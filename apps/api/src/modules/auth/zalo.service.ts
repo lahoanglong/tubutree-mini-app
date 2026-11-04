@@ -27,6 +27,12 @@ export interface ZaloUserInfo {
  *  - https://developers.zalo.me/docs/api/social-api ... /me
  * Header `access_token` là token do zmp-sdk apis.login() / getAccessToken() trả về.
  */
+/** Lời lỗi trong thân phản hồi Zalo (chuỗi hoặc {message}), cắt ngắn; không bao giờ chứa token vì Zalo không phản chiếu header. */
+function errorMessageOf(data: unknown): string | undefined {
+  const raw = typeof data === 'string' ? data : (data as { message?: unknown } | null | undefined)?.message;
+  return typeof raw === 'string' && raw ? raw.slice(0, 200) : undefined;
+}
+
 @Injectable()
 export class ZaloService {
   private readonly logger = new Logger(ZaloService.name);
@@ -82,9 +88,11 @@ export class ZaloService {
       let result = await this.fetchMe(accessToken, proof);
       let retried = false;
       let firstDetail = '';
+      let proofNamed = false;
       if (proof && result.kind !== 'ok') {
         if (result.kind === 'unavailable') throw result.error;
         firstDetail = result.kind === 'rejected' ? `HTTP ${result.status}` : `error ${result.code ?? '?'} ${result.message ?? ''}`.trim();
+        proofNamed = /appsecret/i.test(result.message ?? '');
         retried = true;
         result = await this.fetchMe(accessToken, null);
         if (result.kind === 'ok') {
@@ -93,7 +101,8 @@ export class ZaloService {
       }
       if (result.kind === 'unavailable') throw result.error;
       if (result.kind !== 'ok') {
-        if (retried) this.logger.warn(`Zalo getUserInfo bị từ chối cả hai lượt (${firstDetail}).`);
+        if (retried && proofNamed) this.logger.error(`Zalo từ chối cả hai lượt và phản hồi nhắc appsecret_proof (${firstDetail}); kiểm tra ZALO_APP_SECRET và cách tính proof.`);
+        else if (retried) this.logger.warn(`Zalo getUserInfo bị từ chối cả hai lượt (${firstDetail}).`);
         else if (result.kind === 'body') this.logger.warn(`Zalo getUserInfo bị từ chối: ${result.code ?? '?'} ${result.message ?? 'unknown'}`);
         else this.logger.error(`Zalo getUserInfo error: HTTP ${result.status ?? '?'}`);
         throw new UnauthorizedException('Không xác thực được tài khoản Zalo.');
@@ -114,7 +123,7 @@ export class ZaloService {
   ): Promise<
     | { kind: 'ok'; info: ZaloUserInfo }
     | { kind: 'body'; code?: number; message?: string }
-    | { kind: 'rejected'; status: number | undefined }
+    | { kind: 'rejected'; status: number | undefined; message?: string }
     | { kind: 'unavailable'; error: AxiosError }
   > {
     try {
@@ -135,7 +144,7 @@ export class ZaloService {
     } catch (err) {
       const ax = err as AxiosError;
       if (isZaloUnavailable(ax)) return { kind: 'unavailable', error: ax };
-      return { kind: 'rejected', status: ax.response?.status };
+      return { kind: 'rejected', status: ax.response?.status, message: errorMessageOf(ax.response?.data) };
     }
   }
 

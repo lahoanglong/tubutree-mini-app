@@ -113,7 +113,7 @@ describe('ZaloService.getUserInfo — appsecret_proof', () => {
   });
 
   describe('Zalo từ chối appsecret_proof', () => {
-    const httpError = (status: number) => Object.assign(new Error(`status ${status}`), { isAxiosError: true, response: { status } });
+    const httpError = (status: number, data?: unknown) => Object.assign(new Error(`status ${status}`), { isAxiosError: true, response: { status, data } });
     const proofsSent = () => (axios.get as jest.Mock).mock.calls.map((c) => (c[1].headers as Record<string, string>).appsecret_proof);
     let errorLog: jest.SpyInstance;
     beforeEach(() => {
@@ -154,6 +154,30 @@ describe('ZaloService.getUserInfo — appsecret_proof', () => {
       (axios.get as jest.Mock).mockRejectedValueOnce(httpError(400)).mockRejectedValueOnce(httpError(400));
       await expect(make('s3cret').getUserInfo('tok')).rejects.toBeInstanceOf(UnauthorizedException);
       expect(axios.get).toHaveBeenCalledTimes(2);
+      expect(proofErrors()).toHaveLength(0);
+    });
+
+    it('cả hai lượt lỗi mà phản hồi lượt có proof nhắc appsecret (HTTP hoặc body, không phân biệt hoa thường) → error log', async () => {
+      (axios.get as jest.Mock)
+        .mockRejectedValueOnce(httpError(400, { message: 'Invalid APPSECRET_PROOF' }))
+        .mockRejectedValueOnce(httpError(400, { message: 'Invalid APPSECRET_PROOF' }));
+      await expect(make('s3cret').getUserInfo('tok-xyz')).rejects.toBeInstanceOf(UnauthorizedException);
+      expect(proofErrors()).toHaveLength(1);
+      expect(proofErrors()[0]).not.toContain('tok-xyz');
+      errorLog.mockClear();
+      (axios.get as jest.Mock).mockReset();
+      (axios.get as jest.Mock)
+        .mockResolvedValueOnce({ data: { error: -201, message: 'appsecret_proof is required' } })
+        .mockResolvedValueOnce({ data: { error: -201, message: 'appsecret_proof is required' } });
+      await expect(make('s3cret').getUserInfo('tok')).rejects.toBeInstanceOf(UnauthorizedException);
+      expect(proofErrors()).toHaveLength(1);
+    });
+
+    it('cả hai lượt lỗi vì token hỏng (phản hồi không nhắc appsecret) → chỉ warn', async () => {
+      (axios.get as jest.Mock)
+        .mockResolvedValueOnce({ data: { error: -216, message: 'Access token is invalid' } })
+        .mockResolvedValueOnce({ data: { error: -216, message: 'Access token is invalid' } });
+      await expect(make('s3cret').getUserInfo('tok')).rejects.toBeInstanceOf(UnauthorizedException);
       expect(proofErrors()).toHaveLength(0);
     });
 
