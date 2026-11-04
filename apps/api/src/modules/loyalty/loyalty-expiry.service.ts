@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -408,18 +408,7 @@ export class LoyaltyExpiryService {
       let affected = 0;
       let cursor: string | undefined;
       for (let page = 0; page < MAX_PAGES; page++) {
-        const candidates = await this.prisma.pointsTransaction.findMany({
-          where: {
-            lot: 'STANDARD',
-            delta: { gt: 0 },
-            expiresAt: floor ? { gt: floor, lte: now } : { lte: now },
-            ...(cursor ? { userId: { gt: cursor } } : {}),
-          },
-          select: { userId: true },
-          distinct: ['userId'],
-          orderBy: { userId: 'asc' },
-          take: BATCH,
-        });
+        const candidates = await this.candidateUserIds({ gt: floor, lte: now }, cursor);
         if (candidates.length === 0) break;
         cursor = candidates[candidates.length - 1]!.userId;
         for (const c of candidates) {
@@ -438,6 +427,22 @@ export class LoyaltyExpiryService {
     } catch (err) {
       this.logger.error(`expirePoints lỗi: ${err instanceof Error ? err.message : err}`);
     }
+  }
+
+  /**
+   * Một trang khách có lô STANDARD hết hạn trong (gt, lte], tăng dần theo userId, sau `cursor`.
+   * Viết bằng SQL thẳng: `findMany({ distinct, take })` của Prisma (không bật nativeDistinct) bỏ LIMIT khỏi câu SQL và
+   * kéo mọi dòng sổ trong cửa sổ về bộ nhớ rồi mới cắt trang.
+   */
+  private candidateUserIds(range: { gt?: Date; lte: Date }, cursor?: string): Promise<{ userId: string }[]> {
+    return this.prisma.$queryRaw<{ userId: string }[]>(Prisma.sql`
+      SELECT DISTINCT "userId" FROM "points_transactions"
+      WHERE "lot" = 'STANDARD' AND "delta" > 0
+        ${range.gt ? Prisma.sql`AND "expiresAt" > ${range.gt}` : Prisma.empty}
+        AND "expiresAt" <= ${range.lte}
+        ${cursor ? Prisma.sql`AND "userId" > ${cursor}` : Prisma.empty}
+      ORDER BY "userId"
+      LIMIT ${BATCH}`);
   }
 
   /**
@@ -522,18 +527,7 @@ export class LoyaltyExpiryService {
       let sent = 0;
       let cursor: string | undefined;
       for (let page = 0; page < MAX_PAGES; page++) {
-        const candidates = await this.prisma.pointsTransaction.findMany({
-          where: {
-            lot: 'STANDARD',
-            delta: { gt: 0 },
-            expiresAt: { gt: now, lte: windowEnd },
-            ...(cursor ? { userId: { gt: cursor } } : {}),
-          },
-          select: { userId: true },
-          distinct: ['userId'],
-          orderBy: { userId: 'asc' },
-          take: BATCH,
-        });
+        const candidates = await this.candidateUserIds({ gt: now, lte: windowEnd }, cursor);
         if (candidates.length === 0) break;
         cursor = candidates[candidates.length - 1]!.userId;
         for (const c of candidates) {
@@ -557,10 +551,6 @@ export class LoyaltyExpiryService {
     windowMs: number,
     reminderDays: number,
   ): Promise<boolean> {
-    const txns = await this.loadTxns(userId);
-    const { expiringSoon } = computePointExpiry(txns, now, windowMs);
-    if (expiringSoon.amount <= 0 || !expiringSoon.earliestExpiresAt) return false;
-
     // Dedup theo ngày VN: đã nhắc trong (reminderDays - 1) ngày trước hôm nay hoặc hôm nay thì bỏ qua. Mốc `now - reminderDays*DAY`
     // trượt vài giây so với lúc ghi log tin trước, khiến tin kế dời sang ngày thứ reminderDays+1 và bỏ sót lô hết hạn trong ngày đó.
     const since = new Date(startOfVnDay(now).getTime() - (reminderDays - 1) * DAY);
@@ -569,6 +559,11 @@ export class LoyaltyExpiryService {
       select: { id: true },
     });
     if (recent) return false;
+
+    // Kiểm nhắc trước, nạp sổ sau: khách đã nhắc trong kỳ không phải đọc cả sổ điểm.
+    const txns = await this.loadTxns(userId);
+    const { expiringSoon } = computePointExpiry(txns, now, windowMs);
+    if (expiringSoon.amount <= 0 || !expiringSoon.earliestExpiresAt) return false;
 
     await this.notifications
       .notifySafe(userId, 'POINTS_EXPIRING', {

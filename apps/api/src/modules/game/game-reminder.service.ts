@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -113,17 +114,14 @@ export class GameReminderService {
     // Cửa sổ "sắp héo" rộng tới (death − wilt + 1) ngày, mặc định là 5 — không có cờ chống lặp
     // nghĩa là CÙNG một người nhận đúng thông báo này 5 ngày liên tiếp. Dò lại nhật ký thông báo
     // trong 3 ngày gần nhất thay vì thêm cột mới: một truy vấn cho cả lô.
+    const reminderSince = new Date(now - GameReminderService.THIRSTY_COOLDOWN_DAYS * DAY);
     const recentlyReminded = new Set(
       (
-        await this.prisma.notificationLog.findMany({
-          where: {
-            templateCode: 'GAME_TREE_THIRSTY',
-            sentAt: { gte: new Date(now - GameReminderService.THIRSTY_COOLDOWN_DAYS * DAY) },
-          },
-          select: { userId: true },
-          distinct: ['userId'],
-          take: 20_000,
-        })
+        await this.prisma.$queryRaw<{ userId: string }[]>(Prisma.sql`
+          SELECT DISTINCT "userId" FROM "notification_logs"
+          WHERE "templateCode" = ${'GAME_TREE_THIRSTY'} AND "sentAt" >= ${reminderSince}
+          ORDER BY "userId"
+          LIMIT ${20_000}`)
       ).map((r) => r.userId),
     );
 
