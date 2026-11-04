@@ -14,6 +14,7 @@ import { CTV_MONTHLY_MILESTONES } from '../../src/modules/affiliate/ctv-mileston
 import { AdminService } from '../../src/modules/admin/admin.service';
 import { RbacService } from '../../src/modules/staff/rbac/rbac.service';
 import { MerchantFulfilmentService } from '../../src/modules/merchant/merchant-fulfilment.service';
+import type { Prisma } from '@prisma/client';
 import { createOrder, createUser, randCode, sleep, warmPool } from './helpers';
 
 describe('Hạ quyền CTV chạy song song với rút hoa hồng về Ví (real Postgres)', () => {
@@ -61,6 +62,32 @@ describe('Hạ quyền CTV chạy song song với rút hoa hồng về Ví (real
       },
     });
     return ctv;
+  }
+
+  const newPhone = () => `09${String(Math.floor(Math.random() * 1e8)).padStart(8, '0')}`;
+  function adminServices() {
+    const fulfilment = new MerchantFulfilmentService(prisma, {} as never, undefined, moduleRef.get(SystemConfigService));
+    const rbac = new RbacService(prisma, fulfilment);
+    const none = {} as never;
+    const notifications = { notify: jest.fn().mockResolvedValue(undefined), notifyAdmins: jest.fn().mockResolvedValue(undefined) } as never;
+    return { rbac, admin: new AdminService(prisma, none, none, none, notifications, none, none, rbac, none, none, fulfilment) };
+  }
+  const markOf = async (id: string) => (await prisma.user.findUniqueOrThrow({ where: { id } })).affiliateRevokedAt;
+  const BACKFILL_SQL = readFileSync(join(__dirname, '../../prisma/migrations/20261104160500_user_affiliate_revoked_backfill/migration.sql'), 'utf8');
+
+  class Rollback extends Error {}
+  /** Chạy trong giao dịch rồi huỷ: SQL backfill quét cả DB nên không được để lại dấu cho người dùng của spec khác. */
+  async function rolledBack<T>(fn: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
+    let out!: T;
+    await prisma
+      .$transaction(async (tx) => {
+        out = await fn(tx);
+        throw new Rollback();
+      })
+      .catch((e) => {
+        if (!(e instanceof Rollback)) throw e;
+      });
+    return out;
   }
 
   async function state(userId: string) {
@@ -141,15 +168,12 @@ describe('Hạ quyền CTV chạy song song với rút hoa hồng về Ví (real
   it('đại lý bị admin hạ về khách (có dấu) → cấp rồi thu hồi nhân viên về DEALER (đơn còn APPROVED): dấu còn nguyên, rút vẫn 403', async () => {
     const created = await ctvWithCommission(100_000);
     const boss = await createUser(prisma, { role: 'ADMIN' });
-    const dealer = await prisma.user.update({ where: { id: created.id }, data: { role: 'DEALER', phone: `09${String(Math.floor(Math.random() * 1e8)).padStart(8, '0')}` } });
+    const dealer = await prisma.user.update({ where: { id: created.id }, data: { role: 'DEALER', phone: newPhone() } });
     await prisma.dealerApplication.create({
       data: { userId: dealer.id, status: 'APPROVED', businessName: 'IT', ownerName: 'IT', phone: dealer.phone!, address: 'IT', cccdFrontUrl: 'x', cccdBackUrl: 'x' },
     });
-    const fulfilment = new MerchantFulfilmentService(prisma, {} as never, undefined, moduleRef.get(SystemConfigService));
-    const rbac = new RbacService(prisma, fulfilment);
-    const none = {} as never;
-    const admin = new AdminService(prisma, none, none, none, none, none, none, rbac, none, none, fulfilment);
-    const mark = async () => (await prisma.user.findUniqueOrThrow({ where: { id: dealer.id } })).affiliateRevokedAt;
+    const { rbac, admin } = adminServices();
+    const mark = () => markOf(dealer.id);
 
     await admin.setUserRole(boss.id, dealer.phone!, 'CUSTOMER');
     expect(await mark()).not.toBeNull();
@@ -163,6 +187,47 @@ describe('Hạ quyền CTV chạy song song với rút hoa hồng về Ví (real
     expect(await state(dealer.id)).toEqual({ balance: 0, payouts: 0, paid: 0, approved: 1, ledger: 0 });
   });
 
+  it('M1: CTV bị hạ (có dấu) nộp hồ sơ đại lý rồi được duyệt → DEALER nhưng dấu còn, rút 403; admin đặt lại DEALER tường minh mới xoá dấu và rút được', async () => {
+    const created = await ctvWithCommission(100_000);
+    const phone = newPhone();
+    await prisma.user.update({ where: { id: created.id }, data: { phone } });
+    const boss = await createUser(prisma, { role: 'ADMIN' });
+    const { admin } = adminServices();
+    await admin.setUserRole(boss.id, phone, 'CUSTOMER');
+    expect(await markOf(created.id)).not.toBeNull();
+    const tier = await prisma.dealerTier.create({ data: { id: `tier-${randCode(6)}`, name: 'T', minOrderVolume: 0, discountRules: {} } });
+    const app = await prisma.dealerApplication.create({
+      data: { userId: created.id, status: 'PENDING', businessName: 'IT', ownerName: 'IT', phone, address: 'IT', cccdFrontUrl: 'x', cccdBackUrl: 'x' },
+    });
+    await admin.reviewDealerApplication(boss.id, app.id, true, tier.id);
+    const approved = await prisma.user.findUniqueOrThrow({ where: { id: created.id } });
+    expect(approved.role).toBe('DEALER');
+    expect(approved.affiliateRevokedAt).not.toBeNull();
+    await expect(affiliate.requestPayout(created.id, 100_000, 'WALLET_BALANCE', undefined, `rd-${randCode(10)}`)).rejects.toBeInstanceOf(ForbiddenException);
+    expect(await state(created.id)).toEqual({ balance: 0, payouts: 0, paid: 0, approved: 1, ledger: 0 });
+
+    await admin.setUserRole(boss.id, phone, 'DEALER', tier.id);
+    expect(await markOf(created.id)).toBeNull();
+    await affiliate.requestPayout(created.id, 100_000, 'WALLET_BALANCE', undefined, `rd-${randCode(10)}`);
+    expect(await state(created.id)).toEqual({ balance: 100_000, payouts: 1, paid: 1, approved: 0, ledger: 1 });
+  });
+
+  it('m1: CTV hợp lệ được cấp rồi thu hồi nhân viên → CUSTOMER không dấu, tự đăng ký lại CTV được và rút được', async () => {
+    const ctv = await ctvWithCommission(100_000);
+    const phone = newPhone();
+    await prisma.user.update({ where: { id: ctv.id }, data: { phone } });
+    const boss = await createUser(prisma, { role: 'ADMIN' });
+    const { rbac } = adminServices();
+    await rbac.addGrant(boss.id, phone, 'STAFF');
+    await rbac.revokeGrant(boss.id, phone);
+    const after = await prisma.user.findUniqueOrThrow({ where: { id: ctv.id } });
+    expect(after.role).toBe('CUSTOMER');
+    expect(after.affiliateRevokedAt).toBeNull();
+    await affiliate.register(ctv.id);
+    await affiliate.requestPayout(ctv.id, 100_000, 'WALLET_BALANCE', undefined, `rd-${randCode(10)}`);
+    expect(await state(ctv.id)).toEqual({ balance: 100_000, payouts: 1, paid: 1, approved: 0, ledger: 1 });
+  });
+
   it('migration backfill: đặt dấu cho khách có dấu vết CTV, bỏ qua khách thường và CTV đang hoạt động; chạy lại không đổi', async () => {
     const withCommission = await ctvWithCommission(50_000);
     await prisma.user.update({ where: { id: withCommission.id }, data: { role: 'CUSTOMER' } });
@@ -172,18 +237,24 @@ describe('Hạ quyền CTV chạy song song với rút hoa hồng về Ví (real
     await prisma.userAdminEvent.create({ data: { userId: withEvent.id, kind: 'ROLE', fromValue: 'AFFILIATE', toValue: 'CUSTOMER' } });
     const plain = await createUser(prisma, { role: 'CUSTOMER' });
     const active = await ctvWithCommission(50_000);
-    const sql = readFileSync(join(__dirname, '../../prisma/migrations/20261104160500_user_affiliate_revoked_backfill/migration.sql'), 'utf8');
-    const marks = async () =>
-      (await prisma.user.findMany({ where: { id: { in: [withCommission.id, withStorefront.id, withEvent.id, plain.id, active.id] } }, select: { id: true, affiliateRevokedAt: true } }))
-        .map((u) => [u.id, u.affiliateRevokedAt !== null] as const)
-        .sort();
-    await prisma.$executeRawUnsafe(sql);
-    const first = await marks();
-    expect(Object.fromEntries(first)).toEqual({ [withCommission.id]: true, [withStorefront.id]: true, [withEvent.id]: true, [plain.id]: false, [active.id]: false });
-    const at = (await prisma.user.findUniqueOrThrow({ where: { id: withCommission.id } })).affiliateRevokedAt;
-    await prisma.$executeRawUnsafe(sql);
-    expect(await marks()).toEqual(first);
-    expect((await prisma.user.findUniqueOrThrow({ where: { id: withCommission.id } })).affiliateRevokedAt).toEqual(at);
+    const ids = [withCommission.id, withStorefront.id, withEvent.id, plain.id, active.id];
+    const result = await rolledBack(async (tx) => {
+      const marks = async () =>
+        Object.fromEntries((await tx.user.findMany({ where: { id: { in: ids } }, select: { id: true, affiliateRevokedAt: true } })).map((u) => [u.id, u.affiliateRevokedAt]));
+      await tx.$executeRawUnsafe(BACKFILL_SQL);
+      const first = await marks();
+      await tx.$executeRawUnsafe(BACKFILL_SQL);
+      return { first, second: await marks() };
+    });
+    expect(Object.fromEntries(Object.entries(result.first).map(([k, v]) => [k, v !== null]))).toEqual({
+      [withCommission.id]: true,
+      [withStorefront.id]: true,
+      [withEvent.id]: true,
+      [plain.id]: false,
+      [active.id]: false,
+    });
+    expect(result.second).toEqual(result.first);
+    expect(await markOf(withCommission.id)).toBeNull();
   });
 
   it('backfill với cấu hình cho khách hưởng hoa hồng: khách chỉ có hoa hồng không bị đánh dấu, người có lịch sử hạ quyền vẫn bị', async () => {
@@ -192,20 +263,15 @@ describe('Hạ quyền CTV chạy song song với rút hoa hồng về Ví (real
     const demoted = await createUser(prisma, { role: 'CUSTOMER' });
     await prisma.userAdminEvent.create({ data: { userId: demoted.id, kind: 'ROLE', fromValue: 'DEALER', toValue: 'CUSTOMER' } });
     const key = 'affiliate.commission_eligible_roles';
-    const before = await prisma.systemConfig.findUnique({ where: { key } });
-    await prisma.systemConfig.upsert({
-      where: { key },
-      update: { value: ['AFFILIATE', 'DEALER', 'CUSTOMER'] },
-      create: { key, value: ['AFFILIATE', 'DEALER', 'CUSTOMER'], category: 'affiliate' },
+    const marks = await rolledBack(async (tx) => {
+      await tx.systemConfig.upsert({
+        where: { key },
+        update: { value: ['AFFILIATE', 'DEALER', 'CUSTOMER'] },
+        create: { key, value: ['AFFILIATE', 'DEALER', 'CUSTOMER'], category: 'affiliate' },
+      });
+      await tx.$executeRawUnsafe(BACKFILL_SQL);
+      return (await tx.user.findMany({ where: { id: { in: [onlyCommission.id, demoted.id] } }, select: { id: true, affiliateRevokedAt: true } })).map((u) => [u.id, u.affiliateRevokedAt !== null] as const);
     });
-    try {
-      const sql = readFileSync(join(__dirname, '../../prisma/migrations/20261104160500_user_affiliate_revoked_backfill/migration.sql'), 'utf8');
-      await prisma.$executeRawUnsafe(sql);
-      expect((await prisma.user.findUniqueOrThrow({ where: { id: onlyCommission.id } })).affiliateRevokedAt).toBeNull();
-      expect((await prisma.user.findUniqueOrThrow({ where: { id: demoted.id } })).affiliateRevokedAt).not.toBeNull();
-    } finally {
-      if (before) await prisma.systemConfig.update({ where: { key }, data: { value: before.value as object } });
-      else await prisma.systemConfig.delete({ where: { key } });
-    }
+    expect(Object.fromEntries(marks)).toEqual({ [onlyCommission.id]: false, [demoted.id]: true });
   });
 });

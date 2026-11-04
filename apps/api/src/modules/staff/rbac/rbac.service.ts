@@ -1,4 +1,3 @@
-import { affiliateRevocationPatch } from '../../affiliate/affiliate-revocation';
 import { BadRequestException, ConflictException, Injectable, Logger, Optional } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { User, UserRole } from '@prisma/client';
@@ -195,12 +194,10 @@ export class RbacService {
           }
         }
         role = base;
-        // Vai trò gốc DEALER chỉ suy từ đơn đại lý còn APPROVED (admin hạ đại lý qua setUserRole không đụng tới đơn), nên đường này
-        // chỉ được đặt dấu, không bao giờ xoá: cấp lại CTV/đại lý là quyết định tường minh của admin ở setUserRole.
-        const revocation = await affiliateRevocationPatch(tx, user.id, user.role, base);
+        // Gỡ quyền nhân viên không phải hạ CTV: dấu thu hồi chỉ do AdminService.setUserRole đặt hoặc xoá.
         await tx.user.update({
           where: { id: user.id },
-          data: { role: base, ...(revocation.affiliateRevokedAt ? { affiliateRevokedAt: revocation.affiliateRevokedAt } : {}), ...(user.staffPermissions?.length ? { staffPermissions: [] } : {}) },
+          data: { role: base, ...(user.staffPermissions?.length ? { staffPermissions: [] } : {}) },
         });
         await recordUserAdminEvent(tx, { userId: user.id, kind: 'ROLE', from: user.role, to: base, reason: 'Thu hồi quyền nhân viên', actorId: adminId });
         if (user.staffPermissions?.length) {
