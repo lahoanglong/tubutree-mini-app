@@ -52,8 +52,9 @@ const TEXT_MATCH_LIMIT = 2000;
 const MAX_LIST_SLUGS = 20;
 /** Số sản phẩm của dải "Có thể bạn cũng thích" (cùng nhãn). */
 const RELATED_LIMIT = 8;
-/** Cửa sổ của `soldApp30d` ("Bán chạy nhất"), tính theo ngày giao. */
+/** Số sản phẩm ghi trong một transaction khi tính lại số đã bán: khoá dòng ngắn, không giữ cả catalog. */
 const RECOMPUTE_SOLD_BATCH = 500;
+/** Cửa sổ của `soldApp30d` ("Bán chạy nhất"), tính theo ngày giao. */
 const SOLD_WINDOW_DAYS = 30;
 
 /** Gợi ý khi gõ: từ khoá (đã gấp dấu) ngắn hơn thế khớp gần như mọi SP và trigram không lọc được. */
