@@ -1,5 +1,5 @@
 const IMAGE_HOSTS: readonly string[] = ['res.cloudinary.com', 'content.pancake.vn'];
-const RASTER_DATA_URL_RE = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/;
+const RASTER_DATA_URL_RE = /^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/;
 
 /**
  * Lọc địa chỉ ảnh do người khác nhập (ảnh chuyển lương, QR) trước khi đổ vào `<img src>`. Hàng cũ trong DB có thể còn chuỗi
