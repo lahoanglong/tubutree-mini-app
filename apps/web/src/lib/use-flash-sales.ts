@@ -1,11 +1,12 @@
 'use client';
 
-import { createContext, createElement, useContext, useEffect, useSyncExternalStore, type ReactNode } from 'react';
+import { createElement, useContext, useEffect, useSyncExternalStore, type ReactNode } from 'react';
 import { makeFlashRefetchInterval } from '@tubutree/app-core/queries/flash-sale';
 import { serverNow } from '@tubutree/app-core/server-clock';
 import { getActiveFlashSales } from '@/lib/shop-client';
 import type { FlashSaleActiveItem } from '@tubutree/app-core/api/flash-sale';
 import { runningFlash, type FlashItem } from '@/lib/flash-price';
+import { ServerSeed, useFlashNow } from '@/lib/flash-now';
 
 /**
  * Đợt Giờ vàng đang chạy, dùng chung cho mọi thẻ sản phẩm trên trang: một lần gọi API (không qua React Query để các test render
@@ -95,15 +96,6 @@ function subscribe(onChange: () => void): () => void {
 }
 
 /**
- * Danh sách Giờ vàng do server tải sẵn cho trang ISR (trang sản phẩm) cùng giờ lúc server dựng HTML (`now`): lần dựng đầu (HTML server và hydrate) đã biết
- * giá/thanh Giờ vàng nên không chèn thanh Giờ vàng hay đổi dòng giá sau hydrate. Nằm trong context (không ghi vào kho dùng chung) vì kho là biến của
- * tiến trình server, dùng chung giữa mọi yêu cầu và mọi trang.
- */
-const ServerSeed = createContext<{ items: readonly FlashItem[]; now: number } | null>(null);
-
-const subscribeNever = () => () => undefined;
-
-/**
  * Ở trình duyệt gieo mảng này vào kho dùng chung (cùng mảng với context, nên React không thấy snapshot đổi sau hydrate) để khối khác của trang đọc cùng
  * dữ liệu, nhưng KHÔNG đánh dấu `loaded`: bản ISR có thể cũ tới 5 phút, nên những việc chờ "danh sách thật đã về" (chọn phân loại mở sẵn) vẫn chờ lần hỏi
  * đầu tiên của trình duyệt. `fetchedAt` giữ 0 để effect của `useActiveFlashSales` hỏi lại ngay.
@@ -122,15 +114,10 @@ export function useActiveFlashSales(): readonly FlashItem[] {
   return current;
 }
 
-/**
- * Đợt đang chạy cho trang sản phẩm, cùng `now` để mọi chỗ lọc/tính giá khớp nhau. Lần dựng hydrate dùng giờ server lúc dựng HTML (đợt hết giữa lúc dựng và lúc tải vẫn
- * hiện như HTML, không lệch hydrate); ngay sau đó chuyển sang giờ máy chủ đã đồng bộ, đợt đã hết thì biến mất một lần. Trang không có gieo sẵn luôn dùng giờ đồng bộ.
- */
+/** Đợt đang chạy cho trang sản phẩm, cùng `now` (`useFlashNow`) để mọi chỗ lọc/tính giá khớp nhau, kể cả lúc hydrate. */
 export function useRunningFlash(): { flash: FlashItem[]; now: number } {
-  const seed = useContext(ServerSeed);
   const list = useActiveFlashSales();
-  const settled = useSyncExternalStore(subscribeNever, () => true, () => false);
-  const now = seed && !settled ? seed.now : serverNow();
+  const now = useFlashNow();
   return { flash: runningFlash(list, now), now };
 }
 
