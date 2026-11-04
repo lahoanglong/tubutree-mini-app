@@ -146,6 +146,13 @@ export class RbacService {
       if (!user && role === 'ADMIN') {
         throw new BadRequestException('Chỉ cấp quyền quản trị cho số điện thoại đã có tài khoản. Nhờ người đó đăng nhập Tubu Tree một lần trước.');
       }
+      // Lời mời cũ đã quá hạn còn nằm trong chỉ mục duy nhất của grant đang mở: không thu hồi nó thì createMany bên dưới bị bỏ qua
+      // và admin nhận "thành công" mà chẳng có gì được cấp.
+      const nowAt = new Date();
+      await tx.roleGrant.updateMany({
+        where: { phone: normalized, role, revokedAt: null, expiresAt: { lte: nowAt } },
+        data: { revokedAt: nowAt },
+      });
       const existing = await tx.roleGrant.findFirst({
         where: { phone: normalized, role, ...activeGrantWhere() },
         select: { id: true, staffPermissions: true },

@@ -67,14 +67,33 @@ describe('Lời mời quyền theo SĐT hết hạn sau 7 ngày (real Postgres)'
     expect((await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).role).toBe('CUSTOMER');
   });
 
-  it('mời lại lời mời quá hạn thì gia hạn và dùng được', async () => {
+  it('mời lại lời mời quá hạn (số chưa có tài khoản): thu hồi dòng cũ, tạo dòng mới có hạn mới và dùng được', async () => {
     const phone = newPhone();
     await rbac.addGrant(boss.id, phone, 'STAFF');
     await prisma.roleGrant.updateMany({ where: { phone }, data: { expiresAt: new Date(Date.now() - 1000) } });
     await rbac.addGrant(boss.id, phone, 'STAFF');
     expect((await grantOf(phone)).expiresAt!.getTime()).toBeGreaterThan(Date.now() + 6 * DAY);
+    expect(await prisma.roleGrant.count({ where: { phone, revokedAt: { not: null } } })).toBe(1);
+    expect((await rbac.listStaff()).pendingInvites.map((p) => p.phone)).toContain(phone);
     const user = await createUser(prisma, { role: 'CUSTOMER', phone });
     expect((await rbac.applyGrants(user)).role).toBe('STAFF');
+  });
+
+  // M2: trước đây báo thành công mà không làm gì và dòng quá hạn bị ẩn nên admin không thu hồi được.
+  it('mời STAFF số Q → hết hạn → Q đăng ký → mời lại: Q thành STAFF ngay (applied), grant cũ có revokedAt', async () => {
+    const phone = newPhone();
+    await rbac.addGrant(boss.id, phone, 'STAFF', undefined, 'moi lan dau');
+    await prisma.roleGrant.updateMany({ where: { phone }, data: { expiresAt: new Date(Date.now() - 1000) } });
+    const user = await createUser(prisma, { role: 'CUSTOMER', phone });
+    expect((await rbac.applyGrants(user)).role).toBe('CUSTOMER');
+    const out = await rbac.addGrant(boss.id, phone, 'STAFF', undefined, 'moi lai');
+    expect(out.applied).toBe(true);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).role).toBe('STAFF');
+    const rows = await prisma.roleGrant.findMany({ where: { phone }, orderBy: { createdAt: 'asc' } });
+    expect(rows).toHaveLength(2);
+    expect(rows[0]!.revokedAt).not.toBeNull();
+    expect(rows[1]!.revokedAt).toBeNull();
+    expect(rows[1]!.expiresAt).toBeNull();
   });
 
   it('thu hồi lời mời đang chờ bằng revokeGrant', async () => {

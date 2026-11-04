@@ -350,6 +350,23 @@ describe('RbacService: lời mời quyền theo SĐT hết hạn (L1-05)', () =>
   });
 });
 
+describe('RbacService.addGrant: lời mời cũ quá hạn (M2)', () => {
+  it('thu hồi dòng quá hạn cùng giao dịch trước khi tìm dòng đang mở', async () => {
+    const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const findFirst = jest.fn().mockResolvedValue(null);
+    const prisma = makePrisma({
+      roleGrant: { updateMany, findFirst, createMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      user: { findUnique: jest.fn().mockResolvedValue(null) },
+    });
+    await new RbacService(prisma).addGrant('admin1', '0900000009', 'STAFF');
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { phone: '0900000009', role: 'STAFF', revokedAt: null, expiresAt: { lte: expect.any(Date) } },
+      data: { revokedAt: expect.any(Date) },
+    });
+    expect(updateMany.mock.invocationCallOrder[0]).toBeLessThan(findFirst.mock.invocationCallOrder[0]!);
+  });
+});
+
 describe('RbacService.addGrant', () => {
   it('tạo grant + áp ngay nếu user đã tồn tại (role thấp hơn)', async () => {
     const prisma = makePrisma({
