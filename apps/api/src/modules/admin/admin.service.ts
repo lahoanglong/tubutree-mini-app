@@ -1,3 +1,4 @@
+import { affiliateRevocationPatch } from '../affiliate/affiliate-revocation';
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { OrderStatus } from '@tubutree/shared-types';
@@ -196,16 +197,6 @@ function canAdminRecordLatePayment(o: { type: string; paymentMethod: string; pay
  * Phiên khách vãng lai: mỗi thiết bị chưa đăng nhập tự tạo một user `guest_<deviceId>` không SĐT (AuthService.loginAsGuest).
  * Nâng cấp lên tài khoản thật thì zaloId đổi hoặc có SĐT nên rời nhóm này. Không xoá, chỉ tách khỏi số "người dùng".
  */
-/**
- * Dấu thu hồi quyền bán: đặt khi CTV/đại lý bị hạ về khách (chặn tự đăng ký lại rồi rút hoa hồng), xoá khi admin cấp lại
- * CTV/đại lý. Đổi sang nhân viên/admin không đụng tới dấu.
- */
-export function affiliateRevocationPatch(from: string, to: string): { affiliateRevokedAt?: Date | null } {
-  if (to === 'CUSTOMER' && (from === 'AFFILIATE' || from === 'DEALER')) return { affiliateRevokedAt: new Date() };
-  if (to === 'AFFILIATE' || to === 'DEALER') return { affiliateRevokedAt: null };
-  return {};
-}
-
 export const GUEST_USER_WHERE: Prisma.UserWhereInput = { role: 'CUSTOMER', phone: null, zaloId: { startsWith: 'guest_' } };
 // Bù đúng của GUEST_USER_WHERE; viết rõ từng nhánh vì NOT(... zaloId LIKE ...) trên zaloId NULL ra NULL và làm tài khoản đã ẩn danh biến mất.
 export const REAL_USER_WHERE: Prisma.UserWhereInput = {
@@ -374,6 +365,7 @@ export class AdminService {
           // Merge vào metadata đọc từ dòng đã khoá — KHÔNG ghi đè (giữ segments/onboardedAt từ onboarding quiz, kể cả ghi chen vừa xong).
           data: {
             role: 'DEALER',
+            ...(await affiliateRevocationPatch(tx, app.userId, applicant.role, 'DEALER')),
             ...(droppedPerms.length ? { staffPermissions: [] } : {}),
             metadata: { ...((applicant.metadata as Record<string, unknown> | null) ?? {}), dealerTierId: tierId } as Prisma.InputJsonObject,
           },
@@ -612,7 +604,7 @@ export class AdminService {
       const data: Prisma.UserUpdateInput = {
         role,
         ...(droppedPerms.length ? { staffPermissions: [] } : {}),
-        ...(affiliateRevocationPatch(previousRole, role)),
+        ...(await affiliateRevocationPatch(tx, user.id, previousRole, role)),
       };
       // Gian hàng khoá trước dòng users (cùng thứ tự với checkout); vướng mắc đối tác thì 409 và vai trò không đổi.
       // Đặt về CUSTOMER/AFFILIATE khi người này không vừa rơi từ DEALER/STAFF/ADMIN (vd. lần thu hồi quyền nhân viên bị gian hàng chặn

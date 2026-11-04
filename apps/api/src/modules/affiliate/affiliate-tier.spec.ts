@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AffiliateService, CTV_MONTHLY_MILESTONES } from './affiliate.service';
 import { CTV_TIERS, milestoneProgressPct, vnMonthBounds } from './ctv-milestones';
@@ -196,6 +196,19 @@ describe('AffiliateService — CTV Tiers & Milestones', () => {
         makeService({ $transaction }).claimMilestone('ctv-1', 'milestone-3m', '2026-06', NOW_SEP),
       ).rejects.toThrow(BadRequestException);
       expect($transaction).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['dấu thu hồi', { role: 'AFFILIATE', affiliateRevokedAt: new Date() }],
+      ['khách không dấu', { role: 'CUSTOMER', affiliateRevokedAt: null }],
+    ])('%s → 403, không tính doanh số, không cộng điểm', async (_label, row) => {
+      const tx = txWith(99_000_000);
+      tx.user.findUnique.mockResolvedValue(row);
+      const rewards = { grant: jest.fn(), expiresAt: jest.fn().mockResolvedValue(new Date('2027-10-15T00:00:00Z')) };
+      const svc = makeService({ $transaction: jest.fn((cb) => cb(tx)) }, rewards);
+      await expect(svc.claimMilestone('ctv-1', 'milestone-3m', undefined, NOW_SEP)).rejects.toBeInstanceOf(ForbiddenException);
+      expect(tx.commission.aggregate).not.toHaveBeenCalled();
+      expect(rewards.grant).not.toHaveBeenCalled();
     });
 
     it('chưa đạt ngưỡng (theo doanh số ĐÃ CHỐT) → BadRequest, không tạo claim, không cộng điểm', async () => {

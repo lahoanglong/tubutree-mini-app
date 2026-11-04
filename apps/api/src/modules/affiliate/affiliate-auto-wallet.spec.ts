@@ -12,7 +12,7 @@ import type { AnalyticsEventsService } from '../analytics/analytics-events.servi
 import type { NotificationsService } from '../notifications/notifications.service';
 
 const noop = {} as never;
-type Row = { id: string; affiliateUserId: string; amount: number; user?: { affiliateRevokedAt: Date | null } };
+type Row = { id: string; affiliateUserId: string; amount: number; user?: { role: string; affiliateRevokedAt: Date | null } };
 
 function build(opts: { rows?: Row[]; flag?: unknown; payout?: { amount: number; taxWithheld: number } | null } = {}) {
   const flagValue = 'flag' in opts ? opts.flag : undefined;
@@ -68,7 +68,7 @@ describe('AffiliateService.autoTransferApprovedToWallet', () => {
   });
 
   it('tài khoản có dấu thu hồi bị bỏ qua: không gọi requestPayout, không warn, một dòng log info', async () => {
-    const t = build({ rows: [...rows('a', 10_000).map((r) => ({ ...r, user: { affiliateRevokedAt: new Date() } })), ...rows('b', 7_000)] });
+    const t = build({ rows: [...rows('a', 10_000).map((r) => ({ ...r, user: { role: 'CUSTOMER', affiliateRevokedAt: new Date() } })), ...rows('b', 7_000)] });
     t.requestPayout.mockResolvedValue({ ok: true, method: 'WALLET_BALANCE', credited: 1, note: '' });
     const log = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
     const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
@@ -80,6 +80,19 @@ describe('AffiliateService.autoTransferApprovedToWallet', () => {
     expect(log.mock.calls.filter((c) => String(c[0]).includes('thu hồi quyền CTV'))).toHaveLength(1);
     log.mockRestore();
     warn.mockRestore();
+  });
+
+  it('khách không dấu còn hoa hồng APPROVED cũng bị bỏ qua; STAFF vẫn được chuyển', async () => {
+    const t = build({
+      rows: [
+        ...rows('a', 10_000).map((r) => ({ ...r, user: { role: 'CUSTOMER', affiliateRevokedAt: null } })),
+        ...rows('b', 7_000).map((r) => ({ ...r, user: { role: 'STAFF', affiliateRevokedAt: null } })),
+      ],
+    });
+    t.requestPayout.mockResolvedValue({ ok: true, method: 'WALLET_BALANCE', credited: 1, note: '' });
+    const credited = await t.svc.autoTransferApprovedToWallet();
+    expect([...credited]).toEqual(['b']);
+    expect(t.requestPayout).toHaveBeenCalledTimes(1);
   });
 
   it('khoá idempotency xác định theo tập commission: đảo thứ tự dòng vẫn cùng khoá, thêm một khoản thì khác khoá', async () => {

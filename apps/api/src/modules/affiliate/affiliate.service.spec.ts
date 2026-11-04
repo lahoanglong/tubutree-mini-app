@@ -1587,6 +1587,20 @@ describe('AffiliateService.requestPayout (money safety)', () => {
       expect(payoutCreate).not.toHaveBeenCalled();
     });
 
+    it('khách (CUSTOMER) không dấu mà còn hoa hồng APPROVED → 403, không đánh dấu PAID', async () => {
+      const { prisma, updateMany, userUpdate } = makePrisma({ role: 'CUSTOMER' });
+      await expect(svcOf(prisma).requestPayout('u1', 100_000, 'WALLET_BALANCE')).rejects.toBeInstanceOf(ForbiddenException);
+      expect(updateMany).not.toHaveBeenCalled();
+      expect(userUpdate).not.toHaveBeenCalled();
+    });
+
+    it('vai trò hạ về khách (không dấu) giữa lúc chờ khoá → 403 sau khi đọc lại trong transaction', async () => {
+      const { prisma, userFindUnique, updateMany } = makePrisma({ role: 'AFFILIATE' });
+      userFindUnique.mockResolvedValueOnce({ role: 'AFFILIATE', affiliateRevokedAt: null }).mockResolvedValueOnce({ role: 'CUSTOMER', affiliateRevokedAt: null });
+      await expect(svcOf(prisma).requestPayout('u1', 100_000, 'WALLET_BALANCE')).rejects.toBeInstanceOf(ForbiddenException);
+      expect(updateMany).not.toHaveBeenCalled();
+    });
+
     it('chặn theo dấu, không theo vai trò: CTV được nâng nhân viên (không dấu) vẫn rút được', async () => {
       const { prisma } = makePrisma({ role: 'STAFF' });
       await expect(svcOf(prisma).requestPayout('u1', 100_000, 'WALLET_BALANCE')).resolves.toMatchObject({ ok: true, credited: 100_000 });

@@ -1,3 +1,5 @@
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { ForbiddenException } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { PrismaModule } from '../../src/prisma/prisma.module';
@@ -122,5 +124,37 @@ describe('Hạ quyền CTV chạy song song với rút hoa hồng về Ví (real
     const ctv = await ctvWithCommission(100_000);
     await prisma.user.update({ where: { id: ctv.id }, data: { role: 'CUSTOMER', affiliateRevokedAt: new Date() } });
     await expect(affiliate.claimMilestone(ctv.id, CTV_MONTHLY_MILESTONES[0].id)).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('khách (CUSTOMER) còn hoa hồng APPROVED nhưng KHÔNG có dấu (hạ trước khi có cột) → rút 403, nhận thưởng mốc 403', async () => {
+    const ctv = await ctvWithCommission(100_000);
+    await prisma.user.update({ where: { id: ctv.id }, data: { role: 'CUSTOMER' } });
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: ctv.id } })).affiliateRevokedAt).toBeNull();
+    await expect(affiliate.requestPayout(ctv.id, 100_000, 'WALLET_BALANCE', undefined, `rd-${randCode(10)}`)).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(affiliate.claimMilestone(ctv.id, CTV_MONTHLY_MILESTONES[0].id)).rejects.toBeInstanceOf(ForbiddenException);
+    expect(await state(ctv.id)).toEqual({ balance: 0, payouts: 0, paid: 0, approved: 1, ledger: 0 });
+  });
+
+  it('migration backfill: đặt dấu cho khách có dấu vết CTV, bỏ qua khách thường và CTV đang hoạt động; chạy lại không đổi', async () => {
+    const withCommission = await ctvWithCommission(50_000);
+    await prisma.user.update({ where: { id: withCommission.id }, data: { role: 'CUSTOMER' } });
+    const withStorefront = await createUser(prisma, { role: 'CUSTOMER' });
+    await prisma.storefront.create({ data: { type: 'CTV', slug: `bf-${randCode(8)}`, title: 'bf', ownerUserId: withStorefront.id } });
+    const withEvent = await createUser(prisma, { role: 'CUSTOMER' });
+    await prisma.userAdminEvent.create({ data: { userId: withEvent.id, kind: 'ROLE', fromValue: 'AFFILIATE', toValue: 'CUSTOMER' } });
+    const plain = await createUser(prisma, { role: 'CUSTOMER' });
+    const active = await ctvWithCommission(50_000);
+    const sql = readFileSync(join(__dirname, '../../prisma/migrations/20261104160500_user_affiliate_revoked_backfill/migration.sql'), 'utf8');
+    const marks = async () =>
+      (await prisma.user.findMany({ where: { id: { in: [withCommission.id, withStorefront.id, withEvent.id, plain.id, active.id] } }, select: { id: true, affiliateRevokedAt: true } }))
+        .map((u) => [u.id, u.affiliateRevokedAt !== null] as const)
+        .sort();
+    await prisma.$executeRawUnsafe(sql);
+    const first = await marks();
+    expect(Object.fromEntries(first)).toEqual({ [withCommission.id]: true, [withStorefront.id]: true, [withEvent.id]: true, [plain.id]: false, [active.id]: false });
+    const at = (await prisma.user.findUniqueOrThrow({ where: { id: withCommission.id } })).affiliateRevokedAt;
+    await prisma.$executeRawUnsafe(sql);
+    expect(await marks()).toEqual(first);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: withCommission.id } })).affiliateRevokedAt).toEqual(at);
   });
 });

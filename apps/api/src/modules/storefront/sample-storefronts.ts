@@ -294,7 +294,7 @@ export async function removeSampleStorefronts(db: Pick<PrismaClient, 'user' | 's
     for (const sf of samples) await tx.storefront.delete({ where: { id: sf.id } });
     const owners = await tx.user.findMany({ where: { metadata: { path: ['sampleStorefront'], equals: true } }, select: { id: true } });
     for (const u of owners) {
-      await tx.user.update({ where: { id: u.id }, data: { role: 'CUSTOMER', isBlocked: true, referralCode: `SAMPLE-GONE-${u.id.toUpperCase()}` } });
+      await tx.user.update({ where: { id: u.id }, data: { role: 'CUSTOMER', affiliateRevokedAt: new Date(), isBlocked: true, referralCode: `SAMPLE-GONE-${u.id.toUpperCase()}` } });
     }
     return { storefronts: samples.length, ownerIds: owners.map((u) => u.id) };
   });

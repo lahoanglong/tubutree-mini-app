@@ -79,6 +79,7 @@ import { loadDefaultRate, resolveVariationRate } from './commission-rate';
 import { loadPublicVisibility } from '../storefront/public-visibility';
 import type { PublicVisibilityOptions } from '../storefront/storefront-visibility';
 import { APPROVE_COMMISSIONS_CRON, DAILY_WALLET_TRANSFER_HOUR_VN, DAILY_WALLET_TRANSFER_JOB, AFFILIATE_AUTO_WALLET_TRANSFER_KEY, DEFAULT_AFFILIATE_AUTO_WALLET_TRANSFER_ENABLED } from './affiliate-auto-transfer-config';
+import { isAffiliateBlocked } from './affiliate-revocation';
 import { affiliateAccess, canPlaceOrderForCustomer, canRegisterAsAffiliate } from './affiliate-access';
 import { markCronSkipped, TrackCron } from '../../common/cron-run/track-cron';
 import { SessionStateService } from '../auth/session-state.service';
@@ -141,6 +142,7 @@ function parseClickedAgo(raw: unknown, maxMs: number): number | null {
   return typeof raw === 'number' && Number.isFinite(raw) && raw >= 0 ? Math.min(raw, maxMs) : null;
 }
 
+const AFFILIATE_NOT_CTV_MESSAGE = 'Tài khoản của bạn không còn quyền Cộng tác viên nên không rút hoa hồng hay nhận thưởng được. Vui lòng liên hệ Tubu Tree để được hỗ trợ.';
 const AFFILIATE_REVOKED_MESSAGE = 'Tài khoản đã bị thu hồi quyền CTV. Liên hệ CSKH nếu cần mở lại.';
 
 @Injectable()
@@ -349,10 +351,11 @@ export class AffiliateService {
     }
   }
 
-  /** Rút hoa hồng và nhận thưởng chặn theo dấu thu hồi, không theo vai trò: CTV được nâng nhân viên vẫn rút được khoản đã duyệt. */
+  /** Rút hoa hồng và nhận thưởng chặn khi có dấu thu hồi hoặc người đó đang là khách; STAFF/ADMIN/đại lý rút được khoản đã duyệt. */
   private async assertNotRevoked(db: Pick<Prisma.TransactionClient, 'user'>, userId: string): Promise<void> {
-    const user = await db.user.findUnique({ where: { id: userId }, select: { affiliateRevokedAt: true } });
+    const user = await db.user.findUnique({ where: { id: userId }, select: { role: true, affiliateRevokedAt: true } });
     if (user?.affiliateRevokedAt) throw new ForbiddenException(AFFILIATE_REVOKED_MESSAGE);
+    if (user?.role === 'CUSTOMER') throw new ForbiddenException(AFFILIATE_NOT_CTV_MESSAGE);
   }
 
   async createLink(userId: string, targetType: string, targetId?: string) {
@@ -1683,13 +1686,13 @@ export class AffiliateService {
       const rows = await this.prisma.commission.findMany({
         // CTV bị khoá giữ nguyên tiền ở APPROVED: chuyển vào Ví sẽ ghi thu nhập chịu thuế và cộng tiền cho tài khoản đang bị xem xét.
         where: { status: 'APPROVED', payoutBatchId: null, user: { isBlocked: false } },
-        select: { id: true, affiliateUserId: true, amount: true, user: { select: { affiliateRevokedAt: true } } },
+        select: { id: true, affiliateUserId: true, amount: true, user: { select: { role: true, affiliateRevokedAt: true } } },
         orderBy: { id: 'asc' },
       });
       const byUser = new Map<string, { ids: string[]; total: number }>();
       const revokedUsers = new Set<string>();
       for (const r of rows) {
-        if (r.user?.affiliateRevokedAt) {
+        if (r.user && isAffiliateBlocked(r.user)) {
           revokedUsers.add(r.affiliateUserId);
           continue;
         }
