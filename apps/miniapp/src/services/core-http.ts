@@ -1,6 +1,6 @@
 import type { HttpClient, RequestOptions } from '@tubutree/app-core/http';
 import { api } from './api';
-import { IMAGE_UPLOAD_TIMEOUT_MS, type RequestConfig } from './http';
+import { imageTimeout, type RequestConfig } from './http';
 
 // Chỉ đưa cho api đúng thứ người gọi truyền: spec service đang kiểm mảng đối số (`['/waste/me']`, `['/x', { params: {} }]`).
 function toConfig(opts: RequestOptions | undefined): RequestConfig | undefined {
@@ -39,9 +39,9 @@ export const coreHttp: HttpClient = {
   patch: <T>(path: string, body?: unknown, opts?: RequestOptions) => withBody<T>((...a) => api.patch(...(a as [string])), path, body, opts),
 };
 
-/** Như coreHttp nhưng cho thân mang ảnh base64: trần 90 s thay cho 15 s mặc định. */
+/** Như coreHttp nhưng thân có ảnh base64 thì trần 90 s thay cho 15 s mặc định. */
 export const coreHttpImage: HttpClient = {
   ...coreHttp,
   post: <T>(path: string, body?: unknown, opts?: RequestOptions) =>
-    api.post(path, body, { ...toConfig(opts), timeout: IMAGE_UPLOAD_TIMEOUT_MS }).then((r) => r.data as T),
+    api.post(path, body, { ...toConfig(opts), ...imageTimeout(body) }).then((r) => r.data as T),
 };

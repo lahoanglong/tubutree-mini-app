@@ -7,7 +7,7 @@ import { homeProductSlot, takeMeBlock, takePublicBlock, takePurchasedItems } fro
 import type { CartComboGroup, CouponPreviewRequest, FlashAllowanceResponse, CouponPreviewsResponse, OrderDTO, OrderItemDTO, WastePublicFlags } from '@tubutree/shared-types';
 import { cartStorefrontSlug } from './cart-key';
 import type { MyRefund, RefundBankInput, ReturnReasonCode } from '../utils/refund-rules';
-import { IMAGE_UPLOAD_TIMEOUT_MS } from './http';
+import { imageTimeout } from './http';
 
 /** Shape phân trang backend trả về (§12.1): { data, meta }. */
 export interface PageResponse<T> {
@@ -636,7 +636,7 @@ export type CreatedReview = Pick<ReviewItem, 'id' | 'rating' | 'comment' | 'imag
 export const createReview = (
   slug: string,
   data: { rating: number; comment?: string; images?: string[]; videoUrl?: string; orderId: string },
-) => api.post<CreatedReview>(`/products/${slug}/reviews`, data, { timeout: IMAGE_UPLOAD_TIMEOUT_MS }).then((r) => r.data);
+) => api.post<CreatedReview>(`/products/${slug}/reviews`, data, imageTimeout(data)).then((r) => r.data);
 
 // Orders
 /** Ảnh/tồn kho từng dòng do API join theo variationId (dự án 4a). Optional: API cũ không trả. */
@@ -794,7 +794,7 @@ export interface ReturnRequestBody {
   items: { orderItemId: string; quantity: number }[];
 }
 export const requestReturn = (code: string, body: ReturnRequestBody & Partial<RefundDestinationBody>) =>
-  api.post<ReturnRequestDTO>(`/orders/${code}/return-request`, body, { timeout: IMAGE_UPLOAD_TIMEOUT_MS }).then((r) => r.data);
+  api.post<ReturnRequestDTO>(`/orders/${code}/return-request`, body, imageTimeout(body)).then((r) => r.data);
 /** Số tiền dự kiến hoàn cho các dòng khách đang chọn (cùng cách tính lúc Tubu duyệt). */
 export interface ReturnEstimateDTO {
   isFull: boolean;

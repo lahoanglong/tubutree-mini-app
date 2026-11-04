@@ -1,6 +1,6 @@
 import type { AuthMeResponse } from '@tubutree/shared-types';
 import { api } from './api';
-import { IMAGE_UPLOAD_TIMEOUT_MS } from './http';
+import { imageTimeout } from './http';
 
 export interface OwnedPromotion {
   id: string;
@@ -38,7 +38,7 @@ export const getAuthMeFlags = () =>
   });
 export const getOwnedBrand = () => api.get('/brand/owner/me').then((r) => (r.data || null) as OwnedBrand | null);
 export const updateOwnedBrand = (dto: Partial<Pick<OwnedBrand, 'logoUrl' | 'coverUrl' | 'tagline' | 'story' | 'origin'>>) =>
-  api.patch('/brand/owner/me', dto, { timeout: IMAGE_UPLOAD_TIMEOUT_MS }).then((r) => r.data as OwnedBrand);
+  api.patch('/brand/owner/me', dto, imageTimeout(dto)).then((r) => r.data as OwnedBrand);
 export const createOwnedPromotion = (dto: { title: string; subtitle?: string; couponCode?: string; startAt: string; endAt: string }) =>
   api.post('/brand/owner/me/promotions', dto).then((r) => r.data as OwnedPromotion);
 export const updateOwnedPromotion = (id: string, dto: { title?: string; subtitle?: string; couponCode?: string; startAt?: string; endAt?: string; isActive?: boolean }) =>
