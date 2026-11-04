@@ -163,6 +163,24 @@ describe('RbacService.applyGrants: khoá dòng người dùng rồi đọc lại
   });
 });
 
+describe('RbacService: lý do của admin vào lịch sử vai trò (L1-08)', () => {
+  it('applyGrants có lý do → dòng ROLE mang lý do đó và người làm; không lý do (đăng nhập) giữ chữ cũ', async () => {
+    const mk = () =>
+      makePrisma({
+        roleGrant: { findMany: jest.fn().mockResolvedValue([{ role: 'STAFF', staffPermissions: [] }]) },
+        user: { update: jest.fn().mockResolvedValue(mkUser({ role: 'STAFF' })) },
+      });
+    const a = mk();
+    await new RbacService(a).applyGrants(mkUser(), a, 'admin1', 'Nhân viên kho mới');
+    expect(a.userAdminEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ kind: 'ROLE', reason: 'Cấp quyền theo SĐT: Nhân viên kho mới', actorId: 'admin1' }),
+    });
+    const b = mk();
+    await new RbacService(b).applyGrants(mkUser());
+    expect(b.userAdminEvent.create).toHaveBeenCalledWith({ data: expect.objectContaining({ kind: 'ROLE', reason: 'Áp quyền cấp theo SĐT' }) });
+  });
+});
+
 describe('RbacService.applyGrants: nhóm việc của lời mời', () => {
   it('lời mời STAFF có nhóm → user đăng nhập lần đầu nhận đúng nhóm và có dòng sổ', async () => {
     const prisma = makePrisma({

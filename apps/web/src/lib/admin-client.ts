@@ -455,15 +455,15 @@ export const blockUser = (id: string, reason: string) =>
     method: 'POST',
     body: { reason },
   });
-export const unblockUser = (id: string) =>
-  apiFetch<BlockState>(`/admin/users/${encodeURIComponent(id)}/unblock`, { method: 'POST', body: {} });
+export const unblockUser = (id: string, reason: string) =>
+  apiFetch<BlockState>(`/admin/users/${encodeURIComponent(id)}/unblock`, { method: 'POST', body: { reason } });
 export type UserRole = 'CUSTOMER' | 'AFFILIATE' | 'DEALER' | 'STAFF' | 'ADMIN';
 /** tierId bắt buộc khi role = DEALER (BE từ chối nếu thiếu/không tồn tại — C-008); role khác không gửi. */
-export const setUserRole = (phone: string, role: UserRole, tierId?: string) => {
+export const setUserRole = (phone: string, role: UserRole, reason: string, tierId?: string) => {
   const tier = role === 'DEALER' ? tierId?.trim() : undefined;
   return apiFetch<{ ok: boolean; id: string; phone: string | null; fullName: string | null; role: string; previousRole: string }>(
     '/admin/users/role',
-    { method: 'POST', body: { phone, role, ...(tier ? { tierId: tier } : {}) } },
+    { method: 'POST', body: { phone, role, reason, ...(tier ? { tierId: tier } : {}) } },
   );
 };
 /** Số của trang "Hôm nay" (chỉ ADMIN): đơn, tiền đã thu, giá trị đơn đặt, khách mới (tài khoản thật) theo ngày giờ VN. */
@@ -2276,10 +2276,18 @@ export interface AdminUserDetail {
 export const getUserDetail = (id: string) => apiFetch<AdminUserDetail>(`/admin/users/${encodeURIComponent(id)}/detail`);
 export const forfeitUserCommissions = (id: string, reason: string) =>
   apiFetch<{ cancelled: number; amount: number }>(`/admin/users/${encodeURIComponent(id)}/forfeit-commissions`, { method: 'POST', body: { reason } });
-export const setStaffPermissions = (id: string, permissions: StaffPermission[]) =>
+/** Cấp quyền theo SĐT kèm lý do (bắt buộc ở máy chủ). Hàm dùng chung của app-core chưa có chỗ truyền lý do nên web gọi thẳng. */
+export const grantStaffRole = (phone: string, role: 'STAFF' | 'ADMIN', reason: string, permissions?: string[]) =>
+  apiFetch<{ granted: 'STAFF' | 'ADMIN'; applied: boolean; permissionsChanged?: boolean }>('/admin/staff/grant', {
+    method: 'POST',
+    body: { phone, role, reason, ...(permissions ? { permissions } : {}) },
+  });
+export const revokeStaffRole = (phone: string, reason: string) =>
+  apiFetch<{ revoked: number; downgraded: boolean; storeBlocked?: boolean }>('/admin/staff/revoke', { method: 'POST', body: { phone, reason } });
+export const setStaffPermissions = (id: string, permissions: StaffPermission[], reason: string) =>
   apiFetch<{ id: string; staffPermissions: StaffPermission[]; changed: boolean }>(`/admin/users/${encodeURIComponent(id)}/staff-permissions`, {
     method: 'PUT',
-    body: { permissions },
+    body: { permissions, reason },
   });
 
 export interface AdminMission {

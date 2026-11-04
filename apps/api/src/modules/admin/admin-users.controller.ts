@@ -1,5 +1,6 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Put } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import { ArrayMaxSize, IsArray, IsString, MaxLength, MinLength } from 'class-validator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -12,9 +13,14 @@ export class BlockUserDto {
   @IsString() @MinLength(3) @MaxLength(500) reason!: string;
 }
 
+export class UnblockUserDto {
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value)) @IsString() @MinLength(3) @MaxLength(500) reason!: string;
+}
+
 export class StaffPermissionsDto {
   /** Nhóm việc của nhân viên — xem common/staff-permissions.ts. Mảng rỗng = chỉ quầy thu ngân/đổi vỏ/chấm công. */
   @IsArray() @ArrayMaxSize(10) @IsString({ each: true }) permissions!: string[];
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value)) @IsString() @MinLength(3) @MaxLength(500) reason!: string;
 }
 
 @ApiTags('admin-users')
@@ -35,7 +41,7 @@ export class AdminUsersController {
 
   @Put(':id/staff-permissions')
   setStaffPermissions(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: StaffPermissionsDto) {
-    return this.admin.setStaffPermissions(adminId, id, dto.permissions);
+    return this.admin.setStaffPermissions(adminId, id, dto.permissions, dto.reason);
   }
 
   @Post(':id/forfeit-commissions')
@@ -52,7 +58,7 @@ export class AdminUsersController {
 
   @Post(':id/unblock')
   @HttpCode(HttpStatus.OK)
-  unblock(@CurrentUser('sub') adminId: string, @Param('id') id: string) {
-    return this.blocks.unblock(adminId, id);
+  unblock(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: UnblockUserDto) {
+    return this.blocks.unblock(adminId, id, dto.reason);
   }
 }

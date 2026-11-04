@@ -55,15 +55,15 @@ export class RbacService {
    * (setUserRole thu hồi grant trong tx của nó) thì grant vừa bị thu hồi không được dùng để nâng lại người đó.
    * Gọi với client gốc thì tự mở giao dịch; gọi với tx (addGrant) thì dùng luôn tx đó. Không có grant cao hơn thì không mở gì.
    */
-  async applyGrants(user: User, db: Db = this.prisma, actorId: string | null = null): Promise<User> {
+  async applyGrants(user: User, db: Db = this.prisma, actorId: string | null = null, reason?: string): Promise<User> {
     if (!user.phone) return user;
-    if (!('$transaction' in db)) return this.raiseFromGrants(user, db, actorId);
+    if (!('$transaction' in db)) return this.raiseFromGrants(user, db, actorId, reason);
     const peek = await db.roleGrant.findMany({
       where: { phone: user.phone, revokedAt: null, OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
       select: { role: true },
     });
     if (!this.highestGrant(peek, user.role)) return user;
-    return db.$transaction((tx) => this.raiseFromGrants(user, tx, actorId)).catch(throwIfLockBusy);
+    return db.$transaction((tx) => this.raiseFromGrants(user, tx, actorId, reason)).catch(throwIfLockBusy);
   }
 
   /** Role cao nhất trong grant (STAFF/ADMIN) nếu xếp hạng cao hơn `current`, ngược lại null. */
@@ -72,7 +72,7 @@ export class RbacService {
     return RANK[best] > RANK[current] ? best : null;
   }
 
-  private async raiseFromGrants(stale: User, db: Prisma.TransactionClient, actorId: string | null): Promise<User> {
+  private async raiseFromGrants(stale: User, db: Prisma.TransactionClient, actorId: string | null, reason?: string): Promise<User> {
     const [locked] = await db.$queryRaw<{ role: UserRole; staffPermissions: string[] }[]>`
       SELECT "role", "staffPermissions" FROM "users" WHERE "id" = ${stale.id} FOR NO KEY UPDATE`;
     const user: User = locked ? { ...stale, role: locked.role, staffPermissions: locked.staffPermissions } : stale;
@@ -102,7 +102,7 @@ export class RbacService {
       kind: 'ROLE',
       from: user.role,
       to: best,
-      reason: 'Áp quyền cấp theo SĐT',
+      reason: reason ? `Cấp quyền theo SĐT: ${reason}` : 'Áp quyền cấp theo SĐT',
       actorId,
     });
     if (resetPerms && (invitedPerms.length || oldPerms.length)) {
@@ -126,7 +126,7 @@ export class RbacService {
    * không ghi nhóm, user được nâng lên STAFF với nhóm rỗng (nhóm cũ không sống lại); người đã là STAFF không đi qua bước nâng nên nhóm đang có giữ nguyên. Truyền lại cho lời mời đang chờ thì cập nhật nhóm của lời mời; người đã là STAFF mà admin chọn ít nhất
    * một nhóm thì nhóm cũ bị THAY bằng nhóm vừa chọn ngay (`permissionsChanged`), còn danh sách rỗng không xoá nhóm họ đang có.
    */
-  async addGrant(adminId: string, phone: string, role: 'STAFF' | 'ADMIN', permissions?: readonly string[]) {
+  async addGrant(adminId: string, phone: string, role: 'STAFF' | 'ADMIN', permissions?: readonly string[], reason?: string) {
     const normalized = phone.trim();
     const perms = role === 'STAFF' && permissions ? normalizePermissions(permissions) : [];
     return this.prisma.$transaction(async (tx) => {
@@ -165,7 +165,7 @@ export class RbacService {
       if (user) {
         // Bản đọc đầu tx có thể cũ: request thua createMany đã chờ bên thắng commit, nên role/nhóm của user có thể đã đổi.
         const fresh = (await tx.user.findUnique({ where: { id: user.id } })) ?? user;
-        const updated = await this.applyGrants(fresh, tx, adminId);
+        const updated = await this.applyGrants(fresh, tx, adminId, reason);
         applied = updated.role !== fresh.role;
         // applyGrants chỉ chép nhóm khi nâng vai trò; người đã là STAFF thì nhóm admin vừa chọn phải áp luôn kẻo bị bỏ qua âm thầm.
         if (!applied && updated.role === 'STAFF' && role === 'STAFF' && perms.length && !samePermissions(updated.staffPermissions ?? [], perms)) {
@@ -176,7 +176,7 @@ export class RbacService {
             kind: 'STAFF_PERMISSIONS',
             from: (updated.staffPermissions ?? []).join(','),
             to: perms.join(','),
-            reason: 'Admin chọn nhóm việc khi thêm nhân sự',
+            reason: reason ? `Chọn nhóm việc khi thêm nhân sự: ${reason}` : 'Admin chọn nhóm việc khi thêm nhân sự',
             actorId: adminId,
           });
         }
@@ -193,7 +193,7 @@ export class RbacService {
    * Bọc trong $transaction: revoke grant + hạ role là 1 thao tác atomic — tránh trạng thái nửa
    * vời (grant đã revoke nhưng role chưa hạ) nếu lỗi giữa chừng.
    */
-  async revokeGrant(adminId: string, phone: string) {
+  async revokeGrant(adminId: string, phone: string, reason?: string) {
     const normalized = phone.trim();
     // Đọc cấu hình đối soát trước khi mở tx (như AdminService.setUserRole): chỉ dùng khi người này rơi xuống CUSTOMER.
     const partnerCfg = await this.fulfilment?.settlementConfig();
@@ -234,18 +234,19 @@ export class RbacService {
           where: { id: user.id },
           data: { role: base, ...(user.staffPermissions?.length ? { staffPermissions: [] } : {}) },
         });
-        await recordUserAdminEvent(tx, { userId: user.id, kind: 'ROLE', from: user.role, to: base, reason: 'Thu hồi quyền nhân viên', actorId: adminId });
+        await recordUserAdminEvent(tx, { userId: user.id, kind: 'ROLE', from: user.role, to: base, reason: reason ? `Thu hồi quyền nhân viên: ${reason}` : 'Thu hồi quyền nhân viên', actorId: adminId });
         if (user.staffPermissions?.length) {
           await recordUserAdminEvent(tx, {
             userId: user.id,
             kind: 'STAFF_PERMISSIONS',
             from: user.staffPermissions.join(','),
             to: '',
+            reason,
             actorId: adminId,
           });
         }
         downgraded = true;
-        this.logger.warn(`Admin ${adminId} thu hồi quyền SĐT ${maskPhone(normalized)}: ${user.role} → ${base}`);
+        this.logger.warn(`Admin ${adminId} thu hồi quyền SĐT ${maskPhone(normalized)}: ${user.role} → ${base}${reason ? ` (lý do: ${reason})` : ''}`);
       }
       return { revoked: count, downgraded, role, ...(storeBlocked ? { storeBlocked } : {}) };
     }, { maxWait: 15_000, timeout: 60_000 }).catch(throwIfLockBusy);

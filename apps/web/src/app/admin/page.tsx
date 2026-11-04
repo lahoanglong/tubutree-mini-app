@@ -2309,7 +2309,7 @@ function UsersTab({ isAdmin = true, onOpenOrder, onOpenUserOrders }: { isAdmin?:
     onError,
   });
   const unblock = useMutation({
-    mutationFn: ({ id }: { id: string; label: string }) => unblockUser(id),
+    mutationFn: ({ id, reason }: { id: string; reason: string; label: string }) => unblockUser(id, reason),
     onSuccess: (_r, v) => {
       setMsg({ ok: true, text: `Đã mở khoá ${v.label}.` });
     },
@@ -2336,12 +2336,18 @@ function UsersTab({ isAdmin = true, onOpenOrder, onOpenUserOrders }: { isAdmin?:
   const askUnblock = async (u: AdminUser) => {
     setMsg(null);
     const label = u.fullName ?? u.phone ?? u.id;
-    const ok = await confirm({
+    const reason = await ask({
       title: 'Mở khoá tài khoản',
       message: `Mở khoá ${label}? Người này đăng nhập lại được ngay.`,
       confirmLabel: 'Mở khoá',
+      input: { label: 'Lý do mở khoá', placeholder: 'VD: đã liên hệ khách, xác minh không vi phạm', required: true, maxLength: 500 },
     });
-    if (ok) unblock.mutate({ id: u.id, label });
+    if (reason === null) return;
+    if (reason.length < 3) {
+      setMsg({ ok: false, text: 'Lý do mở khoá cần ít nhất 3 ký tự.' });
+      return;
+    }
+    unblock.mutate({ id: u.id, label, reason });
   };
 
   return (
@@ -2529,9 +2535,9 @@ function GrantRoleForm({ onDone }: { onDone: () => void }) {
   const needsTier = role === 'DEALER';
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [checking, setChecking] = useState(false);
-  const { confirm, dialog } = useConfirm();
+  const { ask, dialog } = useConfirm();
   const mut = useMutation({
-    mutationFn: (v: { phone: string; role: UserRole; tierId?: string }) => setUserRole(v.phone, v.role, v.tierId),
+    mutationFn: (v: { phone: string; role: UserRole; reason: string; tierId?: string }) => setUserRole(v.phone, v.role, v.reason, v.tierId),
     onSuccess: (r) => {
       setMsg({ ok: true, text: `Đã đổi ${r.phone ?? r.id}: ${roleLabel(r.previousRole)} → ${roleLabel(r.role)}` });
       setPhone('');
@@ -2549,23 +2555,30 @@ function GrantRoleForm({ onDone }: { onDone: () => void }) {
     setChecking(true);
     const current = await lookupRoleByPhone(target.phone);
     setChecking(false);
-    const ok = await confirm(
+    const input = { label: 'Lý do đổi vai trò', placeholder: 'VD: nhân viên mới vào kho, đại lý đã ký hợp đồng', required: true, maxLength: 500 };
+    const reason = await ask(
       role === 'ADMIN'
         ? {
             title: 'Cấp quyền ADMIN',
             message: `Cấp quyền ADMIN (toàn quyền quản trị) cho SĐT ${target.phone}?`,
             confirmLabel: 'Cấp quyền ADMIN',
             tone: 'danger',
+            input,
           }
         : {
             title: 'Đổi vai trò',
             message: `Đổi vai trò của SĐT ${target.phone} sang "${roleLabel(target.role)}"?\n${roleChangeConsequences(target.role, current)}`,
             confirmLabel: 'Đổi vai trò',
             tone: 'danger',
+            input,
           },
     );
-    if (!ok) return;
-    mut.mutate(target);
+    if (reason === null) return;
+    if (reason.length < 3) {
+      setMsg({ ok: false, text: 'Lý do đổi vai trò cần ít nhất 3 ký tự.' });
+      return;
+    }
+    mut.mutate({ ...target, reason });
   };
   return (
     <div className="rounded-card border border-stone-200 bg-stone-0 p-4">

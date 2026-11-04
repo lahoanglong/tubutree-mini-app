@@ -374,10 +374,11 @@ function ForfeitCommissions({ userId, pending }: { userId: string; pending: { co
 
 function StaffPermissionsForm({ userId, current }: { userId: string; current: StaffPermission[] }) {
   const qc = useQueryClient();
+  const { ask, dialog } = useConfirm();
   const [perms, setPerms] = useState<StaffPermission[]>(current);
   const [msg, setMsg] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null);
   const save = useMutation({
-    mutationFn: () => setStaffPermissions(userId, perms),
+    mutationFn: (reason: string) => setStaffPermissions(userId, perms, reason),
     onSuccess: (r) => {
       setMsg({ tone: 'success', text: r.changed ? 'Đã lưu nhóm việc — có hiệu lực ở lần thao tác kế tiếp của nhân viên.' : 'Không có gì thay đổi.' });
       void qc.invalidateQueries({ queryKey: ['admin-user-detail', userId] });
@@ -385,6 +386,21 @@ function StaffPermissionsForm({ userId, current }: { userId: string; current: St
     onError: (e) => setMsg({ tone: 'danger', text: actionErrorText(e) }),
   });
   const dirty = [...perms].sort().join(',') !== [...current].sort().join(',');
+  const askSave = async () => {
+    setMsg(null);
+    const reason = await ask({
+      title: 'Lưu nhóm việc',
+      message: 'Đổi nhóm việc của nhân viên này? Có hiệu lực ở lần thao tác kế tiếp của họ.',
+      confirmLabel: 'Lưu nhóm việc',
+      input: { label: 'Lý do đổi nhóm việc', placeholder: 'VD: chuyển sang phụ trách kho', required: true, maxLength: 500 },
+    });
+    if (reason === null) return;
+    if (reason.length < 3) {
+      setMsg({ tone: 'danger', text: 'Lý do cần ít nhất 3 ký tự.' });
+      return;
+    }
+    save.mutate(reason);
+  };
   return (
     <Section title="Nhóm việc nhân viên">
       <p className="text-xs text-stone-500">Không chọn nhóm nào: nhân viên chỉ dùng quầy thu ngân, tab Đổi rác (hàng đợi kho, quà chờ nhận) và chấm công.</p>
@@ -401,7 +417,7 @@ function StaffPermissionsForm({ userId, current }: { userId: string; current: St
           </label>
         ))}
       </div>
-      <button type="button" disabled={!dirty || save.isPending} onClick={() => save.mutate()} className={`${BTN_PRIMARY} mt-2`}>
+      <button type="button" disabled={!dirty || save.isPending} onClick={() => void askSave()} className={`${BTN_PRIMARY} mt-2`}>
         {save.isPending ? 'Đang lưu…' : 'Lưu nhóm việc'}
       </button>
       {msg && (
@@ -411,6 +427,7 @@ function StaffPermissionsForm({ userId, current }: { userId: string; current: St
           </Notice>
         </div>
       )}
+      {dialog}
     </Section>
   );
 }

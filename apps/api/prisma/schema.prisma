@@ -374,6 +374,21 @@ model AdminExportLog {
   @@map("admin_export_logs")
 }
 
+/// Lịch sử đổi % hoa hồng CTV của biến thể (Variation.affiliateRate): ai đổi từ bao nhiêu sang bao nhiêu. NULL = mức mặc định.
+/// Chỉ thêm, ghi cùng giao dịch với lần đổi % (đặt tay, theo sản phẩm, áp hàng loạt, nhập CSV).
+model CommissionRateHistory {
+  id          String   @id @default(cuid())
+  variationId String
+  fromPct     Decimal?
+  toPct       Decimal?
+  actorId     String
+  createdAt   DateTime @default(now())
+
+  @@index([variationId, createdAt])
+  @@index([actorId, createdAt])
+  @@map("commission_rate_history")
+}
+
 // Refresh token lưu hash (rotation). Phục vụ Zalo auth flow Phase 0.
 model RefreshToken {
   id        String    @id @default(cuid())

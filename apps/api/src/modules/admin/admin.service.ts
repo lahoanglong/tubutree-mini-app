@@ -623,6 +623,7 @@ export class AdminService {
     phone: string,
     role: 'CUSTOMER' | 'AFFILIATE' | 'DEALER' | 'STAFF' | 'ADMIN',
     tierId?: string,
+    reason?: string,
   ) {
     const normalized = searchPhone(phone) ?? phone.trim();
     const dealerTierId = role === 'DEALER' ? tierId?.trim() : undefined;
@@ -685,7 +686,7 @@ export class AdminService {
         select: { id: true, phone: true, fullName: true, role: true },
       });
       if (previousRole !== role) {
-        await recordUserAdminEvent(tx, { userId: user.id, kind: 'ROLE', from: previousRole, to: role, actorId: adminId });
+        await recordUserAdminEvent(tx, { userId: user.id, kind: 'ROLE', from: previousRole, to: role, reason, actorId: adminId });
       }
       // Dấu đổi giá trị mà vai trò không đổi (DEALER→DEALER mở lại quyền rút) vẫn phải có dòng sổ: lịch sử vai trò không nói được ai mở lại.
       const markBefore = user.affiliateRevokedAt ?? null;
@@ -696,6 +697,7 @@ export class AdminService {
           kind: 'AFFILIATE_REVOKE',
           from: markBefore?.toISOString() ?? null,
           to: markAfter?.toISOString() ?? null,
+          reason,
           actorId: adminId,
         });
       }
@@ -705,6 +707,7 @@ export class AdminService {
           kind: 'STAFF_PERMISSIONS',
           from: droppedPerms.join(','),
           to: '',
+          reason,
           actorId: adminId,
         });
       }
@@ -730,7 +733,7 @@ export class AdminService {
    * Gán nhóm việc cho nhân viên (ADMINOPS-10). Chỉ cho tài khoản STAFF: ADMIN đã có mọi quyền, khách thì phải cấp vai
    * trò nhân viên trước. Có hiệu lực ở request kế tiếp (JwtStrategy đọc DB, cache vài giây).
    */
-  async setStaffPermissions(adminId: string, userId: string, raw: string[]) {
+  async setStaffPermissions(adminId: string, userId: string, raw: string[], reason?: string) {
     const unknown = raw.filter((p) => !isStaffPermission(p));
     if (unknown.length) throw new BadRequestException(`Nhóm việc không hợp lệ: ${unknown.join(', ')}.`);
     const perms = STAFF_PERMISSIONS.filter((p) => raw.includes(p));
@@ -750,7 +753,7 @@ export class AdminService {
       if (res.count === 0) {
         throw new BadRequestException('Tài khoản vừa đổi vai trò, không còn là Nhân viên — tải lại trang.');
       }
-      await recordUserAdminEvent(tx, { userId, kind: 'STAFF_PERMISSIONS', from: before, to: after, actorId: adminId });
+      await recordUserAdminEvent(tx, { userId, kind: 'STAFF_PERMISSIONS', from: before, to: after, reason, actorId: adminId });
     });
     this.logger.warn(`Admin ${adminId} đổi nhóm việc nhân viên ${userId}: [${before}] → [${after}]`);
     return { id: userId, staffPermissions: perms, changed: true };

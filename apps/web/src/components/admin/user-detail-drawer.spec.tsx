@@ -2,7 +2,7 @@
 import { QueryClient } from '@tanstack/react-query';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { UserDetailDrawer } from './user-detail-drawer';
-import { answerConfirm, byText, click, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
+import { answerAsk, answerConfirm, byText, click, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 import type { AdminUserDetail } from '@/lib/admin-client';
 import type { WasteUserFlagsDTO } from '@tubutree/shared-types';
 
@@ -242,9 +242,14 @@ describe('UserDetailDrawer — nhóm việc nhân viên (D1-05)', () => {
     click(box('Marketing'));
     click(byText(form, 'button', 'Lưu nhóm việc'));
     await flush();
+    expect(api.calls.find((c) => c.url.includes('/staff-permissions'))).toBeUndefined();
+    answerAsk('Chuyển sang marketing');
+    await flush();
     const put = api.calls.find((c) => c.url.includes('/staff-permissions'))!;
     expect(put.init!.method).toBe('PUT');
-    expect(JSON.parse(String(put.init!.body)).permissions.sort()).toEqual(['KE_TOAN', 'MARKETING']);
+    const sent = JSON.parse(String(put.init!.body));
+    expect(sent.permissions.sort()).toEqual(['KE_TOAN', 'MARKETING']);
+    expect(sent.reason).toBe('Chuyển sang marketing');
   });
 });
 

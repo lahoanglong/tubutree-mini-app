@@ -22,6 +22,7 @@ import {
   Max,
   MaxLength,
   Min,
+  MinLength,
   ValidateIf,
   ValidateNested,
   registerDecorator,
@@ -457,6 +458,8 @@ export class SetUserRoleDto {
   role!: 'CUSTOMER' | 'AFFILIATE' | 'DEALER' | 'STAFF' | 'ADMIN';
   /** Bắt buộc khi role = DEALER (kiểm ở AdminService.setUserRole — C-008). */
   @IsOptional() @IsString() @MaxLength(100) tierId?: string;
+  /** Lý do đổi vai trò, ghi vào lịch sử vai trò của người đó. */
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value)) @IsString() @MinLength(3) @MaxLength(500) reason!: string;
 }
 
 @Roles('ADMIN')
@@ -539,7 +542,7 @@ export class AdminController {
   // Cấp/đổi role theo SĐT — thay script SSH grant-admin.js (có guard @Roles + log ai đổi).
   @Post('users/role')
   setUserRole(@CurrentUser('sub') adminId: string, @Body() dto: SetUserRoleDto) {
-    return this.admin.setUserRole(adminId, dto.phone, dto.role, dto.tierId);
+    return this.admin.setUserRole(adminId, dto.phone, dto.role, dto.tierId, dto.reason);
   }
 
   @AllowStaff('CSKH', 'KHO', 'KE_TOAN')

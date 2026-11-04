@@ -545,6 +545,19 @@ describe('AdminService.setStaffPermissions', () => {
   });
 });
 
+describe('AdminService.setStaffPermissions — lý do (L1-08)', () => {
+  it('ghi lý do admin vào dòng STAFF_PERMISSIONS', async () => {
+    const create = jest.fn().mockResolvedValue({});
+    const tx = { user: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) }, userAdminEvent: { create } };
+    const prisma = makePrisma({
+      user: { findUnique: jest.fn().mockResolvedValue({ role: 'STAFF', staffPermissions: [] }) },
+      $transaction: jest.fn((cb: (t: unknown) => unknown) => cb(tx)),
+    });
+    await mkAdmin(prisma).setStaffPermissions('admin1', 'u1', ['KHO'], 'Chuyển sang kho');
+    expect(create).toHaveBeenCalledWith({ data: expect.objectContaining({ kind: 'STAFF_PERMISSIONS', reason: 'Chuyển sang kho', actorId: 'admin1' }) });
+  });
+});
+
 describe('AdminService.setUserRole', () => {
   it('SĐT không tồn tại → NotFound (không tự tạo user như script SSH cũ)', async () => {
     const prisma = makePrisma({ user: { findUnique: jest.fn().mockResolvedValue(null), update: jest.fn() } });

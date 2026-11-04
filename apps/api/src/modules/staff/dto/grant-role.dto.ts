@@ -1,4 +1,5 @@
-import { ArrayMaxSize, IsArray, IsIn, IsOptional, IsString, Matches } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { ArrayMaxSize, IsArray, IsIn, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 import { STAFF_PERMISSIONS, type StaffPermission } from '../../../common/staff-permissions';
 
 export class GrantRoleDto {
@@ -15,4 +16,10 @@ export class GrantRoleDto {
   @ArrayMaxSize(STAFF_PERMISSIONS.length)
   @IsIn(STAFF_PERMISSIONS, { each: true, message: 'Nhóm việc không hợp lệ.' })
   permissions?: StaffPermission[];
+
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @MinLength(3, { message: 'Cần ghi lý do (ít nhất 3 ký tự).' })
+  @MaxLength(500)
+  reason!: string;
 }

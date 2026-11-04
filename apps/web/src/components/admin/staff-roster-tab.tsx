@@ -2,11 +2,11 @@
 
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { grantStaff, revokeStaff, type StaffRole } from '@tubutree/app-core/api/staff';
+import type { StaffRole } from '@tubutree/app-core/api/staff';
 import { adminStaffQuery } from '@tubutree/app-core/queries/staff';
 import { grantDoneText, grantPermissionsHint } from '@tubutree/app-core/staff-copy';
 import { coreHttp } from '@/lib/core-http';
-import { setStaffPermissions, STAFF_PERMISSION_LABELS, STAFF_PERMISSION_SHORT, type StaffPermission } from '@/lib/admin-client';
+import { grantStaffRole, revokeStaffRole, setStaffPermissions, STAFF_PERMISSION_LABELS, STAFF_PERMISSION_SHORT, type StaffPermission } from '@/lib/admin-client';
 import { errText } from '@/components/staff/staff-shell';
 import { formatDate } from '@/lib/format-date';
 import { useConfirm } from './confirm-dialog';
@@ -21,7 +21,7 @@ const inviteExpiry = (p: object): string | null => (p as { expiresAt?: string | 
 /** Nhân sự: danh sách người có quyền, cấp quyền theo SĐT (STAFF hoặc ADMIN), thu hồi và huỷ lời mời chờ mở app. */
 export function StaffRosterTab({ meId }: { meId?: string } = {}) {
   const qc = useQueryClient();
-  const { confirm, dialog } = useConfirm();
+  const { ask, dialog } = useConfirm();
   const staffQ = useQuery(adminStaffQuery(coreHttp));
   const [phone, setPhone] = useState('');
   const [role, setRole] = useState<StaffRole>('STAFF');
@@ -38,10 +38,10 @@ export function StaffRosterTab({ meId }: { meId?: string } = {}) {
 
   const grantM = useMutation({
     // Nhóm việc chỉ có nghĩa với nhân viên; không chọn nhóm nào thì không gửi khoá permissions để máy chủ giữ nguyên nhóm đã lưu.
-    mutationFn: async () => {
+    mutationFn: async (reason: string) => {
       const to = phone.trim();
       const names = PERMISSIONS.filter((p) => newPerms.includes(p)).map((p) => STAFF_PERMISSION_SHORT[p]);
-      const r = await grantStaff(coreHttp, to, role, role === 'STAFF' && newPerms.length ? newPerms : undefined);
+      const r = await grantStaffRole(to, role, reason, role === 'STAFF' && newPerms.length ? newPerms : undefined);
       return { r, to, names, alreadyStaff: existingNames !== null };
     },
     onSuccess: ({ r, to, names, alreadyStaff }) => {
@@ -54,7 +54,7 @@ export function StaffRosterTab({ meId }: { meId?: string } = {}) {
   });
 
   const revokeM = useMutation({
-    mutationFn: (p: string) => revokeStaff(coreHttp, p),
+    mutationFn: (v: { phone: string; reason: string }) => revokeStaffRole(v.phone, v.reason),
     onSuccess: (res) => {
       setMsg(
         res.storeBlocked
@@ -69,40 +69,74 @@ export function StaffRosterTab({ meId }: { meId?: string } = {}) {
     onError: (e) => setMsg({ tone: 'danger', text: errText(e) }),
   });
 
-  // Cấp ADMIN là nâng quyền toàn hệ thống, rủi ro hơn hẳn STAFF nên hỏi thêm một bước.
-  const submitGrant = async () => {
-    if (role === 'ADMIN') {
-      const ok = await confirm({
-        title: 'Cấp quyền ADMIN?',
-        message: `Xác nhận cấp quyền ADMIN (toàn quyền quản trị) cho SĐT ${phone.trim()}?`,
-        confirmLabel: 'Cấp quyền ADMIN',
-        tone: 'danger',
-      });
-      if (!ok) return;
+  /** Hỏi lý do (bắt buộc, ít nhất 3 ký tự). Trả null khi bỏ qua hoặc lý do quá ngắn (đã báo ở khung thông báo). */
+  const askReason = async (opts: { title: string; message: string; confirmLabel: string; cancelLabel?: string; tone?: 'danger'; label: string; placeholder: string }) => {
+    const reason = await ask({
+      title: opts.title,
+      message: opts.message,
+      confirmLabel: opts.confirmLabel,
+      cancelLabel: opts.cancelLabel,
+      tone: opts.tone,
+      input: { label: opts.label, placeholder: opts.placeholder, required: true, maxLength: 500 },
+    });
+    if (reason === null) return null;
+    if (reason.length < 3) {
+      setMsg({ tone: 'danger', text: 'Lý do cần ít nhất 3 ký tự.' });
+      return null;
     }
-    grantM.mutate();
+    return reason;
+  };
+
+  // Cấp ADMIN là nâng quyền toàn hệ thống, rủi ro hơn hẳn STAFF nên hộp xác nhận nói rõ hơn.
+  const submitGrant = async () => {
+    setMsg(null);
+    const reason = await askReason(
+      role === 'ADMIN'
+        ? {
+            title: 'Cấp quyền ADMIN?',
+            message: `Xác nhận cấp quyền ADMIN (toàn quyền quản trị) cho SĐT ${phone.trim()}?`,
+            confirmLabel: 'Cấp quyền ADMIN',
+            tone: 'danger',
+            label: 'Lý do cấp quyền',
+            placeholder: 'VD: quản lý mới của công ty',
+          }
+        : {
+            title: 'Cấp quyền nhân viên?',
+            message: `Cấp quyền nhân viên cho SĐT ${phone.trim()}?`,
+            confirmLabel: 'Cấp quyền',
+            label: 'Lý do cấp quyền',
+            placeholder: 'VD: nhân viên kho mới vào làm',
+          },
+    );
+    if (reason !== null) grantM.mutate(reason);
   };
 
   // Hạ quyền nhầm một quản trị viên thì chỉ người còn quyền mới cấp lại được.
   const askRevoke = async (p: string, who: string) => {
-    const ok = await confirm({
+    setMsg(null);
+    const reason = await askReason({
       title: 'Thu hồi quyền?',
       message: `Thu hồi quyền của ${who}? Người này sẽ mất toàn bộ quyền nhân viên/quản trị.`,
       confirmLabel: 'Thu hồi',
       tone: 'danger',
+      label: 'Lý do thu hồi',
+      placeholder: 'VD: nhân viên đã nghỉ việc',
     });
-    if (ok) revokeM.mutate(p);
+    if (reason !== null) revokeM.mutate({ phone: p, reason });
   };
 
   const askCancelInvite = async (p: string) => {
-    const ok = await confirm({
+    setMsg(null);
+    const reason = await askReason({
       title: 'Huỷ lời mời?',
       message: `Huỷ lời mời chờ mở app của SĐT ${p}? Muốn cấp lại phải thêm lại từ đầu.`,
       confirmLabel: 'Huỷ lời mời',
       cancelLabel: 'Giữ lời mời',
       tone: 'danger',
+      label: 'Lý do huỷ lời mời',
+      placeholder: 'VD: nhập nhầm số điện thoại',
     });
-    if (ok) revokeM.mutate(p);
+    if (reason !== null) revokeM.mutate({ phone: p, reason });
   };
 
   return (
@@ -203,7 +237,7 @@ export function StaffRosterTab({ meId }: { meId?: string } = {}) {
                   <PermissionPicker
                     key={`${m.id}:${(m.staffPermissions ?? []).join(',')}`}
                     current={(m.staffPermissions ?? []) as StaffPermission[]}
-                    save={async (perms) => (await setStaffPermissions(m.id, perms)).changed}
+                    save={async (perms, reason) => (await setStaffPermissions(m.id, perms, reason)).changed}
                     savedText="Đã lưu nhóm việc. Nhân viên thấy mục mới ở lần mở trang kế tiếp."
                     onSaved={refresh}
                   />
@@ -238,8 +272,8 @@ export function StaffRosterTab({ meId }: { meId?: string } = {}) {
                       <PermissionPicker
                         key={`${p.phone}:${(p.staffPermissions ?? []).join(',')}`}
                         current={(p.staffPermissions ?? []) as StaffPermission[]}
-                        save={async (perms) => {
-                          await grantStaff(coreHttp, p.phone, 'STAFF', perms);
+                        save={async (perms, reason) => {
+                          await grantStaffRole(p.phone, 'STAFF', reason, perms);
                           return true;
                         }}
                         savedText="Đã lưu nhóm việc của lời mời. Họ nhận đúng nhóm này khi mở app lần đầu."
@@ -266,14 +300,15 @@ function PermissionPicker({
 }: {
   current: StaffPermission[];
   /** Lưu danh sách nhóm; trả về có thay đổi thật hay không. */
-  save: (perms: StaffPermission[]) => Promise<boolean>;
+  save: (perms: StaffPermission[], reason: string) => Promise<boolean>;
   savedText: string;
   onSaved: () => void;
 }) {
   const [perms, setPerms] = useState<StaffPermission[]>(current);
   const [msg, setMsg] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null);
+  const { ask, dialog } = useConfirm();
   const save = useMutation({
-    mutationFn: () => persist(perms),
+    mutationFn: (reason: string) => persist(perms, reason),
     onSuccess: (changed) => {
       setMsg({ tone: 'success', text: changed ? savedText : 'Không có gì thay đổi.' });
       onSaved();
@@ -281,6 +316,21 @@ function PermissionPicker({
     onError: (e) => setMsg({ tone: 'danger', text: errText(e) }),
   });
   const dirty = [...perms].sort().join(',') !== [...current].sort().join(',');
+  const askSave = async () => {
+    setMsg(null);
+    const reason = await ask({
+      title: 'Lưu nhóm việc',
+      message: 'Đổi nhóm việc? Bỏ tick là mất quyền ngay.',
+      confirmLabel: 'Lưu nhóm việc',
+      input: { label: 'Lý do đổi nhóm việc', placeholder: 'VD: chuyển sang phụ trách kho', required: true, maxLength: 500 },
+    });
+    if (reason === null) return;
+    if (reason.length < 3) {
+      setMsg({ tone: 'danger', text: 'Lý do cần ít nhất 3 ký tự.' });
+      return;
+    }
+    save.mutate(reason);
+  };
   return (
     <fieldset className="space-y-1">
       <legend className="text-xs font-semibold text-stone-700">Nhóm việc</legend>
@@ -299,7 +349,7 @@ function PermissionPicker({
           </span>
         </label>
       ))}
-      <button type="button" disabled={!dirty || save.isPending} onClick={() => save.mutate()} className={BTN_PRIMARY}>
+      <button type="button" disabled={!dirty || save.isPending} onClick={() => void askSave()} className={BTN_PRIMARY}>
         {save.isPending ? 'Đang lưu…' : 'Lưu nhóm việc'}
       </button>
       {msg && (
@@ -307,6 +357,7 @@ function PermissionPicker({
           {msg.text}
         </Notice>
       )}
+      {dialog}
     </fieldset>
   );
 }
