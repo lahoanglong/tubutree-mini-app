@@ -1042,7 +1042,6 @@ export interface AdminFlashSalePage {
   items: AdminFlashSaleSummary[];
   nextCursor: string | null;
 }
-export const listFlashSales = () => apiFetch<AdminFlashSale[]>('/admin/flash-sales');
 export const listFlashSalesPage = (p: { status: 'open' | 'ended' | 'all'; cursor?: string; take?: number }) => {
   const qs = new URLSearchParams({ status: p.status, take: String(p.take ?? 20) });
   if (p.cursor) qs.set('cursor', p.cursor);
