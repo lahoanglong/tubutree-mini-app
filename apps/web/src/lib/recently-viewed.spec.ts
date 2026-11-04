@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest';
+// @vitest-environment jsdom
+import { describe, it, expect, vi } from 'vitest';
 import {
-  RECENTLY_VIEWED_KEY, RECENTLY_VIEWED_MAX, clearRecentlyViewed, parseRecentlyViewed, readRecentlyViewed, recordRecentlyViewed,
+  RECENTLY_VIEWED_KEY, RECENTLY_VIEWED_MAX, RECENTLY_VIEWED_EVENT, clearRecentlyViewed, parseRecentlyViewed, pruneRecentlyViewed, readRecentlyViewed, recordRecentlyViewed,
   type StorageLike,
 } from './recently-viewed';
 
@@ -142,5 +143,50 @@ describe('recently-viewed (spec 5b.4)', () => {
     clearRecentlyViewed(s);
     expect(readRecentlyViewed(s)).toEqual([]);
     expect(RECENTLY_VIEWED_KEY in s.data).toBe(false);
+  });
+});
+
+describe('pruneRecentlyViewed', () => {
+  const keepSet = (...s: string[]) => new Set(s);
+  it('xoá mục đã hỏi mà API không trả; mục không nằm trong tập đã hỏi (ghi từ tab khác) được giữ', () => {
+    const st = memoryStorage();
+    recordRecentlyViewed(item('a'), 1, st);
+    recordRecentlyViewed(item('b'), 2, st);
+    recordRecentlyViewed(item('moi'), 3, st);
+    pruneRecentlyViewed(keepSet('a'), keepSet('a', 'b'), st);
+    expect(readRecentlyViewed(st).map((x) => x.slug)).toEqual(['moi', 'a']);
+  });
+  it('xoá hết thì bỏ khoá', () => {
+    const st = memoryStorage();
+    recordRecentlyViewed(item('a'), 1, st);
+    pruneRecentlyViewed(keepSet(), keepSet('a'), st);
+    expect(RECENTLY_VIEWED_KEY in st.data).toBe(false);
+  });
+  it('không đổi gì thì không ghi và không bắn sự kiện', () => {
+    const st = memoryStorage();
+    recordRecentlyViewed(item('a'), 1, st);
+    let events = 0;
+    const on = () => events++;
+    window.addEventListener(RECENTLY_VIEWED_EVENT, on);
+    const set = vi.spyOn(st, 'setItem');
+    pruneRecentlyViewed(keepSet('a'), keepSet('a'), st);
+    window.removeEventListener(RECENTLY_VIEWED_EVENT, on);
+    expect(set).not.toHaveBeenCalled();
+    expect(events).toBe(0);
+  });
+  it('setItem ném lỗi: không bắn sự kiện, không ném', () => {
+    const st = memoryStorage();
+    recordRecentlyViewed(item('a'), 1, st);
+    recordRecentlyViewed(item('b'), 2, st);
+    st.setItem = () => { throw new Error('quota'); };
+    let events = 0;
+    const on = () => events++;
+    window.addEventListener(RECENTLY_VIEWED_EVENT, on);
+    expect(() => pruneRecentlyViewed(keepSet('a'), keepSet('a', 'b'), st)).not.toThrow();
+    window.removeEventListener(RECENTLY_VIEWED_EVENT, on);
+    expect(events).toBe(0);
+  });
+  it('không có storage: không làm gì', () => {
+    expect(() => pruneRecentlyViewed(keepSet(), keepSet('a'), null)).not.toThrow();
   });
 });

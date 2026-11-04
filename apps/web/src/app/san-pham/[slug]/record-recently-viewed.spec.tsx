@@ -13,6 +13,7 @@ const client = new QueryClient();
 const rerender = (ui: ReactElement) => act(() => mounted!.root.render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>));
 beforeEach(() => localStorage.clear());
 afterEach(() => {
+  vi.useRealTimers();
   mounted?.unmount();
   mounted = null;
 });
@@ -36,7 +37,6 @@ describe('RecordRecentlyViewed (PDP web)', () => {
     expect(readRecentlyViewed()[0]).toMatchObject({ viewedAt: t1, name: 'A' });
     rerender(<RecordRecentlyViewed slug="sp-b" name="B" thumbnail={null} />);
     expect(readRecentlyViewed().map((i) => i.slug)).toEqual(['sp-b', 'sp-a']);
-    vi.useRealTimers();
   });
 
   it('không ghi gì ở HTML server (không localStorage, không vẽ)', () => {

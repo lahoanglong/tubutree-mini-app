@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRecentlyViewed } from '../../hooks/use-recently-viewed';
 import { pruneRecentlyViewed } from '../../utils/recently-viewed';
 import { fetchProductsBySlugs } from '../../services/shop-api';
@@ -29,8 +29,17 @@ export function RecentlyViewedRail({ title = vi.browse.recentlyViewed }: { title
   });
   const live = new Map((productsQ.data ?? []).map((p) => [p.slug, p]));
   // API đã trả lời: mục không còn (ẩn/gỡ) bị xoá khỏi máy, để kho không giữ mục chết.
+  const queryClient = useQueryClient();
   useEffect(() => {
-    if (productsQ.isSuccess) pruneRecentlyViewed(new Set((productsQ.data ?? []).map((p) => p.slug)));
+    if (!productsQ.isSuccess) return;
+    const keep = new Set((productsQ.data ?? []).map((p) => p.slug));
+    const nextSlugs = slugs.filter((s) => keep.has(s));
+    // Khoá truy vấn đổi theo danh sách slug sau khi xoá: nạp sẵn dữ liệu cho khoá mới để thẻ không chớp (mất giá, ảnh cũ) và không gọi thừa.
+    if (nextSlugs.length > 0 && nextSlugs.length !== slugs.length) {
+      queryClient.setQueryData(['recently-viewed-products', nextSlugs.join(',')], (productsQ.data ?? []).filter((p) => keep.has(p.slug)));
+    }
+    pruneRecentlyViewed(keep, new Set(slugs));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [productsQ.isSuccess, productsQ.data]);
   const items = (productsQ.isSuccess ? stored.filter((it) => live.has(it.slug)) : stored).slice(0, shelf('browse.recent').maxItems);
   if (items.length === 0) return null;

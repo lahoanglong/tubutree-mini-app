@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useSyncExternalStore } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { shelf } from '@tubutree/app-core/merch/shelves';
 import { recentlyViewedQuery } from '@tubutree/app-core/queries/catalog';
 import { browseText } from '@/lib/browse-text';
@@ -40,8 +40,15 @@ export function RecentlyViewedRail({ title = browseText.recentlyViewed, reserve 
   const bySlug = new Map((live.data ?? []).map((p) => [p.slug, p]));
   // API đã trả lời: mục không còn (ẩn/gỡ) bị xoá khỏi máy, để lần sau script ở <head> không giữ chỗ cho dải sẽ biến mất. Trong lần vào này dải đã dựng từ kho trước khi API trả lời
   // (giữ chỗ rồi chờ API sẽ trì hoãn ảnh ưu tiên của đường thường), nên khi cả danh sách bị ẩn thì dải vẫn thu lại một lần: chỉ xảy ra khi mọi món đã xem đều bị gỡ.
+  const queryClient = useQueryClient();
   useEffect(() => {
-    if (live.isSuccess) pruneRecentlyViewed(new Set((live.data ?? []).map((p) => p.slug)));
+    if (!live.isSuccess) return;
+    const keep = new Set((live.data ?? []).map((p) => p.slug));
+    const nextSlugs = slugs.filter((s) => keep.has(s));
+    // Sau khi xoá, khoá truy vấn đổi theo danh sách slug mới: nạp sẵn dữ liệu cho khoá mới để thẻ không chớp (không mất giá, không lùi về URL ảnh cũ) và không tốn lần gọi thừa.
+    if (nextSlugs.length > 0 && nextSlugs.length !== slugs.length) queryClient.setQueryData(recentlyViewedQuery(coreHttp, nextSlugs).queryKey, (live.data ?? []).filter((p) => keep.has(p.slug)));
+    pruneRecentlyViewed(keep, new Set(slugs));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [live.isSuccess, live.data]);
   const items = (live.isSuccess ? stored.filter((it) => bySlug.has(it.slug)) : stored).slice(0, shelf('browse.recent').maxItems);
   if (items.length === 0) {

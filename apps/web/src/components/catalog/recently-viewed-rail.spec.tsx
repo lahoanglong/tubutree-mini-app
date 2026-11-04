@@ -86,6 +86,32 @@ describe('RecentlyViewedRail: dọn mục API không trả lại', () => {
     expect(c.querySelector('#browse-recent')).toBeNull();
   });
 
+  it('sau khi dọn: không gọi API thừa theo khoá mới, ảnh không lùi về URL lưu ở máy, giá không biến mất', async () => {
+    http.get.mockImplementation(async (_p: string, opts?: { query?: { slugs?: string } }) => {
+      const slugs = (opts?.query?.slugs ?? '').split(',').filter(Boolean).filter((s) => s !== 'sp-2');
+      return { data: slugs.map((s) => LIVE(Number(s.replace('sp-', '')))), meta: { page: 1, limit: slugs.length, total: slugs.length } };
+    });
+    localStorage.setItem('tubu_recently_viewed', JSON.stringify([1, 2, 3].map(STORED)));
+    mounted = render(<RecentlyViewedRail />);
+    const container = mounted.container;
+    // Từ lúc ảnh hiện hành xuất hiện lần đầu, ghi lại mọi trạng thái: không được có ảnh lưu ở máy hay thẻ mất giá.
+    const bad: string[] = [];
+    let live = false;
+    const look = () => {
+      const srcs = Array.from(container.querySelectorAll('img')).map((i) => decodeURIComponent(i.getAttribute('src') ?? ''));
+      if (srcs.some((u) => u.includes('live-'))) live = true;
+      if (!live) return;
+      if (srcs.some((u) => u.includes('stored-'))) bad.push(`ảnh lưu: ${srcs.join('|')}`);
+      if (container.querySelectorAll('[data-ds="product-tile"]').length && !container.textContent!.includes('50.000')) bad.push('mất giá');
+    };
+    new MutationObserver(look).observe(container, { childList: true, subtree: true, attributes: true });
+    await flush(10);
+    look();
+    expect(live).toBe(true);
+    expect(bad).toEqual([]);
+    expect(http.get.mock.calls.filter(([p]) => p === '/products')).toHaveLength(1);
+  });
+
   it('API lỗi: không dọn (mất mạng không được xoá lịch sử xem)', async () => {
     http.get.mockRejectedValue(new Error('offline'));
     await mount(<RecentlyViewedRail />, [1, 2].map(STORED));

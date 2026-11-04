@@ -129,6 +129,28 @@ describe('RecentlyViewedRail (spec 5b.4)', () => {
     await waitFor(() => expect(localStorage.getItem('tubu_recently_viewed')).toBeNull());
   });
 
+  it('sau khi dọn: không gọi API thừa theo khoá mới và ảnh không lùi về URL lưu ở máy', async () => {
+    recordRecentlyViewed({ slug: 'a', name: 'A', thumbnail: 'https://content.pancake.vn/2-26/stored-a.jpg' }, 1);
+    recordRecentlyViewed({ slug: 'b', name: 'B', thumbnail: 'https://content.pancake.vn/2-26/stored-b.jpg' }, 2);
+    recordRecentlyViewed({ slug: 'c', name: 'C', thumbnail: 'https://content.pancake.vn/2-26/stored-c.jpg' }, 3);
+    mocks.fetchProductsBySlugs.mockImplementation(async (slugs: string[]) => slugs.filter((s) => s !== 'b').map((s) => liveProduct(s, { thumbnail: `https://content.pancake.vn/2-26/live-${s}.jpg` })));
+    const { container } = renderRail();
+    const bad: string[] = [];
+    let live = false;
+    const look = () => {
+      const srcs = Array.from(container.querySelectorAll('img')).map((i) => decodeURIComponent(i.getAttribute('src') ?? ''));
+      if (srcs.some((u) => u.includes('live-'))) live = true;
+      if (live && srcs.some((u) => u.includes('stored-'))) bad.push(srcs.join('|'));
+    };
+    new MutationObserver(look).observe(container, { childList: true, subtree: true, attributes: true });
+    await waitFor(() => expect(JSON.parse(localStorage.getItem('tubu_recently_viewed')!)).toHaveLength(2));
+    await new Promise((r) => setTimeout(r, 50));
+    look();
+    expect(live).toBe(true);
+    expect(bad).toEqual([]);
+    expect(mocks.fetchProductsBySlugs).toHaveBeenCalledTimes(1);
+  });
+
   it('API lỗi: không dọn lịch sử xem', async () => {
     recordRecentlyViewed({ slug: 'a', name: 'A', thumbnail: null }, 1);
     mocks.fetchProductsBySlugs.mockRejectedValue(new Error('offline'));
