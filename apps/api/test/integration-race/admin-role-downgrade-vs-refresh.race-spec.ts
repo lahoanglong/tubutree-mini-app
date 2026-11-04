@@ -5,7 +5,7 @@ import { AdminService } from '../../src/modules/admin/admin.service';
 import { RbacService } from '../../src/modules/staff/rbac/rbac.service';
 import { MerchantFulfilmentService } from '../../src/modules/merchant/merchant-fulfilment.service';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
-import { createUser, sleep, warmPool } from './helpers';
+import { createUser, randCode, sleep, warmPool } from './helpers';
 
 describe('Hạ ADMIN→CUSTOMER chạy song song với các lần refresh token của chính người đó (real Postgres)', () => {
   let moduleRef: TestingModule;
@@ -99,5 +99,31 @@ describe('Hạ ADMIN→CUSTOMER chạy song song với các lần refresh token 
     await admin.setUserRole(boss.id, phone, 'CUSTOMER');
     for (let i = 0; i < 3; i++) await rbac.applyGrants(await prisma.user.findUniqueOrThrow({ where: { id: target.id } }));
     expect((await prisma.user.findUniqueOrThrow({ where: { id: target.id } })).role).toBe('CUSTOMER');
+  });
+
+  // N1: thứ tự khoá của revokeGrant phải là gian hàng TRƯỚC users như checkout. Giao dịch dưới đây là MÔ PHỎNG cùng thứ tự khoá của
+  // checkout.service (KEY SHARE gian hàng, rồi users FOR UPDATE để tiêu điểm), không dựng checkout thật.
+  it('20 vòng revokeGrant song song giao dịch mô phỏng thứ tự khoá của checkout trả điểm qua gian hàng của chính chủ: không 40P01', async () => {
+    for (let round = 0; round < 20; round++) {
+      const phone = newPhone();
+      const target = await createUser(prisma, { role: 'STAFF', phone });
+      await prisma.roleGrant.create({ data: { phone, role: 'STAFF', grantedBy: boss.id } });
+      const sf = await prisma.storefront.create({
+        data: { type: 'CTV', isPartner: true, slug: `it-n1-${randCode(8).toLowerCase()}`, ownerUserId: target.id, title: 'Gian hàng N1' },
+      });
+      const checkout = async (i: number) => {
+        await sleep(i * 3);
+        await prisma.$transaction(async (tx) => {
+          await tx.$queryRaw`SELECT "id" FROM "storefronts" WHERE "id" = ${sf.id} FOR KEY SHARE`;
+          await sleep(5);
+          await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${target.id} FOR UPDATE`;
+          await tx.user.update({ where: { id: target.id }, data: { pointsBalance: { decrement: 0 } } });
+        });
+      };
+      const res = await Promise.allSettled([rbac.revokeGrant(boss.id, phone, 'thu hoi khi dang mua'), checkout(0), checkout(1), checkout(2)]);
+      const errs = res.flatMap((r) => (r.status === 'rejected' ? [String((r.reason as Error)?.message ?? r.reason)] : []));
+      expect(errs).toEqual([]);
+      expect((await prisma.user.findUniqueOrThrow({ where: { id: target.id } })).role).toBe('CUSTOMER');
+    }
   });
 });

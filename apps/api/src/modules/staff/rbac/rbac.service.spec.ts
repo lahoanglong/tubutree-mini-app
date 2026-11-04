@@ -7,6 +7,7 @@ import type { User } from '@prisma/client';
 const fulfilment = () =>
   ({
     settlementConfig: jest.fn().mockResolvedValue({}),
+    lockOwnerStores: jest.fn().mockResolvedValue(undefined),
     clearPartnerOnRoleLoss: jest.fn().mockResolvedValue(undefined),
   }) as unknown as MerchantFulfilmentService & { clearPartnerOnRoleLoss: jest.Mock };
 
@@ -671,13 +672,24 @@ describe('RbacService.revokeGrant — không tự khoá tổ chức ra ngoài', 
     expect(lockAt).toBeLessThan(tx.user.findUnique.mock.invocationCallOrder[0]!);
   });
 
-  it('khoá dòng users (sau khi khoá grant) trước khi đọc role', async () => {
+  it('thứ tự khoá: role_grants, rồi gian hàng của chủ, rồi users, rồi mới đọc role (N1: gian hàng trước users như checkout)', async () => {
     const { prisma, tx } = txWith({ id: 'u2', role: 'STAFF' }, 3);
-    await new RbacService(prisma, fulfilment()).revokeGrant('admin1', '0899625240', 'nghỉ việc');
-    const userLock = tx.$queryRaw.mock.calls.findIndex((c: unknown[]) => /FROM "users"[\s\S]*FOR NO KEY UPDATE/.test((c[0] as string[]).join('?')));
-    expect(userLock).toBeGreaterThanOrEqual(0);
-    expect(tx.roleGrant.updateMany.mock.invocationCallOrder[0]!).toBeLessThan(tx.$queryRaw.mock.invocationCallOrder[userLock]!);
-    expect(tx.$queryRaw.mock.invocationCallOrder[userLock]!).toBeLessThan(tx.user.findUnique.mock.invocationCallOrder[0]!);
+    const ful = fulfilment();
+    await new RbacService(prisma, ful).revokeGrant('admin1', '0899625240', 'nghỉ việc');
+    const sqlOf = (c: unknown[]) => (c[0] as string[]).join('?');
+    const calls = tx.$queryRaw.mock.calls as unknown[][];
+    const storeLock = calls.findIndex((c) => /FROM "storefronts"[\s\S]*FOR UPDATE/.test(sqlOf(c)));
+    const userLock = calls.findIndex((c) => /FROM "users"[\s\S]*FOR NO KEY UPDATE/.test(sqlOf(c)));
+    expect(storeLock).toBeGreaterThanOrEqual(0);
+    expect(userLock).toBeGreaterThan(storeLock);
+    const ord = tx.$queryRaw.mock.invocationCallOrder;
+    const lockStores = (ful as unknown as { lockOwnerStores: jest.Mock }).lockOwnerStores;
+    expect(tx.roleGrant.updateMany.mock.invocationCallOrder[0]!).toBeLessThan(lockStores.mock.invocationCallOrder[0]!);
+    expect(lockStores.mock.invocationCallOrder[0]!).toBeLessThan(ord[storeLock]!);
+    expect(ord[storeLock]!).toBeLessThan(ord[userLock]!);
+    // findUnique đầu (id, không khoá) chạy trước khoá gian hàng; lần đọc role đầy đủ sau khoá users.
+    expect(tx.user.findUnique.mock.invocationCallOrder[0]!).toBeLessThan(lockStores.mock.invocationCallOrder[0]!);
+    expect(ord[userLock]!).toBeLessThan(tx.user.findUnique.mock.invocationCallOrder[1]!);
   });
 
   it('thu hồi một ADMIN khi còn admin khác → vẫn hạ role như cũ', async () => {

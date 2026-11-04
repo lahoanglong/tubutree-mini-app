@@ -239,8 +239,14 @@ export class RbacService {
       if (reason && count > 0) {
         await tx.$executeRaw`UPDATE "role_grants" SET "note" = CASE WHEN "note" IS NULL OR "note" = '' THEN ${`Thu hồi: ${reason}`} ELSE "note" || ${` | Thu hồi: ${reason}`} END WHERE "phone" = ${normalized} AND "revokedAt" = ${revokedAt}`;
       }
-      // Grant đã khoá ở lệnh trên; khoá tiếp dòng users (cùng thứ tự với applyGrants) rồi mới đọc role, để một lần applyGrants đang chạy
-      // không nâng người này sau khi ta đã đọc role cũ.
+      // Thứ tự khoá cuối: roster, role_grants (lệnh trên), gian hàng của chủ, rồi users. Gian hàng đứng TRƯỚC users như checkout (giữ
+      // storefront rồi lấy users FOR UPDATE) và account-deletion; khoá users trước thì thu hồi đụng checkout của chính chủ gian hàng là 40P01.
+      // Users khoá sau cùng, trước khi đọc role, để applyGrants đang chạy không nâng người này sau khi ta đã đọc role cũ.
+      const owner = await tx.user.findUnique({ where: { phone: normalized }, select: { id: true } });
+      if (owner) {
+        await this.fulfilment?.lockOwnerStores(tx, owner.id);
+        await tx.$queryRaw`SELECT "id" FROM "storefronts" WHERE "ownerUserId" = ${owner.id} ORDER BY "id" FOR UPDATE`;
+      }
       await tx.$queryRaw`SELECT "id" FROM "users" WHERE "phone" = ${normalized} FOR NO KEY UPDATE`;
       const user = await tx.user.findUnique({ where: { phone: normalized } });
       // Cùng hai lối khoá tổ chức ra ngoài như AdminService.setUserRole: nút "Thu hồi" trong
@@ -254,7 +260,7 @@ export class RbacService {
       let storeBlocked = false;
       if (user && (user.role === 'STAFF' || user.role === 'ADMIN')) {
         const base = await this.resolveBaseRole(user.id, tx);
-        // Gian hàng khoá trước dòng users (cùng thứ tự với checkout). Việc gỡ quyền nhân viên không bao giờ bị gian hàng chặn và không
+        // Gian hàng đã khoá ở trên, trước dòng users (cùng thứ tự với checkout). Việc gỡ quyền nhân viên không bao giờ bị gian hàng chặn và không
         // bao giờ nâng quyền: còn vướng mắc đối tác thì vai trò vẫn về đúng vai trò gốc, gian hàng giữ nguyên (storeBlocked), hết vướng
         // thì cờ tắt như bình thường.
         if (losesPartnerStore(user.role, base)) {
