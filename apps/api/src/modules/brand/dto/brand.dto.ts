@@ -6,6 +6,10 @@ import { OptionalNotNull } from '../../../common/decorators/optional-not-null.de
 // storefront.controller.ts (không export sẵn nên khai lại hằng số tương đương ở đây).
 const IMAGE_MAX = 1_500_000;
 
+// Câu chuyện nhãn là đoạn văn dài; id là cuid/uuid nên 64 ký tự là dư.
+const STORY_MAX = 5000;
+const ID_MAX = 64;
+
 // Cột threshold là BigInt nhưng API trao đổi bằng number JSON: trần 1 nghìn tỷ vừa rộng hơn mọi
 // doanh số năm thực tế, vừa nằm xa dưới Number.MAX_SAFE_INTEGER nên không mất chính xác.
 export const DEALER_REWARD_THRESHOLD_MAX = 1_000_000_000_000;
@@ -24,7 +28,7 @@ export class CreateBrandDto {
   @IsOptional() @IsString() @MaxLength(IMAGE_MAX) logoUrl?: string;
   @IsOptional() @IsString() @MaxLength(IMAGE_MAX) coverUrl?: string;
   @IsOptional() @IsString() @MaxLength(200) tagline?: string;
-  @IsOptional() @IsString() story?: string;
+  @IsOptional() @IsString() @MaxLength(STORY_MAX) story?: string;
   @IsOptional() @IsString() @MaxLength(200) origin?: string;
   @IsOptional() @Allow() certifications?: unknown;
   @IsOptional() @IsBoolean() isPublished?: boolean;
@@ -36,12 +40,12 @@ export class UpdateBrandDto {
   @OptionalNotNull() @IsString() @MaxLength(IMAGE_MAX) logoUrl?: string;
   @OptionalNotNull() @IsString() @MaxLength(IMAGE_MAX) coverUrl?: string;
   @OptionalNotNull() @IsString() @MaxLength(200) tagline?: string;
-  @OptionalNotNull() @IsString() story?: string;
+  @OptionalNotNull() @IsString() @MaxLength(STORY_MAX) story?: string;
   @OptionalNotNull() @IsString() @MaxLength(200) origin?: string;
   @IsOptional() @Allow() certifications?: unknown;
   @OptionalNotNull() @IsBoolean() isPublished?: boolean;
   // Gán chủ nhãn (lộ trình B): userId của đối tác → cho phép họ tự quản nhãn.
-  @OptionalNotNull() @IsString() ownerUserId?: string;
+  @OptionalNotNull() @IsString() @MaxLength(ID_MAX) ownerUserId?: string;
 }
 
 export class VerifyBrandDto {
@@ -53,7 +57,7 @@ export class UpdateOwnedBrandDto {
   @OptionalNotNull() @IsString() @MaxLength(IMAGE_MAX) logoUrl?: string;
   @OptionalNotNull() @IsString() @MaxLength(IMAGE_MAX) coverUrl?: string;
   @OptionalNotNull() @IsString() @MaxLength(200) tagline?: string;
-  @OptionalNotNull() @IsString() story?: string;
+  @OptionalNotNull() @IsString() @MaxLength(STORY_MAX) story?: string;
   @OptionalNotNull() @IsString() @MaxLength(200) origin?: string;
 }
 
@@ -86,7 +90,7 @@ export class UpdatePromotionDto {
 }
 
 export class DealerRewardDto {
-  @IsOptional() @IsString() brandId?: string;
+  @IsOptional() @IsString() @MaxLength(ID_MAX) brandId?: string;
   @IsIn(['TOUR', 'GIFT', 'OTHER']) type!: 'TOUR' | 'GIFT' | 'OTHER';
   @IsString() @MaxLength(160) title!: string;
   @IsOptional() @IsString() @MaxLength(5000) description?: string;
@@ -96,7 +100,7 @@ export class DealerRewardDto {
 }
 
 export class ProductIdsDto {
-  @IsArray() @ArrayNotEmpty() @ArrayMaxSize(500) @IsString({ each: true }) productIds!: string[];
+  @IsArray() @ArrayNotEmpty() @ArrayMaxSize(500) @IsString({ each: true }) @MaxLength(ID_MAX, { each: true }) productIds!: string[];
 }
 
 export class UpdateDealerRewardDto {
