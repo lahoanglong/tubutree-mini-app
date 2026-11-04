@@ -12,6 +12,8 @@ import { PayrollService } from '../payroll/payroll.service';
 import { resolveZaloLocation } from './zalo-location';
 import { CheckinDto, CheckoutDto, HeartbeatDto } from './attendance.dto';
 
+export const LOCATION_FROM_ZALO_MESSAGE = 'Mở Tubu Tree trong Zalo và cho phép quyền vị trí để chấm công.';
+
 @ApiTags('staff-attendance')
 @Roles('STAFF', 'ADMIN')
 @Controller('staff/attendance')
@@ -80,6 +82,7 @@ export class AttendanceController {
       if (c) return c;
     }
     if (typeof dto.lat === 'number' && typeof dto.lng === 'number') {
+      if (!(await this.attendance.rawCoordsAllowed())) throw new BadRequestException(LOCATION_FROM_ZALO_MESSAGE);
       return { lat: dto.lat, lng: dto.lng };
     }
     throw new BadRequestException('Không lấy được vị trí. Bạn bật GPS và thử lại nhé.');
