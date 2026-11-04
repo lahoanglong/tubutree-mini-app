@@ -27,7 +27,7 @@ import { useHomeBanners } from '@/components/campaign/use-home-banners';
 import { HubLayout } from '@/components/layouts/hub-layout';
 import { PURCHASED_RAIL_LIMIT, PurchasedRail } from '@/components/reorder/purchased-rail';
 import { usePurchasedItems } from '@/components/reorder/use-purchased-items';
-import { BestSellerRail } from './best-seller-rail';
+import { BEST_SELLER_LEAD_PRIORITY, BestSellerRail } from './best-seller-rail';
 import { BrandJourney } from './brand-journey';
 import { CategoryRow } from './category-row';
 import { CommunityPreview } from './community-preview';
@@ -135,6 +135,18 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
   // API sập hẳn: kệ Bán chạy nhất (mọi loại khách đều thấy) lỗi và chưa có gì để hiện → một dải lỗi cấp trang thay cho từng thẻ lỗi.
   const pageDown = shelves.bestSellerQuery.isError && shelves.bestSellerQuery.data === undefined;
 
+  // HTML đầu đã là bố cục khách mới: giữ nguyên thứ tự đó suốt lượt xem này, cả khi hẹn giờ đã nhả khung chờ mà loại khách vẫn "chưa biết"
+  // (mạng chậm) lẫn khi đã biết là khách cũ (Mua lại chen dưới màn đầu, xem `homeKeptOrder`), để nội dung đã vẽ không biến mất hay bị đẩy xuống.
+  const order = startedNew ? homeKeptOrder(kind) : homeRenderOrder(kind, settling);
+  // Không có chiến dịch thì ẩn hẳn (không khung, không giữ chỗ), kể cả cột banner của HubLayout; chỉ giữ chỗ khi lần trước máy này có banner mà nó chưa về
+  // hoặc còn chờ biết loại khách MÀ có chiến dịch riêng của loại khách sẽ hiện sau đó (server đã trả danh sách mọi đối tượng: không có thì chờ cũng vô ích).
+  const bannerShown = banners.slides.length > 0 || (banners.hinted && (banners.loading || (settling && banners.revealable)));
+  // Bán chạy nhất là khối ảnh đầu tiên khi phía trên nó không có banner (kể cả khung giữ chỗ), không có Giờ vàng (kể cả lúc đang tải: suất về sẽ giữ ảnh ưu tiên)
+  // và Mua lại không đứng trước (thứ tự khách cũ). Khi đó kệ nằm trong màn đầu điện thoại và ảnh của nó là LCP, nên không được tải lười.
+  const purchasedAt = order.indexOf('purchased');
+  const bestSellersLead =
+    !bannerShown && shelves.flash.length === 0 && !shelves.flashQuery.isLoading && (purchasedAt === -1 || purchasedAt > order.indexOf('bestSellers'));
+
   const blocks: Record<HomeRenderBlock, ReactNode> = {
     settling: <HomeSettlingSkeleton categoryCells={categories.data ? entries.length + 1 : undefined} />,
     search: <HomeHeader unreadCount={unreadCount} />,
@@ -149,12 +161,7 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
     todo: <TodoStrip restoring={restoring} />,
     // Khách cũ không bao giờ thấy khối này nên không gọi API ưu đãi khách mới.
     welcome: kind === 'new' ? <NewCustomerGift initialConfig={initial.publicConfig} /> : null,
-    // Không có chiến dịch thì ẩn hẳn (không khung, không giữ chỗ), kể cả cột banner của HubLayout; chỉ giữ chỗ khi lần trước máy này có banner mà nó chưa về
-    // hoặc còn chờ biết loại khách MÀ có chiến dịch riêng của loại khách sẽ hiện sau đó (server đã trả danh sách mọi đối tượng: không có thì chờ cũng vô ích).
-    banner:
-      banners.slides.length > 0 || (banners.hinted && (banners.loading || (settling && banners.revealable))) ? (
-        <HomeBanner slides={banners.slides} />
-      ) : null,
+    banner: bannerShown ? <HomeBanner slides={banners.slides} /> : null,
     // Dưới 2 combo còn hạn thì rỗng: ẩn hẳn, không giữ chỗ (đứng dưới Bán chạy nhất nên không đẩy nội dung màn đầu).
     combos: <HomeCombos views={shelves.combos} />,
     shortcuts: <ShortcutGrid initialConfig={initial.publicConfig} />,
@@ -189,6 +196,7 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
         error={shelves.bestSellerQuery.error}
         onRetry={shelves.bestSellerQuery.refetch}
         retrying={shelves.bestSellerQuery.isFetching}
+        priorityCount={bestSellersLead ? BEST_SELLER_LEAD_PRIORITY : 0}
       />
     ),
     journey: <BrandJourney initialBrands={initial.brands} />,
@@ -196,9 +204,6 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
     suggest: <SuggestFeed initial={initial.suggest} seed={initial.suggestSeed} categories={categories.data ?? []} exclude={shelves.seen} />,
   };
 
-  // HTML đầu đã là bố cục khách mới: giữ nguyên thứ tự đó suốt lượt xem này, cả khi hẹn giờ đã nhả khung chờ mà loại khách vẫn "chưa biết"
-  // (mạng chậm) lẫn khi đã biết là khách cũ (Mua lại chen dưới màn đầu, xem `homeKeptOrder`), để nội dung đã vẽ không biến mất hay bị đẩy xuống.
-  const order = startedNew ? homeKeptOrder(kind) : homeRenderOrder(kind, settling);
   const wrap = (id: HomeRenderBlock) => (
     <div key={id} data-home-block={id} className={id === 'search' ? STICKY_SEARCH : undefined} style={id === 'search' || id === 'settling' ? undefined : BLOCK_GAP}>
       {blocks[id]}

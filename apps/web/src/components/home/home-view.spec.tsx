@@ -784,3 +784,90 @@ describe('HomeView — Combo tiết kiệm (P15)', () => {
     expect(region(failed, 'Bán chạy nhất')).not.toBeNull();
   });
 });
+
+describe('HomeView — ảnh ưu tiên của Bán chạy nhất (khối ảnh đầu tiên khi không có banner, Giờ vàng)', () => {
+  const thumb = (id: string) => `https://cdn.example/${id}.jpg`;
+  const LEAD = [['eager', 'high'], ['eager', 'high'], ['lazy', null], ['lazy', null]];
+  const LAZY = Array.from({ length: 4 }, () => ['lazy', null]);
+  const shelfImages = (c: HTMLElement) =>
+    Array.from(region(c, 'Bán chạy nhất')!.querySelectorAll('img')).map((i) => [i.getAttribute('loading'), i.getAttribute('fetchpriority')]);
+  const flashItem = (slug: string) => ({
+    itemId: `i-${slug}`, variationId: `v-${slug}`, productSlug: slug, productName: `Giờ vàng ${slug}`, thumbnail: thumb(slug),
+    retailPrice: 100000, flashPrice: 80000, quota: 10, soldCount: 1, endAt: new Date(Date.now() + 3_600_000).toISOString(),
+  });
+  const bought = { variationId: 'v1', productId: 'p1', slug: 's', productName: 'Nước rửa chén', variationName: '', brand: 'Tubu', thumbnail: null, price: 1000, salePrice: null, stock: 3, inStock: true, timesBought: 1, lastPurchasedAt: '2026-01-01' };
+  let live: ReturnType<typeof mountLive> | null = null;
+
+  beforeEach(() => {
+    const others = routes['/products'];
+    const best = PAGE(['bs1', 'bs2', 'bs3', 'bs4'].map((id, i) => ({ ...card(id, `Hạng ${i + 1}`), thumbnail: thumb(id) })));
+    routes['/products'] = (q) => (q?.sort === 'best_seller_30d' ? best : others(q));
+  });
+  afterEach(() => {
+    live?.unmount();
+    live = null;
+  });
+
+  it('không banner, không Giờ vàng (máy chủ đã hỏi): hai thẻ đầu eager + fetchpriority=high, thẻ sau lazy; cả trang chỉ hai ảnh ưu tiên', async () => {
+    const c = await mount(<HomeView initial={{ campaigns: [], flash: [] }} />);
+    expect(blockOrder(c)).toEqual([...homeBlockOrder('new')]);
+    expect(shelfImages(c)).toEqual(LEAD);
+    expect(c.querySelectorAll('img[fetchpriority="high"]')).toHaveLength(2);
+  });
+
+  it('có banner chiến dịch: banner giữ ảnh ưu tiên, Bán chạy nhất tải lười', async () => {
+    const c = await mount(<HomeView initial={{ campaigns: [campaign('a')], flash: [] }} />);
+    expect(block(c, 'banner').querySelector('img')!.getAttribute('fetchpriority')).toBe('high');
+    expect(shelfImages(c)).toEqual(LAZY);
+  });
+
+  // Khách vãng lai như HTML máy chủ: khách đăng nhập chưa rõ loại thì khung chờ chung che mọi khối trong lúc Giờ vàng hay banner còn tải.
+  it('máy nhớ lần trước có banner mà banner chưa về (khung giữ chỗ): Bán chạy nhất tải lười', async () => {
+    mocks.phase = 'guest';
+    localStorage.setItem(BANNER_HINT_KEY, '1');
+    routes['/campaigns'] = () => new Promise(() => undefined);
+    const c = await mount(<HomeView initial={{ flash: [] }} />);
+    expect(block(c, 'banner').childElementCount).toBeGreaterThan(0);
+    expect(shelfImages(c)).toEqual(LAZY);
+  });
+
+  it('có Giờ vàng: Giờ vàng giữ ảnh ưu tiên, Bán chạy nhất tải lười', async () => {
+    const flash = ['fa', 'fb', 'fc'].map(flashItem);
+    routes['/flash-sales/active'] = () => flash;
+    const c = await mount(<HomeView initial={{ campaigns: [], flash }} />);
+    expect(block(c, 'flash').querySelectorAll('img[fetchpriority="high"]')).toHaveLength(2);
+    expect(shelfImages(c)).toEqual(LAZY);
+  });
+
+  it('máy chủ hụt Giờ vàng và client còn đang tải: chưa biết kệ có lên màn đầu không, Bán chạy nhất tải lười', async () => {
+    mocks.phase = 'guest';
+    routes['/flash-sales/active'] = () => new Promise(() => undefined);
+    const c = await mount(<HomeView initial={{ campaigns: [] }} />);
+    expect(shelfImages(c)).toEqual(LAZY);
+  });
+
+  it('khách cũ (Mua lại đứng trước Bán chạy nhất): Bán chạy nhất tải lười', async () => {
+    routes['/me/purchased-items'] = () => ({ items: [bought], nextCursor: null });
+    const c = await mount(<HomeView initial={{ campaigns: [], flash: [] }} />);
+    expect(blockOrder(c)).toEqual([...homeBlockOrder('returning')]);
+    expect(shelfImages(c)).toEqual(LAZY);
+  });
+
+  it('HTML đầu là khách mới rồi biết là khách cũ: Mua lại chen SAU Bán chạy nhất nên kệ vẫn giữ ảnh ưu tiên', async () => {
+    mocks.phase = 'guest';
+    live = mountLive(() => <HomeView initial={{ campaigns: [], flash: [] }} />);
+    await flush(10);
+    expect(shelfImages(live.container)).toEqual(LEAD);
+    mocks.phase = 'loading';
+    mocks.restoring = true;
+    live.again();
+    await flush(10);
+    routes['/me/purchased-items'] = () => ({ items: [bought], nextCursor: null });
+    mocks.phase = 'authenticated';
+    mocks.restoring = false;
+    live.again();
+    await flush(12);
+    expect(blockOrder(live.container)).toEqual([...homeKeptOrder('returning')]);
+    expect(shelfImages(live.container)).toEqual(LEAD);
+  });
+});
