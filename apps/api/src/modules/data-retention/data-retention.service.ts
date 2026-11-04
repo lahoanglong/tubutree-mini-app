@@ -198,8 +198,16 @@ export class DataRetentionService {
           },
         ];
       case 'cashback_clicks':
-        // Bảng chỉ ghi để ghép postback (utmTraceId); giao dịch cashback chỉ giữ clickId dạng chuỗi, không khoá ngoại.
-        return [{ table: 'cashback_clicks', where: Prisma.sql`"clickedAt" < ${cutoff}` }];
+        // Click còn giao dịch trỏ tới (mọi trạng thái) phải giữ: postback đến sau tìm click theo utmTraceId để cập nhật giao dịch PENDING,
+        // và danh sách giao dịch của admin lấy sàn từ click. Giao dịch chỉ giữ clickId dạng chuỗi, không có khoá ngoại.
+        return [
+          {
+            table: 'cashback_clicks',
+            where: Prisma.sql`"clickedAt" < ${cutoff} AND NOT EXISTS (
+              SELECT 1 FROM cashback_transactions t WHERE t."clickId" = cashback_clicks.id
+            )`,
+          },
+        ];
       case 'support_chat':
         // Hội thoại giữ lại để mã của khách không đổi.
         return [
