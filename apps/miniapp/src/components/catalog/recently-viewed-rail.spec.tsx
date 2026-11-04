@@ -179,6 +179,16 @@ describe('RecentlyViewedRail (spec 5b.4)', () => {
     expect(JSON.parse(localStorage.getItem('tubu_recently_viewed')!)).toHaveLength(10);
   });
 
+  it('10 món slug 210 ký tự, API chưa trả lời: chỉ vẽ món nằm trong lần hỏi, thẻ ngoài trần không hiện thoáng qua', async () => {
+    const wide = (i: number) => `${'y'.repeat(206)}-${String(i).padStart(3, '0')}`;
+    for (let i = 0; i < 10; i++) recordRecentlyViewed({ slug: wide(i), name: `SP ${i}`, thumbnail: null }, i + 1);
+    mocks.fetchProductsBySlugs.mockImplementation(() => new Promise(() => undefined));
+    const { container } = renderRail();
+    await waitFor(() => expect(mocks.fetchProductsBySlugs).toHaveBeenCalled());
+    expect(container.querySelectorAll('[data-ds="product-tile"]')).toHaveLength(9);
+    expect(container.textContent).not.toContain('SP 0');
+  });
+
   it('API lỗi: không dọn lịch sử xem', async () => {
     recordRecentlyViewed({ slug: 'a', name: 'A', thumbnail: null }, 1);
     mocks.fetchProductsBySlugs.mockRejectedValue(new Error('offline'));
