@@ -35,7 +35,8 @@ async function mount() {
 }
 const file = (type: string, bytes: number, name: string) => new File([new Uint8Array(bytes)], name, { type });
 
-describe('Composer chat CSKH — ảnh gửi lên Cloudinary', () => {
+// Mỗi ca nạp lại composer sau resetModules (CONFIGURED đọc một lần lúc nạp module): ca đầu chịu lần biên dịch nguội ~5 s khi máy tải.
+describe('Composer chat CSKH — ảnh gửi lên Cloudinary', { timeout: 20_000 }, () => {
   afterEach(() => {
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
