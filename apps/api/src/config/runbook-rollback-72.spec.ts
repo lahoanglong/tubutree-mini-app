@@ -48,7 +48,10 @@ describe('runbook 7.2: chỉ mục đánh giá cũ chỉ dựng khi r8 còn ch�
   });
 
   it('lệnh DROP INDEX ghi chú cuối 7.2 chỉ áp khi đã dựng chỉ mục cũ', () => {
-    const tail = section72().slice(section72().indexOf('Khi sau này phát hành lại'));
-    expect(tail).toContain(R8);
+    const sec = section72();
+    const at = sec.indexOf('phải gỡ chỉ mục cũ');
+    expect(at).toBeGreaterThan(0);
+    const para = sec.slice(sec.lastIndexOf('\n\n', at), at);
+    expect(para).toContain(R8);
   });
 });
