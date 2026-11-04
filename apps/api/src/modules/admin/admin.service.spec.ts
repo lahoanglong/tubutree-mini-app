@@ -164,6 +164,24 @@ describe('AdminService.reviewDealerApplication', () => {
     expect(notifications.notify).toHaveBeenCalledWith('u1', 'DEALER_APPLICATION_REJECTED', expect.objectContaining({ reason: 'Thiếu ảnh CCCD' }));
   });
 
+  it('không đọc/trả cột ảnh: cả lần đọc đầu và kết quả cuối đều có select', async () => {
+    const findUnique = jest.fn().mockResolvedValue({ id: 'd1', status: 'PENDING', userId: 'u1' });
+    const { $transaction } = makeApproveTx({});
+    const prisma = makePrisma({
+      dealerApplication: { findUnique, updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      dealerTier: { findUnique: jest.fn().mockResolvedValue({ id: 't1', name: 'Bạc' }) },
+      user: { findUnique: jest.fn().mockResolvedValue({ metadata: null }) },
+      $transaction,
+    });
+    await mkAdmin(prisma).reviewDealerApplication('admin1', 'd1', true, 't1');
+    const dealerCalls = findUnique.mock.calls.filter(([a]) => a.where.id === 'd1');
+    expect(dealerCalls.length).toBeGreaterThanOrEqual(2);
+    for (const [arg] of dealerCalls) {
+      expect(arg.select).toBeDefined();
+      for (const col of ['cccdFrontUrl', 'cccdBackUrl', 'storeFrontUrl']) expect(arg.select[col]).toBeUndefined();
+    }
+  });
+
   it('đơn không tồn tại → NotFound', async () => {
     const prisma = makePrisma({ dealerApplication: { findUnique: jest.fn().mockResolvedValue(null) } });
     await expect(mkAdmin(prisma).reviewDealerApplication('a1', 'x', true, 't1')).rejects.toBeInstanceOf(
@@ -2388,7 +2406,10 @@ describe('AdminService.listDealerApplications — thứ tự createdAt theo tham
     const prisma = makePrisma({
       dealerApplication: { findMany, count: jest.fn().mockResolvedValue(2) },
       $transaction: jest.fn((arr) => Promise.all(arr)),
-      $queryRaw: jest.fn().mockResolvedValue([{ id: 'a2' }]),
+      $queryRaw: jest.fn().mockResolvedValue([
+        { id: 'a1', hasCccdFront: true, hasCccdBack: false, hasStoreFront: false },
+        { id: 'a2', hasCccdFront: true, hasCccdBack: true, hasStoreFront: true },
+      ]),
     });
     const out = await mkAdmin(prisma).listDealerApplications(undefined, 1, 20);
     const select = findMany.mock.calls[0][0].select;
@@ -2396,7 +2417,7 @@ describe('AdminService.listDealerApplications — thứ tự createdAt theo tham
     expect(Object.keys(select)).not.toEqual(expect.arrayContaining(['cccdFrontUrl']));
     for (const col of ['cccdFrontUrl', 'cccdBackUrl', 'storeFrontUrl']) expect(select[col]).toBeUndefined();
     expect(out.data).toEqual([
-      { id: 'a1', businessName: 'A', hasCccdFront: true, hasCccdBack: true, hasStoreFront: false },
+      { id: 'a1', businessName: 'A', hasCccdFront: true, hasCccdBack: false, hasStoreFront: false },
       { id: 'a2', businessName: 'B', hasCccdFront: true, hasCccdBack: true, hasStoreFront: true },
     ]);
   });

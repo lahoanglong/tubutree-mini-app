@@ -39,6 +39,7 @@ import { canonicalUserId } from '../external-points/external-claim-audit';
 import { isStaffOwnOrder } from '../../common/staff-own-order';
 import { assertBankRefUnusedByOrder, bankRefUsedByOrderMessage, findOrderUsingBankRef, isBankRefOnPayment, lockBankRef } from '../../common/bank-ref';
 import { isRealUser } from '../../common/real-user';
+import { DEALER_APPLICATION_LIST_SELECT } from './dealer-application-select';
 
 const PAYMENT_STATUS_LABEL_VI: Record<string, string> = {
   UNPAID: 'Chưa thanh toán',
@@ -163,7 +164,7 @@ export class DealerService {
     });
     if (pending) throw new BadRequestException('Bạn đã có đơn đăng ký đang chờ duyệt.');
     try {
-      const created = await this.prisma.dealerApplication.create({ data: { ...dto, userId } });
+      const created = await this.prisma.dealerApplication.create({ data: { ...dto, userId }, select: DEALER_APPLICATION_LIST_SELECT });
       await notifyAdmins(
         { prisma: this.prisma, notifications: this.notifications, logger: this.logger },
         {

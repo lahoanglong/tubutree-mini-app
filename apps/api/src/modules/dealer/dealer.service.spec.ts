@@ -326,6 +326,9 @@ describe('DealerService.apply (Việc 3 — TOCTOU khi đăng ký đại lý)', 
     };
     const out = await new DealerService(prisma, makeConfig()).apply('u1', dto as never);
     expect(out).toEqual(created);
+    const select = (prisma.dealerApplication.create as jest.Mock).mock.calls[0][0].select;
+    expect(select).toBeDefined();
+    for (const col of ['cccdFrontUrl', 'cccdBackUrl', 'storeFrontUrl']) expect(select[col]).toBeUndefined();
   });
 });
 
