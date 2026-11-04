@@ -97,6 +97,26 @@ describe('Admin order list filters (real Postgres)', () => {
     expect(gotDealer.total).toBe(1);
   });
 
+  it('paymentUnlinked: open chỉ đơn mở còn UNPAID có cờ, closed chỉ đơn huỷ/trả; đơn đã PAID có cờ mồ côi không lọt', async () => {
+    const tok = randCode(8);
+    const buyer = await createUser(prisma, { fullName: `Chờ đối chiếu ${tok}` });
+    const flagged = new Date();
+    const mk = (name: string, data: Partial<Parameters<typeof createOrder>[1]>) =>
+      createOrder(prisma, { userId: buyer.id, paymentMethod: 'BANK_TRANSFER', ...data, code: `ITU${tok}${name}` }).then((o) => o.code);
+    const open = await mk('OPEN', { status: 'CONFIRMED', paymentStatus: 'UNPAID', paymentUnlinkedAt: flagged });
+    const cancelled = await mk('CANC', { status: 'CANCELLED', paymentStatus: 'UNPAID', paymentUnlinkedAt: flagged });
+    const returned = await mk('RET', { status: 'RETURNED', paymentStatus: 'UNPAID', paymentUnlinkedAt: flagged });
+    await mk('PAID', { status: 'CONFIRMED', paymentStatus: 'PAID', paymentUnlinkedAt: flagged });
+    await mk('NOFLAG', { status: 'CONFIRMED', paymentStatus: 'UNPAID' });
+    const gotOpen = await codesOf(tok, { paymentUnlinked: 'open' });
+    expect(gotOpen.codes).toEqual([open]);
+    expect(gotOpen.total).toBe(1);
+    const gotClosed = await codesOf(tok, { paymentUnlinked: 'closed' });
+    expect(new Set(gotClosed.codes)).toEqual(new Set([cancelled, returned]));
+    expect(gotClosed.total).toBe(2);
+    expect((await codesOf(tok, {})).total).toBe(5);
+  });
+
   it('lọc theo CTV (id) và theo gian hàng (slug, subdomain hoa thường); slug lạ trả danh sách rỗng', async () => {
     const s = await seed();
     const byCtv = await codesOf(s.tok, { referrerUserId: s.ctv.id });

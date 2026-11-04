@@ -42,6 +42,7 @@ import {
   ADMIN_ORDER_STATUSES,
   ORDER_KINDS,
   ORDER_QUEUES,
+  PAYMENT_UNLINKED_FILTERS,
   ORDER_LIST_PLATFORMS,
   ORDER_PAYMENT_STATUSES,
   PANCAKE_FILTERS,
@@ -49,6 +50,7 @@ import {
   type OrderKind,
   type OrderListPlatform,
   type OrderQueue,
+  type PaymentUnlinkedFilter,
   type OrderPaymentFilter,
   type PancakeFilter,
   type RecyclingFilter,
@@ -342,6 +344,7 @@ export class ListOrdersQuery extends PaginationQuery {
   @IsOptional() @IsIn([...ORDER_PAYMENT_STATUSES]) payment?: OrderPaymentFilter;
   @IsOptional() @IsIn([...ORDER_LIST_PLATFORMS]) platform?: OrderListPlatform;
   @IsOptional() @IsIn([...ORDER_QUEUES]) queue?: OrderQueue;
+  @IsOptional() @IsIn([...PAYMENT_UNLINKED_FILTERS]) paymentUnlinked?: PaymentUnlinkedFilter;
   /** Id CTV / người giới thiệu (chọn từ ô tìm khách). */
   @IsOptional() @IsString() @MaxLength(64) referrerUserId?: string;
   /** Id khách đặt đơn (từ hồ sơ khách: "Xem tất cả đơn"). */
@@ -365,6 +368,7 @@ export class ExportOrdersQuery {
   @IsOptional() @IsIn([...ORDER_PAYMENT_STATUSES]) payment?: OrderPaymentFilter;
   @IsOptional() @IsIn([...ORDER_LIST_PLATFORMS]) platform?: OrderListPlatform;
   @IsOptional() @IsIn([...ORDER_QUEUES]) queue?: OrderQueue;
+  @IsOptional() @IsIn([...PAYMENT_UNLINKED_FILTERS]) paymentUnlinked?: PaymentUnlinkedFilter;
   @IsOptional() @IsString() @MaxLength(64) referrerUserId?: string;
   @IsOptional() @IsString() @MaxLength(64) userId?: string;
   @IsOptional() @IsString() @MaxLength(100) storefront?: string;
@@ -382,6 +386,7 @@ export class OrderStatusCountsQuery {
   @IsOptional() @IsIn([...ORDER_PAYMENT_STATUSES]) payment?: OrderPaymentFilter;
   @IsOptional() @IsIn([...ORDER_LIST_PLATFORMS]) platform?: OrderListPlatform;
   @IsOptional() @IsIn([...ORDER_QUEUES]) queue?: OrderQueue;
+  @IsOptional() @IsIn([...PAYMENT_UNLINKED_FILTERS]) paymentUnlinked?: PaymentUnlinkedFilter;
   @IsOptional() @IsString() @MaxLength(64) referrerUserId?: string;
   @IsOptional() @IsString() @MaxLength(64) userId?: string;
   @IsOptional() @IsString() @MaxLength(100) storefront?: string;
@@ -547,12 +552,13 @@ export class AdminController {
   @AllowStaff('CSKH', 'KHO', 'KE_TOAN')
   @Get('orders')
   orders(@Query() q: ListOrdersQuery, @CurrentUser() viewer: JwtPayload) {
-    const { kind, payment, platform, queue, referrerUserId, userId, storefront, order } = q;
+    const { kind, payment, platform, queue, paymentUnlinked, referrerUserId, userId, storefront, order } = q;
     return this.admin.listOrders(q.page, q.limit, q.status, q.search, q.recycling, q.invoice, q.pancake, q.from, q.to, viewer, {
       kind,
       payment,
       platform,
       queue,
+      paymentUnlinked,
       referrerUserId,
       userId,
       storefront,
