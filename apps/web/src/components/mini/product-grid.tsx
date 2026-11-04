@@ -55,7 +55,8 @@ export function ProductGrid({
       </div>
     );
   }
-  const sizes = gridImageSizes(className);
+  // Thẻ `line` có ảnh 64px cố định: sizes của lưới (theo cột) không áp cho nó.
+  const sizes = variant === 'line' ? undefined : gridImageSizes(className);
   const notes = noteOf ? items.map((p, i) => noteOf(p, i)) : null;
   const reserveNote = notes?.some((n) => !!n) ?? false;
   return (

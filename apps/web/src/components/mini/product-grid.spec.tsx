@@ -9,6 +9,7 @@ vi.mock('@/lib/core-http', () => ({ coreHttp: { get: async () => ({}), post: asy
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: () => undefined }) }));
 
 import { PRIORITY_CARDS } from './product-card';
+import { GRID_PRODUCTS_WITH_FILTER } from '@/lib/product-grid';
 import { ProductGrid } from './product-grid';
 import { ProductRail } from './product-rail';
 
@@ -30,6 +31,23 @@ const mount = async (ui: React.ReactElement) => {
   await flush();
   return r.container;
 };
+
+describe('ProductGrid: sizes của ảnh theo lưới (Pa1)', () => {
+  const sizesOf = (c: HTMLElement) => Array.from(c.querySelectorAll('img')).map((i) => i.getAttribute('sizes'));
+  const PANCAKE = [1, 2].map((n) => ({ ...item(n), thumbnail: `https://content.pancake.vn/2-26/${n}.jpg` }));
+
+  it('lưới mặc định truyền sizes hai cột điện thoại cho mọi thẻ; lưới có cột lọc dùng bản riêng', async () => {
+    const def = sizesOf(await mount(<ProductGrid items={PANCAKE} variant="grid" />));
+    expect(def).toHaveLength(2);
+    expect(def[0]).toContain('(max-width: 767px) calc((100vw - 44px) / 2)');
+    const filtered = sizesOf(await mount(<ProductGrid items={PANCAKE} variant="grid" className={GRID_PRODUCTS_WITH_FILTER} />));
+    expect(filtered[0]).not.toBe(def[0]);
+  });
+
+  it('thẻ line: ảnh 64px nên không nhận sizes của lưới', async () => {
+    expect(sizesOf(await mount(<ProductGrid items={PANCAKE} variant="line" />))).toEqual(['64px', '64px']);
+  });
+});
 
 describe('ProductGrid', () => {
   it('mỗi sản phẩm một ô; priorityCount thẻ đầu tải ảnh ngay, mặc định tải lười hết', async () => {
