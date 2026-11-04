@@ -1,5 +1,6 @@
 import path from 'path';
 import { deflateSync, crc32 } from 'zlib';
+import type { Page } from '@playwright/test';
 import { expect, test, type MockApi } from './support/mock-api';
 import { CATALOG, mockDiscovery, toCard } from './support/discovery-mocks';
 import { campaignBanner, mockCampaigns } from './support/campaign-mocks';
@@ -17,6 +18,7 @@ import { writableTempDb } from './support/waste-db';
 test.use({ viewport: { width: 375, height: 812 } });
 
 const PANCAKE = (n: number) => `https://content.pancake.vn/2-26/lcp-${n}.jpg`;
+const HOUR = 3_600_000;
 
 /** PNG RGB nhiễu 160×160 (~75 KB): đủ entropy để Chrome tính vào LCP dù ảnh được kéo giãn ra khung 343×137. */
 function noisePng(size = 160): Buffer {
@@ -59,14 +61,9 @@ async function withPrisma<T>(fn: (prisma: { product: { updateMany(args: unknown)
   }
 }
 
-let seeded = false;
-test.beforeAll(async () => {
-  seeded = (await withPrisma((p) => p.product.updateMany({ where: { thumbnail: null }, data: { thumbnail: DB_THUMB } }))) !== null;
-});
-test.afterAll(async () => {
-  await withPrisma((p) => p.product.updateMany({ where: { thumbnail: DB_THUMB }, data: { thumbnail: null } }));
-});
-const HOUR = 3_600_000;
+/** Chỉ ca /san-pham cần ảnh trong DB; đặt rồi trả lại ngay quanh ca đó để không để lại ảnh trong dữ liệu mà spec khác (cùng một lượt chạy) đọc. */
+const setDbThumbs = (on: boolean) =>
+  withPrisma((p) => p.product.updateMany(on ? { where: { thumbnail: null }, data: { thumbnail: DB_THUMB } } : { where: { thumbnail: DB_THUMB }, data: { thumbnail: null } }));
 
 const withImages = CATALOG.map((p, i) => ({ ...p, thumbnail: PANCAKE(i) }));
 
@@ -95,7 +92,7 @@ interface Snapshot {
   lcp: { tag: string; src: string; loading: string | null; srcset: string | null; fetchpriority: string | null } | null;
 }
 
-async function measure(page: import('@playwright/test').Page): Promise<Snapshot> {
+async function measure(page: Page): Promise<Snapshot> {
   return page.evaluate(async () => {
     const lcp = await new Promise<Snapshot['lcp']>((resolve) => {
       let last: PerformanceEntry | undefined;
@@ -126,35 +123,50 @@ async function measure(page: import('@playwright/test').Page): Promise<Snapshot>
   });
 }
 
-for (const route of [{ name: 'Trang chủ', path: '/', ready: '[data-ds="product-tile"]' }, { name: 'Danh mục /san-pham', path: '/san-pham?all=1', ready: '[data-ds="product-tile"]' }]) {
+// `minPrice=1` không lọc mất món nào nhưng cho danh sách một khoá bộ nhớ đệm riêng của máy chủ web: ảnh gán tạm không lọt vào trang của spec khác.
+const ROUTES = [
+  { name: 'Trang chủ', path: '/', ready: '[data-ds="product-tile"]', dbThumbs: false },
+  { name: 'Danh mục /san-pham', path: '/san-pham?all=1&minPrice=1', ready: '[data-ds="product-tile"]', dbThumbs: true },
+];
+
+for (const route of ROUTES) {
   test(`LCP ${route.name} 375×812: ảnh high trong màn đầu, LCP không lazy`, async ({ page, api }) => {
+    const seeded = route.dbThumbs ? (await setDbThumbs(true)) !== null : true;
     test.skip(!seeded, 'DB không phải DB tạm: không gán được ảnh cho sản phẩm');
-    mockImages(api);
-    const stripped = route.path === '/' ? await serverWithoutCampaigns(page) : null;
-    await page.route('**/api/img?**', (r) => r.fulfill({ status: 200, contentType: 'image/png', body: NOISE }));
-    await page.goto(route.path);
-    if (stripped) expect(stripped.found(), 'Trang chủ không còn nhúng danh sách chiến dịch: banner sẽ không có').toBeGreaterThan(0);
-    await expect(page.locator(route.ready).first()).toBeVisible({ timeout: 20_000 });
-    await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(500);
-    const snap = await measure(page);
-    test.info().annotations.push({ type: 'LCP', description: JSON.stringify(snap.lcp) }, { type: 'high', description: JSON.stringify(snap.high.map((h) => ({ top: Math.round(h.top), src: h.src.slice(-40) }))) });
-    console.log(`${route.name}: LCP=${JSON.stringify(snap.lcp)} high=${snap.high.length}`);
-    console.log(JSON.stringify(snap.high));
-
-    // 1. Mọi ảnh fetchpriority=high nằm trong màn đầu.
-    for (const h of snap.high) expect(h.top, `ảnh high ngoài màn đầu: ${h.src}`).toBeLessThan(snap.vh);
-    expect(snap.high.length, 'phải có ảnh ưu tiên').toBeGreaterThan(0);
-    expect(snap.high.length).toBeLessThanOrEqual(4);
-
-    // 2. LCP là ảnh không lazy, fetchpriority=high; ảnh đổi cỡ (/img?) dùng srcset theo w.
-    expect(snap.lcp, 'LCP phải là một phần tử').not.toBeNull();
-    expect(snap.lcp!.tag).toBe('IMG');
-    expect(snap.lcp!.loading).not.toBe('lazy');
-    expect(snap.lcp!.fetchpriority).toBe('high');
-    if (snap.lcp!.src.includes('/img?')) expect(snap.lcp!.srcset ?? '').toMatch(/\d+w(,|$)/);
-
-    // 3. Không preload ảnh của phần tử đang ẩn ở khổ này.
-    expect(snap.preloads.filter((p) => p.hidden), `preload ảnh cho phần tử ẩn: ${JSON.stringify(snap.preloads)}`).toEqual([]);
+    try {
+      await run(page, api, route);
+    } finally {
+      if (route.dbThumbs) await setDbThumbs(false);
+    }
   });
+}
+
+async function run(page: Page, api: MockApi, route: (typeof ROUTES)[number]): Promise<void> {
+  mockImages(api);
+  const stripped = route.path === '/' ? await serverWithoutCampaigns(page) : null;
+  await page.route('**/api/img?**', (r) => r.fulfill({ status: 200, contentType: 'image/png', body: NOISE }));
+  await page.goto(route.path);
+  if (stripped) expect(stripped.found(), 'Trang chủ không còn nhúng danh sách chiến dịch: banner sẽ không có').toBeGreaterThan(0);
+  await expect(page.locator(route.ready).first()).toBeVisible({ timeout: 20_000 });
+  await page.waitForLoadState('networkidle');
+  await page.waitForTimeout(500);
+  const snap = await measure(page);
+  test.info().annotations.push({ type: 'LCP', description: JSON.stringify(snap.lcp) }, { type: 'high', description: JSON.stringify(snap.high.map((h) => ({ top: Math.round(h.top), src: h.src.slice(-40) }))) });
+  console.log(`${route.name}: LCP=${JSON.stringify(snap.lcp)} high=${snap.high.length}`);
+  console.log(JSON.stringify(snap.high));
+
+  // 1. Mọi ảnh fetchpriority=high nằm trong màn đầu.
+  for (const h of snap.high) expect(h.top, `ảnh high ngoài màn đầu: ${h.src}`).toBeLessThan(snap.vh);
+  expect(snap.high.length, 'phải có ảnh ưu tiên').toBeGreaterThan(0);
+  expect(snap.high.length).toBeLessThanOrEqual(4);
+
+  // 2. LCP là ảnh không lazy, fetchpriority=high; ảnh đổi cỡ (/img?) dùng srcset theo w.
+  expect(snap.lcp, 'LCP phải là một phần tử').not.toBeNull();
+  expect(snap.lcp!.tag).toBe('IMG');
+  expect(snap.lcp!.loading).not.toBe('lazy');
+  expect(snap.lcp!.fetchpriority).toBe('high');
+  if (snap.lcp!.src.includes('/img?')) expect(snap.lcp!.srcset ?? '').toMatch(/\d+w(,|$)/);
+
+  // 3. Không preload ảnh của phần tử đang ẩn ở khổ này.
+  expect(snap.preloads.filter((p) => p.hidden), `preload ảnh cho phần tử ẩn: ${JSON.stringify(snap.preloads)}`).toEqual([]);
 }
