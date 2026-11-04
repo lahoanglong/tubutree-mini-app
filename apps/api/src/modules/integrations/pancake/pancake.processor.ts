@@ -752,12 +752,18 @@ export class PancakeProcessor extends WorkerHost {
     // Chỉ ghi lý do LẦN ĐẦU cho mỗi cặp (đơn, đơn Pancake): dòng lịch sử là dấu, nên Kế toán bấm "Đã xử lý" cho #A rồi thì webhook sau của #A không ghi
     // lại còn #B khác vẫn được ghim. Nối vào hàng "Cần xử lý Pancake" không đè lý do khác, và chỉ khi đơn còn UNPAID để không đua với nút
     // "Đã nhận tiền" (markPaid vừa gỡ lý do).
-    const logged = await this.prisma.orderStatusHistory.findFirst({ where: { orderId: order.id, actorType: 'PANCAKE', note }, select: { id: true } });
-    if (logged) return;
-    await appendPancakeAttention(this.prisma, order.id, closed ? ATTENTION_PAYMENT_UNLINKED_CLOSED : ATTENTION_PAYMENT_UNLINKED, [], { onlyUnpaid: true });
-    await this.prisma.orderStatusHistory.create({
-      data: { orderId: order.id, fromStatus: order.status, toStatus: order.status, actorType: 'PANCAKE', note },
+    // Khoá dòng đơn trước khi tìm dấu: hai worker cùng cặp (đơn, đơn Pancake) không còn cùng thấy "chưa ghi" rồi ghi đôi và báo đôi.
+    const first = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "orders" WHERE "id" = ${order.id} FOR UPDATE`;
+      const logged = await tx.orderStatusHistory.findFirst({ where: { orderId: order.id, actorType: 'PANCAKE', note }, select: { id: true } });
+      if (logged) return false;
+      await appendPancakeAttention(tx, order.id, closed ? ATTENTION_PAYMENT_UNLINKED_CLOSED : ATTENTION_PAYMENT_UNLINKED, [], { onlyUnpaid: true });
+      await tx.orderStatusHistory.create({
+        data: { orderId: order.id, fromStatus: order.status, toStatus: order.status, actorType: 'PANCAKE', note },
+      });
+      return true;
     });
+    if (!first) return;
     const amount = reported > 0 ? `${formatVnd(reported)}/${formatVnd(order.total)}` : formatVnd(order.total);
     const next = closed
       ? 'Đơn đã huỷ/trả nên không có nút "Đã nhận tiền" và hệ thống KHÔNG tạo khoản hoàn: Kế toán đối chiếu sao kê, khách đã chuyển thì ghi tiền về muộn của đơn rồi hoàn theo luồng đó.'
