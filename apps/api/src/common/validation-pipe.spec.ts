@@ -128,7 +128,7 @@ describe('createValidationPipe — thông điệp lỗi tiếng Việt', () => {
     expect(await sampleMessagesOf({ rating: 'năm' })).toEqual(
       expect.arrayContaining(['Số sao phải là số nguyên.']),
     );
-    expect(await sampleMessagesOf({ rating: 5, method: 'CASH' })).toEqual([expect.stringMatching(/^Trường «method» chỉ nhận một trong: COD, BANK\.$/)]);
+    expect(await sampleMessagesOf({ rating: 5, method: 'CASH' })).toEqual([expect.stringMatching(/^Phương thức chỉ nhận một trong: COD, BANK\.$/)]);
     expect(await sampleMessagesOf({ rating: 5, email: 'abc' })).toEqual(['Email không hợp lệ.']);
     expect(await sampleMessagesOf({})).toEqual(expect.arrayContaining(['Số sao phải là số nguyên.']));
   });
