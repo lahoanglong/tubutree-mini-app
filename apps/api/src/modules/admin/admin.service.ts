@@ -604,6 +604,7 @@ export class AdminService {
   /** Ảnh base64 thứ `index` của một đánh giá (kể cả đã ẩn) cho màn duyệt; chỉ đọc đúng phần tử cần, không kéo cả mảng ảnh. */
   async reviewImage(reviewId: string, index: number): Promise<{ mime: string; data: Buffer }> {
     if (!Number.isInteger(index) || index < 0 || index >= 1000) throw new NotFoundException('Không tìm thấy ảnh.');
+    // `?v=` của đường dẫn chỉ để trình duyệt đổi cache, cố ý không đối chiếu: luôn phát ảnh hiện tại; lúc duyệt đã kiểm phiên bản.
     const rows = await this.prisma.$queryRaw<{ image: string | null }[]>`
       SELECT "images"[${index + 1}::int] AS "image" FROM "reviews" WHERE "id" = ${reviewId}`;
     const decoded = decodeServedImage(rows[0]?.image);
@@ -2148,6 +2149,7 @@ export class AdminService {
   /** Ảnh base64 của sản phẩm chờ duyệt (bản đang có hoặc bản sửa chờ duyệt) cho màn duyệt; chỉ đọc đúng một ảnh, không kéo cả mảng. */
   async merchantProductImage(productId: string, source: 'product' | 'draft', slot: 'thumb' | number): Promise<{ mime: string; data: Buffer }> {
     if (slot !== 'thumb' && !(Number.isInteger(slot) && slot >= 0 && slot < 1000)) throw new NotFoundException('Không tìm thấy ảnh.');
+    // `?v=` của đường dẫn chỉ để đổi cache, cố ý không đối chiếu: luôn phát ảnh hiện tại; lúc duyệt đã kiểm editVersion/updatedAt (lệch thì 409).
     const table = Prisma.raw(source === 'draft' ? '"product_edit_drafts"' : '"products"');
     const key = Prisma.raw(source === 'draft' ? '"productId"' : '"id"');
     const column = slot === 'thumb' ? Prisma.raw('"thumbnail"') : Prisma.sql`"images"[${slot + 1}::int]`;
