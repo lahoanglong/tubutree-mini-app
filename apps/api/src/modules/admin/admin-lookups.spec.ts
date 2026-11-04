@@ -205,6 +205,26 @@ describe('AdminService.listUsers — cache số đếm 60 giây theo bộ lọc 
   });
 });
 
+describe('AdminService.listUsers — số tổng nhớ không thấp hơn số dòng đang trả', () => {
+  const row = (id: string) => ({ id });
+  const mk = (count: jest.Mock, findMany: jest.Mock) =>
+    mkAdmin({ user: { findMany, count }, $queryRaw: jest.fn().mockResolvedValue([{ n: 0 }]), $transaction: tx });
+
+  it('tổng nhớ là 0 nhưng lượt sau đã có 1 dòng → meta.total = 1', async () => {
+    const count = jest.fn().mockResolvedValue(0);
+    const findMany = jest.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([row('u1')]);
+    const admin = mk(count, findMany);
+    expect((await admin.listUsers(1, 20)).meta.total).toBe(0);
+    expect((await admin.listUsers(1, 20)).meta.total).toBe(1);
+  });
+
+  it('trang 3 limit 20 có 5 dòng mà tổng nhớ nhỏ hơn → total ít nhất 45', async () => {
+    const count = jest.fn().mockResolvedValue(10);
+    const findMany = jest.fn().mockResolvedValue(Array.from({ length: 5 }, (_, i) => row(`u${i}`)));
+    expect((await mk(count, findMany).listUsers(3, 20)).meta.total).toBeGreaterThanOrEqual(45);
+  });
+});
+
 describe('AdminService.listUsers — hai lô Điểm Xanh (PD-3)', () => {
   it('select cả pointsConvertedBalance để nhân viên thấy điểm không hết hạn khi xử lý khiếu nại quy đổi', async () => {
     const findMany = jest.fn().mockResolvedValue([]);

@@ -495,7 +495,9 @@ export class AdminService {
       this.userCounts.get(`total:${filterKey}`, () => this.prisma.user.count({ where })),
       this.userCounts.get(`guest:${search?.trim() ?? ''}`, () => this.countGuestUsers(searchWhere)),
     ]);
-    return { ...paginated(items, page, limit, total), guestCount };
+    // Số tổng nhớ có thể cũ hơn danh sách vừa đọc: không để nó nhỏ hơn số dòng đã chắc chắn tồn tại tới trang này.
+    const seen = (page - 1) * limit + items.length;
+    return { ...paginated(items, page, limit, Math.max(total, seen)), guestCount };
   }
 
   // ── Tra cứu cho ô chọn (thay nhập ID thô) + màn duyệt đánh giá / gói định kỳ (C-092) ──
