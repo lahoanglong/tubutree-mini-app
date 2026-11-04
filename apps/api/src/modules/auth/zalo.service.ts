@@ -73,15 +73,48 @@ export class ZaloService {
    * Mini app gọi apis.getUserInfo()/getAccessToken(); BE verify token với Zalo.
    */
   async getUserInfo(accessToken: string): Promise<ZaloUserInfo> {
+    const secret = this.config.get('ZALO_APP_SECRET', { infer: true });
     try {
       // appsecret_proof buộc access token chỉ dùng được bởi máy chủ giữ app secret: token lộ ra ngoài không đổi được lấy hồ sơ người dùng.
-      const secret = this.config.get('ZALO_APP_SECRET', { infer: true });
+      // Zalo từ chối lượt có proof (cách tính khác dự kiến) thì thử đúng một lần không proof để không làm hỏng đăng nhập; hàng rào thật
+      // nằm ở Zalo: khi bật "bắt buộc appsecret_proof" thì lượt không proof cũng bị từ chối.
+      const proof = secret ? createHmac('sha256', secret).update(accessToken).digest('hex') : null;
+      let result = await this.fetchMe(accessToken, proof);
+      if (proof && result.kind !== 'ok') {
+        if (result.kind === 'unavailable') throw result.error;
+        const detail = result.kind === 'rejected' ? `HTTP ${result.status}` : `error ${result.code ?? '?'} ${result.message ?? ''}`.trim();
+        this.logger.error(`Zalo từ chối appsecret_proof (${detail}); thử lại không proof.`);
+        result = await this.fetchMe(accessToken, null);
+      }
+      if (result.kind === 'unavailable') throw result.error;
+      if (result.kind !== 'ok') {
+        if (result.kind === 'body') this.logger.warn(`Zalo getUserInfo bị từ chối: ${result.code ?? '?'} ${result.message ?? 'unknown'}`);
+        else this.logger.error(`Zalo getUserInfo error: HTTP ${result.status ?? '?'}`);
+        throw new UnauthorizedException('Không xác thực được tài khoản Zalo.');
+      }
+      return result.info;
+    } catch (err) {
+      if (err instanceof UnauthorizedException || err instanceof ServiceUnavailableException) throw err;
+      const ax = err as AxiosError;
+      this.logger.error(`Zalo getUserInfo error: ${ax.message}`);
+      if (isZaloUnavailable(ax)) throw new ServiceUnavailableException(ZALO_BUSY_MESSAGE);
+      throw new UnauthorizedException('Không xác thực được tài khoản Zalo.');
+    }
+  }
+
+  private async fetchMe(
+    accessToken: string,
+    proof: string | null,
+  ): Promise<
+    | { kind: 'ok'; info: ZaloUserInfo }
+    | { kind: 'body'; code?: number; message?: string }
+    | { kind: 'rejected'; status: number | undefined }
+    | { kind: 'unavailable'; error: AxiosError }
+  > {
+    try {
       const res = await axios.get(`${this.graphBase}/me`, {
         params: { fields: 'id,name,picture' },
-        headers: {
-          access_token: accessToken,
-          ...(secret ? { appsecret_proof: createHmac('sha256', secret).update(accessToken).digest('hex') } : {}),
-        },
+        headers: { access_token: accessToken, ...(proof ? { appsecret_proof: proof } : {}) },
         timeout: 8000,
       });
       const data = res.data as {
@@ -91,21 +124,12 @@ export class ZaloService {
         name?: string;
         picture?: { data?: { url?: string } };
       };
-      if (!data.id || (data.error && data.error !== 0)) {
-        this.logger.warn(`Zalo getUserInfo bị từ chối: ${data.error ?? '?'} ${data.message ?? 'unknown'}`);
-        throw new UnauthorizedException('Không xác thực được tài khoản Zalo.');
-      }
-      return {
-        zaloId: data.id,
-        name: data.name,
-        avatar: data.picture?.data?.url,
-      };
+      if (!data.id || (data.error && data.error !== 0)) return { kind: 'body', code: data.error, message: data.message };
+      return { kind: 'ok', info: { zaloId: data.id, name: data.name, avatar: data.picture?.data?.url } };
     } catch (err) {
-      if (err instanceof UnauthorizedException) throw err;
       const ax = err as AxiosError;
-      this.logger.error(`Zalo getUserInfo error: ${ax.message}`);
-      if (isZaloUnavailable(ax)) throw new ServiceUnavailableException(ZALO_BUSY_MESSAGE);
-      throw new UnauthorizedException('Không xác thực được tài khoản Zalo.');
+      if (isZaloUnavailable(ax)) return { kind: 'unavailable', error: ax };
+      return { kind: 'rejected', status: ax.response?.status };
     }
   }
 
