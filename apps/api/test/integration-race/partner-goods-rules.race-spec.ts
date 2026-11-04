@@ -18,6 +18,7 @@ import { WalletService } from '../../src/modules/wallet/wallet.service';
 import { WalletLedgerService } from '../../src/modules/wallet/wallet-ledger.service';
 import { ComboService } from '../../src/modules/storefront/combo.service';
 import { StorefrontService } from '../../src/modules/storefront/storefront.service';
+import { ImageRegistryStale } from '../../src/modules/catalog/image-registry-stale';
 import { FlashSaleService } from '../../src/modules/flash-sale/flash-sale.service';
 import { LifecycleService } from '../../src/modules/lifecycle/lifecycle.service';
 import { CashbackService } from '../../src/modules/cashback/cashback.service';
@@ -78,6 +79,7 @@ describe('Hàng của gian hàng đối tác không hưởng chương trình kh�
         MerchantFulfilmentService,
         ComboService,
         StorefrontService,
+        ImageRegistryStale,
         FlashSaleService,
         GroupBuyService,
         DealerService,
