@@ -79,8 +79,14 @@ export function negotiateFormat(accept: string | undefined): ResizeFormat {
   return /image\/webp/i.test(accept ?? '') ? 'webp' : 'jpeg';
 }
 
-export function cacheKey(source: string, width: number, format: ResizeFormat): string {
-  return createHash('sha256').update(`${source}|${width}|${format}`).digest('hex').slice(0, 40);
+/**
+ * Phiên bản cách đổi cỡ (tham số sharp, chất lượng nén) nằm trong khoá cache: cache ở volume bền qua deploy, nên đổi cách đổi cỡ mà không tăng số này
+ * thì bản cũ còn được phát tới 14 ngày. Tăng khi sửa pipeline trong ImageResizeService.produce.
+ */
+export const RESIZE_PIPELINE_VERSION = 1;
+
+export function cacheKey(source: string, width: number, format: ResizeFormat, pipeline: number = RESIZE_PIPELINE_VERSION): string {
+  return createHash('sha256').update(`p${pipeline}|${source}|${width}|${format}`).digest('hex').slice(0, 40);
 }
 
 export const etagOf = (key: string): string => `"${key}"`;
