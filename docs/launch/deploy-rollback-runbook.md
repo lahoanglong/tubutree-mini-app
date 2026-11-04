@@ -624,7 +624,7 @@ env DB_SESSION_OPTIONS= $DC run --rm --no-deps api pnpm exec prisma migrate depl
 
 Biến đặt trong shell thắng `.env` khi compose thay biến, nên container migrate nhận URL trơn. `CMD` của Dockerfile chạy lại `migrate deploy` lúc container khởi động: sau bước 7 không còn gì chờ áp nên xong ngay; nếu ai bỏ bước 7 mà còn migration chờ, lệnh đó chạy dưới options và có thể bị cắt, API không lên (an toàn, không để lại trạng thái hỏng ngoài migration dở: xử lý theo mục 7.1). Đề xuất cho 4f nếu muốn gỡ hẳn rủi ro đó: đổi `CMD` thành chạy migrate với `DATABASE_URL` đã bỏ phần `options` (không sửa ở gói này vì `Dockerfile` là của 4f).
 
-Migration của gói hd2 (`20261105140000_payouts_pending_partial_index`) chỉ dựng chỉ mục một phần trên `payouts` (bảng nhỏ, vài chục đến vài trăm dòng): không phải migration nặng, không vào `HEAVY_MIGRATIONS`, vẫn chạy dưới URL trơn như mọi migration.
+Migration của gói hd2 (`20261105140000_payouts_status_index`) chỉ dựng chỉ mục `payouts_status_idx` trên `payouts` (bảng nhỏ, vài chục đến vài trăm dòng): không phải migration nặng, không vào `HEAVY_MIGRATIONS`, vẫn chạy dưới URL trơn như mọi migration.
 
 **Việc chạy lâu: đã xét từng chỗ.**
 

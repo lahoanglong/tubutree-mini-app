@@ -1854,8 +1854,8 @@ model Payout {
   adminNote       String?
 
   @@index([userId])
-  // Partial, chỉ có trong SQL (20261105140000_payouts_pending_partial_index):
-  // "payouts_pending_status_idx" ("status") WHERE "status" IN ('REQUESTED','APPROVED') — hộp việc admin đếm hàng đợi rút hoa hồng.
+  // Hộp việc admin đếm hàng đợi rút hoa hồng theo status. Không dùng partial: Prisma gửi status là tham số nên generic plan không chọn được index một phần.
+  @@index([status])
   @@map("payouts")
 }
 
