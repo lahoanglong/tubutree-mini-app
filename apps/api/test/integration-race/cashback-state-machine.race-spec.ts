@@ -189,4 +189,29 @@ describe('Cashback: máy trạng thái dưới đồng thời (real Postgres)', 
     expect(notify.mock.calls.length).toBeGreaterThan(firstCalls);
     expect((await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).walletBalance).toBe(35000);
   });
+
+  it('M2\': approved → rejected → approved (REVIVED báo) → settle PAID → rejected → đúng 1 cảnh báo PAID_REJECTED, payload là payload rejected cuối', async () => {
+    const { user, utm } = await seedClick();
+    const o = `M2P-${randCode(6)}`;
+    const alertsFor = () => (notify.mock.calls as unknown[][]).filter((c) => c[1] === 'OPS_HEALTH_ALERT' && String((c[2] as { summary: string }).summary).includes(o));
+    await svc.ingest({ ...ev(utm, o, 'CONFIRMED'), raw: { status: 'approved-1' } }, 'accesstrade');
+    await svc.ingest({ ...ev(utm, o, 'REJECTED'), raw: { status: 'rejected-1' } }, 'accesstrade');
+    await svc.ingest({ ...ev(utm, o, 'CONFIRMED'), raw: { status: 'approved-2' } }, 'accesstrade');
+    expect((await rowOf(o)).conflictNotifiedAt).not.toBeNull();
+    const revived = alertsFor().length;
+    expect(revived).toBeGreaterThan(0);
+
+    await prisma.cashbackTransaction.updateMany({ where: { userId: user.id }, data: { confirmedAt: new Date(Date.now() - 90 * 86400_000) } });
+    await svc.settleConfirmed();
+    expect((await rowOf(o)).status).toBe('PAID');
+    await svc.ingest({ ...ev(utm, o, 'REJECTED'), raw: { status: 'rejected-final' } }, 'accesstrade');
+    const row = await rowOf(o);
+    expect(row.conflictPayload).toEqual({ status: 'rejected-final' });
+    const all = alertsFor();
+    expect(all.length).toBeGreaterThan(revived);
+    expect(all.filter((c) => String((c[2] as { summary: string }).summary).includes('đã trả về Ví'))).not.toHaveLength(0);
+    const before = notify.mock.calls.length;
+    await svc.ingest({ ...ev(utm, o, 'REJECTED'), raw: { status: 'rejected-again' } }, 'accesstrade');
+    expect(notify.mock.calls.length).toBe(before);
+  });
 });

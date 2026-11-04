@@ -324,6 +324,13 @@ describe('CashbackService.ingest', () => {
       expect(notifications.notify).toHaveBeenCalledWith('adm1', 'OPS_HEALTH_ALERT', expect.objectContaining({ summary: expect.stringContaining('duyệt lại khoản đã "Từ chối"') }));
     });
 
+    it('m3: tin REVIVED in số MỚI cộng vào pending (sàn gửi hoa hồng 60k → 42k), không in số cũ trên dòng', async () => {
+      const { prisma } = conflictPrisma({ id: 'tx1', status: 'REJECTED', confirmedAt: null, userId: 'u1', userReward: 35000, adminReviewedAt: null, merchantOrderId: 'AT-1', provider: 'accesstrade' });
+      await new CashbackService(prisma, config, notifications, registry).ingest(event({ status: 'CONFIRMED', commission: 60000 }), 'accesstrade');
+      expect(notifications.notify).toHaveBeenCalledWith('adm1', 'OPS_HEALTH_ALERT', expect.objectContaining({ summary: expect.stringContaining('42.000đ') }));
+      expect(notifications.notify).not.toHaveBeenCalledWith('adm1', 'OPS_HEALTH_ALERT', expect.objectContaining({ summary: expect.stringContaining('35.000đ') }));
+    });
+
     it('PENDING → CONFIRMED bình thường không báo', async () => {
       const { prisma } = conflictPrisma({ id: 'tx1', status: 'PENDING', confirmedAt: null, userId: 'u1', userReward: 35000, adminReviewedAt: null });
       await new CashbackService(prisma, config, notifications, registry).ingest(event({ status: 'CONFIRMED' }), 'accesstrade');
@@ -536,6 +543,8 @@ describe('CashbackService.settleConfirmed', () => {
     const { prisma, updateMany, userUpdate } = settlePrisma([{ id: 'tx1', userId: 'u1', userReward: 35000 }]);
     await new CashbackService(prisma, config, notifications, registry).settleConfirmed();
     expect(updateMany.mock.calls[0][0].where).toEqual({ id: 'tx1', status: 'CONFIRMED', confirmedAt: { lte: expect.any(Date) } });
+    // Sang PAID là chặng mới của dòng: xoá dấu đã báo lệch để L2-08 báo được.
+    expect(updateMany.mock.calls[0][0].data).toMatchObject({ status: 'PAID', conflictNotifiedAt: null });
     expect(userUpdate).toHaveBeenCalledWith(expect.objectContaining({ data: { cashbackPending: { decrement: 35000 } } }));
     expect(ledger).toHaveBeenCalledWith(prisma, {
       userId: 'u1',

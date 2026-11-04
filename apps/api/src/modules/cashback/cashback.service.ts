@@ -37,7 +37,12 @@ type ExistingCashbackRow = {
   provider?: string;
 };
 
-type ConflictNotice = { row: ExistingCashbackRow; kind: 'PAID_REJECTED' | 'ADMIN_OVERRIDE' | 'REVIVED' };
+type ConflictNotice = {
+  row: ExistingCashbackRow;
+  kind: 'PAID_REJECTED' | 'ADMIN_OVERRIDE' | 'REVIVED';
+  /** Số tiền đưa vào tin báo; REVIVED phải in số vừa cộng vào pending (có thể khác số cũ trên dòng). */
+  reward?: number;
+};
 
 const STATUS_VI: Record<CashbackStatus, string> = {
   PENDING: 'Chờ duyệt',
@@ -323,7 +328,7 @@ export class CashbackService {
           if (nowConfirmed && !wasConfirmed) {
             await tx.user.update({ where: { id: cur.userId }, data: { cashbackPending: { increment: userReward } } });
             // Sàn lật khoản đã bị từ chối thành duyệt khi chưa có quyết định tay: tiền sẽ về Ví sau thời gian giữ, ADMIN cần biết.
-            if (!opts.manual && cur.status === 'REJECTED') conflict = { row: cur, kind: 'REVIVED' };
+            if (!opts.manual && cur.status === 'REJECTED') conflict = { row: cur, kind: 'REVIVED', reward: userReward };
           } else if (wasConfirmed && !nowConfirmed) {
             await tx.user.update({ where: { id: cur.userId }, data: { cashbackPending: { decrement: cur.userReward } } });
           }
@@ -347,7 +352,7 @@ export class CashbackService {
   }
 
   /** Báo ADMIN một lần mỗi dòng (CAS trên conflictNotifiedAt) khi sàn báo khác quyết định tay, đòi lại khoản đã trả hoặc lật khoản đã từ chối. Không ném. */
-  private async reportConflict({ row, kind }: ConflictNotice, event: NormalizedCashbackEvent): Promise<void> {
+  private async reportConflict({ row, kind, reward }: ConflictNotice, event: NormalizedCashbackEvent): Promise<void> {
     try {
       const claimed = await this.prisma.cashbackTransaction.updateMany({
         where: { id: row.id, conflictNotifiedAt: null },
@@ -357,7 +362,7 @@ export class CashbackService {
       const order = row.merchantOrderId ?? event.merchantOrderId;
       const summary =
         kind === 'REVIVED'
-          ? `Đơn ${order} (${row.provider ?? 'sàn'}): sàn duyệt lại khoản đã "Từ chối", cashback chờ về Ví ${row.userReward.toLocaleString('vi-VN')}đ đã được cộng lại. Kế toán kiểm tra nếu không đúng.`
+          ? `Đơn ${order} (${row.provider ?? 'sàn'}): sàn duyệt lại khoản đã "Từ chối", cashback chờ về Ví ${(reward ?? row.userReward).toLocaleString('vi-VN')}đ đã được cộng lại. Kế toán kiểm tra nếu không đúng.`
           : kind === 'PAID_REJECTED'
           ? `Đơn ${order} (${row.provider ?? 'sàn'}): sàn báo "Từ chối" nhưng khoản hoàn ${row.userReward.toLocaleString('vi-VN')}đ đã trả về Ví khách. Tiền không đổi, kế toán đối chiếu với sàn.`
           : `Đơn ${order} (${row.provider ?? 'sàn'}): Kế toán đã đặt "${STATUS_VI[row.status]}", sàn báo "${STATUS_VI[event.status]}". Giữ quyết định của Kế toán, số dư không đổi.`;
@@ -427,7 +432,8 @@ export class CashbackService {
         const { outcome: settled, reward } = await this.prisma.$transaction(async (t) => {
           const marked = await t.cashbackTransaction.updateMany({
             where: { id: tx.id, status: 'CONFIRMED', confirmedAt: { lte: threshold } },
-            data: { status: 'PAID', paidAt: new Date() },
+            // Dấu "đã báo lệch" theo từng chặng của dòng: sang PAID là chặng mới, sàn đòi lại sau đó (L2-08) phải báo được dù chặng trước đã báo.
+            data: { status: 'PAID', paidAt: new Date(), conflictNotifiedAt: null },
           });
           if (marked.count === 0) return { outcome: 'none' as const, reward: 0 };
           // Dòng đã bị CAS khoá: số userReward đọc trước vòng lặp có thể đã đổi (REJECT rồi CONFIRMED lại với số mới).
