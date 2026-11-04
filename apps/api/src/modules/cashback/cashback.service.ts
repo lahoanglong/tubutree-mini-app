@@ -25,6 +25,8 @@ function maskedUser<U extends { phone: string | null }>(user: U | undefined, mas
   return mask && user.phone ? { ...user, phone: maskPhoneKeepLast3(user.phone) } : user;
 }
 
+type ExistingCashbackRow = { id: string; userId: string; status: CashbackStatus; confirmedAt: Date | null; userReward: number };
+
 @Injectable()
 export class CashbackService {
   /** Trần mỗi lượt settle — phần còn lại để lượt cron kế (chạy 30 phút/lần). */
@@ -36,6 +38,8 @@ export class CashbackService {
     CONFIRMED: ['PENDING', 'REJECTED'],
     REJECTED: ['PENDING', 'CONFIRMED'],
   };
+
+  private static readonly CAS_ATTEMPTS = 3;
 
   private readonly logger = new Logger(CashbackService.name);
 
@@ -241,51 +245,53 @@ export class CashbackService {
 
   /** Chuyển trạng thái 1 giao dịch cashback đã tồn tại theo sự kiện mới (idempotent, atomic). */
   private async applyToExisting(
-    existing: { id: string; userId: string; status: CashbackStatus; confirmedAt: Date | null; userReward: number },
+    existing: ExistingCashbackRow,
     event: NormalizedCashbackEvent,
     status: NormalizedCashbackEvent['status'],
     userReward: number,
     opts: { manual?: boolean } = {},
   ): Promise<void> {
-    // Đã settle về Ví (PAID) → BỎ QUA postback đến sau: không ghi đè status, không đụng số dư
-    // (không claw-back được tiền đã về Ví).
-    if (existing.status === 'PAID') return;
-    // Sự kiện đến muộn hoặc đến sai thứ tự (postback PENDING sau khi reconcile đã CONFIRMED) không được kéo trạng thái lùi:
-    // lùi về PENDING thì khoản đó không bao giờ settle về Ví. Admin duyệt tay là quyết định tường minh nên được đi mọi hướng.
-    if (!opts.manual && !CashbackService.FORWARD_FROM[status].includes(existing.status)) return;
-
-    // Chuyển trạng thái ATOMIC bằng optimistic CAS theo status đã đọc + điều chỉnh pending trong
-    // CÙNG tx → chống 2 sự kiện 'approved' song song cùng cộng pending 2 lần. Racer thua thấy
-    // count=0 → bỏ qua.
-    const wasConfirmed = existing.status === 'CONFIRMED';
-    const nowConfirmed = status === 'CONFIRMED';
+    // Chuyển trạng thái ATOMIC bằng optimistic CAS + điều chỉnh pending trong CÙNG tx → chống 2 sự kiện song song cùng cộng
+    // pending 2 lần. CAS khớp cả userReward: số trừ khỏi cashbackPending phải là số đang nằm trên dòng lúc CAS, không phải số
+    // đọc ngoài tx từ trước (một sự kiện khác có thể đã sửa số tiền giữa chừng). Thua CAS thì đọc lại dòng trong tx rồi quyết định lại.
     await this.prisma.$transaction(async (tx) => {
-      const moved = await tx.cashbackTransaction.updateMany({
-        where: { id: existing.id, status: existing.status },
-        data: {
-          // confirmedAt set MỚI khi chuyển từ chưa-confirmed sang confirmed (reset đồng hồ hold);
-          // giữ nguyên khi đã confirmed. Tránh REJECTED→CONFIRMED giữ confirmedAt cũ → settle ngay.
-          status,
-          confirmedAt: nowConfirmed && !wasConfirmed ? new Date() : existing.confirmedAt,
-          // Postback sau có thể sửa số tiền (VD PENDING gửi tạm tính rồi CONFIRMED gửi số cuối
-          // cùng chính xác hơn) — chỉ ghi đè khi CHƯA từng confirm (chưa cộng cashbackPending
-          // theo số cũ); đã confirm rồi thì giữ nguyên để tránh lệch sổ cashbackPending/Ví.
-          ...(wasConfirmed
-            ? {}
-            : { orderAmount: event.orderAmount, commission: event.commission, userReward }),
-        },
-      });
-      if (moved.count === 0) return;
-      if (nowConfirmed && !wasConfirmed) {
-        await tx.user.update({
-          where: { id: existing.userId },
-          data: { cashbackPending: { increment: userReward } },
+      let cur = existing;
+      for (let attempt = 0; attempt < CashbackService.CAS_ATTEMPTS; attempt++) {
+        // Đã settle về Ví (PAID) → BỎ QUA postback đến sau: không ghi đè status, không đụng số dư (không claw-back được tiền đã về Ví).
+        if (cur.status === 'PAID') return;
+        // Sự kiện đến muộn hoặc sai thứ tự (postback PENDING sau khi reconcile đã CONFIRMED) không được kéo trạng thái lùi: lùi về
+        // PENDING thì khoản đó không bao giờ settle về Ví. Admin duyệt tay là quyết định tường minh nên được đi mọi hướng.
+        if (!opts.manual && !CashbackService.FORWARD_FROM[status].includes(cur.status)) return;
+        const wasConfirmed = cur.status === 'CONFIRMED';
+        const nowConfirmed = status === 'CONFIRMED';
+        const moved = await tx.cashbackTransaction.updateMany({
+          where: { id: cur.id, status: cur.status, userReward: cur.userReward },
+          data: {
+            // confirmedAt set MỚI khi chuyển từ chưa-confirmed sang confirmed (reset đồng hồ hold);
+            // giữ nguyên khi đã confirmed. Tránh REJECTED→CONFIRMED giữ confirmedAt cũ → settle ngay.
+            status,
+            confirmedAt: nowConfirmed && !wasConfirmed ? new Date() : cur.confirmedAt,
+            // Postback sau có thể sửa số tiền (VD PENDING gửi tạm tính rồi CONFIRMED gửi số cuối
+            // cùng chính xác hơn) — chỉ ghi đè khi CHƯA từng confirm (chưa cộng cashbackPending
+            // theo số cũ); đã confirm rồi thì giữ nguyên để tránh lệch sổ cashbackPending/Ví.
+            ...(wasConfirmed ? {} : { orderAmount: event.orderAmount, commission: event.commission, userReward }),
+          },
         });
-      } else if (wasConfirmed && !nowConfirmed) {
-        await tx.user.update({
-          where: { id: existing.userId },
-          data: { cashbackPending: { decrement: existing.userReward } },
+        if (moved.count > 0) {
+          if (nowConfirmed && !wasConfirmed) {
+            await tx.user.update({ where: { id: cur.userId }, data: { cashbackPending: { increment: userReward } } });
+          } else if (wasConfirmed && !nowConfirmed) {
+            await tx.user.update({ where: { id: cur.userId }, data: { cashbackPending: { decrement: cur.userReward } } });
+          }
+          return;
+        }
+        if (opts.manual) return;
+        const fresh = await tx.cashbackTransaction.findUnique({
+          where: { id: cur.id },
+          select: { id: true, userId: true, status: true, confirmedAt: true, userReward: true },
         });
+        if (!fresh) return;
+        cur = fresh;
       }
     });
   }

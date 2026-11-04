@@ -83,4 +83,23 @@ describe('Cashback: máy trạng thái dưới đồng thời (real Postgres)', 
     expect((await rowOf(o)).status).toBe('CONFIRMED');
     expect(await pendingOf(user.id)).toBe(35000);
   });
+
+  it('L2-09: nhiều sự kiện đổi trạng thái/số tiền chạy song song trên cùng dòng → cashbackPending khớp tổng userReward các dòng CONFIRMED', async () => {
+    const { user, utm } = await seedClick();
+    const orders = Array.from({ length: 6 }, (_, i) => `L209-${randCode(6)}-${i}`);
+    for (const o of orders) await svc.ingest(ev(utm, o, 'PENDING', 50000), 'accesstrade');
+    for (let round = 0; round < 3; round++) {
+      await Promise.all(
+        orders.flatMap((o) => [
+          svc.ingest(ev(utm, o, 'CONFIRMED', 40000), 'accesstrade'),
+          svc.ingest(ev(utm, o, 'REJECTED', 40000), 'accesstrade'),
+          svc.ingest(ev(utm, o, 'CONFIRMED', 60000), 'accesstrade'),
+          svc.ingest(ev(utm, o, 'PENDING', 70000), 'accesstrade'),
+        ]),
+      );
+    }
+    const rows = await prisma.cashbackTransaction.findMany({ where: { userId: user.id } });
+    const confirmed = rows.filter((r) => r.status === 'CONFIRMED').reduce((sum, r) => sum + r.userReward, 0);
+    expect(await pendingOf(user.id)).toBe(confirmed);
+  });
 });

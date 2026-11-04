@@ -184,12 +184,12 @@ describe('CashbackService.ingest', () => {
   // ── transition existing (idempotent + chuyển trạng thái ATOMIC) ──
   // Nhánh existing giờ dùng $transaction callback + cashbackTransaction.updateMany (optimistic CAS
   // theo status) → moveCount mô phỏng thắng/thua race.
-  function updateBranchPrisma(existing: Record<string, unknown>, moveCount = 1) {
+  function updateBranchPrisma(existing: Record<string, unknown>, moveCount = 1, fresh: Record<string, unknown> | null = existing) {
     const updateMany = jest.fn().mockResolvedValue({ count: moveCount });
     const userUpdate = jest.fn().mockResolvedValue({});
     const prisma = {
       cashbackClick: { findUnique: jest.fn().mockResolvedValue({ id: 'c1', userId: 'u1' }) },
-      cashbackTransaction: { findFirst: jest.fn().mockResolvedValue(existing), create: jest.fn(), updateMany },
+      cashbackTransaction: { findFirst: jest.fn().mockResolvedValue(existing), findUnique: jest.fn().mockResolvedValue(fresh), create: jest.fn(), updateMany },
       user: { update: userUpdate },
     } as unknown as PrismaService;
     (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest
@@ -274,6 +274,35 @@ describe('CashbackService.ingest', () => {
       0, // CAS thua: status đã bị racer khác đổi
     );
     await new CashbackService(prisma, config, notifications, registry).ingest(event({ status: 'CONFIRMED' }), 'accesstrade');
+    expect(userUpdate).not.toHaveBeenCalled();
+  });
+
+  it('L2-09: CAS khớp cả userReward đọc lúc quyết định', async () => {
+    const { prisma, updateMany } = updateBranchPrisma({
+      id: 'tx1', status: 'CONFIRMED', confirmedAt: new Date(), userId: 'u1', userReward: 35000,
+    });
+    await new CashbackService(prisma, config, notifications, registry).ingest(event({ status: 'REJECTED' }), 'accesstrade');
+    expect(updateMany.mock.calls[0][0].where).toEqual({ id: 'tx1', status: 'CONFIRMED', userReward: 35000 });
+  });
+
+  it('L2-09: thua CAS vì userReward đã đổi → đọc lại trong tx, trừ pending theo số MỚI trên dòng', async () => {
+    const stale = { id: 'tx1', status: 'CONFIRMED', confirmedAt: new Date(), userId: 'u1', userReward: 35000 };
+    const fresh = { ...stale, userReward: 28000 };
+    const { prisma, updateMany, userUpdate } = updateBranchPrisma(stale, 1, fresh);
+    updateMany.mockResolvedValueOnce({ count: 0 });
+    await new CashbackService(prisma, config, notifications, registry).ingest(event({ status: 'REJECTED' }), 'accesstrade');
+    expect(updateMany).toHaveBeenCalledTimes(2);
+    expect(updateMany.mock.calls[1][0].where).toEqual({ id: 'tx1', status: 'CONFIRMED', userReward: 28000 });
+    expect(userUpdate).toHaveBeenCalledTimes(1);
+    expect(userUpdate).toHaveBeenCalledWith(expect.objectContaining({ data: { cashbackPending: { decrement: 28000 } } }));
+  });
+
+  it('L2-09: thua CAS vì dòng đã sang trạng thái khác → quyết định lại theo trạng thái mới (đã CONFIRMED thì PENDING muộn bị bỏ)', async () => {
+    const stale = { id: 'tx1', status: 'PENDING', confirmedAt: null, userId: 'u1', userReward: 35000 };
+    const fresh = { ...stale, status: 'CONFIRMED', confirmedAt: new Date() };
+    const { prisma, updateMany, userUpdate } = updateBranchPrisma(stale, 0, fresh);
+    await new CashbackService(prisma, config, notifications, registry).ingest(event({ status: 'PENDING' }), 'accesstrade');
+    expect(updateMany).toHaveBeenCalledTimes(1);
     expect(userUpdate).not.toHaveBeenCalled();
   });
 
@@ -532,7 +561,7 @@ describe('CashbackService.adminReview', () => {
     await svc.adminReview('admin1', 'c1', 'CONFIRMED', 'khách gửi ảnh đơn');
 
     expect(txUpdateMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: 'c1', status: 'PENDING' } }),
+      expect.objectContaining({ where: { id: 'c1', status: 'PENDING', userReward: 35000 } }),
     );
     expect(userUpdate).toHaveBeenCalledWith({
       where: { id: 'u1' },
