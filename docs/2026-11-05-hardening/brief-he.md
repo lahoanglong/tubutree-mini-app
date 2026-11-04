@@ -41,7 +41,7 @@ Sao kê Ví và danh sách Đơn dùng offset trong infinite query: dòng mới 
 
 ### Thêm từ gói ha — lý do khi cấp/thu quyền nhân sự
 Gói ha bắt buộc ghi lý do, nhưng để `reason` tuỳ chọn ở `GrantRoleDto`/`RevokeRoleDto` cho Mini App bản cũ. Thiếu lý do thì sổ ghi "(không có lý do — Mini App bản cũ)".
-- Mini App: màn Nhân sự hỏi lý do (3–500 ký tự) trước khi cấp/thu hồi, rồi gửi `reason`. Sửa `apps/miniapp/src/services/staff-api.ts` và `packages/app-core/src/api/staff.ts`. app-core là file dùng chung: báo điều phối trước khi sửa.
+- Mini App: màn Nhân sự hỏi lý do (3–500 ký tự) trước khi cấp/thu hồi, rồi gửi `reason`. Sửa `apps/miniapp/src/services/staff-api.ts`. Ở `packages/app-core/src/api/staff.ts`, điều phối cho phép một việc: thêm tham số `reason` tuỳ chọn cho `grantStaff`/`revokeStaff`. Chỗ khác trong app-core vẫn phải hỏi trước.
 - `ConfirmSheet` không có ô nhập: dùng BottomSheet + Input có sẵn (theo `tubu-ui`).
 - Không đổi DTO về bắt buộc trong gói này. Làm sau khi Mini App bản mới đã lên PROD; ghi vào báo cáo.
 

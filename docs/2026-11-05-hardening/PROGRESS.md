@@ -82,5 +82,8 @@ Kế hoạch: `PLAN.md`. Phát hiện và quyết định của chủ: `audit-11
 - Quay lại: image `:prev-7589f36c` cho cả api và web (runbook 7.2). Nếu bỏ hạn chờ: xoá dòng `DB_SESSION_OPTIONS` trong `.env` rồi tạo lại `api`.
 - File go-live: `/root/golive-archive/94a55770/`. `.pending-migrations` để nguyên ở `/opt/tubutree` cho runbook 7.2.
 
-## Đợt 3 (chưa giao)
-- he (Mini App, PG 46537; sửa app-core phải hỏi điều phối), hf (admin web, PG 46538).
+## Đợt 3 (đang làm; tích hợp `hard/1105-w3`, gốc main 94a557702 + docs 461c99ac8)
+- Chủ chọn 05/11: push docs PR (#173) và làm đợt 3, thêm lỗi ZNS kẹt RETRYING. Test tối đa 2 worker. Hỏi chủ trước khi merge hoặc deploy.
+- he (Mini App, PG 46537): L4-01, L4-02, L4-03 phần Mini App, L4-04, L4-05, ô lý do cấp/thu quyền. app-core chỉ được thêm `reason` tuỳ chọn ở `staff.ts`.
+- hf (admin web + nhãn lỗi, PG 46538): L4-03 phần admin + `FIELD_LABELS`, L4-06.
+- hg (log ZNS kẹt PENDING/RETRYING khi job chết, PG 46539): brief `brief-hg.md`.

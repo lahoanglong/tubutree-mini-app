@@ -21,7 +21,7 @@
   Thao tác thua cuộc trả 409 kèm câu rõ ràng bằng tiếng Việt.
 - Migration chỉ được mở rộng (thêm cột, bảng, index), không xoá.
   - Tên: `YYYYMMDDHHMMSS_<ten>`, với thời điểm sau `20261104180000`.
-  - Đặt tên theo gói để không trùng: gói `ha` dùng `202611051000xx`, `hb` dùng `202611051100xx`, `hc` dùng `202611051200xx`, `hd1` dùng `202611051300xx`, `hd2` dùng `202611051400xx`, `hd3` dùng `202611051500xx`, `he` dùng `202611051600xx`, `hf` dùng `202611051700xx`.
+  - Đặt tên theo gói để không trùng: gói `ha` dùng `202611051000xx`, `hb` dùng `202611051100xx`, `hc` dùng `202611051200xx`, `hd1` dùng `202611051300xx`, `hd2` dùng `202611051400xx`, `hd3` dùng `202611051500xx`, `he` dùng `202611051600xx`, `hf` dùng `202611051700xx`, `hg` dùng `202611051800xx`.
   - Migration nặng (backfill, index trên bảng lớn) thì thêm vào `HEAVY_MIGRATIONS` (`apps/api/src/config/go-live/db-checks.ts`) và vào bảng §1.0 của `docs/launch/deploy-rollback-runbook.md`, kèm câu đếm trước deploy.
 - Route mới: cập nhật `EXPECTED` trong `apps/api/src/common/staff-permissions.matrix.spec.ts`.
 - Chuỗi mới hiện cho người dùng:
