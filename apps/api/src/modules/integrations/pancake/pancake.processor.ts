@@ -13,11 +13,13 @@ import { PANCAKE_PARTIAL_RETURN_PREFIX, PANCAKE_RETURNING_PREFIX, resolvePancake
 import {
   ATTENTION_CANCEL_AFTER_HANDOVER,
   ATTENTION_PARTIAL_RETURN_ACK,
+  ATTENTION_PAYMENT_UNLINKED,
   ATTENTION_PARTIAL_RETURN_HELD_REASONS,
   ATTENTION_RETURN_APPROVED,
   ATTENTION_TOTAL_MISMATCH,
   ATTENTION_UNDERPAID,
   PANCAKE_PARTIAL_RETURN_MANUAL_NOTE,
+  appendPancakeAttention,
   clearPancakeAttention,
   removeAttentionReasonsByPrefix,
   writePancakeAttention,
@@ -726,6 +728,9 @@ export class PancakeProcessor extends WorkerHost {
     const rawId = data['id'] ?? data['order_id'];
     const pancakeRef = rawId === null || rawId === undefined || rawId === '' ? '?' : String(rawId);
     const note = `Pancake báo đã thanh toán (đơn Pancake #${pancakeRef}) nhưng đơn Tubu chưa gắn đơn Pancake nào: chờ Kế toán xác nhận`;
+    // Nối vào hàng "Cần xử lý Pancake" (không đè lý do khác); lặp lại là no-op về nội dung và khôi phục dòng nếu bị ghi đè sau đó.
+    // Đơn đã huỷ/trả không còn việc gỡ nên không ghim.
+    if (!isClosedOrder(order.status)) await appendPancakeAttention(this.prisma, order.id, ATTENTION_PAYMENT_UNLINKED);
     const logged = await this.prisma.orderStatusHistory.findFirst({ where: { orderId: order.id, actorType: 'PANCAKE', note }, select: { id: true } });
     if (logged) return;
     await this.prisma.orderStatusHistory.create({

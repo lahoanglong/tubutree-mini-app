@@ -1,3 +1,4 @@
+import { ATTENTION_PAYMENT_UNLINKED } from '../integrations/pancake/pancake-attention';
 import { Test } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { OrderStatusService, InvalidOrderTransitionError } from './order-status.service';
@@ -898,10 +899,14 @@ describe('OrderStatusService — chặn giao đơn trả trước chưa thanh to
  * đặt bưu tá thu gom, báo khách) gom về MỘT hàm để nút admin và webhook đối soát không lệch nhau.
  */
 describe('OrderStatusService.markPaid', () => {
-  function make(reads: Record<string, unknown>[], flipCounts: number[] = [1]) {
+  function make(reads: Record<string, unknown>[], flipCounts: number[] = [1], attention: string | null = null) {
     const flips = [...flipCounts];
     const tx = {
-      order: { updateMany: jest.fn(async () => ({ count: flips.length ? flips.shift()! : 1 })), findUniqueOrThrow: jest.fn(async () => ({ userId: reads[0]?.userId })) },
+      order: {
+        updateMany: jest.fn(async () => ({ count: flips.length ? flips.shift()! : 1 })),
+        findUniqueOrThrow: jest.fn(async () => ({ userId: reads[0]?.userId })),
+        findUnique: jest.fn(async () => ({ pancakeAttention: attention })),
+      },
       orderStatusHistory: { create: jest.fn().mockResolvedValue({}) },
     };
     const findFirst = jest.fn();
@@ -950,6 +955,25 @@ describe('OrderStatusService.markPaid', () => {
     await svc.markPaid('TUBU1', { actorType: 'PANCAKE' });
     expect(prisma.order.updateMany).toHaveBeenCalledWith({
       where: { id: 'o1', OR: [{ pancakeAttention: { startsWith: 'Khách chuyển thiếu' } }] },
+      data: { pancakeAttention: null, pancakeAttentionAt: null },
+    });
+  });
+
+  it('lật PAID → gỡ đúng lý do "đã thanh toán nhưng đơn chưa gắn Pancake" trong CÙNG tx, giữ lý do khác', async () => {
+    const other = 'Pancake báo HUỶ nhưng đơn đã bàn giao vận chuyển';
+    const { svc, tx } = make([pending()], [1], `${other} | ${ATTENTION_PAYMENT_UNLINKED}`);
+    await svc.markPaid('TUBU1', { actorType: 'ADMIN', actorId: 'a1' });
+    expect(tx.order.updateMany).toHaveBeenCalledWith({
+      where: { id: 'o1', pancakeAttention: `${other} | ${ATTENTION_PAYMENT_UNLINKED}` },
+      data: { pancakeAttention: other },
+    });
+  });
+
+  it('lật PAID: ô chỉ có lý do này → ô được xoá hẳn (đơn rời hàng đợi)', async () => {
+    const { svc, tx } = make([pending()], [1], ATTENTION_PAYMENT_UNLINKED);
+    await svc.markPaid('TUBU1', { actorType: 'ADMIN', actorId: 'a1' });
+    expect(tx.order.updateMany).toHaveBeenCalledWith({
+      where: { id: 'o1', pancakeAttention: ATTENTION_PAYMENT_UNLINKED },
       data: { pancakeAttention: null, pancakeAttentionAt: null },
     });
   });

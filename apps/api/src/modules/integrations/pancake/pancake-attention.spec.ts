@@ -86,3 +86,13 @@ describe('gỡ lý do khi ô đổi liên tục (mọi lần ghi có điều ki�
   });
 });
 
+
+describe('appendAttentionReason', () => {
+  const { appendAttentionReason } = jest.requireActual<typeof import('./pancake-attention')>('./pancake-attention');
+  it('ô trống → chính lý do; lý do mới → nối sau; lý do đã có → giữ nguyên cả ô, không bỏ lý do khác', () => {
+    expect(appendAttentionReason(null, 'B')).toBe('B');
+    expect(appendAttentionReason('A', 'B')).toBe('A | B');
+    expect(appendAttentionReason('A | B', 'B')).toBe('A | B');
+    expect(appendAttentionReason('B | A', 'B')).toBe('B | A');
+  });
+});

@@ -1,3 +1,4 @@
+import { ATTENTION_PAYMENT_UNLINKED } from '../integrations/pancake/pancake-attention';
 import 'reflect-metadata';
 import { BadRequestException, ForbiddenException, NotFoundException, RequestMethod } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
@@ -40,6 +41,7 @@ function build(order: O | null, opts: { creditRow?: boolean; flipCount?: number 
       findFirst: jest.fn().mockResolvedValue(order),
       updateMany,
       findUniqueOrThrow: jest.fn(async () => ({ ...order, paymentStatus: 'PAID' })),
+      findUnique: jest.fn().mockResolvedValue({ pancakeAttention: null }),
     },
     dealerCreditLedger: { findFirst: jest.fn().mockResolvedValue(opts.creditRow ? { id: 'led1' } : null), findMany: jest.fn().mockResolvedValue([]) },
     orderStatusHistory: { create: historyCreate, findMany: jest.fn().mockResolvedValue([]) },
@@ -96,7 +98,7 @@ describe('DealerService.confirmDealerOrderPayment (admin xác nhận đã nhận
     // record(tx, ...) trong callback $transaction, không phải record(this.prisma, ...) ngoài nó.
     const txUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
     const txHistoryCreate = jest.fn().mockResolvedValue({});
-    const txMarker = { order: { updateMany: txUpdateMany }, orderStatusHistory: { create: txHistoryCreate } };
+    const txMarker = { order: { updateMany: txUpdateMany, findUnique: jest.fn().mockResolvedValue({ pancakeAttention: null }) }, orderStatusHistory: { create: txHistoryCreate } };
     const prisma = {
       order: { findFirst: jest.fn().mockResolvedValue(DEALER_ORDER) },
       dealerCreditLedger: { findFirst: jest.fn().mockResolvedValue(null) },
@@ -109,6 +111,13 @@ describe('DealerService.confirmDealerOrderPayment (admin xác nhận đã nhận
     expect(analytics.record).toHaveBeenCalledTimes(1);
     expect(analytics.record.mock.calls[0][0]).toBe(txMarker);
     expect(analytics.record.mock.calls[0][0]).not.toBe(prisma);
+  });
+
+  it('xác nhận đã nhận tiền → gỡ lý do "Pancake báo đã thanh toán nhưng đơn chưa gắn Pancake", giữ lý do khác', async () => {
+    const { svc, prisma, updateMany } = build(DEALER_ORDER);
+    ((prisma.order as { findUnique: jest.Mock }).findUnique).mockResolvedValue({ pancakeAttention: `Lý do khác | ${ATTENTION_PAYMENT_UNLINKED}` });
+    await svc.confirmDealerOrderPayment('admin1', 'DLR1', {});
+    expect(updateMany).toHaveBeenCalledWith({ where: { id: 'o1', pancakeAttention: `Lý do khác | ${ATTENTION_PAYMENT_UNLINKED}` }, data: { pancakeAttention: 'Lý do khác' } });
   });
 
   it('đơn đã PACKED/SHIPPING/DELIVERED mà còn UNPAID → chỉ lật PAID, giữ nguyên trạng thái giao hàng', async () => {

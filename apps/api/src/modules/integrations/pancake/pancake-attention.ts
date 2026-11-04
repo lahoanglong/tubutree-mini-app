@@ -55,6 +55,11 @@ export const ATTENTION_PARTIAL_RETURN_APPROVED_ON_TUBU =
 export const ATTENTION_RETURN_APPROVED = ['Khách trả một phần đơn', 'Khách trả cả đơn'];
 /** Pancake báo khách mới chuyển một phần tiền — tự gỡ khi đơn đủ tiền hoặc số đã nhận đã thành khoản hoàn. */
 export const ATTENTION_UNDERPAID = 'Khách chuyển thiếu';
+/**
+ * Đơn Pancake mang mã đơn Tubu báo đã thanh toán, nhưng đơn Tubu chưa gắn đơn Pancake nào (chỉ khớp bằng mã): không tự PAID.
+ * Nối vào ô (không đè), tự gỡ khi đơn sang PAID ở bất kỳ đường nào; "Đã xử lý" gỡ như lý do thường.
+ */
+export const ATTENTION_PAYMENT_UNLINKED = 'Pancake báo đã thanh toán nhưng đơn chưa gắn Pancake — Kế toán đối chiếu sao kê rồi bấm "Đã nhận tiền"';
 /** Tổng tiền đơn trên Pancake khác `order.total` (đơn bị sửa trên Pancake) — tự gỡ khi tổng trùng lại. */
 export const ATTENTION_TOTAL_MISMATCH = 'Tổng tiền Pancake lệch với Tubu';
 
@@ -146,7 +151,7 @@ export const ATTENTION_SEPARATOR = ' | ';
 
 /** Nối một lý do vào hàng cần xử lý mà không làm mất lý do đang có (cùng dấu nối với việc ghi dấu trạng thái bị chặn). */
 export const appendAttentionReason = (current: string | null | undefined, reason: string): string =>
-  current && !current.split(ATTENTION_SEPARATOR).includes(reason) ? `${current}${ATTENTION_SEPARATOR}${reason}` : reason;
+  !current ? reason : current.split(ATTENTION_SEPARATOR).includes(reason) ? current : `${current}${ATTENTION_SEPARATOR}${reason}`;
 
 /**
  * Gỡ đúng một lý do khỏi hàng cần xử lý (khi việc đó đã có người quyết); hết lý do thì đơn rời hàng đợi. Ghi có điều kiện theo giá trị

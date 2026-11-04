@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { PancakeProcessor } from './pancake.processor';
+import { ATTENTION_PAYMENT_UNLINKED } from './pancake-attention';
 import { OrderReversalService } from '../../orders/order-reversal.service';
 import { OrderStatusService } from '../../orders/order-status.service';
 import type { PrismaService } from '../../../prisma/prisma.service';
@@ -383,6 +384,30 @@ describe('PancakeProcessor.onPaymentReconcile', () => {
       expect(historyCreate.mock.calls[0]![0].data.note).toContain('chờ Kế toán xác nhận');
       expect(alerts.alert).toHaveBeenCalledTimes(1);
       expect(alerts.alert.mock.calls[0]![1]).toContain('Chờ Kế toán');
+      expect(attentionFlags(orderUpdateMany)).toEqual([ATTENTION_PAYMENT_UNLINKED]);
+    });
+
+    it('ô đang có lý do khác → nối sau, không mất lý do cũ (ghi có điều kiện theo giá trị đã đọc)', async () => {
+      const t = setup({ id: 'o1', code: 'TUBU1', userId: 'u1', status: 'CONFIRMED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100000, pancakeOrderId: null, pancakeAttention: 'Chưa đẩy được đơn sang Pancake' });
+      await t.proc.onPaymentReconcile(paidPayload);
+      expect(attentionFlags(t.orderUpdateMany)).toEqual([`Chưa đẩy được đơn sang Pancake | ${ATTENTION_PAYMENT_UNLINKED}`]);
+      expect(t.orderUpdateMany).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'o1', pancakeAttention: 'Chưa đẩy được đơn sang Pancake' } }));
+      expect(statusFlips(t.orderUpdateMany)).toHaveLength(0);
+    });
+
+    it('webhook lặp khi ô đã có lý do này → không nối trùng', async () => {
+      const t = setup({ id: 'o1', code: 'TUBU1', userId: 'u1', status: 'CONFIRMED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100000, pancakeOrderId: null, pancakeAttention: `Lý do khác | ${ATTENTION_PAYMENT_UNLINKED}` });
+      await t.proc.onPaymentReconcile(paidPayload);
+      await t.proc.onPaymentReconcile(paidPayload);
+      for (const v of attentionFlags(t.orderUpdateMany)) expect(v.split(' | ').filter((x) => x === ATTENTION_PAYMENT_UNLINKED)).toHaveLength(1);
+    });
+
+    it('đơn đã huỷ/trả: không ghim vào hàng đợi (chỉ dấu lịch sử và báo ADMIN)', async () => {
+      const alerts = { alert: jest.fn().mockResolvedValue(undefined) };
+      const t = setup({ id: 'o2', code: 'TUBU2', userId: 'u1', status: 'CANCELLED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100000, pancakeOrderId: null }, undefined, alerts);
+      await t.proc.onPaymentReconcile(paidPayload);
+      expect(attentionFlags(t.orderUpdateMany)).toHaveLength(0);
+      expect(alerts.alert).toHaveBeenCalledTimes(1);
     });
 
     it('Pancake gửi lại cùng sự kiện (đã có dấu) → không ghi dấu, không báo thêm', async () => {
@@ -401,7 +426,7 @@ describe('PancakeProcessor.onPaymentReconcile', () => {
     it('chuyển thiếu hoặc đơn đã huỷ cũng không đi đường ghi nhận tiền (không "Khách chuyển thiếu", không khoản hoàn)', async () => {
       const under = setup({ id: 'o1', code: 'TUBU1', userId: 'u1', status: 'CONFIRMED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100000, pancakeOrderId: null });
       await under.proc.onPaymentReconcile({ id: 'p1', prepaid: 50000 });
-      expect(attentionFlags(under.orderUpdateMany)).toHaveLength(0);
+      expect(attentionFlags(under.orderUpdateMany).filter((a) => a.startsWith('Khách chuyển thiếu'))).toHaveLength(0);
       const cancelled = setup({ id: 'o2', code: 'TUBU2', userId: 'u1', status: 'CANCELLED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100000, pancakeOrderId: null });
       await cancelled.proc.onPaymentReconcile(paidPayload);
       expect(cancelled.prisma.orderCustomerRefund.createMany).not.toHaveBeenCalled();
