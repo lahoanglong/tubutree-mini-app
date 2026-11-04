@@ -101,9 +101,10 @@ export class ImageResizeService {
     if (!key) throw new BadRequestException('Nguồn ảnh không được hỗ trợ.');
     const mime = format === 'webp' ? 'image/webp' : 'image/jpeg';
     const etag = `"${key}"`;
+    // Kiểm danh sách trước khi phát bản đã cache: ảnh bị gỡ khỏi danh sách (gian hàng bị gỡ, đổi ảnh) không được phát tiếp tới 14 ngày nữa.
+    if (!parseOwnImagePath(source) && !(await this.isRegistered(source as string))) throw new NotFoundException('Không tìm thấy ảnh.');
     const hit = await this.readCache(key);
     if (hit) return { data: hit, mime, etag };
-    if (!parseOwnImagePath(source) && !(await this.isRegistered(source as string))) throw new NotFoundException('Không tìm thấy ảnh.');
     let job = this.inFlight.get(key);
     if (!job) {
       job = this.produce(source as string, key, width, format, client).finally(() => this.inFlight.delete(key));

@@ -113,6 +113,17 @@ describe('ImageResizeService', () => {
     expect(typeof opts.lookup).toBe('function');
   });
 
+  it('ảnh nguồn đã bị gỡ khỏi danh sách (gian hàng bị gỡ, đổi ảnh) thì 404 dù bản đổi cỡ còn trong cache đĩa; ảnh của chính API không bị ảnh hưởng', async () => {
+    fakeHttps({ status: 200, headers: { 'content-type': 'image/png' }, body: png });
+    const url = 'https://content.pancake.vn/a.png';
+    await make().svc.get(url, 160, 'jpeg');
+    expect(readdirSync(dir).length).toBe(1);
+    await expect(make(undefined, prismaWith([])).svc.get(url, 160, 'jpeg')).rejects.toBeInstanceOf(NotFoundException);
+    const own = make();
+    await own.svc.get('/public-image/product/p1/thumb?v=abc', 160, 'jpeg');
+    await expect(make(undefined, prismaWith([])).svc.get('/public-image/product/p1/thumb?v=abc', 160, 'jpeg')).resolves.toBeDefined();
+  });
+
   it('bước phân giải DNS chặn địa chỉ nội bộ (cả dạng all: true) và cho qua địa chỉ công cộng', async () => {
     fakeHttps({ status: 200, headers: { 'content-type': 'image/png' }, body: png });
     await make().svc.get('https://content.pancake.vn/dns.png', 160, 'webp');

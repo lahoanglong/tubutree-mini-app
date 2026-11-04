@@ -16,9 +16,12 @@ const CAMP_B64 = 'data:image/png;base64,iVBORw0KGgo=';
 const SF_COVER_OK = `${CLOUD}/reg-cover-${rand}.jpg`;
 const SF_AVATAR_PANCAKE = `https://content.pancake.vn/2-26/reg-avatar-${rand}.jpg`;
 const SF_COVER_FOREIGN = `https://evil.example/reg-cover-${rand}.jpg`;
+const SF_COVER_DRAFT = `${CLOUD}/reg-draft-${rand}.jpg`;
+const SF_COVER_TAKEN_DOWN = `${CLOUD}/reg-down-${rand}.jpg`;
 const SF_AVATAR_CLOUD_HTTP = `http://res.cloudinary.com/tubutree/image/upload/v1/reg-http-${rand}.jpg`;
 
-test('registrySql trên Postgres thật: Cloudinary của chiến dịch/gian hàng có; Pancake, host lạ, http, base64 không', async (_args, testInfo) => {
+test('registrySql trên Postgres thật: Cloudinary của chiến dịch/gian hàng đang đăng có; Pancake, host lạ, http, base64, gian hàng nháp/bị gỡ không', // eslint-disable-next-line no-empty-pattern
+async ({}, testInfo) => {
   test.skip(testInfo.project.name !== 'Web Customer', 'ghi DB chỉ ở một project');
   const url = seedDatabaseUrl();
   test.skip(!writableTempDb(url), 'DB không phải DB tạm');
@@ -29,18 +32,23 @@ test('registrySql trên Postgres thật: Cloudinary của chiến dịch/gian h�
   const prisma = new PrismaClient({ datasources: { db: { url } } });
   const now = Date.now();
   const campaign = (slug: string, image: string) => ({
-    slug: `${slug}-${rand}`, title: slug, placement: 'OFFERS_TOP', image, startAt: new Date(now - 3_600_000), endAt: new Date(now + 3_600_000),
+    // Đã tắt và hết hạn: spec khác chạy song song (offers, a11y-shop) không thấy banner này.
+    slug: `${slug}-${rand}`, title: slug, placement: 'OFFERS_TOP', image, isActive: false, startAt: new Date(now - 7_200_000), endAt: new Date(now - 3_600_000),
   });
   try {
     await prisma.campaign.createMany({ data: [campaign('reg-ok', CAMP_OK), campaign('reg-pancake', CAMP_PANCAKE), campaign('reg-b64', CAMP_B64)] });
-    await prisma.storefront.create({ data: { type: 'CTV', slug: `reg-a-${rand}`, title: 'Reg A', coverUrl: SF_COVER_OK, avatarUrl: SF_AVATAR_PANCAKE } });
-    await prisma.storefront.create({ data: { type: 'CTV', slug: `reg-b-${rand}`, title: 'Reg B', coverUrl: SF_COVER_FOREIGN, avatarUrl: SF_AVATAR_CLOUD_HTTP } });
+    const published = { isPublished: true, publishedAt: new Date() };
+    await prisma.storefront.create({ data: { type: 'CTV', slug: `reg-a-${rand}`, title: 'Reg A', coverUrl: SF_COVER_OK, avatarUrl: SF_AVATAR_PANCAKE, ...published } });
+    await prisma.storefront.create({ data: { type: 'CTV', slug: `reg-b-${rand}`, title: 'Reg B', coverUrl: SF_COVER_FOREIGN, avatarUrl: SF_AVATAR_CLOUD_HTTP, ...published } });
+    // Cùng ảnh Cloudinary hợp lệ nhưng gian hàng là bản nháp / bị gỡ: không được đăng ký.
+    await prisma.storefront.create({ data: { type: 'CTV', slug: `reg-c-${rand}`, title: 'Reg C', coverUrl: SF_COVER_DRAFT } });
+    await prisma.storefront.create({ data: { type: 'CTV', slug: `reg-d-${rand}`, title: 'Reg D', coverUrl: SF_COVER_TAKEN_DOWN, ...published, takenDownAt: new Date() } });
     const rows = (await prisma.$queryRaw(registrySql())) as { u: string }[];
     const registry = new Set(rows.map((r) => r.u));
     console.log(`registry rows: ${rows.length}; có Cloudinary chiến dịch=${registry.has(CAMP_OK)}, bìa gian hàng=${registry.has(SF_COVER_OK)}`);
     expect(registry.has(CAMP_OK), 'banner Cloudinary phải có').toBe(true);
     expect(registry.has(SF_COVER_OK), 'bìa gian hàng Cloudinary phải có').toBe(true);
-    for (const u of [CAMP_PANCAKE, CAMP_B64, SF_AVATAR_PANCAKE, SF_COVER_FOREIGN, SF_AVATAR_CLOUD_HTTP]) expect(registry.has(u), `không được có: ${u}`).toBe(false);
+    for (const u of [CAMP_PANCAKE, CAMP_B64, SF_AVATAR_PANCAKE, SF_COVER_FOREIGN, SF_AVATAR_CLOUD_HTTP, SF_COVER_DRAFT, SF_COVER_TAKEN_DOWN]) expect(registry.has(u), `không được có: ${u}`).toBe(false);
   } finally {
     await prisma.campaign.deleteMany({ where: { slug: { endsWith: `-${rand}` } } });
     await prisma.storefront.deleteMany({ where: { slug: { endsWith: `-${rand}` } } });

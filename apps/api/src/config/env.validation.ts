@@ -63,6 +63,8 @@ export const envSchema = z.object({
   IMAGE_CACHE_DIR: z.string().default(''),
   IMAGE_CACHE_MAX_MB: z.preprocess((v) => (v === '' ? undefined : v), z.coerce.number().int().positive().max(10_240).default(512)),
   IMAGE_RESIZE_EXTRA_HOSTS: z.string().default(''),
+  // Tên cloud Cloudinary của Tubu Tree (cùng giá trị VITE_CLOUDINARY_CLOUD_NAME của Mini App). Có thì chỉ ảnh `https://res.cloudinary.com/<cloud>/image/upload/…` của banner chiến dịch và ảnh gian hàng được đổi cỡ; trống = chỉ kiểm host.
+  CLOUDINARY_CLOUD_NAME: z.string().default(''),
   // Tên miền được phép làm link hoá đơn VAT (dấu phẩy, `*.x` gồm tên miền con). Trống = danh sách mặc định (common/vat-invoice-url.ts); có giá trị = thay hẳn.
   ALLOWED_VAT_INVOICE_HOSTS: z.string().default(''),
   // Pancake POS

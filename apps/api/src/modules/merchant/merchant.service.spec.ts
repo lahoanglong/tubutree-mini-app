@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { MERCHANT_SELF_SHIP_USE_FULFIL_TAB, MerchantService } from './merchant.service';
+import { ImageRegistryStale } from '../catalog/image-registry-stale';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { OrderStatusService } from '../orders/order-status.service';
 
@@ -320,6 +321,23 @@ describe('MerchantService', () => {
       });
       expect(res.subdomain).toBe('pure-green');
       expect(res.bankAccountNo).toBe('1234567890');
+    });
+
+    it('đổi ảnh đại diện/bìa thì đánh dấu danh sách ảnh của /img; sửa tên hoặc gửi lại đúng ảnh cũ thì không', async () => {
+      const COVER = 'https://res.cloudinary.com/tubutree/image/upload/v1/c.jpg';
+      const run = async (dto: Record<string, string>) => {
+        const store = { id: 's1', ownerUserId: 'u1', collections: [], title: 'Shop', coverUrl: COVER, avatarUrl: null };
+        const prisma = makePrisma({
+          user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'DEALER' }) },
+          storefront: { findFirst: jest.fn().mockResolvedValue(store), update: jest.fn().mockResolvedValue(store) },
+        });
+        const stale = new ImageRegistryStale();
+        await new MerchantService(prisma, orderStatus, undefined, undefined, stale).updateStore('u1', dto);
+        return stale.isStale();
+      };
+      expect(await run({ avatarUrl: COVER })).toBe(true);
+      expect(await run({ coverUrl: `${COVER}x` })).toBe(true);
+      expect(await run({ title: 'Shop', coverUrl: COVER })).toBe(false);
     });
 
     // P0-1 (docs/2026-09-08-review-progress.md): trước đây chỉ kiểm trùng subdomain-với-

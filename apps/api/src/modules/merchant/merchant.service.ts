@@ -507,6 +507,8 @@ export class MerchantService {
       }
     }
 
+    // Ảnh đại diện/bìa https mới phải vào danh sách của /img: đánh dấu trước lúc ghi (lần tra trượt cách 30 giây nạp lại, nên ghi trễ hơn cờ vẫn thấy).
+    if ((dto.avatarUrl !== undefined && dto.avatarUrl !== store.avatarUrl) || (dto.coverUrl !== undefined && dto.coverUrl !== store.coverUrl)) this.imageStale?.markStale();
     const releasedPrevious = [store.subdomain, store.customDomain];
     const releasedNext = [
       updateData.subdomain === undefined ? store.subdomain : (updateData.subdomain as string | null),
