@@ -24,6 +24,11 @@ export type CouponCleanupResult = { skipped: 'RUNNING' | 'LOCKED' } | { deleted:
  * Chỉ xoá mã CHƯA từng dùng (usedCount = 0 và không có CouponRedemption): coupon đã dùng giữ lại cho lịch sử
  * đối soát; CouponRedemption có khoá ngoại nên cũng không xoá được mã có redemption. Mã cấp theo `reason`
  * tất định (welcome/birthday/winback) không bị cấp lại sau khi xoá vì các cron cấp đều gắn với kỳ hiện tại.
+ *
+ * Voucher mốc (MILESTONE...) KHÔNG bị dọn: milestoneVouchers xét lại cả 3 tháng trước và chống cấp trùng bằng việc mã đã tồn
+ * tại, mà mã hết hạn sau 30 ngày cộng ngưỡng giữ (sàn 30) còn ngắn hơn cửa sổ đó, nên xoá mã là cấp lại mã cho cùng một lần chi
+ * tiêu. Phần bù chênh lệch bậc cũng cộng giá trị các mã đã cấp trong tháng. Chọn loại khỏi dọn thay vì thêm bảng khoá riêng: tối
+ * đa một dòng mỗi (bậc, tháng, khách), không cần migration.
  */
 @Injectable()
 export class CouponCleanupCron {
@@ -92,6 +97,7 @@ export class CouponCleanupCron {
             AND c."scopeMeta" ->> 'userId' IS NOT NULL
             AND c."endAt" < ${cutoff}
             AND c."usedCount" = 0
+            AND c."code" NOT LIKE 'MILESTONE%'
             AND NOT EXISTS (SELECT 1 FROM "coupon_redemptions" r WHERE r."couponId" = c."id")
           ORDER BY c."endAt"
           LIMIT ${batchSize}

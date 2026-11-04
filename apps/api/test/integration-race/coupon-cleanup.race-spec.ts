@@ -74,6 +74,19 @@ describe('CouponCleanupCron (real Postgres)', () => {
     expect(await exists('nullmeta')).toBe(true);
   });
 
+  it('L2-06: voucher mốc hết hạn lâu vẫn được giữ (xoá là bị cấp lại cho cùng lần chi tiêu), mã cá nhân khác vẫn bị dọn', async () => {
+    const milestoneCode = `MILESTONE1000000-2026-01-U${tag}`;
+    await mk('plain', 200);
+    await mk('milestone', 200, { code: milestoneCode });
+    try {
+      await cron.purgeExpiredPersonal(NOW);
+      expect(await exists('plain')).toBe(false);
+      expect(await prisma.coupon.count({ where: { code: milestoneCode } })).toBe(1);
+    } finally {
+      await prisma.coupon.deleteMany({ where: { code: milestoneCode } });
+    }
+  });
+
   it('ngưỡng giữ cấu hình được (coupons.personal_expired_retention_days)', async () => {
     await mk('r120', 120);
     await mk('r50', 50);
