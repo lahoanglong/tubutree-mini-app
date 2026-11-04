@@ -31,8 +31,9 @@ describe('POST /api/csp-report', () => {
   let warn: jest.SpyInstance;
 
   beforeEach(async () => {
-    warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    // Spy đặt SAU khi dựng app: lúc máy tải, Nest ghi warn "module ... is taking Xms to serialize" trong compile().
     ({ app, base } = await startApp());
+    warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
   });
   afterEach(async () => {
     await app.close();
