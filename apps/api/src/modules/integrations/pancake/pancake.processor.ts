@@ -14,11 +14,13 @@ import {
   ATTENTION_CANCEL_AFTER_HANDOVER,
   ATTENTION_INVOICE_URL_REJECTED,
   ATTENTION_PARTIAL_RETURN_ACK,
+  ATTENTION_SEPARATOR,
   ATTENTION_PARTIAL_RETURN_HELD_REASONS,
   ATTENTION_RETURN_APPROVED,
   ATTENTION_TOTAL_MISMATCH,
   ATTENTION_UNDERPAID,
   PANCAKE_PARTIAL_RETURN_MANUAL_NOTE,
+  appendPancakeAttention,
   clearPancakeAttention,
   removeAttentionReasonsByPrefix,
   writePancakeAttention,
@@ -50,6 +52,7 @@ import { hasDealerCreditDebit } from '../../orders/dealer-credit-debit';
 import { formatVnd } from '../../orders/refund-destination';
 import { applyPancakeStock } from '../../catalog/variation-stock';
 import { vatInvoiceUrlError } from '../../../common/vat-invoice-url';
+import { notifyAdmins } from '../../../common/notify-admins';
 
 /** Số cặp (đơn, mã vận đơn lạ) nhớ để không báo trùng — Pancake gửi lại webhook mỗi lần đơn đổi. */
 const WAYBILL_CONFLICT_MEMORY = 500;
@@ -879,17 +882,28 @@ export class PancakeProcessor extends WorkerHost {
     // phía Pancake) — không có guard này thì mỗi lần redeliver lại notify() thêm 1 lần, khách
     // nhận thông báo "đã xuất hoá đơn" trùng lặp dù order đã ISSUED từ trước.
     if (order.invoiceStatus === 'ISSUED') return;
-    // Khách thấy link thành nút "Tải PDF": cùng luật với link Kế toán nhập. Link bị loại thì không ghi (giữ link cũ) nhưng
-    // vẫn đặt ISSUED và báo khách. Đơn vào hàng "Cần xử lý Pancake" và admin nhận báo, vì sau khi ISSUED không còn chỗ nhập lại link.
-    // Gắn trước khi lật ISSUED: lật xong mà ghi lỗi thì lần thử lại dừng ở guard ISSUED phía trên và việc này mất dấu.
+    // Khách thấy link trên đơn (web: nút "Tải PDF"): cùng luật với link Kế toán nhập. Link bị loại thì không ghi (giữ link cũ) nhưng vẫn
+    // đặt ISSUED và báo khách. Sau ISSUED không còn chỗ nhập lại link, nên đơn vào hàng "Cần xử lý Pancake" và ADMIN + CSKH được báo để
+    // gửi hoá đơn qua chat. Nối lý do (không ghi đè việc khác của đơn, việc khác tới sau cũng không xoá nó) và gắn trước khi lật ISSUED:
+    // lật xong mà ghi lỗi thì lần thử lại dừng ở guard ISSUED phía trên và việc này mất dấu.
     const incoming = data['invoice_url'] ? String(data['invoice_url']).trim() : '';
     const urlError = incoming ? vatInvoiceUrlError(incoming) : null;
     const safeUrl = incoming && !urlError ? incoming : undefined;
     if (urlError) {
-      await this.flagAttention(
-        order,
-        `${ATTENTION_INVOICE_URL_REJECTED}, khách chưa có nút "Tải PDF". ${urlError} Gửi hoá đơn cho khách qua chat CSKH.`,
-      );
+      const reason = `${ATTENTION_INVOICE_URL_REJECTED}, đơn chưa có link hoá đơn cho khách. ${urlError} Gửi hoá đơn cho khách qua chat CSKH.`;
+      if (!(order.pancakeAttention ?? '').split(ATTENTION_SEPARATOR).includes(reason)) {
+        await appendPancakeAttention(this.prisma, order.id, reason);
+        this.logger.warn(`Đơn ${order.code} cần xử lý (Pancake): ${reason}`);
+        await notifyAdmins(
+          { prisma: this.prisma, notifications: this.notifications, logger: this.logger },
+          {
+            template: PANCAKE_ALERT_TEMPLATE,
+            audience: 'admins+cskh',
+            subject: `link hoá đơn VAT đơn ${order.code}`,
+            data: () => ({ order_code: order.code, message: reason }),
+          },
+        ).catch((err) => this.logger.warn(`Không báo được admin về link hoá đơn đơn ${order.code}: ${err instanceof Error ? err.message : err}`));
+      }
     }
     await this.prisma.order.update({
       where: { id: order.id },
