@@ -1293,6 +1293,26 @@ describe('AdminService.getDashboardStats (D9-06: một lượt quét bảng orde
   });
 });
 
+describe('AdminService.getDashboardStats — cache số đếm người dùng 60 giây (L3-09)', () => {
+  it('hai lượt liên tiếp: bảng users chỉ bị đếm một lần (hai count Prisma + một câu SQL khách vãng lai)', async () => {
+    const userCount = jest.fn().mockResolvedValue(10);
+    const prisma = makePrisma({
+      $queryRaw: jest.fn(async () => [{}]),
+      order: { findMany: jest.fn().mockResolvedValue([]) },
+      returnRequest: { count: jest.fn().mockResolvedValue(0) },
+      user: { count: userCount },
+      product: { count: jest.fn().mockResolvedValue(1) },
+      plantedTree: { count: jest.fn().mockResolvedValue(1) },
+    });
+    const admin = mkAdmin(prisma);
+    await admin.getDashboardStats();
+    await admin.getDashboardStats();
+    expect(userCount).toHaveBeenCalledTimes(2);
+    const guestQueries = (prisma.$queryRaw as jest.Mock).mock.calls.filter(([q]) => Array.isArray(q) && (q as string[]).join('?').includes("LIKE 'guest_%'"));
+    expect(guestQueries).toHaveLength(1);
+  });
+});
+
 // updateOrderStatus giờ ủy quyền toàn bộ cho OrderStatusService (assertTransition + atomic
 // flip qua $transaction interactive) — cần mock $transaction thật sự GỌI callback với 1 tx
 // giả lập order.updateMany, khác với `makePrisma` mặc định (chỉ resolve [] không gọi callback).

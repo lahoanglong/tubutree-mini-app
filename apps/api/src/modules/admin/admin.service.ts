@@ -14,6 +14,7 @@ import { revokeLostCtvMilestones } from '../affiliate/ctv-milestone-revoke';
 import { vnMonthBounds } from '../affiliate/ctv-milestones';
 import { NotificationsService } from '../notifications/notifications.service';
 import { paginated, skipTake } from '../../common/pagination';
+import { TtlMemo } from '../../common/ttl-memo';
 import { escapePrismaLike, foldVietnamese } from '../catalog/search-text';
 import { OrderReversalService } from '../orders/order-reversal.service';
 import { OrderStatusService, toHttpBadRequest } from '../orders/order-status.service';
@@ -254,6 +255,7 @@ export type DealerApplicationImageField = keyof typeof DEALER_APPLICATION_IMAGE_
 @Injectable()
 export class AdminService {
   private readonly logger = new Logger(AdminService.name);
+  private readonly userCounts = new TtlMemo<number>(60_000);
 
   constructor(
     private readonly prisma: PrismaService,
@@ -461,11 +463,25 @@ export class AdminService {
     return this.prisma.dealerApplication.findUnique({ where: { id }, select: DEALER_APPLICATION_LIST_SELECT });
   }
 
+  /**
+   * Không có ô tìm kiếm thì đếm bằng SQL literal: Prisma gửi `role = CAST($1 ...) AND "zaloId" LIKE $2` dạng tham số nên
+   * planner không chứng minh được partial index users_guest_idx (điều kiện GUEST_USER_WHERE), chỉ SQL literal mới dùng nó.
+   */
+  private async countGuestUsers(searchWhere?: Prisma.UserWhereInput): Promise<number> {
+    if (searchWhere) return this.prisma.user.count({ where: { AND: [GUEST_USER_WHERE, searchWhere] } });
+    const rows = await this.prisma.$queryRaw<{ n: bigint | number }[]>`
+      SELECT count(*) AS n FROM users WHERE role = 'CUSTOMER' AND phone IS NULL AND "zaloId"::text LIKE 'guest_%'`;
+    return Number(rows[0]?.n ?? 0);
+  }
+
   // ── Users & orders ──
   async listUsers(page: number, limit: number, search?: string, includeGuests = false) {
     const searchWhere = adminUserSearchWhere(search);
     const where = adminUserListWhere(search, includeGuests);
-    const [items, total, guestCount] = await this.prisma.$transaction([
+    // Đếm cả bảng users mỗi lượt mở/lật trang là lượt quét tuần tự chỉ để vẽ số tổng; cache 60 giây theo đúng bộ lọc
+    // (đổi trang hay limit không đổi khoá). Số tổng có thể cũ tới một TTL, danh sách thì luôn đọc mới.
+    const filterKey = `${includeGuests ? 'g' : 'r'}:${search?.trim() ?? ''}`;
+    const [items, total, guestCount] = await Promise.all([
       this.prisma.user.findMany({
         where,
         orderBy: { createdAt: 'desc' },
@@ -476,8 +492,8 @@ export class AdminService {
           isBlocked: true, blockedAt: true, blockedReason: true,
         },
       }),
-      this.prisma.user.count({ where }),
-      this.prisma.user.count({ where: searchWhere ? { AND: [GUEST_USER_WHERE, searchWhere] } : GUEST_USER_WHERE }),
+      this.userCounts.get(`total:${filterKey}`, () => this.prisma.user.count({ where })),
+      this.userCounts.get(`guest:${search?.trim() ?? ''}`, () => this.countGuestUsers(searchWhere)),
     ]);
     return { ...paginated(items, page, limit, total), guestCount };
   }
@@ -998,9 +1014,9 @@ export class AdminService {
         SELECT SUM(balance) AS outstanding
         FROM (SELECT SUM(delta) AS balance FROM dealer_credit_ledgers GROUP BY "userId") b
         WHERE balance > 0`,
-      this.prisma.user.count({ where: REAL_USER_WHERE }),
-      this.prisma.user.count({ where: GUEST_USER_WHERE }),
-      this.prisma.user.count({ where: { role: 'AFFILIATE' } }),
+      this.userCounts.get('dash:real', () => this.prisma.user.count({ where: REAL_USER_WHERE })),
+      this.userCounts.get('dash:guest', () => this.countGuestUsers()),
+      this.userCounts.get('dash:affiliate', () => this.prisma.user.count({ where: { role: 'AFFILIATE' } })),
       this.prisma.product.count(),
       this.prisma.plantedTree.count(),
       this.prisma.order.findMany({
