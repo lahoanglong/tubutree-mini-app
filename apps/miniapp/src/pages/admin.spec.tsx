@@ -329,10 +329,34 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
       renderPage();
       fireEvent.click(await screen.findByRole('button', { name: 'Huỷ lời mời · 0987654321' }));
       expect(mocks.revokeStaff).not.toHaveBeenCalled();
+      expect(screen.getByRole('heading', { level: 2, name: 'Huỷ lời mời?' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Thu hồi' })).toBeNull();
+      expect(screen.getByRole('button', { name: 'Giữ lại' })).toBeInTheDocument();
       fireEvent.change(screen.getByLabelText('Lý do'), { target: { value: 'Mời nhầm số' } });
-      fireEvent.click(screen.getByRole('button', { name: 'Thu hồi' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Huỷ lời mời' }));
       await waitFor(() => expect(mocks.revokeStaff).toHaveBeenCalledWith('0987654321', 'Mời nhầm số'));
       expect(confirm).not.toHaveBeenCalled();
+    });
+
+    it('thu hồi: sheet giữ mở trong lúc gửi và khi lỗi (kèm lý do đã gõ), chỉ đóng khi thành công', async () => {
+      let finish!: (v: { revoked: number; downgraded: boolean }) => void;
+      mocks.revokeStaff.mockImplementationOnce(() => new Promise((res) => { finish = res; }));
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Thu hồi · Lan' }));
+      fireEvent.change(screen.getByLabelText('Lý do'), { target: { value: 'Nghỉ việc' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Thu hồi' }));
+      await waitFor(() => expect(mocks.revokeStaff).toHaveBeenCalledTimes(1));
+      expect(screen.getByRole('heading', { level: 2, name: 'Thu hồi quyền?' })).toBeInTheDocument();
+      finish({ revoked: 1, downgraded: false });
+      await waitFor(() => expect(screen.queryByRole('heading', { level: 2, name: 'Thu hồi quyền?' })).not.toBeInTheDocument());
+
+      mocks.revokeStaff.mockRejectedValueOnce(new Error('Không thu hồi được'));
+      fireEvent.click(screen.getByRole('button', { name: 'Thu hồi · Lan' }));
+      fireEvent.change(screen.getByLabelText('Lý do'), { target: { value: 'Nghỉ việc' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Thu hồi' }));
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Không thu hồi được', type: 'error' }));
+      expect(screen.getByRole('heading', { level: 2, name: 'Thu hồi quyền?' })).toBeInTheDocument();
+      expect(screen.getByLabelText('Lý do')).toHaveValue('Nghỉ việc');
     });
 
     it('lý do thu hồi: cắt khoảng trắng, dưới 3 ký tự thì chưa cho thu hồi, tối đa 500 ký tự', async () => {

@@ -556,6 +556,7 @@ function StaffSection() {
   const revokeM = useMutation({
     mutationFn: (v: { phone: string; reason: string }) => revokeStaff(v.phone, v.reason),
     onSuccess: (res) => {
+      closeRevoke();
       openSnackbar(
         res.storeBlocked
           ? {
@@ -773,13 +774,12 @@ function StaffSection() {
               onPress={() => {
                 if (!revokeTarget) return;
                 revokeM.mutate({ phone: revokeTarget.phone, reason: revokeReason.trim() });
-                closeRevoke();
               }}
             >
-              Thu hồi
+              {revokeInvite ? 'Huỷ lời mời' : 'Thu hồi'}
             </Button>
             <Button fullWidth variant="secondary" disabled={revokeM.isPending} onPress={closeRevoke}>
-              Huỷ
+              {revokeInvite ? 'Giữ lại' : 'Huỷ'}
             </Button>
           </div>
         }
