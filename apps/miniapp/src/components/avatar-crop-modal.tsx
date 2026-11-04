@@ -79,6 +79,10 @@ export function AvatarCropModal({
         return;
       }
 
+      // JPEG không có kênh alpha: phần trong suốt của PNG sẽ ra đen nếu không phủ nền trước.
+      ctx.fillStyle = 'white';
+      ctx.fillRect(0, 0, outputSize, outputSize);
+
       // Draw circular clip path
       ctx.beginPath();
       ctx.arc(outputSize / 2, outputSize / 2, outputSize / 2, 0, Math.PI * 2);
