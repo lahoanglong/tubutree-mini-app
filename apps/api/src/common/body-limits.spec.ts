@@ -27,6 +27,7 @@ import {
 const bodyOf = async (res: Response) => (await res.json()) as { message?: unknown; statusCode?: number };
 
 /** Cùng thứ tự middleware với bootstrap.ts (events → parser theo nhóm → lỗi parser → guard → no-store). */
+const REFRESH_TTL_DAYS = 30;
 const ACCESS_SECRET = 'test-access-secret-0123456789abcdef0123';
 const validJwt = () => new JwtService().sign({ sub: 'u1' }, { secret: ACCESS_SECRET, expiresIn: '5m' });
 
@@ -34,7 +35,7 @@ function buildApp() {
   const app = express();
   app.use('/api/events', eventsBodyParser());
   app.use(pancakeWebhookTokenGuard);
-  app.use(...createBodyParsers(ACCESS_SECRET), bodyParserErrorHandler, requestInputGuard);
+  app.use(...createBodyParsers(ACCESS_SECRET, REFRESH_TTL_DAYS), bodyParserErrorHandler, requestInputGuard);
   app.use(privateNoStoreForAuthenticated);
   app.use((req, res) => {
     if (req.path === '/api/public-cached') res.setHeader('Cache-Control', 'public, max-age=60');
@@ -323,14 +324,24 @@ describe('giới hạn thân request (BAOMAT-01, BAOMAT-03, BAOMAT-08)', () => {
     const postAnon = (path: string, body: Buffer | string, headers: Record<string, string> = {}) =>
       fetch(base + path, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body });
 
-    it.each(['gzip', 'deflate', 'br'])('thân %s → 415 tiếng Việt trên mọi tầng, kể cả khi có JWT', async (enc) => {
-      for (const path of ['/api/cart/coupon', '/api/admin/x', '/api/webhooks/zalo-oa']) {
+    it.each(['gzip', 'deflate', 'br'])('thân %s → 415 tiếng Việt ở tầng app (mặc định và lớn), kể cả khi có JWT; /api/events cũng vậy', async (enc) => {
+      for (const path of ['/api/cart/coupon', '/api/admin/x', '/api/events']) {
         for (const auth of [{}, { authorization: `Bearer ${validJwt()}` }] as Array<Record<string, string>>) {
           const res = await postAnon(path, gzipSync('{"a":1}'), { 'content-encoding': enc, ...auth });
           expect(res.status).toBe(415);
           expect(await bodyOf(res)).toMatchObject({ statusCode: 415, message: ENCODING_UNSUPPORTED_MESSAGE });
         }
       }
+    });
+
+    it('webhook đối tác (1 MB và Pancake 10 MB) vẫn nhận thân gzip: trần áp sau giải nén', async () => {
+      for (const path of ['/api/webhooks/gomdon', '/api/webhooks/pancake']) {
+        const res = await postAnon(path, gzipSync('{"a":1}'), { 'content-encoding': 'gzip' });
+        expect(res.status).toBe(200);
+        expect(await bodyOf(res)).toMatchObject({ keys: 1 });
+      }
+      const bomb = await postAnon('/api/webhooks/gomdon', gzipSync(JSON.stringify({ blob: 'x'.repeat(2 * 1024 * 1024) })), { 'content-encoding': 'gzip' });
+      expect(bomb.status).toBe(413);
     });
 
     it('gzip gửi tới /api/admin không token → 415 và không JSON.parse, không scanRawJson', async () => {
@@ -350,16 +361,47 @@ describe('giới hạn thân request (BAOMAT-01, BAOMAT-03, BAOMAT-08)', () => {
         expect((await postAnon(path, oneMb)).status).toBe(413);
       }
     });
-    it('Bearer sai chữ ký, hết hạn hoặc không phải JWT → vẫn 413', async () => {
+    it('Bearer sai chữ ký hoặc không phải JWT → vẫn 413', async () => {
       const wrong = new JwtService().sign({ sub: 'u1' }, { secret: 'secret-khac-hoan-toan-0123456789', expiresIn: '5m' });
-      const expired = new JwtService().sign({ sub: 'u1' }, { secret: ACCESS_SECRET, expiresIn: '-10s' });
-      for (const token of [wrong, expired, 'rac']) {
+      for (const token of [wrong, 'rac']) {
         expect((await postAnon('/api/admin/x', oneMb, { authorization: `Bearer ${token}` })).status).toBe(413);
       }
     });
     it('cùng thân 1 MB kèm JWT hợp lệ → qua tầng body', async () => {
       const res = await postAnon('/api/admin/x', oneMb, { authorization: `Bearer ${validJwt()}` });
       expect(res.status).toBe(200);
+    });
+    describe('Bearer hết hạn gần đây vẫn vào tầng lớn để guard trả 401 và client refresh', () => {
+      const sixHundredKb = JSON.stringify({ blob: 'x'.repeat(600 * 1024) });
+      const signAt = (secret: string, ageSeconds: number) => {
+        const now = Math.floor(Date.now() / 1000);
+        return new JwtService().sign({ sub: 'u1', iat: now - ageSeconds - 900, exp: now - ageSeconds }, { secret });
+      };
+      it('hết hạn 60 giây, 600 KB → qua tầng body (tới guard), không 413', async () => {
+        const res = await postAnon('/api/admin/x', sixHundredKb, { authorization: `Bearer ${signAt(ACCESS_SECRET, 60)}` });
+        expect(res.status).toBe(200);
+      });
+      it('hết hạn quá JWT_REFRESH_TTL_DAYS → 413', async () => {
+        const res = await postAnon('/api/admin/x', sixHundredKb, { authorization: `Bearer ${signAt(ACCESS_SECRET, (REFRESH_TTL_DAYS + 1) * 86_400)}` });
+        expect(res.status).toBe(413);
+      });
+      it('sai chữ ký dù còn hạn → 413', async () => {
+        const res = await postAnon('/api/admin/x', sixHundredKb, { authorization: `Bearer ${signAt('secret-khac-hoan-toan-0123456789', -300)}` });
+        expect(res.status).toBe(413);
+      });
+      it('"bearer" chữ thường được nhận như passport', async () => {
+        const res = await postAnon('/api/admin/x', sixHundredKb, { authorization: `bearer ${validJwt()}` });
+        expect(res.status).toBe(200);
+      });
+      it('kết quả xác minh JWT tính một lần mỗi request (không nhân đôi cho json và urlencoded)', async () => {
+        const verify = jest.spyOn(JwtService.prototype, 'verify');
+        try {
+          await postAnon('/api/admin/x', '{"a":1}', { authorization: `Bearer ${validJwt()}` });
+          expect(verify).toHaveBeenCalledTimes(1);
+        } finally {
+          verify.mockRestore();
+        }
+      });
     });
     it('route không thuộc tầng lớn vẫn 256 KB dù có JWT', async () => {
       expect((await postAnon('/api/cart/coupon', oneMb, { authorization: `Bearer ${validJwt()}` })).status).toBe(413);
