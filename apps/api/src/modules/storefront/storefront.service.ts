@@ -249,6 +249,7 @@ export class StorefrontService {
         where: { id: sf.id, ...(isPublished ? PUBLISH_WHERE_NOT_TAKEN_DOWN : {}) },
         data: { isPublished, publishedAt: isPublished ? new Date() : null },
       });
+      this.imageStale?.markStale();
       // Trả đúng dạng getMine (kèm status/needsApproval) để màn báo "khách xem được ngay" hay "đã gửi duyệt" theo kết quả thật
       // máy chủ vừa tính, không theo cờ đã tải từ trước.
       return await this.getMine(userId);

@@ -10,16 +10,28 @@ describe('registrySql: nguồn ảnh /img được đổi cỡ', () => {
 
   it('chiến dịch và gian hàng chỉ nhận host upload tin cậy (tham số LIKE ANY), không nhận mọi https; LIKE chỉ đọc 300 ký tự đầu sau khi left(…, 8) khớp', () => {
     const sql = registrySql(['res.cloudinary.com'], '');
-    expect(sql.values).toEqual([['https://res.cloudinary.com/%'], ['https://res.cloudinary.com/%'], ['https://res.cloudinary.com/%']]);
+    const likes = ['https://res.cloudinary.com/%'];
+    expect(sql.values.filter((v) => Array.isArray(v) && v[0] === likes[0])).toHaveLength(3);
     expect(sql.text.match(/LIKE ANY/g)).toHaveLength(3);
-    expect(sql.text.match(/left\("(image|avatarUrl|coverUrl)", 8\) = 'https:\/\/' AND left\("\1", 300\) LIKE ANY/g)).toHaveLength(3);
+    expect(sql.text.match(/left\((?:s\.)?"(image|avatarUrl|coverUrl)", 8\) = 'https:\/\/' AND left\((?:s\.)?"\1", 300\) LIKE ANY/g)).toHaveLength(3);
   });
 
-  it('gian hàng chỉ tính khi đang đăng và chưa bị gỡ (bản nháp, chưa đăng, bị gỡ thì không); chiến dịch không có điều kiện này', () => {
+  it('gian hàng chỉ tính khi khách thấy được: đã đăng, không bị gỡ, chủ không bị khoá, CTV còn vai trò hưởng hoa hồng và (khi bắt duyệt) đã duyệt; chiến dịch không có điều kiện này', () => {
     const rows = text.split('UNION ALL').filter((r) => r.includes('"storefronts"'));
     expect(rows).toHaveLength(2);
-    for (const r of rows) expect(r).toContain('"isPublished" AND "takenDownAt" IS NULL');
+    for (const r of rows) {
+      expect(r).toContain('s."isPublished" AND s."takenDownAt" IS NULL');
+      expect(r).toContain('NOT o."isBlocked"');
+      expect(r).toContain('o."role"::text = ANY(');
+      expect(r).toContain('s."approvedAt" IS NOT NULL');
+    }
     expect(text.split('UNION ALL').find((r) => r.includes('"campaigns"'))).not.toContain('isPublished');
+  });
+
+  it('tắt cờ bắt duyệt thì bỏ điều kiện approvedAt; vai trò hưởng hoa hồng lấy từ cấu hình + ADMIN', () => {
+    const sql = registrySql(['res.cloudinary.com'], '', { eligibleRoles: ['DEALER'], requireApproval: false });
+    expect(sql.text).not.toContain('approvedAt');
+    expect(sql.values).toContainEqual(['DEALER', 'ADMIN']);
   });
 });
 

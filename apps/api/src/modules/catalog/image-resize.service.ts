@@ -1,4 +1,4 @@
-import { HttpException, BadRequestException, BadGatewayException, Injectable, Logger, NotFoundException, PayloadTooLargeException, ServiceUnavailableException } from '@nestjs/common';
+import { HttpException, BadRequestException, BadGatewayException, Injectable, Optional, Logger, NotFoundException, PayloadTooLargeException, ServiceUnavailableException } from '@nestjs/common';
 import { lookup as dnsLookup } from 'node:dns';
 import type { LookupFunction } from 'node:net';
 import { createHash } from 'node:crypto';
@@ -11,6 +11,8 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { PublicImageService } from './public-image.service';
 import { ImageRegistryStale } from './image-registry-stale';
 import { registrySql } from './image-registry-query';
+import { loadPublicVisibility } from '../storefront/public-visibility';
+import { SystemConfigService } from '../system-config/system-config.service';
 import {
   FETCH_TIMEOUT_MS,
   FETCH_TOTAL_MS,
@@ -78,12 +80,14 @@ export class ImageResizeService {
   private registryUntil = 0;
   private registryLoadedAt = 0;
   private registryLoad: Promise<void> | null = null;
+  private retryAfter = 0;
   private readonly ownMisses = new Map<string, { start: number; count: number }>();
 
   constructor(
     private readonly own: PublicImageService,
     private readonly prisma: PrismaService,
     private readonly stale: ImageRegistryStale,
+    @Optional() private readonly config?: SystemConfigService,
   ) {}
 
   /** Khoá cache (cũng là ETag) cho cặp nguồn + bề rộng + định dạng; null khi tham số không hợp lệ. Không chạm mạng hay đĩa. */
@@ -119,48 +123,66 @@ export class ImageResizeService {
    * SQL), dùng chung cho mọi request, làm mới mỗi 5 phút và ngay khi ảnh được ghi (sản phẩm: admin, đồng bộ Pancake, đối tác; chiến dịch; gian hàng: ImageRegistryStale); tra một URL là tra trong bộ nhớ, không chạm DB.
    */
   private async isRegistered(raw: string): Promise<boolean> {
-    await this.refreshRegistry(this.stale.isStale() || Date.now() >= this.registryUntil);
-    // Ảnh vừa thêm/đổi trong ≤5 phút chưa có trong danh sách: nạp lại một lần, cách nhau ít nhất 30 giây để URL lạ không kéo DB.
-    if (!this.registry.has(raw) && Date.now() - this.registryLoadedAt >= REGISTRY_MISS_RELOAD_MS) await this.refreshRegistry(true);
+    let refreshing: Promise<void> | null = null;
+    if (this.registryUntil === 0) {
+      // Lần nạp đầu: chưa có danh sách nào để dùng tạm nên phải chờ (lỗi thì 503).
+      await this.load(true);
+    } else if ((this.stale.isStale() || Date.now() >= this.registryUntil) && Date.now() >= this.retryAfter) {
+      // Hết hạn hoặc bị đánh dấu cũ: dùng danh sách hiện có, nạp lại ở nền để ảnh có trong danh sách (kể cả bản đã cache) không chờ truy vấn DB.
+      refreshing = this.load(false);
+    }
+    if (this.registry.has(raw)) return true;
+    // Chỉ khi KHÔNG thấy URL mới chờ: đang nạp lại thì chờ lần nạp đó; cờ cũ còn bật (đánh dấu đến giữa chừng) thì nạp thêm một lần; còn lại
+    // ảnh vừa thêm/đổi trong ≤5 phút nạp lại một lần, cách nhau ít nhất 30 giây để URL lạ không kéo DB.
+    await (refreshing ?? this.registryLoad ?? Promise.resolve()).catch(() => undefined);
+    // Có người đã bắt đầu một lần nạp mới trong lúc ta chờ (cờ cũ đã được họ xoá): chờ nốt lần đó thay vì tưởng đã nạp xong.
+    if (!this.registry.has(raw) && this.registryLoad) await this.registryLoad.catch(() => undefined);
+    if (this.registry.has(raw)) return true;
+    if (this.stale.isStale() || Date.now() - this.registryLoadedAt >= REGISTRY_MISS_RELOAD_MS) await this.load(true);
     return this.registry.has(raw);
   }
 
-  /** Gọi sau khi lưu ảnh sản phẩm: lần tra kế tiếp nạp lại danh sách ngay, không đợi hết 5 phút. */
+  /** Gọi sau khi lưu ảnh sản phẩm: lần tra kế tiếp nạp lại danh sách (ở nền), không đợi hết 5 phút. */
   invalidateRegistry(): void {
     this.stale.markStale();
   }
 
-  private async refreshRegistry(due: boolean): Promise<void> {
-    if (due) {
-      this.registryLoad ??= this.loadRegistry().finally(() => {
-        this.registryLoad = null;
-      });
-      try {
-        await this.registryLoad;
-        // Yêu cầu nhập vào lần nạp đã bắt đầu trước khi cờ bật thì chưa thấy ảnh mới: nạp thêm.
-        // Nhiều yêu cầu cùng nhập lần nạp cũ: yêu cầu chạy tiếp trước mở lần nạp mới, các yêu cầu sau thấy `registryLoad` và nhập
-        // vào đó. Chỉ chờ thêm MỘT lần nạp (`if`, không lặp): đồng bộ đánh dấu liên tục không giữ được /img lâu hơn hai lần nạp.
-        if (this.stale.isStale() || this.registryLoad) {
-          this.registryLoad ??= this.loadRegistry().finally(() => {
-            this.registryLoad = null;
-          });
-          await this.registryLoad;
-        }
-      } catch (e) {
-        if (this.registryUntil === 0) throw new ServiceUnavailableException('Máy chủ đang bận, thử lại sau.');
-        this.log.warn(`Không làm mới được danh sách ảnh: ${(e as Error).message}`);
-        this.registryUntil = Date.now() + 30_000;
-        this.registryLoadedAt = Date.now();
-      }
-    }
+  /**
+   * Nạp danh sách (gộp các lần gọi đồng thời vào một truy vấn). `wait` = chờ kết quả: lỗi ở lần nạp đầu thì 503, lỗi sau đó giữ danh sách cũ,
+   * ghi cảnh báo và không thử lại trong 30 giây. Chạy nền (`wait` = false) thì không bao giờ ném.
+   */
+  private load(wait: boolean): Promise<void> {
+    this.registryLoad ??= this.loadRegistry().finally(() => {
+      this.registryLoad = null;
+    });
+    const job = this.registryLoad.catch((e: Error) => {
+      if (this.registryUntil === 0) throw new ServiceUnavailableException('Máy chủ đang bận, thử lại sau.');
+      this.log.warn(`Không làm mới được danh sách ảnh: ${e.message}`);
+      this.retryAfter = Date.now() + 30_000;
+      this.registryLoadedAt = Date.now();
+    });
+    return wait ? job : job.catch(() => undefined);
   }
 
   private async loadRegistry(): Promise<void> {
+    // Xoá cờ TRƯỚC truy vấn để lần đánh dấu giữa chừng còn nguyên cho lần nạp kế; truy vấn lỗi thì trả cờ lại, kẻo đánh mất lần đánh dấu.
+    const wasStale = this.stale.isStale();
     this.stale.clear();
-    const rows = await this.prisma.$queryRaw<{ u: string }[]>(registrySql());
-    this.registry = new Set(rows.map((r) => r.u));
-    this.registryUntil = Date.now() + REGISTRY_TTL_MS;
-    this.registryLoadedAt = Date.now();
+    try {
+      const vis = await this.visibility();
+      const rows = await this.prisma.$queryRaw<{ u: string }[]>(registrySql(undefined, undefined, vis));
+      this.registry = new Set(rows.map((r) => r.u));
+      this.registryUntil = Date.now() + REGISTRY_TTL_MS;
+      this.registryLoadedAt = Date.now();
+    } catch (e) {
+      if (wasStale) this.stale.markStale();
+      throw e;
+    }
+  }
+
+  /** Điều kiện hiển thị công khai của gian hàng (vai trò hưởng hoa hồng, cờ bắt duyệt) đọc từ cấu hình; không có cấu hình thì mặc định nghiêm nhất. */
+  private async visibility() {
+    return this.config ? loadPublicVisibility(this.config) : undefined;
   }
 
   /** Đếm theo IP: chỉ IP hay gửi sai ?v= bị chặn, khách khác (và ảnh hợp lệ của IP khác) không bị ảnh hưởng. */
