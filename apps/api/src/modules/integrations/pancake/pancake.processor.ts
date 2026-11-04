@@ -886,10 +886,12 @@ export class PancakeProcessor extends WorkerHost {
     const incoming = data['invoice_url'] ? String(data['invoice_url']).trim() : '';
     const urlError = incoming ? vatInvoiceUrlError(incoming) : null;
     const safeUrl = incoming && !urlError ? incoming : undefined;
-    await this.prisma.order.update({
-      where: { id: order.id },
-      data: { invoiceStatus: 'ISSUED', invoiceUrl: safeUrl ?? order.invoiceUrl },
+    const flipped = await this.prisma.order.updateMany({
+      where: { id: order.id, OR: [{ invoiceStatus: null }, { invoiceStatus: { not: 'ISSUED' } }] },
+      data: { invoiceStatus: 'ISSUED', ...(safeUrl ? { invoiceUrl: safeUrl } : {}) },
     });
+    // Admin bấm "Đã xuất hoá đơn" hoặc một invoice.issued khác vừa lật ISSUED và đã báo khách: không báo lại, không đè link họ ghi.
+    if (flipped.count === 0) return;
     if (urlError) {
       const message = `Link hoá đơn VAT từ Pancake bị bỏ, đơn chưa có link hoá đơn cho khách. ${urlError} Gửi hoá đơn cho khách qua chat CSKH.`;
       this.logger.warn(`Đơn ${order.code}: ${message}`);

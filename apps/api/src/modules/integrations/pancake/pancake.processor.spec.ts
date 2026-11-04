@@ -1686,13 +1686,18 @@ describe('PancakeProcessor — invoice.issued ghi invoiceUrl (RB-04)', () => {
     const notify = ctx.notifications.notify as jest.Mock;
     const adminAlerts = () => notify.mock.calls.filter(([, code]) => code === 'OPS_PANCAKE_ALERT');
     const customerNotices = () => notify.mock.calls.filter(([, code]) => code === 'INVOICE_ISSUED');
-    return { ...ctx, alerts, adminAlerts, customerNotices, go: () => ctx.proc.process({ data: { eventId: 'e1' } }) };
+    const issuedWrites = () => ctx.orderUpdateMany.mock.calls.filter(([a]) => a?.data?.invoiceStatus === 'ISSUED').map(([a]) => a);
+    return { ...ctx, alerts, adminAlerts, customerNotices, issuedWrites, go: () => ctx.proc.process({ data: { eventId: 'e1' } }) };
   }
 
   it('link https công khai → ghi link mới, ISSUED, báo khách', async () => {
-    const { go, orderUpdate, notifications } = run('https://abc.meinvoice.vn/inv/1');
+    const { go, orderUpdate, issuedWrites, notifications } = run('https://abc.meinvoice.vn/inv/1');
     await go();
-    expect(orderUpdate.mock.calls[0]![0].data).toEqual({ invoiceStatus: 'ISSUED', invoiceUrl: 'https://abc.meinvoice.vn/inv/1' });
+    expect(issuedWrites()).toEqual([{
+      where: { id: 'o1', OR: [{ invoiceStatus: null }, { invoiceStatus: { not: 'ISSUED' } }] },
+      data: { invoiceStatus: 'ISSUED', invoiceUrl: 'https://abc.meinvoice.vn/inv/1' },
+    }]);
+    expect(orderUpdate).not.toHaveBeenCalled();
     expect(notifications.notify).toHaveBeenCalledWith('u1', 'INVOICE_ISSUED', { order_code: 'TUBU1' });
   });
 
@@ -1700,9 +1705,9 @@ describe('PancakeProcessor — invoice.issued ghi invoiceUrl (RB-04)', () => {
     'https://127.0.0.1/x', 'https://192.168.1.5/inv', 'https://localhost/x', 'http://evil.vn/x', 'https://u:p@evil.vn/x',
     'https://hoadon-tubu.evil.com/x.pdf', 'https://8.8.8.8/x', 'https://[::127.0.0.1]/x',
   ])('link bị loại %s → giữ link cũ, vẫn ISSUED và báo khách; ADMIN + CSKH được báo in-app', async (bad) => {
-    const { go, prisma, orderUpdate, customerNotices, adminAlerts } = run(bad);
+    const { go, prisma, issuedWrites, customerNotices, adminAlerts } = run(bad);
     await go();
-    expect(orderUpdate.mock.calls[0]![0].data).toEqual({ invoiceStatus: 'ISSUED', invoiceUrl: 'https://cu.meinvoice.vn/x' });
+    expect(issuedWrites().map((a) => a.data)).toEqual([{ invoiceStatus: 'ISSUED' }]);
     expect(customerNotices()).toEqual([['u1', 'INVOICE_ISSUED', { order_code: 'TUBU1' }]]);
     const alerts = adminAlerts();
     expect(alerts).toHaveLength(1);
@@ -1723,10 +1728,10 @@ describe('PancakeProcessor — invoice.issued ghi invoiceUrl (RB-04)', () => {
   });
 
   it('báo admin lỗi → vẫn ISSUED và báo khách (báo admin là best-effort)', async () => {
-    const { go, prisma, orderUpdate, customerNotices } = run('https://hoadon-tubu.evil.com/x.pdf');
+    const { go, prisma, issuedWrites, customerNotices } = run('https://hoadon-tubu.evil.com/x.pdf');
     (prisma.user.findMany as jest.Mock).mockRejectedValueOnce(new Error('db hiccup'));
     await go();
-    expect(orderUpdate).toHaveBeenCalledTimes(1);
+    expect(issuedWrites()).toHaveLength(1);
     expect(customerNotices()).toHaveLength(1);
   });
 
@@ -1739,12 +1744,12 @@ describe('PancakeProcessor — invoice.issued ghi invoiceUrl (RB-04)', () => {
   });
 
   it('ghi ISSUED lỗi → chưa báo admin, chưa báo khách; lần thử lại của webhook báo đúng một lần', async () => {
-    const { go, orderUpdate, notifications, adminAlerts, customerNotices } = run('https://hoadon-tubu.evil.com/x.pdf');
-    orderUpdate.mockRejectedValueOnce(new Error('db down'));
+    const { go, orderUpdateMany, issuedWrites, notifications, adminAlerts, customerNotices } = run('https://hoadon-tubu.evil.com/x.pdf');
+    orderUpdateMany.mockRejectedValueOnce(new Error('db down'));
     await expect(go()).rejects.toThrow('db down');
     expect(notifications.notify).not.toHaveBeenCalled();
     await go();
-    expect(orderUpdate).toHaveBeenCalledTimes(2);
+    expect(issuedWrites()).toHaveLength(2);
     expect(adminAlerts()).toHaveLength(1);
     expect(customerNotices()).toHaveLength(1);
   });
@@ -1758,6 +1763,17 @@ describe('PancakeProcessor — invoice.issued ghi invoiceUrl (RB-04)', () => {
     expect(adminAlerts()).toHaveLength(1);
   });
 
+  it.each(['https://abc.meinvoice.vn/inv/9', 'https://hoadon-tubu.evil.com/x.pdf'])(
+    'đơn vừa được lật ISSUED ở nơi khác (admin bấm "Đã xuất hoá đơn", hoặc invoice.issued khác chạy cùng lúc), link %s → không báo trùng',
+    async (url) => {
+      const { go, orderUpdateMany, issuedWrites, notifications } = run(url);
+      orderUpdateMany.mockResolvedValue({ count: 0 });
+      await go();
+      expect(issuedWrites()).toHaveLength(1);
+      expect(notifications.notify).not.toHaveBeenCalled();
+    },
+  );
+
   it('link hợp lệ hoặc không có link → không báo admin', async () => {
     for (const url of ['https://abc.meinvoice.vn/inv/1', undefined]) {
       const { go, adminAlerts, alerts } = run(url);
@@ -1768,14 +1784,14 @@ describe('PancakeProcessor — invoice.issued ghi invoiceUrl (RB-04)', () => {
   });
 
   it('link có khoảng trắng hai đầu → ghi bản đã cắt khoảng trắng', async () => {
-    const { go, orderUpdate } = run('  https://abc.meinvoice.vn/inv/2 ');
+    const { go, issuedWrites } = run('  https://abc.meinvoice.vn/inv/2 ');
     await go();
-    expect(orderUpdate.mock.calls[0]![0].data).toEqual({ invoiceStatus: 'ISSUED', invoiceUrl: 'https://abc.meinvoice.vn/inv/2' });
+    expect(issuedWrites().map((a) => a.data)).toEqual([{ invoiceStatus: 'ISSUED', invoiceUrl: 'https://abc.meinvoice.vn/inv/2' }]);
   });
 
-  it('không có invoice_url → giữ link cũ, vẫn ISSUED', async () => {
-    const { go, orderUpdate } = run(undefined);
+  it('không có invoice_url → giữ link cũ (không ghi invoiceUrl), vẫn ISSUED', async () => {
+    const { go, issuedWrites } = run(undefined);
     await go();
-    expect(orderUpdate.mock.calls[0]![0].data).toEqual({ invoiceStatus: 'ISSUED', invoiceUrl: 'https://cu.meinvoice.vn/x' });
+    expect(issuedWrites().map((a) => a.data)).toEqual([{ invoiceStatus: 'ISSUED' }]);
   });
 });
