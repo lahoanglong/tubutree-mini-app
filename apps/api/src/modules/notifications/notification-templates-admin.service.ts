@@ -1,4 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
+import { invalidateTemplateCache } from './notification-template-cache';
 import { ConfigService } from '@nestjs/config';
 import { PHONE_LIKE_RUN } from '../../common/mask-pii';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -177,6 +178,7 @@ export class NotificationTemplatesAdminService {
       throw new BadRequestException('Kênh ZNS cần mã mẫu đã được Zalo duyệt. Nhập mã mẫu hoặc để kênh Trong app.');
     }
     const updated = await this.prisma.notificationTemplate.update({ where: { code }, data });
+    invalidateTemplateCache(this.prisma, code);
     this.logger.warn(`${actor.staff ? 'Nhân viên' : 'Admin'} ${actor.id} sửa mẫu thông báo ${code}: ${JSON.stringify(data)}`);
     return updated;
   }

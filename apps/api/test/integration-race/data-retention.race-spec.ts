@@ -171,6 +171,36 @@ describe('Data retention cleanup (real Postgres)', () => {
     expect(await prisma.supportConversation.count({ where: { id: conv.id } })).toBe(1);
   });
 
+  it('cashback_clicks: xoá click cũ không có giao dịch; click cũ còn giao dịch (PENDING/CONFIRMED/REJECTED) và click mới giữ nguyên', async () => {
+    const t = randCode(8);
+    const owner = await createUser(prisma);
+    const merchant = await prisma.cashbackMerchant.create({
+      data: { slug: `m-${t}`, name: 'M', logoUrl: '', category: 'ecommerce', baseRate: 0.03, fullRate: 0.05, deeplinkTemplate: 'https://x/{{clickId}}' },
+    });
+    const click = (suffix: string, clickedAt: Date) =>
+      prisma.cashbackClick.create({ data: { userId: owner.id, merchantId: merchant.id, utmTraceId: `${t}-${suffix}`, destinationUrl: 'https://x', clickedAt } });
+    const txn = (clickId: string, status: 'PENDING' | 'CONFIRMED' | 'REJECTED') =>
+      prisma.cashbackTransaction.create({
+        data: { userId: owner.id, clickId, merchantOrderId: `${t}-${status}`, orderAmount: 100_000, commission: 5_000, userReward: 3_500, status, postbackPayload: {} },
+      });
+    const orphanOld = await Promise.all([0, 1, 2].map((i) => click(`orphan${i}`, ago(181))));
+    const fresh = await click('fresh', ago(179));
+    const kept = await Promise.all(
+      (['PENDING', 'CONFIRMED', 'REJECTED'] as const).map(async (st) => {
+        const c = await click(`txn-${st}`, ago(200));
+        await txn(c.id, st);
+        return c;
+      }),
+    );
+
+    await svc.runAll({ now: NOW, batchSize: 2, pauseMs: 0 });
+
+    const alive = await ids(prisma.cashbackClick.findMany({ where: { merchantId: merchant.id }, select: { id: true } }));
+    for (const c of orphanOld) expect(alive.has(c.id)).toBe(false);
+    expect(alive.has(fresh.id)).toBe(true);
+    for (const c of kept) expect(alive.has(c.id)).toBe(true);
+  });
+
   it('TTL đọc từ SystemConfig, đặt thấp hơn sàn thì kẹp về sàn', async () => {
     await setConfig(prisma, 'retention.notification_logs_days', 0);
     const t = randCode(8);

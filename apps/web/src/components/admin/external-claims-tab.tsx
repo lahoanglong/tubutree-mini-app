@@ -7,12 +7,10 @@ import {
   attachExternalClaimAttempt,
   getConfig,
   getExternalClaim,
-  getOpsInbox,
   keepExternalClaimPoints,
   listExternalClaimAttempts,
   listExternalClaims,
   nextPageParam,
-  OPS_INBOX_QUERY_KEY,
   rejectExternalClaimAttempt,
   reverseExternalClaim,
   voidExternalClaim,
@@ -21,6 +19,7 @@ import {
   type AdminExternalClaimAttentionFilter,
   type ExternalClaimState,
 } from '@/lib/admin-client';
+import { useOpsInbox } from './use-ops-inbox';
 import {
   ATTENTION_FILTER_LABEL,
   ATTENTION_PART_LABEL,
@@ -71,7 +70,7 @@ export function ExternalClaimsTab({ isAdmin, canAct, meId, seed }: Who & { seed?
   const [attention, setAttention] = useState<AdminExternalClaimAttentionFilter | ''>(seeded ? seeded.attention : '');
   const attemptsRef = useRef<HTMLDivElement>(null);
   // Cùng khoá với thẻ Hôm nay nên dùng chung bộ nhớ đệm; chỉ CSKH và ADMIN có thẻ này.
-  const inbox = useQuery({ queryKey: OPS_INBOX_QUERY_KEY, queryFn: getOpsInbox, refetchInterval: 60_000, retry: false, enabled: isAdmin || canAct });
+  const inbox = useOpsInbox({ enabled: isAdmin || canAct, retry: false });
   const parts = inbox.data?.items.find((i) => i.key === 'externalPoints')?.parts;
   const openPart = (part: ExternalAttentionPart) => {
     const view = attentionPartView(part);

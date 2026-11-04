@@ -2,21 +2,23 @@ import { Body, Controller, Injectable, Post, UseGuards } from '@nestjs/common';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { Type } from 'class-transformer';
 import { ArrayMaxSize, IsArray, IsIn, IsOptional, IsString, MaxLength, MinLength, ValidateNested } from 'class-validator';
+import type { Request } from 'express';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { throttleIpTracker } from '../../common/throttle/throttle.config';
 import { AiAdvisorService } from './ai-advisor.service';
 
 /**
  * ThrottlerGuard mặc định track theo IP (req.ip) → nhiều user sau NAT/proxy chung sẽ đụng
  * trần chung, còn 1 user đổi IP lại né được giới hạn. Override tracker để track theo userId
  * (đã xác thực qua JwtAuthGuard toàn cục, chạy trước guard này) — đúng với comment "10 lượt/
- * phút/user" ở route chat. Fallback về req.ip khi chưa có user (phòng hờ, không nên xảy ra
+ * phút/user" ở route chat. Fallback về khoá IP gom /64 khi chưa có user (phòng hờ, không nên xảy ra
  * vì route đã yêu cầu auth).
  */
 @Injectable()
-class UserThrottlerGuard extends ThrottlerGuard {
+export class UserThrottlerGuard extends ThrottlerGuard {
   protected override async getTracker(req: Record<string, unknown>): Promise<string> {
     const user = req.user as { sub?: string } | undefined;
-    return user?.sub ?? (req.ip as string | undefined) ?? 'unknown';
+    return user?.sub ?? throttleIpTracker(req as unknown as Request);
   }
 }
 

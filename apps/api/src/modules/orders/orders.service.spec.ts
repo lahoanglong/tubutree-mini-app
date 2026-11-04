@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
-import { OrdersService } from './orders.service';
+import { Prisma } from '@prisma/client';
+import { ORDER_LIST_SELECT, OrdersService } from './orders.service';
 import { OrderReversalService } from './order-reversal.service';
 import * as refundQueue from './refund-queue';
 import type { PrismaService } from '../../prisma/prisma.service';
@@ -870,6 +871,45 @@ describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo vari
     expect(res.data[1]!.items[0]).toMatchObject({ id: 'i3', available: true });
   });
 
+  it('D11: danh sách đơn của khách select riêng, không kéo shippingHistory/invoiceRequest; chi tiết đơn vẫn đọc đủ cột', async () => {
+    const orders = [{ ...baseOrder, id: 'o1', items: [line('i1', 'v1')], shippingHistory: [{ at: 'x' }], invoiceRequest: { taxCode: '1' } }];
+    const { svc } = makeMediaService(orders, [v('v1')]);
+    const prisma = (svc as unknown as { prisma: { order: { findMany: jest.Mock; findUnique: jest.Mock } } }).prisma;
+    await svc.list('u1', {}, 1, 20);
+    const args = prisma.order.findMany.mock.calls[0]![0];
+    expect(args.include).toBeUndefined();
+    expect(args.select).toMatchObject({ id: true, code: true, status: true, total: true, shippingStatus: true, shippingAddress: true, items: true });
+    expect(args.select).not.toHaveProperty('shippingHistory');
+    expect(args.select).not.toHaveProperty('invoiceRequest');
+    await svc.detailView('u1', 'TUBU1').catch(() => undefined);
+    expect(prisma.order.findUnique.mock.calls[0]![0].include).toEqual({ items: true });
+  });
+
+  it('D11: tìm trong đơn cũng dùng select của danh sách khi nạp trang', async () => {
+    const orders = [{ ...baseOrder, id: 'o1', code: 'TUBU1', items: [{ ...line('i1', 'v1'), productName: 'Nến thơm' }] }];
+    const { svc } = makeMediaService(orders, [v('v1')]);
+    const prisma = (svc as unknown as { prisma: { order: { findMany: jest.Mock } } }).prisma;
+    await svc.list('u1', { q: 'nen' }, 1, 20);
+    const pageQuery = prisma.order.findMany.mock.calls[1]![0];
+    expect(pageQuery.include).toBeUndefined();
+    expect(pageQuery.select).not.toHaveProperty('shippingHistory');
+  });
+
+  it('D3: không đọc cột images của sản phẩm; chỉ sản phẩm không có thumbnail mới tốn một câu images[1]', async () => {
+    const orders = [{ ...baseOrder, id: 'o1', items: [line('i1', 'v1'), line('i2', 'v2')] }];
+    const bare = (id: string, thumbnail: string | null) => {
+      const { images: _i, ...product } = v(id).product as Record<string, unknown>;
+      return { ...v(id), product: { ...product, id: `p-${id}`, thumbnail } };
+    };
+    const { svc, variationFindMany } = makeMediaService(orders, [bare('v1', 'https://img.test/v1.jpg'), bare('v2', null)]);
+    const prisma = (svc as unknown as { prisma: { $queryRaw?: jest.Mock } }).prisma;
+    prisma.$queryRaw = jest.fn().mockResolvedValue([{ id: 'p-v2', cover: 'https://res.cloudinary.com/x/first.jpg' }]);
+    const res = await svc.list('u1', {}, 1, 20);
+    expect(variationFindMany.mock.calls[0]![0].select.product.select).not.toHaveProperty('images');
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(res.data[0]!.items.map((i) => i.thumbnail)).toEqual(['https://img.test/v1.jpg', 'https://res.cloudinary.com/x/first.jpg']);
+  });
+
   it.each([
     ['variation tắt', { isActive: false }, {}],
     ['sản phẩm tắt', {}, { isActive: false }],
@@ -1518,5 +1558,12 @@ describe('OrdersService.cancel — hook thu kèm rác (§12.2 bước 3, §17.3)
     const { svc } = makeService({ ...baseOrder, status: 'CONFIRMED' }, { wastePickupHooks });
     await expect(svc.cancel('u1', 'TUBU1')).resolves.toBeDefined();
     expect(notifications.notify as jest.Mock).toHaveBeenCalledWith('u1', 'ORDER_CANCELLED', expect.anything(), undefined, 'order=TUBU1');
+  });
+});
+
+describe('ORDER_LIST_SELECT', () => {
+  it('đủ mọi cột của đơn trừ shippingHistory và invoiceRequest, kèm items: cột mới thêm vào schema phải vào danh sách (hoặc bị loại có chủ ý)', () => {
+    const expected = Object.keys(Prisma.OrderScalarFieldEnum).filter((k) => k !== 'shippingHistory' && k !== 'invoiceRequest');
+    expect(Object.keys(ORDER_LIST_SELECT).sort()).toEqual([...expected, 'items'].sort());
   });
 });

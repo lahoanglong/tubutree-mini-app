@@ -109,7 +109,7 @@ export function ProfileTab({ brand }: { brand: OwnedBrand }) {
           <input className={bigField} value={f.origin} onChange={(e) => setF({ ...f, origin: e.target.value })} />
         </Field>
         <Field label="Câu chuyện thương hiệu">
-          <textarea className={`${ui.field} min-h-28 py-2`} value={f.story} onChange={(e) => setF({ ...f, story: e.target.value })} />
+          <textarea className={`${ui.field} min-h-28 py-2`} maxLength={20000} value={f.story} onChange={(e) => setF({ ...f, story: e.target.value })} />
         </Field>
         <button type="button" disabled={saveMut.isPending} onClick={() => saveMut.mutate()} className={`${ui.btnPrimary} w-full`}>
           {saveMut.isPending ? 'Đang lưu…' : 'Lưu thông tin'}

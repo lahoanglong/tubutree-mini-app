@@ -54,6 +54,7 @@ vi.mock('@/components/account/cloudinary-upload', () => ({
   MAX_IMAGE_BYTES: 20 * 1024 * 1024,
 }));
 
+vi.mock('@/components/account/prepare-for-cloudinary', () => ({ prepareForCloudinary: async (f: File) => f }));
 import SupportChatPage from './page';
 
 const msg = (over: Record<string, unknown>) => ({

@@ -628,7 +628,8 @@ export class OrderStatusService {
     if (order.reversalEffectsAt) return { outcome: 'ALREADY_DONE' };
 
     const closure = await this.prisma.orderStatusHistory.findFirst({
-      where: { orderId: order.id, toStatus: order.status },
+      // Dòng ghi chú cùng trạng thái (fromStatus = toStatus: dấu PANCAKE, "Đã xử lý" của admin…) không phải lần đóng đơn.
+      where: { orderId: order.id, toStatus: order.status, fromStatus: { not: order.status } },
       orderBy: { createdAt: 'desc' },
       select: { actorType: true, createdAt: true },
     });
@@ -804,7 +805,8 @@ export class OrderStatusService {
         const paidAt = new Date();
         const flip = await tx.order.updateMany({
           where: { id: order.id, paymentStatus: 'UNPAID', status: order.status },
-          data: { paymentStatus: 'PAID', paidAt, ...(toStatus !== order.status ? { status: toStatus } : {}) },
+          // Đơn đã PAID thì khoản "Pancake báo đã thanh toán, chờ đối chiếu" xong: gỡ cờ cùng câu lật để không còn cờ mồ côi trên đơn đã thu tiền.
+          data: { paymentStatus: 'PAID', paidAt, paymentUnlinkedAt: null, paymentUnlinkedFirstAt: null, ...(toStatus !== order.status ? { status: toStatus } : {}) },
         });
         if (flip.count === 0) return false;
         await tx.orderStatusHistory.create({

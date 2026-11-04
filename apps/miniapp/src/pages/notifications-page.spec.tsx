@@ -220,12 +220,13 @@ describe('Trang Thông báo: Đọc tất cả (R6-BUYER-5)', () => {
     mocks.markAllNotificationsRead.mockResolvedValue({ ok: true, count: 1 });
   });
 
-  it('có tin chưa đọc: bấm "Đọc tất cả" gọi API một lần rồi nạp lại danh sách', async () => {
+  it('có tin chưa đọc: bấm "Đọc tất cả" gọi API một lần, tin chuyển sang đã đọc ngay trong cache', async () => {
     renderPage();
     await screen.findByText('Đơn TT001 đã được xác nhận');
     fireEvent.click(await screen.findByRole('button', { name: 'Đọc tất cả' }));
     await waitFor(() => expect(mocks.markAllNotificationsRead).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(mocks.getNotifications).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Đọc tất cả' })).not.toBeInTheDocument());
+    expect(mocks.getNotifications).toHaveBeenCalledTimes(1);
   });
 
   it('không còn tin chưa đọc: ẩn nút', async () => {
@@ -541,5 +542,91 @@ describe('Đếm chưa đọc của cả hộp thư và lỗi "Xem thêm"', () =
     expect(await screen.findByRole('alert')).toHaveTextContent('Không tải thêm được thông báo. Bạn thử lại nhé.');
     expect(screen.getByText('Tin số 0')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Xem thêm' })).toBeInTheDocument();
+  });
+});
+
+describe('F10: đánh dấu đã đọc không nạp lại mọi trang đã cuộn', () => {
+  const page = (from: number, unreadAt?: number) =>
+    Array.from({ length: 20 }, (_, i) => ({
+      id: `q${from + i}`,
+      templateCode: 'POINTS_EARNED',
+      payload: { body: `Tin số ${from + i}` },
+      status: (from + i === unreadAt ? 'SENT' : 'READ') as 'SENT' | 'READ',
+      sentAt: new Date(Date.UTC(2026, 9, 28, 3, 0, 0) - (from + i) * 1000).toISOString(),
+    }));
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getSummary.mockReset();
+    mocks.paths.length = 0;
+    mocks.authStatus = 'authenticated';
+    mocks.getSummary.mockResolvedValueOnce(summaryOf(1)).mockResolvedValue(summaryOf(0));
+    mocks.markNotificationRead.mockResolvedValue({ ok: true });
+    mocks.markAllNotificationsRead.mockResolvedValue({ ok: true, count: 1 });
+    mocks.getNotifications.mockImplementation(async (q?: { beforeId?: string }) => {
+      if (!q?.beforeId) return page(0);
+      return q.beforeId === 'q19' ? page(20) : page(40, 45);
+    });
+  });
+
+  async function scrollThreePages() {
+    renderPage();
+    await screen.findByText('Tin số 0');
+    fireEvent.click(await screen.findByRole('button', { name: 'Xem thêm' }));
+    await screen.findByText('Tin số 20');
+    fireEvent.click(await screen.findByRole('button', { name: 'Xem thêm' }));
+    await screen.findByText('Tin số 45');
+    await waitFor(() => expect(mocks.getSummary).toHaveBeenCalled());
+    mocks.paths.length = 0;
+  }
+
+  it('đọc một tin ở trang 3: không gọi lại /me/notifications, tin chuyển sang đã đọc, summary làm mới', async () => {
+    await scrollThreePages();
+    fireEvent.click(screen.getByText('Tin số 45').closest('[role="button"]') as HTMLElement);
+    await waitFor(() => expect(mocks.markNotificationRead).toHaveBeenCalledWith('q45'));
+    await waitFor(() => expect(mocks.paths.filter((p) => p === '/me/summary')).toHaveLength(1));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(mocks.paths.filter((p) => p === '/me/notifications')).toHaveLength(0);
+    expect(mocks.paths.length).toBeLessThanOrEqual(1);
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Đọc tất cả' })).toBeNull());
+  }, 30_000);
+
+  it('"Đọc tất cả": không gọi lại /me/notifications', async () => {
+    await scrollThreePages();
+    fireEvent.click(await screen.findByRole('button', { name: 'Đọc tất cả' }));
+    await waitFor(() => expect(mocks.markAllNotificationsRead).toHaveBeenCalledTimes(1));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(mocks.paths.filter((p) => p === '/me/notifications')).toHaveLength(0);
+    expect(mocks.paths.length).toBeLessThanOrEqual(1);
+  }, 30_000);
+});
+
+describe('F10: đọc tin lúc đang nạp thêm trang', () => {
+  it('có lần nạp đang chạy khi mutation xong thì danh sách được nạp lại, không để bản cũ ghi đè tin vừa đọc', async () => {
+    vi.clearAllMocks();
+    mocks.getSummary.mockReset();
+    mocks.authStatus = 'authenticated';
+    mocks.getSummary.mockResolvedValue(summaryOf(1));
+    mocks.markNotificationRead.mockResolvedValue({ ok: true });
+    const first = Array.from({ length: 20 }, (_, i) => ({
+      id: `r${i}`,
+      templateCode: i === 0 ? 'ORDER_CONFIRMED' : 'POINTS_EARNED',
+      payload: { body: `Tin r${i}`, ...(i === 0 ? { data: { order_code: 'TT009' } } : {}) },
+      status: (i === 0 ? 'SENT' : 'READ') as 'SENT' | 'READ',
+      sentAt: new Date(Date.UTC(2026, 9, 28, 3, 0, 0) - i * 1000).toISOString(),
+    }));
+    let release: (v: unknown[]) => void = () => undefined;
+    let firstPageCalls = 0;
+    mocks.getNotifications.mockImplementation((q?: { beforeId?: string }) => {
+      if (q?.beforeId) return new Promise((r) => (release = r));
+      firstPageCalls += 1;
+      return Promise.resolve(firstPageCalls === 1 ? first : first.map((n) => ({ ...n, status: 'READ' as const })));
+    });
+    renderPage();
+    await screen.findByText('Tin r1');
+    fireEvent.click(await screen.findByRole('button', { name: 'Xem thêm' }));
+    fireEvent.click(screen.getByText('Tin r0').closest('[role="button"]') as HTMLElement);
+    await waitFor(() => expect(mocks.markNotificationRead).toHaveBeenCalledWith('r0'));
+    await waitFor(() => expect(firstPageCalls).toBeGreaterThanOrEqual(2));
+    release([]);
   });
 });

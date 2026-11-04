@@ -146,7 +146,7 @@ export const ATTENTION_SEPARATOR = ' | ';
 
 /** Nối một lý do vào hàng cần xử lý mà không làm mất lý do đang có (cùng dấu nối với việc ghi dấu trạng thái bị chặn). */
 export const appendAttentionReason = (current: string | null | undefined, reason: string): string =>
-  current && !current.split(ATTENTION_SEPARATOR).includes(reason) ? `${current}${ATTENTION_SEPARATOR}${reason}` : reason;
+  !current ? reason : current.split(ATTENTION_SEPARATOR).includes(reason) ? current : `${current}${ATTENTION_SEPARATOR}${reason}`;
 
 /**
  * Gỡ đúng một lý do khỏi hàng cần xử lý (khi việc đó đã có người quyết); hết lý do thì đơn rời hàng đợi. Ghi có điều kiện theo giá trị
@@ -196,16 +196,18 @@ export async function appendPancakeAttention(
   orderId: string,
   reason: string,
   supersededPrefixes: string[] = [],
+  opts: { onlyUnpaid?: boolean } = {},
 ): Promise<void> {
   for (let attempt = 0; attempt < ATTENTION_WRITE_ATTEMPTS; attempt += 1) {
-    const row = await db.order.findUnique({ where: { id: orderId }, select: { pancakeAttention: true } });
+    const row = await db.order.findUnique({ where: { id: orderId }, select: { pancakeAttention: true, paymentStatus: true } });
     if (!row) return;
+    if (opts.onlyUnpaid && row.paymentStatus !== 'UNPAID') return;
     const kept = (row.pancakeAttention ? row.pancakeAttention.split(ATTENTION_SEPARATOR) : []).filter(
       (part) => !supersededPrefixes.some((prefix) => part.startsWith(prefix)),
     );
     const next = appendAttentionReason(kept.join(ATTENTION_SEPARATOR) || null, reason);
     const r = await db.order.updateMany({
-      where: { id: orderId, pancakeAttention: row.pancakeAttention },
+      where: { id: orderId, pancakeAttention: row.pancakeAttention, ...(opts.onlyUnpaid ? { paymentStatus: 'UNPAID' as const } : {}) },
       data: { pancakeAttention: next, pancakeAttentionAt: new Date() },
     });
     if (r.count === 1) return;

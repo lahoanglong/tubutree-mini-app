@@ -15,6 +15,7 @@ import type { AffiliateService } from '../../src/modules/affiliate/affiliate.ser
 import type { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import type { FlashSaleService } from '../../src/modules/flash-sale/flash-sale.service';
 import type { CouponsService } from '../../src/modules/coupons/coupons.service';
+import { PAYMENT_UNLINKED_CLOSED_WHERE, PAYMENT_UNLINKED_OPEN_WHERE } from '../../src/modules/admin/admin-order-filter';
 import { createOrder, createUser, randCode, setConfig, summarize, warmPool } from './helpers';
 
 /**
@@ -249,6 +250,26 @@ describe('Pending-payment expiry cron vs payment race (real Postgres)', () => {
 
   // Review lượt 1: trước đây admin bấm "Xác nhận" đơn chưa trả → CONFIRMED+UNPAID, cron (chỉ quét
   // PENDING_PAYMENT) bỏ qua mãi mãi, kho bị giữ vĩnh viễn.
+  it('(m) đơn có cờ chờ đối chiếu: hoãn tự huỷ trong 48 giờ kể từ khoản đầu tiên (47 giờ → không huỷ); quá 48 giờ (49 giờ) → huỷ, cờ còn', async () => {
+    const H = 3_600_000;
+    const at = (h: number) => new Date(Date.now() - h * H);
+    const held = await staleOrder({ paymentUnlinkedAt: at(1), paymentUnlinkedFirstAt: at(47) });
+    const expired = await staleOrder({ paymentUnlinkedAt: at(1), paymentUnlinkedFirstAt: at(49) });
+    const legacy = await staleOrder({ paymentUnlinkedAt: at(60), paymentUnlinkedFirstAt: null });
+    await newCron().expireStale();
+    const a = await state(held.order.id, held.variationId, held.user.id);
+    expect(a.order).toMatchObject({ status: 'PENDING_PAYMENT', paymentStatus: 'UNPAID' });
+    expect(a.order.paymentUnlinkedAt).not.toBeNull();
+    const b = await state(expired.order.id, expired.variationId, expired.user.id);
+    expect(b.order).toMatchObject({ status: 'CANCELLED', paymentStatus: 'UNPAID' });
+    expect(b.order.paymentUnlinkedAt).not.toBeNull();
+    expect(b.stock).toBe(START_STOCK + QTY);
+    expect((await state(legacy.order.id, legacy.variationId, legacy.user.id)).order.status).toBe('CANCELLED');
+    // Đơn đã huỷ mà cờ còn nằm ở hàng đợi ADMIN, không còn ở hàng đợi Kế toán.
+    expect(await prisma.order.count({ where: { id: expired.order.id, ...PAYMENT_UNLINKED_CLOSED_WHERE } })).toBe(1);
+    expect(await prisma.order.count({ where: { id: expired.order.id, ...PAYMENT_UNLINKED_OPEN_WHERE } })).toBe(0);
+  });
+
   it('(f) admin bấm "Xác nhận" đơn chuyển khoản chưa trả → bị chặn, đơn vẫn PENDING_PAYMENT và cron vẫn huỷ + hoàn kho', async () => {
     const { order, variationId, user } = await staleOrder();
     await expect(orderStatus.setStatus(order.id, 'CONFIRMED', { actorType: 'ADMIN', actorId: 'admin-1' })).rejects.toThrow(

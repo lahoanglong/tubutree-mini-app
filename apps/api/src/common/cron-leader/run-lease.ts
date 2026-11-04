@@ -8,8 +8,8 @@ import type { PrismaService } from '../../prisma/prisma.service';
  * replica khác. Người giữ gia hạn trong lúc chạy; process chết giữa chừng thì khoá tự hết hạn sau ttl. Đồng hồ là now() của
  * Postgres để các máy lệch giờ vẫn so cùng một mốc.
  *
- * Không dùng khoá advisory theo transaction như các cron ngắn: lượt đồng bộ chạy nhiều phút, gọi Pancake giữa chừng — giữ một
- * transaction mở suốt chừng ấy là chiếm kết nối DB và đụng hạn chờ transaction.
+ * Không dùng khoá advisory theo transaction: lượt đồng bộ chạy nhiều phút, gọi Pancake giữa chừng — giữ một transaction mở
+ * suốt chừng ấy là chiếm kết nối DB và đụng hạn chờ transaction.
  */
 export class RunLease {
   private constructor(

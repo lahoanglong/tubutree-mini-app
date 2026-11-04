@@ -1,11 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { hubBestSellers } from '@tubutree/app-core/browse/hub';
-import { bestSellersQuery } from '@tubutree/app-core/queries/browse';
 import { seeAllHref } from '@tubutree/app-core/merch/home-shelves';
 import { shelf } from '@tubutree/app-core/merch/shelves';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import type { CategoryEntry } from '../../hooks/use-categories';
-import { coreHttp } from '../../services/core-http';
+import { homeBestSellerQuery } from '../home/home-best-seller-query';
 import { Button } from '../ui/button';
 import { ProductRail } from '../ui/product-rail';
 import { Section } from '../ui/section';
@@ -29,7 +28,8 @@ export interface BrowseHubProps {
  * thương hiệu, rồi nút mở cả danh sách. KHÔNG tải danh sách sản phẩm; kệ Bán chạy nhất lỗi hay dưới 3 món thì ẩn hẳn và hub vẫn đủ lối vào.
  */
 export function BrowseHub({ entries, categoriesLoading, placeholderCount, brands, onPickCategory, onPickAll, onPickBrand }: BrowseHubProps) {
-  const q = useQuery({ ...bestSellersQuery(coreHttp, shelf('browse.bestSellers').maxItems), staleTime: 60_000, retry: false });
+  // Cùng khoá với kệ Trang chủ: vào Danh mục sau Trang chủ dùng lại dữ liệu đã tải; `hubBestSellers` tự cắt còn maxItems của kệ.
+  const q = useQuery({ ...homeBestSellerQuery, select: (page) => page.data, staleTime: 60_000, retry: false });
   const items = hubBestSellers(q.data);
   const showBestSellers = q.isLoading || items.length > 0;
   const title = fillCopy('rank.title');

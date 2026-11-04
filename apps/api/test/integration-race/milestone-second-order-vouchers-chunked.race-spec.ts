@@ -90,9 +90,13 @@ describe('VouchersService milestone + second-order chunked (real Postgres)', () 
   });
 
   it('second-order: 25 khách một đơn đã giao qua nhiều trang (trang 7): mỗi người đúng 1 mã hạn theo đơn đầu; 2 instance song song + chạy lại không tạo thêm', async () => {
-    const statics = VouchersService as unknown as { SECOND_ORDER_PAGE: number };
+    const statics = VouchersService as unknown as { SECOND_ORDER_PAGE: number; SECOND_ORDER_MAX_PAGES: number };
     const original = statics.SECOND_ORDER_PAGE;
+    const originalMaxPages = statics.SECOND_ORDER_MAX_PAGES;
     statics.SECOND_ORDER_PAGE = 7;
+    // Cron dừng sau SECOND_ORDER_MAX_PAGES trang, sắp theo userId. Chạy cả bộ race thì các spec trước để lại hàng trăm khách
+    // một đơn đủ điều kiện có id nhỏ hơn 25 khách mới ở đây; với trang 7 thì 25 trang không với tới họ.
+    statics.SECOND_ORDER_MAX_PAGES = 100_000;
     try {
       const mine: { id: string; createdAt: Date }[] = [];
       for (let i = 0; i < 25; i++) {
@@ -122,6 +126,7 @@ describe('VouchersService milestone + second-order chunked (real Postgres)', () 
       expect(notified).toHaveLength(25);
     } finally {
       statics.SECOND_ORDER_PAGE = original;
+      statics.SECOND_ORDER_MAX_PAGES = originalMaxPages;
     }
   });
 });

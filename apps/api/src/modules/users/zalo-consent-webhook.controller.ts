@@ -1,7 +1,8 @@
 import { Body, Controller, Headers, HttpCode, HttpStatus, Logger, Post, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SkipThrottle } from '@nestjs/throttler';
-import { createHash, timingSafeEqual } from 'node:crypto';
+import { createHash } from 'node:crypto';
+import { safeEqualStrings } from '../../common/safe-equal';
 import { Public } from '../../common/decorators/public.decorator';
 import type { Env } from '../../config/env.validation';
 import { UsersService } from './users.service';
@@ -89,8 +90,6 @@ export class ZaloConsentWebhookController {
 
   private verify(body: ZaloConsentWebhookBody, signature?: string): boolean {
     if (!signature) return false;
-    const a = Buffer.from(signature.trim().toLowerCase(), 'utf8');
-    const b = Buffer.from(zaloEventSignature(body, this.apiKey), 'utf8');
-    return a.length === b.length && timingSafeEqual(a, b);
+    return safeEqualStrings(signature.trim().toLowerCase(), zaloEventSignature(body, this.apiKey));
   }
 }

@@ -38,6 +38,9 @@ export const PUBLIC_CONTENT_IMAGE: UploadedImageOptions = { maxDataUrlLength: PU
 /** Ảnh trong bài cộng đồng: như PUBLIC_CONTENT_IMAGE, thêm kiểm chữ ký tệp để chuỗi base64 rác không lấp DB. */
 export const FEED_POST_IMAGE: UploadedImageOptions = { ...PUBLIC_CONTENT_IMAGE, verifySignature: true };
 
+/** Ảnh nhân viên/quản trị tải lên (QR lương, chứng từ, minh chứng huỷ ca): chỉ người có quyền xem, nên theo trần mặc định, thêm kiểm chữ ký tệp. */
+export const STAFF_IMAGE: UploadedImageOptions = { verifySignature: true };
+
 const DATA_URL_HEAD_RE = /^data:image\/(png|jpe?g|webp|gif);base64,/;
 
 /** Chữ ký tệp trong 12 byte đầu (16 ký tự base64) khớp loại ảnh khai ở data URL. */

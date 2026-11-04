@@ -15,6 +15,7 @@ import { decidedAtPartialReturn, recordClaimEvent } from './external-claim-audit
 import { recordExtClaimEvent } from './external-claim-events';
 import { advisoryUserLock } from './external-claim.service';
 import { lockOrderThenClaim } from './external-claim-status';
+import { runExclusive } from '../../common/cron-leader/run-exclusive';
 import { settlePoints } from './external-claim.rules';
 import { claimPoints, maskClaimCode } from './external-points-rate';
 
@@ -209,7 +210,7 @@ export async function releaseClaim(
 }
 
 /**
- * Cron 30 phút: cộng mọi claim PENDING có đơn đã giao đủ `loyalty.external_pending_days`. Khoá advisory theo transaction chặn hai
+ * Cron 30 phút: cộng mọi claim PENDING có đơn đã giao đủ `loyalty.external_pending_days`. Khoá lượt chạy (cron_leases) chặn hai
  * lượt chạy chồng nhau (hai replica, hai lần gọi); mỗi claim vẫn tự an toàn nhờ điều kiện trạng thái nên khoá này chỉ để khỏi làm trùng việc.
  */
 export async function releaseDueClaims(
@@ -229,72 +230,63 @@ export async function releaseDueClaims(
   let credited = 0;
   let toReview = 0;
   let held = 0;
-  let skippedLocked = false;
-  await prisma.$transaction(
-    async (lockTx) => {
-      const [lock] = await lockTx.$queryRaw<{ ok: boolean }[]>`SELECT pg_try_advisory_xact_lock(hashtext(${RELEASE_LOCK})) AS "ok"`;
-      if (!lock?.ok) {
-        skippedLocked = true;
-        return;
-      }
-      for (let b = 0; b < MAX_BATCHES; b++) {
-        const due = await prisma.externalPointsClaim.findMany({
-          where: {
-            state: 'PENDING',
-            kind: { in: kinds },
-            // Claim PHONE chưa có thành viên vẫn được xét để chuyển HELD_NO_MEMBER; claim SCAN luôn có chủ.
-            OR: [{ userId: { not: null } }, { kind: 'PHONE' }],
-            AND: [
-              {
-                OR: [
-                  { externalOrder: { status: 'DELIVERED', deliveredAt: { lte: cutoff } } },
-                  { decidedById: { not: null }, releaseAt: { lte: now }, externalOrder: { status: 'PARTIAL_RETURN' } },
-                ],
-              },
-            ],
-          },
-          orderBy: { createdAt: 'asc' },
-          take: BATCH,
-          select: { id: true },
-        });
-        if (due.length === 0) break;
-        let progressed = 0;
-        for (const { id } of due) {
-          try {
-            const res = await releaseClaim(prisma, id, { pendingDays: cfg.pendingDays, expiryMonths, now, reviewAboveVnd: cfg.reviewAboveVnd, monthlyPointsCap: cfg.monthlyPointsCap, chat: chatCfg });
-            if (res.outcome === 'CREDITED') {
-              credited++;
-              progressed++;
-              const isChat = res.kind === 'PHONE';
-              if (notifier && res.userId) {
-                await notifier
-                  .notify(
-                    res.userId,
-                    isChat ? 'CHAT_ORDER_POINTS_CREDITED' : 'EXTERNAL_POINTS_CREDITED',
-                    { points: formatPoints(res.points), code: res.code },
-                    { dedupeKey: `${isChat ? 'chat-credit' : 'ext-credit'}:${id}` },
-                  )
-                  .catch((e: unknown) => logger.warn(`Gửi thông báo cộng điểm lỗi claim=${id}: ${e instanceof Error ? e.message : e}`));
-              }
-              // Đơn chat tính vào xét hạng: cộng xong thì hạng phải được tính lại ngay (sau commit, lỗi không làm hỏng lượt cộng).
-              if (res.countsForTier && res.userId && hooks.recalcTier) {
-                await hooks.recalcTier(res.userId).catch((e: unknown) => logger.warn(`recalcTier sau cộng điểm chat lỗi user=${res.userId}: ${e instanceof Error ? e.message : e}`));
-              }
-            } else if (res.outcome === 'HELD') {
-              held++;
-              progressed++;
-            } else if (res.outcome === 'TO_REVIEW') {
-              toReview++;
-              progressed++;
+  const run = await runExclusive(prisma, RELEASE_LOCK, async () => {
+    for (let b = 0; b < MAX_BATCHES; b++) {
+      const due = await prisma.externalPointsClaim.findMany({
+        where: {
+          state: 'PENDING',
+          kind: { in: kinds },
+          // Claim PHONE chưa có thành viên vẫn được xét để chuyển HELD_NO_MEMBER; claim SCAN luôn có chủ.
+          OR: [{ userId: { not: null } }, { kind: 'PHONE' }],
+          AND: [
+            {
+              OR: [
+                { externalOrder: { status: 'DELIVERED', deliveredAt: { lte: cutoff } } },
+                { decidedById: { not: null }, releaseAt: { lte: now }, externalOrder: { status: 'PARTIAL_RETURN' } },
+              ],
+            },
+          ],
+        },
+        orderBy: { createdAt: 'asc' },
+        take: BATCH,
+        select: { id: true },
+      });
+      if (due.length === 0) break;
+      let progressed = 0;
+      for (const { id } of due) {
+        try {
+          const res = await releaseClaim(prisma, id, { pendingDays: cfg.pendingDays, expiryMonths, now, reviewAboveVnd: cfg.reviewAboveVnd, monthlyPointsCap: cfg.monthlyPointsCap, chat: chatCfg });
+          if (res.outcome === 'CREDITED') {
+            credited++;
+            progressed++;
+            const isChat = res.kind === 'PHONE';
+            if (notifier && res.userId) {
+              await notifier
+                .notify(
+                  res.userId,
+                  isChat ? 'CHAT_ORDER_POINTS_CREDITED' : 'EXTERNAL_POINTS_CREDITED',
+                  { points: formatPoints(res.points), code: res.code },
+                  { dedupeKey: `${isChat ? 'chat-credit' : 'ext-credit'}:${id}` },
+                )
+                .catch((e: unknown) => logger.warn(`Gửi thông báo cộng điểm lỗi claim=${id}: ${e instanceof Error ? e.message : e}`));
             }
-          } catch (err) {
-            logger.error(`releaseClaim ${id} lỗi: ${err instanceof Error ? err.message : err}`);
+            // Đơn chat tính vào xét hạng: cộng xong thì hạng phải được tính lại ngay (sau commit, lỗi không làm hỏng lượt cộng).
+            if (res.countsForTier && res.userId && hooks.recalcTier) {
+              await hooks.recalcTier(res.userId).catch((e: unknown) => logger.warn(`recalcTier sau cộng điểm chat lỗi user=${res.userId}: ${e instanceof Error ? e.message : e}`));
+            }
+          } else if (res.outcome === 'HELD') {
+            held++;
+            progressed++;
+          } else if (res.outcome === 'TO_REVIEW') {
+            toReview++;
+            progressed++;
           }
+        } catch (err) {
+          logger.error(`releaseClaim ${id} lỗi: ${err instanceof Error ? err.message : err}`);
         }
-        if (progressed === 0) break;
       }
-    },
-    { timeout: 10 * 60_000, maxWait: 10_000 },
-  );
-  return { credited, toReview, held, skippedLocked };
+      if (progressed === 0) break;
+    }
+  });
+  return { credited, toReview, held, skippedLocked: !run.acquired };
 }

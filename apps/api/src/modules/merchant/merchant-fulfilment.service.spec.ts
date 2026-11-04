@@ -5,6 +5,10 @@ import { MerchantSlaCron } from './merchant-sla.cron';
 import { payoutView, withLineItems } from './merchant-fulfilment.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { OrderStatusService } from '../orders/order-status.service';
+import { runExclusive } from '../../common/cron-leader/run-exclusive';
+import { holdsLease } from '../../common/cron-leader/run-exclusive.fixtures';
+
+jest.mock('../../common/cron-leader/run-exclusive');
 
 const STORE = { id: 'sf-a', type: 'MERCHANT', title: 'Xanh Shop', ownerUserId: 'u1' };
 const SLA = { confirmHours: 24, shipHours: 48, deliverDays: 7 };
@@ -632,8 +636,8 @@ describe('partialReversalLinesOf — trả nhiều lần cộng lại đúng b�
 describe('MerchantSlaCron', () => {
   it('nhắc đối tác đơn quá hạn, đánh dấu có điều kiện để không nhắc trùng', async () => {
     const updateMany = jest.fn().mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 0 });
-    const tx = { $queryRaw: jest.fn().mockResolvedValue([{ locked: true }]) };
-    const prisma = { order: { updateMany }, $transaction: jest.fn((cb: (t: unknown) => unknown) => cb(tx)) };
+    (runExclusive as jest.Mock).mockImplementation(holdsLease(true));
+    const prisma = { order: { updateMany } };
     const overdue = [
       { id: 'o1', code: 'A', status: 'CONFIRMED', createdAt: new Date(NOW.getTime() - 30 * H), merchantAcceptedAt: null, shippedAt: null, fulfillerStorefront: { ownerUserId: 'u1' } },
       { id: 'o2', code: 'B', status: 'CONFIRMED', createdAt: new Date(NOW.getTime() - 30 * H), merchantAcceptedAt: null, shippedAt: null, fulfillerStorefront: { ownerUserId: 'u1' } },
@@ -652,8 +656,8 @@ describe('MerchantSlaCron', () => {
 
   it('R2-MERCHANT-11: lần nhắc đầu của đơn chưa gửi hàng → báo cả khách (chậm bước nào, huỷ được); nhắc lại hay đơn đang giao thì không', async () => {
     const updateMany = jest.fn().mockResolvedValue({ count: 1 });
-    const tx = { $queryRaw: jest.fn().mockResolvedValue([{ locked: true }]) };
-    const prisma = { order: { updateMany }, $transaction: jest.fn((cb: (t: unknown) => unknown) => cb(tx)) };
+    (runExclusive as jest.Mock).mockImplementation(holdsLease(true));
+    const prisma = { order: { updateMany } };
     const store = { title: 'Shop B', ownerUserId: 'u1' };
     const base = { createdAt: new Date(NOW.getTime() - 30 * H), merchantAcceptedAt: null, shippedAt: null, fulfillerStorefront: store };
     const overdue = [
@@ -801,7 +805,7 @@ describe('Q8: hàng "Tubu giao hộ" vào bảng kê theo từng dòng hàng', (
     expect(queryOf(prisma.$queryRaw.mock.calls[1]).values).toContainEqual(new Date('2026-10-01T00:00:00Z'));
     expect(sql).toContain(`(NOT l."takeover" OR (l."consignmentConfirmedAt" IS NOT NULL AND o."createdAt" >= l."consignmentConfirmedAt"))`);
     expect(sql).toContain(`(l."unlinkedAt" IS NULL OR o."createdAt" < l."unlinkedAt")`);
-    expect(sql).toContain(`FROM "order_status_history" h WHERE h."orderId" = o."id" AND h."toStatus" = 'DELIVERED'`);
+    expect(sql).toContain(`FROM "order_status_history" h WHERE h."orderId" = o."id" AND h."toStatus" = 'DELIVERED' AND h."fromStatus" <> 'DELIVERED')`);
     expect(prisma.orderItem.findMany.mock.calls[1][0].where).toEqual({ orderId: { in: ['o1', 'o2'] } });
   });
 

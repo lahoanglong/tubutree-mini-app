@@ -13,6 +13,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
+import { IsUploadedImage, STAFF_IMAGE } from '../../../../common/uploaded-image';
 import { OptionalNotNull } from '../../../../common/decorators/optional-not-null.decorator';
 
 export class ShiftItemDto {
@@ -67,7 +68,7 @@ export class CancelShiftDto {
   isEmergency?: boolean;
 
   @IsOptional()
-  @IsString()
+  @IsUploadedImage(STAFF_IMAGE)
   evidenceUrl?: string;
 }
 

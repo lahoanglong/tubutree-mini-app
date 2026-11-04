@@ -1,4 +1,5 @@
 import { Logger } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
 import { CronAwareLogger } from '../../common/cron-run/cron-aware-logger';
 import { setCronRunSink, type CronRunReport } from '../../common/cron-run/track-cron';
 import {
@@ -999,6 +1000,10 @@ const config = {
   get: async <T>(_k: string, fb?: T): Promise<T> => fb as T,
 } as unknown as SystemConfigService;
 
+const sqlOf = (m: jest.Mock, call = 0) => m.mock.calls[call]![0] as Prisma.Sql;
+const sqlText = (m: jest.Mock, call = 0) => sqlOf(m, call).sql;
+const dateValues = (m: jest.Mock, call = 0) => sqlOf(m, call).values.filter((v): v is Date => v instanceof Date);
+
 describe('LoyaltyExpiryService.expirePoints (cron)', () => {
   function setup(opts: {
     candidates: { userId: string }[];
@@ -1009,10 +1014,8 @@ describe('LoyaltyExpiryService.expirePoints (cron)', () => {
     /** Mốc lần chạy thành công trước ở cron_runs (mặc định chưa có dòng nào = quét đủ). */
     lastSuccessAt?: Date | null;
   }) {
-    const findMany = jest
-      .fn()
-      .mockResolvedValueOnce(opts.candidates) // ứng viên (distinct userId)
-      .mockResolvedValueOnce(opts.userTxns); // toàn bộ txn của user đó (đọc nhanh, chưa khoá)
+    const queryRaw = jest.fn().mockResolvedValueOnce(opts.candidates); // ứng viên (SELECT DISTINCT userId ... LIMIT)
+    const findMany = jest.fn().mockResolvedValueOnce(opts.userTxns); // toàn bộ txn của user đó (đọc nhanh, chưa khoá)
     const order: string[] = [];
     const txQueryRaw = jest.fn(async () => {
       order.push('lock');
@@ -1034,11 +1037,12 @@ describe('LoyaltyExpiryService.expirePoints (cron)', () => {
     const prisma = {
       pointsTransaction: { findMany },
       cronRun: { findUnique: cronRunFindUnique },
+      $queryRaw: queryRaw,
       $transaction,
     } as unknown as PrismaService;
     const notifications = { notify: jest.fn(), notifySafe: jest.fn() } as unknown as NotificationsService;
     const svc = new LoyaltyExpiryService(prisma, config, notifications);
-    return { svc, prisma, findMany, txUpdateMany, txCreate, txFindMany, txQueryRaw, order, $transaction, cronRunFindUnique };
+    return { svc, prisma, findMany, queryRaw, txUpdateMany, txCreate, txFindMany, txQueryRaw, order, $transaction, cronRunFindUnique };
   }
 
   it('user có expiredNow>0 → decrement có guard gte + tạo POINTS_EXPIRED txn (cặp atomic)', async () => {
@@ -1090,16 +1094,18 @@ describe('LoyaltyExpiryService.expirePoints (cron)', () => {
   it('PD-3 (T7): ứng viên và sổ FIFO chỉ lấy lô STANDARD; dòng POINTS_EXPIRED ghi lô STANDARD', async () => {
     // Lô CONVERTED (quy từ xu) lọt vào FIFO thì dòng tiêu điểm thường ăn nhầm lô quy đổi cũ hơn, lô
     // thường trông "còn nguyên" và cron trừ quá tay (spec PD-3 mục 2.2).
-    const { svc, findMany, txUpdateMany, txCreate } = setup({
+    const { svc, findMany, queryRaw, txUpdateMany, txCreate } = setup({
       candidates: [{ userId: 'u1' }],
       userTxns: [tx('a', 100, '2025-01-01', '2026-01-01')],
       updateCount: 1,
     });
     await svc.expirePoints();
 
-    expect(findMany).toHaveBeenCalledTimes(2);
-    expect(findMany.mock.calls[0][0].where).toMatchObject({ lot: 'STANDARD', delta: { gt: 0 } });
-    expect(findMany.mock.calls[1][0].where).toEqual({ userId: 'u1', lot: 'STANDARD' });
+    expect(queryRaw).toHaveBeenCalledTimes(1);
+    expect(sqlText(queryRaw)).toContain(`"lot" = 'STANDARD'`);
+    expect(sqlText(queryRaw)).toContain('"delta" > 0');
+    expect(findMany).toHaveBeenCalledTimes(1);
+    expect(findMany.mock.calls[0][0].where).toEqual({ userId: 'u1', lot: 'STANDARD' });
     expect(txUpdateMany.mock.calls[0][0].data).toEqual({ pointsBalance: { decrement: 100 } });
     expect(txCreate.mock.calls[0][0].data).toMatchObject({ lot: 'STANDARD' });
   });
@@ -1111,7 +1117,7 @@ describe('LoyaltyExpiryService.expirePoints (cron)', () => {
       updateCount: 1,
     });
     await svc.expirePoints();
-    expect(findMany.mock.calls[1][0].select).toMatchObject({ refType: true, refId: true });
+    expect(findMany.mock.calls[0][0].select).toMatchObject({ refType: true, refId: true });
     expect((txFindMany.mock.calls[0] as unknown as [{ select: unknown }])[0].select).toMatchObject({ refType: true, refId: true });
   });
 
@@ -1122,7 +1128,7 @@ describe('LoyaltyExpiryService.expirePoints (cron)', () => {
       updateCount: 1,
     });
     await svc.expirePoints();
-    expect(findMany.mock.calls[1][0].select).toMatchObject({ reason: true });
+    expect(findMany.mock.calls[0][0].select).toMatchObject({ reason: true });
     expect((txFindMany.mock.calls[0] as unknown as [{ select: unknown }])[0].select).toMatchObject({ reason: true });
   });
 
@@ -1174,7 +1180,7 @@ describe('LoyaltyExpiryService.expirePoints (cron)', () => {
     afterEach(() => jest.useRealTimers());
 
     it('có mốc: ứng viên là lô có expiresAt trong (mốc - 2 ngày, now]', async () => {
-      const { svc, findMany, cronRunFindUnique } = setup({
+      const { svc, queryRaw, cronRunFindUnique } = setup({
         candidates: [],
         userTxns: [],
         updateCount: 1,
@@ -1185,10 +1191,11 @@ describe('LoyaltyExpiryService.expirePoints (cron)', () => {
       const after = Date.now();
 
       expect(cronRunFindUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { job: EXPIRE_POINTS_JOB } }));
-      const range = findMany.mock.calls[0][0].where.expiresAt as { gt: Date; lte: Date };
-      expect(range.gt).toEqual(new Date(LAST_OK.getTime() - 2 * DAY));
-      expect(range.lte.getTime()).toBeGreaterThanOrEqual(before);
-      expect(range.lte.getTime()).toBeLessThanOrEqual(after);
+      const [gt, lte] = dateValues(queryRaw);
+      expect(dateValues(queryRaw)).toHaveLength(2);
+      expect(gt).toEqual(new Date(LAST_OK.getTime() - 2 * DAY));
+      expect(lte!.getTime()).toBeGreaterThanOrEqual(before);
+      expect(lte!.getTime()).toBeLessThanOrEqual(after);
     });
 
     // Khách lỗi kéo dài có lô hết hạn trước mốc sẽ không bao giờ được nhặt lại nếu cron không quét đủ định kỳ.
@@ -1198,9 +1205,10 @@ describe('LoyaltyExpiryService.expirePoints (cron)', () => {
       ['cuối ngày 1 giờ VN (23:59)', '2026-08-01T16:59:00.000Z'],
     ])('ngày 1 hằng tháng (%s): quét đủ dù có mốc, để khách lỗi kéo dài được thử lại', async (_label, now) => {
       jest.setSystemTime(new Date(now));
-      const { svc, findMany } = setup({ candidates: [], userTxns: [], updateCount: 1, lastSuccessAt: LAST_OK });
+      const { svc, queryRaw } = setup({ candidates: [], userTxns: [], updateCount: 1, lastSuccessAt: LAST_OK });
       await svc.expirePoints();
-      expect(Object.keys(findMany.mock.calls[0][0].where.expiresAt)).toEqual(['lte']);
+      expect(dateValues(queryRaw)).toHaveLength(1);
+      expect(sqlText(queryRaw)).not.toContain('"expiresAt" >');
     });
 
     it.each([
@@ -1208,27 +1216,28 @@ describe('LoyaltyExpiryService.expirePoints (cron)', () => {
       ['00:00 ngày 2 giờ VN', '2026-08-01T17:00:00.000Z'],
     ])('không phải ngày 1 (%s): vẫn chặn dưới theo mốc', async (_label, now) => {
       jest.setSystemTime(new Date(now));
-      const { svc, findMany } = setup({ candidates: [], userTxns: [], updateCount: 1, lastSuccessAt: LAST_OK });
+      const { svc, queryRaw } = setup({ candidates: [], userTxns: [], updateCount: 1, lastSuccessAt: LAST_OK });
       await svc.expirePoints();
-      expect(Object.keys(findMany.mock.calls[0][0].where.expiresAt)).toEqual(['gt', 'lte']);
+      expect(dateValues(queryRaw)).toHaveLength(2);
+      expect(sqlText(queryRaw)).toContain('"expiresAt" >');
     });
 
     it('chưa có mốc (lần đầu): quét đủ như cũ, không có chặn dưới', async () => {
-      const { svc, findMany } = setup({ candidates: [], userTxns: [], updateCount: 1 });
+      const { svc, queryRaw } = setup({ candidates: [], userTxns: [], updateCount: 1 });
       await svc.expirePoints();
-      const range = findMany.mock.calls[0][0].where.expiresAt as Record<string, unknown>;
-      expect(Object.keys(range)).toEqual(['lte']);
+      expect(dateValues(queryRaw)).toHaveLength(1);
+      expect(sqlText(queryRaw)).not.toContain('"expiresAt" >');
     });
 
     it('dòng cron_runs có mốc rỗng (chưa từng thành công): quét đủ', async () => {
-      const { svc, findMany, cronRunFindUnique } = setup({ candidates: [], userTxns: [], updateCount: 1 });
+      const { svc, queryRaw, cronRunFindUnique } = setup({ candidates: [], userTxns: [], updateCount: 1 });
       cronRunFindUnique.mockResolvedValue({ lastSuccessAt: null });
       await svc.expirePoints();
-      expect(Object.keys(findMany.mock.calls[0][0].where.expiresAt)).toEqual(['lte']);
+      expect(dateValues(queryRaw)).toHaveLength(1);
     });
 
     it('đọc mốc lỗi: quét đủ và vẫn trừ điểm, không ném ra ngoài @Cron', async () => {
-      const { svc, findMany, cronRunFindUnique, txCreate } = setup({
+      const { svc, queryRaw, cronRunFindUnique, txCreate } = setup({
         candidates: [{ userId: 'u1' }],
         userTxns: [tx('a', 100, '2025-01-01', '2026-01-01')],
         updateCount: 1,
@@ -1237,7 +1246,7 @@ describe('LoyaltyExpiryService.expirePoints (cron)', () => {
       cronRunFindUnique.mockRejectedValue(new Error('cron_runs down'));
       const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
       await expect(svc.expirePoints()).resolves.toBeUndefined();
-      expect(Object.keys(findMany.mock.calls[0][0].where.expiresAt)).toEqual(['lte']);
+      expect(dateValues(queryRaw)).toHaveLength(1);
       expect(txCreate).toHaveBeenCalledTimes(1);
       warn.mockRestore();
     });
@@ -1246,15 +1255,14 @@ describe('LoyaltyExpiryService.expirePoints (cron)', () => {
       const oldLot = { userId: 'old', delta: 100, lot: 'STANDARD', expiresAt: new Date('2026-05-01T00:00:00.000Z') };
       const freshLot = { userId: 'fresh', delta: 70, lot: 'STANDARD', expiresAt: new Date('2026-07-04T12:00:00.000Z') };
       const loaded: string[] = [];
-      const findMany = jest.fn(async (args: { where: { userId?: unknown; expiresAt?: { gt?: Date; lte: Date } } }) => {
-        const { where } = args;
-        if (typeof where.userId === 'string') {
-          loaded.push(where.userId);
-          return where.userId === 'fresh' ? [tx('f', 70, '2026-01-01', '2026-07-04T12:00:00.000Z')] : [tx('o', 100, '2025-05-01', '2026-05-01')];
-        }
-        return [oldLot, freshLot]
-          .filter((l) => (!where.expiresAt?.gt || l.expiresAt > where.expiresAt.gt) && l.expiresAt <= where.expiresAt!.lte)
-          .map((l) => ({ userId: l.userId }));
+      const findMany = jest.fn(async (args: { where: { userId: string } }) => {
+        loaded.push(args.where.userId);
+        return args.where.userId === 'fresh' ? [tx('f', 70, '2026-01-01', '2026-07-04T12:00:00.000Z')] : [tx('o', 100, '2025-05-01', '2026-05-01')];
+      });
+      const queryRaw = jest.fn(async (q: Prisma.Sql) => {
+        const dates = q.values.filter((v): v is Date => v instanceof Date);
+        const [gt, lte] = dates.length === 2 ? dates : [undefined, dates[0]!];
+        return [oldLot, freshLot].filter((l) => (!gt || l.expiresAt > gt) && l.expiresAt <= lte!).map((l) => ({ userId: l.userId }));
       });
       const txObj = {
         $queryRaw: jest.fn().mockResolvedValue([]),
@@ -1263,6 +1271,7 @@ describe('LoyaltyExpiryService.expirePoints (cron)', () => {
       };
       const prisma = {
         pointsTransaction: { findMany },
+        $queryRaw: queryRaw,
         cronRun: { findUnique: jest.fn().mockResolvedValue({ lastSuccessAt: LAST_OK }) },
         $transaction: jest.fn(async (cb: (t: typeof txObj) => Promise<unknown>) => cb(txObj)),
       } as unknown as PrismaService;
@@ -1341,15 +1350,14 @@ describe('LoyaltyExpiryService.remindExpiringPoints (cron)', () => {
     recentLog: unknown;
     reminderDays?: number;
   }) {
-    const findMany = jest
-      .fn()
-      .mockResolvedValueOnce(opts.candidates)
-      .mockResolvedValueOnce(opts.userTxns);
+    const queryRaw = jest.fn().mockResolvedValueOnce(opts.candidates);
+    const findMany = jest.fn().mockResolvedValueOnce(opts.userTxns);
     const notifFindFirst = jest.fn().mockResolvedValue(opts.recentLog);
     const notify = jest.fn().mockResolvedValue(undefined);
     const prisma = {
       pointsTransaction: { findMany },
       notificationLog: { findFirst: notifFindFirst },
+      $queryRaw: queryRaw,
     } as unknown as PrismaService;
     const notifications = { notify, notifySafe: notify } as unknown as NotificationsService;
     const cfg =
@@ -1360,7 +1368,7 @@ describe('LoyaltyExpiryService.remindExpiringPoints (cron)', () => {
               (k === 'loyalty.point_expiry_reminder_days' ? opts.reminderDays : fb) as T,
           } as unknown as SystemConfigService);
     const svc = new LoyaltyExpiryService(prisma, cfg, notifications);
-    return { svc, findMany, notifFindFirst, notify };
+    return { svc, findMany, queryRaw, notifFindFirst, notify };
   }
 
   it('user có điểm sắp hết hạn + chưa nhắc gần đây → notify POINTS_EXPIRING', async () => {
@@ -1480,16 +1488,13 @@ describe('LoyaltyExpiryService.remindExpiringPoints (cron)', () => {
 
     it('"trong 7 ngày tới" gồm trọn ngày VN thứ 7: lô hết hạn 22h ngày 11/11 được tính khi nhắc 8h ngày 04/11', async () => {
       jest.useFakeTimers({ now: new Date('2026-11-04T01:00:00.000Z'), doNotFake: ['nextTick', 'setImmediate'] });
-      const { svc, notify, findMany } = setup({
+      const { svc, notify, queryRaw } = setup({
         candidates: [{ userId: 'u1' }],
         userTxns: [tx('a', 40, '2025-11-11', '2026-11-11T15:00:00.000Z'), tx('b', 10, '2025-11-11', '2026-11-11T01:30:00.000Z')],
         recentLog: null,
       });
       await svc.remindExpiringPoints();
-      expect(findMany.mock.calls[0][0].where.expiresAt).toEqual({
-        gt: new Date('2026-11-04T01:00:00.000Z'),
-        lte: new Date('2026-11-11T16:59:59.999Z'),
-      });
+      expect(dateValues(queryRaw)).toEqual([new Date('2026-11-04T01:00:00.000Z'), new Date('2026-11-11T16:59:59.999Z')]);
       expect(notify.mock.calls[0][2]).toEqual({ points: '50', days: '7', date: '11/11/2026' });
     });
 
@@ -1506,14 +1511,14 @@ describe('LoyaltyExpiryService.remindExpiringPoints (cron)', () => {
 
     it('cấu hình 0 ngày = tắt nhắc: không quét, không gửi (kể cả lô hết hạn hôm nay)', async () => {
       jest.useFakeTimers({ now: new Date('2026-11-04T01:00:00.000Z'), doNotFake: ['nextTick', 'setImmediate'] });
-      const { svc, notify, findMany } = setup({
+      const { svc, notify, queryRaw } = setup({
         candidates: [{ userId: 'u1' }],
         userTxns: [tx('a', 40, '2025-11-04', '2026-11-04T10:00:00.000Z')],
         recentLog: null,
         reminderDays: 0,
       });
       await svc.remindExpiringPoints();
-      expect(findMany).not.toHaveBeenCalled();
+      expect(queryRaw).not.toHaveBeenCalled();
       expect(notify).not.toHaveBeenCalled();
     });
   });
@@ -1529,16 +1534,28 @@ describe('LoyaltyExpiryService.remindExpiringPoints (cron)', () => {
     expect(notify).not.toHaveBeenCalled();
   });
 
+  it('khách đã nhắc trong kỳ → không nạp sổ điểm (không gọi pointsTransaction.findMany)', async () => {
+    const soon = new Date(Date.now() + 3 * DAY);
+    const { svc, findMany, notify } = setup({
+      candidates: [{ userId: 'u1' }],
+      userTxns: [tx('a', 40, '2025-08-01', soon.toISOString())],
+      recentLog: { id: 'log-1' },
+    });
+    await svc.remindExpiringPoints();
+    expect(findMany).not.toHaveBeenCalled();
+    expect(notify).not.toHaveBeenCalled();
+  });
+
   it('PD-3: nhắc sắp hết hạn chỉ xét lô STANDARD (lô quy đổi không bao giờ hết hạn)', async () => {
     const soon = new Date(Date.now() + 3 * DAY);
-    const { svc, findMany } = setup({
+    const { svc, findMany, queryRaw } = setup({
       candidates: [{ userId: 'u1' }],
       userTxns: [tx('a', 40, '2025-08-01', soon.toISOString())],
       recentLog: null,
     });
     await svc.remindExpiringPoints();
-    expect(findMany.mock.calls[0][0].where).toMatchObject({ lot: 'STANDARD' });
-    expect(findMany.mock.calls[1][0].where).toEqual({ userId: 'u1', lot: 'STANDARD' });
+    expect(sqlText(queryRaw)).toContain(`"lot" = 'STANDARD'`);
+    expect(findMany.mock.calls[0][0].where).toEqual({ userId: 'u1', lot: 'STANDARD' });
   });
 
   it('không có điểm nào trong cửa sổ (amount=0) → không notify', async () => {

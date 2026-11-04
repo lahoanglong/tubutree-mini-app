@@ -51,7 +51,7 @@ export function WishlistHeart({
   /** Tên sản phẩm để nhãn nút phân biệt được 20 tim trong một lưới (a11y A6). Thiếu thì giữ nhãn cũ đổi theo trạng thái (trang chi tiết chưa truyền, thuộc gói PDP). */
   productName?: string;
 }) {
-  const { status } = useAuthStore();
+  const status = useAuthStore((s) => s.status);
   const login = useLoginWithNotice();
   const qc = useQueryClient();
   const authed = status === 'authenticated';
@@ -61,8 +61,10 @@ export function WishlistHeart({
     queryFn: getWishlistIds,
     enabled: authed,
     staleTime: 60_000,
+    // Boolean theo sản phẩm này: thêm/bỏ tim của sản phẩm khác (đổi mảng id) không vẽ lại 100 thẻ.
+    select: (ids) => ids.includes(productId),
   });
-  const liked = idsQ.data?.includes(productId) ?? false;
+  const liked = idsQ.data ?? false;
   // Nảy theo thao tác của khách chứ không theo `liked`: tải danh sách đã có sẵn tim đỏ không được nảy, bỏ thích cũng không.
   const [popping, setPopping] = useState(false);
   const pendingLike = useRef(false);

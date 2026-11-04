@@ -93,6 +93,8 @@ function makePrisma(over: Record<string, unknown> = {}) {
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
     dealerTier: { findUnique: jest.fn().mockResolvedValue({ id: 't1' }) },
+    commission: { findFirst: jest.fn().mockResolvedValue(null) },
+    storefront: { findFirst: jest.fn().mockResolvedValue(null) },
     user: { findUnique: jest.fn(), update: jest.fn(), count: jest.fn().mockResolvedValue(3), findMany: jest.fn().mockResolvedValue([]) },
     returnRequest: { findUnique: jest.fn(), update: jest.fn().mockResolvedValue({}) },
     order: { findUniqueOrThrow: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
@@ -131,7 +133,8 @@ function makeApproveTx(opts: {
       $executeRaw: executeRaw,
       $queryRaw: queryRaw,
       dealerApplication: { updateMany: dealerAppUpdateMany },
-      storefront: { updateMany: storefrontUpdateMany },
+      storefront: { updateMany: storefrontUpdateMany, findFirst: jest.fn().mockResolvedValue(null) },
+      commission: { findFirst: jest.fn().mockResolvedValue(null) },
       userAdminEvent: { create: jest.fn().mockResolvedValue({}) },
       user: {
         update: userUpdate,
@@ -162,6 +165,24 @@ describe('AdminService.reviewDealerApplication', () => {
 
     await mkAdmin(prisma).reviewDealerApplication('admin1', 'd1', false, undefined, 'Thiếu ảnh CCCD');
     expect(notifications.notify).toHaveBeenCalledWith('u1', 'DEALER_APPLICATION_REJECTED', expect.objectContaining({ reason: 'Thiếu ảnh CCCD' }));
+  });
+
+  it('không đọc/trả cột ảnh: cả lần đọc đầu và kết quả cuối đều có select', async () => {
+    const findUnique = jest.fn().mockResolvedValue({ id: 'd1', status: 'PENDING', userId: 'u1' });
+    const { $transaction } = makeApproveTx({});
+    const prisma = makePrisma({
+      dealerApplication: { findUnique, updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      dealerTier: { findUnique: jest.fn().mockResolvedValue({ id: 't1', name: 'Bạc' }) },
+      user: { findUnique: jest.fn().mockResolvedValue({ metadata: null }) },
+      $transaction,
+    });
+    await mkAdmin(prisma).reviewDealerApplication('admin1', 'd1', true, 't1');
+    const dealerCalls = findUnique.mock.calls.filter(([a]) => a.where.id === 'd1');
+    expect(dealerCalls.length).toBeGreaterThanOrEqual(2);
+    for (const [arg] of dealerCalls) {
+      expect(arg.select).toBeDefined();
+      for (const col of ['cccdFrontUrl', 'cccdBackUrl', 'storeFrontUrl']) expect(arg.select[col]).toBeUndefined();
+    }
   });
 
   it('đơn không tồn tại → NotFound', async () => {
@@ -217,6 +238,7 @@ describe('AdminService.reviewDealerApplication', () => {
     );
     const meta = (userUpdate.mock.calls[0][0] as { data: { metadata: Record<string, unknown>; role: string } }).data;
     expect(meta.role).toBe('DEALER');
+    expect(meta).not.toHaveProperty('affiliateRevokedAt');
     expect(meta.metadata).toEqual({ segments: ['mom_baby'], onboardedAt: '2026-01-01', dealerTierId: 't1' });
     // Gian hàng sẵn có (mọi loại trừ BRAND) được đánh dấu đối tác trong cùng transaction, không đổi loại.
     expect(storefrontUpdateMany).toHaveBeenCalledWith({ where: { ownerUserId: 'u1', type: { not: 'BRAND' } }, data: { isPartner: true } });
@@ -589,6 +611,28 @@ describe('AdminService.setUserRole', () => {
         },
       });
 
+    it('STAFF chủ gian hàng đối tác (MERCHANT, không hoa hồng) → CUSTOMER: dấu tính SAU khi gian hàng đã thành CTV', async () => {
+      const prisma = withRole('STAFF');
+      let converted = false;
+      fulfilment.clearPartnerOnRoleLoss.mockImplementationOnce(async () => {
+        converted = true;
+      });
+      (prisma as unknown as { storefront: { findFirst: jest.Mock } }).storefront.findFirst.mockImplementation(async () => (converted ? { id: 's1' } : null));
+      await mkAdmin(prisma).setUserRole('admin1', '0899625240', 'CUSTOMER');
+      expect(((prisma.user.update as jest.Mock).mock.calls[0][0].data as { affiliateRevokedAt?: Date }).affiliateRevokedAt).toBeInstanceOf(Date);
+    });
+
+    it('STAFF còn hoa hồng → CUSTOMER: đặt dấu thu hồi; CUSTOMER → AFFILIATE: xoá dấu', async () => {
+      const toCustomer = withRole('STAFF');
+      (toCustomer as unknown as { commission: { findFirst: jest.Mock } }).commission.findFirst.mockResolvedValue({ id: 'c1' });
+      await mkAdmin(toCustomer).setUserRole('admin1', '0899625240', 'CUSTOMER');
+      const set = (toCustomer.user.update as jest.Mock).mock.calls[0][0].data as { affiliateRevokedAt?: Date | null };
+      expect(set.affiliateRevokedAt).toBeInstanceOf(Date);
+      const back = withRole('CUSTOMER');
+      await mkAdmin(back).setUserRole('admin1', '0899625240', 'AFFILIATE');
+      expect(((back.user.update as jest.Mock).mock.calls[0][0].data as { affiliateRevokedAt?: Date | null }).affiliateRevokedAt).toBeNull();
+    });
+
     it.each([
       ['DEALER', 'CUSTOMER', true],
       ['DEALER', 'AFFILIATE', true],
@@ -743,6 +787,7 @@ describe('AdminService.setUserRole', () => {
         where: { id: 'u1' },
         data: {
           role: 'DEALER',
+          affiliateRevokedAt: null,
           metadata: { onboardedAt: '2026-09-01', segments: ['home'], dealerTierId: 'dealer_l3' },
         },
         select: { id: true, phone: true, fullName: true, role: true },
@@ -759,7 +804,7 @@ describe('AdminService.setUserRole', () => {
       });
       await mkAdmin(prisma).setUserRole('admin1', '0899625240', 'AFFILIATE', 'dealer_l3');
       expect(tierFind).not.toHaveBeenCalled();
-      expect(update).toHaveBeenCalledWith(expect.objectContaining({ data: { role: 'AFFILIATE' } }));
+      expect(update).toHaveBeenCalledWith(expect.objectContaining({ data: { role: 'AFFILIATE', affiliateRevokedAt: null } }));
     });
   });
 });
@@ -1798,6 +1843,16 @@ describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () 
       expect(notifications.notify).toHaveBeenCalledWith('owner-1', 'MERCHANT_PRODUCT_EDIT_APPROVED', expect.objectContaining({ product_name: 'Nến thơm sả' }));
     });
 
+    it('duyệt bản sửa có ảnh đầu base64: thumbnail ghi đường dẫn tới ảnh đầu, không chép lại cả ảnh; ảnh https giữ nguyên', async () => {
+      const DATA = `data:image/png;base64,${Buffer.alloc(300, 1).toString('base64')}`;
+      const { prisma, productUpdate } = setup();
+      (prisma.product.findUnique as jest.Mock).mockResolvedValue({ ...product, editDraft: { ...draft, images: [DATA, 'https://x/y.jpg'], thumbnail: DATA } });
+      await mkReviewer(prisma).reviewMerchantProduct('admin-1', 'p1', true, undefined, false, updatedAt.toISOString());
+      const data = productUpdate.mock.calls[0][0].data;
+      expect(data.images[0]).toBe(DATA);
+      expect(data.thumbnail).toMatch(/^\/public-image\/product\/p1\/0\?v=[0-9a-f]{16}$/);
+    });
+
     it('từ chối → nội dung đang bán giữ nguyên, bản chờ bị xoá, lý do lưu ở rejectReason, đối tác được báo', async () => {
       const { prisma, productUpdate, productUpdateMany } = setup();
       await mkReviewer(prisma).reviewMerchantProduct('admin-1', 'p1', false, 'Ảnh vi phạm bản quyền', false, updatedAt.toISOString());
@@ -1878,7 +1933,7 @@ describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () 
   });
 
   it('reviewMerchantProduct duyệt APPROVED', async () => {
-    const product = { id: 'p1', name: 'Nước giặt', approvalStatus: 'PENDING_REVIEW' };
+    const product = { id: 'p1', name: 'Nước giặt', approvalStatus: 'PENDING_REVIEW', thumbnail: null, images: [] };
     const prisma = makePrisma({
       product: {
         findUnique: jest.fn().mockResolvedValue(product),
@@ -1891,12 +1946,65 @@ describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () 
     expect(res.approvalStatus).toBe('APPROVED');
   });
 
+  describe('duyệt lần đầu sản phẩm đối tác: thumbnail data URL thành đường dẫn khi ảnh bắt đầu được phát (D3)', () => {
+    const DATA = `data:image/png;base64,${Buffer.alloc(300, 1).toString('base64')}`;
+    const SVG = 'data:image/svg+xml;base64,PHN2Zy8+';
+    const run = async (row: { thumbnail: string | null; images: string[] }, approve = true) => {
+      const product = { id: 'p1', name: 'Nước giặt', approvalStatus: 'PENDING_REVIEW', storefront: { ownerUserId: 'owner-1' } };
+      const update = jest.fn().mockResolvedValue({});
+      const prisma = makePrisma({
+        product: {
+          findUnique: jest.fn().mockResolvedValue(product),
+          findUniqueOrThrow: jest.fn().mockResolvedValue({ ...product, ...row }),
+          updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+          update,
+        },
+        merchantPancakeLink: { findFirst: jest.fn().mockResolvedValue(null) },
+      });
+      (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest.fn((cb: (tx: unknown) => unknown) => cb(prisma));
+      await mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', approve, approve ? undefined : 'x');
+      return update;
+    };
+
+    it('thumbnail trùng ảnh đầu base64: ghi đường dẫn tới ảnh đầu', async () => {
+      const update = await run({ thumbnail: DATA, images: [DATA] });
+      expect(update).toHaveBeenCalledTimes(1);
+      expect(update.mock.calls[0]![0]).toMatchObject({ where: { id: 'p1' } });
+      expect(update.mock.calls[0]![0].data.thumbnail).toMatch(/^\/public-image\/product\/p1\/0\?v=[0-9a-f]{16}$/);
+    });
+
+    it('thumbnail https, rỗng hay SVG: không ghi gì thêm', async () => {
+      expect(await run({ thumbnail: 'https://cdn/x.jpg', images: ['https://cdn/x.jpg'] })).not.toHaveBeenCalled();
+      expect(await run({ thumbnail: null, images: [DATA] })).not.toHaveBeenCalled();
+      expect(await run({ thumbnail: SVG, images: [SVG] })).not.toHaveBeenCalled();
+    });
+
+    it('từ chối: thumbnail data URL hay https giữ nguyên (ảnh vẫn chưa phát)', async () => {
+      expect(await run({ thumbnail: DATA, images: [DATA] }, false)).not.toHaveBeenCalled();
+      expect(await run({ thumbnail: 'https://cdn/x.jpg', images: [DATA] }, false)).not.toHaveBeenCalled();
+    });
+
+    it('từ chối: thumbnail đường dẫn (ghi lúc còn công khai) trở về data URL của ảnh đầu, trong cùng giao dịch', async () => {
+      const ref = '/public-image/product/p1/0?v=0123456789abcdef';
+      const update = await run({ thumbnail: ref, images: [DATA] }, false);
+      expect(update).toHaveBeenCalledTimes(1);
+      expect(update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { thumbnail: DATA } });
+    });
+
+    it('từ chối: thumbnail base64 khác ảnh đầu giữ nguyên', async () => {
+      const OTHER = `data:image/png;base64,${Buffer.alloc(300, 2).toString('base64')}`;
+      expect(await run({ thumbnail: OTHER, images: [DATA] }, false)).not.toHaveBeenCalled();
+    });
+  });
+
   it('D4: duyệt sản phẩm "Tubu giao hộ" → chuyển biến thể Pancake trong cùng transaction, báo đối tác', async () => {
     (notifications.notify as jest.Mock).mockClear();
     const product = {
       id: 'p1',
       name: 'Mật ong',
       approvalStatus: 'PENDING_REVIEW',
+      thumbnail: null,
+      images: [],
       storefrontId: 'sf-a',
       pancakeLinkCode: 'PK-1',
       storefront: { ownerUserId: 'owner-1' },
@@ -1940,7 +2048,7 @@ describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () 
     });
 
     function setup(read: { approvalStatus?: string; pancakeLinkCode: string | null }, casCount = 1, now = read, variation: unknown = null) {
-      const product = { id: 'p1', name: 'Mật ong', storefrontId: 'sf-a', storefront: { ownerUserId: 'owner-1' }, approvalStatus: 'PENDING_REVIEW', ...read };
+      const product = { id: 'p1', name: 'Mật ong', storefrontId: 'sf-a', storefront: { ownerUserId: 'owner-1' }, approvalStatus: 'PENDING_REVIEW', thumbnail: null, images: [], ...read };
       const updateMany = jest.fn().mockResolvedValue({ count: casCount });
       const findUnique = jest.fn().mockResolvedValueOnce(product).mockResolvedValueOnce({ approvalStatus: 'PENDING_REVIEW', ...now });
       const prisma = makePrisma({
@@ -2101,7 +2209,7 @@ describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () 
     const prisma = makePrisma({
       product: {
         findUnique: jest.fn().mockResolvedValue(product),
-        findUniqueOrThrow: jest.fn().mockResolvedValue({ ...product, approvalStatus: 'REJECTED', rejectReason: 'Chưa đủ chứng nhận' }),
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ ...product, thumbnail: null, images: [], approvalStatus: 'REJECTED', rejectReason: 'Chưa đủ chứng nhận' }),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       merchantPancakeLink: { findFirst: jest.fn().mockResolvedValue(null) },
@@ -2155,6 +2263,8 @@ describe('AdminService.reviewMerchantProduct — dòng chờ duyệt lần đầ
       name: 'Khăn tre',
       storefrontId: 'sf-a',
       storefront: { ownerUserId: 'owner-1' },
+      thumbnail: null,
+      images: [],
       approvalStatus: 'PENDING_REVIEW',
       pancakeLinkCode: null,
       updatedAt: loadedAt,
@@ -2383,6 +2493,52 @@ describe('AdminService.listDealerApplications — thứ tự createdAt theo tham
     return { prisma, findMany };
   }
 
+  it('select không chứa cột ảnh; kết quả có cờ có/không ảnh, không lộ nội dung ảnh', async () => {
+    const findMany = jest.fn().mockResolvedValue([{ id: 'a1', businessName: 'A' }, { id: 'a2', businessName: 'B' }]);
+    const prisma = makePrisma({
+      dealerApplication: { findMany, count: jest.fn().mockResolvedValue(2) },
+      $transaction: jest.fn((arr) => Promise.all(arr)),
+      $queryRaw: jest.fn().mockResolvedValue([
+        { id: 'a1', hasCccdFront: true, hasCccdBack: false, hasStoreFront: false },
+        { id: 'a2', hasCccdFront: true, hasCccdBack: true, hasStoreFront: true },
+      ]),
+    });
+    const out = await mkAdmin(prisma).listDealerApplications(undefined, 1, 20);
+    const select = findMany.mock.calls[0][0].select;
+    expect(select).toBeDefined();
+    expect(Object.keys(select)).not.toEqual(expect.arrayContaining(['cccdFrontUrl']));
+    for (const col of ['cccdFrontUrl', 'cccdBackUrl', 'storeFrontUrl']) expect(select[col]).toBeUndefined();
+    expect(out.data).toEqual([
+      { id: 'a1', businessName: 'A', hasCccdFront: true, hasCccdBack: false, hasStoreFront: false },
+      { id: 'a2', businessName: 'B', hasCccdFront: true, hasCccdBack: true, hasStoreFront: true },
+    ]);
+  });
+
+  describe('dealerApplicationImage', () => {
+    const svc = (value: string | null | undefined) =>
+      mkAdmin(makePrisma({ dealerApplication: { findUnique: jest.fn().mockResolvedValue(value === undefined ? null : { cccdFrontUrl: value }) } }));
+    const jpeg = `data:image/jpeg;base64,${Buffer.from([0xff, 0xd8, 0xff, 0xe0]).toString('base64')}`;
+    it('base64 raster → byte + mime', async () => {
+      const r = await svc(jpeg).dealerApplicationImage('a1', 'cccdFront');
+      expect(r).toMatchObject({ kind: 'data', mime: 'image/jpeg' });
+      expect((r as { data: Buffer }).data.equals(Buffer.from([0xff, 0xd8, 0xff, 0xe0]))).toBe(true);
+    });
+    it('URL Cloudinary → trả URL', async () => {
+      const url = 'https://res.cloudinary.com/tubu/image/upload/v1/a.jpg';
+      expect(await svc(url).dealerApplicationImage('a1', 'cccdFront')).toEqual({ kind: 'url', url });
+    });
+    it.each([['javascript:alert(1)'], ['data:image/svg+xml;base64,PHN2Zz48L3N2Zz4='], ['https://evil.example/a.jpg'], [null]])(
+      'giá trị cũ không hợp lệ %p → 404',
+      async (v) => {
+        await expect(svc(v).dealerApplicationImage('a1', 'cccdFront')).rejects.toThrow(NotFoundException);
+      },
+    );
+    it('hồ sơ không có → 404; tên trường lạ → 404', async () => {
+      await expect(svc(undefined).dealerApplicationImage('x', 'cccdFront')).rejects.toThrow(NotFoundException);
+      await expect(svc(jpeg).dealerApplicationImage('a1', 'password' as never)).rejects.toThrow(NotFoundException);
+    });
+  });
+
   it('order=asc → orderBy createdAt asc; bỏ trống → desc như cũ', async () => {
     const c = daPrisma();
     await mkAdmin(c.prisma).listDealerApplications('PENDING', 1, 20, 'asc');
@@ -2428,6 +2584,7 @@ describe('AdminService.confirmOrderPayment', () => {
       order: {
         findFirst: jest.fn().mockResolvedValue(order),
         findUniqueOrThrow: jest.fn().mockResolvedValue({ ...order, paymentStatus: 'PAID', status: 'CONFIRMED' }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       orderCustomerRefund: { createMany: jest.fn().mockResolvedValue({ count: 1 }), findFirst: jest.fn().mockResolvedValue(null), findMany: jest.fn().mockResolvedValue([]) },
       orderStatusHistory: { findMany: jest.fn().mockResolvedValue([]) },
@@ -2544,6 +2701,16 @@ describe('AdminService.confirmOrderPayment', () => {
       status: 'PENDING',
       adminNote: 'Admin ghi nhận tiền về muộn · Mã GD FT2627001',
     });
+  });
+
+  it('ghi tiền về muộn cho đơn đã huỷ KHÔNG gỡ cờ "Pancake báo đã thanh toán chờ đối chiếu" (chỉ Đã đối chiếu đóng); đơn mở gỡ trong câu lật PAID của markPaid', async () => {
+    const closed = make(bankOrder({ status: 'CANCELLED', userId: 'u9' }), 'CLOSED');
+    await closed.svc.confirmOrderPayment('admin-1', 'TB-1', { bankRef: 'FT1' });
+    const updateMany = (closed.prisma as unknown as { order: { updateMany: jest.Mock } }).order.updateMany;
+    expect(updateMany).not.toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ paymentUnlinkedAt: null }) }));
+    const open = make(bankOrder());
+    await open.svc.confirmOrderPayment('admin-1', 'TB-1', {});
+    expect(open.orderStatus.markPaid).toHaveBeenCalledTimes(1);
   });
 
   it('R3-MONEY-3: khách chỉ chuyển 50.000 cho đơn đã huỷ → khoản hoàn ghi đúng số tiền thực nhận, không phải tổng đơn', async () => {

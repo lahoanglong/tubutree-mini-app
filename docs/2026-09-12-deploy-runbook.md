@@ -128,7 +128,7 @@ curl -s https://<api>/api/cashback/merchants
 
 # 5. Chế độ cookie của web: có header x-client thì refresh token nằm ở Set-Cookie,
 #    và KHÔNG còn trong thân response.
-curl -si -X POST https://<api>/api/auth/guest -H 'content-type: application/json' -H 'x-client: web' -d '{"deviceId":"smoke-test"}' | grep -iE 'set-cookie|refreshToken'
+curl -si -X POST https://<api>/api/auth/guest -H 'content-type: application/json' -H 'x-client: web' -H 'Origin: https://app.tubutree.com' -d '{"deviceId":"smoke-test"}' | grep -iE 'set-cookie|refreshToken'
 # mong: Set-Cookie: tubu_rt=...; Path=/api/auth; HttpOnly; Secure; SameSite=Lax
 #       và "refreshToken":"" trong thân
 

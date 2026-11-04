@@ -2,7 +2,7 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from '@nes
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { SystemConfigService } from '../../system-config/system-config.service';
-import { verifyPresence, type AttnConfig, type VerifyReason } from './verify';
+import { isIpEnforced, verifyPresence, type AttnConfig, type VerifyReason } from './verify';
 import { vnDateKey } from '../../../common/vn-time';
 
 const REASON_MSG: Record<VerifyReason, string> = {
@@ -65,6 +65,15 @@ export class AttendanceService {
       outMaxCount: positiveInt(outMaxCount, DEFAULT_OUT_MAX_COUNT),
       outMaxMin: positiveInt(outMaxMin, DEFAULT_OUT_MAX_MIN),
     };
+  }
+
+  /** Toạ độ thô do client gửi chỉ được nhận khi có IP văn phòng làm chốt chặn thứ hai; không thì chỉ nhận toạ độ Zalo giải mã. */
+  async rawCoordsAllowed(): Promise<boolean> {
+    const [officeIps, enforceIp] = await Promise.all([
+      this.config.get<string[]>('attendance.office_ips', []),
+      this.config.get<boolean>('attendance.enforce_ip', true),
+    ]);
+    return isIpEnforced({ officeIps, enforceIp });
   }
 
   /** Ranh giới ngày VN của "hôm nay" (để khớp workDate @db.Date lưu midnight UTC theo date-key VN). */

@@ -235,6 +235,8 @@ model User {
   dob                    DateTime?
   avatarUrl              String?
   role                   UserRole        @default(CUSTOMER)
+  /// Dấu thu hồi quyền bán: admin hạ CTV/đại lý về khách. Có dấu thì không tự đăng ký lại CTV, không rút hoa hồng, không nhận thưởng mốc.
+  affiliateRevokedAt     DateTime?
   /// Nhóm việc của STAFF ngoài quầy/chấm công (common/staff-permissions.ts): CSKH, KHO. Chỉ có tác dụng khi role = STAFF.
   staffPermissions       String[]        @default([])
   tierId                 String?
@@ -369,6 +371,9 @@ model RefreshToken {
   @@index([userId])
   // Thống kê DAU theo ngày tạo token (analytics-aggregation.service.ts).
   @@index([createdAt])
+  // data-retention xoá theo (revokedAt < cutoff OR expiresAt < cutoff). "refresh_tokens_revokedAt_idx" ("revokedAt") WHERE
+  // revokedAt IS NOT NULL chỉ có trong SQL (20261104130000_perf_indexes_notification_points_retention).
+  @@index([expiresAt])
   @@map("refresh_tokens")
 }
 
@@ -1185,6 +1190,10 @@ model Order {
   pancakeAttention       String?
   /// Lúc ghi lý do cần xử lý gần nhất — admin bấm "Đã xử lý" thì cả hai cột về null.
   pancakeAttentionAt     DateTime?
+  /// Lúc Pancake báo đã thanh toán mà đơn Tubu chưa gắn đúng đơn Pancake (tiền chờ đối chiếu sao kê). Tách khỏi pancakeAttention vì ô chữ
+  /// bị nhiều đường ghi đè/xoá cả ô và nút "Đã xử lý" của KHO gỡ được; cờ này chỉ Kế toán (đơn mở) hoặc ADMIN gỡ. Có nghĩa khi paymentStatus = UNPAID.
+  paymentUnlinkedAt      DateTime?
+  paymentUnlinkedFirstAt DateTime?
   /// Lúc hệ thống thử tự huỷ (hết hạn thanh toán) mà đơn đã bàn giao vận chuyển — D1 không cho huỷ nữa. Cron hết hạn bỏ qua
   /// đơn này (không thử lại, không nhắc lại mỗi lượt); người vận hành xử lý theo lời nhắc ở "Cần xử lý Pancake".
   autoCancelBlockedAt    DateTime?
@@ -1240,6 +1249,8 @@ model Order {
   @@index([hasRecyclingPickup, gomdonStatus])
   // Hàng đợi "Cần xử lý Pancake" của admin: WHERE pancakeAttentionAt IS NOT NULL ORDER BY pancakeAttentionAt.
   @@index([pancakeAttentionAt])
+  // Hộp việc "Pancake báo đã thanh toán chờ đối chiếu" và bộ lọc paymentUnlinked của admin.
+  @@index([paymentUnlinkedAt])
   // Bộ lọc admin "Chưa lên Pancake" và cron cứu hộ (đẩy lại / huỷ lại / cập nhật thanh toán).
   @@index([pancakePushStatus])
   @@index([pancakeCancelStatus])
@@ -1318,6 +1329,8 @@ model PointsTransaction {
   // Cron loyalty-expiry.service.ts (expirePoints/remindExpiringPoints) quét
   // WHERE delta>0 AND expiresAt <=/BETWEEN now — không có index này sẽ full-scan bảng lớn mỗi đêm.
   @@index([expiresAt])
+  // Partial (20261104130000_perf_indexes_notification_points_retention): "points_transactions_order_refId_idx"
+  // ("refId") WHERE refType='ORDER' — creditOrderPoints dò theo refId + refType.
   // Partial unique (thêm bằng SQL tay, Prisma không khai báo được WHERE — migration
   // 20260926120000_loyalty_checkin_pos):
   //  - "points_transactions_checkin_day_key" ON ("userId","refId") WHERE refType='CHECKIN'
@@ -2008,6 +2021,7 @@ model CashbackClick {
   ip             String?
 
   @@index([userId])
+  @@index([clickedAt])
   @@map("cashback_clicks")
 }
 
@@ -2037,6 +2051,8 @@ model CashbackTransaction {
   @@index([userId, status])
   // Cron settle hoàn tiền hết hold: status = CONFIRMED AND confirmedAt <= mốc.
   @@index([status, confirmedAt])
+  // Job data-retention loại click còn giao dịch trỏ tới (NOT EXISTS theo clickId).
+  @@index([clickId])
   @@map("cashback_transactions")
 }
 
@@ -2512,6 +2528,11 @@ model FeedPost {
   title         String?
   body          String
   images        String[]
+  // Tóm tắt của images do trigger feed_posts_image_summary_sync giữ (đừng ghi tay): số ảnh, và ảnh bìa (URL http/https nguyên văn,
+  // hoặc md5(id:0:ảnh) khi ảnh đầu bắt đầu bằng "data:"; NULL khi không có ảnh hoặc ảnh đầu là chuỗi lạ). Danh sách bảng tin đọc
+  // hai cột này thay vì giải nén mảng ảnh.
+  imageCount    Int                @default(0)
+  coverRef      String?
   meta          Json?
   isPinned      Boolean            @default(false)
   bestCommentId String?            @unique
@@ -2978,6 +2999,9 @@ model Review {
   rating       Int
   comment      String?
   images       String[]
+  // Phần tử tương ứng của images: mã md5 10 ký tự hex cho ảnh bắt đầu bằng "data:", chính chuỗi đó cho ảnh khác (URL). Danh sách
+  // công khai đọc cột này thay vì images (base64 nặng). Do trigger reviews_image_versions_sync giữ theo images (đừng ghi tay).
+  imageVersions String[] @default([])
   videoUrl     String? // review video (UGC §6.14.9)
   pointsEarned Int      @default(0)
   isVerified   Boolean  @default(true)
@@ -3019,6 +3043,10 @@ model NotificationLog {
   @@index([userId, sentAt])
   // Cron nhắc theo mẫu trong N ngày gần nhất (game-reminder: templateCode + sentAt >= mốc).
   @@index([templateCode, sentAt])
+  // Trang mẫu tin 30 ngày và data-retention lọc theo khoảng sentAt.
+  @@index([sentAt], map: "notification_logs_sentAt_idx")
+  // Partial, chỉ có trong SQL (20261104130000_perf_indexes_notification_points_retention):
+  // "notification_logs_zns_failed_sentAt_idx" ("sentAt") WHERE channel='ZNS' AND status='FAILED' — znsHealth 24 giờ.
   @@map("notification_logs")
 }
 
@@ -3047,6 +3075,8 @@ model PancakeWebhookEvent {
   dismissedById String?
 
   @@index([status, receivedAt])
+  // data-retention xoá theo lô theo receivedAt.
+  @@index([receivedAt], map: "pancake_webhook_events_receivedAt_idx")
   @@map("pancake_webhook_events")
 }
 
@@ -3075,6 +3105,8 @@ model GomdonWebhookEvent {
 
   @@index([status, receivedAt])
   @@index([gomdonOrderId])
+  // data-retention xoá theo lô theo receivedAt.
+  @@index([receivedAt], map: "gomdon_webhook_events_receivedAt_idx")
   @@map("gomdon_webhook_events")
 }
 
@@ -3281,6 +3313,8 @@ model OaInboundMessage {
 
   @@index([zaloUserId])
   @@index([status])
+  // data-retention xoá theo lô theo createdAt.
+  @@index([createdAt], map: "oa_inbound_messages_createdAt_idx")
   @@map("oa_inbound_messages")
 }
 
@@ -3320,6 +3354,8 @@ model AnalyticsEvent {
   @@index([eventName, occurredAt])
   @@index([userId, occurredAt])
   @@index([anonymousId])
+  // data-retention xoá theo lô theo receivedAt.
+  @@index([receivedAt], map: "analytics_events_receivedAt_idx")
   @@map("analytics_events")
 }
 

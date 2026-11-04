@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ImagePlus, Loader2 } from 'lucide-react';
 import { Button, IconButton } from '@/components/mini';
 import { isCloudinaryConfigured, MAX_IMAGE_BYTES, uploadToCloudinary } from '@/components/account/cloudinary-upload';
+import { prepareForCloudinary } from '@/components/account/prepare-for-cloudinary';
 
 export const CHAT_MAX_LENGTH = 1000;
 
@@ -40,9 +41,15 @@ export function Composer({ onSend, onSendImage, onImageError }: Props) {
       return;
     }
     setUploading(true);
-    const url = await uploadToCloudinary(file);
+    let url: string | null = null;
+    try {
+      url = await uploadToCloudinary(await prepareForCloudinary(file));
+    } catch {
+      url = null;
+    } finally {
+      if (mountedRef.current) setUploading(false);
+    }
     if (!mountedRef.current) return;
-    setUploading(false);
     if (url) onSendImage(url);
     else onImageError('Tải ảnh thất bại. Hãy chọn lại ảnh khác.');
   };

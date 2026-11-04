@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { LayoutGrid } from 'lucide-react';
 import type { CategoryEntry } from '../../hooks/use-categories';
 import { homeCopy } from '@tubutree/app-core/home-copy';
@@ -65,7 +66,7 @@ function Label({ children, scrolls = false }: { children: string; scrolls?: bool
  * Danh mục ở Trang chủ (Q7): lưới 2 hàng × 5 cột, ô vuông bo 56px nền màu xoay vòng (có ảnh thì vẽ ảnh), nhãn tối đa hai dòng. Ô cuối là "Tất cả".
  * Tới 10 ô xếp theo hàng ("Tất cả" luôn cuối); quá 10 ô thì lưới xếp theo cột và cuộn ngang (mỗi cột 1/5,5 bề rộng nên cột thứ 6 ló gần nửa cột để khách biết còn nữa; tiêu đề có "Xem tất cả"), không cắt bớt danh mục.
  */
-export function CategoryRow({ entries, isLoading, onSelect, onSeeAll, placeholderCount = MAX_SKELETON_CELLS - 1 }: CategoryRowProps) {
+export const CategoryRow = memo(function CategoryRow({ entries, isLoading, onSelect, onSeeAll, placeholderCount = MAX_SKELETON_CELLS - 1 }: CategoryRowProps) {
   const skeletonCells = categorySkeletonCells(placeholderCount);
   const cells = isLoading ? skeletonCells : entries.length + (onSeeAll ? 1 : 0);
   const scrolls = categoryGridScrolls(cells);
@@ -122,4 +123,4 @@ export function CategoryRow({ entries, isLoading, onSelect, onSeeAll, placeholde
       </ScrollRow>
     </section>
   );
-}
+});

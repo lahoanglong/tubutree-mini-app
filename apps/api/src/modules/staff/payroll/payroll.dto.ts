@@ -1,4 +1,5 @@
 import { IsBoolean, IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength, NotEquals } from 'class-validator';
+import { IsUploadedImage, STAFF_IMAGE } from '../../../common/uploaded-image';
 import { IsCalendarDate } from '../../../common/calendar-date';
 import { Trim } from '../../../common/decorators/trim.decorator';
 import { OptionalNotNull } from '../../../common/decorators/optional-not-null.decorator';
@@ -21,7 +22,7 @@ export class UpdateBankDto {
   bankAccountName?: string;
 
   @OptionalNotNull()
-  @IsString()
+  @IsUploadedImage(STAFF_IMAGE)
   qrImageUrl?: string;
 }
 
@@ -41,7 +42,7 @@ export class MarkPaidDto {
   @IsInt() @Min(2020) @Max(2100) year!: number;
   @IsInt() @Min(1) @Max(12) month!: number;
 
-  @IsString()
+  @IsUploadedImage(STAFF_IMAGE)
   proofImageUrl!: string;
 
   @IsOptional()

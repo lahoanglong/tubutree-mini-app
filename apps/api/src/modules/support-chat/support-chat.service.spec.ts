@@ -5,10 +5,11 @@ import { CHAT_ENABLED_KEY, DEFAULT_OFF_HOURS_TEXT } from './support-chat.config'
 const NOON = new Date('2026-10-23T12:00:00+07:00');
 const NIGHT = new Date('2026-10-23T22:30:00+07:00');
 
-function setup(opts: { enabled?: boolean; conv?: any; existing?: any; dayCount?: number; bridge?: any; orders?: { code: string; userId: string }[] } = {}) {
+function setup(opts: { enabled?: boolean; conv?: any; existing?: any; dayCount?: number; bridge?: any; orders?: { code: string; userId: string }[]; user?: { phone: string | null; zaloId: string | null } } = {}) {
   const conv = { id: 'c1', userId: 'u1', code: 'K7Q3', customerReadAt: null, lastOffHoursNoticeOn: null, blockedAt: null, ...opts.conv };
   const created: any[] = [];
   const prisma: any = {
+    user: { findUnique: jest.fn().mockResolvedValue(opts.user ?? { phone: null, zaloId: 'zalo-real-1' }) },
     supportConversation: {
       findUnique: jest.fn().mockResolvedValue(conv),
       create: jest.fn(),
@@ -140,6 +141,46 @@ describe('page', () => {
     prisma.supportMessage.findFirst.mockResolvedValue(null);
     expect(await svc.page('u1', { after: 'zzz' })).toEqual({ messages: [], hasMore: false });
     expect(prisma.supportMessage.findMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('khách vãng lai', () => {
+  // Gửi ngoài giờ CSKH sinh thêm tin báo ngoài giờ, nên ghim giờ trong giờ làm việc.
+  beforeEach(() => jest.useFakeTimers({ now: NOON }));
+  afterEach(() => jest.useRealTimers());
+  const guest = { phone: null, zaloId: 'guest_device-1' };
+
+  it('unreadCount: 0 cho khách vãng lai, không đọc tin', async () => {
+    const { svc, prisma } = setup({ user: guest });
+    expect(await svc.unreadCount('u1')).toBe(0);
+    expect(prisma.supportMessage.count).not.toHaveBeenCalled();
+  });
+
+  it('send: 403 mã CHAT_LOGIN_REQUIRED, không tạo hội thoại, không tạo tin, không đặt lịch', async () => {
+    const { svc, prisma, queue } = setup({ user: guest });
+    const err = await svc.send('u1', { ...input, body: 'hi' }, 'MINIAPP').catch((e) => e);
+    expect(err).toBeInstanceOf(HttpException);
+    expect(err.getStatus()).toBe(403);
+    expect(err.getResponse()).toMatchObject({ code: 'CHAT_LOGIN_REQUIRED' });
+    expect(prisma.supportConversation.create).not.toHaveBeenCalled();
+    expect(prisma.supportMessage.create).not.toHaveBeenCalled();
+    expect(queue.add).not.toHaveBeenCalled();
+  });
+
+  it('getThread và page cũng 403 và không tạo hội thoại', async () => {
+    const { svc, prisma } = setup({ user: guest });
+    await expect(svc.getThread('u1')).rejects.toMatchObject({ response: { code: 'CHAT_LOGIN_REQUIRED' } });
+    await expect(svc.page('u1', {})).rejects.toMatchObject({ response: { code: 'CHAT_LOGIN_REQUIRED' } });
+    expect(prisma.supportConversation.findUnique).not.toHaveBeenCalled();
+    expect(prisma.supportConversation.create).not.toHaveBeenCalled();
+  });
+
+  it('guest đã gộp nhưng có SĐT, hoặc user Zalo thật → gửi được', async () => {
+    for (const user of [{ phone: '0900000000', zaloId: 'guest_x_merged_y' }, { phone: null, zaloId: '123456' }]) {
+      const { svc, created } = setup({ user });
+      await svc.send('u1', { ...input, body: 'hi' }, 'MINIAPP');
+      expect(created).toHaveLength(1);
+    }
   });
 });
 

@@ -78,6 +78,22 @@ describe('PayrollAdminTab (Lương)', () => {
     expect(container.querySelector('[aria-label="QR chuyển · Lan"]')).toBeNull();
   });
 
+  it.each([
+    ['https://res.cloudinary.com/tubu/qr.png', 'https://res.cloudinary.com/tubu/qr.png'],
+    ['data:image/jpeg;base64,/9j/AAAA', 'data:image/jpeg;base64,/9j/AAAA'],
+    ['javascript:alert(1)', null],
+    ['http://x/qr.png', null],
+    ['data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=', null],
+  ])('QR chuyển khoản %s: chỉ hiện ảnh khi qua safeEvidenceImage', async (qr, expected) => {
+    stub([row('2', 'Mai', 'FINALIZED', qr)]);
+    const { container } = mount(<PayrollAdminTab />);
+    await flush();
+    click(container.querySelector('[aria-label="QR chuyển · Mai"]'));
+    await flush();
+    const img = document.body.querySelector('img[alt="QR"]');
+    expect(img?.getAttribute('src') ?? null).toBe(expected);
+  });
+
   it('chốt lương gọi POST finalize với năm/tháng đang xem', async () => {
     const api = stub([row('1', 'Lan', 'OPEN')]);
     const { container } = mount(<PayrollAdminTab />);

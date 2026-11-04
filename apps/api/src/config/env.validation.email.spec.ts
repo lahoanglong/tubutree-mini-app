@@ -6,10 +6,10 @@ const PROD_BASE = {
   REDIS_URL: 'redis://redis:6379',
   JWT_ACCESS_SECRET: 'a'.repeat(32),
   JWT_REFRESH_SECRET: 'b'.repeat(32),
-  PANCAKE_WEBHOOK_SECRET: 'pancake-secret',
+  PANCAKE_WEBHOOK_SECRET: 'p'.repeat(40),
   PANCAKE_API_KEY: 'pancake-key',
   PANCAKE_SHOP_ID: '12345',
-  ACCESSTRADE_WEBHOOK_SECRET: 'at-secret',
+  ACCESSTRADE_WEBHOOK_SECRET: 'a'.repeat(40),
   CORS_ORIGINS: 'https://tubutree.com',
 };
 

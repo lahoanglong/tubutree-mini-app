@@ -142,10 +142,10 @@ const PAY_ROWS = [
   {
     staff: { id: 'u2', fullName: null, phone: '0912345678' },
     month: month('FINALIZED', { totalMinutes: 600, totalFines: 0, net: 300000 }),
-    profile: profile({ qrImageUrl: 'https://img.test/qr2.png' }),
+    profile: profile({ qrImageUrl: 'https://res.cloudinary.com/t/qr2.png' }),
     qrImageUrl: null,
   },
-  { staff: { id: 'u3', fullName: 'Bình', phone: null }, month: month('PAID', { totalMinutes: 120, totalFines: 0, net: 100000 }), profile: null, qrImageUrl: 'https://img.test/qr3.png' },
+  { staff: { id: 'u3', fullName: 'Bình', phone: null }, month: month('PAID', { totalMinutes: 120, totalFines: 0, net: 100000 }), profile: null, qrImageUrl: 'https://img.vietqr.io/image/970436-0123456789-compact2.png?amount=100000' },
 ];
 
 const day = (id: string, date: string, workedMinutes: number, net: number) => ({
@@ -763,7 +763,7 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
       fireEvent.click(screen.getByRole('button', { name: 'QR chuyển · Bình' }));
       const dialog = screen.getByRole('heading', { level: 2, name: 'Chuyển lương Bình' });
       expect(dialog).toBeInTheDocument();
-      expect(screen.getByAltText('QR')).toHaveAttribute('src', 'https://img.test/qr3.png');
+      expect(screen.getByAltText('QR')).toHaveAttribute('src', 'https://img.vietqr.io/image/970436-0123456789-compact2.png?amount=100000');
       expect(screen.getAllByText(formatVnd(100000)).length).toBeGreaterThan(0);
       expect(screen.getByText('Quét chuyển khoản rồi bấm "Đã chuyển" để tải ảnh xác nhận.')).toBeInTheDocument();
     });
@@ -771,8 +771,17 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
     it('QR chuyển dùng ảnh QR trong hồ sơ khi dòng không có ảnh riêng, kèm tài khoản ngân hàng', async () => {
       await openPayroll();
       fireEvent.click(screen.getByRole('button', { name: 'QR chuyển · 0912345678' }));
-      expect(screen.getByAltText('QR')).toHaveAttribute('src', 'https://img.test/qr2.png');
+      expect(screen.getByAltText('QR')).toHaveAttribute('src', 'https://res.cloudinary.com/t/qr2.png');
       expect(screen.getByText('NGUYEN LAN · 0123456789')).toBeInTheDocument();
+    });
+
+    it('QR cấp dòng là javascript: thì không có nút QR chuyển', async () => {
+      mocks.adminGetPayroll.mockResolvedValue([{ ...PAY_ROWS[2]!, qrImageUrl: 'javascript:alert(1)' }, PAY_ROWS[0]!]);
+      renderPage();
+      await screen.findByText('Lan');
+      goTab('Lương');
+      await screen.findByText('14h30 · 30.000đ/h · Đang tính');
+      expect(screen.queryByRole('button', { name: 'QR chuyển · Bình' })).not.toBeInTheDocument();
     });
 
     it('Đã chuyển: bắt buộc có ảnh xác nhận; gửi năm, tháng, ảnh, ghi chú (rỗng thì bỏ)', async () => {

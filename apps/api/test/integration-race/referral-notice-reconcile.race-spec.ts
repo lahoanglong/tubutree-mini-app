@@ -1,4 +1,5 @@
 import { JwtService } from '@nestjs/jwt';
+import { runExclusive } from '../../src/common/cron-leader/run-exclusive';
 import type { ConfigService } from '@nestjs/config';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { AuthService } from '../../src/modules/auth/auth.service';
@@ -295,16 +296,8 @@ describe('Gửi bù tin báo người mời về thưởng giới thiệu (real 
     const { referrer, referee } = await pair();
     await rewards.grantReferralOrderReward(referee.id);
     failNotify = false;
-    const holder = await prisma.$transaction(
-      async (tx) => {
-        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('cron:wallet.referral_notice_reconcile'))`;
-        const blocked = await newCron().reconcile(later());
-        expect(blocked).toEqual({ skipped: 'LOCKED' });
-        return blocked;
-      },
-      { timeout: 30_000 },
-    );
-    expect(holder).toEqual({ skipped: 'LOCKED' });
+    const held = await runExclusive(prisma, 'cron:wallet.referral_notice_reconcile', () => newCron().reconcile(later()));
+    expect(held).toEqual({ acquired: true, value: { skipped: 'LOCKED' } });
     expect(await inbox(referrer.id)).toEqual([]);
     const cron = newCron();
     await reconcileAll(cron, later());

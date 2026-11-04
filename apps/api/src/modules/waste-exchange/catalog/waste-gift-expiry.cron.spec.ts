@@ -1,10 +1,14 @@
 import { WasteGiftExpiryCron } from './waste-gift-expiry.cron';
+import { runExclusive } from '../../../common/cron-leader/run-exclusive';
+import { holdsLease } from '../../../common/cron-leader/run-exclusive.fixtures';
+
+jest.mock('../../../common/cron-leader/run-exclusive');
 
 const NOW = new Date('2026-11-20T01:00:00Z');
 
 function setup(o: { locked?: boolean } = {}) {
-  const tx = { $queryRaw: jest.fn().mockResolvedValue([{ locked: o.locked ?? true }]) };
-  const prisma = { $transaction: jest.fn(async (cb: (t: unknown) => unknown) => cb(tx)) };
+  (runExclusive as jest.Mock).mockImplementation(holdsLease(o.locked ?? true));
+  const prisma = {};
   const gifts = { expireOverdue: jest.fn().mockResolvedValue({ expired: 2, failed: 0, held: 0 }) };
   const cron = new WasteGiftExpiryCron(prisma as never, gifts as never);
   return { cron, prisma, gifts };
@@ -20,7 +24,7 @@ describe('WasteGiftExpiryCron', () => {
   it('does not read the programme flag: gifts expire even while waste.enabled is off', async () => {
     const h = setup();
     expect(await h.cron.run(NOW)).toEqual({ expired: 2, failed: 0, held: 0 });
-    expect(h.prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(runExclusive).toHaveBeenCalledWith(h.prisma, 'cron:waste.gift_expiry', expect.any(Function));
   });
 
   it('another replica holds the lock: skips', async () => {

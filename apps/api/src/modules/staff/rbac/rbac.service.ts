@@ -194,6 +194,7 @@ export class RbacService {
           }
         }
         role = base;
+        // Gỡ quyền nhân viên không phải hạ CTV: dấu thu hồi chỉ do AdminService.setUserRole đặt hoặc xoá.
         await tx.user.update({
           where: { id: user.id },
           data: { role: base, ...(user.staffPermissions?.length ? { staffPermissions: [] } : {}) },

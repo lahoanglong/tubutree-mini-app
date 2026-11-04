@@ -1,6 +1,6 @@
-import { Fragment, useState, type CSSProperties, type ReactNode } from 'react';
+import { Fragment, memo, useMemo, useState, type ComponentProps, type CSSProperties, type ReactNode } from 'react';
 import { Page, useNavigate } from 'zmp-ui';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useIsFetching, useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchUpcomingFlashSales } from '../services/shop-api';
 import { useAuthStore } from '../store/auth';
 import { useCategories } from '../hooks/use-categories';
@@ -8,7 +8,7 @@ import { useHomeBanners } from '../hooks/use-home-banners';
 import { useHomeCustomerKind } from '../hooks/use-home-customer-kind';
 import { useMeSummary } from '../hooks/use-me-summary';
 import { usePurchasedItems } from '../hooks/use-purchased-items';
-import { FlashSale } from '../components/flash-sale';
+import { FlashSale, type FlashSaleProps } from '../components/flash-sale';
 import { PullToRefresh } from '../components/pull-to-refresh';
 import { PURCHASED_RAIL_LIMIT } from '../components/reorder/purchased-rail';
 import {
@@ -37,6 +37,7 @@ import { HomeHeader } from '../components/home/home-header';
 import { useHomeShelves } from '../components/home/use-home-shelves';
 import { useHomeFeed } from '../components/home/use-home-feed';
 import { refreshHomeQueries } from '../components/home/home-blocks';
+import { homeBestSellerQuery } from '../components/home/home-best-seller-query';
 import { categorySkeletonCells, homeRenderOrder, readBannerHint, type HomeRenderBlock } from '@tubutree/app-core/home-layout';
 import { haptic } from '../utils/haptic';
 import { browserStorage } from '../utils/recently-viewed';
@@ -102,7 +103,10 @@ export default function HomePage() {
     return refreshHomeQueries(qc);
   };
 
-  const blocks: Record<HomeRenderBlock, ReactNode> = {
+  const flashQuery = shelves.flashQuery;
+  const bestSellerQuery = shelves.bestSellerQuery;
+  // Chỉ phụ thuộc giá trị cần dựng khối (không phải đối tượng query hay shelves, đổi danh tính mỗi lần vẽ): khối không đổi thì giữ nguyên element để React bỏ qua.
+  const blocks = useMemo<Record<HomeRenderBlock, ReactNode>>(() => ({
     settling: <HomeSettlingSkeleton categoryCells={categorySkeletonCells(categories.placeholderCount)} banner={bannerHint} />,
     search: <HomeHeader unreadCount={unreadCount} />,
     member:
@@ -123,12 +127,11 @@ export default function HomePage() {
     // Lỗi tải Mua lại (kể cả 404 của API cũ) đưa trang về bố cục khách mới, nơi khối này không có mặt, nên khối tự có trạng thái lỗi riêng ở PurchasedRail.
     purchased: <HomePurchasedRail source="home_rail" restoring={restoring} excludeVariations={shelves.flashVariationIds} />,
     flash: (
-      <FlashSale
+      <FlashSaleBlock
         items={shelves.flash}
-        loading={shelves.flashQuery.isLoading}
-        error={shelves.flashQuery.error}
-        onRetry={shelves.flashQuery.refetch}
-        retrying={shelves.flashQuery.isFetching}
+        loading={flashQuery.isLoading}
+        error={flashQuery.error}
+        onRetry={flashQuery.refetch}
         onExpire={shelves.onFlashEnd}
       />
     ),
@@ -148,20 +151,24 @@ export default function HomePage() {
       />
     ),
     bestSellers: (
-      <HomeBestSellerRail
+      <BestSellerBlock
         items={shelves.bestSellers}
         ranks={shelves.bestSellerRanks}
         basis={shelves.bestSellerBasis}
-        loading={shelves.bestSellerQuery.isLoading}
-        error={shelves.bestSellerQuery.error}
-        onRetry={shelves.bestSellerQuery.refetch}
-        retrying={shelves.bestSellerQuery.isFetching}
+        loading={bestSellerQuery.isLoading}
+        error={bestSellerQuery.error}
+        onRetry={bestSellerQuery.refetch}
       />
     ),
     journey: <HomeBrandJourney />,
     community: <HomeCommunityPreview />,
     suggest: <HomeSuggestFeed exclude={shelves.seen} />,
-  };
+    }), [
+    kind, sessionFailed, restoring, restore, unreadCount, bannerHint, navigate,
+    categories.entries, categories.isLoading, categories.placeholderCount,
+    shelves.combos, shelves.flash, shelves.flashVariationIds, shelves.onFlashEnd, shelves.bestSellers, shelves.bestSellerRanks, shelves.bestSellerBasis, shelves.seen,
+    flashQuery.isLoading, flashQuery.error, flashQuery.refetch, bestSellerQuery.isLoading, bestSellerQuery.error, bestSellerQuery.refetch,
+  ]);
 
   return (
     // `.page` giữ đệm safe-top của chế độ immersive (actionBar Zalo đã ẩn).
@@ -177,9 +184,9 @@ export default function HomePage() {
             </div>
             {(pageDown || belowState.failed) && id === 'search' && (
               <div data-home-block="pageError">
-                <HomePageError
+                <PageErrorStrip
                   error={pageDown ? shelves.bestSellerQuery.error : belowState.error}
-                  retrying={pageDown && shelves.bestSellerQuery.isFetching}
+                  watchRetry={pageDown}
                   onRetry={refreshAll}
                 />
               </div>
@@ -189,6 +196,23 @@ export default function HomePage() {
       </HomeBlockErrorSuppressed.Provider>
     </Page>
   );
+}
+
+// "Đang tải lại" đọc từ bộ đếm của React Query tại chính khối, không qua `isFetching` của query ở HomePage: đọc ở trang thì mỗi nhịp poll
+// (isFetching đổi, dữ liệu không đổi) dựng lại cả Trang chủ.
+const FlashSaleBlock = memo(function FlashSaleBlock(props: Omit<FlashSaleProps, 'retrying'>) {
+  const retrying = useIsFetching({ queryKey: ['flash-sales', 'active'] }) > 0;
+  return <FlashSale {...props} retrying={retrying} />;
+});
+
+const BestSellerBlock = memo(function BestSellerBlock(props: Omit<ComponentProps<typeof HomeBestSellerRail>, 'retrying'>) {
+  const retrying = useIsFetching({ queryKey: homeBestSellerQuery.queryKey }) > 0;
+  return <HomeBestSellerRail {...props} retrying={retrying} />;
+});
+
+function PageErrorStrip({ error, watchRetry, onRetry }: { error: unknown; watchRetry: boolean; onRetry: () => unknown }) {
+  const fetching = useIsFetching({ queryKey: homeBestSellerQuery.queryKey }) > 0;
+  return <HomePageError error={error} retrying={watchRetry && fetching} onRetry={onRetry} />;
 }
 
 // Header dính đầu trang khi cuộn (đứng thẳng dưới vùng an toàn); phải là con trực tiếp của trang cuộn nên áp lên chính khối bọc, không phải bên trong.

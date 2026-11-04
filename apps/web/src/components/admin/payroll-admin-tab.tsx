@@ -24,6 +24,7 @@ import { Sheet } from '@/components/ui/sheet';
 import { EvidenceUpload } from '@/components/evidence-upload';
 import { errText, PeriodNav } from '@/components/staff/staff-shell';
 import { useConfirm } from './confirm-dialog';
+import { safeEvidenceImage } from './evidence-images';
 import { payrollCsv } from './payroll-csv';
 import { BTN_LINK, BTN_PRIMARY, BTN_SECONDARY, BTN_XS_PRIMARY, BTN_XS_SECONDARY, Field, INPUT_CLASS, Notice } from './ui';
 
@@ -42,6 +43,8 @@ export function PayrollAdminTab() {
   const payQ = useQuery(adminPayrollQuery(coreHttp, ym.year, ym.month));
   const [msg, setMsg] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null);
   const [qrRow, setQrRow] = useState<AdminPayrollRow | null>(null);
+  const qrRaw = qrRow ? (qrRow.qrImageUrl ?? qrRow.profile?.qrImageUrl ?? '') : '';
+  const qrImg = qrRaw ? safeEvidenceImage(qrRaw) : null;
   const [rateRow, setRateRow] = useState<AdminPayrollRow | null>(null);
   const [rateVal, setRateVal] = useState('');
   const [payRow, setPayRow] = useState<AdminPayrollRow | null>(null);
@@ -263,9 +266,9 @@ export function PayrollAdminTab() {
       <Sheet open={!!qrRow} onClose={() => setQrRow(null)} title={`Chuyển lương ${qrRow?.staff.fullName ?? ''}`}>
         <div className="flex flex-col items-center gap-2.5">
           <div className="text-xl font-bold text-forest-700">{formatVnd(qrRow?.month.net ?? 0)}</div>
-          {qrRow && (qrRow.qrImageUrl || qrRow.profile?.qrImageUrl) && (
+          {qrImg && (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={(qrRow.qrImageUrl ?? qrRow.profile?.qrImageUrl) as string} alt="QR" className="w-full max-w-[260px]" />
+            <img src={qrImg.src} alt="QR" referrerPolicy="no-referrer" className="w-full max-w-[260px]" />
           )}
           {qrRow?.profile?.bankAccountNo && (
             <p className="text-sm">

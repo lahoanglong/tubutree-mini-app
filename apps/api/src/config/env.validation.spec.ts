@@ -6,10 +6,10 @@ const PROD_BASE = {
   REDIS_URL: 'redis://redis:6379',
   JWT_ACCESS_SECRET: 'a'.repeat(32),
   JWT_REFRESH_SECRET: 'b'.repeat(32),
-  PANCAKE_WEBHOOK_SECRET: 'pancake-secret',
+  PANCAKE_WEBHOOK_SECRET: 'p'.repeat(40),
   PANCAKE_API_KEY: 'pancake-key',
   PANCAKE_SHOP_ID: '12345',
-  ACCESSTRADE_WEBHOOK_SECRET: 'at-secret',
+  ACCESSTRADE_WEBHOOK_SECRET: 'a'.repeat(40),
   CORS_ORIGINS: 'https://tubutree.com',
 };
 
@@ -30,7 +30,7 @@ describe('envSchema — Gomdon', () => {
   });
 
   it('production đủ tài khoản + secret → boot', () => {
-    const r = envSchema.safeParse({ ...PROD_BASE, GOMDON_PHONE: '0900', GOMDON_PASSWORD: 'pw', GOMDON_WEBHOOK_SECRET: 's'.repeat(24) });
+    const r = envSchema.safeParse({ ...PROD_BASE, GOMDON_PHONE: '0900', GOMDON_PASSWORD: 'pw', GOMDON_WEBHOOK_SECRET: 's'.repeat(32) });
     expect(r.success).toBe(true);
   });
 

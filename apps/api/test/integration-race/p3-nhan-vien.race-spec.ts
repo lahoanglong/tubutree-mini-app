@@ -31,11 +31,11 @@ describe('Bảng lương: khoá tháng cho mở lại, chấm công vào ca, duy
   const officeConfig = ({
     get: async (k: string, d: unknown) =>
       ({
-        'attendance.office_ips': [],
+        'attendance.office_ips': ['1.1.1.1'],
         'attendance.office_lat': 10.7769,
         'attendance.office_lng': 106.7009,
         'attendance.radius_m': 150,
-        'attendance.enforce_ip': false,
+        'attendance.enforce_ip': true,
       })[k] ?? d,
   }) as unknown as SystemConfigService;
   const HERE = { lat: 10.7769, lng: 106.7009 };

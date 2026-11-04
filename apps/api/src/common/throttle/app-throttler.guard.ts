@@ -1,4 +1,4 @@
-import { type ExecutionContext, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
@@ -9,26 +9,19 @@ import {
   type ThrottlerModuleOptions,
   type ThrottlerStorage,
 } from '@nestjs/throttler';
-import { createHash, timingSafeEqual } from 'node:crypto';
 import type { Request } from 'express';
 import type { Env } from '../../config/env.validation';
-import { clientIp } from './throttle.config';
+import { throttleIpTracker } from './throttle.config';
 
-/** Header web SSR gửi kèm để được miễn throttle (giá trị = THROTTLE_BYPASS_TOKEN). */
-export const THROTTLE_BYPASS_HEADER = 'x-throttle-bypass';
-
-function sha256(v: string): Buffer {
-  return createHash('sha256').update(v).digest();
-}
+export { THROTTLE_BYPASS_HEADER } from './throttle.config';
 
 /**
  * Throttle toàn cục theo Q-22: khoá đếm là userId khi có JWT hợp lệ, IP khi chưa; request SSR
- * của web mang token nội bộ được miễn (mọi SSR đi ra từ một IP máy chủ web).
+ * của web mang token nội bộ chỉ chịu trần riêng `ssr` (xem throttle.config.ts).
  */
 @Injectable()
 export class AppThrottlerGuard extends ThrottlerGuard {
   private readonly jwt = new JwtService();
-  private readonly bypassDigest: Buffer | null;
   private readonly accessSecret: string;
 
   constructor(
@@ -38,19 +31,7 @@ export class AppThrottlerGuard extends ThrottlerGuard {
     config: ConfigService<Env, true>,
   ) {
     super(options, storage, reflector);
-    const bypass = config.get('THROTTLE_BYPASS_TOKEN', { infer: true }) ?? '';
-    this.bypassDigest = bypass.length > 0 ? sha256(bypass) : null;
     this.accessSecret = config.get('JWT_ACCESS_SECRET', { infer: true });
-  }
-
-  protected override async shouldSkip(context: ExecutionContext): Promise<boolean> {
-    if (!this.bypassDigest) return false;
-    const req = context.switchToHttp().getRequest<Request>();
-    const h = req.headers?.[THROTTLE_BYPASS_HEADER];
-    const presented = Array.isArray(h) ? h[0] : h;
-    if (typeof presented !== 'string' || presented.length === 0) return false;
-    // So sánh digest cố định 32 byte: timingSafeEqual cần cùng độ dài, và không lộ độ dài token.
-    return timingSafeEqual(sha256(presented), this.bypassDigest);
   }
 
   protected override async getTracker(raw: Record<string, unknown>): Promise<string> {
@@ -60,7 +41,7 @@ export class AppThrottlerGuard extends ThrottlerGuard {
     // nếu trùng thì hai guard cùng cộng vào một khoá và route đó chỉ còn nửa giới hạn.
     if (req.user?.sub) return `u:${req.user.sub}`;
     const sub = this.subFromBearer(req);
-    return sub ? `u:${sub}` : `ip:${clientIp(req)}`;
+    return sub ? `u:${sub}` : `ip:${throttleIpTracker(req)}`;
   }
 
   /** Route @Public không qua JwtAuthGuard, nên tự xác minh Bearer (nếu có) để đếm theo user. */

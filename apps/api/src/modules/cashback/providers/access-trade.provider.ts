@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
-import { timingSafeEqual } from 'node:crypto';
+import { safeEqualStrings } from '../../../common/safe-equal';
 import type { Env } from '../../../config/env.validation';
 import type { CashbackProvider, NormalizedCashbackEvent } from './cashback-provider.interface';
 
@@ -102,8 +102,6 @@ export class AccessTradeProvider implements CashbackProvider {
 
   private tokenMatches(token?: string): boolean {
     if (!token) return false;
-    const a = Buffer.from(token, 'utf8');
-    const b = Buffer.from(this.webhookSecret, 'utf8');
-    return a.length === b.length && timingSafeEqual(a, b);
+    return safeEqualStrings(token, this.webhookSecret);
   }
 }
