@@ -47,6 +47,11 @@ export default function OrdersPage() {
   const tabs = ordersTabs(hasSubscription || keepSubsTab);
   const [picked, setPicked] = useState<OrdersTabKey | null>(null);
   const tab = picked && tabs.some((t) => t.key === picked) ? picked : parseOrdersTab(location.search, tabs);
+  // Khách rời tab Định kỳ đúng lúc danh sách gói còn đang làm mới (vẫn thấy gói cũ) thì lúc bấm chưa biết là hết gói; khi danh sách
+  // về rỗng, gỡ tab ở đây thay vì chỉ ở lúc bấm.
+  useEffect(() => {
+    if (tab !== 'subscriptions' && !hasSubscription) setKeepSubsTab(false);
+  }, [tab, hasSubscription]);
   const awaitingTabs = picked === null && subsLoading && new URLSearchParams(location.search).get('tab') === 'subscriptions';
   // State ổn định (không dựng target trong JSX) — ReorderSheet reset lựa chọn theo identity của target.
   const [reorderTarget, setReorderTarget] = useState<ReorderTarget | null>(null);

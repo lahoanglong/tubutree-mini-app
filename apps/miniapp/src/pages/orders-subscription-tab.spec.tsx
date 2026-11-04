@@ -141,7 +141,26 @@ describe('OrdersPage: huỷ gói cuối cùng khi đang xem tab Định kỳ', (
 
   it('khách tự bấm sang tab khác thì tab Định kỳ cũng gỡ đi', async () => {
     await cancelLastSubscription();
+    await screen.findByText('Bạn không còn gói định kỳ nào');
     fireEvent.click(screen.getByRole('tab', { name: 'Đang giao' }));
+    await waitFor(() => expect(tabNames()).not.toContain('Định kỳ'));
+  });
+
+  it('bấm sang tab khác đúng lúc danh sách gói còn đang làm mới (vẫn thấy gói cũ) thì tab Định kỳ vẫn gỡ khi danh sách về rỗng', async () => {
+    mocks.getSubscriptions.mockResolvedValue([SUB('ACTIVE')]);
+    const { qc } = renderPage();
+    fireEvent.click(await screen.findByRole('tab', { name: 'Định kỳ' }));
+    expect(await screen.findByText('Nước rửa chén')).toBeInTheDocument();
+
+    let release: (v: unknown[]) => void = () => undefined;
+    mocks.getSubscriptions.mockReturnValue(new Promise<unknown[]>((r) => { release = r; }));
+    const callsBefore = mocks.getSubscriptions.mock.calls.length;
+    void qc.invalidateQueries({ queryKey: ['subscriptions'] });
+    await waitFor(() => expect(mocks.getSubscriptions.mock.calls.length).toBeGreaterThan(callsBefore));
+    fireEvent.click(screen.getByRole('tab', { name: 'Đang giao' }));
+    await act(async () => {
+      release([]);
+    });
     await waitFor(() => expect(tabNames()).not.toContain('Định kỳ'));
   });
 
