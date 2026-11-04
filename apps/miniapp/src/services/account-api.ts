@@ -140,7 +140,7 @@ export interface MeProfile {
 }
 export const getMe = () => api.get<MeProfile>('/me').then((r) => r.data);
 export const updateMe = (data: { fullName?: string; email?: string; avatarUrl?: string; dob?: string }) =>
-  api.patch<MeProfile>('/me', data).then((r) => r.data);
+  api.patch<MeProfile>('/me', data, { timeout: IMAGE_UPLOAD_TIMEOUT_MS }).then((r) => r.data);
 export const completeOnboarding = (segments: string[]) =>
   api.post<MeProfile>('/me/onboarding', { segments }).then((r) => r.data);
 
@@ -166,6 +166,7 @@ export type {
   PointsCheckInPart,
   WaterCheckInPart,
 } from '@tubutree/app-core/api/loyalty';
+import { IMAGE_UPLOAD_TIMEOUT_MS } from './http';
 
 /**
  * GET /me/loyalty/member-card. memberCode ("TUBU" + mã giới thiệu duy nhất) là payload DUY NHẤT

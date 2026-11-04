@@ -1,4 +1,5 @@
 import { api } from './api';
+import { IMAGE_UPLOAD_TIMEOUT_MS } from './http';
 
 export type FeedPostKind = 'MANUAL' | 'HARVEST' | 'MILESTONE' | 'SPECIES' | 'QUESTION' | 'SHOWCASE' | 'TIP';
 export type FeedSort = 'new' | 'popular';
@@ -140,10 +141,10 @@ export const getPost = (id: string) => api.get<FeedItem>(`/feed/${id}`).then((r)
 export const getLeaderboard = () => api.get<LeaderboardEntry[]>('/feed/leaderboard').then((r) => r.data);
 
 export const createPost = (input: CreatePostInput) =>
-  api.post<{ id: string; status?: string }>('/feed', input).then((r) => r.data);
+  api.post<{ id: string; status?: string }>('/feed', input, { timeout: IMAGE_UPLOAD_TIMEOUT_MS }).then((r) => r.data);
 
 export const editPost = (id: string, patch: { title?: string; body?: string; images?: string[] }) =>
-  api.patch<{ ok: boolean }>(`/feed/${id}`, patch).then((r) => r.data);
+  api.patch<{ ok: boolean }>(`/feed/${id}`, patch, { timeout: IMAGE_UPLOAD_TIMEOUT_MS }).then((r) => r.data);
 
 export const deletePost = (id: string) => api.delete<{ ok: boolean }>(`/feed/${id}`).then((r) => r.data);
 
@@ -255,7 +256,7 @@ export const adminEventParticipants = (id: string) =>
   api.get<EventParticipant[]>(`/feed/admin/events/${id}/participants`).then((r) => r.data);
 
 export const createEvent = (dto: CreateEventInput) =>
-  api.post<CommunityEvent>('/feed/events', dto).then((r) => r.data);
+  api.post<CommunityEvent>('/feed/events', dto, { timeout: IMAGE_UPLOAD_TIMEOUT_MS }).then((r) => r.data);
 
 export const closeEvent = (id: string) =>
   api.post<{ ok: boolean }>(`/feed/events/${id}/close`).then((r) => r.data);

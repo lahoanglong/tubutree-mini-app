@@ -34,6 +34,12 @@ export function isHttpError(error: unknown): error is HttpError {
   return typeof error === 'object' && error !== null && (error as { isHttpError?: unknown }).isHttpError === true;
 }
 
+/**
+ * Trần cho request mang ảnh. Bản Mini App PROD không có Cloudinary nên ảnh đi base64 trong body (vài MB):
+ * 15 s không đủ trên mạng di động yếu, khách không gửi được yêu cầu đổi/trả, đánh giá, hồ sơ.
+ */
+export const IMAGE_UPLOAD_TIMEOUT_MS = 90_000;
+
 export interface RequestConfig {
   params?: Record<string, unknown>;
   headers?: Record<string, string>;

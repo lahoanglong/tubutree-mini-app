@@ -1,6 +1,7 @@
 import { api } from './api';
 import type { OrderDTO } from '@tubutree/shared-types';
 import { formatVnd } from '../utils/format';
+import { IMAGE_UPLOAD_TIMEOUT_MS } from './http';
 
 export type DealerStatus = 'NONE' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED';
 
@@ -58,7 +59,7 @@ export interface CreditEntry {
 
 export const getDealerMe = () => api.get<DealerMe>('/dealer/me').then((r) => r.data);
 export const applyDealer = (data: DealerApplyInput) =>
-  api.post('/dealer/apply', data).then((r) => r.data);
+  api.post('/dealer/apply', data, { timeout: IMAGE_UPLOAD_TIMEOUT_MS }).then((r) => r.data);
 export const getPricelist = () => api.get<PricelistRow[]>('/dealer/pricelist').then((r) => r.data);
 /** Đặt đơn đại lý kèm Idempotency-Key (mirror checkout.placeOrder/wallet.withdraw) — double-tap/retry mạng không tạo đơn công nợ đôi. */
 export const placeDealerOrder = (
