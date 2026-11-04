@@ -115,11 +115,11 @@ test.describe('Mini App — giá Giờ vàng ở bảng chọn phân loại và 
     await expect(page.getByTestId('flash-price-bar')).toBeVisible({ timeout: 15_000 });
     const plus = page.getByRole('button', { name: 'Tăng số lượng' });
     for (let i = 0; i < 4; i += 1) await plus.click();
-    await expect(page.getByRole('button', { name: /^Mua ngay · / })).toHaveAccessibleName('Mua ngay · 175.000đ');
+    await expect(page.getByRole('button', { name: /^Mua ngay / })).toHaveAccessibleName('Mua ngay 175.000đ');
     await expect(page.getByText(OVER_5)).toBeVisible();
     await page.getByRole('button', { name: 'Giảm số lượng' }).click();
     await page.getByRole('button', { name: 'Giảm số lượng' }).click();
-    await expect(page.getByRole('button', { name: /^Mua ngay · / })).toHaveAccessibleName('Mua ngay · 78.000đ');
+    await expect(page.getByRole('button', { name: /^Mua ngay / })).toHaveAccessibleName('Mua ngay 78.000đ');
     await expect(page.getByText(/cả dòng tính giá thường/)).toHaveCount(0);
   });
 
@@ -162,11 +162,11 @@ test.describe('Mini App — giá Giờ vàng ở bảng chọn phân loại và 
     mockPage(api, 2);
     await page.goto(`/product/${PILOT_SLUG}`);
     await expect(page.getByTestId('flash-price-bar')).toBeVisible({ timeout: 15_000 });
-    const buy = page.getByRole('button', { name: /^Mua ngay · / });
-    await expect(buy).toHaveAccessibleName('Mua ngay · 78.000đ');
+    const buy = page.getByRole('button', { name: /^Mua ngay / });
+    await expect(buy).toHaveAccessibleName('Mua ngay 78.000đ');
     await expect(page.getByText(MERGE_2)).toBeVisible();
     await page.getByRole('button', { name: 'Tăng số lượng' }).click();
-    await expect(buy).toHaveAccessibleName('Mua ngay · 140.000đ');
+    await expect(buy).toHaveAccessibleName('Mua ngay 140.000đ');
     await expect(page.getByText(IN_CART_2)).toBeVisible();
   });
   test('khách đã dùng hết suất Giờ vàng ở đơn trước (perUserLeft 0): bảng "Mua ngay" và "Thêm vào giỏ" ghi giá thường 35.000đ kèm ghi chú, chỉ một request cho cả lần đổi số lượng', async ({ page, api }) => {
@@ -184,7 +184,7 @@ test.describe('Mini App — giá Giờ vàng ở bảng chọn phân loại và 
     expect(api.callsTo('GET', '/flash-sales/me/allowance')).toHaveLength(1);
     await dialog.getByRole('button', { name: 'Đóng' }).click();
     // Ngoài bảng: thanh dưới và ghi chú dưới ô Số lượng cùng số.
-    await expect(page.getByRole('button', { name: /^Mua ngay · / })).toHaveAccessibleName('Mua ngay · 35.000đ');
+    await expect(page.getByRole('button', { name: /^Mua ngay / })).toHaveAccessibleName('Mua ngay 35.000đ');
     await expect(page.getByText(SPENT).first()).toBeVisible();
   });
 

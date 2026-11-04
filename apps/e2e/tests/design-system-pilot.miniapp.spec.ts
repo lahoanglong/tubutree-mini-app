@@ -126,7 +126,7 @@ test.describe('Zalo Mini App E2E - Design System v2 pilot flow', () => {
 
     // Còn hàng: nút giỏ + "Thêm vào giỏ" + "Mua ngay".
     await page.goto(`/product/${PILOT_SLUG}`);
-    const buy = page.getByRole('button', { name: 'Mua ngay · 1.250.000đ' });
+    const buy = page.getByRole('button', { name: 'Mua ngay 1.250.000đ' });
     await expect(buy).toBeVisible({ timeout: 15_000 });
     await assertBarFits();
     // Cả nhãn lẫn giá hiện đủ — không bị rút gọn "…".

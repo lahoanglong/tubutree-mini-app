@@ -219,10 +219,10 @@ describe('ProductDetailPage — giờ vàng ở chỗ biên (D7 #12)', () => {
       await screen.findByTestId('flash-price-bar');
       fireEvent.click(plus());
       fireEvent.click(plus());
-      expect(buyNow()).toHaveAccessibleName('Mua ngay · 240.000đ');
+      expect(buyNow()).toHaveAccessibleName('Mua ngay 240.000đ');
       expect(screen.queryByText(OVER_4)).toBeNull();
       fireEvent.click(plus());
-      expect(buyNow()).toHaveAccessibleName('Mua ngay · 400.000đ');
+      expect(buyNow()).toHaveAccessibleName('Mua ngay 400.000đ');
       expect(screen.getByText(OVER_4)).toBeInTheDocument();
     });
 
@@ -231,9 +231,9 @@ describe('ProductDetailPage — giờ vàng ở chỗ biên (D7 #12)', () => {
       renderPdp();
       await screen.findByTestId('flash-price-bar');
       fireEvent.click(plus());
-      expect(buyNow()).toHaveAccessibleName('Mua ngay · 160.000đ');
+      expect(buyNow()).toHaveAccessibleName('Mua ngay 160.000đ');
       fireEvent.click(plus());
-      expect(buyNow()).toHaveAccessibleName('Mua ngay · 300.000đ');
+      expect(buyNow()).toHaveAccessibleName('Mua ngay 300.000đ');
       const note = screen.getByText('Giờ vàng còn 2 suất. Mua 3 thì cả dòng tính giá thường.');
       expect(note.style.padding).toContain('var(--space-inset-page)');
     });
@@ -243,7 +243,7 @@ describe('ProductDetailPage — giờ vàng ở chỗ biên (D7 #12)', () => {
       renderPdp();
       await screen.findByTestId('flash-price-bar');
       for (let i = 0; i < 3; i += 1) fireEvent.click(plus());
-      expect(buyNow()).toHaveAccessibleName('Mua ngay · 320.000đ');
+      expect(buyNow()).toHaveAccessibleName('Mua ngay 320.000đ');
       expect(screen.queryByText(/cả dòng tính giá thường/)).toBeNull();
     });
 
@@ -255,7 +255,7 @@ describe('ProductDetailPage — giờ vàng ở chỗ biên (D7 #12)', () => {
       expect(screen.getByText(OVER_4)).toBeInTheDocument();
       await waitFor(() => expect(screen.queryByTestId('flash-price-bar')).toBeNull(), { timeout: 4_000 });
       expect(screen.queryByText(OVER_4)).toBeNull();
-      expect(buyNow()).toHaveAccessibleName('Mua ngay · 400.000đ');
+      expect(buyNow()).toHaveAccessibleName('Mua ngay 400.000đ');
     });
   });
   describe('giỏ đã có sẵn cùng phân loại: thêm giỏ cộng dồn nên máy chủ giá cả dòng', () => {
@@ -274,12 +274,12 @@ describe('ProductDetailPage — giờ vàng ở chỗ biên (D7 #12)', () => {
       mocks.fetchActiveFlashSales.mockResolvedValue([flash({ perUserLimit: 3 })]);
       renderPdp();
       await screen.findByTestId('flash-price-bar');
-      await waitFor(() => expect(buyNow()).toHaveAccessibleName('Mua ngay · 240.000đ'));
+      await waitFor(() => expect(buyNow()).toHaveAccessibleName('Mua ngay 240.000đ'));
       // Chưa mất giá nhưng nút ghi cả dòng (3 × 80.000đ) cạnh ô Số lượng đang là 1: nói trước khi bấm, không đợi tới thông báo sau khi bấm.
       expect(screen.getByText(MERGE_2)).toBeInTheDocument();
       expect(screen.queryByText(/tính giá thường/)).toBeNull();
       fireEvent.click(plus());
-      expect(buyNow()).toHaveAccessibleName('Mua ngay · 400.000đ');
+      expect(buyNow()).toHaveAccessibleName('Mua ngay 400.000đ');
       expect(screen.getByText(IN_CART_2)).toBeInTheDocument();
       expect(screen.queryByText(MERGE_2)).toBeNull();
     });
@@ -291,11 +291,11 @@ describe('ProductDetailPage — giờ vàng ở chỗ biên (D7 #12)', () => {
       mocks.fetchActiveFlashSales.mockResolvedValue([flash({ perUserLimit: 3 })]);
       renderPdp();
       await screen.findByTestId('flash-price-bar');
-      await waitFor(() => expect(buyNow()).toHaveAccessibleName('Mua ngay · 240.000đ'));
+      await waitFor(() => expect(buyNow()).toHaveAccessibleName('Mua ngay 240.000đ'));
       fireEvent.click(screen.getByRole('button', { name: /^Thêm vào giỏ$/ }));
       await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledWith('v1', 1));
       // Giỏ giờ có 3 (đúng limit); qty đang chọn vẫn 1 nên thêm tiếp là cả 4 giá thường.
-      await waitFor(() => expect(buyNow()).toHaveAccessibleName('Mua ngay · 400.000đ'));
+      await waitFor(() => expect(buyNow()).toHaveAccessibleName('Mua ngay 400.000đ'));
       expect(screen.getByText('Giỏ đã có 3. Thêm 1 thì cả 4 sản phẩm tính giá thường.')).toBeInTheDocument();
     });
 
@@ -306,12 +306,12 @@ describe('ProductDetailPage — giờ vàng ở chỗ biên (D7 #12)', () => {
       mocks.fetchActiveFlashSales.mockResolvedValue([flash({ perUserLimit: 3 })]);
       renderPdp();
       await screen.findByTestId('flash-price-bar');
-      await waitFor(() => expect(buyNow()).toHaveAccessibleName('Mua ngay · 240.000đ'));
+      await waitFor(() => expect(buyNow()).toHaveAccessibleName('Mua ngay 240.000đ'));
       fireEvent.click(buyNow());
       await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/checkout', expect.anything()));
       // Chờ cho giỏ mới ở cache vẽ lại: trang cũ chưa gỡ nên vẫn thấy số lúc bấm, không nhảy sang 400.000đ.
       await new Promise((r) => setTimeout(r, 20));
-      expect(buyNow()).toHaveAccessibleName('Mua ngay · 240.000đ');
+      expect(buyNow()).toHaveAccessibleName('Mua ngay 240.000đ');
       expect(screen.getByText(MERGE_2)).toBeInTheDocument();
       expect(screen.queryByText(/Giỏ đã có 3/)).toBeNull();
     });
@@ -323,14 +323,14 @@ describe('ProductDetailPage — giờ vàng ở chỗ biên (D7 #12)', () => {
       mocks.fetchActiveFlashSales.mockResolvedValue([flash({ perUserLimit: 3 })]);
       renderPdp();
       await screen.findByTestId('flash-price-bar');
-      await waitFor(() => expect(buyNow()).toHaveAccessibleName('Mua ngay · 240.000đ'));
+      await waitFor(() => expect(buyNow()).toHaveAccessibleName('Mua ngay 240.000đ'));
       fireEvent.click(buyNow());
       await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledTimes(1));
       expect(mocks.navigate).not.toHaveBeenCalled();
       mocks.addToCart.mockResolvedValue(cartOf(3));
       await waitFor(() => expect(screen.getByRole('button', { name: /^Thêm vào giỏ$/ })).not.toBeDisabled());
       fireEvent.click(screen.getByRole('button', { name: /^Thêm vào giỏ$/ }));
-      await waitFor(() => expect(buyNow()).toHaveAccessibleName('Mua ngay · 400.000đ'));
+      await waitFor(() => expect(buyNow()).toHaveAccessibleName('Mua ngay 400.000đ'));
     });
 
     it('giỏ chưa tải được (lỗi): coi như giỏ rỗng, nút vẫn bấm được và ghi số như khi không có giỏ', async () => {
@@ -339,7 +339,7 @@ describe('ProductDetailPage — giờ vàng ở chỗ biên (D7 #12)', () => {
       mocks.fetchActiveFlashSales.mockResolvedValue([flash({ perUserLimit: 3 })]);
       renderPdp();
       await screen.findByTestId('flash-price-bar');
-      expect(buyNow()).toHaveAccessibleName('Mua ngay · 80.000đ');
+      expect(buyNow()).toHaveAccessibleName('Mua ngay 80.000đ');
       expect(buyNow()).not.toBeDisabled();
       expect(screen.queryByText(/Giỏ đã có/)).toBeNull();
     });
@@ -421,7 +421,7 @@ describe('ProductDetailPage — số suất Giờ vàng khách đã dùng ở c�
     mocks.fetchFlashAllowance.mockResolvedValue({ items: { f1: { perUserLeft: 0, allowance: 0 } } });
     renderPdp();
     await screen.findByTestId('flash-price-bar');
-    await waitFor(() => expect(buyNow()).toHaveAccessibleName('Mua ngay · 100.000đ'));
+    await waitFor(() => expect(buyNow()).toHaveAccessibleName('Mua ngay 100.000đ'));
     expect(screen.getByText(SPENT)).toBeInTheDocument();
     expect(mocks.fetchFlashAllowance).toHaveBeenCalledTimes(1);
     expect(mocks.fetchFlashAllowance).toHaveBeenCalledWith(['f1']);
@@ -434,7 +434,7 @@ describe('ProductDetailPage — số suất Giờ vàng khách đã dùng ở c�
     await waitFor(() => expect(screen.getByText(SPENT)).toBeInTheDocument());
     fireEvent.click(plus());
     fireEvent.click(plus());
-    await waitFor(() => expect(buyNow()).toHaveAccessibleName('Mua ngay · 300.000đ'));
+    await waitFor(() => expect(buyNow()).toHaveAccessibleName('Mua ngay 300.000đ'));
     expect(mocks.fetchFlashAllowance).toHaveBeenCalledTimes(1);
   });
 
@@ -443,10 +443,10 @@ describe('ProductDetailPage — số suất Giờ vàng khách đã dùng ở c�
     renderPdp();
     await screen.findByTestId('flash-price-bar');
     await waitFor(() => expect(mocks.fetchFlashAllowance).toHaveBeenCalled());
-    await waitFor(() => expect(buyNow()).toHaveAccessibleName('Mua ngay · 80.000đ'));
+    await waitFor(() => expect(buyNow()).toHaveAccessibleName('Mua ngay 80.000đ'));
     expect(screen.queryByText(/Bạn còn 1 suất/)).toBeNull();
     fireEvent.click(plus());
-    await waitFor(() => expect(buyNow()).toHaveAccessibleName('Mua ngay · 200.000đ'));
+    await waitFor(() => expect(buyNow()).toHaveAccessibleName('Mua ngay 200.000đ'));
     expect(screen.getByText('Bạn còn 1 suất Giờ vàng. Mua 2 thì cả dòng tính giá thường.')).toBeInTheDocument();
   });
 
@@ -455,7 +455,7 @@ describe('ProductDetailPage — số suất Giờ vàng khách đã dùng ở c�
     renderPdp();
     await screen.findByTestId('flash-price-bar');
     await waitFor(() => expect(mocks.fetchFlashAllowance).toHaveBeenCalled());
-    expect(buyNow()).toHaveAccessibleName('Mua ngay · 80.000đ');
+    expect(buyNow()).toHaveAccessibleName('Mua ngay 80.000đ');
     expect(buyNow()).not.toBeDisabled();
     expect(screen.queryByText(SPENT)).toBeNull();
   });
@@ -478,7 +478,7 @@ describe('ProductDetailPage — số suất Giờ vàng khách đã dùng ở c�
     mocks.authStatus = 'guest';
     renderPdp();
     await screen.findByTestId('flash-price-bar');
-    expect(buyNow()).toHaveAccessibleName('Mua ngay · 80.000đ');
+    expect(buyNow()).toHaveAccessibleName('Mua ngay 80.000đ');
     await new Promise((r) => setTimeout(r, 20));
     expect(mocks.fetchFlashAllowance).not.toHaveBeenCalled();
   });

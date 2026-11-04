@@ -181,6 +181,25 @@ describe('/gio-hang — xoá có hoàn tác, liên kết sản phẩm, suất gi
     expect(document.activeElement).toBe(document.body);
   });
 
+  it('hoàn tác bằng bàn phím nhưng phản hồi về chậm: khách đã focus sang ô khác thì không bị kéo focus về dòng', async () => {
+    const { container } = await mount();
+    click(button(container, 'Xoá Dầu gội bồ kết khỏi giỏ hàng'));
+    await flush();
+    const realMatches = Element.prototype.matches;
+    vi.spyOn(Element.prototype, 'matches').mockImplementation(function (this: Element, sel: string) {
+      return sel === ':focus-visible' ? this === document.activeElement : realMatches.call(this, sel);
+    });
+    undoButton(container)!.focus();
+    const other = document.createElement('input');
+    container.appendChild(other);
+    click(undoButton(container)!);
+    other.focus();
+    await flush();
+    expect(document.activeElement).toBe(other);
+    vi.restoreAllMocks();
+    other.remove();
+  });
+
   it('A11Y-05: xoá bằng chuột (nút không có vòng lấy nét) thì không kéo focus sang Hoàn tác, thanh vẫn tự tắt sau 10 giây', async () => {
     const { container } = await mount();
     vi.useFakeTimers();
