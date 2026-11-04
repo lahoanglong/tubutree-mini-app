@@ -890,7 +890,7 @@ export class PancakeProcessor extends WorkerHost {
       where: { id: order.id, OR: [{ invoiceStatus: null }, { invoiceStatus: { not: 'ISSUED' } }] },
       data: { invoiceStatus: 'ISSUED', ...(safeUrl ? { invoiceUrl: safeUrl } : {}) },
     });
-    // Admin bấm "Đã xuất hoá đơn" hoặc một invoice.issued khác vừa lật ISSUED và đã báo khách: không báo lại, không đè link họ ghi.
+    // Admin bấm "Đã xuất hoá đơn" hoặc một invoice.issued khác vừa lật ISSUED, bên đó lo báo khách: không báo lại, không đè link họ ghi.
     if (flipped.count === 0) return;
     if (urlError) {
       const message = `Link hoá đơn VAT từ Pancake bị bỏ, đơn chưa có link hoá đơn cho khách. ${urlError} Gửi hoá đơn cho khách qua chat CSKH.`;
