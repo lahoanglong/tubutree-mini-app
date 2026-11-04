@@ -133,7 +133,7 @@ const mocks = vi.hoisted(() => ({
   userDetail: vi.fn(),
 }));
 
-vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
+vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth, useViewerRole: () => mocks.auth.user?.role }));
 vi.mock('@/lib/admin-client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/admin-client')>();
   const order = (status: string, i: number) => ({
