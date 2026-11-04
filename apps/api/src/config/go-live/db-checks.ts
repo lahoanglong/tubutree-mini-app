@@ -19,15 +19,23 @@ export const REQUIRED_MIGRATIONS = [
 const ORDERS_LOCK_MIGRATION = REQUIRED_MIGRATIONS[0];
 
 /**
- * Ba migration của đợt, hai migration nhỏ thêm sau đó (hai cột NULL trên variations, một cột trên bảng trả hàng cũ) và migration
- * waste_exchange chỉ thêm bảng và cột mới mà image cũ không đọc. Image cũ vẫn chạy được trên schema có đủ sáu cái, nên quay lại
- * bằng image (runbook 7.2) hợp lệ khi danh sách chờ áp chỉ gồm sáu cái này.
+ * Migration mà image cũ vẫn chạy đúng trên schema sau khi áp: quay lại bằng image (runbook 7.2) hợp lệ khi danh sách chờ áp chỉ
+ * gồm tên trong danh sách này. Gồm ba migration của đợt đầu, hai migration nhỏ thêm sau đó (hai cột NULL trên variations, một
+ * cột trên bảng trả hàng cũ), waste_exchange (chỉ thêm bảng và cột mới mà image cũ không đọc) và bảy migration đợt hardening
+ * 05/11 chỉ dựng chỉ mục (không đổi dữ liệu, không đổi cột).
  */
 export const IMAGE_COMPATIBLE_MIGRATIONS: readonly string[] = [
   ...REQUIRED_MIGRATIONS,
   '20261015160000_r9_sync_stock_same_clock_markers',
   '20261015170000_r10_legacy_returns_received',
   '20261020000000_waste_exchange',
+  '20261105130000_hd1_coupon_milestone_period_idx',
+  '20261105130100_hd1_users_guest_partial_idx',
+  '20261105130200_hd1_notification_inapp_indexes',
+  '20261105130300_hd1_points_history_index',
+  '20261105130400_hd1_feed_new_order_index',
+  '20261105130500_hd1_reviews_public_list_index',
+  '20261105140000_payouts_status_index',
 ];
 
 /**
@@ -211,7 +219,7 @@ function migrationChecks(s: DbSnapshot, phase: GoLivePhase): CheckResult[] {
             'db.pending_scope',
             scopeTitle,
             `${pending.length} migration chờ áp, ${extra.length} cái nằm ngoài các migration của đợt${heavy.length > 0 ? `; nặng: ${listNames(heavy, HEAVY_MIGRATIONS.length)}` : ''}`,
-            'Xin cửa sổ theo TOÀN BỘ danh sách chờ áp, không chỉ các migration của đợt (runbook mục 1.0 và 3). Quay lại chỉ bằng image cũ KHÔNG an toàn khi danh sách có migration ngoài sáu cái của đợt: chỉ còn khôi phục bản backup (runbook 7.3).',
+            'Xin cửa sổ theo TOÀN BỘ danh sách chờ áp, không chỉ các migration của đợt (runbook mục 1.0 và 3). Quay lại chỉ bằng image cũ KHÔNG an toàn khi danh sách có migration ngoài IMAGE_COMPATIBLE_MIGRATIONS (db-checks.ts, runbook 7.0): chỉ còn khôi phục bản backup (runbook 7.3).',
           ),
     );
   }

@@ -135,21 +135,38 @@ describe('evaluateDb', () => {
       expect(byId(run(s, 'pre-deploy'), 'db.orders_lock').detail).toContain('~14 giây');
     });
 
-    it('sáu migration của đợt (ba chính và hai migration nhỏ sau đó) chờ áp: db.pending_scope vẫn PASS', () => {
+    it('mọi migration trong danh sách tương thích image (đợt đầu và đợt hardening 05/11) chờ áp: db.pending_scope vẫn PASS', () => {
       const extraSmall = IMAGE_COMPATIBLE_MIGRATIONS.filter((m) => !required.includes(m));
-      expect(extraSmall).toHaveLength(3);
+      for (const m of ['20261015160000_r9_sync_stock_same_clock_markers', '20261015170000_r10_legacy_returns_received', '20261020000000_waste_exchange']) {
+        expect(extraSmall).toContain(m);
+      }
       const s = behind(1_000, extraSmall);
       const r = byId(run(s, 'pre-deploy'), 'db.pending_scope');
       expect(r.status).toBe('PASS');
-      expect(r.detail).toContain('(6)');
+      expect(r.detail).toContain(`(${required.length + extraSmall.length})`);
     });
 
-    it('sáu migration của đợt cộng một migration khác: db.pending_scope WARN, đếm đúng phần ngoài đợt', () => {
+    it('bảy migration chỉ thêm chỉ mục của đợt hardening 05/11 nằm trong danh sách tương thích image', () => {
+      const phase2 = [
+        '20261105130000_hd1_coupon_milestone_period_idx',
+        '20261105130100_hd1_users_guest_partial_idx',
+        '20261105130200_hd1_notification_inapp_indexes',
+        '20261105130300_hd1_points_history_index',
+        '20261105130400_hd1_feed_new_order_index',
+        '20261105130500_hd1_reviews_public_list_index',
+        '20261105140000_payouts_status_index',
+      ];
+      for (const m of phase2) expect(IMAGE_COMPATIBLE_MIGRATIONS).toContain(m);
+      const r = byId(run(behind(1_000, phase2), 'pre-deploy'), 'db.pending_scope');
+      expect(r.status).toBe('PASS');
+    });
+
+    it('migration tương thích image cộng một migration khác: db.pending_scope WARN, đếm đúng phần ngoài danh sách', () => {
       const extraSmall = IMAGE_COMPATIBLE_MIGRATIONS.filter((m) => !required.includes(m));
       const s = behind(1_000, [...extraSmall, P1]);
       const r = byId(run(s, 'pre-deploy'), 'db.pending_scope');
       expect(r.status).toBe('WARN');
-      expect(r.detail).toContain('7 migration chờ áp, 1 cái nằm ngoài');
+      expect(r.detail).toContain(`${required.length + extraSmall.length + 1} migration chờ áp, 1 cái nằm ngoài`);
     });
 
     it('thêm p1, p4, p8, pd3: db.pending_scope WARN, nêu tên migration nặng và chỉ đường 7.3', () => {
