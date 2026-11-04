@@ -176,16 +176,19 @@ describe('BrowsePage — SEO', () => {
     expect(tracked.alternates).toEqual({ canonical: '/san-pham?category=c-goi' });
   });
 
-  it('?category= không có trong cây (id lạ, cây không đọc được) hoặc kèm tham số khác → noindex', async () => {
+  it('?category= không có trong cây (id lạ) hoặc kèm tham số khác → noindex', async () => {
     expect(await generateMetadata({ searchParams: sp({ category: 'khong-co' }) })).toEqual({ robots: { index: false, follow: true } });
     for (const o of [{ category: 'c-goi', brand: 'Tubu' }, { category: 'c-goi', page: '2' }, { category: 'c-goi', sort: 'newest' }, { category: 'c-goi', q: 'gội' }, { category: '' }]) {
       expect(await generateMetadata({ searchParams: sp(o) }), JSON.stringify(o)).toEqual({ robots: { index: false, follow: true } });
     }
+  });
+
+  it('?category= hợp lệ nhưng API danh mục lỗi: ném lỗi (giữ bản ISR cũ), không trả 200 + noindex làm URL rớt khỏi chỉ mục', async () => {
     mocks.get.mockImplementation(async (path: string) => {
       if (path === '/categories') throw new Error('API lỗi');
       return [];
     });
-    expect(await generateMetadata({ searchParams: sp({ category: 'c-goi' }) })).toEqual({ robots: { index: false, follow: true } });
+    await expect(generateMetadata({ searchParams: sp({ category: 'c-goi' }) })).rejects.toThrow('API lỗi');
   });
 
   it('BreadcrumbList JSON-LD ở trạng thái nhãn và danh mục (theo vệt breadcrumb hiển thị), không có ở hub hay trạng thái noindex', async () => {

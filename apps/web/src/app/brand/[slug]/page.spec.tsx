@@ -92,12 +92,20 @@ describe('trang thương hiệu /brand/[slug] — khung shop giống Mini App', 
     expect((await html()).textContent).not.toContain('Chính hãng');
   });
 
-  it('metadata: tiêu đề là tên nhãn (template gốc thêm hậu tố, không còn ✓), canonical không mang ?ref=, og đủ siteName/locale/url/ảnh', async () => {
+  it('tiêu đề trang vẫn gắn ✓ cho nhãn chính hãng (chuỗi <title>, không phải icon); nhãn thường không có', async () => {
     const meta = await generateMetadata({ params: Promise.resolve({ slug: 'bo-hon' }) });
-    expect(meta.title).toBe('Bồ Hòn Xanh');
+    expect(meta.title).toBe('Bồ Hòn Xanh ✓');
+    expect((meta.openGraph as { title: string }).title).toBe('Bồ Hòn Xanh ✓ — Tubu Tree');
+    mocks.brand = { ...BRAND, isVerified: false };
+    expect((await generateMetadata({ params: Promise.resolve({ slug: 'bo-hon' }) })).title).toBe('Bồ Hòn Xanh');
+  });
+
+  it('metadata: tiêu đề là tên nhãn (template gốc thêm hậu tố), canonical không mang ?ref=, og đủ siteName/locale/url/ảnh', async () => {
+    const meta = await generateMetadata({ params: Promise.resolve({ slug: 'bo-hon' }) });
+    expect(meta.title).toBe('Bồ Hòn Xanh ✓');
     expect(meta.description).toBe('Giặt sạch, nhẹ với đất');
     expect(meta.alternates).toEqual({ canonical: '/brand/bo-hon' });
-    expect(meta.openGraph).toMatchObject({ type: 'website', siteName: 'Tubu Tree', locale: 'vi_VN', url: '/brand/bo-hon', title: 'Bồ Hòn Xanh — Tubu Tree' });
+    expect(meta.openGraph).toMatchObject({ type: 'website', siteName: 'Tubu Tree', locale: 'vi_VN', url: '/brand/bo-hon', title: 'Bồ Hòn Xanh ✓ — Tubu Tree' });
     expect((meta.openGraph as { images: { url: string }[] }).images[0]!.url).toBeTruthy();
   });
 

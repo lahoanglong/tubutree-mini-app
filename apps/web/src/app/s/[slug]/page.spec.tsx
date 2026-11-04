@@ -271,7 +271,10 @@ describe('trang gian hàng /s/[slug] — canonical và thẻ chia sẻ (D3-10)',
 
   it('gian hàng mẫu: noindex; gian hàng thật: không chặn công cụ tìm kiếm', async () => {
     mocks.sf = { ...SF, isSample: true };
-    expect((await meta()).robots).toEqual({ index: false, follow: false });
+    const sample = await meta();
+    expect(sample.robots).toEqual({ index: false, follow: false });
+    expect(sample.alternates).toBeUndefined();
+    expect((sample.openGraph as { url?: string }).url).toBeUndefined();
     mocks.sf = { ...SF };
     expect((await meta()).robots).toBeUndefined();
   });

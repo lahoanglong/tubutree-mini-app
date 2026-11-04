@@ -15,6 +15,7 @@ vi.mock('@/lib/use-flash-sales', async (importOriginal) => ({ ...(await importOr
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }), notFound: () => { throw new Error('NEXT_NOT_FOUND'); } }));
 
 import RestoringHomePage, { generateStaticParams, metadata } from './page';
+import { HOME_DESCRIPTION, HOME_TITLE } from '@/lib/home-seo';
 
 const card = (id: string, name: string) => ({ id, slug: id, brand: 'Tubu', name, thumbnail: null, basePrice: 200000, salePrice: null, isFeatured: false, inStock: true });
 const pageOf = (data: unknown[]) => ({ data, meta: { page: 1, limit: 6, total: data.length } });
@@ -62,6 +63,11 @@ describe('Trang chủ dựng sẵn cho khách đã có cookie phiên (HTML đầ
     const html = await render('new');
     expect(html).not.toContain('data-testid="member-card-loading"');
     expect(blocks(html)).toContain('bestSellers');
+  });
+
+  it('tiêu đề và mô tả giống trang chủ (khách đã đăng nhập được viết lại từ "/"), không lấy tiêu đề mặc định của layout gốc', () => {
+    expect(metadata.title).toEqual({ absolute: HOME_TITLE });
+    expect(metadata.description).toBe(HOME_DESCRIPTION);
   });
 
   it('chỉ có đúng 5 bản, gợi ý lạ thì 404, không cho lập chỉ mục và không canonical', async () => {

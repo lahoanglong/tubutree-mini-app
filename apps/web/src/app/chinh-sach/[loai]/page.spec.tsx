@@ -93,10 +93,11 @@ describe('/chinh-sach/[loai] (D5-01)', () => {
     const draft = await generateMetadata({ params: Promise.resolve({ loai: 'van-chuyen' }) });
     expect(draft.title).toBe('Chính sách vận chuyển');
     expect(draft.robots).toEqual({ index: false, follow: true });
-    expect(draft.alternates?.canonical).toBe('/chinh-sach/van-chuyen');
+    expect(draft.alternates).toBeUndefined();
 
     api.doc = { content: 'Nội dung đã duyệt', vars: api.doc.vars };
     const live = await generateMetadata({ params: Promise.resolve({ loai: 'van-chuyen' }) });
     expect(live.robots).toBeUndefined();
+    expect(live.alternates?.canonical).toBe('/chinh-sach/van-chuyen');
   });
 });

@@ -35,9 +35,10 @@ export async function generateMetadata({
   return {
     title,
     description,
-    alternates: { canonical },
+    // Gian hàng mẫu là noindex: không canonical và og:url (hai tín hiệu mâu thuẫn).
+    ...(sf.isSample ? {} : { alternates: { canonical } }),
     // Ảnh chia sẻ do opengraph-image.tsx của trang này dựng nên không rải `ogBase.images`.
-    openGraph: { type: ogBase.type, siteName: ogBase.siteName, locale: ogBase.locale, title: withBrand(title), description, url: canonical },
+    openGraph: { type: ogBase.type, siteName: ogBase.siteName, locale: ogBase.locale, title: withBrand(title), description, ...(sf.isSample ? {} : { url: canonical }) },
     twitter: { card: 'summary_large_image', title: withBrand(title), description },
     ...(sf.isSample ? { robots: { index: false, follow: false } } : {}),
   };

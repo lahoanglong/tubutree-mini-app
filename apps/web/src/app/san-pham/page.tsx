@@ -36,8 +36,9 @@ export async function generateMetadata({ searchParams }: { searchParams: BrowseS
   if (browseNoindex(params)) return { robots: { index: false, follow: true } };
   const categoryId = params.get('category') ?? undefined;
   if (categoryId) {
-    // Danh mục không có trong cây (id bịa, cây không đọc được) → noindex, như nhãn lạ.
-    const trail = categoryTrail(await fetchCategories(createServerHttp()).catch(() => undefined), categoryId);
+    // Danh mục không có trong cây (id bịa) → noindex, như nhãn lạ. Lỗi API thì để nổi lên (như nhánh nhãn): nuốt lỗi sẽ trả 200 + noindex
+    // cho danh mục thật và làm URL rớt khỏi chỉ mục.
+    const trail = categoryTrail(await fetchCategories(createServerHttp()), categoryId);
     const node = trail.at(-1);
     if (!node) return { robots: { index: false, follow: true } };
     return browseMetadata({ category: { id: categoryId, name: node.name } }, true);

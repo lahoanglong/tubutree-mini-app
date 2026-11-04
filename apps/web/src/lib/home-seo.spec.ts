@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { browseBreadcrumb, browseCanonicalPath, browseMetadata, browseNoindex, HOME_DESCRIPTION, HOME_TITLE, siteJsonLd } from './home-seo';
+import { toE164, browseBreadcrumb, browseCanonicalPath, browseMetadata, browseNoindex, HOME_DESCRIPTION, HOME_TITLE, siteJsonLd } from './home-seo';
 
 // R2-BUYERWEB-9: /san-pham?page=N và ?brand= dùng chung một tiêu đề, không có canonical. Danh mục chuyển từ "/" sang
 // /san-pham (00-ma-tran dòng 2) nên canonical, tiêu đề và noindex theo trang mới.
@@ -112,6 +112,24 @@ describe('trang chủ', () => {
   });
 });
 
+describe('toE164', () => {
+  it('đúng một số VN: bỏ khoảng trắng, chấm, gạch rồi đổi sang +84; +84 và tổng đài 1800/1900 giữ nguyên', () => {
+    expect(toE164('0984 606 774')).toBe('+84984606774');
+    expect(toE164('028.3822.1234')).toBe('+842838221234');
+    expect(toE164('0984-606-774')).toBe('+84984606774');
+    expect(toE164('+84 984 606 774')).toBe('+84984606774');
+    expect(toE164('1900 6868')).toBe('19006868');
+    expect(toE164('1800-1234')).toBe('18001234');
+  });
+
+  it('chữ tự do nhiều số hoặc không đúng dạng thì bỏ (không ghép số)', () => {
+    expect(toE164('0984 606 774 - 0912 345 678')).toBeUndefined();
+    expect(toE164('Gọi 0984606774')).toBeUndefined();
+    expect(toE164('098460677')).toBeUndefined();
+    expect(toE164('')).toBeUndefined();
+  });
+});
+
 describe('siteJsonLd', () => {
   const graph = (ld: Record<string, unknown>) => ld['@graph'] as Record<string, unknown>[];
   it('Organization + WebSite trong một @graph; SearchAction trỏ /san-pham?q=', () => {
@@ -125,6 +143,12 @@ describe('siteJsonLd', () => {
     const [org] = graph(siteJsonLd({ hotline: '0984 606 774', email: 'a@b.vn', community: { facebookUrl: 'https://fb.com/x', zaloGroupUrl: 'https://zalo.me/g/y' } }));
     expect(org!.contactPoint).toEqual([expect.objectContaining({ telephone: '+84984606774', email: 'a@b.vn', contactType: 'customer service' })]);
     expect(org!.sameAs).toEqual(['https://fb.com/x', 'https://zalo.me/g/y']);
+  });
+
+  it('hotline là chữ tự do nhiều số: bỏ telephone, vẫn giữ email', () => {
+    const [org] = graph(siteJsonLd({ hotline: '0984 606 774 - 0912 345 678', email: 'a@b.vn' }));
+    expect(org!.contactPoint).toEqual([expect.objectContaining({ email: 'a@b.vn' })]);
+    expect(JSON.stringify(org)).not.toContain('telephone');
   });
 
   it('thiếu dữ liệu thì bỏ trường, không bịa', () => {

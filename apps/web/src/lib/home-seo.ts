@@ -91,9 +91,13 @@ export function browseBreadcrumb(opts: { home: string; browse: string; brand?: s
   return crumbs;
 }
 
-const toE164 = (phone: string): string => {
-  const digits = phone.replace(/[^\d+]/g, '');
-  return digits.startsWith('0') ? `+84${digits.slice(1)}` : digits;
+/** Số điện thoại cho JSON-LD: chỉ nhận đúng MỘT số (di động/bàn VN → +84…, tổng đài 1800/1900 giữ nguyên); chữ tự do nhiều số thì trả undefined. */
+export const toE164 = (phone: string): string | undefined => {
+  const compact = phone.replace(/[\s.-]/g, '');
+  if (/^0\d{9}$/.test(compact)) return `+84${compact.slice(1)}`;
+  if (/^\+84\d{9}$/.test(compact)) return compact;
+  if (/^1[89]00\d{4,6}$/.test(compact)) return compact;
+  return undefined;
 };
 
 /**
@@ -103,7 +107,8 @@ const toE164 = (phone: string): string => {
 export function siteJsonLd(support: Pick<SupportContact, 'hotline' | 'email' | 'community'> | undefined): Record<string, unknown> {
   const sameAs = Object.values(support?.community ?? {}).filter((u): u is string => typeof u === 'string' && u !== '');
   const contact: Record<string, string> = {};
-  if (support?.hotline) contact.telephone = toE164(support.hotline);
+  const telephone = support?.hotline ? toE164(support.hotline) : undefined;
+  if (telephone) contact.telephone = telephone;
   if (support?.email) contact.email = support.email;
   const organization: Record<string, unknown> = {
     '@type': 'Organization',

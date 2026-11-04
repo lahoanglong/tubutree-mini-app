@@ -23,7 +23,8 @@ export async function generateMetadata({
   const { slug } = await params;
   const b = await getBrand(slug);
   if (!b) return { title: 'Thương hiệu' };
-  const title = b.name;
+  // ✓ là chữ trong chuỗi <title>/og (huy hiệu trên trang là icon): nhãn chính hãng nhận dấu ngay ở kết quả tìm kiếm và khi chia sẻ.
+  const title = `${b.name}${b.isVerified ? ' ✓' : ''}`;
   const description = brandMetaDescription(b);
   const img = b.coverUrl ?? b.logoUrl ?? b.products?.[0]?.thumbnail ?? undefined;
   // Link chia sẻ của CTV thêm ?ref=: canonical bỏ tham số đó để cùng một trang không bị tính là bản trùng.
