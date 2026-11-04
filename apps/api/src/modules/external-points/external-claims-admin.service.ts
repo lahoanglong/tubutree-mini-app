@@ -35,6 +35,25 @@ const OTHER_SUBMITTER_DAYS = 30;
 
 const UNPAID: ExternalClaimState[] = ['PENDING', 'REVIEW', 'HELD_NO_MEMBER'];
 
+/** Đúng các cột `rowOf` đọc; `include` cả bản ghi kéo theo `external_orders.lastPayload` (JSON nguyên payload Pancake) cho từng dòng. */
+const CLAIM_ROW_SELECT = {
+  id: true,
+  externalOrderId: true,
+  userId: true,
+  kind: true,
+  state: true,
+  points: true,
+  holdUntil: true,
+  reviewReason: true,
+  voidReason: true,
+  decidedById: true,
+  creditedAt: true,
+  createdAt: true,
+  externalOrder: {
+    select: { id: true, pancakeOrderId: true, channel: true, source: true, trackingCode: true, phone: true, goodsValue: true, status: true, deliveredAt: true },
+  },
+} satisfies Prisma.ExternalPointsClaimSelect;
+
 interface MemberInfo {
   name: string | null;
   phone: string | null;
@@ -71,7 +90,7 @@ export class ExternalClaimsAdminService {
     @Optional() private readonly loyalty?: LoyaltyService,
   ) {}
 
-  private rowOf(c: Prisma.ExternalPointsClaimGetPayload<{ include: { externalOrder: true } }>, user: MemberInfo | null, staleAfterMs: number, now: Date): AdminExternalClaimRow {
+  private rowOf(c: Prisma.ExternalPointsClaimGetPayload<{ select: typeof CLAIM_ROW_SELECT }>, user: MemberInfo | null, staleAfterMs: number, now: Date): AdminExternalClaimRow {
     const o = c.externalOrder;
     return {
       id: c.id,
@@ -138,7 +157,7 @@ export class ExternalClaimsAdminService {
       }
     }
     const [rows, total] = await Promise.all([
-      this.prisma.externalPointsClaim.findMany({ where, include: { externalOrder: true }, orderBy: { createdAt: 'desc' }, ...skipTake(q.page, q.limit) }),
+      this.prisma.externalPointsClaim.findMany({ where, select: CLAIM_ROW_SELECT, orderBy: { createdAt: 'desc' }, ...skipTake(q.page, q.limit) }),
       this.prisma.externalPointsClaim.count({ where }),
     ]);
     const users = await this.usersById(rows.map((r) => r.userId));
@@ -148,7 +167,7 @@ export class ExternalClaimsAdminService {
   }
 
   async detail(id: string): Promise<AdminExternalClaimDetail> {
-    const c = await this.prisma.externalPointsClaim.findUnique({ where: { id }, include: { externalOrder: true } });
+    const c = await this.prisma.externalPointsClaim.findUnique({ where: { id }, select: CLAIM_ROW_SELECT });
     if (!c) throw new NotFoundException('Không tìm thấy claim.');
     const [users, events] = await Promise.all([
       this.usersById([c.userId]),

@@ -100,3 +100,44 @@ describe('ExternalClaimsAdminService.list: lọc việc cần chú ý khớp đi
     expect(findMany.mock.calls[0][0].where).toEqual({ AND: [closedCreditedWhere] });
   });
 });
+
+describe('ExternalClaimsAdminService.list: chỉ đọc cột màn hình cần (L3-20)', () => {
+  const claimRow = {
+    id: 'c1', externalOrderId: 'o1', userId: null, kind: 'SCAN', state: 'REVIEW', points: 10, holdUntil: null, reviewReason: null, voidReason: null,
+    decidedById: null, creditedAt: null, createdAt: new Date('2026-11-01T00:00:00Z'),
+    externalOrder: { id: 'o1', pancakeOrderId: 'P1', channel: 'shopee', source: 'MARKETPLACE', trackingCode: 'SPX123456', phone: null, goodsValue: 100000, status: 'OPEN', deliveredAt: null },
+  };
+  const mk = () => {
+    const findMany = jest.fn().mockResolvedValue([claimRow]);
+    const findUnique = jest.fn().mockResolvedValue(claimRow);
+    const prisma = {
+      externalPointsClaim: { findMany, count: jest.fn().mockResolvedValue(1), findUnique },
+      externalClaimEvent: { findMany: jest.fn().mockResolvedValue([]) },
+      user: { findMany: jest.fn().mockResolvedValue([]) },
+      order: { groupBy: jest.fn().mockResolvedValue([]) },
+    };
+    const config = { get: jest.fn().mockResolvedValue(undefined), getMany: jest.fn().mockResolvedValue({}) };
+    return { svc: new ExternalClaimsAdminService(prisma as never, config as never, {} as never, {} as never), findMany, findUnique };
+  };
+  const heavy = ['lastPayload', 'trackingCodes', 'sourceKey', 'marketplaceOrderSn', 'pancakeStatus', 'phoneLast3', 'claimedCode', 'orderPhone', 'creatorRef', 'ratePct', 'multiplier'];
+
+  it('danh sách dùng select (không include cả bản ghi) và không kéo lastPayload của đơn ngoài', async () => {
+    const { svc, findMany } = mk();
+    await svc.list({ page: 1, limit: 20 });
+    const args = findMany.mock.calls[0]![0];
+    expect(args.include).toBeUndefined();
+    expect(args.select).toBeDefined();
+    expect(args.select.externalOrder.select).toBeDefined();
+    const flat = JSON.stringify(args.select);
+    for (const col of heavy) expect(flat).not.toContain(`"${col}"`);
+    expect(args.select.externalOrder.select).toMatchObject({ id: true, pancakeOrderId: true, channel: true, source: true, trackingCode: true, phone: true, goodsValue: true, status: true, deliveredAt: true });
+  });
+
+  it('chi tiết một claim cũng dùng cùng select; dòng trả về giữ nguyên các trường', async () => {
+    const { svc, findUnique } = mk();
+    const out = await svc.detail('c1');
+    expect(findUnique.mock.calls[0]![0].include).toBeUndefined();
+    expect(JSON.stringify(findUnique.mock.calls[0]![0].select)).not.toContain('lastPayload');
+    expect(out).toMatchObject({ id: 'c1', externalOrderId: 'o1', pancakeOrderId: 'P1', maskedCode: expect.any(String), points: 10, state: 'REVIEW', kind: 'SCAN' });
+  });
+});
