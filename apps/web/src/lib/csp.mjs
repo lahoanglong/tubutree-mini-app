@@ -14,8 +14,8 @@ export function cspReportUrl(apiBaseUrl) {
 
 /**
  * Chính sách CSP (Report-Only) của web và header Reporting-Endpoints đi kèm.
- * Chrome gửi báo cáo theo `report-to` (Reporting API, application/reports+json) và bỏ qua `report-uri` khi có cả hai; Firefox và Safari
- * chỉ hiểu `report-uri` (application/csp-report). API nhận cả hai dạng.
+ * Trình duyệt hỗ trợ `report-to` (Chromium) gửi qua Reporting API (application/reports+json) và bỏ qua `report-uri` khi có cả hai;
+ * trình duyệt chưa hỗ trợ thì dùng `report-uri` (application/csp-report). API nhận cả hai dạng.
  * `'unsafe-eval'` chỉ cho bản dev: `next dev` chạy mã qua eval (source map, Fast Refresh), bản build production thì không.
  */
 export function buildCsp({ apiBaseUrl, sentryConnect = '', dev = false }) {

@@ -45,7 +45,15 @@ export class RbacService {
    * Áp grant theo SĐT khi login/refresh. CHỈ NÂNG role (không tự hạ — hạ qua revoke).
    * Trả user đã update (hoặc user gốc nếu không đổi).
    */
-  async applyGrants(user: User, db: Db = this.prisma, actorId: string | null = null): Promise<User> {
+  async applyGrants(user: User): Promise<User> {
+    const updated = await this.applyGrantsWith(this.prisma, user, null);
+    // Vai trò quyết định gian hàng CTV của người này có hiện công khai không, nên danh sách ảnh /img phải nạp lại (ghi thẳng, đã commit).
+    if (updated !== user) this.imageStale?.markStale();
+    return updated;
+  }
+
+  /** Thân của applyGrants, ghi qua `db` (tx của người gọi) và không đánh dấu ảnh: người gọi đánh dấu sau khi tx commit. Không đổi gì thì trả lại đúng `user`. */
+  private async applyGrantsWith(db: Db, user: User, actorId: string | null): Promise<User> {
     if (!user.phone) return user;
     const grants = await db.roleGrant.findMany({
       where: { phone: user.phone, revokedAt: null },
@@ -88,9 +96,6 @@ export class RbacService {
         actorId,
       });
     }
-    // Vai trò quyết định gian hàng CTV của người này có hiện công khai không, nên danh sách ảnh /img phải nạp lại. Chỉ đánh dấu khi đã
-    // ghi thẳng (đăng nhập/refresh); trong tx của addGrant thì chưa commit, lần nạp chen giữa sẽ đọc vai trò cũ rồi xoá cờ: addGrant đánh dấu sau commit.
-    if (db === this.prisma) this.imageStale?.markStale();
     return updated;
   }
 
@@ -135,7 +140,7 @@ export class RbacService {
       if (user) {
         // Bản đọc đầu tx có thể cũ: request thua createMany đã chờ bên thắng commit, nên role/nhóm của user có thể đã đổi.
         const fresh = (await tx.user.findUnique({ where: { id: user.id } })) ?? user;
-        const updated = await this.applyGrants(fresh, tx, adminId);
+        const updated = await this.applyGrantsWith(tx, fresh, adminId);
         applied = updated.role !== fresh.role;
         // applyGrants chỉ chép nhóm khi nâng vai trò; người đã là STAFF thì nhóm admin vừa chọn phải áp luôn kẻo bị bỏ qua âm thầm.
         if (!applied && updated.role === 'STAFF' && role === 'STAFF' && perms.length && !samePermissions(updated.staffPermissions ?? [], perms)) {
