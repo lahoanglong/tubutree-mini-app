@@ -183,7 +183,7 @@ describe('BrowsePage — SEO', () => {
     }
   });
 
-  it('?category= hợp lệ nhưng API danh mục lỗi: ném lỗi (giữ bản ISR cũ), không trả 200 + noindex làm URL rớt khỏi chỉ mục', async () => {
+  it('?category= hợp lệ nhưng API danh mục lỗi: ném lỗi như nhánh brand, không trả 200 + noindex làm URL rớt khỏi chỉ mục', async () => {
     mocks.get.mockImplementation(async (path: string) => {
       if (path === '/categories') throw new Error('API lỗi');
       return [];

@@ -94,8 +94,8 @@ export function browseBreadcrumb(opts: { home: string; browse: string; brand?: s
 /** Số điện thoại cho JSON-LD: chỉ nhận đúng MỘT số (di động/bàn VN → +84…, tổng đài 1800/1900 giữ nguyên); chữ tự do nhiều số thì trả undefined. */
 export const toE164 = (phone: string): string | undefined => {
   const compact = phone.replace(/[\s.-]/g, '');
-  if (/^0\d{9}$/.test(compact)) return `+84${compact.slice(1)}`;
-  if (/^\+84\d{9}$/.test(compact)) return compact;
+  if (/^0\d{9,10}$/.test(compact)) return `+84${compact.slice(1)}`;
+  if (/^\+84\d{9,10}$/.test(compact)) return compact;
   if (/^1[89]00\d{4,6}$/.test(compact)) return compact;
   return undefined;
 };
