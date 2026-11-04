@@ -142,7 +142,7 @@ function parseClickedAgo(raw: unknown, maxMs: number): number | null {
   return typeof raw === 'number' && Number.isFinite(raw) && raw >= 0 ? Math.min(raw, maxMs) : null;
 }
 
-const AFFILIATE_NOT_CTV_MESSAGE = 'Tài khoản của bạn không còn quyền Cộng tác viên nên không rút hoa hồng hay nhận thưởng được. Vui lòng liên hệ Tubu Tree để được hỗ trợ.';
+const AFFILIATE_NOT_CTV_MESSAGE = 'Tài khoản của bạn không còn quyền Cộng tác viên nên không rút hoa hồng hay nhận thưởng được. Liên hệ Tubu Tree để được hỗ trợ.';
 const AFFILIATE_REVOKED_MESSAGE = 'Tài khoản đã bị thu hồi quyền CTV. Liên hệ CSKH nếu cần mở lại.';
 
 @Injectable()
@@ -347,7 +347,7 @@ export class AffiliateService {
     const user = await db.user.findUnique({ where: { id: userId }, select: { id: true, role: true, affiliateRevokedAt: true } });
     if (user?.affiliateRevokedAt) throw new ForbiddenException(AFFILIATE_REVOKED_MESSAGE);
     if (!user || !(await affiliateAccess(db, user)).hasAccess) {
-      throw new ForbiddenException('Tài khoản của bạn không còn quyền Cộng tác viên nên không dùng được chức năng này. Vui lòng liên hệ Tubu Tree để được hỗ trợ.');
+      throw new ForbiddenException('Tài khoản của bạn không còn quyền Cộng tác viên nên không dùng được chức năng này. Liên hệ Tubu Tree để được hỗ trợ.');
     }
   }
 
