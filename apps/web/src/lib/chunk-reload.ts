@@ -12,8 +12,11 @@ export function isChunkLoadError(err: unknown): boolean {
   return e?.name === 'ChunkLoadError' || /Loading chunk|Loading CSS chunk|Failed to fetch dynamically imported module/i.test(message);
 }
 
-/** Tải lại trang một lần (khoá sessionStorage giữ mốc giờ). Trả true nếu đã gọi tải lại, false nếu vừa tải lại gần đây hoặc không có sessionStorage. */
-export function reloadOnceForChunkError(now: number = Date.now()): boolean {
+/**
+ * Tải lại trang một lần (khoá sessionStorage giữ mốc giờ). Trả true nếu đã gọi tải lại, false nếu vừa tải lại gần đây hoặc không có sessionStorage.
+ * `beforeReload` chạy ngay trước khi tải lại (báo lỗi): chỉ một lần mỗi cửa sổ, vì lần sau bị khoá chặn.
+ */
+export function reloadOnceForChunkError(now: number = Date.now(), beforeReload?: () => void): boolean {
   try {
     const last = Number(sessionStorage.getItem(KEY));
     if (Number.isFinite(last) && last > 0 && now - last < CHUNK_RELOAD_WINDOW_MS) return false;
@@ -21,6 +24,11 @@ export function reloadOnceForChunkError(now: number = Date.now()): boolean {
   } catch {
     // Không có sessionStorage thì không bảo vệ được khỏi vòng lặp: không tải lại.
     return false;
+  }
+  try {
+    beforeReload?.();
+  } catch {
+    // Báo lỗi hỏng không được chặn việc tải lại.
   }
   location.reload();
   return true;

@@ -25,6 +25,18 @@ describe('isChunkLoadError', () => {
 });
 
 describe('reloadOnceForChunkError', () => {
+  it('beforeReload chạy một lần, trước khi tải lại; lần bị khoá thì không chạy', () => {
+    const before = vi.fn();
+    expect(reloadOnceForChunkError(5_000_000, before)).toBe(true);
+    expect(before).toHaveBeenCalledTimes(1);
+    expect(before.mock.invocationCallOrder[0]!).toBeLessThan(reload.mock.invocationCallOrder[0]!);
+    expect(reloadOnceForChunkError(5_000_001, before)).toBe(false);
+    expect(before).toHaveBeenCalledTimes(1);
+  });
+  it('beforeReload ném lỗi: vẫn tải lại', () => {
+    expect(reloadOnceForChunkError(6_000_000, () => { throw new Error('x'); })).toBe(true);
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
   it('lần đầu tải lại; lần hai trong cửa sổ thì không; hết cửa sổ thì cho lại', () => {
     expect(reloadOnceForChunkError(1_000_000)).toBe(true);
     expect(reload).toHaveBeenCalledTimes(1);
