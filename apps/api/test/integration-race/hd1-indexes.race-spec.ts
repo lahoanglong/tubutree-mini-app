@@ -30,13 +30,20 @@ describe('hd1: định nghĩa index (real Postgres)', () => {
     const plan = await prisma.$transaction(async (tx) => {
       await tx.$executeRawUnsafe('SET LOCAL enable_seqscan = off');
       await tx.$executeRawUnsafe('SET LOCAL plan_cache_mode = force_generic_plan');
-      await tx.$executeRawUnsafe(
-        `PREPARE hd1_feed(text, text, int) AS SELECT id FROM notification_logs WHERE "userId" = $1 AND channel = $2 ORDER BY "sentAt" DESC, id DESC LIMIT $3`,
-      );
-      await tx.$executeRawUnsafe(
-        `PREPARE hd1_unread(text, text, text) AS SELECT count(*) FROM notification_logs WHERE "userId" = $1 AND channel = $2 AND status <> $3`,
-      );
+      const prepared: string[] = [];
+      const prepare = async (name: string, sql: string) => {
+        await tx.$executeRawUnsafe(`PREPARE ${name} ${sql}`);
+        prepared.push(name);
+      };
       try {
+        await prepare(
+          'hd1_feed(text, text, int)',
+          `AS SELECT id FROM notification_logs WHERE "userId" = $1 AND channel = $2 ORDER BY "sentAt" DESC, id DESC LIMIT $3`,
+        );
+        await prepare(
+          'hd1_unread(text, text, text)',
+          `AS SELECT count(*) FROM notification_logs WHERE "userId" = $1 AND channel = $2 AND status <> $3`,
+        );
         const feed = await tx.$queryRawUnsafe<{ 'QUERY PLAN': string }[]>(`EXPLAIN EXECUTE hd1_feed('u', 'INAPP', 20)`);
         const unread = await tx.$queryRawUnsafe<{ 'QUERY PLAN': string }[]>(`EXPLAIN EXECUTE hd1_unread('u', 'INAPP', 'READ')`);
         return {
@@ -44,7 +51,11 @@ describe('hd1: định nghĩa index (real Postgres)', () => {
           unread: unread.map((r) => r['QUERY PLAN']).join('\n'),
         };
       } finally {
-        await tx.$executeRawUnsafe('DEALLOCATE ALL');
+        // PREPARE sống theo kết nối chứ không theo transaction: gỡ đúng câu mình tạo (không DEALLOCATE ALL, sẽ xoá cả câu Prisma
+        // đang cache), và nuốt lỗi gỡ để không che lỗi gốc khi transaction đã hỏng.
+        for (const name of prepared) {
+          await tx.$executeRawUnsafe(`DEALLOCATE ${name.split('(')[0]}`).catch(() => undefined);
+        }
       }
     });
     expect(plan.feed).toContain('notification_logs_userId_channel_sentAt_id_idx');
