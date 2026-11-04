@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { EMPTY_GEO, GeoPicker } from './geo-picker';
-import { flush, mockFetch, render, type Rendered } from '@/test-utils/dom';
+import { flush, mockFetch, render, selectByLabel, type Rendered } from '@/test-utils/dom';
 
 let mounted: Rendered[] = [];
 afterEach(() => {
@@ -31,7 +31,7 @@ describe('GeoPicker — thông báo lỗi', () => {
       expect(p.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true');
     }
     expect(container.textContent).not.toContain('⚠');
-    expect(container.querySelector('select[aria-label="Tỉnh/thành"]')?.getAttribute('aria-invalid')).toBe('true');
+    expect(selectByLabel(container, 'Tỉnh/Thành phố')?.getAttribute('aria-invalid')).toBe('true');
   });
 
   it('API địa giới lỗi (Pancake trục trặc) → báo rõ + nút "Thử lại" gọi lại được, không đứng im ở ô trống', async () => {

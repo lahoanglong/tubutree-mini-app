@@ -64,6 +64,7 @@ const rowValue = (c: HTMLElement, label: string) =>
   Array.from(c.querySelectorAll('div.flex')).find((d) => d.firstElementChild?.textContent === label)?.lastElementChild?.textContent;
 
 beforeEach(() => {
+  localStorage.clear();
   mocks.addresses = [ADDR];
   mocks.placeCalls = [];
   mocks.placeImpl = null;
@@ -156,7 +157,7 @@ describe('/thanh-toan — sửa địa chỉ ngay tại chỗ (BUYERWEB-14)', ()
     const phone = Array.from(c.querySelectorAll('form label')).find((l) => l.textContent?.includes('Số điện thoại'))!.querySelector('input')!;
     expect(phone.value).toBe('0912345678');
     typeInto(phone, '0911 222 333');
-    click(btn(c, 'Lưu thay đổi')!);
+    click(btn(c, 'Lưu')!);
     await flush(8);
     expect(mocks.updateAddress).toHaveBeenCalledTimes(1);
     expect(mocks.updateAddress.mock.calls[0]![0]).toBe('a1');
@@ -165,13 +166,24 @@ describe('/thanh-toan — sửa địa chỉ ngay tại chỗ (BUYERWEB-14)', ()
     expect(mocks.quoteCalls).toBeGreaterThan(before);
   });
 
+  it('sửa xong thì nhớ tỉnh/phường theo tài khoản đang đăng nhập, không rơi về khoá chung', async () => {
+    const c = await mount();
+    click(btn(c, 'Sửa địa chỉ của Nguyễn An')!);
+    await flush(4);
+    click(btn(c, 'Lưu')!);
+    await flush(8);
+    expect(mocks.updateAddress).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(localStorage.getItem('tubu_last_geo:u')!)).toMatchObject({ provinceCode: '84_VN01', wardCode: '84_VN01_001' });
+    expect(localStorage.getItem('tubu_last_geo')).toBeNull();
+  });
+
   it('SĐT sai: không gọi PATCH, ô được đánh dấu và có lời nhắc', async () => {
     const c = await mount();
     click(btn(c, 'Sửa địa chỉ của Nguyễn An')!);
     await flush(4);
     const phone = Array.from(c.querySelectorAll('form label')).find((l) => l.textContent?.includes('Số điện thoại'))!.querySelector('input')!;
     typeInto(phone, '091');
-    click(btn(c, 'Lưu thay đổi')!);
+    click(btn(c, 'Lưu')!);
     await flush(4);
     expect(mocks.updateAddress).not.toHaveBeenCalled();
     expect(phone.getAttribute('aria-invalid')).toBe('true');

@@ -15,6 +15,10 @@ const mocks = vi.hoisted(() => ({
   remove: vi.fn(),
 }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => mocks.phase }));
+vi.mock('@/lib/auth-context', async (orig) => ({
+  ...(await orig<typeof import('@/lib/auth-context')>()),
+  useOptionalAuth: () => ({ user: { id: 'u1' } }),
+}));
 vi.mock('@/lib/geo-client', () => ({
   getProvinces: async () => [{ code: '84_VN01', name: 'Hà Nội' }],
   getCommunes: async () => [{ code: '84_VN01_001', name: 'Cầu Giấy' }],
@@ -54,6 +58,7 @@ const btn = (c: HTMLElement, name: string) =>
   Array.from(c.querySelectorAll('button')).find((b) => (b.getAttribute('aria-label') ?? b.textContent ?? '').trim() === name);
 
 beforeEach(() => {
+  localStorage.clear();
   mocks.phase = 'authenticated';
   mocks.list = [A1, A2];
   mocks.listError = false;
@@ -106,7 +111,7 @@ describe('/tai-khoan/dia-chi — Sổ địa chỉ (BUYERWEB-14)', () => {
     const phone = Array.from(c.querySelectorAll('label')).find((l) => l.textContent?.includes('Số điện thoại'))!.querySelector('input')!;
     expect(phone.value).toBe('0987654321');
     typeInto(phone, '0911222333');
-    click(btn(c, 'Lưu thay đổi')!);
+    click(btn(c, 'Lưu')!);
     await flush(6);
     expect(mocks.update).toHaveBeenCalledTimes(1);
     expect(mocks.update.mock.calls[0]![0]).toBe('a2');
@@ -114,12 +119,23 @@ describe('/tai-khoan/dia-chi — Sổ địa chỉ (BUYERWEB-14)', () => {
     expect(c.querySelector('form')).toBeNull();
   });
 
+  it('sửa xong thì nhớ tỉnh/phường theo tài khoản đang đăng nhập, không rơi về khoá chung', async () => {
+    const c = await mount();
+    click(btn(c, 'Sửa địa chỉ của Trần Bình')!);
+    await flush(4);
+    click(btn(c, 'Lưu')!);
+    await flush(6);
+    expect(mocks.update).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(localStorage.getItem('tubu_last_geo:u1')!)).toMatchObject({ provinceCode: '84_VN01', wardCode: '84_VN01_001' });
+    expect(localStorage.getItem('tubu_last_geo')).toBeNull();
+  });
+
   it('sửa với SĐT sai: không gọi API, báo ngay tại ô', async () => {
     const c = await mount();
     click(btn(c, 'Sửa địa chỉ của Trần Bình')!);
     await flush(4);
     typeInto(Array.from(c.querySelectorAll('label')).find((l) => l.textContent?.includes('Số điện thoại'))!.querySelector('input'), '123');
-    click(btn(c, 'Lưu thay đổi')!);
+    click(btn(c, 'Lưu')!);
     await flush(4);
     expect(mocks.update).not.toHaveBeenCalled();
     expect(c.textContent).toContain('Số điện thoại chưa đúng');
@@ -223,7 +239,7 @@ describe('/tai-khoan/dia-chi — Sổ địa chỉ (BUYERWEB-14)', () => {
     const c = await mount();
     click(btn(c, 'Thêm địa chỉ mới')!);
     await flush(2);
-    expect(c.querySelector('form[aria-label="Thêm địa chỉ mới"]')).not.toBeNull();
+    expect(c.querySelector('form[aria-label="Thêm địa chỉ"]')).not.toBeNull();
     click(btn(c, 'Huỷ')!);
     expect(c.querySelector('form')).toBeNull();
   });

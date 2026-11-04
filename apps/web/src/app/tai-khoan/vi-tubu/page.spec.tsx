@@ -119,6 +119,13 @@ describe('/tai-khoan/vi-tubu — thẻ số dư và nguồn tiền', () => {
     expect(c.textContent).toContain('45.000đ');
   });
 
+  it('lịch sử Ví hiện giờ dạng dd/MM HH:mm theo giờ Việt Nam như Mini App, không có năm', async () => {
+    const c = await mount();
+    expect(c.textContent).toContain('05/10 14:04');
+    expect(c.textContent).toContain('04/10 17:00');
+    expect(c.textContent).not.toContain('14:04 05/10/2026');
+  });
+
   it('Ví âm sau khi thu hồi hoa hồng đơn trả hàng: số dư hiện đúng dấu "-", chú thích nói vì sao âm, dòng sổ có nhãn tiếng Việt', async () => {
     state.wallet = { ...WALLET, walletBalance: -50_000 };
     state.pages = [

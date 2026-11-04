@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
+import { click, flush, render, selectByLabel, typeInto, type Rendered } from '@/test-utils/dom';
 import { accessibleName, headingProblems, smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
 
 // C-123 + C-077 (web khách): mỗi trang khách có đúng một h1, heading không nhảy cấp, và mọi nút/ô nhập/
@@ -208,8 +208,8 @@ describe('trang khách — heading và tên truy cập (C-123, C-077)', () => {
     click(Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.includes('Thêm địa chỉ mới')) ?? null);
     await flush();
     expectAccessible(container);
-    expect(container.querySelector('select[aria-label="Tỉnh/thành"]')).not.toBeNull();
-    expect(container.querySelector('select[aria-label="Phường/xã"]')).not.toBeNull();
+    expect(selectByLabel(container, 'Tỉnh/Thành phố')).not.toBeNull();
+    expect(selectByLabel(container, 'Phường/Xã')).not.toBeNull();
   });
 
   it('/thanh-toan đặt đơn chuyển khoản: chuyển sang trang QR riêng thay vì dựng khung QR ngay tại trang đặt hàng', async () => {

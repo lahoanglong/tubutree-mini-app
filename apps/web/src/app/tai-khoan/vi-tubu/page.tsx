@@ -9,7 +9,7 @@ import { CheckCircle2, ChevronRight, Clock, History, Leaf, ShoppingBag, Wallet, 
 import { loyaltyQuery } from '@tubutree/app-core/queries/loyalty';
 import { walletQuery, walletTransactionsQuery } from '@tubutree/app-core/queries/wallet';
 import { CASHBACK_ENABLED } from '@tubutree/app-core/features';
-import { walletNegativeNote, walletTxLabel } from '@tubutree/app-core/wallet-rules';
+import { formatWalletTxTime, walletNegativeNote, walletTxLabel } from '@tubutree/app-core/wallet-rules';
 import { COMMISSION_PENDING_LABEL, COMMISSION_PENDING_NOTE } from '@tubutree/app-core/ctv-dashboard';
 import { uniqueById } from '@tubutree/app-core/unique-by-id';
 import { useAuth } from '@/lib/auth-context';
@@ -17,7 +17,6 @@ import { useAuthPhase } from '@/lib/auth-phase';
 import { isWebRouteReady } from '@/lib/route-map';
 import { coreHttp } from '@/lib/core-http';
 import { formatCount, pointsSummary } from '@/lib/checkout-points';
-import { formatDateTime } from '@/lib/format-date';
 import { formatVnd } from '@/lib/format-vnd';
 import { ui } from '@/lib/guest-ui';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
@@ -243,7 +242,7 @@ function WalletHistory({ q }: { q: UseInfiniteQueryResult<InfiniteData<WalletTxn
                 <div className="min-w-0">
                   <div className="break-words text-sm font-medium text-stone-900">{walletTxLabel(t.type, t.reason)}</div>
                   <div className="break-words text-xs text-stone-600">
-                    {formatDateTime(t.createdAt)}
+                    {formatWalletTxTime(t.createdAt)}
                     {t.reason ? ` · ${t.reason}` : ''}
                   </div>
                 </div>

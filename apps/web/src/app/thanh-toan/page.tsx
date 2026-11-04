@@ -573,6 +573,7 @@ export default function CheckoutPage() {
               selectedId={addressId}
               quoteOutdated={quoteQ.error instanceof ApiError && quoteQ.error.code === 'ADDRESS_OUTDATED'}
               loadFailed={addrQ.isError}
+              userId={user?.id}
               onSelect={chosen(setAddressId)}
               onCreated={(a) => {
                 void qc.invalidateQueries({ queryKey: ['addresses'] });
@@ -1070,6 +1071,7 @@ function AddressPicker({
   selectedId,
   quoteOutdated,
   loadFailed,
+  userId,
   onSelect,
   onCreated,
   onUpdated,
@@ -1079,6 +1081,7 @@ function AddressPicker({
   quoteOutdated: boolean;
   /** Danh sách không tải được: đã có dòng lỗi riêng, không được nói "chưa thêm địa chỉ". */
   loadFailed: boolean;
+  userId?: string;
   onSelect: (id: string) => void;
   onCreated: (a: AddressDTO) => void;
   onUpdated: (a: AddressDTO) => void;
@@ -1098,8 +1101,9 @@ function AddressPicker({
           <AddressForm
             key={a.id}
             title="Sửa địa chỉ"
-            submitLabel="Lưu thay đổi"
+            submitLabel="Lưu"
             initial={addressToForm(a)}
+            userId={userId}
             onSubmit={async (payload) => {
               const saved = await updateAddress(a.id, payload);
               setEditingId(null);
@@ -1166,8 +1170,9 @@ function AddressPicker({
 
       {adding ? (
         <AddressForm
-          title="Thêm địa chỉ mới"
-          submitLabel="Lưu địa chỉ"
+          title="Thêm địa chỉ"
+          userId={userId}
+          submitLabel="Lưu"
           onSubmit={async (payload) => {
             const created = await createAddress(payload);
             setAdding(false);

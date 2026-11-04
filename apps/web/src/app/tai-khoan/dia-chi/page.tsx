@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 import { MapPin, Plus } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuthPhase } from '@/lib/auth-phase';
+import { useOptionalAuth } from '@/lib/auth-context';
 import { addressToForm, isLegacyGeo } from '@/lib/address-form';
 import { createAddress, deleteAddress, getAddresses, updateAddress, type AddressDTO } from '@/lib/shop-client';
 import { ui } from '@/lib/guest-ui';
@@ -27,6 +28,7 @@ const line = (a: AddressDTO) => [a.street, a.ward, a.district, a.province].filte
 
 export default function AddressBookPage() {
   const phase = useAuthPhase();
+  const userId = useOptionalAuth()?.user?.id;
   const qc = useQueryClient();
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -150,8 +152,9 @@ export default function AddressBookPage() {
                 <AddressForm
                   title="Sửa địa chỉ"
                   headingLevel={2}
-                  submitLabel="Lưu thay đổi"
+                  submitLabel="Lưu"
                   initial={addressToForm(a)}
+                  userId={userId}
                   onSubmit={async (payload) => {
                     await updateAddress(a.id, payload);
                     setEditingId(null);
@@ -254,9 +257,10 @@ export default function AddressBookPage() {
       <div className="mt-4">
         {adding ? (
           <AddressForm
-            title="Thêm địa chỉ mới"
+            title="Thêm địa chỉ"
+            userId={userId}
             headingLevel={2}
-            submitLabel="Lưu địa chỉ"
+            submitLabel="Lưu"
             onSubmit={async (payload) => {
               await createAddress(payload);
               setAdding(false);

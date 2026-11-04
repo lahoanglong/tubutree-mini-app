@@ -51,6 +51,13 @@ export function typeInto(el: Element | null, value: string) {
   });
 }
 
+/** Ô chọn của GeoPicker theo nhãn hiện trên màn hình (label htmlFor). */
+export function selectByLabel(root: ParentNode, label: string): HTMLSelectElement | null {
+  const l = Array.from(root.querySelectorAll('label')).find((x) => x.textContent?.trim() === label);
+  const el = l?.htmlFor ? document.getElementById(l.htmlFor) : null;
+  return el instanceof HTMLSelectElement ? el : null;
+}
+
 export function selectValue(el: Element | null, value: string) {
   if (!el) throw new Error('selectValue: không thấy phần tử');
   act(() => {

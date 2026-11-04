@@ -2,7 +2,9 @@
 
 import { useEffect, useId, useRef, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { pickLastGeo, recallLastGeo, rememberLastGeo } from '@tubutree/app-core/address-geo-memory';
+import { usableProfileName } from '@tubutree/app-core/profile-name';
 import { GeoPicker, EMPTY_GEO, type GeoValue } from '@/components/geo-picker';
 import {
   RECIPIENT_MAX,
@@ -16,6 +18,8 @@ import {
 } from '@/lib/address-form';
 import { ui } from '@/lib/guest-ui';
 import { actionErrorText } from '@/lib/error-text';
+import { browserStorage } from '@/lib/recently-viewed';
+import { getMe, type AddressDTO } from '@/lib/shop-client';
 
 const EMPTY_FORM: AddressFormValues = { recipient: '', phone: '', street: '' };
 
@@ -29,6 +33,7 @@ export function AddressForm({
   submitLabel,
   title,
   headingLevel = 3,
+  userId,
   onSubmit,
   onCancel,
 }: {
@@ -37,18 +42,54 @@ export function AddressForm({
   title: string;
   /** Cấp tiêu đề của form cho khớp trang chứa nó (h2 dưới h1, h3 dưới một mục h2) để không nhảy cấp. */
   headingLevel?: 2 | 3;
+  /** Khoá bộ nhớ tỉnh/phường theo tài khoản để máy dùng chung không điền nhầm. */
+  userId?: string | null;
   onSubmit: (payload: AddressPayload) => Promise<unknown>;
   onCancel: () => void;
 }) {
-  const [form, setForm] = useState<AddressFormValues>(initial?.form ?? EMPTY_FORM);
-  const [geo, setGeo] = useState<GeoValue>(initial?.geo ?? EMPTY_GEO);
+  const queryClient = useQueryClient();
+  const meQ = useQuery({ queryKey: ['me'], queryFn: getMe, enabled: !initial });
+  const [form, setForm] = useState<AddressFormValues>(
+    initial?.form ?? {
+      ...EMPTY_FORM,
+      recipient: usableProfileName(meQ.data?.fullName),
+      phone: meQ.data?.phone ?? '',
+    },
+  );
+  const [geo, setGeo] = useState<GeoValue>(
+    () =>
+      initial?.geo ??
+      recallLastGeo(browserStorage(), userId) ??
+      pickLastGeo(queryClient.getQueryData<AddressDTO[]>(['addresses'])) ??
+      EMPTY_GEO,
+  );
   const [touched, setTouched] = useState<Partial<Record<AddressField, boolean>>>({});
   const [submitted, setSubmitted] = useState(false);
   const [focusTick, setFocusTick] = useState(0);
   const formRef = useRef<HTMLFormElement>(null);
   const Heading = headingLevel === 2 ? 'h2' : 'h3';
 
-  const save = useMutation({ mutationFn: (p: AddressPayload) => onSubmit(p) });
+  const save = useMutation({
+    mutationFn: (p: AddressPayload) => onSubmit(p),
+    onSuccess: (_r, p) => {
+      // Không biết tài khoản thì không ghi: khoá chung sẽ điền nhầm tỉnh/phường cho người dùng sau trên máy dùng chung.
+      if (userId) rememberLastGeo(p, browserStorage(), userId);
+    },
+  });
+
+  const prefilled = useRef(false);
+  useEffect(() => {
+    if (initial || !meQ.data || prefilled.current) return;
+    prefilled.current = true;
+    const name = usableProfileName(meQ.data.fullName);
+    const phone = meQ.data.phone ?? '';
+    setForm((f) => ({
+      ...f,
+      recipient: f.recipient.trim() ? f.recipient : name,
+      phone: f.phone.trim() ? f.phone : phone,
+    }));
+    setGeo((g) => (g.provinceCode ? g : (pickLastGeo(queryClient.getQueryData<AddressDTO[]>(['addresses'])) ?? g)));
+  }, [initial, meQ.data, queryClient]);
 
   const all = validateAddress(form, geo);
   const shown = (f: AddressField) => (submitted || touched[f] ? all[f] : undefined);
@@ -98,7 +139,7 @@ export function AddressForm({
         <GeoPicker value={geo} onChange={setGeo} errorProvince={shown('province')} errorWard={shown('ward')} />
       </div>
       <TextField
-        label="Số nhà, đường"
+        label="Số nhà, tên đường"
         value={form.street}
         error={shown('street')}
         maxLength={STREET_MAX}
