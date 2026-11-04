@@ -55,12 +55,15 @@ export function browseCanonicalPath({ brand, page, category }: BrowseSeoFilter):
  * Danh sách gốc không lọc từ trang 2 (`?page=N`) noindex như `?all=1` (trang 1 của danh sách): nếu không, trang 1 noindex mà trang 2+ lập chỉ mục
  * và rel=prev trỏ về trang noindex. Trang noindex không khai canonical (hai tín hiệu mâu thuẫn).
  */
+/** Trang sâu nhất của danh sách được lập chỉ mục; app/san-pham cũng chỉ dựng sẵn danh sách tới trang này, nên hai bên khớp nhau. */
+export const BROWSE_INDEX_MAX_PAGE = 50;
+
 export function browseMetadata(filter: BrowseSeoFilter, brandKnown: boolean): Metadata {
   const brand = filter.brand?.slice(0, BRAND_TITLE_MAX).trim() || undefined;
   const page = filter.page && filter.page > 1 ? Math.floor(filter.page) : 1;
   const category = filter.category;
   const meta: Metadata = {};
-  const noindex = (filter.brand && !brandKnown) || (page > 1 && !brand && !category);
+  const noindex = (filter.brand && !brandKnown) || (page > 1 && !brand && !category) || page > BROWSE_INDEX_MAX_PAGE;
   if (noindex) meta.robots = { index: false, follow: true };
   else meta.alternates = { canonical: browseCanonicalPath({ brand: filter.brand, page, category }) };
 

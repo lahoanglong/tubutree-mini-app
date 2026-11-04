@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, Logger, Optional } from '@nestjs/common';
+import { BadRequestException, ConflictException, Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { User, UserRole } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
@@ -9,6 +9,7 @@ import { throwIfLockBusy } from '../../../common/lock-busy';
 import { STAFF_PERMISSIONS, isStaffPermission, type StaffPermission } from '../../../common/staff-permissions';
 import { MerchantFulfilmentService } from '../../merchant/merchant-fulfilment.service';
 import { losesPartnerStore } from '../../merchant/partner-store';
+import { ImageRegistryStale } from '../../catalog/image-registry-stale';
 
 const RANK: Record<UserRole, number> = {
   CUSTOMER: 0,
@@ -37,13 +38,22 @@ export class RbacService {
   constructor(
     private readonly prisma: PrismaService,
     @Optional() private readonly fulfilment?: MerchantFulfilmentService,
+    @Optional() @Inject(ImageRegistryStale) private readonly imageStale?: ImageRegistryStale,
   ) {}
 
   /**
    * Áp grant theo SĐT khi login/refresh. CHỈ NÂNG role (không tự hạ — hạ qua revoke).
    * Trả user đã update (hoặc user gốc nếu không đổi).
    */
-  async applyGrants(user: User, db: Db = this.prisma, actorId: string | null = null): Promise<User> {
+  async applyGrants(user: User): Promise<User> {
+    const updated = await this.applyGrantsWith(this.prisma, user, null);
+    // Vai trò quyết định gian hàng CTV của người này có hiện công khai không, nên danh sách ảnh /img phải nạp lại (ghi thẳng, đã commit).
+    if (updated !== user) this.imageStale?.markStale();
+    return updated;
+  }
+
+  /** Thân của applyGrants, ghi qua `db` (tx của người gọi) và không đánh dấu ảnh: người gọi đánh dấu sau khi tx commit. Không đổi gì thì trả lại đúng `user`. */
+  private async applyGrantsWith(db: Db, user: User, actorId: string | null): Promise<User> {
     if (!user.phone) return user;
     const grants = await db.roleGrant.findMany({
       where: { phone: user.phone, revokedAt: null },
@@ -100,7 +110,7 @@ export class RbacService {
   async addGrant(adminId: string, phone: string, role: 'STAFF' | 'ADMIN', permissions?: readonly string[]) {
     const normalized = phone.trim();
     const perms = role === 'STAFF' && permissions ? normalizePermissions(permissions) : [];
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       // Cùng luật với revokeGrant/setUserRole: không tự đổi quyền của chính mình. Thiếu chặn này, admin
       // vừa bị hạ quyền dùng access token cũ tự cấp lại ADMIN vĩnh viễn (ADMINOPS-1).
       const user = await tx.user.findUnique({ where: { phone: normalized } });
@@ -130,7 +140,7 @@ export class RbacService {
       if (user) {
         // Bản đọc đầu tx có thể cũ: request thua createMany đã chờ bên thắng commit, nên role/nhóm của user có thể đã đổi.
         const fresh = (await tx.user.findUnique({ where: { id: user.id } })) ?? user;
-        const updated = await this.applyGrants(fresh, tx, adminId);
+        const updated = await this.applyGrantsWith(tx, fresh, adminId);
         applied = updated.role !== fresh.role;
         // applyGrants chỉ chép nhóm khi nâng vai trò; người đã là STAFF thì nhóm admin vừa chọn phải áp luôn kẻo bị bỏ qua âm thầm.
         if (!applied && updated.role === 'STAFF' && role === 'STAFF' && perms.length && !samePermissions(updated.staffPermissions ?? [], perms)) {
@@ -148,6 +158,8 @@ export class RbacService {
       }
       return { granted: role, applied, permissionsChanged };
     });
+    if (result.applied) this.imageStale?.markStale();
+    return result;
   }
 
   /**
@@ -162,7 +174,7 @@ export class RbacService {
     const normalized = phone.trim();
     // Đọc cấu hình đối soát trước khi mở tx (như AdminService.setUserRole): chỉ dùng khi người này rơi xuống CUSTOMER.
     const partnerCfg = await this.fulfilment?.settlementConfig();
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       await lockAdminRoster(tx);
       const { count } = await tx.roleGrant.updateMany({
         where: { phone: normalized, revokedAt: null },
@@ -214,6 +226,8 @@ export class RbacService {
       }
       return { revoked: count, downgraded, role, ...(storeBlocked ? { storeBlocked } : {}) };
     }, { maxWait: 15_000, timeout: 60_000 }).catch(throwIfLockBusy);
+    if (result.downgraded) this.imageStale?.markStale();
+    return result;
   }
 
   /**

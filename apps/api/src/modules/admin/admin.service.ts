@@ -423,6 +423,7 @@ export class AdminService {
           await recordUserAdminEvent(tx, { userId: app.userId, kind: 'STOREFRONT_PARTNER', from: 'false', to: 'true', reason: store.id, actorId: adminId });
         }
       }, { maxWait: 15_000, timeout: 60_000 }).catch(throwIfLockBusy);
+      this.imageResize?.invalidateRegistry();
       // Như setUserRole: grant STAFF/ADMIN còn hiệu lực sẽ được applyGrants nâng lại ở lần refresh token kế tiếp (chỉ nâng, không hạ).
       const revoked = applicantPhone
         ? await this.rbac.revokeGrantsAbove(applicantPhone, 'DEALER').catch((err) => {
@@ -686,6 +687,8 @@ export class AdminService {
       }
       return { updated, previousRole };
     }, { maxWait: 15_000, timeout: 60_000 }).catch(throwIfLockBusy);
+    // Vai trò và cờ đối tác quyết định gian hàng của người này có hiện công khai không: danh sách ảnh /img nạp lại, đánh dấu sau commit.
+    this.imageResize?.invalidateRegistry();
     // Thu hồi mọi RoleGrant (STAFF/ADMIN) xếp hạng CAO HƠN role vừa gán — trước đây KHÔNG làm
     // việc này: hạ quyền qua đường setUserRole trong khi grant từ /admin/staff/grant còn hiệu
     // lực → lần refresh token tiếp theo, applyGrants (chỉ nâng không hạ) tự phục hồi quyền cũ

@@ -35,7 +35,7 @@ describe('ShopHeader (web)', () => {
     expect(img.style.position).toBe('absolute');
     expect(img.style.objectFit).toBe('cover');
     expect(img.getAttribute('src')).toContain('/img?w=960&u=');
-    expect(img.getAttribute('srcset')).toMatch(/ 320w, .* 640w, .* 960w$/);
+    expect(img.getAttribute('srcset')).toMatch(/ 320w, .* 480w, .* 640w, .* 960w$/);
     expect(img.getAttribute('sizes')).toBe('(max-width: 1023px) 100vw, 500px');
   });
 

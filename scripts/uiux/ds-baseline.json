@@ -166,7 +166,6 @@
   "apps/web/src/app/san-pham/[slug]/pdp-rails.tsx": 2,
   "apps/web/src/app/san-pham/[slug]/pdp-sections.tsx": 6,
   "apps/web/src/app/san-pham/[slug]/product-reviews.tsx": 1,
-  "apps/web/src/app/san-pham/page.tsx": 2,
   "apps/web/src/app/tai-khoan/cai-dat/page.tsx": 9,
   "apps/web/src/app/tai-khoan/dia-chi/page.tsx": 22,
   "apps/web/src/app/tai-khoan/diem-xanh/page.tsx": 2,

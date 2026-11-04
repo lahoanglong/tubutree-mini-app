@@ -18,6 +18,63 @@ const orderStatus = { setStatus: jest.fn() } as unknown as OrderStatusService;
 
 describe('MerchantService', () => {
   describe('getOrCreateStore', () => {
+    describe('đánh dấu danh sách ảnh /img cũ khi bật cờ đối tác', () => {
+      const CTV_STORE = { id: 's1', ownerUserId: 'u1', type: 'CTV', isPartner: false, title: 'Shop', collections: [] };
+      function setup(opts: { store?: Record<string, unknown>; ownerRole?: string } = {}) {
+        const stale = { markStale: jest.fn() };
+        const tx = {
+          $queryRaw: jest.fn().mockResolvedValue([{ isPartner: false }]),
+          user: { findUnique: jest.fn().mockResolvedValue({ role: opts.ownerRole ?? 'DEALER' }) },
+          storefront: { update: jest.fn().mockResolvedValue({}) },
+          userAdminEvent: { create: jest.fn().mockResolvedValue({}) },
+        };
+        const prisma = {
+          user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'DEALER' }) },
+          storefront: { findFirst: jest.fn().mockResolvedValue(opts.store ?? CTV_STORE) },
+          $transaction: jest.fn(),
+        };
+        const svc = new MerchantService(prisma as unknown as PrismaService, orderStatus, undefined, undefined, stale as never);
+        return { svc, stale, tx, prisma };
+      }
+
+      it('tx bật isPartner → đánh dấu đúng một lần, 0 lần khi callback tx còn chạy', async () => {
+        const { svc, stale, tx, prisma } = setup();
+        let insideCalls = -1;
+        prisma.$transaction.mockImplementation(async (cb: (t: unknown) => unknown) => {
+          const out = await cb(tx);
+          insideCalls = stale.markStale.mock.calls.length;
+          return out;
+        });
+        const res = await svc.getOrCreateStore('u1');
+        expect(res.isPartner).toBe(true);
+        expect(insideCalls).toBe(0);
+        expect(stale.markStale).toHaveBeenCalledTimes(1);
+      });
+
+      it('chủ không còn là DEALER trong tx (trả false) → KHÔNG đánh dấu', async () => {
+        const { svc, stale, tx, prisma } = setup({ ownerRole: 'CUSTOMER' });
+        prisma.$transaction.mockImplementation((cb: (t: unknown) => unknown) => cb(tx));
+        const res = await svc.getOrCreateStore('u1');
+        expect(res.isPartner).toBe(false);
+        expect(stale.markStale).not.toHaveBeenCalled();
+      });
+
+      it('tx ném lỗi → KHÔNG đánh dấu', async () => {
+        const { svc, stale, tx, prisma } = setup();
+        tx.storefront.update.mockRejectedValue(new Error('tx fail'));
+        prisma.$transaction.mockImplementation((cb: (t: unknown) => unknown) => cb(tx));
+        await expect(svc.getOrCreateStore('u1')).rejects.toThrow('tx fail');
+        expect(stale.markStale).not.toHaveBeenCalled();
+      });
+
+      it('gian hàng đã là đối tác (không vào tx) → KHÔNG đánh dấu', async () => {
+        const { svc, stale, prisma } = setup({ store: { ...CTV_STORE, isPartner: true } });
+        await svc.getOrCreateStore('u1');
+        expect(prisma.$transaction).not.toHaveBeenCalled();
+        expect(stale.markStale).not.toHaveBeenCalled();
+      });
+    });
+
     it('chặn role CUSTOMER không được tạo gian hàng', async () => {
       const prisma = makePrisma({
         user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'CUSTOMER' }) },

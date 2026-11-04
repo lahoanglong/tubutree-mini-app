@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { MerchantModule } from '../merchant/merchant.module';
+import { ImageRegistryModule } from '../catalog/image-registry.module';
 import { RbacService } from './rbac/rbac.service';
 import { ShiftsService } from './shifts/shifts.service';
 import { AttendanceService } from './attendance/attendance.service';
@@ -16,7 +17,7 @@ import { AdminPayrollController } from './payroll/admin-payroll.controller';
 
 // PrismaModule + SystemConfigModule + ConfigModule là @Global() → không cần import ở đây.
 @Module({
-  imports: [MerchantModule],
+  imports: [MerchantModule, ImageRegistryModule],
   controllers: [
     AdminStaffController,
     AdminShiftsController,

@@ -2,7 +2,7 @@ import { ChevronRight, Leaf } from 'lucide-react';
 import { useNavigate } from 'zmp-ui';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { homeCopy } from '@tubutree/app-core/home-copy';
-import { memberCardAriaLabel } from '@tubutree/app-core/home-layout';
+import { offersPointsAriaLabel } from '@tubutree/app-core/home-layout';
 import { offersMemberCard } from '@tubutree/app-core/member-card-grace';
 import type { LoyaltyOverview } from '../../services/account-api';
 import { usePublicConfig } from '../../hooks/use-public-config';
@@ -41,7 +41,7 @@ export function OffersPointsStrip({ loyalty }: { loyalty: PointsStripQuery }) {
       >
         <button
           type="button"
-          aria-label={card ? memberCardAriaLabel(card, homeCopy.offers.pointsDetail) : homeCopy.offers.pointsDetail}
+          aria-label={card ? offersPointsAriaLabel(card, homeCopy.offers.pointsDetail) : homeCopy.offers.pointsDetail}
           className="tubu-press"
           onClick={() => {
             haptic('light');
@@ -57,6 +57,8 @@ export function OffersPointsStrip({ loyalty }: { loyalty: PointsStripQuery }) {
                 </>
               ) : null}
             </Text>
+            {/* Khoảng trắng thật giữa các mảnh chữ (flex không vẽ): chữ nhìn thấy khớp tên truy cập, WCAG 2.5.3. */}
+            {' '}
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
               <Text variant="caption" tone="inverse">
                 {homeCopy.offers.pointsDetail}
@@ -64,10 +66,12 @@ export function OffersPointsStrip({ loyalty }: { loyalty: PointsStripQuery }) {
               <Icon icon={ChevronRight} size="sm" tone="inverse" />
             </span>
           </div>
+          {' '}
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 2, flexWrap: 'wrap' }}>
             <Heading variant="title-md" as="div" tone="inverse" font="ui" style={{ fontVariantNumeric: 'tabular-nums' }}>
               {card?.pointsLabel}
             </Heading>
+            {' '}
             {card?.valueLabel && (
               <Text variant="body-sm" tone="inverse" style={{ opacity: 0.9, fontVariantNumeric: 'tabular-nums' }}>
                 {card.valueLabel}

@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { shelf } from './merch/shelves';
 import {
-  clearHomeHints, customerKind, dropForeignHomeHints, HOME_KIND_KEY, HOME_SHORTCUTS, TODO_ROWS_KEY, OFFERS_SEEN_KEY, readLastTodoRows, readTodoRows, writeTodoRows, readSeenCoupons, writeSeenCoupons, homeBlockOrder, isCouponExpiring, memberCardView, mergeSeenCouponIds, resolveHomeKind, mergeSuggestions, NAV_TAB_SPECS, offersDotReason, ORDER_STATUS_ROW,
+  memberCardAriaLabel, offersPointsAriaLabel, clearHomeHints, customerKind, dropForeignHomeHints, HOME_KIND_KEY, HOME_SHORTCUTS, TODO_ROWS_KEY, OFFERS_SEEN_KEY, readLastTodoRows, readTodoRows, writeTodoRows, readSeenCoupons, writeSeenCoupons, homeBlockOrder, isCouponExpiring, memberCardView, mergeSeenCouponIds, resolveHomeKind, mergeSuggestions, NAV_TAB_SPECS, offersDotReason, ORDER_STATUS_ROW,
   visibleHomeShortcuts, homeRenderOrder, homeKeptOrder, homeSettling, homeShortcutSlots, HOME_HEADER_HEIGHT, HOME_SHORTCUT_SLOTS, HOME_HERO_HEIGHT, HOME_GIFT_HEIGHT,
   readPurchasedHint, writePurchasedHint, PURCHASED_HINT_KEY, purchasedSkeletonHeight, todoSkeletonHeight,
   readFlashHint, readFlashSlotHint, writeFlashHint, FLASH_HINT_KEY, FLASH_NEXT_SLOT_HEIGHT,
@@ -543,5 +543,22 @@ describe('rememberActiveOrder — đơn vừa đặt để Trang chủ lần sau
     const s = store();
     rememberActiveOrder(s, undefined);
     expect(readLastTodoRows(s)).toBe(0);
+  });
+});
+
+describe('tên đọc của thẻ Điểm Xanh', () => {
+  const card = { tierName: 'Mầm Xanh', pointsLabel: '120 điểm', valueLabel: '≈ 12.000đ' };
+  it('memberCardAriaLabel: giữ dấu phẩy giữa các phần (nhịp ngắt cho trình đọc), hành động ở cuối', () => {
+    expect(memberCardAriaLabel(card, 'Xem ưu đãi', 'Chào An')).toBe('Chào An · Mầm Xanh, 120 điểm, ≈ 12.000đ. Xem ưu đãi');
+  });
+  it('memberCardAriaLabel khi tổng quan lỗi: nói câu báo lỗi đang hiển thị, không đọc số điểm không thấy', () => {
+    // Ở trạng thái lỗi ứng dụng không có hạng (overview chưa về).
+    const failed = { ...card, tierName: null };
+    expect(memberCardAriaLabel(failed, 'Xem ưu đãi', 'Chào An', 'Chưa tải được hạng và điểm')).toBe('Chào An, Chưa tải được hạng và điểm. Xem ưu đãi');
+    expect(memberCardAriaLabel(failed, 'Xem ưu đãi', 'Chào An', 'Chưa tải được hạng và điểm')).not.toContain('120');
+  });
+  it('offersPointsAriaLabel: đúng thứ tự chữ nhìn thấy (hạng, chi tiết, điểm, giá trị); thiếu hạng thì bỏ', () => {
+    expect(offersPointsAriaLabel(card, 'Hạng và lịch sử điểm')).toBe('Mầm Xanh, Hạng và lịch sử điểm, 120 điểm, ≈ 12.000đ');
+    expect(offersPointsAriaLabel({ ...card, tierName: null as unknown as string, valueLabel: '' }, 'Chi tiết')).toBe('Chi tiết, 120 điểm');
   });
 });

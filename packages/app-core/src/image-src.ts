@@ -2,7 +2,7 @@
  * Ảnh sản phẩm theo đúng bề rộng hiển thị: API đổi cỡ ảnh Pancake/Cloudinary/ảnh của chính nó (GET {api}/img?u=&w=) thành bản nhỏ
  * webp, thay vì tải ảnh gốc hàng trăm KB cho thẻ rộng ~170px. Chỉ nhận các bề rộng cố định của API (RESIZE_WIDTHS ở apps/api).
  */
-export const IMAGE_WIDTHS: readonly number[] = [160, 320, 640, 960];
+export const IMAGE_WIDTHS: readonly number[] = [160, 320, 480, 640, 960];
 
 /**
  * Bề rộng thêm cho ảnh tràn khung (banner, hero chiến dịch) ở màn 2x–3x; API nhận chúng (RESIZE_WIDTHS) nhưng thẻ SP và Mini App không dùng,
@@ -50,7 +50,7 @@ function safeUrl(raw: string): URL | null {
 export interface ImageVariants {
   /** Bản 1x. */
   src: string;
-  /** "url 1x, url 2x" khi hai bản khác nhau; không có khi cùng một bề rộng. */
+  /** "url 1x, url 2x[, url 3x]" khi hai bản khác nhau; không có khi cùng một bề rộng. */
   srcSet?: string;
 }
 
@@ -66,7 +66,12 @@ export function imageVariants(src: string | null | undefined, cssWidth: number, 
   const url = (w: number) => `${base}/img?w=${w}&u=${encodeURIComponent(source)}`;
   const w1 = pickImageWidth(cssWidth);
   const w2 = pickImageWidth(cssWidth * 2);
-  return w1 === w2 ? { src: url(w1) } : { src: url(w1), srcSet: `${url(w1)} 1x, ${url(w2)} 2x` };
+  if (w1 === w2) return { src: url(w1) };
+  // Máy 3x (Mini App dùng 1x/2x/3x, không có mô tả w): thiếu mục 3x thì ô 170px ở DPR 3 lấy mục 2x (480) khi cần ~510px.
+  const w3 = pickImageWidth(cssWidth * 3);
+  const set = [`${url(w1)} 1x`, `${url(w2)} 2x`];
+  if (w3 !== w2) set.push(`${url(w3)} 3x`);
+  return { src: url(w1), srcSet: set.join(', ') };
 }
 
 /** URL đổi cỡ ở đúng bề rộng `width` (một trong IMAGE_WIDTHS hoặc WIDE_IMAGE_WIDTHS). Null khi ảnh không đổi cỡ được hoặc bề rộng không được API nhận. */

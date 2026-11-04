@@ -1116,3 +1116,62 @@ describe('R4-ADMIN-7: việc admin phải làm với đối tác', () => {
     expect(findMany).not.toHaveBeenCalled();
   });
 });
+
+describe('MerchantFulfilmentService.setStorePartner: đánh dấu danh sách ảnh /img cũ', () => {
+  function setup(store: Record<string, unknown> | null) {
+    const { prisma } = build();
+    const stale = { markStale: jest.fn() };
+    // build() không nhận cờ nên dựng lại service với tham số thứ 5 là cờ, dùng chung prisma giả.
+    const withStale = new MerchantFulfilmentService(
+      prisma as unknown as PrismaService,
+      {} as OrderStatusService,
+      undefined,
+      undefined,
+      stale as never,
+    );
+    (prisma as Record<string, unknown>).userAdminEvent = { create: jest.fn().mockResolvedValue({}) };
+    prisma.$queryRaw.mockResolvedValue(store ? [store] : []);
+    (prisma.storefront as { update: jest.Mock }).update.mockResolvedValue({});
+    return { svc: withStale, prisma, stale };
+  }
+  const CTV = { id: 'sf-a', type: 'CTV', isPartner: false, ownerUserId: 'u1' };
+
+  it('bật cờ đối tác (đổi thật) → đánh dấu đúng một lần, CHỈ sau khi giao dịch xong', async () => {
+    const { svc, prisma, stale } = setup(CTV);
+    let insideCalls = -1;
+    prisma.$transaction.mockImplementation(async (cb: (tx: unknown) => unknown) => {
+      const out = await cb(prisma);
+      insideCalls = stale.markStale.mock.calls.length;
+      return out;
+    });
+    await svc.setStorePartner('admin1', 'sf-a', true);
+    expect(insideCalls).toBe(0);
+    expect(stale.markStale).toHaveBeenCalledTimes(1);
+  });
+
+  it('tắt cờ đối tác (đổi thật) → đánh dấu đúng một lần', async () => {
+    const { svc, stale } = setup({ ...CTV, isPartner: true });
+    jest.spyOn(svc as unknown as { partnerBlockers: () => Promise<string[]> }, 'partnerBlockers').mockResolvedValue([]);
+    await svc.setStorePartner('admin1', 'sf-a', false);
+    expect(stale.markStale).toHaveBeenCalledTimes(1);
+  });
+
+  it('bấm lại cùng giá trị (changed=false) → KHÔNG đánh dấu', async () => {
+    const { svc, stale } = setup({ ...CTV, isPartner: true });
+    await svc.setStorePartner('admin1', 'sf-a', true);
+    expect(stale.markStale).not.toHaveBeenCalled();
+  });
+
+  it('tắt bị chặn vì còn việc dở (409) → KHÔNG đánh dấu', async () => {
+    const { svc, stale } = setup({ ...CTV, isPartner: true });
+    jest.spyOn(svc as unknown as { partnerBlockers: () => Promise<string[]> }, 'partnerBlockers').mockResolvedValue(['còn đơn']);
+    await expect(svc.setStorePartner('admin1', 'sf-a', false)).rejects.toThrow(ConflictException);
+    expect(stale.markStale).not.toHaveBeenCalled();
+  });
+
+  it('giao dịch ném lỗi (không thấy gian hàng) → KHÔNG đánh dấu', async () => {
+    const { svc, stale } = setup(null);
+    await expect(svc.setStorePartner('admin1', 'sf-a', true)).rejects.toThrow(NotFoundException);
+    expect(stale.markStale).not.toHaveBeenCalled();
+  });
+});

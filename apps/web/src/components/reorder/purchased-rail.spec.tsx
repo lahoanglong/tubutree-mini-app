@@ -46,6 +46,8 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
+const productButton = (root: ParentNode) => [...root.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Nước rửa chén'))!;
+
 describe('PurchasedRail', () => {
   it('1 món: thẻ ngang thấp (không phải kệ cuộn) với tên, phân loại, giá và hai nút; hỏi đúng /me/purchased-items?limit=10', async () => {
     const c = await mount();
@@ -132,7 +134,11 @@ describe('PurchasedRail', () => {
 
   it('chạm tên/ảnh thẻ → trang sản phẩm', async () => {
     const c = await mount();
-    click(c.querySelector('button[aria-label="Nước rửa chén"]'));
+    const open = productButton(c);
+    // Tên đọc lấy từ chữ nhìn thấy (WCAG 2.5.3): không aria-label ghi đè, và chữ nhìn thấy gồm cả phân loại.
+    expect(open.hasAttribute('aria-label')).toBe(false);
+    expect(open.textContent).toContain('Chanh');
+    click(open);
     expect(mocks.push).toHaveBeenCalledWith('/san-pham/nuoc-rua-chen?pv=v1');
   });
 
@@ -254,7 +260,10 @@ describe('PurchasedRail — Trang chủ (Q6)', () => {
 
   it('chạm tên/ảnh dòng → trang sản phẩm ở đúng phân loại đã mua', async () => {
     const c = await home();
-    click(c.querySelector('[data-testid="rebuy-line"] button[aria-label="Nước rửa chén"]'));
+    const open = productButton(c.querySelector('[data-testid="rebuy-line"]')!);
+    expect(open.hasAttribute('aria-label')).toBe(false);
+    expect(open.textContent).toContain('Chanh');
+    click(open);
     expect(mocks.push).toHaveBeenCalledWith(expect.stringContaining('/san-pham/nuoc-rua-chen'));
   });
 
