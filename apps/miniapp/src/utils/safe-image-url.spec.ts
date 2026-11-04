@@ -8,6 +8,10 @@ describe('safeImageUrl', () => {
     expect(safeImageUrl('data:image/jpeg;base64,/9j/4AAQ')).not.toBeNull();
     expect(safeImageUrl('data:image/webp;base64,UklGRg==')).not.toBeNull();
   });
+  it('nhận đủ các dạng base64 mà API lưu cho ảnh nhân viên (STAFF_IMAGE): jpg và gif', () => {
+    expect(safeImageUrl('data:image/jpg;base64,/9j/4AAQ')).not.toBeNull();
+    expect(safeImageUrl('data:image/gif;base64,R0lGODlh')).not.toBeNull();
+  });
   it('chặn javascript:, http://, host lạ, svg, data html, rỗng', () => {
     for (const bad of [
       'javascript:alert(1)',
