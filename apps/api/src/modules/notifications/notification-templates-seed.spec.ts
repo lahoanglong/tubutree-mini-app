@@ -189,7 +189,8 @@ describe('seed mẫu thông báo', () => {
       expect(bodiesAfterMigrations().get('POINTS_EXPIRING')).toBe(NEW_BODY);
     });
 
-    it('PROD còn bản "điểm Xanh" viết thường (đã áp 20261010150000 trước khi file được sửa sang chữ hoa): migration bổ sung khớp cả hai bản cũ', () => {
+    it('PROD còn bản "điểm Xanh" viết thường do prisma:seed của bản thử cb92dc8 chèn (lịch sử migration ở trên không thấy): migration bổ sung khớp cả hai bản cũ', () => {
+      // Nguyên văn cb92dc8:apps/api/prisma/seed.ts dòng 705, bản PROD đang giữ. Không sửa chữ.
       const OLD_LOWER = '⏳ Bạn có {{points}} điểm Xanh sắp hết hạn vào {{date}}. Dùng để đổi ưu đãi trước khi lỡ nhé! 🌿';
       const fix = readFileSync(join(MIGRATIONS_DIR, '20261104100000_points_expiring_template_lowercase_variant', 'migration.sql'), 'utf-8');
       const m = /UPDATE "notification_templates" SET "bodyTemplate" = '([^']*)'\s+WHERE "code" = '([A-Z_]+)'\s+AND "bodyTemplate" IN \(([\s\S]*?)\);/.exec(fix);

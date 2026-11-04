@@ -5,11 +5,12 @@ import { readApiSql } from './sql-script';
 
 /**
  * TK-04 bổ sung trên Postgres thật: chạy lại CHÍNH file migration với từng bản lời tin PROD có thể đang giữ.
- * 20261104070000 không đổi được câu trên PROD vì PROD còn bản "điểm Xanh" viết thường.
+ * 20261104070000 không đổi được câu trên PROD vì PROD còn bản "điểm Xanh" viết thường, do prisma:seed của bản thử cb92dc8 chèn.
  */
 describe('migration 20261104100000 đổi mẫu POINTS_EXPIRING (real Postgres)', () => {
   const SQL = readApiSql('prisma/migrations/20261104100000_points_expiring_template_lowercase_variant/migration.sql');
   const NEW_BODY = 'Bạn có {{points}} Điểm Xanh hết hạn trong {{days}} ngày tới, sớm nhất vào {{date}}.';
+  // Nguyên văn cb92dc8:apps/api/prisma/seed.ts dòng 705, bản PROD đang giữ. Không sửa chữ.
   const OLD_LOWER = '⏳ Bạn có {{points}} điểm Xanh sắp hết hạn vào {{date}}. Dùng để đổi ưu đãi trước khi lỡ nhé! 🌿';
   const OLD_UPPER = '⏳ Bạn có {{points}} Điểm Xanh sắp hết hạn vào {{date}}. Dùng để đổi ưu đãi trước khi lỡ nhé! 🌿';
   let moduleRef: TestingModule;
