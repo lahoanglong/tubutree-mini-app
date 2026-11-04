@@ -5,7 +5,7 @@ import { AnalyticsEventsService } from '../../src/modules/analytics/analytics-ev
 import { NotificationsService, ZNS_REVIEW_PREFIX, type ZnsSendJobData } from '../../src/modules/notifications/notifications.service';
 import { ZnsStuckLogCron } from '../../src/modules/notifications/zns-stuck-log.cron';
 import type { ZnsClient } from '../../src/modules/integrations/zns/zns.client';
-import { createUser, warmPool } from './helpers';
+import { createUser, warmPool, uniquePhone } from './helpers';
 
 /** Log ZNS kẹt vì job đã chết: các đường đóng chạy song song chỉ ghi một lần và không đè log đã có kết cục. */
 describe('đóng log ZNS kẹt (real Postgres)', () => {
@@ -28,7 +28,7 @@ describe('đóng log ZNS kẹt (real Postgres)', () => {
 
   beforeEach(() => sendTemplate.mockClear());
 
-  const newUser = () => createUser(prisma, { phone: `09${Date.now().toString().slice(-8)}` });
+  const newUser = () => createUser(prisma, { phone: uniquePhone() });
   const mkLog = (userId: string, dedupeKey: string | null, status: string) =>
     prisma.notificationLog.create({
       data: { userId, templateCode: 'IT_STUCK', channel: 'ZNS', payload: dedupeKey ? { data: {}, dedupeKey } : { data: {} }, status },

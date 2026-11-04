@@ -7,7 +7,7 @@ import { AnalyticsEventsService } from '../../src/modules/analytics/analytics-ev
 import { NotificationsService, type ZnsSendJobData } from '../../src/modules/notifications/notifications.service';
 import { ZnsClient } from '../../src/modules/integrations/zns/zns.client';
 import type { ZaloOaTokenService } from '../../src/modules/integrations/zns/zalo-oa-token.service';
-import { createUser, warmPool } from './helpers';
+import { createUser, warmPool, uniquePhone } from './helpers';
 
 /** Worker ZNS chạy 5 job song song: hai log cùng (khách, dedupeKey) chỉ gửi Zalo một lần dù Zalo trả chậm. */
 describe('deliverZns song song cùng dedupeKey (real Postgres)', () => {
@@ -51,9 +51,7 @@ describe('deliverZns song song cùng dedupeKey (real Postgres)', () => {
       data: { userId, templateCode: 'IT_DEDUPE', channel: 'ZNS', payload: { data: { n: String(n) }, dedupeKey }, status: over.status ?? 'PENDING', ...(over.sentAt ? { sentAt: over.sentAt } : {}) },
     });
   const jobOf = (logId: string, n: number): ZnsSendJobData => ({ notificationLogId: logId, phone: '0900000001', templateId: 'zt', templateData: { n: String(n) } });
-  // Phone là khoá duy nhất: theo đồng hồ thì hai lần gọi trong cùng một mili giây (PG cục bộ trả lời dưới 1ms) đụng nhau. Đếm tăng từ một mốc ngẫu nhiên mỗi lần chạy.
-  let phoneSeq = Math.floor(Math.random() * 1e8);
-  const newUser = () => createUser(prisma, { phone: `09${String(phoneSeq++ % 1e8).padStart(8, '0')}` });
+  const newUser = () => createUser(prisma, { phone: uniquePhone() });
 
   it('log A có sentAt sớm hơn nhưng commit sau log B (hai tx chồng nhau), hai worker song song: Zalo nhận đúng một lần', async () => {
     const u = await newUser();

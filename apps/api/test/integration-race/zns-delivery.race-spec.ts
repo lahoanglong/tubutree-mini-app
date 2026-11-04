@@ -7,7 +7,7 @@ import { AnalyticsEventsService } from '../../src/modules/analytics/analytics-ev
 import { NotificationsService, type ZnsSendJobData } from '../../src/modules/notifications/notifications.service';
 import { ZnsClient } from '../../src/modules/integrations/zns/zns.client';
 import type { ZaloOaTokenService } from '../../src/modules/integrations/zns/zalo-oa-token.service';
-import { createUser, warmPool } from './helpers';
+import { createUser, warmPool, uniquePhone } from './helpers';
 
 /**
  * R2-ENGAGE-1 / R2-ENGAGE-2 trên Postgres thật + máy chủ ZNS giả: Zalo trả HTTP 200 kèm {error:-124} thì thông báo
@@ -79,7 +79,7 @@ describe('Gửi ZNS: HTTP 200 kèm lỗi trong body (real Postgres)', () => {
 
   it('có queue: notify() không gọi Zalo, log PENDING; HTTP 200 + {error:-118} → FAILED ngay + mã/lý do', async () => {
     const { svc } = await build(true);
-    const u = await createUser(prisma, { phone: `09${Date.now().toString().slice(-8)}` });
+    const u = await createUser(prisma, { phone: uniquePhone() });
     await svc.notify(u.id, 'IT_ZNS_DELIVERY', { order_code: 'IT1' });
     expect(hits).toBe(0);
     expect((await znsLog(u.id)).status).toBe('PENDING');
@@ -96,7 +96,7 @@ describe('Gửi ZNS: HTTP 200 kèm lỗi trong body (real Postgres)', () => {
 
   it('HTTP 200 + {error:-124} không bao giờ là SENT: còn lượt thì RETRYING, kèm lý do', async () => {
     const { svc } = await build(true);
-    const u = await createUser(prisma, { phone: `09${Date.now().toString().slice(-8)}` });
+    const u = await createUser(prisma, { phone: uniquePhone() });
     await svc.notify(u.id, 'IT_ZNS_DELIVERY', { order_code: 'IT0' });
     reply = { status: 200, body: { error: -124, message: 'template not approved' } };
     expect(await svc.deliverZns(queued[0]!, false)).toBe('RETRY');
@@ -105,7 +105,7 @@ describe('Gửi ZNS: HTTP 200 kèm lỗi trong body (real Postgres)', () => {
 
   it('lỗi tạm thời (HTTP 503) → RETRYING rồi thành công ở lượt sau → SENT, xoá lỗi', async () => {
     const { svc } = await build(true);
-    const u = await createUser(prisma, { phone: `09${Date.now().toString().slice(-8)}` });
+    const u = await createUser(prisma, { phone: uniquePhone() });
     await svc.notify(u.id, 'IT_ZNS_DELIVERY', { order_code: 'IT2' });
 
     reply = { status: 503, body: 'bad gateway' };
@@ -119,13 +119,13 @@ describe('Gửi ZNS: HTTP 200 kèm lỗi trong body (real Postgres)', () => {
 
   it('lỗi tạm thời ở lượt cuối → FAILED; chạy lặp job đã SENT không gửi lần hai', async () => {
     const { svc } = await build(true);
-    const u = await createUser(prisma, { phone: `09${Date.now().toString().slice(-8)}` });
+    const u = await createUser(prisma, { phone: uniquePhone() });
     await svc.notify(u.id, 'IT_ZNS_DELIVERY', { order_code: 'IT3' });
     reply = { status: 200, body: { error: -100, message: 'system error' } };
     expect(await svc.deliverZns(queued[0]!, true)).toBe('FAILED');
     expect((await znsLog(u.id)).status).toBe('FAILED');
 
-    const v = await createUser(prisma, { phone: `09${Date.now().toString().slice(-8)}` });
+    const v = await createUser(prisma, { phone: uniquePhone() });
     await svc.notify(v.id, 'IT_ZNS_DELIVERY', { order_code: 'IT4' });
     reply = { status: 200, body: { error: 0, message: 'Success' } };
     const before = hits;
@@ -136,7 +136,7 @@ describe('Gửi ZNS: HTTP 200 kèm lỗi trong body (real Postgres)', () => {
 
   it('không có queue: gửi ngay, {error != 0} vẫn không phải SENT', async () => {
     const { svc } = await build(false);
-    const u = await createUser(prisma, { phone: `09${Date.now().toString().slice(-8)}` });
+    const u = await createUser(prisma, { phone: uniquePhone() });
     reply = { status: 200, body: { error: -108, message: 'invalid phone' } };
     await svc.notify(u.id, 'IT_ZNS_DELIVERY', { order_code: 'IT5' });
     expect(await znsLog(u.id)).toMatchObject({ status: 'FAILED', error: expect.stringContaining('-108') });
@@ -144,7 +144,7 @@ describe('Gửi ZNS: HTTP 200 kèm lỗi trong body (real Postgres)', () => {
 
   it('tin thường xếp hàng quá hạn nhưng job vẫn vào Redis: log FAILED không có khoá để nhả, job đến muộn vẫn gửi và log thành SENT', async () => {
     const { svc } = await build(true, true);
-    const u = await createUser(prisma, { phone: `09${Date.now().toString().slice(-8)}` });
+    const u = await createUser(prisma, { phone: uniquePhone() });
     await svc.notify(u.id, 'IT_ZNS_DELIVERY', { order_code: 'IT6' });
     expect((await znsLog(u.id)).status).toBe('FAILED');
 
@@ -155,7 +155,7 @@ describe('Gửi ZNS: HTTP 200 kèm lỗi trong body (real Postgres)', () => {
 
   it('retryZns xếp hàng quá hạn: khoá đã nhả để lượt sau tạo log mới, job đến muộn bị bỏ qua và không gọi Zalo', async () => {
     const { svc } = await build(true, true);
-    const u = await createUser(prisma, { phone: `09${Date.now().toString().slice(-8)}` });
+    const u = await createUser(prisma, { phone: uniquePhone() });
     await expect(svc.notify(u.id, 'IT_ZNS_DELIVERY', { order_code: 'IT7' }, { dedupeKey: 'it-zns:7', retryZns: true })).rejects.toThrow('queue timeout');
     expect((await znsLog(u.id)).status).toBe('FAILED');
 
@@ -166,7 +166,7 @@ describe('Gửi ZNS: HTTP 200 kèm lỗi trong body (real Postgres)', () => {
 
   it('retryZns: worker đã gửi xong (SENT) trước khi queue.add báo lỗi quá hạn: log vẫn SENT, khoá không bị nhả nên lượt sau không gửi đôi', async () => {
     const { svc, add } = await build(true);
-    const u = await createUser(prisma, { phone: `09${Date.now().toString().slice(-8)}` });
+    const u = await createUser(prisma, { phone: uniquePhone() });
     add.mockImplementationOnce(async (_name: string, data: ZnsSendJobData) => {
       expect(await svc.deliverZns(data, false)).toBe('SENT');
       throw new Error('queue timeout');

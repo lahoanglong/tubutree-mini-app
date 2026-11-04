@@ -30,7 +30,7 @@ import {
 } from '../../src/config/demo-data/demo-catalog';
 import { collectDbSnapshot } from '../../src/config/go-live/collect';
 import { evaluateDemoData } from '../../src/config/go-live/demo-data-checks';
-import { createOrder, createUser, deleteItData, randCode, warmPool } from './helpers';
+import { createOrder, createUser, deleteItData, randCode, warmPool, uniquePhone } from './helpers';
 import { readApiSql, splitSqlStatements } from './sql-script';
 
 /**
@@ -108,9 +108,9 @@ describe('Dọn dữ liệu demo của migration demo_catalog (real Postgres)', 
     await warmPool(prisma);
     await restoreDemoState();
 
-    const user = await createUser(prisma, { phone: `09${Date.now().toString().slice(-8)}`, zaloId: `itdemo-${tag}` });
+    const user = await createUser(prisma, { phone: uniquePhone(), zaloId: `itdemo-${tag}` });
     userId = user.id;
-    freshUserId = (await createUser(prisma, { phone: `07${Date.now().toString().slice(-8)}`, zaloId: `itdemo-new-${tag}` })).id;
+    freshUserId = (await createUser(prisma, { phone: uniquePhone('07'), zaloId: `itdemo-new-${tag}` })).id;
     const order = await createOrder(prisma, { userId, status: 'DELIVERED' });
     await prisma.orderItem.create({
       data: {
@@ -272,7 +272,7 @@ describe('Dọn dữ liệu demo của migration demo_catalog (real Postgres)', 
     const otherVariation = DEMO_VARIATIONS.find((v) => v.productId !== demoProduct.id)!;
 
     // Mua chung: nhóm đang mở trên hàng đã tắt không hiện, không tham gia được.
-    const user2 = await createUser(prisma, { phone: `08${Date.now().toString().slice(-8)}`, zaloId: `itdemo2-${tag}` });
+    const user2 = await createUser(prisma, { phone: uniquePhone('08'), zaloId: `itdemo2-${tag}` });
     user2Id = user2.id;
     const gb = await prisma.groupBuy.create({
       data: { productId: demoProduct.id, initiatorId: userId, targetSize: 3, currentSize: 1, unitPrice: 85_000, basePrice: 100_000, expiresAt: new Date(Date.now() + 86_400_000), members: { create: { userId } } },
