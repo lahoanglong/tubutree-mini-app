@@ -87,7 +87,7 @@ SQL, ReDoS, CSV, path traversal, SSRF `/img`, XSS lưu trữ, upload SVG: ổn.
 - e (dữ liệu kéo thừa): D1, D2, D3, D7, D9, D11. PG 46285.
 - f (Mini App): F2, F3, F4, F8–F11, SEC-F3, SEC-F4.
 - g (admin UI, chưa giao): F5, F6 (query-client chỉ nhánh admin-*), F12.
-- Chưa xếp gói: D12 (16 cron giữ kết nối, cần đánh giá rủi ro), F7 (key app-core, file dùng chung).
+- h: F7 (chỉ phía miniapp) + Minor còn sót. i: D12.
 
 ## Trạng thái
 - 04/11: 5/5 báo cáo về. Gói a, b, c, d, e, f đang chạy (worker Sonnet).
@@ -105,6 +105,10 @@ SQL, ReDoS, CSV, path traversal, SSRF `/img`, XSS lưu trữ, upload SVG: ổn.
 - Gói g: xong 4 commit a9840bae2..4a290f7ee (F5 tab lười: First Load JS /admin 372 → 258 kB; F6 `meta.adminInvalidate`; F12 `useOpsInbox` một nhịp poll). Tôi kiểm: tsc web, vitest web 9788/9788. Review Opus REQUEST_CHANGES: M1 sau deploy tab lười lỗi ChunkLoadError, "Thử lại" không cứu; Minor: F6 khai thiếu khoá (chặn hội thoại, resend, khoá user), còn 4 observer poll riêng, poll ở AdminPage render lại cả cây. Sửa 029d3a10b; review vòng 2 APPROVE (0/0/1). Tôi kiểm: tsc web, vitest web 9797/9797. 6a7c94d49: mất mạng không tự tải lại. Tip g: 6a7c94d49.
 - Gói e: xong 6 commit 3a5741812..953d66f28 (D1 `reviews.imageVersions`, D2 select thẻ/giỏ, D3 thumbnail ref, D7 `feed_posts.imageCount/coverRef` qua trigger, D11 bỏ shippingHistory/invoiceRequest khỏi danh sách đơn). 3 migration 20261104140000/141000/142000. D9 KHÔNG sửa: cần cột `imageUrls` trên products, lợi ích nhỏ khi catalog còn nhỏ. 68eceefd7 trigger `imageVersions`. Tôi kiểm: tsc, jest 4368/4368, 273 migration + drift 0, race 422/422. Review Opus REQUEST_CHANGES: M1 D3 đổi thumbnail sản phẩm CHƯA duyệt sang `/public-image` (endpoint chỉ phát sản phẩm từng công khai) → admin duyệt thấy ảnh vỡ; Minor: svg data URL, trigger tách khỏi cột, ADD COLUMN + backfill cùng transaction giữ khoá bảng. Đang sửa.
 - Migration gói b đổi sang 20261104150000 (tránh trùng mốc với e).
+- Nhánh tích hợp `sec/1104-audit`: đã gộp a, b, d, f (ae11621c8), rồi g (0f4dd8df3; xung đột import `admin/page.tsx`: giữ `DealerAppImage` tĩnh của b, 4 tab nhân sự theo `dynamic()` của g). Full jest trước khi gộp g: 13409/13410, lỗi duy nhất là thiếu migration d trong `HEAVY_MIGRATIONS`; sửa ở cdd61d76c (thêm dòng bảng 1.0 runbook). Race 345/345, 272 migration, drift 0.
+- Gói e: review Opus vòng 2 APPROVE (0/0/1). Minor m-new1: sản phẩm bị từ chối giữ thumbnail dạng đường dẫn, gửi duyệt lại thì admin thấy ảnh vỡ (404). Đang sửa: nhánh từ chối trả thumbnail về data URL trong cùng tx. Full jest của tôi ở 726bf80e9: 13099/13099, 1 suite (catalog.service.spec) lỗi lúc máy tải; chạy riêng 3 lần đều xanh 440/440.
+- Gói h (sec-1104-h): các Minor còn sót từ review (khoá throttle IPv6 ở affiliate click + ai-advisor, ảnh minh chứng ở màn lương nhân viên, nén ảnh composer chat CSKH, trần chữ thương hiệu) và F7 (key duyệt danh mục, chỉ sửa phía miniapp).
+- Gói i (sec-1104-i): D12, khoá lượt cron bằng lease trong `cron_leases` thay cho tx giữ kết nối pool.
 
 ## Lưu ý cho chủ
 - A2: cron tự chuyển Ví sẽ warn mỗi giờ cho CTV đã bị hạ mà còn hoa hồng APPROVED, cho tới khi xử lý số hoa hồng đó.
