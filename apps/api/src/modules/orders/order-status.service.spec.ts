@@ -1,4 +1,3 @@
-import { ATTENTION_PAYMENT_UNLINKED } from '../integrations/pancake/pancake-attention';
 import { Test } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { OrderStatusService, InvalidOrderTransitionError } from './order-status.service';
@@ -955,25 +954,6 @@ describe('OrderStatusService.markPaid', () => {
     await svc.markPaid('TUBU1', { actorType: 'PANCAKE' });
     expect(prisma.order.updateMany).toHaveBeenCalledWith({
       where: { id: 'o1', OR: [{ pancakeAttention: { startsWith: 'Khách chuyển thiếu' } }] },
-      data: { pancakeAttention: null, pancakeAttentionAt: null },
-    });
-  });
-
-  it('lật PAID → gỡ đúng lý do "đã thanh toán nhưng đơn chưa gắn Pancake" trong CÙNG tx, giữ lý do khác', async () => {
-    const other = 'Pancake báo HUỶ nhưng đơn đã bàn giao vận chuyển';
-    const { svc, tx } = make([pending()], [1], `${other} | ${ATTENTION_PAYMENT_UNLINKED}`);
-    await svc.markPaid('TUBU1', { actorType: 'ADMIN', actorId: 'a1' });
-    expect(tx.order.updateMany).toHaveBeenCalledWith({
-      where: { id: 'o1', pancakeAttention: `${other} | ${ATTENTION_PAYMENT_UNLINKED}` },
-      data: { pancakeAttention: other },
-    });
-  });
-
-  it('lật PAID: ô chỉ có lý do này → ô được xoá hẳn (đơn rời hàng đợi)', async () => {
-    const { svc, tx } = make([pending()], [1], ATTENTION_PAYMENT_UNLINKED);
-    await svc.markPaid('TUBU1', { actorType: 'ADMIN', actorId: 'a1' });
-    expect(tx.order.updateMany).toHaveBeenCalledWith({
-      where: { id: 'o1', pancakeAttention: ATTENTION_PAYMENT_UNLINKED },
       data: { pancakeAttention: null, pancakeAttentionAt: null },
     });
   });

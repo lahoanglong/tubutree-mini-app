@@ -37,7 +37,6 @@ import { isPartnerOwnedVariation, partnerGoodsError, TUBU_OWNED_VARIATION_WHERE 
 import { forBuyer } from '../orders/buyer-order-fields';
 import { canonicalUserId } from '../external-points/external-claim-audit';
 import { isStaffOwnOrder } from '../../common/staff-own-order';
-import { ATTENTION_PAYMENT_UNLINKED, removeAttentionReasonsByPrefix } from '../integrations/pancake/pancake-attention';
 import { assertBankRefUnusedByOrder, bankRefUsedByOrderMessage, findOrderUsingBankRef, isBankRefOnPayment, lockBankRef } from '../../common/bank-ref';
 import { isRealUser } from '../../common/real-user';
 import { DEALER_APPLICATION_LIST_SELECT } from './dealer-application-select';
@@ -1444,7 +1443,6 @@ export class DealerService {
       if (flip.count === 0) {
         throw new BadRequestException('Đơn vừa thay đổi trạng thái (thanh toán/huỷ) — bạn tải lại rồi thử lại nhé.');
       }
-      await removeAttentionReasonsByPrefix(tx, order.id, [ATTENTION_PAYMENT_UNLINKED]);
       if (this.analytics) {
         await this.analytics.record(tx, {
           eventName: 'order_paid',

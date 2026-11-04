@@ -46,7 +46,6 @@ import {
   ATTENTION_CANCEL_AFTER_HANDOVER,
   ATTENTION_CANCELLED_ON_PANCAKE_ONLY,
   ATTENTION_COD_RETURN_UNVERIFIED,
-  ATTENTION_PAYMENT_UNLINKED,
   partialReturnHeldReason,
   ATTENTION_PARTIAL_RETURN_SETTLED,
   ATTENTION_SEPARATOR,
@@ -808,8 +807,6 @@ export class OrderStatusService {
           data: { paymentStatus: 'PAID', paidAt, ...(toStatus !== order.status ? { status: toStatus } : {}) },
         });
         if (flip.count === 0) return false;
-        // Tiền đã được xác nhận: việc "Pancake báo đã thanh toán, chờ Kế toán" xong, cùng tx để không kẹt trên đơn đã PAID.
-        await removeAttentionReasonsByPrefix(tx, order.id, [ATTENTION_PAYMENT_UNLINKED]);
         await tx.orderStatusHistory.create({
           data: {
             orderId: order.id,

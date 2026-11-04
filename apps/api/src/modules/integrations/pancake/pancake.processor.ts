@@ -13,8 +13,6 @@ import { PANCAKE_PARTIAL_RETURN_PREFIX, PANCAKE_RETURNING_PREFIX, resolvePancake
 import {
   ATTENTION_CANCEL_AFTER_HANDOVER,
   ATTENTION_PARTIAL_RETURN_ACK,
-  ATTENTION_PAYMENT_UNLINKED,
-  ATTENTION_PAYMENT_UNLINKED_CLOSED,
   ATTENTION_PARTIAL_RETURN_HELD_REASONS,
   ATTENTION_RETURN_APPROVED,
   ATTENTION_TOTAL_MISMATCH,
@@ -741,40 +739,40 @@ export class PancakeProcessor extends WorkerHost {
   }
 
   /**
-   * Giữ khoản "đã thanh toán" của đơn chưa gắn Pancake cho Kế toán: lần đầu thì nối lý do vào ô pancakeAttention (tự gỡ khi đơn sang PAID),
-   * ghi dòng lịch sử đơn làm dấu đã xử lý và báo ADMIN. Đơn vẫn nhận phần vận chuyển/trạng thái của cùng sự kiện; chỉ phần tiền chờ Kế toán.
+   * Giữ khoản "đã thanh toán" của đơn chưa gắn Pancake chờ đối chiếu sao kê: lần đầu thì đặt cờ riêng orders.paymentUnlinkedAt (không ghi ô
+   * pancakeAttention: ô chữ bị nhiều đường ghi đè/xoá cả ô và KHO gỡ được, còn cờ này chỉ Kế toán hoặc ADMIN gỡ), ghi dòng lịch sử đơn làm
+   * dấu và báo ADMIN. Đơn vẫn nhận phần vận chuyển/trạng thái của cùng sự kiện; chỉ phần tiền chờ đối chiếu.
    */
   private async holdUnattachedPayment(order: Order, data: Record<string, unknown>, reported: number): Promise<void> {
     const rawId = data['id'] ?? data['order_id'];
     const pancakeRef = rawId === null || rawId === undefined || rawId === '' ? '?' : String(rawId);
-    const note = `${UNLINKED_HISTORY_PREFIX}${pancakeRef}) nhưng đơn Tubu chưa gắn đúng đơn Pancake: chờ Kế toán xác nhận`;
-    // Chỉ ghi lý do LẦN ĐẦU cho mỗi cặp (đơn, đơn Pancake): dòng lịch sử là dấu, nên Kế toán bấm "Đã xử lý" cho #A rồi thì webhook sau của #A không ghi
-    // lại còn #B khác vẫn được ghim. Nối vào hàng "Cần xử lý Pancake" không đè lý do khác, và chỉ khi đơn còn UNPAID để không đua với nút
-    // "Đã nhận tiền" (markPaid vừa gỡ lý do).
+    // Chữ này là khoá chống trùng nên giống nhau cho đơn mở và đơn đóng: trạng thái đơn đổi giữa hai webhook không làm ghi đôi.
+    const note = `${UNLINKED_HISTORY_PREFIX}${pancakeRef}) nhưng đơn Tubu chưa gắn đúng đơn Pancake: chờ đối chiếu sao kê`;
+    // Chỉ xử lý LẦN ĐẦU cho mỗi cặp (đơn, đơn Pancake): dòng lịch sử là dấu, nên người đã đối chiếu/đóng cờ cho #A rồi thì webhook sau của #A không
+    // đặt lại cờ, còn #B khác vẫn được ghim. Cờ chỉ đặt khi đang null (giữ mốc đầu) và đơn còn UNPAID để không đua với nút "Đã nhận tiền".
     // Khoá dòng đơn trước khi tìm dấu: hai worker cùng cặp (đơn, đơn Pancake) không còn cùng thấy "chưa ghi" rồi ghi đôi và báo đôi.
-    // Trạng thái đọc lại SAU khoá: bản `order` của nơi gọi có thể cũ hơn lần huỷ/trả vừa commit, mà trạng thái quyết định lời nhắc và dòng lịch sử.
+    // Trạng thái đọc lại SAU khoá: bản `order` của nơi gọi có thể cũ hơn lần huỷ/trả vừa commit, mà trạng thái quyết định lời báo và dòng lịch sử.
     const written = await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT "id" FROM "orders" WHERE "id" = ${order.id} FOR NO KEY UPDATE`;
       const locked = await tx.order.findUnique({ where: { id: order.id }, select: { status: true, paymentStatus: true } });
-      // Đơn đã PAID (nút "Đã nhận tiền" commit trước khoá): không còn gì chờ Kế toán, không ghim lý do, không ghi dấu, không báo.
+      // Đơn đã PAID (nút "Đã nhận tiền" commit trước khoá): không còn gì chờ đối chiếu, không đặt cờ, không ghi dấu, không báo.
       if (!locked || locked.paymentStatus !== 'UNPAID') return null;
       const logged = await tx.orderStatusHistory.findFirst({ where: { orderId: order.id, actorType: 'PANCAKE', note }, select: { id: true } });
       if (logged) return null;
-      const isClosed = isClosedOrder(locked.status);
-      await appendPancakeAttention(tx, order.id, isClosed ? ATTENTION_PAYMENT_UNLINKED_CLOSED : ATTENTION_PAYMENT_UNLINKED, [], { onlyUnpaid: true });
+      await tx.order.updateMany({ where: { id: order.id, paymentStatus: 'UNPAID', paymentUnlinkedAt: null }, data: { paymentUnlinkedAt: new Date() } });
       await tx.orderStatusHistory.create({
         data: { orderId: order.id, fromStatus: locked.status, toStatus: locked.status, actorType: 'PANCAKE', note },
       });
-      return { closed: isClosed };
+      return { closed: isClosedOrder(locked.status) };
     });
     if (!written) return;
     const { closed } = written;
     const amount = reported > 0 ? `${formatVnd(reported)}/${formatVnd(order.total)}` : formatVnd(order.total);
     const next = closed
-      ? 'Đơn đã huỷ/trả nên không có nút "Đã nhận tiền" và hệ thống KHÔNG tạo khoản hoàn: Kế toán đối chiếu sao kê, khách đã chuyển thì ghi tiền về muộn của đơn rồi hoàn theo luồng đó.'
-      : 'Kế toán đối chiếu sao kê ngân hàng rồi bấm "Đã nhận tiền" nếu khách đã chuyển.';
+      ? 'Đơn đã huỷ/trả nên không có nút "Đã nhận tiền" và hệ thống KHÔNG tạo khoản hoàn: quản trị viên đối chiếu sao kê; khách đã chuyển thì ghi tiền về muộn của đơn (hệ thống tạo khoản hoàn), rồi bấm "Đã đối chiếu".'
+      : 'Kế toán đối chiếu sao kê rồi bấm "Đã nhận tiền" nếu khách đã chuyển.';
     const reason =
-      `Chờ Kế toán: đơn Pancake #${pancakeRef} mang mã ${order.code} báo đã thanh toán (${amount}), nhưng đơn Tubu chưa gắn đúng đơn Pancake nên hệ thống KHÔNG tự xác nhận đã nhận tiền. ` +
+      `Chờ đối chiếu: đơn Pancake #${pancakeRef} mang mã ${order.code} báo đã thanh toán (${amount}), nhưng đơn Tubu chưa gắn đúng đơn Pancake nên hệ thống KHÔNG tự xác nhận đã nhận tiền. ` +
       `${next} Kiểm tra đơn Pancake này có phải đơn do Tubu đẩy không.`;
     this.logger.warn(`Đơn ${order.code}: ${reason}`);
     await this.alerts.alert(order.code, reason, PANCAKE_ALERT_TEMPLATE);
