@@ -47,6 +47,16 @@ describe('AdminService.resolvePaymentUnlinked ("Đã đối chiếu" khoản Pan
     expect(history).not.toHaveBeenCalled();
   });
 
+  it('đơn đóng thiếu reversalEffectsAt: resolve vẫn để lại dòng lịch sử (không còn bỏ qua)', async () => {
+    const history = jest.fn().mockResolvedValue({});
+    const prisma = {
+      order: { findFirst: jest.fn().mockResolvedValue(order({ reversalEffectsAt: null })), updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      orderStatusHistory: { create: history },
+    };
+    await mkAdmin(prisma).resolvePaymentUnlinked('admin1', 'TUBU1', 'ok ok');
+    expect(history).toHaveBeenCalledTimes(1);
+  });
+
   it('đơn không có → 404, không ghi gì', async () => {
     const updateMany = jest.fn();
     const prisma = { order: { findFirst: jest.fn().mockResolvedValue(null), updateMany } };

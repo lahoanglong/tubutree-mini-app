@@ -86,7 +86,7 @@ describe('Đã xử lý việc Pancake khi đơn huỷ chưa xong phần đảo:
     return { user, order };
   }
 
-  it('kho bấm "Đã xử lý" giữa lúc cron chưa chạy: đơn rời hàng đợi, không có dòng lịch sử của admin, cron không gửi tin huỷ lần hai và không huỷ Pancake lại', async () => {
+  it('kho bấm "Đã xử lý" giữa lúc cron chưa chạy: đơn rời hàng đợi, có dòng lịch sử của admin nhưng cron không nhầm nó là dòng đóng đơn: không gửi tin huỷ lần hai và không huỷ Pancake lại', async () => {
     const { user, order } = await cancelledByCustomerNotDone();
     const admin1 = await createUser(prisma, { role: 'ADMIN' });
 
@@ -95,7 +95,7 @@ describe('Đã xử lý việc Pancake khi đơn huỷ chưa xong phần đảo:
     const after = await prisma.order.findUniqueOrThrow({ where: { id: order.id }, select: { pancakeAttentionAt: true, reversalEffectsAt: true } });
     expect(after.pancakeAttentionAt).toBeNull();
     expect(after.reversalEffectsAt).toBeNull();
-    expect(await prisma.orderStatusHistory.count({ where: { orderId: order.id, actorType: 'ADMIN' } })).toBe(0);
+    expect(await prisma.orderStatusHistory.count({ where: { orderId: order.id, actorType: 'ADMIN' } })).toBe(1);
 
     notify.mockClear();
     await expect(orderStatus.resyncReversalEffects(order.id)).resolves.toEqual({ outcome: 'DONE' });
