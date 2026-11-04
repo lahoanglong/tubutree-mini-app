@@ -51,7 +51,7 @@ export class CashbackController {
     if (!event) return { ok: false };
     const result = await this.cashback.ingest(event, provider.key);
     // Lỗi tạm phía ta (thua CAS liên tiếp): trả 503 để sàn gửi lại; các ca ok:false còn lại là dữ liệu sai, gửi lại cũng vô ích.
-    if ('retry' in result && result.retry) throw new ServiceUnavailableException('Chưa xử lý được, vui lòng gửi lại.');
+    if ('retry' in result && result.retry) throw new ServiceUnavailableException('Chưa xử lý được, gửi lại sau.');
     return result;
   }
 
