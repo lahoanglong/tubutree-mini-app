@@ -41,7 +41,8 @@ export const NOISE = noisePng();
 
 const withImages = CATALOG.map((p, i) => ({ ...p, thumbnail: PANCAKE(i) }));
 
-export function mockImages(api: MockApi): void {
+/** `promos: false`: trình duyệt không thấy banner chiến dịch hay suất Giờ vàng nào (Trang chủ lúc chưa có chiến dịch, như PROD hiện tại). */
+export function mockImages(api: MockApi, { promos = true }: { promos?: boolean } = {}): void {
   mockDiscovery(api, { tree: true });
   api.get('/products', ({ call }) => {
     const limit = Number(call.query.get('limit') ?? '20');
@@ -49,6 +50,7 @@ export function mockImages(api: MockApi): void {
     return { data: withImages.slice((page - 1) * limit, page * limit).map(toCard), meta: { page, limit, total: withImages.length } };
   });
   api.get('/flash-sales/active', () => {
+    if (!promos) return [];
     const now = Date.now();
     return withImages.slice(4, 8).map((p, i) => ({
       itemId: `fi-${p.id}`, variationId: `v-${p.id}`, productSlug: p.slug, productName: p.name, variationName: null, thumbnail: p.thumbnail,
@@ -56,10 +58,15 @@ export function mockImages(api: MockApi): void {
       endAt: new Date(now + 3 * HOUR).toISOString(), serverNow: new Date(now).toISOString(),
     }));
   });
-  mockCampaigns(api, {
-    home: [campaignBanner('thu', { title: 'Giữa Thu', image: CLOUD(100) }), campaignBanner('dong', { title: 'Đông về', image: CLOUD(101) })],
-    offers: [campaignBanner('uu-dai', { title: 'Ưu đãi lớn', image: CLOUD(102) })],
-  });
+  mockCampaigns(
+    api,
+    promos
+      ? {
+          home: [campaignBanner('thu', { title: 'Giữa Thu', image: CLOUD(100) }), campaignBanner('dong', { title: 'Đông về', image: CLOUD(101) })],
+          offers: [campaignBanner('uu-dai', { title: 'Ưu đãi lớn', image: CLOUD(102) })],
+        }
+      : {},
+  );
 }
 
 interface Snapshot {
@@ -105,12 +112,15 @@ export interface LcpRoute {
   path: string;
   ready: string;
   maxHigh: number;
+  /** Mặc định có banner và Giờ vàng giả ở trình duyệt; Trang chủ khi đó gỡ danh sách chiến dịch server nhúng để banner giả hiện. `false`: không banner, không Giờ vàng, giữ nguyên HTML máy chủ. */
+  promos?: boolean;
 }
 
 /** Mở trang ở khổ 375×812 rồi kiểm: ảnh high chỉ trong màn đầu và không quá `maxHigh`, LCP là `<img>` không lazy có fetchpriority=high, không preload ảnh ẩn. */
 export async function runLcp(page: Page, api: MockApi, route: LcpRoute): Promise<void> {
-  mockImages(api);
-  const stripped = route.path === '/' ? await serverWithoutCampaigns(page) : null;
+  const promos = route.promos ?? true;
+  mockImages(api, { promos });
+  const stripped = route.path === '/' && promos ? await serverWithoutCampaigns(page) : null;
   await page.route('**/api/img?**', (r) => r.fulfill({ status: 200, contentType: 'image/png', body: NOISE }));
   await page.goto(route.path);
   if (stripped) expect(stripped.found(), 'Trang chủ không còn nhúng danh sách chiến dịch: banner sẽ không có').toBeGreaterThan(0);

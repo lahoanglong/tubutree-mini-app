@@ -16,6 +16,9 @@ import { useBlockQuery } from './use-block-query';
 /** Số khung chờ: vừa đủ lấp một màn ở 375px (thẻ hạng rộng `--tile-w-sm`), phần dư cuộn ngang. */
 const SKELETON_COUNT = 5;
 
+/** Thẻ tải ảnh ngay khi kệ là khối ảnh đầu tiên của trang: ở 375px thấy trọn hai thẻ hạng (thẻ thứ ba lấp ló), một trong hai là ảnh LCP. */
+export const BEST_SELLER_LEAD_PRIORITY = 2;
+
 export interface BestSellerRailProps {
   /** Đã qua `composeHomeShelves` (bỏ món trùng kệ trên, 3–10 món); dưới 3 món thì rỗng và khối ẩn. */
   items: ProductCardData[];
@@ -27,13 +30,15 @@ export interface BestSellerRailProps {
   error?: unknown;
   onRetry?: () => unknown;
   retrying?: boolean;
+  /** Số thẻ đầu tải ảnh ngay; mặc định 0. Trang chủ đặt `BEST_SELLER_LEAD_PRIORITY` khi phía trên kệ không có khối ảnh nào (banner, Giờ vàng, Mua lại). */
+  priorityCount?: number;
 }
 
 /**
  * Bán chạy nhất (Q18, bản web của `best-seller-rail.tsx` ở Mini App) cho MỌI khách: một hàng thẻ có hạng #1..#n xếp theo lượt bán 30 ngày, "Xem tất cả" tới trang
- * xếp hạng. Đứng sau Giờ vàng và Danh mục (dưới màn đầu 375×812 nên không đặt ảnh ưu tiên: ảnh sát màn hình vẫn được trình duyệt tải sớm); khách cũ trước đây chỉ thấy tab "Bán chạy" ở cuối lưới gợi ý, giờ cũng thấy kệ này.
+ * xếp hạng. Đứng sau Giờ vàng và Danh mục. Có banner hay Giờ vàng thì ảnh LCP là của khối đó nên kệ tải lười, không giành băng thông; không có thì ảnh của kệ là LCP (`priorityCount`). Khách cũ trước đây chỉ thấy tab "Bán chạy" ở cuối lưới gợi ý, giờ cũng thấy kệ này.
  */
-export function BestSellerRail({ items, ranks, basis, loading, error, onRetry, retrying }: BestSellerRailProps) {
+export function BestSellerRail({ items, ranks, basis, loading, error, onRetry, retrying, priorityCount = 0 }: BestSellerRailProps) {
   const title = fillCopy('rank.title');
   if (!loading && items.length === 0) {
     return error ? <HomeBlockError title={title} error={error} onRetry={() => onRetry?.()} retrying={retrying} /> : null;
@@ -42,7 +47,7 @@ export function BestSellerRail({ items, ranks, basis, loading, error, onRetry, r
   return (
     <section aria-label={title}>
       <SectionHeader title={title} subtitle={bestSellersBasisCopy([{ basis }])} action={seeAll ? { to: seeAll } : undefined} />
-      <ProductRail label={`${title}, vuốt ngang để xem thêm`} variant="rank" rankFrom={1} ranks={ranks} rankPlain={ranks !== undefined && !ranksAreSequential(ranks)} items={items} loading={loading} skeletonCount={SKELETON_COUNT} />
+      <ProductRail label={`${title}, vuốt ngang để xem thêm`} variant="rank" rankFrom={1} ranks={ranks} rankPlain={ranks !== undefined && !ranksAreSequential(ranks)} items={items} loading={loading} skeletonCount={SKELETON_COUNT} priorityCount={priorityCount} />
     </section>
   );
 }
