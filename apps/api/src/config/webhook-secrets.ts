@@ -10,9 +10,9 @@ export const WEBHOOK_SECRET_KEYS = [
 ] as const;
 
 /** Secret đã đặt (không rỗng) mà ngắn hơn 32 ký tự. Rỗng là "chưa dùng", do từng tính năng tự quyết có bắt buộc hay không. */
-export function shortWebhookSecretKeys(env: Record<string, string | undefined>): string[] {
+export function shortWebhookSecretKeys(env: object): string[] {
   return WEBHOOK_SECRET_KEYS.filter((k) => {
-    const v = env[k];
+    const v = (env as Record<string, unknown>)[k];
     return typeof v === 'string' && v.length > 0 && v.length < MIN_WEBHOOK_SECRET_LENGTH;
   });
 }
