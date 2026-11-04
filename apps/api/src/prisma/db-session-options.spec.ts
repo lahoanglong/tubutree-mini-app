@@ -23,7 +23,7 @@ describe('buildDatasourceUrl', () => {
   it('khoảng trắng thành %20 và dấu = thành %3D (giải mã ngược ra đúng chuỗi gốc)', () => {
     const url = buildDatasourceUrl('postgresql://u:p@db/x', OPTS) as string;
     expect(url).not.toMatch(/options=[^&]*[ =]/);
-    expect(decodeURIComponent(url.split('options=')[1])).toBe(OPTS);
+    expect(decodeURIComponent(url.split('options=')[1] ?? '')).toBe(OPTS);
   });
 
   it('DATABASE_URL đã có options= và DB_SESSION_OPTIONS cũng đặt → lỗi rõ ràng', () => {

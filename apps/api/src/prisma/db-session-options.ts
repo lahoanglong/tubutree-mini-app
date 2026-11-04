@@ -75,5 +75,5 @@ const UNIT_MS: Record<string, number> = { us: 0.001, ms: 1, s: 1_000, min: 60_00
 export function pgDurationToMs(v: string): number {
   const m = /^(\d+)(us|ms|s|min|h|d)?$/.exec(v.trim());
   if (!m) return NaN;
-  return Number(m[1]) * (m[2] ? UNIT_MS[m[2]] : 1);
+  return Number(m[1]) * (m[2] ? (UNIT_MS[m[2]] ?? NaN) : 1);
 }
