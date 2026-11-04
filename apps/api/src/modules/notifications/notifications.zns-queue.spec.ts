@@ -251,8 +251,9 @@ describe('NotificationsService.deliverZns: hai log cùng dedupeKey chạy song s
     const s = setup({ payload: MINE.payload });
     const findFirst = jest.fn().mockResolvedValue(sibling);
     const findUnique = jest.fn().mockResolvedValue({ ...MINE, status: 'RETRYING' });
-    (s.svc as unknown as { prisma: Record<string, Record<string, jest.Mock>> }).prisma.notificationLog.findFirst = findFirst;
-    (s.svc as unknown as { prisma: Record<string, Record<string, jest.Mock>> }).prisma.notificationLog.findUnique = findUnique;
+    const log = (s.svc as unknown as { prisma: { notificationLog: Record<string, jest.Mock> } }).prisma.notificationLog;
+    log.findFirst = findFirst;
+    log.findUnique = findUnique;
     return { ...s, findFirst };
   }
 
