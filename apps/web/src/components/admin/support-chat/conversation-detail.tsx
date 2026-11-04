@@ -61,6 +61,8 @@ export function ConversationDetail({ id }: { id: string }) {
   });
   const resend = useMutation({
     mutationFn: resendSupportForward,
+    // refresh() làm mới hội thoại và danh sách; gửi lại còn đổi số "chưa chuyển vào Zalo" (hộp việc) và số chờ trả lời của thẻ cầu nối.
+    meta: { adminInvalidate: ['admin-ops-inbox', 'admin-support-bridge'] },
     onSuccess: (r) => {
       if (r.status !== 'SENT') setError(`Gửi lại chưa thành công (${FORWARD_VIEW[r.status].text}${r.lastError ? `: ${r.lastError}` : ''}).`);
       refresh();
@@ -72,6 +74,8 @@ export function ConversationDetail({ id }: { id: string }) {
   });
   const block = useMutation({
     mutationFn: (blocked: boolean) => (blocked ? unblockSupportConversation(id) : blockSupportConversation(id)),
+    // Chặn đổi cả số "chưa chuyển vào Zalo" (loại hội thoại đã chặn) và số chờ của thẻ cầu nối, ngoài hội thoại và danh sách do refresh() lo.
+    meta: { adminInvalidate: ['admin-ops-inbox', 'admin-support-bridge'] },
     onSuccess: refresh,
     onError: (e) => setError(errText(e, 'Không đổi được trạng thái chặn.')),
   });

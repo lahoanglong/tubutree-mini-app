@@ -3,13 +3,13 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, ChevronRight, CircleCheck } from 'lucide-react';
-import { getOpsHealth, getOpsInbox, getRetentionDaily, getTodaySummary, type AdminPayoutStatus, type DealerRewardClaimStatus, type InboxKey, type OpsInbox, type TodaySummary } from '@/lib/admin-client';
+import { getOpsHealth, getRetentionDaily, getTodaySummary, type AdminPayoutStatus, type DealerRewardClaimStatus, type InboxKey, type OpsInbox, type TodaySummary } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
 import { summarizeNs1 } from './ns1-card';
 import { formatDateTime } from '@/lib/format-date';
-import { seedDealerClaimFilter } from './dealer-claims-tab';
-import { seedPayoutFilter } from './payout-admin-tab';
-import { failingCronJobs } from './ops-health-tab';
+import { seedDealerClaimFilter, seedPayoutFilter } from './inbox-filter-seeds';
+import { failingCronJobs } from './ops-health-crons';
+import { useOpsInbox } from './use-ops-inbox';
 import { LoadError } from './ui';
 
 export const INBOX_LABELS: Record<InboxKey, { title: string; hint: string }> = {
@@ -82,7 +82,7 @@ const QUALITY_KEYS: ReadonlySet<InboxKey> = new Set<InboxKey>(['productsMissingI
 /** Số việc chờ cạnh mục menu, lấy từ cùng truy vấn với trang "Hôm nay" (một request cho mọi mục). Mục `inbox` hiện tổng. */
 export function InboxBadge({ tab, enabled = true }: { tab: string; enabled?: boolean }) {
   // Route hộp việc chỉ mở cho vài nhóm nhân viên; vai trò khác không gọi để khỏi nhận 403 mỗi phút.
-  const q = useQuery({ queryKey: ['admin-ops-inbox'], queryFn: getOpsInbox, refetchInterval: 60_000, enabled });
+  const q = useOpsInbox({ enabled });
   const items = (q.data?.items ?? []).filter((i) => i.key in INBOX_LABELS && !LEGACY_ONLY.has(i.key));
   // Hàng đợi chất lượng danh mục (hàng chục sản phẩm thiếu ảnh) hiện ở mục Sản phẩm, không cộng vào tổng để việc gấp trong ngày không bị chìm.
   const n = items.filter((i) => (tab === 'inbox' ? !QUALITY_KEYS.has(i.key) : INBOX_TAB[i.key] === tab)).reduce((sum, i) => sum + i.count, 0);
@@ -135,7 +135,7 @@ export function OpsInboxTab({ onOpen: openTab, onOpenStat, onOpenHealth, isAdmin
     openTab(key);
   };
   const [showEmpty, setShowEmpty] = useState(false);
-  const q = useQuery({ queryKey: ['admin-ops-inbox'], queryFn: getOpsInbox, refetchInterval: 60_000 });
+  const q = useOpsInbox();
   if (q.isLoading) return <InboxSkeleton isAdmin={isAdmin} />;
   if (q.isError || !q.data) return <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được danh sách việc cần xử lý.</LoadError>;
   // API mới hơn web (đang triển khai dở) có thể trả khoá web chưa biết: bỏ qua thay vì làm sập cả trang chủ.

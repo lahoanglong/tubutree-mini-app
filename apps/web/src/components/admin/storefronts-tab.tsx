@@ -16,7 +16,8 @@ import {
   type StorefrontStatusFilter,
   type StorefrontTypeFilter,
 } from '@/lib/admin-storefronts-client';
-import { getOpsInbox, invalidateInbox, mergeQueuePages, nextPageParam } from '@/lib/admin-client';
+import { invalidateInbox, mergeQueuePages, nextPageParam } from '@/lib/admin-client';
+import { useOpsInbox } from './use-ops-inbox';
 import { formatDate, formatDateTime } from '@/lib/format-date';
 import { useConfirm } from './confirm-dialog';
 import { SideDrawer } from './side-drawer';
@@ -81,7 +82,7 @@ function ownerLine(row: AdminStorefrontRow): string {
  */
 export function StorefrontsTab({ initialStatus = '' }: { initialStatus?: StorefrontStatusFilter | '' } = {}) {
   const [status, setStatus] = useState<StorefrontStatusFilter | ''>(initialStatus);
-  const pendingCount = useQuery({ queryKey: ['admin-ops-inbox'], queryFn: getOpsInbox, refetchInterval: 60_000 }).data?.items.find((i) => i.key === 'storefrontsPending')?.count;
+  const pendingCount = useOpsInbox().data?.items.find((i) => i.key === 'storefrontsPending')?.count;
   const [changedOnly, setChangedOnly] = useState(false);
   const [type, setType] = useState<StorefrontTypeFilter | ''>('');
   const [draft, setDraft] = useState('');

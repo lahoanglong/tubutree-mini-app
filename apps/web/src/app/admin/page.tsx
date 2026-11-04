@@ -86,7 +86,6 @@ import {
   downloadOrdersCsv,
   downloadUsersCsv,
   getOpsAccess,
-  getOpsInbox,
   type InboxKey,
   type OpsInbox,
   OPS_INBOX_QUERY_KEY,
@@ -121,17 +120,7 @@ import { PartnerRulesCard } from '@/components/admin/partner-rules-card';
 import { ShopInfoCard } from '@/components/admin/shop-info-card';
 import { TabErrorBoundary } from '@/components/admin/tab-error-boundary';
 import { LoyaltyConfigCard } from '@/components/admin/loyalty-config-card';
-import { BundlesTab } from '@/components/admin/bundles-tab';
-import { CampaignsTab } from '@/components/admin/campaigns-tab';
-import { CashbackTab } from '@/components/admin/cashback-tab';
-import { CustomerRefundsPendingBadge, CustomerRefundsTab } from '@/components/admin/customer-refunds-tab';
-import { DealerClaimsTab } from '@/components/admin/dealer-claims-tab';
-import { MerchantProductsTab } from '@/components/admin/merchant-products-tab';
-import { StorefrontsTab } from '@/components/admin/storefronts-tab';
-import { MerchantFulfilmentTab } from '@/components/admin/merchant-fulfilment-tab';
-import { NotificationTemplatesTab } from '@/components/admin/notification-templates-tab';
-import { PayoutAdminTab } from '@/components/admin/payout-admin-tab';
-import { PosCreditsTab } from '@/components/admin/pos-credits-tab';
+import { CustomerRefundsPendingBadge } from '@/components/admin/customer-refunds-badge';
 import { AccountDeletionPanel } from '@/components/admin/account-deletion-panel';
 import { useConfirm } from '@/components/admin/confirm-dialog';
 import { CouponList } from '@/components/admin/coupon-list';
@@ -142,9 +131,7 @@ import { searchEmptyHint } from '@/components/admin/search-empty-hint';
 import { OrderInvoicePanel, OrderReferralPanel, OrderShippingAddress, OrderStatusHistory } from '@/components/admin/order-detail-extras';
 import { DealerTierSelect } from '@/components/admin/dealer-tier-select';
 import { ProductPicker, useVariationLabels } from '@/components/admin/product-picker';
-import { ReviewsTab } from '@/components/admin/reviews-tab';
 import type { PickedItem } from '@/components/admin/search-picker';
-import { SubscriptionsTab } from '@/components/admin/subscriptions-tab';
 import { UserPicker } from '@/components/admin/user-picker';
 import {
   BTN_DANGER_OUTLINE,
@@ -165,28 +152,17 @@ import {
   TOUCH_H,
   ToneBadge,
 } from '@/components/admin/ui';
-import { AnalyticsTab } from './analytics-tab';
-import { ReportsTab, reportSectionsFor } from '@/components/admin/reports-tab';
+import { reportSectionsFor } from '@/components/admin/report-sections';
 import { AdminNav, type NavGroup } from '@/components/admin/admin-nav';
 import { InboxBadge, OpsInboxTab, type TodayStatKey } from '@/components/admin/ops-inbox-tab';
+import { seedDealerClaimFilter, seedPayoutFilter } from '@/components/admin/inbox-filter-seeds';
+import { OpsInboxPoller, useOpsInbox } from '@/components/admin/use-ops-inbox';
 import { COUPON_END_PAST_MESSAGE, isCouponEndPast, vnTodayKey } from '@/lib/admin-reports';
 import { vnLocalToIso, isoToVnLocal } from '@/lib/admin-campaign-form';
 import { FLASH_SALE_PAGE_SIZE, filterFlashSales, flashSaleState, type FlashSaleFilter, type FlashSaleState } from '@/lib/admin-flash-sale';
-import { OpsHealthTab } from '@/components/admin/ops-health-tab';
 import type { WasteSeed } from '@/components/admin/waste-tab';
-import { DealerAccountsTab } from '@/components/admin/dealer-accounts-tab';
-import { DealerPriceHistoryTab } from '@/components/admin/dealer-price-history-tab';
-import { CommissionRatesTab } from '@/components/admin/commission-rates-tab';
-import { ProductCategoriesTab } from '@/components/admin/product-categories-tab';
-import { EngagementTab } from '@/components/admin/engagement-tab';
-import { SupportChatTab } from '@/components/admin/support-chat-tab';
-import { ExternalOrdersTab } from '@/components/admin/external-orders-tab';
-import { ExternalClaimsTab, type ExternalClaimsSeed } from '@/components/admin/external-claims-tab';
+import type { ExternalClaimsSeed } from '@/components/admin/external-claims-tab';
 import type { CommunityView } from '@/components/admin/community-moderation-tab';
-import { AttendanceTab } from '@/components/admin/attendance-tab';
-import { StaffRosterTab } from '@/components/admin/staff-roster-tab';
-import { ShiftApprovalTab } from '@/components/admin/shift-approval-tab';
-import { PayrollAdminTab } from '@/components/admin/payroll-admin-tab';
 import { DealerAppImage } from '@/components/admin/dealer-app-image';
 import { UserDetailDrawer } from '@/components/admin/user-detail-drawer';
 import { UsersList, USER_ROLE_LABELS } from '@/components/admin/users-list';
@@ -243,8 +219,36 @@ type Tab =
   | 'subscriptions'
   | 'analytics'
   | 'reports';
-// Hai tab nặng, không phải trang vào mặc định: tách khỏi gói đầu của /admin để trang mở nhanh hơn.
+// Mọi tab có tệp riêng trừ trang vào mặc định (Việc cần xử lý) tải khi mở tab: gói đầu của /admin không chứa mã của cả 60 tab.
 const tabLoading = () => <ListSkeleton label="Đang tải" rows={5} />;
+const DealerClaimsTab = dynamic(() => import('@/components/admin/dealer-claims-tab').then((m) => m.DealerClaimsTab), { loading: tabLoading });
+const DealerAccountsTab = dynamic(() => import('@/components/admin/dealer-accounts-tab').then((m) => m.DealerAccountsTab), { loading: tabLoading });
+const DealerPriceHistoryTab = dynamic(() => import('@/components/admin/dealer-price-history-tab').then((m) => m.DealerPriceHistoryTab), { loading: tabLoading });
+const CommissionRatesTab = dynamic(() => import('@/components/admin/commission-rates-tab').then((m) => m.CommissionRatesTab), { loading: tabLoading });
+const ProductCategoriesTab = dynamic(() => import('@/components/admin/product-categories-tab').then((m) => m.ProductCategoriesTab), { loading: tabLoading });
+const EngagementTab = dynamic(() => import('@/components/admin/engagement-tab').then((m) => m.EngagementTab), { loading: tabLoading });
+const ExternalOrdersTab = dynamic(() => import('@/components/admin/external-orders-tab').then((m) => m.ExternalOrdersTab), { loading: tabLoading });
+const ExternalClaimsTab = dynamic(() => import('@/components/admin/external-claims-tab').then((m) => m.ExternalClaimsTab), { loading: tabLoading });
+const SupportChatTab = dynamic(() => import('@/components/admin/support-chat-tab').then((m) => m.SupportChatTab), { loading: tabLoading });
+const PayoutAdminTab = dynamic(() => import('@/components/admin/payout-admin-tab').then((m) => m.PayoutAdminTab), { loading: tabLoading });
+const CustomerRefundsTab = dynamic(() => import('@/components/admin/customer-refunds-tab').then((m) => m.CustomerRefundsTab), { loading: tabLoading });
+const CashbackTab = dynamic(() => import('@/components/admin/cashback-tab').then((m) => m.CashbackTab), { loading: tabLoading });
+const PosCreditsTab = dynamic(() => import('@/components/admin/pos-credits-tab').then((m) => m.PosCreditsTab), { loading: tabLoading });
+const ReviewsTab = dynamic(() => import('@/components/admin/reviews-tab').then((m) => m.ReviewsTab), { loading: tabLoading });
+const SubscriptionsTab = dynamic(() => import('@/components/admin/subscriptions-tab').then((m) => m.SubscriptionsTab), { loading: tabLoading });
+const OpsHealthTab = dynamic(() => import('@/components/admin/ops-health-tab').then((m) => m.OpsHealthTab), { loading: tabLoading });
+const AttendanceTab = dynamic(() => import('@/components/admin/attendance-tab').then((m) => m.AttendanceTab), { loading: tabLoading });
+const StaffRosterTab = dynamic(() => import('@/components/admin/staff-roster-tab').then((m) => m.StaffRosterTab), { loading: tabLoading });
+const ShiftApprovalTab = dynamic(() => import('@/components/admin/shift-approval-tab').then((m) => m.ShiftApprovalTab), { loading: tabLoading });
+const PayrollAdminTab = dynamic(() => import('@/components/admin/payroll-admin-tab').then((m) => m.PayrollAdminTab), { loading: tabLoading });
+const StorefrontsTab = dynamic(() => import('@/components/admin/storefronts-tab').then((m) => m.StorefrontsTab), { loading: tabLoading });
+const MerchantProductsTab = dynamic(() => import('@/components/admin/merchant-products-tab').then((m) => m.MerchantProductsTab), { loading: tabLoading });
+const MerchantFulfilmentTab = dynamic(() => import('@/components/admin/merchant-fulfilment-tab').then((m) => m.MerchantFulfilmentTab), { loading: tabLoading });
+const CampaignsTab = dynamic(() => import('@/components/admin/campaigns-tab').then((m) => m.CampaignsTab), { loading: tabLoading });
+const BundlesTab = dynamic(() => import('@/components/admin/bundles-tab').then((m) => m.BundlesTab), { loading: tabLoading });
+const NotificationTemplatesTab = dynamic(() => import('@/components/admin/notification-templates-tab').then((m) => m.NotificationTemplatesTab), { loading: tabLoading });
+const AnalyticsTab = dynamic(() => import('./analytics-tab').then((m) => m.AnalyticsTab), { loading: tabLoading });
+const ReportsTab = dynamic(() => import('@/components/admin/reports-tab').then((m) => m.ReportsTab), { loading: tabLoading });
 const WasteTab = dynamic(() => import('@/components/admin/waste-tab').then((m) => m.WasteTab), { loading: tabLoading });
 const CommunityModerationTab = dynamic(() => import('@/components/admin/community-moderation-tab').then((m) => m.CommunityModerationTab), { loading: tabLoading });
 
@@ -475,7 +479,6 @@ export default function AdminPage() {
     queryFn: getOpsAccess,
     enabled: status === 'authenticated' && role === 'STAFF',
   });
-
   useEffect(() => {
     const u = readUrlState();
     if (u.tab) setTabState(u.tab);
@@ -508,6 +511,9 @@ export default function AdminPage() {
     setExternalSeed(null);
     setDeletionSeed(0);
     setReportsSeed(0);
+    // Tab Chi trả / Yêu cầu thưởng tải lười: đổi sang mục khác trước khi chúng nạp xong thì bộ lọc đã gieo không được kẹt tới lần mở sau.
+    if (t !== 'payouts') seedPayoutFilter(null);
+    if (t !== 'dealerClaims') seedDealerClaimFilter(null);
     setTabState(t);
     writeUrlState(t, t === 'orders' ? ordersRecycling : '', t === 'orders' ? ordersPancake : '');
   };
@@ -688,6 +694,8 @@ export default function AdminPage() {
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-3 sm:py-6">
+      {/* Nơi duy nhất giữ nhịp một phút cho hộp việc; các nơi khác chỉ đọc chung khoá. */}
+      <OpsInboxPoller enabled={allowed.has('inbox')} />
       <div className={`${isAdmin ? 'hidden sm:flex' : 'flex'} items-center justify-between gap-2`}>
         <h1 className="hidden min-w-0 truncate font-display text-lg font-semibold text-stone-900 sm:block sm:text-xl">Quản trị Tubu Tree</h1>
         {/* Điện thoại: bỏ tiêu đề; quản trị viên vào màn thu ngân từ mục "Tích điểm tại quầy" trong menu, nhân viên quầy giữ nút này. */}
@@ -802,7 +810,7 @@ function DealersTab() {
   const pending = filter === 'PENDING';
   const view = mergeQueuePages(q.data?.pages, pending);
   // Dùng chung khoá và dữ liệu với hộp việc của tab Đơn hàng: không thêm request nặng.
-  const inboxQ = useQuery({ queryKey: OPS_INBOX_QUERY_KEY, queryFn: getOpsInbox, refetchInterval: 60_000 });
+  const inboxQ = useOpsInbox();
   const pendingCount = inboxQ.data?.items.find((i) => i.key === 'dealerApplications')?.count;
 
   return (
@@ -1350,7 +1358,7 @@ function OrdersTab({
   useEffect(() => {
     writeUrlState('orders', recycling, pancake, { status, invoice, queue: extra.queue ?? '' });
   }, [recycling, pancake, status, invoice, extra.queue]);
-  const inboxQ = useQuery({ queryKey: OPS_INBOX_QUERY_KEY, queryFn: getOpsInbox, refetchInterval: 60_000, enabled: inboxEnabled });
+  const inboxQ = useOpsInbox({ enabled: inboxEnabled });
   const inboxCount = (k: InboxKey) => inboxQ.data?.items.find((i) => i.key === k)?.count;
   const attentionQ = useQuery({ queryKey: ['admin-recycling-count'], queryFn: countRecyclingAttention });
   const pancakeQ = useQuery({ queryKey: PANCAKE_ATTENTION_COUNT_KEY, queryFn: countPancakeAttention });
@@ -2284,7 +2292,6 @@ function UsersTab({ isAdmin = true, onOpenOrder, onOpenUserOrders }: { isAdmin?:
     mutationFn: ({ id, reason }: { id: string; reason: string; label: string }) => blockUser(id, reason),
     onSuccess: (_r, v) => {
       setMsg({ ok: true, text: `Đã khoá ${v.label}. Mọi phiên đăng nhập của người này đã bị thu hồi.` });
-      void q.refetch();
     },
     onError,
   });
@@ -2292,7 +2299,6 @@ function UsersTab({ isAdmin = true, onOpenOrder, onOpenUserOrders }: { isAdmin?:
     mutationFn: ({ id }: { id: string; label: string }) => unblockUser(id),
     onSuccess: (_r, v) => {
       setMsg({ ok: true, text: `Đã mở khoá ${v.label}.` });
-      void q.refetch();
     },
     onError,
   });

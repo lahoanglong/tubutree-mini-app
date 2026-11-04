@@ -7,6 +7,9 @@ import { ReportsSourcesSection } from './reports-sources-section';
 import { ReportsFinanceSection } from './reports-finance-section';
 import { FIELD_CLASS, TOUCH_H, chipClass } from './ui';
 import { VnDateInput } from './vn-date-input';
+import { ALL_SECTIONS, type ReportSection } from './report-sections';
+
+export { reportSectionsFor, type ReportSection } from './report-sections';
 
 const PRESETS = [
   { key: 'today', label: 'Hôm nay', range: () => ({ from: vnTodayKey(), to: vnTodayKey() }) },
@@ -17,18 +20,6 @@ const PRESETS = [
   { key: 'month', label: 'Tháng này', range: () => vnMonthRange(0) },
   { key: 'lastMonth', label: 'Tháng trước', range: () => vnMonthRange(-1) },
 ] as const;
-
-export type ReportSection = 'revenue' | 'sources' | 'finance';
-const ALL_SECTIONS: readonly ReportSection[] = ['revenue', 'sources', 'finance'];
-
-/**
- * Phần báo cáo mở cho người đang xem — khớp @AllowStaff của AdminReportsController: doanh thu và file tài chính cho KE_TOAN,
- * bảng nguồn khách cho MARKETING. Phần không có quyền thì không render, nên cũng không gọi API (khỏi 403).
- */
-export function reportSectionsFor(isAdmin: boolean, perms: readonly string[]): ReportSection[] {
-  if (isAdmin) return [...ALL_SECTIONS];
-  return ALL_SECTIONS.filter((s) => (s === 'sources' ? perms.includes('MARKETING') : perms.includes('KE_TOAN')));
-}
 
 /** Báo cáo cho kế toán và marketing: một khoảng ngày (giờ Việt Nam) dùng chung cho mọi phần bên dưới. Mặc định 30 ngày gần nhất; `initialPreset` là mốc nhanh mở sẵn (số "Đã thu" ở trang Hôm nay mở mốc "Hôm nay"). */
 export function ReportsTab({ sections = ALL_SECTIONS, initialPreset }: { sections?: readonly ReportSection[]; initialPreset?: (typeof PRESETS)[number]['key'] }) {

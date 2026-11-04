@@ -21,6 +21,40 @@ async function waitFor(cond: () => boolean, timeoutMs = 5000) {
   }
 }
 
+// Các tab tải lười (next/dynamic) nạp lần đầu mất cả giây vì phải biên dịch: nạp sẵn để mỗi ca test chỉ chờ vài lượt flush như trước.
+beforeAll(async () => {
+  await Promise.all([
+    import('@/components/admin/dealer-claims-tab'),
+    import('@/components/admin/dealer-accounts-tab'),
+    import('@/components/admin/dealer-price-history-tab'),
+    import('@/components/admin/commission-rates-tab'),
+    import('@/components/admin/product-categories-tab'),
+    import('@/components/admin/engagement-tab'),
+    import('@/components/admin/external-orders-tab'),
+    import('@/components/admin/external-claims-tab'),
+    import('@/components/admin/support-chat-tab'),
+    import('@/components/admin/payout-admin-tab'),
+    import('@/components/admin/customer-refunds-tab'),
+    import('@/components/admin/cashback-tab'),
+    import('@/components/admin/pos-credits-tab'),
+    import('@/components/admin/reviews-tab'),
+    import('@/components/admin/subscriptions-tab'),
+    import('@/components/admin/ops-health-tab'),
+    import('@/components/admin/attendance-tab'),
+    import('@/components/admin/staff-roster-tab'),
+    import('@/components/admin/shift-approval-tab'),
+    import('@/components/admin/payroll-admin-tab'),
+    import('@/components/admin/storefronts-tab'),
+    import('@/components/admin/merchant-products-tab'),
+    import('@/components/admin/merchant-fulfilment-tab'),
+    import('@/components/admin/campaigns-tab'),
+    import('@/components/admin/bundles-tab'),
+    import('@/components/admin/notification-templates-tab'),
+    import('@/components/admin/reports-tab'),
+    import('./analytics-tab'),
+  ]);
+}, 60_000);
+
 const mocks = vi.hoisted(() => ({
   auth: { user: { role: 'ADMIN' } as { role: string } | null, status: 'authenticated', initialized: true },
   recycling: 0,
@@ -989,6 +1023,25 @@ describe('admin/page — tab Người dùng', () => {
     act(() => (accept as HTMLButtonElement).click());
     await flush();
     expect(mocks.unblockUser).toHaveBeenCalledWith('u3');
+  });
+
+  it('F6 — mở khoá xong danh sách người dùng chỉ tải lại một lần (không còn refetch thừa ngoài lần làm cũ chung)', async () => {
+    mocks.users = [
+      { id: 'u3', fullName: 'Trần Cường', phone: '0966666666', role: 'CUSTOMER', pointsBalance: 0, createdAt: '2026-09-03T00:00:00.000Z', isBlocked: true, blockedReason: 'Farm voucher' },
+    ];
+    mocks.unblockUser.mockReset().mockResolvedValue({ id: 'u3', isBlocked: false, blockedAt: null, blockedReason: null });
+    window.history.replaceState(null, '', '/admin?tab=users');
+    const r = render(<AdminPage />, createQueryClient());
+    mounted.push(r);
+    await flush();
+    const { container } = r;
+    const before = mocks.listUsersArgs.length;
+    act(() => (container.querySelector('button[aria-label="Mở khoá Trần Cường"]') as HTMLButtonElement).click());
+    await flush();
+    const accept = [...document.body.querySelectorAll('[role="alertdialog"] button')].find((b) => b.textContent === 'Mở khoá')!;
+    act(() => (accept as HTMLButtonElement).click());
+    await flush();
+    expect(mocks.listUsersArgs.length - before).toBe(1);
   });
 
   it('khoá thất bại (vd tự khoá mình) → báo lỗi màu danger, không nuốt lỗi', async () => {
