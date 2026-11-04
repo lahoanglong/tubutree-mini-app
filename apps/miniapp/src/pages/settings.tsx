@@ -10,6 +10,7 @@ import { PageHeader } from '../components/ui/page-header';
 import { rowKeyboardProps } from '../components/ui/row-keyboard';
 import { Text } from '../components/ui/text';
 import { useAuthStore } from '../store/auth';
+import { LogoutAllSection } from '../components/logout-all-section';
 import { AccountDeletionSection } from '../components/account-deletion-section';
 import { isGuestUser } from '../components/coupon-claim-gate';
 import { haptic } from '../utils/haptic';
@@ -177,6 +178,8 @@ export default function SettingsPage() {
           </Button>
         </div>
       )}
+
+      {canLogout && <LogoutAllSection />}
 
       {canLogout && <AccountDeletionSection />}
       <div style={{ height: 16 }} />

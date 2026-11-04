@@ -820,7 +820,7 @@ export class AdminService {
       wallet,
       points,
       roleHistory: events.filter((e) => e.kind === 'ROLE' || e.kind === 'STAFF_PERMISSIONS').map(withActor),
-      blockHistory: events.filter((e) => e.kind === 'BLOCK' || e.kind === 'UNBLOCK').map(withActor),
+      blockHistory: events.filter((e) => e.kind === 'BLOCK' || e.kind === 'UNBLOCK' || e.kind === 'SESSIONS_REVOKED').map(withActor),
       partnerHistory: partnerEvents.map(withActor),
       grants: grants.map((g) => ({ ...g, grantedByName: actorName.get(g.grantedBy) ?? null })),
     };

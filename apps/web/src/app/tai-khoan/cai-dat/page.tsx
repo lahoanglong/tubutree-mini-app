@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronRight } from 'lucide-react';
 import { fetchNotifyPrefs, saveNotifyPrefs, type NotifyPrefs } from '@tubutree/app-core/api/account';
+import { LogoutAllSection } from '@/components/account/logout-all-section';
 import { AccountDeletionSection } from '@/components/account/account-deletion-section';
 import { applyFontScale, readFontScale, saveFontScale, type FontScale } from '@/components/account/font-scale';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
@@ -160,6 +161,8 @@ export default function SettingsPage() {
           Đăng xuất
         </button>
       </div>
+
+      <LogoutAllSection />
 
       <AccountDeletionSection />
     </div>,

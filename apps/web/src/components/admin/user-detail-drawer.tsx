@@ -6,6 +6,7 @@ import { formatVnd } from '@/lib/shop-client';
 import {
   getUserDetail,
   getWasteUserFlags,
+  revokeUserSessions,
   setStaffPermissions,
   setWasteUserFlags,
   STAFF_PERMISSION_LABELS,
@@ -63,9 +64,11 @@ function EventLine({ e }: { e: AdminUserEvent }) {
           ? `Gian hàng đối tác: ${onOff(e.fromValue)} → ${onOff(e.toValue)}`
           : e.kind === 'WALLET_FORFEIT'
             ? `Xoá tài khoản: bỏ số dư Ví ${formatVnd(Number(e.fromValue ?? 0))}`
-            : e.kind === 'BLOCK'
-              ? 'Khoá tài khoản'
-              : 'Mở khoá';
+            : e.kind === 'SESSIONS_REVOKED'
+              ? `Cắt mọi phiên đăng nhập${e.toValue ? ` (${e.toValue} phiên)` : ''}`
+              : e.kind === 'BLOCK'
+                ? 'Khoá tài khoản'
+                : 'Mở khoá';
   return (
     <li className="py-1.5">
       <div className="font-medium text-stone-900">{what}</div>
@@ -145,6 +148,8 @@ function DetailBody({ d, isAdmin, onOpenOrder, onOpenUserOrders }: { d: AdminUse
       {isAdmin && u.role === 'STAFF' && <StaffPermissionsForm userId={u.id} current={u.staffPermissions} />}
 
       {isAdmin && <WasteFlagsSection userId={u.id} />}
+
+      {isAdmin && <RevokeSessionsSection userId={u.id} />}
 
       <Section title="Đơn hàng" count={d.orders.total}>
         {d.orders.items.length === 0 ? (
@@ -325,6 +330,49 @@ function StaffPermissionsForm({ userId, current }: { userId: string; current: St
           </Notice>
         </div>
       )}
+    </Section>
+  );
+}
+
+function RevokeSessionsSection({ userId }: { userId: string }) {
+  const qc = useQueryClient();
+  const { ask, dialog } = useConfirm();
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const revoke = useMutation({
+    mutationFn: (reason: string) => revokeUserSessions(userId, reason),
+    onSuccess: () => {
+      setMsg({ ok: true, text: 'Đã cắt mọi phiên đăng nhập. Người này đăng nhập lại là dùng được.' });
+      void qc.invalidateQueries({ queryKey: ['admin-user-detail', userId] });
+    },
+    onError: (e) => setMsg({ ok: false, text: actionErrorText(e) }),
+  });
+  const onClick = async () => {
+    setMsg(null);
+    const reason = await ask({
+      title: 'Cắt phiên đăng nhập',
+      message: 'Người này bị đăng xuất khỏi Mini App và web ngay. Tài khoản không bị khoá, đăng nhập lại được.',
+      confirmLabel: 'Cắt phiên',
+      tone: 'danger',
+      input: { label: 'Lý do cắt phiên', placeholder: 'VD: khách báo mất điện thoại, nghi lộ phiên', required: true, maxLength: 500 },
+    });
+    if (reason === null) return;
+    if (reason.length < 3) {
+      setMsg({ ok: false, text: 'Lý do cắt phiên cần ít nhất 3 ký tự.' });
+      return;
+    }
+    revoke.mutate(reason);
+  };
+  return (
+    <Section title="Phiên đăng nhập">
+      <button type="button" className={BTN_DANGER_OUTLINE} disabled={revoke.isPending} onClick={() => void onClick()}>
+        Cắt phiên
+      </button>
+      {msg && (
+        <p role={msg.ok ? 'status' : 'alert'} className={`mt-2 text-xs ${msg.ok ? 'text-stone-700' : 'text-danger-fg'}`}>
+          {msg.text}
+        </p>
+      )}
+      {dialog}
     </Section>
   );
 }

@@ -453,6 +453,12 @@ export const blockUser = (id: string, reason: string) =>
     method: 'POST',
     body: { reason },
   });
+/** Cắt mọi phiên đăng nhập mà không khoá tài khoản; khách đăng nhập lại được ngay. */
+export const revokeUserSessions = (id: string, reason: string) =>
+  apiFetch<{ id: string; revokedSessions: number }>(`/admin/users/${encodeURIComponent(id)}/revoke-sessions`, {
+    method: 'POST',
+    body: { reason },
+  });
 export const unblockUser = (id: string) =>
   apiFetch<BlockState>(`/admin/users/${encodeURIComponent(id)}/unblock`, { method: 'POST', body: {} });
 export type UserRole = 'CUSTOMER' | 'AFFILIATE' | 'DEALER' | 'STAFF' | 'ADMIN';
