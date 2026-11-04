@@ -5,6 +5,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CRON_TZ } from '../../common/cron-tz';
 import { markCronSkipped, TrackCron } from '../../common/cron-run/track-cron';
+import { runExclusive } from '../../common/cron-leader/run-exclusive';
 
 export type ReviewInviteRunResult = { skipped: 'RUNNING' | 'LOCKED' | 'ERROR' } | { sent: number; claimed: number };
 
@@ -54,16 +55,10 @@ export class ReviewInviteService {
     if (this.running) { markCronSkipped('RUNNING'); return { skipped: 'RUNNING' }; }
     this.running = true;
     try {
-      // Khoá advisory theo transaction giữ suốt lượt (nhiều instance chỉ một chạy); claim từng đơn vẫn là chốt cuối.
-      return await this.prisma.$transaction(
-        async (tx) => {
-          const [row] = await tx.$queryRaw<{ locked: boolean }[]>`
-            SELECT pg_try_advisory_xact_lock(hashtext(${ReviewInviteService.LOCK_KEY})) AS "locked"`;
-          if (!row?.locked) { markCronSkipped('LOCKED'); return { skipped: 'LOCKED' as const }; }
-          return this.processBatches();
-        },
-        { maxWait: 10_000, timeout: 10 * 60_000 },
-      );
+      // Khoá lượt chạy (cron_leases), không giữ kết nối DB: nhiều instance cùng lên lịch thì chỉ một chạy. Claim từng đơn vẫn là chốt cuối.
+      const run = await runExclusive(this.prisma, ReviewInviteService.LOCK_KEY, () => this.processBatches());
+      if (!run.acquired) { markCronSkipped('LOCKED'); return { skipped: 'LOCKED' as const }; }
+      return run.value;
     } catch (err) {
       this.logger.error(`sendReviewInvites lỗi: ${err instanceof Error ? err.message : err}`);
       return { skipped: 'ERROR' };

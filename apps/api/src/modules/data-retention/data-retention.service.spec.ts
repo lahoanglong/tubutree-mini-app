@@ -6,22 +6,25 @@ import { firstLogLine } from '../../common/cron-run/cron-aware-logger';
 import { DataRetentionService, RETENTION_POLICY, resolveRetentionDays } from './data-retention.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
+import { runExclusive } from '../../common/cron-leader/run-exclusive';
+import { holdsLease } from '../../common/cron-leader/run-exclusive.fixtures';
+
+jest.mock('../../common/cron-leader/run-exclusive');
 
 const NOW = new Date('2026-10-10T20:00:00.000Z');
 const DAY = 86_400_000;
 
 function make(opts: { locked?: boolean; config?: Record<string, unknown>; batchCounts?: number[] } = {}) {
-  const tx = { $queryRaw: jest.fn().mockResolvedValue([{ locked: opts.locked ?? true }]) };
+  (runExclusive as jest.Mock).mockImplementation(holdsLease(opts.locked ?? true));
   const queue = [...(opts.batchCounts ?? [])];
   const prisma = {
-    $transaction: jest.fn<Promise<unknown>, [(t: unknown) => Promise<unknown>]>(async (fn) => fn(tx)),
     $executeRaw: jest.fn(async () => queue.shift() ?? 0),
   };
   const systemConfig = {
     get: jest.fn(async (key: string, fallback: unknown) => (opts.config && key in opts.config ? opts.config[key] : fallback)),
   };
   const svc = new DataRetentionService(prisma as unknown as PrismaService, systemConfig as unknown as SystemConfigService);
-  return { svc, prisma, tx, systemConfig };
+  return { svc, prisma, systemConfig };
 }
 
 /** Ghép câu SQL Prisma.sql đã truyền vào $executeRaw thành chuỗi + tham số để assert. */
@@ -70,16 +73,16 @@ describe('DataRetentionService (C-046)', () => {
     });
   });
 
-  it('không giữ được khoá advisory → bỏ qua, không xoá gì', async () => {
+  it('không giành được khoá lượt chạy → bỏ qua, không xoá gì', async () => {
     const { svc, prisma } = make({ locked: false });
     expect(await svc.runAll({ now: NOW })).toEqual({ skipped: 'LOCKED' });
     expect(prisma.$executeRaw).not.toHaveBeenCalled();
   });
 
   it('đang chạy chồng trong cùng instance → bỏ qua', async () => {
-    const { svc, prisma } = make();
+    const { svc } = make();
     let release!: () => void;
-    prisma.$transaction.mockImplementationOnce(() => new Promise((r) => (release = () => r({ deleted: {}, truncated: false }))));
+    (runExclusive as jest.Mock).mockImplementationOnce(() => new Promise((r) => (release = () => r({ acquired: true, value: { deleted: {}, truncated: false } }))));
     const first = svc.runAll({ now: NOW });
     expect(await svc.runAll({ now: NOW })).toEqual({ skipped: 'RUNNING' });
     release();
@@ -247,8 +250,8 @@ describe('DataRetentionService (C-046)', () => {
   });
 
   it('handleCron không bao giờ ném lỗi ra ngoài', async () => {
-    const { svc, prisma } = make();
-    prisma.$transaction.mockRejectedValueOnce(new Error('db down'));
+    const { svc } = make();
+    (runExclusive as jest.Mock).mockRejectedValueOnce(new Error('db down'));
     await expect(svc.handleCron()).resolves.toBeUndefined();
   });
 });

@@ -10,6 +10,10 @@ import {
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 import type { OrderStatusService } from './order-status.service';
+import { runExclusive } from '../../common/cron-leader/run-exclusive';
+import { holdsLease } from '../../common/cron-leader/run-exclusive.fixtures';
+
+jest.mock('../../common/cron-leader/run-exclusive');
 
 const NOW = new Date('2026-10-10T05:00:00.000Z');
 const HOUR = 3_600_000;
@@ -17,10 +21,9 @@ const HOUR = 3_600_000;
 type StaleRow = { id: string; code: string; type?: string; paymentMethod?: string; _count?: { paymentAttempts: number } };
 
 function make(opts: { ttl?: unknown; locked?: boolean; orders?: StaleRow[] } = {}) {
-  const tx = { $queryRaw: jest.fn().mockResolvedValue([{ locked: opts.locked ?? true }]) };
+  (runExclusive as jest.Mock).mockImplementation(holdsLease(opts.locked ?? true));
   const prisma = {
     order: { findMany: jest.fn().mockResolvedValue(opts.orders ?? []) },
-    $transaction: jest.fn((fn: (t: unknown) => unknown) => fn(tx)),
   };
   const systemConfig = {
     get: jest.fn(async (_key: string, fallback: unknown) => ('ttl' in opts ? opts.ttl : fallback)),
@@ -33,7 +36,7 @@ function make(opts: { ttl?: unknown; locked?: boolean; orders?: StaleRow[] } = {
     systemConfig as unknown as SystemConfigService,
     orderStatus as unknown as OrderStatusService,
   );
-  return { cron, prisma, tx, systemConfig, orderStatus };
+  return { cron, prisma, systemConfig, orderStatus };
 }
 
 describe('PendingPaymentExpiryCron (C-024)', () => {
@@ -150,7 +153,7 @@ describe('PendingPaymentExpiryCron (C-024)', () => {
     });
   });
 
-  it('instance khác đang giữ khoá advisory → bỏ lượt, không quét', async () => {
+  it('instance khác đang giữ khoá lượt chạy → bỏ lượt, không quét', async () => {
     const { cron, prisma, orderStatus } = make({ locked: false, orders: [{ id: 'o1', code: 'A' }] });
     const res = await cron.expireStale(NOW);
     expect(res).toEqual({ skipped: 'LOCKED' });
@@ -174,8 +177,8 @@ describe('PendingPaymentExpiryCron (C-024)', () => {
   });
 
   it('handleCron nuốt lỗi (cron không được làm sập process)', async () => {
-    const { cron, prisma } = make();
-    (prisma.$transaction as jest.Mock).mockRejectedValueOnce(new Error('pool exhausted'));
+    const { cron } = make();
+    (runExclusive as jest.Mock).mockRejectedValueOnce(new Error('pool exhausted'));
     await expect(cron.handleCron()).resolves.toBeUndefined();
   });
 });

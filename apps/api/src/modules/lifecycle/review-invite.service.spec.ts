@@ -2,15 +2,19 @@ import { ReviewInviteService } from './review-invite.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 import type { NotificationsService } from '../notifications/notifications.service';
+import { runExclusive } from '../../common/cron-leader/run-exclusive';
+import { holdsLease } from '../../common/cron-leader/run-exclusive.fixtures';
+
+jest.mock('../../common/cron-leader/run-exclusive');
 
 type Item = { productName: string; productSlug: string | null; onSale: boolean };
 
 /** Dựng service với prisma giả: truy vấn thô được nhận diện theo bảng mà câu SQL đọc. */
 function setup(o: { items: Item[]; claimCount?: number; notify?: jest.Mock }) {
   const sql = (strings: TemplateStringsArray) => strings.join('?');
+  (runExclusive as jest.Mock).mockImplementation(holdsLease(true));
   const queryRaw = jest.fn(async (strings: TemplateStringsArray) => {
     const text = sql(strings);
-    if (text.includes('pg_try_advisory_xact_lock')) return [{ locked: true }];
     if (text.includes('FROM orders o')) return [{ id: 'o1', code: 'TT001', userId: 'u1' }];
     if (text.includes('FROM order_items')) return o.items;
     return [];
@@ -18,7 +22,6 @@ function setup(o: { items: Item[]; claimCount?: number; notify?: jest.Mock }) {
   const updateMany = jest.fn().mockResolvedValue({ count: o.claimCount ?? 1 });
   const prisma = {
     $queryRaw: queryRaw,
-    $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn({ $queryRaw: queryRaw }),
     order: { updateMany },
   } as unknown as PrismaService;
   const config = { get: async <T>(_k: string, fb: T) => fb } as unknown as SystemConfigService;

@@ -5,6 +5,7 @@ import { CRON_TZ } from '../../common/cron-tz';
 import { OrderStatusService } from './order-status.service';
 import { deliveredEffectsResyncWhere } from './delivered-effects';
 import { markCronSkipped, TrackCron } from '../../common/cron-run/track-cron';
+import { runExclusive } from '../../common/cron-leader/run-exclusive';
 
 const PAGE = 50;
 const MAX_PER_TICK = 200;
@@ -51,17 +52,10 @@ export class DeliveredEffectsResyncCron {
     if (this.running) { markCronSkipped('RUNNING'); return { skipped: 'RUNNING' }; }
     this.running = true;
     try {
-      // Khoá advisory theo transaction giữ suốt lượt chạy: hai replica cùng lên lịch thì chỉ một bên quét. Từng đơn chạy trên
-      // kết nối khác — tx này chỉ để giữ khoá.
-      return await this.prisma.$transaction(
-        async (tx) => {
-          const [row] = await tx.$queryRaw<{ locked: boolean }[]>`
-            SELECT pg_try_advisory_xact_lock(hashtext(${LOCK_KEY})) AS "locked"`;
-          if (!row?.locked) { markCronSkipped('LOCKED'); return { skipped: 'LOCKED' as const }; }
-          return this.sweep(now);
-        },
-        { maxWait: 10_000, timeout: 15 * 60_000 },
-      );
+      // Khoá lượt chạy (cron_leases), không giữ kết nối DB: nhiều instance cùng lên lịch thì chỉ một chạy.
+      const run = await runExclusive(this.prisma, LOCK_KEY, () => this.sweep(now));
+      if (!run.acquired) { markCronSkipped('LOCKED'); return { skipped: 'LOCKED' as const }; }
+      return run.value;
     } finally {
       this.running = false;
     }

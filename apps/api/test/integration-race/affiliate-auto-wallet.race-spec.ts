@@ -1,4 +1,5 @@
 import { getQueueToken } from '@nestjs/bullmq';
+import { runExclusive } from '../../src/common/cron-leader/run-exclusive';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
@@ -390,17 +391,11 @@ describe('Hoa hồng đã duyệt tự vào Ví (real Postgres)', () => {
     expect(await tins(u.id, CTV_NOTIFICATION.AUTO_WALLET)).toHaveLength(2);
   });
 
-  it('hai tiến trình cùng lúc: bên thua khoá advisory bỏ qua, không duyệt, không chuyển, không báo; nhả khoá thì chạy được', async () => {
+  it('hai tiến trình cùng lúc: bên thua khoá lượt chạy bỏ qua, không duyệt, không chuyển, không báo; nhả khoá thì chạy được', async () => {
     await clearMarker();
     const u = await ctv();
     await commissionFor(u.id, 30_000, 'LOCKED');
-    await prisma.$transaction(
-      async (tx) => {
-        await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('cron:affiliate.approve_due'))::text`;
-        await affiliate.approveDueCommissions(dayNow());
-      },
-      { timeout: 30_000 },
-    );
+    await runExclusive(prisma, 'cron:affiliate.approve_due', () => affiliate.approveDueCommissions(dayNow()));
     let s = await state(u.id);
     expect(s.commissions.map((c) => c.status)).toEqual(['LOCKED']);
     expect(s.balance).toBe(0);

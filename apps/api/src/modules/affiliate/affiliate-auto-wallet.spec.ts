@@ -10,6 +10,10 @@ import type { PancakeOrderService } from '../integrations/pancake/pancake-order.
 import type { RewardPointsService } from '../wallet/reward-points.service';
 import type { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import type { NotificationsService } from '../notifications/notifications.service';
+import { runExclusive } from '../../common/cron-leader/run-exclusive';
+import { holdsLease } from '../../common/cron-leader/run-exclusive.fixtures';
+
+jest.mock('../../common/cron-leader/run-exclusive');
 
 const noop = {} as never;
 type Row = { id: string; affiliateUserId: string; amount: number };
@@ -180,10 +184,8 @@ describe('AffiliateService.approveDueCommissions (duyệt mỗi giờ, chuyển 
       returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
       commission: { updateMany, findMany },
       cronRun: { findUnique: jest.fn().mockResolvedValue(null), upsert: jest.fn().mockResolvedValue({}) },
-      $queryRaw: jest.fn().mockResolvedValue([{ locked: opts.locked ?? true }]),
-      $transaction: jest.fn(),
     };
-    prisma.$transaction.mockImplementation((cb: (tx: unknown) => unknown) => cb(prisma));
+    (runExclusive as jest.Mock).mockImplementation(holdsLease(opts.locked ?? true));
     const config = { get: async <T>(_k: string, fb?: T): Promise<T> => fb as T } as unknown as SystemConfigService;
     const svc = new AffiliateService(
       prisma as unknown as PrismaService, config, noop as PricingService, noop as PancakeOrderService, noop as RewardPointsService, noop as AnalyticsEventsService,
@@ -224,11 +226,18 @@ describe('AffiliateService.approveDueCommissions (duyệt mỗi giờ, chuyển 
     expect(t.updateMany).toHaveBeenCalledTimes(2);
   });
 
-  it('thua khoá advisory: không duyệt, không chuyển', async () => {
+  it('thua khoá lượt chạy: không duyệt, không chuyển', async () => {
     const t = cron({ locked: false, count: 1 });
     await t.svc.approveDueCommissions(NINE_VN);
     expect(t.updateMany).not.toHaveBeenCalled();
     expect(t.prisma.cronRun.upsert).not.toHaveBeenCalled();
+  });
+
+  it('thua khoá lượt chạy: vẫn gọi notifyMilestoneRevokes (báo thu hồi mốc không phụ thuộc lượt duyệt)', async () => {
+    const t = cron({ locked: false });
+    const revokes = jest.spyOn(t.svc as unknown as { notifyMilestoneRevokes: (n: Date) => Promise<void> }, 'notifyMilestoneRevokes').mockResolvedValue(undefined);
+    await t.svc.approveDueCommissions(NINE_VN);
+    expect(revokes).toHaveBeenCalledWith(NINE_VN);
   });
 
   it('lỗi DB giữa chừng không ném (cron không được sập process)', async () => {

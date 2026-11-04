@@ -13,6 +13,7 @@ import {
   PANCAKE_STOCK_EVENT,
 } from './pancake-webhook-dedupe';
 import { markCronSkipped, TrackCron } from '../../../common/cron-run/track-cron';
+import { runExclusive } from '../../../common/cron-leader/run-exclusive';
 
 const LOCK_KEY = 'pancake.events-reconcile';
 
@@ -62,16 +63,10 @@ export class PancakeEventsReconcileService {
     if (this.running) { markCronSkipped('RUNNING'); return { skipped: 'RUNNING' }; }
     this.running = true;
     try {
-      // Khoá advisory giữ suốt lượt chạy: nhiều instance API cùng lên lịch thì chỉ một instance quét.
-      return await this.prisma.$transaction(
-        async (tx) => {
-          const [row] = await tx.$queryRaw<{ locked: boolean }[]>`
-            SELECT pg_try_advisory_xact_lock(hashtext(${LOCK_KEY})) AS "locked"`;
-          if (!row?.locked) { markCronSkipped('LOCKED'); return { skipped: 'LOCKED' as const }; }
-          return { enqueued: await this.enqueueStuck(now) };
-        },
-        { maxWait: 10_000, timeout: 5 * 60_000 },
-      );
+      // Khoá lượt chạy (cron_leases), không giữ kết nối DB: nhiều instance cùng lên lịch thì chỉ một chạy.
+      const run = await runExclusive(this.prisma, LOCK_KEY, async () => ({ enqueued: await this.enqueueStuck(now) }));
+      if (!run.acquired) { markCronSkipped('LOCKED'); return { skipped: 'LOCKED' as const }; }
+      return run.value;
     } finally {
       this.running = false;
     }

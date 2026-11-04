@@ -1,6 +1,10 @@
 import { DeliveredEffectsResyncCron } from './delivered-effects-resync.cron';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { OrderStatusService } from './order-status.service';
+import { runExclusive } from '../../common/cron-leader/run-exclusive';
+import { holdsLease } from '../../common/cron-leader/run-exclusive.fixtures';
+
+jest.mock('../../common/cron-leader/run-exclusive');
 
 const NOW = new Date('2026-10-16T05:00:00.000Z');
 
@@ -16,8 +20,8 @@ function make(rows: Row[], opts: { locked?: boolean; resync?: (id: string) => Pr
       .filter((r) => !after || r.deliveredAt.getTime() > after.at || (r.deliveredAt.getTime() === after.at && r.id > after.id))
       .slice(0, args.take);
   });
-  const tx = { $queryRaw: jest.fn().mockResolvedValue([{ locked: opts.locked ?? true }]) };
-  const prisma = { order: { findMany }, $transaction: jest.fn((fn: (t: unknown) => unknown) => fn(tx)) };
+  (runExclusive as jest.Mock).mockImplementation(holdsLease(opts.locked ?? true));
+  const prisma = { order: { findMany } };
   const orderStatus = {
     resyncDeliveredEffects: jest.fn(opts.resync ?? (async () => ({ outcome: 'DONE', pointsCredited: true, commissionsLocked: 1 }))),
   };
