@@ -1027,6 +1027,19 @@ describe('RbacService: đánh dấu danh sách ảnh /img cũ (ImageRegistryStal
       });
     });
 
+    it('admin khác vừa nâng người này lên ADMIN (dòng khoá đã ADMIN), lượt này cấp STAFF → applied=false, có dòng "(đã có sẵn)", KHÔNG đánh dấu', async () => {
+      const stale = mkStale();
+      const tx = addTx({ before: mkUser(), after: mkUser({ role: 'STAFF' }) });
+      tx.$queryRaw.mockResolvedValue([{ role: 'ADMIN', staffPermissions: [] }]);
+      const out = await new RbacService(txPrisma(tx), undefined, undefined, stale as never).addGrant('admin1', '0900000001', 'STAFF', undefined, 'thêm kho');
+      expect(out.applied).toBe(false);
+      expect(tx.user.update).not.toHaveBeenCalled();
+      expect(tx.userAdminEvent.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ kind: 'ROLE', reason: 'Cấp quyền STAFF theo SĐT (đã có sẵn): thêm kho', actorId: 'admin1' }),
+      });
+      expect(stale.markStale).not.toHaveBeenCalled();
+    });
+
     it('chưa có tài khoản (applied=false) → KHÔNG đánh dấu', async () => {
       const stale = mkStale();
       const tx = addTx({ before: mkUser(), after: mkUser() });

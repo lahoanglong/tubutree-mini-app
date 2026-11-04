@@ -203,8 +203,9 @@ export class RbacService {
       if (user) {
         // Bản đọc đầu tx có thể cũ: request thua createMany đã chờ bên thắng commit, nên role/nhóm của user có thể đã đổi.
         const fresh = (await tx.user.findUnique({ where: { id: user.id } })) ?? user;
-        const { user: updated } = await this.applyGrantsWith(tx, fresh, adminId, reason);
-        applied = updated.role !== fresh.role;
+        // `fresh` đọc trước khi khoá: admin khác vừa nâng người này thì dòng khoá đã khác `fresh` dù lượt này không ghi gì, nên dựa vào `changed`.
+        const { user: updated, changed } = await this.applyGrantsWith(tx, fresh, adminId, reason);
+        applied = changed;
         // applyGrants chỉ chép nhóm khi nâng vai trò; người đã là STAFF thì nhóm admin vừa chọn phải áp luôn kẻo bị bỏ qua âm thầm.
         if (!applied && updated.role === 'STAFF' && role === 'STAFF' && perms.length && !samePermissions(updated.staffPermissions ?? [], perms)) {
           await tx.user.update({ where: { id: user.id }, data: { staffPermissions: perms } });
