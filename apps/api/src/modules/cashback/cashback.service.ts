@@ -42,6 +42,8 @@ type ConflictNotice = {
   kind: 'PAID_REJECTED' | 'ADMIN_OVERRIDE' | 'REVIVED';
   /** Số tiền đưa vào tin báo; REVIVED phải in số vừa cộng vào pending (có thể khác số cũ trên dòng). */
   reward?: number;
+  /** Trạng thái của dòng lúc phát hiện: claim dấu chỉ thắng khi dòng còn ở trạng thái đó (settle chen giữa thì chặng mới tự báo). */
+  atStatus: CashbackStatus;
 };
 
 const STATUS_VI: Record<CashbackStatus, string> = {
@@ -295,12 +297,12 @@ export class CashbackService {
         // Đã settle về Ví (PAID) → BỎ QUA postback đến sau: không ghi đè status, không đụng số dư (không claw-back được tiền đã về Ví).
         // Riêng "rejected" sau PAID là việc kế toán phải biết: sàn đòi lại hoa hồng nhưng tiền khách đã về Ví.
         if (cur.status === 'PAID') {
-          if (!opts.manual && status === 'REJECTED') conflict = { row: cur, kind: 'PAID_REJECTED' };
+          if (!opts.manual && status === 'REJECTED') conflict = { row: cur, kind: 'PAID_REJECTED', atStatus: 'PAID' };
           return 'skipped';
         }
         // Dòng đã có quyết định tay của Kế toán: sàn báo khác thì giữ nguyên quyết định, chỉ báo ADMIN (PENDING là sàn chưa có ý kiến, không báo).
         if (!opts.manual && cur.adminReviewedAt) {
-          if (status !== cur.status && status !== 'PENDING') conflict = { row: cur, kind: 'ADMIN_OVERRIDE' };
+          if (status !== cur.status && status !== 'PENDING') conflict = { row: cur, kind: 'ADMIN_OVERRIDE', atStatus: cur.status };
           return 'skipped';
         }
         // Sự kiện đến muộn hoặc sai thứ tự (postback PENDING sau khi reconcile đã CONFIRMED) không được kéo trạng thái lùi: lùi về
@@ -314,6 +316,8 @@ export class CashbackService {
             ...(opts.manual
               ? { adminReviewedAt: new Date(), adminReviewedBy: opts.reviewedBy ?? null, conflictNotifiedAt: null, conflictPayload: Prisma.DbNull }
               : {}),
+            // Sàn đưa dòng đã CONFIRMED về REJECTED: hết chặng "đã duyệt lại", lần sàn hồi sinh sau (REVIVED) phải báo lại được.
+            ...(!opts.manual && wasConfirmed && !nowConfirmed ? { conflictNotifiedAt: null } : {}),
             // confirmedAt set MỚI khi chuyển từ chưa-confirmed sang confirmed (reset đồng hồ hold);
             // giữ nguyên khi đã confirmed. Tránh REJECTED→CONFIRMED giữ confirmedAt cũ → settle ngay.
             status,
@@ -328,7 +332,7 @@ export class CashbackService {
           if (nowConfirmed && !wasConfirmed) {
             await tx.user.update({ where: { id: cur.userId }, data: { cashbackPending: { increment: userReward } } });
             // Sàn lật khoản đã bị từ chối thành duyệt khi chưa có quyết định tay: tiền sẽ về Ví sau thời gian giữ, ADMIN cần biết.
-            if (!opts.manual && cur.status === 'REJECTED') conflict = { row: cur, kind: 'REVIVED', reward: userReward };
+            if (!opts.manual && cur.status === 'REJECTED') conflict = { row: cur, kind: 'REVIVED', reward: userReward, atStatus: 'CONFIRMED' };
           } else if (wasConfirmed && !nowConfirmed) {
             await tx.user.update({ where: { id: cur.userId }, data: { cashbackPending: { decrement: cur.userReward } } });
           }
@@ -352,10 +356,10 @@ export class CashbackService {
   }
 
   /** Báo ADMIN một lần mỗi dòng (CAS trên conflictNotifiedAt) khi sàn báo khác quyết định tay, đòi lại khoản đã trả hoặc lật khoản đã từ chối. Không ném. */
-  private async reportConflict({ row, kind, reward }: ConflictNotice, event: NormalizedCashbackEvent): Promise<void> {
+  private async reportConflict({ row, kind, reward, atStatus }: ConflictNotice, event: NormalizedCashbackEvent): Promise<void> {
     try {
       const claimed = await this.prisma.cashbackTransaction.updateMany({
-        where: { id: row.id, conflictNotifiedAt: null },
+        where: { id: row.id, conflictNotifiedAt: null, status: atStatus },
         data: { conflictNotifiedAt: new Date(), conflictPayload: (event.raw ?? {}) as Prisma.InputJsonValue },
       });
       if (claimed.count === 0) return;

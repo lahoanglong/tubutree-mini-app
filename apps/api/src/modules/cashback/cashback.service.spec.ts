@@ -331,6 +331,26 @@ describe('CashbackService.ingest', () => {
       expect(notifications.notify).not.toHaveBeenCalledWith('adm1', 'OPS_HEALTH_ALERT', expect.objectContaining({ summary: expect.stringContaining('35.000đ') }));
     });
 
+    it('nit: status đổi giữa lúc phát hiện và lúc claim (settle chen vào) → claim thua, không gửi tin', async () => {
+      const { prisma, updateMany } = conflictPrisma({ id: 'tx1', status: 'REJECTED', confirmedAt: null, userId: 'u1', userReward: 35000, adminReviewedAt: null, merchantOrderId: 'AT-1', provider: 'accesstrade' }, 0);
+      await new CashbackService(prisma, config, notifications, registry).ingest(event({ status: 'CONFIRMED' }), 'accesstrade');
+      const claim = updateMany.mock.calls.find(([a]) => 'conflictNotifiedAt' in a.where)![0];
+      expect(claim.where).toEqual({ id: 'tx1', conflictNotifiedAt: null, status: 'CONFIRMED' });
+      expect(notifications.notify).not.toHaveBeenCalled();
+    });
+
+    it('nit: PAID_REJECTED claim kèm status PAID', async () => {
+      const { prisma, updateMany } = conflictPrisma({ id: 'tx1', status: 'PAID', confirmedAt: new Date(), userId: 'u1', userReward: 35000, merchantOrderId: 'AT-1', provider: 'accesstrade' });
+      await new CashbackService(prisma, config, notifications, registry).ingest(event({ status: 'REJECTED' }), 'accesstrade');
+      expect(updateMany.mock.calls.find(([a]) => 'conflictNotifiedAt' in a.where)![0].where).toMatchObject({ status: 'PAID' });
+    });
+
+    it('sàn đưa CONFIRMED → REJECTED xoá dấu đã báo (để REVIVED lần hai báo lại được)', async () => {
+      const { prisma, updateMany } = updateBranchPrisma({ id: 'tx1', status: 'CONFIRMED', confirmedAt: new Date(), userId: 'u1', userReward: 35000, adminReviewedAt: null });
+      await new CashbackService(prisma, config, notifications, registry).ingest(event({ status: 'REJECTED' }), 'accesstrade');
+      expect(updateMany.mock.calls[0][0].data).toMatchObject({ status: 'REJECTED', conflictNotifiedAt: null });
+    });
+
     it('PENDING → CONFIRMED bình thường không báo', async () => {
       const { prisma } = conflictPrisma({ id: 'tx1', status: 'PENDING', confirmedAt: null, userId: 'u1', userReward: 35000, adminReviewedAt: null });
       await new CashbackService(prisma, config, notifications, registry).ingest(event({ status: 'CONFIRMED' }), 'accesstrade');

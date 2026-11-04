@@ -214,4 +214,19 @@ describe('Cashback: máy trạng thái dưới đồng thời (real Postgres)', 
     await svc.ingest({ ...ev(utm, o, 'REJECTED'), raw: { status: 'rejected-again' } }, 'accesstrade');
     expect(notify.mock.calls.length).toBe(before);
   });
+
+  it('REVIVED lần hai: approved → rejected → approved (báo) → rejected → approved → có 2 tin REVIVED', async () => {
+    const { user, utm } = await seedClick();
+    const o = `REV2-${randCode(6)}`;
+    const revivedAlerts = () => (notify.mock.calls as unknown[][]).filter((c) => c[1] === 'OPS_HEALTH_ALERT' && String((c[2] as { summary: string }).summary).includes(o) && String((c[2] as { summary: string }).summary).includes('duyệt lại'));
+    await svc.ingest(ev(utm, o, 'CONFIRMED'), 'accesstrade');
+    await svc.ingest(ev(utm, o, 'REJECTED'), 'accesstrade');
+    await svc.ingest(ev(utm, o, 'CONFIRMED'), 'accesstrade');
+    const first = revivedAlerts().length;
+    expect(first).toBeGreaterThan(0);
+    await svc.ingest(ev(utm, o, 'REJECTED'), 'accesstrade');
+    await svc.ingest(ev(utm, o, 'CONFIRMED'), 'accesstrade');
+    expect(revivedAlerts().length).toBe(first * 2);
+    expect(await pendingOf(user.id)).toBe(35000);
+  });
 });
