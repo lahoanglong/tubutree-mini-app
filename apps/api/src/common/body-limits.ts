@@ -1,5 +1,5 @@
-import { createHash, timingSafeEqual } from 'node:crypto';
 import { json, urlencoded } from 'express';
+import { safeEqualStrings } from './safe-equal';
 import type { ErrorRequestHandler, NextFunction, Request, RequestHandler, Response } from 'express';
 
 /**
@@ -230,9 +230,7 @@ export const pancakeWebhookTokenGuard: RequestHandler = (req: Request, res: Resp
   }
   const header = req.headers['x-webhook-token'];
   const token = Array.isArray(header) ? header[0] : header;
-  // So băm cùng độ dài để thời gian phản hồi không lộ độ dài secret.
-  const digest = (v: string) => createHash('sha256').update(v, 'utf8').digest();
-  if (!token || !timingSafeEqual(digest(token), digest(secret))) return reject(res, 401, PANCAKE_TOKEN_INVALID_MESSAGE);
+  if (!token || !safeEqualStrings(token, secret)) return reject(res, 401, PANCAKE_TOKEN_INVALID_MESSAGE);
   next();
 };
 

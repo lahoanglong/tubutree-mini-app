@@ -1,4 +1,5 @@
-import { createHash, timingSafeEqual } from 'node:crypto';
+import { createHash } from 'node:crypto';
+import { safeEqualStrings } from '../../common/safe-equal';
 import type { PrismaService } from '../../prisma/prisma.service';
 
 /** Trần số ảnh mỗi bài (CreatePostDto.images); chỉ số ngoài trần không bao giờ có ảnh. */
@@ -22,9 +23,7 @@ export function feedImageRef(postId: string, index: number, version: string): st
 /** So mã `v` trên URL với mã của ảnh đang lưu (so sánh thời gian không đổi). */
 export function matchesFeedImageVersion(given: unknown, postId: string, index: number, image: string): boolean {
   if (typeof given !== 'string') return false;
-  const a = Buffer.from(given);
-  const b = Buffer.from(feedImageVersion(postId, index, image));
-  return a.length === b.length && timingSafeEqual(a, b);
+  return safeEqualStrings(given, feedImageVersion(postId, index, image));
 }
 
 export interface FeedPostImages {

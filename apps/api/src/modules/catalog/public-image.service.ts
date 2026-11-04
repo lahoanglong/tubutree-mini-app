@@ -3,9 +3,9 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { decodeServedImage } from '../../common/served-image';
 import { isPublicImageKind, publicImageVersion, type PublicImageSlot } from '../../common/public-image';
-import { timingSafeEqual } from 'node:crypto';
+import { safeEqualStrings } from '../../common/safe-equal';
 
-const same = (a: unknown, b: string) => typeof a === 'string' && a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
+const same = (a: unknown, b: string) => typeof a === 'string' && safeEqualStrings(a, b);
 
 /**
  * Byte của ảnh base64 đang hiện công khai (đích của `publicImageRef`): sản phẩm đã duyệt, nhãn và khoá học đã công bố, chiến dịch đang bật.
