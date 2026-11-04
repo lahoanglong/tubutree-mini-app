@@ -272,6 +272,11 @@ export function useOptionalAuth(): AuthState | null {
   return useContext(AuthContext);
 }
 
+/** Vai trò của người đang đăng nhập, hoặc undefined khi chưa có AuthProvider (vd ô chọn dùng trong test riêng lẻ). */
+export function useViewerRole(): string | undefined {
+  return useContext(AuthContext)?.user?.role;
+}
+
 export function useAuth(): AuthState {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error('useAuth must be used within AuthProvider');

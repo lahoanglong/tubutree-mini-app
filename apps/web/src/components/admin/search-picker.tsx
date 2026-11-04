@@ -51,6 +51,7 @@ export function SearchPicker({
   placeholder,
   queryKey,
   search,
+  queryProblem,
   debounceMs = 250,
   className = 'w-full',
 }: {
@@ -61,13 +62,16 @@ export function SearchPicker({
   placeholder: string;
   queryKey: string;
   search: (q: string) => Promise<PickerResult>;
+  /** Trả câu hướng dẫn khi từ khoá chưa được phép gửi lên máy chủ (vd CSKH phải gõ đủ SĐT): khi đó không gọi API, chỉ hiện câu này. */
+  queryProblem?: (q: string) => string | null;
   debounceMs?: number;
   className?: string;
 }) {
   const [text, setText] = useState('');
   const typed = text.trim();
   const debounced = useDebounced(typed, debounceMs);
-  const enabled = debounced.length >= PICKER_MIN_CHARS;
+  const problem = typed.length >= PICKER_MIN_CHARS ? (queryProblem?.(typed) ?? null) : null;
+  const enabled = debounced.length >= PICKER_MIN_CHARS && !(queryProblem?.(debounced) ?? null);
   const q = useQuery({ queryKey: [queryKey, debounced], queryFn: () => search(debounced), enabled, staleTime: 30_000 });
   const listId = useId();
 
@@ -91,7 +95,7 @@ export function SearchPicker({
 
   const result = enabled ? q.data : undefined;
   const options = result?.options ?? [];
-  const waiting = typed.length >= PICKER_MIN_CHARS && (typed !== debounced || q.isFetching);
+  const waiting = !problem && typed.length >= PICKER_MIN_CHARS && (typed !== debounced || q.isFetching);
 
   return (
     <div className={className}>
@@ -107,6 +111,7 @@ export function SearchPicker({
       />
       <div id={listId}>
         {typed.length < PICKER_MIN_CHARS && <p className="mt-1 text-xs text-stone-500">Gõ ít nhất {PICKER_MIN_CHARS} ký tự để tìm.</p>}
+        {problem && <p className="mt-1 text-xs text-stone-500">{problem}</p>}
         {waiting && <p className="mt-1 text-xs text-stone-500">Đang tìm…</p>}
         {enabled && !waiting && q.isError && (
           <p role="alert" className="mt-1 text-xs text-danger-fg">
