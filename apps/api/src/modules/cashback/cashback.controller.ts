@@ -1,14 +1,14 @@
 import { Body, Controller, Get, Headers, Param, Post, UnauthorizedException } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
-import { IsOptional, IsString } from 'class-validator';
+import { IsOptional, IsString, IsUrl, MaxLength } from 'class-validator';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { CashbackService } from './cashback.service';
 import { CashbackProviderRegistry } from './providers/cashback-provider.registry';
 
-class ClickDto {
-  @IsString() merchantId!: string;
-  @IsOptional() @IsString() productUrl?: string;
+export class ClickDto {
+  @IsString() @MaxLength(64) merchantId!: string;
+  @IsOptional() @IsUrl({ protocols: ['https'], require_protocol: true }) @MaxLength(2048) productUrl?: string;
 }
 
 @Controller()

@@ -15,7 +15,7 @@ export const MAX_RUN_MS = 90 * 60_000;
 /** Số ngày giữ SĐT của đơn ngoài app sau khi claim của nó về trạng thái cuối (CREDITED, VOIDED, REVERSED, LAPSED). */
 export const EXTERNAL_PHONE_AFTER_FINAL_DAYS = 7;
 
-export type RetentionTargetKey = 'analytics_events' | 'notification_logs' | 'webhook_events' | 'refresh_tokens' | 'support_chat';
+export type RetentionTargetKey = 'analytics_events' | 'notification_logs' | 'webhook_events' | 'refresh_tokens' | 'support_chat' | 'cashback_clicks';
 
 /** Sàn tối thiểu: lỡ đặt 0/1 ngày trong tab Cấu hình thì không xoá sạch bảng ngay đêm sau. */
 export const RETENTION_POLICY: Record<RetentionTargetKey, { configKey: string; defaultDays: number; minDays: number }> = {
@@ -24,6 +24,7 @@ export const RETENTION_POLICY: Record<RetentionTargetKey, { configKey: string; d
   webhook_events: { configKey: 'retention.webhook_events_days', defaultDays: 90, minDays: 14 },
   refresh_tokens: { configKey: 'retention.refresh_sessions_days', defaultDays: 30, minDays: 7 },
   support_chat: { configKey: CHAT_RETENTION_KEY, defaultDays: 365, minDays: 90 },
+  cashback_clicks: { configKey: 'retention.cashback_clicks_days', defaultDays: 180, minDays: 60 },
 };
 
 export function resolveRetentionDays(target: RetentionTargetKey, raw: unknown): number {
@@ -196,6 +197,9 @@ export class DataRetentionService {
             where: Prisma.sql`(("revokedAt" IS NOT NULL AND "revokedAt" < ${cutoff}) OR "expiresAt" < ${cutoff})`,
           },
         ];
+      case 'cashback_clicks':
+        // Bảng chỉ ghi để ghép postback (utmTraceId); giao dịch cashback chỉ giữ clickId dạng chuỗi, không khoá ngoại.
+        return [{ table: 'cashback_clicks', where: Prisma.sql`"clickedAt" < ${cutoff}` }];
       case 'support_chat':
         // Hội thoại giữ lại để mã của khách không đổi.
         return [

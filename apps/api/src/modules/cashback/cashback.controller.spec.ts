@@ -1,5 +1,8 @@
 import { NotFoundException, UnauthorizedException } from '@nestjs/common';
-import { CashbackController } from './cashback.controller';
+import 'reflect-metadata';
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
+import { CashbackController, ClickDto } from './cashback.controller';
 import type { CashbackService } from './cashback.service';
 import type { CashbackProviderRegistry } from './providers/cashback-provider.registry';
 import type { CashbackProvider, NormalizedCashbackEvent } from './providers/cashback-provider.interface';
@@ -62,4 +65,21 @@ describe('CashbackController.webhook', () => {
     expect(r).toEqual({ ok: true });
     expect(ingest).toHaveBeenCalledWith(normalized, 'accesstrade');
   });
+});
+
+describe('ClickDto — SEC-V2', () => {
+  async function keys(plain: Record<string, unknown>) {
+    const errs = await validate(plainToInstance(ClickDto, plain), { whitelist: true });
+    return errs.flatMap((e) => Object.keys(e.constraints ?? {}));
+  }
+  it('https hợp lệ → không lỗi; bỏ trống productUrl → không lỗi', async () => {
+    expect(await keys({ merchantId: 'm1', productUrl: 'https://shopee.vn/p/1' })).toEqual([]);
+    expect(await keys({ merchantId: 'm1' })).toEqual([]);
+  });
+  it.each([['http://shopee.vn/p'], ['javascript:alert(1)'], ['shopee.vn/p'], ['not a url'], [`https://shopee.vn/${'a'.repeat(2100)}`]])(
+    'productUrl %s → lỗi',
+    async (u) => {
+      expect((await keys({ merchantId: 'm1', productUrl: u })).length).toBeGreaterThan(0);
+    },
+  );
 });

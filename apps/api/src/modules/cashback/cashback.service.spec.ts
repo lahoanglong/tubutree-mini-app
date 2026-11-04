@@ -49,6 +49,7 @@ describe('CashbackService.createClick', () => {
   it('merchant hợp lệ → resolve provider qua registry, tạo click, trả deeplink', async () => {
     const create = jest.fn().mockResolvedValue({});
     const prisma = {
+      user: { findUnique: jest.fn().mockResolvedValue({ phone: '0912345678', zaloId: 'z1' }) },
       cashbackMerchant: { findUnique: jest.fn().mockResolvedValue({ id: 'm1', provider: 'accesstrade', isActive: true, deeplinkTemplate: 'https://dl/deep?utm_content={{clickId}}' }) },
       cashbackClick: { findFirst: jest.fn().mockResolvedValue(null), create },
     } as unknown as PrismaService;
@@ -61,6 +62,7 @@ describe('CashbackService.createClick', () => {
 
   it('merchant không tồn tại/không active → BadRequestException', async () => {
     const prisma = {
+      user: { findUnique: jest.fn().mockResolvedValue({ phone: '0912345678', zaloId: 'z1' }) },
       cashbackMerchant: { findUnique: jest.fn().mockResolvedValue(null) },
     } as unknown as PrismaService;
     await expect(
@@ -71,12 +73,67 @@ describe('CashbackService.createClick', () => {
   it('click gần đây trong rate-limit → tái dùng utmTraceId, KHÔNG tạo click mới', async () => {
     const create = jest.fn();
     const prisma = {
+      user: { findUnique: jest.fn().mockResolvedValue({ phone: '0912345678', zaloId: 'z1' }) },
       cashbackMerchant: { findUnique: jest.fn().mockResolvedValue({ id: 'm1', provider: 'accesstrade', isActive: true, deeplinkTemplate: 'tpl' }) },
       cashbackClick: { findFirst: jest.fn().mockResolvedValue({ utmTraceId: 'old-trace' }), create },
     } as unknown as PrismaService;
     await new CashbackService(prisma, config, notifications, reg).createClick('u1', 'm1');
     expect(provider.buildDeeplink).toHaveBeenCalledWith('tpl', 'old-trace', undefined);
     expect(create).not.toHaveBeenCalled();
+  });
+});
+
+describe('CashbackService.createClick — SEC-V2 (productUrl, user thật)', () => {
+  const provider = { buildDeeplink: jest.fn().mockReturnValue('https://dl/deep?utm_content=xyz') };
+  const reg = { get: jest.fn().mockReturnValue(provider) } as unknown as CashbackProviderRegistry;
+  const real = { phone: '0912345678', zaloId: 'z1' };
+  function setup(user: unknown, slug = 'shopee') {
+    const create = jest.fn().mockResolvedValue({});
+    const prisma = {
+      user: { findUnique: jest.fn().mockResolvedValue(user) },
+      cashbackMerchant: { findUnique: jest.fn().mockResolvedValue({ id: 'm1', slug, provider: 'accesstrade', isActive: true, deeplinkTemplate: 'tpl' }) },
+      cashbackClick: { findFirst: jest.fn().mockResolvedValue(null), create },
+    } as unknown as PrismaService;
+    return { svc: new CashbackService(prisma, config, notifications, reg), create };
+  }
+
+  it('khách vãng lai (guest_) → BadRequest, không tạo click', async () => {
+    const { svc, create } = setup({ phone: null, zaloId: 'guest_dev1' });
+    await expect(svc.createClick('u1', 'm1')).rejects.toThrow('Đăng nhập Zalo');
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['shopee', 'https://shopee.vn/product/1/2'],
+    ['shopee', 'https://s.shopee.vn/abc'],
+    ['lazada', 'https://www.lazada.vn/products/x-i1.html'],
+    ['tiktokshop', 'https://shop.tiktok.com/view/product/1'],
+  ])('%s: productUrl %s khớp sàn → tạo click', async (slug, url) => {
+    const { svc, create } = setup(real, slug);
+    await svc.createClick('u1', 'm1', url);
+    expect(create).toHaveBeenCalled();
+  });
+
+  it.each([
+    ['shopee', 'https://evil.example/phish'],
+    ['shopee', 'https://shopee.vn.evil.example/x'],
+    ['shopee', 'https://evilshopee.vn/x'],
+    ['shopee', 'https://lazada.vn/x'],
+    ['shopee', 'https://user:pw@shopee.vn/x'],
+    ['shopee', 'http://shopee.vn/x'],
+    ['shopee', 'javascript:alert(1)'],
+    ['shopee', 'not a url'],
+    ['moi-chua-map', 'https://shopee.vn/x'],
+  ])('%s: productUrl %s không khớp sàn → BadRequest, không tạo click', async (slug, url) => {
+    const { svc, create } = setup(real, slug);
+    await expect(svc.createClick('u1', 'm1', url)).rejects.toThrow(BadRequestException);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('không gửi productUrl → vẫn tạo click bình thường (mọi sàn)', async () => {
+    const { svc, create } = setup(real, 'moi-chua-map');
+    await svc.createClick('u1', 'm1');
+    expect(create).toHaveBeenCalled();
   });
 });
 
