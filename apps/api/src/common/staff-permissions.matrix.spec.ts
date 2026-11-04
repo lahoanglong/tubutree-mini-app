@@ -171,6 +171,7 @@ const EXPECTED: Record<string, Access> = {
   'POST /admin/merchant-products/:id/unlink': ADMIN_ONLY,
   'GET /admin/merchant-products/linked': ADMIN_ONLY,
   'GET /admin/merchant-products/pending': ADMIN_ONLY,
+  'GET /admin/merchant-products/:id/images/:source/:slot': ADMIN_ONLY,
   'GET /admin/notification-templates': [MARKETING],
   'PATCH /admin/notification-templates/:code': [MARKETING],
   'GET /admin/ops/access': STAFF,

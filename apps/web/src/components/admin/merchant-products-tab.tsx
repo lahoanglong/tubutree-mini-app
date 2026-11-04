@@ -12,11 +12,13 @@ import {
   mergeQueuePages,
   nextPageParam,
   ADMIN_QUEUE_PAGE_SIZE,
+  MERCHANT_PENDING_PAGE_SIZE,
   type AdminLinkedMerchantProduct,
   type AdminPendingProduct,
   type PancakeLinkPreview,
 } from '@/lib/admin-client';
 import { ApiError } from '@/lib/client-api';
+import { AdminImage } from './admin-image';
 import { formatVnd } from '@/lib/shop-client';
 import { formatDate } from '@/lib/format-date';
 import { BTN_SECONDARY, BTN_XS_DANGER, BTN_XS_PRIMARY, BTN_XS_SECONDARY, FIELD_XS, Notice, TOUCH_H, ToneBadge, chipClass, LoadError, Field } from './ui';
@@ -36,7 +38,7 @@ import { actionErrorText } from '@/lib/admin-error-text';
 export function MerchantProductsTab({ focusConsignment = false }: { focusConsignment?: boolean }) {
   const q = useInfiniteQuery({
     queryKey: ['admin-merchant-products-pending'],
-    queryFn: ({ pageParam }) => listPendingMerchantProducts(pageParam, ADMIN_QUEUE_PAGE_SIZE),
+    queryFn: ({ pageParam }) => listPendingMerchantProducts(pageParam, MERCHANT_PENDING_PAGE_SIZE),
     initialPageParam: 1,
     getNextPageParam: (last) => nextPageParam(last.meta),
   });
@@ -273,13 +275,18 @@ function LinkedRow({ link: l }: { link: AdminLinkedMerchantProduct }) {
   );
 }
 
+function ComparedImage({ src, alt }: { src: string | null; alt: string }) {
+  if (!src) return <span className="text-stone-600">—</span>;
+  return <AdminImage src={src} alt={alt} className="mt-1 inline-block h-16 w-16 rounded-control border border-stone-200 object-cover align-middle" />;
+}
+
 /** Bản sửa của sản phẩm ĐANG BÁN: khách vẫn thấy cột "Đang bán" cho tới khi admin duyệt cột "Bản sửa" (R3-MERCHANT-4). */
 function EditComparison({ live, next }: { live: NonNullable<AdminPendingProduct['live']>; next: AdminPendingProduct }) {
-  const rows: { label: string; before: string | null; after: string | null }[] = [
+  const rows: { label: string; before: string | null; after: string | null; image?: boolean }[] = [
     { label: 'Tên', before: live.name, after: next.name },
     { label: 'Mô tả ngắn', before: live.shortDesc, after: next.shortDesc ?? null },
     { label: 'Mô tả', before: live.description, after: next.description },
-    { label: 'Ảnh', before: live.thumbnail, after: next.thumbnail },
+    { label: 'Ảnh', before: live.thumbnail, after: next.thumbnail, image: true },
   ];
   return (
     <div className="mt-3 border-t border-stone-200 pt-3 text-xs text-stone-700">
@@ -291,10 +298,11 @@ function EditComparison({ live, next }: { live: NonNullable<AdminPendingProduct[
             <div key={r.label} className="grid gap-1 sm:grid-cols-2 sm:gap-3">
               <p className="min-w-0 break-words">
                 <strong className="text-stone-900">{r.label} · Đang bán:</strong>{' '}
-                <span className="line-clamp-3 text-stone-600">{r.before || '—'}</span>
+                {r.image ? <ComparedImage src={r.before} alt="Ảnh đang bán" /> : <span className="line-clamp-3 text-stone-600">{r.before || '—'}</span>}
               </p>
               <p className="min-w-0 break-words rounded-control bg-warning-bg px-2 py-1 text-warning-fg">
-                <strong>{r.label} · Bản sửa:</strong> <span className="line-clamp-3">{r.after || '—'}</span>
+                <strong>{r.label} · Bản sửa:</strong>{' '}
+                {r.image ? <ComparedImage src={r.after} alt="Ảnh bản sửa" /> : <span className="line-clamp-3">{r.after || '—'}</span>}
               </p>
             </div>
           ))}
@@ -469,8 +477,7 @@ export function MerchantProductRow({
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex min-w-0 gap-3">
           {p.thumbnail ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={p.thumbnail} alt={p.name} className="h-20 w-20 shrink-0 rounded-control border border-stone-200 object-cover" />
+            <AdminImage src={p.thumbnail} alt={p.name} className="h-20 w-20 shrink-0 rounded-control border border-stone-200 object-cover" />
           ) : (
             <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-control bg-forest-50 text-forest-600">
               <Leaf className="h-8 w-8" aria-hidden />

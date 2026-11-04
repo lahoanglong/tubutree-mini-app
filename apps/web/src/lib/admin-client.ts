@@ -1223,7 +1223,10 @@ export interface AdminPendingProduct {
   slug: string;
   basePrice: number;
   salePrice: number | null;
+  /** https, đường dẫn công khai của API, hoặc `/admin/merchant-products/:id/images/...` cho ảnh base64 (tải bằng token, xem AdminImage). */
   thumbnail: string | null;
+  /** Cùng dạng với thumbnail, theo thứ tự ảnh của sản phẩm (hoặc của bản sửa chờ duyệt). API cũ chưa trả. */
+  images?: string[];
   brand: string;
   category: string;
   description: string | null;
@@ -1311,7 +1314,9 @@ export interface AdminLinkedMerchantProduct {
 // admin.service.ts listPendingMerchantProducts) nhưng bản cũ khai kiểu mảng trần rồi gọi `.map`
 // thẳng lên response — TypeError, cả trang admin rơi vào app/error.tsx. Sửa ĐÚNG theo pattern đã
 // dùng cho tab Đại lý/Đổi-Trả (asPage() + Page<T>), không tự nghĩ ra cách khác.
-export const listPendingMerchantProducts = (page = 1, limit = ADMIN_QUEUE_PAGE_SIZE) =>
+/** API trần 50 dòng/trang cho hàng chờ duyệt (mỗi dòng mang cả nội dung sản phẩm); 20 là mặc định của API. */
+export const MERCHANT_PENDING_PAGE_SIZE = 20;
+export const listPendingMerchantProducts = (page = 1, limit = MERCHANT_PENDING_PAGE_SIZE) =>
   apiFetch<AdminPendingProduct[] | Page<AdminPendingProduct>>(
     `/admin/merchant-products/pending?page=${page}&limit=${limit}`,
   ).then((res) => asPage(res, page, limit));

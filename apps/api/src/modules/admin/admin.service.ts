@@ -70,7 +70,7 @@ import {
   CONSIGNMENT_PENDING_LINK_WHERE,
   PANCAKE_CODE_CHANGED,
   type MerchantReviewSeen,
-  describePancakeLink,
+  describePancakeLinks,
   linkTubuFulfilledVariation,
   seenValue,
   unlinkTubuFulfilledVariation,
@@ -106,6 +106,12 @@ import {
 
 function reviewConflict(code: string, message: string) {
   return new ConflictException({ statusCode: 409, error: 'Conflict', code, message });
+}
+
+/** `data:<md5 10 ký tự>` do pendingImageRefs trả cho ảnh base64 thành đường dẫn route admin; URL và đường dẫn công khai giữ nguyên. */
+function adminProductImageRef(productId: string, source: 'product' | 'draft', slot: 'thumb' | number, tag: string | null): string | null {
+  if (!tag) return null;
+  return tag.startsWith('data:') ? `/admin/merchant-products/${productId}/images/${source}/${slot}?v=${tag.slice(5)}` : tag;
 }
 
 function staleEditReview() {
@@ -2063,12 +2069,32 @@ export class AdminService {
     const [items, total] = await this.prisma.$transaction([
       this.prisma.product.findMany({
         where,
-        include: {
-          storefront: {
-            select: { id: true, title: true, subdomain: true, ownerUserId: true },
-          },
-          variations: { orderBy: VARIATION_ORDER_BY },
-          editDraft: true,
+        // Không chọn `images`/`thumbnail`: ảnh tải thẳng lên là base64 tới ~1,5 MB/ảnh, cả bản sống lẫn bản nháp (xem pendingImageRefs).
+        select: {
+          id: true,
+          slug: true,
+          name: true,
+          brand: true,
+          brandId: true,
+          categoryIds: true,
+          tags: true,
+          description: true,
+          shortDesc: true,
+          ingredients: true,
+          certifications: true,
+          basePrice: true,
+          salePrice: true,
+          isActive: true,
+          approvalStatus: true,
+          rejectReason: true,
+          fulfilment: true,
+          pancakeLinkCode: true,
+          storefrontId: true,
+          createdAt: true,
+          updatedAt: true,
+          storefront: { select: { id: true, title: true, subdomain: true, ownerUserId: true } },
+          variations: { orderBy: VARIATION_ORDER_BY, select: { id: true, name: true, sku: true, retailPrice: true, salePrice: true, stock: true, isActive: true } },
+          editDraft: { select: { name: true, description: true, shortDesc: true, updatedAt: true } },
         },
         // Bản sửa mới của sản phẩm cũ phải nổi lên đầu như sản phẩm mới đăng.
         orderBy: { updatedAt: 'desc' },
@@ -2077,22 +2103,57 @@ export class AdminService {
       this.prisma.product.count({ where }),
     ]);
     // Màn duyệt phải thấy sản phẩm nào (thương hiệu, tồn, lượt bán) sẽ bị chuyển khi bấm Duyệt (R2-MERCHANT-1).
-    const data = await Promise.all(
-      items.map(async ({ editDraft, ...p }) => {
-        const shown = editDraft
-          ? { name: editDraft.name, description: editDraft.description, shortDesc: editDraft.shortDesc, images: editDraft.images, thumbnail: editDraft.thumbnail }
-          : {};
-        return {
-          ...p,
-          ...shown,
-          isEdit: !!editDraft,
-          editVersion: editDraft ? editDraft.updatedAt.toISOString() : null,
-          live: editDraft ? { name: p.name, description: p.description, shortDesc: p.shortDesc, thumbnail: p.thumbnail } : null,
-          pancakeLink: await describePancakeLink(this.prisma, p),
-        };
-      }),
-    );
+    const [imageRefs, links] = await Promise.all([this.pendingImageRefs(items.map((p) => p.id)), describePancakeLinks(this.prisma, items)]);
+    const data = items.map(({ editDraft, ...p }) => {
+      const img = imageRefs.get(p.id);
+      const source = editDraft ? 'draft' : 'product';
+      const shown = editDraft
+        ? { name: editDraft.name, description: editDraft.description, shortDesc: editDraft.shortDesc, thumbnail: img?.draftThumb ?? null, images: img?.draftImages ?? [] }
+        : { thumbnail: img?.thumb ?? null, images: img?.images ?? [] };
+      return {
+        ...p,
+        ...shown,
+        thumbnail: adminProductImageRef(p.id, source, 'thumb', shown.thumbnail),
+        images: shown.images.map((tag, i) => adminProductImageRef(p.id, source, i, tag) as string),
+        isEdit: !!editDraft,
+        editVersion: editDraft ? editDraft.updatedAt.toISOString() : null,
+        live: editDraft ? { name: p.name, description: p.description, shortDesc: p.shortDesc, thumbnail: adminProductImageRef(p.id, 'product', 'thumb', img?.thumb ?? null) } : null,
+        pancakeLink: links.get(p.id) ?? null,
+      };
+    });
     return paginated(data, page, limit, total);
+  }
+
+  /**
+   * Ảnh của cả trang hàng chờ duyệt bằng MỘT truy vấn, tính mã băm ngay trong Postgres: Node chỉ nhận `data:<10 ký tự md5>` cho ảnh
+   * base64 (hoặc nguyên URL/đường dẫn) chứ không nhận chính ảnh, nên một trang 50 dòng không còn có thể đẩy heap 512 MB tới OOM.
+   */
+  private async pendingImageRefs(ids: string[]) {
+    const out = new Map<string, { thumb: string | null; images: string[]; draftThumb: string | null; draftImages: string[] | null }>();
+    if (ids.length === 0) return out;
+    const rows = await this.prisma.$queryRaw<{ id: string; thumb: string | null; images: string[]; draftThumb: string | null; draftImages: string[] | null }[]>`
+      SELECT p."id" AS "id",
+        CASE WHEN p."thumbnail" LIKE 'data:%' THEN 'data:' || left(md5(p."thumbnail"), 10) ELSE p."thumbnail" END AS "thumb",
+        ARRAY(SELECT CASE WHEN e LIKE 'data:%' THEN 'data:' || left(md5(e), 10) ELSE e END FROM unnest(p."images") WITH ORDINALITY AS t(e, n) ORDER BY n) AS "images",
+        CASE WHEN d."thumbnail" LIKE 'data:%' THEN 'data:' || left(md5(d."thumbnail"), 10) ELSE d."thumbnail" END AS "draftThumb",
+        CASE WHEN d."id" IS NULL THEN NULL
+          ELSE ARRAY(SELECT CASE WHEN e LIKE 'data:%' THEN 'data:' || left(md5(e), 10) ELSE e END FROM unnest(d."images") WITH ORDINALITY AS t(e, n) ORDER BY n) END AS "draftImages"
+      FROM "products" p LEFT JOIN "product_edit_drafts" d ON d."productId" = p."id"
+      WHERE p."id" IN (${Prisma.join(ids)})`;
+    for (const r of rows) out.set(r.id, r);
+    return out;
+  }
+
+  /** Ảnh base64 của sản phẩm chờ duyệt (bản đang có hoặc bản sửa chờ duyệt) cho màn duyệt; chỉ đọc đúng một ảnh, không kéo cả mảng. */
+  async merchantProductImage(productId: string, source: 'product' | 'draft', slot: 'thumb' | number): Promise<{ mime: string; data: Buffer }> {
+    if (slot !== 'thumb' && !(Number.isInteger(slot) && slot >= 0 && slot < 1000)) throw new NotFoundException('Không tìm thấy ảnh.');
+    const table = Prisma.raw(source === 'draft' ? '"product_edit_drafts"' : '"products"');
+    const key = Prisma.raw(source === 'draft' ? '"productId"' : '"id"');
+    const column = slot === 'thumb' ? Prisma.raw('"thumbnail"') : Prisma.sql`"images"[${slot + 1}::int]`;
+    const rows = await this.prisma.$queryRaw<{ image: string | null }[]>(Prisma.sql`SELECT ${column} AS "image" FROM ${table} WHERE ${key} = ${productId} LIMIT 1`);
+    const decoded = decodeServedImage(rows[0]?.image);
+    if (!decoded) throw new NotFoundException('Không tìm thấy ảnh.');
+    return decoded;
   }
 
   /**

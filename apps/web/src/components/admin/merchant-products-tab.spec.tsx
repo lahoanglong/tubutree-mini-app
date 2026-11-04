@@ -851,3 +851,54 @@ describe('MerchantProductsTab — thành phần là cột Json nên dòng cũ c�
     expect(await ingredientsLine([])).toBeNull();
   });
 });
+
+// L3-02: hàng chờ duyệt không nhúng base64; ảnh đi qua đường dẫn, ảnh nháp chỉ lấy được bằng token admin.
+describe('MerchantProductsTab — ảnh theo đường dẫn (L3-02)', () => {
+  const stub = (rows: AdminPendingProduct[]) => {
+    const calls: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        calls.push(url);
+        if (url.includes('/images/')) return new Response('x', { status: 200, headers: { 'Content-Type': 'image/png' } });
+        if (url.includes('/linked')) return new Response(JSON.stringify({ data: [], meta: { page: 1, limit: 100, total: 0 } }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        return new Response(JSON.stringify({ data: rows, meta: { page: 1, limit: 20, total: rows.length } }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }),
+    );
+    return calls;
+  };
+
+  it('xin 20 dòng mỗi trang, không xin 100 (API trần 50)', async () => {
+    const calls = stub([product()]);
+    mount(<MerchantProductsTab />);
+    await flush();
+    expect(calls.find((u) => u.includes('/pending'))).toContain('/admin/merchant-products/pending?page=1&limit=20');
+  });
+
+  it('thumbnail là đường dẫn admin → tải bằng fetch có token rồi hiện blob; không có chuỗi data:image trong trang', async () => {
+    URL.createObjectURL = vi.fn(() => 'blob:pending-thumb');
+    URL.revokeObjectURL = vi.fn();
+    const thumb = '/admin/merchant-products/p1/images/product/thumb?v=0123456789';
+    const calls = stub([product({ thumbnail: thumb })]);
+    const { container } = mount(<MerchantProductsTab />);
+    for (let i = 0; i < 5; i++) await flush();
+    expect(calls.some((u) => u.endsWith(thumb))).toBe(true);
+    expect(container.querySelector('img')?.getAttribute('src')).toBe('blob:pending-thumb');
+    expect(container.innerHTML).not.toContain('data:image');
+  });
+
+  it('bản sửa: cột Ảnh đối chiếu hiện ảnh đang bán và ảnh bản sửa, không in đường dẫn thành chữ', async () => {
+    URL.createObjectURL = vi.fn(() => 'blob:cmp');
+    URL.revokeObjectURL = vi.fn();
+    const before = '/admin/merchant-products/p1/images/product/thumb?v=aaaaaaaaaa';
+    const after = '/admin/merchant-products/p1/images/draft/thumb?v=bbbbbbbbbb';
+    stub([
+      product({ isEdit: true, editVersion: '2026-10-14T01:00:00.000Z', thumbnail: after, live: { name: 'Tinh dầu sả chanh', description: '', shortDesc: null, thumbnail: before } }),
+    ]);
+    const { container } = mount(<MerchantProductsTab />);
+    for (let i = 0; i < 5; i++) await flush();
+    expect(container.textContent).toContain('Ảnh · Đang bán:');
+    expect(container.textContent).not.toContain('/admin/merchant-products');
+    expect(container.querySelectorAll('img').length).toBeGreaterThanOrEqual(3);
+  });
+});

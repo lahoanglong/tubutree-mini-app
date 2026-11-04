@@ -8,6 +8,7 @@ import {
   AdminController,
   ListReviewsQuery,
   ListSubscriptionsQuery,
+  PendingMerchantProductsQuery,
   ListUsersQuery,
   ProductSearchQuery,
   VariationLookupQuery,
@@ -256,6 +257,48 @@ describe('AdminService.reviewImage — ảnh đánh giá cho admin (L3-03)', () 
     await expect(mkAdmin({ $queryRaw: q }).reviewImage('r1', 1000)).rejects.toThrow('Không tìm thấy ảnh.');
     expect(q).not.toHaveBeenCalled();
     await expect(mkAdmin({ $queryRaw: jest.fn().mockResolvedValue([{ image: 'data:image/svg+xml;base64,PHN2Zz4=' }]) }).reviewImage('r1', 0)).rejects.toThrow('Không tìm thấy ảnh.');
+  });
+});
+
+describe('Hàng chờ duyệt sản phẩm đối tác — controller (L3-02)', () => {
+  const check = async (raw: Record<string, unknown>) => {
+    const q = plainToInstance(PendingMerchantProductsQuery, raw);
+    return { q, errors: await validate(q) };
+  };
+  it('mặc định 20 dòng, tối đa 50; 51 và 100 bị từ chối', async () => {
+    expect((await check({})).q).toMatchObject({ page: 1, limit: 20 });
+    expect((await check({ limit: '50' })).errors).toHaveLength(0);
+    expect((await check({ limit: '51' })).errors).toHaveLength(1);
+    expect((await check({ limit: '100' })).errors).toHaveLength(1);
+    expect((await check({ limit: '0' })).errors).toHaveLength(1);
+  });
+
+  const route = (m: string) => {
+    const fn = (AdminController.prototype as unknown as Record<string, unknown>)[m]!;
+    return [Reflect.getMetadata(METHOD_METADATA, fn as object), Reflect.getMetadata(PATH_METADATA, fn as object)];
+  };
+  it('route ảnh nằm dưới controller chỉ ADMIN, không @Public', () => {
+    expect(route('merchantProductImage')).toEqual([RequestMethod.GET, 'merchant-products/:id/images/:source/:slot']);
+    expect(Reflect.getMetadata(ROLES_KEY, AdminController)).toEqual(['ADMIN']);
+    expect(Reflect.getMetadata('isPublic', AdminController.prototype.merchantProductImage)).toBeUndefined();
+  });
+
+  it.each([['other', '0'], ['product', 'abc'], ['draft', '01'], ['product', '-1'], ['product', '123']])('nguồn %s ô %s → 404 trước khi chạm DB', async (source, slot) => {
+    const admin = { merchantProductImage: jest.fn() };
+    const ctrl = new AdminController(admin as never, {} as never);
+    await expect(ctrl.merchantProductImage('p1', source, slot, { set: jest.fn() } as never)).rejects.toThrow('Không tìm thấy ảnh.');
+    expect(admin.merchantProductImage).not.toHaveBeenCalled();
+  });
+
+  it('nguồn và ô hợp lệ → gọi service, ảnh không cache công khai', async () => {
+    const set = jest.fn();
+    const admin = { merchantProductImage: jest.fn().mockResolvedValue({ mime: 'image/png', data: Buffer.from('x') }) };
+    const ctrl = new AdminController(admin as never, {} as never);
+    await ctrl.merchantProductImage('p1', 'draft', 'thumb', { set } as never);
+    await ctrl.merchantProductImage('p1', 'product', '3', { set } as never);
+    expect(admin.merchantProductImage).toHaveBeenNthCalledWith(1, 'p1', 'draft', 'thumb');
+    expect(admin.merchantProductImage).toHaveBeenNthCalledWith(2, 'p1', 'product', 3);
+    expect(set.mock.calls[0]![0]['Cache-Control']).toBe('private, no-store');
   });
 });
 

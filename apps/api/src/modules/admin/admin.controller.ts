@@ -422,6 +422,12 @@ export class ListReviewsQuery extends PaginationQuery {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(5) rating?: number;
 }
 
+/** Hàng chờ duyệt mang nội dung đầy đủ của từng sản phẩm: trần 50 dòng/trang (mặc định 20), nhẹ hơn trần chung 100. */
+export class PendingMerchantProductsQuery {
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(10_000) page = 1;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(50) limit = 20;
+}
+
 export class ListLinkedMerchantProductsQuery extends PaginationQuery {
   /** PENDING = liên kết nhận lại hàng Tubu đang bán còn chờ admin xác nhận hàng ký gửi. */
   @IsOptional() @IsIn(['PENDING']) consignment?: 'PENDING';
@@ -790,8 +796,22 @@ export class AdminController {
 
   // ── Duyệt sản phẩm do đối tác đăng ──
   @Get('merchant-products/pending')
-  listPendingMerchantProducts(@Query() q: PaginationQuery) {
+  listPendingMerchantProducts(@Query() q: PendingMerchantProductsQuery) {
     return this.admin.listPendingMerchantProducts(q.page, q.limit);
+  }
+
+  /** Ảnh base64 của sản phẩm chờ duyệt (`product` = bản đang có, `draft` = bản sửa chờ duyệt): chỉ admin, không đi qua đường dẫn công khai. */
+  @Get('merchant-products/:id/images/:source/:slot')
+  async merchantProductImage(
+    @Param('id') id: string,
+    @Param('source') source: string,
+    @Param('slot') slot: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    if ((source !== 'product' && source !== 'draft') || !/^(thumb|0|[1-9]\d?)$/.test(slot)) throw new NotFoundException('Không tìm thấy ảnh.');
+    const { mime, data } = await this.admin.merchantProductImage(id, source, slot === 'thumb' ? 'thumb' : Number(slot));
+    res.set({ 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' });
+    return new StreamableFile(data, { type: mime });
   }
 
   @Post('merchant-products/:id/review')

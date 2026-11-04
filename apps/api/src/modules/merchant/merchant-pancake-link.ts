@@ -367,46 +367,69 @@ export interface PancakeLinkPreview {
   brandMatchesStore: boolean;
 }
 
-/** Màn duyệt của admin: biến thể và sản phẩm sẽ bị chuyển khi bấm Duyệt (R2-MERCHANT-1). */
-export async function describePancakeLink(
+type PancakeLinkProductRef = { id: string; storefrontId: string | null; pancakeLinkCode: string | null };
+
+/**
+ * Màn duyệt của admin: biến thể và sản phẩm sẽ bị chuyển khi bấm Duyệt (R2-MERCHANT-1). Cả trang dòng chờ duyệt dùng đúng hai truy vấn
+ * (biến thể theo mã, gian hàng theo id) thay vì hai truy vấn cho mỗi dòng; dòng không có mã không có phần tử trong kết quả.
+ */
+export async function describePancakeLinks(
   db: Pick<PrismaClient, 'variation' | 'storefront'> | Prisma.TransactionClient,
-  product: { id: string; storefrontId: string | null; pancakeLinkCode: string | null },
-): Promise<PancakeLinkPreview | null> {
-  const code = product.pancakeLinkCode?.trim();
-  if (!code) return null;
-  const [v, store] = await Promise.all([
-    db.variation.findUnique({
-      where: { pancakeId: code },
-      select: {
-        name: true,
-        stock: true,
-        retailPrice: true,
-        salePrice: true,
-        isActive: true,
-        product: {
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-            brand: true,
-            brandId: true,
-            brandRef: { select: { name: true } },
-            isActive: true,
-            approvalStatus: true,
-            soldApp: true,
-            soldExternal: true,
-            reviewCount: true,
-            storefrontId: true,
-            storefront: { select: { title: true } },
-            _count: { select: { variations: true } },
-          },
-        },
-      },
-    }),
-    product.storefrontId
-      ? db.storefront.findUnique({ where: { id: product.storefrontId }, select: { brandId: true } })
-      : null,
+  products: readonly PancakeLinkProductRef[],
+): Promise<Map<string, PancakeLinkPreview>> {
+  const out = new Map<string, PancakeLinkPreview>();
+  const withCode = products.filter((p) => p.pancakeLinkCode?.trim());
+  if (withCode.length === 0) return out;
+  const codes = [...new Set(withCode.map((p) => p.pancakeLinkCode!.trim()))];
+  const storeIds = [...new Set(withCode.map((p) => p.storefrontId).filter((id): id is string => !!id))];
+  const [variations, stores] = await Promise.all([
+    db.variation.findMany({ where: { pancakeId: { in: codes } }, select: PANCAKE_LINK_VARIATION_SELECT }),
+    storeIds.length ? db.storefront.findMany({ where: { id: { in: storeIds } }, select: { id: true, brandId: true } }) : [],
   ]);
+  const byCode = new Map(variations.map((v) => [v.pancakeId, v]));
+  const brandOf = new Map(stores.map((st) => [st.id, st.brandId]));
+  for (const product of withCode) {
+    const code = product.pancakeLinkCode!.trim();
+    out.set(product.id, buildPancakeLinkPreview(product, code, byCode.get(code) ?? null, product.storefrontId ? (brandOf.get(product.storefrontId) ?? null) : null));
+  }
+  return out;
+}
+
+const PANCAKE_LINK_VARIATION_SELECT = {
+  pancakeId: true,
+  name: true,
+  stock: true,
+  retailPrice: true,
+  salePrice: true,
+  isActive: true,
+  product: {
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      brand: true,
+      brandId: true,
+      brandRef: { select: { name: true } },
+      isActive: true,
+      approvalStatus: true,
+      soldApp: true,
+      soldExternal: true,
+      reviewCount: true,
+      storefrontId: true,
+      storefront: { select: { title: true } },
+      _count: { select: { variations: true } },
+    },
+  },
+} satisfies Prisma.VariationSelect;
+
+type PancakeLinkVariation = Prisma.VariationGetPayload<{ select: typeof PANCAKE_LINK_VARIATION_SELECT }>;
+
+function buildPancakeLinkPreview(
+  product: PancakeLinkProductRef,
+  code: string,
+  v: PancakeLinkVariation | null,
+  storeBrandId: string | null,
+): PancakeLinkPreview {
   if (!v) {
     return { code, state: 'UNAVAILABLE', reason: 'Không có biến thể Pancake nào mang mã này.', variation: null, origin: null, brandMatchesStore: false };
   }
@@ -428,7 +451,7 @@ export async function describePancakeLink(
         storefrontTitle: p.storefront?.title ?? null,
       };
   const variation = { name: v.name, stock: v.stock, retailPrice: v.retailPrice, salePrice: v.salePrice };
-  const brandMatchesStore = !!store?.brandId && store.brandId === p.brandId;
+  const brandMatchesStore = !!storeBrandId && storeBrandId === p.brandId;
   if (linked) return { code, state: 'LINKED', reason: null, variation, origin: null, brandMatchesStore };
   let reason: string | null = null;
   if (p.storefrontId && p.storefrontId !== product.storefrontId) reason = `Mã đang thuộc sản phẩm của gian hàng ${p.storefront?.title ?? 'khác'}.`;
