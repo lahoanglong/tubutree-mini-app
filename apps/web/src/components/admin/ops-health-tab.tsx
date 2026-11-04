@@ -23,7 +23,7 @@ import { smtpErrorSummary } from '@/lib/ops-email-error';
 import { useConfirm } from './confirm-dialog';
 import { BTN_DANGER_OUTLINE, BTN_SECONDARY, BTN_XS_SECONDARY, Notice, ScrollRegion, LoadError } from './ui';
 import { actionErrorText } from '@/lib/admin-error-text';
-import { failingCronJobs } from './ops-health-crons';
+import { failingCronJobs, recomputeSoldMessage } from './ops-health-crons';
 
 export { failingCronJobs };
 
@@ -202,7 +202,7 @@ export function OpsHealthTab({ onOpenOrder, isAdmin = true }: { onOpenOrder?: (c
   });
   const recompute = useMutation({
     mutationFn: recomputeSoldCounts,
-    onSuccess: (r) => done(`Đã tính lại số đã bán cho ${r.updated} sản phẩm.`),
+    onSuccess: (r) => done(recomputeSoldMessage(r)),
     onError: fail,
   });
 

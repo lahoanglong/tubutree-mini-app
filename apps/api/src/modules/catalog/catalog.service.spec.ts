@@ -509,7 +509,7 @@ describe('CatalogService.getForYou (Feed "Dành cho bạn")', () => {
 
 describe('CatalogService — "đã bán" (soldExternal + soldApp)', () => {
   it('recomputeSoldCounts: gom đơn DELIVERED theo product (tổng và 30 ngày), chỉ chạm dòng CẦN đổi', async () => {
-    const tx = jest.fn().mockResolvedValue([]);
+    const tx = jest.fn((ops: Promise<unknown>[]) => Promise.all(ops));
     const groupBy = jest
       .fn()
       .mockResolvedValueOnce([
@@ -523,13 +523,15 @@ describe('CatalogService — "đã bán" (soldExternal + soldApp)', () => {
       variation: { findMany: jest.fn().mockResolvedValue([
         { id: 'v1', productId: 'p1' }, { id: 'v2', productId: 'p1' }, { id: 'v3', productId: 'p2' },
       ]) },
-      product: { updateMany: jest.fn().mockResolvedValue({ count: 0 }), update: jest.fn() },
+      product: { updateMany: jest.fn((x: { where: { OR?: unknown } }) => Promise.resolve({ count: x.where.OR ? 0 : 1 })), findMany: jest.fn().mockResolvedValue([
+        { id: 'p1', soldApp: 0, soldApp30d: 0 }, { id: 'p2', soldApp: 0, soldApp30d: 0 },
+      ]) },
       $transaction: tx,
     } as unknown as PrismaService;
     const r = await new CatalogService(prisma).recomputeSoldCounts();
     // p1 = 5 + 3 = 8 (gộp 2 biến thể), trong đó 3 trong 30 ngày; p2 chỉ có đơn cũ nên 30 ngày = 0
-    expect((prisma as any).product.update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { soldApp: 8, soldApp30d: 3 } });
-    expect((prisma as any).product.update).toHaveBeenCalledWith({ where: { id: 'p2' }, data: { soldApp: 4, soldApp30d: 0 } });
+    expect((prisma as any).product.updateMany).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { soldApp: 8, soldApp30d: 3 } });
+    expect((prisma as any).product.updateMany).toHaveBeenCalledWith({ where: { id: 'p2' }, data: { soldApp: 4, soldApp30d: 0 } });
     // Đưa về 0 CHỈ những dòng đang khác 0 và không còn đơn nào — `updateMany` không điều kiện sẽ
     // khoá MỌI dòng products suốt transaction, chặn đứng cron đồng bộ và mọi thao tác sửa SP.
     expect((prisma as any).product.updateMany).toHaveBeenCalledWith({
@@ -550,18 +552,117 @@ describe('CatalogService — "đã bán" (soldExternal + soldApp)', () => {
     const prisma = {
       orderItem: { groupBy },
       variation: { findMany: jest.fn().mockResolvedValue([{ id: 'v1', productId: 'p1' }, { id: 'v2', productId: 'p2' }]) },
-      product: { updateMany: jest.fn().mockResolvedValue({ count: 0 }), update: jest.fn() },
-      $transaction: jest.fn().mockResolvedValue([]),
+      product: { updateMany: jest.fn((x: { where: { OR?: unknown } }) => Promise.resolve({ count: x.where.OR ? 0 : 1 })), findMany: jest.fn().mockResolvedValue([
+        { id: 'p1', soldApp: 0, soldApp30d: 0 }, { id: 'p2', soldApp: 0, soldApp30d: 0 },
+      ]) },
+      $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
     } as unknown as PrismaService;
     const r = await new CatalogService(prisma).recomputeSoldCounts();
-    expect((prisma as any).product.update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { soldApp: 9, soldApp30d: 9 } });
-    expect((prisma as any).product.update).toHaveBeenCalledWith({ where: { id: 'p2' }, data: { soldApp: 4, soldApp30d: 4 } });
+    expect((prisma as any).product.updateMany).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { soldApp: 9, soldApp30d: 9 } });
+    expect((prisma as any).product.updateMany).toHaveBeenCalledWith({ where: { id: 'p2' }, data: { soldApp: 4, soldApp30d: 4 } });
     // p2 nằm trong notIn: không bị đưa về 0 oan.
     expect((prisma as any).product.updateMany).toHaveBeenCalledWith({
       where: { OR: [{ soldApp: { not: 0 } }, { soldApp30d: { not: 0 } }], id: { notIn: ['p1', 'p2'] } },
       data: { soldApp: 0, soldApp30d: 0 },
     });
     expect(r.updated).toBe(2);
+  });
+
+  describe('recomputeSoldCounts: chỉ ghi dòng có số đổi, chia lô (L3-19)', () => {
+    const build = (count: number, current: (i: number) => { soldApp: number; soldApp30d: number } | null) => {
+      const rows = Array.from({ length: count }, (_, i) => ({ variationId: `v${i}`, _sum: { quantity: 2 } }));
+      const groupBy = jest.fn().mockResolvedValueOnce(rows).mockResolvedValueOnce(rows);
+      const batches: number[] = [];
+      const prisma = {
+        orderItem: { groupBy },
+        variation: { findMany: jest.fn(async ({ where }: { where: { id: { in: string[] } } }) => where.id.in.map((id) => ({ id, productId: `p${id.slice(1)}` }))) },
+        product: {
+          updateMany: jest.fn((x: { where: { OR?: unknown } }) => Promise.resolve({ count: x.where.OR ? 0 : 1 })),
+          findMany: jest.fn(async ({ where }: { where: { id: { in: string[] } } }) =>
+            where.id.in.flatMap((id) => {
+              const cur = current(Number(id.slice(1)));
+              return cur ? [{ id, ...cur }] : [];
+            }),
+          ),
+        },
+        $transaction: jest.fn(async (ops: Promise<unknown>[]) => {
+          batches.push(ops.length);
+          return Promise.all(ops);
+        }),
+      } as unknown as PrismaService;
+      return { prisma, batches };
+    };
+
+    const writes = (prisma: unknown) => (prisma as any).product.updateMany.mock.calls.filter(([x]: [{ where: { OR?: unknown } }]) => !x.where.OR);
+
+    it('dòng đã đúng số thì không update, không mở transaction', async () => {
+      const { prisma, batches } = build(40, () => ({ soldApp: 2, soldApp30d: 2 }));
+      const r = await new CatalogService(prisma).recomputeSoldCounts();
+      expect(writes(prisma)).toHaveLength(0);
+      expect(batches).toEqual([]);
+      expect(r.updated).toBe(0);
+    });
+
+    it('chỉ dòng lệch được ghi: 4 trong 40 dòng lệch → 4 update trong một lô', async () => {
+      const { prisma, batches } = build(40, (i) => (i % 13 === 0 ? { soldApp: 1, soldApp30d: 2 } : { soldApp: 2, soldApp30d: 2 }));
+      const r = await new CatalogService(prisma).recomputeSoldCounts();
+      expect(writes(prisma)).toHaveLength(4);
+      expect(batches).toEqual([4]);
+      expect(r.updated).toBe(4);
+    });
+
+    it('1201 dòng cần đổi → ba lô 500 + 500 + 201, mỗi lô một transaction', async () => {
+      const { prisma, batches } = build(1201, () => ({ soldApp: 0, soldApp30d: 0 }));
+      const r = await new CatalogService(prisma).recomputeSoldCounts();
+      expect(batches).toEqual([500, 500, 201]);
+      expect(r.updated).toBe(1201);
+    });
+
+    it('sản phẩm bị xoá giữa chừng (không còn dòng) → bỏ qua, không làm hỏng cả lượt', async () => {
+      const { prisma, batches } = build(10, (i) => (i === 3 ? null : { soldApp: 0, soldApp30d: 0 }));
+      const r = await new CatalogService(prisma).recomputeSoldCounts();
+      expect(batches).toEqual([9]);
+      expect(r.updated).toBe(9);
+    });
+  });
+
+  it('recomputeSoldCounts: sản phẩm bị xoá giữa findMany và ghi không làm hỏng cả lô, không tính vào updated, bước đưa về 0 vẫn chạy', async () => {
+    const rows = [1, 2, 3].map((i) => ({ variationId: `v${i}`, _sum: { quantity: 2 } }));
+    const gone = 'p3';
+    const notFound = Object.assign(new Error('Record to update not found'), { code: 'P2025' });
+    const product = {
+      findMany: jest.fn().mockResolvedValue([1, 2, 3].map((i) => ({ id: `p${i}`, soldApp: 0, soldApp30d: 0 }))),
+      update: jest.fn((a: { where: { id: string } }) => (a.where.id === gone ? Promise.reject(notFound) : Promise.resolve({}))),
+      updateMany: jest.fn((a: { where: { id?: string; OR?: unknown } }) =>
+        Promise.resolve({ count: a.where.OR ? 4 : a.where.id === gone ? 0 : 1 }),
+      ),
+    };
+    const prisma = {
+      orderItem: { groupBy: jest.fn().mockResolvedValueOnce(rows).mockResolvedValueOnce(rows) },
+      variation: { findMany: jest.fn().mockResolvedValue([1, 2, 3].map((i) => ({ id: `v${i}`, productId: `p${i}` }))) },
+      product,
+      $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
+    } as unknown as PrismaService;
+    const r = await new CatalogService(prisma).recomputeSoldCounts();
+    expect(r).toEqual({ updated: 2, zeroed: 4, scanned: 3 });
+    expect(product.updateMany.mock.calls.some(([a]) => a.where.OR)).toBe(true);
+  });
+
+  it('recomputeSoldCounts: trả thêm zeroed (dòng đưa về 0) và scanned (sản phẩm có đơn đã xét) để bấm tay không giống job hỏng khi không có gì đổi', async () => {
+    const { prisma } = (() => {
+      const groupBy = jest.fn().mockResolvedValueOnce([{ variationId: 'v1', _sum: { quantity: 2 } }]).mockResolvedValueOnce([{ variationId: 'v1', _sum: { quantity: 2 } }]);
+      const p = {
+        orderItem: { groupBy },
+        variation: { findMany: jest.fn().mockResolvedValue([{ id: 'v1', productId: 'p1' }]) },
+        product: {
+          updateMany: jest.fn().mockResolvedValue({ count: 3 }),
+          findMany: jest.fn().mockResolvedValue([{ id: 'p1', soldApp: 2, soldApp30d: 2 }]),
+        },
+        $transaction: jest.fn(async (ops: unknown[]) => ops),
+      } as unknown as PrismaService;
+      return { prisma: p };
+    })();
+    await expect(new CatalogService(prisma).recomputeSoldCounts()).resolves.toEqual({ updated: 0, zeroed: 3, scanned: 1 });
   });
 
   it('recomputeSoldCounts: cửa sổ 30 ngày tính theo deliveredAt, đúng 30 × 24 giờ trước bây giờ', async () => {
@@ -571,7 +672,7 @@ describe('CatalogService — "đã bán" (soldExternal + soldApp)', () => {
       const prisma = {
         orderItem: { groupBy },
         variation: { findMany: jest.fn().mockResolvedValue([]) },
-        product: { updateMany: jest.fn().mockResolvedValue({ count: 0 }), update: jest.fn() },
+        product: { updateMany: jest.fn().mockResolvedValue({ count: 0 }), update: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
         $transaction: jest.fn().mockResolvedValue([]),
       } as unknown as PrismaService;
       await new CatalogService(prisma).recomputeSoldCounts();
@@ -587,7 +688,7 @@ describe('CatalogService — "đã bán" (soldExternal + soldApp)', () => {
     const prisma = {
       orderItem: { groupBy: jest.fn().mockResolvedValue([]) },
       variation: { findMany: jest.fn().mockResolvedValue([]) },
-      product: { updateMany: jest.fn().mockResolvedValue({ count: 0 }), update: jest.fn() },
+      product: { updateMany: jest.fn().mockResolvedValue({ count: 0 }), update: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
       $transaction: jest.fn().mockResolvedValue([]),
     } as unknown as PrismaService;
 

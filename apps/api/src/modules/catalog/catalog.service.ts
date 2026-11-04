@@ -52,6 +52,8 @@ const TEXT_MATCH_LIMIT = 2000;
 const MAX_LIST_SLUGS = 20;
 /** Số sản phẩm của dải "Có thể bạn cũng thích" (cùng nhãn). */
 const RELATED_LIMIT = 8;
+/** Số sản phẩm ghi trong một transaction khi tính lại số đã bán: khoá dòng ngắn, không giữ cả catalog. */
+const RECOMPUTE_SOLD_BATCH = 500;
 /** Cửa sổ của `soldApp30d` ("Bán chạy nhất"), tính theo ngày giao. */
 const SOLD_WINDOW_DAYS = 30;
 
@@ -982,7 +984,7 @@ export class CatalogService {
    * Đơn DELIVERED chưa có `deliveredAt` (dữ liệu trước khi có cột này) không vào cửa sổ 30 ngày: chấp nhận được vì
    * cửa sổ ngắn hơn tuổi của dữ liệu đó.
    */
-  async recomputeSoldCounts(): Promise<{ updated: number }> {
+  async recomputeSoldCounts(): Promise<{ updated: number; zeroed: number; scanned: number }> {
     const since = new Date(Date.now() - SOLD_WINDOW_DAYS * 864e5);
     const [grouped, grouped30d] = await Promise.all([
       this.prisma.orderItem.groupBy({
@@ -1023,26 +1025,39 @@ export class CatalogService {
     // bán 0" suốt 24 giờ.
     //
     // Cách hiện tại: chỉ chạm đúng những dòng CẦN đổi.
-    //  - Dòng có số bán mới → update từng dòng (khoá đúng dòng đó). Hai `groupBy` đọc ở hai thời điểm nên đơn
+    //  - Dòng có số bán mới: đọc số đang lưu theo lô rồi chỉ update dòng LỆCH (cron đêm phần lớn sản phẩm không đổi, trước đây
+    //    mọi sản phẩm có đơn đều bị ghi lại), mỗi lô ≤ RECOMPUTE_SOLD_BATCH dòng trong một transaction nên khoá dòng
+    //    ngắn. Hai `groupBy` đọc ở hai thời điểm nên đơn
     //    giao xen giữa có thể chỉ hiện ở số 30 ngày: lấy hợp hai tập sản phẩm và `soldApp` không thấp hơn
     //    `soldApp30d`, để sản phẩm đó không bị bỏ sót hay bị đưa về 0 oan (lần chạy 03:00 sau tự chỉnh về đúng).
+    //    Sản phẩm bị xoá trước lần đọc lô thì không còn dòng nên bị bỏ qua; bị xoá giữa lần đọc và lần ghi thì `updateMany` trả
+    //    count 0 (không ném P2025 làm hỏng cả lô và bỏ bước đưa về 0), dòng đó không tính vào `updated`.
     //  - Dòng đang khác 0 mà không còn đơn nào → đưa về 0, một câu lệnh, phạm vi hẹp.
     const ids = [...new Set([...perProduct.keys(), ...perProduct30d.keys()])];
-    const ops = [
-      ...ids.map((productId) => {
-        const recent = perProduct30d.get(productId) ?? 0;
-        return this.prisma.product.update({
-          where: { id: productId },
-          data: { soldApp: Math.max(perProduct.get(productId) ?? 0, recent), soldApp30d: recent },
-        });
-      }),
-      this.prisma.product.updateMany({
-        where: { OR: [{ soldApp: { not: 0 } }, { soldApp30d: { not: 0 } }], ...(ids.length ? { id: { notIn: ids } } : {}) },
-        data: { soldApp: 0, soldApp30d: 0 },
-      }),
-    ];
-    await this.prisma.$transaction(ops);
-    return { updated: ids.length };
+    let written = 0;
+    for (let i = 0; i < ids.length; i += RECOMPUTE_SOLD_BATCH) {
+      const slice = ids.slice(i, i + RECOMPUTE_SOLD_BATCH);
+      const current = await this.prisma.product.findMany({
+        where: { id: { in: slice } },
+        select: { id: true, soldApp: true, soldApp30d: true },
+      });
+      const ops = current.flatMap((row) => {
+        const recent = perProduct30d.get(row.id) ?? 0;
+        const total = Math.max(perProduct.get(row.id) ?? 0, recent);
+        if (row.soldApp === total && row.soldApp30d === recent) return [];
+        return [this.prisma.product.updateMany({ where: { id: row.id }, data: { soldApp: total, soldApp30d: recent } })];
+      });
+      if (ops.length === 0) continue;
+      const results = await this.prisma.$transaction(ops);
+      written += results.filter((r) => r.count === 1).length;
+    }
+    const zeroed = await this.prisma.product.updateMany({
+      where: { OR: [{ soldApp: { not: 0 } }, { soldApp30d: { not: 0 } }], ...(ids.length ? { id: { notIn: ids } } : {}) },
+      data: { soldApp: 0, soldApp30d: 0 },
+    });
+    // `updated` chỉ đếm dòng đổi số theo đơn; dòng đưa về 0 và số sản phẩm có đơn đã xét trả riêng để màn admin phân biệt
+    // "đã đúng, không cần đổi" với "job không chạy được".
+    return { updated: written, zeroed: zeroed.count, scanned: ids.length };
   }
 
   /** Cron 03:00 hằng ngày — tính lại số đã bán (social proof không cần realtime). */

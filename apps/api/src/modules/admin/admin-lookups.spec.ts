@@ -111,15 +111,31 @@ describe('AdminService.lookupVariations — nhãn cho Variation ID đã lưu', (
 describe('AdminService.listUsers — tìm khách theo SĐT/tên/id', () => {
   it('không search → mặc định chỉ tài khoản thật (bỏ phiên khách vãng lai), kèm số khách vãng lai riêng; guests=1 → không lọc', async () => {
     const findMany = jest.fn().mockResolvedValue([]);
-    const count = jest.fn().mockResolvedValueOnce(5).mockResolvedValueOnce(2);
-    const res = await mkAdmin({ user: { findMany, count }, $transaction: tx }).listUsers(1, 20);
+    const count = jest.fn().mockResolvedValueOnce(5);
+    const queryRaw = jest.fn().mockResolvedValue([{ n: 2 }]);
+    const res = await mkAdmin({ user: { findMany, count }, $queryRaw: queryRaw, $transaction: tx }).listUsers(1, 20);
     expect(findMany.mock.calls[0]![0].where).toEqual(REAL_USER_WHERE);
+    expect(count).toHaveBeenCalledTimes(1);
     expect(count).toHaveBeenNthCalledWith(1, { where: REAL_USER_WHERE });
-    expect(count).toHaveBeenNthCalledWith(2, { where: GUEST_USER_WHERE });
     expect(res).toMatchObject({ guestCount: 2, meta: { total: 5 } });
     const all = jest.fn().mockResolvedValue(0);
-    await mkAdmin({ user: { findMany, count: all }, $transaction: tx }).listUsers(1, 20, undefined, true);
+    await mkAdmin({ user: { findMany, count: all }, $queryRaw: queryRaw, $transaction: tx }).listUsers(1, 20, undefined, true);
     expect(findMany.mock.calls[1]![0].where).toBeUndefined();
+  });
+
+  it('số khách vãng lai không search đếm bằng SQL literal khớp partial index users_guest_idx; có search thì dùng Prisma cùng where cũ', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const count = jest.fn().mockResolvedValue(1);
+    const queryRaw = jest.fn().mockResolvedValue([{ n: 4 }]);
+    const admin = mkAdmin({ user: { findMany, count }, $queryRaw: queryRaw, $transaction: tx });
+    const noSearch = await admin.listUsers(1, 20);
+    const sql = (queryRaw.mock.calls[0]![0] as string[]).join('?');
+    expect(sql).toContain(`role = 'CUSTOMER' AND phone IS NULL AND "zaloId"::text LIKE 'guest_%'`);
+    expect(noSearch.guestCount).toBe(4);
+    queryRaw.mockClear();
+    await admin.listUsers(1, 20, '0901');
+    expect(queryRaw).not.toHaveBeenCalled();
+    expect(count).toHaveBeenLastCalledWith({ where: { AND: [GUEST_USER_WHERE, expect.anything()] } });
   });
 
   it('file xuất người dùng cùng tập với danh sách: mặc định bỏ khách vãng lai, guests=1 mới xuất đủ', async () => {
@@ -159,11 +175,70 @@ describe('AdminService.listUsers — tìm khách theo SĐT/tên/id', () => {
   });
 });
 
+describe('AdminService.listUsers — cache số đếm 60 giây theo bộ lọc (L3-09)', () => {
+  function setup() {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const count = jest.fn().mockResolvedValue(3);
+    const queryRaw = jest.fn().mockResolvedValue([{ n: 3 }]);
+    return { findMany, count, queryRaw, admin: mkAdmin({ user: { findMany, count }, $queryRaw: queryRaw, $transaction: tx }) };
+  }
+  const counted = (h: { count: jest.Mock; queryRaw: jest.Mock }) => h.count.mock.calls.length + h.queryRaw.mock.calls.length;
+
+  it('hai lượt liên tiếp cùng bộ lọc: danh sách đọc hai lần, số đếm (tổng + khách vãng lai) chỉ đếm một lần', async () => {
+    const h = setup();
+    await h.admin.listUsers(1, 20);
+    await h.admin.listUsers(2, 20);
+    expect(h.findMany).toHaveBeenCalledTimes(2);
+    expect(counted(h)).toBe(2);
+  });
+
+  it('bộ lọc khác (tìm kiếm, bao gồm khách) đếm riêng; chỉ đổi trang/limit thì không đếm lại', async () => {
+    const h = setup();
+    await h.admin.listUsers(1, 20);
+    await h.admin.listUsers(1, 20, '0901');
+    expect(counted(h)).toBe(4);
+    // bao gồm khách chỉ đổi số tổng; số khách vãng lai không phụ thuộc cờ đó nên dùng lại
+    await h.admin.listUsers(1, 20, undefined, true);
+    expect(counted(h)).toBe(5);
+    await h.admin.listUsers(3, 50, '0901');
+    await h.admin.listUsers(1, 20, '  0901  ');
+    expect(counted(h)).toBe(5);
+  });
+});
+
+describe('AdminService.listUsers — số tổng nhớ không thấp hơn số dòng đang trả', () => {
+  const row = (id: string) => ({ id });
+  const mk = (count: jest.Mock, findMany: jest.Mock) =>
+    mkAdmin({ user: { findMany, count }, $queryRaw: jest.fn().mockResolvedValue([{ n: 0 }]), $transaction: tx });
+
+  it('tổng nhớ là 0 nhưng lượt sau đã có 1 dòng → meta.total = 1', async () => {
+    const count = jest.fn().mockResolvedValue(0);
+    const findMany = jest.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([row('u1')]);
+    const admin = mk(count, findMany);
+    expect((await admin.listUsers(1, 20)).meta.total).toBe(0);
+    expect((await admin.listUsers(1, 20)).meta.total).toBe(1);
+  });
+
+  it('trang vượt cuối (items rỗng) giữ nguyên số đếm, không bị thổi phồng theo page × limit', async () => {
+    const count = jest.fn().mockResolvedValue(30);
+    const findMany = jest.fn().mockResolvedValue([]);
+    const admin = mk(count, findMany);
+    expect((await admin.listUsers(3, 20)).meta.total).toBe(30);
+    expect((await admin.listUsers(1000, 100)).meta.total).toBe(30);
+  });
+
+  it('trang 3 limit 20 có 5 dòng mà tổng nhớ nhỏ hơn → total ít nhất 45', async () => {
+    const count = jest.fn().mockResolvedValue(10);
+    const findMany = jest.fn().mockResolvedValue(Array.from({ length: 5 }, (_, i) => row(`u${i}`)));
+    expect((await mk(count, findMany).listUsers(3, 20)).meta.total).toBeGreaterThanOrEqual(45);
+  });
+});
+
 describe('AdminService.listUsers — hai lô Điểm Xanh (PD-3)', () => {
   it('select cả pointsConvertedBalance để nhân viên thấy điểm không hết hạn khi xử lý khiếu nại quy đổi', async () => {
     const findMany = jest.fn().mockResolvedValue([]);
     const count = jest.fn().mockResolvedValue(0);
-    await mkAdmin({ user: { findMany, count }, $transaction: tx }).listUsers(1, 20);
+    await mkAdmin({ user: { findMany, count }, $queryRaw: jest.fn().mockResolvedValue([{ n: 0 }]), $transaction: tx }).listUsers(1, 20);
     expect(findMany.mock.calls[0]![0].select).toMatchObject({ pointsBalance: true, pointsConvertedBalance: true });
   });
 });

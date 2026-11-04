@@ -1362,6 +1362,8 @@ model PointsTransaction {
 
   @@index([userId])
   @@index([userId, refId])
+  // getPointsTransactions: WHERE userId ORDER BY createdAt DESC, id DESC LIMIT n (keyset) — khỏi sắp lại cả sổ điểm của khách.
+  @@index([userId, createdAt(sort: Desc), id(sort: Desc)])
   // Cron loyalty-expiry.service.ts (expirePoints/remindExpiringPoints) quét
   // WHERE delta>0 AND expiresAt <=/BETWEEN now — không có index này sẽ full-scan bảng lớn mỗi đêm.
   @@index([expiresAt])
@@ -2593,6 +2595,8 @@ model FeedPost {
   @@index([categoryId, status, createdAt])
   @@index([kind, status, createdAt])
   @@index([status, isPinned(sort: Desc), likeCount(sort: Desc), createdAt(sort: Desc)])
+  // Xếp "mới" của getFeed và publicPreview: ORDER BY isPinned DESC, createdAt DESC, id DESC. Index trên không phục vụ được vì sau isPinned là likeCount.
+  @@index([status, isPinned(sort: Desc), createdAt(sort: Desc), id(sort: Desc)])
   @@map("feed_posts")
 }
 
@@ -3053,6 +3057,8 @@ model Review {
   // Một đánh giá cho mỗi lần mua (đơn) của sản phẩm. Thứ tự cột để các truy vấn theo (khách, sản phẩm) vẫn dùng tiền tố chỉ mục.
   @@unique([userId, productId, orderId])
   @@index([productId])
+  // listByProduct: WHERE productId AND isVisible ORDER BY createdAt DESC LIMIT n — khỏi sắp lại mọi đánh giá của sản phẩm.
+  @@index([productId, isVisible, createdAt(sort: Desc)])
   @@map("reviews")
 }
 
@@ -3080,8 +3086,8 @@ model NotificationLog {
   error        String?
   sentAt       DateTime @default(now())
 
-  // Inbox (userId + channel ORDER BY sentAt DESC) và chống nhắc lặp theo user (userId + sentAt) —
-  // prefix userId vẫn phục vụ mọi truy vấn chỉ lọc userId nên không giữ index [userId] riêng.
+  // Chống nhắc lặp theo user (userId + sentAt) — prefix userId vẫn phục vụ mọi truy vấn chỉ lọc userId
+  // nên không giữ index [userId] riêng. Hộp tin in-app dùng index (userId, channel, sentAt, id) bên dưới.
   @@index([userId, sentAt])
   // Cron nhắc theo mẫu trong N ngày gần nhất (game-reminder: templateCode + sentAt >= mốc).
   @@index([templateCode, sentAt])
@@ -3089,6 +3095,10 @@ model NotificationLog {
   @@index([sentAt], map: "notification_logs_sentAt_idx")
   // Partial, chỉ có trong SQL (20261104130000_perf_indexes_notification_points_retention):
   // "notification_logs_zns_failed_sentAt_idx" ("sentAt") WHERE channel='ZNS' AND status='FAILED' — znsHealth 24 giờ.
+  // Hộp tin in-app (userId + channel ORDER BY sentAt DESC, id DESC) và số chưa đọc (userId + channel + status). Index thường,
+  // không phải một phần, để generic plan của prepared statement (channel = $n) vẫn dùng được.
+  @@index([userId, channel, sentAt(sort: Desc), id(sort: Desc)], map: "notification_logs_userId_channel_sentAt_id_idx")
+  @@index([userId, channel, status], map: "notification_logs_userId_channel_status_idx")
   @@map("notification_logs")
 }
 

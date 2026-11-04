@@ -115,6 +115,11 @@ describe('CouponsService.validateAndCompute — số câu SQL (R-82)', () => {
     expect(prisma.couponRedemption.count).not.toHaveBeenCalled();
   });
 
+  it('usedCount lệch (đơn đặt dở không tăng bộ đếm): đã có 13 redemption trên trần 12 thì kiểm trước vẫn chặn', async () => {
+    const { svc } = setup(coupon({ usageLimit: 12, usedCount: 10 }), 0, 13);
+    await expect(svc.validateAndCompute('SALE', 'u1', 100000)).rejects.toThrow('hết lượt sử dụng');
+  });
+
   it('lượt đã dùng đạt giới hạn từ số đếm kèm theo → vẫn báo hết lượt', async () => {
     const { svc } = setup(coupon({ perUserLimit: 1 }), 1);
     await expect(svc.validateAndCompute('SALE', 'u1', 100000)).rejects.toThrow('hết lượt');

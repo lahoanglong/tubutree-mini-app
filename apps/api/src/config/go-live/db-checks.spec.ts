@@ -200,7 +200,7 @@ describe('evaluateDb', () => {
     describe('quét thư mục migrations', () => {
       const dir = join(__dirname, '../../../prisma/migrations');
       const inProd = '20261010080000_dealer_volume_bigint';
-      const tables = '(?:orders|order_items|users|points_transactions)';
+      const tables = '(?:orders|order_items|users|points_transactions|notification_logs)';
       const heavySql = [
         new RegExp(`UPDATE "${tables}"`, 'i'),
         new RegExp(`DELETE FROM "${tables}"`, 'i'),
@@ -221,12 +221,14 @@ describe('evaluateDb', () => {
         const touchesOrders = dynamicOrders || heavyStmts.some((st) => /["']orders["']/i.test(st));
         return { heavy: heavyStmts.length > 0 || dynamic, touchesOrders };
       };
+      // Đã chạy trên PROD từ trước khi bộ quét xét notification_logs; INSERT ... SELECT chỉ thêm dòng nên không cần cửa sổ deploy riêng.
+      const preDatedNotificationLogs = ['20261012160000_pd3_xu_converted_notice'];
       const scanned = readdirSync(dir)
-        .filter((n) => /^\d/.test(n) && n > inProd)
+        .filter((n) => /^\d/.test(n) && n > inProd && !preDatedNotificationLogs.includes(n))
         .map((n) => ({ n, ...scan(n) }));
       const listed = new Map(HEAVY_MIGRATIONS.map((h) => [h.name, h.ordersLock]));
 
-      it('mọi migration sau bản PROD có câu lệnh nặng trên orders, order_items, users, points_transactions đều nằm trong HEAVY_MIGRATIONS', () => {
+      it('mọi migration sau bản PROD có câu lệnh nặng trên orders, order_items, users, points_transactions, notification_logs đều nằm trong HEAVY_MIGRATIONS', () => {
         expect(scanned.filter((m) => m.heavy && !listed.has(m.n)).map((m) => m.n)).toEqual([]);
       });
 

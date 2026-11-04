@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { OpsHealthTab } from './ops-health-tab';
+import { recomputeSoldMessage } from './ops-health-crons';
 import { AttendanceTab } from './attendance-tab';
 import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { formatDateTime } from '@/lib/format-date';
@@ -114,7 +115,7 @@ describe('OpsHealthTab (PLATFORM-5, ADMINOPS-17)', () => {
     const api = mockFetch({
       '/admin/ops/health': { body: { ...HEALTH, problems: [] } },
       '/admin/pancake/sync': { body: { synced: 12, stockOverwritten: false } },
-      '/admin/products/recompute-sold': { body: { updated: 7 } },
+      '/admin/products/recompute-sold': { body: { updated: 7, zeroed: 2, scanned: 10 } },
     });
     vi.stubGlobal('fetch', vi.fn(api.fn));
     const c = await mount(<OpsHealthTab />);
@@ -140,8 +141,23 @@ describe('OpsHealthTab (PLATFORM-5, ADMINOPS-17)', () => {
     answerConfirm(true);
     await flush();
     expect(api.calls.some((x) => x.url.includes('/admin/products/recompute-sold') && x.init?.method === 'POST')).toBe(true);
-    expect(c.textContent).toContain('Đã tính lại số đã bán cho 7 sản phẩm.');
+    expect(c.textContent).toContain('Đã tính lại số đã bán: 7 sản phẩm đổi số, 2 sản phẩm về 0 (xét 10 sản phẩm có đơn đã giao).');
     expect(smallTouchTargets(c).filter((x) => !x.includes('min-h-[44px]'))).toEqual([]);
+  });
+
+  it('tính lại số đã bán khi không có gì đổi: báo số đã đúng, không hiện "0 sản phẩm" như job hỏng', async () => {
+    const api = mockFetch({
+      '/admin/ops/health': { body: { ...HEALTH, problems: [] } },
+      '/admin/products/recompute-sold': { body: { updated: 0, zeroed: 0, scanned: 12 } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const c = await mount(<OpsHealthTab />);
+    click(byText(c, 'button', 'Tính lại số đã bán'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(c.textContent).toContain('Số đã bán đã đúng, không sản phẩm nào cần đổi (xét 12 sản phẩm có đơn đã giao).');
+    expect(c.textContent).not.toContain('cho 0 sản phẩm');
   });
 
   it('Redis không phản hồi: bảng hàng đợi đổi thành thông báo lỗi', async () => {
@@ -952,5 +968,19 @@ describe('AttendanceTab — Chốt ra ca (ADMINOPS-17)', () => {
     answerConfirm(true);
     await flush();
     expect(c.querySelector('[role="alert"]')!.textContent).toContain('Tháng lương đã chốt');
+  });
+});
+
+describe('recomputeSoldMessage', () => {
+  it('chỉ có dòng về 0 vẫn ghi rõ xét bao nhiêu sản phẩm có đơn', () => {
+    expect(recomputeSoldMessage({ updated: 0, zeroed: 3, scanned: 0 })).toBe(
+      'Đã tính lại số đã bán: 0 sản phẩm đổi số, 3 sản phẩm về 0 (xét 0 sản phẩm có đơn đã giao).',
+    );
+  });
+
+  it('API cũ thiếu zeroed/scanned: coi là 0, không in "undefined"', () => {
+    const old = { updated: 5 } as { updated: number; zeroed: number; scanned: number };
+    expect(recomputeSoldMessage(old)).toBe('Đã tính lại số đã bán: 5 sản phẩm đổi số, 0 sản phẩm về 0.');
+    expect(recomputeSoldMessage({} as typeof old)).toBe('Số đã bán đã đúng, không sản phẩm nào cần đổi.');
   });
 });

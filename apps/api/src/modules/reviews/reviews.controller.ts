@@ -3,6 +3,7 @@ import type { Response } from 'express';
 import { IsBoolean } from 'class-validator';
 import type { JwtPayload } from '@tubutree/shared-types';
 import { Public } from '../../common/decorators/public.decorator';
+import { PublicCache } from '../../common/decorators/public-cache.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { ReviewsService } from './reviews.service';
@@ -32,6 +33,7 @@ export class ReviewsController {
   }
 
   @Public()
+  @PublicCache('USER_CONTENT')
   @Get('products/:slug/reviews')
   list(@Param('slug') slug: string) {
     return this.reviews.listByProduct(slug);
