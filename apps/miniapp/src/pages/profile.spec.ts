@@ -45,7 +45,7 @@ describe('lối vào Đổi rác không thêm lệnh gọi mạng (§16.1)', () 
   it('pages/profile.tsx chỉ hỏi điểm nhận hàng, và chỉ với vai có thể có điểm', () => {
     const src = readFileSync(join(SRC, 'pages/profile.tsx'), 'utf8');
     expect(src).not.toMatch(/getWasteMe|useWasteMe/);
-    expect(src).toMatch(/enabled: belowFold && mayHaveDesk/);
+    expect(src).toMatch(/enabled: authed && mayHaveDesk/);
     expect(src).toMatch(/const mayHaveDesk = isStaffOrAdmin \|\| \(user\?\.role === 'DEALER' && cfg\.waste\.enabled\)/);
   });
   it('pages/loyalty.tsx chỉ hỏi danh sách yêu cầu khi chương trình tắt (để giữ lối xem lịch sử), không gọi /waste/me', () => {
