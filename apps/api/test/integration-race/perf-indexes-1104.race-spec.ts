@@ -96,7 +96,8 @@ describe('Index hiệu năng 2026-11-04 (real Postgres)', () => {
     await prisma.notificationLog.groupBy({ by: ['error'], where, _count: { _all: true }, orderBy: { _count: { error: 'desc' } }, take: 1 });
     const qs = captured.filter((q) => /FROM "(public"\.")?notification_logs"/.test(q.query));
     expect(qs.length).toBeGreaterThanOrEqual(2);
-    for (const q of qs) expect(await planOf(q)).toMatch(/notification_logs_zns_failed_sentAt_idx/);
+    // Từ gói hg có thêm index thường (channel, status, sentAt) cũng khớp đúng điều kiện này; planner chọn cái nào tuỳ thống kê. Điều cần giữ: đi index, không quét bảng.
+    for (const q of qs) expect(await planOf(q)).toMatch(/notification_logs_zns_failed_sentAt_idx|notification_logs_channel_status_sentAt_idx/);
   });
 
   it('D4: lọc khoảng sentAt (trang mẫu tin 30 ngày) dùng index sentAt', async () => {
