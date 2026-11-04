@@ -3086,8 +3086,8 @@ model NotificationLog {
   error        String?
   sentAt       DateTime @default(now())
 
-  // Inbox (userId + channel ORDER BY sentAt DESC) và chống nhắc lặp theo user (userId + sentAt) —
-  // prefix userId vẫn phục vụ mọi truy vấn chỉ lọc userId nên không giữ index [userId] riêng.
+  // Chống nhắc lặp theo user (userId + sentAt) — prefix userId vẫn phục vụ mọi truy vấn chỉ lọc userId
+  // nên không giữ index [userId] riêng. Hộp tin in-app dùng index (userId, channel, sentAt, id) bên dưới.
   @@index([userId, sentAt])
   // Cron nhắc theo mẫu trong N ngày gần nhất (game-reminder: templateCode + sentAt >= mốc).
   @@index([templateCode, sentAt])
