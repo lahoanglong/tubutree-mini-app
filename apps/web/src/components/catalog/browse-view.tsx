@@ -158,7 +158,7 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
   const lastPageOfTotal = firstPage && firstPage.meta.total > 0 ? Math.ceil(firstPage.meta.total / PAGE_LIMIT) : 0;
   const pastLastPage = !seeded && page > 1 && !!firstPage && firstPage.data.length === 0 && lastPageOfTotal > 0 && lastPageOfTotal < page;
   useEffect(() => {
-    if (pastLastPage) router.replace(pagedHref(state, lastPageOfTotal), { scroll: false });
+    if (pastLastPage) router.replace(pagedHref(state, lastPageOfTotal, new URLSearchParams(window.location.search)), { scroll: false });
   }, [pastLastPage, lastPageOfTotal, router, state]);
   const list = uniqueById(products.data?.pages.flatMap((pg) => pg.data) ?? []);
   const listLength = list.length;

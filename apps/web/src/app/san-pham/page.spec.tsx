@@ -181,9 +181,8 @@ describe('BrowsePage — dữ liệu ban đầu của danh sách', () => {
     for (const o of [{ all: '1' }, { page: '2' }]) {
       mocks.get.mockClear();
       const done = render(o);
-      await Promise.resolve();
-      await Promise.resolve();
-      expect(productCalls(), JSON.stringify(o)).toHaveLength(1);
+      // Danh sách được gọi trong lúc /brands vẫn treo: không phụ thuộc số nhịp microtask.
+      await vi.waitFor(() => expect(productCalls(), JSON.stringify(o)).toHaveLength(1));
       releaseBrands();
       await done;
     }
@@ -201,8 +200,9 @@ describe('BrowsePage — dữ liệu ban đầu của danh sách', () => {
       return CATEGORIES;
     });
     const done = render({ brand: 'Tubu' });
-    await Promise.resolve();
-    await Promise.resolve();
+    // /categories đã trả: chờ tới khi chỉ còn /brands treo rồi mới kiểm danh sách chưa được gọi.
+    await vi.waitFor(() => expect(mocks.get.mock.calls.some(([p]) => p === '/categories')).toBe(true));
+    await new Promise((r) => setTimeout(r, 20));
     expect(productCalls()).toHaveLength(0);
     releaseBrands();
     await done;
@@ -244,6 +244,18 @@ describe('BrowsePage — dữ liệu ban đầu của danh sách', () => {
   it('?page vượt trang cuối: chuyển về trang cuối giữ bộ lọc thay vì báo chưa có sản phẩm', async () => {
     catalog = () => pageOf([], 45, 9);
     await expect(render({ page: '9', brand: 'Tubu' })).rejects.toThrow('NEXT_REDIRECT /san-pham?brand=Tubu&page=3');
+  });
+
+  it('chuyển về trang cuối giữ tham số lạ (ref, utm) của link; khoá API không chứa chúng', async () => {
+    catalog = () => pageOf([], 45, 9);
+    await expect(render({ brand: 'Tubu', page: '9', ref: 'AN1', utm_source: 'zalo', focus: 'search' })).rejects.toThrow(
+      'NEXT_REDIRECT /san-pham?brand=Tubu&page=3&ref=AN1&utm_source=zalo',
+    );
+    expect(productCalls()).toEqual([['/products', { query: { page: 9, limit: 20, brand: 'Tubu' } }]]);
+    mocks.get.mockClear();
+    catalog = () => pageOf([PRODUCT], 45, 1);
+    await expect(render({ all: '1', page: '60', ref: 'AN1' })).rejects.toThrow('NEXT_REDIRECT /san-pham?all=1&page=3&ref=AN1');
+    expect(productCalls()).toEqual([['/products', { query: { page: 1, limit: 1 } }]]);
   });
 
   it('catalog thật sự rỗng: không chuyển hướng', async () => {

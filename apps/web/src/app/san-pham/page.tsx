@@ -11,7 +11,7 @@ import { createServerHttp } from '@/lib/core-http-server';
 import { BROWSE_INDEX_MAX_PAGE, browseBreadcrumb, browseMetadata, browseNoindex } from '@/lib/home-seo';
 import { browseText } from '@/lib/browse-text';
 import { jsonLdScript, breadcrumbJsonLd } from '@/lib/product-seo';
-import { BROWSE_PATH, PAGE_LIMIT, isBrowseHub, parseSearchState, serializeSearchState, toCatalogQuery, type SearchState } from '@/lib/search-state';
+import { BROWSE_PATH, PAGE_LIMIT, appendForeignParams, isBrowseHub, parseSearchState, serializeSearchState, toCatalogQuery, type SearchState } from '@/lib/search-state';
 import { PAGE_WIDE } from '@/lib/page-frame';
 
 export const revalidate = 300;
@@ -81,11 +81,12 @@ function isServerListState(state: SearchState, page: number, brands: { brand: st
   }
 }
 
-/** URL vượt trang cuối (sản phẩm vừa bị gỡ, link cũ): về trang cuối thay vì hiện "chưa có sản phẩm". */
-function redirectToLastPage(state: SearchState, total: number): never {
+/** URL vượt trang cuối (sản phẩm vừa bị gỡ, link cũ): về trang cuối thay vì hiện "chưa có sản phẩm", giữ tham số lạ (utm, ref) của link. */
+function redirectToLastPage(state: SearchState, total: number, params: URLSearchParams): never {
   const lastPage = Math.max(1, Math.ceil(total / PAGE_LIMIT));
   const qs = serializeSearchState(state);
   if (lastPage > 1) qs.set('page', String(lastPage));
+  appendForeignParams(qs, params);
   redirect(`${BROWSE_PATH}${qs.size > 0 ? `?${qs.toString()}` : ''}`);
 }
 
@@ -124,8 +125,8 @@ export default async function BrowsePage({ searchParams }: { searchParams: Brows
   const catalog = startPage <= SSR_MAX_PAGE ? listed : undefined;
   const probe = startPage > SSR_MAX_PAGE ? listed : undefined;
 
-  if (catalog && catalog.data.length === 0 && catalog.meta.total > 0 && startPage > 1) redirectToLastPage(state, catalog.meta.total);
-  if (probe && probe.meta.total > 0 && startPage > Math.ceil(probe.meta.total / PAGE_LIMIT)) redirectToLastPage(state, probe.meta.total);
+  if (catalog && catalog.data.length === 0 && catalog.meta.total > 0 && startPage > 1) redirectToLastPage(state, catalog.meta.total, params);
+  if (probe && probe.meta.total > 0 && startPage > Math.ceil(probe.meta.total / PAGE_LIMIT)) redirectToLastPage(state, probe.meta.total, params);
 
   const initial: BrowseInitial | null = catalog
     ? { urlKey: serializeSearchState(state).toString(), page: catalog, startPage }

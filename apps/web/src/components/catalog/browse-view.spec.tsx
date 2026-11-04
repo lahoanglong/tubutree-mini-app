@@ -229,6 +229,24 @@ describe('BrowseView — danh sách và trạng thái URL', () => {
     expect(nav.replaces).toHaveLength(1);
   });
 
+  it('về trang cuối giữ tham số lạ (ref, utm) của URL hiện tại, bỏ focus', async () => {
+    const qs = 'category=c-goi&page=9&ref=AN1&utm_source=zalo&focus=search';
+    nav.search = qs;
+    window.history.replaceState(null, '', `/san-pham?${qs}`);
+    routes['/products'] = (q) => pageOf([], 45, Number(q?.page), 20);
+    nav.hold = true;
+    try {
+      mount();
+      await flush();
+      // Lần replace đầu là gỡ ?focus (dùng một lần); router giả giữ URL nên trang vẫn là 9.
+      expect(nav.replaces).toContain('/san-pham?category=c-goi&page=3&ref=AN1&utm_source=zalo');
+      expect(productCalls()[0]).not.toHaveProperty('ref');
+      expect(productCalls()[0]).not.toHaveProperty('utm_source');
+    } finally {
+      window.history.replaceState(null, '', '/');
+    }
+  });
+
   it('trang đang chờ về trang cuối: khung chờ thay cho "không có sản phẩm"', async () => {
     nav.search = 'sort=newest&page=7';
     nav.hold = true;

@@ -4,7 +4,7 @@ import { useCallback, useMemo, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { parsePage } from './catalog-filter';
 import { isHubQuery } from './browse-hub-route';
-import { BROWSE_PATH, SEARCH_PARAM_KEYS, parseSearchState, serializeSearchState, type SearchState } from './search-state';
+import { BROWSE_PATH, appendForeignParams, parseSearchState, serializeSearchState, type SearchState } from './search-state';
 import { shallowReplace } from './shallow-url';
 import { useShellPathname } from './shell-pathname';
 
@@ -20,19 +20,12 @@ export interface UseBrowseState {
   consumeFocus: () => void;
 }
 
-/** Tham số dùng một lần hoặc chỉ có nghĩa với trạng thái cũ: `focus`, và `page` (đổi bộ lọc thì về trang 1). */
-const TRANSIENT_KEYS = ['focus', 'page'];
-
 /**
  * Trạng thái mới + giữ nguyên tham số lạ (utm, ref, s…) theo đúng thứ tự gốc. Tham số chuẩn được viết lại theo thứ tự cố
  * định, đứng trước — một trạng thái chỉ có một URL.
  */
 function withPatch(prev: URLSearchParams, patch: Partial<SearchState>): URLSearchParams {
-  const next = serializeSearchState({ ...parseSearchState(prev), ...patch });
-  for (const [key, value] of prev) {
-    if (!TRANSIENT_KEYS.includes(key) && !SEARCH_PARAM_KEYS.includes(key)) next.append(key, value);
-  }
-  return next;
+  return appendForeignParams(serializeSearchState({ ...parseSearchState(prev), ...patch }), prev);
 }
 
 /**
