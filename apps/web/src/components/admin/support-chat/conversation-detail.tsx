@@ -61,6 +61,8 @@ export function ConversationDetail({ id }: { id: string }) {
   });
   const resend = useMutation({
     mutationFn: resendSupportForward,
+    // refresh() làm mới hội thoại và danh sách; chỉ còn số "chưa chuyển vào Zalo" trên hộp việc cần làm mới thêm.
+    meta: { adminInvalidate: ['admin-ops-inbox'] },
     onSuccess: (r) => {
       if (r.status !== 'SENT') setError(`Gửi lại chưa thành công (${FORWARD_VIEW[r.status].text}${r.lastError ? `: ${r.lastError}` : ''}).`);
       refresh();
@@ -72,6 +74,7 @@ export function ConversationDetail({ id }: { id: string }) {
   });
   const block = useMutation({
     mutationFn: (blocked: boolean) => (blocked ? unblockSupportConversation(id) : blockSupportConversation(id)),
+    meta: { skipAdminInvalidate: true },
     onSuccess: refresh,
     onError: (e) => setError(errText(e, 'Không đổi được trạng thái chặn.')),
   });

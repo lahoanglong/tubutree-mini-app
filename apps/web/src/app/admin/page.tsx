@@ -2254,6 +2254,9 @@ function ReturnsTab({
 
 const ROLES: UserRole[] = ['CUSTOMER', 'AFFILIATE', 'DEALER', 'STAFF', 'ADMIN'];
 
+// Khoá/mở khoá chỉ đổi trạng thái người dùng: làm mới mọi trang danh sách và hồ sơ đang mở, không phải mọi khoá admin.
+const USER_STATE_INVALIDATE = { adminInvalidate: ['admin-users', 'admin-user-detail'] } as const;
+
 function UsersTab({ isAdmin = true, onOpenOrder, onOpenUserOrders }: { isAdmin?: boolean; onOpenOrder?: (code: string) => void; onOpenUserOrders?: (userId: string, label: string) => void }) {
   // Trước đây gọi listUsers(1) CỐ ĐỊNH trang 1, không có UI phân trang — hệ thống có hơn 20
   // người dùng (limit mặc định của BE) thì phần còn lại vĩnh viễn không xem/không cấp quyền
@@ -2285,17 +2288,17 @@ function UsersTab({ isAdmin = true, onOpenOrder, onOpenUserOrders }: { isAdmin?:
   const onError = (e: unknown) => setMsg({ ok: false, text: actionErrorText(e) });
   const block = useMutation({
     mutationFn: ({ id, reason }: { id: string; reason: string; label: string }) => blockUser(id, reason),
+    meta: USER_STATE_INVALIDATE,
     onSuccess: (_r, v) => {
       setMsg({ ok: true, text: `Đã khoá ${v.label}. Mọi phiên đăng nhập của người này đã bị thu hồi.` });
-      void q.refetch();
     },
     onError,
   });
   const unblock = useMutation({
     mutationFn: ({ id }: { id: string; label: string }) => unblockUser(id),
+    meta: USER_STATE_INVALIDATE,
     onSuccess: (_r, v) => {
       setMsg({ ok: true, text: `Đã mở khoá ${v.label}.` });
-      void q.refetch();
     },
     onError,
   });

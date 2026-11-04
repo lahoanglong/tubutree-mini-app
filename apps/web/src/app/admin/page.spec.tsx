@@ -1022,6 +1022,25 @@ describe('admin/page — tab Người dùng', () => {
     expect(mocks.unblockUser).toHaveBeenCalledWith('u3');
   });
 
+  it('F6 — mở khoá xong chỉ tải lại danh sách một lần (không refetch thừa, không kéo khoá admin khác)', async () => {
+    mocks.users = [
+      { id: 'u3', fullName: 'Trần Cường', phone: '0966666666', role: 'CUSTOMER', pointsBalance: 0, createdAt: '2026-09-03T00:00:00.000Z', isBlocked: true, blockedReason: 'Farm voucher' },
+    ];
+    mocks.unblockUser.mockReset().mockResolvedValue({ id: 'u3', isBlocked: false, blockedAt: null, blockedReason: null });
+    window.history.replaceState(null, '', '/admin?tab=users');
+    const r = render(<AdminPage />, createQueryClient());
+    mounted.push(r);
+    await flush();
+    const { container } = r;
+    const before = mocks.listUsersArgs.length;
+    act(() => (container.querySelector('button[aria-label="Mở khoá Trần Cường"]') as HTMLButtonElement).click());
+    await flush();
+    const accept = [...document.body.querySelectorAll('[role="alertdialog"] button')].find((b) => b.textContent === 'Mở khoá')!;
+    act(() => (accept as HTMLButtonElement).click());
+    await flush();
+    expect(mocks.listUsersArgs.length - before).toBe(1);
+  });
+
   it('khoá thất bại (vd tự khoá mình) → báo lỗi màu danger, không nuốt lỗi', async () => {
     mocks.blockUser.mockReset().mockRejectedValue(new Error('Không thể tự khoá tài khoản của chính mình.'));
     const { container } = await openUsers();

@@ -46,6 +46,8 @@ declare module '@tanstack/react-query' {
     mutationMeta: {
       /** Thao tác không ghi gì (xem trước, tra cứu, xuất file...): xong thì không làm cũ các khoá admin. */
       skipAdminInvalidate?: boolean;
+      /** Mutation chỉ làm cũ các khoá admin có tên đầu khớp đúng một trong danh sách này (vd 'admin-users'); không khai thì làm cũ mọi khoá admin. Bị `skipAdminInvalidate` lấn át. */
+      adminInvalidate?: readonly string[];
     };
   }
 }
@@ -63,8 +65,10 @@ export function createQueryClient(): QueryClient {
   // (Người dùng, hộp việc, số trên chip...) đọc cùng dữ liệu. staleTime 30 giây chỉ để đổi tab không gọi lại mạng.
   const mutationCache = new MutationCache({
     onSettled: (_data, _error, _variables, _context, mutation) => {
-      if (mutation.meta?.skipAdminInvalidate) return;
-      void client.invalidateQueries({ predicate: isAdminKey });
+      const { skipAdminInvalidate, adminInvalidate } = mutation.meta ?? {};
+      if (skipAdminInvalidate) return;
+      const only = adminInvalidate ? new Set(adminInvalidate) : null;
+      void client.invalidateQueries({ predicate: (q) => isAdminKey(q) && (!only || only.has(q.queryKey[0] as string)) });
     },
   });
   const client: QueryClient = new TubuQueryClient({
