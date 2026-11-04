@@ -65,5 +65,8 @@ describe('DealerPage gửi lại hồ sơ sau khi mất phản hồi', () => {
     await waitFor(() => expect(mocks.applyDealer).toHaveBeenCalledTimes(1));
     expect(await screen.findByText('Hồ sơ đang được duyệt')).toBeInTheDocument();
     expect(mocks.getDealerMe).toHaveBeenCalledTimes(2);
+    // Hồ sơ đã được nhận: báo bằng thông tin, không phải lỗi.
+    expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Bạn đã có đơn đăng ký đang chờ duyệt.', type: 'info' });
+    expect(mocks.openSnackbar).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'error' }));
   });
 });

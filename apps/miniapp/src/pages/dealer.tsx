@@ -148,8 +148,9 @@ function DealerApply({ rejected, rejectionReason }: { rejected: boolean; rejecti
     },
     onError: (e) => {
       // Mất phản hồi rồi bấm lại: hồ sơ đã nhận, làm mới trạng thái để sang màn chờ duyệt thay vì đứng ở form.
-      if (errorCode(e) === 'DEALER_APPLICATION_PENDING') void qc.invalidateQueries({ queryKey: ['dealer-me'] });
-      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      const already = errorCode(e) === 'DEALER_APPLICATION_PENDING';
+      if (already) void qc.invalidateQueries({ queryKey: ['dealer-me'] });
+      openSnackbar({ text: getErrorMessage(e), type: already ? 'info' : 'error' });
     },
   });
 
