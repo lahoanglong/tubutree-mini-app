@@ -822,3 +822,59 @@ describe('SystemConfigService.set waste.enabled', () => {
     expect(off.upsert).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('SystemConfigService.set: đánh dấu danh sách ảnh /img cũ', () => {
+  const mkStale = () => ({ markStale: jest.fn() });
+
+  it.each([
+    ['affiliate.commission_eligible_roles', ['DEALER']],
+    ['storefront.require_approval', false],
+  ])('khoá hiển thị gian hàng "%s" → đánh dấu đúng một lần, SAU giao dịch, cache khoá đó đã xoá', async (key, value) => {
+    const stale = mkStale();
+    const { prisma, upsert } = makePrisma({ existing: { value: Array.isArray(value) ? ['DEALER', 'STAFF'] : true } });
+    const service = new SystemConfigService(prisma, stale as never);
+    await service.get(key, undefined as never);
+    const cache = (service as unknown as { cache: Map<string, unknown> }).cache;
+    expect(cache.has(key)).toBe(true);
+    let insideCalls = -1;
+    let cachedInside = false;
+    (prisma.$transaction as jest.Mock).mockImplementation(async (cb: (tx: unknown) => unknown) => {
+      const out = await cb(prisma);
+      insideCalls = stale.markStale.mock.calls.length;
+      cachedInside = cache.has(key);
+      return out;
+    });
+    await service.set(key, value as object | boolean, 'admin1');
+    expect(upsert).toHaveBeenCalledTimes(1);
+    expect(insideCalls).toBe(0);
+    expect(cachedInside).toBe(true);
+    expect(cache.has(key)).toBe(false);
+    expect(stale.markStale).toHaveBeenCalledTimes(1);
+  });
+
+  it('khoá không liên quan hiển thị gian hàng → KHÔNG đánh dấu', async () => {
+    const stale = mkStale();
+    const { prisma } = makePrisma({ existing: { value: 100000 } });
+    await new SystemConfigService(prisma, stale as never).set('wallet.withdraw_min', 150000, 'admin1');
+    expect(stale.markStale).not.toHaveBeenCalled();
+  });
+
+  it('giao dịch ném lỗi trên khoá hiển thị → KHÔNG đánh dấu', async () => {
+    const stale = mkStale();
+    const { prisma } = makePrisma({ existing: { value: true }, upsert: jest.fn().mockRejectedValue(new Error('db down')) });
+    await expect(new SystemConfigService(prisma, stale as never).set('storefront.require_approval', false, 'admin1')).rejects.toThrow('db down');
+    expect(stale.markStale).not.toHaveBeenCalled();
+  });
+
+  it('bị chặn đổi kiểu trên khoá hiển thị → KHÔNG đánh dấu', async () => {
+    const stale = mkStale();
+    const { prisma } = makePrisma({ existing: { value: true } });
+    await expect(new SystemConfigService(prisma, stale as never).set('storefront.require_approval', 'x' as never, 'admin1')).rejects.toThrow(BadRequestException);
+    expect(stale.markStale).not.toHaveBeenCalled();
+  });
+
+  it('không tiêm ImageRegistryStale (@Optional) → set khoá hiển thị vẫn chạy, không ném', async () => {
+    const { prisma } = makePrisma({ existing: { value: true } });
+    await expect(new SystemConfigService(prisma).set('storefront.require_approval', false, 'admin1')).resolves.toBeUndefined();
+  });
+});

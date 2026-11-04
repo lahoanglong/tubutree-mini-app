@@ -3050,3 +3050,96 @@ describe('AdminService coupon — nhân viên Marketing (D1-05)', () => {
     });
   });
 });
+
+describe('AdminService: đánh dấu danh sách ảnh /img cũ sau khi đổi vai trò', () => {
+  const mkMarked = (prisma: PrismaService) => {
+    const invalidateRegistry = jest.fn();
+    const svc = mkAdmin(prisma) as unknown as { imageResize: unknown };
+    svc.imageResize = { invalidateRegistry };
+    return { svc: svc as unknown as ReturnType<typeof mkAdmin>, invalidateRegistry };
+  };
+
+  describe('setUserRole', () => {
+    const roleUpdate = { id: 'u1', phone: '0899625240', role: 'ADMIN', fullName: 'X' };
+    const prismaFor = (over: Record<string, unknown> = {}) =>
+      makePrisma({
+        user: {
+          findUnique: jest.fn().mockResolvedValue({ id: 'u1', phone: '0899625240', role: 'CUSTOMER' }),
+          update: jest.fn().mockResolvedValue(roleUpdate),
+          count: jest.fn().mockResolvedValue(3),
+          ...over,
+        },
+      });
+
+    it('đổi vai trò thành công → đánh dấu đúng một lần, CHỈ sau khi giao dịch xong', async () => {
+      const prisma = prismaFor();
+      const { svc, invalidateRegistry } = mkMarked(prisma);
+      let insideCalls = -1;
+      const original = (prisma as unknown as { $transaction: jest.Mock }).$transaction;
+      (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest.fn(async (cb: (tx: unknown) => unknown, opts?: unknown) => {
+        const out = await original(cb, opts);
+        insideCalls = invalidateRegistry.mock.calls.length;
+        return out;
+      });
+      await svc.setUserRole('admin1', '0899625240', 'ADMIN');
+      expect(insideCalls).toBe(0);
+      expect(invalidateRegistry).toHaveBeenCalledTimes(1);
+    });
+
+    it('không tìm thấy user → ném lỗi, KHÔNG đánh dấu', async () => {
+      const { svc, invalidateRegistry } = mkMarked(prismaFor({ findUnique: jest.fn().mockResolvedValue(null) }));
+      await expect(svc.setUserRole('admin1', '0899625240', 'ADMIN')).rejects.toBeInstanceOf(NotFoundException);
+      expect(invalidateRegistry).not.toHaveBeenCalled();
+    });
+
+    it('ghi user lỗi trong giao dịch → ném lỗi, KHÔNG đánh dấu', async () => {
+      const { svc, invalidateRegistry } = mkMarked(prismaFor({ update: jest.fn().mockRejectedValue(new Error('db down')) }));
+      await expect(svc.setUserRole('admin1', '0899625240', 'ADMIN')).rejects.toThrow('db down');
+      expect(invalidateRegistry).not.toHaveBeenCalled();
+    });
+
+    it('không tiêm ImageResizeService (@Optional) → vẫn chạy bình thường', async () => {
+      await expect(mkAdmin(prismaFor()).setUserRole('admin1', '0899625240', 'ADMIN')).resolves.toMatchObject({ previousRole: 'CUSTOMER' });
+    });
+  });
+
+  describe('reviewDealerApplication', () => {
+    const prismaFor = (tx: ReturnType<typeof makeApproveTx>) =>
+      makePrisma({
+        dealerApplication: {
+          findUnique: jest.fn().mockResolvedValue({ id: 'd1', status: 'PENDING', userId: 'u1' }),
+          updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        },
+        dealerTier: { findUnique: jest.fn().mockResolvedValue({ id: 't1', name: 'Bạc' }) },
+        user: { findUnique: jest.fn().mockResolvedValue({ metadata: null }) },
+        $transaction: tx.$transaction,
+      });
+
+    it('duyệt → đánh dấu đúng một lần, CHỈ sau khi giao dịch xong', async () => {
+      const tx = makeApproveTx({});
+      const { svc, invalidateRegistry } = mkMarked(prismaFor(tx));
+      let insideCalls = -1;
+      const inner = tx.$transaction.getMockImplementation() as (cb: (t: unknown) => Promise<unknown>) => Promise<unknown>;
+      tx.$transaction.mockImplementation(async (cb: (t: unknown) => Promise<unknown>) => {
+        const out = await inner(cb);
+        insideCalls = invalidateRegistry.mock.calls.length;
+        return out;
+      });
+      await svc.reviewDealerApplication('admin1', 'd1', true, 't1');
+      expect(insideCalls).toBe(0);
+      expect(invalidateRegistry).toHaveBeenCalledTimes(1);
+    });
+
+    it('từ chối → KHÔNG đánh dấu', async () => {
+      const { svc, invalidateRegistry } = mkMarked(prismaFor(makeApproveTx({})));
+      await svc.reviewDealerApplication('admin1', 'd1', false, undefined, 'Thiếu ảnh CCCD');
+      expect(invalidateRegistry).not.toHaveBeenCalled();
+    });
+
+    it('duyệt nhưng đơn đã được xử lý (giao dịch ném) → KHÔNG đánh dấu', async () => {
+      const { svc, invalidateRegistry } = mkMarked(prismaFor(makeApproveTx({ dealerAppUpdateMany: jest.fn().mockResolvedValue({ count: 0 }) })));
+      await expect(svc.reviewDealerApplication('admin1', 'd1', true, 't1')).rejects.toBeInstanceOf(BadRequestException);
+      expect(invalidateRegistry).not.toHaveBeenCalled();
+    });
+  });
+});
