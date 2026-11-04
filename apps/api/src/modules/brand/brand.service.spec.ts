@@ -533,3 +533,18 @@ describe('BrandService brand-owner tự quản', () => {
     expect(out).toEqual({ ok: true });
   });
 });
+
+describe('BrandService.listBrands — select gọn (L3-17)', () => {
+  it('không chọn storyImages (ảnh câu chuyện có thể là base64); vẫn đủ cột màn quản trị nhãn dùng', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    await new BrandService(makePrisma({ brand: { findMany } }), brandConfig).listBrands();
+    const arg = findMany.mock.calls[0]![0];
+    expect(arg.orderBy).toEqual({ createdAt: 'desc' });
+    expect(arg.select).toBeDefined();
+    expect(arg.select).not.toHaveProperty('storyImages');
+    expect(arg.select).toMatchObject({
+      id: true, slug: true, name: true, tagline: true, logoUrl: true, coverUrl: true, story: true, origin: true, certifications: true,
+      isVerified: true, isPublished: true, followerCount: true,
+    });
+  });
+});

@@ -184,7 +184,27 @@ export class BrandService {
 
   // ---- Admin: Brand ----
   listBrands() {
-    return this.prisma.brand.findMany({ orderBy: { createdAt: 'desc' } });
+    // Không chọn `storyImages`: ảnh câu chuyện tải thẳng lên là base64, màn quản trị nhãn không hiện chúng.
+    return this.prisma.brand.findMany({
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        slug: true,
+        name: true,
+        logoUrl: true,
+        coverUrl: true,
+        tagline: true,
+        story: true,
+        origin: true,
+        certifications: true,
+        isVerified: true,
+        isPublished: true,
+        ownerUserId: true,
+        followerCount: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
   }
 
   /**
