@@ -176,21 +176,35 @@ async function run(page: Page, api: MockApi, route: (typeof ROUTES)[number]): Pr
   expect(snap.preloads.filter((p) => p.hidden), `preload ảnh cho phần tử ẩn: ${JSON.stringify(snap.preloads)}`).toEqual([]);
 }
 
-test.describe('banner Ưu đãi: sizes khớp bề rộng thật', () => {
-  for (const vw of [1024, 1280, 1440]) {
-    test(`${vw}px: ảnh banner rộng min(100vw - 48px, 1152px) và chọn ảnh gốc ở 1x khi khung > 960`, async ({ page, api }) => {
-      mockImages(api);
-      await page.setViewportSize({ width: vw, height: 900 });
-      await page.route('**/api/img?**', (r) => r.fulfill({ status: 200, contentType: 'image/png', body: NOISE }));
-      await page.route('https://content.pancake.vn/**', (r) => r.fulfill({ status: 200, contentType: 'image/png', body: NOISE }));
-      await page.goto('/uu-dai');
-      const img = page.locator('[data-offers-banner] img').first();
-      await expect(img).toBeVisible({ timeout: 20_000 });
-      const expected = Math.min(vw - 48, 1152);
-      const box = await img.boundingBox();
-      expect(Math.abs(box!.width - expected), `bề rộng ảnh ${box!.width} so với sizes ${expected}`).toBeLessThanOrEqual(1);
-      const current = await img.evaluate((el: HTMLImageElement) => el.currentSrc);
-      if (expected > 960) expect(current).toContain('lcp-102.jpg');
+// Bề rộng ảnh banner Ưu đãi = sizes, và bản trình duyệt chọn (currentSrc) là bản đổi cỡ đủ nét: phải là `{api}/img?w=<bề rộng>`, không bao giờ là ảnh gốc của host nguồn.
+const BANNER_CASES = [
+  { name: 'điện thoại 375@2', vw: 375, vh: 812, dpr: 2, slot: 375 - 32, picks: 960 },
+  { name: 'điện thoại 412@2.625', vw: 412, vh: 915, dpr: 2.625, slot: 412 - 32, picks: 1280 },
+  { name: 'điện thoại 390@3', vw: 390, vh: 844, dpr: 3, slot: 390 - 32, picks: 1280 },
+  { name: 'laptop 1024@1', vw: 1024, vh: 800, dpr: 1, slot: Math.min(1024 - 48, 1152), picks: 1280 },
+  { name: 'laptop 1280@1', vw: 1280, vh: 800, dpr: 1, slot: Math.min(1280 - 48, 1152), picks: 1280 },
+  { name: 'laptop 1280@2', vw: 1280, vh: 800, dpr: 2, slot: Math.min(1280 - 48, 1152), picks: 1920 },
+  { name: 'màn rộng 1440@1', vw: 1440, vh: 900, dpr: 1, slot: Math.min(1440 - 48, 1152), picks: 1280 },
+];
+
+test.describe('banner Ưu đãi: sizes khớp bề rộng thật và chọn bản đổi cỡ', () => {
+  for (const c of BANNER_CASES) {
+    test.describe(c.name, () => {
+      test.use({ viewport: { width: c.vw, height: c.vh }, deviceScaleFactor: c.dpr });
+      test('bề rộng ảnh = sizes; currentSrc là /img?w= đúng bậc, không phải ảnh gốc', async ({ page, api }) => {
+        mockImages(api);
+        await page.route('**/api/img?**', (r) => r.fulfill({ status: 200, contentType: 'image/png', body: NOISE }));
+        await page.route('https://content.pancake.vn/**', (r) => r.fulfill({ status: 200, contentType: 'image/png', body: NOISE }));
+        await page.goto('/uu-dai');
+        const img = page.locator('[data-offers-banner] img').first();
+        await expect(img).toBeVisible({ timeout: 20_000 });
+        const box = await img.boundingBox();
+        expect(Math.abs(box!.width - c.slot), `bề rộng ảnh ${box!.width} so với sizes ${c.slot}`).toBeLessThanOrEqual(1);
+        await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.currentSrc)).not.toBe('');
+        const current = await img.evaluate((el: HTMLImageElement) => el.currentSrc);
+        expect(current, `currentSrc ${current}`).toMatch(new RegExp(`/img\\?w=${c.picks}&u=`));
+        expect(current.startsWith('https://content.pancake.vn/'), 'không được chọn ảnh gốc của host nguồn').toBe(false);
+      });
     });
   }
 });
