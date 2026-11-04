@@ -6,8 +6,9 @@ import { EXEMPT_INPUTS, INPUT_LIMITS } from './input-limits.table';
 /**
  * L4-03: ô gõ chữ của màn quản trị phải chặn đúng ở trần của DTO (`@MaxLength`/`@Length`), nếu không người dùng gõ
  * quá trần rồi mới nhận lỗi 400. Spec duyệt mọi `<input>`/`<textarea>` kiểu chữ trong `app/admin` và `components/admin`:
- * ô có trong INPUT_LIMITS phải có `maxLength` bằng trần DTO (đọc thẳng từ mã nguồn API); ô khác phải có `maxLength`
- * hoặc nằm trong EXEMPT_INPUTS kèm lý do.
+ * ô có trong INPUT_LIMITS phải có `maxLength` bằng trần DTO (đọc thẳng từ mã nguồn API: `@MaxLength`, `@Length`, hoặc
+ * độ dài tối đa của `@Matches`), hoặc thấp hơn kèm lý do `stricter`; ô khác phải nằm trong EXEMPT_INPUTS kèm lý do.
+ * Ô có `maxLength` mà không có dòng nào cũng đỏ: không còn ô nào được bỏ qua âm thầm.
  */
 const SRC = join(process.cwd(), 'src');
 const REPO = resolve(process.cwd(), '../..');
@@ -76,7 +77,21 @@ function discover(): FoundInput[] {
   return out;
 }
 
-/** Trần chuỗi của một trường DTO: `@MaxLength(n)` hoặc `@Length(min, n)`, n có thể là hằng số cùng file. */
+/** Độ dài tối đa của một regex đơn giản (`^[A-Z0-9]{2,16}$`, `^0\d{8,10}$`): cộng lượng tử tối đa của từng phần tử. */
+function regexMax(source: string): number | null {
+  const body = source.replace(/^\^/, '').replace(/\$$/, '');
+  const atom = /(\\[dwsDWS]|\[(?:\\.|[^\]])+\]|[^{}?*+()|\\])(?:\{(\d+)(?:,(\d+))?\})?/g;
+  let total = 0;
+  let consumed = 0;
+  for (const m of body.matchAll(atom)) {
+    if (m.index !== consumed) return null;
+    consumed += m[0].length;
+    total += m[3] ? Number(m[3]) : m[2] ? Number(m[2]) : 1;
+  }
+  return consumed === body.length ? total : null;
+}
+
+/** Trần chuỗi của một trường DTO: `@MaxLength(n)`, `@Length(min, n)` hoặc `@Matches(regex)`; n có thể là hằng số cùng file. */
 function dtoCap(spec: string): number | null {
   const [path, rest] = spec.split(':') as [string, string];
   const [cls, field] = rest.split('.') as [string, string];
@@ -90,7 +105,16 @@ function dtoCap(spec: string): number | null {
   if (!hit) throw new Error(`Không thấy trường ${cls}.${field} trong ${path}`);
   const decos = hit[1]!;
   const arg = decos.match(/@MaxLength\(\s*([^,)]+)/)?.[1] ?? decos.match(/@Length\(\s*\d+\s*,\s*([^,)]+)/)?.[1];
-  if (!arg) return null;
+  if (!arg) {
+    const matches = decos.match(/@Matches\(\s*(\/(?:\\.|[^/\\])+\/|\w+)/)?.[1];
+    if (!matches) return null;
+    let literal = matches.startsWith('/') ? matches : null;
+    if (!literal) {
+      const re = new RegExp(`const\\s+${matches}\\s*=\\s*(\\/(?:\\\\.|[^/\\\\])+\\/)`);
+      literal = source.match(re)?.[1] ?? apiSources().map((t) => t.match(re)?.[1]).find(Boolean) ?? null;
+    }
+    return literal ? regexMax(literal.slice(1, -1)) : null;
+  }
   const v = arg.trim();
   if (/^[\d_]+$/.test(v)) return Number(v.replace(/_/g, ''));
   const re = new RegExp(`(?:const|readonly)\\s+${v}\\s*=\\s*([\\d_]+)`);
@@ -119,11 +143,12 @@ describe('ô gõ chữ ở màn quản trị khớp trần DTO (L4-03)', () => {
 
   it('ô đã khai trong bảng có maxLength đúng bằng trần DTO', () => {
     const wrong: string[] = [];
-    for (const [key, { dto, max }] of Object.entries(INPUT_LIMITS)) {
+    for (const [key, { dto, max, stricter }] of Object.entries(INPUT_LIMITS)) {
       const input = found.find((f) => f.key === key);
       if (!input) continue;
-      const cap = dto.startsWith('~') ? max : dtoCap(dto);
-      if (cap !== max) wrong.push(`${key}: bảng ghi ${max}, DTO ${dto} là ${cap}`);
+      const cap = dtoCap(dto);
+      const ok = stricter ? cap !== null && max < cap : cap === max;
+      if (!ok) wrong.push(`${key}: bảng ghi ${max}${stricter ? ' (chặt hơn DTO)' : ''}, DTO ${dto} là ${cap}`);
       if (input.maxLength !== max) wrong.push(`${input.file}:${input.line} ${key}: maxLength ${input.maxLength} ≠ ${max}`);
     }
     expect(wrong).toEqual([]);
@@ -132,6 +157,15 @@ describe('ô gõ chữ ở màn quản trị khớp trần DTO (L4-03)', () => {
   it('bảng không còn dòng của ô đã bị xoá hoặc đổi tên', () => {
     const keys = new Set(found.map((f) => f.key));
     expect([...Object.keys(INPUT_LIMITS), ...Object.keys(EXEMPT_INPUTS)].filter((k) => !keys.has(k))).toEqual([]);
+  });
+
+  it('ô đã có maxLength đều có dòng trong bảng (đối chiếu DTO) hoặc dòng miễn', () => {
+    const unchecked = found.filter((f) => f.maxLength !== null && !(f.key in INPUT_LIMITS) && !(f.key in EXEMPT_INPUTS));
+    expect(unchecked.map((f) => `${f.file}:${f.line}  ${f.key}  maxLength=${f.maxLength}`)).toEqual([]);
+  });
+
+  it('dòng `stricter` ghi rõ lý do', () => {
+    expect(Object.entries(INPUT_LIMITS).filter(([, v]) => v.stricter !== undefined && v.stricter.trim().length < 8)).toEqual([]);
   });
 
   it('maxLength là con số hoặc hằng số đọc được, trừ ô được khai rõ trong bảng', () => {
