@@ -74,6 +74,9 @@ export class UserBlockService {
   async revokeSessions(adminId: string, userId: string, rawReason: string) {
     const reason = rawReason.trim();
     if (!reason) throw new BadRequestException('Cần ghi lý do cắt phiên đăng nhập.');
+    if (userId === adminId) {
+      throw new BadRequestException('Không tự cắt phiên của chính mình. Dùng Đăng xuất mọi thiết bị trong Cài đặt.');
+    }
     const result = await this.prisma.$transaction(async (tx) => {
       const now = new Date();
       // Lệnh đầu: ghi mốc và giữ khoá dòng tới commit (xem AuthService.revokeAllSessions).

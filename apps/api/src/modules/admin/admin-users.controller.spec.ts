@@ -44,3 +44,20 @@ describe('AdminUsersController — cắt phiên (L1-04)', () => {
     expect(validateSync(plainToInstance(RevokeSessionsDto, body)).length).toBeGreaterThan(0);
   });
 });
+
+describe('AdminUsersController — chi tiết kèm người xem (m5)', () => {
+  it('chuyển id admin đang xem sang service để tính cờ được cắt phiên', async () => {
+    const admin = { getUserDetail: jest.fn().mockResolvedValue({}) };
+    const ctrl = new AdminUsersController({} as never, admin as never);
+    await ctrl.detail('admin1', 'u9');
+    expect(admin.getUserDetail).toHaveBeenCalledWith('u9', 'admin1');
+  });
+});
+
+describe('DTO lý do: cắt khoảng trắng trước khi kiểm độ dài (nit)', () => {
+  it.each([BlockUserDto, RevokeSessionsDto])('%p: "  ab  " bị từ chối vì chỉ còn 2 ký tự sau khi cắt', (Dto) => {
+    expect(validateSync(plainToInstance(Dto, { reason: '  ab  ' })).length).toBeGreaterThan(0);
+    expect(validateSync(plainToInstance(Dto, { reason: '  abc  ' }))).toHaveLength(0);
+    expect(plainToInstance(Dto, { reason: '  abc  ' }).reason).toBe('abc');
+  });
+});

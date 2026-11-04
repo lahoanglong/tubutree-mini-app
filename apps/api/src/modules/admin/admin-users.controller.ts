@@ -1,5 +1,6 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Put } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import { ArrayMaxSize, IsArray, IsString, MaxLength, MinLength } from 'class-validator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -7,12 +8,14 @@ import { UserBlockService } from './user-block.service';
 import { AdminService } from './admin.service';
 import { AllowStaff } from '../../common/staff-permissions';
 
+const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
+
 export class BlockUserDto {
-  @IsString() @MinLength(3) @MaxLength(500) reason!: string;
+  @Transform(trim) @IsString() @MinLength(3) @MaxLength(500) reason!: string;
 }
 
 export class RevokeSessionsDto {
-  @IsString() @MinLength(3) @MaxLength(500) reason!: string;
+  @Transform(trim) @IsString() @MinLength(3) @MaxLength(500) reason!: string;
 }
 
 export class StaffPermissionsDto {
@@ -32,8 +35,8 @@ export class AdminUsersController {
   /** Hồ sơ + đơn + sổ ví + Điểm Xanh + lịch sử vai trò/khoá (ADMINOPS-11). CSKH xem được để trả lời khách. */
   @AllowStaff('CSKH')
   @Get(':id/detail')
-  detail(@Param('id') id: string) {
-    return this.admin.getUserDetail(id);
+  detail(@CurrentUser('sub') viewerId: string, @Param('id') id: string) {
+    return this.admin.getUserDetail(id, viewerId);
   }
 
   @Put(':id/staff-permissions')

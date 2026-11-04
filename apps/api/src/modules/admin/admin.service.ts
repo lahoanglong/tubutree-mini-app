@@ -746,7 +746,8 @@ export class AdminService {
    * Chi tiết một người dùng cho admin/CSKH (ADMINOPS-11): hồ sơ + số dư, đơn gần nhất, sổ ví, Điểm Xanh, lịch sử vai trò
    * (sổ user_admin_events + quyền cấp theo SĐT) và lịch sử khoá. Mỗi phần tối đa DETAIL_TAKE dòng mới nhất.
    */
-  async getUserDetail(userId: string) {
+  /** viewerId: admin đang xem, để tắt cờ sessionsRevocable với chính mình (cắt phiên mình thì dùng Đăng xuất mọi thiết bị). */
+  async getUserDetail(userId: string, viewerId?: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -764,10 +765,15 @@ export class AdminService {
         blockedAt: true,
         blockedReason: true,
         createdAt: true,
+        zaloId: true,
+        mergedIntoId: true,
         tier: { select: { name: true } },
       },
     });
     if (!user) throw new NotFoundException('Không tìm thấy người dùng.');
+    const { zaloId, mergedIntoId, ...userFields } = user;
+    // Khách tạm (guest_...) và dòng khách đã gộp không có phiên nào để cắt; chính admin thì dùng nút của khách.
+    const sessionsRevocable = userId !== viewerId && !mergedIntoId && !(zaloId?.startsWith('guest_') ?? false);
     const take = AdminService.DETAIL_TAKE;
     const [orders, orderTotal, wallet, points, events, partnerEvents, grants] = await Promise.all([
       this.prisma.order.findMany({
@@ -815,7 +821,7 @@ export class AdminService {
     const actorName = new Map(actors.map((a) => [a.id, a.fullName ?? a.phone ?? a.id]));
     const withActor = <T extends { actorId: string | null }>(e: T) => ({ ...e, actorName: e.actorId ? (actorName.get(e.actorId) ?? null) : null });
     return {
-      user,
+      user: { ...userFields, sessionsRevocable },
       orders: { items: orders, total: orderTotal },
       wallet,
       points,

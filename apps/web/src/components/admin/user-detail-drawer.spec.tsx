@@ -343,8 +343,21 @@ describe('UserDetailDrawer — Cắt phiên (L1-04)', () => {
       ...DETAIL,
       blockHistory: [{ id: 'e1', kind: 'SESSIONS_REVOKED', fromValue: null, toValue: '2', reason: 'Nghi lộ phiên', actorId: 'a1', actorName: 'Admin', createdAt: '2026-11-05T03:00:00.000Z' }],
     });
-    const text = section(body, 'Lịch sử khoá').textContent ?? '';
+    const text = section(body, 'Khoá và phiên đăng nhập').textContent ?? '';
     expect(text).toContain('Cắt mọi phiên đăng nhập (2 phiên)');
     expect(text).toContain('Nghi lộ phiên');
+  });
+
+  it.each([
+    ['chính mình / khách tạm / dòng đã gộp (API trả sessionsRevocable=false)', false],
+  ])('m5: ẩn nút Cắt phiên với %s', async (_label, flag) => {
+    const body = await open({ ...DETAIL, user: { ...DETAIL.user, sessionsRevocable: flag } });
+    expect(body.querySelector('section[aria-label="Phiên đăng nhập"]')).toBeNull();
+    expect(byText(body, 'button', 'Cắt phiên')).toBeNull();
+  });
+
+  it('m5: tài khoản thường (sessionsRevocable=true) vẫn có nút', async () => {
+    const body = await open({ ...DETAIL, user: { ...DETAIL.user, sessionsRevocable: true } });
+    expect(byText(section(body, 'Phiên đăng nhập'), 'button', 'Cắt phiên')).not.toBeNull();
   });
 });

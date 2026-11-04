@@ -71,6 +71,12 @@ describe('UserBlockService.revokeSessions — cắt phiên không khoá tài kho
     expect(sessions.invalidate).toHaveBeenCalledWith('u9');
   });
 
+  it('m5: admin tự cắt phiên của chính mình → 400 kèm hướng dẫn, không ghi gì', async () => {
+    const { svc, tx } = revokeSvc();
+    await expect(svc.revokeSessions('admin1', 'admin1', 'thử cắt')).rejects.toThrow('Không tự cắt phiên của chính mình. Dùng Đăng xuất mọi thiết bị trong Cài đặt.');
+    expect(tx.user.updateMany).not.toHaveBeenCalled();
+  });
+
   it('lý do rỗng sau khi cắt khoảng trắng → 400, không ghi gì', async () => {
     const { svc, tx } = revokeSvc();
     await expect(svc.revokeSessions('admin1', 'u9', '   ')).rejects.toBeInstanceOf(BadRequestException);

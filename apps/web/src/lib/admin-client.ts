@@ -2260,6 +2260,8 @@ export interface AdminUserDetail {
     blockedReason: string | null;
     createdAt: string;
     tier: { name: string } | null;
+    /** false: chính admin đang xem, khách tạm hoặc dòng khách đã gộp (không có phiên để cắt). Thiếu = bản API cũ, coi như cắt được. */
+    sessionsRevocable?: boolean;
   };
   orders: {
     items: { id: string; code: string; status: string; paymentMethod: string; paymentStatus: string; total: number; createdAt: string; fulfiller: string }[];

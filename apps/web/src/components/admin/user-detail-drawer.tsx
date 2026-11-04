@@ -149,7 +149,7 @@ function DetailBody({ d, isAdmin, onOpenOrder, onOpenUserOrders }: { d: AdminUse
 
       {isAdmin && <WasteFlagsSection userId={u.id} />}
 
-      {isAdmin && <RevokeSessionsSection userId={u.id} />}
+      {isAdmin && u.sessionsRevocable !== false && <RevokeSessionsSection userId={u.id} />}
 
       <Section title="Đơn hàng" count={d.orders.total}>
         {d.orders.items.length === 0 ? (
@@ -276,9 +276,9 @@ function DetailBody({ d, isAdmin, onOpenOrder, onOpenUserOrders }: { d: AdminUse
         </Section>
       )}
 
-      <Section title="Lịch sử khoá">
+      <Section title="Khoá và phiên đăng nhập">
         {d.blockHistory.length === 0 ? (
-          <p className="text-stone-500">Chưa từng bị khoá.</p>
+          <p className="text-stone-500">Chưa từng bị khoá hay cắt phiên.</p>
         ) : (
           <ul className="divide-y divide-stone-100">
             {d.blockHistory.map((e) => (
