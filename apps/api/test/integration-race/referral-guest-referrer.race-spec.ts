@@ -640,7 +640,7 @@ describe('Khách là người mời: gộp mang theo danh tính giới thiệu (
     await merge(g.id, t);
     const merged = await prisma.user.findUniqueOrThrow({ where: { id: g.id } });
     zaloIdForNextCall = `zalo_new_${randCode(8)}`;
-    await expect(auth.ensurePhoneForCurrentUser(g.id, 'code', 'access')).rejects.toBeInstanceOf(ConflictException);
+    await expect(auth.ensurePhoneForCurrentUser(g.id, 'code', 'access')).rejects.toBeInstanceOf(UnauthorizedException);
     const row = await prisma.user.findUniqueOrThrow({ where: { id: g.id } });
     expect(row.zaloId).toBe(merged.zaloId);
     expect(row.mergedIntoId).toBe(t.id);
@@ -658,7 +658,7 @@ describe('Khách là người mời: gộp mang theo danh tính giới thiệu (
       zaloIdForNextCall = z2;
       return res;
     }) as never);
-    await expect(auth.ensurePhoneForCurrentUser(g.id, 'code', 'access')).rejects.toBeInstanceOf(ConflictException);
+    await expect(auth.ensurePhoneForCurrentUser(g.id, 'code', 'access')).rejects.toBeInstanceOf(UnauthorizedException);
     const row = await prisma.user.findUniqueOrThrow({ where: { id: g.id } });
     expect(row.zaloId).toContain('_merged_');
     expect(row.mergedIntoId).toBe(t.id);
@@ -669,9 +669,9 @@ describe('Khách là người mời: gộp mang theo danh tính giới thiệu (
     const t = await zaloUser();
     await merge(g.id, t);
     zaloIdForNextCall = t.zaloId!;
-    await expect(auth.ensurePhoneForCurrentUser(g.id, 'code', 'access')).rejects.toBeInstanceOf(ConflictException);
+    await expect(auth.ensurePhoneForCurrentUser(g.id, 'code', 'access')).rejects.toBeInstanceOf(UnauthorizedException);
     zaloIdForNextCall = `zalo_other_${randCode(8)}`;
-    await expect(auth.ensurePhoneForCurrentUser(g.id, 'code', 'access')).rejects.toBeInstanceOf(ConflictException);
+    await expect(auth.ensurePhoneForCurrentUser(g.id, 'code', 'access')).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
   it('(9c) R2-Y: khách B còn trỏ khách A đã gộp vào T; gộp B vào T ‖ cấp thưởng cho B (ép xen kẽ) → không deadlock (5 vòng)', async () => {
@@ -778,7 +778,7 @@ describe('Khách là người mời: gộp mang theo danh tính giới thiệu (
     await expect(auth.refresh(login.refreshToken!)).rejects.toBeInstanceOf(UnauthorizedException);
     await expect(auth.refresh(rotated.refreshToken!)).rejects.toBeInstanceOf(UnauthorizedException);
     zaloIdForNextCall = t.zaloId!;
-    await expect(auth.ensurePhoneForCurrentUser(g.id, 'code', 'access')).rejects.toBeInstanceOf(ConflictException);
+    await expect(auth.ensurePhoneForCurrentUser(g.id, 'code', 'access')).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
   async function anonymize(userId: string) {

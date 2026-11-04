@@ -772,7 +772,8 @@ export class AdminService {
     });
     if (!user) throw new NotFoundException('Không tìm thấy người dùng.');
     const { zaloId, mergedIntoId, ...userFields } = user;
-    // Khách tạm (guest_...) và dòng khách đã gộp không có phiên nào để cắt; chính admin thì dùng nút của khách.
+    // Ẩn nút với khách tạm (guest_...) là chọn lựa sản phẩm, không phải vì họ không có phiên; dòng khách đã gộp không còn phiên nào;
+    // chính admin thì dùng nút Đăng xuất mọi thiết bị của khách.
     const sessionsRevocable = userId !== viewerId && !mergedIntoId && !(zaloId?.startsWith('guest_') ?? false);
     const take = AdminService.DETAIL_TAKE;
     const [orders, orderTotal, wallet, points, events, partnerEvents, grants] = await Promise.all([

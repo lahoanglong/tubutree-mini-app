@@ -202,6 +202,7 @@ describe('Gộp đồng thời 4 khách vào một tài khoản (real Postgres)'
     const again = summarize(await Promise.allSettled(ctx.guests.map((g) => merge(g.id))));
     expect(again.fulfilled).toHaveLength(0);
     expect(again.errors).toHaveLength(4);
+    for (const e of again.errors) expect(e).toMatch(/UnauthorizedException/);
     await expectMerged(ctx, before);
   });
 });
