@@ -593,9 +593,9 @@ Lượt ngày đầu tiên sau deploy (chưa có dòng `AffiliateService.dailyWa
 - API cũ nhận `w=480` thì trả 400: web lùi về ảnh gốc một lần (`fallBackToOriginal`), Mini App ở mục 2x (và 3x) cũng lùi về ảnh gốc. Ảnh không vỡ nhưng nặng.
 - Quay API về `:prev-*` thiếu `w=480` thì Mini App bản mới nhận 400 như trên. Nếu quay API qua mốc này và phải giữ lâu thì cân nhắc đẩy lại Mini App bản cũ.
 
-### 1.19 Hạn chờ của Postgres đặt trong `DATABASE_URL` (hard/1105, L3-05)
+### 1.19 Hạn chờ của Postgres chỉ cho tiến trình API (hard/1105, L3-05)
 
-Mã API chỉ đổi `maxWait` mặc định của `$transaction` từ 2 giây lên 5 giây (`PRISMA_TRANSACTION_OPTIONS`, `apps/api/src/prisma/prisma.service.ts`); chỗ nào tự truyền `maxWait`/`timeout` thì giữ nguyên. Ba hạn chờ phía Postgres do bước deploy áp, qua tham số `options` của `DATABASE_URL` (không dùng `ALTER ROLE`, để migrate và công cụ dùng role `tubu` không bị ảnh hưởng ngầm):
+Mã API đổi `maxWait` mặc định của `$transaction` từ 2 giây lên 5 giây (`PRISMA_TRANSACTION_OPTIONS`, `apps/api/src/prisma/prisma.service.ts`); chỗ nào tự truyền `maxWait`/`timeout` thì giữ nguyên. Ba hạn chờ phía Postgres đặt bằng một biến môi trường riêng, `DB_SESSION_OPTIONS`; `DATABASE_URL` giữ nguyên, không có `options=`. Lúc khởi động `PrismaService` nối `options=` (đã mã hoá URL) vào URL của chính nó. Nhờ vậy `prisma migrate deploy`, `seed:reference` và mọi script dùng `new PrismaClient()` luôn chạy với URL trơn, migration nặng không bị cắt ở 30 giây (không để lại migration dở, mã P3009).
 
 | Tham số | Giá trị | Vì sao |
 |---|---|---|
@@ -603,31 +603,17 @@ Mã API chỉ đổi `maxWait` mặc định của `$transaction` từ 2 giây l
 | `lock_timeout` | `10s` | chờ khoá dòng/bảng quá 10 giây thì báo lỗi (mã `55P03`, `throwIfLockBusy` đã đổi thành 409 ở các đường tiền) thay vì xếp hàng dồn |
 | `idle_in_transaction_session_timeout` | `30s` | transaction mở mà không gửi lệnh nào 30 giây thì Postgres cắt, nhả khoá |
 
-Dạng URL-encoded đúng (một tham số `options`, các cờ cách nhau bằng `%20`, dấu `=` là `%3D`):
+**Cách bật.** Thêm đúng một dòng vào `/opt/tubutree/.env` (giữ nháy đơn quanh giá trị vì có khoảng trắng; compose đọc `env_file` bỏ nháy bao quanh):
 
 ```
-DATABASE_URL=postgresql://<user>:<mật khẩu đã mã hoá URL>@postgres:5432/<db>?connection_limit=20&pool_timeout=30&options=-c%20statement_timeout%3D30s%20-c%20lock_timeout%3D10s%20-c%20idle_in_transaction_session_timeout%3D30s
+DB_SESSION_OPTIONS='-c statement_timeout=30s -c lock_timeout=10s -c idle_in_transaction_session_timeout=30s'
 ```
 
-Đã thử trên Prisma 5.22 + Postgres 16: một `PrismaClient` dùng URL này đọc ra `statement_timeout=30s`, `lock_timeout=10s`, `idle_in_transaction_session_timeout=30s`, và `prisma migrate deploy`/`migrate diff` vẫn chạy bình thường với URL có `options`.
+Không sửa compose, không sửa `CMD` của Dockerfile: `api` đã có `env_file: .env`, nên biến tới container khi nó được tạo lại ở bước 9. Biến đó cũng vào container chạy `run --rm` của bước 7, 7b, 7c, nhưng Prisma CLI chỉ đọc `DATABASE_URL`, nên không ảnh hưởng.
 
-**Việc của 4f (gói deploy).** `docker-compose.vietnix.yml` dòng `DATABASE_URL:` của service `api` đang kết thúc bằng `?connection_limit=20&pool_timeout=30`. Đề xuất (không sửa trong gói này): thêm đuôi `${DB_SESSION_OPTIONS:-}` vào cuối dòng đó, và đặt trong `/opt/tubutree/.env` đúng một dòng
+Định dạng bị kiểm lúc khởi động (`env.validation.ts`) và bởi bước kiểm `.env` của deploy: chỉ nhận các cặp `-c <tên>=<giá trị>`, tên thuộc ba tên trong bảng, giá trị là số kèm `ms`, `s` hoặc `min` (hoặc số trần, tính bằng mili giây). Sai định dạng, trùng tên, hoặc `DATABASE_URL` đã tự mang `options=` thì API KHÔNG khởi động, kèm thông báo tiếng Việt nêu đúng chỗ sai.
 
-```
-DB_SESSION_OPTIONS=&options=-c%20statement_timeout%3D30s%20-c%20lock_timeout%3D10s%20-c%20idle_in_transaction_session_timeout%3D30s
-```
-
-Compose chỉ thay biến lúc tạo container, nên tạo lại `api` (bước 9) là đủ; không đụng `postgres`/`redis` (xem cảnh báo ở mục 1.5).
-
-**Migration KHÔNG chạy với options này.** Hai chỗ chạy `prisma migrate deploy` bằng cùng `DATABASE_URL` của `api`: bước 7 (`$DC run --rm --no-deps api pnpm exec prisma migrate deploy`) và `CMD` của `apps/api/Dockerfile` (`prisma migrate deploy && node dist/main.js`). Chỉ mục hay backfill dài sẽ bị cắt ở 30 giây và để migration dở (`finished_at IS NULL`). Quyết định: bước migrate riêng (bước 7) chạy với URL KHÔNG có options bằng cách xoá biến ngay trên dòng lệnh:
-
-```bash
-env DB_SESSION_OPTIONS= $DC run --rm --no-deps api pnpm exec prisma migrate deploy
-```
-
-Biến đặt trong shell thắng `.env` khi compose thay biến, nên container migrate nhận URL trơn. `CMD` của Dockerfile chạy lại `migrate deploy` lúc container khởi động: sau bước 7 không còn gì chờ áp nên xong ngay; nếu ai bỏ bước 7 mà còn migration chờ, lệnh đó chạy dưới options và có thể bị cắt, API không lên (an toàn, không để lại trạng thái hỏng ngoài migration dở: xử lý theo mục 7.1). Đề xuất cho 4f nếu muốn gỡ hẳn rủi ro đó: đổi `CMD` thành chạy migrate với `DATABASE_URL` đã bỏ phần `options` (không sửa ở gói này vì `Dockerfile` là của 4f).
-
-Migration của gói hd2 (`20261105140000_payouts_status_index`) chỉ dựng chỉ mục `payouts_status_idx` trên `payouts` (bảng nhỏ, vài chục đến vài trăm dòng): không phải migration nặng, không vào `HEAVY_MIGRATIONS`, vẫn chạy dưới URL trơn như mọi migration.
+**Cái nào bị ảnh hưởng.** Chỉ tiến trình dựng `PrismaService` qua Nest (`src/main.ts`, `src/bootstrap.ts`), tức container `api` đang chạy. Mọi script đều tự dựng `new PrismaClient()` nên dùng URL trơn: `scripts/reconcile-points.ts`, `reconcile-wallet.ts`, `backfill-analytics-2026-09.ts`, `backfill-ns1.ts`, `sample-storefronts.ts`, `dev-token.ts`, `grant-admin.js`, `prisma/seed.ts`, `prisma/seed-reference.ts` (bước 7b), `prisma/cleanup-demo-data.ts` (bước 7c), `prisma/check-partial-indexes.ts`. Ngoại lệ có chủ ý: `go-live:check` dựng URL giống API (cùng `DB_SESSION_OPTIONS`) để đọc ra đúng hạn chờ mà API nhận.
 
 **Việc chạy lâu: đã xét từng chỗ.**
 
@@ -636,23 +622,25 @@ Migration của gói hd2 (`20261105140000_payouts_status_index`) chỉ dựng ch
 | Xuất CSV (`streamCsv`, `orderCsvChunks`, `userCsvChunks`) | Không: đọc từng lô 500 dòng, mỗi lô một câu `findMany` ngắn; không giữ transaction | Không cần |
 | Dọn log (`DataRetentionService.deleteInBatches`) | Không: mỗi câu `DELETE ... LIMIT 5000` rồi nghỉ 200 ms, cột lọc có chỉ mục theo thời gian | Không cần. Nếu một lô vẫn bị cắt (`57014`) thì cron ghi lỗi và lượt sau làm tiếp từ chỗ còn lại |
 | Go-live collect (`config/go-live/collect.ts`) | Không: tx đã có `timeout: 30_000` của Prisma, bằng hạn của Postgres; toàn `count`/`findMany` trên cột có chỉ mục | Không cần |
-| Dọn dữ liệu demo (`config/demo-data/cleanup.ts`, chạy tay ở bước 7c) | Có thể: tx đặt `timeout: 60_000` và quét `products`/`variations`/`coupons` theo điều kiện chuỗi | Đã thêm `allowLongStatements(tx)` (`SET LOCAL statement_timeout = 120s` qua `set_config(..., true)`) ở đầu cả hai tx (xem trước và áp) |
+| Dọn dữ liệu demo (`config/demo-data/cleanup.ts`, chạy tay ở bước 7c) | Có thể: tx đặt `timeout: 60_000` và quét `products`/`variations`/`coupons` theo điều kiện chuỗi | Bước 7c chạy bằng URL trơn nên không dính hạn chờ. Vẫn giữ `allowLongStatements(tx)` (`set_config('statement_timeout', '120s', true)`) ở đầu cả hai tx, phòng khi hàm được gọi từ tiến trình API |
 | Backfill/recompute nền (`recomputeSoldCounts` và các cron sổ) | Thuộc gói hd1 (index/truy vấn của hd1) | Không đổi ở gói này; nếu hd1 giữ một câu dài thì tự bọc `allowLongStatements` |
-| Script chạy tay qua `$DC run --rm --no-deps api ...`: `scripts/reconcile-points.ts` (`pnpm reconcile:points`), `scripts/reconcile-wallet.ts` (`pnpm reconcile:wallet`), `scripts/backfill-analytics-2026-09.ts`, `scripts/backfill-ns1.ts`, `prisma/cleanup-demo-data.ts` (bước 7c), `prisma/seed-reference.ts` (bước 7b) | Có: quét/đối soát/ghi cả bảng (sổ điểm, ví, analytics), một câu có thể quá 30 giây | Chạy bằng URL không options: `env DB_SESSION_OPTIONS= $DC run --rm --no-deps api pnpm <lệnh>`. `go-live:check` và `scripts/sample-storefronts.ts` chỉ đọc/ghi ít, để mặc định |
-| Backup/`pg_dump` (bước 6) | Có | Chạy bằng `psql`/`pg_dump` của container `postgres`, không qua `DATABASE_URL` của app nên không dính options |
+| Script chạy tay qua `$DC run --rm --no-deps api ...` (reconcile, backfill, seed) | Có thể: quét/đối soát/ghi cả bảng | Không dính: các script dùng URL trơn (xem trên), không cần lệnh đặc biệt |
+| Backup/`pg_dump` (bước 6) | Có | Chạy bằng `psql`/`pg_dump` của container `postgres`, không qua `DATABASE_URL` của app nên không dính hạn chờ |
 
-**Câu kiểm sau deploy (bước 9 trở đi).** `psqlq -c "SHOW statement_timeout"` KHÔNG chứng minh được gì: `psql` mở phiên riêng không có `options`, luôn ra `0`. Phải hỏi qua đúng kết nối của app (role app, cùng URL):
+Migration của gói hd2 (`20261105140000_payouts_status_index`) chỉ dựng chỉ mục `payouts_status_idx` trên `payouts` (bảng nhỏ, vài chục đến vài trăm dòng): không phải migration nặng, không vào `HEAVY_MIGRATIONS`.
+
+**Câu kiểm sau deploy (bước 9 trở đi).** `psqlq -c "SHOW statement_timeout"` KHÔNG chứng minh được gì: `psql` mở phiên riêng không có `options`, luôn ra `0`. Phải hỏi qua đúng kết nối của app, dựng URL bằng cùng hàm với `PrismaService`:
 
 ```bash
-$DC exec -T api node -e "const {PrismaClient}=require('@prisma/client');const p=new PrismaClient();p.\$queryRaw\`SELECT current_setting('statement_timeout') AS st, current_setting('lock_timeout') AS lt, current_setting('idle_in_transaction_session_timeout') AS it\`.then(r=>{console.log(JSON.stringify(r));return p.\$disconnect()})"
+$DC exec -T api node -e "const {PrismaClient}=require('@prisma/client');const {buildDatasourceUrl}=require('./dist/prisma/db-session-options');const u=buildDatasourceUrl(process.env.DATABASE_URL,process.env.DB_SESSION_OPTIONS);const p=new PrismaClient(u?{datasourceUrl:u}:undefined);p.\$queryRaw\`SELECT current_setting('statement_timeout') AS st, current_setting('lock_timeout') AS lt, current_setting('idle_in_transaction_session_timeout') AS it\`.then(r=>{console.log(JSON.stringify(r));return p.\$disconnect()})"
 ```
 
-Kỳ vọng đúng một dòng `[{"st":"30s","lt":"10s","it":"30s"}]`. Kiểm thêm log API 10 phút đầu: `$DC logs --since 10m api | grep -ciE '57014|55P03|P2028'` nên là 0 hoặc rất ít; nhiều hơn thì nâng `statement_timeout` rồi tạo lại `api`, không gỡ cả ba.
+Kỳ vọng đúng một dòng `[{"st":"30s","lt":"10s","it":"30s"}]`. `pnpm go-live:check` có dòng `db.session_timeouts` làm cùng việc: PASS khi khớp, FAIL khi đã khai báo mà đọc ra khác, WARN `chưa đặt hạn chờ Postgres (runbook 1.19)` khi `.env` chưa có biến. Kiểm thêm log API 10 phút đầu: `$DC logs --since 10m api | grep -ciE '57014|55P03|P2028'` nên là 0 hoặc rất ít; nhiều hơn thì nâng `statement_timeout` trong `.env` rồi tạo lại `api`, không gỡ cả ba.
 
-Rollback: xoá dòng `DB_SESSION_OPTIONS` khỏi `.env` rồi `$DC up -d --no-deps api` (hoặc quay API về `:prev-*`: ảnh cũ không biết `maxWait` 5 giây nhưng vẫn chạy được với URL có options).
+Rollback: xoá dòng `DB_SESSION_OPTIONS` khỏi `.env` rồi `$DC up -d --no-deps api` (không cần quay image: ảnh cũ không đọc biến này, vẫn chạy với `DATABASE_URL` trơn).
 
-- [ ] `.env` có `DB_SESSION_OPTIONS` (do 4f) và compose đã nối vào `DATABASE_URL`
-- [ ] Bước 7 chạy dưới `env DB_SESSION_OPTIONS=`
+- [ ] `.env` có dòng `DB_SESSION_OPTIONS` đúng mẫu, trước bước 9
+- [ ] `go-live:check` không còn WARN `db.session_timeouts`
 - [ ] Câu kiểm trên ra `[{"st":"30s","lt":"10s","it":"30s"}]`
 
 ### 1.20 Hàng thông báo tách đôi, worker ZNS 5 chỗ (hard/1105, L3-06)

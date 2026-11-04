@@ -60,7 +60,7 @@ Kế hoạch: `PLAN.md`. Phát hiện và quyết định của chủ: `audit-11
   - Opus vòng 2 APPROVE (1 MINOR runbook §1.20, NIT ping không đóng breaker), sửa ở cd0e61efe, 992dcef52. Gộp vào w2 ở 587f372e7.
   - Migration đổi tên thành `20261105140000_payouts_status_index` (index thường, chưa lên đâu).
   - Còn lại, có từ trước (gói sau): log ZNS kẹt RETRYING khi job hỏng hẳn chặn tin cùng khoá; đề xuất coi RETRYING không đổi quá ~1 giờ là chết.
-  - Deploy cần phiên web: `DATABASE_URL` của api trong compose thêm `${DB_SESSION_OPTIONS:-}`; `.env` VPS thêm `DB_SESSION_OPTIONS`; migrate chạy với `DB_SESSION_OPTIONS=` rỗng; CMD Dockerfile chạy migrate bằng URL có options (đề xuất sửa).
+  - Deploy: thêm một dòng `DB_SESSION_OPTIONS='...'` vào `.env` VPS rồi tạo lại `api` (bước 9). Không đổi compose, Dockerfile hay lệnh migrate: chỉ `PrismaService` đọc biến này, CLI Prisma luôn dùng `DATABASE_URL` trơn. Runbook §1.19.
 - hd3: 6 commit b48416624..02eefc05c, không migration. Opus APPROVE (3 MINOR), sửa ở b3a2cec09..ce5aad3d8 (kẹp limit 50 thay vì 400, PDP bớt cột kéo từ DB, AdminImage tải khi vào khung nhìn + ô lỗi). Opus vòng 2 APPROVE (rút lại điểm "PDP lộ cột": `toPublicProductDetail` vốn đã lọc), 3 NIT sửa ở 0ef6e785f. Gộp vào w2 ở b1a0388e6.
   - Response admin đổi (ảnh thành ref, route ảnh admin mới chỉ ADMIN): API và web phải lên cùng lần deploy, rollback cùng cặp. Runbook §1.21 và §7.4.
 - Gộp main c68ce32f3 (#170) ở e265c0dd5, không xung đột.
