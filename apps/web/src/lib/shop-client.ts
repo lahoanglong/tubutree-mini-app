@@ -305,11 +305,13 @@ export interface WalletTxn {
 }
 export interface WalletTxnPage {
   data: WalletTxn[];
-  meta: { page: number; limit: number; total: number };
+  meta: { page: number; limit: number; total: number; nextCursor?: string | null };
 }
 export const WALLET_PAGE_SIZE = 20;
-export const getWalletTransactions = (page: number) =>
-  apiFetch<WalletTxnPage>(`/me/wallet/transactions?page=${page}&limit=${WALLET_PAGE_SIZE}`);
+export const getWalletTransactions = (page: number, cursor?: string) =>
+  apiFetch<WalletTxnPage>(
+    `/me/wallet/transactions?page=${page}&limit=${WALLET_PAGE_SIZE}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
+  );
 
 export interface PointsTxn {
   id: string;
@@ -384,15 +386,16 @@ export interface OrderListFilter {
 }
 export interface OrdersPage {
   data: OrderDTO[];
-  meta: { page: number; limit: number; total: number };
+  meta: { page: number; limit: number; total: number; nextCursor?: string | null };
 }
 export const ORDERS_PAGE_SIZE = 20;
 /** Một trang đơn (mới nhất trước) kèm tổng số — API mặc định chỉ trả 20 đơn đầu nên danh sách phải tự tải thêm. */
-export const fetchOrdersPage = (page: number, filter: OrderListFilter = {}) => {
+export const fetchOrdersPage = (page: number, filter: OrderListFilter = {}, cursor?: string) => {
   const qs = new URLSearchParams({ page: String(page), limit: String(ORDERS_PAGE_SIZE) });
   if (filter.status) qs.set('status', filter.status);
   if (filter.group) qs.set('group', filter.group);
   if (filter.q) qs.set('q', filter.q);
+  if (cursor) qs.set('cursor', cursor);
   return apiFetch<OrdersPage>(`/orders?${qs.toString()}`);
 };
 
