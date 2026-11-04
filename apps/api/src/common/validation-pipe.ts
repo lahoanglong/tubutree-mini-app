@@ -230,6 +230,14 @@ export const FIELD_LABELS: Record<string, string> = {
   zaloTemplateId: 'Mã mẫu ZNS',
 };
 
+/** Nhãn riêng của một trường trong một DTO, khi chữ trên màn hình khác nhãn toàn cục (cùng tên `category` mà là "Nhóm", "Chủ đề" hay "Danh mục"). */
+export const FIELD_LABELS_BY_DTO: Record<string, Record<string, string>> = {
+  CreateQuizDto: { category: 'Chủ đề' },
+  UpdateQuizDto: { category: 'Chủ đề' },
+  FeedQuery: { category: 'Chủ đề' },
+  ProductQuery: { category: 'Danh mục' },
+};
+
 const trailingNumber = (original: string): string => original.match(/(-?\d+(?:\.\d+)?)(?: characters| elements)?$/)?.[1] ?? '';
 const allowedValues = (original: string): string => {
   const list = original.split(':').slice(1).join(':').trim();
@@ -278,19 +286,25 @@ const TEMPLATES: Record<string, (subject: string, original: string) => string> =
 /** Có chữ có dấu tiếng Việt → thông điệp do dev tự viết trong DTO, giữ nguyên văn (cụ thể hơn câu chung). */
 const HAS_VIETNAMESE = /[ăâđêôơưàáạảãằắặẳẵầấậẩẫèéẹẻẽềếệểễìíịỉĩòóọỏõồốộổỗờớợởỡùúụủũừứựửữỳýỵỷỹ]/i;
 
-function translate(constraint: string, original: string, path: string[]): string {
+function translate(constraint: string, original: string, path: string[], dto?: string): string {
   const property = path[path.length - 1]!;
   if (constraint === 'whitelistValidation') return `Không nhận trường «${property}».`;
   if (HAS_VIETNAMESE.test(original)) return original;
 
   const named = [...path].reverse().find((seg) => !/^\d+$/.test(seg)) ?? property;
   const index = path.find((seg) => /^\d+$/.test(seg));
-  const label = FIELD_LABELS[named] ?? `Trường «${named}»`;
+  const own = named === property && dto ? FIELD_LABELS_BY_DTO[dto]?.[named] : undefined;
+  const label = own ?? FIELD_LABELS[named] ?? `Trường «${named}»`;
   const base = /^each value in /.test(original) ? `Mỗi mục của ${label.charAt(0).toLowerCase()}${label.slice(1)}` : label;
   const subject = index === undefined ? base : `${base} (mục ${Number(index) + 1})`;
 
   const template = TEMPLATES[constraint];
   return template ? template(subject, original) : `${subject} không hợp lệ.`;
+}
+
+function dtoName(e: ValidationError): string | undefined {
+  const target = e.target;
+  return target && typeof target === 'object' ? target.constructor?.name : undefined;
 }
 
 export function translateValidationErrors(errors: ValidationError[], parent: string[] = []): string[] {
@@ -301,7 +315,7 @@ export function translateValidationErrors(errors: ValidationError[], parent: str
     // null cũng trượt @IsString/@IsInt…: chỉ nói câu "không được để null", không kèm câu về kiểu dữ liệu.
     const entries = NOT_NULL_CONSTRAINT in constraints ? [[NOT_NULL_CONSTRAINT, constraints[NOT_NULL_CONSTRAINT]!] as const] : Object.entries(constraints);
     for (const [constraint, original] of entries) {
-      out.push(translate(constraint, original, path));
+      out.push(translate(constraint, original, path, dtoName(e)));
     }
     if (e.children?.length) out.push(...translateValidationErrors(e.children, path));
   }

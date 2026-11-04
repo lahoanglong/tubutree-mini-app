@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import { readdirSync, readFileSync, statSync } from 'fs';
 import { join } from 'path';
 import { getMetadataStorage } from 'class-validator';
-import { FIELD_LABELS } from './validation-pipe';
+import { FIELD_LABELS, FIELD_LABELS_BY_DTO } from './validation-pipe';
 
 /**
  * Lỗi 400 hiện nguyên văn message[0] cho khách/admin: trường không có nhãn sẽ hiện «Trường «companyName»».
@@ -80,5 +80,31 @@ describe('nhóm miễn "cờ đúng/sai" chỉ chứa trường thật sự là 
       }
     }
     expect([...new Set(notBoolean)].sort()).toEqual([]);
+  });
+});
+
+describe('FIELD_LABELS_BY_DTO: nhãn riêng theo DTO', () => {
+  it('mỗi mục trỏ tới một DTO có thật và trường có luật kiểm tra trong DTO đó', () => {
+    loadAllValidatedFiles();
+    const metas = (getMetadataStorage() as unknown as { validationMetadatas: Map<unknown, Array<{ propertyName: string; target: unknown }>> }).validationMetadatas;
+    const fieldsByClass = new Map<string, Set<string>>();
+    for (const list of metas.values()) {
+      for (const m of list) {
+        const name = (m.target as { name?: string }).name ?? '';
+        fieldsByClass.set(name, (fieldsByClass.get(name) ?? new Set()).add(m.propertyName));
+      }
+    }
+    const bad: string[] = [];
+    for (const [dto, fields] of Object.entries(FIELD_LABELS_BY_DTO)) {
+      const known = fieldsByClass.get(dto);
+      if (!known) bad.push(`${dto}: không có DTO này`);
+      else for (const f of Object.keys(fields)) if (!known.has(f)) bad.push(`${dto}.${f}: DTO không có trường này`);
+    }
+    expect(bad).toEqual([]);
+  });
+
+  it('mục theo DTO khác nhãn toàn cục (không thì thừa)', () => {
+    const same = Object.entries(FIELD_LABELS_BY_DTO).flatMap(([dto, fields]) => Object.entries(fields).filter(([f, l]) => FIELD_LABELS[f] === l).map(([f]) => `${dto}.${f}`));
+    expect(same).toEqual([]);
   });
 });

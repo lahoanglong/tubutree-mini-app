@@ -1,6 +1,9 @@
 import 'reflect-metadata';
 import { CreateFaqDto } from '../modules/faq/dto/faq.dto';
 import { CreateQuickReplyDto } from '../modules/cskh/dto/quick-reply.dto';
+import { CreateQuizDto } from '../modules/admin/admin-game-quiz.controller';
+import { ProductQuery } from '../modules/catalog/dto/product-query.dto';
+import { FeedQuery } from '../modules/feed/feed-query.dto';
 import { ListOrdersQuery } from '../modules/admin/admin.controller';
 import { DealerRewardDto } from '../modules/brand/dto/brand.dto';
 import { createValidationPipe } from './validation-pipe';
@@ -18,6 +21,13 @@ describe('nhãn lỗi trùng chữ trên màn quản trị', () => {
 
   it('threshold là ô "Mốc doanh số" của chương trình thưởng đại lý', async () => {
     expect(await messages(DealerRewardDto, { type: 'TOUR', title: 'Tour', threshold: -1 })).toEqual(['Mốc doanh số không được nhỏ hơn 0.']);
+  });
+
+  it('category đổi nhãn theo DTO: Chủ đề cho câu đố và bảng tin, Danh mục cho bộ lọc sản phẩm', async () => {
+    const quiz = await messages(CreateQuizDto, { question: 'q', options: ['a', 'b'], correct: 0, difficulty: 1, category: 'khong-co' });
+    expect(quiz?.[0]).toMatch(/^Chủ đề /);
+    expect((await messages(ProductQuery, { category: 5 }))?.[0]).toMatch(/^Danh mục /);
+    expect(await messages(FeedQuery, { category: 'x'.repeat(101) })).toEqual(['Chủ đề không được dài quá 100 ký tự.']);
   });
 
   it('storefront là ô "Gian hàng" của bộ lọc đơn', async () => {
