@@ -15,7 +15,8 @@ import { WishlistHeart } from '@/components/catalog/wishlist-heart';
 import { brandAccent } from '@/components/mini/brand-accent';
 import { createServerHttp } from '@/lib/core-http-server';
 import { isRetailOnly } from '@/lib/pdp-logic';
-import { galleryImages, jsonLdScript, plainText, productJsonLd } from '@/lib/product-seo';
+import { breadcrumbJsonLd, galleryImages, jsonLdScript, plainText, productJsonLd, productMetaDescription, productTitle } from '@/lib/product-seo';
+import { ogBase, withBrand } from '@/lib/og';
 import { SITE_URL } from '@/lib/site';
 import { ProductReviews, ProductReviewsFallback } from './product-reviews';
 import { PdpChatButton, PdpContentKitRow, PdpCoupons, PdpFlashBar, PdpFreeship, PdpGroupBuyRow, PdpLowStock, PdpPointsEarn, PdpShippingRow, PdpSold, PdpSubscribeRow } from './pdp-extras';
@@ -42,9 +43,9 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
   const product = await getProduct(slug);
-  if (!product) return { title: 'Không tìm thấy sản phẩm — Tubu Tree' };
-  const title = `${product.name} — ${product.brand} | Tubu Tree`;
-  const description = plainText(product.shortDesc ?? product.description).slice(0, 160);
+  if (!product) return { title: 'Không tìm thấy sản phẩm' };
+  const title = productTitle(product);
+  const description = productMetaDescription(product);
   const path = `/san-pham/${encodeURIComponent(product.slug)}`;
   const images = galleryImages(product).slice(0, 4);
   return {
@@ -52,8 +53,8 @@ export async function generateMetadata({
     description,
     // Canonical không kèm ?ref=/utm: link CTV chia sẻ là cùng một trang, không được tính là bản trùng.
     alternates: { canonical: path },
-    openGraph: { type: 'website', siteName: 'Tubu Tree', locale: 'vi_VN', url: path, title, description, images },
-    twitter: { card: images.length > 0 ? 'summary_large_image' : 'summary', title, description, images },
+    openGraph: { ...ogBase, url: path, title: withBrand(title), description, images: images.length > 0 ? images : ogBase.images },
+    twitter: { card: 'summary_large_image', title: withBrand(title), description, images: images.length > 0 ? images : ogBase.images.map((i) => i.url) },
   };
 }
 
@@ -284,6 +285,18 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
       </PdpSelectionProvider>
 
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdScript(productJsonLd(product, productUrl)) }} />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: jsonLdScript(
+            breadcrumbJsonLd([
+              { name: 'Trang chủ', href: '/' },
+              { name: product.brand, href: `/san-pham?brand=${encodeURIComponent(product.brand)}` },
+              { name: product.name, href: `/san-pham/${encodeURIComponent(product.slug)}` },
+            ]),
+          ),
+        }}
+      />
     </main>
   );
 }

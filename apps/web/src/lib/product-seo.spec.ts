@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ProductDetail } from './api';
-import { galleryImages, jsonLdScript, plainText, productJsonLd } from './product-seo';
+import { brandMetaDescription, breadcrumbJsonLd, galleryImages, jsonLdScript, plainText, productAvailability, productJsonLd, productMetaDescription, productTitle, trimAtWord } from './product-seo';
 
 const BASE: ProductDetail = {
   id: 'p1', slug: 'dau-goi', brand: 'Xanh Việt', name: 'Dầu gội bồ kết', shortDesc: 'Sạch dịu nhẹ', description: 'Mô tả dài.',
@@ -125,5 +125,86 @@ describe('jsonLdScript — nhúng an toàn vào <script>', () => {
     const out = jsonLdScript({ name: '</script><script>alert(1)</script>' });
     expect(out).not.toContain('</script>');
     expect(JSON.parse(out).name).toBe('</script><script>alert(1)</script>');
+  });
+});
+
+describe('productAvailability — gian hàng chưa nhận đơn (S6)', () => {
+  const unavailable = (reason?: 'STORE_PAUSED' | 'STORE_CLOSED') => ({ ...BASE, fulfiller: { kind: 'UNAVAILABLE' as const, name: 'Shop', shippingFee: null, freeShipFrom: null, ...(reason ? { reason } : {}) } });
+  it('STORE_PAUSED → OutOfStock dù còn tồn; lý do khác hoặc thiếu lý do → Discontinued', () => {
+    expect(productAvailability(unavailable('STORE_PAUSED'))).toBe('https://schema.org/OutOfStock');
+    expect(productAvailability(unavailable('STORE_CLOSED'))).toBe('https://schema.org/Discontinued');
+    expect(productAvailability(unavailable())).toBe('https://schema.org/Discontinued');
+  });
+  it('còn lại theo tồn kho, cả khi fulfiller là TUBU/MERCHANT', () => {
+    expect(productAvailability(BASE)).toBe('https://schema.org/InStock');
+    expect(productAvailability({ ...BASE, fulfiller: { kind: 'MERCHANT', name: 'S', shippingFee: null, freeShipFrom: null } })).toBe('https://schema.org/InStock');
+    expect(productAvailability({ ...BASE, variations: [{ ...BASE.variations[0]!, stock: 0 }] })).toBe('https://schema.org/OutOfStock');
+  });
+  it('productJsonLd dùng cùng quy tắc (Offer và AggregateOffer)', () => {
+    const p = { ...unavailable('STORE_CLOSED') };
+    expect((productJsonLd(p, 'u').offers as { availability: string }).availability).toBe('https://schema.org/Discontinued');
+    const two = { ...p, variations: [BASE.variations[0]!, { ...BASE.variations[0]!, id: 'v2' }] };
+    expect((productJsonLd(two, 'u').offers as { availability: string }).availability).toBe('https://schema.org/Discontinued');
+  });
+});
+
+describe('trimAtWord — mô tả meta ≤ 160, cắt ở ranh giới từ', () => {
+  it('ngắn thì giữ nguyên (gộp khoảng trắng/xuống dòng)', () => {
+    expect(trimAtWord('một\n  hai')).toBe('một hai');
+  });
+  it('dài thì cắt ở từ, thêm …, không vượt max và không bỏ lửng giữa từ', () => {
+    const text = Array.from({ length: 60 }, (_, i) => `từ${i}`).join(' ');
+    const out = trimAtWord(text, 50);
+    expect(out.length).toBeLessThanOrEqual(50);
+    expect(out.endsWith('…')).toBe(true);
+    expect(text.startsWith(out.slice(0, -1))).toBe(true);
+    expect(text[out.length - 1]).toBe(' ');
+  });
+  it('từ đơn quá dài vẫn bị cắt cứng ở max', () => {
+    expect(trimAtWord('x'.repeat(300)).length).toBeLessThanOrEqual(160);
+  });
+});
+
+describe('productTitle / productMetaDescription (S9, S16)', () => {
+  it('nhãn Tubu Tree không bị lặp trong tiêu đề; nhãn khác thì "Tên — Nhãn"', () => {
+    expect(productTitle({ name: 'Xịt tràm 150ml', brand: 'Tubu Tree' })).toBe('Xịt tràm 150ml');
+    expect(productTitle({ name: 'Xịt tràm 150ml', brand: ' tubu tree ' })).toBe('Xịt tràm 150ml');
+    expect(productTitle({ name: 'Dầu gội', brand: 'Xanh Việt' })).toBe('Dầu gội — Xanh Việt');
+  });
+  it('mô tả: ngắn → đầy đủ khi ngắn rỗng ("" không lọt qua ??) → dựng từ tên + nhãn', () => {
+    expect(productMetaDescription({ ...BASE, shortDesc: '', description: '<p>Mô tả   dài.</p>' })).toBe('Mô tả dài.');
+    expect(productMetaDescription({ ...BASE, shortDesc: null, description: '' })).toBe('Dầu gội bồ kết — Xanh Việt, bán tại Tubu Tree.');
+    expect(productMetaDescription({ ...BASE, brand: 'Tubu Tree', shortDesc: ' ', description: null as unknown as string })).toBe('Dầu gội bồ kết — sản phẩm thiên nhiên tại Tubu Tree.');
+  });
+  it('mô tả dài bị cắt ≤ 160 ở ranh giới từ', () => {
+    const long = Array.from({ length: 80 }, (_, i) => `từ${i}`).join(' ');
+    const out = productMetaDescription({ ...BASE, shortDesc: long });
+    expect(out.length).toBeLessThanOrEqual(160);
+    expect(out.endsWith('…')).toBe(true);
+  });
+});
+
+describe('brandMetaDescription (S2)', () => {
+  it('khẩu hiệu → câu giới thiệu → dựng từ tên (+ xuất xứ)', () => {
+    expect(brandMetaDescription({ name: 'Hector', tagline: 'Sống xanh', story: 'dài' })).toBe('Sống xanh');
+    expect(brandMetaDescription({ name: 'Hector', tagline: '', story: '<p>Câu chuyện nhãn.</p>' })).toBe('Hector trên Tubu Tree: Câu chuyện nhãn.');
+    expect(brandMetaDescription({ name: 'Hector', tagline: null, story: null, origin: 'Đà Lạt' })).toBe('Hector đến từ Đà Lạt — thương hiệu sống xanh trên Tubu Tree.');
+    expect(brandMetaDescription({ name: 'Hector' })).toBe('Hector — thương hiệu sống xanh trên Tubu Tree.');
+    expect(brandMetaDescription({ name: 'H', story: 'x '.repeat(300) }).length).toBeLessThanOrEqual(160);
+  });
+});
+
+describe('breadcrumbJsonLd (S5)', () => {
+  it('URL tuyệt đối, position từ 1; mục không có href thì không có item', () => {
+    const ld = breadcrumbJsonLd([{ name: 'Trang chủ', href: '/' }, { name: 'Nhãn', href: '/san-pham?brand=A%20B' }, { name: 'SP' }]);
+    expect(ld).toEqual({
+      '@context': 'https://schema.org',
+      '@type': 'BreadcrumbList',
+      itemListElement: [
+        { '@type': 'ListItem', position: 1, name: 'Trang chủ', item: 'https://app.tubutree.com/' },
+        { '@type': 'ListItem', position: 2, name: 'Nhãn', item: 'https://app.tubutree.com/san-pham?brand=A%20B' },
+        { '@type': 'ListItem', position: 3, name: 'SP' },
+      ],
+    });
   });
 });

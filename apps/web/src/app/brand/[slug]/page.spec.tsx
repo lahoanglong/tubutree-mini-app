@@ -92,9 +92,29 @@ describe('trang thương hiệu /brand/[slug] — khung shop giống Mini App', 
     expect((await html()).textContent).not.toContain('Chính hãng');
   });
 
-  it('tiêu đề trang vẫn gắn ✓ cho thương hiệu chính hãng (chuỗi <title>, không phải icon)', async () => {
+  it('metadata: tiêu đề là tên nhãn (template gốc thêm hậu tố, không còn ✓), canonical không mang ?ref=, og đủ siteName/locale/url/ảnh', async () => {
     const meta = await generateMetadata({ params: Promise.resolve({ slug: 'bo-hon' }) });
-    expect(meta.title).toBe('Bồ Hòn Xanh ✓ — Tubu Tree');
+    expect(meta.title).toBe('Bồ Hòn Xanh');
+    expect(meta.description).toBe('Giặt sạch, nhẹ với đất');
+    expect(meta.alternates).toEqual({ canonical: '/brand/bo-hon' });
+    expect(meta.openGraph).toMatchObject({ type: 'website', siteName: 'Tubu Tree', locale: 'vi_VN', url: '/brand/bo-hon', title: 'Bồ Hòn Xanh — Tubu Tree' });
+    expect((meta.openGraph as { images: { url: string }[] }).images[0]!.url).toBeTruthy();
+  });
+
+  it('nhãn không có ảnh nào thì og dùng ảnh mặc định; mô tả không còn câu chung chung khi thiếu khẩu hiệu', async () => {
+    mocks.brand = { ...BRAND, tagline: null, coverUrl: null, logoUrl: null, products: [] };
+    const meta = await generateMetadata({ params: Promise.resolve({ slug: 'bo-hon' }) });
+    expect((meta.openGraph as { images: { url: string }[] }).images).toEqual([expect.objectContaining({ url: '/opengraph-image.png', width: 1200 })]);
+    expect(meta.description).toContain('Bồ Hòn Xanh');
+    expect((meta.description as string).length).toBeLessThanOrEqual(160);
+  });
+
+  it('có BreadcrumbList JSON-LD Trang chủ › nhãn', async () => {
+    const box = await html();
+    const ld = Array.from(box.querySelectorAll('script[type="application/ld+json"]')).map((s) => JSON.parse(s.textContent!));
+    const crumbs = ld.find((d) => d['@type'] === 'BreadcrumbList');
+    expect(crumbs.itemListElement.map((i: { name: string }) => i.name)).toEqual(['Trang chủ', 'Bồ Hòn Xanh']);
+    expect(crumbs.itemListElement[1].item).toBe('https://app.tubutree.com/brand/bo-hon');
   });
 
   it('bìa phẳng token, avatar là biểu tượng lá không chữ cái, không còn gradient', async () => {
