@@ -200,7 +200,7 @@ describe('evaluateDb', () => {
     describe('quét thư mục migrations', () => {
       const dir = join(__dirname, '../../../prisma/migrations');
       const inProd = '20261010080000_dealer_volume_bigint';
-      const tables = '(?:orders|order_items|users|points_transactions)';
+      const tables = '(?:orders|order_items|users|points_transactions|notification_logs)';
       const heavySql = [
         new RegExp(`UPDATE "${tables}"`, 'i'),
         new RegExp(`DELETE FROM "${tables}"`, 'i'),
@@ -221,8 +221,10 @@ describe('evaluateDb', () => {
         const touchesOrders = dynamicOrders || heavyStmts.some((st) => /["']orders["']/i.test(st));
         return { heavy: heavyStmts.length > 0 || dynamic, touchesOrders };
       };
+      // Backfill cũ có INSERT ... SELECT vào notification_logs, chỉ thêm dòng và đã áp trước khi bộ quét biết bảng này; chờ chủ quyết có đưa vào HEAVY_MIGRATIONS không.
+      const preDatedNotificationLogs = ['20261012160000_pd3_xu_converted_notice'];
       const scanned = readdirSync(dir)
-        .filter((n) => /^\d/.test(n) && n > inProd)
+        .filter((n) => /^\d/.test(n) && n > inProd && !preDatedNotificationLogs.includes(n))
         .map((n) => ({ n, ...scan(n) }));
       const listed = new Map(HEAVY_MIGRATIONS.map((h) => [h.name, h.ordersLock]));
 

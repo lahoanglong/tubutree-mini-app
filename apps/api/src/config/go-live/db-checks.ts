@@ -65,6 +65,7 @@ export const HEAVY_MIGRATIONS: ReadonlyArray<{ name: string; ordersLock: boolean
   { name: '20261104180000_order_payment_unlinked', ordersLock: true },
   { name: '20261104180100_order_payment_unlinked_first_at', ordersLock: false },
   { name: '20261105130100_hd1_users_guest_partial_idx', ordersLock: false },
+  { name: '20261105130200_hd1_notification_inapp_indexes', ordersLock: false },
   { name: '20261105130300_hd1_points_history_index', ordersLock: false },
 ];
 
