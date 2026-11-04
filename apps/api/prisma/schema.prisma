@@ -3101,6 +3101,8 @@ model NotificationLog {
   // không phải một phần, để generic plan của prepared statement (channel = $n) vẫn dùng được.
   @@index([userId, channel, sentAt(sort: Desc), id(sort: Desc)], map: "notification_logs_userId_channel_sentAt_id_idx")
   @@index([userId, channel, status], map: "notification_logs_userId_channel_status_idx")
+  // Cron quét log ZNS kẹt (channel + status IN (PENDING, RETRYING) + sentAt cũ). Index thường, không một phần, cùng lý do generic plan như hai index hộp tin ở trên.
+  @@index([channel, status, sentAt])
   @@map("notification_logs")
 }
 

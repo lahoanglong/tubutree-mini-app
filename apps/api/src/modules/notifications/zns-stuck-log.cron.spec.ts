@@ -13,7 +13,9 @@ type JobSpec = { state: string; returnvalue?: unknown } | null | Error;
 
 function setup(logs: LogRow[], jobs: Record<string, JobSpec>, opts: { noQueue?: boolean; acquired?: boolean } = {}) {
   (runExclusive as jest.Mock).mockImplementation(holdsLease(opts.acquired ?? true));
-  const findMany = jest.fn().mockResolvedValue(logs);
+  // Mỗi trạng thái một truy vấn (index (channel, status, sentAt) cho đúng thứ tự sentAt); mock trả theo status của điều kiện, sentAt tăng theo thứ tự khai báo.
+  const sentAt = (id: string) => new Date(2026, 0, 1, 0, logs.findIndex((l) => l.id === id));
+  const findMany = jest.fn(async ({ where }: { where: { status: string } }) => logs.filter((l) => l.status === where.status).map((l) => ({ ...l, sentAt: sentAt(l.id) })));
   const prisma = { notificationLog: { findMany } } as unknown as PrismaService;
   const closeStuckZnsLog = jest.fn().mockResolvedValue(true);
   const markStuckZnsSent = jest.fn().mockResolvedValue(true);
@@ -38,25 +40,39 @@ beforeEach(() => {
 afterEach(() => jest.restoreAllMocks());
 
 describe('ZnsStuckLogCron: truy vấn', () => {
-  it('chỉ lấy log ZNS PENDING/RETRYING có sentAt cũ hơn 1 giờ, cũ nhất trước, tối đa 200', async () => {
+  it('mỗi trạng thái PENDING và RETRYING một truy vấn: ZNS, sentAt cũ hơn 1 giờ, chưa đánh dấu chờ đối soát, cũ nhất trước, tối đa 200', async () => {
     jest.useFakeTimers().setSystemTime(new Date('2026-11-05T10:00:00.000Z'));
     try {
       const { cron, findMany } = setup([], {});
       await cron.sweepStuckZnsLogs();
-      expect(findMany).toHaveBeenCalledWith({
-        where: {
-          channel: 'ZNS',
-          status: { in: ['PENDING', 'RETRYING'] },
-          sentAt: { lt: new Date('2026-11-05T09:00:00.000Z') },
-          OR: [{ error: null }, { error: { not: { startsWith: ZNS_REVIEW_PREFIX } } }],
-        },
-        orderBy: { sentAt: 'asc' },
-        take: 200,
-        select: { id: true, status: true },
-      });
+      expect(findMany).toHaveBeenCalledTimes(2);
+      for (const status of ['PENDING', 'RETRYING']) {
+        expect(findMany).toHaveBeenCalledWith({
+          where: {
+            channel: 'ZNS',
+            status,
+            sentAt: { lt: new Date('2026-11-05T09:00:00.000Z') },
+            OR: [{ error: null }, { error: { not: { startsWith: ZNS_REVIEW_PREFIX } } }],
+          },
+          orderBy: { sentAt: 'asc' },
+          take: 200,
+          select: { id: true, status: true, sentAt: true },
+        });
+      }
     } finally {
       jest.useRealTimers();
     }
+  });
+
+  it('gộp hai truy vấn theo sentAt cũ nhất trước rồi cắt 200: kết quả lẫn trạng thái vẫn đúng thứ tự', async () => {
+    const logs = [
+      ...Array.from({ length: 150 }, (_, i) => ({ id: `p${i}`, status: 'PENDING' as const })),
+      ...Array.from({ length: 150 }, (_, i) => ({ id: `r${i}`, status: 'RETRYING' as const })),
+    ];
+    const { cron, getJob } = setup(logs, {});
+    const result = await cron.sweepStuckZnsLogs();
+    expect(result).toMatchObject({ scanned: 200 });
+    expect(getJob).toHaveBeenCalledTimes(200);
   });
 });
 

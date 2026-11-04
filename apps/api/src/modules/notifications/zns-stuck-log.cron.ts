@@ -59,18 +59,23 @@ export class ZnsStuckLogCron {
   }
 
   private async sweep(queue: Queue): Promise<ZnsStuckSweepResult> {
-    const logs = await this.prisma.notificationLog.findMany({
-      where: {
-        channel: 'ZNS',
-        status: { in: ['PENDING', 'RETRYING'] },
-        sentAt: { lt: new Date(Date.now() - ZnsStuckLogCron.STUCK_AFTER_MS) },
-        // Log đã xét là mơ hồ (không có đường tự gỡ) bị loại: nếu không, chúng chiếm hết `take` theo sentAt tăng dần và log kẹt mới hơn không bao giờ được xét.
-        OR: [{ error: null }, { error: { not: { startsWith: ZNS_REVIEW_PREFIX } } }],
-      },
-      orderBy: { sentAt: 'asc' },
-      take: ZnsStuckLogCron.BATCH,
-      select: { id: true, status: true },
-    });
+    // Mỗi trạng thái một truy vấn (channel = , status = , ORDER BY sentAt): đúng thứ tự cột của notification_logs_channel_status_sentAt_idx
+    // nên planner đi thẳng index, còn `status IN (...)` buộc sắp lại hoặc đi theo index sentAt và lọc gần hết bảng.
+    const stuckOf = (status: 'PENDING' | 'RETRYING') =>
+      this.prisma.notificationLog.findMany({
+        where: {
+          channel: 'ZNS',
+          status,
+          sentAt: { lt: new Date(Date.now() - ZnsStuckLogCron.STUCK_AFTER_MS) },
+          // Log đã xét là mơ hồ (không có đường tự gỡ) bị loại: nếu không, chúng chiếm hết `take` theo sentAt tăng dần và log kẹt mới hơn không bao giờ được xét.
+          OR: [{ error: null }, { error: { not: { startsWith: ZNS_REVIEW_PREFIX } } }],
+        },
+        orderBy: { sentAt: 'asc' },
+        take: ZnsStuckLogCron.BATCH,
+        select: { id: true, status: true, sentAt: true },
+      });
+    const [pending, retrying] = await Promise.all([stuckOf('PENDING'), stuckOf('RETRYING')]);
+    const logs = [...pending, ...retrying].sort((a, b) => a.sentAt.getTime() - b.sentAt.getTime()).slice(0, ZnsStuckLogCron.BATCH);
 
     // Đọc hết trạng thái job trước, ghi sau: Redis chập chờn giữa chừng thì bỏ cả lượt, không đóng log nào trên bằng chứng nửa vời.
     const verdicts: { id: string; status: string; verdict: Verdict }[] = [];
