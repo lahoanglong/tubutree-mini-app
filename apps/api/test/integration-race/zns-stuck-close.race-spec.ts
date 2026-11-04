@@ -122,6 +122,19 @@ describe('đóng log ZNS kẹt (real Postgres)', () => {
     expect((await row(plain.id)).payload).toEqual({ data: {} });
   });
 
+  it('log từng bị đánh dấu chờ đối soát mà được worker nhận lại rồi kẹt tiếp: tiền tố đã được xoá nên cron quét lại được', async () => {
+    const u = await newUser();
+    const log = await mkLog(u.id, null, 'RETRYING');
+    expect(await svc.markZnsLogForReview(log.id, 'RETRYING', 'không rõ')).toBe(true);
+    expect((await row(log.id)).error).toContain(ZNS_REVIEW_PREFIX);
+    // Worker nhận lại log rồi chết giữa chừng (Zalo ném lỗi bất ngờ): log ở lại RETRYING.
+    sendTemplate.mockRejectedValueOnce(new Error('socket hang up'));
+    await expect(svc.deliverZns(jobOf(log.id), false)).rejects.toThrow('socket hang up');
+    const after = await row(log.id);
+    expect(after.status).toBe('RETRYING');
+    expect(after.error ?? '').not.toContain(ZNS_REVIEW_PREFIX);
+  });
+
   it('markStuckZnsSent chỉ từ RETRYING; đua với closeStuckZnsLog thì đúng một bên thắng', async () => {
     const u = await newUser();
     const pending = await mkLog(u.id, null, 'PENDING');

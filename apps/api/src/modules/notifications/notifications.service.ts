@@ -442,6 +442,10 @@ export class NotificationsService {
             where: { ...where, status: { in: ['PENDING', 'RETRYING'] } },
             data: { status: 'RETRYING' },
           });
+    // Log từng được cron đánh dấu chờ đối soát mà nay được nhận lại: bỏ tiền tố, nếu không lần kẹt tiếp theo bị cron loại khỏi truy vấn mãi.
+    if (claimed.count > 0) {
+      await this.prisma.notificationLog.updateMany({ where: { ...where, error: { startsWith: ZNS_REVIEW_PREFIX } }, data: { error: null } });
+    }
     if (claimed.count === 0) {
       const current = await this.prisma.notificationLog.findUnique({ where, select: { status: true, payload: true } });
       if (current?.status === 'SENT') return 'SENT';

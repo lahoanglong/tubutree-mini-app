@@ -68,7 +68,8 @@ describe('NotificationsService.deliverZns', () => {
   it('R-181: nhận log (PENDING/RETRYING) bằng một câu có điều kiện TRƯỚC khi gọi Zalo', async () => {
     const { svc, updateMany, sendTemplate } = setup();
     const order: string[] = [];
-    updateMany.mockImplementation(async () => (order.push('claim'), { count: 1 }));
+    // Chỉ câu nhận log (có điều kiện status) tính là 'claim'; câu bỏ tiền tố chờ đối soát đi sau nó và không đổi thứ tự trước/sau Zalo.
+    updateMany.mockImplementation(async ({ where }: { where: { status?: unknown } }) => (where.status ? order.push('claim') : undefined, { count: 1 }));
     sendTemplate.mockImplementation(async () => (order.push('send'), { ok: true }));
     await svc.deliverZns(JOB, false);
     expect(order).toEqual(['claim', 'send']);

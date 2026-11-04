@@ -73,4 +73,11 @@ describe('NotificationsService: đóng log ZNS kẹt vì job đã chết', () =>
     expect(a.executeRaw.mock.calls[0]!.slice(1)).toEqual(expect.arrayContaining([`${ZNS_REVIEW_PREFIX}ghi chú`, 'log-1', 'RETRYING']));
     await expect(setup(0).svc.markZnsLogForReview('log-1', 'RETRYING', 'x')).resolves.toBe(false);
   });
+
+  it('deliverZns: nhận log thì xoá tiền tố chờ đối soát ở cột error (chỉ log mang tiền tố)', async () => {
+    const { svc, updateMany } = setup(1, { data: {} });
+    (svc as unknown as { zns: unknown }).zns = { sendTemplate: jest.fn().mockResolvedValue({ ok: false, retryable: true, code: -1, reason: 'x' }) };
+    await svc.deliverZns({ notificationLogId: 'log-1', phone: '0900000000', templateId: 't', templateData: {} }, false).catch(() => undefined);
+    expect(updateMany).toHaveBeenCalledWith({ where: { id: 'log-1', error: { startsWith: ZNS_REVIEW_PREFIX } }, data: { error: null } });
+  });
 });
