@@ -56,10 +56,12 @@ export const ATTENTION_RETURN_APPROVED = ['Khách trả một phần đơn', 'Kh
 /** Pancake báo khách mới chuyển một phần tiền — tự gỡ khi đơn đủ tiền hoặc số đã nhận đã thành khoản hoàn. */
 export const ATTENTION_UNDERPAID = 'Khách chuyển thiếu';
 /**
- * Đơn Pancake mang mã đơn Tubu báo đã thanh toán, nhưng đơn Tubu chưa gắn đơn Pancake nào (chỉ khớp bằng mã): không tự PAID.
- * Nối vào ô (không đè), tự gỡ khi đơn sang PAID ở bất kỳ đường nào; "Đã xử lý" gỡ như lý do thường.
+ * Đơn Pancake mang mã đơn Tubu báo đã thanh toán, nhưng không chứng minh được đó là đơn Pancake Tubu đã đẩy (đơn Tubu chưa gắn đơn Pancake
+ * nào, hoặc webhook không có id): không tự PAID. Nối vào ô (không đè), tự gỡ khi đơn sang PAID ở bất kỳ đường nào; "Đã xử lý" gỡ như lý do thường.
  */
-export const ATTENTION_PAYMENT_UNLINKED = 'Pancake báo đã thanh toán nhưng đơn chưa gắn Pancake — Kế toán đối chiếu sao kê rồi bấm "Đã nhận tiền"';
+export const ATTENTION_PAYMENT_UNLINKED = 'Pancake báo đã thanh toán nhưng đơn chưa gắn đúng đơn Pancake — Kế toán đối chiếu sao kê rồi bấm "Đã nhận tiền"';
+/** Cùng việc cho đơn đã huỷ/trả: không có nút "Đã nhận tiền", tiền thật về thì Kế toán ghi tiền về muộn qua đường admin. */
+export const ATTENTION_PAYMENT_UNLINKED_CLOSED = 'Pancake báo đã thanh toán nhưng đơn đã huỷ/trả và chưa gắn đúng đơn Pancake — Kế toán đối chiếu sao kê, khách đã chuyển thì ghi tiền về muộn của đơn';
 /** Tổng tiền đơn trên Pancake khác `order.total` (đơn bị sửa trên Pancake) — tự gỡ khi tổng trùng lại. */
 export const ATTENTION_TOTAL_MISMATCH = 'Tổng tiền Pancake lệch với Tubu';
 

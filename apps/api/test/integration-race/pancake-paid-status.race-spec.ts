@@ -9,7 +9,7 @@ import type { AffiliateService } from '../../src/modules/affiliate/affiliate.ser
 import type { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import type { FlashSaleService } from '../../src/modules/flash-sale/flash-sale.service';
 import type { CouponsService } from '../../src/modules/coupons/coupons.service';
-import { ATTENTION_PAYMENT_UNLINKED, appendPancakeAttention } from '../../src/modules/integrations/pancake/pancake-attention';
+import { ATTENTION_PAYMENT_UNLINKED, ATTENTION_PAYMENT_UNLINKED_CLOSED, appendPancakeAttention } from '../../src/modules/integrations/pancake/pancake-attention';
 import { createOrder, createUser, warmPool } from './helpers';
 
 const MARKER = 'đẩy tay sau khi nhận tiền';
@@ -105,7 +105,7 @@ describe('Pancake webhook: thanh toán + trạng thái cùng một sự kiện (
 
   it('status=3 (Đã nhận) + bank_payment=total → DELIVERED + PAID (đơn trả trước thường dừng ở 3)', async () => {
     const order = await bankTransferOrder();
-    await deliver({ extension: { external_order_id: order.code }, status: 3, bank_payment: order.total });
+    await deliver({ id: `pc-${order.code}`, extension: { external_order_id: order.code }, status: 3, bank_payment: order.total });
     const after = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
     expect(after).toMatchObject({ status: 'DELIVERED', paymentStatus: 'PAID' });
     expect(after.deliveredAt).not.toBeNull();
@@ -113,7 +113,7 @@ describe('Pancake webhook: thanh toán + trạng thái cùng một sự kiện (
 
   it('status=8 (Đang đóng hàng) + bank_payment=total → PACKED + PAID (không kẹt ở CONFIRMED)', async () => {
     const order = await bankTransferOrder();
-    await deliver({ extension: { external_order_id: order.code }, status: 8, bank_payment: order.total });
+    await deliver({ id: `pc-${order.code}`, extension: { external_order_id: order.code }, status: 8, bank_payment: order.total });
     const after = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
     expect(after).toMatchObject({ status: 'PACKED', paymentStatus: 'PAID' });
     expect(after.note ?? '').not.toContain(MARKER);
@@ -144,7 +144,7 @@ describe('Pancake webhook: thanh toán + trạng thái cùng một sự kiện (
 
   it('status=6 (huỷ) + bank_payment=total → CANCELLED, KHÔNG tự lật PAID; tạo đúng 1 yêu cầu hoàn tiền về muộn (D2)', async () => {
     const order = await bankTransferOrder();
-    await deliver({ extension: { external_order_id: order.code }, status: 6, bank_payment: order.total });
+    await deliver({ id: `pc-${order.code}`, extension: { external_order_id: order.code }, status: 6, bank_payment: order.total });
     const after = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
     expect(after).toMatchObject({ status: 'CANCELLED', paymentStatus: 'UNPAID' });
     const late = await prisma.orderCustomerRefund.findMany({ where: { orderId: order.id } });
@@ -215,13 +215,34 @@ describe('Pancake webhook: thanh toán + trạng thái cùng một sự kiện (
     expect(after.pancakeAttention).toBeNull();
   });
 
-  it('đơn đã huỷ, chưa gắn Pancake, tiền về muộn → dòng hoàn LATE_PAYMENT PENDING cho Kế toán + lý do Cần xử lý', async () => {
+  it('đơn đã huỷ, chưa gắn Pancake, tiền về muộn → KHÔNG có dòng hoàn, KHÔNG báo khách; ghim lý do dành cho đơn đã đóng', async () => {
     const user = await createUser(prisma, { role: 'CUSTOMER' });
     const order = await createOrder(prisma, { userId: user.id, status: 'CANCELLED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 80_000, subtotal: 80_000 });
+    notify.mockClear();
     await deliver({ id: `pc-${order.code}`, extension: { external_order_id: order.code }, bank_payment: 80_000 });
-    const refunds = await prisma.orderCustomerRefund.findMany({ where: { orderId: order.id } });
-    expect(refunds).toEqual([expect.objectContaining({ kind: 'LATE_PAYMENT', amount: 80_000, status: 'PENDING' })]);
+    expect(await prisma.orderCustomerRefund.count({ where: { orderId: order.id } })).toBe(0);
+    expect(notify.mock.calls.filter((c) => c[0] === user.id)).toHaveLength(0);
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).pancakeAttention).toBe(ATTENTION_PAYMENT_UNLINKED_CLOSED);
+  });
+
+  it('dấu "đã ghi lý do" theo cặp (đơn, đơn Pancake): Kế toán xử lý #A rồi #B vẫn được ghim; webhook không có id trên đơn đã gắn → giữ chờ Kế toán', async () => {
+    const user = await createUser(prisma, { role: 'CUSTOMER' });
+    const order = await createOrder(prisma, { userId: user.id, code: `TUBU${Date.now()}${Math.floor(Math.random() * 1e6)}`, status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 60_000, subtotal: 60_000 });
+    const note = `Order code: ${order.code}`;
+    await deliver({ id: `A-${order.code}`, note, bank_payment: 60_000 });
+    await prisma.order.update({ where: { id: order.id }, data: { pancakeAttention: null, pancakeAttentionAt: null } });
+    await deliver({ id: `A-${order.code}`, note, bank_payment: 60_000, updated_at: '2026-11-04 12:00:00' });
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).pancakeAttention).toBeNull();
+    await deliver({ id: `B-${order.code}`, note, bank_payment: 60_000 });
     expect((await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).pancakeAttention).toBe(ATTENTION_PAYMENT_UNLINKED);
+
+    const attached = await bankTransferOrder(55_000);
+    const code = `TUBU${Date.now()}${Math.floor(Math.random() * 1e6)}`;
+    await prisma.order.update({ where: { id: attached.id }, data: { code } });
+    await deliver({ note: `Order code: ${code}`, bank_payment: 55_000 });
+    const held = await prisma.order.findUniqueOrThrow({ where: { id: attached.id } });
+    expect(held.paymentStatus).toBe('UNPAID');
+    expect(held.pancakeAttention).toBe(ATTENTION_PAYMENT_UNLINKED);
   });
 
   it('đua webhook ghi lý do với nút "Đã nhận tiền": đơn đã PAID thì không còn lý do chờ Kế toán (20 vòng)', async () => {

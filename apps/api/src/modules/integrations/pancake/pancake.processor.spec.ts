@@ -1,6 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { PancakeProcessor } from './pancake.processor';
-import { ATTENTION_PAYMENT_UNLINKED } from './pancake-attention';
+import { ATTENTION_PAYMENT_UNLINKED, ATTENTION_PAYMENT_UNLINKED_CLOSED } from './pancake-attention';
 import { OrderReversalService } from '../../orders/order-reversal.service';
 import { OrderStatusService } from '../../orders/order-status.service';
 import type { PrismaService } from '../../../prisma/prisma.service';
@@ -403,13 +403,34 @@ describe('PancakeProcessor.onPaymentReconcile', () => {
       for (const v of attentionFlags(t.orderUpdateMany)) expect(v.split(' | ').filter((x) => x === ATTENTION_PAYMENT_UNLINKED)).toHaveLength(1);
     });
 
-    it('đơn đã huỷ/trả: tạo dòng hoàn PENDING chờ Kế toán như cũ, cộng lý do Cần xử lý và báo ADMIN', async () => {
+    it('đơn đã huỷ/trả: KHÔNG tạo dòng hoàn, KHÔNG báo khách; chỉ ghim lý do (không bảo bấm "Đã nhận tiền") và báo ADMIN', async () => {
       const alerts = { alert: jest.fn().mockResolvedValue(undefined) };
       const t = setup({ id: 'o2', code: 'TUBU2', userId: 'u1', status: 'CANCELLED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100000, pancakeOrderId: null }, undefined, alerts);
       await t.proc.onPaymentReconcile(paidPayload);
-      expect(lateRefunds(t.prisma)).toEqual([expect.objectContaining({ kind: 'LATE_PAYMENT', amount: 100000, status: 'PENDING' })]);
+      expect(lateRefunds(t.prisma)).toHaveLength(0);
+      expect(t.notifications.notify).not.toHaveBeenCalled();
+      expect(attentionFlags(t.orderUpdateMany)).toEqual([ATTENTION_PAYMENT_UNLINKED_CLOSED]);
+      expect(ATTENTION_PAYMENT_UNLINKED_CLOSED).not.toContain('bấm "Đã nhận tiền"');
+      expect(alerts.alert).toHaveBeenCalledTimes(1);
+      expect(alerts.alert.mock.calls[0]![1]).not.toContain('bấm "Đã nhận tiền"');
+    });
+
+    it('dấu "đã ghi lý do" theo cặp (đơn, đơn Pancake): đã chốt #p1 thì #p1 không ghim lại, #p2 vẫn được ghim', async () => {
+      const t = setup({ id: 'o1', code: 'TUBU1', userId: 'u1', status: 'CONFIRMED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100000, pancakeOrderId: null });
+      (t.prisma.orderStatusHistory.findFirst as jest.Mock).mockImplementation(async ({ where }: { where: { note?: string } }) =>
+        where.note?.includes('#p1)') ? { id: 'h1' } : null,
+      );
+      await t.proc.onPaymentReconcile({ id: 'p1', is_paid: true });
+      expect(attentionFlags(t.orderUpdateMany)).toHaveLength(0);
+      await t.proc.onPaymentReconcile({ id: 'p2', is_paid: true });
       expect(attentionFlags(t.orderUpdateMany)).toEqual([ATTENTION_PAYMENT_UNLINKED]);
-      expect(alerts.alert).toHaveBeenCalled();
+    });
+
+    it('đơn đã gắn nhưng webhook KHÔNG có id (khớp nhờ mã trong note) → không lật PAID, giữ chờ Kế toán', async () => {
+      const t = setup({ id: 'o1', code: 'TUBU1', userId: 'u1', status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100000, pancakeOrderId: 'p1' });
+      await t.proc.onPaymentReconcile({ is_paid: true, note: 'Order code: TUBU1' });
+      expect(statusFlips(t.orderUpdateMany)).toHaveLength(0);
+      expect(attentionFlags(t.orderUpdateMany)).toEqual([ATTENTION_PAYMENT_UNLINKED]);
     });
 
     it('đã chốt lần đầu (dòng lịch sử có sẵn, Kế toán bấm "Đã xử lý") → webhook sau không ghi lại lý do', async () => {
