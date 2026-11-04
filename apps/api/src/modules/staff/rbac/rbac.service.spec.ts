@@ -678,7 +678,7 @@ describe('RbacService: đánh dấu danh sách ảnh /img cũ (ImageRegistryStal
   }
 
   describe('applyGrants', () => {
-    it('ghi thẳng (db === prisma) và vai trò đổi → đánh dấu đúng một lần', async () => {
+    it('ghi thẳng và vai trò đổi → đánh dấu đúng một lần', async () => {
       const stale = mkStale();
       const prisma = makePrisma({
         roleGrant: { findMany: jest.fn().mockResolvedValue([{ role: 'STAFF' }]) },
@@ -688,25 +688,15 @@ describe('RbacService: đánh dấu danh sách ảnh /img cũ (ImageRegistryStal
       expect(stale.markStale).toHaveBeenCalledTimes(1);
     });
 
-    it('gọi với tx riêng (db !== prisma) → KHÔNG đánh dấu (chưa commit)', async () => {
-      const stale = mkStale();
-      const tx = {
-        roleGrant: { findMany: jest.fn().mockResolvedValue([{ role: 'STAFF' }]) },
-        user: { update: jest.fn().mockResolvedValue(mkUser({ role: 'STAFF' })) },
-        userAdminEvent: { create: jest.fn().mockResolvedValue({}) },
-      };
-      const out = await new RbacService(makePrisma(), undefined, stale as never).applyGrants(mkUser(), tx as never);
-      expect(out.role).toBe('STAFF');
-      expect(stale.markStale).not.toHaveBeenCalled();
-    });
-
     it.each([
       ['không có grant', []],
       ['grant không cao hơn vai trò hiện có', [{ role: 'STAFF' }]],
     ])('vai trò không đổi (%s) → KHÔNG đánh dấu', async (_label, grants) => {
       const stale = mkStale();
       const prisma = makePrisma({ roleGrant: { findMany: jest.fn().mockResolvedValue(grants) } });
-      await new RbacService(prisma, undefined, stale as never).applyGrants(mkUser({ role: _label === 'không có grant' ? 'CUSTOMER' : 'ADMIN' }));
+      const user = mkUser({ role: _label === 'không có grant' ? 'CUSTOMER' : 'ADMIN' });
+      const out = await new RbacService(prisma, undefined, stale as never).applyGrants(user);
+      expect(out).toBe(user);
       expect(stale.markStale).not.toHaveBeenCalled();
     });
 

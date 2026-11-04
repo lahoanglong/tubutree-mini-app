@@ -3384,3 +3384,76 @@ describe('AffiliateService.recordTouch: hạn tính từ lúc khách bấm (clic
     expect(t.rec.recordBestEffort).not.toHaveBeenCalled();
   });
 });
+
+describe('AffiliateService.register: đánh dấu danh sách ảnh /img cũ', () => {
+  type U = Record<string, unknown>;
+  function setup(over: U = {}, updateImpl?: jest.Mock) {
+    const stale = { markStale: jest.fn() };
+    const update = updateImpl ?? jest.fn().mockResolvedValue({});
+    const prisma = {
+      user: {
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'CUSTOMER', zaloId: 'z1', phone: '0900000001', referralCode: 'R', affiliateRevokedAt: null, metadata: null, ...over }),
+        update,
+      },
+    } as unknown as PrismaService;
+    const svc = new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics, undefined, undefined, undefined, undefined, stale as never);
+    return { svc, stale, update };
+  }
+
+  it('lên AFFILIATE → đánh dấu đúng một lần, CHỈ sau khi user.update xong', async () => {
+    const stale = { markStale: jest.fn() };
+    let insideCalls = -1;
+    const update = jest.fn(async () => {
+      insideCalls = stale.markStale.mock.calls.length;
+      return {};
+    });
+    const prisma = {
+      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'CUSTOMER', zaloId: 'z1', phone: '0900000001', referralCode: 'R', affiliateRevokedAt: null, metadata: null }), update },
+    } as unknown as PrismaService;
+    const svc = new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics, undefined, undefined, undefined, undefined, stale as never);
+    await svc.register('u1');
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(insideCalls).toBe(0);
+    expect(stale.markStale).toHaveBeenCalledTimes(1);
+  });
+
+  it('đã là AFFILIATE, chỉ ghi phiên bản điều khoản → KHÔNG đánh dấu', async () => {
+    const { svc, stale, update } = setup({ role: 'AFFILIATE' });
+    await svc.register('u1', 'v2');
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(stale.markStale).not.toHaveBeenCalled();
+  });
+
+  it('đã là AFFILIATE, không có gì đổi → không ghi, KHÔNG đánh dấu', async () => {
+    const { svc, stale, update } = setup({ role: 'AFFILIATE' });
+    await svc.register('u1');
+    expect(update).not.toHaveBeenCalled();
+    expect(stale.markStale).not.toHaveBeenCalled();
+  });
+
+  it('user.update ném lỗi → KHÔNG đánh dấu', async () => {
+    const { svc, stale } = setup({}, jest.fn().mockRejectedValue(new Error('db down')));
+    await expect(svc.register('u1')).rejects.toThrow('db down');
+    expect(stale.markStale).not.toHaveBeenCalled();
+  });
+
+  it('có dấu thu hồi CTV → 403, KHÔNG đánh dấu', async () => {
+    const { svc, stale, update } = setup({ affiliateRevokedAt: new Date() });
+    await expect(svc.register('u1')).rejects.toBeInstanceOf(ForbiddenException);
+    expect(update).not.toHaveBeenCalled();
+    expect(stale.markStale).not.toHaveBeenCalled();
+  });
+
+  it('không phải tài khoản thật → 400, KHÔNG đánh dấu', async () => {
+    const { svc, stale } = setup({ zaloId: null, phone: null });
+    await expect(svc.register('u1')).rejects.toBeInstanceOf(BadRequestException);
+    expect(stale.markStale).not.toHaveBeenCalled();
+  });
+
+  it('không tiêm ImageRegistryStale (@Optional) → vẫn đăng ký được', async () => {
+    const prisma = {
+      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'CUSTOMER', zaloId: 'z1', phone: '0900000001', referralCode: 'R', affiliateRevokedAt: null, metadata: null }), update: jest.fn().mockResolvedValue({}) },
+    } as unknown as PrismaService;
+    await expect(new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).register('u1')).resolves.toMatchObject({ ok: true });
+  });
+});
