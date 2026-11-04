@@ -1,0 +1,101 @@
+[
+  {
+    "id": "L5-VUI-01",
+    "persona": "ketoan",
+    "size": "web375",
+    "journey": "Hoá đơn VAT bằng giao diện (375)",
+    "step": "Kế toán mở đơn có yêu cầu VAT ở 375px",
+    "expect": "thấy khối \"Hoá đơn VAT\" với MST, tên công ty, email; ô link + nút \"Đã xuất hoá đơn\"; không tràn ngang",
+    "actual": "MST=true; công ty=true; email=true; tràn ngang 0px",
+    "evidence": "HOÁ ĐƠN VAT Chờ xuất hoá đơn Mã số thuế: 0312345679 Chép Email nhận hoá đơn: vat-ui@example.com Công ty: Công ty TNHH UAT Giao Diện Địa chỉ: 34 Nguyễn Huệ, Q1, TP.HCM Link hoá đơn điện tử (tuỳ chọn) Đã xuất hoá đơn LỊCH SỬ TRẠNG THÁI",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-VUI-02",
+    "persona": "ketoan",
+    "size": "web375",
+    "journey": "Hoá đơn VAT bằng giao diện (375)",
+    "step": "Kế toán nhập link http (không https) rồi bấm \"Đã xuất hoá đơn\"",
+    "expect": "màn báo lỗi tiếng Việt ngay, không gọi API, đơn vẫn REQUESTED",
+    "actual": "cảnh báo: \"Link hoá đơn phải là địa chỉ https hợp lệ.\"; gọi API=false; DB REQUESTED",
+    "evidence": null,
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-VUI-02b",
+    "persona": "ketoan",
+    "size": "web375",
+    "journey": "Hoá đơn VAT bằng giao diện (375)",
+    "step": "Giọng câu báo link sai",
+    "expect": "không \"Vui lòng\", \"chúng tôi\", \"...\"",
+    "actual": "sạch",
+    "evidence": "Link hoá đơn phải là địa chỉ https hợp lệ.",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-VUI-03",
+    "persona": "ketoan",
+    "size": "web375",
+    "journey": "Hoá đơn VAT bằng giao diện (375)",
+    "step": "Link https hợp lệ, bấm \"Đã xuất hoá đơn\": hộp xác nhận",
+    "expect": "hộp \"Xác nhận đã xuất hoá đơn\" nêu mã đơn + MST và hậu quả; chưa ghi DB",
+    "actual": "hộp=true; có MST=true; DB REQUESTED",
+    "evidence": "Xác nhận đã xuất hoá đơn Ghi nhận đã xuất hoá đơn VAT cho đơn TUBU2026110344889 (Công ty TNHH UAT Giao Diện, MST 0312345679)? Đơn chuyển sang \"Đã xuất hoá đơn\" và khách được báo trong mục Thông báo. Chỉ bấm khi hoá đơn đã được phát hành ở hệ thống hoá đơn điện tử. Huỷ Đã xuất hoá đơn",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-VUI-04",
+    "persona": "ketoan",
+    "size": "web375",
+    "journey": "Hoá đơn VAT bằng giao diện (375)",
+    "step": "Xác nhận trong hộp thoại",
+    "expect": "POST 2xx; DB ISSUED + invoiceUrl; màn báo kết quả; khách nhận thông báo nhắc mã đơn",
+    "actual": "POST /admin/orders/cmw186b0s03hnjtc4hrrc42wy/issue-invoice 201; DB {\"s\":\"ISSUED\",\"u\":\"https://hoadon.example.com/uat/HD-UI-0001.pdf\"}; màn: \"Đã ghi nhận xuất hoá đơn VAT cho đơn TUBU2026110344889.\"; thông báo cho khách: có",
+    "evidence": "{\"id\":\"cmw186hv503hwjtc43k6w5nax\",\"userId\":\"uat_returning\",\"templateCode\":\"INVOICE_ISSUED\",\"channel\":\"INAPP\",\"payload\":{\"body\":\"Hoá đơn VAT cho đơn TUBU2026110344889 đã được phát hành.\",\"data\":{\"order",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CFGUI-01",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Cấu hình hệ thống bằng giao diện (1280)",
+    "step": "Admin tìm khoá coupon.staff_max_percent",
+    "expect": "thấy đúng ô của khoá, giá trị hiện = DB (30)",
+    "actual": "ô hiện \"30\"; DB 30",
+    "evidence": null,
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CFGUI-02",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Cấu hình hệ thống bằng giao diện (1280)",
+    "step": "Nhập JSON hỏng rồi Lưu",
+    "expect": "báo \"JSON không hợp lệ\"; DB không đổi",
+    "actual": "báo=true; DB 30",
+    "evidence": null,
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CFGUI-03",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Cấu hình hệ thống bằng giao diện (1280)",
+    "step": "Đổi trần % mã của nhân viên từ 30 xuống 25 rồi xác nhận",
+    "expect": "hộp xác nhận nêu giá trị cũ → mới; PUT config 2xx; DB = 25, updatedBy = admin; Marketing tạo mã 26% bị 403 ngay",
+    "actual": "hộp xác nhận=true; PUT /admin/config 200; DB {\"v\":25,\"b\":\"uat_admin\"}; Marketing tạo 26% -> 403 Nhân viên tạo mã giảm tối đa 25%. Cần mức cao hơn thì nhờ quản trị viên tạo mã.",
+    "evidence": "Xác nhận đổi cấu hình tiền/điểm coupon.staff_max_percent 30 → 25 Áp dụng ngay cho mọi đơn, ví và điểm của khách. Huỷ Lưu thay đổi",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CFGUI-04",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Cấu hình hệ thống bằng giao diện (1280)",
+    "step": "Khôi phục trần về giá trị ban đầu bằng giao diện",
+    "expect": "DB = 30",
+    "actual": "DB 30",
+    "evidence": null,
+    "verdict": "PASS"
+  }
+]

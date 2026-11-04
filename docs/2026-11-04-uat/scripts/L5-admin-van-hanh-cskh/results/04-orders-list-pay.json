@@ -1,0 +1,735 @@
+[
+  {
+    "id": "L5-OR-list-all",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Đơn hàng: lọc/tìm",
+    "step": "GET /admin/orders",
+    "expect": "tổng = đếm SQL orders",
+    "actual": "total API=5, SQL=5",
+    "evidence": {
+      "keys": [
+        "data",
+        "meta"
+      ],
+      "n": 5
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-search-code",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Đơn hàng: lọc/tìm",
+    "step": "search=<mã đơn>",
+    "expect": "đúng 1 đơn khớp mã",
+    "actual": "n=1",
+    "evidence": "[\"TUBU2026110330541\"]",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-search-prefix",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Đơn hàng: lọc/tìm",
+    "step": "search=<đầu mã đơn>",
+    "expect": "có đơn khớp, trong đó có đơn vừa đặt",
+    "actual": "n=4",
+    "evidence": "[\"TUBU2026110330313\",\"TUBU2026110320727\",\"TUBU2026110330541\",\"TUBU2026110344285\"]",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-search-none",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Đơn hàng: lọc/tìm",
+    "step": "search không khớp",
+    "expect": "danh sách rỗng, total 0",
+    "actual": "n=0 total=undefined",
+    "evidence": "{\"data\":[],\"meta\":{\"page\":1,\"limit\":20,\"total\":0}}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-status-PENDING_PAYMENT",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Đơn hàng: lọc/tìm",
+    "step": "status=PENDING_PAYMENT",
+    "expect": "mọi dòng đúng trạng thái; total = SQL",
+    "actual": "total API=undefined, SQL=2",
+    "evidence": "[\"PENDING_PAYMENT\",\"PENDING_PAYMENT\"]",
+    "verdict": "FAIL"
+  },
+  {
+    "id": "L5-OR-status-CONFIRMED",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Đơn hàng: lọc/tìm",
+    "step": "status=CONFIRMED",
+    "expect": "mọi dòng đúng trạng thái; total = SQL",
+    "actual": "total API=undefined, SQL=2",
+    "evidence": "[\"CONFIRMED\",\"CONFIRMED\"]",
+    "verdict": "FAIL"
+  },
+  {
+    "id": "L5-OR-status-PACKED",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Đơn hàng: lọc/tìm",
+    "step": "status=PACKED",
+    "expect": "mọi dòng đúng trạng thái; total = SQL",
+    "actual": "total API=undefined, SQL=0",
+    "evidence": "[]",
+    "verdict": "FAIL"
+  },
+  {
+    "id": "L5-OR-status-SHIPPING",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Đơn hàng: lọc/tìm",
+    "step": "status=SHIPPING",
+    "expect": "mọi dòng đúng trạng thái; total = SQL",
+    "actual": "total API=undefined, SQL=0",
+    "evidence": "[]",
+    "verdict": "FAIL"
+  },
+  {
+    "id": "L5-OR-status-DELIVERED",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Đơn hàng: lọc/tìm",
+    "step": "status=DELIVERED",
+    "expect": "mọi dòng đúng trạng thái; total = SQL",
+    "actual": "total API=undefined, SQL=1",
+    "evidence": "[\"DELIVERED\"]",
+    "verdict": "FAIL"
+  },
+  {
+    "id": "L5-OR-status-CANCELLED",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Đơn hàng: lọc/tìm",
+    "step": "status=CANCELLED",
+    "expect": "mọi dòng đúng trạng thái; total = SQL",
+    "actual": "total API=undefined, SQL=0",
+    "evidence": "[]",
+    "verdict": "FAIL"
+  },
+  {
+    "id": "L5-OR-pay-UNPAID",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Đơn hàng: lọc/tìm",
+    "step": "payment=UNPAID",
+    "expect": "total = SQL",
+    "actual": "API=undefined, SQL=5",
+    "evidence": "[\"UNPAID\",\"UNPAID\",\"UNPAID\",\"UNPAID\",\"UNPAID\"]",
+    "verdict": "FAIL"
+  },
+  {
+    "id": "L5-OR-pay-PAID",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Đơn hàng: lọc/tìm",
+    "step": "payment=PAID",
+    "expect": "total = SQL",
+    "actual": "API=undefined, SQL=0",
+    "evidence": "[]",
+    "verdict": "FAIL"
+  },
+  {
+    "id": "L5-OR-pay-REFUNDED",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Đơn hàng: lọc/tìm",
+    "step": "payment=REFUNDED",
+    "expect": "total = SQL",
+    "actual": "API=undefined, SQL=0",
+    "evidence": "[]",
+    "verdict": "FAIL"
+  },
+  {
+    "id": "L5-OR-queue-bank",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Đơn hàng: lọc/tìm",
+    "step": "queue=bank_transfer_to_confirm",
+    "expect": "chỉ đơn chuyển khoản chờ tiền (khớp SQL)",
+    "actual": "API=undefined, SQL=2",
+    "evidence": "[\"TUBU2026110320727:PENDING_PAYMENT\",\"TUBU2026110344285:PENDING_PAYMENT\"]",
+    "verdict": "FAIL"
+  },
+  {
+    "id": "L5-OR-date",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Đơn hàng: lọc/tìm",
+    "step": "from=to=2026-11-04 (giờ VN)",
+    "expect": "total = SQL theo ngày VN",
+    "actual": "API=undefined, SQL=0",
+    "evidence": "",
+    "verdict": "FAIL"
+  },
+  {
+    "id": "L5-OR-date-bad",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Đơn hàng: lọc/tìm",
+    "step": "from=2026-13-45",
+    "expect": "400 JSON, lời tiếng Việt",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":[\"from phải là ngày có thật dạng YYYY-MM-DD.\"],\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-status-bad",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Đơn hàng: lọc/tìm",
+    "step": "status=BAYBAY",
+    "expect": "400 JSON (không 500)",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":[\"Trường «status» chỉ nhận một trong: PENDING_PAYMENT, CONFIRMED, PACKED, SHIPPING, DELIVERED, RETURNED, CANCELLED.\"],\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-status-counts",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Đơn hàng: lọc/tìm",
+    "step": "GET /admin/orders/status-counts (chip)",
+    "expect": "mỗi trạng thái = đếm SQL",
+    "actual": "{\"all\":5,\"byStatus\":{\"PENDING_PAYMENT\":2,\"CONFIRMED\":2,\"DELIVERED\":1}}",
+    "evidence": "[{\"s\":\"CONFIRMED\",\"n\":2},{\"s\":\"DELIVERED\",\"n\":1},{\"s\":\"PENDING_PAYMENT\",\"n\":2}]",
+    "verdict": "FAIL"
+  },
+  {
+    "id": "L5-OR-phone-admin",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Đơn hàng: che SĐT",
+    "step": "danh sách đơn",
+    "expect": "ADMIN thấy SĐT đầy đủ (order-actor-transitions.ts:34)",
+    "actual": "thấy đủ",
+    "evidence": "",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-phone-cskh",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Đơn hàng: che SĐT",
+    "step": "danh sách đơn",
+    "expect": "CSKH thấy SĐT đầy đủ (cần gọi khách)",
+    "actual": "thấy đủ",
+    "evidence": "",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-phone-kho",
+    "persona": "kho",
+    "size": "web1280",
+    "journey": "Đơn hàng: che SĐT",
+    "step": "danh sách đơn",
+    "expect": "KHO thấy SĐT đầy đủ (giao hàng)",
+    "actual": "thấy đủ",
+    "evidence": "",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-phone-ketoan",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Đơn hàng: che SĐT",
+    "step": "danh sách đơn",
+    "expect": "Kế toán KHÔNG thấy SĐT đầy đủ (chỉ 3 số cuối)",
+    "actual": "đã che",
+    "evidence": "[\"\\\"phone\\\":\\\"*******003\\\"\",\"\\\"phone\\\":\\\"*******003\\\"\"]",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-phone-ketoan-search",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Đơn hàng: che SĐT",
+    "step": "kế toán tìm bằng SĐT một phần (đoán số)",
+    "expect": "chỉ khớp khi gõ ĐÚNG đủ SĐT (exactPhoneOnly), tìm 3 số cuối không ra",
+    "actual": "search đủ SĐT: 5 đơn",
+    "evidence": "",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-phone-ketoan-partial",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Đơn hàng: che SĐT",
+    "step": "kế toán tìm \"0901000\" (tiền tố SĐT)",
+    "expect": "không ra đơn nào (chặn dò SĐT)",
+    "actual": "n=0",
+    "evidence": "[]",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-list-marketing",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Đơn hàng: quyền",
+    "step": "GET /admin/orders",
+    "expect": "403",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-csv-ketoan",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "CSV đơn",
+    "step": "GET /admin/orders/export (kế toán)",
+    "expect": "200 CSV, SĐT bị che (không có 0901000003)",
+    "actual": "HTTP 200 text/csv; charset=utf-8 attachment; filename=\"don-hang-2026-11-04.csv\"; SĐT đầy đủ: false",
+    "evidence": "Mã đơn,Ngày đặt,Khách hàng,SĐT khách,Người nhận,SĐT người nhận,Loại đơn,Nơi giao,Phương thức TT,Trạng thái TT,Trạng thái đơn,Tạm tính (VNĐ),Giảm giá (VNĐ),Phí ship (VNĐ),Điểm đã dùng,Tổng tiền (VNĐ),Số sản phẩm,Hãng vận chuyển,Mã vận đơn,Mã đơn Pancake,Ngày giao,Thu gom tái chế,Ghi chú,Nền tảng,Nguồn đơn,CTV giới thiệu,SĐT CTV,Gian hàng\r || TUBU2026110330313,04:09 04/11/2026,Nguyễn Thị Quay Lại,**",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-csv-admin",
+    "persona": "admin",
+    "size": "api",
+    "journey": "CSV đơn",
+    "step": "GET /admin/orders/export (admin)",
+    "expect": "403 (route chỉ KE_TOAN kèm ADMIN: ADMIN luôn vào) -> 200 và SĐT đầy đủ",
+    "actual": "HTTP 200; SĐT đầy đủ: true",
+    "evidence": "Mã đơn,Ngày đặt,Khách hàng,SĐT khách,Người nhận,SĐT người nhận,Loại đơn,Nơi giao,Phương thức TT,Trạng thái TT,Trạng thái đơn,Tạm tính (VNĐ),Giảm giá (VNĐ),Phí ship (VNĐ),Điểm đã dùng,Tổng tiền (VNĐ),Số sản phẩm,Hãng vận chuyển,Mã vận đơn,Mã đơn Pancake,Ngày giao,Thu gom tái chế,Ghi chú,Nền tảng,Nguồ",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-csv-cskh",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "CSV đơn",
+    "step": "GET /admin/orders/export (cskh)",
+    "expect": "403",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-csv-kho",
+    "persona": "kho",
+    "size": "api",
+    "journey": "CSV đơn",
+    "step": "GET /admin/orders/export (kho)",
+    "expect": "403",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-csv-marketing",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "CSV đơn",
+    "step": "GET /admin/orders/export (marketing)",
+    "expect": "403",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-csv-staff",
+    "persona": "staff",
+    "size": "api",
+    "journey": "CSV đơn",
+    "step": "GET /admin/orders/export (staff)",
+    "expect": "403",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-csv-rows",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "CSV đơn",
+    "step": "số dòng CSV (không lọc)",
+    "expect": "số dòng = đếm SQL orders (CSV có thể có dòng theo mặt hàng; ghi nhận)",
+    "actual": "5 dòng dữ liệu, SQL orders=5",
+    "evidence": "Mã đơn,Ngày đặt,Khách hàng,SĐT khách,Người nhận,SĐT người nhận,Loại đơn,Nơi giao,Phương thức TT,Trạng thái TT,Trạng thái đơn,Tạm tính (VNĐ),Giảm giá (VNĐ),Phí ship (VNĐ),Điểm đã dùng,Tổng tiền (VNĐ),Số sản phẩm,Hãng vận chuyển,Mã vận đơn,Mã đơn Pancake,Ngày giao,Thu gom tái chế,Ghi chú,Nền tảng,Nguồ",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-pay-deny-cskh",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Đã nhận tiền",
+    "step": "cskh bấm Đã nhận tiền",
+    "expect": "403",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-pay-deny-kho",
+    "persona": "kho",
+    "size": "api",
+    "journey": "Đã nhận tiền",
+    "step": "kho bấm Đã nhận tiền",
+    "expect": "403",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-pay-deny-marketing",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Đã nhận tiền",
+    "step": "marketing bấm Đã nhận tiền",
+    "expect": "403",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-pay-deny-staff",
+    "persona": "staff",
+    "size": "api",
+    "journey": "Đã nhận tiền",
+    "step": "staff bấm Đã nhận tiền",
+    "expect": "403",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-pay-deny-state",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Đã nhận tiền",
+    "step": "đơn sau 4 lần bị từ chối",
+    "expect": "vẫn PENDING_PAYMENT/UNPAID",
+    "actual": "PENDING_PAYMENT/UNPAID",
+    "evidence": "",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-pay-short",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Đã nhận tiền",
+    "step": "amount thấp hơn tổng đơn",
+    "expect": "400: chưa xác nhận thanh toán được (khách chuyển thiếu)",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":\"Khách mới chuyển 60.000đ/120.000đ — chưa xác nhận thanh toán được. Liên hệ khách chuyển thêm, hoặc huỷ đơn rồi ghi nhận tiền về muộn để hoàn số đã nhận.\",\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-pay-over",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Đã nhận tiền",
+    "step": "amount cao hơn tổng đơn",
+    "expect": "400: tối đa tổng đơn",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":\"Số tiền thực nhận phải từ 1đ đến tổng đơn 120.000đ. Khách chuyển dư thì ghi đúng tổng đơn rồi hoàn tay phần dư.\",\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-pay-neg",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Đã nhận tiền",
+    "step": "amount âm",
+    "expect": "400 (không 500)",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":[\"Số tiền không được nhỏ hơn 1.\"],\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-pay-cod",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Đã nhận tiền",
+    "step": "đơn COD",
+    "expect": "400: không phải chuyển khoản",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":\"Đơn TUBU2026110330541 thanh toán COD, không phải chuyển khoản.\",\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-pay-ok",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Đã nhận tiền",
+    "step": "Kế toán xác nhận đã nhận tiền đủ",
+    "expect": "200; đơn PENDING_PAYMENT->CONFIRMED, UNPAID->PAID, paidAt có, có dòng lịch sử ghi người bấm",
+    "actual": "HTTP 201; CONFIRMED/PAID/paidAt=2026-11-03T21:09:32.468Z",
+    "evidence": {
+      "sqlHistory": [
+        {
+          "f": "PENDING_PAYMENT",
+          "t": "CONFIRMED",
+          "a": "ADMIN",
+          "i": "uat_ketoan",
+          "note": "Đã nhận tiền (UNPAID → PAID) · Kế toán xác nhận · Mã GD UATGD001 · uat l5"
+        }
+      ]
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-pay-idem",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Đã nhận tiền",
+    "step": "bấm lần hai",
+    "expect": "idempotent: alreadyPaid, không thêm dòng lịch sử, không đổi trạng thái",
+    "actual": "HTTP 201 alreadyPaid=true; lịch sử 0->1",
+    "evidence": "{\"ok\":true,\"alreadyPaid\":true,\"latePayment\":false,\"message\":\"Đơn TUBU2026110344285 đã được ghi nhận thanh toán trước đó.\",\"order\":{\"id\":\"cmw165gv5001qjtc41y4xpiki\",\"code\":\"TUBU2026110344285\",\"idempote",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-pay-ledger",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Đã nhận tiền",
+    "step": "Ví/điểm sau xác nhận tiền",
+    "expect": "Đã nhận tiền không đụng Ví; điểm đơn chỉ cộng khi giao",
+    "actual": "wallet=0/sổ=0; điểm=35400/sổ=35400",
+    "evidence": {
+      "wallet": 0,
+      "points": 35400,
+      "wsum": 0,
+      "psum": 35400
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-st-cskh-PACKED",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Đổi trạng thái đơn",
+    "step": "cskh PUT status=PACKED",
+    "expect": "403 (CSKH chỉ được huỷ; order-actor-transitions.ts)",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Nhóm việc của bạn không đổi được đơn sang trạng thái này: CSKH chỉ huỷ đơn (trước khi bàn giao vận chuyển), KHO chỉ đánh dấu Đã đóng gói. Giao vận/Đã giao do Pancake báo về hoặc admin xử lý.\",\"error\":\"Forbidden\",\"statusCode\":403",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-st-cskh-DELIVERED",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Đổi trạng thái đơn",
+    "step": "cskh PUT status=DELIVERED",
+    "expect": "403 (CSKH không được Đã giao tay; order-actor-transitions.ts)",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Nhóm việc của bạn không đổi được đơn sang trạng thái này: CSKH chỉ huỷ đơn (trước khi bàn giao vận chuyển), KHO chỉ đánh dấu Đã đóng gói. Giao vận/Đã giao do Pancake báo về hoặc admin xử lý.\",\"error\":\"Forbidden\",\"statusCode\":403",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-st-kho-CANCELLED",
+    "persona": "kho",
+    "size": "api",
+    "journey": "Đổi trạng thái đơn",
+    "step": "kho PUT status=CANCELLED",
+    "expect": "403 (KHO chỉ được Đã đóng gói; order-actor-transitions.ts)",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Nhóm việc của bạn không đổi được đơn sang trạng thái này: CSKH chỉ huỷ đơn (trước khi bàn giao vận chuyển), KHO chỉ đánh dấu Đã đóng gói. Giao vận/Đã giao do Pancake báo về hoặc admin xử lý.\",\"error\":\"Forbidden\",\"statusCode\":403",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-st-kho-DELIVERED",
+    "persona": "kho",
+    "size": "api",
+    "journey": "Đổi trạng thái đơn",
+    "step": "kho PUT status=DELIVERED",
+    "expect": "403 (KHO không được Đã giao tay; order-actor-transitions.ts)",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Nhóm việc của bạn không đổi được đơn sang trạng thái này: CSKH chỉ huỷ đơn (trước khi bàn giao vận chuyển), KHO chỉ đánh dấu Đã đóng gói. Giao vận/Đã giao do Pancake báo về hoặc admin xử lý.\",\"error\":\"Forbidden\",\"statusCode\":403",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-st-ketoan-CANCELLED",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Đổi trạng thái đơn",
+    "step": "ketoan PUT status=CANCELLED",
+    "expect": "403 (Kế toán không đổi trạng thái đơn; order-actor-transitions.ts)",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-st-marketing-PACKED",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Đổi trạng thái đơn",
+    "step": "marketing PUT status=PACKED",
+    "expect": "403 (Marketing không đổi trạng thái đơn; order-actor-transitions.ts)",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-st-staff-PACKED",
+    "persona": "staff",
+    "size": "api",
+    "journey": "Đổi trạng thái đơn",
+    "step": "staff PUT status=PACKED",
+    "expect": "403 (STAFF không nhóm không đổi trạng thái; order-actor-transitions.ts)",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-st-returning-PACKED",
+    "persona": "returning",
+    "size": "api",
+    "journey": "Đổi trạng thái đơn",
+    "step": "returning PUT status=PACKED",
+    "expect": "403 (khách không gọi API admin; order-actor-transitions.ts)",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-st-state",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Đổi trạng thái đơn",
+    "step": "đơn sau các lần bị từ chối",
+    "expect": "không đổi (CONFIRMED)",
+    "actual": "CONFIRMED",
+    "evidence": "",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-st-kho-packed",
+    "persona": "kho",
+    "size": "api",
+    "journey": "Đổi trạng thái đơn",
+    "step": "KHO đánh dấu Đã đóng gói",
+    "expect": "200, CONFIRMED -> PACKED",
+    "actual": "HTTP 200 PACKED",
+    "evidence": "{\"id\":\"cmw16l2es00ewjtc485zz2rre\",\"code\":\"TUBU2026110330541\",\"idempotencyKey\":\"uat-l5-1793740171613-8dheobyh\",\"pancakeOrderId\":\"9600002\",\"userId\":\"uat_returning",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-st-no-back",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Đổi trạng thái đơn",
+    "step": "admin lùi PACKED -> CONFIRMED",
+    "expect": "400 (không lùi: order-transition.ts)",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":\"Không thể chuyển đơn từ PACKED sang CONFIRMED.\",\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-st-junk",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Đổi trạng thái đơn",
+    "step": "status không có thật",
+    "expect": "400 JSON",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":[\"Trường «status» chỉ nhận một trong: PENDING_PAYMENT, CONFIRMED, PACKED, SHIPPING, DELIVERED, RETURNED, CANCELLED.\"],\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-cancel-cod",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Huỷ đơn",
+    "step": "CSKH huỷ đơn COD chưa giao",
+    "expect": "200, CANCELLED, không hoàn tiền (COD chưa thu), Ví không đổi, lịch sử ghi CSKH",
+    "actual": "HTTP 200; CANCELLED/UNPAID; Ví 0->0",
+    "evidence": {
+      "hist": [
+        {
+          "f": "CONFIRMED",
+          "t": "CANCELLED",
+          "a": "ADMIN",
+          "i": "uat_cskh",
+          "note": "Admin: khách xin huỷ (uat)"
+        }
+      ],
+      "stock0": [
+        {
+          "s": 59
+        }
+      ]
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-cancel-twice",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Huỷ đơn",
+    "step": "huỷ lần hai",
+    "expect": "không hoàn/ghi thêm (idempotent hoặc 400)",
+    "actual": "HTTP 200; Ví 0->0",
+    "evidence": "{\"id\":\"cmw16l2i600fmjtc4rtmvyj85\",\"code\":\"TUBU2026110330313\",\"idempotencyKey\":\"uat-l5-1793740171739-bns7kqm2\",\"pancakeOrderId\":\"9600004\",\"userId\":\"uat_returning",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-cancel-final",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Huỷ đơn",
+    "step": "đơn CANCELLED chuyển lại PACKED",
+    "expect": "400, vẫn CANCELLED",
+    "actual": "HTTP 400; CANCELLED",
+    "evidence": "{\"message\":\"Không thể chuyển đơn từ CANCELLED sang PACKED.\",\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-refund-full-cancel",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Hoàn toàn phần",
+    "step": "CSKH huỷ đơn chuyển khoản ĐÃ trả",
+    "expect": "đơn CANCELLED, paymentStatus REFUNDED, Ví +210000đ, sổ Ví khớp",
+    "actual": "HTTP 200; CANCELLED/REFUNDED; Ví 0->210000 (kỳ vọng +210000); sổ Ví 210000",
+    "evidence": {
+      "wl": [
+        {
+          "d": 210000,
+          "t": "ORDER_REFUND",
+          "rt": "ORDER",
+          "r": "cmw16l2gk00f9jtc4gojiysmv",
+          "reason": "Hoàn tiền đơn TUBU2026110320727"
+        }
+      ],
+      "confirmHttp": 201
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-refund-no-double",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Hoàn toàn phần",
+    "step": "huỷ lần hai đơn đã hoàn",
+    "expect": "không hoàn lần hai (Ví không đổi)",
+    "actual": "Ví 210000->210000",
+    "evidence": "{\"id\":\"cmw16l2gk00f9jtc4gojiysmv\",\"code\":\"TUBU2026110320727\",\"idempotencyKey\":\"uat-l5-1793740171683-qhvawnbf\",\"pancakeOrderId\":\"9600003\",\"userId\":\"uat_returning",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-refund-queue-row",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Hoàn toàn phần",
+    "step": "dòng hàng đợi Hoàn tiền khách của đơn hoàn về Ví",
+    "expect": "hoàn về Ví thì có dòng WALLET đã xong (hoặc không có dòng) — ghi nhận",
+    "actual": "1 dòng",
+    "evidence": [
+      {
+        "n": 1
+      }
+    ],
+    "verdict": "PASS"
+  }
+]

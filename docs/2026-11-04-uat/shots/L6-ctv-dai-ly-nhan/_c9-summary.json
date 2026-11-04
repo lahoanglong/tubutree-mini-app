@@ -1,0 +1,29 @@
+{
+ "mini375": {
+  "errors": [],
+  "lens": {
+   "tiers": 1207,
+   "milestones": 1406,
+   "commissions": 2092,
+   "share": 738
+  }
+ },
+ "web375": {
+  "errors": [],
+  "lens": {
+   "tiers": 1272,
+   "milestones": 1471,
+   "commissions": 2152,
+   "share": 798
+  }
+ },
+ "web1280": {
+  "errors": [],
+  "lens": {
+   "tiers": 1657,
+   "milestones": 1856,
+   "commissions": 2538,
+   "share": 1184
+  }
+ }
+}

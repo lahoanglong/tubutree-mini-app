@@ -1,0 +1,32 @@
+{
+  "mini375": {
+    "surface": "mini375",
+    "tag": "Giới thiệu UAT mini375",
+    "origin": "Xứ UAT mini375",
+    "story": "Chuyện UAT mini375 <b>đậm</b> & \"trích dẫn\" <script>x</script>",
+    "row": {
+      "t": "Giới thiệu UAT mini375",
+      "o": "Xứ UAT mini375",
+      "s": "Chuyện UAT mini375 <b>đậm</b> & \"trích dẫn\" <script>x</script>"
+    },
+    "public": {
+      "boldTags": 0,
+      "scriptInMain": 0
+    }
+  },
+  "web375": {
+    "surface": "web375",
+    "tag": "Giới thiệu UAT web375",
+    "origin": "Xứ UAT web375",
+    "story": "Chuyện UAT web375 <b>đậm</b> & \"trích dẫn\" <script>x</script>",
+    "row": {
+      "t": "Giới thiệu UAT web375",
+      "o": "Xứ UAT web375",
+      "s": "Chuyện UAT web375 <b>đậm</b> & \"trích dẫn\" <script>x</script>"
+    },
+    "public": {
+      "boldTags": 0,
+      "scriptInMain": 0
+    }
+  }
+}

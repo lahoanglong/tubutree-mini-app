@@ -1,0 +1,20 @@
+[
+  {
+    "id": "L5-B01",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Huỷ đơn đồng thời với Đã nhận tiền",
+    "step": "Kế toán bấm \"Đã nhận tiền\" và CSKH bấm \"Huỷ đơn\" cùng một lúc trên cùng đơn chuyển khoản (6 đơn)",
+    "expect": "Huỷ thành công (đơn CANCELLED) hoặc API báo lỗi rõ ràng khi không huỷ được; không báo thành công mà đơn vẫn chạy",
+    "actual": "5/6 lần API báo 2xx mà đơn không bị huỷ",
+    "evidence": [
+      "#1 TUBU2026110323310: Đã nhận tiền 201; Huỷ 200 (body.status=CONFIRMED); đơn cuối CONFIRMED/PAID  <-- huỷ báo 2xx nhưng đơn không bị huỷ",
+      "#2 TUBU2026110376324: Đã nhận tiền 201; Huỷ 200 (body.status=CONFIRMED); đơn cuối CONFIRMED/PAID  <-- huỷ báo 2xx nhưng đơn không bị huỷ",
+      "#3 TUBU2026110343707: Đã nhận tiền 201; Huỷ 200 (body.status=CONFIRMED); đơn cuối CONFIRMED/PAID  <-- huỷ báo 2xx nhưng đơn không bị huỷ",
+      "#4 TUBU2026110398158: Đã nhận tiền 201; Huỷ 200 (body.status=CONFIRMED); đơn cuối CONFIRMED/PAID  <-- huỷ báo 2xx nhưng đơn không bị huỷ",
+      "#5 TUBU2026110336518: Đã nhận tiền 403; Huỷ 200 (body.status=CANCELLED); đơn cuối CANCELLED/UNPAID",
+      "#6 TUBU2026110334742: Đã nhận tiền 201; Huỷ 200 (body.status=CONFIRMED); đơn cuối CONFIRMED/PAID  <-- huỷ báo 2xx nhưng đơn không bị huỷ"
+    ],
+    "verdict": "FAIL"
+  }
+]

@@ -1,0 +1,1764 @@
+[
+  {
+    "id": "L5-PAY-01",
+    "persona": "returning",
+    "size": "api",
+    "journey": "Lệnh rút (legacy)",
+    "step": "POST /wallet/withdraw",
+    "expect": "HTTP 410 (Zalo 4.5 cấm rút tiền), wallet.controller.ts:25",
+    "actual": "HTTP 410",
+    "evidence": "{\"message\":\"Ví Tubu chỉ dùng để trả tiền hàng, không rút ra ngoài.\",\"error\":\"Gone\",\"statusCode\":410}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-PAY-02",
+    "persona": "ctv",
+    "size": "api",
+    "journey": "Lệnh rút (legacy)",
+    "step": "POST /affiliate/payouts method=BANK",
+    "expect": "HTTP 400, chỉ nhận WALLET_BALANCE (affiliate.controller.ts:124)",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":\"Hoa hồng chỉ chuyển vào Ví Tubu để mua hàng.\",\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-PAY-03",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Lệnh rút (legacy)",
+    "step": "Kế toán bấm \"Duyệt\"",
+    "expect": "403: duyệt chỉ ADMIN, người duyệt khác người chi (payout-admin.controller.ts:67)",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-PAY-04",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Lệnh rút (legacy)",
+    "step": "Kế toán bấm \"Từ chối\"",
+    "expect": "403",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-PAY-05",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Lệnh rút (legacy)",
+    "step": "Chi khi lệnh còn REQUESTED",
+    "expect": "400 \"không ở trạng thái Đã duyệt\" (affiliate.service.ts:2389)",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":\"Lệnh rút không ở trạng thái \\\"Đã duyệt\\\" hoặc vừa được xử lý bởi người khác — bạn tải lại nhé.\",\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-PAY-06",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Lệnh rút (legacy)",
+    "step": "ADMIN duyệt với expectedAmount cũ (400.000 so với 500.000)",
+    "expect": "409, câu nêu số đã đổi (affiliate.service.ts:2184)",
+    "actual": "HTTP 409",
+    "evidence": "{\"message\":\"Số thực nhận của lệnh đã đổi từ 400.000đ thành 500.000đ (thuế giữ dư vừa được hoàn), bạn tải lại trước khi duyệt nhé.\",\"error\":\"Conflict\",\"statusCode\":409}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-PAY-07",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Lệnh rút (legacy)",
+    "step": "ADMIN duyệt đúng số",
+    "expect": "200, status APPROVED, reviewedBy = admin",
+    "actual": "HTTP 201, DB APPROVED/uat_admin",
+    "evidence": "{\"id\":\"uatpayzevgn8ax\",\"userId\":\"uat_ctv\",\"amount\":500000,\"fee\":0,\"grossAmount\":null,\"taxWithheld\":0,\"taxRefunded\":0,\"taxId\":null,\"method\":\"BANK\",\"bankInfo\":{\"bank\":\"VCB\",\"accountNo\":\"0123456789\",\"acc",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-PAY-08",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Lệnh rút (legacy)",
+    "step": "Duyệt lần 2",
+    "expect": "400, không đổi trạng thái",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":\"Lệnh rút không ở trạng thái \\\"Yêu cầu\\\" hoặc vừa được xử lý bởi người khác — bạn tải lại nhé.\",\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-PAY-09",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Lệnh rút (legacy)",
+    "step": "Từ chối lệnh đã APPROVED",
+    "expect": "400 (chỉ REQUESTED mới từ chối được)",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":\"Lệnh rút không ở trạng thái \\\"Yêu cầu\\\" hoặc vừa được xử lý bởi người khác — bạn tải lại nhé.\",\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-PAY-10-staff",
+    "persona": "staff",
+    "size": "api",
+    "journey": "Lệnh rút (legacy)",
+    "step": "staff bấm \"Đã chi\"",
+    "expect": "403 (chỉ ADMIN và KE_TOAN)",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-PAY-10-kho",
+    "persona": "kho",
+    "size": "api",
+    "journey": "Lệnh rút (legacy)",
+    "step": "kho bấm \"Đã chi\"",
+    "expect": "403 (chỉ ADMIN và KE_TOAN)",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-PAY-10-marketing",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Lệnh rút (legacy)",
+    "step": "marketing bấm \"Đã chi\"",
+    "expect": "403 (chỉ ADMIN và KE_TOAN)",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-PAY-10-cskh",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Lệnh rút (legacy)",
+    "step": "cskh bấm \"Đã chi\"",
+    "expect": "403 (chỉ ADMIN và KE_TOAN)",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-PAY-11",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Lệnh rút (legacy)",
+    "step": "Kế toán \"Đã chi\" với số cũ",
+    "expect": "409",
+    "actual": "HTTP 409",
+    "evidence": "{\"message\":\"Số thực nhận của lệnh đã đổi từ 1đ thành 500.000đ (thuế giữ dư vừa được hoàn), bạn tải lại trước khi chi nhé.\",\"error\":\"Conflict\",\"statusCode\":409}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-PAY-12",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Lệnh rút (legacy)",
+    "step": "Kế toán \"Đã chi\" đúng số + mã giao dịch",
+    "expect": "200, PAID, paidBy = kế toán, bankRef lưu",
+    "actual": "HTTP 201, DB {\"status\":\"PAID\",\"pb\":\"uat_ketoan\",\"br\":\"FT26UAT0001\",\"pa\":\"2026-11-03T21:23:01.841Z\"}",
+    "evidence": "{\"id\":\"uatpayzevgn8ax\",\"userId\":\"uat_ctv\",\"amount\":500000,\"fee\":0,\"grossAmount\":null,\"taxWithheld\":0,\"taxRefunded\":0,\"taxId\":null,\"method\":\"BANK\",\"bankInfo\":{\"bank\":\"VCB\",\"accountNo\":\"0123456789\",\"acc",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-PAY-13",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Lệnh rút (legacy)",
+    "step": "Bấm \"Đã chi\" lần 2",
+    "expect": "400, bankRef không bị ghi đè",
+    "actual": "HTTP 400, bankRef=FT26UAT0001",
+    "evidence": "{\"message\":\"Lệnh rút không ở trạng thái \\\"Đã duyệt\\\" hoặc vừa được xử lý bởi người khác — bạn tải lại nhé.\",\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-PAY-14",
+    "persona": "ctv",
+    "size": "api",
+    "journey": "Lệnh rút (legacy)",
+    "step": "Thông báo cho CTV (duyệt + chi)",
+    "expect": "có thông báo PAYOUT_APPROVED và PAYOUT_PAID",
+    "actual": "18 dòng notification_logs có PAYOUT",
+    "evidence": [
+      {
+        "n": 18
+      }
+    ],
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-PAY-15",
+    "persona": "ctv",
+    "size": "api",
+    "journey": "Lệnh rút (legacy)",
+    "step": "Ví CTV không đổi khi duyệt + chi (tiền đi ngân hàng, không qua ví)",
+    "expect": "walletBalance trước = sau, sổ ví = số dư",
+    "actual": "ví 2020000 -> 2020000, tổng sổ 2020000",
+    "evidence": {
+      "before": {
+        "wallet": 2020000,
+        "points": 0,
+        "wsum": 2020000,
+        "psum": 0
+      },
+      "afterPaid": {
+        "wallet": 2020000,
+        "points": 0,
+        "wsum": 2020000,
+        "psum": 0
+      }
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-PAY-16",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Lệnh rút (legacy)",
+    "step": "Từ chối thiếu lý do",
+    "expect": "400 (DTO @IsNotEmpty hoặc \"Nhập lý do từ chối\")",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":\"Nhập lý do từ chối.\",\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-PAY-17",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Lệnh rút (legacy)",
+    "step": "ADMIN từ chối lệnh 300.000 + phí 5.000",
+    "expect": "REJECTED + hoàn 305.000 vào ví (WITHDRAW_REFUND), sổ ví = số dư",
+    "actual": "HTTP 201, ví +305000, sổ 2325000/2325000",
+    "evidence": {
+      "pr": {
+        "status": "REJECTED",
+        "rr": "UAT: sai số tài khoản"
+      },
+      "ledger": [
+        {
+          "type": "WITHDRAW_REFUND",
+          "delta": 305000,
+          "refType": "PAYOUT",
+          "refId": "uatpayyqll3goz"
+        }
+      ],
+      "b2": {
+        "wallet": 2020000,
+        "points": 0,
+        "wsum": 2020000,
+        "psum": 0
+      },
+      "a2": {
+        "wallet": 2325000,
+        "points": 0,
+        "wsum": 2325000,
+        "psum": 0
+      }
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-PAY-18",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Lệnh rút (legacy)",
+    "step": "Từ chối lần 2 (chống hoàn trùng)",
+    "expect": "400, ví không tăng thêm",
+    "actual": "HTTP 400, ví 2325000 -> 2325000",
+    "evidence": "{\"message\":\"Lệnh rút không ở trạng thái \\\"Yêu cầu\\\" hoặc vừa được xử lý bởi người khác — bạn tải lại nhé.\",\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-PAY-19",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Lệnh rút (legacy)",
+    "step": "3 request từ chối cùng lúc một lệnh",
+    "expect": "đúng 1 thành công, ví chỉ +200.000 một lần",
+    "actual": "thành công 1/3, ví +200000",
+    "evidence": [
+      201,
+      400,
+      400
+    ],
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-PAY-20",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Lệnh rút (legacy)",
+    "step": "Kế toán xem danh sách lệnh PAID",
+    "expect": "200, có lệnh vừa chi, kèm tên + SĐT người nhận",
+    "actual": "HTTP 200, 5 dòng",
+    "evidence": "{\"id\":\"uatpayzevgn8ax\",\"userId\":\"uat_ctv\",\"amount\":500000,\"fee\":0,\"grossAmount\":null,\"taxWithheld\":0,\"taxRefunded\":0,\"taxId\":null,\"method\":\"BANK\",\"bankInfo\":{\"bank\":\"VCB\",\"accountNo\":\"0123456789\",\"accountName\":\"PHAM VAN CTV\"},\"status\":\"PAID",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-PAY-21",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Lệnh rút (legacy)",
+    "step": "Lọc status không hợp lệ",
+    "expect": "400 JSON",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":[\"Trường «status» chỉ nhận một trong: REQUESTED, APPROVED, PAID, REJECTED.\"],\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-PAY-22-staff",
+    "persona": "staff",
+    "size": "api",
+    "journey": "Lệnh rút (legacy)",
+    "step": "staff xem danh sách lệnh rút",
+    "expect": "403",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-PAY-22-kho",
+    "persona": "kho",
+    "size": "api",
+    "journey": "Lệnh rút (legacy)",
+    "step": "kho xem danh sách lệnh rút",
+    "expect": "403",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-PAY-22-marketing",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Lệnh rút (legacy)",
+    "step": "marketing xem danh sách lệnh rút",
+    "expect": "403",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-PAY-22-cskh",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Lệnh rút (legacy)",
+    "step": "cskh xem danh sách lệnh rút",
+    "expect": "403",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-PAY-23",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Lệnh rút (legacy)",
+    "step": "Báo cáo khấu trừ TNCN tháng này",
+    "expect": "200",
+    "actual": "HTTP 200",
+    "evidence": "{\"month\":\"2026-11\",\"rows\":[],\"totals\":{\"recipients\":0,\"withheldRecipients\":0,\"grossAmount\":0,\"taxWithheld\":0,\"netAmount\":0}}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-PAY-24",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Lệnh rút (legacy)",
+    "step": "Tháng không hợp lệ 2026-13",
+    "expect": "400",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":[\"Tháng phải có dạng YYYY-MM.\"],\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-VAT-01",
+    "persona": "returning",
+    "size": "api",
+    "journey": "Hoá đơn VAT",
+    "step": "Đặt đơn với MST sai (5 số)",
+    "expect": "bị chặn 400, câu \"Mã số thuế gồm 10 số…\" (checkout.dto.ts:10)",
+    "actual": "đặt đơn lỗi 400 {\"message\":[\"Mã số thuế gồm 10 số (chi nhánh thêm -3 số) hoặc 12 số.\"],\"error\":\"Bad Request\",\"statusCode\":400}",
+    "evidence": {
+      "ok": false,
+      "e": "đặt đơn lỗi 400 {\"message\":[\"Mã số thuế gồm 10 số (chi nhánh thêm -3 số) hoặc 12 số.\"],\"error\":\"Bad Request\",\"statusCode\":400}"
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-VAT-02",
+    "persona": "returning",
+    "size": "api",
+    "journey": "Hoá đơn VAT",
+    "step": "Đặt đơn với email hoá đơn sai",
+    "expect": "bị chặn 400",
+    "actual": "đặt đơn lỗi 400 {\"message\":[\"Email không hợp lệ.\"],\"error\":\"Bad Request\",\"statusCode\":400}",
+    "evidence": {
+      "ok": false,
+      "e": "đặt đơn lỗi 400 {\"message\":[\"Email không hợp lệ.\"],\"error\":\"Bad Request\",\"statusCode\":400}"
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-VAT-03",
+    "persona": "returning",
+    "size": "api",
+    "journey": "Hoá đơn VAT",
+    "step": "Đặt đơn COD có yêu cầu VAT hợp lệ",
+    "expect": "invoiceStatus = REQUESTED, lưu đủ 4 trường",
+    "actual": "REQUESTED {\"email\":\"ketoan-uat@example.com\",\"address\":\"12 Lê Lợi, Q1, TP.HCM\",\"taxCode\":\"0312345678\",\"companyName\":\"Công ty TNHH UAT Xanh\"}",
+    "evidence": {
+      "s": "REQUESTED",
+      "r": {
+        "email": "ketoan-uat@example.com",
+        "address": "12 Lê Lợi, Q1, TP.HCM",
+        "taxCode": "0312345678",
+        "companyName": "Công ty TNHH UAT Xanh"
+      }
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-VAT-04",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Hoá đơn VAT",
+    "step": "Lọc ?invoice=pending theo mã đơn",
+    "expect": "đơn xuất hiện trong \"Chờ xuất hoá đơn\"",
+    "actual": "HTTP 200, 1 dòng",
+    "evidence": "{\"code\":\"TUBU2026110355913\",\"invoiceStatus\":\"REQUESTED\"}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-VAT-05",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Hoá đơn VAT",
+    "step": "Hộp việc: mục invoicePending",
+    "expect": "đếm đơn chờ xuất hoá đơn ≥ 1",
+    "actual": "count=2",
+    "evidence": "{\"generatedAt\":\"2026-11-03T21:23:01.954Z\",\"items\":[{\"key\":\"customerRefunds\",\"count\":4},{\"key\":\"bankTransferToConfirm\",\"count\":0},{\"key\":\"dealerTransferToConfirm\",\"count\":0},{\"key\":\"merchantToSettle\",\"count\":0},{\"key\":\"merchantPayoutsPending\",\"count\":0},{\"key\":\"dealerClaimsToPay\",\"count\":0},{\"key\":\"dealerCreditReported\",\"count\":0},{\"key\":\"payoutsToPay\",\"count\":0},{\"key\":\"invoicePending\",\"count\":2},",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-VAT-06",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Hoá đơn VAT",
+    "step": "Kế toán xem dòng đơn trong danh sách \"Chờ xuất hoá đơn\"",
+    "expect": "200, thấy yêu cầu hoá đơn (MST, tên công ty, email) để xuất đúng",
+    "actual": "có MST=true, tên công ty=true, email=true",
+    "evidence": "{\"email\":\"ketoan-uat@example.com\",\"address\":\"12 Lê Lợi, Q1, TP.HCM\",\"taxCode\":\"0312345678\",\"companyName\":\"Công ty TNHH UAT Xanh\"}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-VAT-07-staff",
+    "persona": "staff",
+    "size": "api",
+    "journey": "Hoá đơn VAT",
+    "step": "staff bấm \"Đã xuất hoá đơn\"",
+    "expect": "403 (chỉ ADMIN và KE_TOAN, admin.controller.ts:571)",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-VAT-07-kho",
+    "persona": "kho",
+    "size": "api",
+    "journey": "Hoá đơn VAT",
+    "step": "kho bấm \"Đã xuất hoá đơn\"",
+    "expect": "403 (chỉ ADMIN và KE_TOAN, admin.controller.ts:571)",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-VAT-07-marketing",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Hoá đơn VAT",
+    "step": "marketing bấm \"Đã xuất hoá đơn\"",
+    "expect": "403 (chỉ ADMIN và KE_TOAN, admin.controller.ts:571)",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-VAT-07-cskh",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Hoá đơn VAT",
+    "step": "cskh bấm \"Đã xuất hoá đơn\"",
+    "expect": "403 (chỉ ADMIN và KE_TOAN, admin.controller.ts:571)",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-VAT-08-http",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Hoá đơn VAT",
+    "step": "Link hoá đơn \"http://hoadon.example.com/x.pdf\"",
+    "expect": "400, chỉ nhận https (admin.controller.ts:415), đơn vẫn REQUESTED",
+    "actual": "HTTP 400, đơn REQUESTED",
+    "evidence": "{\"message\":[\"Trường «invoiceUrl» phải là đường dẫn (URL) hợp lệ.\"],\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-VAT-08-javascript",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Hoá đơn VAT",
+    "step": "Link hoá đơn \"javascript:alert(1)\"",
+    "expect": "400, chỉ nhận https (admin.controller.ts:415), đơn vẫn REQUESTED",
+    "actual": "HTTP 400, đơn REQUESTED",
+    "evidence": "{\"message\":[\"Trường «invoiceUrl» phải là đường dẫn (URL) hợp lệ.\"],\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-VAT-08-ftp",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Hoá đơn VAT",
+    "step": "Link hoá đơn \"ftp://hoadon.example.com/x\"",
+    "expect": "400, chỉ nhận https (admin.controller.ts:415), đơn vẫn REQUESTED",
+    "actual": "HTTP 400, đơn REQUESTED",
+    "evidence": "{\"message\":[\"Trường «invoiceUrl» phải là đường dẫn (URL) hợp lệ.\"],\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-VAT-08-không có scheme",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Hoá đơn VAT",
+    "step": "Link hoá đơn \"hoadon.example.com/x.pdf\"",
+    "expect": "400, chỉ nhận https (admin.controller.ts:415), đơn vẫn REQUESTED",
+    "actual": "HTTP 400, đơn REQUESTED",
+    "evidence": "{\"message\":[\"Trường «invoiceUrl» phải là đường dẫn (URL) hợp lệ.\"],\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-VAT-09",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Hoá đơn VAT",
+    "step": "Xuất hoá đơn với link https",
+    "expect": "200, ISSUED + lưu link",
+    "actual": "HTTP 201, DB {\"s\":\"ISSUED\",\"u\":\"https://hoadon.example.com/uat/HD0001.pdf\"}",
+    "evidence": "{\"ok\":true,\"message\":\"Đã ghi nhận xuất hoá đơn VAT cho đơn TUBU2026110355913.\",\"order\":{\"id\":\"cmw172fn501x4jtc4zp7d2l0b\",\"code\":\"TUBU2026110355913\",\"invoiceStatus\":\"ISSUED\",\"invoiceUrl\":\"https://hoadon.example.com/uat/HD0001.pdf\"}}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-VAT-10",
+    "persona": "returning",
+    "size": "api",
+    "journey": "Hoá đơn VAT",
+    "step": "Khách nhận thông báo \"đã xuất hoá đơn\"",
+    "expect": "có thông báo nhắc mã đơn",
+    "actual": "{\"id\":\"cmw172fo801x9jtc4dfr32gau\",\"userId\":\"uat_returning\",\"templateCode\":\"INVOICE_ISSUED\",\"channel\":\"INAPP\",\"payload\":{\"body\":\"Hoá đơn VAT cho đơn TUBU2026110355913 đã được phát hành.\",\"data\":{\"order_code\":\"TUBU20261103",
+    "evidence": {
+      "id": "cmw172fo801x9jtc4dfr32gau",
+      "userId": "uat_returning",
+      "templateCode": "INVOICE_ISSUED",
+      "channel": "INAPP",
+      "payload": {
+        "body": "Hoá đơn VAT cho đơn TUBU2026110355913 đã được phát hành.",
+        "data": {
+          "order_code": "TUBU2026110355913"
+        }
+      },
+      "status": "SENT",
+      "error": null,
+      "sentAt": "2026-11-03T21:23:01.976Z"
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-VAT-10b",
+    "persona": "returning",
+    "size": "api",
+    "journey": "Hoá đơn VAT",
+    "step": "Giọng thông báo hoá đơn (đợt 8)",
+    "expect": "không \"Vui lòng\", \"chúng tôi\", \"...\"",
+    "actual": "sạch",
+    "evidence": "{\"id\":\"cmw172fo801x9jtc4dfr32gau\",\"userId\":\"uat_returning\",\"templateCode\":\"INVOICE_ISSUED\",\"channel\":\"INAPP\",\"payload\":{\"body\":\"Hoá đơn VAT cho đơn TUBU2026110355913 đã được phát hành.\",\"data\":{\"order_code\":\"TUBU20261103",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-VAT-11",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Hoá đơn VAT",
+    "step": "Xuất lần 2",
+    "expect": "400 \"đã được phát hành\"",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":\"Hoá đơn của đơn TUBU2026110355913 đã được phát hành.\",\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-VAT-12",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Hoá đơn VAT",
+    "step": "Lọc ?invoice=issued / pending sau khi xuất",
+    "expect": "có trong issued, không còn trong pending",
+    "actual": "issued 1, pending 0",
+    "evidence": null,
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-VAT-13",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Hoá đơn VAT",
+    "step": "Xuất hoá đơn cho đơn không yêu cầu",
+    "expect": "400 \"chưa có yêu cầu xuất hoá đơn VAT\"",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":\"Đơn TUBU2026110361348 chưa có yêu cầu xuất hoá đơn VAT.\",\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-VAT-14a",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Hoá đơn VAT",
+    "step": "Huỷ đơn có yêu cầu VAT",
+    "expect": "200, CANCELLED",
+    "actual": "HTTP 200, DB CANCELLED",
+    "evidence": "{\"id\":\"cmw172gdf01xwjtc4h0tv0bd0\",\"code\":\"TUBU2026110327922\",\"idempotencyKey\":\"uat-l5-1793740982868-zpf7jcfb\",\"pancakeOrderId\":\"9600040\",\"userId\":\"uat_returning",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-VAT-14",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Hoá đơn VAT",
+    "step": "Xuất hoá đơn cho đơn đã huỷ",
+    "expect": "400 \"đã huỷ/trả — không xuất hoá đơn VAT\"",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":\"Đơn TUBU2026110327922 đã huỷ/trả — không xuất hoá đơn VAT.\",\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-VAT-15",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Hoá đơn VAT",
+    "step": "Mã đơn không tồn tại",
+    "expect": "404",
+    "actual": "HTTP 404",
+    "evidence": "{\"message\":\"Không tìm thấy đơn hàng.\",\"error\":\"Not Found\",\"statusCode\":404}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-VAT-16",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Hoá đơn VAT",
+    "step": "3 request xuất hoá đơn cùng lúc",
+    "expect": "đúng 1 thành công (và đúng 1 thông báo cho khách)",
+    "actual": "thành công 1/3, thông báo 1",
+    "evidence": [
+      201,
+      400,
+      400
+    ],
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CPN-00",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Mã giảm giá (Marketing)",
+    "step": "Đọc trần hiện hành",
+    "expect": "staff_max_percent 30, amount 100.000, usage 1000, ngân sách ngày 10.000.000",
+    "actual": "{\"coupon.staff_max_percent\":30,\"coupon.staff_max_amount_vnd\":100000,\"coupon.staff_max_usage\":1000,\"coupon.staff_daily_budget_vnd\":10000000}",
+    "evidence": {
+      "coupon.staff_max_percent": 30,
+      "coupon.staff_max_amount_vnd": 100000,
+      "coupon.staff_max_usage": 1000,
+      "coupon.staff_daily_budget_vnd": 10000000
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CPN-01",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Mã giảm giá (Marketing)",
+    "step": "Marketing tạo mã giảm 31% (trần 30%)",
+    "expect": "403 + câu nêu trần (coupon-input-rules.ts:126), không ghi DB",
+    "actual": "HTTP 403, 0 dòng DB",
+    "evidence": "{\"message\":\"Nhân viên tạo mã giảm tối đa 30%. Cần mức cao hơn thì nhờ quản trị viên tạo mã.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CPN-02",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Mã giảm giá (Marketing)",
+    "step": "Marketing tạo mã giảm 30% không có \"Giảm tối đa\"",
+    "expect": "403 + câu nêu trần (coupon-input-rules.ts:126), không ghi DB",
+    "actual": "HTTP 403, 0 dòng DB",
+    "evidence": "{\"message\":\"Mã giảm % do nhân viên tạo phải có Giảm tối đa (không quá 100.000đ). Cần mức cao hơn thì nhờ quản trị viên tạo mã.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CPN-03",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Mã giảm giá (Marketing)",
+    "step": "Marketing tạo mã Giảm tối đa 100.001đ (trần 100.000đ)",
+    "expect": "403 + câu nêu trần (coupon-input-rules.ts:126), không ghi DB",
+    "actual": "HTTP 403, 0 dòng DB",
+    "evidence": "{\"message\":\"Giảm tối đa của mã do nhân viên tạo không quá 100.000đ. Cần mức cao hơn thì nhờ quản trị viên tạo mã.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CPN-04",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Mã giảm giá (Marketing)",
+    "step": "Marketing tạo mã giảm tiền 100.001đ (trần 100.000đ)",
+    "expect": "403 + câu nêu trần (coupon-input-rules.ts:126), không ghi DB",
+    "actual": "HTTP 403, 0 dòng DB",
+    "evidence": "{\"message\":\"Nhân viên tạo mã giảm tối đa 100.000đ. Cần mức cao hơn thì nhờ quản trị viên tạo mã.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CPN-05",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Mã giảm giá (Marketing)",
+    "step": "Marketing tạo mã không đặt Tổng lượt dùng",
+    "expect": "403 + câu nêu trần (coupon-input-rules.ts:126), không ghi DB",
+    "actual": "HTTP 403, 0 dòng DB",
+    "evidence": "{\"message\":\"Mã do nhân viên tạo phải có Tổng lượt dùng. Cần mức cao hơn thì nhờ quản trị viên tạo mã.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CPN-06",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Mã giảm giá (Marketing)",
+    "step": "Marketing tạo mã Tổng lượt dùng 1001 (trần 1000)",
+    "expect": "403 + câu nêu trần (coupon-input-rules.ts:126), không ghi DB",
+    "actual": "HTTP 403, 0 dòng DB",
+    "evidence": "{\"message\":\"Tổng lượt dùng của mã do nhân viên tạo không quá 1.000 lượt. Cần mức cao hơn thì nhờ quản trị viên tạo mã.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CPN-07",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Mã giảm giá (Marketing)",
+    "step": "Marketing tạo mã freeship không đặt Tổng lượt dùng",
+    "expect": "403 + câu nêu trần (coupon-input-rules.ts:126), không ghi DB",
+    "actual": "HTTP 403, 0 dòng DB",
+    "evidence": "{\"message\":\"Mã do nhân viên tạo phải có Tổng lượt dùng. Cần mức cao hơn thì nhờ quản trị viên tạo mã.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CPN-08",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Mã giảm giá (Marketing)",
+    "step": "Marketing tạo mã đúng trần (30%, tối đa 100.000đ, 40 lượt = 4.000.000đ)",
+    "expect": "201, createdById = marketing",
+    "actual": "HTTP 201, {\"c\":\"uat_marketing\",\"value\":30,\"m\":100000,\"u\":40}",
+    "evidence": "{\"id\":\"cmw172gg001yojtc47thwzc1h\",\"code\":\"UAT172FH5OK1\",\"type\":\"PERCENT\",\"value\":30,\"minOrder\":0,\"maxDiscount\":100000,\"startAt\":\"2026-11-03T20:23:01.721Z\",\"endAt\":\"2026-12-03T21:23:01.721Z\",\"usageLimi",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CPN-09a",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Mã giảm giá (Marketing)",
+    "step": "Đổ mã cho ngân sách ngày còn 6.000.000đ",
+    "expect": "201",
+    "actual": "HTTP 201",
+    "evidence": "{\"id\":\"cmw172gg401yqjtc4h0rdjyt3\",\"code\":\"UAT172FH5FILL\",\"type\":\"AMOUNT\",\"value\":100000,\"minOrder\":0,\"maxDiscount\":null,\"startAt\":\"2026-11-03T20:23:01.721Z\",\"endAt\":\"2026-12-03T21:23:01.721Z\",\"usageLi",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CPN-09",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Mã giảm giá (Marketing)",
+    "step": "Mã làm tổng ngân sách ngày vượt 10.000.000đ (thêm 2.000.000đ khi chỉ còn dưới 100.000đ)",
+    "expect": "400 \"Vượt ngân sách mã giảm giá và flash sale của nhân viên\" (coupon-input-rules.ts:187)",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":\"Vượt ngân sách mã giảm giá và flash sale của nhân viên ngày 04/11/2026 (10.000.000đ/người/ngày): phần này có thể giảm tới 2.000.000đ, còn 100.000đ. Cần hơn thì nhờ quản trị viên tạo.\",\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CPN-10",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Mã giảm giá (Marketing)",
+    "step": "Marketing tạo mã cá nhân cho chính mình",
+    "expect": "403 \"Không tạo hay sửa mã giảm giá cá nhân của chính mình\"",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Không tạo hay sửa mã giảm giá cá nhân của chính mình — nhờ quản trị viên.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CPN-11-cskh",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Mã giảm giá (Marketing)",
+    "step": "cskh tạo mã giảm giá",
+    "expect": "403",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CPN-11-kho",
+    "persona": "kho",
+    "size": "api",
+    "journey": "Mã giảm giá (Marketing)",
+    "step": "kho tạo mã giảm giá",
+    "expect": "403",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CPN-11-ketoan",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Mã giảm giá (Marketing)",
+    "step": "ketoan tạo mã giảm giá",
+    "expect": "403",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CPN-11-staff",
+    "persona": "staff",
+    "size": "api",
+    "journey": "Mã giảm giá (Marketing)",
+    "step": "staff tạo mã giảm giá",
+    "expect": "403",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CPN-12",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Mã giảm giá (Marketing)",
+    "step": "ADMIN tạo mã 80%, tối đa 500.000đ, 5000 lượt (vượt trần nhân viên)",
+    "expect": "201 (trần chỉ áp cho STAFF)",
+    "actual": "HTTP 201",
+    "evidence": "{\"id\":\"cmw172ggj01ysjtc43n0lrecy\",\"code\":\"UAT172FH5ADM1\",\"type\":\"PERCENT\",\"value\":80,\"minOrder\":0,\"maxDiscount\":500000,\"startAt\":\"2026-11-03T20:23:01.721Z\",\"endAt\":\"2026-12-03T21:23:01.721Z\",\"usageLim",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CPN-13",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Mã giảm giá (Marketing)",
+    "step": "ADMIN tạo mã ≥50% không có \"Giảm tối đa\"",
+    "expect": "400 \"Mã giảm từ 50% phải đặt Giảm tối đa\" (coupon-input-rules.ts:59)",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":\"Mã giảm từ 50% phải đặt Giảm tối đa (đ) để một đơn lớn không được giảm gần hết.\",\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CPN-14",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Mã giảm giá (Marketing)",
+    "step": "ADMIN tạo mã giảm 500.000đ không giới hạn lượt",
+    "expect": "201",
+    "actual": "HTTP 201",
+    "evidence": "{\"id\":\"cmw172ggl01ytjtc4qdpr9fb7\",\"code\":\"UAT172FH5ADM3\",\"type\":\"AMOUNT\",\"value\":500000,\"minOrder\":0,\"maxDiscount\":null,\"startAt\":\"2026-11-03T20:23:01.721Z\",\"endAt\":\"2026-12-03T21:23:01.721Z\",\"usageLi",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CPN-15",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Mã giảm giá (Marketing)",
+    "step": "Marketing nâng Tổng lượt dùng mã của mình lên 1001",
+    "expect": "403 (trần lượt)",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Tổng lượt dùng của mã do nhân viên tạo không quá 1.000 lượt. Cần mức cao hơn thì nhờ quản trị viên tạo mã.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CPN-16",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Mã giảm giá (Marketing)",
+    "step": "Marketing tắt mã do ADMIN tạo",
+    "expect": "403 \"Mã do quản trị viên hoặc hệ thống tạo\"",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Mã do quản trị viên hoặc hệ thống tạo — nhân viên không sửa được, nhờ quản trị viên.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CPN-17",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Mã giảm giá (Marketing)",
+    "step": "Marketing tắt mã của chính mình",
+    "expect": "200, isActive=false, updatedById = marketing",
+    "actual": "HTTP 200, {\"a\":false,\"u\":\"uat_marketing\"}",
+    "evidence": "{\"id\":\"cmw172gg001yojtc47thwzc1h\",\"code\":\"UAT172FH5OK1\",\"type\":\"PERCENT\",\"value\":30,\"minOrder\":0,\"maxDiscount\":100000,\"startAt\":\"2026-11-03T20:23:01.7",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CPN-18",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Mã giảm giá (Marketing)",
+    "step": "Sửa mức giảm của mã đã tạo (value)",
+    "expect": "400 (không có trong UpdateCouponDto, forbidNonWhitelisted)",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":[\"Không nhận trường «value».\"],\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CPN-19",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Mã giảm giá (Marketing)",
+    "step": "Tạo mã trùng",
+    "expect": "409 hoặc 400 (không 500)",
+    "actual": "HTTP 409",
+    "evidence": "{\"message\":\"Mã UAT172FH5ADM1 đã tồn tại.\",\"error\":\"Conflict\",\"statusCode\":409}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CPN-20",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Mã giảm giá (Marketing)",
+    "step": "Mã có dấu và khoảng trắng",
+    "expect": "400 câu \"Mã chỉ gồm chữ in hoa không dấu…\"",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":[\"Mã chỉ gồm chữ in hoa không dấu, số, gạch ngang hoặc gạch dưới (3–40 ký tự, không khoảng trắng).\"],\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CPN-21",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Mã giảm giá (Marketing)",
+    "step": "Ngày hết hạn đã qua",
+    "expect": "400 \"Ngày hết hạn đã qua\"",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":\"Ngày hết hạn đã qua — mã tạo ra sẽ không dùng được. Chọn ngày hết hạn từ hôm nay trở đi.\",\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-TPL-00",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Mẫu thông báo",
+    "step": "Marketing xem danh sách mẫu",
+    "expect": "135 mẫu, staffEditable đúng danh sách",
+    "actual": "135 mẫu; sửa được 24",
+    "evidence": {
+      "mkt": "WELCOME_VOUCHER",
+      "sys": "OPS_PANCAKE_ALERT"
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-TPL-B01",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Mẫu thông báo",
+    "step": "Marketing thêm link https ngoài",
+    "expect": "400, nội dung không đổi (notification-templates-admin.service.ts:276)",
+    "actual": "HTTP 400; nội dung giữ nguyên",
+    "evidence": "{\"message\":\"Nội dung chỉ được có link tubutree hoặc Zalo OA / Mini App của shop — bỏ link \\\"https://evil.example.com/nhan-qua\\\".\",\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-TPL-B02",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Mẫu thông báo",
+    "step": "Marketing thêm tên miền trần bit.ly/…",
+    "expect": "400, nội dung không đổi (notification-templates-admin.service.ts:276)",
+    "actual": "HTTP 400; nội dung giữ nguyên",
+    "evidence": "{\"message\":\"Nội dung chỉ được có link tubutree hoặc Zalo OA / Mini App của shop — bỏ link \\\"bit.ly/nhan-qua\\\".\",\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-TPL-B03",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Mẫu thông báo",
+    "step": "Marketing thêm www. ngoài",
+    "expect": "400, nội dung không đổi (notification-templates-admin.service.ts:276)",
+    "actual": "HTTP 400; nội dung giữ nguyên",
+    "evidence": "{\"message\":\"Nội dung chỉ được có link tubutree hoặc Zalo OA / Mini App của shop — bỏ link \\\"www.khuyenmai.vn\\\".\",\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-TPL-B04",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Mẫu thông báo",
+    "step": "Marketing thêm tubutree.com.evil.vn giả",
+    "expect": "400, nội dung không đổi (notification-templates-admin.service.ts:276)",
+    "actual": "HTTP 400; nội dung giữ nguyên",
+    "evidence": "{\"message\":\"Nội dung chỉ được có link tubutree hoặc Zalo OA / Mini App của shop — bỏ link \\\"http://tubutree.com.evil.vn/x\\\".\",\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-TPL-B05",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Mẫu thông báo",
+    "step": "Marketing thêm zalo.me của người khác",
+    "expect": "400, nội dung không đổi (notification-templates-admin.service.ts:276)",
+    "actual": "HTTP 400; nội dung giữ nguyên",
+    "evidence": "{\"message\":\"Nội dung chỉ được có link tubutree hoặc Zalo OA / Mini App của shop — bỏ link \\\"https://zalo.me/0912345678\\\".\",\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-TPL-B06",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Mẫu thông báo",
+    "step": "Marketing thêm dãy 8 chữ số",
+    "expect": "400, nội dung không đổi (notification-templates-admin.service.ts:276)",
+    "actual": "HTTP 400; nội dung giữ nguyên",
+    "evidence": "{\"message\":\"Nội dung không được có dãy từ 8 chữ số trở lên (số tài khoản, số điện thoại), kể cả viết tách. Thông tin chuyển khoản chỉ quản trị viên đưa vào mẫu.\",\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-TPL-B07",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Mẫu thông báo",
+    "step": "Marketing thêm 8 chữ số viết tách bằng dấu cách",
+    "expect": "400, nội dung không đổi (notification-templates-admin.service.ts:276)",
+    "actual": "HTTP 400; nội dung giữ nguyên",
+    "evidence": "{\"message\":\"Nội dung không được có dãy từ 8 chữ số trở lên (số tài khoản, số điện thoại), kể cả viết tách. Thông tin chuyển khoản chỉ quản trị viên đưa vào mẫu.\",\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-TPL-B08",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Mẫu thông báo",
+    "step": "Marketing thêm SĐT viết tách bằng dấu chấm",
+    "expect": "400, nội dung không đổi (notification-templates-admin.service.ts:276)",
+    "actual": "HTTP 400; nội dung giữ nguyên",
+    "evidence": "{\"message\":\"Nội dung không được có dãy từ 8 chữ số trở lên (số tài khoản, số điện thoại), kể cả viết tách. Thông tin chuyển khoản chỉ quản trị viên đưa vào mẫu.\",\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-TPL-B09",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Mẫu thông báo",
+    "step": "Marketing thêm 8 chữ số toàn chiều rộng (NFKC)",
+    "expect": "400, nội dung không đổi (notification-templates-admin.service.ts:276)",
+    "actual": "HTTP 400; nội dung giữ nguyên",
+    "evidence": "{\"message\":\"Nội dung không được có dãy từ 8 chữ số trở lên (số tài khoản, số điện thoại), kể cả viết tách. Thông tin chuyển khoản chỉ quản trị viên đưa vào mẫu.\",\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-TPL-B10",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Mẫu thông báo",
+    "step": "Marketing thêm 8 chữ số trong query của link tubutree",
+    "expect": "400, nội dung không đổi (notification-templates-admin.service.ts:276)",
+    "actual": "HTTP 400; nội dung giữ nguyên",
+    "evidence": "{\"message\":\"Nội dung không được có dãy từ 8 chữ số trở lên (số tài khoản, số điện thoại), kể cả viết tách. Thông tin chuyển khoản chỉ quản trị viên đưa vào mẫu.\",\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-TPL-G01",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Mẫu thông báo",
+    "step": "Marketing thêm \"tubutree.com\" (được phép) vào nội dung",
+    "expect": "200, nội dung đổi",
+    "actual": "HTTP 200",
+    "evidence": "{\"id\":\"nt-welcome\",\"code\":\"WELCOME_VOUCHER\",\"channel\":\"INAPP\",\"zaloTemplateId\":null,\"bodyTemplate\":\"Chào mừng bạn đến Tubu Tree! Tặng mã giảm giá {{code}} giảm {{value}}đ{{min_order_note}}, dùng trước",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-TPL-G02",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Mẫu thông báo",
+    "step": "Marketing thêm \"Tp.HCM\" (không phải link)",
+    "expect": "200 (không chặn nhầm)",
+    "actual": "HTTP 200",
+    "evidence": "{\"id\":\"nt-welcome\",\"code\":\"WELCOME_VOUCHER\",\"channel\":\"INAPP\",\"zaloTemplateId\":null,\"bodyTemplate\":\"Chào mừng bạn đến Tubu Tree! Tặng mã giảm giá {{code}} giảm {{value}}đ{{min_order_note}}, dùng trước",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-TPL-G03",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Mẫu thông báo",
+    "step": "Marketing thêm dãy 7 chữ số (dưới ngưỡng 8)",
+    "expect": "200 (ngưỡng là ≥ 8 chữ số)",
+    "actual": "HTTP 200",
+    "evidence": "{\"id\":\"nt-welcome\",\"code\":\"WELCOME_VOUCHER\",\"channel\":\"INAPP\",\"zaloTemplateId\":null,\"bodyTemplate\":\"Chào mừng bạn đến Tubu Tree! Tặng mã giảm giá {{code}} giảm {{value}}đ{{min_order_note}}, dùng trước",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-TPL-G04",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Mẫu thông báo",
+    "step": "Nội dung có biến {{khong_co_bien}}",
+    "expect": "400 câu nêu biến lạ (notification-variables.ts)",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":\"Biến \\\"{{khong_co_bien}}\\\" không dùng được cho mẫu này, khách sẽ nhận câu bị trống chỗ đó. Mẫu này dùng được: {{code}}, {{value}}, {{min_order_note}}, {{expires}}.\",\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-TPL-G05",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Mẫu thông báo",
+    "step": "Nội dung chỉ có khoảng trắng",
+    "expect": "400 \"không được để trống\"",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":\"Nội dung thông báo không được để trống.\",\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-TPL-G06",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Mẫu thông báo",
+    "step": "Nội dung 1001 ký tự",
+    "expect": "400 (MaxLength 1000)",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":[\"Trường «bodyTemplate» không được dài quá 1000 ký tự.\"],\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-TPL-P01",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Mẫu thông báo",
+    "step": "Marketing đổi kênh / mã mẫu ZNS",
+    "expect": "403 (tính phí mỗi tin)",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Đổi kênh gửi hoặc mã mẫu ZNS (tính phí mỗi tin) chỉ quản trị viên làm.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-TPL-P02",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Mẫu thông báo",
+    "step": "Marketing chỉ đổi mã mẫu ZNS",
+    "expect": "403",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Đổi kênh gửi hoặc mã mẫu ZNS (tính phí mỗi tin) chỉ quản trị viên làm.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-TPL-P03",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Mẫu thông báo",
+    "step": "Marketing sửa mẫu OPS_PANCAKE_ALERT (đơn hàng / tiền / vận hành)",
+    "expect": "403 \"chỉ quản trị viên sửa\"",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Mẫu thông báo đơn hàng, tiền, đối tác và vận hành chỉ quản trị viên sửa.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-TPL-P04-cskh",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Mẫu thông báo",
+    "step": "cskh sửa mẫu / xem danh sách mẫu",
+    "expect": "403 cả hai",
+    "actual": "PATCH 403, GET 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-TPL-P04-kho",
+    "persona": "kho",
+    "size": "api",
+    "journey": "Mẫu thông báo",
+    "step": "kho sửa mẫu / xem danh sách mẫu",
+    "expect": "403 cả hai",
+    "actual": "PATCH 403, GET 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-TPL-P04-ketoan",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Mẫu thông báo",
+    "step": "ketoan sửa mẫu / xem danh sách mẫu",
+    "expect": "403 cả hai",
+    "actual": "PATCH 403, GET 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-TPL-P04-staff",
+    "persona": "staff",
+    "size": "api",
+    "journey": "Mẫu thông báo",
+    "step": "staff sửa mẫu / xem danh sách mẫu",
+    "expect": "403 cả hai",
+    "actual": "PATCH 403, GET 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-TPL-P05",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Mẫu thông báo",
+    "step": "Mẫu không tồn tại",
+    "expect": "404",
+    "actual": "HTTP 404",
+    "evidence": "{\"message\":\"Không tìm thấy mẫu thông báo.\",\"error\":\"Not Found\",\"statusCode\":404}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-TPL-A01",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Mẫu thông báo",
+    "step": "ADMIN thêm link ngoài vào mẫu hệ thống",
+    "expect": "luật brief: chặn link ngoài và dãy 8 chữ số — nhưng code chỉ áp cho nhân viên (service.ts:156 `if (actor.staff)`)",
+    "actual": "HTTP 200: ADMIN ĐƯỢC thêm link ngoài",
+    "evidence": "{\"id\":\"nt-ops-pancake\",\"code\":\"OPS_PANCAKE_ALERT\",\"channel\":\"INAPP\",\"zaloTemplateId\":null,\"bodyTemplate\":\"⚠️ Đơn {{order_code}} cần xử lý (Pancake): {{message}} https://evil.example.com/x\"}",
+    "verdict": "CAN_CHU"
+  },
+  {
+    "id": "L5-TPL-A02",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Mẫu thông báo",
+    "step": "ADMIN thêm dãy 8 chữ số vào mẫu hệ thống",
+    "expect": "tương tự L5-TPL-A01 (code ghi \"Thông tin chuyển khoản chỉ quản trị viên đưa vào mẫu\", nên ADMIN được phép là chủ ý)",
+    "actual": "HTTP 200",
+    "evidence": "{\"id\":\"nt-ops-pancake\",\"code\":\"OPS_PANCAKE_ALERT\",\"channel\":\"INAPP\",\"zaloTemplateId\":null,\"bodyTemplate\":\"⚠️ Đơn {{order_code}} cần xử lý (Pancake): {{message}} STK 12345678\"}",
+    "verdict": "CAN_CHU"
+  },
+  {
+    "id": "L5-TPL-R-WELCOME_VOUCHER",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Mẫu thông báo",
+    "step": "Khôi phục nội dung WELCOME_VOUCHER",
+    "expect": "nội dung về đúng bản gốc",
+    "actual": "HTTP 200, khớp",
+    "evidence": "{\"id\":\"nt-welcome\",\"code\":\"WELCOME_VOUCHER\",\"channel\":\"INAPP\",\"zaloTemplateId\":null,\"bodyTemplate\":\"Chào mừng bạn đến Tu",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-TPL-R-OPS_PANCAKE_ALERT",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Mẫu thông báo",
+    "step": "Khôi phục nội dung OPS_PANCAKE_ALERT",
+    "expect": "nội dung về đúng bản gốc",
+    "actual": "HTTP 200, khớp",
+    "evidence": "{\"id\":\"nt-ops-pancake\",\"code\":\"OPS_PANCAKE_ALERT\",\"channel\":\"INAPP\",\"zaloTemplateId\":null,\"bodyTemplate\":\"⚠️ Đơn {{order",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CFG-01-staff",
+    "persona": "staff",
+    "size": "api",
+    "journey": "Cấu hình hệ thống",
+    "step": "staff xem / sửa cấu hình",
+    "expect": "403 cả hai, giá trị không đổi",
+    "actual": "GET 403, PUT 403, DB 30",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CFG-01-kho",
+    "persona": "kho",
+    "size": "api",
+    "journey": "Cấu hình hệ thống",
+    "step": "kho xem / sửa cấu hình",
+    "expect": "403 cả hai, giá trị không đổi",
+    "actual": "GET 403, PUT 403, DB 30",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CFG-01-ketoan",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Cấu hình hệ thống",
+    "step": "ketoan xem / sửa cấu hình",
+    "expect": "403 cả hai, giá trị không đổi",
+    "actual": "GET 403, PUT 403, DB 30",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CFG-01-marketing",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Cấu hình hệ thống",
+    "step": "marketing xem / sửa cấu hình",
+    "expect": "403 cả hai, giá trị không đổi",
+    "actual": "GET 403, PUT 403, DB 30",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CFG-01-cskh",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Cấu hình hệ thống",
+    "step": "cskh xem / sửa cấu hình",
+    "expect": "403 cả hai, giá trị không đổi",
+    "actual": "GET 403, PUT 403, DB 30",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CFG-02",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Cấu hình hệ thống",
+    "step": "Ghi khoá không tồn tại",
+    "expect": "400 \"Không có khoá cấu hình\", không tạo dòng mới (admin.service.ts:1502)",
+    "actual": "HTTP 400, 0 dòng",
+    "evidence": "{\"message\":\"Không có khoá cấu hình \\\"coupon.khong_co_khoa_nay\\\". Kiểm tra lại tên khoá.\",\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CFG-03",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Cấu hình hệ thống",
+    "step": "Ghi coupon.staff_max_percent = chuỗi \"ba mươi\"",
+    "expect": "400, giá trị cũ giữ nguyên",
+    "actual": "HTTP 400, DB 30",
+    "evidence": "{\"message\":\"\\\"coupon.staff_max_percent\\\": phải là số nguyên 1–100 %.\",\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CFG-04",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Cấu hình hệ thống",
+    "step": "Ghi coupon.staff_max_percent = -5",
+    "expect": "400 (trần % phải dương), giữ nguyên",
+    "actual": "HTTP 400, DB 30",
+    "evidence": "{\"message\":\"\\\"coupon.staff_max_percent\\\": phải là số nguyên 1–100 %.\",\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CFG-05",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Cấu hình hệ thống",
+    "step": "Ghi coupon.staff_max_percent = null",
+    "expect": "400 (không có 500)",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":\"\\\"coupon.staff_max_percent\\\": phải là số nguyên 1–100 %.\",\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CFG-06",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Cấu hình hệ thống",
+    "step": "Admin đổi coupon.staff_max_percent 30 -> 40",
+    "expect": "200, giá trị mới, có 1 dòng lịch sử (cũ/mới/ai đổi)",
+    "actual": "HTTP 200, DB {\"v\":40,\"ub\":\"uat_admin\"}, lịch sử {\"o\":30,\"n\":40,\"c\":\"uat_admin\"}",
+    "evidence": {
+      "histBefore": 4,
+      "h": [
+        {
+          "o": 30,
+          "n": 40,
+          "c": "uat_admin"
+        }
+      ]
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CFG-07",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Cấu hình hệ thống",
+    "step": "Sau khi nâng trần lên 40%: mã 35% tạo được, 41% bị chặn",
+    "expect": "cấu hình có hiệu lực ngay (không đợi cache dài)",
+    "actual": "35% -> 201, 41% -> 403",
+    "evidence": {
+      "c35": "{\"id\":\"cmw172gj801yyjtc4rut694if\",\"code\":\"UAT172FH5CFG35\",\"type\":\"PERCENT\",\"value\":35,\"minOrder\":0,\"maxDiscount\":10000,\"",
+      "c41": "{\"message\":\"Nhân viên tạo mã giảm tối đa 40%. Cần mức cao hơn thì nhờ quản trị viên tạo mã.\",\"error\":\"Forbidden\",\"statusCode\":403}"
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CFG-08",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Cấu hình hệ thống",
+    "step": "Khôi phục coupon.staff_max_percent về 30",
+    "expect": "200, giá trị về bản gốc, lịch sử +2 dòng",
+    "actual": "HTTP 200, DB 30, lịch sử 4 -> 6",
+    "evidence": "{\"ok\":true,\"key\":\"coupon.staff_max_percent\",\"value\":30}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CFG-09",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Cấu hình hệ thống",
+    "step": "Sau khi khôi phục: mã 35% lại bị chặn",
+    "expect": "403",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Nhân viên tạo mã giảm tối đa 30%. Cần mức cao hơn thì nhờ quản trị viên tạo mã.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CFG-10",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Cấu hình hệ thống",
+    "step": "GET /admin/config che giá trị bí mật (token, secret, key)",
+    "expect": "không trả nguyên văn chuỗi dài của khoá có tên token/secret/key",
+    "actual": "1 khoá nhạy cảm, 0 trả nguyên văn",
+    "evidence": [],
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OPS-01",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Sức khoẻ vận hành",
+    "step": "ADMIN mở /admin/ops/health",
+    "expect": "200, có problems + cronJobs + queues + pancake",
+    "actual": "HTTP 200, problems=pancake.attention",
+    "evidence": [
+      "generatedAt",
+      "thresholds",
+      "pancake",
+      "gomdon",
+      "queues",
+      "orders",
+      "alertChannels",
+      "cronJobs",
+      "zns",
+      "problems"
+    ],
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OPS-02-staff",
+    "persona": "staff",
+    "size": "api",
+    "journey": "Sức khoẻ vận hành",
+    "step": "staff gọi health / inbox / access",
+    "expect": "health 403; inbox 403; access 200 (staff-permissions.matrix.spec.ts:175-178)",
+    "actual": "health 403, inbox 403, access 200",
+    "evidence": "{\"role\":\"STAFF\",\"staffPermissions\":[]}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OPS-02-kho",
+    "persona": "kho",
+    "size": "api",
+    "journey": "Sức khoẻ vận hành",
+    "step": "kho gọi health / inbox / access",
+    "expect": "health 403; inbox 200; access 200 (staff-permissions.matrix.spec.ts:175-178)",
+    "actual": "health 403, inbox 200, access 200",
+    "evidence": "{\"role\":\"STAFF\",\"staffPermissions\":[\"KHO\"]}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OPS-02-ketoan",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Sức khoẻ vận hành",
+    "step": "ketoan gọi health / inbox / access",
+    "expect": "health 403; inbox 200; access 200 (staff-permissions.matrix.spec.ts:175-178)",
+    "actual": "health 403, inbox 200, access 200",
+    "evidence": "{\"role\":\"STAFF\",\"staffPermissions\":[\"KE_TOAN\"]}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OPS-02-marketing",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Sức khoẻ vận hành",
+    "step": "marketing gọi health / inbox / access",
+    "expect": "health 403; inbox 200; access 200 (staff-permissions.matrix.spec.ts:175-178)",
+    "actual": "health 403, inbox 200, access 200",
+    "evidence": "{\"role\":\"STAFF\",\"staffPermissions\":[\"MARKETING\"]}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OPS-02-cskh",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Sức khoẻ vận hành",
+    "step": "cskh gọi health / inbox / access",
+    "expect": "health 403; inbox 200; access 200 (staff-permissions.matrix.spec.ts:175-178)",
+    "actual": "health 403, inbox 200, access 200",
+    "evidence": "{\"role\":\"STAFF\",\"staffPermissions\":[\"CSKH\"]}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OPS-03",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Sức khoẻ vận hành",
+    "step": "Chưa có token Zalo OA",
+    "expect": "không có cảnh báo zalo.oa_token (ops-health.service.ts:266 \"Chưa cấu hình thì không báo\")",
+    "actual": "không có cảnh báo; dòng cấu hình token: []",
+    "evidence": [],
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OPS-04",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Sức khoẻ vận hành",
+    "step": "Token Zalo OA còn 1 giờ (dưới 3 giờ)",
+    "expect": "problems có zalo.oa_token, câu \"chỉ còn 0 giờ … phút\" (ops-health.service.ts:288)",
+    "actual": "Token Zalo OA chỉ còn 0 giờ 59 phút mà chưa được làm mới — tin ZNS và trả lời Zalo OA sẽ không gửi được; xem log \"Zalo OA refresh\" hoặc cấp lại token ở developers.zalo.me",
+    "evidence": {
+      "key": "zalo.oa_token",
+      "message": "Token Zalo OA chỉ còn 0 giờ 59 phút mà chưa được làm mới — tin ZNS và trả lời Zalo OA sẽ không gửi được; xem log \"Zalo OA refresh\" hoặc cấp lại token ở developers.zalo.me"
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OPS-04b",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Sức khoẻ vận hành",
+    "step": "Giọng câu cảnh báo token",
+    "expect": "không \"Vui lòng\", \"chúng tôi\", \"...\"",
+    "actual": "sạch",
+    "evidence": "Token Zalo OA chỉ còn 0 giờ 59 phút mà chưa được làm mới — tin ZNS và trả lời Zalo OA sẽ không gửi được; xem log \"Zalo OA refresh\" hoặc cấp lại token ở developers.zalo.me",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OPS-05",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Sức khoẻ vận hành",
+    "step": "Token Zalo OA đã hết hạn 1 giờ",
+    "expect": "cảnh báo \"đã hết hạn lúc …\"",
+    "actual": "Token Zalo OA đã hết hạn lúc 03:23 04/11/2026 — tin ZNS và trả lời Zalo OA sẽ không gửi được; xem log \"Zalo OA refresh\" hoặc cấp lại token ở developers.zalo.me",
+    "evidence": {
+      "key": "zalo.oa_token",
+      "message": "Token Zalo OA đã hết hạn lúc 03:23 04/11/2026 — tin ZNS và trả lời Zalo OA sẽ không gửi được; xem log \"Zalo OA refresh\" hoặc cấp lại token ở developers.zalo.me"
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OPS-06",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Sức khoẻ vận hành",
+    "step": "ADMIN xem hộp việc /admin/ops/inbox",
+    "expect": "liệt kê hàng đợi theo quyền",
+    "actual": "{\"generatedAt\":\"2026-11-03T21:23:03.148Z\",\"items\":[{\"key\":\"pancakeAttention\",\"count\":6},{\"key\":\"pancakeUnsynced\",\"count\":0},{\"key\":\"gomdonAttention\",\"count\":0},{\"key\":\"customerRefunds\",\"count\":4},{\"key\":\"returnsPending\",\"count\":1,\"oldestAt\":\"2026-11-03T21:11:27.649Z\"},{\"key\":\"returnsToReceive\",\"count\":5},{\"key\":\"bankTransferToConfirm\",\"count\":0},{\"key\":\"dealerTransferToConfirm\",\"count\":0},{\"key\":\"storefrontsPending\",\"count\":1,\"oldestAt\":\"2026-10-28T07:58:14.352Z\"},{\"key\":\"accountDeletionPending\"",
+    "evidence": {
+      "generatedAt": "2026-11-03T21:23:03.148Z",
+      "items": [
+        {
+          "key": "pancakeAttention",
+          "count": 6
+        },
+        {
+          "key": "pancakeUnsynced",
+          "count": 0
+        },
+        {
+          "key": "gomdonAttention",
+          "count": 0
+        },
+        {
+          "key": "customerRefunds",
+          "count": 4
+        },
+        {
+          "key": "returnsPending",
+          "count": 1,
+          "oldestAt": "2026-11-03T21:11:27.649Z"
+        },
+        {
+          "key": "returnsToReceive",
+          "count": 5
+        },
+        {
+          "key": "bankTransferToConfirm",
+          "count": 0
+        },
+        {
+          "key": "dealerTransferToConfirm",
+          "count": 0
+        },
+        {
+          "key": "storefrontsPending",
+          "count": 1,
+          "oldestAt": "2026-10-28T07:58:14.352Z"
+        },
+        {
+          "key": "accountDeletionPending",
+          "count": 0
+        },
+        {
+          "key": "shiftsPending",
+          "count": 0
+        },
+        {
+          "key": "productsMissingImage",
+          "count": 44
+        },
+        {
+          "key": "productsUncategorized",
+          "count": 0
+        },
+        {
+          "key": "merchantOverdue",
+          "count": 0
+        },
+        {
+          "key": "merchantProducts",
+          "count": 0
+        },
+        {
+          "key": "consignmentPending",
+          "count": 0
+        },
+        {
+          "key": "merchantToSettle",
+          "count": 0
+        },
+        {
+          "key": "merchantPayoutsPending",
+          "count": 0
+        },
+        {
+          "key": "dealerApplications",
+          "count": 0
+        },
+        {
+          "key": "dealerClaims",
+          "count": 0
+        },
+        {
+          "key": "dealerClaimsToPay",
+          "count": 0
+        },
+        {
+          "key": "dealerCreditReported",
+          "count": 0
+        },
+        {
+          "key": "payouts",
+          "count": 0
+        },
+        {
+          "key": "payoutsToPay",
+          "count": 0
+        },
+        {
+          "key": "communityReports",
+          "count": 0
+        },
+        {
+          "key": "communityPending",
+          "count": 0
+        },
+        {
+          "key": "communityUnanswered",
+          "count": 0
+        },
+        {
+          "key": "invoicePending",
+          "count": 1
+        },
+        {
+          "key": "externalPoints",
+          "count": 0
+        },
+        {
+          "key": "supportChatUnforwarded",
+          "count": 0
+        },
+        {
+          "key": "zaloBridgeDown",
+          "count": 0
+        },
+        {
+          "key": "wasteToCount",
+          "count": 0
+        },
+        {
+          "key": "wasteUnmatched",
+          "count": 0
+        },
+        {
+          "key": "wasteBlockedPending",
+          "count": 0
+        },
+        {
+          "key": "wastePointsPending",
+          "count": 0
+        },
+        {
+          "key": "wastePerksPending",
+          "count": 0
+        },
+        {
+          "key": "wasteTransitOverdue",
+          "count": 0
+        },
+        {
+          "key": "wasteGiftOverdue",
+          "count": 0
+        },
+        {
+          "key": "wasteOrderMismatch",
+          "count": 0
+        }
+      ]
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OPS-07",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Sức khoẻ vận hành",
+    "step": "Khôi phục cấu hình token Zalo",
+    "expect": "cảnh báo zalo.oa_token biến mất",
+    "actual": "problems=pancake.attention",
+    "evidence": null,
+    "verdict": "PASS"
+  }
+]

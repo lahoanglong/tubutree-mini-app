@@ -1,0 +1,57 @@
+[
+  {
+    "id": "Z-1",
+    "persona": "mọi user",
+    "khổ": "SQL",
+    "journey": "Đối soát cuối lane",
+    "step": "users.pointsBalance = SUM(delta) lô STANDARD và pointsConvertedBalance = SUM(delta) lô CONVERTED, cho mọi user của lane",
+    "expected": "points-ledger.ts; points-reconcile.ts",
+    "actual": "số user lệch=0 []",
+    "evidence": "số user lệch=0 []",
+    "status": "PASS"
+  },
+  {
+    "id": "Z-2",
+    "persona": "mọi user",
+    "khổ": "SQL",
+    "journey": "Đối soát cuối lane",
+    "step": "users.walletBalance = SUM(wallet_transactions.delta), cho mọi user của lane",
+    "expected": "wallet-ledger.service.ts applyWalletDelta",
+    "actual": "số user lệch=0 []",
+    "evidence": "số user lệch=0 []",
+    "status": "PASS"
+  },
+  {
+    "id": "Z-3",
+    "persona": "mọi user",
+    "khổ": "SQL",
+    "journey": "Đối soát cuối lane",
+    "step": "không user nào có ví hoặc điểm âm",
+    "expected": "applyWalletDelta; points-ledger.ts",
+    "actual": "số user âm=0",
+    "evidence": "số user âm=0",
+    "status": "PASS"
+  },
+  {
+    "id": "Z-4",
+    "persona": "DB lane 3",
+    "khổ": "script",
+    "journey": "Đối soát cuối lane",
+    "step": "apps/api/scripts/reconcile-points.ts (chỉ xem): 0 user lệch, thoát mã 0",
+    "expected": "apps/api/scripts/reconcile-points.ts",
+    "actual": "mã thoát=0;  === ĐỐI SOÁT Điểm Xanh theo lô (DRY-RUN — chỉ xem) === Lô STANDARD : 0 user lệch, chênh ròng 0 điểm, tuyệt đối 0 điểm Lô CONVERTED: 0 user lệch, chênh ròng 0 điểm, tuyệt đối 0 điểm (chênh âm = đang cộng dư cần thu hồi) ✅ Không có user nào lệch — không cần đối soát. ",
+    "evidence": "mã thoát=0;  === ĐỐI SOÁT Điểm Xanh theo lô (DRY-RUN — chỉ xem) === Lô STANDARD : 0 user lệch, chênh ròng 0 điểm, tuyệt đối 0 điểm Lô CONVERTED: 0 user lệch, chênh ròng 0 điểm, tuyệt đối 0 điểm (chênh âm = đang cộng dư cần thu hồi) ✅ Không có user nào lệch — không cần đối soát. ",
+    "status": "PASS"
+  },
+  {
+    "id": "Z-5",
+    "persona": "DB lane 3",
+    "khổ": "script",
+    "journey": "Đối soát cuối lane",
+    "step": "apps/api/scripts/reconcile-wallet.ts (chỉ xem): 0 user lệch, thoát mã 0",
+    "expected": "apps/api/scripts/reconcile-wallet.ts",
+    "actual": "mã thoát=0;  === ĐỐI SOÁT Ví Tubu vs sổ cái wallet_transactions === User bị lệch : 0 Chênh ròng : 0đ (dương = ví nhiều hơn sổ ghi nhận) Chênh tuyệt đối: 0đ Không có user nào lệch. ",
+    "evidence": "mã thoát=0;  === ĐỐI SOÁT Ví Tubu vs sổ cái wallet_transactions === User bị lệch : 0 Chênh ròng : 0đ (dương = ví nhiều hơn sổ ghi nhận) Chênh tuyệt đối: 0đ Không có user nào lệch. ",
+    "status": "PASS"
+  }
+]

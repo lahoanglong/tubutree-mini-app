@@ -1,0 +1,58 @@
+{
+  "stats": {
+    "mini375": [
+      {
+        "text": "5",
+        "lines": 1,
+        "width": 78
+      },
+      {
+        "text": "1.052.000đ",
+        "lines": 2,
+        "width": 78
+      },
+      {
+        "text": "78.080đ",
+        "lines": 1,
+        "width": 78
+      }
+    ],
+    "web375": [
+      {
+        "text": "5",
+        "lines": 1,
+        "width": 78
+      },
+      {
+        "text": "1.052.000đ",
+        "lines": 2,
+        "width": 78
+      },
+      {
+        "text": "78.080đ",
+        "lines": 1,
+        "width": 78
+      }
+    ]
+  },
+  "big": {
+    "mini375": {
+      "text": "1.476.000đ",
+      "lines": 2,
+      "width": 78
+    },
+    "web375": {
+      "text": "1.476.000đ",
+      "lines": 2,
+      "width": 78
+    }
+  },
+  "ph": {
+    "mini375": {
+      "need": 136,
+      "room": 74,
+      "inputWidth": 98
+    },
+    "web375": null
+  }
+}

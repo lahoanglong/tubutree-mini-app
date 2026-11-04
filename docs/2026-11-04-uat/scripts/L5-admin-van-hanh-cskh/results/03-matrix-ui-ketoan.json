@@ -1,0 +1,701 @@
+[
+  {
+    "id": "L5-UX-ketoan-inbox",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=inbox (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=inbox, URL=inbox; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 268,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-ketoan-orders",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=orders (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=orders, URL=orders; 11 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "orders",
+      "urlTab": "orders",
+      "nContent": 2474,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-ketoan-productCategories",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=productCategories (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 268,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-ketoan-users",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=users (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 268,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-ketoan-supportChat",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=supportChat (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 268,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-ketoan-community",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=community (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 268,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-ketoan-coupons",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=coupons (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 268,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-ketoan-waste",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=waste (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=waste, URL=waste; 7 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "waste",
+      "urlTab": "waste",
+      "nContent": 551,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-ketoan-storefronts",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=storefronts (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 268,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-ketoan-merchantProducts",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=merchantProducts (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 268,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-ketoan-dealers",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=dealers (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 268,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-ketoan-dashboard",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=dashboard (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 268,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-ketoan-analytics",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=analytics (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 268,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-ketoan-reports",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=reports (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=reports, URL=reports; 7 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "reports",
+      "urlTab": "reports",
+      "nContent": 1788,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-ketoan-externalOrders",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=externalOrders (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 268,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-ketoan-returns",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=returns (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 268,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-ketoan-customerRefunds",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=customerRefunds (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=customerRefunds, URL=customerRefunds; 7 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "customerRefunds",
+      "urlTab": "customerRefunds",
+      "nContent": 858,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-ketoan-subscriptions",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=subscriptions (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 268,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-ketoan-reviews",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=reviews (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 268,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-ketoan-quickReplies",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=quickReplies (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 268,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-ketoan-flashSales",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=flashSales (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 268,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-ketoan-posCredits",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=posCredits (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 268,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-ketoan-externalClaims",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=externalClaims (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=externalClaims, URL=externalClaims; 8 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "externalClaims",
+      "urlTab": "externalClaims",
+      "nContent": 872,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-ketoan-campaigns",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=campaigns (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 268,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-ketoan-bundles",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=bundles (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 268,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-ketoan-engagement",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=engagement (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 355,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-ketoan-dealerClaims",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=dealerClaims (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=dealerClaims, URL=dealerClaims; 7 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "dealerClaims",
+      "urlTab": "dealerClaims",
+      "nContent": 366,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-ketoan-dealerAccounts",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=dealerAccounts (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=dealerAccounts, URL=dealerAccounts; 8 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "dealerAccounts",
+      "urlTab": "dealerAccounts",
+      "nContent": 423,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-ketoan-dealerPrices",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=dealerPrices (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 355,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-ketoan-commissionRates",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=commissionRates (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 355,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-ketoan-payouts",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=payouts (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=payouts, URL=payouts; 8 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "payouts",
+      "urlTab": "payouts",
+      "nContent": 1045,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-ketoan-merchantFulfilment",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=merchantFulfilment (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=merchantFulfilment, URL=merchantFulfilment; 8 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "merchantFulfilment",
+      "urlTab": "merchantFulfilment",
+      "nContent": 554,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-ketoan-brands",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=brands (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 355,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-ketoan-faqs",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=faqs (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 355,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-ketoan-contentKit",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=contentKit (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 355,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-ketoan-academy",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=academy (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 355,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-ketoan-notificationTemplates",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=notificationTemplates (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 355,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-ketoan-staffRoster",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=staffRoster (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 563,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-ketoan-shiftApproval",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=shiftApproval (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 355,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-ketoan-payroll",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=payroll (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 355,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-ketoan-attendance",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=attendance (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 355,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-ketoan-config",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=config (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 355,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-ketoan-opsHealth",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=opsHealth (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 355,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-ketoan-sum",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "tổng 43 tab",
+    "expect": "mọi tab đúng quyền",
+    "actual": "43/43 đúng",
+    "evidence": [],
+    "verdict": "PASS"
+  }
+]

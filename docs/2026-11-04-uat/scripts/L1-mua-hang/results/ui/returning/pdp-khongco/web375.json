@@ -1,0 +1,17 @@
+{
+ "persona": "returning",
+ "key": "pdp-khongco",
+ "surf": "web375",
+ "ms": 5242,
+ "title": "Không tìm thấy sản phẩm — Tubu Tree",
+ "scrollW": 375,
+ "clientW": 375,
+ "url": "/san-pham/khong-co-san-pham-nay",
+ "text": "Không tìm thấy trang\nTrang này lạc vào vườn rồi\nCó thể liên kết đã cũ hoặc trang không tồn tại. Quay về trang chủ để tiếp tục dạo vườn nhé.\nVề trang chủ\nHotline: 0984 606 774\nĐiều khoản\nBảo mật\nĐổi trả\nVận chuyển",
+ "badRequests": [],
+ "errors": [],
+ "consoleErrors": [
+  "Failed to load resource: the server responded with a status of 404 (Not Found)"
+ ],
+ "blocked": []
+}

@@ -1,0 +1,123 @@
+[
+  {
+    "id": "B2-1",
+    "persona": "returning",
+    "khổ": "API",
+    "journey": "Trả hàng một phần sau giao",
+    "step": "đặt đơn 2×nước giặt + 1×lau kính, dùng 5.000 điểm, chuyển khoản",
+    "expected": "loyalty.vnd_per_point_redeem=1; max_redeem_pct=20%",
+    "actual": "code=TUBU2026110338002 quote={\"subtotal\":499000,\"pointsUsed\":5000,\"pointsDiscount\":5000,\"total\":494000,\"pointsEarned\":11856}",
+    "evidence": "code=TUBU2026110338002 quote={\"subtotal\":499000,\"pointsUsed\":5000,\"pointsDiscount\":5000,\"total\":494000,\"pointsEarned\":11856}",
+    "status": "PASS"
+  },
+  {
+    "id": "B2-2",
+    "persona": "returning",
+    "khổ": "API",
+    "journey": "Trả hàng một phần sau giao",
+    "step": "giao xong: điểm tích cộng, điểm đã dùng đã trừ khi đặt, sổ khớp",
+    "expected": "ORDER_DELIVERED + ORDER_REDEEM",
+    "actual": "đơn={\"id\":\"cmw16ejct00xbi0v0zswvgbym\",\"status\":\"DELIVERED\",\"total\":494000,\"sf\":0,\"pu\":5000,\"pe\":11856,\"ps\":\"PAID\"} items=[{\"id\":\"cmw16ejcu00xci0v0julvkjm1\",\"productName\":\"Nước giặt sinh học Fuwa3e\",\"quantity\":2,\"total\":420000,\"paidTotal\":415792,\"pointsDiscount\":4208},{\"id\":\"cmw16ejcu00xdi0v0hxwnfvka\",\"productName\":\"Nước lau kính enzyme Fuwa3e\",\"quantity\":1,\"total\":79000,\"paidTotal\":78208,\"pointsDiscount\":792}] điểm trước={\"bal\":46920,\"conv\":0,\"sum_std\":46920,\"sum_conv\":0} sau={\"bal\":53776,\"conv\":0,\"sum_std\":53776,\"sum_conv\":0}",
+    "evidence": "đơn={\"id\":\"cmw16ejct00xbi0v0zswvgbym\",\"status\":\"DELIVERED\",\"total\":494000,\"sf\":0,\"pu\":5000,\"pe\":11856,\"ps\":\"PAID\"} items=[{\"id\":\"cmw16ejcu00xci0v0julvkjm1\",\"productName\":\"Nước giặt sinh học Fuwa3e\",\"quantity\":2,\"total\":420000,\"paidTotal\":415792,\"pointsDiscount\":4208},{\"id\":\"cmw16ejcu00xdi0v0hxwnfvka\",\"productName\":\"Nước lau kính enzyme Fuwa3e\",\"quantity\":1,\"total\":79000,\"paidTotal\":78208,\"pointsDiscount\":792}] điểm trước={\"bal\":46920,\"conv\":0,\"sum_std\":46920,\"sum_conv\":0} sau={\"bal\":53776,\"conv\":0,\"sum_std\":53776,\"sum_conv\":0}",
+    "status": "PASS"
+  },
+  {
+    "id": "B2-3",
+    "persona": "returning",
+    "khổ": "API",
+    "journey": "Trả hàng một phần sau giao",
+    "step": "gửi yêu cầu trả 1/2 nước giặt (lỗi shop)",
+    "expected": "order-returns.service.ts request",
+    "actual": "estimate={\"isFull\":false,\"goods\":207896,\"shipping\":0,\"refund\":207896,\"moneyRefundable\":true,\"pointsUsedBack\":2104,\"lines\":[{\"orderItemId\":\"cmw16ejcu00xci0v0julvkjm1\",\"quantity\":1,\"refundAmount\":207896}]} request=201 {\"id\":\"cmw16em6700yfi0v0hpb9k7uh\",\"orderId\":\"cmw16ejct00xbi0v0zswvgbym\",\"userId\":\"uat_returning\",\"reason\":\"Sản phẩm lỗi, hỏng\",\"reasonCode\":\"DEFECTIVE\",\"status\":\"REQUESTED\",\"refundMethod\":\"WALLET\",\"bankName\":null,\"bankAccountNo\":null,\"bankAccountName\":null,\"shopFault\":null,\"fullReturn\":false,\"refund",
+    "evidence": "estimate={\"isFull\":false,\"goods\":207896,\"shipping\":0,\"refund\":207896,\"moneyRefundable\":true,\"pointsUsedBack\":2104,\"lines\":[{\"orderItemId\":\"cmw16ejcu00xci0v0julvkjm1\",\"quantity\":1,\"refundAmount\":207896}]} request=201 {\"id\":\"cmw16em6700yfi0v0hpb9k7uh\",\"orderId\":\"cmw16ejct00xbi0v0zswvgbym\",\"userId\":\"uat_returning\",\"reason\":\"Sản phẩm lỗi, hỏng\",\"reasonCode\":\"DEFECTIVE\",\"status\":\"REQUESTED\",\"refundMethod\":\"WALLET\",\"bankName\":null,\"bankAccountNo\":null,\"bankAccountName\":null,\"shopFault\":null,\"fullReturn\":false,\"refund",
+    "status": "PASS"
+  },
+  {
+    "id": "B2-4",
+    "persona": "returning",
+    "khổ": "API",
+    "journey": "Trả hàng một phần sau giao",
+    "step": "duyệt: hoàn tiền theo phần dòng vào ví (paidTotal/2), không hoàn ship (trả một phần, lỗi shop nhưng ship=0)",
+    "expected": "refund-allocation.ts:1-20",
+    "actual": "review=201 preview={\"refund\":207896,\"goods\":207896,\"shipping\":0,\"pointsUsedBack\":2104,\"pointsEarnedBack\":4990,\"destination\":{\"method\":\"WALLET\"}} return_requests={\"status\":\"APPROVED\",\"ra\":207896,\"sr\":0,\"prf\":2104,\"prv\":4990,\"fr\":false,\"rm\":\"WALLET\"} ví 420000->627896 (kỳ vọng +207896) giặt.paidTotal=415792 goodsPaid=494000",
+    "evidence": "review=201 preview={\"refund\":207896,\"goods\":207896,\"shipping\":0,\"pointsUsedBack\":2104,\"pointsEarnedBack\":4990,\"destination\":{\"method\":\"WALLET\"}} return_requests={\"status\":\"APPROVED\",\"ra\":207896,\"sr\":0,\"prf\":2104,\"prv\":4990,\"fr\":false,\"rm\":\"WALLET\"} ví 420000->627896 (kỳ vọng +207896) giặt.paidTotal=415792 goodsPaid=494000",
+    "status": "PASS"
+  },
+  {
+    "id": "B2-5",
+    "persona": "returning",
+    "khổ": "API",
+    "journey": "Trả hàng một phần sau giao",
+    "step": "điểm đã dùng trả lại theo phần dòng (pointsDiscount/2)",
+    "expected": "refund-allocation.ts: điểm đã dùng trả theo OrderItem.pointsDiscount",
+    "actual": "pointsRefunded=2104 kỳ vọng 2104 (dòng pointsDiscount=4208)",
+    "evidence": "pointsRefunded=2104 kỳ vọng 2104 (dòng pointsDiscount=4208)",
+    "status": "PASS"
+  },
+  {
+    "id": "B2-6",
+    "persona": "returning",
+    "khổ": "API",
+    "journey": "Trả hàng một phần sau giao",
+    "step": "điểm tích thu hồi theo tỉ lệ tiền trả/tiền hàng thực trả",
+    "expected": "refund-allocation.ts: điểm tích thu hồi theo phần tiền thực trả",
+    "actual": "pointsReversed=4990 kỳ vọng 4990 (=11856×207896/494000)",
+    "evidence": "pointsReversed=4990 kỳ vọng 4990 (=11856×207896/494000)",
+    "status": "PASS"
+  },
+  {
+    "id": "B2-7",
+    "persona": "returning",
+    "khổ": "API",
+    "journey": "Trả hàng một phần sau giao",
+    "step": "sổ điểm: số dư = SUM(sổ) sau trả một phần; thay đổi ròng của đơn = điểm tích - thu hồi - điểm dùng + hoàn",
+    "expected": "points-reconcile.ts",
+    "actual": "điểm trước duyệt={\"bal\":53776,\"conv\":0,\"sum_std\":53776,\"sum_conv\":0} sau={\"bal\":50890,\"conv\":0,\"sum_std\":50890,\"sum_conv\":0} dòng sổ của đơn=[{\"delta\":-5000,\"lot\":\"STANDARD\",\"reason\":\"ORDER_REDEEM:TUBU2026110338002\"},{\"delta\":11856,\"lot\":\"STANDARD\",\"reason\":\"ORDER_DELIVERED:TUBU2026110338002\"}]",
+    "evidence": "điểm trước duyệt={\"bal\":53776,\"conv\":0,\"sum_std\":53776,\"sum_conv\":0} sau={\"bal\":50890,\"conv\":0,\"sum_std\":50890,\"sum_conv\":0} dòng sổ của đơn=[{\"delta\":-5000,\"lot\":\"STANDARD\",\"reason\":\"ORDER_REDEEM:TUBU2026110338002\"},{\"delta\":11856,\"lot\":\"STANDARD\",\"reason\":\"ORDER_DELIVERED:TUBU2026110338002\"}]",
+    "status": "PASS"
+  },
+  {
+    "id": "B2-8",
+    "persona": "returning",
+    "khổ": "API",
+    "journey": "Trả hàng một phần sau giao",
+    "step": "đơn vẫn DELIVERED sau trả một phần",
+    "expected": "return-ledger/partialReturnTotals",
+    "actual": "orders.status=DELIVERED",
+    "evidence": "orders.status=DELIVERED",
+    "status": "PASS"
+  },
+  {
+    "id": "B2-9",
+    "persona": "returning",
+    "khổ": "API",
+    "journey": "Trả hàng một phần sau giao",
+    "step": "dòng sổ ví của khoản trả hàng",
+    "expected": "wallet_transactions",
+    "actual": "{\"delta\":207896,\"type\":\"ORDER_REFUND\",\"reason\":\"Hoàn tiền trả hàng đơn TUBU2026110338002\",\"createdAt\":\"2026-11-03T21:04:30.686Z\"}",
+    "evidence": "{\"delta\":207896,\"type\":\"ORDER_REFUND\",\"reason\":\"Hoàn tiền trả hàng đơn TUBU2026110338002\",\"createdAt\":\"2026-11-03T21:04:30.686Z\"}",
+    "status": "PASS"
+  },
+  {
+    "id": "B2-10",
+    "persona": "returning",
+    "khổ": "API",
+    "journey": "Trả hàng một phần sau giao",
+    "step": "trả nốt phần còn lại: tổng hoàn các lần = đúng tiền hàng thực trả + phí ship (không dư không thiếu)",
+    "expected": "refund-allocation.ts: luỹ kế sau trừ luỹ kế trước",
+    "actual": "review2=201  tổng hoàn=494000 tổng đơn=494000 ví 627896->914000; điểm={\"bal\":46920,\"conv\":0,\"sum_std\":46920,\"sum_conv\":0}",
+    "evidence": "review2=201  tổng hoàn=494000 tổng đơn=494000 ví 627896->914000; điểm={\"bal\":46920,\"conv\":0,\"sum_std\":46920,\"sum_conv\":0}",
+    "status": "PASS"
+  },
+  {
+    "id": "B2-11",
+    "persona": "returning",
+    "khổ": "API",
+    "journey": "Trả hàng một phần sau giao",
+    "step": "đơn sau trả nốt",
+    "expected": "order-reversal",
+    "actual": "RETURNED",
+    "evidence": "orders.status=RETURNED",
+    "status": "PASS"
+  }
+]

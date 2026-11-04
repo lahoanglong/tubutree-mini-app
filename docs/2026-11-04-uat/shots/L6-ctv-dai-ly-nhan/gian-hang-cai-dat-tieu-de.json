@@ -1,0 +1,24 @@
+{
+  "mini": {
+    "heads": [
+      "Cài đặt gian hàng",
+      "Thanh toán"
+    ],
+    "btns": [
+      "Lưu cấu hình gian hàng",
+      "Gỡ đăng gian hàng"
+    ],
+    "text": "Cài đặt gian hàng\nTên gian hàng\nMàu sắc thương hiệu\nThanh toán\n\nKhách luôn thanh toán cho Tubu Tree. Hoa hồng của bạn chuyển vào Ví Tubu ngay trong mục Cộng tác viên.\n\nLưu cấu hình gian hàng\n\nKhách mở link gian hàng sẽ không thấy gì cho tới khi bạn đăng lại.\n\nGỡ đăng gian hàng"
+  },
+  "web": {
+    "heads": [
+      "Cấu hình gian hàng",
+      "Thanh toán"
+    ],
+    "btns": [
+      "Lưu cấu hình gian hàng",
+      "Gỡ đăng gian hàng"
+    ],
+    "text": "Cấu hình gian hàng\nTên gian hàng\nMàu sắc thương hiệu\nThanh toán\n\nKhách luôn thanh toán cho Tubu Tree. Hoa hồng của bạn chuyển vào Ví Tubu ngay trong mục Cộng tác viên.\n\nLưu cấu hình gian hàng\n\nKhách mở link gian hàng sẽ không thấy gì cho tới khi bạn đăng lại.\n\nGỡ đăng gian hàng"
+  }
+}

@@ -1,0 +1,97 @@
+[
+  {
+    "id": "L5-RRF-00",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Hoàn tiền khách đồng thời",
+    "step": "Chuẩn bị: COD giao rồi hoàn về",
+    "expect": "khoản UNVERIFIED",
+    "actual": "khoản UNVERIFIED 120000đ",
+    "evidence": {
+      "id": "cmw17mk8s033gjtc45r5gc00h",
+      "s": "UNVERIFIED",
+      "a": 120000
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RRF-01",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Hoàn tiền khách đồng thời",
+    "step": "4 request \"Xác nhận hãng đã thu COD\" cùng lúc",
+    "expect": "đúng 1 thành công, khoản PENDING một lần, Ví không đổi",
+    "actual": "mã 201,400,400,400; khoản PENDING; ví 2160000 -> 2160000",
+    "evidence": {
+      "hist": [
+        {
+          "n": 1
+        }
+      ]
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RRF-02a",
+    "persona": "returning",
+    "size": "api",
+    "journey": "Hoàn tiền khách đồng thời",
+    "step": "Chuẩn bị: huỷ đơn đã trả, chọn nhận về ngân hàng",
+    "expect": "khoản PENDING",
+    "actual": "khoản PENDING 120000đ",
+    "evidence": {
+      "id": "cmw17ml5v034hjtc436hy1n83",
+      "s": "PENDING",
+      "a": 120000
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RRF-02",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Hoàn tiền khách đồng thời",
+    "step": "4 request \"Bắt đầu chuyển khoản\" (claim) cùng lúc",
+    "expect": "đúng 1 người giữ khoản (PROCESSING), các request còn lại 4xx",
+    "actual": "mã 201,400,400,400; khoản PROCESSING; người giữ uat_ketoan",
+    "evidence": [
+      "{\"id\":\"cmw17ml5v034hjtc436hy1n83\",\"orderId\":\"cmw17mkpg0344jtc4e6f02ocw\",\"orderCo",
+      "{\"message\":\"Khoản này đang được Kế Toán Tubu chuyển khoản.\",\"error\":\"Bad Request",
+      "{\"message\":\"Khoản hoàn vừa thay đổi — bạn tải lại nhé.\",\"error\":\"Bad Request\",\"s",
+      "{\"message\":\"Khoản này đang được Kế Toán Tubu chuyển khoản.\",\"error\":\"Bad Request"
+    ],
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RRF-03",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Hoàn tiền khách đồng thời",
+    "step": "4 request \"Đã chi\" cùng lúc từ người đang giữ khoản",
+    "expect": "đúng 1 thành công, COMPLETED, Ví không đổi (chi tay), sổ Ví = số dư",
+    "actual": "mã 201,400,400,400; khoản COMPLETED; ví 2160000 -> 2160000; thông báo cho khách của đơn: 4",
+    "evidence": [
+      "{\"id\":\"cmw17ml5v034hjtc436hy1n83\",\"orderId\":\"cmw17mkpg0344jtc4e6f02ocw\",\"orderCo",
+      "{\"message\":\"Khoản này đã được xác nhận chuyển khoản (mã GD UATRACEFT).\",\"error\":",
+      "{\"message\":\"Khoản này đã được xác nhận chuyển khoản (mã GD UATRACEFT).\",\"error\":",
+      "{\"message\":\"Khoản này đã được xác nhận chuyển khoản (mã GD UATRACEFT).\",\"error\":"
+    ],
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RRF-04",
+    "persona": "returning",
+    "size": "api",
+    "journey": "Hoàn tiền khách đồng thời",
+    "step": "Cuối lượt: Ví và điểm khớp sổ",
+    "expect": "khớp",
+    "actual": "ví 2160000/2160000; điểm 55560/55560",
+    "evidence": {
+      "wallet": 2160000,
+      "points": 55560,
+      "wsum": 2160000,
+      "psum": 55560
+    },
+    "verdict": "PASS"
+  }
+]

@@ -1,0 +1,7 @@
+Lần chạy đầu c1-expiry-tier.mjs (C2 trên persona brand, DAI_THU, đơn lùi 13 tháng), console 04/11:
+[OK] C2-1 giữ DAI_THU, tierGraceUntil = +30,00 ngày (2026-12-03T21:05:23Z)
+[OK] C2-2 /me/loyalty tierGrace={"until":"2026-12-03T21:05:23.735Z","spendingToKeep":20000000,"pointsToKeep":400000}
+[OK] C2-3 job lần hai: ân hạn không gia hạn (2026-12-03T21:05:23.735Z = 2026-12-03T21:05:23.735Z)
+[OK] C2-4 lùi ân hạn về quá khứ + job: tierId=MAM_XANH, tierGraceUntil=null
+[OK] C2-5 /me/loyalty: tier MAM_XANH, earnMultiplier 1
+Lần chạy đầu C1 (marketing) bị hỏng vì đơn thứ hai chưa kịp đẩy lên giả Pancake lúc script gửi webhook (đơn kẹt CONFIRMED): kết quả C1 lần đó bị bỏ, script đã thêm chờ pancakeOrderId và chạy lại với persona cskh.

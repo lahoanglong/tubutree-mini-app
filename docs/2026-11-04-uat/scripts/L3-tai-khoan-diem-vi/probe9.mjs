@@ -1,0 +1,17 @@
+import { done, SHOTS } from './lib3.mjs';
+import { openSurface } from './ui-lib.mjs';
+const s = await openSurface('mini375', 'ctv', '/addresses');
+const p = s.s.page;
+await p.waitForTimeout(3000);
+await p.getByText('Thêm địa chỉ mới').first().click();
+await p.waitForTimeout(1500);
+await p.getByText('Chọn tỉnh/thành', { exact: true }).first().click();
+await p.waitForTimeout(800);
+await p.getByRole('option', { name: 'Thành phố Hồ Chí Minh' }).click();
+await p.waitForTimeout(1500);
+console.log(JSON.stringify(await p.getByRole('button').allInnerTexts()));
+const t = await p.locator('body').innerText();
+console.log(t.replace(/\s+/g, ' ').slice(0, 500));
+await p.screenshot({ path: `${SHOTS}/addr-3-da-chon-tinh-mini375.png` });
+await s.s.close();
+await done();

@@ -1,0 +1,68 @@
+[
+  {
+    "id": "U2-mini375",
+    "persona": "returning",
+    "khổ": "mini375",
+    "journey": "Hồ sơ: ngày sinh trên giao diện",
+    "step": "gõ 15/08/1990 -> hộp xác nhận -> Xác nhận: lưu đúng 1990-08-15, không lệch múi giờ",
+    "expected": "users.service.ts updateMe; dob-input.ts",
+    "actual": "ô hiện \"15/08/1990\"; hộp=\"Ngày sinh 15 tháng 8 năm 1990 chỉ đặt được một lần. Xác nhận?\nXác nhận\nSửa lại\"; SQL dob=1990-08-15 00:00:00; GET /me.dob=1990-08-15; ảnh dob-2-xac-nhan-mini375.png",
+    "evidence": "ô hiện \"15/08/1990\"; hộp=\"Ngày sinh 15 tháng 8 năm 1990 chỉ đặt được một lần. Xác nhận?\nXác nhận\nSửa lại\"; SQL dob=1990-08-15 00:00:00; GET /me.dob=1990-08-15; ảnh dob-2-xac-nhan-mini375.png",
+    "status": "PASS"
+  },
+  {
+    "id": "U2-mini375b",
+    "persona": "returning",
+    "khổ": "mini375",
+    "journey": "Hồ sơ: ngày sinh trên giao diện",
+    "step": "mở lại hồ sơ: ngày sinh hiện dd/mm/yyyy, chỉ đọc, có chữ \"chỉ đặt được một lần, ... liên hệ CSKH\"",
+    "expected": "edit-profile.tsx dobEditable",
+    "actual": "ô={\"value\":\"15/08/1990\",\"readOnly\":true} hint=1",
+    "evidence": "ô={\"value\":\"15/08/1990\",\"readOnly\":true} hint=1",
+    "status": "PASS"
+  },
+  {
+    "id": "U2-web375",
+    "persona": "new",
+    "khổ": "web375",
+    "journey": "Hồ sơ: ngày sinh trên giao diện",
+    "step": "gõ 31/12/1999 -> hộp xác nhận -> Xác nhận: lưu đúng 1999-12-31, không lệch múi giờ",
+    "expected": "users.service.ts updateMe; dob-input.ts",
+    "actual": "ô hiện \"31/12/1999\"; hộp=\"Ngày sinh 31 tháng 12 năm 1999 chỉ đặt được một lần. Xác nhận?\n\nXác nhận\nSửa lại\"; SQL dob=1999-12-31 00:00:00; GET /me.dob=1999-12-31; ảnh dob-2-xac-nhan-web375.png",
+    "evidence": "ô hiện \"31/12/1999\"; hộp=\"Ngày sinh 31 tháng 12 năm 1999 chỉ đặt được một lần. Xác nhận?\n\nXác nhận\nSửa lại\"; SQL dob=1999-12-31 00:00:00; GET /me.dob=1999-12-31; ảnh dob-2-xac-nhan-web375.png",
+    "status": "PASS"
+  },
+  {
+    "id": "U2-web375b",
+    "persona": "new",
+    "khổ": "web375",
+    "journey": "Hồ sơ: ngày sinh trên giao diện",
+    "step": "mở lại hồ sơ: ngày sinh hiện dd/mm/yyyy, chỉ đọc, có chữ \"chỉ đặt được một lần, ... liên hệ CSKH\"",
+    "expected": "edit-profile.tsx dobEditable",
+    "actual": "ô={\"value\":\"31/12/1999\",\"readOnly\":true} hint=1",
+    "evidence": "ô={\"value\":\"31/12/1999\",\"readOnly\":true} hint=1",
+    "status": "PASS"
+  },
+  {
+    "id": "U2-web1280",
+    "persona": "ctv",
+    "khổ": "web1280",
+    "journey": "Hồ sơ: ngày sinh trên giao diện",
+    "step": "gõ 01/01/2001 -> hộp xác nhận -> Xác nhận: lưu đúng 2001-01-01, không lệch múi giờ",
+    "expected": "users.service.ts updateMe; dob-input.ts",
+    "actual": "ô hiện \"01/01/2001\"; hộp=\"Ngày sinh 1 tháng 1 năm 2001 chỉ đặt được một lần. Xác nhận?\n\nXác nhận\nSửa lại\"; SQL dob=2001-01-01 00:00:00; GET /me.dob=2001-01-01; ảnh dob-2-xac-nhan-web1280.png",
+    "evidence": "ô hiện \"01/01/2001\"; hộp=\"Ngày sinh 1 tháng 1 năm 2001 chỉ đặt được một lần. Xác nhận?\n\nXác nhận\nSửa lại\"; SQL dob=2001-01-01 00:00:00; GET /me.dob=2001-01-01; ảnh dob-2-xac-nhan-web1280.png",
+    "status": "PASS"
+  },
+  {
+    "id": "U2-web1280b",
+    "persona": "ctv",
+    "khổ": "web1280",
+    "journey": "Hồ sơ: ngày sinh trên giao diện",
+    "step": "mở lại hồ sơ: ngày sinh hiện dd/mm/yyyy, chỉ đọc, có chữ \"chỉ đặt được một lần, ... liên hệ CSKH\"",
+    "expected": "edit-profile.tsx dobEditable",
+    "actual": "ô={\"value\":\"01/01/2001\",\"readOnly\":true} hint=1",
+    "evidence": "ô={\"value\":\"01/01/2001\",\"readOnly\":true} hint=1",
+    "status": "PASS"
+  }
+]

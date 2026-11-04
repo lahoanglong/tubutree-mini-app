@@ -1,0 +1,206 @@
+[
+  {
+    "id": "L5-OR-list-all",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Đơn hàng: lọc/tìm",
+    "step": "GET /admin/orders",
+    "expect": "tổng = đếm SQL orders",
+    "actual": "total API=5, SQL=5",
+    "evidence": {
+      "keys": [
+        "data",
+        "meta"
+      ],
+      "n": 5
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-search-code",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Đơn hàng: lọc/tìm",
+    "step": "search=<mã đơn>",
+    "expect": "đúng 1 đơn khớp mã",
+    "actual": "n=1",
+    "evidence": "[\"TUBU2026110330313\"]",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-search-prefix",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Đơn hàng: lọc/tìm",
+    "step": "search=<đầu mã đơn>",
+    "expect": "có đơn khớp, trong đó có đơn vừa đặt",
+    "actual": "n=4",
+    "evidence": "[\"TUBU2026110330313\",\"TUBU2026110320727\",\"TUBU2026110330541\",\"TUBU2026110344285\"]",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-search-none",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Đơn hàng: lọc/tìm",
+    "step": "search không khớp",
+    "expect": "danh sách rỗng, total 0",
+    "actual": "n=0 total=0",
+    "evidence": "{\"data\":[],\"meta\":{\"page\":1,\"limit\":20,\"total\":0}}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-status-PENDING_PAYMENT",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Đơn hàng: lọc/tìm",
+    "step": "status=PENDING_PAYMENT",
+    "expect": "mọi dòng đúng trạng thái; total = SQL",
+    "actual": "total API=0, SQL=0",
+    "evidence": "[]",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-status-CONFIRMED",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Đơn hàng: lọc/tìm",
+    "step": "status=CONFIRMED",
+    "expect": "mọi dòng đúng trạng thái; total = SQL",
+    "actual": "total API=1, SQL=1",
+    "evidence": "[\"CONFIRMED\"]",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-status-PACKED",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Đơn hàng: lọc/tìm",
+    "step": "status=PACKED",
+    "expect": "mọi dòng đúng trạng thái; total = SQL",
+    "actual": "total API=1, SQL=1",
+    "evidence": "[\"PACKED\"]",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-status-SHIPPING",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Đơn hàng: lọc/tìm",
+    "step": "status=SHIPPING",
+    "expect": "mọi dòng đúng trạng thái; total = SQL",
+    "actual": "total API=0, SQL=0",
+    "evidence": "[]",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-status-DELIVERED",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Đơn hàng: lọc/tìm",
+    "step": "status=DELIVERED",
+    "expect": "mọi dòng đúng trạng thái; total = SQL",
+    "actual": "total API=1, SQL=1",
+    "evidence": "[\"DELIVERED\"]",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-status-CANCELLED",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Đơn hàng: lọc/tìm",
+    "step": "status=CANCELLED",
+    "expect": "mọi dòng đúng trạng thái; total = SQL",
+    "actual": "total API=2, SQL=2",
+    "evidence": "[\"CANCELLED\",\"CANCELLED\"]",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-pay-UNPAID",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Đơn hàng: lọc/tìm",
+    "step": "payment=UNPAID",
+    "expect": "total = SQL",
+    "actual": "API=3, SQL=3",
+    "evidence": "[\"UNPAID\",\"UNPAID\",\"UNPAID\"]",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-pay-PAID",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Đơn hàng: lọc/tìm",
+    "step": "payment=PAID",
+    "expect": "total = SQL",
+    "actual": "API=1, SQL=1",
+    "evidence": "[\"PAID\"]",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-pay-REFUNDED",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Đơn hàng: lọc/tìm",
+    "step": "payment=REFUNDED",
+    "expect": "total = SQL",
+    "actual": "API=1, SQL=1",
+    "evidence": "[\"REFUNDED\"]",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-queue-bank",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Đơn hàng: lọc/tìm",
+    "step": "queue=bank_transfer_to_confirm",
+    "expect": "chỉ đơn chuyển khoản chờ tiền (khớp SQL)",
+    "actual": "API=0, SQL=0",
+    "evidence": "[]",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-date",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Đơn hàng: lọc/tìm",
+    "step": "from=to=2026-11-04 (giờ VN)",
+    "expect": "total = SQL theo ngày VN",
+    "actual": "API=4, SQL=4",
+    "evidence": "",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-date-bad",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Đơn hàng: lọc/tìm",
+    "step": "from=2026-13-45",
+    "expect": "400 JSON, lời tiếng Việt",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":[\"from phải là ngày có thật dạng YYYY-MM-DD.\"],\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-status-bad",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Đơn hàng: lọc/tìm",
+    "step": "status=BAYBAY",
+    "expect": "400 JSON (không 500)",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":[\"Trường «status» chỉ nhận một trong: PENDING_PAYMENT, CONFIRMED, PACKED, SHIPPING, DELIVERED, RETURNED, CANCELLED.\"],\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OR-status-counts",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Đơn hàng: lọc/tìm",
+    "step": "GET /admin/orders/status-counts (chip)",
+    "expect": "mỗi trạng thái = đếm SQL",
+    "actual": "{\"CONFIRMED\":1,\"DELIVERED\":1,\"PACKED\":1,\"CANCELLED\":2}",
+    "evidence": "[{\"s\":\"CONFIRMED\",\"n\":1},{\"s\":\"DELIVERED\",\"n\":1},{\"s\":\"PACKED\",\"n\":1},{\"s\":\"CANCELLED\",\"n\":2}]",
+    "verdict": "PASS"
+  }
+]

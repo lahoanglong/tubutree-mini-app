@@ -1,0 +1,215 @@
+{
+ "meta": {
+  "date": "2026-11-03T10:33:34.508Z",
+  "app": "mini",
+  "persona": "returning",
+  "delay": 0,
+  "cpu": 4,
+  "load": {
+   "loadAvg": "Load Avg: 93.75, 100.04, 114.53 ",
+   "cpu": "CPU usage: 46.94% user, 53.5% sys, 0.0% idle "
+  }
+ },
+ "rows": [
+  {
+   "app": "mini",
+   "key": "best-sellers",
+   "path": "/best-sellers",
+   "persona": "returning",
+   "ms": 8350,
+   "apiCalls": 7,
+   "distinct": 7,
+   "dup": [],
+   "bad": [],
+   "cls": 0,
+   "shifts": [],
+   "fcp": 2316,
+   "lcp": 3932,
+   "lcpEl": "SPAN.",
+   "longTasks": 4,
+   "requests": 94,
+   "jsKB": 398,
+   "totalKB": 549,
+   "consoleErrors": [],
+   "pageErrors": [],
+   "finalPath": "/zapps/2070857098114207963/best-sellers",
+   "body": "Bán chạy nhất Theo lượt bán 30 ngày qua Tất cả Mỹ phẩm thiên nhiên Tẩy rửa sinh học Cho bé Cho mẹ bầ",
+   "err": null,
+   "calls": {
+    "GET /flash-sales/active": 1,
+    "POST /auth/refresh": 1,
+    "GET /categories": 1,
+    "GET /products": 1,
+    "GET /cart": 1,
+    "GET /me/wishlist/ids": 1,
+    "GET /config/public": 1
+   }
+  },
+  {
+   "app": "mini",
+   "key": "chat",
+   "path": "/chat",
+   "persona": "returning",
+   "ms": 7739,
+   "apiCalls": 6,
+   "distinct": 6,
+   "dup": [],
+   "bad": [],
+   "cls": 0.174,
+   "shifts": [
+    {
+     "v": 0.174,
+     "t": 2809,
+     "s": [
+      "DIV \"Tubu TreeTubu Tree hỗ trợ 8:00\" y132→54 h675"
+     ]
+    }
+   ],
+   "fcp": 1892,
+   "lcp": 2816,
+   "lcpEl": "DIV.",
+   "longTasks": 2,
+   "requests": 92,
+   "jsKB": 403,
+   "totalKB": 499,
+   "consoleErrors": [],
+   "pageErrors": [],
+   "finalPath": "/zapps/2070857098114207963/chat",
+   "body": "Chat với Tubu Tree Tubu Tree Tubu Tree hỗ trợ 8:00–21:00 mỗi ngày. Bạn cần hỏi gì ạ? Mình muốn hỏi v",
+   "err": null,
+   "calls": {
+    "GET /flash-sales/active": 1,
+    "POST /auth/refresh": 1,
+    "GET /config/public": 1,
+    "GET /me/support-chat": 1,
+    "GET /orders": 1,
+    "GET /cart": 1
+   }
+  },
+  {
+   "app": "mini",
+   "key": "loyalty",
+   "path": "/loyalty",
+   "persona": "returning",
+   "ms": 8650,
+   "apiCalls": 8,
+   "distinct": 8,
+   "dup": [],
+   "bad": [],
+   "cls": 0.015,
+   "shifts": [
+    {
+     "v": 0.0152,
+     "t": 4447,
+     "s": [
+      "DIV \"\" y84→54 h304"
+     ]
+    }
+   ],
+   "fcp": 2148,
+   "lcp": 3500,
+   "lcpEl": "H1.",
+   "longTasks": 3,
+   "requests": 100,
+   "jsKB": 411,
+   "totalKB": 534,
+   "consoleErrors": [],
+   "pageErrors": [],
+   "finalPath": "/zapps/2070857098114207963/loyalty",
+   "body": "Hạng thành viên & Điểm Xanh Mua trong Mini App: tích gấp đôi Đơn sàn 1% · Mua trong Mini App từ 2%, ",
+   "err": null,
+   "calls": {
+    "GET /flash-sales/active": 1,
+    "POST /auth/refresh": 1,
+    "GET /config/public": 1,
+    "GET /me/points/transactions": 1,
+    "GET /me/coupons": 1,
+    "GET /me/loyalty": 1,
+    "GET /cart": 1,
+    "GET /me/daily-check-in": 1
+   }
+  },
+  {
+   "app": "mini",
+   "key": "offers",
+   "path": "/offers",
+   "persona": "returning",
+   "ms": 8199,
+   "apiCalls": 11,
+   "distinct": 11,
+   "dup": [],
+   "bad": [],
+   "cls": 0,
+   "shifts": [],
+   "fcp": 1700,
+   "lcp": 3160,
+   "lcpEl": "SPAN.",
+   "longTasks": 2,
+   "requests": 105,
+   "jsKB": 410,
+   "totalKB": 560,
+   "consoleErrors": [],
+   "pageErrors": [],
+   "finalPath": "/zapps/2070857098114207963/offers",
+   "body": "Ưu đãi Lộc Biếc Hạng và lịch sử điểm 56.400 điểm ≈ 56.400đ Còn 17,7 triệu mua hàng lên Đại Thụ Điểm ",
+   "err": null,
+   "calls": {
+    "GET /flash-sales/active": 1,
+    "POST /auth/refresh": 1,
+    "GET /me/summary": 1,
+    "GET /me/daily-check-in": 1,
+    "GET /me/coupons": 1,
+    "GET /campaigns": 1,
+    "GET /coupons/collectable": 1,
+    "GET /coupons/collectable/mine": 1,
+    "GET /config/public": 1,
+    "GET /me/loyalty": 1,
+    "GET /cart": 1
+   }
+  },
+  {
+   "app": "mini",
+   "key": "recycle",
+   "path": "/recycle",
+   "persona": "returning",
+   "ms": 7988,
+   "apiCalls": 6,
+   "distinct": 6,
+   "dup": [],
+   "bad": [],
+   "cls": 0.051,
+   "shifts": [
+    {
+     "v": 0.0505,
+     "t": 4478,
+     "s": [
+      "SECTION \"Yêu cầu đang xử lýTR-GY25E · M\" y388→450 h362",
+      "DIV \"Vừa cộng 10.000 điểmTR-33BMR ·\" y278→340 h94",
+      "BUTTON.zaui-btn.zaui-btn-primary \"Đổi rác ngay\" y202→264 h48",
+      "svg \"\" y811→0 h0"
+     ]
+    }
+   ],
+   "fcp": 2060,
+   "lcp": 4056,
+   "lcpEl": "P.",
+   "longTasks": 2,
+   "requests": 95,
+   "jsKB": 406,
+   "totalKB": 502,
+   "consoleErrors": [],
+   "pageErrors": [],
+   "finalPath": "/zapps/2070857098114207963/recycle",
+   "body": "Đổi rác lấy quà Yêu cầu của tôi Điểm Xanh của bạn 56.400 điểm Dùng như 56.400đ khi mua sắm Còn 18.60",
+   "err": null,
+   "calls": {
+    "GET /flash-sales/active": 1,
+    "POST /auth/refresh": 1,
+    "GET /config/public": 1,
+    "GET /cart": 1,
+    "GET /waste/me": 1,
+    "GET /me/loyalty/rewards": 1
+   }
+  }
+ ]
+}

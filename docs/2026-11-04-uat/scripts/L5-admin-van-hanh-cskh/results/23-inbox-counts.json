@@ -1,0 +1,155 @@
+[
+  {
+    "id": "L5-INB-01",
+    "persona": "kho",
+    "size": "api",
+    "journey": "Số Việc cần xử lý khớp danh sách",
+    "step": "Thẻ \"Cần xử lý Pancake\" của Kho = danh sách ?pancake=attention = SQL",
+    "expect": "ba số bằng nhau (ops-inbox.service.ts:116)",
+    "actual": "thẻ Kho 33; thẻ Admin 33; danh sách 33; SQL 33",
+    "evidence": null,
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-INB-01b",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Số Việc cần xử lý khớp danh sách",
+    "step": "Thẻ Pancake của Admin = của Kho",
+    "expect": "bằng nhau",
+    "actual": "Admin 33; Kho 33",
+    "evidence": null,
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-INB-02",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Số Việc cần xử lý khớp danh sách",
+    "step": "Thẻ \"Hoàn tiền khách\" = danh sách \"Đang mở\" = SQL",
+    "expect": "ba số bằng nhau (ops-inbox.service.ts:119)",
+    "actual": "thẻ 6; danh sách 6; SQL (UNVERIFIED+PENDING+PROCESSING) 6",
+    "evidence": null,
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-INB-03",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Số Việc cần xử lý khớp danh sách",
+    "step": "Thẻ \"Đổi/trả chờ duyệt\" của CSKH = danh sách REQUESTED = SQL",
+    "expect": "ba số bằng nhau (ops-inbox.service.ts:121)",
+    "actual": "thẻ 1; danh sách 1; SQL 1",
+    "evidence": null,
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-INB-04",
+    "persona": "kho",
+    "size": "api",
+    "journey": "Số Việc cần xử lý khớp danh sách",
+    "step": "Thẻ \"Hàng trả chờ nhận\" của Kho = danh sách TO_RECEIVE",
+    "expect": "bằng nhau (ops-inbox.service.ts:127; SQL tham khảo: APPROVED chưa receivedAt)",
+    "actual": "thẻ 5; danh sách 5; SQL tham khảo 5 (luật thẻ có thêm điều kiện về đơn/kho trả)",
+    "evidence": null,
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-INB-05",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Số Việc cần xử lý khớp danh sách",
+    "step": "Thẻ \"Chuyển khoản chờ tiền\" = danh sách queue=bank_transfer_to_confirm",
+    "expect": "bằng nhau (ops-inbox.service.ts:141)",
+    "actual": "thẻ 2; danh sách 2",
+    "evidence": null,
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-INB-06",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Số Việc cần xử lý khớp danh sách",
+    "step": "Thẻ \"Hoá đơn VAT chờ xuất\" = danh sách invoice=pending",
+    "expect": "bằng nhau (ops-inbox.service.ts:214)",
+    "actual": "thẻ 1; danh sách 1",
+    "evidence": null,
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-INB-07",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Số Việc cần xử lý khớp danh sách",
+    "step": "Thẻ \"Lệnh rút chờ chi\" của Kế toán = danh sách APPROVED = SQL",
+    "expect": "ba số bằng nhau (ops-inbox.service.ts:201)",
+    "actual": "thẻ 1; danh sách 1; SQL 1",
+    "evidence": null,
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-INB-08",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Số Việc cần xử lý khớp danh sách",
+    "step": "Thẻ \"Lệnh rút chờ duyệt\" của Admin = danh sách REQUESTED = SQL",
+    "expect": "ba số bằng nhau (ops-inbox.service.ts:199)",
+    "actual": "thẻ 0; danh sách 0; SQL 0",
+    "evidence": null,
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-INB-09",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Số Việc cần xử lý khớp danh sách",
+    "step": "Thẻ \"Sản phẩm thiếu ảnh\" của Admin = SQL",
+    "expect": "bằng nhau (ops-inbox.service.ts:180)",
+    "actual": "thẻ 44; SQL 44",
+    "evidence": null,
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-INB-10",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Số Việc cần xử lý khớp danh sách",
+    "step": "Mỗi vai chỉ thấy thẻ của mình (CSKH không thấy tiền/hoá đơn/Pancake; Kho không thấy tiền, duyệt đổi/trả; Kế toán không thấy Pancake, đổi/trả)",
+    "expect": "không rò thẻ của vai khác (ops-inbox.service.ts: audience)",
+    "actual": "thẻ rò: {\"cskh\":[],\"kho\":[],\"ketoan\":[]}",
+    "evidence": {
+      "cskh": [
+        "returnsPending",
+        "communityReports",
+        "communityPending",
+        "communityUnanswered",
+        "externalPoints",
+        "supportChatUnforwarded",
+        "wasteToCount",
+        "wasteUnmatched"
+      ],
+      "kho": [
+        "pancakeAttention",
+        "pancakeUnsynced",
+        "gomdonAttention",
+        "returnsToReceive",
+        "wasteToCount",
+        "wasteUnmatched"
+      ],
+      "ketoan": [
+        "customerRefunds",
+        "bankTransferToConfirm",
+        "dealerTransferToConfirm",
+        "merchantToSettle",
+        "merchantPayoutsPending",
+        "dealerClaimsToPay",
+        "dealerCreditReported",
+        "payoutsToPay",
+        "invoicePending",
+        "wasteToCount",
+        "wasteUnmatched"
+      ]
+    },
+    "verdict": "PASS"
+  }
+]

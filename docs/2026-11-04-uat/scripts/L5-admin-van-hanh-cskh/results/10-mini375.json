@@ -1,0 +1,164 @@
+[
+  {
+    "id": "L5-M375-staff-_staff",
+    "persona": "staff",
+    "size": "mini375",
+    "journey": "Quầy nhân viên",
+    "step": "mở /staff ở 375px",
+    "expect": "không tràn ngang, không request lỗi, có nội dung",
+    "actual": "ổn; URL /staff; 0 nút thấp hơn 32px; chữ: \"Ca làm của tôi Chấm công hôm nay Hôm nay bạn không có ca đã duyệt. Cần ở đúng mạng WiFi công ty & trong vùng để chấm côn\"",
+    "evidence": {
+      "overflow": 0,
+      "text": "Ca làm của tôi Chấm công hôm nay Hôm nay bạn không có ca đã duyệt. Cần ở đúng mạng WiFi công ty & trong vùng để chấm công. 02/11 – 08/11 Đăng ký ca Chép tuần T2 · 02/11 Chưa đăng ký ca. T3 · 03/11 Chưa đăng ký ca. T4 · 04/11 Hôm nay Thêm Chưa đăng ký ca. T5 · ",
+      "len": 386,
+      "url": "/staff",
+      "small": 0,
+      "bad": [],
+      "shot": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/gl-1103-docs/docs/2026-11-04-uat/shots/L5-admin-van-hanh-cskh/mini375-staff-_staff.png"
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-M375-staff-_recycle_desk",
+    "persona": "staff",
+    "size": "mini375",
+    "journey": "Bàn nhận đổi rác",
+    "step": "mở /recycle/desk ở 375px",
+    "expect": "không tràn ngang, không request lỗi, có nội dung",
+    "actual": "ổn; URL /recycle/desk; 0 nút thấp hơn 32px; chữ: \"Nhận hàng tại điểm Điểm nhận Tubu Quận 1 Quét mã của khách Mã yêu cầu hoặc mã nhận quà Tra mã Hôm nay còn xác nhận được \"",
+    "evidence": {
+      "overflow": 0,
+      "text": "Nhận hàng tại điểm Điểm nhận Tubu Quận 1 Quét mã của khách Mã yêu cầu hoặc mã nhận quà Tra mã Hôm nay còn xác nhận được 1.000.000 điểm Báo cáo tháng này 0 lượt xác nhận Tubu đã cộng 0 điểm cho khách",
+      "len": 198,
+      "url": "/recycle/desk",
+      "small": 0,
+      "bad": [],
+      "shot": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/gl-1103-docs/docs/2026-11-04-uat/shots/L5-admin-van-hanh-cskh/mini375-staff-_recycle_desk.png"
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-M375-staff-_my_payroll",
+    "persona": "staff",
+    "size": "mini375",
+    "journey": "Bảng lương của tôi",
+    "step": "mở /my-payroll ở 375px",
+    "expect": "không tràn ngang, không request lỗi, có nội dung",
+    "actual": "ổn; URL /my-payroll; 0 nút thấp hơn 32px; chữ: \"Lương của tôi Tháng 11/2026 Thực nhận tháng 11/2026 0đ Giờ công: 0h00 Đơn giá: 0đ/h Lương gộp: 0đ Phạt: 0đ Đang tính Thô\"",
+    "evidence": {
+      "overflow": 0,
+      "text": "Lương của tôi Tháng 11/2026 Thực nhận tháng 11/2026 0đ Giờ công: 0h00 Đơn giá: 0đ/h Lương gộp: 0đ Phạt: 0đ Đang tính Thông tin nhận lương Chưa có dữ liệu công tháng này.",
+      "len": 169,
+      "url": "/my-payroll",
+      "small": 0,
+      "bad": [],
+      "shot": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/gl-1103-docs/docs/2026-11-04-uat/shots/L5-admin-van-hanh-cskh/mini375-staff-_my_payroll.png"
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-M375-admin-_admin",
+    "persona": "admin",
+    "size": "mini375",
+    "journey": "Admin trong Mini App",
+    "step": "mở /admin ở 375px",
+    "expect": "không tràn ngang, không request lỗi, có nội dung",
+    "actual": "ổn; URL /admin; 0 nút thấp hơn 32px; chữ: \"Quản trị nhân sự Nhân sự Duyệt ca Lương Kiểm duyệt cộng đồng Nhân sự Thêm Admin UAT 0901000012 · Quản trị (bạn) CSKH Kiể\"",
+    "evidence": {
+      "overflow": 0,
+      "text": "Quản trị nhân sự Nhân sự Duyệt ca Lương Kiểm duyệt cộng đồng Nhân sự Thêm Admin UAT 0901000012 · Quản trị (bạn) CSKH Kiểm Duyệt 0901000010 · Nhân viên Nhóm việc: Chăm sóc khách Thu hồi Marketing Tubu 0901000009 · Nhân viên Nhóm việc: Nội dung và khuyến mãi Thu",
+      "len": 487,
+      "url": "/admin",
+      "small": 0,
+      "bad": [],
+      "shot": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/gl-1103-docs/docs/2026-11-04-uat/shots/L5-admin-van-hanh-cskh/mini375-admin-_admin.png"
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-M375-cskh-_staff",
+    "persona": "cskh",
+    "size": "mini375",
+    "journey": "Quầy nhân viên (CSKH)",
+    "step": "mở /staff ở 375px",
+    "expect": "không tràn ngang, không request lỗi, có nội dung",
+    "actual": "ổn; URL /staff; 0 nút thấp hơn 32px; chữ: \"Ca làm của tôi Chấm công hôm nay Hôm nay bạn không có ca đã duyệt. Cần ở đúng mạng WiFi công ty & trong vùng để chấm côn\"",
+    "evidence": {
+      "overflow": 0,
+      "text": "Ca làm của tôi Chấm công hôm nay Hôm nay bạn không có ca đã duyệt. Cần ở đúng mạng WiFi công ty & trong vùng để chấm công. 02/11 – 08/11 Đăng ký ca Chép tuần T2 · 02/11 Chưa đăng ký ca. T3 · 03/11 Chưa đăng ký ca. T4 · 04/11 Hôm nay Thêm Chưa đăng ký ca. T5 · ",
+      "len": 386,
+      "url": "/staff",
+      "small": 0,
+      "bad": [],
+      "shot": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/gl-1103-docs/docs/2026-11-04-uat/shots/L5-admin-van-hanh-cskh/mini375-cskh-_staff.png"
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-M375-kho-_recycle_desk",
+    "persona": "kho",
+    "size": "mini375",
+    "journey": "Bàn nhận đổi rác (kho)",
+    "step": "mở /recycle/desk ở 375px",
+    "expect": "không tràn ngang, không request lỗi, có nội dung",
+    "actual": "ổn; URL /recycle/desk; 0 nút thấp hơn 32px; chữ: \"Nhận hàng tại điểm Điểm nhận Tubu Quận 1 Quét mã của khách Mã yêu cầu hoặc mã nhận quà Tra mã Hôm nay còn xác nhận được \"",
+    "evidence": {
+      "overflow": 0,
+      "text": "Nhận hàng tại điểm Điểm nhận Tubu Quận 1 Quét mã của khách Mã yêu cầu hoặc mã nhận quà Tra mã Hôm nay còn xác nhận được 1.000.000 điểm Báo cáo tháng này 0 lượt xác nhận Tubu đã cộng 0 điểm cho khách",
+      "len": 198,
+      "url": "/recycle/desk",
+      "small": 0,
+      "bad": [],
+      "shot": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/gl-1103-docs/docs/2026-11-04-uat/shots/L5-admin-van-hanh-cskh/mini375-kho-_recycle_desk.png"
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-M375-returning-_staff",
+    "persona": "returning",
+    "size": "mini375",
+    "journey": "Khách gõ thẳng /staff",
+    "step": "khách (CUSTOMER) gõ thẳng /staff",
+    "expect": "không thấy dữ liệu nội bộ: bị đẩy đi hoặc hiện thông báo không có quyền; không có dữ liệu admin trong màn",
+    "actual": "URL cuối /staff; 0 request 403; chữ trên màn: \"Ca làm của tôi Trang dành cho nhân viên Tài khoản này chưa có quyền nhân viên. Liên hệ quản trị để được cấp quyền. Về Cá nhân\"; ",
+    "evidence": {
+      "url": "/staff",
+      "text": "Ca làm của tôi Trang dành cho nhân viên Tài khoản này chưa có quyền nhân viên. Liên hệ quản trị để được cấp quyền. Về Cá nhân",
+      "r403": [],
+      "shot": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/gl-1103-docs/docs/2026-11-04-uat/shots/L5-admin-van-hanh-cskh/mini375-returning-_staff.png"
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-M375-returning-_admin",
+    "persona": "returning",
+    "size": "mini375",
+    "journey": "Khách gõ thẳng /admin",
+    "step": "khách (CUSTOMER) gõ thẳng /admin",
+    "expect": "không thấy dữ liệu nội bộ: bị đẩy đi hoặc hiện thông báo không có quyền; không có dữ liệu admin trong màn",
+    "actual": "URL cuối /admin; 0 request 403; chữ trên màn: \"Quản trị nhân sự Chỉ quản trị viên mới truy cập được trang này.\"; ",
+    "evidence": {
+      "url": "/admin",
+      "text": "Quản trị nhân sự Chỉ quản trị viên mới truy cập được trang này.",
+      "r403": [],
+      "shot": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/gl-1103-docs/docs/2026-11-04-uat/shots/L5-admin-van-hanh-cskh/mini375-returning-_admin.png"
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-M375-returning-_recycle_desk",
+    "persona": "returning",
+    "size": "mini375",
+    "journey": "Khách gõ thẳng /recycle/desk",
+    "step": "khách (CUSTOMER) gõ thẳng /recycle/desk",
+    "expect": "không thấy dữ liệu nội bộ: bị đẩy đi hoặc hiện thông báo không có quyền; không có dữ liệu admin trong màn",
+    "actual": "URL cuối /recycle/desk; 0 request 403; chữ trên màn: \"Nhận hàng tại điểm Chương trình đang tạm dừng\"; ",
+    "evidence": {
+      "url": "/recycle/desk",
+      "text": "Nhận hàng tại điểm Chương trình đang tạm dừng",
+      "r403": [],
+      "shot": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/gl-1103-docs/docs/2026-11-04-uat/shots/L5-admin-van-hanh-cskh/mini375-returning-_recycle_desk.png"
+    },
+    "verdict": "PASS"
+  }
+]

@@ -1,0 +1,11 @@
+import { req, guest, short } from './lib.mjs';
+const G = await guest('d_baomat_fuzz_00000001'); const t=G.tok;
+const T = async (label, m, p, b, h) => { const r = await req(m,p,{tok:t,body:b,headers:h}); console.log(label.padEnd(44), r.status, short(r.body,200).replace(/\n/g,' ')); return r; };
+await T('PATCH me fullName <img onerror>','PATCH','/me',{fullName:'<img src=x onerror=alert(1)>'});
+await T('PATCH me avatarUrl javascript:','PATCH','/me',{avatarUrl:'javascript:alert(1)'});
+await T('PATCH me avatarUrl http internal','PATCH','/me',{avatarUrl:'http://169.254.169.254/'});
+await T('PATCH me avatarUrl data svg','PATCH','/me',{avatarUrl:'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4='});
+await T('PATCH me avatarUrl https other','PATCH','/me',{avatarUrl:'https://evil.example/a.png'});
+await T('PATCH me email bad','PATCH','/me',{email:'not-an-email'});
+await T('PATCH me email 400 chars','PATCH','/me',{email:'a'.repeat(300)+'@b.co'});
+const g = await T('GET /me','GET','/me');

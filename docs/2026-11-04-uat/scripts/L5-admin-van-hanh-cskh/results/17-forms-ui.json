@@ -1,0 +1,134 @@
+[
+  {
+    "id": "L5-FUI-01",
+    "persona": "marketing",
+    "size": "web375",
+    "journey": "Biểu mẫu admin (375)",
+    "step": "Marketing nhập mã 31% (trần 30%) rồi bấm \"Tạo mã giảm giá\"",
+    "expect": "POST 403; màn hiện câu \"Nhân viên tạo mã giảm tối đa 30%…\"; không ghi DB",
+    "actual": "POST 403; câu trên màn: \"Nhân viên tạo mã giảm tối đa 30%.\"; 0 dòng DB",
+    "evidence": "ặt \"Giảm tối đa\" để đơn lớn không bị giảm quá tay. Bắt đầu từ ngày Hết hạn ngày Tạo mã giảm giá Nhân viên tạo mã giảm tối đa 30%. Cần mức cao hơn thì nhờ quản trị viên tạo mã.",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-FUI-01b",
+    "persona": "marketing",
+    "size": "web375",
+    "journey": "Biểu mẫu admin (375)",
+    "step": "Giọng câu báo vượt trần",
+    "expect": "không \"Vui lòng\", \"chúng tôi\", \"...\"",
+    "actual": "sạch",
+    "evidence": "Nhân viên tạo mã giảm tối đa 30%.",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-FUI-02a",
+    "persona": "marketing",
+    "size": "web375",
+    "journey": "Biểu mẫu admin (375)",
+    "step": "Marketing nhập 25% x 100 lượt x tối đa 50.000đ (quá ngân sách ngày còn lại) rồi bấm tạo",
+    "expect": "POST 400; màn nêu ngân sách ngày, phần vượt và số còn lại, chỉ sang quản trị viên; không ghi DB",
+    "actual": "POST 400; câu: \"Vượt ngân sách mã giảm giá và flash sale của nhân viên ngày 04/11/2026 (10.000.000đ/người/ngày): phần này có thể giảm tới 5.000.000đ, còn 1.000.000đ. Cần hơn thì nhờ quản trị viên tạo.\"; marketing đã tạo hôm nay 3 mã, phơi nhiễm tối đa 0đ",
+    "evidence": "Vượt ngân sách mã giảm giá và flash sale của nhân viên ngày 04/11/2026 (10.000.000đ/người/ngày): phần này có thể giảm tới 5.000.000đ, còn 1.000.000đ. Cần hơn thì nhờ quản trị viên tạo.",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-FUI-02",
+    "persona": "marketing",
+    "size": "web375",
+    "journey": "Biểu mẫu admin (375)",
+    "step": "Marketing giảm lượt dùng cho vừa ngân sách ngày rồi tạo lại (25%, tối đa 50.000đ)",
+    "expect": "POST 2xx; màn \"Đã tạo mã giảm giá!\"; DB createdById = marketing, 25%, tối đa 50.000đ",
+    "actual": "POST 201; DB {\"c\":\"uat_marketing\",\"v\":25,\"m\":50000,\"u\":5}; màn: \" hạn ngày Tạo mã giảm giá Đã tạo mã giảm giá!\"",
+    "evidence": null,
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-FUI-03",
+    "persona": "marketing",
+    "size": "web375",
+    "journey": "Biểu mẫu admin (375)",
+    "step": "Marketing mở tab Mẫu thông báo, thấy mẫu WELCOME_VOUCHER",
+    "expect": "có ô nội dung của mẫu, sửa được",
+    "actual": "vị trí ô 22",
+    "evidence": null,
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-FUI-04",
+    "persona": "marketing",
+    "size": "web375",
+    "journey": "Biểu mẫu admin (375)",
+    "step": "Marketing thêm link rút gọn vào mẫu WELCOME_VOUCHER rồi bấm Lưu",
+    "expect": "không lưu được (nút khoá + cảnh báo, hoặc API 400 + cảnh báo tiếng Việt); DB không đổi",
+    "actual": "nút Lưu mở; PATCH 400; cảnh báo: \"Nội dung chỉ được có link tubutree hoặc Zalo OA / Mini App của shop — bỏ link \"bit.ly/nhan-qua\".\"",
+    "evidence": null,
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-FUI-05",
+    "persona": "marketing",
+    "size": "web375",
+    "journey": "Biểu mẫu admin (375)",
+    "step": "Marketing thêm dãy 8 chữ số viết tách vào mẫu WELCOME_VOUCHER rồi bấm Lưu",
+    "expect": "không lưu được (nút khoá + cảnh báo, hoặc API 400 + cảnh báo tiếng Việt); DB không đổi",
+    "actual": "nút Lưu mở; PATCH 400; cảnh báo: \"Nội dung không được có dãy từ 8 chữ số trở lên (số tài khoản, số điện thoại), kể cả viết tách. Thông tin chuyển khoản chỉ quản trị viên đưa vào mẫu.\"",
+    "evidence": null,
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-FUI-06",
+    "persona": "marketing",
+    "size": "web375",
+    "journey": "Biểu mẫu admin (375)",
+    "step": "Marketing thêm \"tubutree.com\" rồi Lưu",
+    "expect": "PATCH 2xx và có dòng báo đã lưu",
+    "actual": "PATCH 200; trạng thái: \"Đã lưu.\"",
+    "evidence": null,
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-FUI-06r",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Biểu mẫu admin (375)",
+    "step": "Khôi phục nội dung mẫu",
+    "expect": "về bản gốc",
+    "actual": "khớp",
+    "evidence": null,
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-FUI-07-375",
+    "persona": "admin",
+    "size": "web375",
+    "journey": "Biểu mẫu admin (375)",
+    "step": "ADMIN mở Sức khoẻ hệ thống khi token Zalo OA còn 1 giờ",
+    "expect": "hiện cảnh báo token Zalo OA (chỉ còn … phút) và đơn cần xử lý Pancake; không tràn ngang",
+    "actual": "Zalo OA=true; \"chỉ còn\"=true; Pancake=true; tràn ngang 0px",
+    "evidence": "261 và 21 việc khác Token Zalo OA chỉ còn 0 giờ 59 phút mà chưa được làm mới — tin ZNS và trả lời Zalo OA sẽ không gửi được; xem log \"Zalo OA refresh\" hoặc cấp lại token ở developers.zalo.me Pancake Cấu hình Đã cấu hình Đẩy đơn thành công g",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-FUI-07-1280",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Biểu mẫu admin (375)",
+    "step": "ADMIN mở Sức khoẻ hệ thống khi token Zalo OA còn 1 giờ",
+    "expect": "hiện cảnh báo token Zalo OA (chỉ còn … phút) và đơn cần xử lý Pancake; không tràn ngang",
+    "actual": "Zalo OA=true; \"chỉ còn\"=true; Pancake=true; tràn ngang 0px",
+    "evidence": "261 và 21 việc khác Token Zalo OA chỉ còn 0 giờ 59 phút mà chưa được làm mới — tin ZNS và trả lời Zalo OA sẽ không gửi được; xem log \"Zalo OA refresh\" hoặc cấp lại token ở developers.zalo.me Pancake Cấu hình Đã cấu hình Đẩy đơn thành công g",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-FUI-07r",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Biểu mẫu admin (375)",
+    "step": "Khôi phục cấu hình token Zalo",
+    "expect": "cảnh báo zalo.oa_token biến mất",
+    "actual": "problems=pancake.attention",
+    "evidence": null,
+    "verdict": "PASS"
+  }
+]

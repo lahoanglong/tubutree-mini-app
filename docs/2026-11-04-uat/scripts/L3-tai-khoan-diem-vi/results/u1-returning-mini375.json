@@ -1,0 +1,210 @@
+[
+  {
+    "name": "returning-profile",
+    "surface": "mini375",
+    "persona": "returning",
+    "route": "/profile",
+    "url": "/profile",
+    "file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/gl-1103-docs/docs/2026-11-04-uat/shots/L3-tai-khoan-diem-vi/returning-profile-mini375.png",
+    "overflowX": false,
+    "sw": 375,
+    "iw": 375,
+    "sh": 812,
+    "pageErrors": [],
+    "consoleErrors": [],
+    "badRequests": [
+      {
+        "method": "POST",
+        "path": "/events",
+        "status": 0,
+        "failure": "net::ERR_ABORTED",
+        "mocked": false
+      }
+    ],
+    "nReq": 14,
+    "badWords": [],
+    "textHead": "Cá nhân\nN\nNguyễn Thị Quay Lại\nLộc Biếc\nSửa hồ sơ\n46.920 điểm\nĐiểm Xanh\n914.000đ\nVí Tubu\n2 mã\nMã giảm giá\nĐơn của tôi\nXem tất cả\n1\nThanh toán\nXử lý\nĐang giao\nĐã giao\nMời bạn bè mua hàng\n\nBạn nhận Điểm Xanh khi bạn bè vào app bằng mã của bạn và có đơn thứ hai từ 200.000đ trong 30 ngày.\n\nMời thêm 3 bạn để nhận 20.000 điểm\n\nMã của bạn: UATRETURNING\nChia sẻ\nKIẾM TIỀN CÙNG TUBU\nMở gian hàng Cộng tác viên\nGian hàng riêng, chia sẻ link cho bạn bè\nĐại lý\nBảng giá sỉ, công nợ\nTÀI KHOẢN\nSản phẩm yêu thích\nSổ địa chỉ\nThông báo\n2\nCài đặt\nHỖ TRỢ\nChat với Tubu Tree\nCâu chuyện thương hiệu\nVề Tubu Tree & Hỗ trợ\nTrang chủ\nDanh mục\nVườn Xanh\nƯu đãi\n1\nCá nhân"
+  },
+  {
+    "name": "returning-edit-profile",
+    "surface": "mini375",
+    "persona": "returning",
+    "route": "/edit-profile",
+    "url": "/edit-profile",
+    "file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/gl-1103-docs/docs/2026-11-04-uat/shots/L3-tai-khoan-diem-vi/returning-edit-profile-mini375.png",
+    "overflowX": false,
+    "sw": 375,
+    "iw": 375,
+    "sh": 812,
+    "pageErrors": [],
+    "consoleErrors": [],
+    "badRequests": [
+      {
+        "method": "POST",
+        "path": "/events",
+        "status": 0,
+        "failure": "net::ERR_ABORTED",
+        "mocked": false
+      }
+    ],
+    "nReq": 5,
+    "badWords": [],
+    "textHead": "Sửa hồ sơ\nN\nHọ và tên\nEmail\nNgày sinh\nNhận mã giảm giá quà tặng vào tháng sinh nhật.\nLưu thay đổi"
+  },
+  {
+    "name": "returning-addresses",
+    "surface": "mini375",
+    "persona": "returning",
+    "route": "/addresses",
+    "url": "/addresses",
+    "file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/gl-1103-docs/docs/2026-11-04-uat/shots/L3-tai-khoan-diem-vi/returning-addresses-mini375.png",
+    "overflowX": false,
+    "sw": 375,
+    "iw": 375,
+    "sh": 812,
+    "pageErrors": [],
+    "consoleErrors": [],
+    "badRequests": [
+      {
+        "method": "POST",
+        "path": "/events",
+        "status": 0,
+        "failure": "net::ERR_ABORTED",
+        "mocked": false
+      }
+    ],
+    "nReq": 5,
+    "badWords": [],
+    "textHead": "Sổ địa chỉ\nNguyễn Thị Quay Lại · 0901000003\nMặc định\n12 Lê Lợi, Phường Bến Thành, Thành phố Hồ Chí Minh\nSửa\nXoá\nThêm địa chỉ mới"
+  },
+  {
+    "name": "returning-notifications",
+    "surface": "mini375",
+    "persona": "returning",
+    "route": "/notifications",
+    "url": "/notifications",
+    "file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/gl-1103-docs/docs/2026-11-04-uat/shots/L3-tai-khoan-diem-vi/returning-notifications-mini375.png",
+    "overflowX": false,
+    "sw": 375,
+    "iw": 375,
+    "sh": 812,
+    "pageErrors": [],
+    "consoleErrors": [],
+    "badRequests": [
+      {
+        "method": "POST",
+        "path": "/events",
+        "status": 0,
+        "failure": "net::ERR_ABORTED",
+        "mocked": false
+      }
+    ],
+    "nReq": 6,
+    "badWords": [],
+    "textHead": "Thông báo\nĐọc tất cả\nHoàn tiền đơn hàng\nTubu đã chuyển khoản hoàn 98.000đ của đơn TUBU2026110385813 về tài khoản Vietcombank ••• 6789 (mã giao dịch UAT-FT26110402-0) 🌿\nVừa xong\nHoàn tiền đơn hàng\nTubu đã chuyển khoản hoàn 98.000đ của đơn TUBU2026110321053 về tài khoản Vietcombank ••• 6789 (mã giao dịch UAT-FT26110401) 🌿\n1 phút trước\nYêu cầu đổi/trả đã duyệt\nYêu cầu đổi/trả đơn TUBU2026110338002 đã được duyệt. Đã hoàn 286.104đ vào Ví Tubu. Đã hoàn 2.896 Điểm Xanh.\n5 phút trước\nĐã nhận yêu cầu đổi/trả\nĐã nhận yêu cầu đổi/trả đơn TUBU2026110338002. Tubu sẽ phản hồi trong 24h.\n5 phút trước\nYêu cầu đổi/trả đã duyệt\nYêu cầu đổi/trả đơn TUBU2026110338002 đã được duyệt. Đã hoàn 207.896đ vào Ví Tubu. Đã hoàn 2.104 Điểm Xanh.\n5 phút trước\nĐã nhận yêu cầu đổi/trả\nĐã nhận yêu cầu đổi/trả đơn TUBU2026110338002. Tubu sẽ phản hồi trong 24h.\n5 phút trước\nĐã giao thành công\nĐơn TUBU2026110338002 đã giao thành công. Bạn được cộng 11.856 Điểm Xanh. Cảm ơn bạn đã mua sắm tại Tubu Tree 🌿\n5 phút trước\nĐang giao hàng\nĐơn TUBU2026110338002 đang được giao đến bạn.\n5 phút trước\nCập nhật đơn hàng\nĐơn TUBU2026110338002 đã được đóng gói, chuẩn bị giao.\n5 phút trước\nĐơn đã xác nhận\nĐơn TUBU2026110338002 đã được xác nhận. Tubu Tree đã nhận đủ thanh toán. Cảm ơn bạn đã mua sắm tại Tubu Tree 🌿\n5 phút trước\nCập nhật đơn hàng\nĐơn TUBU2026110338002 đang chờ thanh toán 494.000đ. Bạn thanh toán trước 04:04 05/11/2026 nhé, quá hạn đơn sẽ tự huỷ.\n5 phút trước\nCập nhật đơn hàng\nĐơn TUBU2026110385813 đã bị huỷ. T"
+  },
+  {
+    "name": "returning-loyalty",
+    "surface": "mini375",
+    "persona": "returning",
+    "route": "/loyalty",
+    "url": "/loyalty",
+    "file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/gl-1103-docs/docs/2026-11-04-uat/shots/L3-tai-khoan-diem-vi/returning-loyalty-mini375.png",
+    "overflowX": false,
+    "sw": 375,
+    "iw": 375,
+    "sh": 812,
+    "pageErrors": [],
+    "consoleErrors": [],
+    "badRequests": [
+      {
+        "method": "POST",
+        "path": "/events",
+        "status": 0,
+        "failure": "net::ERR_ABORTED",
+        "mocked": false
+      }
+    ],
+    "nReq": 10,
+    "badWords": [],
+    "textHead": "Hạng thành viên & Điểm Xanh\nMua trong Mini App: tích gấp đôi\nĐơn sàn 1% · Mua trong Mini App từ 2%, nhân theo hạng\n🌿\nLộc Biếc\nTích điểm ×1,2 · 46.920 Điểm Xanh\n46.920 Điểm Xanh sẽ hết hạn ngày 04/11/2027\nĐiểm Xanh thường có hạn 12 tháng kể từ ngày nhận, điểm cũ được dùng trước.\nCòn 17,8 triệu mua hàng để lên hạng Đại Thụ\nTích 2% tiền hàng thành Điểm Xanh (hạng ×1,2 = 2,4%)\n1 điểm = 1đ khi dùng ở bước thanh toán (tối đa 20% giá trị đơn)\nThẻ thành viên số (mã QR)\nVí mã (2)\nMã giảm giá bạn đang có\nĐiểm danh mỗi ngày\nNgày 1/7\nN1\nN2\nN3\nN4\nN5\nN6\nN7\nHôm nay nhận +1.000 Điểm Xanh · +65 giọt nước\nĐiểm danh\nMột lần bấm nhận cả Điểm Xanh và giọt nước. Mỗi ngày 1 lần (giờ Việt Nam). Lỡ 1 ngày mà có vé giữ lửa thì chuỗi được giữ, không thì lịch 7 ngày bắt đầu lại. Điểm danh không tính vào xét hạng.\nVườn Xanh\nChăm cây nhận quà\nKho quà\nĐổi Điểm Xanh lấy mã giảm giá và quà\nQuyền lợi của bạn\nTích Điểm Xanh ×1,2\nMiễn phí giao hàng đơn từ 99k\nMã giảm giá sinh nhật 50k\nCác hạng\n🌱\nMầm Xanh\nhạng khởi đầu · ×1\n🌿\nLộc Biếc\ntừ 1,5 triệu mua hàng trong 12 tháng · ×1,2\n🌳\nĐại Thụ\ntừ 20 triệu mua hàng trong 12 tháng · ×1,5\n🌲\nCổ Thụ\ntừ 50 triệu mua hàng trong 12 tháng · ×2\nLịch sử Điểm Xanh\nThu hồi điểm của đơn trả hàng\n04/11/2026\n-6.866\nHoàn lại điểm đã dùng\n04/11/2026\n+2.896\nThu hồi điểm của đơn trả hàng\n04/11/2026\n-4.990\nHoàn lại điểm đã dùng (trả hàng)\n04/11/2026\n+2.104\nTích điểm từ đơn hàng\n04/11/2026\n+11.856\nDùng điểm khi thanh toán\n04/11/2026\n-5.000\nHoàn lại điểm đã dùng\n04/11/2026\n+24.000\nDùng"
+  },
+  {
+    "name": "returning-wallet",
+    "surface": "mini375",
+    "persona": "returning",
+    "route": "/wallet",
+    "url": "/wallet",
+    "file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/gl-1103-docs/docs/2026-11-04-uat/shots/L3-tai-khoan-diem-vi/returning-wallet-mini375.png",
+    "overflowX": false,
+    "sw": 375,
+    "iw": 375,
+    "sh": 812,
+    "pageErrors": [],
+    "consoleErrors": [],
+    "badRequests": [
+      {
+        "method": "POST",
+        "path": "/events",
+        "status": 0,
+        "failure": "net::ERR_ABORTED",
+        "mocked": false
+      }
+    ],
+    "nReq": 7,
+    "badWords": [],
+    "textHead": "Ví Tubu\nVí Tubu (số dư khả dụng)\n914.000đ\nDùng để trả tiền hàng ở bước thanh toán\nĐiểm Xanh (đổi giảm giá)\n46.920 điểm\nLộc Biếc\nTích từ mỗi đơn đã giao — đổi giảm giá cho đơn sau & lên hạng thành viên.\nMẹo: tiền hoàn đơn và hoa hồng CTV vào Ví Tubu, dùng trả đơn sau ở bước thanh toán.\nLịch sử Ví\nHoàn tiền đơn hàng\n04/11 04:04 · Hoàn tiền đơn TUBU2026110338002\n+286.104đ\nSố dư 914.000đ\nHoàn tiền trả hàng\n04/11 04:04 · Hoàn tiền trả hàng đơn TUBU2026110338002\n+207.896đ\nSố dư 627.896đ\nHoàn tiền đơn hàng\n04/11 04:04 · Hoàn tiền đơn TUBU2026110389703\n+98.000đ\nSố dư 420.000đ\nThanh toán đơn\n04/11 04:04 · Thanh toán đơn TUBU2026110389703\n−98.000đ\nSố dư 322.000đ\nHoàn tiền đơn hàng\n04/11 04:04 · Hoàn tiền đơn TUBU2026110342491\n+210.000đ\nSố dư 420.000đ\nHoàn tiền đơn hàng\n04/11 04:03 · Hoàn tiền đơn TUBU2026110371708\n+98.000đ\nSố dư 210.000đ\nThanh toán đơn\n04/11 04:03 · Thanh toán đơn TUBU2026110371708\n−98.000đ\nSố dư 112.000đ\nHoàn tiền đơn hàng\n04/11 04:03 · Hoàn tiền đơn TUBU2026110384552\n+210.000đ\nSố dư 210.000đ"
+  },
+  {
+    "name": "returning-subscriptions",
+    "surface": "mini375",
+    "persona": "returning",
+    "route": "/subscriptions",
+    "url": "/orders?tab=subscriptions",
+    "file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/gl-1103-docs/docs/2026-11-04-uat/shots/L3-tai-khoan-diem-vi/returning-subscriptions-mini375.png",
+    "overflowX": false,
+    "sw": 375,
+    "iw": 375,
+    "sh": 812,
+    "pageErrors": [],
+    "consoleErrors": [],
+    "badRequests": [
+      {
+        "method": "POST",
+        "path": "/events",
+        "status": 0,
+        "failure": "net::ERR_ABORTED",
+        "mocked": false
+      }
+    ],
+    "nReq": 8,
+    "badWords": [],
+    "textHead": "Đơn hàng\nTất cả\nChờ thanh toán\nĐang xử lý\nĐang giao\nĐã giao\nĐã huỷ/hoàn\nTUBU2026110338002\nĐã hoàn\nNước giặt sinh học Fuwa3e +1\n3 món · 04/11/2026\nGiá\n494.000đ\nMua lại\nTUBU2026110385813\nĐã huỷ\nNước lau kính enzyme Fuwa3e\n1 món · 04/11/2026\nGiá\n98.000đ\nMua lại\nTUBU2026110389703\nĐã huỷ\nNước lau kính enzyme Fuwa3e\n1 món · 04/11/2026\nGiá\n98.000đ\nMua lại\nTUBU2026110342491\nĐã huỷ\nNước giặt sinh học Fuwa3e\n1 món · 04/11/2026\nGiá\n210.000đ\nMua lại\nTUBU2026110321053\nĐã huỷ\nNước lau kính enzyme Fuwa3e\n1 món · 04/11/2026\nGiá\n98.000đ\nMua lại\nTUBU2026110371708\nĐã huỷ\nNước lau kính enzyme Fuwa3e\n1 món · 04/11/2026\nGiá\n98.000đ\nMua lại\nTUBU2026110384552\nĐã huỷ\nNước giặt sinh học Fuwa3e\n1 món · 04/11/2026\nGiá\n210.000đ\nMua lại\nTUBU2026110359417\nĐã huỷ\nNước rửa chén sinh học Fuwa3e\n1 món · 04/11/2026\nGiá\n96.000đ\nMua lại\nTUBU2026110319226\nGiao thành công\nNước rửa chén sinh học Fuwa3e\n1 món · 04/11/2026\nGiá\n120.000đ\nMua lại\nTUBU2026110332830\nĐã huỷ\nNước rửa chén sinh học Fuwa3e\n1 món · 04/11/2026\nGiá\n96.000đ\nMua lại\nTUBU2026110390783\nGiao thành công\nNước rửa chén sinh học Fuwa3e\n1 món · 04/11/2026\nGiá\n120.000đ\nMua lại\nTUBU2026110323429\nĐã huỷ\nNước rửa chén sinh học Fuwa3e\n1 món · 04/11/2026\nGiá\n96.000đ\nMua lại\nTUBU2026110347201\nGiao thành công\nNước rửa chén sinh học Fuwa3e\n1 món · 04/11/2026\nGiá\n120.000đ\nMua lại\nTUBU2026110362909\nĐã huỷ\nNước rửa chén sinh học Fuwa3e\n1 món · 04/11/2026\nGiá\n96.000đ\nMua lại\nTUBU2026110393532\nGiao thành công\nNước rửa chén sinh học Fuwa3e\n1 món · 04/11/2026\nGiá\n120.000đ"
+  },
+  {
+    "name": "returning-settings",
+    "surface": "mini375",
+    "persona": "returning",
+    "route": "/settings",
+    "url": "/settings",
+    "file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/gl-1103-docs/docs/2026-11-04-uat/shots/L3-tai-khoan-diem-vi/returning-settings-mini375.png",
+    "overflowX": false,
+    "sw": 375,
+    "iw": 375,
+    "sh": 812,
+    "pageErrors": [],
+    "consoleErrors": [],
+    "badRequests": [
+      {
+        "method": "POST",
+        "path": "/events",
+        "status": 0,
+        "failure": "net::ERR_ABORTED",
+        "mocked": false
+      }
+    ],
+    "nReq": 5,
+    "badWords": [],
+    "textHead": "Cài đặt\nThông báo\nCập nhật đơn hàng\nLuôn bật để bạn không lỡ tin giao hàng, hoàn tiền\nKhuyến mãi & mã giảm giá\nNhắc nhở Vườn Xanh & tương tác bài viết\nHiển thị · Cỡ chữ\nA\nNhỏ\nA\nVừa\nA\nLớn\nTài khoản\nChỉnh sửa hồ sơ\nSổ địa chỉ\nĐăng xuất\nXoá tài khoản"
+  }
+]

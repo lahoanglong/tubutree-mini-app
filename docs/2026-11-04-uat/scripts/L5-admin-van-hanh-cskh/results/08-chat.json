@@ -1,0 +1,719 @@
+[
+  {
+    "id": "L5-CHAT-01",
+    "persona": "returning",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "Mở khung chat khi chat đang tắt",
+    "expect": "200, enabled=false (khách vẫn đọc được lịch sử)",
+    "actual": "HTTP 200, enabled=false, mã hội thoại JT8A",
+    "evidence": "{\"code\":\"JT8A\",\"blocked\":false,\"enabled\":false,\"slow\":false,\"messages\":[{\"id\":\"cmw174dz701z9jtc49t44g37p\",\"sender\":\"CUSTOMER\",\"body\":\"Cho mình hỏi đơn hàng đã giao chưa?\",\"imageUrl\":null,\"context\":nul",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-02",
+    "persona": "returning",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "Gửi tin khi chat tắt",
+    "expect": "409 code CHAT_DISABLED, câu tiếng Việt có hotline (support-chat.service.ts:125)",
+    "actual": "HTTP 409 CHAT_DISABLED",
+    "evidence": "{\"statusCode\":409,\"error\":\"Conflict\",\"code\":\"CHAT_DISABLED\",\"message\":\"Chat với Tubu Tree đang tạm đóng. Cần hỗ trợ, gọi hotline.\"}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-02b",
+    "persona": "returning",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "Giọng câu \"chat đang tạm đóng\"",
+    "expect": "không \"Vui lòng\", \"chúng tôi\", \"...\"",
+    "actual": "sạch",
+    "evidence": "Chat với Tubu Tree đang tạm đóng. Cần hỗ trợ, gọi hotline.",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-03-cskh",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "cskh bật chat (PUT settings)",
+    "expect": "403 (cấu hình chat chỉ ADMIN, support-chat-admin.controller.ts:50)",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-03-staff",
+    "persona": "staff",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "staff bật chat (PUT settings)",
+    "expect": "403 (cấu hình chat chỉ ADMIN, support-chat-admin.controller.ts:50)",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-03-kho",
+    "persona": "kho",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "kho bật chat (PUT settings)",
+    "expect": "403 (cấu hình chat chỉ ADMIN, support-chat-admin.controller.ts:50)",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-03-ketoan",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "ketoan bật chat (PUT settings)",
+    "expect": "403 (cấu hình chat chỉ ADMIN, support-chat-admin.controller.ts:50)",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-03-marketing",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "marketing bật chat (PUT settings)",
+    "expect": "403 (cấu hình chat chỉ ADMIN, support-chat-admin.controller.ts:50)",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-04",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "Nhập mã nhóm Zalo có khoảng trắng",
+    "expect": "400",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":[\"groupId không được chứa khoảng trắng\"],\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-05",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "ADMIN bật chat",
+    "expect": "200, enabled=true",
+    "actual": "HTTP 200",
+    "evidence": "{\"enabled\":true,\"groupId\":\"\",\"bridgeSynced\":true}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-06",
+    "persona": "returning",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "Khách gửi tin có khoảng trắng đầu/cuối",
+    "expect": "201, lưu bản đã cắt khoảng trắng, sender CUSTOMER",
+    "actual": "HTTP 201, DB {\"body\":\"Cho mình hỏi đơn hàng đã giao chưa?\",\"sender\":\"CUSTOMER\",\"source\":\"MINIAPP\"}",
+    "evidence": "{\"id\":\"cmw174z72020cjtc49n0ixjts\",\"sender\":\"CUSTOMER\",\"body\":\"Cho mình hỏi đơn hàng đã giao chưa?\",\"imageUrl\":null,\"context\":null,\"clientMsgId\":\"uat-chat-1793741100586-a8m1dl\",\"createdAt\":\"2026-11-03T",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-07",
+    "persona": "returning",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "Gửi lại cùng clientMsgId (bấm đúp / thử lại mạng)",
+    "expect": "trả tin cũ, chỉ 1 dòng trong DB",
+    "actual": "HTTP 201, 1 dòng, cùng id=true",
+    "evidence": "{\"id\":\"cmw174z72020cjtc49n0ixjts\",\"sender\":\"CUSTOMER\",\"body\":\"Cho mình hỏi đơn hàng đã giao chưa?\",\"imageUrl\":null,\"context\":null,\"clientMsgId\":\"uat-chat-179374",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-08",
+    "persona": "returning",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "4 request cùng clientMsgId đồng thời",
+    "expect": "đúng 1 dòng trong DB, không request nào 500",
+    "actual": "1 dòng, mã 201,201,201,201",
+    "evidence": [
+      "{\"id\":\"cmw174z7n020ijtc4jmubtjpe\",\"sender\":\"CUSTOMER\",\"body\":\"song song\",\"imageU",
+      "{\"id\":\"cmw174z7n020ijtc4jmubtjpe\",\"sender\":\"CUSTOMER\",\"body\":\"song song\",\"imageU",
+      "{\"id\":\"cmw174z7n020ijtc4jmubtjpe\",\"sender\":\"CUSTOMER\",\"body\":\"song song\",\"imageU",
+      "{\"id\":\"cmw174z7n020ijtc4jmubtjpe\",\"sender\":\"CUSTOMER\",\"body\":\"song song\",\"imageU"
+    ],
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-09-rỗng",
+    "persona": "returning",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "Khách gửi tin rỗng",
+    "expect": "400 JSON, không ghi DB",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":\"Cần nhập nội dung hoặc gửi ảnh.\",\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-09-1001 ký tự",
+    "persona": "returning",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "Khách gửi tin 1001 ký tự",
+    "expect": "400 JSON, không ghi DB",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":[\"Nội dung không được dài quá 1000 ký tự.\"],\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-09-clientMsgId ngắn",
+    "persona": "returning",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "Khách gửi tin clientMsgId ngắn",
+    "expect": "400 JSON, không ghi DB",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":[\"clientMsgId phải dài 8–64 ký tự chữ, số, - hoặc _\"],\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-09-ảnh base64",
+    "persona": "returning",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "Khách gửi tin ảnh base64",
+    "expect": "400 JSON, không ghi DB",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":[\"imageUrl chỉ nhận tệp đã tải lên (https://res.cloudinary.com).\"],\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-09-ảnh link ngoài",
+    "persona": "returning",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "Khách gửi tin ảnh link ngoài",
+    "expect": "400 JSON, không ghi DB",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":[\"imageUrl chỉ nhận tệp đã tải lên (https://res.cloudinary.com).\"],\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-09-source lạ",
+    "persona": "returning",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "Khách gửi tin source lạ",
+    "expect": "400 JSON, không ghi DB",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":[\"Trường «source» chỉ nhận một trong: MINIAPP, WEB.\"],\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-09-body = số",
+    "persona": "returning",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "Khách gửi tin body = số",
+    "expect": "400 JSON, không ghi DB",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":[\"Nội dung không được dài quá 1000 ký tự.\",\"Nội dung phải là chuỗi ký tự.\"],\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-10",
+    "persona": "ctv",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "CTV gắn mã đơn của người khác (của returning) vào tin",
+    "expect": "orderCode bị bỏ, giữ productSlug (support-chat.service.ts:183)",
+    "actual": "HTTP 201, context={\"productSlug\":\"nuoc-rua-chen-fuwa3e\"}",
+    "evidence": {
+      "other": "TUBU2026110354035"
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-11",
+    "persona": "returning",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "Khách gắn mã đơn của chính mình",
+    "expect": "orderCode được giữ",
+    "actual": "context={\"orderCode\":\"TUBU2026110354035\"}",
+    "evidence": {
+      "own": "TUBU2026110354035"
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-12",
+    "persona": "returning",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "Gửi tin lúc 4h VN (giờ trực 08:00-21:00)",
+    "expect": "ngoài giờ: đúng 1 lời nhắn SYSTEM trong ngày dù gửi nhiều tin",
+    "actual": "1 lời nhắn SYSTEM",
+    "evidence": [
+      "Tubu Tree trả lời từ 8:00 đến 21:00 mỗi ngày. Tin của bạn đã được ghi lại, nhân viên sẽ trả lời khi vào giờ."
+    ],
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-12b",
+    "persona": "returning",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "Giọng lời nhắn ngoài giờ",
+    "expect": "không \"Vui lòng\", \"chúng tôi\", \"...\"",
+    "actual": "sạch",
+    "evidence": "Tubu Tree trả lời từ 8:00 đến 21:00 mỗi ngày. Tin của bạn đã được ghi lại, nhân viên sẽ trả lời khi vào giờ.",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-13",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "CSKH mở danh sách hội thoại",
+    "expect": "200, thấy hội thoại của khách vừa nhắn",
+    "actual": "HTTP 200, 2 hội thoại, thấy=true",
+    "evidence": "{\"id\":\"cmw174dkl01z4jtc4bs1k3joq\",\"code\":\"JT8A\",\"blocked\":false,\"lastMessageAt\":\"2026-11-03T21:25:00.652Z\",\"user\":{\"id\":\"uat_returning\",\"fullName\":\"Nguyễn Thị Quay Lại\",\"phone\":\"0901000003\"},\"lastMessage\":{\"sender\":\"CUSTOMER\",\"body\":\"ngữ cảnh đơn của mình\",\"hasImage\":false},\"needsAttention\":true}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-14",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "Tìm hội thoại theo mã",
+    "expect": "200, 1 kết quả đúng mã",
+    "actual": "HTTP 200, 1 dòng",
+    "evidence": "{\"id\":\"cmw174dkl01z4jtc4bs1k3joq\",\"code\":\"JT8A\",\"blocked\":false,\"lastMessageAt\":\"2026-11-03T21:25:00.652Z\",\"user\":{\"id\":\"uat_returning\",\"fullName\":\"Nguyễn Thị Quay Lại\",\"phone\":\"0901000003\"},\"lastMessage\":{\"sender\":\"CUSTOMER\",\"body\":\"ngữ cả",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-15",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "Lọc \"chưa chuyển Zalo\"",
+    "expect": "200 (cầu nối không chạy nên tin của khách phải nằm ở đây sau ít phút)",
+    "actual": "HTTP 200, 1 dòng",
+    "evidence": "{\"items\":[{\"id\":\"cmw174dkl01z4jtc4bs1k3joq\",\"code\":\"JT8A\",\"blocked\":false,\"lastMessageAt\":\"2026-11-03T21:25:00.652Z\",\"user\":{\"id\":\"uat_returning\",\"fullName\":\"Nguyễn Thị Quay Lại\",\"phone\":\"0901000003\"}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-16",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "Lọc filter lạ",
+    "expect": "400",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":[\"Trường «filter» chỉ nhận một trong: unforwarded.\"],\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-17",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "CSKH mở một hội thoại",
+    "expect": "200, có tin khách + thông tin khách (tên, SĐT)",
+    "actual": "HTTP 200, 8 tin, SĐT 0901000003",
+    "evidence": "{\"id\":\"uat_returning\",\"fullName\":\"Nguyễn Thị Quay Lại\",\"phone\":\"0901000003\"}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-18",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "Mở hội thoại không tồn tại",
+    "expect": "404",
+    "actual": "HTTP 404",
+    "evidence": "{\"message\":\"Không tìm thấy hội thoại.\",\"error\":\"Not Found\",\"statusCode\":404}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-19-staff",
+    "persona": "staff",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "staff đọc / trả lời / chặn hội thoại",
+    "expect": "403 cả bốn",
+    "actual": "list 403, get 403, reply 403, block 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-19-kho",
+    "persona": "kho",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "kho đọc / trả lời / chặn hội thoại",
+    "expect": "403 cả bốn",
+    "actual": "list 403, get 403, reply 403, block 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-19-ketoan",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "ketoan đọc / trả lời / chặn hội thoại",
+    "expect": "403 cả bốn",
+    "actual": "list 403, get 403, reply 403, block 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-19-marketing",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "marketing đọc / trả lời / chặn hội thoại",
+    "expect": "403 cả bốn",
+    "actual": "list 403, get 403, reply 403, block 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-19-customer",
+    "persona": "returning",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "Khách gọi API admin chat",
+    "expect": "403",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-20",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "CSKH trả lời khách",
+    "expect": "201, lưu STAFF/ADMIN, ghi adminUserId = cskh, đã cắt khoảng trắng",
+    "actual": "HTTP 201, DB {\"body\":\"Đơn của bạn đang trên đường giao nhé.\",\"sender\":\"STAFF\",\"source\":\"ADMIN\",\"a\":\"uat_cskh\"}",
+    "evidence": "{\"id\":\"cmw174za1020ujtc48kwe9y5u\",\"sender\":\"STAFF\",\"source\":\"ADMIN\",\"body\":\"Đơn của bạn đang trên đường giao nhé.\",\"imageUrl\":null,\"context\":null,\"staffName\":null,\"adminUserId\":\"uat_cskh\",\"recalledAt\"",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-21",
+    "persona": "returning",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "Khách thấy câu trả lời",
+    "expect": "tin STAFF có trong khung chat",
+    "actual": "9 tin, thấy=true",
+    "evidence": [
+      {
+        "id": "cmw174z8s020sjtc4zpcjlfof",
+        "sender": "CUSTOMER",
+        "body": "ngữ cảnh đơn của mình",
+        "imageUrl": null,
+        "context": {
+          "orderCode": "TUBU2026110354035"
+        },
+        "clientMsgId": "uat-chat-1793741100647-9w4g7f",
+        "createdAt": "2026-11-03T21:25:00.652Z"
+      },
+      {
+        "id": "cmw174za1020ujtc48kwe9y5u",
+        "sender": "STAFF",
+        "body": "Đơn của bạn đang trên đường giao nhé.",
+        "imageUrl": null,
+        "context": null,
+        "clientMsgId": null,
+        "createdAt": "2026-11-03T21:25:00.698Z"
+      }
+    ],
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-22",
+    "persona": "returning",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "Tin trả khách không lộ trường nội bộ (adminUserId, forwardId, Zalo)",
+    "expect": "không có adminUserId / forwardId / zalo trong JSON khách nhận",
+    "actual": "sạch",
+    "evidence": "[{\"id\":\"cmw174dz701z9jtc49t44g37p\",\"sender\":\"CUSTOMER\",\"body\":\"Cho mình hỏi đơn hàng đã giao chưa?\",\"imageUrl\":null,\"context\":null,\"clientMsgId\":\"uat-chat-1793741073086-8rcfd7\",\"createdAt\":\"2026-11-03T21:24:33.092Z\"},{\"id\":\"cmw174dzl01zbjtc426wo5tgd\",\"sender\":\"SYSTEM\",\"body\":\"Tubu Tree trả lời từ 8:",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-23",
+    "persona": "returning",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "Số tin chưa đọc của khách",
+    "expect": "≥ 1 sau khi CSKH trả lời",
+    "actual": "unreadCount=2",
+    "evidence": "{\"unreadCount\":2}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-24",
+    "persona": "returning",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "Khách đánh dấu đã đọc",
+    "expect": "unreadCount = 0",
+    "actual": "unreadCount=0",
+    "evidence": "{\"unreadCount\":0}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-25-rỗng",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "CSKH trả lời rỗng",
+    "expect": "400 JSON",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":[\"Nội dung phải có ít nhất 1 ký tự.\"],\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-25-1001 ký tự",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "CSKH trả lời 1001 ký tự",
+    "expect": "400 JSON",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":[\"Nội dung không được dài quá 1000 ký tự.\"],\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-25-thiếu body",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "CSKH trả lời thiếu body",
+    "expect": "400 JSON",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":[\"Nội dung không được dài quá 1000 ký tự.\",\"Nội dung phải có ít nhất 1 ký tự.\",\"Nội dung phải là chuỗi ký tự.\"],\"error\":\"Bad Request\",\"statusCode\":40",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-26",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "Trả lời hội thoại không tồn tại",
+    "expect": "404",
+    "actual": "HTTP 404",
+    "evidence": "{\"message\":\"Không tìm thấy hội thoại.\",\"error\":\"Not Found\",\"statusCode\":404}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-27",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "CSKH chặn khách; khách gửi tin mới",
+    "expect": "chặn 200; khách gửi 403 CHAT_BLOCKED; thread.blocked=true",
+    "actual": "block 201; gửi 403 CHAT_BLOCKED; blocked=true",
+    "evidence": "{\"statusCode\":403,\"error\":\"Forbidden\",\"code\":\"CHAT_BLOCKED\",\"message\":\"Bạn tạm thời không gửi được tin. Cần hỗ trợ, gọi hotline.\"}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-28",
+    "persona": "returning",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "Khách bị chặn thử lại tin đã lưu (cùng clientMsgId)",
+    "expect": "trả tin cũ, không báo lỗi (support-chat.service.ts:117)",
+    "actual": "HTTP 201",
+    "evidence": "{\"id\":\"cmw174z72020cjtc49n0ixjts\",\"sender\":\"CUSTOMER\",\"body\":\"Cho mình hỏi đơn hàng đã giao chưa?\",\"imageUrl\":null,\"context\":null,\"clientMsgId\":\"uat-chat-179374",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-29",
+    "persona": "returning",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "Tin gửi khi bị chặn không được lưu",
+    "expect": "0 dòng",
+    "actual": "0 dòng",
+    "evidence": null,
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-30",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "CSKH bỏ chặn; khách gửi lại",
+    "expect": "bỏ chặn 200; khách gửi được",
+    "actual": "bỏ chặn 200; gửi 201",
+    "evidence": "{\"id\":\"cmw174zb2020xjtc4q6i3mio2\",\"sender\":\"CUSTOMER\",\"body\":\"sau khi bỏ chặn\",\"imageUrl\":null,\"context\":null,\"clientMsgId\":\"uat-chat-1793741100730-fn64sm\",\"cre",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-31",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "Chặn hội thoại không tồn tại",
+    "expect": "404 (không 500)",
+    "actual": "HTTP 404",
+    "evidence": "{\"message\":\"Không tìm thấy hội thoại.\",\"error\":\"Not Found\",\"statusCode\":404}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-32-bridge/qr",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "CSKH POST bridge/qr",
+    "expect": "403 (quản lý cầu nối chỉ ADMIN)",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-32-bridge/logout",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "CSKH POST bridge/logout",
+    "expect": "403 (quản lý cầu nối chỉ ADMIN)",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-32-bridge/reconnect",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "CSKH POST bridge/reconnect",
+    "expect": "403 (quản lý cầu nối chỉ ADMIN)",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-32-bridge/groups",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "CSKH GET bridge/groups",
+    "expect": "403 (quản lý cầu nối chỉ ADMIN)",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-32-bridge/test",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "CSKH POST bridge/test",
+    "expect": "403 (quản lý cầu nối chỉ ADMIN)",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-33",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "CSKH xem trạng thái cầu nối",
+    "expect": "200 (CSKH cần biết cầu nối sống hay chết)",
+    "actual": "HTTP 200",
+    "evidence": "{\"state\":\"UNREACHABLE\",\"since\":null,\"lastError\":null,\"zaloUid\":null,\"displayName\":null,\"avatar\":null,\"checkedAt\":null,\"deaf\":false,\"groupId\":\"\",\"enabled\":true,\"waitingCount\":1}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-34",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "ADMIN yêu cầu mã QR đăng nhập Zalo khi cầu nối không chạy",
+    "expect": "lỗi gọn bằng tiếng Việt (502/503), không 500 trần, không lộ stack",
+    "actual": "status 200 / qr 502",
+    "evidence": "{\"statusCode\":502,\"error\":\"Bad Gateway\",\"code\":\"BRIDGE_NOT_CONFIGURED\",\"message\":\"Chưa cấu hình ZALO_BRIDGE_URL\"}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-35",
+    "persona": "returning",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "Tin khách được chuyển sang nhóm Zalo của nhân viên",
+    "expect": "forward có trạng thái SENT khi cầu nối chạy",
+    "actual": "1 lần chuyển: FAILED",
+    "evidence": [
+      {
+        "id": "cmw174pm20203jtc4and6xlvu",
+        "status": "FAILED"
+      }
+    ],
+    "verdict": "BLOCKED"
+  },
+  {
+    "id": "L5-CHAT-36",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "CSKH \"Gửi lại\" một lần chuyển",
+    "expect": "JSON gọn; id lạ 404",
+    "actual": "resend 201; id lạ 404",
+    "evidence": "{\"id\":\"cmw174pm20203jtc4and6xlvu\",\"status\":\"FAILED\",\"lastError\":\"BRIDGE_NOT_CONFIGURED: Chưa cấu hình ZALO_BRIDGE_URL\",\"attempts\":2}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-37",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "Hộp việc CSKH: supportChatUnforwarded / zaloBridgeDown",
+    "expect": "có mục đếm tin chưa chuyển",
+    "actual": "supportChatUnforwarded=1, zaloBridgeDown=undefined",
+    "evidence": {
+      "returnsPending": 1,
+      "communityReports": 0,
+      "communityPending": 0,
+      "communityUnanswered": 0,
+      "externalPoints": 0,
+      "supportChatUnforwarded": 1,
+      "wasteToCount": 0,
+      "wasteUnmatched": 0
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-38",
+    "persona": "returning",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "Khách gửi tin thứ 201 trong ngày",
+    "expect": "429 code CHAT_DAILY_LIMIT, có hotline (support-chat.service.ts:141)",
+    "actual": "HTTP 429 CHAT_DAILY_LIMIT",
+    "evidence": "{\"statusCode\":429,\"error\":\"Too Many Requests\",\"code\":\"CHAT_DAILY_LIMIT\",\"message\":\"Bạn đã gửi quá nhiều tin hôm nay. Cần hỗ trợ, gọi hotline.\"}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CHAT-39",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Chat CSKH",
+    "step": "Khôi phục chat.enabled = true",
+    "expect": "về bản gốc",
+    "actual": "DB true",
+    "evidence": null,
+    "verdict": "PASS"
+  }
+]

@@ -1,0 +1,196 @@
+// Thao tác nghiệp vụ bằng GIAO DIỆN: (A) Kế toán 375 xuất hoá đơn VAT, (B) CSKH 375 duyệt đổi/trả rồi Kho 375 "Đã nhận hàng về",
+// (C) Admin 1280 sửa rồi khôi phục cấu hình hệ thống. Có đối chiếu SQL Ví, điểm, tồn kho.
+// Dùng: node 21-ui-actions.mjs   (ONLY=A,B,C để chạy riêng từng phần)
+import { execFileSync } from 'node:child_process';
+import { L, SHOTS, ENV, check, rec, save, short, call, sql, placeOrder, waitPancake, orderRow, userState, sleep, toneProblems } from './_lib.mjs';
+
+const WT = '/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat-1104';
+const { openWeb } = await import(`${WT}/docs/2026-10-20-uat/tools/uat-harness/web-session.mjs`);
+const HOOK = `${WT}/docs/2026-10-20-uat/tools/uat-harness/pancake-webhook.mjs`;
+const env = { ...process.env, PATH: `${process.env.HOME}/.local/node/node-v22.23.3-darwin-arm64/bin:${process.env.PATH}` };
+const hook = (code, st) => execFileSync('node', [HOOK, '5', code, st], { cwd: WT, env, encoding: 'utf8', timeout: 90000 });
+const ONLY = process.env.ONLY ? process.env.ONLY.split(',') : null;
+const want = (k) => !ONLY || ONLY.includes(k);
+const bypassApi = (ctx) => ctx.route((u) => u.href.startsWith(L.apiUrl), (route) => route.continue({ headers: { ...route.request().headers(), 'x-throttle-bypass': ENV.THROTTLE_BYPASS_TOKEN } }));
+const settle = async (s) => { await s.page.waitForLoadState('networkidle', { timeout: 20000 }).catch(() => undefined); await s.page.waitForTimeout(900); };
+const textOf = (s) => s.page.evaluate(() => document.body.innerText.replace(/\s+/g, ' ').trim());
+const overflowOf = (s) => s.page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+const guard = async (id, fn) => { try { await fn(); } catch (e) { rec(id, '-', '-', 'Thao tác bằng giao diện', 'Bước chạy script', 'không lỗi', `lỗi script: ${String(e.message).split('\n')[0]}`, null, 'BLOCKED'); } };
+
+async function openOrder(s, code) {
+  await s.page.goto(`${L.webUrl}/admin?tab=orders`, { waitUntil: 'domcontentloaded', timeout: 90000 });
+  await settle(s);
+  await s.page.getByPlaceholder(/mã đơn/i).first().fill(code);
+  await s.page.getByRole('button', { name: /Tìm kiếm/ }).first().click();
+  await s.page.waitForTimeout(1500);
+  await s.page.getByText(code).first().click();
+  await s.page.waitForTimeout(1500);
+}
+
+// ── A. VAT bằng giao diện ──
+if (want('A')) await guard('L5-VUI-ERR', async () => {
+  const J = 'Hoá đơn VAT bằng giao diện (375)';
+  const inv = { taxCode: '0312345679', companyName: 'Công ty TNHH UAT Giao Diện', address: '34 Nguyễn Huệ, Q1, TP.HCM', email: 'vat-ui@example.com' };
+  const { code } = await placeOrder('returning', { extra: { invoiceRequest: inv } });
+  const o = await orderRow(code);
+  const s = await openWeb(5, 'ketoan', { viewport: { width: 375, height: 800 }, path: '/admin?tab=orders' });
+  await bypassApi(s.context);
+  await openOrder(s, code);
+  await s.page.screenshot({ path: `${SHOTS}/ui375-ketoan-vat-open.png`, fullPage: true });
+  const txt = await textOf(s);
+  check('L5-VUI-01', 'ketoan', 'web375', J, 'Kế toán mở đơn có yêu cầu VAT ở 375px', 'thấy khối "Hoá đơn VAT" với MST, tên công ty, email; ô link + nút "Đã xuất hoá đơn"; không tràn ngang', /hoá đơn vat/i.test(txt) && txt.includes(inv.taxCode) && txt.includes(inv.companyName) && txt.includes(inv.email) && (await overflowOf(s)) <= 1, `MST=${txt.includes(inv.taxCode)}; công ty=${txt.includes(inv.companyName)}; email=${txt.includes(inv.email)}; tràn ngang ${await overflowOf(s)}px`, txt.slice(txt.search(/hoá đơn vat/i), txt.search(/hoá đơn vat/i) + 300));
+  const urlBox = s.page.getByLabel('Link hoá đơn điện tử (tuỳ chọn)').first();
+  const btn = s.page.getByRole('button', { name: 'Đã xuất hoá đơn', exact: true }).first();
+  await urlBox.fill('http://hoadon.example.com/x.pdf');
+  const from0 = s.requests.length;
+  await btn.click({ timeout: 8000 });
+  await s.page.waitForTimeout(900);
+  const badTxt = await s.page.evaluate(() => [...document.querySelectorAll('[role="alert"]')].map((e) => e.textContent.trim()).join(' | '));
+  const [st0] = await sql(`SELECT "invoiceStatus" s FROM orders WHERE code=$1`, [code]);
+  const called = s.requests.slice(from0).some((r) => /invoice/.test(r.path) && r.method !== 'GET');
+  await s.page.screenshot({ path: `${SHOTS}/ui375-ketoan-vat-bad-url.png` });
+  check('L5-VUI-02', 'ketoan', 'web375', J, 'Kế toán nhập link http (không https) rồi bấm "Đã xuất hoá đơn"', 'màn báo lỗi tiếng Việt ngay, không gọi API, đơn vẫn REQUESTED', !!badTxt && !called && st0.s === 'REQUESTED', `cảnh báo: "${badTxt}"; gọi API=${called}; DB ${st0.s}`, null);
+  const t = toneProblems(badTxt);
+  check('L5-VUI-02b', 'ketoan', 'web375', J, 'Giọng câu báo link sai', 'không "Vui lòng", "chúng tôi", "..."', t.length === 0, t.join(', ') || 'sạch', badTxt);
+  await urlBox.fill('https://hoadon.example.com/uat/HD-UI-0001.pdf');
+  await btn.click({ timeout: 8000 });
+  await s.page.waitForTimeout(800);
+  await s.page.screenshot({ path: `${SHOTS}/ui375-ketoan-vat-confirm.png` });
+  const dlg = await textOf(s);
+  const [st1] = await sql(`SELECT "invoiceStatus" s FROM orders WHERE code=$1`, [code]);
+  check('L5-VUI-03', 'ketoan', 'web375', J, 'Link https hợp lệ, bấm "Đã xuất hoá đơn": hộp xác nhận', 'hộp "Xác nhận đã xuất hoá đơn" nêu mã đơn + MST và hậu quả; chưa ghi DB', /Xác nhận đã xuất hoá đơn/.test(dlg) && dlg.includes(inv.taxCode) && st1.s === 'REQUESTED', `hộp=${/Xác nhận đã xuất hoá đơn/.test(dlg)}; có MST=${dlg.includes(inv.taxCode)}; DB ${st1.s}`, dlg.slice(dlg.indexOf('Xác nhận đã xuất hoá đơn'), dlg.indexOf('Xác nhận đã xuất hoá đơn') + 300));
+  const from = s.requests.length;
+  await s.page.locator('[role="alertdialog"] button, [role="dialog"] button').filter({ hasText: /^Đã xuất hoá đơn$/ }).last().click({ timeout: 8000 });
+  await s.page.waitForTimeout(2500);
+  const [st2] = await sql(`SELECT "invoiceStatus" s, "invoiceUrl" u FROM orders WHERE code=$1`, [code]);
+  const req = s.requests.slice(from).find((r) => /invoice/.test(r.path) && r.method !== 'GET');
+  const okMsg = await s.page.evaluate(() => [...document.querySelectorAll('[role="status"]')].map((e) => e.textContent.trim()).join(' | '));
+  const nt = (await call('returning', 'GET', '/me/notifications')).body;
+  const items = nt.items ?? nt.data ?? nt;
+  const got = (Array.isArray(items) ? items : []).find((n) => JSON.stringify(n).includes(code) && /hoá đơn|hóa đơn|VAT/i.test(JSON.stringify(n)));
+  await s.page.screenshot({ path: `${SHOTS}/ui375-ketoan-vat-issued.png` });
+  check('L5-VUI-04', 'ketoan', 'web375', J, 'Xác nhận trong hộp thoại', 'POST 2xx; DB ISSUED + invoiceUrl; màn báo kết quả; khách nhận thông báo nhắc mã đơn', req?.status < 300 && st2.s === 'ISSUED' && st2.u === 'https://hoadon.example.com/uat/HD-UI-0001.pdf' && !!okMsg && !!got, `${req ? `${req.method} ${req.path} ${req.status}` : 'không gọi API'}; DB ${JSON.stringify(st2)}; màn: "${okMsg.slice(0, 120)}"; thông báo cho khách: ${got ? 'có' : 'không thấy'}`, got ? short(got, 200) : null);
+  await s.close();
+});
+
+// ── B. Đổi/trả bằng giao diện ──
+if (want('B')) await guard('L5-RUI-ERR', async () => {
+  const J = 'Đổi/trả bằng giao diện (375)';
+  const A = await placeOrder('returning', { qty: 2, method: 'COD', slug: 'nuoc-rua-chen-fuwa3e' });
+  await waitPancake(A.code);
+  const oa = await orderRow(A.code);
+  await call('kho', 'PUT', `/admin/orders/${oa.id}/status`, { status: 'PACKED' });
+  hook(A.code, 'shipped'); hook(A.code, 'delivered');
+  for (let i = 0; i < 30 && (await orderRow(A.code)).status !== 'DELIVERED'; i++) await sleep(500);
+  const [line] = await sql(`SELECT id, "variationId" v FROM order_items WHERE "orderId"=$1 LIMIT 1`, [oa.id]);
+  const rq = await call('returning', 'POST', `/orders/${A.code}/return-request`, { reasonCode: 'DEFECTIVE', reason: 'Chai bị rò rỉ khi nhận (UAT giao diện)', items: [{ orderItemId: line.id, quantity: 1 }] });
+  rec('L5-RUI-00', 'returning', 'api', J, 'Chuẩn bị: COD 2 món đã giao, khách xin trả 1 món', '201 REQUESTED', `HTTP ${rq.status} ${rq.body?.status}`, short(rq.body, 160), rq.status < 300 && rq.body.status === 'REQUESTED' ? 'PASS' : 'BLOCKED');
+  if (!(rq.status < 300)) return;
+  const pv = (await call('cskh', 'GET', `/admin/return-requests/${rq.body.id}/preview`)).body;
+  const u0 = await userState('uat_returning');
+
+  const s = await openWeb(5, 'cskh', { viewport: { width: 375, height: 800 }, path: '/admin?tab=returns' });
+  await bypassApi(s.context);
+  await settle(s);
+  await s.page.getByLabel('Tìm yêu cầu đổi/trả theo mã đơn hoặc SĐT khách').fill(A.code);
+  await s.page.waitForTimeout(1600);
+  await s.page.screenshot({ path: `${SHOTS}/ui375-cskh-return-card.png`, fullPage: true });
+  const card = await textOf(s);
+  check('L5-RUI-01', 'cskh', 'web375', J, `CSKH tìm đơn ${A.code} ở tab Đổi / Trả`, 'thấy thẻ yêu cầu: dòng khách trả (1/2), lý do khách ghi, nút "Duyệt hoàn tiền" và "Từ chối"', card.includes(A.code) && /Duyệt hoàn tiền/.test(card) && /Chai bị rò rỉ/.test(card), `mã đơn=${card.includes(A.code)}; nút duyệt=${/Duyệt hoàn tiền/.test(card)}; lý do khách=${/Chai bị rò rỉ/.test(card)}`, card.slice(card.indexOf('Đơn:'), card.indexOf('Đơn:') + 300));
+  await s.page.getByRole('button', { name: 'Từ chối', exact: true }).first().click({ timeout: 8000 });
+  await s.page.waitForTimeout(600);
+  const rejTxt = await s.page.evaluate(() => [...document.querySelectorAll('[role="alert"]')].map((e) => e.textContent.trim()).join(' | '));
+  check('L5-RUI-02', 'cskh', 'web375', J, 'Bấm "Từ chối" khi chưa ghi lý do', 'báo "Ghi lý do từ chối để báo cho khách (tối thiểu 3 ký tự)."; đơn vẫn REQUESTED', /Ghi lý do từ chối/.test(rejTxt) && (await sql(`SELECT status::text s FROM return_requests WHERE id=$1`, [rq.body.id]))[0].s === 'REQUESTED', `cảnh báo: "${rejTxt}"`, null);
+  await s.page.getByRole('button', { name: 'Duyệt hoàn tiền', exact: true }).first().click({ timeout: 8000 });
+  await s.page.waitForTimeout(1500);
+  await s.page.screenshot({ path: `${SHOTS}/ui375-cskh-return-confirm.png`, fullPage: true });
+  const conf = await textOf(s);
+  check('L5-RUI-03', 'cskh', 'web375', J, 'Bấm "Duyệt hoàn tiền": bảng kiểm tra trước khi duyệt', `hiện "Trả một phần — kiểm tra trước khi duyệt", Tổng hoàn = số xem trước của API (${pv.refund}đ), nơi nhận tiền, nút "Xác nhận hoàn …"; chưa ghi DB`, /Trả một phần — kiểm tra trước khi duyệt/.test(conf) && conf.includes(new Intl.NumberFormat('vi-VN').format(pv.refund)) && (await sql(`SELECT status::text s FROM return_requests WHERE id=$1`, [rq.body.id]))[0].s === 'REQUESTED', `xem trước API ${pv.refund}đ; có số trên màn=${conf.includes(new Intl.NumberFormat('vi-VN').format(pv.refund))}`, conf.slice(conf.indexOf('Trả một phần'), conf.indexOf('Trả một phần') + 400));
+  const from = s.requests.length;
+  await s.page.getByRole('button', { name: /^Xác nhận hoàn/ }).first().click({ timeout: 8000 });
+  await s.page.waitForTimeout(3000);
+  const req = s.requests.slice(from).find((r) => /review/.test(r.path) && r.method === 'POST');
+  const [rr] = await sql(`SELECT status::text s FROM return_requests WHERE id=$1`, [rq.body.id]);
+  const u1 = await userState('uat_returning');
+  const oA = await orderRow(A.code);
+  const gain = u1.wallet - u0.wallet;
+  await s.page.screenshot({ path: `${SHOTS}/ui375-cskh-return-approved.png`, fullPage: true });
+  check('L5-RUI-04', 'cskh', 'web375', J, 'Xác nhận hoàn trong bảng kiểm tra', 'POST review 2xx; yêu cầu APPROVED; Ví khách +đúng số xem trước; sổ Ví = số dư; điểm = sổ điểm và giảm (đảo điểm đơn); đơn vẫn DELIVERED (trả 1/2)', req?.status < 300 && rr.s === 'APPROVED' && gain === pv.refund && u1.wallet === u1.wsum && u1.points === u1.psum && u1.points < u0.points && oA.status === 'DELIVERED', `${req ? `${req.method} ${req.path} ${req.status}` : 'không gọi API'}; yêu cầu ${rr.s}; Ví ${u0.wallet} -> ${u1.wallet} (+${gain}; xem trước ${pv.refund}); sổ Ví ${u1.wsum}; điểm ${u0.points} -> ${u1.points} (sổ ${u1.psum}); đơn ${oA.status}`, { pv });
+  await s.close();
+
+  const stock = async () => (await sql(`SELECT v.stock::int s FROM variations v WHERE v.id=$1`, [line.v]))[0]?.s;
+  const st0 = await stock();
+  const k = await openWeb(5, 'kho', { viewport: { width: 375, height: 800 }, path: '/admin?tab=returns' });
+  await bypassApi(k.context);
+  await settle(k);
+  await k.page.getByLabel('Tìm yêu cầu đổi/trả theo mã đơn hoặc SĐT khách').fill(A.code);
+  await k.page.waitForTimeout(1600);
+  await k.page.screenshot({ path: `${SHOTS}/ui375-kho-return-card.png`, fullPage: true });
+  const kc = await textOf(k);
+  const kbtns = await k.page.evaluate(() => [...document.querySelectorAll('button')].map((b) => b.textContent.trim()).filter((t) => /Duyệt|Từ chối|Đã nhận hàng về/.test(t)));
+  check('L5-RUI-05', 'kho', 'web375', J, `Kho tìm đơn ${A.code} ở tab Đổi / Trả (mục Chờ nhận hàng về)`, 'thấy thẻ "Chưa nhận hàng trả về — kho chưa cộng" và chỉ nút "Đã nhận hàng về" (không có Duyệt / Từ chối)', /Chưa nhận hàng trả về/.test(kc) && kbtns.includes('Đã nhận hàng về') && !kbtns.some((t) => /Duyệt|Từ chối/.test(t)), `nút: ${JSON.stringify(kbtns)}; thấy dòng chưa nhận=${/Chưa nhận hàng trả về/.test(kc)}`, kc.slice(kc.indexOf('Đơn:'), kc.indexOf('Đơn:') + 260));
+  await k.page.getByRole('button', { name: 'Đã nhận hàng về', exact: true }).first().click({ timeout: 8000 });
+  await k.page.waitForTimeout(700);
+  await k.page.screenshot({ path: `${SHOTS}/ui375-kho-return-confirm.png` });
+  const kd = await textOf(k);
+  const stMid = await stock();
+  const dlgOk = /Đã nhận hàng trả về\?/.test(kd) && stMid === st0;
+  const fromK = k.requests.length;
+  await k.page.locator('[role="alertdialog"] button, [role="dialog"] button').filter({ hasText: /^Đã nhận hàng về$/ }).last().click({ timeout: 8000 });
+  await k.page.waitForTimeout(2500);
+  const reqK = k.requests.slice(fromK).find((r) => /received/.test(r.path) && r.method === 'POST');
+  const st1 = await stock();
+  const [rr2] = await sql(`SELECT "receivedAt" r FROM return_requests WHERE id=$1`, [rq.body.id]);
+  const u2 = await userState('uat_returning');
+  check('L5-RUI-06', 'kho', 'web375', J, 'Kho xác nhận "Đã nhận hàng về" trong hộp thoại', 'hộp hỏi trước, chưa cộng kho khi chưa xác nhận; sau xác nhận POST 2xx, receivedAt có, tồn kho +1, Ví khách không đổi', dlgOk && reqK?.status < 300 && !!rr2.r && st1 - st0 === 1 && u2.wallet === u1.wallet, `hộp hỏi=${dlgOk}; ${reqK ? `${reqK.method} ${reqK.path} ${reqK.status}` : 'không gọi API'}; kho ${st0} -> ${st1}; receivedAt=${rr2.r}; Ví ${u1.wallet} -> ${u2.wallet}`, null);
+  await k.close();
+});
+
+// ── C. Cấu hình hệ thống bằng giao diện (Admin 1280) ──
+if (want('C')) await guard('L5-CFG-ERR', async () => {
+  const J = 'Cấu hình hệ thống bằng giao diện (1280)';
+  const KEY = 'coupon.staff_max_percent';
+  const [orig] = await sql(`SELECT value v FROM system_configs WHERE key=$1`, [KEY]);
+  const s = await openWeb(5, 'admin', { viewport: { width: 1280, height: 800 }, path: '/admin?tab=config' });
+  await bypassApi(s.context);
+  await settle(s);
+  await s.page.getByText('Cài đặt kỹ thuật', { exact: false }).first().click({ timeout: 8000 });
+  await s.page.waitForTimeout(500);
+  await s.page.getByLabel('Tìm khoá cấu hình').fill(KEY);
+  await s.page.waitForTimeout(800);
+  await s.page.screenshot({ path: `${SHOTS}/ui1280-admin-config-search.png` });
+  const box = s.page.getByLabel(KEY, { exact: true }).first();
+  const shown = await box.inputValue();
+  check('L5-CFGUI-01', 'admin', 'web1280', J, `Admin tìm khoá ${KEY}`, `thấy đúng ô của khoá, giá trị hiện = DB (${JSON.stringify(orig.v)})`, shown === JSON.stringify(orig.v), `ô hiện "${shown}"; DB ${JSON.stringify(orig.v)}`, null);
+  await box.fill('{bad');
+  await s.page.locator('div.rounded-card', { has: s.page.getByLabel(KEY, { exact: true }) }).getByRole('button', { name: 'Lưu', exact: true }).click({ timeout: 8000 });
+  await s.page.waitForTimeout(600);
+  const badTxt = await textOf(s);
+  const [still] = await sql(`SELECT value v FROM system_configs WHERE key=$1`, [KEY]);
+  check('L5-CFGUI-02', 'admin', 'web1280', J, 'Nhập JSON hỏng rồi Lưu', 'báo "JSON không hợp lệ"; DB không đổi', /JSON không hợp lệ/.test(badTxt) && JSON.stringify(still.v) === JSON.stringify(orig.v), `báo=${/JSON không hợp lệ/.test(badTxt)}; DB ${JSON.stringify(still.v)}`, null);
+  const card = s.page.locator('div.rounded-card', { has: s.page.getByLabel(KEY, { exact: true }) });
+  await box.fill('25');
+  const from = s.requests.length;
+  await card.getByRole('button', { name: 'Lưu', exact: true }).click({ timeout: 8000 });
+  await s.page.waitForTimeout(800);
+  const dlgTxt = await textOf(s);
+  await s.page.screenshot({ path: `${SHOTS}/ui1280-admin-config-confirm.png` });
+  const hasDlg = /Xác nhận đổi cấu hình tiền\/điểm/.test(dlgTxt);
+  if (hasDlg) await s.page.locator('[role="alertdialog"] button, [role="dialog"] button').filter({ hasText: /^Lưu thay đổi$/ }).last().click({ timeout: 8000 });
+  await s.page.waitForTimeout(2000);
+  const req = s.requests.slice(from).find((r) => /admin\/config/.test(r.path) && r.method !== 'GET');
+  const [now] = await sql(`SELECT value v, "updatedBy" b FROM system_configs WHERE key=$1`, [KEY]);
+  const mk = await call('marketing', 'POST', '/admin/coupons', { code: `UATCFG${Date.now().toString(36).toUpperCase().slice(-5)}`, type: 'PERCENT', value: 26, minOrder: 0, maxDiscount: 20000, startAt: new Date().toISOString(), endAt: new Date(Date.now() + 7 * 864e5).toISOString(), usageLimit: 5, perUserLimit: 1, scope: 'PUBLIC' });
+  check('L5-CFGUI-03', 'admin', 'web1280', J, 'Đổi trần % mã của nhân viên từ 30 xuống 25 rồi xác nhận', `${hasDlg ? 'hộp xác nhận nêu giá trị cũ → mới' : 'lưu thẳng (khoá không thuộc nhóm tiền/điểm)'}; PUT config 2xx; DB = 25, updatedBy = admin; Marketing tạo mã 26% bị 403 ngay`, req?.status < 300 && now.v === 25 && now.b === 'uat_admin' && mk.status === 403, `hộp xác nhận=${hasDlg}; ${req ? `${req.method} ${req.path} ${req.status}` : 'không gọi API'}; DB ${JSON.stringify(now)}; Marketing tạo 26% -> ${mk.status} ${short(mk.body?.message ?? mk.body, 100)}`, hasDlg ? dlgTxt.slice(dlgTxt.indexOf('Xác nhận đổi cấu hình'), dlgTxt.indexOf('Xác nhận đổi cấu hình') + 220) : null);
+  await box.fill(JSON.stringify(orig.v));
+  await card.getByRole('button', { name: 'Lưu', exact: true }).click({ timeout: 8000 });
+  await s.page.waitForTimeout(800);
+  if (await s.page.locator('[role="alertdialog"], [role="dialog"]').count()) await s.page.locator('[role="alertdialog"] button, [role="dialog"] button').filter({ hasText: /^Lưu thay đổi$/ }).last().click({ timeout: 8000 }).catch(() => undefined);
+  await s.page.waitForTimeout(2000);
+  const [back] = await sql(`SELECT value v FROM system_configs WHERE key=$1`, [KEY]);
+  check('L5-CFGUI-04', 'admin', 'web1280', J, 'Khôi phục trần về giá trị ban đầu bằng giao diện', `DB = ${JSON.stringify(orig.v)}`, JSON.stringify(back.v) === JSON.stringify(orig.v), `DB ${JSON.stringify(back.v)}`, null);
+  if (JSON.stringify(back.v) !== JSON.stringify(orig.v)) await call('admin', 'PUT', '/admin/config', { key: KEY, value: orig.v });
+  await s.close();
+});
+save(ONLY ? `21-ui-actions-${ONLY.join('_')}` : '21-ui-actions');
+process.exit(0);

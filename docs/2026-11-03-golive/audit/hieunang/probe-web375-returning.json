@@ -1,0 +1,912 @@
+{
+ "meta": {
+  "date": "2026-11-03T10:14:14.754Z",
+  "app": "web375",
+  "persona": "returning",
+  "delay": 0,
+  "cpu": 4,
+  "load": {
+   "loadAvg": "Load Avg: 97.67, 120.72, 129.60 ",
+   "cpu": "CPU usage: 17.61% user, 81.95% sys, 0.42% idle "
+  }
+ },
+ "rows": [
+  {
+   "app": "web375",
+   "key": "home",
+   "path": "/",
+   "persona": "returning",
+   "ms": 10824,
+   "apiCalls": 12,
+   "distinct": 12,
+   "dup": [],
+   "bad": [],
+   "cls": 0.194,
+   "shifts": [
+    {
+     "v": 0.0535,
+     "t": 6824,
+     "s": [
+      "DIV.tubu-press-card.group \"Bán chạyCao cà gai leo BH.Nong\" y560→560 h252",
+      "DIV.tubu-press-card.group \"Bán chạy-12%Hạt điều rang mộc \" y560→560 h252"
+     ]
+    },
+    {
+     "v": 0.1367,
+     "t": 6899,
+     "s": [
+      "DIV \"Danh mụcMỹ phẩm thiên nhiênTẩy\" y252→396 h248",
+      "DIV.scroll-x.tubu-scroll-fade \"Mỹ phẩm thiên nhiênTẩy rửa sin\" y296→440 h204",
+      "DIV \"Bán chạy nhấtTheo lượt bán 30 \" y516→660 h152",
+      "DIV \"Giờ vàngMã giảm giáĐổi rácMua \" y152→296 h84"
+     ]
+    }
+   ],
+   "fcp": 1168,
+   "lcp": 6908,
+   "lcpEl": "DIV.",
+   "longTasks": 8,
+   "requests": 104,
+   "jsKB": 499,
+   "totalKB": 786,
+   "consoleErrors": [],
+   "pageErrors": [],
+   "finalPath": "/",
+   "body": "Tubu Tree — Mỹ Phẩm & Tiêu Dùng Sinh Học Thuần Khiết Bạn đang tìm gì hôm nay? 15 3 Chào Lại · Lộc Bi",
+   "err": null,
+   "calls": {
+    "GET /home": 1,
+    "POST /auth/refresh": 1,
+    "GET /feed/public-preview": 1,
+    "GET /me/summary": 1,
+    "GET /me/wishlist/ids": 1,
+    "GET /me/daily-check-in": 1,
+    "GET /feed": 1,
+    "GET /me/coupons": 1,
+    "GET /home/me": 1,
+    "GET /cart": 1,
+    "GET /orders/home-todo": 1,
+    "GET /me/loyalty": 1
+   }
+  },
+  {
+   "app": "web375",
+   "key": "browse",
+   "path": "/san-pham",
+   "persona": "returning",
+   "ms": 22848,
+   "apiCalls": 8,
+   "distinct": 8,
+   "dup": [],
+   "bad": [],
+   "cls": 0,
+   "shifts": [],
+   "fcp": 13756,
+   "lcp": 13756,
+   "lcpEl": "SPAN.",
+   "longTasks": 20,
+   "requests": 90,
+   "jsKB": 464,
+   "totalKB": 774,
+   "consoleErrors": [],
+   "pageErrors": [],
+   "finalPath": "/san-pham",
+   "body": "Danh mục Tìm sản phẩm 3 Danh mục Mỹ phẩm thiên nhiên Tẩy rửa sinh học Cho bé Cho mẹ bầu Chăm sóc cá ",
+   "err": null,
+   "calls": {
+    "GET /flash-sales/active": 1,
+    "GET /config/public": 1,
+    "POST /auth/refresh": 1,
+    "GET /me/summary": 1,
+    "GET /me/daily-check-in": 1,
+    "GET /me/wishlist/ids": 1,
+    "GET /me/coupons": 1,
+    "GET /cart": 1
+   }
+  },
+  {
+   "app": "web375",
+   "key": "best-sellers",
+   "path": "/ban-chay",
+   "persona": "returning",
+   "ms": 20151,
+   "apiCalls": 5,
+   "distinct": 5,
+   "dup": [],
+   "bad": [],
+   "cls": 0,
+   "shifts": [],
+   "fcp": 10260,
+   "lcp": 10560,
+   "lcpEl": "SPAN.",
+   "longTasks": 19,
+   "requests": 53,
+   "jsKB": 265,
+   "totalKB": 549,
+   "consoleErrors": [],
+   "pageErrors": [],
+   "finalPath": "/ban-chay",
+   "body": "Bán chạy nhất Theo lượt bán 30 ngày qua Tất cả Mỹ phẩm thiên nhiên Tẩy rửa sinh học Cho bé Cho mẹ bầ",
+   "err": null,
+   "calls": {
+    "GET /flash-sales/active": 1,
+    "GET /config/public": 1,
+    "POST /auth/refresh": 1,
+    "GET /me/wishlist/ids": 1,
+    "GET /cart": 1
+   }
+  },
+  {
+   "app": "web375",
+   "key": "flash-sale",
+   "path": "/gio-vang",
+   "persona": "returning",
+   "ms": 9206,
+   "apiCalls": 6,
+   "distinct": 6,
+   "dup": [],
+   "bad": [],
+   "cls": 0,
+   "shifts": [],
+   "fcp": 2644,
+   "lcp": 6016,
+   "lcpEl": "SPAN.",
+   "longTasks": 2,
+   "requests": 49,
+   "jsKB": 266,
+   "totalKB": 455,
+   "consoleErrors": [],
+   "pageErrors": [],
+   "finalPath": "/gio-vang",
+   "body": "Giờ vàng Chưa có Giờ vàng lúc này Khung giờ tiếp theo sẽ hiện ở đây. Xem sản phẩm khác Hotline: 0984",
+   "err": null,
+   "calls": {
+    "GET /flash-sales/slots": 1,
+    "GET /config/public": 1,
+    "GET /categories": 1,
+    "POST /auth/refresh": 1,
+    "GET /flash-sales/upcoming": 1,
+    "GET /cart": 1
+   }
+  },
+  {
+   "app": "web375",
+   "key": "product-slug",
+   "path": "/san-pham/nuoc-rua-chen-fuwa3e",
+   "persona": "returning",
+   "ms": 9623,
+   "apiCalls": 11,
+   "distinct": 11,
+   "dup": [],
+   "bad": [],
+   "cls": 0.017,
+   "shifts": [
+    {
+     "v": 0.0158,
+     "t": 6030,
+     "s": [
+      "DIV.tubu-press \"Vận chuyểnTubu Tree giao hàng\" y653→721 h64",
+      "DIV.max-md:order-5.max-md:bg-[var(--color-bg-surface)] \"Phân loại1L · 120.000đCan 5L ·\" y717→785 h27",
+      "DIV.mt-4.flex \"Số lượng1Thêm vào giỏ · 120.00\" y797→0 h0"
+     ]
+    }
+   ],
+   "fcp": 2636,
+   "lcp": 2784,
+   "lcpEl": "H1.font-display text-2xl font-semibold text-stone-900 max-md:fo",
+   "longTasks": 4,
+   "requests": 64,
+   "jsKB": 342,
+   "totalKB": 572,
+   "consoleErrors": [],
+   "pageErrors": [],
+   "finalPath": "/san-pham/nuoc-rua-chen-fuwa3e",
+   "body": "Fuwa3e Chia sẻ Nước rửa chén sinh học Fuwa3e 120.000đ Đã bán 4 Nhận ~2.880 Điểm Xanh Ưu đãi 3 mã giả",
+   "err": null,
+   "calls": {
+    "GET /flash-sales/active": 1,
+    "GET /products/nuoc-rua-chen-fuwa3e/reviews": 1,
+    "GET /config/public": 1,
+    "GET /products/nuoc-rua-chen-fuwa3e": 1,
+    "POST /auth/refresh": 1,
+    "GET /me/wishlist/ids": 1,
+    "GET /affiliate/me": 1,
+    "GET /products/nuoc-rua-chen-fuwa3e/reviews/can-review": 1,
+    "GET /me/coupons": 1,
+    "GET /products/for-you": 1,
+    "GET /cart": 1
+   }
+  },
+  {
+   "app": "web375",
+   "key": "wishlist",
+   "path": "/tai-khoan/yeu-thich",
+   "persona": "returning",
+   "ms": 8848,
+   "apiCalls": 6,
+   "distinct": 6,
+   "dup": [],
+   "bad": [],
+   "cls": 0.014,
+   "shifts": [
+    {
+     "v": 0.0115,
+     "t": 4745,
+     "s": [
+      "FOOTER.mt-8.border-t \"Hotline: 0984 606 774Điều khoả\" y776→705 h107"
+     ]
+    }
+   ],
+   "fcp": 1352,
+   "lcp": 5160,
+   "lcpEl": "SPAN.",
+   "longTasks": 3,
+   "requests": 60,
+   "jsKB": 285,
+   "totalKB": 504,
+   "consoleErrors": [],
+   "pageErrors": [],
+   "finalPath": "/tai-khoan/yeu-thich",
+   "body": "Sản phẩm yêu thích Danh sách sản phẩm yêu thích -10% Tubu chọnSerum dưỡng ẩm Visante Giảm 10%, Tubu ",
+   "err": null,
+   "calls": {
+    "GET /config/public": 1,
+    "GET /flash-sales/active": 1,
+    "POST /auth/refresh": 1,
+    "GET /me/wishlist": 1,
+    "GET /me/wishlist/ids": 1,
+    "GET /cart": 1
+   }
+  },
+  {
+   "app": "web375",
+   "key": "cart",
+   "path": "/gio-hang",
+   "persona": "returning",
+   "ms": 9741,
+   "apiCalls": 4,
+   "distinct": 4,
+   "dup": [],
+   "bad": [],
+   "cls": 0.01,
+   "shifts": [
+    {
+     "v": 0.0096,
+     "t": 4811,
+     "s": [
+      "FOOTER.mt-8.border-t \"Hotline: 0984 606 774Điều khoả\" y744→691 h121"
+     ]
+    }
+   ],
+   "fcp": 888,
+   "lcp": 5656,
+   "lcpEl": "DIV.basis-full break-words text-sm font-medium text-stone-900 ma",
+   "longTasks": 3,
+   "requests": 61,
+   "jsKB": 324,
+   "totalKB": 547,
+   "consoleErrors": [],
+   "pageErrors": [],
+   "finalPath": "/gio-hang",
+   "body": "Giỏ hàng Chọn tất cả Nước giặt sinh học Fuwa3e 2L 210.000đ Thành tiền 420.000đ 2 Serum dưỡng ẩm Visa",
+   "err": null,
+   "calls": {
+    "GET /config/public": 1,
+    "POST /auth/refresh": 1,
+    "GET /cart": 1,
+    "GET /me/coupons": 1
+   }
+  },
+  {
+   "app": "web375",
+   "key": "checkout",
+   "path": "/thanh-toan",
+   "persona": "returning",
+   "ms": 19998,
+   "apiCalls": 1,
+   "distinct": 1,
+   "dup": [],
+   "bad": [],
+   "cls": 0,
+   "shifts": [],
+   "fcp": 2560,
+   "lcp": 2560,
+   "lcpEl": "H1.font-display text-2xl font-semibold text-stone-900 max-md:te",
+   "longTasks": 25,
+   "requests": 47,
+   "jsKB": 311,
+   "totalKB": 473,
+   "consoleErrors": [],
+   "pageErrors": [],
+   "finalPath": "/thanh-toan",
+   "body": "Thanh toán Đang tải… Hotline: 0984 606 774 Điều khoản Bảo mật Đổi trả Vận chuyển",
+   "err": null,
+   "calls": {
+    "GET /config/public": 1
+   }
+  },
+  {
+   "app": "web375",
+   "key": "orders",
+   "path": "/tai-khoan/don-hang",
+   "persona": "returning",
+   "ms": 14745,
+   "apiCalls": 0,
+   "distinct": 0,
+   "dup": [],
+   "bad": [],
+   "cls": 0.008,
+   "shifts": [
+    {
+     "v": 0.0082,
+     "t": 14330,
+     "s": [
+      "FOOTER.mt-8.border-t \"Hotline: 0984 606 774Điều khoả\" y691→736 h77"
+     ]
+    }
+   ],
+   "fcp": 5652,
+   "lcp": 5652,
+   "lcpEl": "SPAN.",
+   "longTasks": 24,
+   "requests": 48,
+   "jsKB": 312,
+   "totalKB": 456,
+   "consoleErrors": [],
+   "pageErrors": [],
+   "finalPath": "/tai-khoan/don-hang",
+   "body": "Đơn hàng Đang tải… Hotline: 0984 606 774 Điều khoản Bảo mật Đổi trả Vận chuyển",
+   "err": null,
+   "calls": {}
+  },
+  {
+   "app": "web375",
+   "key": "profile",
+   "path": "/tai-khoan",
+   "persona": "returning",
+   "ms": 15937,
+   "apiCalls": 14,
+   "distinct": 13,
+   "dup": [
+    [
+     "GET /config/public",
+     2
+    ]
+   ],
+   "bad": [],
+   "cls": 0.09,
+   "shifts": [
+    {
+     "v": 0.0315,
+     "t": 3183,
+     "s": [
+      "FOOTER.mt-8.border-t \"Hotline: 0984 606 774Điều khoả\" y0→682 h121",
+      "DIV.md:hidden \"Trang chủDanh mụcVườn XanhƯu đ\" y0→803 h9"
+     ]
+    },
+    {
+     "v": 0.0315,
+     "t": 3216,
+     "s": [
+      "FOOTER.mt-8.border-t \"Hotline: 0984 606 774Điều khoả\" y682→0 h0",
+      "DIV.md:hidden \"Trang chủDanh mụcVườn XanhƯu đ\" y803→0 h0"
+     ]
+    },
+    {
+     "v": 0.0263,
+     "t": 4241,
+     "s": [
+      "SECTION.mx-4.mt-3 \"Kiếm tiền cùng TubuMở gian hàn\" y480→526 h163",
+      "SECTION.mx-4.mt-3 \"Tài khoảnSản phẩm yêu thíchSổ \" y655→701 h111",
+      "DIV.mt-2.5.flex \"Mã của bạn: UATRETURNINGChia s\" y396→442 h68"
+     ]
+    }
+   ],
+   "fcp": 932,
+   "lcp": 3608,
+   "lcpEl": "P.",
+   "longTasks": 4,
+   "requests": 120,
+   "jsKB": 581,
+   "totalKB": 872,
+   "consoleErrors": [],
+   "pageErrors": [],
+   "finalPath": "/tai-khoan",
+   "body": "Cá nhân N Nguyễn Thị Quay Lại Lộc Biếc Sửa hồ sơ 56.400 điểm Điểm Xanh 258.000đ Ví Tubu 3 mã Mã giảm",
+   "err": null,
+   "calls": {
+    "GET /config/public": 2,
+    "POST /auth/refresh": 1,
+    "GET /me": 1,
+    "GET /me/referral": 1,
+    "GET /orders": 1,
+    "GET /me/summary": 1,
+    "GET /me/coupons": 1,
+    "GET /me/support-chat/summary": 1,
+    "GET /auth/me": 1,
+    "GET /me/loyalty": 1,
+    "GET /dealer/me": 1,
+    "GET /cart": 1,
+    "GET /me/daily-check-in": 1
+   }
+  },
+  {
+   "app": "web375",
+   "key": "notifications",
+   "path": "/tai-khoan/thong-bao",
+   "persona": "returning",
+   "ms": 7046,
+   "apiCalls": 5,
+   "distinct": 5,
+   "dup": [],
+   "bad": [],
+   "cls": 0.206,
+   "shifts": [
+    {
+     "v": 0.0512,
+     "t": 3513,
+     "s": [
+      "DIV.max-md:px-4 \"\" y54→60 h208",
+      "FOOTER.mt-8.border-t \"Hotline: 0984 606 774Điều khoả\" y736→691 h121"
+     ]
+    },
+    {
+     "v": 0.0054,
+     "t": 3714,
+     "s": [
+      "DIV.max-md:px-4 \"\" y60→74 h208",
+      "DIV.min-w-0.flex-1 \"Thông báo\" y12→19 h30"
+     ]
+    },
+    {
+     "v": 0.149,
+     "t": 3901,
+     "s": [
+      "FOOTER.mt-8.border-t \"Hotline: 0984 606 774Điều khoả\" y691→0 h0"
+     ]
+    }
+   ],
+   "fcp": 836,
+   "lcp": 4084,
+   "lcpEl": "SPAN.mt-0.5 block text-sm text-stone-700 max-md:text-[color:var(-",
+   "longTasks": 5,
+   "requests": 57,
+   "jsKB": 296,
+   "totalKB": 488,
+   "consoleErrors": [],
+   "pageErrors": [],
+   "finalPath": "/tai-khoan/thong-bao",
+   "body": "Thông báo Đọc tất cả Cập nhật đơn hàng Đơn TUBU20261103DN03 đã bị huỷ. Đã hoàn 258.000đ vào Ví Tubu.",
+   "err": null,
+   "calls": {
+    "GET /config/public": 1,
+    "POST /auth/refresh": 1,
+    "GET /me/summary": 1,
+    "GET /me/notifications": 1,
+    "GET /cart": 1
+   }
+  },
+  {
+   "app": "web375",
+   "key": "chat",
+   "path": "/ho-tro/chat",
+   "persona": "returning",
+   "ms": 6617,
+   "apiCalls": 6,
+   "distinct": 5,
+   "dup": [
+    [
+     "GET /config/public",
+     2
+    ]
+   ],
+   "bad": [],
+   "cls": 0.041,
+   "shifts": [
+    {
+     "v": 0.0082,
+     "t": 2788,
+     "s": [
+      "FOOTER.mt-8.border-t \"Hotline: 0984 606 774Điều khoả\" y691→736 h77"
+     ]
+    },
+    {
+     "v": 0.0082,
+     "t": 3059,
+     "s": [
+      "FOOTER.mt-8.border-t \"Hotline: 0984 606 774Điều khoả\" y736→691 h121"
+     ]
+    },
+    {
+     "v": 0.0248,
+     "t": 3271,
+     "s": [
+      "FOOTER.mt-8.border-t \"Hotline: 0984 606 774Điều khoả\" y691→0 h0"
+     ]
+    }
+   ],
+   "fcp": 664,
+   "lcp": 3288,
+   "lcpEl": "DIV.",
+   "longTasks": 1,
+   "requests": 50,
+   "jsKB": 273,
+   "totalKB": 463,
+   "consoleErrors": [],
+   "pageErrors": [],
+   "finalPath": "/ho-tro/chat",
+   "body": "Chat với Tubu Tree Tubu Tree Tubu Tree hỗ trợ 8:00–21:00 mỗi ngày. Bạn cần hỏi gì ạ? Mình muốn hỏi v",
+   "err": null,
+   "calls": {
+    "GET /config/public": 2,
+    "POST /auth/refresh": 1,
+    "GET /me/support-chat": 1,
+    "GET /cart": 1,
+    "GET /orders": 1
+   }
+  },
+  {
+   "app": "web375",
+   "key": "loyalty",
+   "path": "/tai-khoan/diem-xanh",
+   "persona": "returning",
+   "ms": 20687,
+   "apiCalls": 8,
+   "distinct": 7,
+   "dup": [
+    [
+     "GET /config/public",
+     2
+    ]
+   ],
+   "bad": [],
+   "cls": 0.216,
+   "shifts": [
+    {
+     "v": 0.0299,
+     "t": 1572,
+     "s": [
+      "DIV.mt-4 \"Đang tải…\" y100→70 h650",
+      "FOOTER.mt-8.border-t \"Hotline: 0984 606 774Điều khoả\" y805→776 h37",
+      "A.inline-flex.min-h-11 \"Hotline: 0984 606 774\" y0→793 h20"
+     ]
+    },
+    {
+     "v": 0.0155,
+     "t": 3463,
+     "s": [
+      "FOOTER.mt-8.border-t \"Hotline: 0984 606 774Điều khoả\" y776→691 h121"
+     ]
+    },
+    {
+     "v": 0.149,
+     "t": 3881,
+     "s": [
+      "FOOTER.mt-8.border-t \"Hotline: 0984 606 774Điều khoả\" y691→0 h0"
+     ]
+    },
+    {
+     "v": 0.0212,
+     "t": 3999,
+     "s": [
+      "UL.divide-y.divide-stone-200 \"Vườn XanhChăm cây nhận quàĐổi \" y740→0 h0"
+     ]
+    }
+   ],
+   "fcp": 688,
+   "lcp": 688,
+   "lcpEl": "H1.font-display text-2xl font-semibold text-stone-900 max-md:te",
+   "longTasks": 3,
+   "requests": 80,
+   "jsKB": 390,
+   "totalKB": 628,
+   "consoleErrors": [],
+   "pageErrors": [],
+   "finalPath": "/tai-khoan/diem-xanh",
+   "body": "Hạng thành viên & Điểm Xanh 🌿 Lộc Biếc Tích điểm ×1,2 · 56.400 Điểm Xanh 34.400 Điểm Xanh sẽ hết hạ",
+   "err": null,
+   "calls": {
+    "GET /config/public": 2,
+    "POST /auth/refresh": 1,
+    "GET /me/points/transactions": 1,
+    "GET /me/coupons": 1,
+    "GET /cart": 1,
+    "GET /me/loyalty": 1,
+    "GET /me/daily-check-in": 1
+   }
+  },
+  {
+   "app": "web375",
+   "key": "offers",
+   "path": "/uu-dai",
+   "persona": "returning",
+   "ms": 67339,
+   "apiCalls": 11,
+   "distinct": 11,
+   "dup": [],
+   "bad": [],
+   "cls": 0.21,
+   "shifts": [
+    {
+     "v": 0.0205,
+     "t": 65206,
+     "s": [
+      "FOOTER.mt-8.border-t \"Hotline: 0984 606 774Điều khoả\" y706→631 h121",
+      "DIV.md:hidden \"Trang chủDanh mụcVườn XanhƯu đ\" y0→752 h60"
+     ]
+    },
+    {
+     "v": 0.0982,
+     "t": 66240,
+     "s": [
+      "FOOTER.mt-8.border-t \"Hotline: 0984 606 774Điều khoả\" y631→0 h0",
+      "DIV.md:hidden \"Trang chủDanh mụcVườn XanhƯu đ\" y752→0 h0"
+     ]
+    },
+    {
+     "v": 0.0915,
+     "t": 66769,
+     "s": [
+      "SECTION \"Đổi quàĐổi Điểm Xanh lấy mã gi\" y498→708 h104"
+     ]
+    }
+   ],
+   "fcp": 50980,
+   "lcp": 66784,
+   "lcpEl": "SPAN.",
+   "longTasks": 51,
+   "requests": 76,
+   "jsKB": 381,
+   "totalKB": 616,
+   "consoleErrors": [],
+   "pageErrors": [],
+   "finalPath": "/uu-dai",
+   "body": "Ưu đãi Lộc Biếc Hạng và lịch sử điểm 56.400 điểm ≈ 56.400đ Còn 17,7 triệu mua hàng lên Đại Thụ Điểm ",
+   "err": null,
+   "calls": {
+    "GET /config/public": 1,
+    "GET /campaigns": 1,
+    "GET /flash-sales/active": 1,
+    "GET /coupons/collectable": 1,
+    "POST /auth/refresh": 1,
+    "GET /coupons/collectable/mine": 1,
+    "GET /me/summary": 1,
+    "GET /me/daily-check-in": 1,
+    "GET /me/coupons": 1,
+    "GET /me/loyalty": 1,
+    "GET /cart": 1
+   }
+  },
+  {
+   "app": "web375",
+   "key": "vouchers",
+   "path": "/ma-giam-gia",
+   "persona": "returning",
+   "ms": 7111,
+   "apiCalls": 6,
+   "distinct": 6,
+   "dup": [],
+   "bad": [],
+   "cls": 0.003,
+   "shifts": [],
+   "fcp": 876,
+   "lcp": 3024,
+   "lcpEl": "H1.font-display text-2xl font-semibold text-stone-900 max-md:te",
+   "longTasks": 4,
+   "requests": 51,
+   "jsKB": 272,
+   "totalKB": 462,
+   "consoleErrors": [],
+   "pageErrors": [],
+   "finalPath": "/ma-giam-gia",
+   "body": "Mã giảm giá Mỗi đơn dùng 1 mã Nhận mã Mã của tôi Đã dùng–hết hạn Hôm nay chưa có mã mới Hotline: 098",
+   "err": null,
+   "calls": {
+    "GET /coupons/collectable": 1,
+    "GET /config/public": 1,
+    "POST /auth/refresh": 1,
+    "GET /coupons/collectable/mine": 1,
+    "GET /me/coupons": 1,
+    "GET /cart": 1
+   }
+  },
+  {
+   "app": "web375",
+   "key": "game",
+   "path": "/vuon-xanh",
+   "persona": "returning",
+   "ms": 10912,
+   "apiCalls": 10,
+   "distinct": 10,
+   "dup": [],
+   "bad": [],
+   "cls": 0.342,
+   "shifts": [
+    {
+     "v": 0.0327,
+     "t": 3323,
+     "s": [
+      "FOOTER.mt-8.border-t \"Hotline: 0984 606 774Điều khoả\" y0→682 h121",
+      "DIV.md:hidden \"Trang chủDanh mụcVườn XanhƯu đ\" y0→803 h9"
+     ]
+    },
+    {
+     "v": 0.0327,
+     "t": 3358,
+     "s": [
+      "FOOTER.mt-8.border-t \"Hotline: 0984 606 774Điều khoả\" y682→0 h0",
+      "DIV.md:hidden \"Trang chủDanh mụcVườn XanhƯu đ\" y803→0 h0"
+     ]
+    },
+    {
+     "v": 0.0577,
+     "t": 4005,
+     "s": [
+      "FOOTER.mt-8.border-t \"Hotline: 0984 606 774Điều khoả\" y0→634 h121",
+      "DIV.md:hidden \"Trang chủDanh mụcVườn XanhƯu đ\" y0→755 h57"
+     ]
+    },
+    {
+     "v": 0.2192,
+     "t": 5049,
+     "s": [
+      "FOOTER.mt-8.border-t \"Hotline: 0984 606 774Điều khoả\" y634→0 h0",
+      "DIV.md:hidden \"Trang chủDanh mụcVườn XanhƯu đ\" y755→0 h0"
+     ]
+    }
+   ],
+   "fcp": 684,
+   "lcp": 5156,
+   "lcpEl": "P.text-caption text-stone-600",
+   "longTasks": 4,
+   "requests": 83,
+   "jsKB": 419,
+   "totalKB": 655,
+   "consoleErrors": [],
+   "pageErrors": [],
+   "finalPath": "/vuon-xanh",
+   "body": "Vườn Xanh 💧 100 giọt nước 🌱 Cây của bạn Còn 60💧 nữa là thu hoạch 0/60💧 · 🔥 Chuỗi 0 ngày · 🌳 Đã",
+   "err": null,
+   "calls": {
+    "GET /config/public": 1,
+    "POST /auth/refresh": 1,
+    "GET /me/daily-check-in": 1,
+    "GET /me/summary": 1,
+    "GET /game/quiz/today": 1,
+    "GET /game/missions": 1,
+    "GET /cart": 1,
+    "GET /game/profile": 1,
+    "GET /me/coupons": 1,
+    "GET /me/loyalty": 1
+   }
+  },
+  {
+   "app": "web375",
+   "key": "recycle",
+   "path": "/doi-rac",
+   "persona": "returning",
+   "ms": 9563,
+   "apiCalls": 5,
+   "distinct": 5,
+   "dup": [],
+   "bad": [],
+   "cls": 0.257,
+   "shifts": [
+    {
+     "v": 0.0199,
+     "t": 3409,
+     "s": [
+      "FOOTER.mt-8.border-t \"Hotline: 0984 606 774Điều khoả\" y800→691 h121",
+      "A.inline-flex.min-h-11 \"Hotline: 0984 606 774\" y0→708 h44"
+     ]
+    },
+    {
+     "v": 0.1878,
+     "t": 3953,
+     "s": [
+      "FOOTER.mt-8.border-t \"Hotline: 0984 606 774Điều khoả\" y691→0 h0",
+      "DIV.min-w-0.flex-1 \"Đổi rác lấy quà\" y12→19 h30"
+     ]
+    },
+    {
+     "v": 0.0495,
+     "t": 4101,
+     "s": [
+      "SECTION.space-y-2 \"Yêu cầu đang xử lýTR-GY25E · M\" y352→406 h406",
+      "DIV.rounded-card.border \"Vừa cộng 10.000 điểmTR-33BMR ·\" y264→318 h86",
+      "A.inline-flex.min-h-11 \"Đổi rác ngay\" y187→241 h68"
+     ]
+    }
+   ],
+   "fcp": 1208,
+   "lcp": 3976,
+   "lcpEl": "P.font-display text-3xl font-semibold tabular-nums text-stone-",
+   "longTasks": 6,
+   "requests": 62,
+   "jsKB": 305,
+   "totalKB": 506,
+   "consoleErrors": [],
+   "pageErrors": [],
+   "finalPath": "/doi-rac",
+   "body": "Đổi rác lấy quà Yêu cầu của tôi Điểm Xanh của bạn 56.400 điểm Dùng như 56.400đ khi mua sắm Còn 18.60",
+   "err": null,
+   "calls": {
+    "GET /config/public": 1,
+    "POST /auth/refresh": 1,
+    "GET /cart": 1,
+    "GET /waste/me": 1,
+    "GET /me/loyalty/rewards": 1
+   }
+  },
+  {
+   "app": "web375",
+   "key": "browse-category",
+   "path": "/san-pham?category=cat-cleaning",
+   "persona": "returning",
+   "ms": 9263,
+   "apiCalls": 8,
+   "distinct": 8,
+   "dup": [],
+   "bad": [],
+   "cls": 0,
+   "shifts": [],
+   "fcp": 1460,
+   "lcp": 1564,
+   "lcpEl": "SPAN.",
+   "longTasks": 3,
+   "requests": 91,
+   "jsKB": 464,
+   "totalKB": 720,
+   "consoleErrors": [],
+   "pageErrors": [],
+   "finalPath": "/san-pham?category=cat-cleaning",
+   "body": "Tẩy rửa sinh học Tìm sản phẩm 3 Phổ biến Bán chạy Mới Giá ⇅ Lọc Tẩy rửa sinh học 6 sản phẩm Danh sác",
+   "err": null,
+   "calls": {
+    "GET /config/public": 1,
+    "GET /flash-sales/active": 1,
+    "POST /auth/refresh": 1,
+    "GET /me/wishlist/ids": 1,
+    "GET /me/summary": 1,
+    "GET /me/daily-check-in": 1,
+    "GET /me/coupons": 1,
+    "GET /cart": 1
+   }
+  },
+  {
+   "app": "web375",
+   "key": "browse-search",
+   "path": "/san-pham?q=nuoc",
+   "persona": "returning",
+   "ms": 11357,
+   "apiCalls": 8,
+   "distinct": 8,
+   "dup": [],
+   "bad": [],
+   "cls": 0,
+   "shifts": [],
+   "fcp": 1876,
+   "lcp": 1876,
+   "lcpEl": "SPAN.",
+   "longTasks": 3,
+   "requests": 91,
+   "jsKB": 464,
+   "totalKB": 720,
+   "consoleErrors": [],
+   "pageErrors": [],
+   "finalPath": "/san-pham?q=nuoc",
+   "body": "Kết quả cho \"nuoc\" Tìm sản phẩm 3 Liên quan Bán chạy Mới Giá ⇅ Lọc 8 sản phẩm Danh sách sản phẩm Tub",
+   "err": null,
+   "calls": {
+    "GET /config/public": 1,
+    "GET /flash-sales/active": 1,
+    "POST /auth/refresh": 1,
+    "GET /me/summary": 1,
+    "GET /me/wishlist/ids": 1,
+    "GET /me/daily-check-in": 1,
+    "GET /me/coupons": 1,
+    "GET /cart": 1
+   }
+  }
+ ]
+}

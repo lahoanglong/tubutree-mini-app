@@ -1,0 +1,134 @@
+[
+  {
+    "id": "B1-1",
+    "persona": "returning",
+    "khổ": "API",
+    "journey": "Ví: hoàn tiền huỷ đơn, thanh toán bằng ví",
+    "step": "đặt đơn chuyển khoản",
+    "expected": "BANK_TRANSFER cần Pancake đối soát",
+    "actual": "code=TUBU2026110342491 total=210000 (status 201)",
+    "evidence": "code=TUBU2026110342491 total=210000 (status 201)",
+    "status": "PASS"
+  },
+  {
+    "id": "B1-2",
+    "persona": "returning",
+    "khổ": "API",
+    "journey": "Ví: hoàn tiền huỷ đơn, thanh toán bằng ví",
+    "step": "webhook ngân hàng giả: đơn PAID/CONFIRMED",
+    "expected": "bank-transfer.service.ts + pancake payment",
+    "actual": "SQL orders: {\"status\":\"CONFIRMED\",\"ps\":\"PAID\",\"paidAt\":\"2026-11-03T21:04:25.447Z\"}",
+    "evidence": "SQL orders: {\"status\":\"CONFIRMED\",\"ps\":\"PAID\",\"paidAt\":\"2026-11-03T21:04:25.447Z\"}",
+    "status": "PASS"
+  },
+  {
+    "id": "B1-3",
+    "persona": "returning",
+    "khổ": "API",
+    "journey": "Ví: hoàn tiền huỷ đơn, thanh toán bằng ví",
+    "step": "huỷ đơn đã trả: ví +đúng tổng đơn, 1 dòng sổ ví, số dư = SUM(sổ)",
+    "expected": "refund-destination.ts: mặc định hoàn về Ví Tubu; wallet-ledger.service.ts C-060",
+    "actual": "cancel=201 ví trước={\"bal\":210000,\"sum_w\":210000,\"n\":3} sau={\"bal\":420000,\"sum_w\":420000,\"n\":4} sổ mới nhất={\"delta\":210000,\"balanceAfter\":420000,\"type\":\"ORDER_REFUND\",\"refType\":\"ORDER\",\"refId\":\"cmw16ei1300upi0v0hsq8dpbj\",\"reason\":\"Hoàn tiền đơn TUBU2026110342491\",\"createdAt\":\"2026-11-03T21:04:25.968Z\"}",
+    "evidence": "cancel=201 ví trước={\"bal\":210000,\"sum_w\":210000,\"n\":3} sau={\"bal\":420000,\"sum_w\":420000,\"n\":4} sổ mới nhất={\"delta\":210000,\"balanceAfter\":420000,\"type\":\"ORDER_REFUND\",\"refType\":\"ORDER\",\"refId\":\"cmw16ei1300upi0v0hsq8dpbj\",\"reason\":\"Hoàn tiền đơn TUBU2026110342491\",\"createdAt\":\"2026-11-03T21:04:25.968Z\"}",
+    "status": "PASS"
+  },
+  {
+    "id": "B1-4",
+    "persona": "returning",
+    "khổ": "API",
+    "journey": "Ví: hoàn tiền huỷ đơn, thanh toán bằng ví",
+    "step": "đơn CANCELLED, trạng thái thanh toán hoàn tiền",
+    "expected": "orders.service.cancelOrder",
+    "actual": "SQL orders={\"status\":\"CANCELLED\",\"ps\":\"REFUNDED\"}",
+    "evidence": "SQL orders={\"status\":\"CANCELLED\",\"ps\":\"REFUNDED\"}",
+    "status": "PASS"
+  },
+  {
+    "id": "B1-5",
+    "persona": "returning",
+    "khổ": "API",
+    "journey": "Ví: hoàn tiền huỷ đơn, thanh toán bằng ví",
+    "step": "bấm huỷ lại: không hoàn lần hai",
+    "expected": "orders.service.ts:390 đã CANCELLED thoát sớm",
+    "actual": "cancel lần 2=201; ví 420000 -> 420000",
+    "evidence": "cancel lần 2=201; ví 420000 -> 420000",
+    "status": "PASS"
+  },
+  {
+    "id": "B1-6",
+    "persona": "returning",
+    "khổ": "API",
+    "journey": "Ví: hoàn tiền huỷ đơn, thanh toán bằng ví",
+    "step": "GET /me/wallet và /transactions khớp sổ",
+    "expected": "wallet.service.ts",
+    "actual": "wallet={\"walletBalance\":420000,\"cashbackPending\":0,\"commissionApproved\":0,\"commissionPending\":0} tx[0]={\"id\":\"cmw16eijz00v3i0v0nsqg3k0u\",\"delta\":210000,\"balanceAfter\":420000,\"type\":\"ORDER_REFUND\",\"reason\":\"Hoàn tiền đơn TUBU2026110342491\",\"createdAt\":\"2026-11-03T21:04:25.968Z\",\"orderId\":\"cmw16ei1300upi0v0hsq8dpbj\"} (ghi chú: orderId trả id nội bộ cuid, không phải mã đơn; UI không dùng trường này)",
+    "evidence": "wallet={\"walletBalance\":420000,\"cashbackPending\":0,\"commissionApproved\":0,\"commissionPending\":0} tx[0]={\"id\":\"cmw16eijz00v3i0v0nsqg3k0u\",\"delta\":210000,\"balanceAfter\":420000,\"type\":\"ORDER_REFUND\",\"reason\":\"Hoàn tiền đơn TUBU2026110342491\",\"createdAt\":\"2026-11-03T21:04:25.968Z\",\"orderId\":\"cmw16ei1300upi0v0hsq8dpbj\"} (ghi chú: orderId trả id nội bộ cuid, không phải mã đơn; UI không dùng trường này)",
+    "status": "PASS"
+  },
+  {
+    "id": "B1-7",
+    "persona": "returning",
+    "khổ": "API",
+    "journey": "Ví: hoàn tiền huỷ đơn, thanh toán bằng ví",
+    "step": "đặt đơn trả bằng Ví: ví giảm đúng tổng đơn, sổ ví có dòng âm, đơn PAID",
+    "expected": "checkout.service.ts:416, applyWalletDelta",
+    "actual": "ví trước=420000 sau={\"bal\":322000,\"sum_w\":322000,\"n\":5} đơn={\"total\":98000,\"status\":\"CONFIRMED\",\"ps\":\"PAID\",\"pm\":\"WALLET\"} place=201",
+    "evidence": "ví trước=420000 sau={\"bal\":322000,\"sum_w\":322000,\"n\":5} đơn={\"total\":98000,\"status\":\"CONFIRMED\",\"ps\":\"PAID\",\"pm\":\"WALLET\"} place=201",
+    "status": "PASS"
+  },
+  {
+    "id": "B1-8",
+    "persona": "returning",
+    "khổ": "API",
+    "journey": "Ví: hoàn tiền huỷ đơn, thanh toán bằng ví",
+    "step": "ví không đủ: chặn, câu \"Số dư Ví Tubu không đủ.\"",
+    "expected": "wallet-notice.ts WALLET_SHORT_MESSAGE",
+    "actual": "place=400 {\"message\":\"Số dư Ví Tubu không đủ.\",\"error\":\"Bad Request\",\"statusCode\":400}; ví sau=322000",
+    "evidence": "place=400 {\"message\":\"Số dư Ví Tubu không đủ.\",\"error\":\"Bad Request\",\"statusCode\":400}; ví sau=322000",
+    "status": "PASS"
+  },
+  {
+    "id": "B1-9",
+    "persona": "returning",
+    "khổ": "API",
+    "journey": "Ví: hoàn tiền huỷ đơn, thanh toán bằng ví",
+    "step": "huỷ đơn đã trả bằng ví: hoàn đủ về ví",
+    "expected": "refund-destination.ts: đơn trả bằng Ví hoàn về Ví",
+    "actual": "cancel=201 ví 322000 -> 420000 (trước khi mua 420000)",
+    "evidence": "cancel=201 ví 322000 -> 420000 (trước khi mua 420000)",
+    "status": "PASS"
+  },
+  {
+    "id": "B1-10",
+    "persona": "returning",
+    "khổ": "API",
+    "journey": "Ví: hoàn tiền huỷ đơn, thanh toán bằng ví",
+    "step": "huỷ đơn đã trả, chọn hoàn về ngân hàng: không cộng ví, tạo 1 khoản MANUAL_TRANSFER PENDING",
+    "expected": "refund-destination.ts: Ví hoặc ngân hàng (admin chuyển tay)",
+    "actual": "cancel=201 ví 420000->420000; order_customer_refunds=[{\"id\":\"cmw16ej6500wri0v0mg956vvj\",\"orderCode\":\"TUBU2026110385813\",\"kind\":\"CANCEL\",\"method\":\"MANUAL_TRANSFER\",\"status\":\"PENDING\",\"amount\":98000,\"bankName\":\"Vietcombank\",\"bankAccountNo\":\"0123456789\",\"bankAccountName\":\"NGUYEN THI QUAY LAI\"}]",
+    "evidence": "cancel=201 ví 420000->420000; order_customer_refunds=[{\"id\":\"cmw16ej6500wri0v0mg956vvj\",\"orderCode\":\"TUBU2026110385813\",\"kind\":\"CANCEL\",\"method\":\"MANUAL_TRANSFER\",\"status\":\"PENDING\",\"amount\":98000,\"bankName\":\"Vietcombank\",\"bankAccountNo\":\"0123456789\",\"bankAccountName\":\"NGUYEN THI QUAY LAI\"}]",
+    "status": "PASS"
+  },
+  {
+    "id": "B1-11",
+    "persona": "returning",
+    "khổ": "API",
+    "journey": "Ví: hoàn tiền huỷ đơn, thanh toán bằng ví",
+    "step": "khách thấy khoản hoàn đang chờ ở GET /orders/me/refunds",
+    "expected": "customer-refunds.service.ts CUSTOMER_VISIBLE",
+    "actual": "refunds=[{\"id\":\"cmw16ej6500wri0v0mg956vvj\",\"orderId\":\"cmw16eioc00wdi0v0u458t6uj\",\"orderCode\":\"TUBU2026110385813\",\"kind\":\"CANCEL\",\"refKey\":\"\",\"amount\":98000,\"method\":\"MANUAL_TRANSFER\",\"status\":\"PENDING\",\"bankName\":\"Vietcombank\",\"bankAccountNo\":\"0123456789\",\"bankAccountName\":\"NGUYEN THI QUAY LAI\",\"bankRef\":null,\"completedAt\":null,\"createdAt\":\"2026-11-03T21:04:26.765Z\",\"canChooseDestination\":true},{\"id\":\"cmw",
+    "evidence": "refunds=[{\"id\":\"cmw16ej6500wri0v0mg956vvj\",\"orderId\":\"cmw16eioc00wdi0v0u458t6uj\",\"orderCode\":\"TUBU2026110385813\",\"kind\":\"CANCEL\",\"refKey\":\"\",\"amount\":98000,\"method\":\"MANUAL_TRANSFER\",\"status\":\"PENDING\",\"bankName\":\"Vietcombank\",\"bankAccountNo\":\"0123456789\",\"bankAccountName\":\"NGUYEN THI QUAY LAI\",\"bankRef\":null,\"completedAt\":null,\"createdAt\":\"2026-11-03T21:04:26.765Z\",\"canChooseDestination\":true},{\"id\":\"cmw",
+    "status": "PASS"
+  },
+  {
+    "id": "B1-state",
+    "persona": "returning",
+    "khổ": "API",
+    "journey": "Ví: hoàn tiền huỷ đơn, thanh toán bằng ví",
+    "step": "ghi lại mã đơn cho ca xoá tài khoản",
+    "expected": "",
+    "actual": "bankRefundOrder=TUBU2026110385813 walletBalance=420000",
+    "evidence": "TUBU2026110385813",
+    "status": "PASS"
+  }
+]

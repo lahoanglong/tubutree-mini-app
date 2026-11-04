@@ -1,0 +1,183 @@
+[
+  {
+    "id": "L5-RACE-01",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Thao tác đồng thời",
+    "step": "5 request \"Đã nhận tiền\" cùng lúc (Kế toán + Admin)",
+    "expect": "đơn PAID một lần, đúng 1 dòng lịch sử \"Đã nhận tiền\" (không ghi trùng)",
+    "actual": "mã 201,201,201,201,201; DB CONFIRMED/PAID; 1 dòng lịch sử",
+    "evidence": {
+      "win": 5,
+      "hist": [
+        {
+          "n": 1
+        }
+      ]
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RACE-02",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Thao tác đồng thời",
+    "step": "5 request huỷ cùng một đơn chuyển khoản đã trả (CSKH + Admin)",
+    "expect": "hoàn Ví đúng 1 lần = 120000đ; sổ Ví = số dư; đơn CANCELLED/REFUNDED",
+    "actual": "mã 200,200,200,200,200; Ví 1920000 -> 2040000 (+120000); 1 dòng sổ hoàn; đơn CANCELLED/REFUNDED",
+    "evidence": {
+      "led": [
+        {
+          "t": "ORDER_REFUND",
+          "d": 120000
+        }
+      ],
+      "u0": {
+        "wallet": 1920000,
+        "points": 52680,
+        "wsum": 1920000,
+        "psum": 52680
+      },
+      "u1": {
+        "wallet": 2040000,
+        "points": 52680,
+        "wsum": 2040000,
+        "psum": 52680
+      }
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RACE-03a",
+    "persona": "returning",
+    "size": "api",
+    "journey": "Thao tác đồng thời",
+    "step": "Chuẩn bị: COD giao xong + yêu cầu trả 1/2 món",
+    "expect": "đơn DELIVERED, yêu cầu REQUESTED",
+    "actual": "delivered=true; HTTP 201",
+    "evidence": "{\"id\":\"cmw17iywa02grjtc4w4yc82av\",\"orderId\":\"cmw17ixvj02fyjtc41y25cwk2\",\"userId\":\"uat_returning\",\"reason\":\"Hàng lỗi UAT race\",\"reasonCode\":\"DEFECTIVE\",\"status\":",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RACE-03",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Thao tác đồng thời",
+    "step": "4 request CSKH duyệt cùng một yêu cầu đổi/trả",
+    "expect": "hoàn Ví đúng 1 lần = 120000đ; sổ Ví = số dư; sổ điểm = điểm",
+    "actual": "mã 201,400,400,400; Ví +120000 (xem trước 120000); 1 dòng sổ hoàn; điểm 58440 -> 55560, sổ 55560",
+    "evidence": {
+      "led": [
+        {
+          "t": "ORDER_REFUND",
+          "d": 120000
+        }
+      ]
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RACE-04",
+    "persona": "kho",
+    "size": "api",
+    "journey": "Thao tác đồng thời",
+    "step": "4 request Kho \"Đã nhận hàng về\" cùng lúc",
+    "expect": "tồn kho chỉ +1 (đúng số lượng trả)",
+    "actual": "mã 201,400,400,400; kho 159 -> 160",
+    "evidence": null,
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RACE-05",
+    "persona": "kho",
+    "size": "api",
+    "journey": "Thao tác đồng thời",
+    "step": "4 request Kho \"Đã đóng gói\" cùng lúc",
+    "expect": "đơn PACKED, đúng 1 dòng lịch sử PACKED",
+    "actual": "mã 200,200,200,200; 1 dòng lịch sử PACKED; đơn PACKED",
+    "evidence": null,
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RACE-06",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Thao tác đồng thời",
+    "step": "Kho đóng gói và CSKH huỷ CÙNG LÚC trên một đơn COD",
+    "expect": "kết quả cuối nhất quán: CANCELLED hoặc PACKED, không ở trạng thái lai; tồn kho khớp (huỷ hoàn kho đúng 1 lần)",
+    "actual": "Kho 200, CSKH 200; đơn PACKED; 1 dòng lịch sử",
+    "evidence": {
+      "rp": "{\"id\":\"cmw17j0qx02i8jtc4jygth9zv\",\"code\":\"TUBU2026110305809\",\"idempotencyKey\":\"uat-l5-1793741755762-",
+      "rc": "{\"id\":\"cmw17j0qx02i8jtc4jygth9zv\",\"code\":\"TUBU2026110305809\",\"idempotencyKey\":\"uat-l5-1793741755762-"
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RACE-07",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Thao tác đồng thời",
+    "step": "Duyệt và từ chối (mỗi bên 2 request) cùng một lệnh rút",
+    "expect": "đúng một bên thắng: REJECTED thì hoàn 250.000đ đúng 1 lần, APPROVED thì không hoàn; sổ Ví = số dư",
+    "actual": "mã 201,400,400,400; lệnh APPROVED; Ví +0",
+    "evidence": {
+      "u0": {
+        "wallet": 2525000,
+        "points": 0,
+        "wsum": 2525000,
+        "psum": 0
+      },
+      "u1": {
+        "wallet": 2525000,
+        "points": 0,
+        "wsum": 2525000,
+        "psum": 0
+      }
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RACE-08",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Thao tác đồng thời",
+    "step": "6 request tạo mã (mỗi mã tối đa giảm 3.000.000đ) cùng lúc, ngân sách ngày 10.000.000đ",
+    "expect": "tổng mức giảm tối đa của mã Marketing tạo trong ngày không vượt 10.000.000đ (khoá advisory)",
+    "actual": "mã 400,201,201,201,400,400; tạo được 3; tổng 9.000.000đ",
+    "evidence": {
+      "exposure": 9000000
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RACE-09",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Thao tác đồng thời",
+    "step": "3 request \"Đã xử lý\" cùng một đơn Pancake",
+    "expect": "cờ attention về rỗng, không 500",
+    "actual": "mã 201,400,400; attention sau=null",
+    "evidence": [
+      "{\"ok\":true,\"message\":\"Đơn TUBU2026110305809 đã rời hàng đợi cần xử lý Pancake.\"}",
+      "{\"message\":\"Đơn TUBU2026110305809 không còn trong hàng đợi cần xử lý Pancake.\",\"",
+      "{\"message\":\"Đơn TUBU2026110305809 không còn trong hàng đợi cần xử lý Pancake.\",\""
+    ],
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RACE-10",
+    "persona": "returning",
+    "size": "api",
+    "journey": "Thao tác đồng thời",
+    "step": "Cuối lượt: Ví và điểm của khách khớp sổ",
+    "expect": "walletBalance = SUM(sổ Ví); pointsBalance = SUM(sổ điểm)",
+    "actual": "ví 2160000/2160000; điểm 55560/55560",
+    "evidence": {
+      "wallet": 2160000,
+      "points": 55560,
+      "wsum": 2160000,
+      "psum": 55560
+    },
+    "verdict": "PASS"
+  }
+]

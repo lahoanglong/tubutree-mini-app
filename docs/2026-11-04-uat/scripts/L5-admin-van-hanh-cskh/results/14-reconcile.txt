@@ -1,0 +1,14 @@
+
+=== ĐỐI SOÁT Ví Tubu vs sổ cái wallet_transactions ===
+User bị lệch   : 0
+Chênh ròng     : 0đ (dương = ví nhiều hơn sổ ghi nhận)
+Chênh tuyệt đối: 0đ
+
+Không có user nào lệch.
+
+=== ĐỐI SOÁT Điểm Xanh theo lô (DRY-RUN — chỉ xem) ===
+Lô STANDARD : 0 user lệch, chênh ròng 0 điểm, tuyệt đối 0 điểm
+Lô CONVERTED: 0 user lệch, chênh ròng 0 điểm, tuyệt đối 0 điểm
+(chênh âm = đang cộng dư cần thu hồi)
+
+✅ Không có user nào lệch — không cần đối soát.

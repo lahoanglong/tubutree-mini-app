@@ -1,0 +1,57 @@
+--- apps/web/package.json	2026-11-03 15:09:00
++++ apps/web/package.json	2026-11-03 15:46:28
+@@ -36,5 +36,9 @@
+     "tailwindcss": "^3.4.16",
+     "typescript": "^5.6.3",
+     "vitest": "^2.1.8"
+-  }
+-}
++  },
++  "sideEffects": [
++    "*.css",
++    "**/*.css"
++  ]
++}
+\ No newline at end of file
+--- apps/web/src/app/san-pham/[slug]/page.tsx	2026-11-03 15:09:00
++++ apps/web/src/app/san-pham/[slug]/page.tsx	2026-11-03 16:01:31
+@@ -29,7 +29,11 @@
+ import { phoneBandPad, phoneBrandLabel } from '@/lib/phone-ui';
+ 
+ export const revalidate = 300;
++export async function generateStaticParams() {
++  return [];
++}
+ 
++
+ export async function generateMetadata({
+   params,
+ }: {
+--- apps/web/src/app/brand/[slug]/page.tsx	2026-11-03 15:09:00
++++ apps/web/src/app/brand/[slug]/page.tsx	2026-11-03 16:01:31
+@@ -7,7 +7,11 @@
+ 
+ // Admin gỡ đăng không làm mới được trang này, nên hạn ngắn để nhãn bị gỡ không còn hiện lâu; vẫn dựng phía server cho SEO.
+ export const revalidate = 60;
++export async function generateStaticParams() {
++  return [];
++}
+ 
++
+ export async function generateMetadata({
+   params,
+ }: {
+--- apps/web/src/app/chinh-sach/[loai]/page.tsx	2026-11-03 15:09:00
++++ apps/web/src/app/chinh-sach/[loai]/page.tsx	2026-11-03 16:01:31
+@@ -7,7 +7,11 @@
+ import { PAGE_NARROW } from '@/lib/page-frame';
+ 
+ export const revalidate = 300;
++export async function generateStaticParams() {
++  return [];
++}
+ 
++
+ type Params = { params: Promise<{ loai: string }> };
+ 
+ export async function generateMetadata({ params }: Params): Promise<Metadata> {

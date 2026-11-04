@@ -1,0 +1,46 @@
+[
+  {
+    "id": "L5-PUI-01",
+    "persona": "admin",
+    "size": "web375",
+    "journey": "Lệnh rút CTV bằng giao diện (375)",
+    "step": "Admin mở tab Thuế TNCN hoa hồng (có 2 lệnh rút cũ REQUESTED)",
+    "expect": "mục \"Lệnh rút ngân hàng cũ\" mở sẵn ở \"Chờ duyệt\", thấy 510.000đ và 320.000đ (phí 5.000đ), có nút Duyệt + Từ chối",
+    "actual": "thấy 510.000đ=true; 320.000đ=true; phí=true",
+    "evidence": null,
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-PUI-02",
+    "persona": "admin",
+    "size": "web375",
+    "journey": "Lệnh rút CTV bằng giao diện (375)",
+    "step": "Admin bấm \"Duyệt\" lệnh 510.000đ rồi xác nhận",
+    "expect": "hộp \"Duyệt lệnh rút tiền\" hỏi trước (DB còn REQUESTED); xác nhận: POST approve 2xx, DB APPROVED; Ví CTV không đổi (chưa chi)",
+    "actual": "hộp=true; trước xác nhận REQUESTED; POST /admin/payouts/uatpui21oidmf/approve 201; sau {\"s\":\"APPROVED\",\"r\":\"uat_admin\"}; Ví 2525000 -> 2525000",
+    "evidence": null,
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-PUI-03",
+    "persona": "admin",
+    "size": "web375",
+    "journey": "Lệnh rút CTV bằng giao diện (375)",
+    "step": "Admin bấm \"Từ chối (hoàn tiền)\" khi chưa ghi lý do",
+    "expect": "báo phải ghi lý do (tiếng Việt), không gọi API, lệnh vẫn REQUESTED",
+    "actual": "gọi API=false; DB REQUESTED; cảnh báo: \"Nhập lý do từ chối — tiền/hoa hồng sẽ được hoàn lại cho CTV kèm lý do này.\"",
+    "evidence": null,
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-PUI-04",
+    "persona": "admin",
+    "size": "web375",
+    "journey": "Lệnh rút CTV bằng giao diện (375)",
+    "step": "Admin ghi lý do rồi \"Từ chối (hoàn tiền)\" lệnh 320.000đ (phí 5.000đ)",
+    "expect": "hộp nêu \"Tiền/hoa hồng sẽ được HOÀN LẠI cho CTV\"; xác nhận: POST reject 2xx, DB REJECTED + lý do; Ví CTV +325.000đ (amount + fee); sổ Ví = số dư",
+    "actual": "hộp=true; POST /admin/payouts/uatpuik7gwhe6/reject 201; DB {\"s\":\"REJECTED\",\"r\":\"UAT: sai số tài khoản\"}; Ví 2525000 -> 2850000 (+325000); sổ Ví 2850000",
+    "evidence": null,
+    "verdict": "PASS"
+  }
+]
