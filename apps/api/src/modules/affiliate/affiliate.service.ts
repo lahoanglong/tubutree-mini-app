@@ -1475,10 +1475,14 @@ export class AffiliateService {
         // Khoá dòng khi đọc: lần trả một phần cắt amount của hoa hồng APPROVED giữ khoá tới lúc commit. Đọc không khoá thì thấy amount
         // cũ, updateMany đợi khoá rồi vẫn khớp (điều kiện WHERE không có amount) và Ví nhận nhiều hơn hoa hồng còn lại. Thứ tự khoá
         // hoa hồng rồi tới Ví CTV trùng với đường thu hồi nên không deadlock.
+        // JOIN đơn trong cùng câu khoá: đơn đã RETURNED commit mà reverseCommissionsForOrder chưa kịp chạy thì hoa hồng của đơn đó
+        // chưa bị đảo, và không có điều kiện này sẽ lọt vào khoản rút. Chỉ khoá dòng hoa hồng (OF c), không khoá đơn: đường trả hàng
+        // khoá đơn trước hoa hồng, khoá ngược thứ tự ở đây sẽ deadlock.
         const rows = await tx.$queryRaw<{ id: string; amount: number }[]>`
-          SELECT "id", "amount" FROM "commissions"
-          WHERE "affiliateUserId" = ${userId} AND "status" = 'APPROVED' AND "payoutBatchId" IS NULL
-          ORDER BY "id" FOR NO KEY UPDATE`;
+          SELECT c."id", c."amount" FROM "commissions" c
+          JOIN "orders" o ON o."id" = c."orderId"
+          WHERE c."affiliateUserId" = ${userId} AND c."status" = 'APPROVED' AND c."payoutBatchId" IS NULL AND o."status" = 'DELIVERED'
+          ORDER BY c."id" FOR NO KEY UPDATE OF c`;
         // Khoá dòng người dùng sau dòng hoa hồng (cùng thứ tự với đường thu hồi) rồi đọc lại dấu thu hồi: admin hạ quyền cùng lúc thì
         // hoặc thấy dấu mới và từ chối, hoặc đợi lần rút này xong. Kiểm ở đầu hàm chỉ là đường nhanh, không chặn được cuộc đua.
         await tx.$queryRaw`SELECT 1 FROM "users" WHERE "id" = ${userId} FOR NO KEY UPDATE`;
@@ -1678,7 +1682,7 @@ export class AffiliateService {
       if (enabled !== true) return { credited, ok: true };
       const rows = await this.prisma.commission.findMany({
         // CTV bị khoá giữ nguyên tiền ở APPROVED: chuyển vào Ví sẽ ghi thu nhập chịu thuế và cộng tiền cho tài khoản đang bị xem xét.
-        where: { status: 'APPROVED', payoutBatchId: null, user: { isBlocked: false } },
+        where: { status: 'APPROVED', payoutBatchId: null, user: { isBlocked: false }, order: { status: 'DELIVERED' } },
         select: { id: true, affiliateUserId: true, amount: true, user: { select: { role: true, affiliateRevokedAt: true } } },
         orderBy: { id: 'asc' },
       });
