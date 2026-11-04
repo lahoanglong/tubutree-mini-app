@@ -1,4 +1,5 @@
 import { GameReminderService } from './game-reminder.service';
+import type { Prisma } from '@prisma/client';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 import type { NotificationsService } from '../notifications/notifications.service';
@@ -15,7 +16,7 @@ function setup(profiles: unknown[], remindedUserIds: string[] = [], plotWateredU
   const logFindMany = jest.fn().mockResolvedValue(remindedUserIds.map((userId) => ({ userId })));
   const prisma = {
     gameProfile: { findMany },
-    notificationLog: { findMany: logFindMany },
+    $queryRaw: logFindMany,
     gardenPlot: { findMany: plotFindMany },
   } as unknown as PrismaService;
   const notify = jest.fn().mockResolvedValue(undefined);
@@ -61,6 +62,15 @@ describe('GameReminderService.sendCheckInReminders', () => {
 });
 
 describe('GameReminderService.sendThirstyTreeReminders', () => {
+  it('tìm người đã nhắc bằng SELECT DISTINCT ... LIMIT (Prisma distinct+take không đẩy LIMIT xuống SQL)', async () => {
+    const { svc, logFindMany } = setup([]);
+    await svc.sendThirstyTreeReminders();
+    const q = logFindMany.mock.calls[0]![0] as Prisma.Sql;
+    expect(q.text).toMatch(/SELECT DISTINCT "userId"[\s\S]*FROM "notification_logs"[\s\S]*"templateCode" = \$1[\s\S]*LIMIT \$3/);
+    expect(q.values[0]).toBe('GAME_TREE_THIRSTY');
+    expect(q.values[2]).toBe(20_000);
+  });
+
   it('cây sắp héo (chưa tưới lâu) nhưng chưa chết → nhắc tưới', async () => {
     const { svc, notify } = setup([{ userId: 'u2', lastWateredAt: new Date(), ecoImpact: { progress: 120 } }]);
     const sent = await svc.sendThirstyTreeReminders();
@@ -100,7 +110,7 @@ describe('GameReminderService.sendThirstyTreeReminders — cây bỏ lâu không
   it('chỉ nhắc trong 7 ngày sau lần tưới cuối, không phụ thuộc game.death_days', async () => {
     const cfg = { get: async <T>(k: string, fb?: T): Promise<T> => (k === 'game.death_days' ? (30 as T) : (fb as T)) } as unknown as SystemConfigService;
     const findMany = jest.fn().mockResolvedValue([]);
-    const prisma = { gameProfile: { findMany }, notificationLog: { findMany: jest.fn().mockResolvedValue([]) } } as unknown as PrismaService;
+    const prisma = { gameProfile: { findMany }, $queryRaw: jest.fn().mockResolvedValue([]) } as unknown as PrismaService;
     const svc = new GameReminderService(prisma, cfg, { notify: jest.fn(), notifySafe: jest.fn() } as unknown as NotificationsService);
     const before = Date.now();
     await svc.sendThirstyTreeReminders();
