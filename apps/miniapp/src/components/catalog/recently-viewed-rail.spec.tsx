@@ -106,6 +106,17 @@ describe('RecentlyViewedRail (spec 5b.4)', () => {
     expect(img).toHaveAttribute('src', 'https://img.test/a.jpg');
   });
 
+  it('ảnh hiện hành thắng URL lưu ở máy (URL cũ đã khỏi danh sách /img); API lỗi thì dùng URL lưu', async () => {
+    recordRecentlyViewed({ slug: 'a', name: 'Sản phẩm A', thumbnail: 'https://content.pancake.vn/2-26/cu.jpg' });
+    mocks.fetchProductsBySlugs.mockImplementation(async (slugs: string[]) => slugs.map((s) => liveProduct(s, { thumbnail: 'https://content.pancake.vn/2-26/moi.jpg' })));
+    const { container, unmount } = renderRail();
+    await waitFor(() => expect(decodeURIComponent(container.querySelector('img')!.getAttribute('src')!)).toContain('moi.jpg'));
+    unmount();
+    mocks.fetchProductsBySlugs.mockRejectedValue(new Error('offline'));
+    const again = renderRail();
+    await waitFor(() => expect(decodeURIComponent(again.container.querySelector('img')!.getAttribute('src')!)).toContain('cu.jpg'));
+  });
+
   it('sản phẩm không có ảnh vẫn hiện thẻ (khung ảnh trống, không có thẻ img)', () => {
     recordRecentlyViewed({ slug: 'a', name: 'Sản phẩm A', thumbnail: null });
     renderRail();

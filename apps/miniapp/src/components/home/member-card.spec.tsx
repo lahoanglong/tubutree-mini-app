@@ -112,3 +112,14 @@ describe('MemberCard — dải lỗi cấp trang (một Thử lại cho cả tra
     mocks.loyalty.mockImplementation(() => new Promise(() => {}));
   });
 });
+
+describe('MemberCard — tên đọc khi tổng quan lỗi', () => {
+  it('dòng điểm đổi thành câu báo lỗi thì tên đọc cũng nói câu đó, không còn số điểm không hiển thị', async () => {
+    mocks.loyalty.mockRejectedValue(new Error('500'));
+    render(<MemberCard />);
+    const btn = (await screen.findByText(homeCopy.member.tierFailed)).closest('button')!;
+    expect(btn.getAttribute('aria-label')).toContain(homeCopy.member.tierFailed);
+    expect(btn.getAttribute('aria-label')).not.toMatch(/\d+ điểm/);
+    mocks.loyalty.mockImplementation(() => new Promise(() => {}));
+  });
+});

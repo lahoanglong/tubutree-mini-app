@@ -14,7 +14,7 @@ test.use({ viewport: { width: 375, height: 812 } });
 
 const rand = Math.random().toString(36).slice(2, 8);
 const ORIGINAL = `https://content.pancake.vn/2-26/fb-${rand}.jpg`;
-// URL lưu ở máy là ảnh CŨ của sản phẩm; API trả ảnh hiện hành (ORIGINAL): dải phải dùng ảnh hiện hành và không bao giờ đụng tới URL cũ.
+// URL lưu ở máy là ảnh CŨ của sản phẩm (đã khỏi danh sách /img, 404); API trả ảnh hiện hành (ORIGINAL): lượt dựng đầu còn dùng URL cũ, khi dữ liệu hiện hành về thì dải dùng ảnh hiện hành.
 const STALE = `https://content.pancake.vn/2-26/fb-cu-${rand}.jpg`;
 const SEEN = [{ slug: 'da-xem-fb', name: 'Đã xem FB', thumbnail: STALE, viewedAt: 1_700_000_000_000 }];
 const card = { id: 'da-xem-fb', name: 'Đã xem FB', slug: 'da-xem-fb', brand: 'Tubu', thumbnail: ORIGINAL, basePrice: 99_000, salePrice: null, ratingAvg: 0, reviewCount: 0, sold: 0, inStock: true, isFeatured: false, repVariationId: 'v-fb' };
@@ -30,13 +30,17 @@ function mockHub(api: MockApi): void {
   api.allowUnmocked('GET /products/best-sellers', 'GET /categories', 'GET /brands', 'GET /me/coupons', 'POST /events');
 }
 
-async function openHub(page: import('@playwright/test').Page, seen: unknown[]): Promise<{ requests: string[] }> {
+async function openHub(page: import('@playwright/test').Page, seen: unknown[]): Promise<{ requests: string[]; stale: string[] }> {
   const requests: string[] = [];
+  const stale: string[] = [];
+  // URL cũ không bao giờ chạm host thật (content.pancake.vn): cả bản gốc lẫn bản /img đều 404, như ảnh đã bị thay.
+  await page.route(STALE, (r) => r.fulfill({ status: 404, body: '' }));
   page.on('request', (r) => {
     const u = r.url();
     // Chỉ đếm request của đúng ảnh thẻ đang kiểm (bản đổi cỡ của ảnh hiện hành qua /img hoặc chính ảnh gốc), không đếm ảnh khác của trang (ô danh mục, thương hiệu, Bán chạy).
     const viaImg = /\/api\/img\?/.test(u) && new URL(u).searchParams.get('u') === ORIGINAL;
     if (viaImg || u === ORIGINAL) requests.push(u);
+    if (u === STALE || (/\/api\/img\?/.test(u) && new URL(u).searchParams.get('u') === STALE)) stale.push(u);
   });
   await page.addInitScript((s) => {
     try {
@@ -47,7 +51,7 @@ async function openHub(page: import('@playwright/test').Page, seen: unknown[]): 
   }, seen);
   await page.goto('/san-pham');
   await expect(page.locator('#browse-recent')).toBeVisible({ timeout: 20_000 });
-  return { requests };
+  return { requests, stale };
 }
 
 test.describe('thẻ sản phẩm (dải Đã xem gần đây)', () => {
@@ -55,14 +59,14 @@ test.describe('thẻ sản phẩm (dải Đã xem gần đây)', () => {
     mockHub(api);
     await page.route('**/api/img?**', (r) => r.fulfill({ status: 404, contentType: 'application/json', body: '{"message":"Không tìm thấy ảnh."}' }));
     await page.route(ORIGINAL, (r) => r.fulfill({ status: 200, contentType: 'image/png', body: NOISE }));
-    const { requests } = await openHub(page, SEEN);
+    const { requests, stale } = await openHub(page, SEEN);
     const img = page.locator('#browse-recent img').first();
     await expect(img).toHaveAttribute('src', ORIGINAL);
     await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.naturalWidth)).toBeGreaterThan(0);
     await expect(page.locator('#browse-recent [data-testid="product-image-fallback"]')).toHaveCount(0);
     expect(requests.filter((u) => u === ORIGINAL)).toHaveLength(1);
-    // K6: khi dữ liệu hiện hành về, ảnh của thẻ là ảnh hiện hành (URL cũ ở máy chỉ có thể được tải ở lượt dựng đầu, trước khi API trả lời).
-    await expect(img).not.toHaveAttribute('src', new RegExp(`fb-cu-${rand}`));
+    // K6: URL cũ chỉ bị thử ở lượt dựng đầu (bản /img rồi bản gốc), không lặp sau khi dữ liệu hiện hành về.
+    expect(stale.length).toBeLessThanOrEqual(2);
   });
 
   test('cả /img lẫn ảnh gốc đều hỏng: hình lá, tối đa 2 lượt tải ảnh (không lặp)', async ({ page, api }) => {
@@ -70,6 +74,8 @@ test.describe('thẻ sản phẩm (dải Đã xem gần đây)', () => {
     await page.route('**/api/img?**', (r) => r.fulfill({ status: 404, contentType: 'application/json', body: '{}' }));
     await page.route(ORIGINAL, (r) => r.fulfill({ status: 404, body: '' }));
     const { requests } = await openHub(page, SEEN);
+    // Chờ tới khi ảnh hiện hành đã được thử (không phải hình lá tạm của chuỗi URL cũ) rồi mới kiểm hình lá.
+    await expect.poll(() => requests.some((u) => u === ORIGINAL)).toBe(true);
     await expect(page.locator('#browse-recent [data-testid="product-image-fallback"]')).toBeVisible();
     await page.waitForTimeout(1000);
     expect(requests.length).toBeLessThanOrEqual(2);
@@ -131,5 +137,29 @@ plain.describe('/img trên API thật', () => {
       await prisma.brand.deleteMany({ where: { slug: `fb-${rand}` } });
       await prisma.$disconnect();
     }
+  });
+});
+
+test.describe('Đã xem gần đây: PDP ghi, hub /san-pham hiện', () => {
+  test('mở trang sản phẩm rồi sang hub: dải Đã xem có sản phẩm vừa xem', async ({ page, api }, testInfo) => {
+    test.skip(testInfo.project.name !== 'Web Customer Mobile', 'một project là đủ');
+    const res = await page.request.get(`http://localhost:${process.env.E2E_API_PORT}/api/products?limit=1`);
+    const first = ((await res.json()) as { data: { slug: string; name: string }[] }).data[0];
+    test.skip(!first, 'DB e2e chưa có sản phẩm');
+    api.get('/flash-sales/active', []);
+    api.get('/me/wishlist/ids', []);
+    api.get('/cart', { items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 350000, itemCount: 0 });
+    api.get('/products', (c) => {
+      const slugs = c.call.query.get('slugs');
+      const list = slugs ? slugs.split(',').map((s) => ({ ...card, id: s, slug: s, name: first!.name, thumbnail: null })) : [];
+      return { data: list, meta: { page: 1, limit: list.length, total: list.length } };
+    });
+    api.allowUnmocked(`GET /products/${first!.slug}`, `GET /products/${first!.slug}/related`, `GET /products/${first!.slug}/bought-together`, `GET /products/${first!.slug}/bundles`, `GET /products/${first!.slug}/reviews`, `GET /products/${first!.slug}/stock`, 'GET /products/for-you', 'GET /products/best-sellers', 'GET /categories', 'GET /brands', 'GET /me/coupons', 'POST /events', 'GET /config/public');
+    await page.goto(`/san-pham/${first!.slug}`);
+    await expect(page.locator('h1').first()).toBeVisible({ timeout: 20_000 });
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('tubu_recently_viewed') ?? '')).toContain(first!.slug);
+    await page.goto('/san-pham');
+    await expect(page.locator('#browse-recent')).toBeVisible({ timeout: 20_000 });
+    await expect(page.locator(`#browse-recent a[href*="${first!.slug}"]`).first()).toBeVisible();
   });
 });

@@ -67,7 +67,7 @@ export function MemberCard() {
       <div style={CARD_STYLE}>
         <Link
           href="/uu-dai"
-          aria-label={memberCardAriaLabel(card, homeCopy.member.openLabel, greeting)}
+          aria-label={memberCardAriaLabel(card, homeCopy.member.openLabel, greeting, loyaltyFailed ? homeCopy.member.tierFailed : undefined)}
           className="tubu-press"
           style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 4, textDecoration: 'none', color: 'inherit', minHeight: 44 }}
         >

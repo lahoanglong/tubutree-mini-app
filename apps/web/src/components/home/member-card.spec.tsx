@@ -151,3 +151,15 @@ describe('MemberCard web — vùng báo và nút điểm danh (A11Y-02, A11Y-03)
     expect(document.activeElement).toBe(btn);
   });
 });
+
+describe('MemberCard web — tên đọc khi tổng quan lỗi', () => {
+  it('dòng điểm đổi thành câu báo lỗi thì tên đọc cũng nói câu đó (chứa chữ nhìn thấy), không còn số điểm không hiển thị', async () => {
+    mocks.get.mockRejectedValue(new Error('500'));
+    const c = await mount(<MemberCard />);
+    const btn = c.querySelector<HTMLElement>('section[aria-label="Thẻ thành viên"] [aria-label*="Xem Điểm Xanh"]')!;
+    expect(btn.textContent).toContain('Chưa tải được hạng và điểm');
+    const name = btn.getAttribute('aria-label')!;
+    expect(name).toContain('Chưa tải được hạng và điểm');
+    expect(name).not.toContain('120');
+  });
+});

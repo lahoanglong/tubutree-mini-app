@@ -50,7 +50,7 @@ export function RecentlyViewedRail({ title = browseText.recentlyViewed, reserve 
           return (
             <RailCell key={it.slug} variant="rail-sm">
               <ProductCard
-                // Tên và ảnh luôn là của lần xem; chỉ giá và còn hàng lấy từ dữ liệu hiện hành.
+                // Tên là của lần xem; ảnh, giá và còn hàng lấy từ dữ liệu hiện hành (URL ảnh lưu ở máy chỉ là dự phòng khi chưa có dữ liệu hiện hành).
                 product={{
                   id: it.slug,
                   brand: '',

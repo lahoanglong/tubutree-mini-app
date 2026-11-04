@@ -97,7 +97,7 @@ export function MemberCard() {
       <div style={CARD_STYLE}>
         <button
           type="button"
-          aria-label={memberCardAriaLabel(card, homeCopy.member.openLabel, greeting)}
+          aria-label={memberCardAriaLabel(card, homeCopy.member.openLabel, greeting, loyaltyFailed ? homeCopy.member.tierFailed : undefined)}
           className="tubu-press"
           onClick={() => {
             haptic('light');

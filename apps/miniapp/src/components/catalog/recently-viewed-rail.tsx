@@ -39,7 +39,7 @@ export function RecentlyViewedRail({ title = vi.browse.recentlyViewed }: { title
           return (
             <RailCell key={it.slug} variant="rail-sm">
               <ProductCard
-                // Tên và ảnh luôn là của lần xem (như trước đây); chỉ giá và còn hàng lấy từ dữ liệu hiện hành.
+                // Tên là của lần xem; ảnh, giá và còn hàng lấy từ dữ liệu hiện hành (URL ảnh lưu ở máy chỉ là dự phòng khi chưa có dữ liệu hiện hành).
                 product={{
                   id: it.slug,
                   brand: '',
@@ -50,7 +50,8 @@ export function RecentlyViewedRail({ title = vi.browse.recentlyViewed }: { title
                   ...product,
                   slug: it.slug,
                   name: it.name,
-                  thumbnail: it.thumbnail ?? product?.thumbnail ?? null,
+                  // Ảnh hiện hành thắng: URL lưu ở máy có thể là ảnh cũ đã bị thay và không còn trong danh sách của /img.
+                  thumbnail: product?.thumbnail ?? it.thumbnail ?? null,
                 }}
                 variant="rail-sm"
                 listSource="recently_viewed"

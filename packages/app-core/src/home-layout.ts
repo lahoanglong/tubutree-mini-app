@@ -327,8 +327,10 @@ export function memberCardView(opts: {
  * Tên đọc cho vùng chạm của thẻ thành viên / thẻ Điểm Xanh. Chứa đủ chữ đang hiển thị (tên, hạng, điểm, giá trị quy đổi) rồi mới tới
  * hành động, để trình đọc màn hình và lệnh giọng nói khớp với những gì khách thấy.
  */
-export function memberCardAriaLabel(card: Pick<MemberCardView, 'tierName' | 'pointsLabel' | 'valueLabel'>, action: string, greeting?: string): string {
+export function memberCardAriaLabel(card: Pick<MemberCardView, 'tierName' | 'pointsLabel' | 'valueLabel'>, action: string, greeting?: string, failedText?: string): string {
   const who = [greeting, card.tierName].filter(Boolean).join(' · ');
+  // Tổng quan lỗi: dòng điểm trên thẻ đổi thành câu báo lỗi, nên tên đọc cũng thế (không còn số điểm không hiển thị).
+  if (failedText) return [who, failedText].filter(Boolean).join(', ') + `. ${action}`;
   return [who, card.pointsLabel, card.valueLabel].filter(Boolean).join(', ') + `. ${action}`;
 }
 

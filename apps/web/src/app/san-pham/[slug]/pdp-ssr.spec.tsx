@@ -52,7 +52,9 @@ describe('PdpCoupons: chỗ giữ 44px khi đang khôi phục phiên', () => {
     expect(out).toContain('data-restore-mask="restoring"');
     expect(out).toContain('aria-hidden="true"');
     auth.phase = 'authenticated';
-    expect(html(<PdpCoupons productId="p" product={product} />)).toContain('data-restore-mask="hint"');
+    const hint = html(<PdpCoupons productId="p" product={product} />);
+    expect(hint).toContain('data-restore-mask="hint"');
+    expect(hint.replaceAll('&amp;', '&')).toMatch(/data-restore-mask="hint"[^>]*class="[^"]*\[html\[data-has-offers\]_&\]:block/);
     auth.phase = 'guest';
     expect(html(<PdpCoupons productId="p" product={product} />)).not.toContain('pdp-offers-slot');
     auth.phase = 'loading';
