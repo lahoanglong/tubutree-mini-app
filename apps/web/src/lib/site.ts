@@ -17,17 +17,16 @@ const BASE_PRIVATE_PATHS = ['/admin', '/merchant', '/tai-khoan', '/gio-hang', '/
 
 /**
  * Route công khai trong route map (`private: false`: khách chưa đăng nhập vẫn mở được) nhưng chính trang đánh dấu noindex vì nội dung
- * là của riêng khách (ví mã, điểm). Vẫn `Disallow` trong robots như route riêng tư; robots không `allow` lại chúng (Google chọn `allow`
- * khi hai luật dài bằng nhau) và sitemap không nộp chúng.
+ * là của riêng khách (ví mã, điểm). KHÔNG `Disallow` trong robots: Googlebot bị chặn thì không đọc được thẻ meta noindex, URL vẫn có thể
+ * lên kết quả tìm kiếm khi có link trỏ tới. Chỉ meta noindex của trang (layout) và việc sitemap không nộp chúng giữ chúng khỏi chỉ mục.
  */
 export const NOINDEX_PUBLIC_PATHS = ['/uu-dai', '/ma-giam-gia'];
 
-/** Trang riêng tư/nội bộ — không được để công cụ tìm kiếm lập chỉ mục. Danh sách gốc + tiền tố các route `private` của route map + route công khai noindex. */
+/** Trang riêng tư/nội bộ — robots chặn cào. Danh sách gốc + tiền tố các route `private` của route map (không gồm NOINDEX_PUBLIC_PATHS). */
 export const PRIVATE_PATHS = [
   ...new Set([
     ...BASE_PRIVATE_PATHS,
     ...privatePrefixes().filter((p) => !BASE_PRIVATE_PATHS.some((b) => p === b || p.startsWith(`${b}/`))),
-    ...NOINDEX_PUBLIC_PATHS,
   ]),
 ];
 

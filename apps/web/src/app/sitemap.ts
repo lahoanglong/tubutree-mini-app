@@ -2,7 +2,8 @@ import type { MetadataRoute } from 'next';
 import { CASHBACK_ENABLED } from '@tubutree/app-core/features';
 import { NOINDEX_PUBLIC_PATHS, SITE_URL } from '@/lib/site';
 import { publicStaticRoutes } from '@/lib/route-map';
-import { getProducts, getStorefrontList } from '@/lib/api';
+import { getBrands, getLegalDoc, getProducts, getStorefrontList } from '@/lib/api';
+import { LEGAL_SLUGS } from '@/lib/legal';
 
 export const revalidate = 3600;
 
@@ -14,6 +15,8 @@ export const revalidate = 3600;
  * khai chưa có endpoint liệt kê chúng ("API công khai chưa có endpoint liệt kê chúng"). Nay
  * dùng GET /storefront/public-list (chỉ gian hàng đã đăng, 500 gian hàng cập nhật gần nhất —
  * mirror đúng giới hạn 500 sản phẩm bên dưới, không cần liệt kê TOÀN BỘ).
+ *
+ * Chiến dịch (/chien-dich/[slug]) chưa vào: lib/api.ts chưa có endpoint công khai liệt kê chúng (chỉ có banner theo vị trí hiển thị).
  */
 
 // API chặn limit > 100 (common/pagination.ts); xin 200 một lần từng trả 400 nên sitemap không có sản phẩm nào.
@@ -38,6 +41,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       base.push({ url: `${SITE_URL}/san-pham/${p.slug}`, changeFrequency: 'weekly', priority: 0.7 });
     }
     if (products.length < PRODUCTS_PER_PAGE) break;
+  }
+  // Nhãn đã công khai (có slug) mới có trang /brand/[slug]; nhãn chưa công khai không có URL để nộp.
+  for (const b of await getBrands()) {
+    if (b.slug) base.push({ url: `${SITE_URL}/brand/${encodeURIComponent(b.slug)}`, changeFrequency: 'weekly', priority: 0.6 });
+  }
+  // Cùng quy tắc với generateMetadata của /chinh-sach/[loai]: chưa có nội dung đã duyệt (content === null) thì trang noindex nên không nộp.
+  const legalDocs = await Promise.all(LEGAL_SLUGS.map(async (slug) => ({ slug, doc: await getLegalDoc(slug) })));
+  for (const { slug, doc } of legalDocs) {
+    if (doc.content !== null) base.push({ url: `${SITE_URL}/chinh-sach/${slug}`, changeFrequency: 'monthly', priority: 0.4 });
   }
   const storefronts = await getStorefrontList();
   for (const s of storefronts) {
