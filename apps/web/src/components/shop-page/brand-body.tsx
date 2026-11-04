@@ -12,6 +12,7 @@ import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { BrandActions, BrandDealerBlock } from '@/app/brand/[slug]/brand-actions';
 import type { BrandDetail, ProductCard as ProductCardData } from '@/lib/api';
 import { copyText } from '@/lib/copy-text';
+import { sizedImage } from '@/lib/image-src';
 import { StoreLayout } from '@/components/layouts/store-layout';
 import { Badge } from '@/components/mini/badge';
 import { EmptyState } from '@/components/mini/empty-state';
@@ -35,6 +36,8 @@ export interface BrandBodyProps {
 
 /** Số sản phẩm nổi bật trên tab Shop (kệ ngang); phần còn lại ở tab Sản phẩm. */
 const FEATURED_MAX = 10;
+/** Ảnh câu chuyện rộng 240px (`w-60`) trong kệ cuộn ngang. */
+const STORY_IMAGE_WIDTH = 240;
 const STICKY_TOP = 'calc(var(--safe-top, 0px) + 56px)';
 const TABS_HEIGHT = 62;
 const SORT_TOP = `calc(var(--safe-top, 0px) + 56px + ${TABS_HEIGHT - 12}px)`;
@@ -212,10 +215,23 @@ export function BrandBody({ brand: b, mapOriginId }: BrandBodyProps) {
                   {b.story && <Text variant="body-sm" tone="secondary" as="div" style={{ whiteSpace: 'pre-line', overflowWrap: 'anywhere' }}>{b.story}</Text>}
                   {b.storyImages.length > 0 && (
                     <ScrollRow label="Ảnh câu chuyện thương hiệu" style={{ gap: 8, marginTop: 12, minWidth: 0, maxWidth: '100%' }}>
-                      {b.storyImages.map((src, i) => (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img key={`${i}:${src}`} src={src} alt={`${b.name}, ảnh ${i + 1}`} loading="lazy" className="h-40 w-60 flex-none rounded-card bg-[var(--color-bg-subtle)] object-cover" />
-                      ))}
+                      {b.storyImages.map((src, i) => {
+                        const img = sizedImage(src, STORY_IMAGE_WIDTH);
+                        return (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            key={`${i}:${src}`}
+                            src={img.src}
+                            srcSet={img.srcSet}
+                            sizes={img.sizes}
+                            alt={`${b.name}, ảnh ${i + 1}`}
+                            width={STORY_IMAGE_WIDTH}
+                            height={160}
+                            loading="lazy"
+                            className="h-40 w-60 flex-none rounded-card bg-[var(--color-bg-subtle)] object-cover"
+                          />
+                        );
+                      })}
                     </ScrollRow>
                   )}
                 </div>

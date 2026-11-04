@@ -34,9 +34,9 @@ export default function SiteHeader() {
       {/* Hàng 1 luôn một hàng cao 64px (logo, ô tìm, chuông, giỏ, tài khoản); hàng 2 là điều hướng mục chính. Chiều cao tổng
           cố định = --header-h trong globals.css (6.75rem + 2px viền, 110px ở chữ mặc định), để cột dính của các trang đặt đúng dưới thanh. */}
       <div className={`${PAGE_WIDE} flex h-16 items-center gap-3`}>
-        {/* Logo thật của thương hiệu (đã có sẵn khẩu hiệu), không dựng lại bằng biểu tượng + chữ. */}
+        {/* Logo thật của thương hiệu (đã có sẵn khẩu hiệu), không dựng lại bằng biểu tượng + chữ. Không `priority`: header này `hidden md:block`, preload sẽ tải logo trên điện thoại nơi nó bị ẩn. */}
         <Link href="/" aria-label="Tubu Tree — trang chủ" className="flex min-h-11 flex-none items-center">
-          <Image src={tubuLogo} alt="Tubu Tree" width={99} height={36} priority className="h-9 w-auto" />
+          <Image src={tubuLogo} alt="Tubu Tree" width={99} height={36} className="h-9 w-auto" />
         </Link>
 
         {/* data-site-search: html[data-tenant-host] ẩn khung này từ khung hình đầu trên host gian hàng CTV (globals.css).

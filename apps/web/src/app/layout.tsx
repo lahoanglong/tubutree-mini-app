@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import { preconnect, prefetchDNS } from 'react-dom';
 import './globals.css';
 import { Providers } from './providers';
 import SiteHeader from '@/components/site-header';
@@ -12,6 +13,7 @@ import BackButton from '@/components/mini/back-button';
 import { ErrorReporter } from '@/components/error-reporter';
 import { EntrySourceCapture } from '@/components/entry-source-capture';
 import { PdpNavSkeleton } from '@/components/skeletons/pdp-nav-skeleton';
+import { apiImageOrigin } from '@/lib/image-origin';
 import { SITE_URL, restoringBootScript, tenantHostBootScript } from '@/lib/site';
 
 export const metadata: Metadata = {
@@ -27,6 +29,12 @@ export const metadata: Metadata = {
 export const viewport: Viewport = { width: 'device-width', initialScale: 1, viewportFit: 'cover' };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  // Không `crossOrigin`: thẻ img (no-cors) dùng nhóm kết nối có thông tin xác thực; preconnect `anonymous` mở nhóm khác nên ảnh không dùng lại được.
+  const imageOrigin = apiImageOrigin(process.env.NEXT_PUBLIC_API_BASE_URL);
+  if (imageOrigin) {
+    prefetchDNS(imageOrigin);
+    preconnect(imageOrigin);
+  }
   return (
     // suppressHydrationWarning: script ở <head> thêm data-tenant-host / data-restoring lên <html> trước khi React hydrate.
     <html lang="vi" suppressHydrationWarning>
