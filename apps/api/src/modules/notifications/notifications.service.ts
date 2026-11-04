@@ -202,7 +202,7 @@ export class NotificationsService {
     // mẫu chưa gắn mã ZNS riêng.
     const znsTemplateId = (tpl?.channel === 'ZNS' && tpl.zaloTemplateId) || opts.znsTemplateId || null;
     if (user?.phone && znsTemplateId) {
-      await this.dispatchZns(userId, templateCode, user.phone, znsTemplateId, data, opts.retryZns ? dedupeKey : undefined);
+      await this.dispatchZns(userId, templateCode, user.phone, znsTemplateId, data, opts.retryZns ? dedupeKey : undefined, withinMs);
     }
   }
 
@@ -297,6 +297,7 @@ export class NotificationsService {
     templateId: string,
     data: Record<string, string>,
     dedupeKey?: string,
+    withinMs: number | null = null,
   ): Promise<void> {
     const queue = this.notificationsQueue;
     // Đọc cấu hình giờ yên tĩnh TRƯỚC khi ghi log: lỗi DB ở đây không để lại log PENDING không có job (kẹt mãi, và tin
@@ -318,7 +319,8 @@ export class NotificationsService {
       userId,
       templateCode,
       channel: 'ZNS',
-      payload: dedupeKey ? { data, dedupeKey } : { data },
+      // dedupeWithinMs đi theo log để lúc gửi (deliverZns) xét đúng cửa sổ của nơi gọi: log SENT cũ hơn cửa sổ không chặn tin mới cùng khoá.
+      payload: dedupeKey ? { data, dedupeKey, ...(withinMs ? { dedupeWithinMs: withinMs } : {}) } : { data },
       status: !result ? 'PENDING' : result.ok ? 'SENT' : 'FAILED',
       error: result && !result.ok ? znsFailureText(result) : null,
       // Trần đếm theo sentAt: tin khuyến mãi bị trễ ghi mốc tới tay khách để rơi đúng tháng.
@@ -415,14 +417,20 @@ export class NotificationsService {
    */
   async deliverZns(job: ZnsSendJobData, finalAttempt: boolean): Promise<ZnsDeliveryOutcome> {
     const where = { id: job.notificationLogId };
+    // Log mang dedupeKey: quyết định "ai được gửi" và nhận log nằm chung trong một khoá advisory ngắn (xem claimUnderDedupeLock).
+    const guarded = await this.claimUnderDedupeLock(job.notificationLogId, finalAttempt);
+    if (guarded === 'SKIPPED' || guarded === 'RETRY' || guarded === 'FAILED') return guarded;
     // Nhận log trước khi gọi Zalo, cùng một câu lệnh với việc kiểm trạng thái: catch của dispatchZns (queue.add quá hạn dù Redis đã
     // nhận job) chỉ đóng log còn PENDING, nên sau bước này nó không còn nhả khoá của một tin đang đi được. RETRYING ở đây là "đang
-    // gửi hoặc chờ thử lại"; kết quả cuối ghi đè ở dưới. Đây không phải khoá loại trừ giữa các worker: RETRYING vẫn nhận lại được, nên
-    // job BullMQ bị coi là treo khi Zalo trả chậm có thể được worker khác gửi lần nữa (giống trước đây).
-    const claimed = await this.prisma.notificationLog.updateMany({
-      where: { ...where, status: { in: ['PENDING', 'RETRYING'] } },
-      data: { status: 'RETRYING' },
-    });
+    // gửi hoặc chờ thử lại"; kết quả cuối ghi đè ở dưới. Với log không có khoá, đây không phải khoá loại trừ giữa các worker: RETRYING
+    // vẫn nhận lại được, nên job BullMQ bị coi là treo khi Zalo trả chậm có thể được worker khác gửi lần nữa (giống trước đây).
+    const claimed =
+      guarded === 'CLAIMED'
+        ? { count: 1 }
+        : await this.prisma.notificationLog.updateMany({
+            where: { ...where, status: { in: ['PENDING', 'RETRYING'] } },
+            data: { status: 'RETRYING' },
+          });
     if (claimed.count === 0) {
       const current = await this.prisma.notificationLog.findUnique({ where, select: { status: true, payload: true } });
       if (current?.status === 'SENT') return 'SENT';
@@ -430,15 +438,6 @@ export class NotificationsService {
       // Tin thường không có khoá để nhả và không ai gửi lại, nên job đến muộn vẫn phải gửi (catch chỉ đóng PENDING nên không còn
       // ai tranh log này nữa).
       if (current?.status === 'FAILED' && isReleasedZnsLog(current.payload, job.notificationLogId)) return 'SKIPPED';
-    }
-
-    const earlier = await this.earlierLogForSameEvent(job.notificationLogId);
-    if (earlier) {
-      await this.prisma.notificationLog.updateMany({
-        where: { ...where, status: { in: ['PENDING', 'RETRYING'] } },
-        data: { status: 'FAILED', error: `Bỏ qua: tin cho cùng sự kiện đã có ở log ${earlier}.` },
-      });
-      return 'SKIPPED';
     }
 
     const result = await this.zns.sendTemplate(job.phone, job.templateId, job.templateData, job.notificationLogId);
@@ -456,26 +455,47 @@ export class NotificationsService {
   }
 
   /**
-   * Hai log ZNS cùng (khách, dedupeKey) chỉ được gửi một: log ra đời trước (sentAt, rồi id) thắng, log sau bỏ qua. Xếp thứ tự
-   * thay cho khoá nên hai worker chạy song song không cần chờ nhau và không giữ kết nối trong lúc gọi Zalo. Log không mang
-   * dedupeKey (tin thường) hoặc đã nhả khoá thì không có gì để so.
+   * Hai log ZNS cùng (khách, dedupeKey) chỉ được gửi một. Quyết định và nhận log nằm trong CÙNG một transaction giữ khoá advisory
+   * theo (khách, khoá), nên không phụ thuộc thứ tự sentAt/commit; khoá nhả ngay khi transaction xong, không giữ trong lúc gọi Zalo:
+   * - có log khác đã SENT: bỏ qua (SKIPPED);
+   * - có log khác đang RETRYING (đang gửi hoặc chờ thử lại): hoãn (RETRY, không đóng, BullMQ thử lại sau); tới lượt cuối vẫn
+   *   vậy thì đóng FAILED có lý do, vì gửi tiếp là đánh cược gửi đôi;
+   * - còn lại (log khác PENDING/FAILED hẳn/không có): nhận log này (RETRYING) rồi gửi.
+   * NONE = không có khoá để so (tin thường, khoá đã nhả) hoặc log không còn nhận được: đi tiếp đường nhận log thường.
    */
-  private async earlierLogForSameEvent(logId: string): Promise<string | null> {
-    const mine = await this.prisma.notificationLog.findUnique({ where: { id: logId }, select: { id: true, userId: true, sentAt: true, payload: true } });
-    const key = (mine?.payload as { dedupeKey?: unknown } | null)?.dedupeKey;
-    if (!mine || typeof key !== 'string' || /:failed:[^:]+$/.test(key)) return null;
-    const earlier = await this.prisma.notificationLog.findFirst({
-      where: {
-        userId: mine.userId,
-        channel: 'ZNS',
-        id: { not: mine.id },
-        payload: { path: ['dedupeKey'], equals: key },
-        status: { in: ['PENDING', 'RETRYING', 'SENT'] },
-        OR: [{ sentAt: { lt: mine.sentAt } }, { sentAt: mine.sentAt, id: { lt: mine.id } }],
-      },
-      select: { id: true },
+  private async claimUnderDedupeLock(logId: string, finalAttempt: boolean): Promise<'NONE' | 'CLAIMED' | 'SKIPPED' | 'RETRY' | 'FAILED'> {
+    const mine = await this.prisma.notificationLog.findUnique({ where: { id: logId }, select: { userId: true, status: true, payload: true } });
+    const payload = mine?.payload as { dedupeKey?: unknown; dedupeWithinMs?: unknown } | null | undefined;
+    const key = payload?.dedupeKey;
+    if (!mine || typeof key !== 'string' || /:failed:[^:]+$/.test(key) || !['PENDING', 'RETRYING'].includes(mine.status)) return 'NONE';
+    const withinMs = typeof payload?.dedupeWithinMs === 'number' && payload.dedupeWithinMs > 0 ? payload.dedupeWithinMs : null;
+    const closable = { id: logId, status: { in: ['PENDING', 'RETRYING'] } };
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`zns-send:${mine.userId}:${key}`}))`;
+      const others = await tx.notificationLog.findMany({
+        where: {
+          userId: mine.userId,
+          channel: 'ZNS',
+          id: { not: logId },
+          payload: { path: ['dedupeKey'], equals: key },
+          status: { in: ['SENT', 'RETRYING'] },
+          ...(withinMs != null ? { sentAt: { gte: new Date(Date.now() - withinMs) } } : {}),
+        },
+        select: { id: true, status: true },
+      });
+      const sent = others.find((o) => o.status === 'SENT');
+      if (sent) {
+        await tx.notificationLog.updateMany({ where: closable, data: { status: 'FAILED', error: `Bỏ qua: tin cho cùng sự kiện đã gửi ở log ${sent.id}.` } });
+        return 'SKIPPED' as const;
+      }
+      if (others.length > 0) {
+        if (!finalAttempt) return 'RETRY' as const;
+        await tx.notificationLog.updateMany({ where: closable, data: { status: 'FAILED', error: `Không gửi: log ${others[0]!.id} cùng sự kiện vẫn đang gửi hoặc thử lại sau nhiều lượt chờ.` } });
+        return 'FAILED' as const;
+      }
+      const claimed = await tx.notificationLog.updateMany({ where: closable, data: { status: 'RETRYING' } });
+      return claimed.count > 0 ? ('CLAIMED' as const) : ('NONE' as const);
     });
-    return earlier?.id ?? null;
   }
 
   /**

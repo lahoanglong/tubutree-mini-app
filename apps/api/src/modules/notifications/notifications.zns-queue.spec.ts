@@ -245,42 +245,88 @@ describe('NotificationsService: tin báo trước hạ hạng gửi lại ZNS sa
 });
 
 describe('NotificationsService.deliverZns: hai log cùng dedupeKey chạy song song (L3-06)', () => {
-  const MINE = { id: 'log-2', userId: 'u1', sentAt: new Date('2026-11-05T01:00:00Z'), payload: { data: {}, dedupeKey: 'k1' } };
+  const MINE = { id: 'log-2', userId: 'u1', status: 'PENDING', payload: { data: {}, dedupeKey: 'k1' } };
 
-  function withDedupe(sibling: unknown) {
-    const s = setup({ payload: MINE.payload });
-    const findFirst = jest.fn().mockResolvedValue(sibling);
-    const findUnique = jest.fn().mockResolvedValue({ ...MINE, status: 'RETRYING' });
+  /** `others`: các log khác cùng khoá mà câu truy vấn trong khoá advisory trả về. */
+  function withDedupe(others: { id: string; status: string }[], payload: unknown = MINE.payload) {
+    const s = setup({ payload });
     const log = (s.svc as unknown as { prisma: { notificationLog: Record<string, jest.Mock> } }).prisma.notificationLog;
-    log.findFirst = findFirst;
-    log.findUnique = findUnique;
-    return { ...s, findFirst };
+    log.findUnique = jest.fn().mockResolvedValue({ ...MINE, payload });
+    const findMany = jest.fn().mockResolvedValue(others);
+    const txUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const executeRaw = jest.fn().mockResolvedValue(1);
+    const tx = { $executeRaw: executeRaw, notificationLog: { findMany, updateMany: txUpdateMany } };
+    const prisma = (s.svc as unknown as { prisma: Record<string, unknown> }).prisma;
+    prisma.$transaction = jest.fn(async (fn: (t: typeof tx) => unknown) => fn(tx));
+    return { ...s, findMany, txUpdateMany, executeRaw };
   }
 
-  it('có log cùng khoá ra đời trước và chưa thất bại: bỏ qua, không gọi Zalo, đóng log này', async () => {
-    const { svc, sendTemplate, updateMany, findFirst } = withDedupe({ id: 'log-1' });
+  it('log cùng khoá đã SENT: bỏ qua, không gọi Zalo, đóng log này', async () => {
+    const { svc, sendTemplate, txUpdateMany, findMany, executeRaw } = withDedupe([{ id: 'log-1', status: 'SENT' }]);
     expect(await svc.deliverZns(JOB, false)).toBe('SKIPPED');
     expect(sendTemplate).not.toHaveBeenCalled();
-    expect(findFirst).toHaveBeenCalledWith({
-      where: {
-        userId: 'u1',
-        channel: 'ZNS',
-        id: { not: 'log-2' },
-        payload: { path: ['dedupeKey'], equals: 'k1' },
-        status: { in: ['PENDING', 'RETRYING', 'SENT'] },
-        OR: [{ sentAt: { lt: MINE.sentAt } }, { sentAt: MINE.sentAt, id: { lt: 'log-2' } }],
-      },
-      select: { id: true },
+    expect(executeRaw).toHaveBeenCalledTimes(1);
+    expect(findMany).toHaveBeenCalledWith({
+      where: { userId: 'u1', channel: 'ZNS', id: { not: 'log-2' }, payload: { path: ['dedupeKey'], equals: 'k1' }, status: { in: ['SENT', 'RETRYING'] } },
+      select: { id: true, status: true },
     });
-    expect(updateMany).toHaveBeenCalledWith({
+    expect(txUpdateMany).toHaveBeenCalledWith({
       where: { id: 'log-2', status: { in: ['PENDING', 'RETRYING'] } },
       data: { status: 'FAILED', error: expect.stringContaining('log-1') },
     });
   });
 
-  it('không có log trước cùng khoá: gửi bình thường', async () => {
-    const { svc, sendTemplate } = withDedupe(null);
+  it('log cùng khoá đang gửi/thử lại (RETRYING): hoãn, không đóng, không gọi Zalo, trả RETRY để BullMQ thử lại sau', async () => {
+    const { svc, sendTemplate, txUpdateMany } = withDedupe([{ id: 'log-1', status: 'RETRYING' }]);
+    expect(await svc.deliverZns(JOB, false)).toBe('RETRY');
+    expect(sendTemplate).not.toHaveBeenCalled();
+    expect(txUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it('hoãn tới lượt cuối mà log kia vẫn đang thử lại: đóng FAILED có lý do, không gọi Zalo (không gửi đôi)', async () => {
+    const { svc, sendTemplate, txUpdateMany } = withDedupe([{ id: 'log-1', status: 'RETRYING' }]);
+    expect(await svc.deliverZns(JOB, true)).toBe('FAILED');
+    expect(sendTemplate).not.toHaveBeenCalled();
+    expect(txUpdateMany).toHaveBeenCalledWith({
+      where: { id: 'log-2', status: { in: ['PENDING', 'RETRYING'] } },
+      data: { status: 'FAILED', error: expect.stringContaining('log-1') },
+    });
+  });
+
+  it('log kia đã FAILED hẳn (không còn SENT/RETRYING): log này nhận quyền ngay trong khoá rồi gửi', async () => {
+    const { svc, sendTemplate, txUpdateMany } = withDedupe([]);
     expect(await svc.deliverZns(JOB, false)).toBe('SENT');
+    expect(txUpdateMany).toHaveBeenCalledWith({ where: { id: 'log-2', status: { in: ['PENDING', 'RETRYING'] } }, data: { status: 'RETRYING' } });
     expect(sendTemplate).toHaveBeenCalledTimes(1);
+  });
+
+  it('dedupeWithinMs trong payload: chỉ log nằm trong cửa sổ thời gian mới tính (log SENT cũ hơn cửa sổ không chặn)', async () => {
+    const now = Date.now();
+    const { svc, findMany } = withDedupe([], { data: {}, dedupeKey: 'k1', dedupeWithinMs: 3_600_000 });
+    await svc.deliverZns(JOB, false);
+    const where = findMany.mock.calls[0][0].where;
+    expect(where.sentAt.gte.getTime()).toBeGreaterThanOrEqual(now - 3_600_000 - 50);
+    expect(where.sentAt.gte.getTime()).toBeLessThanOrEqual(Date.now() - 3_600_000 + 50);
+  });
+
+  it('log không mang dedupeKey: không mở transaction, đi đường nhận log như cũ', async () => {
+    const s = setup({ payload: { data: {} } });
+    const prisma = (s.svc as unknown as { prisma: Record<string, unknown> }).prisma;
+    prisma.$transaction = jest.fn();
+    expect(await s.svc.deliverZns(JOB, false)).toBe('SENT');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+});
+
+describe('NotificationsService.notify: ghi dedupeWithinMs vào log ZNS để lúc gửi xét đúng cửa sổ', () => {
+  it('retryZns + dedupeWithinMs → payload log ZNS mang dedupeWithinMs', async () => {
+    const { svc, create } = setup();
+    (svc as unknown as { prisma: { notificationLog: Record<string, jest.Mock> } }).prisma.notificationLog.findFirst = jest.fn().mockResolvedValue(null);
+    (svc as unknown as { prisma: Record<string, unknown> }).prisma.$transaction = jest.fn(async (fn: (t: unknown) => unknown) =>
+      fn({ $executeRaw: jest.fn(), notificationLog: { findFirst: jest.fn().mockResolvedValue(null), create } }),
+    );
+    await svc.notify('u1', 'ORDER_CONFIRMED', {}, { dedupeKey: 'k9', dedupeWithinMs: 60_000, retryZns: true });
+    const znsCall = create.mock.calls.find((c) => c[0].data.channel === 'ZNS');
+    expect(znsCall?.[0].data.payload).toEqual({ data: {}, dedupeKey: 'k9', dedupeWithinMs: 60_000 });
   });
 });
