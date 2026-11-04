@@ -121,6 +121,7 @@ describe('ZaloService.getUserInfo — appsecret_proof', () => {
       errorLog = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
     });
     afterEach(() => errorLog.mockRestore());
+    const proofErrors = () => errorLog.mock.calls.map((c) => String(c[0])).filter((m) => m.includes('appsecret_proof'));
 
     it('HTTP lỗi ở lượt có proof → lượt 2 không proof, đăng nhập thành công, có log error (không chứa token)', async () => {
       (axios.get as jest.Mock).mockRejectedValueOnce(httpError(400)).mockResolvedValueOnce({ data: { id: 'z1', name: 'A' } });
@@ -153,6 +154,14 @@ describe('ZaloService.getUserInfo — appsecret_proof', () => {
       (axios.get as jest.Mock).mockRejectedValueOnce(httpError(400)).mockRejectedValueOnce(httpError(400));
       await expect(make('s3cret').getUserInfo('tok')).rejects.toBeInstanceOf(UnauthorizedException);
       expect(axios.get).toHaveBeenCalledTimes(2);
+      expect(proofErrors()).toHaveLength(0);
+    });
+
+    it('proof lỗi + không proof OK → đúng 1 error log nhắc proof', async () => {
+      (axios.get as jest.Mock).mockRejectedValueOnce(httpError(400)).mockResolvedValueOnce({ data: { id: 'z1' } });
+      await make('s3cret').getUserInfo('tok');
+      expect(proofErrors()).toHaveLength(1);
+      expect(proofErrors()[0]).toContain('nhưng chấp nhận khi không có proof');
     });
 
     it('lỗi mạng/timeout/5xx ở lượt có proof → không thử lại, 503 như cũ', async () => {

@@ -80,15 +80,21 @@ export class ZaloService {
       // nằm ở Zalo: khi bật "bắt buộc appsecret_proof" thì lượt không proof cũng bị từ chối.
       const proof = secret ? createHmac('sha256', secret).update(accessToken).digest('hex') : null;
       let result = await this.fetchMe(accessToken, proof);
+      let retried = false;
+      let firstDetail = '';
       if (proof && result.kind !== 'ok') {
         if (result.kind === 'unavailable') throw result.error;
-        const detail = result.kind === 'rejected' ? `HTTP ${result.status}` : `error ${result.code ?? '?'} ${result.message ?? ''}`.trim();
-        this.logger.error(`Zalo từ chối appsecret_proof (${detail}); thử lại không proof.`);
+        firstDetail = result.kind === 'rejected' ? `HTTP ${result.status}` : `error ${result.code ?? '?'} ${result.message ?? ''}`.trim();
+        retried = true;
         result = await this.fetchMe(accessToken, null);
+        if (result.kind === 'ok') {
+          this.logger.error(`Zalo từ chối appsecret_proof nhưng chấp nhận khi không có proof (${firstDetail}); kiểm tra cách tính proof.`);
+        }
       }
       if (result.kind === 'unavailable') throw result.error;
       if (result.kind !== 'ok') {
-        if (result.kind === 'body') this.logger.warn(`Zalo getUserInfo bị từ chối: ${result.code ?? '?'} ${result.message ?? 'unknown'}`);
+        if (retried) this.logger.warn(`Zalo getUserInfo bị từ chối cả hai lượt (${firstDetail}).`);
+        else if (result.kind === 'body') this.logger.warn(`Zalo getUserInfo bị từ chối: ${result.code ?? '?'} ${result.message ?? 'unknown'}`);
         else this.logger.error(`Zalo getUserInfo error: HTTP ${result.status ?? '?'}`);
         throw new UnauthorizedException('Không xác thực được tài khoản Zalo.');
       }
