@@ -46,7 +46,7 @@ export class HealthController {
   private async checkRedis(): Promise<Status> {
     try {
       const ping = this.queue.client.then((c) => (c as unknown as RedisPing).ping());
-      await withQueueTimeout(ping, 'health ping');
+      await withQueueTimeout(ping, 'health ping', undefined, { breaker: false });
       return 'up';
     } catch (err) {
       this.logger.error(`Health check: Redis không phản hồi — ${(err as Error).message}`);

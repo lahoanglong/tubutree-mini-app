@@ -600,6 +600,8 @@ export class OpsHealthService {
           }),
         ),
         'ops health queues',
+        undefined,
+        { breaker: false },
       );
       return { ok: true, items };
     } catch (err) {

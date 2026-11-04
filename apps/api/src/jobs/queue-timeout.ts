@@ -36,6 +36,15 @@ export class QueueBreakerOpenError extends QueueTimeoutError {
   }
 }
 
+function withPlainTimeout<T>(command: Promise<T>, label: string, ms: number): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new QueueTimeoutError(label, ms)), ms);
+  });
+  command.catch(() => undefined);
+  return Promise.race([command, timeout]).finally(() => clearTimeout(timer));
+}
+
 let breakerFailures = 0;
 let breakerOpenUntil = 0;
 let breakerProbing = false;
@@ -46,7 +55,12 @@ export function resetQueueBreaker(): void {
   breakerProbing = false;
 }
 
-export function withQueueTimeout<T>(command: Promise<T>, label: string, ms = QUEUE_COMMAND_TIMEOUT_MS): Promise<T> {
+/**
+ * `breaker: false` cho lời gọi sức khoẻ (quét 9 hàng đợi, ping): lô nặng hoặc event loop bận có thể quá hạn khi Redis vẫn khoẻ, và
+ * lúc breaker mở chính lời gọi này phải chạy thật để báo Redis đã lên lại. Không bị chặn và không đếm vào breaker.
+ */
+export function withQueueTimeout<T>(command: Promise<T>, label: string, ms = QUEUE_COMMAND_TIMEOUT_MS, opts: { breaker?: boolean } = {}): Promise<T> {
+  if (opts.breaker === false) return withPlainTimeout(command, label, ms);
   let probe = false;
   if (breakerFailures >= QUEUE_BREAKER_THRESHOLD) {
     command.catch(() => undefined);
