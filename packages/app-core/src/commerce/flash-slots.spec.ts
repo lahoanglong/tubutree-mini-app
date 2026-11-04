@@ -34,9 +34,9 @@ describe('slotTabs', () => {
   it('giờ VN, chú thích và câu đọc theo trạng thái tính từ giờ hiện tại, không tin status cũ trong cache', () => {
     const tabs = slotTabs([{ ...LIVE, status: 'UPCOMING' }, EVENING, TOMORROW], NOW);
     expect(tabs).toEqual([
-      { id: 's12', clock: '12:00', caption: 'Đang diễn ra', spoken: '12:00, đang diễn ra', status: 'LIVE' },
-      { id: 's20', clock: '20:00', caption: 'Sắp diễn ra', spoken: '20:00, sắp diễn ra', status: 'UPCOMING' },
-      { id: 't12', clock: '12:00', caption: 'Ngày mai', spoken: '12:00, ngày mai', status: 'UPCOMING' },
+      { id: 's12', clock: '12:00', caption: 'Đang diễn ra', spoken: '12:00 Đang diễn ra', status: 'LIVE' },
+      { id: 's20', clock: '20:00', caption: 'Sắp diễn ra', spoken: '20:00 Sắp diễn ra', status: 'UPCOMING' },
+      { id: 't12', clock: '12:00', caption: 'Ngày mai', spoken: '12:00 Ngày mai', status: 'UPCOMING' },
     ]);
   });
 
