@@ -331,7 +331,8 @@ export class VouchersService {
 
   /**
    * Milestone (§6.6): chi tiêu đạt mốc trong tháng (đơn RETAIL khách tự đặt, đã hết hạn đổi/trả) → voucher tri ân. Chạy 5h sáng.
-   * Mặc định 1tr→30k, 3tr→100k, 5tr→200k. Idempotent theo (mốc, tháng tạo đơn) qua grant.
+   * Mặc định 1tr→30k, 3tr→100k, 5tr→200k. Idempotent theo (mốc, tháng tạo đơn) qua grant. Đạt bậc cao hơn bậc đã nhận trong cùng
+   * tháng thì cấp thêm phần chênh (1tr rồi 3tr: 30k + 70k), nên tổng nhận luôn bằng thưởng của bậc cao nhất.
    *
    * Toàn thân bọc try/catch: @Cron không tự bắt lỗi — $queryRaw lỗi ném ra ngoài là
    * unhandledRejection, Node 20 mặc định crash cả process.
@@ -362,7 +363,7 @@ export class VouchersService {
       }
       const windowDays = await this.returnWindowDays();
       const deliveredBefore = new Date(now - windowDays * 864e5);
-      // Cấp voucher cho mốc CAO NHẤT đạt được (tránh chồng nhiều voucher 1 đợt).
+      // Mốc CAO NHẤT đạt được; phần đã nhận ở các bậc thấp hơn trong cùng tháng được trừ ra khi cấp.
       const byDescSpend = [...milestones].sort((a, b) => b.spend - a.spend);
       const lowestSpend = byDescSpend[byDescSpend.length - 1]?.spend;
       if (lowestSpend === undefined) return;
@@ -408,8 +409,17 @@ export class VouchersService {
             const hit = byDescSpend.find((m) => spent >= m.spend);
             return hit ? [{ userId: r.userId, hit }] : [];
           });
-          granted += await this.grantInChunks('milestoneVouchers', hits, ({ userId, hit }) => ({
-            userId, reason: `MILESTONE${hit.spend}-${period}`, type: 'AMOUNT', value: hit.reward, validDays: 30, templateCode: 'MILESTONE_VOUCHER',
+          const received = await this.milestoneReceived(hits.map((h) => h.userId), milestones, period);
+          // Bù chênh lệch: tổng voucher mốc trong tháng bằng thưởng của bậc cao nhất đạt được, không cấp chồng cả hai bậc.
+          // Voucher đã cấp tính theo giá trị lúc cấp, dù khách đã dùng hay chưa.
+          const grants = hits.flatMap(({ userId, hit }) => {
+            const prior = received.get(userId);
+            if (prior?.codes.has(voucherCode(`MILESTONE${hit.spend}-${period}`, userId))) return [];
+            const value = hit.reward - (prior?.sum ?? 0);
+            return value > 0 ? [{ userId, hit, value }] : [];
+          });
+          granted += await this.grantInChunks('milestoneVouchers', grants, ({ userId, hit, value }) => ({
+            userId, reason: `MILESTONE${hit.spend}-${period}`, type: 'AMOUNT', value, validDays: 30, templateCode: 'MILESTONE_VOUCHER',
           }), failures);
           if (rows.length < VouchersService.MILESTONE_PAGE) break;
           cursor = rows[rows.length - 1]!.userId;
@@ -421,6 +431,28 @@ export class VouchersService {
     } finally {
       this.reportGrantFailures('milestoneVouchers', failures, granted);
     }
+  }
+
+  /** Voucher mốc đã cấp cho từng khách trong kỳ (mọi bậc), tính theo mã tất định của grant(). */
+  private async milestoneReceived(
+    userIds: string[],
+    milestones: { spend: number }[],
+    period: string,
+  ): Promise<Map<string, { codes: Set<string>; sum: number }>> {
+    const out = new Map<string, { codes: Set<string>; sum: number }>();
+    if (userIds.length === 0) return out;
+    const owner = new Map<string, string>();
+    for (const userId of userIds) for (const m of milestones) owner.set(voucherCode(`MILESTONE${m.spend}-${period}`, userId), userId);
+    const found = await this.prisma.coupon.findMany({ where: { code: { in: [...owner.keys()] } }, select: { code: true, value: true } });
+    for (const c of found) {
+      const userId = owner.get(c.code);
+      if (!userId) continue;
+      const cur = out.get(userId) ?? { codes: new Set<string>(), sum: 0 };
+      cur.codes.add(c.code);
+      cur.sum += Number(c.value);
+      out.set(userId, cur);
+    }
+    return out;
   }
 
   /**
