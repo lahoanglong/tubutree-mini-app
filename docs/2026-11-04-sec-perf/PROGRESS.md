@@ -114,6 +114,9 @@ SQL, ReDoS, CSV, path traversal, SSRF `/img`, XSS lưu trữ, upload SVG: ổn.
 - Gói h: 5 mục (40af3212b..af3c21eb0), tôi thêm regex base64 jpg/gif khớp `STAFF_IMAGE` (1ae8b4496, 6f341dcb5). Review Opus REQUEST_CHANGES: M1 Mini App admin lọc mất QR VietQR (`img.vietqr.io`) do API dựng; Minor nút QR xét giá trị thô, spec composer 12MB chậm, `browse.spec` mất mock `suggestProducts`, trần `story` 5000 có thể chặn dữ liệu thật. Full vitest Mini App của tôi đỏ 3 test `support-chat.spec` (mock thiếu `prepareForCloudinary`). Đang sửa; trần story nâng 20000.
 - Gói h2 (sec-1104-h2, tách từ h): composer chat CSKH web nén ảnh như Mini App (41e612ba4). 4f cho phép sửa `support-chat/composer.tsx`, `account/*` và một dòng mock ở `app/ho-tro/chat/page.spec.tsx`.
 - Gói c: sửa theo review ở c30f14077 (M1 `User.affiliateRevokedAt`, migration 20261104160000), f8de0ee32 (M2 W8: lật PAID chỉ khi `pancakeOrderId` khớp), a6f974077, bc45337dd, 8cfb77075. Đang review Opus vòng 2 và kiểm full.
+- Gói h: review Opus vòng 2 APPROVE (0/0/2), sửa nốt: spec composer nâng trần thời gian (2e90facb2); composer web `try/finally` + `maxLength` story trang chủ nhãn (h2 9312a58aa, 4f cho phép). Gộp h (bcd4e85b8), h2 (ec235295f).
+- Gate tích hợp 9 gói (ec235295f): PASS mọi bước trừ `tsc-e2e` (fixture e2e hồ sơ đại lý còn `cccdFrontUrl`) và `vitest-app-core` (luật xưng hô: "vui lòng" ở lời lỗi ảnh đại lý của gói b). Sửa bba00bc2d. jest 13467/13467, vitest web 9824, Mini App 6683 (cả UTC), build OK. Race 2704/2705, drift 0: đỏ `milestone-second-order-vouchers-chunked` lần thứ 3; gốc là cron second-order dừng sau 25 trang sắp theo userId, chạy cả bộ thì khách một đơn của spec khác đứng trước. Sửa spec d8ba967cf (nâng trần trang trong lúc chạy).
+- Gói c vòng 2: REQUEST_CHANGES (0/2/4). M1 CTV bị hạ trước deploy hoặc hạ từ STAFF vẫn rút được (dấu là chốt duy nhất); M2 đơn chưa gắn Pancake đã huỷ sinh khoản hoàn PENDING, khách tự rút vào Ví. Đang sửa: chặn theo dấu HOẶC role CUSTOMER, đặt dấu khi về CUSTOMER từ mọi vai trò, migration backfill riêng; đơn chưa gắn không tạo dòng hoàn, chỉ ghim Cần xử lý.
 
 ## Lưu ý cho chủ
 - A2: cron tự chuyển Ví sẽ warn mỗi giờ cho CTV đã bị hạ mà còn hoa hồng APPROVED, cho tới khi xử lý số hoa hồng đó.
@@ -131,4 +134,5 @@ SQL, ReDoS, CSV, path traversal, SSRF `/img`, XSS lưu trữ, upload SVG: ổn.
 ## Việc hạ tầng / của chủ (ghi lại, phiên này không làm)
 - Rule Rate Limiting Cloudflare cho trang HTML; vhost `app.` chỉ nhận dải IP Cloudflare (`RemoteIPTrustedProxy` như vhost `api.`).
 - HSTS includeSubDomains (Caddyfile/Apache).
+- Khi bật Cloudinary: preset unsigned đặt giới hạn cỡ (`c_limit,w_2000` + `max_file_size`) (4f nhắc).
 - Đã gợi ý 2a: trang tìm kiếm/lọc `noindex` không SSR catalog (bớt khuếch đại qua bypass `ssr`).
