@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { buildCatalogRedirects } from './src/lib/catalog-redirects.mjs';
 import { sentryOrigin } from './src/lib/sentry-origin.mjs';
+import { buildCsp } from './src/lib/csp.mjs';
 import { buildMiniappRedirects } from './src/lib/miniapp-redirects.mjs';
 
 const require = createRequire(import.meta.url);
@@ -16,14 +17,6 @@ const dirname = path.dirname(fileURLToPath(import.meta.url));
 const standalone = process.env.NEXT_STANDALONE === '1';
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001/api';
-// Chỉ lấy origin của API cho connect-src (bỏ path /api).
-const apiOrigin = (() => {
-  try {
-    return new URL(apiBaseUrl).origin;
-  } catch {
-    return '';
-  }
-})();
 
 const sentryConnect = sentryOrigin(process.env.NEXT_PUBLIC_SENTRY_DSN);
 
@@ -42,21 +35,9 @@ const sentryConnect = sentryOrigin(process.env.NEXT_PUBLIC_SENTRY_DSN);
  * nguyên Report-Only cho tới khi có quyết định đó.
  *
  * `'unsafe-inline'` cho script là điều Next cần khi chưa dựng nonce qua middleware — nó vẫn
- * chặn được script từ host lạ, tức chặn đường nhúng mã bên ngoài.
+ * chặn được script từ host lạ, tức chặn đường nhúng mã bên ngoài. Báo cáo vi phạm gửi về API (POST /api/csp-report), xem src/lib/csp.mjs.
  */
-const cspReportOnly = [
-  "default-src 'self'",
-  "base-uri 'self'",
-  "object-src 'none'",
-  "frame-ancestors 'none'",
-  "form-action 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https:",
-  "font-src 'self' data:",
-  "media-src 'self' blob: https://res.cloudinary.com",
-  `connect-src 'self'${apiOrigin ? ` ${apiOrigin}` : ''} https://api.cloudinary.com${sentryConnect ? ` ${sentryConnect}` : ''}`,
-].join('; ');
+const csp = buildCsp({ apiBaseUrl, sentryConnect, dev: process.env.NODE_ENV !== 'production' });
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -111,7 +92,8 @@ const nextConfig = {
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
           { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
-          { key: 'Content-Security-Policy-Report-Only', value: cspReportOnly },
+          { key: 'Content-Security-Policy-Report-Only', value: csp.policy },
+          ...(csp.reportingEndpoints ? [{ key: 'Reporting-Endpoints', value: csp.reportingEndpoints }] : []),
         ],
       },
     ];

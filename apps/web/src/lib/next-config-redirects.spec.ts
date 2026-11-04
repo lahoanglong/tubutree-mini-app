@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import nextConfig from '../../next.config.mjs';
 import { buildCatalogRedirects } from './catalog-redirects.mjs';
 import { miniappRedirects } from './route-map';
+import { CSP_REPORT_GROUP, buildCsp, cspReportUrl } from './csp.mjs';
 
 describe('next.config redirects()', () => {
   it('chuyển hướng danh mục cũ của trang chủ rồi đến danh sách sinh từ route map, đều 307', async () => {
@@ -35,6 +36,50 @@ describe('next.config CSP', () => {
     const csp = rules.flatMap((r) => r.headers).find((h) => h.key === 'Content-Security-Policy-Report-Only')!.value;
     const media = csp.split('; ').find((d) => d.startsWith('media-src '));
     expect(media?.split(' ')).toEqual(expect.arrayContaining(["'self'", 'blob:', 'https://res.cloudinary.com']));
+  });
+});
+
+describe('CSP gửi báo cáo vi phạm về API', () => {
+  const directive = (policy: string, name: string) => policy.split('; ').find((d) => d.startsWith(`${name} `));
+
+  it('report-uri và Reporting-Endpoints cùng trỏ POST /api/csp-report của API, report-to gọi đúng tên endpoint', () => {
+    const { policy, reportingEndpoints } = buildCsp({ apiBaseUrl: 'https://api.tubutree.com/api' });
+    expect(directive(policy, 'report-uri')).toBe('report-uri https://api.tubutree.com/api/csp-report');
+    expect(directive(policy, 'report-to')).toBe(`report-to ${CSP_REPORT_GROUP}`);
+    expect(reportingEndpoints).toBe(`${CSP_REPORT_GROUP}="https://api.tubutree.com/api/csp-report"`);
+  });
+
+  it('URL API có dấu / cuối hoặc query thì đường báo cáo vẫn đúng', () => {
+    expect(cspReportUrl('https://api.tubutree.com/api/')).toBe('https://api.tubutree.com/api/csp-report');
+    expect(cspReportUrl('https://api.tubutree.com/api?x=1')).toBe('https://api.tubutree.com/api/csp-report');
+  });
+
+  it('URL API rỗng, tương đối hoặc không phải http(s) thì không có report-uri, report-to và Reporting-Endpoints', () => {
+    for (const apiBaseUrl of [undefined, '', '/api', 'javascript:alert(1)']) {
+      const { policy, reportingEndpoints } = buildCsp({ apiBaseUrl });
+      expect(directive(policy, 'report-uri'), String(apiBaseUrl)).toBeUndefined();
+      expect(directive(policy, 'report-to'), String(apiBaseUrl)).toBeUndefined();
+      expect(reportingEndpoints, String(apiBaseUrl)).toBe('');
+      expect(directive(policy, 'connect-src'), String(apiBaseUrl)).toBe("connect-src 'self' https://api.cloudinary.com");
+    }
+  });
+
+  it("bản production không cho 'unsafe-eval', bản dev (next dev chạy mã qua eval) thì có", () => {
+    const prod = directive(buildCsp({ apiBaseUrl: 'https://api.tubutree.com/api' }).policy, 'script-src')!;
+    const dev = directive(buildCsp({ apiBaseUrl: 'https://api.tubutree.com/api', dev: true }).policy, 'script-src')!;
+    expect(prod.split(' ')).not.toContain("'unsafe-eval'");
+    expect(prod.split(' ')).toEqual(expect.arrayContaining(["'self'", "'unsafe-inline'"]));
+    expect(dev.split(' ')).toContain("'unsafe-eval'");
+  });
+
+  it('next.config gắn header Reporting-Endpoints khớp report-uri của chính sách đang dùng', async () => {
+    const headers = (await nextConfig.headers!()).flatMap((r) => r.headers);
+    const policy = headers.find((h) => h.key === 'Content-Security-Policy-Report-Only')!.value;
+    const endpoints = headers.find((h) => h.key === 'Reporting-Endpoints')?.value;
+    const reportUri = directive(policy, 'report-uri')!.slice('report-uri '.length);
+    expect(reportUri).toMatch(/\/csp-report$/);
+    expect(endpoints).toBe(`${CSP_REPORT_GROUP}="${reportUri}"`);
+    expect(directive(policy, 'report-to')).toBe(`report-to ${CSP_REPORT_GROUP}`);
   });
 });
 
