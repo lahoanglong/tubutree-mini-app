@@ -1739,10 +1739,14 @@ describe('PancakeProcessor — invoice.issued ghi invoiceUrl (RB-04)', () => {
   });
 
   it('ghi ISSUED lỗi → chưa báo admin, chưa báo khách; lần thử lại của webhook báo đúng một lần', async () => {
-    const { go, orderUpdate, notifications } = run('https://hoadon-tubu.evil.com/x.pdf');
+    const { go, orderUpdate, notifications, adminAlerts, customerNotices } = run('https://hoadon-tubu.evil.com/x.pdf');
     orderUpdate.mockRejectedValueOnce(new Error('db down'));
     await expect(go()).rejects.toThrow('db down');
     expect(notifications.notify).not.toHaveBeenCalled();
+    await go();
+    expect(orderUpdate).toHaveBeenCalledTimes(2);
+    expect(adminAlerts()).toHaveLength(1);
+    expect(customerNotices()).toHaveLength(1);
   });
 
   it('tin cho khách lỗi sau khi đã báo admin → admin đã có việc (lần thử lại dừng ở guard ISSUED)', async () => {
