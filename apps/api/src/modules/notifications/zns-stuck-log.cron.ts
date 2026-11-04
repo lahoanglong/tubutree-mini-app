@@ -9,6 +9,7 @@ import { withQueueTimeout } from '../../jobs/queue-timeout';
 import { markCronSkipped, TrackCron } from '../../common/cron-run/track-cron';
 import { runExclusive } from '../../common/cron-leader/run-exclusive';
 import { captureServerError } from '../../config/sentry';
+import { CRON_TZ } from '../../common/cron-tz';
 
 export type ZnsStuckSweepResult =
   | { skipped: 'RUNNING' | 'LOCKED' | 'NO_QUEUE' | 'REDIS' | 'ERROR' }
@@ -39,7 +40,7 @@ export class ZnsStuckLogCron {
     @Optional() @InjectQueue(QUEUE_NOTIFICATIONS) private readonly queue?: Queue,
   ) {}
 
-  @Cron('*/30 * * * *')
+  @Cron('*/30 * * * *', { timeZone: CRON_TZ })
   @TrackCron({ alertAfter: 2 })
   async sweepStuckZnsLogs(): Promise<ZnsStuckSweepResult> {
     if (!this.queue) return { skipped: 'NO_QUEUE' };
