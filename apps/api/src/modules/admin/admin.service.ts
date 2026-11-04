@@ -10,6 +10,8 @@ import { VARIATION_ORDER_BY } from '../catalog/variation-order';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
+import { revokeLostCtvMilestones } from '../affiliate/ctv-milestone-revoke';
+import { vnMonthBounds } from '../affiliate/ctv-milestones';
 import { NotificationsService } from '../notifications/notifications.service';
 import { paginated, skipTake } from '../../common/pagination';
 import { escapePrismaLike, foldVietnamese } from '../catalog/search-text';
@@ -770,8 +772,8 @@ export class AdminService {
     const out = await this.prisma
       .$transaction(
         async (tx) => {
-          const rows = await tx.$queryRaw<{ id: string; amount: number }[]>`
-            SELECT "id", "amount" FROM "commissions"
+          const rows = await tx.$queryRaw<{ id: string; amount: number; approvedAt: Date | null }[]>`
+            SELECT "id", "amount", "approvedAt" FROM "commissions"
             WHERE "affiliateUserId" = ${userId} AND "status" = 'APPROVED' AND "payoutBatchId" IS NULL
             ORDER BY "id" FOR NO KEY UPDATE`;
           const [user] = await tx.$queryRaw<{ affiliateRevokedAt: Date | null }[]>`
@@ -788,6 +790,10 @@ export class AdminService {
           });
           if (count !== ids.length) throw new ConflictException('Hoa hồng vừa đổi trạng thái, chưa huỷ gì cả. Tải lại trang rồi thử lại.');
           const amount = rows.reduce((sum, r) => sum + r.amount, 0);
+          // Như mọi đường đưa hoa hồng đã chốt về REJECTED (huỷ đơn, trả hàng, lệnh chuyển hỏng): hoa hồng rời doanh số tháng thì mốc thưởng
+          // tháng đã nhận mà doanh số nay dưới ngưỡng phải bị thu hồi, kẻo CTV giữ điểm mốc của doanh số không còn. Mỗi tháng một lần.
+          const months = new Map(rows.filter((r) => r.approvedAt).map((r) => [vnMonthBounds(r.approvedAt!).key, r.approvedAt!]));
+          for (const approvedAt of months.values()) await revokeLostCtvMilestones(tx, userId, approvedAt);
           await recordUserAdminEvent(tx, {
             userId,
             kind: 'WALLET_FORFEIT',

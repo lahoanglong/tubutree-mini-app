@@ -151,4 +151,46 @@ describe('Huỷ hoa hồng chờ rút của CTV bị thu hồi chạy song song 
     }
     expect(cancelled + kept).toBe(20);
   });
+
+  // Bất biến (không phải ca đua): chỉ khoản APPROVED chưa vào lệnh nào mới bị huỷ. Khoản đã gom vào lệnh rút (payoutBatchId) hay đã PAID
+  // thuộc về luồng chi tiền, huỷ ở đây là mất tiền đã chuyển. Ca đua thật của đường nhanh `assertNotRevoked` nằm ở các ca bên trên (tới phần tx).
+  it('bất biến: khoản đã gom vào lệnh rút (payoutBatchId) và khoản PAID không bị huỷ, chỉ khoản tự do bị huỷ', async () => {
+    const { user, commission } = await ctv(true);
+    const mk = async (status: 'APPROVED' | 'PAID', payoutBatchId: string | null) => {
+      const buyer = await createUser(prisma);
+      const order = await createOrder(prisma, { userId: buyer.id, status: 'DELIVERED', referrerUserId: user.id, total: 500_000 });
+      return prisma.commission.create({
+        data: { affiliateUserId: user.id, orderId: order.id, orderTotal: order.total, commissionableTotal: order.total, rate: 10, amount: 50_000, status, lockedAt: new Date(Date.now() - 30 * 864e5), approvedAt: new Date(), payoutBatchId, paidAt: status === 'PAID' ? new Date() : null },
+      });
+    };
+    const inBatch = await mk('APPROVED', 'batch-x');
+    const paid = await mk('PAID', 'batch-y');
+    await expect(admin.forfeitRevokedCommissions(boss.id, user.id, 'chỉ huỷ khoản tự do')).resolves.toEqual({ cancelled: 1, amount: 100_000 });
+    const status = async (id: string) => (await prisma.commission.findUniqueOrThrow({ where: { id }, select: { status: true, payoutBatchId: true } }));
+    expect(await status(commission.id)).toMatchObject({ status: 'REJECTED' });
+    expect(await status(inBatch.id)).toEqual({ status: 'APPROVED', payoutBatchId: 'batch-x' });
+    expect(await status(paid.id)).toEqual({ status: 'PAID', payoutBatchId: 'batch-y' });
+  });
+
+  // m5: huỷ về REJECTED như huỷ đơn/trả hàng nên mốc thưởng tháng đã nhận mà doanh số nay dưới ngưỡng phải bị thu hồi.
+  it('huỷ làm doanh số tháng về 0: điểm thưởng mốc đã nhận bị thu hồi cùng giao dịch', async () => {
+    const phone = newPhone();
+    const user = await createUser(prisma, { role: 'AFFILIATE', phone });
+    for (const amount of [2_200_000, 8_000_000]) {
+      const buyer = await createUser(prisma);
+      const order = await createOrder(prisma, { userId: buyer.id, status: 'DELIVERED', referrerUserId: user.id, total: amount });
+      await prisma.commission.create({
+        data: { affiliateUserId: user.id, orderId: order.id, orderTotal: amount, commissionableTotal: amount, rate: 10, amount: amount / 10, status: 'APPROVED', lockedAt: new Date(Date.now() - 30 * 864e5), approvedAt: new Date() },
+      });
+    }
+    await affiliate.claimMilestone(user.id, 'milestone-3m');
+    await affiliate.claimMilestone(user.id, 'milestone-10m');
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).pointsBalance).toBe(250_000);
+    await admin.setUserRole(boss.id, phone, 'CUSTOMER');
+    await admin.forfeitRevokedCommissions(boss.id, user.id, 'huỷ theo quyết định');
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).pointsBalance).toBe(0);
+    const claims = await prisma.ctvMilestoneClaim.findMany({ where: { userId: user.id } });
+    expect(claims.length).toBeGreaterThan(0);
+    expect(claims.every((c) => c.revokedAt !== null)).toBe(true);
+  });
 });

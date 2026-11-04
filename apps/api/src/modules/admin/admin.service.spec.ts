@@ -1,3 +1,5 @@
+jest.mock('../affiliate/ctv-milestone-revoke', () => ({ revokeLostCtvMilestones: jest.fn().mockResolvedValue([]) }));
+import { revokeLostCtvMilestones } from '../affiliate/ctv-milestone-revoke';
 import { BadRequestException, ConflictException, ForbiddenException, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { AdminService } from './admin.service';
 import { OrderReversalService } from '../orders/order-reversal.service';
@@ -2524,7 +2526,7 @@ describe('AdminService.listLinkedMerchantProducts — lọc liên kết ký gử
  */
 /** Hàng đợi chờ duyệt (PENDING / REQUESTED) cần xem CŨ NHẤT trước — web gửi order=asc. */
 describe('AdminService.forfeitRevokedCommissions', () => {
-  function forfeitPrisma(opts: { rows?: { id: string; amount: number }[]; user?: { affiliateRevokedAt: Date | null } | null; updateCount?: number }) {
+  function forfeitPrisma(opts: { rows?: { id: string; amount: number; approvedAt?: Date | null }[]; user?: { affiliateRevokedAt: Date | null } | null; updateCount?: number }) {
     const rows = opts.rows ?? [{ id: 'c1', amount: 60_000 }, { id: 'c2', amount: 40_000 }];
     const queries: string[] = [];
     const updateMany = jest.fn().mockResolvedValue({ count: opts.updateCount ?? rows.length });
@@ -2542,6 +2544,17 @@ describe('AdminService.forfeitRevokedCommissions', () => {
     const prisma = makePrisma({ $transaction: jest.fn((cb: (t: unknown) => Promise<unknown>) => cb(tx)) });
     return { prisma, queries, updateMany, eventCreate };
   }
+
+  it('thu hồi mốc thưởng tháng của CTV cho mỗi tháng có hoa hồng bị huỷ (một lần mỗi tháng), cùng giao dịch', async () => {
+    const revoke = revokeLostCtvMilestones as jest.Mock;
+    revoke.mockClear();
+    const oct = new Date('2026-10-05T03:00:00Z');
+    const t = forfeitPrisma({ rows: [{ id: 'c1', amount: 1, approvedAt: oct }, { id: 'c2', amount: 2, approvedAt: new Date('2026-10-20T03:00:00Z') }, { id: 'c3', amount: 3, approvedAt: new Date('2026-09-20T03:00:00Z') }, { id: 'c4', amount: 4, approvedAt: null }] });
+    await mkAdmin(t.prisma).forfeitRevokedCommissions('admin1', 'u1', 'Quyết định của quản lý');
+    expect(revoke).toHaveBeenCalledTimes(2);
+    expect(revoke.mock.calls.map((c) => c[1])).toEqual(['u1', 'u1']);
+    expect(t.updateMany.mock.invocationCallOrder[0]).toBeLessThan(revoke.mock.invocationCallOrder[0]!);
+  });
 
   it('khoá hoa hồng trước rồi tới dòng người dùng (cùng thứ tự với requestPayout), huỷ mọi khoản, ghi WALLET_FORFEIT kèm lý do', async () => {
     const t = forfeitPrisma({});
