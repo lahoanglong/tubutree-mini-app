@@ -41,9 +41,15 @@ export function Composer({ onSend, onSendImage, onImageError }: Props) {
       return;
     }
     setUploading(true);
-    const url = await uploadToCloudinary(await prepareForCloudinary(file));
+    let url: string | null = null;
+    try {
+      url = await uploadToCloudinary(await prepareForCloudinary(file));
+    } catch {
+      url = null;
+    } finally {
+      if (mountedRef.current) setUploading(false);
+    }
     if (!mountedRef.current) return;
-    setUploading(false);
     if (url) onSendImage(url);
     else onImageError('Tải ảnh thất bại. Hãy chọn lại ảnh khác.');
   };

@@ -40,8 +40,16 @@ function mount(fetchImpl?: () => Promise<unknown>) {
     });
     await flush(8);
   };
+  const attachClickable = () => {
+    const spy = vi.spyOn(input, 'click').mockImplementation(() => {});
+    const btn = mounted!.container.querySelector('button[aria-label="Đính kèm ảnh"]') as HTMLButtonElement;
+    act(() => {
+      btn.click();
+    });
+    return spy.mock.calls.length === 1;
+  };
   const sent = () => fetchMock.mock.calls[0]![1].body.get('file') as Blob;
-  return { pick, sent, onSendImage, onImageError };
+  return { pick, sent, attachClickable, onSendImage, onImageError };
 }
 const file = (type: string, bytes: number, name: string) => new File([new Uint8Array(bytes)], name, { type });
 
@@ -103,6 +111,7 @@ describe('Composer chat CSKH (web) — ảnh gửi lên Cloudinary', () => {
     expect(m.onSendImage).toHaveBeenCalledWith('https://res.cloudinary.com/demo/a.jpg');
     expect(m.sent()).toBe(big);
     expect(m.onImageError).not.toHaveBeenCalled();
+    expect(m.attachClickable()).toBe(true);
   });
 
   it('tải lên lỗi thì báo lỗi và cho chọn ảnh lại', async () => {
@@ -111,5 +120,29 @@ describe('Composer chat CSKH (web) — ảnh gửi lên Cloudinary', () => {
     await m.pick(file('image/jpeg', 12 * 1024 * 1024, 'big.jpg'));
     expect(m.onImageError).toHaveBeenCalledWith('Tải ảnh thất bại. Hãy chọn lại ảnh khác.');
     expect(m.onSendImage).not.toHaveBeenCalled();
+  });
+
+  it('bước nén ném lỗi thì báo lỗi, không gửi ảnh và nút đính kèm bấm lại được', async () => {
+    stubCanvas();
+    const prep = await import('@/components/account/prepare-for-cloudinary');
+    vi.spyOn(prep, 'prepareForCloudinary').mockRejectedValue(new Error('nén lỗi'));
+    const m = mount();
+    await m.pick(file('image/jpeg', 12 * 1024 * 1024, 'big.jpg'));
+    expect(m.onImageError).toHaveBeenCalledWith('Tải ảnh thất bại. Hãy chọn lại ảnh khác.');
+    expect(m.onSendImage).not.toHaveBeenCalled();
+    expect(m.attachClickable()).toBe(true);
+  });
+
+  it('tải lên ném lỗi thì báo lỗi, không gửi ảnh và nút đính kèm bấm lại được', async () => {
+    stubCanvas();
+    const m = mount(async () => {
+      throw new Error('mất mạng');
+    });
+    const up = await import('@/components/account/cloudinary-upload');
+    vi.spyOn(up, 'uploadToCloudinary').mockRejectedValue(new Error('upload lỗi'));
+    await m.pick(file('image/jpeg', 12 * 1024 * 1024, 'big.jpg'));
+    expect(m.onImageError).toHaveBeenCalledWith('Tải ảnh thất bại. Hãy chọn lại ảnh khác.');
+    expect(m.onSendImage).not.toHaveBeenCalled();
+    expect(m.attachClickable()).toBe(true);
   });
 });
