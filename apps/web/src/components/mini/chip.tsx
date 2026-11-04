@@ -42,7 +42,7 @@ export function Chip({
   className,
   style,
 }: ChipProps) {
-  const className2 = ['tubu-press', 'tubu-hit-44', className].filter(Boolean).join(' ');
+  const chipClass = ['tubu-press', 'tubu-hit-44', className].filter(Boolean).join(' ');
   const baseStyle: CSSProperties = {
     border: 'none',
     cursor: 'pointer',
@@ -74,13 +74,13 @@ export function Chip({
   );
   if (href) {
     return (
-      <Link href={href} aria-label={ariaLabel} className={className2} onClick={onPress} style={{ ...baseStyle, textDecoration: 'none' }}>
+      <Link href={href} aria-label={ariaLabel} className={chipClass} {...(onPress ? { onClick: onPress } : {})} style={{ ...baseStyle, textDecoration: 'none' }}>
         {content}
       </Link>
     );
   }
   return (
-    <button type="button" aria-pressed={selected} aria-label={ariaLabel} className={className2} onClick={onPress} style={baseStyle}>
+    <button type="button" aria-pressed={selected} aria-label={ariaLabel} className={chipClass} onClick={onPress} style={baseStyle}>
       {content}
     </button>
   );

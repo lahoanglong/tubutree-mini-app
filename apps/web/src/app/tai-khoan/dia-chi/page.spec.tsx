@@ -86,8 +86,8 @@ describe('/tai-khoan/dia-chi — Sổ địa chỉ (BUYERWEB-14)', () => {
     expect(items[0]!.textContent).toContain('Nguyễn An · 0912345678');
     expect(items[0]!.textContent).toContain('Mặc định');
     expect(items[0]!.textContent).toContain('1 Xuân Thuỷ, Cầu Giấy, Hà Nội');
-    expect(btn(c, 'Đặt địa chỉ của Nguyễn An làm mặc định')).toBeUndefined();
-    expect(btn(c, 'Đặt địa chỉ của Trần Bình làm mặc định')).toBeDefined();
+    expect(btn(c, 'Đặt mặc định cho địa chỉ của Nguyễn An')).toBeUndefined();
+    expect(btn(c, 'Đặt mặc định cho địa chỉ của Trần Bình')).toBeDefined();
   });
 
   it('chưa có địa chỉ nào: nói rõ và vẫn có nút thêm', async () => {
@@ -143,7 +143,7 @@ describe('/tai-khoan/dia-chi — Sổ địa chỉ (BUYERWEB-14)', () => {
 
   it('đặt mặc định: PATCH isDefault', async () => {
     const c = await mount();
-    click(btn(c, 'Đặt địa chỉ của Trần Bình làm mặc định')!);
+    click(btn(c, 'Đặt mặc định cho địa chỉ của Trần Bình')!);
     await flush(4);
     expect(mocks.update).toHaveBeenCalledWith('a2', { isDefault: true });
   });
@@ -204,7 +204,7 @@ describe('/tai-khoan/dia-chi — Sổ địa chỉ (BUYERWEB-14)', () => {
     mocks.update.mockRejectedValue(new Error('Không đặt được mặc định'));
     mocks.list = [A1, A2];
     await flush(4);
-    click(btn(c, 'Đặt địa chỉ của Trần Bình làm mặc định')!);
+    click(btn(c, 'Đặt mặc định cho địa chỉ của Trần Bình')!);
     await flush(4);
     expect(c.querySelector('[role="status"]')).toBeNull();
     expect(c.querySelector('[role="alert"]')?.textContent).toContain('Không đặt được mặc định');

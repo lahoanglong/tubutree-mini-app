@@ -149,7 +149,7 @@ describe('Trang Giờ vàng (web): khung giờ và danh sách', () => {
   it('có tiêu đề h1, dải tab khung giờ chọn sẵn khung đang diễn ra, panel gắn với tab', async () => {
     const c = await mount();
     expect(c.querySelector('h1')!.textContent).toBe('Giờ vàng');
-    expect(tabs(c).map((t) => t.getAttribute('aria-label'))).toEqual(['12:00, đang diễn ra', '20:00, sắp diễn ra']);
+    expect(tabs(c).map((t) => t.getAttribute('aria-label'))).toEqual(['12:00 Đang diễn ra', '20:00 Sắp diễn ra']);
     expect(tabs(c)[0]!.getAttribute('aria-selected')).toBe('true');
     expect(named(c, 'Mua ngay Sản phẩm a')).not.toBeNull();
     expect(named(c, 'Mua ngay Sản phẩm b')).not.toBeNull();

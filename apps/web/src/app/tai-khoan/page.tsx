@@ -70,7 +70,6 @@ function Stat({ label, value, href }: { label: string; value: string; href: stri
   return (
     <Link
       href={href}
-      aria-label={`${label}: ${value}`}
       className="tubu-press block min-h-11 rounded-card bg-[var(--color-bg-surface)] px-1 py-2.5 text-center shadow-[var(--elevation-1)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-forest-600"
     >
       <Text variant="price-md" as="div" tone="brand" style={{ fontVariantNumeric: 'tabular-nums' }}>

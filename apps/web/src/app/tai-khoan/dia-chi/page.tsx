@@ -224,7 +224,7 @@ export default function AddressBookPage() {
                           type="button"
                           onClick={() => makeDefault.mutate(a.id)}
                           disabled={makeDefault.isPending}
-                          aria-label={`Đặt địa chỉ của ${a.recipient} làm mặc định`}
+                          aria-label={`Đặt mặc định cho địa chỉ của ${a.recipient}`}
                           className={`${ui.btnText} ${LINK_MINI}`}
                         >
                           Đặt mặc định

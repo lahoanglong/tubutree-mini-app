@@ -178,7 +178,7 @@ describe('hub /tai-khoan — thẻ đầu và mã giới thiệu', () => {
 });
 
 describe('hub /tai-khoan — ba số và hàng trạng thái đơn', () => {
-  const stat = (c: HTMLElement, label: string) => Array.from(c.querySelectorAll('a')).find((a) => a.getAttribute('aria-label')?.startsWith(`${label}:`))!;
+  const stat = (c: HTMLElement, label: string) => Array.from(c.querySelectorAll('a')).find((a) => a.getAttribute('aria-label') === null && (a.textContent ?? '').endsWith(label))!;
 
   it('Điểm Xanh, Ví Tubu, Mã giảm giá; Mã giảm giá đếm số mã và mở mục mã của trang Ưu đãi', async () => {
     const c = await mount();

@@ -109,10 +109,7 @@ test.describe('axe smoke web 375px: serious/critical', () => {
       const mismatch = await runAxeRules(page, ['label-content-name-mismatch']);
       // Lọc theo selector của nút mua (`data-testid="buy-now"`): axe cắt thuộc tính dài trong `node.html` (>300 ký tự còn 20 ký tự + "..."), nên lọc theo class hay chữ trong HTML không đáng tin.
       const nodes = mismatch.flatMap((v) => v.nodes.map((n) => ({ target: n.target.join(' '), html: n.html ?? '' })));
-      // Thẻ sản phẩm, ô thương hiệu, tab giờ vàng và dải điểm ở Tài khoản còn lệch nhãn: thuộc phần việc khác nên chỉ ghi chú, chưa chặn.
-      const own = nodes.filter((n) => (n.target.includes('buy-now') || n.html.includes('buy-now')));
-      if (nodes.length > own.length) test.info().annotations.push({ type: 'label-in-name-ngoai-pham-vi', description: nodes.map((n) => n.target).join(' | ').slice(0, 500) });
-      expect(own.map((n) => `${screen.name}: label-content-name-mismatch ${n.target}`)).toEqual([]);
+      expect(nodes.map((n) => `${screen.name}: label-content-name-mismatch ${n.target} ${n.html.slice(0, 160)}`)).toEqual([]);
       if (screen.name === 'Chi tiết sản phẩm') {
         // Kiểm trực tiếp: tên truy cập của nút "Mua ngay" ở thanh dính phải bắt đầu bằng chữ nhìn thấy (WCAG 2.5.3), không dựa vào việc axe có bắt được hay không.
         const buy = page.getByTestId('buy-now');
@@ -200,8 +197,7 @@ test.describe('axe web: màn khách đã đăng nhập ở 375 / 768 / 1440', ()
         expect(staleBaseline('web', key, found)).toEqual([]);
         const mismatch = await runAxeRules(page, ['label-content-name-mismatch']);
         const nodes = mismatch.flatMap((v) => v.nodes.map((n) => ({ target: n.target.join(' '), html: n.html ?? '' })));
-        if (nodes.length > 0) test.info().annotations.push({ type: 'label-in-name-ngoai-pham-vi', description: nodes.map((n) => n.target).join(' | ').slice(0, 500) });
-        expect(nodes.filter((n) => (n.target.includes('buy-now') || n.html.includes('buy-now'))).map((n) => `${key}: ${n.target}`)).toEqual([]);
+        expect(nodes.map((n) => `${key}: ${n.target} ${n.html.slice(0, 160)}`)).toEqual([]);
       });
     }
   }
