@@ -2037,6 +2037,8 @@ model CashbackTransaction {
   @@index([userId, status])
   // Cron settle hoàn tiền hết hold: status = CONFIRMED AND confirmedAt <= mốc.
   @@index([status, confirmedAt])
+  // Job data-retention loại click còn giao dịch trỏ tới (NOT EXISTS theo clickId).
+  @@index([clickId])
   @@map("cashback_transactions")
 }
 
