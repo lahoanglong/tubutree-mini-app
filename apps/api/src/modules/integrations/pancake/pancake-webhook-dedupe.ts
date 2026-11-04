@@ -45,8 +45,11 @@ export function pancakeDedupeKey(eventType: string, body: unknown): string {
   return `${eventType.slice(0, 120)}|${hash}`;
 }
 
-/** Mã đơn Tubu do pushOrder ghi vào note ("Order code: <mã>") — mọi tiền tố (TUBU, TUBUSUB, DLR). */
-const NOTE_ORDER_CODE = /Order code:\s*([A-Z]+\d+)/;
+/**
+ * Mã đơn Tubu do pushOrder ghi vào note: dòng mở đầu "Order code: <mã>" rồi ` | ` hoặc hết dòng (pancakeOrderNote), mọi tiền tố
+ * (TUBU, TUBUSUB, DLR). Neo đầu dòng và cuối mã: chuỗi "Order code: …" nằm giữa câu khách tự viết không phải mã đơn của Tubu.
+ */
+export const NOTE_ORDER_CODE = /^[ \t]*Order code:[ \t]*([A-Z]+\d+)[ \t]*(?:\||$)/m;
 
 /** Pancake POS gửi nguyên object đơn ở top-level; luồng cũ bọc trong {event, data}. */
 export function pancakeEventData(rawPayload: unknown): Record<string, unknown> {

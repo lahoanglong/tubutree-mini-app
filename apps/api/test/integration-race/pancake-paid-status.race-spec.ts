@@ -54,7 +54,7 @@ describe('Pancake webhook: thanh toán + trạng thái cùng một sự kiện (
 
   async function bankTransferOrder(total = 450_000) {
     const user = await createUser(prisma, { role: 'CUSTOMER' });
-    return createOrder(prisma, {
+    const order = await createOrder(prisma, {
       userId: user.id,
       status: 'PENDING_PAYMENT',
       paymentMethod: 'BANK_TRANSFER',
@@ -62,6 +62,8 @@ describe('Pancake webhook: thanh toán + trạng thái cùng một sự kiện (
       total,
       subtotal: total,
     });
+    // Đơn đã đẩy lên Pancake: id khớp với `pc-<mã>` trong payload của các ca, và tiền chỉ lật PAID cho đơn đã gắn đơn Pancake.
+    return prisma.order.update({ where: { id: order.id }, data: { pancakeOrderId: `pc-${order.code}` } });
   }
 
   async function deliver(payload: Record<string, unknown>) {

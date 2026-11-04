@@ -685,6 +685,12 @@ export class PancakeProcessor extends WorkerHost {
     if (await hasDealerCreditDebit(this.prisma, order)) return null;
     const flaggedPaid = isPancakeOrderPaid(data, order.total);
     const reported = pancakePaidAmount(data) || (flaggedPaid ? order.total : 0);
+    // Đơn Tubu chưa gắn đơn Pancake nào mà khớp được chỉ nhờ mã trong note: ai tạo đơn trên Pancake mang đúng dòng mã đó cũng khớp.
+    // Cờ is_paid của đơn như vậy chưa đủ để lật PAID hay ghi khoản hoàn: để Kế toán đối chiếu sao kê rồi bấm "Đã nhận tiền".
+    if (!order.pancakeOrderId) {
+      if (flaggedPaid || reported > 0) await this.holdUnattachedPayment(order, data, reported);
+      return null;
+    }
     if (order.status === 'CANCELLED' || order.status === 'RETURNED') {
       await this.recordLatePancakePayment(order, reported);
       return null;
@@ -710,6 +716,27 @@ export class PancakeProcessor extends WorkerHost {
       await this.recordLatePancakePayment(current ?? order, reported);
     }
     return null;
+  }
+
+  /**
+   * Dấu bền trong lịch sử đơn (không nằm ô pancakeAttention vì nhiều luồng ghi đè cả ô) + báo ADMIN một lần cho mỗi đơn Pancake.
+   * Đơn vẫn nhận phần vận chuyển/trạng thái của cùng sự kiện; chỉ phần tiền chờ Kế toán.
+   */
+  private async holdUnattachedPayment(order: Order, data: Record<string, unknown>, reported: number): Promise<void> {
+    const rawId = data['id'] ?? data['order_id'];
+    const pancakeRef = rawId === null || rawId === undefined || rawId === '' ? '?' : String(rawId);
+    const note = `Pancake báo đã thanh toán (đơn Pancake #${pancakeRef}) nhưng đơn Tubu chưa gắn đơn Pancake nào: chờ Kế toán xác nhận`;
+    const logged = await this.prisma.orderStatusHistory.findFirst({ where: { orderId: order.id, actorType: 'PANCAKE', note }, select: { id: true } });
+    if (logged) return;
+    await this.prisma.orderStatusHistory.create({
+      data: { orderId: order.id, fromStatus: order.status, toStatus: order.status, actorType: 'PANCAKE', note },
+    });
+    const amount = reported > 0 ? `${formatVnd(reported)}/${formatVnd(order.total)}` : formatVnd(order.total);
+    const reason =
+      `Chờ Kế toán: đơn Pancake #${pancakeRef} mang mã ${order.code} báo đã thanh toán (${amount}), nhưng đơn Tubu chưa gắn đơn Pancake nào nên hệ thống KHÔNG tự xác nhận đã nhận tiền. ` +
+      'Kế toán đối chiếu sao kê ngân hàng rồi bấm "Đã nhận tiền" nếu khách đã chuyển; kiểm tra đơn Pancake này có phải đơn do Tubu đẩy không.';
+    this.logger.warn(`Đơn ${order.code}: ${reason}`);
+    await this.alerts.alert(order.code, reason, PANCAKE_ALERT_TEMPLATE);
   }
 
   private async recordLatePancakePayment(order: Order, reported: number): Promise<void> {
