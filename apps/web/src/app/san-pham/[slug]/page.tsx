@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { AlertCircle, Check, ChevronRight } from 'lucide-react';
 import { fetchProductBundles } from '@tubutree/app-core/api/bundle';
 import { fetchBoughtTogether, fetchRelated } from '@tubutree/app-core/api/catalog';
-import { fetchActiveFlashSales } from '@tubutree/app-core/api/flash-sale';
+import { fetchActiveFlashSalesNoSync } from '@/lib/server-flash';
 import { publicConfigQuery } from '@tubutree/app-core/queries/config';
 import { formatSold, getProduct, pdpFulfillerText, pdpPartnerNote, pdpUnavailableText } from '@/lib/api';
 import AddToCart from '@/components/add-to-cart';
@@ -76,7 +76,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
     orUndefined(fetchBoughtTogether(http, product.slug)),
     orUndefined(fetchProductBundles(http, product.slug)),
     // Giờ vàng đổi theo giờ và theo số suất còn: giữ ngắn như Trang chủ (lib/home-initial.ts), nên hạn làm mới của trang này thực tế là 60 giây.
-    orUndefined(fetchActiveFlashSales(createServerHttp({ revalidate: FLASH_REVALIDATE_S }))),
+    orUndefined(fetchActiveFlashSalesNoSync(createServerHttp({ revalidate: FLASH_REVALIDATE_S }))),
     orUndefined(publicConfigQuery(http).queryFn()),
   ]);
   // Hết giờ rồi thì không đưa vào HTML: lần tải ngay sau đó sẽ không còn, thanh Giờ vàng biến mất và trang nhảy.

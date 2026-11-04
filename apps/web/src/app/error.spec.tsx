@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
 
 const mocks = vi.hoisted(() => ({ report: vi.fn(), reload: vi.fn() }));
-vi.mock('@/lib/error-report', () => ({ reportError: mocks.report }));
+vi.mock('@/lib/error-report', () => ({ reportError: mocks.report, reportErrorSettled: async (e: unknown) => mocks.report(e) }));
 
 import ErrorPage from './error';
 
@@ -12,9 +12,11 @@ beforeEach(() => {
   sessionStorage.clear();
   mocks.report.mockReset();
   mocks.reload.mockReset();
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ status: 200 }));
   Object.defineProperty(window, 'location', { configurable: true, value: { ...window.location, reload: mocks.reload } });
 });
 afterEach(() => {
+  vi.unstubAllGlobals();
   mounted?.unmount();
   mounted = null;
 });
@@ -33,8 +35,7 @@ describe('app/error.tsx', () => {
   });
   it('lỗi chunk lần đầu: tải lại một lần, không vẽ khối lỗi', async () => {
     mounted = render(<ErrorPage error={chunkErr} reset={vi.fn()} />);
-    await flush();
-    expect(mocks.reload).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(mocks.reload).toHaveBeenCalledTimes(1));
     expect(mounted.container.innerHTML).toBe('');
   });
   it('lỗi chunk sau khi đã tải lại: hiện "Tải lại trang", bấm là tải lại chứ không reset', async () => {

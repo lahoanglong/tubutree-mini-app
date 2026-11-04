@@ -15,6 +15,8 @@ import { PdpCoupons, PdpFreeship } from './pdp-extras';
 const html = (ui: React.ReactElement) => renderToString(<QueryClientProvider client={new QueryClient()}>{ui}</QueryClientProvider>);
 const CONFIG = { freeshipThreshold: 350_000, subscribeDiscountPct: 0.12, affiliateWalletMultiplier: 1.5, cashbackHoldDays: 30, waste: { enabled: false, dropoff: false, mailin: false, pickup: false }, shippingEta: null };
 
+// Hiệu ứng ẩn/giữ chỗ nằm ở lớp Tailwind theo thuộc tính của <html> (`data-restoring`, `data-has-offers`), mà jsdom không có stylesheet để tính kiểu: ở đây chỉ kiểm HTML có đúng
+// phần tử và đúng lớp; hiệu quả thật (không xê dịch bố cục) do e2e `pdp-flash-cls`, `flash-sheet-price` đo bằng CLS.
 describe('PdpFreeship: HTML server', () => {
   it('đang tải phiên + config server tải sẵn: dòng có trong HTML với ngưỡng thật, giấu chữ chỉ khi <html> có data-restoring', () => {
     const out = html(<PdpFreeship initialConfig={CONFIG} />);

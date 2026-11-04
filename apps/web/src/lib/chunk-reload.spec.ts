@@ -1,13 +1,16 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { CHUNK_RELOAD_WINDOW_MS, isChunkLoadError, reloadOnceForChunkError } from './chunk-reload';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { CHUNK_RELOAD_WINDOW_MS, CHUNK_REPORT_WAIT_MS, isChunkLoadError, reloadOnceForChunkError } from './chunk-reload';
 
 const reload = vi.fn();
 beforeEach(() => {
+  vi.useFakeTimers();
   sessionStorage.clear();
   reload.mockReset();
   Object.defineProperty(window, 'location', { configurable: true, value: { ...window.location, reload } });
 });
+
+afterEach(() => vi.useRealTimers());
 
 describe('isChunkLoadError', () => {
   it('nhận ChunkLoadError và các câu báo của webpack/trình duyệt', () => {
@@ -25,24 +28,43 @@ describe('isChunkLoadError', () => {
 });
 
 describe('reloadOnceForChunkError', () => {
-  it('beforeReload chạy một lần, trước khi tải lại; lần bị khoá thì không chạy', () => {
-    const before = vi.fn();
+  it('beforeReload chạy một lần; tải lại chỉ sau khi báo xong; lần bị khoá thì không chạy', async () => {
+    let done!: () => void;
+    const before = vi.fn(() => new Promise<void>((r) => (done = r)));
     expect(reloadOnceForChunkError(5_000_000, before)).toBe(true);
     expect(before).toHaveBeenCalledTimes(1);
+    await Promise.resolve();
+    expect(reload).not.toHaveBeenCalled();
+    done();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(reload).toHaveBeenCalledTimes(1);
     expect(before.mock.invocationCallOrder[0]!).toBeLessThan(reload.mock.invocationCallOrder[0]!);
     expect(reloadOnceForChunkError(5_000_001, before)).toBe(false);
     expect(before).toHaveBeenCalledTimes(1);
   });
-  it('beforeReload ném lỗi: vẫn tải lại', () => {
-    expect(reloadOnceForChunkError(6_000_000, () => { throw new Error('x'); })).toBe(true);
+  it('báo lỗi treo: chờ tối đa CHUNK_REPORT_WAIT_MS rồi tải lại', async () => {
+    reloadOnceForChunkError(7_000_000, () => new Promise(() => undefined));
+    await vi.advanceTimersByTimeAsync(CHUNK_REPORT_WAIT_MS - 1);
+    expect(reload).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(2);
     expect(reload).toHaveBeenCalledTimes(1);
   });
-  it('lần đầu tải lại; lần hai trong cửa sổ thì không; hết cửa sổ thì cho lại', () => {
+  it('beforeReload ném lỗi hay từ chối: vẫn tải lại', async () => {
+    expect(reloadOnceForChunkError(6_000_000, () => { throw new Error('x'); })).toBe(true);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(reloadOnceForChunkError(6_500_000, () => Promise.reject(new Error('y')))).toBe(true);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(reload).toHaveBeenCalledTimes(2);
+  });
+  it('lần đầu tải lại; lần hai trong cửa sổ thì không; hết cửa sổ thì cho lại', async () => {
     expect(reloadOnceForChunkError(1_000_000)).toBe(true);
+    await vi.advanceTimersByTimeAsync(0);
     expect(reload).toHaveBeenCalledTimes(1);
     expect(reloadOnceForChunkError(1_000_000 + CHUNK_RELOAD_WINDOW_MS - 1)).toBe(false);
     expect(reload).toHaveBeenCalledTimes(1);
     expect(reloadOnceForChunkError(1_000_000 + CHUNK_RELOAD_WINDOW_MS + 1)).toBe(true);
+    await vi.advanceTimersByTimeAsync(0);
     expect(reload).toHaveBeenCalledTimes(2);
   });
   it('sessionStorage ném lỗi: không tải lại (không bảo vệ được khỏi vòng lặp)', () => {

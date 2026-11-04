@@ -11,18 +11,24 @@ const CLS_MAX = 0.02;
 const HOUR = 3_600_000;
 let flash: FlashPdp | null = null;
 
-test.beforeAll(async ({ request }) => {
-  test.setTimeout(150_000);
+// Các ca dùng chung một đợt Giờ vàng gieo vào DB tạm, và bản dựng sẵn của trang chỉ đúng khi không ai xoá/gieo lại giữa chừng: chạy tuần tự trong một worker, và chỉ ở project desktop
+// (khung nhìn tự đặt trong từng ca). Project Mobile chạy cùng tệp ở worker khác sẽ gieo/xoá cùng phân loại song song, rồi một lần dựng lại có thể cache danh sách rỗng.
+test.describe.configure({ mode: 'serial' });
+
+test.beforeAll(async ({ request }, testInfo) => {
+  test.setTimeout(240_000);
+  if (testInfo.project.name !== 'Web Customer') return;
   flash = await seedFlashPdp(request);
   if (!flash) return;
-  // Bản server của Next giữ danh sách Giờ vàng trong bộ nhớ đệm fetch tới 60 giây (Trang chủ của spec trước đã gọi cùng đường): dò bằng các sản phẩm khác cùng đợt,
-  // mỗi lần một sản phẩm (HTML đã dựng của một trang giữ 5 phút), tới khi HTML có thanh Giờ vàng; rồi mới đo trang chính.
+  // Bản server của Next giữ danh sách Giờ vàng trong bộ nhớ đệm fetch tới 60 giây (Trang chủ của spec trước đã gọi cùng đường), và trang chi tiết dựng lại sau tối đa 60 giây:
+  // hỏi chính trang chính mỗi 5 giây tới khi HTML có thanh Giờ vàng (lần dựng lại chạy nền, lần hỏi kế tiếp thấy bản mới).
   const web = `http://localhost:${process.env.E2E_WEB_PORT}`;
-  for (const slug of flash.probeSlugs) {
-    const html = await request.get(`${web}/san-pham/${slug}`).then((r) => r.text()).catch(() => '');
+  for (let i = 0; i < 24; i++) {
+    const html = await request.get(`${web}/san-pham/${flash.slug}`).then((r) => r.text()).catch(() => '');
     if (html.includes('flash-price-bar')) return;
     await new Promise((r) => setTimeout(r, 5_000));
   }
+  throw new Error(`HTML của /san-pham/${flash.slug} không có thanh Giờ vàng sau 2 phút: bản dựng sẵn không thấy đợt vừa gieo`);
 });
 test.afterAll(async () => {
   test.setTimeout(120_000);
@@ -80,15 +86,20 @@ test('PDP Giờ vàng: đợt đã hết giữa lúc server dựng HTML và lúc
     if (m.type() === 'error' && /hydrat|did not match|Minified React error #4(18|19|2\d)/i.test(m.text())) problems.push(m.text());
   });
   page.on('pageerror', (e) => problems.push(String(e)));
-  api.get('/flash-sales/active', []);
   api.get('/flash-sales/me/allowance', { items: {} });
   api.get('/config/public', { freeshipThreshold: 350000, subscribeDiscountPct: 0.12 });
   api.get('/me/wishlist/ids', []);
   api.get('/cart', { items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 350000, itemCount: 0 });
   const p = `/products/${f.slug}`;
   api.allowUnmocked(`GET ${p}`, `GET ${p}/related`, `GET ${p}/bought-together`, `GET ${p}/bundles`, `GET ${p}/reviews`, `GET ${p}/stock`, 'GET /products', 'GET /products/for-you', 'GET /me/coupons', 'POST /events');
+  // Không bao giờ trả lời danh sách Giờ vàng (đăng ký sau cùng nên thắng mock chung): thanh chỉ có thể biến mất vì mốc giờ chuyển sang đồng hồ máy khách sau mount, không phải vì danh sách mới về rỗng.
+  let activeAsked = 0;
+  await page.route('**/flash-sales/active*', () => {
+    activeAsked += 1;
+  });
   await page.goto(`/san-pham/${f.slug}`);
   await expect(page.getByTestId('flash-price-bar')).toHaveCount(0, { timeout: 20_000 });
   await page.waitForTimeout(1000);
+  expect(activeAsked, 'trình duyệt phải đã hỏi danh sách (và không nhận được trả lời nào)').toBeGreaterThan(0);
   expect(problems).toEqual([]);
 });

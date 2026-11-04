@@ -1,6 +1,6 @@
 import { HOME_COMBOS_LIMIT, fetchHomeCombos } from '@tubutree/app-core/api/bundle';
 import { fetchCampaigns } from '@tubutree/app-core/api/campaign';
-import { fetchActiveFlashSales } from '@tubutree/app-core/api/flash-sale';
+import { fetchActiveFlashSalesNoSync } from '@/lib/server-flash';
 import { fetchBrands, fetchCategories, fetchProducts } from '@tubutree/app-core/api/catalog';
 import { publicConfigQuery } from '@tubutree/app-core/queries/config';
 import { homeBestSellerQuery } from '@tubutree/app-core/queries/home';
@@ -42,7 +42,7 @@ export async function loadHomeInitial(): Promise<HomeInitial> {
     orUndefined(fetchCategories(http)),
     orUndefined(fetchBrands(http)),
     orUndefined(publicConfigQuery(http).queryFn()),
-    orUndefined(fetchActiveFlashSales(createServerHttp({ revalidate: FLASH_REVALIDATE_S }))),
+    orUndefined(fetchActiveFlashSalesNoSync(createServerHttp({ revalidate: FLASH_REVALIDATE_S }))),
     orUndefined(fetchCampaigns(createServerHttp({ revalidate: CAMPAIGN_REVALIDATE_S }), 'HOME_TOP')),
     orUndefined(fetchHomeCombos(createServerHttp({ revalidate: COMBO_REVALIDATE_S }), HOME_COMBOS_LIMIT)),
   ]);

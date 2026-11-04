@@ -12,11 +12,14 @@ export function isChunkLoadError(err: unknown): boolean {
   return e?.name === 'ChunkLoadError' || /Loading chunk|Loading CSS chunk|Failed to fetch dynamically imported module/i.test(message);
 }
 
+/** Chờ báo lỗi tối đa ngần này trước khi tải lại: mạng chậm không được giữ khách ở màn hình trống. */
+export const CHUNK_REPORT_WAIT_MS = 500;
+
 /**
- * Tải lại trang một lần (khoá sessionStorage giữ mốc giờ). Trả true nếu đã gọi tải lại, false nếu vừa tải lại gần đây hoặc không có sessionStorage.
- * `beforeReload` chạy ngay trước khi tải lại (báo lỗi): chỉ một lần mỗi cửa sổ, vì lần sau bị khoá chặn.
+ * Tải lại trang một lần (khoá sessionStorage giữ mốc giờ). Trả true nếu đã hẹn tải lại, false nếu vừa tải lại gần đây hoặc không có sessionStorage.
+ * `beforeReload` (báo lỗi, bất đồng bộ) được chờ tối đa `CHUNK_REPORT_WAIT_MS` rồi mới tải lại, để báo lỗi không bị cắt ngang; chỉ chạy một lần mỗi cửa sổ vì lần sau bị khoá chặn.
  */
-export function reloadOnceForChunkError(now: number = Date.now(), beforeReload?: () => void): boolean {
+export function reloadOnceForChunkError(now: number = Date.now(), beforeReload?: () => Promise<unknown> | void): boolean {
   try {
     const last = Number(sessionStorage.getItem(KEY));
     if (Number.isFinite(last) && last > 0 && now - last < CHUNK_RELOAD_WINDOW_MS) return false;
@@ -25,11 +28,19 @@ export function reloadOnceForChunkError(now: number = Date.now(), beforeReload?:
     // Không có sessionStorage thì không bảo vệ được khỏi vòng lặp: không tải lại.
     return false;
   }
+  let reported: Promise<unknown> = Promise.resolve();
   try {
-    beforeReload?.();
+    reported = Promise.resolve(beforeReload?.()).catch(() => undefined);
   } catch {
     // Báo lỗi hỏng không được chặn việc tải lại.
   }
-  location.reload();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const cap = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, CHUNK_REPORT_WAIT_MS);
+  });
+  void Promise.race([reported, cap]).then(() => {
+    clearTimeout(timer);
+    location.reload();
+  });
   return true;
 }

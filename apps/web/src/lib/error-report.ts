@@ -25,3 +25,12 @@ export function reportError(error: unknown): void {
     ?.then((m) => m.startClientSentry().captureException(error))
     .catch(() => {});
 }
+
+/**
+ * Như `reportError` nhưng trả lời hứa xong khi lần báo đã gửi hoặc hỏng (không bao giờ ném): để nơi sắp tải lại trang chờ báo xong, vì SDK nạp lười nên báo lỗi là bất đồng bộ
+ * và tải lại ngay sẽ làm mất nó. Không có DSN thì xong ngay.
+ */
+export function reportErrorSettled(error: unknown): Promise<void> {
+  const p = load()?.then((m) => m.startClientSentry().captureException(error));
+  return p ? p.then(() => undefined, () => undefined) : Promise.resolve();
+}

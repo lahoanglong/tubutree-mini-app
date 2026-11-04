@@ -80,3 +80,23 @@ describe('FlashSalesSeed', () => {
     expect(container.textContent).toBe('1|loaded');
   });
 });
+
+describe('useFlashNow: điện thoại chạy chậm', () => {
+  it('sau mount mốc không lùi dưới giờ dựng HTML: đợt đã hết lúc dựng không hiện lại vì đồng hồ máy chậm', async () => {
+    const t0 = Date.now();
+    const realNow = Date.now;
+    // Đồng hồ điện thoại chậm 10 phút so với giờ server lúc dựng HTML.
+    vi.spyOn(Date, 'now').mockImplementation(() => realNow() - 600_000);
+    const stale = item(new Date(t0 - 1_000).toISOString());
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    container.innerHTML = renderToString(tree([stale], t0));
+    expect(container.textContent).toBe('0|wait');
+    resetFlashSales();
+    await act(async () => {
+      hydrateRoot(container, tree([stale], t0));
+    });
+    await flush();
+    expect(container.textContent).toBe('0|wait');
+  });
+});
