@@ -42,21 +42,39 @@ export class RbacService {
   /**
    * Áp grant theo SĐT khi login/refresh. CHỈ NÂNG role (không tự hạ — hạ qua revoke).
    * Trả user đã update (hoặc user gốc nếu không đổi).
+   * Bước nâng khoá dòng users rồi đọc lại role và grant: bản `user` của người gọi có thể cũ, và admin hạ quyền cùng lúc
+   * (setUserRole thu hồi grant trong tx của nó) thì grant vừa bị thu hồi không được dùng để nâng lại người đó.
+   * Gọi với client gốc thì tự mở giao dịch; gọi với tx (addGrant) thì dùng luôn tx đó. Không có grant cao hơn thì không mở gì.
    */
   async applyGrants(user: User, db: Db = this.prisma, actorId: string | null = null): Promise<User> {
     if (!user.phone) return user;
-    const grants = await db.roleGrant.findMany({
+    if (!('$transaction' in db)) return this.raiseFromGrants(user, db, actorId);
+    const peek = await db.roleGrant.findMany({
       where: { phone: user.phone, revokedAt: null },
+      select: { role: true },
+    });
+    if (!this.highestGrant(peek, user.role)) return user;
+    return db.$transaction((tx) => this.raiseFromGrants(user, tx, actorId)).catch(throwIfLockBusy);
+  }
+
+  /** Role cao nhất trong grant (STAFF/ADMIN) nếu xếp hạng cao hơn `current`, ngược lại null. */
+  private highestGrant(grants: { role: UserRole }[], current: UserRole): UserRole | null {
+    const best = grants.reduce<UserRole>((acc, g) => (RANK[g.role] > RANK[acc] ? g.role : acc), 'CUSTOMER');
+    return RANK[best] > RANK[current] ? best : null;
+  }
+
+  private async raiseFromGrants(stale: User, db: Prisma.TransactionClient, actorId: string | null): Promise<User> {
+    const [locked] = await db.$queryRaw<{ role: UserRole; staffPermissions: string[] }[]>`
+      SELECT "role", "staffPermissions" FROM "users" WHERE "id" = ${stale.id} FOR NO KEY UPDATE`;
+    const user: User = locked ? { ...stale, role: locked.role, staffPermissions: locked.staffPermissions } : stale;
+    const grants = await db.roleGrant.findMany({
+      where: { phone: user.phone!, revokedAt: null },
       select: { role: true, staffPermissions: true },
     });
     if (grants.length === 0) return user;
-    // role cao nhất trong grant (STAFF/ADMIN)
-    const best = grants.reduce<UserRole>(
-      (acc, g) => (RANK[g.role] > RANK[acc] ? g.role : acc),
-      'CUSTOMER',
-    );
-    if (RANK[best] <= RANK[user.role]) return user; // không nâng / không hạ
-    this.logger.warn(`applyGrants: nâng user ${user.id} (${maskPhone(user.phone)}) ${user.role} → ${best}`);
+    const best = this.highestGrant(grants, user.role);
+    if (!best) return user; // không nâng / không hạ
+    this.logger.warn(`applyGrants: nâng user ${user.id} (${maskPhone(user.phone!)}) ${user.role} → ${best}`);
     // Nhóm việc của lời mời chỉ có nghĩa với STAFF. Lời mời không ghi nhóm thì nhóm sau khi nâng lên STAFF là rỗng (không giữ nhóm cũ của user).
     const invitedPerms =
       best === 'STAFF' ? normalizePermissions(grants.filter((g) => g.role === 'STAFF').flatMap((g) => g.staffPermissions ?? [])) : [];
@@ -224,12 +242,12 @@ export class RbacService {
    * docs/2026-09-08-review-progress.md). So sánh dùng RANK — nếu không có grant nào xếp hạng
    * cao hơn (vd gán ADMIN), bỏ qua query, không tốn round-trip vô ích. Trả số grant đã thu hồi.
    */
-  async revokeGrantsAbove(phone: string, role: UserRole): Promise<number> {
+  async revokeGrantsAbove(phone: string, role: UserRole, db: Db = this.prisma): Promise<number> {
     const above = (Object.keys(RANK) as UserRole[]).filter(
       (r) => (r === 'STAFF' || r === 'ADMIN') && RANK[r] > RANK[role],
     );
     if (above.length === 0) return 0;
-    const { count } = await this.prisma.roleGrant.updateMany({
+    const { count } = await db.roleGrant.updateMany({
       where: { phone, revokedAt: null, role: { in: above as ('STAFF' | 'ADMIN')[] } },
       data: { revokedAt: new Date() },
     });

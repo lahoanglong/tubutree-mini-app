@@ -26,6 +26,7 @@ function makePrisma(over: Record<string, unknown> = {}) {
     dealerApplication: { findFirst: jest.fn().mockResolvedValue(null) },
     userAdminEvent: { create: jest.fn().mockResolvedValue({}) },
     $executeRaw: jest.fn().mockResolvedValue(0),
+    $queryRaw: jest.fn().mockResolvedValue([]),
   };
   const merged = { ...base, ...over };
   // addGrant/revokeGrant chạy trong $transaction(tx => ...) — mock tx = chính client này để
@@ -91,6 +92,73 @@ describe('RbacService.applyGrants', () => {
     });
     const out = await new RbacService(prisma).applyGrants(mkUser({ role: 'DEALER' }));
     expect(out.role).toBe('STAFF');
+  });
+});
+
+describe('RbacService.applyGrants: khoá dòng người dùng rồi đọc lại (L1-02)', () => {
+  it('có grant cao hơn: mở giao dịch, khoá dòng users FOR NO KEY UPDATE rồi mới đọc lại grant và nâng', async () => {
+    const order: string[] = [];
+    const prisma = makePrisma({
+      roleGrant: {
+        findMany: jest.fn(async () => {
+          order.push('grants');
+          return [{ role: 'ADMIN' }];
+        }),
+      },
+      user: {
+        update: jest.fn(async () => {
+          order.push('update');
+          return mkUser({ role: 'ADMIN' });
+        }),
+      },
+      $queryRaw: jest.fn(async (s: TemplateStringsArray) => {
+        order.push(/FOR NO KEY UPDATE/.test(s.join('?')) ? 'lock' : 'raw');
+        return [{ role: 'CUSTOMER', staffPermissions: [] }];
+      }),
+    });
+    const out = await new RbacService(prisma).applyGrants(mkUser());
+    expect(out.role).toBe('ADMIN');
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(order).toEqual(['grants', 'lock', 'grants', 'update']);
+  });
+
+  it('grant bị thu hồi trong lúc chờ khoá (đọc lại không còn) → không nâng, trả nguyên user', async () => {
+    const findMany = jest.fn().mockResolvedValueOnce([{ role: 'ADMIN' }]).mockResolvedValueOnce([]);
+    const prisma = makePrisma({
+      roleGrant: { findMany },
+      user: { update: jest.fn() },
+      $queryRaw: jest.fn().mockResolvedValue([{ role: 'CUSTOMER', staffPermissions: [] }]),
+    });
+    const out = await new RbacService(prisma).applyGrants(mkUser());
+    expect(out.role).toBe('CUSTOMER');
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it('bản user cũ nói CUSTOMER nhưng DB đã ADMIN (đọc lại sau khoá) → không ghi đè, không ghi sổ', async () => {
+    const prisma = makePrisma({
+      roleGrant: { findMany: jest.fn().mockResolvedValue([{ role: 'STAFF' }]) },
+      user: { update: jest.fn() },
+      $queryRaw: jest.fn().mockResolvedValue([{ role: 'ADMIN', staffPermissions: [] }]),
+    });
+    const out = await new RbacService(prisma).applyGrants(mkUser());
+    expect(prisma.user.update).not.toHaveBeenCalled();
+    expect(out.role).toBe('ADMIN');
+  });
+
+  it('không có grant nào cao hơn thì không mở giao dịch (đường đăng nhập thường không tốn thêm round-trip)', async () => {
+    const prisma = makePrisma({ roleGrant: { findMany: jest.fn().mockResolvedValue([{ role: 'STAFF' }]) } });
+    await new RbacService(prisma).applyGrants(mkUser({ role: 'ADMIN' }));
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('revokeGrantsAbove dùng client truyền vào (tx của setUserRole) thay cho client gốc', async () => {
+    const prisma = makePrisma();
+    const txUpdate = jest.fn().mockResolvedValue({ count: 2 });
+    const tx = { roleGrant: { updateMany: txUpdate } } as never;
+    const count = await new RbacService(prisma).revokeGrantsAbove('0900000001', 'CUSTOMER', tx);
+    expect(count).toBe(2);
+    expect(txUpdate).toHaveBeenCalled();
+    expect(prisma.roleGrant.updateMany as jest.Mock).not.toHaveBeenCalled();
   });
 });
 

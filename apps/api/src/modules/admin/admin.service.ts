@@ -635,8 +635,13 @@ export class AdminService {
     }
     // Đọc cấu hình đối soát trước khi mở tx (như setStorePartner): chỉ dùng khi người này được đặt về CUSTOMER/AFFILIATE.
     const partnerCfg = losesPartnerStore('DEALER', role) ? await this.fulfilment?.settlementConfig() : undefined;
-    const { updated, previousRole } = await this.prisma.$transaction(async (tx) => {
+    const { updated, previousRole, revoked } = await this.prisma.$transaction(async (tx) => {
       await lockAdminRoster(tx);
+      // Thu hồi mọi RoleGrant (STAFF/ADMIN) xếp hạng CAO HƠN role vừa gán, cùng giao dịch với lệnh đổi role: applyGrants (chỉ nâng, chạy ở mỗi
+      // lần refresh token) khoá dòng users rồi đọc lại grant, nên hoặc thấy grant đã thu hồi, hoặc đợi giao dịch này xong. Lỗi ở đây phải làm
+      // hỏng cả lệnh (không được nuốt): role hạ mà grant còn thì lần refresh kế tự nâng lại. Đặt trước lệnh ghi users để thứ tự khoá
+      // (grant rồi tới users) trùng addGrant/revokeGrant.
+      const revoked = await this.rbac.revokeGrantsAbove(normalized, role, tx);
       const user = await tx.user.findUnique({ where: { phone: normalized } });
       if (!user) throw new NotFoundException(`Không tìm thấy người dùng có SĐT ${normalized} (cần mở Mini App Zalo ≥1 lần).`);
       const previousRole = user.role;
@@ -703,18 +708,8 @@ export class AdminService {
           actorId: adminId,
         });
       }
-      return { updated, previousRole };
+      return { updated, previousRole, revoked };
     }, { maxWait: 15_000, timeout: 60_000 }).catch(throwIfLockBusy);
-    // Thu hồi mọi RoleGrant (STAFF/ADMIN) xếp hạng CAO HƠN role vừa gán — trước đây KHÔNG làm
-    // việc này: hạ quyền qua đường setUserRole trong khi grant từ /admin/staff/grant còn hiệu
-    // lực → lần refresh token tiếp theo, applyGrants (chỉ nâng không hạ) tự phục hồi quyền cũ
-    // (P0-3, docs/2026-09-08-review-progress.md). Chạy SAU khi user.update đã thành công —
-    // nếu lỗi ở bước này, role đã hạ vẫn đứng, chỉ còn nguy cơ tự phục hồi ở lần refresh sau
-    // (best-effort, không rollback role vì role change tự nó luôn đúng ý admin).
-    const revoked = await this.rbac.revokeGrantsAbove(normalized, role).catch((err) => {
-      this.logger.error(`revokeGrantsAbove lỗi cho SĐT ${maskPhone(normalized)}: ${err instanceof Error ? err.message : err}`);
-      return 0;
-    });
     if (revoked > 0) {
       this.logger.warn(`Admin ${adminId} đổi role user ${updated.id} (${maskPhone(normalized)}) → thu hồi ${revoked} grant xếp hạng cao hơn ${role}.`);
     }
