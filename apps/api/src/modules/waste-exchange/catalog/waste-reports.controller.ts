@@ -1,4 +1,4 @@
-import { Controller, Get, Header, Param, Query, Res } from '@nestjs/common';
+import { Controller, Get, Logger, Header, Param, Query, Res } from '@nestjs/common';
 import { IsOptional, Matches } from 'class-validator';
 import type { Response } from 'express';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
@@ -6,6 +6,7 @@ import { Roles } from '../../../common/decorators/roles.decorator';
 import { assertActiveAdmin } from '../../../common/staff-access';
 import { vnMonthKey } from '../../../common/vn-time';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { createCsvRecordCounter } from '../../admin/admin-export';
 import { WasteReportsService } from './waste-reports.service';
 
 export class WasteMonthQueryDto {
@@ -18,6 +19,8 @@ const monthOf = (q: WasteMonthQueryDto): string => q.month ?? vnMonthKey(new Dat
 
 @Controller()
 export class WasteReportsController {
+  private readonly logger = new Logger(WasteReportsController.name);
+
   constructor(
     private readonly reports: WasteReportsService,
     private readonly prisma: PrismaService,
@@ -38,8 +41,20 @@ export class WasteReportsController {
     await assertActiveAdmin(this.prisma, userId);
     const month = monthOf(q);
     const text = await this.reports.csv(month);
+    const counter = createCsvRecordCounter();
+    counter.push(text);
+    await this.logExport(userId, month, counter.dataRows());
     res.setHeader('Content-Disposition', `attachment; filename="doi-rac-${month}.csv"`);
     return text;
+  }
+
+  /** Cùng bảng nhật ký với các CSV khác của admin: ai xuất, tháng nào, bao nhiêu dòng. Lỗi ghi chỉ log, không chặn file. */
+  private async logExport(actorId: string, month: string, rowCount: number): Promise<void> {
+    try {
+      await this.prisma.adminExportLog.create({ data: { actorId, route: 'admin/waste/reports/monthly', filters: { month }, rowCount } });
+    } catch (err) {
+      this.logger.error(`Không ghi được nhật ký xuất doi-rac ${month} của ${actorId}: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   @Get('admin/waste/points/:id/report')
