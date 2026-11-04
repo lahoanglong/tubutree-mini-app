@@ -104,6 +104,14 @@ describe('AdminImage', () => {
     expect(link.getAttribute('href')).toBe('blob:mock/1');
     expect(link.getAttribute('target')).toBe('_blank');
     expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+    const open = vi.spyOn(window, 'open').mockReturnValue(null);
+    const ev = new MouseEvent('click', { bubbles: true, cancelable: true });
+    act(() => {
+      link.dispatchEvent(ev);
+    });
+    expect(ev.defaultPrevented).toBe(true);
+    expect(open).toHaveBeenCalledWith('blob:mock/1', '_blank');
+    open.mockRestore();
   });
 
   it('lỗi tải hiện chữ "Không tải được ảnh" thay vì biến mất', async () => {

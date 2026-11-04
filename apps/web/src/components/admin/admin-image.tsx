@@ -81,7 +81,18 @@ export function AdminImage({ src, alt, className }: { src: string | null | undef
   if (typeof state === 'object') {
     return (
       // Mở bản lớn trong tab mới: ảnh review ẩn trong danh sách chỉ hiện 64px, không đủ để đọc.
-      <a href={state.src} target="_blank" rel="noopener noreferrer">
+      // Mở bằng window.open không noopener: tài liệu mở ra chỉ là ảnh (không chạy script), còn noopener trên blob URL có thể bị
+      // Chrome chặn ra about:blank#blocked do chia vùng lưu trữ.
+      <a
+        href={state.src}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="block shrink-0"
+        onClick={(e) => {
+          e.preventDefault();
+          window.open(state.src, '_blank');
+        }}
+      >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={state.src} alt={alt} referrerPolicy="no-referrer" className={className} />
       </a>

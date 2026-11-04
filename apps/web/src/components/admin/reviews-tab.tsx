@@ -139,7 +139,7 @@ function ReviewRow({ review: r }: { review: AdminReview }) {
     mut.mutate(!hide);
   };
 
-  // Ảnh của đánh giá đã ẩn không đi qua đường dẫn công khai: cần token admin nên không mở ở tab mới được.
+  // Ảnh của đánh giá đã ẩn không đi qua đường dẫn công khai: cần token admin nên thẻ img không tự tải; AdminImage tải bằng token rồi bấm vào ảnh mở bản lớn ở tab mới.
   const images = r.images
     .map((raw) => (isAdminImageRef(raw) ? { admin: raw } : safeEvidenceImage(raw)))
     .filter((x): x is { admin: string } | { src: string; href: string | null } => x !== null);
