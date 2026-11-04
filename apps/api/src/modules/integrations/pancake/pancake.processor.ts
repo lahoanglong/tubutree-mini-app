@@ -755,8 +755,9 @@ export class PancakeProcessor extends WorkerHost {
     // Trạng thái đọc lại SAU khoá: bản `order` của nơi gọi có thể cũ hơn lần huỷ/trả vừa commit, mà trạng thái quyết định lời nhắc và dòng lịch sử.
     const written = await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT "id" FROM "orders" WHERE "id" = ${order.id} FOR NO KEY UPDATE`;
-      const locked = await tx.order.findUnique({ where: { id: order.id }, select: { status: true } });
-      if (!locked) return null;
+      const locked = await tx.order.findUnique({ where: { id: order.id }, select: { status: true, paymentStatus: true } });
+      // Đơn đã PAID (nút "Đã nhận tiền" commit trước khoá): không còn gì chờ Kế toán, không ghim lý do, không ghi dấu, không báo.
+      if (!locked || locked.paymentStatus !== 'UNPAID') return null;
       const logged = await tx.orderStatusHistory.findFirst({ where: { orderId: order.id, actorType: 'PANCAKE', note }, select: { id: true } });
       if (logged) return null;
       const isClosed = isClosedOrder(locked.status);

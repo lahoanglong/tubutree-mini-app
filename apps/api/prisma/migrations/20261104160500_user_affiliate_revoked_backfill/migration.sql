@@ -3,7 +3,7 @@
 --
 -- Sổ user_admin_events (từ 20261014150100) ghi mọi đổi vai trò. Chỉ setUserRole ghi sự kiện ROLE không có "reason"; áp quyền cấp theo SĐT
 -- và thu hồi nhân viên luôn có lý do, còn duyệt hồ sơ đại lý và tự đăng ký CTV không ghi sự kiện ROLE. Nên chỉ sự kiện không lý do mới đặt/xoá dấu:
---   đặt: về CUSTOMER từ CTV/đại lý, hoặc từ nhân viên/admin khi người đó còn dấu vết CTV (hoa hồng, gian hàng CTV; không xét cấu hình, như affiliateRevocationPatch);
+--   đặt: về CUSTOMER từ CTV/đại lý, hoặc từ nhân viên/admin khi người đó còn dấu vết CTV (hoa hồng, gian hàng CTV có từ trước hoặc đúng lúc sự kiện, vì patch chỉ thấy dấu vết đã có khi setUserRole chạy; không xét cấu hình);
 --   xoá: sang CTV/đại lý.
 -- Có dấu khi sự kiện đặt/xoá GẦN NHẤT là sự kiện đặt.
 UPDATE "users" u
@@ -23,8 +23,8 @@ WHERE u."affiliateRevokedAt" IS NULL
               OR (
                 e."fromValue" IN ('STAFF', 'ADMIN')
                 AND (
-                  EXISTS (SELECT 1 FROM "commissions" c WHERE c."affiliateUserId" = u."id")
-                  OR EXISTS (SELECT 1 FROM "storefronts" s WHERE s."ownerUserId" = u."id" AND s."type" = 'CTV')
+                  EXISTS (SELECT 1 FROM "commissions" c WHERE c."affiliateUserId" = u."id" AND c."createdAt" <= e."createdAt")
+                  OR EXISTS (SELECT 1 FROM "storefronts" s WHERE s."ownerUserId" = u."id" AND s."type" = 'CTV' AND s."createdAt" <= e."createdAt")
                 )
               )
             )
