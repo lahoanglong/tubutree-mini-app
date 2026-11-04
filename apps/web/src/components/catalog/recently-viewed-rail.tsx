@@ -37,7 +37,7 @@ export function RecentlyViewedRail({ title = browseText.recentlyViewed, reserve 
   const hydrated = useSyncExternalStore(subscribeNever, () => true, () => false);
   const stored = useRecentlyViewed();
   const slugs = stored.map((it) => it.slug);
-  // Chỉ hỏi những slug vừa trần độ dài của API (mới nhất trước); phần cũ hơn không được hỏi nên không bị dọn và, nếu lọt vào dải, hiện không giá.
+  // Chỉ hỏi những slug vừa trần độ dài của API (mới nhất trước); phần cũ hơn không được hỏi nên không bị dọn (và không hiện ở dải).
   const queried = recentlyViewedQuerySlugs(slugs);
   const queriedSet = new Set(queried);
   const live = useQuery({ ...recentlyViewedQuery(coreHttp, queried), enabled: queried.length > 0, staleTime: 30_000 });
@@ -58,7 +58,9 @@ export function RecentlyViewedRail({ title = browseText.recentlyViewed, reserve 
     // `slugs` không cần trong deps: `live.data` thuộc khoá dựng từ chính `slugs` (không có placeholderData). Nếu thêm placeholderData thì phải chặn `live.isPlaceholderData`, kẻo dọn bằng dữ liệu của danh sách cũ.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [live.isSuccess, live.data]);
-  const items = (live.isSuccess ? stored.filter((it) => !queriedSet.has(it.slug) || bySlug.has(it.slug)) : stored).slice(0, shelf('browse.recent').maxItems);
+  // Sau khi API trả lời chỉ hiện món đã hỏi VÀ được trả về: món ngoài trần (slug dài) không có giá để in và không biết còn bán hay đã ẩn (thẻ có thể dẫn tới 404), nên không vẽ; nó vẫn nằm trong kho, không bị dọn.
+  // Không gây nhảy dọc: chiều cao dải do thẻ quyết định (mọi thẻ cùng khổ), bớt thẻ chỉ ngắn dải theo chiều ngang; dải chỉ thu lại khi không còn thẻ nào, như trường hợp mọi món bị ẩn.
+  const items = (live.isSuccess ? stored.filter((it) => queriedSet.has(it.slug) && bySlug.has(it.slug)) : stored).slice(0, shelf('browse.recent').maxItems);
   if (items.length === 0) {
     return reserve && !hydrated ? <div data-testid="recent-slot" aria-hidden="true" className={`hidden [html[data-has-recent]_&]:block ${RESERVED_HEIGHT}`} /> : null;
   }

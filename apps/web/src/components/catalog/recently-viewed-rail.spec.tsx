@@ -138,4 +138,18 @@ describe('RecentlyViewedRail: trần độ dài slugs của API', () => {
     const left = JSON.parse(localStorage.getItem('tubu_recently_viewed')!).map((i: { slug: string }) => i.slug);
     expect(left).toEqual(seen.slice(1).map((i) => i.slug));
   });
+
+  it('10 món slug 210 ký tự: sau khi API trả lời chỉ vẽ món đã hỏi và được trả về, không thẻ nào thiếu giá; món ngoài trần vẫn nằm trong kho', async () => {
+    const wide = (i: number) => `${'y'.repeat(206)}-${String(i).padStart(3, '0')}`;
+    const stored10 = Array.from({ length: 10 }, (_, i) => ({ slug: wide(i), name: `SP ${i}`, thumbnail: `https://content.pancake.vn/2-26/stored-${i}.jpg`, viewedAt: 1_700_000_000_000 - i }));
+    http.get.mockImplementation(async (_p: string, opts?: { query?: { slugs?: string } }) => {
+      const data = (opts?.query?.slugs ?? '').split(',').filter(Boolean).map((slug) => ({ ...LIVE(1), id: slug, slug, name: slug }));
+      return { data, meta: { page: 1, limit: data.length, total: data.length } };
+    });
+    const c = await mount(<RecentlyViewedRail />, stored10);
+    const cards = c.querySelectorAll('[data-ds="product-tile"]');
+    expect(cards).toHaveLength(9);
+    for (const card of Array.from(cards)) expect(card.textContent).toContain('50.000');
+    expect(JSON.parse(localStorage.getItem('tubu_recently_viewed')!)).toHaveLength(10);
+  });
 });
