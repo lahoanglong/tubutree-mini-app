@@ -682,6 +682,12 @@ Job `zns-send` nằm ở hàng `notifications` như cũ nên bản cũ xử lý 
 
 - [ ] Sau deploy: `$DC logs --since 10m api | grep -ciE 'ZNS|notifications'` không có lỗi khởi tạo worker; `go-live:check` Redis PASS (9 hàng đợi)
 
+### 1.21 Ảnh trong màn admin thành đường dẫn (hard/1105, L3-02, L3-03)
+
+- `GET /admin/merchant-products/pending` và `GET /admin/reviews` không còn trả ảnh base64. Ảnh ra dạng đường dẫn; ảnh nháp và ảnh của đánh giá đã ẩn đi qua hai route mới chỉ ADMIN (`/admin/merchant-products/:id/images/:source/:slot`, `/admin/reviews/:id/images/:index`, `Cache-Control: private, no-store`). Web mới tải các ảnh này bằng token.
+- `limit` của hàng chờ duyệt SP đối tác bị kẹp về 50 ở API (không trả 400), nên web cũ xin `limit=100` vẫn tải được danh sách.
+- Web cũ với API mới thì vỡ ảnh ở tab "Duyệt SP đối tác" và mất ảnh của đánh giá đã ẩn. Vì vậy web và API của bản này lên cùng một lần deploy (bước 8 và 9) và quay lại cùng cặp; không quay riêng web (mục 7.4).
+
 ## 2. Trỏ lại GitHub Actions (máy ảo GCP đã đóng)
 
 Việc của người giữ quyền admin repo GitHub (Settings, Secrets and variables, Actions). Không cần làm trước deploy tay, nhưng phải làm trước khi dùng lại `ops.yml`.
@@ -1311,7 +1317,7 @@ Việc sau khôi phục:
 
 ### 7.4 Chỉ web có vấn đề
 
-Web không có schema riêng: quay web một mình bằng `docker tag "${WEB_NAME%%:*}:rollback" "$WEB_NAME" && $DC up -d --no-build --no-deps web`. Lưu ý cặp web cũ với API mới: tab admin cũ sẽ gửi `null` cho mã Pancake rỗng (xem bước 12), nên chỉ làm tạm. Riêng việc duyệt/chi lệnh rút thì cặp web cũ với API mới không lỗi, vì `expectedAmount` là tuỳ chọn; chỉ cặp web mới với API cũ là hỏng (xem mục 0.2, ràng buộc 3).
+Web không có schema riêng: quay web một mình bằng `docker tag "${WEB_NAME%%:*}:rollback" "$WEB_NAME" && $DC up -d --no-build --no-deps web`. Lưu ý cặp web cũ với API mới: tab admin cũ sẽ gửi `null` cho mã Pancake rỗng (xem bước 12), nên chỉ làm tạm. Riêng việc duyệt/chi lệnh rút thì cặp web cũ với API mới không lỗi, vì `expectedAmount` là tuỳ chọn; chỉ cặp web mới với API cũ là hỏng (xem mục 0.2, ràng buộc 3). Từ bản hard/1105 đợt 2 (mục 1.21), web cũ với API mới làm vỡ ảnh trong tab "Duyệt SP đối tác" và ảnh của đánh giá đã ẩn: quay web thì quay luôn API.
 
 ## 8. Tham chiếu
 
