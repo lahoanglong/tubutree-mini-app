@@ -7,16 +7,41 @@ export const ServerSeed = createContext<{ items: readonly FlashItem[]; now: numb
 
 const subscribeNever = () => () => undefined;
 
+// Lần `/flash-sales/active` đầu tiên của trình duyệt đã xong: độ lệch đồng hồ máy chủ đã đo (nếu API trả `serverNow`), từ đây `serverNow()` mới đáng tin.
+let clockSynced = false;
+const syncListeners = new Set<() => void>();
+export function markFlashClockSynced(): void {
+  if (clockSynced) return;
+  clockSynced = true;
+  syncListeners.forEach((l) => l());
+}
+/** Chỉ cho test. */
+export function resetFlashClockSynced(): void {
+  clockSynced = false;
+}
+const subscribeSynced = (cb: () => void) => {
+  syncListeners.add(cb);
+  return () => syncListeners.delete(cb);
+};
+
+// Mốc đồng hồ đơn điệu lúc nạp mã (gần lúc hydrate): `performance.now()` không phụ thuộc đồng hồ treo tường của điện thoại.
+const loadedAt = typeof performance !== 'undefined' ? performance.now() : 0;
+
 /**
- * "Bây giờ" để lọc đợt Giờ vàng đang chạy. Dưới trang có gieo sẵn, lần dựng hydrate dùng giờ server lúc dựng HTML (đợt hết giữa lúc dựng và lúc tải vẫn hiện
- * như HTML, không lệch hydrate); ngay sau đó chuyển sang giờ máy chủ đã đồng bộ, đợt đã hết thì biến mất một lần. Trang không gieo luôn dùng giờ đồng bộ.
- * Mọi chỗ đọc danh sách gieo (thanh Giờ vàng, giá, thẻ sản phẩm) phải dùng cùng mốc này.
- * Trước lần `/flash-sales/active` đầu tiên trả về, `serverNow()` chưa biết độ lệch nên bằng đồng hồ điện thoại: máy chạy chậm có thể còn thấy giá của đợt đã hết thêm một vòng
- * gọi mạng. Chấp nhận vì chỉ là hiển thị (giỏ và đơn do máy chủ tính giá từ DB), và lần hỏi đầu sửa ngay. Lấy max với giờ dựng HTML để mốc không bao giờ lùi so với HTML.
+ * "Bây giờ" để lọc đợt Giờ vàng đang chạy; mọi chỗ đọc danh sách gieo (thanh Giờ vàng, giá, thẻ sản phẩm) phải dùng cùng mốc này. Trang không gieo luôn dùng `serverNow()`.
+ * Dưới trang có gieo sẵn:
+ * - Lần dựng hydrate dùng giờ server lúc dựng HTML: đợt hết giữa lúc dựng và lúc tải vẫn hiện như HTML, không lệch hydrate.
+ * - Sau mount, TRƯỚC khi lần `/flash-sales/active` đầu tiên xong: giờ dựng HTML cộng thời gian trôi qua theo đồng hồ đơn điệu (`performance.now()`). Lúc này `serverNow()` chưa
+ *   biết độ lệch nên bằng đồng hồ điện thoại; máy chạy NHANH sẽ giấu một đợt còn chạy rồi hiện lại khi đồng bộ (giá nhảy hai lần), máy chạy CHẬM thì còn thấy giá của đợt đã hết
+ *   thêm một vòng mạng. Đồng hồ đơn điệu tránh cả hai; chỗ sai (HTML cũ tới 60 giây nên đợt hết trong khoảng đó còn hiện) chỉ là hiển thị và được lần hỏi đầu sửa ngay,
+ *   còn giỏ và đơn do máy chủ tính giá từ DB.
+ * - Sau khi đã đồng bộ: `serverNow()`.
  */
 export function useFlashNow(): number {
   const seed = useContext(ServerSeed);
-  const settled = useSyncExternalStore(subscribeNever, () => true, () => false);
+  const mounted = useSyncExternalStore(subscribeNever, () => true, () => false);
+  const synced = useSyncExternalStore(subscribeSynced, () => clockSynced, () => false);
   if (!seed) return serverNow();
-  return settled ? Math.max(seed.now, serverNow()) : seed.now;
+  if (!mounted) return seed.now;
+  return synced ? serverNow() : seed.now + (performance.now() - loadedAt);
 }

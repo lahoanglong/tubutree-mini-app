@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { AlertCircle, Check, ChevronRight } from 'lucide-react';
 import { fetchProductBundles } from '@tubutree/app-core/api/bundle';
 import { fetchBoughtTogether, fetchRelated } from '@tubutree/app-core/api/catalog';
-import { fetchActiveFlashSalesNoSync } from '@/lib/server-flash';
+import { fetchActiveFlashSalesNoSync, toFlashSeed } from '@/lib/server-flash';
 import { publicConfigQuery } from '@tubutree/app-core/queries/config';
 import { formatSold, getProduct, pdpFulfillerText, pdpPartnerNote, pdpUnavailableText } from '@/lib/api';
 import AddToCart from '@/components/add-to-cart';
@@ -81,7 +81,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   ]);
   // Hết giờ rồi thì không đưa vào HTML: lần tải ngay sau đó sẽ không còn, thanh Giờ vàng biến mất và trang nhảy.
   const generatedAt = Date.now();
-  const flash = flashAll?.filter((it) => new Date(it.endAt).getTime() > generatedAt);
+  const flash = flashAll ? toFlashSeed(flashAll.filter((it) => new Date(it.endAt).getTime() > generatedAt)) : undefined;
   const hasFlash = (flash ?? []).some((f) => product.variations.some((v) => v.id === f.variationId));
   // Có Giờ vàng ở sản phẩm này thì mở sẵn đúng phân loại mà AddToCart sẽ chốt khi danh sách về (cùng `defaultVariationFor`), để giá không đổi hai lần.
   const initialVariation = (hasFlash ? defaultVariationFor({ slug: product.slug }, product.variations, runningFlash(flash ?? [], generatedAt), generatedAt) : undefined) ?? product.variations.find((v) => v.stock > 0) ?? product.variations[0];

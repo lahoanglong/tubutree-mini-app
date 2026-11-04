@@ -6,7 +6,7 @@ import { serverNow } from '@tubutree/app-core/server-clock';
 import { getActiveFlashSales } from '@/lib/shop-client';
 import type { FlashSaleActiveItem } from '@tubutree/app-core/api/flash-sale';
 import { runningFlash, type FlashItem } from '@/lib/flash-price';
-import { ServerSeed, useFlashNow } from '@/lib/flash-now';
+import { markFlashClockSynced, resetFlashClockSynced, ServerSeed, useFlashNow } from '@/lib/flash-now';
 
 /**
  * Đợt Giờ vàng đang chạy, dùng chung cho mọi thẻ sản phẩm trên trang: một lần gọi API (không qua React Query để các test render
@@ -39,6 +39,7 @@ function load(): Promise<void> {
     })
     .finally(() => {
       loaded = true;
+      markFlashClockSynced();
       inflight = null;
       listeners.forEach((l) => l());
       reschedule();
@@ -128,6 +129,7 @@ export function useFlashSalesLoaded(): boolean {
 
 /** Chỉ cho test: xoá bộ nhớ dùng chung giữa các ca. */
 export function resetFlashSales(): void {
+  resetFlashClockSynced();
   loaded = false;
   items = NONE;
   fetchedAt = 0;

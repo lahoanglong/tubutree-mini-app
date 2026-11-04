@@ -4,7 +4,7 @@ import { mockMergedHome } from './support/home-merged';
 
 /**
  * Web, Trang chủ: khách đã chọn cỡ chữ "lớn"/"nhỏ" ở Cài đặt thì script ở <head> đặt font-size gốc trước khi vẽ,
- * nên trang không dựng lại một lần sau hydrate (trước đây effect đọc kho bất đồng bộ rồi mới đổi cỡ).
+ * nên trang không dựng lại một lần sau hydrate.
  */
 const CLS_MAX = 0.01;
 const SCALES = [

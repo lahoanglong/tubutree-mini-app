@@ -17,15 +17,16 @@ type Phase = 'pending' | 'reloading' | 'offline' | 'stuck';
  */
 /**
  * `navigator.onLine` là true cả trên Wi-Fi cổng đăng nhập hay mất Internet: tải lại lúc đó ra trang lỗi của trình duyệt. Hỏi thử chính trang này (cùng gốc, HEAD, không cache):
- * có bất kỳ phản hồi HTTP nào là tới được máy chủ; lỗi mạng hay quá hạn thì coi như mất kết nối.
+ * có phản hồi dưới 500 là tới được ứng dụng; lỗi mạng, quá hạn hay 5xx thì coi như chưa tải lại được.
  */
 async function reachable(): Promise<boolean> {
   if (typeof navigator !== 'undefined' && navigator.onLine === false) return false;
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), REACHABILITY_TIMEOUT_MS);
   try {
-    await fetch('/', { method: 'HEAD', cache: 'no-store', signal: ctl.signal });
-    return true;
+    const res = await fetch('/', { method: 'HEAD', cache: 'no-store', signal: ctl.signal });
+    // 5xx (nginx 502/503 lúc đổi container khi triển khai) là trang lỗi của proxy: tải lại chỉ ra đúng trang đó.
+    return res.status < 500;
   } catch {
     return false;
   } finally {

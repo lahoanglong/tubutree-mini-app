@@ -71,12 +71,13 @@ for (const vp of [{ name: 'web375', width: 375, height: 812 }, { name: 'web1280'
   });
 }
 
-test('PDP Giờ vàng: đợt đã hết giữa lúc server dựng HTML và lúc tải (đồng hồ máy khách chạy trước): hydrate không lỗi, thanh Giờ vàng biến mất sau hydrate', async ({ page, api, request }) => {
+test('PDP Giờ vàng: điện thoại chạy nhanh 7 giờ, đợt còn chạy theo giờ thật: hydrate không lỗi và thanh Giờ vàng không bị giấu trong lúc lần hỏi danh sách chưa xong', async ({ page, api, request }) => {
   test.skip(!flash, 'DB e2e không phải DB tạm hoặc chưa có sản phẩm để gieo đợt Giờ vàng');
   const f = flash!;
   const html = await request.get(`http://localhost:${process.env.E2E_WEB_PORT}/san-pham/${f.slug}`).then((r) => r.text());
   expect(html, 'HTML server phải đã có thanh Giờ vàng (đợt còn chạy lúc dựng)').toContain('flash-price-bar');
-  // Máy khách chạy trước 7 giờ: đợt gieo ở đây kết thúc sau 6 giờ nên với trình duyệt nó đã hết, còn HTML thì dựng lúc đợt còn chạy.
+  // Đồng hồ treo tường của máy khách chạy trước 7 giờ, trong khi đợt gieo ở đây kết thúc sau 6 giờ: nếu mốc lọc đợt lấy theo đồng hồ điện thoại trước khi đồng bộ thì thanh bị giấu
+  // rồi hiện lại khi lần hỏi đầu xong. `performance.now()` không bị đổi nên mốc đơn điệu vẫn giữ thanh.
   await page.addInitScript(() => {
     const real = Date.now.bind(Date);
     Date.now = () => real() + 7 * 3_600_000;
@@ -92,14 +93,18 @@ test('PDP Giờ vàng: đợt đã hết giữa lúc server dựng HTML và lúc
   api.get('/cart', { items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 350000, itemCount: 0 });
   const p = `/products/${f.slug}`;
   api.allowUnmocked(`GET ${p}`, `GET ${p}/related`, `GET ${p}/bought-together`, `GET ${p}/bundles`, `GET ${p}/reviews`, `GET ${p}/stock`, 'GET /products', 'GET /products/for-you', 'GET /me/coupons', 'POST /events');
-  // Không bao giờ trả lời danh sách Giờ vàng (đăng ký sau cùng nên thắng mock chung): thanh chỉ có thể biến mất vì mốc giờ chuyển sang đồng hồ máy khách sau mount, không phải vì danh sách mới về rỗng.
+  // Không bao giờ trả lời danh sách Giờ vàng (đăng ký sau cùng nên thắng mock chung): lần hỏi đầu không xong thì giờ không bao giờ chuyển sang đồng hồ điện thoại.
   let activeAsked = 0;
   await page.route('**/flash-sales/active*', () => {
     activeAsked += 1;
   });
+  await observeCls(page);
   await page.goto(`/san-pham/${f.slug}`);
-  await expect(page.getByTestId('flash-price-bar')).toHaveCount(0, { timeout: 20_000 });
-  await page.waitForTimeout(1000);
+  await expect(page.getByTestId('flash-price-bar')).toBeVisible({ timeout: 20_000 });
+  await page.waitForTimeout(2_000);
+  await expect(page.getByTestId('flash-price-bar')).toBeVisible();
   expect(activeAsked, 'trình duyệt phải đã hỏi danh sách (và không nhận được trả lời nào)').toBeGreaterThan(0);
   expect(problems).toEqual([]);
+  const { cls } = await readClsTotal(page);
+  expect(cls).toBeLessThan(CLS_MAX);
 });

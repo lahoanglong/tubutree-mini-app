@@ -114,6 +114,19 @@ describe.each(boundaries)('%s — mạng báo online nhưng không ra Internet',
     expectOffline();
   });
 
+  it.each([502, 503, 500])('dò máy chủ trả %i (proxy đang đổi container lúc triển khai): không tải lại, không ghi khoá, hiện thông báo', async (status) => {
+    fetchMock.mockResolvedValue({ status });
+    mounted = render(<Boundary error={chunkErr} reset={vi.fn()} />);
+    await flush();
+    expectOffline();
+  });
+
+  it('dò máy chủ trả 404 hay 304 (ứng dụng còn sống): vẫn tải lại', async () => {
+    fetchMock.mockResolvedValue({ status: 404 });
+    mounted = render(<Boundary error={chunkErr} reset={vi.fn()} />);
+    await vi.waitFor(() => expect(mocks.reload).toHaveBeenCalledTimes(1));
+  });
+
   it('dò máy chủ treo quá hạn: coi như mất kết nối', async () => {
     vi.useFakeTimers();
     fetchMock.mockImplementation((_u: string, init: { signal: AbortSignal }) => new Promise((_r, reject) => init.signal.addEventListener('abort', () => reject(new DOMException('x', 'AbortError')))));

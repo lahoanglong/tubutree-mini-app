@@ -41,12 +41,14 @@ describe('FlashSalesSeed', () => {
     expect(renderToString(tree([item(new Date(t0 + 60_000).toISOString())], t0))).toContain('1|wait');
   });
 
-  it('hydrate khi đợt đã hết giữa lúc dựng HTML và lúc tải: không lệch hydrate ở lần dựng đầu, sau mount thanh biến mất một lần', async () => {
+  it('hydrate khi đợt đã hết giữa lúc dựng HTML và lúc tải: không lệch hydrate, vẫn hiện như HTML tới khi lần hỏi đầu trả danh sách mới (không còn đợt)', async () => {
     const t0 = Date.now() - 120_000;
     const endAt = new Date(t0 + 30_000).toISOString();
     const html = renderToString(tree([item(endAt)], t0));
     expect(html).toContain('1|wait');
     resetFlashSales();
+    let resolve!: (v: unknown) => void;
+    api.impl = () => new Promise((r) => (resolve = r));
     const container = document.createElement('div');
     container.innerHTML = html;
     document.body.appendChild(container);
@@ -58,7 +60,10 @@ describe('FlashSalesSeed', () => {
     await flush();
     expect(errors).toEqual([]);
     expect(logged).not.toHaveBeenCalled();
-    expect(container.textContent).toBe('0|wait');
+    expect(container.textContent).toBe('1|wait');
+    await act(async () => resolve([]));
+    await flush();
+    expect(container.textContent).toBe('0|loaded');
   });
 
   it('đợt còn chạy lâu: sau hydrate vẫn hiện, và chưa đánh dấu "đã tải" tới khi trình duyệt hỏi xong', async () => {
@@ -81,22 +86,65 @@ describe('FlashSalesSeed', () => {
   });
 });
 
-describe('useFlashNow: điện thoại chạy chậm', () => {
-  it('sau mount mốc không lùi dưới giờ dựng HTML: đợt đã hết lúc dựng không hiện lại vì đồng hồ máy chậm', async () => {
-    const t0 = Date.now();
-    const realNow = Date.now;
-    // Đồng hồ điện thoại chậm 10 phút so với giờ server lúc dựng HTML.
-    vi.spyOn(Date, 'now').mockImplementation(() => realNow() - 600_000);
-    const stale = item(new Date(t0 - 1_000).toISOString());
+describe('useFlashNow: đồng hồ điện thoại lệch (trước khi lần hỏi đầu xong dùng đồng hồ đơn điệu, sau đó giờ máy chủ)', () => {
+  const hydrateWith = async (stale: FlashItem, t0: number) => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     container.innerHTML = renderToString(tree([stale], t0));
-    expect(container.textContent).toBe('0|wait');
+    const htmlText = container.textContent;
     resetFlashSales();
+    let resolve!: (v: unknown) => void;
+    api.impl = () => new Promise((r) => (resolve = r));
     await act(async () => {
       hydrateRoot(container, tree([stale], t0));
     });
     await flush();
+    return { container, htmlText, resolve };
+  };
+
+  it('điện thoại chạy NHANH 7 giờ, đợt còn chạy: không bị giấu rồi hiện lại; vẫn hiện trước và sau khi lần hỏi đầu xong', async () => {
+    const t0 = Date.now();
+    const realNow = Date.now;
+    vi.spyOn(Date, 'now').mockImplementation(() => realNow() + 7 * 3_600_000);
+    const running = item(new Date(t0 + 600_000).toISOString());
+    const { container, htmlText, resolve } = await hydrateWith(running, t0);
+    expect(htmlText).toBe('1|wait');
+    expect(container.textContent).toBe('1|wait');
+    // Lần hỏi đầu trả về cùng đợt và giờ máy chủ đúng (giờ thật = t0): đợt vẫn chạy.
+    const { syncServerClock } = await import('@tubutree/app-core/server-clock');
+    syncServerClock(new Date(t0).toISOString());
+    await act(async () => resolve([running]));
+    await flush();
+    expect(container.textContent).toBe('1|loaded');
+  });
+
+  it('điện thoại chạy CHẬM 10 phút, đợt đã hết lúc dựng HTML: không hiện lại sau mount', async () => {
+    const t0 = Date.now();
+    const realNow = Date.now;
+    vi.spyOn(Date, 'now').mockImplementation(() => realNow() - 600_000);
+    const { container, htmlText } = await hydrateWith(item(new Date(t0 - 1_000).toISOString()), t0);
+    expect(htmlText).toBe('0|wait');
     expect(container.textContent).toBe('0|wait');
+  });
+
+  it('đợt hết giữa giờ dựng HTML và giờ thật: hiện như HTML lúc hydrate và sau mount, rồi biến mất khi lần hỏi đầu xong (danh sách mới không còn đợt)', async () => {
+    const t0 = Date.now() - 120_000;
+    const { container, htmlText, resolve } = await hydrateWith(item(new Date(t0 + 30_000).toISOString()), t0);
+    expect(htmlText).toBe('1|wait');
+    expect(container.textContent).toBe('1|wait');
+    await act(async () => resolve([]));
+    await flush();
+    expect(container.textContent).toBe('0|loaded');
+  });
+
+  it('sau khi đã đồng bộ giờ máy chủ: đợt đã hết theo giờ máy chủ biến mất ngay cả khi API vẫn trả nó', async () => {
+    const t0 = Date.now() - 120_000;
+    const ended = item(new Date(t0 + 30_000).toISOString());
+    const { container, resolve } = await hydrateWith(ended, t0);
+    const { syncServerClock } = await import('@tubutree/app-core/server-clock');
+    syncServerClock(new Date().toISOString());
+    await act(async () => resolve([ended]));
+    await flush();
+    expect(container.textContent).toBe('0|loaded');
   });
 });
