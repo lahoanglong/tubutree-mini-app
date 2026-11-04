@@ -4,6 +4,7 @@ import { CRON_TZ } from '../../../common/cron-tz';
 import { markCronSkipped, TrackCron } from '../../../common/cron-run/track-cron';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { WasteGiftRedemptionsService } from './waste-gift-redemptions.service';
+import { runExclusive } from '../../../common/cron-leader/run-exclusive';
 
 /**
  * Mỗi giờ huỷ quà hiện vật đã quá hạn nhận và hoàn điểm cho khách. Chạy bất kể cờ đổi rác: đổi quà và trao quà ở kho không theo cờ đó,
@@ -36,17 +37,10 @@ export class WasteGiftExpiryCron {
     if (this.running) { markCronSkipped('RUNNING'); return none; }
     this.running = true;
     try {
-      // Khoá advisory theo transaction giữ suốt lượt chạy: hai replica cùng lên lịch thì chỉ một bên quét. Từng quà huỷ trên
-      // kết nối khác; tx này chỉ để giữ khoá. Khoá viết thẳng trong SQL để cổng quét khoá thấy `hashtext('cron:`.
-      return await this.prisma.$transaction(
-        async (tx) => {
-          const [row] = await tx.$queryRaw<{ locked: boolean }[]>`
-            SELECT pg_try_advisory_xact_lock(hashtext('cron:waste.gift_expiry')) AS "locked"`;
-          if (!row?.locked) { markCronSkipped('LOCKED'); return none; }
-          return this.gifts.expireOverdue(now);
-        },
-        { maxWait: 10_000, timeout: 15 * 60_000 },
-      );
+      // Khoá lượt chạy (cron_leases), không giữ kết nối DB: nhiều instance cùng lên lịch thì chỉ một chạy.
+      const run = await runExclusive(this.prisma, 'cron:waste.gift_expiry', () => this.gifts.expireOverdue(now));
+      if (!run.acquired) { markCronSkipped('LOCKED'); return none; }
+      return run.value;
     } finally {
       this.running = false;
     }

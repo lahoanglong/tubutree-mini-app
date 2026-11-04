@@ -18,6 +18,7 @@ export {
   readDealerPendingPaymentTtlHours,
   readPendingPaymentTtlHours,
 } from './pending-payment-ttl';
+import { runExclusive } from '../../common/cron-leader/run-exclusive';
 
 const BATCH_SIZE = 200;
 const LOCK_KEY = 'cron:orders.pending_payment_expiry';
@@ -62,17 +63,10 @@ export class PendingPaymentExpiryCron {
     if (this.running) { markCronSkipped('RUNNING'); return { skipped: 'RUNNING' }; }
     this.running = true;
     try {
-      // Khoá advisory theo transaction giữ suốt lượt chạy: nhiều instance API cùng lên lịch thì chỉ một
-      // instance quét. Từng lần huỷ chạy transaction riêng (kết nối khác) — tx này chỉ để giữ khoá.
-      return await this.prisma.$transaction(
-        async (tx) => {
-          const [row] = await tx.$queryRaw<{ locked: boolean }[]>`
-            SELECT pg_try_advisory_xact_lock(hashtext(${LOCK_KEY})) AS "locked"`;
-          if (!row?.locked) { markCronSkipped('LOCKED'); return { skipped: 'LOCKED' as const }; }
-          return this.cancelExpired(now);
-        },
-        { maxWait: 10_000, timeout: 15 * 60_000 },
-      );
+      // Khoá lượt chạy (cron_leases), không giữ kết nối DB: nhiều instance cùng lên lịch thì chỉ một chạy.
+      const run = await runExclusive(this.prisma, LOCK_KEY, () => this.cancelExpired(now));
+      if (!run.acquired) { markCronSkipped('LOCKED'); return { skipped: 'LOCKED' as const }; }
+      return run.value;
     } finally {
       this.running = false;
     }

@@ -1,4 +1,5 @@
 import type { Prisma } from '@prisma/client';
+import { runExclusive } from '../../src/common/cron-leader/run-exclusive';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import type { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import { CouponCleanupCron } from '../../src/modules/coupons/coupon-cleanup.cron';
@@ -113,14 +114,10 @@ describe('CouponCleanupCron (real Postgres)', () => {
     const held = new Promise<void>((r) => (release = r));
     let acquired!: () => void;
     const gotLock = new Promise<void>((r) => (acquired = r));
-    const holder = prisma.$transaction(
-      async (tx) => {
-        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'cron:coupons.cleanup_personal_expired'}))`;
-        acquired();
-        await held;
-      },
-      { timeout: 30_000 },
-    );
+    const holder = runExclusive(prisma, 'cron:coupons.cleanup_personal_expired', async () => {
+      acquired();
+      await held;
+    });
     await gotLock;
     const res = await cron.purgeExpiredPersonal(NOW);
     expect(res).toEqual({ skipped: 'LOCKED' });

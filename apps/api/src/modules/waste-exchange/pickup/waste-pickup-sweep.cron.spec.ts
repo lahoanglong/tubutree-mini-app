@@ -3,8 +3,14 @@ import { join } from 'node:path';
 import { writeWasteEvent } from '../core/waste-events';
 import { WastePickupHooks } from './waste-pickup-hooks.service';
 import { WastePickupSweepCron } from './waste-pickup-sweep.cron';
+import { runExclusive } from '../../../common/cron-leader/run-exclusive';
+import { holdsLease } from '../../../common/cron-leader/run-exclusive.fixtures';
+
+jest.mock('../../../common/cron-leader/run-exclusive');
 
 jest.mock('../core/waste-events', () => ({ writeWasteEvent: jest.fn().mockResolvedValue({ id: 'ev1' }) }));
+
+beforeEach(() => (runExclusive as jest.Mock).mockClear());
 
 const rows = [
   { id: 'r1', orderId: 'o1', order: { status: 'CANCELLED' } },
@@ -14,14 +20,14 @@ const rows = [
 
 function setup(o: { locked?: boolean; outcomes?: Record<string, string>; throwFor?: string } = {}) {
   const findMany = jest.fn().mockResolvedValueOnce(rows).mockResolvedValue([]);
-  const tx = { $queryRaw: jest.fn().mockResolvedValue([{ locked: o.locked ?? true }]) };
-  const prisma = { wasteRequest: { findMany }, $transaction: jest.fn(async (cb: (t: unknown) => unknown) => cb(tx)) };
+  (runExclusive as jest.Mock).mockImplementation(holdsLease(o.locked ?? true));
+  const prisma = { wasteRequest: { findMany } };
   const apply = (orderId: string) => {
     if (o.throwFor === orderId) return Promise.reject(new Error('db'));
     return Promise.resolve(o.outcomes?.[orderId] ?? 'APPLIED');
   };
   const hooks = { applyOrderCancelled: jest.fn(apply), applyOrderDelivered: jest.fn(apply) };
-  return { cron: new WastePickupSweepCron(prisma as never, hooks as never), findMany, hooks, tx };
+  return { cron: new WastePickupSweepCron(prisma as never, hooks as never), findMany, hooks, prisma };
 }
 
 describe('WastePickupSweepCron.run (§12.2 bước 3, quét bù)', () => {
@@ -55,18 +61,18 @@ describe('WastePickupSweepCron.run (§12.2 bước 3, quét bù)', () => {
   });
 
   it('không lấy được try-lock → không quét, trả số 0', async () => {
-    const { cron, findMany, tx } = setup({ locked: false });
+    const { cron, findMany, prisma } = setup({ locked: false });
     await expect(cron.run()).resolves.toEqual({ cancelled: 0, started: 0, anomalies: 0 });
     expect(findMany).not.toHaveBeenCalled();
-    expect((tx.$queryRaw.mock.calls[0]![0] as string[]).join('?')).toContain(`pg_try_advisory_xact_lock(hashtext('cron:waste.pickup_sweep'))`);
+    expect(runExclusive).toHaveBeenCalledWith(prisma, 'cron:waste.pickup_sweep', expect.any(Function));
   });
 
   it('đang chạy trong tiến trình → lần gọi chồng trả số 0, chỉ quét một lần', async () => {
-    const { cron, findMany, tx } = setup();
+    const { cron, findMany } = setup();
     const [a, b] = await Promise.all([cron.run(), cron.run()]);
     expect([a, b]).toContainEqual({ cancelled: 0, started: 0, anomalies: 0 });
     expect(findMany).toHaveBeenCalledTimes(1);
-    expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(runExclusive).toHaveBeenCalledTimes(1);
   });
 
   it('trang đủ 200 dòng → đọc trang sau với id > id cuối; trang thiếu thì dừng', async () => {
@@ -98,8 +104,8 @@ describe('hook hỏng thì quét bù làm nốt, kể cả đơn đã có delive
         findMany: jest.fn().mockResolvedValueOnce([{ id: 'r1', orderId: 'o1', order: { status: 'DELIVERED' } }]).mockResolvedValue([]),
         updateMany,
       },
-      $queryRaw: jest.fn().mockResolvedValue([{ locked: true }]),
     };
+    (runExclusive as jest.Mock).mockImplementation(holdsLease(true));
     prisma.$transaction = jest.fn(async (cb: (tx: unknown) => unknown) => cb(prisma));
     const notifier = { pickupStarted: jest.fn().mockResolvedValue(undefined), pickupCancelled: jest.fn() };
     const hooks = new WastePickupHooks(prisma as never, { snapshot: jest.fn().mockResolvedValue({ pickupWaitDays: 14 }) } as never, notifier as never);

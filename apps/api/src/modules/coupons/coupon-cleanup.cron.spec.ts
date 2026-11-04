@@ -3,17 +3,20 @@ import { SCHEDULE_CRON_OPTIONS } from '@nestjs/schedule/dist/schedule.constants'
 import { CouponCleanupCron } from './coupon-cleanup.cron';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
+import { runExclusive } from '../../common/cron-leader/run-exclusive';
+import { holdsLease } from '../../common/cron-leader/run-exclusive.fixtures';
+
+jest.mock('../../common/cron-leader/run-exclusive');
 
 function make(deleteCounts: number[], locked = true) {
-  const tx = { $queryRaw: jest.fn().mockResolvedValue([{ locked }]) };
+  (runExclusive as jest.Mock).mockImplementation(holdsLease(locked));
   const counts = [...deleteCounts];
   const prisma = {
-    $transaction: jest.fn((fn: (t: unknown) => unknown) => fn(tx)),
     $executeRaw: jest.fn(async () => counts.shift() ?? 0),
   };
   const config = { get: jest.fn(async (_k: string, fallback: unknown) => fallback) };
   const cron = new CouponCleanupCron(prisma as unknown as PrismaService, config as unknown as SystemConfigService);
-  return { cron, prisma, tx };
+  return { cron, prisma };
 }
 
 describe('CouponCleanupCron', () => {
@@ -28,16 +31,16 @@ describe('CouponCleanupCron', () => {
     expect(prisma.$executeRaw).toHaveBeenCalledTimes(3);
   });
 
-  it('không giữ được khoá advisory thì bỏ qua, không xoá', async () => {
+  it('không giành được khoá lượt chạy thì bỏ qua, không xoá', async () => {
     const { cron, prisma } = make([5], false);
     await expect(cron.purgeExpiredPersonal()).resolves.toEqual({ skipped: 'LOCKED' });
     expect(prisma.$executeRaw).not.toHaveBeenCalled();
   });
 
   it('lượt chạy chồng trong cùng instance bị bỏ qua', async () => {
-    const { cron, prisma } = make([0]);
+    const { cron } = make([0]);
     let unblock!: () => void;
-    (prisma.$transaction as jest.Mock).mockImplementationOnce(() => new Promise((r) => (unblock = () => r({ deleted: 0, batches: 0 }))));
+    (runExclusive as jest.Mock).mockImplementationOnce(() => new Promise((r) => (unblock = () => r({ acquired: true, value: { deleted: 0, batches: 0 } }))));
     const first = cron.purgeExpiredPersonal();
     await expect(cron.purgeExpiredPersonal()).resolves.toEqual({ skipped: 'RUNNING' });
     unblock();
@@ -45,8 +48,8 @@ describe('CouponCleanupCron', () => {
   });
 
   it('lỗi DB trong handleCron không ném ra ngoài', async () => {
-    const { cron, prisma } = make([]);
-    (prisma.$transaction as jest.Mock).mockRejectedValueOnce(new Error('db down'));
+    const { cron } = make([]);
+    (runExclusive as jest.Mock).mockRejectedValueOnce(new Error('db down'));
     await expect(cron.handleCron()).resolves.toBeUndefined();
   });
 });

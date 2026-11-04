@@ -14,6 +14,7 @@ import { OWN_RETAIL_SPEND_SQL } from '../orders/own-retail-spend';
 import { COUNTED_ORDER_WHERE } from '../../common/first-order';
 import { voucherCode } from './voucher-code';
 import { markCronSkipped, TrackCron } from '../../common/cron-run/track-cron';
+import { runExclusive } from '../../common/cron-leader/run-exclusive';
 
 type GrantFailures = { count: number; first?: unknown };
 
@@ -40,8 +41,8 @@ export class VouchersService {
   /**
    * Số grant() chạy cùng lúc trong mỗi lô của mọi cron dùng grantInChunks (welcome, birthday, winback, milestone, second-order);
    * mỗi grant giữ 1 kết nối Prisma ngắn hạn. Welcome chạy mỗi giờ nên trùng giờ với second-order lúc 10:00: tối đa 20 grant
-   * cùng lúc, cộng 2 kết nối giữ trong $transaction cho advisory lock (second-order và review-invite, cả hai chạy 10:00),
-   * tổng 22 so với connection_limit=20 của docker-compose.vietnix.yml. Hàng chờ pool (pool_timeout=30) hấp thụ phần vượt, nên khi tăng GRANT_CONCURRENCY hoặc thêm
+   * cùng lúc, bằng connection_limit=20 của docker-compose.vietnix.yml (khoá lượt chạy của các cron là lease trong cron_leases,
+   * không giữ kết nối). Hàng chờ pool (pool_timeout=30) hấp thụ phần vượt, nên khi tăng GRANT_CONCURRENCY hoặc thêm
    * cron chạy cùng giờ phải tính lại tổng này.
    */
   private static readonly GRANT_CONCURRENCY = 10;
@@ -438,17 +439,10 @@ export class VouchersService {
     if (this.secondOrderRunning) { markCronSkipped('RUNNING'); return { skipped: 'RUNNING' }; }
     this.secondOrderRunning = true;
     try {
-      // Khoá advisory theo transaction giữ suốt lượt (nhiều instance cùng lịch thì chỉ một chạy); việc cấp chạy trên
-      // kết nối khác nên mã đã cấp vẫn giữ khi lượt bị ngắt giữa chừng. Code coupon @unique vẫn là chốt cuối.
-      return await this.prisma.$transaction(
-        async (tx) => {
-          const [row] = await tx.$queryRaw<{ locked: boolean }[]>`
-            SELECT pg_try_advisory_xact_lock(hashtext(${VouchersService.SECOND_ORDER_LOCK})) AS "locked"`;
-          if (!row?.locked) { markCronSkipped('LOCKED'); return { skipped: 'LOCKED' as const }; }
-          return this.grantSecondOrderBatches();
-        },
-        { maxWait: 10_000, timeout: 10 * 60_000 },
-      );
+      // Khoá lượt chạy (cron_leases), không giữ kết nối DB: nhiều instance cùng lên lịch thì chỉ một chạy. Việc cấp chạy lô nào commit lô đó; code coupon @unique vẫn là chốt cuối.
+      const run = await runExclusive(this.prisma, VouchersService.SECOND_ORDER_LOCK, () => this.grantSecondOrderBatches());
+      if (!run.acquired) { markCronSkipped('LOCKED'); return { skipped: 'LOCKED' as const }; }
+      return run.value;
     } catch (err) {
       this.logger.error(`secondOrderVouchers lỗi: ${err instanceof Error ? err.message : err}`);
       return { skipped: 'ERROR' };

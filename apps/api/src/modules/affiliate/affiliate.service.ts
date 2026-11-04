@@ -81,6 +81,7 @@ import type { PublicVisibilityOptions } from '../storefront/storefront-visibilit
 import { APPROVE_COMMISSIONS_CRON, DAILY_WALLET_TRANSFER_HOUR_VN, DAILY_WALLET_TRANSFER_JOB, AFFILIATE_AUTO_WALLET_TRANSFER_KEY, DEFAULT_AFFILIATE_AUTO_WALLET_TRANSFER_ENABLED } from './affiliate-auto-transfer-config';
 import { affiliateAccess, canPlaceOrderForCustomer, canRegisterAsAffiliate } from './affiliate-access';
 import { markCronSkipped, TrackCron } from '../../common/cron-run/track-cron';
+import { runExclusive } from '../../common/cron-leader/run-exclusive';
 import { SessionStateService } from '../auth/session-state.service';
 export { CTV_MONTHLY_MILESTONES, type CtvMilestone } from './ctv-milestones';
 
@@ -1554,19 +1555,12 @@ export class AffiliateService {
     }
     this.approveRunning = true;
     try {
-      // Khoá advisory theo transaction giữ suốt lượt: hai tiến trình cùng chạy thì bên thua bỏ qua. Việc ghi chạy trên kết nối khác.
-      await this.prisma.$transaction(
-        async (tx) => {
-          const [row] = await tx.$queryRaw<{ locked: boolean }[]>`
-            SELECT pg_try_advisory_xact_lock(hashtext('cron:affiliate.approve_due')) AS "locked"`;
-          if (!row?.locked) {
-            markCronSkipped('LOCKED');
-            return;
-          }
-          await this.approveDueAndMaybeTransfer(now);
-        },
-        { maxWait: 10_000, timeout: 15 * 60_000 },
-      );
+      // Khoá lượt chạy (cron_leases): hai tiến trình cùng chạy thì bên thua bỏ qua.
+      const run = await runExclusive(this.prisma, 'cron:affiliate.approve_due', () => this.approveDueAndMaybeTransfer(now));
+      if (!run.acquired) {
+        markCronSkipped('LOCKED');
+        return;
+      }
       await this.notifyMilestoneRevokes(now);
     } catch (err) {
       this.logger.error(`approveDueCommissions lỗi: ${err instanceof Error ? err.message : err}`);

@@ -5,6 +5,10 @@ import type { NotificationsService } from '../notifications/notifications.servic
 import { REAL_USER_WHERE } from '../../common/real-user';
 import { priorOrderWhere } from '../../common/first-order';
 import { startOfVnMonth } from '../../common/vn-time';
+import { runExclusive } from '../../common/cron-leader/run-exclusive';
+import { holdsLease } from '../../common/cron-leader/run-exclusive.fixtures';
+
+jest.mock('../../common/cron-leader/run-exclusive');
 
 /** Service gửi tin qua notifySafe; hai tên dùng chung một mock để kiểm theo mã tin. */
 function mockNotifier(): NotificationsService {
@@ -467,10 +471,9 @@ describe('VouchersService.secondOrderVouchers — xử lý từng lô song song 
       cursors.push(cursor);
       return userIds.filter((id) => id > cursor).slice(0, statics.SECOND_ORDER_PAGE).map((userId) => ({ userId, firstAt: FIRST_AT }));
     });
-    const tx = { $queryRaw: jest.fn().mockResolvedValue([{ locked: true }]) };
+    (runExclusive as jest.Mock).mockImplementation(holdsLease(true));
     const prisma = {
       $queryRaw: pageQuery,
-      $transaction: jest.fn(async (fn: (t: typeof tx) => Promise<unknown>) => fn(tx)),
       coupon: k.coupon,
     } as unknown as PrismaService;
     const notify = mockNotifier();

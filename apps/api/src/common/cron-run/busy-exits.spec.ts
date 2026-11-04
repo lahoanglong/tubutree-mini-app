@@ -2,25 +2,32 @@ import { PancakeSyncService } from '../../modules/integrations/pancake/pancake-s
 import { WasteExpiryCron } from '../../modules/waste-exchange/pickup/waste-expiry.cron';
 import { WastePickupSweepCron } from '../../modules/waste-exchange/pickup/waste-pickup-sweep.cron';
 import { CronRunService } from '../../modules/ops/cron-run.service';
+import { runExclusive } from '../cron-leader/run-exclusive';
+import { holdsLease } from '../cron-leader/run-exclusive.fixtures';
 import { setCronRunSink, type CronRunReport } from './track-cron';
 
-const lockedByOther = { $transaction: async (fn: (tx: unknown) => unknown) => fn({ $queryRaw: async () => [{ locked: false }] }) };
+const lockedByOther = {};
+
+jest.mock('../cron-leader/run-exclusive');
 
 describe('thoát vì bận không được tính là thành công', () => {
   const reports: CronRunReport[] = [];
-  beforeEach(() => setCronRunSink({ record: (r) => void reports.push(r) }));
+  beforeEach(() => {
+    setCronRunSink({ record: (r) => void reports.push(r) });
+    (runExclusive as jest.Mock).mockImplementation(holdsLease(false));
+  });
   afterEach(() => {
     setCronRunSink(undefined);
     reports.length = 0;
   });
 
-  it('WasteExpiryCron: khoá advisory đang do replica khác giữ', async () => {
+  it('WasteExpiryCron: khoá lượt chạy đang do replica khác giữ', async () => {
     const cron = new WasteExpiryCron(lockedByOther as never, { snapshot: async () => ({ shortfallLockPct: 1, shortfallLockStreak: 1 }) } as never, {} as never, {} as never, {} as never);
     await cron.handleCron();
     expect(reports[0]).toMatchObject({ outcome: 'SKIPPED' });
   });
 
-  it('WastePickupSweepCron: khoá advisory đang do replica khác giữ', async () => {
+  it('WastePickupSweepCron: khoá lượt chạy đang do replica khác giữ', async () => {
     const cron = new WastePickupSweepCron(lockedByOther as never, {} as never);
     await cron.handleCron();
     expect(reports[0]).toMatchObject({ outcome: 'SKIPPED' });
