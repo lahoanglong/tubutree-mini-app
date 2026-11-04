@@ -110,9 +110,9 @@ describe('BrowsePage (DS v2, spec 5b.2)', () => {
     mocks.fetchCatalog.mockResolvedValue(pageOf([card('p1', 'Nước rửa chén'), card('p2', 'Xà phòng')]));
     mocks.fetchBrands.mockResolvedValue([{ brand: 'Tubu', count: 2 }]);
     mocks.fetchCategories.mockResolvedValue([]);
+    mocks.suggestProducts.mockResolvedValue([]);
     mocks.coreGet.mockResolvedValue({ data: [], meta: { page: 1, limit: 10, total: 0 } });
     mocks.fetchProducts.mockResolvedValue({ data: [], meta: { page: 1, limit: 10, total: 0 } });
-    mocks.coreGet.mockResolvedValue({ data: [], meta: { page: 1, limit: 10, total: 0 } });
     // `useNavigate` của zmp-ui bị thay bằng vi.fn(): chuyển các lượt mở Danh mục vào router thật để thấy URL đổi.
     mocks.navigate.mockImplementation((to: unknown) => {
       if (typeof to === 'string' && to.startsWith('/browse')) mocks.routerNavigate?.(to);

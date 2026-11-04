@@ -44,6 +44,7 @@ vi.mock('../store/auth', () => {
 vi.mock('../components/image-upload', () => ({
   isCloudinaryConfigured: () => mocks.cloudinary,
   uploadToCloudinary: mocks.upload,
+  prepareForCloudinary: async (f: File) => f,
   MAX_IMAGE_BYTES: 20 * 1024 * 1024,
 }));
 vi.mock('./about-data', async (importOriginal) => ({
