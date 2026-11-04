@@ -140,6 +140,11 @@ describe('ô gõ chữ ở màn quản trị khớp trần DTO (L4-03)', () => {
     ).toEqual([]);
   });
 
+  it('ô SĐT của form Cấp / đổi vai trò nhận số dán dạng "+84 912 345 678" mà không bị cắt', () => {
+    const phone = found.find((f) => f.key === 'app/admin/page.tsx::phone');
+    expect(typeof phone?.maxLength === 'number' && phone.maxLength >= '+84 912 345 678'.length).toBe(true);
+  });
+
   it('mọi dòng miễn có lý do', () => {
     expect(Object.entries(EXEMPT_INPUTS).filter(([, reason]) => reason.trim().length < 8)).toEqual([]);
   });

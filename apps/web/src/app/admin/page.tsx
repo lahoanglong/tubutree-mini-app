@@ -2608,7 +2608,7 @@ function GrantRoleForm({ onDone }: { onDone: () => void }) {
             <input
               className={`${FIELD_CLASS} ${TOUCH_H} w-full sm:w-auto`}
               placeholder="SĐT, vd 0912345678"
-              maxLength={11}
+              maxLength={20}
               value={phone}
               disabled={checking}
               onChange={(e) => setPhone(e.target.value)}

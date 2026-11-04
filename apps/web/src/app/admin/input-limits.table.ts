@@ -2,7 +2,7 @@
 /** `dto` dạng `đường/dẫn.ts:Lớp.trường` được đọc từ mã nguồn API; dạng `~mô tả` là trần suy ra từ @Matches, ghi tay. */
 export const INPUT_LIMITS: Record<string, { dto: string; max: number }> = {
   "app/admin/page.tsx::searchInput": { dto: "apps/api/src/modules/admin/admin.controller.ts:ListOrdersQuery.search", max: 100 },
-  "app/admin/page.tsx::phone": { dto: "~GrantRoleDto.phone: @Matches(/^0\\d{8,10}$/) nên tối đa 11 ký tự", max: 11 },
+  "app/admin/page.tsx::phone": { dto: "apps/api/src/modules/admin/admin.controller.ts:SetUserRoleDto.phone", max: 20 },
   "app/admin/page.tsx::f.code": { dto: "apps/api/src/modules/admin/admin.controller.ts:CreateCouponDto.code", max: 64 },
   "app/admin/page.tsx::form.name": { dto: "apps/api/src/modules/brand/dto/brand.dto.ts:CreateBrandDto.name", max: 120 },
   "app/admin/page.tsx::form.tagline": { dto: "apps/api/src/modules/brand/dto/brand.dto.ts:CreateBrandDto.tagline", max: 200 },

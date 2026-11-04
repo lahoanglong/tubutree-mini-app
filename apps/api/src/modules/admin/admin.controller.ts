@@ -479,7 +479,7 @@ export class ResolvePaymentUnlinkedDto {
 }
 
 export class SetUserRoleDto {
-  @IsString() phone!: string;
+  @IsString() @MaxLength(20) phone!: string;
   @IsIn(['CUSTOMER', 'AFFILIATE', 'DEALER', 'STAFF', 'ADMIN'])
   role!: 'CUSTOMER' | 'AFFILIATE' | 'DEALER' | 'STAFF' | 'ADMIN';
   /** Bắt buộc khi role = DEALER (kiểm ở AdminService.setUserRole — C-008). */
