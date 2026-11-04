@@ -325,7 +325,7 @@ describe('Query DTO lọc danh sách admin — qua ValidationPipe thật (forbid
     async function* empty(): AsyncGenerator<string> {}
     const admin = { orderCsv: jest.fn().mockImplementation(async () => empty()) };
     const ctrl = new AdminController(admin as never, {} as never);
-    const res = { setHeader: jest.fn(), write: jest.fn(() => true), end: jest.fn() };
+    const res = { setHeader: jest.fn(), write: jest.fn(() => true), end: jest.fn(), on: jest.fn() };
     await ctrl.exportOrders({} as never, 'STAFF', res as never);
     expect(admin.orderCsv).toHaveBeenLastCalledWith({}, { maskPhones: true });
     await ctrl.exportOrders({} as never, 'ADMIN', res as never);
@@ -340,7 +340,7 @@ describe('Query DTO lọc danh sách admin — qua ValidationPipe thật (forbid
     }
     const admin = { orderCsv: jest.fn().mockImplementation(async () => rows()), userCsv: jest.fn().mockImplementation(() => rows()), recordExport: jest.fn() };
     const ctrl = new AdminController(admin as never, {} as never);
-    const res = { setHeader: jest.fn(), write: jest.fn(() => true), end: jest.fn() };
+    const res = { setHeader: jest.fn(), write: jest.fn(() => true), end: jest.fn(), on: jest.fn() };
     const q = { kind: 'ctv' } as never;
     await ctrl.exportOrders(q, 'KE_TOAN', res as never, 'acc1');
     expect(admin.recordExport).toHaveBeenLastCalledWith('acc1', 'orders/export', q, 2);
@@ -353,7 +353,7 @@ describe('Query DTO lọc danh sách admin — qua ValidationPipe thật (forbid
     async function* empty(): AsyncGenerator<string> {}
     const admin = { orderCsv: jest.fn().mockImplementation(async () => empty()) };
     const ctrl = new AdminController(admin as never, {} as never);
-    const res = { setHeader: jest.fn(), write: jest.fn(() => true), end: jest.fn() };
+    const res = { setHeader: jest.fn(), write: jest.fn(() => true), end: jest.fn(), on: jest.fn() };
     const q = Object.assign(new ExportOrdersQuery(), {
       kind: 'ctv' as const,
       payment: 'PAID' as const,

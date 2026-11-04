@@ -59,9 +59,10 @@ describe('AdminController.users: áp luật CSKH, ADMIN không đổi', () => {
     expect(list).toHaveBeenCalledWith(50, 100, undefined, false);
   });
 
-  it('route có @Throttle riêng 30 lần mỗi phút', () => {
+  it('route có hạn 30 lần mỗi phút riêng cho CSKH (ADMIN bỏ qua, xem throttle.config)', () => {
     const handler = AdminController.prototype.users;
-    expect(Reflect.getMetadata(`${THROTTLER_LIMIT}default`, handler)).toBe(30);
-    expect(Reflect.getMetadata(`${THROTTLER_TTL}default`, handler)).toBe(60_000);
+    expect(Reflect.getMetadata(`${THROTTLER_LIMIT}staffLookup`, handler)).toBe(30);
+    expect(Reflect.getMetadata(`${THROTTLER_TTL}staffLookup`, handler)).toBe(60_000);
+    expect(Reflect.getMetadata(`${THROTTLER_LIMIT}default`, handler)).toBeUndefined();
   });
 });
