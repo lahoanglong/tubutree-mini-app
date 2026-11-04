@@ -145,6 +145,9 @@ describe('page', () => {
 });
 
 describe('khách vãng lai', () => {
+  // Gửi ngoài giờ CSKH sinh thêm tin báo ngoài giờ, nên ghim giờ trong giờ làm việc.
+  beforeEach(() => jest.useFakeTimers({ now: NOON }));
+  afterEach(() => jest.useRealTimers());
   const guest = { phone: null, zaloId: 'guest_device-1' };
 
   it('unreadCount: 0 cho khách vãng lai, không đọc tin', async () => {
