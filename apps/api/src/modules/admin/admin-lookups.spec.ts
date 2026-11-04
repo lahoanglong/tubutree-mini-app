@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { PAGE_TOO_DEEP_MSG } from '../../common/pagination';
 import { RequestMethod } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { plainToInstance } from 'class-transformer';
@@ -346,6 +347,13 @@ describe('Hàng chờ duyệt sản phẩm đối tác — controller (L3-02)', 
     expect((await check({ limit: '51' })).errors).toHaveLength(0);
     expect((await check({ limit: '100' })).errors).toHaveLength(0);
     expect((await check({ limit: '0' })).errors).toHaveLength(1);
+  });
+
+  it('page trần 1000 như PaginationQuery: 1000 qua, 1001 báo 400 kèm lời nhắn thu hẹp bộ lọc', async () => {
+    expect((await check({ page: '1000' })).errors).toHaveLength(0);
+    const { errors } = await check({ page: '1001' });
+    expect(errors).toHaveLength(1);
+    expect(Object.values(errors[0]!.constraints ?? {})).toContain(PAGE_TOO_DEEP_MSG);
   });
 
   const route = (m: string) => {

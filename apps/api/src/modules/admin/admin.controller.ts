@@ -33,7 +33,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { AllowStaff } from '../../common/staff-permissions';
 import { Trim } from '../../common/decorators/trim.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { PaginationQuery } from '../../common/pagination';
+import { MAX_PAGE, PAGE_TOO_DEEP_MSG, PaginationQuery } from '../../common/pagination';
 import { AdminService, DEALER_APPLICATION_IMAGE_COLUMNS } from './admin.service';
 import type { DealerApplicationImageField } from './admin.service';
 import { streamCsv } from './admin-export';
@@ -427,7 +427,7 @@ export class ListReviewsQuery extends PaginationQuery {
  * DTO không chặn `limit` lớn vì web bản cũ vẫn gửi 100 trong lúc deploy; trả 400 sẽ làm hỏng màn duyệt.
  */
 export class PendingMerchantProductsQuery {
-  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(10_000) page = 1;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(MAX_PAGE, { message: PAGE_TOO_DEEP_MSG }) page = 1;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(10_000) limit = 20;
 }
 
