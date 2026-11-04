@@ -11,10 +11,10 @@ describe('pickImageWidth', () => {
 });
 
 describe('imageVariants', () => {
-  it('thẻ SP 170px: 1x = 320, 2x = 480, kèm srcset', () => {
+  it('thẻ SP 170px: 1x = 320, 2x = 480, 3x = 640 (đủ cho DPR 3), kèm srcset', () => {
     const v = imageVariants('https://content.pancake.vn/2-26/a.jpg', 170, API)!;
     expect(v.src).toBe(`${API}/img?w=320&u=${encodeURIComponent('https://content.pancake.vn/2-26/a.jpg')}`);
-    expect(v.srcSet).toBe(`${v.src} 1x, ${API}/img?w=480&u=${encodeURIComponent('https://content.pancake.vn/2-26/a.jpg')} 2x`);
+    expect(v.srcSet).toBe(`${v.src} 1x, ${API}/img?w=480&u=${encodeURIComponent('https://content.pancake.vn/2-26/a.jpg')} 2x, ${API}/img?w=640&u=${encodeURIComponent('https://content.pancake.vn/2-26/a.jpg')} 3x`);
   });
 
   it('ô nhỏ 64px: 1x và 2x cùng 160 thì không có srcset', () => {
