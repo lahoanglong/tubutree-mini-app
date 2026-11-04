@@ -6,6 +6,8 @@ import { PrismaService } from '../../src/prisma/prisma.service';
  * Gói hd1: các index phục vụ truy vấn nóng phải có đúng cột/thứ tự/điều kiện từng phần. Prisma không biểu diễn được
  * index một phần nên drift check không bắt được việc migration bị đổi hay bỏ; so định nghĩa thật trong pg_indexes.
  */
+const SEED = 'hd1-idx-';
+
 describe('hd1: định nghĩa index (real Postgres)', () => {
   let moduleRef: TestingModule;
   let prisma: PrismaService;
@@ -14,9 +16,22 @@ describe('hd1: định nghĩa index (real Postgres)', () => {
     moduleRef = await Test.createTestingModule({ imports: [PrismaModule] }).compile();
     await moduleRef.init();
     prisma = moduleRef.get(PrismaService);
+    // Thống kê bảng phải giống bảng thật có dữ liệu: file race khác nạp rồi xoá làm thống kê gần rỗng, khi đó planner
+    // chọn index khác (sentAt + sắp lại) và bài EXPLAIN phụ thuộc thứ tự chạy file.
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO notification_logs (id, "userId", "templateCode", channel, payload, status, "sentAt")
+       SELECT '${SEED}'||g, 'hd1u'||(g % 200), 'T', CASE WHEN g % 5 = 0 THEN 'ZNS' ELSE 'INAPP' END, '{}'::jsonb,
+              CASE WHEN g % 4 = 0 THEN 'READ' WHEN g % 4 = 1 THEN 'FAILED' ELSE 'SENT' END, now() - (g || ' minutes')::interval
+       FROM generate_series(1, 5000) g`,
+    );
+    await prisma.$executeRawUnsafe('ANALYZE notification_logs');
   });
 
   afterAll(async () => {
+    if (prisma) {
+      await prisma.notificationLog.deleteMany({ where: { id: { startsWith: SEED } } });
+      await prisma.$executeRawUnsafe('ANALYZE notification_logs');
+    }
     await moduleRef?.close();
   });
 
@@ -44,8 +59,8 @@ describe('hd1: định nghĩa index (real Postgres)', () => {
           'hd1_unread(text, text, text)',
           `AS SELECT count(*) FROM notification_logs WHERE "userId" = $1 AND channel = $2 AND status <> $3`,
         );
-        const feed = await tx.$queryRawUnsafe<{ 'QUERY PLAN': string }[]>(`EXPLAIN EXECUTE hd1_feed('u', 'INAPP', 20)`);
-        const unread = await tx.$queryRawUnsafe<{ 'QUERY PLAN': string }[]>(`EXPLAIN EXECUTE hd1_unread('u', 'INAPP', 'READ')`);
+        const feed = await tx.$queryRawUnsafe<{ 'QUERY PLAN': string }[]>(`EXPLAIN EXECUTE hd1_feed('hd1u7', 'INAPP', 20)`);
+        const unread = await tx.$queryRawUnsafe<{ 'QUERY PLAN': string }[]>(`EXPLAIN EXECUTE hd1_unread('hd1u7', 'INAPP', 'READ')`);
         return {
           feed: feed.map((r) => r['QUERY PLAN']).join('\n'),
           unread: unread.map((r) => r['QUERY PLAN']).join('\n'),
