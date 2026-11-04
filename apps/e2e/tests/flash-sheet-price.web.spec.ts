@@ -208,7 +208,7 @@ test.describe('Web khổ điện thoại: giá Giờ vàng ở nút mua và bả
 
   test('số về muộn (request chậm 2 giây): bảng đã mở, ô Số lượng không nhảy khi nút đổi sang giá thường và ghi chú hiện', async ({ page, api, request }) => {
     const { standing } = await setup(page, api, request, { allowance: { perUserLeft: 0, delayMs: 2_000 } });
-    await page.getByRole('button', { name: /^Mua ngay · / }).click();
+    await page.getByRole('button', { name: /^Mua ngay / }).click();
     const dialog = page.getByRole('dialog', { name: 'Chọn phân loại' });
     const buy = dialog.getByRole('button', { name: /^Mua ngay · / });
     const plus = dialog.getByRole('button', { name: 'Tăng số lượng' });

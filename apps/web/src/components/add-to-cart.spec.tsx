@@ -893,7 +893,7 @@ describe('AddToCart — Mua ngay', () => {
       expect(cart.getAttribute('href')).toBe('/gio-hang');
       expect(cart.textContent).toBe('3');
       expect(byText(bar(container), 'button', 'Thêm vào giỏ')!.className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
-      const buy = Array.from(bar(container).querySelectorAll<HTMLButtonElement>('button')).find((b) => b.textContent === 'Mua ngay150.000đ')!;
+      const buy = Array.from(bar(container).querySelectorAll<HTMLButtonElement>('button')).find((b) => b.textContent === 'Mua ngay 150.000đ')!;
       expect(buy.getAttribute('aria-label')).toBe('Mua ngay 150.000đ');
       expect([...buy.querySelectorAll('span')].map((x) => x.textContent)).toEqual(['Mua ngay', '150.000đ']);
       expect(bar(container).textContent).not.toContain('Tạm tính');

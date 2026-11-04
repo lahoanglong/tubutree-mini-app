@@ -461,6 +461,8 @@ export default function AddToCart({
                 className={`${uiBar.primary} min-w-0 flex-1 flex-col !py-1.5 leading-[1.2]`}
               >
                 <span className="block max-w-full truncate">{buyLabel}</span>
+                {/* Khoảng trắng giữa hai khối (flex không vẽ ra) để chữ nhìn thấy, theo cách axe nối, khớp aria-label "Mua ngay <giá>" (WCAG 2.5.3). */}
+                {' '}
                 <span className="block max-w-full truncate text-xs font-medium">{buyTotal}</span>
               </button>
             </div>

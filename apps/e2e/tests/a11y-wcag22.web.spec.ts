@@ -168,15 +168,14 @@ test.describe('A11Y-10: liên kết bỏ qua và nút Quay lại', () => {
     mockBuyer(api);
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto('/gio-hang');
-    const line = page.getByTestId('cart-line').first();
-    await expect(line).toBeVisible({ timeout: 20_000 });
-    await line.click({ position: { x: 3, y: 3 } });
+    await expect(page.getByTestId('cart-line').first()).toBeVisible({ timeout: 20_000 });
+    await page.getByRole('region', { name: 'Sản phẩm trong giỏ' }).click({ position: { x: 3, y: 3 } });
     expect(await page.evaluate(() => document.getElementById('main-content')?.hasAttribute('tabindex'))).toBe(false);
     await page.keyboard.press('Tab');
     const after = await page.evaluate(() => {
-      const line = document.querySelector('[data-testid="cart-line"]')!;
+      const region = document.querySelector('section[aria-label="Sản phẩm trong giỏ"]')!;
       const active = document.activeElement!;
-      return { inMain: !!active.closest('#main-content'), followsLine: line === active || !!(line.compareDocumentPosition(active) & (Node.DOCUMENT_POSITION_FOLLOWING | Node.DOCUMENT_POSITION_CONTAINED_BY)) };
+      return { inMain: !!active.closest('#main-content'), followsLine: region === active || !!(region.compareDocumentPosition(active) & (Node.DOCUMENT_POSITION_FOLLOWING | Node.DOCUMENT_POSITION_CONTAINED_BY)) };
     });
     expect(after.inMain).toBe(true);
     expect(after.followsLine).toBe(true);
