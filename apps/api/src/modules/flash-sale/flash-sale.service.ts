@@ -8,7 +8,8 @@ import { LifecycleService } from '../lifecycle/lifecycle.service';
 import { CRON_TZ } from '../../common/cron-tz';
 import { isSellableVariation, SELLABLE_VARIATION_WHERE } from '../cart/sellable';
 import { assertStaffDailyBudget, loadStaffCouponCaps, type CouponActor } from '../admin/coupon-input-rules';
-import { TrackCron } from '../../common/cron-run/track-cron';
+import { markCronSkipped, TrackCron } from '../../common/cron-run/track-cron';
+import { runExclusive } from '../../common/cron-leader/run-exclusive';
 import { publicImage } from '../../common/public-image';
 import { ACTIVE_FLASH_ORDER_BY, activeFlashWhere, isStillDiscounted } from './flash-active';
 import {
@@ -878,82 +879,95 @@ export class FlashSaleService {
   @TrackCron({ alertAfter: 2 })
   async notifyStartedFlashSales(now: Date = new Date()): Promise<void> {
     try {
-      // Lọc cửa sổ sale NGAY TRONG TRUY VẤN. Trước đây chỉ lọc `notifiedAt: null` rồi mới xét
-      // trong JS: nhắc của những sale đã kết thúc/đã tắt nằm lại vĩnh viễn ở notifiedAt = null
-      // (không có đường dọn), tích tụ dần cho tới khi lấp hết hạn mức 500 — mà truy vấn lại
-      // không có orderBy, nên 500 dòng lấy ra có thể không chứa dòng nào thuộc sale đang chạy.
-      // Kết quả: không ai được nhắc, không lỗi, không log.
-      const baseWhere: Prisma.FlashSaleReminderWhereInput = {
-        notifiedAt: null,
-        // Hàng ngừng bán giữa chừng: không nhắc; dòng nhắc nằm lại tới khi đợt kết thúc rồi được đóng sổ bên dưới.
-        item: { variation: SELLABLE_VARIATION_WHERE, flashSale: { isActive: true, startAt: { lte: now }, endAt: { gt: now } } },
-      };
-      // Lặp trang trong cùng lượt (có hạn thời gian): mỗi phút chỉ 500 người thì 5000 người đăng ký nhắc sẽ bị trễ 10 phút.
-      // Con trỏ theo id để dòng vừa trả cờ về null (gửi lỗi) không bị lấy lại ngay trong lượt này.
-      const deadline = Date.now() + STARTED_REMINDER_BUDGET_MS;
-      let sent = 0;
-      let cursor: string | undefined;
-      for (let page = 0; page < STARTED_REMINDER_MAX_PAGES; page++) {
-        const reminders = await this.prisma.flashSaleReminder.findMany({
-          where: cursor ? { ...baseWhere, id: { gt: cursor } } : baseWhere,
-          include: {
-            item: {
-              include: {
-                flashSale: { select: { isActive: true, startAt: true, endAt: true } },
-                variation: { include: { product: { select: { name: true, slug: true } } } },
-              },
-            },
-          },
-          orderBy: { id: 'asc' },
-          take: STARTED_REMINDER_PAGE,
-        });
-        if (reminders.length === 0) break;
-        cursor = reminders[reminders.length - 1]!.id;
-        for (const r of reminders) {
-          const sale = r.item.flashSale;
-          const started = sale.isActive && sale.startAt <= now && sale.endAt > now;
-          if (!started) continue;
-
-          // Atomic claim chống double-send khi cron chạy chồng.
-          const claimed = await this.prisma.flashSaleReminder.updateMany({
-            where: { id: r.id, notifiedAt: null },
-            data: { notifiedAt: now },
-          });
-          if (claimed.count === 0) continue;
-
-          try {
-            const { name, slug } = r.item.variation.product;
-            const data: Record<string, string> = { product: name };
-            if (slug) data.product_slug = slug;
-            await this.notifications.notify(r.userId, 'FLASH_STARTING', data);
-            sent++;
-          } catch (err) {
-            // Claim đã ghi trước khi gửi: nuốt lỗi ở đây là mất luôn cơ hội giờ vàng của khách đó,
-            // và không có dấu vết nào. Trả cờ về để lượt cron sau thử lại.
-            this.logger.error(`Nhắc giờ vàng lỗi (reminder=${r.id}): ${err instanceof Error ? err.message : err}`);
-            await this.prisma.flashSaleReminder
-              .updateMany({ where: { id: r.id, notifiedAt: now }, data: { notifiedAt: null } })
-              .catch(() => undefined);
-          }
-        }
-        if (reminders.length < STARTED_REMINDER_PAGE || Date.now() >= deadline) break;
-      }
-      if (sent) this.logger.log(`Flash-starting reminders sent: ${sent}`);
-
-      // Đóng sổ những nhắc KHÔNG CÒN CƠ HỘI nào — chỉ theo `endAt` đã qua.
-      //
-      // Cố ý KHÔNG đóng theo `isActive: false`: đó là cờ bật/tắt admin sửa bất cứ lúc nào. Sale
-      // chạy 20:00, 18:30 admin tắt để sửa giá, cron 19:00 sẽ đánh dấu TOÀN BỘ nhắc là đã-nhắc,
-      // 19:30 admin bật lại — tới giờ vàng thì không một ai được nhắc, và log chỉ có dòng "đã đóng
-      // sổ N nhắc hết hạn". Sale đang tắt thì điều kiện truy vấn bên trên đã tự lọc rồi.
-      const stale = await this.prisma.flashSaleReminder.updateMany({
-        where: { notifiedAt: null, item: { flashSale: { endAt: { lte: now } } } },
-        data: { notifiedAt: now },
-      });
-      if (stale.count > 0) this.logger.log(`Đóng sổ ${stale.count} nhắc giờ vàng đã hết hạn.`);
+      // Lượt chạy kéo dài tới 50 giây trên cron mỗi phút nên hai lượt dễ chồng nhau (và nhiều replica): chỉ một lượt làm việc.
+      // Claim từng dòng bên dưới vẫn là chốt chặn gửi đôi.
+      const run = await runExclusive(this.prisma, 'flash-sale-started-reminders', () => this.sendStartedReminders(now), { ttlMs: STARTED_REMINDER_BUDGET_MS * 2 });
+      if (!run.acquired) markCronSkipped('LOCKED');
     } catch (err) {
       this.logger.error(err);
     }
+  }
+
+  private async sendStartedReminders(now: Date): Promise<void> {
+    // Lọc cửa sổ sale NGAY TRONG TRUY VẤN. Trước đây chỉ lọc `notifiedAt: null` rồi mới xét
+    // trong JS: nhắc của những sale đã kết thúc/đã tắt nằm lại vĩnh viễn ở notifiedAt = null
+    // (không có đường dọn), tích tụ dần cho tới khi lấp hết hạn mức 500 — mà truy vấn lại
+    // không có orderBy, nên 500 dòng lấy ra có thể không chứa dòng nào thuộc sale đang chạy.
+    // Kết quả: không ai được nhắc, không lỗi, không log.
+    const baseWhere: Prisma.FlashSaleReminderWhereInput = {
+      notifiedAt: null,
+      // Hàng ngừng bán giữa chừng: không nhắc; dòng nhắc nằm lại tới khi đợt kết thúc rồi được đóng sổ bên dưới.
+      item: { variation: SELLABLE_VARIATION_WHERE, flashSale: { isActive: true, startAt: { lte: now }, endAt: { gt: now } } },
+    };
+    // Lặp trang trong cùng lượt (có hạn thời gian): mỗi phút chỉ 500 người thì 5000 người đăng ký nhắc sẽ bị trễ 10 phút.
+    // Con trỏ theo id để dòng vừa trả cờ về null (gửi lỗi) không bị lấy lại ngay trong lượt này.
+    const deadline = Date.now() + STARTED_REMINDER_BUDGET_MS;
+    let sent = 0;
+    let cursor: string | undefined;
+    let outOfTime = false;
+    for (let page = 0; page < STARTED_REMINDER_MAX_PAGES; page++) {
+      const reminders = await this.prisma.flashSaleReminder.findMany({
+        where: cursor ? { ...baseWhere, id: { gt: cursor } } : baseWhere,
+        include: {
+          item: {
+            include: {
+              flashSale: { select: { isActive: true, startAt: true, endAt: true } },
+              variation: { include: { product: { select: { name: true, slug: true } } } },
+            },
+          },
+        },
+        orderBy: { id: 'asc' },
+        take: STARTED_REMINDER_PAGE,
+      });
+      if (reminders.length === 0) break;
+      cursor = reminders[reminders.length - 1]!.id;
+      for (const r of reminders) {
+        // Xét hạn theo từng dòng: một trang 500 người mà mỗi lần gửi chậm vài trăm ms thì cả trang vượt xa ngân sách (và vượt TTL khoá lượt chạy).
+        if (Date.now() >= deadline) {
+          outOfTime = true;
+          break;
+        }
+        const sale = r.item.flashSale;
+        const started = sale.isActive && sale.startAt <= now && sale.endAt > now;
+        if (!started) continue;
+
+        // Atomic claim chống double-send khi cron chạy chồng.
+        const claimed = await this.prisma.flashSaleReminder.updateMany({
+          where: { id: r.id, notifiedAt: null },
+          data: { notifiedAt: now },
+        });
+        if (claimed.count === 0) continue;
+
+        try {
+          const { name, slug } = r.item.variation.product;
+          const data: Record<string, string> = { product: name };
+          if (slug) data.product_slug = slug;
+          await this.notifications.notify(r.userId, 'FLASH_STARTING', data);
+          sent++;
+        } catch (err) {
+          // Claim đã ghi trước khi gửi: nuốt lỗi ở đây là mất luôn cơ hội giờ vàng của khách đó,
+          // và không có dấu vết nào. Trả cờ về để lượt cron sau thử lại.
+          this.logger.error(`Nhắc giờ vàng lỗi (reminder=${r.id}): ${err instanceof Error ? err.message : err}`);
+          await this.prisma.flashSaleReminder
+            .updateMany({ where: { id: r.id, notifiedAt: now }, data: { notifiedAt: null } })
+            .catch(() => undefined);
+        }
+      }
+      if (outOfTime || reminders.length < STARTED_REMINDER_PAGE || Date.now() >= deadline) break;
+    }
+    if (sent) this.logger.log(`Flash-starting reminders sent: ${sent}`);
+
+    // Đóng sổ những nhắc KHÔNG CÒN CƠ HỘI nào — chỉ theo `endAt` đã qua.
+    //
+    // Cố ý KHÔNG đóng theo `isActive: false`: đó là cờ bật/tắt admin sửa bất cứ lúc nào. Sale
+    // chạy 20:00, 18:30 admin tắt để sửa giá, cron 19:00 sẽ đánh dấu TOÀN BỘ nhắc là đã-nhắc,
+    // 19:30 admin bật lại — tới giờ vàng thì không một ai được nhắc, và log chỉ có dòng "đã đóng
+    // sổ N nhắc hết hạn". Sale đang tắt thì điều kiện truy vấn bên trên đã tự lọc rồi.
+    const stale = await this.prisma.flashSaleReminder.updateMany({
+      where: { notifiedAt: null, item: { flashSale: { endAt: { lte: now } } } },
+      data: { notifiedAt: now },
+    });
+    if (stale.count > 0) this.logger.log(`Đóng sổ ${stale.count} nhắc giờ vàng đã hết hạn.`);
   }
 
   /**

@@ -17,11 +17,66 @@ export class QueueTimeoutError extends Error {
   }
 }
 
+/**
+ * Breaker: Redis sập thì mỗi lệnh đều chờ đủ 2 giây rồi mới lỗi, nên mọi request có notify/enqueue chậm thêm 2 giây một lần.
+ * QUEUE_BREAKER_THRESHOLD lần quá hạn liên tiếp thì mở QUEUE_BREAKER_OPEN_MS: trong lúc mở, lệnh lỗi ngay (caller đi đường dự phòng
+ * sẵn có: ghi log, rơi về cron reconcile). Hết hạn mở thì cho đúng một lệnh dò; dò xong thì đóng, dò hỏng thì mở lại ngay.
+ * Trạng thái theo từng tiến trình (mỗi replica tự phát hiện) và dùng chung cho mọi hàng đợi vì chỉ có một Redis. Chỉ quá hạn mới
+ * tính: lệnh bị Redis trả lỗi nghĩa là Redis còn trả lời.
+ * Giới hạn: lệnh gốc đã được caller gọi trước khi vào đây nên vẫn nằm trong offline queue của ioredis; breaker chỉ cắt thời gian chờ.
+ */
+export const QUEUE_BREAKER_THRESHOLD = 3;
+export const QUEUE_BREAKER_OPEN_MS = 30_000;
+
+export class QueueBreakerOpenError extends QueueTimeoutError {
+  constructor(label: string) {
+    super(label, 0);
+    this.message = `Redis tạm ngắt do lỗi liên tiếp, bỏ qua lệnh (${label})`;
+    this.name = 'QueueBreakerOpenError';
+  }
+}
+
+let breakerFailures = 0;
+let breakerOpenUntil = 0;
+let breakerProbing = false;
+
+export function resetQueueBreaker(): void {
+  breakerFailures = 0;
+  breakerOpenUntil = 0;
+  breakerProbing = false;
+}
+
 export function withQueueTimeout<T>(command: Promise<T>, label: string, ms = QUEUE_COMMAND_TIMEOUT_MS): Promise<T> {
+  let probe = false;
+  if (breakerFailures >= QUEUE_BREAKER_THRESHOLD) {
+    command.catch(() => undefined);
+    if (Date.now() < breakerOpenUntil || breakerProbing) return Promise.reject(new QueueBreakerOpenError(label));
+    breakerProbing = true;
+    probe = true;
+  }
   let timer: NodeJS.Timeout | undefined;
   const timeout = new Promise<never>((_, reject) => {
     timer = setTimeout(() => reject(new QueueTimeoutError(label, ms)), ms);
   });
   command.catch(() => undefined);
-  return Promise.race([command, timeout]).finally(() => clearTimeout(timer));
+  return Promise.race([command, timeout])
+    .then(
+      (value) => {
+        breakerFailures = 0;
+        return value;
+      },
+      (err: unknown) => {
+        if (err instanceof QueueTimeoutError) {
+          breakerFailures += 1;
+          if (breakerFailures >= QUEUE_BREAKER_THRESHOLD) breakerOpenUntil = Date.now() + QUEUE_BREAKER_OPEN_MS;
+        } else {
+          breakerFailures = 0;
+        }
+        throw err;
+      },
+    )
+    .finally(() => {
+      clearTimeout(timer);
+      if (probe) breakerProbing = false;
+    });
 }
