@@ -1,5 +1,5 @@
 import { IMAGE_WIDTHS, WIDE_IMAGE_WIDTHS } from '../../../../../packages/app-core/src/image-src';
-import { cacheKey, isAllowedWidth, isPrivateAddress, negotiateFormat, parseOwnImagePath, parseRemoteSource } from './image-resize';
+import { RESIZE_PIPELINE_VERSION, cacheKey, isAllowedWidth, isPrivateAddress, negotiateFormat, parseOwnImagePath, parseRemoteSource } from './image-resize';
 
 describe('parseRemoteSource (chống SSRF)', () => {
   it('nhận ảnh https trên Pancake CDN và Cloudinary', () => {
@@ -79,5 +79,9 @@ describe('width, định dạng, khoá cache', () => {
     const k = cacheKey('https://a/x.jpg', 320, 'webp');
     expect(k).toBe(cacheKey('https://a/x.jpg', 320, 'webp'));
     expect(new Set([k, cacheKey('https://a/y.jpg', 320, 'webp'), cacheKey('https://a/x.jpg', 640, 'webp'), cacheKey('https://a/x.jpg', 320, 'jpeg')]).size).toBe(4);
+  });
+  it('khoá cache đổi theo phiên bản cách đổi cỡ (cache bền qua deploy không phát bản của cách cũ)', () => {
+    expect(cacheKey('https://a/x.jpg', 320, 'webp')).toBe(cacheKey('https://a/x.jpg', 320, 'webp', RESIZE_PIPELINE_VERSION));
+    expect(cacheKey('https://a/x.jpg', 320, 'webp', RESIZE_PIPELINE_VERSION + 1)).not.toBe(cacheKey('https://a/x.jpg', 320, 'webp'));
   });
 });

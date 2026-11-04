@@ -89,6 +89,12 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-tubu}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tubutree}?connection_limit=20&pool_timeout=30
       REDIS_URL: redis://redis:6379
       THROTTLE_BYPASS_TOKEN: ${THROTTLE_BYPASS_TOKEN:-}
+      # Ghi đè .env: cache ảnh phải nằm đúng chỗ gắn volume img_cache bên dưới.
+      IMAGE_CACHE_DIR: /tmp/tubu-img-cache
+    # Cache ảnh đổi cỡ (/api/img) ở volume: dựng lại container khi deploy không xoá cache, khách đầu sau deploy không phải chờ đổi cỡ lại.
+    # Dung lượng do IMAGE_CACHE_MAX_MB trong .env giới hạn, file quá 14 ngày bị xoá. Thư mục phải khớp IMAGE_CACHE_DIR ở trên.
+    volumes:
+      - img_cache:/tmp/tubu-img-cache
     ports:
       - '127.0.0.1:14001:3001' # Apache aaPanel proxy_pass vào đây cho api.tubutree.com
     depends_on:
@@ -194,6 +200,7 @@ volumes:
   pg_data:
   redis_data:
   zalo_bridge_data:
+  img_cache:
 
 networks:
   tubu:
