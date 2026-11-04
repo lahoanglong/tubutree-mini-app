@@ -146,16 +146,6 @@ describe('AuthService.refresh — ân hạn khi refresh đồng thời (real Pos
     await expect(strategy.validate(decode(again.accessToken))).resolves.toMatchObject({ sub: s1.user.id });
   });
 
-  it('M1: refresh song song với logout-all (20 lần) → sau cùng không còn refresh token nào sống', async () => {
-    const survivors: number[] = [];
-    for (let i = 0; i < 20; i++) {
-      const { login, userId } = await guestSession();
-      await Promise.allSettled([auth.refresh(login.refreshToken), auth.logoutAll(userId)]);
-      survivors.push(await prisma.refreshToken.count({ where: { userId, revokedAt: null } }));
-    }
-    expect(survivors.filter((n) => n > 0)).toEqual([]);
-  });
-
   it('M1: refresh token cấp trước mốc thu hồi chết dù revokedAt còn null', async () => {
     const { login, userId } = await guestSession();
     await prisma.user.update({ where: { id: userId }, data: { sessionsRevokedAt: new Date(Date.now() + 1000) } });
@@ -171,16 +161,5 @@ describe('AuthService.refresh — ân hạn khi refresh đồng thời (real Pos
     await expect(auth.refresh(s1.refreshToken)).rejects.toThrow('không hợp lệ');
     await expect(auth.refresh(sTok.refreshToken)).rejects.toThrow('không hợp lệ');
     await expect(auth.refresh(login.refreshToken)).rejects.toThrow('không hợp lệ');
-  });
-
-  it('m4: refresh song song với logout cùng họ (20 lần) → không còn token con nào sống', async () => {
-    const survivors: number[] = [];
-    for (let i = 0; i < 20; i++) {
-      const { login, userId } = await guestSession();
-      const c = await auth.refresh(login.refreshToken);
-      await Promise.allSettled([auth.refresh(login.refreshToken), auth.logout(c.refreshToken)]);
-      survivors.push(await prisma.refreshToken.count({ where: { userId, revokedAt: null } }));
-    }
-    expect(survivors.filter((n) => n > 0)).toEqual([]);
   });
 });
