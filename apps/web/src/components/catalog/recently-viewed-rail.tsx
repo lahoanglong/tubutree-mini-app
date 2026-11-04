@@ -4,6 +4,7 @@ import { useEffect, useSyncExternalStore } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { shelf } from '@tubutree/app-core/merch/shelves';
 import { recentlyViewedQuery } from '@tubutree/app-core/queries/catalog';
+import { recentlyViewedQuerySlugs } from '@tubutree/app-core/recently-viewed-query';
 import { browseText } from '@/lib/browse-text';
 import { coreHttp } from '@/lib/core-http';
 import { useRecentlyViewed } from '@/lib/use-recently-viewed';
@@ -36,7 +37,10 @@ export function RecentlyViewedRail({ title = browseText.recentlyViewed, reserve 
   const hydrated = useSyncExternalStore(subscribeNever, () => true, () => false);
   const stored = useRecentlyViewed();
   const slugs = stored.map((it) => it.slug);
-  const live = useQuery({ ...recentlyViewedQuery(coreHttp, slugs), enabled: slugs.length > 0, staleTime: 30_000 });
+  // Chỉ hỏi những slug vừa trần độ dài của API (mới nhất trước); phần cũ hơn không được hỏi nên không bị dọn và, nếu lọt vào dải, hiện không giá.
+  const queried = recentlyViewedQuerySlugs(slugs);
+  const queriedSet = new Set(queried);
+  const live = useQuery({ ...recentlyViewedQuery(coreHttp, queried), enabled: queried.length > 0, staleTime: 30_000 });
   const bySlug = new Map((live.data ?? []).map((p) => [p.slug, p]));
   // API đã trả lời: mục không còn (ẩn/gỡ) bị xoá khỏi máy, để lần sau script ở <head> không giữ chỗ cho dải sẽ biến mất. Trong lần vào này dải đã dựng từ kho trước khi API trả lời
   // (giữ chỗ rồi chờ API sẽ trì hoãn ảnh ưu tiên của đường thường), nên khi cả danh sách bị ẩn thì dải vẫn thu lại một lần: chỉ xảy ra khi mọi món đã xem đều bị gỡ.
@@ -44,14 +48,17 @@ export function RecentlyViewedRail({ title = browseText.recentlyViewed, reserve 
   useEffect(() => {
     if (!live.isSuccess) return;
     const keep = new Set((live.data ?? []).map((p) => p.slug));
-    const nextSlugs = slugs.filter((s) => keep.has(s));
+    const nextQueried = recentlyViewedQuerySlugs(slugs.filter((s) => !queriedSet.has(s) || keep.has(s)));
     // Sau khi xoá, khoá truy vấn đổi theo danh sách slug mới: nạp sẵn dữ liệu cho khoá mới để thẻ không chớp (không mất giá, không lùi về URL ảnh cũ) và không tốn lần gọi thừa.
-    if (nextSlugs.length > 0 && nextSlugs.length !== slugs.length) queryClient.setQueryData(recentlyViewedQuery(coreHttp, nextSlugs).queryKey, (live.data ?? []).filter((p) => keep.has(p.slug)));
-    pruneRecentlyViewed(keep, new Set(slugs));
+    // Chỉ nạp khi khoá mới không kéo thêm slug chưa từng được hỏi (món cũ nhích vào trần): khi đó để truy vấn tự chạy.
+    if (nextQueried.length > 0 && nextQueried.length !== queried.length && nextQueried.every((s) => keep.has(s))) {
+      queryClient.setQueryData(recentlyViewedQuery(coreHttp, nextQueried).queryKey, (live.data ?? []).filter((p) => keep.has(p.slug)));
+    }
+    pruneRecentlyViewed(keep, queriedSet);
     // `slugs` không cần trong deps: `live.data` thuộc khoá dựng từ chính `slugs` (không có placeholderData). Nếu thêm placeholderData thì phải chặn `live.isPlaceholderData`, kẻo dọn bằng dữ liệu của danh sách cũ.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [live.isSuccess, live.data]);
-  const items = (live.isSuccess ? stored.filter((it) => bySlug.has(it.slug)) : stored).slice(0, shelf('browse.recent').maxItems);
+  const items = (live.isSuccess ? stored.filter((it) => !queriedSet.has(it.slug) || bySlug.has(it.slug)) : stored).slice(0, shelf('browse.recent').maxItems);
   if (items.length === 0) {
     return reserve && !hydrated ? <div data-testid="recent-slot" aria-hidden="true" className={`hidden [html[data-has-recent]_&]:block ${RESERVED_HEIGHT}`} /> : null;
   }

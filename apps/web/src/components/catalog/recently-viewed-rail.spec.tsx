@@ -118,3 +118,24 @@ describe('RecentlyViewedRail: dọn mục API không trả lại', () => {
     expect(JSON.parse(localStorage.getItem('tubu_recently_viewed')!)).toHaveLength(2);
   });
 });
+
+describe('RecentlyViewedRail: trần độ dài slugs của API', () => {
+  const LONG = (i: number) => `${'x'.repeat(116)}-${String(i).padStart(3, '0')}`;
+  const seen = Array.from({ length: 20 }, (_, i) => ({ slug: LONG(i), name: `SP ${i}`, thumbnail: `https://content.pancake.vn/2-26/stored-${i}.jpg`, viewedAt: 1_700_000_000_000 - i }));
+
+  it('20 slug dài 120 ký tự: chuỗi gửi lên dưới 2000 ký tự (không HTTP 400), món cũ không được hỏi thì không bị dọn', async () => {
+    http.get.mockImplementation(async (_p: string, opts?: { query?: { slugs?: string } }) => {
+      const asked = (opts?.query?.slugs ?? '').split(',').filter(Boolean);
+      // Món mới nhất bị ẩn: bị dọn; bốn món cũ nhất nằm ngoài trần nên không được hỏi và phải còn nguyên.
+      const data = asked.filter((s) => s !== LONG(0)).map((slug) => ({ ...LIVE(1), id: slug, slug, name: slug }));
+      return { data, meta: { page: 1, limit: data.length, total: data.length } };
+    });
+    await mount(<RecentlyViewedRail />, seen);
+    const sent = http.get.mock.calls.filter(([p]) => p === '/products').map(([, o]) => (o as { query: { slugs: string } }).query.slugs);
+    expect(sent.length).toBeGreaterThan(0);
+    for (const q of sent) expect(q.length).toBeLessThanOrEqual(2000);
+    expect(sent[0]?.split(',')).toHaveLength(16);
+    const left = JSON.parse(localStorage.getItem('tubu_recently_viewed')!).map((i: { slug: string }) => i.slug);
+    expect(left).toEqual(seen.slice(1).map((i) => i.slug));
+  });
+});
