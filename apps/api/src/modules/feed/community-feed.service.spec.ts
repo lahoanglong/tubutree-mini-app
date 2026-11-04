@@ -15,7 +15,10 @@ function makePrisma(over: Record<string, unknown> = {}) {
       findMany: jest.fn().mockResolvedValue([]),
       findUnique: jest.fn().mockResolvedValue({ id: 'post1', userId: 'author', kind: 'SHOWCASE' }),
       // pickWinner đòi người thắng có bài dự thi: mặc định coi mọi người đều đã dự.
-      findFirst: jest.fn().mockResolvedValue({ id: 'entry1' }),
+      // Truy vấn chống gửi trùng của createPost (có lọc createdAt) mặc định không thấy bài nào.
+      findFirst: jest.fn().mockImplementation(async ({ where }: { where?: { createdAt?: unknown } } = {}) =>
+        where?.createdAt ? null : { id: 'entry1' },
+      ),
       create: jest.fn().mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({ id: 'new', ...data })),
       update: jest.fn().mockResolvedValue({}),
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
@@ -70,6 +73,7 @@ function makePrisma(over: Record<string, unknown> = {}) {
     communityEvent: {
       findMany: jest.fn().mockResolvedValue([]),
       findUnique: jest.fn().mockResolvedValue(null),
+      findFirst: jest.fn().mockResolvedValue(null),
       create: jest.fn().mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({ id: 'ev1', ...data })),
       update: jest.fn().mockResolvedValue({}),
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
@@ -649,10 +653,11 @@ describe('CommunityFeedService.createPost: trần ảnh của khách vãng lai (
     expect(raw.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan((prisma.$queryRaw as jest.Mock).mock.invocationCallOrder[0] ?? 0);
   });
 
-  it('người dùng thật hoặc bài không ảnh base64: không mở giao dịch, không khoá', async () => {
+  it('người dùng thật hoặc bài không ảnh base64: không lấy khoá trần ảnh khách (chỉ khoá chống gửi trùng theo người)', async () => {
     const prisma = prismaFor({ phone: '0900000000', zaloId: null }, 0, 0);
     await makeSvc(prisma).createPost('u1', 'CUSTOMER', { body: 'Có ảnh', images: [PNG] });
-    expect((prisma as unknown as { $transaction: jest.Mock }).$transaction).not.toHaveBeenCalled();
+    const raw = prisma as unknown as { $executeRaw: jest.Mock };
+    expect(raw.$executeRaw.mock.calls.map((c) => c[1])).toEqual(['feed-post:u1']);
   });
 
   it('đã có 2 bài ảnh chờ duyệt → từ chối bài thứ 3, không ghi', async () => {
@@ -3636,5 +3641,41 @@ describe('B-136: dữ liệu công khai của Cộng đồng không chứa ảnh
     (prisma.communityProfile.findMany as jest.Mock).mockResolvedValue([{ reputation: 5, level: 1, user: { fullName: 'Long', avatarUrl: AVATAR } }]);
     const out = await makeSvc(prisma).getLeaderboard();
     expect(JSON.stringify(out)).not.toContain(AVATAR);
+  });
+});
+
+describe('CommunityFeedService: gửi lại cùng nội dung trong 5 phút (m5)', () => {
+  it('createEvent: đã có sự kiện cùng tiêu đề + giờ vừa tạo → trả sự kiện đó, không tạo thêm', async () => {
+    const prisma = makePrisma();
+    (prisma.communityEvent.findFirst as jest.Mock).mockResolvedValue({ id: 'ev-old', title: 'Thi khoe vườn' });
+    const dto = { title: 'Thi khoe vườn', startAt: new Date('2026-08-01'), endAt: new Date('2026-08-10') };
+    const r = await makeSvc(prisma).createEvent(dto);
+    expect(r).toMatchObject({ id: 'ev-old' });
+    expect(prisma.communityEvent.create).not.toHaveBeenCalled();
+    const where = (prisma.communityEvent.findFirst as jest.Mock).mock.calls[0][0].where;
+    expect(where).toMatchObject({ title: dto.title, startAt: dto.startAt, endAt: dto.endAt });
+    expect(where.createdAt.gte).toBeInstanceOf(Date);
+    expect(prisma.$executeRaw).toHaveBeenCalled();
+  });
+
+  it('createPost: đã có bài cùng người + tiêu đề + nội dung + sự kiện vừa tạo → trả bài đó, không tạo/thưởng thêm', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findFirst as jest.Mock).mockResolvedValue({ id: 'old', status: 'PUBLISHED' });
+    const reward = { rewardPost: jest.fn(), rewardAnswer: jest.fn(), rewardBestAnswer: jest.fn() };
+    const r = await makeSvc(prisma, reward).createPost('u1', 'STAFF', { kind: 'TIP', body: 'mẹo hay' });
+    expect(r).toEqual({ id: 'old', status: 'PUBLISHED' });
+    expect(prisma.feedPost.create).not.toHaveBeenCalled();
+    expect(reward.rewardPost).not.toHaveBeenCalled();
+    const where = (prisma.feedPost.findFirst as jest.Mock).mock.calls[0][0].where;
+    expect(where).toMatchObject({ userId: 'u1', body: 'mẹo hay', title: null });
+    expect(where.createdAt.gte).toBeInstanceOf(Date);
+  });
+
+  it('createPost: chưa có bài trùng → tạo bình thường dưới khoá theo người', async () => {
+    const prisma = makePrisma();
+    const r = await makeSvc(prisma).createPost('u1', 'STAFF', { kind: 'TIP', body: 'mẹo mới' });
+    expect(r.id).toBe('new');
+    expect(prisma.feedPost.create).toHaveBeenCalledTimes(1);
+    expect(prisma.$executeRaw).toHaveBeenCalled();
   });
 });

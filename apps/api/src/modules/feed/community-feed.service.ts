@@ -91,6 +91,7 @@ const MAX_PRODUCT_TAGS = 5;
 const MAX_TAGS = 5;
 /** Cửa sổ chống bình luận trùng do gửi đúp. */
 const COMMENT_DEDUPE_MS = 10_000;
+const FEED_CREATE_DEDUPE_MS = 5 * 60_000;
 const MAX_COMMENT = 500;
 
 export interface CreatePostInput {
@@ -562,12 +563,12 @@ export class CommunityFeedService {
     userId: string,
     images: string[],
     excludePostId: string | undefined,
-    write: (db: PrismaService | Prisma.TransactionClient) => Promise<T>,
+    write: (db: PrismaService | Prisma.TransactionClient, inTransaction: boolean) => Promise<T>,
   ): Promise<T> {
     const incoming = images.filter((u) => u.startsWith('data:'));
-    if (incoming.length === 0) return write(this.prisma);
+    if (incoming.length === 0) return write(this.prisma, false);
     const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { phone: true, zaloId: true } });
-    if (!user || isRealUser(user)) return write(this.prisma);
+    if (!user || isRealUser(user)) return write(this.prisma, false);
     // Kiểm rồi ghi cùng một khoá advisory toàn cục: nhiều khách vãng lai bắn song song không cùng đọc thấy tổng còn chỗ.
     // Người dùng thật không đi vào nhánh này nên không bị khoá.
     return this.prisma.$transaction(async (tx) => {
@@ -585,7 +586,7 @@ export class CommunityFeedService {
         WHERE p."status" = 'PENDING' ${exclude} AND pg_column_size(p."images") > 4096 AND NOT ${REAL_USER_SQL}`;
       const incomingBytes = incoming.reduce((sum, u) => sum + u.length, 0);
       if (Number(total?.bytes ?? 0) + incomingBytes > GUEST_PENDING_IMAGE_BYTES_MAX) throw new BadRequestException(GUEST_IMAGE_TOTAL_LIMIT_MESSAGE);
-      return write(tx);
+      return write(tx, true);
     });
   }
 
@@ -646,15 +647,33 @@ export class CommunityFeedService {
     // qua nhánh auto-PUBLISHED) thay vì chặn hẳn, để admin còn duyệt tay nếu là báo động giả.
     const flagged = containsBannedContent(`${title ?? ''}\n${body}`, await this.bannedKeywords());
     const status = trusted && !flagged ? 'PUBLISHED' : 'PENDING';
-    const post = await this.writeWithGuestImageQuota(userId, status === 'PENDING' ? images : [], undefined, (db) =>
-      db.feedPost.create({
+    // Bấm đăng hai lần / mạng chập chờn gửi lại: cùng người, cùng tiêu đề + nội dung + sự kiện trong 5 phút thì trả bài đã có,
+    // không tạo thêm (và không thưởng, không cộng uy tín lần nữa). Khoá tư vấn theo người buộc hai yêu cầu song song xếp hàng.
+    const createDeduped = async (tx: Prisma.TransactionClient) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`feed-post:${userId}`}))`;
+      const existing = await tx.feedPost.findFirst({
+        where: {
+          userId, title, body, status: { not: 'REMOVED' },
+          meta: input.eventId ? { path: ['eventId'], equals: input.eventId } : { equals: Prisma.DbNull },
+          createdAt: { gte: new Date(Date.now() - FEED_CREATE_DEDUPE_MS) },
+        },
+        select: { id: true, status: true },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (existing) return { id: existing.id, status: existing.status as string, duplicate: true };
+      const created = await tx.feedPost.create({
         data: {
           userId, kind, status, body, title, images, categoryId: input.categoryId ?? null,
           ...(input.eventId ? { meta: { eventId: input.eventId } } : {}),
         },
         select: { id: true },
-      }),
+      });
+      return { id: created.id, status: status as string, duplicate: false };
+    };
+    const post = await this.writeWithGuestImageQuota(userId, status === 'PENDING' ? images : [], undefined, (db, inTransaction) =>
+      inTransaction ? createDeduped(db as Prisma.TransactionClient) : this.prisma.$transaction(createDeduped),
     );
+    if (post.duplicate) return { id: post.id, status: post.status };
 
     if (slugs.length) {
       const products = await this.prisma.product.findMany({
@@ -1549,7 +1568,19 @@ export class CommunityFeedService {
         `Quà sự kiện phải từ ${formatPoints(EVENT_REWARD_MIN_POINTS)} đến ${formatPoints(EVENT_REWARD_MAX_POINTS)} Điểm Xanh, hoặc để 0 nếu sự kiện không có quà.`,
       );
     }
-    return this.prisma.communityEvent.create({ data: dto });
+    // Gửi lại cùng tiêu đề + giờ trong 5 phút (bấm đôi, mạng gửi lại) thì trả sự kiện đã có; khoá toàn cục vì admin tạo ít.
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'feed-event-create'}))`;
+      const existing = await tx.communityEvent.findFirst({
+        where: {
+          title: dto.title, startAt: dto.startAt, endAt: dto.endAt,
+          createdAt: { gte: new Date(Date.now() - FEED_CREATE_DEDUPE_MS) },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (existing) return existing;
+      return tx.communityEvent.create({ data: dto });
+    });
   }
 
   /** Đóng sự kiện thủ công (admin) — không chọn người thắng. */
