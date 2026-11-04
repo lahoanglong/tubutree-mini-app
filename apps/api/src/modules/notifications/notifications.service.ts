@@ -499,6 +499,26 @@ export class NotificationsService {
   }
 
   /**
+   * Đóng log ZNS mà job BullMQ đã chết hẳn (hết lượt, stalled quá giới hạn, hoặc không còn trong Redis) và không ai ghi kết cục.
+   * CAS theo trạng thái cũ: hai đường cùng đóng (sự kiện của worker, cron quét, hai bản API) chỉ một lần ghi, log đã SENT/FAILED không đổi.
+   * Không đụng payload: log FAILED đã không chặn dedupeWhere/claimUnderDedupeLock (chỉ PENDING/RETRYING/SENT mới tính), nên không cần nhả
+   * khoá; đổi khoá còn làm mất dấu vết đối soát. Không gọi Zalo và không tạo job, nên không có đường gửi đôi.
+   */
+  async closeStuckZnsLog(logId: string, reason: string): Promise<boolean> {
+    const closed = await this.prisma.notificationLog.updateMany({
+      where: { id: logId, status: { in: ['PENDING', 'RETRYING'] } },
+      data: { status: 'FAILED', error: reason },
+    });
+    return closed.count > 0;
+  }
+
+  /** Job đã hoàn tất và báo SENT (Zalo đã nhận) mà log còn RETRYING vì markZnsSent ghi lỗi: ghi nốt SENT, chỉ từ RETRYING. */
+  async markStuckZnsSent(logId: string): Promise<boolean> {
+    const updated = await this.prisma.notificationLog.updateMany({ where: { id: logId, status: 'RETRYING' }, data: { status: 'SENT', error: null } });
+    return updated.count > 0;
+  }
+
+  /**
    * Zalo đã nhận tin. Ghi SENT lỗi (DB chớp tắt) mà ném ra thì BullMQ chạy lại job và khách nhận tin lần hai, nên thử lại vài lần
    * rồi nuốt lỗi: log còn RETRYING (nhận lúc bắt đầu) là dấu vết đủ để admin đối chiếu, tin đôi thì không gỡ được.
    */

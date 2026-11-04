@@ -1,4 +1,4 @@
-import { Processor, WorkerHost } from '@nestjs/bullmq';
+import { OnWorkerEvent, Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { DelayedError, type Job } from 'bullmq';
 import { INAPP_RETRY_JOB, NotificationsService, type InAppRetryJobData, type ZnsSendJobData } from './notifications.service';
@@ -41,6 +41,28 @@ export class NotificationsProcessor extends WorkerHost {
     // Chỉ còn job xếp trước khi hàng riêng ra đời (còn nằm trong hàng này lúc deploy); job mới đi QUEUE_NOTIFICATIONS_INAPP_RETRY.
     if (job.name === INAPP_RETRY_JOB) return retryInApp(this.notifications, this.logger, job as Job<InAppRetryJobData>);
     return this.sendZns(job as Job<ZnsSendJobData>, token);
+  }
+
+  /**
+   * BullMQ phát 'failed' cho cả lượt lỗi còn được thử lại; chỉ khi job không chạy lại nữa (hết lượt, hoặc stalled quá giới hạn)
+   * mà log còn PENDING/RETRYING thì không ai ghi kết cục nữa. Không ném: lỗi ở đây không được làm sập worker; cron quét log kẹt là đường dự phòng.
+   */
+  @OnWorkerEvent('failed')
+  async onFailed(job: Job<ZnsSendJobData> | undefined, err: Error): Promise<void> {
+    if (!job || job.name !== 'zns-send') return;
+    const stalled = /stalled/i.test(err?.message ?? '');
+    const attempts = job.opts?.attempts ?? 1;
+    if (!stalled && job.attemptsMade < attempts) return;
+    const logId = job.data?.notificationLogId;
+    if (!logId) return;
+    const why = stalled ? 'job bị treo quá giới hạn của hàng đợi' : 'job hỏng ở lượt cuối, không còn lượt thử lại';
+    try {
+      const closed = await this.notifications.closeStuckZnsLog(logId, `Gửi ZNS dừng: ${why} (${String(err?.message ?? err).slice(0, 300)}).`);
+      if (closed) this.logger.warn(`Đã đóng log ZNS ${logId} thành FAILED vì ${why}.`);
+    } catch (closeErr) {
+      this.logger.error(`Không đóng được log ZNS ${logId} sau khi job hỏng hẳn: ${closeErr instanceof Error ? closeErr.message : closeErr}`);
+      captureServerError(closeErr);
+    }
   }
 
   private async sendZns(job: Job<ZnsSendJobData>, token?: string): Promise<void> {

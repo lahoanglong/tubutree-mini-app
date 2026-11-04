@@ -72,3 +72,57 @@ describe('NotificationsProcessor: lượt thử lại không gửi trong giờ y
     expect(deliverZns).toHaveBeenCalledWith(DATA, false);
   });
 });
+
+describe('NotificationsProcessor: job ZNS hỏng hẳn (sự kiện failed của worker)', () => {
+  function setupFailed(over: { closeStuckZnsLog?: jest.Mock } = {}) {
+    const closeStuckZnsLog = over.closeStuckZnsLog ?? jest.fn().mockResolvedValue(true);
+    const processor = new NotificationsProcessor({ closeStuckZnsLog } as unknown as NotificationsService);
+    const error = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    const job = (over: Record<string, unknown> = {}) =>
+      ({ name: 'zns-send', data: DATA, opts: { attempts: 6 }, attemptsMade: 6, ...over }) as unknown as Job<ZnsSendJobData>;
+    return { processor, closeStuckZnsLog, error, job };
+  }
+
+  it('lượt cuối ném lỗi bất ngờ (attemptsMade = attempts) → đóng log kèm lý do tiếng Việt', async () => {
+    const { processor, closeStuckZnsLog, job } = setupFailed();
+    await processor.onFailed(job(), new Error('db down'));
+    expect(closeStuckZnsLog).toHaveBeenCalledTimes(1);
+    expect(closeStuckZnsLog).toHaveBeenCalledWith('log-1', expect.stringMatching(/lượt cuối.*db down/));
+  });
+
+  it('lượt chưa cuối (BullMQ sẽ chạy lại) → không đóng log', async () => {
+    const { processor, closeStuckZnsLog, job } = setupFailed();
+    await processor.onFailed(job({ attemptsMade: 2 }), new Error('Gửi ZNS thất bại tạm thời, chờ BullMQ thử lại'));
+    expect(closeStuckZnsLog).not.toHaveBeenCalled();
+  });
+
+  it('lỗi stalled quá giới hạn → đóng log dù attemptsMade chưa tới attempts', async () => {
+    const { processor, closeStuckZnsLog, job } = setupFailed();
+    await processor.onFailed(job({ attemptsMade: 1 }), new Error('job stalled more than allowable limit'));
+    expect(closeStuckZnsLog).toHaveBeenCalledWith('log-1', expect.stringContaining('treo'));
+  });
+
+  it('job không phải zns-send (inapp-retry cũ) → bỏ qua', async () => {
+    const { processor, closeStuckZnsLog, job } = setupFailed();
+    await processor.onFailed(job({ name: 'inapp-retry' }), new Error('x'));
+    expect(closeStuckZnsLog).not.toHaveBeenCalled();
+  });
+
+  it('sự kiện không kèm job (stalled có thể không có) → bỏ qua, không ném', async () => {
+    const { processor, closeStuckZnsLog } = setupFailed();
+    await expect(processor.onFailed(undefined, new Error('job stalled more than allowable limit'))).resolves.toBeUndefined();
+    expect(closeStuckZnsLog).not.toHaveBeenCalled();
+  });
+
+  it('hàm đóng ném lỗi → handler không ném ra ngoài, chỉ ghi log lỗi', async () => {
+    const { processor, error, job } = setupFailed({ closeStuckZnsLog: jest.fn().mockRejectedValue(new Error('db lỗi')) });
+    await expect(processor.onFailed(job(), new Error('x'))).resolves.toBeUndefined();
+    expect(error).toHaveBeenCalledWith(expect.stringContaining('log-1'));
+  });
+
+  it('log đã không còn đóng được (đã SENT/FAILED, trả false) → không ghi lỗi', async () => {
+    const { processor, error, job } = setupFailed({ closeStuckZnsLog: jest.fn().mockResolvedValue(false) });
+    await processor.onFailed(job(), new Error('x'));
+    expect(error).not.toHaveBeenCalled();
+  });
+});
