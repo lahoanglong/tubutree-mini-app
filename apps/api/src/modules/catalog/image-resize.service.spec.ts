@@ -61,9 +61,11 @@ describe('ImageResizeService', () => {
     expect(out.mime).toBe('image/webp');
     expect(out.etag).toBe(`"${svc.keyFor(src, 320, 'webp')}"`);
     expect(readdirSync(dir).length).toBe(1);
+    const key = svc.keyFor(src, 320, 'webp') as string;
+    writeFileSync(join(dir, key.slice(0, 2), key), 'tu-dia');
     const again = await svc.get(src, 320, 'webp');
-    expect(again.data.equals(out.data)).toBe(true);
-    expect(own.get).toHaveBeenCalledTimes(1);
+    expect(again.data.toString()).toBe('tu-dia');
+    expect(again.etag).toBe(out.etag);
   });
 
   it('không phóng to ảnh nhỏ hơn bề rộng xin', async () => {
@@ -314,15 +316,76 @@ describe('ImageResizeService', () => {
 });
 
 describe('ImageResizeService — cache ở volume bền qua lần dựng lại container (deploy)', () => {
-  it('tiến trình mới trên cùng thư mục phát bản đã đổi cỡ từ đĩa, không đổi cỡ lại', async () => {
-    const src = '/public-image/product/v1/0';
-    const first = make();
-    const out = await first.svc.get(src, 480, 'webp');
+  it('tiến trình mới trên cùng thư mục phát bản đã đổi cỡ từ đĩa, không tải lại ảnh nguồn', async () => {
+    fakeHttps({ status: 200, headers: { 'content-type': 'image/png' }, body: png });
+    lookupMock.mockImplementation((_h: string, _o: unknown, cb: (e: null, a: string, f: number) => void) => cb(null, '1.1.1.1', 4));
+    const src = 'https://content.pancake.vn/a.png';
+    const out = await make().svc.get(src, 480, 'webp');
+    expect(requestMock).toHaveBeenCalledTimes(1);
     const restarted = make();
     const again = await restarted.svc.get(src, 480, 'webp');
     expect(again.data.equals(out.data)).toBe(true);
     expect(again.etag).toBe(out.etag);
-    expect(restarted.own.get).not.toHaveBeenCalled();
+    expect(requestMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('ảnh của chính API còn trong cache nhưng không còn công khai hoặc đã thay (sai ?v=) thì 404, không phát bản cũ', async () => {
+    const src = '/public-image/product/v2/0?v=abc';
+    await make().svc.get(src, 480, 'webp');
+    expect(readdirSync(dir).length).toBe(1);
+    const stale = { get: jest.fn(async () => ({ mime: 'image/png', data: png, versionOk: false })) };
+    await expect(make(stale as never).svc.get(src, 480, 'webp')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(make(ownImages(null)).svc.get(src, 480, 'webp')).rejects.toBeInstanceOf(NotFoundException);
+    const live = make();
+    const ok = await live.svc.get(src, 480, 'webp');
+    expect((await sharp(ok.data).metadata()).width).toBe(480);
+    expect(live.own.get).toHaveBeenCalledTimes(1);
+  });
+
+  it('các lần ghi đầu tiên cùng lúc chỉ quét thư mục cache một lần và cộng đủ dung lượng đã ghi', async () => {
+    const sub = join(dir, 'dd');
+    require('node:fs').mkdirSync(sub);
+    writeFileSync(join(sub, 'co-san'), Buffer.alloc(1000));
+    const { svc } = make();
+    // Tắt lần dọn định kỳ (chạy sau lần ghi đầu) để chỉ đếm lần quét đầu.
+    (svc as unknown as { lastPrune: number }).lastPrune = Date.now();
+    const scan = jest.spyOn(svc, 'prune');
+    // Lần quét đầu chậm (volume nhiều file): cả bốn lần ghi tới trong lúc nó còn chạy.
+    const fsp = require('node:fs').promises;
+    const realReaddir = fsp.readdir;
+    const slow = jest.spyOn(fsp, 'readdir').mockImplementationOnce(async (...a: unknown[]) => {
+      await new Promise((r) => setTimeout(r, 300));
+      return realReaddir.apply(fsp, a);
+    });
+    const outs = await Promise.all(['a', 'b', 'c', 'd'].map((id) => svc.get(`/public-image/product/${id}/0`, 160, 'webp')));
+    slow.mockRestore();
+    expect(scan).toHaveBeenCalledTimes(1);
+    const written = outs.reduce((s, o) => s + o.data.length, 0);
+    expect((svc as unknown as { cacheBytes: number }).cacheBytes).toBe(1000 + written);
+  });
+
+  it('lần dọn đang quét không xoá mất dung lượng của file ghi trong lúc quét', async () => {
+    const { svc } = make();
+    await svc.get('/public-image/product/e0/0', 160, 'webp');
+    const fsp = require('node:fs').promises;
+    const realReaddir = fsp.readdir;
+    let release: () => void = () => undefined;
+    const hold = new Promise<void>((r) => (release = r));
+    const spy = jest.spyOn(fsp, 'readdir').mockImplementationOnce(async (...a: unknown[]) => {
+      const names = await realReaddir.apply(fsp, a);
+      await hold;
+      return names;
+    });
+    const pruning = svc.prune();
+    await new Promise((r) => setTimeout(r, 10));
+    const during = await svc.get('/public-image/product/e1/0', 160, 'webp');
+    release();
+    await pruning;
+    spy.mockRestore();
+    const all = readdirSync(dir).flatMap((d) => readdirSync(join(dir, d)).map((n) => require('node:fs').statSync(join(dir, d, n)).size));
+    const onDisk = all.reduce((s: number, n: number) => s + n, 0);
+    expect(during.data.length).toBeGreaterThan(0);
+    expect((svc as unknown as { cacheBytes: number }).cacheBytes).toBeGreaterThanOrEqual(onDisk);
   });
 
   it('bản của phiên bản đổi cỡ cũ còn trong thư mục không được phát: đổi cỡ lại theo cách hiện tại', async () => {

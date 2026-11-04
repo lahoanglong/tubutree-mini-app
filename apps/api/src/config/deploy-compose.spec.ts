@@ -156,6 +156,8 @@ describe('apps/api/Dockerfile', () => {
     const instructions = dockerfile.split('\n').filter((l) => !l.trim().startsWith('#')).join('\n');
     const chown = instructions.indexOf('RUN mkdir -p /tmp/tubu-img-cache && chown node:node /tmp/tubu-img-cache\n');
     expect(chown).toBeGreaterThan(-1);
+    // Phải ở stage chạy (sau FROM cuối): ở stage builder thì image chạy không có thư mục này.
+    expect(chown).toBeGreaterThan(instructions.lastIndexOf('\nFROM '));
     expect(chown).toBeLessThan(instructions.lastIndexOf('\nUSER node\n'));
     expect(instructions.lastIndexOf('\nUSER node\n')).toBeLessThan(instructions.indexOf('CMD ['));
   });

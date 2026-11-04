@@ -77,6 +77,10 @@ export class ImageResizeService {
   private readonly waiters: (() => void)[] = [];
   private lastPrune = 0;
   private cacheBytes: number | null = null;
+  /** Lần quét đầu của tiến trình (tính dung lượng cache đã có trong volume): các lần ghi đầu tiên chờ chung một lần quét. */
+  private firstScan: Promise<unknown> | null = null;
+  /** Tổng byte đã ghi từ lúc chạy: lần dọn cộng phần ghi trong lúc nó đang quét, không đè mất. */
+  private writtenBytes = 0;
   private registry = new Set<string>();
   private registryUntil = 0;
   private registryLoadedAt = 0;
@@ -106,10 +110,13 @@ export class ImageResizeService {
     if (!key) throw new BadRequestException('Nguồn ảnh không được hỗ trợ.');
     const mime = format === 'webp' ? 'image/webp' : 'image/jpeg';
     const etag = `"${key}"`;
-    // Kiểm danh sách trước khi phát bản đã cache: ảnh bị gỡ khỏi danh sách (gian hàng bị gỡ, đổi ảnh) không được phát tiếp tới 14 ngày nữa.
-    if (!parseOwnImagePath(source) && !(await this.isRegistered(source as string))) throw new NotFoundException('Không tìm thấy ảnh.');
-    const hit = await this.readCache(key);
-    if (hit) return { data: hit, mime, etag };
+    // Kiểm trước khi phát bản đã cache (cache ở volume, còn qua deploy): ảnh bị gỡ khỏi danh sách (gian hàng bị gỡ, đổi ảnh) không được phát tiếp tới 14 ngày nữa.
+    // Ảnh của chính API kiểm trong job (`produce`): DB xác nhận còn công khai và đúng ?v= rồi mới phát bản đã cache.
+    if (!parseOwnImagePath(source)) {
+      if (!(await this.isRegistered(source as string))) throw new NotFoundException('Không tìm thấy ảnh.');
+      const hit = await this.readCache(key);
+      if (hit) return { data: hit, mime, etag };
+    }
     let job = this.inFlight.get(key);
     if (!job) {
       job = this.produce(source as string, key, width, format, client).finally(() => this.inFlight.delete(key));
@@ -207,11 +214,19 @@ export class ImageResizeService {
   }
 
   private async produce(source: string, key: string, width: number, format: ResizeFormat, client: string): Promise<ResizedImage> {
-    if (parseOwnImagePath(source) && this.ownMissLimited(client)) throw new ServiceUnavailableException('Máy chủ đang bận, thử lại sau.');
+    const own = parseOwnImagePath(source) !== null;
+    if (own && this.ownMissLimited(client)) throw new ServiceUnavailableException('Máy chủ đang bận, thử lại sau.');
+    const mime = format === 'webp' ? 'image/webp' : 'image/jpeg';
     const release = await this.acquire();
     let data: Buffer;
     try {
+      // Ảnh của chính API: 404 khi sản phẩm bị từ chối, nhãn gỡ công bố, chiến dịch tắt hay ảnh đã thay (sai ?v=), kể cả khi bản đổi cỡ còn trong cache.
+      // Lượt đọc DB này nằm trong hàng đợi đổi cỡ để số truy vấn đồng thời vẫn có trần (hàng đợi đầy thì 503).
       const input = await this.loadSource(source, client);
+      if (own) {
+        const hit = await this.readCache(key);
+        if (hit) return { data: hit, mime, etag: `"${key}"` };
+      }
       const pipeline = sharp(input, { limitInputPixels: MAX_SOURCE_PIXELS, failOn: 'error' }).rotate().resize({ width, withoutEnlargement: true });
       // Đổi tham số ở đây thì tăng RESIZE_PIPELINE_VERSION (image-resize.ts): cache bền qua deploy.
       data = await (format === 'webp' ? pipeline.webp({ quality: 78 }) : pipeline.jpeg({ quality: 80, mozjpeg: true })).toBuffer();
@@ -222,7 +237,7 @@ export class ImageResizeService {
       release();
     }
     await this.writeCache(key, data);
-    return { data, mime: format === 'webp' ? 'image/webp' : 'image/jpeg', etag: `"${key}"` };
+    return { data, mime, etag: `"${key}"` };
   }
 
   private async loadSource(source: string, client: string): Promise<Buffer> {
@@ -314,7 +329,7 @@ export class ImageResizeService {
 
   private async writeCache(key: string, data: Buffer): Promise<void> {
     const file = this.pathFor(key);
-    if (this.cacheBytes === null) await this.prune();
+    if (this.cacheBytes === null) await (this.firstScan ??= this.prune().catch(() => undefined));
     if ((this.cacheBytes ?? 0) + data.length > this.maxBytes) {
       if (Date.now() - this.lastPrune > PRUNE_MIN_GAP_WHEN_FULL_MS) {
         this.lastPrune = Date.now();
@@ -328,6 +343,7 @@ export class ImageResizeService {
       await fs.writeFile(tmp, data);
       await fs.rename(tmp, file);
       this.cacheBytes = (this.cacheBytes ?? 0) + data.length;
+      this.writtenBytes += data.length;
     } catch (e) {
       this.log.warn(`Không ghi được cache ảnh: ${(e as Error).message}`);
       return;
@@ -340,6 +356,7 @@ export class ImageResizeService {
 
   /** Xoá file quá tuổi, rồi xoá file cũ nhất cho tới khi dưới 80% trần dung lượng (khi đã vượt trần hoặc không còn chỗ cho file mới). */
   async prune(lowWater = false): Promise<{ removed: number; bytes: number }> {
+    const writtenAtStart = this.writtenBytes;
     const files: { path: string; size: number; mtime: number }[] = [];
     let shards: string[] = [];
     try {
@@ -378,7 +395,8 @@ export class ImageResizeService {
       total -= f.size;
       removed += 1;
     }
-    this.cacheBytes = total;
+    // File ghi trong lúc quét có thể đã được đếm ở trên: tính dư thì chỉ dọn sớm hơn, không vượt trần.
+    this.cacheBytes = total + (this.writtenBytes - writtenAtStart);
     return { removed, bytes: total };
   }
 }

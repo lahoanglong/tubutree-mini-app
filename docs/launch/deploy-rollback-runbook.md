@@ -590,6 +590,14 @@ Lượt ngày đầu tiên sau deploy (chưa có dòng `AffiliateService.dailyWa
 - API cũ nhận `w=480` thì trả 400: web lùi về ảnh gốc một lần (`fallBackToOriginal`), Mini App ở mục 2x (và 3x) cũng lùi về ảnh gốc. Ảnh không vỡ nhưng nặng.
 - Quay API về `:prev-*` thiếu `w=480` thì Mini App bản mới nhận 400 như trên. Nếu quay API qua mốc này và phải giữ lâu thì cân nhắc đẩy lại Mini App bản cũ.
 
+### 1.19 Cache ảnh đổi cỡ nằm trong volume `img_cache` (còn qua deploy)
+
+- API ghi cache ảnh đổi cỡ (`/api/img`) vào volume Docker `tubutree_img_cache`, gắn ở `/tmp/tubu-img-cache` (compose đặt `IMAGE_CACHE_DIR`, ghi đè `.env`). Dựng lại container khi deploy không còn xoá cache. Trần dung lượng vẫn là `IMAGE_CACHE_MAX_MB` trong `.env` (PROD đặt 200), file quá 14 ngày bị xoá.
+- Lần `up -d` đầu tiên với bản này, Docker tạo volume và chép chủ sở hữu từ thư mục trong image (thuộc `node`). dep3 in dòng `cache ảnh ghi được: /tmp/tubu-img-cache`; in `FAIL cache ảnh KHÔNG ghi được` thì xem gạch cuối.
+- Quay lại `:prev-*` (kể cả image trước bản này) dùng tiếp volume, không cần làm gì: khoá cache của hai bản khác nhau, không bản nào phát nhầm ảnh của bản kia.
+- Xoá cache (ảnh đổi cỡ lỗi, đổi tham số đổi cỡ mà quên tăng `RESIZE_PIPELINE_VERSION`): `$DC exec -T api sh -c 'rm -rf /tmp/tubu-img-cache/*'`. KHÔNG `docker volume rm tubutree_img_cache`: volume tạo lại từ image cũ (chưa có thư mục này) sẽ thuộc root, user `node` không ghi được, mọi `/img` phải đổi cỡ lại và log chỉ có dòng cảnh báo `Không ghi được cache ảnh`.
+- Lỡ gặp volume thuộc root: `docker run --rm -u 0 -v tubutree_img_cache:/d --entrypoint chown "$API_NAME" 1000:1000 /d` rồi `$DC restart api` (`API_NAME` lấy như Bước 2 mục 5; `node` có uid 1000).
+
 ## 2. Trỏ lại GitHub Actions (máy ảo GCP đã đóng)
 
 Việc của người giữ quyền admin repo GitHub (Settings, Secrets and variables, Actions). Không cần làm trước deploy tay, nhưng phải làm trước khi dùng lại `ops.yml`.
