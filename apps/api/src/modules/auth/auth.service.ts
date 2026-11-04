@@ -7,6 +7,7 @@ import { Prisma, type User } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { isLockBusy, LOCK_BUSY_MESSAGE } from '../../common/lock-busy';
 import type { Env } from '../../config/env.validation';
+import { SessionStateService } from './session-state.service';
 import { ZaloService } from './zalo.service';
 import { RbacService } from '../staff/rbac/rbac.service';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
@@ -14,6 +15,7 @@ import { isAnonymized, renameMergedMilestones, resolveMergedUserId, revokeReferr
 import { roleClaims } from './session-state.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { sendReferralNotices, type ReferralNotice } from '../wallet/referral-notify';
+import { recordUserAdminEvent } from '../../common/user-admin-events';
 import { firstTouchColumns } from '../../common/attribution';
 import { VouchersService } from '../vouchers/vouchers.service';
 import { ExternalChatService } from '../external-points/external-chat.service';
@@ -82,6 +84,8 @@ export class AuthService {
     @Optional() private readonly vouchers?: VouchersService,
     // Optional như hai cái trên: không có thì đơn chat chờ SĐT chỉ được cron 30 phút liên kết.
     @Optional() private readonly externalChat?: ExternalChatService,
+    // Optional như các cái trên: có thì thu hồi phiên xoá luôn bản cache role của tiến trình này.
+    @Optional() private readonly sessionState?: SessionStateService,
   ) {}
 
   /**
@@ -284,6 +288,7 @@ export class AuthService {
   ): Promise<LoginResponse> {
     void code; // giữ tham số để đồng nhất với loginWithZaloMiniApp, mở rộng OAuth server-side sau này.
     const currentUser = await this.prisma.user.findUniqueOrThrow({ where: { id: currentUserId } });
+    if (currentUser.mergedIntoId) throw this.sessionExpired();
     const info = await this.zalo.getUserInfo(accessToken);
     const phone = phoneToken ? await this.zalo.resolvePhoneNumber(phoneToken, accessToken) : null;
 
@@ -292,9 +297,6 @@ export class AuthService {
       return this.issueTokens(await this.attachPhoneIfMissing(currentUser, phone));
     }
 
-    // Dòng khách đã gộp (access token cũ còn hạn) không phải khách: nâng cấp tại chỗ sẽ hồi sinh nó với mergedIntoId còn trỏ
-    // tài khoản đích, mã giới thiệu của nó vẫn quy về đích.
-    if (currentUser.mergedIntoId) return this.mergedSessionTokens(currentUser, info, phone);
     const isGuest = (currentUser.zaloId?.startsWith('guest_') ?? false) && !currentUser.zaloId?.includes('_merged_');
     if (!isGuest) throw this.zaloMismatch(currentUser, info.zaloId);
 
@@ -345,7 +347,7 @@ export class AuthService {
         await this.grantWelcomeVoucher(fresh.id);
         return this.issueTokens(fresh);
       }
-      if (fresh.mergedIntoId) return this.mergedSessionTokens(fresh, info, phone);
+      if (fresh.mergedIntoId) throw this.sessionExpired();
       throw this.zaloMismatch(fresh, info.zaloId);
     } catch (err) {
       // Hai máy khách khác nhau cùng nâng cấp lên một tài khoản Zalo mới cùng lúc: máy thắng đã
@@ -357,15 +359,9 @@ export class AuthService {
     }
   }
 
-  /**
-   * Phiên của một dòng khách đã gộp (access token cũ còn hạn, thường là client gửi lại ensurePhone sau lần gộp): đúng tài
-   * khoản Zalo của tài khoản đích thì trả token của đích như lần gộp đầu; Zalo khác thì từ chối như mọi phiên không phải khách.
-   */
-  private async mergedSessionTokens(merged: User, info: { zaloId: string }, phone: string | null): Promise<LoginResponse> {
-    const targetId = merged.mergedIntoId ? await resolveMergedUserId(this.prisma, merged.mergedIntoId) : null;
-    const target = targetId ? await this.prisma.user.findUnique({ where: { id: targetId } }) : null;
-    if (target && target.zaloId === info.zaloId) return this.issueTokens(await this.attachPhoneIfMissing(target, phone));
-    throw this.zaloMismatch(merged, info.zaloId);
+  /** Giống JwtStrategy: client đi đường refresh rồi đăng nhập lại như mọi phiên hết hạn. */
+  private sessionExpired(): UnauthorizedException {
+    return new UnauthorizedException({ statusCode: 401, error: 'Unauthorized', code: 'SESSION_EXPIRED', message: 'Phiên đăng nhập không còn hợp lệ.' });
   }
 
   private zaloMismatch(user: User, zaloId: string): ConflictException {
@@ -846,6 +842,8 @@ export class AuthService {
       }
       throw err;
     });
+    // Dòng khách mang mergedIntoId từ lúc commit: bỏ cache để JwtStrategy chặn access token cũ của khách ngay, không đợi hết TTL.
+    this.sessionState?.invalidate(guest.id);
     await sendReferralNotices({ prisma: this.prisma, notifications: this.notifications, logger: this.logger }, referralNotices);
     // SĐT ghi sau khi gộp xong: số vừa bị tài khoản khác lấy (P2002) chỉ làm bỏ qua phần số, không làm hỏng cả lần gộp (transaction đã hỏng nếu lỗi nằm trong nó).
     if (Object.keys(targetPhone).length > 0) {
@@ -936,6 +934,12 @@ export class AuthService {
     if (!stored || stored.expiresAt < new Date()) {
       throw new UnauthorizedException('Refresh token không hợp lệ hoặc đã hết hạn.');
     }
+    // Bất biến: refresh token cấp trước mốc thu hồi là chết dù revokedAt còn null. Mốc được commit TRƯỚC khi token bị thu hồi
+    // (xem revokeAllSessions), nên token con do một lượt refresh đang chạy dở sinh ra cũng bị bắt ở đây hoặc ở kiểm sau.
+    if (stored.user.sessionsRevokedAt && stored.createdAt <= stored.user.sessionsRevokedAt) {
+      throw new UnauthorizedException('Refresh token không hợp lệ hoặc đã hết hạn.');
+    }
+    const markAtStart = stored.user.sessionsRevokedAt ?? null;
     // isBlocked được chặn tập trung trong issueTokens() (dùng chung cho login + refresh) —
     // không check riêng ở đây để tránh 1 user bị khoá đăng nhập lại (guest/zalo-mini-app/
     // zalo-oauth) lấy token mới, né hoàn toàn chặn refresh.
@@ -948,7 +952,7 @@ export class AuthService {
         where: { id: stored.id, revokedAt: null },
         data: { revokedAt: now, rotatedAt: now },
       });
-      if (revoked.count === 1) return this.issueTokens(stored.user);
+      if (revoked.count === 1) return this.rotateInto(stored.user, stored.id, markAtStart);
       const fresh = await this.prisma.refreshToken.findUnique({ where: { id: stored.id }, include: { user: true } });
       if (!fresh) throw new UnauthorizedException('Refresh token không hợp lệ hoặc đã hết hạn.');
       current = fresh;
@@ -962,7 +966,7 @@ export class AuthService {
     }
     const graceMs = this.config.get('JWT_REFRESH_REUSE_GRACE_SECONDS', { infer: true }) * 1000;
     if (Date.now() - current.rotatedAt.getTime() <= graceMs) {
-      return this.issueTokens(current.user);
+      return this.rotateInto(current.user, current.id, markAtStart);
     }
     // Reuse phát hiện (P1-2, docs/2026-09-08-review-progress.md): nếu kẻ trộm đã rotate 1 lần TRƯỚC KHI
     // nạn nhân refresh lại, chuỗi refresh token của kẻ trộm vẫn sống nguyên tới hết JWT_REFRESH_TTL_DAYS.
@@ -972,24 +976,100 @@ export class AuthService {
     throw new UnauthorizedException('Refresh token đã được sử dụng.');
   }
 
-  /** Thu hồi mọi refresh token còn hiệu lực và chốt mốc để token đã xoay trước đó mất ân hạn. */
-  private async revokeAllSessions(userId: string): Promise<void> {
-    const now = new Date();
-    await this.prisma.refreshToken.updateMany({
-      where: { userId, revokedAt: null },
-      data: { revokedAt: now },
+  /** Khách tự bấm "Đăng xuất mọi thiết bị": refresh token và access token của mọi phiên đều chết (JwtStrategy so iat với mốc). */
+  async logoutAll(userId: string): Promise<void> {
+    await this.revokeAllSessions(userId, 'Khách tự đăng xuất mọi thiết bị');
+  }
+
+  /**
+   * Thu hồi mọi refresh token còn hiệu lực và chốt mốc để token đã xoay trước đó mất ân hạn. Một transaction, lệnh ĐẦU khoá dòng
+   * users (giữ tới commit) rồi mới lấy giờ và ghi mốc: lượt refresh song song chờ ở kiểm sau (FOR SHARE) cho tới khi mốc commit, nên
+   * không thể để lại token con sống sau khi thu hồi xong.
+   */
+  private async revokeAllSessions(userId: string, selfServiceReason?: string): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      // Khoá dòng users rồi mới lấy giờ: refresh nào cấp token sau giờ này thì câu FOR SHARE ở kiểm sau của nó phải chờ tx này
+      // commit và thấy mốc mới. Lấy giờ trước khi giữ khoá thì token cấp trong khe đó có iatMs lớn hơn mốc mà vẫn qua kiểm sau.
+      await tx.$executeRaw`SELECT 1 FROM users WHERE id = ${userId} FOR NO KEY UPDATE`;
+      const now = new Date();
+      await tx.user.update({ where: { id: userId }, data: { sessionsRevokedAt: now } });
+      const { count } = await tx.refreshToken.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: now } });
+      if (selfServiceReason) {
+        await recordUserAdminEvent(tx, { userId, kind: 'SESSIONS_REVOKED', to: String(count), reason: selfServiceReason, actorId: userId });
+      }
     });
-    await this.prisma.user.update({ where: { id: userId }, data: { sessionsRevokedAt: now } });
+    this.sessionState?.invalidate(userId);
   }
 
+  /**
+   * Cấp token con từ token cha vừa xoay (hoặc đang trong ân hạn), rồi kiểm lại sau khi con đã tồn tại: nếu lúc đó phiên đã bị cắt
+   * (mốc thu hồi đổi so với lúc bắt đầu refresh, hoặc không nhỏ hơn thời điểm cấp token cha) hoặc họ token đã bị logout thu hồi thì thu hồi luôn con và trả 401. Câu đọc
+   * mốc dùng FOR SHARE để chờ transaction thu hồi đang chạy commit; không bọc quanh issueTokens vì issueTokens tự khoá users trong
+   * transaction riêng (applyGrants).
+   */
+  private async rotateInto(user: User, parentId: string, markAtStart: Date | null): Promise<LoginResponse> {
+    const res = await this.issueTokens(user, parentId);
+    const [row] = await this.prisma.$queryRaw<{ sessionsRevokedAt: Date | null }[]>`
+      SELECT "sessionsRevokedAt" FROM users WHERE id = ${user.id} FOR SHARE`;
+    const parent = await this.prisma.refreshToken.findUnique({ where: { id: parentId }, select: { createdAt: true, rotatedAt: true } });
+    const mark = row?.sessionsRevokedAt ?? null;
+    // Mốc đổi so với lúc bắt đầu refresh nghĩa là một lượt cắt phiên vừa commit giữa chừng: chắc chắn, không phụ thuộc đồng hồ.
+    const markMoved = (mark?.getTime() ?? null) !== (markAtStart?.getTime() ?? null);
+    if (!parent || parent.rotatedAt === null || markMoved || (mark && parent.createdAt <= mark)) {
+      await this.prisma.refreshToken
+        .updateMany({ where: { tokenHash: this.hashToken(res.refreshToken), revokedAt: null }, data: { revokedAt: new Date() } })
+        .catch((err) => this.logger.warn(`Thu hồi token con sau khi phiên bị cắt thất bại: ${err}`));
+      throw new UnauthorizedException('Refresh token không hợp lệ hoặc đã hết hạn.');
+    }
+    return res;
+  }
+
+  /**
+   * Thu hồi token đang dùng và cả họ của nó: token cha vừa xoay trong khoảng ân hạn vẫn đổi được lấy cặp
+   * mới, nên không xoá ân hạn thì một tab khác mở lại phiên vừa đăng xuất. Xoá ân hạn TRƯỚC rồi mới thu hồi
+   * mọi hậu duệ, để lượt đổi song song không kịp sinh token mới giữa hai bước. Chỉ đụng họ của token này, không
+   * đụng thiết bị khác của cùng user; muốn cắt mọi thiết bị dùng logoutAll.
+   */
   async logout(refreshToken: string): Promise<void> {
-    const tokenHash = this.hashToken(refreshToken);
-    await this.prisma.refreshToken
-      .updateMany({ where: { tokenHash, revokedAt: null }, data: { revokedAt: new Date() } })
-      .catch((err) => this.logger.warn(`Revoke refresh token thất bại khi logout: ${err}`));
+    try {
+      const tokenHash = this.hashToken(refreshToken);
+      const token = await this.prisma.refreshToken.findUnique({
+        where: { tokenHash },
+        select: { id: true, parentId: true, rotatedAt: true },
+      });
+      if (!token) return;
+      const now = new Date();
+      await this.prisma.refreshToken.updateMany({ where: { id: token.id, revokedAt: null }, data: { revokedAt: now } });
+      const graceMs = this.config.get('JWT_REFRESH_REUSE_GRACE_SECONDS', { infer: true }) * 1000;
+      // Tab giữ token đã xoay mà bấm đăng xuất: chính nó cũng còn ân hạn để đổi lấy phiên mới.
+      const ancestors: string[] = token.rotatedAt && now.getTime() - token.rotatedAt.getTime() <= graceMs ? [token.id] : [];
+      let cursor = token.parentId;
+      while (cursor && ancestors.length < 5) {
+        const parent = await this.prisma.refreshToken.findUnique({
+          where: { id: cursor },
+          select: { id: true, parentId: true, rotatedAt: true },
+        });
+        if (!parent?.rotatedAt || now.getTime() - parent.rotatedAt.getTime() > graceMs) break;
+        ancestors.push(parent.id);
+        cursor = parent.parentId;
+      }
+      if (ancestors.length === 0) return;
+      await this.prisma.refreshToken.updateMany({ where: { id: { in: ancestors } }, data: { revokedAt: now, rotatedAt: null } });
+      // Mọi hậu duệ (con, cháu...) chết, kể cả token đã xoay còn ân hạn: xoá rotatedAt để chúng không đổi ra token con mới.
+      await this.prisma.$executeRaw`
+        WITH RECURSIVE d AS (
+          SELECT id FROM refresh_tokens WHERE "parentId" = ANY(${ancestors}::text[])
+          UNION
+          SELECT t.id FROM refresh_tokens t JOIN d ON t."parentId" = d.id
+        )
+        UPDATE refresh_tokens SET "revokedAt" = COALESCE("revokedAt", ${now}), "rotatedAt" = NULL
+        WHERE id IN (SELECT id FROM d)`;
+    } catch (err) {
+      this.logger.warn(`Revoke refresh token thất bại khi logout: ${err}`);
+    }
   }
 
-  private async issueTokens(user: User): Promise<LoginResponse> {
+  private async issueTokens(user: User, parentTokenId?: string): Promise<LoginResponse> {
     // Chặn TẬP TRUNG ở đây (dùng chung cho login guest/zalo-mini-app/zalo-oauth VÀ refresh):
     // nếu chỉ chặn ở refresh(), user bị khoá có thể đăng nhập lại để lấy token mới, bỏ qua
     // hoàn toàn việc khoá. Access token đang có bị JwtStrategy chặn qua SessionStateService.
@@ -997,7 +1077,7 @@ export class AuthService {
       throw new UnauthorizedException({ statusCode: 401, error: 'Unauthorized', code: 'ACCOUNT_BLOCKED', message: 'Tài khoản đã bị khoá. Bạn liên hệ CSKH Tubu Tree để được hỗ trợ.' });
     }
     // Khách đã gộp không còn là danh tính: refresh token cũ của khách không được đổi ra phiên mới (phải đăng nhập lại để
-    // nhận token của tài khoản đích; mergedSessionTokens cấp token cho đích, không qua dòng khách).
+    // nhận token của tài khoản đích).
     if (user.mergedIntoId) {
       throw new UnauthorizedException('Phiên đã hết hiệu lực, bạn đăng nhập lại nhé.');
     }
@@ -1007,7 +1087,9 @@ export class AuthService {
     // Điểm đơn chat/điện thoại chờ SĐT này (B9): liên kết ngay khi khách đăng nhập. Không bao giờ chặn hay làm rớt phiên.
     await this.linkChatPoints(user);
 
-    const payload: JwtPayload = {
+    // iatMs: JWT chỉ có iat theo giây; JwtStrategy cần mili giây để không chặn nhầm token cấp ngay sau lần thu hồi.
+    const payload: JwtPayload & { iatMs: number } = {
+      iatMs: Date.now(),
       sub: user.id,
       role: user.role,
       zaloId: user.zaloId ?? undefined,
@@ -1023,7 +1105,7 @@ export class AuthService {
     const refreshTtlDays = this.config.get('JWT_REFRESH_TTL_DAYS', { infer: true });
     const expiresAt = new Date(Date.now() + refreshTtlDays * 24 * 60 * 60 * 1000);
     await this.prisma.refreshToken.create({
-      data: { userId: user.id, tokenHash: this.hashToken(refreshToken), expiresAt },
+      data: { userId: user.id, tokenHash: this.hashToken(refreshToken), expiresAt, parentId: parentTokenId ?? null, createdAt: new Date() },
     });
 
     return { accessToken, refreshToken, user: this.toAuthUser(user) };

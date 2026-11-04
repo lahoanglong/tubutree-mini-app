@@ -183,4 +183,17 @@ describe('Chi tiết người dùng + nhóm việc nhân viên (real Postgres)',
     const d = await admin.getUserDetail(u.id);
     expect(d.grants).toEqual([expect.objectContaining({ role: 'STAFF', grantedBy: boss.id, revokedAt: null })]);
   });
+
+  it('m5: cờ sessionsRevocable — tắt với chính mình, khách tạm và dòng khách đã gộp; bật với tài khoản thường', async () => {
+    const viewer = await createUser(prisma, { role: 'ADMIN', phone: phone() });
+    const customer = await createUser(prisma, { phone: phone() });
+    const guest = await createUser(prisma, { zaloId: `guest_dev_${Date.now()}`, phone: null });
+    const merged = await createUser(prisma, { zaloId: `guest_dev_x_merged_${Date.now()}`, phone: null });
+    await prisma.user.update({ where: { id: merged.id }, data: { mergedIntoId: customer.id } });
+    const flag = async (id: string) => (await admin.getUserDetail(id, viewer.id)).user.sessionsRevocable;
+    expect(await flag(customer.id)).toBe(true);
+    expect(await flag(viewer.id)).toBe(false);
+    expect(await flag(guest.id)).toBe(false);
+    expect(await flag(merged.id)).toBe(false);
+  });
 });

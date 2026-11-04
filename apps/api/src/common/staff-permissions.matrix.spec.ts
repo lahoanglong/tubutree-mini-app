@@ -274,6 +274,7 @@ const EXPECTED: Record<string, Access> = {
   'GET /admin/users': [CSKH],
   'POST /admin/users/:id/block': ADMIN_ONLY,
   'POST /admin/users/:id/forfeit-commissions': ADMIN_ONLY,
+  'POST /admin/users/:id/revoke-sessions': ADMIN_ONLY,
   'GET /admin/users/:id/detail': [CSKH],
   'PUT /admin/users/:id/staff-permissions': ADMIN_ONLY,
   'POST /admin/users/:id/unblock': ADMIN_ONLY,
@@ -459,7 +460,7 @@ describe('Bảng quyền nhân viên theo nhóm việc (ADMINOPS-10, D1-05)', ()
 
   it('không nhóm nào chạm tới cấu hình, phân quyền, khoá tài khoản, % hoa hồng/giá sỉ, lương/ca, duyệt rút tiền, xuất người dùng', () => {
     const forbidden =
-      /^(GET|POST|PUT|PATCH|DELETE) \/admin\/(config|staff($|\/)|users\/role|users\/export|users\/:id\/(block|unblock|staff-permissions|forfeit-commissions)|commission-rates|dealer-prices\/import|payroll|shifts|shift-templates|attendance|payouts\/:id\/(approve|reject)|pancake\/sync|products\/(recompute-sold|sold-external)|merchant-fulfilment\/stores|storefronts|account-deletion-requests|engagement|dealer-applications)/;
+      /^(GET|POST|PUT|PATCH|DELETE) \/admin\/(config|staff($|\/)|users\/role|users\/export|users\/:id\/(block|unblock|revoke-sessions|staff-permissions|forfeit-commissions)|commission-rates|dealer-prices\/import|payroll|shifts|shift-templates|attendance|payouts\/:id\/(approve|reject)|pancake\/sync|products\/(recompute-sold|sold-external)|merchant-fulfilment\/stores|storefronts|account-deletion-requests|engagement|dealer-applications)/;
     const leaked = ROUTES.filter((r) => r.access !== STAFF && r.access.length > 0 && forbidden.test(r.key)).map((r) => r.key);
     expect(leaked).toEqual([]);
   });

@@ -31,6 +31,8 @@ export class UserBlockService {
       const user = await tx.user.findUnique({ where: { id: userId }, select: { id: true, role: true, isBlocked: true } });
       if (!user) throw new NotFoundException('Không tìm thấy người dùng.');
       if (user.role === 'ADMIN' && !user.isBlocked) await assertAnotherActiveAdmin(tx, userId, LAST_ADMIN_MESSAGE.block);
+      // Khoá dòng rồi mới lấy giờ (xem AuthService.revokeAllSessions).
+      await tx.$executeRaw`SELECT 1 FROM users WHERE id = ${userId} FOR NO KEY UPDATE`;
       const now = new Date();
       const updated = await tx.user.update({
         where: { id: userId },
@@ -70,5 +72,30 @@ export class UserBlockService {
     this.imageStale?.markStale();
     this.logger.warn(`Admin ${adminId} mở khoá user ${userId}.`);
     return updated;
+  }
+
+  /**
+   * Cắt mọi phiên đăng nhập (nghi lộ phiên, thiết bị mất) mà không khoá tài khoản: khách đăng nhập lại được ngay.
+   * Cùng cơ chế với khoá: thu hồi refresh token, chốt sessionsRevokedAt để access token đã cấp mất hiệu lực.
+   */
+  async revokeSessions(adminId: string, userId: string, rawReason: string) {
+    const reason = rawReason.trim();
+    if (!reason) throw new BadRequestException('Cần ghi lý do cắt phiên đăng nhập.');
+    if (userId === adminId) {
+      throw new BadRequestException('Không tự cắt phiên của chính mình. Dùng Đăng xuất mọi thiết bị trong Cài đặt.');
+    }
+    const result = await this.prisma.$transaction(async (tx) => {
+      // Khoá dòng rồi mới lấy giờ, giữ khoá tới commit (xem AuthService.revokeAllSessions).
+      await tx.$executeRaw`SELECT 1 FROM users WHERE id = ${userId} FOR NO KEY UPDATE`;
+      const now = new Date();
+      const marked = await tx.user.updateMany({ where: { id: userId }, data: { sessionsRevokedAt: now } });
+      if (marked.count === 0) throw new NotFoundException('Không tìm thấy người dùng.');
+      const { count } = await tx.refreshToken.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: now } });
+      await recordUserAdminEvent(tx, { userId, kind: 'SESSIONS_REVOKED', to: String(count), reason, actorId: adminId });
+      return { id: userId, revokedSessions: count };
+    });
+    this.sessions.invalidate(userId);
+    this.logger.warn(`Admin ${adminId} cắt ${result.revokedSessions} phiên của user ${userId}: ${reason}`);
+    return result;
   }
 }

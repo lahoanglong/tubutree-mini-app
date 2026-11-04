@@ -140,6 +140,19 @@ export class AuthController {
     if (token) await this.auth.logout(token);
   }
 
+  /** POST /api/auth/logout-all — yêu cầu JWT. Cắt mọi thiết bị của chính người gọi; client tự đăng xuất máy hiện tại. */
+  @Throttle({ default: { ttl: 60_000, limit: 10 } })
+  @Post('logout-all')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async logoutAll(
+    @CurrentUser() user: JwtPayload,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<void> {
+    await this.auth.logoutAll(user.sub);
+    if (wantsCookieAuth(req)) clearRefreshCookies(res);
+  }
+
   /** GET /api/auth/me — yêu cầu JWT (guard mặc định). */
   @Get('me')
   async me(@CurrentUser() user: JwtPayload) {

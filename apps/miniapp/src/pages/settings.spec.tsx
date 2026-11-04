@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   setOaPromptState: vi.fn(),
   requestAccountDeletion: vi.fn(),
   getWallet: vi.fn(),
+  apiPost: vi.fn(),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -60,6 +61,7 @@ vi.mock('../services/account-api', () => ({ requestAccountDeletion: mocks.reques
 vi.mock('../services/api', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   getErrorMessage: () => 'lỗi',
+  api: { post: mocks.apiPost },
 }));
 
 import SettingsPage from './settings';
@@ -77,6 +79,7 @@ describe('Cài đặt thông báo lưu trên server (C-022)', () => {
     mocks.stored = undefined;
     mocks.user = { phone: '0900000000', zaloId: 'z123' };
     mocks.storageReads = 0;
+    mocks.apiPost.mockReset().mockResolvedValue({});
     mocks.requestAccountDeletion.mockResolvedValue({ message: 'Đã ghi nhận yêu cầu' });
     mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
     mocks.fetchNotifyPrefs.mockResolvedValue({ notifyPromo: true, notifyGarden: true });
@@ -291,6 +294,35 @@ describe('Cài đặt theo DS v2 (C-076, C-114)', () => {
     expect(mocks.navigate).toHaveBeenCalledWith('/edit-profile');
     fireEvent.click(screen.getByRole('button', { name: 'Đăng xuất' }));
     expect(mocks.logout).toHaveBeenCalled();
+  });
+
+  it('Đăng xuất mọi thiết bị: hỏi xác nhận, gọi logout-all rồi đăng xuất máy này', async () => {
+    render(<SettingsPage />);
+    fireEvent.click(screen.getByRole('button', { name: 'Đăng xuất mọi thiết bị' }));
+    expect(mocks.apiPost).not.toHaveBeenCalled();
+    expect(screen.getByText('Đăng xuất khỏi mọi thiết bị?')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Đăng xuất mọi máy' }));
+    await waitFor(() => expect(mocks.logout).toHaveBeenCalledTimes(1));
+    expect(mocks.apiPost).toHaveBeenCalledWith('/auth/logout-all');
+  });
+
+  it('Đăng xuất mọi thiết bị: bấm Huỷ thì không gọi gì; máy chủ lỗi thì giữ phiên và báo lỗi', async () => {
+    render(<SettingsPage />);
+    fireEvent.click(screen.getByRole('button', { name: 'Đăng xuất mọi thiết bị' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Huỷ' }));
+    expect(mocks.apiPost).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Đăng xuất mọi thiết bị' })).toBeInTheDocument();
+    mocks.apiPost.mockRejectedValueOnce(new Error('boom'));
+    fireEvent.click(screen.getByRole('button', { name: 'Đăng xuất mọi thiết bị' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Đăng xuất mọi máy' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'lỗi', type: 'error' }));
+    expect(mocks.logout).not.toHaveBeenCalled();
+  });
+
+  it('khách tạm không có nút Đăng xuất mọi thiết bị', () => {
+    mocks.user = { phone: null, zaloId: 'guest_abc' };
+    render(<SettingsPage />);
+    expect(screen.queryByRole('button', { name: 'Đăng xuất mọi thiết bị' })).toBeNull();
   });
 
   it('có OA: hàng Theo dõi Zalo OA hiện nút Theo dõi, bấm xong báo "Đã theo dõi" bằng icon, không ký tự ✓', async () => {

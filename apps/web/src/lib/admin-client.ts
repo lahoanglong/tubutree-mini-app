@@ -459,6 +459,12 @@ export const blockUser = (id: string, reason: string) =>
     method: 'POST',
     body: { reason },
   });
+/** Cắt mọi phiên đăng nhập mà không khoá tài khoản; khách đăng nhập lại được ngay. */
+export const revokeUserSessions = (id: string, reason: string) =>
+  apiFetch<{ id: string; revokedSessions: number }>(`/admin/users/${encodeURIComponent(id)}/revoke-sessions`, {
+    method: 'POST',
+    body: { reason },
+  });
 export const unblockUser = (id: string, reason: string) =>
   apiFetch<BlockState>(`/admin/users/${encodeURIComponent(id)}/unblock`, { method: 'POST', body: { reason } });
 export type UserRole = 'CUSTOMER' | 'AFFILIATE' | 'DEALER' | 'STAFF' | 'ADMIN';
@@ -2248,7 +2254,7 @@ export const cancelGiftRedemption = (id: string, body: WasteGiftCancelRequest) =
 // ── Chi tiết người dùng (ADMINOPS-11) + nhóm việc nhân viên (ADMINOPS-10) ──
 export interface AdminUserEvent {
   id: string;
-  kind: 'ROLE' | 'STAFF_PERMISSIONS' | 'BLOCK' | 'UNBLOCK' | 'STOREFRONT_PARTNER' | 'WALLET_FORFEIT' | 'AFFILIATE_REVOKE';
+  kind: 'ROLE' | 'STAFF_PERMISSIONS' | 'BLOCK' | 'UNBLOCK' | 'STOREFRONT_PARTNER' | 'WALLET_FORFEIT' | 'AFFILIATE_REVOKE' | 'SESSIONS_REVOKED';
   fromValue: string | null;
   toValue: string | null;
   reason: string | null;
@@ -2276,6 +2282,8 @@ export interface AdminUserDetail {
     affiliateRevokedAt: string | null;
     createdAt: string;
     tier: { name: string } | null;
+    /** false: chính admin đang xem, khách tạm hoặc dòng khách đã gộp (không có phiên để cắt). Thiếu = bản API cũ, coi như cắt được. */
+    sessionsRevocable?: boolean;
   };
   orders: {
     items: { id: string; code: string; status: string; paymentMethod: string; paymentStatus: string; total: number; createdAt: string; fulfiller: string }[];

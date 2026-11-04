@@ -2642,7 +2642,7 @@ describe('AdminService.recordExport — nhật ký xuất CSV (L1-07)', () => {
     const without = await mkAdmin(mk()).getUserDetail('u1');
     expect(exportsFind).not.toHaveBeenCalled();
     expect(without.recentExports).toBeNull();
-    const withIt = await mkAdmin(mk()).getUserDetail('u1', { withExports: true });
+    const withIt = await mkAdmin(mk()).getUserDetail('u1', undefined, { withExports: true });
     expect(exportsFind).toHaveBeenCalledWith(expect.objectContaining({ where: { actorId: 'u1' }, take: 20, orderBy: { createdAt: 'desc' } }));
     expect(withIt.recentExports).toHaveLength(1);
   });

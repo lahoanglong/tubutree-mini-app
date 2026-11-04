@@ -195,12 +195,14 @@ describe('Gộp đồng thời 4 khách vào một tài khoản (real Postgres)'
     }
   });
 
-  it('gộp lại lần hai bằng token khách cũ (4 thiết bị bấm lại cùng lúc) không nhân đôi điểm hay đơn', async () => {
+  it('gộp lại lần hai bằng token khách cũ (4 thiết bị bấm lại cùng lúc) bị từ chối, không nhân đôi điểm hay đơn', async () => {
     const ctx = await seed();
     const before = await snapshot([ctx.t.id, ...ctx.guests.map((g) => g.id)]);
     expect(summarize(await Promise.allSettled(ctx.guests.map((g) => merge(g.id)))).errors).toEqual([]);
     const again = summarize(await Promise.allSettled(ctx.guests.map((g) => merge(g.id))));
-    expect(again.errors).toEqual([]);
+    expect(again.fulfilled).toHaveLength(0);
+    expect(again.errors).toHaveLength(4);
+    for (const e of again.errors) expect(e).toMatch(/UnauthorizedException/);
     await expectMerged(ctx, before);
   });
 });

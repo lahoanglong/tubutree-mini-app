@@ -815,7 +815,8 @@ export class AdminService {
    * Chi tiết một người dùng cho admin/CSKH (ADMINOPS-11): hồ sơ + số dư, đơn gần nhất, sổ ví, Điểm Xanh, lịch sử vai trò
    * (sổ user_admin_events + quyền cấp theo SĐT) và lịch sử khoá. Mỗi phần tối đa DETAIL_TAKE dòng mới nhất.
    */
-  async getUserDetail(userId: string, opts: { withExports?: boolean } = {}) {
+  /** viewerId: admin đang xem, để tắt cờ sessionsRevocable với chính mình (cắt phiên mình thì dùng Đăng xuất mọi thiết bị). */
+  async getUserDetail(userId: string, viewerId?: string, opts: { withExports?: boolean } = {}) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -834,10 +835,16 @@ export class AdminService {
         blockedReason: true,
         affiliateRevokedAt: true,
         createdAt: true,
+        zaloId: true,
+        mergedIntoId: true,
         tier: { select: { name: true } },
       },
     });
     if (!user) throw new NotFoundException('Không tìm thấy người dùng.');
+    const { zaloId, mergedIntoId, ...userFields } = user;
+    // Ẩn nút với khách tạm (guest_...) là chọn lựa sản phẩm, không phải vì họ không có phiên; dòng khách đã gộp không còn phiên nào;
+    // chính admin thì dùng nút Đăng xuất mọi thiết bị của khách.
+    const sessionsRevocable = userId !== viewerId && !mergedIntoId && !(zaloId?.startsWith('guest_') ?? false);
     const take = AdminService.DETAIL_TAKE;
     const [orders, orderTotal, wallet, points, events, partnerEvents, grants] = await Promise.all([
       this.prisma.order.findMany({
@@ -861,7 +868,7 @@ export class AdminService {
       }),
       // STOREFRONT_PARTNER lấy riêng (partnerHistory) để không chiếm 100 dòng của lịch sử vai trò/khoá.
       this.prisma.userAdminEvent.findMany({
-        where: { userId, kind: { in: ['ROLE', 'STAFF_PERMISSIONS', 'BLOCK', 'UNBLOCK', 'WALLET_FORFEIT', 'AFFILIATE_REVOKE'] } },
+        where: { userId, kind: { in: ['ROLE', 'STAFF_PERMISSIONS', 'BLOCK', 'UNBLOCK', 'WALLET_FORFEIT', 'AFFILIATE_REVOKE', 'SESSIONS_REVOKED'] } },
         orderBy: { createdAt: 'desc' },
         take: 100,
       }),
@@ -902,14 +909,14 @@ export class AdminService {
     const actorName = new Map(actors.map((a) => [a.id, a.fullName ?? a.phone ?? a.id]));
     const withActor = <T extends { actorId: string | null }>(e: T) => ({ ...e, actorName: e.actorId ? (actorName.get(e.actorId) ?? null) : null });
     return {
-      user,
+      user: { ...userFields, sessionsRevocable },
       recentExports,
       forfeitableCommission: pending && pending._count._all > 0 ? { count: pending._count._all, amount: pending._sum.amount ?? 0 } : null,
       orders: { items: orders, total: orderTotal },
       wallet,
       points,
       roleHistory: events.filter((e) => e.kind === 'ROLE' || e.kind === 'STAFF_PERMISSIONS' || e.kind === 'AFFILIATE_REVOKE').map(withActor),
-      blockHistory: events.filter((e) => e.kind === 'BLOCK' || e.kind === 'UNBLOCK').map(withActor),
+      blockHistory: events.filter((e) => e.kind === 'BLOCK' || e.kind === 'UNBLOCK' || e.kind === 'SESSIONS_REVOKED').map(withActor),
       partnerHistory: partnerEvents.map(withActor),
       grants: grants.map((g) => ({ ...g, grantedByName: actorName.get(g.grantedBy) ?? null })),
     };

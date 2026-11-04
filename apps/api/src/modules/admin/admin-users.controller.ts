@@ -10,8 +10,14 @@ import { AllowStaff } from '../../common/staff-permissions';
 import { StaffLookupThrottle } from '../../common/throttle/throttle.config';
 import { ForfeitCommissionsDto } from './dto/forfeit-commissions.dto';
 
+const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
+
 export class BlockUserDto {
-  @IsString() @MinLength(3) @MaxLength(500) reason!: string;
+  @Transform(trim) @IsString() @MinLength(3) @MaxLength(500) reason!: string;
+}
+
+export class RevokeSessionsDto {
+  @Transform(trim) @IsString() @MinLength(3) @MaxLength(500) reason!: string;
 }
 
 export class UnblockUserDto {
@@ -38,8 +44,8 @@ export class AdminUsersController {
   @StaffLookupThrottle(30)
   @AllowStaff('CSKH')
   @Get(':id/detail')
-  detail(@Param('id') id: string, @CurrentUser('role') role?: string) {
-    return this.admin.getUserDetail(id, { withExports: role === 'ADMIN' });
+  detail(@CurrentUser('sub') viewerId: string, @Param('id') id: string, @CurrentUser('role') role?: string) {
+    return this.admin.getUserDetail(id, viewerId, { withExports: role === 'ADMIN' });
   }
 
   @Put(':id/staff-permissions')
@@ -57,6 +63,12 @@ export class AdminUsersController {
   @HttpCode(HttpStatus.OK)
   block(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: BlockUserDto) {
     return this.blocks.block(adminId, id, dto.reason);
+  }
+
+  @Post(':id/revoke-sessions')
+  @HttpCode(HttpStatus.OK)
+  revokeSessions(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: RevokeSessionsDto) {
+    return this.blocks.revokeSessions(adminId, id, dto.reason);
   }
 
   @Post(':id/unblock')
