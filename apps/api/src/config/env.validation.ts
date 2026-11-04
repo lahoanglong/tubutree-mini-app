@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { MIN_WEBHOOK_SECRET_LENGTH, shortWebhookSecretKeys } from './webhook-secrets';
 import { resolveOpsEmailConfig } from './ops-email-config';
 
 /** Validate biến môi trường khi app khởi động (fail-fast). */
@@ -174,6 +175,13 @@ export const envSchema = z.object({
           message: `${key} phải dài ít nhất 32 ký tự ở production. Sinh khoá mới: openssl rand -base64 48 (đổi khoá đang chạy sẽ đăng xuất mọi người dùng, nên làm trước khi mở bán).`,
         });
       }
+    }
+    for (const key of shortWebhookSecretKeys(env)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [key],
+        message: `${key} đã đặt thì phải dài ít nhất ${MIN_WEBHOOK_SECRET_LENGTH} ký tự ở production (route webhook không bị giới hạn tốc độ). Sinh chuỗi mới: openssl rand -hex 32, rồi dán lại đúng y hệt ở phía đối tác.`,
+      });
     }
     if (env.ZALOPAY_APP_ID && /sb-openapi|sandbox/i.test(env.ZALOPAY_ENDPOINT) && env.ZALOPAY_ALLOW_SANDBOX !== '1') {
       ctx.addIssue({
