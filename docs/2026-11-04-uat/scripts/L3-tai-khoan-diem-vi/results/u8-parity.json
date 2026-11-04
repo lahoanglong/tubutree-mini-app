@@ -1,0 +1,24 @@
+[
+  {
+    "id": "U8-wallet-time",
+    "persona": "returning",
+    "khổ": "mini375 vs web375",
+    "journey": "Parity Mini và web 375",
+    "step": "dòng Lịch sử Ví hiện ngày giờ cùng một dạng ở Mini và web 375",
+    "expected": "apps/miniapp/src/pages/wallet.tsx:270 formatWalletTxTime vs apps/web/src/app/tai-khoan/vi-tubu/page.tsx:246 formatDateTime",
+    "actual": "Mini=\"04/11 04:04\" (dd/dd dd:dd) web=\"04:04 04/11/2026\" (dd:dd dd/dd/dddd); cả hai là giờ VN (04:04)",
+    "evidence": "Mini=\"04/11 04:04\" (dd/dd dd:dd) web=\"04:04 04/11/2026\" (dd:dd dd/dd/dddd); cả hai là giờ VN (04:04)",
+    "status": "FAIL"
+  },
+  {
+    "id": "U8-address-text",
+    "persona": "ctv",
+    "khổ": "mini375 vs web375",
+    "journey": "Parity Mini và web 375",
+    "step": "form thêm địa chỉ: nút lưu và nhãn ô đường giống nhau ở Mini và web 375",
+    "expected": "apps/miniapp/src/i18n/vi.ts:267 vs apps/web/src/components/address-form.tsx:101,119",
+    "actual": "Mini={\"labels\":[\"Người nhận\",\"Số điện thoại\",\"Số nhà, tên đường\"],\"save\":[\"Lưu\"]} web={\"labels\":[\"Tìm sản phẩm\",\"Người nhận\",\"Số điện thoại\",\"Số nhà, đường\"],\"save\":[\"Lưu địa chỉ\"]}",
+    "evidence": "Mini={\"labels\":[\"Người nhận\",\"Số điện thoại\",\"Số nhà, tên đường\"],\"save\":[\"Lưu\"]} web={\"labels\":[\"Tìm sản phẩm\",\"Người nhận\",\"Số điện thoại\",\"Số nhà, đường\"],\"save\":[\"Lưu địa chỉ\"]}",
+    "status": "FAIL"
+  }
+]

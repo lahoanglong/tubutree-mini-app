@@ -1,0 +1,183 @@
+{
+ "BRAND-OWNER": {
+  "mini375": {
+   "url": "/brand-owner",
+   "overflowX": 0,
+   "errors": [],
+   "ext": [],
+   "len": 593,
+   "tabs": [
+    "Hồ sơ & khuyến mãi",
+    "Doanh thu"
+   ]
+  },
+  "web375": {
+   "url": "/chu-thuong-hieu",
+   "overflowX": 0,
+   "errors": [],
+   "ext": [
+    "https://www.facebook.com/tubutree",
+    "https://www.tiktok.com/@tubutree.com"
+   ],
+   "len": 657,
+   "tabs": [
+    "CFuwa3e",
+    "Danh mục",
+    "Vườn Xanh",
+    "Ưu đãi",
+    "Kho quà",
+    "Mua chung",
+    "Cộng đồng",
+    "Hồ sơ & khuyến mãi",
+    "Doanh thu",
+    "Danh mục sản phẩm",
+    "Ưu đãi",
+    "Mua chung"
+   ]
+  },
+  "web1280": {
+   "url": "/chu-thuong-hieu",
+   "overflowX": 0,
+   "errors": [],
+   "ext": [
+    "https://www.facebook.com/tubutree",
+    "https://www.tiktok.com/@tubutree.com"
+   ],
+   "len": 1034,
+   "tabs": [
+    "C\nFuwa3e",
+    "Danh mục",
+    "Vườn Xanh",
+    "Ưu đãi",
+    "Kho quà",
+    "Mua chung",
+    "Cộng đồng",
+    "Hồ sơ & khuyến mãi",
+    "Doanh thu",
+    "Danh mục sản phẩm",
+    "Ưu đãi",
+    "Mua chung"
+   ]
+  }
+ },
+ "BRAND-PUB": {
+  "mini375": {
+   "url": "/brand/fuwa3e",
+   "overflowX": 0,
+   "errors": [],
+   "ext": [],
+   "len": 523,
+   "tabs": [
+    "Shop",
+    "Sản phẩm (6)",
+    "Câu chuyện"
+   ]
+  },
+  "web375": {
+   "url": "/brand/fuwa3e",
+   "overflowX": 0,
+   "errors": [],
+   "ext": [
+    "https://www.facebook.com/tubutree",
+    "https://www.tiktok.com/@tubutree.com"
+   ],
+   "len": 583,
+   "tabs": [
+    "LMới",
+    "Danh mục",
+    "Vườn Xanh",
+    "Ưu đãi",
+    "Kho quà",
+    "Mua chung",
+    "Cộng đồng",
+    "Shop",
+    "Sản phẩm (6)",
+    "Câu chuyện",
+    "Danh mục sản phẩm",
+    "Ưu đãi"
+   ]
+  },
+  "web1280": {
+   "url": "/brand/fuwa3e",
+   "overflowX": 0,
+   "errors": [],
+   "ext": [
+    "https://www.facebook.com/tubutree",
+    "https://www.tiktok.com/@tubutree.com"
+   ],
+   "len": 941,
+   "tabs": [
+    "47",
+    "L\nMới",
+    "Danh mục",
+    "Vườn Xanh",
+    "Ưu đãi",
+    "Kho quà",
+    "Mua chung",
+    "Cộng đồng",
+    "Shop",
+    "Sản phẩm (6)",
+    "Câu chuyện",
+    "Danh mục sản phẩm"
+   ]
+  }
+ },
+ "BRAND-NEW": {
+  "mini375": {
+   "url": "/brand-owner",
+   "overflowX": 0,
+   "errors": [],
+   "ext": [],
+   "len": 145,
+   "tabs": []
+  },
+  "web375": {
+   "url": "/chu-thuong-hieu",
+   "overflowX": 0,
+   "errors": [],
+   "ext": [
+    "https://www.facebook.com/tubutree",
+    "https://www.tiktok.com/@tubutree.com"
+   ],
+   "len": 207,
+   "tabs": [
+    "LMới",
+    "Danh mục",
+    "Vườn Xanh",
+    "Ưu đãi",
+    "Kho quà",
+    "Mua chung",
+    "Cộng đồng",
+    "Danh mục sản phẩm",
+    "Ưu đãi",
+    "Mua chung",
+    "Cộng đồng",
+    "Câu chuyện thương hiệu"
+   ]
+  },
+  "web1280": {
+   "url": "/chu-thuong-hieu",
+   "overflowX": 0,
+   "errors": [],
+   "ext": [
+    "https://www.facebook.com/tubutree",
+    "https://www.tiktok.com/@tubutree.com"
+   ],
+   "len": 584,
+   "tabs": [
+    "47",
+    "L\nMới",
+    "Danh mục",
+    "Vườn Xanh",
+    "Ưu đãi",
+    "Kho quà",
+    "Mua chung",
+    "Cộng đồng",
+    "Danh mục sản phẩm",
+    "Ưu đãi",
+    "Mua chung",
+    "Cộng đồng"
+   ]
+  }
+ }
+}

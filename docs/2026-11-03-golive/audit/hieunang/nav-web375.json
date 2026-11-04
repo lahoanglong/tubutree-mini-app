@@ -1,0 +1,144 @@
+{
+ "app": "web375",
+ "date": "2026-11-03T10:46:42.060Z",
+ "load": {
+  "loadAvg": "Load Avg: 74.01, 72.02, 88.58 ",
+  "cpu": "CPU usage: 51.32% user, 48.67% sys, 0.0% idle "
+ },
+ "results": [
+  {
+   "run": 1,
+   "steps": [
+    {
+     "name": "home→PDP (bấm thẻ SP)",
+     "ok": true,
+     "api": 7,
+     "apiList": "GET /products/mat-ong-rung-bhnong/reviews,GET /products/mat-ong-rung-bhnong,GET /affiliate/me,GET /products/mat-ong-rung-bhnong/reviews/can-review,GET /me/coupons,GET /cart,GET /products/for-you",
+     "readyMs": 1379,
+     "inpMs": 72,
+     "skeletonOrSpinnerSeen": true,
+     "path": "/san-pham/mat-ong-rung-bhnong"
+    },
+    {
+     "name": "tab Danh mục",
+     "ok": true,
+     "api": 1,
+     "apiList": "GET /cart",
+     "readyMs": 585,
+     "inpMs": null,
+     "skeletonOrSpinnerSeen": false,
+     "path": "/san-pham"
+    },
+    {
+     "name": "tab Vườn Xanh",
+     "ok": true,
+     "api": 5,
+     "apiList": "GET /me/daily-check-in,GET /game/quiz/today,GET /game/profile,GET /game/missions,GET /me/loyalty",
+     "readyMs": 124,
+     "inpMs": null,
+     "skeletonOrSpinnerSeen": true,
+     "path": "/vuon-xanh"
+    },
+    {
+     "name": "tab Ưu đãi",
+     "ok": true,
+     "api": 5,
+     "apiList": "GET /campaigns,GET /coupons/collectable,GET /coupons/collectable/mine,GET /me/coupons,GET /me/loyalty",
+     "readyMs": 146,
+     "inpMs": null,
+     "skeletonOrSpinnerSeen": true,
+     "path": "/uu-dai"
+    },
+    {
+     "name": "tab Cá nhân",
+     "ok": true,
+     "api": 10,
+     "apiList": "GET /me,GET /me/summary,GET /me/referral,GET /orders,GET /config/public,GET /me/support-chat/summary,GET /auth/me,GET /me/coupons,GET /me/loyalty,GET /dealer/me",
+     "readyMs": 243,
+     "inpMs": 16,
+     "skeletonOrSpinnerSeen": true,
+     "path": "/tai-khoan"
+    },
+    {
+     "name": "tab Trang chủ",
+     "ok": true,
+     "api": 4,
+     "apiList": "GET /me/summary,GET /me/loyalty,GET /home/me,GET /cart",
+     "readyMs": 568,
+     "inpMs": null,
+     "skeletonOrSpinnerSeen": false,
+     "path": "/"
+    }
+   ],
+   "cls": 0.163,
+   "pageErrors": []
+  },
+  {
+   "run": 2,
+   "steps": [
+    {
+     "name": "home→PDP (bấm thẻ SP)",
+     "ok": true,
+     "api": 7,
+     "apiList": "GET /products/mat-ong-rung-bhnong,GET /products/mat-ong-rung-bhnong/reviews,GET /affiliate/me,GET /products/mat-ong-rung-bhnong/reviews/can-review,GET /me/coupons,GET /products/for-you,GET /cart",
+     "readyMs": 1622,
+     "inpMs": 64,
+     "skeletonOrSpinnerSeen": true,
+     "path": "/san-pham/mat-ong-rung-bhnong"
+    },
+    {
+     "name": "tab Danh mục",
+     "ok": true,
+     "api": 1,
+     "apiList": "GET /cart",
+     "readyMs": 583,
+     "inpMs": null,
+     "skeletonOrSpinnerSeen": false,
+     "path": "/san-pham"
+    },
+    {
+     "name": "tab Vườn Xanh",
+     "ok": true,
+     "api": 5,
+     "apiList": "GET /me/daily-check-in,GET /game/profile,GET /game/quiz/today,GET /game/missions,GET /me/loyalty",
+     "readyMs": 119,
+     "inpMs": null,
+     "skeletonOrSpinnerSeen": false,
+     "path": "/vuon-xanh"
+    },
+    {
+     "name": "tab Ưu đãi",
+     "ok": true,
+     "api": 5,
+     "apiList": "GET /campaigns,GET /coupons/collectable,GET /coupons/collectable/mine,GET /me/coupons,GET /me/loyalty",
+     "readyMs": 226,
+     "inpMs": 16,
+     "skeletonOrSpinnerSeen": true,
+     "path": "/uu-dai"
+    },
+    {
+     "name": "tab Cá nhân",
+     "ok": true,
+     "api": 10,
+     "apiList": "GET /me,GET /me/summary,GET /me/referral,GET /me/coupons,GET /me/loyalty,GET /orders,GET /config/public,GET /me/support-chat/summary,GET /auth/me,GET /dealer/me",
+     "readyMs": 306,
+     "inpMs": null,
+     "skeletonOrSpinnerSeen": true,
+     "path": "/tai-khoan"
+    },
+    {
+     "name": "tab Trang chủ",
+     "ok": true,
+     "api": 4,
+     "apiList": "GET /me/summary,GET /me/loyalty,GET /cart,GET /home/me",
+     "readyMs": 520,
+     "inpMs": null,
+     "skeletonOrSpinnerSeen": false,
+     "path": "/"
+    }
+   ],
+   "cls": 0.194,
+   "pageErrors": []
+  }
+ ]
+}

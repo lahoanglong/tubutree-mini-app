@@ -1,0 +1,101 @@
+[
+  {
+    "id": "L5-CUI-00",
+    "persona": "returning",
+    "size": "api",
+    "journey": "Chat CSKH bằng giao diện (375)",
+    "step": "Khách gửi tin để có hội thoại",
+    "expect": "2xx",
+    "actual": "HTTP 201",
+    "evidence": "{\"id\":\"cmw17gkyj02a0jtc4gm2m73vd\",\"sender\":\"CUSTOMER\",\"body\":\"UAT-UI-mw17gkya Đơn của mình bao giờ giao?\",\"imageUrl\":nul",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CUI-01",
+    "persona": "cskh",
+    "size": "web375",
+    "journey": "Chat CSKH bằng giao diện (375)",
+    "step": "CSKH mở tab Chat CSKH",
+    "expect": "thấy danh sách hội thoại có mã #JT8A và tin vừa gửi; thẻ cầu nối ở dạng gọn (không có công tắc \"Cho khách chat\" của admin)",
+    "actual": "thấy mã=true; thấy tin=true; công tắc admin=false",
+    "evidence": "Tubu Tree Quản trị Về cửa hàng Đăng xuất Bỏ qua tới nội dung Hay dùng · Chat CSKH , 3 việc đang chờ Đổi mục Cầu nối Zalo Mất kết nối Hội thoại Tìm Có tin chưa chuyển được #JT8A · Nguyễn Thị Quay Lại 04:34 04/11/2026 0901000003 Khách: UAT-UI-mw17gkya Đơn của mình bao giờ giao? Chưa chuyển được #SRLH ",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CUI-02",
+    "persona": "cskh",
+    "size": "web375",
+    "journey": "Chat CSKH bằng giao diện (375)",
+    "step": "Mở hội thoại: nút \"Gửi trả lời\" khi ô trống",
+    "expect": "bị khoá",
+    "actual": "isDisabled=true",
+    "evidence": null,
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CUI-03",
+    "persona": "cskh",
+    "size": "web375",
+    "journey": "Chat CSKH bằng giao diện (375)",
+    "step": "CSKH gõ và bấm \"Gửi trả lời\"",
+    "expect": "POST reply 2xx; DB sender STAFF, adminUserId = cskh; tin hiện trong luồng; ô nhập được xoá",
+    "actual": "POST /admin/support-chat/conversations/cmw174dkl01z4jtc4bs1k3joq/reply 201; DB {\"sender\":\"STAFF\",\"a\":\"uat_cskh\",\"body\":\"UAT-UI-mw17gkya Đơn đang trên đường giao nhé.\"}; hiện trên màn=true",
+    "evidence": null,
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CUI-04",
+    "persona": "returning",
+    "size": "api",
+    "journey": "Chat CSKH bằng giao diện (375)",
+    "step": "Khách thấy câu trả lời vừa gõ ở giao diện admin",
+    "expect": "có trong khung chat của khách",
+    "actual": "12 tin",
+    "evidence": null,
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CUI-05",
+    "persona": "cskh",
+    "size": "web375",
+    "journey": "Chat CSKH bằng giao diện (375)",
+    "step": "Bấm \"Chặn chat\": hộp xác nhận",
+    "expect": "hộp \"Chặn chat của khách này?\" nêu hậu quả; chưa chặn khi chưa xác nhận",
+    "actual": "hộp=true; DB blockedAt=null",
+    "evidence": "Chặn chat của khách này? Khách vẫn đọc được lịch sử nhưng không gửi được tin mới, và tin của họ không vào nhóm Zalo. Bỏ chặn bất cứ lúc nào. Huỷ Chặn chat",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CUI-06",
+    "persona": "cskh",
+    "size": "web375",
+    "journey": "Chat CSKH bằng giao diện (375)",
+    "step": "Xác nhận chặn",
+    "expect": "DB blockedAt có, blockedByUserId = cskh; khách gửi tiếp bị 403",
+    "actual": "DB {\"b\":\"2026-11-03T21:34:09.857Z\",\"u\":\"uat_cskh\"}; khách gửi -> 403",
+    "evidence": null,
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CUI-07",
+    "persona": "cskh",
+    "size": "web375",
+    "journey": "Chat CSKH bằng giao diện (375)",
+    "step": "Bấm \"Bỏ chặn\"",
+    "expect": "DB blockedAt = null",
+    "actual": "DB blockedAt=null",
+    "evidence": null,
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-CUI-08",
+    "persona": "admin",
+    "size": "web375",
+    "journey": "Chat CSKH bằng giao diện (375)",
+    "step": "ADMIN mở thẻ Cầu nối Zalo ở 375px",
+    "expect": "thấy \"Cho khách chat: đang bật\" và chọn nhóm; không tràn ngang",
+    "actual": "công tắc=Cho khách chat: đang bật",
+    "evidence": "Cầu nối Zalo Mất kết nối Mất kết nối Tin khách đang không tới nhóm Zalo. Khách vẫn gửi được tin và tin được giữ lại (đang có 2 cuộc chat chờ chuyển), nhưng nhân viên trong nhóm Zalo chưa thấy. Bấm \"Kết nối lại\". Nếu vẫn chưa được, bấm \"Đăng nhập Zalo\" và quét ",
+    "verdict": "PASS"
+  }
+]

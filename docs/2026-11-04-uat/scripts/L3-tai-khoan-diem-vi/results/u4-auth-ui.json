@@ -1,0 +1,112 @@
+[
+  {
+    "id": "U4-web375-login",
+    "persona": "guest",
+    "khổ": "web375",
+    "journey": "Đăng nhập / đăng xuất",
+    "step": "khách mở /dang-nhap: có tiêu đề Đăng nhập và nút Đăng nhập với Zalo (hoặc báo tạm ngưng nếu chưa cấu hình), không chữ cấm",
+    "expected": "apps/web/src/app/dang-nhap/page.tsx",
+    "actual": "nút=0 tạmNgưng=true chữ=Đăng nhập Đăng nhập để mua sắm, tích Điểm Xanh và đồng bộ giỏ hàng với Zalo Mini App. Quà khách mới: Mã giảm giá chào mừng 30.000đ, cho đơn từ 199.000đ. Đăng nhập Zalo trên web đang tạm ngưng. Bạn vẫn mua sắm được trong Zalo. Mở Tubu Tree trên Zalo Cần hỗ trợ ",
+    "evidence": "nút=0 tạmNgưng=true chữ=Đăng nhập Đăng nhập để mua sắm, tích Điểm Xanh và đồng bộ giỏ hàng với Zalo Mini App. Quà khách mới: Mã giảm giá chào mừng 30.000đ, cho đơn từ 199.000đ. Đăng nhập Zalo trên web đang tạm ngưng. Bạn vẫn mua sắm được trong Zalo. Mở Tubu Tree trên Zalo Cần hỗ trợ ",
+    "status": "PASS"
+  },
+  {
+    "id": "U4-web375-gate",
+    "persona": "guest",
+    "khổ": "web375",
+    "journey": "Đăng nhập / đăng xuất",
+    "step": "khách mở /tai-khoan: không thấy dữ liệu cá nhân, được đưa về đăng nhập hoặc hiện lời mời đăng nhập",
+    "expected": "guest-auth-gate.spec.tsx",
+    "actual": "url=/tai-khoan chữ=Cá nhân Đăng nhập để xem tích điểm, đơn hàng và ưu đãi cá nhân của bạn. Đăng nhập với Zalo Đăng nhập xong bạn sẽ quay lại đúng trang này. Hotline: 0984 606 774 Điều khoản Bảo mật Đổi trả Vận chuyển Tr",
+    "evidence": "url=/tai-khoan chữ=Cá nhân Đăng nhập để xem tích điểm, đơn hàng và ưu đãi cá nhân của bạn. Đăng nhập với Zalo Đăng nhập xong bạn sẽ quay lại đúng trang này. Hotline: 0984 606 774 Điều khoản Bảo mật Đổi trả Vận chuyển Tr",
+    "status": "PASS"
+  },
+  {
+    "id": "U4-web1280-login",
+    "persona": "guest",
+    "khổ": "web1280",
+    "journey": "Đăng nhập / đăng xuất",
+    "step": "khách mở /dang-nhap: có tiêu đề Đăng nhập và nút Đăng nhập với Zalo (hoặc báo tạm ngưng nếu chưa cấu hình), không chữ cấm",
+    "expected": "apps/web/src/app/dang-nhap/page.tsx",
+    "actual": "nút=0 tạmNgưng=true chữ=Tìm sản phẩm Đăng nhập Danh mục Vườn Xanh Ưu đãi Kho quà Mua chung Cộng đồng Đăng nhập Đăng nhập để mua sắm, tích Điểm Xanh và đồng bộ giỏ hàng với Zalo Mini App. Quà khách mới: Mã giảm giá chào mừng 30.000đ, cho đơn từ 199.000đ. Đăng nhập Zalo trên web đang t",
+    "evidence": "nút=0 tạmNgưng=true chữ=Tìm sản phẩm Đăng nhập Danh mục Vườn Xanh Ưu đãi Kho quà Mua chung Cộng đồng Đăng nhập Đăng nhập để mua sắm, tích Điểm Xanh và đồng bộ giỏ hàng với Zalo Mini App. Quà khách mới: Mã giảm giá chào mừng 30.000đ, cho đơn từ 199.000đ. Đăng nhập Zalo trên web đang t",
+    "status": "PASS"
+  },
+  {
+    "id": "U4-web1280-gate",
+    "persona": "guest",
+    "khổ": "web1280",
+    "journey": "Đăng nhập / đăng xuất",
+    "step": "khách mở /tai-khoan: không thấy dữ liệu cá nhân, được đưa về đăng nhập hoặc hiện lời mời đăng nhập",
+    "expected": "guest-auth-gate.spec.tsx",
+    "actual": "url=/tai-khoan chữ=Tìm sản phẩm Đăng nhập Danh mục Vườn Xanh Ưu đãi Kho quà Mua chung Cộng đồng Cá nhân Đăng nhập để xem tích điểm, đơn hàng và ưu đãi cá nhân của bạn. Đăng nhập với Zalo Đăng nhập xong bạn sẽ quay lại đ",
+    "evidence": "url=/tai-khoan chữ=Tìm sản phẩm Đăng nhập Danh mục Vườn Xanh Ưu đãi Kho quà Mua chung Cộng đồng Cá nhân Đăng nhập để xem tích điểm, đơn hàng và ưu đãi cá nhân của bạn. Đăng nhập với Zalo Đăng nhập xong bạn sẽ quay lại đ",
+    "status": "PASS"
+  },
+  {
+    "id": "U4-web375-logout",
+    "persona": "ctv",
+    "khổ": "web375",
+    "journey": "Đăng nhập / đăng xuất",
+    "step": "bấm Đăng xuất: gọi POST /auth/logout, xoá cookie tubu_rt + cờ phiên, thu hồi refresh token trong DB, rời khỏi trang cá nhân",
+    "expected": "auth.controller.ts logout; auth-context",
+    "actual": "logoutReq=[\"POST\"] cookie 1→0 cờ 1→null refresh còn hạn 3→2 url sau=/tai-khoan/cai-dat",
+    "evidence": "logoutReq=[\"POST\"] cookie 1→0 cờ 1→null refresh còn hạn 3→2 url sau=/tai-khoan/cai-dat",
+    "status": "PASS"
+  },
+  {
+    "id": "U4-web375-after",
+    "persona": "ctv",
+    "khổ": "web375",
+    "journey": "Đăng nhập / đăng xuất",
+    "step": "sau đăng xuất mở /tai-khoan: là khách (về đăng nhập / lời mời), không còn dữ liệu cá nhân",
+    "expected": "guest-auth-gate.spec.tsx",
+    "actual": "url=/tai-khoan chữ=Cá nhân Đăng nhập để xem tích điểm, đơn hàng và ưu đãi cá nhân của bạn. Đăng nhập với Zalo Đăng nhập xong bạn sẽ quay lại đúng trang này. Hotline: 0984 606 774 ",
+    "evidence": "url=/tai-khoan chữ=Cá nhân Đăng nhập để xem tích điểm, đơn hàng và ưu đãi cá nhân của bạn. Đăng nhập với Zalo Đăng nhập xong bạn sẽ quay lại đúng trang này. Hotline: 0984 606 774 ",
+    "status": "PASS"
+  },
+  {
+    "id": "U4-web1280-logout",
+    "persona": "ctv",
+    "khổ": "web1280",
+    "journey": "Đăng nhập / đăng xuất",
+    "step": "bấm Đăng xuất: gọi POST /auth/logout, xoá cookie tubu_rt + cờ phiên, thu hồi refresh token trong DB, rời khỏi trang cá nhân",
+    "expected": "auth.controller.ts logout; auth-context",
+    "actual": "logoutReq=[\"POST\"] cookie 1→0 cờ 1→null refresh còn hạn 3→2 url sau=/tai-khoan/cai-dat",
+    "evidence": "logoutReq=[\"POST\"] cookie 1→0 cờ 1→null refresh còn hạn 3→2 url sau=/tai-khoan/cai-dat",
+    "status": "PASS"
+  },
+  {
+    "id": "U4-web1280-after",
+    "persona": "ctv",
+    "khổ": "web1280",
+    "journey": "Đăng nhập / đăng xuất",
+    "step": "sau đăng xuất mở /tai-khoan: là khách (về đăng nhập / lời mời), không còn dữ liệu cá nhân",
+    "expected": "guest-auth-gate.spec.tsx",
+    "actual": "url=/tai-khoan chữ=Tìm sản phẩm Đăng nhập Danh mục Vườn Xanh Ưu đãi Kho quà Mua chung Cộng đồng Cá nhân Đăng nhập để xem tích điểm, đơn hàng và ưu đãi cá nhân của bạn. Đăng nhập v",
+    "evidence": "url=/tai-khoan chữ=Tìm sản phẩm Đăng nhập Danh mục Vườn Xanh Ưu đãi Kho quà Mua chung Cộng đồng Cá nhân Đăng nhập để xem tích điểm, đơn hàng và ưu đãi cá nhân của bạn. Đăng nhập v",
+    "status": "PASS"
+  },
+  {
+    "id": "U4-mini375-logout",
+    "persona": "ctv",
+    "khổ": "mini375",
+    "journey": "Đăng nhập / đăng xuất",
+    "step": "bấm Đăng xuất trên Mini: ghi lại hành vi (đưa về đâu, có hỏi lại không)",
+    "expected": "apps/miniapp/src/pages/settings.tsx",
+    "actual": "url=/settings chữ=Cài đặt Thông báo Cập nhật đơn hàng Luôn bật để bạn không lỡ tin giao hàng, hoàn tiền Khuyến mãi & mã giảm giá Nhắc nhở Vườn Xanh & tương tác bài viết Hiển thị · Cỡ chữ A Nhỏ A Vừa A Lớn Tài khoản Chỉ",
+    "evidence": "url=http://localhost:3233/settings",
+    "status": "PASS"
+  },
+  {
+    "id": "U4-login-zalo",
+    "persona": "guest",
+    "khổ": "web375/web1280",
+    "journey": "Đăng nhập / đăng xuất",
+    "step": "bấm \"Đăng nhập với Zalo\" và quay lại với phiên đăng nhập",
+    "expected": "dang-nhap/page.tsx onLogin",
+    "actual": "Lane báo \"Đăng nhập Zalo trên web đang tạm ngưng\" (chưa có khoá Zalo) và Zalo OAuth thật không giả được bằng bộ khung",
+    "evidence": "ảnh login-1-khach-web375.png",
+    "status": "BLOCKED"
+  }
+]

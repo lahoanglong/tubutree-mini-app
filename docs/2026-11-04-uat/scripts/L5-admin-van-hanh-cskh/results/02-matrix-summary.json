@@ -1,0 +1,72 @@
+{
+  "anonymous": {
+    "deniedOk": 320,
+    "deniedBad": [],
+    "allowedOk": 0,
+    "allowedBad": [],
+    "skipped": 0
+  },
+  "returning": {
+    "deniedOk": 320,
+    "deniedBad": [],
+    "allowedOk": 0,
+    "allowedBad": [],
+    "skipped": 0
+  },
+  "ctv": {
+    "deniedOk": 316,
+    "deniedBad": [],
+    "allowedOk": 4,
+    "allowedBad": [],
+    "skipped": 0
+  },
+  "dealer": {
+    "deniedOk": 316,
+    "deniedBad": [],
+    "allowedOk": 4,
+    "allowedBad": [],
+    "skipped": 0
+  },
+  "staff": {
+    "deniedOk": 288,
+    "deniedBad": [],
+    "allowedOk": 20,
+    "allowedBad": [],
+    "skipped": 12
+  },
+  "kho": {
+    "deniedOk": 275,
+    "deniedBad": [],
+    "allowedOk": 33,
+    "allowedBad": [],
+    "skipped": 12
+  },
+  "ketoan": {
+    "deniedOk": 248,
+    "deniedBad": [],
+    "allowedOk": 59,
+    "allowedBad": [],
+    "skipped": 13
+  },
+  "marketing": {
+    "deniedOk": 233,
+    "deniedBad": [],
+    "allowedOk": 67,
+    "allowedBad": [],
+    "skipped": 20
+  },
+  "cskh": {
+    "deniedOk": 248,
+    "deniedBad": [],
+    "allowedOk": 59,
+    "allowedBad": [],
+    "skipped": 13
+  },
+  "admin": {
+    "deniedOk": 0,
+    "deniedBad": [],
+    "allowedOk": 258,
+    "allowedBad": [],
+    "skipped": 62
+  }
+}

@@ -1,0 +1,552 @@
+[
+  {
+    "id": "L5-A375-admin-inbox",
+    "persona": "admin",
+    "size": "web375",
+    "journey": "Admin trên điện thoại",
+    "step": "mở /admin?tab=inbox ở 375px",
+    "expect": "không tràn ngang, không request lỗi, không lỗi console, có nội dung",
+    "actual": "ổn; tiêu đề \"Quản trị Tubu Tree\"; 8 request; 1 nút thấp hơn 32px trong màn hình đầu",
+    "evidence": {
+      "overflow": 0,
+      "wide": [],
+      "small": 1,
+      "text": 1070,
+      "title": "Quản trị Tubu Tree",
+      "shown": [
+        "Hôm nay, 20 việc đang chờ"
+      ],
+      "bad": [],
+      "errs": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-A375-admin-dashboard",
+    "persona": "admin",
+    "size": "web375",
+    "journey": "Admin trên điện thoại",
+    "step": "mở /admin?tab=dashboard ở 375px",
+    "expect": "không tràn ngang, không request lỗi, không lỗi console, có nội dung",
+    "actual": "ổn; tiêu đề \"Quản trị Tubu Tree\"; 10 request; 1 nút thấp hơn 32px trong màn hình đầu",
+    "evidence": {
+      "overflow": 0,
+      "wide": [],
+      "small": 1,
+      "text": 1408,
+      "title": "Quản trị Tubu Tree",
+      "shown": [
+        "Tổng quan chỉ số"
+      ],
+      "bad": [],
+      "errs": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-A375-admin-orders",
+    "persona": "admin",
+    "size": "web375",
+    "journey": "Admin trên điện thoại",
+    "step": "mở /admin?tab=orders ở 375px",
+    "expect": "không tràn ngang, không request lỗi, không lỗi console, có nội dung",
+    "actual": "ổn; tiêu đề \"Quản trị Tubu Tree\"; 10 request; 1 nút thấp hơn 32px trong màn hình đầu",
+    "evidence": {
+      "overflow": 0,
+      "wide": [],
+      "small": 1,
+      "text": 2559,
+      "title": "Quản trị Tubu Tree",
+      "shown": [
+        "Đơn hàng, 7 việc đang chờ"
+      ],
+      "bad": [],
+      "errs": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-A375-admin-merchantProducts",
+    "persona": "admin",
+    "size": "web375",
+    "journey": "Admin trên điện thoại",
+    "step": "mở /admin?tab=merchantProducts ở 375px",
+    "expect": "không tràn ngang, không request lỗi, không lỗi console, có nội dung",
+    "actual": "ổn; tiêu đề \"Quản trị Tubu Tree\"; 8 request; 1 nút thấp hơn 32px trong màn hình đầu",
+    "evidence": {
+      "overflow": 0,
+      "wide": [],
+      "small": 1,
+      "text": 529,
+      "title": "Quản trị Tubu Tree",
+      "shown": [
+        "Duyệt SP đối tác"
+      ],
+      "bad": [],
+      "errs": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-A375-admin-productCategories",
+    "persona": "admin",
+    "size": "web375",
+    "journey": "Admin trên điện thoại",
+    "step": "mở /admin?tab=productCategories ở 375px",
+    "expect": "không tràn ngang, không request lỗi, không lỗi console, có nội dung",
+    "actual": "ổn; tiêu đề \"Quản trị Tubu Tree\"; 7 request; 1 nút thấp hơn 32px trong màn hình đầu",
+    "evidence": {
+      "overflow": 0,
+      "wide": [],
+      "small": 1,
+      "text": 4453,
+      "title": "Quản trị Tubu Tree",
+      "shown": [
+        "Sản phẩm, 44 việc đang chờ"
+      ],
+      "bad": [],
+      "errs": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-A375-admin-users",
+    "persona": "admin",
+    "size": "web375",
+    "journey": "Admin trên điện thoại",
+    "step": "mở /admin?tab=users ở 375px",
+    "expect": "không tràn ngang, không request lỗi, không lỗi console, có nội dung",
+    "actual": "ổn; tiêu đề \"Quản trị Tubu Tree\"; 7 request; 1 nút thấp hơn 32px trong màn hình đầu",
+    "evidence": {
+      "overflow": 0,
+      "wide": [],
+      "small": 1,
+      "text": 1288,
+      "title": "Quản trị Tubu Tree",
+      "shown": [
+        "Người dùng"
+      ],
+      "bad": [],
+      "errs": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-A375-admin-waste",
+    "persona": "admin",
+    "size": "web375",
+    "journey": "Admin trên điện thoại",
+    "step": "mở /admin?tab=waste ở 375px",
+    "expect": "không tràn ngang, không request lỗi, không lỗi console, có nội dung",
+    "actual": "ổn; tiêu đề \"Quản trị Tubu Tree\"; 9 request; 1 nút thấp hơn 32px trong màn hình đầu",
+    "evidence": {
+      "overflow": 0,
+      "wide": [],
+      "small": 1,
+      "text": 966,
+      "title": "Quản trị Tubu Tree",
+      "shown": [
+        "Đổi rác"
+      ],
+      "bad": [],
+      "errs": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-A375-admin-supportChat",
+    "persona": "admin",
+    "size": "web375",
+    "journey": "Admin trên điện thoại",
+    "step": "mở /admin?tab=supportChat ở 375px",
+    "expect": "không tràn ngang, không request lỗi, không lỗi console, có nội dung",
+    "actual": "ổn; tiêu đề \"Quản trị Tubu Tree\"; 7 request; 1 nút thấp hơn 32px trong màn hình đầu",
+    "evidence": {
+      "overflow": 0,
+      "wide": [],
+      "small": 1,
+      "text": 383,
+      "title": "Quản trị Tubu Tree",
+      "shown": [
+        "Chat CSKH, 2 việc đang chờ"
+      ],
+      "bad": [],
+      "errs": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-A375-admin-coupons",
+    "persona": "admin",
+    "size": "web375",
+    "journey": "Admin trên điện thoại",
+    "step": "mở /admin?tab=coupons ở 375px",
+    "expect": "không tràn ngang, không request lỗi, không lỗi console, có nội dung",
+    "actual": "ổn; tiêu đề \"Quản trị Tubu Tree\"; 6 request; 1 nút thấp hơn 32px trong màn hình đầu",
+    "evidence": {
+      "overflow": 0,
+      "wide": [],
+      "small": 1,
+      "text": 2092,
+      "title": "Quản trị Tubu Tree",
+      "shown": [
+        "Mã giảm giá"
+      ],
+      "bad": [],
+      "errs": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-A375-admin-dealers",
+    "persona": "admin",
+    "size": "web375",
+    "journey": "Admin trên điện thoại",
+    "step": "mở /admin?tab=dealers ở 375px",
+    "expect": "không tràn ngang, không request lỗi, không lỗi console, có nội dung",
+    "actual": "ổn; tiêu đề \"Quản trị Tubu Tree\"; 6 request; 1 nút thấp hơn 32px trong màn hình đầu",
+    "evidence": {
+      "overflow": 0,
+      "wide": [],
+      "small": 1,
+      "text": 259,
+      "title": "Quản trị Tubu Tree",
+      "shown": [
+        "Đại lý"
+      ],
+      "bad": [],
+      "errs": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-A375-admin-storefronts",
+    "persona": "admin",
+    "size": "web375",
+    "journey": "Admin trên điện thoại",
+    "step": "mở /admin?tab=storefronts ở 375px",
+    "expect": "không tràn ngang, không request lỗi, không lỗi console, có nội dung",
+    "actual": "ổn; tiêu đề \"Quản trị Tubu Tree\"; 6 request; 1 nút thấp hơn 32px trong màn hình đầu",
+    "evidence": {
+      "overflow": 0,
+      "wide": [],
+      "small": 1,
+      "text": 488,
+      "title": "Quản trị Tubu Tree",
+      "shown": [
+        "Gian hàng, 1 việc đang chờ"
+      ],
+      "bad": [],
+      "errs": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-A375-cskh-inbox",
+    "persona": "cskh",
+    "size": "web375",
+    "journey": "Admin trên điện thoại",
+    "step": "mở /admin?tab=inbox ở 375px",
+    "expect": "không tràn ngang, không request lỗi, không lỗi console, có nội dung",
+    "actual": "ổn; tiêu đề \"Quản trị Tubu Tree\"; 5 request; 1 nút thấp hơn 32px trong màn hình đầu",
+    "evidence": {
+      "overflow": 0,
+      "wide": [],
+      "small": 1,
+      "text": 334,
+      "title": "Quản trị Tubu Tree",
+      "shown": [
+        "Hôm nay, 3 việc đang chờ"
+      ],
+      "bad": [],
+      "errs": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-A375-cskh-orders",
+    "persona": "cskh",
+    "size": "web375",
+    "journey": "Admin trên điện thoại",
+    "step": "mở /admin?tab=orders ở 375px",
+    "expect": "không tràn ngang, không request lỗi, không lỗi console, có nội dung",
+    "actual": "ổn; tiêu đề \"Quản trị Tubu Tree\"; 10 request; 1 nút thấp hơn 32px trong màn hình đầu",
+    "evidence": {
+      "overflow": 0,
+      "wide": [],
+      "small": 1,
+      "text": 2541,
+      "title": "Quản trị Tubu Tree",
+      "shown": [
+        "Đơn hàng"
+      ],
+      "bad": [],
+      "errs": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-A375-cskh-returns",
+    "persona": "cskh",
+    "size": "web375",
+    "journey": "Admin trên điện thoại",
+    "step": "mở /admin?tab=returns ở 375px",
+    "expect": "không tràn ngang, không request lỗi, không lỗi console, có nội dung",
+    "actual": "ổn; tiêu đề \"Quản trị Tubu Tree\"; 6 request; 1 nút thấp hơn 32px trong màn hình đầu",
+    "evidence": {
+      "overflow": 0,
+      "wide": [],
+      "small": 1,
+      "text": 596,
+      "title": "Quản trị Tubu Tree",
+      "shown": [
+        "Đổi / Trả, 1 việc đang chờ"
+      ],
+      "bad": [],
+      "errs": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-A375-cskh-supportChat",
+    "persona": "cskh",
+    "size": "web375",
+    "journey": "Admin trên điện thoại",
+    "step": "mở /admin?tab=supportChat ở 375px",
+    "expect": "không tràn ngang, không request lỗi, không lỗi console, có nội dung",
+    "actual": "ổn; tiêu đề \"Quản trị Tubu Tree\"; 7 request; 1 nút thấp hơn 32px trong màn hình đầu",
+    "evidence": {
+      "overflow": 0,
+      "wide": [],
+      "small": 1,
+      "text": 382,
+      "title": "Quản trị Tubu Tree",
+      "shown": [
+        "Chat CSKH, 2 việc đang chờ"
+      ],
+      "bad": [],
+      "errs": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-A375-ketoan-inbox",
+    "persona": "ketoan",
+    "size": "web375",
+    "journey": "Admin trên điện thoại",
+    "step": "mở /admin?tab=inbox ở 375px",
+    "expect": "không tràn ngang, không request lỗi, không lỗi console, có nội dung",
+    "actual": "ổn; tiêu đề \"Quản trị Tubu Tree\"; 6 request; 1 nút thấp hơn 32px trong màn hình đầu",
+    "evidence": {
+      "overflow": 0,
+      "wide": [],
+      "small": 1,
+      "text": 298,
+      "title": "Quản trị Tubu Tree",
+      "shown": [
+        "Hôm nay, 5 việc đang chờ"
+      ],
+      "bad": [],
+      "errs": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-A375-ketoan-orders",
+    "persona": "ketoan",
+    "size": "web375",
+    "journey": "Admin trên điện thoại",
+    "step": "mở /admin?tab=orders ở 375px",
+    "expect": "không tràn ngang, không request lỗi, không lỗi console, có nội dung",
+    "actual": "ổn; tiêu đề \"Quản trị Tubu Tree\"; 11 request; 1 nút thấp hơn 32px trong màn hình đầu",
+    "evidence": {
+      "overflow": 0,
+      "wide": [],
+      "small": 1,
+      "text": 2558,
+      "title": "Quản trị Tubu Tree",
+      "shown": [
+        "Đơn hàng, 1 việc đang chờ"
+      ],
+      "bad": [],
+      "errs": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-A375-ketoan-customerRefunds",
+    "persona": "ketoan",
+    "size": "web375",
+    "journey": "Admin trên điện thoại",
+    "step": "mở /admin?tab=customerRefunds ở 375px",
+    "expect": "không tràn ngang, không request lỗi, không lỗi console, có nội dung",
+    "actual": "ổn; tiêu đề \"Quản trị Tubu Tree\"; 7 request; 1 nút thấp hơn 32px trong màn hình đầu",
+    "evidence": {
+      "overflow": 0,
+      "wide": [],
+      "small": 1,
+      "text": 2166,
+      "title": "Quản trị Tubu Tree",
+      "shown": [
+        "Hoàn tiền khách, 4 khoản hoàn "
+      ],
+      "bad": [],
+      "errs": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-A375-ketoan-payouts",
+    "persona": "ketoan",
+    "size": "web375",
+    "journey": "Admin trên điện thoại",
+    "step": "mở /admin?tab=payouts ở 375px",
+    "expect": "không tràn ngang, không request lỗi, không lỗi console, có nội dung",
+    "actual": "ổn; tiêu đề \"Quản trị Tubu Tree\"; 8 request; 1 nút thấp hơn 32px trong màn hình đầu",
+    "evidence": {
+      "overflow": 0,
+      "wide": [],
+      "small": 1,
+      "text": 923,
+      "title": "Quản trị Tubu Tree",
+      "shown": [
+        "Thuế TNCN hoa hồng"
+      ],
+      "bad": [],
+      "errs": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-A375-kho-inbox",
+    "persona": "kho",
+    "size": "web375",
+    "journey": "Admin trên điện thoại",
+    "step": "mở /admin?tab=inbox ở 375px",
+    "expect": "không tràn ngang, không request lỗi, không lỗi console, có nội dung",
+    "actual": "ổn; tiêu đề \"Quản trị Tubu Tree\"; 5 request; 1 nút thấp hơn 32px trong màn hình đầu",
+    "evidence": {
+      "overflow": 0,
+      "wide": [],
+      "small": 1,
+      "text": 290,
+      "title": "Quản trị Tubu Tree",
+      "shown": [
+        "Hôm nay, 11 việc đang chờ"
+      ],
+      "bad": [],
+      "errs": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-A375-kho-orders",
+    "persona": "kho",
+    "size": "web375",
+    "journey": "Admin trên điện thoại",
+    "step": "mở /admin?tab=orders ở 375px",
+    "expect": "không tràn ngang, không request lỗi, không lỗi console, có nội dung",
+    "actual": "ổn; tiêu đề \"Quản trị Tubu Tree\"; 10 request; 1 nút thấp hơn 32px trong màn hình đầu",
+    "evidence": {
+      "overflow": 0,
+      "wide": [],
+      "small": 1,
+      "text": 2542,
+      "title": "Quản trị Tubu Tree",
+      "shown": [
+        "Đơn hàng, 6 việc đang chờ"
+      ],
+      "bad": [],
+      "errs": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-A375-kho-returns",
+    "persona": "kho",
+    "size": "web375",
+    "journey": "Admin trên điện thoại",
+    "step": "mở /admin?tab=returns ở 375px",
+    "expect": "không tràn ngang, không request lỗi, không lỗi console, có nội dung",
+    "actual": "ổn; tiêu đề \"Quản trị Tubu Tree\"; 6 request; 1 nút thấp hơn 32px trong màn hình đầu",
+    "evidence": {
+      "overflow": 0,
+      "wide": [],
+      "small": 1,
+      "text": 2197,
+      "title": "Quản trị Tubu Tree",
+      "shown": [
+        "Đổi / Trả, 5 việc đang chờ"
+      ],
+      "bad": [],
+      "errs": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-A375-marketing-inbox",
+    "persona": "marketing",
+    "size": "web375",
+    "journey": "Admin trên điện thoại",
+    "step": "mở /admin?tab=inbox ở 375px",
+    "expect": "không tràn ngang, không request lỗi, không lỗi console, có nội dung",
+    "actual": "ổn; tiêu đề \"Quản trị Tubu Tree\"; 5 request; 1 nút thấp hơn 32px trong màn hình đầu",
+    "evidence": {
+      "overflow": 0,
+      "wide": [],
+      "small": 1,
+      "text": 169,
+      "title": "Quản trị Tubu Tree",
+      "shown": [
+        "Hôm nay"
+      ],
+      "bad": [],
+      "errs": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-A375-marketing-coupons",
+    "persona": "marketing",
+    "size": "web375",
+    "journey": "Admin trên điện thoại",
+    "step": "mở /admin?tab=coupons ở 375px",
+    "expect": "không tràn ngang, không request lỗi, không lỗi console, có nội dung",
+    "actual": "ổn; tiêu đề \"Quản trị Tubu Tree\"; 6 request; 1 nút thấp hơn 32px trong màn hình đầu",
+    "evidence": {
+      "overflow": 0,
+      "wide": [],
+      "small": 1,
+      "text": 2073,
+      "title": "Quản trị Tubu Tree",
+      "shown": [
+        "Mã giảm giá"
+      ],
+      "bad": [],
+      "errs": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-A375-marketing-notificationTemplates",
+    "persona": "marketing",
+    "size": "web375",
+    "journey": "Admin trên điện thoại",
+    "step": "mở /admin?tab=notificationTemplates ở 375px",
+    "expect": "không tràn ngang, không request lỗi, không lỗi console, có nội dung",
+    "actual": "ổn; tiêu đề \"Quản trị Tubu Tree\"; 6 request; 1 nút thấp hơn 32px trong màn hình đầu",
+    "evidence": {
+      "overflow": 0,
+      "wide": [],
+      "small": 1,
+      "text": 6000,
+      "title": "Quản trị Tubu Tree",
+      "shown": [
+        "Mẫu thông báo"
+      ],
+      "bad": [],
+      "errs": []
+    },
+    "verdict": "PASS"
+  }
+]

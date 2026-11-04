@@ -1,0 +1,15 @@
+{
+  "up": 200,
+  "seen": {
+    "mini": {
+      "anchors": [],
+      "bold": 0,
+      "hasText": true
+    },
+    "web": {
+      "anchors": [],
+      "bold": 0,
+      "hasText": true
+    }
+  }
+}

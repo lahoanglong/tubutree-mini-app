@@ -1,0 +1,178 @@
+[
+  {
+    "id": "U5-web375-list",
+    "persona": "ctv_pending",
+    "khổ": "web375",
+    "journey": "Đặt hàng định kỳ (giao diện)",
+    "step": "danh sách gói: tên SP, \"Mỗi N tuần\", giá giảm 12% + giá gốc, cách trả, địa chỉ, trạng thái, \"Lần kế\" đúng ngày giờ VN",
+    "expected": "subscriptions-panel.tsx; ngày VN",
+    "actual": "DB nx=2026-11-13T17:00:00.000Z → VN 14/11/2026; chữ=ng giảm 12% cho đơn định kỳ Nước lau kính enzyme Fuwa3e 500ml · SL 1 Mỗi 8 tuần · 69.520đ 79.000đ Tiết kiệm 12% Thanh toán: Ví Tubu Giao tới: 99 Pasteur, Phường Bến Thành Đang chạy Lần kế: 14/11/2026 Sửa Tạm dừng Huỷ Hotline: 0984 606 774 Điều khoản Bảo mật Đổ",
+    "evidence": "DB nx=2026-11-13T17:00:00.000Z → VN 14/11/2026; chữ=ng giảm 12% cho đơn định kỳ Nước lau kính enzyme Fuwa3e 500ml · SL 1 Mỗi 8 tuần · 69.520đ 79.000đ Tiết kiệm 12% Thanh toán: Ví Tubu Giao tới: 99 Pasteur, Phường Bến Thành Đang chạy Lần kế: 14/11/2026 Sửa Tạm dừng Huỷ Hotline: 0984 606 774 Điều khoản Bảo mật Đổ",
+    "status": "PASS"
+  },
+  {
+    "id": "U5-web375-edit",
+    "persona": "ctv_pending",
+    "khổ": "web375",
+    "journey": "Đặt hàng định kỳ (giao diện)",
+    "step": "sửa chu kỳ qua sheet: DB đổi intervalWeeks, thẻ hiện \"Mỗi N tuần\" mới",
+    "expected": "subscriptions.service.ts update",
+    "actual": "DB iw 8→10; nextRunAt 2026-11-13T17:00:00.000Z→2026-11-13T17:00:00.000Z; thẻ có \"Mỗi 10 tuần\"=true",
+    "evidence": "DB iw 8→10; nextRunAt 2026-11-13T17:00:00.000Z→2026-11-13T17:00:00.000Z; thẻ có \"Mỗi 10 tuần\"=true",
+    "status": "PASS"
+  },
+  {
+    "id": "U5-web375-skip",
+    "persona": "ctv_pending",
+    "khổ": "web375",
+    "journey": "Đặt hàng định kỳ (giao diện)",
+    "step": "sheet giữ chân → \"Bỏ qua kỳ này\": nextRunAt lùi đúng 1 chu kỳ, vẫn ACTIVE, không sinh đơn",
+    "expected": "subscriptions.service.ts skipCycle",
+    "actual": "nextRunAt 2026-11-13T17:00:00.000Z→2027-01-22T17:00:00.000Z (+70 ngày, mong 70) status=ACTIVE",
+    "evidence": "nextRunAt 2026-11-13T17:00:00.000Z→2027-01-22T17:00:00.000Z (+70 ngày, mong 70) status=ACTIVE",
+    "status": "PASS"
+  },
+  {
+    "id": "U5-web375-pause",
+    "persona": "ctv_pending",
+    "khổ": "web375",
+    "journey": "Đặt hàng định kỳ (giao diện)",
+    "step": "Tạm dừng: DB PAUSED, thẻ hiện trạng thái Tạm dừng và nút Tiếp tục",
+    "expected": "subscriptions-panel.tsx STATUS_LABEL",
+    "actual": "DB status=PAUSED; nút Tiếp tục=1",
+    "evidence": "DB status=PAUSED; nút Tiếp tục=1",
+    "status": "PASS"
+  },
+  {
+    "id": "U5-web375-resume",
+    "persona": "ctv_pending",
+    "khổ": "web375",
+    "journey": "Đặt hàng định kỳ (giao diện)",
+    "step": "Tiếp tục: DB ACTIVE, nextRunAt không ở quá khứ",
+    "expected": "subscriptions.service.ts setStatus",
+    "actual": "DB status=ACTIVE nextRunAt=2027-01-22T17:00:00.000Z",
+    "evidence": "DB status=ACTIVE nextRunAt=2027-01-22T17:00:00.000Z",
+    "status": "PASS"
+  },
+  {
+    "id": "U5-web1280-list",
+    "persona": "ctv_pending",
+    "khổ": "web1280",
+    "journey": "Đặt hàng định kỳ (giao diện)",
+    "step": "danh sách gói: tên SP, \"Mỗi N tuần\", giá giảm 12% + giá gốc, cách trả, địa chỉ, trạng thái, \"Lần kế\" đúng ngày giờ VN",
+    "expected": "subscriptions-panel.tsx; ngày VN",
+    "actual": "DB nx=2027-01-22T17:00:00.000Z → VN 23/01/2027; chữ=ng giảm 12% cho đơn định kỳ Nước lau kính enzyme Fuwa3e 500ml · SL 1 Mỗi 10 tuần · 69.520đ 79.000đ Tiết kiệm 12% Thanh toán: Ví Tubu Giao tới: 99 Pasteur, Phường Bến Thành Đang chạy Lần kế: 23/01/2027 Sửa Tạm dừng Huỷ Sống xanh An Lành — mỹ phẩm và đồ tiêu dùn",
+    "evidence": "DB nx=2027-01-22T17:00:00.000Z → VN 23/01/2027; chữ=ng giảm 12% cho đơn định kỳ Nước lau kính enzyme Fuwa3e 500ml · SL 1 Mỗi 10 tuần · 69.520đ 79.000đ Tiết kiệm 12% Thanh toán: Ví Tubu Giao tới: 99 Pasteur, Phường Bến Thành Đang chạy Lần kế: 23/01/2027 Sửa Tạm dừng Huỷ Sống xanh An Lành — mỹ phẩm và đồ tiêu dùn",
+    "status": "PASS"
+  },
+  {
+    "id": "U5-web1280-edit",
+    "persona": "ctv_pending",
+    "khổ": "web1280",
+    "journey": "Đặt hàng định kỳ (giao diện)",
+    "step": "sửa chu kỳ qua sheet: DB đổi intervalWeeks, thẻ hiện \"Mỗi N tuần\" mới",
+    "expected": "subscriptions.service.ts update",
+    "actual": "DB iw 10→4; nextRunAt 2027-01-22T17:00:00.000Z→2027-01-22T17:00:00.000Z; thẻ có \"Mỗi 4 tuần\"=true",
+    "evidence": "DB iw 10→4; nextRunAt 2027-01-22T17:00:00.000Z→2027-01-22T17:00:00.000Z; thẻ có \"Mỗi 4 tuần\"=true",
+    "status": "PASS"
+  },
+  {
+    "id": "U5-web1280-skip",
+    "persona": "ctv_pending",
+    "khổ": "web1280",
+    "journey": "Đặt hàng định kỳ (giao diện)",
+    "step": "sheet giữ chân → \"Bỏ qua kỳ này\": nextRunAt lùi đúng 1 chu kỳ, vẫn ACTIVE, không sinh đơn",
+    "expected": "subscriptions.service.ts skipCycle",
+    "actual": "nextRunAt 2027-01-22T17:00:00.000Z→2027-02-19T17:00:00.000Z (+28 ngày, mong 28) status=ACTIVE",
+    "evidence": "nextRunAt 2027-01-22T17:00:00.000Z→2027-02-19T17:00:00.000Z (+28 ngày, mong 28) status=ACTIVE",
+    "status": "PASS"
+  },
+  {
+    "id": "U5-web1280-pause",
+    "persona": "ctv_pending",
+    "khổ": "web1280",
+    "journey": "Đặt hàng định kỳ (giao diện)",
+    "step": "Tạm dừng: DB PAUSED, thẻ hiện trạng thái Tạm dừng và nút Tiếp tục",
+    "expected": "subscriptions-panel.tsx STATUS_LABEL",
+    "actual": "DB status=PAUSED; nút Tiếp tục=1",
+    "evidence": "DB status=PAUSED; nút Tiếp tục=1",
+    "status": "PASS"
+  },
+  {
+    "id": "U5-web1280-resume",
+    "persona": "ctv_pending",
+    "khổ": "web1280",
+    "journey": "Đặt hàng định kỳ (giao diện)",
+    "step": "Tiếp tục: DB ACTIVE, nextRunAt không ở quá khứ",
+    "expected": "subscriptions.service.ts setStatus",
+    "actual": "DB status=ACTIVE nextRunAt=2027-02-19T17:00:00.000Z",
+    "evidence": "DB status=ACTIVE nextRunAt=2027-02-19T17:00:00.000Z",
+    "status": "PASS"
+  },
+  {
+    "id": "U5-mini375-list",
+    "persona": "ctv_pending",
+    "khổ": "mini375",
+    "journey": "Đặt hàng định kỳ (giao diện)",
+    "step": "danh sách gói: tên SP, \"Mỗi N tuần\", giá giảm 12% + giá gốc, cách trả, địa chỉ, trạng thái, \"Lần kế\" đúng ngày giờ VN",
+    "expected": "subscriptions-panel.tsx; ngày VN",
+    "actual": "DB nx=2027-02-19T17:00:00.000Z → VN 20/02/2027; chữ=ng giảm 12% cho đơn định kỳ Nước lau kính enzyme Fuwa3e 500ml · SL 1 Mỗi 4 tuần · 69.520đ 79.000đ Tiết kiệm 12% Thanh toán: Ví Tubu Giao tới: 99 Pasteur, Phường Bến Thành Đang chạy Lần kế: 20/02/2027 Sửa Tạm dừng Huỷ",
+    "evidence": "DB nx=2027-02-19T17:00:00.000Z → VN 20/02/2027; chữ=ng giảm 12% cho đơn định kỳ Nước lau kính enzyme Fuwa3e 500ml · SL 1 Mỗi 4 tuần · 69.520đ 79.000đ Tiết kiệm 12% Thanh toán: Ví Tubu Giao tới: 99 Pasteur, Phường Bến Thành Đang chạy Lần kế: 20/02/2027 Sửa Tạm dừng Huỷ",
+    "status": "PASS"
+  },
+  {
+    "id": "U5-mini375-edit",
+    "persona": "ctv_pending",
+    "khổ": "mini375",
+    "journey": "Đặt hàng định kỳ (giao diện)",
+    "step": "sửa chu kỳ qua sheet: DB đổi intervalWeeks, thẻ hiện \"Mỗi N tuần\" mới",
+    "expected": "subscriptions.service.ts update",
+    "actual": "DB iw 4→6; nextRunAt 2027-02-19T17:00:00.000Z→2027-02-19T17:00:00.000Z; thẻ có \"Mỗi 6 tuần\"=true",
+    "evidence": "DB iw 4→6; nextRunAt 2027-02-19T17:00:00.000Z→2027-02-19T17:00:00.000Z; thẻ có \"Mỗi 6 tuần\"=true",
+    "status": "PASS"
+  },
+  {
+    "id": "U5-mini375-skip",
+    "persona": "ctv_pending",
+    "khổ": "mini375",
+    "journey": "Đặt hàng định kỳ (giao diện)",
+    "step": "sheet giữ chân → \"Bỏ qua kỳ này\": nextRunAt lùi đúng 1 chu kỳ, vẫn ACTIVE, không sinh đơn",
+    "expected": "subscriptions.service.ts skipCycle",
+    "actual": "nextRunAt 2027-02-19T17:00:00.000Z→2027-04-02T17:00:00.000Z (+42 ngày, mong 42) status=ACTIVE",
+    "evidence": "nextRunAt 2027-02-19T17:00:00.000Z→2027-04-02T17:00:00.000Z (+42 ngày, mong 42) status=ACTIVE",
+    "status": "PASS"
+  },
+  {
+    "id": "U5-mini375-pause",
+    "persona": "ctv_pending",
+    "khổ": "mini375",
+    "journey": "Đặt hàng định kỳ (giao diện)",
+    "step": "Tạm dừng: DB PAUSED, thẻ hiện trạng thái Tạm dừng và nút Tiếp tục",
+    "expected": "subscriptions-panel.tsx STATUS_LABEL",
+    "actual": "DB status=PAUSED; nút Tiếp tục=1",
+    "evidence": "DB status=PAUSED; nút Tiếp tục=1",
+    "status": "PASS"
+  },
+  {
+    "id": "U5-mini375-resume",
+    "persona": "ctv_pending",
+    "khổ": "mini375",
+    "journey": "Đặt hàng định kỳ (giao diện)",
+    "step": "Tiếp tục: DB ACTIVE, nextRunAt không ở quá khứ",
+    "expected": "subscriptions.service.ts setStatus",
+    "actual": "DB status=ACTIVE nextRunAt=2027-04-02T17:00:00.000Z",
+    "evidence": "DB status=ACTIVE nextRunAt=2027-04-02T17:00:00.000Z",
+    "status": "PASS"
+  },
+  {
+    "id": "U5-mini375-cancel",
+    "persona": "ctv_pending",
+    "khổ": "mini375",
+    "journey": "Đặt hàng định kỳ (giao diện)",
+    "step": "\"Vẫn huỷ\": DB CANCELLED, màn không còn gói và không báo lỗi",
+    "expected": "subscriptions.service.ts setStatus CANCELLED",
+    "actual": "DB status=CANCELLED; chữ=Đơn hàng Tất cả Chờ thanh toán Đang xử lý Đang giao Đã giao Đã huỷ/hoàn Định kỳ Bạn không còn gói định kỳ nào Các đơn đã đặt vẫn ở tab Tất cả. Xem đơn hàng",
+    "evidence": "DB status=CANCELLED; chữ=Đơn hàng Tất cả Chờ thanh toán Đang xử lý Đang giao Đã giao Đã huỷ/hoàn Định kỳ Bạn không còn gói định kỳ nào Các đơn đã đặt vẫn ở tab Tất cả. Xem đơn hàng",
+    "status": "PASS"
+  }
+]

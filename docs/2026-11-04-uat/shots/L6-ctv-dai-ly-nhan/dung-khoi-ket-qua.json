@@ -1,0 +1,38 @@
+{
+  "mini375": {
+    "surface": "mini375",
+    "name": "Khối UAT mini375",
+    "productName": "Nước tẩy trang rau má Visante",
+    "col": {
+      "id": "cmw195pyv01bbt28tzmuwmnee",
+      "title": "Khối UAT mini375",
+      "l": "GRID",
+      "k": "NORMAL"
+    },
+    "items": [
+      {
+        "pid": "p-visante-cleanser",
+        "pname": "Nước tẩy trang rau má Visante",
+        "hid": false
+      }
+    ]
+  },
+  "web375": {
+    "surface": "web375",
+    "name": "Khối UAT web375",
+    "productName": "Nước tẩy trang rau má Visante",
+    "col": {
+      "id": "cmw1962r401bpt28tpxbd0tr0",
+      "title": "Khối UAT web375",
+      "l": "GRID",
+      "k": "NORMAL"
+    },
+    "items": [
+      {
+        "pid": "p-visante-cleanser",
+        "pname": "Nước tẩy trang rau má Visante",
+        "hid": false
+      }
+    ]
+  }
+}

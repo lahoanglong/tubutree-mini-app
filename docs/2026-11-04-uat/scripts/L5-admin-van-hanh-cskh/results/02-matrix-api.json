@@ -1,0 +1,308 @@
+[
+  {
+    "id": "L5-MX-deny-anonymous",
+    "persona": "anonymous",
+    "size": "api",
+    "journey": "Ma trận vai trò x API",
+    "step": "gọi thẳng 320 route không được phép",
+    "expect": "mọi route admin 401",
+    "actual": "320 đúng, 0 sai",
+    "evidence": {
+      "deniedOk": 320,
+      "allowedOk": 0,
+      "skippedWrites": 0,
+      "deniedBad": [],
+      "allowedBad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-MX-deny-returning",
+    "persona": "returning",
+    "size": "api",
+    "journey": "Ma trận vai trò x API",
+    "step": "gọi thẳng 320 route không được phép",
+    "expect": "mọi route không được phép 403",
+    "actual": "320 đúng, 0 sai",
+    "evidence": {
+      "deniedOk": 320,
+      "allowedOk": 0,
+      "skippedWrites": 0,
+      "deniedBad": [],
+      "allowedBad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-MX-deny-ctv",
+    "persona": "ctv",
+    "size": "api",
+    "journey": "Ma trận vai trò x API",
+    "step": "gọi thẳng 316 route không được phép",
+    "expect": "mọi route không được phép 403",
+    "actual": "316 đúng, 0 sai",
+    "evidence": {
+      "deniedOk": 316,
+      "allowedOk": 4,
+      "skippedWrites": 0,
+      "deniedBad": [],
+      "allowedBad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-MX-allow-ctv",
+    "persona": "ctv",
+    "size": "api",
+    "journey": "Ma trận vai trò x API",
+    "step": "gọi route được phép (GET + ghi với id giả): 4",
+    "expect": "không 403/401",
+    "actual": "4 đúng, 0 sai, 0 route ghi bỏ qua",
+    "evidence": {
+      "deniedOk": 316,
+      "allowedOk": 4,
+      "skippedWrites": 0,
+      "deniedBad": [],
+      "allowedBad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-MX-deny-dealer",
+    "persona": "dealer",
+    "size": "api",
+    "journey": "Ma trận vai trò x API",
+    "step": "gọi thẳng 316 route không được phép",
+    "expect": "mọi route không được phép 403",
+    "actual": "316 đúng, 0 sai",
+    "evidence": {
+      "deniedOk": 316,
+      "allowedOk": 4,
+      "skippedWrites": 0,
+      "deniedBad": [],
+      "allowedBad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-MX-allow-dealer",
+    "persona": "dealer",
+    "size": "api",
+    "journey": "Ma trận vai trò x API",
+    "step": "gọi route được phép (GET + ghi với id giả): 4",
+    "expect": "không 403/401",
+    "actual": "4 đúng, 0 sai, 0 route ghi bỏ qua",
+    "evidence": {
+      "deniedOk": 316,
+      "allowedOk": 4,
+      "skippedWrites": 0,
+      "deniedBad": [],
+      "allowedBad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-MX-deny-staff",
+    "persona": "staff",
+    "size": "api",
+    "journey": "Ma trận vai trò x API",
+    "step": "gọi thẳng 288 route không được phép",
+    "expect": "mọi route không được phép 403",
+    "actual": "288 đúng, 0 sai",
+    "evidence": {
+      "deniedOk": 288,
+      "allowedOk": 20,
+      "skippedWrites": 12,
+      "deniedBad": [],
+      "allowedBad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-MX-allow-staff",
+    "persona": "staff",
+    "size": "api",
+    "journey": "Ma trận vai trò x API",
+    "step": "gọi route được phép (GET + ghi với id giả): 20",
+    "expect": "không 403/401",
+    "actual": "20 đúng, 0 sai, 12 route ghi bỏ qua",
+    "evidence": {
+      "deniedOk": 288,
+      "allowedOk": 20,
+      "skippedWrites": 12,
+      "deniedBad": [],
+      "allowedBad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-MX-deny-kho",
+    "persona": "kho",
+    "size": "api",
+    "journey": "Ma trận vai trò x API",
+    "step": "gọi thẳng 275 route không được phép",
+    "expect": "mọi route không được phép 403",
+    "actual": "275 đúng, 0 sai",
+    "evidence": {
+      "deniedOk": 275,
+      "allowedOk": 33,
+      "skippedWrites": 12,
+      "deniedBad": [],
+      "allowedBad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-MX-allow-kho",
+    "persona": "kho",
+    "size": "api",
+    "journey": "Ma trận vai trò x API",
+    "step": "gọi route được phép (GET + ghi với id giả): 33",
+    "expect": "không 403/401",
+    "actual": "33 đúng, 0 sai, 12 route ghi bỏ qua",
+    "evidence": {
+      "deniedOk": 275,
+      "allowedOk": 33,
+      "skippedWrites": 12,
+      "deniedBad": [],
+      "allowedBad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-MX-deny-ketoan",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Ma trận vai trò x API",
+    "step": "gọi thẳng 248 route không được phép",
+    "expect": "mọi route không được phép 403",
+    "actual": "248 đúng, 0 sai",
+    "evidence": {
+      "deniedOk": 248,
+      "allowedOk": 59,
+      "skippedWrites": 13,
+      "deniedBad": [],
+      "allowedBad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-MX-allow-ketoan",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Ma trận vai trò x API",
+    "step": "gọi route được phép (GET + ghi với id giả): 59",
+    "expect": "không 403/401",
+    "actual": "59 đúng, 0 sai, 13 route ghi bỏ qua",
+    "evidence": {
+      "deniedOk": 248,
+      "allowedOk": 59,
+      "skippedWrites": 13,
+      "deniedBad": [],
+      "allowedBad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-MX-deny-marketing",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Ma trận vai trò x API",
+    "step": "gọi thẳng 233 route không được phép",
+    "expect": "mọi route không được phép 403",
+    "actual": "233 đúng, 0 sai",
+    "evidence": {
+      "deniedOk": 233,
+      "allowedOk": 67,
+      "skippedWrites": 20,
+      "deniedBad": [],
+      "allowedBad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-MX-allow-marketing",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Ma trận vai trò x API",
+    "step": "gọi route được phép (GET + ghi với id giả): 67",
+    "expect": "không 403/401",
+    "actual": "67 đúng, 0 sai, 20 route ghi bỏ qua",
+    "evidence": {
+      "deniedOk": 233,
+      "allowedOk": 67,
+      "skippedWrites": 20,
+      "deniedBad": [],
+      "allowedBad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-MX-deny-cskh",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Ma trận vai trò x API",
+    "step": "gọi thẳng 248 route không được phép",
+    "expect": "mọi route không được phép 403",
+    "actual": "248 đúng, 0 sai",
+    "evidence": {
+      "deniedOk": 248,
+      "allowedOk": 59,
+      "skippedWrites": 13,
+      "deniedBad": [],
+      "allowedBad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-MX-allow-cskh",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Ma trận vai trò x API",
+    "step": "gọi route được phép (GET + ghi với id giả): 59",
+    "expect": "không 403/401",
+    "actual": "59 đúng, 0 sai, 13 route ghi bỏ qua",
+    "evidence": {
+      "deniedOk": 248,
+      "allowedOk": 59,
+      "skippedWrites": 13,
+      "deniedBad": [],
+      "allowedBad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-MX-deny-admin",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Ma trận vai trò x API",
+    "step": "gọi thẳng 0 route không được phép",
+    "expect": "mọi route không được phép 403",
+    "actual": "0 đúng, 0 sai",
+    "evidence": {
+      "deniedOk": 0,
+      "allowedOk": 258,
+      "skippedWrites": 62,
+      "deniedBad": [],
+      "allowedBad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-MX-allow-admin",
+    "persona": "admin",
+    "size": "api",
+    "journey": "Ma trận vai trò x API",
+    "step": "gọi route được phép (GET + ghi với id giả): 258",
+    "expect": "không 403/401",
+    "actual": "258 đúng, 0 sai, 62 route ghi bỏ qua",
+    "evidence": {
+      "deniedOk": 0,
+      "allowedOk": 258,
+      "skippedWrites": 62,
+      "deniedBad": [],
+      "allowedBad": []
+    },
+    "verdict": "PASS"
+  }
+]

@@ -1,0 +1,701 @@
+[
+  {
+    "id": "L5-UX-cskh-inbox",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=inbox (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 281,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-cskh-orders",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=orders (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=orders, URL=orders; 10 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "orders",
+      "urlTab": "orders",
+      "nContent": 1101,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-cskh-productCategories",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=productCategories (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 281,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-cskh-users",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=users (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=users, URL=users; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "users",
+      "urlTab": "users",
+      "nContent": 1047,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-cskh-supportChat",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=supportChat (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=supportChat, URL=supportChat; 7 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "supportChat",
+      "urlTab": "supportChat",
+      "nContent": 482,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-cskh-community",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=community (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=community, URL=community; 7 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "community",
+      "urlTab": "community",
+      "nContent": 241,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-cskh-coupons",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=coupons (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 281,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-cskh-waste",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=waste (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=waste, URL=waste; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "waste",
+      "urlTab": "waste",
+      "nContent": 565,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-cskh-storefronts",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=storefronts (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 281,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-cskh-merchantProducts",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=merchantProducts (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 281,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-cskh-dealers",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=dealers (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 281,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-cskh-dashboard",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=dashboard (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 281,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-cskh-analytics",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=analytics (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 281,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-cskh-reports",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=reports (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 281,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-cskh-externalOrders",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=externalOrders (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=externalOrders, URL=externalOrders; 7 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "externalOrders",
+      "urlTab": "externalOrders",
+      "nContent": 561,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-cskh-returns",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=returns (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=returns, URL=returns; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "returns",
+      "urlTab": "returns",
+      "nContent": 448,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-cskh-customerRefunds",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=customerRefunds (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 281,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-cskh-subscriptions",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=subscriptions (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 281,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-cskh-reviews",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=reviews (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 281,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-cskh-quickReplies",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=quickReplies (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=quickReplies, URL=quickReplies; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "quickReplies",
+      "urlTab": "quickReplies",
+      "nContent": 541,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-cskh-flashSales",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=flashSales (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 281,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-cskh-posCredits",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=posCredits (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 281,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-cskh-externalClaims",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=externalClaims (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=externalClaims, URL=externalClaims; 7 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "externalClaims",
+      "urlTab": "externalClaims",
+      "nContent": 864,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-cskh-campaigns",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=campaigns (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 281,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-cskh-bundles",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=bundles (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 281,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-cskh-engagement",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=engagement (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 281,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-cskh-dealerClaims",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=dealerClaims (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 281,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-cskh-dealerAccounts",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=dealerAccounts (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 281,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-cskh-dealerPrices",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=dealerPrices (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 281,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-cskh-commissionRates",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=commissionRates (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 281,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-cskh-payouts",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=payouts (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 281,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-cskh-merchantFulfilment",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=merchantFulfilment (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 281,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-cskh-brands",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=brands (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 281,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-cskh-faqs",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=faqs (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 281,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-cskh-contentKit",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=contentKit (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 281,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-cskh-academy",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=academy (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 281,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-cskh-notificationTemplates",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=notificationTemplates (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 281,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-cskh-staffRoster",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=staffRoster (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 281,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-cskh-shiftApproval",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=shiftApproval (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 281,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-cskh-payroll",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=payroll (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 281,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-cskh-attendance",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=attendance (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 281,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-cskh-config",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=config (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 281,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-cskh-opsHealth",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=opsHealth (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 281,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-cskh-sum",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "tổng 43 tab",
+    "expect": "mọi tab đúng quyền",
+    "actual": "43/43 đúng",
+    "evidence": [],
+    "verdict": "PASS"
+  }
+]

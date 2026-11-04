@@ -1,0 +1,201 @@
+[
+  {
+    "id": "L5-OUI-01",
+    "persona": "ketoan",
+    "size": "web375",
+    "journey": "Đơn hàng bằng giao diện",
+    "step": "Kế toán mở đơn chuyển khoản chưa trả ở 375px",
+    "expect": "thấy khối \"Xác nhận đã nhận tiền\" + nút \"Đã nhận tiền\"; SĐT khách chỉ hiện đuôi (che)",
+    "actual": "có nút=true; lộ SĐT đầy đủ=false",
+    "evidence": "Tubu Tree Quản trị Về cửa hàng Đăng xuất Bỏ qua tới nội dung Hay dùng · Đơn hàng , 8 việc đang chờ Đổi mục Tìm kiếm Xoá lọc Tất cả (1) Chờ thanh toán (1) Đã xác nhận (0) Đã đóng gói (0) Đang giao (0) Đã giao (0) Đã huỷ (0) Đã trả (0) Lọc Xu",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OUI-02a",
+    "persona": "ketoan",
+    "size": "web375",
+    "journey": "Đơn hàng bằng giao diện",
+    "step": "Bấm \"Đã nhận tiền\" hiện hộp xác nhận",
+    "expect": "có hộp \"Xác nhận đã nhận tiền\" nêu số tiền + mã đơn + câu hậu quả, chưa ghi gì vào DB",
+    "actual": "hộp: Xác nhận đã nhận tiền Xác nhận đã nhận 120.000đ chuyển khoản cho đơn TUBU2026110374728?",
+    "evidence": null,
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OUI-02",
+    "persona": "ketoan",
+    "size": "web375",
+    "journey": "Đơn hàng bằng giao diện",
+    "step": "Kế toán bấm \"Đã nhận tiền\" + mã giao dịch",
+    "expect": "POST confirm-payment 2xx; DB paymentStatus PAID, paidAt có, trạng thái rời PENDING_PAYMENT; màn báo kết quả",
+    "actual": "POST /admin/orders/cmw17eyqz027rjtc4crh2vvro/confirm-payment 201; DB PENDING_PAYMENT/UNPAID -> CONFIRMED/PAID; chữ báo: \"Đã xác nhận (1) Đã đóng gói (0) Đang giao (0) Đã giao (0) Đã huỷ (0) Đã trả (0) Lọc Xuất CSV (Excel) Đã ghi nhận đơn TUBU2026110374\"",
+    "evidence": {
+      "o0": {
+        "id": "cmw17eyqz027rjtc4crh2vvro",
+        "code": "TUBU2026110374728",
+        "status": "PENDING_PAYMENT",
+        "pm": "BANK_TRANSFER",
+        "ps": "UNPAID",
+        "total": 120000,
+        "pu": 0,
+        "pe": 2880,
+        "pk": null,
+        "paidAt": null,
+        "deliveredAt": null,
+        "pa": null
+      },
+      "o1": {
+        "id": "cmw17eyqz027rjtc4crh2vvro",
+        "code": "TUBU2026110374728",
+        "status": "CONFIRMED",
+        "pm": "BANK_TRANSFER",
+        "ps": "PAID",
+        "total": 120000,
+        "pu": 0,
+        "pe": 2880,
+        "pk": "9600048",
+        "paidAt": "2026-11-03T21:32:52.924Z",
+        "deliveredAt": null,
+        "pa": null
+      }
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OUI-02b",
+    "persona": "ketoan",
+    "size": "web375",
+    "journey": "Đơn hàng bằng giao diện",
+    "step": "Lịch sử đơn ghi mã giao dịch",
+    "expect": "ghi mã FT26UI0001",
+    "actual": "[{\"note\":\"Đã nhận tiền (UNPAID → PAID) · Kế toán xác nhận · Mã GD FT26UI0001\"}]",
+    "evidence": [
+      {
+        "note": "Đã nhận tiền (UNPAID → PAID) · Kế toán xác nhận · Mã GD FT26UI0001"
+      }
+    ],
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OUI-03",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Đơn hàng bằng giao diện",
+    "step": "CSKH mở đơn COD đã xác nhận",
+    "expect": "chỉ thấy \"Huỷ đơn\" (CSKH chỉ được huỷ: order-actor-transitions.ts), không thấy Đã đóng gói / Giao vận / Đã giao hàng",
+    "actual": "nút chuyển trạng thái: [\"Huỷ đơn\"]",
+    "evidence": [
+      "Huỷ đơn"
+    ],
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OUI-04",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Đơn hàng bằng giao diện",
+    "step": "CSKH bấm \"Huỷ đơn\" và xác nhận trong hộp thoại",
+    "expect": "PUT status 2xx; DB CANCELLED; COD chưa giao nên Ví không đổi",
+    "actual": "PUT /admin/orders/cmw17f5nz028djtc4oxbs7zu8/status 200; DB CONFIRMED -> CANCELLED; ví 1680000 -> 1680000; hộp thoại: \"Huỷ đơn LỊCH SỬ TRẠNG THÁI Huỷ đơn hàng Xác nhận huỷ đơn TUBU2026110305943? Khách chưa trả tiền — không có khoản hoàn tiền. Hệ thống sẽ huỷ cả đơn trên kho Panc\"",
+    "evidence": {
+      "o0": {
+        "id": "cmw17f5nz028djtc4oxbs7zu8",
+        "code": "TUBU2026110305943",
+        "status": "CONFIRMED",
+        "pm": "COD",
+        "ps": "UNPAID",
+        "total": 120000,
+        "pu": 0,
+        "pe": 2880,
+        "pk": "9600049",
+        "paidAt": null,
+        "deliveredAt": null,
+        "pa": null
+      },
+      "o1": {
+        "id": "cmw17f5nz028djtc4oxbs7zu8",
+        "code": "TUBU2026110305943",
+        "status": "CANCELLED",
+        "pm": "COD",
+        "ps": "UNPAID",
+        "total": 120000,
+        "pu": 0,
+        "pe": 2880,
+        "pk": "9600049",
+        "paidAt": null,
+        "deliveredAt": null,
+        "pa": null
+      }
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OUI-05",
+    "persona": "kho",
+    "size": "web375",
+    "journey": "Đơn hàng bằng giao diện",
+    "step": "Kho mở đơn COD đã xác nhận ở 375px",
+    "expect": "chỉ thấy \"Đã đóng gói\" (KHO chỉ PACKED)",
+    "actual": "nút: [\"Đã đóng gói\"]",
+    "evidence": [
+      "Đã đóng gói"
+    ],
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OUI-06",
+    "persona": "kho",
+    "size": "web375",
+    "journey": "Đơn hàng bằng giao diện",
+    "step": "Kho bấm \"Đã đóng gói\"",
+    "expect": "PUT status 2xx; DB PACKED",
+    "actual": "PUT /admin/orders/cmw17fdnw0291jtc40ke4dtmg/status 200; DB CONFIRMED -> PACKED",
+    "evidence": {
+      "o0": {
+        "id": "cmw17fdnw0291jtc40ke4dtmg",
+        "code": "TUBU2026110328735",
+        "status": "CONFIRMED",
+        "pm": "COD",
+        "ps": "UNPAID",
+        "total": 120000,
+        "pu": 0,
+        "pe": 2880,
+        "pk": "9600050",
+        "paidAt": null,
+        "deliveredAt": null,
+        "pa": null
+      },
+      "o1": {
+        "id": "cmw17fdnw0291jtc40ke4dtmg",
+        "code": "TUBU2026110328735",
+        "status": "PACKED",
+        "pm": "COD",
+        "ps": "UNPAID",
+        "total": 120000,
+        "pu": 0,
+        "pe": 2880,
+        "pk": "9600050",
+        "paidAt": null,
+        "deliveredAt": null,
+        "pa": null
+      }
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-OUI-07",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Đơn hàng bằng giao diện",
+    "step": "ADMIN mở đơn COD đã xác nhận",
+    "expect": "thấy SĐT đầy đủ; có nút Đã đóng gói + Huỷ đơn",
+    "actual": "SĐT đầy đủ=true; nút [\"Đã đóng gói\",\"Giao vận\",\"Đã giao hàng\",\"Huỷ đơn\"]",
+    "evidence": [
+      "Đã đóng gói",
+      "Giao vận",
+      "Đã giao hàng",
+      "Huỷ đơn"
+    ],
+    "verdict": "PASS"
+  }
+]

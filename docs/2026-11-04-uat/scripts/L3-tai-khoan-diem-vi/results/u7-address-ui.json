@@ -1,0 +1,167 @@
+[
+  {
+    "id": "U7-mini375-empty",
+    "persona": "ctv",
+    "khổ": "mini375",
+    "journey": "Sổ địa chỉ (giao diện)",
+    "step": "chưa có địa chỉ: màn trống có lời mời thêm địa chỉ",
+    "expected": "addresses.tsx",
+    "actual": "chữ=Sổ địa chỉ Bạn chưa có địa chỉ giao hàng nào Thêm địa chỉ mới",
+    "evidence": "chữ=Sổ địa chỉ Bạn chưa có địa chỉ giao hàng nào Thêm địa chỉ mới",
+    "status": "PASS"
+  },
+  {
+    "id": "U7-mini375-prefill",
+    "persona": "ctv",
+    "khổ": "mini375",
+    "journey": "Sổ địa chỉ (giao diện)",
+    "step": "Thêm địa chỉ đầu tiên: Người nhận / SĐT điền sẵn từ hồ sơ như Mini (web 375 phải giống Mini)",
+    "expected": "apps/miniapp/src/components/address-form.tsx:72-75 (điền sẵn) vs apps/web/src/components/address-form.tsx:43 (rỗng)",
+    "actual": "điền sẵn=[\"Phạm Văn CTV\",\"0901000004\"]",
+    "evidence": "ô nhập=[\"Phạm Văn CTV\",\"0901000004\",\"\"]",
+    "status": "PASS"
+  },
+  {
+    "id": "U7-mini375-add",
+    "persona": "ctv",
+    "khổ": "mini375",
+    "journey": "Sổ địa chỉ (giao diện)",
+    "step": "lưu địa chỉ đầu tiên: có 1 dòng DB, tự là Mặc định, đúng người nhận/SĐT/đường/tỉnh",
+    "expected": "users.service.ts createAddress",
+    "actual": "DB=[{\"id\":\"cmw17ejau01hhi0v0gy1clez8\",\"recipient\":\"Phạm Văn CTV\",\"phone\":\"0901000004\",\"street\":\"12 Lê Lợi\",\"ward\":\"Phường Bến Thành\",\"province\":\"Thành phố Hồ Chí Minh\",\"d\":true}]",
+    "evidence": "DB=[{\"id\":\"cmw17ejau01hhi0v0gy1clez8\",\"recipient\":\"Phạm Văn CTV\",\"phone\":\"0901000004\",\"street\":\"12 Lê Lợi\",\"ward\":\"Phường Bến Thành\",\"province\":\"Thành phố Hồ Chí Minh\",\"d\":true}]",
+    "status": "PASS"
+  },
+  {
+    "id": "U7-mini375-edit",
+    "persona": "ctv",
+    "khổ": "mini375",
+    "journey": "Sổ địa chỉ (giao diện)",
+    "step": "sửa số nhà tên đường: DB đổi đúng dòng, các dòng khác không đổi",
+    "expected": "users.service.ts updateAddress",
+    "actual": "DB=[[\"99 Nguyễn Huệ\",true],[\"5 Tràng Tiền\",false]]",
+    "evidence": "DB=[[\"99 Nguyễn Huệ\",true],[\"5 Tràng Tiền\",false]]",
+    "status": "PASS"
+  },
+  {
+    "id": "U7-mini375-delete",
+    "persona": "ctv",
+    "khổ": "mini375",
+    "journey": "Sổ địa chỉ (giao diện)",
+    "step": "xoá địa chỉ qua hộp xác nhận \"Xoá địa chỉ này?\": mất đúng 1 dòng, địa chỉ mặc định còn",
+    "expected": "addresses.tsx confirmDel; users.service.ts deleteAddress",
+    "actual": "hộp xác nhận=true DB=[[\"99 Nguyễn Huệ\",true]]",
+    "evidence": "hộp xác nhận=true DB=[[\"99 Nguyễn Huệ\",true]]",
+    "status": "PASS"
+  },
+  {
+    "id": "U7-web375-empty",
+    "persona": "ctv",
+    "khổ": "web375",
+    "journey": "Sổ địa chỉ (giao diện)",
+    "step": "chưa có địa chỉ: màn trống có lời mời thêm địa chỉ",
+    "expected": "addresses.tsx",
+    "actual": "chữ=Sổ địa chỉ Bạn chưa có địa chỉ giao hàng nào Thêm địa chỉ mới Hotline: 0984 606 774 Điều khoản Bảo mật Đổi trả Vận chuyển",
+    "evidence": "chữ=Sổ địa chỉ Bạn chưa có địa chỉ giao hàng nào Thêm địa chỉ mới Hotline: 0984 606 774 Điều khoản Bảo mật Đổi trả Vận chuyển",
+    "status": "PASS"
+  },
+  {
+    "id": "U7-web375-prefill",
+    "persona": "ctv",
+    "khổ": "web375",
+    "journey": "Sổ địa chỉ (giao diện)",
+    "step": "Thêm địa chỉ đầu tiên: Người nhận / SĐT điền sẵn từ hồ sơ như Mini (web 375 phải giống Mini)",
+    "expected": "apps/miniapp/src/components/address-form.tsx:72-75 (điền sẵn) vs apps/web/src/components/address-form.tsx:43 (rỗng)",
+    "actual": "điền sẵn=[\"\",\"\"]",
+    "evidence": "ô nhập=[\"\",\"\",\"\"]",
+    "status": "FAIL"
+  },
+  {
+    "id": "U7-web375-add",
+    "persona": "ctv",
+    "khổ": "web375",
+    "journey": "Sổ địa chỉ (giao diện)",
+    "step": "lưu địa chỉ đầu tiên: có 1 dòng DB, tự là Mặc định, đúng người nhận/SĐT/đường/tỉnh",
+    "expected": "users.service.ts createAddress",
+    "actual": "DB=[{\"id\":\"cmw17eycn01hwi0v0vga9yhcr\",\"recipient\":\"Phạm Văn CTV\",\"phone\":\"0901000004\",\"street\":\"12 Lê Lợi\",\"ward\":\"Phường Bến Thành\",\"province\":\"Thành phố Hồ Chí Minh\",\"d\":true}]",
+    "evidence": "DB=[{\"id\":\"cmw17eycn01hwi0v0vga9yhcr\",\"recipient\":\"Phạm Văn CTV\",\"phone\":\"0901000004\",\"street\":\"12 Lê Lợi\",\"ward\":\"Phường Bến Thành\",\"province\":\"Thành phố Hồ Chí Minh\",\"d\":true}]",
+    "status": "PASS"
+  },
+  {
+    "id": "U7-web375-edit",
+    "persona": "ctv",
+    "khổ": "web375",
+    "journey": "Sổ địa chỉ (giao diện)",
+    "step": "sửa số nhà tên đường: DB đổi đúng dòng, các dòng khác không đổi",
+    "expected": "users.service.ts updateAddress",
+    "actual": "DB=[[\"99 Nguyễn Huệ\",true],[\"5 Tràng Tiền\",false]]",
+    "evidence": "DB=[[\"99 Nguyễn Huệ\",true],[\"5 Tràng Tiền\",false]]",
+    "status": "PASS"
+  },
+  {
+    "id": "U7-web375-delete",
+    "persona": "ctv",
+    "khổ": "web375",
+    "journey": "Sổ địa chỉ (giao diện)",
+    "step": "xoá địa chỉ qua hộp xác nhận \"Xoá địa chỉ này?\": mất đúng 1 dòng, địa chỉ mặc định còn",
+    "expected": "addresses.tsx confirmDel; users.service.ts deleteAddress",
+    "actual": "hộp xác nhận=true DB=[[\"99 Nguyễn Huệ\",true]]",
+    "evidence": "hộp xác nhận=true DB=[[\"99 Nguyễn Huệ\",true]]",
+    "status": "PASS"
+  },
+  {
+    "id": "U7-web1280-empty",
+    "persona": "ctv",
+    "khổ": "web1280",
+    "journey": "Sổ địa chỉ (giao diện)",
+    "step": "chưa có địa chỉ: màn trống có lời mời thêm địa chỉ",
+    "expected": "addresses.tsx",
+    "actual": "chữ=Tìm sản phẩm 1 P CTV Danh mục Vườn Xanh Ưu đãi Kho quà Mua chung Cộng đồng MUA SẮM Tổng quan Đơn hàng Yêu thích Sổ địa chỉ ĐIỂM VÀ QUÀ Ưu đãi Điểm Xanh và hạng ",
+    "evidence": "chữ=Tìm sản phẩm 1 P CTV Danh mục Vườn Xanh Ưu đãi Kho quà Mua chung Cộng đồng MUA SẮM Tổng quan Đơn hàng Yêu thích Sổ địa chỉ ĐIỂM VÀ QUÀ Ưu đãi Điểm Xanh và hạng ",
+    "status": "PASS"
+  },
+  {
+    "id": "U7-web1280-prefill",
+    "persona": "ctv",
+    "khổ": "web1280",
+    "journey": "Sổ địa chỉ (giao diện)",
+    "step": "Thêm địa chỉ đầu tiên: Người nhận / SĐT điền sẵn từ hồ sơ như Mini (web 375 phải giống Mini)",
+    "expected": "apps/miniapp/src/components/address-form.tsx:72-75 (điền sẵn) vs apps/web/src/components/address-form.tsx:43 (rỗng)",
+    "actual": "điền sẵn=[\"\",\"\"]",
+    "evidence": "ô nhập=[\"\",\"\",\"\"]",
+    "status": "FAIL"
+  },
+  {
+    "id": "U7-web1280-add",
+    "persona": "ctv",
+    "khổ": "web1280",
+    "journey": "Sổ địa chỉ (giao diện)",
+    "step": "lưu địa chỉ đầu tiên: có 1 dòng DB, tự là Mặc định, đúng người nhận/SĐT/đường/tỉnh",
+    "expected": "users.service.ts createAddress",
+    "actual": "DB=[{\"id\":\"cmw17fdd601i9i0v00p37q4zk\",\"recipient\":\"Phạm Văn CTV\",\"phone\":\"0901000004\",\"street\":\"12 Lê Lợi\",\"ward\":\"Phường Bến Thành\",\"province\":\"Thành phố Hồ Chí Minh\",\"d\":true}]",
+    "evidence": "DB=[{\"id\":\"cmw17fdd601i9i0v00p37q4zk\",\"recipient\":\"Phạm Văn CTV\",\"phone\":\"0901000004\",\"street\":\"12 Lê Lợi\",\"ward\":\"Phường Bến Thành\",\"province\":\"Thành phố Hồ Chí Minh\",\"d\":true}]",
+    "status": "PASS"
+  },
+  {
+    "id": "U7-web1280-edit",
+    "persona": "ctv",
+    "khổ": "web1280",
+    "journey": "Sổ địa chỉ (giao diện)",
+    "step": "sửa số nhà tên đường: DB đổi đúng dòng, các dòng khác không đổi",
+    "expected": "users.service.ts updateAddress",
+    "actual": "DB=[[\"99 Nguyễn Huệ\",true],[\"5 Tràng Tiền\",false]]",
+    "evidence": "DB=[[\"99 Nguyễn Huệ\",true],[\"5 Tràng Tiền\",false]]",
+    "status": "PASS"
+  },
+  {
+    "id": "U7-web1280-delete",
+    "persona": "ctv",
+    "khổ": "web1280",
+    "journey": "Sổ địa chỉ (giao diện)",
+    "step": "xoá địa chỉ qua hộp xác nhận \"Xoá địa chỉ này?\": mất đúng 1 dòng, địa chỉ mặc định còn",
+    "expected": "addresses.tsx confirmDel; users.service.ts deleteAddress",
+    "actual": "hộp xác nhận=true DB=[[\"99 Nguyễn Huệ\",true]]",
+    "evidence": "hộp xác nhận=true DB=[[\"99 Nguyễn Huệ\",true]]",
+    "status": "PASS"
+  }
+]

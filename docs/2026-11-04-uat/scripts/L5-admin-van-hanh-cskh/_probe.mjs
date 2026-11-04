@@ -1,0 +1,11 @@
+import { harness, SHOTS } from './_lib.mjs';
+const H = '/Users/longla/coding/tubutree-mini-app/.claude/worktrees/uat-1104/docs/2026-10-20-uat/tools/uat-harness';
+const { openWeb } = await import(`${H}/web-session.mjs`);
+const s = await openWeb(5, process.argv[2] ?? 'admin', { viewport: { width: 1280, height: 800 }, path: '/admin' });
+await s.page.waitForTimeout(4000);
+await s.page.screenshot({ path: `${SHOTS}/probe-admin1280.png` });
+const nav = await s.page.evaluate(() => [...document.querySelectorAll('nav a, nav button, aside a, aside button')].map(e => (e.getAttribute('aria-label')||e.textContent||'').trim().slice(0,40)));
+console.log(JSON.stringify(nav));
+console.log(s.requests.slice(0,40).map(r=>r.method+' '+r.path+' '+r.status).join('\n'));
+await s.close();
+await harness.closePrisma();

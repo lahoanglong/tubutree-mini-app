@@ -1,0 +1,144 @@
+{
+ "app": "mini",
+ "date": "2026-11-03T10:45:31.018Z",
+ "load": {
+  "loadAvg": "Load Avg: 63.55, 70.64, 89.69 ",
+  "cpu": "CPU usage: 46.77% user, 53.22% sys, 0.0% idle "
+ },
+ "results": [
+  {
+   "run": 1,
+   "steps": [
+    {
+     "name": "home→PDP (bấm thẻ SP)",
+     "ok": true,
+     "api": 7,
+     "apiList": "GET /affiliate/me,GET /products/nuoc-rua-chen-fuwa3e/bundles,GET /products/nuoc-rua-chen-fuwa3e,GET /products/nuoc-rua-chen-fuwa3e/reviews,GET /products/nuoc-rua-chen-fuwa3e/bought-together,GET /products/nuoc-rua-chen-fuwa3e/reviews/can-review,GET /products/nuoc-rua-chen-fuwa3e/related",
+     "readyMs": 1040,
+     "inpMs": 80,
+     "skeletonOrSpinnerSeen": false,
+     "path": "/zapps/2070857098114207963/product/nuoc-rua-chen-fuwa3e"
+    },
+    {
+     "name": "tab Danh mục",
+     "ok": true,
+     "api": 3,
+     "apiList": "POST /events,GET /products,GET /products",
+     "readyMs": 83,
+     "inpMs": 40,
+     "skeletonOrSpinnerSeen": false,
+     "path": "/zapps/2070857098114207963/browse"
+    },
+    {
+     "name": "tab Vườn Xanh",
+     "ok": true,
+     "api": 5,
+     "apiList": "GET /game/quiz/today,GET /game/missions,GET /game/profile,GET /me/loyalty,GET /me/daily-check-in",
+     "readyMs": 69,
+     "inpMs": 32,
+     "skeletonOrSpinnerSeen": false,
+     "path": "/zapps/2070857098114207963/game"
+    },
+    {
+     "name": "tab Ưu đãi",
+     "ok": true,
+     "api": 4,
+     "apiList": "GET /campaigns,GET /coupons/collectable,GET /coupons/collectable/mine,GET /me/coupons",
+     "readyMs": 97,
+     "inpMs": 24,
+     "skeletonOrSpinnerSeen": false,
+     "path": "/zapps/2070857098114207963/offers"
+    },
+    {
+     "name": "tab Cá nhân",
+     "ok": true,
+     "api": 6,
+     "apiList": "GET /me/summary,GET /me/wallet,GET /me/support-chat/summary,GET /me/referral,GET /dealer/me,GET /auth/me",
+     "readyMs": 53,
+     "inpMs": 24,
+     "skeletonOrSpinnerSeen": false,
+     "path": "/zapps/2070857098114207963/profile"
+    },
+    {
+     "name": "tab Trang chủ",
+     "ok": true,
+     "api": 1,
+     "apiList": "GET /cart",
+     "readyMs": 177,
+     "inpMs": 56,
+     "skeletonOrSpinnerSeen": false,
+     "path": "/zapps/2070857098114207963"
+    }
+   ],
+   "cls": 0.028,
+   "pageErrors": []
+  },
+  {
+   "run": 2,
+   "steps": [
+    {
+     "name": "home→PDP (bấm thẻ SP)",
+     "ok": true,
+     "api": 7,
+     "apiList": "GET /affiliate/me,GET /products/nuoc-rua-chen-fuwa3e,GET /products/nuoc-rua-chen-fuwa3e/bundles,GET /products/nuoc-rua-chen-fuwa3e/reviews,GET /products/nuoc-rua-chen-fuwa3e/bought-together,GET /products/nuoc-rua-chen-fuwa3e/related,GET /products/nuoc-rua-chen-fuwa3e/reviews/can-review",
+     "readyMs": 670,
+     "inpMs": 72,
+     "skeletonOrSpinnerSeen": true,
+     "path": "/zapps/2070857098114207963/product/nuoc-rua-chen-fuwa3e"
+    },
+    {
+     "name": "tab Danh mục",
+     "ok": true,
+     "api": 3,
+     "apiList": "GET /products,GET /products,POST /events",
+     "readyMs": 134,
+     "inpMs": 48,
+     "skeletonOrSpinnerSeen": false,
+     "path": "/zapps/2070857098114207963/browse"
+    },
+    {
+     "name": "tab Vườn Xanh",
+     "ok": true,
+     "api": 5,
+     "apiList": "GET /game/profile,GET /game/quiz/today,GET /game/missions,GET /me/daily-check-in,GET /me/loyalty",
+     "readyMs": 73,
+     "inpMs": 32,
+     "skeletonOrSpinnerSeen": false,
+     "path": "/zapps/2070857098114207963/game"
+    },
+    {
+     "name": "tab Ưu đãi",
+     "ok": true,
+     "api": 4,
+     "apiList": "GET /campaigns,GET /coupons/collectable,GET /coupons/collectable/mine,GET /me/coupons",
+     "readyMs": 146,
+     "inpMs": 40,
+     "skeletonOrSpinnerSeen": true,
+     "path": "/zapps/2070857098114207963/offers"
+    },
+    {
+     "name": "tab Cá nhân",
+     "ok": true,
+     "api": 6,
+     "apiList": "GET /me/summary,GET /me/referral,GET /me/wallet,GET /auth/me,GET /dealer/me,GET /me/support-chat/summary",
+     "readyMs": 70,
+     "inpMs": 24,
+     "skeletonOrSpinnerSeen": false,
+     "path": "/zapps/2070857098114207963/profile"
+    },
+    {
+     "name": "tab Trang chủ",
+     "ok": true,
+     "api": 1,
+     "apiList": "GET /cart",
+     "readyMs": 250,
+     "inpMs": 88,
+     "skeletonOrSpinnerSeen": false,
+     "path": "/zapps/2070857098114207963"
+    }
+   ],
+   "cls": 0.031,
+   "pageErrors": []
+  }
+ ]
+}

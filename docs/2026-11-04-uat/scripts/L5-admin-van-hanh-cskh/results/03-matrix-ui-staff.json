@@ -1,0 +1,701 @@
+[
+  {
+    "id": "L5-UX-staff-inbox",
+    "persona": "staff",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=inbox (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=waste, URL=waste; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "waste",
+      "urlTab": "waste",
+      "nContent": 478,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-staff-orders",
+    "persona": "staff",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=orders (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=waste, URL=waste; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "waste",
+      "urlTab": "waste",
+      "nContent": 478,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-staff-productCategories",
+    "persona": "staff",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=productCategories (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=waste, URL=waste; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "waste",
+      "urlTab": "waste",
+      "nContent": 478,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-staff-users",
+    "persona": "staff",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=users (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=waste, URL=waste; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "waste",
+      "urlTab": "waste",
+      "nContent": 478,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-staff-supportChat",
+    "persona": "staff",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=supportChat (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=waste, URL=waste; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "waste",
+      "urlTab": "waste",
+      "nContent": 478,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-staff-community",
+    "persona": "staff",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=community (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=waste, URL=waste; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "waste",
+      "urlTab": "waste",
+      "nContent": 478,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-staff-coupons",
+    "persona": "staff",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=coupons (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=waste, URL=waste; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "waste",
+      "urlTab": "waste",
+      "nContent": 478,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-staff-waste",
+    "persona": "staff",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=waste (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=waste, URL=waste; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "waste",
+      "urlTab": "waste",
+      "nContent": 478,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-staff-storefronts",
+    "persona": "staff",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=storefronts (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=waste, URL=waste; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "waste",
+      "urlTab": "waste",
+      "nContent": 478,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-staff-merchantProducts",
+    "persona": "staff",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=merchantProducts (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=waste, URL=waste; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "waste",
+      "urlTab": "waste",
+      "nContent": 478,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-staff-dealers",
+    "persona": "staff",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=dealers (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=waste, URL=waste; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "waste",
+      "urlTab": "waste",
+      "nContent": 478,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-staff-dashboard",
+    "persona": "staff",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=dashboard (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=waste, URL=waste; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "waste",
+      "urlTab": "waste",
+      "nContent": 478,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-staff-analytics",
+    "persona": "staff",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=analytics (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=waste, URL=waste; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "waste",
+      "urlTab": "waste",
+      "nContent": 478,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-staff-reports",
+    "persona": "staff",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=reports (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=waste, URL=waste; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "waste",
+      "urlTab": "waste",
+      "nContent": 478,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-staff-externalOrders",
+    "persona": "staff",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=externalOrders (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=waste, URL=waste; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "waste",
+      "urlTab": "waste",
+      "nContent": 478,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-staff-returns",
+    "persona": "staff",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=returns (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=waste, URL=waste; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "waste",
+      "urlTab": "waste",
+      "nContent": 478,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-staff-customerRefunds",
+    "persona": "staff",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=customerRefunds (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=waste, URL=waste; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "waste",
+      "urlTab": "waste",
+      "nContent": 478,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-staff-subscriptions",
+    "persona": "staff",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=subscriptions (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=waste, URL=waste; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "waste",
+      "urlTab": "waste",
+      "nContent": 478,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-staff-reviews",
+    "persona": "staff",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=reviews (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=waste, URL=waste; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "waste",
+      "urlTab": "waste",
+      "nContent": 478,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-staff-quickReplies",
+    "persona": "staff",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=quickReplies (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=waste, URL=waste; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "waste",
+      "urlTab": "waste",
+      "nContent": 478,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-staff-flashSales",
+    "persona": "staff",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=flashSales (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=waste, URL=waste; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "waste",
+      "urlTab": "waste",
+      "nContent": 478,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-staff-posCredits",
+    "persona": "staff",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=posCredits (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=waste, URL=waste; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "waste",
+      "urlTab": "waste",
+      "nContent": 478,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-staff-externalClaims",
+    "persona": "staff",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=externalClaims (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=waste, URL=waste; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "waste",
+      "urlTab": "waste",
+      "nContent": 478,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-staff-campaigns",
+    "persona": "staff",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=campaigns (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=waste, URL=waste; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "waste",
+      "urlTab": "waste",
+      "nContent": 478,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-staff-bundles",
+    "persona": "staff",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=bundles (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=waste, URL=waste; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "waste",
+      "urlTab": "waste",
+      "nContent": 478,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-staff-engagement",
+    "persona": "staff",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=engagement (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=waste, URL=waste; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "waste",
+      "urlTab": "waste",
+      "nContent": 478,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-staff-dealerClaims",
+    "persona": "staff",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=dealerClaims (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=waste, URL=waste; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "waste",
+      "urlTab": "waste",
+      "nContent": 478,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-staff-dealerAccounts",
+    "persona": "staff",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=dealerAccounts (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=waste, URL=waste; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "waste",
+      "urlTab": "waste",
+      "nContent": 478,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-staff-dealerPrices",
+    "persona": "staff",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=dealerPrices (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=waste, URL=waste; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "waste",
+      "urlTab": "waste",
+      "nContent": 478,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-staff-commissionRates",
+    "persona": "staff",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=commissionRates (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=waste, URL=waste; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "waste",
+      "urlTab": "waste",
+      "nContent": 478,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-staff-payouts",
+    "persona": "staff",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=payouts (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=waste, URL=waste; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "waste",
+      "urlTab": "waste",
+      "nContent": 478,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-staff-merchantFulfilment",
+    "persona": "staff",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=merchantFulfilment (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=waste, URL=waste; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "waste",
+      "urlTab": "waste",
+      "nContent": 478,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-staff-brands",
+    "persona": "staff",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=brands (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=waste, URL=waste; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "waste",
+      "urlTab": "waste",
+      "nContent": 478,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-staff-faqs",
+    "persona": "staff",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=faqs (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=waste, URL=waste; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "waste",
+      "urlTab": "waste",
+      "nContent": 478,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-staff-contentKit",
+    "persona": "staff",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=contentKit (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=waste, URL=waste; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "waste",
+      "urlTab": "waste",
+      "nContent": 478,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-staff-academy",
+    "persona": "staff",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=academy (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=waste, URL=waste; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "waste",
+      "urlTab": "waste",
+      "nContent": 478,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-staff-notificationTemplates",
+    "persona": "staff",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=notificationTemplates (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=waste, URL=waste; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "waste",
+      "urlTab": "waste",
+      "nContent": 478,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-staff-staffRoster",
+    "persona": "staff",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=staffRoster (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=waste, URL=waste; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "waste",
+      "urlTab": "waste",
+      "nContent": 478,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-staff-shiftApproval",
+    "persona": "staff",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=shiftApproval (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=waste, URL=waste; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "waste",
+      "urlTab": "waste",
+      "nContent": 478,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-staff-payroll",
+    "persona": "staff",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=payroll (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=waste, URL=waste; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "waste",
+      "urlTab": "waste",
+      "nContent": 478,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-staff-attendance",
+    "persona": "staff",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=attendance (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=waste, URL=waste; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "waste",
+      "urlTab": "waste",
+      "nContent": 478,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-staff-config",
+    "persona": "staff",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=config (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=waste, URL=waste; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "waste",
+      "urlTab": "waste",
+      "nContent": 478,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-staff-opsHealth",
+    "persona": "staff",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=opsHealth (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=waste, URL=waste; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "waste",
+      "urlTab": "waste",
+      "nContent": 478,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-staff-sum",
+    "persona": "staff",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "tổng 43 tab",
+    "expect": "mọi tab đúng quyền",
+    "actual": "43/43 đúng",
+    "evidence": [],
+    "verdict": "PASS"
+  }
+]

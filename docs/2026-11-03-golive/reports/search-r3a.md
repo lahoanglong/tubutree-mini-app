@@ -1,0 +1,4 @@
+# search r3a
+- P2 matchCache: sửa. textWhere(q, remember, reuse = page>1): trang 1 luôn chạy SQL rồi ghi đè cache, chỉ trang >1 recallMatch. Test jest mới "trang 1 luôn chạy lại SQL" đỏ với mã cũ, xanh với mã mới. jest catalog: 411/411 (--maxWorkers=2), tsc api sạch.
+- P2 cổng kiểm (ảnh 375, Playwright web, First Load web, race): KHÔNG làm được. Race cần DB tubutree_it; classifier chặn dò mật khẩu Postgres 25432 và chặn docker. Ảnh/Playwright/First Load để phiên điều phối (ảnh chụp tập trung theo quyết định 23:40). Race cần chạy: catalog-search-index, buy-flow-4b, ai-advisor-public-products, demo-cleanup.
+- P3 softBreakLongWords: sửa bằng Intl.Segmenter (lùi về điểm mã). Test emoji ZWJ đỏ với mã cũ. vitest browse.spec 76/76 (Node 22; --maxWorkers xung đột minThreads của config, chạy 1 file nên chỉ 1 worker), tsc miniapp sạch.

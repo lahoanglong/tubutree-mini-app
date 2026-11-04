@@ -1,0 +1,15 @@
+{
+ "persona": "returning",
+ "key": "checkout-trong",
+ "surf": "web375",
+ "ms": 4886,
+ "title": "Thanh toán — Tubu Tree",
+ "scrollW": 375,
+ "clientW": 375,
+ "url": "/thanh-toan",
+ "text": "Thanh toán\nGiỏ hàng đang trống\n\nChưa có sản phẩm nào để thanh toán. Chọn vài món xanh rồi quay lại nhé.\n\nKhám phá sản phẩm\nĐơn của tôi\nHotline: 0984 606 774\nĐiều khoản\nBảo mật\nĐổi trả\nVận chuyển",
+ "badRequests": [],
+ "errors": [],
+ "consoleErrors": [],
+ "blocked": []
+}

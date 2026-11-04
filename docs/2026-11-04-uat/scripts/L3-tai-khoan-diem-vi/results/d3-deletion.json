@@ -1,0 +1,146 @@
+[
+  {
+    "id": "D3-0",
+    "persona": "returning",
+    "khổ": "API",
+    "journey": "Yêu cầu xoá tài khoản",
+    "step": "tiền đề: ví còn tiền, còn khoản hoàn ngân hàng PENDING (do B1-10 để lại)",
+    "expected": "B1-10",
+    "actual": "ví={\"bal\":914000,\"sum_w\":914000,\"n\":8} khoản mở=[{\"orderCode\":\"TUBU2026110321053\",\"status\":\"PENDING\",\"amount\":98000,\"kind\":\"CANCEL\"},{\"orderCode\":\"TUBU2026110385813\",\"status\":\"PENDING\",\"amount\":98000,\"kind\":\"CANCEL\"}]",
+    "evidence": "ví={\"bal\":914000,\"sum_w\":914000,\"n\":8} khoản mở=[{\"orderCode\":\"TUBU2026110321053\",\"status\":\"PENDING\",\"amount\":98000,\"kind\":\"CANCEL\"},{\"orderCode\":\"TUBU2026110385813\",\"status\":\"PENDING\",\"amount\":98000,\"kind\":\"CANCEL\"}]",
+    "status": "PASS"
+  },
+  {
+    "id": "D3-1",
+    "persona": "returning",
+    "khổ": "API",
+    "journey": "Yêu cầu xoá tài khoản",
+    "step": "ví còn tiền, không tick đồng ý bỏ số dư: 400 WALLET_FORFEIT_CONSENT, không tạo yêu cầu",
+    "expected": "users.service.ts requestAccountDeletion",
+    "actual": "POST=400 {\"statusCode\":400,\"error\":\"Bad Request\",\"code\":\"WALLET_FORFEIT_CONSENT\",\"walletBalance\":914000,\"message\":\"Ví Tubu còn 914.000đ. Xoá tài khoản thì số dư này mất và không hoàn lại. Bạn cần đồng ý để gửi yêu cầu xoá.\"}",
+    "evidence": "POST=400 {\"statusCode\":400,\"error\":\"Bad Request\",\"code\":\"WALLET_FORFEIT_CONSENT\",\"walletBalance\":914000,\"message\":\"Ví Tubu còn 914.000đ. Xoá tài khoản thì số dư này mất và không hoàn lại. Bạn cần đồng ý để gửi yêu cầu xoá.\"}",
+    "status": "PASS"
+  },
+  {
+    "id": "D3-2",
+    "persona": "returning",
+    "khổ": "API",
+    "journey": "Yêu cầu xoá tài khoản",
+    "step": "đồng ý nhưng số dư đã thấy lệch số thật: 400 \"Số dư Ví Tubu vừa đổi...\"",
+    "expected": "users.service.ts",
+    "actual": "POST=400 {\"statusCode\":400,\"error\":\"Bad Request\",\"code\":\"WALLET_FORFEIT_CONSENT\",\"walletBalance\":914000,\"message\":\"Số dư Ví Tubu vừa đổi, hiện còn 914.000đ. Bạn xem lại và đồng ý lần nữa để gửi yêu cầu xoá.\"}",
+    "evidence": "POST=400 {\"statusCode\":400,\"error\":\"Bad Request\",\"code\":\"WALLET_FORFEIT_CONSENT\",\"walletBalance\":914000,\"message\":\"Số dư Ví Tubu vừa đổi, hiện còn 914.000đ. Bạn xem lại và đồng ý lần nữa để gửi yêu cầu xoá.\"}",
+    "status": "PASS"
+  },
+  {
+    "id": "D3-3",
+    "persona": "returning",
+    "khổ": "API",
+    "journey": "Yêu cầu xoá tài khoản",
+    "step": "đồng ý đúng số dư: ghi nhận yêu cầu, tài khoản CHƯA bị xoá, thông điệp \"tài khoản CHƯA bị xoá\"",
+    "expected": "users.service.ts requestAccountDeletion",
+    "actual": "POST=201 {\"alreadyRequested\":false,\"createdAt\":\"2026-11-03T21:09:01.779Z\",\"message\":\"Yêu cầu đã được ghi nhận. CSKH sẽ liên hệ xử lý trong vòng 3 ngày làm việc — tài khoản CHƯA bị xoá.\"} SQL={\"id\":\"cmw16kfdf017ii0v092qrw5ti\",\"status\":\"PENDING\",\"fa\":914000}",
+    "evidence": "POST=201 {\"alreadyRequested\":false,\"createdAt\":\"2026-11-03T21:09:01.779Z\",\"message\":\"Yêu cầu đã được ghi nhận. CSKH sẽ liên hệ xử lý trong vòng 3 ngày làm việc — tài khoản CHƯA bị xoá.\"} SQL={\"id\":\"cmw16kfdf017ii0v092qrw5ti\",\"status\":\"PENDING\",\"fa\":914000}",
+    "status": "PASS"
+  },
+  {
+    "id": "D3-4",
+    "persona": "returning",
+    "khổ": "API",
+    "journey": "Yêu cầu xoá tài khoản",
+    "step": "gửi lại: không tạo dòng thứ hai (alreadyRequested)",
+    "expected": "users.service.ts",
+    "actual": "POST=201 {\"alreadyRequested\":true,\"createdAt\":\"2026-11-03T21:09:01.779Z\",\"message\":\"Bạn đã gửi yêu cầu xoá tài khoản trước đó. CSKH sẽ liên hệ xử lý trong vòng 3 ngày làm việc.\"}",
+    "evidence": "POST=201 {\"alreadyRequested\":true,\"createdAt\":\"2026-11-03T21:09:01.779Z\",\"message\":\"Bạn đã gửi yêu cầu xoá tài khoản trước đó. CSKH sẽ liên hệ xử lý trong vòng 3 ngày làm việc.\"}",
+    "status": "PASS"
+  },
+  {
+    "id": "D3-5",
+    "persona": "admin",
+    "khổ": "API",
+    "journey": "Yêu cầu xoá tài khoản",
+    "step": "danh sách admin hiện blockers: CUSTOMER_REFUND_PENDING (khoản hoàn mở) + ORDER_IN_PROGRESS; KHÔNG còn WALLET_BALANCE (khách đã đồng ý)",
+    "expected": "account-deletion.service.ts collectBlockers",
+    "actual": "blockers=[{\"code\":\"ORDER_IN_PROGRESS\",\"message\":\"còn 1 đơn hàng chưa hoàn tất (chờ thanh toán/đang xử lý/đang giao)\"},{\"code\":\"CUSTOMER_REFUND_PENDING\",\"message\":\"còn 2 khoản hoàn tiền đơn chưa chuyển\"}]",
+    "evidence": "blockers=[{\"code\":\"ORDER_IN_PROGRESS\",\"message\":\"còn 1 đơn hàng chưa hoàn tất (chờ thanh toán/đang xử lý/đang giao)\"},{\"code\":\"CUSTOMER_REFUND_PENDING\",\"message\":\"còn 2 khoản hoàn tiền đơn chưa chuyển\"}]",
+    "status": "PASS"
+  },
+  {
+    "id": "D3-6",
+    "persona": "admin",
+    "khổ": "API",
+    "journey": "Yêu cầu xoá tài khoản",
+    "step": "admin bấm Xử lý khi còn khoản hoàn mở: 400 ACCOUNT_DELETION_BLOCKED, KHÔNG ẩn danh, ví không đổi",
+    "expected": "account-deletion.service.ts processOnce",
+    "actual": "POST=400 {\"statusCode\":400,\"error\":\"Bad Request\",\"code\":\"ACCOUNT_DELETION_BLOCKED\",\"message\":\"Chưa thể xoá tài khoản: còn 1 đơn hàng chưa hoàn tất (chờ thanh toán/đang xử lý/đang giao); còn 2 khoản hoàn tiền đơn chưa chuyển.\",\"blockers\":[{\"code\":\"ORDER_IN_PROGRESS\",\"message\":\"còn 1 đơn hàng chưa hoàn tất (chờ thanh toán/đang xử lý/đang giao)\"},{\"code\":\"CUSTOMER_REFUND_PENDING\",\"message\":\"còn 2 khoản hoàn tiền đơn chưa chuyển\"}]}",
+    "evidence": "POST=400 {\"statusCode\":400,\"error\":\"Bad Request\",\"code\":\"ACCOUNT_DELETION_BLOCKED\",\"message\":\"Chưa thể xoá tài khoản: còn 1 đơn hàng chưa hoàn tất (chờ thanh toán/đang xử lý/đang giao); còn 2 khoản hoàn tiền đơn chưa chuyển.\",\"blockers\":[{\"code\":\"ORDER_IN_PROGRESS\",\"message\":\"còn 1 đơn hàng chưa hoàn tất (chờ thanh toán/đang xử lý/đang giao)\"},{\"code\":\"CUSTOMER_REFUND_PENDING\",\"message\":\"còn 2 khoản hoàn tiền đơn chưa chuyển\"}]}",
+    "status": "PASS"
+  },
+  {
+    "id": "D3-7",
+    "persona": "returning",
+    "khổ": "API",
+    "journey": "Yêu cầu xoá tài khoản",
+    "step": "Mini App cũ (chỉ gửi reason) khi ví còn tiền: ghi nhận, admin thấy blocker WALLET_BALANCE \"khách chưa đồng ý bỏ số dư\"",
+    "expected": "users.service.ts comment: bản đã phát hành",
+    "actual": "POST=201 blockers=[{\"code\":\"WALLET_BALANCE\",\"message\":\"Ví Tubu còn 914.000đ mà khách chưa đồng ý bỏ số dư, khách cần gửi lại yêu cầu xoá và đồng ý\"},{\"code\":\"ORDER_IN_PROGRESS\",\"message\":\"còn 1 đơn hàng chưa hoàn tất (chờ thanh toán/đang xử lý/đang giao)\"},{\"code\":\"CUSTOMER_REFUND_PENDING\",\"message\":\"còn 2 khoản hoàn tiền đơn chưa chuyển\"}]",
+    "evidence": "POST=201 blockers=[{\"code\":\"WALLET_BALANCE\",\"message\":\"Ví Tubu còn 914.000đ mà khách chưa đồng ý bỏ số dư, khách cần gửi lại yêu cầu xoá và đồng ý\"},{\"code\":\"ORDER_IN_PROGRESS\",\"message\":\"còn 1 đơn hàng chưa hoàn tất (chờ thanh toán/đang xử lý/đang giao)\"},{\"code\":\"CUSTOMER_REFUND_PENDING\",\"message\":\"còn 2 khoản hoàn tiền đơn chưa chuyển\"}]",
+    "status": "PASS"
+  },
+  {
+    "id": "D3-8",
+    "persona": "admin",
+    "khổ": "API",
+    "journey": "Yêu cầu xoá tài khoản",
+    "step": "admin Xử lý: bị chặn, câu \"Chưa thể xoá tài khoản: ...\"",
+    "expected": "account-deletion.service.ts",
+    "actual": "POST=400 Chưa thể xoá tài khoản: Ví Tubu còn 914.000đ mà khách chưa đồng ý bỏ số dư, khách cần gửi lại yêu cầu xoá và đồng ý; còn 1 đơn hàng chưa hoàn tất (chờ thanh toán/đang xử lý/đang giao); còn 2 khoản hoàn tiền đơn chưa chuyển.",
+    "evidence": "POST=400 Chưa thể xoá tài khoản: Ví Tubu còn 914.000đ mà khách chưa đồng ý bỏ số dư, khách cần gửi lại yêu cầu xoá và đồng ý; còn 1 đơn hàng chưa hoàn tất (chờ thanh toán/đang xử lý/đang giao); còn 2 khoản hoàn tiền đơn chưa chuyển.",
+    "status": "PASS"
+  },
+  {
+    "id": "D3-9",
+    "persona": "admin",
+    "khổ": "API",
+    "journey": "Yêu cầu xoá tài khoản",
+    "step": "admin chuyển khoản xong + mark-paid: khoản COMPLETED, blocker CUSTOMER_REFUND_PENDING hết; vẫn còn blocker khác",
+    "expected": "customer-refunds.service.ts markPaid; collectBlockers",
+    "actual": "claim=201 mark-paid=201 {\"id\":\"cmw16dh0z00ubi0v060sv191r\",\"orderId\":\"cmw16dghe00txi0v0s109h4tg\",\"orderCode\":\"TUBU2026110321053\",\"kind\":\"CANCEL\",\"refKey\":\"\",\"userId\":\"uat_returning\",\"amount\":98000,\"phone\":null,\"recipientName\" blockers=[\"WALLET_BALANCE\",\"ORDER_IN_PROGRESS\",\"CUSTOMER_REFUND_PENDING\"]",
+    "evidence": "claim=201 mark-paid=201 {\"id\":\"cmw16dh0z00ubi0v060sv191r\",\"orderId\":\"cmw16dghe00txi0v0s109h4tg\",\"orderCode\":\"TUBU2026110321053\",\"kind\":\"CANCEL\",\"refKey\":\"\",\"userId\":\"uat_returning\",\"amount\":98000,\"phone\":null,\"recipientName\" blockers=[\"WALLET_BALANCE\",\"ORDER_IN_PROGRESS\",\"CUSTOMER_REFUND_PENDING\"]",
+    "status": "FAIL",
+    "superseded": "Do B1 chạy hai lần nên có hai khoản hoàn mở, kịch bản chỉ trả một. Đã bù bằng d3b-refund-clear.json (D3-9b) và PASS."
+  },
+  {
+    "id": "D3-10",
+    "persona": "returning",
+    "khổ": "API",
+    "journey": "Yêu cầu xoá tài khoản",
+    "step": "khách nhận thông báo đã chuyển khoản kèm mã giao dịch",
+    "expected": "customer-refunds.service.ts markPaid (D2)",
+    "actual": "thông báo={\"body\":\"Tubu đã chuyển khoản hoàn 98.000đ của đơn TUBU2026110321053 về tài khoản Vietcombank ••• 6789 (mã giao dịch UAT-FT26110401) 🌿\",\"data\":{\"bank\":\"Vietcombank ••• 6789\",\"amount\":\"98.000đ\",\"bank_ref\":\"UAT-FT26110401\",\"order_code\":\"TUBU2026110321053\"}}",
+    "evidence": "thông báo={\"body\":\"Tubu đã chuyển khoản hoàn 98.000đ của đơn TUBU2026110321053 về tài khoản Vietcombank ••• 6789 (mã giao dịch UAT-FT26110401) 🌿\",\"data\":{\"bank\":\"Vietcombank ••• 6789\",\"amount\":\"98.000đ\",\"bank_ref\":\"UAT-FT26110401\",\"order_code\":\"TUBU2026110321053\"}}",
+    "status": "PASS"
+  },
+  {
+    "id": "D3-11",
+    "persona": "new_nophone",
+    "khổ": "API",
+    "journey": "Yêu cầu xoá tài khoản",
+    "step": "đường thành công: ví đã đồng ý bỏ, không khoản mở: admin Xử lý -> ẩn danh, ví về 0 bằng 1 dòng ADJUST, sổ khớp",
+    "expected": "account-deletion.service.ts forfeitWallet + anonymize",
+    "actual": "trước: ví=98000 request=201 blockers=[] process=201 {\"alreadyProcessed\":false,\"requestId\":\"cmw16kg75018ni0v0stxi33a2\",\"userId\":\"uat_new_nophone\",\"reviewedAt\":\"2026-11-03T21:09:02.874Z\"} sau={\"n\":\"Người dùng đã xoá\",\"wb\":0,\"b\":true,\"email\":null,\"phone\":null,\"dob\":null} dòng ví cuối={\"delta\":-98000,\"type\":\"ADJUST\",\"refType\":\"ACCOUNT_DELETION\"} sổ={\"bal\":0,\"sum_w\":0,\"n\":2}",
+    "evidence": "trước: ví=98000 request=201 blockers=[] process=201 {\"alreadyProcessed\":false,\"requestId\":\"cmw16kg75018ni0v0stxi33a2\",\"userId\":\"uat_new_nophone\",\"reviewedAt\":\"2026-11-03T21:09:02.874Z\"} sau={\"n\":\"Người dùng đã xoá\",\"wb\":0,\"b\":true,\"email\":null,\"phone\":null,\"dob\":null} dòng ví cuối={\"delta\":-98000,\"type\":\"ADJUST\",\"refType\":\"ACCOUNT_DELETION\"} sổ={\"bal\":0,\"sum_w\":0,\"n\":2}",
+    "status": "PASS"
+  },
+  {
+    "id": "D3-12",
+    "persona": "new_nophone",
+    "khổ": "API",
+    "journey": "Yêu cầu xoá tài khoản",
+    "step": "tài khoản đã xoá: token cũ bị từ chối (sau cache phiên 5 giây)",
+    "expected": "SessionStateService + isBlocked",
+    "actual": "GET /me sau xoá 6 giây = 401 {\"statusCode\":401,\"error\":\"Unauthorized\",\"code\":\"ACCOUNT_BLOCKED\",\"message\":\"Tài khoản đã bị khoá. Bạn liên hệ CSKH Tubu Tree để được hỗ trợ.\"}",
+    "evidence": "GET /me sau xoá 6 giây = 401 {\"statusCode\":401,\"error\":\"Unauthorized\",\"code\":\"ACCOUNT_BLOCKED\",\"message\":\"Tài khoản đã bị khoá. Bạn liên hệ CSKH Tubu Tree để được hỗ trợ.\"}",
+    "status": "PASS"
+  }
+]

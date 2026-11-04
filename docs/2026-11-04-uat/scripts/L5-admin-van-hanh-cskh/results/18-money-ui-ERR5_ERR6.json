@@ -1,0 +1,57 @@
+[
+  {
+    "id": "L5-MUI-09",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Việc tiền bằng giao diện",
+    "step": "Kế toán bấm chip \"Cần xử lý Pancake (n)\" ở danh sách đơn",
+    "expect": "số trên chip = số đơn API pancake=attention; danh sách lọc còn đúng các đơn đó",
+    "actual": "chip \"Cần xử lý Pancake (26)\"; API total 26; số dòng 20; Tổng trên màn 26",
+    "evidence": "Tubu Tree Quản trị Về cửa hàng Tubu Đăng xuất Quản trị Tubu Tree Bỏ qua tới nội dung HAY DÙNG Hôm nay , 9 việc đang chờ Đơn hàng , 3 việc đang chờ Đổi rác TỔNG QUAN BÁN HÀNG , 3 VIỆC ĐANG CHỜ , 6 KHOẢ",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-MUI-10",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Việc tiền bằng giao diện",
+    "step": "Kế toán bấm \"Xuất CSV (Excel)\" ở danh sách đơn",
+    "expect": "tải được file .csv có tiêu đề + đủ dòng (mọi đơn khớp bộ lọc); SĐT khách bị che (không có số 10 chữ số đầy đủ); màn báo \"Đã tải …\"",
+    "actual": "file \"don-hang-2026-11-04.csv\"; 94 dòng dữ liệu (DB có 94 đơn); SĐT đầy đủ trong file: 0; màn: \"Đã tải don-hang-2026-11-04.\"",
+    "evidence": "﻿Mã đơn,Ngày đặt,Khách hàng,SĐT khách,Người nhận,SĐT người nhận,Loại đơn,Nơi giao,Phương thức TT,Trạng thái TT,Trạng thái đơn,Tạm tính (VNĐ),Giảm giá (VNĐ),Phí ship (VNĐ),Điểm đã dùng,Tổng tiền (VNĐ),Số sản phẩm,Hãng vận",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-MUI-11",
+    "persona": "ketoan",
+    "size": "web375",
+    "journey": "Việc tiền bằng giao diện",
+    "step": "Kế toán 375px mở \"Lọc\" rồi bấm chip \"Cần xử lý Pancake\" trong nhóm \"Cần xử lý\"",
+    "expect": "chip hiện số đơn khớp API, bật được (aria-pressed=true); không tràn ngang",
+    "actual": "chip \"Cần xử lý Pancake (26)\"; API 26; aria-pressed=true; tràn ngang 0px",
+    "evidence": null,
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-MUI-12-cskh",
+    "persona": "cskh",
+    "size": "web375",
+    "journey": "Việc tiền bằng giao diện",
+    "step": "CSKH mở tab Đổi / Trả ở 375px",
+    "expect": "mở sẵn mục đang chờ duyệt (REQUESTED), có nút Duyệt / Từ chối",
+    "actual": "mục đang chọn: [\"Chờ duyệt\"]; các mục: [\"Chờ duyệt\",\"Chờ nhận hàng về\",\"Đã duyệt\",\"Đã từ chối\",\"Tất cả trạng thái\"]; nút: [\"Duyệt hoàn tiền\",\"Từ chối\"]; DB REQUESTED=1, APPROVED=10; tràn ngang 0px",
+    "evidence": "Tubu Tree Quản trị Về cửa hàng Đăng xuất Bỏ qua tới nội dung Bán hàng · Đổi / Trả , 3 việc đang chờ Đổi mục Chờ duyệt Chờ nhận hàng về Đã duyệt Đã từ chối Tất cả trạng thái Khách trả theo dòng và số lượng. Duyệt: xem số ",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-MUI-12-kho",
+    "persona": "kho",
+    "size": "web375",
+    "journey": "Việc tiền bằng giao diện",
+    "step": "KHO mở tab Đổi / Trả ở 375px",
+    "expect": "mở sẵn mục chờ nhận hàng (TO_RECEIVE); không có nút duyệt; không tràn ngang",
+    "actual": "mục đang chọn: [\"Chờ nhận hàng về\"]; các mục: [\"Chờ duyệt\",\"Chờ nhận hàng về\",\"Đã duyệt\",\"Đã từ chối\",\"Tất cả trạng thái\"]; nút: [\"Đã nhận hàng về\"]; DB REQUESTED=1, APPROVED=10; tràn ngang 0px",
+    "evidence": "Tubu Tree Quản trị Về cửa hàng Đăng xuất Bỏ qua tới nội dung Bán hàng · Đổi / Trả , 31 việc đang chờ Đổi mục Chờ duyệt Chờ nhận hàng về Đã duyệt Đã từ chối Tất cả trạng thái Khách trả theo dòng và số lượng. Duyệt: xem số",
+    "verdict": "PASS"
+  }
+]

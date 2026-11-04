@@ -1,0 +1,112 @@
+[
+  {
+    "id": "U6-mini375-list",
+    "persona": "returning",
+    "khổ": "mini375",
+    "journey": "Thông báo",
+    "step": "có tin chưa đọc: hiện nút \"Đọc tất cả\"; chữ tiếng Việt đúng giọng, không \"Vui lòng\"/\"chúng tôi\"",
+    "expected": "notifications.tsx; brief giọng đợt 8",
+    "actual": "unread API=3; chữ=Thông báo Đọc tất cả Hoàn tiền đơn hàng Tubu đã chuyển khoản hoàn 98.000đ của đơn TUBU2026110385813 về tài khoản Vietcombank ••• 6789 (mã giao dịch UAT-FT26110402-0) 🌿 11 phút trước Hoàn tiền đơn hàng Tubu đã chuyển khoản hoàn 98.000đ của đơn TUBU2026110321053 về tài khoản Vietcombank ••• 6789 (mã giao dịch UAT-FT2611",
+    "evidence": "unread API=3; chữ=Thông báo Đọc tất cả Hoàn tiền đơn hàng Tubu đã chuyển khoản hoàn 98.000đ của đơn TUBU2026110385813 về tài khoản Vietcombank ••• 6789 (mã giao dịch UAT-FT26110402-0) 🌿 11 phút trước Hoàn tiền đơn hàng Tubu đã chuyển khoản hoàn 98.000đ của đơn TUBU2026110321053 về tài khoản Vietcombank ••• 6789 (mã giao dịch UAT-FT2611",
+    "status": "PASS"
+  },
+  {
+    "id": "U6-mini375-one",
+    "persona": "returning",
+    "khổ": "mini375",
+    "journey": "Thông báo",
+    "step": "bấm một tin: chỉ tin đó chuyển READ, unread-count giảm đúng 1",
+    "expected": "notifications.controller.ts POST :id/read",
+    "actual": "tin cmw16kt5g018vi0v0384mdzrl status=READ; unread 3→2; DB chưa đọc=2",
+    "evidence": "tin cmw16kt5g018vi0v0384mdzrl status=READ; unread 3→2; DB chưa đọc=2",
+    "status": "PASS"
+  },
+  {
+    "id": "U6-mini375-all",
+    "persona": "returning",
+    "khổ": "mini375",
+    "journey": "Thông báo",
+    "step": "\"Đọc tất cả\": mọi tin INAPP thành READ, unread-count 0, nút biến mất",
+    "expected": "notification-feed.service.ts markAllRead",
+    "actual": "unread API=0 DB chưa đọc=0 nút còn=0",
+    "evidence": "unread API=0 DB chưa đọc=0 nút còn=0",
+    "status": "PASS"
+  },
+  {
+    "id": "U6-web375-list",
+    "persona": "returning",
+    "khổ": "web375",
+    "journey": "Thông báo",
+    "step": "có tin chưa đọc: hiện nút \"Đọc tất cả\"; chữ tiếng Việt đúng giọng, không \"Vui lòng\"/\"chúng tôi\"",
+    "expected": "notifications.tsx; brief giọng đợt 8",
+    "actual": "unread API=3; chữ=Thông báo Đọc tất cả Hoàn tiền đơn hàng Tubu đã chuyển khoản hoàn 98.000đ của đơn TUBU2026110385813 về tài khoản Vietcombank ••• 6789 (mã giao dịch UAT-FT26110402-0) 🌿 11 phút trước Hoàn tiền đơn hàng Tubu đã chuyển khoản hoàn 98.000đ của đơn TUBU2026110321053 về tài khoản Vietcombank ••• 6789 (mã giao dịch UAT-FT2611",
+    "evidence": "unread API=3; chữ=Thông báo Đọc tất cả Hoàn tiền đơn hàng Tubu đã chuyển khoản hoàn 98.000đ của đơn TUBU2026110385813 về tài khoản Vietcombank ••• 6789 (mã giao dịch UAT-FT26110402-0) 🌿 11 phút trước Hoàn tiền đơn hàng Tubu đã chuyển khoản hoàn 98.000đ của đơn TUBU2026110321053 về tài khoản Vietcombank ••• 6789 (mã giao dịch UAT-FT2611",
+    "status": "PASS"
+  },
+  {
+    "id": "U6-web375-one",
+    "persona": "returning",
+    "khổ": "web375",
+    "journey": "Thông báo",
+    "step": "bấm một tin: chỉ tin đó chuyển READ, unread-count giảm đúng 1",
+    "expected": "notifications.controller.ts POST :id/read",
+    "actual": "tin cmw16kt5g018vi0v0384mdzrl status=READ; unread 3→2; DB chưa đọc=2",
+    "evidence": "tin cmw16kt5g018vi0v0384mdzrl status=READ; unread 3→2; DB chưa đọc=2",
+    "status": "PASS"
+  },
+  {
+    "id": "U6-web375-all",
+    "persona": "returning",
+    "khổ": "web375",
+    "journey": "Thông báo",
+    "step": "\"Đọc tất cả\": mọi tin INAPP thành READ, unread-count 0, nút biến mất",
+    "expected": "notification-feed.service.ts markAllRead",
+    "actual": "unread API=0 DB chưa đọc=0 nút còn=0",
+    "evidence": "unread API=0 DB chưa đọc=0 nút còn=0",
+    "status": "PASS"
+  },
+  {
+    "id": "U6-web1280-list",
+    "persona": "returning",
+    "khổ": "web1280",
+    "journey": "Thông báo",
+    "step": "có tin chưa đọc: hiện nút \"Đọc tất cả\"; chữ tiếng Việt đúng giọng, không \"Vui lòng\"/\"chúng tôi\"",
+    "expected": "notifications.tsx; brief giọng đợt 8",
+    "actual": "unread API=3; chữ=Tìm sản phẩm 3 N Lại Danh mục Vườn Xanh Ưu đãi Kho quà Mua chung Cộng đồng MUA SẮM Tổng quan Đơn hàng Yêu thích Sổ địa chỉ ĐIỂM VÀ QUÀ Ưu đãi Điểm Xanh và hạng Ví Tubu Kho quà Quà của tôi TÀI KHOẢN Sửa hồ sơ Thông báo Cài đặt Thông báo Đọc tất cả Hoàn tiền đơn hàng Tubu đã chuyển khoản hoàn 98.000đ của đơn TUBU20261103",
+    "evidence": "unread API=3; chữ=Tìm sản phẩm 3 N Lại Danh mục Vườn Xanh Ưu đãi Kho quà Mua chung Cộng đồng MUA SẮM Tổng quan Đơn hàng Yêu thích Sổ địa chỉ ĐIỂM VÀ QUÀ Ưu đãi Điểm Xanh và hạng Ví Tubu Kho quà Quà của tôi TÀI KHOẢN Sửa hồ sơ Thông báo Cài đặt Thông báo Đọc tất cả Hoàn tiền đơn hàng Tubu đã chuyển khoản hoàn 98.000đ của đơn TUBU20261103",
+    "status": "PASS"
+  },
+  {
+    "id": "U6-web1280-one",
+    "persona": "returning",
+    "khổ": "web1280",
+    "journey": "Thông báo",
+    "step": "bấm một tin: chỉ tin đó chuyển READ, unread-count giảm đúng 1",
+    "expected": "notifications.controller.ts POST :id/read",
+    "actual": "tin cmw16kt5g018vi0v0384mdzrl status=READ; unread 3→2; DB chưa đọc=2",
+    "evidence": "tin cmw16kt5g018vi0v0384mdzrl status=READ; unread 3→2; DB chưa đọc=2",
+    "status": "PASS"
+  },
+  {
+    "id": "U6-web1280-all",
+    "persona": "returning",
+    "khổ": "web1280",
+    "journey": "Thông báo",
+    "step": "\"Đọc tất cả\": mọi tin INAPP thành READ, unread-count 0, nút biến mất",
+    "expected": "notification-feed.service.ts markAllRead",
+    "actual": "unread API=0 DB chưa đọc=0 nút còn=0",
+    "evidence": "unread API=0 DB chưa đọc=0 nút còn=0",
+    "status": "PASS"
+  },
+  {
+    "id": "U6-time",
+    "persona": "returning",
+    "khổ": "DB",
+    "journey": "Thông báo",
+    "step": "ghi chú giờ: sentAt mới nhất của returning (UTC) để đối chiếu với ảnh",
+    "expected": "cách hiển thị giờ VN",
+    "actual": "sentAt=2026-11-03T21:09:19.637Z",
+    "evidence": "sentAt=2026-11-03T21:09:19.637Z",
+    "status": "PASS"
+  }
+]

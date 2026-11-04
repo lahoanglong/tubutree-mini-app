@@ -1,0 +1,21 @@
+import { req, guest, short } from './lib.mjs';
+const V = await guest('d_baomat_victim_00000001');
+const X = await guest('d_baomat_attack_00000001');
+console.log('V', V.user.id, 'X', X.user.id);
+const pr = (await req('GET', '/products/nuoc-rua-chen-fuwa3e')).body;
+const varId = pr.variations[0].id;
+let r = await req('POST', '/me/addresses', { tok: V.tok, body: { recipient: 'Nguoi Mua Thu', phone: '0912345678', province: 'Thành phố Hồ Chí Minh', district: '', ward: 'Phường Bến Thành', street: '1 Test', provinceCode: '84_VN79', districtCode: '', wardCode: '84_VN7926743' } });
+console.log('addr create', r.status, short(r.body));
+const addrId = r.body.id;
+r = await req('POST', '/cart/items', { tok: V.tok, body: { variationId: varId, quantity: 1 } });
+console.log('cart add', r.status, short(r.body, 200));
+r = await req('GET', '/cart', { tok: V.tok }); const itemId = r.body.items?.[0]?.id; console.log('cart item', itemId);
+r = await req('POST', '/checkout/place-order', { tok: V.tok, body: { addressId: addrId, paymentMethod: 'COD' }, headers: { 'idempotency-key': 'baomat-v-' + Date.now() } });
+console.log('place', r.status, short(r.body, 400));
+const code = r.body.code ?? r.body.order?.code;
+const out = { V: { id: V.user.id }, X: { id: X.user.id }, addrId, itemId, code };
+// re-add a cart item to V so that cart item exists after the order
+r = await req('POST', '/cart/items', { tok: V.tok, body: { variationId: varId, quantity: 1 } });
+r = await req('GET', '/cart', { tok: V.tok }); out.itemId = r.body.items?.[0]?.id;
+import fs from 'node:fs'; fs.writeFileSync('idor-ctx.json', JSON.stringify(out, null, 1));
+console.log(out);

@@ -1,0 +1,110 @@
+[
+  {
+    "id": "L5-RUI-00",
+    "persona": "returning",
+    "size": "api",
+    "journey": "Đổi/trả bằng giao diện (375)",
+    "step": "Chuẩn bị: COD 2 món đã giao, khách xin trả 1 món",
+    "expect": "201 REQUESTED",
+    "actual": "HTTP 201 REQUESTED",
+    "evidence": "{\"id\":\"cmw184dyk03gpjtc4sa1s8nwo\",\"orderId\":\"cmw184d1q03fwjtc4ozju94zr\",\"userId\":\"uat_returning\",\"reason\":\"Chai bị rò rỉ khi nhận (UAT giao diện)\",\"reasonCode\":",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RUI-01",
+    "persona": "cskh",
+    "size": "web375",
+    "journey": "Đổi/trả bằng giao diện (375)",
+    "step": "CSKH tìm đơn TUBU2026110306439 ở tab Đổi / Trả",
+    "expect": "thấy thẻ yêu cầu: dòng khách trả (1/2), lý do khách ghi, nút \"Duyệt hoàn tiền\" và \"Từ chối\"",
+    "actual": "mã đơn=true; nút duyệt=true; lý do khách=true",
+    "evidence": "Đơn: TUBU2026110306439 Chờ duyệt Khách: Nguyễn Thị Quay Lại · SĐT: 0901000003 · Tổng đơn: 240.000đ (COD (Tiền mặt)) 04:52 04/11/2026 Nước rửa chén sinh học Fuwa3e · 1L Trả 1/2 Lý do: Sản phẩm lỗi, hỏng. Chai bị rò rỉ khi nhận (UAT giao diện) Ghi chú duyệt / lý do từ chối (bắt buộc khi từ chối) Duyệt",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RUI-02",
+    "persona": "cskh",
+    "size": "web375",
+    "journey": "Đổi/trả bằng giao diện (375)",
+    "step": "Bấm \"Từ chối\" khi chưa ghi lý do",
+    "expect": "báo \"Ghi lý do từ chối để báo cho khách (tối thiểu 3 ký tự).\"; đơn vẫn REQUESTED",
+    "actual": "cảnh báo: \"Ghi lý do từ chối để báo cho khách (tối thiểu 3 ký tự).\"",
+    "evidence": null,
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RUI-03",
+    "persona": "cskh",
+    "size": "web375",
+    "journey": "Đổi/trả bằng giao diện (375)",
+    "step": "Bấm \"Duyệt hoàn tiền\": bảng kiểm tra trước khi duyệt",
+    "expect": "hiện \"Trả một phần — kiểm tra trước khi duyệt\", Tổng hoàn = số xem trước của API (120000đ), nơi nhận tiền, nút \"Xác nhận hoàn …\"; chưa ghi DB",
+    "actual": "xem trước API 120000đ; có số trên màn=true",
+    "evidence": "Trả một phần — kiểm tra trước khi duyệt Nước rửa chén sinh học Fuwa3e · 1L ×1 120.000đ Phí ship hoàn 0đ Tổng hoàn 120.000đ Về Ví Tubu của khách (cộng ngay khi duyệt) Thu hồi 2880 Điểm Xanh đã tích Lỗi do Tubu (hoàn cả phí ship dù chỉ trả một phần) Đơn giao qua Pancake: sau khi duyệt, tạo phiếu trả/nhận hàng về trên Pancake. Kho chỉ cộng lại khi bấm \"Đã nhận hàng về\". Quay lại Xác nhận hoàn 120.000",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RUI-04",
+    "persona": "cskh",
+    "size": "web375",
+    "journey": "Đổi/trả bằng giao diện (375)",
+    "step": "Xác nhận hoàn trong bảng kiểm tra",
+    "expect": "POST review 2xx; yêu cầu APPROVED; Ví khách +đúng số xem trước; sổ Ví = số dư; điểm = sổ điểm và giảm (đảo điểm đơn); đơn vẫn DELIVERED (trả 1/2)",
+    "actual": "POST /admin/return-requests/cmw184dyk03gpjtc4sa1s8nwo/review 201; yêu cầu APPROVED; Ví 2640000 -> 2760000 (+120000; xem trước 120000); sổ Ví 2760000; điểm 61320 -> 58440 (sổ 58440); đơn DELIVERED",
+    "evidence": {
+      "pv": {
+        "requestId": "cmw184dyk03gpjtc4sa1s8nwo",
+        "shopFault": true,
+        "defaultShopFault": true,
+        "isFull": false,
+        "goods": 120000,
+        "shipping": 0,
+        "refund": 120000,
+        "moneyRefundable": true,
+        "destination": {
+          "method": "WALLET"
+        },
+        "pointsUsedBack": 0,
+        "pointsEarnedBack": 2880,
+        "lines": [
+          {
+            "orderItemId": "cmw184d1q03fxjtc4paji8hz0",
+            "quantity": 1,
+            "refundAmount": 120000,
+            "productName": "Nước rửa chén sinh học Fuwa3e",
+            "variationName": "1L",
+            "orderedQuantity": 2
+          }
+        ],
+        "pancakeTask": true,
+        "returnTo": {
+          "kind": "TUBU",
+          "name": "Kho Tubu Tree"
+        }
+      }
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RUI-05",
+    "persona": "kho",
+    "size": "web375",
+    "journey": "Đổi/trả bằng giao diện (375)",
+    "step": "Kho tìm đơn TUBU2026110306439 ở tab Đổi / Trả (mục Chờ nhận hàng về)",
+    "expect": "thấy thẻ \"Chưa nhận hàng trả về — kho chưa cộng\" và chỉ nút \"Đã nhận hàng về\" (không có Duyệt / Từ chối)",
+    "actual": "nút: [\"Đã nhận hàng về\"]; thấy dòng chưa nhận=true",
+    "evidence": "Đơn: TUBU2026110306439 Đã duyệt (Hoàn tiền) Khách: Nguyễn Thị Quay Lại · SĐT: 0901000003 · Tổng đơn: 240.000đ (COD (Tiền mặt)) 04:52 04/11/2026 Nước rửa chén sinh học Fuwa3e · 1L Trả 1/2 Lý do: Sản phẩm lỗi, hỏng. Chai bị rò rỉ khi nhận (UAT giao diện) Đã hoàn",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RUI-06",
+    "persona": "kho",
+    "size": "web375",
+    "journey": "Đổi/trả bằng giao diện (375)",
+    "step": "Kho xác nhận \"Đã nhận hàng về\" trong hộp thoại",
+    "expect": "hộp hỏi trước, chưa cộng kho khi chưa xác nhận; sau xác nhận POST 2xx, receivedAt có, tồn kho +1, Ví khách không đổi",
+    "actual": "hộp hỏi=true; POST /admin/return-requests/cmw184dyk03gpjtc4sa1s8nwo/received 201; kho 123 -> 124; receivedAt=2026-11-03T21:52:46.429Z; Ví 2760000 -> 2760000",
+    "evidence": null,
+    "verdict": "PASS"
+  }
+]

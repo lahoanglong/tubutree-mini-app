@@ -1,0 +1,30 @@
+{
+  "surface": "mini375",
+  "stock0": 255,
+  "phone": "0901000070",
+  "order": {
+    "id": "cmw18vs02017rt28tqgw7qzit",
+    "code": "TUBU2026110322412",
+    "st": "CONFIRMED",
+    "t": 108000,
+    "sub": 89000,
+    "ship": 19000,
+    "pm": "COD",
+    "uid": "uat_returning",
+    "ref": "uat_returning",
+    "pfc": true,
+    "src": "ctv_assisted"
+  },
+  "items": [
+    {
+      "q": 1,
+      "u": 89000
+    }
+  ],
+  "comm": {
+    "a": 7120,
+    "s": "PENDING",
+    "r": 8
+  },
+  "stock1": 254
+}

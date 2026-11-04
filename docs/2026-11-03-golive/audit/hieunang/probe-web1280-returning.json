@@ -1,0 +1,414 @@
+{
+ "meta": {
+  "date": "2026-11-03T10:30:26.573Z",
+  "app": "web1280",
+  "persona": "returning",
+  "delay": 0,
+  "cpu": 1,
+  "load": {
+   "loadAvg": "Load Avg: 82.36, 108.45, 120.77 ",
+   "cpu": "CPU usage: 43.39% user, 56.60% sys, 0.0% idle "
+  }
+ },
+ "rows": [
+  {
+   "app": "web1280",
+   "key": "home",
+   "path": "/",
+   "persona": "returning",
+   "ms": 11765,
+   "apiCalls": 12,
+   "distinct": 12,
+   "dup": [],
+   "bad": [],
+   "cls": 0.324,
+   "shifts": [
+    {
+     "v": 0.0299,
+     "t": 4273,
+     "s": [
+      "DIV.tubu-press-card.group \"Bán chạyCao cà gai leo BH.Nong\" y562→562 h238",
+      "DIV.tubu-press-card.group \"Bán chạy-12%Hạt điều rang mộc \" y562→562 h238",
+      "DIV.tubu-press-card.group \"Bán chạyMật ong rừng nguyên ch\" y562→562 h238",
+      "DIV.tubu-press-card.group \"Bán chạyTiêu đen Chư Sê BH.Non\" y562→562 h238",
+      "DIV.tubu-press-card.group \"Bán chạyTrà thảo mộc thanh nhi\" y562→562 h238"
+     ]
+    },
+    {
+     "v": 0.2925,
+     "t": 4429,
+     "s": [
+      "DIV.contents.lg:col-span-12 \"Giờ vàngMã giảm giáĐổi rácMua \" y238→302 h498",
+      "BUTTON.tubu-press \"Điểm danh\" y160→160 h44",
+      "svg \"\" y174→174 h16"
+     ]
+    }
+   ],
+   "fcp": 680,
+   "lcp": 4440,
+   "lcpEl": "DIV.",
+   "longTasks": 3,
+   "requests": 123,
+   "jsKB": 547,
+   "totalKB": 855,
+   "consoleErrors": [],
+   "pageErrors": [],
+   "finalPath": "/",
+   "body": "Tìm sản phẩm 3 N Lại Danh mục Vườn Xanh Ưu đãi Đổi rác lấy quà Kho quà Mua chung Cộng đồng Tubu Tree",
+   "err": null,
+   "calls": {
+    "GET /home": 1,
+    "POST /auth/refresh": 1,
+    "GET /feed/public-preview": 1,
+    "GET /me/summary": 1,
+    "GET /me/wishlist/ids": 1,
+    "GET /feed": 1,
+    "GET /home/me": 1,
+    "GET /me/daily-check-in": 1,
+    "GET /me/coupons": 1,
+    "GET /orders/home-todo": 1,
+    "GET /cart": 1,
+    "GET /me/loyalty": 1
+   }
+  },
+  {
+   "app": "web1280",
+   "key": "browse",
+   "path": "/san-pham",
+   "persona": "returning",
+   "ms": 9656,
+   "apiCalls": 8,
+   "distinct": 8,
+   "dup": [],
+   "bad": [],
+   "cls": 0.002,
+   "shifts": [],
+   "fcp": 828,
+   "lcp": 828,
+   "lcpEl": "SPAN.",
+   "longTasks": 0,
+   "requests": 114,
+   "jsKB": 540,
+   "totalKB": 830,
+   "consoleErrors": [],
+   "pageErrors": [],
+   "finalPath": "/san-pham",
+   "body": "3 N Lại Danh mục Vườn Xanh Ưu đãi Đổi rác lấy quà Kho quà Mua chung Cộng đồng Trang chủ Danh mục Dan",
+   "err": null,
+   "calls": {
+    "GET /config/public": 1,
+    "GET /flash-sales/active": 1,
+    "POST /auth/refresh": 1,
+    "GET /me/summary": 1,
+    "GET /me/wishlist/ids": 1,
+    "GET /me/daily-check-in": 1,
+    "GET /me/coupons": 1,
+    "GET /cart": 1
+   }
+  },
+  {
+   "app": "web1280",
+   "key": "product-slug",
+   "path": "/san-pham/nuoc-rua-chen-fuwa3e",
+   "persona": "returning",
+   "ms": 8134,
+   "apiCalls": 12,
+   "distinct": 12,
+   "dup": [],
+   "bad": [],
+   "cls": 0.017,
+   "shifts": [
+    {
+     "v": 0.0146,
+     "t": 3586,
+     "s": [
+      "DIV.max-md:contents \"Phân loại1L · 120.000đCan 5L ·\" y432→500 h218",
+      "DIV.tubu-press \"Vận chuyểnTubu Tree giao hàng\" y364→432 h68",
+      "DIV.max-md:order-2.max-md:flex \"Đặt định kỳ — tiết kiệm 12%\" y674→742 h56",
+      "DIV.max-md:order-11 \"Mở nhóm mua chung — nhận mã gi\" y730→798 h2",
+      "DIV.mt-3.flex \"Eco\" y648→716 h26"
+     ]
+    }
+   ],
+   "fcp": 1564,
+   "lcp": 1564,
+   "lcpEl": "H1.font-display text-2xl font-semibold text-stone-900 max-md:fo",
+   "longTasks": 0,
+   "requests": 109,
+   "jsKB": 556,
+   "totalKB": 858,
+   "consoleErrors": [],
+   "pageErrors": [],
+   "finalPath": "/san-pham/nuoc-rua-chen-fuwa3e",
+   "body": "Tìm sản phẩm 3 N Lại Danh mục Vườn Xanh Ưu đãi Đổi rác lấy quà Kho quà Mua chung Cộng đồng Trang chủ",
+   "err": null,
+   "calls": {
+    "GET /config/public": 1,
+    "GET /flash-sales/active": 1,
+    "GET /products/nuoc-rua-chen-fuwa3e": 1,
+    "GET /products/nuoc-rua-chen-fuwa3e/reviews": 1,
+    "POST /auth/refresh": 1,
+    "GET /me/summary": 1,
+    "GET /affiliate/me": 1,
+    "GET /me/wishlist/ids": 1,
+    "GET /me/coupons": 1,
+    "GET /products/for-you": 1,
+    "GET /products/nuoc-rua-chen-fuwa3e/reviews/can-review": 1,
+    "GET /cart": 1
+   }
+  },
+  {
+   "app": "web1280",
+   "key": "cart",
+   "path": "/gio-hang",
+   "persona": "returning",
+   "ms": 6453,
+   "apiCalls": 5,
+   "distinct": 5,
+   "dup": [],
+   "bad": [],
+   "cls": 0.064,
+   "shifts": [
+    {
+     "v": 0.0589,
+     "t": 1207,
+     "s": [
+      "FOOTER.mt-12.hidden \"Sống xanh An Lành — mỹ phẩm và\" y0→622 h178",
+      "NAV.ml-auto.flex \"NLại\" y0→0 h68"
+     ]
+    }
+   ],
+   "fcp": 360,
+   "lcp": 1216,
+   "lcpEl": "IMG.h-10 w-auto",
+   "longTasks": 0,
+   "requests": 117,
+   "jsKB": 612,
+   "totalKB": 908,
+   "consoleErrors": [],
+   "pageErrors": [],
+   "finalPath": "/gio-hang",
+   "body": "Tìm sản phẩm 3 N Lại Danh mục Vườn Xanh Ưu đãi Đổi rác lấy quà Kho quà Mua chung Cộng đồng Trang chủ",
+   "err": null,
+   "calls": {
+    "GET /config/public": 1,
+    "POST /auth/refresh": 1,
+    "GET /me/summary": 1,
+    "GET /cart": 1,
+    "GET /me/coupons": 1
+   }
+  },
+  {
+   "app": "web1280",
+   "key": "checkout",
+   "path": "/thanh-toan",
+   "persona": "returning",
+   "ms": 8467,
+   "apiCalls": 8,
+   "distinct": 8,
+   "dup": [],
+   "bad": [],
+   "cls": 0.003,
+   "shifts": [],
+   "fcp": 364,
+   "lcp": 4180,
+   "lcpEl": "P.text-xs text-stone-600 hidden lg:block",
+   "longTasks": 0,
+   "requests": 110,
+   "jsKB": 557,
+   "totalKB": 837,
+   "consoleErrors": [],
+   "pageErrors": [],
+   "finalPath": "/thanh-toan",
+   "body": "Tìm sản phẩm 3 N Lại Danh mục Vườn Xanh Ưu đãi Đổi rác lấy quà Kho quà Mua chung Cộng đồng Trang chủ",
+   "err": null,
+   "calls": {
+    "GET /config/public": 1,
+    "POST /auth/refresh": 1,
+    "GET /me/summary": 1,
+    "GET /me/addresses": 1,
+    "GET /me": 1,
+    "GET /cart": 1,
+    "POST /checkout/quote": 1,
+    "GET /me/coupons": 1
+   }
+  },
+  {
+   "app": "web1280",
+   "key": "orders",
+   "path": "/tai-khoan/don-hang",
+   "persona": "returning",
+   "ms": 7923,
+   "apiCalls": 7,
+   "distinct": 7,
+   "dup": [],
+   "bad": [],
+   "cls": 0.015,
+   "shifts": [
+    {
+     "v": 0.0139,
+     "t": 1347,
+     "s": [
+      "DIV.max-md:px-3 \"Tất cảChờ thanh toánĐang xử lý\" y202→214 h360",
+      "NAV.ml-auto.flex \"NLại\" y0→0 h68"
+     ]
+    }
+   ],
+   "fcp": 432,
+   "lcp": 1748,
+   "lcpEl": "DIV.truncate text-sm text-stone-900",
+   "longTasks": 0,
+   "requests": 133,
+   "jsKB": 648,
+   "totalKB": 966,
+   "consoleErrors": [],
+   "pageErrors": [],
+   "finalPath": "/tai-khoan/don-hang",
+   "body": "Tìm sản phẩm 3 N Lại Danh mục Vườn Xanh Ưu đãi Đổi rác lấy quà Kho quà Mua chung Cộng đồng MUA SẮM T",
+   "err": null,
+   "calls": {
+    "GET /config/public": 1,
+    "POST /auth/refresh": 1,
+    "GET /me/summary": 1,
+    "GET /orders": 1,
+    "GET /me/purchased-items": 1,
+    "GET /flash-sales/active": 1,
+    "GET /cart": 1
+   }
+  },
+  {
+   "app": "web1280",
+   "key": "notifications",
+   "path": "/tai-khoan/thong-bao",
+   "persona": "returning",
+   "ms": 7709,
+   "apiCalls": 5,
+   "distinct": 5,
+   "dup": [],
+   "bad": [],
+   "cls": 0.013,
+   "shifts": [
+    {
+     "v": 0.0121,
+     "t": 1539,
+     "s": [
+      "DIV.max-md:px-4 \"\" y202→208 h208",
+      "NAV.ml-auto.flex \"NLại\" y0→0 h68"
+     ]
+    }
+   ],
+   "fcp": 252,
+   "lcp": 1876,
+   "lcpEl": "SPAN.mt-0.5 block text-sm text-stone-700 max-md:text-[color:var(-",
+   "longTasks": 0,
+   "requests": 122,
+   "jsKB": 625,
+   "totalKB": 935,
+   "consoleErrors": [],
+   "pageErrors": [],
+   "finalPath": "/tai-khoan/thong-bao",
+   "body": "Tìm sản phẩm 3 N Lại Danh mục Vườn Xanh Ưu đãi Đổi rác lấy quà Kho quà Mua chung Cộng đồng MUA SẮM T",
+   "err": null,
+   "calls": {
+    "GET /config/public": 1,
+    "POST /auth/refresh": 1,
+    "GET /me/notifications": 1,
+    "GET /me/summary": 1,
+    "GET /cart": 1
+   }
+  },
+  {
+   "app": "web1280",
+   "key": "loyalty",
+   "path": "/tai-khoan/diem-xanh",
+   "persona": "returning",
+   "ms": 7281,
+   "apiCalls": 9,
+   "distinct": 8,
+   "dup": [
+    [
+     "GET /config/public",
+     2
+    ]
+   ],
+   "bad": [],
+   "cls": 0.003,
+   "shifts": [],
+   "fcp": 232,
+   "lcp": 248,
+   "lcpEl": "H1.font-display text-2xl font-semibold text-stone-900 max-md:te",
+   "longTasks": 0,
+   "requests": 126,
+   "jsKB": 625,
+   "totalKB": 935,
+   "consoleErrors": [],
+   "pageErrors": [],
+   "finalPath": "/tai-khoan/diem-xanh",
+   "body": "Tìm sản phẩm 3 N Lại Danh mục Vườn Xanh Ưu đãi Đổi rác lấy quà Kho quà Mua chung Cộng đồng MUA SẮM T",
+   "err": null,
+   "calls": {
+    "GET /config/public": 2,
+    "POST /auth/refresh": 1,
+    "GET /me/summary": 1,
+    "GET /me/points/transactions": 1,
+    "GET /me/coupons": 1,
+    "GET /me/loyalty": 1,
+    "GET /cart": 1,
+    "GET /me/daily-check-in": 1
+   }
+  },
+  {
+   "app": "web1280",
+   "key": "game",
+   "path": "/vuon-xanh",
+   "persona": "returning",
+   "ms": 6171,
+   "apiCalls": 10,
+   "distinct": 10,
+   "dup": [],
+   "bad": [],
+   "cls": 0.048,
+   "shifts": [
+    {
+     "v": 0.0097,
+     "t": 902,
+     "s": [
+      "FOOTER.mt-12.hidden \"Sống xanh An Lành — mỹ phẩm và\" y0→762 h38",
+      "NAV.ml-auto.flex \"NLại\" y0→0 h68"
+     ]
+    },
+    {
+     "v": 0.0366,
+     "t": 1548,
+     "s": [
+      "FOOTER.mt-12.hidden \"Sống xanh An Lành — mỹ phẩm và\" y762→0 h0"
+     ]
+    }
+   ],
+   "fcp": 100,
+   "lcp": 1592,
+   "lcpEl": "P.text-caption text-stone-600",
+   "longTasks": 0,
+   "requests": 114,
+   "jsKB": 577,
+   "totalKB": 862,
+   "consoleErrors": [],
+   "pageErrors": [],
+   "finalPath": "/vuon-xanh",
+   "body": "Tìm sản phẩm 3 N Lại Danh mục Vườn Xanh Ưu đãi Đổi rác lấy quà Kho quà Mua chung Cộng đồng Vườn Xanh",
+   "err": null,
+   "calls": {
+    "GET /config/public": 1,
+    "POST /auth/refresh": 1,
+    "GET /me/summary": 1,
+    "GET /me/daily-check-in": 1,
+    "GET /game/quiz/today": 1,
+    "GET /game/profile": 1,
+    "GET /game/missions": 1,
+    "GET /me/coupons": 1,
+    "GET /cart": 1,
+    "GET /me/loyalty": 1
+   }
+  }
+ ]
+}

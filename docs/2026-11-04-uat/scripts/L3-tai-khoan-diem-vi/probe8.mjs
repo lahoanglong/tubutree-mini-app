@@ -1,0 +1,15 @@
+import { done, SHOTS } from './lib3.mjs';
+import { openSurface } from './ui-lib.mjs';
+const s = await openSurface('mini375', 'ctv', '/addresses');
+const p = s.s.page;
+await p.waitForTimeout(3000);
+await p.getByText('Thêm địa chỉ mới').first().click();
+await p.waitForTimeout(1500);
+await p.getByText('Chọn tỉnh/thành', { exact: true }).first().click();
+await p.waitForTimeout(1500);
+await p.screenshot({ path: `${SHOTS}/addr-2-chon-tinh-mini375.png` });
+console.log(JSON.stringify(await p.getByRole('button').allInnerTexts()));
+console.log((await p.locator('body').innerText()).replace(/\s+/g, ' ').slice(0, 600));
+console.log(JSON.stringify(await p.getByRole('option').allInnerTexts()));
+await s.s.close();
+await done();

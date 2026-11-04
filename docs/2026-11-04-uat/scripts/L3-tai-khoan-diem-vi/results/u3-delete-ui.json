@@ -1,0 +1,79 @@
+[
+  {
+    "id": "U3-mini375a",
+    "persona": "returning",
+    "khổ": "mini375",
+    "journey": "Xoá tài khoản trên giao diện",
+    "step": "ví còn tiền: hộp xoá hiện số dư + \"không hoàn lại\"; nút Gửi yêu cầu xoá khoá tới khi tick đồng ý",
+    "expected": "account-deletion-copy.ts canSubmitDeletion",
+    "actual": "ví=914000 hasNotice=true nút khoá trước tick=true sau tick=false",
+    "evidence": "ví=914000 hasNotice=true nút khoá trước tick=true sau tick=false",
+    "status": "PASS"
+  },
+  {
+    "id": "U3-mini375b",
+    "persona": "returning",
+    "khổ": "mini375",
+    "journey": "Xoá tài khoản trên giao diện",
+    "step": "bấm Gửi: body có acknowledgedWalletBalance = số dư + acceptWalletForfeit; DB có yêu cầu PENDING; tài khoản chưa xoá",
+    "expected": "users.service.ts; account-deletion-copy.ts walletForfeitConsent",
+    "actual": "body={\"acknowledgedWalletBalance\":914000,\"acceptWalletForfeit\":true} SQL={\"status\":\"PENDING\",\"fa\":914000} chữ sau gửi: \"Xoá tài khoản\"",
+    "evidence": "body={\"acknowledgedWalletBalance\":914000,\"acceptWalletForfeit\":true} SQL={\"status\":\"PENDING\",\"fa\":914000} chữ sau gửi: \"Xoá tài khoản\"",
+    "status": "PASS"
+  },
+  {
+    "id": "U3-web375a",
+    "persona": "returning",
+    "khổ": "web375",
+    "journey": "Xoá tài khoản trên giao diện",
+    "step": "ví còn tiền: hộp xoá hiện số dư + \"không hoàn lại\"; nút Gửi yêu cầu xoá khoá tới khi tick đồng ý",
+    "expected": "account-deletion-copy.ts canSubmitDeletion",
+    "actual": "ví=914000 hasNotice=true nút khoá trước tick=true sau tick=false",
+    "evidence": "ví=914000 hasNotice=true nút khoá trước tick=true sau tick=false",
+    "status": "PASS"
+  },
+  {
+    "id": "U3-web375b",
+    "persona": "returning",
+    "khổ": "web375",
+    "journey": "Xoá tài khoản trên giao diện",
+    "step": "bấm Gửi: body có acknowledgedWalletBalance = số dư + acceptWalletForfeit; DB có yêu cầu PENDING; tài khoản chưa xoá",
+    "expected": "users.service.ts; account-deletion-copy.ts walletForfeitConsent",
+    "actual": "body={\"acknowledgedWalletBalance\":914000,\"acceptWalletForfeit\":true} SQL={\"status\":\"PENDING\",\"fa\":914000} chữ sau gửi: \"Yêu cầu đã được ghi nhận. CSKH sẽ liên hệ xử lý trong vòng 3 ngày làm việc — tài khoản CHƯA bị xoá.\"",
+    "evidence": "body={\"acknowledgedWalletBalance\":914000,\"acceptWalletForfeit\":true} SQL={\"status\":\"PENDING\",\"fa\":914000} chữ sau gửi: \"Yêu cầu đã được ghi nhận. CSKH sẽ liên hệ xử lý trong vòng 3 ngày làm việc — tài khoản CHƯA bị xoá.\"",
+    "status": "PASS"
+  },
+  {
+    "id": "U3-web1280a",
+    "persona": "returning",
+    "khổ": "web1280",
+    "journey": "Xoá tài khoản trên giao diện",
+    "step": "ví còn tiền: hộp xoá hiện số dư + \"không hoàn lại\"; nút Gửi yêu cầu xoá khoá tới khi tick đồng ý",
+    "expected": "account-deletion-copy.ts canSubmitDeletion",
+    "actual": "ví=914000 hasNotice=true nút khoá trước tick=true sau tick=false",
+    "evidence": "ví=914000 hasNotice=true nút khoá trước tick=true sau tick=false",
+    "status": "PASS"
+  },
+  {
+    "id": "U3-web1280b",
+    "persona": "returning",
+    "khổ": "web1280",
+    "journey": "Xoá tài khoản trên giao diện",
+    "step": "bấm Gửi: body có acknowledgedWalletBalance = số dư + acceptWalletForfeit; DB có yêu cầu PENDING; tài khoản chưa xoá",
+    "expected": "users.service.ts; account-deletion-copy.ts walletForfeitConsent",
+    "actual": "body={\"acknowledgedWalletBalance\":914000,\"acceptWalletForfeit\":true} SQL={\"status\":\"PENDING\",\"fa\":914000} chữ sau gửi: \"Yêu cầu đã được ghi nhận. CSKH sẽ liên hệ xử lý trong vòng 3 ngày làm việc — tài khoản CHƯA bị xoá.\"",
+    "evidence": "body={\"acknowledgedWalletBalance\":914000,\"acceptWalletForfeit\":true} SQL={\"status\":\"PENDING\",\"fa\":914000} chữ sau gửi: \"Yêu cầu đã được ghi nhận. CSKH sẽ liên hệ xử lý trong vòng 3 ngày làm việc — tài khoản CHƯA bị xoá.\"",
+    "status": "PASS"
+  },
+  {
+    "id": "U3-vi0",
+    "persona": "ctv",
+    "khổ": "mini375",
+    "journey": "Xoá tài khoản trên giao diện",
+    "step": "ví 0đ: không có cảnh báo ví / ô đồng ý, nút Gửi dùng được ngay",
+    "expected": "canSubmitDeletion(0,false)=true",
+    "actual": "có chữ ví=false nút khoá=false",
+    "evidence": "có chữ ví=false nút khoá=false",
+    "status": "PASS"
+  }
+]

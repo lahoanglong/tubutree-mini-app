@@ -1,0 +1,706 @@
+[
+  {
+    "id": "L5-UX-admin-inbox",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=inbox (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=?Hôm nay,, URL=inbox; 8 request, 0 lỗi; được phép nhưng bị đẩy sang tab ?Hôm nay,",
+    "evidence": {
+      "shown": "?Hôm nay,",
+      "urlTab": "inbox",
+      "nContent": 1019,
+      "bad": []
+    },
+    "verdict": "FAIL"
+  },
+  {
+    "id": "L5-UX-admin-orders",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=orders (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=?Đơn hàng,, URL=orders; 10 request, 0 lỗi; được phép nhưng bị đẩy sang tab ?Đơn hàng,",
+    "evidence": {
+      "shown": "?Đơn hàng,",
+      "urlTab": "orders",
+      "nContent": 1362,
+      "bad": []
+    },
+    "verdict": "FAIL"
+  },
+  {
+    "id": "L5-UX-admin-productCategories",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=productCategories (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=?Sản phẩm,, URL=productCategories; 7 request, 0 lỗi; được phép nhưng bị đẩy sang tab ?Sản phẩm,",
+    "evidence": {
+      "shown": "?Sản phẩm,",
+      "urlTab": "productCategories",
+      "nContent": 4781,
+      "bad": []
+    },
+    "verdict": "FAIL"
+  },
+  {
+    "id": "L5-UX-admin-users",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=users (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=users, URL=users; 7 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "users",
+      "urlTab": "users",
+      "nContent": 1478,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-admin-supportChat",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=supportChat (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=supportChat, URL=supportChat; 7 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "supportChat",
+      "urlTab": "supportChat",
+      "nContent": 986,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-admin-community",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=community (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=community, URL=community; 7 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "community",
+      "urlTab": "community",
+      "nContent": 485,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-admin-coupons",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=coupons (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=coupons, URL=coupons; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "coupons",
+      "urlTab": "coupons",
+      "nContent": 1228,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-admin-waste",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=waste (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=waste, URL=waste; 9 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "waste",
+      "urlTab": "waste",
+      "nContent": 1295,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-admin-storefronts",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=storefronts (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=?Gian hàng,, URL=storefronts; 6 request, 0 lỗi; được phép nhưng bị đẩy sang tab ?Gian hàng,",
+    "evidence": {
+      "shown": "?Gian hàng,",
+      "urlTab": "storefronts",
+      "nContent": 815,
+      "bad": []
+    },
+    "verdict": "FAIL"
+  },
+  {
+    "id": "L5-UX-admin-merchantProducts",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=merchantProducts (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=merchantProducts, URL=merchantProducts; 8 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "merchantProducts",
+      "urlTab": "merchantProducts",
+      "nContent": 849,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-admin-dealers",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=dealers (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=dealers, URL=dealers; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "dealers",
+      "urlTab": "dealers",
+      "nContent": 589,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-admin-dashboard",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=dashboard (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=dashboard, URL=dashboard; 10 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "dashboard",
+      "urlTab": "dashboard",
+      "nContent": 1286,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-admin-analytics",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=analytics (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=analytics, URL=analytics; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "analytics",
+      "urlTab": "analytics",
+      "nContent": 666,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-admin-reports",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=reports (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=reports, URL=reports; 7 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "reports",
+      "urlTab": "reports",
+      "nContent": 3122,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-admin-externalOrders",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=externalOrders (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=externalOrders, URL=externalOrders; 7 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "externalOrders",
+      "urlTab": "externalOrders",
+      "nContent": 797,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-admin-returns",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=returns (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=returns, URL=returns; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "returns",
+      "urlTab": "returns",
+      "nContent": 684,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-admin-customerRefunds",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=customerRefunds (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=customerRefunds, URL=customerRefunds; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "customerRefunds",
+      "urlTab": "customerRefunds",
+      "nContent": 1108,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-admin-subscriptions",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=subscriptions (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=subscriptions, URL=subscriptions; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "subscriptions",
+      "urlTab": "subscriptions",
+      "nContent": 613,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-admin-reviews",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=reviews (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=reviews, URL=reviews; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "reviews",
+      "urlTab": "reviews",
+      "nContent": 630,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-admin-quickReplies",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=quickReplies (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=quickReplies, URL=quickReplies; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "quickReplies",
+      "urlTab": "quickReplies",
+      "nContent": 777,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-admin-flashSales",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=flashSales (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=flashSales, URL=flashSales; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "flashSales",
+      "urlTab": "flashSales",
+      "nContent": 964,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-admin-posCredits",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=posCredits (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=posCredits, URL=posCredits; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "posCredits",
+      "urlTab": "posCredits",
+      "nContent": 715,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-admin-externalClaims",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=externalClaims (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=externalClaims, URL=externalClaims; 8 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "externalClaims",
+      "urlTab": "externalClaims",
+      "nContent": 1100,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-admin-campaigns",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=campaigns (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=campaigns, URL=campaigns; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "campaigns",
+      "urlTab": "campaigns",
+      "nContent": 523,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-admin-bundles",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=bundles (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=bundles, URL=bundles; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "bundles",
+      "urlTab": "bundles",
+      "nContent": 563,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-admin-engagement",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=engagement (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=engagement, URL=engagement; 8 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "engagement",
+      "urlTab": "engagement",
+      "nContent": 8639,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-admin-dealerClaims",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=dealerClaims (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=dealerClaims, URL=dealerClaims; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "dealerClaims",
+      "urlTab": "dealerClaims",
+      "nContent": 562,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-admin-dealerAccounts",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=dealerAccounts (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=dealerAccounts, URL=dealerAccounts; 8 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "dealerAccounts",
+      "urlTab": "dealerAccounts",
+      "nContent": 1447,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-admin-dealerPrices",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=dealerPrices (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=dealerPrices, URL=dealerPrices; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "dealerPrices",
+      "urlTab": "dealerPrices",
+      "nContent": 479,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-admin-commissionRates",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=commissionRates (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=commissionRates, URL=commissionRates; 7 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "commissionRates",
+      "urlTab": "commissionRates",
+      "nContent": 3809,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-admin-payouts",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=payouts (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=payouts, URL=payouts; 7 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "payouts",
+      "urlTab": "payouts",
+      "nContent": 1240,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-admin-merchantFulfilment",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=merchantFulfilment (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=merchantFulfilment, URL=merchantFulfilment; 7 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "merchantFulfilment",
+      "urlTab": "merchantFulfilment",
+      "nContent": 761,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-admin-brands",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=brands (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=brands, URL=brands; 7 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "brands",
+      "urlTab": "brands",
+      "nContent": 979,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-admin-faqs",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=faqs (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=faqs, URL=faqs; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "faqs",
+      "urlTab": "faqs",
+      "nContent": 628,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-admin-contentKit",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=contentKit (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=contentKit, URL=contentKit; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "contentKit",
+      "urlTab": "contentKit",
+      "nContent": 632,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-admin-academy",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=academy (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=academy, URL=academy; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "academy",
+      "urlTab": "academy",
+      "nContent": 633,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-admin-notificationTemplates",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=notificationTemplates (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=notificationTemplates, URL=notificationTemplates; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "notificationTemplates",
+      "urlTab": "notificationTemplates",
+      "nContent": 32131,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-admin-staffRoster",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=staffRoster (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=staffRoster, URL=staffRoster; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "staffRoster",
+      "urlTab": "staffRoster",
+      "nContent": 3776,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-admin-shiftApproval",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=shiftApproval (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=shiftApproval, URL=shiftApproval; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "shiftApproval",
+      "urlTab": "shiftApproval",
+      "nContent": 467,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-admin-payroll",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=payroll (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=payroll, URL=payroll; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "payroll",
+      "urlTab": "payroll",
+      "nContent": 1076,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-admin-attendance",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=attendance (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=attendance, URL=attendance; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "attendance",
+      "urlTab": "attendance",
+      "nContent": 446,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-admin-config",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=config (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=config, URL=config; 7 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "config",
+      "urlTab": "config",
+      "nContent": 4525,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-admin-opsHealth",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=opsHealth (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=opsHealth, URL=opsHealth; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "opsHealth",
+      "urlTab": "opsHealth",
+      "nContent": 5599,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-admin-sum",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "tổng 43 tab",
+    "expect": "mọi tab đúng quyền",
+    "actual": "39/43 đúng",
+    "evidence": [
+      "inbox: được phép nhưng bị đẩy sang tab ?Hôm nay,",
+      "orders: được phép nhưng bị đẩy sang tab ?Đơn hàng,",
+      "productCategories: được phép nhưng bị đẩy sang tab ?Sản phẩm,",
+      "storefronts: được phép nhưng bị đẩy sang tab ?Gian hàng,"
+    ],
+    "verdict": "FAIL"
+  }
+]

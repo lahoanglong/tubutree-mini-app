@@ -1,0 +1,11 @@
+Lần chạy đầu a1-earn.mjs trên lane vừa seed (new chưa có hạng, returning Lộc Biếc), ghi lại từ console 04:0x 04/11:
+[OK] A1a-1 new  quote.pointsEarned=2400 kỳ vọng 2400 (120000×2%×1)  quote={"subtotal":120000,"total":139000,"shippingFee":19000,"discount":0,"pointsEarned":2400}
+[OK] A1a-2 đặt đơn COD 201 TUBU2026110367688
+[OK] A1a-3 pointsBalance trước=0 sau đặt=0; orders.pointsEarned=2400
+[OK] A1a-4 1 dòng ORDER_DELIVERED:TUBU2026110367688 delta 2400, expiresAt 2027-11-03T21:00:11Z, số dư = SUM(sổ)
+[OK] A1a-6 /me/loyalty {"pointsBalance":2400,"lockedPoints":2400,"lockedUntil":"2026-11-10T21:00:11.369Z","redeemablePoints":0,"earnMultiplier":1,"tier":"MAM_XANH"}
+[OK] A1a-7 báo giá pointsToUse=2400: pointsUsed=0 (khoá) pointsMax=0
+[OK] A1a-8 lùi giao 8 ngày: locked 0, redeemable 2400
+[OK] A1b-1 returning quote.pointsEarned=2880 (120000×2%×1,2); A1b-3, A1b-4 (delta 2880), A1b-5, A1b-6 (locked 2880, redeemable 35400), A1b-7 (pointsUsed 24000 ≤ redeemable 35400; pointsMax 24000 = 20%×120000), A1b-8
+[FAIL→script] A1b-9: script lấy dòng đầu lịch sử nhưng dòng đầu là ORDER_REFUND_POINTS của đơn thử vừa huỷ (đúng nghiệp vụ); script đã sửa thành tìm dòng theo reason + kiểm sắp xếp.
+Chạy lại lần 2 trên lane đã nâng hạng: 'new' đã là LOC_BIEC nên kỳ vọng ×1 cứng sai; script đổi thành hệ số theo hạng hiện tại.

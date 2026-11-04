@@ -1,0 +1,15 @@
+{
+ "persona": "guest",
+ "key": "checkout",
+ "surf": "web375",
+ "ms": 5090,
+ "title": "Thanh toán — Tubu Tree",
+ "scrollW": 375,
+ "clientW": 375,
+ "url": "/thanh-toan",
+ "text": "Thanh toán\n\nĐăng nhập để thanh toán đơn hàng.\n\nĐăng nhập với Zalo\n\nĐăng nhập xong bạn sẽ quay lại đúng trang này.\n\nHotline: 0984 606 774\nĐiều khoản\nBảo mật\nĐổi trả\nVận chuyển",
+ "badRequests": [],
+ "errors": [],
+ "consoleErrors": [],
+ "blocked": []
+}

@@ -1,0 +1,357 @@
+[
+  {
+    "id": "L5-PK-queue-appear",
+    "persona": "kho",
+    "size": "web1280",
+    "journey": "Cần xử lý Pancake",
+    "step": "Pancake báo HUỶ đơn đã bàn giao",
+    "expect": "đơn vào hàng đợi (pancakeAttention có lý do), lọc ?pancake=attention thấy đơn, số đếm khớp SQL",
+    "actual": "lý do=\"Pancake báo HUỶ nhưng đơn đã bàn giao vận chuyển (đơn đang giao) — KHÔNG tự huỷ/hoàn tiền.\"; trong hàng đợi=true; API=7, SQL=7; đơn SHIPPING",
+    "evidence": {
+      "cancelHook": "    \"pancakeAttention\": \"Pancake báo HUỶ nhưng đơn đã bàn giao vận chuyển (đơn đang giao) — KHÔNG tự huỷ/hoàn tiền. Kiểm tra với kho/hãng vận chuyển: chặn giao và chờ Pancake báo \\\"Đã hoàn\\\" (đơn tự h"
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-PK-resolve-deny-cskh",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Cần xử lý Pancake",
+    "step": "cskh bấm Đã xử lý",
+    "expect": "403 (chỉ KHO/ADMIN)",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-PK-resolve-deny-ketoan",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Cần xử lý Pancake",
+    "step": "ketoan bấm Đã xử lý",
+    "expect": "403 (chỉ KHO/ADMIN)",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-PK-resolve-deny-marketing",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Cần xử lý Pancake",
+    "step": "marketing bấm Đã xử lý",
+    "expect": "403 (chỉ KHO/ADMIN)",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-PK-resolve-deny-staff",
+    "persona": "staff",
+    "size": "api",
+    "journey": "Cần xử lý Pancake",
+    "step": "staff bấm Đã xử lý",
+    "expect": "403 (chỉ KHO/ADMIN)",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-PK-resolve-ok",
+    "persona": "kho",
+    "size": "web1280",
+    "journey": "Cần xử lý Pancake",
+    "step": "KHO bấm \"Đã xử lý\"",
+    "expect": "200; đơn rời hàng đợi (pancakeAttention rỗng); lịch sử đơn ghi ai xử lý",
+    "actual": "HTTP 201; còn lý do=false",
+    "evidence": {
+      "hist": [
+        {
+          "note": "Đã xử lý việc Pancake: Pancake báo HUỶ nhưng đơn đã bàn giao vận chuyển (đơn đang giao) — KHÔNG tự huỷ/hoàn tiền. Kiểm tra với kho/hãng vận chuyển: chặn giao và chờ Pancake báo \"Đã hoàn\" (đơn tự huỷ, hoàn tiền), hoặc khách đã nhận thì xử lý ở Đổi/Trả. — đã gọi kho xác nhận (uat)",
+          "a": "uat_kho"
+        },
+        {
+          "note": null,
+          "a": null
+        }
+      ]
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-PK-resolve-twice",
+    "persona": "kho",
+    "size": "api",
+    "journey": "Cần xử lý Pancake",
+    "step": "bấm lần hai",
+    "expect": "400: đơn không còn trong hàng đợi",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":\"Đơn TUBU2026110386039 không còn trong hàng đợi cần xử lý Pancake.\",\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-PK-unsynced-filter",
+    "persona": "kho",
+    "size": "api",
+    "journey": "Cần xử lý Pancake",
+    "step": "lọc ?pancake=unsynced",
+    "expect": "200 (đơn mới đẩy sau 15 phút mới tính chưa lên)",
+    "actual": "HTTP 200 n=0",
+    "evidence": "",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-PK-cod-return-unverified",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Hoàn tiền khách: COD trả hàng",
+    "step": "Pancake báo \"Đã hoàn\" cho đơn COD đã giao",
+    "expect": "đơn RETURNED; Ví khách KHÔNG tự tăng; có khoản RETURN trạng thái UNVERIFIED; đơn vào hàng đợi Pancake với lý do COD chờ Kế toán (pancake-attention.ts)",
+    "actual": "đơn RETURNED; Ví 1680000->1680000; khoản RETURN/UNVERIFIED/289000",
+    "evidence": {
+      "refRow": {
+        "id": "cmw16qmg9019hjtc43kj6tx8n",
+        "k": "RETURN",
+        "s": "UNVERIFIED",
+        "a": 289000,
+        "m": "MANUAL_TRANSFER",
+        "rk": "cod-return-unverified"
+      },
+      "pa": "Pancake báo \"Đã hoàn\" cho đơn COD đã giao — đơn đã chuyển \"Đã trả hàng\", điểm/hoa hồng đã đảo, nhưng hệ thống KHÔNG tự h"
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-PK-resolve-blocked-cod",
+    "persona": "kho",
+    "size": "api",
+    "journey": "Hoàn tiền khách: COD trả hàng",
+    "step": "KHO bấm Đã xử lý khi còn khoản COD chờ Kế toán",
+    "expect": "400: xử lý ở mục Hoàn tiền khách trước (admin.service.ts:1400)",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":\"Đơn TUBU2026110308970 còn khoản hoàn COD chờ Kế toán quyết ở mục \\\"Hoàn tiền khách\\\" — xử lý ở đó trước.\",\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RF-list-deny-cskh",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Hoàn tiền khách",
+    "step": "cskh xem Hoàn tiền khách",
+    "expect": "403",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RF-list-deny-kho",
+    "persona": "kho",
+    "size": "api",
+    "journey": "Hoàn tiền khách",
+    "step": "kho xem Hoàn tiền khách",
+    "expect": "403",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RF-list-deny-marketing",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Hoàn tiền khách",
+    "step": "marketing xem Hoàn tiền khách",
+    "expect": "403",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RF-list-deny-staff",
+    "persona": "staff",
+    "size": "api",
+    "journey": "Hoàn tiền khách",
+    "step": "staff xem Hoàn tiền khách",
+    "expect": "403",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RF-list-ketoan",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Hoàn tiền khách",
+    "step": "Kế toán xem khoản chờ đối soát",
+    "expect": "200, thấy khoản COD trả hàng chờ đối soát",
+    "actual": "HTTP 200; khoản cmw16qmg9019hjtc43kj6tx8n",
+    "evidence": "{\"id\":\"cmw16qmg9019hjtc43kj6tx8n\",\"orderId\":\"cmw16ql9b018ijtc462xzyoyx\",\"orderCode\":\"TUBU2026110308970\",\"kind\":\"RETURN\",\"refKey\":\"cod-return-unverified\",\"userId\":\"uat_returning\",\"amount\":289000,\"phone\":null,\"recipientName\":null,\"customerUserId\":null,\"method\":\"MANUAL_TRANSFER\",\"status\":\"UNVERIFIED\",\"",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RF-verify-over",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Hoàn tiền khách",
+    "step": "xác nhận hoàn quá số khoản",
+    "expect": "400: tối đa phần chưa hoàn",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":\"Số tiền hoàn phải từ 1đ đến 289.000đ (phần chưa hoàn của đơn).\",\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RF-verify-ok",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Hoàn tiền khách",
+    "step": "Kế toán xác nhận hãng đã thu COD",
+    "expect": "khoản UNVERIFIED -> PENDING; lý do COD rời hàng đợi Pancake",
+    "actual": "HTTP 201; khoản PENDING; còn lý do=false",
+    "evidence": "{\"id\":\"cmw16qmg9019hjtc43kj6tx8n\",\"orderId\":\"cmw16ql9b018ijtc462xzyoyx\",\"orderCode\":\"TUBU2026110308970\",\"kind\":\"RETURN\",\"refKey\":\"cod-return-unverified\",\"userId\":\"uat_returning\",\"amount\":289000,\"phone",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RF-claim-deny-cskh",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Hoàn tiền khách",
+    "step": "CSKH bấm bắt đầu chuyển khoản",
+    "expect": "403",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RF-claim-ketoan-typed-bank",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Hoàn tiền khách",
+    "step": "Kế toán tự nhập số tài khoản nhận thay khách",
+    "expect": "403: nhân viên không nhập tài khoản nhận, nhờ quản trị viên (customer-refunds.service assertStaffMayHandle)",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Nhân viên không nhập tài khoản nhận. Khách chưa chọn tài khoản nhận — nhờ quản trị viên nhập.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RF-markpaid-no-account",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Hoàn tiền khách",
+    "step": "Đã chi khi khách chưa có tài khoản nhận",
+    "expect": "403: khách chưa chọn tài khoản nhận (không chi khi chưa biết chuyển đâu)",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Khách chưa chọn tài khoản nhận — nhờ quản trị viên nhập.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RF-claim-ok",
+    "persona": "admin",
+    "size": "web1280",
+    "journey": "Hoàn tiền khách",
+    "step": "ADMIN nhập tài khoản và bắt đầu chuyển khoản",
+    "expect": "khoản sang PROCESSING",
+    "actual": "HTTP 201; PROCESSING",
+    "evidence": "{\"id\":\"cmw16qmg9019hjtc43kj6tx8n\",\"orderId\":\"cmw16ql9b018ijtc462xzyoyx\",\"orderCode\":\"TUBU2026110308970\",\"kind\":\"RETURN\",\"refKey\":\"cod-return-unverified\",\"userId\":\"uat_returning\",\"amount\":289000,\"phone\":null,\"recipientName\":null,\"customerUse",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RF-markpaid-noref",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Hoàn tiền khách",
+    "step": "Đã chi không có mã giao dịch",
+    "expect": "400 (bankRef bắt buộc)",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":[\"Trường «bankRef» không được dài quá 100 ký tự.\",\"Trường «bankRef» phải có ít nhất 1 ký tự.\",\"Trường «bankRef» phải là chuỗi ký tự.\"],\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RF-markpaid-claimed-by-other",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Hoàn tiền khách",
+    "step": "Kế toán bấm Đã chi khoản do ADMIN đang chuyển",
+    "expect": "400: chỉ người đang chuyển được xác nhận, hoặc chọn Tiếp quản kèm lý do (customer-refunds.service)",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":\"Khoản này đang do Admin UAT chuyển khoản từ 04:13 04/11/2026. Chỉ người đó được xác nhận đã chuyển; nếu chắc chắn Admin UAT không chuyển nữa, chọn \\\"Tiếp quản\\\" và ghi lý do (được lưu vào lịch sử đơn).\",\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RF-markpaid-ok",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Hoàn tiền khách",
+    "step": "Kế toán bấm Đã chi",
+    "expect": "khoản COMPLETED; chi bằng chuyển khoản tay nên Ví khách KHÔNG đổi; Ví = sổ Ví",
+    "actual": "HTTP 201; {\"s\":\"COMPLETED\"}; Ví 1680000->1680000",
+    "evidence": "{\"id\":\"cmw16qmg9019hjtc43kj6tx8n\",\"orderId\":\"cmw16ql9b018ijtc462xzyoyx\",\"orderCode\":\"TUBU2026110308970\",\"kind\":\"RETURN\",\"refKey\":\"cod-return-unverified\",\"userId\":\"uat_returning\",\"amount\":289000,\"phone\":null,\"recipientName\":null,\"customerUse",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RF-markpaid-twice",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Hoàn tiền khách",
+    "step": "bấm Đã chi lần hai",
+    "expect": "4xx, không ghi hai lần",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":\"Khoản này đã được xác nhận chuyển khoản (mã GD UATRF001).\",\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-PK-resolve-after-refund",
+    "persona": "kho",
+    "size": "api",
+    "journey": "Hoàn tiền khách: COD trả hàng",
+    "step": "KHO bấm Đã xử lý sau khi Kế toán xong",
+    "expect": "tuỳ lý do còn lại: 400 \"không còn trong hàng đợi\" là đúng nếu Kế toán đã gỡ lý do",
+    "actual": "HTTP 400 {\"message\":\"Đơn TUBU2026110308970 không còn trong hàng đợi cần xử lý Pancake.\",\"error\":\"Bad Request\",\"statusCode\":400}",
+    "evidence": {
+      "pa": null
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RF-cancel-bank",
+    "persona": "returning",
+    "size": "mini375",
+    "journey": "Hoàn toàn phần về ngân hàng",
+    "step": "khách huỷ đơn đã chuyển khoản, chọn nhận về ngân hàng",
+    "expect": "đơn CANCELLED/REFUNDED; có khoản CANCEL PENDING 120000đ; Ví KHÔNG đổi",
+    "actual": "HTTP 201; CANCELLED/REFUNDED; khoản {\"id\":\"cmw16qn1h01akjtc4rxfk3xc6\",\"k\":\"CANCEL\",\"s\":\"PENDING\",\"a\":120000,\"m\":\"MANUAL_TRANSFER\"}; Ví 1680000->1680000",
+    "evidence": "{\"id\":\"cmw16qmmf01a7jtc461kjyxhd\",\"code\":\"TUBU2026110330461\",\"userId\":\"uat_returning\",\"type\":\"RETAIL\",\"status\":\"CANCELLED\",\"subtotal\":120000,\"discount\":0,\"coupo",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RF-cancel-bank-paid",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Hoàn toàn phần về ngân hàng",
+    "step": "Kế toán claim rồi Đã chi",
+    "expect": "COMPLETED; Ví khách không đổi",
+    "actual": "claim 201; paid 201; COMPLETED; Ví 1680000->1680000",
+    "evidence": "{\"id\":\"cmw16qn1h01akjtc4rxfk3xc6\",\"orderId\":\"cmw16qmmf01a7jtc461kjyxhd\",\"orderCode\":\"TUBU2026110330461\",\"kind\":\"CANCEL\",\"refKey\":\"\",\"userId\":\"uat_returning\",\"amount\":120000,\"phone\":null,\"recipientName",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RF-cancel-bank-missing",
+    "persona": "returning",
+    "size": "mini375",
+    "journey": "Hoàn toàn phần về ngân hàng",
+    "step": "huỷ chọn ngân hàng nhưng thiếu số tài khoản",
+    "expect": "400 lời tiếng Việt, đơn KHÔNG bị huỷ",
+    "actual": "HTTP 400; đơn CONFIRMED",
+    "evidence": "{\"message\":\"Số tài khoản nhận tiền hoàn chỉ gồm chữ số, từ 6 đến 24 số.\",\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RF-note-mask",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Hoàn tiền khách: che SĐT",
+    "step": "ghi chú khoản hoàn có SĐT",
+    "expect": "Kế toán thấy SĐT trong ghi chú bị che; ADMIN thấy đủ",
+    "actual": "kế toán: \"khách gọi từ *******678 xác nhận\"; admin: \"khách gọi từ 0912345678 xác nhận\"",
+    "evidence": "",
+    "verdict": "PASS"
+  }
+]

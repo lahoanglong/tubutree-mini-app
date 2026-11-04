@@ -1,0 +1,82 @@
+{
+ "sha": "98803f006",
+ "runInfo": "Chạy 04/11/2026 từ khoảng 04:00 đến 05:10 (giờ máy), nhân viên chạy là một agent UAT. Lane dựng mới bằng 00-lane-fresh.sh (267 migration), nạp thể lệ từ bản nháp của chủ ở Desktop/doi-rac-ban-nhap, bật cờ đổi rác và chat. Giao diện chạy bằng Playwright thư viện (Mini 375 qua miniapp-session, web 375 và web 1280 qua web-session), 107 ảnh chụp.",
+ "sections": [
+  {
+   "title": "Tóm tắt",
+   "lines": [
+    "- Số dư Điểm Xanh luôn bằng tổng sổ: kiểm bằng SQL sau từng ca có cộng/trừ điểm và kiểm lại toàn bộ lane cuối đợt (0 user lệch). `reconcile:points` và `reconcile:wallet` chạy dry-run trên DB lane: cả hai báo 0 user lệch, chênh ròng 0.",
+    "- Không thấy cộng hoặc trừ điểm sai, không thấy cộng đôi khi gửi song song (18 ca đua R-01..R-18: xác nhận cùng lúc, huỷ cùng lúc, đổi quà cùng lúc, hai nhân viên cùng xác nhận, thu hồi cùng lúc, điểm danh, quay, đăng bài, câu trả lời hay nhất).",
+    "- Ranh giới ngày giờ Việt Nam đúng: hoạt động lúc 23:30 hôm qua giờ VN không chiếm trần hôm nay (vòng quay, hứng sương, chuỗi điểm danh, thưởng đăng bài). Phép thử chỉ phân biệt được lỗi dùng ngày UTC vì chạy trong khung 00:00-07:00 giờ VN.",
+    "- Mini 375 và web 375 giống nhau về bố cục ở các màn đã chụp đối chiếu; Cộng đồng trên Mini chỉ đọc, không có liên kết ngoài, thanh dưới đủ 5 tab; web cho xem và bình luận; CSKH duyệt, từ chối, ẩn bài qua trang quản trị chạy đúng.",
+    "- Lỗi duy nhất: một chữ của bản nháp thể lệ (L4-B01, mức P3, ba dòng giao diện cùng một nguyên nhân). Sáu mục CẦN CHỦ nằm ở phần riêng bên dưới, không tính là FAIL."
+   ]
+  },
+  {
+   "title": "Lỗi",
+   "lines": [
+    "### L4-B01 (P3) Thể lệ Đổi rác có chữ \"vui lòng\" trái quy tắc văn phong",
+    "",
+    "- Bề mặt: Mini 375 `/recycle/rules`, web 375 và web 1280 `/doi-rac/quy-dinh` (ba dòng FAIL: U-mini375-recycle-rules-returning, U-web375-recycle-rules-returning, U-web1280-recycle-rules-returning).",
+    "- Chữ sai: mục 12 \"Liên hệ\": \"Khách cần hỗ trợ hoặc khiếu nại vui lòng nhắn Zalo OA của Tubu Tree.\". Quy tắc văn phong của brief cấm \"Vui lòng\".",
+    "- Nguồn: nội dung SystemConfig `waste.rules_text`, lấy từ bản nháp của chủ `/Users/longla/Desktop/doi-rac-ban-nhap/01-the-le-waste.rules_text.txt` dòng 65, không phải mã nguồn trong repo. Chưa kiểm PROD (không được đọc PROD); nếu chủ đã dán bản này lên PROD thì PROD cũng có chữ này.",
+    "- Tái hiện (chạy từ worktree uat-1104, lane 4 đang mở): `curl -s http://localhost:3241/api/waste/rules | grep -io \"vui lòng\"` trả về một dòng. Giao diện: `node docs/2026-11-04-uat/scripts/L4-doi-rac-cong-dong/50-ui.mjs matrix` (ảnh `shots/L4-doi-rac-cong-dong/mini375-returning-recycle-rules.png`, `web375-returning-recycle-rules.png`, `web1280-returning-recycle-rules.png`).",
+    "- Ảnh hưởng: chỉ là chữ, không đụng điểm. Cách sửa gợi ý: sửa bản nháp trước khi dán lên PROD, ví dụ \"Cần hỗ trợ hoặc khiếu nại, bạn nhắn Zalo OA của Tubu Tree nhé.\"."
+   ]
+  },
+  {
+   "title": "CẦN CHỦ (không tính là FAIL)",
+   "lines": [
+    "Các mục dưới đây là hành vi thật của mã mà tài liệu chưa nêu rõ quy tắc. Mỗi mục cần chủ quyết là đúng ý hay cần sửa.",
+    "",
+    "1. **P-W04 và P-W05: mọi tài khoản role STAFF đều mở được quầy kho và xác nhận cân cộng điểm.** Kế toán, marketing, CSKH (role STAFF, không phải nhân viên kho) mở được danh sách điểm nhận (`ketoan`, `marketing`, `cskh` thấy điểm nhận) và gọi `/admin/waste/requests/:id/confirm` thành công (marketing xác nhận 1.000 điểm cho khách). Mã: `apps/api/src/common/staff-access.ts:21-33` (`assertActiveStaff` nhận mọi role STAFF, không xét `staffPermissions`), `waste-admin-requests.controller.ts:96-160` (`@Roles('STAFF','ADMIN')`). Nếu chủ muốn chỉ nhóm kho cộng được điểm Đổi rác thì cần thêm kiểm quyền; hiện chưa có quy tắc nào nói nhóm nào được cộng. Bằng chứng: `70-perm.mjs`.",
+    "2. **G-41: khách đăng nhập Zalo thật nhưng chưa có SĐT vẫn được +1.000 Điểm Xanh khi điểm danh** (đúng theo `common/real-user.ts:20-33`: có zaloId không bắt đầu bằng `guest_` là user thật), trong khi tạo yêu cầu Đổi rác thì chặn vì chưa có SĐT (W-05 và M-13 đều 403). Có chủ ý khác nhau giữa hai tính năng hay không thì chủ xác nhận. Bằng chứng: `30-game-api.mjs`.",
+    "3. **C-68: CSKH không gỡ được bình luận của khách** (403 \"Không có quyền gỡ bình luận này.\"; mã chỉ cho tác giả bình luận hoặc ADMIN). CSKH chỉ ẩn được cả bài. Nếu chủ muốn CSKH gỡ từng bình luận thì cần mở quyền. Bằng chứng: `40-community-api.mjs`.",
+    "4. **P-C02: CSKH không xoá được bài của khách bằng đường xoá của tác giả** (403, bài vẫn PUBLISHED); CSKH dùng đường ẩn `/feed/admin/:id/hide` (ca U-F-cskh-hide đã PASS). Ghi nhận, không phải lỗi nếu đây là thiết kế. Bằng chứng: `70-perm.mjs`.",
+    "5. **X-14: đáp án đố vui ngoài phạm vi (choice=99) được tính như một lần trả lời sai** (201, +2 giọt nước câu sai, lượt trả lời bị trừ, đáp án đúng lộ như mọi lần trả lời sai). `AnswerDto` ở `game.controller.ts:17` chỉ có `@IsInt() @Min(0)`, không chặn trên. Không có đường kiếm thêm so với một lần trả lời sai bình thường; chỉ là kiểm đầu vào lỏng. Bằng chứng: `85-extra.mjs` (ONLY=quiz14).",
+    "6. **Điểm rơi nước không bị thu hồi khi thu hồi điểm Đổi rác** (D-9x): thu hồi chỉ trừ Điểm Xanh theo sổ, phần giọt nước Vườn Xanh đã cộng cho vỏ chai Tubu vẫn giữ. Mã thu hồi `waste-reverse.service.ts:43-99` không đụng hạt nước. Chủ xác nhận đây là chủ ý.",
+    "",
+    "Ghi chú thêm, không phải FAIL: Mini hiển thị URL trong bài viết ở dạng chữ thường (không bấm được), đúng quy tắc Mini không có link ngoài; ô nhập web có chữ gợi ý \"Viết trả lời…\" chứa dấu \"…\" (quy tắc cấm \"...\" của brief áp dụng cho chữ trả về từ API); báo cáo tháng của quầy tính cả yêu cầu đã thu hồi (REVERSED) vào số yêu cầu, chủ xem có muốn tách riêng không (`waste-reports.service.ts:23`)."
+   ]
+  },
+  {
+   "title": "Hạn chế bộ khung (không tính là FAIL)",
+   "lines": [
+    "- D-95 BLOCKED: luồng GOM ĐƠN (pickup) cần Gomdon thật; bật cờ `waste.lane_pickup_enabled` mà Gomdon tắt thì pickup vẫn tắt trên `/waste/me`, ca kiểm đúng điều đó. Gắn đơn và bưu tá nhận không chạy được.",
+    "- `seed-data.mjs` có lệnh `extra` làm sập khi `waste.enabled` bật mà `waste.rules_text` rỗng (cờ không bật được); đã vòng bằng `00-setup.mjs` nạp thể lệ trước khi bật cờ. Nên sửa thứ tự trong bộ khung.",
+    "- Mini chạy trong Playwright với zmp-sdk và Zalo giả, không phải Zalo thật: không kiểm được mở liên kết ngoài thật, chỉ kiểm không có thẻ `a` ngoài và không có lời gọi mở link; không kiểm được giao diện trong khung Zalo thật.",
+    "- Web 375 dùng tuỳ chọn khổ nhìn của bộ khung, không phải máy thật; nút \"N\" của Next dev (chỉ có ở chế độ dev) hiện trong ảnh web.",
+    "- Web dev có tiếng ồn console: 401 rồi làm mới token ở request đầu tiên, và `/events` bị huỷ khi chuyển trang (aborted); đã loại khỏi điều kiện \"không lỗi console\".",
+    "- Playwright chặn host ngoài nên không thể bấm mở link ngoài thật; các kiểm tra link là kiểm thẻ và lời gọi SDK.",
+    "- Ca ranh giới ngày giờ chỉ phân biệt được lệch 00:00 VN với 07:00 VN (lỗi dùng ngày UTC) vì chạy trong khung giờ 00:00-07:00 giờ VN; không kiểm được ranh giới tháng.",
+    "- `run-job.mjs` (khởi động Nest để chạy cron) đôi khi sập ở lần đầu; script 20 có chạy lại tối đa 3 lần.",
+    "- Bản thể lệ và ba thư (Gomdon, Sở Công Thương, Sở Nông nghiệp) ở Desktop chưa điền tên công ty và ngày bắt đầu, chưa kiểm phần đó."
+   ]
+  },
+  {
+   "title": "Đã làm và chưa làm",
+   "lines": [
+    "- Đã làm: rules, tạo DROP_OFF và MAIL_IN, mã vận đơn, kho nhận kiện, xác nhận cân đủ và thiếu, từ chối cước chưa trả, kiện không rõ chủ, hộp sữa và vỏ chai Tubu chỉ kho HCMC nhận, điểm đại lý chỉ carton và nilon (API và quầy Mini 375), trần ngày và trần tháng (carton 10, nilon 10, hộp sữa 50, tối đa 3 yêu cầu mở), huỷ, quầy `/recycle/desk` cân và cộng điểm theo bảng (kể cả trần điểm tháng hạ xuống thử, D-51 và D-52), thu hồi (chỉ ADMIN), quà hiện vật (đổi, nhận, hết hạn nhận 60 ngày, hoàn điểm tự động, admin huỷ có và không hoàn), thư nhắc sắp hết hạn với câu \"hạn chót là hết ngày\" (D-80..D-84), Cộng đồng (đăng, tự duyệt người tin cậy, từ khoá cấm, link ngoài danh sách trắng, sửa bài kiểm duyệt lại, bình luận, câu trả lời hay nhất, báo cáo, CSKH duyệt, từ chối, ẩn), Vườn Xanh (điểm danh, chuỗi, đóng băng, sửa chuỗi, nhiệm vụ, quay và trần quay 5 lần, sương, đố vui), đua song song, quyền theo vai trò, ranh giới ngày giờ VN, ma trận trang x khổ, hành trình bấm thật với các persona khách mới, khách cũ, quầy, chủ điểm đại lý, kế toán, marketing, CSKH, khách chưa đăng nhập.",
+    "- Chưa làm: pickup (xem hạn chế), PROD (cấm), Zalo thật.",
+    "- Chạy lại toàn bộ: `bash docs/2026-11-04-uat/scripts/L4-doi-rac-cong-dong/run-api-cases.sh` (lane mới, phần API khoảng 12 phút, giao diện thêm khoảng 20 phút), sau đó `node docs/2026-11-04-uat/scripts/L4-doi-rac-cong-dong/51-ui-partner.mjs` và `node docs/2026-11-04-uat/scripts/L4-doi-rac-cong-dong/85-extra.mjs` trên cùng lane. Script 85 nhận biến `ONLY` (ví dụ `ONLY=quiz14,giftcancel`) để chạy riêng từng khối."
+   ]
+  },
+  {
+   "title": "Đối soát cuối đợt",
+   "lines": [
+    "Chạy từ worktree uat-1104 với `DATABASE_URL=postgresql://tubu@127.0.0.1:25432/tubutree_uat_l4?schema=public`, chỉ dry-run:",
+    "",
+    "```",
+    "pnpm --filter @tubutree/api reconcile:points",
+    "  Lô STANDARD : 0 user lệch, chênh ròng 0 điểm, tuyệt đối 0 điểm",
+    "  Lô CONVERTED: 0 user lệch, chênh ròng 0 điểm, tuyệt đối 0 điểm",
+    "pnpm --filter @tubutree/api reconcile:wallet",
+    "  User bị lệch: 0; chênh ròng 0đ; chênh tuyệt đối 0đ",
+    "SQL: SELECT count(*) FROM users u WHERE pointsBalance <> COALESCE(SUM(points_transactions.delta),0)  ->  0",
+    "```",
+    "",
+    "Số migration trên lane: 267."
+   ]
+  }
+ ]
+}

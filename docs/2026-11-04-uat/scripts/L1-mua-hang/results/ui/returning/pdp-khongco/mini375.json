@@ -1,0 +1,38 @@
+{
+ "persona": "returning",
+ "key": "pdp-khongco",
+ "surf": "mini375",
+ "ms": 5906,
+ "title": "Tubu Tree",
+ "scrollW": 375,
+ "clientW": 375,
+ "url": "/product/khong-co-san-pham-nay",
+ "text": "Chi tiết sản phẩm\n\nKhông tìm thấy\n\nKhông tìm thấy sản phẩm này.\nVề trang chủ\nCần hỗ trợ?\nGọi 0984 606 774\nCó thể bạn thích\nGiờ vàng -25%\nCao cà gai leo BH.Nong\nGiờ vàng giảm 25%, Giá Giờ vàng 165.000đ, giá gốc 220.000đ\nGiá\n165.000đ\n, giá gốc\n220.000đ\nGiờ vàng -25%\nHạt điều rang mộc BH.Nong\nGiờ vàng giảm 25%, Giá Giờ vàng 119.000đ, giá gốc 159.000đ\nGiá\n119.000đ\n, giá gốc\n159.000đ\nGiờ vàng -25%\nTubu chọnMật ong rừng nguyên chất BH.Nong\nGiờ vàng giảm 25%, Tubu chọn, Giá Giờ vàng 195.000đ, giá gốc 260.000đ\nGiá\n195.000đ\n, giá gốc\n260.000đ",
+ "badRequests": [
+  {
+   "method": "GET",
+   "path": "/products/khong-co-san-pham-nay",
+   "status": 404,
+   "mocked": false
+  },
+  {
+   "method": "GET",
+   "path": "/products/khong-co-san-pham-nay/bundles",
+   "status": 404,
+   "mocked": false
+  },
+  {
+   "method": "GET",
+   "path": "/products/khong-co-san-pham-nay/reviews",
+   "status": 404,
+   "mocked": false
+  }
+ ],
+ "errors": [],
+ "consoleErrors": [
+  "Failed to load resource: the server responded with a status of 404 (Not Found)",
+  "Failed to load resource: the server responded with a status of 404 (Not Found)",
+  "Failed to load resource: the server responded with a status of 404 (Not Found)"
+ ],
+ "blocked": []
+}

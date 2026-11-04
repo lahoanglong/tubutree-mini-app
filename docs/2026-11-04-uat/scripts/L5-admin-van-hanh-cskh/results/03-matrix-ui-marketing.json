@@ -1,0 +1,701 @@
+[
+  {
+    "id": "L5-UX-marketing-inbox",
+    "persona": "marketing",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=inbox (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 273,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-marketing-orders",
+    "persona": "marketing",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=orders (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 273,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-marketing-productCategories",
+    "persona": "marketing",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=productCategories (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 273,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-marketing-users",
+    "persona": "marketing",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=users (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 273,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-marketing-supportChat",
+    "persona": "marketing",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=supportChat (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 273,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-marketing-community",
+    "persona": "marketing",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=community (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=community, URL=community; 7 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "community",
+      "urlTab": "community",
+      "nContent": 233,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-marketing-coupons",
+    "persona": "marketing",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=coupons (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=coupons, URL=coupons; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "coupons",
+      "urlTab": "coupons",
+      "nContent": 984,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-marketing-waste",
+    "persona": "marketing",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=waste (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=waste, URL=waste; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "waste",
+      "urlTab": "waste",
+      "nContent": 557,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-marketing-storefronts",
+    "persona": "marketing",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=storefronts (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 273,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-marketing-merchantProducts",
+    "persona": "marketing",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=merchantProducts (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 273,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-marketing-dealers",
+    "persona": "marketing",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=dealers (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 273,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-marketing-dashboard",
+    "persona": "marketing",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=dashboard (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 273,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-marketing-analytics",
+    "persona": "marketing",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=analytics (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 273,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-marketing-reports",
+    "persona": "marketing",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=reports (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=reports, URL=reports; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "reports",
+      "urlTab": "reports",
+      "nContent": 1407,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-marketing-externalOrders",
+    "persona": "marketing",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=externalOrders (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 273,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-marketing-returns",
+    "persona": "marketing",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=returns (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 273,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-marketing-customerRefunds",
+    "persona": "marketing",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=customerRefunds (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 273,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-marketing-subscriptions",
+    "persona": "marketing",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=subscriptions (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 273,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-marketing-reviews",
+    "persona": "marketing",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=reviews (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 273,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-marketing-quickReplies",
+    "persona": "marketing",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=quickReplies (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 273,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-marketing-flashSales",
+    "persona": "marketing",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=flashSales (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=flashSales, URL=flashSales; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "flashSales",
+      "urlTab": "flashSales",
+      "nContent": 720,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-marketing-posCredits",
+    "persona": "marketing",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=posCredits (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 273,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-marketing-externalClaims",
+    "persona": "marketing",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=externalClaims (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 273,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-marketing-campaigns",
+    "persona": "marketing",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=campaigns (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=campaigns, URL=campaigns; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "campaigns",
+      "urlTab": "campaigns",
+      "nContent": 279,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-marketing-bundles",
+    "persona": "marketing",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=bundles (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=bundles, URL=bundles; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "bundles",
+      "urlTab": "bundles",
+      "nContent": 319,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-marketing-engagement",
+    "persona": "marketing",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=engagement (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 273,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-marketing-dealerClaims",
+    "persona": "marketing",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=dealerClaims (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 273,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-marketing-dealerAccounts",
+    "persona": "marketing",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=dealerAccounts (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 273,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-marketing-dealerPrices",
+    "persona": "marketing",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=dealerPrices (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 273,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-marketing-commissionRates",
+    "persona": "marketing",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=commissionRates (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 273,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-marketing-payouts",
+    "persona": "marketing",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=payouts (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 273,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-marketing-merchantFulfilment",
+    "persona": "marketing",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=merchantFulfilment (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 273,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-marketing-brands",
+    "persona": "marketing",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=brands (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 273,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-marketing-faqs",
+    "persona": "marketing",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=faqs (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=faqs, URL=faqs; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "faqs",
+      "urlTab": "faqs",
+      "nContent": 384,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-marketing-contentKit",
+    "persona": "marketing",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=contentKit (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=contentKit, URL=contentKit; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "contentKit",
+      "urlTab": "contentKit",
+      "nContent": 388,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-marketing-academy",
+    "persona": "marketing",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=academy (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=academy, URL=academy; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "academy",
+      "urlTab": "academy",
+      "nContent": 389,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-marketing-notificationTemplates",
+    "persona": "marketing",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=notificationTemplates (được phép)",
+    "expect": "mở đúng tab, có nội dung, không request lỗi",
+    "actual": "tab hiển thị=notificationTemplates, URL=notificationTemplates; 6 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "notificationTemplates",
+      "urlTab": "notificationTemplates",
+      "nContent": 6112,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-marketing-staffRoster",
+    "persona": "marketing",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=staffRoster (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 273,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-marketing-shiftApproval",
+    "persona": "marketing",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=shiftApproval (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 273,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-marketing-payroll",
+    "persona": "marketing",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=payroll (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 273,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-marketing-attendance",
+    "persona": "marketing",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=attendance (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 273,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-marketing-config",
+    "persona": "marketing",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=config (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 273,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-marketing-opsHealth",
+    "persona": "marketing",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "mở /admin?tab=opsHealth (bị cấm)",
+    "expect": "đẩy về tab waste, không gọi API bị cấm",
+    "actual": "tab hiển thị=inbox, URL=inbox; 5 request, 0 lỗi; ổn",
+    "evidence": {
+      "shown": "inbox",
+      "urlTab": "inbox",
+      "nContent": 273,
+      "bad": []
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-UX-marketing-sum",
+    "persona": "marketing",
+    "size": "web1280",
+    "journey": "Ma trận vai trò x tab",
+    "step": "tổng 43 tab",
+    "expect": "mọi tab đúng quyền",
+    "actual": "43/43 đúng",
+    "evidence": [],
+    "verdict": "PASS"
+  }
+]

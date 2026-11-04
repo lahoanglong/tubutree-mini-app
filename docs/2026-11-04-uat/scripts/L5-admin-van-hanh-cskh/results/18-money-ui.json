@@ -1,0 +1,124 @@
+[
+  {
+    "id": "L5-MUI-01",
+    "persona": "ketoan",
+    "size": "web375",
+    "journey": "Việc tiền bằng giao diện",
+    "step": "Kế toán mở tab Hoàn tiền khách ở 375px",
+    "expect": "có danh sách khoản hoàn; ô tìm ghi \"Mã đơn hoặc đủ 10 số SĐT\" (SĐT bị che với Kế toán); không lộ SĐT 10 số; không tràn ngang",
+    "actual": "Tổng 7 khoản (DB đang chờ 5); ô tìm: \"Mã đơn hoặc đủ 10 số SĐT\"; SĐT 10 số lộ trên màn: 0; tràn ngang 0px",
+    "evidence": "Tubu Tree Quản trị Về cửa hàng Đăng xuất Bỏ qua tới nội dung Bán hàng · Hoàn tiền khách , 10 việc đang chờ Đổi mục Hoàn tiền khách Tất cả loại Huỷ đơn Trả hàng Tiền về muộn Tiền trả dư Đơn CTV lên hộ Đang mở Chờ đối soát Chờ chuyển khoản Đang chuyển khoản Đã c",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-MUI-02",
+    "persona": "ketoan",
+    "size": "web375",
+    "journey": "Việc tiền bằng giao diện",
+    "step": "Kế toán bấm \"Bắt đầu chuyển khoản\" khoản TUBU2026110328097 khách chưa chọn tài khoản nhận",
+    "expect": "hộp báo \"Khách chưa chọn tài khoản nhận — nhờ quản trị viên nhập.\"; nút xác nhận bị khoá; DB vẫn PENDING",
+    "actual": "câu báo=true; nút xác nhận khoá=true; DB PENDING",
+    "evidence": "Bắt đầu chuyển khoản\" để khoá nơi nhận (khách không đổi sang Ví được nữa), chuyển khoản tay về tài khoản khách đã chọn (đơn CTV lên hộ: theo SĐT khách cuối), miễn phí và không giới hạn số tiền, rồi bấm \"Đã chuyển khoản\" kèm mã giao dịch. Màn này chỉ ghi sổ, không tự chuyển tiền. Khoản \"Chờ đối soát\" là tiền dư Pancake báo, hoặc đơn COD đã giao rồi bị hoàn mà",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-MUI-03",
+    "persona": "admin",
+    "size": "web375",
+    "journey": "Việc tiền bằng giao diện",
+    "step": "Admin nhập tài khoản thay khách rồi bấm \"Bắt đầu chuyển khoản\" (TUBU2026110328097)",
+    "expect": "POST 2xx; DB PROCESSING, claimedBy = admin, đã có số tài khoản; màn báo \"Đã khoá nơi nhận…\"; Ví khách không đổi",
+    "actual": "POST /admin/customer-refunds/cmw16plqt00zljtc4xlyvshad/claim 201; DB PROCESSING, giữ bởi uat_admin, STK 0011004567891; ví 2160000 -> 2160000; báo: true",
+    "evidence": null,
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-MUI-04",
+    "persona": "ketoan",
+    "size": "web375",
+    "journey": "Việc tiền bằng giao diện",
+    "step": "Kế toán xem khoản TUBU2026110328097 đang do Admin chuyển",
+    "expect": "thẻ báo \"Chỉ … được xác nhận hoặc trả về hàng chờ… tiếp quản kèm lý do\"; nút ghi \"(tiếp quản)\"",
+    "actual": "có chữ tiếp quản=true",
+    "evidence": "Bắt đầu chuyển lúc 04:44 04/11/2026 bởi Admin UAT — khách không đổi được nơi nhận. Chỉ Admin UAT được xác nhận hoặc trả về hàng chờ. Chắc chắn Admin UAT không chuyển nữa thì tiếp quản kèm lý do (lưu vào lịch sử đơn). Đã chuyển khoản (tiếp quản) Trả về hàng chờ (tiếp quản) Tổng: 1 khoản",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-MUI-05",
+    "persona": "ketoan",
+    "size": "web375",
+    "journey": "Việc tiền bằng giao diện",
+    "step": "Bấm \"Đã chuyển khoản\" khi chưa nhập mã giao dịch và lý do tiếp quản",
+    "expect": "không gọi API; hộp vẫn mở; DB vẫn PROCESSING",
+    "actual": "gọi mark-paid=false; DB còn PROCESSING=true",
+    "evidence": "04567891 Chủ tài khoản NGUYEN VAN UAT Đơn TUBU2026110328097 Mã giao dịch ngân hàng Ghi chú (tuỳ chọn) Lý do tiếp quản Nhập mã giao dịch ngân hàng của lần chuyển khoản. Huỷ Đã chuyển khoản",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-MUI-06",
+    "persona": "ketoan",
+    "size": "web375",
+    "journey": "Việc tiền bằng giao diện",
+    "step": "Kế toán nhập mã giao dịch + lý do tiếp quản rồi \"Đã chuyển khoản\" (TUBU2026110328097)",
+    "expect": "POST mark-paid 2xx; DB COMPLETED, bankRef FT26UIREF01; lý do tiếp quản ghi vào lịch sử đơn; Ví khách không đổi (chi tay); sổ Ví khớp",
+    "actual": "POST /admin/customer-refunds/cmw16plqt00zljtc4xlyvshad/mark-paid 201; DB COMPLETED, mã FT26UIREF01; lịch sử có lý do=true; ví 2160000 -> 2160000, sổ 2160000",
+    "evidence": {
+      "hist": [
+        {
+          "note": "Hoàn tiền 289.000đ: tiếp quản khoản Admin UAT đang chuyển khoản từ 04:44 04/11/2026 — xác nhận đã chuyển khoản. Lý do: UAT: admin nghỉ, kế toán đối chiếu sao kê rồi chi · Mã GD FT26UIREF01"
+        },
+        {
+          "note": "Xác nhận hoàn 289.000đ cho đơn COD trả hàng: hãng vận chuyển đã thu COD · hãng xác nhận đã thu COD (uat)"
+        },
+        {
+          "note": "Pancake: hàng đã hoàn về kho"
+        }
+      ]
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-MUI-07",
+    "persona": "ketoan",
+    "size": "web375",
+    "journey": "Việc tiền bằng giao diện",
+    "step": "Kế toán mở tab Thuế TNCN hoa hồng (có lệnh rút cũ APPROVED)",
+    "expect": "thấy \"Lệnh rút ngân hàng cũ\" ở mục Đã duyệt + nút \"Đã chuyển khoản\"; không có nút Duyệt / Từ chối; không tràn ngang",
+    "actual": "tiêu đề=true; có Đã chuyển khoản=true; không có Duyệt=true; tràn ngang 0px",
+    "evidence": "Tubu Tree Quản trị Về cửa hàng Đăng xuất Bỏ qua tới nội dung Đại lý và đối tác · Thuế TNCN hoa hồng , 9 việc đang chờ Đổi mục Thuế TNCN hoa hồng Khấu trừ thuế TNCN theo tháng Tháng Tháng 1 Tháng 2 Tháng 3 Tháng 4 Tháng 5 Tháng 6 Tháng 7 Tháng 8 Tháng 9 Tháng 1",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-MUI-08",
+    "persona": "ketoan",
+    "size": "web375",
+    "journey": "Việc tiền bằng giao diện",
+    "step": "Kế toán nhập mã giao dịch rồi bấm \"Đã chuyển khoản\" cho lệnh rút đã duyệt",
+    "expect": "POST 2xx; DB PAID + bankRef + paidAt; Ví CTV không đổi (tiền đã trừ lúc rút); sổ Ví khớp",
+    "actual": "POST /admin/payouts/uatracep3ipsnb/mark-paid 201; DB {\"s\":\"PAID\",\"br\":\"FT26UIPAY01\",\"pa\":\"2026-11-03T21:44:58.468Z\"}; ví 2525000 -> 2525000, sổ 2525000; hộp: \"Tubu Tree Quản trị Về cửa hàng Đăng xuất Bỏ qua tới nội dung Đại lý và đối tác · Thuế TNCN hoa hồng , 9 việc đang chờ Đổ\"",
+    "evidence": null,
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-MUI-09",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Việc tiền bằng giao diện",
+    "step": "Kế toán bấm chip \"Cần xử lý Pancake (n)\" ở danh sách đơn",
+    "expect": "số trên chip = số đơn API pancake=attention; danh sách lọc còn đúng các đơn đó",
+    "actual": "chip \"Cần xử lý Pancake (26)\"; API total 26; số dòng 20; Tổng trên màn 26",
+    "evidence": "Tubu Tree Quản trị Về cửa hàng Tubu Đăng xuất Quản trị Tubu Tree Bỏ qua tới nội dung HAY DÙNG Hôm nay , 9 việc đang chờ Đơn hàng , 3 việc đang chờ Đổi rác TỔNG QUAN BÁN HÀNG , 3 VIỆC ĐANG CHỜ , 6 KHOẢ",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-MUI-10",
+    "persona": "ketoan",
+    "size": "web1280",
+    "journey": "Việc tiền bằng giao diện",
+    "step": "Kế toán bấm \"Xuất CSV (Excel)\" ở danh sách đơn",
+    "expect": "tải được file .csv có tiêu đề + đủ dòng (mọi đơn khớp bộ lọc); SĐT khách bị che (không có số 10 chữ số đầy đủ); màn báo \"Đã tải …\"",
+    "actual": "file \"don-hang-2026-11-04.csv\"; 94 dòng dữ liệu (DB có 94 đơn); SĐT đầy đủ trong file: 0; màn: \"Đã tải don-hang-2026-11-04.\"",
+    "evidence": "﻿Mã đơn,Ngày đặt,Khách hàng,SĐT khách,Người nhận,SĐT người nhận,Loại đơn,Nơi giao,Phương thức TT,Trạng thái TT,Trạng thái đơn,Tạm tính (VNĐ),Giảm giá (VNĐ),Phí ship (VNĐ),Điểm đã dùng,Tổng tiền (VNĐ),Số sản phẩm,Hãng vận",
+    "verdict": "PASS"
+  }
+]

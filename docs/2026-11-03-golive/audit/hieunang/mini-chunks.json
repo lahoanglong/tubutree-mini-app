@@ -1,0 +1,3937 @@
+[
+ {
+  "file": "assets/index.Ccyc-_sx.module.js",
+  "isEntry": true,
+  "size": 653652,
+  "imports": 0,
+  "dynImports": 61,
+  "facade": "apps/miniapp/index.html",
+  "mods": [
+   [
+    "npm:react-dom/cjs/react-dom.production.min.js",
+    135093
+   ],
+   [
+    "npm:zmp-sdk/apis/external/zod/lib/index.mjs.js",
+    49460
+   ],
+   [
+    "apps/miniapp/src/i18n/vi.ts",
+    36641
+   ],
+   [
+    "npm:@remix-run/router/dist/router.js",
+    32483
+   ],
+   [
+    "apps/miniapp/src/components/app.tsx",
+    26525
+   ],
+   [
+    "npm:react-router/dist/index.js",
+    20781
+   ],
+   [
+    "packages/app-core/src/shop-copy.ts",
+    16125
+   ],
+   [
+    "npm:@tanstack/query-core/build/modern/queryObserver.js",
+    16088
+   ],
+   [
+    "npm:zmp-sdk/apis/constants.js",
+    14222
+   ],
+   [
+    "apps/miniapp/src/components/ui/product-tile.tsx",
+    13125
+   ],
+   [
+    "apps/miniapp/src/components/reorder/purchased-rail.tsx",
+    12411
+   ],
+   [
+    "npm:@tanstack/query-core/build/modern/query.js",
+    12283
+   ],
+   [
+    "packages/app-core/src/home-layout.ts",
+    11520
+   ],
+   [
+    "apps/miniapp/src/components/home/new-customer-gift.tsx",
+    9269
+   ]
+  ]
+ },
+ {
+  "file": "assets/coupon-claim-gate.CHbAJfM0.module.js",
+  "isEntry": false,
+  "size": 4871,
+  "imports": 5,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/components/coupon-claim-gate.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/components/coupon-claim-gate.tsx",
+    7787
+   ]
+  ]
+ },
+ {
+  "file": "assets/browse.C75Mt-co.module.js",
+  "isEntry": false,
+  "size": 26978,
+  "imports": 19,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/browse.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/browse.tsx",
+    13485
+   ],
+   [
+    "apps/miniapp/src/components/catalog/suggest-list.tsx",
+    5541
+   ],
+   [
+    "apps/miniapp/src/components/catalog/filter-sheet.tsx",
+    5033
+   ],
+   [
+    "apps/miniapp/src/utils/search-state.ts",
+    4926
+   ],
+   [
+    "apps/miniapp/src/components/catalog/category-tiles.tsx",
+    3199
+   ],
+   [
+    "apps/miniapp/src/components/catalog/brand-grid.tsx",
+    2183
+   ],
+   [
+    "apps/miniapp/src/components/catalog/browse-hub.tsx",
+    1822
+   ],
+   [
+    "apps/miniapp/src/components/catalog/recently-viewed-rail.tsx",
+    1635
+   ],
+   [
+    "apps/miniapp/src/hooks/use-search-state.ts",
+    1407
+   ],
+   [
+    "apps/miniapp/src/utils/recent-searches.ts",
+    1196
+   ],
+   [
+    "apps/miniapp/src/components/catalog/active-filters.tsx",
+    1078
+   ],
+   [
+    "packages/app-core/src/browse/sort.ts",
+    1020
+   ],
+   [
+    "packages/app-core/src/browse/category-tree.ts",
+    981
+   ],
+   [
+    "apps/miniapp/src/components/catalog/list-heading.tsx",
+    905
+   ]
+  ]
+ },
+ {
+  "file": "assets/campaign.DaqMDsof.module.js",
+  "isEntry": false,
+  "size": 3901,
+  "imports": 8,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/campaign.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/campaign.tsx",
+    5293
+   ],
+   [
+    "packages/app-core/src/queries/campaign.ts",
+    317
+   ]
+  ]
+ },
+ {
+  "file": "assets/best-sellers.CoKHZMJ9.module.js",
+  "isEntry": false,
+  "size": 2822,
+  "imports": 6,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/best-sellers.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/best-sellers.tsx",
+    4497
+   ]
+  ]
+ },
+ {
+  "file": "assets/use-scroll-restoration.DGkTyZe_.module.js",
+  "isEntry": false,
+  "size": 1760,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/hooks/use-scroll-restoration.ts",
+    2592
+   ],
+   [
+    "packages/app-core/src/queries/browse.ts",
+    528
+   ]
+  ]
+ },
+ {
+  "file": "assets/vouchers.Zx3silZ_.module.js",
+  "isEntry": false,
+  "size": 5000,
+  "imports": 13,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/vouchers.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/vouchers.tsx",
+    7129
+   ]
+  ]
+ },
+ {
+  "file": "assets/product-detail.ymMS2Z5x.module.js",
+  "isEntry": false,
+  "size": 50820,
+  "imports": 42,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/product-detail.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/product-detail.tsx",
+    45339
+   ],
+   [
+    "apps/miniapp/src/components/reviews-section.tsx",
+    19119
+   ],
+   [
+    "apps/miniapp/src/components/product/pdp-bundles.tsx",
+    6821
+   ],
+   [
+    "apps/miniapp/src/components/product/pdp-quick-reviews.tsx",
+    2510
+   ],
+   [
+    "apps/miniapp/src/components/product/points-earn-line.tsx",
+    2203
+   ],
+   [
+    "apps/miniapp/src/components/product/points-earn-sheet.tsx",
+    2164
+   ],
+   [
+    "apps/miniapp/src/components/product/flash-price-bar.tsx",
+    1523
+   ],
+   [
+    "packages/app-core/src/points-earn-popup.ts",
+    1198
+   ],
+   [
+    "apps/miniapp/src/components/product/use-product-bundles.ts",
+    878
+   ],
+   [
+    "apps/miniapp/src/components/product/pdp-offers-sheet.tsx",
+    876
+   ],
+   [
+    "apps/miniapp/src/utils/points-earn.ts",
+    735
+   ],
+   [
+    "packages/app-core/src/commerce/review-filter.ts",
+    596
+   ],
+   [
+    "npm:lucide-react/dist/esm/icons/megaphone.mjs",
+    574
+   ],
+   [
+    "apps/miniapp/src/components/ui/section-title.tsx",
+    532
+   ]
+  ]
+ },
+ {
+  "file": "assets/cart.C1mpeo1B.module.js",
+  "isEntry": false,
+  "size": 20938,
+  "imports": 29,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/cart.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/cart.tsx",
+    30504
+   ],
+   [
+    "packages/app-core/src/commerce/cart-combo.ts",
+    2893
+   ],
+   [
+    "apps/miniapp/src/components/cart-combo-block.tsx",
+    1861
+   ],
+   [
+    "apps/miniapp/src/utils/cart-rules.ts",
+    734
+   ],
+   [
+    "packages/app-core/src/commerce/cart-total.ts",
+    147
+   ]
+  ]
+ },
+ {
+  "file": "assets/pdp-view.CRtvhamP.module.js",
+  "isEntry": false,
+  "size": 1643,
+  "imports": 2,
+  "dynImports": 0,
+  "mods": [
+   [
+    "packages/app-core/src/commerce/pdp-view.ts",
+    1532
+   ],
+   [
+    "apps/miniapp/src/components/storefront-context-bar.tsx",
+    1153
+   ]
+  ]
+ },
+ {
+  "file": "assets/checkout.D4Xu1a9H.module.js",
+  "isEntry": false,
+  "size": 48104,
+  "imports": 40,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/checkout.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/checkout.tsx",
+    55184
+   ],
+   [
+    "apps/miniapp/src/components/checkout/order-success.tsx",
+    10602
+   ],
+   [
+    "apps/miniapp/src/components/checkout/referral-code-box.tsx",
+    7361
+   ],
+   [
+    "apps/miniapp/src/components/checkout/address-section.tsx",
+    6768
+   ],
+   [
+    "apps/miniapp/src/utils/checkout-rules.ts",
+    3901
+   ],
+   [
+    "packages/app-core/src/commerce/flash-limit.ts",
+    662
+   ],
+   [
+    "packages/app-core/src/points-offer.ts",
+    567
+   ],
+   [
+    "npm:lucide-react/dist/esm/icons/circle-alert.mjs",
+    468
+   ],
+   [
+    "packages/app-core/src/commerce/checkout-display.ts",
+    339
+   ]
+  ]
+ },
+ {
+  "file": "assets/retail-only.CUyd0_8Y.module.js",
+  "isEntry": false,
+  "size": 171,
+  "imports": 0,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/utils/retail-only.ts",
+    137
+   ]
+  ]
+ },
+ {
+  "file": "assets/shipments.DgRLNRux.module.js",
+  "isEntry": false,
+  "size": 7537,
+  "imports": 7,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/components/checkout/voucher-sheet.tsx",
+    6912
+   ],
+   [
+    "apps/miniapp/src/components/checkout/use-coupon-hint.ts",
+    3426
+   ],
+   [
+    "apps/miniapp/src/utils/shipments.ts",
+    1539
+   ],
+   [
+    "apps/miniapp/src/components/ui/voucher-picker.tsx",
+    883
+   ],
+   [
+    "apps/miniapp/src/utils/coupon-scope.ts",
+    225
+   ]
+  ]
+ },
+ {
+  "file": "assets/coupon-name.DZ8cc2JG.module.js",
+  "isEntry": false,
+  "size": 4270,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "packages/app-core/src/commerce/voucher-picker.ts",
+    5503
+   ],
+   [
+    "apps/miniapp/src/utils/coupon-name.ts",
+    638
+   ]
+  ]
+ },
+ {
+  "file": "assets/bank-payment.O8RiYrh0.module.js",
+  "isEntry": false,
+  "size": 11299,
+  "imports": 8,
+  "dynImports": 1,
+  "facade": "apps/miniapp/src/pages/bank-payment.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/bank-payment.tsx",
+    17160
+   ],
+   [
+    "apps/miniapp/src/services/platform-bridge.ts",
+    1509
+   ],
+   [
+    "packages/app-core/src/bank-payment-copy.ts",
+    360
+   ],
+   [
+    "packages/app-core/src/bridge.ts",
+    166
+   ],
+   [
+    "apps/miniapp/src/services/payment-api.ts",
+    136
+   ]
+  ]
+ },
+ {
+  "file": "assets/orders._u7nQi6z.module.js",
+  "isEntry": false,
+  "size": 14401,
+  "imports": 22,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/orders.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/components/subscriptions-panel.tsx",
+    8685
+   ],
+   [
+    "apps/miniapp/src/pages/orders.tsx",
+    6349
+   ],
+   [
+    "apps/miniapp/src/components/orders/order-card.tsx",
+    3788
+   ],
+   [
+    "apps/miniapp/src/components/subscription-edit-sheet.tsx",
+    3524
+   ],
+   [
+    "apps/miniapp/src/components/orders/orders-tabs.ts",
+    937
+   ],
+   [
+    "apps/miniapp/src/utils/subscription-price.ts",
+    343
+   ]
+  ]
+ },
+ {
+  "file": "assets/order-detail.CkH9D_Hs.module.js",
+  "isEntry": false,
+  "size": 34780,
+  "imports": 32,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/order-detail.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/order-detail.tsx",
+    36345
+   ],
+   [
+    "apps/miniapp/src/components/orders/return-request-sheet.tsx",
+    9608
+   ],
+   [
+    "apps/miniapp/src/components/orders/order-refunds.tsx",
+    4524
+   ],
+   [
+    "apps/miniapp/src/components/orders/refund-destination-picker.tsx",
+    3690
+   ],
+   [
+    "packages/app-core/src/shipping-events.ts",
+    2006
+   ],
+   [
+    "apps/miniapp/src/components/orders/cancel-reason-picker.tsx",
+    1652
+   ],
+   [
+    "packages/app-core/src/cancel-reasons.ts",
+    612
+   ],
+   [
+    "npm:lucide-react/dist/esm/icons/rotate-ccw.mjs",
+    391
+   ],
+   [
+    "packages/app-core/src/api/orders.ts",
+    384
+   ]
+  ]
+ },
+ {
+  "file": "assets/shipping-eta.CvTtVy5k.module.js",
+  "isEntry": false,
+  "size": 1269,
+  "imports": 0,
+  "dynImports": 0,
+  "mods": [
+   [
+    "packages/app-core/src/shipping-eta.ts",
+    1961
+   ]
+  ]
+ },
+ {
+  "file": "assets/order-status.DoQvc0_s.module.js",
+  "isEntry": false,
+  "size": 3607,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/utils/order-status.ts",
+    5195
+   ]
+  ]
+ },
+ {
+  "file": "assets/game.CQHwCB6U.module.js",
+  "isEntry": false,
+  "size": 61232,
+  "imports": 24,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/game.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/game.tsx",
+    14583
+   ],
+   [
+    "apps/miniapp/src/components/game/harvest-celebration.tsx",
+    7640
+   ],
+   [
+    "apps/miniapp/src/components/game/checkin-streak.tsx",
+    5708
+   ],
+   [
+    "apps/miniapp/src/components/game/use-game-actions.ts",
+    5431
+   ],
+   [
+    "apps/miniapp/src/components/wheel.tsx",
+    5371
+   ],
+   [
+    "apps/miniapp/src/components/game/missions-card.tsx",
+    4424
+   ],
+   [
+    "apps/miniapp/src/components/game/quiz-card.tsx",
+    4384
+   ],
+   [
+    "apps/miniapp/src/components/game/eco-impact.tsx",
+    4263
+   ],
+   [
+    "apps/miniapp/src/components/game/garden-plots.tsx",
+    3795
+   ],
+   [
+    "apps/miniapp/src/components/game/earn-water-sheet.tsx",
+    3782
+   ],
+   [
+    "apps/miniapp/src/components/game/wheel-prize-sheet.tsx",
+    3493
+   ],
+   [
+    "apps/miniapp/src/components/game/newbie-guide.tsx",
+    3345
+   ],
+   [
+    "apps/miniapp/src/components/game/tree-fund.tsx",
+    3269
+   ],
+   [
+    "apps/miniapp/src/components/game/garden-hero.tsx",
+    2904
+   ]
+  ]
+ },
+ {
+  "file": "assets/feed.CyMFa23K.module.js",
+  "isEntry": false,
+  "size": 7824,
+  "imports": 20,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/feed.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/feed.tsx",
+    9573
+   ],
+   [
+    "apps/miniapp/src/components/community/public-preview-list.tsx",
+    3584
+   ]
+  ]
+ },
+ {
+  "file": "assets/community-events.BQyhWRUK.module.js",
+  "isEntry": false,
+  "size": 6026,
+  "imports": 17,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/community-events.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/community-events.tsx",
+    9347
+   ]
+  ]
+ },
+ {
+  "file": "assets/post-detail.D6cVXpKJ.module.js",
+  "isEntry": false,
+  "size": 9885,
+  "imports": 22,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/post-detail.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/post-detail.tsx",
+    15686
+   ],
+   [
+    "npm:lucide-react/dist/esm/icons/flag.mjs",
+    459
+   ]
+  ]
+ },
+ {
+  "file": "assets/ai-advisor.CAmxGjdW.module.js",
+  "isEntry": false,
+  "size": 7558,
+  "imports": 4,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/ai-advisor.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/ai-advisor.tsx",
+    8804
+   ],
+   [
+    "npm:zmp-ui/esm/components/spinner/index.js",
+    1736
+   ],
+   [
+    "apps/miniapp/src/components/advisor-paused.tsx",
+    1482
+   ],
+   [
+    "npm:@tanstack/react-query/build/modern/useMutationState.js",
+    1274
+   ],
+   [
+    "apps/miniapp/src/store/ai-advisor.ts",
+    383
+   ],
+   [
+    "apps/miniapp/src/services/ai-api.ts",
+    108
+   ]
+  ]
+ },
+ {
+  "file": "assets/group-buy.9dF7Y5XL.module.js",
+  "isEntry": false,
+  "size": 7741,
+  "imports": 10,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/group-buy.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/group-buy.tsx",
+    10148
+   ],
+   [
+    "packages/app-core/src/group-buy-copy.ts",
+    1239
+   ]
+  ]
+ },
+ {
+  "file": "assets/share-link.7dkoWSR3.module.js",
+  "isEntry": false,
+  "size": 540,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/utils/share-link.ts",
+    520
+   ],
+   [
+    "apps/miniapp/src/services/groupbuy-api.ts",
+    328
+   ]
+  ]
+ },
+ {
+  "file": "assets/recycle-rules.C4o9sIJ0.module.js",
+  "isEntry": false,
+  "size": 835,
+  "imports": 3,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/recycle-rules.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/recycle-rules.tsx",
+    1161
+   ]
+  ]
+ },
+ {
+  "file": "assets/recycle-points.D9fgHuJX.module.js",
+  "isEntry": false,
+  "size": 9944,
+  "imports": 16,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/recycle-points.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/components/waste-point-picker.tsx",
+    8126
+   ],
+   [
+    "apps/miniapp/src/pages/recycle-points.tsx",
+    8005
+   ]
+  ]
+ },
+ {
+  "file": "assets/recycle-edit.DG4Mp0fj.module.js",
+  "isEntry": false,
+  "size": 5788,
+  "imports": 20,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/recycle-edit.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/recycle-edit.tsx",
+    7031
+   ]
+  ]
+ },
+ {
+  "file": "assets/recycle-new.CvYWebbd.module.js",
+  "isEntry": false,
+  "size": 17588,
+  "imports": 19,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/recycle-new.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/recycle-new.tsx",
+    27701
+   ],
+   [
+    "packages/app-core/src/waste-method-order.ts",
+    674
+   ],
+   [
+    "packages/app-core/src/waste-consent.ts",
+    196
+   ],
+   [
+    "packages/app-core/src/waste-province.ts",
+    135
+   ]
+  ]
+ },
+ {
+  "file": "assets/useQueries.paott_QZ.module.js",
+  "isEntry": false,
+  "size": 4895,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "npm:@tanstack/query-core/build/modern/queriesObserver.js",
+    6496
+   ],
+   [
+    "npm:@tanstack/react-query/build/modern/useQueries.js",
+    2716
+   ]
+  ]
+ },
+ {
+  "file": "assets/recycle-requests.Ccg0T4WV.module.js",
+  "isEntry": false,
+  "size": 3447,
+  "imports": 10,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/recycle-requests.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/recycle-requests.tsx",
+    4622
+   ]
+  ]
+ },
+ {
+  "file": "assets/waste-phone-needed.xlU9yP3y.module.js",
+  "isEntry": false,
+  "size": 1027,
+  "imports": 2,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/components/waste-phone-needed.tsx",
+    1107
+   ]
+  ]
+ },
+ {
+  "file": "assets/recycle-done.BwiZdktU.module.js",
+  "isEntry": false,
+  "size": 4557,
+  "imports": 27,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/recycle-done.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/recycle-done.tsx",
+    4368
+   ],
+   [
+    "npm:lucide-react/dist/esm/icons/droplet.mjs",
+    420
+   ]
+  ]
+ },
+ {
+  "file": "assets/recycle.BpyNtOPO.module.js",
+  "isEntry": false,
+  "size": 10098,
+  "imports": 13,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/recycle.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/recycle.tsx",
+    15577
+   ],
+   [
+    "apps/miniapp/src/components/recycle-page-skeleton.tsx",
+    695
+   ]
+  ]
+ },
+ {
+  "file": "assets/recycle-request.OrmHBxPM.module.js",
+  "isEntry": false,
+  "size": 12233,
+  "imports": 21,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/recycle-request.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/recycle-request.tsx",
+    18768
+   ],
+   [
+    "packages/app-core/src/waste-request-poll.ts",
+    185
+   ]
+  ]
+ },
+ {
+  "file": "assets/support-contact.C6XUJ34K.module.js",
+  "isEntry": false,
+  "size": 1810,
+  "imports": 4,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/components/support-contact.tsx",
+    2332
+   ]
+  ]
+ },
+ {
+  "file": "assets/timeline.B0lPoV2A.module.js",
+  "isEntry": false,
+  "size": 2489,
+  "imports": 2,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/components/ui/timeline.tsx",
+    3378
+   ],
+   [
+    "packages/app-core/src/waste-timeline.ts",
+    848
+   ]
+  ]
+ },
+ {
+  "file": "assets/waste-hours.DUwppmjj.module.js",
+  "isEntry": false,
+  "size": 1096,
+  "imports": 0,
+  "dynImports": 0,
+  "mods": [
+   [
+    "packages/app-core/src/waste-hours.ts",
+    1821
+   ]
+  ]
+ },
+ {
+  "file": "assets/waste-item-thumb.Dyc-364M.module.js",
+  "isEntry": false,
+  "size": 2532,
+  "imports": 2,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/components/waste-item-thumb.tsx",
+    902
+   ],
+   [
+    "npm:lucide-react/dist/esm/icons/layers.mjs",
+    706
+   ],
+   [
+    "npm:lucide-react/dist/esm/icons/container.mjs",
+    697
+   ],
+   [
+    "npm:lucide-react/dist/esm/icons/milk.mjs",
+    595
+   ],
+   [
+    "npm:lucide-react/dist/esm/icons/battery.mjs",
+    393
+   ]
+  ]
+ },
+ {
+  "file": "assets/use-recycle-login.DTrlztOw.module.js",
+  "isEntry": false,
+  "size": 620,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/hooks/use-recycle-login.ts",
+    662
+   ]
+  ]
+ },
+ {
+  "file": "assets/recycle-desk.C-7erJF1.module.js",
+  "isEntry": false,
+  "size": 22673,
+  "imports": 19,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/recycle-desk.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/recycle-desk.tsx",
+    21427
+   ],
+   [
+    "packages/shared-types/src/cash-wording.ts",
+    7376
+   ],
+   [
+    "apps/miniapp/src/components/waste-desk-perk.tsx",
+    4604
+   ],
+   [
+    "packages/app-core/src/waste-desk.ts",
+    2354
+   ],
+   [
+    "packages/app-core/src/waste-code-input.ts",
+    1181
+   ]
+  ]
+ },
+ {
+  "file": "assets/waste-labels.BfsbToBw.module.js",
+  "isEntry": false,
+  "size": 6614,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/utils/waste-labels.ts",
+    8241
+   ]
+  ]
+ },
+ {
+  "file": "assets/rewards.DrOqqMc4.module.js",
+  "isEntry": false,
+  "size": 11238,
+  "imports": 19,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/rewards.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/rewards.tsx",
+    16648
+   ],
+   [
+    "apps/miniapp/src/utils/points-rules-note.ts",
+    459
+   ]
+  ]
+ },
+ {
+  "file": "assets/game-api.CMpvSSc8.module.js",
+  "isEntry": false,
+  "size": 1734,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/services/game-api.ts",
+    1849
+   ]
+  ]
+ },
+ {
+  "file": "assets/use-idempotency-key.CXTyHdJh.module.js",
+  "isEntry": false,
+  "size": 526,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/hooks/use-idempotency-key.ts",
+    882
+   ]
+  ]
+ },
+ {
+  "file": "assets/rewards-mine.BDuie0MD.module.js",
+  "isEntry": false,
+  "size": 4436,
+  "imports": 9,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/rewards-mine.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/rewards-mine.tsx",
+    5389
+   ],
+   [
+    "packages/app-core/src/redemption-coupon.ts",
+    729
+   ]
+  ]
+ },
+ {
+  "file": "assets/reward-rules.CXGuwAPw.module.js",
+  "isEntry": false,
+  "size": 2931,
+  "imports": 0,
+  "dynImports": 0,
+  "mods": [
+   [
+    "packages/app-core/src/reward-rules.ts",
+    4118
+   ]
+  ]
+ },
+ {
+  "file": "assets/profile.1Y3xF2SK.module.js",
+  "isEntry": false,
+  "size": 18493,
+  "imports": 33,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/profile.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/profile.tsx",
+    25818
+   ],
+   [
+    "npm:lucide-react/dist/esm/icons/calendar-clock.mjs",
+    617
+   ],
+   [
+    "npm:lucide-react/dist/esm/icons/credit-card.mjs",
+    413
+   ]
+  ]
+ },
+ {
+  "file": "assets/profile-sections.mvvibGUr.module.js",
+  "isEntry": false,
+  "size": 65,
+  "imports": 0,
+  "dynImports": 0,
+  "mods": [
+   [
+    "packages/app-core/src/profile-sections.ts",
+    91
+   ]
+  ]
+ },
+ {
+  "file": "assets/loyalty.BAwEzpyY.module.js",
+  "isEntry": false,
+  "size": 15180,
+  "imports": 20,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/loyalty.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/loyalty.tsx",
+    24599
+   ],
+   [
+    "npm:lucide-react/dist/esm/icons/qr-code.mjs",
+    952
+   ]
+  ]
+ },
+ {
+  "file": "assets/waste-copy.D41YhNzE.module.js",
+  "isEntry": false,
+  "size": 3623,
+  "imports": 0,
+  "dynImports": 0,
+  "mods": [
+   [
+    "packages/app-core/src/waste-copy.ts",
+    4974
+   ]
+  ]
+ },
+ {
+  "file": "assets/guest-tiers.lRkLMeFE.module.js",
+  "isEntry": false,
+  "size": 2952,
+  "imports": 4,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/components/loyalty/guest-tiers.tsx",
+    2250
+   ],
+   [
+    "apps/miniapp/src/utils/points-lots.ts",
+    794
+   ],
+   [
+    "packages/app-core/src/guest-preview.ts",
+    724
+   ]
+  ]
+ },
+ {
+  "file": "assets/waste-api.CNX2RjK9.module.js",
+  "isEntry": false,
+  "size": 2209,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/services/waste-api.ts",
+    2799
+   ]
+  ]
+ },
+ {
+  "file": "assets/offers.CeWISMU2.module.js",
+  "isEntry": false,
+  "size": 13250,
+  "imports": 16,
+  "dynImports": 1,
+  "facade": "apps/miniapp/src/pages/offers.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/offers.tsx",
+    7762
+   ],
+   [
+    "apps/miniapp/src/components/offers/offers-points-strip.tsx",
+    5934
+   ],
+   [
+    "apps/miniapp/src/components/offers/offers-collect.tsx",
+    3129
+   ],
+   [
+    "apps/miniapp/src/components/offers/offers-flash.tsx",
+    2384
+   ],
+   [
+    "apps/miniapp/src/components/campaign/campaign-banner.tsx",
+    1557
+   ],
+   [
+    "packages/app-core/src/member-card-grace.ts",
+    559
+   ]
+  ]
+ },
+ {
+  "file": "assets/use-claim-coupon.DA6b1b26.module.js",
+  "isEntry": false,
+  "size": 3644,
+  "imports": 2,
+  "dynImports": 0,
+  "mods": [
+   [
+    "packages/app-core/src/commerce/voucher-center.ts",
+    3442
+   ],
+   [
+    "apps/miniapp/src/hooks/use-claim-coupon.ts",
+    1378
+   ]
+  ]
+ },
+ {
+  "file": "assets/use-coupon-use.DWnHebDy.module.js",
+  "isEntry": false,
+  "size": 1275,
+  "imports": 2,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/hooks/use-coupon-use.ts",
+    1660
+   ]
+  ]
+ },
+ {
+  "file": "assets/coupon-use.C5NwusyQ.module.js",
+  "isEntry": false,
+  "size": 2219,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "packages/app-core/src/coupon-use.ts",
+    3715
+   ]
+  ]
+ },
+ {
+  "file": "assets/guest-link-card.C8D2yrzs.module.js",
+  "isEntry": false,
+  "size": 1274,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/components/home/guest-link-card.tsx",
+    1834
+   ]
+  ]
+ },
+ {
+  "file": "assets/daily-check-in-card.DJlGw81d.module.js",
+  "isEntry": false,
+  "size": 5114,
+  "imports": 3,
+  "dynImports": 1,
+  "mods": [
+   [
+    "apps/miniapp/src/components/loyalty/daily-check-in-card.tsx",
+    6475
+   ],
+   [
+    "packages/app-core/src/loyalty-tier-copy.ts",
+    1018
+   ],
+   [
+    "npm:lucide-react/dist/esm/icons/calendar-check.mjs",
+    535
+   ]
+  ]
+ },
+ {
+  "file": "assets/daily-check-in-guest-copy.p11A9Cl8.module.js",
+  "isEntry": false,
+  "size": 679,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "packages/app-core/src/daily-check-in-guest-copy.ts",
+    1154
+   ]
+  ]
+ },
+ {
+  "file": "assets/loyalty.Cxbe8vng.module.js",
+  "isEntry": false,
+  "size": 1046,
+  "imports": 0,
+  "dynImports": 0,
+  "mods": [
+   [
+    "packages/app-core/src/queries/loyalty.ts",
+    1044
+   ],
+   [
+    "packages/app-core/src/api/loyalty.ts",
+    620
+   ],
+   [
+    "packages/app-core/src/api/coupon-collect.ts",
+    236
+   ]
+  ]
+ },
+ {
+  "file": "assets/card-gift-note.B2gEndz3.module.js",
+  "isEntry": false,
+  "size": 242,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/services/card-gift-note.ts",
+    427
+   ]
+  ]
+ },
+ {
+  "file": "assets/bottom-sheet.35gnbsd2.module.js",
+  "isEntry": false,
+  "size": 2511,
+  "imports": 3,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/components/ui/bottom-sheet.tsx",
+    4390
+   ]
+  ]
+ },
+ {
+  "file": "assets/index.BmRc2nlJ.module.js",
+  "isEntry": false,
+  "size": 78840,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "npm:@react-spring/core/dist/react-spring-core.esm.js",
+    48357
+   ],
+   [
+    "npm:resize-observer-polyfill/dist/ResizeObserver.es.js",
+    33630
+   ],
+   [
+    "npm:@use-gesture/core/dist/actions-fe213e88.esm.js",
+    29002
+   ],
+   [
+    "npm:@react-spring/shared/dist/react-spring-shared.esm.js",
+    20632
+   ],
+   [
+    "npm:@react-spring/animated/dist/react-spring-animated.esm.js",
+    8466
+   ],
+   [
+    "npm:@use-gesture/core/dist/use-gesture-core.esm.js",
+    8350
+   ],
+   [
+    "npm:zmp-ui/esm/components/sheet/content.js",
+    7671
+   ],
+   [
+    "npm:@react-spring/web/dist/react-spring-web.esm.js",
+    7587
+   ],
+   [
+    "npm:@react-spring/rafz/dist/react-spring-rafz.esm.js",
+    3531
+   ],
+   [
+    "npm:zmp-ui/esm/common/modal-wrapper/index.js",
+    3204
+   ],
+   [
+    "npm:zmp-ui/esm/components/sheet/action-sheet.js",
+    2817
+   ],
+   [
+    "npm:zmp-ui/esm/components/sheet/sheet.js",
+    2511
+   ],
+   [
+    "npm:zmp-ui/esm/components/sheet/index.js",
+    1610
+   ],
+   [
+    "npm:@use-gesture/core/dist/maths-0ab39ae9.esm.js",
+    1196
+   ]
+  ]
+ },
+ {
+  "file": "assets/x.D7wk0QHh.module.js",
+  "isEntry": false,
+  "size": 334,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "npm:lucide-react/dist/esm/icons/x.mjs",
+    337
+   ]
+  ]
+ },
+ {
+  "file": "assets/useInfiniteQuery.DtqRvcdW.module.js",
+  "isEntry": false,
+  "size": 1621,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "npm:@tanstack/query-core/build/modern/infiniteQueryObserver.js",
+    1976
+   ],
+   [
+    "npm:@tanstack/react-query/build/modern/useInfiniteQuery.js",
+    135
+   ]
+  ]
+ },
+ {
+  "file": "assets/catalog-grid.CwQhPbt3.module.js",
+  "isEntry": false,
+  "size": 327,
+  "imports": 2,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/components/catalog/catalog-grid.tsx",
+    355
+   ]
+  ]
+ },
+ {
+  "file": "assets/sort-bar.CbTMDMEl.module.js",
+  "isEntry": false,
+  "size": 3083,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/components/ui/sort-bar.tsx",
+    3582
+   ],
+   [
+    "npm:lucide-react/dist/esm/icons/sliders-horizontal.mjs",
+    686
+   ]
+  ]
+ },
+ {
+  "file": "assets/search-field.TwStX73P.module.js",
+  "isEntry": false,
+  "size": 1359,
+  "imports": 2,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/components/ui/search-field.tsx",
+    2643
+   ]
+  ]
+ },
+ {
+  "file": "assets/use-suggest.CHfLJBhy.module.js",
+  "isEntry": false,
+  "size": 559,
+  "imports": 3,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/hooks/use-suggest.ts",
+    785
+   ]
+  ]
+ },
+ {
+  "file": "assets/chip.rDRGUNkI.module.js",
+  "isEntry": false,
+  "size": 1436,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/components/ui/chip.tsx",
+    1680
+   ]
+  ]
+ },
+ {
+  "file": "assets/section.QPF5zEBU.module.js",
+  "isEntry": false,
+  "size": 252,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/components/ui/section.tsx",
+    255
+   ]
+  ]
+ },
+ {
+  "file": "assets/product-grid.CCvad8Hv.module.js",
+  "isEntry": false,
+  "size": 1620,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/components/ui/product-grid.tsx",
+    1794
+   ]
+  ]
+ },
+ {
+  "file": "assets/use-debounced.dDUIvIhu.module.js",
+  "isEntry": false,
+  "size": 214,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/utils/use-debounced.ts",
+    321
+   ]
+  ]
+ },
+ {
+  "file": "assets/catalog-pricing.DqGfd5IM.module.js",
+  "isEntry": false,
+  "size": 106,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/components/catalog/catalog-pricing.ts",
+    101
+   ]
+  ]
+ },
+ {
+  "file": "assets/vn-fold.BVOkQldh.module.js",
+  "isEntry": false,
+  "size": 456,
+  "imports": 0,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/utils/vn-fold.ts",
+    776
+   ]
+  ]
+ },
+ {
+  "file": "assets/history.C4r0hshs.module.js",
+  "isEntry": false,
+  "size": 417,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "npm:lucide-react/dist/esm/icons/history.mjs",
+    435
+   ]
+  ]
+ },
+ {
+  "file": "assets/initials-avatar.BCgG3n-G.module.js",
+  "isEntry": false,
+  "size": 514,
+  "imports": 2,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/components/ui/initials-avatar.tsx",
+    691
+   ]
+  ]
+ },
+ {
+  "file": "assets/initials-avatar.Cglhv8iC.module.js",
+  "isEntry": false,
+  "size": 607,
+  "imports": 0,
+  "dynImports": 0,
+  "mods": [
+   [
+    "packages/app-core/src/initials-avatar.ts",
+    901
+   ]
+  ]
+ },
+ {
+  "file": "assets/page-header.BUDlxIAm.module.js",
+  "isEntry": false,
+  "size": 634,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/components/ui/page-header.tsx",
+    1028
+   ]
+  ]
+ },
+ {
+  "file": "assets/voucher-ticket.D5tTU_hZ.module.js",
+  "isEntry": false,
+  "size": 7539,
+  "imports": 2,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/components/ui/voucher-ticket.tsx",
+    11411
+   ]
+  ]
+ },
+ {
+  "file": "assets/store.CRxE0Xjd.module.js",
+  "isEntry": false,
+  "size": 678,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "npm:lucide-react/dist/esm/icons/store.mjs",
+    722
+   ]
+  ]
+ },
+ {
+  "file": "assets/segmented-tabs.BLksGYSC.module.js",
+  "isEntry": false,
+  "size": 1670,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/components/ui/segmented-tabs.tsx",
+    1986
+   ]
+  ]
+ },
+ {
+  "file": "assets/auth-gate.BO5vLBkf.module.js",
+  "isEntry": false,
+  "size": 1317,
+  "imports": 2,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/components/ui/auth-gate.tsx",
+    2328
+   ]
+  ]
+ },
+ {
+  "file": "assets/clock.Cs7q-U_f.module.js",
+  "isEntry": false,
+  "size": 349,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "npm:lucide-react/dist/esm/icons/clock.mjs",
+    360
+   ]
+  ]
+ },
+ {
+  "file": "assets/share-sheet.uvAtz7En.module.js",
+  "isEntry": false,
+  "size": 3140,
+  "imports": 4,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/components/share-sheet.tsx",
+    3433
+   ],
+   [
+    "npm:lucide-react/dist/esm/icons/share-2.mjs",
+    596
+   ],
+   [
+    "apps/miniapp/src/utils/miniapp-link.ts",
+    349
+   ]
+  ]
+ },
+ {
+  "file": "assets/subscribe-sheet.CrSmoXlb.module.js",
+  "isEntry": false,
+  "size": 4057,
+  "imports": 10,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/components/subscribe-sheet.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/components/subscribe-sheet.tsx",
+    6544
+   ]
+  ]
+ },
+ {
+  "file": "assets/use-flash-allowance.DNWfzn26.module.js",
+  "isEntry": false,
+  "size": 7732,
+  "imports": 4,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/components/variation-sheet.tsx",
+    5900
+   ],
+   [
+    "packages/app-core/src/commerce/flash-line.ts",
+    3458
+   ],
+   [
+    "apps/miniapp/src/components/product/variation-chip.tsx",
+    1895
+   ],
+   [
+    "packages/app-core/src/commerce/flash-allowance.ts",
+    795
+   ],
+   [
+    "packages/app-core/src/variation-picker.ts",
+    520
+   ],
+   [
+    "apps/miniapp/src/hooks/use-flash-allowance.ts",
+    518
+   ],
+   [
+    "packages/shared-types/src/flash-allowance.ts",
+    37
+   ]
+  ]
+ },
+ {
+  "file": "assets/suggested-rail.cb6RjjVH.module.js",
+  "isEntry": false,
+  "size": 613,
+  "imports": 2,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/components/catalog/suggested-rail.tsx",
+    741
+   ]
+  ]
+ },
+ {
+  "file": "assets/quantity-selector.D-yVs_bJ.module.js",
+  "isEntry": false,
+  "size": 2739,
+  "imports": 3,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/components/ui/quantity-selector.tsx",
+    3525
+   ],
+   [
+    "packages/app-core/src/qty-input.ts",
+    182
+   ]
+  ]
+ },
+ {
+  "file": "assets/brands.qhkIksIW.module.js",
+  "isEntry": false,
+  "size": 607,
+  "imports": 0,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/utils/brands.ts",
+    802
+   ],
+   [
+    "apps/miniapp/src/css/brand-theme.css",
+    0
+   ]
+  ]
+ },
+ {
+  "file": "assets/checkout-selection.BMs7nr5W.module.js",
+  "isEntry": false,
+  "size": 521,
+  "imports": 0,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/utils/checkout-selection.ts",
+    904
+   ]
+  ]
+ },
+ {
+  "file": "assets/content-kit-sheet.Ckwnh1oM.module.js",
+  "isEntry": false,
+  "size": 3935,
+  "imports": 4,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/components/content-kit-sheet.tsx",
+    6379
+   ]
+  ]
+ },
+ {
+  "file": "assets/sticky-action-bar.Dx4DJwsY.module.js",
+  "isEntry": false,
+  "size": 1868,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/components/ui/sticky-action-bar.tsx",
+    2335
+   ]
+  ]
+ },
+ {
+  "file": "assets/row-keyboard.zzhiC3yn.module.js",
+  "isEntry": false,
+  "size": 198,
+  "imports": 0,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/components/ui/row-keyboard.ts",
+    288
+   ]
+  ]
+ },
+ {
+  "file": "assets/index.C0zCaaEn.module.js",
+  "isEntry": false,
+  "size": 3308,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "npm:zmp-ui/esm/components/box/index.js",
+    5962
+   ],
+   [
+    "npm:zmp-ui/esm/components/box/utils/constants.js",
+    1031
+   ],
+   [
+    "npm:zmp-ui/esm/components/box/utils/index.js",
+    341
+   ]
+  ]
+ },
+ {
+  "file": "assets/check.DdN6-Brh.module.js",
+  "isEntry": false,
+  "size": 304,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "npm:lucide-react/dist/esm/icons/check.mjs",
+    298
+   ]
+  ]
+ },
+ {
+  "file": "assets/message-circle.DkewU9nD.module.js",
+  "isEntry": false,
+  "size": 421,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "npm:lucide-react/dist/esm/icons/message-circle.mjs",
+    455
+   ]
+  ]
+ },
+ {
+  "file": "assets/qr-code.CAvMtMhF.module.js",
+  "isEntry": false,
+  "size": 24585,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "npm:qrcode/lib/core/qrcode.js",
+    15085
+   ],
+   [
+    "npm:qrcode/lib/core/segments.js",
+    9620
+   ],
+   [
+    "npm:qrcode/lib/core/mask-pattern.js",
+    6399
+   ],
+   [
+    "npm:dijkstrajs/dijkstra.js",
+    5343
+   ],
+   [
+    "npm:qrcode/lib/core/version.js",
+    5054
+   ],
+   [
+    "npm:qrcode/lib/core/mode.js",
+    4153
+   ],
+   [
+    "npm:qrcode/lib/core/error-correction-code.js",
+    3445
+   ],
+   [
+    "npm:qrcode/lib/core/alignment-pattern.js",
+    3107
+   ],
+   [
+    "npm:qrcode/lib/renderer/utils.js",
+    3041
+   ],
+   [
+    "npm:qrcode/lib/renderer/svg-tag.js",
+    1986
+   ],
+   [
+    "npm:qrcode/lib/core/galois-field.js",
+    1921
+   ],
+   [
+    "npm:qrcode/lib/browser.js",
+    1837
+   ],
+   [
+    "npm:qrcode/lib/core/alphanumeric-data.js",
+    1832
+   ],
+   [
+    "npm:qrcode/lib/core/polynomial.js",
+    1680
+   ]
+  ]
+ },
+ {
+  "file": "assets/copy.B48v4rum.module.js",
+  "isEntry": false,
+  "size": 416,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "npm:lucide-react/dist/esm/icons/copy.mjs",
+    432
+   ]
+  ]
+ },
+ {
+  "file": "assets/image-upload.D6flVOVJ.module.js",
+  "isEntry": false,
+  "size": 12371,
+  "imports": 2,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/components/image-upload.tsx",
+    15081
+   ],
+   [
+    "packages/app-core/src/cloudinary-video.ts",
+    2792
+   ],
+   [
+    "packages/app-core/src/review-copy.ts",
+    883
+   ],
+   [
+    "npm:lucide-react/dist/esm/icons/camera.mjs",
+    560
+   ],
+   [
+    "npm:lucide-react/dist/esm/icons/refresh-cw.mjs",
+    534
+   ],
+   [
+    "npm:lucide-react/dist/esm/icons/video.mjs",
+    471
+   ],
+   [
+    "npm:lucide-react/dist/esm/icons/loader-circle.mjs",
+    329
+   ]
+  ]
+ },
+ {
+  "file": "assets/star.DeAdFyXp.module.js",
+  "isEntry": false,
+  "size": 652,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "npm:lucide-react/dist/esm/icons/star.mjs",
+    677
+   ]
+  ]
+ },
+ {
+  "file": "assets/index.1XvDEDVl.module.js",
+  "isEntry": false,
+  "size": 27524,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "npm:zmp-ui/esm/components/input/TextArea.js",
+    6582
+   ],
+   [
+    "npm:zmp-ui/esm/components/input/ClearableLabeledBaseInput.js",
+    6016
+   ],
+   [
+    "npm:zmp-ui/esm/components/input/Input.js",
+    5811
+   ],
+   [
+    "npm:zmp-ui/esm/components/input/BaseInput.js",
+    4244
+   ],
+   [
+    "npm:zmp-ui/esm/components/input/OTP.js",
+    4031
+   ],
+   [
+    "npm:zmp-ui/esm/components/input/icons/eye-invisible.js",
+    3080
+   ],
+   [
+    "npm:zmp-ui/esm/components/input/index.js",
+    3025
+   ],
+   [
+    "npm:zmp-ui/esm/components/input/Search.js",
+    2975
+   ],
+   [
+    "npm:zmp-ui/esm/hooks/useMergedState.js",
+    2829
+   ],
+   [
+    "npm:zmp-ui/esm/components/input/Password.js",
+    2733
+   ],
+   [
+    "npm:react-is/cjs/react-is.production.min.js",
+    2688
+   ],
+   [
+    "npm:zmp-ui/esm/components/input/icons/eye.js",
+    1772
+   ],
+   [
+    "npm:zmp-ui/esm/components/input/utils/commonUtils.js",
+    1474
+   ],
+   [
+    "npm:zmp-ui/esm/components/input/icons/close-circle.js",
+    1124
+   ]
+  ]
+ },
+ {
+  "file": "assets/subscriptions-api.CBBM16G3.module.js",
+  "isEntry": false,
+  "size": 738,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/services/subscriptions-api.ts",
+    651
+   ]
+  ]
+ },
+ {
+  "file": "assets/form.D4QXDGL8.module.js",
+  "isEntry": false,
+  "size": 8820,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "npm:zmp-ui/esm/components/checkbox/Checkbox.js",
+    4434
+   ],
+   [
+    "npm:zmp-ui/esm/components/checkbox/Group.js",
+    3379
+   ],
+   [
+    "npm:zmp-ui/esm/components/radio/Radio.js",
+    3374
+   ],
+   [
+    "apps/miniapp/src/components/ui/form.tsx",
+    3295
+   ],
+   [
+    "npm:zmp-ui/esm/components/radio/index.js",
+    2049
+   ],
+   [
+    "npm:zmp-ui/esm/components/radio/Group.js",
+    1901
+   ],
+   [
+    "npm:zmp-ui/esm/components/checkbox/index.js",
+    1254
+   ],
+   [
+    "npm:zmp-ui/esm/components/checkbox/TickIcon.js",
+    406
+   ],
+   [
+    "npm:zmp-ui/esm/components/checkbox/context.js",
+    67
+   ],
+   [
+    "npm:zmp-ui/esm/components/radio/context.js",
+    65
+   ]
+  ]
+ },
+ {
+  "file": "assets/subscription-options.DoGHkCHt.module.js",
+  "isEntry": false,
+  "size": 3365,
+  "imports": 6,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/components/subscription-options.tsx",
+    4628
+   ]
+  ]
+ },
+ {
+  "file": "assets/minus.B7oxy3kR.module.js",
+  "isEntry": false,
+  "size": 297,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "npm:lucide-react/dist/esm/icons/minus.mjs",
+    291
+   ]
+  ]
+ },
+ {
+  "file": "assets/plus.B7qudkN0.module.js",
+  "isEntry": false,
+  "size": 333,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "npm:lucide-react/dist/esm/icons/plus.mjs",
+    339
+   ]
+  ]
+ },
+ {
+  "file": "assets/loyalty-copy.BzcYUmm5.module.js",
+  "isEntry": false,
+  "size": 875,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/utils/loyalty-copy.ts",
+    1147
+   ]
+  ]
+ },
+ {
+  "file": "assets/wallet-rules.B_x73rkg.module.js",
+  "isEntry": false,
+  "size": 1088,
+  "imports": 0,
+  "dynImports": 0,
+  "mods": [
+   [
+    "packages/app-core/src/wallet-rules.ts",
+    1347
+   ]
+  ]
+ },
+ {
+  "file": "assets/shopping-bag.TpDGuU8-.module.js",
+  "isEntry": false,
+  "size": 520,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "npm:lucide-react/dist/esm/icons/shopping-bag.mjs",
+    570
+   ]
+  ]
+ },
+ {
+  "file": "assets/key-value-row.DGOG-krj.module.js",
+  "isEntry": false,
+  "size": 821,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/components/ui/key-value-row.tsx",
+    665
+   ]
+  ]
+ },
+ {
+  "file": "assets/confirm-sheet.DeBkAJp3.module.js",
+  "isEntry": false,
+  "size": 646,
+  "imports": 2,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/components/ui/confirm-sheet.tsx",
+    922
+   ]
+  ]
+ },
+ {
+  "file": "assets/trash-2.BDhHDZ1W.module.js",
+  "isEntry": false,
+  "size": 508,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "npm:lucide-react/dist/esm/icons/trash-2.mjs",
+    543
+   ]
+  ]
+ },
+ {
+  "file": "assets/policy-sheet.C2BiIanM.module.js",
+  "isEntry": false,
+  "size": 16126,
+  "imports": 2,
+  "dynImports": 0,
+  "mods": [
+   [
+    "packages/app-core/src/legal.ts",
+    11812
+   ],
+   [
+    "apps/miniapp/src/components/legal-markdown.tsx",
+    3804
+   ],
+   [
+    "apps/miniapp/src/components/policy-sheet.tsx",
+    2857
+   ],
+   [
+    "apps/miniapp/src/services/legal-api.ts",
+    963
+   ]
+  ]
+ },
+ {
+  "file": "assets/address-form.BG0uBUlP.module.js",
+  "isEntry": false,
+  "size": 5787,
+  "imports": 4,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/components/address-form.tsx",
+    5575
+   ],
+   [
+    "apps/miniapp/src/utils/address-memory.ts",
+    2009
+   ],
+   [
+    "apps/miniapp/src/services/zalo-profile.ts",
+    629
+   ],
+   [
+    "npm:lucide-react/dist/esm/icons/user-round.mjs",
+    377
+   ]
+  ]
+ },
+ {
+  "file": "assets/circle-check.v5W5SBqW.module.js",
+  "isEntry": false,
+  "size": 358,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "npm:lucide-react/dist/esm/icons/circle-check.mjs",
+    375
+   ]
+  ]
+ },
+ {
+  "file": "assets/repeat.BHbrFXMd.module.js",
+  "isEntry": false,
+  "size": 452,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "npm:lucide-react/dist/esm/icons/repeat.mjs",
+    478
+   ]
+  ]
+ },
+ {
+  "file": "assets/geo-picker.GLAMzX-d.module.js",
+  "isEntry": false,
+  "size": 4789,
+  "imports": 5,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/components/geo-picker.tsx",
+    7637
+   ]
+  ]
+ },
+ {
+  "file": "assets/geo-api.BdtRIX0F.module.js",
+  "isEntry": false,
+  "size": 193,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/services/geo-api.ts",
+    187
+   ]
+  ]
+ },
+ {
+  "file": "assets/use-has-subscription.DZCJTjjU.module.js",
+  "isEntry": false,
+  "size": 335,
+  "imports": 2,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/hooks/use-has-subscription.ts",
+    359
+   ]
+  ]
+ },
+ {
+  "file": "assets/reorder-sheet.CAvAAsBS.module.js",
+  "isEntry": false,
+  "size": 6107,
+  "imports": 5,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/components/reorder/reorder-sheet.tsx",
+    4460
+   ],
+   [
+    "apps/miniapp/src/hooks/use-reorder.ts",
+    2230
+   ],
+   [
+    "apps/miniapp/src/components/reorder/reorder-summary.ts",
+    1440
+   ],
+   [
+    "apps/miniapp/src/services/buy-flow-events.ts",
+    325
+   ]
+  ]
+ },
+ {
+  "file": "assets/account-copy.BwOfF3Bo.module.js",
+  "isEntry": false,
+  "size": 697,
+  "imports": 0,
+  "dynImports": 0,
+  "mods": [
+   [
+    "packages/app-core/src/account-copy.ts",
+    985
+   ]
+  ]
+ },
+ {
+  "file": "assets/circle-x.BI-Kfm4f.module.js",
+  "isEntry": false,
+  "size": 387,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "npm:lucide-react/dist/esm/icons/circle-x.mjs",
+    409
+   ]
+  ]
+ },
+ {
+  "file": "assets/message-square.D4bMUUBk.module.js",
+  "isEntry": false,
+  "size": 413,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "npm:lucide-react/dist/esm/icons/message-square.mjs",
+    447
+   ]
+  ]
+ },
+ {
+  "file": "assets/wallet.Y2jck_7g.module.js",
+  "isEntry": false,
+  "size": 466,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "npm:lucide-react/dist/esm/icons/wallet.mjs",
+    502
+   ]
+  ]
+ },
+ {
+  "file": "assets/landmark.Cpc1txZg.module.js",
+  "isEntry": false,
+  "size": 565,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "npm:lucide-react/dist/esm/icons/landmark.mjs",
+    639
+   ]
+  ]
+ },
+ {
+  "file": "assets/guest-points-note.1WM5wcwM.module.js",
+  "isEntry": false,
+  "size": 7416,
+  "imports": 2,
+  "dynImports": 0,
+  "mods": [
+   [
+    "packages/app-core/src/game-newbie.ts",
+    8302
+   ],
+   [
+    "apps/miniapp/src/components/loyalty/guest-points-note.tsx",
+    1435
+   ]
+  ]
+ },
+ {
+  "file": "assets/tree-pine.CCOIUgmJ.module.js",
+  "isEntry": false,
+  "size": 489,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "npm:lucide-react/dist/esm/icons/tree-pine.mjs",
+    527
+   ]
+  ]
+ },
+ {
+  "file": "assets/globe.igL0RGhF.module.js",
+  "isEntry": false,
+  "size": 793,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "npm:lucide-react/dist/esm/icons/circle-question-mark.mjs",
+    465
+   ],
+   [
+    "npm:lucide-react/dist/esm/icons/globe.mjs",
+    442
+   ]
+  ]
+ },
+ {
+  "file": "assets/progress-bar.DeTF_QX8.module.js",
+  "isEntry": false,
+  "size": 816,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/components/ui/progress-bar.tsx",
+    1168
+   ]
+  ]
+ },
+ {
+  "file": "assets/map-pin.hQplk2Yr.module.js",
+  "isEntry": false,
+  "size": 439,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "npm:lucide-react/dist/esm/icons/map-pin.mjs",
+    479
+   ]
+  ]
+ },
+ {
+  "file": "assets/book-open.CqdtG25e.module.js",
+  "isEntry": false,
+  "size": 459,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "npm:lucide-react/dist/esm/icons/book-open.mjs",
+    497
+   ]
+  ]
+ },
+ {
+  "file": "assets/lightbulb.DXlOr4sa.module.js",
+  "isEntry": false,
+  "size": 466,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "npm:lucide-react/dist/esm/icons/lightbulb.mjs",
+    514
+   ]
+  ]
+ },
+ {
+  "file": "assets/target.5TeAOMv5.module.js",
+  "isEntry": false,
+  "size": 406,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "npm:lucide-react/dist/esm/icons/target.mjs",
+    435
+   ]
+  ]
+ },
+ {
+  "file": "assets/time-ago.iha0fnri.module.js",
+  "isEntry": false,
+  "size": 1546,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/services/feed-api.ts",
+    1868
+   ],
+   [
+    "apps/miniapp/src/utils/time-ago.ts",
+    305
+   ]
+  ]
+ },
+ {
+  "file": "assets/post-card.Czjk4_2K.module.js",
+  "isEntry": false,
+  "size": 8118,
+  "imports": 11,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/components/community/post-card.tsx",
+    7290
+   ],
+   [
+    "apps/miniapp/src/components/community/author-line.tsx",
+    1205
+   ],
+   [
+    "apps/miniapp/src/components/community/post-tags.ts",
+    770
+   ],
+   [
+    "apps/miniapp/src/components/community/rank-badge.tsx",
+    622
+   ],
+   [
+    "npm:lucide-react/dist/esm/icons/hash.mjs",
+    528
+   ],
+   [
+    "npm:lucide-react/dist/esm/icons/pen-line.mjs",
+    498
+   ],
+   [
+    "npm:lucide-react/dist/esm/icons/tree-deciduous.mjs",
+    485
+   ],
+   [
+    "npm:lucide-react/dist/esm/icons/book-marked.mjs",
+    471
+   ],
+   [
+    "apps/miniapp/src/components/community/tag-price.tsx",
+    347
+   ]
+  ]
+ },
+ {
+  "file": "assets/pin.pVPYCUj4.module.js",
+  "isEntry": false,
+  "size": 526,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "npm:lucide-react/dist/esm/icons/pin.mjs",
+    559
+   ]
+  ]
+ },
+ {
+  "file": "assets/info.3ViBjEOb.module.js",
+  "isEntry": false,
+  "size": 384,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "npm:lucide-react/dist/esm/icons/info.mjs",
+    403
+   ]
+  ]
+ },
+ {
+  "file": "assets/storefront-signup.Bq0C4nhb.module.js",
+  "isEntry": false,
+  "size": 5397,
+  "imports": 0,
+  "dynImports": 0,
+  "mods": [
+   [
+    "packages/app-core/src/storefront-signup.ts",
+    7109
+   ]
+  ]
+ },
+ {
+  "file": "assets/profile-avatar.DOI-nQV_.module.js",
+  "isEntry": false,
+  "size": 985,
+  "imports": 3,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/components/account/profile-avatar.tsx",
+    822
+   ]
+  ]
+ },
+ {
+  "file": "assets/brand-owner-api.CWbsmOu9.module.js",
+  "isEntry": false,
+  "size": 618,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/services/brand-owner-api.ts",
+    785
+   ]
+  ]
+ },
+ {
+  "file": "assets/dealer-api.CzB_CfDf.module.js",
+  "isEntry": false,
+  "size": 2284,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/services/dealer-api.ts",
+    3129
+   ]
+  ]
+ },
+ {
+  "file": "assets/support-chat-api.Dci-sxwF.module.js",
+  "isEntry": false,
+  "size": 909,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "packages/app-core/src/api/support-chat.ts",
+    529
+   ],
+   [
+    "apps/miniapp/src/services/support-chat-api.ts",
+    360
+   ],
+   [
+    "packages/app-core/src/queries/support-chat.ts",
+    233
+   ]
+  ]
+ },
+ {
+  "file": "assets/graduation-cap.C8-jkHEn.module.js",
+  "isEntry": false,
+  "size": 512,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "npm:lucide-react/dist/esm/icons/graduation-cap.mjs",
+    564
+   ]
+  ]
+ },
+ {
+  "file": "assets/settings.Cq8WOVB_.module.js",
+  "isEntry": false,
+  "size": 667,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "npm:lucide-react/dist/esm/icons/settings.mjs",
+    709
+   ]
+  ]
+ },
+ {
+  "file": "assets/academy-access.DaLPu3Az.module.js",
+  "isEntry": false,
+  "size": 102,
+  "imports": 0,
+  "dynImports": 0,
+  "mods": [
+   [
+    "packages/app-core/src/academy-access.ts",
+    146
+   ]
+  ]
+ },
+ {
+  "file": "assets/shield-check.CL-yjiOF.module.js",
+  "isEntry": false,
+  "size": 500,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "npm:lucide-react/dist/esm/icons/shield-check.mjs",
+    541
+   ]
+  ]
+ },
+ {
+  "file": "assets/pencil.HSwv1QQr.module.js",
+  "isEntry": false,
+  "size": 456,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "npm:lucide-react/dist/esm/icons/pencil.mjs",
+    492
+   ]
+  ]
+ },
+ {
+  "file": "assets/index.BoCKuaK8.module.js",
+  "isEntry": false,
+  "size": 3667,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "npm:zmp-ui/esm/components/avatar/avatar.js",
+    3609
+   ],
+   [
+    "npm:zmp-ui/esm/components/avatar/group.js",
+    2301
+   ],
+   [
+    "npm:zmp-ui/esm/components/avatar/block-icon.js",
+    1015
+   ],
+   [
+    "npm:zmp-ui/esm/components/avatar/index.js",
+    822
+   ],
+   [
+    "npm:zmp-ui/esm/components/avatar/props-type.js",
+    325
+   ]
+  ]
+ },
+ {
+  "file": "assets/points-boost-strip.CyBNpCi6.module.js",
+  "isEntry": false,
+  "size": 1345,
+  "imports": 2,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/components/loyalty/points-boost-strip.tsx",
+    2053
+   ]
+  ]
+ },
+ {
+  "file": "assets/see-all.BpkRb2ZS.module.js",
+  "isEntry": false,
+  "size": 165,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "packages/app-core/src/commerce/see-all.ts",
+    173
+   ]
+  ]
+ },
+ {
+  "file": "assets/package-open.CUghVV-6.module.js",
+  "isEntry": false,
+  "size": 759,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "npm:lucide-react/dist/esm/icons/package-open.mjs",
+    874
+   ]
+  ]
+ },
+ {
+  "file": "assets/flash-sale.CO9vWh7D.module.js",
+  "isEntry": false,
+  "size": 12164,
+  "imports": 4,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/flash-sale.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/flash-sale.tsx",
+    11513
+   ],
+   [
+    "packages/app-core/src/commerce/flash-slots.ts",
+    3396
+   ],
+   [
+    "apps/miniapp/src/components/ui/slot-tabs.tsx",
+    2727
+   ],
+   [
+    "apps/miniapp/src/components/flash/flash-slot-item.tsx",
+    2689
+   ],
+   [
+    "packages/app-core/src/commerce/flash-remind-intent.ts",
+    167
+   ]
+  ]
+ },
+ {
+  "file": "assets/wallet.DMZuChS4.module.js",
+  "isEntry": false,
+  "size": 8474,
+  "imports": 13,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/wallet.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/wallet.tsx",
+    13170
+   ]
+  ]
+ },
+ {
+  "file": "assets/ctv-dashboard.CqjwcEan.module.js",
+  "isEntry": false,
+  "size": 2160,
+  "imports": 0,
+  "dynImports": 0,
+  "mods": [
+   [
+    "packages/app-core/src/ctv-dashboard.ts",
+    2869
+   ],
+   [
+    "packages/app-core/src/affiliate-rules.ts",
+    150
+   ]
+  ]
+ },
+ {
+  "file": "assets/external-points.oYE15y81.module.js",
+  "isEntry": false,
+  "size": 17680,
+  "imports": 12,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/external-points.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/external-points.tsx",
+    21887
+   ],
+   [
+    "packages/app-core/src/claim-code.ts",
+    7572
+   ],
+   [
+    "apps/miniapp/src/services/external-points-api.ts",
+    708
+   ]
+  ]
+ },
+ {
+  "file": "assets/addresses.CDs9t9lz.module.js",
+  "isEntry": false,
+  "size": 4150,
+  "imports": 15,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/addresses.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/addresses.tsx",
+    7297
+   ]
+  ]
+ },
+ {
+  "file": "assets/notifications.CxwFbwnz.module.js",
+  "isEntry": false,
+  "size": 17786,
+  "imports": 29,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/notifications.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/notifications.tsx",
+    16649
+   ],
+   [
+    "packages/app-core/src/notification-route.ts",
+    9183
+   ],
+   [
+    "npm:lucide-react/dist/esm/icons/coins.mjs",
+    494
+   ],
+   [
+    "apps/miniapp/src/components/reorder/reorder-reminder.ts",
+    491
+   ],
+   [
+    "packages/app-core/src/queries/account.ts",
+    461
+   ],
+   [
+    "packages/app-core/src/api/account.ts",
+    108
+   ]
+  ]
+ },
+ {
+  "file": "assets/undo-2.BwNxAPBg.module.js",
+  "isEntry": false,
+  "size": 388,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "npm:lucide-react/dist/esm/icons/undo-2.mjs",
+    395
+   ]
+  ]
+ },
+ {
+  "file": "assets/receipt.CymJaHsl.module.js",
+  "isEntry": false,
+  "size": 834,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "npm:lucide-react/dist/esm/icons/receipt.mjs",
+    880
+   ]
+  ]
+ },
+ {
+  "file": "assets/file-text.BpYV7UxB.module.js",
+  "isEntry": false,
+  "size": 565,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "npm:lucide-react/dist/esm/icons/file-text.mjs",
+    630
+   ]
+  ]
+ },
+ {
+  "file": "assets/user-plus.noLiKvcT.module.js",
+  "isEntry": false,
+  "size": 490,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "npm:lucide-react/dist/esm/icons/user-plus.mjs",
+    534
+   ]
+  ]
+ },
+ {
+  "file": "assets/affiliate.B7EHS2Og.module.js",
+  "isEntry": false,
+  "size": 50361,
+  "imports": 38,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/affiliate.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/affiliate.tsx",
+    50390
+   ],
+   [
+    "apps/miniapp/src/components/affiliate/ctv-order-sheet.tsx",
+    23462
+   ],
+   [
+    "apps/miniapp/src/components/affiliate/milestone-rewards.tsx",
+    8456
+   ],
+   [
+    "apps/miniapp/src/components/affiliate/ctv-shortcuts.tsx",
+    1969
+   ],
+   [
+    "apps/miniapp/src/components/affiliate/recent-customers.ts",
+    1534
+   ],
+   [
+    "apps/miniapp/src/components/affiliate/choice-card.tsx",
+    1196
+   ],
+   [
+    "apps/miniapp/src/components/affiliate/milestone-copy.ts",
+    933
+   ],
+   [
+    "npm:lucide-react/dist/esm/icons/handshake.mjs",
+    696
+   ],
+   [
+    "npm:lucide-react/dist/esm/icons/link-2.mjs",
+    444
+   ],
+   [
+    "apps/miniapp/src/utils/vn-phone.ts",
+    171
+   ],
+   [
+    "packages/app-core/src/affiliate-page.ts",
+    151
+   ],
+   [
+    "apps/miniapp/src/utils/tax-id.ts",
+    65
+   ]
+  ]
+ },
+ {
+  "file": "assets/academy-api.Dazy3rOK.module.js",
+  "isEntry": false,
+  "size": 246,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/services/academy-api.ts",
+    266
+   ]
+  ]
+ },
+ {
+  "file": "assets/badge-percent.CIIFS8Kn.module.js",
+  "isEntry": false,
+  "size": 570,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "npm:lucide-react/dist/esm/icons/badge-percent.mjs",
+    630
+   ]
+  ]
+ },
+ {
+  "file": "assets/trending-up._lOlmerJ.module.js",
+  "isEntry": false,
+  "size": 355,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "npm:lucide-react/dist/esm/icons/trending-up.mjs",
+    367
+   ]
+  ]
+ },
+ {
+  "file": "assets/trophy.BzMg7377.module.js",
+  "isEntry": false,
+  "size": 656,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "npm:lucide-react/dist/esm/icons/trophy.mjs",
+    700
+   ]
+  ]
+ },
+ {
+  "file": "assets/academy.BItz7SpX.module.js",
+  "isEntry": false,
+  "size": 5854,
+  "imports": 10,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/academy.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/academy.tsx",
+    8853
+   ],
+   [
+    "npm:lucide-react/dist/esm/icons/circle-play.mjs",
+    480
+   ],
+   [
+    "packages/app-core/src/video-url.ts",
+    181
+   ]
+  ]
+ },
+ {
+  "file": "assets/cashback.DeRxfnJD.module.js",
+  "isEntry": false,
+  "size": 6984,
+  "imports": 10,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/cashback.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/cashback.tsx",
+    11622
+   ],
+   [
+    "apps/miniapp/src/services/cashback-api.ts",
+    304
+   ]
+  ]
+ },
+ {
+  "file": "assets/dealer.AZzKKkE5.module.js",
+  "isEntry": false,
+  "size": 31657,
+  "imports": 20,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/dealer.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/dealer.tsx",
+    49453
+   ],
+   [
+    "packages/app-core/src/dealer-apply-copy.ts",
+    971
+   ],
+   [
+    "npm:lucide-react/dist/esm/icons/clipboard-list.mjs",
+    684
+   ],
+   [
+    "npm:lucide-react/dist/esm/icons/hourglass.mjs",
+    613
+   ],
+   [
+    "npm:lucide-react/dist/esm/icons/save.mjs",
+    550
+   ],
+   [
+    "npm:lucide-react/dist/esm/icons/plane.mjs",
+    516
+   ],
+   [
+    "npm:lucide-react/dist/esm/icons/award.mjs",
+    497
+   ],
+   [
+    "packages/app-core/src/dealer-pricing.ts",
+    294
+   ]
+  ]
+ },
+ {
+  "file": "assets/about.CuPvEcJX.module.js",
+  "isEntry": false,
+  "size": 5043,
+  "imports": 9,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/about.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/about.tsx",
+    8897
+   ]
+  ]
+ },
+ {
+  "file": "assets/wishlist.Cp3iW92L.module.js",
+  "isEntry": false,
+  "size": 3952,
+  "imports": 13,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/wishlist.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/wishlist.tsx",
+    5205
+   ],
+   [
+    "packages/app-core/src/quick-add.ts",
+    311
+   ]
+  ]
+ },
+ {
+  "file": "assets/support-chat.CPIET88w.module.js",
+  "isEntry": false,
+  "size": 15260,
+  "imports": 9,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/support-chat.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/support-chat.tsx",
+    11167
+   ],
+   [
+    "apps/miniapp/src/components/support-chat/closed-panel.tsx",
+    4337
+   ],
+   [
+    "apps/miniapp/src/components/support-chat/message-list.tsx",
+    3472
+   ],
+   [
+    "apps/miniapp/src/components/support-chat/composer.tsx",
+    2667
+   ],
+   [
+    "apps/miniapp/src/components/support-chat/quick-replies.tsx",
+    803
+   ],
+   [
+    "packages/app-core/src/support-chat-view.ts",
+    717
+   ],
+   [
+    "apps/miniapp/src/components/support-chat/context-chip.tsx",
+    687
+   ],
+   [
+    "npm:lucide-react/dist/esm/icons/image-plus.mjs",
+    585
+   ]
+  ]
+ },
+ {
+  "file": "assets/edit-profile.DgT3RSqJ.module.js",
+  "isEntry": false,
+  "size": 14222,
+  "imports": 12,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/edit-profile.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/edit-profile.tsx",
+    13910
+   ],
+   [
+    "apps/miniapp/src/components/avatar-crop-modal.tsx",
+    6643
+   ],
+   [
+    "packages/app-core/src/dob-input.ts",
+    3820
+   ],
+   [
+    "npm:lucide-react/dist/esm/icons/zoom-in.mjs",
+    534
+   ],
+   [
+    "npm:lucide-react/dist/esm/icons/zoom-out.mjs",
+    462
+   ]
+  ]
+ },
+ {
+  "file": "assets/settings.CkwBmV5T.module.js",
+  "isEntry": false,
+  "size": 8483,
+  "imports": 5,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/settings.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/settings.tsx",
+    10379
+   ],
+   [
+    "apps/miniapp/src/components/account-deletion-section.tsx",
+    3624
+   ],
+   [
+    "packages/app-core/src/account-deletion-copy.ts",
+    668
+   ]
+  ]
+ },
+ {
+  "file": "assets/brand-story.ezru17ur.module.js",
+  "isEntry": false,
+  "size": 14460,
+  "imports": 8,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/brand-story.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/brand-story.tsx",
+    24264
+   ]
+  ]
+ },
+ {
+  "file": "assets/brand-origins.BvMaDPBZ.module.js",
+  "isEntry": false,
+  "size": 3120,
+  "imports": 0,
+  "dynImports": 0,
+  "mods": [
+   [
+    "packages/app-core/src/brand-origins.ts",
+    3869
+   ]
+  ]
+ },
+ {
+  "file": "assets/storefront-builder.2rV4VveB.module.js",
+  "isEntry": false,
+  "size": 65923,
+  "imports": 31,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/storefront-builder.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/storefront-builder.tsx",
+    33164
+   ],
+   [
+    "apps/miniapp/src/pages/storefront-signup.tsx",
+    16957
+   ],
+   [
+    "apps/miniapp/src/components/storefront-builder/section-detail.tsx",
+    10043
+   ],
+   [
+    "apps/miniapp/src/components/storefront-builder/config-sheet.tsx",
+    8108
+   ],
+   [
+    "packages/app-core/src/commerce/storefront-builder.ts",
+    7317
+   ],
+   [
+    "apps/miniapp/src/components/ui/layout-picker.tsx",
+    5409
+   ],
+   [
+    "apps/miniapp/src/components/storefront-pickers.tsx",
+    5115
+   ],
+   [
+    "apps/miniapp/src/components/storefront-builder/stats-panel.tsx",
+    4758
+   ],
+   [
+    "apps/miniapp/src/components/ui/section-card.tsx",
+    3569
+   ],
+   [
+    "apps/miniapp/src/components/storefront-builder/quest-panel.tsx",
+    3192
+   ],
+   [
+    "apps/miniapp/src/components/storefront-builder/profile-sheet.tsx",
+    2770
+   ],
+   [
+    "apps/miniapp/src/components/storefront-builder/new-section-sheet.tsx",
+    2542
+   ],
+   [
+    "apps/miniapp/src/components/storefront-preview.tsx",
+    2413
+   ],
+   [
+    "apps/miniapp/src/components/storefront-builder/use-section-style.ts",
+    1602
+   ]
+  ]
+ },
+ {
+  "file": "assets/shop-section.DvEb3edh.module.js",
+  "isEntry": false,
+  "size": 5242,
+  "imports": 4,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/components/ui/shop-section.tsx",
+    4294
+   ],
+   [
+    "apps/miniapp/src/services/storefront-api.ts",
+    1979
+   ],
+   [
+    "apps/miniapp/src/components/ui/tier-badge.tsx",
+    820
+   ],
+   [
+    "apps/miniapp/src/utils/storefront-badge.ts",
+    231
+   ]
+  ]
+ },
+ {
+  "file": "assets/shop-header.C1amwcVX.module.js",
+  "isEntry": false,
+  "size": 2747,
+  "imports": 2,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/components/ui/shop-header.tsx",
+    3904
+   ]
+  ]
+ },
+ {
+  "file": "assets/eye-off.BNXsHkb6.module.js",
+  "isEntry": false,
+  "size": 610,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "npm:lucide-react/dist/esm/icons/eye-off.mjs",
+    692
+   ]
+  ]
+ },
+ {
+  "file": "assets/storefront-view.ePu4pqy6.module.js",
+  "isEntry": false,
+  "size": 7498,
+  "imports": 23,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/storefront-view.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/storefront-view.tsx",
+    8213
+   ],
+   [
+    "apps/miniapp/src/components/shop-page/shop-categories-tab.tsx",
+    2204
+   ]
+  ]
+ },
+ {
+  "file": "assets/shop-products-tab.DUHNQejj.module.js",
+  "isEntry": false,
+  "size": 5664,
+  "imports": 7,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/components/shop-page/shop-products-tab.tsx",
+    3968
+   ],
+   [
+    "apps/miniapp/src/components/ui/shop-top-bar.tsx",
+    1512
+   ],
+   [
+    "apps/miniapp/src/components/ui/shop-stats-row.tsx",
+    1442
+   ],
+   [
+    "packages/app-core/src/commerce/shop-stats.ts",
+    765
+   ],
+   [
+    "apps/miniapp/src/services/brand-api.ts",
+    543
+   ],
+   [
+    "packages/app-core/src/api/brand.ts",
+    325
+   ]
+  ]
+ },
+ {
+  "file": "assets/brand-view.CS0LjUsv.module.js",
+  "isEntry": false,
+  "size": 10911,
+  "imports": 25,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/brand-view.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/brand-view.tsx",
+    15867
+   ]
+  ]
+ },
+ {
+  "file": "assets/brand-owner.BcZr8-vL.module.js",
+  "isEntry": false,
+  "size": 12094,
+  "imports": 16,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/brand-owner.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/brand-owner.tsx",
+    15247
+   ],
+   [
+    "apps/miniapp/src/pages/brand-owner-sales.tsx",
+    4049
+   ],
+   [
+    "apps/miniapp/src/components/ui/tiles.tsx",
+    901
+   ]
+  ]
+ },
+ {
+  "file": "assets/admin.CSw4g0yt.module.js",
+  "isEntry": false,
+  "size": 25346,
+  "imports": 21,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/admin.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/admin.tsx",
+    43701
+   ],
+   [
+    "packages/app-core/src/staff-copy.ts",
+    999
+   ],
+   [
+    "packages/app-core/src/payroll-copy.ts",
+    248
+   ]
+  ]
+ },
+ {
+  "file": "assets/staff-api.DNSysjc-.module.js",
+  "isEntry": false,
+  "size": 1036,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/services/staff-api.ts",
+    806
+   ]
+  ]
+ },
+ {
+  "file": "assets/time-input.xZ-jNKdr.module.js",
+  "isEntry": false,
+  "size": 2224,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/services/shifts-api.ts",
+    1483
+   ],
+   [
+    "apps/miniapp/src/components/ui/time-input.tsx",
+    755
+   ]
+  ]
+ },
+ {
+  "file": "assets/payroll-api.BtOnmOCb.module.js",
+  "isEntry": false,
+  "size": 709,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/services/payroll-api.ts",
+    954
+   ]
+  ]
+ },
+ {
+  "file": "assets/week.DvTAsWGp.module.js",
+  "isEntry": false,
+  "size": 3597,
+  "imports": 1,
+  "dynImports": 0,
+  "mods": [
+   [
+    "apps/miniapp/src/services/attendance-api.ts",
+    2230
+   ],
+   [
+    "apps/miniapp/src/utils/week.ts",
+    1873
+   ],
+   [
+    "apps/miniapp/src/components/period-nav.tsx",
+    849
+   ]
+  ]
+ },
+ {
+  "file": "assets/community-moderation.DQVEuzY0.module.js",
+  "isEntry": false,
+  "size": 14068,
+  "imports": 24,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/community-moderation.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/community-moderation.tsx",
+    22484
+   ],
+   [
+    "packages/app-core/src/community-moderation-views.ts",
+    633
+   ]
+  ]
+ },
+ {
+  "file": "assets/staff.tYA4KGVJ.module.js",
+  "isEntry": false,
+  "size": 17019,
+  "imports": 14,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/staff.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/staff.tsx",
+    31165
+   ],
+   [
+    "npm:lucide-react/dist/esm/icons/log-in.mjs",
+    431
+   ],
+   [
+    "npm:lucide-react/dist/esm/icons/log-out.mjs",
+    427
+   ]
+  ]
+ },
+ {
+  "file": "assets/my-payroll.DpVLMRQW.module.js",
+  "isEntry": false,
+  "size": 7958,
+  "imports": 12,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/my-payroll.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/my-payroll.tsx",
+    12861
+   ]
+  ]
+ },
+ {
+  "file": "assets/not-found.B2lAI6-8.module.js",
+  "isEntry": false,
+  "size": 595,
+  "imports": 1,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/pages/not-found.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/pages/not-found.tsx",
+    816
+   ]
+  ]
+ },
+ {
+  "file": "assets/home-below.BGR69E0S.module.js",
+  "isEntry": false,
+  "size": 7943,
+  "imports": 8,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/components/home/home-below.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/components/home/suggest-feed.tsx",
+    5594
+   ],
+   [
+    "apps/miniapp/src/components/home/community-preview.tsx",
+    2365
+   ],
+   [
+    "apps/miniapp/src/components/home/brand-journey.tsx",
+    2355
+   ],
+   [
+    "packages/app-core/src/home-suggest.ts",
+    738
+   ],
+   [
+    "npm:lucide-react/dist/esm/icons/map.mjs",
+    647
+   ],
+   [
+    "apps/miniapp/src/components/home/home-below.tsx",
+    0
+   ]
+  ]
+ },
+ {
+  "file": "assets/earn-sheet.DpUXY1Vb.module.js",
+  "isEntry": false,
+  "size": 1483,
+  "imports": 7,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/components/home/earn-sheet.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/components/home/earn-sheet.tsx",
+    1119
+   ]
+  ]
+ },
+ {
+  "file": "assets/shortcuts-sheet.BrVjdgol.module.js",
+  "isEntry": false,
+  "size": 832,
+  "imports": 4,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/components/home/shortcuts-sheet.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/components/home/shortcuts-sheet.tsx",
+    1052
+   ]
+  ]
+ },
+ {
+  "file": "assets/banner-carousel.DBETGGTs.module.js",
+  "isEntry": false,
+  "size": 5843,
+  "imports": 1,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/components/ui/banner-carousel.tsx",
+  "mods": [
+   [
+    "apps/miniapp/src/components/ui/banner-carousel.tsx",
+    8087
+   ],
+   [
+    "packages/app-core/src/commerce/banner-autoplay.ts",
+    419
+   ],
+   [
+    "npm:lucide-react/dist/esm/icons/pause.mjs",
+    418
+   ],
+   [
+    "npm:lucide-react/dist/esm/icons/play.mjs",
+    395
+   ]
+  ]
+ },
+ {
+  "file": "assets/zmp-save-image.BXhNe6zA.module.js",
+  "isEntry": false,
+  "size": 1442,
+  "imports": 1,
+  "dynImports": 0,
+  "facade": "apps/miniapp/src/services/zmp-save-image.ts",
+  "mods": [
+   [
+    "npm:zmp-sdk/apis/apis/saveImageToGallery.js",
+    607
+   ],
+   [
+    "npm:zmp-sdk/apis/common/apis/general/saveImageToGallery.js",
+    317
+   ],
+   [
+    "apps/miniapp/src/services/zmp-save-image.ts",
+    297
+   ]
+  ]
+ }
+]

@@ -1,0 +1,145 @@
+[
+  {
+    "id": "A2b2-1",
+    "persona": "brand",
+    "khổ": "API",
+    "journey": "Điểm Xanh: lên hạng và hệ số",
+    "step": "đặt đơn lớn 5×5L chuyển khoản, trả đủ bằng webhook ngân hàng giả",
+    "expected": "BANK_TRANSFER PAID khi Pancake đối soát (bank-webhook)",
+    "actual": "code=TUBU2026110331067 total=2150000 order={\"status\":\"CONFIRMED\",\"ps\":\"PAID\"} place=201 ",
+    "evidence": "code=TUBU2026110331067 total=2150000 order={\"status\":\"CONFIRMED\",\"ps\":\"PAID\"} place=201 ",
+    "status": "PASS"
+  },
+  {
+    "id": "A2b2-2",
+    "persona": "brand",
+    "khổ": "API",
+    "journey": "Điểm Xanh: lên hạng và hệ số",
+    "step": "giao xong: lên hạng DAI_THU (chi tiêu 12 tháng ≥ 20000000)",
+    "expected": "membership_tiers.minSpending=20000000",
+    "actual": "SQL users.tierId trước=LOC_BIEC sau=DAI_THU; tổng đơn giao=20210000",
+    "evidence": "SQL users.tierId trước=LOC_BIEC sau=DAI_THU; tổng đơn giao=20210000",
+    "status": "PASS"
+  },
+  {
+    "id": "A2b2-3",
+    "persona": "brand",
+    "khổ": "API",
+    "journey": "Điểm Xanh: lên hạng và hệ số",
+    "step": "khách nhận thông báo trong app khi lên hạng",
+    "expected": "notifyTierUpgrade (loyalty.service.ts:396)",
+    "actual": "GET /me/notifications: {\"id\":\"cmw16bfep00hui0v06muuh3ec\",\"userId\":\"uat_brand\",\"templateCode\":\"TIER_UPGRADED\",\"channel\":\"INAPP\",\"payload\":{\"body\":\"Chúc mừng bạn đã lên hạng Đại Thụ tại Tubu Tree 🌿\",\"data\":{\"tier\":\"Đại Thụ\"},\"dedupeKey\":\"tier-up:DAI_THU:2026-11-4\"},\"status\":\"SENT\",\"error\":null,\"sentAt\":\"2026-11-03T21:02:01",
+    "evidence": "GET /me/notifications: {\"id\":\"cmw16bfep00hui0v06muuh3ec\",\"userId\":\"uat_brand\",\"templateCode\":\"TIER_UPGRADED\",\"channel\":\"INAPP\",\"payload\":{\"body\":\"Chúc mừng bạn đã lên hạng Đại Thụ tại Tubu Tree 🌿\",\"data\":{\"tier\":\"Đại Thụ\"},\"dedupeKey\":\"tier-up:DAI_THU:2026-11-4\"},\"status\":\"SENT\",\"error\":null,\"sentAt\":\"2026-11-03T21:02:01",
+    "status": "PASS"
+  },
+  {
+    "id": "A2b2-4",
+    "persona": "brand",
+    "khổ": "API",
+    "journey": "Điểm Xanh: lên hạng và hệ số",
+    "step": "đơn kế: điểm tích = tiền hàng sau giảm × 2% × 1.5",
+    "expected": "membership_tiers.pointMultiplier=1.5",
+    "actual": "quote={\"subtotal\":430000,\"discount\":0,\"tierDiscount\":0,\"shippingFee\":0,\"total\":430000,\"pointsEarned\":12900} kỳ vọng 12900",
+    "evidence": "quote={\"subtotal\":430000,\"discount\":0,\"tierDiscount\":0,\"shippingFee\":0,\"total\":430000,\"pointsEarned\":12900} kỳ vọng 12900",
+    "status": "PASS"
+  },
+  {
+    "id": "A2b2-6",
+    "persona": "brand",
+    "khổ": "API",
+    "journey": "Điểm Xanh: lên hạng và hệ số",
+    "step": "phí giao đơn 79.000đ (dưới 99k) ở hạng DAI_THU",
+    "expected": "Đại Thụ/Cổ Thụ: miễn phí giao mọi đơn",
+    "actual": "quote.shippingFee=0 subtotal=79000 kỳ vọng 0",
+    "evidence": "quote.shippingFee=0 subtotal=79000 kỳ vọng 0",
+    "status": "PASS"
+  },
+  {
+    "id": "A2b2-7",
+    "persona": "brand",
+    "khổ": "API",
+    "journey": "Điểm Xanh: lên hạng và hệ số",
+    "step": "/me/loyalty khớp hạng & hệ số",
+    "expected": "earnMultiplier theo hạng",
+    "actual": "tier=DAI_THU earnMultiplier=1.5 nextTier={\"id\":\"CO_THU\",\"name\":\"Cổ Thụ\",\"minPoints\":1000000,\"minSpending\":50000000,\"pointsToGo\":587200,\"spendingToGo\":29790000}",
+    "evidence": "tier=DAI_THU earnMultiplier=1.5 nextTier={\"id\":\"CO_THU\",\"name\":\"Cổ Thụ\",\"minPoints\":1000000,\"minSpending\":50000000,\"pointsToGo\":587200,\"spendingToGo\":29790000}",
+    "status": "PASS"
+  },
+  {
+    "id": "A2c2-1",
+    "persona": "kho",
+    "khổ": "API",
+    "journey": "Điểm Xanh: lên hạng và hệ số",
+    "step": "đặt đơn lớn 12×5L chuyển khoản, trả đủ bằng webhook ngân hàng giả",
+    "expected": "BANK_TRANSFER PAID khi Pancake đối soát (bank-webhook)",
+    "actual": "code=TUBU2026110399185 total=5160000 order={\"status\":\"CONFIRMED\",\"ps\":\"PAID\"} place=201 ",
+    "evidence": "code=TUBU2026110399185 total=5160000 order={\"status\":\"CONFIRMED\",\"ps\":\"PAID\"} place=201 ",
+    "status": "PASS"
+  },
+  {
+    "id": "A2c2-2",
+    "persona": "kho",
+    "khổ": "API",
+    "journey": "Điểm Xanh: lên hạng và hệ số",
+    "step": "giao xong: lên hạng CO_THU (chi tiêu 12 tháng ≥ 50000000)",
+    "expected": "membership_tiers.minSpending=50000000",
+    "actual": "SQL users.tierId trước=DAI_THU sau=CO_THU; tổng đơn giao=50310000",
+    "evidence": "SQL users.tierId trước=DAI_THU sau=CO_THU; tổng đơn giao=50310000",
+    "status": "PASS"
+  },
+  {
+    "id": "A2c2-3",
+    "persona": "kho",
+    "khổ": "API",
+    "journey": "Điểm Xanh: lên hạng và hệ số",
+    "step": "khách nhận thông báo trong app khi lên hạng",
+    "expected": "notifyTierUpgrade (loyalty.service.ts:396)",
+    "actual": "GET /me/notifications: {\"id\":\"cmw16bmjn00k6i0v0ezp4x89h\",\"userId\":\"uat_kho\",\"templateCode\":\"TIER_UPGRADED\",\"channel\":\"INAPP\",\"payload\":{\"body\":\"Chúc mừng bạn đã lên hạng Cổ Thụ tại Tubu Tree 🌿\",\"data\":{\"tier\":\"Cổ Thụ\"},\"dedupeKey\":\"tier-up:CO_THU:2026-11-4\"},\"status\":\"SENT\",\"error\":null,\"sentAt\":\"2026-11-03T21:02:11.172Z",
+    "evidence": "GET /me/notifications: {\"id\":\"cmw16bmjn00k6i0v0ezp4x89h\",\"userId\":\"uat_kho\",\"templateCode\":\"TIER_UPGRADED\",\"channel\":\"INAPP\",\"payload\":{\"body\":\"Chúc mừng bạn đã lên hạng Cổ Thụ tại Tubu Tree 🌿\",\"data\":{\"tier\":\"Cổ Thụ\"},\"dedupeKey\":\"tier-up:CO_THU:2026-11-4\"},\"status\":\"SENT\",\"error\":null,\"sentAt\":\"2026-11-03T21:02:11.172Z",
+    "status": "PASS"
+  },
+  {
+    "id": "A2c2-4",
+    "persona": "kho",
+    "khổ": "API",
+    "journey": "Điểm Xanh: lên hạng và hệ số",
+    "step": "đơn kế: điểm tích = tiền hàng sau giảm × 2% × 2",
+    "expected": "membership_tiers.pointMultiplier=2",
+    "actual": "quote.pointsEarned=16340 = (430000 - tierDiscount 21500) × 2% × 2; kỳ vọng ban đầu của script quên trừ tierDiscount (sửa công thức trong script)",
+    "evidence": "quote.pointsEarned=16340 = (430000 - tierDiscount 21500) × 2% × 2; kỳ vọng ban đầu của script quên trừ tierDiscount (sửa công thức trong script)",
+    "status": "PASS"
+  },
+  {
+    "id": "A2c2-5",
+    "persona": "kho",
+    "khổ": "API",
+    "journey": "Điểm Xanh: lên hạng và hệ số",
+    "step": "Cổ Thụ giảm 5% mọi đơn",
+    "expected": "membership_tiers.discountPct=0.05",
+    "actual": "tierDiscount=21500 discount=0 subtotal=430000",
+    "evidence": "tierDiscount=21500 discount=0 subtotal=430000",
+    "status": "PASS"
+  },
+  {
+    "id": "A2c2-6",
+    "persona": "kho",
+    "khổ": "API",
+    "journey": "Điểm Xanh: lên hạng và hệ số",
+    "step": "phí giao đơn 79.000đ (dưới 99k) ở hạng CO_THU",
+    "expected": "Đại Thụ/Cổ Thụ: miễn phí giao mọi đơn",
+    "actual": "quote.shippingFee=0 subtotal=79000 kỳ vọng 0",
+    "evidence": "quote.shippingFee=0 subtotal=79000 kỳ vọng 0",
+    "status": "PASS"
+  },
+  {
+    "id": "A2c2-7",
+    "persona": "kho",
+    "khổ": "API",
+    "journey": "Điểm Xanh: lên hạng và hệ số",
+    "step": "/me/loyalty khớp hạng & hệ số",
+    "expected": "earnMultiplier theo hạng",
+    "actual": "tier=CO_THU earnMultiplier=2 nextTier=null",
+    "evidence": "tier=CO_THU earnMultiplier=2 nextTier=null",
+    "status": "PASS"
+  }
+]

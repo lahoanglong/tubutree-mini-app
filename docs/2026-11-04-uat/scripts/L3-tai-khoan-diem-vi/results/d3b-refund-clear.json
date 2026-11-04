@@ -1,0 +1,13 @@
+[
+  {
+    "id": "D3-9b",
+    "persona": "admin",
+    "khổ": "API",
+    "journey": "Yêu cầu xoá tài khoản",
+    "step": "trả nốt mọi khoản hoàn mở: blocker CUSTOMER_REFUND_PENDING hết, ORDER_IN_PROGRESS + WALLET_BALANCE vẫn chặn",
+    "expected": "collectBlockers",
+    "actual": "đã trả 1 khoản; order_customer_refunds=[{\"status\":\"COMPLETED\",\"n\":9}] blockers=[\"WALLET_BALANCE\",\"ORDER_IN_PROGRESS\"]; ví returning không đổi={\"bal\":914000,\"sum_w\":914000,\"n\":8}",
+    "evidence": "đã trả 1 khoản; order_customer_refunds=[{\"status\":\"COMPLETED\",\"n\":9}] blockers=[\"WALLET_BALANCE\",\"ORDER_IN_PROGRESS\"]; ví returning không đổi={\"bal\":914000,\"sum_w\":914000,\"n\":8}",
+    "status": "PASS"
+  }
+]

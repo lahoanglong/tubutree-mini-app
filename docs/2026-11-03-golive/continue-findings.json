@@ -1,0 +1,237 @@
+{
+ "parity": {
+  "summary": "Kết luận: CHANGES. Phần R-109 làm đúng. Phần R-23 trên web có ba lỗi P2. Không thấy lỗi P0 hay P1: không đụng tiền, điểm, phiên, API hay migration.\n\nR-109 (ổn): `wallet-rules`, `shipping-eta`, `dob-input` đổi sang giờ Việt Nam cố định (+7 rồi đọc `getUTC*`). `format.ts` vốn đã theo giờ Việt Nam từ trước. Tôi grep lại `apps/miniapp/src` và `packages/app-core/src`, không còn chỗ nào hiện giờ cho khách mà đọc giờ máy. Test đỏ thật với mã cũ: dựng worktree tạm, chép mã gốc của 3 file vào, thì app-core đỏ 4 ca (TZ=America/New_York) và `vn-timezone.spec` của Mini đỏ 7/21. Mã mới xanh ở UTC, New_York và Kiritimati. Web cũng đúng hơn trước nhờ dùng chung hàm, SSR và trình duyệt ra cùng một ngày.\n\nR-132: đã có từ gốc (redirect 308 ở `next.config.mjs:91`, `route-map.json:48`). Đồng ý không cần đổi.\n\nR-23 (chưa đạt), ba lỗi P2:\n- **Thay đổi bộ đếm làm web lệch Mini.** Ở gốc, bộ đếm trên 375 đã ẩn bằng `max-md:sr-only`, khách không thấy. Mã mới lại làm nó hiện rõ khi gõ từ 450 ký tự, trong khi Mini không có. Ở 1280 thì bộ đếm vốn luôn hiện nay bị bỏ.\n- **Trang thanh toán 375 vẫn lệch, ngược với câu \"đã khớp\" trong báo cáo.** Chính ảnh worker chụp cho thấy: ô tick lệch khoảng 20px, chữ cạnh nút chọn phương thức thanh toán (Ví Tubu) lệch khoảng 18px, và web thiếu \"Chi tiết ›\" ở mục Tóm tắt đơn hàng.\n- **Thiếu bằng chứng brief yêu cầu.** Không có ảnh trước/sau, persona returning/new, 1280, số `bundle-report`. Hai ảnh đang có lại dùng dữ liệu mock khác nhau.\n\nGhi thêm: e2e R-23 mới cũng sẽ xanh với mã gốc, vì phần tử `sr-only` rộng 1px nên kiểm `width > 1` không phân biệt được trước/sau.",
+  "findings": [
+   {
+    "severity": "P2",
+    "file": "apps/web/src/app/thanh-toan/page.tsx",
+    "line": 617,
+    "issue": "Thay đổi bộ đếm ghi chú tạo lệch Mini thay vì sửa lệch. Ở gốc 52fd5cd65, thẻ `<p id=\"order-note-count\">` có `max-md:sr-only`, nên ở 375 khách vốn không thấy bộ đếm (chỉ máy đọc màn hình đọc). Mã mới bỏ `max-md:sr-only` và chỉ hiện từ 450 ký tự. Hậu quả: (a) Ở 375, gõ hoặc dán ≥450 ký tự vào ô ghi chú thì web hiện chữ '450/500 ký tự' rõ ràng dưới ô, Mini (`checkout.tsx:880`, Input maxLength 500) không hiện gì. Đây là lệch mới, gốc không có. (b) Ở 1280, bộ đếm vốn luôn hiện nay mất, trái ý 'giữ bố cục 1280'. (c) Người dùng máy đọc màn hình mất thông tin số ký tự cho tới 450. E2E mới không gõ tới 450 nên không bắt được (a). Phép kiểm `noteCounterVisible` (width>1) cũng xanh với mã gốc, vì phần tử `sr-only` chỉ rộng 1px.",
+    "fix": "Trả markup gốc: luôn render bộ đếm với `max-md:sr-only` và giữ `aria-describedby`. Bỏ `ORDER_NOTE_COUNT_FROM` và sửa lại hai spec unit cho khớp. Nếu thật sự muốn báo khi sắp chạm 500, phải làm cả Mini qua hằng chung ở app-core, phiên điều phối chốt, và thêm ca e2e gõ 450 ký tự ở cả hai nền."
+   },
+   {
+    "severity": "P2",
+    "file": "apps/web/src/app/thanh-toan/page.tsx",
+    "line": 760,
+    "issue": "R-23 yêu cầu 'soát lại cả trang thanh toán 375 hai nền (chữ, vị trí)', báo cáo nói đã khớp, nhưng chính ảnh worker chụp còn lệch rõ (đổi ra px CSS ở 375):\n(1) Ô tick Điểm Xanh và VAT: mép phải của ô tick ở Mini cách mép trái màn hình khoảng 338px, ở web khoảng 359px. Web dịch phải khoảng 20px. Nguyên nhân: zaui Checkbox của Mini rộng hơn 24px, còn `miniCheckboxWrap` của web đúng 24px.\n(2) Phương thức thanh toán: chữ 'Ví Tubu' ở Mini bắt đầu khoảng x=70px, ở web khoảng x=52px (zaui Radio cũng thừa bề ngang).\n(3) Mini có 'Chi tiết ›' ở đầu mục Tóm tắt đơn hàng, mở sheet 'Chi tiết tính tiền đơn hàng' (`apps/miniapp/src/pages/checkout.tsx:1045`, `:1254`); web 375 không có.\nPhép kiểm `vatTextLeft < 40` trong e2e chỉ chứng minh ô tick không nằm bên trái, không đo được lệch 20px.",
+    "fix": "Trong `ds-parity.shop.spec.ts`, đo trên cả hai nền: mép phải của ô tick so với mép phải màn hình, và x của chữ phương thức thanh toán so với nút chọn, cho phép sai ±2px. Rồi canh một phía cho khớp, ví dụ thêm khoảng đệm phải bằng đúng phần zaui thừa vào `miniCheckboxWrap`/`miniRadio` ở max-md, hoặc sửa wrapper zaui bên Mini. Còn 'Chi tiết ›': làm sheet trên web hoặc ghi rõ là quyết định có chủ ý (hỏi phiên điều phối). Sửa câu 'đã khớp' trong báo cáo."
+   },
+   {
+    "severity": "P2",
+    "file": "apps/e2e/tests/ds-parity.shop.spec.ts",
+    "line": 207,
+    "issue": "Bằng chứng brief yêu cầu chưa có.\n- Thiếu ảnh trước/sau, persona returning và new, Mini và web 375, web 1280. Thay đổi bộ đếm có đổi bố cục 1280 nhưng chưa ai xem ảnh 1280. Thiếu số `bundle-report` của Mini dù đã đổi mã app-core mà Mini dùng.\n- Hai ảnh hiện có dùng dữ liệu mock khác nhau. Mini: 'Dùng 100 điểm, giảm 100đ' + 'trong đó 50 điểm không hết hạn, trả tới 100% giá trị hàng', ví 350.000đ. Web: 'Dùng 50 điểm, giảm 50đ', không có dòng điểm quy đổi, ví 200.000đ. Vì vậy so ảnh không kết luận được.\n- `pointsSubtext` chỉ so tiền tố bằng `/^Dùng [\\d.]+ điểm, giảm [\\d.]+đ/`, nên nếu web thiếu dòng điểm quy đổi thì e2e vẫn xanh.",
+    "fix": "Cho hai nền dùng cùng một bộ mock: cùng `pointsBalance`/`pointsConvertedBalance` và cùng số dư ví. So `pointsSubtext` bằng chuỗi đầy đủ, có cả dòng 'trong đó … không hết hạn, trả tới 100% giá trị hàng'. Chụp `capture.mjs --phase mini375,web375,web1280 --keys checkout` cho persona returning và new, trước và sau (trước = 52fd5cd65), rồi `before-after.mjs`. Chạy `bundle-report.mjs` trên gốc và trên nhánh, chép số vào báo cáo."
+   },
+   {
+    "severity": "P3",
+    "file": "apps/miniapp/vitest-global-setup.ts",
+    "line": 1,
+    "issue": "Báo cáo ghi vitest miniapp `TZ=UTC` toàn bộ còn 3 file đỏ (flash-sale, suggest-feed, shop-products-tab), worker coi là timeout do tải mà chưa chạy lại toàn bộ. Báo cáo cũng tự mâu thuẫn: dòng 'tsc web/miniapp/e2e sạch' trong khi bản tóm tắt nói tsc chưa có kết quả đáng tin. Tôi đã tự chạy: tsc app-core/e2e/miniapp và eslint các file đổi đều sạch; chưa chạy tsc web và chưa chạy lại vitest toàn bộ.",
+    "fix": "Chạy lại `TZ=UTC npx vitest run` toàn bộ miniapp và `tsc --noEmit` cho apps/web lúc máy bớt tải, chép đúng số thật vào báo cáo."
+   }
+  ]
+ },
+ "pdp": {
+  "summary": "Gói pdp lượt 2, nhánh gl/1103-pdp tại 7bc177dd2: chưa merge được. Tôi tự chạy web-gate.sh cho hai spec web mà worker chưa chạy được, máy lúc đó đủ rảnh nên chạy xong. Kết quả 28 ca: 20 xanh, 8 đỏ (đỏ cả 3 lần chạy, gồm 2 lần chạy lại). 8 ca đỏ đúng là 4 ca CLS mới viết, đỏ ở cả hai project Web Customer và Web Customer Mobile.\n\nTrong số đó có một lỗi bố cục thật ở 1280px. Ghi chú hết suất có `mt-2`, lề này gộp ra ngoài vùng giữ chỗ (margin collapse), nên lúc allowance về nút \"Mua ngay\" vẫn dịch xuống 8px. Các ca đỏ còn lại là do test: test đo CLS của cả trang thay vì chỉ phần do ghi chú gây ra, và ở 375px điểm neo lấy theo thứ tự DOM nên rơi vào một khối nằm phía trên. Trên Mini, vùng giữ chỗ trống có nền trắng; trên web 375 nó không có nền nên hiện thành một khoảng xám 52px. Mục 2 của brief vẫn thiếu so pixel ảnh trước/sau.\n\nPhần làm đúng:\n- Logic giữ chỗ hai app khớp brief: chỉ giữ khi khách đã đăng nhập (hoặc web đang khôi phục phiên) và SP có Giờ vàng. Mọi Giờ vàng đều có perUserLimit (cột `Int` bắt buộc trong schema), nên giữ chỗ cho mọi Giờ vàng là hợp lý.\n- Mini không có tình huống \"phiên về muộn\": interceptor giữ mọi request, kể cả /flash-sales/active, tới khi restore xong.\n- Đổi `max-md:order-N` sang lớp `tubu-pdp-order-N` cho ra cùng media query. Tôi grep `max-md:order` trong toàn bộ apps/packages/scripts: không còn spec hay e2e nào của PDP dùng selector cũ.\n- Mini entry không tăng (product-detail tải lười). Không có migration, không đổi luật giá hay chữ.\n- voucher-ticket-height.web.spec.ts xanh ở 375 và 320.\n\nTôi không sửa mã, không commit. test-results của Playwright nằm trong apps/e2e của worktree pdp (đã gitignore, `git status` sạch). Các cổng 3921–3925 đã đóng.",
+  "findings": [
+   {
+    "severity": "P1",
+    "file": "apps/e2e/tests/flash-sheet-price.web.spec.ts",
+    "line": 224,
+    "issue": "Gói chưa đạt yêu cầu brief:\n- Mục 1 cần CLS web 375 bằng 0, đo bằng Playwright.\n- Mục 3 và quy tắc chung cần spec web xanh qua web-gate.sh.\n- Mục 2 cần ảnh 375 và 1280 trước/sau, so pixel và ghi số px lệch.\nTôi chạy web-gate (28 ca): 8 ca đỏ, đỏ cả 3 lần chạy. Đó là 4 ca CLS mới (dòng 224 và 243, mỗi ca chạy ở 375 và 1280), đỏ ở cả hai project. Ảnh trước/sau và before-after.mjs chưa có, thư mục screens-pdp chưa tồn tại.",
+    "fix": "Sửa các phát hiện P2 bên dưới. Chạy lại web-gate.sh cho flash-sheet-price.web.spec.ts tới khi xanh, rồi chụp 375 và 1280 trước/sau cho PDP (mục 2: so pixel, ghi số px lệch) vào screens-pdp."
+   },
+   {
+    "severity": "P2",
+    "file": "apps/web/src/components/add-to-cart.tsx",
+    "line": 402,
+    "issue": "Ở 1280px vẫn còn dịch chỗ, do margin collapse.\n- Vùng `pdp-flash-limit` là block không có padding hay border, `.tubu-pdp-flash-note` cho nó min-height 1.75rem (mini.css:657).\n- Ghi chú `<p className=\"mt-2 …\">` nằm ở đầu vùng. Lề trên 8px của nó gộp ra ngoài cha, vì min-height không chặn gộp lề trên.\n- Kết quả: khi ghi chú hiện, vùng chiếm 8 + 28 = 36px chứ không phải 28px.\nTái hiện: web-gate, ca \"1280px, ngoài bảng: allowance còn treo rồi mới về\". Nút Mua ngay (neo) dịch xuống đúng 8px, lỗi \"khối bên dưới dịch 8px\", đỏ cả 3 lần chạy ở cả hai project.",
+    "fix": "Đổi `mt-2` của ghi chú thành `md:pt-2` (giữ `max-md:mt-0`/`pb-3` như cũ), hoặc thêm `display: flow-root` cho `.tubu-pdp-flash-note`. Như vậy 28px giữ chỗ đã gồm khoảng cách trên. Chạy lại ca 1280."
+   },
+   {
+    "severity": "P2",
+    "file": "apps/e2e/tests/flash-sheet-price.web.spec.ts",
+    "line": 259,
+    "issue": "Ca \"phiên về sau khi trang đã vẽ\" đo CLS của cả trang, nên không thể xanh, và cũng không tách được phần do ghi chú gây ra.\n- Khi pha đăng nhập đổi từ loading sang authenticated, các khối khác của PDP cũng đổi. Ví dụ dòng \"Nhận … Điểm Xanh\": `tierEarnFor` trả null khi đang 'loading' (pdp-extras.tsx:76), nên dòng này chỉ hiện khi pha đã rõ (min-h-11). Ngoài ra còn rails và reviews.\n- Kết quả đo: CLS 0,01355 ở 375, 0,000338 ở 1280, đỏ cả 3 lần chạy.\n- Thêm nữa, ở 375 `anchorBelow` (support/pdp-cls.ts:28) đi theo DOM: sau vùng ghi chú chỉ có các khối ẩn hoặc fixed, nên neo rơi vào `pdp-certs` (order 1) hoặc `pdp-subscribe` (order 2). Hai khối này nằm PHÍA TRÊN vùng ghi chú trên màn hình (order 6). Vì vậy phép kiểm `after.y - before.y` trên web 375 luôn qua, kể cả khi phần bên dưới bị đẩy.",
+    "fix": "Chọn neo theo vị trí thật trên màn hình: khối có top lớn nhất nhưng ≥ slot.bottom, ví dụ `pdp-bundles` hoặc khối order 8/9. Thay CLS toàn trang bằng tổng các entry layout-shift có `sources` nằm từ vùng ghi chú trở xuống. Cách khác là đo y của vùng ghi chú và của khối ngay dưới. Đừng đòi CLS cả trang bằng 0 khi các khối ngoài phạm vi gói (PdpPointsEarn) còn dịch theo pha đăng nhập."
+   },
+   {
+    "severity": "P2",
+    "file": "apps/web/src/components/mini/mini.css",
+    "line": 660,
+    "issue": "Ở 375px, chỗ giữ chưa khớp đúng chiều cao ghi chú tới mức dưới 1px.\n- Chỗ giữ tính bằng `calc(13px × 1.54 × 2 + 12px)` = 52,04px.\n- Ghi chú thật có hai line box, mỗi cái 20,02px và được làm tròn theo đơn vị layout, nên khi hiện vẫn còn một dịch chuyển dưới 1px.\nTái hiện: web-gate, ca \"375px, ngoài bảng: allowance còn treo\". Kết quả CLS 0,0000259 so với toBe(0), đỏ cả 3 lần chạy ở cả hai project. Mini đo bằng cùng phép tính thì xanh, nên hai bên lệch nhau.",
+    "fix": "Làm tròn lên chỗ giữ (ví dụ `calc(… * 2 + 12px + 1px)` hoặc `3.3rem`), hoặc đặt cho ghi chú cùng `min-height` và `line-height` cố định bằng px. Nếu chấp nhận dịch dưới 1px thì để test đo vị trí khối bên dưới (≤1px) cộng CLS < 0,001 và ghi rõ lý do. Áp cùng cách cho Mini (product-detail.tsx:805)."
+   },
+   {
+    "severity": "P2",
+    "file": "apps/web/src/components/add-to-cart.tsx",
+    "line": 400,
+    "issue": "Ở 375px Mini và web hiện khác nhau khi vùng giữ chỗ trống, tức khách đã đăng nhập, đang xem Giờ vàng và còn suất (phần lớn khách):\n- Mini: vùng giữ chỗ có `background: var(--color-bg-surface)` (product-detail.tsx:801-806), nên dải 52px dưới ô Số lượng màu trắng, liền khối Số lượng.\n- Web: div `pdp-flash-limit` chỉ có `tubu-pdp-order-6 tubu-pdp-flash-note`, không có nền. Nền surface chỉ nằm trên thẻ <p> ghi chú (phoneBandPad), mà cột `pdp-info` không tô nền (page.tsx:104). Vì vậy web hiện một khoảng xám canvas 52px (cộng 8px mt-2 của khối Combo) giữa Số lượng và Combo, khác Mini.",
+    "fix": "Thêm `max-md:bg-[var(--color-bg-surface)]` cho div `pdp-flash-limit`, hoặc đặt nền trong `.tubu-pdp-flash-note` dưới md. Chụp 375 Mini và web cạnh nhau khi khách đăng nhập, SP có Giờ vàng còn suất."
+   },
+   {
+    "severity": "P3",
+    "file": "apps/web/src/components/add-to-cart.tsx",
+    "line": 132,
+    "issue": "Khách có cờ `tubu_web_session` cũ nhưng refresh bị từ chối (phiên hết hạn) hoặc mất mạng (pha 'unavailable'):\n- Lúc khôi phục, `restoring=true` nên dải giữ chỗ 52px hiện ra.\n- Khi pha thành guest hoặc unavailable thì `reserveFlashNote=false`, dải co lại và phần dưới dịch lên một lần.\nTrước nhánh này không có dịch chuyển này.",
+    "fix": "Chấp nhận được, nhưng nên ghi rõ trong comment. Hoặc giữ chỗ cả khi pha 'unavailable', và chỉ bỏ khi chắc là guest."
+   },
+   {
+    "severity": "P3",
+    "file": "apps/web/src/components/mini/mini.css",
+    "line": 643,
+    "issue": "Mục 2 mới làm phần `order` (13 chỗ chuyển sang lớp riêng `tubu-pdp-order-N` của PDP). Px viết tay, pdp-extras và pdp-sections chưa đụng. Lớp mới chỉ PDP dùng nên chưa phải lớp dùng chung như brief gợi ý.",
+    "fix": "Ghi rõ trong báo cáo là mục 2 mới xong một phần. Hoặc giảm thêm px và `max-md:` bằng lớp có sẵn trong `phone-ui.ts` hay `order-mobile`."
+   }
+  ]
+ },
+ "sec": {
+  "summary": "Lượt này đóng được các ca thân UTF-8: thân 10 MB nhiều khoá bị trả 400 trước JSON.parse, tôi đo trong 480 ms (máy tải 124). CORS đã đứng đầu chuỗi middleware: Nest 10 gắn option `cors` trong init() ở nest-application.js:94, nên đổi sang `app.enableCors` là đúng gốc lỗi. Khoá advisory cho ảnh khách vãng lai theo đúng mẫu đang dùng trong repo. MST gõ dở không còn báo đỏ. Các test liên quan đều xanh.\n\nRiêng mục tiêu chính của BAOMAT-01 (\"một request ẩn danh làm đứng event loop\") vẫn chưa đạt. body-parser 1.20.9 nhận mọi charset bắt đầu bằng `utf-`. Thân gửi với `charset=utf-7` hoặc `utf-16le` lọt qua `scanRawJson`. Tôi đo thật trên `createBodyParsers` của nhánh: một request 9 MB `charset=utf-7` (chỉ có một chuỗi, không cần token) tới `/api/feed/posts` chặn event loop **20,5 giây**, vì iconv giải mã UTF-7 chạy đồng bộ. Mã gốc cũng mắc lỗi này, nhưng chính gói sec phải đóng nó.\n\nNgoài ra báo cáo worker ghi \"test mới PATCH /me giữ nguyên 'Hoa <3'\", nhưng users.service.spec.ts không có ca nào cho luật `<>` mới ở `UsersService.updateMe`. Luật BAOMAT-09 hiện không có test nào giữ.\n\nẢnh trước/sau và bundle-report vẫn chưa có: thư mục screens-sec không tồn tại.",
+  "findings": [
+   {
+    "severity": "P1",
+    "file": "apps/api/src/common/body-limits.ts",
+    "line": 93,
+    "issue": "Gói chưa đạt BAOMAT-01: một request ẩn danh vẫn làm đứng event loop. body-parser json 1.20.9 (lib/types/json.js:131-132) nhận mọi charset bắt đầu bằng `utf-` và giải mã đồng bộ bằng iconv SAU bước verify. `rawGuard` lại quét byte thô như thể là UTF-8. Hai đường lọt: (a) `Content-Type: application/json; charset=utf-7` với `\"`/`:` mã hoá thành `+ACI-`/`+ADo-`, buffer thô không còn byte 0x22/0x3a nên `scanRawJson` trả true. (b) utf-16le, chèn ký tự có code unit chứa 0x22 để đảo trạng thái trong/ngoài chuỗi của bộ quét. Bản thân việc giải mã UTF-7 10 MB đã chặn event loop hàng chục giây, kể cả khi thân không có khoá nào nên cả inspectBody lẫn scanRawJson đều không chặn. Tái hiện (đã chạy): POST /api/feed/posts, `content-type: application/json; charset=utf-7`, thân `{\"note\":\"` + 'a+ACI-'.repeat(1_500_000) + `\"}` (9 MB, không cần token), cho kết quả 400 sau 20,8 s, event loop đứng 20,5 s. /health và mọi khách khác treo trong thời gian đó. Lặp vài request là API ngừng phục vụ. Thân 400k khoá gửi bằng utf-7 khiến JSON.parse chạy 2,5 s, tổng 23,7 s. Route 10 MB (/api/feed, /api/admin, /api/dealer, /api/merchant...) bị nặng nhất. Route 256 KB chỉ mất khoảng 0,1 s.",
+    "fix": "Chặn charset khác utf-8 trước bước giải mã. Có hai cách: (1) trong `rawGuard` dùng tham số thứ tư `encoding` của verify: `(req,res,buf,encoding) => { if (String(encoding).toLowerCase() !== 'utf-8') throw Object.assign(new Error('charset'), { status: 415, type: 'charset.unsupported' }); ... }`, đặt TRƯỚC điều kiện `buf.length > 1024`. verify chạy trước iconv.decode nên chặn được cả chi phí giải mã. (2) Hoặc trong `pick`, kiểm `content-type` charset và trả 415 JSON ngay. Làm tương tự cho parser riêng của `/api/events` ở bootstrap.ts. Trong `bodyParserErrorHandler`, map `charset.unsupported` sang câu lỗi chung. Thêm jest: POST /api/feed với `charset=utf-7` hoặc `utf-16le` thân khoảng 1 MB phải bị từ chối nhanh, kèm spy xác nhận JSON.parse không chạy."
+   },
+   {
+    "severity": "P2",
+    "file": "apps/api/src/modules/users/users.service.ts",
+    "line": 70,
+    "issue": "Luật BAOMAT-09 mới (chặn `<` `>` khi tên đổi, cho qua khi trùng tên đang lưu) không có test nào. Báo cáo worker ghi \"Test mới: PATCH /me giữ nguyên 'Hoa <3' kèm dob thành công\", nhưng commit f4203c887 không sửa users.service.spec.ts. `grep 'Hoa <3'` chỉ thấy ở update-me.dto.spec.ts, và test đó chỉ kiểm DTO nhận `<`. Các ca từ chối `<img src=x onerror=...>` đã bị xoá khỏi DTO spec mà không có ca thay thế ở tầng service. Tái hiện: xoá ba dòng 70-73 của users.service.ts thì toàn bộ jest users vẫn xanh, và PATCH /me với fullName '<img src=x onerror=alert(1)>' được lưu.",
+    "fix": "Thêm vào users.service.spec.ts: (a) tên đang lưu 'A', gửi '<b>x' thì nhận BadRequest 'Tên không được chứa ký tự < hoặc >.' và không gọi update. (b) Tên đang lưu 'Hoa <3', gửi 'Hoa <3' kèm dob thì update chạy. (c) Tên đang lưu 'Hoa <3', gửi 'Hoa <4' thì bị từ chối. Xác nhận ca (a) đỏ khi gỡ đoạn kiểm."
+   },
+   {
+    "severity": "P3",
+    "file": "apps/api/src/modules/users/users.service.ts",
+    "line": 72,
+    "issue": "Phép so khớp tên đang lưu không trim, trong khi Mini (edit-profile.tsx:126,137) và web (tai-khoan/ho-so/page.tsx:132) đều gửi `fullName.trim()`. Tên Zalo có khoảng trắng đầu/cuối kèm `<` (ví dụ ' Hoa <3' do auth.service.ts:235 ghi nguyên `info.name`) sẽ khác 'Hoa <3' mà client gửi. Khách đó không lưu được hồ sơ, đổi ngày sinh cũng không, và nhận lỗi 'Tên không được chứa ký tự < hoặc >.' dù không hề sửa tên.",
+    "fix": "So khớp `current?.fullName?.trim() !== rest.fullName.trim()`, và thêm một ca test cho tên có khoảng trắng thừa."
+   },
+   {
+    "severity": "P3",
+    "file": "apps/api/src/common/body-limits.spec.ts",
+    "line": 62,
+    "issue": "Ca 'thân lồng quá sâu bị loại khi quét thô' gửi `'['.repeat(40)+']'.repeat(40)`, tức 80 byte, dưới ngưỡng `buf.length > 1024` của rawGuard, nên chỉ inspectBody chặn sau JSON.parse. Nhánh kiểm độ sâu của `scanRawJson` không có ca nào trên đường HTTP. Gỡ `if (++depth > maxDepth) return false` thì test vẫn xanh.",
+    "fix": "Đệm thân quá 1024 byte (ví dụ `{\"pad\":\"x\".repeat(2000),\"d\":` + '['.repeat(40) + ...) và spy JSON.parse không chạy. Hoặc thêm unit test gọi thẳng `scanRawJson`."
+   },
+   {
+    "severity": "P3",
+    "file": "apps/miniapp/src/pages/checkout.tsx",
+    "line": 985,
+    "issue": "Gói có đổi giao diện (dòng lỗi MST ở Mini và web) nhưng chưa có ảnh trước/sau mini375/web375/web1280: thư mục docs/2026-11-03-golive/screens-sec không tồn tại. bundle-report Mini cũng chưa đo, trái mục 'Kiểm trước khi báo xong' của brief. Chưa xác nhận được vị trí dòng lỗi ở Mini (errorText của zmp Input) và web (span dưới ô) có giống nhau ở 375.",
+    "fix": "Người gộp hoặc worker chụp capture.mjs mini375,web375,web1280 cho màn thanh toán khi bật hoá đơn, gõ MST sai đủ 10 số. Chạy vite build, rồi bundle-report so với gốc 52fd5cd65 và ghi số vào báo cáo."
+   }
+  ]
+ },
+ "search": {
+  "summary": "Tôi không thấy lỗi P0 hay P1. Phần API của KHAMPHA-02 làm đúng gốc lỗi. textMatchSql chuyển sang mỗi từ một điều kiện LIKE nối AND (bỏ từ trùng, tối đa 6 từ, vẫn thoát %/_ và giữ không dấu, vẫn có nhánh tag). Thứ tự xếp là khớp đầu tên, khớp cả cụm, nổi bật, bán chạy, id. Tab \"Liên quan\" đi qua listByRelevance theo đúng thứ tự SQL. Gợi ý lấy 8 id đầu rồi xếp lại đúng thứ tự đó. Các đường khác không đổi: không có q, có sort, có lọc giá, trang thương hiệu, khối Trang chủ, nhánh lùi về contains khi SQL lỗi. Số câu SQL không tăng. Tôi tự chạy textMatchSql của nhánh trên DB lane 5 ở chế độ chỉ đọc. Kết quả: \"nuoc chen\" ra 1 (Nước rửa chén Fuwa3e), \"Fuwa3e nước\" ra 6, \"dầu bé\" ra 2, \"sữa\" xếp hai SP có tên mở đầu bằng \"Sữa\" lên trước. Lane 5 có ít SP nên kế hoạch thực thi ở đó không dùng index trigram. Ca EXPLAIN trong race spec bỏ bớt index khác và tắt seqscan để buộc kiểm, và có dùng từ khoá nhiều từ. Còn lại 2 điểm P2 và 3 điểm P3. (1) Entry Mini tăng +40 B raw / +11 B gz, trái luật \"Entry Mini App không được tăng\". Tôi đã xác nhận trong bản build www của chính worktree: chuỗi thêm vào style của EmptyState nằm trong chunk entry index.Ca4UV9o0.module.js, dài đúng 40 ký tự. Sửa được mà entry không tăng. (2) Chưa có ảnh trước/sau 375 Mini/web, chưa chạy Playwright: thư mục screens-search không tồn tại, nên tôi chưa xác nhận được Mini và web giống nhau ở 375 trên màn thật. Tôi đọc mã web thì thấy web 375 và 1280 không bị tràn: EmptyResults có break-words, ListingLayout dùng minmax(0,1fr) và min-w-0. KHAMPHA-05, 07, 14 đúng gốc, có test (clipQuery cắt theo điểm mã, đổi chỗ min/max ở cả hai app). KHAMPHA-15 chỉ làm được một phần, chi tiết ở các phát hiện P3.",
+  "findings": [
+   {
+    "severity": "P2",
+    "file": "apps/miniapp/src/components/ui/empty-state.tsx",
+    "line": 91,
+    "issue": "Entry Mini tăng +40 B raw / +11 B gz, trái luật brief \"Entry Mini App không được tăng\". Worker tự báo con số này nhưng coi là đạt vì làm tròn KB không đổi. Nguyên nhân: EmptyState nằm trong chunk entry. Tôi grep `index.Ca4UV9o0.module.js` trong www của worktree và thấy `style:{fontSize:17,marginTop:10,maxWidth:\"100%\",overflowWrap:\"anywhere\"}`. Phần thêm vào là `,maxWidth:\"100%\",overflowWrap:\"anywhere\"`, đúng 40 ký tự. Số gốc 675199 cũng không do worker tự đo trên 52fd5cd65.",
+    "fix": "Đưa phần ngắt dòng ra khỏi entry. Cách 1: ở browse.tsx (chunk lazy), bọc từ khoá trong heading \"Không tìm thấy\" bằng span có style overflowWrap:'anywhere', nếu prop heading nhận ReactNode. Cách 2: thêm một lớp CSS trong tokens.css. Sau đó tự đo lại bundle-report trên gốc 52fd5cd65 và trên HEAD; entry phải ≤ gốc."
+   },
+   {
+    "severity": "P2",
+    "file": "apps/miniapp/src/pages/browse.tsx",
+    "line": 376,
+    "issue": "Gói đổi giao diện (tiêu đề rỗng, maxLength ô tìm, chip giá sau khi đổi chỗ) nhưng thiếu bằng chứng bắt buộc theo brief. Không có ảnh trước/sau 375 Mini/web: thư mục docs/2026-11-03-golive/screens-search không tồn tại. Không chạy Playwright spec màn tìm ở Mini và web. Reviewer không xác nhận được Mini và web 375 giống nhau trên màn thật. Chưa có ảnh xác nhận KHAMPHA-05 đã hết tràn: tiêu đề \"Không tìm thấy\" với từ khoá 130 ký tự 'a' trên Mini 375.",
+    "fix": "Phiên điều phối (hoặc worker sau khi được cấp lane) chụp `capture.mjs --lane 5 --phase mini375,web375` cho /browse?q=<130 ký tự a>, q nhiều từ ('nuoc chen') và ?minPrice=500000&maxPrice=100000, kèm ảnh trước/sau. Chạy Playwright spec browse/search của Mini và web (web qua web-gate.sh, khối cổng 3970)."
+   },
+   {
+    "severity": "P3",
+    "file": "apps/miniapp/src/pages/browse.tsx",
+    "line": 121,
+    "issue": "KHAMPHA-15 trên Mini mới làm được phần \"đổi tài khoản\", chưa làm \"xoá khi đăng xuất\". Tái hiện: A đăng nhập rồi tìm 'kem chống hăm', owner=A. A bấm Đăng xuất ở Cài đặt; auth.ts:379 đặt user null, status idle và không tự đăng nhập lại cho tới lần mở app sau. Người kế tiếp mở Tìm kiếm thì userId undefined, scopeRecentSearchesToUser trả false và vẫn thấy lịch sử của A. Từ khoá người đó gõ được ghi thêm vào danh sách của A (owner vẫn là A); A đăng nhập lại sẽ thấy chúng. Web thì ngược lại: chỉ xoá khi gọi logout() (auth-context.tsx:238). Khi phiên web hết hạn rồi B đăng nhập, user đổi mà không qua logout, B vẫn thấy lịch sử của A. Hai app xử lý lệch nhau.",
+    "fix": "Mini: trong browse, khi userId chuyển từ có giá trị sang undefined trong lúc status === 'idle' (đăng xuất), xoá lịch sử và owner. Hoặc gắn việc xoá vào setLogoutCleanup nếu xử lý được phần entry tăng. Web: dùng cùng cơ chế owner theo userId như Mini (đã có mẫu dropForeignHomeHints trong effect [userId] ở auth-context.tsx), ngoài việc xoá khi logout."
+   },
+   {
+    "severity": "P3",
+    "file": "apps/api/src/modules/catalog/catalog.service.ts",
+    "line": 249,
+    "issue": "Tab \"Liên quan\" khi có q tính lại thứ tự ở mỗi trang, theo soldExternal + soldApp đang sống. Mã cũ xếp theo isFeatured, id nên thứ tự ổn định. Bộ nhớ 60 giây không giữ thứ tự: khoá nhớ chứa chính mảng id đã xếp, đổi thứ tự là ra khoá mới, và khoá dài hơn 2000 ký tự (khoảng 70 SP trở lên) thì không nhớ. Tái hiện: q='nuoc' khớp hơn 20 SP có cùng độ khớp đầu tên/cả cụm và cùng isFeatured. Tải trang 1, rồi đồng bộ Pancake (setSoldExternal) đổi số đã bán, rồi tải trang 2. Một SP có thể nhảy từ trang 2 lên trang 1: Mini lọc trùng bằng uniqueById, nhưng SP đó bị sót, khách không bao giờ thấy.",
+    "fix": "Nhớ danh sách id đã xếp theo khoá ngắn: q đã gấp dấu cùng các bộ lọc, không dùng mảng id, như listSeeded dùng cacheTag. Hoặc bỏ tiêu chí bán chạy khỏi thứ tự của tab Liên quan, chỉ giữ khớp đầu tên, khớp cả cụm, isFeatured, id."
+   },
+   {
+    "severity": "P3",
+    "file": "apps/api/src/modules/catalog/catalog.service.ts",
+    "line": 364,
+    "issue": "Mỗi lượt tìm \"Liên quan\" có ít kết quả (khoá ≤ 2000 ký tự) nay ghi vào rankCache. Bộ nhớ này dùng chung, trần 100 khoá, đầy thì bỏ khoá cũ nhất. Tìm nhiều từ khoá khác nhau sẽ đẩy khoá Bán chạy và khoá xoay theo ngày (seed) của Danh mục/Trang chủ ra ngoài. Khi đó các danh sách này phải quét lại toàn bộ catalog thường hơn. Lợi ích nhớ cho tìm kiếm gần như không có, vì câu SQL tìm vẫn chạy mỗi request và khoá chỉ trúng khi cùng từ khoá trong 60 giây.",
+    "fix": "Không nhớ ở listByRelevance (thêm tham số tắt nhớ, hoặc dùng select riêng với cacheable=false). Hoặc dùng khoá ngắn như ở phát hiện P3 trước."
+   }
+  ]
+ },
+ "home": {
+  "summary": "Tôi review HEAD 180b0f16b (3 commit trên 52fd5cd65). Lưu ý: worktree gl-1103-home đang có 13 file sửa dở chưa commit (hook cuộn có thử lại, SuggestFeed dựng sẵn từ cache, useWindowScrollRestore cho web, :not([role=dialog] *) trong CSS, member-card flex, bleed cho skeleton web). Phần này KHÔNG nằm trong lượt review này, phải commit rồi review lại.\n\nỞ HEAD, các test liên quan đều xanh, nhưng gói chưa đạt:\n- **KHAMPHA-01 (P1):** ca cuộn sâu mà audit đo được vẫn không khôi phục đúng. Lúc quay lại, lưới Gợi ý trả về null vì `near` = false, mà hook chỉ khôi phục một lần, nên vị trí bị kẹp về cuối phần trên lưới. Web 375 chưa kiểm cũng chưa sửa.\n- **HIEUNANG-03:** chỉ giữ chỗ được khi /me/summary đã có sẵn. Mở lạnh trên web, hoặc Mini mở lại sau khi đặt đơn rồi đóng app, thì dải vẫn chèn 64px làm trang nhảy.\n- **KHAMPHA-06:** kẹp 3 dòng làm thẻ cao 76px, vượt khung chờ 64px. Đây là CLS mới cho mọi khách mới, mà câu có \"từ X đ\" vẫn có thể bị cắt.\n- **ShortcutGrid web:** bản server luôn vẽ khung trơn dù server đã có `initial.publicConfig`. Đây là hồi quy so với PROD, nơi waste đang tắt nên trước đây không nhảy.\n- **Entry Mini tăng +1 KB gz**, trái luật brief.\n- **Thiếu bằng chứng bắt buộc:** không có ảnh (thư mục screens-home không tồn tại), không đo CLS trước/sau, không chạy Playwright web, KHAMPHA-16 chưa tái hiện.\n\nKhông thấy lỗi P0: không đụng API, điểm, giá hay migration. Chuỗi placeholder cũ không còn sót chỗ nào.",
+  "findings": [
+   {
+    "severity": "P1",
+    "file": "apps/miniapp/src/pages/home.tsx",
+    "line": 95,
+    "issue": "KHAMPHA-01 chưa đạt với đúng ca audit đo được (scrollTop 4529, sâu trong lưới Gợi ý). `ready` không chờ lưới Gợi ý. Khi Trang chủ mount lại sau Back, SuggestFeed khởi tạo `near` = false (suggest-feed.tsx:54) và trả null cho phần lưới (suggest-feed.tsx:123). Vì vậy trang chỉ cao tới hết các khối trên. Ở HEAD, useScrollRestoration chỉ gán scrollTop MỘT lần, nên trình duyệt kẹp về cuối phần trên lưới. Sau đó IntersectionObserver bật `near`, lưới dựng từ cache nhưng không ai cuộn lại. Tái hiện: khách cũ cuộn tới khoảng 4500px trong Gợi ý, chạm một thẻ sang PDP rồi Back. Kết quả: khách ở đầu lưới Gợi ý (khoảng 1800–2500px), không về 4529. Thêm nữa, phần 'kiểm và sửa cả web 375' không làm: báo cáo ghi chưa kiểm, và không có commit nào cho web. Bản sửa dở chưa commit trong worktree (getQueryData ở suggest-feed, vòng thử lại trong hook, useWindowScrollRestore cho web) đang nhắm đúng chỗ này nhưng chưa được review.",
+    "fix": "Commit phần sửa dở: SuggestFeed dựng ngay khi trang 1 đã có trong cache, hook thử lại tới khi đủ cao, ngừng khi khách chạm hay cuộn. Thêm test: mount lại với cache infinite nhiều trang thì scrollTop đạt y đã lưu. Kiểm web 375 bằng Back thật (Playwright hoặc lane) và ghi số scrollTop trước/sau cho cả hai app."
+   },
+   {
+    "severity": "P2",
+    "file": "apps/web/src/components/home/todo-strip.tsx",
+    "line": 119,
+    "issue": "HIEUNANG-03 chỉ giữ chỗ khi /me/summary đã về (`enabled` cần count.data > 0). Lúc count.isPending, `pending` = 0 nên trả null. Khi summary về với active > 0, khung chờ 64px bị CHÈN vào: cú nhảy chỉ dời sớm hơn, không mất. Ca web cold mà audit đo 3/3 (HTML server dựng bố cục, giữ nội dung qua useStartedAsNew, không có settling) vẫn nhảy khoảng 64px khi summary về. Mini có cùng lỗi ở apps/miniapp/src/components/home/todo-strip.tsx:127. Ví dụ: khách đặt đơn COD, đóng app ở màn đặt thành công (lần trước Trang chủ đã ghi rows = 0). Hôm sau mở lạnh: kind = returning, không settling, summary pending, null. Summary về active = 1, chèn 64px, Danh mục và Bán chạy bị đẩy xuống. Test mới chỉ dựng ca summary đã có sẵn (hold home-todo), không có ca summary đang chờ.",
+    "fix": "Giữ chỗ ngay cả lúc count.isPending với khách đã nhớ là returning. Hoặc ghi writeTodoRows(…, 1) khi đặt đơn thành công (đề xuất (a), phối hợp với đợt 1 sau khi checkout merge). Hoặc cho settling của web và Mini chờ /me/summary với trần ngắn. Thêm test: summary đang chờ rồi về active > 0 thì không có lần chèn chiều cao. Đo CLS trước/sau bằng home-probe.mjs như audit."
+   },
+   {
+    "severity": "P2",
+    "file": "apps/miniapp/src/components/home/new-customer-gift.tsx",
+    "line": 154,
+    "issue": "KHAMPHA-06: kẹp 3 dòng làm thẻ cao hơn khung chờ. Tiêu đề label 12px × 1.33 = 16px, cộng 3 dòng caption 13px × 1.54 = 20px, ra 76px, lớn hơn HOME_HERO_HEIGHT 64. NewCustomerGiftSkeleton và khung settling đều 64px, nên mọi khách mới ở 375 (Mini và web, apps/web/src/components/home/new-customer-gift.tsx:115) thấy cả trang nhảy khoảng 12px khi thẻ quà về: đây là CLS mới mà gói lại sinh ra. Ảnh audit cho thấy cột chữ chỉ khoảng 13 ký tự mỗi dòng ('Miễn phí giao' / 'hàng cho đơ…'). Vì vậy câu freeShipFirstFrom 'Miễn phí giao hàng cho đơn đầu tiên từ {min}' (47 ký tự) cần 4 dòng: 3 dòng vẫn cắt mất đúng phần điều kiện số tiền. Không có ảnh sau để chứng minh câu đọc trọn.",
+    "fix": "Làm theo đề xuất đầu của audit: đưa nút 'Chọn sản phẩm' xuống hàng riêng, hoặc cho câu chiếm cả hàng. Nếu thẻ đổi chiều cao thì cập nhật HOME_HERO_HEIGHT, khung chờ và settling cho khớp. Chụp ảnh 375 Mini và web với câu dài nhất (có 'từ X đ')."
+   },
+   {
+    "severity": "P2",
+    "file": "apps/web/src/components/home/shortcut-grid.tsx",
+    "line": 80,
+    "issue": "Web không hydrate query public-config: không có HydrationBoundary, và ShortcutGrid không nhận initial.publicConfig dù home-initial.ts:44 đã tải nó ở server. Vì thế cfg.isPending luôn true lúc SSR, và HTML Trang chủ web ở 375 của MỌI khách (kể cả bản cache ISR) chỉ có khung trơn 84px. Lối tắt chỉ bấm được sau khi hydrate xong và /config/public về. Trên PROD, waste.* đang tắt nên trước đây lưới dựng đúng ngay từ server, không nhảy. Thay đổi này làm chậm đi mà không được gì. Khung trơn cũng thiếu `tubu-bleed max-md:px-2` nên rộng khác lưới thật (bản dở chưa commit đã thêm).",
+    "fix": "Truyền initial.publicConfig vào ShortcutGrid (placeholderData hoặc initialData như NewCustomerGift) để lưới dựng đúng ngay từ khung đầu ở server. Thêm test: có initialConfig thì không hiện khung trơn."
+   },
+   {
+    "severity": "P2",
+    "file": "apps/miniapp/src/pages/home.tsx",
+    "line": 40,
+    "issue": "Brief ghi 'Entry Mini App không được tăng', nhưng theo báo cáo worker, entry tăng từ 659 lên 661 KB raw và từ 205 lên 206 KB gz. Lý do: import use-scroll-restoration (cùng use-navigation-type) kéo hook từ chunk lười vào gói đầu, vì Trang chủ nằm trong entry. Đây là luật cứng của đợt, cần sửa hoặc người điều phối duyệt ngoại lệ.",
+    "fix": "Bù lại ở chỗ khác trong entry, hoặc đưa phần khôi phục cuộn của Home vào chunk dưới màn đầu (home-below). Nếu không làm được thì xin 2a duyệt ngoại lệ, kèm số đo vite build và bundle-report trước/sau."
+   },
+   {
+    "severity": "P2",
+    "file": "apps/web/src/app/globals.css",
+    "line": 101,
+    "issue": "Gói thiếu bằng chứng bắt buộc của brief:\n- Không có ảnh trước/sau: thư mục docs/2026-11-03-golive/screens-home không tồn tại.\n- Không đo CLS trước/sau cho HIEUNANG-04 (rule ẩn chân trang) và HIEUNANG-03, dù brief ghi 'Đo CLS trước/sau'. Audit còn ghi nguồn nhảy thứ hai là 'DIV.md:hidden' (đệm thanh đáy), rule này không xử lý.\n- Không chạy Playwright web, a11y-shop hay ds-parity.\n- KHAMPHA-16 chưa tái hiện.\nKhông thể xác nhận rule CSS đưa CLS các màn /vuon-xanh, /doi-rac, /uu-dai, … về dưới 0,1.",
+    "fix": "Bật lane 6 (nhờ 2a nếu lane-down bị chặn). Chạy probe.mjs web375 returning cho 6 màn trước/sau, home-probe cho Trang chủ, capture.mjs mini375, web375 và web1280 cho các khoá home. Chạy web-gate.sh home-merged.web.spec.ts. Chạy axe /san-pham persona returning cho KHAMPHA-16."
+   },
+   {
+    "severity": "P3",
+    "file": "apps/web/src/app/globals.css",
+    "line": 101,
+    "issue": "Ở HEAD, selector khớp cả khối aria-busy nằm trong sheet hay hộp thoại, ví dụ components/game/earn-water-sheet.tsx:107 (div role=status aria-busy). Mở sheet 'Kiếm nước' ở /vuon-xanh khi đang cuộn tới đáy: chân trang biến mất phía sau, trang ngắn lại, scrollTop bị kẹp, nền phía sau nhảy. Đóng sheet thì chân trang hiện lại.",
+    "fix": "Thêm :not([role='dialog'] *) (bản dở đã có) và test hoặc ảnh cho ca sheet."
+   },
+   {
+    "severity": "P3",
+    "file": "apps/miniapp/src/components/home/member-card.tsx",
+    "line": 112,
+    "issue": "KHAMPHA-09 mới đạt một phần. Lời chào và tên bậc đều co (minWidth 0, flex-shrink 1), mà co theo tỉ lệ flex-basis. Tên bậc dài (khoảng 400px) làm lời chào 'Chào Lại' (khoảng 60px) mất khoảng một nửa, còn 'Ch…'. Web giống hệt ở apps/web/src/components/home/member-card.tsx:78.",
+    "fix": "Lời chào flexShrink 0, maxWidth khoảng 60%; tên bậc flex '1 1 0%' (bản dở đã có). Thêm test cho cả web."
+   },
+   {
+    "severity": "P3",
+    "file": "apps/web/src/components/reorder/purchased-rail.tsx",
+    "line": 21,
+    "issue": "Hai lần import từ cùng module '@/components/home/home-block-error' (homeErrorMessage và HomeBlockErrorSuppressed). Web không có test cho nhánh ẩn Thử lại của PurchasedRail và MemberCard khi có dải lỗi cấp trang. Test cuộn ở pages/home.spec.tsx chỉ kiểm lần gọi cuối là ('home', true), không kiểm `ready` = false khi Danh mục hay Bán chạy còn tải.",
+    "fix": "Gộp import. Thêm spec web cho hai nhánh ẩn. Thêm assert `ready` = false trong lúc còn tải ở home.spec."
+   }
+  ]
+ }
+}

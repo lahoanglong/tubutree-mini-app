@@ -1,0 +1,624 @@
+[
+  {
+    "id": "L5-RT-A-delivered",
+    "persona": "returning",
+    "size": "api",
+    "journey": "Đổi/trả: chuẩn bị",
+    "step": "đặt COD 3 món rồi giao (KHO đóng gói + webhook Pancake)",
+    "expect": "đơn DELIVERED, có deliveredAt, điểm đơn vào sổ",
+    "actual": "DELIVERED deliveredAt=2026-11-03T21:11:49.024Z",
+    "evidence": {
+      "full": [
+        {
+          "sub": 360000,
+          "disc": 0,
+          "ship": 0,
+          "total": 360000,
+          "pe": 8640
+        }
+      ],
+      "items": [
+        {
+          "id": "cmw16nzu000sejtc4nkywvmlu",
+          "n": "Nước rửa chén sinh học Fuwa3e",
+          "q": 3,
+          "p": 120000
+        }
+      ],
+      "d1": {
+        "kho": 200,
+        "shipped": "  } | } | ",
+        "delivered": "  } | } | "
+      }
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RT-A-points-ledger",
+    "persona": "returning",
+    "size": "api",
+    "journey": "Đổi/trả: chuẩn bị",
+    "step": "điểm sau giao đối chiếu sổ",
+    "expect": "users.pointsBalance = SUM(sổ STANDARD); có dòng ORDER_DELIVERED",
+    "actual": "điểm=58440 sổ=58440; ví=1110000 sổ ví=1110000",
+    "evidence": {
+      "ledgerA": [
+        {
+          "d": 8640,
+          "reason": "ORDER_DELIVERED:TUBU2026110345261",
+          "lot": "STANDARD",
+          "rt": "ORDER"
+        }
+      ]
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RT-B-reason-short",
+    "persona": "returning",
+    "size": "mini375",
+    "journey": "Đổi/trả: yêu cầu",
+    "step": "lý do khác < 5 ký tự",
+    "expect": "400 lời tiếng Việt (return-request: RETURN_REASON_REQUIRED)",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":\"Bạn mô tả lý do đổi/trả (ít nhất 5 ký tự) nhé.\",\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RT-B-qty-over",
+    "persona": "returning",
+    "size": "mini375",
+    "journey": "Đổi/trả: yêu cầu",
+    "step": "trả nhiều hơn số đã mua (99 > 3)",
+    "expect": "400, không tạo yêu cầu",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":\"Số lượng trả của \\\"Nước rửa chén sinh học Fuwa3e\\\" vượt số còn lại có thể trả (3).\",\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RT-B-create-partial",
+    "persona": "returning",
+    "size": "mini375",
+    "journey": "Đổi/trả: yêu cầu",
+    "step": "khách trả 1/3 món (lý do: hàng lỗi)",
+    "expect": "201, trạng thái REQUESTED",
+    "actual": "HTTP 201",
+    "evidence": "{\"id\":\"cmw16o0uz00t8jtc43dcldba4\",\"orderId\":\"cmw16nzu000sdjtc4c8tnvi9p\",\"userId\":\"uat_returning\",\"reason\":\"Chai bị rò rỉ khi nhận\",\"reasonCode\":\"DEFECTIVE\",\"status\":\"REQUESTED\",\"refundMethod\":\"WALLET\",\"bankName\":null,\"bankAccountNo\":null,\"b",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RT-B-duplicate",
+    "persona": "returning",
+    "size": "mini375",
+    "journey": "Đổi/trả: yêu cầu",
+    "step": "gửi lần hai khi còn yêu cầu chờ",
+    "expect": "400: Đơn đang có yêu cầu đổi/trả chờ xử lý",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":\"Đơn đang có yêu cầu đổi/trả chờ xử lý.\",\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RT-B-review-deny-kho",
+    "persona": "kho",
+    "size": "api",
+    "journey": "Đổi/trả: duyệt",
+    "step": "kho duyệt đổi/trả",
+    "expect": "403 (chỉ CSKH/ADMIN: returns-admin.controller.ts)",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RT-B-review-deny-ketoan",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Đổi/trả: duyệt",
+    "step": "ketoan duyệt đổi/trả",
+    "expect": "403 (chỉ CSKH/ADMIN: returns-admin.controller.ts)",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RT-B-review-deny-marketing",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Đổi/trả: duyệt",
+    "step": "marketing duyệt đổi/trả",
+    "expect": "403 (chỉ CSKH/ADMIN: returns-admin.controller.ts)",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RT-B-review-deny-staff",
+    "persona": "staff",
+    "size": "api",
+    "journey": "Đổi/trả: duyệt",
+    "step": "staff duyệt đổi/trả",
+    "expect": "403 (chỉ CSKH/ADMIN: returns-admin.controller.ts)",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RT-B-review-deny-returning",
+    "persona": "returning",
+    "size": "api",
+    "journey": "Đổi/trả: duyệt",
+    "step": "returning duyệt đổi/trả",
+    "expect": "403 (chỉ CSKH/ADMIN: returns-admin.controller.ts)",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RT-B-list-deny-ketoan",
+    "persona": "ketoan",
+    "size": "api",
+    "journey": "Đổi/trả: danh sách",
+    "step": "ketoan xem danh sách đổi/trả",
+    "expect": "403",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RT-B-list-deny-marketing",
+    "persona": "marketing",
+    "size": "api",
+    "journey": "Đổi/trả: danh sách",
+    "step": "marketing xem danh sách đổi/trả",
+    "expect": "403",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RT-B-list-kho",
+    "persona": "kho",
+    "size": "api",
+    "journey": "Đổi/trả: danh sách",
+    "step": "KHO xem danh sách (được phép CSKH/KHO)",
+    "expect": "200",
+    "actual": "HTTP 200",
+    "evidence": "[\"cmw16o0uz00t8jtc43dcldba4\",\"cmw16njxc00m3jtc4ccivkf19\"]",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RT-B-preview-kho",
+    "persona": "kho",
+    "size": "api",
+    "journey": "Đổi/trả: xem trước",
+    "step": "KHO xem số tiền hoàn",
+    "expect": "403 (preview chỉ CSKH)",
+    "actual": "HTTP 403",
+    "evidence": "{\"message\":\"Bạn không có quyền truy cập tài nguyên này.\",\"error\":\"Forbidden\",\"statusCode\":403}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RT-C-preview",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Đổi/trả: duyệt từng phần",
+    "step": "CSKH xem số tiền hoàn trước khi duyệt",
+    "expect": "200, có số tiền hoàn của dòng, là hoàn một phần (không tính phí ship vì không trả cả đơn trừ lỗi shop)",
+    "actual": "HTTP 200",
+    "evidence": "{\"requestId\":\"cmw16o0uz00t8jtc43dcldba4\",\"shopFault\":true,\"defaultShopFault\":true,\"isFull\":false,\"goods\":120000,\"shipping\":0,\"refund\":120000,\"moneyRefundable\":true,\"destination\":{\"method\":\"WALLET\"},\"pointsUsedBack\":0,\"pointsEarnedBack\":2880,\"lines\":[{\"orderItemId\":\"cmw16nzu000sejtc4nkywvmlu\",\"quantity\":1,\"refundAmount\":120000,\"productName\":\"Nước rửa chén sinh học Fuwa3e\",\"variationName\":\"1L\",\"orderedQuantity\":3}],\"pancakeTask\":true,\"returnTo\":{\"kind\":\"TUBU\",\"name\":\"Kho Tubu Tree\"}}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RT-C-preview-math",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Đổi/trả: duyệt từng phần",
+    "step": "số tiền hoàn một phần",
+    "expect": "hoàn ≈ 1/3 tiền hàng sau giảm (120000đ; giá món 120000đ), lỗi shop có thể cộng phí ship 0đ",
+    "actual": "goods=120000 shipping=0 refund=120000",
+    "evidence": {
+      "pv": {
+        "requestId": "cmw16o0uz00t8jtc43dcldba4",
+        "shopFault": true,
+        "defaultShopFault": true,
+        "isFull": false,
+        "goods": 120000,
+        "shipping": 0,
+        "refund": 120000,
+        "moneyRefundable": true,
+        "destination": {
+          "method": "WALLET"
+        },
+        "pointsUsedBack": 0,
+        "pointsEarnedBack": 2880,
+        "lines": [
+          {
+            "orderItemId": "cmw16nzu000sejtc4nkywvmlu",
+            "quantity": 1,
+            "refundAmount": 120000,
+            "productName": "Nước rửa chén sinh học Fuwa3e",
+            "variationName": "1L",
+            "orderedQuantity": 3
+          }
+        ],
+        "pancakeTask": true,
+        "returnTo": {
+          "kind": "TUBU",
+          "name": "Kho Tubu Tree"
+        }
+      },
+      "full": [
+        {
+          "sub": 360000,
+          "disc": 0,
+          "ship": 0,
+          "total": 360000,
+          "pe": 8640
+        }
+      ],
+      "unit": 120000
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RT-C-stale-expected",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Đổi/trả: duyệt từng phần",
+    "step": "duyệt với số tiền đã xem lệch số tính lại",
+    "expect": "409/400: từ chối để xem lại (review: expectedRefund)",
+    "actual": "HTTP 409",
+    "evidence": "{\"message\":\"Số tiền hoàn đã đổi thành 120.000đ (đơn vừa có thay đổi). Xem lại trước khi duyệt.\",\"error\":\"Conflict\",\"statusCode\":409}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RT-C-approve",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Đổi/trả: duyệt từng phần",
+    "step": "CSKH duyệt (lỗi shop)",
+    "expect": "200, yêu cầu APPROVED",
+    "actual": "HTTP 201",
+    "evidence": "{\"id\":\"cmw16o0uz00t8jtc43dcldba4\",\"orderId\":\"cmw16nzu000sdjtc4c8tnvi9p\",\"userId\":\"uat_returning\",\"reason\":\"Chai bị rò rỉ khi nhận\",\"reasonCode\":\"DEFECTIVE\",\"images\":[],\"status\":\"APPROVED\",\"refundMethod\":\"WALLET\",\"bankName\":null,\"bankAccountNo\":null,\"bankAccountName\":null,\"shopFault\":true,\"fullReturn\":false,\"refundAmount\":120000,\"shippingRefund\":0,\"pointsRefunded\":0,\"convertedPointsRefunded\":0,\"poi",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RT-C-wallet",
+    "persona": "returning",
+    "size": "api",
+    "journey": "Đổi/trả: duyệt từng phần",
+    "step": "Ví sau duyệt từng phần",
+    "expect": "Ví tăng đúng số tiền hoàn của yêu cầu; sổ Ví khớp số dư; đơn vẫn DELIVERED (chưa trả hết)",
+    "actual": "Ví 1110000->1230000 (+120000); sổ 1230000; đơn DELIVERED; yêu cầu APPROVED",
+    "evidence": {
+      "wl": [
+        {
+          "d": 120000,
+          "t": "ORDER_REFUND",
+          "reason": "Hoàn tiền trả hàng đơn TUBU2026110345261"
+        },
+        {
+          "d": 210000,
+          "t": "ORDER_REFUND",
+          "reason": "Hoàn tiền đơn TUBU2026110356347"
+        }
+      ],
+      "preview": {
+        "requestId": "cmw16o0uz00t8jtc43dcldba4",
+        "shopFault": true,
+        "defaultShopFault": true,
+        "isFull": false,
+        "goods": 120000,
+        "shipping": 0,
+        "refund": 120000,
+        "moneyRefundable": true,
+        "destination": {
+          "method": "WALLET"
+        },
+        "pointsUsedBack": 0,
+        "pointsEarnedBack": 2880,
+        "lines": [
+          {
+            "orderItemId": "cmw16nzu000sejtc4nkywvmlu",
+            "quantity": 1,
+            "refundAmount": 120000,
+            "productName": "Nước rửa chén sinh học Fuwa3e",
+            "variationName": "1L",
+            "orderedQuantity": 3
+          }
+        ],
+        "pancakeTask": true,
+        "returnTo": {
+          "kind": "TUBU",
+          "name": "Kho Tubu Tree"
+        }
+      }
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RT-C-wallet-equals-preview",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Đổi/trả: duyệt từng phần",
+    "step": "tiền hoàn thực tế = số CSKH đã thấy ở xem trước (cùng shopFault)",
+    "expect": "bằng nhau",
+    "actual": "thực 120000; xem trước(shopFault) 120000; xem trước(mặc định) 120000",
+    "evidence": {
+      "pv": {
+        "requestId": "cmw16o0uz00t8jtc43dcldba4",
+        "shopFault": true,
+        "defaultShopFault": true,
+        "isFull": false,
+        "goods": 120000,
+        "shipping": 0,
+        "refund": 120000,
+        "moneyRefundable": true,
+        "destination": {
+          "method": "WALLET"
+        },
+        "pointsUsedBack": 0,
+        "pointsEarnedBack": 2880,
+        "lines": [
+          {
+            "orderItemId": "cmw16nzu000sejtc4nkywvmlu",
+            "quantity": 1,
+            "refundAmount": 120000,
+            "productName": "Nước rửa chén sinh học Fuwa3e",
+            "variationName": "1L",
+            "orderedQuantity": 3
+          }
+        ],
+        "pancakeTask": true,
+        "returnTo": {
+          "kind": "TUBU",
+          "name": "Kho Tubu Tree"
+        }
+      }
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RT-C-points",
+    "persona": "returning",
+    "size": "api",
+    "journey": "Đổi/trả: duyệt từng phần",
+    "step": "điểm sau duyệt từng phần",
+    "expect": "điểm đảo theo phần (≈1/3 điểm đơn); users.pointsBalance = SUM(sổ)",
+    "actual": "điểm 58440->55560; sổ 55560",
+    "evidence": {
+      "pointsRev": [
+        {
+          "d": -2880,
+          "reason": "RETURN_REVERSED:TUBU2026110345261"
+        },
+        {
+          "d": 8640,
+          "reason": "ORDER_DELIVERED:TUBU2026110345261"
+        },
+        {
+          "d": -5040,
+          "reason": "ORDER_REVERSED:TUBU2026110356347"
+        }
+      ],
+      "pointsEarnedOrder": 8640
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RT-C-approve-twice",
+    "persona": "cskh",
+    "size": "api",
+    "journey": "Đổi/trả: duyệt từng phần",
+    "step": "duyệt lần hai cùng yêu cầu",
+    "expect": "4xx, không hoàn thêm",
+    "actual": "HTTP 400; Ví 1230000->1230000",
+    "evidence": "{\"message\":\"Yêu cầu đã được xử lý.\",\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RT-C-received",
+    "persona": "kho",
+    "size": "api",
+    "journey": "Đổi/trả: nhận hàng về",
+    "step": "KHO bấm Đã nhận hàng về",
+    "expect": "200; tồn kho +1 (đúng số lượng trả)",
+    "actual": "HTTP 201; kho 187->188",
+    "evidence": "{\"id\":\"cmw16o0uz00t8jtc43dcldba4\",\"orderId\":\"cmw16nzu000sdjtc4c8tnvi9p\",\"userId\":\"uat_returning\",\"reason\":\"Chai bị rò rỉ khi nhận\",\"reasonCode\":\"DEFECTIVE\",\"images\":[],\"status\":\"APPROVED\",\"refundMethod\":\"WALLET\",\"bankName\":null,\"bankAccount",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RT-C-received-twice",
+    "persona": "kho",
+    "size": "api",
+    "journey": "Đổi/trả: nhận hàng về",
+    "step": "bấm lần hai",
+    "expect": "không cộng kho lần hai",
+    "actual": "HTTP 400; kho 188->188",
+    "evidence": "{\"message\":\"Yêu cầu chưa được duyệt hoặc đã ghi nhận nhận hàng trước đó.\",\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RT-D-create-rest",
+    "persona": "returning",
+    "size": "mini375",
+    "journey": "Đổi/trả: hoàn toàn phần",
+    "step": "khách trả nốt mọi dòng còn lại (không gửi items)",
+    "expect": "201 REQUESTED",
+    "actual": "HTTP 201",
+    "evidence": "{\"id\":\"cmw16o0yi00ttjtc4oe5ljm6m\",\"orderId\":\"cmw16nzu000sdjtc4c8tnvi9p\",\"userId\":\"uat_returning\",\"reason\":\"Không dùng nữa muốn trả hết\",\"reasonCode\":\"OTHER\",\"status\":\"REQUESTED\",\"refundMethod\":\"WALLET",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RT-D-approve-rest",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Đổi/trả: hoàn toàn phần",
+    "step": "CSKH duyệt lần trả nốt",
+    "expect": "200; đơn RETURNED; tổng đã hoàn về Ví của đơn ≤ tổng đơn",
+    "actual": "HTTP 201; đơn RETURNED; tổng hoàn ví của đơn 360000 / tổng đơn 360000",
+    "evidence": {
+      "pv2": {
+        "requestId": "cmw16o0yi00ttjtc4oe5ljm6m",
+        "shopFault": false,
+        "defaultShopFault": false,
+        "isFull": true,
+        "goods": 240000,
+        "shipping": 0,
+        "refund": 240000,
+        "moneyRefundable": true,
+        "destination": {
+          "method": "WALLET"
+        },
+        "pointsUsedBack": 0,
+        "pointsEarnedBack": 5760,
+        "lines": [
+          {
+            "orderItemId": "cmw16nzu000sejtc4nkywvmlu",
+            "quantity": 2,
+            "refundAmount": 240000,
+            "productName": "Nước rửa chén sinh học Fuwa3e",
+            "variationName": "1L",
+            "orderedQuantity": 3
+          }
+        ],
+        "pancakeTask": true,
+        "returnTo": {
+          "kind": "TUBU",
+          "name": "Kho Tubu Tree"
+        }
+      },
+      "rev2": "{\"id\":\"cmw16o0yi00ttjtc4oe5ljm6m\",\"orderId\":\"cmw16nzu000sdjtc4c8tnvi9p\",\"userId\":\"uat_returning\",\"reason\":\"Không dùng nữa muốn trả hết\",\"reasonCode\":\"OTHER\",\"images\":[],\"status\":\"APPROVED\",\"refundMethod\":\"WALLET\",\"bankName\":null,\"bankAccountNo\":null,\"bankAccountName\":null,\"shopFault\":false,\"fullRetu"
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RT-D-sum-equals-total",
+    "persona": "returning",
+    "size": "api",
+    "journey": "Đổi/trả: hoàn toàn phần",
+    "step": "cộng hai lần hoàn so với tổng đơn (COD đã thu, trả hết)",
+    "expect": "tổng hoàn = tổng đơn 360000đ (hàng + phí ship)",
+    "actual": "tổng hoàn 360000 vs đơn 360000",
+    "evidence": {
+      "wl": [
+        {
+          "d": 240000,
+          "t": "ORDER_REFUND",
+          "reason": "Hoàn tiền đơn TUBU2026110345261"
+        },
+        {
+          "d": 120000,
+          "t": "ORDER_REFUND",
+          "reason": "Hoàn tiền trả hàng đơn TUBU2026110345261"
+        },
+        {
+          "d": 210000,
+          "t": "ORDER_REFUND",
+          "reason": "Hoàn tiền đơn TUBU2026110356347"
+        },
+        {
+          "d": 240000,
+          "t": "ORDER_REFUND",
+          "reason": "Hoàn tiền đơn TUBU2026110369224"
+        }
+      ]
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RT-D-points-net",
+    "persona": "returning",
+    "size": "api",
+    "journey": "Đổi/trả: hoàn toàn phần",
+    "step": "điểm của đơn sau trả hết",
+    "expect": "điểm đơn bị thu hồi hết: tổng sổ liên quan đơn = 0; users.pointsBalance = SUM(sổ)",
+    "actual": "tổng sổ theo mã đơn 0; điểm 55560->49800; sổ 49800",
+    "evidence": {
+      "ledger": [
+        {
+          "d": 8640,
+          "reason": "ORDER_DELIVERED:TUBU2026110345261",
+          "lot": "STANDARD",
+          "rt": "ORDER"
+        },
+        {
+          "d": -2880,
+          "reason": "RETURN_REVERSED:TUBU2026110345261",
+          "lot": "STANDARD",
+          "rt": "RETURN_REQUEST"
+        },
+        {
+          "d": -5760,
+          "reason": "ORDER_REVERSED:TUBU2026110345261",
+          "lot": "STANDARD",
+          "rt": "ORDER"
+        }
+      ]
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RT-D-closed",
+    "persona": "returning",
+    "size": "mini375",
+    "journey": "Đổi/trả: hoàn toàn phần",
+    "step": "đơn đã RETURNED gửi yêu cầu nữa",
+    "expect": "400",
+    "actual": "HTTP 400",
+    "evidence": "{\"message\":\"Chỉ yêu cầu đổi/trả với đơn đã giao.\",\"error\":\"Bad Request\",\"statusCode\":400}",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RT-E-reject",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Đổi/trả: từ chối",
+    "step": "CSKH từ chối đổi/trả",
+    "expect": "200, yêu cầu REJECTED, đơn vẫn DELIVERED, Ví/điểm không đổi",
+    "actual": "HTTP 201; REJECTED; đơn DELIVERED; Ví 1470000->1470000; điểm 54840->54840",
+    "evidence": "{\"id\":\"cmw16o26c00vcjtc4i7kufoh5\",\"orderId\":\"cmw16o13n00ujjtc42s92wm1b\",\"userId\":\"uat_returning\",\"reason\":\"Giao sai sản phẩm\",\"reasonCode\":\"WRONG_ITEM\",\"images\":[],\"status\":\"REJECTED\",\"refundMethod\":\"",
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-RT-E-full",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Đổi/trả: hoàn toàn phần",
+    "step": "trả cả đơn 1 món sau khi bị từ chối lần đầu",
+    "expect": "đơn RETURNED; Ví +tổng đơn; điểm đơn thu hồi; sổ khớp",
+    "actual": "HTTP 201; đơn RETURNED; Ví +210000 (tổng đơn 210000); điểm 54840->49800; sổ ví 1680000/điểm 49800",
+    "evidence": {
+      "pv": {
+        "requestId": "cmw16o26s00vijtc40aay7el3",
+        "shopFault": true,
+        "defaultShopFault": true,
+        "isFull": true,
+        "goods": 210000,
+        "shipping": 0,
+        "refund": 210000,
+        "moneyRefundable": true,
+        "destination": {
+          "method": "WALLET"
+        },
+        "pointsUsedBack": 0,
+        "pointsEarnedBack": 5040,
+        "lines": [
+          {
+            "orderItemId": "cmw16o13n00ukjtc4yhee770x",
+            "quantity": 1,
+            "refundAmount": 210000,
+            "productName": "Nước giặt sinh học Fuwa3e",
+            "variationName": "2L",
+            "orderedQuantity": 1
+          }
+        ],
+        "pancakeTask": true,
+        "returnTo": {
+          "kind": "TUBU",
+          "name": "Kho Tubu Tree"
+        }
+      }
+    },
+    "verdict": "PASS"
+  }
+]

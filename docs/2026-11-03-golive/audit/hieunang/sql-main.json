@@ -1,0 +1,532 @@
+{
+ "home": {
+  "path": "/home",
+  "first": {
+   "status": 200,
+   "sql": 21,
+   "sqlWithTx": 25,
+   "select": 21,
+   "write": 0
+  },
+  "sample": [
+   "SELECT COUNT(*), \"public\".\"products\".\"brand\" FROM \"public\".\"products\" WHERE (\"public\".\"products\".\"isActive\" = $1 AND \"public\".\"products\".\"approvalStatus\" = CAST",
+   "SELECT \"public\".\"campaigns\".\"id\", \"public\".\"campaigns\".\"slug\", \"public\".\"campaigns\".\"title\", \"public\".\"campaigns\".\"image\", \"public\".\"campaigns\".\"linkType\"::text",
+   "SELECT \"public\".\"brands\".\"id\", \"public\".\"brands\".\"name\", \"public\".\"brands\".\"slug\" FROM \"public\".\"brands\" WHERE (\"public\".\"brands\".\"isPublished\" = $1 AND \"public",
+   "SELECT \"public\".\"products\".\"id\", \"public\".\"products\".\"categoryIds\" FROM \"public\".\"products\" WHERE (\"public\".\"products\".\"isActive\" = $1 AND \"public\".\"products\".\"",
+   "SELECT \"public\".\"bundles\".\"id\", \"public\".\"bundles\".\"kind\"::text, \"public\".\"bundles\".\"title\", \"public\".\"bundles\".\"pct\", \"public\".\"bundles\".\"endAt\", \"public\".\"bun",
+   "SELECT \"public\".\"products\".\"id\", \"public\".\"products\".\"soldApp30d\", \"public\".\"products\".\"soldApp\", \"public\".\"products\".\"soldExternal\" FROM \"public\".\"products\" WH",
+   "SELECT \"public\".\"membership_tiers\".\"id\", \"public\".\"membership_tiers\".\"name\", \"public\".\"membership_tiers\".\"pointMultiplier\" FROM \"public\".\"membership_tiers\" WHER",
+   "SELECT \"public\".\"flash_sale_items\".\"id\", \"public\".\"flash_sale_items\".\"flashSaleId\", \"public\".\"flash_sale_items\".\"variationId\", \"public\".\"flash_sale_items\".\"flas",
+   "SELECT \"public\".\"products\".\"id\", \"public\".\"products\".\"pancakeId\", \"public\".\"products\".\"fulfilment\"::text, \"public\".\"products\".\"pancakeLinkCode\", \"public\".\"produ",
+   "SELECT \"public\".\"products\".\"id\", \"public\".\"products\".\"pancakeId\", \"public\".\"products\".\"fulfilment\"::text, \"public\".\"products\".\"pancakeLinkCode\", \"public\".\"produ",
+   "SELECT \"public\".\"system_configs\".\"key\", \"public\".\"system_configs\".\"value\", \"public\".\"system_configs\".\"description\", \"public\".\"system_configs\".\"category\", \"publi",
+   "SELECT \"public\".\"products\".\"id\", \"public\".\"products\".\"pancakeId\", \"public\".\"products\".\"fulfilment\"::text, \"public\".\"products\".\"pancakeLinkCode\", \"public\".\"produ",
+   "SELECT \"public\".\"variations\".\"id\", \"public\".\"variations\".\"pancakeId\", \"public\".\"variations\".\"productId\", \"public\".\"variations\".\"sku\", \"public\".\"variations\".\"nam",
+   "SELECT \"public\".\"variations\".\"id\", \"public\".\"variations\".\"pancakeId\", \"public\".\"variations\".\"productId\", \"public\".\"variations\".\"sku\", \"public\".\"variations\".\"nam",
+   "SELECT COUNT(*) FROM (SELECT \"public\".\"products\".\"id\" FROM \"public\".\"products\" WHERE (\"public\".\"products\".\"isActive\" = $1 AND \"public\".\"products\".\"approvalStatu",
+   "SELECT \"public\".\"variations\".\"id\", \"public\".\"variations\".\"pancakeId\", \"public\".\"variations\".\"productId\", \"public\".\"variations\".\"sku\", \"public\".\"variations\".\"nam",
+   "SELECT \"public\".\"system_configs\".\"key\", \"public\".\"system_configs\".\"value\", \"public\".\"system_configs\".\"description\", \"public\".\"system_configs\".\"category\", \"publi",
+   "SELECT COUNT(*) FROM (SELECT \"public\".\"products\".\"id\" FROM \"public\".\"products\" WHERE (\"public\".\"products\".\"isActive\" = $1 AND \"public\".\"products\".\"approvalStatu",
+   "SELECT \"public\".\"system_configs\".\"key\", \"public\".\"system_configs\".\"value\", \"public\".\"system_configs\".\"description\", \"public\".\"system_configs\".\"category\", \"publi",
+   "SELECT \"public\".\"system_configs\".\"key\", \"public\".\"system_configs\".\"value\", \"public\".\"system_configs\".\"description\", \"public\".\"system_configs\".\"category\", \"publi",
+   "SELECT \"public\".\"system_configs\".\"key\", \"public\".\"system_configs\".\"value\", \"public\".\"system_configs\".\"description\", \"public\".\"system_configs\".\"category\", \"publi"
+  ],
+  "second": {
+   "status": 200,
+   "sql": 0,
+   "sqlWithTx": 0,
+   "select": 0,
+   "write": 0
+  }
+ },
+ "products_list": {
+  "path": "/products?limit=12",
+  "first": {
+   "status": 200,
+   "sql": 3,
+   "sqlWithTx": 4,
+   "select": 3,
+   "write": 0
+  },
+  "sample": [
+   "SELECT \"public\".\"products\".\"id\", \"public\".\"products\".\"pancakeId\", \"public\".\"products\".\"fulfilment\"::text, \"public\".\"products\".\"pancakeLinkCode\", \"public\".\"produ",
+   "SELECT \"public\".\"variations\".\"id\", \"public\".\"variations\".\"pancakeId\", \"public\".\"variations\".\"productId\", \"public\".\"variations\".\"sku\", \"public\".\"variations\".\"nam",
+   "SELECT COUNT(*) FROM (SELECT \"public\".\"products\".\"id\" FROM \"public\".\"products\" WHERE (\"public\".\"products\".\"isActive\" = $1 AND \"public\".\"products\".\"approvalStatu"
+  ],
+  "second": {
+   "status": 200,
+   "sql": 3,
+   "sqlWithTx": 4,
+   "select": 3,
+   "write": 0
+  }
+ },
+ "products_best_seller": {
+  "path": "/products?sort=best_seller&limit=12",
+  "first": {
+   "status": 200,
+   "sql": 2,
+   "sqlWithTx": 2,
+   "select": 2,
+   "write": 0
+  },
+  "sample": [
+   "SELECT \"public\".\"products\".\"id\", \"public\".\"products\".\"pancakeId\", \"public\".\"products\".\"fulfilment\"::text, \"public\".\"products\".\"pancakeLinkCode\", \"public\".\"produ",
+   "SELECT \"public\".\"variations\".\"id\", \"public\".\"variations\".\"pancakeId\", \"public\".\"variations\".\"productId\", \"public\".\"variations\".\"sku\", \"public\".\"variations\".\"nam"
+  ],
+  "second": {
+   "status": 200,
+   "sql": 1,
+   "sqlWithTx": 1,
+   "select": 1,
+   "write": 0
+  }
+ },
+ "product_detail": {
+  "path": "/products/mat-ong-rung-bhnong",
+  "first": {
+   "status": 200,
+   "sql": 3,
+   "sqlWithTx": 3,
+   "select": 3,
+   "write": 0
+  },
+  "sample": [
+   "SELECT \"public\".\"variations\".\"id\", \"public\".\"variations\".\"sku\", \"public\".\"variations\".\"name\", \"public\".\"variations\".\"attributes\", \"public\".\"variations\".\"retailP",
+   "SELECT \"public\".\"brands\".\"id\", \"public\".\"brands\".\"slug\", \"public\".\"brands\".\"isPublished\" FROM \"public\".\"brands\" WHERE \"public\".\"brands\".\"id\" IN ($1) OFFSET $2",
+   "SELECT \"public\".\"reviews\".\"id\", \"public\".\"reviews\".\"rating\", \"public\".\"reviews\".\"comment\", \"public\".\"reviews\".\"videoUrl\", \"public\".\"reviews\".\"isVerified\", \"publ"
+  ],
+  "second": {
+   "status": 200,
+   "sql": 4,
+   "sqlWithTx": 4,
+   "select": 4,
+   "write": 0
+  }
+ },
+ "config_public": {
+  "path": "/config/public",
+  "first": {
+   "status": 200,
+   "sql": 0,
+   "sqlWithTx": 0,
+   "select": 0,
+   "write": 0
+  },
+  "sample": [],
+  "second": {
+   "status": 200,
+   "sql": 0,
+   "sqlWithTx": 0,
+   "select": 0,
+   "write": 0
+  }
+ },
+ "home_me": {
+  "path": "/home/me?purchasedLimit=10",
+  "first": {
+   "status": 200,
+   "sql": 15,
+   "sqlWithTx": 15,
+   "select": 13,
+   "write": 0
+  },
+  "sample": [
+   "SELECT 1",
+   "SELECT 1",
+   "SELECT 1",
+   "SELECT \"public\".\"subscriptions\".\"id\", \"public\".\"subscriptions\".\"userId\", \"public\".\"subscriptions\".\"variationId\", \"public\".\"subscriptions\".\"quantity\", \"public\".\"",
+   "SELECT \"public\".\"notification_logs\".\"id\", \"public\".\"notification_logs\".\"userId\", \"public\".\"notification_logs\".\"templateCode\", \"public\".\"notification_logs\".\"chan",
+   " SELECT 'order' AS kind, o.status::text AS key, COUNT(*)::int AS n FROM orders o WHERE o.\"userId\" = $1 GROUP BY o.status UNION ALL SELECT 'waste', 'open', COUNT",
+   "SELECT \"public\".\"flash_sale_items\".\"id\", \"public\".\"flash_sale_items\".\"flashSaleId\", \"public\".\"flash_sale_items\".\"variationId\", \"public\".\"flash_sale_items\".\"flas",
+   "SELECT \"public\".\"order_items\".\"id\", \"public\".\"order_items\".\"variationId\" FROM \"public\".\"order_items\" LEFT JOIN \"public\".\"orders\" AS \"orderby_1\" ON (\"orderby_1\".",
+   " SELECT oi.\"variationId\" AS \"variationId\", COUNT(DISTINCT o.id)::int AS \"timesBought\", MAX(o.\"createdAt\") AS \"lastPurchasedAt\" FROM order_items oi JOIN orders o",
+   "SELECT \"public\".\"products\".\"id\", \"public\".\"products\".\"categoryIds\" FROM \"public\".\"products\" WHERE (\"public\".\"products\".\"id\") IN (SELECT \"t1\".\"productId\" FROM \"p",
+   "SELECT \"public\".\"variations\".\"id\", \"public\".\"variations\".\"name\", \"public\".\"variations\".\"retailPrice\", \"public\".\"variations\".\"salePrice\", \"public\".\"variations\".\"",
+   "SELECT \"public\".\"products\".\"id\", \"public\".\"products\".\"slug\", \"public\".\"products\".\"name\", \"public\".\"products\".\"brand\", \"public\".\"products\".\"thumbnail\", \"public\".",
+   "SELECT \"public\".\"brand_follows\".\"id\", \"public\".\"brand_follows\".\"brandId\" FROM \"public\".\"brand_follows\" WHERE \"public\".\"brand_follows\".\"userId\" = $1 OFFSET $2",
+   "SELECT \"public\".\"products\".\"id\", \"public\".\"products\".\"pancakeId\", \"public\".\"products\".\"fulfilment\"::text, \"public\".\"products\".\"pancakeLinkCode\", \"public\".\"produ",
+   "SELECT \"public\".\"variations\".\"id\", \"public\".\"variations\".\"pancakeId\", \"public\".\"variations\".\"productId\", \"public\".\"variations\".\"sku\", \"public\".\"variations\".\"nam"
+  ],
+  "second": {
+   "status": 200,
+   "sql": 11,
+   "sqlWithTx": 11,
+   "select": 9,
+   "write": 0
+  }
+ },
+ "me": {
+  "path": "/me",
+  "first": {
+   "status": 200,
+   "sql": 1,
+   "sqlWithTx": 1,
+   "select": 1,
+   "write": 0
+  },
+  "sample": [
+   "SELECT \"public\".\"membership_tiers\".\"id\", \"public\".\"membership_tiers\".\"name\", \"public\".\"membership_tiers\".\"minPoints\", \"public\".\"membership_tiers\".\"minSpending\","
+  ],
+  "second": {
+   "status": 200,
+   "sql": 2,
+   "sqlWithTx": 2,
+   "select": 2,
+   "write": 0
+  }
+ },
+ "cart": {
+  "path": "/cart",
+  "first": {
+   "status": 200,
+   "sql": 20,
+   "sqlWithTx": 20,
+   "select": 19,
+   "write": 0
+  },
+  "sample": [
+   "SELECT \"public\".\"referral_touches\".\"id\", \"public\".\"referral_touches\".\"userId\", \"public\".\"referral_touches\".\"referrerUserId\", \"public\".\"referral_touches\".\"storef",
+   "SELECT \"public\".\"users\".\"id\", \"public\".\"users\".\"role\"::text, \"public\".\"users\".\"isBlocked\", \"public\".\"users\".\"mergedIntoId\" FROM \"public\".\"users\" WHERE (\"public\"",
+   "SELECT \"public\".\"storefronts\".\"id\", \"public\".\"storefronts\".\"ownerUserId\" FROM \"public\".\"storefronts\" WHERE (\"public\".\"storefronts\".\"isSample\" = $1 AND \"public\".",
+   "SELECT \"public\".\"system_configs\".\"key\", \"public\".\"system_configs\".\"value\", \"public\".\"system_configs\".\"description\", \"public\".\"system_configs\".\"category\", \"publi",
+   "SELECT \"public\".\"system_configs\".\"key\", \"public\".\"system_configs\".\"value\", \"public\".\"system_configs\".\"description\", \"public\".\"system_configs\".\"category\", \"publi",
+   "SELECT \"public\".\"storefronts\".\"id\", \"public\".\"storefronts\".\"slug\", \"public\".\"storefronts\".\"type\"::text, \"public\".\"storefronts\".\"ownerUserId\" FROM \"public\".\"stor",
+   "SELECT \"public\".\"carts\".\"id\", \"public\".\"carts\".\"userId\", \"public\".\"carts\".\"couponCode\", \"public\".\"carts\".\"updatedAt\", \"public\".\"carts\".\"abandonRemindedAt\" FROM ",
+   "SELECT \"public\".\"users\".\"id\", \"public\".\"users\".\"tierId\", \"public\".\"users\".\"phone\", \"public\".\"users\".\"zaloId\", COALESCE(\"aggr_selection_0_Order\".\"_aggr_count_ord",
+   "SELECT \"public\".\"cart_items\".\"id\", \"public\".\"cart_items\".\"cartId\", \"public\".\"cart_items\".\"variationId\", \"public\".\"cart_items\".\"quantity\" FROM \"public\".\"cart_ite",
+   "SELECT \"public\".\"variations\".\"id\", \"public\".\"variations\".\"pancakeId\", \"public\".\"variations\".\"productId\", \"public\".\"variations\".\"sku\", \"public\".\"variations\".\"nam",
+   "SELECT \"public\".\"products\".\"id\", \"public\".\"products\".\"pancakeId\", \"public\".\"products\".\"fulfilment\"::text, \"public\".\"products\".\"pancakeLinkCode\", \"public\".\"produ",
+   " SELECT i.\"id\", i.\"variationId\", i.\"flashPrice\", i.\"quota\", i.\"soldCount\", i.\"perUserLimit\", s.\"endAt\", s.\"createdBy\", COALESCE(p.\"quantity\", 0)::int AS \"bought",
+   "SELECT \"public\".\"storefronts\".\"id\", \"public\".\"storefronts\".\"slug\", \"public\".\"storefronts\".\"type\"::text, \"public\".\"storefronts\".\"ownerUserId\" FROM \"public\".\"stor",
+   "SELECT \"public\".\"storefronts\".\"id\", \"public\".\"storefronts\".\"ownerUserId\" FROM \"public\".\"storefronts\" LEFT JOIN \"public\".\"users\" AS \"j1\" ON (\"j1\".\"id\") = (\"publi",
+   "SELECT \"public\".\"storefront_collections\".\"id\", \"public\".\"storefront_collections\".\"title\", \"public\".\"storefront_collections\".\"comboDiscountPct\", \"public\".\"storef",
+   "SELECT \"public\".\"system_configs\".\"key\", \"public\".\"system_configs\".\"value\", \"public\".\"system_configs\".\"description\", \"public\".\"system_configs\".\"category\", \"publi",
+   "SELECT \"public\".\"bundles\".\"id\", \"public\".\"bundles\".\"kind\"::text, \"public\".\"bundles\".\"title\", \"public\".\"bundles\".\"pct\", \"public\".\"bundles\".\"anchorProductId\", \"pu",
+   "SELECT \"public\".\"coupons\".\"id\", \"public\".\"coupons\".\"code\", \"public\".\"coupons\".\"type\"::text, \"public\".\"coupons\".\"value\", \"public\".\"coupons\".\"minOrder\", \"public\".",
+   "SELECT \"public\".\"membership_tiers\".\"id\", \"public\".\"membership_tiers\".\"discountPct\" FROM \"public\".\"membership_tiers\" WHERE (\"public\".\"membership_tiers\".\"id\" = $1",
+   "SELECT \"public\".\"system_configs\".\"key\", \"public\".\"system_configs\".\"value\", \"public\".\"system_configs\".\"description\", \"public\".\"system_configs\".\"category\", \"publi"
+  ],
+  "second": {
+   "status": 200,
+   "sql": 15,
+   "sqlWithTx": 15,
+   "select": 14,
+   "write": 0
+  }
+ },
+ "me_summary": {
+  "path": "/me/summary",
+  "first": {
+   "status": 200,
+   "sql": 3,
+   "sqlWithTx": 3,
+   "select": 3,
+   "write": 0
+  },
+  "sample": [
+   "SELECT COUNT(*) FROM (SELECT \"public\".\"subscriptions\".\"id\" FROM \"public\".\"subscriptions\" WHERE (\"public\".\"subscriptions\".\"userId\" = $1 AND \"public\".\"subscriptio",
+   "SELECT COUNT(*) FROM (SELECT \"public\".\"notification_logs\".\"id\" FROM \"public\".\"notification_logs\" WHERE (\"public\".\"notification_logs\".\"userId\" = $1 AND \"public\".",
+   "SELECT COUNT(*), \"public\".\"orders\".\"status\"::text FROM \"public\".\"orders\" WHERE \"public\".\"orders\".\"userId\" = $1 GROUP BY \"public\".\"orders\".\"status\" OFFSET $2"
+  ],
+  "second": {
+   "status": 200,
+   "sql": 4,
+   "sqlWithTx": 4,
+   "select": 4,
+   "write": 0
+  }
+ },
+ "orders_home_todo": {
+  "path": "/orders/home-todo",
+  "first": {
+   "status": 200,
+   "sql": 16,
+   "sqlWithTx": 21,
+   "select": 16,
+   "write": 0
+  },
+  "sample": [
+   "SELECT \"public\".\"orders\".\"id\", \"public\".\"orders\".\"code\", \"public\".\"orders\".\"idempotencyKey\", \"public\".\"orders\".\"pancakeOrderId\", \"public\".\"orders\".\"userId\", \"pu",
+   "SELECT \"public\".\"order_items\".\"id\", \"public\".\"order_items\".\"orderId\", \"public\".\"order_items\".\"variationId\", \"public\".\"order_items\".\"productName\", \"public\".\"orde",
+   "SELECT COUNT(*) FROM (SELECT \"public\".\"orders\".\"id\" FROM \"public\".\"orders\" WHERE (\"public\".\"orders\".\"userId\" = $1 AND \"public\".\"orders\".\"status\" IN (CAST($2::te",
+   "SELECT \"public\".\"orders\".\"id\", \"public\".\"orders\".\"code\", \"public\".\"orders\".\"idempotencyKey\", \"public\".\"orders\".\"pancakeOrderId\", \"public\".\"orders\".\"userId\", \"pu",
+   "SELECT \"public\".\"variations\".\"id\", \"public\".\"variations\".\"stock\", \"public\".\"variations\".\"isActive\", \"public\".\"variations\".\"retailPrice\", \"public\".\"variations\".\"",
+   "SELECT \"public\".\"orders\".\"id\", \"public\".\"orders\".\"code\", \"public\".\"orders\".\"idempotencyKey\", \"public\".\"orders\".\"pancakeOrderId\", \"public\".\"orders\".\"userId\", \"pu",
+   "SELECT \"public\".\"order_items\".\"id\", \"public\".\"order_items\".\"orderId\", \"public\".\"order_items\".\"variationId\", \"public\".\"order_items\".\"productName\", \"public\".\"orde",
+   "SELECT \"public\".\"order_items\".\"id\", \"public\".\"order_items\".\"orderId\", \"public\".\"order_items\".\"variationId\", \"public\".\"order_items\".\"productName\", \"public\".\"orde",
+   "SELECT COUNT(*) FROM (SELECT \"public\".\"orders\".\"id\" FROM \"public\".\"orders\" WHERE (\"public\".\"orders\".\"userId\" = $1 AND \"public\".\"orders\".\"status\" = CAST($2::text",
+   "SELECT \"public\".\"products\".\"id\", \"public\".\"products\".\"thumbnail\", \"public\".\"products\".\"images\", \"public\".\"products\".\"isActive\", \"public\".\"products\".\"approvalSta",
+   "SELECT COUNT(*) FROM (SELECT \"public\".\"orders\".\"id\" FROM \"public\".\"orders\" WHERE (\"public\".\"orders\".\"userId\" = $1 AND \"public\".\"orders\".\"status\" = CAST($2::text",
+   "SELECT \"public\".\"variations\".\"id\", \"public\".\"variations\".\"stock\", \"public\".\"variations\".\"isActive\", \"public\".\"variations\".\"retailPrice\", \"public\".\"variations\".\"",
+   "SELECT \"public\".\"system_configs\".\"key\", \"public\".\"system_configs\".\"value\", \"public\".\"system_configs\".\"description\", \"public\".\"system_configs\".\"category\", \"publi",
+   "SELECT \"public\".\"products\".\"id\", \"public\".\"products\".\"thumbnail\", \"public\".\"products\".\"images\", \"public\".\"products\".\"isActive\", \"public\".\"products\".\"approvalSta",
+   "SELECT \"public\".\"variations\".\"id\", \"public\".\"variations\".\"stock\", \"public\".\"variations\".\"isActive\", \"public\".\"variations\".\"retailPrice\", \"public\".\"variations\".\"",
+   "SELECT \"public\".\"products\".\"id\", \"public\".\"products\".\"thumbnail\", \"public\".\"products\".\"images\", \"public\".\"products\".\"isActive\", \"public\".\"products\".\"approvalSta"
+  ],
+  "second": {
+   "status": 200,
+   "sql": 15,
+   "sqlWithTx": 21,
+   "select": 15,
+   "write": 0
+  }
+ },
+ "wishlist_ids": {
+  "path": "/me/wishlist/ids",
+  "first": {
+   "status": 200,
+   "sql": 1,
+   "sqlWithTx": 1,
+   "select": 1,
+   "write": 0
+  },
+  "sample": [
+   "SELECT \"public\".\"products\".\"id\" FROM \"public\".\"products\" WHERE (\"public\".\"products\".\"id\" IN ($1,$2) AND \"public\".\"products\".\"isActive\" = $3) OFFSET $4"
+  ],
+  "second": {
+   "status": 200,
+   "sql": 1,
+   "sqlWithTx": 1,
+   "select": 1,
+   "write": 0
+  }
+ },
+ "me_loyalty": {
+  "path": "/me/loyalty",
+  "first": {
+   "status": 200,
+   "sql": 13,
+   "sqlWithTx": 13,
+   "select": 12,
+   "write": 0
+  },
+  "sample": [
+   "SELECT \"public\".\"users\".\"id\", \"public\".\"users\".\"zaloId\", \"public\".\"users\".\"zaloAccessToken\", \"public\".\"users\".\"zaloRefreshToken\", \"public\".\"users\".\"phone\", \"pub",
+   "SELECT \"public\".\"membership_tiers\".\"id\", \"public\".\"membership_tiers\".\"name\", \"public\".\"membership_tiers\".\"minPoints\", \"public\".\"membership_tiers\".\"minSpending\",",
+   "SELECT \"public\".\"membership_tiers\".\"id\", \"public\".\"membership_tiers\".\"name\", \"public\".\"membership_tiers\".\"minPoints\", \"public\".\"membership_tiers\".\"minSpending\",",
+   "SELECT \"public\".\"points_transactions\".\"id\", \"public\".\"points_transactions\".\"refId\", \"public\".\"points_transactions\".\"delta\" FROM \"public\".\"points_transactions\" W",
+   "SELECT \"public\".\"points_transactions\".\"id\", \"public\".\"points_transactions\".\"refId\" FROM \"public\".\"points_transactions\" WHERE (\"public\".\"points_transactions\".\"us",
+   "SELECT \"public\".\"points_transactions\".\"id\", \"public\".\"points_transactions\".\"refId\", \"public\".\"points_transactions\".\"delta\" FROM \"public\".\"points_transactions\" W",
+   "SELECT \"public\".\"return_requests\".\"id\", \"public\".\"return_requests\".\"orderId\", \"public\".\"return_requests\".\"refundAmount\", \"public\".\"return_requests\".\"shippingRef",
+   "SELECT \"public\".\"system_configs\".\"key\", \"public\".\"system_configs\".\"value\", \"public\".\"system_configs\".\"description\", \"public\".\"system_configs\".\"category\", \"publi",
+   "SELECT SUM(\"total\") FROM (SELECT \"public\".\"orders\".\"total\" FROM \"public\".\"orders\" WHERE (\"public\".\"orders\".\"userId\" = $1 AND \"public\".\"orders\".\"status\" = CAST($",
+   "SELECT \"public\".\"return_requests\".\"id\", \"public\".\"return_requests\".\"orderId\", \"public\".\"return_requests\".\"refundAmount\", \"public\".\"return_requests\".\"shippingRef",
+   "SELECT \"public\".\"external_points_claims\".\"id\", \"public\".\"external_points_claims\".\"creditedGoodsValue\" FROM \"public\".\"external_points_claims\" WHERE (\"public\".\"ex",
+   " SELECT GREATEST(pt.\"delta\" - COALESCE(( SELECT SUM(rr.\"pointsReversed\") FROM \"return_requests\" rr WHERE rr.\"orderId\" = o.\"id\" AND rr.\"status\" = 'APPROVED' AND ",
+   "SELECT \"public\".\"points_transactions\".\"id\", \"public\".\"points_transactions\".\"delta\", \"public\".\"points_transactions\".\"expiresAt\", \"public\".\"points_transactions\".\""
+  ],
+  "second": {
+   "status": 200,
+   "sql": 11,
+   "sqlWithTx": 11,
+   "select": 10,
+   "write": 0
+  }
+ },
+ "me_coupons": {
+  "path": "/me/coupons",
+  "first": {
+   "status": 200,
+   "sql": 5,
+   "sqlWithTx": 5,
+   "select": 4,
+   "write": 0
+  },
+  "sample": [
+   "SELECT \"public\".\"users\".\"id\", \"public\".\"users\".\"zaloId\", \"public\".\"users\".\"zaloAccessToken\", \"public\".\"users\".\"zaloRefreshToken\", \"public\".\"users\".\"phone\", \"pub",
+   " SELECT id FROM coupons WHERE scope IN ('PUBLIC', 'TIER') AND \"startAt\" <= $1 AND \"endAt\" >= $2 AND (scope = 'PUBLIC' OR ($3::text IS NOT NULL AND \"scopeMeta\" -",
+   "SELECT \"public\".\"coupons\".\"id\", \"public\".\"coupons\".\"code\", \"public\".\"coupons\".\"type\"::text, \"public\".\"coupons\".\"value\", \"public\".\"coupons\".\"minOrder\", \"public\".",
+   "SELECT \"public\".\"orders\".\"id\" FROM \"public\".\"orders\" WHERE (\"public\".\"orders\".\"userId\" = $1 AND \"public\".\"orders\".\"status\" <> CAST($2::text AS \"public\".\"OrderSt",
+   "SELECT COUNT(*), \"public\".\"coupon_redemptions\".\"couponId\" FROM \"public\".\"coupon_redemptions\" WHERE (\"public\".\"coupon_redemptions\".\"userId\" = $1 AND \"public\".\"co"
+  ],
+  "second": {
+   "status": 200,
+   "sql": 5,
+   "sqlWithTx": 5,
+   "select": 4,
+   "write": 0
+  }
+ },
+ "daily_check_in": {
+  "path": "/me/daily-check-in",
+  "first": {
+   "status": 200,
+   "sql": 10,
+   "sqlWithTx": 10,
+   "select": 10,
+   "write": 0
+  },
+  "sample": [
+   "SELECT 1",
+   "SELECT 1",
+   "SELECT 1",
+   "SELECT \"public\".\"system_configs\".\"key\", \"public\".\"system_configs\".\"value\", \"public\".\"system_configs\".\"description\", \"public\".\"system_configs\".\"category\", \"publi",
+   "SELECT \"public\".\"loyalty_check_ins\".\"id\", \"public\".\"loyalty_check_ins\".\"userId\", \"public\".\"loyalty_check_ins\".\"dayKey\", \"public\".\"loyalty_check_ins\".\"cycleDay\",",
+   "SELECT \"public\".\"game_profiles\".\"id\", \"public\".\"game_profiles\".\"lastCheckInAt\", \"public\".\"game_profiles\".\"streakDays\", \"public\".\"game_profiles\".\"streakFreezes\" ",
+   "SELECT \"public\".\"game_profiles\".\"id\", \"public\".\"game_profiles\".\"lastCheckInAt\", \"public\".\"game_profiles\".\"totalSeeds\", \"public\".\"game_profiles\".\"streakDays\", \"p",
+   "SELECT \"public\".\"users\".\"id\", \"public\".\"users\".\"phone\", \"public\".\"users\".\"zaloId\" FROM \"public\".\"users\" WHERE (\"public\".\"users\".\"id\" = $1 AND 1=1) LIMIT $2 OFFS",
+   "SELECT \"public\".\"system_configs\".\"key\", \"public\".\"system_configs\".\"value\", \"public\".\"system_configs\".\"description\", \"public\".\"system_configs\".\"category\", \"publi",
+   "SELECT \"public\".\"system_configs\".\"key\", \"public\".\"system_configs\".\"value\", \"public\".\"system_configs\".\"description\", \"public\".\"system_configs\".\"category\", \"publi"
+  ],
+  "second": {
+   "status": 200,
+   "sql": 3,
+   "sqlWithTx": 3,
+   "select": 3,
+   "write": 0
+  }
+ },
+ "notifications": {
+  "path": "/me/notifications",
+  "first": {
+   "status": 200,
+   "sql": 1,
+   "sqlWithTx": 1,
+   "select": 1,
+   "write": 0
+  },
+  "sample": [
+   "SELECT \"public\".\"notification_logs\".\"id\", \"public\".\"notification_logs\".\"userId\", \"public\".\"notification_logs\".\"templateCode\", \"public\".\"notification_logs\".\"chan"
+  ],
+  "second": {
+   "status": 200,
+   "sql": 0,
+   "sqlWithTx": 0,
+   "select": 0,
+   "write": 0
+  }
+ },
+ "orders_list": {
+  "path": "/orders?page=1&limit=10",
+  "first": {
+   "status": 200,
+   "sql": 5,
+   "sqlWithTx": 6,
+   "select": 5,
+   "write": 0
+  },
+  "sample": [
+   "SELECT \"public\".\"orders\".\"id\", \"public\".\"orders\".\"code\", \"public\".\"orders\".\"idempotencyKey\", \"public\".\"orders\".\"pancakeOrderId\", \"public\".\"orders\".\"userId\", \"pu",
+   "SELECT \"public\".\"order_items\".\"id\", \"public\".\"order_items\".\"orderId\", \"public\".\"order_items\".\"variationId\", \"public\".\"order_items\".\"productName\", \"public\".\"orde",
+   "SELECT COUNT(*) FROM (SELECT \"public\".\"orders\".\"id\" FROM \"public\".\"orders\" WHERE \"public\".\"orders\".\"userId\" = $1 OFFSET $2) AS \"sub\"",
+   "SELECT \"public\".\"variations\".\"id\", \"public\".\"variations\".\"stock\", \"public\".\"variations\".\"isActive\", \"public\".\"variations\".\"retailPrice\", \"public\".\"variations\".\"",
+   "SELECT \"public\".\"products\".\"id\", \"public\".\"products\".\"thumbnail\", \"public\".\"products\".\"images\", \"public\".\"products\".\"isActive\", \"public\".\"products\".\"approvalSta"
+  ],
+  "second": {
+   "status": 200,
+   "sql": 5,
+   "sqlWithTx": 7,
+   "select": 5,
+   "write": 0
+  }
+ },
+ "flash_active": {
+  "path": "/flash-sales/active",
+  "first": {
+   "status": 200,
+   "sql": 0,
+   "sqlWithTx": 0,
+   "select": 0,
+   "write": 0
+  },
+  "sample": [],
+  "second": {
+   "status": 200,
+   "sql": 1,
+   "sqlWithTx": 1,
+   "select": 1,
+   "write": 0
+  }
+ },
+ "feed": {
+  "path": "/feed",
+  "first": {
+   "status": 200,
+   "sql": 12,
+   "sqlWithTx": 12,
+   "select": 11,
+   "write": 0
+  },
+  "sample": [
+   "SELECT \"public\".\"feed_posts\".\"id\", \"public\".\"feed_posts\".\"kind\"::text, \"public\".\"feed_posts\".\"status\"::text, \"public\".\"feed_posts\".\"title\", \"public\".\"feed_posts",
+   "SELECT \"public\".\"users\".\"id\", \"public\".\"users\".\"fullName\", \"public\".\"users\".\"role\"::text FROM \"public\".\"users\" WHERE \"public\".\"users\".\"id\" IN ($1) OFFSET $2",
+   "SELECT \"public\".\"community_profiles\".\"userId\", \"public\".\"community_profiles\".\"level\" FROM \"public\".\"community_profiles\" WHERE \"public\".\"community_profiles\".\"use",
+   "SELECT \"public\".\"community_categories\".\"id\", \"public\".\"community_categories\".\"slug\", \"public\".\"community_categories\".\"name\", \"public\".\"community_categories\".\"ic",
+   "SELECT \"public\".\"post_product_tags\".\"id\", \"public\".\"post_product_tags\".\"postId\", \"public\".\"post_product_tags\".\"productId\", \"public\".\"post_product_tags\".\"created",
+   "SELECT \"public\".\"post_tags\".\"postId\", \"public\".\"post_tags\".\"tagId\" FROM \"public\".\"post_tags\" WHERE \"public\".\"post_tags\".\"postId\" IN ($1,$2) OFFSET $3",
+   "SELECT \"public\".\"feed_reactions\".\"id\", \"public\".\"feed_reactions\".\"postId\" FROM \"public\".\"feed_reactions\" WHERE (\"public\".\"feed_reactions\".\"userId\" = $1 AND \"pub",
+   "SELECT 1",
+   "SELECT 1",
+   "SELECT COUNT(*), \"public\".\"feed_comments\".\"postId\" FROM \"public\".\"feed_comments\" WHERE (\"public\".\"feed_comments\".\"postId\" IN ($1,$2) AND \"public\".\"feed_comments",
+   " SELECT p.\"id\" AS \"postId\", cardinality(p.\"images\")::int AS \"count\", 0 AS \"idx\", CASE WHEN c.img ~ '^https?://' THEN c.img END AS \"url\", CASE WHEN c.img LIKE 'd",
+   "SELECT COUNT(*), \"public\".\"feed_reactions\".\"postId\" FROM \"public\".\"feed_reactions\" WHERE \"public\".\"feed_reactions\".\"postId\" IN ($1,$2) GROUP BY \"public\".\"feed_r"
+  ],
+  "second": {
+   "status": 200,
+   "sql": 9,
+   "sqlWithTx": 9,
+   "select": 8,
+   "write": 0
+  }
+ },
+ "combos": {
+  "path": "/bundles/combos",
+  "first": {
+   "status": 200,
+   "sql": 0,
+   "sqlWithTx": 0,
+   "select": 0,
+   "write": 0
+  },
+  "sample": [],
+  "second": {
+   "status": 200,
+   "sql": 0,
+   "sqlWithTx": 0,
+   "select": 0,
+   "write": 0
+  }
+ },
+ "coupons_collectable": {
+  "path": "/coupons/collectable",
+  "first": {
+   "status": 200,
+   "sql": 1,
+   "sqlWithTx": 1,
+   "select": 0,
+   "write": 0
+  },
+  "sample": [
+   " INSERT INTO cron_leases (name, holder, \"expiresAt\", \"updatedAt\") VALUES ( $1, $2, (now() AT TIME ZONE 'UTC') + make_interval(secs => $3::double precision), (no"
+  ],
+  "second": {
+   "status": 200,
+   "sql": 0,
+   "sqlWithTx": 0,
+   "select": 0,
+   "write": 0
+  }
+ },
+ "categories": {
+  "path": "/categories",
+  "first": {
+   "status": 200,
+   "sql": 2,
+   "sqlWithTx": 2,
+   "select": 2,
+   "write": 0
+  },
+  "sample": [
+   "SELECT \"public\".\"categories\".\"id\", \"public\".\"categories\".\"parentId\", \"public\".\"categories\".\"name\", \"public\".\"categories\".\"slug\", \"public\".\"categories\".\"image\", ",
+   "SELECT \"public\".\"products\".\"id\", \"public\".\"products\".\"categoryIds\" FROM \"public\".\"products\" WHERE (\"public\".\"products\".\"isActive\" = $1 AND \"public\".\"products\".\""
+  ],
+  "second": {
+   "status": 200,
+   "sql": 0,
+   "sqlWithTx": 0,
+   "select": 0,
+   "write": 0
+  }
+ }
+}

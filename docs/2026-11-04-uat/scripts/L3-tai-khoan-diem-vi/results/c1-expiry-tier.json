@@ -1,0 +1,134 @@
+[
+  {
+    "id": "C1-1",
+    "persona": "cskh",
+    "khổ": "API",
+    "journey": "Điểm Xanh: hết hạn",
+    "step": "hai đơn giao xong cộng điểm 2 lô riêng",
+    "expected": "loyalty.earn_pct=2 (hạng chưa có ×1)",
+    "actual": "đơn=[{\"code\":\"TUBU2026110332046\",\"pts\":7200,\"id\":\"cmw16gbbr011yi0v0upqgr6ia\"},{\"code\":\"TUBU2026110342464\",\"pts\":4800,\"id\":\"cmw16gese0131i0v0ard1y6gr\"}] sổ={\"bal\":12000,\"conv\":0,\"sum_std\":12000,\"sum_conv\":0}",
+    "evidence": "đơn=[{\"code\":\"TUBU2026110332046\",\"pts\":7200,\"id\":\"cmw16gbbr011yi0v0upqgr6ia\"},{\"code\":\"TUBU2026110342464\",\"pts\":4800,\"id\":\"cmw16gese0131i0v0ard1y6gr\"}] sổ={\"bal\":12000,\"conv\":0,\"sum_std\":12000,\"sum_conv\":0}",
+    "status": "PASS"
+  },
+  {
+    "id": "C1-2",
+    "persona": "cskh",
+    "khổ": "API",
+    "journey": "Điểm Xanh: hết hạn",
+    "step": "tiêu 1.000 điểm khi đặt đơn (đã hết khoá), sổ khớp",
+    "expected": "max_redeem_pct=20%; 1 điểm = 1đ",
+    "actual": "quote.pointsUsed=1000 sổ={\"bal\":11000,\"conv\":0,\"sum_std\":11000,\"sum_conv\":0}",
+    "evidence": "quote.pointsUsed=1000 sổ={\"bal\":11000,\"conv\":0,\"sum_std\":11000,\"sum_conv\":0}",
+    "status": "PASS"
+  },
+  {
+    "id": "C1-3",
+    "persona": "cskh",
+    "khổ": "API",
+    "journey": "Điểm Xanh: hết hạn",
+    "step": "job points.expire: trừ đúng phần còn lại của lô hết hạn (lô đơn 1 trừ phần đã tiêu FIFO), không đụng lô đơn 2",
+    "expected": "loyalty-expiry.service.ts: FIFO tiêu lô cũ nhất; EXPIRY_REASON POINTS_EXPIRED",
+    "actual": "job={\"lane\":3,\"job\":\"LoyaltyExpiryService.expirePoints\",\"ms\":229,\"result\":null} POINTS_EXPIRED=[{\"delta\":-6200,\"lot\":\"STANDARD\",\"reason\":\"POINTS_EXPIRED\",\"refType\":\"EXPIRE\",\"refId\":null}] kỳ vọng -6200; số dư trước=11000 sau=4800 (kỳ vọng 4800) sổ={\"bal\":4800,\"conv\":0,\"sum_std\":4800,\"sum_conv\":0}",
+    "evidence": "job={\"lane\":3,\"job\":\"LoyaltyExpiryService.expirePoints\",\"ms\":229,\"result\":null} POINTS_EXPIRED=[{\"delta\":-6200,\"lot\":\"STANDARD\",\"reason\":\"POINTS_EXPIRED\",\"refType\":\"EXPIRE\",\"refId\":null}] kỳ vọng -6200; số dư trước=11000 sau=4800 (kỳ vọng 4800) sổ={\"bal\":4800,\"conv\":0,\"sum_std\":4800,\"sum_conv\":0}",
+    "status": "PASS"
+  },
+  {
+    "id": "C1-4",
+    "persona": "cskh",
+    "khổ": "API",
+    "journey": "Điểm Xanh: hết hạn",
+    "step": "chạy job lần hai: không trừ lần hai",
+    "expected": "idempotent",
+    "actual": "job2={\"lane\":3,\"job\":\"LoyaltyExpiryService.expirePoints\",\"ms\":229,\"result\":null} số dòng POINTS_EXPIRED=1",
+    "evidence": "job2={\"lane\":3,\"job\":\"LoyaltyExpiryService.expirePoints\",\"ms\":229,\"result\":null} số dòng POINTS_EXPIRED=1",
+    "status": "PASS"
+  },
+  {
+    "id": "C1-5",
+    "persona": "cskh",
+    "khổ": "API",
+    "journey": "Điểm Xanh: hết hạn",
+    "step": "lịch sử điểm hiện dòng hết hạn",
+    "expected": "GET /me/points/transactions",
+    "actual": "dòng={\"id\":\"cmw16gi6j0002blwaerypj7nd\",\"userId\":\"uat_cskh\",\"delta\":-6200,\"reason\":\"POINTS_EXPIRED\",\"refType\":\"EXPIRE\",\"refId\":null,\"expiresAt\":null,\"lot\":\"STANDARD\",\"createdAt\":\"2026-11-03T21:05:58.796Z\"}",
+    "evidence": "dòng={\"id\":\"cmw16gi6j0002blwaerypj7nd\",\"userId\":\"uat_cskh\",\"delta\":-6200,\"reason\":\"POINTS_EXPIRED\",\"refType\":\"EXPIRE\",\"refId\":null,\"expiresAt\":null,\"lot\":\"STANDARD\",\"createdAt\":\"2026-11-03T21:05:58.796Z\"}",
+    "status": "PASS"
+  },
+  {
+    "id": "C1-6",
+    "persona": "cskh",
+    "khổ": "API",
+    "journey": "Điểm Xanh: hết hạn",
+    "step": "điểm sắp hết hạn trong 7 ngày: /me/loyalty báo expiringPoints, job nhắc tạo thông báo",
+    "expected": "loyalty.point_expiry_reminder_days=7",
+    "actual": "job={\"lane\":3,\"job\":\"LoyaltyExpiryService.remindExpiringPoints\",\"ms\":146,\"result\":null} expiringPoints={\"amount\":4800,\"expiresAt\":\"2026-11-06T21:05:59.685Z\"} thông báo={\"id\":\"cmw16gjng00003m998ukug2ml\",\"userId\":\"uat_cskh\",\"templateCode\":\"POINTS_EXPIRING\",\"channel\":\"INAPP\",\"payload\":{\"body\":\"⏳ Bạn có 4.800 Điểm Xanh sắp hết hạn vào 07/11/2026. Dùng để đổi ưu đãi trước khi lỡ nhé! 🌿\",\"data\":{\"date\":\"07/11/2026\",\"points\":\"4.800\"}},\"status\":\"SENT\",\"error\":null,\"sentAt\":\"2026-11-03T21:06:00.701Z\"}",
+    "evidence": "job={\"lane\":3,\"job\":\"LoyaltyExpiryService.remindExpiringPoints\",\"ms\":146,\"result\":null} expiringPoints={\"amount\":4800,\"expiresAt\":\"2026-11-06T21:05:59.685Z\"} thông báo={\"id\":\"cmw16gjng00003m998ukug2ml\",\"userId\":\"uat_cskh\",\"templateCode\":\"POINTS_EXPIRING\",\"channel\":\"INAPP\",\"payload\":{\"body\":\"⏳ Bạn có 4.800 Điểm Xanh sắp hết hạn vào 07/11/2026. Dùng để đổi ưu đãi trước khi lỡ nhé! 🌿\",\"data\":{\"date\":\"07/11/2026\",\"points\":\"4.800\"}},\"status\":\"SENT\",\"error\":null,\"sentAt\":\"2026-11-03T21:06:00.701Z\"}",
+    "status": "PASS"
+  },
+  {
+    "id": "C1-7",
+    "persona": "cskh",
+    "khổ": "API",
+    "journey": "Điểm Xanh: hết hạn",
+    "step": "chạy job nhắc lần hai: không nhắc trùng",
+    "expected": "dedupe",
+    "actual": "trước=1 sau=1",
+    "evidence": "trước=1 sau=1",
+    "status": "PASS"
+  },
+  {
+    "id": "C2-1",
+    "persona": "kho",
+    "khổ": "API",
+    "journey": "Điểm Xanh: hết hạn",
+    "step": "chi tiêu 12 tháng rớt mốc: GIỮ hạng cũ, đặt ân hạn 30 ngày",
+    "expected": "loyalty.tier_grace_days=30; tier-policy.ts decideTier",
+    "actual": "job={\"lane\":3,\"job\":\"LoyaltyCron.recalcTiers\",\"ms\":186,\"result\":null} trước={\"t\":\"CO_THU\",\"g\":null} sau={\"t\":\"CO_THU\",\"g\":\"2026-12-03T21:06:02.911Z\"} ân hạn còn 30.00 ngày",
+    "evidence": "job={\"lane\":3,\"job\":\"LoyaltyCron.recalcTiers\",\"ms\":186,\"result\":null} trước={\"t\":\"CO_THU\",\"g\":null} sau={\"t\":\"CO_THU\",\"g\":\"2026-12-03T21:06:02.911Z\"} ân hạn còn 30.00 ngày",
+    "status": "PASS"
+  },
+  {
+    "id": "C2-2",
+    "persona": "kho",
+    "khổ": "API",
+    "journey": "Điểm Xanh: hết hạn",
+    "step": "/me/loyalty hiện tierGrace khi đang ân hạn",
+    "expected": "getOverview tierGrace",
+    "actual": "tierGrace={\"until\":\"2026-12-03T21:06:02.911Z\",\"spendingToKeep\":50000000,\"pointsToKeep\":1000000} tier=CO_THU",
+    "evidence": "tierGrace={\"until\":\"2026-12-03T21:06:02.911Z\",\"spendingToKeep\":50000000,\"pointsToKeep\":1000000} tier=CO_THU",
+    "status": "PASS"
+  },
+  {
+    "id": "C2-3",
+    "persona": "kho",
+    "khổ": "API",
+    "journey": "Điểm Xanh: hết hạn",
+    "step": "job chạy lần hai: ân hạn KHÔNG gia hạn",
+    "expected": "tier-policy.ts: còn trong grace → giữ, không gia hạn",
+    "actual": "ân hạn trước=2026-12-03T21:06:02.911Z sau=2026-12-03T21:06:02.911Z",
+    "evidence": "ân hạn trước=2026-12-03T21:06:02.911Z sau=2026-12-03T21:06:02.911Z",
+    "status": "PASS"
+  },
+  {
+    "id": "C2-4",
+    "persona": "kho",
+    "khổ": "API",
+    "journey": "Điểm Xanh: hết hạn",
+    "step": "hết ân hạn: hạ về hạng đạt được (Mầm Xanh), xoá ân hạn",
+    "expected": "tier-policy.ts",
+    "actual": "job={\"lane\":3,\"job\":\"LoyaltyCron.recalcTiers\",\"ms\":168,\"result\":null} sau={\"t\":\"MAM_XANH\",\"g\":null}",
+    "evidence": "job={\"lane\":3,\"job\":\"LoyaltyCron.recalcTiers\",\"ms\":168,\"result\":null} sau={\"t\":\"MAM_XANH\",\"g\":null}",
+    "status": "PASS"
+  },
+  {
+    "id": "C2-5",
+    "persona": "kho",
+    "khổ": "API",
+    "journey": "Điểm Xanh: hết hạn",
+    "step": "/me/loyalty sau hạ hạng: hệ số 1, hạng Mầm Xanh",
+    "expected": "membership_tiers",
+    "actual": "tier=MAM_XANH earnMultiplier=1",
+    "evidence": "tier=MAM_XANH earnMultiplier=1",
+    "status": "PASS"
+  }
+]

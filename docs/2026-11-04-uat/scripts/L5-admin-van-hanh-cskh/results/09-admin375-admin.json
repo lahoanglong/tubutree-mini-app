@@ -1,0 +1,266 @@
+[
+  {
+    "id": "L5-A375-admin-inbox",
+    "persona": "admin",
+    "size": "web375",
+    "journey": "Admin trên điện thoại",
+    "step": "mở /admin?tab=inbox ở 375px",
+    "expect": "không tràn ngang, không request lỗi, không lỗi console, có nội dung",
+    "actual": "lỗi console: Failed to load resource: the server responded with a status of 401 (Unauthorized); tiêu đề \"Quản trị Tubu Tree\"; 8 request; 1 nút thấp hơn 32px trong màn hình đầu",
+    "evidence": {
+      "overflow": 0,
+      "wide": [],
+      "small": 1,
+      "text": 1070,
+      "title": "Quản trị Tubu Tree",
+      "shown": [
+        "Hôm nay, 20 việc đang chờ"
+      ],
+      "bad": [],
+      "errs": [
+        "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+      ]
+    },
+    "verdict": "FAIL"
+  },
+  {
+    "id": "L5-A375-admin-dashboard",
+    "persona": "admin",
+    "size": "web375",
+    "journey": "Admin trên điện thoại",
+    "step": "mở /admin?tab=dashboard ở 375px",
+    "expect": "không tràn ngang, không request lỗi, không lỗi console, có nội dung",
+    "actual": "lỗi console: Failed to load resource: the server responded with a status of 401 (Unauthorized); tiêu đề \"Quản trị Tubu Tree\"; 10 request; 1 nút thấp hơn 32px trong màn hình đầu",
+    "evidence": {
+      "overflow": 0,
+      "wide": [],
+      "small": 1,
+      "text": 1408,
+      "title": "Quản trị Tubu Tree",
+      "shown": [
+        "Tổng quan chỉ số"
+      ],
+      "bad": [],
+      "errs": [
+        "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+      ]
+    },
+    "verdict": "FAIL"
+  },
+  {
+    "id": "L5-A375-admin-orders",
+    "persona": "admin",
+    "size": "web375",
+    "journey": "Admin trên điện thoại",
+    "step": "mở /admin?tab=orders ở 375px",
+    "expect": "không tràn ngang, không request lỗi, không lỗi console, có nội dung",
+    "actual": "lỗi console: Failed to load resource: the server responded with a status of 401 (Unauthorized); tiêu đề \"Quản trị Tubu Tree\"; 10 request; 1 nút thấp hơn 32px trong màn hình đầu",
+    "evidence": {
+      "overflow": 0,
+      "wide": [],
+      "small": 1,
+      "text": 2559,
+      "title": "Quản trị Tubu Tree",
+      "shown": [
+        "Đơn hàng, 7 việc đang chờ"
+      ],
+      "bad": [],
+      "errs": [
+        "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+      ]
+    },
+    "verdict": "FAIL"
+  },
+  {
+    "id": "L5-A375-admin-merchantProducts",
+    "persona": "admin",
+    "size": "web375",
+    "journey": "Admin trên điện thoại",
+    "step": "mở /admin?tab=merchantProducts ở 375px",
+    "expect": "không tràn ngang, không request lỗi, không lỗi console, có nội dung",
+    "actual": "lỗi console: Failed to load resource: the server responded with a status of 401 (Unauthorized); tiêu đề \"Quản trị Tubu Tree\"; 8 request; 1 nút thấp hơn 32px trong màn hình đầu",
+    "evidence": {
+      "overflow": 0,
+      "wide": [],
+      "small": 1,
+      "text": 529,
+      "title": "Quản trị Tubu Tree",
+      "shown": [
+        "Duyệt SP đối tác"
+      ],
+      "bad": [],
+      "errs": [
+        "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+      ]
+    },
+    "verdict": "FAIL"
+  },
+  {
+    "id": "L5-A375-admin-productCategories",
+    "persona": "admin",
+    "size": "web375",
+    "journey": "Admin trên điện thoại",
+    "step": "mở /admin?tab=productCategories ở 375px",
+    "expect": "không tràn ngang, không request lỗi, không lỗi console, có nội dung",
+    "actual": "lỗi console: Failed to load resource: the server responded with a status of 401 (Unauthorized); tiêu đề \"Quản trị Tubu Tree\"; 7 request; 1 nút thấp hơn 32px trong màn hình đầu",
+    "evidence": {
+      "overflow": 0,
+      "wide": [],
+      "small": 1,
+      "text": 4453,
+      "title": "Quản trị Tubu Tree",
+      "shown": [
+        "Sản phẩm, 44 việc đang chờ"
+      ],
+      "bad": [],
+      "errs": [
+        "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+      ]
+    },
+    "verdict": "FAIL"
+  },
+  {
+    "id": "L5-A375-admin-users",
+    "persona": "admin",
+    "size": "web375",
+    "journey": "Admin trên điện thoại",
+    "step": "mở /admin?tab=users ở 375px",
+    "expect": "không tràn ngang, không request lỗi, không lỗi console, có nội dung",
+    "actual": "lỗi console: Failed to load resource: the server responded with a status of 401 (Unauthorized); tiêu đề \"Quản trị Tubu Tree\"; 7 request; 1 nút thấp hơn 32px trong màn hình đầu",
+    "evidence": {
+      "overflow": 0,
+      "wide": [],
+      "small": 1,
+      "text": 1288,
+      "title": "Quản trị Tubu Tree",
+      "shown": [
+        "Người dùng"
+      ],
+      "bad": [],
+      "errs": [
+        "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+      ]
+    },
+    "verdict": "FAIL"
+  },
+  {
+    "id": "L5-A375-admin-waste",
+    "persona": "admin",
+    "size": "web375",
+    "journey": "Admin trên điện thoại",
+    "step": "mở /admin?tab=waste ở 375px",
+    "expect": "không tràn ngang, không request lỗi, không lỗi console, có nội dung",
+    "actual": "lỗi console: Failed to load resource: the server responded with a status of 401 (Unauthorized); tiêu đề \"Quản trị Tubu Tree\"; 9 request; 1 nút thấp hơn 32px trong màn hình đầu",
+    "evidence": {
+      "overflow": 0,
+      "wide": [],
+      "small": 1,
+      "text": 966,
+      "title": "Quản trị Tubu Tree",
+      "shown": [
+        "Đổi rác"
+      ],
+      "bad": [],
+      "errs": [
+        "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+      ]
+    },
+    "verdict": "FAIL"
+  },
+  {
+    "id": "L5-A375-admin-supportChat",
+    "persona": "admin",
+    "size": "web375",
+    "journey": "Admin trên điện thoại",
+    "step": "mở /admin?tab=supportChat ở 375px",
+    "expect": "không tràn ngang, không request lỗi, không lỗi console, có nội dung",
+    "actual": "lỗi console: Failed to load resource: the server responded with a status of 401 (Unauthorized); tiêu đề \"Quản trị Tubu Tree\"; 7 request; 1 nút thấp hơn 32px trong màn hình đầu",
+    "evidence": {
+      "overflow": 0,
+      "wide": [],
+      "small": 1,
+      "text": 383,
+      "title": "Quản trị Tubu Tree",
+      "shown": [
+        "Chat CSKH, 2 việc đang chờ"
+      ],
+      "bad": [],
+      "errs": [
+        "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+      ]
+    },
+    "verdict": "FAIL"
+  },
+  {
+    "id": "L5-A375-admin-coupons",
+    "persona": "admin",
+    "size": "web375",
+    "journey": "Admin trên điện thoại",
+    "step": "mở /admin?tab=coupons ở 375px",
+    "expect": "không tràn ngang, không request lỗi, không lỗi console, có nội dung",
+    "actual": "lỗi console: Failed to load resource: the server responded with a status of 401 (Unauthorized); tiêu đề \"Quản trị Tubu Tree\"; 6 request; 1 nút thấp hơn 32px trong màn hình đầu",
+    "evidence": {
+      "overflow": 0,
+      "wide": [],
+      "small": 1,
+      "text": 2092,
+      "title": "Quản trị Tubu Tree",
+      "shown": [
+        "Mã giảm giá"
+      ],
+      "bad": [],
+      "errs": [
+        "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+      ]
+    },
+    "verdict": "FAIL"
+  },
+  {
+    "id": "L5-A375-admin-dealers",
+    "persona": "admin",
+    "size": "web375",
+    "journey": "Admin trên điện thoại",
+    "step": "mở /admin?tab=dealers ở 375px",
+    "expect": "không tràn ngang, không request lỗi, không lỗi console, có nội dung",
+    "actual": "lỗi console: Failed to load resource: the server responded with a status of 401 (Unauthorized); tiêu đề \"Quản trị Tubu Tree\"; 6 request; 1 nút thấp hơn 32px trong màn hình đầu",
+    "evidence": {
+      "overflow": 0,
+      "wide": [],
+      "small": 1,
+      "text": 259,
+      "title": "Quản trị Tubu Tree",
+      "shown": [
+        "Đại lý"
+      ],
+      "bad": [],
+      "errs": [
+        "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+      ]
+    },
+    "verdict": "FAIL"
+  },
+  {
+    "id": "L5-A375-admin-storefronts",
+    "persona": "admin",
+    "size": "web375",
+    "journey": "Admin trên điện thoại",
+    "step": "mở /admin?tab=storefronts ở 375px",
+    "expect": "không tràn ngang, không request lỗi, không lỗi console, có nội dung",
+    "actual": "lỗi console: Failed to load resource: the server responded with a status of 401 (Unauthorized); tiêu đề \"Quản trị Tubu Tree\"; 6 request; 1 nút thấp hơn 32px trong màn hình đầu",
+    "evidence": {
+      "overflow": 0,
+      "wide": [],
+      "small": 1,
+      "text": 488,
+      "title": "Quản trị Tubu Tree",
+      "shown": [
+        "Gian hàng, 1 việc đang chờ"
+      ],
+      "bad": [],
+      "errs": [
+        "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+      ]
+    },
+    "verdict": "FAIL"
+  }
+]

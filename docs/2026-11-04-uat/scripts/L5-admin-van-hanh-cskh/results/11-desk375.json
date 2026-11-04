@@ -1,0 +1,87 @@
+[
+  {
+    "id": "L5-DESK-01",
+    "persona": "staff",
+    "size": "mini375",
+    "journey": "Bàn nhận đổi rác (Mini 375)",
+    "step": "Mở bàn nhận, chưa nhập mã",
+    "expect": "nút \"Tra mã\" bị khoá (không gọi API khi rỗng)",
+    "actual": "isDisabled=true",
+    "evidence": null,
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-DESK-02",
+    "persona": "staff",
+    "size": "mini375",
+    "journey": "Bàn nhận đổi rác (Mini 375)",
+    "step": "Tra mã yêu cầu không có thật",
+    "expect": "báo lỗi tiếng Việt rõ, không 500, không tràn ngang, không \"Vui lòng/chúng tôi/...\"",
+    "actual": "POST /waste/desk/lookup 404; chữ lỗi: \"\"; tràn ngang 0px; giọng: sạch",
+    "evidence": {
+      "reqs": [
+        {
+          "method": "POST",
+          "path": "/waste/desk/lookup",
+          "status": 404,
+          "mocked": false
+        }
+      ],
+      "txt": "Nhận hàng tại điểm Điểm nhận Tubu Quận 1 Quét mã của khách Mã yêu cầu hoặc mã nhận quà Tra mã Hôm nay còn xác nhận được 1.000.000 điểm Báo cáo tháng này 0 lượt xác nhận Tubu đã cộng 0 điểm cho khách zi_close_circle_solid Không tìm thấy mã"
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-DESK-03",
+    "persona": "staff",
+    "size": "mini375",
+    "journey": "Bàn nhận đổi rác (Mini 375)",
+    "step": "Tra chuỗi lạ có dấu nháy",
+    "expect": "báo lỗi tiếng Việt rõ, không 500, không tràn ngang, không \"Vui lòng/chúng tôi/...\"",
+    "actual": "POST /waste/desk/lookup 404; chữ lỗi: \"\"; tràn ngang 0px; giọng: sạch",
+    "evidence": {
+      "reqs": [
+        {
+          "method": "POST",
+          "path": "/waste/desk/lookup",
+          "status": 404,
+          "mocked": false
+        }
+      ],
+      "txt": "Nhận hàng tại điểm Điểm nhận Tubu Quận 1 Quét mã của khách Mã yêu cầu hoặc mã nhận quà Tra mã Hôm nay còn xác nhận được 1.000.000 điểm Báo cáo tháng này 0 lượt xác nhận Tubu đã cộng 0 điểm cho khách zi_close_circle_solid Không tìm thấy mã"
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-DESK-04",
+    "persona": "staff",
+    "size": "mini375",
+    "journey": "Bàn nhận đổi rác (Mini 375)",
+    "step": "Tra chuỗi dài 120 ký tự",
+    "expect": "báo lỗi tiếng Việt rõ, không 500, không tràn ngang, không \"Vui lòng/chúng tôi/...\"",
+    "actual": "POST /waste/desk/lookup 400; chữ lỗi: \"Mã không được dài quá 64 ký tự.\"; tràn ngang 0px; giọng: sạch",
+    "evidence": {
+      "reqs": [
+        {
+          "method": "POST",
+          "path": "/waste/desk/lookup",
+          "status": 400,
+          "mocked": false
+        }
+      ],
+      "txt": "Nhận hàng tại điểm Điểm nhận Tubu Quận 1 Quét mã của khách Mã yêu cầu hoặc mã nhận quà Tra mã Hôm nay còn xác nhận được 1.000.000 điểm Báo cáo tháng này 0 lượt xác nhận Tubu đã cộng 0 điểm cho khách zi_close_circle_solid Mã không được dài q"
+    },
+    "verdict": "PASS"
+  },
+  {
+    "id": "L5-DESK-05",
+    "persona": "returning",
+    "size": "mini375",
+    "journey": "Bàn nhận đổi rác (Mini 375)",
+    "step": "Khách mở /recycle/desk",
+    "expect": "không có ô tra mã của nhân viên",
+    "actual": "0 ô nhập; chữ: \"Nhận hàng tại điểm Chương trình đang tạm dừng\"",
+    "evidence": null,
+    "verdict": "PASS"
+  }
+]

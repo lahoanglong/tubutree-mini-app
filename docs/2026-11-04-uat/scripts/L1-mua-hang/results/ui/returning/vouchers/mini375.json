@@ -1,0 +1,15 @@
+{
+ "persona": "returning",
+ "key": "vouchers",
+ "surf": "mini375",
+ "ms": 4760,
+ "title": "Tubu Tree",
+ "scrollW": 375,
+ "clientW": 375,
+ "url": "/vouchers",
+ "text": "Mã giảm giá\nMỗi đơn dùng 1 mã\nNhận mã\nMã của tôi\nĐã dùng–hết hạn\nHôm nay chưa có mã mới",
+ "badRequests": [],
+ "errors": [],
+ "consoleErrors": [],
+ "blocked": []
+}

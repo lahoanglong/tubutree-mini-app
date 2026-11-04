@@ -1,0 +1,13 @@
+[
+  {
+    "id": "L5-B01-UI",
+    "persona": "cskh",
+    "size": "web1280",
+    "journey": "Huỷ đơn đồng thời với Đã nhận tiền (giao diện)",
+    "step": "CSKH bấm xác nhận \"Huỷ đơn\" đúng lúc Kế toán \"Đã nhận tiền\" (TUBU2026110399367)",
+    "expect": "đơn được huỷ, hoặc màn báo rõ \"chưa huỷ được: đơn vừa đổi trạng thái\"",
+    "actual": "PUT status 200; đơn cuối CONFIRMED/PAID; thông báo trên màn: []",
+    "evidence": "Tubu Tree Quản trị Về cửa hàng Duyệt Đăng xuất Quản trị Tubu Tree Bỏ qua tới nội dung HAY DÙNG Hôm nay , 3 việc đang chờ Đơn hàng Người dùng Chat CSKH , 2 việc đang chờ Cộng đồng Đổi rác BÁN HÀNG , 1 VIỆC ĐANG CHỜ KHÁCH HÀNG , 2 VIỆC ĐANG CHỜ KHUYẾN MÃI VÀ ĐIỂM ĐỔI RÁC VÀ GAME Tìm kiếm Xoá lọc Tất c",
+    "verdict": "FAIL"
+  }
+]

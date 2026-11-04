@@ -1,0 +1,570 @@
+{
+  "generatedAt": "2026-11-03T08:17:33.401Z",
+  "web": {
+    "buildId": "n9evWlD-wL-4o1YjqkJ49",
+    "customerRoutes": [
+      {
+        "route": "/",
+        "nextFirstLoadKB": 260,
+        "routeOwnSize": "195 B",
+        "manifestGzKB": 288
+      },
+      {
+        "route": "/san-pham",
+        "nextFirstLoadKB": 222,
+        "routeOwnSize": "17.7 kB",
+        "manifestGzKB": 256
+      },
+      {
+        "route": "/san-pham/[slug]",
+        "nextFirstLoadKB": 231,
+        "routeOwnSize": "37.5 kB",
+        "manifestGzKB": 269
+      },
+      {
+        "route": "/gio-hang",
+        "nextFirstLoadKB": 224,
+        "routeOwnSize": "13.1 kB",
+        "manifestGzKB": 262
+      },
+      {
+        "route": "/thanh-toan",
+        "nextFirstLoadKB": 245,
+        "routeOwnSize": "20.5 kB",
+        "manifestGzKB": 283
+      },
+      {
+        "route": "/tai-khoan",
+        "nextFirstLoadKB": 225,
+        "routeOwnSize": "21.7 kB",
+        "manifestGzKB": 270
+      },
+      {
+        "route": "/tai-khoan/diem-xanh",
+        "nextFirstLoadKB": 223,
+        "routeOwnSize": "18.4 kB",
+        "manifestGzKB": 268
+      },
+      {
+        "route": "/uu-dai",
+        "nextFirstLoadKB": 230,
+        "routeOwnSize": "11.3 kB",
+        "manifestGzKB": 268
+      },
+      {
+        "route": "/vuon-xanh",
+        "nextFirstLoadKB": 186,
+        "routeOwnSize": "25.9 kB",
+        "manifestGzKB": 228
+      },
+      {
+        "route": "/doi-rac",
+        "nextFirstLoadKB": 220,
+        "routeOwnSize": "10.6 kB",
+        "manifestGzKB": 258
+      },
+      {
+        "route": "/kho-qua",
+        "nextFirstLoadKB": 167,
+        "routeOwnSize": "6.37 kB",
+        "manifestGzKB": 216
+      },
+      {
+        "route": "/mua-chung",
+        "nextFirstLoadKB": 207,
+        "routeOwnSize": "177 B",
+        "manifestGzKB": 245
+      },
+      {
+        "route": "/tai-khoan/don-hang",
+        "nextFirstLoadKB": 236,
+        "routeOwnSize": "17.6 kB",
+        "manifestGzKB": 280
+      },
+      {
+        "route": "/dang-nhap",
+        "nextFirstLoadKB": 147,
+        "routeOwnSize": "11 kB",
+        "manifestGzKB": 184
+      }
+    ],
+    "nextSharedByAllKB": 104,
+    "nextAllRoutes": [
+      {
+        "route": "/admin",
+        "routeSize": "190 kB",
+        "firstLoadKB": 369
+      },
+      {
+        "route": "/",
+        "routeSize": "195 B",
+        "firstLoadKB": 260
+      },
+      {
+        "route": "/khoi-phuc/[hint]",
+        "routeSize": "195 B",
+        "firstLoadKB": 260
+      },
+      {
+        "route": "/thanh-toan",
+        "routeSize": "20.5 kB",
+        "firstLoadKB": 245
+      },
+      {
+        "route": "/tai-khoan/don-hang/[code]",
+        "routeSize": "18.7 kB",
+        "firstLoadKB": 244
+      },
+      {
+        "route": "/tai-khoan/don-hang",
+        "routeSize": "17.6 kB",
+        "firstLoadKB": 236
+      },
+      {
+        "route": "/san-pham/[slug]",
+        "routeSize": "37.5 kB",
+        "firstLoadKB": 231
+      },
+      {
+        "route": "/uu-dai",
+        "routeSize": "11.3 kB",
+        "firstLoadKB": 230
+      },
+      {
+        "route": "/doi-rac/tao",
+        "routeSize": "8.46 kB",
+        "firstLoadKB": 226
+      },
+      {
+        "route": "/tai-khoan",
+        "routeSize": "21.7 kB",
+        "firstLoadKB": 225
+      },
+      {
+        "route": "/doi-rac/yeu-cau/[id]",
+        "routeSize": "5.89 kB",
+        "firstLoadKB": 224
+      },
+      {
+        "route": "/gio-hang",
+        "routeSize": "13.1 kB",
+        "firstLoadKB": 224
+      }
+    ],
+    "heaviest10": [
+      {
+        "route": "/admin",
+        "gzKB": 404,
+        "jsFiles": 27
+      },
+      {
+        "route": "/khoi-phuc/[hint]",
+        "gzKB": 288,
+        "jsFiles": 34
+      },
+      {
+        "route": "/",
+        "gzKB": 288,
+        "jsFiles": 34
+      },
+      {
+        "route": "/tai-khoan/don-hang/[code]",
+        "gzKB": 288,
+        "jsFiles": 38
+      },
+      {
+        "route": "/thanh-toan",
+        "gzKB": 283,
+        "jsFiles": 35
+      },
+      {
+        "route": "/tai-khoan/don-hang",
+        "gzKB": 280,
+        "jsFiles": 36
+      },
+      {
+        "route": "/tai-khoan",
+        "gzKB": 270,
+        "jsFiles": 32
+      },
+      {
+        "route": "/san-pham/[slug]",
+        "gzKB": 269,
+        "jsFiles": 29
+      },
+      {
+        "route": "/uu-dai",
+        "gzKB": 268,
+        "jsFiles": 34
+      },
+      {
+        "route": "/tai-khoan/diem-xanh",
+        "gzKB": 268,
+        "jsFiles": 34
+      }
+    ],
+    "medianGzKB": 244,
+    "largestChunks": [
+      {
+        "file": "static/chunks/app/admin/page-b552d8df7960465e.js",
+        "rawKB": 757,
+        "gzKB": 183,
+        "onNearlyEveryPage": false
+      },
+      {
+        "file": "static/chunks/5750.570e0a4f234ff359.js",
+        "rawKB": 332,
+        "gzKB": 111,
+        "onNearlyEveryPage": false
+      },
+      {
+        "file": "static/chunks/framework-e636a6e4ee7f4b46.js",
+        "rawKB": 214,
+        "gzKB": 67,
+        "onNearlyEveryPage": false
+      },
+      {
+        "file": "static/chunks/2309-8afa059976e21927.js",
+        "rawKB": 171,
+        "gzKB": 46,
+        "onNearlyEveryPage": true
+      },
+      {
+        "file": "static/chunks/b7e0a1e7-e5c8f6db1c10644f.js",
+        "rawKB": 169,
+        "gzKB": 53,
+        "onNearlyEveryPage": true
+      },
+      {
+        "file": "static/chunks/35.82faa4af44f69e19.js",
+        "rawKB": 133,
+        "gzKB": 32,
+        "onNearlyEveryPage": false
+      },
+      {
+        "file": "static/chunks/main-ebe9baf1078b4c07.js",
+        "rawKB": 126,
+        "gzKB": 37,
+        "onNearlyEveryPage": false
+      },
+      {
+        "file": "static/chunks/27269722.cd886c5d81a5d287.js",
+        "rawKB": 122,
+        "gzKB": 38,
+        "onNearlyEveryPage": false
+      }
+    ],
+    "allRoutes": [
+      {
+        "route": "/admin",
+        "gzKB": 404,
+        "jsFiles": 27
+      },
+      {
+        "route": "/khoi-phuc/[hint]",
+        "gzKB": 288,
+        "jsFiles": 34
+      },
+      {
+        "route": "/",
+        "gzKB": 288,
+        "jsFiles": 34
+      },
+      {
+        "route": "/tai-khoan/don-hang/[code]",
+        "gzKB": 288,
+        "jsFiles": 38
+      },
+      {
+        "route": "/thanh-toan",
+        "gzKB": 283,
+        "jsFiles": 35
+      },
+      {
+        "route": "/tai-khoan/don-hang",
+        "gzKB": 280,
+        "jsFiles": 36
+      },
+      {
+        "route": "/tai-khoan",
+        "gzKB": 270,
+        "jsFiles": 32
+      },
+      {
+        "route": "/san-pham/[slug]",
+        "gzKB": 269,
+        "jsFiles": 29
+      },
+      {
+        "route": "/uu-dai",
+        "gzKB": 268,
+        "jsFiles": 34
+      },
+      {
+        "route": "/tai-khoan/diem-xanh",
+        "gzKB": 268,
+        "jsFiles": 34
+      },
+      {
+        "route": "/tai-khoan/thong-bao",
+        "gzKB": 265,
+        "jsFiles": 34
+      },
+      {
+        "route": "/doi-rac/tao",
+        "gzKB": 264,
+        "jsFiles": 34
+      },
+      {
+        "route": "/gio-hang",
+        "gzKB": 262,
+        "jsFiles": 33
+      },
+      {
+        "route": "/doi-rac/yeu-cau/[id]",
+        "gzKB": 262,
+        "jsFiles": 35
+      },
+      {
+        "route": "/cong-dong",
+        "gzKB": 259,
+        "jsFiles": 33
+      },
+      {
+        "route": "/doi-rac",
+        "gzKB": 258,
+        "jsFiles": 32
+      },
+      {
+        "route": "/cong-dong/su-kien",
+        "gzKB": 258,
+        "jsFiles": 34
+      },
+      {
+        "route": "/ctv/gian-hang",
+        "gzKB": 258,
+        "jsFiles": 30
+      },
+      {
+        "route": "/doi-rac/yeu-cau/[id]/sua",
+        "gzKB": 258,
+        "jsFiles": 36
+      },
+      {
+        "route": "/san-pham",
+        "gzKB": 256,
+        "jsFiles": 30
+      },
+      {
+        "route": "/cong-dong/[id]",
+        "gzKB": 254,
+        "jsFiles": 33
+      },
+      {
+        "route": "/tai-khoan/yeu-thich",
+        "gzKB": 254,
+        "jsFiles": 33
+      },
+      {
+        "route": "/nhan-vien/bang-luong",
+        "gzKB": 252,
+        "jsFiles": 33
+      },
+      {
+        "route": "/ho-tro/chat",
+        "gzKB": 251,
+        "jsFiles": 30
+      },
+      {
+        "route": "/ma-giam-gia",
+        "gzKB": 250,
+        "jsFiles": 31
+      },
+      {
+        "route": "/chien-dich/[slug]",
+        "gzKB": 245,
+        "jsFiles": 29
+      },
+      {
+        "route": "/mua-chung/[id]",
+        "gzKB": 245,
+        "jsFiles": 29
+      },
+      {
+        "route": "/mua-chung",
+        "gzKB": 245,
+        "jsFiles": 29
+      },
+      {
+        "route": "/tu-van",
+        "gzKB": 245,
+        "jsFiles": 29
+      },
+      {
+        "route": "/ban-chay",
+        "gzKB": 244,
+        "jsFiles": 29
+      },
+      {
+        "route": "/ds-gallery",
+        "gzKB": 244,
+        "jsFiles": 27
+      },
+      {
+        "route": "/gio-vang",
+        "gzKB": 244,
+        "jsFiles": 28
+      },
+      {
+        "route": "/s/[slug]",
+        "gzKB": 238,
+        "jsFiles": 27
+      },
+      {
+        "route": "/brand/[slug]",
+        "gzKB": 231,
+        "jsFiles": 25
+      },
+      {
+        "route": "/vuon-xanh",
+        "gzKB": 228,
+        "jsFiles": 24
+      },
+      {
+        "route": "/merchant",
+        "gzKB": 222,
+        "jsFiles": 20
+      },
+      {
+        "route": "/doi-rac/quay",
+        "gzKB": 217,
+        "jsFiles": 24
+      },
+      {
+        "route": "/kho-qua",
+        "gzKB": 216,
+        "jsFiles": 24
+      },
+      {
+        "route": "/ctv",
+        "gzKB": 213,
+        "jsFiles": 23
+      },
+      {
+        "route": "/dai-ly",
+        "gzKB": 212,
+        "jsFiles": 22
+      },
+      {
+        "route": "/kho-qua/cua-toi",
+        "gzKB": 210,
+        "jsFiles": 23
+      },
+      {
+        "route": "/doi-rac/diem-nhan",
+        "gzKB": 207,
+        "jsFiles": 23
+      },
+      {
+        "route": "/tai-khoan/vi-tubu",
+        "gzKB": 206,
+        "jsFiles": 24
+      },
+      {
+        "route": "/doi-rac/yeu-cau",
+        "gzKB": 203,
+        "jsFiles": 22
+      },
+      {
+        "route": "/thanh-toan/chuyen-khoan/[code]",
+        "gzKB": 203,
+        "jsFiles": 22
+      },
+      {
+        "route": "/tai-khoan/ho-so",
+        "gzKB": 202,
+        "jsFiles": 22
+      },
+      {
+        "route": "/doi-rac/xong/[id]",
+        "gzKB": 201,
+        "jsFiles": 22
+      },
+      {
+        "route": "/chu-thuong-hieu",
+        "gzKB": 199,
+        "jsFiles": 21
+      },
+      {
+        "route": "/nhan-vien",
+        "gzKB": 198,
+        "jsFiles": 21
+      },
+      {
+        "route": "/tai-khoan/dia-chi",
+        "gzKB": 198,
+        "jsFiles": 21
+      },
+      {
+        "route": "/admin/pos",
+        "gzKB": 197,
+        "jsFiles": 20
+      },
+      {
+        "route": "/hoc-vien/[courseId]",
+        "gzKB": 195,
+        "jsFiles": 22
+      },
+      {
+        "route": "/tai-khoan/cai-dat",
+        "gzKB": 192,
+        "jsFiles": 21
+      },
+      {
+        "route": "/hoan-tien",
+        "gzKB": 191,
+        "jsFiles": 20
+      },
+      {
+        "route": "/hoc-vien",
+        "gzKB": 191,
+        "jsFiles": 22
+      },
+      {
+        "route": "/doi-rac/quy-dinh",
+        "gzKB": 186,
+        "jsFiles": 18
+      },
+      {
+        "route": "/gioi-thieu",
+        "gzKB": 184,
+        "jsFiles": 16
+      },
+      {
+        "route": "/dang-nhap",
+        "gzKB": 184,
+        "jsFiles": 18
+      },
+      {
+        "route": "/cau-chuyen",
+        "gzKB": 183,
+        "jsFiles": 16
+      },
+      {
+        "route": "/dang-nhap/callback",
+        "gzKB": 176,
+        "jsFiles": 17
+      },
+      {
+        "route": "/_not-found",
+        "gzKB": 173,
+        "jsFiles": 16
+      },
+      {
+        "route": "/chinh-sach/[loai]",
+        "gzKB": 172,
+        "jsFiles": 16
+      }
+    ]
+  }
+}

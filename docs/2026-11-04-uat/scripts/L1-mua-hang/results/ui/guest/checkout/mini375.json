@@ -1,0 +1,15 @@
+{
+ "persona": "guest",
+ "key": "checkout",
+ "surf": "mini375",
+ "ms": 5369,
+ "title": "Tubu Tree",
+ "scrollW": 375,
+ "clientW": 375,
+ "url": "/checkout",
+ "text": "Thanh toán\nGiỏ còn trống đấy\nKhám phá sản phẩm Tubu chọn riêng cho bạn\nKhám phá ngay",
+ "badRequests": [],
+ "errors": [],
+ "consoleErrors": [],
+ "blocked": []
+}
