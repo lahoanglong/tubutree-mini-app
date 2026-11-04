@@ -86,7 +86,6 @@ import {
   downloadOrdersCsv,
   downloadUsersCsv,
   getOpsAccess,
-  getOpsInbox,
   type InboxKey,
   type OpsInbox,
   OPS_INBOX_QUERY_KEY,
@@ -156,6 +155,7 @@ import {
 import { reportSectionsFor } from '@/components/admin/report-sections';
 import { AdminNav, type NavGroup } from '@/components/admin/admin-nav';
 import { InboxBadge, OpsInboxTab, type TodayStatKey } from '@/components/admin/ops-inbox-tab';
+import { useOpsInbox } from '@/components/admin/use-ops-inbox';
 import { COUPON_END_PAST_MESSAGE, isCouponEndPast, vnTodayKey } from '@/lib/admin-reports';
 import { vnLocalToIso, isoToVnLocal } from '@/lib/admin-campaign-form';
 import { FLASH_SALE_PAGE_SIZE, filterFlashSales, flashSaleState, type FlashSaleFilter, type FlashSaleState } from '@/lib/admin-flash-sale';
@@ -476,6 +476,11 @@ export default function AdminPage() {
     queryKey: ['admin-ops-access'],
     queryFn: getOpsAccess,
     enabled: status === 'authenticated' && role === 'STAFF',
+  });
+  // Nơi duy nhất giữ nhịp một phút cho hộp việc; thẻ Hôm nay, huy hiệu menu và số trên chip chỉ đọc chung khoá này.
+  useOpsInbox({
+    enabled: status === 'authenticated' && (role === 'ADMIN' || (role === 'STAFF' && !!accessQ.data && staffTabs(accessQ.data.staffPermissions ?? []).has('inbox'))),
+    poll: true,
   });
 
   useEffect(() => {
@@ -804,7 +809,7 @@ function DealersTab() {
   const pending = filter === 'PENDING';
   const view = mergeQueuePages(q.data?.pages, pending);
   // Dùng chung khoá và dữ liệu với hộp việc của tab Đơn hàng: không thêm request nặng.
-  const inboxQ = useQuery({ queryKey: OPS_INBOX_QUERY_KEY, queryFn: getOpsInbox, refetchInterval: 60_000 });
+  const inboxQ = useOpsInbox();
   const pendingCount = inboxQ.data?.items.find((i) => i.key === 'dealerApplications')?.count;
 
   return (
@@ -1353,7 +1358,7 @@ function OrdersTab({
   useEffect(() => {
     writeUrlState('orders', recycling, pancake, { status, invoice, queue: extra.queue ?? '' });
   }, [recycling, pancake, status, invoice, extra.queue]);
-  const inboxQ = useQuery({ queryKey: OPS_INBOX_QUERY_KEY, queryFn: getOpsInbox, refetchInterval: 60_000, enabled: inboxEnabled });
+  const inboxQ = useOpsInbox({ enabled: inboxEnabled });
   const inboxCount = (k: InboxKey) => inboxQ.data?.items.find((i) => i.key === k)?.count;
   const attentionQ = useQuery({ queryKey: ['admin-recycling-count'], queryFn: countRecyclingAttention });
   const pancakeQ = useQuery({ queryKey: PANCAKE_ATTENTION_COUNT_KEY, queryFn: countPancakeAttention });

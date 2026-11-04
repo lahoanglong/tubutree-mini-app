@@ -121,13 +121,13 @@ describe('createQueryClient — làm mới số đếm /me/summary', () => {
 
 describe('mutation chỉ làm mới các khoá admin mà nó khai (F6)', () => {
   type Meta = { skipAdminInvalidate?: boolean; adminInvalidate?: readonly string[] };
-  const setup = async (keys: string[][]) => {
+  const setup = async (keys: (string | number)[][]) => {
     const client = createQueryClient();
     const fns = new Map<string, ReturnType<typeof vi.fn>>();
     const unsubs: Array<() => void> = [];
     for (const key of keys) {
       const fn = vi.fn(async () => key.join('/'));
-      fns.set(key[0], fn);
+      fns.set(key[0] as string, fn);
       const obs = new QueryObserver(client, { queryKey: key, queryFn: fn });
       unsubs.push(obs.subscribe(() => undefined));
     }
