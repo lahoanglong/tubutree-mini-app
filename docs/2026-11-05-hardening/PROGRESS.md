@@ -82,8 +82,47 @@ Kế hoạch: `PLAN.md`. Phát hiện và quyết định của chủ: `audit-11
 - Quay lại: image `:prev-7589f36c` cho cả api và web (runbook 7.2). Nếu bỏ hạn chờ: xoá dòng `DB_SESSION_OPTIONS` trong `.env` rồi tạo lại `api`.
 - File go-live: `/root/golive-archive/94a55770/`. `.pending-migrations` để nguyên ở `/opt/tubutree` cho runbook 7.2.
 
-## Đợt 3 (đang làm; tích hợp `hard/1105-w3`, gốc main 94a557702 + docs 461c99ac8)
+## Đợt 3 (tích hợp `hard/1105-w3`, gốc main 94a557702 + docs 461c99ac8)
 - Chủ chọn 05/11: push docs PR (#173) và làm đợt 3, thêm lỗi ZNS kẹt RETRYING. Test tối đa 2 worker. Hỏi chủ trước khi merge hoặc deploy.
 - he (Mini App, PG 46537): L4-01, L4-02, L4-03 phần Mini App, L4-04, L4-05, ô lý do cấp/thu quyền. app-core chỉ được thêm `reason` tuỳ chọn ở `staff.ts`.
 - hf (admin web + nhãn lỗi, PG 46538): L4-03 phần admin + `FIELD_LABELS`, L4-06.
 - hg (log ZNS kẹt PENDING/RETRYING khi job chết, PG 46539): brief `brief-hg.md`.
+- he: 33 commit, tip b5d5a5dcc. Opus 7 vòng tới APPROVE. Đáng nhớ:
+  - Ô MST checkout trần 14 chặn chuỗi có dấu chấm. Nới trần.
+  - Chống trùng `POST /feed` và `/feed/events` bằng khoá advisory theo user. Vòng 3 lộ MAJOR: tag sản phẩm ghi sau commit nên bài đôi vẫn lọt. Sửa: ghi tag trong cùng giao dịch, khoá sản phẩm `FOR KEY SHARE`. Opus thử 160/160 lần.
+  - Ví và Đơn của web, Mini App chuyển sang keyset `cursor`. API cũ không trả `nextCursor` thì client tự quay về `page`.
+  - Tiêu đề, bài, bình luận cắt khoảng trắng và ký tự vô hình ở hai đầu (`trimInvisible`), giữ emoji ghép.
+- hf: 48 commit, tip 3053b2771. Opus nhiều vòng tới APPROVE. Đáng nhớ:
+  - Ô SĐT `setUserRole` trần 11 nâng 20.
+  - Slug sản phẩm một nguồn `PRODUCT_SLUG_MAX = 240` ở shared-types, dùng chung cho API, DTO, app-core và web. Trước đó ENTITY_SLUG_RE là 120, còn UI cho 200.
+  - Slug Pancake cắt theo trần, slug rỗng hoặc bắt đầu bằng `-` thành `san-pham`.
+  - `?slugs=` trần 20 mục và 4820 ký tự.
+  - Tab Giờ vàng ở admin chuyển sang keyset `?status&take&cursor` và route chi tiết.
+- hg: 40 commit, tip e2754a011. Opus APPROVE.
+  - `writeFailure` chỉ một câu UPDATE, nhả khoá dedupe `<key>:failed:<logId>`.
+  - `ZnsStuckLogCron` chạy */30 phút, con trỏ Redis `zns-stuck-cron:cursor`, quét keyset (sentAt, id), tối đa 200 log mỗi lần.
+  - Migration `20261105180000_hg_zns_stuck_logs_index` (HEAVY, IMAGE_COMPATIBLE), runbook §1.0, §1.20, §7.0.
+  - CI race thêm service Redis.
+  - Test `perf-indexes-1104` D4 đỏ ngẫu nhiên vì seed 50 giờ làm khoảng 30 ngày chọn gần cả bảng. Sửa: seed thêm 20000 log cũ 31–170 ngày; chạy 16/16 lần DB mới đều xanh.
+- Gộp vào w3: 3b9b093c8 (hg), c187b5716 (hf), 8e41b28d2 (he, giải xung đột `community-feed.dto.spec.ts` giữ cả hai khối), 780c3cd34 (he vòng 6–7). Sửa thêm trên w3:
+  - 7e3c2f025: nhãn cron mới.
+  - 2a683c32c: `withDbUrlParams`, race chạy được cả khi `DATABASE_URL` không có `?schema=`.
+  - 1192af91d, 072128def: runbook §1.23.
+- Opus review chéo cả nhánh: APPROVE, 0 MAJOR. Hai MINOR thành ghi chú runbook §1.23: ZMP cũ bỏ banner slug 121–240; quay API giữa lúc cuộn thì "Tải thêm" 400 tới khi tải lại.
+- Opus xem phần gộp riêng của w3: merge sạch (so patch-id từng file), helper race đúng. 4 MINOR chữ runbook và 1 NIT nhãn cron, đã sửa ở 072128def:
+  - kiểm slug sai mẫu cả products lẫn categories;
+  - form admin cũ luôn gửi lại đích;
+  - 400 cursor lặp lại mỗi lần bấm;
+  - tab Giờ vàng lúc web và API lệch bản;
+  - ZMP mới chạy với API cũ.
+- Kiểm cuối ở 1192af91d, giới hạn 2 worker:
+  - gate 0 FAIL;
+  - vitest app-core 2695, miniapp 6799 (cả UTC), web 604 file / 10264;
+  - bundle Mini entry 666/208 KB;
+  - migrate 0, drift 0; race 371 suite / 2878 test;
+  - jest api 599 suite / 14233 test; Playwright Mini App 475 passed / 10 skipped, web 740 passed / 137 skipped / 0 failed.
+- 072128def chỉ đổi chữ runbook và nhãn: spec đọc runbook 4 suite / 136 test, `cron-job-labels` 2/2.
+- Đọc PROD trước deploy (chỉ đọc, chủ cho phép):
+  - products 156, slug dài nhất 101, slug sai mẫu 0; categories slug sai mẫu 0;
+  - notification_logs 58; log ZNS 0 (không có log kẹt);
+  - 295 migration; PROD 94a557702.
