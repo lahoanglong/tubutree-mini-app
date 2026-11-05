@@ -439,6 +439,21 @@ const isSensitivePath = (r: { key: string }) => {
 const sensitiveRoutesWithoutRoles = (routes: AnyRoute[], allowlist: Record<string, string>) =>
   routes.filter((r) => isSensitivePath(r) && r.roles.length === 0 && !(r.key in allowlist)).map((r) => r.key);
 
+/**
+ * Dưới tiền tố nhạy cảm vai trò CUSTOMER không được khai trong @Roles (khách thường không bao giờ là chủ thể của route nhân sự, tiền,
+ * kho): `@Roles('CUSTOMER')` trên route mới vẫn qua kiểm `roles.length > 0` nên cần chốt riêng. Ngoại lệ phải kèm lý do.
+ */
+const MERCHANT_PAYOUT_OWNER =
+  'chủ gian hàng đã mất tư cách đối tác nhưng còn phiếu đối soát; MerchantPayoutOwnerGuard (merchant-payout-owner.guard.ts) chặn CUSTOMER không có gian hàng còn phiếu, dịch vụ phía sau tự kiểm chủ sở hữu';
+const CUSTOMER_ROLE_ALLOWLIST: Record<string, string> = {
+  'GET /merchant/store': MERCHANT_PAYOUT_OWNER,
+  'GET /merchant/settlement': MERCHANT_PAYOUT_OWNER,
+  'GET /merchant/returns': MERCHANT_PAYOUT_OWNER,
+  'POST /merchant/returns/:id/received': MERCHANT_PAYOUT_OWNER,
+};
+const sensitiveCustomerRoleViolations = (routes: AnyRoute[], allowlist: Record<string, string>): string[] =>
+  routes.filter((r) => isSensitivePath(r) && r.roles.includes('CUSTOMER') && !(r.key in allowlist)).map((r) => `${r.key} [${r.roles.join('|')}]`);
+
 const WASTE_POINT_ACCESS = 'quyền theo điểm nhận kiểm trong service (WasteAccessService.listOperablePoints/assertPointAccess: người dùng phải gắn với điểm)';
 const BRAND_OWNER = 'quyền chủ nhãn kiểm trong BrandService (Brand.ownerUserId === người gọi)';
 const WEBHOOK_SECRET = 'webhook công khai nhưng bắt buộc chữ ký hoặc token bí mật trong controller (fail-closed ở production)';
@@ -595,6 +610,74 @@ describe('Bảng quyền nhân viên theo nhóm việc (ADMINOPS-10, D1-05)', ()
       })
       .map(([key]) => key);
     expect(stale).toEqual([]);
+  });
+
+  it('route dưới tiền tố nhạy cảm không khai vai trò CUSTOMER, trừ ngoại lệ kèm lý do', () => {
+    expect(sensitiveCustomerRoleViolations(ALL_ROUTES, CUSTOMER_ROLE_ALLOWLIST)).toEqual([]);
+  });
+
+  it('ngoại lệ CUSTOMER không có mục thừa: mỗi mục là một route thật dưới tiền tố nhạy cảm, đang khai CUSTOMER, có lý do', () => {
+    const byRouteKey = new Map(ALL_ROUTES.map((r) => [r.key, r]));
+    const stale = Object.entries(CUSTOMER_ROLE_ALLOWLIST)
+      .filter(([key, reason]) => {
+        const r = byRouteKey.get(key);
+        return !r || !isSensitivePath(r) || !r.roles.includes('CUSTOMER') || reason.trim() === '';
+      })
+      .map(([key]) => key);
+    expect(stale).toEqual([]);
+  });
+
+  it('tự kiểm: spec bắt @Roles(CUSTOMER) dưới /staff, /loyalty/staff, /waste/desk; ngoại lệ có lý do, vai trò khác và tiền tố khác thì qua', () => {
+    @Controller('staff')
+    class ProbeStaffController {
+      @Roles('CUSTOMER')
+      @Post('payroll/approve')
+      approve() {
+        return 1;
+      }
+
+      @Roles('STAFF', 'ADMIN')
+      @Post('payroll/view')
+      view() {
+        return 1;
+      }
+    }
+    @Controller('loyalty/staff')
+    @Roles('DEALER', 'CUSTOMER')
+    class ProbeLoyaltyStaffController {
+      @Post('pos-credit')
+      credit() {
+        return 1;
+      }
+    }
+    @Controller('waste/desk')
+    class ProbeDeskController {
+      @Roles('CUSTOMER', 'STAFF')
+      @Get('points')
+      points() {
+        return 1;
+      }
+
+      @Roles('CUSTOMER')
+      @Get('lookup')
+      lookup() {
+        return 1;
+      }
+    }
+    @Controller('shop')
+    class ProbeShopController {
+      @Roles('CUSTOMER')
+      @Get('mine')
+      mine() {
+        return 1;
+      }
+    }
+    const routes = routesFor([ProbeStaffController, ProbeLoyaltyStaffController, ProbeDeskController, ProbeShopController]);
+    expect(sensitiveCustomerRoleViolations(routes, { 'GET /waste/desk/lookup': 'có guard riêng' })).toEqual([
+      'POST /staff/payroll/approve [CUSTOMER]',
+      'POST /loyalty/staff/pos-credit [DEALER|CUSTOMER]',
+      'GET /waste/desk/points [CUSTOMER|STAFF]',
+    ]);
   });
 
   it('tự kiểm: spec bắt route thiếu @Roles dưới /ops, /pos, /staff, /merchant, /waste/desk, /dealer, /affiliate; @Roles hoặc allowlist thì qua', () => {
