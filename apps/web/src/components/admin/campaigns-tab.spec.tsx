@@ -274,6 +274,34 @@ describe('CampaignsTab: tạo chiến dịch', () => {
     expect(c.querySelector('[role="alert"]')!.textContent).toContain('Thứ tự là số nguyên từ 0 đến 9999.');
   });
 
+  it.each([
+    ['ô trống', ''],
+    ['gõ "5e" (trình duyệt trả value rỗng)', '5e'],
+    ['gõ "-" (trình duyệt trả value rỗng)', '-'],
+  ])('thứ tự %s: báo bằng tiếng Việt, không lưu im lặng thành 0', async (_name, typed) => {
+    const c = await mount();
+    await open(c);
+    fillBasics(c);
+    typeInto(field(c, 'Thứ tự hiển thị'), typed);
+    click(byText(c, 'button', 'Lưu chiến dịch'));
+    await flush(4);
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(c.querySelector('[role="alert"]')!.textContent).toContain('Thứ tự là số nguyên từ 0 đến 9999.');
+  });
+
+  it('thứ tự mà trình duyệt báo badInput (chữ dở dang trong ô số) cũng bị chặn dù state còn số cũ', async () => {
+    const c = await mount();
+    await open(c);
+    fillBasics(c);
+    const input = field(c, 'Thứ tự hiển thị');
+    typeInto(input, '5');
+    Object.defineProperty(input, 'validity', { value: { badInput: true }, configurable: true });
+    click(byText(c, 'button', 'Lưu chiến dịch'));
+    await flush(4);
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(c.querySelector('[role="alert"]')!.textContent).toContain('Thứ tự là số nguyên từ 0 đến 9999.');
+  });
+
   it('thiếu tên, ảnh hoặc mốc thì nút Lưu khoá, không gửi gì', async () => {
     const c = await mount();
     await open(c);
