@@ -1143,6 +1143,22 @@ describe('PancakeSyncService — payload thiếu trường hoặc kiểu lạ (W
         expect(stockArgs(prisma)[0]).toContain(expected);
       });
 
+      it.each([['7.00', 7], ['7.50', 7], ['12.3456', 12], [' 3.0 ', 3]])('remain_quantity chuỗi thập phân %j: ghi %j', async (raw, expected) => {
+        const { prisma } = await sync([product('a', [variation('v-a', { remain_quantity: raw })])]);
+        expect(firstUpsert(prisma).create).toMatchObject({ stock: expected, pancakeStock: expected });
+      });
+
+      it.each([['5.000'], ['1.234'], ['12.000']])('remain_quantity=%j khớp mẫu ngăn nghìn (có thể là 5000): từ chối, không đụng tồn kho, có warn', async (raw) => {
+        const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+        try {
+          const { prisma } = await sync([product('a', [variation('v-a', { remain_quantity: raw })])]);
+          expect(stockArgs(prisma)).toHaveLength(0);
+          expect(warn).toHaveBeenCalledWith(expect.stringContaining('remain_quantity'));
+        } finally {
+          warn.mockRestore();
+        }
+      });
+
       it.each([[''], ['abc'], [{}], [[]], [true], [1e12], ['1e3'], [Infinity]])('remain_quantity=%j: không đọc được, coi như Pancake không nói gì (không đụng tồn kho)', async (raw) => {
         const { prisma } = await sync([product('a', [variation('v-a', { remain_quantity: raw })])]);
         expect(stockArgs(prisma)).toHaveLength(0);
@@ -1155,6 +1171,11 @@ describe('PancakeSyncService — payload thiếu trường hoặc kiểu lạ (W
         const { prisma } = await sync([product('a', [variation('v-a', { retail_price: '269000', sale_price: '199000' })])]);
         expect(firstUpsert(prisma).create).toMatchObject({ retailPrice: 269000, salePrice: 199000 });
         expect(firstUpsert(prisma).create.pancakeHold ?? null).toBeNull();
+      });
+
+      it('retail_price "269000.000" (phần lẻ toàn số 0) đọc như 269000', async () => {
+        const { prisma } = await sync([product('a', [variation('v-a', { retail_price: '269000.000', sale_price: '199000.00' })])]);
+        expect(firstUpsert(prisma).create).toMatchObject({ retailPrice: 269000, salePrice: 199000 });
       });
 
       it.each([['12.000'], ['269.000đ'], [12000.5], [''], ['abc'], [{}], [[]], [true], [-1], [1e21]])('retail_price=%j: không đọc được → biến thể mới không mở bán, không ghi giá lạ', async (retail) => {

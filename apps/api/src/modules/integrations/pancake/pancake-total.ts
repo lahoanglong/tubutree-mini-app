@@ -9,6 +9,16 @@ function amount(v: unknown): number | null {
   return payloadNonNegInt(v, { round: true });
 }
 
+const TOTAL_FIELDS = ['total_price_after_sub_discount', 'total_price', 'total_discount', 'shipping_fee'] as const;
+
+/** Tên các ô tổng tiền có mặt (khác null/undefined/'') mà không đọc được: người gọi ghi warn để biết vì sao đơn không được so tổng. */
+export function unreadableTotalFields(data: Record<string, unknown>): string[] {
+  return TOTAL_FIELDS.filter((f) => {
+    const v = data[f];
+    return v !== undefined && v !== null && v !== '' && amount(v) === null;
+  });
+}
+
 /**
  * Các cách đọc "tổng khách phải trả" của một đơn Pancake, theo schema "Đơn hàng" của Pancake POS Open API:
  * `total_price_after_sub_discount` (tổng sau giảm đơn) + `shipping_fee`, hoặc `total_price` − `total_discount` + ship.

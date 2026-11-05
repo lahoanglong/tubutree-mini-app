@@ -1,5 +1,5 @@
 import { buildPancakeOrderBody, type PancakePushOrder, type PancakeRecipient } from './pancake-order-body';
-import { pancakeTotalMismatch, pancakeTotalReadings } from './pancake-total';
+import { pancakeTotalMismatch, pancakeTotalReadings, unreadableTotalFields } from './pancake-total';
 
 /**
  * Payload `order` rút gọn theo schema "Đơn hàng" của Pancake POS Open API (api-docs.pancake.vn): tổng tiền hàng
@@ -169,5 +169,22 @@ describe('pancakeTotalReadings / pancakeTotalMismatch — ô tiền kiểu lạ 
 
   it('ô tổng hỏng nhưng ô khác đủ: vẫn so được, không ném', () => {
     expect(pancakeTotalMismatch({ total_price: [], total_discount: true, total_price_after_sub_discount: 250000, shipping_fee: 19000 }, order)).toBeNull();
+  });
+});
+
+describe('ô tổng tiền: chuỗi có phần lẻ dài và mẫu ngăn nghìn (W11)', () => {
+  it('"269000.000" đọc như 269000', () => {
+    expect(pancakeTotalReadings({ total_price_after_sub_discount: '250000.000', shipping_fee: '19000.000' }, 19000)).toEqual([269000, 250000]);
+  });
+
+  it('"269.000" (ngăn nghìn) → không đọc được, không thành 269', () => {
+    expect(pancakeTotalReadings({ total_price_after_sub_discount: '269.000' }, 0)).toEqual([]);
+  });
+
+  it('unreadableTotalFields liệt kê ô có mặt mà không đọc được, bỏ qua ô vắng/rỗng', () => {
+    expect(
+      unreadableTotalFields({ total_price: '269.000', total_discount: '', total_price_after_sub_discount: {}, shipping_fee: null }),
+    ).toEqual(['total_price_after_sub_discount', 'total_price']);
+    expect(unreadableTotalFields({ total_price: 100000, total_discount: '0', shipping_fee: '19000.000' })).toEqual([]);
   });
 });

@@ -1,11 +1,24 @@
-/** Chuỗi số kiểu máy có thể âm; "12.000" (dấu chấm ngăn nghìn) và "1e5" không khớp nên không bị đọc thành 12 hay 100000. */
-const MACHINE_NUMBER = /^-?\d+(?:\.\d{1,2})?$/;
+import { payloadNumericString } from './pancake-payload';
 
-/** Số tiền của một ô: số hữu hạn trong miền an toàn, hoặc chuỗi số kiểu máy; boolean/mảng/object/số khổng lồ là 0 (Number(true) = 1, Number([5]) = 5). */
-const num = (v: unknown): number => {
-  const n = typeof v === 'number' ? v : typeof v === 'string' && MACHINE_NUMBER.test(v.trim()) ? Number(v.trim()) : NaN;
-  return Number.isFinite(n) && Math.abs(n) <= Number.MAX_SAFE_INTEGER ? n : 0;
+/** Số tiền của một ô: số hữu hạn trong miền an toàn, hoặc chuỗi số thập phân (không phải mẫu ngăn nghìn "269.000"); null khi không đọc được. */
+const readMoney = (v: unknown): number | null => {
+  const n = typeof v === 'number' ? v : typeof v === 'string' ? payloadNumericString(v) : null;
+  return n !== null && Number.isFinite(n) && Math.abs(n) <= Number.MAX_SAFE_INTEGER ? n : null;
 };
+
+/** Ô tiền đọc được, không thì 0 (Number(true) = 1, Number([5]) = 5 là kiểu đọc sai mà hàm này tránh). */
+const num = (v: unknown): number => readMoney(v) ?? 0;
+
+/** Các ô tiền đã trả của payload đơn. */
+const PAID_FIELDS = ['prepaid', 'bank_payment'] as const;
+
+/** Tên các ô tiền đã trả có mặt (khác null/undefined/'') mà không đọc được: người gọi ghi warn để biết vì sao đơn không được tính đã trả. */
+export function unreadablePaidFields(data: Record<string, unknown>): string[] {
+  return PAID_FIELDS.filter((f) => {
+    const v = data[f];
+    return v !== undefined && v !== null && v !== '' && readMoney(v) === null;
+  });
+}
 
 /** Số tiền Pancake ghi nhận khách đã trả (prepaid + bank_payment); 0 khi payload chỉ có cờ is_paid. */
 export function pancakePaidAmount(data: Record<string, unknown>): number {

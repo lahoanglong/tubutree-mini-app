@@ -22,7 +22,7 @@ import {
   removeAttentionReasonsByPrefix,
   writePancakeAttention,
 } from './pancake-attention';
-import { isPancakeOrderPaid, pancakePaidAmount, pancakePaidAmountAfterPaid } from './pancake-payment.util';
+import { isPancakeOrderPaid, pancakePaidAmount, pancakePaidAmountAfterPaid, unreadablePaidFields } from './pancake-payment.util';
 import {
   PANCAKE_CLAIM_STALE_MINUTES,
   PANCAKE_EVENT_DONE,
@@ -43,7 +43,7 @@ import {
 } from '../../external-points/external-order.config';
 import { ingestAndApply } from '../../external-points/external-order.sync';
 import { LoyaltyService } from '../../loyalty/loyalty.service';
-import { pancakeStatusSkipsTotalCheck, pancakeTotalMismatch } from './pancake-total';
+import { pancakeStatusSkipsTotalCheck, pancakeTotalMismatch, unreadableTotalFields } from './pancake-total';
 import { OrderStatusService, InvalidOrderTransitionError, type SetStatusOutcome } from '../../orders/order-status.service';
 import { CancelAfterHandoverError, UnpaidPrepaidTransitionError } from '../../orders/order-transition';
 import { recordCumulativeLatePayment, recordCumulativeOverpayment } from '../../orders/refund-queue';
@@ -316,6 +316,7 @@ export class PancakeProcessor extends WorkerHost {
     if (!order || isClosedOrder(order.status) || isMerchantFulfilledOrder(order)) return;
     if (!(await this.totalCheckEnabled())) return;
 
+    this.warnUnreadableMoney(order, unreadableTotalFields(data), data);
     const mismatch = pancakeTotalMismatch(data, order);
     const own = order.pancakeAttention?.startsWith(ATTENTION_TOTAL_MISMATCH) ?? false;
     if (!mismatch) {
@@ -362,6 +363,13 @@ export class PancakeProcessor extends WorkerHost {
       return resolveOrderSourceMap(await this.systemConfig.get<unknown>(ORDER_SOURCE_MAP_KEY, DEFAULT_ORDER_SOURCE_MAP));
     } catch {
       return DEFAULT_ORDER_SOURCE_MAP;
+    }
+  }
+
+  /** Ô tiền có mặt mà không đọc được làm đơn bị bỏ qua so tổng / không được tính đã trả: không im lặng, ghi lại để đối soát. */
+  private warnUnreadableMoney(order: Pick<Order, 'code'>, fields: string[], data: Record<string, unknown>): void {
+    for (const f of fields) {
+      this.logger.warn(`Đơn ${order.code}: ô tiền Pancake ${f} không đọc được (${JSON.stringify(data[f])?.slice(0, 60)}) — bỏ qua ô này.`);
     }
   }
 
@@ -681,6 +689,7 @@ export class PancakeProcessor extends WorkerHost {
     const order = await this.findOrder(data);
     if (!order) return null;
     if (order.paymentMethod !== 'BANK_TRANSFER') return null;
+    this.warnUnreadableMoney(order, unreadablePaidFields(data), data);
     // Đơn chưa gắn đơn Pancake nào mà khớp được chỉ nhờ mã trong note: ai tạo đơn trên Pancake mang đúng dòng mã đó (hay nhân viên sửa
     // ghi chú) cũng khớp. Cờ is_paid của đơn như vậy chưa đủ để lật PAID, ghi khoản hoàn hay tính trả vượt: chốt ở đây, trước mọi nhánh tiền.
     // Đơn đã gắn id khác với id trong webhook không tới được đây (resolveOrder trả `foreign`, bỏ qua và báo ở nhánh khác). Webhook không có id

@@ -26,25 +26,43 @@ export function payloadId(x: unknown): string | null {
   return payloadText(x);
 }
 
-/** Chuỗi số theo kiểu máy: chữ số, tối đa hai số lẻ. "12.000" (ba số lẻ, dấu chấm ngăn nghìn kiểu Việt Nam) cố ý KHÔNG khớp. */
-const DECIMAL_STRING = /^\d+(?:\.\d{1,2})?$/;
-const SIGNED_DECIMAL_STRING = /^-?\d+(?:\.\d{1,2})?$/;
+/** Chuỗi số thập phân (có thể âm), phần lẻ dài tùy ý: "269000.000", "7.00". Không nhận "1e3", "0x10", "1,5". */
+const NUMERIC_STRING = /^-?\d+(?:\.\d+)?$/;
+/**
+ * Mẫu ngăn nghìn kiểu Việt Nam: nhóm đầu 1-3 chữ số, rồi các nhóm đúng ba chữ số sau dấu chấm ("12.000", "269.000", "1.234.567").
+ * Không phân biệt được với số thập phân có ba số lẻ ("5.000" là 5 hay 5000?), nên từ chối thay vì đoán: đọc nhầm là sai tiền/tồn.
+ * "269000.000" (nhóm đầu 6 chữ số) không khớp mẫu này nên là số thập phân thật.
+ */
+const THOUSANDS_GROUPED = /^-?\d{1,3}(?:\.\d{3})+$/;
+
+/** Chuỗi số thập phân hợp lệ thành số hữu hạn; chuỗi lạ hoặc khớp mẫu ngăn nghìn là null. */
+export function payloadNumericString(x: string): number | null {
+  const s = x.trim();
+  if (!NUMERIC_STRING.test(s) || THOUSANDS_GROUPED.test(s)) return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
 
 /**
- * Số nguyên không âm cho tiền (VND) và các cột Int: số, hoặc chuỗi số kiểu máy. Số lẻ là null (giá "12000.5" là dữ liệu hỏng,
- * không phải 12001 đồng), trừ khi `round` (nơi chỉ cần so sánh/ghi gần đúng). Âm, quá 2^53, "12.000" → null.
+ * Số nguyên không âm cho tiền (VND) và các cột Int: số, hoặc chuỗi số thập phân (xem `payloadNumericString`). Số lẻ là null (giá
+ * "12000.5" là dữ liệu hỏng, không phải 12001 đồng), trừ khi `round` (làm tròn) hoặc `trunc` (bỏ phần lẻ): nơi chỉ cần so sánh
+ * hoặc ghi gần đúng. Âm, quá 2^53, "12.000" (ngăn nghìn) → null.
  */
-export function payloadNonNegInt(x: unknown, opts: { round?: boolean } = {}): number | null {
+export function payloadNonNegInt(x: unknown, opts: { round?: boolean; trunc?: boolean } = {}): number | null {
   let n: number;
   if (typeof x === 'number') n = x;
-  else if (typeof x === 'string' && DECIMAL_STRING.test(x.trim())) n = Number(x.trim());
-  else return null;
+  else if (typeof x === 'string') {
+    const parsed = payloadNumericString(x);
+    if (parsed === null) return null;
+    n = parsed;
+  } else return null;
   if (!Number.isFinite(n) || n < 0) return null;
   if (!Number.isInteger(n)) {
-    if (!opts.round) return null;
-    n = Math.round(n);
+    if (opts.trunc) n = Math.trunc(n);
+    else if (opts.round) n = Math.round(n);
+    else return null;
   }
-  return Number.isSafeInteger(n) ? n : null;
+  return Number.isSafeInteger(n) ? n || 0 : null;
 }
 
 /**
@@ -54,10 +72,13 @@ export function payloadNonNegInt(x: unknown, opts: { round?: boolean } = {}): nu
 export function payloadQuantity(x: unknown): number | null {
   let n: number;
   if (typeof x === 'number') n = x;
-  else if (typeof x === 'string' && SIGNED_DECIMAL_STRING.test(x.trim())) n = Number(x.trim());
-  else return null;
+  else if (typeof x === 'string') {
+    const parsed = payloadNumericString(x);
+    if (parsed === null) return null;
+    n = parsed;
+  } else return null;
   if (!Number.isFinite(n)) return null;
-  n = Math.trunc(n);
+  n = Math.trunc(n) || 0;
   return Math.abs(n) > INT4_MAX ? null : n;
 }
 

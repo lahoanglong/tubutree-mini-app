@@ -1,4 +1,4 @@
-import { payloadFlag, payloadId, payloadNonNegInt, payloadQuantity, payloadText } from './pancake-payload';
+import { payloadFlag, payloadId, payloadNonNegInt, payloadNumericString, payloadQuantity, payloadText } from './pancake-payload';
 
 const STRANGE: unknown[] = [null, undefined, {}, { a: 1 }, [], ['x'], true, false, () => 1, Symbol('s'), NaN, Infinity, -Infinity];
 
@@ -82,5 +82,41 @@ describe('payloadFlag', () => {
   });
   it.each([[false], [0], ['0'], ['false'], [''], ['yes'], [2], ...STRANGE.filter((v) => v !== true).map((v) => [v])])('%p → tắt', (v) => {
     expect(payloadFlag(v)).toBe(false);
+  });
+});
+
+describe('chuỗi số có phần lẻ (Pancake gửi "269000.000", "7.00")', () => {
+  it('phần lẻ dài tùy ý được đọc như số rồi xử lý như nhánh số', () => {
+    expect(payloadNonNegInt('269000.000')).toBe(269000);
+    expect(payloadNonNegInt('269000.0000')).toBe(269000);
+    expect(payloadNonNegInt(' 1000.000 ')).toBe(1000);
+    expect(payloadNonNegInt('12.3456')).toBeNull();
+    expect(payloadNonNegInt('12.3456', { round: true })).toBe(12);
+    expect(payloadNonNegInt('12.9', { trunc: true })).toBe(12);
+    expect(payloadQuantity('7.00')).toBe(7);
+    expect(payloadQuantity('12.3456')).toBe(12);
+    expect(payloadQuantity('-5.5')).toBe(-5);
+    expect(payloadQuantity('1000.000')).toBe(1000);
+  });
+  it('đúng mẫu ngăn nghìn kiểu Việt Nam ("5.000", "269.000", "1.234.567") bị từ chối, kể cả "5.123"', () => {
+    for (const s of ['12.000', '269.000', '5.000', '5.123', '0.000', '1.234.567', '999.999']) {
+      expect(payloadNonNegInt(s)).toBeNull();
+      expect(payloadNonNegInt(s, { round: true })).toBeNull();
+      expect(payloadQuantity(s)).toBeNull();
+      expect(payloadNumericString(s)).toBeNull();
+    }
+    expect(payloadQuantity('-1.000')).toBeNull();
+  });
+  it('cùng giá trị nhưng kiểu số thì không thể là ngăn nghìn: 5.123 → 5', () => {
+    expect(payloadQuantity(5.123)).toBe(5);
+    expect(payloadNonNegInt(5.123, { round: true })).toBe(5);
+  });
+  it('payloadNumericString: chỉ chuỗi số thập phân, có thể âm; không có -0', () => {
+    expect(payloadNumericString('12.5')).toBe(12.5);
+    expect(payloadNumericString('-3')).toBe(-3);
+    expect(payloadNumericString('abc')).toBeNull();
+    expect(payloadNumericString('1e3')).toBeNull();
+    expect(payloadNumericString('')).toBeNull();
+    expect(Object.is(payloadQuantity('-0.4'), 0)).toBe(true);
   });
 });

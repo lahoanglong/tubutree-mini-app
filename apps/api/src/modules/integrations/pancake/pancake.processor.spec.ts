@@ -2137,6 +2137,56 @@ describe('PancakeProcessor — payload webhook thiếu trường hoặc kiểu l
     });
   });
 
+  describe('ô tiền có mặt mà không đọc được: ghi warn nêu mã đơn và tên ô', () => {
+    const warnSpy = () => jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    const bankOrder = { ...baseOrder, paymentMethod: 'BANK_TRANSFER' };
+
+    it('prepaid "269.000" (ngăn nghìn): không tính là đã trả, nhưng có warn nêu TUBU1 và prepaid', async () => {
+      const warn = warnSpy();
+      try {
+        const t = setup(bankOrder);
+        await (t.proc as unknown as { onPaymentReconcile: (d: unknown) => Promise<unknown> }).onPaymentReconcile({ id: 'p1', prepaid: '269.000' });
+        expect(warn).toHaveBeenCalledWith(expect.stringMatching(/TUBU1.*prepaid|prepaid.*TUBU1/));
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it('prepaid "269000.000" đọc được: đủ tiền thì lật PAID, không warn về ô tiền', async () => {
+      const warn = warnSpy();
+      try {
+        const t = setup({ ...bankOrder, total: 269000 });
+        await (t.proc as unknown as { onPaymentReconcile: (d: unknown) => Promise<unknown> }).onPaymentReconcile({ id: 'p1', prepaid: '269000.000' });
+        expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('prepaid'));
+        expect(t.orderUpdateMany.mock.calls.some((c) => (c[0] as { data?: { paymentStatus?: string } }).data?.paymentStatus === 'PAID')).toBe(true);
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it.each([[undefined], [null], [''], [0]])('prepaid=%j vắng hoặc 0: không warn', async (raw) => {
+      const warn = warnSpy();
+      try {
+        const t = setup(bankOrder);
+        await (t.proc as unknown as { onPaymentReconcile: (d: unknown) => Promise<unknown> }).onPaymentReconcile({ id: 'p1', prepaid: raw });
+        expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('prepaid'));
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it('tổng "269.000" không đọc được: so tổng bỏ qua, có warn nêu TUBU1 và tên ô', async () => {
+      const warn = warnSpy();
+      try {
+        const t = setup(baseOrder);
+        await (t.proc as unknown as { onTotalReconcile: (d: unknown) => Promise<unknown> }).onTotalReconcile({ id: 'p1', status: 1, total_price_after_sub_discount: '269.000' });
+        expect(warn).toHaveBeenCalledWith(expect.stringMatching(/TUBU1.*total_price_after_sub_discount|total_price_after_sub_discount.*TUBU1/));
+      } finally {
+        warn.mockRestore();
+      }
+    });
+  });
+
   describe('mã đơn Tubu trong payload', () => {
     const { proc } = setup(null);
     it('external_order_id là object hoặc số: bỏ qua, đọc mã từ ghi chú', () => {
