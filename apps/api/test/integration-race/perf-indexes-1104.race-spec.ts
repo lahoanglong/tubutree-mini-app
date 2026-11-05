@@ -80,6 +80,22 @@ describe('Index hiệu năng 2026-11-04 (real Postgres)', () => {
     return sql;
   }
 
+  /**
+   * Sự kiện `query` của Prisma (engine thư viện) do phía native gọi lại qua hàng đợi sự kiện của Node, độc lập với việc promise của truy vấn resolve:
+   * không có gì bảo đảm câu cuối đã tới `captured` ngay sau `await`. Chờ tới khi có câu khớp (tối đa 3 giây) thay vì đọc ngay; khi không thấy
+   * thì lỗi in kèm danh sách câu đã bắt để biết do thiếu sự kiện hay do code không sinh câu đó.
+   */
+  async function capturedMatching(re: RegExp, label: string): Promise<Captured> {
+    const found = () => captured.find((c) => re.test(c.query));
+    for (let waited = 0; !found() && waited < 3000; waited += 10) await new Promise((resolve) => setTimeout(resolve, 10));
+    const hit = found();
+    if (!hit) {
+      const seen = captured.map((c) => c.query.slice(0, 90).replace(/\s+/g, ' '));
+      throw new Error(`${label}: không bắt được câu khớp ${re}; captured.length=${captured.length}; đã bắt: ${JSON.stringify(seen)}`);
+    }
+    return hit;
+  }
+
   async function planOf(q: Captured): Promise<string> {
     const sql = inline(q);
     return prisma.$transaction(async (tx) => {
@@ -94,8 +110,12 @@ describe('Index hiệu năng 2026-11-04 (real Postgres)', () => {
     captured = [];
     await prisma.notificationLog.count({ where });
     await prisma.notificationLog.groupBy({ by: ['error'], where, _count: { _all: true }, orderBy: { _count: { error: 'desc' } }, take: 1 });
+    // Cả hai truy vấn (count và groupBy) đều phải tới: chờ cho đến khi đủ hai câu thay vì đọc ngay sau await.
+    for (let waited = 0; captured.filter((q) => /FROM "(public"\.")?notification_logs"/.test(q.query)).length < 2 && waited < 3000; waited += 10) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
     const qs = captured.filter((q) => /FROM "(public"\.")?notification_logs"/.test(q.query));
-    expect(qs.length).toBeGreaterThanOrEqual(2);
+    if (qs.length < 2) throw new Error(`D4 ZNS FAILED: chỉ bắt được ${qs.length}/2 câu; captured.length=${captured.length}; đã bắt: ${JSON.stringify(captured.map((c) => c.query.slice(0, 90)))}`);
     // Từ gói hg có thêm index thường (channel, status, sentAt) cũng khớp đúng điều kiện này; planner chọn cái nào tuỳ thống kê. Điều cần giữ: đi index, không quét bảng.
     for (const q of qs) expect(await planOf(q)).toMatch(/notification_logs_zns_failed_sentAt_idx|notification_logs_channel_status_sentAt_idx/);
   });
@@ -103,14 +123,14 @@ describe('Index hiệu năng 2026-11-04 (real Postgres)', () => {
   it('D4: lọc khoảng sentAt (trang mẫu tin 30 ngày) dùng index sentAt', async () => {
     captured = [];
     await prisma.notificationLog.count({ where: { sentAt: { gte: new Date(Date.now() - 30 * 86_400_000) } } });
-    const q = captured.find((c) => /FROM "(public"\.")?notification_logs"/.test(c.query))!;
+    const q = await capturedMatching(/FROM "(public"\.")?notification_logs"/, 'D4 khoảng sentAt');
     expect(await planOf(q)).toMatch(/notification_logs_sentAt_idx/);
   });
 
   it('D5: dò dòng điểm của đơn theo refId + refType=ORDER dùng partial index', async () => {
     captured = [];
     await prisma.pointsTransaction.findFirst({ where: { reason: 'ORDER_DELIVERED:X', refType: 'ORDER', refId: `${prefix}-ord` }, select: { userId: true } });
-    const q = captured.find((c) => /FROM "(public"\.")?points_transactions"/.test(c.query))!;
+    const q = await capturedMatching(/FROM "(public"\.")?points_transactions"/, 'D5');
     expect(q.query).toMatch(/"refType"/);
     expect(await planOf(q)).toMatch(/points_transactions_order_refId_idx/);
   });
@@ -134,9 +154,10 @@ describe('Index hiệu năng 2026-11-04 (real Postgres)', () => {
       refresh_tokens: /refresh_tokens_expiresAt_idx/,
     };
     for (const [table, re] of Object.entries(expected)) {
-      const q = captured.find((c) => new RegExp(`^\\s*DELETE FROM "(public"\\.")?${table}"`).test(c.query));
-      expect(q).toBeDefined();
-      expect(await planOf(q!)).toMatch(re);
+      const batchSql = new RegExp(`^\\s*DELETE FROM "(public"\\.")?${table}"`);
+      const caught = () => captured.filter((c) => /^\s*DELETE FROM/.test(c.query)).map((c) => c.query.slice(0, 60).replace(/\s+/g, ' '));
+      const q = await capturedMatching(batchSql, `D10 bảng ${table}; result=${JSON.stringify(result)}; câu xoá đã bắt=${JSON.stringify(caught())}`);
+      expect(await planOf(q)).toMatch(re);
     }
   });
 });
