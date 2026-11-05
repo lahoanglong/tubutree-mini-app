@@ -172,6 +172,9 @@ export function CampaignForm({
 
   const save = async () => {
     setError(null);
+    const img = image.trim();
+    if (!img.startsWith('https://') && !img.startsWith('data:image/'))
+      return setError('Ảnh banner phải là link bắt đầu bằng https:// hoặc ảnh tải lên.');
     if (!startIso || !endIso) return setError('Chọn đủ ngày và giờ bắt đầu, kết thúc.');
     if (Date.parse(endIso) <= Date.parse(startIso))
       return setError('Giờ kết thúc phải sau giờ bắt đầu.');
