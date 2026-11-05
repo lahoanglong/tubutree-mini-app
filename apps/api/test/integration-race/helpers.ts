@@ -344,3 +344,10 @@ let phoneSeq = Math.floor(Math.random() * 1e8);
 export function uniquePhone(prefix = '09'): string {
   return `${prefix}${String(phoneSeq++ % 1e8).padStart(8, '0')}`;
 }
+
+/** Thêm tham số kết nối vào DATABASE_URL dù URL gốc đã có `?` hay chưa (CI có `?schema=public`, máy cục bộ có thể không). */
+export function withDbUrlParams(url: string, params: Record<string, string>): string {
+  const u = new URL(url);
+  for (const [k, v] of Object.entries(params)) u.searchParams.set(k, v);
+  return u.toString();
+}
