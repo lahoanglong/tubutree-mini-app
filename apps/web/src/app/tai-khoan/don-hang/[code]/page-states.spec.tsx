@@ -169,6 +169,17 @@ afterEach(() => {
 });
 
 describe('chi tiết đơn web — nút theo trạng thái (gói hl)', () => {
+  it.each(ROWS)('khối "Cần hỗ trợ?" ở cuối trang, hotline và email mang mã đơn: $name', async (row) => {
+    mocks.order = { ...BASE, ...row.order };
+    const { container } = await mount();
+    const block = Array.from(container.querySelectorAll('div')).find((d) => d.firstElementChild?.textContent === 'Cần hỗ trợ?')!;
+    expect(block).toBeTruthy();
+    expect(block.querySelector('a[href="tel:0984606774"]')?.textContent).toBe('Gọi hotline 0984 606 774');
+    expect(block.querySelector('a[href^="mailto:tubutree@gmail.com?subject="]')!.getAttribute('href')).toContain(encodeURIComponent('Hỗ trợ đơn TB-9'));
+    const hero = container.querySelector('[data-testid="status-hero"]')!;
+    expect(hero.compareDocumentPosition(block) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it.each(ROWS)('$name', async (row) => {
     mocks.order = { ...BASE, ...row.order };
     const { container } = await mount();
@@ -227,7 +238,7 @@ describe('chi tiết đơn web — nút theo trạng thái (gói hl)', () => {
     expect(emptyFrames).toHaveLength(0);
   });
 
-  it('đơn chuyển khoản đã huỷ: chỉ nói "Đơn đã huỷ.", không suy ra lý do quá hạn thanh toán (API không trả lý do huỷ)', async () => {
+  it('đơn chuyển khoản đã huỷ mà API chưa trả cancelReason: chỉ nói "Đơn đã huỷ.", không suy ra lý do quá hạn thanh toán', async () => {
     mocks.order = {
       ...BASE,
       status: 'CANCELLED',
@@ -238,5 +249,14 @@ describe('chi tiết đơn web — nút theo trạng thái (gói hl)', () => {
     const { container } = await mount();
     expect(container.textContent).toContain('Đơn đã huỷ.');
     expect(container.textContent).not.toContain('quá hạn thanh toán');
+    expect(container.querySelector('[data-testid="order-cancel-reason"]')).toBeNull();
+  });
+
+  it('đơn huỷ API trả cancelReason: khối đầu trang hiện đúng câu lý do (lời khách, tự huỷ quá hạn, Tubu huỷ)', async () => {
+    for (const reason of ['Bạn đã huỷ: Đổi ý, không muốn mua nữa', 'Đơn tự huỷ vì quá hạn thanh toán', 'Tubu Tree đã huỷ đơn này. Cần biết thêm, bạn liên hệ CSKH.']) {
+      mocks.order = { ...BASE, status: 'CANCELLED', statusTimes: { CANCELLED: hoursFromNow(-6) }, cancelReason: reason };
+      const { container } = await mount();
+      expect(container.querySelector('[data-testid="status-hero"] [data-testid="order-cancel-reason"]')?.textContent).toBe(reason);
+    }
   });
 });

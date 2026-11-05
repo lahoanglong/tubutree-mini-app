@@ -261,12 +261,32 @@ describe('orderActionPlan và orderHeadline theo trạng thái', () => {
     expect(orderHeadline(closed, { now: NOW, returnDays: 7 }).milestone).toBe('Đã hết hạn đổi/trả.');
   });
 
-  it('đơn huỷ chỉ nói "Đơn đã huỷ.": API không trả lý do huỷ nên không suy ra "quá hạn thanh toán", kể cả khi dữ liệu có hạn và mốc huỷ sau hạn', () => {
-    // API thật không trả paymentDeadline cho đơn CANCELLED; ca có hạn ở đây là đơn tự huỷ lẫn đơn khách huỷ sau hạn, không phân biệt được.
+  it('đơn huỷ chưa có cancelReason chỉ nói "Đơn đã huỷ.": không tự suy ra "quá hạn thanh toán", kể cả khi dữ liệu có hạn và mốc huỷ sau hạn', () => {
+    // Không có cancelReason thì đơn tự huỷ lẫn đơn khách huỷ sau hạn không phân biệt được; lý do chỉ lấy từ API.
     const afterDeadline = order({ status: 'CANCELLED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', paymentDeadline: iso(-3 * HOUR), statusTimes: { CANCELLED: iso(-3 * HOUR + 60_000) } });
     expect(orderHeadline(afterDeadline, { now: NOW }).sentence).toBe('Đơn đã huỷ.');
     const apiShape = order({ status: 'CANCELLED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', paymentDeadline: null, statusTimes: { CANCELLED: iso(-HOUR) } });
     expect(orderHeadline(apiShape, { now: NOW }).sentence).toBe('Đơn đã huỷ.');
+  });
+});
+
+describe('orderHeadline: lý do huỷ do API trả cho khách', () => {
+  const cancelled = (reason?: string | null) => order({ status: 'CANCELLED', cancelReason: reason });
+
+  it('đơn huỷ có lý do: chuyển nguyên văn (đã cắt khoảng trắng đầu cuối) ra headline.reason, câu trạng thái giữ nguyên', () => {
+    const h = orderHeadline(cancelled('  Bạn đã huỷ: Đổi ý, không muốn mua nữa  '), { now: NOW });
+    expect(h.reason).toBe('Bạn đã huỷ: Đổi ý, không muốn mua nữa');
+    expect(h.sentence).toBe('Đơn đã huỷ.');
+  });
+
+  it('không có lý do (thiếu trường, null, chuỗi rỗng hay chỉ khoảng trắng): reason là null, API cũ không hiện gì thêm', () => {
+    for (const r of [undefined, null, '', '   ']) expect(orderHeadline(cancelled(r), { now: NOW }).reason).toBeNull();
+  });
+
+  it('chỉ đơn huỷ mới có reason: trạng thái khác lỡ mang cancelReason cũng không hiện', () => {
+    for (const status of ['PENDING_PAYMENT', 'CONFIRMED', 'SHIPPING', 'DELIVERED', 'RETURNED']) {
+      expect(orderHeadline(order({ status, cancelReason: 'Đơn tự huỷ vì quá hạn thanh toán' }), { now: NOW }).reason).toBeNull();
+    }
   });
 });
 

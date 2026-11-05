@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import type { FeedItem, FeedPreviewItem } from '@tubutree/app-core/api/feed';
+import { POST_CARD_SKELETON, POST_CARD_SKELETON_COUNT } from '@tubutree/app-core/community-skeleton';
 import { byText, click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
 
@@ -488,5 +489,48 @@ describe('/cong-dong — tiêu đề chừa chỗ nút lùi', () => {
     const { container } = await mount();
     expect(container.querySelector('h1')!.parentElement!.className).toContain('max-md:pl-12');
     expect(searchInput(container).className).toContain('max-md:border-stone-200');
+  });
+});
+
+describe('/cong-dong — khung chờ giống thẻ bài thật (không nhảy khi bài về)', () => {
+  const skeletons = (c: HTMLElement) => Array.from(c.querySelectorAll<HTMLElement>('[data-testid="post-card-skeleton"]'));
+
+  it('đang khôi phục phiên: 3 thẻ chờ cao đúng số đo chung, ẩn với trình đọc màn hình', async () => {
+    mocks.auth.status = 'idle';
+    mocks.auth.initialized = false;
+    const { container } = await mount();
+    const cards = skeletons(container);
+    expect(cards).toHaveLength(POST_CARD_SKELETON_COUNT);
+    for (const c of cards) {
+      expect(c.style.height).toBe(`${POST_CARD_SKELETON.height}px`);
+      expect(c.getAttribute('aria-hidden')).toBe('true');
+    }
+  });
+
+  it('đã đăng nhập, bảng tin đang tải: thẻ chờ tràn ngang như thẻ thật, cách nhau cùng khe (gap-3, max-md:gap-2)', async () => {
+    feedImpl = () => new Promise(() => {});
+    const { container } = await mount();
+    const cards = skeletons(container);
+    expect(cards).toHaveLength(POST_CARD_SKELETON_COUNT);
+    expect(cards[0]!.className).toContain('max-md:-mx-4');
+    expect(cards[0]!.className).toContain('max-md:rounded-none');
+    const list = cards[0]!.parentElement!;
+    expect(list.className).toContain('gap-3');
+    expect(list.className).toContain('max-md:gap-2');
+  });
+
+  it('khách chờ xem trước: vẫn là thẻ chờ, giữ data-testid feed-preview-loading ở khối cha', async () => {
+    mocks.auth.status = 'idle';
+    config = { communityPublicPreview: true };
+    previewImpl = () => new Promise(() => {});
+    const { container } = await mount();
+    const wrap = container.querySelector('[data-testid="feed-preview-loading"]')!;
+    expect(skeletons(wrap as HTMLElement)).toHaveLength(POST_CARD_SKELETON_COUNT);
+  });
+
+  it('bài về thì thẻ chờ biến mất', async () => {
+    const { container } = await mount();
+    expect(container.querySelector('[data-testid="post-card"]')).not.toBeNull();
+    expect(skeletons(container)).toHaveLength(0);
   });
 });

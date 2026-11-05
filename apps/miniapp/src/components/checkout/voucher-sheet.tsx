@@ -152,7 +152,7 @@ export function VoucherSheet({
             marginBottom: 16,
           }}
         >
-          <Text variant="label" tone="secondary" as="p" style={{ marginBottom: 8 }}>
+          <Text variant="field-label" tone="secondary" as="p" style={{ marginBottom: 8 }}>
             {fillCopy('coupon.pickManual')}
           </Text>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

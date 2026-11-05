@@ -163,7 +163,7 @@ function GeoSelect({
 
   return (
     <>
-      <Text variant="caption" tone="secondary" as="div" style={{ marginBottom: 4 }}>
+      <Text variant="field-label" tone="secondary" as="div" style={{ marginBottom: 4 }}>
         {label}
       </Text>
       <button

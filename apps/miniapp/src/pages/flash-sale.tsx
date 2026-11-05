@@ -29,6 +29,9 @@ import { FlashSlotItem } from '../components/flash/flash-slot-item';
 
 const UPCOMING_KEY = ['flash-sales', 'upcoming'] as const;
 const SOLD_FOOTER_HEIGHT = 20;
+/** Cao của dải tab khung giờ (`SlotTabs`) và dải đồng hồ (`STRIP`): khung chờ dựng đúng hai dải này để danh sách không nhảy khi dữ liệu về. */
+const TABS_HEIGHT = 56;
+const STRIP_HEIGHT = 44;
 /** Nhịp tải lại món của khung đang diễn ra: suất đã bán nhích lên, món hết suất xuống cuối. Phản hồi máy chủ được cache 3 giây. */
 const LIVE_ITEMS_REFETCH_MS = 30_000;
 const SLOTS_REFETCH_MS = 60_000;
@@ -38,7 +41,7 @@ const STRIP: React.CSSProperties = {
   alignItems: 'center',
   justifyContent: 'space-between',
   gap: 8,
-  minHeight: 44,
+  minHeight: STRIP_HEIGHT,
   padding: '0 16px',
   boxSizing: 'border-box',
   background: 'var(--color-bg-surface)',
@@ -243,8 +246,9 @@ export default function FlashSalePage() {
   let body: React.ReactNode;
   if (slotsQ.isPending) {
     body = (
-      <div data-testid="flash-slots-loading" aria-hidden="true" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <Skeleton height={56} radius="0" />
+      <div data-testid="flash-slots-loading" aria-hidden="true">
+        <Skeleton height={TABS_HEIGHT} radius="0" />
+        <Skeleton height={STRIP_HEIGHT} radius="0" />
         <ListSkeleton />
       </div>
     );

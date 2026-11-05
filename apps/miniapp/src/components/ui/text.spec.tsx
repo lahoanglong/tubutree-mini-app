@@ -9,6 +9,13 @@ describe('Text/Heading', () => {
     expect(el.tagName).toBe('SPAN');
     expect(el.style.fontSize).toBe('var(--type-body-md-size)');
   });
+  it('Text variant field-label đọc bậc --type-field-label-* (nhãn ô nhập 12px/1,33/500), không lẫn bậc nhãn chip', () => {
+    render(<Text variant="field-label" data-testid="t">Họ tên</Text>);
+    const el = screen.getByTestId('t');
+    expect(el.style.fontSize).toBe('var(--type-field-label-size)');
+    expect(el.style.lineHeight).toBe('var(--type-field-label-lh)');
+    expect(el.style.fontWeight).toBe('var(--type-field-label-weight)');
+  });
   it('Heading renders h1/h2/h3 based on variant, defaulting sensibly', () => {
     render(<Heading variant="title-lg" data-testid="h">Title</Heading>);
     expect(screen.getByTestId('h').tagName).toBe('H1');

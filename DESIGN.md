@@ -62,6 +62,7 @@ Cần gì thì dùng đó. Mini ở `apps/miniapp/src/components/ui/`, web ở `
 | giá, giá gạch, "Tiết kiệm" | `PriceTag` (giá gạch chỉ được vẽ ở đây) |
 | ảnh sản phẩm, ảnh nhỏ | `ProductImage`, `ProductThumb` |
 | khung chờ thẻ | `ProductTileSkeleton`, `Skeleton` |
+| khung chờ thẻ bài đăng của bảng tin | `PostCardSkeleton` (số đo `POST_CARD_SKELETON` ở `packages/app-core/src/community-skeleton.ts`, Mini và web cùng đọc) |
 | tim yêu thích | `WishlistHeart` |
 
 Kệ ngang chỉ dùng `rail-sm`, `flash` và `rank` (`--tile-w-sm`, 128px) hoặc `rail-md` (`--tile-w-md`, 148px); `grid` là hai cột. Số đo thân thẻ ở `TILE_METRICS` (`packages/app-core/src/commerce/tile-metrics.ts`), khung chờ đọc cùng chỗ. Hàng cùng kệ chênh đáy giá không quá 1px.
@@ -102,7 +103,7 @@ Kệ ngang chỉ dùng `rail-sm`, `flash` và `rank` (`--tile-w-sm`, 128px) ho�
 
 | Cần | Dùng |
 |---|---|
-| đầu trang đơn: trạng thái, một câu, mốc (ngày giao, hạn trả, hạn đổi/trả), bước kế tiếp | `OrderStatusHero` (chữ từ `orderHeadline` của `packages/app-core/src/commerce/order-tracking.ts`) |
+| đầu trang đơn: trạng thái, một câu, lý do huỷ (đơn huỷ, nguyên văn từ `cancelReason` của API), mốc (ngày giao, hạn trả, hạn đổi/trả), bước kế tiếp | `OrderStatusHero` (chữ từ `orderHeadline` của `packages/app-core/src/commerce/order-tracking.ts`) |
 | hành trình 5 bước có giờ thật, bước hiện tại `aria-current="step"`, mốc hãng gộp dưới "Đang giao" mới nhất trên cùng | `OrderTrack` (dữ liệu từ `orderTrack`) |
 | hãng vận chuyển, mã vận đơn, nút "Chép mã" | `OrderShipping` |
 | thanh nút của đơn: đúng một nút chính theo trạng thái, việc còn lại vào "Thêm thao tác" | `OrderActionBar` (kế hoạch từ `orderActionPlan`; điều kiện từng nút lấy từ cờ API, không đoán) |
@@ -180,6 +181,8 @@ Thứ tự khối Trang chủ cho khách cũ: header dính → thẻ thành viê
 ## Chữ chuẩn và thuật ngữ cấm
 
 Chữ mua sắm dùng chung chỉ thêm vào `packages/app-core/src/shop-copy.ts` (khoá `SHOP_COPY`, kèm ngân sách độ dài ở `shop-copy-budget.ts`); màn gọi `fillCopy('<khoá>')`, không viết chữ thẳng trong mã. Chữ đã chốt: "Bán chạy nhất", "Miễn phí giao hàng", "Được yêu thích", "Tubu chọn", "Mã giảm giá", "Thương hiệu", "Gian hàng", "Giờ vàng" (hoa chữ G), "Tạm hết hàng", "Ngừng bán", "Kết thúc sau {t}". Giọng: "bạn" và "Tubu".
+
+Nhãn đặt trên ô nhập (`Field`, địa chỉ, hoá đơn VAT, hồ sơ, đổi trả, ô nhập mã giảm giá) dùng bậc riêng `--type-field-label-*`: 12px, dòng 1,33, độ đậm 500 (Mini: `<Text variant="field-label">`; web: lớp `text-field-label`, `apps/web/src/field-label-style.spec.ts` quét các file có nhãn ô nhập). Bậc `--type-label-*` (12px, 600) chỉ dành cho chip, huy hiệu và nhãn nhỏ trên thẻ, không dùng cho nhãn ô nhập.
 
 Thuật ngữ cấm trong chữ khách đọc (`FORBIDDEN_TERMS`), cột phải là chữ dùng thay:
 

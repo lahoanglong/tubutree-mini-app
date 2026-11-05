@@ -532,6 +532,8 @@ describe('/san-pham/[slug] — đủ chức năng như Mini App', () => {
     const c = await mount();
     const h2 = Array.from(c.querySelectorAll('h2')).map((h) => h.textContent);
     expect(h2).toEqual(expect.arrayContaining(['Thành phần', 'Cam kết Tubu', 'Mô tả sản phẩm']));
+    const promises = c.querySelector('#pdp-promises')!;
+    expect(promises.querySelector('a[href="/chinh-sach/van-chuyen"]')?.textContent).toBe('Chính sách vận chuyển');
     api.product = PRODUCT;
     const c2 = await mount();
     expect(Array.from(c2.querySelectorAll('h2')).map((h) => h.textContent)).not.toContain('Thành phần');

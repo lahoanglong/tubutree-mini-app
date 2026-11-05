@@ -587,6 +587,17 @@ describe('Trang Giờ vàng: trạng thái tải, rỗng, lỗi', () => {
     expect(screen.queryByRole('tab')).not.toBeInTheDocument();
   });
 
+  it('khung chờ cao đúng phần đầu thật: dải tab 56px + dải đồng hồ 44px liền nhau (không khe), rồi mới tới danh sách', async () => {
+    mocks.http.mockImplementation(() => new Promise(() => {}));
+    renderPage();
+    const root = await screen.findByTestId('flash-slots-loading');
+    expect(root.style.gap).toBe('');
+    const [tabsBar, strip, list] = Array.from(root.children) as HTMLElement[];
+    expect(tabsBar!.style.height).toBe('56px');
+    expect(strip!.style.height).toBe('44px');
+    expect(list!.getAttribute('data-testid')).toBe('flash-items-loading');
+  });
+
   it('không có khung nào: trạng thái rỗng, nút dẫn tới danh mục sản phẩm', async () => {
     serve({ slots: { serverNow: '', slots: [] } });
     renderPage();

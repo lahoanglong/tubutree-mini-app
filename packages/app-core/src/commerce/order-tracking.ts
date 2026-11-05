@@ -31,6 +31,8 @@ export interface TrackOrder {
   paymentDeadline?: string | null;
   manualHandling?: boolean | null;
   canCancel?: boolean | null;
+  /** Lý do huỷ viết sẵn cho khách đọc (API đã lọc, ví dụ "Bạn đã huỷ: Đổi ý, không muốn mua nữa"); API cũ không trả. */
+  cancelReason?: string | null;
   placedForCustomer?: boolean | null;
   referrerUserId?: string | null;
   statusTimes?: Partial<Record<string, string>>;
@@ -165,6 +167,8 @@ export interface OrderHeadline {
   stage: OrderStage;
   /** Một câu nói đơn đang ở đâu. */
   sentence: string;
+  /** Lý do huỷ của đơn đã huỷ, nguyên văn từ API; null khi đơn không huỷ hoặc API không trả. */
+  reason: string | null;
   /** Mốc cần biết: ngày giao dự kiến, hạn thanh toán, hạn đổi/trả. */
   milestone: string | null;
   /** Bước kế tiếp của khách (hoặc của Tubu). */
@@ -195,6 +199,7 @@ export function orderHeadline(o: TrackOrder, ctx: TrackCtx = {}): OrderHeadline 
 
   let milestone: string | null = null;
   let next: string | null = null;
+  let reason: string | null = null;
   switch (stage) {
     case 'PAY_WAIT': {
       if (o.paymentDeadline && !Number.isNaN(deadlineMs(o))) {
@@ -231,6 +236,7 @@ export function orderHeadline(o: TrackOrder, ctx: TrackCtx = {}): OrderHeadline 
       break;
     }
     case 'CANCELLED':
+      reason = typeof o.cancelReason === 'string' ? o.cancelReason.trim() || null : null;
       next = o.paymentStatus === 'PAID' || o.paymentStatus === 'REFUNDED' ? fillCopy('order.next.refund') : fillCopy('order.next.rebuy');
       break;
     case 'RETURNED':
@@ -239,7 +245,7 @@ export function orderHeadline(o: TrackOrder, ctx: TrackCtx = {}): OrderHeadline 
     default:
       break;
   }
-  return { stage, sentence, milestone, next };
+  return { stage, sentence, reason, milestone, next };
 }
 
 export interface TrackEvent {
