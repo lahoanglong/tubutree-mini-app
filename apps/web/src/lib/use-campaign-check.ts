@@ -17,20 +17,20 @@ export interface CampaignCheckState {
   issues: CampaignIssue[];
   blockers: number;
   warnings: number;
-  /** Giờ máy chủ trừ giờ máy admin (ms) lúc nhận kết quả; 0 khi API không trả `now`. */
-  skewMs: number;
+  /** Phán quyết lần lưu của máy chủ cho đúng bản nháp đã kiểm (thiếu khi API cũ). */
+  verdict?: { blocked: boolean; codes: string[]; reason?: string };
   /** Lý do chưa kiểm được (status `error`). */
   message?: string;
 }
 
-const IDLE: CampaignCheckState = { status: 'idle', issues: [], blockers: 0, warnings: 0, skewMs: 0 };
+const IDLE: CampaignCheckState = { status: 'idle', issues: [], blockers: 0, warnings: 0 };
 
 /**
  * Kiểm chiến dịch đang soạn bằng `POST /admin/campaigns/check`. `input` null (form chưa đủ để kiểm) thì không gọi gì. Máy chủ trả 400 vì đích sai
  * định dạng thì hiện đúng câu đó như một lỗi chặn; lỗi mạng hay 5xx không khoá nút lưu (máy chủ vẫn kiểm lại lúc bật).
  */
 export function useCampaignCheck(input: CampaignCheckInput | null): CampaignCheckState {
-  const [state, setState] = useState<CampaignCheckState>(IDLE);
+  const [state, setState] = useState<CampaignCheckState & { forKey: string }>({ ...IDLE, forKey: '' });
   const key = input ? JSON.stringify(input) : '';
   const latest = useRef(input);
   latest.current = input;
@@ -38,40 +38,42 @@ export function useCampaignCheck(input: CampaignCheckInput | null): CampaignChec
   useEffect(() => {
     const body = latest.current;
     if (!body) {
-      setState(IDLE);
+      setState({ ...IDLE, forKey: '' });
       return;
     }
     let live = true;
-    setState((s) => ({ ...s, status: 'loading' }));
+    setState((s) => ({ ...s, status: 'loading', forKey: key }));
     const timer = setTimeout(() => {
       checkAdminCampaign(body).then(
         (r) =>
           live &&
           setState({
+            forKey: key,
             status: 'ready',
             issues: r.issues,
             blockers: r.blockers,
             warnings: r.warnings,
-            skewMs: r.now ? Date.parse(r.now) - Date.now() : 0,
+            ...(r.verdict ? { verdict: r.verdict } : {}),
           }),
         (e: unknown) => {
           if (!live) return;
           if (e instanceof ApiError && e.status === 400) {
             setState({
+              forKey: key,
               status: 'ready',
               issues: [{ code: 'INVALID', level: 'BLOCK', message: e.message }],
               blockers: 1,
               warnings: 0,
-              skewMs: 0,
+              verdict: { blocked: true, codes: ['INVALID'], reason: e.message },
             });
             return;
           }
           setState({
+            forKey: key,
             status: 'error',
             issues: [],
             blockers: 0,
             warnings: 0,
-            skewMs: 0,
             message: actionErrorText(e),
           });
         },
@@ -83,5 +85,8 @@ export function useCampaignCheck(input: CampaignCheckInput | null): CampaignChec
     };
   }, [key]);
 
-  return state;
+  // Kết quả của bản nháp cũ (vừa gõ thêm, chưa kịp kiểm lại) vẫn hiện trong khối kiểm nhưng không được dùng để khoá hay mở khoá bản nháp mới.
+  const { forKey, verdict, ...rest } = state;
+  if (forKey !== key) return input ? { ...rest, status: 'loading' } : IDLE;
+  return { ...rest, ...(verdict ? { verdict } : {}) };
 }

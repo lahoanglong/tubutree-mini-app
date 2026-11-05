@@ -35,12 +35,10 @@ export interface CampaignIssue {
 
 export interface CampaignCheckResult {
   issues: CampaignIssue[];
-  /** Số món khách dùng được trên trang chiến dịch theo danh sách đang soạn; API cũ không trả. */
-  usable?: { products: number; coupons: number };
-  /** Giờ máy chủ (ISO); API cũ không trả. */
-  now?: string;
   blockers: number;
   warnings: number;
+  /** Phán quyết lần lưu này theo cùng luật với máy chủ lúc lưu; API cũ không trả (form không khoá, máy chủ vẫn quyết). */
+  verdict?: { blocked: boolean; codes: string[]; reason?: string };
 }
 
 /** Thân kiểm trước khi lưu: cùng trường với tạo/sửa (không cần ảnh), kèm sản phẩm và mã đang soạn. `id` có khi sửa chiến dịch đã lưu. */
@@ -53,6 +51,8 @@ export interface CampaignCheckInput {
   startAt: string;
   endAt: string;
   sortOrder: number;
+  /** Mặc định bật khi không gửi (kiểm "như thể đã bật"). */
+  isActive?: boolean;
   productIds: string[];
   couponCodes: string[];
 }
@@ -77,6 +77,9 @@ export interface AdminCampaignInput {
   endAt: string;
   sortOrder?: number;
   isActive?: boolean;
+  /** Thay hết danh sách trong cùng lệnh lưu (một giao dịch); không gửi thì giữ nguyên. */
+  productIds?: string[];
+  couponCodes?: string[];
 }
 
 /** Sửa: không có slug (đổi slug làm gãy link đã chia sẻ); subtitle/linkValue null là xoá. */

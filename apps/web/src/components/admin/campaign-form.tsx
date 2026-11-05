@@ -11,13 +11,10 @@ import { CAMPAIGN_INTERNAL_TARGETS } from '@tubutree/app-core/commerce/campaign'
 import { CAMPAIGN_ENTITY_SLUG_MAX } from '@tubutree/shared-types';
 import {
   createAdminCampaign,
-  setAdminCampaignCoupons,
-  setAdminCampaignProducts,
   updateAdminCampaign,
   type AdminCampaignDetail,
   type AdminCampaignInput,
   type CampaignCheckInput,
-  checkAdminCampaign,
 } from '@/lib/admin-campaigns-client';
 import { isoToVnLocal, parseCouponCodes, vnLocalToIso } from '@/lib/admin-campaign-form';
 import { useBannerImageCheck } from '@/lib/use-banner-image-check';
@@ -65,23 +62,14 @@ interface PickedProduct {
   name: string;
 }
 
-interface SavedState {
-  active: boolean;
-  startAt: string;
-  endAt: string;
-  linkType: CampaignLinkType;
-  linkValue: string;
-}
-
 const needsValue = (t: CampaignLinkType) => t !== 'CAMPAIGN_PAGE';
 const errText = (e: unknown, fallback: string) =>
   e instanceof Error ? actionErrorText(e) : fallback;
 
 /**
  * Form tạo/sửa một chiến dịch. Mốc giờ nhập theo giờ Việt Nam (đổi sang ISO +07:00 bất kể múi giờ máy admin). Đích "Trang trong app" chỉ chọn trong danh sách
- * đóng của app-core: giá trị tự gõ không dẫn tới đường dẫn nào ngoài app. Tạo xong mới đặt sản phẩm và mã (hai lời gọi riêng của API): một bước sau lỗi thì chiến dịch
- * đã có, form chuyển sang chế độ sửa chính chiến dịch đó để bấm Lưu lại không tạo trùng. Chiến dịch chỉ được bật ở bước CUỐI, sau khi sản phẩm và mã đã gắn:
- * máy chủ kiểm lúc bật (trang chiến dịch trống thì chặn), nên bật trước khi gắn sẽ bị từ chối oan.
+ * đóng của app-core: giá trị tự gõ không dẫn tới đường dẫn nào ngoài app. Lưu = MỘT lệnh (POST hoặc PATCH kèm sản phẩm/mã khi danh sách đổi): máy chủ khoá dòng,
+ * phán quyết và ghi trong một giao dịch nên không có trạng thái lưu dở. Nút Lưu khoá theo `verdict` của lần kiểm mới nhất khớp bản nháp, cùng luật với máy chủ.
  */
 export function CampaignForm({
   initial,
@@ -93,19 +81,6 @@ export function CampaignForm({
   onCancel: () => void;
 }) {
   const qc = useQueryClient();
-  const [savedId, setSavedId] = useState<string | null>(initial?.id ?? null);
-  // Bản đang lưu trên máy chủ (khác ô trên form khi lưu dở dang: đã lưu nháp nhưng chưa bật được, chưa đổi được đích hay ngày).
-  const [saved, setSaved] = useState<SavedState | null>(() =>
-    initial
-      ? {
-          active: initial.isActive,
-          startAt: initial.startAt,
-          endAt: initial.endAt,
-          linkType: initial.linkType,
-          linkValue: initial.linkValue ?? '',
-        }
-      : null,
-  );
   const baseline = useState(() => ({
     products: (initial?.products ?? []).map((p) => p.id),
     codes: initial?.couponCodes ?? [],
@@ -153,9 +128,10 @@ export function CampaignForm({
     if (codes.length > MAX_COUPONS) return null;
     const order = Number(sortOrder);
     return {
-      ...(savedId ? { id: savedId } : {}),
+      ...(initial ? { id: initial.id } : {}),
       placement,
       linkType,
+      isActive,
       ...(needsValue(linkType) ? { linkValue: linkValue.trim() } : {}),
       audience,
       startAt: startIso,
@@ -170,7 +146,8 @@ export function CampaignForm({
     valueReady,
     codesText,
     sortOrder,
-    savedId,
+    initial,
+    isActive,
     placement,
     linkType,
     linkValue,
@@ -179,35 +156,8 @@ export function CampaignForm({
   ]);
   const check = useCampaignCheck(checkInput);
   const imageCheck = useBannerImageCheck(image);
-  // Cùng luật với máy chủ (PATCH): lỗi chặn chỉ khoá khi lần lưu này đưa chiến dịch từ khách-không-thấy sang khách-thấy (đang tắt hoặc đã quá hạn, rồi bật và chưa hết hạn)
-  // hoặc đổi đích lúc đang chạy. Lỗi cũ của chiến dịch đang chạy không khoá việc sửa tiêu đề hay giờ; khối kiểm vẫn hiện lỗi đó.
-  // Đồng hồ máy chủ khi đã kiểm được (máy admin lệch vài phút vẫn ra cùng kết quả như máy chủ).
-  const clockNow = () => Date.now() + check.skewMs;
-  const nowMs = clockNow();
-  const wasVisible = saved !== null && saved.active && Date.parse(saved.endAt) > nowMs;
-  const willBeVisible = isActive && endIso !== null && Date.parse(endIso) > nowMs;
-  const linkValueNow = needsValue(linkType) ? linkValue.trim() : '';
-  const linkChanged =
-    saved !== null && (linkType !== saved.linkType || linkValueNow !== saved.linkValue);
-  const activation =
-    willBeVisible && (!wasVisible || linkChanged) && check.status === 'ready' && check.blockers > 0;
-  // Lần lưu vẫn để chiến dịch hiện cho khách, đích cuối là trang chiến dịch, và có đụng danh sách sản phẩm/mã mà trang thành trống: máy chủ từ chối PUT.
-  // Lỗi PAGE_EMPTY có sẵn từ trước mà lần lưu không đụng danh sách thì không khoá.
-  // Dời giờ bắt đầu cũng đụng: mã hết hạn trước mốc mới thì không còn dùng được, nên máy chủ kiểm lại trang theo mốc đó.
-  const startMoved = saved !== null && startIso !== null && Date.parse(startIso) !== Date.parse(saved.startAt);
-  const touchesList =
-    productIdsKey !== baseline.products.join('\n') ||
-    parseCouponCodes(codesText).join('\n') !== baseline.codes.join('\n') ||
-    startMoved;
-  const emptiesLivePage =
-    !activation &&
-    willBeVisible &&
-    wasVisible &&
-    linkType === 'CAMPAIGN_PAGE' &&
-    touchesList &&
-    check.status === 'ready' &&
-    check.issues.some((i) => i.code === 'PAGE_EMPTY');
-  const blocked = activation || emptiesLivePage;
+  // Khoá theo phán quyết của máy chủ cho đúng bản nháp này; đang kiểm, kiểm lỗi hay API cũ không trả `verdict` thì không khoá (máy chủ vẫn quyết lúc lưu).
+  const blocked = check.status === 'ready' && check.verdict?.blocked === true;
 
   const addProduct = (p: { id: string; label: string } | null) => {
     if (!p) return;
@@ -229,47 +179,27 @@ export function CampaignForm({
     const codes = parseCouponCodes(codesText);
     if (codes.length > MAX_COUPONS) return setError(`Mỗi chiến dịch gắn tối đa ${MAX_COUPONS} mã.`);
     const value = needsValue(linkType) ? linkValue.trim() : '';
+    const productIds = products.map((p) => p.id);
+    const needProducts = productIds.join('\n') !== baseline.products.join('\n');
+    const needCoupons = codes.join('\n') !== baseline.codes.join('\n');
     setBusy(true);
-    let id = savedId;
-    const goesLive = isActive && Date.parse(endIso) > clockNow();
-    const savedEnded = saved !== null && saved.active && Date.parse(saved.endAt) <= clockNow();
-    const staysActive = isActive && saved !== null && saved.active;
-    // Máy chủ coi mọi bước đưa chiến dịch sang "khách thấy" là một lần bật và kiểm trang chiến dịch (trống thì từ chối). Sản phẩm và mã gắn bằng lời gọi riêng,
-    // nên phần làm chiến dịch hiện ra (bật, gia hạn ngày, đổi đích lúc đang chạy) để lại cuối, sau khi đã gắn; chiến dịch vẫn chạy bản cũ trong lúc đó, không tắt.
-    const deferDates = staysActive && savedEnded && goesLive;
-    // Chỉ đích CAMPAIGN_PAGE cần để cuối (máy chủ kiểm trang không trống). Đích khác đi ở bước 1: nếu đích cũ là CAMPAIGN_PAGE thì phải đổi đích trước khi gỡ
-    // sản phẩm/mã, nếu không máy chủ thấy trang đang chạy bị làm trống.
-    const deferLink = staysActive && linkChanged && goesLive && linkType === 'CAMPAIGN_PAGE';
-    const turnOn = isActive && !(saved !== null && saved.active);
-    const step1Active = isActive && saved !== null && saved.active;
-    let snap: SavedState = saved ?? {
-      active: false,
-      startAt: startIso,
-      endAt: endIso,
-      linkType,
-      linkValue: value,
-    };
     try {
-      if (id) {
-        await updateAdminCampaign(id, {
+      if (initial) {
+        await updateAdminCampaign(initial.id, {
           title: title.trim(),
           subtitle: subtitle.trim() || null,
           placement,
           image: image.trim(),
           audience,
           sortOrder: order,
-          isActive: step1Active,
-          ...(deferDates ? {} : { startAt: startIso, endAt: endIso }),
-          ...(deferLink ? {} : { linkType, linkValue: value || null }),
+          isActive,
+          startAt: startIso,
+          endAt: endIso,
+          linkType,
+          linkValue: value || null,
+          ...(needProducts ? { productIds } : {}),
+          ...(needCoupons ? { couponCodes: codes } : {}),
         });
-        snap = {
-          active: step1Active,
-          startAt: deferDates ? snap.startAt : startIso,
-          endAt: deferDates ? snap.endAt : endIso,
-          linkType: deferLink ? snap.linkType : linkType,
-          linkValue: deferLink ? snap.linkValue : value,
-        };
-        setSaved(snap);
       } else {
         const body: AdminCampaignInput = {
           title: title.trim(),
@@ -280,87 +210,18 @@ export function CampaignForm({
           startAt: startIso,
           endAt: endIso,
           sortOrder: order,
-          isActive: false,
+          isActive,
           ...(subtitle.trim() ? { subtitle: subtitle.trim() } : {}),
           ...(slug.trim() ? { slug: slug.trim() } : {}),
           ...(value ? { linkValue: value } : {}),
+          ...(productIds.length > 0 ? { productIds } : {}),
+          ...(codes.length > 0 ? { couponCodes: codes } : {}),
         };
-        id = (await createAdminCampaign(body)).id;
-        setSavedId(id);
-        snap = { active: false, startAt: startIso, endAt: endIso, linkType, linkValue: value };
-        setSaved(snap);
+        await createAdminCampaign(body);
       }
     } catch (e) {
       setBusy(false);
       return setError(errText(e, 'Không lưu được chiến dịch.'));
-    }
-    void qc.invalidateQueries({ queryKey: ['admin-campaigns'] });
-    const productIds = products.map((p) => p.id);
-    const needProducts = productIds.join('\n') !== baseline.products.join('\n');
-    const needCoupons = codes.join('\n') !== baseline.codes.join('\n');
-    const attachProducts = async () => {
-      try {
-        await setAdminCampaignProducts(id, productIds);
-        baseline.products = productIds;
-        return null;
-      } catch (e) {
-        return `Đã lưu chiến dịch nhưng chưa gắn được sản phẩm: ${errText(e, 'lỗi không rõ')}`;
-      }
-    };
-    const attachCoupons = async () => {
-      try {
-        await setAdminCampaignCoupons(id, codes);
-        baseline.codes = codes;
-        return null;
-      } catch (e) {
-        return `Đã lưu chiến dịch nhưng chưa gắn được mã: ${errText(e, 'lỗi không rõ')}`;
-      }
-    };
-    // Trang chiến dịch đang chạy không được có lúc trống (máy chủ từ chối): khi phải đổi cả hai, làm trước bước mà danh sách MỚI có món dùng được
-    // (máy chủ đếm sản phẩm khách thấy và mã dùng được); cả hai đều có thì sản phẩm trước. Không hỏi được thì tạm coi sản phẩm có mặt là dùng được.
-    let productsFirst = productIds.length > 0;
-    if (needProducts && needCoupons && staysActive && checkInput) {
-      try {
-        const usable = (await checkAdminCampaign(checkInput)).usable;
-        if (usable) productsFirst = usable.products > 0 || usable.coupons === 0;
-      } catch {
-        // giữ cách đoán ở trên
-      }
-    }
-    const steps = [
-      ...(needProducts && needCoupons && !productsFirst ? [attachCoupons, attachProducts] : []),
-      ...(needProducts && needCoupons && productsFirst ? [attachProducts, attachCoupons] : []),
-      ...(needProducts && !needCoupons ? [attachProducts] : []),
-      ...(needCoupons && !needProducts ? [attachCoupons] : []),
-    ];
-    for (const step of steps) {
-      const failure = await step();
-      if (failure) {
-        setBusy(false);
-        return setError(failure);
-      }
-    }
-    const last = {
-      ...(turnOn ? { isActive: true } : {}),
-      ...(deferDates ? { startAt: startIso, endAt: endIso } : {}),
-      ...(deferLink ? { linkType, linkValue: value || null } : {}),
-    };
-    if (Object.keys(last).length > 0) {
-      try {
-        await updateAdminCampaign(id, last);
-        setSaved({
-          active: isActive,
-          startAt: startIso,
-          endAt: endIso,
-          linkType,
-          linkValue: value,
-        });
-      } catch (e) {
-        void qc.invalidateQueries({ queryKey: ['admin-campaigns'] });
-        setBusy(false);
-        const what = turnOn ? 'chưa bật được' : 'chưa đổi được đích hoặc ngày';
-        return setError(`Đã lưu chiến dịch nhưng ${what}: ${errText(e, 'lỗi không rõ')}`);
-      }
     }
     void qc.invalidateQueries({ queryKey: ['admin-campaigns'] });
     void qc.invalidateQueries({ queryKey: ['admin-campaign'] });
@@ -609,9 +470,7 @@ export function CampaignForm({
           data-testid="campaign-check-lock"
           className="text-sm text-danger-fg"
         >
-          {emptiesLivePage
-            ? 'Lần lưu này làm trang đang chạy thành trống: giữ lại ít nhất một sản phẩm hiển thị hoặc một mã dùng được, hoặc bỏ chọn “Đang bật”.'
-            : `Còn ${check.blockers} lỗi chặn nên chưa bật được. Sửa theo khối “Kiểm trước khi bật”, hoặc bỏ chọn “Đang bật” để lưu nháp.`}
+          {check.verdict?.reason ?? 'Lần lưu này bị chặn: sửa theo khối “Kiểm trước khi bật”, hoặc bỏ chọn “Đang bật” để lưu nháp.'}
         </p>
       )}
       <div className="flex flex-wrap gap-2">
