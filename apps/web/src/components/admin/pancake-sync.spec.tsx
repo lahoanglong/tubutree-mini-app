@@ -13,7 +13,7 @@ vi.mock('@/lib/admin-client', async (importOriginal) => ({
   retryPancakePush: mocks.retryPancakePush,
 }));
 
-import { PancakeSyncBadge, PancakeSyncPanel, canRetryPancakePush, pancakeErrorGuide, pancakeSyncState } from './pancake-sync';
+import { PancakeSyncBadge, PancakeSyncPanel, canRetryPancakePush, pancakeErrorGuide, pancakeStaleGuideText, pancakeSyncState } from './pancake-sync';
 
 const order = (o: Partial<AdminOrder> = {}): AdminOrder =>
   ({
@@ -246,6 +246,23 @@ describe('loại lỗi đẩy + câu hướng dẫn (hi)', () => {
     const legacy = pancakeErrorGuide(order({ pancakePushStatus: 'STALE', type: 'DEALER', items }))?.text ?? '';
     expect(legacy).toContain('đang chờ đủ hàng đặt trước');
     expect(legacy).toContain('CHƯA đẩy lại được');
+  });
+
+  it('một hàm chọn câu STALE chung: pancakeStaleGuideText (danh sách đơn kẹt) trùng pancakeErrorGuide (chi tiết đơn) với mọi cờ', () => {
+    const inputs: Partial<AdminOrder>[] = [
+      { pancakeRetry: 'NOW' },
+      { pancakeRetry: 'WAIT', pancakeRetryWaitingFor: 'đủ hàng đặt trước' },
+      { pancakeRetry: 'NEVER' },
+      {},
+      { status: 'DELIVERED' },
+    ];
+    for (const i of inputs) {
+      const o = order({ pancakePushStatus: 'STALE', ...i });
+      expect(pancakeStaleGuideText(o)).toBe(pancakeErrorGuide(o)?.text);
+    }
+    // Đơn kẹt của Sức khoẻ hệ thống chỉ có vài cột (không fulfiller/type/items): vẫn chạy được, không cờ thì suy từ trạng thái đơn.
+    expect(pancakeStaleGuideText({ status: 'CONFIRMED', pancakePushStatus: 'STALE' })).toContain('bấm "Đẩy lại Pancake"');
+    expect(pancakeStaleGuideText({ status: 'DELIVERED', pancakePushStatus: 'STALE' })).not.toContain('bấm "Đẩy lại Pancake"');
   });
 
   it('lỗi tạm: nêu giờ tự thử lại kế tiếp (HH:MM giờ Việt Nam)', () => {

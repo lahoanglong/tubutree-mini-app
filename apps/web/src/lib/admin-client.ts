@@ -2013,6 +2013,10 @@ export interface OpsStuckOrder {
   pancakeLastAttemptAt: string | null;
   pancakeSyncError: string | null;
   pancakeErrorKind?: string | null;
+  /** "Đẩy lại Pancake" có nhận đơn không (NOW/WAIT/NEVER), cùng vị từ với retryPushByAdmin; thiếu = API cũ. */
+  pancakeRetry?: 'NOW' | 'WAIT' | 'NEVER' | null;
+  /** Việc đơn đang chờ khi pancakeRetry = WAIT. */
+  pancakeRetryWaitingFor?: string | null;
 }
 export interface OpsQueueRow {
   name: string;

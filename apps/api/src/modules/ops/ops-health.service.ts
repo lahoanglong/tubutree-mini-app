@@ -15,6 +15,7 @@ import { GomdonClient } from '../integrations/gomdon/gomdon.client';
 import { hasGomdonCredentials } from '../integrations/gomdon/gomdon-config';
 import { PANCAKE_EVENT_STATUS, pancakeEventRef } from '../integrations/pancake/pancake-webhook-dedupe';
 import { PUSH_ERROR_KIND } from '../integrations/pancake/pancake-push-error';
+import { pushRetryGateDecision } from '../integrations/pancake/pancake-order.service';
 import { GOMDON_EVENT_STATUS } from '../integrations/gomdon/gomdon-webhook.service';
 import { GOMDON_STATE } from '../integrations/gomdon/gomdon-status';
 import { pancakeUnsyncedWhere, recyclingAttentionWhere } from '../admin/admin-order-filter';
@@ -387,7 +388,7 @@ export class OpsHealthService {
       failedEvents,
       unsynced,
       stuck,
-      stuckOrders,
+      stuckRows,
       attention,
       attentionOrders,
       catalog,
@@ -438,6 +439,16 @@ export class OpsHealthService {
             pancakeLastAttemptAt: true,
             pancakeSyncError: true,
             pancakeErrorKind: true,
+            // Chỉ để tính cờ "Đẩy lại Pancake" (pushRetryGateDecision cần đủ cột của cổng đẩy); không trả ra ngoài.
+            type: true,
+            fulfiller: true,
+            paymentMethod: true,
+            paymentStatus: true,
+            hasRecyclingPickup: true,
+            gomdonOrderId: true,
+            gomdonPartnerCode: true,
+            gomdonStatus: true,
+            items: { select: { backorderedQty: true } },
           },
         }),
         this.prisma.order.count({ where: { pancakeAttentionAt: { not: null } } }),
@@ -456,6 +467,11 @@ export class OpsHealthService {
           select: { code: true },
         }),
       ]);
+    // Cùng vị từ với retryPushByAdmin và danh sách đơn của admin: web chọn câu hướng dẫn STALE theo cờ, không tự suy lại từ cột.
+    const stuckOrders = stuckRows.map(({ type, fulfiller, paymentMethod, paymentStatus, hasRecyclingPickup, gomdonOrderId, gomdonPartnerCode, gomdonStatus, items, ...shown }) => {
+      const retry = pushRetryGateDecision({ ...shown, pancakeOrderId: null, type, fulfiller, paymentMethod, paymentStatus, hasRecyclingPickup, gomdonOrderId, gomdonPartnerCode, gomdonStatus, items });
+      return { ...shown, pancakeRetry: retry.kind, pancakeRetryWaitingFor: retry.kind === 'WAIT' ? retry.waitingFor : null };
+    });
     const pushErrors = tallyPushErrors(pushErrorGroups);
     const lastWebhook = lastByStatus.reduce<Date | null>((m, r) => (r && (!m || r.receivedAt > m) ? r.receivedAt : m), null);
     const failedRefs = await this.pancakeEventRefs(failedEvents.map((e) => e.id));

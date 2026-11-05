@@ -262,6 +262,36 @@ describe('OpsHealthTab — việc cụ thể cần xử lý (R2-PLATFORM-1, R2-A
     expect(text).not.toContain('vẫn tự thử lại');
   });
 
+  it('đơn STALE ở danh sách đơn kẹt: câu theo cờ pancakeRetry của API (NOW bảo bấm, WAIT nêu việc chờ, NEVER không bảo bấm), API cũ không cờ thì như NOW', async () => {
+    const base = HEALTH.pancake.stuckOrders[0]!;
+    const stale = { ...base, pancakePushStatus: 'STALE', pancakeSyncError: null };
+    const health = {
+      ...HEALTH,
+      pancake: {
+        ...HEALTH.pancake,
+        stuck: 4,
+        stuckOrders: [
+          { ...stale, id: 'k1', code: 'TUBUNOW', pancakeRetry: 'NOW' },
+          { ...stale, id: 'k2', code: 'TUBUWAIT', pancakeRetry: 'WAIT', pancakeRetryWaitingFor: 'vận đơn Gomdon' },
+          { ...stale, id: 'k3', code: 'TUBUNEVER', pancakeRetry: 'NEVER' },
+          { ...stale, id: 'k4', code: 'TUBUOLD' },
+        ],
+      },
+    };
+    vi.stubGlobal('fetch', vi.fn(mockFetch({ '/admin/ops/health': { body: health } }).fn));
+    const c = await mount(<OpsHealthTab onOpenOrder={vi.fn()} />);
+    const rows = Array.from(c.querySelectorAll('section[aria-label="Đơn kẹt"] li')).map((li) => li.textContent ?? '');
+    const row = (code: string) => rows.find((r) => r.includes(code))!;
+    expect(row('TUBUNOW')).toContain('đã ngừng tự đẩy');
+    expect(row('TUBUNOW')).toContain('bấm "Đẩy lại Pancake"');
+    expect(row('TUBUNOW')).not.toContain('CHƯA đẩy lại được');
+    expect(row('TUBUWAIT')).toContain('đang chờ vận đơn Gomdon');
+    expect(row('TUBUWAIT')).toContain('CHƯA đẩy lại được');
+    expect(row('TUBUNEVER')).toContain('không có nút đẩy lại');
+    expect(row('TUBUNEVER')).not.toContain('bấm "Đẩy lại Pancake"');
+    expect(row('TUBUOLD')).toContain('bấm "Đẩy lại Pancake"');
+  });
+
   it('API cũ chưa trả pushErrors thì không hiện dòng loại lỗi', async () => {
     vi.stubGlobal('fetch', vi.fn(mockFetch({ '/admin/ops/health': { body: HEALTH } }).fn));
     const c = await mount(<OpsHealthTab onOpenOrder={vi.fn()} />);

@@ -66,12 +66,7 @@ const clock = (iso: string) => formatDateTime(iso).slice(0, 5);
 /** Câu hướng dẫn cho admin theo loại lỗi đẩy; null khi đơn đã lên Pancake hoặc chưa có loại lỗi. */
 export function pancakeErrorGuide(order: AdminOrder): PancakeErrorGuide | null {
   if (order.pancakeOrderId) return null;
-  if (order.pancakePushStatus === 'STALE') {
-    const retry = pancakeRetryDecision(order);
-    const text =
-      retry.kind === 'NOW' ? PANCAKE_STALE_GUIDE : retry.kind === 'WAIT' ? pancakeStaleWaitingGuide(retry.waitingFor) : PANCAKE_STALE_NO_RETRY_GUIDE;
-    return { kind: 'STALE', configBlocked: false, text };
-  }
+  if (order.pancakePushStatus === 'STALE') return { kind: 'STALE', configBlocked: false, text: pancakeStaleGuideText(order) };
   if (!order.pancakeErrorKind || !KIND_LABEL[order.pancakeErrorKind]) return null;
   const kind = order.pancakeErrorKind;
   switch (kind) {
@@ -114,13 +109,13 @@ export function pancakeErrorGuide(order: AdminOrder): PancakeErrorGuide | null {
  * Đơn đại lý còn hàng đặt trước: chỉ lên kho khi đủ hàng (API: dealer-awaiting-stock.ts). Có dòng hàng thì tin dòng
  * hàng — cờ WAITING_STOCK có thể còn sót sau khi đã lấp đủ mà lệnh đẩy chưa chạy.
  */
-function awaitingStock(order: AdminOrder): boolean {
+function awaitingStock(order: Pick<AdminOrder, 'type' | 'items' | 'pancakePushStatus'>): boolean {
   if (!order.items) return order.pancakePushStatus === 'WAITING_STOCK';
   return order.type === 'DEALER' && order.items.some((i) => (i.backorderedQty ?? 0) > 0);
 }
 
 /** Đơn gian hàng đối tác tự giao: kho Tubu không giao nên không bao giờ lên Pancake (API chặn đẩy/huỷ). */
-export function isMerchantFulfilled(order: AdminOrder): boolean {
+export function isMerchantFulfilled(order: Pick<AdminOrder, 'fulfiller'>): boolean {
   return order.fulfiller === 'MERCHANT';
 }
 
@@ -163,11 +158,15 @@ export function pancakeSyncState(order: AdminOrder): PancakeSyncState | null {
   }
 }
 
+/** Phần của đơn mà quyết định "Đẩy lại Pancake" cần: chi tiết đơn có đủ, danh sách đơn kẹt của Sức khoẻ hệ thống chỉ có vài cột. */
+export type PancakeRetryInput = Pick<AdminOrder, 'status' | 'pancakePushStatus' | 'pancakeRetry' | 'pancakeRetryWaitingFor'> &
+  Partial<Pick<AdminOrder, 'pancakeOrderId' | 'fulfiller' | 'type' | 'items'>>;
+
 /**
  * "Đẩy lại Pancake" có nhận đơn không. API quyết (`pancakeRetry`, cùng vị từ với retryPushByAdmin: cổng đẩy theo trạng thái đơn, thanh toán,
  * hàng đặt trước, vận đơn Gomdon), web không tự suy lại. API cũ chưa trả cờ thì suy từ các cột đã có (không thấy được chờ vận đơn Gomdon).
  */
-function pancakeRetryDecision(order: AdminOrder): { kind: 'NOW' } | { kind: 'WAIT'; waitingFor: string } | { kind: 'NEVER' } {
+function pancakeRetryDecision(order: PancakeRetryInput): { kind: 'NOW' } | { kind: 'WAIT'; waitingFor: string } | { kind: 'NEVER' } {
   if (order.pancakeRetry === 'NOW') return { kind: 'NOW' };
   if (order.pancakeRetry === 'WAIT') return { kind: 'WAIT', waitingFor: order.pancakeRetryWaitingFor ?? 'việc khác' };
   if (order.pancakeRetry === 'NEVER') return { kind: 'NEVER' };
@@ -175,6 +174,13 @@ function pancakeRetryDecision(order: AdminOrder): { kind: 'NOW' } | { kind: 'WAI
   if (order.pancakePushStatus === 'WAITING_PAYMENT') return { kind: 'WAIT', waitingFor: 'khách thanh toán' };
   if (awaitingStock(order)) return { kind: 'WAIT', waitingFor: 'đủ hàng đặt trước' };
   return { kind: 'NOW' };
+}
+
+/** Câu hướng dẫn đơn STALE theo quyết định "Đẩy lại"; MỘT hàm cho chi tiết đơn (pancakeErrorGuide) và danh sách đơn kẹt (ops-health-tab). */
+export function pancakeStaleGuideText(order: PancakeRetryInput): string {
+  const retry = pancakeRetryDecision(order);
+  if (retry.kind === 'NOW') return PANCAKE_STALE_GUIDE;
+  return retry.kind === 'WAIT' ? pancakeStaleWaitingGuide(retry.waitingFor) : PANCAKE_STALE_NO_RETRY_GUIDE;
 }
 
 export function canRetryPancakePush(order: AdminOrder): boolean {

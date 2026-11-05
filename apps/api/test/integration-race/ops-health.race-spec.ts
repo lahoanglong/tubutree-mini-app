@@ -97,6 +97,23 @@ describe('Sức khoẻ vận hành + việc cần xử lý (real Postgres)', () 
     expect((await health.snapshot()).problems.map((p) => p.key)).not.toContain('pancake.catalog');
   });
 
+  it('đơn kẹt mang cờ "Đẩy lại Pancake" (NOW/WAIT) tính từ cột thật của cổng đẩy, không lộ cột phụ', async () => {
+    const u = await createUser(prisma, {});
+    // Cũ nhất trước và cắt ở STUCK_LIST: dùng ngày rất cũ, mỗi đơn một ngày, để đơn kẹt của spec khác không đẩy chúng ra ngoài.
+    const day = (n: number) => new Date(Date.UTC(1999, 0, n));
+    const now = await createOrder(prisma, { userId: u.id, pancakePushStatus: 'STALE', createdAt: day(1) });
+    const payment = await createOrder(prisma, { userId: u.id, pancakePushStatus: 'STALE', paymentMethod: 'ZALOPAY', paymentStatus: 'UNPAID', createdAt: day(2) });
+    const gomdon = await createOrder(prisma, { userId: u.id, pancakePushStatus: 'STALE', hasRecyclingPickup: true, gomdonStatus: 'CREATING', createdAt: day(3) });
+    const s = await health.snapshot();
+    const byCode = new Map(s.pancake.stuckOrders.map((o) => [o.code, o as Record<string, unknown>]));
+    expect([now, payment, gomdon].map((o) => [byCode.get(o.code)?.pancakeRetry, byCode.get(o.code)?.pancakeRetryWaitingFor])).toEqual([
+      ['NOW', null],
+      ['WAIT', 'khách thanh toán'],
+      ['WAIT', 'vận đơn Gomdon'],
+    ]);
+    for (const o of byCode.values()) expect(Object.keys(o)).not.toEqual(expect.arrayContaining(['items', 'fulfiller', 'paymentMethod']));
+  });
+
   it('nhãn đơn của webhook lỗi lấy bằng SQL gọn khớp pancakeEventRef trên nguyên rawPayload, mọi dạng payload', async () => {
     const bigNote = `${'x'.repeat(50_000)} Order code: TUBU7001`;
     const payloads: Prisma.InputJsonValue[] = [
