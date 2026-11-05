@@ -1,3 +1,5 @@
+import { CAMPAIGN_ENTITY_SLUG_MAX } from '@tubutree/shared-types';
+
 /** Bảng ô gõ chữ ở màn quản trị → trường DTO và trần độ dài. Spec `input-limits.spec.ts` đối chiếu với mã nguồn API. */
 /** `dto` dạng `đường/dẫn.ts:Lớp.trường`, đọc từ mã nguồn API (`@MaxLength`, `@Length` hoặc `@Matches`). `stricter`: ô chặn thấp hơn DTO có chủ đích. */
 export const INPUT_LIMITS: Record<string, { dto: string; max: number; stricter?: string }> = {
@@ -73,8 +75,8 @@ export const INPUT_LIMITS: Record<string, { dto: string; max: number; stricter?:
   "components/admin/campaign-form.tsx::title": { dto: "apps/api/src/modules/campaigns/dto/campaign.dto.ts:CreateCampaignDto.title", max: 120 },
   "components/admin/campaign-form.tsx::subtitle": { dto: "apps/api/src/modules/campaigns/dto/campaign.dto.ts:CreateCampaignDto.subtitle", max: 200 },
   "components/admin/campaign-form.tsx::slug": { dto: "apps/api/src/modules/campaigns/dto/campaign.dto.ts:CreateCampaignDto.slug", max: 80 },
-  "components/admin/campaign-form.tsx::linkValue": { dto: "apps/api/src/modules/campaigns/dto/campaign.dto.ts:CreateCampaignDto.linkValue", max: 200 },
-  "components/admin/campaign-form.tsx::linkValue#2": { dto: "apps/api/src/modules/campaigns/dto/campaign.dto.ts:CreateCampaignDto.linkValue", max: 200 },
+  "components/admin/campaign-form.tsx::linkValue": { dto: "apps/api/src/modules/campaigns/dto/campaign.dto.ts:CreateCampaignDto.linkValue", max: CAMPAIGN_ENTITY_SLUG_MAX },
+  "components/admin/campaign-form.tsx::linkValue#2": { dto: "apps/api/src/modules/campaigns/dto/campaign.dto.ts:CreateCampaignDto.linkValue", max: CAMPAIGN_ENTITY_SLUG_MAX },
   "components/admin/category-tree-panel.tsx::draft": { dto: "apps/api/src/modules/catalog/category-admin.controller.ts:CreateCategoryDto.name", max: 60 },
   "components/admin/category-tree-panel.tsx::draft#2": { dto: "apps/api/src/modules/catalog/category-admin.controller.ts:UpdateCategoryDto.name", max: 60 },
   "components/admin/commission-rates-tab.tsx::typed": { dto: "apps/api/src/modules/affiliate/commission-admin.controller.ts:ListCommissionRatesQuery.q", max: 64 },

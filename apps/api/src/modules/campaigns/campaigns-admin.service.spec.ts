@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { CAMPAIGN_ENTITY_SLUG_MAX } from '@tubutree/shared-types';
 import { ImageRegistryStale } from '../catalog/image-registry-stale';
 import { CampaignsAdminService } from './campaigns-admin.service';
 
@@ -156,8 +157,8 @@ describe('CampaignsAdminService: đích banner phải tồn tại', () => {
     expect(prisma.campaign.create).toHaveBeenCalledTimes(1);
   });
 
-  it('slug sản phẩm 200 ký tự (slug Pancake theo tên đầy đủ) tạo và sửa được, 201 ký tự thì 400', async () => {
-    const long = `a${'b'.repeat(199)}`;
+  it('slug sản phẩm dài CAMPAIGN_ENTITY_SLUG_MAX ký tự tạo và sửa được, MAX + 1 thì 400', async () => {
+    const long = `a${'b'.repeat(CAMPAIGN_ENTITY_SLUG_MAX - 1)}`;
     const { svc, prisma } = setup({ productSlugs: [long] });
     await svc.create(input({ linkType: 'PRODUCT', linkValue: long }), NOW);
     expect(prisma.campaign.create.mock.calls[0][0].data).toMatchObject({ linkType: 'PRODUCT', linkValue: long });

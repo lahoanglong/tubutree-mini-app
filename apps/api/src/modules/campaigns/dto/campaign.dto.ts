@@ -1,4 +1,5 @@
 import { ArrayMaxSize, IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Matches, Max, MaxLength, Min } from 'class-validator';
+import { CAMPAIGN_ENTITY_SLUG_MAX } from '@tubutree/shared-types';
 import { IsImageRef } from '../../../common/uploaded-image';
 import { OptionalNotNull } from '../../../common/decorators/optional-not-null.decorator';
 import { Trim } from '../../../common/decorators/trim.decorator';
@@ -18,7 +19,7 @@ export class CreateCampaignDto {
   @IsIn([...CAMPAIGN_PLACEMENTS]) placement!: (typeof CAMPAIGN_PLACEMENTS)[number];
   @Trim() @IsString() @IsNotEmpty() @IsImageRef() image!: string;
   @IsOptional() @IsIn([...CAMPAIGN_LINK_TYPES]) linkType?: (typeof CAMPAIGN_LINK_TYPES)[number];
-  @IsOptional() @IsString() @MaxLength(200) linkValue?: string;
+  @IsOptional() @IsString() @MaxLength(CAMPAIGN_ENTITY_SLUG_MAX) linkValue?: string;
   @IsOptional() @IsIn([...CAMPAIGN_AUDIENCES]) audience?: (typeof CAMPAIGN_AUDIENCES)[number];
   @IsDateString() startAt!: string;
   @IsDateString() endAt!: string;
@@ -33,7 +34,7 @@ export class UpdateCampaignDto {
   @OptionalNotNull() @IsIn([...CAMPAIGN_PLACEMENTS]) placement?: (typeof CAMPAIGN_PLACEMENTS)[number];
   @OptionalNotNull() @Trim() @IsString() @IsNotEmpty() @IsImageRef() image?: string;
   @OptionalNotNull() @IsIn([...CAMPAIGN_LINK_TYPES]) linkType?: (typeof CAMPAIGN_LINK_TYPES)[number];
-  @IsOptional() @IsString() @MaxLength(200) linkValue?: string | null;
+  @IsOptional() @IsString() @MaxLength(CAMPAIGN_ENTITY_SLUG_MAX) linkValue?: string | null;
   @OptionalNotNull() @IsIn([...CAMPAIGN_AUDIENCES]) audience?: (typeof CAMPAIGN_AUDIENCES)[number];
   @OptionalNotNull() @IsDateString() startAt?: string;
   @OptionalNotNull() @IsDateString() endAt?: string;

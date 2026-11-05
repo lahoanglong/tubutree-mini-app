@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { CAMPAIGN_INTERNAL_TARGETS } from '@tubutree/shared-types';
+import { CAMPAIGN_ENTITY_SLUG_MAX, CAMPAIGN_INTERNAL_TARGETS } from '@tubutree/shared-types';
 import { getMetadataStorage } from 'class-validator';
 import { CreateCampaignDto } from './dto/campaign.dto';
 import { assertWindow, campaignStatus, normalizeLink, slugFromTitle } from './campaign-admin-rules';
@@ -31,11 +31,11 @@ describe('normalizeLink', () => {
     expect(normalizeLink('CATEGORY', 'nha-bep')).toBe('nha-bep');
     for (const bad of [undefined, null, '', 'có dấu', 'a b', '-x']) expect(() => normalizeLink('PRODUCT', bad)).toThrow(BadRequestException);
   });
-  it('slug sản phẩm và danh mục dài tới 200 ký tự như @MaxLength của DTO (slug Pancake theo tên đầy đủ) qua được; 201 thì 400', () => {
+  it('slug sản phẩm và danh mục dài tới CAMPAIGN_ENTITY_SLUG_MAX, bằng @MaxLength của DTO, qua được; MAX + 1 thì 400', () => {
     const cap = (getMetadataStorage() as unknown as { getTargetValidationMetadatas: (t: unknown, s: unknown, a: boolean, b: boolean) => Array<{ propertyName: string; name?: string; constraints?: number[] }> })
       .getTargetValidationMetadatas(CreateCampaignDto, null, false, false)
       .find((m) => m.propertyName === 'linkValue' && m.name === 'maxLength')!.constraints![0]!;
-    expect(cap).toBe(200);
+    expect(cap).toBe(CAMPAIGN_ENTITY_SLUG_MAX);
     const slug = (n: number) => `a${'b-'.repeat(n).slice(0, n - 1)}`;
     for (const type of ['PRODUCT', 'CATEGORY'] as const) {
       expect(normalizeLink(type, slug(cap))).toHaveLength(cap);

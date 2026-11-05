@@ -1,5 +1,8 @@
 import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { CAMPAIGN_ENTITY_SLUG_MAX, CAMPAIGN_ENTITY_SLUG_RE } from '@tubutree/shared-types';
+import { getMetadataStorage } from 'class-validator';
+import { CreateMerchantProductDto } from './merchant.controller';
 import { CTV_CANNOT_CREATE_PRODUCT, MerchantService } from './merchant.service';
 import {
   linkTubuFulfilledVariation,
@@ -105,6 +108,22 @@ describe('MerchantService — đăng sản phẩm (SELLER-1, D4)', () => {
     expect(data.variations.create.stock).toBe(12);
     expect(JSON.stringify(data)).not.toContain('MCH_');
     expect(notify).toHaveBeenCalledWith('admin-1', 'OPS_MERCHANT_PRODUCT_PENDING', expect.objectContaining({ mode: 'Đối tác tự giao' }));
+  });
+
+  it('slug sinh từ tên dài nhất DTO cho phép cộng hậu tố thời gian (kể cả đến năm 2100) vừa CAMPAIGN_ENTITY_SLUG_MAX và khớp CAMPAIGN_ENTITY_SLUG_RE, để chiến dịch gắn được vào sản phẩm đối tác', async () => {
+    const nameMax = (getMetadataStorage() as unknown as { getTargetValidationMetadatas: (t: unknown, s: unknown, a: boolean, b: boolean) => Array<{ propertyName: string; name?: string; constraints?: number[] }> })
+      .getTargetValidationMetadatas(CreateMerchantProductDto, null, false, false)
+      .find((m) => m.propertyName === 'name' && m.name === 'maxLength')!.constraints![0]!;
+    const year2100 = jest.spyOn(Date, 'now').mockReturnValue(Date.UTC(2100, 0, 1));
+    try {
+      const { svc, productCreate } = build();
+      await svc.createProduct('u1', { ...BASE, name: 'a'.repeat(nameMax) });
+      const slug = productCreate.mock.calls[0][0].data.slug as string;
+      expect(slug.length).toBeLessThanOrEqual(CAMPAIGN_ENTITY_SLUG_MAX);
+      expect(slug).toMatch(CAMPAIGN_ENTITY_SLUG_RE);
+    } finally {
+      year2100.mockRestore();
+    }
   });
 
   it('không nhập tồn kho → 0, không tự hứa 100 sản phẩm', async () => {

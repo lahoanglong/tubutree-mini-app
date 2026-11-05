@@ -31,7 +31,7 @@ function constValue(name: string, localText: string): number | null {
   const re = new RegExp(`(?:const|readonly)\\s+${name}\\s*=\\s*([\\d_]+)`);
   const local = localText.match(re);
   if (local) return Number(local[1]!.replace(/_/g, ''));
-  for (const f of walk(join(SRC, 'lib'))) {
+  for (const f of [...walk(join(SRC, 'lib')), ...walk(resolve(REPO, 'packages/shared-types/src'))]) {
     if (!f.endsWith('.ts')) continue;
     const m = readFileSync(f, 'utf8').match(re);
     if (m) return Number(m[1]!.replace(/_/g, ''));
@@ -112,7 +112,7 @@ function dtoCap(spec: string): number | null {
 let apiCache: string[] | null = null;
 /** Hằng số trần có thể nằm ở file khác của API (vd DEALER_PRICE_CSV_MAX_LENGTH): quét một lần. */
 function apiSources(): string[] {
-  apiCache ??= walk(resolve(REPO, 'apps/api/src'))
+  apiCache ??= [...walk(resolve(REPO, 'apps/api/src')), ...walk(resolve(REPO, 'packages/shared-types/src'))]
     .filter((f) => f.endsWith('.ts') && !f.endsWith('.spec.ts'))
     .map((f) => readFileSync(f, 'utf8'));
   return apiCache;

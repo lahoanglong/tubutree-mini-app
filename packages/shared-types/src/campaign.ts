@@ -18,3 +18,11 @@ export const CAMPAIGN_INTERNAL_TARGETS: readonly CampaignInternalTarget[] = [
   { value: '/group-buy', label: 'Mua chung', web: '/mua-chung' },
   { value: '/rewards', label: 'Đổi quà', web: '/kho-qua' },
 ];
+
+/**
+ * Độ dài tối đa slug sản phẩm/danh mục gắn vào chiến dịch (cột linkValue). Slug sản phẩm đối tác là tên (≤ 200 ký tự) + `-` + mã thời gian
+ * (≤ 9 ký tự), slug Pancake là tên + `-` + 6 ký tự, slug danh mục là tên (≤ 60) + hậu tố trùng: 240 chứa trọn mọi slug sinh từ tên trong trần DTO.
+ * API (regex, @MaxLength của DTO), app-core (campaignHref) và ô nhập ở admin đều đọc hằng này, không viết số tay.
+ */
+export const CAMPAIGN_ENTITY_SLUG_MAX = 240;
+export const CAMPAIGN_ENTITY_SLUG_RE = new RegExp(`^[A-Za-z0-9][A-Za-z0-9_-]{0,${CAMPAIGN_ENTITY_SLUG_MAX - 1}}$`);
