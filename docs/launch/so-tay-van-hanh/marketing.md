@@ -28,7 +28,7 @@ Bấm "Tạo voucher". Khách nhập mã ở ô "Nhập mã giảm giá" khi tha
 
 **Nội dung bán hàng cho CTV.** **Nội dung › Bộ nội dung CTV** › chọn sản phẩm, điền "Bài mẫu (mỗi dòng 1 caption)", "USP / điểm bán hàng (mỗi dòng 1 ý)", "Video URL (mỗi dòng 1 link)", FAQ, bấm "Lưu Content Kit". CTV mở trang sản phẩm trong Mini App, bấm "Nội dung bán hàng" và thấy bài mẫu đã gắn sẵn link giới thiệu của họ. Sản phẩm mới ra: làm Content Kit trong tuần đầu.
 
-**Khoá học cho CTV.** **Nội dung › Học viện CTV** › "Tạo khoá học mới": tiêu đề, thứ tự, ảnh bìa, mô tả, "Tạo khoá học". Bấm "Quản lý" để thêm bài (bài viết hoặc video). Khoá ở trạng thái "Nháp" đến khi bấm "Đăng (publish)". CTV thấy trong Mini App mục "CTV Academy".
+**Khoá học cho CTV.** **Nội dung › Học viện CTV** › "Tạo khoá học mới": tiêu đề, thứ tự, ảnh bìa, mô tả, "Tạo khoá học". Bấm "Quản lý" để thêm bài (bài viết hoặc video). Khoá ở trạng thái "Nháp" đến khi bấm "Đăng". CTV thấy trong Mini App mục "CTV Academy".
 
 **Câu hỏi thường gặp.** **Nội dung › Câu hỏi thường gặp** › điền "Nhóm", "Câu hỏi", "Câu trả lời", "Thứ tự hiển thị", bấm "Thêm câu hỏi". Trợ lý tư vấn trong app dùng các câu này để trả lời khách: viết đúng, ngắn, không hứa quá.
 

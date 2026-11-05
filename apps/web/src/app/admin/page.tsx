@@ -4309,7 +4309,7 @@ function CourseRow({ course }: { course: AdminCourse }) {
         <div className="mt-3 space-y-4 border-t border-stone-200 pt-3">
           <div className="flex flex-wrap gap-2">
             <button onClick={() => togglePublish.mutate()} disabled={togglePublish.isPending} className={BTN_SECONDARY}>
-              {course.isPublished ? 'Chuyển về nháp' : 'Đăng (publish)'}
+              {course.isPublished ? 'Chuyển về nháp' : 'Đăng'}
             </button>
             <button
               onClick={() => askDelete({

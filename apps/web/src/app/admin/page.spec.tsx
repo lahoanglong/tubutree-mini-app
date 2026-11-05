@@ -2582,7 +2582,7 @@ describe('admin/page — tab Academy', () => {
     await openCourse(container);
     expect(btn(container, 'Thu gọn')).toBeTruthy();
 
-    const publish = btn(container, 'Đăng (publish)');
+    const publish = btn(container, 'Đăng');
     expect(publish.className).toContain('border-stone-450');
     mocks.updateAcademyCourse.mockResolvedValue({});
     click(publish);
