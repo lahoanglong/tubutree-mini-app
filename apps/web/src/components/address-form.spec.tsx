@@ -253,9 +253,14 @@ describe('AddressForm — khổ điện thoại giống Mini App', () => {
   it('dưới md: không khung viền quanh form và tiêu đề chỉ để trình đọc màn hình (Mini không có hai thứ này)', async () => {
     const c = await mount();
     const form = c.querySelector('form')!;
-    expect(form.className).toContain('max-md:border-0');
-    expect(form.className).toContain('max-md:p-0');
-    expect(c.querySelector('form h3')!.className).toContain('max-md:sr-only');
+    // Khung viết kiểu mobile-first: lớp không tiền tố là khổ điện thoại (không viền, không đệm), viền và đệm chỉ bật từ md.
+    const formClasses = form.className.split(/\s+/);
+    expect(formClasses).not.toContain('border');
+    expect(formClasses).not.toContain('p-3');
+    expect(formClasses).toEqual(expect.arrayContaining(['md:border', 'md:p-3']));
+    const headingClasses = c.querySelector('form h3')!.className.split(/\s+/);
+    expect(headingClasses).toContain('sr-only');
+    expect(headingClasses).toContain('md:not-sr-only');
   });
 
   it('nhãn và lời báo lỗi cỡ 13px (text-caption), không dùng text-xs 12px', async () => {

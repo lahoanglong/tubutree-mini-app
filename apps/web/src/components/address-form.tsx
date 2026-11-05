@@ -104,7 +104,7 @@ export function AddressForm({
       ref={formRef}
       noValidate
       aria-label={title}
-      className="space-y-3 rounded-control border border-stone-300 p-3 max-md:rounded-none max-md:border-0 max-md:p-0"
+      className="space-y-3 md:rounded-control md:border md:border-stone-300 md:p-3"
       onSubmit={(e) => {
         e.preventDefault();
         setSubmitted(true);
@@ -115,7 +115,7 @@ export function AddressForm({
         save.mutate(addressPayload(form, geo));
       }}
     >
-      <Heading className="font-semibold text-stone-900 max-md:sr-only">{title}</Heading>
+      <Heading className="sr-only font-semibold text-stone-900 md:not-sr-only">{title}</Heading>
       <TextField
         label="Người nhận"
         value={form.recipient}

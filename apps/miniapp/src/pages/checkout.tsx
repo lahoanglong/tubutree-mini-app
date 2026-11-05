@@ -14,6 +14,7 @@ import { trackEvent } from '../services/analytics';
 import { useAuthStore } from '../store/auth';
 import { AuthPhaseView } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
+import { useNotify } from '../hooks/use-notify';
 import { useStorefrontContext } from '../store/storefront-context';
 import { AddressSection } from '../components/checkout/address-section';
 import { OrderSuccess } from '../components/checkout/order-success';
@@ -88,6 +89,7 @@ export default function CheckoutPage() {
   const navigate = useNavigate();
   const [policy, setPolicy] = useState<WebPolicySlug | null>(null);
   const { openSnackbar } = useSnackbar();
+  const { notify } = useNotify();
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
   const phase = useAuthPhase();
@@ -215,8 +217,8 @@ export default function CheckoutPage() {
     }
     if (!quote.isSuccess || quote.isFetching || !quote.data || quote.dataUpdatedAt <= priceAcceptedAt) return;
     setPriceAcceptedAt(null);
-    openSnackbar({ text: fillCopy('checkout.priceUpdated', { price: formatVnd(quote.data.total) }), type: 'success' });
-  }, [priceAcceptedAt, quote.isError, quote.isSuccess, quote.isFetching, quote.data, quote.dataUpdatedAt, openSnackbar]);
+    notify({ text: fillCopy('checkout.priceUpdated', { price: formatVnd(quote.data.total) }), type: 'success' });
+  }, [priceAcceptedAt, quote.isError, quote.isSuccess, quote.isFetching, quote.data, quote.dataUpdatedAt, notify]);
 
   const checkoutItems = itemIds
     ? (cart.data?.items ?? []).filter((it) => itemIds.includes(it.id))
@@ -263,11 +265,11 @@ export default function CheckoutPage() {
   useEffect(() => {
     if (focusTick === 0) return;
     const target = !addressId
-      ? (addressRef.current?.querySelector<HTMLElement>('button, [role="radio"], input') ?? addressRef.current)
+      ? (addressRef.current?.querySelector<HTMLElement>('button, [role=radio], input') ?? addressRef.current)
       : invoiceRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]');
     target?.focus();
     target?.scrollIntoView?.({ block: 'center' });
-  }, [focusTick]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [focusTick]);
 
 
   // Đơn 0đ: BE ép COD + xác nhận luôn (không thu tiền). Gửi đúng phương thức đó và không mở màn QR chuyển
@@ -453,7 +455,7 @@ export default function CheckoutPage() {
       void queryClient.invalidateQueries({ queryKey: ['cart'] });
       void queryClient.invalidateQueries({ queryKey: ['quote'] });
     },
-    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e: unknown) => notify({ text: getErrorMessage(e), type: 'error' }),
   });
 
   // ── Success screen ──
@@ -636,12 +638,12 @@ export default function CheckoutPage() {
         />
       </div>
       {placeAttempted && !addressId && (
-        <div id="checkout-address-error" role="alert" style={{ padding: '8px 16px 0', background: 'var(--color-bg-surface)' }}>
+        <Box id="checkout-address-error" role="alert" px={4} pt={2} style={{ background: 'var(--color-bg-surface)' }}>
           <DsText variant="caption" tone="danger" as="div">
             <span aria-hidden="true">⚠ </span>
             {fillCopy('checkout.addressNeeded')}
           </DsText>
-        </div>
+        </Box>
       )}
 
       {/* ── Sản phẩm sẽ mua ── (liệt kê món; nếu checkout TẬP CON thì chỉ hiện món đã chọn) */}
