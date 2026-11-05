@@ -684,7 +684,7 @@ export default function ProductDetailPage() {
 
         <PointsEarnLine goods={line.total} authStatus={status} tierId={user?.tierId} />
 
-        {inStock && (
+        {inStock && !unavailable && (
           <Text size="xSmall" data-testid={lowStock ? 'pdp-low-stock' : 'pdp-stock-label'} style={{ color: lowStock ? 'var(--color-text-warning)' : 'var(--color-text-secondary)', marginTop: 4 }}>
             {vi.product.lowStock(selected!.stock)}
           </Text>

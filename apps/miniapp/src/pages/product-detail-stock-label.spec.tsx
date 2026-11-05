@@ -50,14 +50,15 @@ vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 import ProductDetailPage from './product-detail';
 
 const FUTURE = { v7_startTransition: true, v7_relativeSplatPath: true } as const;
-const productWith = (stock: number) => ({
+const productWith = (stock: number, extra: Record<string, unknown> = {}) => ({
   id: 'p1', slug: 'xa-phong', brand: 'Cô Lan', name: 'Xà phòng sả chanh', shortDesc: null, description: 'Mô tả',
   images: [], thumbnail: null, basePrice: 100_000, salePrice: null, certifications: [], ingredients: null, sold: 0,
   variations: [{ id: 'v1', sku: 'S1', name: 'Mặc định', attributes: {}, retailPrice: 100_000, salePrice: null, stock }],
+  ...extra,
 });
 
-async function openPdp(stock: number) {
-  mocks.fetchProduct.mockResolvedValue(productWith(stock));
+async function openPdp(stock: number, extra: Record<string, unknown> = {}) {
+  mocks.fetchProduct.mockResolvedValue(productWith(stock, extra));
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={qc}>
@@ -104,5 +105,13 @@ describe('ProductDetailPage: nhãn tồn kho thông minh', () => {
     await screen.findByText('Xà phòng sả chanh');
     expect(screen.queryByTestId('pdp-low-stock')).toBeNull();
     expect(screen.queryByTestId('pdp-stock-label')).toBeNull();
+  });
+
+  it('gian hàng tạm nghỉ: không có dòng tồn kho nào, kể cả tồn ảo (câu "Sẵn sàng giao ngay" mâu thuẫn với "chưa nhận đơn")', async () => {
+    await openPdp(99_999_988, { fulfiller: { kind: 'UNAVAILABLE', reason: 'STORE_PAUSED', name: 'Gốm Minh An' } });
+    await screen.findByText(/đang tạm nghỉ, chưa nhận đơn/);
+    expect(screen.queryByTestId('pdp-low-stock')).toBeNull();
+    expect(screen.queryByTestId('pdp-stock-label')).toBeNull();
+    expect(document.body.textContent).not.toContain('Sẵn sàng giao ngay');
   });
 });

@@ -523,6 +523,16 @@ describe('AddToCart — gian hàng chưa nhận đơn (R3-MERCHANT-3)', () => {
     expect(mocks.addToCart).not.toHaveBeenCalled();
     expect(mocks.push).not.toHaveBeenCalled();
   });
+
+  it('gian hàng tạm nghỉ thì không có dòng tồn kho nào ("Sẵn sàng giao ngay" mâu thuẫn với nút khoá), kể cả tồn ảo', async () => {
+    mocks.auth = { status: 'authenticated', initialized: true, user: { id: 'u1' } };
+    mocks.getProductStock.mockResolvedValue({ v1: 99_999_988, v2: 7 });
+    const { container } = mountBlocked();
+    await flush();
+    expect(container.querySelector('[data-testid="atc-stock-label"]')).toBeNull();
+    expect(container.querySelector('[data-testid="atc-low-stock"]')).toBeNull();
+    expect(container.textContent).not.toContain('Sẵn sàng giao ngay');
+  });
 });
 
 describe('AddToCart — khối mua xếp theo order cùng các khối khác của PDP ở điện thoại (như Mini App)', () => {
@@ -610,10 +620,14 @@ describe('AddToCart — chip phân loại hai dòng như Mini App', () => {
     mocks.getProductStock.mockResolvedValue({ v1: 245, v2: 99_999_988 });
     const { container } = mount();
     await flush();
-    const note = container.querySelector('[data-testid="atc-stock-label"]')!;
-    expect(note.textContent).toBe('Còn hàng');
-    expect(note.className).toContain('max-md:hidden');
-    expect(note.className).not.toContain('text-warning-fg');
+    const note = () => container.querySelector('[data-testid="atc-stock-label"]')!;
+    expect(note().textContent).toBe('Còn hàng');
+    expect(note().className).toContain('max-md:hidden');
+    expect(note().className).not.toContain('text-warning-fg');
+    click(byText(container, 'button', /500ml/));
+    await flush();
+    expect(note().textContent).toBe('Còn hàng — Sẵn sàng giao ngay');
+    expect(note().className).not.toContain('text-warning-fg');
     expect(container.textContent).not.toMatch(/99\.?999/);
   });
 });

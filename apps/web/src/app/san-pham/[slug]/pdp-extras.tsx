@@ -314,7 +314,7 @@ export function PdpLowStock({ slug, variations }: { slug: string; variations: { 
   if (stock <= 0) return null;
   const low = stock <= LOW_STOCK_NOTICE;
   return (
-    <p data-testid={low ? 'pdp-low-stock' : 'pdp-stock-label'} className={`mt-1 text-xs md:hidden ${low ? 'font-medium text-warning-fg' : 'text-stone-600'}`}>
+    <p data-testid={low ? 'pdp-low-stock' : 'pdp-stock-label'} className={`mt-1 text-xs md:hidden ${low ? 'font-medium text-warning-fg' : 'text-[var(--color-text-secondary)]'}`}>
       {stockText(stock)}
     </p>
   );
