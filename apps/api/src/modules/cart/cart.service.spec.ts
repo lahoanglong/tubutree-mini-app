@@ -111,7 +111,7 @@ describe('CartService guard tồn kho', () => {
     it('hàng Tubu giao không bị ảnh hưởng bởi trạng thái gian hàng', async () => {
       const tubu = { id: 'v1', isActive: true, stock: 3, product: { isActive: true, approvalStatus: 'APPROVED', name: 'X', fulfilment: 'TUBU', storefrontId: null, storefront: null } };
       const { svc } = build(tubu);
-      await expect(svc.addItem('u1', { variationId: 'v1', quantity: 5 })).rejects.toThrow('Còn 3 sản phẩm trong kho.');
+      await expect(svc.addItem('u1', { variationId: 'v1', quantity: 5 })).rejects.toThrow('Chỉ còn 3 sản phẩm.');
     });
   });
 
@@ -279,7 +279,7 @@ describe('CartService guard tồn kho', () => {
     } as unknown as PrismaService;
     const svc = new CartService(prisma, coupons, config, flash, analytics, combo);
     // đã có 2, thêm 2 = 4 > 3
-    await expect(svc.addItem('u1', { variationId: 'v1', quantity: 2 })).rejects.toThrow('Còn 3 sản phẩm trong kho.');
+    await expect(svc.addItem('u1', { variationId: 'v1', quantity: 2 })).rejects.toThrow('Chỉ còn 3 sản phẩm.');
     expect((prisma.cartItem!.upsert as jest.Mock)).not.toHaveBeenCalled();
   });
 
@@ -427,7 +427,7 @@ describe('CartService guard tồn kho', () => {
       },
     } as unknown as PrismaService;
     const svc = new CartService(prisma, coupons, config, flash, analytics, combo);
-    await expect(svc.updateItem('u1', 'it1', 10)).rejects.toThrow('Còn 5 sản phẩm trong kho.');
+    await expect(svc.updateItem('u1', 'it1', 10)).rejects.toThrow('Chỉ còn 5 sản phẩm.');
     expect((prisma.cartItem!.update as jest.Mock)).not.toHaveBeenCalled();
   });
 
@@ -637,6 +637,55 @@ describe('CartService guard tồn kho', () => {
       const l = (await cartWith(2, { allowance: 1, perUserLeft: 1, quotaLeft: 5 })).items[0]!;
       expect(l.isFlash).toBe(false);
       expect(l.flashLimitNotice).toBe('Giá Giờ vàng chỉ áp dụng tối đa 1 sản phẩm cho bạn. Giảm số lượng còn 1 để được giá Giờ vàng, hoặc mua 2 sản phẩm với giá thường.');
+    });
+  });
+
+  describe('Smart Stock: câu lỗi và payload giỏ không lộ tồn thật', () => {
+    const svcWithStock = (stock: number, inCartQty: number) => {
+      const prisma = {
+        cart: { upsert: jest.fn().mockResolvedValue({ id: 'c1' }) },
+        variation: { findUnique: jest.fn().mockResolvedValue({ id: 'v1', isActive: true, stock, product: { isActive: true, approvalStatus: 'APPROVED' } }) },
+        cartItem: { findUnique: jest.fn().mockResolvedValue({ id: 'it1', cartId: 'c1', quantity: inCartQty, variation: { stock } }), upsert: jest.fn(), update: jest.fn() },
+      } as unknown as PrismaService;
+      return new CartService(prisma, coupons, config, flash, analytics, combo);
+    };
+    const messageOf = (p: Promise<unknown>) => p.then(() => 'KHÔNG LỖI', (e: { message: string }) => e.message);
+
+    it.each([[21], [40], [500], [998]])('tồn %i (> 20): addItem vượt tồn báo chung chung, không ghi con số tồn', async (stock) => {
+      const msg = await messageOf(svcWithStock(stock, 2).addItem('u1', { variationId: 'v1', quantity: 999 }));
+      expect(msg).toBe('Số lượng này vượt số hàng đang có.');
+      expect(msg).not.toContain(String(stock));
+    });
+
+    it.each([[21], [40], [500], [99_999], [100_000], [99_999_988]])('tồn %i (> 20): updateItem vượt tồn báo chung chung, không ghi con số tồn', async (stock) => {
+      const msg = await messageOf(svcWithStock(stock, 1).updateItem('u1', 'it1', stock + 1));
+      expect(msg).toBe('Số lượng này vượt số hàng đang có.');
+      expect(msg).not.toMatch(/\d/);
+    });
+
+    it('tồn thấp đúng ngưỡng 20 vẫn ghi số, tồn 21 thì không (ranh giới)', async () => {
+      expect(await messageOf(svcWithStock(20, 0).updateItem('u1', 'it1', 21))).toBe('Chỉ còn 20 sản phẩm.');
+      expect(await messageOf(svcWithStock(21, 0).updateItem('u1', 'it1', 22))).toBe('Số lượng này vượt số hàng đang có.');
+    });
+
+    it('hết hàng (tồn 0) báo đã hết hàng, không có "Còn 0 sản phẩm"', async () => {
+      expect(await messageOf(svcWithStock(0, 0).addItem('u1', { variationId: 'v1', quantity: 1 }))).toBe('Sản phẩm đã hết hàng.');
+    });
+
+    it('payload giỏ: tồn ảo 99.999.988 bị kẹp ở 100.000, tồn thường giữ nguyên để client chặn nút +', async () => {
+      const row = (id: string, stock: number) => ({
+        id: `ci-${id}`,
+        variationId: id,
+        quantity: 1,
+        variation: { isActive: true, productId: `p-${id}`, salePrice: null, retailPrice: 50000, stock, name: id, product: { name: `SP ${id}`, slug: id, thumbnail: null, isActive: true, approvalStatus: 'APPROVED' } },
+      });
+      const prisma = {
+        cart: { upsert: jest.fn().mockResolvedValue({ id: 'c1' }), findUnique: jest.fn().mockResolvedValue({ id: 'c1', couponCode: null, items: [row('virtual', 99_999_988), row('plenty', 100_000), row('normal', 40)] }) },
+      } as unknown as PrismaService;
+      const flashSvc = { resolveEffective: jest.fn().mockResolvedValue(new Map()) } as unknown as FlashSaleService;
+      const cart = await new CartService(prisma, coupons, config, flashSvc, analytics, combo).getCart('u1');
+      expect(cart.items.map((i) => i.stock)).toEqual([100_000, 100_000, 40]);
+      expect(JSON.stringify(cart)).not.toContain('99999988');
     });
   });
 
@@ -1371,10 +1420,17 @@ describe('CartService.addItemsBatch (thêm nhiều món một transaction: hỏn
     expect(getCart).not.toHaveBeenCalled();
   });
 
-  it('vượt tồn nhưng còn hàng → câu nêu số còn lại', async () => {
+  it('vượt tồn thấp (≤ 20) → câu nêu số còn lại', async () => {
     const { svc } = setup([sellable('v1', 3)]);
     const body = await reject(svc.addItemsBatch('u1', [{ variationId: 'v1', quantity: 4 }], undefined));
-    expect(body).toMatchObject({ reason: 'STOCK', variationId: 'v1', message: 'SP v1 còn 3 sản phẩm. Chưa có món nào được thêm vào giỏ.' });
+    expect(body).toMatchObject({ reason: 'STOCK', variationId: 'v1', message: 'SP v1 chỉ còn 3 sản phẩm. Chưa có món nào được thêm vào giỏ.' });
+  });
+
+  it('vượt tồn cao (> 20) → câu KHÔNG nêu số tồn thật', async () => {
+    const { svc } = setup([sellable('v1', 40)]);
+    const body = await reject(svc.addItemsBatch('u1', [{ variationId: 'v1', quantity: 41 }], undefined));
+    expect(body).toMatchObject({ reason: 'STOCK', variationId: 'v1', message: 'SP v1: số lượng này vượt số hàng đang có. Chưa có món nào được thêm vào giỏ.' });
+    expect((body as { message: string }).message).not.toContain('40');
   });
 
   it('món không bán được (ngừng bán, chưa duyệt) hoặc không tồn tại → reason UNAVAILABLE, dòng đầu tiên hỏng theo thứ tự đến', async () => {

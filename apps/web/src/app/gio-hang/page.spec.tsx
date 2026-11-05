@@ -120,11 +120,12 @@ describe('/gio-hang — dòng hết hàng / chạm trần tồn kho (BUYERWEB-10
     expect(state.updates).toEqual([]);
   });
 
-  it('chạm trần mà tồn cao (40/40): dòng "Còn 40 sản phẩm" vẫn giải thích nút + khoá nhưng chữ thường, không màu cảnh báo (L5 3)', async () => {
+  it('chạm trần mà tồn cao (40/40): dòng "Đã chọn hết số hàng đang có" giải thích nút + khoá, chữ thường, không màu cảnh báo, KHÔNG ghi con số tồn (Smart Stock)', async () => {
     state.cart = cartOf([line({ stock: 40, quantity: 40 })]);
     const { container } = await mount();
-    const note = Array.from(container.querySelectorAll('p')).find((p) => p.textContent === 'Còn 40 sản phẩm')!;
+    const note = Array.from(container.querySelectorAll('p')).find((p) => p.textContent === 'Đã chọn hết số hàng đang có')!;
     expect(note).toBeTruthy();
+    expect(container.textContent).not.toMatch(/Còn 40 sản phẩm/);
     expect(note.className).not.toContain('text-warning-fg');
     expect(note.className).toContain('--color-text-secondary');
     expect(note.querySelector('svg')).toBeNull();

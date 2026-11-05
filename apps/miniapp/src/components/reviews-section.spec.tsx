@@ -165,6 +165,21 @@ describe('ReviewsSection (C-076 di cư DS v2: giữ nguyên hành vi)', () => {
     expect(screen.getAllByText(/^Nhận xét /)).toHaveLength(3);
   });
 
+  it('chip "2 sao" và "1 sao" lọc đúng đánh giá thấp, mức không có đánh giá ra trạng thái rỗng', async () => {
+    mocks.fetchReviews.mockResolvedValue({ ...DATA, count: 4, distribution: { '5': 1, '2': 2, '1': 1 }, items: [review('s5', 5), review('s2', 2), review('s2b', 2), review('s1', 1)] });
+    renderSection();
+    await screen.findByText('Nhận xét s5');
+    fireEvent.click(screen.getByRole('button', { name: '2 sao' }));
+    expect(screen.getByText('Nhận xét s2')).toBeInTheDocument();
+    expect(screen.getByText('Nhận xét s2b')).toBeInTheDocument();
+    expect(screen.queryByText('Nhận xét s1')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '1 sao' }));
+    expect(screen.getByText('Nhận xét s1')).toBeInTheDocument();
+    expect(screen.queryByText('Nhận xét s2')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '4 sao' }));
+    expect(screen.getByText('Không có đánh giá khớp bộ lọc.')).toBeInTheDocument();
+  });
+
   it('không có video nào → không có chip "Có video"', async () => {
     mocks.fetchReviews.mockResolvedValue({ ...DATA, videoCount: 0 });
     renderSection();

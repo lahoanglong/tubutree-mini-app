@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
-import { strikePrice } from '@tubutree/shared-types';
+import { exposedStock, strikePrice } from '@tubutree/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CouponMinOrderError, CouponsService, normalizeCouponCode } from '../coupons/coupons.service';
 import { CouponClaimService } from '../coupons/coupon-claim.service';
@@ -18,6 +18,7 @@ import { resolveAttribution } from '../checkout/attribution';
 import { COUNTED_ORDER_WHERE } from '../../common/first-order';
 import { AddItemDto, MAX_ITEM_QUANTITY } from './dto/cart.dto';
 import { batchStockMessage, cartBatchRejected } from './cart.batch-error';
+import { overStockText } from './cart.stock-message';
 import { isSellableVariation, productDiscontinuedError } from './sellable';
 import { isPartnerOwnedVariation } from './partner-goods';
 import {
@@ -231,7 +232,8 @@ export class CartService {
         // tính "Tiết kiệm" khi lớn hơn unitPrice (bằng nhau thì không vẽ gì). Chỉ là số hiển thị: không số tiền nào của giỏ đọc trường này.
         listUnitPrice: strikePrice({ retailPrice: it.variation.retailPrice, salePrice: it.variation.salePrice, flashPrice: flash?.flashPrice }),
         quantity: it.quantity,
-        stock: it.variation.stock,
+        // Kẹp ở PLENTY_STOCK: tồn ảo của hàng không quản kho không ra khỏi API. Dưới ngưỡng ảo giữ nguyên số vì client dùng nó để chặn nút +.
+        stock: exposedStock(it.variation.stock),
         weight: it.variation.weight ?? null,
         total: unitPrice * it.quantity,
         isFlash: !!flash,
@@ -388,7 +390,7 @@ export class CartService {
   /** Vượt tồn kho khi cộng thêm `addQty` vào `currentQty` đang có trong giỏ. */
   private assertStock(variation: AddableVariation, currentQty: number, addQty: number): void {
     if (currentQty + addQty > variation.stock) {
-      throw new BadRequestException(`Còn ${variation.stock} sản phẩm trong kho.`);
+      throw new BadRequestException(overStockText(variation.stock));
     }
   }
 
@@ -585,7 +587,7 @@ export class CartService {
       await this.prisma.cartItem.delete({ where: { id: itemId } });
     } else {
       if (quantity > item.variation.stock) {
-        throw new BadRequestException(`Còn ${item.variation.stock} sản phẩm trong kho.`);
+        throw new BadRequestException(overStockText(item.variation.stock));
       }
       await this.prisma.cartItem.update({ where: { id: itemId }, data: { quantity } });
     }

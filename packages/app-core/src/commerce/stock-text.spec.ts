@@ -1,3 +1,4 @@
+import { exposedStock } from '@tubutree/shared-types';
 import { describe, expect, it } from 'vitest';
 import { cartStockNote, isLowStock, LOW_STOCK_NOTICE, PLENTY_STOCK, stockText } from './stock-text';
 
@@ -52,13 +53,30 @@ describe('cartStockNote: dòng tồn kho ở giỏ, một luật cho hai app (L5
     for (const n of [1, 3, 5, 20]) expect(cartStockNote(n, n)).toEqual({ text: `Chỉ còn ${n} sản phẩm`, tone: 'warning' });
   });
 
-  it('chạm trần mà tồn cao (21 trở lên): chữ thường ghi đúng trần "Còn n sản phẩm", không cam', () => {
-    expect(cartStockNote(21, 21)).toEqual({ text: 'Còn 21 sản phẩm', tone: 'neutral' });
-    expect(cartStockNote(40, 40)).toEqual({ text: 'Còn 40 sản phẩm', tone: 'neutral' });
+  it('chạm trần mà tồn cao (21 trở lên): chữ thường báo đã chọn hết số hàng, KHÔNG ghi con số tồn, không cam', () => {
+    expect(cartStockNote(21, 21)).toEqual({ text: 'Đã chọn hết số hàng đang có', tone: 'neutral' });
+    expect(cartStockNote(40, 40)).toEqual({ text: 'Đã chọn hết số hàng đang có', tone: 'neutral' });
   });
 
-  it('vượt tồn (quantity > stock, đang chặn thanh toán): luôn cảnh báo kể cả tồn cao', () => {
+  it('vượt tồn (quantity > stock, đang chặn thanh toán): luôn cảnh báo kể cả tồn cao, tồn cao vẫn không lộ số', () => {
     expect(cartStockNote(3, 1)).toEqual({ text: 'Chỉ còn 1 sản phẩm', tone: 'warning' });
-    expect(cartStockNote(50, 40)).toEqual({ text: 'Còn 40 sản phẩm', tone: 'warning' });
+    expect(cartStockNote(50, 40)).toEqual({ text: 'Đã chọn hết số hàng đang có', tone: 'warning' });
+  });
+
+  it('tồn trên ngưỡng không bao giờ có chữ số trong dòng ghi chú (21, 40, 999, 99.999, 100.000, 99.999.988)', () => {
+    for (const stock of [LOW_STOCK_NOTICE + 1, 40, 999, PLENTY_STOCK - 1, PLENTY_STOCK, 99_999_988]) {
+      expect(cartStockNote(stock, stock)!.text).not.toMatch(/\d/);
+      expect(cartStockNote(stock + 1, stock)!.text).not.toMatch(/\d/);
+    }
+  });
+});
+
+describe('exposedStock: tồn gửi ra client', () => {
+  it('dưới ngưỡng ảo giữ nguyên để client chặn nút +, từ 100.000 trở lên bị kẹp, con số Pancake không ra ngoài', () => {
+    expect(exposedStock(0)).toBe(0);
+    expect(exposedStock(7)).toBe(7);
+    expect(exposedStock(PLENTY_STOCK - 1)).toBe(PLENTY_STOCK - 1);
+    expect(exposedStock(PLENTY_STOCK)).toBe(PLENTY_STOCK);
+    expect(exposedStock(99_999_988)).toBe(PLENTY_STOCK);
   });
 });

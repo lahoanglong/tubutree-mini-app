@@ -7,13 +7,18 @@ export interface ReviewFilterChip {
   count?: number;
 }
 
-/** Chip "Có video" chỉ có khi sản phẩm thật sự có video; các chip còn lại luôn hiện để hàng chip không đổi theo dữ liệu. */
+/**
+ * Chip "Có video" chỉ có khi sản phẩm thật sự có video; các chip còn lại luôn hiện để hàng chip không đổi theo dữ liệu.
+ * Đủ năm mức sao, kể cả 2 và 1 sao: biểu đồ phân bố đã vẽ cả năm mức, khách phải lọc riêng được đánh giá thấp để kiểm chứng (ẩn đi là mất tin cậy).
+ */
 export function reviewFilterChips(videoCount: number | undefined): ReviewFilterChip[] {
   const chips: ReviewFilterChip[] = [
     { key: 'all', label: 'Tất cả' },
     { key: 5, label: '5 sao' },
     { key: 4, label: '4 sao' },
     { key: 3, label: '3 sao' },
+    { key: 2, label: '2 sao' },
+    { key: 1, label: '1 sao' },
     { key: 'photo', label: 'Có ảnh' },
   ];
   if ((videoCount ?? 0) > 0) chips.push({ key: 'video', label: 'Có video', count: videoCount });
