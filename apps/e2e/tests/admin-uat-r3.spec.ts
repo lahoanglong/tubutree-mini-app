@@ -458,12 +458,13 @@ async function cleanupAll(): Promise<void> {
   });
 }
 
+// Hai khung dùng chung dữ liệu seed `e2e-w13-*` (beforeAll xoá rồi tạo lại): cấu hình cấp tệp để cả hai khung chạy nối nhau trong một worker, không song song.
+test.describe.configure({ mode: 'serial' });
+
 for (const frame of FRAMES) {
   test.describe(`Admin UAT vòng 3 ${frame.w}x${frame.h} với API và DB thật`, () => {
     test.skip(!runnable, 'Cần web-gate.sh (API + DB tạm thật)');
     test.use({ viewport: { width: frame.w, height: frame.h }, timezoneId: frame.tz });
-    // Mọi ca dùng chung dữ liệu seed `e2e-w13-*` (beforeAll xoá rồi tạo lại): chạy nhiều worker thì các lần seed đạp lên nhau.
-    test.describe.configure({ mode: 'serial' });
 
     test.beforeAll(async () => {
       await seedAll();
