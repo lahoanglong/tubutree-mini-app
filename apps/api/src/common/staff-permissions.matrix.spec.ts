@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { Controller, ForbiddenException, Get, RequestMethod, type ExecutionContext } from '@nestjs/common';
+import { Controller, ForbiddenException, Get, Post, RequestMethod, type ExecutionContext } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { Reflector } from '@nestjs/core';
 import { AppModule } from '../app.module';
@@ -428,8 +428,10 @@ const adminPathRoleViolations = (routes: AnyRoute[]) =>
 /**
  * Tiền tố ngoài `/admin` nhưng ghi dữ liệu nhạy cảm (tiền, hàng, nhân sự, trạng thái đơn): route bắt buộc có @Roles, hoặc nằm trong
  * NO_ROLES_ALLOWLIST kèm lý do. Route mới dưới các tiền tố này mà quên @Roles làm spec đỏ.
+ * `/ops` và `/pos` hiện không khớp controller nào: giữ làm chốt cho route tương lai, chưa có route thật nào ở đó được kiểm (chỉ ca
+ * tự kiểm bằng controller giả chạy trên chúng).
  */
-const SENSITIVE_PREFIXES = ['/ops', '/pos', '/staff', '/waste/desk', '/merchant', '/loyalty/staff', '/brand/owner', '/internal', '/webhooks'] as const;
+const SENSITIVE_PREFIXES = ['/ops', '/pos', '/staff', '/waste/desk', '/merchant', '/loyalty/staff', '/brand/owner', '/internal', '/webhooks', '/dealer', '/affiliate'] as const;
 const isSensitivePath = (r: { key: string }) => {
   const path = r.key.slice(r.key.indexOf(' ') + 1);
   return SENSITIVE_PREFIXES.some((p) => path === p || path.startsWith(`${p}/`));
@@ -440,6 +442,14 @@ const sensitiveRoutesWithoutRoles = (routes: AnyRoute[], allowlist: Record<strin
 const WASTE_POINT_ACCESS = 'quyền theo điểm nhận kiểm trong service (WasteAccessService.listOperablePoints/assertPointAccess: người dùng phải gắn với điểm)';
 const BRAND_OWNER = 'quyền chủ nhãn kiểm trong BrandService (Brand.ownerUserId === người gọi)';
 const WEBHOOK_SECRET = 'webhook công khai nhưng bắt buộc chữ ký hoặc token bí mật trong controller (fail-closed ở production)';
+const dealerOnly = (fn: string, line: number) =>
+  `chỉ đại lý: DealerService.${fn} gọi dealerContext (dealer.service.ts:${line}), nó ném 403 khi User.role !== DEALER (dealer.service.ts:2071); dữ liệu theo userId của người gọi`;
+const dealerOwnRows = (fn: string, line: number) =>
+  `chỉ đọc dữ liệu của chính người gọi: DealerService.${fn} (dealer.service.ts:${line}) lọc theo userId từ token, không kiểm vai trò DEALER nên người chưa/không còn là đại lý nhận danh sách rỗng`;
+const ctvOwnRows = (fn: string, line: number) =>
+  `chỉ đọc dữ liệu của chính người gọi: AffiliateService.${fn} (affiliate.service.ts:${line}) lọc theo userId từ token, không kiểm vai trò CTV nên người ngoài chương trình nhận số 0/danh sách rỗng`;
+const CTV_ORDER_FOR_CUSTOMER =
+  'chỉ CTV hoặc ADMIN: AffiliateService.customerOrderPlacer (affiliate.service.ts:782) từ chối 400 khi !canPlaceOrderForCustomer(role) (affiliate-access.ts:13)';
 const NO_ROLES_ALLOWLIST: Record<string, string> = {
   'GET /waste/desk/points': WASTE_POINT_ACCESS,
   'POST /waste/desk/lookup': WASTE_POINT_ACCESS,
@@ -448,6 +458,43 @@ const NO_ROLES_ALLOWLIST: Record<string, string> = {
   'PUT /waste/desk/points/:pointId/perk': 'chỉ chủ điểm đối tác (WasteDeskService.submitPerk: access.myRole === OWNER)',
   'POST /waste/desk/gifts/fulfil': WASTE_POINT_ACCESS,
   'GET /waste/desk/points/:pointId/report': WASTE_POINT_ACCESS,
+  'POST /dealer/apply':
+    'đăng ký chính mình, khách thường phải vào được: DealerService.apply (dealer.service.ts:165) chỉ nhận tài khoản thật (isRealUser :167), ghi hồ sơ PENDING gắn userId của người gọi (một hồ sơ chờ duyệt mỗi người, :169); vai trò chỉ đổi khi admin duyệt',
+  'GET /dealer/me': 'chỉ đọc hồ sơ của chính người gọi: DealerService.getMe (dealer.service.ts:195) theo userId từ token; khách thường nhận isDealer=false, status NONE',
+  'GET /dealer/pricelist': dealerOnly('pricelist', 236),
+  'POST /dealer/orders': dealerOnly('placeOrder', 263),
+  'GET /dealer/orders': dealerOwnRows('listOrders', 525),
+  'GET /dealer/credit-ledger': dealerOwnRows('creditLedger', 535),
+  'POST /dealer/credit-payment': `${dealerOnly('reportCreditPayment', 554)}; chỉ ghi lời báo, không đụng sổ công nợ (giảm nợ chỉ qua admin xác nhận)`,
+  'GET /dealer/quarterly-report': dealerOnly('quarterlyReport', 979),
+  'GET /dealer/rewards': dealerOnly('rewardsProgress', 1016),
+  'POST /dealer/rewards/:id/claim': dealerOnly('claimReward', 1117),
+  'GET /dealer/templates': dealerOnly('listTemplates', 2027),
+  'POST /dealer/templates': dealerOnly('saveTemplate', 2036),
+  'DELETE /dealer/templates/:id': `${dealerOnly('deleteTemplate', 2047)}; xoá theo (id, userId) nên không chạm mẫu của người khác (dealer.service.ts:2049)`,
+  'POST /affiliate/register':
+    'cửa đăng ký CTV một chạm, khách thường phải vào được: AffiliateService.register (affiliate.service.ts:175) chỉ nhận CUSTOMER/AFFILIATE (canRegisterAsAffiliate :177), chặn tài khoản bị thu hồi (:180) và tài khoản không thật (isRealUser :182); chỉ đổi vai trò của chính người gọi',
+  'POST /affiliate/touch':
+    'khách ghi lượt chạm giới thiệu của chính mình: AffiliateService.recordTouch (affiliate.service.ts:233) ghi ReferralTouch theo userId từ token; người giới thiệu phải qua findEligibleReferrer (:315: khác người gọi, không bị khoá/thu hồi, vai trò hưởng hoa hồng); không đụng tiền',
+  'GET /affiliate/me': ctvOwnRows('getMe', 209),
+  'POST /affiliate/click':
+    'công khai có chủ đích (khách mở link CTV chưa có phiên): @Throttle 30 lượt/phút theo IP (affiliate.controller.ts:88); AffiliateService.recordLinkClick (affiliate.service.ts:404) chỉ tăng bộ đếm click theo IP băm HMAC, mỗi ngày một lần, không đụng tiền',
+  'POST /affiliate/links': 'chỉ CTV còn quyền: AffiliateService.createLink gọi assertAffiliateAccess (affiliate.service.ts:371), nó ném 403 khi bị thu hồi hoặc không còn quyền CTV (:355)',
+  'GET /affiliate/links': ctvOwnRows('listLinks', 379),
+  'GET /affiliate/dashboard': ctvOwnRows('dashboard', 415),
+  'GET /affiliate/commissions': ctvOwnRows('listCommissions', 503),
+  'GET /affiliate/payouts': ctvOwnRows('listMyPayouts', 524),
+  'POST /affiliate/payouts':
+    'rút hoa hồng của chính mình: AffiliateService.requestPayout (affiliate.service.ts:1409) chặn tài khoản bị thu hồi và khách ngoài vai trò hưởng hoa hồng (assertNotRevoked :1418, lặp trong giao dịch :1498), chỉ gom hoa hồng APPROVED có affiliateUserId = userId (:1452) và chỉ cộng vào Ví của người gọi',
+  'GET /affiliate/tax-statement': ctvOwnRows('taxStatement', 622),
+  'POST /affiliate/orders/quote': CTV_ORDER_FOR_CUSTOMER,
+  'POST /affiliate/orders': CTV_ORDER_FOR_CUSTOMER,
+  'GET /affiliate/analytics/storefronts': ctvOwnRows('storefrontAnalytics', 1873),
+  'GET /affiliate/analytics/products': ctvOwnRows('productCommissionBreakdown', 1896),
+  'GET /affiliate/tiers': ctvOwnRows('getCtvTiers', 2023),
+  'GET /affiliate/milestones': ctvOwnRows('getMilestones', 2037),
+  'POST /affiliate/milestones/:id/claim':
+    'nhận thưởng mốc của chính mình: AffiliateService.claimMilestone (affiliate.service.ts:2102) chặn tài khoản bị thu hồi và khách ngoài vai trò hưởng hoa hồng (assertNotRevoked trong giao dịch :2122), chỉ cấp khi doanh số đã chốt của người gọi đạt ngưỡng (:2123)',
   'GET /brand/owner/me': BRAND_OWNER,
   'PATCH /brand/owner/me': BRAND_OWNER,
   'GET /brand/owner/me/sales': BRAND_OWNER,
@@ -534,7 +581,7 @@ describe('Bảng quyền nhân viên theo nhóm việc (ADMINOPS-10, D1-05)', ()
     ]);
   });
 
-  it('route dưới tiền tố nhạy cảm ngoài /admin (/ops, /pos, /staff, /waste/desk, /merchant, ...) có @Roles hoặc nằm trong allowlist kèm lý do', () => {
+  it('route dưới tiền tố nhạy cảm ngoài /admin (/staff, /waste/desk, /merchant, /dealer, /affiliate, ...) có @Roles hoặc nằm trong allowlist kèm lý do', () => {
     expect(sensitiveRoutesWithoutRoles(ALL_ROUTES, NO_ROLES_ALLOWLIST)).toEqual([]);
     expect(ALL_ROUTES.filter(isSensitivePath).length).toBeGreaterThan(60);
   });
@@ -550,7 +597,7 @@ describe('Bảng quyền nhân viên theo nhóm việc (ADMINOPS-10, D1-05)', ()
     expect(stale).toEqual([]);
   });
 
-  it('tự kiểm: spec bắt route thiếu @Roles dưới /ops, /pos, /staff, /merchant, /waste/desk; @Roles hoặc allowlist thì qua', () => {
+  it('tự kiểm: spec bắt route thiếu @Roles dưới /ops, /pos, /staff, /merchant, /waste/desk, /dealer, /affiliate; @Roles hoặc allowlist thì qua', () => {
     @Controller('ops')
     class ProbeOpsController {
       @Get('refund')
@@ -597,6 +644,20 @@ describe('Bảng quyền nhân viên theo nhóm việc (ADMINOPS-10, D1-05)', ()
         return 1;
       }
     }
+    @Controller('dealer')
+    class ProbeDealerController {
+      @Post('orders')
+      orders() {
+        return 1;
+      }
+    }
+    @Controller('affiliate')
+    class ProbeAffiliateController {
+      @Post('payouts')
+      payouts() {
+        return 1;
+      }
+    }
     @Controller('shop')
     class ProbeOtherController {
       @Get('open')
@@ -604,13 +665,24 @@ describe('Bảng quyền nhân viên theo nhóm việc (ADMINOPS-10, D1-05)', ()
         return 1;
       }
     }
-    const routes = routesFor([ProbeOpsController, ProbePosController, ProbeStaffController, ProbeMerchantController, ProbeDeskController, ProbeOtherController]);
+    const routes = routesFor([
+      ProbeOpsController,
+      ProbePosController,
+      ProbeStaffController,
+      ProbeMerchantController,
+      ProbeDeskController,
+      ProbeDealerController,
+      ProbeAffiliateController,
+      ProbeOtherController,
+    ]);
     expect(sensitiveRoutesWithoutRoles(routes, { 'GET /waste/desk/points': 'kiểm trong service' })).toEqual([
       'GET /ops/refund',
       'GET /pos/credit',
       'GET /staff/payroll',
       'GET /merchant/orders',
       'GET /waste/desk/lookup',
+      'POST /dealer/orders',
+      'POST /affiliate/payouts',
     ]);
   });
 
