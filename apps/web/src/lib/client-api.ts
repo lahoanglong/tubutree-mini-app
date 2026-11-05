@@ -202,9 +202,9 @@ interface Reply {
  * Một lượt gọi + đọc thân phản hồi, giới hạn REQUEST_TIMEOUT_MS cho cả hai. Lỗi tầng mạng (fetch ném TypeError,
  * hoặc bị ngắt vì quá hạn) đổi thành NetworkError với câu tiếng Việt thay vì "Failed to fetch" thô.
  */
-async function exchange(url: string, init: RequestInit): Promise<Reply> {
+async function exchange(url: string, init: RequestInit, timeoutMs: number = REQUEST_TIMEOUT_MS): Promise<Reply> {
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     const res = await fetch(url, { ...init, signal: ctrl.signal });
     let body: unknown;
@@ -246,6 +246,8 @@ export async function apiFetch<T>(
     auth?: boolean;
     headers?: Record<string, string>;
     cache?: RequestCache;
+    /** Hạn chờ riêng cho lời gọi chậm có chủ đích (AI soạn kịch bản); mặc định REQUEST_TIMEOUT_MS. */
+    timeoutMs?: number;
   } = {},
   _retried = false,
 ): Promise<T> {
@@ -268,7 +270,7 @@ export async function apiFetch<T>(
     credentials: 'include',
     ...(opts.cache ? { cache: opts.cache } : {}),
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
-  });
+  }, opts.timeoutMs);
 
   // opts.auth === false đánh dấu endpoint không cần Authorization (login/refresh/logout) —
   // bỏ qua guard này thì một 401 từ chính /auth/refresh hay /auth/zalo-oauth (vd code đã

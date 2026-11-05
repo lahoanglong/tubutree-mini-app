@@ -3,6 +3,8 @@ import { CAMPAIGN_ENTITY_SLUG_MAX } from '@tubutree/shared-types';
 /** Bảng ô gõ chữ ở màn quản trị → trường DTO và trần độ dài. Spec `input-limits.spec.ts` đối chiếu với mã nguồn API. */
 /** `dto` dạng `đường/dẫn.ts:Lớp.trường`, đọc từ mã nguồn API (`@MaxLength`, `@Length` hoặc `@Matches`). `stricter`: ô chặn thấp hơn DTO có chủ đích. */
 export const INPUT_LIMITS: Record<string, { dto: string; max: number; stricter?: string }> = {
+  "components/admin/product-story-studio.tsx::aiNote": { dto: "apps/api/src/modules/catalog/story-draft.controller.ts:GenerateStoryDraftDto.note", max: 500 },
+  "components/admin/product-story-studio.tsx::link": { dto: "apps/api/src/modules/catalog/story-assets.controller.ts:ExtractStoryAssetsDto.pageUrl", max: 2048 },
   "app/admin/page.tsx::searchInput": { dto: "apps/api/src/modules/admin/admin.controller.ts:ListOrdersQuery.search", max: 100 },
   "app/admin/page.tsx::phone": { dto: "apps/api/src/modules/admin/admin.controller.ts:SetUserRoleDto.phone", max: 20 },
   "app/admin/page.tsx::f.code": { dto: "apps/api/src/modules/admin/admin.controller.ts:CreateCouponDto.code", max: 64 },
@@ -136,6 +138,10 @@ export const INPUT_LIMITS: Record<string, { dto: string; max: number; stricter?:
 
 /** Ô gõ chữ không đặt `maxLength`, kèm lý do. */
 export const EXEMPT_INPUTS: Record<string, string> = {
+  "components/admin/product-story-studio.tsx::s.title": "storyConfig là JSON kiểm bằng parseStoryConfig (shared-types, STORY_LIMITS.maxLabel), không có @MaxLength trên DTO; ô chặn đúng trần đó",
+  "components/admin/product-story-studio.tsx::s.body": "storyConfig là JSON kiểm bằng parseStoryConfig (shared-types, STORY_LIMITS.maxBody), không có @MaxLength trên DTO; ô chặn đúng trần đó",
+  "components/admin/product-story-studio.tsx::points[sel].label": "storyConfig là JSON kiểm bằng parseStoryConfig (shared-types, STORY_LIMITS.maxLabel), không có @MaxLength trên DTO; ô chặn đúng trần đó",
+  "components/admin/product-story-studio.tsx::points[sel].value ?? ''": "storyConfig là JSON kiểm bằng parseStoryConfig (shared-types, STORY_LIMITS.maxLabel), không có @MaxLength trên DTO; ô chặn đúng trần đó",
   "components/admin/dealer-tiers-section.tsx::form.name": "TierValuesDto.name chỉ có @IsString, không có trần; 60 là trần do màn tự đặt",
   "components/admin/commission-rates-tab.tsx::text": "ô gõ số (inputMode numeric/decimal): trần là @Min/@Max theo giá trị, không phải độ dài chuỗi",
   "components/admin/commission-rates-tab.tsx::text#2": "ô gõ số (inputMode numeric/decimal): trần là @Min/@Max theo giá trị, không phải độ dài chuỗi",

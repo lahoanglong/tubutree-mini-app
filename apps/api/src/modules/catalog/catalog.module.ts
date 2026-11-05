@@ -9,6 +9,10 @@ import { ImageResizeController } from './image-resize.controller';
 import { ImageResizeService } from './image-resize.service';
 import { ProductAdminController } from './product-admin.controller';
 import { ProductAdminService } from './product-admin.service';
+import { StoryAssetsController } from './story-assets.controller';
+import { StoryAssetsService } from './story-assets.service';
+import { StoryDraftController } from './story-draft.controller';
+import { StoryDraftService } from './story-draft.service';
 import { CategoryAdminController } from './category-admin.controller';
 import { CategoryAdminService } from './category-admin.service';
 import { ProductCategoryAdminController } from './product-category-admin.controller';
@@ -17,11 +21,12 @@ import { ImageRegistryModule } from './image-registry.module';
 import { FlashSaleModule } from '../flash-sale/flash-sale.module';
 import { OrdersModule } from '../orders/orders.module';
 import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
+import { AiAdvisorModule } from '../ai-advisor/ai-advisor.module';
 
 @Module({
-  imports: [ImageRegistryModule, FlashSaleModule, OrdersModule, SubscriptionsModule],
-  controllers: [CatalogController, HomeController, CategoryAdminController, ProductCategoryAdminController, ProductAdminController, PublicImageController, ImageResizeController],
-  providers: [CatalogService, HomeService, CategoryAdminService, ProductCategoryAdminService, ProductAdminService, PublicImageService, ImageResizeService],
+  imports: [ImageRegistryModule, FlashSaleModule, OrdersModule, SubscriptionsModule, AiAdvisorModule],
+  controllers: [CatalogController, HomeController, CategoryAdminController, ProductCategoryAdminController, ProductAdminController, StoryAssetsController, StoryDraftController, PublicImageController, ImageResizeController],
+  providers: [CatalogService, HomeService, CategoryAdminService, ProductCategoryAdminService, ProductAdminService, StoryAssetsService, StoryDraftService, PublicImageService, ImageResizeService],
   exports: [CatalogService, ImageResizeService],
 })
 export class CatalogModule {}

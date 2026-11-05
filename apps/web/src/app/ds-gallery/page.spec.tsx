@@ -8,12 +8,12 @@ vi.mock('next/link', () => ({
 
 import DsGalleryPage from './page';
 
-const GROUPS = ['section-header', 'section', 'countdown', 'flash-sold-bar', 'sort-bar', 'voucher-ticket', 'combo-card', 'banner-carousel'];
+const GROUPS = ['section-header', 'section', 'countdown', 'flash-sold-bar', 'sort-bar', 'voucher-ticket', 'combo-card', 'banner-carousel', 'product-story-showcase'];
 
 afterEach(() => vi.unstubAllEnvs());
 
 describe('/ds-gallery (web)', () => {
-  it('ngoài production: có đủ 8 mục, mỗi mục ít nhất 2 biến thể hoặc trạng thái', () => {
+  it('ngoài production: có đủ 9 mục, mỗi mục ít nhất 2 biến thể hoặc trạng thái', () => {
     vi.stubEnv('NODE_ENV', 'development');
     mount(<DsGalleryPage />);
     for (const g of GROUPS) {

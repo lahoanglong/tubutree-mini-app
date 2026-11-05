@@ -1,4 +1,5 @@
 import { render } from '@testing-library/react';
+import type { ProductDetail } from '@tubutree/app-core/api/catalog';
 import { Search } from 'lucide-react';
 import { describe, expect, it } from 'vitest';
 import { Button } from './button';
@@ -7,6 +8,7 @@ import { Checkbox, Radio, Switch } from './form';
 import { IconButton } from './icon-button';
 import { ListRow } from './list-row';
 import { QuantitySelector } from './quantity-selector';
+import { ProductStoryShowcase } from './product-story-showcase';
 import { SegmentedTabs } from './segmented-tabs';
 
 /**
@@ -14,6 +16,18 @@ import { SegmentedTabs } from './segmented-tabs';
  * nên đọc kích thước KHAI BÁO: width/height/min* >= 44 trên chính phần tử hoặc cha bọc ngay trên nó,
  * hoặc lớp `tubu-hit-44*` (pseudo-element 44px). Component mới thêm vào danh sách này sẽ bị bắt nếu quên.
  */
+const storyProduct = {
+  id: 'p', slug: 's', brand: 'Tubu', name: 'Sp', images: [], thumbnail: null, variations: [], certifications: [],
+} as unknown as ProductDetail;
+const storyConfig = {
+  version: 1 as const,
+  enabled: true,
+  scenes: [
+    { kind: 'variant_arc' as const, items: [{ variationId: 'a', label: 'A', ambient: 'leaf' as const }, { variationId: 'b', label: 'B', ambient: 'sky' as const }] },
+    { kind: 'ingredient_assembly' as const, steps: [{ title: 'T', body: 'B', layers: [] }, { title: 'T2', body: 'B2', layers: [] }] },
+  ],
+};
+
 const px = (v: string): number => (v.endsWith('px') ? parseFloat(v) : 0);
 
 function declared(el: HTMLElement, axis: 'w' | 'h'): number {
@@ -52,6 +66,7 @@ describe('vùng chạm DS v2 >= 44x44', () => {
     ['Checkbox có nhãn', () => <Checkbox label="A" checked={false} onChange={() => {}} />],
     ['Checkbox flush (ô chọn dòng giỏ)', () => <Checkbox flush aria-label="A" checked={false} onChange={() => {}} />],
     ['Radio có nhãn', () => <Radio label="A" checked={false} onChange={() => {}} />],
+    ['ProductStoryShowcase (vòng cung, chip bước)', () => <ProductStoryShowcase product={storyProduct} previewConfig={storyConfig} />],
     ['Switch có nhãn', () => <Switch label="A" checked={false} onChange={() => {}} />],
   ];
 
@@ -63,5 +78,13 @@ describe('vùng chạm DS v2 >= 44x44', () => {
       // ZaUI vẽ input checkbox/radio/switch đè lên ô gốc; vùng chạm là khối hitArea bọc ngoài.
       expect(reaches44(el), `${el.tagName} ${el.className} không đạt 44x44`).toBe(true);
     }
+  });
+
+  it('ProductStoryShowcase toàn màn (đóng, thêm giỏ, mua ngay)', () => {
+    // Khung toàn màn vẽ qua portal vào body nên không nằm trong container của render.
+    render(<ProductStoryShowcase product={storyProduct} previewConfig={storyConfig} fullscreen />);
+    const els = interactiveIn(document.body);
+    expect(els.length).toBeGreaterThanOrEqual(3);
+    for (const el of els) expect(reaches44(el), `${el.tagName} ${el.className} không đạt 44x44`).toBe(true);
   });
 });

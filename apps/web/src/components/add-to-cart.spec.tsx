@@ -3,6 +3,7 @@ import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
+import { PdpSelectionProvider, usePdpSelection } from './pdp-selection';
 
 // BUYERWEB-15: khách bấm "Thêm vào giỏ" khi chưa đăng nhập phải quay lại đúng sản phẩm và món đó được thêm nốt.
 // BUYERWEB-9: tồn kho trong HTML là bản ISR cũ; trang hỏi lại tồn kho thật.
@@ -96,6 +97,51 @@ describe('AddToCart — khách chưa đăng nhập', () => {
     expect(addButton(container).disabled).toBe(true);
     click(addButton(container));
     expect(mocks.push).not.toHaveBeenCalled();
+  });
+});
+
+describe('AddToCart — chia sẻ trạng thái mua với PdpSelection', () => {
+  let shared: ReturnType<typeof usePdpSelection> = null;
+  const Probe = () => {
+    shared = usePdpSelection();
+    return null;
+  };
+  const mountShared = (props: { blockedReason?: string | null } = {}) => {
+    const r = render(
+      <PdpSelectionProvider initialId="v1">
+        <AddToCart slug="dau-goi" variations={VARIATIONS} {...props} />
+        <Probe />
+      </PdpSelectionProvider>,
+    );
+    mounted.push(r);
+    return r;
+  };
+
+  it('còn hàng ở phân loại đang chọn: buyable true', async () => {
+    mountShared();
+    await flush();
+    expect(shared!.buyable).toBe(true);
+  });
+
+  it('hết hàng cả hai phân loại (tồn kho thật): buyable false', async () => {
+    mocks.getProductStock.mockResolvedValue({ v1: 0, v2: 0 });
+    mountShared();
+    await flush();
+    expect(shared!.buyable).toBe(false);
+  });
+
+  it('gian hàng tạm nghỉ: buyable false dù còn tồn kho', async () => {
+    mountShared({ blockedReason: 'Gian hàng tạm nghỉ' });
+    await flush();
+    expect(shared!.buyable).toBe(false);
+  });
+
+  it('chọn chip phân loại đánh dấu khách đã tự chọn trên cờ dùng chung', async () => {
+    const { container } = mountShared();
+    await flush();
+    expect(shared!.userPicked.current).toBe(false);
+    click(byText(container, 'button', '500ml'));
+    expect(shared!.userPicked.current).toBe(true);
   });
 });
 

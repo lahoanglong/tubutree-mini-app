@@ -33,7 +33,8 @@ export const CARD_IMAGE_WIDTH = 170;
  * Ảnh thẻ sản phẩm: có ảnh thì vẽ bản đổi cỡ đúng bề rộng (srcset 1x/2x/3x; ảnh tải lỗi thì rơi về ô thay thế), không có thì ô thay thế.
  * Cha phải `position: relative`; ô vuông của cha giữ chỗ nên ảnh về không làm nhảy bố cục.
  */
-export function ProductImage({ src, brand, width = CARD_IMAGE_WIDTH }: { src?: string | null; brand: string; width?: number }) {
+/** `fit="contain"` cho ảnh tách nền (hình dọc, vùng trong suốt): hiện trọn, không viền 1px; mặc định `cover` cho ô vuông thẻ. */
+export function ProductImage({ src, brand, width = CARD_IMAGE_WIDTH, fit = 'cover' }: { src?: string | null; brand: string; width?: number; fit?: 'cover' | 'contain' }) {
   const [failed, setFailed] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const ref = useRef<HTMLImageElement>(null);
@@ -60,13 +61,13 @@ export function ProductImage({ src, brand, width = CARD_IMAGE_WIDTH }: { src?: s
       style={{
         width: '100%',
         height: '100%',
-        objectFit: 'cover',
+        objectFit: fit,
         display: 'block',
         opacity: loaded ? 1 : 0,
         transition: 'opacity 200ms var(--p-ease-out)',
         // Ảnh nền trắng (đa số ảnh Pancake) không hoà vào thân thẻ trắng.
-        outline: '1px solid var(--color-media-outline)',
-        outlineOffset: -1,
+        outline: fit === 'contain' ? undefined : '1px solid var(--color-media-outline)',
+        outlineOffset: fit === 'contain' ? undefined : -1,
       }}
     />
   );

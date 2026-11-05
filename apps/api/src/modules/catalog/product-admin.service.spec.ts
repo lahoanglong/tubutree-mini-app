@@ -270,3 +270,74 @@ describe('UpdateProductDto', () => {
     ['images null', { images: null }],
   ])('từ chối: %s', (_l, b) => expect(bad(b)).toBeGreaterThan(0));
 });
+
+describe('ProductAdminService — câu chuyện sản phẩm (storyConfig)', () => {
+  const story = {
+    version: 1,
+    enabled: true,
+    scenes: [{ kind: 'variant_arc', items: [{ label: '300ml', ambient: 'leaf' }] }],
+  };
+
+  it('lưu storyConfig hợp lệ, không đụng thumbnail', async () => {
+    const { svc, update } = setup();
+    await svc.update('a1', 'p1', { storyConfig: story });
+    const data = update.mock.calls[0][0].data;
+    expect(data.storyConfig).toEqual(story);
+    expect(data).not.toHaveProperty('thumbnail');
+  });
+
+  it('null xoá storyConfig', async () => {
+    const { svc, update } = setup(row({ storyConfig: story }));
+    await svc.update('a1', 'p1', { storyConfig: null });
+    expect(update.mock.calls[0][0].data.storyConfig).toBeDefined();
+    expect(update.mock.calls[0][0].data.storyConfig).not.toEqual(story);
+  });
+
+  it('từ chối storyConfig sai bằng 400 và không ghi', async () => {
+    const { svc, update } = setup();
+    const bad = { ...story, scenes: [{ kind: 'ingredient_assembly', steps: [{ title: 't', body: 'b', layers: [{ id: 'l', imageUrl: 'javascript:alert(1)', label: 'x', from: 'top', xPct: 1, yPct: 1, scale: 1, rotateDeg: 0 }] }] }] };
+    await expect(svc.update('a1', 'p1', { storyConfig: bad })).rejects.toBeInstanceOf(BadRequestException);
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('hàng đối tác vẫn được admin gắn storyConfig (khác ảnh và mô tả)', async () => {
+    const { svc, update } = setup(row({ storefrontId: 'sf1' }));
+    await svc.update('a1', 'p1', { storyConfig: story });
+    expect(update).toHaveBeenCalledTimes(1);
+  });
+
+  it('xem trả storyConfig, thiếu thì null', async () => {
+    expect(await setup(row({ storyConfig: story })).svc.get('p1')).toMatchObject({ storyConfig: story });
+    expect(await setup().svc.get('p1')).toMatchObject({ storyConfig: null });
+  });
+
+  it('DTO nhận object và null, từ chối chuỗi', () => {
+    const bad = (b: object) => validateSync(plainToInstance(UpdateProductDto, b), { whitelist: true, forbidNonWhitelisted: true }).length;
+    expect(bad({ storyConfig: story })).toBe(0);
+    expect(bad({ storyConfig: null })).toBe(0);
+    expect(bad({ storyConfig: 'x' })).toBeGreaterThan(0);
+  });
+});
+
+describe('ProductAdminService — dữ liệu cho Story Studio', () => {
+  it('xem trả thành phần, chứng nhận và biến thể (id, tên) để tự sinh kịch bản', async () => {
+    const ingredients = [{ name: 'Bồ kết', benefit: 'Làm sạch dịu nhẹ' }];
+    const { svc } = setup(row({ ingredients, certifications: ['Vegan'], variations: [{ id: 'v1', name: '300ml' }, { id: 'v2', name: '500ml' }] }));
+    expect(await svc.get('p1')).toMatchObject({
+      ingredients,
+      certifications: ['Vegan'],
+      variations: [{ id: 'v1', name: '300ml' }, { id: 'v2', name: '500ml' }],
+    });
+  });
+
+  it('thiếu thì trả null, mảng rỗng, mảng rỗng', async () => {
+    expect(await setup().svc.get('p1')).toMatchObject({ ingredients: null, certifications: [], variations: [] });
+  });
+
+  it('GET chỉ đọc biến thể đang bán, theo thứ tự ổn định', async () => {
+    const { svc, prisma } = setup();
+    await svc.get('p1');
+    const select = (prisma.product.findUnique as jest.Mock).mock.calls[0][0].select;
+    expect(select.variations).toMatchObject({ where: { isActive: true }, select: { id: true, name: true } });
+  });
+});

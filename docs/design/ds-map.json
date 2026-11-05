@@ -325,6 +325,15 @@
       ]
     },
     {
+      "name": "ProductStoryShowcase",
+      "miniapp": "apps/miniapp/src/components/ui/product-story-showcase.tsx",
+      "web": "apps/web/src/components/mini/product-story-showcase.tsx",
+      "props": "ProductStoryShowcaseProps",
+      "screens": [
+        "/product/:slug"
+      ]
+    },
+    {
       "name": "ProductThumb",
       "miniapp": "apps/miniapp/src/components/ui/product-thumb.tsx",
       "web": "apps/web/src/components/mini/product-thumb.tsx",

@@ -3,10 +3,10 @@
 // Nguồn: apps/miniapp/src/pages/ds-gallery.tsx
 import { useState, type ReactNode } from 'react';
 import { Truck } from 'lucide-react';
-import { GALLERY_COMBO_ITEMS, GALLERY_PICKER_ROWS, GALLERY_SLIDES, GALLERY_SORT_OPTIONS, GALLERY_VOUCHERS, galleryCombo, galleryEnd, type GalleryVoucher } from '@tubutree/app-core/commerce/ds-gallery-data';
+import { GALLERY_STORY_PRODUCTS, GALLERY_COMBO_ITEMS, GALLERY_PICKER_ROWS, GALLERY_SLIDES, GALLERY_SORT_OPTIONS, GALLERY_VOUCHERS, galleryCombo, galleryEnd, type GalleryVoucher } from '@tubutree/app-core/commerce/ds-gallery-data';
 import { cartComboBlocks } from '@tubutree/app-core/commerce/cart-combo';
 import { CartComboBlock } from '@/components/cart-combo-block';
-import { BannerCarousel, ComboCard, Countdown, FlashSoldBar, Heading, Section, SectionHeader, SortBar, Text, VoucherPicker, VoucherTicket } from '@/components/mini';
+import { BannerCarousel, ComboCard, Countdown, FlashSoldBar, Heading, ProductStoryShowcase, Section, SectionHeader, SortBar, Text, VoucherPicker, VoucherTicket } from '@/components/mini';
 
 /**
  * Trang dev `/ds-gallery`: vẽ mọi biến thể và trạng thái của bộ section-kit bằng dữ liệu giả (app-core/commerce/ds-gallery-data),
@@ -252,6 +252,14 @@ export function DsGallery() {
           <Variant label="1 slide: không chấm, không nút Dừng">
             <BannerCarousel slides={GALLERY_SLIDES.slice(0, 1)} />
           </Variant>
+        </Group>
+
+        <Group name="product-story-showcase">
+          {GALLERY_STORY_PRODUCTS.map((g) => (
+            <Variant key={g.product.id} label={g.label}>
+              <ProductStoryShowcase product={g.product} />
+            </Variant>
+          ))}
         </Group>
       </div>
     </main>

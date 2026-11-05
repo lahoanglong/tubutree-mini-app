@@ -42,6 +42,7 @@ export function ProductImage({
   size,
   width = CARD_IMAGE_WIDTH,
   sizes,
+  fit = 'cover',
 }: {
   src?: string | null;
   brand: string;
@@ -53,6 +54,8 @@ export function ProductImage({
   width?: number;
   /** Thuộc tính `sizes` của ảnh: bề rộng thật theo khung nhìn; thiếu thì lấy đúng `width`. */
   sizes?: string;
+  /** `contain` cho ảnh tách nền (hình dọc, vùng trong suốt): hiện trọn, không viền 1px; mặc định `cover` cho ô vuông thẻ. */
+  fit?: 'cover' | 'contain';
 }) {
   const [failed, setFailed] = useState(false);
   // Mặc định hiện: HTML dựng sẵn (ISR) và lần hydrate đầu phải khớp nhau, và ảnh đã tải xong thì không được chớp trong suốt (PL-15a).
@@ -87,12 +90,12 @@ export function ProductImage({
       onError={() => fallBack() || setFailed(true)}
       className={className}
       style={{
-        ...(className ? null : { width: '100%', height: '100%', objectFit: 'cover', display: 'block' }),
+        ...(className ? null : { width: '100%', height: '100%', objectFit: fit, display: 'block' }),
         opacity: loaded ? 1 : 0,
         transition: priority ? undefined : 'opacity 200ms var(--p-ease-out)',
         // Ảnh nền trắng (đa số ảnh Pancake) không hoà vào thân thẻ trắng.
-        outline: '1px solid var(--color-media-outline)',
-        outlineOffset: -1,
+        outline: fit === 'contain' ? undefined : '1px solid var(--color-media-outline)',
+        outlineOffset: fit === 'contain' ? undefined : -1,
       }}
     />
   );
