@@ -48,7 +48,7 @@ export function bannerLinkUsable(c: Pick<Campaign, 'linkType' | 'linkValue'>): b
   }
 }
 
-/** Ảnh banner phục vụ được (hoặc null): một chỗ cho `toBannerDTO` và cho phép kiểm sức khoẻ biết chiến dịch nào thật sự ra slide. */
+/** Ảnh banner phục vụ được (hoặc null) cho `toBannerDTO`. Kiểm sức khoẻ không gọi hàm này mà phân loại 32 ký tự đầu ảnh ở DB, theo cùng danh sách mime (`served-image.ts`). */
 export const bannerImage = (id: string, image: string | null | undefined): string | null => publicImage('campaign', id, 'cover', image);
 
 /** Banner công khai; null khi ảnh không phục vụ được (rỗng, SVG, base64 hỏng): bỏ chiến dịch đó thay vì để lọt một slide trống. */
