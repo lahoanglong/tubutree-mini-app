@@ -170,6 +170,7 @@ export const CRON_JOB_LABELS: Record<string, string> = {
   'waste.gift-expiry': 'Huỷ quà đổi rác quá hạn nhận, hoàn điểm và báo khách',
   'waste.pickup-sweep': 'Quét bù yêu cầu thu gom rác còn mở khi đơn đã giao, huỷ hoặc trả',
   'ZnsStuckLogCron.sweepStuckZnsLogs': 'Đóng tin ZNS kẹt chờ gửi hoặc chờ gửi lại quá 1 giờ: ghi nốt tin đã gửi, đánh dấu ca chưa rõ cần đối soát tay',
+  'ZnsStuckLogCron.expireStaleRetryingZnsLogs': 'Đóng tin ZNS chờ gửi lại quá 24 giờ thành thất bại, ca đang chờ đối soát tay thì báo Sentry',
 };
 
 export function OpsHealthTab({ onOpenOrder, isAdmin = true }: { onOpenOrder?: (code: string) => void; isAdmin?: boolean }) {
