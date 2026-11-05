@@ -963,6 +963,66 @@ describe('PancakeOrderService — STALE chỉ rời bằng đẩy thành công h
     expect(t.row()).toMatchObject({ pancakePushStatus: PANCAKE_PUSH.STALE, pancakeErrorKind: 'DATA' });
   });
 
+  describe('markPushFailure trên đơn STALE: lời nhắc theo ĐÚNG quyết định "Đẩy lại", không bị câu "hệ thống tự thử lại" đè', () => {
+    const dataErr = () => new PancakeOrderDataError('thiếu SĐT');
+    const transientErr = () => new PancakeApiError('Pancake trả 503 khi tạo đơn', true, false, 503);
+    const retryClaims = /tự hỏi lại|tự thử lại/;
+
+    it('lỗi dứt khoát lượt cuối (cổng PUSH): vẫn STALE, nhắc kiểm kho rồi mới bấm Đẩy lại, không nói "vẫn tự hỏi lại"', async () => {
+      const t = setup({ pancakePushStatus: PANCAKE_PUSH.STALE });
+      await t.svc.markPushFailure('o1', dataErr(), true);
+      const text = t.row().pancakeAttention as string;
+      expect(t.row().pancakePushStatus).toBe(PANCAKE_PUSH.STALE);
+      expect(text).toMatch(new RegExp(`^${ATTENTION_PUSH_FAILED}`));
+      expect(text).toContain('quá hạn tự đẩy');
+      expect(text).toContain('thiếu SĐT');
+      expect(text).toContain('kiểm tra kho đã giao tay chưa');
+      expect(text).not.toContain('CHƯA bấm');
+      expect(text).not.toMatch(retryClaims);
+    });
+
+    it('lỗi tạm quá ân hạn lượt cuối: cùng câu STALE, không "Hệ thống tự thử lại mỗi 15 phút"', async () => {
+      const t = setup({ pancakePushStatus: PANCAKE_PUSH.STALE });
+      await t.svc.markPushFailure('o1', transientErr(), true);
+      const text = t.row().pancakeAttention as string;
+      expect(text).toContain('quá hạn tự đẩy');
+      expect(text).toContain('kiểm tra kho đã giao tay chưa');
+      expect(text).not.toMatch(retryClaims);
+    });
+
+    it('lời nhắc của syncPayment trên đơn STALE không bị lượt đang bay lỗi muộn đổi thành câu "tự thử lại"', async () => {
+      const t = setup({ pancakePushStatus: PANCAKE_PUSH.STALE, paymentMethod: 'ZALOPAY', paymentStatus: 'PAID' });
+      await t.svc.syncPayment('o1');
+      await t.svc.markPushFailure('o1', dataErr(), true);
+      expect(t.row().pancakeAttention).toContain('quá hạn tự đẩy');
+      expect(t.row().pancakeAttention).not.toMatch(retryClaims);
+    });
+
+    it('đơn đang chờ khách thanh toán (WAIT): nói chờ gì và CHƯA bấm Đẩy lại', async () => {
+      const t = setup({ pancakePushStatus: PANCAKE_PUSH.STALE, paymentMethod: 'ZALOPAY', paymentStatus: 'UNPAID' });
+      await t.svc.markPushFailure('o1', dataErr(), true);
+      const text = t.row().pancakeAttention as string;
+      expect(text).toContain('đang chờ khách thanh toán');
+      expect(text).toContain('CHƯA bấm "Đẩy lại Pancake" lúc này');
+      expect(text).not.toMatch(retryClaims);
+    });
+
+    it('đơn đã rời kho (NEVER): không gắn nhắc nào, nhắc có sẵn còn nguyên, không báo admin', async () => {
+      const prior = `${ATTENTION_PUSH_FAILED} (quá hạn tự đẩy): nhắc cũ`;
+      const t = setup({ pancakePushStatus: PANCAKE_PUSH.STALE, status: 'DELIVERED', pancakeAttention: prior });
+      await t.svc.markPushFailure('o1', dataErr(), true);
+      expect(t.row()).toMatchObject({ pancakePushStatus: PANCAKE_PUSH.STALE, pancakeErrorKind: 'DATA', pancakeAttention: prior });
+      expect(t.alerts.alert).not.toHaveBeenCalled();
+    });
+
+    it('đơn không STALE vẫn nhận lời cũ "tự hỏi lại" (không đổi hành vi)', async () => {
+      const t = setup({ pancakePushStatus: PANCAKE_PUSH.PENDING });
+      await t.svc.markPushFailure('o1', dataErr(), true);
+      expect(t.row().pancakeAttention).toContain('vẫn tự hỏi lại');
+      expect(t.row().pancakeAttention).not.toContain('quá hạn tự đẩy');
+    });
+  });
+
   it('markPushFailure(final) trên đơn STALE gặp 401: vẫn hoàn lượt đã đốt và vẫn STALE', async () => {
     const t = setup({ pancakePushStatus: PANCAKE_PUSH.STALE, pancakePushAttempts: 3 });
     await t.svc.markPushFailure('o1', new PancakeApiError('Pancake trả 401 khi tạo đơn', false, false, 401), true);

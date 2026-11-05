@@ -439,7 +439,24 @@ const url = process.env.TEST_REDIS_URL;
   it('STALE giữa lúc lượt đẩy đang bay, lượt bay gặp lỗi dứt khoát (422): vẫn STALE, không FAILED, không gọi lần hai', async () => {
     const { calls, row } = await staleWhileInFlight(() => new PancakeApiError('Pancake trả 422 khi tạo đơn: x', false, false, 422));
     expect(calls()).toBe(1);
-    expect(await row()).toMatchObject({ pancakePushStatus: 'STALE', pancakeErrorKind: 'REJECTED', pancakeOrderId: null });
+    const after = await row();
+    expect(after).toMatchObject({ pancakePushStatus: 'STALE', pancakeErrorKind: 'REJECTED', pancakeOrderId: null });
+    // Lời nhắc theo cổng "Đẩy lại" của đơn STALE, không phải câu "hệ thống vẫn tự hỏi lại" của đơn thường.
+    expect(after.pancakeAttention).toContain('quá hạn tự đẩy');
+    expect(after.pancakeAttention).not.toMatch(/tự hỏi lại|tự thử lại/);
+  });
+
+  it('STALE giữa lúc lượt đẩy đang bay, lượt cuối của job gặp 503 khi đơn đã quá ân hạn: nhắc STALE, không "Hệ thống tự thử lại mỗi 15 phút"', async () => {
+    const { calls, row } = await staleWhileInFlight(() => new PancakeApiError('Pancake trả 503 khi tạo đơn', true, false, 503), {
+      attempts: 1,
+      seed: { createdAt: new Date(Date.now() - 4 * 24 * 3_600_000) },
+    });
+    expect(calls()).toBe(1);
+    const after = await row();
+    expect(after).toMatchObject({ pancakePushStatus: 'STALE', pancakeOrderId: null });
+    expect(after.pancakeAttention).toContain('quá hạn tự đẩy');
+    expect(after.pancakeAttention).toContain('kiểm tra kho đã giao tay chưa');
+    expect(after.pancakeAttention).not.toMatch(/tự hỏi lại|tự thử lại/);
   });
 
   it('STALE giữa lúc lượt đẩy đang bay, lượt cuối của job gặp 503 (markPushFailure final): vẫn STALE, không FAILED', async () => {

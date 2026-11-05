@@ -209,6 +209,21 @@ export function pushRetryGateDecision(
   }
 }
 
+/**
+ * Lời nhắc "Cần xử lý Pancake" của đơn STALE theo ĐÚNG quyết định của "Đẩy lại" (`pushRetryGateDecision` + môi trường): MỘT hàm cho
+ * `syncPayment` (khách vừa trả tiền) và `markPushFailure` (lượt đang bay lỗi muộn). `because` là lý do đang nhắc. Mở đầu bằng
+ * ATTENTION_PUSH_FAILED để đẩy thành công và đường huỷ (ATTENTION_SETTLED_BY_CANCEL) tự gỡ nhắc như lời đẩy lỗi khác.
+ * NEVER → null: admin không đẩy lại được (đã huỷ/rời kho/đối tác tự giao), đẩy là kho giao lần hai nên không có gì để bảo bấm.
+ */
+export function staleReminder(decision: PushRetryDecision, because: string): string | null {
+  if (decision.kind === 'NEVER') return null;
+  const head = `${ATTENTION_PUSH_FAILED} (quá hạn tự đẩy) — ${because}`;
+  const check = 'kiểm tra kho đã giao tay chưa; chưa thì bấm "Đẩy lại Pancake".';
+  return decision.kind === 'NOW'
+    ? `${head}: ${check}`
+    : `${head}, nhưng đơn đang chờ ${decision.waitingFor} nên CHƯA bấm "Đẩy lại Pancake" lúc này. Khi đủ điều kiện: ${check}`;
+}
+
 type OrderWithItems = Order & { items: OrderItem[] };
 
 /** Đơn cũ trước cột trạng thái huỷ: có dấu vết đã (có thể) lên Pancake thì phải huỷ bên đó. */
@@ -425,11 +440,25 @@ export class PancakeOrderService {
     // CONFIG_RECHECK coi như lỗi tạm: khoá đã đẩy được đơn khác, cron thử lại bình thường.
     const transientLike = kind === PUSH_ERROR_KIND.TRANSIENT || kind === PUSH_ERROR_KIND.CONFIG_RECHECK;
     if (!transientLike || (final && !this.inTransientGrace(order, err))) {
-      const hint = transientLike
-        ? 'Hệ thống tự thử lại mỗi 15 phút; sửa nguyên nhân rồi bấm "Đẩy lại Pancake".'
-        : `Thử lại không tự hết lỗi: sửa nguyên nhân rồi bấm "Đẩy lại Pancake" (hệ thống chỉ hỏi lại mỗi ${PUSH_RETRY.SLOW_MINUTES} phút). Không tạo tay đơn này trên Pancake: hệ thống vẫn tự hỏi lại, làm vậy sẽ thành hai đơn kho.`;
-      await flagPancakeAttention(this.prisma, this.alerts, order, `${ATTENTION_PUSH_FAILED} (kho chưa thấy đơn): ${pancakeErrorText(err)}. ${hint}`, this.logger);
+      const reason = await this.failureReminder(order, err, transientLike);
+      if (reason) await flagPancakeAttention(this.prisma, this.alerts, order, reason, this.logger);
     }
+  }
+
+  /**
+   * Lời gắn lên "Cần xử lý Pancake" khi một lượt đẩy lỗi. Đơn STALE (lượt đang bay lỗi sau khi markOverdue đánh STALE) không được nhận câu
+   * "hệ thống vẫn tự thử lại": không đường tự động nào đẩy đơn STALE, câu đó đè lời nhắc đúng và không ai sửa lại (markOverdue bỏ qua STALE).
+   * Đọc trạng thái SAU khi đã ghi lỗi. null = không gắn gì (đơn đã lên Pancake giữa chừng, hoặc STALE mà admin không đẩy lại được).
+   */
+  private async failureReminder(order: { id: string; code: string }, err: unknown, transientLike: boolean): Promise<string | null> {
+    const now = await this.prisma.order.findUnique({ where: { id: order.id }, include: { items: { select: { backorderedQty: true } } } });
+    if (!now || now.pancakeOrderId) return null;
+    const cause = pancakeErrorText(err);
+    if (now.pancakePushStatus === PANCAKE_PUSH.STALE) return staleReminder(this.retryDecision(now), `lượt đẩy đang bay vừa lỗi «${cause}»`);
+    const hint = transientLike
+      ? 'Hệ thống tự thử lại mỗi 15 phút; sửa nguyên nhân rồi bấm "Đẩy lại Pancake".'
+      : `Thử lại không tự hết lỗi: sửa nguyên nhân rồi bấm "Đẩy lại Pancake" (hệ thống chỉ hỏi lại mỗi ${PUSH_RETRY.SLOW_MINUTES} phút). Không tạo tay đơn này trên Pancake: hệ thống vẫn tự hỏi lại, làm vậy sẽ thành hai đơn kho.`;
+    return `${ATTENTION_PUSH_FAILED} (kho chưa thấy đơn): ${cause}. ${hint}`;
   }
 
   /** Ghi lỗi của một lượt đẩy ngay trong pushOrder (trạng thái PENDING, lời lỗi, loại lỗi). */
@@ -559,15 +588,8 @@ export class PancakeOrderService {
     if (!order.pancakeOrderId && order.pancakePushStatus === PANCAKE_PUSH.STALE) {
       // Chỉ bảo "bấm Đẩy lại" khi retryPushByAdmin nhận đơn NGAY lúc này (cùng quyết định). Đơn đang chờ việc khác thì nói rõ chờ gì, chưa bấm;
       // đơn đã huỷ/rời kho/đối tác tự giao thì không nhắc (admin không đẩy lại được, đẩy là kho giao lần hai).
-      const decision = this.retryDecision(order);
-      if (decision.kind === 'NEVER') return;
-      // Mở đầu bằng ATTENTION_PUSH_FAILED để đẩy thành công và đường huỷ (ATTENTION_SETTLED_BY_CANCEL) tự gỡ nhắc, như lời đẩy lỗi khác.
-      const head = `${ATTENTION_PUSH_FAILED} (quá hạn tự đẩy) — khách vừa thanh toán`;
-      const reason =
-        decision.kind === 'NOW'
-          ? `${head}: kiểm tra kho đã giao tay chưa; chưa thì bấm "Đẩy lại Pancake".`
-          : `${head}, nhưng đơn đang chờ ${decision.waitingFor} nên CHƯA bấm "Đẩy lại Pancake" lúc này. Khi đủ điều kiện: kiểm tra kho đã giao tay chưa; chưa thì bấm "Đẩy lại Pancake".`;
-      await flagPancakeAttention(this.prisma, this.alerts, order, reason, this.logger);
+      const reason = staleReminder(this.retryDecision(order), 'khách vừa thanh toán');
+      if (reason) await flagPancakeAttention(this.prisma, this.alerts, order, reason, this.logger);
       return;
     }
     if (!order.pancakeOrderId) {
