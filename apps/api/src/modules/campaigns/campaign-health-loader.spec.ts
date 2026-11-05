@@ -34,8 +34,8 @@ function fakePrisma(world: {
   coupons?: Record<string, unknown>[];
   categories?: { slug: string }[];
   peers?: Record<string, unknown>[];
-  /** id các chiến dịch mà truy vấn "ảnh không phục vụ được" trả về. */
-  badImageIds?: string[];
+  /** Dòng truy vấn đầu ảnh (`left(image, 32)`) của các chiến dịch bật cùng vị trí; chiến dịch không có dòng thì coi là ảnh phục vụ được. */
+  imageHeads?: { id: string; head: string }[];
 } = {}) {
   return {
     campaignProduct: { findMany: jest.fn().mockResolvedValue(world.links ?? []) },
@@ -43,12 +43,12 @@ function fakePrisma(world: {
     product: { findMany: jest.fn().mockResolvedValue(world.products ?? []) },
     coupon: { findMany: jest.fn().mockResolvedValue(world.coupons ?? []) },
     category: { findMany: jest.fn().mockResolvedValue(world.categories ?? []) },
-    campaign: {
-      findMany: jest.fn().mockImplementation(async (args: { where?: { id?: unknown } }) => (args.where?.id ? (world.badImageIds ?? []).map((id) => ({ id })) : (world.peers ?? []))),
-    },
+    campaign: { findMany: jest.fn().mockResolvedValue(world.peers ?? []) },
+    $queryRaw: jest.fn().mockResolvedValue(world.imageHeads ?? []),
   };
 }
-const calls = (p: ReturnType<typeof fakePrisma>) => Object.values(p).reduce((n, m) => n + m.findMany.mock.calls.length, 0);
+const calls = (p: ReturnType<typeof fakePrisma>) =>
+  p.$queryRaw.mock.calls.length + Object.values(p).reduce((n, m) => n + ('findMany' in m ? m.findMany.mock.calls.length : 0), 0);
 
 describe('campaignHealthBatch', () => {
   it('không N+1: số truy vấn như nhau cho 3 hay 60 chiến dịch', async () => {
@@ -110,21 +110,35 @@ describe('campaignHealthBatch', () => {
     const prisma = fakePrisma({ peers, products: [prod('a')] });
     const [issues = []] = await campaignHealthBatch(prisma as never, [{ subject: subject('zz', { sortOrder: 9 }), productIds: ['a'], couponCodes: [] }], NOW);
     expect(issues.map((i) => i.code)).toEqual(['CROWDED']);
-    expect(prisma.campaign.findMany).toHaveBeenCalledTimes(2);
+    expect(prisma.campaign.findMany).toHaveBeenCalledTimes(1);
     expect(prisma.campaign.findMany.mock.calls[0][0].where).toMatchObject({ isActive: true, placement: { in: ['HOME_TOP'] } });
   });
 
   it('đối thủ ảnh rỗng, SVG hỏng hay đích không dựng được link không tính là slide: 5 đối thủ như vậy không làm chiến dịch này CROWDED', async () => {
     const mk = (id: string, over: Record<string, unknown> = {}) => ({ id, placement: 'HOME_TOP', audience: 'ALL', startAt: at(-1), endAt: at(10), sortOrder: 0, linkType: 'CAMPAIGN_PAGE', linkValue: null, ...over });
     const peers = [mk('p1'), mk('p2'), mk('p3', { linkType: 'PRODUCT', linkValue: 'có dấu' }), mk('p4', { linkType: 'URL_INTERNAL', linkValue: '/khong-co' }), mk('p5', { linkType: 'CATEGORY', linkValue: null })];
-    const prisma = fakePrisma({ peers, badImageIds: ['p1', 'p2'], products: [prod('a')] });
+    const prisma = fakePrisma({ peers, imageHeads: [{ id: 'p1', head: '' }, { id: 'p2', head: 'data:image/svg+xml;base64,PHN2Zz4=' }, { id: 'p3', head: 'https://cdn.test/a.jpg' }], products: [prod('a')] });
     const [issues = []] = await campaignHealthBatch(prisma as never, [{ subject: subject('zz', { sortOrder: 9 }), productIds: ['a'], couponCodes: [] }], NOW);
     expect(issues.map((i) => i.code)).toEqual([]);
-    // Ảnh được lọc ở DB (không kéo base64 về): truy vấn thứ hai chỉ hỏi id, kèm điều kiện rỗng hoặc data URL không phải ảnh raster.
-    const q = prisma.campaign.findMany.mock.calls[1][0];
-    expect(q.select).toEqual({ id: true });
-    expect(q.where.id).toEqual({ in: ['p1', 'p2', 'p3', 'p4', 'p5'] });
-    expect(q.where.OR).toEqual(expect.arrayContaining([{ image: '' }]));
+    // Chỉ đọc 32 ký tự đầu của ảnh ở DB (không kéo cả base64, không buộc Postgres đọc trọn TOAST), tham số hoá theo id.
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+    const [strings, ids] = prisma.$queryRaw.mock.calls[0] as [string[], { values: unknown[] }];
+    expect(strings.join('?')).toContain('left("image", 32)');
+    expect(ids.values).toEqual(['p1', 'p2', 'p3', 'p4', 'p5']);
+  });
+
+  it('đầu ảnh raster hợp lệ thì ra slide; đầu data URL lạ hay rỗng thì không', async () => {
+    const mk = (id: string) => ({ id, placement: 'HOME_TOP', audience: 'ALL', startAt: at(-1), endAt: at(10), sortOrder: 0, linkType: 'CAMPAIGN_PAGE', linkValue: null });
+    const peers = ['p1', 'p2', 'p3', 'p4', 'p5'].map(mk);
+    const run = async (head: string) => {
+      const imageHeads = peers.map((p) => ({ id: p.id, head }));
+      const [issues = []] = await campaignHealthBatch(fakePrisma({ peers, imageHeads, products: [prod('a')] }) as never, [{ subject: subject('zz', { sortOrder: 9 }), productIds: ['a'], couponCodes: [] }], NOW);
+      return issues.map((i) => i.code);
+    };
+    expect(await run('data:image/png;base64,iVBORw0KGgo')).toEqual(['CROWDED']);
+    expect(await run('https://cdn.test/banner.jpg')).toEqual(['CROWDED']);
+    expect(await run('data:image/svg+xml;base64,PHN2Zz4')).toEqual([]);
+    expect(await run('')).toEqual([]);
   });
 
   it('chiến dịch đã kết thúc: không nạp liên kết, đích hay chiến dịch khác; chỉ báo ngày kết thúc', async () => {

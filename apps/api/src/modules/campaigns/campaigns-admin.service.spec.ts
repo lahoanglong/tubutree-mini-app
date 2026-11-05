@@ -91,7 +91,7 @@ function setup(
       findUnique: jest.fn().mockImplementation(({ where }: { where: { slug: string } }) => Promise.resolve((opts.categorySlugs ?? []).includes(where.slug) ? { id: 'k' } : null)),
     },
     coupon: { findMany: jest.fn().mockResolvedValue(opts.coupons ?? []) },
-    $queryRaw: jest.fn().mockReturnValue('lock'),
+    $queryRaw: jest.fn().mockResolvedValue([]),
     $transaction: jest.fn(),
   };
   // Giao dịch tương tác: chạy hàm với chính mock (tx giống prisma); ném lỗi trong hàm là huỷ giao dịch như thật.

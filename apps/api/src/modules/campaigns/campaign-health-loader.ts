@@ -1,12 +1,12 @@
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { normalizeCouponCode } from '../coupons/coupons.service';
 import { isPublicProduct } from '../catalog/public-product';
-import { SERVED_IMAGE_MIMES, servedImagePrefix } from '../../common/served-image';
+import { hasServedImagePrefix } from '../../common/served-image';
 import { bannerLinkUsable } from './campaign-public';
 import { campaignHealth, PeerIndex, usableCounts, type HealthCoupon, type HealthIssue, type HealthProduct, type HealthSubject } from './campaign-health';
 
-type HealthPrisma = Pick<PrismaService, 'campaign' | 'campaignProduct' | 'campaignCoupon' | 'product' | 'coupon' | 'category'>;
+type HealthPrisma = Pick<PrismaService, '$queryRaw' | 'campaign' | 'campaignProduct' | 'campaignCoupon' | 'product' | 'coupon' | 'category'>;
 
 export interface HealthRequest {
   subject: HealthSubject;
@@ -31,16 +31,6 @@ const COUPON_SELECT = { code: true, isActive: true, startAt: true, endAt: true, 
 // Trần an toàn cho số chiến dịch bật cùng nạp để tính chồng banner (danh sách admin cũng chỉ lấy tối đa 200 dòng).
 const PEER_LIMIT = 500;
 
-/**
- * Ảnh banner KHÔNG ra được slide (khớp `bannerImage`): rỗng, hoặc data URL không phải ảnh raster base64 (SVG...). Lọc ngay ở DB để không kéo
- * cả ảnh base64 (tới ~1,5 MB mỗi chiến dịch) về. Chỉ nhìn tiền tố nên ảnh có tiền tố hợp lệ nhưng thân base64 hỏng vẫn tính là ra slide
- * (hiếm; sai theo hướng thừa một cảnh báo CROWDED, không bao giờ thiếu).
- */
-const RASTER_PREFIXES = SERVED_IMAGE_MIMES.map(servedImagePrefix);
-const UNSERVABLE_IMAGE: Prisma.CampaignWhereInput = {
-  OR: [{ image: '' }, { AND: [{ image: { startsWith: 'data:' } }, { NOT: { OR: RASTER_PREFIXES.map((p) => ({ image: { startsWith: p } })) } }] }],
-};
-
 const toProduct = (p: ProductRow): HealthProduct => ({
   name: p.name,
   visible: isPublicProduct(p),
@@ -55,8 +45,8 @@ export interface HealthDetail {
 }
 
 /**
- * Kiểm sức khoẻ nhiều chiến dịch bằng số truy vấn cố định (tối đa 7, không phụ thuộc số chiến dịch): liên kết sản phẩm, liên kết mã, sản phẩm đang soạn,
- * mã đang soạn, đích sản phẩm, đích danh mục, chiến dịch bật cùng vị trí. Thứ tự kết quả theo thứ tự `requests`.
+ * Kiểm sức khoẻ nhiều chiến dịch bằng số truy vấn cố định (tối đa 8, không phụ thuộc số chiến dịch): liên kết sản phẩm, liên kết mã, sản phẩm đang soạn,
+ * mã đang soạn, đích sản phẩm, đích danh mục, chiến dịch bật cùng vị trí, và (chỉ khi có chiến dịch khác) đầu ảnh của chúng để biết cái nào thật sự ra slide. Thứ tự kết quả theo thứ tự `requests`.
  */
 export async function campaignHealthBatch(prisma: HealthPrisma, requests: readonly HealthRequest[], now: Date): Promise<HealthIssue[][]> {
   return (await campaignHealthDetailBatch(prisma, requests, now)).map((d) => d.issues);
@@ -97,11 +87,12 @@ export async function campaignHealthDetailBatch(prisma: HealthPrisma, requests: 
     }),
   ]);
 
-  const unservable = new Set(
-    peerRows.length
-      ? (await prisma.campaign.findMany({ where: { id: { in: peerRows.map((p) => p.id) }, ...UNSERVABLE_IMAGE }, select: { id: true } })).map((r) => r.id)
-      : [],
-  );
+  // Ảnh banner có ra được slide không: chỉ lấy 32 ký tự đầu (ảnh base64 tới ~1,5 MB mỗi chiến dịch; `left` không buộc Postgres đọc trọn TOAST) rồi phân loại
+  // bằng tiền tố ảnh raster dùng chung với endpoint ảnh. Tiền tố hợp lệ mà thân base64 hỏng vẫn tính là ra slide (hiếm; chỉ thừa một cảnh báo CROWDED).
+  const heads = peerRows.length
+    ? await prisma.$queryRaw<{ id: string; head: string }[]>`SELECT "id", left("image", 32) AS "head" FROM "campaigns" WHERE "id" IN (${Prisma.join(peerRows.map((p) => p.id))})`
+    : [];
+  const unservable = new Set(heads.filter((h) => h.head === '' || (h.head.startsWith('data:') && !hasServedImagePrefix(h.head))).map((h) => h.id));
   const peerFacts = peerRows.map(({ linkType, linkValue, ...p }) => ({ ...p, shows: !unservable.has(p.id) && bannerLinkUsable({ linkType, linkValue }) }));
 
   const peerIndexByPlacement = new Map<string, { peers: typeof peerFacts; index: PeerIndex }>();
