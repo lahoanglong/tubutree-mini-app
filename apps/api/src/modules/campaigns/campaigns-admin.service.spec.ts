@@ -472,7 +472,7 @@ describe('CampaignsAdminService: kiểm sức khoẻ trước khi bật', () => 
     it('sửa chiến dịch đã lưu mà không gửi danh sách: đọc liên kết đang lưu', async () => {
       const { svc, prisma } = setup({ linked: [linkedTo('c1')] });
       const out = await svc.check(dto({ id: 'c1' }), NOW);
-      expect(out).toEqual({ issues: [], blockers: 0, warnings: 0 });
+      expect(out).toEqual({ issues: [], usable: { products: 1, coupons: 0 }, blockers: 0, warnings: 0 });
       expect(prisma.campaignProduct.findMany).toHaveBeenCalledTimes(1);
     });
 
