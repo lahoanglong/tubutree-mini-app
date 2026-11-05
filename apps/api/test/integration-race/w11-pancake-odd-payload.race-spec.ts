@@ -32,7 +32,16 @@ describe('Payload Pancake kiểu lạ không làm hỏng đồng bộ và tồn 
     );
   });
 
+  const eventIds: string[] = [];
+
   afterAll(async () => {
+    if (prisma) {
+      const products = await prisma.product.findMany({ where: { pancakeId: { startsWith: 'w11-' } }, select: { id: true } });
+      const productIds = products.map((p) => p.id);
+      await prisma.variation.deleteMany({ where: { productId: { in: productIds } } });
+      await prisma.product.deleteMany({ where: { id: { in: productIds } } });
+      await prisma.pancakeWebhookEvent.deleteMany({ where: { id: { in: eventIds } } });
+    }
     await prisma?.$disconnect();
   });
 
@@ -168,6 +177,7 @@ describe('Payload Pancake kiểu lạ không làm hỏng đồng bộ và tồn 
       const event = await prisma.pancakeWebhookEvent.create({
         data: { eventType: PANCAKE_STOCK_EVENT, dedupeKey: pancakeDedupeKey(PANCAKE_STOCK_EVENT, body), rawPayload: body, status: 'RECEIVED', receivedAt: new Date() },
       });
+      eventIds.push(event.id);
       await proc.process({ data: { eventId: event.id } } as Job<{ eventId: string }>);
       return prisma.pancakeWebhookEvent.findUniqueOrThrow({ where: { id: event.id } });
     }
@@ -187,7 +197,7 @@ describe('Payload Pancake kiểu lạ không làm hỏng đồng bộ và tồn 
         pancakeStock: 9,
         pancakeStockEventAt: null,
       });
-      await stockEvent(variation.pancakeId!, { remain_quantity: 5, updated_at: '2026-11-06T08:00:00Z' });
+      await stockEvent(variation.pancakeId!, { remain_quantity: 5, updated_at: new Date(Date.now() - 60_000).toISOString() });
       expect(await prisma.variation.findUniqueOrThrow({ where: { id: variation.id }, select: { stock: true } })).toEqual({ stock: 5 });
     });
   });
