@@ -17,6 +17,7 @@ import {
   type CampaignCheckInput,
 } from '@/lib/admin-campaigns-client';
 import { isoToVnLocal, parseCouponCodes, vnLocalToIso } from '@/lib/admin-campaign-form';
+import { ApiError } from '@/lib/client-api';
 import { useBannerImageCheck } from '@/lib/use-banner-image-check';
 import { useCampaignCheck } from '@/lib/use-campaign-check';
 import { CampaignCheckPanel } from './campaign-check-panel';
@@ -221,6 +222,8 @@ export function CampaignForm({
       }
     } catch (e) {
       setBusy(false);
+      // Máy chủ từ chối vì trạng thái đã đổi (400 phán quyết, 409 người khác đang lưu): kiểm lại để khối kiểm và nút Lưu theo kịp.
+      if (e instanceof ApiError && (e.status === 400 || e.status === 409)) check.recheck();
       return setError(errText(e, 'Không lưu được chiến dịch.'));
     }
     void qc.invalidateQueries({ queryKey: ['admin-campaigns'] });

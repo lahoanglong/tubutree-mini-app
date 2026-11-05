@@ -13,7 +13,7 @@ const ADMIN_LOGIN = {
 
 const IMAGE = 'https://img.test/banner.svg';
 const BANNER_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="600"><rect width="1500" height="600" fill="#2f6b3a"/></svg>';
-const BAD_SLUG_MESSAGE = 'Không có sản phẩm với slug "sua-hat-sai". Kiểm lại slug hoặc đổi đích.';
+const BAD_SLUG_MESSAGE = 'Không có sản phẩm với slug "sua-hat-sai". Kiểm lại slug.';
 
 const listRow = (id: string, over: Record<string, unknown> = {}) => ({
   id,
@@ -61,10 +61,10 @@ test.describe('Admin: kiểm chiến dịch trước khi bật', () => {
       const b = call.body as { linkType: string; linkValue?: string };
       if (b.linkType === 'PRODUCT' && b.linkValue === 'sua-hat-sai') {
         return {
-          issues: [{ code: 'LINK_PRODUCT_MISSING', level: 'BLOCK', message: BAD_SLUG_MESSAGE }],
+          issues: [{ code: 'INVALID', level: 'BLOCK', message: BAD_SLUG_MESSAGE }],
           blockers: 1,
           warnings: 0,
-          verdict: { blocked: true, codes: ['LINK_PRODUCT_MISSING'], reason: BAD_SLUG_MESSAGE },
+          verdict: { blocked: true, codes: ['INVALID'], reason: BAD_SLUG_MESSAGE },
         };
       }
       return { issues: [], blockers: 0, warnings: 0, verdict: { blocked: false, codes: [] } };

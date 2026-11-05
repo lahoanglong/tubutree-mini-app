@@ -639,7 +639,7 @@ describe('CampaignsTab: khối "Kiểm trước khi bật" và xem trước tron
   });
 
   it('sửa đích rồi kiểm lại: lỗi chặn biến mất, hiện "Sẵn sàng" và mở khoá nút', async () => {
-    mocks.check.mockResolvedValueOnce({ issues: [issue('LINK_PRODUCT_MISSING', 'BLOCK', 'Không có sản phẩm với slug "sai".')], blockers: 1, warnings: 0, verdict: { blocked: true, codes: ['LINK_PRODUCT_MISSING'], reason: 'Không có sản phẩm với slug "sai".' } });
+    mocks.check.mockResolvedValueOnce({ issues: [issue('INVALID', 'BLOCK', 'Không có sản phẩm với slug "sai". Kiểm lại slug.')], blockers: 1, warnings: 0, verdict: { blocked: true, codes: ['INVALID'], reason: 'Không có sản phẩm với slug "sai". Kiểm lại slug.' } });
     const c = await mount();
     await open(c);
     fillBasics(c);
@@ -926,6 +926,29 @@ describe('CampaignsTab: khoá lưu theo phán quyết của máy chủ', () => {
       expect(saveBtn(c).disabled).toBe(false);
     });
 
+    it('đang kiểm lại trên kết quả đã có: giữ phán quyết cũ, nút bị khoá và hiện "Đang kiểm lại…"', async () => {
+      mocks.check.mockResolvedValue(result(SHUT));
+      const c = await mount();
+      await edit(c);
+      typeInto(field(c, 'Tên chiến dịch'), 'Tên mới');
+      await settle();
+      expect(recheckBtn(c).disabled).toBe(false);
+      expect(c.textContent).not.toContain('Đang kiểm lại…');
+      let release!: (v: unknown) => void;
+      mocks.check.mockReturnValueOnce(new Promise((r) => (release = r)));
+      click(recheckBtn(c));
+      await flush(3);
+      expect(recheckBtn(c).disabled).toBe(true);
+      expect(c.querySelector('[data-testid="campaign-check"]')!.textContent).toContain('Đang kiểm lại…');
+      expect(saveBtn(c).disabled).toBe(true);
+      expect(c.querySelector('[data-testid="campaign-check-lock"]')!.textContent).toBe(REASON);
+      await act(async () => release(result(OPEN)));
+      await settle();
+      expect(c.textContent).not.toContain('Đang kiểm lại…');
+      expect(recheckBtn(c).disabled).toBe(false);
+      expect(saveBtn(c).disabled).toBe(false);
+    });
+
     it('cửa sổ được focus lại: tự kiểm lại đúng một lần dù focus và visibilitychange cùng bắn', async () => {
       mocks.check.mockResolvedValue(result(OPEN));
       const c = await mount();
@@ -978,6 +1001,37 @@ describe('CampaignsTab: khoá lưu theo phán quyết của máy chủ', () => {
       await fire('focus');
       await settle();
       expect(mocks.check.mock.calls.length).toBe(before);
+    });
+  });
+
+  describe('lưu bị máy chủ từ chối: kiểm lại để khối kiểm theo kịp', () => {
+    const rejectWith = async (status: number) => {
+      mocks.check.mockResolvedValueOnce(result(OPEN));
+      mocks.update.mockRejectedValueOnce(new ApiError(REASON, status));
+      const c = await mount();
+      await edit(c);
+      typeInto(field(c, 'Tên chiến dịch'), 'Tên mới');
+      await settle();
+      const before = mocks.check.mock.calls.length;
+      click(saveBtn(c));
+      await flush(10);
+      return { c, before };
+    };
+
+    it.each([400, 409])('lỗi %i: gọi kiểm lại ngay và nút Lưu theo phán quyết mới', async (status) => {
+      mocks.check.mockResolvedValue(result(SHUT));
+      const { c, before } = await rejectWith(status);
+      await flush(4);
+      expect(mocks.check.mock.calls.length).toBe(before + 1);
+      expect(c.querySelector('[role="alert"]')!.textContent).toContain(REASON);
+      expect(saveBtn(c).disabled).toBe(true);
+    });
+
+    it('lỗi 500 hay lỗi mạng thì không kiểm lại', async () => {
+      const { c, before } = await rejectWith(500);
+      await settle();
+      expect(mocks.check.mock.calls.length).toBe(before);
+      expect(c.querySelector('[role="alert"]')).not.toBeNull();
     });
   });
 

@@ -19,6 +19,8 @@ export interface CampaignCheckState {
   warnings: number;
   /** Phán quyết lần lưu của máy chủ cho đúng bản nháp đã kiểm (thiếu khi API cũ). */
   verdict?: { blocked: boolean; codes: string[]; reason?: string };
+  /** Đang kiểm lại đúng bản nháp đã có kết quả: vẫn giữ kết quả và phán quyết cũ cho tới khi có kết quả mới. */
+  refreshing?: boolean;
   /** Lý do chưa kiểm được (status `error`). */
   message?: string;
 }
@@ -74,7 +76,11 @@ export function useCampaignCheck(input: CampaignCheckInput | null, opts: { pause
     let live = true;
     const delay = immediate.current ? 0 : CHECK_DEBOUNCE_MS;
     immediate.current = false;
-    setState((s) => (s.forKey === key && s.status === 'ready' ? s : { ...s, status: 'loading', forKey: key }));
+    setState((s) => {
+      if (s.forKey === key && s.status === 'ready') return { ...s, refreshing: true };
+      const { refreshing: _stale, ...rest } = s;
+      return { ...rest, status: 'loading', forKey: key };
+    });
     const timer = setTimeout(() => {
       checkAdminCampaign(body).then(
         (r) =>
@@ -119,6 +125,9 @@ export function useCampaignCheck(input: CampaignCheckInput | null, opts: { pause
 
   // Kết quả của bản nháp cũ (vừa gõ thêm, chưa kịp kiểm lại) vẫn hiện trong khối kiểm nhưng không được dùng để khoá hay mở khoá bản nháp mới.
   const { forKey, verdict, ...rest } = state;
-  if (forKey !== key) return { ...(input ? { ...rest, status: 'loading' as const } : IDLE), recheck };
+  if (forKey !== key) {
+    const { refreshing: _stale, ...fresh } = rest;
+    return { ...(input ? { ...fresh, status: 'loading' as const } : IDLE), recheck };
+  }
   return { ...rest, ...(verdict ? { verdict } : {}), recheck };
 }

@@ -41,13 +41,18 @@ export function CampaignCheckPanel({
           <button
             type="button"
             onClick={onRecheck}
-            disabled={check.status === 'loading'}
+            disabled={check.status === 'loading' || check.refreshing === true}
             className="inline-flex min-h-[44px] items-center text-xs font-medium text-forest-700 underline sm:min-h-[36px] disabled:opacity-50"
           >
             Kiểm lại
           </button>
         )}
       </div>
+      {check.refreshing && (
+        <p role="status" className="text-xs text-stone-500">
+          Đang kiểm lại…
+        </p>
+      )}
       {check.status === 'idle' && (
         <p className="text-xs text-stone-500">Điền ngày bắt đầu, kết thúc và đích bấm để kiểm.</p>
       )}
