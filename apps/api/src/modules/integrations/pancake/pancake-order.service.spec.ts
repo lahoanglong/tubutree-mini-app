@@ -806,6 +806,104 @@ describe('PancakeOrderService — đơn STALE không có đường tự động 
   });
 });
 
+describe('PancakeOrderService — STALE chỉ rời bằng đẩy thành công hoặc "Đẩy lại" của admin (mọi chỗ ghi pancakePushStatus)', () => {
+  const transient = () => new PancakeApiError('Pancake trả 503 khi tạo đơn', true, false, 503);
+
+  /** Đơn bị đánh STALE giữa lúc lượt đẩy đang bay (markStale của lượt khác): lật hàng ngay trong lệnh gọi Pancake. */
+  const staleDuringCreate = (t: ReturnType<typeof setup>, outcome: () => unknown) =>
+    t.client.createOrder.mockImplementation(async () => {
+      t.row().pancakePushStatus = PANCAKE_PUSH.STALE;
+      return outcome();
+    });
+
+  it('lượt đang bay gặp lỗi tạm sau khi đơn thành STALE: vẫn STALE (loại và lời lỗi vẫn ghi), không về PENDING', async () => {
+    const t = setup({ pancakePushStatus: PANCAKE_PUSH.PENDING });
+    staleDuringCreate(t, () => {
+      throw transient();
+    });
+    await expect(t.svc.pushOrder('o1')).rejects.toBeInstanceOf(PancakeApiError);
+    expect(t.row()).toMatchObject({ pancakePushStatus: PANCAKE_PUSH.STALE, pancakeErrorKind: 'TRANSIENT' });
+    expect(t.row().pancakeSyncError).toContain('503');
+    // Job BullMQ thử lại: đơn STALE không có đường tự động nào, không gọi Pancake lần hai.
+    expect(await t.svc.pushOrder('o1')).toBeNull();
+    expect(t.client.createOrder).toHaveBeenCalledTimes(1);
+  });
+
+  it('lỗi dứt khoát (422) sau khi đơn thành STALE: vẫn STALE, mốc "đã gửi lệnh tạo" vẫn được gỡ', async () => {
+    const t = setup({ pancakePushStatus: PANCAKE_PUSH.PENDING });
+    staleDuringCreate(t, () => {
+      throw new PancakeApiError('Pancake trả 422 khi tạo đơn: x', false, false, 422);
+    });
+    await expect(t.svc.pushOrder('o1')).rejects.toBeInstanceOf(PancakeApiError);
+    expect(t.row()).toMatchObject({ pancakePushStatus: PANCAKE_PUSH.STALE, pancakeErrorKind: 'REJECTED', pancakePushClaimedAt: null });
+  });
+
+  it('nhánh "Pancake không trả mã đơn" sau khi đơn thành STALE: vẫn STALE', async () => {
+    const t = setup({ pancakePushStatus: PANCAKE_PUSH.PENDING });
+    staleDuringCreate(t, () => ({}));
+    await expect(t.svc.pushOrder('o1')).rejects.toBeInstanceOf(PancakeApiError);
+    expect(t.row().pancakePushStatus).toBe(PANCAKE_PUSH.STALE);
+  });
+
+  it('lỗi tạm gặp loại cũ cần giữ (REJECTED) trên đơn STALE: không ghi lời lỗi, vẫn STALE', async () => {
+    const t = setup({ pancakePushStatus: PANCAKE_PUSH.PENDING, pancakeErrorKind: 'REJECTED', pancakeSyncError: 'Pancake trả 422 cũ' });
+    staleDuringCreate(t, () => {
+      throw transient();
+    });
+    await expect(t.svc.pushOrder('o1')).rejects.toBeInstanceOf(PancakeApiError);
+    expect(t.row()).toMatchObject({ pancakePushStatus: PANCAKE_PUSH.STALE, pancakeErrorKind: 'REJECTED', pancakeSyncError: 'Pancake trả 422 cũ' });
+  });
+
+  it('markPushFailure(final) trên đơn STALE: không ghi FAILED đè STALE, loại lỗi vẫn ghi', async () => {
+    const t = setup({ pancakePushStatus: PANCAKE_PUSH.STALE });
+    await t.svc.markPushFailure('o1', new PancakeOrderDataError('thiếu SĐT'), true);
+    expect(t.row()).toMatchObject({ pancakePushStatus: PANCAKE_PUSH.STALE, pancakeErrorKind: 'DATA' });
+  });
+
+  it('markPushFailure(final) trên đơn STALE gặp 401: vẫn hoàn lượt đã đốt và vẫn STALE', async () => {
+    const t = setup({ pancakePushStatus: PANCAKE_PUSH.STALE, pancakePushAttempts: 3 });
+    await t.svc.markPushFailure('o1', new PancakeApiError('Pancake trả 401 khi tạo đơn', false, false, 401), true);
+    expect(t.row()).toMatchObject({ pancakePushStatus: PANCAKE_PUSH.STALE, pancakeErrorKind: 'CONFIG', pancakePushAttempts: 2 });
+  });
+
+  it('markPushFailure trên đơn không STALE vẫn ghi FAILED như cũ', async () => {
+    const t = setup({ pancakePushStatus: PANCAKE_PUSH.PENDING });
+    await t.svc.markPushFailure('o1', new PancakeOrderDataError('thiếu SĐT'), true);
+    expect(t.row().pancakePushStatus).toBe(PANCAKE_PUSH.FAILED);
+  });
+
+  it('đơn STALE đã huỷ (cổng DEAD): không ghi SKIPPED đè STALE', async () => {
+    const t = setup({ pancakePushStatus: PANCAKE_PUSH.STALE, status: 'CANCELLED' });
+    expect(await t.svc.pushOrder('o1')).toBeNull();
+    expect(t.row().pancakePushStatus).toBe(PANCAKE_PUSH.STALE);
+  });
+
+  it('đơn STALE trả trước chưa thanh toán (cổng WAIT_PAYMENT): không ghi WAITING_PAYMENT đè STALE', async () => {
+    const t = setup({ pancakePushStatus: PANCAKE_PUSH.STALE, paymentMethod: 'ZALOPAY', paymentStatus: 'UNPAID' });
+    expect(await t.svc.pushOrder('o1')).toBeNull();
+    expect(t.row().pancakePushStatus).toBe(PANCAKE_PUSH.STALE);
+  });
+
+  it('Pancake chưa cấu hình, đơn thành STALE giữa lúc đọc và ghi: không ghi NOT_CONFIGURED đè STALE', async () => {
+    const t = setup({ pancakePushStatus: PANCAKE_PUSH.PENDING });
+    t.client.isConfigured.mockImplementation(() => {
+      t.row().pancakePushStatus = PANCAKE_PUSH.STALE;
+      return false;
+    });
+    expect(await t.svc.pushOrder('o1')).toBeNull();
+    expect(t.row().pancakePushStatus).toBe(PANCAKE_PUSH.STALE);
+  });
+
+  it('đẩy thành công và "Đẩy lại" của admin vẫn là hai đường rời STALE', async () => {
+    const t = setup({ pancakePushStatus: PANCAKE_PUSH.STALE });
+    await t.svc.retryPushByAdmin('admin1', 'TUBU1');
+    expect(t.row().pancakePushStatus).toBe(PANCAKE_PUSH.PENDING);
+    staleDuringCreate(t, () => ({ id: 'pk-77' }));
+    await t.svc.pushOrder('o1');
+    expect(t.row()).toMatchObject({ pancakePushStatus: PANCAKE_PUSH.SYNCED, pancakeOrderId: 'pk-77' });
+  });
+});
+
 describe('PancakeOrderService.syncPayment', () => {
   it('đơn đã lên Pancake lúc chờ chuyển khoản, nay PAID → PUT transfer_money = tổng, cod = 0', async () => {
     const t = setup({ pancakeOrderId: 'pk-1', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID' });

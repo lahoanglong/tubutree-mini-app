@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
-import type { Order, OrderItem, PaymentMethod } from '@prisma/client';
+import type { Order, OrderItem, PaymentMethod, Prisma } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { PancakeClient } from './pancake.client';
 import type { PancakeOrderDTO, PancakeOrderTagRef, PancakeUpdateOrderBody } from './pancake.types';
@@ -78,6 +78,30 @@ export const PANCAKE_CANCEL_REFUSED_PREFIX = 'Pancake từ chối lệnh huỷ: 
 
 /** Trạng thái đơn Tubu còn được tự đẩy sang kho: chưa rời kho, chưa kết thúc. */
 export const PANCAKE_PUSHABLE_STATUSES = ['PENDING_PAYMENT', 'CONFIRMED', 'PACKED'] as const;
+
+/**
+ * Điều kiện ghi "đơn chưa STALE". STALE (quá cửa sổ tự đẩy, kho có thể đã giao tay) chỉ rời bằng hai đường: đẩy thành công
+ * (`saveCreated` → SYNCED) và "Đẩy lại" của admin (`retryPushByAdmin` → PENDING). Mọi câu ghi `pancakePushStatus` khác phải mang điều kiện
+ * này (hoặc bỏ trường trạng thái khi đơn STALE): đọc-rồi-ghi không đủ, vì markOverdue/markStale chen vào giữa lúc lượt đẩy đang bay.
+ */
+export const NOT_STALE_WHERE: Prisma.OrderWhereInput = {
+  OR: [{ pancakePushStatus: null }, { pancakePushStatus: { not: PANCAKE_PUSH.STALE } }],
+};
+
+/**
+ * Điều kiện "không lượt đẩy nào đang giữ quyền": không PUSHING, hoặc PUSHING đã quá `PUSH_LEASE_MS` (tiến trình đẩy đã chết). Một luật
+ * cho claim, câu ghi lỗi của job và markOverdue.
+ */
+export function pushLeaseFreeWhere(now: Date = new Date()): Prisma.OrderWhereInput {
+  return {
+    OR: [
+      { pancakePushStatus: null },
+      { pancakePushStatus: { not: PANCAKE_PUSH.PUSHING } },
+      { pancakeLastAttemptAt: null },
+      { pancakeLastAttemptAt: { lt: new Date(now.getTime() - PancakeOrderService.PUSH_LEASE_MS) } },
+    ],
+  };
+}
 
 /**
  * MERCHANT = đơn gian hàng đối tác tự giao (D4): không thuộc kho Tubu, không bao giờ lên Pancake. WAIT_GOMDON = đơn
@@ -232,7 +256,7 @@ export class PancakeOrderService {
     if (!this.client.isConfigured()) {
       this.logger.warn(`Pancake chưa cấu hình — đơn ${order.code} giữ trạng thái chờ đồng bộ.`);
       await this.prisma.order.updateMany({
-        where: { id: order.id, pancakeOrderId: null },
+        where: { id: order.id, pancakeOrderId: null, AND: [NOT_STALE_WHERE] },
         data: { pancakePushStatus: PANCAKE_PUSH.NOT_CONFIGURED, pancakeSyncError: 'Pancake chưa cấu hình (PANCAKE_API_KEY/SHOP_ID).' },
       });
       return null;
@@ -266,13 +290,8 @@ export class PancakeOrderService {
         ...TUBU_FULFILLED_ORDER_WHERE,
         status: { in: [...PANCAKE_PUSHABLE_STATUSES] },
         NOT: DEALER_AWAITING_STOCK_WHERE,
-        OR: [
-          { pancakePushStatus: null },
-          { pancakePushStatus: { not: PANCAKE_PUSH.PUSHING } },
-          { pancakeLastAttemptAt: { lt: new Date(now.getTime() - PancakeOrderService.PUSH_LEASE_MS) } },
-        ],
         // Cùng luật với chặn STALE ở trên, nhưng nguyên tử: đơn vừa bị markOverdue giữa lúc đọc và claim không được claim.
-        AND: [{ OR: [{ pancakePushStatus: null }, { pancakePushStatus: { not: PANCAKE_PUSH.STALE } }] }],
+        AND: [pushLeaseFreeWhere(now), NOT_STALE_WHERE],
       },
       data: {
         pancakePushStatus: PANCAKE_PUSH.PUSHING,
@@ -405,9 +424,9 @@ export class PancakeOrderService {
       // Khoá API sai làm hỏng mọi đơn như nhau: không đốt lượt từng đơn (cron chỉ dò bằng một đơn mỗi giờ).
       const refunded =
         fromJob && kind === PUSH_ERROR_KIND.CONFIG
-          ? await this.prisma.order.updateMany({ where: { ...where, pancakePushAttempts: { gt: 0 } }, data: { ...data, pancakePushAttempts: { increment: -1 } } })
+          ? await this.updateManyKeepingStale({ ...where, pancakePushAttempts: { gt: 0 } }, { ...data, pancakePushAttempts: { increment: -1 } })
           : { count: 0 };
-      const done = refunded.count > 0 ? refunded : await this.prisma.order.updateMany({ where, data });
+      const done = refunded.count > 0 ? refunded : await this.updateManyKeepingStale(where, data);
       if (done.count > 0) return { ...order, kind, kept, written: true };
       const again = await this.prisma.order.findUnique({ where: { id: orderId }, select: { pancakeOrderId: true, pancakeErrorKind: true } });
       if (!again || again.pancakeOrderId) return null;
@@ -805,7 +824,20 @@ export class PancakeOrderService {
   }
 
   private setPushStatus(orderId: string, status: string) {
-    return this.prisma.order.updateMany({ where: { id: orderId, pancakeOrderId: null }, data: { pancakePushStatus: status } });
+    return this.prisma.order.updateMany({ where: { id: orderId, pancakeOrderId: null, AND: [NOT_STALE_WHERE] }, data: { pancakePushStatus: status } });
+  }
+
+  /**
+   * `updateMany` không bao giờ ghi `pancakePushStatus` lên đơn STALE (xem NOT_STALE_WHERE). Câu ghi đầu mang điều kiện "chưa STALE"; hụt
+   * thì ghi lại BỎ trường trạng thái, nên loại lỗi, lời lỗi, mốc và hoàn lượt vẫn được ghi. Dữ liệu không có trạng thái thì ghi thẳng.
+   */
+  private async updateManyKeepingStale(where: Prisma.OrderWhereInput, data: Record<string, unknown>): Promise<{ count: number }> {
+    if (!('pancakePushStatus' in data)) return this.prisma.order.updateMany({ where, data });
+    const withStatus = await this.prisma.order.updateMany({ where: { AND: [where, NOT_STALE_WHERE] }, data });
+    if (withStatus.count > 0) return withStatus;
+    const rest = { ...data };
+    delete rest.pancakePushStatus;
+    return this.prisma.order.updateMany({ where, data: rest });
   }
 
   private setPushError(orderId: string, err: unknown) {

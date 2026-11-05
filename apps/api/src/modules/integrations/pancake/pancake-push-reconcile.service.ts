@@ -9,6 +9,7 @@ import {
   PANCAKE_PUSH,
   PANCAKE_PUSHABLE_STATUSES,
   PancakeOrderService,
+  pushLeaseFreeWhere,
 } from './pancake-order.service';
 import { DEALER_AWAITING_STOCK_WHERE, isDealerAwaitingStock } from '../../dealer/dealer-awaiting-stock';
 import { ATTENTION_PUSH_FAILED, flagPancakeAttention } from './pancake-attention';
@@ -258,6 +259,9 @@ export class PancakePushReconcileService {
           AND: [
             { NOT: DEALER_AWAITING_STOCK_WHERE },
             { NOT: { paymentStatus: { not: 'PAID' }, paymentMethod: { in: GATEWAY_METHODS } } },
+            // Lượt đẩy còn trong hạn thuê sắp ghi kết cục của nó: không đánh STALE chen ngang (nếu lượt đó lỗi, đơn phải còn đúng trạng thái
+            // của nó). Lần quét sau mới đánh; tiến trình đẩy đã chết (quá hạn thuê) thì đánh ngay.
+            pushLeaseFreeWhere(),
           ],
         },
         select: { id: true, code: true, createdAt: true },
@@ -266,7 +270,7 @@ export class PancakePushReconcileService {
       });
       for (const order of overdue) {
         const r = await this.prisma.order.updateMany({
-          where: { id: order.id, pancakeOrderId: null },
+          where: { id: order.id, pancakeOrderId: null, AND: [pushLeaseFreeWhere()] },
           data: { pancakePushStatus: PANCAKE_PUSH.STALE },
         });
         if (r.count === 0) continue;
