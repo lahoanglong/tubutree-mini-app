@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
@@ -237,19 +237,33 @@ export class BrandService {
     const slug = dto.slug?.trim() ? slugifyVi(dto.slug) : slugifyVi(dto.name);
     if (!slug) throw new BadRequestException('Tên nhãn cần có ít nhất một chữ cái hoặc chữ số.');
     this.assertImageChanges(dto, null);
-    return this.prisma.brand.create({
-      data: {
-        name: dto.name,
-        slug,
-        logoUrl: dto.logoUrl ?? null,
-        coverUrl: dto.coverUrl ?? null,
-        tagline: dto.tagline ?? null,
-        story: dto.story ?? null,
-        origin: dto.origin ?? null,
-        certifications: (plainCerts(dto.certifications) as object) ?? undefined,
-        isPublished: dto.isPublished ?? false,
-      },
-    });
+    return this.nameConflictAware(dto.name, () =>
+      this.prisma.brand.create({
+        data: {
+          name: dto.name,
+          slug,
+          logoUrl: dto.logoUrl ?? null,
+          coverUrl: dto.coverUrl ?? null,
+          tagline: dto.tagline ?? null,
+          story: dto.story ?? null,
+          origin: dto.origin ?? null,
+          certifications: (plainCerts(dto.certifications) as object) ?? undefined,
+          isPublished: dto.isPublished ?? false,
+        },
+      }),
+    );
+  }
+
+  /** Tên và slug nhãn đều unique: trùng thì nói rõ tên nhãn thay vì câu chung "vi phạm ràng buộc duy nhất" của bộ lọc Prisma. */
+  private async nameConflictAware<T>(name: string | undefined, write: () => Promise<T>): Promise<T> {
+    try {
+      return await write();
+    } catch (err) {
+      if (name && err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw new ConflictException(`Đã có nhãn hàng trùng tên "${name.trim()}". Hãy đặt tên khác.`);
+      }
+      throw err;
+    }
   }
 
   async updateBrand(
@@ -290,7 +304,7 @@ export class BrandService {
       if (!owner) throw new BadRequestException('userId chủ nhãn không tồn tại.');
       data.ownerUserId = owner.id;
     }
-    return this.prisma.brand.update({ where: { id }, data });
+    return this.nameConflictAware(typeof dto.name === 'string' ? dto.name : undefined, () => this.prisma.brand.update({ where: { id }, data }));
   }
 
   verifyBrand(id: string, isVerified: boolean) {

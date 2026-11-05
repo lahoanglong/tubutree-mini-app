@@ -1,4 +1,5 @@
-import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { BrandService, slugifyVi } from './brand.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 
@@ -248,6 +249,30 @@ describe('BrandService admin', () => {
     expect((cover as BadRequestException).message).toBe('Ảnh bìa chỉ nhận link https hoặc ảnh tải lên (png, jpeg, webp, gif).');
   });
 
+  it('createBrand và updateBrand: tên trùng nhãn khác báo bằng lời nói rõ tên nhãn, không dùng câu chung của cơ sở dữ liệu', async () => {
+    const dup = () => new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x' });
+    const prisma = makePrisma();
+    prisma.brand.create.mockRejectedValue(dup());
+    prisma.brand.findUniqueOrThrow.mockResolvedValue({ id: 'b1' });
+    prisma.brand.update.mockRejectedValue(dup());
+    const svc = new BrandService(prisma, brandConfig);
+    const created = await svc.createBrand({ name: 'Dừa Bến Tre' }).catch((e: unknown) => e);
+    const renamed = await svc.updateBrand('b1', { name: 'Dừa Bến Tre' }).catch((e: unknown) => e);
+    for (const err of [created, renamed]) {
+      expect(err).toBeInstanceOf(ConflictException);
+      expect((err as ConflictException).message).toBe('Đã có nhãn hàng trùng tên "Dừa Bến Tre". Hãy đặt tên khác.');
+    }
+  });
+
+  it('updateBrand: lỗi trùng không liên quan tới tên giữ nguyên để bộ lọc chung xử lý', async () => {
+    const prisma = makePrisma();
+    prisma.brand.findUniqueOrThrow.mockResolvedValue({ id: 'b1' });
+    const dup = new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x' });
+    prisma.brand.update.mockRejectedValue(dup);
+    const svc = new BrandService(prisma, brandConfig);
+    await expect(svc.updateBrand('b1', { tagline: 'Mới' })).rejects.toBe(dup);
+  });
+
   it('updateBrand ném BadRequest nếu slug slugify ra rỗng (vd toàn ký tự đặc biệt)', async () => {
     const prisma = makePrisma();
     prisma.brand.findUniqueOrThrow.mockResolvedValue({ id: 'b1' });
@@ -404,7 +429,6 @@ describe('BrandService follow nhãn', () => {
     const prisma = makePrisma();
     prisma.brand.findFirst.mockResolvedValue({ id: 'b1' });
     prisma.brand.findUniqueOrThrow.mockResolvedValue({ followerCount: 6 });
-    const { Prisma } = require('@prisma/client');
     prisma.$transaction.mockRejectedValue(new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x' }));
     const svc = new BrandService(prisma, brandConfig);
     const out = await svc.followBrand('u1', 'sachi');
