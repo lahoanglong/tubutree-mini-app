@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { MessageCircle, MessageSquare, Phone, Mail, type LucideIcon } from 'lucide-react';
 import { supportContactQuery } from '@tubutree/app-core/queries/config';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { Icon, Text } from '@/components/mini';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
@@ -43,6 +44,11 @@ function GhostLink({ href, icon, children }: { href: string; icon: LucideIcon; c
   );
 }
 
+/** Mail tới CSKH: có mã đơn thì ghi sẵn ở tiêu đề thư để nhân viên khỏi hỏi lại. */
+function mailtoHref(email: string, orderCode?: string): string {
+  return orderCode ? `mailto:${email}?subject=${encodeURIComponent(fillCopy('support.orderContext', { code: orderCode }))}` : `mailto:${email}`;
+}
+
 /**
  * Khối "Cần hỗ trợ?" của chi tiết đơn và theo dõi yêu cầu đổi rác, cùng quy tắc với SupportContact của Mini App:
  * chat bật và đã đăng nhập → vào chat (kèm mã đơn); chưa đăng nhập → giữ OA/hotline và mời đăng nhập; đang khôi phục phiên → chỉ OA/hotline.
@@ -62,29 +68,29 @@ export function SupportContact({ orderCode }: { orderCode?: string }) {
   const chatPath = orderCode ? `/ho-tro/chat?order=${encodeURIComponent(orderCode)}` : '/ho-tro/chat';
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-      <Text variant="caption" tone="tertiary">Cần hỗ trợ?</Text>
+      <Text variant="caption" tone="tertiary">{fillCopy('support.title')}</Text>
       {chatReady && (
         <GhostLink href={chatPath} icon={MessageCircle}>
-          Chat với Tubu Tree
+          {fillCopy('support.chat')}
         </GhostLink>
       )}
       {!chatReady && hasOA && (
-        <button type="button" className={BTN} style={BTN_STYLE} onClick={() => void platformBridge.oa.openChat(orderCode ? `Hỗ trợ đơn ${orderCode}` : undefined)}>
-          <Inner icon={MessageSquare}>Nhắn Zalo OA</Inner>
+        <button type="button" className={BTN} style={BTN_STYLE} onClick={() => void platformBridge.oa.openChat(orderCode ? fillCopy('support.orderContext', { code: orderCode }) : undefined)}>
+          <Inner icon={MessageSquare}>{fillCopy('support.oa')}</Inner>
         </button>
       )}
       {chatOn && phase === 'guest' && (
         <GhostLink href={loginHref(chatPath)} icon={MessageCircle}>
-          Đăng nhập để chat với Tubu Tree
+          {fillCopy('support.chatLogin')}
         </GhostLink>
       )}
       {hotline && (
         <GhostLink href={`tel:${hotline.replace(/[^\d+]/g, '')}`} icon={Phone}>
-          {`Gọi hotline ${formatPhoneDisplay(hotline)}`}
+          {fillCopy('support.hotline', { phone: formatPhoneDisplay(hotline) })}
         </GhostLink>
       )}
       {email && (
-        <GhostLink href={`mailto:${email}`} icon={Mail}>
+        <GhostLink href={mailtoHref(email, orderCode)} icon={Mail}>
           {email}
         </GhostLink>
       )}

@@ -169,6 +169,17 @@ afterEach(() => {
 });
 
 describe('chi tiết đơn web — nút theo trạng thái (gói hl)', () => {
+  it.each(ROWS)('khối "Cần hỗ trợ?" ở cuối trang, hotline và email mang mã đơn: $name', async (row) => {
+    mocks.order = { ...BASE, ...row.order };
+    const { container } = await mount();
+    const block = Array.from(container.querySelectorAll('div')).find((d) => d.firstElementChild?.textContent === 'Cần hỗ trợ?')!;
+    expect(block).toBeTruthy();
+    expect(block.querySelector('a[href="tel:0984606774"]')?.textContent).toBe('Gọi hotline 0984 606 774');
+    expect(block.querySelector('a[href^="mailto:tubutree@gmail.com?subject="]')!.getAttribute('href')).toContain(encodeURIComponent('Hỗ trợ đơn TB-9'));
+    const hero = container.querySelector('[data-testid="status-hero"]')!;
+    expect(hero.compareDocumentPosition(block) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it.each(ROWS)('$name', async (row) => {
     mocks.order = { ...BASE, ...row.order };
     const { container } = await mount();

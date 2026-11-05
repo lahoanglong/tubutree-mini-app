@@ -245,6 +245,18 @@ describe('OrderDetailPage — nút theo trạng thái (gói hl)', () => {
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã sao chép mã vận đơn', type: 'success' }));
   });
 
+  it.each(STATES)('khối "Cần hỗ trợ?" ở cuối nội dung trang, trước thanh nút: $name', async (row) => {
+    mocks.getPublicConfig.mockResolvedValue({ returnWindowDays: 7, support: { hotline: '0984 606 774', email: null, zaloOaName: null } });
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, createdAt: hoursFromNow(-48), updatedAt: hoursFromNow(-2), ...row.order });
+    renderPage();
+    const bar = await screen.findByTestId('sticky-bar');
+    const [title] = await screen.findAllByText('Cần hỗ trợ?');
+    expect(within(title!.parentElement!).getByRole('button', { name: /Gọi hotline 0984 606 774/ })).toBeInTheDocument();
+    const hero = screen.getByTestId('status-hero');
+    expect(hero.compareDocumentPosition(title!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(title!.compareDocumentPosition(bar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('"Liên hệ Tubu" mở bảng liên hệ, không chuyển trang', async () => {
     mocks.getPublicConfig.mockResolvedValue({ returnWindowDays: 7, support: { hotline: '0984 606 774', email: null, zaloOaName: null } });
     mocks.fetchOrder.mockResolvedValue({ ...ORDER, createdAt: hoursFromNow(-48), updatedAt: hoursFromNow(-1), ...STATES[5]!.order });
