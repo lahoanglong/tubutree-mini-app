@@ -116,6 +116,7 @@ import { ReturnRow } from '@/components/admin/return-request-row';
 import { GomdonConfigCard } from '@/components/admin/gomdon-config-card';
 import { ConfigItem } from '@/components/admin/config-item';
 import { CASHBACK_ENABLED } from '@tubutree/app-core/features';
+import { formatVnNumber } from '@tubutree/app-core/number-format';
 import { isDirectVideoUrl } from '@tubutree/app-core/video-url';
 import { useDebounced } from '@/lib/use-debounced';
 import { FeatureFlagsCard } from '@/components/admin/feature-flags-card';
@@ -2976,7 +2977,7 @@ function BrandRow({ brand }: { brand: AdminBrand }) {
             {brand.isVerified && <ToneBadge tone="success"><Check className="h-3 w-3" aria-hidden />Chính hãng</ToneBadge>}
             {!brand.isPublished && <ToneBadge tone="neutral">Nháp</ToneBadge>}
           </div>
-          <div className="break-words text-xs text-stone-500">/{brand.slug} · {brand.followerCount} theo dõi</div>
+          <div className="break-words text-xs text-stone-500">/{brand.slug} · {formatVnNumber(brand.followerCount)} theo dõi</div>
         </div>
         <button onClick={() => setOpen((o) => !o)} className={`${BTN_LINK} shrink-0 text-sm`}>{open ? 'Thu gọn' : 'Quản lý'}</button>
       </div>

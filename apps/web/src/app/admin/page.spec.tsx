@@ -1626,6 +1626,12 @@ describe('admin/page — tab Nhãn hàng', () => {
     expect(mocks.createBrand).toHaveBeenCalledWith({ name: 'Dừa Bến Tre', tagline: undefined });
   });
 
+  it('hàng nhãn: số người theo dõi từ 1.000 trở lên có dấu chấm ngăn nghìn', async () => {
+    mocks.brands = [{ ...BRAND, followerCount: 1234 }];
+    const { container } = await openBrands();
+    expect(container.textContent).toContain('/dua-ben-tre · 1.234 theo dõi');
+  });
+
   it('hàng nhãn: Chính hãng có biểu tượng thay dấu chữ và tông success, Nháp tông trung tính', async () => {
     mocks.brands = [BRAND];
     const { container } = await openBrands();
