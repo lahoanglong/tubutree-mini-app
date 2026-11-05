@@ -7,7 +7,7 @@ import { PancakeOrderService } from '../../src/modules/integrations/pancake/panc
 import { PancakePushProcessor } from '../../src/modules/integrations/pancake/pancake-push.processor';
 import { PancakePushReconcileService } from '../../src/modules/integrations/pancake/pancake-push-reconcile.service';
 import type { PancakeClient } from '../../src/modules/integrations/pancake/pancake.client';
-import { PancakeApiError } from '../../src/modules/integrations/pancake/pancake-outbound';
+import { PancakeApiError, PancakePushSettlingError } from '../../src/modules/integrations/pancake/pancake-outbound';
 import { PANCAKE_JOB_PUSH } from '../../src/modules/integrations/pancake/pancake-queue';
 import type { GomdonAlertService } from '../../src/modules/integrations/gomdon/gomdon-alert.service';
 import { PancakeSyncHooks } from '../../src/modules/integrations/pancake/pancake-sync-hooks';
@@ -380,9 +380,15 @@ const url = process.env.TEST_REDIS_URL;
       if (n === 1) throw new PancakeApiError('Pancake trả 503 khi tạo đơn', true, false, 503);
       throw new PancakeApiError('Pancake trả 403 khi tạo đơn: forbidden', false, false, 403);
     });
-    await service.enqueuePush(x.id);
-    await until(async () => n >= 2 && (await prisma.order.findUniqueOrThrow({ where: { id: x.id } })).pancakePushStatus !== 'PUSHING');
-    await sleep(200);
+    // Cửa sổ chờ gửi rút còn vài chục ms để lượt thử lại của job (backoff 20ms) tới được lệnh tạo thứ hai; lượt rơi vào cửa sổ chỉ chờ, không gửi.
+    const window = jest.replaceProperty(PancakeOrderService, 'SEND_SETTLE_MS', 30);
+    try {
+      await service.enqueuePush(x.id);
+      await until(async () => n >= 2 && (await prisma.order.findUniqueOrThrow({ where: { id: x.id } })).pancakePushStatus !== 'PUSHING');
+      await sleep(200);
+    } finally {
+      window.restore();
+    }
     expect(n).toBe(2);
     return { x, row: await prisma.order.findUniqueOrThrow({ where: { id: x.id } }) };
   };
@@ -651,6 +657,56 @@ const url = process.env.TEST_REDIS_URL;
     expect(await queue.getJob(x.id)).toBeUndefined();
     expect(await prisma.order.findUniqueOrThrow({ where: { id: x.id } })).toMatchObject({ pancakePushStatus: 'STALE', pancakeLastAttemptAt: null });
     expect(client.createOrder.mock.calls.filter(([b]) => (b as { custom_id: string }).custom_id === x.code)).toHaveLength(0);
+  });
+
+  it('A1: createOrder hết giờ nhưng Pancake đã lưu đơn và tra theo mã chưa thấy ngay: thử lại TRONG cửa sổ chờ không tạo thêm, cron sau cửa sổ tra thấy và đơn SYNCED (tổng createOrder = 1)', async () => {
+    const settle = 1_500;
+    const visibleAfter = 500;
+    const window = jest.replaceProperty(PancakeOrderService, 'SEND_SETTLE_MS', settle);
+    const x = await order();
+    await prisma.order.update({ where: { id: x.id }, data: { createdAt: new Date(Date.now() - 30 * 60_000) } });
+    // Chừa chỗ trong lô 50 đơn của cron: đơn của spec khác chưa từng thử đứng trước X.
+    await prisma.order.updateMany({ where: { pancakeOrderId: null, id: { not: x.id }, pancakeLastAttemptAt: null }, data: { pancakeLastAttemptAt: new Date() } });
+    let storedAt = 0;
+    const pk = `pk-${randCode(8)}`;
+    respond((code) => {
+      if (code !== x.code) return { success: true, data: { id: `pk-${code}` } };
+      storedAt = Date.now();
+      throw new PancakeApiError('timeout of 15000ms exceeded', true);
+    });
+    client.searchOrders.mockImplementation(async (code: string) =>
+      code === x.code && storedAt > 0 && Date.now() >= storedAt + visibleAfter ? [{ id: pk, status: 0, custom_id: x.code }] : [],
+    );
+    const searchesOfX = () => client.searchOrders.mock.calls.filter(([c]) => c === x.code).length;
+    try {
+      client.searchOrders.mockClear();
+      await expect(service.pushOrder(x.id)).rejects.toMatchObject({ transient: true });
+      const stamp = (await prisma.order.findUniqueOrThrow({ where: { id: x.id } })).pancakePushClaimedAt;
+      expect(stamp).toBeInstanceOf(Date);
+
+      // Thử lại ngay (tra theo mã chưa thấy đơn) rồi lần nữa khi tra đã thấy: cả hai còn trong cửa sổ nên không tra, không tạo.
+      await expect(service.pushOrder(x.id)).rejects.toBeInstanceOf(PancakePushSettlingError);
+      await sleep(visibleAfter + 100);
+      await expect(service.pushOrder(x.id)).rejects.toBeInstanceOf(PancakePushSettlingError);
+      expect(calls()).toBe(1);
+      expect(searchesOfX()).toBe(0);
+      expect(await prisma.order.findUniqueOrThrow({ where: { id: x.id } })).toMatchObject({
+        pancakePushStatus: 'PENDING',
+        pancakeErrorKind: 'TRANSIENT',
+        pancakePushClaimedAt: stamp,
+      });
+
+      // Hết cửa sổ: cron nhặt đơn PENDING, job tra theo mã, thấy đơn đã lưu và nhận nó.
+      await sleep(Math.max(0, stamp!.getTime() + settle - Date.now()) + 50);
+      await reconcile.reconcile();
+      await until(async () => (await prisma.order.findUniqueOrThrow({ where: { id: x.id } })).pancakeOrderId === pk);
+      expect(calls()).toBe(1);
+      expect(searchesOfX()).toBe(1);
+      expect(await prisma.order.findUniqueOrThrow({ where: { id: x.id } })).toMatchObject({ pancakePushStatus: 'SYNCED', pancakeOrderId: pk, pancakePushClaimedAt: null });
+    } finally {
+      window.restore();
+      client.searchOrders.mockReset().mockResolvedValue([]);
+    }
   });
 
   it('markOverdue không đánh STALE đơn quá 72 giờ đang PUSHING trong hạn thuê quyền đẩy; hết hạn thuê thì lần quét sau mới đánh', async () => {

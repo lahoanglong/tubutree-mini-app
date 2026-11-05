@@ -4,7 +4,7 @@ import { PANCAKE_CANCEL, PANCAKE_CANCEL_REFUSED_PREFIX, PANCAKE_PUSH, PancakeOrd
 import type { PrismaService } from '../../../prisma/prisma.service';
 import type { PancakeClient } from './pancake.client';
 import type { PancakeCreateOrderBody } from './pancake.types';
-import { PancakeApiError, PancakeCancelRefusedError, PancakeOrderDataError, PancakePushBusyError } from './pancake-outbound';
+import { PancakeApiError, PancakeCancelRefusedError, PancakeOrderDataError, PancakePushBusyError, PancakePushSettlingError } from './pancake-outbound';
 import { ATTENTION_PUSH_FAILED } from './pancake-attention';
 import { QUEUE_COMMAND_TIMEOUT_MS, QueueTimeoutError } from '../../../jobs/queue-timeout';
 import { baseOrder, fakeOrderDb, fakeQueue } from '../../../../test/fakes/pancake-order.fake';
@@ -334,6 +334,8 @@ describe('PancakeOrderService.pushOrder — chống tạo trùng (PANCAKE-4, PAN
     await expect(t.svc.pushOrder('o1')).rejects.toThrow('timeout');
     expect(t.row().pancakePushClaimedAt).toBeInstanceOf(Date);
     expect(t.row().pancakePushStatus).toBe(PANCAKE_PUSH.PENDING);
+    // Lần sau phải đợi hết cửa sổ chờ (SEND_SETTLE_MS) mới được tra cứu.
+    t.row().pancakePushClaimedAt = new Date(Date.now() - PancakeOrderService.SEND_SETTLE_MS - 1_000);
 
     t.client.searchOrders.mockResolvedValue([
       { id: 555, status: 0, note: 'Order code: TUBU12 | x' },
@@ -372,7 +374,11 @@ describe('PancakeOrderService.pushOrder — chống tạo trùng (PANCAKE-4, PAN
   });
 
   it('PUSHING đã quá hạn (worker chết giữa chừng) → vào lại, tra cứu trước khi tạo', async () => {
-    const t = setup({ pancakePushStatus: PANCAKE_PUSH.PUSHING, pancakeLastAttemptAt: new Date(Date.now() - 120_000), pancakePushClaimedAt: new Date(Date.now() - 120_000) });
+    const t = setup({
+      pancakePushStatus: PANCAKE_PUSH.PUSHING,
+      pancakeLastAttemptAt: new Date(Date.now() - 120_000),
+      pancakePushClaimedAt: new Date(Date.now() - PancakeOrderService.SEND_SETTLE_MS - 60_000),
+    });
     t.client.searchOrders.mockResolvedValue([{ id: 31, status: 1, custom_id: 'TUBU1' }]);
     expect(await t.svc.pushOrder('o1')).toBe('31');
     expect(t.client.createOrder).not.toHaveBeenCalled();
@@ -1722,5 +1728,152 @@ describe('PancakeOrderService — thẻ: lùi về không thẻ, gỡ thẻ cũ,
     const t = setup({}, { client: { createOrder, invalidateOrderTags: jest.fn() } });
     expect(await t.svc.pushOrder('o1')).toBe('pk-new');
     expect(createOrder.mock.calls[1]![0]).not.toHaveProperty('tags');
+  });
+});
+
+describe('PancakeOrderService.pushOrder — dấu gửi: tối đa MỘT lệnh tạo đơn chưa rõ kết quả mỗi cửa sổ chờ', () => {
+  const settle = PancakeOrderService.SEND_SETTLE_MS;
+  const ago = (ms: number) => new Date(Date.now() - ms);
+  const claimedBefore = { pancakePushStatus: PANCAKE_PUSH.PENDING, pancakeLastAttemptAt: ago(3 * 60_000) };
+
+  it('dấu null → đóng dấu rồi gửi ngay, không tra cứu', async () => {
+    const t = setup();
+    let stampDuringSend: unknown;
+    t.client.createOrder.mockImplementation(async () => {
+      stampDuringSend = t.row().pancakePushClaimedAt;
+      return { id: 'pk-new' };
+    });
+    expect(await t.svc.pushOrder('o1')).toBe('pk-new');
+    expect(stampDuringSend).toBeInstanceOf(Date);
+    expect(t.client.searchOrders).not.toHaveBeenCalled();
+    expect(t.row()).toMatchObject({ pancakeOrderId: 'pk-new', pancakePushStatus: PANCAKE_PUSH.SYNCED, pancakePushClaimedAt: null });
+  });
+
+  it('dấu còn trong cửa sổ → không gửi, không tra, giữ loại lỗi/lời lỗi, về PENDING, không đốt thêm lượt, không báo', async () => {
+    const stamp = ago(2 * 60_000);
+    const t = setup({
+      ...claimedBefore,
+      pancakePushClaimedAt: stamp,
+      pancakeErrorKind: 'REJECTED',
+      pancakeSyncError: 'Pancake trả 422: x',
+      pancakePushAttempts: 3,
+    });
+    const err = await t.svc.pushOrder('o1').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(PancakePushSettlingError);
+    expect(err).toMatchObject({ transient: true });
+    expect(t.client.createOrder).not.toHaveBeenCalled();
+    expect(t.client.searchOrders).not.toHaveBeenCalled();
+    expect(t.row()).toMatchObject({
+      pancakeOrderId: null,
+      pancakePushStatus: PANCAKE_PUSH.PENDING,
+      pancakeErrorKind: 'REJECTED',
+      pancakeSyncError: 'Pancake trả 422: x',
+      pancakePushAttempts: 4,
+      pancakePushClaimedAt: stamp,
+      pancakeAttention: null,
+    });
+    expect(t.alerts.alert).not.toHaveBeenCalled();
+  });
+
+  it('lỗi "đang chờ cửa sổ" không bị markPushFailure ghi (không đổi loại lỗi, không đốt/hoàn lượt, không báo)', async () => {
+    const t = setup({ ...claimedBefore, pancakePushClaimedAt: ago(60_000), pancakeErrorKind: 'REJECTED', pancakeSyncError: 'cũ', pancakePushAttempts: 2 });
+    const before = JSON.stringify(t.row());
+    await t.svc.markPushFailure('o1', new PancakePushSettlingError('Đơn TUBU1 vừa gửi'), true);
+    expect(JSON.stringify(t.row())).toBe(before);
+    expect(t.alerts.alert).not.toHaveBeenCalled();
+  });
+
+  it('dấu đã quá cửa sổ, tra thấy đơn → nhận đơn đó, không tạo', async () => {
+    const t = setup({ ...claimedBefore, pancakePushClaimedAt: ago(settle + 60_000) });
+    t.client.searchOrders.mockResolvedValue([{ id: 31, status: 1, custom_id: 'TUBU1' }]);
+    expect(await t.svc.pushOrder('o1')).toBe('31');
+    expect(t.client.searchOrders).toHaveBeenCalledTimes(1);
+    expect(t.client.createOrder).not.toHaveBeenCalled();
+    expect(t.row()).toMatchObject({ pancakeOrderId: '31', pancakePushStatus: PANCAKE_PUSH.SYNCED, pancakePushClaimedAt: null });
+  });
+
+  it('dấu đã quá cửa sổ, tra không thấy → tạo đúng một lần, dấu được đóng lại mới', async () => {
+    const old = ago(settle + 60_000);
+    const t = setup({ ...claimedBefore, pancakePushClaimedAt: old });
+    let stampDuringSend: Date | null = null;
+    t.client.createOrder.mockImplementation(async () => {
+      stampDuringSend = t.row().pancakePushClaimedAt as Date;
+      return { id: 'pk-new' };
+    });
+    expect(await t.svc.pushOrder('o1')).toBe('pk-new');
+    expect(t.client.searchOrders).toHaveBeenCalledTimes(1);
+    expect(t.client.createOrder).toHaveBeenCalledTimes(1);
+    expect(stampDuringSend!.getTime()).toBeGreaterThan(old.getTime());
+  });
+
+  it('dấu đã quá cửa sổ, tra không thấy, Pancake từ chối dứt khoát → KHÔNG gỡ dấu (lệnh cũ chưa rõ kết quả vẫn còn dấu vết)', async () => {
+    const t = setup(
+      { ...claimedBefore, pancakePushClaimedAt: ago(settle + 60_000) },
+      { client: { createOrder: jest.fn().mockRejectedValue(new PancakeApiError('Pancake trả 422 khi tạo đơn: x', false, false, 422)) } },
+    );
+    await expect(t.svc.pushOrder('o1')).rejects.toThrow('422');
+    expect(t.row().pancakePushClaimedAt).toBeInstanceOf(Date);
+    expect(t.row().pancakePushStatus).toBe(PANCAKE_PUSH.PENDING);
+  });
+
+  it('mất quyền giữa claim và đóng dấu (lượt khác vừa claim) → không gửi, không ghi gì, ném lỗi chờ', async () => {
+    const t = setup();
+    const lastAttempt = ago(-1_000);
+    const read = t.prisma.order.findUnique.getMockImplementation()!;
+    t.prisma.order.findUnique.mockImplementationOnce(async (args: Parameters<typeof read>[0]) => {
+      t.row().pancakeLastAttemptAt = lastAttempt; // lượt B claim sau khi hết hạn thuê của ta
+      return read(args);
+    });
+    const err = await t.svc.pushOrder('o1').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(PancakePushSettlingError);
+    expect(t.client.createOrder).not.toHaveBeenCalled();
+    expect(t.client.searchOrders).not.toHaveBeenCalled();
+    expect(t.row()).toMatchObject({ pancakePushStatus: PANCAKE_PUSH.PUSHING, pancakeLastAttemptAt: lastAttempt, pancakePushClaimedAt: null });
+  });
+
+  describe('gửi lại không thẻ', () => {
+    const rejectTags = () => new PancakeApiError('Pancake trả 422 khi tạo đơn: [tags]: is invalid', false);
+    const mk = (onFirst?: (t: ReturnType<typeof setup>) => void) => {
+      const stamps: unknown[] = [];
+      const ref: { t?: ReturnType<typeof setup> } = {};
+      const createOrder = jest.fn(async () => {
+        stamps.push(ref.t!.row().pancakePushClaimedAt);
+        if (stamps.length === 1) {
+          onFirst?.(ref.t!);
+          throw rejectTags();
+        }
+        return { id: 'pk-new' };
+      });
+      const t = setup({}, { client: { createOrder, invalidateOrderTags: jest.fn() } });
+      ref.t = t;
+      return { t, createOrder, stamps };
+    };
+
+    it('cùng lượt: đóng dấu lại bằng CAS theo dấu của chính mình rồi gửi lần hai (dấu mới không cũ hơn)', async () => {
+      const { t, createOrder, stamps } = mk();
+      expect(await t.svc.pushOrder('o1')).toBe('pk-new');
+      expect(createOrder).toHaveBeenCalledTimes(2);
+      expect((stamps[1] as Date).getTime()).toBeGreaterThanOrEqual((stamps[0] as Date).getTime());
+    });
+
+    it('dấu đã đổi sang lượt khác giữa hai lần gửi → không gửi lần hai, không ghi gì', async () => {
+      const other = new Date(Date.now() + 5_000);
+      const { t, createOrder } = mk((x) => {
+        x.row().pancakePushClaimedAt = other;
+      });
+      const err = await t.svc.pushOrder('o1').catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(PancakePushSettlingError);
+      expect(createOrder).toHaveBeenCalledTimes(1);
+      expect(t.row()).toMatchObject({ pancakePushClaimedAt: other, pancakePushStatus: PANCAKE_PUSH.PUSHING });
+    });
+
+    it('lượt khác đã nhả đơn về PENDING giữa hai lần gửi → không gửi lần hai', async () => {
+      const { t, createOrder } = mk((x) => {
+        x.row().pancakePushStatus = PANCAKE_PUSH.PENDING;
+      });
+      await expect(t.svc.pushOrder('o1')).rejects.toBeInstanceOf(PancakePushSettlingError);
+      expect(createOrder).toHaveBeenCalledTimes(1);
+      expect(t.row().pancakePushStatus).toBe(PANCAKE_PUSH.PENDING);
+    });
   });
 });

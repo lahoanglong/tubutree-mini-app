@@ -106,6 +106,8 @@ describe('Pancake push race (real Postgres)', () => {
     const o = await order();
     client.createOrder.mockRejectedValueOnce(new PancakeApiError('timeout of 15000ms exceeded', true));
     await expect(service.pushOrder(o.id)).rejects.toThrow('timeout');
+    // Hết cửa sổ chờ gửi (SEND_SETTLE_MS): lượt sau mới được tra cứu. Trong cửa sổ thì không lượt nào tra hay tạo (xem pancake-failed-jobs A1).
+    await prisma.order.update({ where: { id: o.id }, data: { pancakePushClaimedAt: new Date(Date.now() - PancakeOrderService.SEND_SETTLE_MS - 1_000) } });
 
     const pkId = `pk-${randCode(8)}`;
     client.searchOrders.mockImplementation(async () => {

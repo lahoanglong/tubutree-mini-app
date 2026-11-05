@@ -30,6 +30,17 @@ export class PancakePushBusyError extends PancakeApiError {
 }
 
 /**
+ * Lượt này không được gửi lệnh tạo đơn vì một lệnh tạo khác (chưa rõ kết quả) vừa được gửi trong cửa sổ chờ `SEND_SETTLE_MS`: Pancake có thể
+ * đang tạo đơn hoặc chưa tra được theo mã. Là Busy: BullMQ thử lại, markPushFailure không ghi gì (không đốt/hoàn lượt, không đổi loại lỗi, không báo).
+ */
+export class PancakePushSettlingError extends PancakePushBusyError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'PancakePushSettlingError';
+  }
+}
+
+/**
  * Pancake trả lời được nhưng từ chối lệnh huỷ, và lần đọc lại ngay sau đó cho thấy đơn CHƯA bàn giao vận chuyển: khác
  * hẳn lỗi mất kết nối — trạng thái Pancake đã biết chắc tại thời điểm hỏi.
  */

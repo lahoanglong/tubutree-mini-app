@@ -33,9 +33,11 @@ import {
   PancakeCancelRefusedError,
   PancakeOrderDataError,
   PancakePushBusyError,
+  PancakePushSettlingError,
   pancakeErrorText,
   pancakeOrderHasCode,
 } from './pancake-outbound';
+import { CRON_TZ } from '../../../common/cron-tz';
 import { enqueuePancakeCancel, enqueuePancakePayment, enqueuePancakePush, PANCAKE_JOB_PUSH, removeFailedPancakePush } from './pancake-queue';
 import { classifyPushError, isPushFailureSettled, keepsPriorKind, kindAfterFailure, PUSH_ERROR_KIND, PUSH_RETRY, storedErrorText, type PushErrorKind } from './pancake-push-error';
 import { withQueueTimeout } from '../../../jobs/queue-timeout';
@@ -106,6 +108,26 @@ export function pushLeaseFreeWhere(now: Date = new Date()): Prisma.OrderWhereInp
     ],
   };
 }
+
+/**
+ * Điều kiện "cửa sổ chờ gửi đã mở": đơn chưa có dấu gửi (`pancakePushClaimedAt`), hoặc dấu cũ hơn `SEND_SETTLE_MS`. Câu `updateMany` mang điều kiện
+ * này là phép CAS đóng dấu trước MỖI lệnh tạo đơn: hai lượt cùng đóng dấu thì chỉ một lượt thắng, không phụ thuộc hạn thuê quyền đẩy.
+ */
+export function sendWindowOpenWhere(at: Date = new Date()): Prisma.OrderWhereInput {
+  return {
+    OR: [{ pancakePushClaimedAt: null }, { pancakePushClaimedAt: { lt: new Date(at.getTime() - PancakeOrderService.SEND_SETTLE_MS) } }],
+  };
+}
+
+const VN_CLOCK = new Intl.DateTimeFormat('en-GB', { timeZone: CRON_TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+const vnClock = (d: Date): string => VN_CLOCK.format(d);
+
+/** MỘT câu cho "đang được đẩy sang Pancake": lời từ chối 400 của `retryDecision` và 409 của `retryPushByAdmin`. */
+export const pushInFlightMessage = (code: string): string => `Đơn ${code} đang được đẩy sang Pancake — chờ ít phút rồi tải lại.`;
+
+/** Lời chờ khi đơn vừa được gửi lệnh tạo (chưa rõ kết quả): dùng cho lỗi chờ của pushOrder và 409 của "Đẩy lại". Giờ Việt Nam. */
+export const sendSettlingMessage = (code: string, sentAt: Date): string =>
+  `Đơn ${code} vừa được gửi sang Pancake lúc ${vnClock(sentAt)}, Pancake có thể đang tạo đơn. Thử lại sau ${vnClock(new Date(sentAt.getTime() + PancakeOrderService.SEND_SETTLE_MS))}.`;
 
 /**
  * MERCHANT = đơn gian hàng đối tác tự giao (D4): không thuộc kho Tubu, không bao giờ lên Pancake. WAIT_GOMDON = đơn
@@ -270,8 +292,18 @@ export class PancakeOrderService {
     @Optional() private readonly alerts?: GomdonAlertService,
   ) {}
 
-  /** Quá mốc này mà đơn vẫn PUSHING thì coi tiến trình đẩy trước đã chết. Dài hơn timeout gọi Pancake (15s). */
+  /**
+   * Hạn thuê quyền đẩy: chỉ ngăn hai lượt chạy CÙNG LÚC (claim) và để lượt của tiến trình đã chết được vào lại. KHÔNG ngăn hai lần gửi lệnh
+   * tạo đơn: lượt quá hạn thuê vẫn có thể đang chờ Pancake trả lời, nên chặn gửi trùng là việc của dấu gửi (`pancakePushClaimedAt` + SEND_SETTLE_MS).
+   * Dài hơn timeout gọi Pancake (15s).
+   */
   static readonly PUSH_LEASE_MS = 60_000;
+
+  /**
+   * Trong chừng này kể từ lúc gửi một lệnh tạo đơn, không lượt nào được gửi lệnh tạo thứ hai và cũng không được tra cứu để kết luận "chưa có":
+   * Pancake có thể còn đang tạo đơn hoặc chưa đánh chỉ mục để tìm theo mã. Hết cửa sổ mới tra cứu, rồi mới tạo.
+   */
+  static readonly SEND_SETTLE_MS = 5 * 60_000;
 
   /** Xếp hàng đẩy đơn (retry + backoff — jobs/queue.module.ts). Gọi lặp an toàn, xem pancake-queue.ts. */
   enqueuePush(orderId: string): Promise<void> {
@@ -351,7 +383,7 @@ export class PancakeOrderService {
     if (tags.length > 0) body.tags = tags;
 
     // Giữ quyền đẩy (một tiến trình một lúc): job push, job thanh toán và cron có thể cùng chạm một đơn. Tiến trình
-    // chết giữa chừng để lại PUSHING — quá PUSH_LEASE_MS thì lần sau được vào lại (và tra cứu trước khi tạo).
+    // chết giữa chừng để lại PUSHING — quá PUSH_LEASE_MS thì lần sau được vào lại; còn được gửi lệnh tạo hay không do dấu gửi quyết (bên dưới).
     const now = new Date();
     const claim = await this.prisma.order.updateMany({
       where: {
@@ -377,18 +409,31 @@ export class PancakeOrderService {
       throw new PancakePushBusyError(`Đơn ${order.code} đang được đẩy sang Pancake bởi tiến trình khác — thử lại sau.`);
     }
 
-    // Đặt mốc "đã gửi lệnh tạo" bằng cập nhật có điều kiện: mốc cũ chỉ đọc được từ chính câu lệnh này. Lần đọc đơn đầu
-    // hàm có thể cũ (tiến trình khác vừa đẩy xong và gặp lỗi tạm sau khi ta đọc), nên không dùng nó để quyết định tra đơn.
-    const marked = await this.prisma.order.updateMany({
-      where: { id: order.id, pancakeOrderId: null, pancakePushClaimedAt: null },
-      data: { pancakePushClaimedAt: now },
+    // Dấu gửi: ngay trước MỖI lệnh tạo đơn (kể cả lần gửi lại không thẻ) đóng dấu `pancakePushClaimedAt` bằng CAS, và trong một cửa sổ
+    // SEND_SETTLE_MS chỉ một lượt thắng, bất kể hạn thuê quyền đẩy: lượt quá hạn thuê vẫn có thể đang chờ Pancake trả lời. Thua thì không gửi,
+    // không tra cứu (Pancake chưa chắc đã tra được lệnh vừa gửi) và nhả quyền về PENDING. Dấu cũ đọc ở đây an toàn: ta đang giữ quyền đẩy,
+    // và CAS bên dưới ghim cả `pancakeLastAttemptAt` của lượt này nên lượt khác không chen vào giữa.
+    let fence = now;
+    const prior = await this.prisma.order.findUnique({ where: { id: order.id }, select: { pancakePushClaimedAt: true } });
+    const priorStamp = prior?.pancakePushClaimedAt ?? null;
+    const stamp = new Date();
+    const stamped = await this.prisma.order.updateMany({
+      where: { id: order.id, pancakeOrderId: null, pancakePushStatus: PANCAKE_PUSH.PUSHING, pancakeLastAttemptAt: fence, ...sendWindowOpenWhere(stamp) },
+      data: { pancakePushClaimedAt: stamp, pancakeLastAttemptAt: stamp },
     });
-    const sentBefore = marked.count === 0;
+    if (stamped.count === 0) {
+      await this.releaseSettling(order, fence);
+      throw new PancakePushSettlingError(
+        priorStamp ? sendSettlingMessage(order.code, priorStamp) : `Đơn ${order.code}: lượt đẩy khác đang giữ quyền gửi sang Pancake — thử lại sau.`,
+      );
+    }
+    let sendStamp = stamp;
+    fence = stamp;
 
     let pancakeOrderId: string | null;
     try {
-      // Lần trước đã gửi lệnh tạo mà không rõ kết quả → tra theo mã đơn, có thì nhận đơn đó thay vì tạo thêm.
-      if (sentBefore) {
+      // Dấu cũ đã quá cửa sổ (lệnh tạo trước chưa rõ kết quả) → tra theo mã đơn, có thì nhận đơn đó thay vì tạo thêm.
+      if (priorStamp !== null) {
         const found = await this.findOnPancake(order);
         if (found) {
           const adopted = await this.adopt(order, found);
@@ -396,11 +441,28 @@ export class PancakeOrderService {
           return adopted;
         }
       }
-      pancakeOrderId = extractPancakeOrderId(await this.withTagFallback(body, (b) => this.client.createOrder(b)));
+      pancakeOrderId = extractPancakeOrderId(
+        await this.withTagFallback(
+          body,
+          (b) => this.client.createOrder(b),
+          // Gửi lại không thẻ là lệnh tạo thứ hai: CAS theo dấu của chính lượt này, dấu đã sang lượt khác thì không gửi.
+          async () => {
+            const restamp = new Date();
+            const again = await this.prisma.order.updateMany({
+              where: { id: order.id, pancakeOrderId: null, pancakePushStatus: PANCAKE_PUSH.PUSHING, pancakeLastAttemptAt: fence, pancakePushClaimedAt: sendStamp },
+              data: { pancakePushClaimedAt: restamp, pancakeLastAttemptAt: restamp },
+            });
+            if (again.count === 0) throw new PancakePushSettlingError(`Đơn ${order.code}: dấu gửi đã sang lượt khác — không gửi lại không thẻ.`);
+            sendStamp = restamp;
+            fence = restamp;
+          },
+        ),
+      );
     } catch (err) {
-      // Từ chối dứt khoát → Pancake chắc chắn chưa tạo: gỡ mốc để lần sau không phải tra cứu.
+      if (err instanceof PancakePushSettlingError) throw err;
+      // Từ chối dứt khoát → Pancake chắc chắn chưa tạo: gỡ dấu để lần sau không phải tra cứu. Dấu cũ chưa gỡ được thì giữ (lệnh cũ chưa rõ kết quả).
       const definite = err instanceof PancakeApiError && !err.transient;
-      await this.writeAttemptError(order.id, err, { pancakePushStatus: PANCAKE_PUSH.PENDING, ...(definite && !sentBefore ? { pancakePushClaimedAt: null } : {}) });
+      await this.writeAttemptError(order.id, err, { pancakePushStatus: PANCAKE_PUSH.PENDING, ...(definite && priorStamp === null ? { pancakePushClaimedAt: null } : {}) });
       throw err;
     }
     if (!pancakeOrderId) {
@@ -717,13 +779,19 @@ export class PancakeOrderService {
    * Thẻ lấy từ cache có thể đã bị xoá trên Pancake: 4xx nhắc tới `tags` thì bỏ cache và gửi lại MỘT lần không kèm thẻ,
    * để thẻ không làm hỏng đẩy đơn / ghi nhận thanh toán.
    */
-  private async withTagFallback<T extends { tags?: PancakeOrderTagRef[] }, R>(payload: T, send: (p: T) => Promise<R>): Promise<R> {
+  private async withTagFallback<T extends { tags?: PancakeOrderTagRef[] }, R>(
+    payload: T,
+    send: (p: T) => Promise<R>,
+    /** Chạy ngay trước lần gửi lại; ném thì không gửi (đường tạo đơn dùng nó để đóng dấu gửi bằng CAS). */
+    beforeResend?: () => Promise<void>,
+  ): Promise<R> {
     try {
       return await send(payload);
     } catch (err) {
       if (!payload.tags || !isTagsRejection(err)) throw err;
       this.client.invalidateOrderTags();
       this.logger.warn(`Pancake từ chối thẻ đơn, gửi lại không kèm thẻ: ${pancakeErrorText(err)}`);
+      await beforeResend?.();
       const { tags: _dropped, ...rest } = payload;
       return send(rest as T);
     }
@@ -904,6 +972,18 @@ export class PancakeOrderService {
       order.pancakeLastAttemptAt != null &&
       Date.now() - order.pancakeLastAttemptAt.getTime() < PancakeOrderService.PUSH_LEASE_MS
     );
+  }
+
+  /**
+   * Lượt này thua CAS dấu gửi: nhả quyền về PENDING mà KHÔNG đổi loại lỗi/lời lỗi, không đốt hay hoàn lượt (lượt claim đã tính một), không báo.
+   * Ghi ghim `pancakeLastAttemptAt` của lượt và trạng thái PUSHING: lượt khác đã claim tiếp, hoặc markOverdue đã đánh STALE, thì không ghi gì.
+   */
+  private async releaseSettling(order: Pick<Order, 'id' | 'code'>, fence: Date): Promise<void> {
+    const released = await this.prisma.order.updateMany({
+      where: { id: order.id, pancakeOrderId: null, pancakePushStatus: PANCAKE_PUSH.PUSHING, pancakeLastAttemptAt: fence },
+      data: { pancakePushStatus: PANCAKE_PUSH.PENDING },
+    });
+    if (released.count === 0) this.logger.warn(`Đơn ${order.code}: lượt đẩy đã mất quyền, không nhả về PENDING (trạng thái do lượt khác quyết).`);
   }
 
   /**
