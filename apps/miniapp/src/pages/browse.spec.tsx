@@ -603,6 +603,24 @@ describe('BrowsePage (DS v2, spec 5b.2)', () => {
       expect(screen.queryByRole('region', { name: 'Đã xem gần đây' })).toBeNull();
     });
 
+    it('tìm không ra kết quả → có kệ "Có thể bạn thích" với sản phẩm bán chạy, không để màn trống', async () => {
+      mocks.fetchCatalog.mockResolvedValue(pageOf([]));
+      mocks.fetchProducts.mockResolvedValue({ data: [card('b1', 'Dầu gội bưởi'), card('b2', 'Nước rửa chén')], meta: { page: 1, limit: 4, total: 2 } });
+      renderAt('/browse?q=mat%20hoa%20dua');
+      expect(await screen.findByText('Không tìm thấy "mat hoa dua"')).toBeInTheDocument();
+      const rail = await screen.findByRole('region', { name: 'Có thể bạn thích' });
+      expect(within(rail).getByRole('button', { name: 'Dầu gội bưởi' })).toBeInTheDocument();
+      expect(mocks.fetchProducts).toHaveBeenCalledWith({ limit: 4, sort: 'best_seller' });
+    });
+
+    it('tìm có kết quả → không có kệ "Có thể bạn thích"', async () => {
+      mocks.fetchProducts.mockClear();
+      renderAt('/browse?q=nuoc');
+      await listPainted();
+      expect(screen.queryByRole('region', { name: 'Có thể bạn thích' })).toBeNull();
+      expect(mocks.fetchProducts).not.toHaveBeenCalled();
+    });
+
     it('tìm không ra kết quả → dải vẫn hiện để khách có đường đi tiếp', async () => {
       mocks.fetchCatalog.mockResolvedValue(pageOf([]));
       renderAt('/browse?q=zzz');

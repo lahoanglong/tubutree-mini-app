@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AcademyCourseSummary } from '@tubutree/app-core/api/academy';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
@@ -95,6 +96,18 @@ describe('/hoc-vien — danh sách khoá học', () => {
     courses = [COURSE('a', { coverUrl: 'javascript:alert(1)' })];
     const { container } = await mount();
     expect(container.querySelector('img')).toBeNull();
+  });
+
+  it('ảnh bìa tải lỗi (URL chết) thì về biểu tượng sách, không để ảnh vỡ', async () => {
+    courses = [COURSE('b', { coverUrl: 'https://img.test/chet.jpg' })];
+    const { container } = await mount();
+    const img = container.querySelector('img[src="https://img.test/chet.jpg"]')!;
+    expect(img).not.toBeNull();
+    act(() => {
+      img.dispatchEvent(new Event('error'));
+    });
+    expect(container.querySelector('img')).toBeNull();
+    expect(container.querySelector('a[href="/hoc-vien/b"] svg')).not.toBeNull();
   });
 
   it('mỗi khoá là liên kết tới /hoc-vien/<id>', async () => {

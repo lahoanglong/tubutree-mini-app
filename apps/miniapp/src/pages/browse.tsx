@@ -18,6 +18,7 @@ import { CategoryChipRow } from '../components/catalog/category-chip-row';
 import { FilterSheet } from '../components/catalog/filter-sheet';
 import { ListHeading } from '../components/catalog/list-heading';
 import { RecentlyViewedRail } from '../components/catalog/recently-viewed-rail';
+import { SuggestedRail } from '../components/catalog/suggested-rail';
 import { SuggestList } from '../components/catalog/suggest-list';
 import { Button } from '../components/ui/button';
 import { SortBar } from '../components/ui/sort-bar';
@@ -424,7 +425,12 @@ export default function BrowsePage() {
             )}
           </div>
           {/* Tìm/lọc không ra gì → vẫn cho khách lối đi tiếp ("Đã xem gần đây" tự ẩn khi chưa xem gì). */}
-          {noResults && <RecentlyViewedRail />}
+          {noResults && (
+            <>
+              <SuggestedRail listSource={state.q ? 'search_empty' : 'browse_empty'} />
+              <RecentlyViewedRail />
+            </>
+          )}
         </>
       )}
 

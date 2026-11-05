@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   calls: [] as string[],
   notReady: new Set<string>(),
   meName: 'Nguyễn An' as string | null,
+  meWallet: 50000,
   search: '',
   // Nguồn dữ liệu cho /me/summary (số đơn, tin chưa đọc, gói định kỳ); mỗi ca đổi nguồn của mình.
   summarySource: {
@@ -45,7 +46,7 @@ vi.mock('@/lib/core-http', () => ({
 }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/shop-client')>()),
-  getMe: async () => ({ fullName: mocks.meName, phone: '0912345678', pointsBalance: 1800, pointsConvertedBalance: 0, walletBalance: 50000 }),
+  getMe: async () => ({ fullName: mocks.meName, phone: '0912345678', pointsBalance: 1800, pointsConvertedBalance: 0, walletBalance: mocks.meWallet }),
   fetchOrdersPage: async () => ({ data: [], meta: { page: 1, limit: 20, total: 0 } }),
 }));
 
@@ -90,6 +91,7 @@ beforeEach(() => {
   mocks.calls = [];
   mocks.notReady = new Set();
   mocks.meName = 'Nguyễn An';
+  mocks.meWallet = 50000;
   mocks.search = '';
   mocks.summarySource.orderCounts = () => ({ pending_payment: 0, processing: 0, shipping: 0, delivered: 0, closed: 0 });
   mocks.summarySource.unread = () => 2;
@@ -187,6 +189,17 @@ describe('hub /tai-khoan — ba số và hàng trạng thái đơn', () => {
     const coupons = stat(c, 'Mã giảm giá');
     expect(coupons.getAttribute('href')).toBe('/uu-dai?section=coupons');
     expect(coupons.textContent).toContain('2 mã');
+  });
+
+  it('ví từ một triệu xuống price-sm để số không tràn ô ở 320px; ví nhỏ giữ price-md', async () => {
+    mocks.meWallet = 1_234_567;
+    const big = stat(await mount(), 'Ví Tubu');
+    expect(big.textContent).toContain('1.234.567đ');
+    expect(byText(big, 'div', '1.234.567đ')!.style.fontSize).toBe('var(--type-price-sm-size)');
+    expect(byText(big, 'div', '1.234.567đ')!.style.lineHeight).toBe('var(--type-price-md-lh)');
+    mocks.meWallet = 50000;
+    const small = stat(await mount(), 'Ví Tubu');
+    expect(byText(small, 'div', '50.000đ')!.style.fontSize).toBe('var(--type-price-md-size)');
   });
 
   it('chưa tải được mã giảm giá: dấu "—", không đoán số', async () => {
