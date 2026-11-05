@@ -206,8 +206,8 @@ describe('body PATCH/PUT: null không phải "bỏ trường" (R5-ADMIN-1)', () 
       ['PATCH /admin/flash-sales/:id', 'isActive', 'Trường «isActive»'],
       ['PATCH /admin/flash-sales/:id', 'startAt', 'Thời gian bắt đầu'],
       ['PATCH /admin/flash-sales/:id', 'endAt', 'Thời gian kết thúc'],
-      ['PATCH /admin/merchant-fulfilment/stores/:storefrontId/terms', 'consignmentFeePct', 'Trường «consignmentFeePct»'],
-      ['PATCH /admin/merchant-fulfilment/stores/:storefrontId/terms', 'consignmentFeeFixed', 'Trường «consignmentFeeFixed»'],
+      ['PATCH /admin/merchant-fulfilment/stores/:storefrontId/terms', 'consignmentFeePct', 'Phí ký gửi (%)'],
+      ['PATCH /admin/merchant-fulfilment/stores/:storefrontId/terms', 'consignmentFeeFixed', 'Phí ký gửi cố định'],
       ['PUT /merchant/store', 'title', 'Tiêu đề'],
       ['PUT /merchant/store', 'isPublished', 'Trường «isPublished»'],
       ['PATCH /storefront/me', 'title', 'Tiêu đề'],
@@ -218,7 +218,7 @@ describe('body PATCH/PUT: null không phải "bỏ trường" (R5-ADMIN-1)', () 
     it('POST /feed/events: rewardPoints null (cột NOT NULL, DTO đi thẳng vào Prisma) → 400, bỏ trường vẫn tạo được', async () => {
       const base = { title: 'Thử thách tháng 10', startAt: '2026-10-20T00:00:00.000Z', endAt: '2026-10-30T00:00:00.000Z' };
       expect(await messages('POST /feed/events', { ...base, rewardPoints: null })).toEqual([
-        'Trường «rewardPoints» không được để null; bỏ trường này nếu không muốn đổi.',
+        'Điểm thưởng không được để null; bỏ trường này nếu không muốn đổi.',
       ]);
       expect(await messages('POST /feed/events', base)).toBeNull();
     });

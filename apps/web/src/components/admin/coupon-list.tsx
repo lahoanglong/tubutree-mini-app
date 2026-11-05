@@ -143,6 +143,7 @@ export function CouponList() {
           type="search"
           aria-label="Tìm mã"
           placeholder="Tìm mã"
+          maxLength={64}
           value={keyword}
           onChange={(e) => {
             setKeyword(e.target.value.toUpperCase());

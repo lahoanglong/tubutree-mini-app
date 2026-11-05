@@ -1,3 +1,4 @@
+import { merchantSku } from './merchant-sku';
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { PANCAKE_FULFILLED_VARIATION_WHERE } from '../integrations/pancake/pancake-fulfilment';
@@ -322,7 +323,7 @@ export async function unlinkTubuFulfilledVariation(
     data: {
       productId,
       pancakeId: null,
-      sku: `MCH-${Date.now().toString(36).toUpperCase()}-${productId.slice(-6).toUpperCase()}`,
+      sku: merchantSku(productId),
       name: 'Mặc định',
       attributes: {},
       retailPrice: product.basePrice,

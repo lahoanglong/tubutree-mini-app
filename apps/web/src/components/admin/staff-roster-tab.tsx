@@ -162,6 +162,7 @@ export function StaffRosterTab({ meId }: { meId?: string } = {}) {
             type="tel"
             inputMode="numeric"
             placeholder="Số điện thoại (VD 09xxxxxxxx)"
+            maxLength={11}
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             className={INPUT_CLASS}

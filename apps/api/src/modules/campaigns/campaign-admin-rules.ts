@@ -1,11 +1,10 @@
 import { BadRequestException } from '@nestjs/common';
 import type { CampaignLinkType } from '@prisma/client';
-import { CAMPAIGN_INTERNAL_TARGETS } from '@tubutree/shared-types';
+import { CAMPAIGN_ENTITY_SLUG_RE, CAMPAIGN_INTERNAL_TARGETS } from '@tubutree/shared-types';
 
 export type CampaignStatus = 'live' | 'scheduled' | 'ended' | 'off';
 
 const SLUG_MAX = 80;
-const ENTITY_SLUG_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,119}$/;
 
 /** "Chiến dịch Giữa Thu" → "chien-dich-giua-thu". Tiêu đề toàn ký hiệu vẫn ra một slug dùng được. */
 export function slugFromTitle(title: string): string {
@@ -34,7 +33,7 @@ export function normalizeLink(linkType: CampaignLinkType, raw: string | null | u
     }
     return value;
   }
-  if (!ENTITY_SLUG_RE.test(value)) {
+  if (!CAMPAIGN_ENTITY_SLUG_RE.test(value)) {
     throw new BadRequestException(linkType === 'PRODUCT' ? 'Nhập slug sản phẩm hợp lệ.' : 'Nhập slug danh mục hợp lệ.');
   }
   return value;

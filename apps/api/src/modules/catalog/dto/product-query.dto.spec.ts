@@ -1,8 +1,9 @@
-import { ValidationPipe } from '@nestjs/common';
+import { createValidationPipe } from '../../../common/validation-pipe';
+import { PRODUCT_SLUG_MAX, PRODUCT_SLUGS_LIST_MAX, PRODUCT_SLUGS_QUERY_MAX_CHARS } from '@tubutree/shared-types';
 import { ProductQuery } from './product-query.dto';
 
 // Cùng cấu hình ValidationPipe với main.ts — forbidNonWhitelisted: field lạ bị từ chối (400).
-const pipe = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true });
+const pipe = createValidationPipe();
 const asQuery = (value: Record<string, unknown>) =>
   pipe.transform(value, { type: 'query', metatype: ProductQuery, data: undefined });
 
@@ -38,9 +39,18 @@ describe('ProductQuery (dự án 4b)', () => {
     await expect(asQuery({ inStock: 'yes' })).rejects.toThrow();
   });
 
+  it('slugs nhận đủ 20 slug dài PRODUCT_SLUG_MAX (dải "Đã xem gần đây"), từ chối khi có hơn 20 phần tử hoặc chuỗi vượt PRODUCT_SLUGS_QUERY_MAX_CHARS', async () => {
+    const slug = (i: number) => `${String(i).padStart(2, '0')}${'x'.repeat(PRODUCT_SLUG_MAX - 2)}`;
+    const twenty = Array.from({ length: PRODUCT_SLUGS_LIST_MAX }, (_, i) => slug(i)).join(',');
+    expect(twenty.length).toBe(PRODUCT_SLUGS_QUERY_MAX_CHARS - 1);
+    await expect(asQuery({ slugs: twenty })).resolves.toMatchObject({ slugs: twenty });
+    const twentyOne = Array.from({ length: PRODUCT_SLUGS_LIST_MAX + 1 }, (_, i) => `s${i}`).join(',');
+    await expect(asQuery({ slugs: twentyOne })).rejects.toMatchObject({ response: { message: [expect.stringMatching(/^Danh sách sản phẩm chỉ nhận tối đa 20 mục/)] } });
+    await expect(asQuery({ slugs: 'x'.repeat(PRODUCT_SLUGS_QUERY_MAX_CHARS + 1) })).rejects.toThrow();
+  });
   it('slugs nhận chuỗi slug cách nhau bằng dấu phẩy, từ chối chuỗi quá dài', async () => {
     await expect(asQuery({ slugs: 'a,b,c' })).resolves.toMatchObject({ slugs: 'a,b,c' });
-    await expect(asQuery({ slugs: 'x'.repeat(2001) })).rejects.toThrow();
+    await expect(asQuery({ slugs: 'x'.repeat(PRODUCT_SLUGS_QUERY_MAX_CHARS + 1) })).rejects.toThrow();
   });
 
   it('field lạ vẫn bị từ chối — đây là lý do API trước 4b trả 400 cho tham số mới (miniapp phải tự lùi)', async () => {

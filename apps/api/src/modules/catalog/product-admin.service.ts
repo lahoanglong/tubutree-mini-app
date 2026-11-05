@@ -8,8 +8,6 @@ import { ImageResizeService } from './image-resize.service';
 
 export const PRODUCT_IMAGES_MAX = 8;
 export const PRODUCT_CATEGORIES_MAX = 10;
-const DESCRIPTION_MAX = 5000;
-const SHORT_DESC_MAX = 300;
 
 export interface ProductPatch {
   images?: string[];
@@ -85,12 +83,10 @@ export class ProductAdminService {
     }
     if (patch.description !== undefined) {
       const description = patch.description.trim();
-      if (description.length > DESCRIPTION_MAX) throw new BadRequestException(`Mô tả tối đa ${DESCRIPTION_MAX} chữ.`);
       data.description = description;
     }
     if (patch.shortDesc !== undefined) {
       const shortDesc = patch.shortDesc?.trim() || null;
-      if (shortDesc && shortDesc.length > SHORT_DESC_MAX) throw new BadRequestException(`Mô tả ngắn tối đa ${SHORT_DESC_MAX} chữ.`);
       data.shortDesc = shortDesc;
     }
     if (patch.isFeatured !== undefined) data.isFeatured = patch.isFeatured;

@@ -248,6 +248,7 @@ function LinkedRow({ link: l }: { link: AdminLinkedMerchantProduct }) {
                 type="text"
                 aria-label="Lý do gỡ liên kết (gửi đối tác)"
                 placeholder="Lý do gỡ (gửi đối tác)..."
+                maxLength={300}
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
                 className={`${FIELD_XS} w-full`}
@@ -548,6 +549,7 @@ export function MerchantProductRow({
                   type="text"
                   aria-label="Lý do từ chối"
                   placeholder="Lý do từ chối..."
+                  maxLength={500}
                   value={rejectReason}
                   onChange={(e) => setRejectReason(e.target.value)}
                   className={`${FIELD_XS} w-full`}

@@ -175,3 +175,18 @@ describe('ProductEditDrawer: hỏi lại trước khi bỏ thay đổi chưa lư
     expect(onClose).not.toHaveBeenCalled();
   });
 });
+
+describe('ProductEditDrawer: trần ô mô tả khớp DTO', () => {
+  it('mô tả Pancake dài 5400 ký tự mở ra nguyên vẹn, sửa một chữ vẫn lưu được; ô cho gõ tới 6000 và 400 như DTO', async () => {
+    const long = 'a'.repeat(5400);
+    const { m } = mount({ server: product({ description: long, shortDesc: 'b'.repeat(350) }) });
+    await flush(6);
+    expect(textarea().value).toHaveLength(5400);
+    expect(textarea().maxLength).toBe(6000);
+    expect((document.querySelector('input[maxlength="400"]') as HTMLInputElement | null)?.value).toHaveLength(350);
+    typeInto(textarea(), `${long}!`);
+    click(saveBtn());
+    await flush(6);
+    expect(patches(m)).toEqual([{ description: `${long}!` }]);
+  });
+});

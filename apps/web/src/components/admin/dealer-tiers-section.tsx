@@ -208,7 +208,7 @@ export function DealerTiersSection() {
               <input aria-label="Hạn mức công nợ (đ)" inputMode="numeric" value={form.creditLimit} onChange={set('creditLimit')} className={INPUT} />
             </Field>
             <Field label="Điều kiện thanh toán" hint="PREPAID (trả trước) hoặc NET 30 (công nợ 30 ngày). Để trống nếu chưa đặt.">
-              <input aria-label="Điều kiện thanh toán" value={form.paymentTerms} onChange={set('paymentTerms')} placeholder="PREPAID hoặc NET 30" maxLength={10} className={INPUT} />
+              <input aria-label="Điều kiện thanh toán" value={form.paymentTerms} onChange={set('paymentTerms')} placeholder="PREPAID hoặc NET 30" maxLength={40} className={INPUT} />
             </Field>
           </div>
           {errors.length > 0 && (

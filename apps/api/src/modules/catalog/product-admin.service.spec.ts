@@ -1,10 +1,11 @@
 import 'reflect-metadata';
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
-import { validateSync } from 'class-validator';
+import { getMetadataStorage, validateSync } from 'class-validator';
 import { ROLES_KEY } from '../../common/decorators/roles.decorator';
 import { CATEGORY_MSG } from './category-tree';
 import { ProductAdminController, UpdateProductDto } from './product-admin.controller';
+import { createValidationPipe } from '../../common/validation-pipe';
 import { ProductAdminService } from './product-admin.service';
 
 const PNG = 'data:image/png;base64,iVBORw0KGgo=';
@@ -99,6 +100,42 @@ describe('ProductAdminService — sửa sản phẩm', () => {
     await svc.update('a1', 'p1', { description: '  Mô tả mới  ', shortDesc: '   ', isFeatured: true, categoryIds: ['c1', 'c1'] });
     expect(prisma.category.findMany.mock.calls[0][0].where).toEqual({ id: { in: ['c1'] } });
     expect(update.mock.calls[0][0].data).toEqual({ description: 'Mô tả mới', shortDesc: null, isFeatured: true, categoryIds: ['c1'] });
+  });
+
+  it('mô tả 5400 ký tự và mô tả ngắn 350 ký tự (Pancake ghi không cắt) lưu được: trần duy nhất là của DTO (6000 và 400)', async () => {
+    const { svc, update } = setup();
+    const description = 'a'.repeat(5400);
+    const shortDesc = 'b'.repeat(350);
+    await svc.update('a1', 'p1', { description, shortDesc });
+    expect(update.mock.calls[0][0].data).toEqual({ description, shortDesc });
+  });
+
+  it('mọi trường chữ của UpdateProductDto lưu được ở đúng trần @MaxLength: service không giữ trần riêng thấp hơn DTO', async () => {
+    const caps = (getMetadataStorage() as unknown as { getTargetValidationMetadatas: (t: unknown, s: unknown, a: boolean, b: boolean) => Array<{ propertyName: string; name?: string; each?: boolean; constraints?: number[] }> })
+      .getTargetValidationMetadatas(UpdateProductDto, null, false, false)
+      .filter((m) => m.name === 'maxLength' && !m.each)
+      .map((m) => [m.propertyName, m.constraints![0]!] as const);
+    expect(caps.map(([f]) => f)).toEqual(expect.arrayContaining(['description', 'shortDesc']));
+    for (const [field, max] of caps) {
+      const { svc, update } = setup();
+      await svc.update('a1', 'p1', { [field]: 'a'.repeat(max) });
+      expect(update.mock.calls[0][0].data).toEqual({ [field]: 'a'.repeat(max) });
+    }
+  });
+
+  it('mô tả 6000 ký tự có khoảng trắng hai đầu qua pipe và được cắt khoảng trắng (đo sau trim như mô tả ngắn); 6001 ký tự thật vẫn bị chặn', async () => {
+    const pipe = createValidationPipe();
+    const run = (body: object) => pipe.transform(body, { type: 'body', metatype: UpdateProductDto, data: undefined }).then((v) => v as UpdateProductDto, (e: { response: { message: string[] } }) => e.response.message);
+    const core = 'a'.repeat(6000);
+    expect(await run({ description: `  ${core}\n ` })).toMatchObject({ description: core });
+    expect(await run({ description: `  ${core}b ` })).toEqual(['Mô tả không được dài quá 6000 ký tự.']);
+  });
+
+  it('pipe chặn mô tả 6001 ký tự và mô tả ngắn 401 ký tự bằng câu tiếng Việt', async () => {
+    const pipe = createValidationPipe();
+    const run = (body: object) => pipe.transform(body, { type: 'body', metatype: UpdateProductDto, data: undefined }).then(() => null, (e: { response: { message: string[] } }) => e.response.message);
+    expect(await run({ description: 'a'.repeat(6001) })).toEqual(['Mô tả không được dài quá 6000 ký tự.']);
+    expect(await run({ shortDesc: 'b'.repeat(401) })).toEqual(['Mô tả ngắn không được dài quá 400 ký tự.']);
   });
 
   it('thêm danh mục có mục con vào sản phẩm → 400 nêu tên, không ghi; kiểm lá chỉ với id mới thêm', async () => {

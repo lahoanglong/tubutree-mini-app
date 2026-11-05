@@ -326,12 +326,12 @@ export function WastePointForm({
       </fieldset>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Tên điểm"><input name="name" className={INPUT_CLASS} value={f.name} onChange={(e) => set({ name: e.target.value })} /></Field>
-        <Field label="Địa chỉ"><input name="addressLine" className={INPUT_CLASS} value={f.addressLine} onChange={(e) => set({ addressLine: e.target.value })} /></Field>
+        <Field label="Tên điểm"><input name="name" className={INPUT_CLASS} maxLength={120} value={f.name} onChange={(e) => set({ name: e.target.value })} /></Field>
+        <Field label="Địa chỉ"><input name="addressLine" className={INPUT_CLASS} maxLength={300} value={f.addressLine} onChange={(e) => set({ addressLine: e.target.value })} /></Field>
         <GeoFields value={f.geo} onChange={(geo) => set({ geo })} />
         <Field label="Vĩ độ" hint={errors.lat}><input name="lat" inputMode="decimal" className={INPUT_CLASS} value={f.lat} onChange={(e) => set({ lat: e.target.value })} /></Field>
         <Field label="Kinh độ" hint={errors.lng}><input name="lng" inputMode="decimal" className={INPUT_CLASS} value={f.lng} onChange={(e) => set({ lng: e.target.value })} /></Field>
-        <Field label="Số điện thoại"><input name="phone" inputMode="tel" className={INPUT_CLASS} value={f.phone} onChange={(e) => set({ phone: e.target.value })} /></Field>
+        <Field label="Số điện thoại"><input name="phone" inputMode="tel" className={INPUT_CLASS} maxLength={20} value={f.phone} onChange={(e) => set({ phone: e.target.value })} /></Field>
       </div>
 
       <section className="space-y-2" aria-label="Giờ mở cửa">
@@ -385,7 +385,7 @@ export function WastePointForm({
             {errors.quota && touched.quota && <p className="mt-0.5 text-[11px] text-danger-fg">{errors.quota}</p>}
           </div>
         )}
-        <Field label="Ghi chú nội bộ"><input name="note" className={INPUT_CLASS} value={f.note} onChange={(e) => set({ note: e.target.value })} /></Field>
+        <Field label="Ghi chú nội bộ"><input name="note" className={INPUT_CLASS} maxLength={1000} value={f.note} onChange={(e) => set({ note: e.target.value })} /></Field>
       </div>
 
       {warehouse ? (

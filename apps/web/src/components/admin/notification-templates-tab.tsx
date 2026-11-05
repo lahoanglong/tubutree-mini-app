@@ -117,6 +117,7 @@ function TemplateRow({ item, canEditDelivery }: { item: AdminNotificationTemplat
             name="zaloTemplateId"
             inputMode="numeric"
             placeholder="vd 231570"
+            maxLength={20}
             value={f.zaloTemplateId}
             onChange={(e) => setF({ ...f, zaloTemplateId: e.target.value })}
             disabled={!canEditDelivery}
@@ -134,6 +135,7 @@ function TemplateRow({ item, canEditDelivery }: { item: AdminNotificationTemplat
         <textarea
           name="bodyTemplate"
           rows={2}
+          maxLength={1000}
           value={f.bodyTemplate}
           onChange={(e) => setF({ ...f, bodyTemplate: e.target.value })}
           aria-invalid={bodyProblem ? true : undefined}

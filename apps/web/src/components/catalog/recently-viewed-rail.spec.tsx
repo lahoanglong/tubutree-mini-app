@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { PRODUCT_SLUGS_QUERY_MAX_CHARS } from '@tubutree/shared-types';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flush, render, type Rendered } from '@/test-utils/dom';
 import { resetFlashSales } from '@/lib/use-flash-sales';
@@ -119,27 +120,27 @@ describe('RecentlyViewedRail: dọn mục API không trả lại', () => {
   });
 });
 
-describe('RecentlyViewedRail: trần độ dài slugs của API', () => {
+describe('RecentlyViewedRail: trần độ dài slugs của API (20 slug × 240 ký tự vừa trần)', () => {
   const LONG = (i: number) => `${'x'.repeat(116)}-${String(i).padStart(3, '0')}`;
   const seen = Array.from({ length: 20 }, (_, i) => ({ slug: LONG(i), name: `SP ${i}`, thumbnail: `https://content.pancake.vn/2-26/stored-${i}.jpg`, viewedAt: 1_700_000_000_000 - i }));
 
-  it('20 slug dài 120 ký tự: chuỗi gửi lên dưới 2000 ký tự (không HTTP 400), món cũ không được hỏi thì không bị dọn', async () => {
+  it('20 slug dài 120 ký tự: hỏi đủ cả 20 trong một chuỗi dưới trần của API (không HTTP 400), món bị ẩn thì bị dọn, các món còn lại nguyên', async () => {
     http.get.mockImplementation(async (_p: string, opts?: { query?: { slugs?: string } }) => {
       const asked = (opts?.query?.slugs ?? '').split(',').filter(Boolean);
-      // Món mới nhất bị ẩn: bị dọn; bốn món cũ nhất nằm ngoài trần nên không được hỏi và phải còn nguyên.
+      // Món mới nhất bị ẩn: bị dọn; mọi món khác đều được hỏi và còn nguyên.
       const data = asked.filter((s) => s !== LONG(0)).map((slug) => ({ ...LIVE(1), id: slug, slug, name: slug }));
       return { data, meta: { page: 1, limit: data.length, total: data.length } };
     });
     await mount(<RecentlyViewedRail />, seen);
     const sent = http.get.mock.calls.filter(([p]) => p === '/products').map(([, o]) => (o as { query: { slugs: string } }).query.slugs);
     expect(sent.length).toBeGreaterThan(0);
-    for (const q of sent) expect(q.length).toBeLessThanOrEqual(2000);
-    expect(sent[0]?.split(',')).toHaveLength(16);
+    for (const q of sent) expect(q.length).toBeLessThanOrEqual(PRODUCT_SLUGS_QUERY_MAX_CHARS);
+    expect(sent[0]?.split(',')).toHaveLength(20);
     const left = JSON.parse(localStorage.getItem('tubu_recently_viewed')!).map((i: { slug: string }) => i.slug);
     expect(left).toEqual(seen.slice(1).map((i) => i.slug));
   });
 
-  it('10 món slug 210 ký tự: sau khi API trả lời chỉ vẽ món đã hỏi và được trả về, không thẻ nào thiếu giá; món ngoài trần vẫn nằm trong kho', async () => {
+  it('10 món slug 210 ký tự: đều vừa trần, hỏi đủ 10 và vẽ đủ 10 thẻ có giá, kho còn nguyên', async () => {
     const wide = (i: number) => `${'y'.repeat(206)}-${String(i).padStart(3, '0')}`;
     const stored10 = Array.from({ length: 10 }, (_, i) => ({ slug: wide(i), name: `SP ${i}`, thumbnail: `https://content.pancake.vn/2-26/stored-${i}.jpg`, viewedAt: 1_700_000_000_000 - i }));
     http.get.mockImplementation(async (_p: string, opts?: { query?: { slugs?: string } }) => {
@@ -148,17 +149,16 @@ describe('RecentlyViewedRail: trần độ dài slugs của API', () => {
     });
     const c = await mount(<RecentlyViewedRail />, stored10);
     const cards = c.querySelectorAll('[data-ds="product-tile"]');
-    expect(cards).toHaveLength(9);
+    expect(cards).toHaveLength(10);
     for (const card of Array.from(cards)) expect(card.textContent).toContain('50.000');
     expect(JSON.parse(localStorage.getItem('tubu_recently_viewed')!)).toHaveLength(10);
   });
 
-  it('10 món slug 210 ký tự, API chưa trả lời: chỉ vẽ món nằm trong lần hỏi, thẻ ngoài trần không hiện thoáng qua', async () => {
+  it('10 món slug 210 ký tự, API chưa trả lời: vẽ đủ 10 món đã hỏi', async () => {
     const wide = (i: number) => `${'y'.repeat(206)}-${String(i).padStart(3, '0')}`;
     const stored10 = Array.from({ length: 10 }, (_, i) => ({ slug: wide(i), name: `SP ${i}`, thumbnail: `https://content.pancake.vn/2-26/stored-${i}.jpg`, viewedAt: 1_700_000_000_000 - i }));
     http.get.mockImplementation(() => new Promise(() => undefined));
     const c = await mount(<RecentlyViewedRail />, stored10);
-    expect(c.querySelectorAll('[data-ds="product-tile"]')).toHaveLength(9);
-    expect(c.textContent).not.toContain('SP 9');
+    expect(c.querySelectorAll('[data-ds="product-tile"]')).toHaveLength(10);
   });
 });

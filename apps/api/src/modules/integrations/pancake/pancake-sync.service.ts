@@ -10,6 +10,7 @@ import { applyPancakeStock, forcePancakeStock } from '../../catalog/variation-st
 import type { PancakeProductDTO, PancakeProductsResponse, PancakeVariationDTO } from './pancake.types';
 import { CRON_TZ } from '../../../common/cron-tz';
 import { LEGACY_FAKE_PANCAKE_PREFIX } from './pancake-fulfilment';
+import { pancakeProductSlug } from './pancake-product-slug';
 import { CronLeaderService } from '../../../common/cron-leader/cron-leader.service';
 import { RunLease } from '../../../common/cron-leader/run-lease';
 import { SystemConfigService } from '../../system-config/system-config.service';
@@ -529,14 +530,7 @@ export class PancakeSyncService implements OnModuleInit {
   }
 
   private slugify(name: string, suffix: string): string {
-    const base = name
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[̀-ͯ]/g, '') // bỏ dấu tiếng Việt
-      .replace(/[đ]/g, 'd') // đ → d
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '');
-    return `${base}-${suffix.slice(-6).toLowerCase()}`;
+    return pancakeProductSlug(name, suffix);
   }
 
   /** Suy phân khúc từ tên sản phẩm (bỏ dấu) — eco là catch-all để "Sống xanh" luôn có hàng. */

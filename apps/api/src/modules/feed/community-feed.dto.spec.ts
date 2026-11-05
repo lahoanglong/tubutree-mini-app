@@ -1,5 +1,6 @@
 import 'reflect-metadata';
 import { ValidationPipe } from '@nestjs/common';
+import { PRODUCT_SLUG_MAX } from '@tubutree/shared-types';
 import { CreatePostDto, EditPostDto } from './community-feed.controller';
 
 /** Đúng cấu hình ValidationPipe toàn cục ở main.ts. */
@@ -59,5 +60,12 @@ describe('CreatePostDto/EditPostDto.images chữ ký tệp (BAOMAT-02)', () => {
   ])('từ chối %s (tạo và sửa bài)', async (_label, img) => {
     await expect(asCreate({ body: 'Chia sẻ', images: [img] })).rejects.toThrow();
     await expect(asEdit({ images: [img] })).rejects.toThrow();
+  });
+});
+
+describe('CreatePostDto.productSlugs: trần slug sản phẩm', () => {
+  it('nhận slug dài tới PRODUCT_SLUG_MAX, PRODUCT_SLUG_MAX + 1 thì 400', async () => {
+    await expect(asCreate({ body: 'Chia sẻ', productSlugs: ['a'.repeat(PRODUCT_SLUG_MAX)] })).resolves.toBeDefined();
+    await expect(asCreate({ body: 'Chia sẻ', productSlugs: ['a'.repeat(PRODUCT_SLUG_MAX + 1)] })).rejects.toBeDefined();
   });
 });

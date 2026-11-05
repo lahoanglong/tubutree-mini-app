@@ -68,7 +68,7 @@ export function DealerAccountsTab({ isAdmin = true }: { isAdmin?: boolean } = {}
             type="search"
             aria-label="Tìm đại lý theo tên hoặc SĐT"
             placeholder="Tìm theo tên hoặc SĐT"
-            maxLength={64}
+            maxLength={100}
             value={typed}
             onChange={(e) => setTyped(e.target.value)}
             className={`${FIELD_XS} w-full sm:w-64`}

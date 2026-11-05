@@ -499,6 +499,7 @@ function RateCsvImport() {
         aria-label="Nội dung CSV sku,% hoa hồng"
         rows={6}
         placeholder={'SKU,% hoa hồng\nNRC-500,10\nNG-1L;7'}
+        maxLength={300000}
         value={csv}
         onChange={(e) => {
           setCsv(e.target.value);
@@ -645,6 +646,7 @@ function DealerPriceImport() {
         aria-label="Nội dung CSV sku,giá sỉ"
         rows={5}
         placeholder={'SKU;Giá sỉ\nNRC-500;185.000\nNG-1L;240.000'}
+        maxLength={300000}
         value={csv}
         onChange={(e) => {
           setCsv(e.target.value);

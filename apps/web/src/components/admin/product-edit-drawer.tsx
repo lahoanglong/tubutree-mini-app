@@ -144,11 +144,11 @@ function Form({
           )}
           <label className="block text-sm text-stone-700">
             Mô tả ngắn
-            <input value={shortDesc} maxLength={300} onChange={(e) => setShortDesc(e.target.value)} className={`${INPUT_CLASS} mt-1`} />
+            <input value={shortDesc} maxLength={400} onChange={(e) => setShortDesc(e.target.value)} className={`${INPUT_CLASS} mt-1`} />
           </label>
           <label className="block text-sm text-stone-700">
             Mô tả
-            <textarea value={description} maxLength={5000} rows={6} onChange={(e) => setDescription(e.target.value)} className={`${INPUT_CLASS} mt-1`} />
+            <textarea value={description} maxLength={6000} rows={6} onChange={(e) => setDescription(e.target.value)} className={`${INPUT_CLASS} mt-1`} />
           </label>
           {product.managedByPancake && (
             <p className="text-xs text-stone-500">

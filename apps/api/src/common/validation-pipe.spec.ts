@@ -12,6 +12,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  Length,
   Max,
   MaxLength,
   Min,
@@ -87,6 +88,7 @@ class LineDto {
 class SampleDto {
   @IsInt() @Min(1) @Max(5) rating!: number;
   @IsOptional() @IsString() @MinLength(5) @MaxLength(20) comment?: string;
+  @IsOptional() @IsString() @Length(2, 6) title?: string;
   @IsOptional() @IsArray() @ArrayMaxSize(2) @IsUploadedImage({}, { each: true }) images?: string[];
   @IsOptional() @IsIn(['COD', 'BANK']) method?: string;
   @IsOptional() @IsEmail() email?: string;
@@ -122,13 +124,15 @@ describe('createValidationPipe — thông điệp lỗi tiếng Việt', () => {
     expect(await sampleMessagesOf({ rating: 0 })).toEqual(['Số sao không được nhỏ hơn 1.']);
     expect(await sampleMessagesOf({ rating: 5, comment: 'ngắn' })).toEqual(['Nội dung đánh giá phải có ít nhất 5 ký tự.']);
     expect(await sampleMessagesOf({ rating: 5, comment: 'x'.repeat(21) })).toEqual(['Nội dung đánh giá không được dài quá 20 ký tự.']);
+    expect(await sampleMessagesOf({ rating: 5, title: 'x' })).toEqual(['Tiêu đề phải có ít nhất 2 ký tự.']);
+    expect(await sampleMessagesOf({ rating: 5, title: 'x'.repeat(7) })).toEqual(['Tiêu đề không được dài quá 6 ký tự.']);
   });
 
   it('kiểu dữ liệu, giá trị cho phép, email, thiếu trường', async () => {
     expect(await sampleMessagesOf({ rating: 'năm' })).toEqual(
       expect.arrayContaining(['Số sao phải là số nguyên.']),
     );
-    expect(await sampleMessagesOf({ rating: 5, method: 'CASH' })).toEqual([expect.stringMatching(/^Trường «method» chỉ nhận một trong: COD, BANK\.$/)]);
+    expect(await sampleMessagesOf({ rating: 5, method: 'CASH' })).toEqual([expect.stringMatching(/^Phương thức chỉ nhận một trong: COD, BANK\.$/)]);
     expect(await sampleMessagesOf({ rating: 5, email: 'abc' })).toEqual(['Email không hợp lệ.']);
     expect(await sampleMessagesOf({})).toEqual(expect.arrayContaining(['Số sao phải là số nguyên.']));
   });

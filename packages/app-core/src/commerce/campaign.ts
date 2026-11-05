@@ -1,7 +1,7 @@
 import type { CampaignBanner, CampaignCouponDTO } from '../api/campaign';
 import type { PageResponse, ProductCard } from '../api/catalog';
 import type { HomeKindState } from '../home-layout';
-import { CAMPAIGN_INTERNAL_TARGETS } from '@tubutree/shared-types';
+import { CAMPAIGN_ENTITY_SLUG_RE, CAMPAIGN_INTERNAL_TARGETS } from '@tubutree/shared-types';
 import { liveRoute } from '../merch/route-fallback';
 import { fillCopy } from '../shop-copy';
 import { sortVouchers, voucherView, type VoucherView } from './voucher';
@@ -11,7 +11,6 @@ export const CAMPAIGN_SLIDES_MAX = 5;
 export const CAMPAIGN_PRODUCTS_PAGE = 20;
 
 const VN_OFFSET_MS = 7 * 3_600_000;
-const ENTITY_SLUG = /^[A-Za-z0-9][A-Za-z0-9_-]{0,119}$/;
 
 // Danh sách đích nằm ở shared-types để API và app dùng chung một nguồn.
 export { CAMPAIGN_INTERNAL_TARGETS };
@@ -34,9 +33,9 @@ export function campaignHref(c: Pick<CampaignBanner, 'slug' | 'linkType' | 'link
     case 'CAMPAIGN_PAGE':
       return `${mini ? '/campaign' : '/chien-dich'}/${encodeURIComponent(c.slug)}`;
     case 'PRODUCT':
-      return c.linkValue && ENTITY_SLUG.test(c.linkValue) ? `${mini ? '/product' : '/san-pham'}/${c.linkValue}` : null;
+      return c.linkValue && CAMPAIGN_ENTITY_SLUG_RE.test(c.linkValue) ? `${mini ? '/product' : '/san-pham'}/${c.linkValue}` : null;
     case 'CATEGORY':
-      return c.linkValue && ENTITY_SLUG.test(c.linkValue) ? `${mini ? '/browse' : '/san-pham'}?category=${c.linkValue}` : null;
+      return c.linkValue && CAMPAIGN_ENTITY_SLUG_RE.test(c.linkValue) ? `${mini ? '/browse' : '/san-pham'}?category=${c.linkValue}` : null;
     case 'URL_INTERNAL': {
       const target = CAMPAIGN_INTERNAL_TARGETS.find((t) => t.value === c.linkValue);
       if (!target) return null;
