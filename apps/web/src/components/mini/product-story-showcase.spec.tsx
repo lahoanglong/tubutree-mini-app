@@ -65,6 +65,18 @@ describe('ProductStoryShowcase (web)', () => {
     expect(q(container, 'product-story')).toBeNull();
   });
 
+  it('sản phẩm của nhãn chủ lực chưa có cấu hình: tự vẽ điểm chỉ Thương hiệu, Quy cách, Hương đọc từ tên cùng câu kết', () => {
+    const brand = { ...PRODUCT, storyConfig: null, ingredients: null, variations: [PRODUCT.variations[0]], slug: 'nuoc-giat-huong-bac-ha-fuwa3e-500ml-751754', name: 'Nước giặt hương Bạc hà Fuwa3e 500ml', brand: 'Tubu Tree' } as ProductDetail;
+    const { container } = mount(<ProductStoryShowcase product={brand} />);
+    const callouts = qa(q(container, 'story-hud')!, 'story-callout').map((c) => c.textContent);
+    expect(callouts).toHaveLength(3);
+    expect(callouts[0]).toContain('Thương hiệu');
+    expect(callouts[0]).toContain('Fuwa3e');
+    expect(callouts[1]).toContain('500ml');
+    expect(callouts[2]).toContain('Bạc hà');
+    expect(q(container, 'story-closing')!.textContent).toBe('Fuwa3e, có tại Tubu Tree');
+  });
+
   it('variant arc: tapping an item calls onSelectVariation and sets ambient', () => {
     const onSelect = vi.fn();
     const { container } = mount(<ProductStoryShowcase product={PRODUCT} selectedVariationId="v1" onSelectVariation={onSelect} />);

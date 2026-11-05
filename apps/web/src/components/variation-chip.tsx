@@ -9,7 +9,7 @@ import { phoneBodySm, phoneCaption } from '@/lib/phone-ui';
 export interface VariationChipProps {
   variation: { name: string; stock: number };
   /** Giá khách thật sự trả cho một đơn vị (đã áp Giờ vàng), từ `variationPricing`. */
-  pricing: { price: number; isFlash: boolean };
+  pricing: { price: number; isFlash: boolean; salePct?: number };
   active: boolean;
   onClick: () => void;
 }
@@ -22,6 +22,8 @@ export interface VariationChipProps {
  */
 export function VariationChip({ variation, pricing, active, onClick }: VariationChipProps) {
   const out = variation.stock <= 0;
+  // Giờ vàng đã có dấu riêng; ở đây chỉ phân loại đang giảm giá thường (giá gạch cao hơn giá bán) mới ghi phần trăm tiết kiệm.
+  const savePct = !out && !pricing.isFlash && (pricing.salePct ?? 0) > 0 ? pricing.salePct! : 0;
   return (
     <button
       type="button"
@@ -57,6 +59,14 @@ export function VariationChip({ variation, pricing, active, onClick }: Variation
           <>
             {pricing.isFlash && <Zap className="hidden h-3 w-3 max-md:block" strokeWidth={2} aria-hidden="true" />}
             {formatVnd(pricing.price)}
+            {savePct > 0 && (
+              <>
+                <span aria-hidden="true" className="ml-1 font-semibold text-[var(--color-text-price-deal)]">
+                  {fillTileCopy('badge.discount', { pct: savePct })}
+                </span>
+                <span className="sr-only">, {fillTileCopy('badge.discountSpoken', { pct: savePct })}</span>
+              </>
+            )}
           </>
         )}
       </span>

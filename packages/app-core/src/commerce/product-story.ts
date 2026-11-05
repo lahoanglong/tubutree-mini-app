@@ -12,6 +12,7 @@ import {
   type VariantArcItem,
 } from '@tubutree/shared-types';
 import { fillCopy } from '../shop-copy';
+import { buildBrandStoryConfig } from './brand-story';
 import { findStoryPreset } from './story-presets-launch';
 import { spriteForIngredient, STORY_SPRITES, type StoryTone } from './story-sprites';
 
@@ -176,7 +177,8 @@ function reconcileArc(config: ProductStoryConfig, variations: readonly ArcVariat
 }
 
 /**
- * Cấu hình dùng để vẽ: đã lưu (hợp lệ) > preset theo slug (mẫu seed hoặc mẫu đợt đầu theo slug gốc; chèn vòng cung từ biến thể thật) > tự sinh từ thành phần.
+ * Cấu hình dùng để vẽ: đã lưu (hợp lệ) > preset theo slug (mẫu seed hoặc mẫu đợt đầu theo slug gốc; chèn vòng cung từ biến thể thật) > tự sinh từ thành phần >
+ * kịch bản cấp nhãn cho năm nhãn chủ lực (`brand-story.ts`).
  * `enabled:false` là admin tắt hẳn. Trả null thì trang chi tiết không vẽ gì thêm.
  */
 export function resolveStoryConfig(p: StoryProductInput): ProductStoryConfig | null {
@@ -190,7 +192,15 @@ export function resolveStoryConfig(p: StoryProductInput): ProductStoryConfig | n
     const arc = buildArcScene(p.variations);
     return arc ? { ...preset, scenes: [arc, ...preset.scenes] } : preset;
   }
-  return buildDefaultStoryConfig(p);
+  const auto = buildDefaultStoryConfig(p);
+  // Có thành phần thật thì kịch bản tự sinh giàu hơn; còn lại, sản phẩm của năm nhãn chủ lực nhận kịch bản cấp nhãn (không ghi đè gì đã lưu).
+  if (auto?.scenes.some((s) => s.kind === 'ingredient_assembly')) return auto;
+  const brandConfig = buildBrandStoryConfig(p);
+  if (brandConfig) {
+    const arc = buildArcScene(p.variations);
+    return arc ? { ...brandConfig, scenes: [arc, ...brandConfig.scenes] } : brandConfig;
+  }
+  return auto;
 }
 
 export interface StoryStepView {
