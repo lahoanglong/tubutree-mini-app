@@ -178,6 +178,18 @@ describe('loại lỗi đẩy + câu hướng dẫn (hi)', () => {
     expect(forbiddenText).toContain('hai đơn kho');
   });
 
+  it('đơn STALE (quá hạn tự đẩy): câu riêng, không nói "vẫn tự thử lại", dù loại lỗi cũ là REJECTED vì 401/403', () => {
+    const o = order({ pancakePushStatus: 'STALE', pancakeErrorKind: 'REJECTED', pancakeSyncError: `${PANCAKE_FORBIDDEN_ERROR_PREFIX}Pancake trả 403` });
+    const text = pancakeErrorGuide(o)?.text ?? '';
+    expect(text).toContain('đã ngừng tự đẩy');
+    expect(text).toContain('giao tay chưa');
+    expect(text).toContain('Đẩy lại Pancake');
+    expect(text).not.toContain('vẫn tự thử lại');
+    expect(text).not.toMatch(/(?<!Không )tạo tay|nhập tay|tạo thủ công/i);
+    expect(pancakeErrorGuide(order({ pancakePushStatus: 'STALE' }))?.text).toBe(text);
+    expect(pancakeErrorGuide(order({ pancakePushStatus: 'STALE', pancakeOrderId: '9' }))).toBeNull();
+  });
+
   it('lỗi tạm: nêu giờ tự thử lại kế tiếp (HH:MM giờ Việt Nam)', () => {
     const o = order({ pancakeErrorKind: 'TRANSIENT', pancakePushStatus: 'PENDING', pancakeNextRetryAt: '2026-10-13T03:30:00.000Z' });
     expect(pancakeSyncState(o)).toMatchObject({ label: 'Pancake: tạm lỗi, tự thử lại', flag: true });

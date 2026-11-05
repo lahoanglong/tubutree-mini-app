@@ -246,6 +246,22 @@ describe('OpsHealthTab — việc cụ thể cần xử lý (R2-PLATFORM-1, R2-A
     expect(text).not.toContain('sửa theo lỗi rồi bấm');
   });
 
+  it('hi: đơn STALE ở danh sách đơn kẹt hiện câu ngừng tự đẩy, không câu "vẫn tự thử lại"', async () => {
+    const base = HEALTH.pancake.stuckOrders[0]!;
+    const health = {
+      ...HEALTH,
+      pancake: {
+        ...HEALTH.pancake,
+        stuckOrders: [{ ...base, id: 's3', code: 'TUBUSTALE', pancakePushStatus: 'STALE', pancakeErrorKind: 'REJECTED', pancakeSyncError: `${PANCAKE_FORBIDDEN_ERROR_PREFIX}Pancake trả 403` }],
+      },
+    };
+    vi.stubGlobal('fetch', vi.fn(mockFetch({ '/admin/ops/health': { body: health } }).fn));
+    const c = await mount(<OpsHealthTab onOpenOrder={vi.fn()} />);
+    const text = c.querySelector('section[aria-label="Đơn kẹt"]')!.textContent!;
+    expect(text).toContain('đã ngừng tự đẩy');
+    expect(text).not.toContain('vẫn tự thử lại');
+  });
+
   it('API cũ chưa trả pushErrors thì không hiện dòng loại lỗi', async () => {
     vi.stubGlobal('fetch', vi.fn(mockFetch({ '/admin/ops/health': { body: HEALTH } }).fn));
     const c = await mount(<OpsHealthTab onOpenOrder={vi.fn()} />);

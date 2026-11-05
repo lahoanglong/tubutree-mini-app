@@ -29,6 +29,13 @@ export interface PancakeSyncState {
 export const PANCAKE_FORBIDDEN_GUIDE =
   'Pancake từ chối quyền cho riêng đơn này (khoá API vẫn đẩy được đơn khác). Không tạo tay đơn này trên Pancake: hệ thống vẫn tự thử lại mỗi giờ (tới 72 giờ), làm vậy sẽ thành hai đơn kho. Kiểm tra trang/kho/sản phẩm của đơn trên Pancake hoặc báo kỹ thuật.';
 
+/**
+ * Đơn quá cửa sổ tự đẩy (STALE): không đường tự động nào đẩy nữa (API: pushOrder bỏ qua đơn STALE), kho có thể đã giao tay. Khớp câu
+ * "Cần xử lý Pancake" của cron markOverdue.
+ */
+export const PANCAKE_STALE_GUIDE =
+  'Đơn quá hạn tự đẩy: hệ thống đã ngừng tự đẩy đơn này (kể cả khi khách trả tiền sau). Kiểm tra kho đã giao tay chưa; chưa thì bấm "Đẩy lại Pancake". Không làm cả hai, kẻo kho giao hai lần.';
+
 /** Loại lỗi đẩy (API: pancake-push-error.ts) → nhãn ngắn ở danh sách. */
 const KIND_LABEL: Record<string, { tone: Tone; label: string }> = {
   DATA: { tone: 'danger', label: 'Pancake: thiếu dữ liệu đơn' },
@@ -50,7 +57,9 @@ const clock = (iso: string) => formatDateTime(iso).slice(0, 5);
 
 /** Câu hướng dẫn cho admin theo loại lỗi đẩy; null khi đơn đã lên Pancake hoặc chưa có loại lỗi. */
 export function pancakeErrorGuide(order: AdminOrder): PancakeErrorGuide | null {
-  if (order.pancakeOrderId || !order.pancakeErrorKind || !KIND_LABEL[order.pancakeErrorKind]) return null;
+  if (order.pancakeOrderId) return null;
+  if (order.pancakePushStatus === 'STALE') return { kind: 'STALE', configBlocked: false, text: PANCAKE_STALE_GUIDE };
+  if (!order.pancakeErrorKind || !KIND_LABEL[order.pancakeErrorKind]) return null;
   const kind = order.pancakeErrorKind;
   switch (kind) {
     case 'DATA':
