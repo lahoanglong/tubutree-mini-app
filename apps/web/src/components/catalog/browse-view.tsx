@@ -483,7 +483,7 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
               )}
             </section>
             {/* Tìm/lọc không ra gì vẫn cho khách lối đi tiếp. */}
-            {noResults && (
+            {noResults && !pastLastPage && (
               <>
                 <SuggestedRail flush />
                 <RecentlyViewedRail />

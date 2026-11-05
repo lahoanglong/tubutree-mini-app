@@ -102,7 +102,8 @@ const ellipsis = { display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', t
 function CourseCard({ course, onOpen }: { course: AcademyCourseSummary; onOpen: () => void }) {
   const pct = course.lessonCount > 0 ? Math.round((course.completedCount / course.lessonCount) * 100) : 0;
   // Ảnh bìa chết (404, hết hạn) thì về biểu tượng sách như khoá không có ảnh, không để biểu tượng ảnh vỡ trong ô 64px.
-  const [coverFailed, setCoverFailed] = useState(false);
+  // Nhớ đúng URL đã lỗi (không phải cờ chung): admin sửa ảnh bìa rồi làm mới thì thẻ cùng id vẽ lại ảnh mới.
+  const [failedCover, setFailedCover] = useState<string | null>(null);
 
   return (
     <Card padding={0}>
@@ -120,8 +121,8 @@ function CourseCard({ course, onOpen }: { course: AcademyCourseSummary; onOpen: 
               placeItems: 'center',
             }}
           >
-            {course.coverUrl && !coverFailed ? (
-              <img src={course.coverUrl} alt="" onError={() => setCoverFailed(true)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            {course.coverUrl && course.coverUrl !== failedCover ? (
+              <img src={course.coverUrl} alt="" onError={() => setFailedCover(course.coverUrl)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             ) : (
               <Icon icon={BookOpen} size="lg" tone="brand" />
             )}

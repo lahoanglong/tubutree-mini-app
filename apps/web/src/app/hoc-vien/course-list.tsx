@@ -24,14 +24,16 @@ export const errorText = friendlyError;
 function CourseCard({ course }: { course: AcademyCourseSummary }) {
   const pct = course.lessonCount > 0 ? Math.round((course.completedCount / course.lessonCount) * 100) : 0;
   // Ảnh bìa chết (404, hết hạn) thì về biểu tượng sách như khoá không có ảnh, không để biểu tượng ảnh vỡ của trình duyệt trong ô 64px.
-  const [coverFailed, setCoverFailed] = useState(false);
-  const cover = coverFailed ? null : safeMediaUrl(course.coverUrl);
+  // Nhớ đúng URL đã lỗi (không phải cờ chung): admin sửa ảnh bìa rồi làm mới thì thẻ cùng id vẽ lại ảnh mới.
+  const [failedCover, setFailedCover] = useState<string | null>(null);
+  const safeCover = safeMediaUrl(course.coverUrl);
+  const cover = safeCover && safeCover !== failedCover ? safeCover : null;
   return (
     <Link href={`/hoc-vien/${encodeURIComponent(course.id)}`} className={`${miniCard} flex min-h-11 items-start gap-3 p-3 transition active:scale-[0.99]`}>
       <span className="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-control bg-forest-50 text-forest-600">
         {cover ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={cover} alt="" loading="lazy" onError={() => setCoverFailed(true)} className="h-full w-full object-cover" />
+          <img src={cover} alt="" loading="lazy" onError={() => setFailedCover(cover)} className="h-full w-full object-cover" />
         ) : (
           <BookOpen className="h-6 w-6" aria-hidden="true" />
         )}

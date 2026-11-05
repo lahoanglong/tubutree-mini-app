@@ -268,6 +268,9 @@ describe('BrowseView — danh sách và trạng thái URL', () => {
     expect(nav.replaces[0]).toBe('/san-pham?sort=newest&page=3');
     expect(container.textContent).not.toContain(browseText.noResultFiltered);
     expect(container.querySelector('[data-testid="catalog-grid"]')).toBeNull();
+    // Đang chuyển về trang cuối thì chưa phải "không có kết quả": không hiện kệ gợi ý, không bắn thêm yêu cầu bán chạy.
+    expect(container.querySelector('section[aria-label="Có thể bạn thích"]')).toBeNull();
+    expect(productCalls().some((q) => q?.sort === 'best_seller')).toBe(false);
   });
 
   it('danh sách thật sự rỗng (total = 0) ở trang > 1: không chuyển hướng', async () => {
