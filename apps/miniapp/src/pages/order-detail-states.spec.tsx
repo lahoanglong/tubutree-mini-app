@@ -264,6 +264,24 @@ describe('OrderDetailPage — nút theo trạng thái (gói hl)', () => {
     expect(within(container).queryByText(/^0$/)).toBeNull();
   });
 
+  it('đơn huỷ mà lịch sử vận chuyển toàn dòng rác: không dựng khung vận chuyển trống', async () => {
+    mocks.fetchOrder.mockResolvedValue({
+      ...ORDER,
+      status: 'CANCELLED',
+      createdAt: hoursFromNow(-30),
+      updatedAt: hoursFromNow(-5),
+      statusTimes: { CANCELLED: hoursFromNow(-6) },
+      shippingHistory: [{ at: hoursFromNow(-6) }, { at: hoursFromNow(-5), status: '', code: null }, null],
+    });
+    const { container } = renderPage();
+    await screen.findByText('Đơn đã huỷ.');
+    expect(container.querySelector('[data-testid="order-shipping"]')).toBeNull();
+    const emptyFrames = Array.from(container.querySelectorAll<HTMLElement>('div')).filter(
+      (d) => d.style.background.includes('--color-bg-surface') && d.childElementCount === 0 && !d.textContent?.trim(),
+    );
+    expect(emptyFrames).toHaveLength(0);
+  });
+
   it('đơn chuyển khoản đã huỷ: chỉ nói "Đơn đã huỷ.", không suy ra lý do quá hạn thanh toán (API không trả lý do huỷ)', async () => {
     const base = { ...ORDER, status: 'CANCELLED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', createdAt: hoursFromNow(-30), updatedAt: hoursFromNow(-5) };
     mocks.fetchOrder.mockResolvedValue({ ...base, paymentDeadline: hoursFromNow(-6), statusTimes: { CANCELLED: hoursFromNow(-6) } });

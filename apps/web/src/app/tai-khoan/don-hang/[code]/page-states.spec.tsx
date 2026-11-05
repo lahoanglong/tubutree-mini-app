@@ -213,6 +213,20 @@ describe('chi tiết đơn web — nút theo trạng thái (gói hl)', () => {
     expect(container.querySelector('[data-testid="order-action-note"]')?.textContent).toMatch(/Còn 2 giờ/);
   });
 
+  it('đơn huỷ mà lịch sử vận chuyển toàn dòng rác: không dựng khung vận chuyển trống', async () => {
+    mocks.order = {
+      ...BASE,
+      status: 'CANCELLED',
+      statusTimes: { CANCELLED: hoursFromNow(-6) },
+      shippingHistory: [{ at: hoursFromNow(-6) }, { at: hoursFromNow(-5), status: '', code: null }, null],
+    };
+    const { container } = await mount();
+    expect(container.textContent).toContain('Đơn đã huỷ.');
+    expect(container.querySelector('[data-testid="order-shipping"]')).toBeNull();
+    const emptyFrames = Array.from(container.querySelectorAll('section')).filter((s) => !s.textContent?.trim());
+    expect(emptyFrames).toHaveLength(0);
+  });
+
   it('đơn chuyển khoản đã huỷ: chỉ nói "Đơn đã huỷ.", không suy ra lý do quá hạn thanh toán (API không trả lý do huỷ)', async () => {
     mocks.order = {
       ...BASE,

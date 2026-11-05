@@ -277,6 +277,8 @@ export default function OrderDetailPage() {
   const headline = orderHeadline(tOrder, ctx);
   const plan = orderActionPlan(tOrder, ctx);
   const trackView = orderTrack(tOrder, { etaLabel });
+  // Đơn không có hành trình 5 bước (huỷ/hoàn) mới in mốc hãng riêng; lịch sử toàn dòng rác thì không dựng khung trống.
+  const historyEvents = trackView ? [] : shippingEvents(o.shippingHistory);
   const payNote = plan.primary === 'pay' && deadlineLeft ? fillCopy('order.action.payLeft', { t: deadlineLeft }) : null;
 
   const onAction = (kind: OrderActionKind) => {
@@ -337,13 +339,13 @@ export default function OrderDetailPage() {
         </Box>
       )}
 
-      {(o.shippingPartner || o.shippingCode || (!trackView && !!o.shippingHistory?.length)) && (
+      {(o.shippingPartner || o.shippingCode || historyEvents.length > 0) && (
         <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
           <OrderShipping
             partner={o.shippingPartner}
             code={o.shippingCode}
             status={o.shippingStatus ? shippingEventLabel(o.shippingStatus) : null}
-            events={trackView ? undefined : shippingEvents(o.shippingHistory)}
+            events={trackView ? undefined : historyEvents}
           />
         </Box>
       )}

@@ -208,6 +208,8 @@ export default function OrderDetailPage() {
   const headline = orderHeadline(trackOrder, ctx);
   const plan = orderActionPlan(trackOrder, ctx);
   const trackView = orderTrack(trackOrder, { etaLabel });
+  // Đơn không có hành trình 5 bước (huỷ/hoàn) mới in mốc hãng riêng; lịch sử toàn dòng rác thì không dựng khung trống.
+  const historyEvents = trackView ? [] : shippingEvents(o.shippingHistory);
   const payNote = plan.primary === 'pay' && deadlineLeft ? fillCopy('order.action.payLeft', { t: deadlineLeft }) : null;
   const tracking = safeHttpUrl(o.trackingLink);
   const showPayPanel = !isPhone && (canPayNow(o) || (qrShown && canPayNow(o, 0)) || paidNotice);
@@ -242,14 +244,14 @@ export default function OrderDetailPage() {
               <OrderTrack track={trackView} now={ctx.now} />
             </section>
           )}
-          {(o.shippingPartner || o.shippingCode || tracking || (!trackView && !!o.shippingHistory?.length)) && (
+          {(o.shippingPartner || o.shippingCode || tracking || historyEvents.length > 0) && (
             <section className={`order-5 mt-4 p-4 max-md:mt-2 ${ui.card} ${mini.band}`}>
               <OrderShipping
                 partner={o.shippingPartner}
                 code={o.shippingCode}
                 status={shippingEventLabel(o.shippingStatus)}
                 trackingHref={tracking}
-                events={trackView ? undefined : shippingEvents(o.shippingHistory)}
+                events={trackView ? undefined : historyEvents}
               />
             </section>
           )}
