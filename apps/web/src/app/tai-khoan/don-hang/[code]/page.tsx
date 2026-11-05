@@ -310,7 +310,7 @@ export default function OrderDetailPage() {
                   {o.status === 'DELIVERED' && slug && (it.reviewId || it.reviewable !== false) && (
                     <Link
                       href={reviewHref(slug, o.id)}
-                      className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-forest-700 underline max-md:min-h-0 max-md:py-1 max-md:text-xs max-md:text-[color:var(--color-text-brand)] max-md:no-underline"
+                      className="tubu-hit-44 inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-forest-700 underline max-md:min-h-0 max-md:py-1 max-md:text-xs max-md:text-[color:var(--color-text-brand)] max-md:no-underline"
                     >
                       <Star className="h-4 w-4" aria-hidden="true" />
                       {it.reviewId ? 'Sửa đánh giá' : 'Viết đánh giá'}

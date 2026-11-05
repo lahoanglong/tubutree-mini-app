@@ -157,5 +157,7 @@ describe('chi tiết đơn như Mini App', () => {
     expect(text(container)).toContain('Serum Visante · 30ml ×1');
     const review = [...container.querySelectorAll('a')].find((a) => a.textContent === 'Viết đánh giá')!;
     expect(review.className).toContain('max-md:no-underline');
+    // 12px chữ như Mini App nhưng vùng chạm 44px nhờ ::after (Playwright đo thấy 96x24 khi thiếu lớp này).
+    expect(review.className).toContain('tubu-hit-44');
   });
 });

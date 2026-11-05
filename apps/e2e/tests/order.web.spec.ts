@@ -220,10 +220,18 @@ test.describe('Web khách: giỏ và thanh toán', () => {
     await expect(page.getByText('Chuyển khoản trước')).toHaveCount(0);
     const bar = page.getByTestId('order-action-bar');
     await expect(bar.getByRole('button', { name: 'Huỷ đơn' })).toHaveCount(0);
-    await expect(bar.getByRole('link', { name: 'Thanh toán ngay' })).toHaveAttribute('href', '/thanh-toan/chuyen-khoan/TUBU2026101900004');
     await bar.getByRole('button', { name: 'Thêm thao tác' }).click();
     await expect(page.getByRole('group', { name: 'Thao tác với đơn' }).getByRole('button', { name: 'Huỷ đơn' })).toBeVisible();
+    await page.reload();
+    await expect(bar.getByRole('button', { name: 'Thanh toán ngay' })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+    api.get('/payments/bank-qr/TUBU2026101900004', {
+      orderCode: 'TUBU2026101900004', amount: 330000, paymentStatus: 'UNPAID', paymentDeadline: null,
+      bank: { bin: '970407', name: 'Techcombank', accountNo: '9984606774', accountName: 'CONG TY TUBU TREE' },
+      memo: 'TUBU2026101900004', qrString: 'x', qrImageUrl: 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==',
+    });
+    await bar.getByRole('button', { name: 'Thanh toán ngay' }).click();
+    await expect(page).toHaveURL(/\/thanh-toan\/chuyen-khoan\/TUBU2026101900004$/);
   });
 
   test('chi tiết đơn đã giao ở 375px: thanh đáy chỉ có "Mua lại đơn này", "Yêu cầu đổi/trả" nằm trong menu Thêm thao tác', async ({ page, api }) => {
