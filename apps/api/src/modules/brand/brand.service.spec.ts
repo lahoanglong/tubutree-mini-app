@@ -233,6 +233,21 @@ describe('BrandService admin', () => {
     expect(out.slug).toBe('dua-ben-tre');
   });
 
+  it('createBrand: tên toàn ký hiệu bị từ chối bằng lời tiếng Việt không nhắc "slug"', async () => {
+    const svc = new BrandService(makePrisma(), brandConfig);
+    const err = await svc.createBrand({ name: '!!!' }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect((err as BadRequestException).message).toBe('Tên nhãn cần có ít nhất một chữ cái hoặc chữ số.');
+  });
+
+  it('createBrand: link logo hay ảnh bìa sai thì lời báo gọi đúng tên ô, không lộ tên trường kỹ thuật', async () => {
+    const svc = new BrandService(makePrisma(), brandConfig);
+    const logo = await svc.createBrand({ name: 'Nhãn', logoUrl: 'http://x/a.png' }).catch((e: unknown) => e);
+    const cover = await svc.createBrand({ name: 'Nhãn', coverUrl: 'http://x/b.png' }).catch((e: unknown) => e);
+    expect((logo as BadRequestException).message).toBe('Logo chỉ nhận link https hoặc ảnh tải lên (png, jpeg, webp, gif).');
+    expect((cover as BadRequestException).message).toBe('Ảnh bìa chỉ nhận link https hoặc ảnh tải lên (png, jpeg, webp, gif).');
+  });
+
   it('updateBrand ném BadRequest nếu slug slugify ra rỗng (vd toàn ký tự đặc biệt)', async () => {
     const prisma = makePrisma();
     prisma.brand.findUniqueOrThrow.mockResolvedValue({ id: 'b1' });

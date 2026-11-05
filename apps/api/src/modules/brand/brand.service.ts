@@ -215,10 +215,11 @@ export class BrandService {
    * luôn gửi lại cả hai ô, nên nhãn có logo cũ (http, SVG) vẫn sửa được lời giới thiệu mà không bị chặn vì ảnh không đụng tới.
    */
   private assertImageChanges(dto: { logoUrl?: string; coverUrl?: string }, current: { logoUrl: string | null; coverUrl: string | null } | null) {
+    const label = { logoUrl: 'Logo', coverUrl: 'Ảnh bìa' } as const;
     for (const k of ['logoUrl', 'coverUrl'] as const) {
       const v = dto[k];
       if (v === undefined || v === (current?.[k] ?? undefined)) continue;
-      if (!isStorefrontImageValue(v)) throw new BadRequestException(`${k} chỉ nhận link https hoặc ảnh tải lên (png, jpeg, webp, gif).`);
+      if (!isStorefrontImageValue(v)) throw new BadRequestException(`${label[k]} chỉ nhận link https hoặc ảnh tải lên (png, jpeg, webp, gif).`);
     }
   }
 
@@ -234,7 +235,7 @@ export class BrandService {
     isPublished?: boolean;
   }) {
     const slug = dto.slug?.trim() ? slugifyVi(dto.slug) : slugifyVi(dto.name);
-    if (!slug) throw new BadRequestException('Tên nhãn không hợp lệ để tạo slug.');
+    if (!slug) throw new BadRequestException('Tên nhãn cần có ít nhất một chữ cái hoặc chữ số.');
     this.assertImageChanges(dto, null);
     return this.prisma.brand.create({
       data: {
