@@ -748,6 +748,11 @@ describe('evaluateDb', () => {
       expect(r.hint).toContain('1.20');
       expect(r.hint).not.toMatch(/\bjob\b/i);
     });
+    it('không đọc được số log chờ đối soát (degraded.znsReview) không hạ dòng db.zns_templates', () => {
+      const s = dbWith({ appliedMigrations: GOOD_DB.appliedMigrations.slice(0, 1), degraded: { znsReview: 'P2022' } });
+      expect(byId(run(s, 'pre-deploy'), 'db.zns_templates').status).toBe('PASS');
+      expect(byId(run(s, 'pre-deploy'), 'db.zns_review_pending').status).toBe('WARN');
+    });
     it('kênh khác ZNS không bị tính', () => {
       const s = dbWith({ znsTemplates: [{ code: 'X', channel: 'INAPP', zaloTemplateId: null }, { code: 'Y', channel: 'ZNS', zaloTemplateId: '1' }] });
       expect(byId(run(s), 'db.zns_templates').status).toBe('PASS');

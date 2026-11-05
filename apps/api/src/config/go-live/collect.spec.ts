@@ -187,6 +187,13 @@ describe('collectDbSnapshot: dữ liệu demo của migration', () => {
 describe('collectDbSnapshot: schema cũ hơn mã', () => {
   const p2022 = Object.assign(new Error('The column does not exist'), { code: 'P2022' });
 
+  it('câu đếm log chờ đối soát lỗi: chỉ hạ phần znsReview, không đụng znsTemplates (zns)', async () => {
+    const { prisma } = fakePrisma({ tables: [...ALL_TABLES, 'notification_logs'], failing: { notification_logs: p2022 } });
+    const snap = await collectDbSnapshot(prisma, ['m1']);
+    expect(snap.degraded).toEqual({ znsReview: 'P2022' });
+    expect(snap.znsTemplates).toHaveLength(1);
+  });
+
   it('một phần đụng cột chưa có (P2022) bị hạ riêng, các phần khác và migration vẫn đọc được', async () => {
     const migrations = [{ migration_name: 'm1', finished_at: new Date(), rolled_back_at: null }];
     const { prisma, sql } = fakePrisma({ tables: ALL_TABLES, migrations, counts: { orders: 7, users: 2 }, failing: { notification_templates: p2022 } });

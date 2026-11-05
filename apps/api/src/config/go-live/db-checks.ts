@@ -132,7 +132,7 @@ export interface DbSnapshot {
   sessionTimeouts: Record<DbSessionOptionName, string>;
   demoData?: DemoDataSnapshot;
   /** Phần collector không đọc được vì schema DB cũ hơn mã (P2021/P2022): mã lỗi theo từng phần. Vắng nghĩa là đọc đủ. */
-  degraded?: Partial<Record<'configs' | 'waste' | 'membershipTiers' | 'dealerTiers' | 'admin' | 'zns' | 'demoData', string>>;
+  degraded?: Partial<Record<'configs' | 'waste' | 'membershipTiers' | 'dealerTiers' | 'admin' | 'zns' | 'znsReview' | 'demoData', string>>;
 }
 
 export const CONFIG_KEYS_OF_INTEREST = [
@@ -740,7 +740,8 @@ export function evaluateDb(s: DbSnapshot, ctx: DbContext): CheckResult[] {
     ...part('membershipTiers', [membershipTierCheck(s, ctx.phase)]),
     ...part('dealerTiers', [dealerTierCheck(s)]),
     ...part('admin', [adminCheck(s)]),
-    ...part('zns', [znsCheck(s), znsReviewCheck(s)]),
+    ...part('zns', [znsCheck(s)]),
+    ...part('znsReview', [znsReviewCheck(s)]),
     ...(d.demoData ? degradeResults(demo, d.demoData, ctx.phase, pendingCount) : demo),
   ];
 }

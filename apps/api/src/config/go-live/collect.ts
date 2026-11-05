@@ -98,7 +98,7 @@ export async function collectDbSnapshot(prisma: PrismaClient, expectedMigrations
           : [],
       );
 
-      const znsReviewPending = await guarded('zns', 0, () =>
+      const znsReviewPending = await guarded('znsReview', 0, () =>
         count('notification_logs', `channel = 'ZNS' AND status IN ('PENDING', 'RETRYING') AND "error" LIKE '${ZNS_REVIEW_PREFIX}%'`),
       );
 
