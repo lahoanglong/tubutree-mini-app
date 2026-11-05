@@ -55,6 +55,8 @@ export interface PushRetryInput {
  * STALE (người phải bấm "Đẩy lại"), hay quá cửa sổ tự đẩy. Lỗi vĩnh viễn cũng được hỏi lại, nhưng thưa (mỗi giờ).
  */
 export function nextPushRetryAt(o: PushRetryInput, now: Date = new Date()): Date | null {
+  // CONFIG: cả nhóm nghỉ, cron chỉ dò bằng một đơn mỗi giờ nên không có lần tự thử nào đáng hứa cho riêng đơn này.
+  if (o.pancakeErrorKind === PUSH_ERROR_KIND.CONFIG) return null;
   if (o.pancakeOrderId || (o.status !== undefined && !PUSHABLE_STATUSES.includes(o.status))) return null;
   // Chỉ nhóm đang thử lại: chờ thanh toán/đủ hàng/vận đơn, STALE, chưa cấu hình, bỏ qua thì không có lần tự đẩy nào.
   if (o.pancakePushStatus !== null && !RETRYING_PUSH_STATUSES.includes(o.pancakePushStatus)) return null;

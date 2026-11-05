@@ -207,7 +207,7 @@ export function PancakeSyncPanel({ order }: { order: AdminOrder }) {
           {guide.text}
         </p>
       )}
-      {guide && !order.pancakeOrderId && order.pancakePushStatus !== 'STALE' && (
+      {guide && !guide.configBlocked && !order.pancakeOrderId && order.pancakePushStatus !== 'STALE' && (
         <p className="mt-1 text-stone-600">
           {order.pancakeNextRetryAt ? `Lần tự thử kế tiếp: ${formatDateTime(order.pancakeNextRetryAt)}.` : 'Không còn lần tự thử nào: bấm "Đẩy lại Pancake" sau khi xử lý.'}
         </p>

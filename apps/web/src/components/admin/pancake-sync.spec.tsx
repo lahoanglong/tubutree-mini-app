@@ -180,6 +180,13 @@ describe('loại lỗi đẩy + câu hướng dẫn (hi)', () => {
     expect(document.querySelector('[role="alertdialog"]')?.textContent).toContain('Khoá API Pancake đang bị từ chối');
   });
 
+  it('lỗi khoá API: không hiện "Lần tự thử kế tiếp" cũng không nói "Không còn lần tự thử nào"', () => {
+    const { container } = mount(<PancakeSyncPanel order={order({ pancakeErrorKind: 'CONFIG', pancakeNextRetryAt: '2026-10-13T03:30:00.000Z' })} />);
+    expect(container.textContent).not.toContain('Lần tự thử kế tiếp');
+    expect(container.textContent).not.toContain('Không còn lần tự thử nào');
+    expect(container.querySelector('[data-testid="pancake-error-guide"]')?.textContent).toContain('Khoá API Pancake sai');
+  });
+
   it('đơn STALE không hứa lần tự thử', () => {
     const { container } = mount(<PancakeSyncPanel order={order({ pancakeErrorKind: 'REJECTED', pancakePushStatus: 'STALE' })} />);
     expect(container.textContent).not.toContain('Lần tự thử kế tiếp');

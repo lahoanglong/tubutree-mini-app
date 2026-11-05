@@ -64,6 +64,10 @@ describe('nextPushRetryAt', () => {
     expect(nextPushRetryAt({ ...base, status: 'CONFIRMED' }, now)).not.toBeNull();
   });
 
+  it('lỗi cấu hình (CONFIG): không có lần tự thử của đơn (cả nhóm nghỉ, cron chỉ dò bằng một đơn)', () => {
+    expect(nextPushRetryAt({ ...base, pancakeErrorKind: 'CONFIG' }, now)).toBeNull();
+  });
+
   it('đã lên Pancake, STALE, hay quá cửa sổ 72 giờ thì không còn lần tự thử', () => {
     expect(nextPushRetryAt({ ...base, pancakeOrderId: '1' }, now)).toBeNull();
     expect(nextPushRetryAt({ ...base, pancakePushStatus: 'STALE' }, now)).toBeNull();
