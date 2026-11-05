@@ -935,6 +935,17 @@ describe('CampaignsTab: luật "bật" của form khớp máy chủ', () => {
       expect(c.querySelector('[data-testid="campaign-check-lock"]')!.textContent).toContain('Lần lưu này làm trang đang chạy thành trống');
     });
 
+    it('dời giờ bắt đầu của trang đang chạy (không đụng danh sách): máy chủ kiểm lại trang theo mốc mới nên form cũng khoá khi kiểm trả PAGE_EMPTY', async () => {
+      mocks.check.mockResolvedValue(PAGE_EMPTY);
+      const c = await mount();
+      await edit(c);
+      typeInto(field(c, 'Bắt đầu: ngày'), '20/11/2026');
+      typeInto(field(c, 'Kết thúc: ngày'), '30/11/2026');
+      await settle();
+      expect(saveBtn(c).disabled).toBe(true);
+      expect(c.querySelector('[data-testid="campaign-check-lock"]')!.textContent).toContain('làm trang đang chạy thành trống');
+    });
+
     it('trang trống sẵn, chỉ sửa tiêu đề (không đụng danh sách): không khoá', async () => {
       mocks.get.mockResolvedValue(detail('a', { products: [], couponCodes: [] }));
       mocks.check.mockResolvedValue(PAGE_EMPTY);

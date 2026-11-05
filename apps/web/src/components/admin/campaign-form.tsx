@@ -193,9 +193,12 @@ export function CampaignForm({
     willBeVisible && (!wasVisible || linkChanged) && check.status === 'ready' && check.blockers > 0;
   // Lần lưu vẫn để chiến dịch hiện cho khách, đích cuối là trang chiến dịch, và có đụng danh sách sản phẩm/mã mà trang thành trống: máy chủ từ chối PUT.
   // Lỗi PAGE_EMPTY có sẵn từ trước mà lần lưu không đụng danh sách thì không khoá.
+  // Dời giờ bắt đầu cũng đụng: mã hết hạn trước mốc mới thì không còn dùng được, nên máy chủ kiểm lại trang theo mốc đó.
+  const startMoved = saved !== null && startIso !== null && Date.parse(startIso) !== Date.parse(saved.startAt);
   const touchesList =
     productIdsKey !== baseline.products.join('\n') ||
-    parseCouponCodes(codesText).join('\n') !== baseline.codes.join('\n');
+    parseCouponCodes(codesText).join('\n') !== baseline.codes.join('\n') ||
+    startMoved;
   const emptiesLivePage =
     !activation &&
     willBeVisible &&
