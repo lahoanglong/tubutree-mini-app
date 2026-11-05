@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { Campaign, CampaignAudience, CampaignLinkType, CampaignPlacement, CouponScope } from '@prisma/client';
+import { isLockBusy } from '../../common/lock-busy';
 import { publicImage } from '../../common/public-image';
 import { PRISMA_TRANSACTION_OPTIONS, PrismaService } from '../../prisma/prisma.service';
 import { ImageRegistryStale } from '../catalog/image-registry-stale';
@@ -109,6 +110,19 @@ function rethrowForeignKey(e: unknown, what: string): never {
     throw new BadRequestException(`${label} vừa bị xoá, tải lại danh sách rồi chọn lại.`);
   }
   throw e;
+}
+
+/**
+ * Hạn chờ khoá trong giao dịch lưu chiến dịch, nhỏ hơn hạn giao dịch (5 giây của `PRISMA_TRANSACTION_OPTIONS`): giữ khoá lâu hơn thế thì Postgres tự huỷ câu đang chờ
+ * (55P03) và lệnh lưu báo 409, thay vì chờ tới khi Prisma huỷ giao dịch và trả 500 với một câu bị kẹt.
+ */
+const CAMPAIGN_LOCK_TIMEOUT = '3s';
+const SAVE_BUSY_MESSAGE = 'Chiến dịch đang được người khác lưu, thử lại sau giây lát';
+
+/** Lỗi của giao dịch lưu. Thua tranh khoá (hết hạn chờ khoá, hết hạn giao dịch, deadlock, thua tuần tự hoá) thử lại được: 409 tiếng Việt, giao dịch đã huỷ nên không ghi gì. */
+function rethrowSaveFailure(e: unknown, what: string): never {
+  if (isLockBusy(e)) throw new ConflictException(SAVE_BUSY_MESSAGE);
+  return rethrowForeignKey(e, what);
 }
 
 /** Danh sách tối đa vài mục để báo lỗi gọn khi admin dán nhầm cả trăm mã. */
@@ -235,6 +249,7 @@ export class CampaignsAdminService {
     try {
       const created = await this.prisma
         .$transaction(async (tx) => {
+          await this.limitLockWait(tx);
           // Cùng luật với mọi đường lưu: chiến dịch mới hiện cho khách thì không được còn lỗi chặn; vi phạm thì không ghi gì (chưa ghi dòng nào).
           const { verdict } = await this.judge(tx, null, { placement: dto.placement, audience, linkType, linkValue, startAt, endAt, sortOrder, isActive }, { productIds: products, couponCodes: coupons?.codes }, now);
           if (verdict.blocked) throw new BadRequestException(verdict.reason);
@@ -246,7 +261,7 @@ export class CampaignsAdminService {
           if (coupons) await this.writeCoupons(tx, row.id, coupons);
           return products?.length || coupons?.codes.length ? ((await tx.campaign.findUnique({ where: { id: row.id }, include: DETAIL_INCLUDE })) ?? row) : row;
         }, PRISMA_TRANSACTION_OPTIONS)
-        .catch((e: unknown) => rethrowForeignKey(e, 'Có sản phẩm hoặc mã'));
+        .catch((e: unknown) => rethrowSaveFailure(e, 'Có sản phẩm hoặc mã'));
       // Ảnh banner https chỉ đổi cỡ được khi có trong danh sách của /img: nạp lại ngay thay vì đợi 5 phút.
       this.imageStale?.markStale();
       return toDetail(created, now);
@@ -287,6 +302,11 @@ export class CampaignsAdminService {
     if (!found) throw new NotFoundException('Không tìm thấy chiến dịch.');
   }
 
+  /** Việc đầu của mọi giao dịch lưu: đặt hạn chờ khoá chỉ cho giao dịch này (set_config local). */
+  private limitLockWait(tx: Pick<Prisma.TransactionClient, '$executeRaw'>) {
+    return tx.$executeRaw`SELECT set_config('lock_timeout', ${CAMPAIGN_LOCK_TIMEOUT}, true)`;
+  }
+
   /**
    * Việc đầu của mỗi giao dịch "xoá hết rồi ghi lại": hai người thay danh sách cùng lúc thì người sau chờ ở đây tới khi người trước xong.
    * Thiếu khoá thì cả hai cùng xoá một danh sách cũ rồi cùng ghi, và chiến dịch giữ lẫn sản phẩm của hai bên.
@@ -310,6 +330,7 @@ export class CampaignsAdminService {
     const endAt = dto.endAt === undefined ? undefined : new Date(dto.endAt);
     return this.prisma
       .$transaction(async (tx) => {
+        await this.limitLockWait(tx);
         await this.lockRow(tx, id);
         const current = await tx.campaign.findUnique({ where: { id } });
         if (!current) throw new NotFoundException('Không tìm thấy chiến dịch.');
@@ -352,7 +373,7 @@ export class CampaignsAdminService {
         if (writeRow && (lists.products || lists.coupons)) updated = (await tx.campaign.findUnique({ where: { id }, include: DETAIL_INCLUDE })) ?? updated;
         return { updated, current };
       }, PRISMA_TRANSACTION_OPTIONS)
-      .catch((e: unknown) => rethrowForeignKey(e, lists.products && lists.coupons ? 'Có sản phẩm hoặc mã' : lists.products ? 'Có sản phẩm' : 'Có mã'));
+      .catch((e: unknown) => rethrowSaveFailure(e, lists.products && lists.coupons ? 'Có sản phẩm hoặc mã' : lists.products ? 'Có sản phẩm' : 'Có mã'));
   }
 
   /** Kiểm tồn tại và trần số lượng trước giao dịch; trả danh sách đã bỏ trùng. */

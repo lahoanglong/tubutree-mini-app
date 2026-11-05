@@ -92,6 +92,7 @@ function setup(
     },
     coupon: { findMany: jest.fn().mockResolvedValue(opts.coupons ?? []) },
     $queryRaw: jest.fn().mockResolvedValue([]),
+    $executeRaw: jest.fn().mockResolvedValue(0),
     $transaction: jest.fn(),
   };
   // Giao dịch tương tác: chạy hàm với chính mock (tx giống prisma); ném lỗi trong hàm là huỷ giao dịch như thật.
@@ -348,6 +349,58 @@ describe('P2003 chọn nhãn theo cột vi phạm khi PATCH gửi cả hai danh 
     const a = setup({ products: [{ id: 'p1' }], coupons });
     a.prisma.$transaction.mockRejectedValue(fkViolation('khac'));
     await expect(a.svc.update('c1', both, NOW)).rejects.toThrow(/^Có sản phẩm hoặc mã vừa bị xoá/);
+  });
+});
+
+describe('hạn chờ khoá của giao dịch lưu (lock_timeout)', () => {
+  const BUSY = 'Chiến dịch đang được người khác lưu, thử lại sau giây lát';
+  const lockTimeoutError = () => new Prisma.PrismaClientKnownRequestError('Raw query failed. Code: `55P03`. Message: `canceling statement due to lock timeout`', { code: 'P2010', clientVersion: 'test', meta: { code: '55P03' } });
+
+  it('update đặt lock_timeout 3s (cục bộ giao dịch) trước khi khoá dòng và trước mọi lần đọc', async () => {
+    const { svc, prisma } = setup({ existing: row({ isActive: false }) });
+    await svc.update('c1', { title: 'Mới' }, NOW);
+    expect(prisma.$executeRaw).toHaveBeenCalledTimes(1);
+    const [strings, value] = prisma.$executeRaw.mock.calls[0];
+    expect(strings.join('?')).toContain("set_config('lock_timeout'");
+    expect(value).toBe('3s');
+    expect(prisma.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(prisma.$queryRaw.mock.invocationCallOrder[0]);
+    expect(prisma.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(prisma.campaign.findUnique.mock.invocationCallOrder[0]);
+  });
+
+  it('create và PUT cũng đặt lock_timeout', async () => {
+    const a = setup({ existing: row({ products: [], coupons: [] }) });
+    await a.svc.create({ title: 'Mới', placement: 'HOME_TOP', image: PNG, linkType: 'URL_INTERNAL', linkValue: '/offers', startAt: '2026-11-01T00:00:00.000Z', endAt: '2026-11-20T00:00:00.000Z', isActive: false }, NOW);
+    expect(a.prisma.$executeRaw).toHaveBeenCalledTimes(1);
+    const b = setup({ existing: row({ isActive: false }), products: [{ id: 'p1' }] });
+    await b.svc.setProducts('c1', ['p1'], NOW);
+    expect(b.prisma.$executeRaw).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['55P03 của câu raw (P2010)', lockTimeoutError()],
+    ['55P03 trong message', new Error('canceling statement due to lock timeout (55P03)')],
+    ['giao dịch Prisma hết hạn (P2028)', new Prisma.PrismaClientKnownRequestError('Transaction API error', { code: 'P2028', clientVersion: 'test' })],
+    ['deadlock (P2034)', new Prisma.PrismaClientKnownRequestError('deadlock detected', { code: 'P2034', clientVersion: 'test' })],
+  ])('%s: update, create và PUT đều trả 409 tiếng Việt', async (_n, err) => {
+    const a = setup({ existing: row({ isActive: false }) });
+    a.prisma.$transaction.mockRejectedValue(err);
+    await expect(a.svc.update('c1', { title: 'Mới' }, NOW)).rejects.toMatchObject({ status: 409, message: BUSY });
+    const b = setup({ existing: row({ products: [], coupons: [] }) });
+    b.prisma.$transaction.mockRejectedValue(err);
+    await expect(
+      b.svc.create({ title: 'Mới', placement: 'HOME_TOP', image: PNG, linkType: 'URL_INTERNAL', linkValue: '/offers', startAt: '2026-11-01T00:00:00.000Z', endAt: '2026-11-20T00:00:00.000Z', isActive: false }, NOW),
+    ).rejects.toMatchObject({ status: 409, message: BUSY });
+    const c = setup({ existing: row({ isActive: false }), coupons: [{ id: 'k1', code: 'THU10', scope: 'PUBLIC', batch: null }] });
+    c.prisma.$transaction.mockRejectedValue(err);
+    await expect(c.svc.setCoupons('c1', ['THU10'], NOW)).rejects.toMatchObject({ status: 409, message: BUSY });
+  });
+
+  it('lỗi khác (không phải thua khoá) vẫn ném nguyên; 400 nghiệp vụ không bị đổi thành 409', async () => {
+    const a = setup({ existing: row({ isActive: false }) });
+    a.prisma.$transaction.mockRejectedValue(new Error('boom'));
+    await expect(a.svc.update('c1', { title: 'Mới' }, NOW)).rejects.toThrow('boom');
+    const b = setup({ existing: row({ isActive: true }), linked: [{ campaignId: 'c1', product: visibleProduct() }] });
+    await expect(b.svc.update('c1', { productIds: [] }, NOW)).rejects.toBeInstanceOf(BadRequestException);
   });
 });
 
