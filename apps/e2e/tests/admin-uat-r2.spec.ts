@@ -732,7 +732,8 @@ for (const frame of FRAMES) {
       const card = page.locator('div.rounded-card').filter({ hasText: 'W11 Nhãn Chính Hãng' }).last();
       await card.getByRole('button', { name: 'Quản lý' }).click();
       await expect(card.getByText('Thông tin nhãn')).toBeVisible();
-      await expect(card.getByRole('button', { name: 'Đăng', exact: true }), 'nút đăng nhãn bằng tiếng Việt').toBeVisible();
+      await expect(card.getByRole('button', { name: 'Ẩn (chuyển nháp)', exact: true })).toBeVisible();
+      await expect(card.getByText('Đã xác minh', { exact: true }), 'ô tick chứng nhận ghi Đã xác minh bằng tiếng Việt').toBeVisible();
       expect(await card.innerText(), 'màn quản lý nhãn không còn chữ tiếng Anh verified, Proof URL, publish').not.toMatch(/\bverified\b|Proof URL|\(publish\)/);
       await expectCleanScreen(page, 'nhan-hang-quan-ly');
       await shot(page, 'nhan-hang', 'quan-ly');
