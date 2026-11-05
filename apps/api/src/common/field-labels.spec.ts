@@ -134,15 +134,11 @@ describe('trường có nhãn riêng theo DTO không rơi im lặng về nhãn c
     expect([...new Set(unlisted)].sort()).toEqual([]);
   });
 
-  it('không có class nào kế thừa hay bọc (extends, PartialType, PickType, OmitType) DTO có nhãn riêng mà tự không có dòng trong bảng', () => {
-    const owners = Object.keys(FIELD_LABELS_BY_DTO);
+  it('không có class nào dẫn xuất từ DTO có nhãn riêng (extends, mixin kiểu PartialType/PickType/OmitType/IntersectionType, qua biến trung gian) mà tự không có dòng trong bảng', () => {
     const hits: string[] = [];
     for (const file of walk(SRC)) {
-      const text = readFileSync(file, 'utf8');
-      for (const owner of owners) {
-        for (const m of text.matchAll(new RegExp(`class\\s+(\\w+)\\s+extends\\s+(?:\\w+Type\\(\\s*)?${owner}\\b`, 'g'))) {
-          if (!FIELD_LABELS_BY_DTO[m[1]!]) hits.push(`${m[1]} kế thừa ${owner} (${file.slice(SRC.length + 1)})`);
-        }
+      for (const h of findDerivedDtos(readFileSync(file, 'utf8'), Object.keys(FIELD_LABELS_BY_DTO))) {
+        if (!FIELD_LABELS_BY_DTO[h.derived]) hits.push(`${h.derived} dẫn xuất từ ${h.owner} (${file.slice(SRC.length + 1)})`);
       }
     }
     expect(hits).toEqual([]);
@@ -162,5 +158,46 @@ describe('trường có nhãn riêng theo DTO không rơi im lặng về nhãn c
       }
     }
     expect(bad).toEqual([]);
+  });
+});
+
+/** Class dẫn xuất từ một trong `owners`: `extends` trực tiếp, bọc nhiều tầng bằng hàm mixin, hoặc qua `const Base = …(Owner…)`. */
+function findDerivedDtos(text: string, owners: string[]): Array<{ derived: string; owner: string }> {
+  const tainted = new Map<string, string>(owners.map((o) => [o, o]));
+  const mentions = (expr: string) => [...tainted].find(([name]) => new RegExp(`\\b${name}\\b`).test(expr));
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (const m of text.matchAll(/\bconst\s+(\w+)\s*=\s*([^;]*);/g)) {
+      const hit = tainted.has(m[1]!) ? undefined : mentions(m[2]!);
+      if (hit) {
+        tainted.set(m[1]!, hit[1]);
+        changed = true;
+      }
+    }
+  }
+  const out: Array<{ derived: string; owner: string }> = [];
+  for (const m of text.matchAll(/\bclass\s+(\w+)\s+extends\s+([^{]*)\{/g)) {
+    const hit = mentions(m[2]!);
+    if (hit) out.push({ derived: m[1]!, owner: hit[1] });
+  }
+  return out;
+}
+
+describe('findDerivedDtos', () => {
+  const owners = ['ProductQuery'];
+  const derived = (t: string) => findDerivedDtos(t, owners).map((h) => h.derived);
+  it('extends trực tiếp', () => expect(derived('class A extends ProductQuery {}')).toEqual(['A']));
+  it('mixin một tầng', () => expect(derived('class A extends PartialType(ProductQuery) {}')).toEqual(['A']));
+  it('mixin nhiều tầng và IntersectionType', () => {
+    expect(derived("class A extends PartialType(PickType(ProductQuery, ['category'] as const)) {}")).toEqual(['A']);
+    expect(derived('class B extends IntersectionType(Other, ProductQuery) {}')).toEqual(['B']);
+  });
+  it('qua biến trung gian, kể cả biến của biến', () => {
+    expect(derived('const Base = PartialType(ProductQuery);\nclass A extends Base {}')).toEqual(['A']);
+    expect(derived('const Base = PartialType(ProductQuery);\nconst Mid = OmitType(Base, [] as const);\nclass A extends Mid {}')).toEqual(['A']);
+  });
+  it('không bắt class không liên quan hay tên chỉ chứa tên DTO', () => {
+    expect(derived('class A extends Other {}')).toEqual([]);
+    expect(derived('class A extends ProductQueryExtra {}')).toEqual([]);
   });
 });
