@@ -1,4 +1,5 @@
 import { IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { Trim } from '../../../common/decorators/trim.decorator';
 
 /**
  * Nhân viên tra cứu thành viên tại quầy. Chỉ TRA CỨU — cộng điểm đi route riêng (PosCreditDto)
@@ -13,6 +14,7 @@ export class ScanMemberDto {
   @MinLength(6)
   @MaxLength(40)
   @Matches(/^[A-Za-z0-9+\-. ]+$/, { message: 'Mã thành viên chỉ gồm chữ, số (hoặc SĐT).' })
+  @Trim()
   memberCode!: string;
 }
 
@@ -39,6 +41,7 @@ export class PosCreditDto extends ScanMemberDto {
   @IsOptional()
   @IsString()
   @MaxLength(200)
+  @Trim()
   note?: string;
 }
 

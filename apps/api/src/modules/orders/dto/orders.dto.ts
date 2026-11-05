@@ -5,6 +5,7 @@ import { KeysetCursorField } from '../../../common/keyset-cursor';
 import { PaginationQuery } from '../../../common/pagination';
 import { ORDER_STATUS_GROUP_KEYS, type OrderStatusGroup } from '../order-status-groups';
 import { VARIATION_ID_RE } from '../variation-id';
+import { Trim } from '../../../common/decorators/trim.decorator';
 
 export class OrderListQuery extends PaginationQuery {
   @IsOptional()
@@ -17,7 +18,7 @@ export class OrderListQuery extends PaginationQuery {
   group?: OrderStatusGroup;
 
   /** Tìm theo mã đơn hoặc tên sản phẩm; tối đa 100 ký tự (cùng trần với tìm sản phẩm). */
-  @IsOptional() @IsString() @MaxLength(100) q?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(100) q?: string;
 
   /** Con trỏ keyset do `meta.nextCursor` của trang trước trả về; có thì bỏ qua `page`. */
   @KeysetCursorField() cursor?: string;

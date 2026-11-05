@@ -1,8 +1,10 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { Check, Star } from 'lucide-react';
 import { formatRating } from '@tubutree/app-core/commerce/card-meta';
+import { LEGAL_PAGES } from '@tubutree/app-core/legal';
 import { returnsPromise } from '@tubutree/app-core/returns-copy';
 import type { ProductDetail } from '@/lib/api';
 import { usePublicConfig } from '@/lib/use-public-config';
@@ -74,6 +76,9 @@ export function PdpPromises({ children }: { children?: React.ReactNode }) {
           </li>
         ))}
       </ul>
+      <Link href="/chinh-sach/van-chuyen" className={`${ui.btnText} ${phoneBrandText}`}>
+        {LEGAL_PAGES['van-chuyen'].title}
+      </Link>
       {children}
     </section>
   );

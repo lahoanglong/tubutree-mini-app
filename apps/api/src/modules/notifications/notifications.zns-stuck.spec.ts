@@ -49,6 +49,52 @@ describe('NotificationsService: đóng log ZNS kẹt vì job đã chết', () =>
     expect(updateMany).toHaveBeenCalledWith({ where: { id: 'log-1', status: { in: ['PENDING'] } }, data: { status: 'FAILED', error: 'x' } });
   });
 
+  describe('closeStuckZnsLog với olderThan và keepError (hết hạn RETRYING 24 giờ)', () => {
+    const cutoff = new Date('2026-11-05T10:00:00.000Z');
+    const withLog = (log: unknown, count = 1) => {
+      const updateMany = jest.fn().mockResolvedValue({ count });
+      const findUnique = jest.fn().mockResolvedValue(log);
+      const prisma = { notificationLog: { updateMany, findUnique }, $executeRaw: jest.fn() } as unknown as PrismaService;
+      return { svc: new NotificationsService(prisma, {} as ZnsClient, {} as AnalyticsEventsService), updateMany };
+    };
+
+    it('CAS thêm sentAt cũ hơn mốc và đúng lỗi đã đọc; ghi lý do mới, giữ lỗi cũ (kể cả tiền tố đối soát) phía sau', async () => {
+      const { svc, updateMany } = withLog({ payload: { data: {} }, error: `${ZNS_REVIEW_PREFIX}không rõ` });
+      await expect(svc.closeStuckZnsLog('log-1', 'Hết thời gian chờ', ['RETRYING'], { olderThan: cutoff, keepError: true })).resolves.toBe(true);
+      expect(updateMany).toHaveBeenCalledWith({
+        where: { id: 'log-1', status: { in: ['RETRYING'] }, sentAt: { lt: cutoff }, error: `${ZNS_REVIEW_PREFIX}không rõ` },
+        data: { status: 'FAILED', error: `Hết thời gian chờ | ${ZNS_REVIEW_PREFIX}không rõ` },
+      });
+    });
+
+    it('log chưa có lỗi: lý do đứng một mình, CAS theo error null', async () => {
+      const { svc, updateMany } = withLog({ payload: { data: {} }, error: null });
+      await svc.closeStuckZnsLog('log-1', 'Hết thời gian chờ', ['RETRYING'], { olderThan: cutoff, keepError: true });
+      expect(updateMany).toHaveBeenCalledWith({
+        where: { id: 'log-1', status: { in: ['RETRYING'] }, sentAt: { lt: cutoff }, error: null },
+        data: { status: 'FAILED', error: 'Hết thời gian chờ' },
+      });
+    });
+
+    it('lỗi cũ dài bị cắt 500 ký tự để cột error không phình', async () => {
+      const { svc, updateMany } = withLog({ payload: { data: {} }, error: 'x'.repeat(2000) });
+      await svc.closeStuckZnsLog('log-1', 'R', ['RETRYING'], { olderThan: cutoff, keepError: true });
+      expect((updateMany.mock.calls[0]![0].data as { error: string }).error).toBe(`R | ${'x'.repeat(500)}`);
+    });
+
+    it('log có dedupeKey vẫn nhả khoá như mọi đường đóng khác (job sống lại ra SKIPPED, không gửi)', async () => {
+      const { svc, updateMany } = withLog({ payload: { data: {}, dedupeKey: 'k1', dedupeWithinMs: 86_400_000 }, error: null });
+      await svc.closeStuckZnsLog('log-1', 'R', ['RETRYING'], { olderThan: cutoff, keepError: true });
+      expect(updateMany.mock.calls[0]![0].data).toEqual({ status: 'FAILED', error: 'R', payload: { data: {}, dedupeKey: 'k1:failed:log-1', dedupeWithinMs: 86_400_000 } });
+    });
+
+    it('không truyền tuỳ chọn: hành vi cũ giữ nguyên (không thêm sentAt, không đọc error)', async () => {
+      const { svc, updateMany } = withLog({ payload: { data: {} }, error: 'cũ' });
+      await svc.closeStuckZnsLog('log-1', 'mới');
+      expect(updateMany).toHaveBeenCalledWith({ where: { id: 'log-1', status: { in: ['PENDING', 'RETRYING'] } }, data: { status: 'FAILED', error: 'mới' } });
+    });
+  });
+
   it('closeStuckZnsLog: log đã SENT/FAILED (count 0) → false', async () => {
     const { svc } = setup(0);
     await expect(svc.closeStuckZnsLog('log-1', 'x')).resolves.toBe(false);

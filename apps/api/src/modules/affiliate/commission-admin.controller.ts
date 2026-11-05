@@ -8,9 +8,10 @@ import { CursorPageQuery } from '../../common/cursor-page-query.dto';
 import { clampTake } from '../../common/pagination';
 import { CommissionAdminService } from './commission-admin.service';
 import { RATE_CSV_MAX_LENGTH } from './commission-rate-csv';
+import { Trim } from '../../common/decorators/trim.decorator';
 
 export class ListCommissionRatesQuery extends CursorPageQuery {
-  @IsOptional() @IsString() @MaxLength(64) q?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(64) q?: string;
   /** `?missing=1` / `true`: chỉ sản phẩm còn biến thể đang bán chưa có %. */
   @IsOptional()
   @Transform(({ value }) => (value === '1' || value === 'true' ? true : value === '0' || value === 'false' || value === '' ? false : value))

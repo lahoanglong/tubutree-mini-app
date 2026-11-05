@@ -115,6 +115,25 @@ describe('OrderStatusHero', () => {
     const headline = orderHeadline(order({ status: 'CANCELLED' }), { now: NOW });
     render(<OrderStatusHero headline={headline} statusLabel="Đã huỷ" stamp={{ label: 'Huỷ lúc', at: '2026-11-03T05:00:00Z' }} tone={tone} />);
     expect(screen.queryByTestId('order-milestone')).toBeNull();
+    expect(screen.queryByTestId('order-cancel-reason')).toBeNull();
+  });
+
+  it('đơn huỷ có lý do từ API: một dòng riêng ngay dưới câu "Đơn đã huỷ.", trước bước kế tiếp', () => {
+    const headline = orderHeadline(order({ status: 'CANCELLED', cancelReason: 'Bạn đã huỷ: Đổi ý, không muốn mua nữa' }), { now: NOW });
+    render(<OrderStatusHero headline={headline} statusLabel="Đã huỷ" stamp={{ label: 'Huỷ lúc', at: '2026-11-03T05:00:00Z' }} tone={tone} />);
+    const reason = screen.getByTestId('order-cancel-reason');
+    expect(reason).toHaveTextContent('Bạn đã huỷ: Đổi ý, không muốn mua nữa');
+    const sentence = screen.getByText('Đơn đã huỷ.');
+    expect(sentence.nextElementSibling).toBe(reason);
+    expect(reason.nextElementSibling).toBe(screen.getByTestId('order-next'));
+  });
+
+  it('lý do huỷ là chuỗi dài không dấu cách (link, số tài khoản): được ngắt dòng, không đẩy trang cuộn ngang', () => {
+    const long = `Bạn đã huỷ: Lý do khác. https://example.com/${'a'.repeat(80)}`;
+    const headline = orderHeadline(order({ status: 'CANCELLED', cancelReason: long }), { now: NOW });
+    render(<OrderStatusHero headline={headline} statusLabel="Đã huỷ" stamp={{ label: 'Huỷ lúc', at: '2026-11-03T05:00:00Z' }} tone={tone} />);
+    expect(screen.getByTestId('order-cancel-reason').style.overflowWrap).toBe('anywhere');
+    expect(screen.getByTestId('order-next').style.overflowWrap).toBe('anywhere');
   });
 });
 

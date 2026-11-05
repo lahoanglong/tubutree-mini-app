@@ -76,6 +76,16 @@ describe('GeoPicker: tìm phường/xã', () => {
     expect(screen.getByText('Không tìm thấy kết quả phù hợp')).toBeInTheDocument();
   });
 
+  it('nhãn hai ô chọn dùng bậc field-label (12px/1,33/500) như nhãn của Field', async () => {
+    renderHarness();
+    await waitFor(() => expect(mocks.getCommunes).toHaveBeenCalled());
+    for (const name of ['Tỉnh/Thành phố', 'Phường/Xã']) {
+      const el = screen.getAllByText(name).find((e) => e.style.fontSize !== '')!;
+      expect(el.style.fontSize).toBe('var(--type-field-label-size)');
+      expect(el.style.fontWeight).toBe('var(--type-field-label-weight)');
+    }
+  });
+
   it('chưa chọn tỉnh: ô Phường/Xã bị khoá', () => {
     mocks.getProvinces.mockResolvedValue([]);
     const qc = new QueryClient();

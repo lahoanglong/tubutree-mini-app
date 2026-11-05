@@ -21,6 +21,7 @@ import { OptionalNotNull } from '../../../common/decorators/optional-not-null.de
 import { Roles } from '../../../common/decorators/roles.decorator';
 import { WASTE_POINTS_MAX_PER_SITE } from '../waste.constants';
 import { WasteAdminPointsService } from './waste-admin-points.service';
+import { Trim } from '../../../common/decorators/trim.decorator';
 
 export class AdminWastePointQueryDto implements AdminWastePointQuery {
   @IsOptional()
@@ -39,21 +40,25 @@ export class WastePointCreateDto implements WastePointUpsertRequest {
   kind?: WastePointKind;
 
   @Length(1, 120)
+  @Trim()
   name!: string;
 
   @Length(1, 300)
+  @Trim()
   addressLine!: string;
 
   @Length(1, 10)
   provinceCode!: string;
 
   @Length(1, 100)
+  @Trim()
   provinceName!: string;
 
   @Length(1, 20)
   communeCode!: string;
 
   @Length(1, 100)
+  @Trim()
   communeName!: string;
 
   @IsOptional()
@@ -70,6 +75,7 @@ export class WastePointCreateDto implements WastePointUpsertRequest {
 
   @IsOptional()
   @MaxLength(20)
+  @Trim()
   phone?: string;
 
   @IsOptional()
@@ -92,6 +98,7 @@ export class WastePointCreateDto implements WastePointUpsertRequest {
 
   @IsOptional()
   @MaxLength(1000)
+  @Trim()
   note?: string;
 
   @IsOptional()
@@ -114,10 +121,12 @@ export class WastePointUpdateDto implements Partial<WastePointUpsertRequest> {
 
   @OptionalNotNull()
   @Length(1, 120)
+  @Trim()
   name?: string;
 
   @OptionalNotNull()
   @Length(1, 300)
+  @Trim()
   addressLine?: string;
 
   @OptionalNotNull()
@@ -126,6 +135,7 @@ export class WastePointUpdateDto implements Partial<WastePointUpsertRequest> {
 
   @OptionalNotNull()
   @Length(1, 100)
+  @Trim()
   provinceName?: string;
 
   @OptionalNotNull()
@@ -134,6 +144,7 @@ export class WastePointUpdateDto implements Partial<WastePointUpsertRequest> {
 
   @OptionalNotNull()
   @Length(1, 100)
+  @Trim()
   communeName?: string;
 
   @IsOptional()
@@ -153,6 +164,7 @@ export class WastePointUpdateDto implements Partial<WastePointUpsertRequest> {
   @IsOptional()
   @ValidateIf((_, v) => v !== null)
   @MaxLength(20)
+  @Trim()
   phone?: string | null;
 
   @OptionalNotNull()
@@ -177,6 +189,7 @@ export class WastePointUpdateDto implements Partial<WastePointUpsertRequest> {
   @IsOptional()
   @ValidateIf((_, v) => v !== null)
   @MaxLength(1000)
+  @Trim()
   note?: string | null;
 
   @OptionalNotNull()

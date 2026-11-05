@@ -23,6 +23,7 @@ import { OrderReversalService } from '../orders/order-reversal.service';
 import { OrderStatusService, toHttpBadRequest } from '../orders/order-status.service';
 import { assertManualStatusChange, manualOutcome } from '../orders/status-race';
 import { allowedNextStatuses } from '../orders/order-transition';
+import { ADMIN_ORDER_NOTE_PREFIX } from '../orders/customer-cancel-reason';
 import { actorAllowedTransitions, actorTransitionBlock, seesFullOrderPhones, type OrderActor } from './order-actor-transitions';
 import { ADMIN_LATE_PAYMENT_REF, COD_RETURN_UNVERIFIED_REF, HELD_RETURN_UNVERIFIED_REF, recordLatePaymentRefund } from '../orders/refund-queue';
 import { formatVnd } from '../orders/refund-destination';
@@ -1325,7 +1326,7 @@ export class AdminService {
     const outcome = manualOutcome();
     try {
       updated = await this.orderStatus.setStatus(before.id, status, {
-        note: note ? `Admin: ${note}` : undefined,
+        note: note ? `${ADMIN_ORDER_NOTE_PREFIX}${note}` : undefined,
         customerReason: note,
         actorType: 'ADMIN',
         actorId: adminId,

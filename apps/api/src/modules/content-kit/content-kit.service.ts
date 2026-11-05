@@ -79,7 +79,8 @@ export class ContentKitService {
     const data = {
       captions: dto.captions ?? [],
       usps: dto.usps ?? [],
-      faqs: (dto.faqs as object | undefined) ?? undefined,
+      // Lưu object thuần {q, a}: dto.faqs qua ValidationPipe là thể hiện lớp DTO.
+      faqs: (dto.faqs?.map((f) => ({ q: f.q, a: f.a })) as object | undefined) ?? undefined,
       videoUrls: dto.videoUrls ?? [],
     };
     return this.prisma.productContentKit.upsert({

@@ -1,9 +1,11 @@
 import { Logger } from '@nestjs/common';
 import type { Queue } from 'bullmq';
-import { ZnsStuckLogCron } from './zns-stuck-log.cron';
+import { ZnsStuckLogCron, ZNS_RETRYING_EXPIRE_MS } from './zns-stuck-log.cron';
 import { ZNS_REVIEW_PREFIX, type NotificationsService } from './notifications.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { captureServerError } from '../../config/sentry';
+import { SystemConfigService } from '../system-config/system-config.service';
+import { NOTIFY_DEDUPE_MS } from '../support-chat/reply-notifier';
 import { runExclusive } from '../../common/cron-leader/run-exclusive';
 import { holdsLease } from '../../common/cron-leader/run-exclusive.fixtures';
 
@@ -321,5 +323,125 @@ describe('ZnsStuckLogCron: an toàn', () => {
     await cron.sweepStuckZnsLogs();
     await setup([{ id: 'b', status: 'PENDING' }], { b: { state: 'failed' } }).cron.sweepStuckZnsLogs();
     expect(captureServerError).not.toHaveBeenCalled();
+  });
+});
+
+describe('ZnsStuckLogCron.expireStaleRetryingZnsLogs: log RETRYING quá 24 giờ chuyển FAILED', () => {
+  const NOW = new Date('2026-11-06T10:00:00.000Z');
+  const CUTOFF = new Date('2026-11-05T10:00:00.000Z');
+
+  function setupExpiry(rows: { id: string; error?: string | null }[], opts: { acquired?: boolean; closeResult?: boolean | boolean[] } = {}) {
+    (runExclusive as jest.Mock).mockImplementation(holdsLease(opts.acquired ?? true));
+    const findMany = jest.fn().mockResolvedValue(rows);
+    const closeStuckZnsLog = jest.fn();
+    const results = Array.isArray(opts.closeResult) ? opts.closeResult : null;
+    if (results) results.forEach((r) => closeStuckZnsLog.mockResolvedValueOnce(r));
+    else closeStuckZnsLog.mockResolvedValue(opts.closeResult ?? true);
+    const getJob = jest.fn();
+    const prisma = { notificationLog: { findMany } } as unknown as PrismaService;
+    const notifications = { closeStuckZnsLog } as unknown as NotificationsService;
+    const cron = new ZnsStuckLogCron(prisma, notifications, { getJob } as unknown as Queue);
+    return { cron, findMany, closeStuckZnsLog, getJob };
+  }
+
+  beforeEach(() => jest.useFakeTimers().setSystemTime(NOW));
+  afterEach(() => jest.useRealTimers());
+
+  it('truy vấn: ZNS, RETRYING, sentAt cũ hơn 24 giờ, KHÔNG loại log đã gắn tiền tố đối soát, cũ nhất trước, tối đa 200', async () => {
+    const { cron, findMany } = setupExpiry([]);
+    await cron.expireStaleRetryingZnsLogs();
+    expect(findMany).toHaveBeenCalledTimes(1);
+    expect(findMany).toHaveBeenCalledWith({
+      where: { channel: 'ZNS', status: 'RETRYING', sentAt: { lt: CUTOFF } },
+      orderBy: [{ sentAt: 'asc' }, { id: 'asc' }],
+      take: 200,
+      select: { id: true, error: true },
+    });
+  });
+
+  it('log đã gắn tiền tố đối soát mà hết hạn: báo lỗi lên Sentry kèm id (log rời db.zns_review_pending, không vào ZNS_FAILED_24H_ALERT)', async () => {
+    const { cron } = setupExpiry(
+      [
+        { id: 'r1', error: 'Chờ đối soát tay: job completed nhưng không báo SENT' },
+        { id: 'plain', error: 'Zalo timeout' },
+        { id: 'r2', error: 'Chờ đối soát tay: job mất khỏi hàng đợi' },
+      ],
+      { closeResult: [true, true, false] },
+    );
+    jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    await expect(cron.expireStaleRetryingZnsLogs()).resolves.toEqual({ scanned: 3, expired: 2 });
+    expect(captureServerError).toHaveBeenCalledTimes(1);
+    const msg = (captureServerError as jest.Mock).mock.calls[0]![0].message as string;
+    expect(msg).toMatch(/Hết hạn 1 log ZNS đang chờ đối soát tay/);
+    expect(msg).toContain('r1');
+    expect(msg).not.toContain('r2');
+    expect(msg).not.toContain('plain');
+  });
+
+  it('chỉ log không có tiền tố đối soát hết hạn: không báo Sentry', async () => {
+    const { cron } = setupExpiry([{ id: 'a', error: null }, { id: 'b', error: 'Zalo timeout' }]);
+    await expect(cron.expireStaleRetryingZnsLogs()).resolves.toEqual({ scanned: 2, expired: 2 });
+    expect(captureServerError).not.toHaveBeenCalled();
+  });
+
+  it('đóng từng log: CAS chỉ từ RETRYING, cùng mốc cắt, giữ lỗi cũ; lý do nêu rõ hết thời gian chờ và không gửi lại', async () => {
+    const { cron, closeStuckZnsLog } = setupExpiry([{ id: 'a' }, { id: 'b' }]);
+    await expect(cron.expireStaleRetryingZnsLogs()).resolves.toEqual({ scanned: 2, expired: 2 });
+    expect(closeStuckZnsLog).toHaveBeenCalledTimes(2);
+    for (const id of ['a', 'b']) {
+      expect(closeStuckZnsLog).toHaveBeenCalledWith(id, expect.stringContaining('Hết thời gian chờ kết quả gửi ZNS (24 giờ)'), ['RETRYING'], { olderThan: CUTOFF, keepError: true });
+    }
+    expect((closeStuckZnsLog.mock.calls[0] as string[])[1]).toContain('không gửi lại');
+  });
+
+  it('CAS không trúng (log đã SENT/FAILED hoặc sang lượt mới giữa chừng): không đếm vào expired', async () => {
+    const { cron } = setupExpiry([{ id: 'a' }, { id: 'b' }, { id: 'c' }], { closeResult: [true, false, false] });
+    await expect(cron.expireStaleRetryingZnsLogs()).resolves.toEqual({ scanned: 3, expired: 1 });
+  });
+
+  it('không có log quá hạn: không gọi đóng, expired 0', async () => {
+    const { cron, closeStuckZnsLog } = setupExpiry([]);
+    await expect(cron.expireStaleRetryingZnsLogs()).resolves.toEqual({ scanned: 0, expired: 0 });
+    expect(closeStuckZnsLog).not.toHaveBeenCalled();
+  });
+
+  it('bước này không đọc hàng đợi và không xếp việc: không gửi lại tin dưới mọi hình thức', async () => {
+    const { cron, getJob } = setupExpiry([{ id: 'a' }]);
+    await cron.expireStaleRetryingZnsLogs();
+    expect(getJob).not.toHaveBeenCalled();
+  });
+
+  it('ghi một log lỗi: báo Sentry, các log còn lại vẫn được đóng', async () => {
+    const { cron, closeStuckZnsLog } = setupExpiry([{ id: 'a' }, { id: 'b' }]);
+    closeStuckZnsLog.mockReset();
+    closeStuckZnsLog.mockRejectedValueOnce(new Error('db chớp tắt')).mockResolvedValueOnce(true);
+    jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    await expect(cron.expireStaleRetryingZnsLogs()).resolves.toEqual({ scanned: 2, expired: 1 });
+    expect(captureServerError).toHaveBeenCalledTimes(1);
+  });
+
+  it('không giành được khoá lượt chạy: bỏ lượt, không truy vấn', async () => {
+    const { cron, findMany } = setupExpiry([{ id: 'a' }], { acquired: false });
+    await expect(cron.expireStaleRetryingZnsLogs()).resolves.toEqual({ skipped: 'LOCKED' });
+    expect(findMany).not.toHaveBeenCalled();
+  });
+
+  it('lượt trước còn chạy: bỏ lượt (RUNNING)', async () => {
+    let release: () => void = () => undefined;
+    const { cron, findMany } = setupExpiry([]);
+    findMany.mockImplementationOnce(() => new Promise((resolve) => { release = () => resolve([]); }));
+    const first = cron.expireStaleRetryingZnsLogs();
+    await expect(cron.expireStaleRetryingZnsLogs()).resolves.toEqual({ skipped: 'RUNNING' });
+    release();
+    await first;
+  });
+
+  it('ngưỡng 24 giờ không nhỏ hơn cửa chống trùng nào đang dùng: dedupeWithinMs lớn nhất là khoá cấu hình tối đa 1440 phút và hằng 10 phút của CSKH', () => {
+    // Đọc bảng khoảng giá trị riêng tư của SystemConfigService để ngưỡng này không bị bỏ lại khi ai đó nới cấu hình.
+    const ranges = (SystemConfigService as unknown as { RANGES: Record<string, { max: number }> }).RANGES;
+    const feedWindowMaxMs = ranges['community.author_notify_interval_minutes']!.max * 60_000;
+    expect(ZNS_RETRYING_EXPIRE_MS).toBe(24 * 3_600_000);
+    expect(ZNS_RETRYING_EXPIRE_MS).toBeGreaterThanOrEqual(feedWindowMaxMs);
+    expect(ZNS_RETRYING_EXPIRE_MS).toBeGreaterThanOrEqual(NOTIFY_DEDUPE_MS);
   });
 });

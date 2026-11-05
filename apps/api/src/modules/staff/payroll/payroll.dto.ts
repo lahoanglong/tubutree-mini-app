@@ -9,16 +9,19 @@ export class UpdateBankDto {
   @IsString()
   // Rỗng được: nhân viên chỉ khai ảnh QR nhận tiền thì ô mã ngân hàng để trống (cả hai app gửi chuỗi rỗng).
   @Matches(/^(\d{6})?$/, { message: 'Mã số ngân hàng gồm đúng 6 chữ số (ví dụ 970407); chưa biết mã thì để trống và tải ảnh QR.' })
+  @Trim()
   bankBin?: string;
 
   @OptionalNotNull()
   @IsString()
   @MaxLength(30)
+  @Trim()
   bankAccountNo?: string;
 
   @OptionalNotNull()
   @IsString()
   @MaxLength(120)
+  @Trim()
   bankAccountName?: string;
 
   @OptionalNotNull()
@@ -48,6 +51,7 @@ export class MarkPaidDto {
   @IsOptional()
   @IsString()
   @MaxLength(500)
+  @Trim()
   note?: string;
 }
 

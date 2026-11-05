@@ -1,4 +1,5 @@
 import { Allow, IsOptional, IsString, IsNotEmpty } from 'class-validator';
+import { Trim } from '../../../common/decorators/trim.decorator';
 
 /** POST /api/auth/zalo-oauth — Zalo Web Login OAuth v4 (PKCE). */
 export class ZaloOAuthDto {
@@ -14,6 +15,7 @@ export class ZaloOAuthDto {
   /** Mã giới thiệu từ deep link ?ref= (nếu được bạn bè mời vào app). */
   @IsOptional()
   @IsString()
+  @Trim()
   referralCode?: string;
 
   /** Nguồn chạm đầu {source, campaign?, at?} từ máy khách. Cố ý không validate chặt ở đây: số liệu phân tích không được làm 400 một lần đăng nhập, common/attribution.ts bỏ giá trị bẩn. */

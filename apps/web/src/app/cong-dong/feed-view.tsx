@@ -7,6 +7,7 @@ import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { HelpCircle, Hash, Plus, Search, X, type LucideIcon } from 'lucide-react';
 import type { FeedPreviewItem, FeedSort } from '@tubutree/app-core/api/feed';
 import type { PublicConfig } from '@tubutree/app-core/api/config';
+import { POST_CARD_SKELETON_COUNT } from '@tubutree/app-core/community-skeleton';
 import { feedCategoriesQuery, feedListQuery, feedPublicPreviewQuery } from '@tubutree/app-core/queries/feed';
 import { publicConfigQuery } from '@tubutree/app-core/queries/config';
 import { CommunityChannels } from '@/components/community/community-channels';
@@ -16,12 +17,12 @@ import { PublicPreviewList } from '@/components/community/public-preview-list';
 import { useDebounced } from '@/components/community/use-debounced';
 import { LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { ErrorState } from '@/components/ui/error-state';
-import { Skeleton } from '@/components/ui/skeleton';
+import { PostCardSkeleton } from '@/components/mini/skeleton';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { ui } from '@/lib/guest-ui';
 import { isWebRouteReady } from '@/lib/route-map';
-import { miniBtnSecondary } from '@/components/loyalty/mini-surface';
+import { miniBleed, miniBtnSecondary } from '@/components/loyalty/mini-surface';
 import { FeedShell } from './feed-shell';
 import { loadErrorText } from '@/lib/error-text';
 
@@ -51,11 +52,14 @@ function Chip({ selected, onClick, icon: Icon, label, children, pressed = true }
   );
 }
 
-function ListSkeleton({ count, height, testId }: { count: number; height: number; testId?: string }) {
+/** Danh sách bài (và khung chờ của nó) cách nhau 12px, ở điện thoại 8px như dải nền giữa các thẻ của Mini App. */
+const POST_LIST = 'grid gap-3 max-md:gap-2';
+
+function ListSkeleton({ testId }: { testId?: string }) {
   return (
-    <div data-testid={testId} className="grid gap-3">
-      {Array.from({ length: count }, (_, i) => (
-        <Skeleton key={i} height={height} rounded="rounded-card" />
+    <div data-testid={testId} className={POST_LIST}>
+      {Array.from({ length: POST_CARD_SKELETON_COUNT }, (_, i) => (
+        <PostCardSkeleton key={i} className={miniBleed} />
       ))}
     </div>
   );
@@ -131,7 +135,7 @@ export function FeedView({ initialPreview, initialConfig }: { initialPreview?: F
     }
     return (
       <FeedShell>
-        <ListSkeleton count={3} height={140} />
+        <ListSkeleton />
       </FeedShell>
     );
   }
@@ -148,7 +152,7 @@ export function FeedView({ initialPreview, initialConfig }: { initialPreview?: F
     if (settling) {
       return (
         <FeedShell>
-          <ListSkeleton count={3} height={140} testId="feed-preview-loading" />
+          <ListSkeleton testId="feed-preview-loading" />
         </FeedShell>
       );
     }
@@ -274,7 +278,7 @@ export function FeedView({ initialPreview, initialConfig }: { initialPreview?: F
       </div>
 
       {feed.isLoading ? (
-        <ListSkeleton count={4} height={110} />
+        <ListSkeleton />
       ) : feed.isError ? (
         <ErrorState message={errorText(feed.error)} onRetry={() => void feed.refetch()} />
       ) : posts.length === 0 ? (
@@ -291,7 +295,7 @@ export function FeedView({ initialPreview, initialConfig }: { initialPreview?: F
         )
       ) : (
         <>
-          <div className="grid gap-3 max-md:gap-2">
+          <div className={POST_LIST}>
             {posts.map((post) => (
               <PostCard key={post.id} post={post} />
             ))}

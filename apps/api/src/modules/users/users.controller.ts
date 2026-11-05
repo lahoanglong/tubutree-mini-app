@@ -4,13 +4,14 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { UsersService } from './users.service';
 import { UpdateMeDto } from './dto/update-me.dto';
 import { CreateAddressDto, UpdateAddressDto } from './dto/address.dto';
+import { Trim } from '../../common/decorators/trim.decorator';
 
 class OnboardingDto {
   @IsArray() @ArrayMaxSize(20) @IsString({ each: true }) segments!: string[];
 }
 
 class DeletionRequestDto {
-  @IsOptional() @IsString() @MaxLength(500) reason?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(500) reason?: string;
   @IsOptional() @IsInt() @Min(0) acknowledgedWalletBalance?: number;
   @IsOptional() @IsBoolean() acceptWalletForfeit?: boolean;
 }

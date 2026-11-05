@@ -11,7 +11,7 @@ import { formatPhoneDisplay } from '../utils/phone';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { useLoginWithNotice } from './ui/auth-gate';
 import { usePublicConfig } from '../hooks/use-public-config';
-import { vi } from '../i18n/vi';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 
 /**
  * Kênh liên hệ khi đơn gặp sự cố (không huỷ được, giao sai...). Trước đây chỉ có đúng một dòng "Nhắn Tubu qua Zalo OA"
@@ -45,33 +45,33 @@ export function SupportContact({ orderCode }: { orderCode?: string }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-      <Text variant="caption" tone="tertiary">{vi.orders.support}</Text>
+      <Text variant="caption" tone="tertiary">{fillCopy('support.title')}</Text>
       {chatReady && (
         <Button
           variant="ghost"
           icon={MessageCircle}
           onPress={() => navigate(orderCode ? `/chat?order=${encodeURIComponent(orderCode)}` : '/chat')}
         >
-          Chat với Tubu Tree
+          {fillCopy('support.chat')}
         </Button>
       )}
       {!chatReady && hasOA && (
         <Button
           variant="ghost"
           icon={MessageSquare}
-          onPress={() => void openOAChat(orderCode ? `Hỗ trợ đơn ${orderCode}` : undefined)}
+          onPress={() => void openOAChat(orderCode ? fillCopy('support.orderContext', { code: orderCode }) : undefined)}
         >
-          Nhắn Zalo OA
+          {fillCopy('support.oa')}
         </Button>
       )}
       {chatOn && phase === 'guest' && (
         <Button variant="ghost" icon={MessageCircle} onPress={() => void login()}>
-          Đăng nhập để chat với Tubu Tree
+          {fillCopy('support.chatLogin')}
         </Button>
       )}
       {hotline && (
         <Button variant="ghost" icon={Phone} onPress={() => void callPhone(hotline)}>
-          {`Gọi hotline ${formatPhoneDisplay(hotline)}`}
+          {fillCopy('support.hotline', { phone: formatPhoneDisplay(hotline) })}
         </Button>
       )}
       {email && (

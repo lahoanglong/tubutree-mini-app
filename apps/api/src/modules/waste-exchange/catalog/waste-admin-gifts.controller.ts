@@ -35,16 +35,19 @@ import { OptionalNotNull } from '../../../common/decorators/optional-not-null.de
 import { Roles } from '../../../common/decorators/roles.decorator';
 import { WasteAdminGiftsService } from './waste-admin-gifts.service';
 import { WasteGiftRedemptionsService } from './waste-gift-redemptions.service';
+import { Trim } from '../../../common/decorators/trim.decorator';
 
 export class GiftFulfilByIdDto {
   @IsString()
   @Length(4, 40)
+  @Trim()
   code!: string;
 }
 
 export class WasteGiftCancelDto implements WasteGiftCancelRequest {
   @IsString()
   @Length(3, 500)
+  @Trim()
   reason!: string;
 
   @OptionalNotNull()
@@ -95,16 +98,19 @@ export class WasteGiftCreateDto implements WasteGiftUpsertRequest {
 
   @IsString()
   @Length(1, 120)
+  @Trim()
   name!: string;
 
   @IsOptional()
   @IsString()
   @MaxLength(500)
+  @Trim()
   description?: string;
 
   @IsOptional()
   @IsString()
   @MaxLength(40)
+  @Trim()
   label?: string;
 
   @IsOptional()
@@ -137,6 +143,7 @@ export class WasteGiftCreateDto implements WasteGiftUpsertRequest {
   @IsOptional()
   @IsString()
   @MaxLength(1000)
+  @Trim()
   claimInstructions?: string;
 
   @IsOptional()
@@ -154,18 +161,21 @@ export class WasteGiftUpdateDto implements Partial<WasteGiftUpsertRequest> {
   @OptionalNotNull()
   @IsString()
   @Length(1, 120)
+  @Trim()
   name?: string;
 
   @IsOptional()
   @ValidateIf((_, v) => v !== null)
   @IsString()
   @MaxLength(500)
+  @Trim()
   description?: string | null;
 
   @IsOptional()
   @ValidateIf((_, v) => v !== null)
   @IsString()
   @MaxLength(40)
+  @Trim()
   label?: string | null;
 
   @OptionalNotNull()
@@ -201,6 +211,7 @@ export class WasteGiftUpdateDto implements Partial<WasteGiftUpsertRequest> {
   @ValidateIf((_, v) => v !== null)
   @IsString()
   @MaxLength(1000)
+  @Trim()
   claimInstructions?: string | null;
 
   @OptionalNotNull()

@@ -64,6 +64,7 @@ import { rememberCheckoutSelection } from '../utils/checkout-selection';
 import { SUBSCRIPTIONS_IN_MINIAPP } from '../utils/features';
 import { getAffiliateMe } from '../services/affiliate-api';
 import { ContentKitSheet } from '../components/content-kit-sheet';
+import { POLICY_TITLES, PolicySheet } from '../components/policy-sheet';
 import { CartBadge } from '../components/ui/cart-badge';
 import { copyText } from '../utils/clipboard';
 import { Button } from '../components/ui/button';
@@ -155,6 +156,7 @@ export default function ProductDetailPage() {
   const addedTimer = useRef<ReturnType<typeof setTimeout>>();
   useEffect(() => () => clearTimeout(addedTimer.current), []);
   const [showSubscribe, setShowSubscribe] = useState(false);
+  const [shippingPolicyOpen, setShippingPolicyOpen] = useState(false);
   const [sheetMode, setSheetMode] = useState<VariationSheetMode | null>(null);
   const [showContentKit, setShowContentKit] = useState(false);
   const [offersOpen, setOffersOpen] = useState(false);
@@ -985,6 +987,9 @@ export default function ProductDetailPage() {
             </Box>
           ))}
         </Box>
+        <Button variant="ghost" onPress={() => setShippingPolicyOpen(true)} style={{ minWidth: 0 }}>
+          {POLICY_TITLES['van-chuyen']}
+        </Button>
         {/* Chat OA ở đây, không ở thanh CTA dính: thêm nút 48px vào thanh làm hai nút chính hẹp lại ở màn 360px. */}
         {(hasOA || chatReady) && (
           <Button
@@ -1059,6 +1064,8 @@ export default function ProductDetailPage() {
           onConfirm={(v, qty) => confirmVariation(v as VariationDetail, qty)}
         />
       )}
+
+      <PolicySheet slug={shippingPolicyOpen ? 'van-chuyen' : null} onClose={() => setShippingPolicyOpen(false)} />
 
       <PdpOffersSheet open={offersOpen} onClose={() => setOffersOpen(false)} coupons={pdpCoupons} amount={offerAmount(price, quantity, priceView.isFlash)} onCopy={copyCoupon} />
 

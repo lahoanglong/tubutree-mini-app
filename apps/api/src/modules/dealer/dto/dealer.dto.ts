@@ -17,6 +17,8 @@ import {
 import { DEFAULT_MAX_DATA_URL_LENGTH, IsUploadedImage } from '../../../common/uploaded-image';
 import type { UploadedImageOptions } from '../../../common/uploaded-image';
 import { TAX_CODE_RE } from '../../checkout/dto/checkout.dto';
+import { Trim } from '../../../common/decorators/trim.decorator';
+import { trimInvisible } from '../../../common/text-trim';
 
 // Trần bằng trần mà API nhận cho ảnh base64 nói chung (và ≥ trần nén của web, MAX_UPLOAD_DATA_URL_LENGTH): ảnh giấy tờ nhiều chi tiết
 // có thể ra ~800 nghìn ký tự. 3 ảnh + chữ vẫn dưới trần thân 10mb của /api/dealer (body-limits.ts).
@@ -29,7 +31,7 @@ const DEALER_IMAGE_MSG = { message: 'Ảnh quá nặng hoặc không hợp lệ.
 // Ô tuỳ chọn mà khách gõ rồi xoá thì client gửi chuỗi rỗng: coi như không gửi.
 const blankToUndefined = ({ value }: { value: unknown }) => {
   if (typeof value !== 'string') return value;
-  const t = value.trim();
+  const t = trimInvisible(value);
   return t === '' ? undefined : t;
 };
 
@@ -55,16 +57,16 @@ function IsVnBusinessPhone() {
 }
 
 export class ApplyDealerDto {
-  @IsString() @MaxLength(120) businessName!: string;
+  @Trim() @IsString() @MaxLength(120) businessName!: string;
   @IsOptional() @Transform(blankToUndefined) @IsString() @Matches(TAX_CODE_RE, { message: 'Mã số thuế gồm 10 số (chi nhánh thêm -3 số) hoặc 12 số.' }) taxCode?: string;
-  @IsString() @MaxLength(120) ownerName!: string;
+  @Trim() @IsString() @MaxLength(120) ownerName!: string;
   @Transform(({ value }) => (typeof value === 'string' ? normalizeBusinessPhone(value) : value)) @IsString() @MaxLength(30) @IsVnBusinessPhone() phone!: string;
-  @IsString() @MaxLength(500) address!: string;
+  @Trim() @IsString() @MaxLength(500) address!: string;
   @IsUploadedImage(DEALER_IMAGE, DEALER_IMAGE_MSG) cccdFrontUrl!: string;
   @IsUploadedImage(DEALER_IMAGE, DEALER_IMAGE_MSG) cccdBackUrl!: string;
   @IsOptional() @Transform(blankToUndefined) @IsUploadedImage(DEALER_IMAGE, DEALER_IMAGE_MSG) storeFrontUrl?: string;
   @IsOptional() @IsInt() @Min(0) @Max(1_000_000_000) monthlyVolumeEstimate?: number;
-  @IsOptional() @IsString() @MaxLength(1000) notes?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(1000) notes?: string;
 }
 
 export class DealerOrderLine {
@@ -82,7 +84,7 @@ export class DealerOrderDto {
   items!: DealerOrderLine[];
 
   @IsIn(['CREDIT', 'PREPAID']) paymentMethod!: string;
-  @IsOptional() @IsString() note?: string;
+  @IsOptional() @Trim() @IsString() note?: string;
   /** Địa chỉ nhận trong sổ địa chỉ của đại lý. Bỏ trống → địa chỉ mặc định, rồi tới địa chỉ trong hồ sơ đại lý. */
   @IsOptional() @IsString() addressId?: string;
 }

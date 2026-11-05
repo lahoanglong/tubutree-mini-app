@@ -36,6 +36,8 @@ const WORST_BY_KEY: Record<string, Record<string, string>> = {
   'order.action.payLeft': { t: '99 ngày 23 giờ' },
   'order.payByLeft': { at: '23:59 31/12', t: '99 ngày 23 giờ' },
   'shop.tierHintNext': { name: 'Đồng' },
+  'support.hotline': { phone: '0984 606 774' },
+  'support.orderContext': { code: 'TUBU20261015001' },
 };
 
 const hit = (text: string) => FORBIDDEN_TERMS.filter((t) => t.pattern.test(text)).map((t) => t.use);
@@ -96,6 +98,17 @@ describe('SHOP_COPY', () => {
   it('dải thương hiệu ở PDP: tiêu đề không kèm tên (ux-copy UC-01), tên đi vào nhãn đọc', () => {
     expect(SHOP_COPY['pdp.brandShelf']).toBe('Cùng thương hiệu');
     expect(fillCopy('pdp.brandShelfLabel', { brand: 'Cô Lan' })).toBe('Cùng thương hiệu Cô Lan');
+  });
+});
+
+describe('chữ khối "Cần hỗ trợ?" ở chi tiết đơn', () => {
+  it('nhãn các kênh CSKH chỉ có một nguồn cho Mini và web (kèm mã đơn khi kênh nhận được ngữ cảnh)', () => {
+    expect(fillCopy('support.title')).toBe('Cần hỗ trợ?');
+    expect(fillCopy('support.chat')).toBe('Chat với Tubu Tree');
+    expect(fillCopy('support.chatLogin')).toBe('Đăng nhập để chat với Tubu Tree');
+    expect(fillCopy('support.oa')).toBe('Nhắn Zalo OA');
+    expect(fillCopy('support.hotline', { phone: '0984 606 774' })).toBe('Gọi hotline 0984 606 774');
+    expect(fillCopy('support.orderContext', { code: 'TUBU20261015001' })).toBe('Hỗ trợ đơn TUBU20261015001');
   });
 });
 

@@ -13,7 +13,7 @@ const toBool = ({ value }: { value: unknown }): unknown => (value === 'true' ? t
 export class StorefrontAdminListQueryDto extends PaginationQuery {
   @IsOptional() @IsIn(['PUBLISHED', 'DRAFT', 'TAKEN_DOWN', 'PENDING_APPROVAL']) status?: 'PUBLISHED' | 'DRAFT' | 'TAKEN_DOWN' | 'PENDING_APPROVAL';
   @IsOptional() @IsIn(['CTV', 'BRAND', 'MERCHANT']) type?: 'CTV' | 'BRAND' | 'MERCHANT';
-  @IsOptional() @IsString() @MaxLength(100) q?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(100) q?: string;
   @IsOptional() @Transform(toBool) @IsBoolean() changedAfterApproval?: boolean;
 }
 

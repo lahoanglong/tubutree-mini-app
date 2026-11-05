@@ -114,7 +114,7 @@ describe('Index hiệu năng 2026-11-04 (real Postgres)', () => {
     });
   }
 
-  it('D4: đếm và gom nhóm ZNS FAILED 24 giờ đi bằng partial index notification_logs', async () => {
+  it('D4: đếm và gom nhóm ZNS FAILED 24 giờ đi bằng index (channel, status, sentAt) của notification_logs', async () => {
     const where = { channel: 'ZNS', status: 'FAILED', sentAt: { gte: new Date(Date.now() - 86_400_000) } };
     captured = [];
     await prisma.notificationLog.count({ where });
@@ -125,8 +125,8 @@ describe('Index hiệu năng 2026-11-04 (real Postgres)', () => {
     }
     const qs = captured.filter((q) => /FROM "(public"\.")?notification_logs"/.test(q.query));
     if (qs.length < 2) throw new Error(`D4 ZNS FAILED: chỉ bắt được ${qs.length}/2 câu; captured.length=${captured.length}; đã bắt: ${JSON.stringify(captured.map((c) => c.query.slice(0, 90)))}`);
-    // Từ gói hg có thêm index thường (channel, status, sentAt) cũng khớp đúng điều kiện này; planner chọn cái nào tuỳ thống kê. Điều cần giữ: đi index, không quét bảng.
-    for (const q of qs) expect(await planOf(q)).toMatch(/notification_logs_zns_failed_sentAt_idx|notification_logs_channel_status_sentAt_idx/);
+    // Index một phần notification_logs_zns_failed_sentAt_idx đã gỡ ở w7: phải đi index thường (channel, status, sentAt), không quét bảng.
+    for (const q of qs) expect(await planOf(q)).toContain('notification_logs_channel_status_sentAt_idx');
   });
 
   it('D4: lọc khoảng sentAt (trang mẫu tin 30 ngày) dùng index sentAt', async () => {

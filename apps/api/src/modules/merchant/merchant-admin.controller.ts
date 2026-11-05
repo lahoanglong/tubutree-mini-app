@@ -12,13 +12,13 @@ import { OptionalNotNull } from '../../common/decorators/optional-not-null.decor
 
 export class CreateMerchantPayoutDto {
   @IsString() @IsNotEmpty() storefrontId!: string;
-  @IsOptional() @IsString() @MaxLength(300) note?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(300) note?: string;
   /** Tổng bảng kê admin vừa xem (âm khi đối tác nộp lại); lệch với tổng lúc lập thì từ chối. */
   @IsOptional() @IsInt() expectedTotal?: number;
 }
 
 class MarkMerchantPayoutPaidDto {
-  @IsString() @IsNotEmpty() @MaxLength(100) bankRef!: string;
+  @Trim() @IsString() @IsNotEmpty() @MaxLength(100) bankRef!: string;
 }
 
 /** Lý do huỷ phiếu gửi nguyên văn cho gian hàng. */

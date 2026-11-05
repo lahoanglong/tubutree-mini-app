@@ -1,21 +1,20 @@
 import { Body, Controller, Get, Param, Patch } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { Transform } from 'class-transformer';
 import { ArrayMaxSize, IsArray, IsBoolean, IsObject, IsOptional, IsString, MaxLength, ValidateIf } from 'class-validator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { OptionalNotNull } from '../../common/decorators/optional-not-null.decorator';
 import { PRODUCT_CATEGORIES_MAX, PRODUCT_IMAGES_MAX, ProductAdminService } from './product-admin.service';
+import { Trim } from '../../common/decorators/trim.decorator';
 
-const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
 // Ảnh base64 nén tới ~1,5 triệu ký tự (cùng trần ảnh gian hàng); trần body 10 MB ở main.ts đủ cho 8 ảnh nén.
 const IMAGE_MAX = 1_500_000;
 
 export class UpdateProductDto {
   @OptionalNotNull() @IsArray() @ArrayMaxSize(PRODUCT_IMAGES_MAX) @IsString({ each: true }) @MaxLength(IMAGE_MAX, { each: true }) images?: string[];
-  @OptionalNotNull() @Transform(trim) @IsString() @MaxLength(6000) description?: string;
+  @OptionalNotNull() @Trim() @IsString() @MaxLength(6000) description?: string;
   /** null hoặc chuỗi rỗng = xoá mô tả ngắn. */
-  @IsOptional() @ValidateIf((_, v) => v !== null) @Transform(trim) @IsString() @MaxLength(400) shortDesc?: string | null;
+  @IsOptional() @ValidateIf((_, v) => v !== null) @Trim() @IsString() @MaxLength(400) shortDesc?: string | null;
   @OptionalNotNull() @IsBoolean() isActive?: boolean;
   @OptionalNotNull() @IsBoolean() isFeatured?: boolean;
   /** null = xoá cấu hình câu chuyện. Cấu trúc chi tiết do parseStoryConfig kiểm trong service (400 kèm lý do). */

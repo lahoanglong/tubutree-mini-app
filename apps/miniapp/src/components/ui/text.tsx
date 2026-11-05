@@ -1,6 +1,6 @@
 import type { CSSProperties, ElementType, ReactNode } from 'react';
 
-export type TextVariant = 'body-lg' | 'body-md' | 'body-sm' | 'caption' | 'label' | 'price-xl' | 'price-lg' | 'price-md' | 'price-sm';
+export type TextVariant = 'body-lg' | 'body-md' | 'body-sm' | 'caption' | 'label' | 'field-label' | 'price-xl' | 'price-lg' | 'price-md' | 'price-sm';
 export type HeadingVariant = 'display-lg' | 'display-md' | 'title-lg' | 'title-md' | 'title-sm';
 export type Tone = 'primary' | 'secondary' | 'tertiary' | 'disabled' | 'inverse' | 'brand' | 'success' | 'warning' | 'danger';
 

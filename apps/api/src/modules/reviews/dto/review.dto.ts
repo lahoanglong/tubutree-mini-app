@@ -1,9 +1,10 @@
 import { ArrayMaxSize, IsArray, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 import { IsUploadedImage, IsUploadedMediaUrl, PUBLIC_CONTENT_IMAGE } from '../../../common/uploaded-image';
+import { Trim } from '../../../common/decorators/trim.decorator';
 
 export class CreateReviewDto {
   @IsInt() @Min(1) @Max(5) rating!: number;
-  @IsOptional() @IsString() @MaxLength(2000) comment?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(2000) comment?: string;
   // Đánh giá hiện công khai và có thưởng Điểm Xanh theo media (MONEY-10): chỉ ảnh đã tải lên Cloudinary, hoặc ảnh
   // raster base64 nén khi miniapp chưa cấu hình Cloudinary (ENGAGE-6). Chuỗi bất kỳ/host lạ/SVG bị chặn.
   @IsOptional()

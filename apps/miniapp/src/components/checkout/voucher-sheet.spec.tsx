@@ -200,6 +200,14 @@ describe('VoucherSheet — hành vi (C-076 di cư DS v2: giữ nguyên hành vi)
     expect(screen.getByRole('button', { name: 'Áp dụng' })).toBeDisabled();
   });
 
+  it('nhãn ô nhập mã dùng bậc field-label (12px/1,33/500), không còn bậc nhãn chip 600', async () => {
+    renderSheet();
+    await screen.findByRole('button', { name: /^Dùng mã/ });
+    const label = screen.getByText('Nhập mã giảm giá khác', { selector: 'p' });
+    expect(label.style.fontSize).toBe('var(--type-field-label-size)');
+    expect(label.style.fontWeight).toBe('var(--type-field-label-weight)');
+  });
+
   it('nhập mã tay: bỏ khoảng trắng + IN HOA; ô trống thì nút "Áp dụng" khoá; Enter cũng áp dụng', async () => {
     renderSheet();
     await screen.findByRole('button', { name: /^Dùng mã/  });

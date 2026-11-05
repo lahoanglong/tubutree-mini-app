@@ -161,7 +161,18 @@ describe('design-tokens/tokens.css: commerce tokens (P1 tokens-a11y)', () => {
     ['--type-price-tile-size', '16px'],
     ['--type-price-tile-lh', '1.25'],
     ['--type-price-tile-weight', '700'],
+    ['--type-field-label-size', '12px'],
+    ['--type-field-label-lh', '1.33'],
+    ['--type-field-label-weight', '500'],
   ])('lớp component (commerce) %s = %s', (name, value) => decl(name, value));
+
+  // Nhãn ô nhập (Field, địa chỉ, hoá đơn VAT, hồ sơ, đổi trả) có bậc riêng: mảnh hơn nhãn chip/huy hiệu. Đổi bậc nhãn dùng chung
+  // sang độ đậm khác sẽ kéo theo chip và huy hiệu, nên hai bậc này được ghim riêng.
+  it.each([
+    ['--type-label-size', '12px'],
+    ['--type-label-lh', '1.33'],
+    ['--type-label-weight', '600'],
+  ])('bậc nhãn chip/huy hiệu %s giữ nguyên = %s', (name, value) => decl(name, value));
 
   it.each([
     ['--elevation-nav', '0 -1px 0 rgba(28,26,22,.06), 0 -4px 16px rgba(28,26,22,.06)'],

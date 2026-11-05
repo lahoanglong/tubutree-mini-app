@@ -1,5 +1,6 @@
 import { Transform, Type } from 'class-transformer';
 import { ArrayMaxSize, ArrayMinSize, IsArray, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, ValidateNested } from 'class-validator';
+import { Trim } from '../../../common/decorators/trim.decorator';
 
 /** Trần số lượng một món trong một lần thêm (DTO) và sau khi batch gộp các dòng trùng variationId. */
 export const MAX_ITEM_QUANTITY = 999;
@@ -30,7 +31,7 @@ export class UpdateItemDto {
 }
 
 export class ApplyCouponDto {
-  @IsString() code!: string;
+  @Trim() @IsString() code!: string;
 }
 
 /** `?itemIds=a,b` hoặc lặp tham số (`itemIds=a&itemIds=b,c`): tách dấu phẩy ở từng phần tử, bỏ rỗng và trùng. Giá trị lạ để validator từ chối. */

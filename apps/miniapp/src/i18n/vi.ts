@@ -349,7 +349,6 @@ export const vi = {
     pointsUsed: 'Điểm Xanh đã dùng',
     reviewItem: 'Viết đánh giá',
     editReviewItem: 'Sửa đánh giá',
-    support: 'Cần hỗ trợ?',
     pointsCredited: (n: string) => `Đã cộng +${n} Điểm Xanh vào tài khoản`,
     pointsReversed: 'Điểm Xanh của đơn này đã được thu hồi',
     pointsCreditedPartlyReversed: (earned: string, reversed: string) => `Đã cộng +${earned}, đã thu lại tối đa ${reversed} do trả hàng`,

@@ -7,6 +7,7 @@ import { PaginationQuery } from '../../common/pagination';
 import { OrderReturnsService, RETURNS_TO_RECEIVE } from './order-returns.service';
 import type { JwtPayload } from '@tubutree/shared-types';
 import { ReturnPreviewQuery, ReviewReturnDto } from './dto/return-request.dto';
+import { Trim } from '../../common/decorators/trim.decorator';
 
 const RETURN_STATUSES = ['REQUESTED', 'APPROVED', 'REJECTED', RETURNS_TO_RECEIVE] as const;
 const SORT_ORDERS = ['asc', 'desc'] as const;
@@ -16,7 +17,7 @@ export class ReturnRequestsQuery extends PaginationQuery {
   @IsOptional() @IsIn(RETURN_STATUSES) status?: (typeof RETURN_STATUSES)[number];
   @IsOptional() @IsIn(SORT_ORDERS) order?: (typeof SORT_ORDERS)[number];
   /** Mã đơn, SĐT hoặc tên khách. */
-  @IsOptional() @IsString() @MaxLength(100) q?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(100) q?: string;
 }
 
 /** Tài khoản nhận hoàn của khách chỉ cần cho người duyệt hoàn (ADMIN/CSKH); KHO chỉ nhận hàng về nên không thấy. */

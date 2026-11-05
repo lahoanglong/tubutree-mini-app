@@ -28,12 +28,16 @@ describe('InvoiceRequestDto', () => {
   it.each(['0312345678', '0312345678-001', '001234567890'])('mã số thuế %s hợp lệ (10 số, chi nhánh -3 số, CCCD 12 số)', async (taxCode) => {
     expect(await errorsFor(InvoiceRequestDto, { ...base, taxCode, email })).toHaveLength(0);
   });
-  it.each(['abc', '123', '031234567', '03123456789', '0312345678-01', '0312345678-0011', '0312345678 ', '0312-345678', ''])(
+  it.each(['abc', '123', '031234567', '03123456789', '0312345678-01', '0312345678-0011', '0312-345678', ''])(
     'mã số thuế %j không hợp lệ',
     async (taxCode) => {
       expect(await errorsFor(InvoiceRequestDto, { ...base, taxCode, email })).toContain('matches');
     },
   );
+  // Khách dán MST từ bảng tính hay dính khoảng trắng/NBSP/U+200B ở hai đầu: cắt trước khi kiểm mẫu, giữa chuỗi vẫn không hợp lệ.
+  it.each(['0312345678 ', ' 0312345678', '0312345678\u00a0', '\u200b0312345678\u200b'])('mã số thuế %j được cắt hai đầu rồi hợp lệ', async (taxCode) => {
+    expect(await errorsFor(InvoiceRequestDto, { ...base, taxCode, email })).toHaveLength(0);
+  });
   it('tên công ty, địa chỉ, email quá dài → lỗi maxLength', async () => {
     expect(await errorsFor(InvoiceRequestDto, { ...base, email, companyName: 'x'.repeat(256) })).toContain('maxLength');
     expect(await errorsFor(InvoiceRequestDto, { ...base, email, address: 'x'.repeat(501) })).toContain('maxLength');

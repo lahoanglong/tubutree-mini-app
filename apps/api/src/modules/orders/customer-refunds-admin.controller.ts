@@ -8,6 +8,7 @@ import type { JwtPayload } from '@tubutree/shared-types';
 import { maskPhoneKeepLast3, maskVnPhonesInText } from '../../common/mask-pii';
 import { seesFullOrderPhones } from '../admin/order-actor-transitions';
 import { CustomerRefundsService } from './customer-refunds.service';
+import { Trim } from '../../common/decorators/trim.decorator';
 
 /**
  * Người không thấy SĐT khách đầy đủ (Kế toán đơn thuần) chỉ nhận 3 số cuối ở `phone` và ở dãy giống SĐT trong ghi chú;
@@ -32,41 +33,41 @@ export class ListCustomerRefundsQuery extends PaginationQuery {
   @IsOptional() @IsIn(CUSTOMER_REFUND_STATUSES) status?: (typeof CUSTOMER_REFUND_STATUSES)[number];
   @IsOptional() @IsIn(CUSTOMER_REFUND_KINDS) kind?: (typeof CUSTOMER_REFUND_KINDS)[number];
   /** Mã đơn, SĐT hoặc tên khách. */
-  @IsOptional() @IsString() @MaxLength(100) q?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(100) q?: string;
 }
 
 /** Admin khác người đang chuyển khoản phải chọn tiếp quản tường minh kèm lý do (ghi vào lịch sử đơn). */
 export class TakeOverRefundDto {
   @IsOptional() @IsBoolean() takeOver?: boolean;
-  @IsOptional() @IsString() @MaxLength(300) takeOverReason?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(300) takeOverReason?: string;
 }
 
 export class MarkCustomerRefundPaidDto extends TakeOverRefundDto {
   /** Mã giao dịch ngân hàng — bằng chứng đã chuyển, khách thấy trong thông báo. */
-  @IsString() @MinLength(1) @MaxLength(100) bankRef!: string;
-  @IsOptional() @IsString() @MaxLength(500) note?: string;
+  @Trim() @IsString() @MinLength(1) @MaxLength(100) bankRef!: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(500) note?: string;
   /** Tài khoản khách gửi qua kênh khác khi khoản chưa có tài khoản nhận. */
-  @IsOptional() @IsString() @MaxLength(120) bankName?: string;
-  @IsOptional() @IsString() @MaxLength(40) accountNumber?: string;
-  @IsOptional() @IsString() @MaxLength(120) accountName?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(120) bankName?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(40) accountNumber?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(120) accountName?: string;
 }
 
 export class ClaimCustomerRefundDto {
   /** Tài khoản khách gửi qua kênh khác khi khoản chưa có tài khoản nhận. */
-  @IsOptional() @IsString() @MaxLength(120) bankName?: string;
-  @IsOptional() @IsString() @MaxLength(40) accountNumber?: string;
-  @IsOptional() @IsString() @MaxLength(120) accountName?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(120) bankName?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(40) accountNumber?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(120) accountName?: string;
 }
 
 /** "Xác nhận tiền dư": số dư thực nhận trên sao kê (mặc định số Pancake báo; service chặn vượt số đó). */
 export class VerifyOverpaymentDto {
   @IsOptional() @IsInt() @Min(1) amount?: number;
-  @IsOptional() @IsString() @MaxLength(500) note?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(500) note?: string;
 }
 
 /** "Không phải tiền dư": lý do bắt buộc (lưu vào khoản và lịch sử đơn). */
 export class DismissOverpaymentDto {
-  @IsString() @MinLength(5) @MaxLength(300) reason!: string;
+  @Trim() @IsString() @MinLength(5) @MaxLength(300) reason!: string;
 }
 
 @Roles('ADMIN')
