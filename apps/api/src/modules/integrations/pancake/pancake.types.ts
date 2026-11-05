@@ -1,9 +1,12 @@
+import type { PancakeVariantFields } from './pancake-variant-fields';
+
 /** Shape rút gọn của Pancake POS Open API (Build Spec §8). */
 
 export interface PancakeVariationDTO {
   id: string;
   sku?: string;
-  fields?: Record<string, string>;
+  /** Phân loại: Pancake trả mảng `[{ id, name, value, keyValue }]`. Đọc bằng `variantLabel`/`variantAttributes`, đừng `Object.values`. */
+  fields?: PancakeVariantFields | null;
   retail_price?: number;
   sale_price?: number;
   remain_quantity?: number;

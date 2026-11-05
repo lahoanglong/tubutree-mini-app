@@ -205,6 +205,13 @@ describe('evaluateDb', () => {
       expect(byId(run(behind(1_000, [name]), 'pre-deploy'), 'db.pending_scope').status).toBe('PASS');
     });
 
+    it('w5: migration dữ liệu sửa tên biến thể nằm trong danh sách tương thích image, không phải migration nặng', () => {
+      const name = '20261105230000_w5_variation_name_repair';
+      expect(IMAGE_COMPATIBLE_MIGRATIONS).toContain(name);
+      expect(HEAVY_MIGRATIONS.map((m) => m.name)).not.toContain(name);
+      expect(byId(run(behind(1_000, [name]), 'pre-deploy'), 'db.pending_scope').status).toBe('PASS');
+    });
+
     it('migration tương thích image cộng một migration khác: db.pending_scope WARN, đếm đúng phần ngoài danh sách', () => {
       const extraSmall = IMAGE_COMPATIBLE_MIGRATIONS.filter((m) => !required.includes(m));
       const s = behind(1_000, [...extraSmall, P1]);
