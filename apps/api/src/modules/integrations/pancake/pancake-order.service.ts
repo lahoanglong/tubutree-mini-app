@@ -333,7 +333,12 @@ export class PancakeOrderService {
    */
   static readonly PUSH_ATTENTION_GRACE_MINUTES = 60;
 
-  /** Hết lượt thử của job push: chốt FAILED + đưa vào hàng đợi "Cần xử lý Pancake" (cron vẫn thử tiếp). */
+  /**
+   * Ghi kết cục một lần đẩy lỗi, gọi từ job push (hết lượt hoặc lỗi dứt khoát) và từ `syncPayment` khi job thanh toán đẩy hộ đơn
+   * gặp 401/403. `final` chốt FAILED. Lỗi tạm hoặc dứt khoát: đưa vào hàng đợi "Cần xử lý Pancake" (cron vẫn thử tiếp, lỗi tạm
+   * có ân hạn). Lỗi CONFIG: hoàn lượt đã đốt, không báo từng đơn; 401/403 riêng một đơn khi khoá vừa chứng minh còn dùng thì
+   * tính là REJECTED.
+   */
   async markPushFailure(orderId: string, err: unknown, final: boolean): Promise<void> {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
