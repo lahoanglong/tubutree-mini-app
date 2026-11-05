@@ -1047,6 +1047,44 @@ describe('PancakeSyncService — payload thiếu trường hoặc kiểu lạ (W
     });
   });
 
+  describe('kết quả lượt đồng bộ ghi cho màn sức khoẻ vận hành: sản phẩm thiếu tên/mã là "bỏ qua", không phải "lỗi"', () => {
+    const runDetail = async (products: unknown[], prismaOver: Record<string, unknown> = {}) => {
+      const upsert = jest.fn().mockResolvedValue({});
+      const prisma = makePrisma({ opsHealthState: { upsert }, ...prismaOver });
+      const { n } = await sync(products, prisma);
+      const calls = upsert.mock.calls.map((c) => c[0] as { update: { detail?: unknown } });
+      return { n, detail: calls.at(-1)?.update.detail };
+    };
+
+    it.each([['   '], [null], [{}]])('sản phẩm nháp name=%j + một sản phẩm tốt: count 1, failed 0, skipped 1', async (name) => {
+      const { n, detail } = await runDetail([{ id: 'draft', name, variations: [] }, product('good', [variation('v-good')])]);
+      expect(n).toBe(1);
+      expect(detail).toEqual({ count: 1, failed: 0, skipped: 1 });
+    });
+
+    it('sản phẩm thiếu id (có tên): bỏ qua, không phải lỗi', async () => {
+      const { detail } = await runDetail([{ name: 'Không mã', variations: [variation('v-x')] }]);
+      expect(detail).toEqual({ count: 0, failed: 0, skipped: 1 });
+    });
+
+    it('lỗi ghi thật (sku trùng) vẫn là failed, không bị đếm là skipped', async () => {
+      const { detail } = await runDetail([product('a', [variation('v-bad')])], {
+        variation: { upsert: jest.fn().mockRejectedValue(new Error('sku trùng')) },
+      });
+      expect(detail).toEqual({ count: 0, failed: 1, skipped: 0 });
+    });
+
+    it('phần tử không phải object trong danh sách vẫn là failed (dữ liệu hỏng, không phải sản phẩm nháp)', async () => {
+      const { detail } = await runDetail([null, product('good', [variation('v-good')])]);
+      expect(detail).toEqual({ count: 1, failed: 1, skipped: 0 });
+    });
+
+    it('lượt sạch: skipped 0', async () => {
+      const { detail } = await runDetail([product('good', [variation('v-good')])]);
+      expect(detail).toEqual({ count: 1, failed: 0, skipped: 0 });
+    });
+  });
+
   describe('trường kiểu lạ của sản phẩm', () => {
     it('images là một chuỗi: thành một ảnh, không tách từng ký tự', async () => {
       const { prisma } = await sync([product('a', [variation('v-a')], { images: 'https://img/a.jpg' })]);

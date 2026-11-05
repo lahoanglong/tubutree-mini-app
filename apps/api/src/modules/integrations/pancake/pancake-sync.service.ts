@@ -261,6 +261,7 @@ export class PancakeSyncService implements OnModuleInit {
     let page = 1;
     let count = 0;
     let failed = 0;
+    let skipped = 0;
     let truncated = false;
     let pagesWithData = 0;
     let unnamedRows = 0;
@@ -302,8 +303,9 @@ export class PancakeSyncService implements OnModuleInit {
         }
         // Cô lập lỗi từng sản phẩm — 1 SP hỏng (vd slug trùng) không làm hỏng cả batch.
         try {
+          // Sản phẩm thiếu mã/tên (nháp trên Pancake) là "bỏ qua", không phải lỗi: không được làm màn sức khoẻ báo lỗi mỗi lượt.
           if (await this.upsertProduct(p, { ...opts, stockReadAt })) count++;
-          else failed++;
+          else skipped++;
         } catch (err) {
           failed++;
           this.logger.error(`Upsert sản phẩm Pancake ${pid ?? '?'} lỗi: ${err instanceof Error ? err.message : err}`);
@@ -341,8 +343,10 @@ export class PancakeSyncService implements OnModuleInit {
         }
       }
       this.lastRunAt = startedAt;
-      this.logger.log(`Đã đồng bộ ${count} sản phẩm từ Pancake${failed ? ` (${failed} lỗi, bỏ qua)` : ''}.`);
-      await this.noteRun({ ok: true, count, failed });
+      this.logger.log(
+        `Đã đồng bộ ${count} sản phẩm từ Pancake${failed ? ` (${failed} lỗi, bỏ qua)` : ''}${skipped ? ` (${skipped} sản phẩm thiếu mã/tên, bỏ qua)` : ''}.`,
+      );
+      await this.noteRun({ ok: true, count, failed, skipped });
       return count;
     } catch (err) {
       await this.noteRun({ ok: false, error: err instanceof Error ? err.message : String(err) });
