@@ -88,6 +88,14 @@ const url = process.env.TEST_REDIS_URL;
     }
     await worker?.close();
     await queue?.close();
+    if (prisma) {
+      // Đơn STALE của spec (có ca đặt createdAt năm 2000) ở lại DB dùng chung sẽ xếp đầu danh sách đơn kẹt "cũ nhất trước, cắt 20 dòng"
+      // của Sức khoẻ hệ thống và đẩy đơn kẹt của spec khác ra ngoài. Worker đã đóng nên không còn job nào chạm chúng.
+      const stale = await prisma.order.findMany({ where: { code: { in: [...mine] }, pancakeOrderId: null, pancakePushStatus: 'STALE' }, select: { id: true } });
+      const ids = stale.map((o) => o.id);
+      await prisma.orderItem.deleteMany({ where: { orderId: { in: ids } } });
+      await prisma.order.deleteMany({ where: { id: { in: ids } } });
+    }
     await moduleRef?.close();
   });
 
