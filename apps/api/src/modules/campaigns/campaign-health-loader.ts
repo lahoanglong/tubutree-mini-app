@@ -2,6 +2,7 @@ import type { Prisma } from '@prisma/client';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { normalizeCouponCode } from '../coupons/coupons.service';
 import { isPublicProduct } from '../catalog/public-product';
+import { bannerLinkUsable } from './campaign-public';
 import { campaignHealth, usableCounts, type HealthCoupon, type HealthIssue, type HealthPeer, type HealthProduct, type HealthSubject } from './campaign-health';
 
 type HealthPrisma = Pick<PrismaService, 'campaign' | 'campaignProduct' | 'campaignCoupon' | 'product' | 'coupon' | 'category'>;
@@ -28,6 +29,16 @@ const COUPON_SELECT = { code: true, isActive: true, startAt: true, endAt: true, 
 
 // Trần an toàn cho số chiến dịch bật cùng nạp để tính chồng banner (danh sách admin cũng chỉ lấy tối đa 200 dòng).
 const PEER_LIMIT = 500;
+
+/**
+ * Ảnh banner KHÔNG ra được slide (khớp `bannerImage`): rỗng, hoặc data URL không phải ảnh raster base64 (SVG...). Lọc ngay ở DB để không kéo
+ * cả ảnh base64 (tới ~1,5 MB mỗi chiến dịch) về. Chỉ nhìn tiền tố nên ảnh có tiền tố hợp lệ nhưng thân base64 hỏng vẫn tính là ra slide
+ * (hiếm; sai theo hướng thừa một cảnh báo CROWDED, không bao giờ thiếu).
+ */
+const RASTER_PREFIXES = ['data:image/png;base64,', 'data:image/jpeg;base64,', 'data:image/jpg;base64,', 'data:image/webp;base64,', 'data:image/gif;base64,'];
+const UNSERVABLE_IMAGE: Prisma.CampaignWhereInput = {
+  OR: [{ image: '' }, { AND: [{ image: { startsWith: 'data:' } }, { NOT: { OR: RASTER_PREFIXES.map((p) => ({ image: { startsWith: p } })) } }] }],
+};
 
 const toProduct = (p: ProductRow): HealthProduct => ({
   name: p.name,
@@ -80,10 +91,17 @@ export async function campaignHealthDetailBatch(prisma: HealthPrisma, requests: 
     categorySlugs.length ? prisma.category.findMany({ where: { slug: { in: categorySlugs } }, select: { slug: true } }) : [],
     prisma.campaign.findMany({
       where: { isActive: true, endAt: { gt: now }, placement: { in: placements } },
-      select: { id: true, placement: true, audience: true, startAt: true, endAt: true, sortOrder: true },
+      select: { id: true, placement: true, audience: true, startAt: true, endAt: true, sortOrder: true, linkType: true, linkValue: true },
       take: PEER_LIMIT,
     }),
   ]);
+
+  const unservable = new Set(
+    peerRows.length
+      ? (await prisma.campaign.findMany({ where: { id: { in: peerRows.map((p) => p.id) }, ...UNSERVABLE_IMAGE }, select: { id: true } })).map((r) => r.id)
+      : [],
+  );
+  const peerFacts = peerRows.map(({ linkType, linkValue, ...p }) => ({ ...p, shows: !unservable.has(p.id) && bannerLinkUsable({ linkType, linkValue }) }));
 
   const productsByCampaign = new Map<string, HealthProduct[]>();
   for (const l of savedProducts) productsByCampaign.set(l.campaignId, [...(productsByCampaign.get(l.campaignId) ?? []), toProduct(l.product)]);
@@ -111,7 +129,7 @@ export async function campaignHealthDetailBatch(prisma: HealthPrisma, requests: 
       target = { exists, visible: exists };
     }
     if (s.endAt <= now) return none(r);
-    const facts = { now, target, products, coupons, peers: peerRows.filter((p): p is HealthPeer & typeof p => p.placement === s.placement) };
+    const facts = { now, target, products, coupons, peers: peerFacts.filter((p): p is HealthPeer & typeof p => p.placement === s.placement) };
     return { issues: campaignHealth(s, facts), usable: usableCounts(s, facts) };
   });
 }

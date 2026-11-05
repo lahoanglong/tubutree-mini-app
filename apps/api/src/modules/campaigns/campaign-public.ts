@@ -1,6 +1,7 @@
 import type { Campaign, CampaignAudience, CampaignLinkType, CampaignPlacement, Prisma } from '@prisma/client';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { publicImage } from '../../common/public-image';
+import { CAMPAIGN_ENTITY_SLUG_RE, CAMPAIGN_INTERNAL_TARGETS } from '@tubutree/shared-types';
 
 // Lấy dư số slide tối đa của carousel (5): app-core còn lọc đối tượng/lịch lần nữa trên máy khách nên cần chừa chỗ.
 export const BANNER_FETCH_LIMIT = 10;
@@ -29,9 +30,30 @@ export function audienceWhere(wanted?: 'NEW' | 'RETURNING'): Prisma.CampaignWher
   return wanted ? { audience: { in: ['ALL', wanted] } } : {};
 }
 
+/**
+ * Đích có dựng được link ở app không: cùng điều kiện với `campaignHref` của app-core (dùng chung hằng của shared-types, API không import app-core).
+ * Không xét liveRoute: nó chỉ đổi route khi một tính năng tắt, không biến link thành null.
+ */
+export function bannerLinkUsable(c: Pick<Campaign, 'linkType' | 'linkValue'>): boolean {
+  switch (c.linkType) {
+    case 'CAMPAIGN_PAGE':
+      return true;
+    case 'PRODUCT':
+    case 'CATEGORY':
+      return !!c.linkValue && CAMPAIGN_ENTITY_SLUG_RE.test(c.linkValue);
+    case 'URL_INTERNAL':
+      return CAMPAIGN_INTERNAL_TARGETS.some((t) => t.value === c.linkValue);
+    default:
+      return false;
+  }
+}
+
+/** Ảnh banner phục vụ được (hoặc null): một chỗ cho `toBannerDTO` và cho phép kiểm sức khoẻ biết chiến dịch nào thật sự ra slide. */
+export const bannerImage = (id: string, image: string | null | undefined): string | null => publicImage('campaign', id, 'cover', image);
+
 /** Banner công khai; null khi ảnh không phục vụ được (rỗng, SVG, base64 hỏng): bỏ chiến dịch đó thay vì để lọt một slide trống. */
 export function toBannerDTO(c: BannerRow): CampaignBannerDTO | null {
-  const image = publicImage('campaign', c.id, 'cover', c.image);
+  const image = bannerImage(c.id, c.image);
   if (!image) return null;
   return {
     id: c.id,

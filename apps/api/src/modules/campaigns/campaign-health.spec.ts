@@ -180,6 +180,13 @@ describe('campaignHealth', () => {
       const s = subject({ id: 'zz', sortOrder: 9, startAt: at(5), endAt: at(8) });
       expect(codes(s, facts({ peers: five({ startAt: at(-1), endAt: at(2) }) }))).toEqual([]);
     });
+    it('đối thủ không ra slide (ảnh hỏng hay đích không dựng được link) vẫn chiếm chỗ trong 10 của API nhưng không chiếm slide: 5 đối thủ như vậy đứng trước thì chiến dịch này vẫn hiện', () => {
+      expect(codes(subject({ id: 'zz', sortOrder: 9 }), facts({ peers: five({ shows: false }) }))).toEqual([]);
+    });
+    it('10 đối thủ không ra slide đứng trước: API cắt ở 10 nên chiến dịch này không tới máy khách', () => {
+      const peers = Array.from({ length: 10 }, (_, i) => peer(`n${i}`, { shows: false }));
+      expect(codes(subject({ id: 'zz', sortOrder: 9 }), facts({ peers }))).toEqual(['WARN:CROWDED']);
+    });
     it('không tự tính mình hai lần khi peers có chính nó', () => {
       expect(codes(subject({ id: 'p1' }), facts({ peers: five() }))).toEqual([]);
     });

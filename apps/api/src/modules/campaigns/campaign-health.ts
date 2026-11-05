@@ -58,6 +58,8 @@ export interface HealthPeer {
   startAt: Date;
   endAt: Date;
   sortOrder: number;
+  /** Ra được slide ở máy khách (ảnh phục vụ được và đích dựng được link). Thiếu thì coi là có. Vẫn chiếm chỗ trong 10 của API vì API cắt trước khi bỏ chúng. */
+  shows?: boolean;
 }
 
 export interface HealthFacts {
@@ -87,7 +89,9 @@ function hiddenAt(s: HealthSubject, rivals: readonly HealthPeer[], t: Date): boo
   const live = rivals.filter((p) => p.startAt <= t && t < p.endAt);
   const fetched = [self, ...live].sort(compareBannerOrder).slice(0, BANNER_FETCH_LIMIT);
   if (!fetched.includes(self)) return true;
-  return viewsOf(s.audience).some((v) => !fetched.filter((x) => x.audience === 'ALL' || x.audience === v).slice(0, CAMPAIGN_SLIDES_MAX).includes(self));
+  // API bỏ banner có ảnh không phục vụ được SAU khi cắt 10, và app bỏ banner không dựng được link: hai loại đó chiếm chỗ trong 10 nhưng không thành slide.
+  const slides = fetched.filter((x) => x === self || x.shows !== false);
+  return viewsOf(s.audience).some((v) => !slides.filter((x) => x.audience === 'ALL' || x.audience === v).slice(0, CAMPAIGN_SLIDES_MAX).includes(self));
 }
 
 const vnStamp = (d: Date) => {
