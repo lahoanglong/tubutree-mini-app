@@ -2,6 +2,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
 import { describe, it, expect } from 'vitest';
 import { EXEMPT_INPUTS, INPUT_LIMITS } from './input-limits.table';
+import { apiConstValue, findFieldCaps, regexMax } from './input-limits.scan';
 
 /**
  * L4-03: ô gõ chữ của màn quản trị phải chặn đúng ở trần của DTO (`@MaxLength`/`@Length`), nếu không người dùng gõ
@@ -75,20 +76,6 @@ function discover(): FoundInput[] {
     }
   }
   return out;
-}
-
-/** Độ dài tối đa của một regex đơn giản (`^[A-Z0-9]{2,16}$`, `^0\d{8,10}$`): cộng lượng tử tối đa của từng phần tử. */
-function regexMax(source: string): number | null {
-  const body = source.replace(/^\^/, '').replace(/\$$/, '');
-  const atom = /(\\[dwsDWS]|\[(?:\\.|[^\]])+\]|[^{}?*+()|\\])(?:\{(\d+)(?:,(\d+))?\})?/g;
-  let total = 0;
-  let consumed = 0;
-  for (const m of body.matchAll(atom)) {
-    if (m.index !== consumed) return null;
-    consumed += m[0].length;
-    total += m[3] ? Number(m[3]) : m[2] ? Number(m[2]) : 1;
-  }
-  return consumed === body.length ? total : null;
 }
 
 /** Trần chuỗi của một trường DTO: `@MaxLength(n)`, `@Length(min, n)` hoặc `@Matches(regex)`; n có thể là hằng số cùng file. */
@@ -179,18 +166,19 @@ describe('ô gõ chữ ở màn quản trị khớp trần DTO (L4-03)', () => {
     expect(typeof phone?.maxLength === 'number' && phone.maxLength >= '+84 912 345 678'.length).toBe(true);
   });
 
-  it('service cùng thư mục với DTO không chặn độ dài trường chữ thấp hơn trần DTO mà ô nhập đã cho phép', () => {
+  it('service và rules cùng module với DTO không chặn độ dài trường chữ thấp hơn trần DTO mà ô nhập đã cho phép', () => {
     const lower: string[] = [];
     for (const [key, row] of Object.entries(INPUT_LIMITS)) {
       const [path, rest] = row.dto.split(':') as [string, string];
       const field = rest.split('.')[1]!;
-      const dir = resolve(REPO, path, '..');
-      for (const f of readdirSync(dir).filter((n) => n.endsWith('.service.ts'))) {
-        const text = readFileSync(join(dir, f), 'utf8');
-        for (const m of text.matchAll(new RegExp(`\\b${field}\\.length\\s*>\\s*([A-Z][A-Z0-9_]*|\\d+)`, 'g'))) {
-          const limit = /^\d+$/.test(m[1]!) ? Number(m[1]) : constValue(m[1]!, text) ?? apiSources().map((t) => t.match(new RegExp(`const\\s+${m[1]}\\s*=\\s*(\\d+)`))?.[1]).find(Boolean);
-          if (limit !== undefined && limit !== null && Number(limit) < row.max) lower.push(`${key}: ${f} chặn ${field} ở ${limit}, ô và DTO cho ${row.max}`);
-        }
+      const dtoDir = resolve(REPO, path, '..');
+      const dir = dtoDir.endsWith(`${sep}dto`) ? resolve(dtoDir, '..') : dtoDir;
+      const sources = readdirSync(dir)
+        .filter((n) => n.endsWith('.ts') && !/\.spec\.ts$/.test(n) && n !== 'index.ts')
+        .map((n) => ({ name: n, text: readFileSync(join(dir, n), 'utf8') }));
+      const lookup = (name: string, local: string) => apiConstValue(name, [local, ...apiSources()]);
+      for (const c of findFieldCaps(sources, field, lookup)) {
+        if (c.limit < row.max) lower.push(`${key}: ${c.file} chặn ${field} ở ${c.limit} (${c.kind}), ô và DTO cho ${row.max}`);
       }
     }
     expect(lower).toEqual([]);
