@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { act } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, type Rendered } from '@/test-utils/dom';
 
 const carousel = vi.hoisted(() => vi.fn());
@@ -78,4 +80,23 @@ describe('CampaignPreview', () => {
     link.dispatchEvent(ev);
     expect(ev.defaultPrevented).toBe(true);
   });
+
+  it('ảnh cũ lỗi không dính sang ảnh mới: đổi đường dẫn thì dựng lại ảnh, hết chữ thay thế', () => {
+    const c = show({ image: 'https://img.test/hong.jpg' });
+    const img = c.querySelector<HTMLImageElement>('[data-testid="campaign-preview-phone"] img')!;
+    act(() => {
+      img.dispatchEvent(new Event('error'));
+    });
+    expect(c.querySelector('[data-testid="campaign-preview-phone"] img')).toBeNull();
+    act(() => {
+      // Cùng kiểu phần tử gốc như render() của harness để React giữ state cũ nếu không có key.
+      mounted!.root.render(
+        <QueryClientProvider client={new QueryClient()}>
+          <CampaignPreview image="https://img.test/tot.jpg" title="Giữa Thu" subtitle="Giảm 20%" placement="HOME_TOP" />
+        </QueryClientProvider>,
+      );
+    });
+    expect(c.querySelector('[data-testid="campaign-preview-phone"] img')!.getAttribute('src')).toBe('https://img.test/tot.jpg');
+  });
 });
+

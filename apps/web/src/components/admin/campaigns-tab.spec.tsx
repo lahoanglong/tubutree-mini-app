@@ -78,6 +78,9 @@ const field = (c: HTMLElement, label: string) => c.querySelector<HTMLInputElemen
 const chip = (c: HTMLElement, name: string) => byText(c, 'button[aria-pressed]', name)!;
 
 beforeEach(() => {
+  // Chỉ giả Date (không giả setTimeout): mốc endAt của dữ liệu mẫu so với "bây giờ" phải cố định để luật "bật" không đổi theo ngày chạy test.
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-11-05T05:00:00Z'));
   mocks.list.mockReset().mockResolvedValue([row('a')]);
   mocks.get.mockReset().mockResolvedValue(detail('a'));
   mocks.create.mockReset().mockResolvedValue(detail('new1'));
@@ -85,11 +88,12 @@ beforeEach(() => {
   mocks.remove.mockReset().mockResolvedValue({ ok: true });
   mocks.setProducts.mockReset().mockResolvedValue({ count: 1 });
   mocks.setCoupons.mockReset().mockResolvedValue({ count: 1 });
-  mocks.check.mockReset().mockResolvedValue({ issues: [], blockers: 0, warnings: 0 });
+  mocks.check.mockReset().mockResolvedValue({ issues: [], blockers: 0, warnings: 0, usable: { products: 1, coupons: 0 } });
 });
 afterEach(() => {
   mounted?.unmount();
   mounted = null;
+  vi.useRealTimers();
 });
 
 describe('CampaignsTab: danh sách', () => {
@@ -428,7 +432,10 @@ describe('CampaignsTab: sửa chiến dịch', () => {
     selectValue(field(c, 'Đích khi bấm'), 'CAMPAIGN_PAGE');
     click(byText(c, 'button', 'Lưu chiến dịch'));
     await flush(8);
-    expect(mocks.update.mock.calls[0]![1]).toMatchObject({ subtitle: null, linkType: 'CAMPAIGN_PAGE', linkValue: null });
+    // Chiến dịch đang chạy đổi đích: trường khác lưu trước, đích để bước cuối.
+    expect(mocks.update.mock.calls[0]![1]).toMatchObject({ subtitle: null });
+    expect(mocks.update.mock.calls[0]![1]).not.toHaveProperty('linkType');
+    expect(mocks.update.mock.calls[1]![1]).toEqual({ linkType: 'CAMPAIGN_PAGE', linkValue: null });
   });
 
   it('tải chi tiết lỗi: báo lỗi kèm Thử lại, danh sách vẫn còn', async () => {
@@ -704,29 +711,40 @@ describe('CampaignsTab: khối "Kiểm trước khi bật" và xem trước tron
     expect(mocks.update.mock.calls.map((x) => x[1].isActive)).toEqual([false, true]);
   });
 
-  it('sửa trang đang bật đổi cả sản phẩm lẫn mã: gắn trước phần còn có nội dung, để trang không có lúc trống (máy chủ chặn gỡ hết)', async () => {
-    const order: string[] = [];
-    mocks.setProducts.mockImplementation(async () => (order.push('products'), { count: 0 }));
-    mocks.setCoupons.mockImplementation(async () => (order.push('coupons'), { count: 1 }));
-    const c = await mount();
-    click(c.querySelector('button[aria-label="Sửa chiến dịch Chiến dịch a"]'));
-    await flush(6);
-    click(c.querySelector('button[aria-label="Bỏ Sản phẩm cũ khỏi chiến dịch"]'));
-    typeInto(field(c, 'Mã giảm giá gắn kèm'), 'MOI5');
-    click(save(c));
-    await flush(8);
-    expect(order).toEqual(['coupons', 'products']);
+  describe('thứ tự gắn sản phẩm và mã: không bao giờ đi qua trang trống', () => {
+    // [sản phẩm, mã] cũ → mới; `usable` là số món dùng được của danh sách MỚI do máy chủ báo (sản phẩm hiển thị, mã dùng được).
+    const run = async (opts: { oldProducts: boolean; oldCodes: string[]; newProduct: boolean; newCodes: string; usable: { products: number; coupons: number } }) => {
+      const order: string[] = [];
+      mocks.setProducts.mockImplementation(async () => (order.push('products'), { count: 0 }));
+      mocks.setCoupons.mockImplementation(async () => (order.push('coupons'), { count: 0 }));
+      mocks.get.mockResolvedValue(detail('a', { products: opts.oldProducts ? [{ id: 'p9', name: 'Sản phẩm cũ', slug: 'sp-cu' }] : [], couponCodes: opts.oldCodes }));
+      mocks.check.mockResolvedValue({ issues: [], blockers: 0, warnings: 0, usable: opts.usable });
+      const c = await mount();
+      click(c.querySelector('button[aria-label="Sửa chiến dịch Chiến dịch a"]'));
+      await flush(6);
+      if (opts.oldProducts) click(c.querySelector('button[aria-label="Bỏ Sản phẩm cũ khỏi chiến dịch"]'));
+      if (opts.newProduct) click(byText(c, 'button', 'Chọn: Thêm sản phẩm'));
+      typeInto(field(c, 'Mã giảm giá gắn kèm'), opts.newCodes);
+      click(byText(c, 'button', 'Lưu chiến dịch'));
+      await flush(10);
+      return order;
+    };
 
-    mounted?.unmount();
-    order.length = 0;
-    const d = await mount();
-    click(d.querySelector('button[aria-label="Sửa chiến dịch Chiến dịch a"]'));
-    await flush(6);
-    click(byText(d, 'button', 'Chọn: Thêm sản phẩm'));
-    typeInto(field(d, 'Mã giảm giá gắn kèm'), '');
-    click(save(d));
-    await flush(8);
-    expect(order).toEqual(['products', 'coupons']);
+    it('[A, ∅] → [H ẩn, Y]: danh sách mới chỉ có mã dùng được, gắn mã trước rồi mới đổi sản phẩm', async () => {
+      expect(await run({ oldProducts: true, oldCodes: [], newProduct: true, newCodes: 'Y', usable: { products: 0, coupons: 1 } })).toEqual(['coupons', 'products']);
+    });
+
+    it('[∅, X] → [B, ∅]: danh sách mới chỉ có sản phẩm dùng được, gắn sản phẩm trước rồi mới gỡ mã', async () => {
+      expect(await run({ oldProducts: false, oldCodes: ['X'], newProduct: true, newCodes: '', usable: { products: 1, coupons: 0 } })).toEqual(['products', 'coupons']);
+    });
+
+    it('[A, X] → [B, ∅]: sản phẩm trước', async () => {
+      expect(await run({ oldProducts: true, oldCodes: ['X'], newProduct: true, newCodes: '', usable: { products: 1, coupons: 0 } })).toEqual(['products', 'coupons']);
+    });
+
+    it('cả hai danh sách mới đều dùng được: sản phẩm trước', async () => {
+      expect(await run({ oldProducts: true, oldCodes: ['X'], newProduct: true, newCodes: 'Y', usable: { products: 1, coupons: 1 } })).toEqual(['products', 'coupons']);
+    });
   });
 
   it('xem trước banner: hai khung dựng bằng băng chuyền thật với ảnh và tên đang nhập', async () => {
@@ -791,3 +809,128 @@ describe('CampaignsTab: khối "Kiểm trước khi bật" và xem trước tron
     });
   });
 });
+
+describe('CampaignsTab: luật "bật" của form khớp máy chủ', () => {
+  const BLOCK = { issues: [{ code: 'LINK_PRODUCT_HIDDEN', level: 'BLOCK', message: 'Sản phẩm "sua-hat" đang ẩn.' }], blockers: 1, warnings: 0, usable: { products: 1, coupons: 0 } };
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, CHECK_DEBOUNCE_MS + 60));
+    });
+  const edit = async (c: HTMLElement, id = 'a') => {
+    click(c.querySelector(`button[aria-label="Sửa chiến dịch Chiến dịch ${id}"]`));
+    await flush(6);
+  };
+  const saveBtn = (c: HTMLElement) => byText(c, 'button', 'Lưu chiến dịch') as HTMLButtonElement;
+  const calls = () => mocks.update.mock.calls.map((x) => x[1] as Record<string, unknown>);
+
+  it('chiến dịch đang chạy mà có lỗi cũ (sản phẩm đích bị ẩn sau này): đổi tiêu đề vẫn lưu được, khối kiểm vẫn hiện lỗi', async () => {
+    mocks.check.mockResolvedValue(BLOCK);
+    const c = await mount();
+    await edit(c);
+    typeInto(field(c, 'Tên chiến dịch'), 'Tên mới');
+    await settle();
+    expect(c.querySelector('[data-testid="campaign-check"] [data-level="BLOCK"]')!.textContent).toContain('đang ẩn');
+    expect(saveBtn(c).disabled).toBe(false);
+    expect(c.querySelector('[data-testid="campaign-check-lock"]')).toBeNull();
+  });
+
+  it('đang chạy mà đổi đích còn lỗi chặn: khoá nút Lưu như máy chủ', async () => {
+    mocks.check.mockResolvedValue(BLOCK);
+    const c = await mount();
+    await edit(c);
+    selectValue(field(c, 'Đích khi bấm'), 'PRODUCT');
+    typeInto(field(c, 'Slug sản phẩm'), 'sua-hat');
+    await settle();
+    expect(saveBtn(c).disabled).toBe(true);
+  });
+
+  it('chiến dịch đang tắt, bật lên mà còn lỗi chặn: khoá nút Lưu', async () => {
+    mocks.list.mockResolvedValue([row('d', { status: 'off', isActive: false })]);
+    mocks.get.mockResolvedValue(detail('d', { isActive: false, status: 'off' }));
+    mocks.check.mockResolvedValue(BLOCK);
+    const c = await mount();
+    await edit(c, 'd');
+    await settle();
+    expect(saveBtn(c).disabled).toBe(false);
+    click(c.querySelector('input[aria-label="Đang bật"]'));
+    expect(saveBtn(c).disabled).toBe(true);
+  });
+
+  it('chiến dịch đã hết hạn (vẫn đánh dấu bật) mà gia hạn: là một lần bật, còn lỗi chặn thì khoá', async () => {
+    mocks.list.mockResolvedValue([row('e', { status: 'ended' })]);
+    mocks.get.mockResolvedValue(detail('e', { status: 'ended', endAt: '2026-11-02T16:59:00.000Z' }));
+    mocks.check.mockResolvedValue(BLOCK);
+    const c = await mount();
+    await edit(c, 'e');
+    await settle();
+    expect(saveBtn(c).disabled).toBe(false);
+    typeInto(field(c, 'Kết thúc: ngày'), '30/11/2026');
+    await settle();
+    expect(saveBtn(c).disabled).toBe(true);
+  });
+
+  it('đang chạy đổi đích sang trang chiến dịch kèm sản phẩm: lưu các trường khác trước (vẫn chạy đích cũ, không tắt), gắn sản phẩm, đổi đích ở cuối', async () => {
+    mocks.list.mockResolvedValue([row('u')]);
+    mocks.get.mockResolvedValue(detail('u', { linkType: 'URL_INTERNAL', linkValue: '/offers', products: [], couponCodes: [] }));
+    const order: string[] = [];
+    mocks.update.mockImplementation(async (_id: string, body: Record<string, unknown>) => (order.push(`update:${Object.keys(body).includes('linkType') ? 'đích' : 'trường'}`), detail('u')));
+    mocks.setProducts.mockImplementation(async () => (order.push('products'), { count: 1 }));
+    const c = await mount();
+    await edit(c, 'u');
+    typeInto(field(c, 'Tên chiến dịch'), 'Tên mới');
+    selectValue(field(c, 'Đích khi bấm'), 'CAMPAIGN_PAGE');
+    click(byText(c, 'button', 'Chọn: Thêm sản phẩm'));
+    click(saveBtn(c));
+    await flush(10);
+    expect(order).toEqual(['update:trường', 'products', 'update:đích']);
+    expect(calls().every((b) => b.isActive !== false)).toBe(true);
+    expect(calls()[0]).toMatchObject({ title: 'Tên mới', isActive: true });
+    expect(calls()[0]).not.toHaveProperty('linkType');
+    expect(calls()[1]).toEqual({ linkType: 'CAMPAIGN_PAGE', linkValue: null });
+  });
+
+  it('gia hạn chiến dịch đã hết hạn kèm sản phẩm: ngày gia hạn lưu ở cuối, sau khi gắn sản phẩm', async () => {
+    mocks.list.mockResolvedValue([row('e', { status: 'ended' })]);
+    mocks.get.mockResolvedValue(detail('e', { status: 'ended', endAt: '2026-11-02T16:59:00.000Z', products: [], couponCodes: [] }));
+    const order: string[] = [];
+    mocks.update.mockImplementation(async (_id: string, body: Record<string, unknown>) => (order.push(`update:${'endAt' in body ? 'ngày' : 'trường'}`), detail('e')));
+    mocks.setProducts.mockImplementation(async () => (order.push('products'), { count: 1 }));
+    const c = await mount();
+    await edit(c, 'e');
+    typeInto(field(c, 'Kết thúc: ngày'), '30/11/2026');
+    click(byText(c, 'button', 'Chọn: Thêm sản phẩm'));
+    click(saveBtn(c));
+    await flush(10);
+    expect(order).toEqual(['update:trường', 'products', 'update:ngày']);
+    expect(calls()[1]).toMatchObject({ endAt: '2026-11-30T16:59:00.000Z' });
+  });
+
+  it('đổi đích khi chiến dịch đang tắt: lưu một lần cùng các trường khác, bật ở cuối', async () => {
+    mocks.list.mockResolvedValue([row('d', { status: 'off', isActive: false })]);
+    mocks.get.mockResolvedValue(detail('d', { isActive: false, status: 'off', linkType: 'URL_INTERNAL', linkValue: '/offers' }));
+    const c = await mount();
+    await edit(c, 'd');
+    selectValue(field(c, 'Đích khi bấm'), 'CAMPAIGN_PAGE');
+    click(c.querySelector('input[aria-label="Đang bật"]'));
+    click(saveBtn(c));
+    await flush(10);
+    expect(calls()).toHaveLength(2);
+    expect(calls()[0]).toMatchObject({ linkType: 'CAMPAIGN_PAGE', isActive: false });
+    expect(calls()[1]).toEqual({ isActive: true });
+  });
+});
+
+describe('CampaignsTab: web mới chạy với API cũ chưa trả health', () => {
+  it('dòng không có health vẫn vẽ bình thường, không huy hiệu, nút Bật không khoá, lọc "Có vấn đề" không vỡ', async () => {
+    const { health: _h, ...legacy } = row('cu', { status: 'off', isActive: false });
+    mocks.list.mockResolvedValue([legacy]);
+    const c = await mount();
+    expect(c.textContent).toContain('Chiến dịch cu');
+    expect(c.textContent).not.toMatch(/lỗi chặn|cảnh báo/);
+    expect(c.querySelector<HTMLButtonElement>('button[aria-label="Bật chiến dịch Chiến dịch cu"]')!.disabled).toBe(false);
+    click(chip(c, 'Có vấn đề'));
+    await flush(2);
+    expect(c.textContent).toContain('Không có chiến dịch nào có vấn đề');
+  });
+});
+

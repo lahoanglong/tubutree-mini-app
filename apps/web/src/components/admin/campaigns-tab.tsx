@@ -38,6 +38,9 @@ const STATUS: Record<AdminCampaignStatus, { label: string; tone: Tone }> = {
   ended: { label: 'Đã kết thúc', tone: 'neutral' },
   off: { label: 'Đang tắt', tone: 'warning' },
 };
+// API cũ (web mới chạy trước khi API lên bản có kiểm sức khoẻ) chưa trả `health`: coi như không có vấn đề.
+const NO_HEALTH = { blockers: 0, warnings: 0 };
+const healthOf = (row: AdminCampaignRow) => row.health ?? NO_HEALTH;
 const msg = (e: unknown, fallback: string) => (e instanceof Error ? actionErrorText(e) : fallback);
 
 /** Form đang mở thì Sửa và Tắt/Bật của dòng bị khoá: Tắt rồi Lưu form sẽ bật lại chiến dịch (form giữ giá trị lúc mở), Sửa dòng khác làm mất bản nháp. */
@@ -100,11 +103,11 @@ function CampaignRow({
   };
   const st = STATUS[row.status];
   // Chiến dịch đang tắt mà còn lỗi chặn thì máy chủ từ chối bật: khoá sẵn nút kèm lý do thay vì để bấm rồi báo lỗi.
-  const turnOnBlocked = !row.isActive && row.health.blockers > 0;
+  const turnOnBlocked = !row.isActive && healthOf(row).blockers > 0;
   const toggleHint = formOpen
     ? FORM_OPEN_HINT
     : turnOnBlocked
-      ? `Còn ${row.health.blockers} lỗi chặn. Bấm Sửa để xem và khắc phục trước khi bật.`
+      ? `Còn ${healthOf(row).blockers} lỗi chặn. Bấm Sửa để xem và khắc phục trước khi bật.`
       : undefined;
   const meta = [
     PLACEMENT_LABELS[row.placement],
@@ -128,7 +131,7 @@ function CampaignRow({
         <div className="flex flex-wrap items-center gap-2 font-medium text-stone-900">
           <span className="break-words">{row.title}</span>
           <ToneBadge tone={st.tone}>{st.label}</ToneBadge>
-          <HealthBadges health={row.health} />
+          <HealthBadges health={healthOf(row)} />
         </div>
         <div className="break-words text-xs text-stone-600">
           {formatVnRange(row.startAt, row.endAt)}
@@ -216,7 +219,7 @@ export function CampaignsTab() {
     queryFn: () => listAdminCampaigns(filter || undefined),
   });
   const rows = onlyIssues
-    ? q.data?.filter((r) => r.health.blockers + r.health.warnings > 0)
+    ? q.data?.filter((r) => healthOf(r).blockers + healthOf(r).warnings > 0)
     : q.data;
   const setError = (id: string, text: string | null) => setRowError(text ? { id, text } : null);
   const done = () => {

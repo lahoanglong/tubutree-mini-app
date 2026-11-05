@@ -44,7 +44,7 @@ function Frame({
         style={style}
         onClickCapture={stayHere}
       >
-        <BannerCarousel slides={[slide]} {...(wide ? { sizes: WIDE_SLIDE_SIZES } : {})} />
+        <BannerCarousel key={slide.image} slides={[slide]} {...(wide ? { sizes: WIDE_SLIDE_SIZES } : {})} />
       </div>
     </figure>
   );

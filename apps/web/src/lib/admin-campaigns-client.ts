@@ -35,6 +35,8 @@ export interface CampaignIssue {
 
 export interface CampaignCheckResult {
   issues: CampaignIssue[];
+  /** Số món khách dùng được trên trang chiến dịch theo danh sách đang soạn; API cũ không trả. */
+  usable?: { products: number; coupons: number };
   blockers: number;
   warnings: number;
 }

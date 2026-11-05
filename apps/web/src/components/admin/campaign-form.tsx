@@ -17,6 +17,7 @@ import {
   type AdminCampaignDetail,
   type AdminCampaignInput,
   type CampaignCheckInput,
+  checkAdminCampaign,
 } from '@/lib/admin-campaigns-client';
 import { isoToVnLocal, parseCouponCodes, vnLocalToIso } from '@/lib/admin-campaign-form';
 import { useBannerImageCheck } from '@/lib/use-banner-image-check';
@@ -64,6 +65,14 @@ interface PickedProduct {
   name: string;
 }
 
+interface SavedState {
+  active: boolean;
+  startAt: string;
+  endAt: string;
+  linkType: CampaignLinkType;
+  linkValue: string;
+}
+
 const needsValue = (t: CampaignLinkType) => t !== 'CAMPAIGN_PAGE';
 const errText = (e: unknown, fallback: string) =>
   e instanceof Error ? actionErrorText(e) : fallback;
@@ -85,8 +94,18 @@ export function CampaignForm({
 }) {
   const qc = useQueryClient();
   const [savedId, setSavedId] = useState<string | null>(initial?.id ?? null);
-  // Trạng thái bật đang lưu trên máy chủ (khác ô "Đang bật" khi bật dở dang: đã lưu nháp nhưng chưa bật được).
-  const [savedActive, setSavedActive] = useState(initial?.isActive ?? false);
+  // Bản đang lưu trên máy chủ (khác ô trên form khi lưu dở dang: đã lưu nháp nhưng chưa bật được, chưa đổi được đích hay ngày).
+  const [saved, setSaved] = useState<SavedState | null>(() =>
+    initial
+      ? {
+          active: initial.isActive,
+          startAt: initial.startAt,
+          endAt: initial.endAt,
+          linkType: initial.linkType,
+          linkValue: initial.linkValue ?? '',
+        }
+      : null,
+  );
   const baseline = useState(() => ({
     products: (initial?.products ?? []).map((p) => p.id),
     codes: initial?.couponCodes ?? [],
@@ -160,7 +179,16 @@ export function CampaignForm({
   ]);
   const check = useCampaignCheck(checkInput);
   const imageCheck = useBannerImageCheck(image);
-  const blocked = isActive && check.status === 'ready' && check.blockers > 0;
+  // Cùng luật với máy chủ (PATCH): lỗi chặn chỉ khoá khi lần lưu này đưa chiến dịch từ khách-không-thấy sang khách-thấy (đang tắt hoặc đã quá hạn, rồi bật và chưa hết hạn)
+  // hoặc đổi đích lúc đang chạy. Lỗi cũ của chiến dịch đang chạy không khoá việc sửa tiêu đề hay giờ; khối kiểm vẫn hiện lỗi đó.
+  const nowMs = Date.now();
+  const wasVisible = saved !== null && saved.active && Date.parse(saved.endAt) > nowMs;
+  const willBeVisible = isActive && endIso !== null && Date.parse(endIso) > nowMs;
+  const linkValueNow = needsValue(linkType) ? linkValue.trim() : '';
+  const linkChanged =
+    saved !== null && (linkType !== saved.linkType || linkValueNow !== saved.linkValue);
+  const blocked =
+    willBeVisible && (!wasVisible || linkChanged) && check.status === 'ready' && check.blockers > 0;
 
   const addProduct = (p: { id: string; label: string } | null) => {
     if (!p) return;
@@ -184,8 +212,22 @@ export function CampaignForm({
     const value = needsValue(linkType) ? linkValue.trim() : '';
     setBusy(true);
     let id = savedId;
-    // Bước đầu chỉ giữ hoặc tắt trạng thái; việc bật chờ tới cuối.
-    const keepActive = isActive && savedActive;
+    const goesLive = isActive && Date.parse(endIso) > Date.now();
+    const savedEnded = saved !== null && saved.active && Date.parse(saved.endAt) <= Date.now();
+    const staysActive = isActive && saved !== null && saved.active;
+    // Máy chủ coi mọi bước đưa chiến dịch sang "khách thấy" là một lần bật và kiểm trang chiến dịch (trống thì từ chối). Sản phẩm và mã gắn bằng lời gọi riêng,
+    // nên phần làm chiến dịch hiện ra (bật, gia hạn ngày, đổi đích lúc đang chạy) để lại cuối, sau khi đã gắn; chiến dịch vẫn chạy bản cũ trong lúc đó, không tắt.
+    const deferDates = staysActive && savedEnded && goesLive;
+    const deferLink = staysActive && linkChanged && goesLive;
+    const turnOn = isActive && !(saved !== null && saved.active);
+    const step1Active = isActive && saved !== null && saved.active;
+    let snap: SavedState = saved ?? {
+      active: false,
+      startAt: startIso,
+      endAt: endIso,
+      linkType,
+      linkValue: value,
+    };
     try {
       if (id) {
         await updateAdminCampaign(id, {
@@ -193,15 +235,20 @@ export function CampaignForm({
           subtitle: subtitle.trim() || null,
           placement,
           image: image.trim(),
-          linkType,
-          linkValue: value || null,
           audience,
-          startAt: startIso,
-          endAt: endIso,
           sortOrder: order,
-          isActive: keepActive,
+          isActive: step1Active,
+          ...(deferDates ? {} : { startAt: startIso, endAt: endIso }),
+          ...(deferLink ? {} : { linkType, linkValue: value || null }),
         });
-        setSavedActive(keepActive);
+        snap = {
+          active: step1Active,
+          startAt: deferDates ? snap.startAt : startIso,
+          endAt: deferDates ? snap.endAt : endIso,
+          linkType: deferLink ? snap.linkType : linkType,
+          linkValue: deferLink ? snap.linkValue : value,
+        };
+        setSaved(snap);
       } else {
         const body: AdminCampaignInput = {
           title: title.trim(),
@@ -219,7 +266,8 @@ export function CampaignForm({
         };
         id = (await createAdminCampaign(body)).id;
         setSavedId(id);
-        setSavedActive(false);
+        snap = { active: false, startAt: startIso, endAt: endIso, linkType, linkValue: value };
+        setSaved(snap);
       }
     } catch (e) {
       setBusy(false);
@@ -227,8 +275,9 @@ export function CampaignForm({
     }
     void qc.invalidateQueries({ queryKey: ['admin-campaigns'] });
     const productIds = products.map((p) => p.id);
+    const needProducts = productIds.join('\n') !== baseline.products.join('\n');
+    const needCoupons = codes.join('\n') !== baseline.codes.join('\n');
     const attachProducts = async () => {
-      if (productIds.join('\n') === baseline.products.join('\n')) return null;
       try {
         await setAdminCampaignProducts(id, productIds);
         baseline.products = productIds;
@@ -238,7 +287,6 @@ export function CampaignForm({
       }
     };
     const attachCoupons = async () => {
-      if (codes.join('\n') === baseline.codes.join('\n')) return null;
       try {
         await setAdminCampaignCoupons(id, codes);
         baseline.codes = codes;
@@ -247,9 +295,23 @@ export function CampaignForm({
         return `Đã lưu chiến dịch nhưng chưa gắn được mã: ${errText(e, 'lỗi không rõ')}`;
       }
     };
-    // Máy chủ chặn lần gỡ làm trang chiến dịch đang bật thành trống: gắn trước phần còn nội dung, gỡ phần kia sau.
-    const steps =
-      productIds.length > 0 ? [attachProducts, attachCoupons] : [attachCoupons, attachProducts];
+    // Trang chiến dịch đang chạy không được có lúc trống (máy chủ từ chối): khi phải đổi cả hai, làm trước bước mà danh sách MỚI có món dùng được
+    // (máy chủ đếm sản phẩm khách thấy và mã dùng được); cả hai đều có thì sản phẩm trước. Không hỏi được thì tạm coi sản phẩm có mặt là dùng được.
+    let productsFirst = productIds.length > 0;
+    if (needProducts && needCoupons && staysActive && checkInput) {
+      try {
+        const usable = (await checkAdminCampaign(checkInput)).usable;
+        if (usable) productsFirst = usable.products > 0 || usable.coupons === 0;
+      } catch {
+        // giữ cách đoán ở trên
+      }
+    }
+    const steps = [
+      ...(needProducts && needCoupons && !productsFirst ? [attachCoupons, attachProducts] : []),
+      ...(needProducts && needCoupons && productsFirst ? [attachProducts, attachCoupons] : []),
+      ...(needProducts && !needCoupons ? [attachProducts] : []),
+      ...(needCoupons && !needProducts ? [attachCoupons] : []),
+    ];
     for (const step of steps) {
       const failure = await step();
       if (failure) {
@@ -257,14 +319,26 @@ export function CampaignForm({
         return setError(failure);
       }
     }
-    if (isActive && !keepActive) {
+    const last = {
+      ...(turnOn ? { isActive: true } : {}),
+      ...(deferDates ? { startAt: startIso, endAt: endIso } : {}),
+      ...(deferLink ? { linkType, linkValue: value || null } : {}),
+    };
+    if (Object.keys(last).length > 0) {
       try {
-        await updateAdminCampaign(id, { isActive: true });
-        setSavedActive(true);
+        await updateAdminCampaign(id, last);
+        setSaved({
+          active: isActive,
+          startAt: startIso,
+          endAt: endIso,
+          linkType,
+          linkValue: value,
+        });
       } catch (e) {
         void qc.invalidateQueries({ queryKey: ['admin-campaigns'] });
         setBusy(false);
-        return setError(`Đã lưu chiến dịch nhưng chưa bật được: ${errText(e, 'lỗi không rõ')}`);
+        const what = turnOn ? 'chưa bật được' : 'chưa đổi được đích hoặc ngày';
+        return setError(`Đã lưu chiến dịch nhưng ${what}: ${errText(e, 'lỗi không rõ')}`);
       }
     }
     void qc.invalidateQueries({ queryKey: ['admin-campaigns'] });
