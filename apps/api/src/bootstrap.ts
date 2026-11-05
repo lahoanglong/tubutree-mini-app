@@ -111,7 +111,7 @@ async function createApp(rootModule: Type<unknown>, opts: BootstrapOptions): Pro
   // Webhook Pancake (thân tới 10mb): kiểm token trước khi parse.
   app.use(pancakeWebhookTokenGuard);
   // Secret đọc từ process.env: ConfigModule đã nạp .env vào đó và JwtStrategy dùng cùng giá trị.
-  // Trần theo nhóm route (mặc định 256kb; ảnh base64/CSV 10mb; webhook 1mb, Pancake 10mb), rồi duyệt khoá/phần tử/NUL trước ValidationPipe.
+  // Trần theo nhóm route (mặc định 256kb; ảnh base64/CSV 10mb; webhook sự kiện nhỏ 64kb, Pancake 10mb), rồi duyệt khoá/phần tử/NUL trước ValidationPipe.
   app.use(...createBodyParsers(process.env.JWT_ACCESS_SECRET ?? '', Number(process.env.JWT_REFRESH_TTL_DAYS) || 30), bodyParserErrorHandler, requestInputGuard);
   app.use(privateNoStoreForAuthenticated);
   app.use(helmet());

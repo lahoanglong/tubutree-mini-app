@@ -156,19 +156,44 @@ describe('giới hạn thân request (BAOMAT-01, BAOMAT-03, BAOMAT-08)', () => {
       const body = { images: Array.from({ length: 6 }, () => 'data:image/png;base64,' + 'A'.repeat(1_500_000)) };
       expect((await post('/api/orders/TUBU1/return-request', body)).status).toBe(200);
     });
-    it('webhook nhận tới 1 MB, route thường thì không', async () => {
+    it('Pancake (webhook 10 MB) nhận 800 KB, route thường thì không', async () => {
       const body = { data: 'x'.repeat(800_000) };
       expect((await post('/api/webhooks/pancake', body)).status).toBe(200);
       expect((await post('/api/cart/coupon', body)).status).toBe(413);
     });
-    it('Pancake nhận thân 2 MB / 50 000 nút; webhook khác giữ trần 1 MB / 20 000 nút', async () => {
+    it('Pancake nhận thân 2 MB / 50 000 nút; webhook khác giữ trần 64 KB / 20 000 nút', async () => {
       const wide = JSON.stringify({ items: Array.from({ length: 50_000 }, (_, i) => ({ i })), pad: 'x'.repeat(1_200_000) });
       const res = await post('/api/webhooks/pancake', wide);
       expect(res.status).toBe(200);
       expect((await post('/api/webhooks/zalo-oa', wide)).status).toBe(413);
       const nodes = JSON.stringify({ items: Array.from({ length: 50_000 }, () => 1) });
       expect((await post('/api/webhooks/pancake', nodes)).status).toBe(200);
-      expect((await post('/api/webhooks/zalo-oa', nodes)).status).toBe(400);
+      expect((await post('/api/webhooks/zalo-oa', nodes)).status).toBe(413);
+      const manyNodesUnderLimit = JSON.stringify({ items: Array.from({ length: 25_000 }, () => 1) });
+      expect(manyNodesUnderLimit.length).toBeLessThan(64 * 1024);
+      expect((await post('/api/webhooks/zalo-oa', manyNodesUnderLimit)).status).toBe(400);
+    });
+    it.each([
+      '/api/webhooks/zalopay',
+      '/api/webhooks/cashback/accesstrade',
+      '/api/webhooks/accesstrade',
+      '/api/webhooks/zalo-miniapp',
+      '/api/webhooks/zalo-oa',
+      '/api/webhooks/gomdon',
+      '/api/webhooks/gomdon/mot-token',
+    ])('webhook sự kiện nhỏ %s: thân 65 KB → 413 JSON, thân 60 KB và thân nhỏ vẫn qua', async (path) => {
+      const res = await post(path, { pad: 'x'.repeat(65 * 1024) });
+      expect(res.status).toBe(413);
+      expect(await bodyOf(res)).toMatchObject({ statusCode: 413, message: BODY_TOO_LARGE_MESSAGE });
+      expect((await post(path, { pad: 'x'.repeat(60 * 1024) })).status).toBe(200);
+      expect((await post(path, { data: '{"amount":1}', mac: 'abc', type: 1 })).status).toBe(200);
+    });
+    it('webhook sự kiện nhỏ: thân 65 KB gửi dạng gzip cũng 413 (trần áp sau giải nén)', async () => {
+      const gz = gzipSync(JSON.stringify({ pad: 'x'.repeat(65 * 1024) }));
+      const res = await fetch(base + '/api/webhooks/zalopay', { method: 'POST', headers: { 'content-type': 'application/json', 'content-encoding': 'gzip' }, body: gz });
+      expect(res.status).toBe(413);
+      const small = await fetch(base + '/api/webhooks/zalopay', { method: 'POST', headers: { 'content-type': 'application/json', 'content-encoding': 'gzip' }, body: gzipSync('{"a":1}') });
+      expect(small.status).toBe(200);
     });
     it('Pancake: thân 2 MB (một chuỗi) qua, zalo-oa 413; vượt 10 MB thì 413', async () => {
       const two = { data: 'x'.repeat(2_000_000) };
@@ -334,7 +359,7 @@ describe('giới hạn thân request (BAOMAT-01, BAOMAT-03, BAOMAT-08)', () => {
       }
     });
 
-    it('webhook đối tác (1 MB và Pancake 10 MB) vẫn nhận thân gzip: trần áp sau giải nén', async () => {
+    it('webhook đối tác (64 KB và Pancake 10 MB) vẫn nhận thân gzip: trần áp sau giải nén', async () => {
       for (const path of ['/api/webhooks/gomdon', '/api/webhooks/pancake']) {
         const res = await postAnon(path, gzipSync('{"a":1}'), { 'content-encoding': 'gzip' });
         expect(res.status).toBe(200);
