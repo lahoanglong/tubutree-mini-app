@@ -3832,6 +3832,24 @@ describe('chữ người dùng chỉ gồm ký tự vô hình bị coi là trố
     expect(data.body).toBe('nội dung');
   });
 
+  it.each(['', '\u200b\ufeff', '   '])('editPost: bài QUESTION sửa tiêu đề %j → 400 như createPost, không ghi', async (title) => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ userId: 'author', status: 'PUBLISHED', kind: 'QUESTION' });
+    await expect(makeSvc(prisma).editPost('author', 'p1', { title })).rejects.toThrow('Câu hỏi cần có tiêu đề.');
+    expect(prisma.feedPost.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('editPost: bài QUESTION sửa sang tiêu đề hợp lệ vẫn được; loại khác tiêu đề vô hình → null', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ userId: 'author', status: 'PUBLISHED', kind: 'QUESTION' });
+    await makeSvc(prisma).editPost('author', 'p1', { title: ' Lá vàng vì sao? ' });
+    expect((prisma.feedPost.updateMany as jest.Mock).mock.calls[0][0].data.title).toBe('Lá vàng vì sao?');
+    const prisma2 = makePrisma();
+    (prisma2.feedPost.findUnique as jest.Mock).mockResolvedValue({ userId: 'author', status: 'PUBLISHED', kind: 'TIP' });
+    await makeSvc(prisma2).editPost('author', 'p1', { title: '\u200b' });
+    expect((prisma2.feedPost.updateMany as jest.Mock).mock.calls[0][0].data.title).toBeNull();
+  });
+
   it('addComment: nội dung toàn ký tự vô hình → BadRequest, không tạo', async () => {
     const prisma = makePrisma();
     await expect(makeSvc(prisma).addComment('u1', 'CUSTOMER', 'p1', ZW)).rejects.toBeInstanceOf(BadRequestException);

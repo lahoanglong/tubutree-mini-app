@@ -1142,7 +1142,7 @@ export class CommunityFeedService {
   ) {
     const post = await this.prisma.feedPost.findUnique({
       where: { id: postId },
-      select: { userId: true, status: true, title: true, body: true },
+      select: { userId: true, status: true, title: true, body: true, kind: true },
     });
     if (!post) throw new NotFoundException('Bài viết không tồn tại.');
     if (post.userId !== userId) throw new ForbiddenException('Chỉ chủ bài mới sửa được.');
@@ -1153,7 +1153,12 @@ export class CommunityFeedService {
       if (!b || b.length > MAX_BODY) throw new BadRequestException('Nội dung không hợp lệ.');
       data.body = b;
     }
-    if (patch.title !== undefined) data.title = trimInvisible(patch.title).slice(0, MAX_TITLE) || null;
+    if (patch.title !== undefined) {
+      const t = trimInvisible(patch.title).slice(0, MAX_TITLE) || null;
+      // Cùng luật với createPost: câu hỏi luôn cần tiêu đề, loại khác để trống thì thành không có tiêu đề.
+      if (post.kind === 'QUESTION' && !t) throw new BadRequestException('Câu hỏi cần có tiêu đề.');
+      data.title = t;
+    }
     if (patch.images !== undefined) {
       const images = patch.images.filter((u) => u?.trim()).slice(0, MAX_FEED_IMAGES);
       data.images = images;
