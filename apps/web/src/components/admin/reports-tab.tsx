@@ -34,7 +34,7 @@ export function ReportsTab({ sections = ALL_SECTIONS, initialPreset }: { section
     setRange((r) => ({ ...r, ...patch }));
     setPreset(null);
   };
-  // Thiếu ngày hoặc ngược thứ tự thì không phần nào tính được: báo một câu ở đây thay vì lặp ở từng phần. Giới hạn số ngày là của từng phần nên vẫn do phần đó báo.
+  // Thiếu ngày hoặc ngược thứ tự thì không phần nào tính được: báo một câu ở đây và ẩn các phần (không gỡ, để bộ lọc đã chọn còn nguyên khi sửa lại ngày). Giới hạn số ngày là của từng phần nên vẫn do phần đó báo.
   const orderError = rangeError(range.from, range.to, Number.POSITIVE_INFINITY);
 
   return (
@@ -59,15 +59,12 @@ export function ReportsTab({ sections = ALL_SECTIONS, initialPreset }: { section
           </label>
         </div>
       </div>
-      {orderError ? (
-        <Notice tone="warning" role="alert">{orderError}</Notice>
-      ) : (
-        <>
-          {sections.includes('revenue') && <ReportsRevenueSection range={range} />}
-          {sections.includes('sources') && <ReportsSourcesSection range={range} />}
-          {sections.includes('finance') && <ReportsFinanceSection range={range} />}
-        </>
-      )}
+      {orderError && <Notice tone="warning" role="alert">{orderError}</Notice>}
+      <div hidden={!!orderError} className="space-y-6">
+        {sections.includes('revenue') && <ReportsRevenueSection range={range} />}
+        {sections.includes('sources') && <ReportsSourcesSection range={range} />}
+        {sections.includes('finance') && <ReportsFinanceSection range={range} />}
+      </div>
     </div>
   );
 }
