@@ -187,8 +187,22 @@ export function CampaignForm({
   const linkValueNow = needsValue(linkType) ? linkValue.trim() : '';
   const linkChanged =
     saved !== null && (linkType !== saved.linkType || linkValueNow !== saved.linkValue);
-  const blocked =
+  const activation =
     willBeVisible && (!wasVisible || linkChanged) && check.status === 'ready' && check.blockers > 0;
+  // Lần lưu vẫn để chiến dịch hiện cho khách, đích cuối là trang chiến dịch, và có đụng danh sách sản phẩm/mã mà trang thành trống: máy chủ từ chối PUT.
+  // Lỗi PAGE_EMPTY có sẵn từ trước mà lần lưu không đụng danh sách thì không khoá.
+  const touchesList =
+    productIdsKey !== baseline.products.join('\n') ||
+    parseCouponCodes(codesText).join('\n') !== baseline.codes.join('\n');
+  const emptiesLivePage =
+    !activation &&
+    willBeVisible &&
+    wasVisible &&
+    linkType === 'CAMPAIGN_PAGE' &&
+    touchesList &&
+    check.status === 'ready' &&
+    check.issues.some((i) => i.code === 'PAGE_EMPTY');
+  const blocked = activation || emptiesLivePage;
 
   const addProduct = (p: { id: string; label: string } | null) => {
     if (!p) return;
@@ -590,8 +604,9 @@ export function CampaignForm({
           data-testid="campaign-check-lock"
           className="text-sm text-danger-fg"
         >
-          Còn {check.blockers} lỗi chặn nên chưa bật được. Sửa theo khối “Kiểm trước khi bật”, hoặc
-          bỏ chọn “Đang bật” để lưu nháp.
+          {emptiesLivePage
+            ? 'Lần lưu này làm trang đang chạy thành trống: giữ lại ít nhất một sản phẩm hiển thị hoặc một mã dùng được, hoặc bỏ chọn “Đang bật”.'
+            : `Còn ${check.blockers} lỗi chặn nên chưa bật được. Sửa theo khối “Kiểm trước khi bật”, hoặc bỏ chọn “Đang bật” để lưu nháp.`}
         </p>
       )}
       <div className="flex flex-wrap gap-2">
