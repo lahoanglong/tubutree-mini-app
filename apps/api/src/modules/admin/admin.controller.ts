@@ -84,7 +84,7 @@ export function MaxIfPercent(max: number, validationOptions?: ValidationOptions)
           return typeof value === 'number' && value <= max;
         },
         defaultMessage(args: ValidationArguments) {
-          return `value phải <= ${args.constraints[0]} khi type=PERCENT.`;
+          return `Mã giảm theo % chỉ được giảm tối đa ${args.constraints[0]}%.`;
         },
       },
     });
@@ -481,7 +481,7 @@ export class ResolvePaymentUnlinkedDto {
 }
 
 export class SetUserRoleDto {
-  @Trim() @IsString() @MaxLength(20) phone!: string;
+  @Trim() @IsString() @IsNotEmpty({ message: 'Số điện thoại không hợp lệ: ô đang trống.' }) @MaxLength(20) phone!: string;
   @IsIn(['CUSTOMER', 'AFFILIATE', 'DEALER', 'STAFF', 'ADMIN'])
   role!: 'CUSTOMER' | 'AFFILIATE' | 'DEALER' | 'STAFF' | 'ADMIN';
   /** Bắt buộc khi role = DEALER (kiểm ở AdminService.setUserRole — C-008). */

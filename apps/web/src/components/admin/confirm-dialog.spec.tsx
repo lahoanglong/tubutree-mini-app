@@ -250,6 +250,16 @@ describe('useConfirm.ask — hộp thoại có ô nhập lý do', () => {
     expect(accept.disabled).toBe(false);
   });
 
+  it('lý do bắt buộc: chuỗi chỉ có ký tự vô hình (rộng 0, BOM, word joiner) vẫn khoá nút Xác nhận', async () => {
+    const { container } = mount(<AskHarness options={{ title: 'T', message: 'M', input: { ...REASON, required: true } }} />);
+    await ask(container);
+    const accept = confirmDialog()!.querySelector<HTMLButtonElement>('[data-confirm="accept"]')!;
+    for (const junk of ['\u200b\u200b', '\ufeff', '\u2060 \u200b']) {
+      typeInto(confirmDialog()!.querySelector('textarea'), junk);
+      expect(accept.disabled, JSON.stringify(junk)).toBe(true);
+    }
+  });
+
   it('confirm() thường không có ô nhập', async () => {
     const { container } = mount(<Harness options={{ title: 'T', message: 'M' }} />);
     await ask(container);

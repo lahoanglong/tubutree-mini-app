@@ -76,6 +76,12 @@ describe('CreateCouponDto validation (Phase 1 findings)', () => {
     expect(errors.some((e) => e.property === 'value')).toBe(true);
   });
 
+  it('type=PERCENT, value=150 → lời báo là câu tiếng Việt cho admin, không lộ tên trường kỹ thuật', async () => {
+    const errors = await validate(makeDto({ type: 'PERCENT', value: 150 }));
+    const messages = errors.filter((e) => e.property === 'value').flatMap((e) => Object.values(e.constraints ?? {}));
+    expect(messages).toEqual(['Mã giảm theo % chỉ được giảm tối đa 100%.']);
+  });
+
   it('type=PERCENT, value=100 → hợp lệ (biên trên cho phép)', async () => {
     const errors = await validate(makeDto({ type: 'PERCENT', value: 100 }));
     expect(errors.some((e) => e.property === 'value')).toBe(false);
