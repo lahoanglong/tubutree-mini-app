@@ -12,6 +12,7 @@ import {
 } from './pancake-order.service';
 import { DEALER_AWAITING_STOCK_WHERE, isDealerAwaitingStock } from '../../dealer/dealer-awaiting-stock';
 import { ATTENTION_PUSH_FAILED, flagPancakeAttention } from './pancake-attention';
+import { PUSH_ERROR_KIND, PUSH_RETRY } from './pancake-push-error';
 import { TUBU_FULFILLED_ORDER_WHERE } from './pancake-fulfilment';
 import { PREPAID_METHODS } from '../../orders/order-transition';
 import { GOMDON_STATE, isGomdonPayable } from '../gomdon/gomdon-status';
@@ -42,11 +43,11 @@ import { markCronSkipped, TrackCron } from '../../../common/cron-run/track-cron'
 @Injectable()
 export class PancakePushReconcileService {
   private readonly logger = new Logger(PancakePushReconcileService.name);
-  static readonly STALE_MINUTES = 15;
+  static readonly STALE_MINUTES = PUSH_RETRY.FAST_MINUTES;
   static readonly GOMDON_GIVE_UP_MINUTES = 60;
   static readonly BATCH_SIZE = 50;
   /** Quá mốc này mà đơn chưa lên Pancake thì không tự đẩy nữa (đối soát tay). */
-  static readonly MAX_AGE_HOURS = 72;
+  static readonly MAX_AGE_HOURS = PUSH_RETRY.MAX_AGE_HOURS;
   /** Cửa sổ tự thử lại huỷ / cập nhật thanh toán trên Pancake. */
   static readonly FOLLOW_UP_WINDOW_HOURS = 72;
   /** Huỷ trên Pancake: thử lại với đơn đặt trong chừng này ngày (đơn chưa giao có thể nằm kho lâu hơn 72 giờ). */
@@ -55,8 +56,8 @@ export class PancakePushReconcileService {
    * Đơn đã bị đẩy lỗi từng này lượt (mỗi lượt claim cộng 1, nút "Đẩy lại" đặt về 0) thì cron chỉ thử lại mỗi
    * SLOW_RETRY_MINUTES: Pancake từ chối dứt khoát (4xx) hay chập kéo dài không nên bị gõ cửa mỗi 15 phút suốt 72 giờ.
    */
-  static readonly SLOW_RETRY_AFTER_ATTEMPTS = 20;
-  static readonly SLOW_RETRY_MINUTES = 60;
+  static readonly SLOW_RETRY_AFTER_ATTEMPTS = PUSH_RETRY.SLOW_AFTER_ATTEMPTS;
+  static readonly SLOW_RETRY_MINUTES = PUSH_RETRY.SLOW_MINUTES;
   /** Pancake đã trả lời và từ chối lệnh huỷ (đơn chưa bàn giao): người đã được báo huỷ tay, cron chỉ hỏi lại thưa. */
   static readonly CANCEL_REFUSED_RETRY_HOURS = 6;
 
@@ -80,6 +81,8 @@ export class PancakePushReconcileService {
       return;
     }
     await this.pushStale();
+    await this.probeConfigBlocked();
+    await this.sweepFailedJobs();
     await this.markOverdue();
     await this.retryCancels();
     await this.retryPayments();
@@ -105,7 +108,20 @@ export class PancakePushReconcileService {
             { NOT: DEALER_AWAITING_STOCK_WHERE },
             // Trả trước qua cổng chưa có tiền: chờ thanh toán (lật PAID tự xếp đẩy), không chiếm lô.
             { NOT: { paymentStatus: { not: 'PAID' }, paymentMethod: { in: GATEWAY_METHODS } } },
-            { OR: [{ pancakePushAttempts: { lt: PancakePushReconcileService.SLOW_RETRY_AFTER_ATTEMPTS } }, { pancakeLastAttemptAt: { lt: slowCutoff } }] },
+            // Khoá API sai (CONFIG): thử đơn nào cũng cùng lỗi, nên cả nhóm nghỉ; probeConfigBlocked dò bằng đúng một đơn mỗi giờ.
+            { OR: [{ pancakeErrorKind: null }, { pancakeErrorKind: { notIn: [PUSH_ERROR_KIND.CONFIG] } }] },
+            // 15 phút một lần cho lỗi tạm; lỗi Pancake từ chối dứt khoát (DATA/REJECTED) hay đã quá SLOW_RETRY_AFTER_ATTEMPTS lượt thì mỗi giờ.
+            {
+              OR: [
+                {
+                  AND: [
+                    { pancakePushAttempts: { lt: PancakePushReconcileService.SLOW_RETRY_AFTER_ATTEMPTS } },
+                    { OR: [{ pancakeErrorKind: null }, { pancakeErrorKind: { notIn: [PUSH_ERROR_KIND.DATA, PUSH_ERROR_KIND.REJECTED] } }] },
+                  ],
+                },
+                { pancakeLastAttemptAt: { lt: slowCutoff } },
+              ],
+            },
           ],
         },
         select: {
@@ -184,6 +200,47 @@ export class PancakePushReconcileService {
       }
     } catch (err) {
       this.logger.error(`reconcile lỗi: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+
+  /**
+   * Đơn đang bị lỗi cấu hình Pancake (401/403): cả nhóm bị loại khỏi lô thử lại; mỗi giờ thử đúng MỘT đơn để biết khoá đã được sửa chưa.
+   * Đẩy thành công thì PancakeOrderService thả cả nhóm (xem releaseConfigBlocked); lại 401 thì lượt thử của đơn dò được hoàn lại.
+   */
+  private async probeConfigBlocked(): Promise<void> {
+    try {
+      const slowCutoff = new Date(Date.now() - PancakePushReconcileService.SLOW_RETRY_MINUTES * 60_000);
+      const maxAge = new Date(Date.now() - PancakePushReconcileService.MAX_AGE_HOURS * 3_600_000);
+      const [probe] = await this.prisma.order.findMany({
+        where: {
+          pancakeOrderId: null,
+          ...TUBU_FULFILLED_ORDER_WHERE,
+          status: { in: [...PANCAKE_PUSHABLE_STATUSES] },
+          createdAt: { gte: maxAge },
+          pancakeErrorKind: PUSH_ERROR_KIND.CONFIG,
+          OR: [{ pancakeLastAttemptAt: null }, { pancakeLastAttemptAt: { lt: slowCutoff } }],
+          AND: [{ NOT: DEALER_AWAITING_STOCK_WHERE }, { NOT: { paymentStatus: { not: 'PAID' }, paymentMethod: { in: GATEWAY_METHODS } } }],
+        },
+        select: { id: true, code: true },
+        orderBy: { pancakeLastAttemptAt: { sort: 'asc', nulls: 'first' } },
+        take: 1,
+      });
+      if (!probe) return;
+      await this.prisma.order.updateMany({ where: { id: probe.id, pancakeOrderId: null }, data: { pancakeLastAttemptAt: new Date() } });
+      await this.pancakeOrder.enqueuePush(probe.id);
+      this.logger.warn(`Khoá API Pancake đang bị từ chối: dò lại bằng đơn ${probe.code}.`);
+    } catch (err) {
+      this.logger.error(`Dò lại lỗi cấu hình Pancake lỗi: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+
+  /** Gỡ job push lỗi của đơn đã lên Pancake/huỷ/giao khỏi tập failed của BullMQ (go-live và bảng hàng đợi không đếm rác). */
+  private async sweepFailedJobs(): Promise<void> {
+    try {
+      const n = await this.pancakeOrder.sweepSettledFailedJobs();
+      if (n > 0) this.logger.log(`Đã gỡ ${n} job đẩy Pancake lỗi của đơn đã có kết cục.`);
+    } catch (err) {
+      this.logger.error(`Dọn job đẩy Pancake lỗi lỗi: ${err instanceof Error ? err.message : err}`);
     }
   }
 

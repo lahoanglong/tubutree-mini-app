@@ -4,7 +4,8 @@ import { UnrecoverableError, type Job } from 'bullmq';
 import { PancakeOrderService } from './pancake-order.service';
 import { QUEUE_PANCAKE_PUSH } from '../../../jobs/queues';
 import { PANCAKE_JOB_CANCEL, PANCAKE_JOB_PAYMENT } from './pancake-queue';
-import { PancakeApiError, PancakeCancelRefusedError, PancakeOrderDataError, pancakeErrorText } from './pancake-outbound';
+import { PancakeCancelRefusedError, pancakeErrorText } from './pancake-outbound';
+import { classifyPushError, isPermanentPushError } from './pancake-push-error';
 
 /**
  * Worker queue pancake-push (outbound). Retry+backoff (5 lần, exponential 2s) do BullMQ tự quản qua
@@ -46,8 +47,9 @@ export class PancakePushProcessor extends WorkerHost {
     try {
       await this.pancakeOrder.pushOrder(orderId);
     } catch (err) {
-      // Thiếu dữ liệu người nhận, hay Pancake từ chối dứt khoát (4xx, không phải mất kết nối/5xx/429): thử lại ngay không giúp gì.
-      const unrecoverable = err instanceof PancakeOrderDataError || (err instanceof PancakeApiError && !err.transient);
+      // Thiếu dữ liệu người nhận, khoá API sai (401/403) hay Pancake từ chối dứt khoát (4xx, không phải mất kết nối/5xx/408/409/425/429):
+      // thử lại ngay không giúp gì. Một nguồn phân loại: pancake-push-error.ts.
+      const unrecoverable = isPermanentPushError(classifyPushError(err));
       if (final || unrecoverable) {
         this.logger.error(`Đẩy Pancake THẤT BẠI (lần ${job.attemptsMade + 1}) cho đơn ${orderId}: ${pancakeErrorText(err)}`);
       }

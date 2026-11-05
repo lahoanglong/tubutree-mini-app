@@ -79,6 +79,16 @@ describe('PancakeClient đơn hàng (PANCAKE-2, PANCAKE-4, PANCAKE-14)', () => {
     }
   });
 
+  it.each([408, 409, 425, 429, 500])('createOrder: HTTP %s → lỗi tạm, mang mã HTTP', async (status) => {
+    const client = makeOrderClient({ post: jest.fn().mockRejectedValue(axiosErr(status)) });
+    await expect(client.createOrder({ items: [] } as never)).rejects.toMatchObject({ transient: true, status });
+  });
+
+  it.each([400, 401, 403, 422])('createOrder: HTTP %s → từ chối dứt khoát, mang mã HTTP', async (status) => {
+    const client = makeOrderClient({ post: jest.fn().mockRejectedValue(axiosErr(status)) });
+    await expect(client.createOrder({ items: [] } as never)).rejects.toMatchObject({ transient: false, status });
+  });
+
   it('createOrder: HTTP 200 kèm success:false → từ chối dứt khoát, mang lời Pancake', async () => {
     const client = makeOrderClient({ post: jest.fn().mockResolvedValue({ data: { success: false, message: 'Hết hàng' } }) });
     await expect(client.createOrder({ items: [] } as never)).rejects.toMatchObject({

@@ -35,7 +35,9 @@ import {
   pancakeErrorText,
   pancakeOrderHasCode,
 } from './pancake-outbound';
-import { enqueuePancakeCancel, enqueuePancakePayment, enqueuePancakePush } from './pancake-queue';
+import { enqueuePancakeCancel, enqueuePancakePayment, enqueuePancakePush, PANCAKE_JOB_PUSH, removeFailedPancakePush } from './pancake-queue';
+import { classifyPushError, isPushFailureSettled, PUSH_ERROR_KIND, PUSH_RETRY } from './pancake-push-error';
+import { withQueueTimeout } from '../../../jobs/queue-timeout';
 import {
   ATTENTION_CANCEL_PENDING,
   ATTENTION_PAYMENT_PENDING,
@@ -185,7 +187,9 @@ export class PancakeOrderService {
     return enqueuePancakePayment(this.pushQueue, orderId);
   }
 
-  enqueueCancel(orderId: string): Promise<void> {
+  async enqueueCancel(orderId: string): Promise<void> {
+    // Đơn đã huỷ thì dấu "đẩy lỗi" cũ không còn việc gì để làm; gỡ trước để go-live không đếm nó là việc còn treo.
+    await removeFailedPancakePush(this.pushQueue, orderId);
     return enqueuePancakeCancel(this.pushQueue, orderId);
   }
 
@@ -199,6 +203,7 @@ export class PancakeOrderService {
       await this.setPushStatus(order.id, PANCAKE_PUSH.SKIPPED);
       // Lần tạo trước có thể đã thành công rồi đơn mới bị huỷ: huỷ luôn bên Pancake (job tra theo mã đơn).
       if (order.status === 'CANCELLED' && order.pancakePushClaimedAt) await this.requestCancel(order);
+      await removeFailedPancakePush(this.pushQueue, order.id);
       return null;
     }
     if (gate === 'LEFT_WAREHOUSE') {
@@ -301,6 +306,7 @@ export class PancakeOrderService {
         data: {
           pancakePushStatus: PANCAKE_PUSH.PENDING,
           pancakeSyncError: pancakeErrorText(err),
+          pancakeErrorKind: classifyPushError(err),
           ...(definite && !sentBefore ? { pancakePushClaimedAt: null } : {}),
         },
       });
@@ -311,7 +317,7 @@ export class PancakeOrderService {
       const err = new PancakeApiError(`Pancake không trả mã đơn khi tạo đơn ${order.code}.`, true);
       await this.prisma.order.updateMany({
         where: { id: order.id, pancakeOrderId: null },
-        data: { pancakePushStatus: PANCAKE_PUSH.PENDING, pancakeSyncError: pancakeErrorText(err) },
+        data: { pancakePushStatus: PANCAKE_PUSH.PENDING, pancakeSyncError: pancakeErrorText(err), pancakeErrorKind: PUSH_ERROR_KIND.TRANSIENT },
       });
       throw err;
     }
@@ -334,20 +340,47 @@ export class PancakeOrderService {
       select: { id: true, code: true, pancakeOrderId: true, createdAt: true, paidAt: true },
     });
     if (!order || order.pancakeOrderId) return;
+    const kind = classifyPushError(err);
     // Đang PUSHING = tiến trình khác giữ quyền đẩy (lần này thua tranh chấp): không ghi đè, kẻo mở khoá cho lần tạo thứ hai.
+    const idle = { id: order.id, pancakeOrderId: null, OR: [{ pancakePushStatus: null }, { pancakePushStatus: { not: PANCAKE_PUSH.PUSHING } }] };
     await this.prisma.order.updateMany({
-      where: { id: order.id, pancakeOrderId: null, OR: [{ pancakePushStatus: null }, { pancakePushStatus: { not: PANCAKE_PUSH.PUSHING } }] },
-      data: { pancakeSyncError: pancakeErrorText(err), ...(final ? { pancakePushStatus: PANCAKE_PUSH.FAILED } : {}) },
+      where: idle,
+      data: { pancakeSyncError: pancakeErrorText(err), pancakeErrorKind: kind, ...(final ? { pancakePushStatus: PANCAKE_PUSH.FAILED } : {}) },
     });
-    if (err instanceof PancakeOrderDataError || (final && !this.inTransientGrace(order, err))) {
-      await flagPancakeAttention(
-        this.prisma,
-        this.alerts,
-        order,
-        `${ATTENTION_PUSH_FAILED} (kho chưa thấy đơn): ${pancakeErrorText(err)}. Hệ thống tự thử lại mỗi 15 phút; sửa nguyên nhân rồi bấm "Đẩy lại Pancake".`,
-        this.logger,
-      );
+    if (kind === PUSH_ERROR_KIND.CONFIG) {
+      // Khoá API sai làm hỏng mọi đơn như nhau: không đốt lượt từng đơn (cron chỉ dò bằng một đơn mỗi giờ, xem
+      // PancakePushReconcileService) và không báo từng đơn; báo động tổng `pancake.config` (ops-alerts) lo việc báo một lần.
+      await this.prisma.order.updateMany({ where: { ...idle, pancakePushAttempts: { gt: 0 } }, data: { pancakePushAttempts: { increment: -1 } } });
+      return;
     }
+    if (kind !== PUSH_ERROR_KIND.TRANSIENT || (final && !this.inTransientGrace(order, err))) {
+      const hint =
+        kind === PUSH_ERROR_KIND.TRANSIENT
+          ? 'Hệ thống tự thử lại mỗi 15 phút; sửa nguyên nhân rồi bấm "Đẩy lại Pancake".'
+          : `Thử lại không tự hết lỗi: sửa nguyên nhân rồi bấm "Đẩy lại Pancake" (hệ thống chỉ hỏi lại mỗi ${PUSH_RETRY.SLOW_MINUTES} phút).`;
+      await flagPancakeAttention(this.prisma, this.alerts, order, `${ATTENTION_PUSH_FAILED} (kho chưa thấy đơn): ${pancakeErrorText(err)}. ${hint}`, this.logger);
+    }
+  }
+
+  /**
+   * Gỡ job push lỗi của những đơn đã có kết cục (lên Pancake, huỷ, giao): lệnh đẩy chạy lại thành công qua đường khác (job thanh
+   * toán, cron, admin) hay đơn bị huỷ giữa chừng đều để lại dấu lỗi. Trả số job đã gỡ.
+   */
+  async sweepSettledFailedJobs(limit = 100): Promise<number> {
+    const failed = await withQueueTimeout(this.pushQueue.getFailed(0, limit - 1), `${QUEUE_PANCAKE_PUSH} liệt kê job lỗi`);
+    const pushJobs = failed.filter((j) => j.name === PANCAKE_JOB_PUSH && typeof j.data?.orderId === 'string');
+    if (pushJobs.length === 0) return 0;
+    const rows = await this.prisma.order.findMany({
+      where: { id: { in: pushJobs.map((j) => j.data.orderId as string) } },
+      select: { id: true, status: true, pancakeOrderId: true },
+    });
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    let removed = 0;
+    for (const job of pushJobs) {
+      if (!isPushFailureSettled(byId.get(job.data.orderId as string))) continue;
+      await job.remove().then(() => (removed += 1)).catch(() => undefined);
+    }
+    return removed;
   }
 
   private inTransientGrace(order: { createdAt?: Date | null; paidAt?: Date | null }, err: unknown): boolean {
@@ -392,6 +425,7 @@ export class PancakeOrderService {
       where: { id: order.id },
       data: { pancakePushStatus: PANCAKE_PUSH.PENDING, pancakePushAttempts: 0 },
     });
+    // enqueuePush gỡ job push đã lỗi cùng jobId trước khi add: BullMQ bỏ qua `add` khi jobId còn nằm ở tập failed.
     await this.enqueuePush(order.id);
     this.logger.warn(`Admin ${adminId} đẩy lại đơn ${order.code} sang Pancake.`);
     return { ok: true, message: `Đã xếp lệnh đẩy đơn ${order.code} sang Pancake.` };
@@ -654,11 +688,17 @@ export class PancakeOrderService {
         pancakePushStatus: PANCAKE_PUSH.SYNCED,
         pancakePushClaimedAt: null,
         pancakeSyncError: null,
+        pancakeErrorKind: null,
         pancakePaymentSynced: paymentSynced,
       },
     });
     if (saved.count === 0) return;
     await clearPancakeAttention(this.prisma, order.id, ATTENTION_PUSH_FAILED);
+    await removeFailedPancakePush(this.pushQueue, order.id);
+    // Đơn này từng bị 401/403 mà nay đẩy được: khoá API đã đúng lại, thả cả nhóm đơn đang bị loại khỏi lô thử lại của cron.
+    if (order.pancakeErrorKind === PUSH_ERROR_KIND.CONFIG) {
+      await this.prisma.order.updateMany({ where: { pancakeOrderId: null, pancakeErrorKind: PUSH_ERROR_KIND.CONFIG }, data: { pancakeErrorKind: null } });
+    }
     // Đơn đổi trạng thái trong lúc đang tạo: huỷ ngay bên Pancake / báo đã thanh toán.
     const now = await this.prisma.order.findUniqueOrThrow({ where: { id: order.id } });
     if (now.status === 'CANCELLED') {

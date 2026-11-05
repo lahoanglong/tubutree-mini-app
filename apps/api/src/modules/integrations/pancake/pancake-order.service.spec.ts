@@ -451,6 +451,96 @@ describe('PancakeOrderService.markPushFailure', () => {
   });
 });
 
+describe('PancakeOrderService.markPushFailure — loại lỗi (hi)', () => {
+  it('ghi loại lỗi lên đơn: tạm / bị từ chối / dữ liệu', async () => {
+    const t = setup({ pancakePushStatus: PANCAKE_PUSH.PENDING });
+    await t.svc.markPushFailure('o1', new PancakeApiError('Pancake trả 503 khi tạo đơn', true, false, 503), false);
+    expect(t.row().pancakeErrorKind).toBe('TRANSIENT');
+    await t.svc.markPushFailure('o1', new PancakeApiError('Pancake trả 422 khi tạo đơn: x', false, false, 422), true);
+    expect(t.row().pancakeErrorKind).toBe('REJECTED');
+    await t.svc.markPushFailure('o1', new PancakeOrderDataError('thiếu SĐT'), true);
+    expect(t.row().pancakeErrorKind).toBe('DATA');
+  });
+
+  it('401/403 (CONFIG): ghi loại, hoàn lại lượt đã đốt, KHÔNG báo từng đơn', async () => {
+    const t = setup({ pancakePushStatus: PANCAKE_PUSH.PENDING, pancakePushAttempts: 3 });
+    await t.svc.markPushFailure('o1', new PancakeApiError('Pancake trả 401 khi tạo đơn: invalid key', false, false, 401), true);
+    expect(t.row()).toMatchObject({ pancakeErrorKind: 'CONFIG', pancakePushStatus: PANCAKE_PUSH.FAILED, pancakePushAttempts: 2 });
+    expect(t.row().pancakeAttention ?? null).toBeNull();
+    expect(t.alerts.alert).not.toHaveBeenCalled();
+  });
+
+  it('lượt đẩy thành công xoá loại lỗi', async () => {
+    const t = setup({ pancakePushStatus: PANCAKE_PUSH.FAILED, pancakeErrorKind: 'REJECTED', pancakeSyncError: 'cũ' });
+    await t.svc.pushOrder('o1');
+    expect(t.row()).toMatchObject({ pancakeErrorKind: null, pancakeSyncError: null });
+  });
+
+  it('lượt đẩy lỗi 401 ngay trong pushOrder: lượt thử không bị đốt', async () => {
+    const t = setup({}, { client: { createOrder: jest.fn().mockRejectedValue(new PancakeApiError('Pancake trả 401 khi tạo đơn', false, false, 401)) } });
+    await expect(t.svc.pushOrder('o1')).rejects.toBeInstanceOf(PancakeApiError);
+    await t.svc.markPushFailure('o1', new PancakeApiError('Pancake trả 401 khi tạo đơn', false, false, 401), true);
+    expect(t.row().pancakePushAttempts).toBe(0);
+  });
+});
+
+describe('PancakeOrderService — dọn job lỗi (hi)', () => {
+  const failedJob = (remove = jest.fn().mockResolvedValue(undefined)) => ({ getState: jest.fn().mockResolvedValue('failed'), remove });
+
+  it('đẩy thành công thì gỡ job lỗi cũ của đơn', async () => {
+    const job = failedJob();
+    const t = setup({ pancakePushStatus: PANCAKE_PUSH.FAILED });
+    t.queue.getJob.mockResolvedValue(job);
+    await t.svc.pushOrder('o1');
+    expect(t.queue.getJob).toHaveBeenCalledWith('o1');
+    expect(job.remove).toHaveBeenCalledTimes(1);
+  });
+
+  it('không gỡ job đang chờ/đang chạy', async () => {
+    const job = { getState: jest.fn().mockResolvedValue('active'), remove: jest.fn() };
+    const t = setup({ pancakePushStatus: PANCAKE_PUSH.FAILED });
+    t.queue.getJob.mockResolvedValue(job);
+    await t.svc.pushOrder('o1');
+    expect(job.remove).not.toHaveBeenCalled();
+  });
+
+  it('đơn đã huỷ chưa từng lên Pancake: gỡ job lỗi cũ', async () => {
+    const job = failedJob();
+    const t = setup({ status: 'CANCELLED' });
+    t.queue.getJob.mockResolvedValue(job);
+    await t.svc.pushOrder('o1');
+    expect(job.remove).toHaveBeenCalledTimes(1);
+  });
+
+  it('lỗi Redis khi gỡ job không làm hỏng việc đẩy đơn', async () => {
+    const t = setup();
+    t.queue.getJob.mockRejectedValue(new Error('redis'));
+    await expect(t.svc.pushOrder('o1')).resolves.toBe('pk-new');
+  });
+
+  it('sweepSettledFailedJobs gỡ job lỗi của đơn đã lên Pancake hoặc đã huỷ, giữ job của đơn còn mở', async () => {
+    const t = setup(
+      { id: 'o1', status: 'CANCELLED' },
+      {
+        extra: undefined,
+      },
+    );
+    const rows = [
+      { id: 'o1', status: 'CANCELLED', pancakeOrderId: null },
+      { id: 'o2', status: 'CONFIRMED', pancakeOrderId: 'pk-2' },
+      { id: 'o3', status: 'CONFIRMED', pancakeOrderId: null },
+    ];
+    const removed: string[] = [];
+    const mk = (id: string) => ({ id, name: 'push', data: { orderId: id }, remove: jest.fn(async () => { removed.push(id); }) });
+    const jobs = ['o1', 'o2', 'o3'].map(mk);
+    const queue = { ...t.queue, getFailed: jest.fn().mockResolvedValue(jobs) };
+    const prisma = { order: { findMany: jest.fn().mockResolvedValue(rows) } };
+    const svc = new PancakeOrderService(prisma as never, t.client as never, queue as never, undefined, t.alerts as never);
+    await expect(svc.sweepSettledFailedJobs()).resolves.toBe(2);
+    expect(removed.sort()).toEqual(['o1', 'o2']);
+  });
+});
+
 describe('PancakeOrderService.retryPushByAdmin (PANCAKE-9, ADMINOPS-4)', () => {
   it('đơn còn trong kho chưa lên Pancake → reset lượt + xếp job đẩy', async () => {
     const t = setup({ pancakePushStatus: PANCAKE_PUSH.FAILED, pancakePushAttempts: 5 });

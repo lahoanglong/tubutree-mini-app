@@ -10,6 +10,8 @@ export class PancakeApiError extends Error {
     message: string,
     readonly transient: boolean,
     readonly notFound = false,
+    /** Mã HTTP Pancake trả (không có khi mất kết nối hay `success:false` trong HTTP 200). */
+    readonly status?: number,
   ) {
     super(message);
     this.name = 'PancakeApiError';

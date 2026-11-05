@@ -52,3 +52,23 @@ export function enqueuePancakePayment(queue: Queue, orderId: string): Promise<vo
 export function enqueuePancakeCancel(queue: Queue, orderId: string): Promise<void> {
   return addPancakeJob(queue, PANCAKE_JOB_CANCEL, orderId, pancakeCancelJobId(orderId));
 }
+
+/**
+ * Gỡ job push ĐÃ LỖI của đơn: việc đã có kết cục (lên Pancake, huỷ, người đã xử lý) thì dấu lỗi trong tập failed chỉ còn gây
+ * nhiễu (go-live, bảng hàng đợi). Job đang chờ/chạy/hoãn giữ nguyên. Lỗi Redis chỉ ghi nhận, không làm hỏng việc đang làm:
+ * quét định kỳ (sweepSettledFailedJobs) và hạn tuổi removeOnFail dọn nốt phần sót.
+ */
+export async function removeFailedPancakePush(queue: Queue, orderId: string): Promise<boolean> {
+  try {
+    return await withQueueTimeout(removeIfFailed(queue, pancakePushJobId(orderId)), `${queue.name} gỡ job lỗi ${orderId}`);
+  } catch {
+    return false;
+  }
+}
+
+async function removeIfFailed(queue: Queue, jobId: string): Promise<boolean> {
+  const job = await queue.getJob(jobId);
+  if (!job || (await job.getState()) !== 'failed') return false;
+  await job.remove();
+  return true;
+}
