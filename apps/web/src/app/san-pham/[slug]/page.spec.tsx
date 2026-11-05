@@ -282,6 +282,32 @@ describe('/san-pham/[slug] — thư viện ảnh (BUYERWEB-17)', () => {
     expect(c.textContent).toContain('Sạch dịu');
   });
 
+  it('điện thoại: dải câu chuyện nằm ngay sau khối mua ở cột thông tin, trước Combo; máy tính: ở đầu phần dưới; mỗi chỗ một bản', async () => {
+    api.product = {
+      ...PRODUCT,
+      ingredients: [{ name: 'Bồ kết', percentage: '12%', benefit: 'Sạch dịu' }],
+      storyConfig: {
+        version: 1,
+        enabled: true,
+        scenes: [{ kind: 'hud_callouts', closing: 'An lành', points: [{ id: 'p1', xPct: 40, yPct: 40, label: 'Bồ kết', side: 'left' }] }],
+      },
+    };
+    const c = await mount();
+    const all = Array.from(c.querySelectorAll('[data-section="pdp-story"]'));
+    expect(all).toHaveLength(2);
+    const info = c.querySelector('[data-testid="pdp-info"]')!;
+    const phone = all.find((el) => info.contains(el))!;
+    const wide = all.find((el) => !info.contains(el))!;
+    expect(phone.className).toContain('tubu-pdp-order-7');
+    expect(phone.className).toContain('md:hidden');
+    expect(wide.className.split(' ')).toContain('hidden');
+    expect(wide.className).toContain('md:block');
+    const bundles = info.querySelector('[data-section="pdp-bundles"]')!;
+    expect(phone.compareDocumentPosition(bundles) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const buy = info.querySelector('[data-testid="pdp-add-to-cart"], [data-testid="add-to-cart"]');
+    if (buy) expect(buy.compareDocumentPosition(phone) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('truy cập: một h1, nút có tên, vùng chạm đủ 44px', async () => {
     const c = await mount();
     expect(headingProblems(c)).toEqual([]);

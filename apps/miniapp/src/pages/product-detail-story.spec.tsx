@@ -134,4 +134,16 @@ describe('ProductDetailPage — câu chuyện sản phẩm', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Câu chuyện sản phẩm' });
     expect(within(dialog).getByTestId('story-buy-now')).toBeEnabled();
   });
+  it('khối câu chuyện nằm ngay dưới khối mua nhanh (sau ô Số lượng), trước Đánh giá nhanh và mục Thành phần', async () => {
+    mocks.fetchProduct.mockResolvedValue(product({ ingredients: [{ name: 'Sả chanh', percentage: '12%' }] }));
+    mocks.fetchReviews.mockResolvedValue({ data: [], average: 4.5, count: 2, items: [{ id: 'r1', rating: 5, comment: 'Thơm', authorName: 'An', createdAt: '2026-11-01T00:00:00.000Z' }] });
+    renderPdp();
+    const story = await screen.findByTestId('product-story');
+    const qty = screen.getByRole('button', { name: /Tăng số lượng/ });
+    expect(qty.compareDocumentPosition(story) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const quick = await screen.findByRole('region', { name: 'Đánh giá nhanh' });
+    expect(story.compareDocumentPosition(quick) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const heading = screen.getByText('Thành phần', { selector: 'h2' });
+    expect(story.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
 });

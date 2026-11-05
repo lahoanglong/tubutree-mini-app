@@ -9,6 +9,7 @@ import {
   buildDefaultStoryConfig,
   layersUpTo,
   resolveStoryConfig,
+  STORY_LAYER_WIDTH_PCT,
   STORY_PRODUCT_INSET_PCT,
   storyView,
   toneVar,
@@ -217,6 +218,15 @@ describe('khung sân khấu dùng chung', () => {
     const studio = read('apps/web/src/components/admin/product-story-studio.tsx');
     expect(studio).toContain('STORY_PRODUCT_INSET_PCT');
     expect(studio).toContain('aspect-square');
+  });
+
+  it('lớp nguyên liệu rộng đúng STORY_LAYER_WIDTH_PCT khung sân khấu ở CSS Mini và web, không có cỡ rem cố định', () => {
+    const widths = (css: string) => Array.from(css.matchAll(/\.tubu-story-layer\s*\{[^}]*?\bwidth:\s*([^;}\s]+)/g)).map((m) => m[1]);
+    for (const rel of ['apps/miniapp/src/css/story.css', 'apps/web/src/components/mini/mini.css']) {
+      const found = widths(read(rel));
+      expect(found.length, rel).toBeGreaterThan(0);
+      for (const w of found) expect(w, rel).toBe(`${STORY_LAYER_WIDTH_PCT}%`);
+    }
   });
 });
 

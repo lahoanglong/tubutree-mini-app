@@ -9,11 +9,12 @@ import { usePdpSelection } from '@/components/pdp-selection';
 import type { ProductDetail } from '@/lib/api';
 
 /**
- * Dải câu chuyện sản phẩm trên trang chi tiết. Phân loại dùng chung với giá và nút mua qua `PdpSelectionProvider`.
+ * Dải câu chuyện sản phẩm trên trang chi tiết. Hai bản, mỗi lúc một bản hiện (như hai bộ nút mua): `phone` ở cột thông tin ngay sau khối mua như đặc tả
+ * (cột thông tin và phần dưới là hai ô riêng của PdpLayout nên không xen kẽ được bằng `order`), `wide` ở đầu phần dưới từ md. Phân loại dùng chung với giá và nút mua qua `PdpSelectionProvider`.
  * Thêm giỏ và Mua ngay ở khung toàn màn bấm lại đúng nút của khối mua (đóng khung trước), nên đăng nhập, bảng phân loại,
  * tồn kho và giá Giờ vàng giữ nguyên một đường xử lý.
  */
-export function PdpStory({ product }: { product: ProductDetail }) {
+export function PdpStory({ product, placement = 'wide' }: { product: ProductDetail; placement?: 'phone' | 'wide' }) {
   const selection = usePdpSelection();
   const [open, setOpen] = useState(false);
   const pick = useCallback(
@@ -39,7 +40,7 @@ export function PdpStory({ product }: { product: ProductDetail }) {
 
   if (!config) return null;
   return (
-    <section data-testid="pdp-story" data-section="pdp-story" className="min-w-0 bg-[var(--color-bg-surface)] p-4 md:rounded-card md:p-6">
+    <section data-testid="pdp-story" data-section="pdp-story" className={`min-w-0 bg-[var(--color-bg-surface)] p-4 md:rounded-card md:p-6 ${placement === 'phone' ? 'tubu-pdp-order-7 mt-2 md:hidden' : 'hidden md:block'}`}>
       <ProductStoryShowcase
         product={core}
         selectedVariationId={selection?.selectedId}

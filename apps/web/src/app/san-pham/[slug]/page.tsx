@@ -220,7 +220,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                 Thứ tự trong HTML là thứ tự đọc và bấm Tab ở máy tính: khối mua rồi mới tới chứng nhận và "Đặt định kỳ" (lối phụ), nên nút
                 "Thêm vào giỏ" không bị đẩy xuống dưới khung 1280×800. Điện thoại xếp lại bằng lớp `tubu-pdp-order-N` (mini.css) theo thứ tự của Mini App:
                 thông tin chính 0, chứng nhận 1, Đặt định kỳ 2 (chỉ web: ngoại lệ có chủ đích), Ưu đãi + Vận chuyển 3, ghi chú vận chuyển 4,
-                chip phân loại 5, Số lượng 6, Combo/Mua kèm 8, Đánh giá nhanh 9, Mở nhóm mua chung + Nội dung bán hàng 11.
+                chip phân loại 5, Số lượng 6, dải câu chuyện 7, Combo/Mua kèm 8, Đánh giá nhanh 9, Mở nhóm mua chung + Nội dung bán hàng 11.
                 Chip và Số lượng là ruột của AddToCart (gốc `contents`). Không có dòng "Phân loại ›" (chip đã đủ).
                 Hệ quả: thứ tự nhìn và thứ tự Tab/TalkBack lệch nhau ở điện thoại. Tab đi Ưu đãi/Vận chuyển, chip, Số lượng (trong DOM
                 đứng liền nhau và đúng chỗ trên màn hình), thanh dính đáy, rồi mới tới chứng nhận, Đặt định kỳ, Combo, Đánh giá nhanh.
@@ -256,6 +256,9 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                 </div>
               )}
 
+              {/* Điện thoại: dải câu chuyện ngay dưới khối mua nhanh (chip, Số lượng), order 7 giữa Số lượng (6) và Combo (8); máy tính dùng bản ở `below`. */}
+              <PdpStory product={product} placement="phone" />
+
               {/* Điện thoại: Combo/Mua kèm là hai dải trắng riêng như Mini App. Lớp dải đặt ở đây vì khối combo (pdp-bundles) tự nó chỉ có đệm dọc. */}
               <div
                 data-section="pdp-bundles"
@@ -276,7 +279,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           below={
             <div className="min-w-0">
               {/* Dải câu chuyện nằm đầu phần dưới: máy tính có đủ bề ngang cho hai cột cuộn kể chuyện; mô tả và thành phần vẫn là chữ trong HTML ở dưới. */}
-              <PdpStory product={product} />
+              <PdpStory product={product} placement="wide" />
               {/* Từ lg hai cột (nội dung bán hàng | đánh giá) để thanh phân bổ sao không kéo dài cả bề ngang 1200px; dưới lg vẫn xếp dọc như cũ. */}
               <div data-testid="pdp-below-cols" className="lg:grid lg:grid-cols-2 lg:items-start lg:gap-x-8">
                 <div className="min-w-0">

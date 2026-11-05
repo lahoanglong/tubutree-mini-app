@@ -843,6 +843,22 @@ export default function ProductDetailPage() {
         )}
       </div>
 
+      {/* Dải câu chuyện ngay dưới khối mua nhanh (chip, Số lượng), trước Combo và Đánh giá nhanh, như đặc tả; web điện thoại cùng thứ tự (order 7). */}
+      {hasStory && (
+        <Suspense fallback={null}>
+          <ProductStoryShowcase
+            product={p}
+            selectedVariationId={selected?.id}
+            onSelectVariation={(id) => {
+              haptic('light');
+              setSelectedId(id);
+            }}
+            onAddToCart={() => void handleAdd()}
+            onBuyNow={() => void handleBuyNow()}
+          />
+        </Suspense>
+      )}
+
       {slug && <PdpBundles slug={slug} productName={product.data?.name} />}
 
       {reviews.data && reviews.data.count > 0 && (
@@ -919,21 +935,6 @@ export default function ProductDetailPage() {
           </Box>
           <ChevronRight size={18} color="var(--color-text-brand)" strokeWidth={2} />
         </Box>
-      )}
-
-      {hasStory && (
-        <Suspense fallback={null}>
-          <ProductStoryShowcase
-            product={p}
-            selectedVariationId={selected?.id}
-            onSelectVariation={(id) => {
-              haptic('light');
-              setSelectedId(id);
-            }}
-            onAddToCart={() => void handleAdd()}
-            onBuyNow={() => void handleBuyNow()}
-          />
-        </Suspense>
       )}
 
       {/* ── Thành phần (spec §6.2 — niềm tin cho persona sợ hoá chất) ── */}

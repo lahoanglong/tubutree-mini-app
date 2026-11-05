@@ -28,10 +28,10 @@ const Probe = () => {
   latest = usePdpSelection();
   return <p data-testid="probe">{latest?.selectedId}</p>;
 };
-const mount = async (product: ProductDetail) => {
+const mount = async (product: ProductDetail, placement?: 'phone' | 'wide') => {
   const r = render(
     <PdpSelectionProvider initialId="v1">
-      <PdpStory product={product} />
+      <PdpStory product={product} placement={placement} />
       <Probe />
       <button type="button" data-testid="pdp-add-to-cart" onClick={onAdd} />
       <button type="button" data-testid="buy-now" onClick={onBuy} />
@@ -99,5 +99,18 @@ describe('PdpStory', () => {
     expect((c.querySelector('[data-testid="story-add-to-cart"]') as HTMLButtonElement).disabled).toBe(true);
     act(() => latest!.setBuyable(true));
     expect((c.querySelector('[data-testid="story-buy-now"]') as HTMLButtonElement).disabled).toBe(false);
+  });
+  it('placement phone: nằm ở cột thông tin sau khối mua (order 7) và ẩn từ md; wide: chỉ hiện từ md', async () => {
+    const phone = await mount(PRODUCT, 'phone');
+    const p = phone.querySelector('[data-testid="pdp-story"]')!;
+    expect(p.className).toContain('md:hidden');
+    expect(p.className).toContain('tubu-pdp-order-7');
+    expect(p.className.split(' ')).not.toContain('hidden');
+    document.body.innerHTML = '';
+    const wide = await mount(PRODUCT, 'wide');
+    const w = wide.querySelector('[data-testid="pdp-story"]')!;
+    expect(w.className.split(' ')).toContain('hidden');
+    expect(w.className).toContain('md:block');
+    expect(w.className).not.toContain('tubu-pdp-order-7');
   });
 });

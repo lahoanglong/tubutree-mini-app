@@ -31,6 +31,8 @@ export interface StoryProductInput {
  * từng này phần trăm mỗi cạnh ở Mini, web và Studio, nên một điểm đặt lên chai ở Studio rơi đúng chỗ đó ở hai app.
  */
 export const STORY_PRODUCT_INSET_PCT = 12;
+/** Bề rộng một lớp nguyên liệu rơi, tính theo bề rộng khung sân khấu (Mini và web cùng tỷ lệ, không dùng cỡ cố định). */
+export const STORY_LAYER_WIDTH_PCT = 24;
 export const ARC_ACTIVE = { scale: 1.22, rotateDeg: -6 } as const;
 const ARC_AMBIENTS: readonly StoryAmbient[] = ['leaf', 'amber', 'sky', 'sand'];
 
