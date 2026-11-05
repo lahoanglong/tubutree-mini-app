@@ -213,7 +213,7 @@ describe('chi tiết đơn web — nút theo trạng thái (gói hl)', () => {
     expect(container.querySelector('[data-testid="order-action-note"]')?.textContent).toMatch(/Còn 2 giờ/);
   });
 
-  it('đơn tự huỷ vì quá hạn thanh toán: nói đúng lý do', async () => {
+  it('đơn chuyển khoản đã huỷ: chỉ nói "Đơn đã huỷ.", không suy ra lý do quá hạn thanh toán (API không trả lý do huỷ)', async () => {
     mocks.order = {
       ...BASE,
       status: 'CANCELLED',
@@ -222,6 +222,7 @@ describe('chi tiết đơn web — nút theo trạng thái (gói hl)', () => {
       statusTimes: { CANCELLED: hoursFromNow(-6) },
     };
     const { container } = await mount();
-    expect(container.textContent).toContain('Đơn tự huỷ vì quá hạn thanh toán.');
+    expect(container.textContent).toContain('Đơn đã huỷ.');
+    expect(container.textContent).not.toContain('quá hạn thanh toán');
   });
 });

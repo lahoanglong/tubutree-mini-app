@@ -234,11 +234,12 @@ describe('orderActionPlan và orderHeadline theo trạng thái', () => {
     expect(orderHeadline(closed, { now: NOW, returnDays: 7 }).milestone).toBe('Đã hết hạn đổi/trả.');
   });
 
-  it('đơn chuyển khoản chưa trả bị huỷ vào hạn thanh toán thì nói tự huỷ vì quá hạn, huỷ khác thì chỉ nói đã huỷ', () => {
-    const overdue = order({ status: 'CANCELLED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', paymentDeadline: iso(-3 * HOUR), statusTimes: { CANCELLED: iso(-3 * HOUR + 60_000) } });
-    expect(orderHeadline(overdue, { now: NOW }).sentence).toBe('Đơn tự huỷ vì quá hạn thanh toán.');
-    const byUser = order({ status: 'CANCELLED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', paymentDeadline: iso(2 * HOUR), statusTimes: { CANCELLED: iso(-HOUR) } });
-    expect(orderHeadline(byUser, { now: NOW }).sentence).toBe('Đơn đã huỷ.');
+  it('đơn huỷ chỉ nói "Đơn đã huỷ.": API không trả lý do huỷ nên không suy ra "quá hạn thanh toán", kể cả khi dữ liệu có hạn và mốc huỷ sau hạn', () => {
+    // API thật không trả paymentDeadline cho đơn CANCELLED; ca có hạn ở đây là đơn tự huỷ lẫn đơn khách huỷ sau hạn, không phân biệt được.
+    const afterDeadline = order({ status: 'CANCELLED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', paymentDeadline: iso(-3 * HOUR), statusTimes: { CANCELLED: iso(-3 * HOUR + 60_000) } });
+    expect(orderHeadline(afterDeadline, { now: NOW }).sentence).toBe('Đơn đã huỷ.');
+    const apiShape = order({ status: 'CANCELLED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', paymentDeadline: null, statusTimes: { CANCELLED: iso(-HOUR) } });
+    expect(orderHeadline(apiShape, { now: NOW }).sentence).toBe('Đơn đã huỷ.');
   });
 });
 

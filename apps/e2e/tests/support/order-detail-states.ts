@@ -258,7 +258,7 @@ export const STATES: OrderState[] = [
   },
   {
     key: 'cancelled',
-    name: 'Đã huỷ (quá hạn thanh toán)',
+    name: 'Đã huỷ (chuyển khoản chưa trả)',
     wide: true,
     ready: textVisible(/Đã huỷ/),
     world: (now) =>
@@ -267,7 +267,8 @@ export const STATES: OrderState[] = [
           status: 'CANCELLED',
           paymentMethod: 'BANK_TRANSFER',
           paymentStatus: 'UNPAID',
-          paymentDeadline: iso(now - 20 * HOUR),
+          // API không bao giờ trả hạn thanh toán cho đơn đã huỷ.
+          paymentDeadline: null,
           createdAt: iso(now - 44 * HOUR),
           statusTimes: { PENDING_PAYMENT: iso(now - 44 * HOUR), CANCELLED: iso(now - 20 * HOUR + 60_000) },
         }),

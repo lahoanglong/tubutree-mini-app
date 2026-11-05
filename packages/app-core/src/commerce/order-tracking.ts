@@ -177,17 +177,10 @@ const SENTENCE: Record<OrderStage, string | null> = {
   OTHER: null,
 };
 
-/** Đơn chuyển khoản tự huỷ vì hết hạn: huỷ vào hoặc sau hạn thanh toán (cron huỷ đúng lúc hạn tới), chưa trả đồng nào. */
-function cancelledForOverdue(o: TrackOrder): boolean {
-  const deadline = deadlineMs(o);
-  const cancelledAt = o.statusTimes?.CANCELLED ? Date.parse(o.statusTimes.CANCELLED) : Number.NaN;
-  return o.paymentMethod === 'BANK_TRANSFER' && o.paymentStatus === 'UNPAID' && !Number.isNaN(deadline) && !Number.isNaN(cancelledAt) && cancelledAt >= deadline;
-}
-
 export function orderHeadline(o: TrackOrder, ctx: TrackCtx = {}): OrderHeadline {
   const now = ctx.now ?? Date.now();
   const stage = orderStage(o, now);
-  const key = stage === 'CANCELLED' && cancelledForOverdue(o) ? 'order.sentence.cancelledOverdue' : SENTENCE[stage];
+  const key = SENTENCE[stage];
   const sentence = key ? fillCopy(key) : '';
   const days = ctx.returnDays ?? 7;
   const eta = ctx.etaLabel ? orderCopy.etaLine(ctx.etaLabel) : null;

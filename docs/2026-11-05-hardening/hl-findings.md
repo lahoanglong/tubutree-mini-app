@@ -17,7 +17,7 @@ Mức: CAO = khách không biết đơn đang ở đâu hoặc bấm nhầm; V�
 | 7 | Mini, đã giao | `miniapp-375/delivered.full.jpg` | Nút chính "Mua lại đơn này" trong khi sản phẩm chưa đánh giá; "Viết đánh giá" lặp ở từng dòng nhỏ; "Yêu cầu đổi/trả" là một dòng chữ trần giữa vùng hỗ trợ; không nói hạn đổi/trả | VỪA | Nút chính "Đánh giá sản phẩm" khi còn dòng chưa đánh giá, không thì "Mua lại". "Yêu cầu đổi/trả" (chỉ khi còn hạn, chưa có yêu cầu chờ, còn dòng trả được) vào menu. Hero nói "Đổi/trả được đến 10/11" |
 | 8 | Mini + web, hãng đã nhận hàng nhưng đơn chưa "Đang giao" | `miniapp-375/carrier-booked.jpg` | Hero "Đã đặt đơn vị vận chuyển" nhưng không có nút nào hữu ích (chỉ "Xem tất cả đơn"), không nói vì sao không huỷ được; mã vận đơn không hiện ở đâu cho tới khi đơn chuyển "Đang giao" | VỪA | Nút chính Liên hệ. Câu "Hàng đã giao cho đơn vị vận chuyển nên đơn không huỷ được" đưa lên hero (hiện chỉ nằm cuối trang). Mốc hãng hiện ngay ở bước hiện tại |
 | 9 | Mini + web, chờ thanh toán quá hạn | (dựng từ `pending-payment` với hạn đã qua, xem spec) | Hero vẫn đỏ chữ "quá hạn đơn sẽ tự huỷ" nhưng thanh nút vẫn có nút Thanh toán đã bị khoá bên máy chủ | VỪA | `canPayOrder` ở app-core: quá hạn thì nút chính là Liên hệ, không có Thanh toán |
-| 10 | Mini + web, đã huỷ | `miniapp-375/cancelled.full.jpg` | Chỉ "Đã huỷ", khách không biết vì sao. API không trả lý do huỷ cho khách (có chủ đích, tránh lộ ghi chú nội bộ) | VỪA | Không đổi API. Suy ra một trường hợp chắc chắn: đơn chuyển khoản chưa trả, huỷ vào hoặc sau hạn thanh toán = "Đơn tự huỷ vì quá hạn thanh toán". Các huỷ khác chỉ nói "Đơn đã huỷ". Ghi ở mục Còn lại |
+| 10 | Mini + web, đã huỷ | `miniapp-375/cancelled.full.jpg` | Chỉ "Đã huỷ", khách không biết vì sao. API không trả lý do huỷ cho khách (có chủ đích, tránh lộ ghi chú nội bộ) | VỪA | Để lại, cần API trả lý do huỷ thật. Đã thử suy ra "quá hạn thanh toán" từ hạn và mốc huỷ rồi bỏ (review): API không bao giờ trả `paymentDeadline` cho đơn CANCELLED (`pending-payment-ttl.ts`) và khách tự huỷ sau hạn, trước lượt cron 10 phút, bị gán sai. Mọi đơn huỷ chỉ nói "Đơn đã huỷ." |
 | 11 | Web 375 so Mini 375 | `web-375/shipping.full.jpg` so `miniapp-375/shipping.full.jpg` | Hai app lệch số đo: tên khối, cỡ chữ mã vận đơn, dòng "Tra cứu hành trình" chỉ có ở web, khối "Vận chuyển" khác bố cục | VỪA | Cùng `OrderTrack`, `OrderShipping`, `OrderActionBar`, cùng props, cùng chữ |
 | 12 | Mini + web, đang giao | `miniapp-375/shipping.full.jpg` | Hãng + mã vận đơn có nút "Chép mã" nhưng nằm giữa trang dưới tiền. Mã không đi cùng hành trình | VỪA | Thẻ vận chuyển liền dưới hành trình: tên hãng + mã + nút "Chép mã" (vùng chạm 44px), kèm "Tra cứu hành trình" khi có liên kết |
 | 13 | Mini + web, mốc thời gian | `miniapp-375/delivered.full.jpg` | Giờ có cả năm ("14:36 04/11/2026") ở mọi mốc, dài, khó quét | THẤP | Giờ ngắn "14:36 04/11" (theo giờ Việt Nam, không phụ thuộc múi giờ máy). Chỉ in năm khi khác năm hiện tại. Áp dụng ở hero, hành trình, thẻ vận chuyển |
@@ -29,7 +29,7 @@ Mức: CAO = khách không biết đơn đang ở đâu hoặc bấm nhầm; V�
 
 ## Phạm vi sửa
 
-Sửa: 1-12, 16, 17 (cao và vừa). 13 sửa kèm (cùng thay đổi thời gian). Giữ nguyên: 14, 15, 18.
+Sửa: 1-9, 11, 12, 16, 17 (cao và vừa). 13 sửa kèm (cùng thay đổi thời gian). Để lại: 10 (cần API trả lý do huỷ), 14, 15, 18.
 
 Không động: luồng huỷ/đổi trả/hoàn tiền (máy chủ), thanh toán và tạo đơn (gói hk), API (đủ dữ liệu: `statusTimes`, `shippingHistory`, `canCancel`, `manualHandling`, `paymentDeadline`, `deliveredAt`, `reviewable`).
 
@@ -49,7 +49,7 @@ Không động: luồng huỷ/đổi trả/hoàn tiền (máy chủ), thanh toá
 | 5 | `miniapp-375/pending-payment.jpg` -> `hl-after/miniapp-375/pending-payment.jpg` | Một nút "Thanh toán ngay" + dòng "Còn 2 giờ 14 phút", "Huỷ đơn" vào menu |
 | 6 | `web-1280/shipping.full.jpg`, `pending-payment.full.jpg` -> `hl-after/web-1280/...` | Hai cột (trái ~530px trạng thái + hành trình + sản phẩm; phải 21rem tiền + địa chỉ + nút). Cao trang 2384 -> 2013 |
 | 7 | `miniapp-375/delivered.jpg`, `web-375/delivered.jpg` -> `hl-after/...` | Nút chính "Đánh giá sản phẩm"; "Mua lại", "Yêu cầu đổi/trả" trong menu; hero "Đổi/trả được đến 11/11." |
-| 10 | `miniapp-375/cancelled.full.jpg` -> `hl-after/miniapp-375/cancelled.full.jpg` | "Đơn tự huỷ vì quá hạn thanh toán." (đơn huỷ khác chỉ "Đơn đã huỷ.") |
+| 10 | `miniapp-375/cancelled.full.jpg` | Không đổi chữ lý do: đơn huỷ nào cũng "Đơn đã huỷ." (đã bỏ câu suy luận "quá hạn thanh toán") |
 | 11 | `miniapp-375/shipping.full.jpg` so `web-375/shipping.full.jpg` (sau) | Cùng hero, hành trình, thẻ vận chuyển, thanh nút; web còn "Tra cứu hành trình" vì Mini không mở được trang ngoài |
 | 13 | mọi ảnh có mốc giờ | "14:36 04/11/2026" -> "14:36 04/11" |
 | 16 | `hl-after/miniapp-375/cancelled.full.jpg` lần chụp đầu (có "0") -> lần chụp cuối (hết) | Không còn nút 0 lạc |

@@ -264,13 +264,9 @@ describe('OrderDetailPage — nút theo trạng thái (gói hl)', () => {
     expect(within(container).queryByText(/^0$/)).toBeNull();
   });
 
-  it('đơn tự huỷ vì quá hạn thanh toán: nói đúng lý do, không nói lý do bịa cho đơn huỷ khác', async () => {
+  it('đơn chuyển khoản đã huỷ: chỉ nói "Đơn đã huỷ.", không suy ra lý do quá hạn thanh toán (API không trả lý do huỷ)', async () => {
     const base = { ...ORDER, status: 'CANCELLED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', createdAt: hoursFromNow(-30), updatedAt: hoursFromNow(-5) };
     mocks.fetchOrder.mockResolvedValue({ ...base, paymentDeadline: hoursFromNow(-6), statusTimes: { CANCELLED: hoursFromNow(-6) } });
-    const first = renderPage();
-    expect(await screen.findByText('Đơn tự huỷ vì quá hạn thanh toán.')).toBeInTheDocument();
-    first.unmount();
-    mocks.fetchOrder.mockResolvedValue({ ...base, paymentDeadline: hoursFromNow(5), statusTimes: { CANCELLED: hoursFromNow(-6) } });
     renderPage();
     expect(await screen.findByText('Đơn đã huỷ.')).toBeInTheDocument();
     expect(screen.queryByText(/quá hạn thanh toán/)).toBeNull();

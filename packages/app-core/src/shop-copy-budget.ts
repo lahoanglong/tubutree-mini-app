@@ -123,7 +123,6 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'order.sentence.shipping': 35,
   'order.sentence.delivered': 25,
   'order.sentence.cancelled': 15,
-  'order.sentence.cancelledOverdue': 35,
   'order.sentence.returned': 20,
   'order.payBy': 30,
   'order.payByLeft': 50,

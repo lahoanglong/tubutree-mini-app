@@ -126,7 +126,6 @@ export const SHOP_COPY: Record<string, string> = {
   'order.sentence.shipping': 'Đơn đang trên đường giao đến bạn.',
   'order.sentence.delivered': 'Đơn đã giao thành công.',
   'order.sentence.cancelled': 'Đơn đã huỷ.',
-  'order.sentence.cancelledOverdue': 'Đơn tự huỷ vì quá hạn thanh toán.',
   'order.sentence.returned': 'Đơn đã hoàn trả.',
   'order.payBy': 'Thanh toán trước {at}.',
   'order.payByLeft': 'Thanh toán trước {at}, còn {t}.',
