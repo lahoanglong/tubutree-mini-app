@@ -152,6 +152,10 @@ export interface AdminOrder {
   pancakeErrorKind?: string | null;
   /** Lần cron tự đẩy lại kế tiếp (ISO); null = không còn lần nào, người phải bấm "Đẩy lại Pancake". API cũ chưa trả. */
   pancakeNextRetryAt?: string | null;
+  /** "Đẩy lại Pancake" có nhận đơn không, do API quyết (cùng vị từ với retryPushByAdmin): NOW nhận, WAIT đơn đang chờ việc khác, NEVER không bao giờ; null = đã lên Pancake; thiếu = API cũ. */
+  pancakeRetry?: 'NOW' | 'WAIT' | 'NEVER' | null;
+  /** Việc đơn đang chờ khi pancakeRetry = WAIT (khách thanh toán, đủ hàng đặt trước, vận đơn Gomdon...). */
+  pancakeRetryWaitingFor?: string | null;
   pancakePushAttempts?: number;
   pancakeLastAttemptAt?: string | null;
   /** PENDING | CANCELLED | NOT_FOUND | TOO_LATE | FAILED — kết quả huỷ bên Pancake khi đơn bị huỷ. */

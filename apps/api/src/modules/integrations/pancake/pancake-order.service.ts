@@ -158,6 +158,57 @@ export function pancakePushGate(order: {
   return 'PUSH';
 }
 
+export type PushRetryDecision =
+  | { kind: 'NOW' }
+  /** Chưa nhận vì đơn đang chờ việc khác; `waitingFor` là việc đó. Đủ điều kiện thì nhận. */
+  | { kind: 'WAIT'; refusal: string; waitingFor: string }
+  | { kind: 'NEVER'; refusal: string };
+
+/**
+ * "Đẩy lại Pancake" của admin có nhận đơn này không, chỉ theo trạng thái của chính đơn. MỘT nguồn cho `retryPushByAdmin` (lời từ chối),
+ * lời nhắc đơn STALE vừa thanh toán (`syncPayment`) và cờ `pancakeRetry` trên danh sách đơn của admin (web không tự suy lại từ cột).
+ *  - NOW: nhận.
+ *  - WAIT: đơn đang chờ khách trả tiền / đủ hàng đặt trước / vận đơn Gomdon; hệ thống hoặc người làm xong việc đó thì nhận.
+ *  - NEVER: đã có trên Pancake, đối tác tự giao, đã huỷ/trả, đã rời kho (đẩy là kho giao lần hai).
+ */
+export function pushRetryGateDecision(
+  order: Parameters<typeof pancakePushGate>[0] & { code: string; pancakeOrderId?: string | null },
+): PushRetryDecision {
+  if (order.pancakeOrderId) return { kind: 'NEVER', refusal: `Đơn ${order.code} đã có trên Pancake (#${order.pancakeOrderId}).` };
+  const gate = pancakePushGate(order);
+  switch (gate) {
+    case 'PUSH':
+      return { kind: 'NOW' };
+    case 'MERCHANT':
+      return { kind: 'NEVER', refusal: `Đơn ${order.code} do gian hàng đối tác tự giao — không đẩy sang kho Pancake.` };
+    case 'DEAD':
+      return { kind: 'NEVER', refusal: `Đơn ${order.code} đã huỷ/trả, không đẩy sang kho.` };
+    case 'LEFT_WAREHOUSE':
+      return {
+        kind: 'NEVER',
+        refusal: `Đơn ${order.code} đã ở trạng thái «${orderStatusLabelVi(order.status)}» — không đẩy để tránh kho giao lần hai.`,
+      };
+    case 'WAIT_PAYMENT':
+      return {
+        kind: 'WAIT',
+        waitingFor: 'khách thanh toán',
+        refusal: `Đơn ${order.code} trả trước (${PAYMENT_METHOD_LABEL_VI[order.paymentMethod as PaymentMethod] ?? order.paymentMethod}) chưa thanh toán — sẽ tự đẩy khi khách trả tiền.`,
+      };
+    case 'WAIT_STOCK':
+      return {
+        kind: 'WAIT',
+        waitingFor: 'đủ hàng đặt trước',
+        refusal: `Đơn ${order.code} còn hàng đặt trước chưa về đủ — hệ thống tự đẩy sang kho khi đủ hàng.`,
+      };
+    case 'WAIT_GOMDON':
+      return {
+        kind: 'WAIT',
+        waitingFor: 'vận đơn Gomdon',
+        refusal: `Đơn thu gom ${order.code} đang chờ tạo vận đơn Gomdon — hệ thống tự đẩy sang kho kèm mã vận đơn (quá 60 phút thì đẩy kèm cảnh báo tạo tay).`,
+      };
+  }
+}
+
 type OrderWithItems = Order & { items: OrderItem[] };
 
 /** Đơn cũ trước cột trạng thái huỷ: có dấu vết đã (có thể) lên Pancake thì phải huỷ bên đó. */
@@ -462,6 +513,19 @@ export class PancakeOrderService {
     return Date.now() - since < PancakeOrderService.PUSH_ATTENTION_GRACE_MINUTES * 60_000;
   }
 
+  /** `pushRetryGateDecision` cộng điều kiện môi trường lúc này (đã cấu hình Pancake, không có lượt đẩy đang bay): "nhận ngay bây giờ". */
+  private retryDecision(order: Parameters<typeof pushRetryGateDecision>[0] & Pick<Order, 'pancakePushStatus' | 'pancakeLastAttemptAt'>): PushRetryDecision {
+    const byOrder = pushRetryGateDecision(order);
+    if (byOrder.kind !== 'NOW') return byOrder;
+    if (!this.client.isConfigured()) {
+      return { kind: 'WAIT', waitingFor: 'cấu hình Pancake (PANCAKE_API_KEY/SHOP_ID)', refusal: 'Pancake chưa được cấu hình (PANCAKE_API_KEY/SHOP_ID).' };
+    }
+    if (this.pushInFlight(order)) {
+      return { kind: 'WAIT', waitingFor: 'lượt đẩy đang chạy xong', refusal: `Đơn ${order.code} đang được đẩy sang Pancake — chờ ít phút rồi tải lại.` };
+    }
+    return byOrder;
+  }
+
   /**
    * "Đẩy lại Pancake" của admin: đơn còn trong kho (chưa rời kho, chưa huỷ) và chưa lên Pancake — kể cả quá cửa sổ
    * tự đẩy. Đơn ĐÃ rời kho/đã giao thì không đẩy (kho sẽ giao lần hai).
@@ -472,28 +536,8 @@ export class PancakeOrderService {
       include: { items: { select: { backorderedQty: true } } },
     });
     if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
-    if (order.pancakeOrderId) throw new BadRequestException(`Đơn ${order.code} đã có trên Pancake (#${order.pancakeOrderId}).`);
-    const gate = pancakePushGate(order);
-    if (gate === 'MERCHANT') {
-      throw new BadRequestException(`Đơn ${order.code} do gian hàng đối tác tự giao — không đẩy sang kho Pancake.`);
-    }
-    if (gate === 'DEAD') throw new BadRequestException(`Đơn ${order.code} đã huỷ/trả, không đẩy sang kho.`);
-    if (gate === 'LEFT_WAREHOUSE') {
-      throw new BadRequestException(`Đơn ${order.code} đã ở trạng thái «${orderStatusLabelVi(order.status)}» — không đẩy để tránh kho giao lần hai.`);
-    }
-    if (gate === 'WAIT_PAYMENT') {
-      throw new BadRequestException(`Đơn ${order.code} trả trước (${PAYMENT_METHOD_LABEL_VI[order.paymentMethod] ?? order.paymentMethod}) chưa thanh toán — sẽ tự đẩy khi khách trả tiền.`);
-    }
-    if (gate === 'WAIT_STOCK') {
-      throw new BadRequestException(`Đơn ${order.code} còn hàng đặt trước chưa về đủ — hệ thống tự đẩy sang kho khi đủ hàng.`);
-    }
-    if (gate === 'WAIT_GOMDON') {
-      throw new BadRequestException(
-        `Đơn thu gom ${order.code} đang chờ tạo vận đơn Gomdon — hệ thống tự đẩy sang kho kèm mã vận đơn (quá 60 phút thì đẩy kèm cảnh báo tạo tay).`,
-      );
-    }
-    if (!this.client.isConfigured()) throw new BadRequestException('Pancake chưa được cấu hình (PANCAKE_API_KEY/SHOP_ID).');
-    if (this.pushInFlight(order)) throw new BadRequestException(`Đơn ${order.code} đang được đẩy sang Pancake — chờ ít phút rồi tải lại.`);
+    const decision = this.retryDecision(order);
+    if (decision.kind !== 'NOW') throw new BadRequestException(decision.refusal);
     await this.prisma.order.update({
       where: { id: order.id },
       data: { pancakePushStatus: PANCAKE_PUSH.PENDING, pancakePushAttempts: 0 },
@@ -513,17 +557,17 @@ export class PancakeOrderService {
     if (order.pancakePaymentSynced || order.status === 'CANCELLED' || order.status === 'RETURNED') return;
     if (isMerchantFulfilledOrder(order)) return;
     if (!order.pancakeOrderId && order.pancakePushStatus === PANCAKE_PUSH.STALE) {
-      // Đơn đã rời kho (đang giao/đã giao): admin không "Đẩy lại" được (retryPushByAdmin chặn để kho không giao lần hai), nhắc đó vô nghĩa.
-      if (pancakePushGate(order) === 'LEFT_WAREHOUSE') return;
-      // Đơn quá hạn tự đẩy vừa được thanh toán: không đường tự động nào đẩy. Nhắc người kiểm kho (đã giao tay chưa) trước khi bấm Đẩy lại.
+      // Chỉ bảo "bấm Đẩy lại" khi retryPushByAdmin nhận đơn NGAY lúc này (cùng quyết định). Đơn đang chờ việc khác thì nói rõ chờ gì, chưa bấm;
+      // đơn đã huỷ/rời kho/đối tác tự giao thì không nhắc (admin không đẩy lại được, đẩy là kho giao lần hai).
+      const decision = this.retryDecision(order);
+      if (decision.kind === 'NEVER') return;
       // Mở đầu bằng ATTENTION_PUSH_FAILED để đẩy thành công và đường huỷ (ATTENTION_SETTLED_BY_CANCEL) tự gỡ nhắc, như lời đẩy lỗi khác.
-      await flagPancakeAttention(
-        this.prisma,
-        this.alerts,
-        order,
-        `${ATTENTION_PUSH_FAILED} (quá hạn tự đẩy) — khách vừa thanh toán: kiểm tra kho đã giao tay chưa; chưa thì bấm "Đẩy lại Pancake".`,
-        this.logger,
-      );
+      const head = `${ATTENTION_PUSH_FAILED} (quá hạn tự đẩy) — khách vừa thanh toán`;
+      const reason =
+        decision.kind === 'NOW'
+          ? `${head}: kiểm tra kho đã giao tay chưa; chưa thì bấm "Đẩy lại Pancake".`
+          : `${head}, nhưng đơn đang chờ ${decision.waitingFor} nên CHƯA bấm "Đẩy lại Pancake" lúc này. Khi đủ điều kiện: kiểm tra kho đã giao tay chưa; chưa thì bấm "Đẩy lại Pancake".`;
+      await flagPancakeAttention(this.prisma, this.alerts, order, reason, this.logger);
       return;
     }
     if (!order.pancakeOrderId) {

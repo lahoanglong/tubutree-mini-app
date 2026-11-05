@@ -1,6 +1,6 @@
 import { isPancakeForbiddenError, PANCAKE_FORBIDDEN_ERROR_PREFIX } from '@tubutree/shared-types';
 import { BadRequestException } from '@nestjs/common';
-import { PANCAKE_CANCEL, PANCAKE_CANCEL_REFUSED_PREFIX, PANCAKE_PUSH, PancakeOrderService } from './pancake-order.service';
+import { PANCAKE_CANCEL, PANCAKE_CANCEL_REFUSED_PREFIX, PANCAKE_PUSH, PancakeOrderService, pushRetryGateDecision } from './pancake-order.service';
 import type { PrismaService } from '../../../prisma/prisma.service';
 import type { PancakeClient } from './pancake.client';
 import type { PancakeCreateOrderBody } from './pancake.types';
@@ -845,6 +845,58 @@ describe('PancakeOrderService — đơn STALE không có đường tự động 
     expect(t.client.createOrder).not.toHaveBeenCalled();
     expect(t.row().pancakeAttention ?? null).toBeNull();
     expect(t.alerts.alert).not.toHaveBeenCalled();
+  });
+
+  describe('lời nhắc đơn STALE vừa thanh toán theo ĐÚNG quyết định của "Đẩy lại" (một vị từ chung với retryPushByAdmin)', () => {
+    const stale = { pancakePushStatus: PANCAKE_PUSH.STALE, paymentMethod: 'ZALOPAY', paymentStatus: 'PAID' };
+    const dealerItems = [{ id: 'i1', variationId: 'v1', quantity: 5, unitPrice: 70_000, backorderedQty: 3 }];
+    const scenarios: Array<[string, Record<string, unknown>, 'NOW' | 'WAIT' | 'NEVER', string | null, Record<string, unknown>?]> = [
+      ['cổng PUSH', stale, 'NOW', null],
+      ['LEFT_WAREHOUSE (đã giao)', { ...stale, status: 'DELIVERED' }, 'NEVER', null],
+      ['DEAD (đã huỷ)', { ...stale, status: 'CANCELLED' }, 'NEVER', null],
+      ['MERCHANT (đối tác tự giao)', { ...stale, fulfiller: 'MERCHANT' }, 'NEVER', null],
+      ['WAIT_STOCK (đại lý còn hàng đặt trước)', { ...stale, type: 'DEALER', items: dealerItems }, 'WAIT', 'đủ hàng đặt trước'],
+      ['WAIT_GOMDON (chờ vận đơn Gomdon)', { ...stale, hasRecyclingPickup: true, gomdonStatus: 'CREATING' }, 'WAIT', 'vận đơn Gomdon'],
+      ['WAIT_PAYMENT (trả trước chưa PAID)', { ...stale, paymentStatus: 'UNPAID' }, 'WAIT', 'khách thanh toán'],
+    ];
+
+    it.each(scenarios)('%s: admin Đẩy lại và lời nhắc cùng một quyết định', async (_name, order, kind, waiting) => {
+      const t = setup(order);
+      const decision = pushRetryGateDecision({ ...(t.row() as Parameters<typeof pushRetryGateDecision>[0]) });
+      expect(decision.kind).toBe(kind);
+      const retry = await t.svc.retryPushByAdmin('admin1', 'TUBU1').then(() => 'accepted', (e: unknown) => (e instanceof BadRequestException ? 'refused' : 'error'));
+      expect(retry).toBe(kind === 'NOW' ? 'accepted' : 'refused');
+      const u = setup(order);
+      await expect(u.svc.syncPayment('o1')).resolves.toBeUndefined();
+      expect(u.client.createOrder).not.toHaveBeenCalled();
+      const text = u.row().pancakeAttention as string | null;
+      if (kind === 'NEVER') {
+        expect(text ?? null).toBeNull();
+        return;
+      }
+      expect(text).toMatch(new RegExp(`^${ATTENTION_PUSH_FAILED}`));
+      expect(text).toContain('kiểm tra kho đã giao tay chưa');
+      if (kind === 'NOW') {
+        expect(text).not.toContain('CHƯA bấm');
+        expect(text).toContain('bấm "Đẩy lại Pancake"');
+      } else {
+        expect(text).toContain(`đang chờ ${waiting}`);
+        expect(text).toContain('CHƯA bấm "Đẩy lại Pancake" lúc này');
+      }
+    });
+
+    it('Pancake chưa cấu hình: admin Đẩy lại bị từ chối nên lời nhắc cũng là "chờ", không bảo bấm ngay', async () => {
+      const t = setup(stale, { client: { isConfigured: jest.fn().mockReturnValue(false) } });
+      await expect(t.svc.retryPushByAdmin('admin1', 'TUBU1')).rejects.toBeInstanceOf(BadRequestException);
+      await t.svc.syncPayment('o1');
+      expect(t.row().pancakeAttention).toMatch(new RegExp(`^${ATTENTION_PUSH_FAILED}`));
+      expect(t.row().pancakeAttention).toContain('CHƯA bấm "Đẩy lại Pancake" lúc này');
+      expect(t.row().pancakeAttention).toContain('cấu hình Pancake');
+    });
+
+    it('đơn đã lên Pancake: không có quyết định Đẩy lại (NEVER)', () => {
+      expect(pushRetryGateDecision({ ...(setup({ pancakeOrderId: 'pk-1' }).row() as Parameters<typeof pushRetryGateDecision>[0]) }).kind).toBe('NEVER');
+    });
   });
 
   it('"Đẩy lại" của admin vẫn đưa đơn STALE lên Pancake', async () => {

@@ -36,9 +36,13 @@ export const PANCAKE_FORBIDDEN_GUIDE =
 export const PANCAKE_STALE_GUIDE =
   'Đơn quá hạn tự đẩy: hệ thống đã ngừng tự đẩy đơn này (kể cả khi khách trả tiền sau). Kiểm tra kho đã giao tay chưa; chưa thì bấm "Đẩy lại Pancake". Không làm cả hai, kẻo kho giao hai lần.';
 
-/** Đơn STALE mà admin không "Đẩy lại" được (đã rời kho, còn hàng đặt trước): không có nút nên không bảo bấm. */
+/** Đơn STALE mà admin không "Đẩy lại" được (đã huỷ, đã rời kho, đối tác tự giao): không có nút nên không bảo bấm. */
 export const PANCAKE_STALE_NO_RETRY_GUIDE =
-  'Đơn quá hạn tự đẩy: hệ thống đã ngừng tự đẩy đơn này (kể cả khi khách trả tiền sau) và đơn không còn ở trạng thái cho phép đẩy lại (đã rời kho, hoặc còn hàng đặt trước), nên không có nút đẩy lại. Kiểm tra kho đã giao tay chưa.';
+  'Đơn quá hạn tự đẩy: hệ thống đã ngừng tự đẩy đơn này (kể cả khi khách trả tiền sau) và đơn không còn ở trạng thái cho phép đẩy lại (đã huỷ, đã rời kho hoặc do đối tác tự giao), nên không có nút đẩy lại. Kiểm tra kho đã giao tay chưa.';
+
+/** Đơn STALE đang chờ việc khác (khách trả tiền, đủ hàng đặt trước, vận đơn Gomdon): chưa đẩy lại được, đủ điều kiện mới bấm. */
+export const pancakeStaleWaitingGuide = (waitingFor: string) =>
+  `Đơn quá hạn tự đẩy: hệ thống đã ngừng tự đẩy đơn này (kể cả khi khách trả tiền sau). Đơn đang chờ ${waitingFor} nên CHƯA đẩy lại được. Khi đủ điều kiện: kiểm tra kho đã giao tay chưa; chưa thì bấm "Đẩy lại Pancake". Không làm cả hai, kẻo kho giao hai lần.`;
 
 /** Loại lỗi đẩy (API: pancake-push-error.ts) → nhãn ngắn ở danh sách. */
 const KIND_LABEL: Record<string, { tone: Tone; label: string }> = {
@@ -63,7 +67,10 @@ const clock = (iso: string) => formatDateTime(iso).slice(0, 5);
 export function pancakeErrorGuide(order: AdminOrder): PancakeErrorGuide | null {
   if (order.pancakeOrderId) return null;
   if (order.pancakePushStatus === 'STALE') {
-    return { kind: 'STALE', configBlocked: false, text: canRetryPancakePush(order) ? PANCAKE_STALE_GUIDE : PANCAKE_STALE_NO_RETRY_GUIDE };
+    const retry = pancakeRetryDecision(order);
+    const text =
+      retry.kind === 'NOW' ? PANCAKE_STALE_GUIDE : retry.kind === 'WAIT' ? pancakeStaleWaitingGuide(retry.waitingFor) : PANCAKE_STALE_NO_RETRY_GUIDE;
+    return { kind: 'STALE', configBlocked: false, text };
   }
   if (!order.pancakeErrorKind || !KIND_LABEL[order.pancakeErrorKind]) return null;
   const kind = order.pancakeErrorKind;
@@ -156,9 +163,22 @@ export function pancakeSyncState(order: AdminOrder): PancakeSyncState | null {
   }
 }
 
+/**
+ * "Đẩy lại Pancake" có nhận đơn không. API quyết (`pancakeRetry`, cùng vị từ với retryPushByAdmin: cổng đẩy theo trạng thái đơn, thanh toán,
+ * hàng đặt trước, vận đơn Gomdon), web không tự suy lại. API cũ chưa trả cờ thì suy từ các cột đã có (không thấy được chờ vận đơn Gomdon).
+ */
+function pancakeRetryDecision(order: AdminOrder): { kind: 'NOW' } | { kind: 'WAIT'; waitingFor: string } | { kind: 'NEVER' } {
+  if (order.pancakeRetry === 'NOW') return { kind: 'NOW' };
+  if (order.pancakeRetry === 'WAIT') return { kind: 'WAIT', waitingFor: order.pancakeRetryWaitingFor ?? 'việc khác' };
+  if (order.pancakeRetry === 'NEVER') return { kind: 'NEVER' };
+  if (isMerchantFulfilled(order) || order.pancakeOrderId || !IN_WAREHOUSE.has(order.status)) return { kind: 'NEVER' };
+  if (order.pancakePushStatus === 'WAITING_PAYMENT') return { kind: 'WAIT', waitingFor: 'khách thanh toán' };
+  if (awaitingStock(order)) return { kind: 'WAIT', waitingFor: 'đủ hàng đặt trước' };
+  return { kind: 'NOW' };
+}
+
 export function canRetryPancakePush(order: AdminOrder): boolean {
-  if (isMerchantFulfilled(order) || order.pancakeOrderId || !IN_WAREHOUSE.has(order.status)) return false;
-  return order.pancakePushStatus !== 'WAITING_PAYMENT' && !awaitingStock(order);
+  return pancakeRetryDecision(order).kind === 'NOW';
 }
 
 export function PancakeSyncBadge({ order }: { order: AdminOrder }) {

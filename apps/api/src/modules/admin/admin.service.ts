@@ -2,6 +2,7 @@ import { affiliateRevocationPatch } from '../affiliate/affiliate-revocation';
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { nextPushRetryAt } from '../integrations/pancake/pancake-push-error';
+import { pushRetryGateDecision } from '../integrations/pancake/pancake-order.service';
 import { DEALER_APPLICATION_LIST_SELECT } from '../dealer/dealer-application-select';
 import { decodeServedImage } from '../../common/served-image';
 import { reviewAdminImageRefFromVersion, reviewImageRefFromVersion } from '../reviews/reviews.service';
@@ -1278,6 +1279,7 @@ export class AdminService {
     // OrderStatusService.setStatus và confirmOrderPayment, không để UI tự đoán theo điều kiện cứng.
     const data = items.map((o) => {
       const dealerOnCredit = o.type === 'DEALER' ? onCredit.has(o.id) : undefined;
+      const retry = o.pancakeOrderId ? null : pushRetryGateDecision(o);
       return {
         ...o,
         ...(o.type === 'DEALER' ? { dealerOnCredit } : {}),
@@ -1286,6 +1288,9 @@ export class AdminService {
         canRecordLatePayment: canAdminRecordLatePayment(o) && !lateRecorded.has(o.id),
         // Lần cron tự đẩy lại kế tiếp (null = không còn): màn "Kho Pancake" nói cho admin biết có cần chờ hay phải tự bấm.
         pancakeNextRetryAt: nextPushRetryAt(o)?.toISOString() ?? null,
+        // "Đẩy lại Pancake" có nhận đơn không (NOW/WAIT/NEVER) và đơn đang chờ gì: cùng vị từ với retryPushByAdmin, web không tự suy lại từ cột.
+        pancakeRetry: retry?.kind ?? null,
+        pancakeRetryWaitingFor: retry?.kind === 'WAIT' ? retry.waitingFor : null,
       };
     });
     if (!seesFullOrderPhones(viewer)) {

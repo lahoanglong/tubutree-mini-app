@@ -1517,6 +1517,38 @@ describe('AdminService.listOrders — lần tự đẩy Pancake kế tiếp (hi)
   });
 });
 
+describe('AdminService.listOrders — "Đẩy lại Pancake" có nhận đơn không (một vị từ với retryPushByAdmin)', () => {
+  const row = { id: 'o1', code: 'TUBU1', type: 'RETAIL', fulfiller: 'TUBU', status: 'CONFIRMED', paymentMethod: 'COD', paymentStatus: 'UNPAID', createdAt: new Date(), pancakeOrderId: null, pancakePushStatus: 'STALE', pancakePushAttempts: 0, pancakeLastAttemptAt: null, items: [{ id: 'i1', backorderedQty: 0 }] };
+  const list = async (rows: unknown[]) => {
+    const prisma = makePrisma({
+      order: { findMany: jest.fn().mockResolvedValue(rows), count: jest.fn().mockResolvedValue(rows.length) },
+      dealerCreditLedger: { findMany: jest.fn().mockResolvedValue([]) },
+      $transaction: jest.fn().mockImplementation((arr) => Promise.all(arr)),
+    });
+    const res = (await mkAdmin({ ...prisma, $queryRaw: jest.fn().mockResolvedValue([]) } as unknown as PrismaService).listOrders(1, 20)) as unknown as {
+      data: { code: string; pancakeRetry: string | null; pancakeRetryWaitingFor: string | null }[];
+    };
+    return res.data;
+  };
+
+  it('NOW / WAIT (kèm việc đang chờ) / NEVER theo cổng đẩy; đơn đã lên Pancake thì null', async () => {
+    const data = await list([
+      row,
+      { ...row, id: 'o2', code: 'TUBU2', status: 'DELIVERED' },
+      { ...row, id: 'o3', code: 'TUBU3', type: 'DEALER', items: [{ id: 'i1', backorderedQty: 3 }] },
+      { ...row, id: 'o4', code: 'TUBU4', hasRecyclingPickup: true, gomdonStatus: 'CREATING' },
+      { ...row, id: 'o5', code: 'TUBU5', pancakeOrderId: 'pk-1', pancakePushStatus: 'SYNCED' },
+    ]);
+    expect(data.map((o) => [o.code, o.pancakeRetry, o.pancakeRetryWaitingFor])).toEqual([
+      ['TUBU1', 'NOW', null],
+      ['TUBU2', 'NEVER', null],
+      ['TUBU3', 'WAIT', 'đủ hàng đặt trước'],
+      ['TUBU4', 'WAIT', 'vận đơn Gomdon'],
+      ['TUBU5', null, null],
+    ]);
+  });
+});
+
 describe('AdminService.listOrders with search', () => {
   it('tìm kiếm theo mã đơn hoặc SĐT truyền OR filter vào Prisma', async () => {
     const findMany = jest.fn().mockResolvedValue([]);
