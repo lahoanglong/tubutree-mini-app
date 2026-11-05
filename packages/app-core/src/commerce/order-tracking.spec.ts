@@ -376,6 +376,36 @@ describe('shippingEvents', () => {
     expect(events.map((e) => e.latest)).toEqual([true, false, false]);
   });
 
+  it('mốc ghi muộn (Gomdon báo trễ) vẫn xếp theo giờ thật: mốc mới nhất thật sự nằm trên cùng', () => {
+    const events = shippingEvents([
+      { at: '2026-11-04T01:00:00Z', status: 'Đã lấy hàng' },
+      { at: '2026-11-05T01:00:00Z', status: 'Đang giao hàng' },
+      { at: '2026-11-04T09:00:00Z', status: 'Đang vận chuyển' },
+    ]);
+    expect(events.map((e) => e.label)).toEqual(['Đang giao hàng', 'Đang vận chuyển', 'Đã lấy hàng']);
+    expect(events.map((e) => e.latest)).toEqual([true, false, false]);
+  });
+
+  it('giờ trùng hoặc thiếu thì giữ thứ tự ghi (mới ghi nằm trên), mốc thiếu giờ không nhảy chỗ', () => {
+    const same = shippingEvents([
+      { at: '2026-11-04T01:00:00Z', status: 'Đã lấy hàng' },
+      { at: '2026-11-04T01:00:00Z', status: 'Đang vận chuyển' },
+    ]);
+    expect(same.map((e) => e.label)).toEqual(['Đang vận chuyển', 'Đã lấy hàng']);
+    const undated = shippingEvents([
+      { at: '2026-11-04T01:00:00Z', status: 'Đã lấy hàng' },
+      { status: 'Hàng đang ở kho trung chuyển' },
+      { at: '2026-11-05T01:00:00Z', status: 'Đang giao hàng' },
+    ]);
+    expect(undated.map((e) => e.label)).toEqual(['Đang giao hàng', 'Hàng đang ở kho trung chuyển', 'Đã lấy hàng']);
+    const lateAmongUndated = shippingEvents([
+      { at: '2026-11-04T01:00:00Z', status: 'Đã lấy hàng' },
+      { status: 'Hàng đang ở kho trung chuyển' },
+      { at: '2026-11-03T01:00:00Z', status: 'Đã tạo vận đơn' },
+    ]);
+    expect(lateAmongUndated.map((e) => e.label)).toEqual(['Đã lấy hàng', 'Hàng đang ở kho trung chuyển', 'Đã tạo vận đơn']);
+  });
+
   it('bỏ phần tử rác và lịch sử trống', () => {
     expect(shippingEvents(null)).toEqual([]);
     expect(shippingEvents([null, undefined, {}])).toEqual([]);

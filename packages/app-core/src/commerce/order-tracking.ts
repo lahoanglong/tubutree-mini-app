@@ -250,11 +250,29 @@ export interface TrackEvent {
 }
 
 /**
+ * Hãng báo trễ thì mốc ghi sau lại có giờ sớm hơn: xếp lại theo giờ thật, mới nhất trên cùng. Mốc thiếu giờ hoặc giờ không đọc được giữ
+ * nguyên chỗ, giờ trùng giữ thứ tự ghi (sắp ổn định) nên mốc ghi sau vẫn nằm trên.
+ */
+function byTimeDescending<T extends { at?: string | null }>(list: T[]): T[] {
+  const time = (e: T) => (e.at ? Date.parse(e.at) : Number.NaN);
+  const slots: number[] = [];
+  list.forEach((e, i) => {
+    if (!Number.isNaN(time(e))) slots.push(i);
+  });
+  const sorted = slots.map((i) => list[i]!).sort((a, b) => time(b) - time(a));
+  const out = [...list];
+  slots.forEach((slot, k) => {
+    out[slot] = sorted[k]!;
+  });
+  return out;
+}
+
+/**
  * Các mốc vận chuyển hãng ghi vào đơn (Pancake, Gomdon), mới nhất trên cùng. Hãng hay bắn lại cùng một trạng thái: các mốc liền
  * nhau cùng chữ gộp thành một, giữ giờ lúc trạng thái bắt đầu (mốc sớm nhất trong cụm), vì khách muốn biết hàng tới chặng đó khi nào.
  */
 export function shippingEvents(history: TrackOrder['shippingHistory']): TrackEvent[] {
-  const newestFirst = journeyEvents((history ?? []).map((e) => e ?? null) as { at?: string | null; status?: string | null; code?: string | null }[]);
+  const newestFirst = byTimeDescending(journeyEvents((history ?? []).map((e) => e ?? null) as { at?: string | null; status?: string | null; code?: string | null }[]));
   const out: Omit<TrackEvent, 'latest'>[] = [];
   for (const ev of newestFirst) {
     const label = journeyEventLabel(ev);
