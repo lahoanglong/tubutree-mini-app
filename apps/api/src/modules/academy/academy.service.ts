@@ -125,8 +125,17 @@ export class AcademyService {
     });
   }
 
+  /** Mô tả và ảnh bìa gửi chuỗi rỗng là admin xoá trắng: ghi null như lúc tạo khoá không có hai trường này. Không gửi trường thì giữ nguyên cột. */
   updateCourse(id: string, dto: UpdateCourseInput) {
-    return this.prisma.course.update({ where: { id }, data: dto });
+    const { description, coverUrl, ...rest } = dto;
+    return this.prisma.course.update({
+      where: { id },
+      data: {
+        ...rest,
+        ...(description !== undefined ? { description: description === '' ? null : description } : {}),
+        ...(coverUrl !== undefined ? { coverUrl: coverUrl === '' ? null : coverUrl } : {}),
+      },
+    });
   }
 
   async deleteCourse(id: string) {

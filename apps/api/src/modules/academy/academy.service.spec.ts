@@ -258,6 +258,19 @@ describe('AcademyService — admin CRUD course', () => {
     expect((prisma as any).course.update).toHaveBeenCalledWith({ where: { id: 'c1' }, data: { title: 'Mới' } });
   });
 
+  // W9-03: admin xoá trắng Mô tả/Ảnh bìa rồi Lưu — chuỗi rỗng phải thành null trong DB, không được giữ giá trị cũ.
+  it('updateCourse: Mô tả và Ảnh bìa rỗng ghi null (xoá thật), cột không gửi thì không đụng', async () => {
+    const prisma = makePrisma();
+    (prisma as any).course.update.mockResolvedValue({ id: 'c1' });
+    const svc = new AcademyService(prisma);
+
+    await svc.updateCourse('c1', { title: 'Mới', description: '', coverUrl: '' });
+    expect((prisma as any).course.update).toHaveBeenLastCalledWith({ where: { id: 'c1' }, data: { title: 'Mới', description: null, coverUrl: null } });
+
+    await svc.updateCourse('c1', { description: 'Mô tả mới' });
+    expect((prisma as any).course.update).toHaveBeenLastCalledWith({ where: { id: 'c1' }, data: { description: 'Mô tả mới' } });
+  });
+
   it('deleteCourse: xoá course + trả {ok:true}', async () => {
     const prisma = makePrisma();
     (prisma as any).course.delete.mockResolvedValue({});

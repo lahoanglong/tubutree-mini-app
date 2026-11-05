@@ -177,6 +177,7 @@ import { formatDate, formatDateTime } from '@/lib/format-date';
 import { isRefundInProgress, orderPaymentStatusShort, shippingStatusLabel } from '@/lib/order-view';
 import { OrderPaymentSummary } from '@/components/admin/order-payment-summary';
 import { actionErrorText, loadErrorText } from '@/lib/admin-error-text';
+import { hasVisibleText, isPhoneInput, stripInvisible } from '@/lib/admin-visible-text';
 import { STAFF_USER_MAX_PAGE, staffUserSearchProblem } from '@/lib/staff-user-search';
 
 type Tab =
@@ -481,7 +482,8 @@ export default function AdminPage() {
   const role = user?.role;
   // Nhân viên: nhóm việc đọc lại từ API (JwtStrategy đọc DB) — gán/gỡ nhóm có hiệu lực mà không cần đăng nhập lại.
   // Cờ tích điểm tại quầy đang tắt thì không mời vào màn thu ngân; chưa biết (đang tải hoặc lỗi) thì vẫn hiện để nhân viên quầy không mất lối vào.
-  const posOffQ = useQuery({ queryKey: ['pos-credit-enabled'], queryFn: getPosCreditEnabled, staleTime: 60_000 });
+  // Chỉ hỏi sau khi có phiên: trước đó /me/loyalty/member-card trả 401 ở mỗi lần mở /admin (token chưa được làm mới xong).
+  const posOffQ = useQuery({ queryKey: ['pos-credit-enabled'], queryFn: getPosCreditEnabled, staleTime: 60_000, enabled: status === 'authenticated' });
   const accessQ = useQuery({
     queryKey: ['admin-ops-access'],
     queryFn: getOpsAccess,
@@ -2570,7 +2572,7 @@ function GrantRoleForm({ onDone }: { onDone: () => void }) {
     setMsg(null);
     if (!role) return;
     // Chụp giá trị lúc bấm: hộp xác nhận và lệnh đổi phải nói về cùng một SĐT dù ô nhập có bị sửa giữa chừng.
-    const target = { phone: phone.trim(), role, tierId: needsTier ? tierId : undefined };
+    const target = { phone: stripInvisible(phone).trim(), role, tierId: needsTier ? tierId : undefined };
     setChecking(true);
     const current = await lookupRoleByPhone(target.phone);
     setChecking(false);
@@ -2632,7 +2634,7 @@ function GrantRoleForm({ onDone }: { onDone: () => void }) {
         {needsTier && <DealerTierSelect value={tierId} onChange={setTierId} className="min-w-0 flex-1" />}
         <button
           className={BTN_PRIMARY}
-          disabled={!phone.trim() || !role || (needsTier && !tierId.trim()) || mut.isPending || checking}
+          disabled={!isPhoneInput(phone) || !role || (needsTier && !tierId.trim()) || mut.isPending || checking}
           title={needsTier && !tierId.trim() ? 'Cần chọn bậc đại lý để cấp vai trò DEALER' : undefined}
           onClick={submit}
         >
@@ -2856,7 +2858,7 @@ function CouponsTab({ onOpenConfig }: { onOpenConfig?: () => void } = {}) {
           </Field>
         </div>
       </div>
-      <button onClick={() => create.mutate()} disabled={!f.code || startPending || endPending || endBeforeStart || endAlreadyPast} className={`${BTN_PRIMARY} w-full`}>Tạo mã giảm giá</button>
+      <button onClick={() => create.mutate()} disabled={!hasVisibleText(f.code) || startPending || endPending || endBeforeStart || endAlreadyPast} className={`${BTN_PRIMARY} w-full`}>Tạo mã giảm giá</button>
       {endBeforeStart && <p role="alert" className="text-xs text-danger-fg">Ngày hết hạn không được sớm hơn ngày bắt đầu. Hãy chọn lại ngày hết hạn hoặc ngày bắt đầu để tạo mã.</p>}
       {endAlreadyPast && <p role="alert" className="text-xs text-danger-fg">{COUPON_END_PAST_MESSAGE}</p>}
       {msg && <p className={`text-sm ${create.isError ? 'text-danger-fg' : 'text-success-fg'}`}>{msg}</p>}
@@ -3274,7 +3276,7 @@ function FlashSalesTab() {
           </Field>
           <button
             onClick={() => { setMsg(null); create.mutate(); }}
-            disabled={!f.title.trim() || !f.startAt || !f.endAt || startPending || endPending || create.isPending}
+            disabled={!hasVisibleText(f.title) || !f.startAt || !f.endAt || startPending || endPending || create.isPending}
             className={BTN_PRIMARY}
           >
             {create.isPending ? 'Đang tạo…' : 'Tạo đợt'}
@@ -4207,7 +4209,7 @@ function AcademyTab() {
           </Field>
           <button
             onClick={() => { setMsg(null); create.mutate(); }}
-            disabled={!form.title.trim() || create.isPending}
+            disabled={!hasVisibleText(form.title) || create.isPending}
             className={BTN_PRIMARY}
           >
             {create.isPending ? 'Đang tạo…' : 'Tạo khoá học'}
@@ -4248,15 +4250,21 @@ function CourseRow({ course }: { course: AdminCourse }) {
     coverUrl: course.coverUrl ?? '',
     sortOrder: course.sortOrder,
   });
+  // Mô tả và ảnh bìa chỉ gửi khi admin đã đổi so với lúc mở (xoá trắng thì gửi ''): form giữ bản chụp lúc mount, nên gửi cả khi không đổi
+  // sẽ ghi đè giá trị người khác vừa thêm. Lưu xong thì bản chụp là giá trị vừa lưu, để lần xoá kế tiếp vẫn được gửi.
+  const baseline = useRef({ description: (course.description ?? '').trim(), coverUrl: (course.coverUrl ?? '').trim() });
   const save = useMutation({
-    mutationFn: () =>
+    mutationFn: (v: { title: string; description: string; coverUrl: string; sortOrder: number }) =>
       updateAcademyCourse(course.id, {
-        title: f.title.trim(),
-        description: f.description.trim() || undefined,
-        coverUrl: f.coverUrl.trim() || undefined,
-        sortOrder: Number(f.sortOrder) || 0,
+        title: v.title,
+        ...(v.description !== baseline.current.description ? { description: v.description } : {}),
+        ...(v.coverUrl !== baseline.current.coverUrl ? { coverUrl: v.coverUrl } : {}),
+        sortOrder: v.sortOrder,
       }),
-    onSuccess: refresh,
+    onSuccess: (_result, v) => {
+      baseline.current = { description: v.description, coverUrl: v.coverUrl };
+      refresh();
+    },
   });
 
   const [lesson, setLesson] = useState<{
@@ -4334,7 +4342,11 @@ function CourseRow({ course }: { course: AdminCourse }) {
                 <textarea placeholder="Mô tả" value={f.description} maxLength={5000} onChange={(e) => setF({ ...f, description: e.target.value })} rows={2} className={INPUT_CLASS} />
               </Field>
             </div>
-            <button onClick={() => save.mutate()} disabled={!f.title.trim() || save.isPending} className={`${BTN_PRIMARY} mt-2`}>
+            <button
+              onClick={() => save.mutate({ title: f.title.trim(), description: f.description.trim(), coverUrl: f.coverUrl.trim(), sortOrder: Number(f.sortOrder) || 0 })}
+              disabled={!hasVisibleText(f.title) || save.isPending}
+              className={`${BTN_PRIMARY} mt-2`}
+            >
               {save.isPending ? 'Đang lưu…' : 'Lưu thông tin'}
             </button>
             {save.isSuccess && <span className="ml-2 inline-flex items-center gap-1 text-sm text-success-fg">Đã lưu <Check className="h-4 w-4" aria-hidden /></span>}
@@ -4407,7 +4419,7 @@ function CourseRow({ course }: { course: AdminCourse }) {
               )}
               <button
                 onClick={() => addLesson.mutate()}
-                disabled={!lesson.title.trim() || addLesson.isPending}
+                disabled={!hasVisibleText(lesson.title) || addLesson.isPending}
                 className={BTN_PRIMARY}
               >
                 Thêm bài học
@@ -4500,7 +4512,7 @@ function LessonRow({ lesson }: { lesson: AdminLesson }) {
               <textarea placeholder="Nội dung bài viết" value={f.body} maxLength={50000} onChange={(e) => setF({ ...f, body: e.target.value })} rows={3} className={INPUT_CLASS} />
             </Field>
           )}
-          <button onClick={() => save.mutate()} disabled={!f.title.trim() || save.isPending} className={BTN_PRIMARY}>
+          <button onClick={() => save.mutate()} disabled={!hasVisibleText(f.title) || save.isPending} className={BTN_PRIMARY}>
             {save.isPending ? 'Đang lưu…' : 'Lưu'}
           </button>
           {save.isError && <p className="text-xs text-danger-fg">{actionErrorText(save.error)}</p>}
