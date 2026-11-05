@@ -618,9 +618,11 @@ export class MerchantService {
     }
 
     const baseSlug = slugify(dto.name) || 'san-pham';
-    // Mã thời gian (8–9 ký tự) + 6 hex ngẫu nhiên: hai sản phẩm cùng tên trong cùng một mili giây không đụng unique slug. Tối đa 200 + 1 + 9 + 6 = 216 ký tự, vừa PRODUCT_SLUG_MAX.
-    const uniqueSlug = `${baseSlug}-${Date.now().toString(36)}${randomBytes(3).toString('hex')}`;
-    const sku = `MCH-${Date.now().toString(36).toUpperCase()}`;
+    // Mã thời gian (8–9 ký tự) + 6 hex ngẫu nhiên (dùng chung cho slug và sku): hai sản phẩm đăng cùng một mili giây không đụng unique slug hay sku. Tối đa 200 + 1 + 9 + 6 = 216 ký tự, vừa PRODUCT_SLUG_MAX.
+    const nowCode = Date.now().toString(36);
+    const randomCode = randomBytes(3).toString('hex');
+    const uniqueSlug = `${baseSlug}-${nowCode}${randomCode}`;
+    const sku = `MCH-${nowCode.toUpperCase()}-${randomCode.toUpperCase()}`;
     const retailPrice = link ? link.retailPrice : dto.basePrice;
     const salePrice = link ? link.salePrice : (dto.salePrice ?? null);
 
