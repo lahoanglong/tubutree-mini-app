@@ -516,23 +516,33 @@ test.describe('Buy-flow 4a — nhắc mua lại, đặt hàng thành công, bố
     });
   }
 
-  test('Chi tiết đơn 320px (followups DS v2): "Huỷ đơn" + "Thanh toán ngay" nằm trọn và không bị cắt chữ', async ({ page, api }) => {
+  test('Chi tiết đơn 320px (followups DS v2): "Thanh toán ngay" + "Thêm thao tác" nằm trọn và không bị cắt chữ, "Huỷ đơn" ở menu', async ({ page, api }) => {
     await page.setViewportSize({ width: 320, height: 700 });
     mockBuyFlowSession(api);
     api.get('/orders/:code', makeOrder({ code: 'TUBU-PAY-320', status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER' }));
     await page.goto('/order/TUBU-PAY-320');
 
     const bar = page.getByTestId('sticky-bar');
-    for (const name of ['Huỷ đơn', 'Thanh toán ngay']) {
-      const btn = bar.getByRole('button', { name });
-      await expect(btn).toBeVisible({ timeout: 15_000 });
+    const pay = bar.getByRole('button', { name: 'Thanh toán ngay' });
+    const more = bar.getByRole('button', { name: 'Thêm thao tác' });
+    await expect(pay).toBeVisible({ timeout: 15_000 });
+    await expect(bar.getByRole('button', { name: 'Huỷ đơn' })).toHaveCount(0);
+    for (const [name, btn] of [['Thanh toán ngay', pay], ['Thêm thao tác', more]] as const) {
       const b = await btn.boundingBox();
       expect(b!.x).toBeGreaterThanOrEqual(0);
       expect(b!.x + b!.width, `${name} tràn phải`).toBeLessThanOrEqual(320);
       expect(b!.height, `${name} thấp hơn vùng chạm 44px`).toBeGreaterThanOrEqual(44);
-      const label = btn.getByText(name, { exact: true });
-      expect(await label.evaluate((el) => el.scrollWidth <= el.clientWidth), `"${name}" bị rút gọn`).toBe(true);
+      expect(b!.width, `${name} hẹp hơn vùng chạm 44px`).toBeGreaterThanOrEqual(44);
     }
+    const label = pay.getByText('Thanh toán ngay', { exact: true });
+    expect(await label.evaluate((el) => el.scrollWidth <= el.clientWidth), '"Thanh toán ngay" bị rút gọn').toBe(true);
+
+    await more.click();
+    const cancel = page.getByRole('group', { name: 'Thao tác với đơn' }).getByRole('button', { name: 'Huỷ đơn' });
+    await expect(cancel).toBeVisible();
+    const c = await cancel.boundingBox();
+    expect(c!.x + c!.width, 'Huỷ đơn tràn phải').toBeLessThanOrEqual(320);
+    expect(c!.height, 'Huỷ đơn thấp hơn vùng chạm 44px').toBeGreaterThanOrEqual(44);
   });
 });
 

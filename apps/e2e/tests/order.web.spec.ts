@@ -205,7 +205,7 @@ test.describe('Web khách: giỏ và thanh toán', () => {
     expect([rail!.x, rail!.x + rail!.width]).toEqual([0, 375]);
   });
 
-  test('chi tiết đơn chờ chuyển khoản ở 375px: dải hạn thanh toán, thanh đáy "Huỷ đơn | Thanh toán ngay" tới trang QR, không nhúng khung QR', async ({ page, api }) => {
+  test('chi tiết đơn chờ chuyển khoản ở 375px: hạn thanh toán ở hero, thanh đáy "Thanh toán ngay" tới trang QR, "Huỷ đơn" trong menu, không nhúng khung QR', async ({ page, api }) => {
     mockBuyer(api);
     api.get('/orders/TUBU2026101900004', detailOrder({
       status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', deliveredAt: null, canCancel: true,
@@ -216,15 +216,17 @@ test.describe('Web khách: giỏ và thanh toán', () => {
     await page.setViewportSize({ width: 375, height: 800 });
     await page.goto('/tai-khoan/don-hang/TUBU2026101900004');
     await expect(page.getByTestId('status-hero')).toContainText('Thanh toán trước');
-    await expect(page.getByTestId('status-hero')).toContainText('quá hạn đơn sẽ tự huỷ.');
+    await expect(page.getByTestId('status-hero')).toContainText('Đơn đang chờ bạn thanh toán.');
     await expect(page.getByText('Chuyển khoản trước')).toHaveCount(0);
     const bar = page.getByTestId('order-action-bar');
-    await expect(bar.getByRole('button', { name: 'Huỷ đơn' })).toBeVisible();
+    await expect(bar.getByRole('button', { name: 'Huỷ đơn' })).toHaveCount(0);
     await expect(bar.getByRole('link', { name: 'Thanh toán ngay' })).toHaveAttribute('href', '/thanh-toan/chuyen-khoan/TUBU2026101900004');
+    await bar.getByRole('button', { name: 'Thêm thao tác' }).click();
+    await expect(page.getByRole('group', { name: 'Thao tác với đơn' }).getByRole('button', { name: 'Huỷ đơn' })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
   });
 
-  test('chi tiết đơn đã giao ở 375px: thanh đáy chỉ có "Mua lại đơn này", "Yêu cầu đổi/trả" là nút phụ trong trang', async ({ page, api }) => {
+  test('chi tiết đơn đã giao ở 375px: thanh đáy chỉ có "Mua lại đơn này", "Yêu cầu đổi/trả" nằm trong menu Thêm thao tác', async ({ page, api }) => {
     mockBuyer(api);
     api.get('/orders/TUBU2026101900004', detailOrder({ deliveredAt: new Date(Date.now() - 864e5).toISOString() }));
     api.get('/orders/me/returns', []);
@@ -233,8 +235,9 @@ test.describe('Web khách: giỏ và thanh toán', () => {
     await page.goto('/tai-khoan/don-hang/TUBU2026101900004');
     const bar = page.getByTestId('order-action-bar');
     await expect(bar.getByRole('button', { name: 'Mua lại đơn này' })).toBeVisible();
-    await expect(bar.getByRole('button', { name: 'Yêu cầu đổi/trả' })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Yêu cầu đổi/trả' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Yêu cầu đổi/trả' })).toHaveCount(0);
+    await bar.getByRole('button', { name: 'Thêm thao tác' }).click();
+    await expect(page.getByRole('group', { name: 'Thao tác với đơn' }).getByRole('button', { name: 'Yêu cầu đổi/trả' })).toBeVisible();
   });
 
   test('Mua lại từ thẻ đơn: sheet chọn dòng, gửi repurchase đúng body rồi sang giỏ', async ({ page, api }) => {
@@ -289,7 +292,7 @@ test.describe('Web khách: giỏ và thanh toán', () => {
     await page.goto('/tai-khoan/don-hang/TUBU2026101900004');
     await expect(page.getByRole('heading', { name: 'Chi tiết đơn hàng', level: 1 })).toBeVisible();
     await expect(page.getByText('TUBU2026101900004').first()).toBeVisible();
-    await expect(page.getByText('Giao lúc 10:00 03/10/2026')).toBeVisible();
+    await expect(page.getByText(/Giao lúc 10:00 03\/10(\/2026)?$/)).toBeVisible();
     await expect(page.getByText('Đã cộng +50 Điểm Xanh vào tài khoản')).toBeVisible();
     const pdf = page.getByRole('link', { name: 'Tải PDF' });
     await expect(pdf).toHaveAttribute('href', 'https://hoadon.example/4.pdf');
