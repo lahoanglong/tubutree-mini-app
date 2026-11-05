@@ -92,12 +92,15 @@ export const NOT_STALE_WHERE: Prisma.OrderWhereInput = {
 };
 
 /**
- * Điều kiện "không lượt đẩy nào đang giữ quyền": không PUSHING, hoặc PUSHING đã quá `PUSH_LEASE_MS` (tiến trình đẩy đã chết). Một luật
- * cho claim, câu ghi lỗi của job, markOverdue, "Đẩy lại" của admin và ghi trạng thái cổng/cấu hình (setPushStatus, NOT_CONFIGURED).
- * Ghi đè PUSHING còn hạn thuê là mở khoá cho lượt thứ hai: nó claim được, `findOnPancake` chưa thấy đơn đang bay và tạo đơn kho lần hai.
- * Chỉ ba loại câu ghi `pancakePushStatus` được bỏ điều kiện này, mỗi loại có lý do: claim (chính nó lấy lease), `saveCreated` (đẩy xong thì
- * SYNCED là kết cục thật), và câu của chính lượt đang giữ lease (ghi PENDING lúc lỗi trong pushOrder). STALE (markStale) cũng được bỏ vì
- * nó chặn mọi claim chứ không mở khoá.
+ * Điều kiện "không lượt đẩy nào đang giữ quyền": không PUSHING, hoặc PUSHING đã quá `PUSH_LEASE_MS` (tiến trình đẩy đã chết). Một luật cho claim
+ * (claim CÓ điều kiện này: lấy lease chính là câu ghi mang nó), câu ghi lỗi của job (markPushFailure), markOverdue, "Đẩy lại" của admin, ghi trạng
+ * thái cổng/cấu hình (setPushStatus, NOT_CONFIGURED) và câu đóng dấu của probeConfigBlocked. Ghi đè PUSHING còn hạn thuê là mở khoá cho lượt thứ hai:
+ * nó claim được và đi tiếp. Lease chỉ chặn hai lượt chạy CÙNG LÚC; chặn hai lần GỬI lệnh tạo đơn là việc của dấu gửi (SEND_SETTLE_MS, sendWindowOpenWhere).
+ * Chỉ ba loại câu ghi `pancakePushStatus` bỏ điều kiện này, mỗi loại có lý do:
+ *  - `saveCreated`: SYNCED là kết cục thật của lượt tạo đơn, ghi lên mọi trạng thái (chỉ cần chưa có mã);
+ *  - `markStale`: STALE chặn mọi claim chứ không mở khoá;
+ *  - hai câu của CHÍNH lượt giữ lease, ghim token `pancakeLastAttemptAt` (mốc lượt đó ghi lần cuối) thay cho điều kiện này: nhả về PENDING khi thua
+ *    CAS dấu gửi (releaseSettling) và ghi lỗi cuối lượt (writeAttemptError). Lượt đã mất quyền thì token không khớp và câu ghi hụt.
  */
 export function pushLeaseFreeWhere(now: Date = new Date()): Prisma.OrderWhereInput {
   return {
@@ -275,10 +278,11 @@ function isTagsRejection(err: unknown): boolean {
 /**
  * Đẩy đơn local → Pancake (Build Spec §8.3) và các cập nhật sau đó (đã thanh toán, huỷ).
  *
- * Chống tạo đơn trùng ở kho: trước khi POST ghi `pancakePushClaimedAt`; nếu lần thử sau thấy mốc này mà chưa có
- * `pancakeOrderId` (timeout, mất response, lỗi lưu DB, worker bị kill khi deploy, job bị dọn) thì TRA Pancake theo
- * mã đơn trước, có thì nhận đơn đó, không thì mới tạo. Pancake từ chối dứt khoát (4xx) thì chắc chắn chưa tạo → gỡ
- * mốc. Vì vậy enqueue lại bao nhiêu lần cũng an toàn (không còn phải giữ job completed làm "chốt chặn").
+ * Chống tạo đơn trùng ở kho: ngay trước MỖI POST tạo đơn đóng dấu `pancakePushClaimedAt` bằng CAS (dấu gửi). Trong SEND_SETTLE_MS kể từ
+ * dấu, không lượt nào gửi lệnh tạo thứ hai hay tra cứu (lượt thua nhả về PENDING). Lần thử sau cửa sổ mà thấy dấu cũ chưa có `pancakeOrderId`
+ * (timeout, mất response, lỗi lưu DB, worker bị kill khi deploy, job bị dọn) thì TRA Pancake theo mã đơn trước, có thì nhận đơn đó, không thì mới tạo.
+ * Pancake từ chối dứt khoát (4xx) thì chắc chắn chưa tạo → gỡ dấu. Dấu gửi độc lập với hạn thuê quyền đẩy (PUSH_LEASE_MS), nên lượt chậm hơn
+ * hạn thuê cũng không sinh lệnh tạo thứ hai. Vì vậy enqueue lại bao nhiêu lần cũng an toàn (không còn phải giữ job completed làm "chốt chặn").
  */
 @Injectable()
 export class PancakeOrderService {
