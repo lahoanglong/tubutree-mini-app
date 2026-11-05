@@ -1023,6 +1023,42 @@ describe('PancakeOrderService — STALE chỉ rời bằng đẩy thành công h
     });
   });
 
+  describe('câu ghi thứ hai (bỏ trường trạng thái) chỉ chạy khi câu đầu hụt VÌ đơn STALE', () => {
+    /** Câu ghi đầu hụt vì lượt khác đang giữ quyền đẩy (PUSHING trong hạn thuê); ngay sau đó lượt kia nhả quyền (về PENDING). */
+    const holderReleasesAfterFirstWrite = (t: ReturnType<typeof setup>) => {
+      const real = t.prisma.order.updateMany.getMockImplementation()!;
+      t.prisma.order.updateMany.mockImplementationOnce(async (args: Parameters<typeof real>[0]) => {
+        const r = await real(args);
+        t.row().pancakePushStatus = PANCAKE_PUSH.PENDING;
+        return r;
+      });
+    };
+
+    it('câu đầu hụt vì lease (không phải STALE), lượt kia nhả quyền ngay sau: không ghi gì, written=false → không báo, không FAILED', async () => {
+      const t = setup({ pancakePushStatus: PANCAKE_PUSH.PUSHING, pancakeLastAttemptAt: new Date() });
+      holderReleasesAfterFirstWrite(t);
+      await t.svc.markPushFailure('o1', new PancakeOrderDataError('thiếu SĐT'), true);
+      expect(t.row().pancakePushStatus).toBe(PANCAKE_PUSH.PENDING);
+      expect([t.row().pancakeErrorKind ?? null, t.row().pancakeSyncError ?? null, t.row().pancakeAttention ?? null]).toEqual([null, null, null]);
+      expect(t.alerts.alert).not.toHaveBeenCalled();
+    });
+
+    it('lỗi 401 trên đơn đang PUSHING trong hạn thuê: không ghi, không hoàn lượt, không báo', async () => {
+      const t = setup({ pancakePushStatus: PANCAKE_PUSH.PUSHING, pancakeLastAttemptAt: new Date(), pancakePushAttempts: 3 });
+      await t.svc.markPushFailure('o1', new PancakeApiError('Pancake trả 401 khi tạo đơn', false, false, 401), true);
+      expect(t.row()).toMatchObject({ pancakePushStatus: PANCAKE_PUSH.PUSHING, pancakePushAttempts: 3 });
+      expect(t.row().pancakeErrorKind ?? null).toBeNull();
+      expect(t.alerts.alert).not.toHaveBeenCalled();
+    });
+
+    it('câu đầu hụt VÌ đơn STALE: câu thứ hai vẫn ghi loại lỗi và lời lỗi (không trạng thái)', async () => {
+      const t = setup({ pancakePushStatus: PANCAKE_PUSH.STALE });
+      await t.svc.markPushFailure('o1', new PancakeOrderDataError('thiếu SĐT'), true);
+      expect(t.row()).toMatchObject({ pancakePushStatus: PANCAKE_PUSH.STALE, pancakeErrorKind: 'DATA' });
+      expect(t.row().pancakeSyncError).toContain('thiếu SĐT');
+    });
+  });
+
   it('markPushFailure(final) trên đơn STALE gặp 401: vẫn hoàn lượt đã đốt và vẫn STALE', async () => {
     const t = setup({ pancakePushStatus: PANCAKE_PUSH.STALE, pancakePushAttempts: 3 });
     await t.svc.markPushFailure('o1', new PancakeApiError('Pancake trả 401 khi tạo đơn', false, false, 401), true);

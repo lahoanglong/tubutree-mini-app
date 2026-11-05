@@ -899,7 +899,9 @@ export class PancakeOrderService {
 
   /**
    * `updateMany` không bao giờ ghi `pancakePushStatus` lên đơn STALE (xem NOT_STALE_WHERE). Câu ghi đầu mang điều kiện "chưa STALE"; hụt
-   * thì ghi lại BỎ trường trạng thái, nên loại lỗi, lời lỗi, mốc và hoàn lượt vẫn được ghi. Dữ liệu không có trạng thái thì ghi thẳng.
+   * VÌ đơn STALE thì ghi lại BỎ trường trạng thái, nên loại lỗi, lời lỗi, mốc và hoàn lượt vẫn được ghi. Câu thứ hai mang đúng điều kiện
+   * "đang STALE": câu đầu có thể hụt vì lý do khác (lượt khác đang giữ quyền đẩy, loại lỗi vừa đổi), và lý do đó có thể hết ngay sau đó;
+   * khi ấy ghi bỏ trạng thái sẽ để lại đơn chưa FAILED mà vẫn báo như đã ghi. Dữ liệu không có trạng thái thì ghi thẳng.
    */
   private async updateManyKeepingStale(where: Prisma.OrderWhereInput, data: Record<string, unknown>): Promise<{ count: number }> {
     if (!('pancakePushStatus' in data)) return this.prisma.order.updateMany({ where, data });
@@ -907,7 +909,7 @@ export class PancakeOrderService {
     if (withStatus.count > 0) return withStatus;
     const rest = { ...data };
     delete rest.pancakePushStatus;
-    return this.prisma.order.updateMany({ where, data: rest });
+    return this.prisma.order.updateMany({ where: { AND: [where, { pancakePushStatus: PANCAKE_PUSH.STALE }] }, data: rest });
   }
 
   private setPushError(orderId: string, err: unknown) {
