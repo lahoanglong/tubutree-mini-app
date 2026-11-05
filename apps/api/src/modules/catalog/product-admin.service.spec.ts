@@ -111,11 +111,11 @@ describe('ProductAdminService — sửa sản phẩm', () => {
   });
 
   it('mọi trường chữ của UpdateProductDto lưu được ở đúng trần @MaxLength: service không giữ trần riêng thấp hơn DTO', async () => {
-    const caps = (getMetadataStorage() as unknown as { getTargetValidationMetadatas: (t: unknown, s: unknown, a: boolean, b: boolean) => Array<{ propertyName: string; name?: string; constraints?: number[] }> })
+    const caps = (getMetadataStorage() as unknown as { getTargetValidationMetadatas: (t: unknown, s: unknown, a: boolean, b: boolean) => Array<{ propertyName: string; name?: string; each?: boolean; constraints?: number[] }> })
       .getTargetValidationMetadatas(UpdateProductDto, null, false, false)
-      .filter((m) => m.name === 'maxLength' && ['description', 'shortDesc'].includes(m.propertyName))
+      .filter((m) => m.name === 'maxLength' && !m.each)
       .map((m) => [m.propertyName, m.constraints![0]!] as const);
-    expect(caps.map(([f]) => f).sort()).toEqual(['description', 'shortDesc']);
+    expect(caps.map(([f]) => f)).toEqual(expect.arrayContaining(['description', 'shortDesc']));
     for (const [field, max] of caps) {
       const { svc, update } = setup();
       await svc.update('a1', 'p1', { [field]: 'a'.repeat(max) });
