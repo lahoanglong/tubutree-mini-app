@@ -336,7 +336,86 @@ describe('Campaigns (real Postgres)', () => {
       expect(await linksOf(c.id)).toEqual({ products: 1, coupons: 0 });
     });
 
-    it('đang chạy CAMPAIGN_PAGE [A]: đổi đích sang PRODUCT trước thì gỡ A được (đúng thứ tự form); gỡ A trước khi đổi đích thì 400', async () => {
+    describe('lock_timeout: giữ khoá quá hạn thì lệnh lưu nhận 409 tiếng Việt, không 500, không ghi gì', () => {
+      const BUSY = 'Chiến dịch đang được người khác lưu, thử lại sau giây lát';
+      const settleWhile = async (hold: (tx: Parameters<Parameters<PrismaService['$transaction']>[0]>[0]) => Promise<void>, run: () => Promise<unknown>) => {
+        let out: unknown;
+        const t0 = Date.now();
+        await prisma.$transaction(
+          async (tx) => {
+            await hold(tx);
+            out = await run().then(
+              (v) => v,
+              (e: unknown) => e,
+            );
+          },
+          { timeout: 20_000 },
+        );
+        return { out, ms: Date.now() - t0 };
+      };
+
+      it('người khác giữ khoá dòng quá hạn: PATCH nhận 409, tiêu đề không đổi, trả lời trước hạn giao dịch 5 giây', async () => {
+        const c = await admin.create(base('lt1'));
+        const { out, ms } = await settleWhile(
+          (tx) => tx.$queryRaw`SELECT "id" FROM "campaigns" WHERE "id" = ${c.id} FOR UPDATE`.then(() => undefined),
+          () => admin.update(c.id, { title: 'Không được lưu' }),
+        );
+        expect(out).toBeInstanceOf(ConflictException);
+        expect((out as Error).message).toBe(BUSY);
+        expect(ms).toBeLessThan(5_000);
+        expect((await prisma.campaign.findUniqueOrThrow({ where: { id: c.id } })).title).not.toBe('Không được lưu');
+      });
+
+      it('PUT sản phẩm cũng nhận 409 và danh sách không đổi', async () => {
+        const c = await admin.create(base('lt2'));
+        const a = await product('SP lt2', 'lt2');
+        const { out } = await settleWhile(
+          (tx) => tx.$queryRaw`SELECT "id" FROM "campaigns" WHERE "id" = ${c.id} FOR UPDATE`.then(() => undefined),
+          () => admin.setProducts(c.id, [a.id]),
+        );
+        expect(out).toBeInstanceOf(ConflictException);
+        expect((out as Error).message).toBe(BUSY);
+        expect(await linksOf(c.id)).toEqual({ products: 0, coupons: 0 });
+      });
+
+      it('lệnh ghi (UPDATE) bị khoá bảng giữ quá hạn: cũng 409 (lỗi của câu ORM, không chỉ câu raw), không ghi gì', async () => {
+        const c = await admin.create(base('lt3'));
+        const { out } = await settleWhile(
+          (tx) => tx.$executeRawUnsafe('LOCK TABLE "campaigns" IN SHARE MODE').then(() => undefined),
+          () => admin.update(c.id, { title: 'Không được lưu' }),
+        );
+        expect(out).toBeInstanceOf(ConflictException);
+        expect((out as Error).message).toBe(BUSY);
+        expect((await prisma.campaign.findUniqueOrThrow({ where: { id: c.id } })).title).not.toBe('Không được lưu');
+      });
+
+      it('tạo mới bị khoá bảng giữ quá hạn: 409 và không có dòng nào', async () => {
+        const slug = `it-cmp-${tag}-lt4`;
+        const { out } = await settleWhile(
+          (tx) => tx.$executeRawUnsafe('LOCK TABLE "campaigns" IN SHARE MODE').then(() => undefined),
+          () => admin.create(base('lt4')),
+        );
+        expect(out).toBeInstanceOf(ConflictException);
+        expect((out as Error).message).toBe(BUSY);
+        expect(await prisma.campaign.count({ where: { slug } })).toBe(0);
+      });
+
+      it('khoá nhả kịp (trước hạn) thì lệnh lưu chờ rồi thành công như thường', async () => {
+        const c = await admin.create(base('lt5'));
+        let pending: Promise<unknown> | undefined;
+        await prisma.$transaction(
+          async (tx) => {
+            await tx.$queryRaw`SELECT "id" FROM "campaigns" WHERE "id" = ${c.id} FOR UPDATE`;
+            pending = admin.update(c.id, { title: 'Lưu sau khi nhả' });
+            await waitForLockWait(/FOR UPDATE/);
+          },
+          { timeout: 20_000 },
+        );
+        await expect(pending).resolves.toMatchObject({ title: 'Lưu sau khi nhả' });
+      });
+    });
+
+    it('PUT của web cũ, đang chạy CAMPAIGN_PAGE [A]: đổi đích sang PRODUCT trước thì gỡ A được (đúng thứ tự lệnh của web cũ); gỡ A trước khi đổi đích thì 400', async () => {
       const c = await livePage('pg2p');
       const target = await product('SP đích', 'pg2p-dich');
       await expect(admin.setProducts(c.id, [])).rejects.toThrow(/Trang chiến dịch đang trống/);
@@ -357,7 +436,7 @@ describe('Campaigns (real Postgres)', () => {
       await expect(admin.update(c.id, { startAt: new Date(Date.now() - 2 * DAY).toISOString() })).resolves.toMatchObject({ isActive: true });
     });
 
-    it('sửa chiến dịch đang bật đổi đích sang trang chiến dịch kèm sản phẩm: trường khác trước, gắn sản phẩm, đích ở cuối thì được; đổi đích trước khi có sản phẩm thì 400', async () => {
+    it('PUT của web cũ, chiến dịch đang bật đổi đích sang trang chiến dịch kèm sản phẩm: trường khác trước, PUT gắn sản phẩm, đích ở cuối thì được; đổi đích trước khi có sản phẩm thì 400', async () => {
       const c = await admin.create(base('doi-dich'));
       await expect(admin.update(c.id, { linkType: 'CAMPAIGN_PAGE' })).rejects.toThrow(/Trang chiến dịch đang trống/);
       expect((await prisma.campaign.findUniqueOrThrow({ where: { id: c.id } })).linkType).toBe('URL_INTERNAL');
@@ -418,6 +497,61 @@ describe('Campaigns (real Postgres)', () => {
         await prisma.campaign.update({ where: { id: c.id }, data: { isActive: true } });
         await expect(admin.update(c.id, { title: 'Tiêu đề mới', startAt })).resolves.toMatchObject({ title: 'Tiêu đề mới' });
         expect((await row(c.id)).title).toBe('Tiêu đề mới');
+      });
+
+      it('(3b) startAt trong DB có giây, form gửi startAt cắt về phút (khác DB): trang trống sẵn, sửa tiêu đề vẫn được', async () => {
+        const withSeconds = new Date(Math.floor((Date.now() - 3 * DAY) / 60_000) * 60_000 + 37_000);
+        const c = await page('v3b', { startAt: withSeconds.toISOString() });
+        await prisma.campaign.update({ where: { id: c.id }, data: { isActive: true } });
+        const toMinute = new Date(Math.floor(withSeconds.getTime() / 60_000) * 60_000).toISOString();
+        expect(toMinute).not.toBe(withSeconds.toISOString());
+        await expect(admin.update(c.id, { title: 'Tiêu đề phút', startAt: toMinute })).resolves.toMatchObject({ title: 'Tiêu đề phút' });
+        expect((await row(c.id)).startAt.toISOString()).toBe(toMinute);
+      });
+
+      describe('hẹn giờ (bật, startAt > now) vẫn được giữ không trống', () => {
+        const hiddenProduct = async (suffix: string) => {
+          const p = await product(`SP ẩn ${suffix}`, suffix);
+          await prisma.product.update({ where: { id: p.id }, data: { isActive: false } });
+          return p;
+        };
+        const scheduledOnHidden = async (suffix: string) => {
+          const hidden = await hiddenProduct(suffix);
+          const c = await admin.create(base(suffix, { linkType: 'PRODUCT', linkValue: hidden.slug, isActive: false, startAt: offset(3).toISOString(), endAt: offset(20).toISOString() }));
+          await prisma.campaign.update({ where: { id: c.id }, data: { isActive: true } });
+          return c;
+        };
+
+        it('(10) PATCH {startAt: bây giờ} cho banner PRODUCT hẹn giờ trỏ sản phẩm ẩn: 400 (vừa hiện với khách), startAt không đổi', async () => {
+          const c = await scheduledOnHidden('v10');
+          const before = await row(c.id);
+          await expect(admin.update(c.id, { startAt: new Date().toISOString() })).rejects.toBeInstanceOf(BadRequestException);
+          expect(await row(c.id)).toMatchObject({ startAt: before.startAt, isActive: true });
+        });
+
+        it('(11) hẹn giờ có lỗi cũ dời sang ngày tương lai khác: được', async () => {
+          const c = await scheduledOnHidden('v11');
+          const startAt = offset(6).toISOString();
+          await expect(admin.update(c.id, { startAt, title: 'Dời hẹn giờ' })).resolves.toMatchObject({ title: 'Dời hẹn giờ' });
+          expect((await row(c.id)).startAt.toISOString()).toBe(startAt);
+        });
+
+        it('(12) tạo mới đang bật hẹn giờ mà trang trống: 400, không có dòng nào; kèm sản phẩm hiển thị thì được', async () => {
+          const a = await product('SP v12', 'v12');
+          const slug = `it-cmp-${tag}-v12`;
+          const input = base('v12', { linkType: 'CAMPAIGN_PAGE', linkValue: undefined, isActive: true, startAt: offset(2).toISOString(), endAt: offset(9).toISOString() });
+          await expect(admin.create(input)).rejects.toBeInstanceOf(BadRequestException);
+          expect(await prisma.campaign.count({ where: { slug } })).toBe(0);
+          await expect(admin.create({ ...input, productIds: [a.id] })).resolves.toMatchObject({ isActive: true });
+        });
+
+        it('(13) hẹn giờ CAMPAIGN_PAGE [A]: gỡ A làm trang hẹn giờ trống thì 400 và A còn nguyên', async () => {
+          const c = await page('v13', { startAt: offset(2).toISOString() });
+          await admin.setProducts(c.id, [(await product('SP v13', 'v13')).id]);
+          await admin.update(c.id, { isActive: true });
+          await expect(admin.update(c.id, { productIds: [] })).rejects.toThrow(/Lần lưu này làm trang chiến dịch đang bật thành trống/);
+          expect(await linksOf(c.id)).toEqual({ products: 1, coupons: 0 });
+        });
       });
 
       it('(4) CAMPAIGN_PAGE [A] đang chạy → PRODUCT và bỏ A trong một lệnh: được', async () => {
@@ -495,6 +629,25 @@ describe('Campaigns (real Postgres)', () => {
           const results = await Promise.allSettled([admin.update(c.id, { title: 'A', productIds: [] }), admin.update(c.id, { title: 'B', productIds: [] })]);
           expect(results.every((r) => r.status === 'rejected')).toBe(true);
           expect(await linksOf(c.id)).toEqual({ products: 1, coupons: 0 });
+        }
+      });
+
+      it('hai PATCH một lệnh, một bỏ sản phẩm một bỏ mã, trang đang chạy có cả hai: đúng một lệnh thắng, lệnh kia 400 và không ghi tiêu đề; trang không bao giờ trống', async () => {
+        for (let round = 0; round < 6; round++) {
+          const c = await page(`pw${round}`);
+          const a = await product(`SP pw${round}`, `pw${round}`);
+          const k = await couponAt(`PW${round}`, -1, 10);
+          await admin.setProducts(c.id, [a.id]);
+          await admin.setCoupons(c.id, [k.code]);
+          await admin.update(c.id, { isActive: true });
+          const results = await Promise.allSettled([admin.update(c.id, { title: 'Bỏ sản phẩm', productIds: [] }), admin.update(c.id, { title: 'Bỏ mã', couponCodes: [] })]);
+          expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+          const lost = results.find((r): r is PromiseRejectedResult => r.status === 'rejected')!;
+          expect(lost.reason).toBeInstanceOf(BadRequestException);
+          const winner = results.findIndex((r) => r.status === 'fulfilled') === 0 ? 'Bỏ sản phẩm' : 'Bỏ mã';
+          expect((await row(c.id)).title).toBe(winner);
+          const left = await linksOf(c.id);
+          expect(left.products + left.coupons).toBe(1);
         }
       });
     });
