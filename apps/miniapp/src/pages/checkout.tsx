@@ -213,22 +213,25 @@ export default function CheckoutPage() {
   const pointsToUse = usePoints ? points.usable : 0;
   // Giỏ chưa tải xong hoặc không có món nào thì không báo giá: máy chủ trả 400 cho giỏ rỗng.
   const cartHasItems = (cart.data?.items.length ?? 0) > 0;
+  const quoteEnabled = !!addressId && authed && cartReady && cartHasItems && !selectionDead;
   const quote = useQuery({
     queryKey: ['quote', addressId, pointsToUse, ctvSlug, itemIdsKey],
     queryFn: () => checkoutQuote(addressId!, pointsToUse, ctvSlug, itemIds),
-    enabled: !!addressId && authed && cartReady && cartHasItems && !selectionDead,
+    enabled: quoteEnabled,
   });
 
   useEffect(() => {
     if (priceAcceptedAt === null) return;
-    if (quote.isError) {
+    // Báo giá lỗi hoặc đang tắt (giỏ thành rỗng, hết địa chỉ) thì không còn lần báo giá nào để báo: xoá mốc, kẻo lần báo giá
+    // về sau (giỏ có hàng lại) bật câu "Đã cập nhật giá" sai lúc.
+    if (quote.isError || !quoteEnabled) {
       setPriceAcceptedAt(null);
       return;
     }
     if (!quote.isSuccess || quote.isFetching || !quote.data || quote.dataUpdatedAt <= priceAcceptedAt) return;
     setPriceAcceptedAt(null);
     notify({ text: fillCopy('checkout.priceUpdated', { price: formatVnd(quote.data.total) }), type: 'success' });
-  }, [priceAcceptedAt, quote.isError, quote.isSuccess, quote.isFetching, quote.data, quote.dataUpdatedAt, notify]);
+  }, [priceAcceptedAt, quoteEnabled, quote.isError, quote.isSuccess, quote.isFetching, quote.data, quote.dataUpdatedAt, notify]);
 
   const checkoutItems = itemIds
     ? (cart.data?.items ?? []).filter((it) => itemIds.includes(it.id))

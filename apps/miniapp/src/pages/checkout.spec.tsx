@@ -2164,6 +2164,26 @@ describe('CheckoutPage — giá đổi lúc đặt (hk)', () => {
     expect((mocks.placeOrder.mock.calls[1]![0] as Record<string, unknown>).expectedTotal).toBe(75_000);
   });
 
+  it('nhận giá mới rồi giỏ thành rỗng (báo giá tắt): mốc nhận giá bị xoá, báo giá về muộn không bật câu "Đã cập nhật giá" sai lúc', async () => {
+    mocks.placeOrder.mockRejectedValueOnce(priceChangedErr());
+    renderPage();
+    await placeOrderClick();
+    let release: () => void = () => undefined;
+    mocks.checkoutQuote.mockImplementation(() => new Promise((resolve) => {
+      release = () => resolve({ ...QUOTE, total: 75_000 });
+    }));
+    mocks.getCart.mockResolvedValue({ ...CART, items: [], itemCount: 0 });
+    fireEvent.click(await screen.findByRole('button', { name: 'Cập nhật giá mới' }));
+    expect(await screen.findByText(viCopy.cart.emptyHeading)).toBeInTheDocument();
+    await act(async () => {
+      release();
+    });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(mocks.openSnackbar).not.toHaveBeenCalledWith(expect.objectContaining({ text: expect.stringContaining('Đã cập nhật giá') }));
+  });
+
   it('"Xem lại giỏ hàng" vẫn đưa sang giỏ', async () => {
     mocks.placeOrder.mockRejectedValue(priceChangedErr());
     renderPage();
