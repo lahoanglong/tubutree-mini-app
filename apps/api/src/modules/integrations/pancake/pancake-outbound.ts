@@ -1,5 +1,6 @@
 import type { PancakeCreateOrderResponse, PancakeOrderDTO } from './pancake.types';
 import { NOTE_ORDER_CODE } from './pancake-webhook-dedupe';
+import { payloadId } from './pancake-payload';
 
 /**
  * Lỗi gọi Pancake POS (đơn hàng). `transient`: lỗi mạng/timeout/5xx/429 — Pancake CÓ THỂ đã xử lý lệnh, thử lại
@@ -74,10 +75,11 @@ export const PANCAKE_ORDER_STATUS = {
 
 const HANDED_OVER: ReadonlySet<number> = new Set([2, 3, 16, 4, 15, 5]);
 
+/** Chỉ số hoặc chuỗi số nguyên: `Number([6])` = 6 và `Number(true)` = 1 sẽ đọc mảng/boolean thành mã trạng thái ("đã huỷ" → bỏ lệnh huỷ). */
 function statusNumber(status: unknown): number | null {
-  if (status === null || status === undefined || status === '') return null;
-  const n = Number(status);
-  return Number.isInteger(n) ? n : null;
+  if (typeof status === 'number') return Number.isInteger(status) ? status : null;
+  if (typeof status === 'string' && /^\s*\d+\s*$/.test(status)) return Number(status);
+  return null;
 }
 
 export function isPancakeHandedOver(status: unknown): boolean {
@@ -92,8 +94,13 @@ export function isPancakeCancelled(status: unknown): boolean {
 
 /** id đơn Pancake trong phản hồi tạo đơn — phẳng (theo Open API) hoặc bọc `data` (bản thật). */
 export function extractPancakeOrderId(res: PancakeCreateOrderResponse | null | undefined): string | null {
-  const raw = res?.data?.id ?? res?.data?.order_id ?? res?.id ?? res?.order_id;
-  return raw === null || raw === undefined || raw === '' ? null : String(raw);
+  // Ô đầu rỗng/rác thì thử ô sau; id không đọc được không được thành "[object Object]" rồi ghi làm mã đơn Pancake của đơn Tubu.
+  return payloadId(res?.data?.id) ?? payloadId(res?.data?.order_id) ?? payloadId(res?.id) ?? payloadId(res?.order_id);
+}
+
+/** Mã của một đơn Pancake trong danh sách/tra cứu trả về; null khi thiếu hoặc không đọc được. */
+export function pancakeOrderIdOf(o: PancakeOrderDTO | null | undefined): string | null {
+  return o && typeof o === 'object' ? payloadId(o.id) : null;
 }
 
 /** Đơn Pancake này mang đúng mã đơn Tubu (custom_id, extension hoặc ghi chú) — không khớp theo chuỗi con. */

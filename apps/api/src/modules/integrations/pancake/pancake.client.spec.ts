@@ -146,6 +146,13 @@ describe('PancakeClient đơn hàng (PANCAKE-2, PANCAKE-4, PANCAKE-14)', () => {
     const broken = makeOrderClient({ get: jest.fn().mockResolvedValue({ data: {} }) });
     await expect(broken.searchOrders('TUBU1')).rejects.toMatchObject({ transient: true });
   });
+
+  it('searchOrders/listUpdatedOrders: phần tử không phải object (null, chuỗi, mảng) bị bỏ, người gọi không phải đọc .id của null (W11)', async () => {
+    const rows = [null, 'rác', 7, [], { id: 9, custom_id: 'TUBU1' }];
+    const get = jest.fn().mockResolvedValue({ data: { data: rows } });
+    expect(await makeOrderClient({ get }).searchOrders('TUBU1')).toEqual([{ id: 9, custom_id: 'TUBU1' }]);
+    expect(await makeOrderClient({ get }).listUpdatedOrders({ sinceEpochSec: 1, orderSources: ['-1'], page: 1, pageSize: 50 })).toEqual([{ id: 9, custom_id: 'TUBU1' }]);
+  });
 });
 
 describe('PancakeClient đọc danh mục/geo: lỗi HTTP thành câu tiếng Việt, không lộ "Request failed with status code"', () => {

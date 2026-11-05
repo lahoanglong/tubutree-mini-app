@@ -12,6 +12,7 @@ import {
   PancakeCancelRefusedError,
   pancakeErrorText,
   pancakeOrderHasCode,
+  pancakeOrderIdOf,
   isPancakeCancelled,
   isPancakeHandedOver,
 } from './pancake-outbound';
@@ -104,7 +105,7 @@ export class PancakeSyncHooks {
       let pancakeOrderId = order.pancakeOrderId;
       if (!pancakeOrderId) {
         const found = (await this.client.searchOrders(order.code, opts)).filter(
-          (o) => o.id != null && pancakeOrderHasCode(o, order.code) && !isPancakeCancelled(o.status),
+          (o) => pancakeOrderIdOf(o) !== null && pancakeOrderHasCode(o, order.code) && !isPancakeCancelled(o.status),
         );
         if (found.length === 0) return { kind: 'CONFIRMED', cancelStatus: PANCAKE_CANCEL.NOT_FOUND, pancakeOrderId: null };
         // Nhiều đơn sống cùng mã (đẩy trùng): một đơn đã gửi hàng là đủ để chặn; còn lại để job huỷ từng đơn và báo admin.
@@ -113,7 +114,8 @@ export class PancakeSyncHooks {
           if (shipped) throw new PancakeHandedOverError(shipped.status!);
           return { kind: 'DEFERRED', reason: `Pancake có ${found.length} đơn mang mã ${order.code}` };
         }
-        pancakeOrderId = String(found[0]!.id);
+        // `found` chỉ gồm đơn có mã đọc được (bộ lọc ở trên).
+        pancakeOrderId = pancakeOrderIdOf(found[0])!;
       }
       const outcome = await cancelPancakeOrder(this.client, pancakeOrderId, opts);
       if (outcome.kind === 'HANDED_OVER') throw new PancakeHandedOverError(outcome.status);

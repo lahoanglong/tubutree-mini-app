@@ -36,6 +36,7 @@ import {
   PancakePushSettlingError,
   pancakeErrorText,
   pancakeOrderHasCode,
+  pancakeOrderIdOf,
 } from './pancake-outbound';
 import { CRON_TZ } from '../../../common/cron-tz';
 import { enqueuePancakeCancel, enqueuePancakePayment, enqueuePancakePush, PANCAKE_JOB_PUSH, removeFailedPancakePush } from './pancake-queue';
@@ -870,7 +871,8 @@ export class PancakeOrderService {
         // Lần đẩy đang chạy dở: tra lúc này có thể chưa thấy đơn sắp được tạo → đợi nó xong rồi thử lại.
         if (this.pushInFlight(order)) throw new PancakeApiError(`Đơn ${order.code} đang được đẩy sang Pancake — huỷ sau.`, true);
         const found = await this.findOnPancake(order);
-        if (!found?.id) {
+        const foundId = pancakeOrderIdOf(found);
+        if (!foundId) {
           const r = await this.prisma.order.updateMany({
             where: { id: order.id, pancakeOrderId: null },
             data: { pancakeCancelStatus: PANCAKE_CANCEL.NOT_FOUND, pancakePushClaimedAt: null, pancakeSyncError: null },
@@ -879,7 +881,7 @@ export class PancakeOrderService {
           await clearPancakeAttention(this.prisma, order.id, ATTENTION_SETTLED_BY_CANCEL);
           return;
         }
-        pancakeId = String(found.id);
+        pancakeId = foundId;
         await this.prisma.order.updateMany({ where: { id: order.id, pancakeOrderId: null }, data: { pancakeOrderId: pancakeId } });
       }
       const outcome = await cancelPancakeOrder(this.client, pancakeId);
@@ -922,7 +924,7 @@ export class PancakeOrderService {
 
   /** Đơn Pancake mang đúng mã đơn này (ưu tiên đơn còn sống, cũ nhất). Có nhiều đơn sống → báo admin đơn trùng. */
   private async findOnPancake(order: Pick<Order, 'id' | 'code'>): Promise<PancakeOrderDTO | null> {
-    const matches = (await this.client.searchOrders(order.code)).filter((o) => o.id != null && pancakeOrderHasCode(o, order.code));
+    const matches = (await this.client.searchOrders(order.code)).filter((o) => pancakeOrderIdOf(o) !== null && pancakeOrderHasCode(o, order.code));
     if (matches.length === 0) return null;
     const alive = matches.filter((o) => !isPancakeCancelled(o.status));
     const pool = (alive.length > 0 ? alive : matches).sort((a, b) => String(a.inserted_at ?? '').localeCompare(String(b.inserted_at ?? '')));
@@ -939,7 +941,9 @@ export class PancakeOrderService {
   }
 
   private async adopt(order: OrderWithItems, found: PancakeOrderDTO): Promise<string> {
-    const pancakeOrderId = String(found.id);
+    // findOnPancake chỉ trả đơn có mã đọc được; không có thì không gắn gì (String(object) sẽ thành mã đơn Pancake "[object Object]").
+    const pancakeOrderId = pancakeOrderIdOf(found);
+    if (!pancakeOrderId) throw new PancakeApiError(`Đơn Pancake tìm thấy cho ${order.code} không có mã đọc được.`, true);
     this.logger.warn(`Đơn ${order.code} đã có trên Pancake (#${pancakeOrderId}) từ lần đẩy trước — gắn lại, không tạo đơn mới.`);
     // Đơn tìm thấy được tạo bởi lần thử trước, có thể trước khi khách trả tiền: để job thanh toán tự kiểm.
     await this.saveCreated(order, pancakeOrderId, false);
