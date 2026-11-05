@@ -30,7 +30,7 @@ describe('campaignHealth', () => {
     it('PRODUCT trỏ slug không tồn tại: BLOCK, câu nêu slug', () => {
       const issues = campaignHealth(subject({ linkType: 'PRODUCT', linkValue: 'khong-co' }), facts({ target: { exists: false, visible: false } }));
       expect(issues[0]).toMatchObject({ level: 'BLOCK', code: 'LINK_PRODUCT_MISSING' });
-      expect(issues[0].message).toContain('khong-co');
+      expect(issues[0]?.message).toContain('khong-co');
     });
     it('PRODUCT đang ẩn: BLOCK; sản phẩm hiển thị: xanh', () => {
       const s = subject({ linkType: 'PRODUCT', linkValue: 'sua-hat' });
@@ -98,14 +98,14 @@ describe('campaignHealth', () => {
     it('gom theo loại và nêu mã', () => {
       const issues = campaignHealth(subject(), facts({ coupons: [coupon({ code: 'A', isActive: false }), coupon({ code: 'B', isActive: false })] }));
       expect(issues).toHaveLength(1);
-      expect(issues[0].message).toContain('A, B');
+      expect(issues[0]?.message).toContain('A, B');
     });
   });
 
   describe('sản phẩm gắn kèm', () => {
     it('đếm sản phẩm ẩn/hết hàng, nêu tối đa 3 tên', () => {
       const products = [product(), ...['An', 'Bình', 'Chi', 'Dũng'].map((name) => product({ name, inStock: false }))];
-      const [issue] = campaignHealth(subject(), facts({ products }));
+      const [issue = { code: '', level: '', message: '' }] = campaignHealth(subject(), facts({ products }));
       expect(issue).toMatchObject({ level: 'WARN', code: 'PRODUCTS_UNAVAILABLE' });
       expect(issue.message).toContain('4 sản phẩm');
       expect(issue.message).toContain('An, Bình, Chi');

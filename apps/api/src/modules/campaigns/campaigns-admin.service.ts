@@ -124,7 +124,7 @@ export class CampaignsAdminService {
       image: publicImage('campaign', c.id, 'cover', c.image),
       productCount: c._count.products,
       couponCount: c._count.coupons,
-      health: countHealth(health[i]),
+      health: countHealth(health[i] ?? []),
     }));
   }
 
@@ -145,13 +145,13 @@ export class CampaignsAdminService {
     const fresh = dto.id === undefined;
     const productIds = dto.productIds ?? (fresh ? [] : undefined);
     const couponCodes = dto.couponCodes ?? (fresh ? [] : undefined);
-    const [issues] = await campaignHealthBatch(this.prisma, [{ subject, ...(productIds ? { productIds } : {}), ...(couponCodes ? { couponCodes } : {}) }], now);
+    const [issues = []] = await campaignHealthBatch(this.prisma, [{ subject, ...(productIds ? { productIds } : {}), ...(couponCodes ? { couponCodes } : {}) }], now);
     return { issues, ...countHealth(issues) };
   }
 
   /** Bật chiến dịch mà còn lỗi chặn thì 400 với câu đầu tiên. Kiểm lại ngay trong request, không tin gì từ trình duyệt. */
   private async assertCanActivate(subject: HealthSubject, now: Date): Promise<void> {
-    const [issues] = await campaignHealthBatch(this.prisma, [{ subject, ...(subject.id ? {} : { productIds: [], couponCodes: [] }) }], now);
+    const [issues = []] = await campaignHealthBatch(this.prisma, [{ subject, ...(subject.id ? {} : { productIds: [], couponCodes: [] }) }], now);
     const block = issues.find((i) => i.level === 'BLOCK');
     if (block) throw new BadRequestException(block.message);
   }

@@ -70,7 +70,7 @@ describe('campaignHealthBatch', () => {
       ],
       couponLinks: [{ campaignId: 'c1', coupon: { code: 'HET', isActive: true, startAt: at(-9), endAt: at(-1), usageLimit: null, usedCount: 0 } }],
     });
-    const [c1, c2, c3] = await campaignHealthBatch(prisma as never, [{ subject: subject('c1') }, { subject: subject('c2') }, { subject: subject('c3') }], NOW);
+    const [c1 = [], c2 = [], c3 = []] = await campaignHealthBatch(prisma as never, [{ subject: subject('c1') }, { subject: subject('c2') }, { subject: subject('c3') }], NOW);
     expect(c1.map((i) => i.code)).toEqual(['COUPON_EXPIRED', 'PRODUCTS_UNAVAILABLE']);
     expect(c2.map((i) => i.code)).toEqual(['PAGE_EMPTY', 'PRODUCTS_UNAVAILABLE']);
     expect(c3.map((i) => i.code)).toEqual(['PAGE_EMPTY']);
@@ -78,7 +78,7 @@ describe('campaignHealthBatch', () => {
 
   it('chiến dịch đang soạn (chưa lưu): dùng danh sách gửi lên, không đọc liên kết trong DB', async () => {
     const prisma = fakePrisma({ products: [prod('a')], coupons: [{ code: 'GIAM10', isActive: false, startAt: at(-9), endAt: at(30), usageLimit: null, usedCount: 0 }] });
-    const [issues] = await campaignHealthBatch(prisma as never, [{ subject: { ...subject('x'), id: undefined }, productIds: ['a'], couponCodes: ['giam10'] }], NOW);
+    const [issues = []] = await campaignHealthBatch(prisma as never, [{ subject: { ...subject('x'), id: undefined }, productIds: ['a'], couponCodes: ['giam10'] }], NOW);
     expect(issues.map((i) => i.code)).toEqual(['COUPON_OFF']);
     expect(prisma.campaignProduct.findMany).not.toHaveBeenCalled();
     expect(prisma.coupon.findMany.mock.calls[0][0].where).toEqual({ code: { in: ['GIAM10'] } });
@@ -104,7 +104,7 @@ describe('campaignHealthBatch', () => {
   it('chiến dịch bật khác cùng vị trí được nạp một lần để tính chồng banner', async () => {
     const peers = ['p1', 'p2', 'p3', 'p4', 'p5'].map((id) => ({ id, placement: 'HOME_TOP', audience: 'ALL', startAt: at(-1), endAt: at(10), sortOrder: 0 }));
     const prisma = fakePrisma({ peers, products: [prod('a')] });
-    const [issues] = await campaignHealthBatch(prisma as never, [{ subject: subject('zz', { sortOrder: 9 }), productIds: ['a'], couponCodes: [] }], NOW);
+    const [issues = []] = await campaignHealthBatch(prisma as never, [{ subject: subject('zz', { sortOrder: 9 }), productIds: ['a'], couponCodes: [] }], NOW);
     expect(issues.map((i) => i.code)).toEqual(['CROWDED']);
     expect(prisma.campaign.findMany).toHaveBeenCalledTimes(1);
     expect(prisma.campaign.findMany.mock.calls[0][0].where).toMatchObject({ isActive: true, placement: { in: ['HOME_TOP'] } });
