@@ -144,3 +144,22 @@ Kế hoạch: `PLAN.md`. Phát hiện và quyết định của chủ: `audit-11
 - Quay lại: image `:prev-94a55770` cho cả api (09985aa679fc) và web (60ce23ad126e), theo runbook 7.2 và §1.23. Migration 180000 thuộc IMAGE_COMPATIBLE.
 - Mini App (ZMP) chưa lên bản mới. Cho tới lúc đó, không gắn chiến dịch vào slug dài hơn 120 ký tự (§1.23).
 - File go-live: `/root/golive-archive/6ec0dee8/`. `/opt/tubutree` sạch.
+
+## Đợt 4 (đang làm; tích hợp `hard/1105-w4`, gốc main 6ec0dee82 + docs 9c3ab9f20)
+- Chủ giao 05/11:
+  - (1) job pancake-push lỗi: tìm gốc, sửa triệt để trong mã, dọn PROD;
+  - (2) làm cả 3 nâng cấp, tuần tự: kiểm chiến dịch trước khi bật, checkout mobile 375px, trang theo dõi đơn.
+  - Tối đa 2 subagent và 2 worker test cùng lúc. Gate + Opus xong thì PR, merge, deploy (chủ đã duyệt đọc PROD, PR, deploy). Chủ để điều phối tự chốt thiết kế.
+- Đọc PROD (chỉ đọc):
+  - job lỗi duy nhất là đơn thử `TUBUSUB7659607093` (định kỳ, platform `system`, CONFIRMED, UNPAID);
+  - 73 lần đẩy, đều `422 [tags]: is invalid`; STALE từ 28/10;
+  - gói định kỳ thử vẫn ACTIVE, kỳ tới 22/11.
+- Nguyên nhân gốc: body gửi `tags` dạng tên tự do; Pancake chỉ nhận thẻ `{id, name}` có trong shop. PR #39 có bản sửa, bị giữ vì đơn thử.
+- Chủ chọn: điều phối huỷ đơn và gói thử bằng hàm hệ thống. Script `/root/ops-20261105/cancel-test-order.js`:
+  - Opus duyệt GO; đã sửa 3 điểm: chạy lại được, hạn 60s khi đóng app, kiểm admin + gỡ cờ Pancake.
+  - Chạy 05/11 10:40 sau backup `tubutree_20261105_104032.sql.gz`, EXIT=0, log `/root/ops-20261105/cancel.log`.
+  - Kết quả: đơn CONFIRMED → CANCELLED qua `AdminService.updateOrderStatus` (actor admin của chủ); gói định kỳ → CANCELLED (`SubscriptionsService.setStatus`); cờ "Cần xử lý Pancake" gỡ (`resolvePancakeAttention`); job lỗi gỡ. Hàng `pancake-push` còn failed 0.
+- Gói:
+  - `hi` (Pancake, PG 46540): gộp PR #39; phân loại lỗi; job lỗi không đọng; go-live chỉ WARN đơn còn cần xử lý; admin hiển thị rõ.
+  - `hj` (chiến dịch, PG 46541): API kiểm BLOCK/WARN; admin xem trước banner 375px + desktop; huy hiệu trên danh sách.
+  - `hk` (checkout mobile) và `hl` (theo dõi đơn): làm sau khi `hi`/`hj` xong.
