@@ -206,7 +206,8 @@ export function orderHeadline(o: TrackOrder, ctx: TrackCtx = {}): OrderHeadline 
       break;
     case 'CARRIER_BOOKED':
       milestone = eta;
-      next = fillCopy('order.next.handed');
+      // Hãng mới gắn mã vận đơn, hàng chưa tới tay bưu tá: không nói "đã giao cho đơn vị vận chuyển" (trái với "hàng sắp được lấy").
+      next = fillCopy('order.next.carrierBooked');
       break;
     case 'SHIPPING':
       milestone = eta;

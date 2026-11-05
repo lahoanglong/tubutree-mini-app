@@ -135,6 +135,7 @@ export const SHOP_COPY: Record<string, string> = {
   'order.next.payOverdue': 'Cần hỗ trợ thì bạn liên hệ Tubu.',
   'order.next.cancelable': 'Bạn huỷ được đơn tới khi hàng giao cho đơn vị vận chuyển.',
   'order.next.handed': 'Hàng đã giao cho đơn vị vận chuyển nên đơn không huỷ được.',
+  'order.next.carrierBooked': 'Đơn đã có mã vận đơn của hãng nên không huỷ được.',
   'order.next.shipping': 'Khi nhận hàng, bạn có thể đổi/trả trong {n} ngày.',
   'order.next.review': 'Bạn có thể đánh giá sản phẩm đã nhận.',
   'order.next.refund': 'Tiền hoàn của đơn xem ở mục Hoàn tiền bên dưới.',

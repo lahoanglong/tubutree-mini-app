@@ -208,11 +208,11 @@ describe('orderActionPlan và orderHeadline theo trạng thái', () => {
     }
   });
 
-  it('mốc ngày giao dự kiến chỉ ở các bước trước khi giao, bước tiếp theo của khách nói rõ khi hàng đã giao hãng', () => {
+  it('mốc ngày giao dự kiến chỉ ở các bước trước khi giao; hãng đã có mã vận đơn mà chưa bàn giao thì không nói "đã giao cho đơn vị vận chuyển"', () => {
     const o = order({ status: 'PACKED', shippingCode: 'GHN123', canCancel: false });
     const head = orderHeadline(o, { now: NOW, etaLabel: '06/11 – 08/11' });
     expect(head.milestone).toBe('Dự kiến giao 06/11 – 08/11');
-    expect(head.next).toBe('Hàng đã giao cho đơn vị vận chuyển nên đơn không huỷ được.');
+    expect(head.next).toBe('Đơn đã có mã vận đơn của hãng nên không huỷ được.');
     expect(orderHeadline(order({ status: 'DELIVERED', deliveredAt: iso(-HOUR) }), { now: NOW, etaLabel: '06/11 – 08/11' }).milestone).not.toContain('Dự kiến giao');
   });
 

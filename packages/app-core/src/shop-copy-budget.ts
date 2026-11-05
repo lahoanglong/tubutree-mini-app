@@ -132,6 +132,7 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'order.next.payOverdue': 35,
   'order.next.cancelable': 60,
   'order.next.handed': 60,
+  'order.next.carrierBooked': 55,
   'order.next.shipping': 50,
   'order.next.review': 40,
   'order.next.refund': 50,
