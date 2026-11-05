@@ -35,13 +35,14 @@ function assertSuccess<T extends PancakeBody>(body: T, what: string): T {
   return body;
 }
 
-/** 4xx mà thử lại có thể qua: hết hạn chờ (408), quá sớm (425), quá tải (429). */
-const TRANSIENT_CLIENT_STATUSES: ReadonlySet<number> = new Set([408, 425, 429]);
+/** 4xx mà thử lại có thể qua ở mọi lệnh: hết hạn chờ (408), quá tải (429). */
+const TRANSIENT_CLIENT_STATUSES: ReadonlySet<number> = new Set([408, 429]);
 
 /**
- * Phân loại lỗi axios: không có phản hồi / 5xx / 408 / 425 / 429 là lỗi tạm (Pancake CÓ THỂ đã xử lý); 4xx là từ chối.
- * 409 chỉ là lỗi tạm khi `conflictIsTransient` (đường TẠO đơn: xung đột tạo trùng thử lại sẽ tra ra đơn đã có). Ở lệnh huỷ và
- * các PUT khác 409 là lời từ chối dứt khoát: coi là tạm thì huỷ của người bấm bị chặn và cron huỷ bật khoá "Pancake không phản hồi".
+ * Phân loại lỗi axios: không có phản hồi / 5xx / 408 / 429 là lỗi tạm (Pancake CÓ THỂ đã xử lý); 4xx là từ chối.
+ * 409 và 425 chỉ là lỗi tạm khi `conflictIsTransient` (đường TẠO đơn: xung đột / quá sớm, thử lại sẽ tra ra đơn đã có hoặc qua).
+ * Ở lệnh huỷ và các PUT khác chúng là lời từ chối dứt khoát: coi là tạm thì huỷ của người bấm bị chặn và cron huỷ bật khoá
+ * "Pancake không phản hồi".
  */
 function toPancakeError(err: unknown, what: string, conflictIsTransient = false): Error {
   if (err instanceof PancakeApiError || !isAxiosError(err)) return err as Error;
@@ -53,7 +54,7 @@ function toPancakeError(err: unknown, what: string, conflictIsTransient = false)
   const detail = reason ? `: ${reason}` : '';
   if (status === undefined) return new PancakeApiError(`Không kết nối được Pancake khi ${what}: ${err.message}`, true);
   if (status === 404) return new PancakeApiError(`Pancake không tìm thấy (${what})${detail}`, false, true, status);
-  const transient = status >= 500 || TRANSIENT_CLIENT_STATUSES.has(status) || (conflictIsTransient && status === 409);
+  const transient = status >= 500 || TRANSIENT_CLIENT_STATUSES.has(status) || (conflictIsTransient && (status === 409 || status === 425));
   return new PancakeApiError(`Pancake trả ${status} khi ${what}${detail}`, transient, false, status);
 }
 
