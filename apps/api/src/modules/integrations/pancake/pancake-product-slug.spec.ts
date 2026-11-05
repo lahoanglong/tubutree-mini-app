@@ -35,4 +35,21 @@ describe('pancakeProductSlug', () => {
       expect(slug).toMatch(CAMPAIGN_ENTITY_SLUG_RE);
     }
   });
+
+  it('mã Pancake UUID hoặc số cho kết quả y như cũ (6 ký tự cuối, viết thường)', () => {
+    expect(pancakeProductSlug('Trà Sen', '3f2b8c1e-7a41-4d0e-9b6a-1c2d3e4f5a6b')).toBe('tra-sen-4f5a6b');
+    expect(pancakeProductSlug('Trà Sen', '1234567890')).toBe('tra-sen-567890');
+    expect(pancakeProductSlug('Trà Sen', 'ab_cd-')).toBe('tra-sen-ab_cd-');
+  });
+
+  it('mã có ký tự ngoài [a-z0-9_-] hoặc rỗng: hậu tố là 6 ký tự hex băm từ cả mã, slug vẫn khớp RE, ổn định và khác nhau theo mã', () => {
+    const odd = ['mã sản phẩm é☃', 'ab/cd?ef#', 'xx xx x', '', '   '];
+    const slugs = odd.map((c) => pancakeProductSlug('Trà Sen', c));
+    for (const slug of slugs) {
+      expect(slug).toMatch(CAMPAIGN_ENTITY_SLUG_RE);
+      expect(slug).toMatch(/^tra-sen-[0-9a-f]{6}$/);
+    }
+    expect(new Set(slugs).size).toBe(odd.length);
+    expect(pancakeProductSlug('Trà Sen', odd[0]!)).toBe(slugs[0]);
+  });
 });

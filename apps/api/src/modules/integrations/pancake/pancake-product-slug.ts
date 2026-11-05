@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import { CAMPAIGN_ENTITY_SLUG_MAX } from '@tubutree/shared-types';
 
 const SUFFIX_LENGTH = 6;
@@ -9,7 +10,9 @@ const EMPTY_NAME = 'san-pham';
  * CAMPAIGN_ENTITY_SLUG_MAX (chiến dịch gắn sản phẩm theo slug); hậu tố giữ nguyên để vẫn duy nhất. Chỉ dùng khi tạo sản phẩm mới: sản phẩm đã có giữ slug đã lưu.
  */
 export function pancakeProductSlug(name: string, suffix: string): string {
-  const tail = suffix.slice(-SUFFIX_LENGTH).toLowerCase();
+  const raw = suffix.slice(-SUFFIX_LENGTH).toLowerCase();
+  // Mã có ký tự lạ (hoặc rỗng) thì 6 ký tự cuối không dùng được trong slug: thay bằng băm của cả mã, vẫn ổn định và gần như duy nhất.
+  const tail = /^[a-z0-9_-]{1,6}$/.test(raw) ? raw : createHash('sha1').update(suffix).digest('hex').slice(0, SUFFIX_LENGTH);
   const base = name
     .toLowerCase()
     .normalize('NFD')
