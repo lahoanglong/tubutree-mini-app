@@ -863,7 +863,7 @@ export interface AdminCoupon {
   /** Lô thẻ in (mỗi mã một lượt cho một thẻ): có giá trị thì không hiện ở mục Nhận mã được. */
   batch?: string | null;
 }
-export type CouponStatusFilter = '' | 'active' | 'inactive' | 'expired';
+export type CouponStatusFilter = '' | 'active' | 'upcoming' | 'inactive' | 'expired';
 export async function listCoupons(params: { page: number; limit: number; q?: string; status?: CouponStatusFilter }) {
   const qs = new URLSearchParams({ page: String(params.page), limit: String(params.limit) });
   if (params.q?.trim()) qs.set('q', params.q.trim());

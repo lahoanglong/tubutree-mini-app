@@ -378,6 +378,21 @@ const CRON_REAL = ['PancakeSyncService.scheduledSync', 'ZnsStuckLogCron.sweepStu
 /** Giá trị `company.legal_name` trước khi spec chạy (đọc một lần), để afterAll trả lại. */
 const LEGAL_NAME = { read: false, value: undefined as unknown };
 
+/** Xoá mọi dòng spec tạo. Gọi cả ở afterAll: chiến dịch HOME_TOP còn chạy sẽ thành banner Trang chủ của các spec web khách chạy sau (lcp-priority-db đòi trang chủ không banner). */
+async function purgeW11(prisma: any): Promise<void> {
+  const orderIds: string[] = (await prisma.order.findMany({ where: { code: { startsWith: 'E2EW11-' } }, select: { id: true } })).map((o: { id: string }) => o.id);
+  if (orderIds.length) await prisma.orderStatusHistory.deleteMany({ where: { orderId: { in: orderIds } } });
+  await prisma.order.deleteMany({ where: { code: { startsWith: 'E2EW11-' } } });
+  await prisma.campaign.deleteMany({ where: { title: { startsWith: 'W11 ' } } });
+  await prisma.brand.deleteMany({ where: { name: { startsWith: 'W11 ' } } });
+  // Mục con tạo bằng giao diện có id cuid, nên nhận ra theo tên "W11 " thay vì tiền tố id; con trước, gốc sau.
+  const w11Category = { OR: [{ id: { startsWith: W11 } }, { name: { startsWith: 'W11 ' } }] };
+  await prisma.category.deleteMany({ where: { AND: [w11Category, { parentId: { not: null } }] } });
+  await prisma.category.deleteMany({ where: w11Category });
+  await prisma.notificationLog.deleteMany({ where: { userId: CUSTOMER.id } });
+  await prisma.pancakeWebhookEvent.deleteMany({ where: { dedupeKey: { startsWith: W11 } } });
+}
+
 async function seedAll(): Promise<void> {
   CLOCK.at = Date.now();
   SEED.now = new Date(CLOCK.at);
@@ -386,18 +401,8 @@ async function seedAll(): Promise<void> {
       LEGAL_NAME.value = (await prisma.systemConfig.findUnique({ where: { key: 'company.legal_name' } }))?.value;
       LEGAL_NAME.read = true;
     }
-    const orderIds: string[] = (await prisma.order.findMany({ where: { code: { startsWith: 'E2EW11-' } }, select: { id: true } })).map((o: { id: string }) => o.id);
-    if (orderIds.length) await prisma.orderStatusHistory.deleteMany({ where: { orderId: { in: orderIds } } });
-    await prisma.order.deleteMany({ where: { code: { startsWith: 'E2EW11-' } } });
-    await prisma.campaign.deleteMany({ where: { title: { startsWith: 'W11 ' } } });
-    await prisma.brand.deleteMany({ where: { name: { startsWith: 'W11 ' } } });
+    await purgeW11(prisma);
     await prisma.systemConfig.updateMany({ where: { key: 'company.legal_name' }, data: { value: '' } });
-    // Mục con tạo bằng giao diện có id cuid, nên nhận ra theo tên "W11 " thay vì tiền tố id; con trước, gốc sau.
-    const w11Category = { OR: [{ id: { startsWith: W11 } }, { name: { startsWith: 'W11 ' } }] };
-    await prisma.category.deleteMany({ where: { AND: [w11Category, { parentId: { not: null } }] } });
-    await prisma.category.deleteMany({ where: w11Category });
-    await prisma.notificationLog.deleteMany({ where: { userId: CUSTOMER.id } });
-    await prisma.pancakeWebhookEvent.deleteMany({ where: { dedupeKey: { startsWith: W11 } } });
 
     const user = (id: string, zalo: string, fullName: string, phone: string | null, refCode: string, role = 'CUSTOMER') =>
       prisma.user.upsert({
@@ -502,12 +507,13 @@ async function seedCronRuns(): Promise<void> {
   });
 }
 
+// Hai khung dùng chung dữ liệu seed `e2e-w11-*` (beforeAll xoá rồi tạo lại): cấu hình cấp tệp để cả hai khung chạy nối nhau trong một worker, không song song.
+test.describe.configure({ mode: 'serial' });
+
 for (const frame of FRAMES) {
   test.describe(`Admin UAT vòng 2 ${frame.w}x${frame.h} với API và DB thật`, () => {
     test.skip(!runnable, 'Cần web-gate.sh (API + DB tạm thật)');
     test.use({ viewport: { width: frame.w, height: frame.h }, timezoneId: frame.tz });
-    // Mọi ca dùng chung dữ liệu seed `e2e-w11-*` (beforeAll xoá rồi tạo lại): chạy nhiều worker thì các lần seed đạp lên nhau.
-    test.describe.configure({ mode: 'serial' });
 
     test.beforeAll(async () => {
       await seedAll();
@@ -516,6 +522,7 @@ for (const frame of FRAMES) {
     test.afterAll(async () => {
       if (!LEGAL_NAME.read) return;
       await withDb(async (prisma) => {
+        await purgeW11(prisma);
         if (LEGAL_NAME.value === undefined) await prisma.systemConfig.deleteMany({ where: { key: 'company.legal_name' } });
         else await prisma.systemConfig.updateMany({ where: { key: 'company.legal_name' }, data: { value: LEGAL_NAME.value } });
       });

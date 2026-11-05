@@ -105,6 +105,7 @@ import {
   staffCouponExposure,
   SYSTEM_ACTOR,
   type CouponActor,
+  type CouponListStatus,
   type StaffCouponCaps,
 } from './coupon-input-rules';
 
@@ -1852,7 +1853,7 @@ export class AdminService {
    * chào mừng/sinh nhật/mua chung/vòng quay — hàng nghìn dòng) trừ khi lọc đúng scope đó, và mã thuộc lô thẻ hộp hàng
    * (xem theo lô ở AdminCouponBatchService) trừ khi tìm theo mã.
    */
-  async listCoupons(q: { page: number; limit: number; q?: string; scope?: string; status?: 'active' | 'inactive' | 'expired' }, actor: CouponActor = SYSTEM_ACTOR) {
+  async listCoupons(q: { page: number; limit: number; q?: string; scope?: string; status?: CouponListStatus }, actor: CouponActor = SYSTEM_ACTOR) {
     const now = new Date();
     const keyword = q.q ? normalizeCouponCode(q.q) : '';
     const where: Prisma.CouponWhereInput = {
@@ -1861,9 +1862,10 @@ export class AdminService {
       ...(keyword ? {} : { batch: null }),
       // Tìm theo mã bỏ lọc lô; nhân viên chỉ được thấy mã lô do chính mình tạo, không thì dò `q=-` là lộ cả mã thẻ của lô khác để đem nhận.
       ...(actor.staff ? { OR: [{ batch: null }, { createdById: actor.id }] } : {}),
-      ...(q.status === 'active' ? { isActive: true, endAt: { gte: now } } : {}),
+      ...(q.status === 'active' ? { isActive: true, startAt: { lte: now }, endAt: { gte: now } } : {}),
+      ...(q.status === 'upcoming' ? { isActive: true, startAt: { gt: now } } : {}),
       ...(q.status === 'inactive' ? { isActive: false } : {}),
-      ...(q.status === 'expired' ? { endAt: { lt: now } } : {}),
+      ...(q.status === 'expired' ? { isActive: true, endAt: { lt: now } } : {}),
     };
     const { skip, take } = skipTake(q.page, q.limit);
     let rows: Awaited<ReturnType<typeof this.prisma.coupon.findMany>>;
@@ -1903,9 +1905,17 @@ export class AdminService {
    * coupons_admin_list_idx và quét tuần tự cả bảng (hàng nghìn voucher cá nhân); chữ nghĩa thì chứng minh được. Một truy vấn
    * lấy cả trang lẫn tổng (COUNT OVER) thay cho findMany + count.
    */
-  private async listDefaultCoupons(status: 'active' | 'inactive' | 'expired' | undefined, now: Date, skip: number, take: number) {
+  private async listDefaultCoupons(status: CouponListStatus | undefined, now: Date, skip: number, take: number) {
     const byStatus =
-      status === 'active' ? Prisma.sql`AND "isActive" AND "endAt" >= ${now}` : status === 'inactive' ? Prisma.sql`AND NOT "isActive"` : status === 'expired' ? Prisma.sql`AND "endAt" < ${now}` : Prisma.empty;
+      status === 'active'
+        ? Prisma.sql`AND "isActive" AND "startAt" <= ${now} AND "endAt" >= ${now}`
+        : status === 'upcoming'
+          ? Prisma.sql`AND "isActive" AND "startAt" > ${now}`
+          : status === 'inactive'
+            ? Prisma.sql`AND NOT "isActive"`
+            : status === 'expired'
+              ? Prisma.sql`AND "isActive" AND "endAt" < ${now}`
+              : Prisma.empty;
     const filter = Prisma.sql`"scope" <> 'USER_GROUP' AND "batch" IS NULL ${byStatus}`;
     const page = await this.prisma.$queryRaw<{ id: string; total: number }[]>(Prisma.sql`
       SELECT "id", COUNT(*) OVER ()::int AS total FROM "coupons" WHERE ${filter} ORDER BY "startAt" DESC LIMIT ${take} OFFSET ${skip}`);

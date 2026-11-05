@@ -246,6 +246,24 @@ describe('BundlesTab: tạo combo giảm %', () => {
     expect(mocks.create).not.toHaveBeenCalled();
   });
 
+  it('W13: % giảm ngoài 1 đến 100 hoặc thứ tự ngoài 0 đến 9999: form tự báo bằng tiếng Việt thay vì bong bóng kiểm tra của trình duyệt, không gửi gì', async () => {
+    const c = await mount();
+    await open(c);
+    basics(c);
+    await pick(c, 2);
+    expect(c.querySelector('form')!.noValidate).toBe(true);
+    for (const bad of ['150', '0', '-5', '12.5']) {
+      typeInto(field(c, '% giảm mỗi món'), bad);
+      await save(c);
+      expect(c.querySelector('[role="alert"]')!.textContent, `% giảm ${bad}`).toContain('Nhập % giảm là số nguyên từ 1 đến 100.');
+    }
+    typeInto(field(c, '% giảm mỗi món'), '10');
+    typeInto(field(c, 'Thứ tự hiển thị'), '10000');
+    await save(c);
+    expect(c.querySelector('[role="alert"]')!.textContent).toContain('Thứ tự là số nguyên từ 0 đến 9999.');
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
   it('API từ chối (vd vượt trần của nhân viên): lời máy chủ hiện nguyên văn, form giữ nguyên để sửa', async () => {
     mocks.create.mockRejectedValueOnce(new Error('Combo giảm tối đa 30% mỗi món với nhân viên.'));
     const c = await mount();

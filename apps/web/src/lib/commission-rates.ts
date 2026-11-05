@@ -126,6 +126,7 @@ const RATE_INPUT_HINT = 'Nhập số nguyên, vd 10 cho 10%.';
 export function parseRateInput(text: string, max: number): { rate: number } | { error: string } {
   const t = text.trim().replace(/%$/, '').trim().replace(',', '.');
   if (!t) return { error: 'Nhập % hoa hồng.' };
+  if (/^-\s*\d/.test(t)) return { error: `Không được âm. ${RATE_INPUT_HINT}` };
   if (!/^\d+(\.\d+)?$/.test(t)) return { error: `Chỉ nhập số. ${RATE_INPUT_HINT}` };
   const rate = Number(t);
   if (Math.round(rate * 10 ** RATE_MAX_DECIMALS) / 10 ** RATE_MAX_DECIMALS !== rate) {

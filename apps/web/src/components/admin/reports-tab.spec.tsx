@@ -101,6 +101,50 @@ describe('ReportsTab (D1-04: báo cáo theo khoảng ngày)', () => {
     expect(mocks.getRevenueReport).not.toHaveBeenCalled();
   });
 
+  it('W13: Từ ngày sau Đến ngày hoặc thiếu ngày thì báo đúng một câu ở đầu tab, không báo lặp ở từng phần hay ở từng ô ngày, và không gọi API', async () => {
+    const { container } = mount(<ReportsTab />);
+    await flush();
+    mocks.getRevenueReport.mockClear();
+    mocks.getSourceReport.mockClear();
+    const from = container.querySelector<HTMLInputElement>('input[aria-label="Từ ngày"]')!;
+    const to = container.querySelector<HTMLInputElement>('input[aria-label="Đến ngày"]')!;
+    const alerts = () => [...container.querySelectorAll('[role="alert"]')].filter((a) => !a.closest('[hidden]')).map((a) => a.textContent?.trim());
+    typeInto(from, '20102026');
+    typeInto(to, '18102026');
+    await flush();
+    expect(alerts()).toEqual(['Ngày bắt đầu phải trước hoặc bằng ngày kết thúc.']);
+    expect(container.querySelector('[data-kpi]:not([hidden] *)')).toBeNull();
+    expect(mocks.getRevenueReport).not.toHaveBeenCalled();
+    expect(mocks.getSourceReport).not.toHaveBeenCalled();
+    typeInto(to, '');
+    await flush();
+    expect(alerts()).toEqual(['Chọn đủ ngày bắt đầu và ngày kết thúc.']);
+    typeInto(to, '25102026');
+    await flush();
+    expect(alerts()).toEqual([]);
+    expect(mocks.getRevenueReport).toHaveBeenLastCalledWith({ from: '2026-10-20', to: '2026-10-25' });
+  });
+
+  it('W13: làm khoảng ngày sai rồi sửa lại thì bộ lọc ở phần Tài chính và nhóm báo cáo nguồn còn giữ nguyên', async () => {
+    const { container } = mount(<ReportsTab />);
+    await flush();
+    const selects = () => container.querySelectorAll('select');
+    selectValue(selects()[0]!, 'PAID');
+    selectValue(selects()[1]!, 'OPEN');
+    const chip = () => Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Khách mới theo đợt thẻ')!;
+    click(chip());
+    await flush();
+    expect(chip().getAttribute('aria-pressed')).toBe('true');
+    const to = container.querySelector<HTMLInputElement>('input[aria-label="Đến ngày"]')!;
+    typeInto(to, '01092026');
+    await flush();
+    typeInto(to, '18102026');
+    await flush();
+    expect([selects()[0]!.value, selects()[1]!.value]).toEqual(['PAID', 'OPEN']);
+    expect(chip().getAttribute('aria-pressed')).toBe('true');
+    expect(mocks.getSourceReport).toHaveBeenLastCalledWith({ from: '2026-09-19', to: '2026-10-18' }, 'campaign');
+  });
+
   it('chọn nhanh 7 ngày', async () => {
     const { container } = mount(<ReportsTab />);
     await flush();

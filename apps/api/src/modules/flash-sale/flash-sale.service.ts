@@ -742,7 +742,7 @@ export class FlashSaleService {
     if (!sale) throw new BadRequestException('Đợt flash không tồn tại.');
     if (actor?.staff) await this.assertStaffCreated(sale.createdBy);
     const variation = await this.prisma.variation.findUnique({ where: { id: dto.variationId } });
-    if (!variation) throw new BadRequestException('Variation không tồn tại.');
+    if (!variation) throw new BadRequestException('Biến thể không tồn tại.');
     const standing = variation.salePrice ?? variation.retailPrice;
     if (dto.flashPrice >= standing) throw new BadRequestException('Giá flash phải thấp hơn giá đang bán.');
     const minPct = await this.config.get<number>('flashsale.min_discount_pct', 0);
@@ -757,7 +757,7 @@ export class FlashSaleService {
           `giá flash thấp nhất là ${vnd(floor)}. Kiểm tra lại số 0; muốn bán sâu hơn thì nâng "${FLASH_MAX_DISCOUNT_KEY}" ở trang Cấu hình.`,
       );
     }
-    if (dto.quota > variation.stock) throw new BadRequestException('Quota vượt tồn kho.');
+    if (dto.quota > variation.stock) throw new BadRequestException(`Số lượng bán vượt tồn kho của biến thể (còn ${variation.stock}).`);
     const perUserLimit = dto.perUserLimit ?? (await this.config.get<number>('flashsale.default_per_user_limit', 5));
     const data = {
       flashSaleId: saleId,

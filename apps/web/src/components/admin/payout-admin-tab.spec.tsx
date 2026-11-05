@@ -362,6 +362,30 @@ describe('Thuế TNCN trên lệnh rút và báo cáo tháng (SELLER-11)', () =>
     expect(container.textContent).toContain('Tổng tháng 10/2026: 2 người nhận · thu nhập 7.600.000');
     expect(container.textContent).toContain('thuế đã khấu trừ 760.000');
   });
+
+  it('W13: bỏ trống ô tháng hoặc năm thì nói cần chọn đủ, không giữ số của tháng trước và không gọi API', async () => {
+    const api = mockFetch({ ...LIST });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<PayoutAdminTab />);
+    await flush();
+    selectValue(container.querySelector('select[aria-label="Tháng báo cáo: năm"]'), '2026');
+    selectValue(container.querySelector('select[aria-label="Tháng báo cáo: tháng"]'), '10');
+    await flush();
+    expect(container.textContent).toContain('Tổng tháng 10/2026');
+    const callsBefore = api.calls.filter((c) => c.url.includes('/pit-report')).length;
+    selectValue(container.querySelector('select[aria-label="Tháng báo cáo: tháng"]'), '');
+    await flush();
+    expect(container.textContent).toContain('Chọn đủ tháng và năm để xem báo cáo.');
+    expect(container.textContent).not.toContain('Tổng tháng');
+    expect(api.calls.filter((c) => c.url.includes('/pit-report')).length).toBe(callsBefore);
+  });
+
+  it('W13: lệnh chuyển hoa hồng vào Ví Tubu mang nhãn "Chuyển vào Ví Tubu", lệnh ngân hàng cũ thì không', () => {
+    const wallet = mount(<PayoutRow payout={payout({ status: 'PAID', method: 'WALLET_BALANCE', bankInfo: null, grossAmount: 2_500_000, amount: 2_250_000, taxWithheld: 250_000 })} />);
+    expect(wallet.container.textContent).toContain('Chuyển vào Ví Tubu');
+    const bank = mount(<PayoutRow payout={payout()} />);
+    expect(bank.container.textContent).not.toContain('Chuyển vào Ví Tubu');
+  });
 });
 
 // D1-05: kế toán chi lệnh đã duyệt; duyệt/từ chối là việc của ADMIN (API chặn 403, màn không hiện nút).

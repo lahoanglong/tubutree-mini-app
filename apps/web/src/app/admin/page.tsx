@@ -164,7 +164,7 @@ import { seedDealerClaimFilter, seedPayoutFilter } from '@/components/admin/inbo
 import { OpsInboxPoller, useOpsInbox } from '@/components/admin/use-ops-inbox';
 import { COUPON_END_PAST_MESSAGE, isCouponEndPast, vnTodayKey } from '@/lib/admin-reports';
 import { vnLocalToIso, isoToVnLocal } from '@/lib/admin-campaign-form';
-import { FLASH_SALE_PAGE_SIZE, flashSaleState, type FlashSaleFilter, type FlashSaleState } from '@/lib/admin-flash-sale';
+import { FLASH_SALE_PAGE_SIZE, flashSaleState, flashWindowOrderError, type FlashSaleFilter, type FlashSaleState } from '@/lib/admin-flash-sale';
 import type { WasteSeed } from '@/components/admin/waste-tab';
 import type { ExternalClaimsSeed } from '@/components/admin/external-claims-tab';
 import type { CommunityView } from '@/components/admin/community-moderation-tab';
@@ -3236,6 +3236,7 @@ function FlashSalesTab() {
   const [f, setF] = useState({ title: '', startAt: '', endAt: '' });
   const [startPending, setStartPending] = useState(false);
   const [endPending, setEndPending] = useState(false);
+  const windowError = flashWindowOrderError(f.startAt, f.endAt);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const create = useMutation({
     mutationFn: () =>
@@ -3277,12 +3278,13 @@ function FlashSalesTab() {
           </Field>
           <button
             onClick={() => { setMsg(null); create.mutate(); }}
-            disabled={!hasVisibleText(f.title) || !f.startAt || !f.endAt || startPending || endPending || create.isPending}
+            disabled={!hasVisibleText(f.title) || !f.startAt || !f.endAt || !!windowError || startPending || endPending || create.isPending}
             className={BTN_PRIMARY}
           >
             {create.isPending ? 'Đang tạo…' : 'Tạo đợt'}
           </button>
         </div>
+        {windowError && <p aria-live="polite" className="mt-2 text-sm text-danger-fg">{windowError}</p>}
         {msg && <p className={`mt-2 text-sm ${msg.ok ? 'text-success-fg' : 'text-danger-fg'}`}>{msg.text}</p>}
       </div>
 
@@ -3389,6 +3391,7 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSaleSummary }) {
   };
   const original = { title: sale.title, startAt: isoToVnLocal(sale.startAt), endAt: isoToVnLocal(sale.endAt) };
   const changed = draft.title !== original.title || draft.startAt !== original.startAt || draft.endAt !== original.endAt;
+  const draftWindowError = flashWindowOrderError(draft.startAt, draft.endAt);
   const saveEdit = useMutation({
     mutationFn: () =>
       updateFlashSale(sale.id, {
@@ -3451,7 +3454,7 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSaleSummary }) {
           </Field>
           <button
             onClick={() => saveEdit.mutate()}
-            disabled={!changed || !draft.title.trim() || !draft.startAt || !draft.endAt || draftStartPending || draftEndPending || saveEdit.isPending}
+            disabled={!changed || !draft.title.trim() || !draft.startAt || !draft.endAt || !!draftWindowError || draftStartPending || draftEndPending || saveEdit.isPending}
             className={BTN_PRIMARY}
           >
             {saveEdit.isPending ? 'Đang lưu…' : 'Lưu thay đổi'}
@@ -3459,6 +3462,7 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSaleSummary }) {
           <button onClick={() => setEditing(false)} className={BTN_SECONDARY}>
             Huỷ sửa
           </button>
+          {draftWindowError && <p aria-live="polite" className="basis-full text-sm text-danger-fg">{draftWindowError}</p>}
           {!notStarted && (
             <p className="basis-full text-xs text-stone-600">
               Đợt đã bắt đầu: không đổi được giờ bắt đầu (khách đã thấy giá). Chỉ sửa được tên, giờ kết thúc hoặc tắt đợt.
@@ -3568,7 +3572,7 @@ function FlashSaleItemsPanel({ sale, ended }: { sale: AdminFlashSaleSummary; end
               </Field>
             </div>
             <div className="w-32">
-              <Field label="Số lượng bán (quota)">
+              <Field label="Số lượng bán">
                 <input type="number" min={1} step={1} inputMode="numeric" placeholder="vd 20" value={item.quota} onChange={(e) => setItem({ ...item, quota: e.target.value })} className={`${field} w-full`} />
               </Field>
             </div>

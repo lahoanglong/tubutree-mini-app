@@ -15,7 +15,9 @@ describe('parseRateInput — % hoa hồng CTV là phần trăm (10 = 10%)', () =
   it.each([
     ['', 'Nhập % hoa hồng.'],
     ['abc', 'Chỉ nhập số. Nhập số nguyên, vd 10 cho 10%.'],
-    ['-1', 'Chỉ nhập số'],
+    ['-1', 'Không được âm. Nhập số nguyên, vd 10 cho 10%.'],
+    ['-0,5', 'Không được âm'],
+    ['10-', 'Chỉ nhập số'],
     ['7,5', 'Không phải số nguyên. Nhập số nguyên, vd 10 cho 10%.'],
     ['7.5', 'Không phải số nguyên'],
     ['0.1', 'Nhập số nguyên, vd 10 cho 10%.'],

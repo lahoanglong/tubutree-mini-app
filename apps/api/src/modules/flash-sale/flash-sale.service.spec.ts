@@ -629,7 +629,7 @@ describe('FlashSaleService.addItem (validate)', () => {
   it('quota > stock → reject', async () => {
     const prisma = base() as any;
     await expect(new FlashSaleService(prisma, config, notifications, lifecycle).addItem('s1', { variationId: 'v1', flashPrice: 80000, quota: 999 }))
-      .rejects.toThrow('Quota vượt tồn kho.');
+      .rejects.toThrow(/Số lượng bán vượt tồn kho/);
   });
   it('variation đã có flash active khác → reject', async () => {
     const prisma = base() as any;

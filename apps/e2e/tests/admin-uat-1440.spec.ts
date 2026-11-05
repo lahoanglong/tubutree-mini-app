@@ -595,9 +595,8 @@ test.describe('Admin UAT 1440x900 với API và DB thật', () => {
     await paste(title, 'W9 Giờ ngược');
     await setDate('bắt đầu', dmy(31), '12');
     await setDate('kết thúc', dmy(30), '10');
-    const backwards = await post();
-    await expect(msg()).toBeVisible();
-    note('gio-vang', `giờ kết thúc trước giờ bắt đầu: HTTP ${backwards.status} ${backwards.body}; chữ hiện ra: "${(await msg().innerText()).trim()}"`);
+    await expect(page.locator('[aria-live="polite"]').filter({ hasText: 'Giờ kết thúc phải sau giờ bắt đầu' }), 'giờ kết thúc trước giờ bắt đầu: form báo ngay, chưa cần gửi lên máy chủ').toBeVisible();
+    await expect(create, 'giờ kết thúc trước giờ bắt đầu giữ nút Tạo đợt khoá').toBeDisabled();
     const rowsAfterBackwards = await mine();
     expect(rowsAfterBackwards.filter((x: { title: string }) => x.title === 'W9 Giờ ngược'), 'đợt có giờ kết thúc trước giờ bắt đầu không được tạo').toEqual([]);
     if (rowsAfterBackwards.length) await withDb((prisma) => prisma.flashSale.deleteMany({ where: { createdBy: ADMIN_ID } }));

@@ -71,7 +71,7 @@ export function SearchPicker({
   const typed = text.trim();
   const debounced = useDebounced(typed, debounceMs);
   const problem = typed.length >= PICKER_MIN_CHARS ? (queryProblem?.(typed) ?? null) : null;
-  const enabled = debounced.length >= PICKER_MIN_CHARS && !(queryProblem?.(debounced) ?? null);
+  const enabled = typed.length >= PICKER_MIN_CHARS && debounced.length >= PICKER_MIN_CHARS && !(queryProblem?.(debounced) ?? null);
   const q = useQuery({ queryKey: [queryKey, debounced], queryFn: () => search(debounced), enabled, staleTime: 30_000 });
   const listId = useId();
 
