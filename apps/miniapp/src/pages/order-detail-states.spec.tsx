@@ -1,9 +1,6 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { HttpError } from '../services/http';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -63,8 +60,6 @@ vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 vi.mock('../utils/clipboard', () => ({ copyText: mocks.copyText }));
 
 import OrderDetailPage from './order-detail';
-import { STATUS_COLOR } from '../utils/order-status';
-import { makeRequestDetail } from '../services/waste-test-fixtures';
 
 const ORDER = {
   id: 'o1',

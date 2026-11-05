@@ -14,7 +14,6 @@ import { ErrorState } from '../components/ui/empty-state';
 import {
   formatVnd,
   formatPoints,
-  formatDateTime,
   addressLine,
 } from '../utils/format';
 import { shippingEventLabel } from '../utils/format-shipping';
@@ -49,7 +48,6 @@ import { orderActionPlan, orderHeadline, orderTrack, shippingEvents, type OrderA
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { useCountdown } from '../hooks/use-countdown';
 import { serverNow } from '../utils/server-clock';
-import { orderCopy } from '@tubutree/app-core/account-copy';
 import { customerOrderNote, isSubscriptionOrder, openProductSlug } from '@tubutree/app-core/api/orders';
 import { orderDeliveryEtaLabel } from '@tubutree/app-core/shipping-eta';
 import { cancelReasonBody, type CancelReasonCode } from '@tubutree/app-core/cancel-reasons';
