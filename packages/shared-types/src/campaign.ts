@@ -37,3 +37,9 @@ export const PRODUCT_SLUGS_QUERY_MAX_CHARS = PRODUCT_SLUGS_LIST_MAX * (PRODUCT_S
 /** Slug sản phẩm/danh mục gắn vào chiến dịch dùng chung trần với mọi slug sản phẩm. */
 export const CAMPAIGN_ENTITY_SLUG_MAX = PRODUCT_SLUG_MAX;
 export const CAMPAIGN_ENTITY_SLUG_RE = new RegExp(`^[A-Za-z0-9][A-Za-z0-9_-]{0,${CAMPAIGN_ENTITY_SLUG_MAX - 1}}$`);
+
+/** Carousel banner hiển thị tối đa chừng này slide: nhiều hơn là khách không xem hết và ảnh nặng. App-core và kiểm sức khoẻ chiến dịch của API dùng chung số này. */
+export const CAMPAIGN_SLIDES_MAX = 5;
+
+/** Mini App bản cũ chỉ dựng liên kết banner cho slug tới chừng này ký tự; dài hơn thì banner bị bỏ khỏi carousel (runbook §1.23). */
+export const CAMPAIGN_LEGACY_SLUG_MAX = 120;

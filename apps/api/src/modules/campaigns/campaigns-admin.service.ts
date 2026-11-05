@@ -6,7 +6,9 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { ImageRegistryStale } from '../catalog/image-registry-stale';
 import { normalizeCouponCode } from '../coupons/coupons.service';
 import { assertWindow, campaignStatus, normalizeLink, slugFromTitle, type CampaignStatus } from './campaign-admin-rules';
-import { CAMPAIGN_MAX_COUPONS, CAMPAIGN_MAX_PRODUCTS, type CreateCampaignDto, type UpdateCampaignDto } from './dto/campaign.dto';
+import { countHealth, type HealthIssue, type HealthSubject } from './campaign-health';
+import { campaignHealthBatch } from './campaign-health-loader';
+import { CAMPAIGN_MAX_COUPONS, CAMPAIGN_MAX_PRODUCTS, type CheckCampaignDto, type CreateCampaignDto, type UpdateCampaignDto } from './dto/campaign.dto';
 
 export interface AdminCampaignRow {
   id: string;
@@ -26,9 +28,17 @@ export interface AdminCampaignRow {
   productCount: number;
   couponCount: number;
   status: CampaignStatus;
+  /** Kết quả kiểm trước khi bật (xem campaign-health.ts), tính như chiến dịch đang bật. */
+  health: { blockers: number; warnings: number };
 }
 
-export interface AdminCampaignDetail extends Omit<AdminCampaignRow, 'image' | 'productCount' | 'couponCount'> {
+export interface CampaignCheckResult {
+  issues: HealthIssue[];
+  blockers: number;
+  warnings: number;
+}
+
+export interface AdminCampaignDetail extends Omit<AdminCampaignRow, 'image' | 'productCount' | 'couponCount' | 'health'> {
   /** Ảnh nguyên bản (URL https hoặc base64) để form sửa gửi lại đúng giá trị. */
   image: string;
   products: { id: string; name: string; slug: string }[];
@@ -62,6 +72,10 @@ function baseFields(c: Campaign, now: Date) {
     isActive: c.isActive,
     status: campaignStatus(c, now),
   };
+}
+
+function subjectOf(c: Pick<Campaign, 'id' | 'placement' | 'audience' | 'linkType' | 'linkValue' | 'startAt' | 'endAt' | 'sortOrder'>): HealthSubject {
+  return { id: c.id, placement: c.placement, audience: c.audience, linkType: c.linkType, linkValue: c.linkValue, startAt: c.startAt, endAt: c.endAt, sortOrder: c.sortOrder };
 }
 
 function toDetail(c: DetailRow, now: Date): AdminCampaignDetail {
@@ -104,12 +118,42 @@ export class CampaignsAdminService {
       take: LIST_LIMIT,
       include: { _count: { select: { products: true, coupons: true } } },
     });
-    return rows.map((c) => ({
+    const health = await campaignHealthBatch(this.prisma, rows.map((c) => ({ subject: subjectOf(c) })), now);
+    return rows.map((c, i) => ({
       ...baseFields(c, now),
       image: publicImage('campaign', c.id, 'cover', c.image),
       productCount: c._count.products,
       couponCount: c._count.coupons,
+      health: countHealth(health[i]),
     }));
+  }
+
+  /** Kiểm một chiến dịch chưa lưu (hoặc đang sửa) như thể đã bật. Không ghi gì. */
+  async check(dto: CheckCampaignDto, now: Date = new Date()): Promise<CampaignCheckResult> {
+    const linkType = dto.linkType ?? 'CAMPAIGN_PAGE';
+    const subject: HealthSubject = {
+      ...(dto.id ? { id: dto.id } : {}),
+      placement: dto.placement,
+      audience: dto.audience ?? 'ALL',
+      linkType,
+      linkValue: normalizeLink(linkType, dto.linkValue),
+      startAt: new Date(dto.startAt),
+      endAt: new Date(dto.endAt),
+      sortOrder: dto.sortOrder ?? 0,
+    };
+    // Chiến dịch mới chưa có liên kết trong DB: không gửi danh sách nghĩa là danh sách rỗng. Sửa chiến dịch đã lưu mà không gửi thì dùng liên kết đang lưu.
+    const fresh = dto.id === undefined;
+    const productIds = dto.productIds ?? (fresh ? [] : undefined);
+    const couponCodes = dto.couponCodes ?? (fresh ? [] : undefined);
+    const [issues] = await campaignHealthBatch(this.prisma, [{ subject, ...(productIds ? { productIds } : {}), ...(couponCodes ? { couponCodes } : {}) }], now);
+    return { issues, ...countHealth(issues) };
+  }
+
+  /** Bật chiến dịch mà còn lỗi chặn thì 400 với câu đầu tiên. Kiểm lại ngay trong request, không tin gì từ trình duyệt. */
+  private async assertCanActivate(subject: HealthSubject, now: Date): Promise<void> {
+    const [issues] = await campaignHealthBatch(this.prisma, [{ subject, ...(subject.id ? {} : { productIds: [], couponCodes: [] }) }], now);
+    const block = issues.find((i) => i.level === 'BLOCK');
+    if (block) throw new BadRequestException(block.message);
   }
 
   async get(id: string, now: Date = new Date()): Promise<AdminCampaignDetail> {
@@ -125,6 +169,10 @@ export class CampaignsAdminService {
     const linkType = dto.linkType ?? 'CAMPAIGN_PAGE';
     const linkValue = normalizeLink(linkType, dto.linkValue);
     await this.assertLinkTarget(linkType, linkValue);
+    const isActive = dto.isActive ?? true;
+    const audience = dto.audience ?? 'ALL';
+    const sortOrder = dto.sortOrder ?? 0;
+    if (isActive) await this.assertCanActivate({ placement: dto.placement, audience, linkType, linkValue, startAt, endAt, sortOrder }, now);
     const slug = dto.slug ?? slugFromTitle(dto.title);
     if (await this.prisma.campaign.findUnique({ where: { slug }, select: { id: true } })) {
       throw new ConflictException(`Đã có chiến dịch dùng slug "${slug}". Đổi tên hoặc nhập slug khác.`);
@@ -139,11 +187,11 @@ export class CampaignsAdminService {
           image: dto.image,
           linkType,
           linkValue,
-          audience: dto.audience ?? 'ALL',
+          audience,
           startAt,
           endAt,
-          sortOrder: dto.sortOrder ?? 0,
-          isActive: dto.isActive ?? true,
+          sortOrder,
+          isActive,
         },
         include: DETAIL_INCLUDE,
       });
@@ -175,12 +223,33 @@ export class CampaignsAdminService {
       ...(dto.sortOrder !== undefined ? { sortOrder: dto.sortOrder } : {}),
       ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
     };
+    let linkChanged = false;
     if (dto.linkType !== undefined || dto.linkValue !== undefined) {
       const linkType = dto.linkType ?? current.linkType;
       data.linkType = linkType;
       data.linkValue = normalizeLink(linkType, dto.linkValue !== undefined ? dto.linkValue : current.linkValue);
       // Lưu lại đúng đích cũ không kiểm lại: sản phẩm đã ẩn không được chặn việc sửa tiêu đề hay giờ của banner.
-      if (linkType !== current.linkType || data.linkValue !== current.linkValue) await this.assertLinkTarget(linkType, data.linkValue);
+      linkChanged = linkType !== current.linkType || data.linkValue !== current.linkValue;
+      if (linkChanged) await this.assertLinkTarget(linkType, data.linkValue);
+    }
+    // Chỉ kiểm khi chiến dịch sắp được bật hoặc đổi đích lúc đang bật: lỗi cũ không chặn việc sửa tiêu đề hay giờ của chiến dịch đang chạy.
+    const willBeActive = dto.isActive ?? current.isActive;
+    if (willBeActive && (!current.isActive || linkChanged)) {
+      const linkType = data.linkType === undefined ? current.linkType : (data.linkType as CampaignLinkType);
+      const linkValue = data.linkValue === undefined ? current.linkValue : (data.linkValue as string | null);
+      await this.assertCanActivate(
+        {
+          id,
+          placement: dto.placement ?? current.placement,
+          audience: dto.audience ?? current.audience,
+          linkType,
+          linkValue,
+          startAt: startAt ?? current.startAt,
+          endAt: endAt ?? current.endAt,
+          sortOrder: dto.sortOrder ?? current.sortOrder,
+        },
+        now,
+      );
     }
     const updated = await this.prisma.campaign.update({ where: { id }, data, include: DETAIL_INCLUDE });
     if (dto.image !== undefined && dto.image !== current.image) this.imageStale?.markStale();

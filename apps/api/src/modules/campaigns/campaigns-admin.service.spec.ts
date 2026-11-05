@@ -28,6 +28,7 @@ const row = (over: Record<string, unknown> = {}) => ({
 
 const input = (over: Record<string, unknown> = {}) => ({
   title: 'Chiến dịch Giữa Thu',
+  isActive: false,
   placement: 'HOME_TOP' as const,
   image: 'https://cdn.example.com/a.jpg',
   startAt: '2026-11-01T00:00:00.000Z',
@@ -35,7 +36,30 @@ const input = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-function setup(opts: { existing?: unknown; slugTaken?: boolean; products?: { id: string }[]; coupons?: unknown[]; productSlugs?: string[]; categorySlugs?: string[] } = {}) {
+const visibleProduct = (over: Record<string, unknown> = {}) => ({
+  id: 'p',
+  name: 'Sữa hạt',
+  slug: 'sua-hat',
+  isActive: true,
+  approvalStatus: 'APPROVED',
+  variations: [{ isActive: true, stock: 5 }],
+  ...over,
+});
+
+function setup(
+  opts: {
+    existing?: unknown;
+    slugTaken?: boolean;
+    products?: { id: string }[];
+    coupons?: unknown[];
+    productSlugs?: string[];
+    categorySlugs?: string[];
+    /** Sản phẩm đã gắn vào chiến dịch (đọc cho kiểm sức khoẻ). */
+    linked?: { campaignId: string; product: ReturnType<typeof visibleProduct> }[];
+    /** Sản phẩm tra theo slug/id cho kiểm sức khoẻ; mặc định là các slug trong `productSlugs`, đang hiển thị. */
+    healthProducts?: ReturnType<typeof visibleProduct>[];
+  } = {},
+) {
   const prisma = {
     campaign: {
       findMany: jest.fn().mockResolvedValue([]),
@@ -47,13 +71,21 @@ function setup(opts: { existing?: unknown; slugTaken?: boolean; products?: { id:
       update: jest.fn().mockImplementation(({ data }: { data: Record<string, unknown> }) => Promise.resolve(row({ ...data, products: [], coupons: [] }))),
       deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
-    campaignProduct: { deleteMany: jest.fn().mockReturnValue('del-p'), createMany: jest.fn().mockReturnValue('add-p') },
-    campaignCoupon: { deleteMany: jest.fn().mockReturnValue('del-c'), createMany: jest.fn().mockReturnValue('add-c') },
     product: {
-      findMany: jest.fn().mockResolvedValue(opts.products ?? []),
+      findMany: jest.fn().mockImplementation(({ where }: { where: { slug?: { in: string[] }; id?: { in: string[] } } }) => {
+        if (where.slug) {
+          const known = opts.healthProducts ?? (opts.productSlugs ?? []).map((slug) => visibleProduct({ slug }));
+          return Promise.resolve(known.filter((p) => where.slug!.in.includes(p.slug)));
+        }
+        if (opts.healthProducts && where.id) return Promise.resolve(opts.healthProducts.filter((p) => where.id!.in.includes(p.id)));
+        return Promise.resolve(opts.products ?? []);
+      }),
       findFirst: jest.fn().mockImplementation(({ where }: { where: { slug: string } }) => Promise.resolve((opts.productSlugs ?? []).includes(where.slug) ? { id: 'p' } : null)),
     },
+    campaignProduct: { deleteMany: jest.fn().mockReturnValue('del-p'), createMany: jest.fn().mockReturnValue('add-p'), findMany: jest.fn().mockResolvedValue(opts.linked ?? []) },
+    campaignCoupon: { deleteMany: jest.fn().mockReturnValue('del-c'), createMany: jest.fn().mockReturnValue('add-c'), findMany: jest.fn().mockResolvedValue([]) },
     category: {
+      findMany: jest.fn().mockImplementation(({ where }: { where: { slug: { in: string[] } } }) => Promise.resolve((opts.categorySlugs ?? []).filter((s) => where.slug.in.includes(s)).map((slug) => ({ slug })))),
       findUnique: jest.fn().mockImplementation(({ where }: { where: { slug: string } }) => Promise.resolve((opts.categorySlugs ?? []).includes(where.slug) ? { id: 'k' } : null)),
     },
     coupon: { findMany: jest.fn().mockResolvedValue(opts.coupons ?? []) },
@@ -135,10 +167,16 @@ describe('CampaignsAdminService.create', () => {
     expect(prisma.campaign.create).not.toHaveBeenCalled();
   });
 
-  it('mặc định: CAMPAIGN_PAGE, ALL, thứ tự 0, bật; linkValue của CAMPAIGN_PAGE bị bỏ', async () => {
+  it('mặc định: CAMPAIGN_PAGE, ALL, thứ tự 0; linkValue của CAMPAIGN_PAGE bị bỏ', async () => {
     const { svc, prisma } = setup();
     await svc.create(input({ linkValue: 'bat-ky' }), NOW);
-    expect(prisma.campaign.create.mock.calls[0][0].data).toMatchObject({ linkType: 'CAMPAIGN_PAGE', linkValue: null, audience: 'ALL', sortOrder: 0, isActive: true });
+    expect(prisma.campaign.create.mock.calls[0][0].data).toMatchObject({ linkType: 'CAMPAIGN_PAGE', linkValue: null, audience: 'ALL', sortOrder: 0, isActive: false });
+  });
+
+  it('không nói isActive thì tạo ở trạng thái bật (đích trang trong app không có gì để chặn)', async () => {
+    const { svc, prisma } = setup();
+    await svc.create(input({ isActive: undefined, linkType: 'URL_INTERNAL', linkValue: '/offers' }), NOW);
+    expect(prisma.campaign.create.mock.calls[0][0].data).toMatchObject({ isActive: true });
   });
 
   it('URL_INTERNAL ngoài app → 400', async () => {
@@ -160,7 +198,7 @@ describe('CampaignsAdminService: đích banner phải tồn tại', () => {
   it('slug sản phẩm dài CAMPAIGN_ENTITY_SLUG_MAX ký tự tạo và sửa được, MAX + 1 thì 400', async () => {
     const long = `a${'b'.repeat(CAMPAIGN_ENTITY_SLUG_MAX - 1)}`;
     const { svc, prisma } = setup({ productSlugs: [long] });
-    await svc.create(input({ linkType: 'PRODUCT', linkValue: long }), NOW);
+    await svc.create(input({ linkType: 'PRODUCT', linkValue: long, isActive: true }), NOW);
     expect(prisma.campaign.create.mock.calls[0][0].data).toMatchObject({ linkType: 'PRODUCT', linkValue: long });
     await svc.update('c1', { linkType: 'PRODUCT', linkValue: long }, NOW);
     expect(prisma.campaign.update.mock.calls[0][0].data).toMatchObject({ linkValue: long });
@@ -204,7 +242,7 @@ describe('CampaignsAdminService.update', () => {
   });
 
   it('đổi sang CAMPAIGN_PAGE xoá linkValue đang lưu', async () => {
-    const { svc, prisma } = setup({ existing: row({ linkType: 'URL_INTERNAL', linkValue: '/offers' }) });
+    const { svc, prisma } = setup({ existing: row({ linkType: 'URL_INTERNAL', linkValue: '/offers', isActive: false }) });
     await svc.update('c1', { linkType: 'CAMPAIGN_PAGE' }, NOW);
     expect(prisma.campaign.update.mock.calls[0][0].data).toMatchObject({ linkType: 'CAMPAIGN_PAGE', linkValue: null });
   });
@@ -335,5 +373,99 @@ describe('CampaignsAdminService: danh sách ảnh của /img', () => {
     const changed = setup({ existing: row({ image: 'https://res.cloudinary.com/tubutree/image/upload/v1/a.jpg' }) });
     await changed.svc.update('c1', { image: 'https://res.cloudinary.com/tubutree/image/upload/v1/b.jpg' }, NOW);
     expect(changed.stale.isStale()).toBe(true);
+  });
+});
+
+describe('CampaignsAdminService: kiểm sức khoẻ trước khi bật', () => {
+  const linkedTo = (campaignId: string, over: Record<string, unknown> = {}) => ({ campaignId, product: visibleProduct(over) });
+
+  it('danh sách trả health mỗi dòng (số lỗi chặn, số cảnh báo) với số truy vấn không đổi theo số dòng', async () => {
+    const rows = (n: number) => Array.from({ length: n }, (_, i) => ({ ...row({ id: `c${i}` }), _count: { products: 0, coupons: 0 } }));
+    const few = setup({ linked: [linkedTo('c0')] });
+    few.prisma.campaign.findMany.mockResolvedValue(rows(2));
+    const out = await few.svc.list(undefined, NOW);
+    expect(out.map((r) => r.health)).toEqual([{ blockers: 0, warnings: 0 }, { blockers: 1, warnings: 0 }]);
+
+    const many = setup();
+    many.prisma.campaign.findMany.mockResolvedValue(rows(40));
+    await many.svc.list(undefined, NOW);
+    const count = (p: ReturnType<typeof setup>['prisma']) =>
+      [p.campaign, p.campaignProduct, p.campaignCoupon, p.product, p.coupon, p.category].reduce((n, m) => n + (m.findMany as jest.Mock).mock.calls.length, 0);
+    expect(count(many.prisma)).toBe(count(few.prisma));
+    expect(many.prisma.campaignProduct.findMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('bật chiến dịch đang tắt mà còn lỗi chặn: 400 kèm câu đầu tiên, không ghi', async () => {
+    const { svc, prisma } = setup({ existing: row({ isActive: false }) });
+    await expect(svc.update('c1', { isActive: true }, NOW)).rejects.toThrow(/Trang chiến dịch đang trống/);
+    expect(prisma.campaign.update).not.toHaveBeenCalled();
+  });
+
+  it('bật được khi hết lỗi chặn; lưu nháp tắt vẫn được dù còn lỗi chặn', async () => {
+    const ok = setup({ existing: row({ isActive: false }), linked: [linkedTo('c1')] });
+    await ok.svc.update('c1', { isActive: true }, NOW);
+    expect(ok.prisma.campaign.update).toHaveBeenCalledTimes(1);
+    const draft = setup({ existing: row({ isActive: false }) });
+    await draft.svc.update('c1', { title: 'Nháp', isActive: false }, NOW);
+    await draft.svc.update('c1', { title: 'Nháp nữa' }, NOW);
+    expect(draft.prisma.campaign.update).toHaveBeenCalledTimes(2);
+  });
+
+  it('chiến dịch đang bật: sửa tiêu đề không bị chặn vì lỗi cũ, nhưng đổi sang đích sản phẩm ẩn thì bị chặn', async () => {
+    const { svc, prisma } = setup({ productSlugs: ['da-an'], healthProducts: [visibleProduct({ slug: 'da-an', isActive: false })] });
+    await svc.update('c1', { title: 'Mới' }, NOW);
+    expect(prisma.campaign.update).toHaveBeenCalledTimes(1);
+    await expect(svc.update('c1', { linkType: 'PRODUCT', linkValue: 'da-an' }, NOW)).rejects.toThrow(/đang ẩn hoặc chưa được duyệt/);
+    expect(prisma.campaign.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('tạo bật mà đích là sản phẩm ẩn: 400, không tạo; tạo tắt thì được', async () => {
+    const hidden = [visibleProduct({ slug: 'da-an', isActive: false })];
+    const { svc, prisma } = setup({ productSlugs: ['da-an'], healthProducts: hidden });
+    await expect(svc.create(input({ isActive: true, linkType: 'PRODUCT', linkValue: 'da-an' }), NOW)).rejects.toThrow(/đang ẩn/);
+    expect(prisma.campaign.create).not.toHaveBeenCalled();
+    await svc.create(input({ isActive: false, linkType: 'PRODUCT', linkValue: 'da-an' }), NOW);
+    expect(prisma.campaign.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('tạo bật trang chiến dịch chưa có sản phẩm/mã: 400 vì trang trống', async () => {
+    const { svc, prisma } = setup();
+    await expect(svc.create(input({ isActive: true }), NOW)).rejects.toThrow(/Trang chiến dịch đang trống/);
+    expect(prisma.campaign.create).not.toHaveBeenCalled();
+  });
+
+  describe('check (form chưa lưu)', () => {
+    const dto = (over: Record<string, unknown> = {}) => ({
+      placement: 'HOME_TOP' as const,
+      startAt: '2026-11-01T00:00:00.000Z',
+      endAt: '2026-11-11T16:59:59.000Z',
+      ...over,
+    });
+
+    it('dùng danh sách sản phẩm gửi lên, trả issues kèm số đếm', async () => {
+      const { svc, prisma } = setup({ healthProducts: [visibleProduct({ id: 'p1' }), visibleProduct({ id: 'p2', name: 'Trà', inStock: false, variations: [] })] });
+      const out = await svc.check(dto({ productIds: ['p1', 'p2'] }), NOW);
+      expect(out).toMatchObject({ blockers: 0, warnings: 1 });
+      expect(out.issues[0]).toMatchObject({ code: 'PRODUCTS_UNAVAILABLE', level: 'WARN' });
+      expect(prisma.campaignProduct.findMany).not.toHaveBeenCalled();
+    });
+
+    it('chưa chọn sản phẩm/mã: trang trống là BLOCK', async () => {
+      const { svc } = setup();
+      const out = await svc.check(dto({ productIds: [], couponCodes: [] }), NOW);
+      expect(out).toMatchObject({ blockers: 1, warnings: 0 });
+    });
+
+    it('sửa chiến dịch đã lưu mà không gửi danh sách: đọc liên kết đang lưu', async () => {
+      const { svc, prisma } = setup({ linked: [linkedTo('c1')] });
+      const out = await svc.check(dto({ id: 'c1' }), NOW);
+      expect(out).toEqual({ issues: [], blockers: 0, warnings: 0 });
+      expect(prisma.campaignProduct.findMany).toHaveBeenCalledTimes(1);
+    });
+
+    it('đích sai định dạng: 400 như lúc lưu', async () => {
+      const { svc } = setup();
+      await expect(svc.check(dto({ linkType: 'PRODUCT', linkValue: 'có dấu' }), NOW)).rejects.toBeInstanceOf(BadRequestException);
+    });
   });
 });

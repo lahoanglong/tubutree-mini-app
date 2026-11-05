@@ -1,4 +1,4 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
@@ -50,6 +50,9 @@ describe('Campaigns (real Postgres)', () => {
     title: `Chiến dịch ${slug}`,
     slug: `it-cmp-${tag}-${slug}`,
     placement: 'HOME_TOP' as const,
+    // Đích trong app: bật ngay được dù chưa gắn sản phẩm (trang chiến dịch trống thì kiểm trước khi bật chặn, xem nhóm "kiểm trước khi bật").
+    linkType: 'URL_INTERNAL' as const,
+    linkValue: '/offers',
     image: IMAGE,
     startAt: new Date(Date.now() - DAY).toISOString(),
     endAt: new Date(Date.now() + DAY).toISOString(),
@@ -119,5 +122,70 @@ describe('Campaigns (real Postgres)', () => {
     await admin.setCoupons(c.id, [ok.code, full.code, expired.code]);
     const detail = await pub.getPublic(`it-cmp-${tag}-coupon`);
     expect(detail.coupons.map((x) => x.code)).toEqual([ok.code]);
+  });
+
+  describe('kiểm trước khi bật (health)', () => {
+    const issuesOf = (list: Awaited<ReturnType<typeof admin.list>>, id: string) => list.find((r) => r.id === id)!.health;
+
+    it('trang chiến dịch trống không bật được; gắn sản phẩm hiển thị thì bật được và khách thấy', async () => {
+      const draft = await admin.create(base('trong', { linkType: 'CAMPAIGN_PAGE', linkValue: undefined, isActive: false }));
+      await expect(admin.update(draft.id, { isActive: true })).rejects.toBeInstanceOf(BadRequestException);
+      expect((await prisma.campaign.findUniqueOrThrow({ where: { id: draft.id } })).isActive).toBe(false);
+      expect(issuesOf(await admin.list(), draft.id)).toEqual({ blockers: 1, warnings: 0 });
+
+      const p = await product('Hiển thị', 'trong');
+      await admin.setProducts(draft.id, [p.id]);
+      await admin.update(draft.id, { isActive: true });
+      expect(issuesOf(await admin.list(), draft.id)).toEqual({ blockers: 0, warnings: 0 });
+      expect((await pub.getPublic(draft.slug)).productCount).toBe(1);
+    });
+
+    it('sản phẩm ẩn không cứu được trang trống; bật hiển thị lại thì bật được', async () => {
+      const draft = await admin.create(base('an', { linkType: 'CAMPAIGN_PAGE', linkValue: undefined, isActive: false }));
+      const hidden = await product('Đang ẩn', 'an');
+      await prisma.product.update({ where: { id: hidden.id }, data: { isActive: false } });
+      await admin.setProducts(draft.id, [hidden.id]);
+      await expect(admin.update(draft.id, { isActive: true })).rejects.toThrow(/Trang chiến dịch đang trống/);
+      await prisma.product.update({ where: { id: hidden.id }, data: { isActive: true } });
+      await expect(admin.update(draft.id, { isActive: true })).resolves.toMatchObject({ isActive: true });
+    });
+
+    it('đích sản phẩm ẩn hoặc chưa duyệt: tạo bật bị chặn, tạo nháp được và hiện 1 lỗi chặn trong danh sách', async () => {
+      const p = await product('Chờ duyệt', 'duyet');
+      await prisma.product.update({ where: { id: p.id }, data: { approvalStatus: 'PENDING_REVIEW' } });
+      const input = base('dich', { linkType: 'PRODUCT', linkValue: p.slug });
+      await expect(admin.create({ ...input, isActive: true })).rejects.toThrow(/đang ẩn hoặc chưa được duyệt/);
+      expect(await prisma.campaign.count({ where: { slug: input.slug } })).toBe(0);
+      const draft = await admin.create({ ...input, isActive: false });
+      expect(issuesOf(await admin.list(), draft.id).blockers).toBe(1);
+      await prisma.product.update({ where: { id: p.id }, data: { approvalStatus: 'APPROVED' } });
+      expect(issuesOf(await admin.list(), draft.id).blockers).toBe(0);
+      await expect(admin.update(draft.id, { isActive: true })).resolves.toMatchObject({ isActive: true });
+    });
+
+    it('check cho form chưa lưu: mã hết hạn và sản phẩm hết hàng là cảnh báo, không chặn', async () => {
+      const p = await product('Hết hàng', 'het');
+      await prisma.variation.updateMany({ where: { productId: p.id }, data: { stock: 0 } });
+      const old = await prisma.coupon.create({
+        data: { code: `ITCMP${tag.toUpperCase()}HETHAN`, type: 'PERCENT', value: 10, scope: 'PUBLIC', startAt: new Date(Date.now() - 3 * DAY), endAt: new Date(Date.now() - DAY) },
+      });
+      const out = await admin.check({
+        placement: 'OFFERS_TOP',
+        startAt: new Date(Date.now() - DAY).toISOString(),
+        endAt: new Date(Date.now() + DAY).toISOString(),
+        productIds: [p.id],
+        couponCodes: [old.code],
+      });
+      expect(out.blockers).toBe(0);
+      expect(out.issues.map((i) => i.code).sort()).toEqual(['COUPON_EXPIRED', 'PRODUCTS_UNAVAILABLE']);
+    });
+
+    it('banner thứ 6 cùng chỗ bị cảnh báo chồng banner theo đúng thứ tự hiển thị thật', async () => {
+      for (let i = 0; i < 5; i++) await admin.create(base(`day${i}`, { placement: 'OFFERS_TOP', sortOrder: i }));
+      const sixth = await admin.create(base('day5', { placement: 'OFFERS_TOP', sortOrder: 9999 }));
+      expect(issuesOf(await admin.list('OFFERS_TOP'), sixth.id)).toEqual({ blockers: 0, warnings: 1 });
+      const shown = (await pub.listPublic('OFFERS_TOP')).map((b) => b.slug);
+      expect(shown.slice(0, 5)).not.toContain(sixth.slug);
+    });
   });
 });

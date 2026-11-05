@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { CreateCampaignDto, SetCampaignCouponsDto, SetCampaignProductsDto, UpdateCampaignDto } from './campaign.dto';
+import { CheckCampaignDto, CreateCampaignDto, SetCampaignCouponsDto, SetCampaignProductsDto, UpdateCampaignDto } from './campaign.dto';
 
 const PNG = 'data:image/png;base64,iVBORw0KGgo=';
 const ok = {
@@ -61,5 +61,22 @@ describe('Set*Dto', () => {
     expect(await errs(SetCampaignProductsDto, { productIds: [1] })).not.toHaveLength(0);
     expect(await errs(SetCampaignCouponsDto, { codes: ['THU10'] })).toHaveLength(0);
     expect(await errs(SetCampaignCouponsDto, { codes: Array.from({ length: 11 }, (_, i) => `M${i}`) })).not.toHaveLength(0);
+  });
+});
+
+describe('CheckCampaignDto', () => {
+  const { image: _image, title: _title, ...base } = ok;
+  it('hợp lệ không cần ảnh/tên; nhận danh sách sản phẩm và mã đang soạn', async () => {
+    expect(await errs(CheckCampaignDto, base)).toHaveLength(0);
+    expect(await errs(CheckCampaignDto, { ...base, id: 'c1', linkType: 'PRODUCT', linkValue: 'sua-hat', productIds: ['p1'], couponCodes: ['THU10'], sortOrder: 2 })).toHaveLength(0);
+  });
+  it.each([
+    ['vị trí lạ', { placement: 'X' }],
+    ['ngày sai', { endAt: 'mai' }],
+    ['quá 200 sản phẩm', { productIds: Array.from({ length: 201 }, (_, i) => `p${i}`) }],
+    ['quá 10 mã', { couponCodes: Array.from({ length: 11 }, (_, i) => `M${i}`) }],
+    ['id sản phẩm rỗng', { productIds: [''] }],
+  ])('chặn: %s', async (_name, patch) => {
+    expect(await errs(CheckCampaignDto, { ...base, ...patch })).not.toHaveLength(0);
   });
 });

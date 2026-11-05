@@ -50,6 +50,20 @@ export class SetCampaignCouponsDto {
   @IsArray() @ArrayMaxSize(CAMPAIGN_MAX_COUPONS) @IsString({ each: true }) @IsNotEmpty({ each: true }) @MaxLength(64, { each: true }) codes!: string[];
 }
 
+/** Kiểm trước khi lưu: cùng trường với tạo/sửa (không cần ảnh), kèm danh sách sản phẩm/mã đang soạn. `id` có khi sửa chiến dịch đã lưu. */
+export class CheckCampaignDto {
+  @IsOptional() @IsString() @MaxLength(64) id?: string;
+  @IsIn([...CAMPAIGN_PLACEMENTS]) placement!: (typeof CAMPAIGN_PLACEMENTS)[number];
+  @IsOptional() @IsIn([...CAMPAIGN_LINK_TYPES]) linkType?: (typeof CAMPAIGN_LINK_TYPES)[number];
+  @IsOptional() @IsString() @MaxLength(CAMPAIGN_ENTITY_SLUG_MAX) linkValue?: string | null;
+  @IsOptional() @IsIn([...CAMPAIGN_AUDIENCES]) audience?: (typeof CAMPAIGN_AUDIENCES)[number];
+  @IsDateString() startAt!: string;
+  @IsDateString() endAt!: string;
+  @IsOptional() @IsInt() @Min(0) @Max(9999) sortOrder?: number;
+  @IsOptional() @IsArray() @ArrayMaxSize(CAMPAIGN_MAX_PRODUCTS) @IsString({ each: true }) @IsNotEmpty({ each: true }) productIds?: string[];
+  @IsOptional() @IsArray() @ArrayMaxSize(CAMPAIGN_MAX_COUPONS) @IsString({ each: true }) @IsNotEmpty({ each: true }) @MaxLength(64, { each: true }) couponCodes?: string[];
+}
+
 export class AdminCampaignListQuery {
   @IsOptional() @IsIn([...CAMPAIGN_PLACEMENTS]) placement?: (typeof CAMPAIGN_PLACEMENTS)[number];
 }

@@ -46,6 +46,15 @@ export function toBannerDTO(c: BannerRow): CampaignBannerDTO | null {
   };
 }
 
+const BANNER_ORDER_BY: Prisma.CampaignOrderByWithRelationInput[] = [{ sortOrder: 'asc' }, { startAt: 'desc' }, { id: 'asc' }];
+
+/** Thứ tự hiển thị banner (`orderBy` của listLiveBanners viết thành hàm so sánh): sortOrder tăng, startAt mới trước, id tăng. */
+export function compareBannerOrder(a: { id: string; sortOrder: number; startAt: Date }, b: { id: string; sortOrder: number; startAt: Date }): number {
+  if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+  if (a.startAt.getTime() !== b.startAt.getTime()) return b.startAt.getTime() - a.startAt.getTime();
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
+
 export async function listLiveBanners(
   prisma: Pick<PrismaService, 'campaign'>,
   placement: CampaignPlacement,
@@ -53,7 +62,7 @@ export async function listLiveBanners(
 ): Promise<CampaignBannerDTO[]> {
   const rows = await prisma.campaign.findMany({
     where: { ...liveWhere(opts.now ?? new Date(), placement), ...audienceWhere(opts.audience) },
-    orderBy: [{ sortOrder: 'asc' }, { startAt: 'desc' }, { id: 'asc' }],
+    orderBy: BANNER_ORDER_BY,
     take: BANNER_FETCH_LIMIT,
     select: { id: true, slug: true, title: true, image: true, linkType: true, linkValue: true, audience: true, startAt: true, endAt: true },
   });
