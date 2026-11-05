@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type * as ZmpUi from 'zmp-ui';
+import { PRODUCT_SLUGS_QUERY_MAX_CHARS } from '@tubutree/shared-types';
 
 const mocks = vi.hoisted(() => ({ navigate: vi.fn(), fetchProductsBySlugs: vi.fn(), fetchActiveFlashSales: vi.fn() }));
 vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<typeof ZmpUi>()), useNavigate: () => mocks.navigate }));
@@ -151,22 +152,22 @@ describe('RecentlyViewedRail (spec 5b.4)', () => {
     expect(mocks.fetchProductsBySlugs).toHaveBeenCalledTimes(1);
   });
 
-  it('20 slug dài 120 ký tự: chuỗi gửi lên dưới 2000 ký tự (không HTTP 400), món cũ không được hỏi thì không bị dọn', async () => {
+  it('20 slug dài 120 ký tự: hỏi đủ cả 20 trong một chuỗi dưới trần của API (không HTTP 400), món bị ẩn thì bị dọn, các món còn lại nguyên', async () => {
     const long = (i: number) => `${'x'.repeat(116)}-${String(i).padStart(3, '0')}`;
     for (let i = 0; i < 20; i++) recordRecentlyViewed({ slug: long(i), name: `SP ${i}`, thumbnail: null }, i + 1);
-    // Món mới nhất (i = 19) bị ẩn: bị dọn; bốn món cũ nhất nằm ngoài trần nên không được hỏi và phải còn nguyên.
+    // Món mới nhất (i = 19) bị ẩn: bị dọn; mọi món khác đều được hỏi và còn nguyên.
     mocks.fetchProductsBySlugs.mockImplementation(async (slugs: string[]) => slugs.filter((s) => s !== long(19)).map((s) => liveProduct(s)));
     renderRail();
     await waitFor(() => expect(JSON.parse(localStorage.getItem('tubu_recently_viewed')!)).toHaveLength(19));
     const sent = mocks.fetchProductsBySlugs.mock.calls.map(([slugs]) => (slugs as string[]).join(','));
-    for (const q of sent) expect(q.length).toBeLessThanOrEqual(2000);
-    expect(sent[0]?.split(',')).toHaveLength(16);
+    for (const q of sent) expect(q.length).toBeLessThanOrEqual(PRODUCT_SLUGS_QUERY_MAX_CHARS);
+    expect(sent[0]?.split(',')).toHaveLength(20);
     const left = JSON.parse(localStorage.getItem('tubu_recently_viewed')!).map((i: { slug: string }) => i.slug);
-    for (let i = 0; i < 4; i++) expect(left).toContain(long(i));
+    for (let i = 0; i < 19; i++) expect(left).toContain(long(i));
     expect(left).not.toContain(long(19));
   });
 
-  it('10 món slug 210 ký tự: sau khi API trả lời chỉ vẽ món đã hỏi và được trả về, không thẻ nào thiếu giá; món ngoài trần vẫn nằm trong kho', async () => {
+  it('10 món slug 210 ký tự: đều vừa trần, hỏi đủ 10 và vẽ đủ 10 thẻ có giá, kho còn nguyên', async () => {
     const wide = (i: number) => `${'y'.repeat(206)}-${String(i).padStart(3, '0')}`;
     for (let i = 0; i < 10; i++) recordRecentlyViewed({ slug: wide(i), name: `SP ${i}`, thumbnail: null }, i + 1);
     mocks.fetchProductsBySlugs.mockImplementation(async (slugs: string[]) => slugs.map((s) => liveProduct(s)));
@@ -174,19 +175,18 @@ describe('RecentlyViewedRail (spec 5b.4)', () => {
     await waitFor(() => expect(mocks.fetchProductsBySlugs).toHaveBeenCalled());
     await new Promise((r) => setTimeout(r, 50));
     const cards = container.querySelectorAll('[data-ds="product-tile"]');
-    expect(cards).toHaveLength(9);
+    expect(cards).toHaveLength(10);
     for (const card of Array.from(cards)) expect(card.textContent).toContain('45.000');
     expect(JSON.parse(localStorage.getItem('tubu_recently_viewed')!)).toHaveLength(10);
   });
 
-  it('10 món slug 210 ký tự, API chưa trả lời: chỉ vẽ món nằm trong lần hỏi, thẻ ngoài trần không hiện thoáng qua', async () => {
+  it('10 món slug 210 ký tự, API chưa trả lời: vẽ đủ 10 món đã hỏi', async () => {
     const wide = (i: number) => `${'y'.repeat(206)}-${String(i).padStart(3, '0')}`;
     for (let i = 0; i < 10; i++) recordRecentlyViewed({ slug: wide(i), name: `SP ${i}`, thumbnail: null }, i + 1);
     mocks.fetchProductsBySlugs.mockImplementation(() => new Promise(() => undefined));
     const { container } = renderRail();
     await waitFor(() => expect(mocks.fetchProductsBySlugs).toHaveBeenCalled());
-    expect(container.querySelectorAll('[data-ds="product-tile"]')).toHaveLength(9);
-    expect(container.textContent).not.toContain('SP 0');
+    expect(container.querySelectorAll('[data-ds="product-tile"]')).toHaveLength(10);
   });
 
   it('API lỗi: không dọn lịch sử xem', async () => {
