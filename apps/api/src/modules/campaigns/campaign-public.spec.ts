@@ -1,4 +1,4 @@
-import { audienceWhere, BANNER_FETCH_LIMIT, bannerLinkUsable, liveWhere, listLiveBanners, toBannerDTO } from './campaign-public';
+import { audienceWhere, BANNER_FETCH_LIMIT, liveWhere, listLiveBanners, toBannerDTO } from './campaign-public';
 
 const PNG = 'data:image/png;base64,iVBORw0KGgo=';
 const SVG = 'data:image/svg+xml;base64,PHN2Zz4=';
@@ -80,18 +80,5 @@ describe('listLiveBanners', () => {
     const { prisma, findMany } = make([row()]);
     await listLiveBanners(prisma, 'HOME_TOP', { now: NOW, audience: 'RETURNING' });
     expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { ...liveWhere(NOW, 'HOME_TOP'), audience: { in: ['ALL', 'RETURNING'] } } }));
-  });
-});
-
-describe('bannerLinkUsable (cùng điều kiện app-core dựng được href)', () => {
-  it('trang chiến dịch luôn dựng được; sản phẩm/danh mục cần slug đúng mẫu; đích trong app cần nằm trong danh sách đóng', () => {
-    expect(bannerLinkUsable({ linkType: 'CAMPAIGN_PAGE', linkValue: null })).toBe(true);
-    expect(bannerLinkUsable({ linkType: 'PRODUCT', linkValue: 'sua-hat' })).toBe(true);
-    expect(bannerLinkUsable({ linkType: 'PRODUCT', linkValue: 'có dấu' })).toBe(false);
-    expect(bannerLinkUsable({ linkType: 'PRODUCT', linkValue: null })).toBe(false);
-    expect(bannerLinkUsable({ linkType: 'CATEGORY', linkValue: 'nuoc-rua' })).toBe(true);
-    expect(bannerLinkUsable({ linkType: 'CATEGORY', linkValue: '' })).toBe(false);
-    expect(bannerLinkUsable({ linkType: 'URL_INTERNAL', linkValue: '/offers' })).toBe(true);
-    expect(bannerLinkUsable({ linkType: 'URL_INTERNAL', linkValue: '/khong-co' })).toBe(false);
   });
 });

@@ -3,7 +3,7 @@ import type { PrismaService } from '../../prisma/prisma.service';
 import { normalizeCouponCode } from '../coupons/coupons.service';
 import { isPublicProduct } from '../catalog/public-product';
 import { hasServedImagePrefix } from '../../common/served-image';
-import { bannerLinkUsable } from './campaign-public';
+import { campaignLinkUsable } from '@tubutree/shared-types';
 import { campaignHealth, PeerIndex, usableCounts, type HealthCoupon, type HealthIssue, type HealthProduct, type HealthSubject } from './campaign-health';
 
 type HealthPrisma = Pick<PrismaService, '$queryRaw' | 'campaign' | 'campaignProduct' | 'campaignCoupon' | 'product' | 'coupon' | 'category'>;
@@ -93,7 +93,7 @@ export async function campaignHealthDetailBatch(prisma: HealthPrisma, requests: 
     ? await prisma.$queryRaw<{ id: string; head: string }[]>`SELECT "id", left("image", 32) AS "head" FROM "campaigns" WHERE "id" IN (${Prisma.join(peerRows.map((p) => p.id))})`
     : [];
   const unservable = new Set(heads.filter((h) => h.head === '' || (h.head.startsWith('data:') && !hasServedImagePrefix(h.head))).map((h) => h.id));
-  const peerFacts = peerRows.map(({ linkType, linkValue, ...p }) => ({ ...p, shows: !unservable.has(p.id) && bannerLinkUsable({ linkType, linkValue }) }));
+  const peerFacts = peerRows.map(({ linkType, linkValue, ...p }) => ({ ...p, shows: !unservable.has(p.id) && campaignLinkUsable({ linkType, linkValue }) }));
 
   const peerIndexByPlacement = new Map<string, { peers: typeof peerFacts; index: PeerIndex }>();
   for (const placement of placements) {

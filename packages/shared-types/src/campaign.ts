@@ -43,3 +43,21 @@ export const CAMPAIGN_SLIDES_MAX = 5;
 
 /** Mini App bản cũ chỉ dựng liên kết banner cho slug tới chừng này ký tự; dài hơn thì banner bị bỏ khỏi carousel (runbook §1.23). */
 export const CAMPAIGN_LEGACY_SLUG_MAX = 120;
+
+/**
+ * Đích banner có dựng được liên kết ở app không (khi sai thì banner bị bỏ khỏi carousel). Một nguồn cho app-core (`campaignHref`) và kiểm sức khoẻ chiến dịch
+ * của API. Không xét tính năng nào đang tắt: `liveRoute` chỉ đổi route đích, không biến liên kết thành null.
+ */
+export function campaignLinkUsable(c: { linkType: string; linkValue: string | null }): boolean {
+  switch (c.linkType) {
+    case 'CAMPAIGN_PAGE':
+      return true;
+    case 'PRODUCT':
+    case 'CATEGORY':
+      return !!c.linkValue && CAMPAIGN_ENTITY_SLUG_RE.test(c.linkValue);
+    case 'URL_INTERNAL':
+      return CAMPAIGN_INTERNAL_TARGETS.some((t) => t.value === c.linkValue);
+    default:
+      return false;
+  }
+}

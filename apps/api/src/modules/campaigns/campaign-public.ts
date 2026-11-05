@@ -1,7 +1,6 @@
 import type { Campaign, CampaignAudience, CampaignLinkType, CampaignPlacement, Prisma } from '@prisma/client';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { publicImage } from '../../common/public-image';
-import { CAMPAIGN_ENTITY_SLUG_RE, CAMPAIGN_INTERNAL_TARGETS } from '@tubutree/shared-types';
 
 // Lấy dư số slide tối đa của carousel (5): app-core còn lọc đối tượng/lịch lần nữa trên máy khách nên cần chừa chỗ.
 export const BANNER_FETCH_LIMIT = 10;
@@ -28,24 +27,6 @@ export function liveWhere(now: Date, placement?: CampaignPlacement): Prisma.Camp
 /** Khách NEW thấy ALL + NEW, khách RETURNING thấy ALL + RETURNING; không biết loại khách thì không lọc. */
 export function audienceWhere(wanted?: 'NEW' | 'RETURNING'): Prisma.CampaignWhereInput {
   return wanted ? { audience: { in: ['ALL', wanted] } } : {};
-}
-
-/**
- * Đích có dựng được link ở app không: cùng điều kiện với `campaignHref` của app-core (dùng chung hằng của shared-types, API không import app-core).
- * Không xét liveRoute: nó chỉ đổi route khi một tính năng tắt, không biến link thành null.
- */
-export function bannerLinkUsable(c: Pick<Campaign, 'linkType' | 'linkValue'>): boolean {
-  switch (c.linkType) {
-    case 'CAMPAIGN_PAGE':
-      return true;
-    case 'PRODUCT':
-    case 'CATEGORY':
-      return !!c.linkValue && CAMPAIGN_ENTITY_SLUG_RE.test(c.linkValue);
-    case 'URL_INTERNAL':
-      return CAMPAIGN_INTERNAL_TARGETS.some((t) => t.value === c.linkValue);
-    default:
-      return false;
-  }
 }
 
 /** Ảnh banner phục vụ được (hoặc null) cho `toBannerDTO`. Kiểm sức khoẻ không gọi hàm này mà phân loại 32 ký tự đầu ảnh ở DB, theo cùng danh sách mime (`served-image.ts`). */

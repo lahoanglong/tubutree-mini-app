@@ -1,7 +1,7 @@
 import type { CampaignBanner, CampaignCouponDTO } from '../api/campaign';
 import type { PageResponse, ProductCard } from '../api/catalog';
 import type { HomeKindState } from '../home-layout';
-import { CAMPAIGN_ENTITY_SLUG_RE, CAMPAIGN_INTERNAL_TARGETS, CAMPAIGN_SLIDES_MAX } from '@tubutree/shared-types';
+import { CAMPAIGN_ENTITY_SLUG_RE, CAMPAIGN_INTERNAL_TARGETS, CAMPAIGN_SLIDES_MAX, campaignLinkUsable } from '@tubutree/shared-types';
 import { liveRoute } from '../merch/route-fallback';
 import { fillCopy } from '../shop-copy';
 import { sortVouchers, voucherView, type VoucherView } from './voucher';
@@ -27,6 +27,7 @@ export function campaignVisible(c: Pick<CampaignBanner, 'audience' | 'startAt' |
 
 /** Đường dẫn bấm vào banner; null khi đích không hợp lệ (slide bị bỏ thay vì dẫn tới trang chết). */
 export function campaignHref(c: Pick<CampaignBanner, 'slug' | 'linkType' | 'linkValue'>, platform: 'mini' | 'web'): string | null {
+  if (!campaignLinkUsable(c)) return null;
   const mini = platform === 'mini';
   switch (c.linkType) {
     case 'CAMPAIGN_PAGE':

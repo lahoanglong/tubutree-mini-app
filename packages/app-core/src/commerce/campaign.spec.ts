@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CampaignBanner, CampaignCouponDTO } from '../api/campaign';
 import type { HomeKindState } from '../home-layout';
-import { CAMPAIGN_ENTITY_SLUG_MAX, CAMPAIGN_ENTITY_SLUG_RE, PRODUCT_SLUG_MAX } from '@tubutree/shared-types';
+import { CAMPAIGN_ENTITY_SLUG_MAX, CAMPAIGN_ENTITY_SLUG_RE, campaignLinkUsable, PRODUCT_SLUG_MAX } from '@tubutree/shared-types';
 import { liveRoute } from '../merch/route-fallback';
 import {
   CAMPAIGN_INTERNAL_TARGETS,
@@ -57,6 +57,30 @@ describe('campaignVisible — lịch', () => {
   });
   it('thiếu now thì bỏ qua lịch (web trước khi hydrate không biết giờ máy khách)', () => {
     expect(campaignVisible({ ...c, endAt: '2020-01-01T00:00:00.000Z' }, { kind: 'new' })).toBe(true);
+  });
+});
+
+describe('campaignLinkUsable (shared-types) khớp campaignHref: usable khi và chỉ khi dựng được href', () => {
+  const longSlug = 'a'.repeat(CAMPAIGN_ENTITY_SLUG_MAX + 1);
+  const cases: [CampaignBanner['linkType'], string | null][] = [
+    ['CAMPAIGN_PAGE', null],
+    ['CAMPAIGN_PAGE', 'bất kỳ'],
+    ['PRODUCT', 'tra-sen'],
+    ['PRODUCT', 'có dấu'],
+    ['PRODUCT', ''],
+    ['PRODUCT', null],
+    ['PRODUCT', longSlug],
+    ['CATEGORY', 'nuoc-rua'],
+    ['CATEGORY', '-bat-dau-gach'],
+    ['CATEGORY', null],
+    ...CAMPAIGN_INTERNAL_TARGETS.map((t): [CampaignBanner['linkType'], string | null] => ['URL_INTERNAL', t.value]),
+    ['URL_INTERNAL', '/khong-co'],
+    ['URL_INTERNAL', null],
+  ];
+  it.each(cases)('%s %j', (linkType, linkValue) => {
+    for (const platform of ['mini', 'web'] as const) {
+      expect(campaignLinkUsable({ linkType, linkValue })).toBe(campaignHref(banner({ linkType, linkValue }), platform) !== null);
+    }
   });
 });
 
