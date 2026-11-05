@@ -80,6 +80,17 @@ describe('OrderShipping (web)', () => {
     expect(container.querySelector('[role="status"]')?.textContent).toContain('hãy chép mã thủ công');
   });
 
+  it('vùng báo kết quả chép có sẵn từ đầu (rỗng) và chỉ đổi chữ, để trình đọc màn hình đọc được', async () => {
+    const { container } = mount(<OrderShipping code="GHN123" />);
+    const region = container.querySelector('[role="status"]');
+    expect(region).not.toBeNull();
+    expect(region!.textContent).toBe('');
+    click(byText(container, 'button', 'Chép mã'));
+    await act(async () => undefined);
+    expect(container.querySelector('[role="status"]')).toBe(region);
+    expect(region!.textContent).toBe('Đã sao chép mã vận đơn');
+  });
+
   it('liên kết tra cứu mở tab mới; không có gì để hiện thì không dựng', () => {
     const { container } = mount(<OrderShipping code="GHN123" trackingHref="https://hang.example/GHN123" />);
     const a = container.querySelector('a')!;

@@ -55,16 +55,19 @@ export function OrderShipping({ partner, code, status, events = [], trackingHref
             <Text variant="body-md" as="div" style={{ fontWeight: 700, overflowWrap: 'anywhere' }}>
               {code}
             </Text>
+            {/* Vùng báo phải có sẵn trong trang trước khi bấm thì trình đọc màn hình mới đọc lúc chữ đổi; rỗng nên không chiếm chỗ. */}
+            <div role="status">
+              {result && (
+                <Text variant="caption" tone={result === 'ok' ? 'success' : 'danger'} as="div">
+                  {result === 'ok' ? 'Đã sao chép mã vận đơn' : 'Không sao chép được — hãy chép mã thủ công.'}
+                </Text>
+              )}
+            </div>
           </div>
           <Button variant="secondary" onPress={() => void copy()} style={{ flex: '0 0 auto' }}>
             {fillCopy('order.shipping.copy')}
           </Button>
         </div>
-      )}
-      {result && (
-        <Text variant="caption" tone={result === 'ok' ? 'success' : 'danger'} as="div">
-          <span role="status">{result === 'ok' ? 'Đã sao chép mã vận đơn' : 'Không sao chép được — hãy chép mã thủ công.'}</span>
-        </Text>
       )}
       {status && (
         <Text variant="caption" tone="success" as="div">
