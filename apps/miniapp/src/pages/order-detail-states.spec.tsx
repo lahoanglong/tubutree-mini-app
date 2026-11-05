@@ -254,6 +254,16 @@ describe('OrderDetailPage — nút theo trạng thái (gói hl)', () => {
     expect(mocks.navigate).not.toHaveBeenCalled();
   });
 
+  it('đơn huỷ chưa có vận chuyển, lịch sử vận chuyển rỗng: không rơi chữ số 0 ra trang', async () => {
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, status: 'CANCELLED', createdAt: hoursFromNow(-30), updatedAt: hoursFromNow(-5), shippingHistory: [], statusTimes: { CANCELLED: hoursFromNow(-6) } });
+    const { container } = renderPage();
+    await screen.findByText('Đơn đã huỷ.');
+    expect(container.querySelector('[data-testid="order-shipping"]')).toBeNull();
+    const hero = screen.getByTestId('status-hero');
+    expect(hero.nextSibling?.textContent ?? '').not.toBe('0');
+    expect(within(container).queryByText(/^0$/)).toBeNull();
+  });
+
   it('đơn tự huỷ vì quá hạn thanh toán: nói đúng lý do, không nói lý do bịa cho đơn huỷ khác', async () => {
     const base = { ...ORDER, status: 'CANCELLED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', createdAt: hoursFromNow(-30), updatedAt: hoursFromNow(-5) };
     mocks.fetchOrder.mockResolvedValue({ ...base, paymentDeadline: hoursFromNow(-6), statusTimes: { CANCELLED: hoursFromNow(-6) } });

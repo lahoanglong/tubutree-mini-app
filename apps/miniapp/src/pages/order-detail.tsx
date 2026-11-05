@@ -337,7 +337,7 @@ export default function OrderDetailPage() {
         </Box>
       )}
 
-      {(o.shippingPartner || o.shippingCode || (!trackView && o.shippingHistory?.length)) && (
+      {(o.shippingPartner || o.shippingCode || (!trackView && !!o.shippingHistory?.length)) && (
         <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
           <OrderShipping
             partner={o.shippingPartner}
