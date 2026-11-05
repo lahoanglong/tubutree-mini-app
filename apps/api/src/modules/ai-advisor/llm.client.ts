@@ -6,6 +6,7 @@ import {
   type AdvisorProvider,
   isAdvisorAvailable,
   positiveInt,
+  providerConfigured,
   resolveProviderOrder,
 } from './advisor-config';
 import { buildGatewayPrompt } from './gateway-prompt';
@@ -13,6 +14,16 @@ import { buildGatewayPrompt } from './gateway-prompt';
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;
+}
+
+export interface CompleteViaOptions {
+  /** Trần token đầu ra cho provider OpenAI-compatible (mặc định 800 là đủ cho câu trả lời tư vấn, không đủ cho JSON kịch bản). */
+  maxTokens?: number;
+  /**
+   * Gateway: dùng nguyên văn các tin nhắn nối lại thay vì khung "câu hỏi của khách" của AI tư vấn (khung đó cắt còn 500 ký tự
+   * và dặn trả lời như tư vấn viên). Chỉ dùng với nội dung do admin gửi, không bao giờ với chữ của khách.
+   */
+  rawGatewayPrompt?: boolean;
 }
 
 /** Lý do thất bại để service chọn câu xin lỗi phù hợp; KHÔNG mang nội dung lỗi của gateway ra ngoài. */
@@ -49,7 +60,8 @@ const RATE_WINDOW_MS = 60_000;
  * Client LLM cho AI tư vấn (§6.14.3). Antigravity gateway (chính, cùng cách ChoDeli dùng) → DeepSeek → Gemini,
  * chỉ thử những provider đã cấu hình; AI_ADVISOR_PROVIDER chọn cứng một provider (xem advisor-config.ts).
  * Gate bằng cấu hình: tắt hoặc chưa có provider nào → isConfigured()=false để service tắt graceful.
- * KHÔNG dùng Claude/Anthropic (yêu cầu nghiệp vụ).
+ * AI tư vấn khách KHÔNG dùng Claude/Anthropic (yêu cầu nghiệp vụ): `complete()` chỉ đi qua ba provider trên. Story Studio của admin
+ * có thứ tự riêng (antigravity > Claude > deepseek/gemini) nên gọi `completeVia()` cho từng provider và tự ghép Claude (AnthropicClient).
  */
 @Injectable()
 export class LlmClient {
@@ -65,6 +77,7 @@ export class LlmClient {
   private readonly gatewayModel: string;
   private readonly gatewayTimeoutMs: number;
   private readonly order: AdvisorProvider[];
+  private readonly configured: ReadonlySet<AdvisorProvider>;
   private readonly available: boolean;
   private readonly globalPerMin: number;
   private readonly maxConcurrent: number;
@@ -85,6 +98,7 @@ export class LlmClient {
     this.gatewayModel = (get('ANTIGRAVITY_MODEL') ?? '').trim() || DEFAULT_ANTIGRAVITY_MODEL;
     this.gatewayTimeoutMs = positiveInt(get('ANTIGRAVITY_GATEWAY_TIMEOUT_MS'), DEFAULT_ANTIGRAVITY_TIMEOUT_MS);
     this.order = resolveProviderOrder(get);
+    this.configured = new Set((['antigravity', 'deepseek', 'gemini'] as const).filter((p) => providerConfigured(get, p)));
     this.available = isAdvisorAvailable(get);
     this.globalPerMin = positiveInt(get('AI_ADVISOR_GLOBAL_PER_MIN'), DEFAULT_GLOBAL_PER_MIN);
     this.maxConcurrent = positiveInt(get('AI_ADVISOR_MAX_CONCURRENT'), DEFAULT_MAX_CONCURRENT);
@@ -94,21 +108,35 @@ export class LlmClient {
     return this.available;
   }
 
+  /** Provider này đã đủ khoá để gọi (không xét công tắc AI tư vấn và AI_ADVISOR_PROVIDER, vốn chỉ điều khiển AI tư vấn khách). */
+  hasProvider(p: AdvisorProvider): boolean {
+    return this.configured.has(p);
+  }
+
   /**
    * Gọi LLM theo thứ tự provider đã cấu hình, lỗi → provider kế. Hết phương án, đang tắt, hoặc chạm trần
    * toàn hệ thống → LlmUnavailableException (service đổi thành câu trả lời offline).
    */
   async complete(messages: ChatMessage[]): Promise<string> {
     if (!this.available) throw new LlmUnavailableException('error');
+    return this.completeVia(this.order, messages);
+  }
+
+  /**
+   * Như `complete` nhưng với danh sách provider do người gọi chọn (cùng trần lượt gọi, cùng cách ghi log). Không xét công tắc AI tư vấn:
+   * người gọi tự lọc bằng `hasProvider`. Danh sách rỗng hoặc hết phương án → LlmUnavailableException.
+   */
+  async completeVia(providers: readonly AdvisorProvider[], messages: ChatMessage[], opts: CompleteViaOptions = {}): Promise<string> {
+    if (providers.length === 0) throw new LlmUnavailableException('error');
     if (!this.reserve()) {
       this.logger.warn('Chạm trần lượt gọi AI (toàn hệ thống hoặc đồng thời), bỏ qua lượt này.');
       throw new LlmUnavailableException('busy');
     }
     try {
       let reason: LlmFailureReason = 'error';
-      for (const provider of this.order) {
+      for (const provider of providers) {
         try {
-          return await this.callProvider(provider, messages);
+          return await this.callProvider(provider, messages, opts);
         } catch (e) {
           reason = e instanceof LlmCallError ? e.reason : 'error';
           this.logger.warn(`${provider} lỗi (${reason}): ${(e as Error).message}`);
@@ -132,10 +160,10 @@ export class LlmClient {
     return true;
   }
 
-  private callProvider(provider: AdvisorProvider, messages: ChatMessage[]): Promise<string> {
-    if (provider === 'antigravity') return this.callAntigravity(messages);
-    if (provider === 'deepseek') return this.callDeepSeek(messages);
-    return this.callGemini(messages);
+  private callProvider(provider: AdvisorProvider, messages: ChatMessage[], opts: CompleteViaOptions): Promise<string> {
+    if (provider === 'antigravity') return this.callAntigravity(messages, opts);
+    if (provider === 'deepseek') return this.callDeepSeek(messages, opts);
+    return this.callGemini(messages, opts);
   }
 
   /**
@@ -143,8 +171,8 @@ export class LlmClient {
    * body {task, prompt, images, model}; 200 → {result, model?, usage?}; lỗi → {error, message}.
    * Gateway tự báo 429 circuit_open khi chạm trần giờ/đồng thời của nó. Model bị agy gỡ → thử lại 1 lần không kèm model.
    */
-  private async callAntigravity(messages: ChatMessage[]): Promise<string> {
-    const prompt = buildGatewayPrompt(messages);
+  private async callAntigravity(messages: ChatMessage[], opts: CompleteViaOptions): Promise<string> {
+    const prompt = opts.rawGatewayPrompt ? messages.map((m) => m.content).join('\n\n') : buildGatewayPrompt(messages);
     try {
       return await this.postGateway(prompt, this.gatewayModel);
     } catch (e) {
@@ -184,12 +212,12 @@ export class LlmClient {
     }
   }
 
-  private callDeepSeek(messages: ChatMessage[]): Promise<string> {
-    return this.callChat(this.deepseekBase, this.deepseekKey, this.deepseekModel, 'DeepSeek', messages);
+  private callDeepSeek(messages: ChatMessage[], opts: CompleteViaOptions): Promise<string> {
+    return this.callChat(this.deepseekBase, this.deepseekKey, this.deepseekModel, 'DeepSeek', messages, opts.maxTokens);
   }
 
-  private callGemini(messages: ChatMessage[]): Promise<string> {
-    return this.callChat(this.geminiBase, this.geminiKey, this.geminiModel, 'Gemini', messages);
+  private callGemini(messages: ChatMessage[], opts: CompleteViaOptions): Promise<string> {
+    return this.callChat(this.geminiBase, this.geminiKey, this.geminiModel, 'Gemini', messages, opts.maxTokens);
   }
 
   /**
@@ -203,10 +231,11 @@ export class LlmClient {
     model: string,
     label: string,
     messages: ChatMessage[],
+    maxTokens = 800,
   ): Promise<string> {
     const { data } = await axios.post(
       `${baseURL.replace(/\/$/, '')}/chat/completions`,
-      { model, messages, temperature: 0.7, max_tokens: 800 },
+      { model, messages, temperature: 0.7, max_tokens: maxTokens },
       { headers: { Authorization: `Bearer ${apiKey}` }, timeout: 30000 },
     );
     const text = data?.choices?.[0]?.message?.content;

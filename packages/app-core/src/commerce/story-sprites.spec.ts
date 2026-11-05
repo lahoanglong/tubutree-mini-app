@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { STORY_SPRITE_CHOICES } from '@tubutree/shared-types';
 import { STORY_SPRITES, spriteForIngredient } from './story-sprites';
 
 const SPEC_SPRITES = [
@@ -19,6 +20,11 @@ const SPEC_SPRITES = [
 ];
 
 describe('STORY_SPRITES', () => {
+  it('danh sách mã và tên của shared-types (API dặn AI) khớp đúng thư viện vẽ', () => {
+    expect(STORY_SPRITE_CHOICES.map((c) => c.id).sort()).toEqual(Object.keys(STORY_SPRITES).sort());
+    for (const c of STORY_SPRITE_CHOICES) expect(STORY_SPRITES[c.id]?.label, c.id).toBe(c.label);
+  });
+
   it('có đủ thư viện nguyên liệu của spec', () => {
     for (const id of SPEC_SPRITES) expect(STORY_SPRITES, id).toHaveProperty(id);
   });

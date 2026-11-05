@@ -29,6 +29,8 @@ const NOT_IN_EXAMPLE: Record<string, string> = {
   AI_ADVISOR_ENABLED: 'AI tư vấn tuỳ chọn',
   AI_ADVISOR_GLOBAL_PER_MIN: 'AI tư vấn tuỳ chọn',
   AI_ADVISOR_MAX_CONCURRENT: 'AI tư vấn tuỳ chọn',
+  ANTHROPIC_API_KEY: 'Story Studio của admin: bước Claude tuỳ chọn, trống thì bỏ qua; đặt qua ops.yml set-env, không ghi khoá vào file mẫu',
+  CLAUDE_API_MODEL: 'Story Studio: trống = claude-sonnet-5-5',
 };
 
 // KEY=... hoặc `# KEY=...` (khoá mà giá trị rỗng làm API không khởi động phải để dạng chú thích).

@@ -14,6 +14,27 @@ export const STORY_LIMITS = {
   maxJsonBytes: 16 * 1024,
 } as const;
 
+/**
+ * Mã và tên các sprite trong thư viện nguyên liệu (nguồn vẽ nằm ở app-core). API không import app-core nên giữ bản danh sách này để
+ * dặn AI chỉ chọn mã có thật; `story-sprites.spec.ts` ở app-core giữ hai bên khớp nhau.
+ */
+export const STORY_SPRITE_CHOICES = [
+  { id: 'pomelo-peel', label: 'Vỏ bưởi' },
+  { id: 'pomelo-slice', label: 'Lát bưởi' },
+  { id: 'gleditsia-pod', label: 'Quả bồ kết' },
+  { id: 'ocimum-leaf', label: 'Lá hương nhu' },
+  { id: 'lemongrass', label: 'Sả chanh' },
+  { id: 'centella-leaf', label: 'Lá rau má' },
+  { id: 'shea-butter', label: 'Bơ hạt mỡ' },
+  { id: 'arabica-bean', label: 'Hạt cà phê Arabica' },
+  { id: 'honey-drop', label: 'Giọt mật ong' },
+  { id: 'pineapple-enzyme', label: 'Lát dứa' },
+  { id: 'granola-clusters', label: 'Hạt granola' },
+  { id: 'cajeput-leaf', label: 'Lá tràm gió' },
+  { id: 'water-droplet', label: 'Giọt nước' },
+  { id: 'oil-drop', label: 'Giọt dầu' },
+] as const;
+
 export type StoryAmbient = 'leaf' | 'amber' | 'rose' | 'sky' | 'sand';
 export type StoryFrom = 'top' | 'left' | 'right' | 'bottom';
 

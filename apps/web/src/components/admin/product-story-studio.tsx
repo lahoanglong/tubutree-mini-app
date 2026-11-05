@@ -7,7 +7,7 @@ import type { ProductDetail as PublicProduct } from '@tubutree/app-core/api/cata
 import { resolveStoryConfig, STORY_PRODUCT_INSET_PCT } from '@tubutree/app-core/commerce/product-story';
 import { STORY_SPRITES } from '@tubutree/app-core/commerce/story-sprites';
 import { ProductStoryShowcase } from '@/components/mini/product-story-showcase';
-import { extractStoryAssets, type ProductDetail, type StoryAssetsResult } from '@/lib/product-categories';
+import { extractStoryAssets, generateStoryDraft, type ProductDetail, type StoryAssetsResult, type StoryDraftProvider } from '@/lib/product-categories';
 import { actionErrorText } from '@/lib/admin-error-text';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_SMALL, FIELD_CLASS, INPUT_CLASS, Notice, chipClass } from './ui';
 
@@ -15,6 +15,8 @@ const EMPTY: ProductStoryConfig = { version: 1, enabled: true, scenes: [] };
 const OWN_IMAGE = /^\/public-image\/product\/[A-Za-z0-9_-]+\/(\d{1,2})(?:\?|$)/;
 const IMAGE_URL = /\.(png|jpe?g|webp|gif)(\?.*)?$/i;
 const clamp = (n: number) => Math.min(100, Math.max(0, Math.round(n)));
+const AI_NOTE_MAX = 500;
+const PROVIDER_NAME: Record<StoryDraftProvider, string> = { antigravity: 'Antigravity', anthropic: 'Claude', deepseek: 'DeepSeek', gemini: 'Gemini' };
 
 type Assembly = Extract<StoryScene, { kind: 'ingredient_assembly' }>;
 type Hud = Extract<StoryScene, { kind: 'hud_callouts' }>;
@@ -64,6 +66,8 @@ export function ProductStoryStudio({
   const [note, setNote] = useState<string | null>(null);
   const [link, setLink] = useState('');
   const [found, setFound] = useState<StoryAssetsResult | null>(null);
+  const [aiNote, setAiNote] = useState('');
+  const [aiInfo, setAiInfo] = useState<{ provider: StoryDraftProvider; warnings: string[] } | null>(null);
 
   const generated = useMemo(
     () =>
@@ -96,6 +100,19 @@ export function ProductStoryStudio({
       return extractStoryAssets(product.id, IMAGE_URL.test(v) ? { imageUrls: [v] } : { pageUrl: v });
     },
     onSuccess: (r) => setFound(r),
+  });
+
+  // Bản nháp AI thay cảnh lắp ghép và điểm chỉ; giữ vòng cung (bám phân loại thật), ảnh sân khấu và công tắc bật/tắt của sản phẩm. Chưa lưu: admin xem trước rồi tự bấm Lưu.
+  const draft = useMutation({
+    mutationFn: () => generateStoryDraft(product.id, aiNote),
+    onSuccess: (r) => {
+      const { cutoutUrl, enabled } = current;
+      const kept = current.scenes.filter((s) => s.kind === 'variant_arc');
+      setNote(null);
+      setPick(0);
+      setAiInfo({ provider: r.provider, warnings: r.warnings });
+      onChange({ version: 1, enabled, ...(cutoutUrl ? { cutoutUrl } : {}), scenes: [...kept, ...r.config.scenes] });
+    },
   });
 
   const steps = asm(current)?.steps ?? [];
@@ -163,6 +180,46 @@ export function ProductStoryStudio({
           >
             Dùng kịch bản mẫu
           </button>
+        )}
+      </div>
+      <div className="space-y-2" data-testid="story-ai">
+        <label className="block text-sm font-medium text-stone-900" htmlFor={`story-ai-note-${product.id}`}>
+          Ghi chú cho AI (tuỳ chọn)
+        </label>
+        <textarea
+          id={`story-ai-note-${product.id}`}
+          className={`${INPUT_CLASS} min-h-[64px]`}
+          placeholder="Nguồn gốc, điểm nổi bật, đối tượng dùng…"
+          maxLength={AI_NOTE_MAX}
+          rows={2}
+          value={aiNote}
+          disabled={disabled}
+          onChange={(e) => setAiNote(e.target.value)}
+        />
+        <div className="flex flex-wrap items-center gap-3">
+          <button type="button" data-testid="story-ai-generate" className={BTN_PRIMARY} disabled={disabled || draft.isPending} onClick={() => draft.mutate()}>
+            {draft.isPending ? 'AI đang soạn…' : '✨ AI Tạo kịch bản câu chuyện'}
+          </button>
+          <span className="text-xs text-stone-600">Chỉ điền vào khung bên dưới để xem trước. Chưa lưu cho đến khi bấm Lưu sản phẩm.</span>
+        </div>
+        {draft.isError && (
+          <Notice tone="danger" role="alert">
+            {draft.error instanceof Error ? actionErrorText(draft.error) : 'AI chưa soạn được kịch bản.'}
+          </Notice>
+        )}
+        {aiInfo && !draft.isError && (
+          <Notice tone={aiInfo.warnings.length > 0 ? 'warning' : 'info'} role="status">
+            <span data-testid="story-ai-result">
+              {PROVIDER_NAME[aiInfo.provider]} đã soạn bản nháp thay các bước và điểm chỉ hiện tại. Chữ do AI viết, đối chiếu với bao bì trước khi đăng.
+            </span>
+            {aiInfo.warnings.length > 0 && (
+              <ul className="mt-1 list-disc pl-5" data-testid="story-ai-warnings">
+                {aiInfo.warnings.map((w) => (
+                  <li key={w}>{w}</li>
+                ))}
+              </ul>
+            )}
+          </Notice>
         )}
       </div>
       {!value && <p className="text-xs text-stone-600">Đang dùng kịch bản mẫu hoặc tự sinh, chưa lưu cấu hình riêng. Sửa bất kỳ mục nào bên dưới để tạo cấu hình riêng.</p>}

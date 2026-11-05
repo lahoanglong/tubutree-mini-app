@@ -125,3 +125,13 @@ export interface StoryAssetsResult {
 }
 export const extractStoryAssets = (id: string, body: { pageUrl?: string; imageUrls?: string[] }) =>
   apiFetch<StoryAssetsResult>(`/admin/products/${encodeURIComponent(id)}/story-assets/extract`, { method: 'POST', body });
+
+export type StoryDraftProvider = 'antigravity' | 'anthropic' | 'deepseek' | 'gemini';
+/** Bản nháp AI soạn: chỉ có cảnh lắp ghép và điểm chỉ; chưa lưu gì ở API. `warnings` là chỗ admin phải đọc trước khi Lưu. */
+export interface StoryDraftResult {
+  config: ProductStoryConfig;
+  provider: StoryDraftProvider;
+  warnings: string[];
+}
+export const generateStoryDraft = (id: string, note: string) =>
+  apiFetch<StoryDraftResult>(`/admin/products/${encodeURIComponent(id)}/story-config/generate`, { method: 'POST', body: note.trim() === '' ? {} : { note: note.trim() } });

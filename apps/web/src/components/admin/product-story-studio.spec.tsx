@@ -232,4 +232,80 @@ describe('ProductStoryStudio', () => {
     expect(byText(document.body, 'button', 'Tự sinh Story')?.hasAttribute('disabled')).toBe(true);
     expect(document.querySelector<HTMLInputElement>('[data-testid="story-enabled"]')!.disabled).toBe(true);
   });
+
+  describe('AI Tạo kịch bản câu chuyện', () => {
+    const AI_ASM = {
+      kind: 'ingredient_assembly' as const,
+      steps: [{ title: 'Hái hoa dừa', body: 'Mật lấy từ cụm hoa.', layers: [{ id: 'l1', spriteId: 'honey-drop', label: 'Mật hoa dừa', from: 'top' as const, xPct: 28, yPct: 24, scale: 1, rotateDeg: -15 }] }],
+    };
+    const AI_HUD = { kind: 'hud_callouts' as const, closing: 'Vị ngọt tự nhiên', points: [{ id: 'h1', xPct: 26, yPct: 30, label: 'Vị ngọt dịu', side: 'left' as const }] };
+    const aiBody = (warnings: string[] = []) => ({ config: { version: 1, enabled: true, scenes: [AI_ASM, AI_HUD] }, provider: 'anthropic', warnings });
+    const gen = () => document.querySelector<HTMLButtonElement>('[data-testid="story-ai-generate"]')!;
+
+    it('bấm nút gửi ghi chú tới API của đúng sản phẩm và điền bản nháp vào form, chưa lưu gì', async () => {
+      const { onChange, m } = mount({ value: config(), routes: { '/admin/products/p1/story-config/generate': { body: aiBody() } } });
+      typeInto(document.querySelector('textarea'), '  Làm từ hoa dừa Bến Tre  ');
+      click(gen());
+      await flush();
+      const call = m.calls.find((c) => c.url.includes('/story-config/generate'))!;
+      expect(call.init?.method).toBe('POST');
+      expect(JSON.parse(call.init!.body as string)).toEqual({ note: 'Làm từ hoa dừa Bến Tre' });
+      const c = last(onChange)!;
+      expect(c.scenes.map((s) => s.kind)).toEqual(['ingredient_assembly', 'hud_callouts']);
+      const asm = c.scenes[0];
+      expect(asm && asm.kind === 'ingredient_assembly' && asm.steps[0]!.title).toBe('Hái hoa dừa');
+      expect(m.calls.some((x) => x.init?.method === 'PATCH' || x.url.includes('catalog-products'))).toBe(false);
+      expect(document.querySelector('[data-testid="story-ai-result"]')?.textContent).toContain('Claude đã soạn bản nháp');
+    });
+
+    it('không có ghi chú thì gửi thân rỗng', async () => {
+      const { m } = mount({ value: config(), routes: { '/story-config/generate': { body: aiBody() } } });
+      click(gen());
+      await flush();
+      expect(JSON.parse(m.calls.find((c) => c.url.includes('/story-config/generate'))!.init!.body as string)).toEqual({});
+    });
+
+    it('giữ vòng cung, ảnh sân khấu và công tắc của sản phẩm; chỉ thay cảnh lắp ghép và điểm chỉ', async () => {
+      const arc = { kind: 'variant_arc' as const, items: [{ variationId: 'v1', label: '300ml', ambient: 'leaf' as const }, { variationId: 'v2', label: '500ml', ambient: 'amber' as const }] };
+      const start: ProductStoryConfig = { version: 1, enabled: false, cutoutUrl: 'https://cdn.example.com/cut.webp', scenes: [arc, ...config().scenes] };
+      const { onChange } = mount({ value: start, routes: { '/story-config/generate': { body: aiBody() } } });
+      click(gen());
+      await flush();
+      const c = last(onChange)!;
+      expect(c.enabled).toBe(false);
+      expect(c.cutoutUrl).toBe('https://cdn.example.com/cut.webp');
+      expect(c.scenes.map((s) => s.kind)).toEqual(['variant_arc', 'ingredient_assembly', 'hud_callouts']);
+      expect(c.scenes[0]).toEqual(arc);
+    });
+
+    it('hiện cảnh báo của API để admin đọc trước khi Lưu', async () => {
+      mount({ value: config(), routes: { '/story-config/generate': { body: aiBody(['Có con số không thấy trong dữ liệu sản phẩm: 98.']) } } });
+      click(gen());
+      await flush();
+      expect(document.querySelector('[data-testid="story-ai-warnings"]')?.textContent).toContain('98');
+    });
+
+    it('lỗi 503 hiện role=alert bằng chữ của API và không đổi cấu hình', async () => {
+      const { onChange } = mount({ value: config(), routes: { '/story-config/generate': { status: 503, body: { message: 'AI chưa soạn được kịch bản lần này. Thử lại sau ít phút hoặc soạn tay.' } } } });
+      click(gen());
+      await flush();
+      expect(onChange).not.toHaveBeenCalled();
+      expect(document.querySelector('[role="alert"]')?.textContent).toContain('AI chưa soạn được');
+      expect(document.querySelector('[data-testid="story-ai-result"]')).toBeNull();
+    });
+
+    it('đang soạn thì khoá nút và đổi chữ; disabled khoá cả ô ghi chú lẫn nút', async () => {
+      mount({ value: config() });
+      vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})));
+      click(gen());
+      await flush();
+      expect(gen().disabled).toBe(true);
+      expect(gen().textContent).toContain('AI đang soạn');
+      mounted.forEach((x) => x.unmount());
+      mounted = [];
+      mount({ value: config(), disabled: true });
+      expect(gen().disabled).toBe(true);
+      expect(document.querySelector<HTMLTextAreaElement>('[data-testid="story-ai"] textarea')!.disabled).toBe(true);
+    });
+  });
 });
