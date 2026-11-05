@@ -5,7 +5,7 @@ import { PancakeApiError, PancakeOrderDataError } from './pancake-outbound';
  *  - DATA: dữ liệu đơn không đủ để tạo đơn kho (thiếu người nhận...). Cần người sửa đơn.
  *  - CONFIG: Pancake từ chối khoá API (401/403). Mọi đơn đều dính như nhau; phải sửa cấu hình, thử dồn chỉ đốt lượt.
  *  - REJECTED: Pancake từ chối dứt khoát dữ liệu đơn (4xx khác, `success:false`).
- *  - TRANSIENT: mất kết nối, timeout, 5xx, 408/409/425/429 — thử lại sau là hợp lý.
+ *  - TRANSIENT: mất kết nối, timeout, 5xx, 408/429 ở mọi lệnh; 409/425 CHỈ ở lệnh tạo đơn (ở huỷ/PUT là từ chối dứt khoát). Thử lại sau là hợp lý.
  */
 export const PUSH_ERROR_KIND = {
   DATA: 'DATA',

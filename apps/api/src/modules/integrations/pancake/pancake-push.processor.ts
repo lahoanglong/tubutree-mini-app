@@ -53,7 +53,7 @@ export class PancakePushProcessor extends WorkerHost {
     try {
       await this.pancakeOrder.pushOrder(orderId);
     } catch (err) {
-      // Thiếu dữ liệu người nhận, khoá API sai (401/403) hay Pancake từ chối dứt khoát (4xx, không phải mất kết nối/5xx/408/409/425/429):
+      // Thiếu dữ liệu người nhận, khoá API sai (401/403) hay Pancake từ chối dứt khoát (4xx, không phải mất kết nối/5xx/408/429, và 409/425 khi tạo đơn):
       // thử lại ngay không giúp gì. Một nguồn phân loại: pancake-push-error.ts.
       const unrecoverable = isPermanentPushError(classifyPushError(err));
       if (final || unrecoverable) {
