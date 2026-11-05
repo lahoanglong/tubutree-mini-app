@@ -245,6 +245,8 @@ async function seedAll(): Promise<void> {
 
 test.describe('Admin UAT 1440x900 với API và DB thật', () => {
   test.skip(!runnable, 'Cần web-gate.sh (API + DB tạm thật)');
+  // Mọi ca dùng chung dữ liệu seed `e2e-w9-*` (beforeAll xoá rồi tạo lại): chạy nhiều worker thì các lần seed đạp lên nhau.
+  test.describe.configure({ mode: 'serial' });
 
   test.beforeAll(async () => {
     await seedAll();
