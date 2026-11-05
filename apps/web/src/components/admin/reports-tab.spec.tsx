@@ -101,6 +101,30 @@ describe('ReportsTab (D1-04: báo cáo theo khoảng ngày)', () => {
     expect(mocks.getRevenueReport).not.toHaveBeenCalled();
   });
 
+  it('W13: Từ ngày sau Đến ngày hoặc thiếu ngày thì báo đúng một câu ở đầu tab, không báo lặp ở từng phần hay ở từng ô ngày, và không gọi API', async () => {
+    const { container } = mount(<ReportsTab />);
+    await flush();
+    mocks.getRevenueReport.mockClear();
+    mocks.getSourceReport.mockClear();
+    const from = container.querySelector<HTMLInputElement>('input[aria-label="Từ ngày"]')!;
+    const to = container.querySelector<HTMLInputElement>('input[aria-label="Đến ngày"]')!;
+    const alerts = () => [...container.querySelectorAll('[role="alert"]')].map((a) => a.textContent?.trim());
+    typeInto(from, '20102026');
+    typeInto(to, '18102026');
+    await flush();
+    expect(alerts()).toEqual(['Ngày bắt đầu phải trước hoặc bằng ngày kết thúc.']);
+    expect(container.querySelector('[data-kpi]')).toBeNull();
+    expect(mocks.getRevenueReport).not.toHaveBeenCalled();
+    expect(mocks.getSourceReport).not.toHaveBeenCalled();
+    typeInto(to, '');
+    await flush();
+    expect(alerts()).toEqual(['Chọn đủ ngày bắt đầu và ngày kết thúc.']);
+    typeInto(to, '25102026');
+    await flush();
+    expect(alerts()).toEqual([]);
+    expect(mocks.getRevenueReport).toHaveBeenLastCalledWith({ from: '2026-10-20', to: '2026-10-25' });
+  });
+
   it('chọn nhanh 7 ngày', async () => {
     const { container } = mount(<ReportsTab />);
     await flush();

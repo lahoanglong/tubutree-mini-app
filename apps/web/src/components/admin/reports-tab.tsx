@@ -1,11 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { addDaysKey, lastDaysRange, vnMonthRange, vnTodayKey } from '@/lib/admin-reports';
+import { addDaysKey, lastDaysRange, rangeError, vnMonthRange, vnTodayKey } from '@/lib/admin-reports';
 import { ReportsRevenueSection } from './reports-revenue-section';
 import { ReportsSourcesSection } from './reports-sources-section';
 import { ReportsFinanceSection } from './reports-finance-section';
-import { FIELD_CLASS, TOUCH_H, chipClass } from './ui';
+import { FIELD_CLASS, Notice, TOUCH_H, chipClass } from './ui';
 import { VnDateInput } from './vn-date-input';
 import { ALL_SECTIONS, type ReportSection } from './report-sections';
 
@@ -34,6 +34,8 @@ export function ReportsTab({ sections = ALL_SECTIONS, initialPreset }: { section
     setRange((r) => ({ ...r, ...patch }));
     setPreset(null);
   };
+  // Thiếu ngày hoặc ngược thứ tự thì không phần nào tính được: báo một câu ở đây thay vì lặp ở từng phần. Giới hạn số ngày là của từng phần nên vẫn do phần đó báo.
+  const orderError = rangeError(range.from, range.to, Number.POSITIVE_INFINITY);
 
   return (
     <div className="space-y-6">
@@ -49,17 +51,23 @@ export function ReportsTab({ sections = ALL_SECTIONS, initialPreset }: { section
           </div>
           <label className="flex items-center gap-1.5 text-xs text-stone-600">
             Từ ngày
-            <VnDateInput ariaLabel="Từ ngày" value={range.from} max={range.to} onChange={(v) => edit({ from: v })} className={`${FIELD_CLASS} ${TOUCH_H}`} />
+            <VnDateInput ariaLabel="Từ ngày" value={range.from} max={range.to} rangeMessage={null} onChange={(v) => edit({ from: v })} className={`${FIELD_CLASS} ${TOUCH_H}`} />
           </label>
           <label className="flex items-center gap-1.5 text-xs text-stone-600">
             Đến ngày
-            <VnDateInput ariaLabel="Đến ngày" value={range.to} min={range.from} onChange={(v) => edit({ to: v })} className={`${FIELD_CLASS} ${TOUCH_H}`} />
+            <VnDateInput ariaLabel="Đến ngày" value={range.to} min={range.from} rangeMessage={null} onChange={(v) => edit({ to: v })} className={`${FIELD_CLASS} ${TOUCH_H}`} />
           </label>
         </div>
       </div>
-      {sections.includes('revenue') && <ReportsRevenueSection range={range} />}
-      {sections.includes('sources') && <ReportsSourcesSection range={range} />}
-      {sections.includes('finance') && <ReportsFinanceSection range={range} />}
+      {orderError ? (
+        <Notice tone="warning" role="alert">{orderError}</Notice>
+      ) : (
+        <>
+          {sections.includes('revenue') && <ReportsRevenueSection range={range} />}
+          {sections.includes('sources') && <ReportsSourcesSection range={range} />}
+          {sections.includes('finance') && <ReportsFinanceSection range={range} />}
+        </>
+      )}
     </div>
   );
 }
