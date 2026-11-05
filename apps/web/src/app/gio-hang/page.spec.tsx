@@ -109,12 +109,12 @@ describe('/gio-hang — dòng hết hàng / chạm trần tồn kho (BUYERWEB-10
     expect(state.updates).toEqual([{ id: 'i1', q: 2 }]);
   });
 
-  it('chạm trần tồn kho: nút + bị khoá kèm chú thích "Còn N sản phẩm"; bấm không gửi lệnh nào', async () => {
+  it('chạm trần tồn kho: nút + bị khoá kèm chú thích "Chỉ còn N sản phẩm"; bấm không gửi lệnh nào', async () => {
     state.cart = cartOf([line({ stock: 2, quantity: 2 })]);
     const { container } = await mount();
     const plus = button(container, 'Tăng số lượng Dầu gội bồ kết')!;
     expect(plus.disabled).toBe(true);
-    expect(container.textContent).toContain('Còn 2 sản phẩm');
+    expect(container.textContent).toContain('Chỉ còn 2 sản phẩm');
     click(plus);
     await flush();
     expect(state.updates).toEqual([]);
@@ -132,7 +132,7 @@ describe('/gio-hang — dòng hết hàng / chạm trần tồn kho (BUYERWEB-10
   });
 
   it('chạm trần mà tồn thấp (3/3) và vượt tồn (5 trên tồn 3): cảnh báo; chưa chạm trần (2/5) không có dòng (L5 3)', async () => {
-    const noteOf = (c: HTMLElement) => Array.from(c.querySelectorAll('p')).find((p) => /^Còn \d+ sản phẩm$/.test(p.textContent ?? ''));
+    const noteOf = (c: HTMLElement) => Array.from(c.querySelectorAll('p')).find((p) => /^(?:Chỉ còn|Còn) \d+ sản phẩm$/.test(p.textContent ?? ''));
     state.cart = cartOf([line({ stock: 3, quantity: 3 })]);
     const low = await mount();
     expect(noteOf(low.container)!.className).toContain('text-warning-fg');

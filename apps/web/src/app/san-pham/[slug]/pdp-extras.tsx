@@ -301,18 +301,20 @@ interface PdpVariation {
 }
 
 /**
- * "Còn N sản phẩm" của phân loại đang chọn, dưới dòng Điểm Xanh, đúng chữ của Mini App (`vi.product.lowStock`, D2 chốt "Còn {n} sản phẩm").
+ * Chữ tồn kho của phân loại đang chọn, dưới dòng Điểm Xanh, đúng chữ của Mini App (`vi.product.lowStock` = `stockText`): "Chỉ còn n sản phẩm" khi 1–20 (màu cảnh báo),
+ * "Còn hàng" khi 21–99.999, "Còn hàng — Sẵn sàng giao ngay" từ 100.000 (tồn ảo, không lộ con số). Hết hàng không có dòng (nút mua đã ghi "Tạm hết hàng").
  * Máy tính có dòng cùng chữ trong khối mua (`AddToCart`, ngay dưới chip), nên bản này ẩn từ md.
- * Cùng ngưỡng và cùng tồn kho thật với bản trong khối mua.
+ * Cùng tồn kho thật với bản trong khối mua.
  */
 export function PdpLowStock({ slug, variations }: { slug: string; variations: { id: string; stock: number }[] }) {
   const sel = usePdpSelection();
   const stockQ = useProductStock(slug);
   const selected = variations.find((v) => v.id === sel?.selectedId);
   const stock = selected ? (stockQ.data?.[selected.id] ?? selected.stock) : 0;
-  if (stock <= 0 || stock > LOW_STOCK_NOTICE) return null;
+  if (stock <= 0) return null;
+  const low = stock <= LOW_STOCK_NOTICE;
   return (
-    <p data-testid="pdp-low-stock" className="mt-1 text-xs font-medium text-warning-fg md:hidden">
+    <p data-testid={low ? 'pdp-low-stock' : 'pdp-stock-label'} className={`mt-1 text-xs md:hidden ${low ? 'font-medium text-warning-fg' : 'text-[var(--color-text-secondary)]'}`}>
       {stockText(stock)}
     </p>
   );

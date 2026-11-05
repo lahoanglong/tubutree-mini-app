@@ -437,7 +437,7 @@ describe('AddToCart — tồn kho thật thay cho bản ISR', () => {
     const { container } = mount([{ ...VARIATIONS[0]!, stock: 0 }]);
     await flush();
     expect(addButton(container).disabled).toBe(false);
-    expect(container.textContent).toContain('Còn 4 sản phẩm');
+    expect(container.textContent).toContain('Chỉ còn 4 sản phẩm');
   });
 
   it('phân loại mặc định hết thật mà phân loại khác còn: tự chọn phân loại còn hàng', async () => {
@@ -523,6 +523,16 @@ describe('AddToCart — gian hàng chưa nhận đơn (R3-MERCHANT-3)', () => {
     expect(mocks.addToCart).not.toHaveBeenCalled();
     expect(mocks.push).not.toHaveBeenCalled();
   });
+
+  it('gian hàng tạm nghỉ thì không có dòng tồn kho nào ("Sẵn sàng giao ngay" mâu thuẫn với nút khoá), kể cả tồn ảo', async () => {
+    mocks.auth = { status: 'authenticated', initialized: true, user: { id: 'u1' } };
+    mocks.getProductStock.mockResolvedValue({ v1: 99_999_988, v2: 7 });
+    const { container } = mountBlocked();
+    await flush();
+    expect(container.querySelector('[data-testid="atc-stock-label"]')).toBeNull();
+    expect(container.querySelector('[data-testid="atc-low-stock"]')).toBeNull();
+    expect(container.textContent).not.toContain('Sẵn sàng giao ngay');
+  });
 });
 
 describe('AddToCart — khối mua xếp theo order cùng các khối khác của PDP ở điện thoại (như Mini App)', () => {
@@ -596,13 +606,29 @@ describe('AddToCart — chip phân loại hai dòng như Mini App', () => {
     expect(addButton(container).textContent).toBe('Thêm vào giỏ · 300.000đ');
   });
 
-  it('"Còn N sản phẩm" (màu cảnh báo) trong khối mua chỉ hiện từ md (điện thoại dùng dòng ở khối thông tin chính)', async () => {
+  it('"Chỉ còn N sản phẩm" (màu cảnh báo) trong khối mua chỉ hiện từ md (điện thoại dùng dòng ở khối thông tin chính)', async () => {
     mocks.getProductStock.mockResolvedValue({ v1: 3, v2: 9 });
     const { container } = mount();
     await flush();
-    const note = Array.from(container.querySelectorAll('p')).find((x) => x.textContent === 'Còn 3 sản phẩm')!;
+    const note = container.querySelector('[data-testid="atc-low-stock"]')!;
+    expect(note.textContent).toBe('Chỉ còn 3 sản phẩm');
     expect(note.className).toContain('max-md:hidden');
     expect(note.className).toContain('text-warning-fg');
+  });
+
+  it('tồn 21–99.999 ghi "Còn hàng", tồn ảo từ 100.000 ghi "Còn hàng — Sẵn sàng giao ngay" không lộ số; cả hai chữ thường, không màu cảnh báo', async () => {
+    mocks.getProductStock.mockResolvedValue({ v1: 245, v2: 99_999_988 });
+    const { container } = mount();
+    await flush();
+    const note = () => container.querySelector('[data-testid="atc-stock-label"]')!;
+    expect(note().textContent).toBe('Còn hàng');
+    expect(note().className).toContain('max-md:hidden');
+    expect(note().className).not.toContain('text-warning-fg');
+    click(byText(container, 'button', /500ml/));
+    await flush();
+    expect(note().textContent).toBe('Còn hàng — Sẵn sàng giao ngay');
+    expect(note().className).not.toContain('text-warning-fg');
+    expect(container.textContent).not.toMatch(/99\.?999/);
   });
 });
 

@@ -251,27 +251,36 @@ describe('VariationSheet: giỏ đã có sẵn cùng phân loại (thêm giỏ c
   });
 });
 
-describe('VariationSheet: chữ tồn kho "Còn n sản phẩm" cho mọi n, tồn thấp chỉ nhấn bằng màu cảnh báo (L4 5)', () => {
+describe('VariationSheet: nhãn tồn kho thông minh (stockText), tồn thấp nhấn bằng màu cảnh báo (L4 5)', () => {
   const withStock = (stock: number): VariationOption[] => [{ ...variations[0]!, stock }, ...variations.slice(1)];
 
-  it('tồn 3 (thấp): "Gói 80 tờ · Còn 3 sản phẩm", phần tồn có màu cảnh báo', () => {
+  it('tồn 3 (thấp): "Gói 80 tờ · Chỉ còn 3 sản phẩm", phần tồn có màu cảnh báo', () => {
     renderSheet({ variations: withStock(3), flash: [] });
     const stock = screen.getByTestId('variation-sheet-stock');
-    expect(stock).toHaveTextContent(/^Còn 3 sản phẩm$/);
-    expect(stock.parentElement).toHaveTextContent('Gói 80 tờ · Còn 3 sản phẩm');
+    expect(stock).toHaveTextContent(/^Chỉ còn 3 sản phẩm$/);
+    expect(stock.parentElement).toHaveTextContent('Gói 80 tờ · Chỉ còn 3 sản phẩm');
     expect(stock.style.color).toBe('var(--color-status-warning-fg)');
   });
 
-  it('tồn 6 và 245: cùng chữ "Còn n sản phẩm" nhưng không màu cảnh báo; tồn 5 vẫn là mức thấp', () => {
-    const six = renderSheet({ variations: withStock(6), flash: [] });
-    expect(screen.getByTestId('variation-sheet-stock')).toHaveTextContent(/^Còn 6 sản phẩm$/);
+  it('tồn 21 và 245: "Còn hàng" không số, không màu cảnh báo; tồn 20 vẫn là mức thấp', () => {
+    const a = renderSheet({ variations: withStock(21), flash: [] });
+    expect(screen.getByTestId('variation-sheet-stock')).toHaveTextContent(/^Còn hàng$/);
     expect(screen.getByTestId('variation-sheet-stock').style.color).toBe('');
-    six.unmount();
+    a.unmount();
     const big = renderSheet({ variations: withStock(245), flash: [] });
-    expect(screen.getByTestId('variation-sheet-stock')).toHaveTextContent(/^Còn 245 sản phẩm$/);
+    expect(screen.getByTestId('variation-sheet-stock')).toHaveTextContent(/^Còn hàng$/);
     big.unmount();
-    renderSheet({ variations: withStock(5), flash: [] });
+    renderSheet({ variations: withStock(20), flash: [] });
+    expect(screen.getByTestId('variation-sheet-stock')).toHaveTextContent(/^Chỉ còn 20 sản phẩm$/);
     expect(screen.getByTestId('variation-sheet-stock').style.color).toBe('var(--color-status-warning-fg)');
+  });
+
+  it('tồn ảo 99.999.988 (Pancake): "Còn hàng — Sẵn sàng giao ngay", không lộ con số, không màu cảnh báo', () => {
+    renderSheet({ variations: withStock(99_999_988), flash: [] });
+    const stock = screen.getByTestId('variation-sheet-stock');
+    expect(stock).toHaveTextContent(/^Còn hàng — Sẵn sàng giao ngay$/);
+    expect(stock.parentElement?.textContent).not.toMatch(/99/);
+    expect(stock.style.color).toBe('');
   });
 });
 
@@ -310,11 +319,11 @@ describe('VariationSheet: hết hàng ghi "Tạm hết hàng" nhất quán', () 
     expect(screen.getByRole('button', { name: 'Tạm hết hàng' })).toBeDisabled();
   });
 
-  it('chú thích còn hàng ghi "Còn n sản phẩm" theo phân loại đang chọn', () => {
+  it('chú thích còn hàng theo phân loại đang chọn: "Còn hàng" khi nhiều, "Chỉ còn n sản phẩm" khi thấp', () => {
     renderSheet({ flash: [] });
-    expect(screen.getByTestId('variation-sheet-stock').parentElement).toHaveTextContent('Gói 80 tờ · Còn 245 sản phẩm');
+    expect(screen.getByTestId('variation-sheet-stock').parentElement).toHaveTextContent('Gói 80 tờ · Còn hàng');
     fireEvent.click(screen.getByRole('button', { name: /Gói 40 tờ/ }));
-    expect(screen.getByTestId('variation-sheet-stock').parentElement).toHaveTextContent('Gói 40 tờ · Còn 8 sản phẩm');
+    expect(screen.getByTestId('variation-sheet-stock').parentElement).toHaveTextContent('Gói 40 tờ · Chỉ còn 8 sản phẩm');
   });
 });
 
