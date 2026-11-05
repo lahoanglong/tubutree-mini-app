@@ -162,7 +162,7 @@ export function ProductStoryShowcase({ product, selectedVariationId, onSelectVar
 
   const stage = (
     <div className="tubu-story-sticky min-w-0 md:order-2 md:self-start">
-      <div data-testid="story-stage" className="tubu-story-stage" style={{ background: ambient }}>
+      <div data-testid="story-stage" data-frame={view.frame} className="tubu-story-stage" style={{ background: ambient }}>
         <ProductImage src={image} brand={product.brand} alt={fillCopy('story.stageAlt', { name: product.name })} width={448} sizes={STAGE_SIZES} fit="contain" className="tubu-story-product" />
         {layers.map((l) => (
           <Layer key={l.id} layer={l} animated={view.animated} />

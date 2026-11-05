@@ -7,11 +7,12 @@ import {
   type ProductStoryConfig,
   type StoryAmbient,
   type StoryFrom,
+  type StoryImageFrame,
   type StoryScene,
   type VariantArcItem,
 } from '@tubutree/shared-types';
 import { fillCopy } from '../shop-copy';
-import { STORY_PRESETS } from './story-presets';
+import { findStoryPreset } from './story-presets-launch';
 import { spriteForIngredient, STORY_SPRITES, type StoryTone } from './story-sprites';
 
 /** Phần của sản phẩm mà dải câu chuyện đọc. `ingredients` và `storyConfig` là cột Json nên nhận `unknown` (dòng cũ có thể là chuỗi, mảng lạ). */
@@ -175,7 +176,7 @@ function reconcileArc(config: ProductStoryConfig, variations: readonly ArcVariat
 }
 
 /**
- * Cấu hình dùng để vẽ: đã lưu (hợp lệ) > preset theo slug (chèn vòng cung từ biến thể thật) > tự sinh từ thành phần.
+ * Cấu hình dùng để vẽ: đã lưu (hợp lệ) > preset theo slug (mẫu seed hoặc mẫu đợt đầu theo slug gốc; chèn vòng cung từ biến thể thật) > tự sinh từ thành phần.
  * `enabled:false` là admin tắt hẳn. Trả null thì trang chi tiết không vẽ gì thêm.
  */
 export function resolveStoryConfig(p: StoryProductInput): ProductStoryConfig | null {
@@ -183,8 +184,9 @@ export function resolveStoryConfig(p: StoryProductInput): ProductStoryConfig | n
     const parsed = parseStoryConfig(p.storyConfig);
     if (parsed.ok) return parsed.value.enabled ? reconcileArc(parsed.value, p.variations) : null;
   }
-  if (Object.prototype.hasOwnProperty.call(STORY_PRESETS, p.slug)) {
-    const preset = STORY_PRESETS[p.slug]!;
+  const preset = findStoryPreset(p.slug);
+  if (preset) {
+    if (!preset.enabled) return null;
     const arc = buildArcScene(p.variations);
     return arc ? { ...preset, scenes: [arc, ...preset.scenes] } : preset;
   }
@@ -198,10 +200,19 @@ export interface StoryStepView {
   layers: IngredientLayerSprite[];
 }
 
+/**
+ * Khung ảnh sản phẩm: admin chọn thì theo admin; không chọn thì ảnh tách nền (`cutoutUrl`) đặt thẳng lên nền cảnh, còn ảnh gốc của
+ * sản phẩm (poster, ảnh chụp có nền) vào thẻ nổi để không lộ cạnh vuông thô.
+ */
+export function storyImageFrame(config: Pick<ProductStoryConfig, 'cutoutUrl' | 'imageFrame'>): StoryImageFrame {
+  return config.imageFrame ?? (config.cutoutUrl ? 'cutout' : 'floating-card');
+}
+
 export interface StoryViewModel {
   /** false khi khách chọn giảm chuyển động: hai app vẽ bản tĩnh đủ nội dung bằng `staticLayers`. */
   animated: boolean;
   cutoutUrl: string | null;
+  frame: StoryImageFrame;
   arc: VariantArcItem[] | null;
   steps: StoryStepView[];
   hud: { points: HudCalloutPoint[]; closing: string } | null;
@@ -220,7 +231,7 @@ export function storyView(config: ProductStoryConfig, opts: { reducedMotion: boo
   const animated = !opts.reducedMotion;
   const seen = new Set<string>();
   const staticLayers = animated ? [] : steps.flatMap((s) => s.layers).filter((l) => (seen.has(l.id) ? false : (seen.add(l.id), true)));
-  return { animated, cutoutUrl: config.cutoutUrl ?? null, arc, steps, hud, staticLayers };
+  return { animated, cutoutUrl: config.cutoutUrl ?? null, frame: storyImageFrame(config), arc, steps, hud, staticLayers };
 }
 
 /** Lớp nguyên liệu đã "rơi vào" tới bước đang xem (tích luỹ); chỉ số ngoài khoảng được kẹp. */

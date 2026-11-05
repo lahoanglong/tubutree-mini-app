@@ -273,3 +273,33 @@ describe('Mini ↔ web: ba điểm lệch nhỏ của dải câu chuyện', () =
   });
 });
 
+describe('khung ảnh sản phẩm trên sân khấu (floating-card / cutout)', () => {
+  const webCss = readFileSync(resolve(__dirname, 'mini.css'), 'utf8');
+  const miniCss = readFileSync(resolve(__dirname, '../../../../miniapp/src/css/story.css'), 'utf8');
+  const floatingBlock = (css: string, selector: RegExp): string => selector.exec(css)?.[1] ?? '';
+
+  it('CSS thẻ nổi cùng số đo ở Mini và web: bo radius-sheet, viền subtle 1px, bóng elevation-2, nền surface', () => {
+    const mini = floatingBlock(miniCss, /\.tubu-story-frame\[data-frame='floating-card'\] \.tubu-story-product \{([^}]*)\}/);
+    const web = floatingBlock(webCss, /\.tubu-story-stage\[data-frame='floating-card'\] \.tubu-story-product \{([^}]*)\}/);
+    expect(mini).not.toBe('');
+    expect(web).not.toBe('');
+    for (const re of [/border-radius:\s*var\(--radius-sheet\)/, /border:\s*1px solid var\(--color-border-subtle\)/, /box-shadow:\s*var\(--elevation-2\)/, /background:\s*var\(--color-bg-surface\)/, /overflow:\s*hidden/]) {
+      expect(mini).toMatch(re);
+      expect(web).toMatch(re);
+    }
+  });
+
+  it('không có ảnh tách nền thì sân khấu là floating-card; có thì cutout; admin đặt imageFrame thì theo admin', () => {
+    const { cutoutUrl: _omit, ...noCut } = CONFIG;
+    void _omit;
+    const a = mount(<ProductStoryShowcase product={PRODUCT} previewConfig={noCut} />);
+    expect(a.container.querySelector('[data-testid="story-stage"]')?.getAttribute('data-frame')).toBe('floating-card');
+    a.unmount();
+    const b = mount(<ProductStoryShowcase product={PRODUCT} previewConfig={CONFIG} />);
+    expect(b.container.querySelector('[data-testid="story-stage"]')?.getAttribute('data-frame')).toBe('cutout');
+    b.unmount();
+    const c = mount(<ProductStoryShowcase product={PRODUCT} previewConfig={{ ...CONFIG, imageFrame: 'floating-card' }} />);
+    expect(c.container.querySelector('[data-testid="story-stage"]')?.getAttribute('data-frame')).toBe('floating-card');
+    c.unmount();
+  });
+});

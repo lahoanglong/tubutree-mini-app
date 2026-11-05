@@ -70,12 +70,13 @@ function Layer({ layer, isStatic }: { layer: IngredientLayerSprite; isStatic: bo
   );
 }
 
-function Stage({ product, imageUrl, ambient, layers, isStatic }: { product: ProductDetail; imageUrl: string | null; ambient: string; layers: IngredientLayerSprite[]; isStatic: boolean }) {
+function Stage({ product, imageUrl, frame, ambient, layers, isStatic }: { product: ProductDetail; imageUrl: string | null; frame: StoryViewModel['frame']; ambient: string; layers: IngredientLayerSprite[]; isStatic: boolean }) {
   return (
     <div
       data-testid="story-stage"
       role="img"
       aria-label={fillCopy('story.stageAlt', { name: product.name })}
+      data-frame={frame}
       className="tubu-story-frame tubu-story-stage"
       style={{ background: ambient }}
     >
@@ -91,10 +92,10 @@ function Stage({ product, imageUrl, ambient, layers, isStatic }: { product: Prod
 
 const clampPct = (n: number) => Math.min(100, Math.max(0, n));
 
-function Hud({ product, imageUrl, hud }: { product: ProductDetail; imageUrl: string | null; hud: NonNullable<StoryViewModel['hud']> }) {
+function Hud({ product, imageUrl, frame, hud }: { product: ProductDetail; imageUrl: string | null; frame: StoryViewModel['frame']; hud: NonNullable<StoryViewModel['hud']> }) {
   return (
     <div data-testid="story-hud" className="tubu-story-hud">
-      <div role="group" aria-label={fillCopy('story.hudLabel')} className="tubu-story-frame" style={{ background: ambientVar('sand') }}>
+      <div role="group" aria-label={fillCopy('story.hudLabel')} data-frame={frame} className="tubu-story-frame" style={{ background: ambientVar('sand') }}>
         <div className="tubu-story-product" aria-hidden>
           <ProductImage src={imageUrl} brand={product.brand} width={480} fit="contain" />
         </div>
@@ -200,7 +201,7 @@ function Scenes({ props, view }: { props: ProductStoryShowcaseProps; view: Story
 
   return (
     <>
-      {showStage && <Stage product={product} imageUrl={imageUrl} ambient={ambient} layers={layers} isStatic={!view.animated} />}
+      {showStage && <Stage product={product} imageUrl={imageUrl} frame={view.frame} ambient={ambient} layers={layers} isStatic={!view.animated} />}
 
       {arc && (
         <div role="radiogroup" aria-label={fillCopy('story.arcLabel')} className="tubu-story-arc">
@@ -255,7 +256,7 @@ function Scenes({ props, view }: { props: ProductStoryShowcaseProps; view: Story
           </ol>
         ))}
 
-      {view.hud && <Hud product={product} imageUrl={imageUrl} hud={view.hud} />}
+      {view.hud && <Hud product={product} imageUrl={imageUrl} frame={view.frame} hud={view.hud} />}
     </>
   );
 }

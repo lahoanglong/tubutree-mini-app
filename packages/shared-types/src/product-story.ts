@@ -79,10 +79,19 @@ export type StoryScene =
   | { kind: 'ingredient_assembly'; steps: AssemblyStep[] }
   | { kind: 'hud_callouts'; points: HudCalloutPoint[]; closing: string };
 
+/**
+ * Khung ảnh sản phẩm trên sân khấu. `cutout`: ảnh đã tách nền, đặt thẳng lên nền cảnh. `floating-card`: ảnh có nền (poster, ảnh chụp
+ * bối cảnh) nằm trong thẻ bo góc có viền mảnh và bóng, để không lộ cạnh vuông trên nền cảnh. Không đặt thì app-core suy ra: có
+ * `cutoutUrl` là `cutout`, không có là `floating-card`.
+ */
+export type StoryImageFrame = 'floating-card' | 'cutout';
+export const STORY_IMAGE_FRAMES: readonly StoryImageFrame[] = ['floating-card', 'cutout'];
+
 export interface ProductStoryConfig {
   version: 1;
   enabled: boolean;
   cutoutUrl?: string;
+  imageFrame?: StoryImageFrame;
   scenes: StoryScene[];
 }
 
@@ -216,6 +225,10 @@ export function parseStoryConfig(raw: unknown): ParseStoryResult {
     const scenes = arr(raw.scenes, STORY_LIMITS.maxScenes, 'cảnh').map(scene);
     const value: ProductStoryConfig = { version: 1, enabled, scenes };
     if (raw.cutoutUrl !== undefined && raw.cutoutUrl !== null) value.cutoutUrl = url(raw.cutoutUrl, 'cutoutUrl');
+    if (raw.imageFrame !== undefined && raw.imageFrame !== null) {
+      if (!STORY_IMAGE_FRAMES.includes(raw.imageFrame as StoryImageFrame)) fail('khung ảnh không hợp lệ');
+      value.imageFrame = raw.imageFrame as StoryImageFrame;
+    }
     return { ok: true, value };
   } catch (e) {
     if (e instanceof Bad) return { ok: false, error: e.message };
