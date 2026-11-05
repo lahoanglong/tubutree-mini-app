@@ -80,7 +80,7 @@ function Stage({ product, imageUrl, ambient, layers, isStatic }: { product: Prod
       style={{ background: ambient }}
     >
       <div className="tubu-story-product">
-        <ProductImage src={imageUrl} brand={product.brand} width={480} />
+        <ProductImage src={imageUrl} brand={product.brand} width={480} fit="contain" />
       </div>
       {layers.map((l) => (
         <Layer key={l.id} layer={l} isStatic={isStatic} />
@@ -96,7 +96,7 @@ function Hud({ product, imageUrl, hud }: { product: ProductDetail; imageUrl: str
     <div data-testid="story-hud" className="tubu-story-hud">
       <div role="group" aria-label={fillCopy('story.hudLabel')} className="tubu-story-frame" style={{ background: ambientVar('sand') }}>
         <div className="tubu-story-product" aria-hidden>
-          <ProductImage src={imageUrl} brand={product.brand} width={480} />
+          <ProductImage src={imageUrl} brand={product.brand} width={480} fit="contain" />
         </div>
         <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden focusable="false" className="tubu-story-hud-lines">
           {hud.points.map((p) => (

@@ -77,6 +77,19 @@ describe('ProductStoryShowcase (web)', () => {
     expect((q(container, 'story-stage') as HTMLElement).style.background).toContain('story-ambient-leaf');
   });
 
+  it('vòng cung cùng cách vẽ với Mini: biến --arc-*, mục chọn nền theo màu bối cảnh, không chấm màu, mục xa hạ xuống', () => {
+    const { container } = mount(<ProductStoryShowcase product={PRODUCT} selectedVariationId="v1" />);
+    const [on, off] = qa(container, 'story-arc-item');
+    expect(container.querySelector('.tubu-story-arc-dot')).toBeNull();
+    expect(on!.style.getPropertyValue('--arc-lift')).toBe('0');
+    expect(on!.style.getPropertyValue('--arc-scale')).toBe('1.22');
+    expect(on!.style.background).toContain('story-ambient-amber');
+    expect(Number(off!.style.getPropertyValue('--arc-lift'))).toBeGreaterThan(0);
+    expect(off!.style.getPropertyValue('--arc-offset')).toBe('1');
+    expect(off!.style.background).toBe('');
+    expect(off!.style.transform).toBe('');
+  });
+
   it('step chips switch the active step (aria-current)', () => {
     const { container } = mount(<ProductStoryShowcase product={PRODUCT} />);
     const chips = qa(container, 'story-step-chip');
@@ -102,6 +115,24 @@ describe('ProductStoryShowcase (web)', () => {
     expect(list.querySelectorAll('li')).toHaveLength(2);
     expect(q(container, 'story-step-chip')).toBeNull();
     expect(qa(container, 'story-layer')).toHaveLength(2);
+  });
+
+  it('fullscreen: khối sân khấu + chip được ghim, các mốc cuộn nằm ngoài khối đó nên sân khấu không trôi khỏi màn khi cuộn qua mốc', () => {
+    const { container } = mount(<ProductStoryShowcase product={PRODUCT} fullscreen onClose={() => {}} />);
+    const scroll = container.querySelector('.tubu-story-scroll')!;
+    const pin = scroll.querySelector(':scope > .tubu-story-pin');
+    expect(pin).not.toBeNull();
+    expect(pin!.querySelector('[data-testid="story-stage"]')).not.toBeNull();
+    expect(pin!.querySelector('[data-testid="story-step-chip"]')).not.toBeNull();
+    expect(pin!.querySelector('.tubu-story-sentinel')).toBeNull();
+    expect(scroll.querySelectorAll(':scope > .tubu-story-sentinel')).toHaveLength(2);
+  });
+
+  it('khung nội tuyến giữ các mốc trong cột bước để md+ ghim sân khấu suốt đường cuộn', () => {
+    const { container } = mount(<ProductStoryShowcase product={PRODUCT} />);
+    expect(container.querySelector('.tubu-story-pin')).toBeNull();
+    expect(container.querySelectorAll('.tubu-story-sentinel')).toHaveLength(2);
+    expect(q(container, 'story-step-panel')!.closest('.grid')!.contains(container.querySelector('.tubu-story-sentinel'))).toBe(true);
   });
 
   it('fullscreen: Esc calls onClose, role=dialog, buy bar buttons call handlers', () => {
@@ -183,5 +214,25 @@ describe('ProductStoryShowcase (web)', () => {
     expect(grid).not.toBeNull();
     expect(q(grid, 'story-stage')!.parentElement!.className).toContain('md:sticky');
     expect(q(grid, 'story-step-panel')).not.toBeNull();
+  });
+
+  it('md+: ghim dưới header dính của trang (var(--header-h)) để sân khấu và chip không chui xuống dưới header', () => {
+    const { container } = mount(<ProductStoryShowcase product={PRODUCT} />);
+    const stageCol = q(container, 'story-stage')!.parentElement!;
+    const stepsCol = q(container, 'story-step-panel')!.parentElement!;
+    for (const el of [stageCol, stepsCol]) {
+      expect(el.className).toContain('md:top-[calc(var(--header-h)+1rem)]');
+      expect(el.className).not.toContain('md:top-24');
+    }
+  });
+
+  it('không có bước nào (chỉ vòng cung và HUD): một cột, sân khấu căn giữa, không để nửa phải trống', () => {
+    const arcHud: ProductStoryConfig = { ...CONFIG, scenes: CONFIG.scenes.filter((s) => s.kind !== 'ingredient_assembly') };
+    const { container } = mount(<ProductStoryShowcase product={PRODUCT} previewConfig={arcHud} />);
+    expect(q(container, 'story-step-chip')).toBeNull();
+    const grid = q(container, 'story-stage')!.closest('.grid')!;
+    expect(grid.className).not.toContain('md:grid-cols-2');
+    expect(grid.className).toContain('md:max-w-lg');
+    expect(grid.className).toContain('md:mx-auto');
   });
 });

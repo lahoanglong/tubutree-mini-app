@@ -826,13 +826,13 @@
 
 .tubu-story-arc { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem; padding: var(--space-block) 0.5rem 0; }
 .tubu-story-arc-item {
-  display: inline-flex; align-items: center; gap: 0.375rem; min-height: 2.75rem; min-width: 2.75rem; padding: 0 0.875rem;
-  border: 0; border-radius: var(--radius-pill); background: var(--color-bg-chip, var(--color-bg-subtle)); color: var(--color-text-primary);
-  font: inherit; font-size: var(--type-body-sm-size); cursor: pointer;
+  display: inline-flex; align-items: center; min-height: 2.75rem; min-width: 2.75rem; padding: 0 var(--space-inline-sm);
+  border: 1px solid var(--color-border-default); border-radius: var(--radius-pill); background: var(--color-bg-surface); color: var(--color-text-primary);
+  font-family: var(--font-ui); font-size: var(--type-label-size); line-height: var(--type-label-lh); font-weight: 600; cursor: pointer;
+  transform: translateX(calc(var(--arc-offset, 0) * 0.375rem)) translateY(calc(var(--arc-lift, 0) * 0.0625rem)) rotate(var(--arc-rot, 0deg)) scale(var(--arc-scale, 1));
   transition: transform var(--p-dur-enter) var(--p-ease-spring);
 }
-.tubu-story-arc-item[aria-checked='true'] { background: var(--color-action-primary-bg); color: var(--color-action-primary-fg); font-weight: 600; }
-.tubu-story-arc-dot { width: 0.75rem; height: 0.75rem; border-radius: var(--radius-pill); box-shadow: inset 0 0 0 1px var(--color-border-default); }
+.tubu-story-arc-item[aria-checked='true'] { border: 2px solid var(--color-action-primary-bg); }
 
 .tubu-story-chips { display: flex; gap: 0.5rem; }
 .tubu-story-chip {
@@ -854,7 +854,9 @@
 .tubu-story-heading { margin: 0; font-size: var(--type-title-sm-size); font-weight: 700; }
 .tubu-story-close { min-height: 2.75rem; min-width: 2.75rem; border: 0; border-radius: var(--radius-pill); background: transparent; color: var(--color-text-primary); font-size: 1.5rem; cursor: pointer; }
 .tubu-story-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 0 var(--space-block) var(--space-block); }
+.tubu-story-pin { position: sticky; top: 0; z-index: 1; padding-bottom: var(--space-stack-sm); background: var(--color-bg-surface); }
 .tubu-story-full .tubu-story-sentinel { display: block; height: 30vh; }
+.tubu-story-scroll > .tubu-story-sentinel:last-child { margin-bottom: 50vh; }
 .tubu-story-bar {
   display: flex; flex: none; gap: 0.625rem; padding: 0.625rem var(--space-block);
   padding-bottom: calc(0.625rem + var(--safe-bottom)); background: var(--color-bg-surface); box-shadow: var(--elevation-3);

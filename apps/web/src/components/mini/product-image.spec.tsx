@@ -155,6 +155,14 @@ describe('ảnh hiện dần, viền trung tính, ô thay thế không nhuộm m
     expect(img.style.outlineOffset).toBe('-1px');
   });
 
+  it('fit="contain": ảnh tách nền hiện trọn vẹn, không viền (viền 1px sẽ vẽ khung chữ nhật quanh vùng trong suốt)', () => {
+    setComplete(true);
+    const { container } = mount(<div style={{ position: 'relative' }}><ProductImage src="https://img.test/a.webp" brand="Tubu" fit="contain" /></div>);
+    const img = container.querySelector('img')!;
+    expect(img.style.objectFit).toBe('contain');
+    expect(img.style.outline).toBe('');
+  });
+
   it('ô thay thế chỉ có lá xanh trên nền khung ảnh: không tên nhãn, không nền ngả màu nhãn', () => {
     const { container } = mount(<div style={{ position: 'relative' }}><ProductImage src={null} brand="Polang" /></div>);
     const fallback = container.querySelector('[data-testid="product-image-fallback"]') as HTMLElement;

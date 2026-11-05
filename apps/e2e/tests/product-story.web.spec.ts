@@ -62,7 +62,22 @@ test.describe('Web khách 375px: câu chuyện sản phẩm', () => {
     await story.getByTestId('pdp-story-open').click();
     const dialog = page.getByRole('dialog', { name: 'Câu chuyện sản phẩm' });
     await expect(dialog).toBeVisible();
+
+    // Cuộn tới mốc cuối của khung toàn màn: sân khấu vẫn nằm trong màn và bước cuối sáng mà không cần chạm chip (đường cuộn phải đủ dài để mốc cuối chạm dải kích hoạt).
+    await dialog.locator('.tubu-story-sentinel').last().evaluate((el) => el.scrollIntoView({ block: 'center' }));
+    const chips = dialog.getByTestId('story-step-chip');
+    await expect(chips.last()).toHaveAttribute('aria-current', 'step');
+    const stageBox = await dialog.getByTestId('story-stage').boundingBox();
+    expect(stageBox && stageBox.y >= 0 && stageBox.y + stageBox.height <= 812).toBe(true);
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);
+
+    // Cùng kiểm ở khổ máy tính: khung toàn màn thấp hơn nên mốc cuối dễ nằm dưới dải kích hoạt khi đã cuộn hết.
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.getByTestId('pdp-story-open').locator('visible=true').click();
+    const wide = page.getByRole('dialog', { name: 'Câu chuyện sản phẩm' });
+    await expect(wide).toBeVisible();
+    await wide.locator('.tubu-story-sentinel').last().evaluate((el) => el.scrollIntoView({ block: 'center' }));
+    await expect(wide.getByTestId('story-step-chip').last()).toHaveAttribute('aria-current', 'step');
   });
 });

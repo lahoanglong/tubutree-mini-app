@@ -161,9 +161,9 @@ export function ProductStoryShowcase({ product, selectedVariationId, onSelectVar
   const title = fillCopy('story.title');
 
   const stage = (
-    <div className="min-w-0 md:order-2 md:sticky md:top-24 md:self-start">
+    <div className="min-w-0 md:order-2 md:sticky md:top-[calc(var(--header-h)+1rem)] md:self-start">
       <div data-testid="story-stage" className="tubu-story-stage" style={{ background: ambient }}>
-        <ProductImage src={image} brand={product.brand} alt={fillCopy('story.stageAlt', { name: product.name })} width={448} sizes={STAGE_SIZES} className="tubu-story-product" />
+        <ProductImage src={image} brand={product.brand} alt={fillCopy('story.stageAlt', { name: product.name })} width={448} sizes={STAGE_SIZES} fit="contain" className="tubu-story-product" />
         {layers.map((l) => (
           <Layer key={l.id} layer={l} animated={view.animated} />
         ))}
@@ -196,10 +196,17 @@ export function ProductStoryShowcase({ product, selectedVariationId, onSelectVar
                 aria-checked={on}
                 data-testid="story-arc-item"
                 className="tubu-story-arc-item tubu-hit-44-square"
-                style={{ transform: `translateY(-${slot.lift / 16}rem) rotate(${slot.rotateDeg}deg) scale(${slot.scale})` }}
+                style={
+                  {
+                    '--arc-offset': slot.offset,
+                    '--arc-lift': slot.lift,
+                    '--arc-rot': `${slot.rotateDeg}deg`,
+                    '--arc-scale': slot.scale,
+                    ...(on ? { background: ambientVar(item.ambient) } : null),
+                  } as CSSProperties
+                }
                 onClick={() => pickArc(i)}
               >
-                <span aria-hidden="true" className="tubu-story-arc-dot" style={{ background: ambientVar(item.ambient) }} />
                 {item.label}
               </button>
             );
@@ -210,10 +217,14 @@ export function ProductStoryShowcase({ product, selectedVariationId, onSelectVar
     </div>
   );
 
+  // Mốc cuộn của chế độ ghép lớp theo cuộn. Nội tuyến nằm cuối cột bước (md+ ghim sân khấu suốt đường cuộn); toàn màn nằm ngoài khối ghim
+  // để sân khấu và chip luôn ở trên cùng khi cuộn qua mốc, kể cả khổ điện thoại một cột.
+  const sentinelEls = view.steps.map((s, i) => <div key={s.num} aria-hidden="true" ref={(el) => void (sentinels.current[i] = el)} className="tubu-story-sentinel" />);
+
   const steps =
     stepCount === 0 ? null : view.animated ? (
       <div className="min-w-0 md:order-1">
-        <div className="md:sticky md:top-24">
+        <div className="md:sticky md:top-[calc(var(--header-h)+1rem)]">
         <nav aria-label={fillCopy('story.stepsLabel')} className="tubu-story-chips">
           {view.steps.map((s, i) => (
             <button
@@ -238,9 +249,7 @@ export function ProductStoryShowcase({ product, selectedVariationId, onSelectVar
           <p className="tubu-story-step-body">{panel?.body}</p>
         </div>
         </div>
-        {view.steps.map((s, i) => (
-          <div key={s.num} aria-hidden="true" ref={(el) => void (sentinels.current[i] = el)} className="tubu-story-sentinel" />
-        ))}
+        {fullscreen ? null : sentinelEls}
       </div>
     ) : (
       <ol data-testid="story-static-steps" className="tubu-story-static md:order-1">
@@ -254,7 +263,12 @@ export function ProductStoryShowcase({ product, selectedVariationId, onSelectVar
       </ol>
     );
 
-  const body = <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 md:items-start md:gap-8">{stage}{steps}</div>;
+  const body = (
+    <div className={stepCount > 0 ? 'grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 md:items-start md:gap-8' : 'grid min-w-0 grid-cols-1 gap-4 md:mx-auto md:max-w-lg'}>
+      {stage}
+      {steps}
+    </div>
+  );
 
   if (!fullscreen) {
     return (
@@ -281,7 +295,16 @@ export function ProductStoryShowcase({ product, selectedVariationId, onSelectVar
           <span aria-hidden="true">×</span>
         </button>
       </header>
-      <div className="tubu-story-scroll">{body}</div>
+      <div className="tubu-story-scroll">
+        {view.animated && stepCount > 0 ? (
+          <>
+            <div className="tubu-story-pin">{body}</div>
+            {sentinelEls}
+          </>
+        ) : (
+          body
+        )}
+      </div>
       <div className="tubu-story-bar">
         <button type="button" data-testid="story-add-to-cart" disabled={buyDisabled} className="tubu-story-btn tubu-story-btn-secondary" onClick={() => onAddToCart?.()}>
           {fillCopy('story.addToCart')}
