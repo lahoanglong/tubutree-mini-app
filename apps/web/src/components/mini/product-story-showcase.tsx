@@ -221,7 +221,7 @@ export function ProductStoryShowcase({ product, selectedVariationId, onSelectVar
               type="button"
               data-testid="story-step-chip"
               aria-current={i === activeStep ? 'step' : undefined}
-              aria-label={fillCopy('story.stepN', { n: i + 1 })}
+              aria-label={fillCopy('story.stepChip', { num: s.num, title: s.title })}
               className="tubu-story-chip tubu-hit-44-square"
               onClick={() => setStep(i)}
             >

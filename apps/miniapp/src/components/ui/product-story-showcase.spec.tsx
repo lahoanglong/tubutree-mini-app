@@ -114,6 +114,7 @@ describe('ProductStoryShowcase (Mini)', () => {
     const nav = screen.getByRole('navigation', { name: 'Các bước' });
     const chips = within(nav).getAllByTestId('story-step-chip');
     expect(chips.map((c) => c.textContent)).toEqual(['01', '02', '03']);
+    chips.forEach((c) => expect(c.getAttribute('aria-label')!.startsWith(c.textContent!)).toBe(true));
     expect(chips[0]).toHaveAttribute('aria-current', 'step');
     expect(screen.getByTestId('story-step-panel')).toHaveTextContent('Tiêu đề 1');
     expect(screen.getAllByTestId('story-layer')).toHaveLength(1);

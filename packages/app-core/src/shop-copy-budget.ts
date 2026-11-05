@@ -360,7 +360,7 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'story.title': 22,
   'story.close': 8,
   'story.stepsLabel': 12,
-  'story.stepN': 8,
+  'story.stepChip': null,
   'story.arcLabel': 12,
   'story.hudLabel': 22,
   'story.closing': 22,

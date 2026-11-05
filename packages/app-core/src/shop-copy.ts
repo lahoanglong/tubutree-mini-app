@@ -363,7 +363,7 @@ export const SHOP_COPY: Record<string, string> = {
   'story.title': 'Câu chuyện sản phẩm',
   'story.close': 'Đóng',
   'story.stepsLabel': 'Các bước',
-  'story.stepN': 'Bước {n}',
+  'story.stepChip': '{num} {title}',
   'story.arcLabel': 'Chọn loại',
   'story.hudLabel': 'Thành phần nổi bật',
   'story.closing': 'An lành cho cả nhà',

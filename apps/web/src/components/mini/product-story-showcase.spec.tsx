@@ -81,6 +81,7 @@ describe('ProductStoryShowcase (web)', () => {
     const { container } = mount(<ProductStoryShowcase product={PRODUCT} />);
     const chips = qa(container, 'story-step-chip');
     expect(chips.map((c) => c.textContent)).toEqual(['01', '02']);
+    chips.forEach((c) => expect(c.getAttribute('aria-label')!.startsWith(c.textContent!)).toBe(true));
     expect(chips[0]!.getAttribute('aria-current')).toBe('step');
     expect(q(container, 'story-step-panel')!.textContent).toContain('Tinh tuyển');
     expect(qa(container, 'story-layer')).toHaveLength(1);

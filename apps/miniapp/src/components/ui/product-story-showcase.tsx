@@ -132,7 +132,7 @@ function Hud({ product, imageUrl, hud }: { product: ProductDetail; imageUrl: str
   );
 }
 
-function StepChips({ nums, active, onPick }: { nums: string[]; active: number; onPick: (i: number) => void }) {
+function StepChips({ steps, active, onPick }: { steps: { num: string; title: string }[]; active: number; onPick: (i: number) => void }) {
   const track = useRef<HTMLDivElement>(null);
   // Chỉ cuộn do khách vuốt mới đổi bước: lần gọi đầu của observer báo cả chip đang nằm giữa, không được tính.
   const touched = useRef(false);
@@ -159,22 +159,22 @@ function StepChips({ nums, active, onPick }: { nums: string[]; active: number; o
       root.removeEventListener('scroll', mark);
       io.disconnect();
     };
-  }, [nums.length, onPick]);
+  }, [steps.length, onPick]);
   return (
     <nav aria-label={fillCopy('story.stepsLabel')}>
       <div ref={track} className="tubu-story-chips">
-        {nums.map((n, i) => (
+        {steps.map((s, i) => (
           <button
-            key={n}
+            key={s.num}
             type="button"
             data-testid="story-step-chip"
             data-index={i}
             aria-current={i === active ? 'step' : undefined}
-            aria-label={fillCopy('story.stepN', { n: i + 1 })}
+            aria-label={fillCopy('story.stepChip', { num: s.num, title: s.title })}
             className="tubu-story-chip tubu-press tubu-hit-44-square"
             onClick={() => onPick(i)}
           >
-            {n}
+            {s.num}
           </button>
         ))}
       </div>
@@ -237,7 +237,7 @@ function Scenes({ props, view }: { props: ProductStoryShowcaseProps; view: Story
       {view.steps.length > 0 &&
         (view.animated ? (
           <div className="tubu-story-steps">
-            <StepChips nums={view.steps.map((s) => s.num)} active={step} onPick={pickStep} />
+            <StepChips steps={view.steps} active={step} onPick={pickStep} />
             <div data-testid="story-step-panel" aria-live="polite" className="tubu-story-panel">
               <h3 className="tubu-story-step-title">{view.steps[step]!.title}</h3>
               <p className="tubu-story-step-body">{view.steps[step]!.body}</p>
