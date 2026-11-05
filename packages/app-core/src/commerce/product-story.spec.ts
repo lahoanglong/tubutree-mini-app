@@ -68,6 +68,30 @@ describe('buildArcScene', () => {
   });
 });
 
+describe('nhãn vòng cung khi tên phân loại hỏng (đồng bộ Pancake ghi "[object Object]" hoặc để trống)', () => {
+  const labels = (vs: readonly { id: string; name: string; attributes?: unknown }[]) => {
+    const s = buildArcScene(vs);
+    return s && s.kind === 'variant_arc' ? s.items.map((i) => i.label) : null;
+  };
+  it('tên "[object Object]" thì lấy giá trị thuộc tính (mảng {name, value} của Pancake), nhiều thuộc tính nối bằng " · "', () => {
+    expect(
+      labels([
+        { id: 'a', name: '[object Object]', attributes: [{ name: 'PHÂN LOẠI', value: '300g' }] },
+        { id: 'b', name: '[object Object] - [object Object]', attributes: [{ name: 'PHÂN LOẠI', value: '1KG' }, { name: 'HƯƠNG', value: 'Bạc hà' }] },
+      ]),
+    ).toEqual(['300g', '1KG · Bạc hà']);
+  });
+  it('tên rỗng thì lấy giá trị của thuộc tính dạng bản ghi', () => {
+    expect(labels([{ id: 'a', name: '', attributes: { size: '500ml' } }, { id: 'b', name: '  ', attributes: { size: '1l', color: 'xanh' } }])).toEqual(['500ml', '1l · xanh']);
+  });
+  it('không có thuộc tính dùng được thì #số thứ tự, không bao giờ để chữ "[object Object]"', () => {
+    expect(labels([{ id: 'a', name: '[object Object]' }, { id: 'b', name: '', attributes: [] }, { id: 'c', name: 'x', attributes: [{ value: 5 }, null, 'lạ'] }])).toEqual(['#1', '#2', 'x']);
+  });
+  it('tên bình thường giữ nguyên, kể cả khi có thuộc tính', () => {
+    expect(labels([{ id: 'a', name: 'Chai 300ml', attributes: [{ value: '300ml' }] }, { id: 'b', name: 'Chai 500ml' }])).toEqual(['Chai 300ml', 'Chai 500ml']);
+  });
+});
+
 describe('buildDefaultStoryConfig', () => {
   it('thành phần + 2 biến thể → vòng cung, lắp ghép ≥3 bước, điểm chỉ lấy phần trăm thật; qua parseStoryConfig', () => {
     const cfg = buildDefaultStoryConfig(product({ ingredients: polang, variations: variations(2) }));

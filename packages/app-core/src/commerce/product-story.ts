@@ -22,7 +22,7 @@ export interface StoryProductInput {
   shortDesc?: string | null;
   certifications?: string[] | null;
   ingredients?: unknown;
-  variations: readonly { id: string; name: string }[];
+  variations: readonly ArcVariation[];
   storyConfig?: unknown;
 }
 
@@ -43,11 +43,29 @@ export const toneVar = (t: StoryTone): string => `var(--color-story-tone-${t})`;
 const clean = (v: unknown, max: number): string =>
   typeof v === 'string' ? v.replace(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, max) : '';
 
-export function buildArcScene(variations: readonly { id: string; name: string }[], ambients: readonly StoryAmbient[] = ARC_AMBIENTS): StoryScene | null {
+/** Phân loại như API trả: `attributes` là bản ghi {khoá: giá trị} hoặc mảng {name, value} của Pancake. Kiểu hẹp đủ để dựng nhãn, không buộc app khai lại kiểu. */
+export interface ArcVariation {
+  id: string;
+  name: string;
+  attributes?: unknown;
+}
+
+/** Đồng bộ Pancake từng ghi tên phân loại là "[object Object]" (hoặc để trống): gặp tên hỏng thì lấy giá trị thuộc tính, không có thì #số thứ tự. */
+function arcLabel(v: ArcVariation, index: number): string {
+  const name = clean(v.name, STORY_LIMITS.maxLabel);
+  if (name && !name.includes('[object Object]')) return name;
+  const attrs = v.attributes;
+  const values = (Array.isArray(attrs) ? attrs.map((a) => (typeof a === 'object' && a !== null ? (a as { value?: unknown }).value : undefined)) : typeof attrs === 'object' && attrs !== null ? Object.values(attrs) : [])
+    .map((x) => clean(x, STORY_LIMITS.maxLabel))
+    .filter(Boolean);
+  return clean(values.join(' · '), STORY_LIMITS.maxLabel) || `#${index + 1}`;
+}
+
+export function buildArcScene(variations: readonly ArcVariation[], ambients: readonly StoryAmbient[] = ARC_AMBIENTS): StoryScene | null {
   if (variations.length < 2) return null;
   const items: VariantArcItem[] = variations.slice(0, STORY_LIMITS.maxArcItems).map((v, i) => ({
     variationId: v.id,
-    label: clean(v.name, STORY_LIMITS.maxLabel) || `#${i + 1}`,
+    label: arcLabel(v, i),
     ambient: ambients[i % ambients.length] ?? 'leaf',
   }));
   return { kind: 'variant_arc', items };
@@ -138,7 +156,7 @@ export function buildDefaultStoryConfig(p: StoryProductInput): ProductStoryConfi
  * và màu admin đặt); lệch (đã xoá, thêm mới, thiếu variationId) thì dựng lại từ biến thể thật; dưới 2 biến thể thì bỏ cảnh.
  * Hết cảnh thì null để trang không vẽ khung rỗng.
  */
-function reconcileArc(config: ProductStoryConfig, variations: readonly { id: string; name: string }[]): ProductStoryConfig | null {
+function reconcileArc(config: ProductStoryConfig, variations: readonly ArcVariation[]): ProductStoryConfig | null {
   if (!config.scenes.some((s) => s.kind === 'variant_arc')) return config;
   const fresh = buildArcScene(variations);
   const real = variations.slice(0, STORY_LIMITS.maxArcItems).map((v) => v.id);
