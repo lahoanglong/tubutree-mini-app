@@ -4,12 +4,16 @@ import { PancakeApiError, PancakeOrderDataError } from './pancake-outbound';
  * Loại lỗi đẩy đơn sang Pancake, một nguồn cho processor, cron, admin và go-live:
  *  - DATA: dữ liệu đơn không đủ để tạo đơn kho (thiếu người nhận...). Cần người sửa đơn.
  *  - CONFIG: Pancake từ chối khoá API (401/403). Mọi đơn đều dính như nhau; phải sửa cấu hình, thử dồn chỉ đốt lượt.
- *  - REJECTED: Pancake từ chối dứt khoát dữ liệu đơn (4xx khác, `success:false`).
+ *  - CONFIG_RECHECK: KHÔNG do `classifyPushError` trả. Đơn đang CONFIG được chuyển sang đây khi khoá API vừa đẩy được một đơn khác
+ *    (PancakeOrderService.saveCreated): cron thử lại bình thường (15 phút). Lần thử này lại 401/403 thì khoá không còn là nguyên nhân
+ *    chung mà là lỗi riêng của đơn → REJECTED (`kindAfterFailure`). Không tính vào báo động tổng `pancake.config`.
+ *  - REJECTED: Pancake từ chối dứt khoát dữ liệu đơn (4xx khác, `success:false`), hoặc 401/403 riêng của một đơn (xem trên).
  *  - TRANSIENT: mất kết nối, timeout, 5xx, 408/429 ở mọi lệnh; 409/425 CHỈ ở lệnh tạo đơn (ở huỷ/PUT là từ chối dứt khoát). Thử lại sau là hợp lý.
  */
 export const PUSH_ERROR_KIND = {
   DATA: 'DATA',
   CONFIG: 'CONFIG',
+  CONFIG_RECHECK: 'CONFIG_RECHECK',
   REJECTED: 'REJECTED',
   TRANSIENT: 'TRANSIENT',
 } as const;
@@ -21,6 +25,18 @@ export function classifyPushError(err: unknown): PushErrorKind {
   if (!(err instanceof PancakeApiError) || err.transient) return PUSH_ERROR_KIND.TRANSIENT;
   if (err.status === 401 || err.status === 403) return PUSH_ERROR_KIND.CONFIG;
   return PUSH_ERROR_KIND.REJECTED;
+}
+
+/**
+ * Loại lỗi GHI cho đơn sau một lượt đẩy lỗi. Khác `classifyPushError` ở đúng một chỗ: 401/403 mà đơn đã được thử lại sau khi khoá đẩy
+ * được đơn khác (CONFIG_RECHECK), hoặc đã là REJECTED, là lỗi riêng của đơn đó chứ không phải khoá hỏng → REJECTED (đốt lượt, nhịp 60 phút,
+ * báo đơn). Đánh đổi chấp nhận: khoá bị thu hồi đúng giữa lúc thả nhóm và lượt thử kế tiếp thì đơn CONFIG_RECHECK cũng thành REJECTED
+ * (chỉ báo từng đơn, không báo động tổng); các đơn khác cùng dính nên vẫn có người biết.
+ */
+export function kindAfterFailure(err: unknown, priorKind: string | null | undefined): PushErrorKind {
+  const kind = classifyPushError(err);
+  if (kind === PUSH_ERROR_KIND.CONFIG && (priorKind === PUSH_ERROR_KIND.CONFIG_RECHECK || priorKind === PUSH_ERROR_KIND.REJECTED)) return PUSH_ERROR_KIND.REJECTED;
+  return kind;
 }
 
 export const isPermanentPushError = (kind: PushErrorKind): boolean => kind !== PUSH_ERROR_KIND.TRANSIENT;
@@ -61,7 +77,7 @@ export function nextPushRetryAt(o: PushRetryInput, now: Date = new Date()): Date
   // Chỉ nhóm đang thử lại: chờ thanh toán/đủ hàng/vận đơn, STALE, chưa cấu hình, bỏ qua thì không có lần tự đẩy nào.
   if (o.pancakePushStatus !== null && !RETRYING_PUSH_STATUSES.includes(o.pancakePushStatus)) return null;
   if (now.getTime() - o.createdAt.getTime() >= PUSH_RETRY.MAX_AGE_HOURS * 3_600_000) return null;
-  const slow = o.pancakePushAttempts >= PUSH_RETRY.SLOW_AFTER_ATTEMPTS || (o.pancakeErrorKind !== null && o.pancakeErrorKind !== PUSH_ERROR_KIND.TRANSIENT);
+  const slow = o.pancakePushAttempts >= PUSH_RETRY.SLOW_AFTER_ATTEMPTS || (o.pancakeErrorKind !== null && o.pancakeErrorKind !== PUSH_ERROR_KIND.TRANSIENT && o.pancakeErrorKind !== PUSH_ERROR_KIND.CONFIG_RECHECK);
   const interval = (slow ? PUSH_RETRY.SLOW_MINUTES : PUSH_RETRY.FAST_MINUTES) * 60_000;
   const earliest = Math.max((o.pancakeLastAttemptAt?.getTime() ?? 0) + interval, now.getTime());
   const tick = PUSH_RETRY.FAST_MINUTES * 60_000;

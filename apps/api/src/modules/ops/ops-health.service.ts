@@ -178,6 +178,30 @@ export type QueueHealth =
  * hàng đợi BullMQ và đơn kẹt. Cron 5 phút so với ngưỡng `ops.*` rồi báo admin in-app (thêm webhook ngoài nếu đặt
  * OPS_ALERT_WEBHOOK_URL, thêm email nếu đặt OPS_ALERT_EMAIL_TO + SMTP_*); @Cron chỉ chạy trên instance giữ khoá leader (CronLeaderService).
  */
+export interface PushErrorTally {
+  transient: number;
+  data: number;
+  rejected: number;
+  config: number;
+  /** CONFIG_RECHECK: khoá vừa đẩy được đơn khác, đang chờ cron thử lại. Không cộng vào `config` nên không kích báo động `pancake.config`. */
+  configRecheck: number;
+  unclassified: number;
+}
+
+/** Đếm đơn chưa lên Pancake theo `pancakeErrorKind` (null hoặc giá trị lạ = unclassified). */
+export function tallyPushErrors(groups: { pancakeErrorKind: string | null; _count: { _all: number } }[]): PushErrorTally {
+  const out: PushErrorTally = { transient: 0, data: 0, rejected: 0, config: 0, configRecheck: 0, unclassified: 0 };
+  const keyOf: Record<string, keyof PushErrorTally> = {
+    [PUSH_ERROR_KIND.TRANSIENT]: 'transient',
+    [PUSH_ERROR_KIND.DATA]: 'data',
+    [PUSH_ERROR_KIND.REJECTED]: 'rejected',
+    [PUSH_ERROR_KIND.CONFIG]: 'config',
+    [PUSH_ERROR_KIND.CONFIG_RECHECK]: 'configRecheck',
+  };
+  for (const g of groups) out[keyOf[g.pancakeErrorKind ?? ''] ?? 'unclassified'] += g._count._all;
+  return out;
+}
+
 @Injectable()
 export class OpsHealthService {
   private readonly logger = new Logger(OpsHealthService.name);
@@ -432,11 +456,7 @@ export class OpsHealthService {
           select: { code: true },
         }),
       ]);
-    const pushErrors = { transient: 0, data: 0, rejected: 0, config: 0, unclassified: 0 };
-    for (const g of pushErrorGroups) {
-      const key = g.pancakeErrorKind === PUSH_ERROR_KIND.TRANSIENT ? 'transient' : g.pancakeErrorKind === PUSH_ERROR_KIND.DATA ? 'data' : g.pancakeErrorKind === PUSH_ERROR_KIND.REJECTED ? 'rejected' : g.pancakeErrorKind === PUSH_ERROR_KIND.CONFIG ? 'config' : 'unclassified';
-      pushErrors[key] += g._count._all;
-    }
+    const pushErrors = tallyPushErrors(pushErrorGroups);
     const lastWebhook = lastByStatus.reduce<Date | null>((m, r) => (r && (!m || r.receivedAt > m) ? r.receivedAt : m), null);
     const failedRefs = await this.pancakeEventRefs(failedEvents.map((e) => e.id));
     const catalogRun: CatalogRun & { detail: unknown } = {

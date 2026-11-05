@@ -51,6 +51,7 @@ export interface QueueSnapshot {
 const FAILED_REASON_VI: Record<string, string> = {
   [PUSH_ERROR_KIND.CONFIG]: 'khoá API Pancake sai/hết hạn',
   [PUSH_ERROR_KIND.DATA]: 'thiếu dữ liệu đơn',
+  [PUSH_ERROR_KIND.CONFIG_RECHECK]: 'khoá API vừa đẩy được đơn khác, chờ thử lại',
   [PUSH_ERROR_KIND.REJECTED]: 'Pancake từ chối dữ liệu đơn',
   [PUSH_ERROR_KIND.TRANSIENT]: 'Pancake tạm lỗi',
 };

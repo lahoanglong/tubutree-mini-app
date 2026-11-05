@@ -203,8 +203,6 @@ const url = process.env.TEST_REDIS_URL;
   });
 
   it('401 hàng loạt: không đốt lượt từng đơn, không báo từng đơn; cron chỉ dò bằng MỘT đơn, dò thành công thì thả cả nhóm', async () => {
-    // Đơn lên Pancake từ spec trước chứng minh khoá còn dùng: lùi mốc để 401 ở đây là lỗi khoá thật.
-    await prisma.order.updateMany({ where: { pancakeOrderId: { not: null }, pancakeLastAttemptAt: { gte: new Date(Date.now() - 2 * 3_600_000) } }, data: { pancakeLastAttemptAt: new Date(Date.now() - 3 * 3_600_000) } });
     const orders = await Promise.all([order(), order(), order(), order()]);
     respond(() => {
       throw new PancakeApiError('Pancake trả 401 khi tạo đơn: invalid api key', false, false, 401);
@@ -235,28 +233,68 @@ const url = process.env.TEST_REDIS_URL;
     await until(async () => (await prisma.order.count({ where: { id: { in: ids }, pancakeOrderId: { not: null } } })) >= 1);
     await sleep(300);
     const after = await prisma.order.findMany({ where: { id: { in: ids } } });
-    expect(after.filter((r) => r.pancakeOrderId === null).every((r) => r.pancakeErrorKind === null)).toBe(true);
+    expect(after.filter((r) => r.pancakeOrderId === null).every((r) => r.pancakeErrorKind === 'CONFIG_RECHECK')).toBe(true);
   });
 
-  it('403 riêng một đơn trong khi đơn khác đẩy được: đơn lỗi thành REJECTED (đốt lượt), không thành CONFIG, cron không dò lại ngay', async () => {
-    const [a, b] = await Promise.all([order(), order()]);
-    respond(async (code) => {
-      if (code === b.code) return { success: true, data: { id: `pk-${code}` } };
-      await until(async () => (await prisma.order.findUniqueOrThrow({ where: { id: b.id } })).pancakeOrderId != null);
-      throw new PancakeApiError('Pancake trả 403 khi tạo đơn: forbidden', false, false, 403);
+  /** Hai tick của luồng PROD: tick 1 X bị 401/403 (CONFIG) rồi Y đẩy được (X → CONFIG_RECHECK); tick 2 là cron nhặt lại X. */
+  const tickOne = async () => {
+    const [x, y] = await Promise.all([order(), order()]);
+    let key: 'bad' | 'good' = 'bad';
+    respond((code) => {
+      if (code === x.code && key === 'bad') throw new PancakeApiError('Pancake trả 403 khi tạo đơn: forbidden', false, false, 403);
+      return { success: true, data: { id: `pk-${code}` } };
     });
     alerts.alert.mockClear();
-    await Promise.all([service.enqueuePush(a.id), service.enqueuePush(b.id)]);
-    await until(async () => (await prisma.order.findUniqueOrThrow({ where: { id: a.id } })).pancakePushStatus === 'FAILED');
-    const rowA = await prisma.order.findUniqueOrThrow({ where: { id: a.id } });
-    expect(rowA).toMatchObject({ pancakeErrorKind: 'REJECTED', pancakeOrderId: null });
-    expect(rowA.pancakePushAttempts).toBeGreaterThanOrEqual(1);
-    expect(rowA.pancakeAttention).not.toBeNull();
+    await service.enqueuePush(x.id);
+    await until(async () => (await prisma.order.findUniqueOrThrow({ where: { id: x.id } })).pancakePushStatus === 'FAILED');
+    const afterOne = await prisma.order.findUniqueOrThrow({ where: { id: x.id } });
+    expect(afterOne).toMatchObject({ pancakeErrorKind: 'CONFIG', pancakePushAttempts: 0, pancakeAttention: null });
 
-    const callsOfA = () => client.createOrder.mock.calls.filter(([body]) => (body as { custom_id: string }).custom_id === a.code).length;
-    expect(callsOfA()).toBe(1);
+    await service.enqueuePush(y.id);
+    await until(async () => (await prisma.order.findUniqueOrThrow({ where: { id: x.id } })).pancakeErrorKind === 'CONFIG_RECHECK');
+    const callsOfX = () => client.createOrder.mock.calls.filter(([body]) => (body as { custom_id: string }).custom_id === x.code).length;
+    // Cron nhặt X ở tick 2: đơn đủ cũ (cutoff 10 phút), lượt thử cuối đã quá nhịp 15 phút.
+    const dueForCron = () =>
+      prisma.order.update({ where: { id: x.id }, data: { createdAt: new Date(Date.now() - 30 * 60_000), pancakeLastAttemptAt: new Date(Date.now() - 2 * 3_600_000) } });
+    return { x, callsOfX, dueForCron, setKey: (k: 'bad' | 'good') => (key = k) };
+  };
+
+  it('luồng PROD hai tick: X 403 → CONFIG; Y đẩy được → X CONFIG_RECHECK; tick 2 X lại 403 → REJECTED (đốt lượt, báo đơn), cron không dò lại ngay', async () => {
+    const { x, callsOfX, dueForCron } = await tickOne();
+    await dueForCron();
+    await reconcile.reconcile();
+    await until(async () => (await prisma.order.findUniqueOrThrow({ where: { id: x.id } })).pancakeErrorKind === 'REJECTED');
+    const row = await prisma.order.findUniqueOrThrow({ where: { id: x.id } });
+    expect(row.pancakeOrderId).toBeNull();
+    expect(row.pancakePushAttempts).toBeGreaterThanOrEqual(1);
+    expect(row.pancakeAttention).not.toBeNull();
+    expect(callsOfX()).toBe(2);
     await reconcile.reconcile();
     await sleep(300);
-    expect(callsOfA()).toBe(1);
+    expect(callsOfX()).toBe(2);
+  });
+
+  it('luồng PROD hai tick: tick 2 X đẩy được → loại lỗi về null, không có attention', async () => {
+    const { x, dueForCron, setKey } = await tickOne();
+    setKey('good');
+    await dueForCron();
+    await reconcile.reconcile();
+    await until(async () => (await prisma.order.findUniqueOrThrow({ where: { id: x.id } })).pancakeOrderId != null);
+    const row = await prisma.order.findUniqueOrThrow({ where: { id: x.id } });
+    expect(row).toMatchObject({ pancakePushStatus: 'SYNCED', pancakeErrorKind: null, pancakeAttention: null });
+  });
+
+  it('khoá hỏng thật (nhiều đơn 401, không đơn nào đẩy được): tất cả CONFIG, không đốt lượt, không báo từng đơn', async () => {
+    const orders = await Promise.all([order(), order(), order()]);
+    respond(() => {
+      throw new PancakeApiError('Pancake trả 401 khi tạo đơn: invalid api key', false, false, 401);
+    });
+    alerts.alert.mockClear();
+    await Promise.all(orders.map((o) => service.enqueuePush(o.id)));
+    const ids = orders.map((o) => o.id);
+    await until(async () => (await prisma.order.count({ where: { id: { in: ids }, pancakeErrorKind: 'CONFIG', pancakePushStatus: 'FAILED' } })) === 3);
+    const rows = await prisma.order.findMany({ where: { id: { in: ids } } });
+    for (const r of rows) expect(r).toMatchObject({ pancakePushAttempts: 0, pancakeAttention: null });
+    expect(alerts.alert.mock.calls.filter(([code]) => mine.has(code as string))).toHaveLength(0);
   });
 });

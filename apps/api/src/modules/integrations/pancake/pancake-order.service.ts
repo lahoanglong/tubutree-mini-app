@@ -36,7 +36,7 @@ import {
   pancakeOrderHasCode,
 } from './pancake-outbound';
 import { enqueuePancakeCancel, enqueuePancakePayment, enqueuePancakePush, PANCAKE_JOB_PUSH, removeFailedPancakePush } from './pancake-queue';
-import { classifyPushError, isPushFailureSettled, PUSH_ERROR_KIND, PUSH_RETRY } from './pancake-push-error';
+import { classifyPushError, isPushFailureSettled, kindAfterFailure, PUSH_ERROR_KIND, PUSH_RETRY } from './pancake-push-error';
 import { withQueueTimeout } from '../../../jobs/queue-timeout';
 import {
   ATTENTION_CANCEL_PENDING,
@@ -306,7 +306,7 @@ export class PancakeOrderService {
         data: {
           pancakePushStatus: PANCAKE_PUSH.PENDING,
           pancakeSyncError: pancakeErrorText(err),
-          pancakeErrorKind: classifyPushError(err),
+          pancakeErrorKind: kindAfterFailure(err, order.pancakeErrorKind),
           ...(definite && !sentBefore ? { pancakePushClaimedAt: null } : {}),
         },
       });
@@ -336,19 +336,16 @@ export class PancakeOrderService {
   /**
    * Ghi kết cục một lần đẩy lỗi, gọi từ job push (hết lượt hoặc lỗi dứt khoát) và từ `syncPayment` khi job thanh toán đẩy hộ đơn
    * gặp 401/403. `final` chốt FAILED. Lỗi tạm hoặc dứt khoát: đưa vào hàng đợi "Cần xử lý Pancake" (cron vẫn thử tiếp, lỗi tạm
-   * có ân hạn). Lỗi CONFIG: hoàn lượt đã đốt, không báo từng đơn; 401/403 riêng một đơn khi khoá vừa chứng minh còn dùng thì
-   * tính là REJECTED.
+   * có ân hạn). Lỗi CONFIG: hoàn lượt đã đốt, không báo từng đơn. 401/403 của đơn đã được thả khỏi nhóm CONFIG
+   * (CONFIG_RECHECK) hay đã REJECTED tính là REJECTED (`kindAfterFailure`): khoá đã đẩy được đơn khác thì lỗi là của riêng đơn.
    */
   async markPushFailure(orderId: string, err: unknown, final: boolean): Promise<void> {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
-      select: { id: true, code: true, pancakeOrderId: true, createdAt: true, paidAt: true, pancakeLastAttemptAt: true },
+      select: { id: true, code: true, pancakeOrderId: true, createdAt: true, paidAt: true, pancakeErrorKind: true },
     });
     if (!order || order.pancakeOrderId) return;
-    let kind = classifyPushError(err);
-    // 401/403 trong khi khoá API vừa chứng tỏ còn dùng được là lỗi riêng của đơn này, không phải khoá hỏng: coi như bị từ chối
-    // (đốt lượt, nhịp chậm) để đơn không được thả khỏi nhóm CONFIG rồi hoàn lượt mãi.
-    if (kind === PUSH_ERROR_KIND.CONFIG && (await this.apiKeyProvenRecently(order.pancakeLastAttemptAt))) kind = PUSH_ERROR_KIND.REJECTED;
+    const kind = kindAfterFailure(err, order.pancakeErrorKind);
     // Đang PUSHING = tiến trình khác giữ quyền đẩy (lần này thua tranh chấp): không ghi đè, kẻo mở khoá cho lần tạo thứ hai.
     const idle = { id: order.id, pancakeOrderId: null, OR: [{ pancakePushStatus: null }, { pancakePushStatus: { not: PANCAKE_PUSH.PUSHING } }] };
     await this.prisma.order.updateMany({
@@ -368,21 +365,6 @@ export class PancakeOrderService {
           : `Thử lại không tự hết lỗi: sửa nguyên nhân rồi bấm "Đẩy lại Pancake" (hệ thống chỉ hỏi lại mỗi ${PUSH_RETRY.SLOW_MINUTES} phút).`;
       await flagPancakeAttention(this.prisma, this.alerts, order, `${ATTENTION_PUSH_FAILED} (kho chưa thấy đơn): ${pancakeErrorText(err)}. ${hint}`, this.logger);
     }
-  }
-
-  /**
-   * Khoá API còn dùng được: có đơn khác lên Pancake (lượt đẩy bắt đầu trong 60 phút qua VÀ không sớm hơn lượt đẩy đang lỗi quá
-   * 60 giây). Mốc thứ hai chặn trường hợp khoá bị thu hồi giữa chừng: đơn thành công từ trước đó không chứng minh được gì. Dùng DB
-   * (không cần Redis hay cột mới); chỉ chạy ở nhánh 401/403 hiếm gặp.
-   */
-  private async apiKeyProvenRecently(attemptStartedAt: Date | null): Promise<boolean> {
-    const floor = Date.now() - PUSH_RETRY.SLOW_MINUTES * 60_000;
-    const since = new Date(Math.max(floor, (attemptStartedAt?.getTime() ?? 0) - 60_000));
-    const ok = await this.prisma.order.findFirst({
-      where: { pancakeOrderId: { not: null }, pancakeLastAttemptAt: { gte: since } },
-      select: { id: true },
-    });
-    return ok != null;
   }
 
   /**
@@ -727,8 +709,9 @@ export class PancakeOrderService {
     if (saved.count === 0) return;
     await clearPancakeAttention(this.prisma, order.id, ATTENTION_PUSH_FAILED);
     await removeFailedPancakePush(this.pushQueue, order.id);
-    // Một lần đẩy thành công (đơn nào cũng được) nghĩa là khoá API đã đúng lại: thả cả nhóm đơn đang bị loại khỏi lô thử lại của cron.
-    await this.prisma.order.updateMany({ where: { pancakeOrderId: null, pancakeErrorKind: PUSH_ERROR_KIND.CONFIG }, data: { pancakeErrorKind: null } });
+    // Một lần đẩy thành công (đơn nào cũng được) nghĩa là khoá API đã đúng lại: cả nhóm CONFIG quay lại lô thử lại của cron, đánh dấu
+    // CONFIG_RECHECK để lần thử kế tiếp mà vẫn 401/403 thì biết đó là lỗi riêng của đơn (kindAfterFailure), không rơi lại nhóm CONFIG mãi.
+    await this.prisma.order.updateMany({ where: { pancakeOrderId: null, pancakeErrorKind: PUSH_ERROR_KIND.CONFIG }, data: { pancakeErrorKind: PUSH_ERROR_KIND.CONFIG_RECHECK } });
     // Đơn đổi trạng thái trong lúc đang tạo: huỷ ngay bên Pancake / báo đã thanh toán.
     const now = await this.prisma.order.findUniqueOrThrow({ where: { id: order.id } });
     if (now.status === 'CANCELLED') {

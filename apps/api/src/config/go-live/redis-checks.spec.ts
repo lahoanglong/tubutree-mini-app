@@ -199,6 +199,11 @@ describe('summarizePancakeFailed', () => {
     expect(r.open.map((o) => o.reason)).toEqual(['khoá API Pancake sai/hết hạn', 'lỗi chưa phân loại', 'thiếu dữ liệu đơn']);
   });
 
+  it('đơn CONFIG_RECHECK có lý do riêng, không rơi vào "lỗi chưa phân loại"', () => {
+    const r = summarizePancakeFailed([{ name: 'push', orderId: 'a' }], [order('a', { pancakeErrorKind: 'CONFIG_RECHECK' })], 1);
+    expect(r.open.map((o) => o.reason)).toEqual(['khoá API vừa đẩy được đơn khác, chờ thử lại']);
+  });
+
   it('số job lỗi nhiều hơn số đã đọc → unexamined', () => {
     expect(summarizePancakeFailed([{ name: 'push', orderId: 'a' }], [order('a', { status: 'CANCELLED' })], 250).unexamined).toBe(249);
   });
