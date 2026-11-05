@@ -138,6 +138,7 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'order.next.refund': 50,
   'order.next.rebuy': 45,
   'order.action.pay': 15,
+  'order.action.payLeft': 36,
   'order.action.cancel': 10,
   'order.action.contact': 15,
   'order.action.review': 20,

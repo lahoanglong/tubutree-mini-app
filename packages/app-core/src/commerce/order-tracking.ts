@@ -282,13 +282,13 @@ export interface TrackStep {
   events: TrackEvent[];
 }
 
-export interface OrderTrack {
+export interface OrderTrackView {
   steps: TrackStep[];
   current: number;
 }
 
 /** Hành trình 5 bước chuẩn; đơn đã huỷ hoặc hoàn nằm ngoài đường này nên trả null (trạng thái đã có ở đầu trang). */
-export function orderTrack(o: TrackOrder, ctx: Pick<TrackCtx, 'etaLabel'> = {}): OrderTrack | null {
+export function orderTrack(o: TrackOrder, ctx: Pick<TrackCtx, 'etaLabel'> = {}): OrderTrackView | null {
   const keys = NO_PAYMENT_WAIT.has(o.paymentMethod) ? STEPS.filter((s) => s !== 'PENDING_PAYMENT') : [...STEPS];
   const current = (keys as readonly string[]).indexOf(o.status);
   if (current < 0) return null;
@@ -371,6 +371,7 @@ export function orderActionPlan(o: TrackOrder, ctx: TrackCtx = {}): OrderActionP
       more.push('contact');
       break;
     default:
+      primary = 'contact';
       break;
   }
   return { stage, primary, more, reviewItemId };

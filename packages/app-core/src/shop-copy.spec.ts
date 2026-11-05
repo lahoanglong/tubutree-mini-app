@@ -33,6 +33,7 @@ const WORST: Record<string, string> = {
 const WORST_BY_KEY: Record<string, Record<string, string>> = {
   'coupon.hintShort': { x: '999,9tr' },
   'order.payBy': { at: '23:59 31/12' },
+  'order.action.payLeft': { t: '99 ngày 23 giờ' },
   'order.payByLeft': { at: '23:59 31/12', t: '99 ngày 23 giờ' },
   'shop.tierHintNext': { name: 'Đồng' },
 };

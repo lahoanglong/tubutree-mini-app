@@ -141,6 +141,7 @@ export const SHOP_COPY: Record<string, string> = {
   'order.next.refund': 'Tiền hoàn của đơn xem ở mục Hoàn tiền bên dưới.',
   'order.next.rebuy': 'Bạn có thể mua lại các sản phẩm trong đơn.',
   'order.action.pay': 'Thanh toán ngay',
+  'order.action.payLeft': 'Còn {t} để thanh toán',
   'order.action.cancel': 'Huỷ đơn',
   'order.action.contact': 'Liên hệ Tubu',
   'order.action.review': 'Đánh giá sản phẩm',

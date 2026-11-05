@@ -157,6 +157,14 @@ const ROWS: Row[] = [
     more: ['contact'],
   },
   {
+    name: 'trạng thái lạ vẫn có đường liên hệ',
+    order: order({ status: 'WEIRD' }),
+    stage: 'OTHER',
+    sentence: '',
+    primary: 'contact',
+    more: [],
+  },
+  {
     name: 'đã hoàn',
     order: order({ status: 'RETURNED', paymentStatus: 'PAID' }),
     stage: 'RETURNED',
