@@ -339,26 +339,39 @@ const readPit = async (month: string) => {
   return { rows: Number(j.totals.recipients), gross: Number(j.totals.grossAmount), tax: Number(j.totals.taxWithheld), net: Number(j.totals.netAmount), json: j };
 };
 
-/** Cấu hình bị đổi trong spec, trả lại ở afterAll. */
-const SAVED_CONFIG: Record<string, unknown> = {};
+/**
+ * Gỡ mọi dòng của spec, chỉ theo tiền tố riêng (`W13 ` ở tên, `E2EW13` ở mã, `e2e-w13-` ở id), theo thứ tự khoá ngoại: bảng con của đơn trước đơn
+ * (OrderItem, PaymentAttempt, GomdonAlert tự xoá theo đơn), rồi lệnh chi, biến thể, bậc đại lý, sản phẩm, cuối cùng người dùng.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function purgeData(prisma: any, withUsers: boolean): Promise<void> {
+  const flashIds: string[] = (await prisma.flashSale.findMany({ where: { title: { startsWith: 'W13 ' } }, select: { id: true } })).map((x: { id: string }) => x.id);
+  if (flashIds.length) await prisma.flashSaleItem.deleteMany({ where: { flashSaleId: { in: flashIds } } });
+  await prisma.flashSale.deleteMany({ where: { title: { startsWith: 'W13 ' } } });
+  await prisma.couponRedemption.deleteMany({ where: { coupon: { code: { startsWith: 'E2EW13' } } } });
+  await prisma.coupon.deleteMany({ where: { code: { startsWith: 'E2EW13' } } });
+  await prisma.campaign.deleteMany({ where: { title: { startsWith: 'W13 ' } } });
+  await prisma.bundle.deleteMany({ where: { title: { startsWith: 'W13 ' } } });
+  const orderIds: string[] = (await prisma.order.findMany({ where: { code: { startsWith: 'E2EW13-' } }, select: { id: true } })).map((o: { id: string }) => o.id);
+  if (orderIds.length) {
+    const byOrder = { orderId: { in: orderIds } };
+    await prisma.orderStatusHistory.deleteMany({ where: byOrder });
+    await prisma.commission.deleteMany({ where: byOrder });
+    await prisma.orderCustomerRefund.deleteMany({ where: byOrder });
+    await prisma.merchantPayoutLine.deleteMany({ where: byOrder });
+  }
+  await prisma.order.deleteMany({ where: { code: { startsWith: 'E2EW13-' } } });
+  await prisma.payout.deleteMany({ where: { userId: { startsWith: W13 } } });
+  await prisma.variation.deleteMany({ where: { id: { startsWith: W13 } } });
+  await prisma.dealerTier.deleteMany({ where: { id: { startsWith: W13 } } });
+  await prisma.product.deleteMany({ where: { id: { startsWith: W13 } } });
+  if (withUsers) await prisma.user.deleteMany({ where: { id: { startsWith: W13 } } });
+}
 
 async function seedAll(): Promise<void> {
   CLOCK.at = Date.now();
   await withDb(async (prisma) => {
-    const flashIds: string[] = (await prisma.flashSale.findMany({ where: { title: { startsWith: 'W13 ' } }, select: { id: true } })).map((x: { id: string }) => x.id);
-    if (flashIds.length) await prisma.flashSaleItem.deleteMany({ where: { flashSaleId: { in: flashIds } } });
-    await prisma.flashSale.deleteMany({ where: { title: { startsWith: 'W13 ' } } });
-    await prisma.couponRedemption.deleteMany({ where: { coupon: { code: { startsWith: 'E2EW13' } } } });
-    await prisma.coupon.deleteMany({ where: { code: { startsWith: 'E2EW13' } } });
-    await prisma.campaign.deleteMany({ where: { title: { startsWith: 'W13 ' } } });
-    await prisma.bundle.deleteMany({ where: { title: { startsWith: 'W13 ' } } });
-    const orderIds: string[] = (await prisma.order.findMany({ where: { code: { startsWith: 'E2EW13-' } }, select: { id: true } })).map((o: { id: string }) => o.id);
-    if (orderIds.length) await prisma.orderStatusHistory.deleteMany({ where: { orderId: { in: orderIds } } });
-    await prisma.order.deleteMany({ where: { code: { startsWith: 'E2EW13-' } } });
-    await prisma.payout.deleteMany({ where: { userId: { startsWith: W13 } } });
-    await prisma.variation.deleteMany({ where: { id: { startsWith: W13 } } });
-    await prisma.dealerTier.deleteMany({ where: { id: { startsWith: W13 } } });
-    await prisma.product.deleteMany({ where: { id: { startsWith: W13 } } });
+    await purgeData(prisma, false);
 
     const user = (id: string, zalo: string, fullName: string, phone: string | null, refCode: string, role = 'CUSTOMER', extra: Record<string, unknown> = {}) =>
       prisma.user.upsert({
@@ -438,24 +451,9 @@ async function seedAll(): Promise<void> {
   });
 }
 
-/** Trả lại cấu hình đã đổi, gỡ dữ liệu của spec khỏi những chỗ dùng chung (ngoài tiền tố riêng thì không có gì khác bị đổi). */
+/** Gỡ toàn bộ dữ liệu của spec khỏi DB dùng chung (spec không đổi cấu hình hệ thống nào). */
 async function cleanupAll(): Promise<void> {
-  await withDb(async (prisma) => {
-    for (const [key, value] of Object.entries(SAVED_CONFIG)) {
-      if (value === undefined) await prisma.systemConfig.deleteMany({ where: { key } });
-      else await prisma.systemConfig.updateMany({ where: { key }, data: { value } });
-    }
-    const flashIds: string[] = (await prisma.flashSale.findMany({ where: { title: { startsWith: 'W13 ' } }, select: { id: true } })).map((x: { id: string }) => x.id);
-    if (flashIds.length) await prisma.flashSaleItem.deleteMany({ where: { flashSaleId: { in: flashIds } } });
-    await prisma.flashSale.deleteMany({ where: { title: { startsWith: 'W13 ' } } });
-    await prisma.couponRedemption.deleteMany({ where: { coupon: { code: { startsWith: 'E2EW13' } } } });
-    await prisma.coupon.deleteMany({ where: { code: { startsWith: 'E2EW13' } } });
-    await prisma.campaign.deleteMany({ where: { title: { startsWith: 'W13 ' } } });
-    await prisma.bundle.deleteMany({ where: { title: { startsWith: 'W13 ' } } });
-    await prisma.payout.deleteMany({ where: { userId: { startsWith: W13 } } });
-    await prisma.variation.updateMany({ where: { id: { startsWith: W13 } }, data: { affiliateRate: null } });
-    await prisma.dealerTier.deleteMany({ where: { id: { startsWith: W13 } } });
-  });
+  await withDb((prisma) => purgeData(prisma, true));
 }
 
 // Hai khung dùng chung dữ liệu seed `e2e-w13-*` (beforeAll xoá rồi tạo lại): cấu hình cấp tệp để cả hai khung chạy nối nhau trong một worker, không song song.
