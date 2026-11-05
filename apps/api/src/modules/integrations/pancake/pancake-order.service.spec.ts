@@ -450,6 +450,29 @@ describe('PancakeOrderService.markPushFailure', () => {
     await t.svc.markPushFailure('o1', new Error('đang đẩy'), true);
     expect(t.row().pancakePushStatus).toBe(PANCAKE_PUSH.PUSHING);
   });
+
+  it('đơn còn PUSHING nhưng quá hạn thuê (tiến trình đẩy đã chết), lỗi DATA ném trước claim: job ghi DATA, FAILED và "Cần xử lý" (cùng luật với claim)', async () => {
+    const t = setup({
+      pancakePushStatus: PANCAKE_PUSH.PUSHING,
+      pancakeLastAttemptAt: new Date(Date.now() - PancakeOrderService.PUSH_LEASE_MS - 5_000),
+      shippingAddress: { recipient: 'A', phone: '', street: 'S' },
+    });
+    const err = await t.svc.pushOrder('o1').catch((e) => e);
+    expect(err).toBeInstanceOf(PancakeOrderDataError);
+    await t.svc.markPushFailure('o1', err, true);
+    expect(t.row()).toMatchObject({ pancakePushStatus: PANCAKE_PUSH.FAILED, pancakeErrorKind: 'DATA' });
+    expect(t.row().pancakeAttention).toContain('Chưa đẩy được đơn sang Pancake');
+  });
+
+  it('lỗi CONFIG trên đơn PUSHING quá hạn thuê: hoàn lượt đã đốt trong cùng câu ghi', async () => {
+    const t = setup({
+      pancakePushStatus: PANCAKE_PUSH.PUSHING,
+      pancakePushAttempts: 3,
+      pancakeLastAttemptAt: new Date(Date.now() - PancakeOrderService.PUSH_LEASE_MS - 5_000),
+    });
+    await t.svc.markPushFailure('o1', new PancakeApiError('Pancake trả 401 khi tạo đơn', false, false, 401), true);
+    expect(t.row()).toMatchObject({ pancakePushStatus: PANCAKE_PUSH.FAILED, pancakeErrorKind: 'CONFIG', pancakePushAttempts: 2 });
+  });
 });
 
 describe('PancakeOrderService.markPushFailure — loại lỗi (hi)', () => {

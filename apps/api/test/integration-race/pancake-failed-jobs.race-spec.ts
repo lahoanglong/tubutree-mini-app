@@ -444,6 +444,25 @@ const url = process.env.TEST_REDIS_URL;
     expect(await row()).toMatchObject({ pancakePushStatus: 'STALE', pancakeErrorKind: 'REJECTED', pancakeSyncError: 'Pancake trả 422 cũ' });
   });
 
+  it('tiến trình đẩy chết giữa chừng để lại PUSHING quá hạn thuê, rồi job gặp lỗi DATA trước claim: ghi DATA, FAILED và "Cần xử lý" (không kẹt PUSHING)', async () => {
+    const x = await order();
+    await prisma.order.update({
+      where: { id: x.id },
+      data: {
+        pancakePushStatus: 'PUSHING',
+        pancakeLastAttemptAt: new Date(Date.now() - PancakeOrderService.PUSH_LEASE_MS - 5_000),
+        shippingAddress: { recipient: 'A', phone: '', street: 'S' },
+      },
+    });
+    respond(() => ({ success: true, data: { id: 'pk-unused' } }));
+    await service.enqueuePush(x.id);
+    await until(async () => {
+      const r = await prisma.order.findUniqueOrThrow({ where: { id: x.id } });
+      return r.pancakeErrorKind === 'DATA' && r.pancakePushStatus === 'FAILED' && r.pancakeAttention != null;
+    });
+    expect(calls()).toBe(0);
+  });
+
   it('markOverdue không đánh STALE đơn quá 72 giờ đang PUSHING trong hạn thuê quyền đẩy; hết hạn thuê thì lần quét sau mới đánh', async () => {
     const x = await order();
     // createdAt rất cũ để đơn đứng đầu lô markOverdue (xếp theo ngày đặt tăng dần) dù DB dùng chung có đơn quá hạn của spec khác.

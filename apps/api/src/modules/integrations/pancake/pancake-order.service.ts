@@ -413,12 +413,13 @@ export class PancakeOrderService {
       const kind = kindAfterFailure(err, order);
       const kept = keepsPriorKind(err, order);
       if (kept && fromJob) return { ...order, kind, kept, written: true };
-      // Đang PUSHING = tiến trình khác giữ quyền đẩy (lần này thua tranh chấp): không ghi đè, kẻo mở khoá cho lần tạo thứ hai.
-      const where = {
+      // Đang PUSHING trong hạn thuê = tiến trình khác giữ quyền đẩy (lần này thua tranh chấp): không ghi đè, kẻo mở khoá cho lần tạo thứ
+      // hai. PUSHING quá hạn thuê là tiến trình đã chết: ghi được, cùng luật với claim (không thì lỗi DATA ném trước claim kẹt PUSHING mãi).
+      const where: Prisma.OrderWhereInput = {
         id: order.id,
         pancakeOrderId: null,
         pancakeErrorKind: order.pancakeErrorKind,
-        ...(fromJob ? { OR: [{ pancakePushStatus: null }, { pancakePushStatus: { not: PANCAKE_PUSH.PUSHING } }] } : {}),
+        ...(fromJob ? pushLeaseFreeWhere() : {}),
       };
       const data = kept ? extra : { ...extra, pancakeSyncError: storedErrorText(err, kind), pancakeErrorKind: kind };
       // Khoá API sai làm hỏng mọi đơn như nhau: không đốt lượt từng đơn (cron chỉ dò bằng một đơn mỗi giờ).
