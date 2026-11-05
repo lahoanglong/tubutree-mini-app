@@ -70,6 +70,7 @@ import { Icon } from '../components/ui/icon';
 import { Text as DsText } from '../components/ui/text';
 import { ListRow } from '../components/ui/list-row';
 import { useCartKey } from '../services/cart-key';
+import { INPUT_LIMITS } from '../utils/input-limits';
 
 const PREVIOUS_MAYBE_PLACED = 'Đơn trước có thể đã được tạo. Kiểm tra mục Đơn hàng trước khi đặt lại.';
 
@@ -982,7 +983,7 @@ export default function CheckoutPage() {
         </Box>
         {wantInvoice && (
           <Box flex flexDirection="column" style={{ gap: 10, marginTop: 10 }}>
-            <Input
+            <Input maxLength={INPUT_LIMITS.invoiceTaxCode}
               label="Mã số thuế"
               value={invoice.taxCode}
               status={shouldShowTaxCodeError(invoice.taxCode) ? 'error' : undefined}
@@ -992,7 +993,7 @@ export default function CheckoutPage() {
                 setInvoice((f) => ({ ...f, taxCode: e.target.value }));
               }}
             />
-            <Input
+            <Input maxLength={INPUT_LIMITS.invoiceCompanyName}
               label="Tên công ty"
               value={invoice.companyName}
               onChange={(e) => {
@@ -1000,7 +1001,7 @@ export default function CheckoutPage() {
                 setInvoice((f) => ({ ...f, companyName: e.target.value }));
               }}
             />
-            <Input
+            <Input maxLength={INPUT_LIMITS.invoiceAddress}
               label="Địa chỉ xuất hoá đơn"
               value={invoice.address}
               onChange={(e) => {
@@ -1008,7 +1009,7 @@ export default function CheckoutPage() {
                 setInvoice((f) => ({ ...f, address: e.target.value }));
               }}
             />
-            <Input
+            <Input maxLength={INPUT_LIMITS.invoiceEmail}
               label="Email nhận hoá đơn"
               value={invoice.email}
               onChange={(e) => {

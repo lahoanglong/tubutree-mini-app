@@ -1,4 +1,5 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { normalizeTemplateName } from './shift-template-name';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { SystemConfigService } from '../../system-config/system-config.service';
 import { rangesOverlap } from './time.util';
@@ -10,6 +11,8 @@ export interface ShiftItem {
   endAt: Date;
   templateId?: string;
 }
+
+const templateNameKey = (name: string): string => normalizeTemplateName(name).toLocaleLowerCase('vi');
 
 @Injectable()
 export class ShiftsService {
@@ -279,15 +282,43 @@ export class ShiftsService {
   listAllTemplates() {
     return this.prisma.shiftTemplate.findMany({ orderBy: { sortOrder: 'asc' } });
   }
-  createTemplate(data: { name: string; startMin: number; endMin: number; sortOrder?: number }) {
-    if (data.endMin <= data.startMin) throw new BadRequestException('Giờ kết thúc phải sau giờ bắt đầu.');
-    return this.prisma.shiftTemplate.create({ data });
+  async createTemplate(input: { name: string; startMin: number; endMin: number; sortOrder?: number }) {
+    if (input.endMin <= input.startMin) throw new BadRequestException('Giờ kết thúc phải sau giờ bắt đầu.');
+    const data = { ...input, name: normalizeTemplateName(input.name) };
+    // Không có unique index: bảng đang chạy thật có thể đã chứa tên trùng nên thêm ràng buộc sẽ làm migration hỏng.
+    // Khoá advisory xếp hàng hai lần thêm song song để cùng một tên không lọt qua cả hai lần kiểm.
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('shift-template-create'))`;
+      await this.assertTemplateNameFree(tx, data.name);
+      return tx.shiftTemplate.create({ data });
+    });
+  }
+  /**
+   * So tên đúng nghĩa đen: Prisma `mode: 'insensitive'` dịch thành ILIKE nên `_` và `%` trong tên thành ký tự đại diện
+   * ("Ca_1" bị coi là trùng "Ca 1", tên "%" trùng mọi ca). Số ca chuẩn rất nhỏ nên đọc tên rồi so trong bộ nhớ.
+   */
+  private async assertTemplateNameFree(tx: Pick<PrismaService, 'shiftTemplate'>, name: string, exceptId?: string) {
+    const key = templateNameKey(name);
+    const all = await tx.shiftTemplate.findMany({ select: { id: true, name: true } });
+    if (all.some((t) => t.id !== exceptId && templateNameKey(t.name) === key)) {
+      throw new ConflictException('Đã có ca chuẩn cùng tên. Bạn đổi tên khác hoặc sửa ca đang có nhé.');
+    }
   }
   async updateTemplate(
     id: string,
     data: { name?: string; startMin?: number; endMin?: number; active?: boolean; sortOrder?: number },
   ) {
-    const r = await this.prisma.shiftTemplate.updateMany({ where: { id }, data });
+    const patch = data.name === undefined ? data : { ...data, name: normalizeTemplateName(data.name) };
+    if (patch.name === undefined) return this.applyTemplatePatch(this.prisma, id, patch);
+    // Cùng khoá với createTemplate: đổi tên và thêm ca song song không được cùng lọt qua kiểm trùng.
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('shift-template-create'))`;
+      await this.assertTemplateNameFree(tx, patch.name as string, id);
+      return this.applyTemplatePatch(tx, id, patch);
+    });
+  }
+  private async applyTemplatePatch(db: Pick<PrismaService, 'shiftTemplate'>, id: string, data: object) {
+    const r = await db.shiftTemplate.updateMany({ where: { id }, data });
     if (r.count === 0) throw new NotFoundException('Không tìm thấy ca chuẩn.');
     return { updated: true };
   }

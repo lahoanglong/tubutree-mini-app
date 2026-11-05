@@ -1,4 +1,5 @@
 import { api } from './api';
+import { imageTimeout } from './http';
 
 export type PayrollStatus = 'OPEN' | 'FINALIZED' | 'PAID';
 
@@ -59,7 +60,7 @@ export const getMyPayroll = (year: number, month: number) =>
   api.get<MyPayroll>('/staff/payroll', { params: { year, month } }).then((r) => r.data);
 
 export const updateBank = (dto: BankInput) =>
-  api.put<StaffProfile>('/staff/bank', dto).then((r) => r.data);
+  api.put<StaffProfile>('/staff/bank', dto, imageTimeout(dto)).then((r) => r.data);
 
 export interface SessionHistoryRow {
   id: string;
@@ -99,4 +100,4 @@ export const reopenPayroll = (staffId: string, year: number, month: number) =>
 export const markPaid = (
   staffId: string,
   body: { year: number; month: number; proofImageUrl: string; note?: string },
-) => api.post<{ paid: boolean }>(`/admin/payroll/${staffId}/mark-paid`, body).then((r) => r.data);
+) => api.post<{ paid: boolean }>(`/admin/payroll/${staffId}/mark-paid`, body, imageTimeout(body)).then((r) => r.data);

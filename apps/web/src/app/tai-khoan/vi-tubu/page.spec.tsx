@@ -14,7 +14,7 @@ const state = vi.hoisted(() => ({
   wallet: null as Record<string, unknown> | null,
   referral: null as Record<string, unknown> | null,
   loyalty: null as Record<string, unknown> | null,
-  pages: [] as { data: Record<string, unknown>[]; total: number; limit?: number }[],
+  pages: [] as { data: Record<string, unknown>[]; total: number; limit?: number; nextCursor?: string | null }[],
   fail: new Set<string>(),
   calls: [] as Call[],
   share: null as null | (() => Promise<string>),
@@ -49,7 +49,7 @@ vi.mock('@/lib/core-http', () => ({
       if (path === '/me/wallet/transactions') {
         const page = Number(opts?.query?.page ?? 1);
         const p = state.pages[page - 1] ?? { data: [], total: 0 };
-        return { data: p.data, meta: { page, limit: p.limit ?? 20, total: p.total } };
+        return { data: p.data, meta: { page, limit: p.limit ?? 20, total: p.total, ...(p.nextCursor !== undefined ? { nextCursor: p.nextCursor } : {}) } };
       }
       throw new Error(`chưa mock ${path}`);
     },
@@ -335,6 +335,20 @@ describe('/tai-khoan/vi-tubu — lịch sử Ví', () => {
     expect(state.calls.find((x) => x.path === '/me/wallet/transactions')!.query).toEqual({ page: 1, limit: 20 });
     click(byText(c, 'button', 'Xem thêm'));
     await flush(6);
+    expect(c.querySelectorAll('li')).toHaveLength(3);
+    expect(byText(c, 'button', 'Xem thêm')).toBeNull();
+  });
+
+  it('API trả nextCursor: "Xem thêm" gửi con trỏ đó, dù tổng/limit báo đã hết trang kiểu offset', async () => {
+    state.pages = [
+      { total: 2, limit: 2, data: PAGE_1.data, nextCursor: 'CUR1' },
+      { total: 2, limit: 2, data: [PAGE_2.data[0]!], nextCursor: null },
+    ];
+    const c = await mount();
+    click(byText(c, 'button', 'Xem thêm'));
+    await flush(6);
+    const calls = state.calls.filter((x) => x.path === '/me/wallet/transactions');
+    expect(calls[1]!.query).toEqual({ page: 2, limit: 20, cursor: 'CUR1' });
     expect(c.querySelectorAll('li')).toHaveLength(3);
     expect(byText(c, 'button', 'Xem thêm')).toBeNull();
   });

@@ -213,6 +213,24 @@ describe('CheckoutPage — mã giới thiệu CTV (C-020)', () => {
     expect(mocks.recordReferralTouch).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['MST chi nhánh dán có dấu chấm', '0312.345.678-001', '0312345678-001'],
+    ['CCCD dán có khoảng trắng', '001 234 567 890', '001234567890'],
+  ])('hoá đơn VAT: %s vẫn gửi đúng (ô không cắt chuỗi thô trước khi chuẩn hoá)', async (_n, pasted, sent) => {
+    renderPage();
+    await screen.findByText(/Đặt hàng · /);
+    fireEvent.click(screen.getByText('Yêu cầu xuất hoá đơn VAT'));
+    const input = (label: string) => document.querySelector(`input[label="${label}"]`) as HTMLInputElement;
+    const tax = input('Mã số thuế');
+    // Trình duyệt cắt chuỗi dán theo maxLength của ô.
+    fireEvent.change(tax, { target: { value: tax.maxLength > 0 ? pasted.slice(0, tax.maxLength) : pasted } });
+    fireEvent.change(input('Tên công ty'), { target: { value: 'Cty A' } });
+    fireEvent.change(input('Địa chỉ xuất hoá đơn'), { target: { value: '1 Lê Lợi' } });
+    fireEvent.change(input('Email nhận hoá đơn'), { target: { value: 'a@b.vn' } });
+    const body = await placeOrderClick();
+    expect((body.invoiceRequest as { taxCode: string }).taxCode).toBe(sent);
+  });
+
   it('mua qua link giới thiệu của CTV thật (đã xác nhận) → hiện mã cố định, không có ô nhập, và vẫn gửi referralCode của link', async () => {
     mocks.sfCtx.referralCode = 'linkcode';
     mocks.sfCtx.referralEligible = true;

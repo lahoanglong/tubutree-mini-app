@@ -1,7 +1,7 @@
 import 'reflect-metadata';
-import { ValidationPipe } from '@nestjs/common';
+import { BadRequestException, ValidationPipe } from '@nestjs/common';
 import { PRODUCT_SLUG_MAX } from '@tubutree/shared-types';
-import { CreatePostDto, EditPostDto } from './community-feed.controller';
+import { CreateEventDto, CreatePostDto, EditPostDto } from './community-feed.controller';
 
 /** Đúng cấu hình ValidationPipe toàn cục ở main.ts. */
 const pipe = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true });
@@ -67,5 +67,28 @@ describe('CreatePostDto.productSlugs: trần slug sản phẩm', () => {
   it('nhận slug dài tới PRODUCT_SLUG_MAX, PRODUCT_SLUG_MAX + 1 thì 400', async () => {
     await expect(asCreate({ body: 'Chia sẻ', productSlugs: ['a'.repeat(PRODUCT_SLUG_MAX)] })).resolves.toBeDefined();
     await expect(asCreate({ body: 'Chia sẻ', productSlugs: ['a'.repeat(PRODUCT_SLUG_MAX + 1)] })).rejects.toBeDefined();
+  });
+});
+
+describe('CreateEventDto.title: cắt khoảng trắng và không rỗng', () => {
+  const asEvent = (value: Record<string, unknown>) =>
+    pipe.transform(value, { type: 'body', metatype: CreateEventDto, data: undefined }) as Promise<{ title: string }>;
+  const dates = { startAt: '2026-08-01T00:00:00Z', endAt: '2026-08-10T00:00:00Z' };
+
+  it.each(['', '   ', '\t\n'])('tiêu đề %j bị từ chối 400', async (title) => {
+    await expect(asEvent({ title, ...dates })).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it.each(['\u200b', ' \ufeff ', '\u200c\u2060', '\u00a0'])('tiêu đề chỉ có ký tự vô hình %j bị từ chối 400', async (title) => {
+    await expect(asEvent({ title, ...dates })).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('cắt ký tự vô hình ở hai đầu nhưng giữ emoji ghép (U+200D ở giữa)', async () => {
+    const family = '👨\u200d👩\u200d👧';
+    await expect(asEvent({ title: `\u200b Hội chợ ${family}\ufeff`, ...dates })).resolves.toMatchObject({ title: `Hội chợ ${family}` });
+  });
+
+  it('" Hội chợ " lưu thành "Hội chợ"', async () => {
+    await expect(asEvent({ title: ' Hội chợ ', ...dates })).resolves.toMatchObject({ title: 'Hội chợ' });
   });
 });

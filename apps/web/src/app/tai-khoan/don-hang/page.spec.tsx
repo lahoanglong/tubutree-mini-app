@@ -35,6 +35,8 @@ let calls: Call[] = [];
 let orders: Record<string, unknown>[] = [];
 let total: number | undefined;
 let ordersFail = false;
+/** Khi đặt: API trả con trỏ keyset (theo thứ tự trang); trang đọc theo cursor thay vì page. */
+let keyset: { data: Record<string, unknown>[]; nextCursor: string | null }[] | null = null;
 let offer: unknown = { isNewCustomer: false, welcomeVoucher: null };
 let purchased: unknown[] = [];
 
@@ -52,6 +54,10 @@ function stubApi() {
         if (ordersFail) return json({ message: 'ECONNRESET tại bảng orders' }, 500);
         const page = Number(u.searchParams.get('page') ?? 1);
         const limit = Number(u.searchParams.get('limit') ?? 20);
+        if (keyset) {
+          const k = keyset[page - 1] ?? { data: [], nextCursor: null };
+          return json({ data: k.data, meta: { page, limit, total: 1, nextCursor: k.nextCursor } });
+        }
         return json({ data: orders.slice((page - 1) * limit, page * limit), meta: { page, limit, total: total ?? orders.length } });
       }
       if (path === '/me/new-customer-offer') return json(offer);
@@ -86,6 +92,7 @@ beforeEach(() => {
   orders = [order('TUBU1')];
   total = undefined;
   ordersFail = false;
+  keyset = null;
   offer = { isNewCustomer: false, welcomeVoucher: null };
   purchased = [];
   stubApi();
@@ -176,6 +183,19 @@ describe('trang Đơn hàng /tai-khoan/don-hang', () => {
     await flush(8);
     expect(sent('/orders').map((x) => x.query.get('page'))).toEqual(['1', '2']);
     expect(c.querySelectorAll('[data-testid="order-card"]')).toHaveLength(25);
+    expect(btn('Xem thêm', c)).toBeUndefined();
+  });
+
+  it('API trả nextCursor: "Xem thêm" gửi con trỏ đó (dù tổng báo hết trang kiểu offset) và đơn lặp giữa hai trang chỉ hiện một lần', async () => {
+    keyset = [
+      { data: [order('TUBU1')], nextCursor: 'CUR1' },
+      { data: [order('TUBU1'), order('TUBU2')], nextCursor: null },
+    ];
+    const c = await mount();
+    click(btn('Xem thêm', c) ?? null);
+    await flush(8);
+    expect(sent('/orders').map((x) => x.query.get('cursor'))).toEqual([null, 'CUR1']);
+    expect(c.querySelectorAll('[data-testid="order-card"]')).toHaveLength(2);
     expect(btn('Xem thêm', c)).toBeUndefined();
   });
 

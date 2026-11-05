@@ -4,6 +4,7 @@ import { ORDER_LIST_SELECT, OrdersService } from './orders.service';
 import { OrderReversalService } from './order-reversal.service';
 import * as refundQueue from './refund-queue';
 import type { PrismaService } from '../../prisma/prisma.service';
+import { fakeKeysetTable } from '../../common/keyset-cursor.testing';
 import type { LoyaltyService } from '../loyalty/loyalty.service';
 import type { CartService } from '../cart/cart.service';
 import type { NotificationsService } from '../notifications/notifications.service';
@@ -757,6 +758,54 @@ describe('OrdersService.list / activeCount — nhóm trạng thái (tab Đơn h�
     expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { userId: 'u1' } }));
   });
 
+  describe('cursor keyset (L4-05)', () => {
+    const T0 = Date.UTC(2026, 10, 5);
+    const mkRow = (n: number, createdMs = T0 + Math.floor(n / 2) * 1000) => ({
+      id: `o${String(n).padStart(3, '0')}`, userId: 'u1', status: 'DELIVERED', code: `TUBU${n}`, createdAt: new Date(createdMs), items: [],
+    });
+    function makeKeysetService(rows: ReturnType<typeof mkRow>[]) {
+      const table = fakeKeysetTable(rows);
+      const prisma = {
+        order: { findMany: table.findMany, count: table.count },
+        variation: { findMany: jest.fn().mockResolvedValue([]) },
+        orderStatusHistory: { findMany: jest.fn().mockResolvedValue([]) },
+        $transaction: jest.fn(async (ops: Promise<unknown>[]) => Promise.all(ops)),
+      } as unknown as PrismaService;
+      return { table, svc: new OrdersService(prisma, loyalty, cart, notifications, config, affiliate, reversal) };
+    }
+    const ids = (r: { data: unknown[] }) => (r.data as { id: string }[]).map((o) => o.id);
+
+    it('trang sau không lặp, không sót khi có đơn mới chen vào đầu giữa hai lần gọi', async () => {
+      const { table, svc } = makeKeysetService(Array.from({ length: 25 }, (_, i) => mkRow(i + 1)));
+      const p1 = await svc.list('u1', {}, 1, 10);
+      expect(p1.meta.nextCursor).toEqual(expect.any(String));
+      table.rows.push(mkRow(99, T0 + 60_000));
+      const p2 = await svc.list('u1', { cursor: p1.meta.nextCursor as string }, 1, 10);
+      const p3 = await svc.list('u1', { cursor: p2.meta.nextCursor as string }, 1, 10);
+      const all = [...ids(p1), ...ids(p2), ...ids(p3)];
+      expect(new Set(all).size).toBe(25);
+      expect(all).not.toContain('o099');
+      expect(p3.meta.nextCursor).toBeNull();
+    });
+
+    it('cùng createdAt vẫn đủ nhờ id làm khoá phụ; không có cursor giữ offset và trả nextCursor', async () => {
+      const { svc } = makeKeysetService(Array.from({ length: 5 }, (_, i) => mkRow(i + 1, T0)));
+      const first = await svc.list('u1', {}, 1, 2);
+      expect(ids(first)).toEqual(['o005', 'o004']);
+      expect(first.meta).toMatchObject({ page: 1, limit: 2, total: 5, nextCursor: expect.any(String) });
+      const next = await svc.list('u1', { cursor: first.meta.nextCursor as string }, 1, 2);
+      expect(ids(next)).toEqual(['o003', 'o002']);
+      const last = await svc.list('u1', { cursor: next.meta.nextCursor as string }, 1, 2);
+      expect(ids(last)).toEqual(['o001']);
+      expect(last.meta.nextCursor).toBeNull();
+    });
+
+    it('cursor hỏng → 400', async () => {
+      const { svc } = makeKeysetService([mkRow(1)]);
+      await expect(svc.list('u1', { cursor: '@@@' }, 1, 10)).rejects.toBeInstanceOf(BadRequestException);
+    });
+  });
+
   it('activeCount đếm 4 trạng thái đang xử lý của chính user', async () => {
     const { svc, count } = makeListService();
     count.mockResolvedValue(2);
@@ -779,7 +828,7 @@ describe('OrdersService.list — ô tìm kiếm theo mã đơn / tên sản ph�
 
   function makeSearchService() {
     const findMany = jest.fn(async (args: { where: Record<string, unknown>; select?: unknown }) => {
-      if (args.select) return ORDERS.map(({ id, code, items }) => ({ id, code, items: items.map((i) => ({ productName: i.productName })) }));
+      if (args.select) return ORDERS.map(({ id, code, items }) => ({ id, code, createdAt: new Date(0), items: items.map((i) => ({ productName: i.productName })) }));
       const ids = (args.where.id as { in: string[] } | undefined)?.in;
       return ids ? ORDERS.filter((o) => ids.includes(o.id)) : [];
     });

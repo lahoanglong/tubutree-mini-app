@@ -20,6 +20,7 @@ import { Text } from '../ui/text';
 import { VoucherPicker } from '../ui/voucher-picker';
 import { autoCouponName } from '../../utils/coupon-name';
 import { cartKey } from '../../services/cart-key';
+import { INPUT_LIMITS } from '../../utils/input-limits';
 
 export interface VoucherSheetProps {
   visible: boolean;
@@ -156,7 +157,7 @@ export function VoucherSheet({
           </Text>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div className="tubu-field-44" style={{ flex: 1 }}>
-              <Input
+              <Input maxLength={INPUT_LIMITS.voucherCode}
                 aria-label={fillCopy('coupon.pickManual')}
                 placeholder={fillCopy('coupon.pickPlaceholder')}
                 value={customCode}

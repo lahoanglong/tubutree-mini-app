@@ -311,6 +311,28 @@ describe('DealerService.apply (Việc 3 — TOCTOU khi đăng ký đại lý)', 
     );
   });
 
+  it('đã có đơn chờ duyệt (pre-check hoặc P2002) → 400 mang code DEALER_APPLICATION_PENDING', async () => {
+    const { Prisma } = jest.requireActual('@prisma/client');
+    const p2002 = new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'test' });
+    const dto = {
+      businessName: 'Cty A', ownerName: 'A', phone: '0900000000', address: 'HN',
+      cccdFrontUrl: 'f.jpg', cccdBackUrl: 'b.jpg',
+    };
+    const mk = (findFirst: unknown, create: unknown) =>
+      ({
+        user: { findUnique: jest.fn().mockResolvedValue({ phone: '0900000000', zaloId: 'z1' }) },
+        dealerApplication: { findFirst, create },
+      }) as unknown as PrismaService;
+    for (const prisma of [
+      mk(jest.fn().mockResolvedValue({ id: 'a1' }), jest.fn()),
+      mk(jest.fn().mockResolvedValue(null), jest.fn().mockRejectedValue(p2002)),
+    ]) {
+      const err = await new DealerService(prisma, makeConfig()).apply('u1', dto as never).catch((e) => e);
+      expect(err.getStatus()).toBe(400);
+      expect(err.getResponse()).toEqual({ code: 'DEALER_APPLICATION_PENDING', message: 'Bạn đã có đơn đăng ký đang chờ duyệt.' });
+    }
+  });
+
   it('không có đơn PENDING, create() thành công bình thường → trả đơn mới tạo', async () => {
     const created = { id: 'app1', userId: 'u1', status: 'PENDING' };
     const prisma = {

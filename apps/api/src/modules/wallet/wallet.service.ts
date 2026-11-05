@@ -1,4 +1,5 @@
 import { GoneException, Injectable } from '@nestjs/common';
+import { decodeKeysetCursor, encodeKeysetCursor, KEYSET_ORDER, keysetAfter } from '../../common/keyset-cursor';
 import { paginated, skipTake } from '../../common/pagination';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -34,19 +35,29 @@ export class WalletService {
    * Sao kê Ví Tubu từ sổ cái wallet_transactions (C-060), mới nhất trước. Chỉ trả mã đơn (để mở
    * chi tiết đơn); refId khác là id nội bộ (payout, giao dịch cashback, tài khoản khách đã gộp).
    */
-  async getTransactions(userId: string, page: number, limit: number) {
-    const where = { userId };
-    const [rows, total] = await Promise.all([
+  /**
+   * Sao kê Ví. Có `cursor` thì phân trang keyset `(createdAt, id)` (không lặp/sót khi có dòng mới chèn đầu giữa hai lần gọi);
+   * không có thì offset như cũ (web và Mini App bản cũ). Cả hai đều trả `meta.nextCursor` để client mới chuyển sang keyset.
+   */
+  async getTransactions(userId: string, page: number, limit: number, cursor?: string) {
+    const base = { userId };
+    const where = cursor ? { AND: [base, keysetAfter(decodeKeysetCursor(cursor))] } : base;
+    const [fetched, total] = await Promise.all([
       this.prisma.walletTransaction.findMany({
         where,
-        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-        ...skipTake(page, limit),
+        orderBy: KEYSET_ORDER,
+        ...(cursor ? { take: limit + 1 } : skipTake(page, limit)),
         select: { id: true, delta: true, balanceAfter: true, type: true, refType: true, refId: true, reason: true, createdAt: true },
       }),
-      this.prisma.walletTransaction.count({ where }),
+      this.prisma.walletTransaction.count({ where: base }),
     ]);
+    const hasMore = cursor ? fetched.length > limit : page * limit < total;
+    const rows = cursor ? fetched.slice(0, limit) : fetched;
+    const last = rows[rows.length - 1];
     const data = rows.map(({ refType, refId, ...r }) => ({ ...r, orderId: refType === 'ORDER' ? refId : null }));
-    return paginated(data, page, limit, total);
+    const result = paginated(data, page, limit, total);
+    result.meta.nextCursor = hasMore && last ? encodeKeysetCursor(last) : null;
+    return result;
   }
 
   /**

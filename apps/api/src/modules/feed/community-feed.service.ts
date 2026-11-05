@@ -1,3 +1,4 @@
+import { trimInvisible } from './text-trim';
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -91,6 +92,7 @@ const MAX_PRODUCT_TAGS = 5;
 const MAX_TAGS = 5;
 /** Cửa sổ chống bình luận trùng do gửi đúp. */
 const COMMENT_DEDUPE_MS = 10_000;
+const FEED_CREATE_DEDUPE_MS = 5 * 60_000;
 const MAX_COMMENT = 500;
 
 export interface CreatePostInput {
@@ -562,31 +564,39 @@ export class CommunityFeedService {
     userId: string,
     images: string[],
     excludePostId: string | undefined,
-    write: (db: PrismaService | Prisma.TransactionClient) => Promise<T>,
+    write: (db: PrismaService | Prisma.TransactionClient, inTransaction: boolean) => Promise<T>,
   ): Promise<T> {
     const incoming = images.filter((u) => u.startsWith('data:'));
-    if (incoming.length === 0) return write(this.prisma);
+    if (incoming.length === 0) return write(this.prisma, false);
     const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { phone: true, zaloId: true } });
-    if (!user || isRealUser(user)) return write(this.prisma);
+    if (!user || isRealUser(user)) return write(this.prisma, false);
     // Kiểm rồi ghi cùng một khoá advisory toàn cục: nhiều khách vãng lai bắn song song không cùng đọc thấy tổng còn chỗ.
     // Người dùng thật không đi vào nhánh này nên không bị khoá.
     return this.prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${GUEST_FEED_IMAGES_LOCK}))`;
-      const exclude = excludePostId ? Prisma.sql`AND p."id" <> ${excludePostId}` : Prisma.empty;
-      const [own] = await tx.$queryRaw<{ n: number }[]>`
-        SELECT count(*)::int AS "n" FROM "feed_posts" p
-        WHERE p."userId" = ${userId} AND p."status" = 'PENDING' ${exclude}
-          AND EXISTS (SELECT 1 FROM unnest(p."images") AS i WHERE left(i, 5) = 'data:')`;
-      if ((own?.n ?? 0) >= GUEST_PENDING_IMAGE_POSTS_MAX) throw new BadRequestException(GUEST_IMAGE_OWN_LIMIT_MESSAGE);
-      // pg_column_size đọc kích thước đã lưu mà không giải nén mảng (có thể tới 100 MB); ngưỡng 4 KB loại mảng chỉ có URL Cloudinary.
-      const [total] = await tx.$queryRaw<{ bytes: bigint | number }[]>`
-        SELECT COALESCE(sum(pg_column_size(p."images")), 0)::bigint AS "bytes"
-        FROM "feed_posts" p JOIN "users" u ON u."id" = p."userId"
-        WHERE p."status" = 'PENDING' ${exclude} AND pg_column_size(p."images") > 4096 AND NOT ${REAL_USER_SQL}`;
-      const incomingBytes = incoming.reduce((sum, u) => sum + u.length, 0);
-      if (Number(total?.bytes ?? 0) + incomingBytes > GUEST_PENDING_IMAGE_BYTES_MAX) throw new BadRequestException(GUEST_IMAGE_TOTAL_LIMIT_MESSAGE);
-      return write(tx);
+      await this.assertGuestImageQuota(tx, userId, incoming, excludePostId);
+      return write(tx, true);
     });
+  }
+
+  /**
+   * Kiểm hai trần ảnh của khách vãng lai dưới khoá toàn cục. Thứ tự khoá luôn là khoá theo người (`feed-post:<id>`, chỉ createPost
+   * lấy) rồi mới khoá toàn cục này; updatePost chỉ lấy khoá toàn cục nên không thể đảo thứ tự, không deadlock.
+   */
+  private async assertGuestImageQuota(tx: Prisma.TransactionClient, userId: string, incoming: string[], excludePostId?: string): Promise<void> {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${GUEST_FEED_IMAGES_LOCK}))`;
+    const exclude = excludePostId ? Prisma.sql`AND p."id" <> ${excludePostId}` : Prisma.empty;
+    const [own] = await tx.$queryRaw<{ n: number }[]>`
+      SELECT count(*)::int AS "n" FROM "feed_posts" p
+      WHERE p."userId" = ${userId} AND p."status" = 'PENDING' ${exclude}
+        AND EXISTS (SELECT 1 FROM unnest(p."images") AS i WHERE left(i, 5) = 'data:')`;
+    if ((own?.n ?? 0) >= GUEST_PENDING_IMAGE_POSTS_MAX) throw new BadRequestException(GUEST_IMAGE_OWN_LIMIT_MESSAGE);
+    // pg_column_size đọc kích thước đã lưu mà không giải nén mảng (có thể tới 100 MB); ngưỡng 4 KB loại mảng chỉ có URL Cloudinary.
+    const [total] = await tx.$queryRaw<{ bytes: bigint | number }[]>`
+      SELECT COALESCE(sum(pg_column_size(p."images")), 0)::bigint AS "bytes"
+      FROM "feed_posts" p JOIN "users" u ON u."id" = p."userId"
+      WHERE p."status" = 'PENDING' ${exclude} AND pg_column_size(p."images") > 4096 AND NOT ${REAL_USER_SQL}`;
+    const incomingBytes = incoming.reduce((sum, u) => sum + u.length, 0);
+    if (Number(total?.bytes ?? 0) + incomingBytes > GUEST_PENDING_IMAGE_BYTES_MAX) throw new BadRequestException(GUEST_IMAGE_TOTAL_LIMIT_MESSAGE);
   }
 
   /**
@@ -603,10 +613,10 @@ export class CommunityFeedService {
 
   async createPost(userId: string, role: string, input: CreatePostInput): Promise<{ id: string; status: string }> {
     const kind = input.kind ?? 'MANUAL';
-    const body = (input.body ?? '').trim();
+    const body = trimInvisible(input.body ?? '');
     if (!body) throw new BadRequestException('Nội dung bài viết trống.');
     if (body.length > MAX_BODY) throw new BadRequestException('Nội dung quá dài.');
-    const title = input.title?.trim() || null;
+    const title = trimInvisible(input.title ?? '') || null;
     if (kind === 'QUESTION' && !title) throw new BadRequestException('Câu hỏi cần có tiêu đề.');
     if (title && title.length > MAX_TITLE) throw new BadRequestException('Tiêu đề quá dài.');
     const images = (input.images ?? []).filter((u) => typeof u === 'string' && u.trim()).slice(0, MAX_FEED_IMAGES);
@@ -646,59 +656,88 @@ export class CommunityFeedService {
     // qua nhánh auto-PUBLISHED) thay vì chặn hẳn, để admin còn duyệt tay nếu là báo động giả.
     const flagged = containsBannedContent(`${title ?? ''}\n${body}`, await this.bannedKeywords());
     const status = trusted && !flagged ? 'PUBLISHED' : 'PENDING';
-    const post = await this.writeWithGuestImageQuota(userId, status === 'PENDING' ? images : [], undefined, (db) =>
-      db.feedPost.create({
+    // Thẻ #tag và sản phẩm gắn nằm ở bảng quan hệ nên so trùng ở JS trên vài ứng viên.
+    const tagLabels = (input.tagSlugs ?? [])
+      .map((raw) => (raw ?? '').trim().replace(/^#+/, '').trim())
+      .filter((s) => s.length > 0)
+      .slice(0, MAX_TAGS);
+    const wantedTags = [...new Set(tagLabels.map(slugifyTag))].sort();
+    const sameSet = (a: string[], b: string[]) => a.length === b.length && a.every((v, i) => v === b[i]);
+    // Bấm đăng hai lần / mạng chập chờn gửi lại: cùng người và cùng MỌI trường nội dung khách gửi (tiêu đề, nội dung, loại, danh mục,
+    // ảnh, sự kiện, sản phẩm gắn, thẻ) trong 5 phút thì trả bài đã có, không tạo thêm (và không thưởng, không cộng uy tín lần nữa).
+    // Thiếu một trường là nuốt bài thật mà vẫn báo thành công. Khoá tư vấn theo người buộc hai yêu cầu song song xếp hàng.
+    // Khách vãng lai có ảnh `data:` ở bài chờ duyệt mới phải qua trần ảnh (người dùng thật không bị).
+    const dataImages = status === 'PENDING' ? images.filter((u) => u.startsWith('data:')) : [];
+    const guestUser = dataImages.length ? await this.prisma.user.findUnique({ where: { id: userId }, select: { phone: true, zaloId: true } }) : null;
+    const guestIncoming = dataImages.length && (!guestUser || !isRealUser(guestUser)) ? dataImages : [];
+    const createDeduped = async (tx: Prisma.TransactionClient) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`feed-post:${userId}`}))`;
+      // Đọc sản phẩm ngay trong giao dịch, một lần cho cả so trùng lẫn ghi gắn: sản phẩm ngừng bán hoặc không còn thì bỏ lặng lẽ như
+      // trước, không để khoảng hở giữa lúc đọc và lúc ghi làm lỗi khoá ngoại.
+      const products = slugs.length
+        ? await tx.product.findMany({ where: { slug: { in: slugs }, isActive: true }, select: { id: true } })
+        : [];
+      const wantedProducts = [...new Set(products.map((p) => p.id))].sort();
+      const candidates = await tx.feedPost.findMany({
+        where: {
+          userId, title, body, kind, categoryId: input.categoryId ?? null, images: { equals: images },
+          status: { not: 'REMOVED' },
+          meta: input.eventId ? { path: ['eventId'], equals: input.eventId } : { equals: Prisma.DbNull },
+          createdAt: { gte: new Date(Date.now() - FEED_CREATE_DEDUPE_MS) },
+        },
+        select: { id: true, status: true, productTags: { select: { productId: true } }, tags: { select: { tag: { select: { slug: true } } } } },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+      });
+      const existing = candidates.find(
+        (c) =>
+          sameSet([...new Set(c.productTags.map((t) => t.productId))].sort(), wantedProducts) &&
+          sameSet([...new Set(c.tags.map((t) => t.tag.slug))].sort(), wantedTags),
+      );
+      if (existing) return { id: existing.id, status: existing.status as string, duplicate: true };
+      // Trần ảnh chỉ kiểm cho bài MỚI: gửi lại bài đã có thì trả bài đó, không đụng trần và không cộng ảnh hai lần.
+      if (guestIncoming.length > 0) await this.assertGuestImageQuota(tx, userId, guestIncoming);
+      const created = await tx.feedPost.create({
         data: {
           userId, kind, status, body, title, images, categoryId: input.categoryId ?? null,
           ...(input.eventId ? { meta: { eventId: input.eventId } } : {}),
         },
         select: { id: true },
-      }),
-    );
-
-    if (slugs.length) {
-      const products = await this.prisma.product.findMany({
-        where: { slug: { in: slugs }, isActive: true }, select: { id: true },
       });
+      // Sản phẩm gắn và thẻ ghi CÙNG giao dịch, trước khi nhả khoá theo người: nếu ghi sau commit thì yêu cầu gửi song song lấy khoá,
+      // thấy bài chưa có thẻ/sản phẩm (≠ yêu cầu của nó) và tạo bài thứ hai. Không nuốt lỗi ở đây (Postgres hỏng cả giao dịch sau
+      // lỗi): lỗi DB thật thì cả yêu cầu lỗi và bài không được tạo.
       if (products.length) {
-        await this.prisma.postProductTag.createMany({
-          data: products.map((p) => ({ postId: post.id, productId: p.id })),
+        await tx.postProductTag.createMany({
+          data: products.map((p) => ({ postId: created.id, productId: p.id })),
           skipDuplicates: true,
         });
       }
-    }
-
-    const tagLabels = (input.tagSlugs ?? [])
-      .map((raw) => (raw ?? '').trim().replace(/^#+/, '').trim())
-      .filter((s) => s.length > 0)
-      .slice(0, MAX_TAGS);
-    if (tagLabels.length) {
-      try {
+      if (tagLabels.length) {
         // Hai nhãn cùng slug là một Tag: nhãn đầu giữ name, như upsert nối tiếp trước đây.
         const nameBySlug = new Map<string, string>();
         for (const label of tagLabels) {
           const slug = slugifyTag(label);
           if (!nameBySlug.has(slug)) nameBySlug.set(slug, label);
         }
-        const slugs = [...nameBySlug.keys()];
-        await this.prisma.tag.createMany({
-          data: slugs.map((slug) => ({ slug, name: nameBySlug.get(slug)! })),
+        // Sắp theo slug: hai giao dịch cùng tạo thẻ mới theo cùng một thứ tự khoá dòng nên không deadlock.
+        const tagSlugs = [...nameBySlug.keys()].sort();
+        await tx.tag.createMany({
+          data: tagSlugs.map((slug) => ({ slug, name: nameBySlug.get(slug)! })),
           skipDuplicates: true,
         });
-        const rows = await this.prisma.tag.findMany({ where: { slug: { in: slugs } }, select: { id: true, slug: true } });
+        const rows = await tx.tag.findMany({ where: { slug: { in: tagSlugs } }, select: { id: true, slug: true } });
         const idBySlug = new Map(rows.map((t) => [t.slug, t.id]));
-        const tags = slugs.flatMap((slug) => {
+        const tagRows = tagSlugs.flatMap((slug) => {
           const id = idBySlug.get(slug);
-          return id ? [{ id }] : [];
+          return id ? [{ postId: created.id, tagId: id }] : [];
         });
-        await this.prisma.postTag.createMany({
-          data: tags.map((t) => ({ postId: post.id, tagId: t.id })),
-          skipDuplicates: true,
-        });
-      } catch (err) {
-        this.logger.warn(`gắn tag thất bại cho bài ${post.id}: ${(err as Error).message}`);
+        await tx.postTag.createMany({ data: tagRows, skipDuplicates: true });
       }
-    }
+      return { id: created.id, status: status as string, duplicate: false };
+    };
+    const post = await this.prisma.$transaction(createDeduped);
+    if (post.duplicate) return { id: post.id, status: post.status };
 
     if (status === 'PUBLISHED') {
       try {
@@ -1549,7 +1588,22 @@ export class CommunityFeedService {
         `Quà sự kiện phải từ ${formatPoints(EVENT_REWARD_MIN_POINTS)} đến ${formatPoints(EVENT_REWARD_MAX_POINTS)} Điểm Xanh, hoặc để 0 nếu sự kiện không có quà.`,
       );
     }
-    return this.prisma.communityEvent.create({ data: dto });
+    // Gửi lại y hệt trong 5 phút (bấm đôi, mạng gửi lại) thì trả sự kiện đã có; khoá toàn cục vì admin tạo ít. Chỉ so với sự kiện còn
+    // OPEN và cùng mô tả, ảnh bìa, quà: tạo nhầm rồi đóng, tạo lại cho đúng ngay sau đó phải ra sự kiện mới, không phải cái đã đóng.
+    const data = { ...dto, title: trimInvisible(dto.title) };
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'feed-event-create'}))`;
+      const existing = await tx.communityEvent.findFirst({
+        where: {
+          status: 'OPEN', title: data.title, description: data.description ?? null, coverUrl: data.coverUrl ?? null,
+          startAt: data.startAt, endAt: data.endAt, rewardPoints: data.rewardPoints ?? 0,
+          createdAt: { gte: new Date(Date.now() - FEED_CREATE_DEDUPE_MS) },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (existing) return existing;
+      return tx.communityEvent.create({ data });
+    });
   }
 
   /** Đóng sự kiện thủ công (admin) — không chọn người thắng. */

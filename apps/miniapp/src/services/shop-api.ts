@@ -7,11 +7,12 @@ import { homeProductSlot, takeMeBlock, takePublicBlock, takePurchasedItems } fro
 import type { CartComboGroup, CouponPreviewRequest, FlashAllowanceResponse, CouponPreviewsResponse, OrderDTO, OrderItemDTO, WastePublicFlags } from '@tubutree/shared-types';
 import { cartStorefrontSlug } from './cart-key';
 import type { MyRefund, RefundBankInput, ReturnReasonCode } from '../utils/refund-rules';
+import { imageTimeout } from './http';
 
 /** Shape phân trang backend trả về (§12.1): { data, meta }. */
 export interface PageResponse<T> {
   data: T[];
-  meta: { page: number; limit: number; total: number };
+  meta: { page: number; limit: number; total: number; nextCursor?: string | null };
 }
 
 export interface ProductCard {
@@ -635,7 +636,7 @@ export type CreatedReview = Pick<ReviewItem, 'id' | 'rating' | 'comment' | 'imag
 export const createReview = (
   slug: string,
   data: { rating: number; comment?: string; images?: string[]; videoUrl?: string; orderId: string },
-) => api.post<CreatedReview>(`/products/${slug}/reviews`, data).then((r) => r.data);
+) => api.post<CreatedReview>(`/products/${slug}/reviews`, data, imageTimeout(data)).then((r) => r.data);
 
 // Orders
 /** Ảnh/tồn kho từng dòng do API join theo variationId (dự án 4a). Optional: API cũ không trả. */
@@ -678,13 +679,14 @@ export interface OrderListFilter {
 
 // Bug 1 fix: truoc day khong truyen page/limit -> BE mac dinh page=1 limit=20, khach co >20 don
 // khong bao gio xem duoc don cu hon qua app. Nhan them page/limit de orders.tsx phan trang duoc.
-export const fetchOrders = async (filter: OrderListFilter = {}, page = 1, limit = 20) => {
+export const fetchOrders = async (filter: OrderListFilter = {}, page = 1, limit = 20, cursor?: string) => {
   return api
     .get<PageResponse<OrderView>>('/orders', {
       params: {
         ...(filter.status ? { status: filter.status } : filter.group ? { group: filter.group } : {}),
         page,
         limit,
+        ...(cursor ? { cursor } : {}),
       },
     })
     .then((r) => r.data);
@@ -792,7 +794,7 @@ export interface ReturnRequestBody {
   items: { orderItemId: string; quantity: number }[];
 }
 export const requestReturn = (code: string, body: ReturnRequestBody & Partial<RefundDestinationBody>) =>
-  api.post<ReturnRequestDTO>(`/orders/${code}/return-request`, body).then((r) => r.data);
+  api.post<ReturnRequestDTO>(`/orders/${code}/return-request`, body, imageTimeout(body)).then((r) => r.data);
 /** Số tiền dự kiến hoàn cho các dòng khách đang chọn (cùng cách tính lúc Tubu duyệt). */
 export interface ReturnEstimateDTO {
   isFull: boolean;

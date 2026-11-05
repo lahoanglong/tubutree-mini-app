@@ -32,6 +32,7 @@ import { Text } from '../components/ui/text';
 import { vi } from '../i18n/vi';
 import { formatDate, formatNumber } from '../utils/format';
 import { haptic } from '../utils/haptic';
+import { INPUT_LIMITS } from '../utils/input-limits';
 
 const PAGE_SIZE = 10;
 const DEAD_STATES: readonly MyExternalClaimItem['state'][] = ['VOIDED', 'REVERSED', 'LAPSED'];
@@ -419,7 +420,7 @@ function ClaimForm({ fromCard, channel, initialCode, codeParamRejected }: { from
         )}
         <div style={{ marginTop: 16 }}>
           <Field label={t.inputLabel}>
-            <Input
+            <Input maxLength={INPUT_LIMITS.externalPointsCode}
               placeholder={t.inputPlaceholder}
               value={code}
               onChange={(e) => {

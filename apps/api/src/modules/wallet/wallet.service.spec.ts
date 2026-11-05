@@ -2,6 +2,7 @@ import { BadRequestException, GoneException } from '@nestjs/common';
 import { WalletService } from './wallet.service';
 import { applyWalletDelta } from './wallet-ledger.service';
 import type { PrismaService } from '../../prisma/prisma.service';
+import { fakeKeysetTable } from '../../common/keyset-cursor.testing';
 
 // Sổ cái thật (khoá dòng + ghi wallet_transactions) được kiểm trên Postgres ở
 // test/integration-race/wallet-ledger*.race-spec.ts; ở đây chỉ cần biết service gọi nó đúng.
@@ -80,7 +81,7 @@ describe('WalletService.getTransactions (sao kê Ví, C-060)', () => {
       take: 20,
     });
     expect(count).toHaveBeenCalledWith({ where: { userId: 'u1' } });
-    expect(r.meta).toEqual({ page: 3, limit: 20, total: 45 });
+    expect(r.meta).toEqual({ page: 3, limit: 20, total: 45, nextCursor: null });
   });
 
   it('chỉ lộ mã đơn với dòng tham chiếu ORDER; mã payout/user bên kia (gộp phiên) không trả ra', async () => {
@@ -99,5 +100,66 @@ describe('WalletService.getTransactions (sao kê Ví, C-060)', () => {
       { id: 'w1', delta: -103_000, balanceAfter: 30_000, type: 'WITHDRAW', reason: null, orderId: null, createdAt: at },
     ]);
     expect(JSON.stringify(r.data)).not.toContain('guest-9');
+  });
+});
+
+describe('WalletService.getTransactions — phân trang cursor keyset (L4-05)', () => {
+  const T0 = Date.UTC(2026, 10, 5, 0, 0, 0);
+  const mkRow = (n: number, extra: Record<string, unknown> = {}) => ({
+    id: `w${String(n).padStart(3, '0')}`,
+    userId: 'u1',
+    createdAt: new Date(T0 + Math.floor(n / 2) * 1000),
+    delta: n,
+    balanceAfter: n,
+    type: 'ADJUST',
+    refType: null,
+    refId: null,
+    reason: null,
+    ...extra,
+  });
+  const make = (rows: ReturnType<typeof mkRow>[]) => {
+    const table = fakeKeysetTable(rows);
+    const prisma = { walletTransaction: { findMany: table.findMany, count: table.count } } as unknown as PrismaService;
+    return { table, svc: new WalletService(prisma) };
+  };
+
+  it('trang 2 không lặp, không sót dù có dòng mới chèn vào đầu giữa hai lần gọi (offset sẽ lặp)', async () => {
+    const rows = Array.from({ length: 25 }, (_, i) => mkRow(i + 1));
+    const { table, svc } = make(rows);
+    const p1 = await svc.getTransactions('u1', 1, 10, undefined);
+    expect(p1.data).toHaveLength(10);
+    expect(p1.meta.nextCursor).toEqual(expect.any(String));
+    // Dòng mới nhất chen vào đầu danh sách.
+    table.rows.push(mkRow(99, { createdAt: new Date(T0 + 60_000) }));
+    const p2 = await svc.getTransactions('u1', 1, 10, p1.meta.nextCursor as string);
+    const p3 = await svc.getTransactions('u1', 1, 10, p2.meta.nextCursor as string);
+    const ids = [...p1.data, ...p2.data, ...p3.data].map((r) => r.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids).toHaveLength(25);
+    expect(ids).not.toContain('w099');
+    expect(p3.meta.nextCursor).toBeNull();
+  });
+
+  it('cùng createdAt vẫn không lặp/sót nhờ id làm khoá phụ', async () => {
+    const rows = Array.from({ length: 7 }, (_, i) => mkRow(i + 1, { createdAt: new Date(T0) }));
+    const { svc } = make(rows);
+    const seen: string[] = [];
+    let cursor: string | undefined;
+    for (let i = 0; i < 5; i++) {
+      const page = await svc.getTransactions('u1', 1, 3, cursor);
+      seen.push(...page.data.map((r) => r.id));
+      cursor = (page.meta.nextCursor as string | null) ?? undefined;
+      if (!cursor) break;
+    }
+    expect(seen).toEqual(['w007', 'w006', 'w005', 'w004', 'w003', 'w002', 'w001']);
+  });
+
+  it('không có cursor vẫn phân trang offset như cũ và trả thêm nextCursor để client mới chuyển sang', async () => {
+    const { svc } = make(Array.from({ length: 5 }, (_, i) => mkRow(i + 1)));
+    const r = await svc.getTransactions('u1', 1, 2);
+    expect(r.data.map((x) => x.id)).toEqual(['w005', 'w004']);
+    expect(r.meta).toMatchObject({ page: 1, limit: 2, total: 5, nextCursor: expect.any(String) });
+    const last = await svc.getTransactions('u1', 3, 2);
+    expect(last.meta.nextCursor).toBeNull();
   });
 });

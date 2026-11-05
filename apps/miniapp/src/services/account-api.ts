@@ -108,7 +108,8 @@ export interface WalletTxn {
 
 export interface WalletTxnPage {
   data: WalletTxn[];
-  meta: { page: number; limit: number; total: number };
+  /** nextCursor: con trỏ trang kế (null khi hết); API cũ không trả. */
+  meta: { page: number; limit: number; total: number; nextCursor?: string | null };
 }
 
 export interface ReferralMilestone {
@@ -140,7 +141,7 @@ export interface MeProfile {
 }
 export const getMe = () => api.get<MeProfile>('/me').then((r) => r.data);
 export const updateMe = (data: { fullName?: string; email?: string; avatarUrl?: string; dob?: string }) =>
-  api.patch<MeProfile>('/me', data).then((r) => r.data);
+  api.patch<MeProfile>('/me', data, imageTimeout(data)).then((r) => r.data);
 export const completeOnboarding = (segments: string[]) =>
   api.post<MeProfile>('/me/onboarding', { segments }).then((r) => r.data);
 
@@ -166,6 +167,7 @@ export type {
   PointsCheckInPart,
   WaterCheckInPart,
 } from '@tubutree/app-core/api/loyalty';
+import { imageTimeout } from './http';
 
 /**
  * GET /me/loyalty/member-card. memberCode ("TUBU" + mã giới thiệu duy nhất) là payload DUY NHẤT
@@ -276,8 +278,8 @@ export function tierProgressPercent(ov: LoyaltyOverview): number {
 
 // Wallet
 export const getWallet = () => api.get<WalletSummary>('/me/wallet').then((r) => r.data);
-export const getWalletTransactions = (page: number, limit = 20) =>
-  api.get<WalletTxnPage>('/me/wallet/transactions', { params: { page, limit } }).then((r) => r.data);
+export const getWalletTransactions = (page: number, limit = 20, cursor?: string) =>
+  api.get<WalletTxnPage>('/me/wallet/transactions', { params: { page, limit, ...(cursor ? { cursor } : {}) } }).then((r) => r.data);
 
 // Notifications
 export interface NotificationDTO {

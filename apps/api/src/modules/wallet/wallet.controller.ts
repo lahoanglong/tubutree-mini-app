@@ -1,8 +1,13 @@
 import { Controller, Get, GoneException, Post, Query } from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { KeysetCursorField } from '../../common/keyset-cursor';
 import { PaginationQuery } from '../../common/pagination';
 import { WalletService } from './wallet.service';
 import { RewardPointsService } from './reward-points.service';
+
+export class WalletTransactionsQuery extends PaginationQuery {
+  @KeysetCursorField() cursor?: string;
+}
 
 @Controller()
 export class WalletController {
@@ -17,8 +22,8 @@ export class WalletController {
   }
 
   @Get('me/wallet/transactions')
-  transactions(@CurrentUser('sub') userId: string, @Query() q: PaginationQuery) {
-    return this.wallet.getTransactions(userId, q.page, q.limit);
+  transactions(@CurrentUser('sub') userId: string, @Query() q: WalletTransactionsQuery) {
+    return this.wallet.getTransactions(userId, q.page, q.limit, q.cursor);
   }
 
   // Chính sách Zalo 4.5 cấm rút tiền: route giữ lại trả 410 (không nhận body, không 400 trước 410) để client cũ nhận câu đọc được.

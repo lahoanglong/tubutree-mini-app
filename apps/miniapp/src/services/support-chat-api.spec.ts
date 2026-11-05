@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
-vi.mock('./core-http', () => ({ coreHttp: { get: mocks.get, post: mocks.post } }));
+vi.mock('./core-http', () => ({ coreHttp: { get: mocks.get, post: mocks.post }, coreHttpImage: { post: mocks.post } }));
 
 import { getSupportChatPage, markSupportChatRead, sendSupportChat, supportChatQueryOptions, supportChatSummaryQueryOptions } from './support-chat-api';
 

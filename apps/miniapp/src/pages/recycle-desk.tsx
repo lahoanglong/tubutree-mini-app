@@ -36,6 +36,7 @@ import { Skeleton } from '../components/ui/skeleton';
 import { Heading, Text } from '../components/ui/text';
 import { formatDate, formatDateTime, formatNumber, formatPoints } from '../utils/format';
 import { DESK_REJECTION_OPTIONS, METHOD_LABELS, PAUSED_TEXT, SHORTFALL_LABELS } from '../utils/waste-labels';
+import { INPUT_LIMITS } from '../utils/input-limits';
 
 const COLUMN = { display: 'flex', flexDirection: 'column' } as const;
 const SELECT_STYLE: CSSProperties = {
@@ -154,7 +155,7 @@ function RejectSheet({
         </div>
         {reason === null && <Text variant="body-sm" tone="secondary" as="div">Chọn một lý do</Text>}
         <Field label={noteRequired ? 'Ghi chú (bắt buộc với lý do Khác)' : 'Ghi chú (không bắt buộc)'}>
-          <Input value={note} onChange={(e) => setNote(e.target.value)} />
+          <Input maxLength={INPUT_LIMITS.recycleRejectNote} value={note} onChange={(e) => setNote(e.target.value)} />
         </Field>
       </div>
     </BottomSheet>
@@ -316,7 +317,7 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
           }}
         >
           <Field label="Mã yêu cầu hoặc mã nhận quà">
-            <Input placeholder="VD: TR-6NY3J" value={code} onChange={(e) => setCode(e.target.value)} />
+            <Input maxLength={INPUT_LIMITS.recycleDeskCode} placeholder="VD: TR-6NY3J" value={code} onChange={(e) => setCode(e.target.value)} />
           </Field>
           <Button fullWidth variant="secondary" disabled={code.trim() === ''} loading={find.isPending} onPress={search}>
             Tra mã

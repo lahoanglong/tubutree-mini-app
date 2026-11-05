@@ -35,14 +35,19 @@ export interface StaffListResponse {
 export const listStaff = () => api.get<StaffListResponse>('/admin/staff').then((r) => r.data);
 
 /** `permissions` chỉ gửi khi có (cấp STAFF): không gửi = không đổi nhóm việc đã lưu. */
-export const grantStaff = (phone: string, role: StaffRole, permissions?: StaffPermission[]) =>
+export const grantStaff = (phone: string, role: StaffRole, permissions?: StaffPermission[], reason?: string) =>
   api
-    .post<{ granted: StaffRole; applied: boolean; permissionsChanged?: boolean }>('/admin/staff/grant', { phone, role, ...(permissions ? { permissions } : {}) })
+    .post<{ granted: StaffRole; applied: boolean; permissionsChanged?: boolean }>('/admin/staff/grant', {
+      phone,
+      role,
+      ...(permissions ? { permissions } : {}),
+      ...(reason ? { reason } : {}),
+    })
     .then((r) => r.data);
 
-export const revokeStaff = (phone: string) =>
+export const revokeStaff = (phone: string, reason?: string) =>
   api
-    .post<{ revoked: number; downgraded: boolean; storeBlocked?: boolean }>('/admin/staff/revoke', { phone })
+    .post<{ revoked: number; downgraded: boolean; storeBlocked?: boolean }>('/admin/staff/revoke', { phone, ...(reason ? { reason } : {}) })
     .then((r) => r.data);
 
 /**

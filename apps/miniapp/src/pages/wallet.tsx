@@ -12,6 +12,7 @@ import { useAuthPhase } from '../hooks/use-auth-phase';
 import { walletTxLabel, formatWalletTxTime, walletNegativeNote } from '../utils/wallet-rules';
 import { formatVnd, formatPoints } from '../utils/format';
 import { uniqueById } from '../utils/unique-by-id';
+import { FIRST_PAGE, nextPageParam } from '../utils/keyset-paging';
 import { convertedPointsNote, pointsSummary } from '../utils/points-lots';
 import { CASHBACK_ENABLED } from '../utils/features';
 import { Badge } from '../components/ui/badge';
@@ -45,9 +46,9 @@ export default function WalletPage() {
   const txQ = useInfiniteQuery({
     // Khoá con của ['wallet'] → làm mới ['wallet'] cũng làm mới sao kê.
     queryKey: ['wallet', 'transactions'],
-    queryFn: ({ pageParam }) => getWalletTransactions(pageParam),
-    initialPageParam: 1,
-    getNextPageParam: (last) => (last.meta.page * last.meta.limit < last.meta.total ? last.meta.page + 1 : undefined),
+    queryFn: ({ pageParam }) => (pageParam.cursor ? getWalletTransactions(pageParam.page, 20, pageParam.cursor) : getWalletTransactions(pageParam.page)),
+    initialPageParam: FIRST_PAGE,
+    getNextPageParam: nextPageParam,
     enabled: authed,
   });
   const loyaltyQ = useQuery({ queryKey: ['loyalty'], queryFn: getLoyalty, enabled: authed });

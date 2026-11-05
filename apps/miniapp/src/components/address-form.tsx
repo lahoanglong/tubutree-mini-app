@@ -1,3 +1,4 @@
+import { ADDRESS_INPUT_LIMIT } from '../utils/input-limits';
 import { useEffect, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar, Input } from 'zmp-ui';
@@ -168,6 +169,7 @@ export function AddressForm({ initial, askZaloProfile = false, onCancel, onSaved
     <Field label={FIELD_LABEL[k]} error={touched[k] ? errors[k] : undefined}>
       <Input
         value={form[k]}
+        maxLength={ADDRESS_INPUT_LIMIT[k]}
         onChange={setField(k)}
         onBlur={blurField(k)}
         inputMode={k === 'phone' ? 'numeric' : undefined}
