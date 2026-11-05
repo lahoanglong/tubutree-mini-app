@@ -7,7 +7,8 @@ import { test, expect, type Locator, type Page } from '@playwright/test';
  * UAT quản trị vòng 3 ở hai khung 1440x900 và 768x1024, API và DB thật (chạy qua scripts/web-gate.sh, E2E_SCOPE=web).
  * Các màn: Giờ vàng, Mã giảm giá, Báo cáo (kể cả kỳ trống), Tổng quan chỉ số, Hoa hồng & giá sỉ, Thuế TNCN hoa hồng, Chiến dịch và Combo (ô ngày, ô %).
  * Chỉ /auth/refresh được giả (phiên ADMIN ký bằng đúng JWT_ACCESS_SECRET của API). Mọi mốc ngày tính từ một lần đọc đồng hồ lúc seed, theo lịch Việt Nam;
- * mỗi khung chạy trong một múi giờ trình duyệt khác nhau để ngày đọc theo giờ máy lộ ra. Số tổng lấy từ API lúc kiểm, kèm chênh lệch so với ảnh chụp trước seed.
+ * mỗi khung chạy trong một múi giờ trình duyệt khác nhau để ngày đọc theo giờ máy lộ ra. Số tổng trên màn so với API đọc ngay lúc kiểm (tải lại màn và đọc lại nếu spec khác ghi vào cùng DB giữa chừng);
+ * phần của spec trong số tổng đọc thẳng từ DB theo mã đơn `E2EW13-` và người dùng `e2e-w13-*`.
  * Ảnh chụp (fullPage) ghi vào W13_SCREENS_DIR nếu đặt, tên `NN-<khung>-<màn>-<bước>.png`.
  */
 
@@ -314,30 +315,76 @@ type RangeKey = keyof typeof RANGES;
 /** Khoảng ngày chắc chắn không có đơn nào (tháng 3/2019), để kiểm kỳ trống. */
 const EMPTY = { from: '2019-03-01', to: '2019-03-07', typedFrom: '01032019', typedTo: '07032019' };
 interface RangeTotals { revenue: number; gmv: number; orders: number; cancelled: number; partialRefund: number; newUsers: number }
-interface Baseline {
-  stats: { totalRevenue: number; gmv: number; codPendingValue: number; totalOrders: number };
-  ranges: Record<RangeKey, RangeTotals>;
-  pit: { rows: number; gross: number; tax: number; net: number };
-}
-let BASE!: Baseline;
 
 async function readRange(from: string, to: string): Promise<RangeTotals> {
   const t = (await apiJson(`/admin/reports/revenue?from=${from}&to=${to}`)).totals;
   return { revenue: Number(t.revenue), gmv: Number(t.gmv), orders: Number(t.orders), cancelled: Number(t.cancelled), partialRefund: Number(t.partialRefund), newUsers: Number(t.newUsers) };
 }
-async function readStats(): Promise<Baseline['stats']> {
+async function readStats(): Promise<{ totalRevenue: number; gmv: number; codPendingValue: number; totalOrders: number }> {
   const j = await apiJson('/admin/dashboard/stats');
   return { totalRevenue: Number(j.totalRevenue), gmv: Number(j.gmv), codPendingValue: Number(j.codPendingValue), totalOrders: Number(j.totalOrders) };
 }
 const inRange = (key: RangeKey): readonly SeedOrder[] => ORDERS.filter((o) => o.day >= RANGES[key][0] && o.day <= RANGES[key][1]);
 
+interface OrderPart { orders: number; cancelled: number; revenue: number; gmv: number }
+const partOf = (xs: readonly SeedOrder[]): OrderPart => ({ orders: xs.length, cancelled: xs.filter((o) => o.status === 'CANCELLED').length, revenue: sum(xs.filter((o) => PAID.includes(o))), gmv: sum(xs.filter((o) => GMV.includes(o))) });
+const vnKey = (d: Date): string => new Date(d.getTime() + VN_OFFSET_MS).toISOString().slice(0, 10);
+
+/** Phần của spec trong số tổng, đọc thẳng từ DB theo mã đơn `E2EW13-` (ngày theo giờ VN, để null thì không chặn đầu đó): không phụ thuộc đơn của spec khác chạy cùng DB. */
+async function ownOrders(fromKey: string | null, toKey: string | null): Promise<OrderPart> {
+  const rows: { status: string; paymentStatus: string; total: unknown; createdAt: Date }[] = await withDb((prisma) =>
+    prisma.order.findMany({ where: { code: { startsWith: 'E2EW13-' } }, select: { status: true, paymentStatus: true, total: true, createdAt: true } }),
+  );
+  const inside = rows.filter((r) => (fromKey === null || vnKey(r.createdAt) >= fromKey) && (toKey === null || vnKey(r.createdAt) <= toKey));
+  const money = (xs: typeof rows) => xs.reduce((n, r) => n + Number(r.total), 0);
+  return {
+    orders: inside.length,
+    cancelled: inside.filter((r) => r.status === 'CANCELLED').length,
+    revenue: money(inside.filter((r) => r.status === 'DELIVERED' && r.paymentStatus === 'PAID')),
+    gmv: money(inside.filter((r) => ['CONFIRMED', 'PACKED', 'SHIPPING', 'DELIVERED'].includes(r.status))),
+  };
+}
+
+/**
+ * So số trên màn với API đọc ngay lúc kiểm. Spec khác ghi vào cùng DB (đơn, người dùng, lệnh chi) nên API có thể đổi giữa lúc màn tải và lúc đọc:
+ * lệch thì tải lại màn, mở lại màn đang kiểm và đọc lại API, thử tới khi hai bên khớp. Trả về kết quả của lần đọc khớp.
+ */
+async function expectMatchesApi<T>(page: Page, reopen: () => Promise<void>, check: () => Promise<T>): Promise<T> {
+  let attempt = 0;
+  let last!: T;
+  await expect(async () => {
+    if (attempt++ > 0) {
+      await page.reload();
+      await reopen();
+    }
+    last = await check();
+  }).toPass({ timeout: 90_000, intervals: [500, 1_000, 2_000, 4_000] });
+  return last;
+}
+
 /** Tháng của báo cáo thuế: 3/2026 theo giờ VN. Lệnh 00:30 ngày 01/03 giờ VN còn là 28/02 theo giờ UTC, lệnh 23:30 ngày 28/02 giờ VN thì ngược lại. */
 const PIT_MONTH = '2026-03';
 const PIT_FEB = '2026-02';
+const nextMonth = (ym: string): string => {
+  const [y, m] = ym.split('-').map(Number) as [number, number];
+  return m === 12 ? `${y + 1}-01` : `${y}-${p2(m + 1)}`;
+};
 const readPit = async (month: string) => {
   const j = await apiJson(`/admin/payouts/pit-report?month=${month}`);
   return { rows: Number(j.totals.recipients), gross: Number(j.totals.grossAmount), tax: Number(j.totals.taxWithheld), net: Number(j.totals.netAmount), json: j };
 };
+
+/** Phần của spec trong báo cáo thuế một tháng giờ VN: lệnh chi hoa hồng đã chi của người dùng `e2e-w13-*`, đọc thẳng từ DB. */
+async function ownPit(ym: string): Promise<{ rows: number; gross: number; tax: number; net: number }> {
+  const list: { userId: string; grossAmount: unknown; taxWithheld: unknown; amount: unknown }[] = await withDb((prisma) =>
+    prisma.payout.findMany({
+      where: { userId: { startsWith: W13 }, status: 'PAID', paidAt: { gte: new Date(`${ym}-01T00:00:00+07:00`), lt: new Date(`${nextMonth(ym)}-01T00:00:00+07:00`) } },
+      select: { userId: true, grossAmount: true, taxWithheld: true, amount: true },
+    }),
+  );
+  const add = (pick: (r: (typeof list)[number]) => unknown) => list.reduce((n, r) => n + Number(pick(r)), 0);
+  return { rows: new Set(list.map((r) => r.userId)).size, gross: add((r) => r.grossAmount), tax: add((r) => r.taxWithheld), net: add((r) => r.amount) };
+}
 
 /**
  * Gỡ mọi dòng của spec, chỉ theo tiền tố riêng (`W13 ` ở tên, `E2EW13` ở mã, `e2e-w13-` ở id), theo thứ tự khoá ngoại: bảng con của đơn trước đơn
@@ -383,13 +430,6 @@ async function seedAll(): Promise<void> {
     await user(CUSTOMER.id, `${W13}cust-zalo`, CUSTOMER.name, CUSTOMER.phone, 'E2EW13CU1');
     await user(CTV_A.id, `${W13}ctv-a-zalo`, CTV_A.name, CTV_A.phone, 'E2EW13CA1', 'CUSTOMER', { personalTaxId: CTV_A.taxId });
     await user(CTV_B.id, `${W13}ctv-b-zalo`, CTV_B.name, CTV_B.phone, 'E2EW13CB1');
-
-    // Chụp số liệu trước khi seed đơn và lệnh chi: màn hiện số API lúc kiểm, API tăng đúng phần của spec.
-    const stats = await readStats();
-    const ranges = {} as Record<RangeKey, RangeTotals>;
-    for (const key of Object.keys(RANGES) as RangeKey[]) ranges[key] = await readRange(ymd(RANGES[key][0]), ymd(RANGES[key][1]));
-    const pit = await readPit(PIT_MONTH);
-    BASE = { stats, ranges, pit: { rows: pit.rows, gross: pit.gross, tax: pit.tax, net: pit.net } };
 
     for (const o of ORDERS) {
       await prisma.order.create({
@@ -848,46 +888,61 @@ for (const frame of FRAMES) {
       const w = watch(page);
       await openAdmin(page);
 
-      // Tổng quan chỉ số: số trên thẻ bằng số của API lúc kiểm; API tăng đúng phần đơn của spec.
-      await gotoNav(page, 'Tổng quan chỉ số');
-      const stats = await readStats();
+      // Tổng quan chỉ số: số trên thẻ bằng số của API đọc ngay lúc kiểm; phần đơn của spec (đọc từ DB theo mã E2EW13-) nằm trong số tổng.
+      const openStats = () => gotoNav(page, 'Tổng quan chỉ số');
+      await openStats();
+      const mineAll = await ownOrders(null, null);
+      expect(mineAll, 'DB có đủ đơn seed của spec').toEqual(partOf(ORDERS));
       const revenueCard = page.locator('div.shadow-card').filter({ hasText: 'Doanh thu đã thu' }).first();
-      await expect(revenueCard.locator('.text-2xl')).toHaveText(vnd(stats.totalRevenue));
-      expect(stats.totalRevenue - BASE.stats.totalRevenue, 'doanh thu đã thu tăng đúng đơn đã giao đã thanh toán của spec').toBe(sum(PAID));
-      expect(stats.gmv - BASE.stats.gmv, 'giá trị đơn tăng đúng đơn đã xác nhận trở đi của spec').toBe(sum(GMV));
-      expect(stats.totalOrders - BASE.stats.totalOrders).toBe(ORDERS.length);
-      await expect(page.locator('div.shadow-card').filter({ hasText: 'Tổng đơn hàng' }).first().locator('.text-2xl')).toHaveText(String(stats.totalOrders));
+      await expectMatchesApi(page, openStats, async () => {
+        const stats = await readStats();
+        await expect(revenueCard.locator('.text-2xl')).toHaveText(vnd(stats.totalRevenue));
+        await expect(page.locator('div.shadow-card').filter({ hasText: 'Tổng đơn hàng' }).first().locator('.text-2xl')).toHaveText(String(stats.totalOrders));
+        expect(stats.totalRevenue, 'doanh thu đã thu gồm đơn đã giao đã thanh toán của spec').toBeGreaterThanOrEqual(mineAll.revenue);
+        expect(stats.gmv, 'giá trị đơn gồm đơn đã xác nhận trở đi của spec').toBeGreaterThanOrEqual(mineAll.gmv);
+        expect(stats.totalOrders, 'tổng đơn gồm đơn của spec').toBeGreaterThanOrEqual(mineAll.orders);
+      });
       await expectCleanScreen(page, 'tong-quan');
       await shot(page, 'tong-quan', 'the-so');
 
-      await gotoNav(page, 'Báo cáo');
-      await expect(page.getByRole('heading', { name: 'Doanh thu theo ngày và kênh' })).toBeVisible();
+      const openReports = async () => {
+        await gotoNav(page, 'Báo cáo');
+        await expect(page.getByRole('heading', { name: 'Doanh thu theo ngày và kênh' })).toBeVisible();
+      };
+      await openReports();
       const tile = (label: string) => page.locator(`[data-kpi="${label}"] dd`);
       const preset = (name: string) => page.getByRole('button', { name, exact: true });
       const from = page.getByRole('textbox', { name: 'Từ ngày', exact: true });
       const to = page.getByRole('textbox', { name: 'Đến ngày', exact: true });
-      /** Mọi ô số liệu của màn bằng số của API cho khoảng đó (đọc lại sau khi màn đã đổi). */
-      const expectTiles = async (fromKey: string, toKey: string, why: string) => {
-        const t = await readRange(fromKey, toKey);
-        await expect(tile('Doanh thu (đã thu)'), why).toHaveText(vnd(t.revenue));
-        await expect(tile('Tổng giá trị đơn đặt'), why).toHaveText(vnd(t.gmv));
-        await expect(tile('Đơn đặt'), why).toHaveText(String(t.orders));
-        await expect(tile('Đơn huỷ / trả'), why).toHaveText(String(t.cancelled));
-        await expect(tile('Đã hoàn một phần'), why).toHaveText(vnd(t.partialRefund));
-        await expect(tile('Khách mới'), why).toHaveText(String(t.newUsers));
-        return t;
-      };
+      /** Mọi ô số liệu của màn bằng số của API cho khoảng đó, đọc ngay lúc kiểm; lệch thì mở lại Báo cáo, chọn lại khoảng (`pick`) và đọc lại. */
+      const expectTiles = (fromKey: string, toKey: string, why: string, pick: () => Promise<void>) =>
+        expectMatchesApi(page, async () => { await openReports(); await pick(); }, async () => {
+          const t = await readRange(fromKey, toKey);
+          await expect(tile('Doanh thu (đã thu)'), why).toHaveText(vnd(t.revenue));
+          await expect(tile('Tổng giá trị đơn đặt'), why).toHaveText(vnd(t.gmv));
+          await expect(tile('Đơn đặt'), why).toHaveText(String(t.orders));
+          await expect(tile('Đơn huỷ / trả'), why).toHaveText(String(t.cancelled));
+          await expect(tile('Đã hoàn một phần'), why).toHaveText(vnd(t.partialRefund));
+          await expect(tile('Khách mới'), why).toHaveText(String(t.newUsers));
+          return t;
+        });
 
-      // Mặc định 30 ngày; các mốc nhanh 7, 30, 90 ngày: số bằng API và tăng đúng phần đơn của spec; dòng chú thích nói đúng ngày và số ngày.
+      // Mặc định 30 ngày; các mốc nhanh 7, 30, 90 ngày: số bằng API và gồm đơn của spec (đọc từ DB theo mã E2EW13- và ngày giờ VN); dòng chú thích nói đúng ngày và số ngày.
       for (const [key, name, days] of [['r7', '7 ngày', 7], ['r30', '30 ngày', 30], ['r90', '90 ngày', 90]] as const) {
-        await preset(name).click();
-        await expect(preset(name)).toHaveAttribute('aria-pressed', 'true');
-        const t = await expectTiles(ymd(RANGES[key][0]), ymd(RANGES[key][1]), name);
-        const mine = inRange(key);
-        expect(t.revenue - BASE.ranges[key].revenue, `${name}: doanh thu tăng đúng đơn của spec`).toBe(sum(mine.filter((o) => PAID.includes(o))));
-        expect(t.gmv - BASE.ranges[key].gmv, `${name}: giá trị đơn tăng đúng`).toBe(sum(mine.filter((o) => GMV.includes(o))));
-        expect(t.orders - BASE.ranges[key].orders, `${name}: số đơn tăng đúng`).toBe(mine.length);
-        expect(t.cancelled - BASE.ranges[key].cancelled, `${name}: đơn huỷ tăng đúng`).toBe(mine.filter((o) => o.status === 'CANCELLED').length);
+        const pickPreset = async () => {
+          await preset(name).click();
+          await expect(preset(name)).toHaveAttribute('aria-pressed', 'true');
+        };
+        await pickPreset();
+        const fromKey = ymd(RANGES[key][0]);
+        const toKey = ymd(RANGES[key][1]);
+        const mine = await ownOrders(fromKey, toKey);
+        expect(mine, `${name}: DB có đúng đơn seed của spec trong khoảng`).toEqual(partOf(inRange(key)));
+        const t = await expectTiles(fromKey, toKey, name, pickPreset);
+        expect(t.revenue, `${name}: doanh thu gồm đơn của spec`).toBeGreaterThanOrEqual(mine.revenue);
+        expect(t.gmv, `${name}: giá trị đơn gồm đơn của spec`).toBeGreaterThanOrEqual(mine.gmv);
+        expect(t.orders, `${name}: số đơn gồm đơn của spec`).toBeGreaterThanOrEqual(mine.orders);
+        expect(t.cancelled, `${name}: đơn huỷ gồm đơn của spec`).toBeGreaterThanOrEqual(mine.cancelled);
         await expect(page.getByText(new RegExp(`${escapeRe(dmy(RANGES[key][0]))} – ${escapeRe(dmy(0))} \\(${days} ngày\\)`))).toBeVisible();
         await expect(from).toHaveValue(dmy(RANGES[key][0]));
         await expect(to).toHaveValue(dmy(0));
@@ -897,12 +952,15 @@ for (const frame of FRAMES) {
       await shot(page, 'bao-cao', '90-ngay');
 
       // Tuỳ chọn: một ngày có đơn (đơn A, ngày -2) cho đúng số tiền của đơn.
-      await paste(from, dmyDigits(-2));
-      await paste(to, dmyDigits(-2));
-      await expect(from).toHaveValue(dmy(-2));
-      await expect(to).toHaveValue(dmy(-2));
-      await expect(preset('7 ngày')).toHaveAttribute('aria-pressed', 'false');
-      const one = await expectTiles(ymd(-2), ymd(-2), 'một ngày tuỳ chọn');
+      const pickDay = async () => {
+        await paste(from, dmyDigits(-2));
+        await paste(to, dmyDigits(-2));
+        await expect(from).toHaveValue(dmy(-2));
+        await expect(to).toHaveValue(dmy(-2));
+        await expect(preset('7 ngày')).toHaveAttribute('aria-pressed', 'false');
+      };
+      await pickDay();
+      const one = await expectTiles(ymd(-2), ymd(-2), 'một ngày tuỳ chọn', pickDay);
       await expect(page.locator(`tr[data-day="${ymd(-2)}"]`)).toContainText(dmy(-2));
       expect(one.revenue, 'ngày -2: doanh thu không nhỏ hơn đơn A của spec').toBeGreaterThanOrEqual(ORDERS[0]!.total);
       await shot(page, 'bao-cao', 'tuy-chon-mot-ngay');
@@ -937,10 +995,13 @@ for (const frame of FRAMES) {
       await shot(page, 'bao-cao', 'qua-nam');
 
       // Kỳ trống: một tuần năm 2019 không có đơn nào. Mọi ô là 0, có câu "Không có đơn", không NaN, không chia cho 0.
-      await paste(from, EMPTY.typedFrom);
-      await paste(to, EMPTY.typedTo);
-      await expect(from).toHaveValue('01/03/2019');
-      const empty = await expectTiles(EMPTY.from, EMPTY.to, 'kỳ trống');
+      const pickEmpty = async () => {
+        await paste(from, EMPTY.typedFrom);
+        await paste(to, EMPTY.typedTo);
+        await expect(from).toHaveValue('01/03/2019');
+      };
+      await pickEmpty();
+      const empty = await expectTiles(EMPTY.from, EMPTY.to, 'kỳ trống', pickEmpty);
       expect([empty.revenue, empty.gmv, empty.orders, empty.cancelled, empty.partialRefund], 'kỳ trống: API trả toàn số 0').toEqual([0, 0, 0, 0, 0]);
       await expect(page.getByText('Không có đơn nào trong khoảng ngày này.')).toBeVisible();
       await expect(page.locator('tr[data-day]'), 'kỳ trống: không có dòng ngày nào').toHaveCount(0);
@@ -1142,17 +1203,29 @@ for (const frame of FRAMES) {
       }
 
       await openAdmin(page);
-      await gotoNav(page, 'Thuế TNCN hoa hồng');
-      await expect(page.getByRole('heading', { name: 'Thuế TNCN hoa hồng', level: 2 })).toBeVisible();
-      const now = await readPit(cur);
+      const openTax = async () => {
+        await gotoNav(page, 'Thuế TNCN hoa hồng');
+        await expect(page.getByRole('heading', { name: 'Thuế TNCN hoa hồng', level: 2 })).toBeVisible();
+      };
+      await openTax();
+      /** Tổng của tháng `ym` trên màn bằng số của API đọc ngay lúc kiểm; lệch (spec khác vừa ghi lệnh chi) thì mở lại màn, chọn lại tháng và đọc lại. */
+      const expectSummary = (ym: string) => expectMatchesApi(page, async () => { await openTax(); if (ym !== cur) await pickMonth(ym); }, async () => {
+        const t = await readPit(ym);
+        await expect(page.getByText(summary(ym, t))).toBeVisible();
+        return t;
+      });
       await expect(page.getByLabel('Tháng báo cáo: tháng', { exact: true }), 'mặc định là tháng hiện tại giờ Việt Nam').toHaveValue(cur.slice(5));
-      await expect(page.getByText(summary(cur, now))).toBeVisible();
+      await expectSummary(cur);
 
       // Tháng 3/2026: lệnh 00:30 ngày 01/03 giờ VN (còn 28/02 theo UTC) tính vào tháng 3; lệnh 23:30 ngày 28/02 giờ VN tính vào tháng 2.
-      const mar = await readPit(PIT_MONTH);
-      expect({ rows: mar.rows - BASE.pit.rows, gross: mar.gross - BASE.pit.gross, tax: mar.tax - BASE.pit.tax, net: mar.net - BASE.pit.net }, 'tháng 3: chênh so với trước seed đúng phần của spec').toEqual({ rows: 2, gross: 13_500_000, tax: 1_350_000, net: 12_150_000 });
+      const ownMar = await ownPit(PIT_MONTH);
+      expect(ownMar, 'tháng 3: DB có đúng hai lệnh chi của spec (theo người dùng e2e-w13-*)').toEqual({ rows: 2, gross: 13_500_000, tax: 1_350_000, net: 12_150_000 });
       await pickMonth(PIT_MONTH);
-      await expect(page.getByText(summary(PIT_MONTH, mar))).toBeVisible();
+      const mar = await expectSummary(PIT_MONTH);
+      expect(mar.rows, 'tháng 3: tổng gồm người nhận của spec').toBeGreaterThanOrEqual(ownMar.rows);
+      expect(mar.gross, 'tháng 3: thu nhập gồm lệnh chi của spec').toBeGreaterThanOrEqual(ownMar.gross);
+      expect(mar.tax, 'tháng 3: thuế gồm khoản khấu trừ của spec').toBeGreaterThanOrEqual(ownMar.tax);
+      expect(mar.net, 'tháng 3: thực chi gồm lệnh chi của spec').toBeGreaterThanOrEqual(ownMar.net);
       await expect(taxRow(CTV_A.name).locator('td')).toHaveText([new RegExp(`${CTV_A.name}\\s*${CTV_A.phone}`), CTV_A.taxId, '1', vnd(6_000_000), vnd(600_000), vnd(5_400_000)]);
       await expect(taxRow(CTV_B.name).locator('td')).toHaveText([new RegExp(`${CTV_B.name}\\s*${CTV_B.phone}`), 'Thiếu MST/CCCD', '1', vnd(7_500_000), vnd(750_000), vnd(6_750_000)]);
       await expect(taxRow(CTV_A.name), 'lệnh 23:30 ngày 28/02 không lọt vào tháng 3').not.toContainText(vnd(9_000_000));
@@ -1162,9 +1235,9 @@ for (const frame of FRAMES) {
       await expectCleanScreen(page, 'thue-tncn-thang-3');
       await shot(page, 'thue-tncn', 'thang-3');
 
-      const feb = await readPit(PIT_FEB);
+      expect(await ownPit(PIT_FEB), 'tháng 2: DB có đúng một lệnh chi của spec').toEqual({ rows: 1, gross: 3_000_000, tax: 0, net: 3_000_000 });
       await pickMonth(PIT_FEB);
-      await expect(page.getByText(summary(PIT_FEB, feb))).toBeVisible();
+      await expectSummary(PIT_FEB);
       await expect(taxRow(CTV_A.name).locator('td')).toHaveText([new RegExp(`${CTV_A.name}\\s*${CTV_A.phone}`), CTV_A.taxId, '1', vnd(3_000_000), vnd(0), vnd(3_000_000)]);
       await expect(taxRow(CTV_B.name), 'CTV B không có lệnh chi nào trong tháng 2').toHaveCount(0);
       await expectCleanScreen(page, 'thue-tncn-thang-2');
