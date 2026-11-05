@@ -21,6 +21,7 @@ import { VoucherSheet } from '../components/checkout/voucher-sheet';
 import { useCheckoutCoupon } from '../components/checkout/use-coupon-hint';
 import { normalizeTaxCode, shouldShowTaxCodeError } from '@tubutree/app-core/commerce/tax-code';
 import { flashLimitNotice, isCartFixableError } from '@tubutree/app-core/commerce/flash-limit';
+import { isPriceChangedError, priceChangedActions } from '@tubutree/app-core/commerce/checkout-issues';
 import { checkoutPlaceHint, checkoutTotalText } from '@tubutree/app-core/commerce/checkout-display';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { couponAutoCopy, couponHintText } from '@tubutree/app-core/coupon-use';
@@ -115,6 +116,8 @@ export default function CheckoutPage() {
   const [summarySheetOpen, setSummarySheetOpen] = useState(false);
   const [placed, setPlaced] = useState<PlacedOrder | null>(null);
   const [priceChanged, setPriceChanged] = useState(false);
+  // Mốc thời gian lúc khách nhận giá mới: báo "Tổng mới" khi báo giá tải lại xong sau mốc này.
+  const [priceAcceptedAt, setPriceAcceptedAt] = useState<number | null>(null);
   const [totalChanged, setTotalChanged] = useState<string | null>(null);
   // Lỗi đặt đơn chỉ sửa được ở giỏ (hết tồn, vượt suất giờ vàng): giữ trên màn kèm đường về giỏ, không để toast trôi mất.
   const [cartIssue, setCartIssue] = useState<string | null>(null);
@@ -202,6 +205,17 @@ export default function CheckoutPage() {
     queryFn: () => checkoutQuote(addressId!, pointsToUse, ctvSlug, itemIds),
     enabled: !!addressId && authed && cartReady && cartHasItems,
   });
+
+  useEffect(() => {
+    if (priceAcceptedAt === null) return;
+    if (quote.isError) {
+      setPriceAcceptedAt(null);
+      return;
+    }
+    if (!quote.isSuccess || quote.isFetching || !quote.data || quote.dataUpdatedAt <= priceAcceptedAt) return;
+    setPriceAcceptedAt(null);
+    openSnackbar({ text: fillCopy('checkout.priceUpdated', { price: formatVnd(quote.data.total) }), type: 'success' });
+  }, [priceAcceptedAt, quote.isError, quote.isSuccess, quote.isFetching, quote.data, quote.dataUpdatedAt, openSnackbar]);
 
   const checkoutItems = itemIds
     ? (cart.data?.items ?? []).filter((it) => itemIds.includes(it.id))
@@ -375,7 +389,8 @@ export default function CheckoutPage() {
         openSnackbar({ text: getErrorMessage(e), type: 'error' });
         return;
       }
-      if (getErrorMessage(e) === 'PRICE_CHANGED') {
+      // `getErrorMessage` đã biến mã không dấu thành câu chung, nên nhận ra bằng thân phản hồi thô.
+      if (isPriceChangedError(e)) {
         setPriceChanged(true);
         return;
       }
@@ -1206,19 +1221,33 @@ export default function CheckoutPage() {
         open={priceChanged}
         onClose={() => setPriceChanged(false)}
         title={vi.flashSale.priceChangedTitle}
-        description={fillCopy('flash.priceChangedBody')}
+        description={fillCopy('checkout.priceChangedBody')}
         footer={
-          <Button
-            fullWidth
-            onPress={() => {
-              setPriceChanged(false);
-              void queryClient.invalidateQueries({ queryKey: ['cart'] });
-              void queryClient.invalidateQueries({ queryKey: ['quote'] });
-              navigate('/cart');
-            }}
-          >
-            {vi.flashSale.priceChangedCta}
-          </Button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <Button
+              fullWidth
+              onPress={() => {
+                setPriceChanged(false);
+                setPriceAcceptedAt(Date.now());
+                void queryClient.invalidateQueries({ queryKey: ['cart'] });
+                void queryClient.invalidateQueries({ queryKey: ['quote'] });
+              }}
+            >
+              {priceChangedActions().accept}
+            </Button>
+            <Button
+              fullWidth
+              variant="secondary"
+              onPress={() => {
+                setPriceChanged(false);
+                void queryClient.invalidateQueries({ queryKey: ['cart'] });
+                void queryClient.invalidateQueries({ queryKey: ['quote'] });
+                navigate('/cart');
+              }}
+            >
+              {priceChangedActions().viewCart}
+            </Button>
+          </div>
         }
       >
         {null}

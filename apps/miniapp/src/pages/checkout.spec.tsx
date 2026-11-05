@@ -2107,3 +2107,62 @@ describe('CheckoutPage: tự áp mã giảm nhiều nhất, gợi ý khi chưa �
     await waitFor(() => expect(mocks.voucherProps[mocks.voucherProps.length - 1]!.busy).toBe(false));
   });
 });
+
+describe('CheckoutPage — giá đổi lúc đặt (hk)', () => {
+  const priceChangedErr = () =>
+    new HttpError('Bad Request', 'ERR_BAD_REQUEST', { status: 400, data: { statusCode: 400, message: 'PRICE_CHANGED' } });
+
+  beforeEach(() => {
+    mocks.publicConfig.waste.pickup = false;
+    vi.clearAllMocks();
+    mocks.placeOrder.mockReset();
+    sessionStorage.clear();
+    localStorage.clear();
+    mocks.sfCtx.slug = null;
+    mocks.sfCtx.referralCode = null;
+    mocks.getCouponPreviews.mockResolvedValue([]);
+    mocks.getAddresses.mockResolvedValue([ADDRESS]);
+    mocks.getCart.mockResolvedValue(CART);
+    mocks.checkoutQuote.mockResolvedValue(QUOTE);
+    mocks.ensurePhone.mockResolvedValue('0900000000');
+    mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
+  });
+
+  it('PRICE_CHANGED (axios, thân phản hồi chỉ là mã không dấu) → sheet giá đổi với "Cập nhật giá mới", không phải toast chung', async () => {
+    mocks.placeOrder.mockRejectedValue(priceChangedErr());
+    renderPage();
+    await placeOrderClick();
+    expect(await screen.findByText('Giá ưu đãi đã thay đổi')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Cập nhật giá mới' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Xem lại giỏ hàng' })).toBeInTheDocument();
+    expect(mocks.openSnackbar).not.toHaveBeenCalled();
+  });
+
+  it('"Cập nhật giá mới" ở lại màn thanh toán, tải lại giỏ và báo giá, báo tổng mới và đặt tiếp với tổng mới', async () => {
+    mocks.placeOrder.mockRejectedValueOnce(priceChangedErr()).mockResolvedValueOnce({ id: 'o1', code: 'TT001' });
+    renderPage();
+    await placeOrderClick();
+    const cartCalls = mocks.getCart.mock.calls.length;
+    mocks.checkoutQuote.mockResolvedValue({ ...QUOTE, total: 75_000 });
+    fireEvent.click(await screen.findByRole('button', { name: 'Cập nhật giá mới' }));
+    await waitFor(() => expect(mocks.getCart.mock.calls.length).toBeGreaterThan(cartCalls));
+    await waitFor(() =>
+      expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Đã cập nhật giá. Tổng mới 75.000đ.' })),
+    );
+    expect(mocks.navigate).not.toHaveBeenCalled();
+    const btn = await screen.findByText('Đặt hàng · 75.000đ');
+    await waitFor(() => expect(btn.closest('button')).not.toBeDisabled());
+    fireEvent.click(btn);
+    await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(2));
+    expect((mocks.placeOrder.mock.calls[1]![0] as Record<string, unknown>).expectedTotal).toBe(75_000);
+  });
+
+  it('"Xem lại giỏ hàng" vẫn đưa sang giỏ', async () => {
+    mocks.placeOrder.mockRejectedValue(priceChangedErr());
+    renderPage();
+    await placeOrderClick();
+    fireEvent.click(await screen.findByRole('button', { name: 'Xem lại giỏ hàng' }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/cart');
+  });
+});
