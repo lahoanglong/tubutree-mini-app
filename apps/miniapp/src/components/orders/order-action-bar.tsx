@@ -25,11 +25,13 @@ export interface OrderActionBarProps {
   returnMore?: boolean;
   /** Dòng nhỏ trên nút chính, ví dụ "Còn 2 giờ 05 phút để thanh toán". */
   note?: string | null;
+  /** Đang gửi một việc (huỷ đơn): khoá nút chính để không gửi hai lần. */
+  busy?: boolean;
   onAction: (kind: OrderActionKind) => void;
 }
 
 /** Thanh nút dính đáy của đơn: đúng một nút chính theo trạng thái, các việc còn lại vào "Thêm thao tác". */
-export function OrderActionBar({ plan, returnMore, note, onAction }: OrderActionBarProps) {
+export function OrderActionBar({ plan, returnMore, note, busy, onAction }: OrderActionBarProps) {
   const [menu, setMenu] = useState(false);
   const { primary, more } = plan;
   if (!primary) return null;
@@ -52,6 +54,7 @@ export function OrderActionBar({ plan, returnMore, note, onAction }: OrderAction
         primary={
           <Button
             fullWidth
+            disabled={busy}
             variant={primary === 'cancel' ? 'secondary' : 'primary'}
             onPress={() => onAction(primary)}
             style={primary === 'cancel' ? { color: 'var(--color-text-danger)' } : { fontWeight: 700 }}

@@ -26,7 +26,7 @@ export function OrderShipping({ partner, code, status, events = [] }: OrderShipp
     );
   };
   return (
-    <section aria-label={fillCopy('order.shipping.title')} data-testid="order-shipping" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <section aria-label={fillCopy('order.shipping.title')} data-testid="order-shipping" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-inset-card)' }}>
       <Text variant="body-sm" as="h2" style={{ fontWeight: 700 }}>
         {fillCopy('order.shipping.title')}
       </Text>
@@ -41,7 +41,7 @@ export function OrderShipping({ partner, code, status, events = [] }: OrderShipp
         </div>
       )}
       {code && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--space-inset-card)' }}>
           <div style={{ minWidth: 0 }}>
             <Text variant="caption" tone="tertiary" as="div">
               {fillCopy('order.shipping.code')}
@@ -61,7 +61,7 @@ export function OrderShipping({ partner, code, status, events = [] }: OrderShipp
         </Text>
       )}
       {events.length > 0 && (
-        <ul aria-label="Mốc vận chuyển" style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <ul aria-label="Mốc vận chuyển" style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 'var(--space-stack-sm)' }}>
           {events.map((ev, i) => (
             <li key={`${ev.at ?? ''}-${i}`}>
               <Text variant="caption" tone={ev.latest ? 'primary' : 'secondary'} as="div" style={{ fontWeight: ev.latest ? 600 : 400 }}>

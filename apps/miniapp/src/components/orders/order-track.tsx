@@ -24,7 +24,7 @@ function StepHint({ step, now }: { step: TrackStep; now?: number }): ReactNode {
         </Text>
       )}
       {step.events.length > 0 && (
-        <ul aria-label="Mốc vận chuyển" style={{ listStyle: 'none', margin: '6px 0 0', padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <ul aria-label="Mốc vận chuyển" style={{ listStyle: 'none', margin: 0, marginTop: 'var(--space-stack-xs)', padding: 0, display: 'flex', flexDirection: 'column', gap: 'var(--space-stack-sm)' }}>
           {step.events.map((ev, i) => (
             <li key={`${ev.at ?? ''}-${i}`} data-latest={ev.latest ? 'true' : undefined}>
               <Text variant="caption" tone={ev.latest ? 'primary' : 'secondary'} as="div" style={{ fontWeight: ev.latest ? 600 : 400 }}>

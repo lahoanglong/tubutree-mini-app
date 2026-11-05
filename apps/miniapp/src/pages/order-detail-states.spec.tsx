@@ -230,7 +230,7 @@ describe('OrderDetailPage — nút theo trạng thái (gói hl)', () => {
     mocks.fetchOrder.mockResolvedValue({ ...ORDER, ...STATES[0]!.order, createdAt: hoursFromNow(-1), updatedAt: hoursFromNow(-1) });
     renderPage();
     expect(await screen.findByText(/Thanh toán trước 14:00 05\/11, còn 2 giờ/)).toBeInTheDocument();
-    expect(screen.getByText('Đơn đang chờ bạn chuyển khoản.')).toBeInTheDocument();
+    expect(screen.getByText('Đơn đang chờ bạn thanh toán.')).toBeInTheDocument();
     expect(within(bar()).getByText(/Còn 2 giờ/)).toBeInTheDocument();
   });
 

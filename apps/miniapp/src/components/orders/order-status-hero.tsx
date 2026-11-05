@@ -18,7 +18,7 @@ export function OrderStatusHero({ headline, statusLabel, stamp, tone }: OrderSta
     <section
       data-testid="status-hero"
       aria-label="Tình trạng đơn hàng"
-      style={{ background: tone.bg, color: tone.fg, padding: 16, display: 'flex', flexDirection: 'column', gap: 4 }}
+      style={{ background: tone.bg, color: tone.fg, padding: 'var(--space-inset-page)', display: 'flex', flexDirection: 'column', gap: 'var(--space-stack-xs)' }}
     >
       <Text variant="caption" as="p" style={inherit}>
         {stamp.label} <span>{shortDateTime(stamp.at)}</span>

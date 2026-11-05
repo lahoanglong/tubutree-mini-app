@@ -646,7 +646,7 @@ export default function OrderDetailPage() {
         <SupportContact orderCode={o.code} />
       </Box>
 
-      <OrderActionBar plan={plan} returnMore={orderReturns.some((r) => r.status === 'APPROVED')} note={payNote} onAction={onAction} />
+      <OrderActionBar plan={plan} returnMore={orderReturns.some((r) => r.status === 'APPROVED')} note={payNote} busy={cancel.isPending} onAction={onAction} />
 
       <BottomSheet open={contactOpen} onClose={() => setContactOpen(false)} title={fillCopy('order.action.contact')}>
         <SupportContact orderCode={o.code} />
