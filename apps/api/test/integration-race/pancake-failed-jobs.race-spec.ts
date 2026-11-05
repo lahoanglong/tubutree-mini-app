@@ -671,6 +671,32 @@ const url = process.env.TEST_REDIS_URL;
     expect(alerts.alert.mock.calls.filter(([code]) => code === x.code)).toHaveLength(0);
   });
 
+  it('lượt đẩy lỗi dứt khoát, markOverdue đánh STALE đúng giữa lúc đọc và lúc gắn nhắc: không còn câu "sửa rồi bấm Đẩy lại, hệ thống chỉ hỏi lại" nằm trên đơn STALE', async () => {
+    const x = await order();
+    await prisma.order.update({ where: { id: x.id }, data: { pancakePushStatus: 'PENDING' } });
+    // Lệnh đọc của failureReminder (có include) trả bản chụp CŨ (PENDING), rồi markOverdue đánh STALE: câu ghi lời nhắc thường phải bị từ chối
+    // trong chính điều kiện `pancakePushStatus <> 'STALE'`.
+    const racing = new PancakeOrderService(
+      prismaStaleRead(
+        'findUnique',
+        async () => {
+          await prisma.order.update({ where: { id: x.id }, data: { pancakePushStatus: 'STALE' } });
+        },
+        (args) => (args as { include?: unknown }).include !== undefined,
+      ),
+      client as unknown as PancakeClient,
+      queue,
+      undefined,
+      alerts as unknown as GomdonAlertService,
+    );
+    alerts.alert.mockClear();
+    await racing.markPushFailure(x.id, new PancakeApiError('Pancake trả 422 khi tạo đơn: x', false, false, 422), true);
+    const after = await prisma.order.findUniqueOrThrow({ where: { id: x.id } });
+    expect(after.pancakePushStatus).toBe('STALE');
+    expect(after.pancakeAttention ?? '').not.toMatch(/tự hỏi lại|tự thử lại|hệ thống chỉ hỏi lại/);
+    expect(alerts.alert.mock.calls.filter(([code]) => code === x.code)).toHaveLength(0);
+  });
+
   it('cron tự đẩy bỏ qua đơn STALE: không xếp job, không đóng dấu lần thử, không gọi createOrder', async () => {
     const x = await order();
     // Đóng dấu mọi đơn chưa từng thử khác để lô 50 đơn của pushStale (chưa thử đứng đầu) chắc chắn đủ chỗ cho X nếu X còn đủ điều kiện.

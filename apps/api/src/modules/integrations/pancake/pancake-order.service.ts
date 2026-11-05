@@ -45,6 +45,7 @@ import {
   ATTENTION_CANCEL_PENDING,
   ATTENTION_PAYMENT_PENDING,
   ATTENTION_PUSH_FAILED,
+  ATTENTION_PUSH_RETRYING,
   ATTENTION_SETTLED_BY_CANCEL,
   clearPancakeAttention,
   flagPancakeAttention,
@@ -526,7 +527,7 @@ export class PancakeOrderService {
     const hint = transientLike
       ? 'Hệ thống tự thử lại mỗi 15 phút; sửa nguyên nhân rồi bấm "Đẩy lại Pancake".'
       : `Thử lại không tự hết lỗi: sửa nguyên nhân rồi bấm "Đẩy lại Pancake" (hệ thống chỉ hỏi lại mỗi ${PUSH_RETRY.SLOW_MINUTES} phút). Không tạo tay đơn này trên Pancake: hệ thống vẫn tự hỏi lại, làm vậy sẽ thành hai đơn kho.`;
-    return `${ATTENTION_PUSH_FAILED} (kho chưa thấy đơn): ${cause}. ${hint}`;
+    return `${ATTENTION_PUSH_RETRYING}: ${cause}. ${hint}`;
   }
 
   /**

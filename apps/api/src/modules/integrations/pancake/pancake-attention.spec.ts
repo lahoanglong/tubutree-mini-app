@@ -3,6 +3,7 @@ import {
   ATTENTION_COD_RETURN_UNVERIFIED,
   ATTENTION_PARTIAL_RETURN_ACK,
   ATTENTION_PUSH_FAILED,
+  ATTENTION_PUSH_RETRYING,
   flagPancakeAttention,
   removeAttentionReason,
   removeAttentionReasonsByPrefix,
@@ -41,6 +42,53 @@ describe('writePancakeAttention — lời "Chưa đẩy được đơn sang Panc
     const { prisma, row } = fakeOrderDb([baseOrder({ pancakeOrderId: 'pk-1' })]);
     expect(await writePancakeAttention(prisma as never, 'o1', WAYBILL)).toBe(WAYBILL);
     expect(row().pancakeAttention).toBe(WAYBILL);
+  });
+});
+
+describe('writePancakeAttention — lời "hệ thống tự thử lại" không bao giờ nằm trên đơn STALE (B1)', () => {
+  const retrying = `${ATTENTION_PUSH_RETRYING}: Pancake trả 503. Hệ thống tự thử lại mỗi 15 phút; sửa nguyên nhân rồi bấm "Đẩy lại Pancake".`;
+  const staleReminder = `${ATTENTION_PUSH_FAILED} (quá hạn tự đẩy) — lượt đẩy đang bay vừa lỗi: kiểm tra kho đã giao tay chưa; chưa thì bấm "Đẩy lại Pancake".`;
+
+  it('đơn đã STALE (markOverdue chen giữa lúc đọc và lúc gắn): câu ghi từ chối, không báo admin, không lặp vòng đọc-ghi', async () => {
+    const { prisma, row } = fakeOrderDb([baseOrder({ pancakePushStatus: 'STALE' })]);
+    const alerts = { alert: jest.fn().mockResolvedValue(undefined) };
+    await flagPancakeAttention(prisma as unknown as PrismaService, alerts as never, { id: 'o1', code: 'TUBU1' }, retrying);
+    expect(row().pancakeAttention ?? null).toBeNull();
+    expect(alerts.alert).not.toHaveBeenCalled();
+    expect(prisma.order.findUnique.mock.calls.length).toBeLessThanOrEqual(1);
+  });
+
+  it('ô đang có lý do khác mà đơn STALE: lời "tự thử lại" không nối vào, ô giữ nguyên', async () => {
+    const { prisma, row } = fakeOrderDb([baseOrder({ pancakePushStatus: 'STALE', pancakeAttention: ATTENTION_COD_RETURN_UNVERIFIED })]);
+    expect(await writePancakeAttention(prisma as never, 'o1', retrying)).toBeNull();
+    expect(row().pancakeAttention).toBe(ATTENTION_COD_RETURN_UNVERIFIED);
+  });
+
+  it('đơn chưa STALE (PENDING, null): ghi như thường', async () => {
+    for (const status of [null, 'PENDING', 'FAILED']) {
+      const { prisma, row } = fakeOrderDb([baseOrder({ pancakePushStatus: status })]);
+      expect(await writePancakeAttention(prisma as never, 'o1', retrying)).toBe(retrying);
+      expect(row().pancakeAttention).toBe(retrying);
+    }
+  });
+
+  it('lời nhắc của đơn STALE ("quá hạn tự đẩy") và lý do loại khác vẫn ghi được lên đơn STALE', async () => {
+    const a = fakeOrderDb([baseOrder({ pancakePushStatus: 'STALE' })]);
+    expect(await writePancakeAttention(a.prisma as never, 'o1', staleReminder)).toBe(staleReminder);
+    const b = fakeOrderDb([baseOrder({ pancakePushStatus: 'STALE' })]);
+    expect(await writePancakeAttention(b.prisma as never, 'o1', WAYBILL)).toBe(WAYBILL);
+  });
+
+  it('STALE xuất hiện giữa vòng đọc-ghi (ô đang có lý do khác): vòng ghi lại cũng từ chối', async () => {
+    const { prisma, row } = fakeOrderDb([baseOrder({ pancakeAttention: ATTENTION_COD_RETURN_UNVERIFIED })]);
+    const find = prisma.order.findUnique.getMockImplementation()!;
+    prisma.order.findUnique.mockImplementationOnce(async (args: Parameters<typeof find>[0]) => {
+      const snapshot = await find(args);
+      row().pancakePushStatus = 'STALE';
+      return snapshot;
+    });
+    expect(await writePancakeAttention(prisma as never, 'o1', retrying)).toBeNull();
+    expect(row().pancakeAttention).toBe(ATTENTION_COD_RETURN_UNVERIFIED);
   });
 });
 
