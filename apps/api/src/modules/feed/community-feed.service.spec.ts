@@ -647,10 +647,28 @@ describe('CommunityFeedService.createPost: trần ảnh của khách vãng lai (
     await makeSvc(prisma).createPost('g1', 'CUSTOMER', { body: 'Có ảnh', images: [PNG] });
     const raw = prisma as unknown as { $transaction: jest.Mock; $executeRaw: jest.Mock };
     expect(raw.$transaction).toHaveBeenCalledTimes(1);
-    const lockCall = raw.$executeRaw.mock.calls[0];
+    const lockCall = raw.$executeRaw.mock.calls[1];
     expect(lockCall[0].join('?')).toContain('pg_advisory_xact_lock');
     expect(lockCall[1]).toBe('guest-feed-images');
-    expect(raw.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan((prisma.$queryRaw as jest.Mock).mock.invocationCallOrder[0] ?? 0);
+    expect(raw.$executeRaw.mock.invocationCallOrder[1]).toBeLessThan((prisma.$queryRaw as jest.Mock).mock.invocationCallOrder[0] ?? 0);
+  });
+
+  it('khóa theo người lấy TRƯỚC khoá toàn cục (updatePost chỉ lấy khoá toàn cục nên không deadlock)', async () => {
+    const prisma = prismaFor(guest, 0, 0);
+    await makeSvc(prisma).createPost('g1', 'CUSTOMER', { body: 'Có ảnh', images: [PNG] });
+    const raw = prisma as unknown as { $executeRaw: jest.Mock };
+    expect(raw.$executeRaw.mock.calls.map((c) => c[1])).toEqual(['feed-post:g1', 'guest-feed-images']);
+  });
+
+  it('gửi lại đúng bài ảnh đang chờ duyệt khi đã chạm trần: nhận bài đã có, không lỗi trần, không đụng trần ảnh', async () => {
+    const prisma = prismaFor(guest, GUEST_PENDING_IMAGE_POSTS_MAX, GUEST_PENDING_IMAGE_BYTES_MAX);
+    (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([{ id: 'p2', status: 'PENDING', productTags: [], tags: [] }]);
+    const r = await makeSvc(prisma).createPost('g1', 'CUSTOMER', { body: 'Có ảnh', images: [PNG] });
+    expect(r).toEqual({ id: 'p2', status: 'PENDING' });
+    expect(prisma.feedPost.create).not.toHaveBeenCalled();
+    expect(prisma.$queryRaw).not.toHaveBeenCalled();
+    const raw = prisma as unknown as { $executeRaw: jest.Mock };
+    expect(raw.$executeRaw.mock.calls.map((c) => c[1])).toEqual(['feed-post:g1']);
   });
 
   it('người dùng thật hoặc bài không ảnh base64: không lấy khoá trần ảnh khách (chỉ khoá chống gửi trùng theo người)', async () => {

@@ -572,22 +572,30 @@ export class CommunityFeedService {
     // Kiểm rồi ghi cùng một khoá advisory toàn cục: nhiều khách vãng lai bắn song song không cùng đọc thấy tổng còn chỗ.
     // Người dùng thật không đi vào nhánh này nên không bị khoá.
     return this.prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${GUEST_FEED_IMAGES_LOCK}))`;
-      const exclude = excludePostId ? Prisma.sql`AND p."id" <> ${excludePostId}` : Prisma.empty;
-      const [own] = await tx.$queryRaw<{ n: number }[]>`
-        SELECT count(*)::int AS "n" FROM "feed_posts" p
-        WHERE p."userId" = ${userId} AND p."status" = 'PENDING' ${exclude}
-          AND EXISTS (SELECT 1 FROM unnest(p."images") AS i WHERE left(i, 5) = 'data:')`;
-      if ((own?.n ?? 0) >= GUEST_PENDING_IMAGE_POSTS_MAX) throw new BadRequestException(GUEST_IMAGE_OWN_LIMIT_MESSAGE);
-      // pg_column_size đọc kích thước đã lưu mà không giải nén mảng (có thể tới 100 MB); ngưỡng 4 KB loại mảng chỉ có URL Cloudinary.
-      const [total] = await tx.$queryRaw<{ bytes: bigint | number }[]>`
-        SELECT COALESCE(sum(pg_column_size(p."images")), 0)::bigint AS "bytes"
-        FROM "feed_posts" p JOIN "users" u ON u."id" = p."userId"
-        WHERE p."status" = 'PENDING' ${exclude} AND pg_column_size(p."images") > 4096 AND NOT ${REAL_USER_SQL}`;
-      const incomingBytes = incoming.reduce((sum, u) => sum + u.length, 0);
-      if (Number(total?.bytes ?? 0) + incomingBytes > GUEST_PENDING_IMAGE_BYTES_MAX) throw new BadRequestException(GUEST_IMAGE_TOTAL_LIMIT_MESSAGE);
+      await this.assertGuestImageQuota(tx, userId, incoming, excludePostId);
       return write(tx, true);
     });
+  }
+
+  /**
+   * Kiểm hai trần ảnh của khách vãng lai dưới khoá toàn cục. Thứ tự khoá luôn là khoá theo người (`feed-post:<id>`, chỉ createPost
+   * lấy) rồi mới khoá toàn cục này; updatePost chỉ lấy khoá toàn cục nên không thể đảo thứ tự, không deadlock.
+   */
+  private async assertGuestImageQuota(tx: Prisma.TransactionClient, userId: string, incoming: string[], excludePostId?: string): Promise<void> {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${GUEST_FEED_IMAGES_LOCK}))`;
+    const exclude = excludePostId ? Prisma.sql`AND p."id" <> ${excludePostId}` : Prisma.empty;
+    const [own] = await tx.$queryRaw<{ n: number }[]>`
+      SELECT count(*)::int AS "n" FROM "feed_posts" p
+      WHERE p."userId" = ${userId} AND p."status" = 'PENDING' ${exclude}
+        AND EXISTS (SELECT 1 FROM unnest(p."images") AS i WHERE left(i, 5) = 'data:')`;
+    if ((own?.n ?? 0) >= GUEST_PENDING_IMAGE_POSTS_MAX) throw new BadRequestException(GUEST_IMAGE_OWN_LIMIT_MESSAGE);
+    // pg_column_size đọc kích thước đã lưu mà không giải nén mảng (có thể tới 100 MB); ngưỡng 4 KB loại mảng chỉ có URL Cloudinary.
+    const [total] = await tx.$queryRaw<{ bytes: bigint | number }[]>`
+      SELECT COALESCE(sum(pg_column_size(p."images")), 0)::bigint AS "bytes"
+      FROM "feed_posts" p JOIN "users" u ON u."id" = p."userId"
+      WHERE p."status" = 'PENDING' ${exclude} AND pg_column_size(p."images") > 4096 AND NOT ${REAL_USER_SQL}`;
+    const incomingBytes = incoming.reduce((sum, u) => sum + u.length, 0);
+    if (Number(total?.bytes ?? 0) + incomingBytes > GUEST_PENDING_IMAGE_BYTES_MAX) throw new BadRequestException(GUEST_IMAGE_TOTAL_LIMIT_MESSAGE);
   }
 
   /**
@@ -661,6 +669,10 @@ export class CommunityFeedService {
     // Bấm đăng hai lần / mạng chập chờn gửi lại: cùng người và cùng MỌI trường nội dung khách gửi (tiêu đề, nội dung, loại, danh mục,
     // ảnh, sự kiện, sản phẩm gắn, thẻ) trong 5 phút thì trả bài đã có, không tạo thêm (và không thưởng, không cộng uy tín lần nữa).
     // Thiếu một trường là nuốt bài thật mà vẫn báo thành công. Khoá tư vấn theo người buộc hai yêu cầu song song xếp hàng.
+    // Khách vãng lai có ảnh `data:` ở bài chờ duyệt mới phải qua trần ảnh (người dùng thật không bị).
+    const dataImages = status === 'PENDING' ? images.filter((u) => u.startsWith('data:')) : [];
+    const guestUser = dataImages.length ? await this.prisma.user.findUnique({ where: { id: userId }, select: { phone: true, zaloId: true } }) : null;
+    const guestIncoming = dataImages.length && (!guestUser || !isRealUser(guestUser)) ? dataImages : [];
     const createDeduped = async (tx: Prisma.TransactionClient) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`feed-post:${userId}`}))`;
       const candidates = await tx.feedPost.findMany({
@@ -680,6 +692,8 @@ export class CommunityFeedService {
           sameSet([...new Set(c.tags.map((t) => t.tag.slug))].sort(), wantedTags),
       );
       if (existing) return { id: existing.id, status: existing.status as string, duplicate: true };
+      // Trần ảnh chỉ kiểm cho bài MỚI: gửi lại bài đã có thì trả bài đó, không đụng trần và không cộng ảnh hai lần.
+      if (guestIncoming.length > 0) await this.assertGuestImageQuota(tx, userId, guestIncoming);
       const created = await tx.feedPost.create({
         data: {
           userId, kind, status, body, title, images, categoryId: input.categoryId ?? null,
@@ -689,9 +703,7 @@ export class CommunityFeedService {
       });
       return { id: created.id, status: status as string, duplicate: false };
     };
-    const post = await this.writeWithGuestImageQuota(userId, status === 'PENDING' ? images : [], undefined, (db, inTransaction) =>
-      inTransaction ? createDeduped(db as Prisma.TransactionClient) : this.prisma.$transaction(createDeduped),
-    );
+    const post = await this.prisma.$transaction(createDeduped);
     if (post.duplicate) return { id: post.id, status: post.status };
 
     if (products.length) {
