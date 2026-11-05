@@ -150,6 +150,8 @@ describe('ZnsStuckLogCron: con trỏ quay vòng (log cũ còn sống không che 
     const first = setup(logs, jobs, { client });
     await first.cron.sweepStuckZnsLogs();
     expect(client.set).toHaveBeenCalledTimes(1);
+    // Đúng chữ ký IRedisClient của BullMQ (options { EX }), proxy dịch sang SET ... EX của ioredis.
+    expect(client.set).toHaveBeenCalledWith('zns-stuck-cron:cursor', expect.any(String), { EX: 86_400 });
     const second = setup(logs, jobs, { client });
     await expect(second.cron.sweepStuckZnsLogs()).resolves.toMatchObject({ scanned: 51, closed: 1 });
     expect(client.del).toHaveBeenCalledTimes(1);

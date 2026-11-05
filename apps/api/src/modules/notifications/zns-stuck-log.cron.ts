@@ -19,9 +19,6 @@ export type ZnsStuckSweepResult =
 /** Log cuối cùng đã xét ở lượt trước, theo (sentAt, id): lượt sau đi tiếp ngay sau nó. */
 type Cursor = { sentAt: string; id: string };
 
-/** IRedisClient của BullMQ chuyển tiếp mọi lệnh sang ioredis nhưng chỉ khai báo SET kiểu node-redis; ioredis nhận SET key value EX seconds. */
-type KeyValueClient = { set(key: string, value: string, mode: 'EX', seconds: number): Promise<unknown> };
-
 type Verdict = 'CLOSE_GONE' | 'CLOSE_FAILED' | 'MARK_SENT' | 'AMBIGUOUS' | 'ALIVE';
 
 /**
@@ -166,7 +163,7 @@ export class ZnsStuckLogCron {
     try {
       const client = await withQueueTimeout(Promise.resolve(queue.client), `${QUEUE_NOTIFICATIONS} client`, undefined, { breaker: false });
       if (!client) return;
-      if (cursor) await withQueueTimeout(Promise.resolve((client as unknown as KeyValueClient).set(ZnsStuckLogCron.CURSOR_KEY, JSON.stringify(cursor), 'EX', ZnsStuckLogCron.CURSOR_TTL_S)), `${QUEUE_NOTIFICATIONS} cursor set`, undefined, { breaker: false });
+      if (cursor) await withQueueTimeout(Promise.resolve(client.set(ZnsStuckLogCron.CURSOR_KEY, JSON.stringify(cursor), { EX: ZnsStuckLogCron.CURSOR_TTL_S })), `${QUEUE_NOTIFICATIONS} cursor set`, undefined, { breaker: false });
       else await withQueueTimeout(Promise.resolve(client.del(ZnsStuckLogCron.CURSOR_KEY)), `${QUEUE_NOTIFICATIONS} cursor del`, undefined, { breaker: false });
     } catch (err) {
       this.logger.warn(`Quét log ZNS kẹt: không ghi được con trỏ vào Redis (${err instanceof Error ? err.message : err})`);
