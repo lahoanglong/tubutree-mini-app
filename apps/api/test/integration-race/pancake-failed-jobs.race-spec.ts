@@ -210,7 +210,7 @@ const url = process.env.TEST_REDIS_URL;
     alerts.alert.mockClear();
     await Promise.all(orders.map((o) => service.enqueuePush(o.id)));
     const ids = orders.map((o) => o.id);
-    await until(async () => (await prisma.order.count({ where: { id: { in: ids }, pancakeErrorKind: 'CONFIG', pancakePushStatus: 'FAILED' } })) === 4);
+    await until(async () => (await prisma.order.count({ where: { id: { in: ids }, pancakeErrorKind: 'CONFIG', pancakePushStatus: 'FAILED', pancakePushAttempts: 0 } })) === 4);
     const rows = await prisma.order.findMany({ where: { id: { in: ids } } });
     for (const r of rows) {
       expect(r.pancakePushAttempts).toBe(0);
@@ -246,23 +246,36 @@ const url = process.env.TEST_REDIS_URL;
     });
     alerts.alert.mockClear();
     await service.enqueuePush(x.id);
-    await until(async () => (await prisma.order.findUniqueOrThrow({ where: { id: x.id } })).pancakePushStatus === 'FAILED');
+    await until(async () => {
+      const r = await prisma.order.findUniqueOrThrow({ where: { id: x.id } });
+      return r.pancakePushStatus === 'FAILED' && r.pancakePushAttempts === 0;
+    });
     const afterOne = await prisma.order.findUniqueOrThrow({ where: { id: x.id } });
     expect(afterOne).toMatchObject({ pancakeErrorKind: 'CONFIG', pancakePushAttempts: 0, pancakeAttention: null });
 
     await service.enqueuePush(y.id);
     await until(async () => (await prisma.order.findUniqueOrThrow({ where: { id: x.id } })).pancakeErrorKind === 'CONFIG_RECHECK');
     const callsOfX = () => client.createOrder.mock.calls.filter(([body]) => (body as { custom_id: string }).custom_id === x.code).length;
-    // Cron nhặt X ở tick 2: đơn đủ cũ (cutoff 10 phút), lượt thử cuối đã quá nhịp 15 phút.
-    const dueForCron = () =>
-      prisma.order.update({ where: { id: x.id }, data: { createdAt: new Date(Date.now() - 30 * 60_000), pancakeLastAttemptAt: new Date(Date.now() - 2 * 3_600_000) } });
-    return { x, callsOfX, dueForCron, setKey: (k: 'bad' | 'good') => (key = k) };
+    // Tick 2: pushStale lấy lô 50 đơn xếp theo lần thử cuối cũ nhất trước, chưa từng thử đứng đầu (DB dùng chung với spec khác). Để X chắc chắn
+    // trong lô: đóng dấu mọi đơn chưa từng thử khác, rồi đặt lần thử cuối của X cũ hơn mọi đơn còn lại. Rồi gọi reconcile() lặp (có giới hạn)
+    // tới khi X thật sự bị đẩy lại thêm một lần.
+    const runTick2 = async () => {
+      await prisma.order.updateMany({ where: { pancakeOrderId: null, id: { not: x.id }, pancakeLastAttemptAt: null }, data: { pancakeLastAttemptAt: new Date() } });
+      await prisma.order.update({ where: { id: x.id }, data: { createdAt: new Date(Date.now() - 30 * 60_000), pancakeLastAttemptAt: new Date(Date.now() - 71 * 3_600_000) } });
+      const before = callsOfX();
+      for (let i = 0; i < 5 && callsOfX() === before; i++) {
+        await reconcile.reconcile();
+        const end = Date.now() + 2_000;
+        while (callsOfX() === before && Date.now() < end) await sleep(50);
+      }
+      expect(callsOfX()).toBe(before + 1);
+    };
+    return { x, callsOfX, runTick2, setKey: (k: 'bad' | 'good') => (key = k) };
   };
 
   it('luồng PROD hai tick: X 403 → CONFIG; Y đẩy được → X CONFIG_RECHECK; tick 2 X lại 403 → REJECTED (đốt lượt, báo đơn), cron không dò lại ngay', async () => {
-    const { x, callsOfX, dueForCron } = await tickOne();
-    await dueForCron();
-    await reconcile.reconcile();
+    const { x, callsOfX, runTick2 } = await tickOne();
+    await runTick2();
     // pushOrder ghi REJECTED trước, markPushFailure (báo đơn) sau: chờ tới khi cả hai xong.
     await until(async () => {
       const r = await prisma.order.findUniqueOrThrow({ where: { id: x.id } });
@@ -279,10 +292,9 @@ const url = process.env.TEST_REDIS_URL;
   });
 
   it('luồng PROD hai tick: tick 2 X đẩy được → loại lỗi về null, không có attention', async () => {
-    const { x, dueForCron, setKey } = await tickOne();
+    const { x, runTick2, setKey } = await tickOne();
     setKey('good');
-    await dueForCron();
-    await reconcile.reconcile();
+    await runTick2();
     await until(async () => (await prisma.order.findUniqueOrThrow({ where: { id: x.id } })).pancakeOrderId != null);
     const row = await prisma.order.findUniqueOrThrow({ where: { id: x.id } });
     expect(row).toMatchObject({ pancakePushStatus: 'SYNCED', pancakeErrorKind: null, pancakeAttention: null });
@@ -296,9 +308,31 @@ const url = process.env.TEST_REDIS_URL;
     alerts.alert.mockClear();
     await Promise.all(orders.map((o) => service.enqueuePush(o.id)));
     const ids = orders.map((o) => o.id);
-    await until(async () => (await prisma.order.count({ where: { id: { in: ids }, pancakeErrorKind: 'CONFIG', pancakePushStatus: 'FAILED' } })) === 3);
+    await until(async () => (await prisma.order.count({ where: { id: { in: ids }, pancakeErrorKind: 'CONFIG', pancakePushStatus: 'FAILED', pancakePushAttempts: 0 } })) === 3);
     const rows = await prisma.order.findMany({ where: { id: { in: ids } } });
     for (const r of rows) expect(r).toMatchObject({ pancakePushAttempts: 0, pancakeAttention: null });
     expect(alerts.alert.mock.calls.filter(([code]) => mine.has(code as string))).toHaveLength(0);
+  });
+
+  it('job BullMQ thử lại (503 rồi 403) trên đơn CONFIG_RECHECK → REJECTED, không bao giờ về CONFIG nên báo động tổng pancake.config không bật', async () => {
+    const x = await order();
+    await prisma.order.update({ where: { id: x.id }, data: { pancakeErrorKind: 'CONFIG_RECHECK', pancakePushStatus: 'PENDING' } });
+    let n = 0;
+    const seen = new Set<string | null>();
+    respond((code) => {
+      if (code !== x.code) return { success: true, data: { id: `pk-${code}` } };
+      n += 1;
+      if (n === 1) throw new PancakeApiError('Pancake trả 503 khi tạo đơn', true, false, 503);
+      throw new PancakeApiError('Pancake trả 403 khi tạo đơn: forbidden', false, false, 403);
+    });
+    await service.enqueuePush(x.id);
+    await until(async () => {
+      const r = await prisma.order.findUniqueOrThrow({ where: { id: x.id } });
+      seen.add(r.pancakeErrorKind);
+      return r.pancakeErrorKind === 'REJECTED' && r.pancakeAttention != null;
+    });
+    expect(n).toBe(2);
+    expect(seen.has('CONFIG')).toBe(false);
+    expect(await prisma.order.count({ where: { id: x.id, pancakeErrorKind: 'CONFIG' } })).toBe(0);
   });
 });
