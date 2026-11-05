@@ -53,3 +53,18 @@ test('web 375: một cột, cột phải nằm dưới cột trái', async ({ pa
   expect(shipping!.y).toBeGreaterThan(hero!.y);
   expect(Math.abs(shipping!.x - hero!.x)).toBeLessThan(40);
 });
+
+test('web 375: mở form đổi/trả từ menu thì form nằm trong tầm nhìn và nhận focus (form ở cuối trang, khách đang ở đầu trang)', async ({ page, api }, testInfo) => {
+  test.skip(testInfo.project.name !== 'Web Customer Mobile', 'Một project đủ cho cả hai khổ: khổ do spec tự đặt');
+  const state = stateOf('delivered');
+  const w = await mockWorld(api, page, 'web', state, Date.now());
+  await openState(page, 'web', 375, w.order.code);
+  await state.ready(page);
+  await page.getByRole('button', { name: 'Thêm thao tác' }).locator('visible=true').click();
+  await page.getByRole('group', { name: 'Thao tác với đơn' }).getByRole('button', { name: 'Yêu cầu đổi/trả' }).click();
+  const form = page.locator('form[aria-labelledby="return-form-title"]');
+  await expect(form).toBeVisible();
+  await expect(page.locator('#return-form-title')).toBeInViewport({ ratio: 1 });
+  await expect(page.locator('#return-form-title')).toBeFocused();
+});
+

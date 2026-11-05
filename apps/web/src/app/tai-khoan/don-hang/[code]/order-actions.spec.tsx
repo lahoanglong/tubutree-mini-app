@@ -465,6 +465,24 @@ describe('chi tiết đơn — yêu cầu đổi/trả (BUYERWEB-13)', () => {
     expect(container.textContent).toContain('Đã gửi yêu cầu đổi/trả');
   });
 
+  it('mở form từ menu: cuộn form vào tầm nhìn và chuyển focus vào tiêu đề form (form nằm cuối trang, khách đang ở đầu trang)', async () => {
+    const scroll = vi.fn();
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scroll;
+    try {
+      mocks.order = delivered;
+      const { container } = await mount();
+      pressMenu(container, 'Yêu cầu đổi/trả');
+      const title = container.querySelector<HTMLElement>('#return-form-title')!;
+      expect(title).not.toBeNull();
+      expect(scroll).toHaveBeenCalled();
+      expect(scroll.mock.contexts.at(-1)).toBe(title);
+      expect(document.activeElement).toBe(title);
+    } finally {
+      Element.prototype.scrollIntoView = original;
+    }
+  });
+
   // R3-UI-6: Mini App hiện "Dự kiến hoàn" theo D3 trước khi gửi; web phải cho khách thấy cùng con số (cùng API).
   describe('ước tính tiền hoàn (R3-UI-6)', () => {
     const estimateText = (c: HTMLElement) => c.querySelector('[data-testid="return-estimate"]')?.textContent ?? null;

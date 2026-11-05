@@ -222,8 +222,8 @@ test.describe('Web khách: giỏ và thanh toán', () => {
     await expect(bar.getByRole('button', { name: 'Huỷ đơn' })).toHaveCount(0);
     await bar.getByRole('button', { name: 'Thêm thao tác' }).click();
     await expect(page.getByRole('group', { name: 'Thao tác với đơn' }).getByRole('button', { name: 'Huỷ đơn' })).toBeVisible();
-    await page.reload();
-    await expect(bar.getByRole('button', { name: 'Thanh toán ngay' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('group', { name: 'Thao tác với đơn' })).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
     api.get('/payments/bank-qr/TUBU2026101900004', {
       orderCode: 'TUBU2026101900004', amount: 330000, paymentStatus: 'UNPAID', paymentDeadline: null,
