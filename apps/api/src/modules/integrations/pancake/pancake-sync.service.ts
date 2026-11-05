@@ -556,8 +556,9 @@ export class PancakeSyncService implements OnModuleInit {
       const oldEff = prev.salePrice ?? prev.retailPrice;
       if (newEff > 0 && newEff < oldEff) drop = { oldPrice: oldEff, newPrice: newEff };
     }
-    // Cột `sku` là khoá duy nhất: rỗng/object/số lạ không được ghi, lấy mã biến thể.
-    const sku = payloadText(v.sku) ?? vid;
+    // Cột `sku` là khoá duy nhất: ghi nguyên văn chuỗi Pancake gửi (không cắt khoảng trắng, kẻo lệch so với các lần đồng bộ trước và
+    // với sku admin đã dán); rỗng/khoảng trắng/object lấy mã biến thể, số đổi thành chuỗi.
+    const sku = typeof v.sku === 'string' ? (v.sku.trim() ? v.sku : vid) : (payloadText(v.sku) ?? vid);
     // Cột `weight` là Int: số lẻ làm Prisma ném và hỏng cả sản phẩm; số âm/rác là không biết.
     const weight = payloadNonNegInt(v.weight, { round: true });
     const label = variantLabel(v.fields) ?? productName;

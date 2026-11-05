@@ -1111,6 +1111,17 @@ describe('PancakeSyncService — payload thiếu trường hoặc kiểu lạ (W
       expect(upserts(prisma)[0]!.where.pancakeId).toBe('12345');
     });
 
+    it.each([['ABC '], [' ABC'], ['abc-1'], ['null']])('sku chuỗi có chữ %j: ghi nguyên văn, không cắt khoảng trắng (khoá duy nhất so khớp theo giá trị Pancake gửi)', async (sku) => {
+      const { prisma } = await sync([product('a', [{ id: 'v-a', sku, retail_price: 1000 }])]);
+      expect(firstUpsert(prisma).create.sku).toBe(sku);
+      expect(firstUpsert(prisma).update.sku).toBe(sku);
+    });
+
+    it('sku là số: đổi thành chuỗi', async () => {
+      const { prisma } = await sync([product('a', [{ id: 'v-a', sku: 8934567, retail_price: 1000 }])]);
+      expect(firstUpsert(prisma).create.sku).toBe('8934567');
+    });
+
     it.each([[''], ['   '], [{ a: 1 }], [null], [undefined]])('sku=%j: lấy mã biến thể làm sku, không ghi chuỗi rỗng/object (sku là khoá duy nhất)', async (sku) => {
       const { prisma } = await sync([product('a', [{ id: 'v-a', sku, retail_price: 1000 }])]);
       expect(firstUpsert(prisma).create.sku).toBe('v-a');
