@@ -55,7 +55,7 @@ function Callout({ point }: { point: HudCalloutPoint }) {
       data-testid="story-callout"
       data-side={point.side}
       className="tubu-story-callout"
-      style={{ top: `${point.yPct}%`, ...(left ? { left: 0 } : { right: 0 }) }}
+      style={{ top: `${point.yPct}%`, ...(left ? { left: '3%' } : { right: '3%' }) }}
     >
       <span className="tubu-story-callout-label">{point.label}</span>
       {point.value ? <span className="tubu-story-callout-value">{point.value}</span> : null}
@@ -171,9 +171,12 @@ export function ProductStoryShowcase({ product, selectedVariationId, onSelectVar
           <div data-testid="story-hud" role="group" aria-label={fillCopy('story.hudLabel')} className="tubu-story-hud">
             <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true" focusable="false" className="tubu-story-hud-lines">
               {view.hud.points.map((p) => (
-                <line key={p.id} x1={p.xPct} y1={p.yPct} x2={p.side === 'left' ? 30 : 70} y2={p.yPct} vectorEffect="non-scaling-stroke" />
+                <line key={p.id} x1={p.xPct} y1={p.yPct} x2={p.side === 'left' ? 37 : 63} y2={p.yPct} vectorEffect="non-scaling-stroke" />
               ))}
             </svg>
+            {view.hud.points.map((p) => (
+              <span key={`dot-${p.id}`} aria-hidden="true" className="tubu-story-dot" style={{ left: `${p.xPct}%`, top: `${p.yPct}%` }} />
+            ))}
             {view.hud.points.map((p) => (
               <Callout key={p.id} point={p} />
             ))}

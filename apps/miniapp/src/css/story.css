@@ -156,8 +156,8 @@
 }
 .tubu-story-callout {
   position: absolute;
-  width: 44%;
-  transform: translateY(-50%);
+  width: 34%;
+  transform: translateY(calc(-100% - var(--space-stack-sm)));
   padding: var(--space-stack-xs) var(--space-inline-sm);
   border-radius: var(--radius-control);
   background: var(--color-bg-surface);

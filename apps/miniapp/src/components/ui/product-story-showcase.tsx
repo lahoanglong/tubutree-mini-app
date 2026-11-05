@@ -104,7 +104,7 @@ function Hud({ product, imageUrl, hud }: { product: ProductDetail; imageUrl: str
               key={p.id}
               x1={clampPct(p.xPct)}
               y1={clampPct(p.yPct)}
-              x2={p.side === 'left' ? 47 : 53}
+              x2={p.side === 'left' ? 37 : 63}
               y2={clampPct(p.yPct)}
               stroke="var(--color-border-strong)"
               strokeWidth={1.5}
