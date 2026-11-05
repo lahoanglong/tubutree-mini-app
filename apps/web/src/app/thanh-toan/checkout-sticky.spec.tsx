@@ -96,11 +96,11 @@ describe('/thanh-toan — nút Đặt hàng ở khung tóm tắt (từ lg) ghi s
     expect(lgButton(c).textContent).toBe(barButton(c).textContent);
   });
 
-  it('chưa có địa chỉ: chỉ "Đặt hàng", khoá, không có số tiền nào', async () => {
+  it('chưa có địa chỉ: chỉ "Đặt hàng", bấm được để chỉ ra chỗ thiếu, không có số tiền nào', async () => {
     state.noAddress = true;
     const c = await mount();
     expect(lgButton(c).textContent).toBe('Đặt hàng');
-    expect(lgButton(c).disabled).toBe(true);
+    expect(lgButton(c).disabled).toBe(false);
   });
 
   it('báo giá lỗi: chỉ "Đặt hàng", không giữ số tiền cũ', async () => {
@@ -113,14 +113,14 @@ describe('/thanh-toan — nút Đặt hàng ở khung tóm tắt (từ lg) ghi s
 describe('/thanh-toan — lý do khoá nút theo Mini (K2)', () => {
   const region = (c: HTMLElement) => bar(c)!.querySelector<HTMLElement>('[role="status"]')!;
 
-  it('thiếu địa chỉ: lý do là chữ phụ (không đỏ) trong vùng báo, nút khoá', async () => {
+  it('thiếu địa chỉ: lý do là chữ phụ (không đỏ) trong vùng báo, nút bấm được để chỉ ra chỗ thiếu', async () => {
     state.noAddress = true;
     const c = await mount();
     expect(region(c).textContent).toBe('Chọn địa chỉ giao hàng để đặt hàng.');
     expect(region(c).className).toContain('--color-text-secondary');
     expect(region(c).className).not.toContain('danger');
     expect(bar(c)!.querySelector('[aria-hidden="true"].text-danger-fg')).toBeNull();
-    expect(barButton(c).disabled).toBe(true);
+    expect(barButton(c).disabled).toBe(false);
   });
 
   it('báo giá lỗi: cũng chữ phụ, khác câu thiếu địa chỉ', async () => {
@@ -178,11 +178,11 @@ describe('/thanh-toan — thanh dính đáy', () => {
     expect(bar(c)).toBeNull();
   });
 
-  it('chưa có địa chỉ: tổng trong khung tóm tắt ghi "Chưa tính", nút khoá và không kèm số tiền', async () => {
+  it('chưa có địa chỉ: tổng trong khung tóm tắt ghi "Chưa tính", nút bấm được và không kèm số tiền', async () => {
     state.noAddress = true;
     const c = await mount();
     expect(c.querySelector('[data-mini-part="summary-total"]')!.textContent).toContain('Chưa tính');
-    expect(barButton(c).disabled).toBe(true);
+    expect(barButton(c).disabled).toBe(false);
     expect(barButton(c).textContent).toBe('Đặt hàng');
   });
 
