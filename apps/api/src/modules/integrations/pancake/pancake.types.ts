@@ -101,12 +101,19 @@ export interface PancakeCreateOrderBody {
   cod?: number;
   /** Khoá ngoài: mã đơn Tubu — dùng để tra lại đơn trên Pancake khi không biết lần tạo trước đã thành công chưa. */
   custom_id?: string;
-  tags?: string[];
+  /** Open API: danh sách thẻ ĐÃ CÓ trong shop, tham chiếu bằng id (tên tự do bị 422 "[tags]: is invalid"). */
+  tags?: PancakeOrderTagRef[];
   note?: string;
   extension?: {
     external_order_id?: string;
     invoice_request?: { tax_code: string; company_name: string; address: string; email: string };
   };
+}
+
+/** Thẻ đơn hàng của shop (`GET /shops/{SHOP_ID}/orders/tags`); `name` có thể vắng ở thẻ đọc từ webhook. */
+export interface PancakeOrderTagRef {
+  id: number;
+  name?: string;
 }
 
 /** Cập nhật một phần đơn (PUT /shops/{SHOP_ID}/orders/{ORDER_ID}). */
@@ -123,6 +130,7 @@ export interface PancakeOrderDTO {
   note?: string | null;
   extension?: { external_order_id?: string } | null;
   inserted_at?: string;
+  tags?: Array<PancakeOrderTagRef | string>;
 }
 
 /** Open API mô tả phản hồi là chính object đơn; bản thật hay bọc `{success, data}`. Đọc được cả hai. */
