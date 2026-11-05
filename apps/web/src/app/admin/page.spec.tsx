@@ -672,6 +672,17 @@ describe('admin/page — tab Tổng quan', () => {
     expect(container.querySelector('table')!.closest('[role="region"]')!.className).toContain('hidden sm:block');
   });
 
+  it('bảng đơn gần đây: mã đơn và mốc giờ không bị xuống dòng giữa chừng, bảng cuộn trong khung riêng', async () => {
+    const { container } = await mount();
+    const rows = container.querySelectorAll('table tbody tr');
+    expect(rows.length).toBeGreaterThan(0);
+    rows.forEach((tr) => {
+      expect(tr.querySelector('td:first-child button')!.className).toContain('whitespace-nowrap');
+      expect(tr.querySelector('td:last-child')!.className).toContain('whitespace-nowrap');
+    });
+    expect(container.querySelector('table')!.closest('[role="region"]')).not.toBeNull();
+  });
+
   it('huy hiệu trạng thái đơn mỗi trạng thái một cặp nền/chữ cùng họ token, nhãn giữ nguyên', async () => {
     const { container } = await mount();
     const badges = [...container.querySelectorAll('tbody span.inline-block')];

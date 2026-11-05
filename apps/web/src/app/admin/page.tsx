@@ -1225,7 +1225,7 @@ function DashboardTab({
                 stats.recentOrders.map((o) => (
                   <tr key={o.id} className="border-t border-stone-100 hover:bg-stone-50">
                     <td className="px-3 py-2.5 font-semibold text-stone-800">
-                      <button type="button" onClick={() => onOpenOrder(o.code)} className="min-h-[44px] text-left font-semibold text-forest-700 underline-offset-2 hover:underline sm:min-h-0">{o.code}</button>
+                      <button type="button" onClick={() => onOpenOrder(o.code)} className="min-h-[44px] whitespace-nowrap text-left font-semibold text-forest-700 underline-offset-2 hover:underline sm:min-h-0">{o.code}</button>
                     </td>
                     <td className="px-3 py-2.5">
                       <div className="font-medium text-stone-900">{o.user?.fullName ?? 'Khách lẻ'}</div>
@@ -1238,7 +1238,7 @@ function DashboardTab({
                     <td className="px-3 py-2.5">
                       <OrderStatusBadge status={o.status} />
                     </td>
-                    <td className="px-3 py-2.5 text-xs text-stone-500">
+                    <td className="whitespace-nowrap px-3 py-2.5 text-xs text-stone-500">
                       {formatDateTime(o.createdAt)}
                     </td>
                   </tr>
