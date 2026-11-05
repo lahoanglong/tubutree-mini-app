@@ -51,6 +51,11 @@ describe('buildPublicConfig — đơn vị vận hành', () => {
     expect((await build({})).company).toEqual({ legalName: null, taxCode: null, address: null, bctNoticeUrl: null });
   });
 
+  it('trường chỉ có ký tự vô hình là null để chân trang ẩn dòng; ký tự vô hình ở hai đầu chữ thật bị cắt', async () => {
+    const cfg = await build({ 'company.legal_name': '\u200b\ufeff\u2060', 'company.tax_code': '\u200b0312345678\ufeff', 'company.address': ' \u200b ' });
+    expect(cfg.company).toEqual({ legalName: null, taxCode: '0312345678', address: null, bctNoticeUrl: null });
+  });
+
   it('trả tên, MST, địa chỉ đã cắt khoảng trắng; trường rỗng hoặc sai kiểu là null', async () => {
     const cfg = await build({ 'company.legal_name': ' Công ty A ', 'company.tax_code': '0312345678', 'company.address': '   ', 'company.bct_notice_url': 5 });
     expect(cfg.company).toEqual({ legalName: 'Công ty A', taxCode: '0312345678', address: null, bctNoticeUrl: null });

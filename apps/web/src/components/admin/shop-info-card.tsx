@@ -8,6 +8,7 @@ import { LEGAL_PAGES, LEGAL_SLUGS, type LegalSlug } from '@/lib/legal';
 import { LegalMarkdown } from '@/components/legal-markdown';
 import { BTN_PRIMARY, BTN_SECONDARY, Field, INPUT_CLASS, Notice } from './ui';
 import { actionErrorText } from '@/lib/admin-error-text';
+import { trimVisible } from '@/lib/admin-visible-text';
 
 const COMPANY_FIELDS = [
   { key: 'company.legal_name', label: 'Tên công ty', hint: 'Đúng tên trên giấy đăng ký kinh doanh. Hiện ở chân trang và các trang chính sách.', placeholder: 'Công ty TNHH ...' },
@@ -49,11 +50,12 @@ export function ShopInfoCard({ rows }: { rows: ConfigRow[] | undefined }) {
   const [msg, setMsg] = useState<{ key: string; ok: boolean; text: string } | null>(null);
 
   const valueOf = (key: string) => draft[key] ?? textOf(rows, key);
-  const dirty = (key: string) => draft[key] !== undefined && draft[key] !== textOf(rows, key);
+  const savedValueOf = (key: string) => trimVisible(valueOf(key));
+  const dirty = (key: string) => draft[key] !== undefined && savedValueOf(key) !== textOf(rows, key);
 
   const save = useMutation({
     mutationFn: async (keys: string[]) => {
-      for (const key of keys) await setConfig(key, valueOf(key).trim());
+      for (const key of keys) await setConfig(key, savedValueOf(key));
       return keys;
     },
     onSuccess: (keys, _v) => {

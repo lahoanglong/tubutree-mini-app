@@ -1,3 +1,4 @@
+import { trimInvisible } from '../../common/text-trim';
 import type { SystemConfigService } from './system-config.service';
 
 export const COMPANY_KEYS = {
@@ -9,7 +10,9 @@ export const COMPANY_KEYS = {
 
 /** Rỗng hoặc sai kiểu thì null để FE ẩn dòng, không hiện thông tin giả. */
 function text(v: unknown): string | null {
-  return typeof v === 'string' && v.trim() !== '' ? v.trim() : null;
+  if (typeof v !== 'string') return null;
+  const t = trimInvisible(v);
+  return t === '' ? null : t;
 }
 
 /** Link ra ngoài app chỉ nhận https: giá trị sửa tay trong DB không được thành javascript: hay http. */
