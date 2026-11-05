@@ -326,20 +326,22 @@ describe('/thanh-toan — ghi chú (BUYERWEB-20)', () => {
 });
 
 describe('/thanh-toan — hết hàng (R2-BUYERWEB-11)', () => {
-  it('vào thẳng khi có dòng hết hàng: cảnh báo ngay, khoá đặt hàng, có nút về giỏ', async () => {
+  it('vào thẳng khi có dòng hết hàng: báo ngay dưới dòng đó, khoá đặt hàng, có nút bỏ khỏi đơn', async () => {
     m.items = [line('i1', 'Dầu gội', { stock: 0 })];
     const r = await mount();
-    const alert = r.container.querySelector('[data-testid="checkout-cart-issue"]')!;
-    expect(alert.textContent).toContain('Dầu gội');
-    expect(alert.textContent).toContain('đã hết hàng');
-    expect(alert.querySelector('a[href="/gio-hang"]')?.textContent).toBe('Về giỏ hàng để sửa');
+    const note = r.container.querySelector('[data-testid="checkout-line-problem"]')!;
+    expect(note.textContent).toContain('Hết hàng');
+    expect(byText(note, 'button', 'Bỏ khỏi đơn')).toBeTruthy();
+    expect(r.container.querySelector('[data-testid="checkout-cart-issue"]')).toBeNull();
     expect(placeButton(r).disabled).toBe(true);
   });
 
-  it('vượt tồn kho: nói còn bao nhiêu', async () => {
+  it('vượt tồn kho: nói còn bao nhiêu và cho giảm về số đó', async () => {
     m.items = [line('i1', 'Dầu gội', { quantity: 4, stock: 2 })];
     const r = await mount();
-    expect(r.container.querySelector('[data-testid="checkout-cart-issue"]')!.textContent).toContain('hiện còn 2');
+    const note = r.container.querySelector('[data-testid="checkout-line-problem"]')!;
+    expect(note.textContent).toContain('Còn 2 sản phẩm');
+    expect(byText(note, 'button', 'Giảm còn 2')).toBeTruthy();
     expect(placeButton(r).disabled).toBe(true);
   });
 

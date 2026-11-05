@@ -21,6 +21,8 @@ import {
   updateAddress,
   checkoutQuote,
   placeOrder,
+  updateCartItem,
+  removeCartItem,
   getMe,
   getPublicConfig,
   formatVnd,
@@ -33,7 +35,7 @@ import { pointsOfferText } from '@tubutree/app-core/points-offer';
 import { normalizeTaxCode } from '@tubutree/app-core/commerce/tax-code';
 import { checkoutPlaceHint, checkoutTotalText, collapseCheckoutLines } from '@tubutree/app-core/commerce/checkout-display';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
-import { priceChangedActions } from '@tubutree/app-core/commerce/checkout-issues';
+import { checkoutLineProblems, priceChangedActions, type LineFix, type LineProblem } from '@tubutree/app-core/commerce/checkout-issues';
 import { checkoutEtaLabel, placedOrderKinds } from '@tubutree/app-core/shipping-eta';
 import { checkoutPointsOffer, convertedPointsLine, formatCount, idlePointsLabel, lockedPointsLabel, pointsCapState, zeroTotalNote, type CheckoutPointsOffer } from '@/lib/checkout-points';
 import {
@@ -41,8 +43,6 @@ import {
   effectiveReferralCode,
   cartFixableNotice,
   isInvoiceValid,
-  outOfStockLine,
-  overStockMessage,
   paymentMissingNote,
   paymentUnavailableReason,
   pickPaymentMethod,
@@ -256,9 +256,10 @@ export default function CheckoutPage() {
   }, [pickedPayment, payment]);
 
   const invoiceValid = isInvoiceValid(wantInvoice, invoice);
-  // Hết hàng/vượt tồn chỉ sửa được ở giỏ: chặn ngay ở đây (khách đi thẳng vào /thanh-toan hay lưu đường dẫn không phải
-  // chờ tới lúc bấm đặt mới biết). Chỉ xét các dòng đang thanh toán.
-  const overStock = outOfStockLine(checkoutItems);
+  // Hết hàng/vượt tồn: báo ngay dưới đúng dòng kèm cách sửa nhanh và chặn đặt (khách đi thẳng vào /thanh-toan hay lưu đường dẫn
+  // không phải chờ tới lúc bấm đặt mới biết). Chỉ xét các dòng đang thanh toán.
+  const lineProblems = checkoutLineProblems(checkoutItems);
+  const hasLineProblem = Object.keys(lineProblems).length > 0;
 
   const attempt = useRef<{ body: PlaceBody; key: string; rev: number } | null>(null);
   // Khách đã bấm "Cập nhật giá mới" sau lỗi giá đổi: báo tổng mới cho tới lần đặt kế tiếp.
@@ -357,6 +358,25 @@ export default function CheckoutPage() {
       }
     },
   });
+
+  // Sửa nhanh dòng hết hàng/vượt tồn ngay tại màn: khách không rời trang nên các ô đã nhập còn nguyên. Đổi dòng là đổi lựa chọn của khách,
+  // nên một lần đặt đang đóng băng (chưa rõ kết quả) không được phát lại nữa.
+  const lineFix = useMutation({
+    mutationFn: ({ id, fix }: { id: string; fix: LineFix }) => (fix.kind === 'remove' ? removeCartItem(id) : updateCartItem(id, fix.quantity)),
+    onSuccess: () => {
+      choiceRev.current += 1;
+      place.reset();
+      void qc.invalidateQueries({ queryKey: ['cart'] });
+      void qc.invalidateQueries({ queryKey: ['quote'] });
+    },
+  });
+  const lineFixView: LineFixView = {
+    problems: lineProblems,
+    pendingId: lineFix.isPending ? (lineFix.variables?.id ?? null) : null,
+    errorFor: lineFix.isError ? (lineFix.variables?.id ?? null) : null,
+    errorText: lineFix.isError ? actionErrorText(lineFix.error) : null,
+    onFix: (id, fix) => lineFix.mutate({ id, fix }),
+  };
 
   // Từ lg nút Đặt hàng nằm cuối khung "Đơn hàng", có thể ngoài màn khi khách đang điền form hoá đơn ở cột trái: đặt lỗi thì cuộn khối nút + lời báo vào màn
   // (nearest: không giật trang nếu đã thấy; 64rem = breakpoint lg) và trả focus về nút, vì nút bị khoá lúc đang gửi nên mất focus. Dưới lg thanh dính đáy lo phần này, không cuộn trang.
@@ -489,7 +509,7 @@ export default function CheckoutPage() {
   const priceChanged = place.error instanceof Error && place.error.message === PRICE_CHANGED;
   const placeErrorMessage = place.error instanceof Error && !priceChanged ? (place.error instanceof NetworkError ? place.error.message : actionErrorText(place.error)) : null;
   const placeCartNotice = place.error ? cartFixableNotice(place.error, placeErrorMessage) : null;
-  const cartIssue = overStock ? overStockMessage(overStock.productName, overStock.stock) : placeCartNotice;
+  const cartIssue = placeCartNotice;
   const previewSubtotal = checkoutItems.reduce((sum, it) => sum + it.total, 0);
   // Chưa có báo giá: xem trước khoản giảm từ giỏ như Mini. Combo, mã và hạng của giỏ chỉ đúng cho cả giỏ; mua một phần thì máy chủ tính lại.
   const earnedLabel = quote ? `Nhận +${formatCount(quote.pointsEarned)} Điểm Xanh khi giao thành công` : '';
@@ -510,7 +530,7 @@ export default function CheckoutPage() {
     .map((m) => ({ ...m, hint: quote ? paymentUnavailableReason(m.k, quote, walletBalance) : null }));
   const paymentNote = quote && !zeroNote && payment === '' ? paymentMissingNote(quote, walletBalance) : null;
   const placeDisabled =
-    !addressId || !quote || quoteStale || place.isPending || !invoiceValid || !!overStock || (!zeroNote && payment === '');
+    !addressId || !quote || quoteStale || place.isPending || !invoiceValid || hasLineProblem || (!zeroNote && payment === '');
   const totalText = checkoutTotalText({ total: quote?.total ?? null, hasAddress: !!addressId }, formatVnd);
   const placeLabel = place.isPending ? 'Đang đặt hàng…' : quote ? fillCopy('checkout.placeWith', { price: formatVnd(quote.total) }) : 'Đặt hàng';
   // Lời báo đặt lỗi/giỏ cần sửa nằm cuối khung tóm tắt; thanh dính đáy nhắc lại để khách không phải cuộn xuống mới biết vì sao.
@@ -518,7 +538,7 @@ export default function CheckoutPage() {
   const barError =
     cartIssue ??
     (priceChanged ? fillCopy('checkout.priceChangedHint') : place.isError ? (placeErrorMessage ?? 'Đặt hàng thất bại.') : null);
-  const barNote = barError ? null : checkoutPlaceHint({ hasAddress: !!addressId, quoteFailed: quoteQ.isError });
+  const barNote = barError ? null : (checkoutPlaceHint({ hasAddress: !!addressId, quoteFailed: quoteQ.isError }) ?? (hasLineProblem ? fillCopy('checkout.fixLinesHint') : null));
 
   return (
     <Shell>
@@ -741,8 +761,8 @@ export default function CheckoutPage() {
           {/* Từ md danh sách chữ hiện đủ dòng, không vùng cuộn lồng: dòng thứ 6 trở đi gập sau nút kèm tiền; giỏ tách kiện hiện hết
               để khách thấy đủ mọi kiện và phí giao cộng vào tổng. */}
           <div data-mini-block="items" className="max-md:order-2 max-md:mt-2 max-md:bg-[var(--color-bg-surface)] max-md:p-4">
-          <MobileItems items={checkoutItems} shipments={split ? shipments : null} splitNote={splitNote} />
-          <DesktopLines items={checkoutItems} shipments={split ? shipments : null} />
+          <MobileItems items={checkoutItems} shipments={split ? shipments : null} splitNote={splitNote} fix={lineFixView} />
+          <DesktopLines items={checkoutItems} shipments={split ? shipments : null} fix={lineFixView} />
           {itemIds && cart && (
             <p className="mt-2 text-caption text-[color:var(--color-text-secondary)]">
               Đang thanh toán {itemIds.length}/{cart.items.length} sản phẩm trong giỏ.{' '}
@@ -1028,9 +1048,10 @@ function Row({ label, value, green, valueGreen, ds }: { label: React.ReactNode; 
 type ShipmentView = { key: string; itemIds: string[]; fulfiller: Parameters<typeof fulfillerLabel>[0]; shippingFee: number };
 
 // Danh sách chữ trong khung "Đơn hàng" từ md (điện thoại dùng MobileItems). Các dòng thấy được cộng với tiền dòng gập ra đúng "Tạm tính".
-function DesktopLines({ items, shipments }: { items: CartLine[]; shipments: ShipmentView[] | null }) {
+function DesktopLines({ items, shipments, fix }: { items: CartLine[]; shipments: ShipmentView[] | null; fix: LineFixView }) {
   const [expanded, setExpanded] = useState(false);
-  const { shown, hiddenCount, hiddenTotal } = collapseCheckoutLines(items, expanded);
+  // Dòng lỗi nằm sau chỗ gập thì khách thấy nút đặt bị khoá mà không thấy lý do: có dòng lỗi thì mở hết.
+  const { shown, hiddenCount, hiddenTotal } = collapseCheckoutLines(items, expanded || Object.keys(fix.problems).length > 0);
   return (
     <div role="region" aria-label="Sản phẩm trong đơn" className="mt-2 space-y-1 text-sm max-md:hidden">
       {shipments
@@ -1040,7 +1061,7 @@ function DesktopLines({ items, shipments }: { items: CartLine[]; shipments: Ship
               {items
                 .filter((it) => sh.itemIds.includes(it.id))
                 .map((it) => (
-                  <LineRow key={it.id} item={it} />
+                  <LineRow key={it.id} item={it} fix={fix} />
                 ))}
               <div className="flex justify-between gap-2 text-caption text-[color:var(--color-text-secondary)]">
                 <span>Phí giao</span>
@@ -1048,7 +1069,7 @@ function DesktopLines({ items, shipments }: { items: CartLine[]; shipments: Ship
               </div>
             </div>
           ))
-        : shown.map((it) => <LineRow key={it.id} item={it} />)}
+        : shown.map((it) => <LineRow key={it.id} item={it} fix={fix} />)}
       {!shipments && (hiddenCount > 0 || expanded) && (
         <button
           type="button"
@@ -1064,17 +1085,47 @@ function DesktopLines({ items, shipments }: { items: CartLine[]; shipments: Ship
   );
 }
 
-function LineRow({ item }: { item: CartLine }) {
+function LineRow({ item, fix }: { item: CartLine; fix: LineFixView }) {
   return (
-    <div data-testid="checkout-line" className="flex justify-between gap-2">
-      <span className="min-w-0 text-[color:var(--color-text-secondary)]">
-        <span className="line-clamp-2">{item.productName}</span>
-        <span className="block text-caption text-[color:var(--color-text-tertiary)]">
-          {item.variationName && <span>{item.variationName}</span>}
-          {item.variationName ? ' · ' : ''}×{item.quantity}
+    <>
+      <div data-testid="checkout-line" className="flex justify-between gap-2">
+        <span className="min-w-0 text-[color:var(--color-text-secondary)]">
+          <span className="line-clamp-2">{item.productName}</span>
+          <span className="block text-caption text-[color:var(--color-text-tertiary)]">
+            {item.variationName && <span>{item.variationName}</span>}
+            {item.variationName ? ' · ' : ''}×{item.quantity}
+          </span>
         </span>
-      </span>
-      <span className="shrink-0 tabular-nums text-[color:var(--color-text-primary)]">{formatVnd(item.total)}</span>
+        <span className="shrink-0 tabular-nums text-[color:var(--color-text-primary)]">{formatVnd(item.total)}</span>
+      </div>
+      <LineProblemNote id={item.id} fix={fix} />
+    </>
+  );
+}
+
+/** Lỗi của một dòng hàng ngay dưới dòng đó, kèm nút sửa nhanh (bỏ dòng, giảm về số còn). */
+interface LineFixView {
+  problems: Record<string, LineProblem>;
+  pendingId: string | null;
+  errorFor: string | null;
+  errorText: string | null;
+  onFix: (id: string, fix: LineFix) => void;
+}
+
+function LineProblemNote({ id, fix }: { id: string; fix: LineFixView }) {
+  const problem = fix.problems[id];
+  if (!problem) return null;
+  return (
+    <div data-testid="checkout-line-problem" role="alert" className="mt-1 flex flex-wrap items-center justify-between gap-2">
+      <span className="text-caption text-danger-fg">{fix.errorFor === id && fix.errorText ? fix.errorText : problem.text}</span>
+      <button
+        type="button"
+        className={ui.btnSecondary}
+        disabled={fix.pendingId === id}
+        onClick={() => fix.onFix(id, problem.fix)}
+      >
+        {problem.fixLabel}
+      </button>
     </div>
   );
 }
@@ -1248,10 +1299,12 @@ function MobileItems({
   items,
   shipments,
   splitNote,
+  fix,
 }: {
   items: CartLine[];
   shipments: { key: string; itemIds: string[]; fulfiller: Parameters<typeof fulfillerLabel>[0]; shippingFee: number }[] | null;
   splitNote: string | null;
+  fix: LineFixView;
 }) {
   if (items.length === 0) return null;
   const count = items.reduce((sum, it) => sum + it.quantity, 0);
@@ -1276,6 +1329,7 @@ function MobileItems({
                     <div className="text-caption text-[color:var(--color-text-tertiary)]">
                       {formatVnd(it.unitPrice)} × {it.quantity}
                     </div>
+                    <LineProblemNote id={it.id} fix={fix} />
                   </div>
                   <div className="whitespace-nowrap text-sm font-semibold">{formatVnd(it.total)}</div>
                 </div>
