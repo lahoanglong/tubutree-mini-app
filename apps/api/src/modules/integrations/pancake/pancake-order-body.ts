@@ -125,11 +125,15 @@ export function pancakePaymentNote(state: PancakePaymentState, paymentMethod: st
   }
 }
 
+export const PANCAKE_TAG_SUBSCRIPTION = 'DINH_KY';
+
 export function pancakeTags(
   order: Pick<PancakePushOrder, 'type' | 'platform' | 'hasRecyclingPickup' | 'gomdonPartnerCode'>,
   state: PancakePaymentState,
 ): string[] {
-  const tags = [order.platform === 'web' ? 'WEB' : 'MINIAPP', order.type === 'DEALER' ? 'DEALER' : 'RETAIL'];
+  // Đơn tự sinh từ gói định kỳ (platform 'system') không do khách đặt trên Mini App/web: kho cần phân biệt.
+  const channel = order.platform === 'web' ? 'WEB' : order.platform === 'system' ? PANCAKE_TAG_SUBSCRIPTION : 'MINIAPP';
+  const tags = [channel, order.type === 'DEALER' ? 'DEALER' : 'RETAIL'];
   if (order.hasRecyclingPickup) {
     tags.push(PANCAKE_TAG_RECYCLING);
     if (order.gomdonPartnerCode) tags.push(PANCAKE_TAG_GOMDON);
