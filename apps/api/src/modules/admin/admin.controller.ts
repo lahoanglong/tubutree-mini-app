@@ -84,7 +84,7 @@ export function MaxIfPercent(max: number, validationOptions?: ValidationOptions)
           return typeof value === 'number' && value <= max;
         },
         defaultMessage(args: ValidationArguments) {
-          return `value phải <= ${args.constraints[0]} khi type=PERCENT.`;
+          return `Mã giảm theo % chỉ được giảm tối đa ${args.constraints[0]}%.`;
         },
       },
     });
