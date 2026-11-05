@@ -971,7 +971,7 @@ for (const frame of FRAMES) {
       expectCleanWatch('chien-dich', w, [{ status: 0, path: /\/admin\/campaigns/, why: 'thử tên vô hình' }]);
     });
 
-    test('7. Cấu hình: thẻ tính năng, thông tin cửa hàng, điểm danh, tìm khoá, JSON', async ({ page, request }) => {
+    test('7. Cấu hình: thẻ tính năng, thông tin cửa hàng, điểm danh, tìm khoá, JSON', async ({ page }) => {
       test.setTimeout(150_000);
       const w = watch(page);
       await openAdmin(page);
@@ -991,14 +991,27 @@ for (const frame of FRAMES) {
       await expect(shop.getByText('Link phải bắt đầu bằng https:// và không có khoảng trắng.')).toBeVisible();
       await expect(saveShop).toBeDisabled();
       await paste(bct, '');
+      const savedLegalName = (value: string) =>
+        page.waitForResponse((r) => r.request().method() === 'PUT' && /\/admin\/config$/.test(new URL(r.url()).pathname)
+          && r.request().postDataJSON()?.key === 'company.legal_name' && r.request().postDataJSON()?.value === value);
+      // admin-all-tabs chạy song song ở worker khác có thể vừa lưu tên công ty, nên không giả định tên đang lưu là rỗng:
+      // chuỗi chỉ ký tự vô hình phải cư xử y như ô trống, và nếu lưu thì ghi chuỗi rỗng.
+      await paste(legalName, '');
+      const lockedWhenEmpty = await saveShop.isDisabled();
       await paste(legalName, INVISIBLE_MIX);
-      await expect(saveShop, 'tên công ty chỉ có ký tự vô hình: nút Lưu khoá, không ghi chuỗi vô hình vào cấu hình').toBeDisabled();
+      if (lockedWhenEmpty) {
+        await expect(saveShop, 'tên công ty chỉ có ký tự vô hình: nút Lưu khoá như khi ô trống').toBeDisabled();
+      } else {
+        await expect(saveShop, 'tên công ty chỉ có ký tự vô hình: nút Lưu mở như khi ô trống').toBeEnabled();
+        const cleared = savedLegalName('');
+        await saveShop.click();
+        expect((await cleared).status(), 'tên công ty chỉ có ký tự vô hình: ghi chuỗi rỗng, không ghi ký tự vô hình').toBe(200);
+      }
       await paste(legalName, 'Công ty TNHH W11 Thử Nghiệm');
+      const named = savedLegalName('Công ty TNHH W11 Thử Nghiệm');
       await saveShop.click();
+      expect((await named).status()).toBe(200);
       await expect(shop.getByRole('status').filter({ hasText: 'Đã lưu.' })).toBeVisible();
-      const cfg = await (await adminGet(request, '/admin/config')).json();
-      const rows = Array.isArray(cfg) ? cfg : (cfg.items ?? []);
-      expect(rows.find((c: { key: string }) => c.key === 'company.legal_name')?.value).toBe('Công ty TNHH W11 Thử Nghiệm');
       await paste(legalName, 'x'.repeat(2000));
       await saveShop.click();
       const longRes = await Promise.race([
