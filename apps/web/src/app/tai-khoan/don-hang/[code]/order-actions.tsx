@@ -1,23 +1,27 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { returnWindowExpired } from '@tubutree/app-core/client-copy';
-import Link from 'next/link';
-import { CheckCircle2, Clock, RotateCcw, XCircle } from 'lucide-react';
-import { orderCopy } from '@tubutree/app-core/account-copy';
+import { useRouter } from 'next/navigation';
+import { CheckCircle2, Clock, XCircle } from 'lucide-react';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
+import type { OrderActionKind, OrderActionPlan } from '@tubutree/app-core/commerce/order-tracking';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   cancelOrder,
   fetchMyRefunds,
   fetchMyReturns,
   formatVnd,
-  getPublicConfig,
   type OrderDetailDTO,
   type ReturnRequestDTO,
 } from '@/lib/shop-client';
-import { canCancelOrder, isReorderable, returnWindowState } from '@/lib/order-view';
+import { bankPaymentHref } from '@/lib/order-view';
+import { reviewHref } from '@/lib/reviews-client';
+import { openProductSlug } from '@tubutree/app-core/api/orders';
 import { ui } from '@/lib/guest-ui';
 import { mini } from '@/components/order-mobile/mobile-ui';
+import { OrderActionBar } from '@/components/orders/order-action-bar';
+import { BottomSheet } from '@/components/mini/bottom-sheet';
+import { SupportContact } from '@/components/support-contact';
 import { Sheet } from '@/components/ui/sheet';
 import { MD_DOWN, useMediaQuery } from '@/lib/use-media-query';
 import { invalidateBalances } from '@/lib/balances';
@@ -26,7 +30,6 @@ import {
   bankDetailsError,
   cancelRefundMode,
   destinationBody,
-  remainingByLine,
   refundOfReturn,
   refundStatusText,
   returnLinesText,
@@ -49,26 +52,28 @@ const CANCEL_TITLE = 'Bạn muốn huỷ đơn này?';
 const CANCEL_NOTE = 'Đơn đã huỷ không thể khôi phục lại.';
 
 /**
- * Việc khách tự làm được trên đơn: hủy (khi còn kịp, đơn đã trả tiền thì chọn nơi nhận tiền hoàn), mua lại (đơn đã kết thúc),
- * yêu cầu đổi/trả theo dòng và số lượng (đơn đã giao).
- * Quy tắc chỉ quyết định việc BÀY nút nào; BE vẫn kiểm lại và lời từ chối của BE (quá hạn đổi/trả, đã có yêu cầu…) hiện nguyên văn.
+ * Việc khách tự làm được trên đơn, theo kế hoạch nút của app-core (`orderActionPlan`): một nút chính theo trạng thái, phần còn lại
+ * vào "Thêm thao tác"; hủy (khi còn kịp, đơn đã trả tiền thì chọn nơi nhận tiền hoàn), mua lại, đánh giá, đổi/trả theo dòng và số lượng.
+ * Kế hoạch chỉ quyết định việc BÀY nút nào; BE vẫn kiểm lại và lời từ chối của BE (quá hạn đổi/trả, đã có yêu cầu…) hiện nguyên văn.
  */
 export function OrderActions({
   order: o,
-  userId,
-  payHref = null,
+  plan,
+  note = null,
 }: {
   order: OrderDetailDTO;
-  userId: string | null | undefined;
-  /** Đường tới trang chuyển khoản của đơn: chỉ truyền ở điện thoại, nơi thanh đáy thay khung QR nhúng. */
-  payHref?: string | null;
+  plan: OrderActionPlan;
+  /** Dòng nhỏ trên nút chính: "Còn 2 giờ 05 phút để thanh toán". */
+  note?: string | null;
 }) {
   const qc = useQueryClient();
+  const router = useRouter();
   const isPhone = useMediaQuery(MD_DOWN);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [returnOpen, setReturnOpen] = useState(false);
   const [returnKey, setReturnKey] = useState(0);
   const [returnSent, setReturnSent] = useState(false);
+  const [contactOpen, setContactOpen] = useState(false);
   // State ổn định (không dựng target trong JSX): ReorderSheet khởi tạo lại lựa chọn theo danh tính của target.
   const [reorderTarget, setReorderTarget] = useState<ReorderTarget | null>(null);
   const [cancelMethod, setCancelMethod] = useState<RefundMethodChoice>('WALLET');
@@ -76,13 +81,11 @@ export function OrderActions({
   const [cancelTouched, setCancelTouched] = useState(false);
   const [cancelReason, setCancelReason] = useState<CancelReasonCode | null>(null);
   const [cancelReasonText, setCancelReasonText] = useState('');
-  const cancelTriggerRef = useRef<HTMLButtonElement>(null);
   const keepOrderRef = useRef<HTMLButtonElement>(null);
   const cancelNoticeRef = useRef<HTMLParagraphElement>(null);
+  const barFocusRef = useRef<(() => void) | null>(null);
   const restoreFocus = useRef(false);
 
-  const canCancel = canCancelOrder(o, userId);
-  const canReorder = isReorderable(o.status);
   const delivered = o.status === 'DELIVERED';
   const showsReturns = delivered || o.status === 'RETURNED';
   const refundMode = cancelRefundMode({ paymentMethod: o.paymentMethod, paymentStatus: o.paymentStatus ?? 'UNPAID' });
@@ -97,15 +100,6 @@ export function OrderActions({
     enabled: !!o.id && orderReturns.some((r) => r.status === 'APPROVED'),
     retry: 0,
   });
-  const remaining = remainingByLine(
-    o.items.filter((it): it is typeof it & { id: string } => !!it.id),
-    orderReturns,
-  );
-  const configQ = useQuery({ queryKey: ['public-config'], queryFn: getPublicConfig, staleTime: 5 * 60_000, enabled: delivered, retry: 0 });
-  const returnDays = configQ.data?.returnWindowDays ?? 7;
-  const returnWindow = returnWindowState(o, returnDays);
-  const canRequestMore =
-    delivered && !orderReturns.some((r) => r.status === 'REQUESTED') && [...remaining.values()].some((q) => q > 0);
 
   const cancel = useMutation({
     mutationFn: ({ choose, reason }: { choose: boolean; reason: CancelReasonCode }) =>
@@ -134,17 +128,40 @@ export function OrderActions({
   useEffect(() => {
     if (confirmCancel || cancel.isPending || !restoreFocus.current) return;
     restoreFocus.current = false;
-    (cancelTriggerRef.current ?? cancelNoticeRef.current)?.focus();
+    if (barFocusRef.current && !cancel.isSuccess) barFocusRef.current();
+    else cancelNoticeRef.current?.focus();
   }, [confirmCancel, cancel.isPending, cancel.isSuccess, cancel.isError]);
 
-  const showsReturnButton = canRequestMore && returnWindow.open && !returnOpen && !returnSent;
-  // Điện thoại như Mini App: "Yêu cầu đổi/trả" là nút phụ trong trang, thanh đáy chỉ giữ việc chính của đơn.
-  const returnInBar = showsReturnButton && !isPhone;
-  const hasButtons = (canCancel && !cancel.isSuccess) || !!payHref || canReorder || returnInBar;
-  // Lời từ chối hủy của BE phải còn trên màn dù đơn tải lại không còn việc gì để bấm.
-  const nothingToDo = !canCancel && !payHref && !canReorder && !showsReturns && !cancel.isError;
-  if (nothingToDo) return null;
-
+  // Đã huỷ xong thì ẩn nút huỷ của kế hoạch cũ tới khi đơn tải lại; đang mở/đã gửi form đổi/trả thì ẩn nút đổi/trả.
+  const hide = (k: OrderActionKind) => (k === 'cancel' && cancel.isSuccess) || (k === 'return' && (returnOpen || returnSent));
+  const more = plan.more.filter((k) => !hide(k));
+  const primary = plan.primary && hide(plan.primary) ? (more.shift() ?? null) : plan.primary;
+  const shownPlan: OrderActionPlan = { ...plan, primary, more };
+  // Lời từ chối hủy của BE và kết quả hủy phải còn trên màn dù đơn tải lại không còn việc gì để bấm.
+  if (!primary && !showsReturns && !cancel.isError && !cancel.isSuccess) return null;
+  const returnMore = orderReturns.some((r) => r.status === 'APPROVED');
+  const onAction = (kind: OrderActionKind) => {
+    if (kind === 'pay') {
+      // Từ md khung QR nằm ngay trong trang: cuộn tới nó thay vì rời trang.
+      const panel = isPhone ? null : document.getElementById('order-pay-panel');
+      if (panel) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      else router.push(bankPaymentHref(o.code));
+    }
+    else if (kind === 'cancel') {
+      if (cancel.isPending) return;
+      cancel.reset();
+      setConfirmCancel(true);
+    } else if (kind === 'contact') setContactOpen(true);
+    else if (kind === 'reorder') setReorderTarget(orderReorderTarget({ code: o.code, items: o.items as OrderItemView[] }));
+    else if (kind === 'return') {
+      setReturnKey((k) => k + 1);
+      setReturnOpen(true);
+    } else {
+      const item = o.items.find((it) => it.id === plan.reviewItemId);
+      const slug = item ? openProductSlug(item) : null;
+      if (slug) router.push(reviewHref(slug, o.id));
+    }
+  };
   const cancelFields = (
     <>
       <CancelReasonPicker
@@ -195,22 +212,8 @@ export function OrderActions({
       {cancel.isPending ? 'Đang huỷ…' : 'Huỷ đơn'}
     </button>
   );
-  const returnButton = (
-    <button
-      type="button"
-      onClick={() => {
-        setReturnKey((k) => k + 1);
-        setReturnOpen(true);
-      }}
-      className={isPhone ? 'inline-flex min-h-11 items-center gap-2 px-2 text-sm font-semibold text-stone-700' : `${ui.btnSecondary} gap-2`}
-    >
-      <RotateCcw className="h-4 w-4" aria-hidden="true" />
-      {orderReturns.some((r) => r.status === 'APPROVED') ? 'Trả thêm sản phẩm' : 'Yêu cầu đổi/trả'}
-    </button>
-  );
-
   return (
-    <section aria-label="Thao tác với đơn hàng" className={`mt-4 rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card max-md:mt-2 max-md:py-0 ${mini.band}`}>
+    <section aria-label="Thao tác với đơn hàng" className={`mt-4 rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card max-md:mt-2 max-md:py-0 lg:mt-0 ${mini.band}`}>
       {cancel.isSuccess && (
         <p ref={cancelNoticeRef} tabIndex={-1} role="status" className="mb-3 text-sm font-medium text-success-fg outline-none">
           Đã huỷ đơn hàng. Hàng, điểm và tiền đã dùng cho đơn này được hoàn lại theo quy định.
@@ -242,36 +245,7 @@ export function OrderActions({
           </div>
         </div>
       ) : (
-        hasButtons && (
-        <ActionRow>
-          {canCancel && !cancel.isSuccess && (
-            <button
-              ref={cancelTriggerRef}
-              type="button"
-              disabled={cancel.isPending}
-              onClick={() => {
-                if (cancel.isPending) return;
-                cancel.reset();
-                setConfirmCancel(true);
-              }}
-              className={`${ui.btnSecondary} border-danger-fg text-danger-fg max-md:flex-1`}
-            >
-              Huỷ đơn
-            </button>
-          )}
-          {payHref && (
-            <Link href={payHref} className={`${ui.btnPrimary} flex-1`}>
-              {orderCopy.payNow}
-            </Link>
-          )}
-          {canReorder && (
-            <button type="button" onClick={() => setReorderTarget(orderReorderTarget({ code: o.code, items: o.items as OrderItemView[] }))} className={`${ui.btnPrimary} max-md:flex-1`}>
-              Mua lại đơn này
-            </button>
-          )}
-          {returnInBar && returnButton}
-        </ActionRow>
-        )
+        shownPlan.primary && <OrderActionBar plan={shownPlan} returnMore={returnMore} note={note} busy={cancel.isPending} onAction={onAction} focusRef={barFocusRef} />
       )}
 
       {isPhone && (
@@ -296,12 +270,6 @@ export function OrderActions({
         </Sheet>
       )}
 
-      {canRequestMore && !returnWindow.open && (
-        <p className="mt-3 rounded-control bg-stone-50 p-3 text-xs text-stone-700">
-          {returnWindowExpired(returnDays)}
-        </p>
-      )}
-
       {showsReturns && orderReturns.map((r) => (
           <ReturnStatus key={r.id} request={r} items={o.items} refund={refundOfReturn(refundsQ.data, r.id)} placedForCustomer={!!o.placedForCustomer} />
         ))}
@@ -310,8 +278,6 @@ export function OrderActions({
           Đã gửi yêu cầu đổi/trả. Tubu sẽ phản hồi trong 24 giờ.
         </p>
       )}
-
-      {isPhone && showsReturnButton && <div className="mt-2 text-center">{returnButton}</div>}
 
       {delivered && returnOpen && (
         <ReturnRequestForm
@@ -326,6 +292,9 @@ export function OrderActions({
         />
       )}
       <ReorderSheet target={reorderTarget} navigateToCart onClose={() => setReorderTarget(null)} />
+      <BottomSheet open={contactOpen} onClose={() => setContactOpen(false)} title={fillCopy('order.action.contact')}>
+        <SupportContact orderCode={o.code} />
+      </BottomSheet>
     </section>
   );
 }
@@ -367,46 +336,6 @@ function ReturnStatus({
           <RefundDestinationControl refund={refund} />
         </div>
       )}
-    </div>
-  );
-}
-
-/**
- * Hàng nút thao tác: từ md nằm trong thẻ như cũ; ở điện thoại dính đáy toàn chiều ngang như StickyActionBar của Mini App
- * (Huỷ đơn / Thanh toán ngay / Mua lại đơn này; "Yêu cầu đổi/trả" là nút phụ nằm ngoài thanh). Thanh fixed che đáy trang nên báo qua `has-sticky-bar` + `--sticky-bar-h`
- * để body chừa chỗ và thanh tab ẩn đi, cùng cách StickyActionBar của web làm.
- */
-function ActionRow({ children }: { children: React.ReactNode }) {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const root = document.documentElement;
-    const bar = ref.current;
-    const measure = () => {
-      const fixed = bar && getComputedStyle(bar).position === 'fixed';
-      document.body.classList.toggle('has-sticky-bar', !!fixed);
-      if (fixed) root.style.setProperty('--sticky-bar-h', `${Math.ceil(bar.getBoundingClientRect().height)}px`);
-      else root.style.removeProperty('--sticky-bar-h');
-    };
-    measure();
-    window.addEventListener('resize', measure);
-    // Số nút đổi (hủy xong, mua lại hiện ra) làm thanh cao thấp khác đi mà không có resize.
-    const observer = typeof ResizeObserver === 'undefined' || !bar ? null : new ResizeObserver(measure);
-    if (bar) observer?.observe(bar);
-    return () => {
-      observer?.disconnect();
-      window.removeEventListener('resize', measure);
-      root.style.removeProperty('--sticky-bar-h');
-      document.body.classList.remove('has-sticky-bar');
-    };
-  }, []);
-  return (
-    <div
-      ref={ref}
-      data-testid="order-action-bar"
-      data-sticky-bar
-      className="flex flex-wrap gap-2 max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:z-30 max-md:flex-nowrap max-md:border-t max-md:border-stone-200 max-md:bg-stone-0 max-md:px-4 max-md:pt-3 max-md:pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] max-md:shadow-raised"
-    >
-      {children}
     </div>
   );
 }

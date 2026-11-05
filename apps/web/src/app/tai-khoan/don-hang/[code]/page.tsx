@@ -4,14 +4,17 @@ import { useCallback, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { Leaf, ExternalLink, Star } from 'lucide-react';
+import { Leaf, Star } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { orderCopy } from '@tubutree/app-core/account-copy';
 import { customerOrderNote, isSubscriptionOrder, openProductSlug } from '@tubutree/app-core/api/orders';
 import { publicConfigQuery } from '@tubutree/app-core/queries/config';
 import { orderDeliveryEtaLabel } from '@tubutree/app-core/shipping-eta';
+import { orderActionPlan, orderHeadline, orderTrack, shippingEvents, type TrackOrder } from '@tubutree/app-core/commerce/order-tracking';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { serverNow } from '@tubutree/app-core/server-clock';
 import { useAuth } from '@/lib/auth-context';
 import { MD_DOWN, useMediaQuery } from '@/lib/use-media-query';
+import { useCountdown } from '@/lib/use-countdown';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { loadErrorText } from '@/lib/error-text';
@@ -20,16 +23,13 @@ import { fetchMyRefunds, fetchMyReturns, fetchOrder, formatVnd, type OrderDetail
 import {
   addressLine,
   buyerOrderStatusLabel,
-  canCancelOrder,
   discountRows,
   orderPaymentStatusLabel,
-  isHandedToCarrier,
   bankPaymentHref,
   orderDetailHref,
   orderPointsNote,
   orderStamp,
   orderStatusLabel,
-  orderStatusTone,
   safeHttpUrl,
 } from '@/lib/order-view';
 import { ui } from '@/lib/guest-ui';
@@ -40,11 +40,13 @@ import { BankTransferPanel, type BankPanelState } from '../../../thanh-toan/bank
 import { formatDateTime } from '@/lib/format-date';
 import { formatCount } from '@/lib/checkout-points';
 import { SupportContact } from '@/components/support-contact';
-import { journeyEvents, journeyEventLabel, shippingEventLabel } from '@/lib/shipping-events';
+import { shippingEventLabel } from '@/lib/shipping-events';
 import { OrderActions } from './order-actions';
 import { OrderRefunds } from './order-refunds';
-import { returnedByLine, showsPaymentDeadline, showsRefundPanel } from '@/lib/refund-rules';
-import { OrderTimeline } from './order-timeline';
+import { returnedByLine, remainingByLine, showsRefundPanel } from '@/lib/refund-rules';
+import { OrderStatusHero } from '@/components/orders/order-status-hero';
+import { OrderTrack } from '@/components/orders/order-track';
+import { OrderShipping } from '@/components/orders/order-shipping';
 import { mini } from '@/components/order-mobile/mobile-ui';
 import { PageHeader } from '@/components/ui/page-header';
 import { ErrorState } from '@/components/ui/error-state';
@@ -52,11 +54,10 @@ import { LineItemSkeleton, Skeleton } from '@/components/ui/skeleton';
 import { PAGE_NARROW } from '@/lib/page-frame';
 import { ProductThumb } from '@/components/mini';
 
-// Phần dưới màn đầu (nhắc theo dõi OA, hoá đơn, đổi rác, chép mã vận đơn) tải sau để First Load của trang tăng ít nhất có thể.
+// Phần dưới màn đầu (nhắc theo dõi OA, hoá đơn, đổi rác) tải sau để First Load của trang tăng ít nhất có thể.
 const FollowOaPrompt = dynamic(() => import('./order-extras').then((m) => m.FollowOaPrompt), { ssr: false });
 const OrderInvoice = dynamic(() => import('./order-extras').then((m) => m.OrderInvoice), { ssr: false });
 const OrderWasteLink = dynamic(() => import('./order-extras').then((m) => m.OrderWasteLink), { ssr: false });
-const CopyShippingCode = dynamic(() => import('./copy-shipping-code').then((m) => m.CopyShippingCode), { ssr: false });
 
 /** STATUS_COLOR của Mini App (utils/order-status.ts): dải trạng thái đầu trang chi tiết đơn. */
 const STATUS_COLOR: Record<string, { bg: string; fg: string }> = {
@@ -127,6 +128,11 @@ export default function OrderDetailPage() {
     void qc.invalidateQueries({ queryKey: ['orders'] });
   }, [qc, code]);
 
+  // Đếm ngược theo giờ máy chủ chỉ khi đơn còn chờ khách chuyển khoản; hook phải đứng trước các return sớm.
+  const deadlineLeft = useCountdown(
+    orderQ.data?.status === 'PENDING_PAYMENT' && !orderQ.data.manualHandling ? (orderQ.data.paymentDeadline ?? null) : null,
+  );
+
   if (phase === 'loading') {
     return (
       <Shell title="Chi tiết đơn hàng">
@@ -188,7 +194,22 @@ export default function OrderDetailPage() {
   const etaLabel = orderDeliveryEtaLabel(cfgQ.data?.shippingEta, o);
   const pointsReversed = orderReturns.filter((r) => r.status === 'APPROVED').reduce((sum, r) => sum + (r.pointsReversed ?? 0), 0);
   const pointsNote = orderPointsNote(o.status, o.pointsEarned ?? 0, pointsReversed, o.pointsReturnReversed);
-  const cancelClosed = !canCancelOrder(o, user?.id) && isHandedToCarrier(o);
+  const returnDays = cfgQ.data?.returnWindowDays ?? 7;
+  const ctx = {
+    now: serverNow(),
+    userId: user?.id,
+    etaLabel,
+    returnDays,
+    deadlineLeft,
+    pendingReturn: orderReturns.some((r) => r.status === 'REQUESTED'),
+    returnableLeft: [...remainingByLine(o.items.filter((it): it is typeof it & { id: string } => !!it.id), orderReturns).values()].some((q) => q > 0),
+  };
+  const trackOrder: TrackOrder = o;
+  const headline = orderHeadline(trackOrder, ctx);
+  const plan = orderActionPlan(trackOrder, ctx);
+  const trackView = orderTrack(trackOrder, { etaLabel });
+  const payNote = plan.primary === 'pay' && deadlineLeft ? fillCopy('order.action.payLeft', { t: deadlineLeft }) : null;
+  const tracking = safeHttpUrl(o.trackingLink);
   const showPayPanel = !isPhone && (canPayNow(o) || (qrShown && canPayNow(o, 0)) || paidNotice);
   const returnedQty = returnedByLine(
     o.items.filter((it): it is typeof it & { id: string } => !!it.id),
@@ -196,91 +217,43 @@ export default function OrderDetailPage() {
   );
   return (
     <Shell title="Chi tiết đơn hàng" subtitle={o.code}>
-      <div
-        data-testid="status-hero"
-        style={{ '--hero-bg': (STATUS_COLOR[o.status] ?? STATUS_COLOR.CONFIRMED!).bg, '--hero-fg': (STATUS_COLOR[o.status] ?? STATUS_COLOR.CONFIRMED!).fg } as React.CSSProperties}
-        className="max-md:bg-[var(--hero-bg)] max-md:p-4 max-md:text-[color:var(--hero-fg)]"
-      >
-        <div className="flex flex-wrap items-center gap-2 max-md:flex-col-reverse max-md:items-start max-md:gap-0">
-          <span
-            className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${orderStatusTone(o.status)} max-md:bg-transparent max-md:p-0 max-md:text-base max-md:font-semibold max-md:text-[color:inherit]`}
-          >
-            {buyerOrderStatusLabel(o)}
-          </span>
-          <span className="text-sm text-stone-600 max-md:text-xs max-md:text-[color:inherit]">
-            {stamp.label} {formatDateTime(stamp.at)}
-          </span>
-        </div>
-        {etaLabel && (
-          <p data-testid="order-eta" className="mt-1 text-sm font-medium text-stone-800 max-md:text-xs max-md:font-normal max-md:text-[color:inherit]">
-            {orderCopy.etaLine(etaLabel)}
-          </p>
-        )}
-        {o.manualHandling ? (
-          <p className="mt-2 text-sm text-stone-700 max-md:mt-1 max-md:text-xs max-md:text-[color:inherit]">
-            Tubu đang xử lý đơn này, liên hệ CSKH nếu cần hỗ trợ.
-          </p>
-        ) : (
-          !showPayPanel &&
-          showsPaymentDeadline({ status: o.status, paymentStatus: o.paymentStatus ?? '', paymentDeadline: o.paymentDeadline }) && (
-            <p className="mt-2 text-sm font-medium text-warning-fg max-md:mt-1 max-md:text-xs max-md:font-normal max-md:text-[color:inherit]">
-              Thanh toán trước <b>{formatDateTime(o.paymentDeadline!)}</b> — quá hạn đơn sẽ tự huỷ.
-            </p>
-          )
-        )}
-      </div>
-
-      {o.fulfilment?.kind === 'MERCHANT' && (
-        <p className="mt-2 text-sm text-stone-700 max-md:order-5 max-md:px-4">
-          Giao bởi <span className="font-semibold text-stone-900">{o.fulfilment.name}</span> (gian hàng đối tác tự đóng gói và giao)
-          {o.fulfilment.phone && (
-            <>
-              {' '}· Liên hệ gian hàng: <span className="font-semibold text-stone-900">{o.fulfilment.phone}</span>
-            </>
-          )}
-        </p>
-      )}
-      {(o.siblings?.length ?? 0) > 0 && (
-        <section aria-label="Đơn cùng lần đặt" className={`mt-3 p-3 text-sm max-md:order-5 max-md:mx-4 ${ui.card}`}>
-          <p className="text-stone-700">Lần đặt này được tách theo nơi giao, các đơn còn lại:</p>
-          <ul className="mt-1 space-y-1">
-            {o.siblings!.map((sb) => (
-              <li key={sb.code} className="flex flex-wrap items-center justify-between gap-2">
-                <span>
-                  <Link href={orderDetailHref(sb.code)} className="inline-flex min-h-11 items-center font-semibold text-forest-700 underline">
-                    {sb.code}
-                  </Link>{' '}
-                  · {sb.fulfillerName} giao · {orderStatusLabel(sb.status)}
-                </span>
-                <span className="font-semibold text-stone-900">{formatVnd(sb.total)}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
+      <div data-testid="order-layout" className="flex flex-col lg:grid lg:grid-cols-[minmax(0,1fr)_21rem] lg:items-start lg:gap-x-6">
+        <div data-testid="order-main" className="contents lg:flex lg:min-w-0 lg:flex-col">
+          <div className="order-1 md:overflow-hidden md:rounded-card">
+            <OrderStatusHero headline={headline} statusLabel={buyerOrderStatusLabel(o)} stamp={stamp} tone={STATUS_COLOR[o.status] ?? STATUS_COLOR.CONFIRMED!} />
+          </div>
       {showPayPanel && (
-        <div className="mt-2 max-md:px-4">
+        <div id="order-pay-panel" className="order-2 mt-2 max-md:px-4">
           {canPayNow(o) && panelState === 'ready' && (
             <p className="rounded-card border border-warning-fg bg-warning-bg px-4 py-3 text-sm text-warning-fg">
-              Đơn đang chờ bạn chuyển khoản. Quét mã bên dưới để thanh toán, hệ thống tự xác nhận khi nhận được tiền.
+              Quét mã bên dưới để thanh toán, hệ thống tự xác nhận khi nhận được tiền.
             </p>
           )}
           <BankTransferPanel order={o} onPaid={refreshOrder} onState={onPanelState} />
         </div>
       )}
 
-      <div className="max-md:px-4 max-md:empty:hidden"><FollowOaPrompt /></div>
-      <OrderTimeline status={o.status} paymentMethod={o.paymentMethod} createdAt={o.createdAt} statusTimes={o.statusTimes} etaLabel={etaLabel} />
-      {/* Điện thoại xếp khối theo thứ tự của Mini App (order-N); từ md giữ nút thao tác ngay dưới hành trình. */}
-      <div className="max-md:order-11">
-        <OrderActions order={o} userId={user?.id} payHref={isPhone && canPayNow(o) ? bankPaymentHref(o.code) : null} />
-      </div>
-      <div className="max-md:order-6 max-md:px-4 max-md:empty:hidden">
-        {o.id && showsRefundPanel(o) && <OrderRefunds orderId={o.id} returnRequestIds={new Set(orderReturns.map((r) => r.id))} />}
-      </div>
-
-      <section className={`mt-4 p-4 max-md:mt-2 ${ui.card} ${mini.band}`}>
+          <div className="order-3 max-md:px-4 max-md:empty:hidden"><FollowOaPrompt /></div>
+          {trackView && (
+            <section aria-labelledby="order-track-title" className={`order-4 mt-4 p-4 max-md:mt-2 ${ui.card} ${mini.band}`}>
+              <h2 id="order-track-title" className={`${ui.sectionTitle} ${mini.sectionLabel} mb-3`}>
+                Hành trình đơn hàng
+              </h2>
+              <OrderTrack track={trackView} now={ctx.now} />
+            </section>
+          )}
+          {(o.shippingPartner || o.shippingCode || tracking || (!trackView && !!o.shippingHistory?.length)) && (
+            <section className={`order-5 mt-4 p-4 max-md:mt-2 ${ui.card} ${mini.band}`}>
+              <OrderShipping
+                partner={o.shippingPartner}
+                code={o.shippingCode}
+                status={shippingEventLabel(o.shippingStatus)}
+                trackingHref={tracking}
+                events={trackView ? undefined : shippingEvents(o.shippingHistory)}
+              />
+            </section>
+          )}
+      <section className={`order-6 mt-4 p-4 max-md:mt-2 ${ui.card} ${mini.band}`}>
         <h2 className={`${ui.sectionTitle} ${mini.sectionLabel}`}>Sản phẩm</h2>
         <ul className="mt-2 divide-y divide-stone-200">
           {o.items.map((it, i) => {
@@ -350,7 +323,9 @@ export default function OrderDetailPage() {
         </ul>
       </section>
 
-      <section className={`mt-4 p-4 max-md:mt-2 ${ui.card} ${mini.band}`}>
+        </div>
+        <div data-testid="order-side" className="contents lg:flex lg:min-w-0 lg:flex-col">
+      <section className={`order-7 mt-4 p-4 max-md:mt-2 ${ui.card} ${mini.band}`}>
         <h2 className={`${ui.sectionTitle} max-md:sr-only`}>Thanh toán</h2>
         <div className="mt-2 space-y-1 text-sm max-md:mt-0 max-md:space-y-2">
           <Row label="Tạm tính" value={formatVnd(o.subtotal)} />
@@ -381,99 +356,69 @@ export default function OrderDetailPage() {
         </div>
       </section>
 
-      <div className="max-md:order-7">
-        <ShippingSection order={o} />
-      </div>
-      <div className="max-md:order-8 max-md:px-4 max-md:empty:hidden">
-        <OrderInvoice order={o} />
-        <OrderWasteLink order={o} />
-      </div>
-      <div className="max-md:order-9">
-        <AddressSection order={o} />
-      </div>
+      {o.fulfilment?.kind === 'MERCHANT' && (
+        <p className="mt-2 text-sm text-stone-700 order-8 max-md:px-4">
+          Giao bởi <span className="font-semibold text-stone-900">{o.fulfilment.name}</span> (gian hàng đối tác tự đóng gói và giao)
+          {o.fulfilment.phone && (
+            <>
+              {' '}· Liên hệ gian hàng: <span className="font-semibold text-stone-900">{o.fulfilment.phone}</span>
+            </>
+          )}
+        </p>
+      )}
+      {(o.siblings?.length ?? 0) > 0 && (
+        <section aria-label="Đơn cùng lần đặt" className={`mt-3 p-3 text-sm order-8 max-md:mx-4 ${ui.card}`}>
+          <p className="text-stone-700">Lần đặt này được tách theo nơi giao, các đơn còn lại:</p>
+          <ul className="mt-1 space-y-1">
+            {o.siblings!.map((sb) => (
+              <li key={sb.code} className="flex flex-wrap items-center justify-between gap-2">
+                <span>
+                  <Link href={orderDetailHref(sb.code)} className="inline-flex min-h-11 items-center font-semibold text-forest-700 underline">
+                    {sb.code}
+                  </Link>{' '}
+                  · {sb.fulfillerName} giao · {orderStatusLabel(sb.status)}
+                </span>
+                <span className="font-semibold text-stone-900">{formatVnd(sb.total)}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
+          <div className="order-9 max-md:px-4 max-md:empty:hidden">
+            {o.id && showsRefundPanel(o) && <OrderRefunds orderId={o.id} returnRequestIds={new Set(orderReturns.map((r) => r.id))} />}
+          </div>
+          <div className="order-10 max-md:px-4 max-md:empty:hidden">
+            <OrderInvoice order={o} />
+            <OrderWasteLink order={o} />
+          </div>
+          <div className="order-11">
+            <AddressSection order={o} />
+          </div>
       {customerOrderNote(o) ? (
-        <section className={`mt-4 p-4 max-md:order-10 max-md:mt-2 ${ui.card} ${mini.band}`}>
+        <section className={`mt-4 p-4 order-[12] max-md:mt-2 ${ui.card} ${mini.band}`}>
           <h2 className={`${ui.sectionTitle} ${mini.sectionLabel}`}>Ghi chú</h2>
           <p className="mt-2 whitespace-pre-line text-sm text-stone-700">{customerOrderNote(o)}</p>
         </section>
       ) : (
         // Ghi chú cố định của hệ thống không phải lời khách viết: thay bằng nhãn.
         isSubscriptionOrder(o) && (
-          <section className={`mt-4 p-4 max-md:order-10 max-md:mt-2 ${ui.card} ${mini.band}`}>
+          <section className={`mt-4 p-4 order-[12] max-md:mt-2 ${ui.card} ${mini.band}`}>
             <h2 className={`${ui.sectionTitle} ${mini.sectionLabel}`}>Đơn định kỳ</h2>
             <p className="mt-2 text-sm text-stone-700">Đơn này tự đặt theo lịch bạn đã chọn.</p>
           </section>
         )
       )}
 
-      {cancelClosed && (
-        <p className="mt-4 text-sm text-stone-700 max-md:order-12 max-md:px-4">
-          Đơn đã giao cho đơn vị vận chuyển nên không huỷ được. Khi nhận hàng, bạn có thể gửi yêu cầu đổi/trả.
-        </p>
-      )}
-
-      <div className="mt-4 px-4 max-md:order-last md:px-0">
-        <SupportContact orderCode={o.code} />
+          <div className="order-[13] lg:order-first">
+            <OrderActions order={o} plan={plan} note={payNote} />
+          </div>
+          <div className="order-[14] mt-4 px-4 md:px-0">
+            <SupportContact orderCode={o.code} />
+          </div>
+        </div>
       </div>
     </Shell>
-  );
-}
-
-function ShippingSection({ order: o }: { order: OrderDetailDTO }) {
-  const tracking = safeHttpUrl(o.trackingLink);
-  const journey = journeyEvents(o.shippingHistory);
-  const hasShipping = !!(o.shippingPartner || o.shippingCode || tracking || journey.length > 0);
-  if (!hasShipping) return null;
-
-  return (
-    <section className={`mt-4 p-4 max-md:mt-2 ${ui.card} ${mini.band}`}>
-      <h2 className={`${ui.sectionTitle} ${mini.sectionLabel}`}>Vận chuyển</h2>
-      <div className="mt-2 space-y-1 text-sm">
-        {o.shippingPartner && <Row label="Đơn vị vận chuyển" value={o.shippingPartner} />}
-        {o.shippingCode && (
-          <div className="flex items-center justify-between gap-3">
-            <Row label="Mã vận đơn" value={o.shippingCode} />
-            <CopyShippingCode code={o.shippingCode} />
-          </div>
-        )}
-        {shippingEventLabel(o.shippingStatus) && (
-          <p className="text-xs font-medium text-success-fg">{shippingEventLabel(o.shippingStatus)}</p>
-        )}
-        {tracking && (
-          <a
-            href={tracking}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-forest-700 underline"
-          >
-            Tra cứu hành trình
-            <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-          </a>
-        )}
-      </div>
-      {journey.length > 0 && (
-        <>
-          <h3 className="mt-3 text-sm font-semibold text-stone-900">Hành trình vận chuyển</h3>
-          <ol className="mt-2 text-sm">
-            {journey.map((ev, i) => (
-              <li key={`${ev.at ?? ''}-${i}`} className="flex gap-3">
-                <div className="flex flex-col items-center">
-                  <span aria-hidden="true" className={`mt-1.5 h-2 w-2 flex-none rounded-full ${i === 0 ? 'bg-forest-600' : 'bg-stone-300'}`} />
-                  {i < journey.length - 1 && <span aria-hidden="true" className="my-0.5 w-0.5 flex-1 bg-stone-200" />}
-                </div>
-                <div className={`min-w-0 ${i < journey.length - 1 ? 'pb-3' : ''}`}>
-                  <p className={i === 0 ? 'font-semibold text-stone-900' : 'text-stone-700'}>
-                    {journeyEventLabel(ev)}
-                  </p>
-                  {ev.at && <p className="text-xs text-stone-600">{formatDateTime(ev.at)}</p>}
-                </div>
-              </li>
-            ))}
-          </ol>
-        </>
-      )}
-    </section>
   );
 }
 
@@ -518,7 +463,7 @@ function Row({ label, value, positive, valueTone }: { label: string; value: stri
 
 function Shell({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
-    <main className={`${PAGE_NARROW} py-6 max-md:px-0 max-md:py-0`}>
+    <main className={`${PAGE_NARROW} py-6 max-md:px-0 max-md:py-0 lg:max-w-none`}>
       <PageHeader title={title} subtitle={subtitle} subtitleClassName="md:text-sm" backHref="/tai-khoan" backLabel="Đơn hàng của tôi" />
       <div className="mt-3 max-md:mt-0 max-md:flex max-md:flex-col max-md:pb-6">{children}</div>
     </main>
