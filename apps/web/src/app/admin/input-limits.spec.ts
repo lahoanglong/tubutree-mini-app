@@ -179,6 +179,23 @@ describe('ô gõ chữ ở màn quản trị khớp trần DTO (L4-03)', () => {
     expect(typeof phone?.maxLength === 'number' && phone.maxLength >= '+84 912 345 678'.length).toBe(true);
   });
 
+  it('service cùng thư mục với DTO không chặn độ dài trường chữ thấp hơn trần DTO mà ô nhập đã cho phép', () => {
+    const lower: string[] = [];
+    for (const [key, row] of Object.entries(INPUT_LIMITS)) {
+      const [path, rest] = row.dto.split(':') as [string, string];
+      const field = rest.split('.')[1]!;
+      const dir = resolve(REPO, path, '..');
+      for (const f of readdirSync(dir).filter((n) => n.endsWith('.service.ts'))) {
+        const text = readFileSync(join(dir, f), 'utf8');
+        for (const m of text.matchAll(new RegExp(`\\b${field}\\.length\\s*>\\s*([A-Z][A-Z0-9_]*|\\d+)`, 'g'))) {
+          const limit = /^\d+$/.test(m[1]!) ? Number(m[1]) : constValue(m[1]!, text) ?? apiSources().map((t) => t.match(new RegExp(`const\\s+${m[1]}\\s*=\\s*(\\d+)`))?.[1]).find(Boolean);
+          if (limit !== undefined && limit !== null && Number(limit) < row.max) lower.push(`${key}: ${f} chặn ${field} ở ${limit}, ô và DTO cho ${row.max}`);
+        }
+      }
+    }
+    expect(lower).toEqual([]);
+  });
+
   it('mọi dòng miễn có lý do', () => {
     expect(Object.entries(EXEMPT_INPUTS).filter(([, reason]) => reason.trim().length < 8)).toEqual([]);
   });
