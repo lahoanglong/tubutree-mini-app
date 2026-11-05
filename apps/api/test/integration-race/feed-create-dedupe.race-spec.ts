@@ -99,6 +99,26 @@ describe('Feed: gửi trùng đăng bài / tạo sự kiện (real Postgres)', (
     });
   });
 
+  it('sự kiện tạo nhầm rồi đóng, tạo lại đúng quà ngay sau đó → sự kiện mới, không trả cái đã đóng', async () => {
+    const title = `Sự kiện đôi đóng ${Date.now()}`;
+    const dto = { title, startAt: new Date('2027-02-01T00:00:00Z'), endAt: new Date('2027-02-10T00:00:00Z'), rewardPoints: 20_000 };
+    const wrong = await feed.createEvent(dto);
+    await feed.closeEvent(wrong.id);
+    const again = await feed.createEvent({ ...dto, rewardPoints: 30_000 });
+    expect(again.id).not.toBe(wrong.id);
+    expect(again.status).toBe('OPEN');
+    const sameAsClosed = await feed.createEvent(dto);
+    expect(sameAsClosed.id).not.toBe(wrong.id);
+  });
+
+  it('tiêu đề chỉ khác khoảng trắng hai đầu → cùng sự kiện', async () => {
+    const t = `Sự kiện đôi trim ${Date.now()}`;
+    const dto = { startAt: new Date('2027-03-01T00:00:00Z'), endAt: new Date('2027-03-10T00:00:00Z') };
+    const a = await feed.createEvent({ ...dto, title: t });
+    const b = await feed.createEvent({ ...dto, title: `${t} ` });
+    expect(b.id).toBe(a.id);
+  });
+
   it('khách vãng lai có 2 bài ảnh chờ duyệt (chạm trần) gửi lại bài thứ 2 → nhận bài đó, không lỗi trần, số bài không đổi', async () => {
     const u = await createUser(prisma);
     const img = (n: number) => `data:image/png;base64,${'A'.repeat(200)}${n}`;

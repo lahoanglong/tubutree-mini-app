@@ -1590,18 +1590,21 @@ export class CommunityFeedService {
         `Quà sự kiện phải từ ${formatPoints(EVENT_REWARD_MIN_POINTS)} đến ${formatPoints(EVENT_REWARD_MAX_POINTS)} Điểm Xanh, hoặc để 0 nếu sự kiện không có quà.`,
       );
     }
-    // Gửi lại cùng tiêu đề + giờ trong 5 phút (bấm đôi, mạng gửi lại) thì trả sự kiện đã có; khoá toàn cục vì admin tạo ít.
+    // Gửi lại y hệt trong 5 phút (bấm đôi, mạng gửi lại) thì trả sự kiện đã có; khoá toàn cục vì admin tạo ít. Chỉ so với sự kiện còn
+    // OPEN và cùng mô tả, ảnh bìa, quà: tạo nhầm rồi đóng, tạo lại cho đúng ngay sau đó phải ra sự kiện mới, không phải cái đã đóng.
+    const data = { ...dto, title: dto.title.trim() };
     return this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'feed-event-create'}))`;
       const existing = await tx.communityEvent.findFirst({
         where: {
-          title: dto.title, startAt: dto.startAt, endAt: dto.endAt,
+          status: 'OPEN', title: data.title, description: data.description ?? null, coverUrl: data.coverUrl ?? null,
+          startAt: data.startAt, endAt: data.endAt, rewardPoints: data.rewardPoints ?? 0,
           createdAt: { gte: new Date(Date.now() - FEED_CREATE_DEDUPE_MS) },
         },
         orderBy: { createdAt: 'desc' },
       });
       if (existing) return existing;
-      return tx.communityEvent.create({ data: dto });
+      return tx.communityEvent.create({ data });
     });
   }
 

@@ -3676,6 +3676,21 @@ describe('CommunityFeedService: gửi lại cùng nội dung trong 5 phút (m5)'
     expect(prisma.$executeRaw).toHaveBeenCalled();
   });
 
+  it('createEvent: so trùng chỉ với sự kiện còn OPEN và cùng mô tả, ảnh bìa, quà; tiêu đề cắt khoảng trắng hai đầu', async () => {
+    const prisma = makePrisma();
+    const dto = { title: '  Thi khoe vườn ', description: 'Mô tả', coverUrl: 'https://c/1.jpg', startAt: new Date('2026-08-01'), endAt: new Date('2026-08-10'), rewardPoints: 30_000 };
+    await makeSvc(prisma).createEvent(dto);
+    const where = (prisma.communityEvent.findFirst as jest.Mock).mock.calls[0][0].where;
+    expect(where).toMatchObject({ status: 'OPEN', title: 'Thi khoe vườn', description: 'Mô tả', coverUrl: 'https://c/1.jpg', rewardPoints: 30_000 });
+    expect((prisma.communityEvent.create as jest.Mock).mock.calls[0][0].data.title).toBe('Thi khoe vườn');
+  });
+
+  it('createEvent: không mô tả/ảnh bìa/quà → so với null và 0', async () => {
+    const prisma = makePrisma();
+    await makeSvc(prisma).createEvent({ title: 'A', startAt: new Date('2026-08-01'), endAt: new Date('2026-08-10') });
+    expect((prisma.communityEvent.findFirst as jest.Mock).mock.calls[0][0].where).toMatchObject({ description: null, coverUrl: null, rewardPoints: 0 });
+  });
+
   const cand = (over: Record<string, unknown> = {}) => ({ id: 'old', status: 'PUBLISHED', productTags: [], tags: [], ...over });
 
   it('createPost: ứng viên trùng đủ trường nội dung → trả bài đó, không tạo/thưởng thêm', async () => {
