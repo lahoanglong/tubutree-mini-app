@@ -920,6 +920,13 @@ describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo vari
     expect(res.data[1]!.items[0]).toMatchObject({ id: 'i3', available: true });
   });
 
+  it('ảnh bìa dòng đơn: tồn ảo 99.999.988 bị kẹp ở 100.000, vẫn còn hàng', async () => {
+    const orders = [{ ...baseOrder, id: 'o1', code: 'A', items: [line('i1', 'v1')] }];
+    const { svc } = makeMediaService(orders, [v('v1', { stock: 99_999_988 })]);
+    const res = await svc.list('u1', {}, 1, 20);
+    expect(res.data[0]!.items[0]).toMatchObject({ stock: 100_000, available: true });
+  });
+
   it('D11: danh sách đơn của khách select riêng, không kéo shippingHistory/invoiceRequest; chi tiết đơn vẫn đọc đủ cột', async () => {
     const orders = [{ ...baseOrder, id: 'o1', items: [line('i1', 'v1')], shippingHistory: [{ at: 'x' }], invoiceRequest: { taxCode: '1' } }];
     const { svc } = makeMediaService(orders, [v('v1')]);

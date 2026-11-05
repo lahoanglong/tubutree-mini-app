@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { exposedStock } from '@tubutree/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { isPartnerOwnedProduct } from '../cart/partner-goods';
 import { isPancakeFulfilledLine } from '../integrations/pancake/pancake-fulfilment';
@@ -130,7 +131,7 @@ export class PurchasedItemsService {
         thumbnail: publicProductThumb({ id: v.product.id, thumbnail: v.product.thumbnail, images: coverOf.get(v.product.id) }),
         price: v.retailPrice,
         salePrice: v.salePrice,
-        stock: Math.max(v.stock, 0),
+        stock: exposedStock(Math.max(v.stock, 0)),
         inStock: v.stock > 0,
         timesBought: Number(r.timesBought),
         lastPurchasedAt: new Date(r.lastPurchasedAt).toISOString(),

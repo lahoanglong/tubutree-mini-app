@@ -253,7 +253,7 @@ export default function AddToCart({
     } catch (e) {
       setMsg(actionErrorText(e));
       setSuccess(false);
-      // Thường là câu "Chỉ còn N sản phẩm trong kho." của máy chủ: tồn kho đang hiển thị đã cũ, lấy lại để nút/giới hạn khớp thực tế.
+      // Thường là câu vượt tồn của máy chủ ("Chỉ còn N sản phẩm." hay "Số lượng này vượt số hàng đang có."): tồn kho đang hiển thị đã cũ, lấy lại để nút/giới hạn khớp thực tế.
       void qc.invalidateQueries({ queryKey: ['product-stock', slug] });
     } finally {
       if (!leaving) {

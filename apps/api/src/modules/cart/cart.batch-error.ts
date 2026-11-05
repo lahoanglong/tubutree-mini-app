@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import { CART_BATCH_REJECTED } from '@tubutree/shared-types';
+import { overStockText } from './cart.stock-message';
 
 export { CART_BATCH_REJECTED };
 export type CartBatchReason = 'UNAVAILABLE' | 'STOCK';
@@ -18,7 +19,7 @@ export function cartBatchRejected(i: { reason: CartBatchReason; variationId: str
   });
 }
 
-/** Câu cho món vượt tồn: hết hẳn thì nói hết hàng, còn thì nói còn bao nhiêu (ux-copy B `overStock`). */
+/** Câu cho món vượt tồn: hết hẳn thì nói hết hàng, tồn thấp thì ghi số, tồn cao không ghi số (luật Smart Stock, xem `overStockText`). */
 export function batchStockMessage(productName: string, stock: number): string {
-  return stock > 0 ? `${productName} còn ${stock} sản phẩm.` : `${productName} đã hết hàng.`;
+  return overStockText(stock, productName);
 }

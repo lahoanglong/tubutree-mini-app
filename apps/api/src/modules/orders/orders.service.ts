@@ -2,7 +2,7 @@ import { BadRequestException, Injectable, Logger, NotFoundException, Optional } 
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import { Prisma } from '@prisma/client';
-import type { OrderStatus } from '@tubutree/shared-types';
+import { exposedStock, type OrderStatus } from '@tubutree/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { decodeKeysetCursor, encodeKeysetCursor, KEYSET_ORDER, keysetAfter } from '../../common/keyset-cursor';
 import { paginated, skipTake } from '../../common/pagination';
@@ -414,7 +414,7 @@ export class OrdersService {
       if (!v) return { ...MISSING_MEDIA, productPublic: productSlug ? (publicBySlug.get(productSlug) ?? false) : false };
       return {
         thumbnail: publicProductThumb(v.product),
-        stock: v.stock,
+        stock: exposedStock(v.stock),
         available: v.isActive && isPublicProduct(v.product) && v.stock > 0,
         productPublic: isPublicProduct(v.product),
         currentPrice: v.salePrice ?? v.retailPrice,

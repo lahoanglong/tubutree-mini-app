@@ -18,6 +18,7 @@ import { resolveAttribution } from '../checkout/attribution';
 import { COUNTED_ORDER_WHERE } from '../../common/first-order';
 import { AddItemDto, MAX_ITEM_QUANTITY } from './dto/cart.dto';
 import { batchStockMessage, cartBatchRejected } from './cart.batch-error';
+import { overStockText } from './cart.stock-message';
 import { isSellableVariation, productDiscontinuedError } from './sellable';
 import { isPartnerOwnedVariation } from './partner-goods';
 import {
@@ -30,6 +31,9 @@ import {
 import { fulfillerOf, merchantStoreUnavailableReason, storeUnavailableOnAddMessage } from '../checkout/checkout-split';
 import { isPartnerStore } from '../merchant/partner-store';
 import { publicImage } from '../../common/public-image';
+
+/** Tồn lớn nhất payload giỏ gửi cho client: một ô nhiều hơn MAX_ITEM_QUANTITY để nút + khoá đúng ở trần mỗi món mà không lộ tồn thật. */
+const CART_STOCK_CAP = MAX_ITEM_QUANTITY + 1;
 
 const ADD_ITEM_INCLUDE = {
   product: {
@@ -231,7 +235,8 @@ export class CartService {
         // tính "Tiết kiệm" khi lớn hơn unitPrice (bằng nhau thì không vẽ gì). Chỉ là số hiển thị: không số tiền nào của giỏ đọc trường này.
         listUnitPrice: strikePrice({ retailPrice: it.variation.retailPrice, salePrice: it.variation.salePrice, flashPrice: flash?.flashPrice }),
         quantity: it.quantity,
-        stock: it.variation.stock,
+        // Client chỉ cần trần để khoá nút +, mà máy chủ không nhận quá MAX_ITEM_QUANTITY mỗi món: kẹp ở CART_STOCK_CAP nên tồn ảo và tồn lớn không ra khỏi giỏ.
+        stock: Math.min(it.variation.stock, CART_STOCK_CAP),
         weight: it.variation.weight ?? null,
         total: unitPrice * it.quantity,
         isFlash: !!flash,
@@ -388,7 +393,11 @@ export class CartService {
   /** Vượt tồn kho khi cộng thêm `addQty` vào `currentQty` đang có trong giỏ. */
   private assertStock(variation: AddableVariation, currentQty: number, addQty: number): void {
     if (currentQty + addQty > variation.stock) {
-      throw new BadRequestException(`Còn ${variation.stock} sản phẩm trong kho.`);
+      throw new BadRequestException(overStockText(variation.stock));
+    }
+    // Payload giỏ kẹp stock ở CART_STOCK_CAP; giỏ vượt trần mỗi món thì client coi là vượt tồn và chặn thanh toán, nên máy chủ chặn từ lúc cộng dồn.
+    if (currentQty + addQty > MAX_ITEM_QUANTITY) {
+      throw new BadRequestException(`Mỗi món chỉ có tối đa ${MAX_ITEM_QUANTITY} sản phẩm trong giỏ.`);
     }
   }
 
@@ -585,7 +594,7 @@ export class CartService {
       await this.prisma.cartItem.delete({ where: { id: itemId } });
     } else {
       if (quantity > item.variation.stock) {
-        throw new BadRequestException(`Còn ${item.variation.stock} sản phẩm trong kho.`);
+        throw new BadRequestException(overStockText(item.variation.stock));
       }
       await this.prisma.cartItem.update({ where: { id: itemId }, data: { quantity } });
     }
