@@ -20,9 +20,12 @@ export const CAMPAIGN_INTERNAL_TARGETS: readonly CampaignInternalTarget[] = [
 ];
 
 /**
- * Độ dài tối đa slug sản phẩm/danh mục gắn vào chiến dịch (cột linkValue). Slug sản phẩm đối tác là tên (≤ 200 ký tự) + `-` + mã thời gian
- * (≤ 9 ký tự), slug Pancake là tên + `-` + 6 ký tự, slug danh mục là tên (≤ 60) + hậu tố trùng: 240 chứa trọn mọi slug sinh từ tên trong trần DTO.
- * API (regex, @MaxLength của DTO), app-core (campaignHref) và ô nhập ở admin đều đọc hằng này, không viết số tay.
+ * Độ dài tối đa slug sản phẩm (và danh mục) ở mọi nơi nhận slug: chiến dịch (linkValue), chat hỗ trợ (productSlug), bài cộng đồng (productSlugs).
+ * Slug sản phẩm đối tác là tên (≤ 200 ký tự) + `-` + mã thời gian (≤ 9) + `-` + 4 ký tự ngẫu nhiên, slug Pancake bị cắt về đúng trần này khi sinh,
+ * slug danh mục là tên (≤ 60) + hậu tố trùng: 240 chứa trọn mọi slug do hệ thống sinh.
  */
-export const CAMPAIGN_ENTITY_SLUG_MAX = 240;
+export const PRODUCT_SLUG_MAX = 240;
+
+/** Slug sản phẩm/danh mục gắn vào chiến dịch dùng chung trần với mọi slug sản phẩm. */
+export const CAMPAIGN_ENTITY_SLUG_MAX = PRODUCT_SLUG_MAX;
 export const CAMPAIGN_ENTITY_SLUG_RE = new RegExp(`^[A-Za-z0-9][A-Za-z0-9_-]{0,${CAMPAIGN_ENTITY_SLUG_MAX - 1}}$`);

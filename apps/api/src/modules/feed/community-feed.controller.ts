@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Query, Res, StreamableFile, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
-import type { JwtPayload } from '@tubutree/shared-types';
+import { PRODUCT_SLUG_MAX, type JwtPayload } from '@tubutree/shared-types';
 import { Throttle } from '@nestjs/throttler';
 import { ArrayMaxSize, IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsOptional, IsString, Max, Min, MaxLength, MinLength } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -27,7 +27,7 @@ export class CreatePostDto {
   @IsOptional() @IsString() @MaxLength(160) title?: string;
   @IsString() @MinLength(1) @MaxLength(5000) body!: string;
   @IsOptional() @IsArray() @ArrayMaxSize(MAX_POST_IMAGES) @IsUploadedImage(FEED_POST_IMAGE, { each: true }) images?: string[];
-  @IsOptional() @IsArray() @ArrayMaxSize(20) @IsString({ each: true }) @MaxLength(200, { each: true }) productSlugs?: string[];
+  @IsOptional() @IsArray() @ArrayMaxSize(20) @IsString({ each: true }) @MaxLength(PRODUCT_SLUG_MAX, { each: true }) productSlugs?: string[];
   @IsOptional() @IsArray() @ArrayMaxSize(20) @IsString({ each: true }) @MaxLength(100, { each: true }) tagSlugs?: string[];
   @IsOptional() @IsString() eventId?: string;
 }

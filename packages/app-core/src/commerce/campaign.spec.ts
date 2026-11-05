@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CampaignBanner, CampaignCouponDTO } from '../api/campaign';
 import type { HomeKindState } from '../home-layout';
-import { CAMPAIGN_ENTITY_SLUG_MAX } from '@tubutree/shared-types';
+import { CAMPAIGN_ENTITY_SLUG_MAX, CAMPAIGN_ENTITY_SLUG_RE, PRODUCT_SLUG_MAX } from '@tubutree/shared-types';
 import { liveRoute } from '../merch/route-fallback';
 import {
   CAMPAIGN_INTERNAL_TARGETS,
@@ -217,5 +217,19 @@ describe('campaignProductPages', () => {
     expect(campaignProductPages([page(['a', 'b'], 1, 5), undefined]).items).toHaveLength(2);
     expect(campaignProductPages([undefined])).toEqual({ items: [], hasMore: false });
     expect(campaignProductPages([])).toEqual({ items: [], hasMore: false });
+  });
+});
+
+describe('CAMPAIGN_ENTITY_SLUG_RE (shared-types không có runner, kiểm ở đây)', () => {
+  const slug = (n: number) => `a${'b'.repeat(n - 1)}`;
+  it('nhận chuỗi dài đúng CAMPAIGN_ENTITY_SLUG_MAX, từ chối MAX + 1', () => {
+    expect(CAMPAIGN_ENTITY_SLUG_RE.test(slug(CAMPAIGN_ENTITY_SLUG_MAX))).toBe(true);
+    expect(CAMPAIGN_ENTITY_SLUG_RE.test(slug(CAMPAIGN_ENTITY_SLUG_MAX + 1))).toBe(false);
+  });
+  it('từ chối chuỗi rỗng, bắt đầu bằng "-" hoặc "_", có dấu cách, dấu, "/"', () => {
+    for (const bad of ['', '-abc', '_abc', 'a b', 'á', 'a/b', '../x']) expect(CAMPAIGN_ENTITY_SLUG_RE.test(bad), bad).toBe(false);
+  });
+  it('trần slug chiến dịch và trần slug sản phẩm là một nguồn', () => {
+    expect(CAMPAIGN_ENTITY_SLUG_MAX).toBe(PRODUCT_SLUG_MAX);
   });
 });
