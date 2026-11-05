@@ -743,6 +743,36 @@ for (const frame of FRAMES) {
       await chip('Tất cả').click();
       await search.fill('');
 
+      // Không gõ từ khoá: danh sách đi nhánh truy vấn thô của máy chủ (trang mặc định, có phân trang) và phải ra cùng kết quả; duyệt từng trang tới khi thấy mã hoặc hết trang.
+      await expect(search).toHaveValue('');
+      const loading = list.getByText('Đang tải danh sách mã...');
+      const nextPage = list.getByRole('button', { name: 'Trang sau', exact: true });
+      const seenOnSomePage = async (name: string, code: string): Promise<boolean> => {
+        await chip(name).click();
+        for (let n = 1; n <= 60; n++) {
+          await expect(loading).toHaveCount(0);
+          if ((await item(code).count()) > 0) return true;
+          if ((await nextPage.count()) === 0 || (await nextPage.isDisabled())) return false;
+          await nextPage.click();
+          await expect(list.getByText(new RegExp(`^Trang ${n + 1}/`))).toBeVisible();
+        }
+        return false;
+      };
+      const expectRawFilter = async (name: string, present: Record<string, string>, absent: string[]) => {
+        await chip(name).click();
+        await expect(chip(name)).toHaveAttribute('aria-pressed', 'true');
+        for (const [code, label] of Object.entries(present)) {
+          expect(await seenOnSomePage(name, code), `${name} không từ khoá: có ${code}`).toBe(true);
+          expect(await badgeOf(code), `${name} không từ khoá: nhãn của ${code}`).toBe(label);
+        }
+        for (const code of absent) expect(await seenOnSomePage(name, code), `${name} không từ khoá: không có ${code}`).toBe(false);
+      };
+      await expectRawFilter('Sắp diễn ra', { E2EW13SOON: 'Sắp diễn ra' }, others('E2EW13SOON'));
+      await expectRawFilter('Đang chạy', { E2EW13RUN: 'Đang chạy', E2EW13FULL: 'Hết lượt' }, others('E2EW13RUN', 'E2EW13FULL'));
+      await expectRawFilter('Đã hết hạn', { E2EW13OLD: 'Đã hết hạn' }, others('E2EW13OLD'));
+      await expectRawFilter('Đã tắt', { E2EW13OFF: 'Đã tắt', E2EW13DEAD: 'Đã tắt' }, others('E2EW13OFF', 'E2EW13DEAD'));
+      await chip('Tất cả').click();
+
       // API chặn khi gọi thẳng: số âm, % quá 100, mức giảm bằng đơn tối thiểu, tổng lượt, ngày; lời báo tiếng Việt.
       const baseCoupon = { code: 'E2EW13API', type: 'PERCENT', value: 10, maxDiscount: 30_000, minOrder: 100_000, usageLimit: 50, perUserLimit: 1, scope: 'PUBLIC', startAt: vnAt(1, '00:00').toISOString(), endAt: vnAt(9, '23:59').toISOString() };
       const badCoupon = async (why: string, over: Record<string, unknown>, re: RegExp) => {
