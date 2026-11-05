@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import type { Order, OrderItem, PaymentMethod, Prisma } from '@prisma/client';
@@ -567,10 +567,17 @@ export class PancakeOrderService {
     if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
     const decision = this.retryDecision(order);
     if (decision.kind !== 'NOW') throw new BadRequestException(decision.refusal);
-    await this.prisma.order.update({
-      where: { id: order.id },
+    // Quyết định ở trên đọc từ bản chụp: lượt đẩy khác có thể claim PUSHING ngay sau đó. Đè PENDING lên claim ấy mở khoá cho lượt thứ hai
+    // (job thanh toán, cron) tạo thêm một đơn kho. Nên ghi có điều kiện "chưa đã có trên Pancake, không lượt nào giữ quyền đẩy".
+    const reset = await this.prisma.order.updateMany({
+      where: { id: order.id, pancakeOrderId: null, AND: [pushLeaseFreeWhere()] },
       data: { pancakePushStatus: PANCAKE_PUSH.PENDING, pancakePushAttempts: 0 },
     });
+    if (reset.count === 0) {
+      const current = await this.prisma.order.findUnique({ where: { id: order.id }, select: { pancakeOrderId: true } });
+      if (current?.pancakeOrderId) throw new ConflictException(`Đơn ${order.code} vừa lên Pancake (#${current.pancakeOrderId}), tải lại danh sách.`);
+      throw new ConflictException(`Đơn ${order.code} đang được đẩy sang Pancake, tải lại sau ít phút.`);
+    }
     // enqueuePush gỡ job push đã lỗi cùng jobId trước khi add: BullMQ bỏ qua `add` khi jobId còn nằm ở tập failed.
     await this.enqueuePush(order.id);
     this.logger.warn(`Admin ${adminId} đẩy lại đơn ${order.code} sang Pancake.`);

@@ -1,5 +1,5 @@
 import { isPancakeForbiddenError, PANCAKE_FORBIDDEN_ERROR_PREFIX } from '@tubutree/shared-types';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { PANCAKE_CANCEL, PANCAKE_CANCEL_REFUSED_PREFIX, PANCAKE_PUSH, PancakeOrderService, pushRetryGateDecision } from './pancake-order.service';
 import type { PrismaService } from '../../../prisma/prisma.service';
 import type { PancakeClient } from './pancake.client';
@@ -756,6 +756,44 @@ describe('PancakeOrderService.retryPushByAdmin (PANCAKE-9, ADMINOPS-4)', () => {
     expect(err).toBeInstanceOf(BadRequestException);
     expect((err as Error).message).toContain(msg);
     expect(t.queue.add).not.toHaveBeenCalled();
+  });
+});
+
+describe('PancakeOrderService.retryPushByAdmin: ghi nguyên tử, không đè lượt đẩy vừa claim (hai đơn kho)', () => {
+  /** Lệnh đọc đơn trả bản chụp CŨ rồi lượt khác mới ghi trạng thái: đúng khe giữa "đọc quyết định" và "đặt PENDING". */
+  const changeAfterRead = (t: ReturnType<typeof setup>, change: (row: Record<string, unknown>) => void) =>
+    t.prisma.order.findFirst.mockImplementationOnce(async () => {
+      const snapshot = { ...t.row() };
+      change(t.row());
+      return snapshot;
+    });
+
+  it('lượt khác vừa claim PUSHING trong hạn thuê sau khi đọc: 409, không đặt PENDING, không đặt lại lượt, không xếp job', async () => {
+    const t = setup({ pancakePushStatus: PANCAKE_PUSH.FAILED, pancakePushAttempts: 5 });
+    const claimedAt = new Date();
+    changeAfterRead(t, (row) => Object.assign(row, { pancakePushStatus: PANCAKE_PUSH.PUSHING, pancakePushAttempts: 6, pancakeLastAttemptAt: claimedAt }));
+    const err = await t.svc.retryPushByAdmin('admin1', 'TUBU1').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ConflictException);
+    expect((err as Error).message).toBe('Đơn TUBU1 đang được đẩy sang Pancake, tải lại sau ít phút.');
+    expect(t.row()).toMatchObject({ pancakePushStatus: PANCAKE_PUSH.PUSHING, pancakePushAttempts: 6, pancakeLastAttemptAt: claimedAt });
+    expect(t.queue.add).not.toHaveBeenCalled();
+  });
+
+  it('đơn vừa lên Pancake sau khi đọc: 409 nói đã có trên Pancake, không xếp job', async () => {
+    const t = setup({ pancakePushStatus: PANCAKE_PUSH.FAILED });
+    changeAfterRead(t, (row) => Object.assign(row, { pancakeOrderId: 'pk-77', pancakePushStatus: PANCAKE_PUSH.SYNCED }));
+    const err = await t.svc.retryPushByAdmin('admin1', 'TUBU1').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ConflictException);
+    expect((err as Error).message).toContain('#pk-77');
+    expect(t.row().pancakePushStatus).toBe(PANCAKE_PUSH.SYNCED);
+    expect(t.queue.add).not.toHaveBeenCalled();
+  });
+
+  it('PUSHING đã quá hạn thuê (tiến trình đẩy đã chết): vẫn đẩy lại được', async () => {
+    const t = setup({ pancakePushStatus: PANCAKE_PUSH.PUSHING, pancakeLastAttemptAt: new Date(Date.now() - PancakeOrderService.PUSH_LEASE_MS - 5_000), pancakePushAttempts: 2 });
+    await t.svc.retryPushByAdmin('admin1', 'TUBU1');
+    expect(t.row()).toMatchObject({ pancakePushStatus: PANCAKE_PUSH.PENDING, pancakePushAttempts: 0 });
+    expect(t.queue.add).toHaveBeenCalledTimes(1);
   });
 });
 

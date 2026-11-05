@@ -1,3 +1,4 @@
+import { ConflictException } from '@nestjs/common';
 import { Queue, Worker, type Job } from 'bullmq';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { PrismaModule } from '../../src/prisma/prisma.module';
@@ -490,6 +491,62 @@ const url = process.env.TEST_REDIS_URL;
       return r.pancakeErrorKind === 'DATA' && r.pancakePushStatus === 'FAILED' && r.pancakeAttention != null;
     });
     expect(calls()).toBe(0);
+  });
+
+  it('"Đẩy lại" đọc xong quyết định thì lượt khác claim PUSHING trong hạn thuê: 409, không xếp job, createOrder đúng MỘT lần (không hai đơn kho)', async () => {
+    const x = await order();
+    await prisma.order.update({ where: { id: x.id }, data: { pancakePushStatus: 'FAILED', pancakePushAttempts: 2, createdAt: new Date(Date.now() - 20 * 60_000) } });
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    let n = 0;
+    const pk = `pk-${randCode(8)}`;
+    respond(async (code) => {
+      if (code !== x.code) return { success: true, data: { id: `pk-${code}` } };
+      n += 1;
+      await gate;
+      return { success: true, data: { id: pk } };
+    });
+    // Dịch vụ thứ hai bọc prisma: findFirst của retryPushByAdmin trả bản chụp (đơn chưa PUSHING), rồi job push thật claim đơn và vào createOrder
+    // TRƯỚC khi bản chụp cũ về tay retryPushByAdmin. Đúng khe giữa "đọc quyết định" và "đặt PENDING".
+    const racing = new PancakeOrderService(
+      new Proxy(prisma, {
+        get(target, prop) {
+          const value = Reflect.get(target, prop, target);
+          if (prop !== 'order') return typeof value === 'function' ? value.bind(target) : value;
+          return new Proxy(value, {
+            get(model, method) {
+              const fn = Reflect.get(model, method, model);
+              if (method !== 'findFirst') return typeof fn === 'function' ? fn.bind(model) : fn;
+              return async (args: unknown) => {
+                const snapshot = await fn.call(model, args);
+                await service.enqueuePush(x.id);
+                await until(async () => n >= 1);
+                return snapshot;
+              };
+            },
+          });
+        },
+      }),
+      client as unknown as PancakeClient,
+      queue,
+      undefined,
+      alerts as unknown as GomdonAlertService,
+    );
+    const enqueued = jest.spyOn(racing, 'enqueuePush');
+    let other: Promise<unknown> = Promise.resolve();
+    try {
+      await expect(racing.retryPushByAdmin('admin-it', x.code)).rejects.toBeInstanceOf(ConflictException);
+      expect(enqueued).not.toHaveBeenCalled();
+      // Job thanh toán / cron chạm đơn ngay sau đó: nếu "Đẩy lại" đã đè PENDING thì lượt này claim được và tạo đơn kho lần hai.
+      other = service.pushOrder(x.id).catch(() => undefined);
+      await sleep(300);
+    } finally {
+      release(); // không nhả cổng thì lượt đang bay treo mãi và afterAll không đóng được worker khi ca đỏ
+    }
+    await other;
+    await until(async () => (await prisma.order.findUniqueOrThrow({ where: { id: x.id } })).pancakeOrderId === pk);
+    expect(n).toBe(1);
+    expect(await prisma.order.findUniqueOrThrow({ where: { id: x.id } })).toMatchObject({ pancakePushStatus: 'SYNCED', pancakePushAttempts: 3 });
   });
 
   it('cron tự đẩy bỏ qua đơn STALE: không xếp job, không đóng dấu lần thử, không gọi createOrder', async () => {
