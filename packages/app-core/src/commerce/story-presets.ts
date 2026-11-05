@@ -47,14 +47,14 @@ export const STORY_PRESETS: Record<string, ProductStoryConfig> = {
   // ── Nhóm 1: chăm sóc cá nhân và mẹ bé ──
   'dau-goi-buoi-po-lang': preset(
     [
-      step(T1, 'Vỏ bưởi, bồ kết và hương nhu, dược liệu Tây Nguyên được chọn từng loại.', L('pomelo-peel', 'top', 28, 22, 1.1, -20), L('gleditsia-pod', 'left', 20, 52, 1, 15)),
+      step(T1, 'Tinh dầu bưởi, bồ kết và hương nhu được chọn từng loại.', L('pomelo-peel', 'top', 28, 22, 1.1, -20), L('gleditsia-pod', 'left', 20, 52, 1, 15)),
       step('Chiết xuất tinh dầu', 'Tinh dầu bưởi giúp kích thích mọc tóc, giảm gãy rụng.', L('pomelo-slice', 'right', 74, 28, 1.1, 10), L('water-droplet', 'top', 64, 56, 0.8)),
       step(T3, 'Bồ kết làm sạch dịu nhẹ, hương nhu thư giãn da đầu.', L('ocimum-leaf', 'right', 76, 52, 1, 25), L('gleditsia-pod', 'left', 24, 60, 0.9, -10)),
       step(T4, 'Dầu gội thảo dược mượt tóc, sạch gàu tự nhiên.', L('water-droplet', 'top', 50, 24, 1), L('pomelo-peel', 'bottom', 34, 70, 0.8, 40)),
       step(T5, 'Dịu nhẹ để cả nhà gội mỗi ngày.', L('ocimum-leaf', 'left', 22, 30, 0.9, -30), L('pomelo-slice', 'right', 78, 66, 0.9, 20)),
     ],
     [pt('h1', 26, 30, 'left', 'Tinh dầu bưởi', '2%'), pt('h2', 74, 46, 'right', 'Bồ kết'), pt('h3', 26, 66, 'left', 'Hương nhu'), pt('h4', 74, 80, 'right', 'Vegan')],
-    'Mượt tóc từ thảo dược Tây Nguyên',
+    'Mượt tóc từ thảo dược',
   ),
   'serum-duong-am-visante': preset(
     [
@@ -116,7 +116,7 @@ export const STORY_PRESETS: Record<string, ProductStoryConfig> = {
   'granola-hat-sokfram': preset(
     [
       step(T1, 'Ngũ cốc và các loại hạt được chọn kỹ.', L('granola-clusters', 'top', 30, 24, 1.1, -10), L('granola-clusters', 'left', 22, 56, 0.8, 15)),
-      step('Kết dính bằng mật ong', 'Vị ngọt nhẹ đến từ mật ong.', L('honey-drop', 'right', 74, 30, 1), L('granola-clusters', 'top', 60, 56, 0.8, 30)),
+      step('Ngọt nhẹ từ mật ong', 'Vị ngọt nhẹ đến từ mật ong.', L('honey-drop', 'right', 74, 30, 1), L('granola-clusters', 'top', 60, 56, 0.8, 30)),
       step(T3, 'Hạt giòn hoà quyện trong từng miếng.', L('granola-clusters', 'right', 76, 50, 1, -20), L('honey-drop', 'left', 26, 62, 0.7)),
       step(T4, 'Ăn sáng healthy, ngọt nhẹ từ mật ong.', L('granola-clusters', 'bottom', 50, 70, 1.1)),
       step(T5, 'Bữa sáng nhẹ nhàng cho cả nhà.', L('granola-clusters', 'left', 24, 30, 0.8), L('honey-drop', 'right', 78, 66, 0.7)),
@@ -150,11 +150,11 @@ export const STORY_PRESETS: Record<string, ProductStoryConfig> = {
   ),
   'nuoc-giat-fuwa3e': preset(
     [
-      step(T1, 'Thành phần sinh học được chọn cho đồ của bé.', L('pineapple-enzyme', 'top', 30, 24, 1, -10, 'Enzyme'), L('lemongrass', 'left', 22, 56, 0.9, 15, 'Thảo mộc')),
-      step('Lên men enzyme', 'Enzyme sinh học làm sạch sâu.', L('pineapple-enzyme', 'right', 74, 30, 1, 10, 'Enzyme'), L('water-droplet', 'top', 60, 56, 0.8)),
-      step(T3, 'Hoà quyện nhẹ nhàng, sạch sâu mà dịu.', L('water-droplet', 'right', 76, 50, 1), L('lemongrass', 'left', 26, 62, 0.7, -20, 'Thảo mộc')),
+      step(T1, 'Nước giặt sinh học dành cho quần áo cả nhà, kể cả đồ em bé.', L('water-droplet', 'top', 30, 24, 1.1, -10), L('water-droplet', 'left', 22, 56, 0.8, 15)),
+      step('Làm sạch sâu', 'Sạch sâu mà vẫn dịu nhẹ.', L('water-droplet', 'right', 74, 30, 1, 10), L('water-droplet', 'top', 60, 56, 0.8)),
+      step(T3, 'Hoà quyện nhẹ nhàng, sạch sâu mà dịu.', L('water-droplet', 'right', 76, 50, 1), L('water-droplet', 'left', 26, 62, 0.7, -20)),
       step(T4, 'Sạch sâu, dịu nhẹ cho đồ em bé.', L('water-droplet', 'top', 50, 24, 1.1)),
-      step(T5, 'Quần áo thơm sạch cho cả nhà.', L('lemongrass', 'left', 24, 30, 0.8, 0, 'Thảo mộc'), L('water-droplet', 'right', 78, 66, 0.8)),
+      step(T5, 'Quần áo sạch, dịu nhẹ cho cả nhà.', L('water-droplet', 'left', 24, 30, 0.8), L('water-droplet', 'right', 78, 66, 0.8)),
     ],
     [pt('h1', 26, 34, 'left', 'Sạch sâu'), pt('h2', 74, 54, 'right', 'Dịu nhẹ cho đồ em bé'), pt('h3', 26, 72, 'left', 'Eco')],
     'Sạch sâu, dịu nhẹ cho cả nhà',

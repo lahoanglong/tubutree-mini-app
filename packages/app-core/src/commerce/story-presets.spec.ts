@@ -63,4 +63,23 @@ describe('STORY_PRESETS', () => {
       }
     }
   });
+  it('mọi lời khẳng định về nguồn gốc, quy trình, công dụng đặc thù chỉ xuất hiện khi dữ liệu mẫu của chính sản phẩm đó có từ ấy', () => {
+    const seed = readFileSync(resolve(__dirname, '../../../../apps/api/prisma/seed.ts'), 'utf8');
+    const CLAIMS = ['tây nguyên', 'enzyme', 'lên men', 'kháng khuẩn', 'khử mùi', 'sấy lạnh', 'kết dính', 'sinh học', 'thảo mộc', 'phân huỷ', 'organic', 'vegan', 'eco', 'không đường', 'mật ong', 'thơm'];
+    const textOf = (cfg: (typeof STORY_PRESETS)[string]): string[] =>
+      cfg.scenes.flatMap((sc) => {
+        if (sc.kind === 'ingredient_assembly') return sc.steps.flatMap((st) => [st.title, st.body, ...st.layers.map((l) => l.label)]);
+        if (sc.kind === 'hud_callouts') return [sc.closing, ...sc.points.flatMap((p) => [p.label, p.value ?? ''])];
+        return [];
+      });
+    for (const [slug, cfg] of Object.entries(STORY_PRESETS)) {
+      const at = seed.indexOf(`slug: '${slug}'`);
+      const next = seed.indexOf("id: 'p-", at);
+      const block = seed.slice(at, next === -1 ? undefined : next).toLowerCase();
+      for (const line of textOf(cfg)) {
+        const low = line.toLowerCase();
+        for (const claim of CLAIMS) if (low.includes(claim)) expect(block, `${slug}: "${line}" nói "${claim}" nhưng dữ liệu sản phẩm không có`).toContain(claim);
+      }
+    }
+  });
 });
