@@ -46,6 +46,16 @@ describe('OrderTrack', () => {
     expect(screen.getByText('Dự kiến giao 06/11 – 08/11')).toBeInTheDocument();
   });
 
+  it('đã giao: mọi bước "đã xong", không bước nào "đang diễn ra" và không có aria-current', () => {
+    const track = orderTrack(order({ status: 'DELIVERED', statusTimes: { CONFIRMED: '2026-11-03T06:00:00Z', PACKED: '2026-11-03T09:00:00Z', SHIPPING: '2026-11-04T02:00:00Z', DELIVERED: '2026-11-05T02:00:00Z' } }))!;
+    render(<OrderTrack track={track} now={NOW} />);
+    const list = screen.getByRole('list', { name: 'Hành trình đơn hàng' });
+    expect(list.querySelectorAll('[aria-current]')).toHaveLength(0);
+    expect(list.querySelectorAll('[data-state="done"]')).toHaveLength(4);
+    expect(list.textContent).toContain('Giao thành công, đã xong');
+    expect(list.textContent).not.toContain('đang diễn ra');
+  });
+
   it('bước chưa tới không có giờ', () => {
     const track = orderTrack(order({ status: 'CONFIRMED', shippingHistory: [] }))!;
     render(<OrderTrack track={track} now={NOW} />);

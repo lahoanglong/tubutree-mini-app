@@ -288,17 +288,20 @@ export interface TrackStep {
 
 export interface OrderTrackView {
   steps: TrackStep[];
+  /** Chỉ số bước đang diễn ra; bằng `steps.length` khi đơn đã giao, lúc đó mọi bước đã xong. */
   current: number;
 }
 
 /** Hành trình 5 bước chuẩn; đơn đã huỷ hoặc hoàn nằm ngoài đường này nên trả null (trạng thái đã có ở đầu trang). */
 export function orderTrack(o: TrackOrder, ctx: Pick<TrackCtx, 'etaLabel'> = {}): OrderTrackView | null {
   const keys = NO_PAYMENT_WAIT.has(o.paymentMethod) ? STEPS.filter((s) => s !== 'PENDING_PAYMENT') : [...STEPS];
-  const current = (keys as readonly string[]).indexOf(o.status);
-  if (current < 0) return null;
+  const statusIdx = (keys as readonly string[]).indexOf(o.status);
+  if (statusIdx < 0) return null;
+  // Giao xong là điểm cuối: bước "Giao thành công" đã xong chứ không còn "đang diễn ra".
+  const current = o.status === 'DELIVERED' ? keys.length : statusIdx;
   const events = shippingEvents(o.shippingHistory);
   const shipIdx = keys.indexOf('SHIPPING');
-  const eventsAt = current >= shipIdx ? shipIdx : current;
+  const eventsAt = statusIdx >= shipIdx ? shipIdx : statusIdx;
   const steps = keys.map<TrackStep>((key, i) => {
     const state: TrackState = i < current ? 'done' : i === current ? 'current' : 'upcoming';
     const at = i > current ? null : (o.statusTimes?.[key] ?? (i === 0 ? o.createdAt : null));

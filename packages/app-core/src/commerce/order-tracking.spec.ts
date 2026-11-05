@@ -415,7 +415,7 @@ describe('orderTrack', () => {
     }
   });
 
-  it('đã giao: mọi bước xong, chỉ bước cuối là current, mốc hãng nằm ở bước Đang giao', () => {
+  it('đã giao: mọi bước xong (không còn bước "đang diễn ra"), mốc hãng nằm ở bước Đang giao', () => {
     const track = orderTrack(
       order({
         status: 'DELIVERED',
@@ -423,7 +423,9 @@ describe('orderTrack', () => {
         shippingHistory: [{ at: iso(-7 * HOUR), status: 'Đã lấy hàng' }],
       }),
     );
-    expect(track!.steps.map((s) => s.state)).toEqual(['done', 'done', 'done', 'current']);
+    expect(track!.steps.map((s) => s.state)).toEqual(['done', 'done', 'done', 'done']);
+    expect(track!.current).toBe(track!.steps.length);
+    expect(track!.steps[3]?.at).toBe(iso(-HOUR));
     expect(track!.steps[2]?.events).toHaveLength(1);
     expect(track!.steps[3]?.events).toHaveLength(0);
     expect(track!.steps[3]?.eta).toBeNull();

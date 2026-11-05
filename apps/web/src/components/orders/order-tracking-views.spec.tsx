@@ -50,6 +50,15 @@ describe('OrderTrack (web)', () => {
     expect(events).toEqual(['Đang giao hàng', 'Đã lấy hàng']);
     expect(container.textContent).toContain('Dự kiến giao 06/11 – 08/11');
   });
+
+  it('đã giao: mọi bước "đã xong", không bước nào "đang diễn ra" và không có aria-current', () => {
+    const track = orderTrack(order({ status: 'DELIVERED', statusTimes: { CONFIRMED: '2026-11-03T06:00:00Z', PACKED: '2026-11-03T09:00:00Z', SHIPPING: '2026-11-04T02:00:00Z', DELIVERED: '2026-11-05T02:00:00Z' } }))!;
+    const { container } = mount(<OrderTrack track={track} now={NOW} />);
+    expect(container.querySelectorAll('[aria-current]')).toHaveLength(0);
+    expect(container.querySelectorAll('[data-state="done"]')).toHaveLength(4);
+    expect(container.textContent).toContain('Giao thành công, đã xong');
+    expect(container.textContent).not.toContain('đang diễn ra');
+  });
 });
 
 describe('OrderShipping (web)', () => {
