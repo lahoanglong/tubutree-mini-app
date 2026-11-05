@@ -11,7 +11,15 @@ const read = (p: string) => readFileSync(resolve(ROOT, p), 'utf8');
 type Key = keyof typeof INPUT_LIMITS;
 /** `value` là biểu thức `value={...}` của đúng ô nhập đó: maxLength phải nằm trên chính phần tử có value này, không chỉ đâu đó trong file. */
 interface DtoRow { key: Key; file: string; cls: string; prop: string; value: string; uses: string[]; maxAttr?: string; addrField?: string }
-interface RegexRow { key: Key; file: string; re: string; longest: string; value: string; uses: string[]; cls?: string; prop?: string }
+/**
+ * `re` là tên hằng regex (ở `file`). `dto` (nếu có) là thuộc tính DTO nhận giá trị: spec kiểm `@Matches` của đúng thuộc tính đó dùng
+ * đúng hằng `re`. Subdomain không có DTO riêng: regex nằm ở service (`normalizeSubdomain`), spec kiểm hàm đó gọi đúng hằng.
+ */
+interface RegexRow {
+  key: Key; file: string; re: string; longest: string; value: string; uses: string[]; cls?: string; prop?: string;
+  dto?: { file: string; cls: string; prop: string };
+  serviceFn?: string;
+}
 
 const MA = 'apps/miniapp/src/';
 
@@ -58,9 +66,9 @@ const DTO_ROWS: DtoRow[] = [
 
 /** Ô mà DTO giới hạn bằng regex: trần là độ dài chuỗi dài nhất regex còn nhận. */
 const REGEX_ROWS: RegexRow[] = [
-  { key: 'dealerTaxCode', file: 'apps/api/src/modules/checkout/dto/checkout.dto.ts', re: 'TAX_CODE_RE', longest: '1234567890-123', value: "form.taxCode ?? ''", uses: ['pages/dealer.tsx'] },
-  { key: 'storefrontSubdomain', file: 'apps/api/src/modules/storefront/identifier-validation.ts', re: 'SUBDOMAIN_RE', longest: 'a'.repeat(30), value: 'form.subdomain', uses: ['components/storefront-builder/config-sheet.tsx'] },
-  { key: 'affiliateTaxId', file: 'apps/api/src/modules/affiliate/affiliate.service.ts', re: 'PERSONAL_TAX_ID_PATTERN', longest: '1234567890-123', value: 'taxId', uses: ['pages/affiliate.tsx'] },
+  { key: 'dealerTaxCode', file: 'apps/api/src/modules/checkout/dto/checkout.dto.ts', re: 'TAX_CODE_RE', longest: '1234567890-123', value: "form.taxCode ?? ''", dto: { file: 'apps/api/src/modules/dealer/dto/dealer.dto.ts', cls: 'ApplyDealerDto', prop: 'taxCode' }, uses: ['pages/dealer.tsx'] },
+  { key: 'storefrontSubdomain', file: 'apps/api/src/modules/storefront/identifier-validation.ts', re: 'SUBDOMAIN_RE', longest: 'a'.repeat(30), value: 'form.subdomain', serviceFn: 'normalizeSubdomain', uses: ['components/storefront-builder/config-sheet.tsx'] },
+  { key: 'affiliateTaxId', file: 'apps/api/src/modules/affiliate/affiliate.service.ts', re: 'PERSONAL_TAX_ID_PATTERN', longest: '1234567890-123', value: 'taxId', dto: { file: 'apps/api/src/modules/affiliate/affiliate.controller.ts', cls: 'PayoutDto', prop: 'taxId' }, uses: ['pages/affiliate.tsx'] },
   { key: 'bankBin', file: 'apps/api/src/modules/staff/payroll/payroll.dto.ts', cls: 'UpdateBankDto', prop: 'bankBin', re: '', longest: '970407', value: 'bin', uses: ['pages/my-payroll.tsx'] },
 ];
 
@@ -127,6 +135,26 @@ function matchesRegexOf(src: string, cls: string, prop: string): RegExp | null {
   return m ? new RegExp(m[1] ?? '', m[2]) : null;
 }
 
+/** Tên hằng truyền cho `@Matches(...)` của đúng thuộc tính (khi đối số là một identifier). */
+function matchesIdentifierOf(src: string, cls: string, prop: string): string | null {
+  const arg = decorator(classProp(parse(src), cls, prop), 'Matches')?.arguments[0];
+  return arg && ts.isIdentifier(arg) ? arg.text : null;
+}
+
+/** Hàm `fn` ở cấp file có nhắc tới identifier `name` trong thân không. */
+function functionUses(src: string, fn: string, name: string): boolean {
+  let used = false;
+  parse(src).forEachChild((n) => {
+    if (ts.isFunctionDeclaration(n) && n.name?.text === fn && n.body) {
+      (function visit(x: ts.Node) {
+        if (ts.isIdentifier(x) && x.text === name) used = true;
+        x.forEachChild(visit);
+      })(n.body);
+    }
+  });
+  return used;
+}
+
 /** Có phần tử JSX mang `maxLength={maxAttr}` VÀ `value={value}` cùng lúc không (tức đúng ô nhập, không chỉ có chuỗi trong file). */
 function usesLimit(file: string, maxAttr: string, value: string): boolean {
   const sf = parse(read(MA + file), ts.ScriptKind.TSX);
@@ -157,6 +185,12 @@ describe('ô nhập Mini App: maxLength bằng trần DTO', () => {
 
   it.each(REGEX_ROWS)('$key khớp độ dài lớn nhất regex nhận', (row) => {
     expect(row.longest.length).toBe(INPUT_LIMITS[row.key]);
+    if (row.dto) {
+      expect(matchesIdentifierOf(read(row.dto.file), row.dto.cls, row.dto.prop), `${row.dto.cls}.${row.dto.prop} phải dùng @Matches(${row.re})`).toBe(row.re);
+    }
+    if (row.serviceFn) {
+      expect(functionUses(read(row.file), row.serviceFn, row.re), `${row.serviceFn} phải dùng ${row.re}`).toBe(true);
+    }
     if (row.re) {
       const m = new RegExp(`${row.re}\\s*=\\s*/(.+)/[a-z]*;`).exec(read(row.file));
       expect(m, `không thấy ${row.re}`).toBeTruthy();
