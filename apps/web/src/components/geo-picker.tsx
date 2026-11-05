@@ -44,13 +44,14 @@ export function GeoPicker({
   return (
     <>
       <div>
-        <label htmlFor={provinceId} className="mb-1 block text-xs font-medium text-stone-700">
+        <label htmlFor={provinceId} className="mb-1 block text-caption font-medium text-stone-700">
           Tỉnh/Thành phố
         </label>
         <select
           id={provinceId}
           aria-required="true"
           aria-invalid={errorProvince ? true : undefined}
+          aria-describedby={errorProvince ? `${provinceId}-err` : undefined}
           value={value.provinceCode}
           onChange={(e) => {
             const code = e.target.value;
@@ -67,7 +68,7 @@ export function GeoPicker({
           ))}
         </select>
         {errorProvince && (
-          <p className="mt-0.5 flex items-start gap-1 text-xs text-danger-fg">
+          <p id={`${provinceId}-err`} className="mt-0.5 flex items-start gap-1 text-caption text-danger-fg">
             <AlertTriangle className="mt-px h-3 w-3 shrink-0" aria-hidden />
             {errorProvince}
           </p>
@@ -78,13 +79,14 @@ export function GeoPicker({
       </div>
 
       <div>
-        <label htmlFor={wardId} className="mb-1 block text-xs font-medium text-stone-700">
+        <label htmlFor={wardId} className="mb-1 block text-caption font-medium text-stone-700">
           Phường/Xã
         </label>
         <select
           id={wardId}
           aria-required="true"
           aria-invalid={errorWard ? true : undefined}
+          aria-describedby={errorWard ? `${wardId}-err` : undefined}
           value={value.wardCode}
           disabled={!value.provinceCode}
           onChange={(e) => {
@@ -104,7 +106,7 @@ export function GeoPicker({
           ))}
         </select>
         {errorWard && (
-          <p className="mt-0.5 flex items-start gap-1 text-xs text-danger-fg">
+          <p id={`${wardId}-err`} className="mt-0.5 flex items-start gap-1 text-caption text-danger-fg">
             <AlertTriangle className="mt-px h-3 w-3 shrink-0" aria-hidden />
             {errorWard}
           </p>
@@ -120,7 +122,7 @@ export function GeoPicker({
 /** Danh mục lấy từ Pancake có thể lỗi tạm thời: không báo thì ô chọn đứng im ở placeholder và khách bỏ cuộc. */
 function LoadFailed({ what, onRetry }: { what: string; onRetry: () => void }) {
   return (
-    <div role="alert" className="mt-0.5 flex flex-wrap items-center gap-1 text-xs text-danger-fg">
+    <div role="alert" className="mt-0.5 flex flex-wrap items-center gap-1 text-caption text-danger-fg">
       <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden />
       <span>Không tải được danh sách {what}.</span>
       <button type="button" onClick={onRetry} className={ui.btnText}>

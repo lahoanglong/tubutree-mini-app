@@ -34,6 +34,25 @@ describe('GeoPicker — thông báo lỗi', () => {
     expect(selectByLabel(container, 'Tỉnh/Thành phố')?.getAttribute('aria-invalid')).toBe('true');
   });
 
+  it('lỗi tỉnh/phường gắn vào ô bằng aria-describedby, nhãn và lời báo từ 13px (bậc caption)', async () => {
+    const api = mockFetch({ '/geo/provinces': { body: [] } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(
+      <GeoPicker value={EMPTY_GEO} onChange={() => {}} errorProvince="Chọn tỉnh/thành" errorWard="Chọn phường/xã" />,
+    );
+    await flush();
+    for (const [label, text] of [['Tỉnh/Thành phố', 'Chọn tỉnh/thành'], ['Phường/Xã', 'Chọn phường/xã']] as const) {
+      const select = selectByLabel(container, label)!;
+      const note = document.getElementById(select.getAttribute('aria-describedby') ?? '');
+      expect(note?.textContent).toBe(text);
+    }
+    const labels = Array.from(container.querySelectorAll('label'));
+    expect(labels.length).toBe(2);
+    for (const l of labels) expect(l.className).toContain('text-caption');
+    for (const p of Array.from(container.querySelectorAll('p'))) expect(p.className).toContain('text-caption');
+    expect(container.innerHTML).not.toContain('text-xs');
+  });
+
   it('API địa giới lỗi (Pancake trục trặc) → báo rõ + nút "Thử lại" gọi lại được, không đứng im ở ô trống', async () => {
     let ok = false;
     const api = mockFetch({
