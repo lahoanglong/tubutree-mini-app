@@ -1,4 +1,5 @@
 import type { PancakeProductDTO, PancakeCategoryNode } from './pancake.types';
+import { payloadId, payloadText } from './pancake-payload';
 
 /** Khoá cấu hình: { mã hoặc tên nhóm hàng Pancake → id danh mục Tubu }. */
 export const PANCAKE_CATEGORY_MAP_KEY = 'pancake.category_map';
@@ -8,18 +9,25 @@ export type PancakeCategoryMap = Record<string, string>;
 
 const norm = (s: string): string => s.trim().toLowerCase();
 
+/**
+ * Pancake mô tả là mảng nhưng bản trả về có thể là một phần tử lẻ (số hoặc chuỗi). Lặp thẳng một số thì ném TypeError làm hỏng cả sản phẩm,
+ * lặp một chuỗi thì tách từng ký tự thành "nhóm hàng".
+ */
+const asList = (v: unknown): unknown[] => (Array.isArray(v) ? v : v === null || v === undefined ? [] : [v]);
+
 /** Mã và tên nhóm hàng một sản phẩm Pancake mang theo (đã chuẩn hoá để so khớp khoá của bản đồ). */
 export function pancakeCategoryRefs(p: Pick<PancakeProductDTO, 'category_ids' | 'categories'>): string[] {
   const out: string[] = [];
   const push = (v: unknown) => {
     if ((typeof v === 'string' && v.trim()) || (typeof v === 'number' && Number.isFinite(v))) out.push(norm(String(v)));
   };
-  for (const id of p.category_ids ?? []) push(id);
-  for (const c of p.categories ?? []) {
-    if (c && typeof c === 'object') {
-      push(c.id);
-      push(c.name);
-      push(c.text);
+  for (const id of asList(p.category_ids)) push(id);
+  for (const c of asList(p.categories)) {
+    if (c && typeof c === 'object' && !Array.isArray(c)) {
+      const node = c as { id?: unknown; name?: unknown; text?: unknown };
+      push(node.id);
+      push(node.name);
+      push(node.text);
     } else push(c);
   }
   return [...new Set(out)];
@@ -63,10 +71,13 @@ export interface FlatPancakeCategory {
 
 export function flattenPancakeCategories(nodes: readonly PancakeCategoryNode[], parents: string[] = []): FlatPancakeCategory[] {
   const out: FlatPancakeCategory[] = [];
-  for (const n of nodes) {
-    const name = n.text ?? n.name ?? String(n.id);
-    out.push({ id: String(n.id), name, path: [...parents, name].join(' > ') });
-    if (n.nodes?.length) out.push(...flattenPancakeCategories(n.nodes, [...parents, name]));
+  for (const n of Array.isArray(nodes) ? nodes : []) {
+    if (!n || typeof n !== 'object') continue;
+    const id = payloadId(n.id);
+    const name = payloadText(n.text) ?? payloadText(n.name) ?? id;
+    // Nhóm không có mã lẫn tên đọc được thì admin không có gì để ánh xạ; chỉ đi tiếp xuống nhóm con của nó.
+    if (id !== null && name !== null) out.push({ id, name, path: [...parents, name].join(' > ') });
+    if (Array.isArray(n.nodes) && n.nodes.length) out.push(...flattenPancakeCategories(n.nodes, name !== null ? [...parents, name] : parents));
   }
   return out;
 }

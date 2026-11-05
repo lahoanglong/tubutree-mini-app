@@ -11,6 +11,7 @@ import type { PancakeProductDTO, PancakeProductsResponse, PancakeVariationDTO } 
 import { CRON_TZ } from '../../../common/cron-tz';
 import { LEGACY_FAKE_PANCAKE_PREFIX } from './pancake-fulfilment';
 import { pancakeProductSlug } from './pancake-product-slug';
+import { payloadFlag, payloadId, payloadNonNegInt, payloadQuantity, payloadText, payloadTextList } from './pancake-payload';
 import { BROKEN_VARIANT_NAME_MARKER, isBrokenVariantName, variantAttributes, variantLabel } from './pancake-variant-fields';
 import { CronLeaderService } from '../../../common/cron-leader/cron-leader.service';
 import { RunLease } from '../../../common/cron-leader/run-lease';
@@ -54,7 +55,24 @@ export class CatalogSyncBusyError extends ConflictException {
   }
 }
 
-const positiveInt = (n: unknown): n is number => typeof n === 'number' && Number.isInteger(n) && n > 0;
+/** Cột Int của Postgres: giá/tồn lớn hơn làm câu ghi ném và hỏng cả sản phẩm. */
+const INT4_MAX = 2_147_483_647;
+
+/** Giá bán đọc được: số nguyên (hoặc chuỗi số kiểu máy) từ 1 tới trần cột Int; còn lại null — "không biết giá", không phải 0đ. */
+const positivePrice = (x: unknown): number | null => {
+  const n = payloadNonNegInt(x);
+  return n !== null && n > 0 && n <= INT4_MAX ? n : null;
+};
+
+const isRecord = (x: unknown): x is Record<string, unknown> => typeof x === 'object' && x !== null && !Array.isArray(x);
+
+/** Danh sách sản phẩm của một trang: mảng đầu tiên trong `data`/`products` (client đã bảo đảm ít nhất một trong hai là mảng). */
+const pageProducts = (res: PancakeProductsResponse): unknown[] =>
+  Array.isArray(res.data) ? res.data : Array.isArray(res.products) ? res.products : [];
+
+/** Biến thể của sản phẩm: chỉ các phần tử là object; `variations` không phải mảng thì không có biến thể nào. */
+const variationsOf = (p: PancakeProductDTO): PancakeVariationDTO[] =>
+  Array.isArray(p.variations) ? (p.variations as unknown[]).filter(isRecord).map((v) => v as unknown as PancakeVariationDTO) : [];
 
 interface SweepSeen {
   products: Set<string>;
@@ -262,23 +280,33 @@ export class PancakeSyncService implements OnModuleInit {
       const stockReadAt = new Date();
       const res = await this.client.fetchProducts(page, updatedSince);
       noteExpected(expected, res);
-      const products = res.data ?? res.products ?? [];
+      const products = pageProducts(res);
       if (products.length === 0) break;
       pagesWithData++;
-      for (const p of products) {
-        const pid = p.id ?? p.product_id;
+      for (const row of products) {
+        // Phần tử không phải object (null, chuỗi...) là dữ liệu hỏng của Pancake: đọc `.id` của nó ném TypeError và làm chết cả lượt,
+        // mà lượt 15 phút sau gặp lại đúng nó. Tính như một hàng không mã để so với total_entries vẫn khớp.
+        if (!isRecord(row)) {
+          unnamedRows++;
+          failed++;
+          this.logger.error(`Bỏ qua phần tử không phải sản phẩm ở trang ${page} của Pancake: ${JSON.stringify(row) ?? String(row)}`.slice(0, 200));
+          continue;
+        }
+        const p = row as unknown as PancakeProductDTO;
+        const pid = payloadId(p.id) ?? payloadId(p.product_id);
         if (pid) seen.products.add(pid);
         else unnamedRows++;
-        for (const v of p.variations ?? []) if (v.id) seen.variations.add(v.id);
+        for (const v of variationsOf(p)) {
+          const vid = payloadId(v.id);
+          if (vid) seen.variations.add(vid);
+        }
         // Cô lập lỗi từng sản phẩm — 1 SP hỏng (vd slug trùng) không làm hỏng cả batch.
         try {
-          await this.upsertProduct(p, { ...opts, stockReadAt });
-          count++;
+          if (await this.upsertProduct(p, { ...opts, stockReadAt })) count++;
+          else failed++;
         } catch (err) {
           failed++;
-          this.logger.error(
-            `Upsert sản phẩm Pancake ${p.product_id} lỗi: ${err instanceof Error ? err.message : err}`,
-          );
+          this.logger.error(`Upsert sản phẩm Pancake ${pid ?? '?'} lỗi: ${err instanceof Error ? err.message : err}`);
         }
       }
       page++;
@@ -389,52 +417,56 @@ export class PancakeSyncService implements OnModuleInit {
     v: PancakeVariationDTO,
     prev: { retailPrice: number; pancakeHold: string | null } | null,
   ): { prices: { retailPrice?: number; salePrice?: number | null }; noPrice: boolean } {
-    if (positiveInt(v.retail_price)) {
-      return { prices: { retailPrice: v.retail_price, salePrice: positiveInt(v.sale_price) ? v.sale_price : null }, noPrice: false };
-    }
+    const retail = positivePrice(v.retail_price);
+    if (retail !== null) return { prices: { retailPrice: retail, salePrice: positivePrice(v.sale_price) }, noPrice: false };
     this.logger.warn(
-      `Biến thể Pancake ${v.id} thiếu/không hợp lệ retail_price (${String(v.retail_price)}) — ` +
+      `Biến thể Pancake ${v.id} thiếu/không hợp lệ retail_price (${JSON.stringify(v.retail_price) ?? 'undefined'}) — ` +
         (prev && prev.retailPrice > 0 ? `giữ giá cũ ${prev.retailPrice}.` : 'không mở bán tới khi có giá.'),
     );
     return { prices: {}, noPrice: !prev || prev.retailPrice <= 0 || prev.pancakeHold === PANCAKE_HOLD.NO_PRICE };
   }
 
-  private async upsertProduct(p: PancakeProductDTO, opts: { forceStock?: boolean; stockReadAt?: Date } = {}): Promise<void> {
+  /** `false` = bỏ qua vì thiếu mã/tên đọc được (dữ liệu hỏng của Pancake), không ghi gì. */
+  private async upsertProduct(p: PancakeProductDTO, opts: { forceStock?: boolean; stockReadAt?: Date } = {}): Promise<boolean> {
     // Pancake POS dùng `id` cho sản phẩm (product_id là của variation) — lấy id thật.
-    const pancakeId = p.id ?? p.product_id;
-    if (!pancakeId || !p.name) {
-      this.logger.warn(`Bỏ qua sản phẩm Pancake thiếu id/name: ${JSON.stringify(p).slice(0, 120)}`);
-      return;
+    const pancakeId = payloadId(p.id) ?? payloadId(p.product_id);
+    const name = payloadText(p.name);
+    if (!pancakeId || !name) {
+      this.logger.warn(`Bỏ qua sản phẩm Pancake thiếu id/name: ${JSON.stringify(p)?.slice(0, 120)}`);
+      return false;
     }
+    const variations = variationsOf(p);
     const existing = await this.prisma.product.findUnique({ where: { pancakeId } });
 
     // Ảnh: ưu tiên ảnh sản phẩm, rồi ảnh variation đầu tiên (Pancake hay để ảnh ở variation).
     const imgs = [
-      ...(p.images ?? []),
-      ...(p.image ? [p.image] : []),
-      ...(p.variations?.flatMap((v) => v.images ?? []) ?? []),
-    ].filter((u): u is string => typeof u === 'string' && u.length > 0);
+      ...payloadTextList(p.images),
+      ...payloadTextList(p.image),
+      ...variations.flatMap((v) => payloadTextList(v.images)),
+    ];
 
+    const description = typeof p.description === 'string' && p.description.trim() ? p.description : null;
+    const sellable = variations.filter((v) => !payloadFlag(v.is_removed) && positivePrice(v.retail_price) !== null);
     const baseData = {
-      name: p.name,
+      name,
       // Mô tả Pancake để trống không xoá mô tả admin đã nhập ở trang quản trị; có nội dung thật thì Pancake là nguồn chính.
-      description: p.description?.trim() ? p.description : (existing?.description ?? ''),
+      description: description ?? existing?.description ?? '',
       images: imgs.length ? imgs : (existing?.images ?? []),
       thumbnail: imgs[0] ?? existing?.thumbnail ?? null,
-      basePrice: p.variations?.find((v) => !v.is_removed && positiveInt(v.retail_price))?.retail_price ?? existing?.basePrice ?? 0,
+      basePrice: positivePrice(sellable[0]?.retail_price) ?? existing?.basePrice ?? 0,
     };
     // Chưa biến thể nào có giá (và sản phẩm chưa từng bán có giá) → chưa mở bán, kẻo hiện "0đ" ngoài danh mục.
     // Sản phẩm đang bán mà Pancake tạm trả thiếu giá thì giữ bán theo giá cũ như biến thể (variationPrices).
-    const priced = (p.variations ?? []).some((v) => !v.is_removed && positiveInt(v.retail_price));
+    const priced = sellable.length > 0;
     const soldBefore = !!existing && existing.basePrice > 0 && existing.pancakeHold !== PANCAKE_HOLD.NO_PRICE;
     const productHold = this.holdPatch(
       existing,
-      p.is_removed ? PANCAKE_HOLD.REMOVED : !priced && !soldBefore ? PANCAKE_HOLD.NO_PRICE : null,
+      payloadFlag(p.is_removed) ? PANCAKE_HOLD.REMOVED : !priced && !soldBefore ? PANCAKE_HOLD.NO_PRICE : null,
     );
 
     // forSegment: suy từ tên để segment pills (Cho mẹ&bé / Nhà bếp xanh / Chăm sóc cá nhân / Sống xanh)
     // có hàng. Chỉ set khi tạo mới hoặc khi product cũ CHƯA có segment (không đè tag thủ công).
-    const inferred = this.inferSegments(p.name);
+    const inferred = this.inferSegments(name);
     // Danh mục: admin gán tay là của admin — đồng bộ chỉ điền khi sản phẩm CHƯA có danh mục nào.
     const mappedCats = (existing?.categoryIds?.length ?? 0) === 0 ? await this.mappedCategoryIds(p) : [];
 
@@ -457,7 +489,7 @@ export class PancakeSyncService implements OnModuleInit {
             ...productHold,
             pancakeId,
             brand: 'Tubu Tree',
-            slug: this.slugify(p.name, pancakeId),
+            slug: this.slugify(name, pancakeId),
             forSegment: inferred,
             categoryIds: mappedCats,
           },
@@ -472,63 +504,23 @@ export class PancakeSyncService implements OnModuleInit {
 
     // Biến thể giảm sâu nhất theo % — giá cũ/mới của nó đi vào nội dung thông báo và để xét ngưỡng giảm tối thiểu.
     let bestDrop: { oldPrice: number; newPrice: number } | null = null;
-    for (const v of p.variations ?? []) {
-      // So giá cũ ↔ mới để phát hiện GIẢM GIÁ (§6.14.10 Price Drop Alert).
-      const prev = await this.prisma.variation.findUnique({
-        where: { pancakeId: v.id },
-        select: { retailPrice: true, salePrice: true, isActive: true, pancakeHold: true, name: true },
-      });
-      const { prices, noPrice } = this.variationPrices(v, prev);
-      const hold = this.holdPatch(prev, v.is_removed ? PANCAKE_HOLD.REMOVED : noPrice ? PANCAKE_HOLD.NO_PRICE : null);
-      // Biến thể khách không mua được sau lượt này (Pancake xoá, hoặc admin đã tắt bán) hạ giá thì không báo "giảm giá".
-      const sellable = !v.is_removed && (hold.isActive ?? prev?.isActive) !== false;
-      if (prev && sellable && prices.retailPrice != null) {
-        const newEff = prices.salePrice ?? prices.retailPrice;
-        const oldEff = prev.salePrice ?? prev.retailPrice;
-        if (newEff > 0 && newEff < oldEff && (!bestDrop || (oldEff - newEff) / oldEff > (bestDrop.oldPrice - bestDrop.newPrice) / bestDrop.oldPrice)) {
-          bestDrop = { oldPrice: oldEff, newPrice: newEff };
+    // Cô lập lỗi từng biến thể như từng sản phẩm: một biến thể hỏng (sku trùng, mã rác) không được chặn các biến thể còn lại của cùng
+    // sản phẩm cập nhật giá/tồn. Lỗi đầu tiên ném sau cùng để sản phẩm vẫn được tính là lỗi trong lượt.
+    let variationError: unknown = null;
+    for (const v of variations) {
+      const vid = payloadId(v.id);
+      if (!vid) {
+        this.logger.warn(`Bỏ qua biến thể Pancake không có mã đọc được của sản phẩm ${pancakeId}: ${JSON.stringify(v.id) ?? 'undefined'}`);
+        continue;
+      }
+      try {
+        const drop = await this.upsertVariation(v, vid, product.id, name, opts);
+        if (drop && (!bestDrop || (drop.oldPrice - drop.newPrice) / drop.oldPrice > (bestDrop.oldPrice - bestDrop.newPrice) / bestDrop.oldPrice)) {
+          bestDrop = drop;
         }
-      }
-      await this.prisma.variation.upsert({
-        where: { pancakeId: v.id },
-        update: {
-          sku: v.sku ?? v.id,
-          attributes: variantAttributes(v.fields),
-          ...prices,
-          ...hold,
-          weight: v.weight ?? null,
-          // KHÔNG ghi `stock` ở đây: tồn kho đi qua applyPancakeStock ngay dưới, vì nó phải đọc
-          // giá trị cũ của chính hàng đó (chênh lệch + giữ chỗ) trong MỘT câu UPDATE nguyên tử.
-        },
-        create: {
-          pancakeId: v.id,
-          productId: product.id,
-          sku: v.sku ?? v.id,
-          name: variantLabel(v.fields) ?? p.name,
-          attributes: variantAttributes(v.fields),
-          retailPrice: prices.retailPrice ?? 0,
-          salePrice: prices.salePrice ?? null,
-          ...hold,
-          stock: v.remain_quantity ?? 0,
-          pancakeStock: v.remain_quantity ?? 0,
-          weight: v.weight ?? null,
-        },
-      });
-      // Tên chỉ ghi lúc tạo, nên dòng đã ghi hỏng thì lành ở đây. Câu UPDATE tự kiểm lại tên VẪN còn dấu hiệu hỏng: admin sửa
-      // tay giữa lúc đọc `prev` và lúc này thì không bị đè.
-      if (isBrokenVariantName(prev?.name)) {
-        await this.prisma.variation.updateMany({
-          where: { pancakeId: v.id, name: { contains: BROKEN_VARIANT_NAME_MARKER } },
-          data: { name: variantLabel(v.fields) ?? p.name },
-        });
-      }
-      // `remain_quantity` vắng mặt (null/undefined) = Pancake KHÔNG nói gì về tồn kho lần này.
-      // Trước đây `?? 0` biến "không biết" thành "hết hàng" và xoá sạch tồn của variation đó.
-      // Kèm lúc đọc: webhook nhận sau lúc đọc đã áp trong lúc lượt này chạy thì số đọc trước đó không ghi đè (R5-SYNC-3).
-      if (v.remain_quantity != null) {
-        const readAt = opts.stockReadAt;
-        if (opts.forceStock) await forcePancakeStock(this.prisma, v.id, v.remain_quantity, { readAt });
-        else await applyPancakeStock(this.prisma, v.id, v.remain_quantity, readAt && { kind: 'sync', readAt });
+      } catch (err) {
+        variationError ??= err;
+        this.logger.error(`Upsert biến thể Pancake ${vid} lỗi: ${err instanceof Error ? err.message : err}`);
       }
     }
 
@@ -536,6 +528,86 @@ export class PancakeSyncService implements OnModuleInit {
     if (bestDrop) {
       await this.lifecycle.notifyWishlistPriceDrop(product.id, product.name, bestDrop).catch(() => undefined);
     }
+    if (variationError) throw variationError;
+    return true;
+  }
+
+  /** Ghi một biến thể; trả mức giảm giá của nó (so với giá đang lưu) nếu khách mua được và giá giảm. */
+  private async upsertVariation(
+    v: PancakeVariationDTO,
+    vid: string,
+    productId: string,
+    productName: string,
+    opts: { forceStock?: boolean; stockReadAt?: Date },
+  ): Promise<{ oldPrice: number; newPrice: number } | null> {
+    let drop: { oldPrice: number; newPrice: number } | null = null;
+    // So giá cũ ↔ mới để phát hiện GIẢM GIÁ (§6.14.10 Price Drop Alert).
+    const prev = await this.prisma.variation.findUnique({
+      where: { pancakeId: vid },
+      select: { retailPrice: true, salePrice: true, isActive: true, pancakeHold: true, name: true },
+    });
+    const removed = payloadFlag(v.is_removed);
+    const { prices, noPrice } = this.variationPrices(v, prev);
+    const hold = this.holdPatch(prev, removed ? PANCAKE_HOLD.REMOVED : noPrice ? PANCAKE_HOLD.NO_PRICE : null);
+    // Biến thể khách không mua được sau lượt này (Pancake xoá, hoặc admin đã tắt bán) hạ giá thì không báo "giảm giá".
+    const sellable = !removed && (hold.isActive ?? prev?.isActive) !== false;
+    if (prev && sellable && prices.retailPrice != null) {
+      const newEff = prices.salePrice ?? prices.retailPrice;
+      const oldEff = prev.salePrice ?? prev.retailPrice;
+      if (newEff > 0 && newEff < oldEff) drop = { oldPrice: oldEff, newPrice: newEff };
+    }
+    // Cột `sku` là khoá duy nhất: rỗng/object/số lạ không được ghi, lấy mã biến thể.
+    const sku = payloadText(v.sku) ?? vid;
+    // Cột `weight` là Int: số lẻ làm Prisma ném và hỏng cả sản phẩm; số âm/rác là không biết.
+    const weight = payloadNonNegInt(v.weight, { round: true });
+    const label = variantLabel(v.fields) ?? productName;
+    // `remain_quantity` vắng mặt hoặc không đọc được = Pancake KHÔNG nói gì về tồn kho lần này (không phải "hết hàng").
+    // Số âm (POS cho bán lố kho) là hết hàng: tồn bán được không âm.
+    const reported = payloadQuantity(v.remain_quantity);
+    const remain = reported === null ? null : Math.max(0, reported);
+    if (v.remain_quantity != null && reported === null) {
+      this.logger.warn(`Biến thể Pancake ${vid} có remain_quantity không đọc được (${JSON.stringify(v.remain_quantity)}) — không đổi tồn kho.`);
+    }
+    await this.prisma.variation.upsert({
+      where: { pancakeId: vid },
+      update: {
+        sku,
+        attributes: variantAttributes(v.fields),
+        ...prices,
+        ...hold,
+        weight,
+        // KHÔNG ghi `stock` ở đây: tồn kho đi qua applyPancakeStock ngay dưới, vì nó phải đọc
+        // giá trị cũ của chính hàng đó (chênh lệch + giữ chỗ) trong MỘT câu UPDATE nguyên tử.
+      },
+      create: {
+        pancakeId: vid,
+        productId,
+        sku,
+        name: label,
+        attributes: variantAttributes(v.fields),
+        retailPrice: prices.retailPrice ?? 0,
+        salePrice: prices.salePrice ?? null,
+        ...hold,
+        stock: remain ?? 0,
+        pancakeStock: remain ?? 0,
+        weight,
+      },
+    });
+    // Tên chỉ ghi lúc tạo, nên dòng đã ghi hỏng thì lành ở đây. Câu UPDATE tự kiểm lại tên VẪN còn dấu hiệu hỏng: admin sửa
+    // tay giữa lúc đọc `prev` và lúc này thì không bị đè.
+    if (isBrokenVariantName(prev?.name)) {
+      await this.prisma.variation.updateMany({
+        where: { pancakeId: vid, name: { contains: BROKEN_VARIANT_NAME_MARKER } },
+        data: { name: label },
+      });
+    }
+    // Kèm lúc đọc: webhook nhận sau lúc đọc đã áp trong lúc lượt này chạy thì số đọc trước đó không ghi đè (R5-SYNC-3).
+    if (remain !== null) {
+      const readAt = opts.stockReadAt;
+      if (opts.forceStock) await forcePancakeStock(this.prisma, vid, remain, { readAt });
+      else await applyPancakeStock(this.prisma, vid, remain, readAt && { kind: 'sync', readAt });
+    }
+    return drop;
   }
 
   private slugify(name: string, suffix: string): string {
