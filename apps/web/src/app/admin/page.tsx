@@ -3284,7 +3284,7 @@ function FlashSalesTab() {
             {create.isPending ? 'Đang tạo…' : 'Tạo đợt'}
           </button>
         </div>
-        {windowError && <p role="alert" className="mt-2 text-sm text-danger-fg">{windowError}</p>}
+        {windowError && <p aria-live="polite" className="mt-2 text-sm text-danger-fg">{windowError}</p>}
         {msg && <p className={`mt-2 text-sm ${msg.ok ? 'text-success-fg' : 'text-danger-fg'}`}>{msg.text}</p>}
       </div>
 
@@ -3462,7 +3462,7 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSaleSummary }) {
           <button onClick={() => setEditing(false)} className={BTN_SECONDARY}>
             Huỷ sửa
           </button>
-          {draftWindowError && <p role="alert" className="basis-full text-sm text-danger-fg">{draftWindowError}</p>}
+          {draftWindowError && <p aria-live="polite" className="basis-full text-sm text-danger-fg">{draftWindowError}</p>}
           {!notStarted && (
             <p className="basis-full text-xs text-stone-600">
               Đợt đã bắt đầu: không đổi được giờ bắt đầu (khách đã thấy giá). Chỉ sửa được tên, giờ kết thúc hoặc tắt đợt.

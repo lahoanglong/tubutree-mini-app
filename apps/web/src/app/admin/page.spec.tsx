@@ -1890,11 +1890,12 @@ describe('admin/page — tab Flash Sale', () => {
   it('W13: giờ kết thúc không sau giờ bắt đầu thì báo ngay trên form tạo đợt, giữ nút Tạo đợt khoá và không gửi gì', async () => {
     const { container } = await openSales();
     const create = btn(container, 'Tạo đợt');
-    const alertText = () => container.querySelector('[role="alert"]')?.textContent ?? '';
+    const alertText = () => container.querySelector('[aria-live="polite"]')?.textContent ?? '';
     typeInto(labelledInput(container, 'Tên đợt'), 'Đợt mới');
     setDateTime(container, 'Giờ vàng bắt đầu lúc', '2026-10-20T08:00');
     setDateTime(container, 'Giờ vàng kết thúc lúc', '2026-10-20T08:00');
     expect(alertText()).toContain('Giờ kết thúc phải sau giờ bắt đầu');
+    expect(container.querySelector('[aria-live="polite"]')?.getAttribute('role'), 'câu báo hiện khi vừa gõ ngày chưa chọn giờ: không bật như cảnh báo khẩn').toBeNull();
     expect(create.disabled).toBe(true);
     setDateTime(container, 'Giờ vàng kết thúc lúc', '2026-10-19T23:45');
     expect(alertText()).toContain('Giờ kết thúc phải sau giờ bắt đầu');
@@ -1912,7 +1913,7 @@ describe('admin/page — tab Flash Sale', () => {
     const { container } = await openSales();
     click(btn(container, 'Sửa đợt'));
     const save = btn(container, 'Lưu thay đổi');
-    const alertText = () => container.querySelector('[role="alert"]')?.textContent ?? '';
+    const alertText = () => container.querySelector('[aria-live="polite"]')?.textContent ?? '';
     typeInto(labelledInput(container, 'Tên đợt (sửa)'), 'Đợt đã đổi tên');
     expect(save.disabled).toBe(false);
     expect(alertText()).toBe('');
