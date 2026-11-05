@@ -104,17 +104,19 @@ export class PancakeSyncHooks {
     try {
       let pancakeOrderId = order.pancakeOrderId;
       if (!pancakeOrderId) {
-        const found = (await this.client.searchOrders(order.code, opts)).filter(
-          (o) => pancakeOrderIdOf(o) !== null && pancakeOrderHasCode(o, order.code) && !isPancakeCancelled(o.status),
-        );
+        const found = (await this.client.searchOrders(order.code, opts)).filter((o) => pancakeOrderHasCode(o, order.code) && !isPancakeCancelled(o.status));
         if (found.length === 0) return { kind: 'CONFIRMED', cancelStatus: PANCAKE_CANCEL.NOT_FOUND, pancakeOrderId: null };
-        // Nhiều đơn sống cùng mã (đẩy trùng): một đơn đã gửi hàng là đủ để chặn; còn lại để job huỷ từng đơn và báo admin.
-        if (found.length > 1) {
+        // Nhiều đơn sống cùng mã (đẩy trùng), hoặc có đơn sống mà mã đơn Pancake không đọc được (không huỷ được, cũng không được chốt
+        // "không có đơn"): một đơn đã gửi hàng là đủ để chặn; còn lại để job huỷ thử lại và báo admin nếu vẫn không đọc được.
+        const unreadable = found.some((o) => pancakeOrderIdOf(o) === null);
+        if (found.length > 1 || unreadable) {
           const shipped = found.find((o) => isPancakeHandedOver(o.status));
           if (shipped) throw new PancakeHandedOverError(shipped.status!);
-          return { kind: 'DEFERRED', reason: `Pancake có ${found.length} đơn mang mã ${order.code}` };
+          return {
+            kind: 'DEFERRED',
+            reason: found.length > 1 ? `Pancake có ${found.length} đơn mang mã ${order.code}` : `Pancake có đơn mang mã ${order.code} nhưng mã đơn Pancake không đọc được`,
+          };
         }
-        // `found` chỉ gồm đơn có mã đọc được (bộ lọc ở trên).
         pancakeOrderId = pancakeOrderIdOf(found[0])!;
       }
       const outcome = await cancelPancakeOrder(this.client, pancakeOrderId, opts);
