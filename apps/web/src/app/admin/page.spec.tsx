@@ -672,6 +672,17 @@ describe('admin/page — tab Tổng quan', () => {
     expect(container.querySelector('table')!.closest('[role="region"]')!.className).toContain('hidden sm:block');
   });
 
+  it('bảng đơn gần đây: mã đơn và mốc giờ không bị xuống dòng giữa chừng, bảng cuộn trong khung riêng', async () => {
+    const { container } = await mount();
+    const rows = container.querySelectorAll('table tbody tr');
+    expect(rows.length).toBeGreaterThan(0);
+    rows.forEach((tr) => {
+      expect(tr.querySelector('td:first-child button')!.className).toContain('whitespace-nowrap');
+      expect(tr.querySelector('td:last-child')!.className).toContain('whitespace-nowrap');
+    });
+    expect(container.querySelector('table')!.closest('[role="region"]')).not.toBeNull();
+  });
+
   it('huy hiệu trạng thái đơn mỗi trạng thái một cặp nền/chữ cùng họ token, nhãn giữ nguyên', async () => {
     const { container } = await mount();
     const badges = [...container.querySelectorAll('tbody span.inline-block')];
@@ -1626,6 +1637,22 @@ describe('admin/page — tab Nhãn hàng', () => {
     expect(mocks.createBrand).toHaveBeenCalledWith({ name: 'Dừa Bến Tre', tagline: undefined });
   });
 
+  it('mở Quản lý nhãn: chữ nhìn thấy bằng tiếng Việt, không còn "verified", "Proof URL", "(publish)"', async () => {
+    mocks.brands = [{ ...BRAND, isPublished: false }];
+    const { container } = await openBrands();
+    await openRow(container);
+    expect(btn(container, 'Đăng')).toBeTruthy();
+    expect(container.querySelector('input[placeholder="Link minh chứng"]')).not.toBeNull();
+    expect([...container.querySelectorAll('label')].some((l) => l.textContent?.trim() === 'Đã xác minh')).toBe(true);
+    expect(container.textContent).not.toMatch(/\bverified\b|Proof URL|\(publish\)/);
+  });
+
+  it('hàng nhãn: số người theo dõi từ 1.000 trở lên có dấu chấm ngăn nghìn', async () => {
+    mocks.brands = [{ ...BRAND, followerCount: 1234 }];
+    const { container } = await openBrands();
+    expect(container.textContent).toContain('/dua-ben-tre · 1.234 theo dõi');
+  });
+
   it('hàng nhãn: Chính hãng có biểu tượng thay dấu chữ và tông success, Nháp tông trung tính', async () => {
     mocks.brands = [BRAND];
     const { container } = await openBrands();
@@ -1649,7 +1676,7 @@ describe('admin/page — tab Nhãn hàng', () => {
     await openRow(container);
     expect(btn(container, 'Thu gọn')).toBeTruthy();
 
-    const publish = btn(container, 'Đăng (publish)');
+    const publish = btn(container, 'Đăng');
     expect(publish.className).toContain('min-h-[44px]');
     mocks.updateBrand.mockResolvedValue({});
     click(publish);
@@ -2555,7 +2582,7 @@ describe('admin/page — tab Academy', () => {
     await openCourse(container);
     expect(btn(container, 'Thu gọn')).toBeTruthy();
 
-    const publish = btn(container, 'Đăng (publish)');
+    const publish = btn(container, 'Đăng');
     expect(publish.className).toContain('border-stone-450');
     mocks.updateAcademyCourse.mockResolvedValue({});
     click(publish);

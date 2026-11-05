@@ -995,3 +995,261 @@ describe('PancakeSyncService — tên và phân loại biến thể từ payload
     expect(mk(prisma).variation.findUnique).toHaveBeenCalledWith(expect.objectContaining({ select: expect.objectContaining({ name: true }) }));
   });
 });
+
+describe('PancakeSyncService — payload thiếu trường hoặc kiểu lạ (W11)', () => {
+  const SINCE = '2026-11-06T00:00:00.000Z';
+  const sync = async (products: unknown[], prisma: PrismaService = makePrisma(), config?: unknown) => {
+    const svc = new PancakeSyncService(prisma, makeClient([products]), lifecycle, undefined, config as never);
+    return { n: await svc.syncProducts(SINCE), prisma };
+  };
+  const upserts = (prisma: PrismaService) => mk(prisma).variation.upsert.mock.calls.map((c) => c[0] as { where: { pancakeId: unknown }; update: Record<string, unknown>; create: Record<string, unknown> });
+  const firstUpsert = (prisma: PrismaService) => upserts(prisma)[0]!;
+  const stockArgs = (prisma: PrismaService) =>
+    (prisma as unknown as { $executeRaw: jest.Mock }).$executeRaw.mock.calls.map((c) => Prisma.sql(c[0] as string[], ...(c.slice(1) as Prisma.Sql[])).values);
+
+  describe('một phần tử hỏng không làm hỏng cả lượt đồng bộ', () => {
+    it.each([[null], ['rác'], [42], [[]]])('phần tử %j trong danh sách sản phẩm: bỏ qua, sản phẩm đứng sau vẫn được đồng bộ', async (bad) => {
+      const { n, prisma } = await sync([bad, product('good', [variation('v-good')])]);
+      expect(n).toBe(1);
+      expect(mk(prisma).product.create).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([['x'], [{}], [5], [{ id: 'v1' }]])('variations=%j (không phải mảng): sản phẩm vẫn được ghi, không có biến thể nào', async (variations) => {
+      const { n, prisma } = await sync([{ id: 'a', name: 'Tinh dầu', variations }, product('b', [variation('v-b')])]);
+      expect(n).toBe(2);
+      expect(upserts(prisma).map((u) => u.where.pancakeId)).toEqual(['v-b']);
+    });
+
+    it('data là object còn products là mảng: đọc mảng, không lặp qua object', async () => {
+      const client = {
+        isConfigured: () => true,
+        fetchProducts: jest
+          .fn()
+          .mockResolvedValueOnce({ success: true, data: {}, products: [prod('a')], total_pages: 1, total_entries: 1 })
+          .mockResolvedValue({ success: true, data: [], total_pages: 1, total_entries: 1 }),
+      } as unknown as PancakeClient;
+      const prisma = makePrisma();
+      await expect(new PancakeSyncService(prisma, client, lifecycle).syncProducts(SINCE)).resolves.toBe(1);
+    });
+
+    it('một biến thể lỗi khi ghi: các biến thể còn lại của sản phẩm vẫn được ghi, sản phẩm tính là lỗi', async () => {
+      const prisma = makePrisma({
+        variation: {
+          upsert: jest.fn().mockImplementation(async ({ where }: { where: { pancakeId: string } }) => {
+            if (where.pancakeId === 'v-bad') throw new Error('sku trùng');
+            return {};
+          }),
+        },
+      });
+      const { n } = await sync([product('a', [variation('v-bad'), variation('v-ok')])], prisma);
+      expect(upserts(prisma).map((u) => u.where.pancakeId)).toEqual(['v-bad', 'v-ok']);
+      expect(n).toBe(0);
+    });
+  });
+
+  describe('kết quả lượt đồng bộ ghi cho màn sức khoẻ vận hành: sản phẩm thiếu tên/mã là "bỏ qua", không phải "lỗi"', () => {
+    const runDetail = async (products: unknown[], prismaOver: Record<string, unknown> = {}) => {
+      const upsert = jest.fn().mockResolvedValue({});
+      const prisma = makePrisma({ opsHealthState: { upsert }, ...prismaOver });
+      const { n } = await sync(products, prisma);
+      const calls = upsert.mock.calls.map((c) => c[0] as { update: { detail?: unknown } });
+      return { n, detail: calls.at(-1)?.update.detail };
+    };
+
+    it.each([['   '], [null], [{}]])('sản phẩm nháp name=%j + một sản phẩm tốt: count 1, failed 0, skipped 1', async (name) => {
+      const { n, detail } = await runDetail([{ id: 'draft', name, variations: [] }, product('good', [variation('v-good')])]);
+      expect(n).toBe(1);
+      expect(detail).toEqual({ count: 1, failed: 0, skipped: 1 });
+    });
+
+    it('sản phẩm thiếu id (có tên): bỏ qua, không phải lỗi', async () => {
+      const { detail } = await runDetail([{ name: 'Không mã', variations: [variation('v-x')] }]);
+      expect(detail).toEqual({ count: 0, failed: 0, skipped: 1 });
+    });
+
+    it('lỗi ghi thật (sku trùng) vẫn là failed, không bị đếm là skipped', async () => {
+      const { detail } = await runDetail([product('a', [variation('v-bad')])], {
+        variation: { upsert: jest.fn().mockRejectedValue(new Error('sku trùng')) },
+      });
+      expect(detail).toEqual({ count: 0, failed: 1, skipped: 0 });
+    });
+
+    it('phần tử không phải object trong danh sách vẫn là failed (dữ liệu hỏng, không phải sản phẩm nháp)', async () => {
+      const { detail } = await runDetail([null, product('good', [variation('v-good')])]);
+      expect(detail).toEqual({ count: 1, failed: 1, skipped: 0 });
+    });
+
+    it('lượt sạch: skipped 0', async () => {
+      const { detail } = await runDetail([product('good', [variation('v-good')])]);
+      expect(detail).toEqual({ count: 1, failed: 0, skipped: 0 });
+    });
+  });
+
+  describe('trường kiểu lạ của sản phẩm', () => {
+    it('images là một chuỗi: thành một ảnh, không tách từng ký tự', async () => {
+      const { prisma } = await sync([product('a', [variation('v-a')], { images: 'https://img/a.jpg' })]);
+      const data = mk(prisma).product.create.mock.calls[0][0].data;
+      expect(data.images).toEqual(['https://img/a.jpg']);
+      expect(data.thumbnail).toBe('https://img/a.jpg');
+    });
+
+    it('images là object: bỏ qua phần ảnh, giá và tồn vẫn đồng bộ', async () => {
+      const { n, prisma } = await sync([product('a', [variation('v-a', { images: ['https://img/v.jpg'] })], { images: { 0: 'x' } })]);
+      expect(n).toBe(1);
+      expect(mk(prisma).product.create.mock.calls[0][0].data.images).toEqual(['https://img/v.jpg']);
+    });
+
+    it('variations[].images là một chuỗi thì thành một ảnh, là object thì bỏ qua', async () => {
+      const { prisma } = await sync([product('a', [variation('v-a', { images: 'https://img/one.jpg' }), variation('v-b', { images: { a: 1 } })])]);
+      expect(mk(prisma).product.create.mock.calls[0][0].data.images).toEqual(['https://img/one.jpg']);
+    });
+
+    it('description là object: không ném, mô tả cũ được giữ', async () => {
+      const prisma = makePrisma({ product: { findUnique: jest.fn().mockResolvedValue({ id: 'p', pancakeId: 'a', description: 'Mô tả cũ', basePrice: 1000, forSegment: ['eco'], images: [], categoryIds: [] }) } });
+      const { n } = await sync([product('a', [variation('v-a')], { description: { vi: 'x' } })], prisma);
+      expect(n).toBe(1);
+      expect(mk(prisma).product.update.mock.calls[0][0].data.description).toBe('Mô tả cũ');
+    });
+
+    it.each([['   '], [''], [null], [{}], [['a']], [true]])('name=%j: bỏ qua sản phẩm, không ghi tên rác', async (name) => {
+      const { n, prisma } = await sync([{ id: 'a', name, variations: [variation('v-a')] }]);
+      expect(n).toBe(0);
+      expect(mk(prisma).product.create).not.toHaveBeenCalled();
+      expect(upserts(prisma)).toHaveLength(0);
+    });
+
+    it.each([['false'], [0], [null], [undefined]])('is_removed=%j: không phải cờ bật, sản phẩm không bị tắt', async (flag) => {
+      const { prisma } = await sync([product('a', [variation('v-a')], { is_removed: flag })]);
+      expect(mk(prisma).product.create.mock.calls[0][0].data).not.toHaveProperty('pancakeHold', 'REMOVED');
+    });
+
+    it.each([[true], ['true'], [1], ['1'], [2], ['yes'], ['2026-11-05T10:00:00Z'], [1730800000000], [{}]])('is_removed=%j: tắt sản phẩm', async (flag) => {
+      const { prisma } = await sync([product('a', [variation('v-a')], { is_removed: flag })]);
+      expect(mk(prisma).product.create.mock.calls[0][0].data).toMatchObject({ isActive: false, pancakeHold: 'REMOVED' });
+    });
+
+    it('category_ids là một số (không phải mảng): vẫn ánh xạ, sản phẩm không hỏng', async () => {
+      const prisma = makePrisma({ category: { findMany: jest.fn().mockResolvedValue([{ id: 'catA' }]) } });
+      const cfg = { get: jest.fn().mockResolvedValue({ '865301': 'catA' }) };
+      const { n } = await sync([product('a', [variation('v-a')], { category_ids: 865301 })], prisma, cfg);
+      expect(n).toBe(1);
+      expect(mk(prisma).product.create.mock.calls[0][0].data.categoryIds).toEqual(['catA']);
+    });
+  });
+
+  describe('trường kiểu lạ của biến thể', () => {
+    it.each([[undefined], [null], [''], [{ a: 1 }], [['x']], [true]])('id=%j: bỏ qua biến thể, không upsert theo mã rác; biến thể hợp lệ cạnh nó vẫn ghi', async (id) => {
+      const { n, prisma } = await sync([product('a', [{ id, sku: 's', retail_price: 1000 }, variation('v-ok')])]);
+      expect(n).toBe(1);
+      expect(upserts(prisma).map((u) => u.where.pancakeId)).toEqual(['v-ok']);
+    });
+
+    it('id là số: đổi thành chuỗi như webhook đã làm', async () => {
+      const { prisma } = await sync([product('a', [variation('x', { id: 12345 })])]);
+      expect(upserts(prisma)[0]!.where.pancakeId).toBe('12345');
+    });
+
+    it.each([['ABC '], [' ABC'], ['abc-1'], ['null']])('sku chuỗi có chữ %j: ghi nguyên văn, không cắt khoảng trắng (khoá duy nhất so khớp theo giá trị Pancake gửi)', async (sku) => {
+      const { prisma } = await sync([product('a', [{ id: 'v-a', sku, retail_price: 1000 }])]);
+      expect(firstUpsert(prisma).create.sku).toBe(sku);
+      expect(firstUpsert(prisma).update.sku).toBe(sku);
+    });
+
+    it('sku là số: đổi thành chuỗi', async () => {
+      const { prisma } = await sync([product('a', [{ id: 'v-a', sku: 8934567, retail_price: 1000 }])]);
+      expect(firstUpsert(prisma).create.sku).toBe('8934567');
+    });
+
+    it.each([[''], ['   '], [{ a: 1 }], [null], [undefined]])('sku=%j: lấy mã biến thể làm sku, không ghi chuỗi rỗng/object (sku là khoá duy nhất)', async (sku) => {
+      const { prisma } = await sync([product('a', [{ id: 'v-a', sku, retail_price: 1000 }])]);
+      expect(firstUpsert(prisma).create.sku).toBe('v-a');
+      expect(firstUpsert(prisma).update.sku).toBe('v-a');
+    });
+
+    it.each([
+      [250.5, 250],
+      [250.9, 250],
+      ['250.9', 250],
+      ['500', 500],
+      [-5, null],
+      [{}, null],
+      [true, null],
+      [Number.MAX_SAFE_INTEGER * 4, null],
+    ])('weight=%j: cột weight là Int, ghi %j', async (weight, expected) => {
+      const { prisma } = await sync([product('a', [variation('v-a', { weight })])]);
+      expect(firstUpsert(prisma).create.weight).toBe(expected);
+      expect(firstUpsert(prisma).update.weight).toBe(expected);
+    });
+
+    describe('remain_quantity', () => {
+      it('số âm (Pancake cho bán lố kho): tồn Tubu là 0, không ghi số âm', async () => {
+        const { prisma } = await sync([product('a', [variation('v-a', { remain_quantity: -3 })])]);
+        expect(firstUpsert(prisma).create).toMatchObject({ stock: 0, pancakeStock: 0 });
+        expect(stockArgs(prisma).flat()).not.toContain(-3);
+      });
+
+      it.each([['7', 7], [12.7, 12], ['0', 0]])('remain_quantity=%j: ghi %j', async (raw, expected) => {
+        const { prisma } = await sync([product('a', [variation('v-a', { remain_quantity: raw })])]);
+        expect(firstUpsert(prisma).create).toMatchObject({ stock: expected, pancakeStock: expected });
+        expect(stockArgs(prisma)[0]).toContain(expected);
+      });
+
+      it.each([['7.00', 7], ['7.50', 7], ['12.3456', 12], [' 3.0 ', 3]])('remain_quantity chuỗi thập phân %j: ghi %j', async (raw, expected) => {
+        const { prisma } = await sync([product('a', [variation('v-a', { remain_quantity: raw })])]);
+        expect(firstUpsert(prisma).create).toMatchObject({ stock: expected, pancakeStock: expected });
+      });
+
+      it.each([['5.000'], ['1.234'], ['12.000']])('remain_quantity=%j khớp mẫu ngăn nghìn (có thể là 5000): từ chối, không đụng tồn kho, có warn', async (raw) => {
+        const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+        try {
+          const { prisma } = await sync([product('a', [variation('v-a', { remain_quantity: raw })])]);
+          expect(stockArgs(prisma)).toHaveLength(0);
+          expect(warn).toHaveBeenCalledWith(expect.stringContaining('remain_quantity'));
+        } finally {
+          warn.mockRestore();
+        }
+      });
+
+      it.each([[''], ['abc'], [{}], [[]], [true], [1e12], ['1e3'], [Infinity]])('remain_quantity=%j: không đọc được, coi như Pancake không nói gì (không đụng tồn kho)', async (raw) => {
+        const { prisma } = await sync([product('a', [variation('v-a', { remain_quantity: raw })])]);
+        expect(stockArgs(prisma)).toHaveLength(0);
+        expect(firstUpsert(prisma).create).toMatchObject({ stock: 0, pancakeStock: 0 });
+      });
+    });
+
+    describe('giá', () => {
+      it('retail_price là chuỗi toàn chữ số: đọc như số', async () => {
+        const { prisma } = await sync([product('a', [variation('v-a', { retail_price: '269000', sale_price: '199000' })])]);
+        expect(firstUpsert(prisma).create).toMatchObject({ retailPrice: 269000, salePrice: 199000 });
+        expect(firstUpsert(prisma).create.pancakeHold ?? null).toBeNull();
+      });
+
+      it('retail_price "269000.000" (phần lẻ toàn số 0) đọc như 269000', async () => {
+        const { prisma } = await sync([product('a', [variation('v-a', { retail_price: '269000.000', sale_price: '199000.00' })])]);
+        expect(firstUpsert(prisma).create).toMatchObject({ retailPrice: 269000, salePrice: 199000 });
+      });
+
+      it.each([['12.000'], ['269.000đ'], [12000.5], [''], ['abc'], [{}], [[]], [true], [-1], [1e21]])('retail_price=%j: không đọc được → biến thể mới không mở bán, không ghi giá lạ', async (retail) => {
+        const { prisma } = await sync([product('a', [variation('v-a', { retail_price: retail })])]);
+        expect(firstUpsert(prisma).create).toMatchObject({ retailPrice: 0, isActive: false, pancakeHold: 'NO_PRICE' });
+        expect(mk(prisma).product.create.mock.calls[0][0].data).toMatchObject({ basePrice: 0, isActive: false, pancakeHold: 'NO_PRICE' });
+      });
+
+      it.each([['12.000'], [{}], [[]], ['abc']])('sale_price=%j: bỏ giá khuyến mãi, giữ giá lẻ', async (sale) => {
+        const { prisma } = await sync([product('a', [variation('v-a', { retail_price: 50000, sale_price: sale })])]);
+        expect(firstUpsert(prisma).create).toMatchObject({ retailPrice: 50000, salePrice: null });
+      });
+    });
+
+    it.each([[true], ['true'], [1], ['1'], [2], ['yes'], ['2026-11-05T10:00:00Z'], [1730800000000], [{}]])('is_removed=%j: tắt biến thể', async (flag) => {
+      const { prisma } = await sync([product('a', [variation('v-a', { is_removed: flag })])]);
+      expect(firstUpsert(prisma).create).toMatchObject({ isActive: false, pancakeHold: 'REMOVED' });
+    });
+
+    it.each([['false'], [' False '], [0], ['0'], [''], [null]])('is_removed=%j: không tắt biến thể', async (flag) => {
+      const { prisma } = await sync([product('a', [variation('v-a', { is_removed: flag })])]);
+      expect(firstUpsert(prisma).create.pancakeHold ?? null).toBeNull();
+      expect(firstUpsert(prisma).create.isActive ?? true).toBe(true);
+    });
+  });
+});

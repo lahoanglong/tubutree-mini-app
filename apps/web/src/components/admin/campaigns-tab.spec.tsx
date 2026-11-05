@@ -262,6 +262,72 @@ describe('CampaignsTab: tạo chiến dịch', () => {
     expect(c.querySelector('[role="alert"]')!.textContent).toContain('Giờ kết thúc phải sau giờ bắt đầu');
   });
 
+  it('thứ tự ngoài 0 đến 9999: form tự báo bằng tiếng Việt thay vì bong bóng kiểm tra của trình duyệt, không gửi gì', async () => {
+    const c = await mount();
+    await open(c);
+    fillBasics(c);
+    typeInto(field(c, 'Thứ tự hiển thị'), '99999');
+    expect(c.querySelector('form')!.noValidate).toBe(true);
+    click(byText(c, 'button', 'Lưu chiến dịch'));
+    await flush(4);
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(c.querySelector('[role="alert"]')!.textContent).toContain('Thứ tự là số nguyên từ 0 đến 9999.');
+  });
+
+  it.each([
+    ['ô trống', ''],
+    ['gõ "5e" (trình duyệt trả value rỗng)', '5e'],
+    ['gõ "-" (trình duyệt trả value rỗng)', '-'],
+  ])('thứ tự %s: báo bằng tiếng Việt, không lưu im lặng thành 0', async (_name, typed) => {
+    const c = await mount();
+    await open(c);
+    fillBasics(c);
+    typeInto(field(c, 'Thứ tự hiển thị'), typed);
+    click(byText(c, 'button', 'Lưu chiến dịch'));
+    await flush(4);
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(c.querySelector('[role="alert"]')!.textContent).toContain('Thứ tự là số nguyên từ 0 đến 9999.');
+  });
+
+  it('thứ tự mà trình duyệt báo badInput (chữ dở dang trong ô số) cũng bị chặn dù state còn số cũ', async () => {
+    const c = await mount();
+    await open(c);
+    fillBasics(c);
+    const input = field(c, 'Thứ tự hiển thị');
+    typeInto(input, '5');
+    Object.defineProperty(input, 'validity', { value: { badInput: true }, configurable: true });
+    click(byText(c, 'button', 'Lưu chiến dịch'));
+    await flush(4);
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(c.querySelector('[role="alert"]')!.textContent).toContain('Thứ tự là số nguyên từ 0 đến 9999.');
+  });
+
+  it.each([
+    ['link thiếu https://', 'cdn.x.com/a.jpg'],
+    ['http', 'http://cdn.x.com/a.jpg'],
+    ['đường dẫn tương đối', '/img/a.jpg'],
+  ])('ảnh là %s: form tự báo bằng tiếng Việt, không gửi lên máy chủ', async (_name, image) => {
+    const c = await mount();
+    await open(c);
+    fillBasics(c);
+    typeInto(field(c, 'Ảnh banner (tỉ lệ 5:2, ví dụ 1500×600)'), image);
+    click(byText(c, 'button', 'Lưu chiến dịch'));
+    await flush(4);
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(c.querySelector('[role="alert"]')!.textContent).toContain('Ảnh banner phải là link bắt đầu bằng https:// hoặc ảnh tải lên.');
+  });
+
+  it('ảnh https:// và ảnh tải lên (data:image/…) đều qua bước kiểm ảnh của form', async () => {
+    const c = await mount();
+    await open(c);
+    fillBasics(c);
+    typeInto(field(c, 'Ảnh banner (tỉ lệ 5:2, ví dụ 1500×600)'), 'data:image/png;base64,iVBORw0KGgo=');
+    click(byText(c, 'button', 'Lưu chiến dịch'));
+    await flush(6);
+    expect(mocks.create).toHaveBeenCalledTimes(1);
+    expect(mocks.create.mock.calls[0]![0].image).toBe('data:image/png;base64,iVBORw0KGgo=');
+  });
+
   it('thiếu tên, ảnh hoặc mốc thì nút Lưu khoá, không gửi gì', async () => {
     const c = await mount();
     await open(c);

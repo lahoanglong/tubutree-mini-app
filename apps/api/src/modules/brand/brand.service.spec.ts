@@ -1,4 +1,5 @@
-import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { BrandService, slugifyVi } from './brand.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 
@@ -233,6 +234,76 @@ describe('BrandService admin', () => {
     expect(out.slug).toBe('dua-ben-tre');
   });
 
+  it('createBrand: tên toàn ký hiệu bị từ chối bằng lời tiếng Việt không nhắc "slug"', async () => {
+    const svc = new BrandService(makePrisma(), brandConfig);
+    const err = await svc.createBrand({ name: '!!!' }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect((err as BadRequestException).message).toBe('Tên nhãn cần có ít nhất một chữ cái hoặc chữ số.');
+  });
+
+  it('createBrand: link logo hay ảnh bìa sai thì lời báo gọi đúng tên ô, không lộ tên trường kỹ thuật', async () => {
+    const svc = new BrandService(makePrisma(), brandConfig);
+    const logo = await svc.createBrand({ name: 'Nhãn', logoUrl: 'http://x/a.png' }).catch((e: unknown) => e);
+    const cover = await svc.createBrand({ name: 'Nhãn', coverUrl: 'http://x/b.png' }).catch((e: unknown) => e);
+    expect((logo as BadRequestException).message).toBe('Logo chỉ nhận link https hoặc ảnh tải lên (png, jpeg, webp, gif).');
+    expect((cover as BadRequestException).message).toBe('Ảnh bìa chỉ nhận link https hoặc ảnh tải lên (png, jpeg, webp, gif).');
+  });
+
+  it('createBrand và updateBrand: tên trùng nhãn khác báo bằng lời nói rõ tên nhãn, không dùng câu chung của cơ sở dữ liệu', async () => {
+    const dup = () => new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x' });
+    const prisma = makePrisma();
+    prisma.brand.create.mockRejectedValue(dup());
+    prisma.brand.findUniqueOrThrow.mockResolvedValue({ id: 'b1' });
+    prisma.brand.update.mockRejectedValue(dup());
+    const svc = new BrandService(prisma, brandConfig);
+    const created = await svc.createBrand({ name: 'Dừa Bến Tre' }).catch((e: unknown) => e);
+    const renamed = await svc.updateBrand('b1', { name: 'Dừa Bến Tre' }).catch((e: unknown) => e);
+    for (const err of [created, renamed]) {
+      expect(err).toBeInstanceOf(ConflictException);
+      expect((err as ConflictException).message).toBe('Đã có nhãn hàng trùng tên "Dừa Bến Tre". Hãy đặt tên khác.');
+    }
+  });
+
+  describe('P2002 theo meta.target: phân biệt trùng tên và trùng đường dẫn', () => {
+    const dupOn = (target: unknown) => new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x', meta: { target } });
+    const run = async (call: (svc: BrandService) => Promise<unknown>, target: unknown) => {
+      const prisma = makePrisma();
+      prisma.brand.create.mockRejectedValue(dupOn(target));
+      prisma.brand.findUniqueOrThrow.mockResolvedValue({ id: 'b1' });
+      prisma.brand.update.mockRejectedValue(dupOn(target));
+      const err = await call(new BrandService(prisma, brandConfig)).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(ConflictException);
+      return (err as ConflictException).message;
+    };
+
+    it('trùng cột name: nói rõ tên nhãn', async () => {
+      expect(await run((s) => s.createBrand({ name: 'Dừa Bến Tre' }), ['name'])).toBe('Đã có nhãn hàng trùng tên "Dừa Bến Tre". Hãy đặt tên khác.');
+      expect(await run((s) => s.updateBrand('b1', { name: 'Dừa Bến Tre' }), ['name'])).toBe('Đã có nhãn hàng trùng tên "Dừa Bến Tre". Hãy đặt tên khác.');
+    });
+
+    it('trùng cột slug khi slug sinh từ tên: nói tên này tạo đường dẫn trùng, không nói trùng tên', async () => {
+      expect(await run((s) => s.createBrand({ name: 'Dừa Bến Tre' }), ['slug'])).toBe('Tên này tạo đường dẫn /dua-ben-tre trùng với nhãn khác, hãy đổi tên.');
+    });
+
+    it('trùng cột slug khi người dùng tự đặt slug: nêu đường dẫn đã đặt', async () => {
+      expect(await run((s) => s.createBrand({ name: 'Dừa Bến Tre', slug: 'Dua Moi' }), ['slug'])).toBe('Đường dẫn /dua-moi đã có nhãn khác dùng, hãy đổi đường dẫn.');
+      expect(await run((s) => s.updateBrand('b1', { slug: 'dua-moi' }), ['slug'])).toBe('Đường dẫn /dua-moi đã có nhãn khác dùng, hãy đổi đường dẫn.');
+    });
+
+    it('meta.target là tên ràng buộc dạng chuỗi (Brand_slug_key) vẫn nhận ra cột slug', async () => {
+      expect(await run((s) => s.createBrand({ name: 'Dừa Bến Tre' }), 'Brand_slug_key')).toBe('Tên này tạo đường dẫn /dua-ben-tre trùng với nhãn khác, hãy đổi tên.');
+    });
+  });
+
+  it('updateBrand: lỗi trùng không liên quan tới tên giữ nguyên để bộ lọc chung xử lý', async () => {
+    const prisma = makePrisma();
+    prisma.brand.findUniqueOrThrow.mockResolvedValue({ id: 'b1' });
+    const dup = new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x' });
+    prisma.brand.update.mockRejectedValue(dup);
+    const svc = new BrandService(prisma, brandConfig);
+    await expect(svc.updateBrand('b1', { tagline: 'Mới' })).rejects.toBe(dup);
+  });
+
   it('updateBrand ném BadRequest nếu slug slugify ra rỗng (vd toàn ký tự đặc biệt)', async () => {
     const prisma = makePrisma();
     prisma.brand.findUniqueOrThrow.mockResolvedValue({ id: 'b1' });
@@ -389,7 +460,6 @@ describe('BrandService follow nhãn', () => {
     const prisma = makePrisma();
     prisma.brand.findFirst.mockResolvedValue({ id: 'b1' });
     prisma.brand.findUniqueOrThrow.mockResolvedValue({ followerCount: 6 });
-    const { Prisma } = require('@prisma/client');
     prisma.$transaction.mockRejectedValue(new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x' }));
     const svc = new BrandService(prisma, brandConfig);
     const out = await svc.followBrand('u1', 'sachi');

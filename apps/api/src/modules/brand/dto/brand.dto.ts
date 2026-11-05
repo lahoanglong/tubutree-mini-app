@@ -81,7 +81,7 @@ const THEME_COLOR_HEX = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 const THEME_COLOR_MESSAGE = 'themeColor phải là mã màu hex dạng #RGB hoặc #RRGGBB.';
 
 export class PromotionDto {
-  @Trim() @IsString() @MaxLength(160) title!: string;
+  @Trim() @IsString() @IsNotEmpty({ message: 'Tiêu đề không được để trống.' }) @MaxLength(160) title!: string;
   @IsOptional() @Trim() @IsString() @MaxLength(240) subtitle?: string;
   @IsOptional() @IsString() @Matches(THEME_COLOR_HEX, { message: THEME_COLOR_MESSAGE }) themeColor?: string;
   @IsOptional() @Trim() @IsString() @MaxLength(64) couponCode?: string;
@@ -93,7 +93,7 @@ export class PromotionDto {
 }
 
 export class UpdatePromotionDto {
-  @OptionalNotNull() @Trim() @IsString() @MaxLength(160) title?: string;
+  @OptionalNotNull() @Trim() @IsString() @IsNotEmpty({ message: 'Tiêu đề không được để trống.' }) @MaxLength(160) title?: string;
   @OptionalNotNull() @Trim() @IsString() @MaxLength(240) subtitle?: string;
   @OptionalNotNull() @IsString() @Matches(THEME_COLOR_HEX, { message: THEME_COLOR_MESSAGE }) themeColor?: string;
   @OptionalNotNull() @Trim() @IsString() @MaxLength(64) couponCode?: string;
@@ -106,7 +106,7 @@ export class UpdatePromotionDto {
 export class DealerRewardDto {
   @IsOptional() @IsString() @MaxLength(ID_MAX) brandId?: string;
   @IsIn(['TOUR', 'GIFT', 'OTHER']) type!: 'TOUR' | 'GIFT' | 'OTHER';
-  @Trim() @IsString() @MaxLength(160) title!: string;
+  @Trim() @IsString() @IsNotEmpty({ message: 'Tiêu đề không được để trống.' }) @MaxLength(160) title!: string;
   @IsOptional() @Trim() @IsString() @MaxLength(5000) description?: string;
   @IsInt() @Min(0) @Max(DEALER_REWARD_THRESHOLD_MAX) threshold!: number;
   @IsOptional() @IsIn(['QUARTER', 'YEAR']) period?: string;
@@ -118,7 +118,7 @@ export class ProductIdsDto {
 }
 
 export class UpdateDealerRewardDto {
-  @OptionalNotNull() @Trim() @IsString() @MaxLength(160) title?: string;
+  @OptionalNotNull() @Trim() @IsString() @IsNotEmpty({ message: 'Tiêu đề không được để trống.' }) @MaxLength(160) title?: string;
   @OptionalNotNull() @Trim() @IsString() @MaxLength(5000) description?: string;
   @OptionalNotNull() @IsInt() @Min(0) @Max(DEALER_REWARD_THRESHOLD_MAX) threshold?: number;
   @OptionalNotNull() @IsIn(['QUARTER', 'YEAR']) period?: string;

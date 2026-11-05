@@ -597,6 +597,13 @@ describe('evaluateDb', () => {
     ])('%s thì FAIL', (_l, configs) => {
       expect(status(dbWith({ configs }), 'db.company_identity')).toBe('FAIL');
     });
+    it.each([
+      ['tên toàn ký tự rộng 0', { 'company.legal_name': '\u200b\u200d \u2060' }],
+      ['MST toàn ký tự nối từ', { 'company.tax_code': '\u2060\u2060' }],
+      ['địa chỉ toàn ký tự đánh dấu hướng', { 'company.address': '\u200e \u200f' }],
+    ])('%s hiển thị ra rỗng nên vẫn FAIL như để trống', (_l, configs) => {
+      expect(status(dbWith({ configs }), 'db.company_identity')).toBe('FAIL');
+    });
     it('trước deploy (DB mới chưa seed-reference) thì chỉ WARN, không FAIL', () => {
       const configs = { 'company.legal_name': '' };
       expect(status(dbWith({ configs }), 'db.company_identity', 'pre-deploy')).toBe('WARN');
@@ -620,6 +627,11 @@ describe('evaluateDb', () => {
       expect(r.detail).toContain('bảo mật');
       expect(r.detail).toContain('đổi trả');
       expect(r.detail).not.toContain('vận chuyển');
+    });
+    it('bản chỉ có ký tự vô hình hiển thị ra rỗng nên vẫn tính là bản nháp', () => {
+      const r = byId(run(dbWith({ configs: { 'legal.van-chuyen': '\u200b\u200c\u2060' } })), 'db.legal_policies');
+      expect(r.status).toBe('FAIL');
+      expect(r.detail).toContain('vận chuyển');
     });
     it('trước deploy chỉ WARN', () => {
       expect(status(dbWith({ dropConfigs: ['legal.dieu-khoan'] }), 'db.legal_policies', 'pre-deploy')).toBe('WARN');

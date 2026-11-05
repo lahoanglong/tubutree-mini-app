@@ -28,6 +28,8 @@ interface PancakeWebhookBody {
   [key: string]: unknown;
 }
 
+const eventTypeOf = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v.trim() : null);
+
 /**
  * Nhận webhook Pancake (Build Spec §8.4). URL cấu hình trong Pancake:
  *   https://api.tubutree.com/api/webhooks/pancake
@@ -64,8 +66,9 @@ export class PancakeWebhookController {
     } else if (!this.verifyToken(token)) {
       throw new UnauthorizedException('Token webhook không hợp lệ.');
     }
-    // Pancake POS không gửi field 'event' — suy ra loại từ 'type' (vd 'orders'), mặc định 'order'.
-    const eventType = body.event ?? body.type ?? 'order';
+    // Pancake POS không gửi field 'event' — suy ra loại từ 'type' (vd 'orders'), mặc định 'order'. Chỉ nhận chuỗi: số/object ở đây
+    // làm `slice` của khoá chống trùng ném và Pancake bị trả 500 (rồi gửi lại mãi).
+    const eventType = eventTypeOf(body.event) ?? eventTypeOf(body.type) ?? 'order';
     const dedupeKey = pancakeDedupeKey(eventType, body);
     let eventId: string;
     try {

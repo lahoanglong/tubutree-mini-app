@@ -116,6 +116,7 @@ import { ReturnRow } from '@/components/admin/return-request-row';
 import { GomdonConfigCard } from '@/components/admin/gomdon-config-card';
 import { ConfigItem } from '@/components/admin/config-item';
 import { CASHBACK_ENABLED } from '@tubutree/app-core/features';
+import { formatVnNumber } from '@tubutree/app-core/number-format';
 import { isDirectVideoUrl } from '@tubutree/app-core/video-url';
 import { useDebounced } from '@/lib/use-debounced';
 import { FeatureFlagsCard } from '@/components/admin/feature-flags-card';
@@ -1224,7 +1225,7 @@ function DashboardTab({
                 stats.recentOrders.map((o) => (
                   <tr key={o.id} className="border-t border-stone-100 hover:bg-stone-50">
                     <td className="px-3 py-2.5 font-semibold text-stone-800">
-                      <button type="button" onClick={() => onOpenOrder(o.code)} className="min-h-[44px] text-left font-semibold text-forest-700 underline-offset-2 hover:underline sm:min-h-0">{o.code}</button>
+                      <button type="button" onClick={() => onOpenOrder(o.code)} className="min-h-[44px] whitespace-nowrap text-left font-semibold text-forest-700 underline-offset-2 hover:underline sm:min-h-0">{o.code}</button>
                     </td>
                     <td className="px-3 py-2.5">
                       <div className="font-medium text-stone-900">{o.user?.fullName ?? 'Khách lẻ'}</div>
@@ -1237,7 +1238,7 @@ function DashboardTab({
                     <td className="px-3 py-2.5">
                       <OrderStatusBadge status={o.status} />
                     </td>
-                    <td className="px-3 py-2.5 text-xs text-stone-500">
+                    <td className="whitespace-nowrap px-3 py-2.5 text-xs text-stone-500">
                       {formatDateTime(o.createdAt)}
                     </td>
                   </tr>
@@ -2976,7 +2977,7 @@ function BrandRow({ brand }: { brand: AdminBrand }) {
             {brand.isVerified && <ToneBadge tone="success"><Check className="h-3 w-3" aria-hidden />Chính hãng</ToneBadge>}
             {!brand.isPublished && <ToneBadge tone="neutral">Nháp</ToneBadge>}
           </div>
-          <div className="break-words text-xs text-stone-500">/{brand.slug} · {brand.followerCount} theo dõi</div>
+          <div className="break-words text-xs text-stone-500">/{brand.slug} · {formatVnNumber(brand.followerCount)} theo dõi</div>
         </div>
         <button onClick={() => setOpen((o) => !o)} className={`${BTN_LINK} shrink-0 text-sm`}>{open ? 'Thu gọn' : 'Quản lý'}</button>
       </div>
@@ -2985,7 +2986,7 @@ function BrandRow({ brand }: { brand: AdminBrand }) {
         <div className="mt-3 space-y-4 border-t border-stone-200 pt-3">
           <div className="flex flex-wrap gap-2">
             <button onClick={() => patch.mutate({ isPublished: !brand.isPublished })} className={BTN_SECONDARY}>
-              {brand.isPublished ? 'Ẩn (chuyển nháp)' : 'Đăng (publish)'}
+              {brand.isPublished ? 'Ẩn (chuyển nháp)' : 'Đăng'}
             </button>
             <button onClick={() => verify.mutate(!brand.isVerified)} className={`${BTN_SECONDARY} inline-flex items-center gap-1`}>
               {brand.isVerified ? 'Bỏ chính hãng' : <>Cấp <Check className="h-4 w-4" aria-hidden /> chính hãng</>}
@@ -3130,10 +3131,10 @@ function BrandInfoForm({ brand }: { brand: AdminBrand }) {
           <div key={i} className="flex flex-wrap items-center gap-2 text-sm">
             <input placeholder="Mã (ORG)" aria-label={`Mã chứng nhận ${i + 1}`} maxLength={40} value={c.code} onChange={(e) => setCert(i, { code: e.target.value })} className={`${field} w-24`} />
             <input placeholder="Nhãn (Hữu cơ USDA)" aria-label={`Tên chứng nhận ${i + 1}`} maxLength={200} value={c.label} onChange={(e) => setCert(i, { label: e.target.value })} className={`${field} grow basis-40`} />
-            <input placeholder="Proof URL" aria-label={`Link bằng chứng chứng nhận ${i + 1}`} maxLength={500} value={c.proofUrl ?? ''} onChange={(e) => setCert(i, { proofUrl: e.target.value })} className={`${field} w-40`} />
+            <input placeholder="Link minh chứng" aria-label={`Link bằng chứng chứng nhận ${i + 1}`} maxLength={500} value={c.proofUrl ?? ''} onChange={(e) => setCert(i, { proofUrl: e.target.value })} className={`${field} w-40`} />
             <label className="inline-flex min-h-[44px] items-center gap-1.5 text-stone-700 sm:min-h-0">
               <input type="checkbox" className="h-4 w-4 accent-forest-600" checked={c.verified ?? false} onChange={(e) => setCert(i, { verified: e.target.checked })} />
-              <Check className="h-4 w-4" aria-hidden /> verified
+              <Check className="h-4 w-4" aria-hidden /> Đã xác minh
             </label>
             <button onClick={() => setCerts((cs) => cs.filter((_, idx) => idx !== i))} className={`${BTN_LINK_DANGER} text-xs`}>Xoá</button>
           </div>
@@ -4308,7 +4309,7 @@ function CourseRow({ course }: { course: AdminCourse }) {
         <div className="mt-3 space-y-4 border-t border-stone-200 pt-3">
           <div className="flex flex-wrap gap-2">
             <button onClick={() => togglePublish.mutate()} disabled={togglePublish.isPending} className={BTN_SECONDARY}>
-              {course.isPublished ? 'Chuyển về nháp' : 'Đăng (publish)'}
+              {course.isPublished ? 'Chuyển về nháp' : 'Đăng'}
             </button>
             <button
               onClick={() => askDelete({

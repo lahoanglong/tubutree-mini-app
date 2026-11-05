@@ -47,13 +47,13 @@ export function ReportsTab({ sections = ALL_SECTIONS, initialPreset }: { section
               </button>
             ))}
           </div>
-          <label className="text-xs text-stone-600">
+          <label className="flex items-center gap-1.5 text-xs text-stone-600">
             Từ ngày
-            <VnDateInput ariaLabel="Từ ngày" value={range.from} max={range.to} onChange={(v) => edit({ from: v })} className={`${FIELD_CLASS} ${TOUCH_H} mt-1`} />
+            <VnDateInput ariaLabel="Từ ngày" value={range.from} max={range.to} onChange={(v) => edit({ from: v })} className={`${FIELD_CLASS} ${TOUCH_H}`} />
           </label>
-          <label className="text-xs text-stone-600">
+          <label className="flex items-center gap-1.5 text-xs text-stone-600">
             Đến ngày
-            <VnDateInput ariaLabel="Đến ngày" value={range.to} min={range.from} onChange={(v) => edit({ to: v })} className={`${FIELD_CLASS} ${TOUCH_H} mt-1`} />
+            <VnDateInput ariaLabel="Đến ngày" value={range.to} min={range.from} onChange={(v) => edit({ to: v })} className={`${FIELD_CLASS} ${TOUCH_H}`} />
           </label>
         </div>
       </div>

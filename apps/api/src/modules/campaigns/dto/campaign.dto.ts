@@ -11,13 +11,14 @@ export const CAMPAIGN_MAX_PRODUCTS = 200;
 export const CAMPAIGN_MAX_COUPONS = 10;
 
 const SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+const IMAGE_MESSAGE = 'Ảnh banner chỉ nhận link bắt đầu bằng https:// hoặc ảnh tải lên (png, jpeg, webp, gif).';
 
 export class CreateCampaignDto {
   @Trim() @IsString() @IsNotEmpty() @MaxLength(120) title!: string;
   @IsOptional() @Trim() @IsString() @MaxLength(200) subtitle?: string;
   @IsOptional() @IsString() @MaxLength(80) @Matches(SLUG, { message: 'slug chỉ gồm chữ thường không dấu, số và dấu gạch ngang.' }) slug?: string;
   @IsIn([...CAMPAIGN_PLACEMENTS]) placement!: (typeof CAMPAIGN_PLACEMENTS)[number];
-  @Trim() @IsString() @IsNotEmpty() @IsImageRef() image!: string;
+  @Trim() @IsString() @IsNotEmpty() @IsImageRef({ message: IMAGE_MESSAGE }) image!: string;
   @IsOptional() @IsIn([...CAMPAIGN_LINK_TYPES]) linkType?: (typeof CAMPAIGN_LINK_TYPES)[number];
   @IsOptional() @IsString() @MaxLength(CAMPAIGN_ENTITY_SLUG_MAX) linkValue?: string;
   @IsOptional() @IsIn([...CAMPAIGN_AUDIENCES]) audience?: (typeof CAMPAIGN_AUDIENCES)[number];
@@ -36,7 +37,7 @@ export class UpdateCampaignDto {
   @OptionalNotNull() @Trim() @IsString() @IsNotEmpty() @MaxLength(120) title?: string;
   @IsOptional() @Trim() @IsString() @MaxLength(200) subtitle?: string | null;
   @OptionalNotNull() @IsIn([...CAMPAIGN_PLACEMENTS]) placement?: (typeof CAMPAIGN_PLACEMENTS)[number];
-  @OptionalNotNull() @Trim() @IsString() @IsNotEmpty() @IsImageRef() image?: string;
+  @OptionalNotNull() @Trim() @IsString() @IsNotEmpty() @IsImageRef({ message: IMAGE_MESSAGE }) image?: string;
   @OptionalNotNull() @IsIn([...CAMPAIGN_LINK_TYPES]) linkType?: (typeof CAMPAIGN_LINK_TYPES)[number];
   @IsOptional() @IsString() @MaxLength(CAMPAIGN_ENTITY_SLUG_MAX) linkValue?: string | null;
   @OptionalNotNull() @IsIn([...CAMPAIGN_AUDIENCES]) audience?: (typeof CAMPAIGN_AUDIENCES)[number];

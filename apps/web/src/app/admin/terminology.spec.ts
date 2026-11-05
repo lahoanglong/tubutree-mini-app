@@ -42,6 +42,10 @@ describe('chữ màn quản trị web', () => {
     expect(offenders(/khoá <code>affiliate\.|\(cấu hình affiliate\./)).toEqual([]);
   });
 
+  it('nút đăng khoá học ở Học viện là "Đăng", không kèm chữ tiếng Anh (publish)', () => {
+    expect(offenders(/Đăng \(publish\)/)).toEqual([]);
+  });
+
   it('QT-20: nút trả lương ở bảng lương không đặt tên "Đã chuyển" (dễ nhầm với trạng thái)', () => {
     expect(offenders(/aria-label=\{`Đã chuyển · /)).toEqual([]);
   });
