@@ -126,6 +126,23 @@ describe('MerchantService — đăng sản phẩm (SELLER-1, D4)', () => {
     }
   });
 
+  it('tên toàn ký hiệu: phần tên slug là "san-pham", slug hợp lệ (không bắt đầu bằng "-"); tên bình thường giữ nguyên dạng cũ', async () => {
+    const now = jest.spyOn(Date, 'now').mockReturnValue(1_800_000_000_000);
+    try {
+      const code = (1_800_000_000_000).toString(36);
+      const slugOf = async (name: string) => {
+        const { svc, productCreate } = build();
+        await svc.createProduct('u1', { ...BASE, name });
+        return productCreate.mock.calls[0][0].data.slug as string;
+      };
+      expect(await slugOf('!!! ???')).toBe(`san-pham-${code}`);
+      expect(await slugOf('()')).toMatch(CAMPAIGN_ENTITY_SLUG_RE);
+      expect(await slugOf('Mật ong rừng')).toBe(`mat-ong-rung-${code}`);
+    } finally {
+      now.mockRestore();
+    }
+  });
+
   it('không nhập tồn kho → 0, không tự hứa 100 sản phẩm', async () => {
     const { svc, productCreate } = build();
     await svc.createProduct('u1', BASE);

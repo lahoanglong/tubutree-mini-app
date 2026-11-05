@@ -616,7 +616,7 @@ export class MerchantService {
       }
     }
 
-    const baseSlug = slugify(dto.name);
+    const baseSlug = slugify(dto.name) || 'san-pham';
     const uniqueSlug = `${baseSlug}-${Date.now().toString(36)}`;
     const sku = `MCH-${Date.now().toString(36).toUpperCase()}`;
     const retailPrice = link ? link.retailPrice : dto.basePrice;
