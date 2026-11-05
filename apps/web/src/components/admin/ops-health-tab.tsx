@@ -151,6 +151,7 @@ export const CRON_JOB_LABELS: Record<string, string> = {
   'waste.expiry': 'Đóng yêu cầu đổi rác quá hạn giữ chỗ hoặc lỡ hẹn thu gom',
   'waste.gift-expiry': 'Huỷ quà đổi rác quá hạn nhận, hoàn điểm và báo khách',
   'waste.pickup-sweep': 'Quét bù yêu cầu thu gom rác còn mở khi đơn đã giao, huỷ hoặc trả',
+  'ZnsStuckLogCron.sweepStuckZnsLogs': 'Đóng tin ZNS kẹt chờ gửi hoặc chờ gửi lại quá 1 giờ, đánh dấu ca cần đối soát tay',
 };
 
 export function OpsHealthTab({ onOpenOrder, isAdmin = true }: { onOpenOrder?: (code: string) => void; isAdmin?: boolean }) {
