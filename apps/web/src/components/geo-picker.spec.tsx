@@ -34,7 +34,7 @@ describe('GeoPicker — thông báo lỗi', () => {
     expect(selectByLabel(container, 'Tỉnh/Thành phố')?.getAttribute('aria-invalid')).toBe('true');
   });
 
-  it('lỗi tỉnh/phường gắn vào ô bằng aria-describedby, nhãn và lời báo từ 13px (bậc caption)', async () => {
+  it('lỗi tỉnh/phường gắn vào ô bằng aria-describedby, nhãn bậc field-label (12px/500), lời báo 13px (bậc caption)', async () => {
     const api = mockFetch({ '/geo/provinces': { body: [] } });
     vi.stubGlobal('fetch', vi.fn(api.fn));
     const { container } = mount(
@@ -48,7 +48,7 @@ describe('GeoPicker — thông báo lỗi', () => {
     }
     const labels = Array.from(container.querySelectorAll('label'));
     expect(labels.length).toBe(2);
-    for (const l of labels) expect(l.className).toContain('text-caption');
+    for (const l of labels) expect(l.className).toContain('text-field-label');
     for (const p of Array.from(container.querySelectorAll('p'))) expect(p.className).toContain('text-caption');
     expect(container.innerHTML).not.toContain('text-xs');
   });
