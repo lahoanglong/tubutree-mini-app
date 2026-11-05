@@ -3,7 +3,7 @@
 
 Nếu quay web về bản trước gói hj mà giữ API mới: form tạo chiến dịch của web cũ tạo thẳng chiến dịch đang bật với đích CAMPAIGN_PAGE chưa có sản phẩm, API trả 400 PAGE_EMPTY. Cách xử lý: tạo chiến dịch ở trạng thái tắt, gắn sản phẩm hoặc mã, rồi bật.
 
-Web cũ cũng gặp 400 ở các ca sau, vì web cũ lưu chiến dịch (PATCH) trước rồi mới gắn sản phẩm/mã:
+Web cũ cũng gặp 400 ở các ca sau, vì web cũ lưu chiến dịch (PATCH) trước rồi mới gắn sản phẩm/mã. Ba ca đầu chỉ xảy ra khi trang chiến dịch HIỆN CHƯA có sản phẩm khách thấy được và chưa có mã dùng được (đã có một trong hai thì bước 1 qua, thêm sau vẫn ổn):
 - Sửa chiến dịch đang tắt, bật lên kèm thêm sản phẩm: 400 ở bước 1, chưa ghi gì.
 - Gia hạn chiến dịch đã hết hạn kèm thêm sản phẩm: 400 ở bước 1, chưa ghi gì.
 - Đổi đích sang CAMPAIGN_PAGE kèm thêm sản phẩm: 400 ở bước 1, chưa ghi gì.
