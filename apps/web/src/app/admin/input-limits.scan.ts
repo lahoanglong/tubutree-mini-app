@@ -19,7 +19,7 @@ export interface SourceFile {
 const NUM = '[\\d_]+';
 const toNumber = (raw: string) => Number(raw.replace(/_/g, ''));
 
-/** Hằng số: tìm ở chính file trước, rồi lần lượt ở các nguồn khác; hằng là bí danh của hằng khác (`const A = B;`) thì đọc theo (tối đa 5 bước). Không bao giờ lấy từ mã web. */
+/** Hằng số: tìm ở chính file trước, rồi lần lượt ở các nguồn khác; hằng là bí danh của hằng khác (`const A = B;`) thì đọc theo (tối đa 5 bước); bí danh không ra số thì xét tiếp nguồn sau. Không bao giờ lấy từ mã web. */
 export function apiConstValue(name: string, sources: string[], depth = 0): number | null {
   if (depth > 5) return null;
   const num = new RegExp(`(?:const|readonly)\\s+${name}\\s*=\\s*(${NUM})\\b`);
@@ -28,7 +28,10 @@ export function apiConstValue(name: string, sources: string[], depth = 0): numbe
     const m = text.match(num);
     if (m) return toNumber(m[1]!);
     const a = text.match(alias);
-    if (a && a[1] !== name) return apiConstValue(a[1]!, sources, depth + 1);
+    if (a && a[1] !== name) {
+      const resolved = apiConstValue(a[1]!, sources, depth + 1);
+      if (resolved !== null) return resolved;
+    }
   }
   return null;
 }
