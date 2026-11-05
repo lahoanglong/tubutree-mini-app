@@ -1168,6 +1168,16 @@ describe('AdminService coupons — xem, sửa, tắt mã (ADMINOPS-8)', () => {
     expect(rawSql($queryRaw.mock.calls[1][0])).toContain('"isActive" AND "startAt" >');
   });
 
+  it('W13: lọc "Đã hết hạn" chỉ lấy mã còn bật (mã tắt đã nằm ở "Đã tắt"), cả truy vấn theo mã lẫn truy vấn thô', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const $queryRaw = jest.fn().mockResolvedValue([]);
+    const prisma = makePrisma({ coupon: { findMany, count: jest.fn().mockResolvedValue(0) }, couponRedemption: { groupBy: jest.fn() }, $queryRaw });
+    await mkAdmin(prisma).listCoupons({ page: 1, limit: 20, q: 'SALE', status: 'expired' });
+    expect(findMany.mock.calls[0][0].where).toMatchObject({ isActive: true, endAt: { lt: expect.any(Date) } });
+    await mkAdmin(prisma).listCoupons({ page: 1, limit: 20, status: 'expired' });
+    expect(rawSql($queryRaw.mock.calls[0][0])).toContain('AND "isActive" AND "endAt" <');
+  });
+
   it('listCoupons mặc định: trang vượt cuối danh sách → đếm riêng để tổng vẫn đúng', async () => {
     const $queryRaw = jest.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([{ n: 5 }]);
     const findMany = jest.fn();

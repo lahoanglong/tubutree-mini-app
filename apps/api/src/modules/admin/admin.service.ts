@@ -1865,7 +1865,7 @@ export class AdminService {
       ...(q.status === 'active' ? { isActive: true, startAt: { lte: now }, endAt: { gte: now } } : {}),
       ...(q.status === 'upcoming' ? { isActive: true, startAt: { gt: now } } : {}),
       ...(q.status === 'inactive' ? { isActive: false } : {}),
-      ...(q.status === 'expired' ? { endAt: { lt: now } } : {}),
+      ...(q.status === 'expired' ? { isActive: true, endAt: { lt: now } } : {}),
     };
     const { skip, take } = skipTake(q.page, q.limit);
     let rows: Awaited<ReturnType<typeof this.prisma.coupon.findMany>>;
@@ -1914,7 +1914,7 @@ export class AdminService {
           : status === 'inactive'
             ? Prisma.sql`AND NOT "isActive"`
             : status === 'expired'
-              ? Prisma.sql`AND "endAt" < ${now}`
+              ? Prisma.sql`AND "isActive" AND "endAt" < ${now}`
               : Prisma.empty;
     const filter = Prisma.sql`"scope" <> 'USER_GROUP' AND "batch" IS NULL ${byStatus}`;
     const page = await this.prisma.$queryRaw<{ id: string; total: number }[]>(Prisma.sql`
