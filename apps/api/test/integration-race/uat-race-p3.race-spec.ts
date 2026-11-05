@@ -3,7 +3,7 @@ import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { PANCAKE_PUSH, PancakeOrderService } from '../../src/modules/integrations/pancake/pancake-order.service';
 import type { PancakeClient } from '../../src/modules/integrations/pancake/pancake.client';
-import { PancakeApiError } from '../../src/modules/integrations/pancake/pancake-outbound';
+import { PancakeApiError, PancakePushSettlingError } from '../../src/modules/integrations/pancake/pancake-outbound';
 import { GameEconomyService } from '../../src/modules/game/game-economy.service';
 import { PayrollService } from '../../src/modules/staff/payroll/payroll.service';
 import { AttendanceService } from '../../src/modules/staff/attendance/attendance.service';
@@ -54,7 +54,7 @@ describe('UAT race p3 (real Postgres)', () => {
       return v.id;
     };
 
-    it('B đọc đơn trước khi A claim; A tạo đơn Pancake rồi gặp lỗi tạm; B claim sau → phải tra đơn và nhận, không tạo thêm', async () => {
+    it('B đọc đơn trước khi A claim; A tạo đơn Pancake rồi gặp lỗi tạm; B claim trong cửa lắng thì chờ, sau cửa thì tra đơn và nhận, không tạo thêm', async () => {
       const buyer = await createUser(prisma);
       const o = await createOrder(prisma, {
         userId: buyer.id,
@@ -94,10 +94,24 @@ describe('UAT race p3 (real Postgres)', () => {
       await bRead;
       await expect(a.pushOrder(o.id)).rejects.toThrow('ECONNRESET');
       release();
-      const bResult = await bRun;
+      // Pancake có thể chưa tra được lệnh vừa gửi: trong cửa lắng B không tra, không tạo, nhả đơn về PENDING.
+      await expect(bRun).rejects.toBeInstanceOf(PancakePushSettlingError);
+      expect(client.searchOrders).not.toHaveBeenCalled();
+      expect(await prisma.order.findUniqueOrThrow({ where: { id: o.id } })).toMatchObject({
+        pancakeOrderId: null,
+        pancakePushStatus: PANCAKE_PUSH.PENDING,
+      });
+
+      // Hết cửa lắng: lượt kế tra theo mã đơn và nhận đơn Pancake đã có.
+      await prisma.order.update({
+        where: { id: o.id },
+        data: { pancakePushClaimedAt: new Date(Date.now() - PancakeOrderService.SEND_SETTLE_MS - 60_000) },
+      });
+      const result = await b.pushOrder(o.id);
 
       expect(client.createOrder).toHaveBeenCalledTimes(1);
-      expect(bResult).toBe(pkId);
+      expect(client.searchOrders).toHaveBeenCalledTimes(1);
+      expect(result).toBe(pkId);
       const saved = await prisma.order.findUniqueOrThrow({ where: { id: o.id } });
       expect(saved).toMatchObject({ pancakeOrderId: pkId, pancakePushStatus: PANCAKE_PUSH.SYNCED });
     });
