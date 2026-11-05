@@ -22,13 +22,21 @@ describe('đóng log ZNS kẹt (real Postgres)', () => {
     svc = new NotificationsService(prisma, { sendTemplate } as unknown as ZnsClient, { recordBestEffort: jest.fn() } as unknown as AnalyticsEventsService);
   });
 
+  // Log của spec (kể cả 250 log năm 1999 của ca con trỏ) phải được dọn: nếu còn PENDING/RETRYING cũ, chúng thành ứng viên của cron ở lần chạy
+  // sau trên cùng DB và chiếm chỗ trong mỗi lượt quét 200 log (ca "log mơ hồ" đỏ ở lần chạy thứ hai).
+  const userIds: string[] = [];
   afterAll(async () => {
+    if (prisma && userIds.length > 0) await prisma.notificationLog.deleteMany({ where: { userId: { in: userIds } } });
     await moduleRef?.close();
   });
 
   beforeEach(() => sendTemplate.mockClear());
 
-  const newUser = () => createUser(prisma, { phone: uniquePhone() });
+  const newUser = async () => {
+    const user = await createUser(prisma, { phone: uniquePhone() });
+    userIds.push(user.id);
+    return user;
+  };
   const mkLog = (userId: string, dedupeKey: string | null, status: string) =>
     prisma.notificationLog.create({
       data: { userId, templateCode: 'IT_STUCK', channel: 'ZNS', payload: dedupeKey ? { data: {}, dedupeKey } : { data: {} }, status },
