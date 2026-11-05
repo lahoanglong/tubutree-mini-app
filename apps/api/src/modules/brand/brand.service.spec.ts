@@ -264,6 +264,37 @@ describe('BrandService admin', () => {
     }
   });
 
+  describe('P2002 theo meta.target: phân biệt trùng tên và trùng đường dẫn', () => {
+    const dupOn = (target: unknown) => new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x', meta: { target } });
+    const run = async (call: (svc: BrandService) => Promise<unknown>, target: unknown) => {
+      const prisma = makePrisma();
+      prisma.brand.create.mockRejectedValue(dupOn(target));
+      prisma.brand.findUniqueOrThrow.mockResolvedValue({ id: 'b1' });
+      prisma.brand.update.mockRejectedValue(dupOn(target));
+      const err = await call(new BrandService(prisma, brandConfig)).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(ConflictException);
+      return (err as ConflictException).message;
+    };
+
+    it('trùng cột name: nói rõ tên nhãn', async () => {
+      expect(await run((s) => s.createBrand({ name: 'Dừa Bến Tre' }), ['name'])).toBe('Đã có nhãn hàng trùng tên "Dừa Bến Tre". Hãy đặt tên khác.');
+      expect(await run((s) => s.updateBrand('b1', { name: 'Dừa Bến Tre' }), ['name'])).toBe('Đã có nhãn hàng trùng tên "Dừa Bến Tre". Hãy đặt tên khác.');
+    });
+
+    it('trùng cột slug khi slug sinh từ tên: nói tên này tạo đường dẫn trùng, không nói trùng tên', async () => {
+      expect(await run((s) => s.createBrand({ name: 'Dừa Bến Tre' }), ['slug'])).toBe('Tên này tạo đường dẫn /dua-ben-tre trùng với nhãn khác, hãy đổi tên.');
+    });
+
+    it('trùng cột slug khi người dùng tự đặt slug: nêu đường dẫn đã đặt', async () => {
+      expect(await run((s) => s.createBrand({ name: 'Dừa Bến Tre', slug: 'Dua Moi' }), ['slug'])).toBe('Đường dẫn /dua-moi đã có nhãn khác dùng, hãy đổi đường dẫn.');
+      expect(await run((s) => s.updateBrand('b1', { slug: 'dua-moi' }), ['slug'])).toBe('Đường dẫn /dua-moi đã có nhãn khác dùng, hãy đổi đường dẫn.');
+    });
+
+    it('meta.target là tên ràng buộc dạng chuỗi (Brand_slug_key) vẫn nhận ra cột slug', async () => {
+      expect(await run((s) => s.createBrand({ name: 'Dừa Bến Tre' }), 'Brand_slug_key')).toBe('Tên này tạo đường dẫn /dua-ben-tre trùng với nhãn khác, hãy đổi tên.');
+    });
+  });
+
   it('updateBrand: lỗi trùng không liên quan tới tên giữ nguyên để bộ lọc chung xử lý', async () => {
     const prisma = makePrisma();
     prisma.brand.findUniqueOrThrow.mockResolvedValue({ id: 'b1' });

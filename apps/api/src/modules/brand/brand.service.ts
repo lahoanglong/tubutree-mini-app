@@ -237,7 +237,7 @@ export class BrandService {
     const slug = dto.slug?.trim() ? slugifyVi(dto.slug) : slugifyVi(dto.name);
     if (!slug) throw new BadRequestException('Tên nhãn cần có ít nhất một chữ cái hoặc chữ số.');
     this.assertImageChanges(dto, null);
-    return this.nameConflictAware(dto.name, () =>
+    return this.nameConflictAware({ name: dto.name, slug, slugFromName: !dto.slug?.trim() }, () =>
       this.prisma.brand.create({
         data: {
           name: dto.name,
@@ -254,13 +254,28 @@ export class BrandService {
     );
   }
 
-  /** Tên và slug nhãn đều unique: trùng thì nói rõ tên nhãn thay vì câu chung "vi phạm ràng buộc duy nhất" của bộ lọc Prisma. */
-  private async nameConflictAware<T>(name: string | undefined, write: () => Promise<T>): Promise<T> {
+  /**
+   * Tên và slug nhãn đều unique. Trùng thì nói rõ cột nào trùng (theo meta.target) thay vì câu chung "vi phạm ràng buộc duy nhất" của bộ lọc Prisma;
+   * meta.target có thể là mảng cột hoặc tên ràng buộc dạng chuỗi tuỳ bộ điều khiển.
+   */
+  private async nameConflictAware<T>(by: { name?: string; slug?: string; slugFromName?: boolean }, write: () => Promise<T>): Promise<T> {
     try {
       return await write();
     } catch (err) {
-      if (name && err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-        throw new ConflictException(`Đã có nhãn hàng trùng tên "${name.trim()}". Hãy đặt tên khác.`);
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        const target = err.meta?.target;
+        const fields = (Array.isArray(target) ? target : [target]).map((f) => String(f ?? '').toLowerCase());
+        const slugOnly = fields.some((f) => f.includes('slug')) && !fields.some((f) => f.includes('name'));
+        if (slugOnly && by.slug) {
+          throw new ConflictException(
+            by.slugFromName
+              ? `Tên này tạo đường dẫn /${by.slug} trùng với nhãn khác, hãy đổi tên.`
+              : `Đường dẫn /${by.slug} đã có nhãn khác dùng, hãy đổi đường dẫn.`,
+          );
+        }
+        if (!slugOnly && by.name) {
+          throw new ConflictException(`Đã có nhãn hàng trùng tên "${by.name.trim()}". Hãy đặt tên khác.`);
+        }
       }
       throw err;
     }
@@ -304,7 +319,10 @@ export class BrandService {
       if (!owner) throw new BadRequestException('userId chủ nhãn không tồn tại.');
       data.ownerUserId = owner.id;
     }
-    return this.nameConflictAware(typeof dto.name === 'string' ? dto.name : undefined, () => this.prisma.brand.update({ where: { id }, data }));
+    return this.nameConflictAware(
+      { name: typeof dto.name === 'string' ? dto.name : undefined, slug: typeof data.slug === 'string' ? data.slug : undefined },
+      () => this.prisma.brand.update({ where: { id }, data }),
+    );
   }
 
   verifyBrand(id: string, isVerified: boolean) {
