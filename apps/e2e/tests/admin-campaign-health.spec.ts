@@ -2,7 +2,7 @@ import { test, expect, type MockApi } from './support/mock-api';
 
 /**
  * Admin, tab Chiến dịch: khối "Kiểm trước khi bật" và xem trước banner. Đích sản phẩm sai thì thấy lỗi chặn đỏ và không bật được;
- * sửa đích thì "Sẵn sàng" và bật được (tạo tắt, rồi bật ở bước cuối). Mọi lệnh gọi /api/ được giả, kể cả bước kiểm.
+ * sửa đích thì "Sẵn sàng" và lưu được bằng MỘT lệnh tạo đang bật. Nút Lưu khoá theo `verdict` của máy chủ. Mọi lệnh gọi /api/ được giả, kể cả bước kiểm.
  */
 
 const ADMIN_LOGIN = {
@@ -60,9 +60,14 @@ test.describe('Admin: kiểm chiến dịch trước khi bật', () => {
     api.post('/admin/campaigns/check', ({ call }) => {
       const b = call.body as { linkType: string; linkValue?: string };
       if (b.linkType === 'PRODUCT' && b.linkValue === 'sua-hat-sai') {
-        return { issues: [{ code: 'LINK_PRODUCT_MISSING', level: 'BLOCK', message: BAD_SLUG_MESSAGE }], blockers: 1, warnings: 0 };
+        return {
+          issues: [{ code: 'LINK_PRODUCT_MISSING', level: 'BLOCK', message: BAD_SLUG_MESSAGE }],
+          blockers: 1,
+          warnings: 0,
+          verdict: { blocked: true, codes: ['LINK_PRODUCT_MISSING'], reason: BAD_SLUG_MESSAGE },
+        };
       }
-      return { issues: [], blockers: 0, warnings: 0 };
+      return { issues: [], blockers: 0, warnings: 0, verdict: { blocked: false, codes: [] } };
     });
     api.post('/admin/campaigns', ({ call }) => ({ id: 'new1', ...(call.body as object) }));
     api.patch('/admin/campaigns/:id', ({ params, call }) => ({ id: params.id, ...(call.body as object) }));
@@ -81,7 +86,7 @@ test.describe('Admin: kiểm chiến dịch trước khi bật', () => {
     await expect(check.locator('[data-level="BLOCK"]')).toContainText(BAD_SLUG_MESSAGE);
     const save = page.getByRole('button', { name: 'Lưu chiến dịch' });
     await expect(save).toBeDisabled();
-    await expect(page.getByTestId('campaign-check-lock')).toContainText('1 lỗi chặn');
+    await expect(page.getByTestId('campaign-check-lock')).toContainText(BAD_SLUG_MESSAGE);
     expect(api.callsTo('POST', '/admin/campaigns')).toHaveLength(0);
 
     await page.getByRole('textbox', { name: 'Slug sản phẩm' }).fill('sua-hat');
@@ -89,11 +94,11 @@ test.describe('Admin: kiểm chiến dịch trước khi bật', () => {
     await expect(save).toBeEnabled();
 
     const created = api.waitForCall('POST', '/admin/campaigns');
-    const activated = api.waitForCall('PATCH', '/admin/campaigns/:id');
     await save.click();
-    expect((await created).body).toMatchObject({ linkType: 'PRODUCT', linkValue: 'sua-hat', isActive: false });
-    expect((await activated).body).toEqual({ isActive: true });
+    expect((await created).body).toMatchObject({ linkType: 'PRODUCT', linkValue: 'sua-hat', isActive: true });
     await expect(page.getByText('Đã lưu chiến dịch.')).toBeVisible();
+    expect(api.callsTo('POST', '/admin/campaigns')).toHaveLength(1);
+    expect(api.callsTo('PATCH', '/admin/campaigns/:id')).toHaveLength(0);
   });
 
   test('xem trước banner: khung điện thoại rộng 375px và khung máy tính, cả hai dựng bằng băng chuyền thật', async ({ page, api }) => {
