@@ -9,6 +9,11 @@ const INVISIBLE_ANYWHERE = new RegExp(`[${INVISIBLE_CHARS}]`, 'g');
 
 export const hasVisibleText = (text: string): boolean => !INVISIBLE_OR_SPACE.test(text);
 
+const INVISIBLE_EDGE = new RegExp(`^[\\s${INVISIBLE_CHARS}]+|[\\s${INVISIBLE_CHARS}]+$`, 'g');
+
+/** Cắt khoảng trắng và ký tự vô hình ở hai đầu, như `trimInvisible` của API; chuỗi chỉ toàn chúng thành rỗng. */
+export const trimVisible = (text: string): string => text.replace(INVISIBLE_EDGE, '');
+
 /** Bỏ ký tự vô hình ở mọi vị trí (khoảng trắng thường giữ nguyên): SĐT dán từ Zalo hay Word hay kèm chúng giữa số. */
 export const stripInvisible = (text: string): string => text.replace(INVISIBLE_ANYWHERE, '');
 

@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { payloadId } from './pancake-payload';
 
 export const PANCAKE_EVENT_STATUS = {
   RECEIVED: 'RECEIVED',
@@ -53,18 +54,25 @@ export const NOTE_ORDER_CODE = /Order code:\s*([A-Z]+\d+)/;
 
 /** Pancake POS gửi nguyên object đơn ở top-level; luồng cũ bọc trong {event, data}. */
 export function pancakeEventData(rawPayload: unknown): Record<string, unknown> {
-  const payload = (rawPayload && typeof rawPayload === 'object' ? rawPayload : {}) as Record<string, unknown>;
+  const payload = (rawPayload && typeof rawPayload === 'object' && !Array.isArray(rawPayload) ? rawPayload : {}) as Record<string, unknown>;
   const data = payload['data'];
   return data && typeof data === 'object' && !Array.isArray(data) ? (data as Record<string, unknown>) : payload;
 }
 
 /** Mã đơn Tubu mà đơn Pancake mang (extension.external_order_id, hoặc "Order code: …" trong note). */
 export function pancakeEventOrderCode(data: Record<string, unknown>): string | null {
-  const ext = data['extension'] as { external_order_id?: string } | undefined;
-  if (ext?.external_order_id) return ext.external_order_id;
+  const ext = data['extension'] as { external_order_id?: unknown } | null | undefined;
+  // Mã đơn là chuỗi: số/object/mảng ở đây làm `where: { code }` của Prisma ném và sự kiện FAILED mãi, hoặc thành "[object Object]".
+  const external = typeof ext?.external_order_id === 'string' ? ext.external_order_id.trim() : '';
+  if (external) return external;
   const note = typeof data['note'] === 'string' ? data['note'] : '';
   const m = note.match(NOTE_ORDER_CODE);
   return m ? m[1]! : null;
+}
+
+/** Mã đơn Pancake của payload webhook (`id`, không có thì `order_id`): chuỗi/số nguyên đọc được; còn lại null — không bao giờ "[object Object]". */
+export function pancakeEventId(data: Record<string, unknown>): string | null {
+  return payloadId(data['id']) ?? payloadId(data['order_id']);
 }
 
 /** Nhãn để người vận hành tìm ra việc: mã đơn Tubu, không có thì #id đơn Pancake; null khi payload không có cả hai. */
@@ -72,6 +80,6 @@ export function pancakeEventRef(rawPayload: unknown): string | null {
   const data = pancakeEventData(rawPayload);
   const code = pancakeEventOrderCode(data);
   if (code) return code;
-  const id = data['id'] ?? data['order_id'];
-  return id === null || id === undefined || id === '' ? null : `#${String(id)}`;
+  const id = pancakeEventId(data);
+  return id === null ? null : `#${id}`;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hasVisibleText, isPhoneInput, stripInvisible } from './admin-visible-text';
+import { hasVisibleText, isPhoneInput, stripInvisible, trimVisible } from './admin-visible-text';
 
 describe('hasVisibleText: ô bắt buộc của màn quản trị có chữ nhìn thấy được', () => {
   it('chuỗi rỗng hoặc chỉ khoảng trắng → false', () => {
@@ -48,4 +48,14 @@ describe('isPhoneInput: cùng luật với searchPhone của API (apps/api/src/m
   it.each(['', '   ', '12', '+', 'abc', '0912345678 Lan', '09123x45678', '\u200b\u200b', '84+912345678'])('%j không phải SĐT', (v) =>
     expect(isPhoneInput(v)).toBe(false),
   );
+});
+
+describe('trimVisible', () => {
+  it('cắt khoảng trắng và ký tự vô hình ở hai đầu, giữ phần giữa', () => {
+    expect(trimVisible('​ Công ty ‍ Tubu ﻿')).toBe('Công ty ‍ Tubu');
+  });
+
+  it('chuỗi chỉ toàn khoảng trắng và ký tự vô hình thành rỗng', () => {
+    expect(trimVisible(' ​﻿⁠ ')).toBe('');
+  });
 });

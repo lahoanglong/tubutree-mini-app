@@ -1,10 +1,22 @@
 import { resolvePancakeStatus } from './pancake-status.map';
+import { payloadNonNegInt } from './pancake-payload';
 
-/** Số đồng nguyên không âm từ một ô của payload (số hoặc chuỗi số); ô thiếu hoặc không đọc được → null. */
+/**
+ * Số đồng nguyên không âm từ một ô của payload (số hoặc chuỗi số kiểu máy); ô thiếu hoặc không đọc được → null. `Number(v)` đọc
+ * "   ", [] và false thành 0 (báo lệch giả với mọi đơn) và "269.000" (dấu chấm ngăn nghìn) thành 269.
+ */
 function amount(v: unknown): number | null {
-  if (v === null || v === undefined || v === '') return null;
-  const n = Number(v);
-  return Number.isFinite(n) && n >= 0 ? Math.round(n) : null;
+  return payloadNonNegInt(v, { round: true });
+}
+
+const TOTAL_FIELDS = ['total_price_after_sub_discount', 'total_price', 'total_discount', 'shipping_fee'] as const;
+
+/** Tên các ô tổng tiền có mặt (khác null/undefined/'') mà không đọc được: người gọi ghi warn để biết vì sao đơn không được so tổng. */
+export function unreadableTotalFields(data: Record<string, unknown>): string[] {
+  return TOTAL_FIELDS.filter((f) => {
+    const v = data[f];
+    return v !== undefined && v !== null && v !== '' && amount(v) === null;
+  });
 }
 
 /**

@@ -148,6 +148,55 @@ describe('PancakeSyncHooks.precheckCancel (D1)', () => {
   });
 });
 
+describe('PancakeSyncHooks.precheckCancel — đơn Pancake khớp mã nhưng mã đơn Pancake không đọc được (W11)', () => {
+  const UNREADABLE: [string, unknown][] = [
+    ['số lẻ 1.5', 1.5],
+    ['chuỗi rỗng', ''],
+    ['object', { a: 1 }],
+    ['2**60 (quá 2^53)', 2 ** 60],
+    ['thiếu', undefined],
+  ];
+
+  it.each(UNREADABLE)('đơn còn sống id %s → DEFERRED, không chốt NOT_FOUND, không huỷ', async (_label, id) => {
+    const t = setup({}, { searchOrders: jest.fn().mockResolvedValue([{ id, status: 1, custom_id: 'TUBU1' }]) });
+    for (const mode of ['INTERACTIVE', 'BACKGROUND'] as const) {
+      expect(await t.hooks.precheckCancel(subject({ pancakePushClaimedAt: new Date() }), mode)).toMatchObject({ kind: 'DEFERRED' });
+    }
+    expect(t.client.updateOrder).not.toHaveBeenCalled();
+  });
+
+  it('đơn id rác đã gửi hàng → từ chối như đã bàn giao (không cần mã đơn để biết hàng đã đi)', async () => {
+    const t = setup({}, { searchOrders: jest.fn().mockResolvedValue([{ id: {}, status: 2, custom_id: 'TUBU1' }]) });
+    await expect(t.hooks.precheckCancel(subject({ pancakePushClaimedAt: new Date() }), 'INTERACTIVE')).rejects.toBeInstanceOf(PancakeHandedOverError);
+  });
+
+  it('đơn id rác nhưng đã huỷ bên Pancake, hoặc mã đơn khác → không chặn: NOT_FOUND', async () => {
+    const t = setup(
+      {},
+      {
+        searchOrders: jest.fn().mockResolvedValue([
+          { id: {}, status: 6, custom_id: 'TUBU1' },
+          { id: {}, status: 1, custom_id: 'TUBU9' },
+        ]),
+      },
+    );
+    expect(await t.hooks.precheckCancel(subject({ pancakePushClaimedAt: new Date() }), 'INTERACTIVE')).toMatchObject({ kind: 'CONFIRMED', cancelStatus: 'NOT_FOUND' });
+  });
+
+  it('hai đơn sống, một id rác → DEFERRED', async () => {
+    const t = setup(
+      {},
+      {
+        searchOrders: jest.fn().mockResolvedValue([
+          { id: 7, status: 1, custom_id: 'TUBU1' },
+          { id: {}, status: 1, custom_id: 'TUBU1' },
+        ]),
+      },
+    );
+    expect(await t.hooks.precheckCancel(subject({ pancakePushClaimedAt: new Date() }), 'INTERACTIVE')).toMatchObject({ kind: 'DEFERRED' });
+  });
+});
+
 describe('PancakeSyncHooks.afterLocalCancel — job push lỗi (hi)', () => {
   it('đơn chưa từng lên Pancake (return sớm) vẫn gỡ job push đã lỗi; job đang chạy thì giữ', async () => {
     const t = setup();

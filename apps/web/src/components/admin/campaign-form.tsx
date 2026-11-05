@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type {
   CampaignAudience,
@@ -99,6 +99,7 @@ export function CampaignForm({
   const [startPending, setStartPending] = useState(false);
   const [endPending, setEndPending] = useState(false);
   const [sortOrder, setSortOrder] = useState(String(initial?.sortOrder ?? 0));
+  const sortOrderRef = useRef<HTMLInputElement>(null);
   const [isActive, setIsActive] = useState(initial?.isActive ?? true);
   const [products, setProducts] = useState<PickedProduct[]>(() =>
     (initial?.products ?? []).map((p) => ({ id: p.id, name: p.name })),
@@ -171,11 +172,21 @@ export function CampaignForm({
 
   const save = async () => {
     setError(null);
+    const img = image.trim();
+    if (!img.startsWith('https://') && !img.startsWith('data:image/'))
+      return setError('Ảnh banner phải là link bắt đầu bằng https:// hoặc ảnh tải lên.');
     if (!startIso || !endIso) return setError('Chọn đủ ngày và giờ bắt đầu, kết thúc.');
     if (Date.parse(endIso) <= Date.parse(startIso))
       return setError('Giờ kết thúc phải sau giờ bắt đầu.');
+    // Ô số mà trình duyệt thấy chữ dở dang ("5e", "-") trả value rỗng, Number('') là 0: không được lưu im lặng thành 0.
     const order = Number(sortOrder);
-    if (!Number.isInteger(order) || order < 0 || order > 9999)
+    if (
+      sortOrder.trim() === '' ||
+      sortOrderRef.current?.validity.badInput ||
+      !Number.isInteger(order) ||
+      order < 0 ||
+      order > 9999
+    )
       return setError('Thứ tự là số nguyên từ 0 đến 9999.');
     const codes = parseCouponCodes(codesText);
     if (codes.length > MAX_COUPONS) return setError(`Mỗi chiến dịch gắn tối đa ${MAX_COUPONS} mã.`);
@@ -234,6 +245,7 @@ export function CampaignForm({
 
   return (
     <form
+      noValidate
       aria-label={initial ? 'Sửa chiến dịch' : 'Tạo chiến dịch mới'}
       onSubmit={(e) => {
         e.preventDefault();
@@ -391,6 +403,7 @@ export function CampaignForm({
         </Field>
         <Field label="Thứ tự hiển thị" hint="Số nhỏ đứng trước.">
           <input
+            ref={sortOrderRef}
             aria-label="Thứ tự hiển thị"
             type="number"
             min={0}

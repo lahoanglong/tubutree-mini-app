@@ -49,6 +49,24 @@ describe('ShopInfoCard', () => {
     ]);
   });
 
+  it('ô chỉ có ký tự vô hình (rộng 0, BOM) coi như chưa nhập: nút Lưu vẫn khoá, không gửi gì', async () => {
+    const { container, puts } = setup();
+    typeInto(container.querySelector('input[placeholder^="Công ty"]'), '\u200b\ufeff\u2060');
+    const save = byText(container, 'button', 'Lưu thông tin cửa hàng')!;
+    expect(save.hasAttribute('disabled')).toBe(true);
+    click(save);
+    await flush();
+    expect(puts).toEqual([]);
+  });
+
+  it('ô công ty có chữ thật lẫn ký tự vô hình ở hai đầu: lưu chuỗi đã cắt sạch', async () => {
+    const { container, puts } = setup();
+    typeInto(container.querySelector('input[placeholder^="Công ty"]'), '\u200b Công ty TNHH Tubu \ufeff');
+    click(byText(container, 'button', 'Lưu thông tin cửa hàng'));
+    await flush();
+    expect(puts).toEqual([{ key: 'company.legal_name', value: 'Công ty TNHH Tubu' }]);
+  });
+
   it('link Bộ Công Thương sai dạng thì chặn lưu', () => {
     const { container } = setup();
     typeInto(container.querySelector('input[type="url"]'), 'online.gov.vn');

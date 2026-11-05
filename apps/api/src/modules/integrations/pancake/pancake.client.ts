@@ -26,6 +26,9 @@ export const PANCAKE_HTTP_TIMEOUT_MS = 15_000;
 
 type PancakeBody = { success?: boolean; message?: string; error?: string } | null | undefined;
 
+/** Danh sách đơn: phần tử null/chuỗi/mảng bị bỏ, vì mọi người gọi đọc `.id`/`.status` của từng dòng và `null.id` ném làm hỏng cả lượt huỷ/tra cứu. */
+const orderRows = (rows: unknown[]): PancakeOrderDTO[] => rows.filter((r): r is PancakeOrderDTO => typeof r === 'object' && r !== null && !Array.isArray(r));
+
 /** `success:false` trong HTTP 200 → lỗi dứt khoát (kèm lời Pancake); `order_not_found` → notFound. */
 function assertSuccess<T extends PancakeBody>(body: T, what: string): T {
   if (body && body.success === false) {
@@ -252,7 +255,7 @@ export class PancakeClient {
       if (!body || !Array.isArray(body.data)) {
         throw new PancakeApiError('Pancake không trả danh sách đơn khi tra cứu.', true);
       }
-      return body.data;
+      return orderRows(body.data);
     } catch (err) {
       throw toPancakeError(err, 'tra cứu đơn');
     }
@@ -279,7 +282,7 @@ export class PancakeClient {
       });
       const body = assertSuccess(data, 'kéo đơn đã cập nhật');
       if (!body || !Array.isArray(body.data)) throw new PancakeApiError('Pancake không trả danh sách đơn khi kéo đơn đã cập nhật.', true);
-      return body.data;
+      return orderRows(body.data);
     } catch (err) {
       throw toPancakeError(err, 'kéo đơn đã cập nhật');
     }

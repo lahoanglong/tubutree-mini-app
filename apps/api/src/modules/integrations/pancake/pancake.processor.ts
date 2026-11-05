@@ -22,14 +22,16 @@ import {
   removeAttentionReasonsByPrefix,
   writePancakeAttention,
 } from './pancake-attention';
-import { isPancakeOrderPaid, pancakePaidAmount, pancakePaidAmountAfterPaid } from './pancake-payment.util';
+import { isPancakeOrderPaid, pancakePaidAmount, pancakePaidAmountAfterPaid, unreadablePaidFields } from './pancake-payment.util';
 import {
   PANCAKE_CLAIM_STALE_MINUTES,
   PANCAKE_EVENT_DONE,
   PANCAKE_EVENT_STATUS,
   pancakeEventData,
+  pancakeEventId,
   pancakeEventOrderCode,
 } from './pancake-webhook-dedupe';
+import { payloadId, payloadQuantity, payloadText } from './pancake-payload';
 import { isMerchantFulfilledOrder, isPancakeFulfilledLine } from './pancake-fulfilment';
 import {
   DEFAULT_EXTERNAL_CAPTURE_ENABLED,
@@ -41,7 +43,7 @@ import {
 } from '../../external-points/external-order.config';
 import { ingestAndApply } from '../../external-points/external-order.sync';
 import { LoyaltyService } from '../../loyalty/loyalty.service';
-import { pancakeStatusSkipsTotalCheck, pancakeTotalMismatch } from './pancake-total';
+import { pancakeStatusSkipsTotalCheck, pancakeTotalMismatch, unreadableTotalFields } from './pancake-total';
 import { OrderStatusService, InvalidOrderTransitionError, type SetStatusOutcome } from '../../orders/order-status.service';
 import { CancelAfterHandoverError, UnpaidPrepaidTransitionError } from '../../orders/order-transition';
 import { recordCumulativeLatePayment, recordCumulativeOverpayment } from '../../orders/refund-queue';
@@ -121,8 +123,12 @@ const PANCAKE_STATUS_SHIPPED = 2;
 function pancakeTime(v: unknown): Date | null {
   if (typeof v !== 'string' && typeof v !== 'number') return null;
   const d = new Date(v);
-  return Number.isNaN(d.getTime()) ? null : d;
+  if (Number.isNaN(d.getTime())) return null;
+  // Mốc ở tương lai xa (đồng hồ Pancake lệch, giá trị rác) mà được ghi làm mốc "đã áp" thì mọi sự kiện thật sau đó đều bị coi là cũ và bỏ.
+  // Ngưỡng một ngày rộng hơn mọi lệch múi giờ (chuỗi không mang múi giờ, tối đa ±14 giờ), nên không phải phép so đồng hồ Pancake với máy chủ.
+  return d.getTime() > Date.now() + PANCAKE_TIME_MAX_AHEAD_MS ? null : d;
 }
+const PANCAKE_TIME_MAX_AHEAD_MS = 24 * 3_600_000;
 
 /** Mốc updated_at Pancake mới nhất đã ghi vào hành trình vận chuyển (null nếu chưa mốc nào có). */
 function latestPancakeAt(history: unknown[]): Date | null {
@@ -135,11 +141,6 @@ function latestPancakeAt(history: unknown[]): Date | null {
 }
 
 const UNLINKED_HISTORY_PREFIX = 'Pancake báo đã thanh toán (đơn Pancake #';
-
-function webhookPancakeId(data: Record<string, unknown>): string | null {
-  const raw = data['id'] ?? data['order_id'];
-  return raw === null || raw === undefined || raw === '' ? null : String(raw);
-}
 
 @Processor(QUEUE_PANCAKE_EVENTS)
 export class PancakeProcessor extends WorkerHost {
@@ -315,6 +316,7 @@ export class PancakeProcessor extends WorkerHost {
     if (!order || isClosedOrder(order.status) || isMerchantFulfilledOrder(order)) return;
     if (!(await this.totalCheckEnabled())) return;
 
+    this.warnUnreadableMoney(order, unreadableTotalFields(data), data);
     const mismatch = pancakeTotalMismatch(data, order);
     const own = order.pancakeAttention?.startsWith(ATTENTION_TOTAL_MISMATCH) ?? false;
     if (!mismatch) {
@@ -364,6 +366,13 @@ export class PancakeProcessor extends WorkerHost {
     }
   }
 
+  /** Ô tiền có mặt mà không đọc được làm đơn bị bỏ qua so tổng / không được tính đã trả: không im lặng, ghi lại để đối soát. */
+  private warnUnreadableMoney(order: Pick<Order, 'code'>, fields: string[], data: Record<string, unknown>): void {
+    for (const f of fields) {
+      this.logger.warn(`Đơn ${order.code}: ô tiền Pancake ${f} không đọc được (${JSON.stringify(data[f])?.slice(0, 60)}) — bỏ qua ô này.`);
+    }
+  }
+
   private async totalCheckEnabled(): Promise<boolean> {
     if (!this.systemConfig) return true;
     try {
@@ -397,8 +406,7 @@ export class PancakeProcessor extends WorkerHost {
   private async resolveOrder(
     data: Record<string, unknown>,
   ): Promise<{ order: Order | null; foreign?: Order; pancakeId: string | null }> {
-    const rawId = data['id'] ?? data['order_id'];
-    const pancakeId = rawId === null || rawId === undefined || rawId === '' ? null : String(rawId);
+    const pancakeId = pancakeEventId(data);
     if (pancakeId) {
       const byId = await this.prisma.order.findFirst({ where: { pancakeOrderId: pancakeId } });
       if (byId) return { order: byId, pancakeId };
@@ -681,11 +689,12 @@ export class PancakeProcessor extends WorkerHost {
     const order = await this.findOrder(data);
     if (!order) return null;
     if (order.paymentMethod !== 'BANK_TRANSFER') return null;
+    this.warnUnreadableMoney(order, unreadablePaidFields(data), data);
     // Đơn chưa gắn đơn Pancake nào mà khớp được chỉ nhờ mã trong note: ai tạo đơn trên Pancake mang đúng dòng mã đó (hay nhân viên sửa
     // ghi chú) cũng khớp. Cờ is_paid của đơn như vậy chưa đủ để lật PAID, ghi khoản hoàn hay tính trả vượt: chốt ở đây, trước mọi nhánh tiền.
     // Đơn đã gắn id khác với id trong webhook không tới được đây (resolveOrder trả `foreign`, bỏ qua và báo ở nhánh khác). Webhook không có id
     // thì khớp được chỉ nhờ mã trong note, cũng chưa chứng minh được đơn Pancake là đơn Tubu đã đẩy.
-    if (!order.pancakeOrderId || webhookPancakeId(data) !== order.pancakeOrderId) return this.onUnattachedPayment(order, data);
+    if (!order.pancakeOrderId || pancakeEventId(data) !== order.pancakeOrderId) return this.onUnattachedPayment(order, data);
     if (order.paymentStatus === 'PAID' || order.paymentStatus === 'REFUNDED') {
       // Đơn đã nhận đủ: Pancake báo vượt tổng đơn có thể là khách chuyển dư (chuyển hai lần) — R3-MONEY-1.
       await this.recordOverpayment(order, pancakePaidAmountAfterPaid(data));
@@ -743,8 +752,7 @@ export class PancakeProcessor extends WorkerHost {
    * dấu và báo ADMIN. Đơn vẫn nhận phần vận chuyển/trạng thái của cùng sự kiện; chỉ phần tiền chờ đối chiếu.
    */
   private async holdUnattachedPayment(order: Order, data: Record<string, unknown>, reported: number): Promise<void> {
-    const rawId = data['id'] ?? data['order_id'];
-    const pancakeRef = rawId === null || rawId === undefined || rawId === '' ? '?' : String(rawId);
+    const pancakeRef = pancakeEventId(data) ?? '?';
     // Chữ này là khoá chống trùng nên giống nhau cho đơn mở và đơn đóng: trạng thái đơn đổi giữa hai webhook không làm ghi đôi.
     const note = `${UNLINKED_HISTORY_PREFIX}${pancakeRef}) nhưng đơn Tubu chưa gắn đúng đơn Pancake: chờ đối chiếu sao kê`;
     // Chỉ xử lý LẦN ĐẦU cho mỗi cặp (đơn, đơn Pancake): dòng lịch sử là dấu, nên người đã đối chiếu/đóng cờ cho #A rồi thì webhook sau của #A không
@@ -830,11 +838,11 @@ export class PancakeProcessor extends WorkerHost {
     const shipStatus = partner['partner_status'] ?? data['shipping_status'];
     const trackingLink = data['tracking_link'] ?? partner['printed_form'];
 
-    const str = (v: unknown): string | null => (v == null || v === '' ? null : String(v));
-    const carrierS = str(carrier);
-    const waybillS = str(waybill);
-    const shipStatusS = str(shipStatus);
-    const linkS = safeHttpUrl(str(trackingLink));
+    // Object/mảng/boolean không phải tên hãng, mã vận đơn hay trạng thái: String() của chúng ("[object Object]", "true") sẽ hiện cho khách.
+    const carrierS = payloadText(carrier);
+    const waybillS = payloadText(waybill);
+    const shipStatusS = payloadText(shipStatus);
+    const linkS = safeHttpUrl(payloadText(trackingLink));
 
     // Đơn có vận đơn Gomdon ĐANG SỐNG: Gomdon là nguồn DUY NHẤT của shippingCode/Partner/Status/History
     // (webhook Gomdon ghi, kèm chặn lùi trạng thái). Pancake không ghi đè — trước đây "ai ghi sau thắng":
@@ -1011,11 +1019,10 @@ export class PancakeProcessor extends WorkerHost {
    * `receivedAt` = lúc Tubu nhận webhook (giờ máy chủ) — mốc duy nhất được so với lượt đồng bộ danh mục.
    */
   private async onStockChanged(data: Record<string, unknown>, receivedAt: Date): Promise<string | undefined> {
-    const variationId = data['variation_id'] ?? data['id'];
-    const stock = data['remain_quantity'];
-    if (variationId == null || stock == null) return;
-    const n = Number(stock);
-    if (!Number.isFinite(n) || n < 0) return;
+    const pancakeVariationId = payloadId(data['variation_id']) ?? payloadId(data['id']);
+    // `Number("")` = 0, `Number(true)` = 1, `Number([])` = 0: ô không phải số không được thành "hết hàng" hay "còn 1".
+    const n = payloadQuantity(data['remain_quantity']);
+    if (pancakeVariationId === null || n === null || n < 0) return;
     // KHÔNG nuốt lỗi: process() đánh dấu event PROCESSED sau khi handler trả về, nên nuốt ở đây
     // là mất hẳn một lần cập nhật tồn kho — BullMQ không retry, không có log, và tồn kho lệch
     // với kho thật cho tới lần đồng bộ sau. Mọi handler khác trong file này đều để lỗi nổi lên.
@@ -1027,7 +1034,6 @@ export class PancakeProcessor extends WorkerHost {
     // Pancake không đảm bảo thứ tự giao webhook (và BullMQ thử lại làm lệch thêm): mang updated_at thì chỉ áp khi không cũ
     // hơn sự kiện đã áp (R4-SYNC-2). Nhận trước lúc lượt đồng bộ danh mục đã áp bắt đầu đọc Pancake thì số đồng bộ mới hơn
     // (R5-SYNC-3).
-    const pancakeVariationId = String(variationId);
     const eventAt = pancakeTime(data['updated_at']) ?? undefined;
     const applied = await applyPancakeStock(this.prisma, pancakeVariationId, n, { kind: 'webhook', eventAt, receivedAt });
     if (applied) return;

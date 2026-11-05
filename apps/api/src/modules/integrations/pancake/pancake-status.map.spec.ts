@@ -64,3 +64,13 @@ describe('resolvePancakeStatus — chuỗi trạng thái (luồng cũ)', () => {
     expect(resolvePancakeStatus(999)).toBeNull();
   });
 });
+
+describe('resolvePancakeStatus — kiểu lạ (W11)', () => {
+  it.each([[[3]], [['confirmed']], [{ toString: () => '3' }], [true], [false], [{}], [[]], [() => 3], [Symbol('s')]])('%p không phải mã/tên trạng thái: null', (raw) => {
+    expect(resolvePancakeStatus(raw)).toBeNull();
+  });
+  it('mã số dạng chuỗi và tên không phân biệt hoa thường vẫn đọc được', () => {
+    expect(resolvePancakeStatus(' 3 ')).toEqual({ kind: 'status', status: 'DELIVERED' });
+    expect(resolvePancakeStatus('Delivered')).toEqual({ kind: 'status', status: 'DELIVERED' });
+  });
+});

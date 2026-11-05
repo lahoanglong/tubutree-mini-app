@@ -2054,3 +2054,62 @@ describe('PancakeOrderService.pushOrder — hai đơn Pancake cho một đơn Tu
     expect(t.alerts.alert).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('PancakeOrderService — đơn Pancake khớp mã đơn Tubu nhưng mã đơn Pancake không đọc được (W11)', () => {
+  const UNREADABLE: [string, unknown][] = [
+    ['số lẻ 1.5', 1.5],
+    ['chuỗi rỗng', ''],
+    ['object', { a: 1 }],
+    ['2**60 (quá 2^53)', 2 ** 60],
+    ['thiếu', undefined],
+  ];
+
+  it.each(UNREADABLE)('đẩy: dấu cũ + tra thấy đơn id %s → lỗi tạm, KHÔNG tạo đơn thứ hai, không gắn mã rác', async (_label, id) => {
+    const t = setup({ pancakePushClaimedAt: new Date('2026-10-14T00:00:00Z'), pancakePushStatus: PANCAKE_PUSH.PENDING });
+    t.client.searchOrders.mockResolvedValue([{ id, status: 1, custom_id: 'TUBU1' }]);
+    await expect(t.svc.pushOrder('o1')).rejects.toMatchObject({ transient: true });
+    expect(t.client.createOrder).not.toHaveBeenCalled();
+    expect(t.row().pancakeOrderId).toBeNull();
+  });
+
+  it('đẩy: đơn khớp mã nhưng id rác đứng cạnh đơn khác mã → vẫn dừng, không tạo thêm', async () => {
+    const t = setup({ pancakePushClaimedAt: new Date('2026-10-14T00:00:00Z'), pancakePushStatus: PANCAKE_PUSH.PENDING });
+    t.client.searchOrders.mockResolvedValue([
+      { id: 555, status: 0, note: 'Order code: TUBU12 | x' },
+      { id: {}, status: 0, custom_id: 'TUBU1' },
+    ]);
+    await expect(t.svc.pushOrder('o1')).rejects.toMatchObject({ transient: true });
+    expect(t.client.createOrder).not.toHaveBeenCalled();
+  });
+
+  it('đẩy: đơn mã khác có id rác không phải đơn của ta → bỏ qua, tạo bình thường', async () => {
+    const t = setup({ pancakePushClaimedAt: new Date('2026-10-14T00:00:00Z'), pancakePushStatus: PANCAKE_PUSH.PENDING });
+    t.client.searchOrders.mockResolvedValue([{ id: {}, status: 0, custom_id: 'TUBU9' }]);
+    expect(await t.svc.pushOrder('o1')).toBe('pk-new');
+    expect(t.client.createOrder).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(UNREADABLE)('huỷ: chỉ có mốc đẩy, tra thấy đơn còn sống id %s → lỗi tạm để thử lại, KHÔNG chốt NOT_FOUND', async (_label, id) => {
+    const t = setup({ status: 'CANCELLED', pancakePushClaimedAt: new Date() });
+    t.client.searchOrders.mockResolvedValue([{ id, status: 1, custom_id: 'TUBU1' }]);
+    await expect(t.svc.cancelOnPancake('o1')).rejects.toMatchObject({ transient: true });
+    expect(t.row().pancakeCancelStatus).not.toBe(PANCAKE_CANCEL.NOT_FOUND);
+    expect(t.row().pancakePushClaimedAt).not.toBeNull();
+    expect(t.client.updateOrder).not.toHaveBeenCalled();
+  });
+
+  it('huỷ: lượt cuối vẫn không đọc được mã đơn → FAILED + "HUỶ TAY" (không im lặng coi như không có đơn)', async () => {
+    const t = setup({ status: 'CANCELLED', pancakePushClaimedAt: new Date() });
+    t.client.searchOrders.mockResolvedValue([{ id: {}, status: 1, custom_id: 'TUBU1' }]);
+    await expect(t.svc.cancelOnPancake('o1', true)).rejects.toMatchObject({ transient: true });
+    expect(t.row().pancakeCancelStatus).toBe(PANCAKE_CANCEL.FAILED);
+    expect(t.row().pancakeAttention).toContain('HUỶ TAY');
+  });
+
+  it('huỷ: đơn Pancake id rác nhưng ĐÃ huỷ bên đó → không chặn, chốt như không còn đơn sống', async () => {
+    const t = setup({ status: 'CANCELLED', pancakePushClaimedAt: new Date() });
+    t.client.searchOrders.mockResolvedValue([{ id: {}, status: 6, custom_id: 'TUBU1' }]);
+    await t.svc.cancelOnPancake('o1');
+    expect(t.row().pancakeCancelStatus).toBe(PANCAKE_CANCEL.NOT_FOUND);
+  });
+});
