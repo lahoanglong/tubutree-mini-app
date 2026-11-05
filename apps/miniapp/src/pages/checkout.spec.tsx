@@ -13,6 +13,8 @@ const mocks = vi.hoisted(() => ({
   getCart: vi.fn(),
   checkoutQuote: vi.fn(),
   placeOrder: vi.fn(),
+  updateCartItem: vi.fn(),
+  removeCartItem: vi.fn(),
   recordReferralTouch: vi.fn(),
   ensurePhone: vi.fn(),
   requestZaloProfile: vi.fn(),
@@ -40,6 +42,8 @@ vi.mock('../services/shop-api', () => ({
   getCart: mocks.getCart,
   checkoutQuote: mocks.checkoutQuote,
   placeOrder: mocks.placeOrder,
+  updateCartItem: mocks.updateCartItem,
+  removeCartItem: mocks.removeCartItem,
   getCouponPreviews: mocks.getCouponPreviews,
   applyCoupon: mocks.applyCoupon,
   removeCoupon: mocks.removeCoupon,
@@ -1014,11 +1018,12 @@ describe('CheckoutPage — hết hàng / vượt suất lúc đặt (BUYERMINI-1
     expect(within(banner).getByText('Vượt giới hạn mua ưu đãi.')).toBeInTheDocument();
   });
 
-  it('giỏ đang có dòng vượt tồn → báo ngay và khoá nút Đặt hàng', async () => {
+  it('giỏ đang có dòng vượt tồn → báo ngay dưới dòng đó và khoá nút Đặt hàng', async () => {
     mocks.getCart.mockResolvedValue({ ...CART, items: [{ ...CART.items[0]!, quantity: 3, stock: 1, total: 150_000 }] });
     renderPage();
-    const banner = await screen.findByTestId('checkout-cart-issue');
-    expect(within(banner).getByText('Sản phẩm "Xà bông thảo mộc" hiện còn 1 sản phẩm. Sửa số lượng trong giỏ để tiếp tục.')).toBeInTheDocument();
+    const problem = await screen.findByTestId('checkout-line-problem');
+    expect(within(problem).getByText('Còn 1 sản phẩm')).toBeInTheDocument();
+    expect(screen.queryByTestId('checkout-cart-issue')).not.toBeInTheDocument();
     const btn = await screen.findByText(/Đặt hàng · /);
     expect(btn.closest('button')).toBeDisabled();
   });
@@ -2164,5 +2169,59 @@ describe('CheckoutPage — giá đổi lúc đặt (hk)', () => {
     await placeOrderClick();
     fireEvent.click(await screen.findByRole('button', { name: 'Xem lại giỏ hàng' }));
     expect(mocks.navigate).toHaveBeenCalledWith('/cart');
+  });
+});
+
+describe('CheckoutPage — lỗi theo từng dòng hàng (hk)', () => {
+  const SECOND = { id: 'ci2', variationId: 'v2', productName: 'Dầu gội', variationName: null, slug: 'dg', thumbnail: null, unitPrice: 50_000, quantity: 1, stock: 5, total: 50_000 };
+  const OVER = { ...CART.items[0]!, quantity: 3, stock: 1, total: 150_000 };
+  const SOLD_OUT = { ...CART.items[0]!, quantity: 1, stock: 0, total: 50_000 };
+
+  beforeEach(() => {
+    mocks.publicConfig.waste.pickup = false;
+    vi.clearAllMocks();
+    mocks.placeOrder.mockReset();
+    sessionStorage.clear();
+    localStorage.clear();
+    mocks.sfCtx.slug = null;
+    mocks.sfCtx.referralCode = null;
+    mocks.getCouponPreviews.mockResolvedValue([]);
+    mocks.getAddresses.mockResolvedValue([ADDRESS]);
+    mocks.checkoutQuote.mockResolvedValue(QUOTE);
+    mocks.ensurePhone.mockResolvedValue('0900000000');
+    mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
+    mocks.removeCartItem.mockResolvedValue(CART);
+    mocks.updateCartItem.mockResolvedValue(CART);
+  });
+
+  it('dòng vượt tồn: nút "Giảm còn 1" sửa số lượng ngay tại màn rồi tải lại giỏ và báo giá', async () => {
+    mocks.getCart.mockResolvedValue({ ...CART, items: [OVER] });
+    renderPage();
+    const problem = await screen.findByTestId('checkout-line-problem');
+    const carts = mocks.getCart.mock.calls.length;
+    fireEvent.click(within(problem).getByRole('button', { name: 'Giảm còn 1' }));
+    await waitFor(() => expect(mocks.updateCartItem).toHaveBeenCalledWith('ci1', 1));
+    await waitFor(() => expect(mocks.getCart.mock.calls.length).toBeGreaterThan(carts));
+    expect(mocks.navigate).not.toHaveBeenCalled();
+  });
+
+  it('dòng hết hàng: "Hết hàng" và nút "Bỏ khỏi đơn" xoá đúng dòng đó, dòng còn hàng không có nút sửa', async () => {
+    mocks.getCart.mockResolvedValue({ ...CART, items: [SOLD_OUT, SECOND] });
+    renderPage();
+    const problems = await screen.findAllByTestId('checkout-line-problem');
+    expect(problems).toHaveLength(1);
+    expect(within(problems[0]!).getByText('Hết hàng')).toBeInTheDocument();
+    fireEvent.click(within(problems[0]!).getByRole('button', { name: 'Bỏ khỏi đơn' }));
+    await waitFor(() => expect(mocks.removeCartItem).toHaveBeenCalledWith('ci1'));
+    expect(mocks.updateCartItem).not.toHaveBeenCalled();
+  });
+
+  it('còn dòng cần sửa: dải đáy nói lý do khoá nút, bỏ banner đầu trang', async () => {
+    mocks.getCart.mockResolvedValue({ ...CART, items: [SOLD_OUT, SECOND] });
+    renderPage();
+    await screen.findByTestId('checkout-line-problem');
+    expect(await screen.findByText('Sửa sản phẩm hết hàng ở trên để đặt tiếp.')).toBeInTheDocument();
+    expect(screen.queryByTestId('checkout-cart-issue')).not.toBeInTheDocument();
   });
 });

@@ -3,7 +3,7 @@ import { Box, Page, Text, Input, useNavigate, useLocation, useSnackbar } from 'z
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { WasteMeDTO, WasteRequestSummaryDTO } from '@tubutree/shared-types';
 import { Ticket, ChevronRight, Sprout, AlertCircle, Recycle } from 'lucide-react';
-import { getAddresses, getCart, checkoutQuote, placeOrder, type PlacedOrder } from '../services/shop-api';
+import { getAddresses, getCart, checkoutQuote, placeOrder, removeCartItem, updateCartItem, type PlacedOrder } from '../services/shop-api';
 import { cartPreviewKey, cartProductIds } from '../utils/coupon-scope';
 import { fulfillerLabel, shipmentsNote } from '../utils/shipments';
 import { getWallet, getLoyalty } from '../services/account-api';
@@ -21,7 +21,7 @@ import { VoucherSheet } from '../components/checkout/voucher-sheet';
 import { useCheckoutCoupon } from '../components/checkout/use-coupon-hint';
 import { normalizeTaxCode, shouldShowTaxCodeError } from '@tubutree/app-core/commerce/tax-code';
 import { flashLimitNotice, isCartFixableError } from '@tubutree/app-core/commerce/flash-limit';
-import { isPriceChangedError, priceChangedActions } from '@tubutree/app-core/commerce/checkout-issues';
+import { checkoutLineProblems, isPriceChangedError, priceChangedActions, type LineFix } from '@tubutree/app-core/commerce/checkout-issues';
 import { checkoutPlaceHint, checkoutTotalText } from '@tubutree/app-core/commerce/checkout-display';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { couponAutoCopy, couponHintText } from '@tubutree/app-core/coupon-use';
@@ -423,6 +423,19 @@ export default function CheckoutPage() {
     },
   });
 
+  // Sửa nhanh dòng hết hàng/vượt tồn ngay tại màn: khách không rời trang nên các ô đã nhập còn nguyên. Đổi dòng là đổi lựa chọn
+  // của khách, nên một lần đặt đang đóng băng (chưa rõ kết quả) không được phát lại nữa.
+  const lineFix = useMutation({
+    mutationFn: ({ id, fix }: { id: string; fix: LineFix }) => (fix.kind === 'remove' ? removeCartItem(id) : updateCartItem(id, fix.quantity)),
+    onSuccess: () => {
+      choiceRev.current += 1;
+      setCartIssue(null);
+      void queryClient.invalidateQueries({ queryKey: ['cart'] });
+      void queryClient.invalidateQueries({ queryKey: ['quote'] });
+    },
+    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+  });
+
   // ── Success screen ──
   if (placed) {
     return (
@@ -506,9 +519,10 @@ export default function CheckoutPage() {
   // chặn bấm-2-lần khi `loading` bất kể `disabled`, và handler onPress cũng tự kiểm `submitting`
   // trước khi mutate — gộp lại `disabled` chỉ khiến spinner không hiện trong lúc đặt hàng (đúng
   // bug audit A4-01/A4-02/A4-04 mà lần migrate này phải sửa), không thêm được lớp bảo vệ nào mới.
-  const overStockLine = checkoutItems.find((it) => it.quantity > it.stock);
-  const shownCartIssue = overStockLine ? vi.checkout.overStock(overStockLine.productName, overStockLine.stock) : cartIssue;
-  const canPlace = !!addressId && quote.isSuccess && !quote.isFetching && !!invoiceValid && !overStockLine && (!!zeroNote || payment !== '') && !autoCoupon.busy;
+  const lineProblems = checkoutLineProblems(checkoutItems);
+  const hasLineProblem = Object.keys(lineProblems).length > 0;
+  const shownCartIssue = cartIssue;
+  const canPlace = !!addressId && quote.isSuccess && !quote.isFetching && !!invoiceValid && !hasLineProblem && (!!zeroNote || payment !== '') && !autoCoupon.busy;
 
   // Chưa có báo giá (chưa chọn địa chỉ) thì chưa biết tổng đơn → chưa khoá, chưa có lý do.
   const paymentMethods = [
@@ -543,7 +557,7 @@ export default function CheckoutPage() {
   const previewDiscount = wholeCart && cart.data?.couponCode ? (cart.data.discount ?? 0) : 0;
   const previewTier = wholeCart ? (cart.data?.tierDiscount ?? 0) : 0;
   // Lý do nút Đặt hàng đang khoá do thiếu địa chỉ hoặc báo giá lỗi: nói ngay trên nút (cùng câu với web).
-  const placeHint = checkoutPlaceHint({ hasAddress: !!addressId, quoteFailed: quote.isError });
+  const placeHint = checkoutPlaceHint({ hasAddress: !!addressId, quoteFailed: quote.isError }) ?? (hasLineProblem ? fillCopy('checkout.fixLinesHint') : null);
   const previewRecalcNote = !wholeCart && (!!cart.data?.couponCode || (cart.data?.comboDiscount ?? 0) > 0 || (cart.data?.tierDiscount ?? 0) > 0);
 
   return (
@@ -631,6 +645,18 @@ export default function CheckoutPage() {
                   <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
                     {formatVnd(it.unitPrice)} × {it.quantity}
                   </Text>
+                  {lineProblems[it.id] && (
+                    <Box data-testid="checkout-line-problem" role="alert" mt={1} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                      <DsText variant="caption" tone="danger">{lineProblems[it.id]!.text}</DsText>
+                      <Button
+                        variant="secondary"
+                        loading={lineFix.isPending && lineFix.variables?.id === it.id}
+                        onPress={() => lineFix.mutate({ id: it.id, fix: lineProblems[it.id]!.fix })}
+                      >
+                        {lineProblems[it.id]!.fixLabel}
+                      </Button>
+                    </Box>
+                  )}
                 </Box>
                 <Text size="small" bold style={{ whiteSpace: 'nowrap' }}>{formatVnd(it.total)}</Text>
               </Box>
