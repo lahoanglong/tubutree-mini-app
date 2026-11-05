@@ -321,8 +321,15 @@ const vnClock = (d: Date): string => {
 
 const CRON_REAL = ['PancakeSyncService.scheduledSync', 'ZnsStuckLogCron.sweepStuckZnsLogs', 'AffiliateService.dailyWalletTransfer', 'LoyaltyCron.recalcTiers'];
 
+/** Giá trị `company.legal_name` trước khi spec chạy (đọc một lần), để afterAll trả lại. */
+const LEGAL_NAME = { read: false, value: undefined as unknown };
+
 async function seedAll(): Promise<void> {
   await withDb(async (prisma) => {
+    if (!LEGAL_NAME.read) {
+      LEGAL_NAME.value = (await prisma.systemConfig.findUnique({ where: { key: 'company.legal_name' } }))?.value;
+      LEGAL_NAME.read = true;
+    }
     const orderIds: string[] = (await prisma.order.findMany({ where: { code: { startsWith: 'E2EW11-' } }, select: { id: true } })).map((o: { id: string }) => o.id);
     if (orderIds.length) await prisma.orderStatusHistory.deleteMany({ where: { orderId: { in: orderIds } } });
     await prisma.order.deleteMany({ where: { code: { startsWith: 'E2EW11-' } } });
@@ -437,6 +444,14 @@ for (const frame of FRAMES) {
 
     test.beforeAll(async () => {
       await seedAll();
+    });
+
+    test.afterAll(async () => {
+      if (!LEGAL_NAME.read) return;
+      await withDb(async (prisma) => {
+        if (LEGAL_NAME.value === undefined) await prisma.systemConfig.deleteMany({ where: { key: 'company.legal_name' } });
+        else await prisma.systemConfig.updateMany({ where: { key: 'company.legal_name' }, data: { value: LEGAL_NAME.value } });
+      });
     });
 
     test('1. Tổng quan chỉ số: doanh thu, đơn mới nhất, mốc 00:30 và 23:30', async ({ page, request }) => {
