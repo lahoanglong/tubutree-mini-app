@@ -123,7 +123,7 @@ test.describe('Zalo Mini App - Cộng đồng chỉ đọc, không link ngoài',
     api.get('/orders/:code', order);
     await page.setViewportSize({ width: 375, height: 1500 });
     await page.goto(`/order/${order.code}`);
-    await expect(page.getByText('Mã vận đơn: GHN123456789')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('order-shipping').getByText('GHN123456789', { exact: true })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole('button', { name: 'Chép mã' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Tra cứu hành trình' })).toHaveCount(0);
     await shot(page, 'order-detail-shipping');

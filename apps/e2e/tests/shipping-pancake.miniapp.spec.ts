@@ -83,7 +83,7 @@ test.describe('Zalo Mini App E2E - Luồng Đối tác Vận chuyển (Pancake P
     await expect(page.getByText(/quá hạn đơn sẽ tự huỷ/)).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Huỷ đơn' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Thanh toán ngay' })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Xem tất cả đơn' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Liên hệ Tubu' })).toBeVisible();
     expect(api.callsTo('POST', '/orders/:code/cancel')).toHaveLength(0);
     await page.screenshot({ path: testInfo.outputPath('order-handed-over-unpaid.png'), fullPage: true });
   });
@@ -96,9 +96,11 @@ test.describe('Zalo Mini App E2E - Luồng Đối tác Vận chuyển (Pancake P
     // Nhãn thật của trạng thái SHIPPING (i18n vi.orderStatus.SHIPPING = 'Đang giao').
     await expect(page.getByText('Đang giao', { exact: true }).first()).toBeVisible({ timeout: 15_000 });
 
-    await expect(page.getByText('Vận chuyển', { exact: true })).toBeVisible();
-    await expect(page.getByText('Giao Hàng Nhanh', { exact: true })).toBeVisible();
-    await expect(page.getByText('Mã vận đơn: GHN123456789')).toBeVisible();
+    const shipping = page.getByTestId('order-shipping');
+    await expect(shipping.getByText('Vận chuyển', { exact: true })).toBeVisible();
+    await expect(shipping.getByText('Giao Hàng Nhanh', { exact: true })).toBeVisible();
+    await expect(shipping.getByText('Mã vận đơn', { exact: true })).toBeVisible();
+    await expect(shipping.getByText('GHN123456789', { exact: true })).toBeVisible();
     // Trạng thái VC hiện ở dòng tóm tắt VÀ ở chặng mới nhất của hành trình.
     await expect(page.getByText('Đang vận chuyển tới người nhận', { exact: true })).toHaveCount(2);
 
@@ -141,8 +143,8 @@ test.describe('Zalo Mini App E2E - Luồng Đối tác Vận chuyển (Pancake P
     await page.goto(`/order/${ORDER_PENDING.code}`);
     await expect(page.getByText('Đã xác nhận').first()).toBeVisible({ timeout: 15_000 });
 
-    await expect(page.getByText('Vận chuyển', { exact: true })).toHaveCount(0);
-    await expect(page.getByText('Mã vận đơn:')).toHaveCount(0);
+    await expect(page.getByTestId('order-shipping')).toHaveCount(0);
+    await expect(page.getByText('Mã vận đơn')).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Chép mã' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Tra cứu hành trình' })).toHaveCount(0);
   });

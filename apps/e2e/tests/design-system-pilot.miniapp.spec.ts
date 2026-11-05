@@ -25,7 +25,7 @@ import type { Locator, Page } from '@playwright/test';
  *      không vẽ spinner — audit A4-07).
  *   3. Cart: bấm vào ảnh sản phẩm (xa chữ tên) vẫn mở trang sản phẩm.
  *   4. Storefront: hàng hết có overlay "tạm hết", hàng còn thì không (audit A4-06).
- *   5. Đơn đã giao: "Mua lại đơn này" mở sheet; CTA trong sheet hiện spinner rồi chuyển sang /cart.
+ *   5. Đơn đã giao: "Mua lại đơn này" (trong menu Thêm thao tác) mở sheet; CTA trong sheet hiện spinner rồi chuyển sang /cart.
  *   6. PDP 375px: thanh CTA dính đáy không tràn màn hình (còn hàng giá dài + hết hàng).
  *   7-8. Component con CHƯA migrate trong luồng pilot (quantity-selector, address-section) vẫn
  *      có viền/nền thật nhờ khối alias v1 → v2 (final review C1: trước đó resolve ra "không gì").
@@ -261,13 +261,15 @@ test.describe('Zalo Mini App E2E - Design System v2 pilot flow', () => {
     await expect(overlay(page)).toHaveCount(1);
   });
 
-  test('Đơn đã giao: "Mua lại đơn này" mở sheet; CTA trong sheet hiện spinner rồi chuyển sang /cart', async ({ page, api }) => {
+  test('Đơn đã giao: "Mua lại đơn này" (menu Thêm thao tác) mở sheet; CTA trong sheet hiện spinner rồi chuyển sang /cart', async ({ page, api }) => {
     mockPilotDeliveredOrder(api, { repurchaseDelayMs: 1500 });
     await page.goto(`/order/${PILOT_ORDER_CODE}`);
 
-    const rebuy = page.getByRole('button', { name: 'Mua lại đơn này' });
-    await expect(rebuy).toBeVisible({ timeout: 15_000 });
-    await rebuy.click();
+    // Đơn còn dòng chưa đánh giá: nút chính là "Đánh giá sản phẩm", "Mua lại đơn này" nằm trong menu "Thêm thao tác".
+    const more = page.getByRole('button', { name: 'Thêm thao tác' });
+    await expect(more).toBeVisible({ timeout: 15_000 });
+    await more.click();
+    await page.getByRole('button', { name: 'Mua lại đơn này' }).click();
 
     // makeOrder: 1 dòng SL 2, API mock cũ không trả stock → coi như còn hàng (Ruling 19).
     const cta = page.getByRole('button', { name: 'Thêm vào giỏ (2)' });

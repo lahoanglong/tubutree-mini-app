@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Minus, Plus } from 'lucide-react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { estimateReturn, formatVnd, requestReturn, type OrderDetailDTO, type ReturnRequestDTO } from '@/lib/shop-client';
@@ -58,6 +58,7 @@ export function ReturnRequestForm({
 }) {
   const qc = useQueryClient();
   const reasonName = useId();
+  const titleRef = useRef<HTMLHeadingElement>(null);
   const [lines, setLines] = useState<ReturnLineState[]>(() => initialLines(o, returns));
   const [reasonCode, setReasonCode] = useState<ReturnReasonCode | null>(null);
   const [reason, setReason] = useState('');
@@ -104,6 +105,15 @@ export function ReturnRequestForm({
     },
   });
 
+  // Form nằm cuối trang còn khách bấm từ menu ở đầu trang: đưa form vào tầm nhìn rồi chuyển focus vào tiêu đề để người dùng
+  // bàn phím và trình đọc màn hình đứng đúng chỗ. `preventScroll` vì cuộn đã làm ở trên.
+  useEffect(() => {
+    const title = titleRef.current;
+    if (!title) return;
+    title.scrollIntoView?.({ block: 'start' });
+    title.focus({ preventScroll: true });
+  }, []);
+
   const setLine = (id: string, patch: Partial<ReturnLineState>) =>
     setLines((ls) => ls.map((l) => (l.orderItemId === id ? { ...l, ...patch } : l)));
 
@@ -118,7 +128,7 @@ export function ReturnRequestForm({
       }}
     >
       <div>
-        <h3 id="return-form-title" className="font-semibold text-stone-900">
+        <h3 id="return-form-title" ref={titleRef} tabIndex={-1} className="scroll-mt-4 font-semibold text-stone-900 outline-none">
           Yêu cầu đổi/trả
         </h3>
         <p className="mt-1 text-xs text-stone-600">

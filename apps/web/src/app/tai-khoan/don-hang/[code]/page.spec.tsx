@@ -205,7 +205,7 @@ describe('/tai-khoan/don-hang/[code] — chi tiết đơn và thanh toán lại'
 
   it('ngày đặt đơn theo giờ Việt Nam, dáng HH:mm dd/MM/yyyy', async () => {
     const { container } = await mount();
-    expect(container.textContent).toContain('Đặt lúc 10:00 01/10/2026');
+    expect(container.textContent).toMatch(/Đặt lúc 10:00 01\/10(?!\d)/);
   });
 
   it('đủ truy cập: một h1, không nhảy cấp, mọi điều khiển có tên và vùng chạm 44px', async () => {
@@ -255,16 +255,15 @@ describe('/tai-khoan/don-hang/[code] — chi tiết đơn và thanh toán lại'
     const { container } = await mount();
     expect(mocks.qr.calls).toBe(0);
     expect(container.querySelector('img[alt="VietQR"]')).toBeNull();
-    expect(container.textContent).not.toContain('Đơn đang chờ bạn chuyển khoản');
-    expect(container.textContent).toContain('Thanh toán trước');
-    expect(container.textContent).toContain('quá hạn đơn sẽ tự huỷ');
+    expect(container.textContent).not.toContain('Quét mã bên dưới');
+    expect(container.textContent).toContain('Đơn đã quá hạn thanh toán và sắp tự huỷ.');
   });
 
   it('chờ chuyển khoản còn hạn: dựng QR như cũ', async () => {
     mocks.order = { ...ORDER, paymentDeadline: '2999-01-01T00:00:00Z' };
     const { container } = await mount();
     expect(mocks.qr.calls).toBeGreaterThan(0);
-    expect(container.textContent).toContain('Đơn đang chờ bạn chuyển khoản');
+    expect(container.textContent).toContain('Đơn đang chờ bạn thanh toán.');
   });
 
   it('lần dò QR bị từ chối chốt (409) khi đang mở trang: dòng "Quét mã bên dưới" biến mất cùng lúc khung chuyển sang đóng', async () => {
@@ -554,7 +553,7 @@ describe('/tai-khoan/don-hang/[code] — ngày giao dự kiến, ảnh món, ghi
     mocks.eta = { minDays: 2, maxDays: 4 };
     mocks.order = shipping();
     const { container } = await mount();
-    expect(container.querySelector('[data-testid="order-eta"]')?.textContent).toBe('Dự kiến giao 30/10 – 01/11');
+    expect(container.querySelector('[data-testid="order-milestone"]')?.textContent).toBe('Dự kiến giao 30/10 – 01/11');
     expect(container.textContent?.match(/Dự kiến giao 30\/10 – 01\/11/g)).toHaveLength(2);
   });
 
@@ -584,15 +583,40 @@ describe('/tai-khoan/don-hang/[code] — ngày giao dự kiến, ảnh món, ghi
     expect(container.textContent).toContain('Gọi trước khi giao');
   });
 
-  it('khối xếp theo thứ tự của Mini App ở điện thoại: ... Sản phẩm, Thanh toán, Vận chuyển, Địa chỉ, Ghi chú, thao tác, hỗ trợ', async () => {
+  const orderOf = (el: Element) => Number(/(?:^|\s)order-\[?(\d+)\]?(?:\s|$)/.exec(el.className)?.[1] ?? 0);
+  const blockOrder = (root: Element, heading: string) => {
+    const h = Array.from(root.querySelectorAll('h2')).find((e) => e.textContent?.trim() === heading)!;
+    let el: Element | null = h;
+    while (el && !orderOf(el)) el = el.parentElement;
+    return orderOf(el!);
+  };
+
+  it('khối xếp theo thứ tự của Mini App ở điện thoại: hành trình, vận chuyển, sản phẩm, thanh toán, địa chỉ, ghi chú, thao tác, hỗ trợ', async () => {
     mocks.order = shipping({ note: 'x', shippingPartner: 'GHN', shippingCode: 'GHN001' });
     const { container } = await mount();
-    const col = container.querySelector('.max-md\\:flex-col')!;
-    const orderOf = (el: Element) => Number(/max-md:order-(\d+)/.exec(el.className)?.[1] ?? 0);
-    const find = (text: string) => Array.from(col.children).find((c) => c.textContent?.includes(text))!;
-    expect(orderOf(find('Vận chuyển'))).toBeLessThan(orderOf(find('Địa chỉ giao hàng')));
-    expect(orderOf(find('Địa chỉ giao hàng'))).toBeLessThan(orderOf(find('Ghi chú')));
-    expect(orderOf(find('Ghi chú'))).toBeLessThan(orderOf(col.querySelector('.max-md\\:order-11')!));
+    const layout = container.querySelector('[data-testid="order-layout"]')!;
+    const orders = ['Hành trình đơn hàng', 'Vận chuyển', 'Sản phẩm', 'Thanh toán', 'Địa chỉ giao hàng', 'Ghi chú'].map((h) => blockOrder(layout, h));
+    expect([...orders].sort((a, b) => a - b)).toEqual(orders);
+    expect(new Set(orders).size).toBe(orders.length);
+    const actions = orderOf(layout.querySelector('[aria-label="Thao tác với đơn hàng"]')!.parentElement!);
+    expect(orders[orders.length - 1]).toBeLessThan(actions);
+  });
+
+  it('máy tính (lg): hai cột gọn, trái là trạng thái + hành trình + sản phẩm, phải là tiền + địa chỉ + nút thao tác', async () => {
+    mocks.order = shipping({ note: 'x', shippingPartner: 'GHN', shippingCode: 'GHN001' });
+    const { container } = await mount();
+    const layout = container.querySelector('[data-testid="order-layout"]')!;
+    expect(layout.className).toContain('lg:grid');
+    expect(layout.className).toMatch(/lg:grid-cols-\[minmax\(0,1fr\)_21rem\]/);
+    const main = layout.querySelector('[data-testid="order-main"]')!;
+    const side = layout.querySelector('[data-testid="order-side"]')!;
+    for (const part of ['status-hero', 'order-shipping']) expect(main.querySelector(`[data-testid="${part}"]`)).not.toBeNull();
+    expect(main.textContent).toContain('Hành trình đơn hàng');
+    expect(main.textContent).toContain('Sản phẩm');
+    expect(side.textContent).toContain('Tạm tính');
+    expect(side.textContent).toContain('Địa chỉ giao hàng');
+    expect(side.querySelector('[aria-label="Thao tác với đơn hàng"]')).not.toBeNull();
+    expect(side.querySelector('[data-testid="status-hero"]')).toBeNull();
   });
 
   it('đang tải: khung chờ thay chữ "Đang tải đơn hàng…"', async () => {

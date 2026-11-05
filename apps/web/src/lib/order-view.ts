@@ -1,3 +1,4 @@
+import { deliveredBaseAt } from '@tubutree/app-core/commerce/order-tracking';
 import { isGomdonPickedUp } from './recycling';
 import { formatCount } from './checkout-points';
 
@@ -91,13 +92,13 @@ export function orderPointsNote(
   return { text: `Nhận +${earned} Điểm Xanh khi giao thành công`, tone: 'success' };
 }
 
-/** Hạn đổi/trả còn mở không, cùng cách tính của API (mốc giao, thiếu thì updatedAt); không có mốc nào thì để API quyết định. */
+/** Hạn đổi/trả còn mở không, cùng mốc với API (`deliveredBaseAt`: ngày giao, lần lật DELIVERED trong sổ, rồi updatedAt); không có mốc nào thì để API quyết định. */
 export function returnWindowState(
-  o: { deliveredAt?: string | null; updatedAt?: string | null },
+  o: { deliveredAt?: string | null; updatedAt?: string | null; statusTimes?: Partial<Record<string, string>> },
   windowDays: number,
   now: number = Date.now(),
 ): { open: boolean; daysLeft: number } {
-  const base = o.deliveredAt ?? o.updatedAt;
+  const base = deliveredBaseAt(o);
   if (!base) return { open: true, daysLeft: windowDays };
   const left = (new Date(base).getTime() + windowDays * 864e5 - now) / 864e5;
   return left > 0 ? { open: true, daysLeft: Math.ceil(left) } : { open: false, daysLeft: 0 };

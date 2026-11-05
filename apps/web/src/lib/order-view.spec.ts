@@ -350,6 +350,11 @@ describe('returnWindowState — hạn đổi/trả theo mốc giao', () => {
     expect(returnWindowState({ updatedAt: '2026-10-01T00:00:00Z' }, 7, now).open).toBe(false);
     expect(returnWindowState({}, 7, now)).toEqual({ open: true, daysLeft: 7 });
   });
+  it('thiếu deliveredAt thì lấy lần lật DELIVERED trong sổ, updatedAt mới hơn không kéo dài hạn', () => {
+    const o = { updatedAt: '2026-10-09T22:00:00Z', statusTimes: { DELIVERED: '2026-10-01T00:00:00Z' } };
+    expect(returnWindowState(o, 7, now)).toEqual({ open: false, daysLeft: 0 });
+    expect(returnWindowState({ ...o, statusTimes: { DELIVERED: '2026-10-08T00:00:00Z' } }, 7, now)).toEqual({ open: true, daysLeft: 5 });
+  });
 });
 
 describe('isHandedToCarrier — hàng đã rời kho', () => {
