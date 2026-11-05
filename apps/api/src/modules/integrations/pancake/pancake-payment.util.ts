@@ -1,6 +1,10 @@
+/** Chuỗi số kiểu máy có thể âm; "12.000" (dấu chấm ngăn nghìn) và "1e5" không khớp nên không bị đọc thành 12 hay 100000. */
+const MACHINE_NUMBER = /^-?\d+(?:\.\d{1,2})?$/;
+
+/** Số tiền của một ô: số hữu hạn trong miền an toàn, hoặc chuỗi số kiểu máy; boolean/mảng/object/số khổng lồ là 0 (Number(true) = 1, Number([5]) = 5). */
 const num = (v: unknown): number => {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : 0;
+  const n = typeof v === 'number' ? v : typeof v === 'string' && MACHINE_NUMBER.test(v.trim()) ? Number(v.trim()) : NaN;
+  return Number.isFinite(n) && Math.abs(n) <= Number.MAX_SAFE_INTEGER ? n : 0;
 };
 
 /** Số tiền Pancake ghi nhận khách đã trả (prepaid + bank_payment); 0 khi payload chỉ có cờ is_paid. */

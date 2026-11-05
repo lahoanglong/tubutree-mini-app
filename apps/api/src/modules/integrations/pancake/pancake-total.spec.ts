@@ -145,3 +145,29 @@ describe('khớp với body Tubu đẩy lên Pancake (buildPancakeOrderBody)', (
     expect(pancakeTotalMismatch(echo(body), o)).toBeNull();
   });
 });
+
+describe('pancakeTotalReadings / pancakeTotalMismatch — ô tiền kiểu lạ (W11)', () => {
+  const order = { total: 269000, shippingFee: 19000 };
+
+  it.each([['   '], [[]], [true], [false], [{}], [Number.NaN], [Infinity], [-1], [1e21], ['abc'], ['269.000'], ['269.000đ'], ['1e5'], [null], [undefined]])(
+    'total_price_after_sub_discount=%j: không đọc được → không có số để so (không báo lệch giả)',
+    (raw) => {
+      const data = { total_price_after_sub_discount: raw };
+      expect(pancakeTotalReadings(data, 19000)).toEqual([]);
+      expect(pancakeTotalMismatch(data, order)).toBeNull();
+    },
+  );
+
+  it('chuỗi số kiểu máy đọc như số', () => {
+    expect(pancakeTotalReadings({ total_price_after_sub_discount: '250000', shipping_fee: '19000' }, 19000)).toEqual([269000, 250000]);
+    expect(pancakeTotalReadings({ total_price: '300000.00', total_discount: '31000', shipping_fee: 0 }, 0)).toEqual([269000]);
+  });
+
+  it('phí ship không đọc được thì coi như Pancake không gửi phí ship (không thành 0 hay NaN)', () => {
+    expect(pancakeTotalReadings({ total_price_after_sub_discount: 250000, shipping_fee: { a: 1 } }, 19000)).toEqual([250000]);
+  });
+
+  it('ô tổng hỏng nhưng ô khác đủ: vẫn so được, không ném', () => {
+    expect(pancakeTotalMismatch({ total_price: [], total_discount: true, total_price_after_sub_discount: 250000, shipping_fee: 19000 }, order)).toBeNull();
+  });
+});

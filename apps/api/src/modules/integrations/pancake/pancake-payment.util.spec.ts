@@ -44,3 +44,25 @@ describe('pancakePaidAmount / pancakePaidAmountAfterPaid', () => {
     expect(pancakePaidAmountAfterPaid({ prepaid: 'x', bank_payment: -5 })).toBe(0);
   });
 });
+
+describe('số tiền Pancake báo đã trả — ô kiểu lạ (W11)', () => {
+  it.each([[true], [false], [[]], [[5]], [{}], [Number.NaN], [Infinity], [1e21], ['12.000'], ['1e5'], ['0x10'], ['abc'], ['  '], [null], [undefined]])(
+    'prepaid=%j: không phải số tiền → 0 (không thành 1, 12 hay số khổng lồ)',
+    (raw) => {
+      expect(pancakePaidAmount({ prepaid: raw, bank_payment: raw })).toBe(0);
+      expect(pancakePaidAmountAfterPaid({ prepaid: raw, bank_payment: raw })).toBe(0);
+      expect(isPancakeOrderPaid({ prepaid: raw }, 100000)).toBe(false);
+    },
+  );
+
+  it('chuỗi số kiểu máy đọc như số; cộng prepaid và bank_payment như trước', () => {
+    expect(pancakePaidAmount({ prepaid: '100000', bank_payment: '50000.00' })).toBe(150000);
+    expect(pancakePaidAmountAfterPaid({ prepaid: '100000', bank_payment: 50000 })).toBe(100000);
+  });
+
+  it('cờ is_paid kiểu chuỗi không tự coi là đã trả (chỉ boolean true hoặc payment_status đúng)', () => {
+    expect(isPancakeOrderPaid({ is_paid: 'true' }, 100000)).toBe(false);
+    expect(isPancakeOrderPaid({ is_paid: 1 }, 100000)).toBe(false);
+    expect(isPancakeOrderPaid({ is_paid: true }, 100000)).toBe(true);
+  });
+});

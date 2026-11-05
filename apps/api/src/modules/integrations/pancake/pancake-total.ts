@@ -1,10 +1,12 @@
 import { resolvePancakeStatus } from './pancake-status.map';
+import { payloadNonNegInt } from './pancake-payload';
 
-/** Số đồng nguyên không âm từ một ô của payload (số hoặc chuỗi số); ô thiếu hoặc không đọc được → null. */
+/**
+ * Số đồng nguyên không âm từ một ô của payload (số hoặc chuỗi số kiểu máy); ô thiếu hoặc không đọc được → null. `Number(v)` đọc
+ * "   ", [] và false thành 0 (báo lệch giả với mọi đơn) và "269.000" (dấu chấm ngăn nghìn) thành 269.
+ */
 function amount(v: unknown): number | null {
-  if (v === null || v === undefined || v === '') return null;
-  const n = Number(v);
-  return Number.isFinite(n) && n >= 0 ? Math.round(n) : null;
+  return payloadNonNegInt(v, { round: true });
 }
 
 /**
