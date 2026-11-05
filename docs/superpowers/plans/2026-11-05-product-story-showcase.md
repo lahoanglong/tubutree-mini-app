@@ -36,14 +36,14 @@
 ### Task 1: Kiểu và bộ kiểm hợp lệ `storyConfig` (shared-types)
 
 **Files:**
-- Create: `packages/shared-types/src/product-story.ts`, `packages/shared-types/src/product-story.spec.ts`
+- Create: `packages/shared-types/src/product-story.ts` (gói không có runner test và API đọc bản build `dist`: chạy `pnpm --filter @tubutree/shared-types build` sau mỗi lần sửa), `packages/app-core/src/commerce/story-config.spec.ts` (spec của hàm ở shared-types, đặt ở app-core vì đã có vitest)
 - Modify: `packages/shared-types/src/index.ts` (export)
 
 **Interfaces:**
 - Produces: `STORY_LIMITS`; `type StoryAmbient = 'leaf'|'amber'|'rose'|'sky'|'sand'`; `type StoryFrom = 'top'|'left'|'right'|'bottom'`; `interface IngredientLayerSprite { id: string; spriteId?: string; imageUrl?: string; label: string; from: StoryFrom; xPct: number; yPct: number; scale: number; rotateDeg: number }`; `interface AssemblyStep { title: string; body: string; layers: IngredientLayerSprite[] }`; `interface HudCalloutPoint { id: string; xPct: number; yPct: number; label: string; value?: string; barPct?: number; side: 'left'|'right' }`; `interface VariantArcItem { variationId?: string; label: string; ambient: StoryAmbient }`; `type StoryScene = {kind:'variant_arc'; items: VariantArcItem[]} | {kind:'ingredient_assembly'; steps: AssemblyStep[]} | {kind:'hud_callouts'; points: HudCalloutPoint[]; closing: string}`; `interface ProductStoryConfig { version: 1; enabled: boolean; cutoutUrl?: string; scenes: StoryScene[] }`; `parseStoryConfig(raw: unknown): { ok: true; value: ProductStoryConfig } | { ok: false; error: string }` (nghiêm: bỏ khoá lạ, kẹp toạ độ 0–100, từ chối vượt giới hạn, `imageUrl`/`cutoutUrl` chỉ `https:` hoặc đường dẫn `/api/...` của ảnh đã đăng ký; nhãn bị cắt `<`/`>`).
 
-- [ ] **Step 1: Test hỏng** — `product-story.spec.ts`: `parses a valid 3-scene config`; `rejects javascript: imageUrl`; `rejects >5 steps`; `clamps xPct 140 to 100 and -5 to 0`; `rejects NaN yPct`; `strips unknown keys`; `rejects JSON over 16KB`; `strips angle brackets from labels`; `rejects version 2`.
-- [ ] **Step 2: Chạy, thấy đỏ** — `VITEST_MAX_WORKERS=1 pnpm --filter @tubutree/shared-types test product-story` → FAIL (module thiếu). (Nếu package dùng jest thì dùng lệnh `test` của nó.)
+- [ ] **Step 1: Test hỏng** — `story-config.spec.ts`: `parses a valid 3-scene config`; `rejects javascript: imageUrl`; `rejects >5 steps`; `clamps xPct 140 to 100 and -5 to 0`; `rejects NaN yPct`; `strips unknown keys`; `rejects JSON over 16KB`; `strips angle brackets from labels`; `rejects version 2`.
+- [ ] **Step 2: Chạy, thấy đỏ** — `VITEST_MAX_WORKERS=1 pnpm --filter @tubutree/app-core test story-config` → FAIL (export thiếu).
 - [ ] **Step 3: Cài `parseStoryConfig` + kiểu + `STORY_LIMITS`** theo khối Interfaces. Không dùng thư viện; hàm thuần.
 - [ ] **Step 4: Chạy, thấy xanh** — cùng lệnh → PASS.
 - [ ] **Step 5: Commit** — `feat(story): kiểu và bộ kiểm storyConfig`.
