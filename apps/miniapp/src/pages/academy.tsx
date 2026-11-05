@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Page, useSnackbar, useNavigate, useParams } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { PlayCircle, FileText, CheckCircle2, BookOpen } from 'lucide-react';
@@ -100,6 +101,8 @@ const ellipsis = { display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', t
 
 function CourseCard({ course, onOpen }: { course: AcademyCourseSummary; onOpen: () => void }) {
   const pct = course.lessonCount > 0 ? Math.round((course.completedCount / course.lessonCount) * 100) : 0;
+  // Ảnh bìa chết (404, hết hạn) thì về biểu tượng sách như khoá không có ảnh, không để biểu tượng ảnh vỡ trong ô 64px.
+  const [coverFailed, setCoverFailed] = useState(false);
 
   return (
     <Card padding={0}>
@@ -117,8 +120,8 @@ function CourseCard({ course, onOpen }: { course: AcademyCourseSummary; onOpen: 
               placeItems: 'center',
             }}
           >
-            {course.coverUrl ? (
-              <img src={course.coverUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            {course.coverUrl && !coverFailed ? (
+              <img src={course.coverUrl} alt="" onError={() => setCoverFailed(true)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             ) : (
               <Icon icon={BookOpen} size="lg" tone="brand" />
             )}
