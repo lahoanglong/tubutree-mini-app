@@ -1,11 +1,11 @@
 import { ArrayMaxSize, IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Matches, Max, MaxLength, Min } from 'class-validator';
-import { CAMPAIGN_ENTITY_SLUG_MAX } from '@tubutree/shared-types';
+import { CAMPAIGN_ENTITY_SLUG_MAX, CAMPAIGN_LINK_TYPES } from '@tubutree/shared-types';
 import { IsImageRef } from '../../../common/uploaded-image';
 import { OptionalNotNull } from '../../../common/decorators/optional-not-null.decorator';
 import { Trim } from '../../../common/decorators/trim.decorator';
 
 export const CAMPAIGN_PLACEMENTS = ['HOME_TOP', 'OFFERS_TOP'] as const;
-export const CAMPAIGN_LINK_TYPES = ['CAMPAIGN_PAGE', 'PRODUCT', 'CATEGORY', 'URL_INTERNAL'] as const;
+export { CAMPAIGN_LINK_TYPES };
 export const CAMPAIGN_AUDIENCES = ['ALL', 'NEW', 'RETURNING'] as const;
 export const CAMPAIGN_MAX_PRODUCTS = 200;
 export const CAMPAIGN_MAX_COUPONS = 10;

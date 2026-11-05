@@ -1,3 +1,7 @@
+/** Các loại đích của banner chiến dịch (khớp enum CampaignLinkType của Prisma). Một nguồn cho API (DTO), app-core và web. */
+export const CAMPAIGN_LINK_TYPES = ['CAMPAIGN_PAGE', 'PRODUCT', 'CATEGORY', 'URL_INTERNAL'] as const;
+export type CampaignLinkType = (typeof CAMPAIGN_LINK_TYPES)[number];
+
 export interface CampaignInternalTarget {
   value: string;
   label: string;
@@ -48,7 +52,7 @@ export const CAMPAIGN_LEGACY_SLUG_MAX = 120;
  * Đích banner có dựng được liên kết ở app không (khi sai thì banner bị bỏ khỏi carousel). Một nguồn cho app-core (`campaignHref`) và kiểm sức khoẻ chiến dịch
  * của API. Không xét tính năng nào đang tắt: `liveRoute` chỉ đổi route đích, không biến liên kết thành null.
  */
-export function campaignLinkUsable(c: { linkType: string; linkValue: string | null }): boolean {
+export function campaignLinkUsable(c: { linkType: CampaignLinkType; linkValue: string | null }): boolean {
   switch (c.linkType) {
     case 'CAMPAIGN_PAGE':
       return true;
@@ -57,7 +61,10 @@ export function campaignLinkUsable(c: { linkType: string; linkValue: string | nu
       return !!c.linkValue && CAMPAIGN_ENTITY_SLUG_RE.test(c.linkValue);
     case 'URL_INTERNAL':
       return CAMPAIGN_INTERNAL_TARGETS.some((t) => t.value === c.linkValue);
-    default:
-      return false;
+    default: {
+      // Thêm loại đích mới mà quên xử lý ở đây thì TypeScript báo lỗi tại dòng này.
+      const unhandled: never = c.linkType;
+      return unhandled;
+    }
   }
 }

@@ -246,10 +246,6 @@ describe('Campaigns (real Postgres)', () => {
       }
     });
 
-    /**
-     * Tất định, không dựa may rủi: giữ khoá dòng chiến dịch trong một giao dịch, gọi `update` (không await) rồi xoá liên kết ngay trong giao dịch giữ khoá.
-     * `update` phải chờ khoá (chưa xong sau một khoảng ngắn), và khi nhả khoá nó thấy trang trống nên 400, không ghi gì.
-     */
     /** Chờ tới khi có backend Postgres đang CHỜ khoá (wait_event_type = 'Lock') chạy câu lệnh khớp `query`; không chỉ ngủ rồi đoán. */
     const waitForLockWait = async (query: RegExp, event?: (e: string | null) => boolean) => {
       for (let i = 0; i < 100; i++) {
@@ -262,6 +258,10 @@ describe('Campaigns (real Postgres)', () => {
       throw new Error(`không thấy backend nào chờ khoá với câu lệnh ${query}`);
     };
 
+    /**
+     * Tất định, không dựa may rủi: giữ khoá dòng chiến dịch trong một giao dịch, gọi `update` (không await) rồi xoá liên kết ngay trong giao dịch giữ khoá.
+     * `update` phải chờ khoá (chưa xong sau một khoảng ngắn), và khi nhả khoá nó thấy trang trống nên 400, không ghi gì.
+     */
     const updateWhileLockHeld = async (id: string, patch: Parameters<CampaignsAdminService['update']>[1]) => {
       let settled = false;
       let outcome: Promise<unknown> | undefined;
@@ -319,7 +319,7 @@ describe('Campaigns (real Postgres)', () => {
             (v) => ((updDone = true), v),
             (e: unknown) => ((updDone = true), e),
           );
-          await waitForLockWait(/UPDATE/, (e) => e === 'relation');
+          await waitForLockWait(/^\s*UPDATE/, (e) => e === 'relation');
           put = admin.setProducts(c.id, []).then(
             (v) => ((putDone = true), v),
             (e: unknown) => ((putDone = true), e),
