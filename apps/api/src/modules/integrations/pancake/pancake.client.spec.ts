@@ -79,6 +79,20 @@ describe('PancakeClient đơn hàng (PANCAKE-2, PANCAKE-4, PANCAKE-14)', () => {
     }
   });
 
+  it('409 chỉ là lỗi tạm ở đường TẠO đơn; PUT (huỷ, thanh toán) và đọc đơn giữ phân loại cũ: 409 dứt khoát', async () => {
+    const put = makeOrderClient({ put: jest.fn().mockRejectedValue(axiosErr(409)) });
+    await expect(put.updateOrder('1', { status: 6 })).rejects.toMatchObject({ transient: false, status: 409 });
+    const get = makeOrderClient({ get: jest.fn().mockRejectedValue(axiosErr(409)) });
+    await expect(get.getOrder('1')).rejects.toMatchObject({ transient: false, status: 409 });
+    const post = makeOrderClient({ post: jest.fn().mockRejectedValue(axiosErr(409)) });
+    await expect(post.createOrder({ items: [] } as never)).rejects.toMatchObject({ transient: true, status: 409 });
+  });
+
+  it.each([408, 425, 429, 500])('PUT: HTTP %s vẫn là lỗi tạm', async (status) => {
+    const client = makeOrderClient({ put: jest.fn().mockRejectedValue(axiosErr(status)) });
+    await expect(client.updateOrder('1', { status: 6 })).rejects.toMatchObject({ transient: true });
+  });
+
   it.each([408, 409, 425, 429, 500])('createOrder: HTTP %s → lỗi tạm, mang mã HTTP', async (status) => {
     const client = makeOrderClient({ post: jest.fn().mockRejectedValue(axiosErr(status)) });
     await expect(client.createOrder({ items: [] } as never)).rejects.toMatchObject({ transient: true, status });

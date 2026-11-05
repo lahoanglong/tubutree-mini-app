@@ -106,6 +106,13 @@ describe('PancakeSyncHooks.precheckCancel (D1)', () => {
       expect(await t.hooks.precheckCancel(subject({ pancakeOrderId: 'pk-1' }), 'INTERACTIVE')).toMatchObject({ kind: 'DEFERRED' });
     });
 
+    it('Pancake trả 409 dứt khoát cho lệnh huỷ → DEFERRED, không PancakeUnreachableError, không bật unreachableUntil (đơn vẫn huỷ ở Tubu)', async () => {
+      const t = setup({}, { updateOrder: jest.fn().mockRejectedValue(new PancakeApiError('Pancake trả 409 khi cập nhật đơn', false, false, 409)) });
+      const d = await t.hooks.precheckCancel(subject({ pancakeOrderId: 'pk-1' }), 'INTERACTIVE');
+      expect(d.kind).toBe('DEFERRED');
+      expect((t.hooks as unknown as { unreachableUntil: number }).unreachableUntil).toBe(0);
+    });
+
     it('nhiều đơn cùng mã trên Pancake, một đơn đã gửi hàng → từ chối như đã bàn giao', async () => {
       const t = setup(
         {},
