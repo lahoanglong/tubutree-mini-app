@@ -12,7 +12,7 @@ vi.mock('@/lib/admin-client', async (importOriginal) => ({
   retryPancakePush: mocks.retryPancakePush,
 }));
 
-import { PancakeSyncBadge, PancakeSyncPanel, canRetryPancakePush, pancakeSyncState } from './pancake-sync';
+import { PancakeSyncBadge, PancakeSyncPanel, canRetryPancakePush, pancakeErrorGuide, pancakeSyncState } from './pancake-sync';
 
 const order = (o: Partial<AdminOrder> = {}): AdminOrder =>
   ({
@@ -130,6 +130,59 @@ describe('PancakeSyncPanel', () => {
     const { container } = mount(<PancakeSyncPanel order={order({ pancakeOrderId: '98765', pancakePushStatus: 'SYNCED', pancakeSyncError: null })} />);
     expect(container.textContent).toContain('Mã đơn Pancake #98765');
     expect(container.querySelector('button')).toBeNull();
+  });
+});
+
+describe('loại lỗi đẩy + câu hướng dẫn (hi)', () => {
+  it.each([
+    ['DATA', 'Pancake: thiếu dữ liệu đơn', 'sửa thông tin người nhận'],
+    ['REJECTED', 'Pancake: từ chối dữ liệu đơn', 'Pancake từ chối dữ liệu đơn: sửa dữ liệu'],
+    ['CONFIG', 'Pancake: sai khoá API', 'Khoá API Pancake sai hoặc hết hạn: báo kỹ thuật'],
+  ])('%s → nhãn "%s", câu hướng dẫn chứa "%s"', (kind, label, text) => {
+    const o = order({ pancakeErrorKind: kind });
+    expect(pancakeSyncState(o)).toMatchObject({ label, flag: true });
+    expect(pancakeErrorGuide(o)?.text).toContain(text);
+  });
+
+  it('lỗi tạm: nêu giờ tự thử lại kế tiếp (HH:MM giờ Việt Nam)', () => {
+    const o = order({ pancakeErrorKind: 'TRANSIENT', pancakePushStatus: 'PENDING', pancakeNextRetryAt: '2026-10-13T03:30:00.000Z' });
+    expect(pancakeSyncState(o)).toMatchObject({ label: 'Pancake: tạm lỗi, tự thử lại', flag: true });
+    expect(pancakeErrorGuide(o)?.text).toBe('Pancake tạm lỗi: hệ thống tự thử lại tới 10:30.');
+  });
+
+  it('lỗi tạm mà không còn lần tự thử → bảo bấm "Đẩy lại Pancake"', () => {
+    expect(pancakeErrorGuide(order({ pancakeErrorKind: 'TRANSIENT', pancakeNextRetryAt: null }))?.text).toContain('không còn tự thử lại');
+  });
+
+  it('chưa có loại lỗi (API cũ) hay đơn đã lên Pancake → không có hướng dẫn, nhãn cũ giữ nguyên', () => {
+    expect(pancakeErrorGuide(order())).toBeNull();
+    expect(pancakeSyncState(order())).toMatchObject({ label: 'Pancake: đẩy lỗi' });
+    expect(pancakeErrorGuide(order({ pancakeErrorKind: 'REJECTED', pancakeOrderId: '9' }))).toBeNull();
+  });
+
+  it('panel: hiện câu hướng dẫn, lần thử cuối, số lần thử và lần tự thử kế tiếp', () => {
+    const { container } = mount(<PancakeSyncPanel order={order({ pancakeErrorKind: 'TRANSIENT', pancakePushStatus: 'PENDING', pancakeNextRetryAt: '2026-10-13T03:30:00.000Z' })} />);
+    expect(container.querySelector('[data-testid="pancake-error-guide"]')?.textContent).toBe('Pancake tạm lỗi: hệ thống tự thử lại tới 10:30.');
+    expect(container.textContent).toContain('5 lần thử, gần nhất 10:00 13/10/2026');
+    expect(container.textContent).toContain('Lần tự thử kế tiếp: 10:30 13/10/2026.');
+  });
+
+  it('lỗi dữ liệu: panel có nút "Đẩy lại Pancake" và nói không còn lần tự thử nào khi cron đã dừng', () => {
+    const { container } = mount(<PancakeSyncPanel order={order({ pancakeErrorKind: 'DATA', pancakeNextRetryAt: null })} />);
+    expect(byText(container, 'button', 'Đẩy lại Pancake')).toBeTruthy();
+    expect(container.textContent).toContain('Không còn lần tự thử nào');
+  });
+
+  it('lỗi khoá API: câu xác nhận cảnh báo chỉ bấm sau khi kỹ thuật sửa khoá', async () => {
+    const { container } = mount(<PancakeSyncPanel order={order({ pancakeErrorKind: 'CONFIG' })} />);
+    click(byText(container, 'button', 'Đẩy lại Pancake'));
+    await flush();
+    expect(document.querySelector('[role="alertdialog"]')?.textContent).toContain('Khoá API Pancake đang bị từ chối');
+  });
+
+  it('đơn STALE không hứa lần tự thử', () => {
+    const { container } = mount(<PancakeSyncPanel order={order({ pancakeErrorKind: 'REJECTED', pancakePushStatus: 'STALE' })} />);
+    expect(container.textContent).not.toContain('Lần tự thử kế tiếp');
   });
 });
 

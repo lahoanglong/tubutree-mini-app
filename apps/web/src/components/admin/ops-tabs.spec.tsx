@@ -204,6 +204,30 @@ describe('OpsHealthTab — việc cụ thể cần xử lý (R2-PLATFORM-1, R2-A
     },
   };
 
+  it('hi: đơn chờ đẩy theo loại lỗi và gợi ý theo loại ở danh sách đơn kẹt', async () => {
+    const health = {
+      ...HEALTH,
+      pancake: {
+        ...HEALTH.pancake,
+        pushErrors: { transient: 3, data: 1, rejected: 2, config: 4, unclassified: 0 },
+        stuckOrders: [{ ...HEALTH.pancake.stuckOrders[0]!, pancakeErrorKind: 'REJECTED' }],
+      },
+    };
+    vi.stubGlobal('fetch', vi.fn(mockFetch({ '/admin/ops/health': { body: health } }).fn));
+    const c = await mount(<OpsHealthTab onOpenOrder={vi.fn()} />);
+    const pancake = c.querySelector('section[aria-label="Pancake"]')!;
+    expect(pancake.textContent).toContain('Chờ đẩy, Pancake tạm lỗi (tự thử lại)3');
+    expect(pancake.textContent).toContain('thiếu dữ liệu hoặc Pancake từ chối (cần sửa đơn)3');
+    expect(pancake.textContent).toContain('Lỗi khoá API Pancake (báo kỹ thuật)4');
+    expect(c.querySelector('section[aria-label="Đơn kẹt"]')!.textContent).toContain('Pancake từ chối dữ liệu đơn: sửa theo lỗi rồi bấm "Đẩy lại Pancake"');
+  });
+
+  it('API cũ chưa trả pushErrors thì không hiện dòng loại lỗi', async () => {
+    vi.stubGlobal('fetch', vi.fn(mockFetch({ '/admin/ops/health': { body: HEALTH } }).fn));
+    const c = await mount(<OpsHealthTab onOpenOrder={vi.fn()} />);
+    expect(c.querySelector('section[aria-label="Pancake"]')!.textContent).not.toContain('Lỗi khoá API Pancake');
+  });
+
   it('liệt kê webhook lỗi (mã đơn, loại sự kiện, số lần thử, lỗi), đơn cần sửa tay Pancake, báo động Gomdon, đơn thu gom chờ vận đơn', async () => {
     vi.stubGlobal('fetch', vi.fn(mockFetch({ '/admin/ops/health': { body: ISSUES } }).fn));
     const onOpenOrder = vi.fn();
