@@ -2526,6 +2526,20 @@ describe('admin/page — tab Academy', () => {
     expect(ok.textContent).not.toContain('✓');
   });
 
+  it('W9-03: xoá trắng Mô tả và Ảnh bìa rồi Lưu gửi chuỗi rỗng (không bỏ khoá khỏi body, nếu không giá trị cũ ở lại)', async () => {
+    mocks.courses = [{ ...COURSE, coverUrl: 'https://c.test/cu.png' }];
+    const { container } = await openAcademy();
+    await openCourse(container);
+    const save = btn(container, 'Lưu thông tin');
+    const panel = save.parentElement!;
+    typeInto(panel.querySelector('textarea'), '');
+    typeInto(panel.querySelector('input[type=url]'), '');
+    mocks.updateAcademyCourse.mockResolvedValue({});
+    click(save);
+    await flush();
+    expect(mocks.updateAcademyCourse).toHaveBeenCalledWith('c1', { title: 'Bán hàng 101', description: '', coverUrl: '', sortOrder: 1 });
+  });
+
   it('thêm bài học: ô nhập 44px, khoá tới khi có tiêu đề, gửi đúng dữ liệu theo loại nội dung', async () => {
     mocks.courses = [COURSE];
     const { container } = await openAcademy();

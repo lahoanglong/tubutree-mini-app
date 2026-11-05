@@ -4252,8 +4252,8 @@ function CourseRow({ course }: { course: AdminCourse }) {
     mutationFn: () =>
       updateAcademyCourse(course.id, {
         title: f.title.trim(),
-        description: f.description.trim() || undefined,
-        coverUrl: f.coverUrl.trim() || undefined,
+        description: f.description.trim(),
+        coverUrl: f.coverUrl.trim(),
         sortOrder: Number(f.sortOrder) || 0,
       }),
     onSuccess: refresh,
