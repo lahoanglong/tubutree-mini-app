@@ -1,4 +1,4 @@
-import { campaignHealth, countHealth, usableCounts, type HealthCoupon, type HealthFacts, type HealthProduct, type HealthSubject } from './campaign-health';
+import { campaignHealth, countHealth, PeerIndex, usableCounts, type HealthCoupon, type HealthFacts, type HealthProduct, type HealthSubject } from './campaign-health';
 import { compareBannerOrder } from './campaign-public';
 
 const NOW = new Date('2026-11-05T05:00:00Z');
@@ -189,6 +189,45 @@ describe('campaignHealth', () => {
     });
     it('không tự tính mình hai lần khi peers có chính nó', () => {
       expect(codes(subject({ id: 'p1' }), facts({ peers: five() }))).toEqual([]);
+    });
+  });
+
+  describe('xếp hạng theo mốc dùng chung cho cả danh sách', () => {
+    const peers = Array.from({ length: 500 }, (_, i) => ({
+      id: `p${String(i).padStart(3, '0')}`,
+      audience: (['ALL', 'NEW', 'RETURNING'] as const)[i % 3]!,
+      startAt: at(-3 + (i % 40)),
+      endAt: at(2 + (i % 40) + (i % 7)),
+      sortOrder: i % 11,
+    }));
+    const subjects = Array.from({ length: 200 }, (_, i) =>
+      subject({ id: `s${i}`, audience: (['ALL', 'NEW', 'RETURNING'] as const)[i % 3]!, sortOrder: i % 13, startAt: at(-2 + (i % 20)), endAt: at(10 + (i % 30)) }),
+    );
+
+    it('cùng kết quả khi dùng chung một PeerIndex hay mỗi dòng tự dựng', () => {
+      const shared = new PeerIndex(peers);
+      for (const s of subjects.slice(0, 40)) {
+        expect(campaignHealth(s, facts({ peers, index: shared }))).toEqual(campaignHealth(s, facts({ peers })));
+      }
+    });
+
+    it('200 dòng × 500 chiến dịch: mỗi mốc thời gian chỉ sắp xếp một lần và xong nhanh', () => {
+      const index = new PeerIndex(peers);
+      const t0 = Date.now();
+      for (const s of subjects) campaignHealth(s, facts({ peers, index }));
+      const ms = Date.now() - t0;
+      const distinct = new Set<number>();
+      for (const p of peers) {
+        distinct.add(p.startAt.getTime());
+        distinct.add(p.endAt.getTime());
+      }
+      for (const s of subjects) {
+        distinct.add(s.startAt.getTime());
+        distinct.add(NOW.getTime());
+      }
+      expect(index.sorts).toBeGreaterThan(0);
+      expect(index.sorts).toBeLessThanOrEqual(distinct.size);
+      expect(ms).toBeLessThan(3000);
     });
   });
 

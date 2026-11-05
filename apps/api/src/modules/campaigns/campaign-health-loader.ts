@@ -3,7 +3,7 @@ import type { PrismaService } from '../../prisma/prisma.service';
 import { normalizeCouponCode } from '../coupons/coupons.service';
 import { isPublicProduct } from '../catalog/public-product';
 import { bannerLinkUsable } from './campaign-public';
-import { campaignHealth, usableCounts, type HealthCoupon, type HealthIssue, type HealthPeer, type HealthProduct, type HealthSubject } from './campaign-health';
+import { campaignHealth, PeerIndex, usableCounts, type HealthCoupon, type HealthIssue, type HealthProduct, type HealthSubject } from './campaign-health';
 
 type HealthPrisma = Pick<PrismaService, 'campaign' | 'campaignProduct' | 'campaignCoupon' | 'product' | 'coupon' | 'category'>;
 
@@ -103,6 +103,12 @@ export async function campaignHealthDetailBatch(prisma: HealthPrisma, requests: 
   );
   const peerFacts = peerRows.map(({ linkType, linkValue, ...p }) => ({ ...p, shows: !unservable.has(p.id) && bannerLinkUsable({ linkType, linkValue }) }));
 
+  const peerIndexByPlacement = new Map<string, { peers: typeof peerFacts; index: PeerIndex }>();
+  for (const placement of placements) {
+    const peers = peerFacts.filter((p) => p.placement === placement);
+    peerIndexByPlacement.set(placement, { peers, index: new PeerIndex(peers) });
+  }
+
   const productsByCampaign = new Map<string, HealthProduct[]>();
   for (const l of savedProducts) productsByCampaign.set(l.campaignId, [...(productsByCampaign.get(l.campaignId) ?? []), toProduct(l.product)]);
   const couponsByCampaign = new Map<string, HealthCoupon[]>();
@@ -129,7 +135,7 @@ export async function campaignHealthDetailBatch(prisma: HealthPrisma, requests: 
       target = { exists, visible: exists };
     }
     if (s.endAt <= now) return none(r);
-    const facts = { now, target, products, coupons, peers: peerFacts.filter((p): p is HealthPeer & typeof p => p.placement === s.placement) };
+    const facts = { now, target, products, coupons, ...(peerIndexByPlacement.get(s.placement) ?? { peers: [], index: new PeerIndex([]) }) };
     return { issues: campaignHealth(s, facts), usable: usableCounts(s, facts) };
   });
 }

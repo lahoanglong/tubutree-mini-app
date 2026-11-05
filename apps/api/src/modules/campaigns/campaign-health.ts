@@ -70,6 +70,8 @@ export interface HealthFacts {
   coupons: HealthCoupon[];
   /** Chiến dịch BẬT khác cùng vị trí chưa hết hạn. */
   peers: HealthPeer[];
+  /** Chỉ mục xếp hạng theo mốc dùng chung cho cả lô (tạo từ `peers`); thiếu thì tự dựng cho riêng lần gọi này. */
+  index?: PeerIndex;
 }
 
 const PLACEMENT_LABEL: Record<CampaignPlacement, string> = { HOME_TOP: 'Đầu Trang chủ', OFFERS_TOP: 'Đầu Ưu đãi' };
@@ -81,14 +83,50 @@ const names = (items: readonly string[]) => (items.length > 3 ? `${items.slice(0
 const viewsOf = (a: CampaignAudience): readonly ('NEW' | 'RETURNING')[] => (a === 'ALL' ? ['NEW', 'RETURNING'] : [a]);
 
 /**
+ * Chiến dịch đang chạy tại từng mốc, đã xếp đúng thứ tự hiển thị thật, nhớ theo mốc: một danh sách (hàng trăm dòng) dùng chung một chỉ mục nên mỗi mốc
+ * chỉ xếp một lần thay vì xếp lại cho từng dòng.
+ */
+export class PeerIndex {
+  /** Số lần đã xếp (để test kiểm "mỗi mốc một lần"). */
+  sorts = 0;
+  private readonly cache = new Map<number, readonly HealthPeer[]>();
+  constructor(private readonly peers: readonly HealthPeer[]) {}
+
+  liveAt(t: number): readonly HealthPeer[] {
+    let live = this.cache.get(t);
+    if (!live) {
+      live = this.peers.filter((p) => p.startAt.getTime() <= t && t < p.endAt.getTime()).sort(compareBannerOrder);
+      this.sorts += 1;
+      this.cache.set(t, live);
+    }
+    return live;
+  }
+}
+
+/**
  * Chiến dịch này có bị khuất khỏi carousel lúc `t` không, theo đúng đường hiển thị thật: API lấy chiến dịch đang chạy, xếp theo compareBannerOrder và cắt
  * BANNER_FETCH_LIMIT (chưa lọc đối tượng, như Mini App bản cũ gọi không kèm audience); máy khách rồi lọc đối tượng và cắt CAMPAIGN_SLIDES_MAX.
+ * `live` đã xếp sẵn; chèn chiến dịch này vào đúng chỗ, không xếp lại.
  */
-function hiddenAt(s: HealthSubject, rivals: readonly HealthPeer[], t: Date): boolean {
+function hiddenAt(s: HealthSubject, live: readonly HealthPeer[]): boolean {
   const self: HealthPeer = { id: s.id ?? '\uffff', audience: s.audience, startAt: s.startAt, endAt: s.endAt, sortOrder: s.sortOrder };
-  const live = rivals.filter((p) => p.startAt <= t && t < p.endAt);
-  const fetched = [self, ...live].sort(compareBannerOrder).slice(0, BANNER_FETCH_LIMIT);
-  if (!fetched.includes(self)) return true;
+  const fetched: HealthPeer[] = [];
+  let placed = false;
+  for (const p of live) {
+    if (fetched.length >= BANNER_FETCH_LIMIT) break;
+    if (p.id === self.id) continue;
+    if (!placed && compareBannerOrder(self, p) < 0) {
+      fetched.push(self);
+      placed = true;
+      if (fetched.length >= BANNER_FETCH_LIMIT) break;
+    }
+    fetched.push(p);
+  }
+  if (!placed && fetched.length < BANNER_FETCH_LIMIT) {
+    fetched.push(self);
+    placed = true;
+  }
+  if (!placed) return true;
   // API bỏ banner có ảnh không phục vụ được SAU khi cắt 10, và app bỏ banner không dựng được link: hai loại đó chiếm chỗ trong 10 nhưng không thành slide.
   const slides = fetched.filter((x) => x === self || x.shows !== false);
   return viewsOf(s.audience).some((v) => !slides.filter((x) => x.audience === 'ALL' || x.audience === v).slice(0, CAMPAIGN_SLIDES_MAX).includes(self));
@@ -108,6 +146,7 @@ function crowding(s: HealthSubject, f: HealthFacts): { always: boolean; firstHid
   const from = s.startAt > f.now ? s.startAt : f.now;
   if (s.endAt <= from) return null;
   const rivals = f.peers.filter((p) => p.id !== s.id && p.endAt > from && p.startAt < s.endAt);
+  const index = f.index ?? new PeerIndex(f.peers);
   const marks = new Set<number>([from.getTime()]);
   for (const p of rivals) {
     for (const t of [p.startAt, p.endAt]) if (t > from && t < s.endAt) marks.add(t.getTime());
@@ -116,10 +155,9 @@ function crowding(s: HealthSubject, f: HealthFacts): { always: boolean; firstHid
   let first: Date | null = null;
   const sorted = [...marks].sort((a, b) => a - b);
   for (const m of sorted) {
-    const t = new Date(m);
-    if (hiddenAt(s, rivals, t)) {
+    if (hiddenAt(s, index.liveAt(m))) {
       hidden += 1;
-      first ??= t;
+      first ??= new Date(m);
     }
   }
   return first ? { always: hidden === sorted.length, firstHidden: first } : null;
