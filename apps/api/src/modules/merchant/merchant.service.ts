@@ -1,3 +1,4 @@
+import { randomBytes } from 'crypto';
 import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, Logger, NotFoundException, Optional, ServiceUnavailableException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { OrderStatus } from '@tubutree/shared-types';
@@ -617,7 +618,8 @@ export class MerchantService {
     }
 
     const baseSlug = slugify(dto.name) || 'san-pham';
-    const uniqueSlug = `${baseSlug}-${Date.now().toString(36)}`;
+    // Mã thời gian (8–9 ký tự) + 6 hex ngẫu nhiên: hai sản phẩm cùng tên trong cùng một mili giây không đụng unique slug. Tối đa 200 + 1 + 9 + 6 = 216 ký tự, vừa PRODUCT_SLUG_MAX.
+    const uniqueSlug = `${baseSlug}-${Date.now().toString(36)}${randomBytes(3).toString('hex')}`;
     const sku = `MCH-${Date.now().toString(36).toUpperCase()}`;
     const retailPrice = link ? link.retailPrice : dto.basePrice;
     const salePrice = link ? link.salePrice : (dto.salePrice ?? null);

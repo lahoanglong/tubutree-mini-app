@@ -135,9 +135,25 @@ describe('MerchantService — đăng sản phẩm (SELLER-1, D4)', () => {
         await svc.createProduct('u1', { ...BASE, name });
         return productCreate.mock.calls[0][0].data.slug as string;
       };
-      expect(await slugOf('!!! ???')).toBe(`san-pham-${code}`);
+      expect(await slugOf('!!! ???')).toMatch(new RegExp(`^san-pham-${code}[0-9a-f]{6}$`));
       expect(await slugOf('()')).toMatch(CAMPAIGN_ENTITY_SLUG_RE);
-      expect(await slugOf('Mật ong rừng')).toBe(`mat-ong-rung-${code}`);
+      expect(await slugOf('Mật ong rừng')).toMatch(new RegExp(`^mat-ong-rung-${code}[0-9a-f]{6}$`));
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it('hai sản phẩm cùng tên đăng cùng một mili giây cho hai slug khác nhau (không đụng unique slug), vẫn vừa trần', async () => {
+    const now = jest.spyOn(Date, 'now').mockReturnValue(1_800_000_000_000);
+    try {
+      const a = build();
+      const b = build();
+      await a.svc.createProduct('u1', { ...BASE, name: 'Mật ong rừng' });
+      await b.svc.createProduct('u1', { ...BASE, name: 'Mật ong rừng' });
+      const slugA = a.productCreate.mock.calls[0][0].data.slug as string;
+      const slugB = b.productCreate.mock.calls[0][0].data.slug as string;
+      expect(slugA).not.toBe(slugB);
+      expect(slugA).toMatch(CAMPAIGN_ENTITY_SLUG_RE);
     } finally {
       now.mockRestore();
     }
