@@ -265,7 +265,10 @@ export function CouponBox({
             id="coupon-code"
             name="coupon-code"
             value={code}
-            onChange={(e) => setCode(e.target.value)}
+            onChange={(e) => {
+              setCode(e.target.value);
+              if (err) setErr(null);
+            }}
             placeholder={fillCopy('coupon.pickPlaceholder')}
             autoCapitalize="characters"
             autoComplete="off"

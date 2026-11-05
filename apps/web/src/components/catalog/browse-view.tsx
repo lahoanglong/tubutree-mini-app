@@ -39,6 +39,7 @@ import { FilterSheet } from './filter-sheet';
 import { FilterSidebar } from './filter-sidebar';
 import { ListHeading } from './list-heading';
 import { RecentlyViewedRail } from './recently-viewed-rail';
+import { SuggestedRail } from './suggested-rail';
 import { SuggestList } from './suggest-list';
 import { loadErrorText } from '@/lib/error-text';
 import { announcePdpNavigation } from '@/components/skeletons/pdp-nav-event';
@@ -294,7 +295,7 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
           placeholder={browseText.searchPlaceholder}
           autoComplete="off"
           enterKeyHint="search"
-          className={`${ui.field} pl-9 pr-11 max-md:h-[46px] max-md:rounded-full max-md:border-[var(--color-border-subtle)]`}
+          className={`${ui.field} pl-9 pr-11 max-md:h-[46px] max-md:rounded-full max-md:border-[var(--color-border-subtle)] [&::-webkit-search-cancel-button]:hidden [&::-webkit-search-cancel-button]:appearance-none`}
         />
         {draft !== '' && (
           <button
@@ -482,7 +483,12 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
               )}
             </section>
             {/* Tìm/lọc không ra gì vẫn cho khách lối đi tiếp. */}
-            {noResults && <RecentlyViewedRail />}
+            {noResults && !pastLastPage && (
+              <>
+                <SuggestedRail flush />
+                <RecentlyViewedRail />
+              </>
+            )}
           </>
         )}
       </ListingLayout>
