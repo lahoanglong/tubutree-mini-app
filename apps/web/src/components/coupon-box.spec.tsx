@@ -474,6 +474,32 @@ describe('CouponBox — gọn một dòng, mở khi bấm', () => {
     expect(state.applied).toEqual([]);
   });
 
+  it('Enter chốt chữ của bộ gõ trên Safari (keyCode 229, isComposing không đặt) không áp mã dở', async () => {
+    const box = await mount();
+    click(toggle(box));
+    const input = box.querySelector('input[name="coupon-code"]');
+    typeInto(input, 'giam');
+    press(input, 'Enter', { keyCode: 229 });
+    await flush(6);
+    expect(state.applied).toEqual([]);
+  });
+
+  it('giữ phím Enter (repeat) chỉ áp mã một lần, kể cả khi mã sai và ô vẫn còn chữ', async () => {
+    state.applyError = new Error('Mã giảm giá không tồn tại.');
+    const box = await mount();
+    click(toggle(box));
+    const input = box.querySelector('input[name="coupon-code"]');
+    typeInto(input, 'abc');
+    press(input, 'Enter');
+    await flush(6);
+    expect(box.querySelectorAll('[role="alert"]')).toHaveLength(1);
+    state.applyError = null;
+    press(input, 'Enter', { repeat: true });
+    press(input, 'Enter', { repeat: true });
+    await flush(6);
+    expect(state.applied).toEqual([]);
+  });
+
   it('Enter lúc đang áp mã (nút "Áp dụng" bận) không gửi lần hai', async () => {
     let release!: () => void;
     state.applyGate = new Promise<void>((r) => (release = r));

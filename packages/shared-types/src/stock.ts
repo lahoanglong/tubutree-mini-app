@@ -12,7 +12,7 @@ export const PLENTY_STOCK = 100_000;
 
 /**
  * Tồn gửi cho client: tồn ảo bị kẹp ở PLENTY_STOCK để con số Pancake không ra khỏi API. Dưới ngưỡng giữ nguyên (bảng chọn cần để ghi "Chỉ còn n").
- * Đã áp ở trang chi tiết sản phẩm (`GET /products/:slug`), ảnh bìa dòng đơn hàng và danh sách mua lại. Thẻ danh sách sản phẩm chưa kẹp (còn trả tồn thô);
+ * Đã áp ở trang chi tiết sản phẩm (`GET /products/:slug`), ảnh bìa dòng đơn hàng và danh sách mua lại. Thẻ danh sách sản phẩm không mang số tồn (chỉ có cờ `inStock`, xem `cardInStock` ở API);
  * giỏ hàng kẹp thấp hơn nữa bằng trần riêng của nó (MAX_ITEM_QUANTITY + 1).
  */
 export function exposedStock(stock: number): number {
