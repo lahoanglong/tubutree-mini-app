@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AcademyCourseDetail } from '@tubutree/app-core/api/academy';
 import { ApiError } from '@/lib/client-api';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
-import { smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
+import { iconOnlyControlProblems, smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
 
 // Chép ý academy.spec.tsx (Mini App), phần chi tiết: khoá theo id trên URL, bài đánh số, video mở tab mới, bài viết giữ xuống dòng,
 // nút đã học/chưa học, đánh dấu gửi đúng bài rồi tải lại khoá + danh sách, lỗi, khoá nút khi đang gửi, quay về danh sách, lỗi tải, vùng chạm.
@@ -159,6 +159,27 @@ describe('/hoc-vien/[courseId] — chi tiết khoá học', () => {
     const { container } = await mount();
     expect(smallTouchTargets(container)).toEqual([]);
     expect(unnamedControls(container)).toEqual([]);
+  });
+});
+
+describe('/hoc-vien/[courseId] — nhãn truy cập của biểu tượng', () => {
+  it('khoá đã tải: nút/liên kết chỉ có biểu tượng đều có aria-label tiếng Việt, biểu tượng trạng thái "Đã học" có nhãn', async () => {
+    const { container } = await mount();
+    expect(iconOnlyControlProblems(container)).toEqual([]);
+    expect(container.querySelector('svg[role="img"]')?.getAttribute('aria-label')).toBe('Đã học');
+  });
+
+  it('mọi trạng thái còn lại của trang (đang tải, lỗi, 403, khách, mất phiên) không có nút chỉ-biểu-tượng thiếu nhãn', async () => {
+    mocks.get.mockReset().mockRejectedValue(new Error('mạng'));
+    expect(iconOnlyControlProblems((await mount()).container)).toEqual([]);
+    mocks.get.mockReset().mockRejectedValue(new ApiError('Forbidden', 403));
+    expect(iconOnlyControlProblems((await mount()).container)).toEqual([]);
+    mocks.get.mockReset().mockReturnValue(new Promise(() => undefined));
+    expect(iconOnlyControlProblems((await mount()).container)).toEqual([]);
+    Object.assign(mocks.auth, { user: null, status: 'unauthenticated' });
+    expect(iconOnlyControlProblems((await mount()).container)).toEqual([]);
+    Object.assign(mocks.auth, { sessionUnavailable: true });
+    expect(iconOnlyControlProblems((await mount()).container)).toEqual([]);
   });
 });
 

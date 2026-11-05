@@ -49,6 +49,22 @@ export function unnamedControls(root: ParentNode): string[] {
     .map((el) => `<${el.tagName.toLowerCase()}${el.getAttribute('type') ? ` type=${el.getAttribute('type')}` : ''}> ${el.outerHTML.slice(0, 120)}`);
 }
 
+const VIETNAMESE_LETTER = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i;
+
+/**
+ * Nút, liên kết và hình trạng thái (`role="img"`) chỉ có biểu tượng, không có chữ nhìn thấy, phải có `aria-label` tiếng Việt
+ * (có ít nhất một chữ có dấu); thiếu hoặc ghi tiếng Anh ("Close") là lỗi. Điều khiển `aria-hidden` và biểu tượng thuần trang trí bỏ qua. Rỗng = đạt.
+ */
+export function iconOnlyControlProblems(root: ParentNode): string[] {
+  const hasVietnameseLabel = (el: Element) => VIETNAMESE_LETTER.test(el.getAttribute('aria-label') ?? '');
+  const controls = Array.from(root.querySelectorAll<HTMLElement>('button, a[href], [role="button"]'))
+    .filter((el) => el.getAttribute('aria-hidden') !== 'true')
+    .filter((el) => visibleText(el).trim() === '')
+    .filter((el) => !hasVietnameseLabel(el));
+  const images = Array.from(root.querySelectorAll<SVGElement>('svg[role="img"]')).filter((el) => el.getAttribute('aria-hidden') !== 'true' && !hasVietnameseLabel(el));
+  return [...controls, ...images].map((el) => el.outerHTML.slice(0, 120));
+}
+
 /** Danh sách cấp heading theo thứ tự tài liệu. */
 export function headingLevels(root: ParentNode): number[] {
   return Array.from(root.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, h6, [role="heading"]')).map((h) =>
