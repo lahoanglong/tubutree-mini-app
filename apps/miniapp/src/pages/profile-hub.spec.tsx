@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -105,6 +105,7 @@ vi.mock('../store/auth', () => {
 
 import ProfilePage from './profile';
 import { miniAppLink } from '../utils/miniapp-link';
+import { getWallet } from '../services/account-api';
 
 function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -153,6 +154,22 @@ describe('Thanh số dư ở hub Cá nhân (C-086)', () => {
     expect(balances.every(Boolean)).toBe(true);
     expect(screen.queryByText(/TubuXu/)).toBeNull();
     expect(screen.queryByRole('button', { name: /(?<![\p{L}_])xu(?![\p{L}_])/iu })).toBeNull();
+  });
+
+  it('ví từ một triệu xuống price-sm để số không tràn ô ở 320px; ví nhỏ giữ price-md', async () => {
+    vi.mocked(getWallet).mockResolvedValue({ walletBalance: 1_234_567 } as never);
+    try {
+      const { unmount } = renderPage();
+      const big = await screen.findByRole('button', { name: /^1\.234\.567đ\s*Ví Tubu$/ });
+      expect(within(big).getByText('1.234.567đ').style.fontSize).toBe('var(--type-price-sm-size)');
+      expect(within(big).getByText('1.234.567đ').style.lineHeight).toBe('var(--type-price-md-lh)');
+      unmount();
+    } finally {
+      vi.mocked(getWallet).mockResolvedValue({ walletBalance: 50000 } as never);
+    }
+    renderPage();
+    const small = await screen.findByRole('button', { name: /^50\.000đ\s*Ví Tubu$/ });
+    expect(within(small).getByText('50.000đ').style.fontSize).toBe('var(--type-price-md-size)');
   });
 
   it('khách thường thấy lời mời "Mở gian hàng Cộng tác viên" (không nhắc hoa hồng); CTV thấy "Cộng tác viên"', async () => {
