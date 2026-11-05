@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Param, Patch } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { ArrayMaxSize, IsArray, IsBoolean, IsOptional, IsString, MaxLength, ValidateIf } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsBoolean, IsObject, IsOptional, IsString, MaxLength, ValidateIf } from 'class-validator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { OptionalNotNull } from '../../common/decorators/optional-not-null.decorator';
@@ -18,6 +18,8 @@ export class UpdateProductDto {
   @IsOptional() @ValidateIf((_, v) => v !== null) @Transform(trim) @IsString() @MaxLength(400) shortDesc?: string | null;
   @OptionalNotNull() @IsBoolean() isActive?: boolean;
   @OptionalNotNull() @IsBoolean() isFeatured?: boolean;
+  /** null = xoá cấu hình câu chuyện. Cấu trúc chi tiết do parseStoryConfig kiểm trong service (400 kèm lý do). */
+  @IsOptional() @ValidateIf((_, v) => v !== null) @IsObject() storyConfig?: Record<string, unknown> | null;
   @OptionalNotNull() @IsArray() @ArrayMaxSize(PRODUCT_CATEGORIES_MAX + 5) @IsString({ each: true }) @MaxLength(64, { each: true }) categoryIds?: string[];
 }
 

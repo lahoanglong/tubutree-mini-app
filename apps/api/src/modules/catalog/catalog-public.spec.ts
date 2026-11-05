@@ -81,3 +81,19 @@ describe('GET /products/:slug — chỉ trả trường công khai', () => {
     });
   });
 });
+
+describe('GET /products/:slug — storyConfig', () => {
+  const story = { version: 1, enabled: true, scenes: [] };
+  const base = { id: 'p1', slug: 's', name: 'n', brand: 'b', description: 'd', images: [], basePrice: 1, variations: [], reviews: [] };
+
+  it('trả storyConfig của sản phẩm cho trang chi tiết', async () => {
+    const catalog = { getBySlug: jest.fn().mockResolvedValue({ ...base, storyConfig: story }) } as unknown as CatalogService;
+    const res = (await new CatalogController(catalog).detail('s')) as Record<string, unknown>;
+    expect(res.storyConfig).toEqual(story);
+  });
+
+  it('thẻ danh sách không mang storyConfig', async () => {
+    const { CARD_SELECT } = await import('./card-select');
+    expect(CARD_SELECT).not.toHaveProperty('storyConfig');
+  });
+});

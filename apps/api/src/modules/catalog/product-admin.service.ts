@@ -3,7 +3,8 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { isStorefrontImageValue } from '../../common/uploaded-image';
 import { storedThumbnailFor } from '../../common/public-image';
 import { CATEGORY_MSG, CATEGORY_TREE_LOCK } from './category-tree';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { parseStoryConfig } from '@tubutree/shared-types';
 import { ImageResizeService } from './image-resize.service';
 
 export const PRODUCT_IMAGES_MAX = 8;
@@ -16,6 +17,8 @@ export interface ProductPatch {
   isActive?: boolean;
   isFeatured?: boolean;
   categoryIds?: string[];
+  /** Cấu hình câu chuyện sản phẩm; null = xoá (quay về preset/tự sinh). Kiểm bằng parseStoryConfig trước khi ghi. */
+  storyConfig?: unknown;
 }
 
 const SELECT = {
@@ -36,6 +39,7 @@ const SELECT = {
   categoryIds: true,
   basePrice: true,
   salePrice: true,
+  storyConfig: true,
 } as const;
 
 /** Sản phẩm kho Tubu lấy từ Pancake (mã seed- là hàng mẫu nhập tay): tên, giá, tồn kho do đồng bộ ghi đè. */
@@ -90,6 +94,14 @@ export class ProductAdminService {
       data.shortDesc = shortDesc;
     }
     if (patch.isFeatured !== undefined) data.isFeatured = patch.isFeatured;
+    if (patch.storyConfig !== undefined) {
+      if (patch.storyConfig === null) data.storyConfig = Prisma.DbNull;
+      else {
+        const parsed = parseStoryConfig(patch.storyConfig);
+        if (!parsed.ok) throw new BadRequestException(`Cấu hình câu chuyện sản phẩm không hợp lệ: ${parsed.error}.`);
+        data.storyConfig = parsed.value as unknown as Prisma.InputJsonValue;
+      }
+    }
     if (patch.isActive !== undefined && patch.isActive !== current.isActive) {
       // Hàng đối tác bật/tắt theo luồng của gian hàng (duyệt lại, gỡ/gắn liên kết Pancake): bật ở đây bỏ qua luồng đó và có thể
       // mở bán sản phẩm không còn biến thể nào, tắt ở đây thì gian hàng thấy trạng thái lệch với bản duyệt.
@@ -174,6 +186,7 @@ export class ProductAdminService {
     categoryIds: string[];
     basePrice: number;
     salePrice: number | null;
+    storyConfig?: unknown;
   }) {
     const managed = isPancakeManaged(p);
     return {
@@ -190,6 +203,7 @@ export class ProductAdminService {
       categoryIds: p.categoryIds,
       basePrice: p.basePrice,
       salePrice: p.salePrice,
+      storyConfig: p.storyConfig ?? null,
       managedByPancake: managed,
       partnerOwned: p.storefrontId !== null,
       /** Lý do chưa bật bán lại được; null = bật được. */
