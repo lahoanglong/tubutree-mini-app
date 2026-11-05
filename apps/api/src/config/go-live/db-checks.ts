@@ -4,6 +4,7 @@ import { OPS_THRESHOLD_KEYS, type OpsThresholds } from '../../modules/ops/ops-al
 import { toShippingEta } from '../../modules/system-config/shipping-eta';
 import { evaluateDemoData, type DemoDataSnapshot } from './demo-data-checks';
 import { sameProvince } from '@tubutree/shared-types';
+import { trimInvisible } from '../../common/text-trim';
 import { envValue } from './secrets';
 import { parseDbSessionOptions, pgDurationToMs, type DbSessionOptionName } from '../../prisma/db-session-options';
 import { fail, pass, warn, type CheckResult, type Env, type GoLivePhase } from './types';
@@ -505,7 +506,7 @@ const LEGAL_DOCS = { 'legal.dieu-khoan': 'điều khoản', 'legal.bao-mat': 'b�
 
 function legalPoliciesCheck(s: DbSnapshot, phase: GoLivePhase): CheckResult {
   const title = 'Chính sách hiển thị cho khách';
-  const draft = (Object.keys(LEGAL_DOCS) as (keyof typeof LEGAL_DOCS)[]).filter((k) => typeof s.configs[k] !== 'string' || (s.configs[k] as string).trim() === '');
+  const draft = (Object.keys(LEGAL_DOCS) as (keyof typeof LEGAL_DOCS)[]).filter((k) => typeof s.configs[k] !== 'string' || trimInvisible(s.configs[k] as string) === '');
   if (draft.length > 0) {
     // Bản nháp mặc định của web hiện banner "chờ Tubu Tree duyệt"; trước deploy chưa có dòng nào là bình thường.
     const red = phase === 'pre-deploy' ? warn : fail;
@@ -517,7 +518,7 @@ function legalPoliciesCheck(s: DbSnapshot, phase: GoLivePhase): CheckResult {
 function companyIdentityCheck(s: DbSnapshot, phase: GoLivePhase): CheckResult {
   const title = 'Đơn vị vận hành hiển thị cho khách';
   const labels = { 'company.legal_name': 'tên công ty', 'company.tax_code': 'mã số thuế', 'company.address': 'địa chỉ trụ sở' } as const;
-  const lack = (Object.keys(labels) as (keyof typeof labels)[]).filter((k) => typeof s.configs[k] !== 'string' || (s.configs[k] as string).trim() === '');
+  const lack = (Object.keys(labels) as (keyof typeof labels)[]).filter((k) => typeof s.configs[k] !== 'string' || trimInvisible(s.configs[k] as string) === '');
   if (lack.length > 0) {
     // Trước deploy, dòng company.* chưa có là bình thường: seed-reference chạy ở bước 7b.
     const red = phase === 'pre-deploy' ? warn : fail;
