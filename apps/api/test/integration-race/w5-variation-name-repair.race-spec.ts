@@ -58,7 +58,8 @@ describe('migration 20261105230000 sửa tên biến thể "[object Object]" (re
     const beforeBroken = await read(brokenIds);
 
     const changed = await prisma.$executeRawUnsafe(SQL);
-    expect(changed).toBe(brokenIds.length);
+    // DB dùng chung: lần chạy hỏng trước còn để lại dòng tên sai, UPDATE của migration sửa luôn cả chúng nên số dòng đổi chỉ chặn dưới.
+    expect(changed).toBeGreaterThanOrEqual(brokenIds.length);
 
     const name = async (v: { id: string }) => (await prisma.variation.findUniqueOrThrow({ where: { id: v.id } })).name;
     expect(await name(broken.one)).toBe('1 chai');
