@@ -255,9 +255,10 @@ export function countHealth(issues: readonly HealthIssue[]): { blockers: number;
   return { blockers, warnings: issues.length - blockers };
 }
 
-/** Phần của chiến dịch mà phán quyết lưu cần: có hiện cho khách không (bật và chưa hết hạn) và đích. */
+/** Phần của chiến dịch mà phán quyết lưu cần: bật/tắt, khoảng giờ và đích. */
 export interface VerdictState {
   isActive: boolean;
+  startAt: Date;
   endAt: Date;
   linkType: CampaignLinkType;
   linkValue: string | null;
@@ -270,14 +271,33 @@ export interface SaveVerdict {
   reason?: string;
 }
 
-const visibleAt = (s: VerdictState, now: Date) => s.isActive && s.endAt > now;
+/**
+ * OFF: tắt hoặc `endAt <= now`. SCHEDULED: bật, `startAt > now` (hẹn giờ, chưa hiện nhưng sẽ hiện). LIVE: bật, `startAt <= now < endAt`.
+ * Trang hẹn giờ cũng phải được giữ không trống, nên SCHEDULED được kiểm như LIVE.
+ */
+export type CampaignPhase = 'OFF' | 'SCHEDULED' | 'LIVE';
+
+export function campaignPhase(s: Pick<VerdictState, 'isActive' | 'startAt' | 'endAt'>, now: Date): CampaignPhase {
+  if (!s.isActive || s.endAt <= now) return 'OFF';
+  return s.startAt > now ? 'SCHEDULED' : 'LIVE';
+}
+
+const sameLink = (a: VerdictState, b: VerdictState) => a.linkType === b.linkType && a.linkValue === b.linkValue;
+
+/** Lần lưu này phải sạch MỌI lỗi chặn (không chỉ lỗi mới): chiến dịch vừa xuất hiện, đổi đích, hoặc từ hẹn giờ sang hiện ngay. */
+export function needsCleanSlate(before: VerdictState | null, after: VerdictState, now: Date): boolean {
+  const from = before ? campaignPhase(before, now) : 'OFF';
+  const to = campaignPhase(after, now);
+  if (to === 'OFF') return false;
+  return from === 'OFF' || (before !== null && !sameLink(before, after)) || (from === 'SCHEDULED' && to === 'LIVE');
+}
 
 /**
  * MỘT luật phán quyết cho mọi đường lưu (tạo, sửa, PUT sản phẩm/mã, kiểm trước khi lưu). `before` null là chiến dịch chưa tồn tại; health của hai bên
- * là kết quả `campaignHealth` ở trạng thái trước và sau lần lưu.
- * - After không hiện cho khách (tắt hoặc đã hết hạn): cho lưu.
- * - Từ không hiện sang hiện, hoặc đổi đích lúc đang hiện: chặn nếu after có BẤT KỲ BLOCK (chiến dịch vừa xuất hiện với khách thì lỗi nào cũng là lỗi mới).
- * - Vẫn hiện, cùng đích: chỉ chặn BLOCK MỚI mà trước đó chưa có (gỡ sản phẩm cuối, đổi mã, dời giờ làm trang trống). Lỗi cũ không chặn việc sửa tiêu đề hay giờ.
+ * là kết quả `campaignHealth` ở trạng thái trước và sau lần lưu. Ba trạng thái xem `CampaignPhase`.
+ * - After OFF: cho lưu.
+ * - After SCHEDULED/LIVE và (before OFF hoặc chưa có, đổi đích, hoặc before SCHEDULED mà after LIVE tức kéo giờ bắt đầu về hiện tại/quá khứ): chặn nếu after có BẤT KỲ BLOCK.
+ * - Còn lại (cùng đích; LIVE→LIVE, SCHEDULED→SCHEDULED, LIVE→SCHEDULED): chỉ chặn BLOCK MỚI mà trước đó chưa có (gỡ sản phẩm cuối, đổi mã, dời giờ làm trang trống). Lỗi cũ không chặn việc sửa tiêu đề hay giờ.
  */
 export function saveVerdict(o: {
   before: VerdictState | null;
@@ -286,13 +306,12 @@ export function saveVerdict(o: {
   healthAfter: readonly HealthIssue[];
   now: Date;
 }): SaveVerdict {
-  if (!visibleAt(o.after, o.now)) return { blocked: false, codes: [] };
+  if (campaignPhase(o.after, o.now) === 'OFF') return { blocked: false, codes: [] };
   const afterBlocks = o.healthAfter.filter((i) => i.level === 'BLOCK');
-  const stayed = o.before !== null && visibleAt(o.before, o.now);
-  const linkChanged = o.before !== null && (o.before.linkType !== o.after.linkType || o.before.linkValue !== o.after.linkValue);
-  const offending = stayed && !linkChanged ? afterBlocks.filter((i) => !o.healthBefore.some((b) => b.level === 'BLOCK' && b.code === i.code)) : afterBlocks;
+  const strict = needsCleanSlate(o.before, o.after, o.now);
+  const offending = strict ? afterBlocks : afterBlocks.filter((i) => !o.healthBefore.some((b) => b.level === 'BLOCK' && b.code === i.code));
   const first = offending[0];
   if (!first) return { blocked: false, codes: [] };
-  const emptied = stayed && !linkChanged && first.code === 'PAGE_EMPTY';
-  return { blocked: true, codes: offending.map((i) => i.code), reason: emptied ? `Lần lưu này làm trang đang chạy thành trống. ${first.message}` : first.message };
+  const emptied = !strict && first.code === 'PAGE_EMPTY';
+  return { blocked: true, codes: offending.map((i) => i.code), reason: emptied ? `Lần lưu này làm trang chiến dịch đang bật thành trống. ${first.message}` : first.message };
 }

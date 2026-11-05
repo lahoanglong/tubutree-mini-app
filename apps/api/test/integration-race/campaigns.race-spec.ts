@@ -396,7 +396,7 @@ describe('Campaigns (real Postgres)', () => {
         await admin.update(c.id, { isActive: true });
         const startAt = offset(5).toISOString();
         const before = await row(c.id);
-        await expect(admin.update(c.id, { startAt, title: 'Chỉ dời giờ' })).rejects.toThrow(/Lần lưu này làm trang đang chạy thành trống/);
+        await expect(admin.update(c.id, { startAt, title: 'Chỉ dời giờ' })).rejects.toThrow(/Lần lưu này làm trang chiến dịch đang bật thành trống/);
         expect(await row(c.id)).toMatchObject({ title: before.title, startAt: before.startAt });
         const out = await admin.update(c.id, { startAt, couponCodes: [x.code, y.code] });
         expect(out.couponCodes.sort()).toEqual([x.code, y.code].sort());
@@ -439,7 +439,7 @@ describe('Campaigns (real Postgres)', () => {
       it('(6) bỏ A và sửa tiêu đề (trang thành trống): 400, tiêu đề KHÔNG đổi, A còn nguyên', async () => {
         const c = await livePage('v6');
         const before = await row(c.id);
-        await expect(admin.update(c.id, { title: 'Không được lưu', productIds: [] })).rejects.toThrow(/Lần lưu này làm trang đang chạy thành trống/);
+        await expect(admin.update(c.id, { title: 'Không được lưu', productIds: [] })).rejects.toThrow(/Lần lưu này làm trang chiến dịch đang bật thành trống/);
         expect((await row(c.id)).title).toBe(before.title);
         expect(await linksOf(c.id)).toEqual({ products: 1, coupons: 0 });
       });
@@ -469,7 +469,7 @@ describe('Campaigns (real Postgres)', () => {
         const c = await page('v9');
         await admin.setCoupons(c.id, [x.code]);
         await admin.update(c.id, { isActive: true });
-        await expect(admin.update(c.id, { couponCodes: [y.code] })).rejects.toThrow(/Lần lưu này làm trang đang chạy thành trống/);
+        await expect(admin.update(c.id, { couponCodes: [y.code] })).rejects.toThrow(/Lần lưu này làm trang chiến dịch đang bật thành trống/);
         expect(await codesOf(c.id)).toEqual([x.code]);
       });
 

@@ -797,7 +797,7 @@ describe('CampaignsTab: khối "Kiểm trước khi bật" và xem trước tron
 });
 
 describe('CampaignsTab: khoá lưu theo phán quyết của máy chủ', () => {
-  const REASON = 'Lần lưu này làm trang đang chạy thành trống. Trang chiến dịch đang trống: thêm sản phẩm hoặc mã.';
+  const REASON = 'Lần lưu này làm trang chiến dịch đang bật thành trống. Trang chiến dịch đang trống: thêm sản phẩm hoặc mã.';
   const OPEN = { blocked: false, codes: [] };
   const SHUT = { blocked: true, codes: ['PAGE_EMPTY'], reason: REASON };
   const result = (verdict?: { blocked: boolean; codes: string[]; reason?: string }) => ({
@@ -914,7 +914,7 @@ describe('CampaignsTab: khoá lưu theo phán quyết của máy chủ', () => {
     typeInto(field(c, 'Tên chiến dịch'), 'Tên mới');
     click(saveBtn(c));
     await flush(10);
-    expect(c.querySelector('[role="alert"]')!.textContent).toContain('Lần lưu này làm trang đang chạy thành trống');
+    expect(c.querySelector('[role="alert"]')!.textContent).toContain('Lần lưu này làm trang chiến dịch đang bật thành trống');
     expect(field(c, 'Tên chiến dịch').value).toBe('Tên mới');
   });
 });

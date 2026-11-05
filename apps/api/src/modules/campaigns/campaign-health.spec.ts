@@ -250,7 +250,7 @@ describe('compareBannerOrder (cùng thứ tự với truy vấn banner công kha
 });
 
 describe('saveVerdict: một luật phán quyết cho mọi đường lưu', () => {
-  const state = (over: Record<string, unknown> = {}) => ({ isActive: true, endAt: at(5), linkType: 'CAMPAIGN_PAGE' as const, linkValue: null, ...over });
+  const state = (over: Record<string, unknown> = {}) => ({ isActive: true, startAt: at(-1), endAt: at(5), linkType: 'CAMPAIGN_PAGE' as const, linkValue: null, ...over });
   const block = (code: 'PAGE_EMPTY' | 'LINK_PRODUCT_HIDDEN' | 'LINK_PRODUCT_MISSING') => ({ level: 'BLOCK' as const, code, message: `m-${code}` });
   const warn = { level: 'WARN' as const, code: 'CROWDED' as const, message: 'w' };
   const run = (o: { before: ReturnType<typeof state> | null; after: ReturnType<typeof state>; hb?: ReturnType<typeof block>[]; ha?: (ReturnType<typeof block> | typeof warn)[] }) =>
@@ -299,7 +299,7 @@ describe('saveVerdict: một luật phán quyết cho mọi đường lưu', () 
     it('PAGE_EMPTY mới: chặn, lý do nói trang đang chạy thành trống và còn câu gốc', () => {
       const v = run({ before: state(), after: state(), ha: [block('PAGE_EMPTY')] });
       expect(v).toMatchObject({ blocked: true, codes: ['PAGE_EMPTY'] });
-      expect(v.reason).toContain('Lần lưu này làm trang đang chạy thành trống');
+      expect(v.reason).toContain('Lần lưu này làm trang chiến dịch đang bật thành trống');
       expect(v.reason).toContain('m-PAGE_EMPTY');
     });
     it('mã BLOCK mới khác với lỗi cũ: chặn và chỉ nêu mã mới', () => {
@@ -311,6 +311,47 @@ describe('saveVerdict: một luật phán quyết cho mọi đường lưu', () 
     });
     it('chỉ WARN mới: cho', () => {
       expect(run({ before: state(), after: state(), ha: [warn] }).blocked).toBe(false);
+    });
+  });
+
+  describe('ba trạng thái OFF / SCHEDULED (bật, startAt > now) / LIVE', () => {
+    const scheduled = (over: Record<string, unknown> = {}) => state({ startAt: at(2), ...over });
+    it('hẹn giờ mà after có BLOCK, trước đó tắt: chặn (hẹn giờ vẫn là chiến dịch đang bật)', () => {
+      expect(run({ before: state({ isActive: false }), after: scheduled(), ha: [block('PAGE_EMPTY')] }).blocked).toBe(true);
+    });
+    it('tạo mới hẹn giờ có BLOCK: chặn', () => {
+      expect(run({ before: null, after: scheduled(), ha: [block('LINK_PRODUCT_HIDDEN')] }).blocked).toBe(true);
+    });
+    it('SCHEDULED→SCHEDULED cùng đích, lỗi cũ dời sang ngày khác: cho', () => {
+      expect(run({ before: scheduled(), after: scheduled({ startAt: at(3) }), hb: [block('LINK_PRODUCT_HIDDEN')], ha: [block('LINK_PRODUCT_HIDDEN')] }).blocked).toBe(false);
+    });
+    it('SCHEDULED→SCHEDULED làm trang trống mới: chặn, lời nói trang chiến dịch đang bật', () => {
+      const v = run({ before: scheduled(), after: scheduled(), ha: [block('PAGE_EMPTY')] });
+      expect(v.blocked).toBe(true);
+      expect(v.reason).toContain('Lần lưu này làm trang chiến dịch đang bật thành trống');
+    });
+    it('SCHEDULED→LIVE (kéo giờ bắt đầu về hiện tại) có lỗi cũ: chặn vì chiến dịch vừa hiện với khách', () => {
+      const v = run({ before: scheduled(), after: state(), hb: [block('LINK_PRODUCT_HIDDEN')], ha: [block('LINK_PRODUCT_HIDDEN')] });
+      expect(v).toMatchObject({ blocked: true, codes: ['LINK_PRODUCT_HIDDEN'] });
+    });
+    it('SCHEDULED→LIVE startAt đúng bằng now: tính là LIVE, chặn', () => {
+      expect(run({ before: scheduled(), after: state({ startAt: NOW }), hb: [block('PAGE_EMPTY')], ha: [block('PAGE_EMPTY')] }).blocked).toBe(true);
+    });
+    it('SCHEDULED→LIVE sạch: cho', () => {
+      expect(run({ before: scheduled(), after: state() }).blocked).toBe(false);
+    });
+    it('LIVE→LIVE lỗi cũ: cho', () => {
+      expect(run({ before: state(), after: state({ startAt: at(-3) }), hb: [block('PAGE_EMPTY')], ha: [block('PAGE_EMPTY')] }).blocked).toBe(false);
+    });
+    it('LIVE→SCHEDULED lỗi cũ: cho (dời hẹn giờ không bị chặn vì lỗi cũ)', () => {
+      expect(run({ before: state(), after: scheduled(), hb: [block('PAGE_EMPTY')], ha: [block('PAGE_EMPTY')] }).blocked).toBe(false);
+    });
+    it('LIVE→SCHEDULED nhưng đổi đích: chặn nếu có BLOCK', () => {
+      expect(run({ before: state(), after: scheduled({ linkType: 'PRODUCT', linkValue: 'x' }), ha: [block('LINK_PRODUCT_MISSING')] }).blocked).toBe(true);
+    });
+    it('SCHEDULED→OFF (tắt hoặc hết hạn): cho dù có BLOCK', () => {
+      expect(run({ before: scheduled(), after: scheduled({ isActive: false }), ha: [block('PAGE_EMPTY')] }).blocked).toBe(false);
+      expect(run({ before: scheduled(), after: scheduled({ endAt: at(-1) }), ha: [block('PAGE_EMPTY')] }).blocked).toBe(false);
     });
   });
 

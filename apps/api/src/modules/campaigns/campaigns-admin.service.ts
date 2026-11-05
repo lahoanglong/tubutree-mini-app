@@ -6,7 +6,7 @@ import { PRISMA_TRANSACTION_OPTIONS, PrismaService } from '../../prisma/prisma.s
 import { ImageRegistryStale } from '../catalog/image-registry-stale';
 import { normalizeCouponCode } from '../coupons/coupons.service';
 import { assertWindow, campaignStatus, normalizeLink, slugFromTitle, type CampaignStatus } from './campaign-admin-rules';
-import { countHealth, saveVerdict, type HealthIssue, type HealthSubject, type SaveVerdict } from './campaign-health';
+import { campaignPhase, countHealth, needsCleanSlate, saveVerdict, type HealthIssue, type HealthSubject, type SaveVerdict, type VerdictState } from './campaign-health';
 import { campaignHealthBatch } from './campaign-health-loader';
 import { CAMPAIGN_MAX_COUPONS, CAMPAIGN_MAX_PRODUCTS, type CheckCampaignDto, type CreateCampaignDto, type UpdateCampaignDto } from './dto/campaign.dto';
 
@@ -181,11 +181,18 @@ export class CampaignsAdminService {
       ],
       now,
     );
-    const beforeState = before ? { isActive: before.isActive, endAt: before.endAt, linkType: before.linkType, linkValue: before.linkValue } : null;
-    const stayed = beforeState !== null && beforeState.isActive && beforeState.endAt > now;
-    const sameLink = before !== null && before.linkType === after.linkType && before.linkValue === after.linkValue;
-    const healthBefore = before && stayed && sameLink ? ((await campaignHealthBatch(client, [{ subject: subjectOf(before) }], now))[0] ?? []) : [];
-    const verdict = saveVerdict({ before: beforeState, after: { isActive: after.isActive, endAt: after.endAt, linkType: after.linkType, linkValue: after.linkValue }, healthBefore, healthAfter: issues, now });
+    const stateOf = (c: { isActive: boolean; startAt: Date; endAt: Date; linkType: CampaignLinkType; linkValue: string | null }): VerdictState => ({
+      isActive: c.isActive,
+      startAt: c.startAt,
+      endAt: c.endAt,
+      linkType: c.linkType,
+      linkValue: c.linkValue,
+    });
+    const beforeState = before ? stateOf(before) : null;
+    const afterState = stateOf(after);
+    const needBaseline = before !== null && beforeState !== null && campaignPhase(afterState, now) !== 'OFF' && !needsCleanSlate(beforeState, afterState, now);
+    const healthBefore = before && needBaseline ? ((await campaignHealthBatch(client, [{ subject: subjectOf(before) }], now))[0] ?? []) : [];
+    const verdict = saveVerdict({ before: beforeState, after: afterState, healthBefore, healthAfter: issues, now });
     return { verdict, issues };
   }
 

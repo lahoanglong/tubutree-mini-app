@@ -470,11 +470,11 @@ describe('CampaignsAdminService: kiểm sức khoẻ trước khi bật', () => 
       expect(out.issues.map((i) => i.code)).toContain('PAGE_EMPTY');
     });
 
-    it('verdict có id: before là bản đã lưu; trang đang chạy còn sản phẩm mà bản nháp gỡ hết thì blocked "làm trang đang chạy thành trống"', async () => {
+    it('verdict có id: before là bản đã lưu; trang đang chạy còn sản phẩm mà bản nháp gỡ hết thì blocked "làm trang chiến dịch đang bật thành trống"', async () => {
       const { svc } = setup({ existing: row({ isActive: true }), linked: [{ campaignId: 'c1', product: visibleProduct() }] });
       const out = await svc.check(dto({ id: 'c1', productIds: [] }), NOW);
       expect(out.verdict).toMatchObject({ blocked: true, codes: ['PAGE_EMPTY'] });
-      expect(out.verdict.reason).toContain('Lần lưu này làm trang đang chạy thành trống');
+      expect(out.verdict.reason).toContain('Lần lưu này làm trang chiến dịch đang bật thành trống');
     });
 
     it('verdict có id: lỗi cũ có sẵn (trang đang chạy đã trống) mà bản nháp không làm tệ thêm thì không chặn', async () => {
@@ -522,7 +522,7 @@ describe('CampaignsAdminService: PUT sản phẩm/mã không làm trang chiến 
 
   it('setProducts: gỡ hết sản phẩm khỏi trang đang bật, không còn mã dùng được: 400 câu trang trống, huỷ giao dịch', async () => {
     const { svc, prisma } = setup({ existing: live(), linked: linked() });
-    await expect(svc.setProducts('c1', [], NOW)).rejects.toThrow(/Lần lưu này làm trang đang chạy thành trống/);
+    await expect(svc.setProducts('c1', [], NOW)).rejects.toThrow(/Lần lưu này làm trang chiến dịch đang bật thành trống/);
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     expect(typeof prisma.$transaction.mock.calls[0][0]).toBe('function');
   });
@@ -546,7 +546,7 @@ describe('CampaignsAdminService: PUT sản phẩm/mã không làm trang chiến 
 
   it('setCoupons: gỡ hết mã của trang đang bật mà không còn sản phẩm hiển thị: 400 câu trang trống', async () => {
     const { svc } = setup({ existing: live(), couponLinks: [{ campaignId: 'c1', coupon: usable }] });
-    await expect(svc.setCoupons('c1', [], NOW)).rejects.toThrow(/Lần lưu này làm trang đang chạy thành trống/);
+    await expect(svc.setCoupons('c1', [], NOW)).rejects.toThrow(/Lần lưu này làm trang chiến dịch đang bật thành trống/);
   });
 
   it('setCoupons: còn sản phẩm hiển thị thì cho; chiến dịch tắt thì cho', async () => {
@@ -639,7 +639,7 @@ describe('CampaignsAdminService: một lệnh lưu trường + danh sách trong 
 
   it('PATCH bị chặn (trang đang chạy thành trống): 400 và KHÔNG ghi gì (không đổi trường, không đụng danh sách)', async () => {
     const { svc, prisma } = setup({ existing: live(), linked: [{ campaignId: 'c1', product: visibleProduct() }] });
-    await expect(svc.update('c1', { title: 'Không lưu', productIds: [] }, NOW)).rejects.toThrow(/Lần lưu này làm trang đang chạy thành trống/);
+    await expect(svc.update('c1', { title: 'Không lưu', productIds: [] }, NOW)).rejects.toThrow(/Lần lưu này làm trang chiến dịch đang bật thành trống/);
     expect(prisma.campaign.update).not.toHaveBeenCalled();
     expect(prisma.campaignProduct.deleteMany).not.toHaveBeenCalled();
     expect(prisma.campaignCoupon.deleteMany).not.toHaveBeenCalled();
