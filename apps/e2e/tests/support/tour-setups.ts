@@ -2,6 +2,7 @@ import type { RewardCatalogDTO, RewardItemDTO } from '@tubutree/shared-types';
 import { CTV_DASHBOARD } from './affiliate-mocks';
 import { mockAffiliateDashboard } from './affiliate-mocks';
 import { BANK_QR } from './checkout-mocks';
+import { CAMPAIGN_SLUG, campaignDetail, mockCampaigns } from './campaign-mocks';
 import { mockFlashSlots } from './flash-slot-mocks';
 import { publicConfig, type MockApi } from './mock-api';
 import { mockCollectable, mockCouponHistory, mockWallet } from './voucher-mocks';
@@ -180,6 +181,7 @@ export const SETUPS: Record<string, (api: MockApi) => void> = {
     api.get('/group-buy', [GROUP('g1')]);
     api.get('/group-buy/:id', ({ params }) => GROUP(params.id!));
   },
+  '/campaign/:slug': (api) => mockCampaigns(api, { details: { [CAMPAIGN_SLUG]: campaignDetail() } }),
   '/brand/:slug': (api) => {
     api.get('/brand/public/:slug', {
       id: 'b1', slug: 'visante', name: 'Visante', logoUrl: null, coverUrl: null, tagline: 'Mỹ phẩm thiên nhiên từ rau má', story: 'Visante khởi nguồn từ vùng đất Tây Nguyên.', storyImages: [],

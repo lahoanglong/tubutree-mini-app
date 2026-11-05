@@ -2,6 +2,7 @@ import { readFileSync } from 'fs';
 import path from 'path';
 import type { UserRole } from '@tubutree/shared-types';
 import type { MockApi } from './mock-api';
+import { CAMPAIGN_SLUG } from './campaign-mocks';
 import { SETUPS } from './tour-setups';
 import { ORDER_DELIVERED, TOUR_PRODUCT_SLUG } from './tour-world';
 
@@ -39,6 +40,7 @@ const BANK_CODE = 'TUBU20261019003';
 export const TOUR: Record<string, Omit<TourEntry, 'key'>> = {
   '/': { name: 'Trang chủ', miniapp: '/', web: '/', role: 'CUSTOMER' },
   '/browse': { name: 'Danh mục và tìm kiếm', miniapp: '/browse', web: '/san-pham', role: 'CUSTOMER' },
+  '/best-sellers': { name: 'Bán chạy nhất', miniapp: '/best-sellers', web: '/ban-chay', role: 'CUSTOMER' },
   '/product/:slug': { name: 'Chi tiết sản phẩm', miniapp: `/product/${TOUR_PRODUCT_SLUG}`, web: `/san-pham/${TOUR_PRODUCT_SLUG}`, role: 'CUSTOMER' },
   '/wishlist': { name: 'Yêu thích', miniapp: '/wishlist', web: '/tai-khoan/yeu-thich', role: 'CUSTOMER' },
   '/flash-sale': { name: 'Giờ vàng', miniapp: '/flash-sale', web: '/gio-vang', role: 'CUSTOMER' },
@@ -47,6 +49,7 @@ export const TOUR: Record<string, Omit<TourEntry, 'key'>> = {
   '/group-buy': { name: 'Mua chung', miniapp: '/group-buy', web: '/mua-chung', role: 'CUSTOMER' },
   '/group-buy/:id': { name: 'Chi tiết nhóm mua chung', miniapp: '/group-buy/g1', web: '/mua-chung/g1', role: 'CUSTOMER' },
   '/brand/:slug': { name: 'Thương hiệu', miniapp: '/brand/visante', web: '/brand/visante', role: 'CUSTOMER' },
+  '/campaign/:slug': { name: 'Chiến dịch', miniapp: `/campaign/${CAMPAIGN_SLUG}`, web: `/chien-dich/${CAMPAIGN_SLUG}`, role: 'CUSTOMER' },
   '/brand-story': { name: 'Câu chuyện thương hiệu', miniapp: '/brand-story', web: '/cau-chuyen', role: 'CUSTOMER' },
   '/cart': { name: 'Giỏ hàng', miniapp: '/cart', web: '/gio-hang', role: 'CUSTOMER' },
   '/checkout': { name: 'Thanh toán', miniapp: '/checkout', web: '/thanh-toan', role: 'CUSTOMER' },
