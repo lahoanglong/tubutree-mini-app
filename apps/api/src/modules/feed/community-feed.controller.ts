@@ -3,7 +3,7 @@ import type { Response } from 'express';
 import { PRODUCT_SLUG_MAX, type JwtPayload } from '@tubutree/shared-types';
 import { Throttle } from '@nestjs/throttler';
 import { Transform } from 'class-transformer';
-import { trimInvisible } from './text-trim';
+import { trimInvisible } from '../../common/text-trim';
 import { ArrayMaxSize, IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Max, Min, MaxLength, MinLength } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
@@ -16,6 +16,7 @@ import { FEED_POST_IMAGE, IsUploadedImage } from '../../common/uploaded-image';
 import { FeedQuery } from './feed-query.dto';
 import { CommunityFeedService, type CreateEventInput, type CreatePostInput } from './community-feed.service';
 import { OptionalNotNull } from '../../common/decorators/optional-not-null.decorator';
+import { Trim } from '../../common/decorators/trim.decorator';
 
 const KINDS = ['MANUAL', 'QUESTION', 'SHOWCASE', 'TIP'] as const;
 const REPORT_TARGET_TYPES = ['POST', 'COMMENT'] as const;
@@ -26,36 +27,36 @@ const MAX_POST_IMAGES = 6;
 export class CreatePostDto {
   @IsOptional() @IsIn(KINDS as unknown as string[]) kind?: (typeof KINDS)[number];
   @IsOptional() @IsString() categoryId?: string;
-  @IsOptional() @IsString() @MaxLength(160) title?: string;
-  @IsString() @MinLength(1) @MaxLength(5000) body!: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(160) title?: string;
+  @Trim() @IsString() @MinLength(1) @MaxLength(5000) body!: string;
   @IsOptional() @IsArray() @ArrayMaxSize(MAX_POST_IMAGES) @IsUploadedImage(FEED_POST_IMAGE, { each: true }) images?: string[];
   @IsOptional() @IsArray() @ArrayMaxSize(20) @IsString({ each: true }) @MaxLength(PRODUCT_SLUG_MAX, { each: true }) productSlugs?: string[];
   @IsOptional() @IsArray() @ArrayMaxSize(20) @IsString({ each: true }) @MaxLength(100, { each: true }) tagSlugs?: string[];
   @IsOptional() @IsString() eventId?: string;
 }
 export class EditPostDto {
-  @OptionalNotNull() @IsString() @MaxLength(160) title?: string;
-  @OptionalNotNull() @IsString() @MaxLength(5000) body?: string;
+  @OptionalNotNull() @Trim() @IsString() @MaxLength(160) title?: string;
+  @OptionalNotNull() @Trim() @IsString() @MaxLength(5000) body?: string;
   @OptionalNotNull() @IsArray() @ArrayMaxSize(MAX_POST_IMAGES) @IsUploadedImage(FEED_POST_IMAGE, { each: true }) images?: string[];
 }
-class CommentDto {
-  @IsString() @MinLength(1) @MaxLength(500) body!: string;
+export class CommentDto {
+  @Trim() @IsString() @MinLength(1) @MaxLength(500) body!: string;
 }
-class ReportDto {
+export class ReportDto {
   @IsIn(REPORT_TARGET_TYPES as unknown as string[]) targetType!: (typeof REPORT_TARGET_TYPES)[number];
   @IsOptional() @IsString() targetId?: string;
-  @IsString() @MaxLength(500) reason!: string;
+  @Trim() @IsString() @MaxLength(500) reason!: string;
 }
 class RejectPostDto {
-  @IsOptional() @IsString() @MaxLength(200) reason?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(200) reason?: string;
 }
 class PinDto {
   @IsOptional() @IsBoolean() pinned?: boolean;
 }
 export class CreateEventDto {
   @Transform(({ value }) => (typeof value === 'string' ? trimInvisible(value) : value))
-  @IsString() @IsNotEmpty({ message: 'Tiêu đề sự kiện không được để trống.' }) @MaxLength(160) title!: string;
-  @OptionalNotNull() @IsString() @MaxLength(2000) description?: string;
+  @Trim() @IsString() @IsNotEmpty({ message: 'Tiêu đề sự kiện không được để trống.' }) @MaxLength(160) title!: string;
+  @OptionalNotNull() @Trim() @IsString() @MaxLength(2000) description?: string;
   @OptionalNotNull() @IsString() coverUrl?: string;
   @IsDateString() startAt!: string;
   @IsDateString() endAt!: string;

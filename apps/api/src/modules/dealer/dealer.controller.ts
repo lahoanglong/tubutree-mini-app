@@ -15,17 +15,18 @@ import { Type } from 'class-transformer';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { DealerService } from './dealer.service';
 import { ApplyDealerDto, DealerOrderDto } from './dto/dealer.dto';
+import { Trim } from '../../common/decorators/trim.decorator';
 
 export class CreditPaymentDto {
   @IsInt() @Min(1) amount!: number;
-  @IsOptional() @IsString() @MaxLength(500) note?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(500) note?: string;
 }
 
 export class ClaimRewardDto {
   /** Kỳ muốn nhận thưởng: 'Q3/2026' (thưởng quý) | '2026' (thưởng năm). Bỏ trống = kỳ hiện tại. */
   @IsOptional() @IsString() @Matches(/^(Q[1-4]\/\d{4}|\d{4})$/, { message: 'Kỳ thưởng không hợp lệ.' })
   periodKey?: string;
-  @IsOptional() @IsString() @MaxLength(500) note?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(500) note?: string;
 }
 
 class TemplateItemDto {
@@ -33,7 +34,7 @@ class TemplateItemDto {
   @IsInt() @Min(1) quantity!: number;
 }
 export class SaveTemplateDto {
-  @IsString() @MaxLength(120) name!: string;
+  @Trim() @IsString() @MaxLength(120) name!: string;
   @IsArray() @ArrayNotEmpty() @ArrayMaxSize(100) @ValidateNested({ each: true }) @Type(() => TemplateItemDto)
   items!: TemplateItemDto[];
 }

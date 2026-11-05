@@ -2,15 +2,16 @@ import { Type } from 'class-transformer';
 import { ArrayMaxSize, IsArray, IsBoolean, IsEmail, IsInt, IsNotEmpty, IsObject, IsOptional, IsString, Matches, MaxLength, Min, ValidateNested } from 'class-validator';
 import { PaymentMethod } from '@tubutree/shared-types';
 import { IsIn } from 'class-validator';
+import { Trim } from '../../../common/decorators/trim.decorator';
 
 /** MST doanh nghiệp 10 số (chi nhánh thêm -3 số); từ 01/07/2025 cá nhân và hộ kinh doanh dùng số CCCD 12 số làm MST. */
 export const TAX_CODE_RE = /^(\d{10}(-\d{3})?|\d{12})$/;
 
 export class InvoiceRequestDto {
-  @IsString() @Matches(TAX_CODE_RE, { message: 'Mã số thuế gồm 10 số (chi nhánh thêm -3 số) hoặc 12 số.' }) taxCode!: string;
-  @IsString() @MaxLength(255) companyName!: string;
-  @IsString() @MaxLength(500) address!: string;
-  @IsEmail() @MaxLength(254) email!: string; // e-invoice gửi qua email → phải hợp lệ
+  @Trim() @IsString() @Matches(TAX_CODE_RE, { message: 'Mã số thuế gồm 10 số (chi nhánh thêm -3 số) hoặc 12 số.' }) taxCode!: string;
+  @Trim() @IsString() @MaxLength(255) companyName!: string;
+  @Trim() @IsString() @MaxLength(500) address!: string;
+  @Trim() @IsEmail() @MaxLength(254) email!: string; // e-invoice gửi qua email → phải hợp lệ
 }
 
 export class QuoteDto {
@@ -65,10 +66,10 @@ export class PlaceOrderDto {
    */
   @IsOptional() @IsInt() @Min(0) expectedTotal?: number;
 
-  @IsOptional() @IsString() @MaxLength(500) note?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(500) note?: string;
 
   /** Mã giới thiệu CTV (nếu mua qua link chia sẻ). */
-  @IsOptional() @IsString() referralCode?: string;
+  @IsOptional() @Trim() @IsString() referralCode?: string;
 
   /** Slug gian hàng CTV (attribution — lưu vào Order.storefrontSlug). */
   @IsOptional() @IsString() storefrontSlug?: string;

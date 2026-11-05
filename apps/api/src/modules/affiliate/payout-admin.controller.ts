@@ -5,6 +5,7 @@ import { AllowStaff } from '../../common/staff-permissions';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PaginationQuery } from '../../common/pagination';
 import { AffiliateService } from './affiliate.service';
+import { Trim } from '../../common/decorators/trim.decorator';
 
 const PAYOUT_STATUSES = ['REQUESTED', 'APPROVED', 'PAID', 'REJECTED'] as const;
 
@@ -18,19 +19,19 @@ export class PitReportQuery {
 }
 
 export class ReviewPayoutDto {
-  @IsOptional() @IsString() @MaxLength(500) note?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(500) note?: string;
   /** Số thực nhận đang hiện trên màn admin; khác số hiện tại của lệnh thì 409 (tránh duyệt theo số cũ). Bỏ trống = không kiểm. */
   @IsOptional() @IsInt() @Min(0) expectedAmount?: number;
 }
 
 export class RejectPayoutDto {
-  @IsString() @IsNotEmpty() @MaxLength(500) reason!: string;
+  @Trim() @IsString() @IsNotEmpty() @MaxLength(500) reason!: string;
 }
 
 export class MarkPayoutPaidDto {
   /** Mã giao dịch ngân hàng (vd FT26270…) — lưu vào Payout.bankRef để đối soát. */
-  @IsOptional() @IsString() @MaxLength(100) bankRef?: string;
-  @IsOptional() @IsString() @MaxLength(500) note?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(100) bankRef?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(500) note?: string;
   /** Số thực nhận đang hiện trên màn; khác số hiện tại của lệnh thì 409 (tránh chuyển khoản theo số cũ). Bỏ trống = không kiểm. */
   @IsOptional() @IsInt() @Min(0) expectedAmount?: number;
 }

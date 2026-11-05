@@ -20,6 +20,7 @@ import { ZaloMiniAppLoginDto } from './dto/zalo-login.dto';
 import { ZaloOAuthDto } from './dto/zalo-oauth.dto';
 import { RefreshTokenDto } from './dto/refresh.dto';
 import { EnsurePhoneDto } from './dto/ensure-phone.dto';
+import { Trim } from '../../common/decorators/trim.decorator';
 
 export class GuestLoginDto {
   // deviceId là thứ DUY NHẤT xác thực tài khoản khách (xem apps/miniapp/src/utils/idempotency.ts
@@ -27,7 +28,7 @@ export class GuestLoginDto {
   // Ràng buộc định dạng + độ dài ở đây để BE không tin mù một chuỗi tuỳ ý làm định danh xác thực.
   @IsString() @IsNotEmpty() @MinLength(8) @MaxLength(128) @Matches(/^[A-Za-z0-9_-]+$/)
   deviceId!: string;
-  @IsString() @IsOptional() referralCode?: string;
+  @Trim() @IsString() @IsOptional() referralCode?: string;
   /** Nguồn chạm đầu từ máy khách; dạng và lý do không validate chặt xem ZaloMiniAppLoginDto.firstTouch. */
   @IsOptional() @Allow() firstTouch?: unknown;
 }

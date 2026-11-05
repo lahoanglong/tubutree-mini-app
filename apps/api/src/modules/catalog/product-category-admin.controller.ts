@@ -7,12 +7,13 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { CursorPageQuery } from '../../common/cursor-page-query.dto';
 import { clampTake } from '../../common/pagination';
 import { CATEGORY_ASSIGN_MAX_PRODUCTS, ProductCategoryAdminService, type CategoryAssignMode } from './product-category-admin.service';
+import { Trim } from '../../common/decorators/trim.decorator';
 
 const flag = ({ value }: { value: unknown }) =>
   value === '1' || value === 'true' ? true : value === '0' || value === 'false' || value === '' ? false : value;
 
 export class ListCategoryProductsQuery extends CursorPageQuery {
-  @IsOptional() @IsString() @MaxLength(64) q?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(64) q?: string;
   /** `?uncategorized=1`: chỉ sản phẩm chưa có danh mục nào. */
   @IsOptional() @Transform(flag) @IsBoolean() uncategorized?: boolean;
   /** `?onSale=1`: chỉ sản phẩm đang bán thật (bật và đã duyệt). */

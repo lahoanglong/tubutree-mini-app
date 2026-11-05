@@ -5,10 +5,11 @@ import { AllowStaff } from '../../common/staff-permissions';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { CashbackService } from './cashback.service';
 import { CashbackAdminListQuery } from './dto/cashback-admin-list-query.dto';
+import { Trim } from '../../common/decorators/trim.decorator';
 
 class ReviewCashbackDto {
   @IsIn(['CONFIRMED', 'REJECTED']) status!: 'CONFIRMED' | 'REJECTED';
-  @IsOptional() @IsString() @MaxLength(500) note?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(500) note?: string;
 }
 
 /**

@@ -7,11 +7,12 @@ import {
   type WasteShortfallReason,
 } from '@tubutree/shared-types';
 import { WASTE_MAX_REQUEST_LINES } from '../waste.constants';
+import { Trim } from '../../../common/decorators/trim.decorator';
 
 export class WasteMatchDto {
-  @IsOptional() @IsString() @MaxLength(32) parcelCode?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(32) parcelCode?: string;
   @IsOptional() @IsBoolean() phoneMatchConfirmed?: boolean;
-  @IsOptional() @IsString() @MaxLength(64) parcelTracking?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(64) parcelTracking?: string;
 }
 
 export class WasteConfirmLineDto {
@@ -29,6 +30,6 @@ export class WasteConfirmDto {
 
 export class WasteRejectDto {
   @IsIn(WASTE_REJECTION_REASON_VALUES) rejectionReason!: WasteRejectionReason;
-  @IsOptional() @IsString() @MaxLength(500) rejectionNote?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(500) rejectionNote?: string;
   @IsOptional() @ValidateNested() @Type(() => WasteMatchDto) match?: WasteMatchDto;
 }

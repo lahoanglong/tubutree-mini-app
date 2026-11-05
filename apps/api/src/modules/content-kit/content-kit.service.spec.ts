@@ -239,3 +239,19 @@ describe('ContentKitService.get (admin)', () => {
     await expect(svc.get('p1')).resolves.toEqual(kit);
   });
 });
+
+describe('ContentKitService.upsert: faqs lưu dạng object thuần', () => {
+  it('đổi thể hiện lớp DTO thành {q, a} thuần', async () => {
+    class FaqDto {
+      q = 'Ship bao lâu?';
+      a = '2 ngày';
+    }
+    const prisma = makePrisma();
+    (prisma as any).productContentKit.upsert.mockResolvedValue({ id: 'k1' });
+    const svc = new ContentKitService(prisma, makeConfig());
+    await svc.upsert('p1', { faqs: [new FaqDto()] });
+    const faqs = (prisma as any).productContentKit.upsert.mock.calls[0][0].update.faqs as unknown[];
+    expect(faqs).toEqual([{ q: 'Ship bao lâu?', a: '2 ngày' }]);
+    expect(Object.getPrototypeOf(faqs[0])).toBe(Object.prototype);
+  });
+});

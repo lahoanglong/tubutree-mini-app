@@ -1,20 +1,22 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
-import { Transform, Type } from 'class-transformer';
+import { Type } from 'class-transformer';
 import { IsIn, IsInt, IsNotEmpty, IsOptional, IsString, MaxLength, Min, ValidateNested } from 'class-validator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AccountDeletionService, OVERRIDE_REASON_MAX, type DeletionListStatus } from './account-deletion.service';
+import { Trim } from '../../common/decorators/trim.decorator';
 
 class ListDeletionRequestsQuery {
   @IsOptional() @IsIn(['PENDING', 'RESOLVED', 'ALL']) status?: DeletionListStatus;
 }
 
 class WalletOverrideDto {
-  @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value))
+  @Trim()
   @IsString()
   @IsNotEmpty()
   // Độ dài tối thiểu kiểm ở AccountDeletionService.process (đếm theo điểm mã, như web); MaxLength ở đây chỉ chặn body quá to.
   @MaxLength(OVERRIDE_REASON_MAX)
+  @Trim()
   reason!: string;
 
   /** Số dư Ví admin đã thấy trong hộp thoại xác nhận. */
@@ -22,7 +24,7 @@ class WalletOverrideDto {
 }
 
 class ProcessDeletionRequestDto {
-  @IsOptional() @IsString() @MaxLength(500) note?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(500) note?: string;
 
   /** Chỉ bỏ blocker số dư Ví dương; các vướng mắc khác vẫn chặn. Lý do bắt buộc, lưu cùng số tiền bị trừ. */
   @IsOptional() @ValidateNested() @Type(() => WalletOverrideDto) overrideWalletBalance?: WalletOverrideDto;

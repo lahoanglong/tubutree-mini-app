@@ -115,6 +115,20 @@ const COMMON_LABEL_OK: Record<string, Record<string, string>> = {
   UpdateFaqDto: { category: 'form FAQ ở màn quản trị ghi "Nhóm"' },
   CreateQuickReplyDto: { category: 'form Trả lời nhanh ở màn quản trị ghi "Nhóm"' },
   UpdateQuickReplyDto: { category: 'form Trả lời nhanh ở màn quản trị ghi "Nhóm"' },
+  AdminListQuery: { q: 'ô tìm kiếm ghi "Từ khoá"' },
+  ExternalClaimListQueryDto: { q: 'ô tìm kiếm ghi "Từ khoá"' },
+  ExternalOrderListQueryDto: { q: 'ô tìm kiếm ghi "Từ khoá"' },
+  FeedQuery: { q: 'ô tìm kiếm ghi "Từ khoá"' },
+  ListCategoryProductsQuery: { q: 'ô tìm kiếm ghi "Từ khoá"' },
+  ListCommissionRatesQuery: { q: 'ô tìm kiếm ghi "Từ khoá"' },
+  ListCouponsQuery: { q: 'ô tìm kiếm ghi "Từ khoá"' },
+  ListCustomerRefundsQuery: { q: 'ô tìm kiếm ghi "Từ khoá"' },
+  OrderListQuery: { q: 'ô tìm kiếm ghi "Từ khoá"' },
+  ProductQuery: { q: 'ô tìm kiếm ghi "Từ khoá"' },
+  ProductSearchQuery: { q: 'ô tìm kiếm ghi "Từ khoá"' },
+  ReturnRequestsQuery: { q: 'ô tìm kiếm ghi "Từ khoá"' },
+  StorefrontAdminListQueryDto: { q: 'ô tìm kiếm ghi "Từ khoá"' },
+  SuggestQuery: { q: 'ô tìm kiếm ghi "Từ khoá"' },
 };
 
 describe('trường có nhãn riêng theo DTO không rơi im lặng về nhãn chung', () => {

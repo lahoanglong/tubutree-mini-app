@@ -36,7 +36,7 @@ export class AdminWasteRequestQueryDto {
 }
 
 export class WasteLookupQueryDto {
-  @IsString() @MinLength(1) @MaxLength(64) code!: string;
+  @Trim() @IsString() @MinLength(1) @MaxLength(64) code!: string;
 }
 
 export class WasteReceiveDto {
@@ -63,9 +63,9 @@ export class WasteCostDto {
 }
 
 export class WasteUnmatchedCreateDto {
-  @IsOptional() @IsString() @MaxLength(60) carrier?: string;
-  @IsOptional() @IsString() @MaxLength(64) trackingCode?: string;
-  @IsString() @MinLength(1) @MaxLength(200) description!: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(60) carrier?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(64) trackingCode?: string;
+  @Trim() @IsString() @MinLength(1) @MaxLength(200) description!: string;
 }
 
 export class WasteUnmatchedResolveDto {

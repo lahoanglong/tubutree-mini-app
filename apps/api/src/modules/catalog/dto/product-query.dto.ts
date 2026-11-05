@@ -5,6 +5,7 @@ import { MaxCsvItems } from '../../../common/decorators/max-csv-items.decorator'
 import { PaginationQuery } from '../../../common/pagination';
 import { SEED_PATTERN } from '../catalog-seed';
 import { SEARCH_Q_MAX_LENGTH } from './suggest-query.dto';
+import { Trim } from '../../../common/decorators/trim.decorator';
 
 /** Query string luôn là chuỗi: 'true'/'1' → true, 'false'/'0' → false; giá trị khác để IsBoolean từ chối. */
 function toBool({ value }: { value: unknown }): unknown {
@@ -21,7 +22,7 @@ export class ProductQuery extends PaginationQuery {
   @IsOptional() @IsString() brand?: string;
   @IsOptional() @IsString() category?: string;
   @IsOptional() @IsString() segment?: string; // forSegment (vd mom_baby)
-  @IsOptional() @IsString() @MaxLength(SEARCH_Q_MAX_LENGTH) q?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(SEARCH_Q_MAX_LENGTH) q?: string;
 
   @IsOptional()
   @IsIn([...PRODUCT_SORTS])

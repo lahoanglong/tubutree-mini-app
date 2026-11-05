@@ -6,6 +6,7 @@ import type { Request } from 'express';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { throttleIpTracker } from '../../common/throttle/throttle.config';
 import { AiAdvisorService } from './ai-advisor.service';
+import { Trim } from '../../common/decorators/trim.decorator';
 
 /**
  * ThrottlerGuard mặc định track theo IP (req.ip) → nhiều user sau NAT/proxy chung sẽ đụng
@@ -24,11 +25,11 @@ export class UserThrottlerGuard extends ThrottlerGuard {
 
 class ChatTurnDto {
   @IsIn(['user', 'assistant']) role!: 'user' | 'assistant';
-  @IsString() @MaxLength(2000) content!: string;
+  @Trim() @IsString() @MaxLength(2000) content!: string;
 }
 
 class ChatDto {
-  @IsString() @MinLength(1) @MaxLength(500) message!: string;
+  @Trim() @IsString() @MinLength(1) @MaxLength(500) message!: string;
   // Cap rộng chỉ để chặn payload quá khổ — AiAdvisorService tự cắt còn MAX_HISTORY (6) lượt
   // gần nhất trước khi gọi LLM. Cap hẹp hơn số lượt hội thoại thực tế sẽ khiến ValidationPipe
   // (forbidNonWhitelisted) chặn cứng mọi request sau vài lượt chat, hỏng cả tính năng.

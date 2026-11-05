@@ -8,9 +8,10 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PaginationQuery } from '../../common/pagination';
 import { DealerAccountsAdminService } from './dealer-accounts-admin.service';
 import { TIER_ID_PATTERN } from './dealer-tier-input';
+import { Trim } from '../../common/decorators/trim.decorator';
 
 export class ListDealerAccountsQuery extends PaginationQuery {
-  @IsOptional() @IsString() @MaxLength(100) search?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(100) search?: string;
   @IsOptional() @IsString() @MaxLength(64) tierId?: string;
   /** `?debtOnly=1` / `true`: chỉ đại lý còn dư nợ. */
   @IsOptional()
@@ -21,12 +22,12 @@ export class ListDealerAccountsQuery extends PaginationQuery {
 
 /** Kiểu dữ liệu ở đây; khoảng giá trị và trần chiết khấu kiểm ở `tierProblems` để trả câu tiếng Việt gom đủ lỗi. */
 export class TierValuesDto {
-  @IsString() name!: string;
+  @Trim() @IsString() name!: string;
   @IsInt() minOrderVolume!: number;
   /** Phần trăm: 30 là 30%. */
   @IsNumber({ allowNaN: false, allowInfinity: false }) discountPct!: number;
   @IsInt() creditLimit!: number;
-  @IsOptional() @IsString() @MaxLength(40) paymentTerms?: string | null;
+  @IsOptional() @Trim() @IsString() @MaxLength(40) paymentTerms?: string | null;
 }
 
 /** Giá trị bậc admin đã thấy lúc mở form; đã khác trong DB thì server từ chối ghi đè (409). */

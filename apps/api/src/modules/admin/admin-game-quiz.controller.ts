@@ -6,15 +6,15 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { OptionalNotNull } from '../../common/decorators/optional-not-null.decorator';
 import { PaginationQuery } from '../../common/pagination';
 import { GameQuizService, QUIZ_CATEGORIES, QUIZ_DIFFICULTIES } from '../game/game-quiz.service';
+import { Trim, TrimEach } from '../../common/decorators/trim.decorator';
+import { trimInvisible } from '../../common/text-trim';
 
-const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
-const trimEach = ({ value }: { value: unknown }) => (Array.isArray(value) ? value.map((v) => (typeof v === 'string' ? v.trim() : v)) : value);
 /** Chuỗi rỗng nghĩa là xoá giá trị (cột cho phép null). */
-const blankToNull = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() || null : value);
+const blankToNull = ({ value }: { value: unknown }) => (typeof value === 'string' ? trimInvisible(value) || null : value);
 
 export class CreateQuizDto {
-  @Transform(trim) @IsString() @IsNotEmpty() @MaxLength(300) question!: string;
-  @Transform(trimEach) @IsArray() @ArrayMinSize(2) @ArrayMaxSize(4) @IsString({ each: true }) @IsNotEmpty({ each: true }) @MaxLength(120, { each: true }) options!: string[];
+  @Trim() @IsString() @IsNotEmpty() @MaxLength(300) question!: string;
+  @TrimEach() @IsArray() @ArrayMinSize(2) @ArrayMaxSize(4) @IsString({ each: true }) @IsNotEmpty({ each: true }) @MaxLength(120, { each: true }) options!: string[];
   @IsInt() @Min(0) correct!: number;
   @IsIn(QUIZ_CATEGORIES) category!: string;
   @IsIn(QUIZ_DIFFICULTIES) difficulty!: number;
@@ -22,8 +22,8 @@ export class CreateQuizDto {
 }
 
 export class UpdateQuizDto {
-  @OptionalNotNull() @Transform(trim) @IsString() @IsNotEmpty() @MaxLength(300) question?: string;
-  @OptionalNotNull() @Transform(trimEach) @IsArray() @ArrayMinSize(2) @ArrayMaxSize(4) @IsString({ each: true }) @IsNotEmpty({ each: true }) @MaxLength(120, { each: true }) options?: string[];
+  @OptionalNotNull() @Trim() @IsString() @IsNotEmpty() @MaxLength(300) question?: string;
+  @OptionalNotNull() @TrimEach() @IsArray() @ArrayMinSize(2) @ArrayMaxSize(4) @IsString({ each: true }) @IsNotEmpty({ each: true }) @MaxLength(120, { each: true }) options?: string[];
   @OptionalNotNull() @IsInt() @Min(0) correct?: number;
   @OptionalNotNull() @IsIn(QUIZ_CATEGORIES) category?: string;
   @OptionalNotNull() @IsIn(QUIZ_DIFFICULTIES) difficulty?: number;

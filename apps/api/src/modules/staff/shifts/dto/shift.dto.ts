@@ -17,6 +17,7 @@ import {
 } from 'class-validator';
 import { IsUploadedImage, STAFF_IMAGE } from '../../../../common/uploaded-image';
 import { OptionalNotNull } from '../../../../common/decorators/optional-not-null.decorator';
+import { Trim } from '../../../../common/decorators/trim.decorator';
 
 export class ShiftItemDto {
   @IsDateString()
@@ -63,6 +64,7 @@ export class CopyWeekDto {
 export class CancelShiftDto {
   @IsString()
   @MaxLength(500)
+  @Trim()
   reason!: string;
 
   @IsOptional()
@@ -87,6 +89,7 @@ export class ApproveShiftDto {
 export class RejectShiftDto {
   @IsString()
   @MaxLength(500)
+  @Trim()
   reason!: string;
 }
 

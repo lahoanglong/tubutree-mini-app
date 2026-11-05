@@ -1,5 +1,7 @@
-import { Allow, ArrayMaxSize, ArrayNotEmpty, IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min } from 'class-validator';
+import { Type } from 'class-transformer';
+import { ArrayMaxSize, ArrayNotEmpty, IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Matches, Max, MaxLength, Min, ValidateNested } from 'class-validator';
 import { OptionalNotNull } from '../../../common/decorators/optional-not-null.decorator';
+import { Trim } from '../../../common/decorators/trim.decorator';
 
 // Ảnh có thể là URL Cloudinary HOẶC data URL base64 (fallback khi chưa cấu hình Cloudinary), nên
 // trần phải rộng — đủ cho ảnh nén ~1MB nhưng chặn payload vô hạn. Mirror IMAGE_MAX của
@@ -22,27 +24,39 @@ export class BrandSalesQueryDto {
   @IsOptional() @IsIn([...BRAND_SALES_PERIODS]) period?: BrandSalesPeriod;
 }
 
+/**
+ * Chứng nhận của nhãn (Brand.certifications là Json): admin gửi lại nguyên mảng mỗi lần lưu, chỉ mục `verified` mới hiện cho khách
+ * (brand.service getPublicBySlug). proofUrl là link bằng chứng admin dán, không phải ảnh tải lên nên không qua IsImageRef.
+ */
+export class BrandCertificationDto {
+  @Trim() @IsString() @IsNotEmpty() @MaxLength(40) code!: string;
+  @Trim() @IsString() @IsNotEmpty() @MaxLength(200) label!: string;
+  @IsOptional() @IsBoolean() verified?: boolean;
+  @IsOptional() @Trim() @IsString() @MaxLength(500) proofUrl?: string;
+}
+const CERTIFICATIONS_MAX = 20;
+
 export class CreateBrandDto {
-  @IsString() @MaxLength(120) name!: string;
+  @Trim() @IsString() @MaxLength(120) name!: string;
   @IsOptional() @IsString() @MaxLength(80) slug?: string;
   @IsOptional() @IsString() @MaxLength(IMAGE_MAX) logoUrl?: string;
   @IsOptional() @IsString() @MaxLength(IMAGE_MAX) coverUrl?: string;
-  @IsOptional() @IsString() @MaxLength(200) tagline?: string;
-  @IsOptional() @IsString() @MaxLength(STORY_MAX) story?: string;
-  @IsOptional() @IsString() @MaxLength(200) origin?: string;
-  @IsOptional() @Allow() certifications?: unknown;
+  @IsOptional() @Trim() @IsString() @MaxLength(200) tagline?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(STORY_MAX) story?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(200) origin?: string;
+  @IsOptional() @IsArray() @ArrayMaxSize(CERTIFICATIONS_MAX) @ValidateNested({ each: true }) @Type(() => BrandCertificationDto) certifications?: BrandCertificationDto[];
   @IsOptional() @IsBoolean() isPublished?: boolean;
 }
 
 export class UpdateBrandDto {
-  @OptionalNotNull() @IsString() @MaxLength(120) name?: string;
+  @OptionalNotNull() @Trim() @IsString() @MaxLength(120) name?: string;
   @OptionalNotNull() @IsString() @MaxLength(80) slug?: string;
   @OptionalNotNull() @IsString() @MaxLength(IMAGE_MAX) logoUrl?: string;
   @OptionalNotNull() @IsString() @MaxLength(IMAGE_MAX) coverUrl?: string;
-  @OptionalNotNull() @IsString() @MaxLength(200) tagline?: string;
-  @OptionalNotNull() @IsString() @MaxLength(STORY_MAX) story?: string;
-  @OptionalNotNull() @IsString() @MaxLength(200) origin?: string;
-  @IsOptional() @Allow() certifications?: unknown;
+  @OptionalNotNull() @Trim() @IsString() @MaxLength(200) tagline?: string;
+  @OptionalNotNull() @Trim() @IsString() @MaxLength(STORY_MAX) story?: string;
+  @OptionalNotNull() @Trim() @IsString() @MaxLength(200) origin?: string;
+  @OptionalNotNull() @IsArray() @ArrayMaxSize(CERTIFICATIONS_MAX) @ValidateNested({ each: true }) @Type(() => BrandCertificationDto) certifications?: BrandCertificationDto[];
   @OptionalNotNull() @IsBoolean() isPublished?: boolean;
   // Gán chủ nhãn (lộ trình B): userId của đối tác → cho phép họ tự quản nhãn.
   @OptionalNotNull() @IsString() @MaxLength(ID_MAX) ownerUserId?: string;
@@ -56,9 +70,9 @@ export class VerifyBrandDto {
 export class UpdateOwnedBrandDto {
   @OptionalNotNull() @IsString() @MaxLength(IMAGE_MAX) logoUrl?: string;
   @OptionalNotNull() @IsString() @MaxLength(IMAGE_MAX) coverUrl?: string;
-  @OptionalNotNull() @IsString() @MaxLength(200) tagline?: string;
-  @OptionalNotNull() @IsString() @MaxLength(STORY_MAX) story?: string;
-  @OptionalNotNull() @IsString() @MaxLength(200) origin?: string;
+  @OptionalNotNull() @Trim() @IsString() @MaxLength(200) tagline?: string;
+  @OptionalNotNull() @Trim() @IsString() @MaxLength(STORY_MAX) story?: string;
+  @OptionalNotNull() @Trim() @IsString() @MaxLength(200) origin?: string;
 }
 
 // themeColor được nội suy thẳng vào style của trang công khai (border-color), nên chỉ nhận mã hex:
@@ -67,10 +81,10 @@ const THEME_COLOR_HEX = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 const THEME_COLOR_MESSAGE = 'themeColor phải là mã màu hex dạng #RGB hoặc #RRGGBB.';
 
 export class PromotionDto {
-  @IsString() @MaxLength(160) title!: string;
-  @IsOptional() @IsString() @MaxLength(240) subtitle?: string;
+  @Trim() @IsString() @MaxLength(160) title!: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(240) subtitle?: string;
   @IsOptional() @IsString() @Matches(THEME_COLOR_HEX, { message: THEME_COLOR_MESSAGE }) themeColor?: string;
-  @IsOptional() @IsString() @MaxLength(64) couponCode?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(64) couponCode?: string;
   // @IsDateString: endpoint self-service /brand/owner/* dùng chung DTO này với client ít
   // tin cậy hơn admin → chặn chuỗi không phải ngày (new Date('x')→Invalid Date→Prisma 500).
   @IsDateString() startAt!: string;
@@ -79,10 +93,10 @@ export class PromotionDto {
 }
 
 export class UpdatePromotionDto {
-  @OptionalNotNull() @IsString() @MaxLength(160) title?: string;
-  @OptionalNotNull() @IsString() @MaxLength(240) subtitle?: string;
+  @OptionalNotNull() @Trim() @IsString() @MaxLength(160) title?: string;
+  @OptionalNotNull() @Trim() @IsString() @MaxLength(240) subtitle?: string;
   @OptionalNotNull() @IsString() @Matches(THEME_COLOR_HEX, { message: THEME_COLOR_MESSAGE }) themeColor?: string;
-  @OptionalNotNull() @IsString() @MaxLength(64) couponCode?: string;
+  @OptionalNotNull() @Trim() @IsString() @MaxLength(64) couponCode?: string;
   @OptionalNotNull() @IsDateString() startAt?: string;
   @OptionalNotNull() @IsDateString() endAt?: string;
   @OptionalNotNull() @IsBoolean() isActive?: boolean;
@@ -92,8 +106,8 @@ export class UpdatePromotionDto {
 export class DealerRewardDto {
   @IsOptional() @IsString() @MaxLength(ID_MAX) brandId?: string;
   @IsIn(['TOUR', 'GIFT', 'OTHER']) type!: 'TOUR' | 'GIFT' | 'OTHER';
-  @IsString() @MaxLength(160) title!: string;
-  @IsOptional() @IsString() @MaxLength(5000) description?: string;
+  @Trim() @IsString() @MaxLength(160) title!: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(5000) description?: string;
   @IsInt() @Min(0) @Max(DEALER_REWARD_THRESHOLD_MAX) threshold!: number;
   @IsOptional() @IsIn(['QUARTER', 'YEAR']) period?: string;
   @IsOptional() @IsInt() @Min(0) sortOrder?: number;
@@ -104,8 +118,8 @@ export class ProductIdsDto {
 }
 
 export class UpdateDealerRewardDto {
-  @OptionalNotNull() @IsString() @MaxLength(160) title?: string;
-  @OptionalNotNull() @IsString() @MaxLength(5000) description?: string;
+  @OptionalNotNull() @Trim() @IsString() @MaxLength(160) title?: string;
+  @OptionalNotNull() @Trim() @IsString() @MaxLength(5000) description?: string;
   @OptionalNotNull() @IsInt() @Min(0) @Max(DEALER_REWARD_THRESHOLD_MAX) threshold?: number;
   @OptionalNotNull() @IsIn(['QUARTER', 'YEAR']) period?: string;
   @OptionalNotNull() @IsBoolean() isActive?: boolean;

@@ -1,4 +1,4 @@
-import { trimInvisible } from './text-trim';
+import { trimInvisible } from '../../common/text-trim';
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';

@@ -7,6 +7,7 @@ import { NOT_NULL_CONSTRAINT } from './decorators/optional-not-null.decorator';
  * message[0] của lỗi 400 nên không để câu tiếng Anh của class-validator lọt ra.
  */
 export const FIELD_LABELS: Record<string, string> = {
+  a: 'Câu trả lời',
   rating: 'Số sao',
   comment: 'Nội dung đánh giá',
   images: 'Ảnh',
@@ -31,6 +32,7 @@ export const FIELD_LABELS: Record<string, string> = {
   code: 'Mã',
   startAt: 'Thời gian bắt đầu',
   endAt: 'Thời gian kết thúc',
+  proofUrl: 'Link bằng chứng',
   q: 'Từ khoá',
   page: 'Trang',
   limit: 'Số dòng mỗi trang',
@@ -228,6 +230,7 @@ export const FIELD_LABELS: Record<string, string> = {
   warehousePhone: 'Số điện thoại kho',
   warehouseWard: 'Phường/xã của kho',
   workDate: 'Ngày làm việc',
+  verified: 'Đã xác minh',
   year: 'Năm',
   zaloTemplateId: 'Mã mẫu ZNS',
 };
@@ -238,6 +241,7 @@ export const FIELD_LABELS_BY_DTO: Record<string, Record<string, string>> = {
   UpdateQuizDto: { category: 'Chủ đề' },
   FeedQuery: { category: 'Chủ đề' },
   ProductQuery: { category: 'Danh mục' },
+  ContentKitFaqDto: { q: 'Câu hỏi' },
 };
 
 const trailingNumber = (original: string): string => original.match(/(-?\d+(?:\.\d+)?)(?: characters| elements)?$/)?.[1] ?? '';
