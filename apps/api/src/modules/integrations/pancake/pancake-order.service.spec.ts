@@ -1999,3 +1999,58 @@ describe('PancakeOrderService.pushOrder — hàng rào token: câu ghi cuối l�
     expect(t.row().pancakeSyncError).toContain('422');
   });
 });
+
+describe('PancakeOrderService.pushOrder — hai đơn Pancake cho một đơn Tubu (A3)', () => {
+  const savedElsewhere = (t: ReturnType<typeof setup>, id: string) => {
+    // Lượt khác đã gắn mã Pancake vào đơn trong lúc lệnh tạo của ta còn bay.
+    Object.assign(t.row(), { pancakeOrderId: id, pancakePushStatus: PANCAKE_PUSH.SYNCED, pancakePushClaimedAt: null });
+  };
+
+  it('lệnh tạo của ta trả mã khác mã đã lưu → không đè mã đã lưu, gắn "Cần xử lý" nêu cả hai mã và báo ops', async () => {
+    const t = setup();
+    t.client.createOrder.mockImplementation(async () => {
+      savedElsewhere(t, 'pk-saved');
+      return { id: 'pk-new' };
+    });
+    const error = jest.spyOn((t.svc as unknown as { logger: Logger }).logger, 'error').mockImplementation(() => undefined);
+    await t.svc.pushOrder('o1');
+    const reason = 'Pancake có 2 đơn cho đơn TUBU1: #pk-saved và #pk-new. Huỷ #pk-new trên Pancake trước khi kho giao.';
+    expect(t.row()).toMatchObject({ pancakeOrderId: 'pk-saved', pancakePushStatus: PANCAKE_PUSH.SYNCED, pancakeAttention: reason });
+    expect(t.alerts.alert).toHaveBeenCalledWith('TUBU1', reason, expect.anything());
+    expect(error).toHaveBeenCalledWith(expect.stringContaining('#pk-new'));
+  });
+
+  it('cùng mã đã lưu → không nhắc, không báo', async () => {
+    const t = setup();
+    t.client.createOrder.mockImplementation(async () => {
+      savedElsewhere(t, 'pk-same');
+      return { id: 'pk-same' };
+    });
+    await t.svc.pushOrder('o1');
+    expect(t.row().pancakeAttention).toBeNull();
+    expect(t.alerts.alert).not.toHaveBeenCalled();
+  });
+
+  it('nhận đơn tìm thấy (adopt) mà mã khác mã vừa được lưu → cùng cảnh báo', async () => {
+    const t = setup({ pancakePushClaimedAt: new Date(Date.now() - PancakeOrderService.SEND_SETTLE_MS - 1_000), pancakePushStatus: PANCAKE_PUSH.PENDING });
+    t.client.searchOrders.mockImplementation(async () => {
+      savedElsewhere(t, 'pk-saved');
+      return [{ id: 777, status: 0, custom_id: 'TUBU1' }];
+    });
+    await t.svc.pushOrder('o1');
+    expect(t.row()).toMatchObject({ pancakeOrderId: 'pk-saved' });
+    expect(t.row().pancakeAttention).toBe('Pancake có 2 đơn cho đơn TUBU1: #pk-saved và #777. Huỷ #777 trên Pancake trước khi kho giao.');
+  });
+
+  it('không báo lại cùng lời đang chờ trên ô', async () => {
+    const t = setup();
+    t.client.createOrder.mockImplementation(async () => {
+      savedElsewhere(t, 'pk-saved');
+      return { id: 'pk-new' };
+    });
+    await t.svc.pushOrder('o1');
+    t.row().pancakeOrderId = null; // đẩy lần hai gặp đúng cảnh cũ
+    await t.svc.pushOrder('o1');
+    expect(t.alerts.alert).toHaveBeenCalledTimes(1);
+  });
+});

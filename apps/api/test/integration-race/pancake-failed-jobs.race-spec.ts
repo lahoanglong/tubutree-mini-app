@@ -796,6 +796,43 @@ const url = process.env.TEST_REDIS_URL;
     expect(await prisma.order.findUniqueOrThrow({ where: { id: x.id } })).toMatchObject({ pancakePushStatus: 'PUSHING', pancakeLastAttemptAt: claimedAt });
   });
 
+  it('A3: Pancake trả lời chậm hơn cả cửa sổ chờ nên lượt sau đã tạo đơn khác: lượt chậm không đè mã đã lưu, đơn mang "Pancake có 2 đơn" nêu cả hai mã và ops được báo', async () => {
+    const window = jest.replaceProperty(PancakeOrderService, 'SEND_SETTLE_MS', 100);
+    const lease = jest.replaceProperty(PancakeOrderService, 'PUSH_LEASE_MS', 50);
+    const x = await order();
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    let n = 0;
+    const slow = `pk-slow-${randCode(6)}`;
+    const quick = `pk-quick-${randCode(6)}`;
+    respond(async (code) => {
+      if (code !== x.code) return { success: true, data: { id: `pk-${code}` } };
+      n += 1;
+      if (n === 1) {
+        await gate;
+        return { success: true, data: { id: slow } };
+      }
+      return { success: true, data: { id: quick } };
+    });
+    alerts.alert.mockClear();
+    let a: Promise<unknown> = Promise.resolve();
+    try {
+      a = service.pushOrder(x.id).catch((e: unknown) => e);
+      await until(async () => n >= 1);
+      await sleep(250); // quá cửa sổ chờ (100ms) và hạn thuê (50ms): lượt sau được tra rồi tạo
+      expect(await service.pushOrder(x.id)).toBe(quick);
+    } finally {
+      release();
+    }
+    await a;
+    window.restore();
+    lease.restore();
+    const reason = `Pancake có 2 đơn cho đơn ${x.code}: #${quick} và #${slow}. Huỷ #${slow} trên Pancake trước khi kho giao.`;
+    expect(await prisma.order.findUniqueOrThrow({ where: { id: x.id } })).toMatchObject({ pancakeOrderId: quick, pancakePushStatus: 'SYNCED', pancakeAttention: reason });
+    expect(alerts.alert.mock.calls.filter(([code]) => code === x.code)).toHaveLength(1);
+    expect(n).toBe(2);
+  });
+
   it('markOverdue không đánh STALE đơn quá 72 giờ đang PUSHING trong hạn thuê quyền đẩy; hết hạn thuê thì lần quét sau mới đánh', async () => {
     const x = await order();
     // createdAt rất cũ để đơn đứng đầu lô markOverdue (xếp theo ngày đặt tăng dần) dù DB dùng chung có đơn quá hạn của spec khác.

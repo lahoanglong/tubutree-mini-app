@@ -953,7 +953,10 @@ export class PancakeOrderService {
         pancakePaymentSynced: paymentSynced,
       },
     });
-    if (saved.count === 0) return;
+    if (saved.count === 0) {
+      await this.flagDuplicateCreate(order, pancakeOrderId);
+      return;
+    }
     await clearPancakeAttention(this.prisma, order.id, ATTENTION_PUSH_FAILED);
     await removeFailedPancakePush(this.pushQueue, order.id);
     // Một lần đẩy thành công (đơn nào cũng được) nghĩa là khoá API đã đúng lại: cả nhóm CONFIG quay lại lô thử lại của cron, đánh dấu
@@ -966,6 +969,19 @@ export class PancakeOrderService {
     } else if (now.paymentStatus === 'PAID' && !now.pancakePaymentSynced && isPrepaidMethod(now.paymentMethod)) {
       await this.enqueuePayment(now.id).catch((e) => this.logger.error(`Enqueue cập nhật thanh toán Pancake lỗi cho ${now.code}: ${pancakeErrorText(e)}`));
     }
+  }
+
+  /**
+   * `saveCreated` không gắn được vì đơn đã có mã Pancake. Mã đó khác mã ta vừa tạo/tìm thấy nghĩa là kho có HAI đơn cho một đơn Tubu (ngoài cửa sổ chờ
+   * gửi, tới đây là việc Pancake trả lời quá chậm): không đè mã đã lưu, gắn "Cần xử lý" bảo huỷ đơn mới và báo ops. Cùng mã thì lượt khác đã lưu hộ.
+   */
+  private async flagDuplicateCreate(order: Pick<Order, 'id' | 'code'>, createdId: string): Promise<void> {
+    const current = await this.prisma.order.findUnique({ where: { id: order.id }, select: { pancakeOrderId: true } });
+    const savedId = current?.pancakeOrderId;
+    if (!savedId || savedId === createdId) return;
+    const reason = `Pancake có 2 đơn cho đơn ${order.code}: #${savedId} và #${createdId}. Huỷ #${createdId} trên Pancake trước khi kho giao.`;
+    this.logger.error(`Đơn ${order.code}: ${reason}`);
+    await flagPancakeAttention(this.prisma, this.alerts, order, reason, this.logger);
   }
 
   private async requestCancel(order: Pick<Order, 'id' | 'code'>): Promise<void> {
