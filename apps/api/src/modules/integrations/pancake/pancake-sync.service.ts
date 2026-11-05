@@ -11,7 +11,7 @@ import type { PancakeProductDTO, PancakeProductsResponse, PancakeVariationDTO } 
 import { CRON_TZ } from '../../../common/cron-tz';
 import { LEGACY_FAKE_PANCAKE_PREFIX } from './pancake-fulfilment';
 import { pancakeProductSlug } from './pancake-product-slug';
-import { payloadFlag, payloadId, payloadNonNegInt, payloadQuantity, payloadText, payloadTextList } from './pancake-payload';
+import { payloadId, payloadNonNegInt, payloadQuantity, payloadRemoved, payloadText, payloadTextList } from './pancake-payload';
 import { BROKEN_VARIANT_NAME_MARKER, isBrokenVariantName, variantAttributes, variantLabel } from './pancake-variant-fields';
 import { CronLeaderService } from '../../../common/cron-leader/cron-leader.service';
 import { RunLease } from '../../../common/cron-leader/run-lease';
@@ -446,7 +446,7 @@ export class PancakeSyncService implements OnModuleInit {
     ];
 
     const description = typeof p.description === 'string' && p.description.trim() ? p.description : null;
-    const sellable = variations.filter((v) => !payloadFlag(v.is_removed) && positivePrice(v.retail_price) !== null);
+    const sellable = variations.filter((v) => !payloadRemoved(v.is_removed) && positivePrice(v.retail_price) !== null);
     const baseData = {
       name,
       // Mô tả Pancake để trống không xoá mô tả admin đã nhập ở trang quản trị; có nội dung thật thì Pancake là nguồn chính.
@@ -461,7 +461,7 @@ export class PancakeSyncService implements OnModuleInit {
     const soldBefore = !!existing && existing.basePrice > 0 && existing.pancakeHold !== PANCAKE_HOLD.NO_PRICE;
     const productHold = this.holdPatch(
       existing,
-      payloadFlag(p.is_removed) ? PANCAKE_HOLD.REMOVED : !priced && !soldBefore ? PANCAKE_HOLD.NO_PRICE : null,
+      payloadRemoved(p.is_removed) ? PANCAKE_HOLD.REMOVED : !priced && !soldBefore ? PANCAKE_HOLD.NO_PRICE : null,
     );
 
     // forSegment: suy từ tên để segment pills (Cho mẹ&bé / Nhà bếp xanh / Chăm sóc cá nhân / Sống xanh)
@@ -546,7 +546,7 @@ export class PancakeSyncService implements OnModuleInit {
       where: { pancakeId: vid },
       select: { retailPrice: true, salePrice: true, isActive: true, pancakeHold: true, name: true },
     });
-    const removed = payloadFlag(v.is_removed);
+    const removed = payloadRemoved(v.is_removed);
     const { prices, noPrice } = this.variationPrices(v, prev);
     const hold = this.holdPatch(prev, removed ? PANCAKE_HOLD.REMOVED : noPrice ? PANCAKE_HOLD.NO_PRICE : null);
     // Biến thể khách không mua được sau lượt này (Pancake xoá, hoặc admin đã tắt bán) hạ giá thì không báo "giảm giá".

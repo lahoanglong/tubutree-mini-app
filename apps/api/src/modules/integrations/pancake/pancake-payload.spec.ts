@@ -1,4 +1,4 @@
-import { payloadFlag, payloadId, payloadNonNegInt, payloadNumericString, payloadQuantity, payloadText } from './pancake-payload';
+import { payloadId, payloadNonNegInt, payloadNumericString, payloadQuantity, payloadRemoved, payloadText } from './pancake-payload';
 
 const STRANGE: unknown[] = [null, undefined, {}, { a: 1 }, [], ['x'], true, false, () => 1, Symbol('s'), NaN, Infinity, -Infinity];
 
@@ -76,13 +76,16 @@ describe('payloadQuantity', () => {
   });
 });
 
-describe('payloadFlag', () => {
-  it.each([[true], [1], ['1'], ['true'], [' TRUE ']])('%p → bật', (v) => {
-    expect(payloadFlag(v)).toBe(true);
+describe('payloadRemoved', () => {
+  it.each([[false], [0], [-0], [null], [undefined], [NaN], [''], ['   '], ['0'], ['false'], [' FALSE '], ['False']])('%p → chưa xoá', (v) => {
+    expect(payloadRemoved(v)).toBe(false);
   });
-  it.each([[false], [0], ['0'], ['false'], [''], ['yes'], [2], ...STRANGE.filter((v) => v !== true).map((v) => [v])])('%p → tắt', (v) => {
-    expect(payloadFlag(v)).toBe(false);
-  });
+  it.each([[true], [1], ['1'], ['true'], [2], [-1], ['yes'], ['2026-11-05T10:00:00Z'], [1730800000000], [{}], [{ a: 1 }], [[]], [['x']], ['null'], ['undefined'], [Infinity]])(
+    '%p → đã xoá (giữ nghĩa truthy cũ của `if (is_removed)`)',
+    (v) => {
+      expect(payloadRemoved(v)).toBe(true);
+    },
+  );
 });
 
 describe('chuỗi số có phần lẻ (Pancake gửi "269000.000", "7.00")', () => {

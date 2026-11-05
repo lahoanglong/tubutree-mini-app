@@ -1085,7 +1085,7 @@ describe('PancakeSyncService — payload thiếu trường hoặc kiểu lạ (W
       expect(mk(prisma).product.create.mock.calls[0][0].data).not.toHaveProperty('pancakeHold', 'REMOVED');
     });
 
-    it.each([[true], ['true'], [1]])('is_removed=%j: tắt sản phẩm', async (flag) => {
+    it.each([[true], ['true'], [1], ['1'], [2], ['yes'], ['2026-11-05T10:00:00Z'], [1730800000000], [{}]])('is_removed=%j: tắt sản phẩm', async (flag) => {
       const { prisma } = await sync([product('a', [variation('v-a')], { is_removed: flag })]);
       expect(mk(prisma).product.create.mock.calls[0][0].data).toMatchObject({ isActive: false, pancakeHold: 'REMOVED' });
     });
@@ -1190,7 +1190,12 @@ describe('PancakeSyncService — payload thiếu trường hoặc kiểu lạ (W
       });
     });
 
-    it.each([['false'], [0], [null]])('is_removed=%j: không tắt biến thể', async (flag) => {
+    it.each([[true], ['true'], [1], ['1'], [2], ['yes'], ['2026-11-05T10:00:00Z'], [1730800000000], [{}]])('is_removed=%j: tắt biến thể', async (flag) => {
+      const { prisma } = await sync([product('a', [variation('v-a', { is_removed: flag })])]);
+      expect(firstUpsert(prisma).create).toMatchObject({ isActive: false, pancakeHold: 'REMOVED' });
+    });
+
+    it.each([['false'], [' False '], [0], ['0'], [''], [null]])('is_removed=%j: không tắt biến thể', async (flag) => {
       const { prisma } = await sync([product('a', [variation('v-a', { is_removed: flag })])]);
       expect(firstUpsert(prisma).create.pancakeHold ?? null).toBeNull();
       expect(firstUpsert(prisma).create.isActive ?? true).toBe(true);

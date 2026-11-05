@@ -82,9 +82,16 @@ export function payloadQuantity(x: unknown): number | null {
   return Math.abs(n) > INT4_MAX ? null : n;
 }
 
-/** Cờ bật/tắt: chỉ `true`, 1, "1", "true" là bật. Chuỗi "false" không được thành bật như `Boolean("false")`. */
-export function payloadFlag(x: unknown): boolean {
-  return x === true || x === 1 || x === '1' || (typeof x === 'string' && x.trim().toLowerCase() === 'true');
+/**
+ * Cờ "đã xoá" (`is_removed`): chỉ false, 0, "0", "false", "", null/undefined là CHƯA xoá. Mọi giá trị khác (true, 1, 2, "yes", mốc thời
+ * gian xoá, object) là đã xoá, giữ đúng nghĩa của `if (is_removed)` cũ; chuỗi "false" thì không được thành đã xoá như `Boolean("false")`.
+ */
+export function payloadRemoved(x: unknown): boolean {
+  if (typeof x === 'string') {
+    const t = x.trim().toLowerCase();
+    return !(t === '' || t === '0' || t === 'false');
+  }
+  return Boolean(x);
 }
 
 /** Mảng các chuỗi khác rỗng: nhận mảng, hoặc một chuỗi đơn lẻ (Pancake trả một ảnh thay vì mảng); còn lại rỗng. */
