@@ -97,6 +97,26 @@ describe('/thanh-toan — lỗi ô nhập và nút đặt hàng bấm được (
     expect(m.placeOrder).not.toHaveBeenCalled();
   });
 
+  it('bấm Đặt hàng khi thiếu địa chỉ rồi mới bật hoá đơn: các ô hoá đơn chưa đỏ; chỉ báo sau khi rời ô hoặc sau lần bấm kế tiếp', async () => {
+    m.addresses = [];
+    const r = await mount();
+    click(placeButton(r));
+    await flush(4);
+    expect(r.container.textContent).toContain('Chọn địa chỉ giao hàng để đặt hàng.');
+    click(checkbox(r, 'Yêu cầu xuất hoá đơn VAT'));
+    await flush(2);
+    expect(field(r, 'Mã số thuế').getAttribute('aria-invalid')).toBeNull();
+    expect(field(r, 'Tên công ty').getAttribute('aria-invalid')).toBeNull();
+    expect(r.container.textContent).not.toContain('Nhập mã số thuế.');
+    blur(field(r, 'Mã số thuế'));
+    await flush(1);
+    expect(field(r, 'Mã số thuế').getAttribute('aria-invalid')).toBe('true');
+    expect(field(r, 'Tên công ty').getAttribute('aria-invalid')).toBeNull();
+    click(placeButton(r));
+    await flush(4);
+    expect(field(r, 'Tên công ty').getAttribute('aria-invalid')).toBe('true');
+  });
+
   it('hoá đơn: rời ô có giá trị sai thì báo ngay dưới ô đó, ô chưa chạm chưa báo; sửa đúng thì hết báo và đặt được', async () => {
     const r = await mount();
     click(checkbox(r, 'Yêu cầu xuất hoá đơn VAT'));
@@ -106,7 +126,7 @@ describe('/thanh-toan — lỗi ô nhập và nút đặt hàng bấm được (
     blur(field(r, 'Email nhận hoá đơn'));
     await flush(1);
     expect(field(r, 'Email nhận hoá đơn').getAttribute('aria-invalid')).toBe('true');
-    expect(describedBy(field(r, 'Email nhận hoá đơn'))).toContain('Email chưa đúng.');
+    expect(describedBy(field(r, 'Email nhận hoá đơn'))).toMatch(/^(⚠ )?Email chưa đúng\. Ví dụ: ten@congty\.vn\.$/);
     expect(field(r, 'Tên công ty').getAttribute('aria-invalid')).toBeNull();
     typeInto(field(r, 'Mã số thuế'), '0312345678');
     typeInto(field(r, 'Tên công ty'), 'Công ty A');

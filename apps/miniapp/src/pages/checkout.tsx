@@ -269,8 +269,10 @@ export default function CheckoutPage() {
   const invoiceErrors = wantInvoice ? validateInvoiceFields(invoice) : {};
   const [invoiceTouched, setInvoiceTouched] = useState<Partial<Record<InvoiceField, boolean>>>({});
   const [placeAttempted, setPlaceAttempted] = useState(false);
+  // Lần bấm Đặt hàng tính cho ô hoá đơn tách riêng khỏi địa chỉ: bật hoá đơn SAU một lần bấm thiếu địa chỉ thì bốn ô chưa được đỏ ngay.
+  const [invoiceAttempted, setInvoiceAttempted] = useState(false);
   const [focusTick, setFocusTick] = useState(0);
-  const invoiceError = (f: InvoiceField) => (placeAttempted || invoiceTouched[f] ? invoiceErrors[f] : undefined);
+  const invoiceError = (f: InvoiceField) => (invoiceAttempted || invoiceTouched[f] ? invoiceErrors[f] : undefined);
   const touchInvoice = (f: InvoiceField) => () => setInvoiceTouched((t) => (t[f] ? t : { ...t, [f]: true }));
   const addressRef = useRef<HTMLDivElement>(null);
   const invoiceRef = useRef<HTMLDivElement>(null);
@@ -1098,6 +1100,10 @@ export default function CheckoutPage() {
           onClick={() => {
             haptic('light');
             bumpChoice();
+            if (!wantInvoice) {
+              setInvoiceAttempted(false);
+              setInvoiceTouched({});
+            }
             setWantInvoice((v) => !v);
           }}
           flex
@@ -1324,6 +1330,7 @@ export default function CheckoutPage() {
               if (submitting) return;
               if (formBlocked) {
                 setPlaceAttempted(true);
+                setInvoiceAttempted(true);
                 setFocusTick((n) => n + 1);
                 return;
               }

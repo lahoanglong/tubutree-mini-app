@@ -2444,6 +2444,23 @@ describe('CheckoutPage — lỗi ô nhập và nút đặt hàng bấm được 
     expect(mocks.placeOrder).not.toHaveBeenCalled();
   });
 
+  it('bấm Đặt hàng khi thiếu địa chỉ rồi mới bật hoá đơn: các ô hoá đơn chưa đỏ; chỉ báo sau khi rời ô hoặc sau lần bấm kế tiếp', async () => {
+    mocks.getAddresses.mockResolvedValue([]);
+    renderPage();
+    await pressPlace();
+    expect((await screen.findAllByText('Chọn địa chỉ giao hàng để đặt hàng.')).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByText('Yêu cầu xuất hoá đơn VAT'));
+    const tax = await screen.findByLabelText('Mã số thuế');
+    expect(tax).not.toHaveAttribute('aria-invalid');
+    expect(screen.getByLabelText('Tên công ty')).not.toHaveAttribute('aria-invalid');
+    expect(screen.queryByText('Nhập mã số thuế.')).not.toBeInTheDocument();
+    fireEvent.blur(tax);
+    await waitFor(() => expect(tax).toHaveAttribute('aria-invalid', 'true'));
+    expect(screen.getByLabelText('Tên công ty')).not.toHaveAttribute('aria-invalid');
+    await pressPlace();
+    await waitFor(() => expect(screen.getByLabelText('Tên công ty')).toHaveAttribute('aria-invalid', 'true'));
+  });
+
   it('hoá đơn: rời ô có giá trị sai thì báo ngay dưới ô đó, ô chưa chạm chưa báo; sửa đúng thì lời báo mất và đặt được', async () => {
     renderPage();
     await screen.findByText('Đặt hàng · 70.000đ');
@@ -2453,7 +2470,7 @@ describe('CheckoutPage — lỗi ô nhập và nút đặt hàng bấm được 
     expect(email).not.toHaveAttribute('aria-invalid');
     fireEvent.blur(email);
     await waitFor(() => expect(email).toHaveAttribute('aria-invalid', 'true'));
-    expect(document.getElementById(email.getAttribute('aria-describedby')!)).toHaveTextContent('Email chưa đúng.');
+    expect(document.getElementById(email.getAttribute('aria-describedby')!)).toHaveTextContent(/^(⚠ )?Email chưa đúng\. Ví dụ: ten@congty\.vn\.$/);
     expect(screen.getByLabelText('Tên công ty')).not.toHaveAttribute('aria-invalid');
     fireEvent.change(screen.getByLabelText('Mã số thuế'), { target: { value: '0312345678' } });
     fireEvent.change(screen.getByLabelText('Tên công ty'), { target: { value: 'Cty A' } });

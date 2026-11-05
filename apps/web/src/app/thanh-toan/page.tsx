@@ -268,9 +268,11 @@ export default function CheckoutPage() {
   const invoiceAllErrors = wantInvoice ? validateInvoiceFields(invoice) : {};
   const [invoiceTouched, setInvoiceTouched] = useState<Partial<Record<InvoiceField, boolean>>>({});
   const [placeAttempted, setPlaceAttempted] = useState(false);
+  // Lần bấm Đặt hàng tính cho ô hoá đơn tách riêng khỏi địa chỉ: bật hoá đơn SAU một lần bấm thiếu địa chỉ thì bốn ô chưa được đỏ ngay.
+  const [invoiceAttempted, setInvoiceAttempted] = useState(false);
   const [focusTick, setFocusTick] = useState(0);
   const invoiceShown = Object.fromEntries(
-    Object.entries(invoiceAllErrors).filter(([f]) => placeAttempted || invoiceTouched[f as InvoiceField]),
+    Object.entries(invoiceAllErrors).filter(([f]) => invoiceAttempted || invoiceTouched[f as InvoiceField]),
   ) as Partial<Record<InvoiceField, string>>;
   const formBlocked = !addressId || !invoiceValid;
   const addressBlockRef = useRef<HTMLDivElement>(null);
@@ -591,6 +593,7 @@ export default function CheckoutPage() {
   const onPlace = () => {
     if (formBlocked) {
       setPlaceAttempted(true);
+      setInvoiceAttempted(true);
       setFocusTick((n) => n + 1);
       return;
     }
@@ -838,7 +841,13 @@ export default function CheckoutPage() {
           <div ref={invoiceBlockRef} data-mini-block="invoice" className="max-md:order-9 max-md:mt-2">
             <InvoiceSection
               want={wantInvoice}
-              onWant={chosen(setWantInvoice)}
+              onWant={(v) => {
+                chosen(setWantInvoice)(v);
+                if (v) {
+                  setInvoiceAttempted(false);
+                  setInvoiceTouched({});
+                }
+              }}
               invoice={invoice}
               onInvoice={chosen(setInvoice)}
               errors={invoiceShown}
