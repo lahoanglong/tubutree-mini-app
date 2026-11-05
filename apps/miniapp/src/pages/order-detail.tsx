@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { INVOICE_ISSUE_FAILED, returnWindowExpired } from '@tubutree/app-core/client-copy';
+import { INVOICE_ISSUE_FAILED } from '@tubutree/app-core/client-copy';
 import { Box, Page, Text, Sheet, useParams, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { RotateCcw, Recycle, Star, Leaf, CheckCircle2, XCircle, Clock, type LucideIcon } from 'lucide-react';
+import { Recycle, Star, Leaf, CheckCircle2, XCircle, Clock, type LucideIcon } from 'lucide-react';
 import { fetchOrder, fetchOrders, cancelOrder, fetchMyRefunds, fetchMyReturns, fetchRefundBank, type OrderView } from '../services/shop-api';
 import { getErrorMessage, getLoadErrorMessage, isNotFoundError } from '../services/api';
 import { getWasteRequestByOrder, WASTE_QUERY_KEYS } from '../services/waste-api';
@@ -17,21 +17,8 @@ import {
   formatDateTime,
   addressLine,
 } from '../utils/format';
-import { journeyEventLabel, journeyEvents, shippingEventLabel } from '../utils/format-shipping';
-import {
-  STATUS_COLOR,
-  buyerStatusLabel,
-  canCustomerCancel,
-  isReorderable,
-  isHandedToCarrier,
-  orderPointsNote,
-  orderStamp,
-  stepTime,
-  returnWindowState,
-  timelineIndex,
-  timelineStepsFor,
-  discountRows,
-} from '../utils/order-status';
+import { shippingEventLabel } from '../utils/format-shipping';
+import { STATUS_COLOR, buyerStatusLabel, orderPointsNote, orderStamp, discountRows } from '../utils/order-status';
 import {
   hasOA,
   followOA,
@@ -48,12 +35,20 @@ import { Badge } from '../components/ui/badge';
 import { Icon, type IconProps } from '../components/ui/icon';
 import { KeyValueRow } from '../components/ui/key-value-row';
 import { rowKeyboardProps } from '../components/ui/row-keyboard';
-import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { Button } from '../components/ui/button';
+import { BottomSheet } from '../components/ui/bottom-sheet';
 import { ListRow } from '../components/ui/list-row';
 import { ProductThumb } from '../components/ui/product-thumb';
 import { ReorderSheet } from '../components/reorder/reorder-sheet';
 import { CancelReasonPicker } from '../components/orders/cancel-reason-picker';
+import { OrderStatusHero } from '../components/orders/order-status-hero';
+import { OrderTrack } from '../components/orders/order-track';
+import { OrderShipping } from '../components/orders/order-shipping';
+import { OrderActionBar } from '../components/orders/order-action-bar';
+import { orderActionPlan, orderHeadline, orderTrack, shippingEvents, type OrderActionKind, type TrackOrder } from '@tubutree/app-core/commerce/order-tracking';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { useCountdown } from '../hooks/use-countdown';
+import { serverNow } from '../utils/server-clock';
 import { orderCopy } from '@tubutree/app-core/account-copy';
 import { customerOrderNote, isSubscriptionOrder, openProductSlug } from '@tubutree/app-core/api/orders';
 import { orderDeliveryEtaLabel } from '@tubutree/app-core/shipping-eta';
@@ -66,14 +61,12 @@ import { RefundDestinationPicker } from '../components/orders/refund-destination
 import { OrderRefunds } from '../components/orders/order-refunds';
 import {
   EMPTY_BANK,
-  canPayOrderNow,
   cancelRefundMode,
   destinationBody,
   remainingByLine,
   refundOfReturn,
   returnLinesText,
   returnStatusLabel,
-  showsPaymentDeadline,
   showsRefundPanel,
   type RefundBankInput,
   type RefundMethodChoice,
@@ -88,6 +81,7 @@ export default function OrderDetailPage() {
   const publicConfig = usePublicConfig();
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [returnOpen, setReturnOpen] = useState(false);
+  const [contactOpen, setContactOpen] = useState(false);
   // Đổi key mỗi lần mở để form đổi/trả khởi tạo lại theo dữ liệu mới nhất (vẫn giữ animation đóng của sheet).
   const [returnKey, setReturnKey] = useState(0);
   const [cancelMethod, setCancelMethod] = useState<RefundMethodChoice>('WALLET');
@@ -160,6 +154,11 @@ export default function OrderDetailPage() {
     queryFn: () => fetchOrders({}, 1, 1),
     enabled: hasOA && oaPromptReady && !oaPromptSeen && !!order.data,
   });
+
+  // Đếm ngược theo giờ máy chủ chỉ khi đơn còn chờ khách chuyển khoản; hook phải đứng trước các return sớm.
+  const deadlineLeft = useCountdown(
+    order.data?.status === 'PENDING_PAYMENT' && !order.data.manualHandling ? (order.data.paymentDeadline ?? null) : null,
+  );
 
   const wasteQ = useQuery({
     queryKey: [...WASTE_QUERY_KEYS.all, 'by-order', order.data?.id],
@@ -253,65 +252,56 @@ export default function OrderDetailPage() {
   const o = order.data;
   const wasteReq = wasteQ.data;
   const color = STATUS_COLOR[o.status] ?? STATUS_COLOR.CONFIRMED!;
-  const journey = journeyEvents(o.shippingHistory);
   // Đơn CTV lên hộ khách: OrderDTO chung chưa khai báo 2 cột này dù API trả nguyên bản ghi đơn.
   const assisted = o as { placedForCustomer?: boolean; referrerUserId?: string | null };
-  const canCancel = canCustomerCancel({ ...o, ...assisted }, meId);
-  // Đơn chuyển khoản chưa trả tiền: trước đây màn QR (/bank-payment/:code) CHỈ tới được đúng
-  // một lần ngay sau khi đặt hàng (checkout.tsx). Rời khỏi đó là mất luôn mã QR/số tài khoản —
-  // khách muốn trả tiền cũng không có đường quay lại, chỉ còn cách huỷ đơn rồi đặt lại.
-  // Hàng đã bàn giao vận chuyển mà chưa nhận tiền: CSKH thống nhất với khách cách trả (chuyển khoản hay hãng thu hộ) — không
-  // mời trả tiền thêm ở đây để khách không trả hai lần (R5-SYNC-1).
-  const canPayNow = canPayOrderNow(o);
-  const isDone = o.status === 'DELIVERED' || o.status === 'CANCELLED' || o.status === 'RETURNED';
   const stamp = orderStamp(o);
   const etaLabel = publicConfig.isLoaded ? orderDeliveryEtaLabel(publicConfig.shippingEta, o) : null;
-  const timelineSteps = timelineStepsFor(o.paymentMethod);
   const discounts = discountRows(o);
   // Sản phẩm đã gỡ thì trang sản phẩm trả 404: dòng vẫn hiện, chỉ không dẫn đi đâu.
   const itemLinks = o.items.map((it) => ({ it, slug: openProductSlug(it) }));
   const returnDays = publicConfig.returnWindowDays ?? 7;
-  const returnWindow = returnWindowState(o, returnDays);
   const refundMode = cancelRefundMode(o);
   const cancelBankError = refundMode === 'choose' && cancelMethod === 'BANK' ? bankDetailsError(cancelBank) : null;
   const orderReturns = (myReturns.data ?? []).filter((r) => r.orderId === o.id);
   const pointsReversed = orderReturns.filter((r) => r.status === 'APPROVED').reduce((sum, r) => sum + (r.pointsReversed ?? 0), 0);
   const pointsNote = orderPointsNote(o.status, o.pointsEarned, pointsReversed, o.pointsReturnReversed);
   const remaining = remainingByLine(o.items, orderReturns);
-  const canRequestMore =
-    o.status === 'DELIVERED' && !orderReturns.some((r) => r.status === 'REQUESTED') && [...remaining.values()].some((q) => q > 0);
+  const tOrder: TrackOrder = { ...o, ...assisted };
+  const ctx = {
+    now: serverNow(),
+    userId: meId,
+    etaLabel,
+    returnDays,
+    deadlineLeft,
+    pendingReturn: orderReturns.some((r) => r.status === 'REQUESTED'),
+    returnableLeft: [...remaining.values()].some((q) => q > 0),
+  };
+  const headline = orderHeadline(tOrder, ctx);
+  const plan = orderActionPlan(tOrder, ctx);
+  const trackView = orderTrack(tOrder, { etaLabel });
+  const payNote = plan.primary === 'pay' && deadlineLeft ? fillCopy('order.action.payLeft', { t: deadlineLeft }) : null;
+
+  const onAction = (kind: OrderActionKind) => {
+    haptic('light');
+    if (kind === 'pay') navigate(`/bank-payment/${o.code}`);
+    else if (kind === 'cancel') setConfirmCancel(true);
+    else if (kind === 'contact') setContactOpen(true);
+    else if (kind === 'reorder') setReorderTarget(orderReorderTarget(o));
+    else if (kind === 'return') {
+      setReturnKey((k) => k + 1);
+      setReturnOpen(true);
+    } else {
+      const item = o.items.find((it) => it.id === plan.reviewItemId);
+      const slug = item ? openProductSlug(item) : null;
+      if (slug) navigate(`/product/${slug}`, { state: { reviewOrderId: o.id } });
+    }
+  };
 
   return (
     <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 96 }}>
       <PageHeader title="Chi tiết đơn hàng" subtitle={o.code} />
 
-      {/* ── Status hero ── */}
-      <Box p={4} style={{ background: color.bg }}>
-        {/* Không dùng opacity để làm dòng phụ: nó kéo cặp màu trạng thái xuống dưới 4,5:1 (chờ thanh toán 3,84).
-            Thứ bậc đã có từ cỡ xSmall dưới tiêu đề đậm. */}
-        <Text size="xSmall" style={{ color: color.fg }}>
-          {stamp.label} <span>{formatDateTime(stamp.at)}</span>
-        </Text>
-        <Text.Title size="small" style={{ color: color.fg }}>
-          {buyerStatusLabel(o)}
-        </Text.Title>
-        {etaLabel && (
-          <Text size="xSmall" style={{ color: color.fg, marginTop: 4 }}>
-            {orderCopy.etaLine(etaLabel)}
-          </Text>
-        )}
-        {o.manualHandling ? (
-          <Text size="xSmall" style={{ color: color.fg, marginTop: 4 }}>
-            {vi.orders.manualHandling}
-          </Text>
-        ) : (
-          showsPaymentDeadline(o) && (
-            <Text size="xSmall" style={{ color: color.fg, marginTop: 4 }}>
-              Thanh toán trước <b>{formatDateTime(o.paymentDeadline)}</b> — quá hạn đơn sẽ tự huỷ.
-            </Text>
-          )
-        )}
-      </Box>
+      <OrderStatusHero headline={headline} statusLabel={buyerStatusLabel(o)} stamp={stamp} tone={color} />
 
       {/* ── Mời theo dõi OA (đơn đầu tiên) — finding A3-01 nửa 2, xem shouldShowFollowOaPrompt.
           Đúng lúc thiện chí cao nhất (vừa đặt xong đơn đầu), không hỏi lúc mở app nguội. ── */}
@@ -339,17 +329,23 @@ export default function OrderDetailPage() {
         </Box>
       )}
 
-      {/* ── Timeline (DI #9) ── */}
-      {timelineIndex(o.status, timelineSteps) >= 0 && (
+      {/* ── Hành trình: bước chuẩn kèm giờ thật, mốc hãng gộp dưới "Đang giao" ── */}
+      {trackView && (
         <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
           <Text bold size="small" style={{ marginBottom: 12 }}>
             {vi.orders.timeline}
           </Text>
-          <Timeline
-            steps={timelineSteps}
-            current={timelineIndex(o.status, timelineSteps)}
-            times={timelineSteps.map((s, i) => stepTime(o, s, i, timelineIndex(o.status, timelineSteps)))}
-            etaLabel={etaLabel}
+          <OrderTrack track={trackView} now={ctx.now} />
+        </Box>
+      )}
+
+      {(o.shippingPartner || o.shippingCode || (!trackView && o.shippingHistory?.length)) && (
+        <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
+          <OrderShipping
+            partner={o.shippingPartner}
+            code={o.shippingCode}
+            status={o.shippingStatus ? shippingEventLabel(o.shippingStatus) : null}
+            events={trackView ? undefined : shippingEvents(o.shippingHistory)}
           />
         </Box>
       )}
@@ -506,86 +502,6 @@ export default function OrderDetailPage() {
 
       {showsRefundPanel(o) && <OrderRefunds orderId={o.id} />}
 
-      {/* ── Vận chuyển (hãng VC + mã vận đơn + hành trình) §6.4 ── */}
-      {(o.shippingCode || journey.length > 0) && (
-        <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
-          <Text bold size="small" style={{ marginBottom: 6 }}>
-            Vận chuyển
-          </Text>
-          <Box flex alignItems="center" justifyContent="space-between" style={{ gap: 8 }}>
-            <Box style={{ flex: 1 }}>
-              {o.shippingPartner && <Text size="small">{o.shippingPartner}</Text>}
-              {o.shippingCode && (
-                <Text size="xSmall" style={{ color: 'var(--color-text-secondary)' }}>
-                  Mã vận đơn: <b>{o.shippingCode}</b>
-                </Text>
-              )}
-              {o.shippingStatus && (
-                <Text size="xSmall" style={{ color: 'var(--color-text-success)' }}>
-                  {shippingEventLabel(o.shippingStatus)}
-                </Text>
-              )}
-            </Box>
-            {o.shippingCode && (
-              <Button
-                variant="secondary"
-                onPress={() => {
-                  haptic('light');
-                  void copyText(o.shippingCode!).then((ok) =>
-                    openSnackbar(
-                      ok
-                        ? { text: 'Đã sao chép mã vận đơn', type: 'success' }
-                        : { text: 'Không sao chép được — hãy chép mã thủ công.', type: 'error' },
-                    ),
-                  );
-                }}
-              >
-                Chép mã
-              </Button>
-            )}
-          </Box>
-
-          {journey.length > 0 && (
-            <Box mt={3}>
-              {journey.map((ev, i) => (
-                <Box key={i} flex style={{ gap: 10 }}>
-                  <Box flex flexDirection="column" alignItems="center" style={{ flex: '0 0 auto' }}>
-                    <span
-                      style={{
-                        width: 9,
-                        height: 9,
-                        borderRadius: '50%',
-                        background: i === 0 ? 'var(--color-action-primary-bg)' : 'var(--stone-300)',
-                        marginTop: 4,
-                      }}
-                    />
-                    {i < journey.length - 1 && (
-                      <span style={{ width: 2, flex: 1, background: 'var(--color-border-subtle)', marginTop: 2 }} />
-                    )}
-                  </Box>
-                  <Box style={{ flex: 1, paddingBottom: 12 }}>
-                    <Text
-                      size="xSmall"
-                      style={{
-                        color: i === 0 ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
-                        fontWeight: i === 0 ? 600 : 400,
-                      }}
-                    >
-                      {journeyEventLabel(ev)}
-                    </Text>
-                    {ev.at && (
-                      <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
-                        {formatDateTime(ev.at)}
-                      </Text>
-                    )}
-                  </Box>
-                </Box>
-              ))}
-            </Box>
-          )}
-        </Box>
-      )}
-
       {/* ── Hoá đơn VAT (nếu có) ── */}
       {o.invoiceStatus && o.invoiceStatus !== 'NOT_REQUESTED' && (
         <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
@@ -726,92 +642,15 @@ export default function OrderDetailPage() {
             </Box>
           );
         })}
-      {canRequestMore && !returnWindow.open && (
-        <Box mx={4} mt={2} p={3} style={{ background: 'var(--color-bg-surface)', borderRadius: 'var(--radius-control)' }}>
-          <Text size="xSmall" style={{ color: 'var(--color-text-secondary)' }}>
-            {returnWindowExpired(returnDays)}
-          </Text>
-        </Box>
-      )}
-      {canRequestMore && returnWindow.open && (
-        <Box px={4} mt={2} style={{ textAlign: 'center' }}>
-          <Button
-            variant="ghost"
-            icon={RotateCcw}
-            onPress={() => {
-              setReturnKey((k) => k + 1);
-              setReturnOpen(true);
-            }}
-            style={{ color: 'var(--color-text-secondary)' }}
-          >
-            {orderReturns.some((r) => r.status === 'APPROVED') ? 'Trả thêm sản phẩm' : 'Yêu cầu đổi/trả'}
-          </Button>
-        </Box>
-      )}
-
-      {!canCancel && isHandedToCarrier(o) && (
-        <Box px={4} pt={4}>
-          <Text size="small" style={{ color: 'var(--color-text-secondary)' }}>
-            {vi.orders.cancelClosedAfterHandover}
-          </Text>
-        </Box>
-      )}
-
       <Box p={4}>
         <SupportContact orderCode={o.code} />
       </Box>
 
-      {/* ── Action bar — 4 tổ hợp gốc: (huỷ+thanh toán ngay) / (chỉ huỷ) / (chỉ mua lại) /
-          (chỉ xem tất cả đơn) — giữ nguyên 4 điều kiện gốc, chỉ đổi vỏ trình bày. ── */}
-      <StickyActionBar
-        primary={
-          <Box flex style={{ gap: 10 }}>
-            {canCancel && (
-              <Button
-                variant="secondary"
-                onPress={() => {
-                  haptic('light');
-                  setConfirmCancel(true);
-                }}
-                style={{ flex: 1, color: 'var(--color-text-danger)' }}
-              >
-                {vi.orders.cancelOrder}
-              </Button>
-            )}
-            {canPayNow && (
-              /* Hành động CHÍNH của đơn chờ chuyển khoản — đặt sau nút Huỷ để nằm bên phải (vị trí
-                 ngón cái) và tô đặc, tránh việc "Huỷ đơn" là nút nổi bật duy nhất. */
-              <Button
-                onPress={() => {
-                  haptic('light');
-                  navigate(`/bank-payment/${o.code}`);
-                }}
-                style={{ flex: 1, fontWeight: 700 }}
-              >
-                {vi.orders.payNow}
-              </Button>
-            )}
-            {isReorderable(o.status) && (
-              <Button
-                onPress={() => {
-                  haptic('light');
-                  setReorderTarget(orderReorderTarget(o));
-                }}
-                style={{ flex: 1, fontWeight: 600 }}
-              >
-                {vi.orders.repurchase}
-              </Button>
-            )}
-            {!canCancel && !isDone && (
-              <Button variant="ghost" fullWidth onPress={() => navigate('/orders')}>
-                {/* Nút này đi tới DANH SÁCH đơn — trước đây dùng nhãn "Về trang chủ" nên bấm xong
-                    khách rơi lại vào danh sách đơn thay vì trang chủ như chữ hứa. */}
-                {vi.orders.viewAllOrders}
-              </Button>
-            )}
-          </Box>
-        }
-      />
+      <OrderActionBar plan={plan} returnMore={orderReturns.some((r) => r.status === 'APPROVED')} note={payNote} onAction={onAction} />
+
+      <BottomSheet open={contactOpen} onClose={() => setContactOpen(false)} title={fillCopy('order.action.contact')}>
+        <SupportContact orderCode={o.code} />
+      </BottomSheet>
 
       {/* ── Confirm huỷ (DI #10): giữ đơn là primary. Đơn đã trả tiền: khách chọn nơi nhận tiền hoàn (D2). ── */}
       <Sheet visible={confirmCancel} onClose={() => setConfirmCancel(false)} autoHeight>
@@ -898,87 +737,5 @@ function Shell({ children }: { children: React.ReactNode }) {
       <PageHeader title="Chi tiết đơn hàng" />
       {children}
     </Page>
-  );
-}
-
-/** Timeline dọc 5 bước — bước hiện tại pulse, bước qua tick lá. */
-function Timeline({
-  steps,
-  current,
-  times,
-  etaLabel,
-}: {
-  steps: readonly string[];
-  current: number;
-  times?: readonly (string | null)[];
-  etaLabel?: string | null;
-}) {
-  return (
-    <Box style={{ display: 'flex', flexDirection: 'column' }}>
-      {steps.map((step, i) => {
-        const done = i < current;
-        const active = i === current;
-        return (
-          <Box key={step} flex style={{ gap: 12, minHeight: i === steps.length - 1 ? 24 : 44 }}>
-            <Box style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-              <span
-                className={active ? 'tubu-pulse' : undefined}
-                style={{
-                  width: 18,
-                  height: 18,
-                  borderRadius: '50%',
-                  flex: '0 0 auto',
-                  background: done || active ? 'var(--color-action-primary-bg)' : 'var(--stone-100)',
-                  border: `2px solid ${done || active ? 'var(--color-action-primary-bg)' : 'var(--stone-200)'}`,
-                  boxSizing: 'border-box',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                {done && (
-                  <svg width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden>
-                    <path d="M2.5 6.5l2.5 2.5 4.5-5.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                )}
-              </span>
-              {i < steps.length - 1 && (
-                <span
-                  style={{
-                    width: 2,
-                    flex: 1,
-                    background: done ? 'var(--color-action-primary-bg)' : 'var(--stone-200)',
-                    marginTop: 2,
-                    marginBottom: 2,
-                  }}
-                />
-              )}
-            </Box>
-            <Box>
-              <Text
-                size="small"
-                bold={active}
-                style={{
-                  color: active ? 'var(--color-text-brand)' : done ? 'var(--color-text-primary)' : 'var(--color-text-tertiary)',
-                  paddingTop: 0,
-                }}
-              >
-                {vi.orderStatus[step]}
-              </Text>
-              {times?.[i] && (
-                <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
-                  {formatDateTime(times[i])}
-                </Text>
-              )}
-              {etaLabel && i === steps.length - 1 && !times?.[i] && (
-                <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
-                  {orderCopy.etaLine(etaLabel)}
-                </Text>
-              )}
-            </Box>
-          </Box>
-        );
-      })}
-    </Box>
   );
 }

@@ -135,10 +135,11 @@ export function orderStage(o: TrackOrder, now: number = Date.now()): OrderStage 
   }
 }
 
-/** "18:48 05/11" theo giờ Việt Nam (UTC+7 quanh năm), không phụ thuộc múi giờ máy. */
-export function shortDateTime(iso: string): string {
+/** "18:48 05/11" theo giờ Việt Nam (UTC+7 quanh năm), không phụ thuộc múi giờ máy; khác năm với `now` thì thêm năm ("18:48 05/11/2025"). */
+export function shortDateTime(iso: string, now: number = Date.now()): string {
   const d = new Date(Date.parse(iso) + VN_OFFSET_MS);
-  return `${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())} ${pad2(d.getUTCDate())}/${pad2(d.getUTCMonth() + 1)}`;
+  const year = d.getUTCFullYear() === new Date(now + VN_OFFSET_MS).getUTCFullYear() ? '' : `/${d.getUTCFullYear()}`;
+  return `${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())} ${pad2(d.getUTCDate())}/${pad2(d.getUTCMonth() + 1)}${year}`;
 }
 
 const dayMonth = (ms: number): string => {
@@ -196,7 +197,7 @@ export function orderHeadline(o: TrackOrder, ctx: TrackCtx = {}): OrderHeadline 
   switch (stage) {
     case 'PAY_WAIT': {
       if (o.paymentDeadline && !Number.isNaN(deadlineMs(o))) {
-        const at = shortDateTime(o.paymentDeadline);
+        const at = shortDateTime(o.paymentDeadline, now);
         milestone = ctx.deadlineLeft ? fillCopy('order.payByLeft', { at, t: ctx.deadlineLeft }) : fillCopy('order.payBy', { at });
       }
       next = fillCopy('order.next.payWait');
@@ -216,7 +217,7 @@ export function orderHeadline(o: TrackOrder, ctx: TrackCtx = {}): OrderHeadline 
       break;
     case 'SHIPPING':
       milestone = eta;
-      next = fillCopy('order.next.shipping', { n: days });
+      next = `${fillCopy('order.next.handed')} ${fillCopy('order.next.shipping', { n: days })}`;
       break;
     case 'DELIVERED': {
       const base = o.deliveredAt ?? o.updatedAt;

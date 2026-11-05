@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { HttpError } from '../services/http';
@@ -86,6 +86,12 @@ const ORDER = {
   ],
 };
 
+// Mốc giờ hiện theo giờ Việt Nam và bỏ năm khi cùng năm với giờ hiện tại: cố định "bây giờ" để test không trôi theo năm.
+function fixNow(iso = '2026-11-05T05:00:00.000Z') {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date(iso));
+}
+
 function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   return render(
@@ -112,7 +118,7 @@ describe('OrderDetailPage — vùng chạm >= 44px (C-021)', () => {
 });
 
 describe('OrderDetailPage — giải thích vì sao không còn nút huỷ (R6-BUYER-10)', () => {
-  const NOTE = 'Đơn đã giao cho đơn vị vận chuyển nên không huỷ được. Khi nhận hàng, bạn có thể gửi yêu cầu đổi/trả.';
+  const NOTE = /đơn không huỷ được\. Khi nhận hàng, bạn có thể đổi\/trả trong 7 ngày/;
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.fetchMyReturns.mockResolvedValue([]);
@@ -274,7 +280,7 @@ describe('OrderDetailPage — lịch sử vận chuyển bằng tiếng Việt (
       }),
     );
     const { container } = renderPage();
-    await screen.findByText('Mã vận đơn:', { exact: false });
+    await screen.findByRole('list', { name: 'Hành trình đơn hàng' });
     expect(screen.getAllByText('Đang giao hàng').length).toBeGreaterThanOrEqual(1);
     expect(container.textContent).not.toContain('delivering');
   });
@@ -288,7 +294,7 @@ describe('OrderDetailPage — lịch sử vận chuyển bằng tiếng Việt (
       ]),
     );
     const { container } = renderPage();
-    await screen.findByText('Mã vận đơn:', { exact: false });
+    await screen.findByRole('list', { name: 'Hành trình đơn hàng' });
     expect(screen.getByText('Đã lấy hàng')).toBeInTheDocument();
     expect(screen.getByText('Đang cập nhật')).toBeInTheDocument();
     expect(screen.getByText('Đã gán mã vận đơn GHN001')).toBeInTheDocument();
@@ -296,13 +302,19 @@ describe('OrderDetailPage — lịch sử vận chuyển bằng tiếng Việt (
     expect(container.textContent).not.toContain('xyz_weird_code');
   });
 
-  it('mốc thời gian hiện dạng "HH:mm dd/MM/yyyy" cùng một kiểu với các màn khác', async () => {
+  it('mốc thời gian hiện "HH:mm dd/MM" theo giờ Việt Nam, thêm năm khi khác năm hiện tại', async () => {
+    fixNow();
     mocks.fetchOrder.mockResolvedValue(
-      withShipping([{ at: new Date(2026, 9, 2, 8, 5).toISOString(), status: 'delivered', carrier: 'GHN', code: 'GHN001' }]),
+      withShipping([
+        { at: '2026-10-02T01:05:00.000Z', status: 'delivered', carrier: 'GHN', code: 'GHN001' },
+        { at: '2025-12-31T16:30:00.000Z', status: 'Đã lấy hàng', carrier: 'GHN', code: 'GHN001' },
+      ]),
     );
     renderPage();
-    await screen.findByText('Mã vận đơn:', { exact: false });
-    expect(screen.getByText('08:05 02/10/2026')).toBeInTheDocument();
+    await screen.findByRole('list', { name: 'Hành trình đơn hàng' });
+    expect(screen.getByText('08:05 02/10')).toBeInTheDocument();
+    expect(screen.getByText('23:30 31/12/2025')).toBeInTheDocument();
+    vi.useRealTimers();
   });
 
   it('R2-BUYERMINI-8: tóm tắt tiền tách mã giảm giá và Điểm Xanh bằng số tiền thật, không còn dòng "N điểm" trơ', async () => {
@@ -337,6 +349,9 @@ describe('OrderDetailPage — điểm, mốc giờ, hành trình, đổi/trả, 
     mocks.fetchMyReturns.mockResolvedValue([]);
     mocks.getPublicConfig.mockResolvedValue({ returnWindowDays: 7 });
   });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
   it('đơn đang giao: "Nhận +N khi giao thành công"; đơn đã hoàn: điểm đã thu hồi', async () => {
     mocks.fetchOrder.mockResolvedValue({ ...ORDER, status: 'SHIPPING', pointsEarned: 35 });
@@ -351,9 +366,10 @@ describe('OrderDetailPage — điểm, mốc giờ, hành trình, đổi/trả, 
   });
 
   it('đơn đã giao ghi "Giao lúc" theo mốc giao; đơn khác ghi "Đặt lúc" theo giờ tạo đơn', async () => {
-    mocks.fetchOrder.mockResolvedValue({ ...ORDER, status: 'DELIVERED', deliveredAt: new Date(2026, 9, 5, 9, 30).toISOString() });
+    fixNow();
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, status: 'DELIVERED', deliveredAt: '2026-10-05T02:30:00.000Z' });
     const first = renderPage();
-    expect(await screen.findByText('09:30 05/10/2026')).toBeInTheDocument();
+    expect(await screen.findByText('09:30 05/10')).toBeInTheDocument();
     expect(screen.getByText(/Giao lúc/)).toBeInTheDocument();
     first.unmount();
 
@@ -363,7 +379,8 @@ describe('OrderDetailPage — điểm, mốc giờ, hành trình, đổi/trả, 
   });
 
   it('hành trình ghi giờ từng bước đã tới; bước chưa tới không có giờ; đơn huỷ ghi "Huỷ lúc"', async () => {
-    const at = (d: number, h: number, m: number) => new Date(2026, 9, d, h, m).toISOString();
+    fixNow();
+    const at = (d: number, h: number, m: number) => new Date(Date.UTC(2026, 9, d, h - 7, m)).toISOString();
     mocks.fetchOrder.mockResolvedValue({
       ...ORDER,
       status: 'PACKED',
@@ -381,7 +398,7 @@ describe('OrderDetailPage — điểm, mốc giờ, hành trình, đổi/trả, 
     mocks.fetchOrder.mockResolvedValue({ ...ORDER, status: 'CANCELLED', createdAt: at(1, 8, 0), statusTimes: { CANCELLED: at(3, 14, 45) } });
     renderPage();
     expect(await screen.findByText(/Huỷ lúc/)).toBeInTheDocument();
-    expect(screen.getByText('14:45 03/10/2026')).toBeInTheDocument();
+    expect(screen.getByText('14:45 03/10')).toBeInTheDocument();
   });
 
   it('đơn COD không có bước "Chờ thanh toán" trong hành trình; chuyển khoản thì có', async () => {
@@ -401,16 +418,19 @@ describe('OrderDetailPage — điểm, mốc giờ, hành trình, đổi/trả, 
     mocks.getPublicConfig.mockResolvedValue({ returnWindowDays: 14 });
     mocks.fetchOrder.mockResolvedValue({ ...ORDER, status: 'DELIVERED', deliveredAt: daysAgo(10) });
     renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Thêm thao tác' }));
     const btn = await screen.findByRole('button', { name: /Yêu cầu đổi\/trả/ });
     expect(btn.querySelector('svg')).not.toBeNull();
     fireEvent.click(btn);
     expect(await screen.findByText(/Trong 14 ngày từ khi nhận hàng/)).toBeInTheDocument();
   });
 
-  it('quá hạn đổi/trả: ẩn nút, nói rõ đã quá hạn theo số ngày cấu hình', async () => {
+  it('quá hạn đổi/trả: đầu trang nói đã hết hạn, menu không có nút đổi/trả', async () => {
     mocks.fetchOrder.mockResolvedValue({ ...ORDER, status: 'DELIVERED', deliveredAt: daysAgo(10) });
     renderPage();
-    expect(await screen.findByText(/Đã quá hạn đổi\/trả \(7 ngày/)).toBeInTheDocument();
+    expect(await screen.findByText('Đã hết hạn đổi/trả.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm thao tác' }));
+    await screen.findByRole('group', { name: 'Thao tác với đơn' });
     expect(screen.queryByRole('button', { name: /Yêu cầu đổi\/trả/ })).toBeNull();
   });
 
@@ -476,7 +496,7 @@ describe('OrderDetailPage — tự huỷ tới trước khi bàn giao vận chuy
     expect(screen.queryByText(/Thanh toán trước/)).toBeNull();
     expect(screen.queryByRole('button', { name: 'Huỷ đơn' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Thanh toán ngay' })).toBeNull();
-    expect(screen.getByRole('button', { name: 'Xem tất cả đơn' })).toBeInTheDocument();
+    expect(within(screen.getByTestId('sticky-bar')).getByRole('button', { name: 'Liên hệ Tubu' })).toBeInTheDocument();
   });
 });
 
@@ -538,10 +558,15 @@ describe('OrderDetailPage — tương phản chữ ngày giờ ở khung trạng
     mocks.fetchMyReturns.mockResolvedValue([]);
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it.each(Object.keys(STATUS_COLOR))('%s: chữ ngày giờ không bị làm mờ bằng opacity', async (status) => {
+    fixNow();
     mocks.fetchOrder.mockResolvedValue({ ...ORDER, status });
     renderPage();
-    const stamps = await screen.findAllByText('10:00 01/10/2026');
+    const stamps = await screen.findAllByText(/10:00 01\/10$/);
     for (const el of stamps) {
       const opacity = el.style.opacity;
       expect(opacity === '' || Number(opacity) === 1, `opacity=${opacity}`).toBe(true);
@@ -626,16 +651,18 @@ describe('OrderDetailPage — huỷ đơn chọn nơi nhận tiền hoàn, hạn
   });
 
   it('đơn chuyển khoản chưa ghi nhận tiền: hiện hạn thanh toán và cảnh báo trước khi huỷ', async () => {
+    fixNow();
     mocks.fetchOrder.mockResolvedValue({
       ...ORDER,
       status: 'PENDING_PAYMENT',
       paymentMethod: 'BANK_TRANSFER',
       paymentStatus: 'UNPAID',
-      paymentDeadline: '2026-10-02T03:00:00.000Z',
+      paymentDeadline: '2026-11-05T07:00:00.000Z',
     });
     renderPage();
-    expect(await screen.findByText(/quá hạn đơn sẽ tự huỷ/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Huỷ đơn' }));
+    expect(await screen.findByText(/Thanh toán trước 14:00 05\/11/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm thao tác' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Huỷ đơn' }));
     expect(screen.getByRole('note')).toHaveTextContent('Nếu bạn vừa chuyển khoản');
     fireEvent.click(screen.getByRole('button', { name: /Đổi ý/ }));
     const buttons = screen.getAllByRole('button', { name: 'Huỷ đơn' });
@@ -656,8 +683,8 @@ describe('OrderDetailPage — huỷ đơn chọn nơi nhận tiền hoàn, hạn
       manualHandling: false,
     });
     renderPage();
-    await screen.findByRole('button', { name: 'Huỷ đơn' });
-    expect(screen.queryByRole('button', { name: 'Thanh toán ngay' }) !== null).toBe(shown);
+    const bar = await screen.findByTestId('sticky-bar');
+    expect(within(bar).queryByRole('button', { name: 'Thanh toán ngay' }) !== null).toBe(shown);
   });
 
   it('đã duyệt trả một phần: hiện số tiền, dòng trả, trạng thái nhận hàng và cho trả thêm', async () => {
@@ -678,7 +705,8 @@ describe('OrderDetailPage — huỷ đơn chọn nơi nhận tiền hoàn, hạn
     expect(await screen.findByText('Đổi/trả đã duyệt — đã hoàn 50.000đ vào Ví Tubu')).toBeInTheDocument();
     expect(screen.getByText('Trả: Xà bông thảo mộc ×1')).toBeInTheDocument();
     expect(screen.getByText('Tubu sẽ liên hệ để nhận lại hàng.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Trả thêm sản phẩm' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm thao tác' }));
+    expect(await screen.findByRole('button', { name: 'Trả thêm sản phẩm' })).toBeInTheDocument();
   });
 });
 

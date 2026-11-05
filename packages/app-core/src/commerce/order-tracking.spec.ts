@@ -216,6 +216,11 @@ describe('orderActionPlan và orderHeadline theo trạng thái', () => {
     expect(orderHeadline(order({ status: 'DELIVERED', deliveredAt: iso(-HOUR) }), { now: NOW, etaLabel: '06/11 – 08/11' }).milestone).not.toContain('Dự kiến giao');
   });
 
+  it('đang giao: bước kế tiếp nói không huỷ được và hạn đổi/trả sau khi nhận', () => {
+    const head = orderHeadline(order({ status: 'SHIPPING', shippingCode: 'GHN123' }), { now: NOW, returnDays: 7 });
+    expect(head.next).toBe('Hàng đã giao cho đơn vị vận chuyển nên đơn không huỷ được. Khi nhận hàng, bạn có thể đổi/trả trong 7 ngày.');
+  });
+
   it('chờ thanh toán: mốc là hạn trả kèm thời gian còn lại', () => {
     const o = order({ status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentDeadline: '2026-11-05T11:30:00Z' });
     expect(orderHeadline(o, { now: NOW, deadlineLeft: '6 giờ 30 phút' }).milestone).toBe('Thanh toán trước 18:30 05/11, còn 6 giờ 30 phút.');
@@ -387,7 +392,8 @@ describe('orderTrack', () => {
 
 describe('shortDateTime', () => {
   it('theo giờ Việt Nam bất kể múi giờ máy', () => {
-    expect(shortDateTime('2026-11-05T11:30:00Z')).toBe('18:30 05/11');
-    expect(shortDateTime('2026-12-31T17:30:00Z')).toBe('00:30 01/01');
+    expect(shortDateTime('2026-11-05T11:30:00Z', NOW)).toBe('18:30 05/11');
+    expect(shortDateTime('2026-12-31T17:30:00Z', NOW)).toBe('00:30 01/01/2027');
+    expect(shortDateTime('2025-12-31T16:30:00Z', NOW)).toBe('23:30 31/12/2025');
   });
 });
