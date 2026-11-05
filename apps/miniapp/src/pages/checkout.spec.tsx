@@ -224,7 +224,7 @@ describe('CheckoutPage — mã giới thiệu CTV (C-020)', () => {
     renderPage();
     await screen.findByText(/(Đặt hàng|Thử lại) · /);
     fireEvent.click(screen.getByText('Yêu cầu xuất hoá đơn VAT'));
-    const input = (label: string) => document.querySelector(`input[label="${label}"]`) as HTMLInputElement;
+    const input = (label: string) => screen.getByLabelText(label) as HTMLInputElement;
     const tax = input('Mã số thuế');
     // Trình duyệt cắt chuỗi dán theo maxLength của ô.
     fireEvent.change(tax, { target: { value: tax.maxLength > 0 ? pasted.slice(0, tax.maxLength) : pasted } });
@@ -737,12 +737,12 @@ describe('CheckoutPage — thiếu địa chỉ: nút Đặt hàng khoá có lý
     mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
   });
 
-  it('chưa có địa chỉ: thanh dính ghi lý do, nút khoá, không kèm số tiền', async () => {
+  it('chưa có địa chỉ: thanh dính ghi lý do, nút bấm được để chỉ ra chỗ thiếu, không kèm số tiền', async () => {
     renderPage();
     const bar = await screen.findByTestId('sticky-bar');
     expect(within(bar).getByRole('status')).toHaveTextContent('Chọn địa chỉ giao hàng để đặt hàng.');
     const button = within(bar).getByRole('button');
-    expect(button).toBeDisabled();
+    expect(button).not.toBeDisabled();
     expect(button).toHaveTextContent(/^Đặt hàng$/);
   });
 
@@ -2267,5 +2267,80 @@ describe('CheckoutPage — gửi lỗi mạng (hk)', () => {
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalled());
     expect(screen.getByText(/Đặt hàng · /)).toBeInTheDocument();
     expect(screen.queryByText(/Chưa gửi được đơn/)).not.toBeInTheDocument();
+  });
+});
+
+describe('CheckoutPage — lỗi ô nhập và nút đặt hàng bấm được (hk)', () => {
+  beforeEach(() => {
+    mocks.publicConfig.waste.pickup = false;
+    vi.clearAllMocks();
+    mocks.placeOrder.mockReset();
+    sessionStorage.clear();
+    localStorage.clear();
+    mocks.sfCtx.slug = null;
+    mocks.sfCtx.referralCode = null;
+    mocks.user.fullName = 'Long';
+    mocks.user.phone = '0900000000';
+    mocks.locState = null;
+    mocks.getCouponPreviews.mockResolvedValue([]);
+    mocks.getAddresses.mockResolvedValue([ADDRESS]);
+    mocks.getCart.mockResolvedValue(CART);
+    mocks.checkoutQuote.mockResolvedValue(QUOTE);
+    mocks.placeOrder.mockResolvedValue({ id: 'o1', code: 'TT001' });
+    mocks.ensurePhone.mockResolvedValue('0900000000');
+    mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
+  });
+
+  const pressPlace = async () => {
+    const btn = await screen.findByText(/(Đặt hàng|Thử lại)( · |$)/);
+    fireEvent.click(btn);
+  };
+
+  it('chưa có địa chỉ: bấm Đặt hàng không gửi đơn, báo thiếu ngay dưới khối địa chỉ và đưa con trỏ vào khối đó', async () => {
+    mocks.getAddresses.mockResolvedValue([]);
+    renderPage();
+    await pressPlace();
+    const block = await screen.findByTestId('checkout-address-block');
+    const alert = await within(block.parentElement!).findByRole('alert');
+    expect(alert).toHaveTextContent('Chọn địa chỉ giao hàng để đặt hàng.');
+    expect(block).toHaveAttribute('aria-describedby', alert.id);
+    expect(block.contains(document.activeElement)).toBe(true);
+    expect(mocks.placeOrder).not.toHaveBeenCalled();
+  });
+
+  it('hoá đơn thiếu ô: bấm Đặt hàng không gửi đơn, mỗi ô báo riêng dưới ô đó (aria-invalid + aria-describedby), ô đầu tiên nhận con trỏ', async () => {
+    renderPage();
+    await screen.findByText('Đặt hàng · 70.000đ');
+    fireEvent.click(screen.getByText('Yêu cầu xuất hoá đơn VAT'));
+    expect(screen.getByLabelText('Mã số thuế')).not.toHaveAttribute('aria-invalid');
+    await pressPlace();
+    const tax = screen.getByLabelText('Mã số thuế');
+    await waitFor(() => expect(tax).toHaveAttribute('aria-invalid', 'true'));
+    expect(document.getElementById(tax.getAttribute('aria-describedby')!)).toHaveTextContent('Nhập mã số thuế.');
+    expect(document.getElementById(screen.getByLabelText('Tên công ty').getAttribute('aria-describedby')!)).toHaveTextContent('Nhập tên công ty.');
+    expect(document.getElementById(screen.getByLabelText('Email nhận hoá đơn').getAttribute('aria-describedby')!)).toHaveTextContent('Nhập email nhận hoá đơn.');
+    expect(document.activeElement).toBe(tax);
+    expect(mocks.placeOrder).not.toHaveBeenCalled();
+  });
+
+  it('hoá đơn: rời ô có giá trị sai thì báo ngay dưới ô đó, ô chưa chạm chưa báo; sửa đúng thì lời báo mất và đặt được', async () => {
+    renderPage();
+    await screen.findByText('Đặt hàng · 70.000đ');
+    fireEvent.click(screen.getByText('Yêu cầu xuất hoá đơn VAT'));
+    const email = screen.getByLabelText('Email nhận hoá đơn');
+    fireEvent.change(email, { target: { value: 'khong-phai-email' } });
+    expect(email).not.toHaveAttribute('aria-invalid');
+    fireEvent.blur(email);
+    await waitFor(() => expect(email).toHaveAttribute('aria-invalid', 'true'));
+    expect(document.getElementById(email.getAttribute('aria-describedby')!)).toHaveTextContent('Email chưa đúng.');
+    expect(screen.getByLabelText('Tên công ty')).not.toHaveAttribute('aria-invalid');
+    fireEvent.change(screen.getByLabelText('Mã số thuế'), { target: { value: '0312345678' } });
+    fireEvent.change(screen.getByLabelText('Tên công ty'), { target: { value: 'Cty A' } });
+    fireEvent.change(screen.getByLabelText('Địa chỉ xuất hoá đơn'), { target: { value: '1 Lê Lợi' } });
+    fireEvent.change(email, { target: { value: 'a@b.vn' } });
+    await waitFor(() => expect(email).not.toHaveAttribute('aria-invalid'));
+    const body = await placeOrderClick();
+    expect((body.invoiceRequest as { email: string }).email).toBe('a@b.vn');
   });
 });

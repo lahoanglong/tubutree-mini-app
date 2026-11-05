@@ -19,7 +19,8 @@ import { AddressSection } from '../components/checkout/address-section';
 import { OrderSuccess } from '../components/checkout/order-success';
 import { VoucherSheet } from '../components/checkout/voucher-sheet';
 import { useCheckoutCoupon } from '../components/checkout/use-coupon-hint';
-import { normalizeTaxCode, shouldShowTaxCodeError } from '@tubutree/app-core/commerce/tax-code';
+import { normalizeTaxCode } from '@tubutree/app-core/commerce/tax-code';
+import { validateInvoiceFields, type InvoiceField } from '@tubutree/app-core/commerce/checkout-form';
 import { flashLimitNotice, isCartFixableError } from '@tubutree/app-core/commerce/flash-limit';
 import { checkoutLineProblems, isPriceChangedError, priceChangedActions, type LineFix } from '@tubutree/app-core/commerce/checkout-issues';
 import { checkoutPlaceHint, checkoutTotalText } from '@tubutree/app-core/commerce/checkout-display';
@@ -62,7 +63,7 @@ import { formatLineQty } from '../utils/waste-labels';
 import { PageHeader } from '../components/ui/page-header';
 import { ProductThumb } from '../components/ui/product-thumb';
 import { BottomSheet } from '../components/ui/bottom-sheet';
-import { Radio, Checkbox } from '../components/ui/form';
+import { Radio, Checkbox, Field } from '../components/ui/form';
 import { rowKeyboardProps } from '../components/ui/row-keyboard';
 import { KeyValueRow } from '../components/ui/key-value-row';
 import { StickyActionBar } from '../components/ui/sticky-action-bar';
@@ -249,6 +250,25 @@ export default function CheckoutPage() {
   }, [partnerPoints.disabled, usePoints]);
 
   const invoiceValid = isInvoiceValid(wantInvoice, invoice);
+  // Lời báo ô hoá đơn: hiện khi khách rời ô, hoặc khi bấm Đặt hàng mà còn thiếu (lúc đó con trỏ nhảy tới ô lỗi đầu tiên).
+  const invoiceErrors = wantInvoice ? validateInvoiceFields(invoice) : {};
+  const [invoiceTouched, setInvoiceTouched] = useState<Partial<Record<InvoiceField, boolean>>>({});
+  const [placeAttempted, setPlaceAttempted] = useState(false);
+  const [focusTick, setFocusTick] = useState(0);
+  const invoiceError = (f: InvoiceField) => (placeAttempted || invoiceTouched[f] ? invoiceErrors[f] : undefined);
+  const touchInvoice = (f: InvoiceField) => () => setInvoiceTouched((t) => (t[f] ? t : { ...t, [f]: true }));
+  const addressRef = useRef<HTMLDivElement>(null);
+  const invoiceRef = useRef<HTMLDivElement>(null);
+  // Bấm Đặt hàng khi còn thiếu địa chỉ hoặc ô hoá đơn: cuộn tới và đưa con trỏ vào chỗ thiếu đầu tiên theo thứ tự trên màn hình.
+  useEffect(() => {
+    if (focusTick === 0) return;
+    const target = !addressId
+      ? (addressRef.current?.querySelector<HTMLElement>('button, [role="radio"], input') ?? addressRef.current)
+      : invoiceRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]');
+    target?.focus();
+    target?.scrollIntoView?.({ block: 'center' });
+  }, [focusTick]); // eslint-disable-line react-hooks/exhaustive-deps
+
 
   // Đơn 0đ: BE ép COD + xác nhận luôn (không thu tiền). Gửi đúng phương thức đó và không mở màn QR chuyển
   // khoản cho khoản 0đ dù khách đã lỡ chọn chuyển khoản trước khi dùng điểm.
@@ -522,7 +542,11 @@ export default function CheckoutPage() {
   const lineProblems = checkoutLineProblems(checkoutItems);
   const hasLineProblem = Object.keys(lineProblems).length > 0;
   const shownCartIssue = cartIssue;
-  const canPlace = !!addressId && quote.isSuccess && !quote.isFetching && !!invoiceValid && !hasLineProblem && (!!zeroNote || payment !== '') && !autoCoupon.busy;
+  // Thiếu địa chỉ hoặc ô hoá đơn thì nút vẫn bấm được: bấm để chỉ ra ô thiếu (lỗi ngay dưới ô, con trỏ nhảy tới). Chỉ những lý do
+  // không phải ô nhập (đang tính tiền, dòng cần sửa, chưa có cách thanh toán, đang áp mã) mới khoá hẳn, và đã có chữ nói lý do.
+  const formBlocked = !addressId || !invoiceValid;
+  const placeLocked =
+    hasLineProblem || autoCoupon.busy || (!!addressId && (!quote.isSuccess || quote.isFetching || (!zeroNote && payment === '')));
 
   // Chưa có báo giá (chưa chọn địa chỉ) thì chưa biết tổng đơn → chưa khoá, chưa có lý do.
   const paymentMethods = [
@@ -596,11 +620,29 @@ export default function CheckoutPage() {
         </Box>
       )}
 
-      <AddressSection
-        addresses={addresses.data ?? []}
-        selectedId={addressId}
-        onSelect={chosen(setAddressId)}
-      />
+      <div
+        ref={addressRef}
+        data-testid="checkout-address-block"
+        role="group"
+        aria-label={vi.checkout.address}
+        tabIndex={-1}
+        aria-describedby={placeAttempted && !addressId ? 'checkout-address-error' : undefined}
+        style={{ outline: 'none' }}
+      >
+        <AddressSection
+          addresses={addresses.data ?? []}
+          selectedId={addressId}
+          onSelect={chosen(setAddressId)}
+        />
+      </div>
+      {placeAttempted && !addressId && (
+        <div id="checkout-address-error" role="alert" style={{ padding: '8px 16px 0', background: 'var(--color-bg-surface)' }}>
+          <DsText variant="caption" tone="danger" as="div">
+            <span aria-hidden="true">⚠ </span>
+            {fillCopy('checkout.addressNeeded')}
+          </DsText>
+        </div>
+      )}
 
       {/* ── Sản phẩm sẽ mua ── (liệt kê món; nếu checkout TẬP CON thì chỉ hiện món đã chọn) */}
       {(() => {
@@ -1026,50 +1068,57 @@ export default function CheckoutPage() {
           <Checkbox checked={wantInvoice} onChange={() => {}} />
         </Box>
         {wantInvoice && (
-          <Box flex flexDirection="column" style={{ gap: 10, marginTop: 10 }}>
-            <Input maxLength={INPUT_LIMITS.invoiceTaxCode}
-              label="Mã số thuế"
-              value={invoice.taxCode}
-              status={shouldShowTaxCodeError(invoice.taxCode) ? 'error' : undefined}
-              errorText={shouldShowTaxCodeError(invoice.taxCode) ? fillCopy('checkout.taxCodeInvalid') : undefined}
-              onChange={(e) => {
-                choiceRev.current += 1;
-                setInvoice((f) => ({ ...f, taxCode: e.target.value }));
-              }}
-            />
-            <Input maxLength={INPUT_LIMITS.invoiceCompanyName}
-              label="Tên công ty"
-              value={invoice.companyName}
-              onChange={(e) => {
-                choiceRev.current += 1;
-                setInvoice((f) => ({ ...f, companyName: e.target.value }));
-              }}
-            />
-            <Input maxLength={INPUT_LIMITS.invoiceAddress}
-              label="Địa chỉ xuất hoá đơn"
-              value={invoice.address}
-              onChange={(e) => {
-                choiceRev.current += 1;
-                setInvoice((f) => ({ ...f, address: e.target.value }));
-              }}
-            />
-            <Input maxLength={INPUT_LIMITS.invoiceEmail}
-              label="Email nhận hoá đơn"
-              value={invoice.email}
-              onChange={(e) => {
-                choiceRev.current += 1;
-                setInvoice((f) => ({ ...f, email: e.target.value }));
-              }}
-            />
-            {!invoiceValid && (
-              <Box flex alignItems="center" style={{ gap: 4, marginTop: 4 }}>
-                <AlertCircle size={13} color="var(--color-text-danger)" aria-hidden />
-                <Text size="xSmall" style={{ color: 'var(--color-text-danger)' }}>
-                  {fillCopy('checkout.invoiceIncomplete')}
-                </Text>
-              </Box>
-            )}
-          </Box>
+          <div ref={invoiceRef} style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
+            <Field label="Mã số thuế" error={invoiceError('taxCode')}>
+              <Input
+                maxLength={INPUT_LIMITS.invoiceTaxCode}
+                value={invoice.taxCode}
+                status={invoiceError('taxCode') ? 'error' : undefined}
+                onBlur={touchInvoice('taxCode')}
+                onChange={(e) => {
+                  choiceRev.current += 1;
+                  setInvoice((f) => ({ ...f, taxCode: e.target.value }));
+                }}
+              />
+            </Field>
+            <Field label="Tên công ty" error={invoiceError('companyName')}>
+              <Input
+                maxLength={INPUT_LIMITS.invoiceCompanyName}
+                value={invoice.companyName}
+                status={invoiceError('companyName') ? 'error' : undefined}
+                onBlur={touchInvoice('companyName')}
+                onChange={(e) => {
+                  choiceRev.current += 1;
+                  setInvoice((f) => ({ ...f, companyName: e.target.value }));
+                }}
+              />
+            </Field>
+            <Field label="Địa chỉ xuất hoá đơn" error={invoiceError('address')}>
+              <Input
+                maxLength={INPUT_LIMITS.invoiceAddress}
+                value={invoice.address}
+                status={invoiceError('address') ? 'error' : undefined}
+                onBlur={touchInvoice('address')}
+                onChange={(e) => {
+                  choiceRev.current += 1;
+                  setInvoice((f) => ({ ...f, address: e.target.value }));
+                }}
+              />
+            </Field>
+            <Field label="Email nhận hoá đơn" error={invoiceError('email')}>
+              <Input
+                maxLength={INPUT_LIMITS.invoiceEmail}
+                inputMode="email"
+                value={invoice.email}
+                status={invoiceError('email') ? 'error' : undefined}
+                onBlur={touchInvoice('email')}
+                onChange={(e) => {
+                  choiceRev.current += 1;
+                  setInvoice((f) => ({ ...f, email: e.target.value }));
+                }}
+              />
+            </Field>
+          </div>
         )}
       </Box>
 
@@ -1224,9 +1273,14 @@ export default function CheckoutPage() {
           <Button
             fullWidth
             loading={order.isPending || submitting}
-            disabled={!canPlace}
+            disabled={placeLocked}
             onPress={async () => {
               if (submitting) return;
+              if (formBlocked) {
+                setPlaceAttempted(true);
+                setFocusTick((n) => n + 1);
+                return;
+              }
               setSubmitting(true);
               try {
                 // Xin SĐT đúng lúc đặt hàng (như Homefarm) nếu tài khoản chưa có — không chặn nếu user từ chối.
