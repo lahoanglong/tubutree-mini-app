@@ -4,7 +4,7 @@ import { PrismaService } from '../../src/prisma/prisma.service';
 import { AnalyticsEventsService } from '../../src/modules/analytics/analytics-events.service';
 import { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import { ZnsClient } from '../../src/modules/integrations/zns/zns.client';
-import { createUser, warmPool } from './helpers';
+import { createUser, warmPool, uniquePhone } from './helpers';
 
 /**
  * C-022 / A1-009: công tắc "Khuyến mãi & mã giảm giá" trước đây chỉ lưu trên máy khách, server vẫn gửi.
@@ -54,7 +54,7 @@ describe('Tuỳ chọn thông báo khuyến mãi (real Postgres)', () => {
 
   it('tắt khuyến mãi → lưu DB, notify bỏ qua tin khuyến mãi nhưng vẫn gửi tin đơn hàng', async () => {
     sendTemplate.mockClear();
-    const u = await createUser(prisma, { phone: `08${Date.now().toString().slice(-8)}` });
+    const u = await createUser(prisma, { phone: uniquePhone('08') });
     await expect(svc.updatePrefs(u.id, { notifyPromo: false })).resolves.toEqual({
       notifyPromo: false,
       notifyGarden: true,

@@ -14,6 +14,7 @@ import { getTemplateCached } from './notification-template-cache';
 import { isAllowedByPrefs, type NotificationPrefs } from './notification-categories';
 import { MARKETING_TEMPLATE_CODES } from './notification-templates-admin.service';
 import { captureServerError } from '../../config/sentry';
+import { ZNS_REVIEW_PREFIX } from './zns-review-prefix';
 
 /** Nội dung dùng khi template chưa được seed — tuyệt đối không in mã code ra cho khách. */
 const MISSING_TEMPLATE_BODY = 'Tubu Tree có cập nhật mới cho bạn. Mở mục liên quan trong app để xem chi tiết nhé 🌿';
@@ -46,6 +47,14 @@ export interface InAppRetryJobData {
 }
 
 export const INAPP_RETRY_JOB = 'inapp-retry';
+/** Tên job gửi ZNS trong QUEUE_NOTIFICATIONS (dispatchZns xếp, processor và sự kiện failed lọc theo tên này). */
+export const ZNS_SEND_JOB = 'zns-send';
+
+/** Câu lỗi thô (Prisma tiếng Anh nhiều dòng, có khi kèm câu truy vấn) thành một dòng ngắn để đặt sau câu tiếng Việt trong cột `error`, hiện ở trang admin. */
+export function oneLineReason(raw: unknown, max = 160): string {
+  const text = String(raw ?? '').replace(/\s+/g, ' ').trim();
+  return text.length > max ? `${text.slice(0, max)}…` : text;
+}
 
 /**
  * Lỗi ghi tin trong app gần như luôn là DB hay kết nối chập chờn: 6 lần, 30 giây nhân đôi (≈ 15 phút) như ZNS. Không đặt jobId:
@@ -64,9 +73,26 @@ const DEFAULT_QUIET_END_HOUR = 8;
 const DEFAULT_PROMO_MONTHLY_CAP = 2;
 const HOUR_MS = 3_600_000;
 
+export { ZNS_REVIEW_PREFIX };
+
 const releasedZnsDedupeKey = (dedupeKey: string, logId: string) => `${dedupeKey}:failed:${logId}`;
 
-/** Log ZNS đã đóng vì không xếp được hàng đợi và đã nhả khoá chống trùng (xem dispatchZns). */
+/**
+ * Payload của log ZNS sắp đóng FAILED với khoá chống trùng đã nhả (`<khoá>:failed:<id>`, giữ nguyên `data` và `dedupeWithinMs`), hoặc undefined
+ * nếu log không có khoá hay khoá đã nhả. Mọi chỗ đóng log ZNS mà log đó còn có thể được job chạy lại phải ghi kèm payload này: không thì job
+ * sống lại (khôi phục Redis, retry tay) thấy FAILED chưa nhả khoá và gửi tiếp (isReleasedZnsLog), trong khi tin cùng sự kiện đã đi bằng log khác.
+ */
+function releasedPayload(payload: unknown, logId: string): Prisma.InputJsonObject | undefined {
+  const p = payload as { dedupeKey?: unknown } | null;
+  const key = p?.dedupeKey;
+  if (typeof key !== 'string' || /:failed:[^:]+$/.test(key)) return undefined;
+  return { ...p, dedupeKey: releasedZnsDedupeKey(key, logId) } as Prisma.InputJsonObject;
+}
+
+/**
+ * Log ZNS đã đóng FAILED và đã nhả khoá chống trùng. Mọi đường nhả đều ghi `<khoá>:failed:<id>`: dispatchZns (không xếp được hàng đợi),
+ * claimUnderDedupeLock (nhánh FAILED), closeStuckZnsLog (cron và sự kiện failed của processor) và deliverZns (FAILED cuối, writeFailure).
+ */
 function isReleasedZnsLog(payload: unknown, logId: string): boolean {
   const key = (payload as { dedupeKey?: unknown } | null)?.dedupeKey;
   return typeof key === 'string' && key.endsWith(`:failed:${logId}`);
@@ -343,7 +369,7 @@ export class NotificationsService {
     const job: ZnsSendJobData = { notificationLogId: log.id, phone, templateId, templateData: data };
     try {
       await withQueueTimeout(
-        queue.add('zns-send', job, { ...ZNS_SEND_JOB_OPTIONS, jobId: `zns-${log.id}`, ...(delay > 0 ? { delay } : {}) }),
+        queue.add(ZNS_SEND_JOB, job, { ...ZNS_SEND_JOB_OPTIONS, jobId: `zns-${log.id}`, ...(delay > 0 ? { delay } : {}) }),
         `${QUEUE_NOTIFICATIONS} ${log.id}`,
       );
     } catch (err) {
@@ -431,6 +457,10 @@ export class NotificationsService {
             where: { ...where, status: { in: ['PENDING', 'RETRYING'] } },
             data: { status: 'RETRYING' },
           });
+    // Log từng được cron đánh dấu chờ đối soát mà nay được nhận lại: bỏ tiền tố, nếu không lần kẹt tiếp theo bị cron loại khỏi truy vấn mãi.
+    if (claimed.count > 0) {
+      await this.prisma.notificationLog.updateMany({ where: { ...where, error: { startsWith: ZNS_REVIEW_PREFIX } }, data: { error: null } });
+    }
     if (claimed.count === 0) {
       const current = await this.prisma.notificationLog.findUnique({ where, select: { status: true, payload: true } });
       if (current?.status === 'SENT') return 'SENT';
@@ -446,12 +476,38 @@ export class NotificationsService {
       return 'SENT';
     }
     const error = znsFailureText(result);
-    if (result.retryable && !finalAttempt) {
-      await this.prisma.notificationLog.update({ where, data: { status: 'RETRYING', error } });
-      return 'RETRY';
+    const retrying = result.retryable && !finalAttempt;
+    // Một câu UPDATE có điều kiện status <> 'SENT' (xem writeFailure): worker khác có thể đã ghi SENT cho log này trong lúc ta chờ Zalo.
+    // Khi đó log đã đúng là "đã gửi": trả SENT (processor không ném nên BullMQ không thử lại), không đè FAILED/RETRYING và không nhả khoá.
+    if ((await this.writeFailure(job.notificationLogId, retrying ? 'RETRYING' : 'FAILED', error)) === 0) {
+      const now = await this.prisma.notificationLog.findUnique({ where, select: { status: true } });
+      if (now?.status === 'SENT') {
+        this.logger.warn(`ZNS log ${job.notificationLogId} đã SENT bởi lượt khác; kết quả lỗi của lượt này bị bỏ qua: ${error}`);
+        return 'SENT';
+      }
+      // Lượt RETRYING muộn gặp log đã đóng FAILED (sự kiện failed/cron, đã nhả khoá): không còn gì để thử lại, đừng tốn lượt của BullMQ.
+      if (now?.status === 'FAILED') return 'SKIPPED';
     }
-    await this.prisma.notificationLog.update({ where, data: { status: 'FAILED', error } });
-    return 'FAILED';
+    return retrying ? 'RETRY' : 'FAILED';
+  }
+
+  /**
+   * Ghi kết cục chưa gửi được (RETRYING còn lượt, FAILED hết lượt) bằng MỘT câu UPDATE, không ghi đè log đã SENT. RETRYING chỉ từ PENDING/RETRYING:
+   * log đã đóng FAILED bởi sự kiện failed/cron (đã nhả khoá) không được worker cũ mở lại. FAILED nhả luôn khoá
+   * chống trùng trong cùng câu (`<khoá>:failed:<id>`, cùng quy tắc releasedPayload): job completed vẫn retry tay được, log FAILED còn khoá
+   * nguyên thì lần chạy lại gửi tiếp dù nơi gọi đã gửi tin cùng sự kiện bằng log khác. Trả số dòng đã ghi (0 = log đã SENT, hoặc đã đóng khi ghi RETRYING, hoặc biến mất).
+   */
+  private async writeFailure(logId: string, status: 'RETRYING' | 'FAILED', error: string): Promise<number> {
+    const release = status === 'FAILED';
+    return this.prisma.$executeRaw`
+      UPDATE notification_logs
+         SET status = ${status}, "error" = ${error},
+             payload = CASE
+               WHEN ${release}::boolean AND jsonb_typeof(payload -> 'dedupeKey') = 'string' AND (payload ->> 'dedupeKey') !~ ':failed:[^:]+$'
+               THEN jsonb_set(payload, '{dedupeKey}', to_jsonb((payload ->> 'dedupeKey') || ':failed:' || id))
+               ELSE payload END
+       WHERE id = ${logId}
+         AND (CASE WHEN ${release}::boolean THEN status <> 'SENT' ELSE status IN ('PENDING', 'RETRYING') END)`;
   }
 
   /**
@@ -485,17 +541,80 @@ export class NotificationsService {
       });
       const sent = others.find((o) => o.status === 'SENT');
       if (sent) {
-        await tx.notificationLog.updateMany({ where: closable, data: { status: 'FAILED', error: `Bỏ qua: tin cho cùng sự kiện đã gửi ở log ${sent.id}.` } });
+        await tx.notificationLog.updateMany({
+          where: closable,
+          data: { status: 'FAILED', error: `Bỏ qua: tin cho cùng sự kiện đã gửi ở log ${sent.id}.`, payload: releasedPayload(mine.payload, logId) },
+        });
         return 'SKIPPED' as const;
       }
       if (others.length > 0) {
         if (!finalAttempt) return 'RETRY' as const;
-        await tx.notificationLog.updateMany({ where: closable, data: { status: 'FAILED', error: `Không gửi: log ${others[0]!.id} cùng sự kiện vẫn đang gửi hoặc thử lại sau nhiều lượt chờ.` } });
+        await tx.notificationLog.updateMany({
+          where: closable,
+          data: { status: 'FAILED', error: `Không gửi: log ${others[0]!.id} cùng sự kiện vẫn đang gửi hoặc thử lại sau nhiều lượt chờ.`, payload: releasedPayload(mine.payload, logId) },
+        });
         return 'FAILED' as const;
       }
       const claimed = await tx.notificationLog.updateMany({ where: closable, data: { status: 'RETRYING' } });
       return claimed.count > 0 ? ('CLAIMED' as const) : ('NONE' as const);
     });
+  }
+
+  /**
+   * Đóng log ZNS mà job BullMQ đã chết hẳn (hết lượt, stalled quá giới hạn, hoặc không còn trong Redis) và không ai ghi kết cục.
+   * CAS theo trạng thái cũ (`from`: nơi gọi chỉ đóng từ trạng thái nó đã dựa vào để quyết, vd log vừa sang RETRYING thì không đóng theo bằng chứng của PENDING): hai đường cùng đóng (sự kiện của worker, cron quét, hai bản API) chỉ một lần ghi, log đã SENT/FAILED không đổi.
+   * Log mang dedupeKey thì nhả khoá như dispatchZns (`<khoá>:failed:<id>`, giữ `data` và `dedupeWithinMs`): log FAILED đã không chặn dedupeWhere
+   * nên khoá không cần nhả để tin sau đi được, nhưng job sống lại (khôi phục Redis, retry tay) mà log FAILED còn khoá nguyên thì deliverZns gửi
+   * tiếp trong lúc khoá đã mở cho log mới = gửi đôi; nhả khoá thì deliverZns trả SKIPPED. Tiền tố khoá còn trong chuỗi nên vẫn đối soát được.
+   * Không gọi Zalo và không tạo job.
+   */
+  async closeStuckZnsLog(logId: string, reason: string, from: readonly string[] = ['PENDING', 'RETRYING']): Promise<boolean> {
+    const log = await this.prisma.notificationLog.findUnique({ where: { id: logId }, select: { payload: true } });
+    if (!log) return false;
+    // Chỉ closer ghi payload của log đang PENDING/RETRYING nên đọc rồi ghi kèm CAS theo status là đủ; key đã nhả (đường khác đóng trước) thì không nhả lần hai.
+    const released = releasedPayload(log.payload, logId);
+    const release = released ? { payload: released } : {};
+    const closed = await this.prisma.notificationLog.updateMany({
+      where: { id: logId, status: { in: [...from] } },
+      data: { status: 'FAILED', error: reason, ...release },
+    });
+    return closed.count > 0;
+  }
+
+  /**
+   * Log mà cron không đoán được kết cục (Zalo có thể đã nhận tin): giữ nguyên status, ghi tiền tố chờ đối soát vào `error` (giữ lỗi cũ phía sau)
+   * để các lượt quét sau không xét lại và không để chúng chiếm hết mỗi lượt. CAS theo status đã thấy; true chỉ khi vừa đánh dấu.
+   */
+  async markZnsLogForReview(logId: string, seenStatus: string, note: string): Promise<boolean> {
+    const mark = `${ZNS_REVIEW_PREFIX}${note}`;
+    const updated = await this.prisma.$executeRaw`
+      UPDATE notification_logs
+         SET "error" = ${mark} || CASE WHEN "error" IS NULL THEN '' ELSE ' | ' || "error" END
+       WHERE id = ${logId} AND status = ${seenStatus} AND channel = 'ZNS' AND ("error" IS NULL OR "error" NOT LIKE ${`${ZNS_REVIEW_PREFIX}%`})`;
+    return updated > 0;
+  }
+
+  /** Job đã hoàn tất và báo SENT (Zalo đã nhận) mà log còn RETRYING vì markZnsSent ghi lỗi: ghi nốt SENT, chỉ từ RETRYING. */
+  async markStuckZnsSent(logId: string): Promise<boolean> {
+    return (await this.writeSent(logId, 'RETRYING')) > 0;
+  }
+
+  /**
+   * Ghi SENT. Log đã bị đóng và nhả khoá (`<khoá>:failed:<id>`, xem closeStuckZnsLog) mà worker còn sống vẫn gọi Zalo thành công thì phải
+   * khôi phục khoá gốc ngay trong CÙNG câu UPDATE: nếu không, log SENT mang khoá đã nhả sẽ không còn bị dedupeWhere/claimUnderDedupeLock
+   * thấy và lần notify(retryZns) sau cùng khoá gửi tin lần nữa. Chỉ khôi phục khoá đã nhả của chính log này; `data`, `dedupeWithinMs` giữ nguyên.
+   * `onlyFrom`: chỉ ghi khi log đang ở trạng thái đó (CAS); bỏ trống là ghi vô điều kiện như đường gửi thường. Trả số dòng đã ghi.
+   */
+  private async writeSent(logId: string, onlyFrom?: string): Promise<number> {
+    const suffix = `:failed:${logId}`;
+    return this.prisma.$executeRaw`
+      UPDATE notification_logs
+         SET status = 'SENT', "error" = NULL,
+             payload = CASE
+               WHEN jsonb_typeof(payload -> 'dedupeKey') = 'string' AND right(payload ->> 'dedupeKey', ${suffix.length}::int) = ${suffix}
+               THEN jsonb_set(payload, '{dedupeKey}', to_jsonb(left(payload ->> 'dedupeKey', length(payload ->> 'dedupeKey') - ${suffix.length}::int)))
+               ELSE payload END
+       WHERE id = ${logId} AND (${onlyFrom ?? null}::text IS NULL OR status = ${onlyFrom ?? null}::text)`;
   }
 
   /**
@@ -506,7 +625,10 @@ export class NotificationsService {
     const delays = NotificationsService.SENT_WRITE_RETRY_DELAYS_MS;
     for (let attempt = 0; ; attempt++) {
       try {
-        await this.prisma.notificationLog.update({ where: { id: logId }, data: { status: 'SENT', error: null } });
+        // $executeRaw không ném khi không trúng dòng nào (khác update của Prisma ném P2025): log biến mất sau khi Zalo đã nhận thì phải lên log lỗi.
+        if ((await this.writeSent(logId)) === 0) {
+          this.logger.error(`ZNS log ${logId} đã gửi thành công nhưng không còn dòng log để ghi SENT.`);
+        }
         return;
       } catch (err) {
         if (attempt >= delays.length) {

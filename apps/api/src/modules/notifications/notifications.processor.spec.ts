@@ -1,7 +1,7 @@
 import { Logger } from '@nestjs/common';
-import { DelayedError, type Job } from 'bullmq';
+import { DelayedError, UnrecoverableError, type Job } from 'bullmq';
 import { NotificationsProcessor } from './notifications.processor';
-import { znsQuietDelayMs, type NotificationsService, type ZnsDeliveryOutcome, type ZnsSendJobData } from './notifications.service';
+import { ZNS_SEND_JOB, znsQuietDelayMs, type NotificationsService, type ZnsDeliveryOutcome, type ZnsSendJobData } from './notifications.service';
 
 const DATA: ZnsSendJobData = { notificationLogId: 'log-1', phone: '0900000000', templateId: 'zt-1', templateData: {} };
 
@@ -34,9 +34,9 @@ describe('NotificationsProcessor', () => {
     await expect(run('RETRY').result).rejects.toThrow('thất bại tạm thời');
   });
 
-  it('SENT → không ghi gì, không ném', async () => {
+  it("SENT → không ghi gì, không ném, trả 'SENT' làm returnvalue của job", async () => {
     const { result, error, warn } = run('SENT');
-    await expect(result).resolves.toBeUndefined();
+    await expect(result).resolves.toBe('SENT');
     expect(error).not.toHaveBeenCalled();
     expect(warn).not.toHaveBeenCalled();
   });
@@ -67,8 +67,86 @@ describe('NotificationsProcessor: lượt thử lại không gửi trong giờ y
     const notifications = { deliverZns, quietDelayMs: jest.fn(async () => znsQuietDelayMs(new Date(), 21, 8)) } as unknown as NotificationsService;
     const moveToDelayed = jest.fn();
     const job = { data: DATA, opts: { attempts: 6 }, attemptsMade: 0, moveToDelayed } as unknown as Job<ZnsSendJobData>;
-    await expect(new NotificationsProcessor(notifications).process(job, 'tok')).resolves.toBeUndefined();
+    await expect(new NotificationsProcessor(notifications).process(job, 'tok')).resolves.toBe('SENT');
     expect(moveToDelayed).not.toHaveBeenCalled();
     expect(deliverZns).toHaveBeenCalledWith(DATA, false);
+  });
+});
+
+describe('NotificationsProcessor: job ZNS hỏng hẳn (sự kiện failed của worker)', () => {
+  function setupFailed(over: { closeStuckZnsLog?: jest.Mock } = {}) {
+    const closeStuckZnsLog = over.closeStuckZnsLog ?? jest.fn().mockResolvedValue(true);
+    const processor = new NotificationsProcessor({ closeStuckZnsLog } as unknown as NotificationsService);
+    const error = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    const job = (over: Record<string, unknown> = {}) =>
+      ({ name: ZNS_SEND_JOB, data: DATA, opts: { attempts: 6 }, attemptsMade: 6, ...over }) as unknown as Job<ZnsSendJobData>;
+    return { processor, closeStuckZnsLog, error, job };
+  }
+
+  it('lượt cuối ném lỗi bất ngờ (attemptsMade = attempts) → đóng log kèm lý do tiếng Việt', async () => {
+    const { processor, closeStuckZnsLog, job } = setupFailed();
+    await processor.onFailed(job(), new Error('db down'));
+    expect(closeStuckZnsLog).toHaveBeenCalledTimes(1);
+    expect(closeStuckZnsLog).toHaveBeenCalledWith('log-1', expect.stringMatching(/lượt cuối.*db down/));
+  });
+
+  it('lý do ghi cho admin: tiếng Việt không chữ "job", chi tiết lỗi thô gọn một dòng và cắt ngắn (Prisma tiếng Anh nhiều dòng kèm câu truy vấn)', async () => {
+    const { processor, closeStuckZnsLog, job } = setupFailed();
+    const raw = 'Invalid `prisma.notificationLog.update()` invocation:\n\n  SELECT * FROM "notification_logs"\n  WHERE id = \'x\' ' + 'y'.repeat(500);
+    await processor.onFailed(job(), new Error(raw));
+    const reason = closeStuckZnsLog.mock.calls[0]![1] as string;
+    expect(reason).not.toMatch(/\n/);
+    expect(reason).not.toMatch(/\bjob\b/i);
+    expect(reason.length).toBeLessThan(330);
+    expect(reason).toMatch(/^Gửi ZNS dừng: /);
+  });
+
+  it('lượt chưa cuối (BullMQ sẽ chạy lại) → không đóng log', async () => {
+    const { processor, closeStuckZnsLog, job } = setupFailed();
+    await processor.onFailed(job({ attemptsMade: 2 }), new Error('Gửi ZNS thất bại tạm thời, chờ BullMQ thử lại'));
+    expect(closeStuckZnsLog).not.toHaveBeenCalled();
+  });
+
+  it('UnrecoverableError ở lượt chưa cuối (BullMQ không chạy lại) → đóng log', async () => {
+    const { processor, closeStuckZnsLog, job } = setupFailed();
+    await processor.onFailed(job({ attemptsMade: 1 }), new UnrecoverableError('job stalled more than allowable limit'));
+    expect(closeStuckZnsLog).toHaveBeenCalledWith('log-1', expect.stringContaining('treo'));
+  });
+
+  it('lỗi có name UnrecoverableError (khác bản bullmq nạp) ở lượt chưa cuối → đóng log', async () => {
+    const { processor, closeStuckZnsLog, job } = setupFailed();
+    const err = Object.assign(new Error('x'), { name: 'UnrecoverableError' });
+    await processor.onFailed(job({ attemptsMade: 1 }), err);
+    expect(closeStuckZnsLog).toHaveBeenCalledTimes(1);
+  });
+
+  it('Error thường có chữ "stalled" ở lượt chưa cuối (BullMQ còn chạy lại) → KHÔNG đóng log', async () => {
+    const { processor, closeStuckZnsLog, job } = setupFailed();
+    await processor.onFailed(job({ attemptsMade: 1 }), new Error('connection stalled: ECONNRESET'));
+    expect(closeStuckZnsLog).not.toHaveBeenCalled();
+  });
+
+  it('job không phải zns-send (inapp-retry cũ) → bỏ qua', async () => {
+    const { processor, closeStuckZnsLog, job } = setupFailed();
+    await processor.onFailed(job({ name: 'inapp-retry' }), new Error('x'));
+    expect(closeStuckZnsLog).not.toHaveBeenCalled();
+  });
+
+  it('sự kiện không kèm job (stalled có thể không có) → bỏ qua, không ném', async () => {
+    const { processor, closeStuckZnsLog } = setupFailed();
+    await expect(processor.onFailed(undefined, new Error('job stalled more than allowable limit'))).resolves.toBeUndefined();
+    expect(closeStuckZnsLog).not.toHaveBeenCalled();
+  });
+
+  it('hàm đóng ném lỗi → handler không ném ra ngoài, chỉ ghi log lỗi', async () => {
+    const { processor, error, job } = setupFailed({ closeStuckZnsLog: jest.fn().mockRejectedValue(new Error('db lỗi')) });
+    await expect(processor.onFailed(job(), new Error('x'))).resolves.toBeUndefined();
+    expect(error).toHaveBeenCalledWith(expect.stringContaining('log-1'));
+  });
+
+  it('log đã không còn đóng được (đã SENT/FAILED, trả false) → không ghi lỗi', async () => {
+    const { processor, error, job } = setupFailed({ closeStuckZnsLog: jest.fn().mockResolvedValue(false) });
+    await processor.onFailed(job(), new Error('x'));
+    expect(error).not.toHaveBeenCalled();
   });
 });

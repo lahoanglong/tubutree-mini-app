@@ -6,7 +6,7 @@ import { AdminService } from '../../src/modules/admin/admin.service';
 import { PancakeProcessor } from '../../src/modules/integrations/pancake/pancake.processor';
 import { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import { invoiceIssuedDedupeKey } from '../../src/common/vat-invoice-url';
-import { createOrder, createUser, randCode, summarize, warmPool } from './helpers';
+import { createOrder, createUser, randCode, summarize, warmPool, uniquePhone } from './helpers';
 
 /** C-094: admin ghi nhận "đã xuất hoá đơn VAT" trên Postgres thật (enum nullable + guard atomic + bộ lọc danh sách). */
 describe('AdminService.issueOrderInvoice (real Postgres)', () => {
@@ -160,7 +160,7 @@ describe('AdminService.issueOrderInvoice (real Postgres)', () => {
   });
 
   it('listOrders lọc theo invoice: pending chỉ REQUESTED/FAILED, issued chỉ ISSUED, bỏ đơn không yêu cầu', async () => {
-    const phone = `09${String(Date.now()).slice(-8)}`;
+    const phone = uniquePhone();
     const u = await createUser(prisma, { phone });
     const mk = (invoiceStatus: 'REQUESTED' | 'ISSUED' | 'FAILED' | 'NOT_REQUESTED') =>
       createOrder(prisma, {
@@ -183,7 +183,7 @@ describe('AdminService.issueOrderInvoice (real Postgres)', () => {
   });
 
   it('đơn HUỶ/TRẢ chưa xuất hoá đơn không nằm trong hàng đợi pending (và số đếm meta.total), đơn đã ISSUED thì vẫn tra được', async () => {
-    const phone = `09${String(Date.now()).slice(-8)}`;
+    const phone = uniquePhone();
     const u = await createUser(prisma, { phone });
     const mk = (status: 'CONFIRMED' | 'CANCELLED' | 'RETURNED', invoiceStatus: 'REQUESTED' | 'ISSUED' | 'FAILED') =>
       createOrder(prisma, { userId: u.id, status, invoiceStatus, invoiceRequest: REQUEST });
