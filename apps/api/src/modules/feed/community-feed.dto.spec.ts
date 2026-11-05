@@ -72,6 +72,15 @@ describe('CreateEventDto.title: cắt khoảng trắng và không rỗng', () =>
     await expect(asEvent({ title, ...dates })).rejects.toBeInstanceOf(BadRequestException);
   });
 
+  it.each(['\u200b', ' \ufeff ', '\u200c\u2060', '\u00a0'])('tiêu đề chỉ có ký tự vô hình %j bị từ chối 400', async (title) => {
+    await expect(asEvent({ title, ...dates })).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('cắt ký tự vô hình ở hai đầu nhưng giữ emoji ghép (U+200D ở giữa)', async () => {
+    const family = '👨\u200d👩\u200d👧';
+    await expect(asEvent({ title: `\u200b Hội chợ ${family}\ufeff`, ...dates })).resolves.toMatchObject({ title: `Hội chợ ${family}` });
+  });
+
   it('" Hội chợ " lưu thành "Hội chợ"', async () => {
     await expect(asEvent({ title: ' Hội chợ ', ...dates })).resolves.toMatchObject({ title: 'Hội chợ' });
   });

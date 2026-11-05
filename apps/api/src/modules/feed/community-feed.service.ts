@@ -1,3 +1,4 @@
+import { trimInvisible } from './text-trim';
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -612,10 +613,10 @@ export class CommunityFeedService {
 
   async createPost(userId: string, role: string, input: CreatePostInput): Promise<{ id: string; status: string }> {
     const kind = input.kind ?? 'MANUAL';
-    const body = (input.body ?? '').trim();
+    const body = trimInvisible(input.body ?? '');
     if (!body) throw new BadRequestException('Nội dung bài viết trống.');
     if (body.length > MAX_BODY) throw new BadRequestException('Nội dung quá dài.');
-    const title = input.title?.trim() || null;
+    const title = trimInvisible(input.title ?? '') || null;
     if (kind === 'QUESTION' && !title) throw new BadRequestException('Câu hỏi cần có tiêu đề.');
     if (title && title.length > MAX_TITLE) throw new BadRequestException('Tiêu đề quá dài.');
     const images = (input.images ?? []).filter((u) => typeof u === 'string' && u.trim()).slice(0, MAX_FEED_IMAGES);
@@ -655,15 +656,11 @@ export class CommunityFeedService {
     // qua nhánh auto-PUBLISHED) thay vì chặn hẳn, để admin còn duyệt tay nếu là báo động giả.
     const flagged = containsBannedContent(`${title ?? ''}\n${body}`, await this.bannedKeywords());
     const status = trusted && !flagged ? 'PUBLISHED' : 'PENDING';
-    // Sản phẩm gắn và thẻ #tag nằm ở bảng quan hệ nên so trùng ở JS trên vài ứng viên: lấy trước khi vào giao dịch.
-    const products = slugs.length
-      ? await this.prisma.product.findMany({ where: { slug: { in: slugs }, isActive: true }, select: { id: true } })
-      : [];
+    // Thẻ #tag và sản phẩm gắn nằm ở bảng quan hệ nên so trùng ở JS trên vài ứng viên.
     const tagLabels = (input.tagSlugs ?? [])
       .map((raw) => (raw ?? '').trim().replace(/^#+/, '').trim())
       .filter((s) => s.length > 0)
       .slice(0, MAX_TAGS);
-    const wantedProducts = [...new Set(products.map((p) => p.id))].sort();
     const wantedTags = [...new Set(tagLabels.map(slugifyTag))].sort();
     const sameSet = (a: string[], b: string[]) => a.length === b.length && a.every((v, i) => v === b[i]);
     // Bấm đăng hai lần / mạng chập chờn gửi lại: cùng người và cùng MỌI trường nội dung khách gửi (tiêu đề, nội dung, loại, danh mục,
@@ -675,6 +672,12 @@ export class CommunityFeedService {
     const guestIncoming = dataImages.length && (!guestUser || !isRealUser(guestUser)) ? dataImages : [];
     const createDeduped = async (tx: Prisma.TransactionClient) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`feed-post:${userId}`}))`;
+      // Đọc sản phẩm ngay trong giao dịch, một lần cho cả so trùng lẫn ghi gắn: sản phẩm ngừng bán hoặc không còn thì bỏ lặng lẽ như
+      // trước, không để khoảng hở giữa lúc đọc và lúc ghi làm lỗi khoá ngoại.
+      const products = slugs.length
+        ? await tx.product.findMany({ where: { slug: { in: slugs }, isActive: true }, select: { id: true } })
+        : [];
+      const wantedProducts = [...new Set(products.map((p) => p.id))].sort();
       const candidates = await tx.feedPost.findMany({
         where: {
           userId, title, body, kind, categoryId: input.categoryId ?? null, images: { equals: images },
@@ -1587,7 +1590,7 @@ export class CommunityFeedService {
     }
     // Gửi lại y hệt trong 5 phút (bấm đôi, mạng gửi lại) thì trả sự kiện đã có; khoá toàn cục vì admin tạo ít. Chỉ so với sự kiện còn
     // OPEN và cùng mô tả, ảnh bìa, quà: tạo nhầm rồi đóng, tạo lại cho đúng ngay sau đó phải ra sự kiện mới, không phải cái đã đóng.
-    const data = { ...dto, title: dto.title.trim() };
+    const data = { ...dto, title: trimInvisible(dto.title) };
     return this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'feed-event-create'}))`;
       const existing = await tx.communityEvent.findFirst({

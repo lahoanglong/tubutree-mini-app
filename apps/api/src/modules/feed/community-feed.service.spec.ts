@@ -3766,6 +3766,28 @@ describe('CommunityFeedService: gửi lại cùng nội dung trong 5 phút (m5)'
     expect(order.slice(0, 5)).toEqual(['create', 'productTags', 'postTags', 'commit', 'reward']);
   });
 
+  it('createPost: sản phẩm đọc TRONG giao dịch (sau khoá theo người); sản phẩm biến mất giữa chừng → bài vẫn tạo, bỏ sản phẩm đó', async () => {
+    const prisma = makePrisma();
+    (prisma.product.findMany as jest.Mock).mockResolvedValue([]);
+    const r = await makeSvc(prisma).createPost('u1', 'STAFF', { kind: 'TIP', body: 'mẹo', productSlugs: ['da-bi-xoa'] });
+    expect(r.id).toBe('new');
+    expect(prisma.postProductTag.createMany).not.toHaveBeenCalled();
+    const raw = prisma as unknown as { $executeRaw: jest.Mock };
+    expect((prisma.product.findMany as jest.Mock).mock.invocationCallOrder[0]).toBeGreaterThan(raw.$executeRaw.mock.invocationCallOrder[0]!);
+  });
+
+  it('createPost: tiêu đề chỉ gồm ký tự vô hình → coi như không có tiêu đề', async () => {
+    const prisma = makePrisma();
+    await makeSvc(prisma).createPost('u1', 'STAFF', { kind: 'TIP', title: '\u200b\ufeff', body: 'nội dung' });
+    expect((prisma.feedPost.create as jest.Mock).mock.calls[0][0].data.title).toBeNull();
+  });
+
+  it('createPost: nội dung chỉ gồm ký tự vô hình → BadRequest, không tạo', async () => {
+    const prisma = makePrisma();
+    await expect(makeSvc(prisma).createPost('u1', 'STAFF', { kind: 'TIP', body: '\u200b\u00a0\ufeff' })).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.feedPost.create).not.toHaveBeenCalled();
+  });
+
   it('createPost: chưa có ứng viên → tạo bình thường dưới khoá theo người', async () => {
     const prisma = makePrisma();
     const r = await makeSvc(prisma).createPost('u1', 'STAFF', { kind: 'TIP', body: 'mẹo mới' });
