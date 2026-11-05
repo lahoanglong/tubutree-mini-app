@@ -28,8 +28,8 @@ export const PRODUCT_SLUG_MAX = 240;
 
 /**
  * Danh sách slug cách nhau bằng dấu phẩy (`GET /products?slugs=`, dải "Đã xem gần đây"): tối đa PRODUCT_SLUGS_LIST_MAX slug, chuỗi nối tối đa
- * 20 × (240 + 1) = 4820 ký tự. Dòng yêu cầu 4820 ký tự cộng đường dẫn và tham số khác vẫn dưới 8 KB mặc định của nginx (large_client_header_buffers)
- * và 16 KB của Node/Cloudflare; slug chỉ gồm chữ, số, "-", "_" nên không phình thêm khi mã hoá URL, dấu phẩy thành %2C chỉ thêm 38 ký tự.
+ * 20 × (240 + 1) = 4820 ký tự. Dòng yêu cầu 4820 ký tự cộng đường dẫn và tham số khác vẫn dưới giới hạn header mặc định của Caddy (proxy thật, `Caddyfile`
+ * ở gốc repo, Go mặc định khoảng 1 MB) và 16 KB của Node; slug chỉ gồm chữ, số, "-", "_" nên không phình thêm khi mã hoá URL, dấu phẩy thành %2C chỉ thêm 38 ký tự.
  */
 export const PRODUCT_SLUGS_LIST_MAX = 20;
 export const PRODUCT_SLUGS_QUERY_MAX_CHARS = PRODUCT_SLUGS_LIST_MAX * (PRODUCT_SLUG_MAX + 1);
