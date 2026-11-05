@@ -20,11 +20,11 @@ import { WALLET_SHORT_MESSAGE, walletNegativeMessage } from '../../../apps/api/s
  */
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '../../..');
 const ROOTS = ['apps/miniapp/src', 'apps/web/src', 'packages/app-core/src'];
-// API: chỉ file nào chắc chắn chỉ chứa chữ trả cho khách (`*-notice.ts`, `*-notice.service.ts`, `*-price.ts`, `*-price.service.ts`) và danh sách tên file ghi sẵn (`cart/cart.batch-error.ts`);
+// API: chỉ file nào chắc chắn chỉ chứa chữ trả cho khách (`*-notice.ts`, `*-notice.service.ts`, `*-price.ts`, `*-price.service.ts`) và danh sách tên file ghi sẵn (`cart/cart.batch-error.ts`, `cart/cart.stock-message.ts`);
 // service lớn lẫn log, quản trị và lỗi nội bộ nên không quét cả cây (vd `flash-sale.service.ts` có cả lỗi của Giờ vàng cho khách lẫn chữ quản trị "đợt flash sale").
 const API_ROOT = 'apps/api/src/modules';
 const API_COPY_FILE = /-(notice|price)(\.service)?\.ts$/;
-const API_COPY_EXTRA = new Set([`${API_ROOT}/cart/cart.batch-error.ts`]);
+const API_COPY_EXTRA = new Set([`${API_ROOT}/cart/cart.batch-error.ts`, `${API_ROOT}/cart/cart.stock-message.ts`]);
 const isApiCopyFile = (file: string) => file.startsWith(`${API_ROOT}/`) && (API_COPY_FILE.test(file) || API_COPY_EXTRA.has(file));
 // Quản trị có bảng chữ riêng (Q16, admin/terminology.spec.ts), spec và dữ liệu giả không tới tay khách.
 const NOT_SCANNED = [/\.(spec|test)\.tsx?$/, /(^|\/)admin\//, /(^|\/)components\/admin\//, /(^|\/)test-utils\//, /(^|\/)lib\/admin-/];
@@ -480,9 +480,9 @@ describe('findHits: từ cấm viết thường và giá trị truy vấn trong 
 describe('findHits: file chữ khách đọc của API', () => {
   const at = (file: string, text: string) => findHits([{ file, text }]).map((h) => h.use);
 
-  it('phạm vi quét đúng như DESIGN.md ghi: *-notice(.service).ts, *-price(.service).ts và cart/cart.batch-error.ts, không quét service lớn', () => {
+  it('phạm vi quét đúng như DESIGN.md ghi: *-notice(.service).ts, *-price(.service).ts, cart/cart.batch-error.ts và cart/cart.stock-message.ts, không quét service lớn', () => {
     const m = 'apps/api/src/modules';
-    for (const f of ['coupons/coupon-notice.ts', 'loyalty/tier-drop-notice.service.ts', 'flash-sale/flash-line-price.ts', 'pricing/x-price.service.ts', 'cart/cart.batch-error.ts']) {
+    for (const f of ['coupons/coupon-notice.ts', 'loyalty/tier-drop-notice.service.ts', 'flash-sale/flash-line-price.ts', 'pricing/x-price.service.ts', 'cart/cart.batch-error.ts', 'cart/cart.stock-message.ts']) {
       expect(isApiCopyFile(`${m}/${f}`), f).toBe(true);
     }
     for (const f of ['flash-sale/flash-sale.service.ts', 'cart/cart.service.ts', 'admin/dealer-price-import.ts', 'wallet/referral-notice-ledger.ts']) {
@@ -693,7 +693,7 @@ describe('mã thật của apps/miniapp và apps/web', () => {
 
   // Chữ API trả cho khách (lý do mã không dùng được, lời báo Giờ vàng, lỗi tồn kho) đến tận màn hình mà ngoài tầm quét của app (review/extra-critique-2 P2 #18).
   it('quét cả file chữ khách đọc của API, không quét service và chữ cấm mới ở đó bị bắt', () => {
-    for (const f of ['coupons/coupon-notice.ts', 'flash-sale/flash-line-price.ts', 'cart/cart.batch-error.ts', 'loyalty/tier-drop-notice.service.ts']) {
+    for (const f of ['coupons/coupon-notice.ts', 'flash-sale/flash-line-price.ts', 'cart/cart.batch-error.ts', 'cart/cart.stock-message.ts', 'loyalty/tier-drop-notice.service.ts']) {
       expect(sources.some((s) => s.file === `apps/api/src/modules/${f}`), f).toBe(true);
     }
     expect(sources.some((s) => s.file === 'apps/api/src/modules/cart/cart.service.ts')).toBe(false);

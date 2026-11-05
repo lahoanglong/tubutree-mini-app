@@ -1,4 +1,4 @@
-import { PRODUCT_SLUGS_LIST_MAX } from '@tubutree/shared-types';
+import { exposedStock, PRODUCT_SLUGS_LIST_MAX } from '@tubutree/shared-types';
 import { BadRequestException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { Prisma, type Category } from '@prisma/client';
@@ -598,7 +598,8 @@ export class CatalogService {
       ...publicProduct,
       images: publicImages('product', product.id, publicProduct.images ?? []),
       thumbnail: publicProductThumb(publicProduct),
-      variations: sortVariationsByPrice(publicProduct.variations),
+      // Tồn ảo của hàng không quản kho (Pancake 99.999.988) không ra khỏi trang chi tiết; dưới ngưỡng giữ nguyên số cho bảng chọn "Chỉ còn n".
+      variations: sortVariationsByPrice(publicProduct.variations).map((v) => ({ ...v, stock: exposedStock(v.stock) })),
       brandSlug,
       sold: product.soldExternal + product.soldApp,
       fulfiller: await this.fulfillerOf(product.fulfilment, storefront),

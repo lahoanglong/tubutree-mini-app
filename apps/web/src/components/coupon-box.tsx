@@ -142,6 +142,11 @@ export function CouponBox({
   };
   // Thu gọn mặc định: ô nhập + danh sách voucher dài hàng trăm px, đẩy nút thanh toán xuống khỏi màn điện thoại.
   const [open, setOpen] = useState(false);
+  // Lỗi từ bấm "Dùng"/"Bỏ chọn" ở hàng mã phía dưới: lời báo nằm ở đầu bảng nên kéo về tầm nhìn, không thì khách thấy như bấm không có gì xảy ra.
+  const errRef = useRef<HTMLParagraphElement | null>(null);
+  useEffect(() => {
+    if (open && err) errRef.current?.scrollIntoView?.({ block: 'nearest' });
+  }, [open, err]);
   const couponsQ = useQuery({ queryKey: ['my-coupons'], queryFn: getMyCoupons });
   const previewSig = preview ? JSON.stringify([preview, previewKey ?? '']) : null;
   const settledSig = useSettled(previewSig, PREVIEW_DEBOUNCE_MS);
@@ -278,6 +283,12 @@ export function CouponBox({
             {fillCopy('coupon.pickApply')}
           </button>
         </div>
+        {/* Lời báo mã sai/hết hạn nằm ngay dưới ô nhập khi bảng/panel đang mở. Đặt sau cả danh sách mã thì ở bảng 320x568 và ở thẻ tóm tắt dính 1440x900 nó nằm ngoài tầm nhìn, khách thấy như bấm không có gì xảy ra. */}
+        {open && err && (
+          <p ref={errRef} role="alert" className="mt-2 text-caption text-danger-fg">
+            {err}
+          </p>
+        )}
       </div>
       {(rows.length > 0 || inSheet) && (
         <p className="mb-2.5 mt-4 text-label font-semibold text-[color:var(--color-text-secondary)]">{fillCopy('coupon.pickMine')}</p>
@@ -463,11 +474,6 @@ export function CouponBox({
         <BottomSheet open={open} onClose={() => setOpen(false)} title={fillCopy('coupon.pickTitle')} description={fillCopy('coupon.oneCodeHint')}>
           <div id="coupon-panel">
             {panelBody}
-            {err && (
-              <p role="alert" className="mt-2 text-caption text-danger-fg">
-                {err}
-              </p>
-            )}
           </div>
         </BottomSheet>
       ) : (
@@ -507,7 +513,7 @@ export function CouponBox({
           </p>
         )}
       </div>
-      {err && (!inSheet || !open) && (
+      {err && !open && (
         <p role="alert" className="mt-2 text-caption text-danger-fg">
           {err}
         </p>

@@ -404,6 +404,37 @@ describe('CouponBox — gọn một dòng, mở khi bấm', () => {
     expect(box.querySelector('[role="alert"]')).toBeNull();
   });
 
+  it('có lời báo lỗi khi bảng đang mở thì kéo lời báo vào tầm nhìn (lỗi từ hàng mã phía dưới không được khuất)', async () => {
+    const scroll = vi.fn();
+    const prev = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scroll;
+    try {
+      state.applyError = new Error('Mã giảm giá không tồn tại.');
+      const box = await mount();
+      click(toggle(box));
+      typeInto(box.querySelector('input[name="coupon-code"]'), 'abc');
+      click(byText(box, 'button', 'Áp dụng'));
+      await flush();
+      expect(scroll).toHaveBeenCalledWith({ block: 'nearest' });
+      expect(scroll.mock.instances[0]).toBe(box.querySelector('[role="alert"]'));
+    } finally {
+      Element.prototype.scrollIntoView = prev;
+    }
+  });
+
+  it('panel tại chỗ (desktop): lời báo nằm trong khung ô nhập, không dưới cả danh sách mã (thẻ tóm tắt dính cắt phần đuôi)', async () => {
+    state.applyError = new Error('Mã giảm giá không tồn tại.');
+    state.coupons = [c('A1'), c('B2')];
+    const box = await mount();
+    click(toggle(box));
+    typeInto(box.querySelector('input[name="coupon-code"]'), 'abc');
+    click(byText(box, 'button', 'Áp dụng'));
+    await flush();
+    const alerts = box.querySelectorAll('[role="alert"]');
+    expect(alerts).toHaveLength(1);
+    expect(box.querySelector('input[name="coupon-code"]')!.closest('div.rounded-card')!.contains(alerts[0]!)).toBe(true);
+  });
+
   it('đã áp mã: chỉ hiện thẻ mã đang dùng, chưa mở ô nhập khi khách chưa bấm', async () => {
     const r = render(<CouponBox currentCode="WELCOME30" subtotal={100000} />);
     mounted.push(r);
@@ -1035,6 +1066,25 @@ describe('CouponBox — dạng bảng trượt (điện thoại, trong thanh dí
     const still = document.querySelector<HTMLElement>('[role="dialog"]')!;
     expect(still.querySelector('[role="alert"]')).not.toBeNull();
     expect(box.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it('mã sai: lời báo nằm trong khung ô nhập, trước danh sách mã (ở 320x568 cuối bảng nằm ngoài màn hình)', async () => {
+    state.applyError = new Error('Mã không hợp lệ');
+    state.coupons = [c('A1'), c('B2')];
+    const box = await mountSheet();
+    click(box.querySelector('button[aria-haspopup="dialog"]'));
+    await flush(3);
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    typeInto(dialog.querySelector('input[name="coupon-code"]'), 'SAI');
+    click(byText(dialog, 'button', 'Áp dụng'));
+    await flush(6);
+    const still = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    const alerts = still.querySelectorAll('[role="alert"]');
+    expect(alerts).toHaveLength(1);
+    const card = still.querySelector('input[name="coupon-code"]')!.closest('div.rounded-card')!;
+    expect(card.contains(alerts[0]!)).toBe(true);
+    const mine = byText(still, 'p', 'Mã giảm giá của bạn')!;
+    expect(alerts[0]!.compareDocumentPosition(mine) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });
 

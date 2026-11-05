@@ -149,10 +149,23 @@ describe('ProductReviews (web) — danh sách công khai', () => {
     expect(c.querySelectorAll('li.border-t')).toHaveLength(7);
   });
 
-  it('hàng chip lọc như Mini App: Tất cả (chọn sẵn), 5/4/3 sao, Có ảnh; chọn chip thì chỉ còn đánh giá khớp', async () => {
+  it('lọc 2 sao và 1 sao: chỉ còn đúng đánh giá mức đó, mức không có đánh giá ra trạng thái rỗng', async () => {
+    mocks.list = { ...LIST, count: 4, items: [review('s5', 5), review('s2', 2), review('s2b', 2), review('s1', 1)] };
+    const c = await mount();
+    click(button(c, '2 sao'));
+    expect(c.querySelectorAll('li.border-t')).toHaveLength(2);
+    expect(button(c, '2 sao')!.getAttribute('aria-pressed')).toBe('true');
+    click(button(c, '1 sao'));
+    expect(c.querySelectorAll('li.border-t')).toHaveLength(1);
+    expect(c.textContent).toContain('Nhận xét s1');
+    click(button(c, '4 sao'));
+    expect(c.querySelectorAll('li.border-t')).toHaveLength(0);
+  });
+
+  it('hàng chip lọc như Mini App: Tất cả (chọn sẵn), 5/4/3/2/1 sao, Có ảnh; chọn chip thì chỉ còn đánh giá khớp', async () => {
     const c = await mount();
     const chips = () => Array.from(c.querySelectorAll<HTMLButtonElement>('button[aria-pressed]'));
-    expect(chips().map((b) => b.textContent)).toEqual(['Tất cả', '5 sao', '4 sao', '3 sao', 'Có ảnh']);
+    expect(chips().map((b) => b.textContent)).toEqual(['Tất cả', '5 sao', '4 sao', '3 sao', '2 sao', '1 sao', 'Có ảnh']);
     expect(chips()[0]!.getAttribute('aria-pressed')).toBe('true');
     click(button(c, '5 sao'));
     expect(c.querySelectorAll('li.border-t')).toHaveLength(2);

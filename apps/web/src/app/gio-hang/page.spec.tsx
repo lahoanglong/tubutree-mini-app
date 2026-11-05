@@ -120,15 +120,29 @@ describe('/gio-hang — dòng hết hàng / chạm trần tồn kho (BUYERWEB-10
     expect(state.updates).toEqual([]);
   });
 
-  it('chạm trần mà tồn cao (40/40): dòng "Còn 40 sản phẩm" vẫn giải thích nút + khoá nhưng chữ thường, không màu cảnh báo (L5 3)', async () => {
+  it('chạm trần mà tồn cao (40/40): dòng "Đã chọn hết số hàng đang có" giải thích nút + khoá, chữ thường, không màu cảnh báo, KHÔNG ghi con số tồn (Smart Stock)', async () => {
     state.cart = cartOf([line({ stock: 40, quantity: 40 })]);
     const { container } = await mount();
-    const note = Array.from(container.querySelectorAll('p')).find((p) => p.textContent === 'Còn 40 sản phẩm')!;
+    const note = Array.from(container.querySelectorAll('p')).find((p) => p.textContent === 'Đã chọn hết số hàng đang có')!;
     expect(note).toBeTruthy();
+    expect(container.textContent).not.toMatch(/Còn 40 sản phẩm/);
     expect(note.className).not.toContain('text-warning-fg');
     expect(note.className).toContain('--color-text-secondary');
     expect(note.querySelector('svg')).toBeNull();
     expect(button(container, 'Tăng số lượng Dầu gội bồ kết')!.disabled).toBe(true);
+  });
+
+  it('vượt tồn mà tồn cao (50 trên tồn 40): dòng báo "Vượt số hàng đang có…" (không phải "chọn hết"), cảnh báo, không ghi số tồn, nút Giảm kẹp về đúng tồn', async () => {
+    state.cart = cartOf([line({ stock: 40, quantity: 50 })]);
+    const { container } = await mount();
+    const note = Array.from(container.querySelectorAll('p')).find((p) => p.textContent === 'Vượt số hàng đang có, giảm bớt để thanh toán')!;
+    expect(note).toBeTruthy();
+    expect(note.className).toContain('text-warning-fg');
+    expect(container.textContent).not.toContain('Đã chọn hết số hàng đang có');
+    expect(container.textContent).not.toMatch(/Còn 40 sản phẩm/);
+    click(button(container, 'Giảm số lượng Dầu gội bồ kết')!);
+    await flush();
+    expect(state.updates).toEqual([{ id: 'i1', q: 40 }]);
   });
 
   it('chạm trần mà tồn thấp (3/3) và vượt tồn (5 trên tồn 3): cảnh báo; chưa chạm trần (2/5) không có dòng (L5 3)', async () => {

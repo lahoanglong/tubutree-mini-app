@@ -15,3 +15,4 @@ export * from './me-summary';
 export * from './flash-allowance';
 export * from './product-story';
 export * from './pancake-push';
+export * from './stock';

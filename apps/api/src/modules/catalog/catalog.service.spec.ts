@@ -162,6 +162,16 @@ describe('CatalogService.getBySlug — chỉ hiện SP APPROVED (P0 A2-03=A5-06=
     const r = await new CatalogService(prisma).getBySlug('tinh-dau');
     expect(r.id).toBe('p1');
   });
+
+  it('tồn ảo của hàng không quản kho (Pancake 99.999.988) bị kẹp ở 100.000, tồn thật dưới ngưỡng giữ nguyên số', async () => {
+    const variation = (id: string, stock: number) => ({ id, sku: id, name: id, attributes: {}, retailPrice: 50000, salePrice: null, stock, weight: null });
+    const prisma = {
+      product: { findUnique: jest.fn().mockResolvedValue({ ...product('APPROVED'), variations: [variation('a', 99_999_988), variation('b', 100_000), variation('c', 12), variation('d', 523)] }) },
+    } as unknown as PrismaService;
+    const r = await new CatalogService(prisma).getBySlug('tinh-dau');
+    expect(r.variations.map((v) => v.stock).sort((x, y) => x - y)).toEqual([12, 523, 100_000, 100_000]);
+    expect(JSON.stringify(r)).not.toContain('99999988');
+  });
 });
 
 describe('CatalogService.getBySlug — cờ hàng của gian hàng đối tác (Q8 S2)', () => {
