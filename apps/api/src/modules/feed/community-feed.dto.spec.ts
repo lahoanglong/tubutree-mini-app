@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { ValidationPipe } from '@nestjs/common';
-import { CreatePostDto, EditPostDto } from './community-feed.controller';
+import { BadRequestException } from '@nestjs/common';
+import { CreateEventDto, CreatePostDto, EditPostDto } from './community-feed.controller';
 
 /** Đúng cấu hình ValidationPipe toàn cục ở main.ts. */
 const pipe = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true });
@@ -59,5 +60,19 @@ describe('CreatePostDto/EditPostDto.images chữ ký tệp (BAOMAT-02)', () => {
   ])('từ chối %s (tạo và sửa bài)', async (_label, img) => {
     await expect(asCreate({ body: 'Chia sẻ', images: [img] })).rejects.toThrow();
     await expect(asEdit({ images: [img] })).rejects.toThrow();
+  });
+});
+
+describe('CreateEventDto.title: cắt khoảng trắng và không rỗng', () => {
+  const asEvent = (value: Record<string, unknown>) =>
+    pipe.transform(value, { type: 'body', metatype: CreateEventDto, data: undefined }) as Promise<{ title: string }>;
+  const dates = { startAt: '2026-08-01T00:00:00Z', endAt: '2026-08-10T00:00:00Z' };
+
+  it.each(['', '   ', '\t\n'])('tiêu đề %j bị từ chối 400', async (title) => {
+    await expect(asEvent({ title, ...dates })).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('" Hội chợ " lưu thành "Hội chợ"', async () => {
+    await expect(asEvent({ title: ' Hội chợ ', ...dates })).resolves.toMatchObject({ title: 'Hội chợ' });
   });
 });
