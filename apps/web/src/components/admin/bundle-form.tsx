@@ -107,6 +107,7 @@ export function BundleForm({ initial, onDone, onCancel }: { initial?: AdminBundl
   const heading = initial ? 'Sửa bộ combo và mua kèm' : 'Tạo bộ combo và mua kèm';
   return (
     <form
+      noValidate
       aria-label={heading}
       onSubmit={(e) => {
         e.preventDefault();
