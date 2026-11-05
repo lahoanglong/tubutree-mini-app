@@ -21,6 +21,20 @@ const SCREENS = process.env.W9_SCREENS_DIR;
 const API = `http://localhost:${process.env.E2E_API_PORT ?? '3001'}/api`;
 
 /** Chữ "trống" mà người dùng dán vào được: dấu cách, tab, và ký tự rộng 0 (U+200B, U+FEFF, U+2060) mà String.trim của trình duyệt không bỏ hết. */
+const DAY_MS = 86_400_000;
+const VN_OFFSET_MS = 7 * 3_600_000;
+/** Ngày theo lịch Việt Nam `days` ngày kể từ bây giờ, tách sẵn năm/tháng/ngày hai chữ số. */
+function vnDay(days: number): { y: string; m: string; d: string } {
+  const t = new Date(Date.now() + VN_OFFSET_MS + days * DAY_MS);
+  return { y: String(t.getUTCFullYear()), m: String(t.getUTCMonth() + 1).padStart(2, '0'), d: String(t.getUTCDate()).padStart(2, '0') };
+}
+/** "dd/mm/yyyy": đúng dạng ô ngày của màn quản trị đang nhận. */
+const dmy = (days: number): string => { const { y, m, d } = vnDay(days); return `${d}/${m}/${y}`; };
+/** "yyyy-mm-ddTHH:mm": đúng dạng ô datetime-local. */
+const localAt = (days: number, hhmm: string): string => { const { y, m, d } = vnDay(days); return `${y}-${m}-${d}T${hhmm}`; };
+/** Mốc ISO UTC cho lệnh gọi thẳng API. */
+const isoAt = (days: number, hours: number): string => new Date(Date.now() + days * DAY_MS + hours * 3_600_000).toISOString();
+
 const SPACES = '   \t  ';
 const ZERO_WIDTH = '​​​';
 const INVISIBLE_MIX = '​﻿⁠​';
@@ -479,7 +493,7 @@ test.describe('Admin UAT 1440x900 với API và DB thật', () => {
     await paste(code, ZERO_WIDTH);
     await expect(submit, 'mã chỉ có ký tự vô hình giữ nút Tạo mã giảm giá khoá').toBeDisabled();
     await shot(page, 'ma-giam-gia', 'ma-vo-hinh-khoa');
-    const directCoupon = await adminPost(request, '/admin/coupons', { code: ZERO_WIDTH, type: 'PERCENT', value: 10, startAt: '2030-12-01T00:00:00.000Z', endAt: '2030-12-31T00:00:00.000Z', scope: 'PUBLIC' });
+    const directCoupon = await adminPost(request, '/admin/coupons', { code: ZERO_WIDTH, type: 'PERCENT', value: 10, startAt: isoAt(1, 0), endAt: isoAt(365, 0), scope: 'PUBLIC' });
     note('ma-giam-gia', `gọi thẳng API với mã ký tự rộng 0: HTTP ${directCoupon.status} ${directCoupon.body}`);
     expect(directCoupon.status).toBe(400);
     expect(directCoupon.body).toContain('Mã không được để trống.');
@@ -512,8 +526,8 @@ test.describe('Admin UAT 1440x900 với API và DB thật', () => {
     await form.getByPlaceholder('Giảm tối đa (đ)').fill('50000');
     await form.getByPlaceholder('Đơn tối thiểu (đ)').fill('100000');
     await form.getByPlaceholder('Tổng lượt dùng').fill('100');
-    await form.getByRole('textbox', { name: 'Mã giảm giá bắt đầu từ ngày' }).fill('01/12/2026');
-    await form.getByRole('textbox', { name: 'Mã giảm giá hết hạn ngày' }).fill('31/12/2030');
+    await form.getByRole('textbox', { name: 'Mã giảm giá bắt đầu từ ngày' }).fill(dmy(1));
+    await form.getByRole('textbox', { name: 'Mã giảm giá hết hạn ngày' }).fill(dmy(365));
     const ok = await post();
     expect(ok.status).toBe(201);
     await expect(message()).toHaveText('Đã tạo mã giảm giá!');
@@ -558,15 +572,15 @@ test.describe('Admin UAT 1440x900 với API và DB thật', () => {
     // (a) trống
     await expect(create).toBeDisabled();
     await paste(title, SPACES);
-    await setDate('bắt đầu', '01/12/2030', '10');
-    await setDate('kết thúc', '01/12/2030', '12');
+    await setDate('bắt đầu', dmy(30), '10');
+    await setDate('kết thúc', dmy(30), '12');
     await expect(create).toBeDisabled();
 
     // (b) chỉ ký tự rộng 0: nút Tạo khoá; gọi thẳng API vẫn bị chặn.
     await paste(title, ZERO_WIDTH);
     await expect(create, 'tên đợt chỉ có ký tự vô hình giữ nút Tạo đợt khoá').toBeDisabled();
     await shot(page, 'gio-vang', 'ten-vo-hinh-khoa');
-    const directFlash = await adminPost(request, '/admin/flash-sales', { title: ZERO_WIDTH, startAt: '2030-12-01T03:00:00.000Z', endAt: '2030-12-01T05:00:00.000Z' });
+    const directFlash = await adminPost(request, '/admin/flash-sales', { title: ZERO_WIDTH, startAt: isoAt(30, 0), endAt: isoAt(30, 2) });
     note('gio-vang', `gọi thẳng API với tên ký tự rộng 0: HTTP ${directFlash.status} ${directFlash.body}`);
     expect(directFlash.status).toBe(400);
     expect(directFlash.body).toContain('Tiêu đề không được để trống.');
@@ -579,8 +593,8 @@ test.describe('Admin UAT 1440x900 với API và DB thật', () => {
 
     // Giờ kết thúc trước giờ bắt đầu.
     await paste(title, 'W9 Giờ ngược');
-    await setDate('bắt đầu', '02/12/2030', '12');
-    await setDate('kết thúc', '01/12/2030', '10');
+    await setDate('bắt đầu', dmy(31), '12');
+    await setDate('kết thúc', dmy(30), '10');
     const backwards = await post();
     await expect(msg()).toBeVisible();
     note('gio-vang', `giờ kết thúc trước giờ bắt đầu: HTTP ${backwards.status} ${backwards.body}; chữ hiện ra: "${(await msg().innerText()).trim()}"`);
@@ -590,8 +604,8 @@ test.describe('Admin UAT 1440x900 với API và DB thật', () => {
 
     // (d) hợp lệ
     await paste(title, 'W9 Giờ vàng thử');
-    await setDate('bắt đầu', '01/12/2030', '10');
-    await setDate('kết thúc', '01/12/2030', '12');
+    await setDate('bắt đầu', dmy(30), '10');
+    await setDate('kết thúc', dmy(30), '12');
     const ok = await post();
     expect(ok.status).toBe(201);
     await expect(msg()).toHaveText('Đã tạo đợt giờ vàng!');
@@ -885,15 +899,15 @@ test.describe('Admin UAT 1440x900 với API và DB thật', () => {
     // (a) trống
     await expect(create).toBeDisabled();
     await paste(name, SPACES);
-    await start.fill('2030-12-01T10:00');
-    await end.fill('2030-12-01T12:00');
+    await start.fill(localAt(30, '10:00'));
+    await end.fill(localAt(30, '12:00'));
     await expect(create).toBeDisabled();
 
     // (b) ký tự rộng 0: nút Tạo sự kiện khoá; gọi thẳng API vẫn bị chặn.
     await paste(name, ZERO_WIDTH);
     await expect(create, 'tên sự kiện chỉ có ký tự vô hình giữ nút Tạo sự kiện khoá').toBeDisabled();
     await shot(page, 'cong-dong', 'su-kien-ten-vo-hinh-khoa');
-    const directEvent = await adminPost(request, '/feed/events', { title: ZERO_WIDTH, startAt: '2030-12-01T03:00:00.000Z', endAt: '2030-12-01T05:00:00.000Z' });
+    const directEvent = await adminPost(request, '/feed/events', { title: ZERO_WIDTH, startAt: isoAt(30, 0), endAt: isoAt(30, 2) });
     note('cong-dong', `gọi thẳng API với tên sự kiện ký tự rộng 0: HTTP ${directEvent.status} ${directEvent.body}`);
     expect(directEvent.status).toBe(400);
     expect(directEvent.body).toContain('Tiêu đề sự kiện không được để trống.');
@@ -910,11 +924,11 @@ test.describe('Admin UAT 1440x900 với API và DB thật', () => {
 
     // Giờ ngược: lời báo cạnh ô và nút khoá.
     await paste(name, 'W9 Sự kiện giờ ngược');
-    await end.fill('2030-12-01T09:00');
+    await end.fill(localAt(30, '09:00'));
     await expect(form.getByText('Giờ kết thúc phải sau giờ bắt đầu.')).toBeVisible();
     await expect(create).toBeDisabled();
     await shot(page, 'cong-dong', 'su-kien-gio-nguoc');
-    await end.fill('2030-12-01T12:00');
+    await end.fill(localAt(30, '12:00'));
 
     // Quà sai: 1 điểm, và giá trị âm.
     await reward.fill('1');
