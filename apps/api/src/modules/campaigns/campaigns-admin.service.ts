@@ -188,8 +188,10 @@ export class CampaignsAdminService {
   }
 
   /**
-   * Phán quyết MỘT lần cho mọi đường lưu, trước khi ghi (trong khoá dòng của giao dịch gọi). Health "sau" tính với danh sách sẽ được ghi (đúng trạng thái sau lưu);
-   * health "trước" chỉ tính khi cần (chiến dịch đang hiện và không đổi đích). Chiến dịch lưu xong vẫn không hiện cho khách thì khỏi tính gì, trừ khi `always` (check cần issues).
+   * Phán quyết MỘT lần cho mọi đường lưu, trước khi ghi (trong khoá dòng của giao dịch gọi). Chiến dịch có ba trạng thái (`campaignPhase`): OFF (tắt hoặc hết hạn),
+   * SCHEDULED (bật, chưa tới giờ bắt đầu) và LIVE. Health "sau" tính với danh sách sẽ được ghi (đúng trạng thái sau lưu). Sau lưu mà OFF thì khỏi tính gì, trừ khi
+   * `always` (check cần issues). Health "trước" (`needBaseline`) chỉ đọc khi luật so với lỗi cũ, tức sau lưu không OFF và `needsCleanSlate` false (cùng đích,
+   * không từ OFF sang, không từ hẹn giờ kéo về hiện tại); các ca còn lại đòi sạch mọi BLOCK nên không cần mốc cũ.
    */
   private async judge(
     client: Prisma.TransactionClient | PrismaService,
@@ -289,7 +291,10 @@ export class CampaignsAdminService {
     return { ok: true };
   }
 
-  /** Banner kiểu sản phẩm/danh mục phải trỏ tới slug có thật. Chỉ kiểm tồn tại, không bắt sản phẩm đang bán: admin đặt banner trước cho hàng ra mắt chưa bật. */
+  /**
+   * Banner kiểu sản phẩm/danh mục phải trỏ tới slug có thật. Bước này chỉ kiểm TỒN TẠI nên LƯU TẮT được dù sản phẩm chưa bật (đặt banner trước cho hàng ra mắt).
+   * Còn bật hoặc hẹn giờ khi sản phẩm đích đang ẩn thì bị chặn ở phán quyết (LINK_PRODUCT_HIDDEN là BLOCK): quy trình là bật sản phẩm rồi mới bật chiến dịch.
+   */
   private async assertLinkTarget(client: Pick<Prisma.TransactionClient, 'product' | 'category'> | PrismaService, linkType: CampaignLinkType, value: string | null): Promise<void> {
     if (!value) return;
     if (linkType === 'PRODUCT') {

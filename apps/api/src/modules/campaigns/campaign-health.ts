@@ -284,9 +284,19 @@ export function campaignPhase(s: Pick<VerdictState, 'isActive' | 'startAt' | 'en
   return s.startAt > now ? 'SCHEDULED' : 'LIVE';
 }
 
+/**
+ * Banner cho hàng sắp ra mắt KHÔNG được bật hay hẹn giờ khi sản phẩm đích còn ẩn (LINK_PRODUCT_HIDDEN là BLOCK, để không bao giờ có banner dẫn tới trang lỗi);
+ * quy trình là lưu tắt trước. Câu này đi kèm lý do chặn để admin biết đường đi.
+ */
+const LAUNCH_HINT = 'Banner cho hàng sắp ra mắt: lưu chiến dịch ở trạng thái TẮT (lưu được dù sản phẩm chưa bật), bật sản phẩm, rồi mới bật chiến dịch.';
+
 const sameLink = (a: VerdictState, b: VerdictState) => a.linkType === b.linkType && a.linkValue === b.linkValue;
 
-/** Lần lưu này phải sạch MỌI lỗi chặn (không chỉ lỗi mới): chiến dịch vừa xuất hiện, đổi đích, hoặc từ hẹn giờ sang hiện ngay. */
+/**
+ * Lần lưu này phải sạch MỌI lỗi chặn (không chỉ lỗi mới): chiến dịch vừa xuất hiện, đổi đích, hoặc từ hẹn giờ sang hiện ngay.
+ * Luật SCHEDULED→LIVE chỉ để tránh lỡ tay (kéo giờ hẹn về hiện tại làm trang lỗi hiện ra với khách ngay), không phải hàng rào tuyệt đối: đặt `startAt` là
+ * phút kế tiếp vẫn đi SCHEDULED→SCHEDULED (chỉ chặn lỗi mới) rồi tới giờ tự hiện.
+ */
 export function needsCleanSlate(before: VerdictState | null, after: VerdictState, now: Date): boolean {
   const from = before ? campaignPhase(before, now) : 'OFF';
   const to = campaignPhase(after, now);
@@ -315,5 +325,6 @@ export function saveVerdict(o: {
   const first = offending[0];
   if (!first) return { blocked: false, codes: [] };
   const emptied = !strict && first.code === 'PAGE_EMPTY';
-  return { blocked: true, codes: offending.map((i) => i.code), reason: emptied ? `Lần lưu này làm trang chiến dịch đang bật thành trống. ${first.message}` : first.message };
+  const message = emptied ? `Lần lưu này làm trang chiến dịch đang bật thành trống. ${first.message}` : first.message;
+  return { blocked: true, codes: offending.map((i) => i.code), reason: first.code === 'LINK_PRODUCT_HIDDEN' ? `${message} ${LAUNCH_HINT}` : message };
 }

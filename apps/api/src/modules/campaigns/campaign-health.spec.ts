@@ -355,6 +355,30 @@ describe('saveVerdict: một luật phán quyết cho mọi đường lưu', () 
     });
   });
 
+  describe('đích sản phẩm chưa bật: câu lỗi gợi đúng quy trình hàng sắp ra mắt', () => {
+    const HINT = 'Banner cho hàng sắp ra mắt: lưu chiến dịch ở trạng thái TẮT (lưu được dù sản phẩm chưa bật), bật sản phẩm, rồi mới bật chiến dịch.';
+    const productState = (over: Record<string, unknown> = {}) => state({ linkType: 'PRODUCT', linkValue: 'sp-moi', ...over });
+    it.each([
+      ['tạo mới đang bật', null, productState()],
+      ['tạo mới hẹn giờ', null, productState({ startAt: at(2) })],
+      ['đang tắt rồi bật', productState({ isActive: false }), productState()],
+      ['hẹn giờ kéo về hiện tại', productState({ startAt: at(2) }), productState()],
+      ['đang chạy đổi sang sản phẩm khác', state(), productState()],
+    ])('%s: reason có câu gợi ý', (_n, before, after) => {
+      const v = run({ before, after, ha: [block('LINK_PRODUCT_HIDDEN')] });
+      expect(v).toMatchObject({ blocked: true, codes: ['LINK_PRODUCT_HIDDEN'] });
+      expect(v.reason).toContain('m-LINK_PRODUCT_HIDDEN');
+      expect(v.reason).toContain(HINT);
+    });
+    it('lỗi khác (trang trống, sản phẩm không tồn tại) không có câu gợi ý', () => {
+      expect(run({ before: null, after: state(), ha: [block('PAGE_EMPTY')] }).reason).not.toContain('hàng sắp ra mắt');
+      expect(run({ before: null, after: productState(), ha: [block('LINK_PRODUCT_MISSING')] }).reason).not.toContain('hàng sắp ra mắt');
+    });
+    it('after tắt: cho lưu, không có reason', () => {
+      expect(run({ before: null, after: productState({ isActive: false }), ha: [block('LINK_PRODUCT_HIDDEN')] })).toEqual({ blocked: false, codes: [] });
+    });
+  });
+
   it('không chặn thì không có reason', () => {
     expect(run({ before: state(), after: state() })).toEqual({ blocked: false, codes: [] });
   });

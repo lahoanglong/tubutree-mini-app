@@ -545,6 +545,22 @@ describe('Campaigns (real Postgres)', () => {
           await expect(admin.create({ ...input, productIds: [a.id] })).resolves.toMatchObject({ isActive: true });
         });
 
+        it('(14) hàng sắp ra mắt: tạo bật hoặc hẹn giờ trỏ sản phẩm chưa bật thì 400 kèm câu gợi ý; tạo TẮT được; bật sản phẩm rồi bật chiến dịch thì được', async () => {
+          const hidden = await hiddenProduct('v14');
+          const slug = `it-cmp-${tag}-v14`;
+          const product14 = { linkType: 'PRODUCT' as const, linkValue: hidden.slug };
+          const HINT = /lưu chiến dịch ở trạng thái TẮT \(lưu được dù sản phẩm chưa bật\), bật sản phẩm, rồi mới bật chiến dịch/;
+          await expect(admin.create(base('v14', { ...product14, isActive: true }))).rejects.toThrow(HINT);
+          await expect(admin.create(base('v14', { ...product14, isActive: true, startAt: offset(2).toISOString(), endAt: offset(9).toISOString() }))).rejects.toThrow(HINT);
+          expect(await prisma.campaign.count({ where: { slug } })).toBe(0);
+          const draft = await admin.create(base('v14', { ...product14, isActive: false, startAt: offset(2).toISOString(), endAt: offset(9).toISOString() }));
+          expect(draft).toMatchObject({ isActive: false });
+          await expect(admin.update(draft.id, { isActive: true })).rejects.toThrow(HINT);
+          expect((await row(draft.id)).isActive).toBe(false);
+          await prisma.product.update({ where: { id: hidden.id }, data: { isActive: true } });
+          await expect(admin.update(draft.id, { isActive: true })).resolves.toMatchObject({ isActive: true });
+        });
+
         it('(13) hẹn giờ CAMPAIGN_PAGE [A]: gỡ A làm trang hẹn giờ trống thì 400 và A còn nguyên', async () => {
           const c = await page('v13', { startAt: offset(2).toISOString() });
           await admin.setProducts(c.id, [(await product('SP v13', 'v13')).id]);
