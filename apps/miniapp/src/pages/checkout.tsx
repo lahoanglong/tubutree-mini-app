@@ -462,13 +462,17 @@ export default function CheckoutPage() {
   // của khách, nên một lần đặt đang đóng băng (chưa rõ kết quả) không được phát lại nữa.
   const lineFix = useMutation({
     mutationFn: ({ id, fix }: { id: string; fix: LineFix }) => (fix.kind === 'remove' ? removeCartItem(id) : updateCartItem(id, fix.quantity)),
-    onSuccess: () => {
+    // Chờ giỏ và báo giá về mới thôi bận: nút xoá còn bấm được trong lúc giỏ cũ còn hiện thì lần bấm hai gọi xoá dòng đã mất và nhận 404.
+    onSuccess: async () => {
       bumpChoice();
       setCartIssue(null);
-      void queryClient.invalidateQueries({ queryKey: ['cart'] });
-      void queryClient.invalidateQueries({ queryKey: ['quote'] });
+      await Promise.all([queryClient.invalidateQueries({ queryKey: ['cart'] }), queryClient.invalidateQueries({ queryKey: ['quote'] })]);
     },
-    onError: (e: unknown) => notify({ text: getErrorMessage(e), type: 'error' }),
+    // Bị từ chối thường vì tồn vừa đổi: tải lại giỏ để nút "Giảm còn n" theo tồn mới.
+    onError: (e: unknown) => {
+      notify({ text: getErrorMessage(e), type: 'error' });
+      void queryClient.invalidateQueries({ queryKey: ['cart'] });
+    },
   });
 
   // ── Success screen ──

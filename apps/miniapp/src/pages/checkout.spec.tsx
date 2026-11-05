@@ -2218,6 +2218,39 @@ describe('CheckoutPage — lỗi theo từng dòng hàng (hk)', () => {
     expect(mocks.updateCartItem).not.toHaveBeenCalled();
   });
 
+  it('bấm "Bỏ khỏi đơn" hai lần liền: nút còn bận tới khi giỏ mới về, chỉ xoá một lần (không gọi lần hai rồi nhận 404)', async () => {
+    mocks.getCart.mockResolvedValue({ ...CART, items: [SOLD_OUT, SECOND] });
+    renderPage();
+    const problem = await screen.findByTestId('checkout-line-problem');
+    let release: () => void = () => undefined;
+    mocks.getCart.mockImplementation(() => new Promise((resolve) => {
+      release = () => resolve({ ...CART, items: [SECOND] });
+    }));
+    const btn = within(problem).getByRole('button', { name: 'Bỏ khỏi đơn' });
+    fireEvent.click(btn);
+    await waitFor(() => expect(mocks.removeCartItem).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mocks.getCart.mock.calls.length).toBeGreaterThan(1));
+    fireEvent.click(btn);
+    fireEvent.click(btn);
+    expect(mocks.removeCartItem).toHaveBeenCalledTimes(1);
+    release();
+    await waitFor(() => expect(screen.queryByTestId('checkout-line-problem')).not.toBeInTheDocument());
+    expect(mocks.removeCartItem).toHaveBeenCalledTimes(1);
+  });
+
+  it('sửa nhanh bị từ chối (tồn đã đổi): báo lỗi và tải lại giỏ để nút "Giảm còn n" theo tồn mới', async () => {
+    mocks.getCart.mockResolvedValue({ ...CART, items: [OVER] });
+    mocks.updateCartItem.mockRejectedValue(new HttpError('Bad Request', 'ERR_BAD_REQUEST', { status: 400, data: { statusCode: 400, message: 'Kho đã đổi, bạn thử lại nhé.' } }));
+    renderPage();
+    const problem = await screen.findByTestId('checkout-line-problem');
+    const carts = mocks.getCart.mock.calls.length;
+    mocks.getCart.mockResolvedValue({ ...CART, items: [{ ...OVER, stock: 2 }] });
+    fireEvent.click(within(problem).getByRole('button', { name: 'Giảm còn 1' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Kho đã đổi, bạn thử lại nhé.' })));
+    await waitFor(() => expect(mocks.getCart.mock.calls.length).toBeGreaterThan(carts));
+    expect(await screen.findByRole('button', { name: 'Giảm còn 2' })).toBeInTheDocument();
+  });
+
   it('còn dòng cần sửa: dải đáy nói lý do khoá nút, bỏ banner đầu trang', async () => {
     mocks.getCart.mockResolvedValue({ ...CART, items: [SOLD_OUT, SECOND] });
     renderPage();
