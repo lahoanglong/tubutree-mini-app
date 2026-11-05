@@ -18,6 +18,6 @@ export function pancakeProductSlug(name: string, suffix: string): string {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
   const room = CAMPAIGN_ENTITY_SLUG_MAX - 1 - tail.length;
-  const name = base.slice(0, room).replace(/-+$/, '') || EMPTY_NAME;
-  return `${name}-${tail}`;
+  const head = base.slice(0, room).replace(/-+$/, '') || EMPTY_NAME;
+  return `${head}-${tail}`;
 }
