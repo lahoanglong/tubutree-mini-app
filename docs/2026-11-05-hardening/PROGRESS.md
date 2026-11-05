@@ -145,7 +145,7 @@ Kế hoạch: `PLAN.md`. Phát hiện và quyết định của chủ: `audit-11
 - Mini App (ZMP) chưa lên bản mới. Cho tới lúc đó, không gắn chiến dịch vào slug dài hơn 120 ký tự (§1.23).
 - File go-live: `/root/golive-archive/6ec0dee8/`. `/opt/tubutree` sạch.
 
-## Đợt 4 (đang làm; tích hợp `hard/1105-w4`, gốc main 6ec0dee82 + docs 9c3ab9f20)
+## Đợt 4 (tích hợp `hard/1105-w4`, gốc main 6ec0dee82 + docs 9c3ab9f20)
 - Chủ giao 05/11:
   - (1) job pancake-push lỗi: tìm gốc, sửa triệt để trong mã, dọn PROD;
   - (2) làm cả 3 nâng cấp, tuần tự: kiểm chiến dịch trước khi bật, checkout mobile 375px, trang theo dõi đơn.
@@ -163,3 +163,10 @@ Kế hoạch: `PLAN.md`. Phát hiện và quyết định của chủ: `audit-11
   - `hi` (Pancake, PG 46540): gộp PR #39; phân loại lỗi; job lỗi không đọng; go-live chỉ WARN đơn còn cần xử lý; admin hiển thị rõ.
   - `hj` (chiến dịch, PG 46541): API kiểm BLOCK/WARN; admin xem trước banner 375px + desktop; huy hiệu trên danh sách.
   - `hk` (checkout mobile) và `hl` (theo dõi đơn): làm sau khi `hi`/`hj` xong.
+- Chỉ thị PO giữa đợt: mỗi gói chỉ cần tsc + eslint + test liên quan xanh và TỐI ĐA một lượt review; `hi` chốt sau vòng sửa 10, không review Opus lại.
+- Kết quả từng gói (đã gộp vào `hard/1105-w4`):
+  - `hj` (merge f8dcdbaf5): Opus APPROVE r5, r6; sửa r7 đã kiểm lại. Lưu chiến dịch một lệnh một giao dịch, luật `saveVerdict` chung, route `POST /admin/campaigns/check`, huy hiệu sức khoẻ, xem trước banner. Không migration. Runbook 1.25.
+  - `hi` (merge 3223ca770): 10 vòng sửa (9 vòng Opus). Loại lỗi `pancakeErrorKind` (migration `20261105190000_hi_order_pancake_error_kind`), dọn job lỗi, go-live chỉ WARN đơn còn cần xử lý. Chống hai đơn kho: lease 60s cho mọi câu ghi trạng thái, dấu gửi `pancakePushClaimedAt` với cửa lắng 5 phút (tối đa một lệnh tạo chưa rõ kết quả mỗi cửa), fence token cho câu ghi cuối lượt, báo "Pancake có 2 đơn" nếu vẫn lọt. Vòng 10 chỉ điều phối tự đọc diff. Runbook 1.24, `so-tay-van-hanh/kho.md`.
+  - `hk` (merge 7e0c01f59): checkout Mini + web 375. Lỗi từng ô địa chỉ/hoá đơn, nhảy tới ô lỗi; PRICE_CHANGED có nút nhận giá mới; hết hàng/vượt tồn báo dưới dòng kèm sửa nhanh; mất mạng thì "Thử lại · tổng" cùng khoá. Một lượt Opus: 2 MAJOR (bỏ dòng cuối khi thanh toán một phần rơi về cả giỏ; câu "Chưa gửi được đơn" sai) + 6 mục khác, đã sửa kèm test. `hk-findings.md`.
+  - `hl` (merge f14c193ce): trang theo dõi đơn Mini + web. Một câu trạng thái + mốc, hành trình gom mốc hãng, một nút chính mỗi trạng thái, web lg hai cột; logic chung `app-core/commerce/order-tracking.ts`. Một lượt Opus: 1 MAJOR (form đổi/trả mở ngoài màn ở web <md) + 8 mục khác, đã sửa kèm test. Bỏ suy luận lý do huỷ (API không trả). `hl-findings.md`.
+- Câu hỏi để gói sau: nhãn "Mặc định" và chip mã 12px lên 13px (bậc chữ dùng chung); API trả lý do huỷ cho khách; giữ khối "Cần hỗ trợ?" cuối trang đơn; xoá khoá chữ `checkout.invoiceIncomplete`.
