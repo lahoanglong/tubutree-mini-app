@@ -110,6 +110,13 @@ describe('campaignHealthBatch', () => {
     expect(prisma.campaign.findMany.mock.calls[0][0].where).toMatchObject({ isActive: true, placement: { in: ['HOME_TOP'] } });
   });
 
+  it('chiến dịch đã kết thúc: không nạp liên kết, đích hay chiến dịch khác; chỉ báo ngày kết thúc', async () => {
+    const prisma = fakePrisma();
+    const [issues = []] = await campaignHealthBatch(prisma as never, [{ subject: subject('old', { endAt: at(-1), linkType: 'PRODUCT', linkValue: 'sp' }) }], NOW);
+    expect(issues.map((i) => i.code)).toEqual(['ENDED']);
+    expect(calls(prisma)).toBe(0);
+  });
+
   it('danh sách rỗng: không truy vấn', async () => {
     const prisma = fakePrisma();
     expect(await campaignHealthBatch(prisma as never, [], NOW)).toEqual([]);

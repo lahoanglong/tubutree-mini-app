@@ -42,15 +42,17 @@ const unique = <T>(items: readonly T[]) => [...new Set(items)];
  * mã đang soạn, đích sản phẩm, đích danh mục, chiến dịch bật cùng vị trí. Thứ tự kết quả theo thứ tự `requests`.
  */
 export async function campaignHealthBatch(prisma: HealthPrisma, requests: readonly HealthRequest[], now: Date): Promise<HealthIssue[][]> {
-  if (requests.length === 0) return [];
+  // Đã kết thúc thì không có gì để tra: bỏ khỏi mọi truy vấn (campaignHealth tự trả riêng ENDED).
+  const live = requests.filter((r) => r.subject.endAt > now);
+  if (live.length === 0) return requests.map((r) => campaignHealth(r.subject, { now, target: null, products: [], coupons: [], peers: [] }));
 
-  const savedProductIds = unique(requests.filter((r) => r.productIds === undefined && r.subject.id).map((r) => r.subject.id as string));
-  const savedCouponIds = unique(requests.filter((r) => r.couponCodes === undefined && r.subject.id).map((r) => r.subject.id as string));
-  const draftProductIds = unique(requests.flatMap((r) => r.productIds ?? []));
-  const draftCodes = unique(requests.flatMap((r) => (r.couponCodes ?? []).map(normalizeCouponCode)).filter((c) => c !== ''));
-  const productSlugs = unique(requests.filter((r) => r.subject.linkType === 'PRODUCT' && r.subject.linkValue).map((r) => r.subject.linkValue as string));
-  const categorySlugs = unique(requests.filter((r) => r.subject.linkType === 'CATEGORY' && r.subject.linkValue).map((r) => r.subject.linkValue as string));
-  const placements = unique(requests.map((r) => r.subject.placement));
+  const savedProductIds = unique(live.filter((r) => r.productIds === undefined && r.subject.id).map((r) => r.subject.id as string));
+  const savedCouponIds = unique(live.filter((r) => r.couponCodes === undefined && r.subject.id).map((r) => r.subject.id as string));
+  const draftProductIds = unique(live.flatMap((r) => r.productIds ?? []));
+  const draftCodes = unique(live.flatMap((r) => (r.couponCodes ?? []).map(normalizeCouponCode)).filter((c) => c !== ''));
+  const productSlugs = unique(live.filter((r) => r.subject.linkType === 'PRODUCT' && r.subject.linkValue).map((r) => r.subject.linkValue as string));
+  const categorySlugs = unique(live.filter((r) => r.subject.linkType === 'CATEGORY' && r.subject.linkValue).map((r) => r.subject.linkValue as string));
+  const placements = unique(live.map((r) => r.subject.placement));
 
   const [savedProducts, savedCoupons, draftProducts, draftCoupons, targetProducts, targetCategories, peerRows] = await Promise.all([
     savedProductIds.length

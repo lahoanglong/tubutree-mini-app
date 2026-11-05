@@ -73,8 +73,9 @@ describe('campaignHealth', () => {
     });
   });
 
-  it('endAt đã qua: WARN', () => {
+  it('endAt đã qua: chỉ báo ENDED, các luật còn lại không còn nghĩa (không BLOCK trang trống, không CROWDED)', () => {
     expect(codes(subject({ endAt: at(-1) }), facts())).toEqual(['WARN:ENDED']);
+    expect(codes(subject({ endAt: at(-1) }), facts({ products: [], coupons: [coupon({ isActive: false })] }))).toEqual(['WARN:ENDED']);
   });
 
   describe('mã gắn kèm', () => {
@@ -94,6 +95,13 @@ describe('campaignHealth', () => {
       const s = subject({ startAt: at(3), endAt: at(8) });
       expect(run(coupon({ startAt: at(3), endAt: at(9) }), s)).toEqual([]);
       expect(run(coupon({ startAt: at(-5), endAt: at(2) }), s)).toEqual(['WARN:COUPON_EXPIRED']);
+    });
+    it('mã chưa tới giờ mở: WARN riêng, không tính là dùng được (trang công khai chỉ hiện mã đã mở)', () => {
+      expect(run(coupon({ startAt: at(2) }))).toEqual(['WARN:COUPON_NOT_STARTED']);
+      expect(codes(subject(), facts({ products: [], coupons: [coupon({ startAt: at(2) })] }))).toEqual(['BLOCK:PAGE_EMPTY', 'WARN:COUPON_NOT_STARTED']);
+    });
+    it('mã mở đúng lúc chiến dịch mở: xanh', () => {
+      expect(run(coupon({ startAt: at(-1) }))).toEqual([]);
     });
     it('gom theo loại và nêu mã', () => {
       const issues = campaignHealth(subject(), facts({ coupons: [coupon({ code: 'A', isActive: false }), coupon({ code: 'B', isActive: false })] }));
@@ -148,18 +156,42 @@ describe('campaignHealth', () => {
       expect(codes(subject({ id: 'zz', startAt: at(-1) }), facts({ peers }))).toEqual(['WARN:CROWDED']);
       expect(codes(subject({ id: 'zz', startAt: at(1) }), facts({ peers: five({ startAt: at(0) }) }))).toEqual([]);
     });
+    it('(a) 10 chiến dịch RETURNING đứng trước làm API cắt ở 10 trước khi lọc đối tượng: chiến dịch NEW sau chúng không bao giờ tới máy khách', () => {
+      const peers = Array.from({ length: 10 }, (_, i) => peer(`r${i}`, { audience: 'RETURNING' }));
+      const issues = campaignHealth(subject({ id: 'zz', audience: 'NEW', sortOrder: 1 }), facts({ peers }));
+      expect(issues.map((i) => i.code)).toEqual(['CROWDED']);
+      expect(issues[0]?.message).toContain('suốt thời gian');
+    });
+    it('(b) 5 chiến dịch nối tiếp nhau 1 ngày và một chiến dịch 1 tuần: không bao giờ quá 2 cùng lúc, không cảnh báo', () => {
+      const s = subject({ id: 'zz', sortOrder: 9, startAt: at(0), endAt: at(7) });
+      const peers = [0, 1, 2, 3, 4].map((d) => peer(`d${d}`, { startAt: at(d), endAt: at(d + 1) }));
+      expect(codes(s, facts({ peers }))).toEqual([]);
+    });
+    it('có lúc bị khuất: báo "có lúc không hiện" kèm mốc đầu tiên (giờ Việt Nam)', () => {
+      const s = subject({ id: 'zz', sortOrder: 9, startAt: at(0), endAt: at(7) });
+      const peers = five({ startAt: at(3), endAt: at(4) });
+      const [first] = campaignHealth(s, facts({ peers }));
+      expect(first).toMatchObject({ level: 'WARN', code: 'CROWDED' });
+      expect(first?.message).toContain('có lúc');
+      expect(first?.message).toContain('08/11 12:00');
+      expect(first?.message).not.toContain('suốt');
+    });
+    it('chiến dịch này bắt đầu sau: chỉ xét từ khi nó chạy, không tính các chiến dịch đã hết trước đó', () => {
+      const s = subject({ id: 'zz', sortOrder: 9, startAt: at(5), endAt: at(8) });
+      expect(codes(s, facts({ peers: five({ startAt: at(-1), endAt: at(2) }) }))).toEqual([]);
+    });
     it('không tự tính mình hai lần khi peers có chính nó', () => {
       expect(codes(subject({ id: 'p1' }), facts({ peers: five() }))).toEqual([]);
     });
   });
 
   it('BLOCK luôn đứng trước WARN', () => {
-    const levels = campaignHealth(subject({ endAt: at(-1) }), facts({ products: [] })).map((i) => i.level);
+    const levels = campaignHealth(subject(), facts({ products: [], coupons: [coupon({ isActive: false })] })).map((i) => i.level);
     expect(levels).toEqual(['BLOCK', 'WARN']);
   });
 
   it('countHealth đếm từng mức', () => {
-    expect(countHealth(campaignHealth(subject({ endAt: at(-1) }), facts({ products: [] })))).toEqual({ blockers: 1, warnings: 1 });
+    expect(countHealth(campaignHealth(subject(), facts({ products: [], coupons: [coupon({ isActive: false })] })))).toEqual({ blockers: 1, warnings: 1 });
   });
 });
 
