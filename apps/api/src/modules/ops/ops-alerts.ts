@@ -46,6 +46,9 @@ export interface ProblemInput {
     /** Đơn trong hàng đợi "Cần xử lý Pancake" (huỷ chưa tới Pancake, nguy cơ thu COD lần nữa...). */
     attention: number;
     attentionRefs: string[];
+    /** Đơn chưa lên Pancake vì Pancake từ chối khoá API (401/403): cả nhóm cùng một nguyên nhân, báo MỘT lần thay vì từng đơn. */
+    configBlocked?: number;
+    configRefs?: string[];
     catalog: CatalogRun;
   };
   gomdon: {
@@ -108,6 +111,12 @@ export function opsProblems(s: ProblemInput, t: OpsThresholds): OpsProblem[] {
       out.push({
         key: 'pancake.stuck',
         message: `${s.pancake.stuck} đơn quá ${t.unsyncedMinutes} phút chưa lên Pancake${refList(s.pancake.stuckRefs, s.pancake.stuck)}`,
+      });
+    }
+    if ((s.pancake.configBlocked ?? 0) > 0) {
+      out.push({
+        key: 'pancake.config',
+        message: `Pancake từ chối khoá API (401/403): ${s.pancake.configBlocked} đơn không đẩy được${refList(s.pancake.configRefs ?? [], s.pancake.configBlocked ?? 0)}. Báo kỹ thuật kiểm PANCAKE_API_KEY và PANCAKE_SHOP_ID; hệ thống chỉ dò lại bằng một đơn mỗi giờ, đơn khác giữ nguyên tới khi khoá đúng`,
       });
     }
     const hooks = s.pancake.webhookFailedOpen + s.pancake.webhookStuck;

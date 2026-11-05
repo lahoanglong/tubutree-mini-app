@@ -1499,6 +1499,24 @@ describe('AdminService.updateOrderStatus', () => {
   });
 });
 
+describe('AdminService.listOrders — lần tự đẩy Pancake kế tiếp (hi)', () => {
+  it('đơn đẩy lỗi mang pancakeErrorKind và pancakeNextRetryAt; đơn đã lên Pancake thì null', async () => {
+    const failed = { id: 'o1', code: 'TUBU1', type: 'RETAIL', status: 'CONFIRMED', createdAt: new Date(), pancakeOrderId: null, pancakePushStatus: 'FAILED', pancakeErrorKind: 'TRANSIENT', pancakePushAttempts: 2, pancakeLastAttemptAt: new Date(), items: [] };
+    const synced = { ...failed, id: 'o2', code: 'TUBU2', pancakeOrderId: 'pk1', pancakePushStatus: 'SYNCED', pancakeErrorKind: null };
+    const prisma = makePrisma({
+      order: { findMany: jest.fn().mockResolvedValue([failed, synced]), count: jest.fn().mockResolvedValue(2) },
+      $transaction: jest.fn().mockImplementation((arr) => Promise.all(arr)),
+    });
+    const res = (await mkAdmin({ ...prisma, $queryRaw: jest.fn().mockResolvedValue([]) } as unknown as PrismaService).listOrders(1, 20)) as unknown as {
+      data: { code: string; pancakeErrorKind: string | null; pancakeNextRetryAt: string | null }[];
+    };
+    const [a, b] = res.data;
+    expect(a).toMatchObject({ code: 'TUBU1', pancakeErrorKind: 'TRANSIENT' });
+    expect(new Date(a!.pancakeNextRetryAt!).getTime()).toBeGreaterThan(Date.now() - 1);
+    expect(b!.pancakeNextRetryAt).toBeNull();
+  });
+});
+
 describe('AdminService.listOrders with search', () => {
   it('tìm kiếm theo mã đơn hoặc SĐT truyền OR filter vào Prisma', async () => {
     const findMany = jest.fn().mockResolvedValue([]);

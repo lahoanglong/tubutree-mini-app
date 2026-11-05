@@ -14,6 +14,7 @@ import { K_ACCESS as ZALO_OA_ACCESS_KEY, K_EXPIRES as ZALO_OA_EXPIRES_KEY } from
 import { GomdonClient } from '../integrations/gomdon/gomdon.client';
 import { hasGomdonCredentials } from '../integrations/gomdon/gomdon-config';
 import { PANCAKE_EVENT_STATUS, pancakeEventRef } from '../integrations/pancake/pancake-webhook-dedupe';
+import { PUSH_ERROR_KIND } from '../integrations/pancake/pancake-push-error';
 import { GOMDON_EVENT_STATUS } from '../integrations/gomdon/gomdon-webhook.service';
 import { GOMDON_STATE } from '../integrations/gomdon/gomdon-status';
 import { pancakeUnsyncedWhere, recyclingAttentionWhere } from '../admin/admin-order-filter';
@@ -235,6 +236,8 @@ export class OpsHealthService {
           stuckRefs: refs(pancake.stuckOrders, (o) => o.code),
           webhookRefs: refs(pancake.failedEvents, (e) => (e.orderRef ? `${e.orderRef} (${e.eventType})` : null)),
           attentionRefs: refs(pancake.attentionOrders, (o) => o.code),
+          configBlocked: pancake.pushErrors.config,
+          configRefs: refs(pancake.configOrders, (o) => o.code),
         },
         gomdon: {
           ...gomdon,
@@ -364,6 +367,8 @@ export class OpsHealthService {
       attention,
       attentionOrders,
       catalog,
+      pushErrorGroups,
+      configOrders,
     ] = await Promise.all([
         this.prisma.$queryRaw<{ at: Date | null }[]>`
           SELECT max("pancakeLastAttemptAt") AS "at" FROM "orders"
@@ -408,6 +413,7 @@ export class OpsHealthService {
             pancakePushAttempts: true,
             pancakeLastAttemptAt: true,
             pancakeSyncError: true,
+            pancakeErrorKind: true,
           },
         }),
         this.prisma.order.count({ where: { pancakeAttentionAt: { not: null } } }),
@@ -418,7 +424,19 @@ export class OpsHealthService {
           select: { id: true, code: true, pancakeAttention: true, pancakeAttentionAt: true },
         }),
         this.prisma.opsHealthState.findUnique({ where: { key: CATALOG_STATE_KEY } }),
+        this.prisma.order.groupBy({ by: ['pancakeErrorKind'], where: pancakeUnsyncedWhere(now), _count: { _all: true } }),
+        this.prisma.order.findMany({
+          where: { AND: [pancakeUnsyncedWhere(now), { pancakeErrorKind: PUSH_ERROR_KIND.CONFIG }] },
+          orderBy: { createdAt: 'asc' },
+          take: STUCK_LIST,
+          select: { code: true },
+        }),
       ]);
+    const pushErrors = { transient: 0, data: 0, rejected: 0, config: 0, unclassified: 0 };
+    for (const g of pushErrorGroups) {
+      const key = g.pancakeErrorKind === PUSH_ERROR_KIND.TRANSIENT ? 'transient' : g.pancakeErrorKind === PUSH_ERROR_KIND.DATA ? 'data' : g.pancakeErrorKind === PUSH_ERROR_KIND.REJECTED ? 'rejected' : g.pancakeErrorKind === PUSH_ERROR_KIND.CONFIG ? 'config' : 'unclassified';
+      pushErrors[key] += g._count._all;
+    }
     const lastWebhook = lastByStatus.reduce<Date | null>((m, r) => (r && (!m || r.receivedAt > m) ? r.receivedAt : m), null);
     const failedRefs = await this.pancakeEventRefs(failedEvents.map((e) => e.id));
     const catalogRun: CatalogRun & { detail: unknown } = {
@@ -446,6 +464,9 @@ export class OpsHealthService {
       stuckOrders,
       attention,
       attentionOrders,
+      /** Đơn chưa lên Pancake theo loại lỗi đẩy gần nhất (unclassified = chưa có lỗi hay đơn cũ trước cột loại lỗi). */
+      pushErrors,
+      configOrders,
       catalog: catalogRun,
     };
   }

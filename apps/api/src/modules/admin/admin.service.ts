@@ -1,6 +1,7 @@
 import { affiliateRevocationPatch } from '../affiliate/affiliate-revocation';
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { nextPushRetryAt } from '../integrations/pancake/pancake-push-error';
 import { DEALER_APPLICATION_LIST_SELECT } from '../dealer/dealer-application-select';
 import { decodeServedImage } from '../../common/served-image';
 import { reviewAdminImageRefFromVersion, reviewImageRefFromVersion } from '../reviews/reviews.service';
@@ -1283,6 +1284,8 @@ export class AdminService {
         allowedTransitions: actorAllowedTransitions(viewer, o, allowedNextStatuses({ ...o, onCredit: dealerOnCredit === true })),
         canConfirmPayment: canAdminConfirmRetailPayment(o),
         canRecordLatePayment: canAdminRecordLatePayment(o) && !lateRecorded.has(o.id),
+        // Lần cron tự đẩy lại kế tiếp (null = không còn): màn "Kho Pancake" nói cho admin biết có cần chờ hay phải tự bấm.
+        pancakeNextRetryAt: nextPushRetryAt(o)?.toISOString() ?? null,
       };
     });
     if (!seesFullOrderPhones(viewer)) {
