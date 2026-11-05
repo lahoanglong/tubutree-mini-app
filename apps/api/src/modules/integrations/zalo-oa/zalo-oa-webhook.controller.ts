@@ -28,9 +28,19 @@ const MAX_EVENT_SKEW_MS = 30 * 60 * 1000;
 
 interface ZaloOaWebhookBody {
   event_name?: string;
-  sender?: { id?: string };
-  message?: { text?: string; msg_id?: string };
+  sender?: { id?: unknown };
+  message?: { text?: unknown; msg_id?: unknown };
   [key: string]: unknown;
+}
+
+const INVALID = Symbol('invalid');
+
+/** Chuỗi hoặc số hữu hạn → chuỗi; thiếu/null → null; kiểu khác (object, mảng, boolean) → INVALID. */
+function scalarText(value: unknown): string | null | typeof INVALID {
+  if (value === undefined || value === null) return null;
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  return INVALID;
 }
 
 /**
@@ -93,17 +103,25 @@ export class ZaloOaWebhookController {
     // sẽ bị worker khớp từ khoá và "trả lời" lại OA. Trả 200 để Zalo không gửi lại.
     if (typeof body.event_name !== 'string' || !body.event_name.startsWith(USER_SEND_PREFIX)) return { received: true };
 
-    const zaloUserId = body.sender?.id;
+    const senderId = scalarText(body.sender?.id);
+    const rawMsgId = scalarText(body.message?.msg_id);
+    const text = scalarText(body.message?.text);
+    const timestamp = scalarText(body['timestamp']);
+    if (senderId === INVALID || rawMsgId === INVALID || text === INVALID || timestamp === INVALID) {
+      this.logger.warn('Webhook OA có sender.id/msg_id/text/timestamp sai kiểu: bỏ qua sự kiện.');
+      return { received: true };
+    }
+    const zaloUserId = senderId;
     if (!zaloUserId) return { received: true }; // tin khách không có người gửi → bỏ qua êm
 
     // msgId dedup: Zalo có thể gửi lại cùng 1 tin (retry/at-least-once) → unique index chặn
     // tạo trùng row + enqueue trùng job (nếu không, "tin đầu tiên" có thể bị coi là 2 tin
-    // khác nhau → gửi lời chào 2 lần). Tin không có msg_id (hiếm) thì không dedup được, chấp nhận.
-    const msgId = body.message?.msg_id ?? null;
+    // khác nhau → gửi lời chào 2 lần). Tin không có msg_id thì dùng băm của người gửi + timestamp + nội dung làm khoá.
+    const msgId = rawMsgId || this.fallbackMsgId(zaloUserId, timestamp ?? '', text ?? '');
     let event: { id: string };
     try {
       event = await this.prisma.oaInboundMessage.create({
-        data: { zaloUserId, msgId, messageText: body.message?.text ?? null, rawPayload: body as object },
+        data: { zaloUserId, msgId, messageText: text, rawPayload: body as object },
       });
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
@@ -118,6 +136,11 @@ export class ZaloOaWebhookController {
       this.logger.error(`Enqueue tin OA ${event.id} lỗi: ${err instanceof Error ? err.message : err}`);
     }
     return { received: true };
+  }
+
+  /** Ngăn cách bằng NUL để (a, bc) và (ab, c) không cho cùng khoá. */
+  private fallbackMsgId(zaloUserId: string, timestamp: string, text: string): string {
+    return createHash('sha256').update(`${zaloUserId}\0${timestamp}\0${text}`).digest('hex');
   }
 
   private get signingReady(): boolean {
