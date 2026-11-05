@@ -156,6 +156,16 @@ describe('CampaignsAdminService: đích banner phải tồn tại', () => {
     expect(prisma.campaign.create).toHaveBeenCalledTimes(1);
   });
 
+  it('slug sản phẩm 200 ký tự (slug Pancake theo tên đầy đủ) tạo và sửa được, 201 ký tự thì 400', async () => {
+    const long = `a${'b'.repeat(199)}`;
+    const { svc, prisma } = setup({ productSlugs: [long] });
+    await svc.create(input({ linkType: 'PRODUCT', linkValue: long }), NOW);
+    expect(prisma.campaign.create.mock.calls[0][0].data).toMatchObject({ linkType: 'PRODUCT', linkValue: long });
+    await svc.update('c1', { linkType: 'PRODUCT', linkValue: long }, NOW);
+    expect(prisma.campaign.update.mock.calls[0][0].data).toMatchObject({ linkValue: long });
+    await expect(svc.create(input({ linkType: 'PRODUCT', linkValue: `${long}b` }), NOW)).rejects.toBeInstanceOf(BadRequestException);
+  });
+
   it('CATEGORY với slug không có danh mục: 400', async () => {
     const { svc, prisma } = setup({ categorySlugs: ['sua-hat'] });
     await expect(svc.create(input({ linkType: 'CATEGORY', linkValue: 'khong-co' }), NOW)).rejects.toThrow(/danh mục/);

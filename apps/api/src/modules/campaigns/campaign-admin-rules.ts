@@ -5,7 +5,7 @@ import { CAMPAIGN_INTERNAL_TARGETS } from '@tubutree/shared-types';
 export type CampaignStatus = 'live' | 'scheduled' | 'ended' | 'off';
 
 const SLUG_MAX = 80;
-const ENTITY_SLUG_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,119}$/;
+const ENTITY_SLUG_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,199}$/;
 
 /** "Chiến dịch Giữa Thu" → "chien-dich-giua-thu". Tiêu đề toàn ký hiệu vẫn ra một slug dùng được. */
 export function slugFromTitle(title: string): string {

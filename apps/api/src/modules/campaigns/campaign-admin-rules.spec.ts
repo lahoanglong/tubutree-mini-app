@@ -1,5 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import { CAMPAIGN_INTERNAL_TARGETS } from '@tubutree/shared-types';
+import { getMetadataStorage } from 'class-validator';
+import { CreateCampaignDto } from './dto/campaign.dto';
 import { assertWindow, campaignStatus, normalizeLink, slugFromTitle } from './campaign-admin-rules';
 
 const NOW = new Date('2026-11-05T05:00:00Z');
@@ -28,6 +30,17 @@ describe('normalizeLink', () => {
     expect(normalizeLink('PRODUCT', ' tinh-dau-sa ')).toBe('tinh-dau-sa');
     expect(normalizeLink('CATEGORY', 'nha-bep')).toBe('nha-bep');
     for (const bad of [undefined, null, '', 'có dấu', 'a b', '-x']) expect(() => normalizeLink('PRODUCT', bad)).toThrow(BadRequestException);
+  });
+  it('slug sản phẩm và danh mục dài tới 200 ký tự như @MaxLength của DTO (slug Pancake theo tên đầy đủ) qua được; 201 thì 400', () => {
+    const cap = (getMetadataStorage() as unknown as { getTargetValidationMetadatas: (t: unknown, s: unknown, a: boolean, b: boolean) => Array<{ propertyName: string; name?: string; constraints?: number[] }> })
+      .getTargetValidationMetadatas(CreateCampaignDto, null, false, false)
+      .find((m) => m.propertyName === 'linkValue' && m.name === 'maxLength')!.constraints![0]!;
+    expect(cap).toBe(200);
+    const slug = (n: number) => `a${'b-'.repeat(n).slice(0, n - 1)}`;
+    for (const type of ['PRODUCT', 'CATEGORY'] as const) {
+      expect(normalizeLink(type, slug(cap))).toHaveLength(cap);
+      expect(() => normalizeLink(type, slug(cap + 1))).toThrow(BadRequestException);
+    }
   });
   it('đích nội bộ chỉ nhận giá trị trong danh sách chung CAMPAIGN_INTERNAL_TARGETS', () => {
     for (const t of CAMPAIGN_INTERNAL_TARGETS) expect(normalizeLink('URL_INTERNAL', ` ${t.value} `)).toBe(t.value);
