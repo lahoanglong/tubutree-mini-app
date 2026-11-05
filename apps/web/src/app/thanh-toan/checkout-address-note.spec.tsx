@@ -77,13 +77,13 @@ afterEach(() => {
 });
 
 describe('/thanh-toan — khách chưa có địa chỉ (BUYERWEB-20)', () => {
-  it('phí vận chuyển nhắc nhập địa chỉ thay vì "…", tổng ghi "Chưa tính", nút Đặt hàng khoá', async () => {
+  it('phí vận chuyển nhắc nhập địa chỉ thay vì "…", tổng ghi "Chưa tính", nút Đặt hàng bấm được để chỉ ra chỗ thiếu', async () => {
     mocks.addresses = [];
     const c = await mount();
     expect(rowValue(c, 'Phí vận chuyển')).toBe('Nhập địa chỉ để tính phí');
     expect(c.textContent).toContain('Chưa tính');
     expect(c.textContent).not.toContain('…');
-    expect(btn(c, 'Đặt hàng')!.disabled).toBe(true);
+    expect(btn(c, 'Đặt hàng')!.disabled).toBe(false);
   });
 
   it('có địa chỉ: hiện phí ship và tổng thật', async () => {

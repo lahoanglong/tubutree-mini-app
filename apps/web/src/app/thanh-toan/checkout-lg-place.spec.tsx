@@ -111,7 +111,7 @@ afterEach(() => {
 });
 
 describe('/thanh-toan lg: lý do khoá nút Đặt hàng nằm cạnh nút (K2 c)', () => {
-  it('chưa có địa chỉ: vùng role=status cạnh nút ghi lý do (chữ phụ, không đỏ), nút khoá', async () => {
+  it('chưa có địa chỉ: vùng role=status cạnh nút ghi lý do (chữ phụ, không đỏ), nút bấm được để chỉ ra chỗ thiếu', async () => {
     state.noAddress = true;
     const c = await mount();
     const region = note(c)!;
@@ -119,7 +119,7 @@ describe('/thanh-toan lg: lý do khoá nút Đặt hàng nằm cạnh nút (K2 c
     expect(region.textContent).toBe('Chọn địa chỉ giao hàng để đặt hàng.');
     expect(region.className).toContain('--color-text-secondary');
     expect(region.className).not.toContain('danger');
-    expect(lgButton(c).disabled).toBe(true);
+    expect(lgButton(c).disabled).toBe(false);
     // Cùng khối với nút và đứng ngay dưới nó (như lời báo lỗi đặt hàng), dòng đồng ý điều khoản vẫn sát trên nút.
     expect(part(c).contains(region)).toBe(true);
     expect(lgButton(c).nextElementSibling).toBe(region);

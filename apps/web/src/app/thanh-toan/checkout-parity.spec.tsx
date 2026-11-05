@@ -200,19 +200,21 @@ describe('/thanh-toan — hoá đơn VAT (R2-BUYERWEB-6)', () => {
     expect(m.placeOrder.mock.calls[0]![0].invoiceRequest).toBeUndefined();
   });
 
-  it('bật yêu cầu: khoá đặt hàng tới khi đủ MST, tên, địa chỉ, email đúng; rồi gửi kèm đơn', async () => {
+  it('bật yêu cầu: chưa đủ MST, tên, địa chỉ, email đúng thì bấm không đặt; đủ rồi mới gửi kèm đơn', async () => {
     const r = await mount();
     click(checkbox(r, 'Yêu cầu xuất hoá đơn VAT'));
     await flush(1);
-    expect(placeButton(r).disabled).toBe(true);
-    expect(r.container.textContent).toContain('Bạn điền đủ MST, tên công ty, địa chỉ và email hợp lệ nhé.');
+    click(placeButton(r));
+    await flush(2);
+    expect(m.placeOrder).not.toHaveBeenCalled();
     typeInto(field(r, 'Mã số thuế'), ' 0312345678 ');
     typeInto(field(r, 'Tên công ty'), 'Công ty A');
     typeInto(field(r, 'Địa chỉ xuất hoá đơn'), '1 Phố Huế, Hà Nội');
     typeInto(field(r, 'Email nhận hoá đơn'), 'ketoan@');
-    expect(placeButton(r).disabled).toBe(true);
+    click(placeButton(r));
+    await flush(2);
+    expect(m.placeOrder).not.toHaveBeenCalled();
     typeInto(field(r, 'Email nhận hoá đơn'), 'ketoan@a.vn');
-    expect(placeButton(r).disabled).toBe(false);
     click(placeButton(r));
     await flush(4);
     expect(m.placeOrder.mock.calls[0]![0].invoiceRequest).toEqual({

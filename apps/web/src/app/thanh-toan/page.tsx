@@ -33,6 +33,7 @@ import {
 import { ctvSlugFor, getStorefrontContext, subscribeStorefrontContext } from '@/lib/storefront-context';
 import { pointsOfferText } from '@tubutree/app-core/points-offer';
 import { normalizeTaxCode } from '@tubutree/app-core/commerce/tax-code';
+import { validateInvoiceFields, type InvoiceField } from '@tubutree/app-core/commerce/checkout-form';
 import { checkoutPlaceHint, checkoutTotalText, collapseCheckoutLines } from '@tubutree/app-core/commerce/checkout-display';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { checkoutLineProblems, priceChangedActions, type LineFix, type LineProblem } from '@tubutree/app-core/commerce/checkout-issues';
@@ -256,6 +257,26 @@ export default function CheckoutPage() {
   }, [pickedPayment, payment]);
 
   const invoiceValid = isInvoiceValid(wantInvoice, invoice);
+  // Lời báo ô hoá đơn: hiện khi khách rời ô, hoặc khi bấm Đặt hàng mà còn thiếu (lúc đó con trỏ nhảy tới ô lỗi đầu tiên).
+  const invoiceAllErrors = wantInvoice ? validateInvoiceFields(invoice) : {};
+  const [invoiceTouched, setInvoiceTouched] = useState<Partial<Record<InvoiceField, boolean>>>({});
+  const [placeAttempted, setPlaceAttempted] = useState(false);
+  const [focusTick, setFocusTick] = useState(0);
+  const invoiceShown = Object.fromEntries(
+    Object.entries(invoiceAllErrors).filter(([f]) => placeAttempted || invoiceTouched[f as InvoiceField]),
+  ) as Partial<Record<InvoiceField, string>>;
+  const formBlocked = !addressId || !invoiceValid;
+  const addressBlockRef = useRef<HTMLDivElement>(null);
+  const invoiceBlockRef = useRef<HTMLDivElement>(null);
+  // Bấm Đặt hàng khi còn thiếu địa chỉ hoặc ô hoá đơn: cuộn tới và đưa con trỏ vào chỗ thiếu đầu tiên theo thứ tự trên màn hình.
+  useEffect(() => {
+    if (focusTick === 0) return;
+    const target = !addressId
+      ? (addressBlockRef.current?.querySelector<HTMLElement>('button, input, [role="radio"]') ?? addressBlockRef.current)
+      : invoiceBlockRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]');
+    target?.focus();
+    target?.scrollIntoView?.({ block: 'center' });
+  }, [focusTick]); // eslint-disable-line react-hooks/exhaustive-deps
   // Hết hàng/vượt tồn: báo ngay dưới đúng dòng kèm cách sửa nhanh và chặn đặt (khách đi thẳng vào /thanh-toan hay lưu đường dẫn
   // không phải chờ tới lúc bấm đặt mới biết). Chỉ xét các dòng đang thanh toán.
   const lineProblems = checkoutLineProblems(checkoutItems);
@@ -529,8 +550,18 @@ export default function CheckoutPage() {
     .filter((m) => m.k !== 'WALLET' || walletBalance !== 0)
     .map((m) => ({ ...m, hint: quote ? paymentUnavailableReason(m.k, quote, walletBalance) : null }));
   const paymentNote = quote && !zeroNote && payment === '' ? paymentMissingNote(quote, walletBalance) : null;
+  // Thiếu địa chỉ hoặc ô hoá đơn thì nút vẫn bấm được: bấm để chỉ ra ô thiếu (lỗi ngay dưới ô, con trỏ nhảy tới). Chỉ những lý do
+  // không phải ô nhập (đang gửi, đang tính tiền, dòng cần sửa, chưa có cách thanh toán) mới khoá hẳn, và đã có chữ nói lý do.
   const placeDisabled =
-    !addressId || !quote || quoteStale || place.isPending || !invoiceValid || hasLineProblem || (!zeroNote && payment === '');
+    place.isPending || hasLineProblem || (!!addressId && (!quote || quoteStale || (!zeroNote && payment === '')));
+  const onPlace = () => {
+    if (formBlocked) {
+      setPlaceAttempted(true);
+      setFocusTick((n) => n + 1);
+      return;
+    }
+    place.mutate();
+  };
   const totalText = checkoutTotalText({ total: quote?.total ?? null, hasAddress: !!addressId }, formatVnd);
   // Lần đặt vừa rồi chưa rõ kết quả (mất mạng, quá thời gian, 5xx): nút nói rõ là gửi lại cùng đơn (cùng khoá, không tạo đơn trùng).
   const retryingPlace = place.isError && isOutcomeUnknown(place.error);
@@ -603,7 +634,16 @@ export default function CheckoutPage() {
       )}
       <div className="grid gap-6 max-md:grid-cols-[minmax(0,1fr)] max-md:gap-0 md:mx-auto md:max-w-2xl lg:max-w-none lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-4 max-md:contents">
-          <section data-mini-block="address" className={`${MINI_BAND} max-md:order-1`}>
+          <section
+            ref={addressBlockRef}
+            data-mini-block="address"
+            data-testid="checkout-address-block"
+            role="group"
+            aria-label="Địa chỉ giao hàng"
+            tabIndex={-1}
+            aria-describedby={placeAttempted && !addressId ? 'checkout-address-error' : undefined}
+            className={`${MINI_BAND} max-md:order-1 outline-none`}
+          >
             <h2 data-ds="checkout-block-title" className={`${ui.sectionTitle} ${mini.sectionLabel}`}>Địa chỉ giao hàng</h2>
             {addrQ.isError && (
               <p className={`mt-2 ${ui.error}`}>
@@ -630,6 +670,12 @@ export default function CheckoutPage() {
                 void qc.invalidateQueries({ queryKey: ['quote'] });
               }}
             />
+            {placeAttempted && !addressId && (
+              <p id="checkout-address-error" role="alert" className="mt-2 text-caption text-danger-fg">
+                <span aria-hidden="true">⚠ </span>
+                {fillCopy('checkout.addressNeeded')}
+              </p>
+            )}
           </section>
 
           <section data-mini-block="payment" className={`${MINI_BAND} max-md:order-5`}>
@@ -755,13 +801,14 @@ export default function CheckoutPage() {
             />
           </div>
 
-          <div data-mini-block="invoice" className="max-md:order-9 max-md:mt-2">
+          <div ref={invoiceBlockRef} data-mini-block="invoice" className="max-md:order-9 max-md:mt-2">
             <InvoiceSection
               want={wantInvoice}
               onWant={chosen(setWantInvoice)}
               invoice={invoice}
               onInvoice={chosen(setInvoice)}
-              valid={invoiceValid}
+              errors={invoiceShown}
+              onTouch={(f) => setInvoiceTouched((t) => (t[f] ? t : { ...t, [f]: true }))}
               disabled={place.isPending}
             />
           </div>
@@ -974,7 +1021,7 @@ export default function CheckoutPage() {
           <button
             ref={placeButtonRef}
             type="button"
-            onClick={() => place.mutate()}
+            onClick={onPlace}
             disabled={placeDisabled}
             className={`${ui.btnPrimary} mt-2 hidden w-full lg:inline-flex`}
           >
@@ -1033,7 +1080,7 @@ export default function CheckoutPage() {
         </p>
         <button
           type="button"
-          onClick={() => place.mutate()}
+          onClick={onPlace}
           disabled={placeDisabled}
           className={`${uiBar.primary} w-full`}
         >
