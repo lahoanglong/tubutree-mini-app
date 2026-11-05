@@ -187,7 +187,7 @@ describe('CartPage — vượt tồn kho (BUYERMINI-18) và suất giờ vàng (
   it('dòng đang chọn có số lượng vượt tồn → nút Thanh toán bị khoá, kèm hướng dẫn giảm số lượng', async () => {
     mocks.getCart.mockResolvedValue(summary({ items: [{ ...OK_LINE, quantity: 3, stock: 1, total: 150_000 }] }));
     renderPage();
-    expect(await screen.findByText('Còn 1 sản phẩm')).toBeInTheDocument();
+    expect(await screen.findByText('Chỉ còn 1 sản phẩm')).toBeInTheDocument();
     const btn = screen.getByRole('button', { name: 'Thanh toán (3)' });
     expect(btn).toBeDisabled();
     expect(screen.getByText('Giảm số lượng sản phẩm vượt tồn kho để thanh toán.')).toBeInTheDocument();
@@ -207,14 +207,14 @@ describe('CartPage — vượt tồn kho (BUYERMINI-18) và suất giờ vàng (
   it('chạm trần mà tồn thấp (3/3): cảnh báo kèm icon; chưa chạm trần (2/40) không có dòng (L5 3)', async () => {
     mocks.getCart.mockResolvedValue(summary({ items: [{ ...OK_LINE, quantity: 3, stock: 3, total: 150_000 }] }));
     const low = renderPage();
-    const note = await screen.findByText('Còn 3 sản phẩm');
+    const note = await screen.findByText('Chỉ còn 3 sản phẩm');
     expect(note.getAttribute('style')).toContain('--color-text-warning');
     expect(note.parentElement!.querySelector('svg')).not.toBeNull();
     low.unmount();
     mocks.getCart.mockResolvedValue(summary({ items: [{ ...OK_LINE, quantity: 2, stock: 40, total: 100_000 }] }));
     renderPage();
     await screen.findByText('Xà bông thảo mộc');
-    expect(screen.queryByText(/^Còn \d+ sản phẩm$/)).toBeNull();
+    expect(screen.queryByText(/^(?:Chỉ còn|Còn) \d+ sản phẩm$/)).toBeNull();
   });
 
   it('bấm + tới trần: dòng tồn kho hiện cùng lúc nút + khoá, không đợi máy chủ (L5 3)', async () => {

@@ -287,7 +287,9 @@ describe('findHits: ca vi phạm cố ý', () => {
     ['Flash sale hôm nay', 'Giờ vàng'],
     ['Ưu đãi giờ vàng', 'Giờ vàng (hoa chữ G)'],
     ['HSD 12/2026', 'Hạn dùng hoặc Dùng đến'],
-    ['Chỉ còn 3 sản phẩm', 'Còn {n} sản phẩm'],
+    ['Chỉ còn 3 suất', 'Còn {n} sản phẩm'],
+    ['Chỉ còn 3 món', 'Còn {n} sản phẩm'],
+    ['Chỉ còn hàng ở kho Hà Nội', 'Còn {n} sản phẩm'],
     ['Mất kết nối, vui lòng thử lại', 'Bạn hoặc Tubu'],
     ['Chúng tôi sẽ gọi lại', 'Bạn hoặc Tubu'],
     ['Mua tại cửa hàng', 'Gian hàng'],
@@ -314,6 +316,9 @@ describe('findHits: ca vi phạm cố ý', () => {
 
   it.each([
     'Giờ vàng',
+    'Chỉ còn 3 sản phẩm',
+    'Chỉ còn {n} sản phẩm',
+    'Còn hàng — Sẵn sàng giao ngay',
     'Bán chạy nhất',
     'Mã giảm giá',
     'Nhận mã giảm giá 15% cho đơn sau',

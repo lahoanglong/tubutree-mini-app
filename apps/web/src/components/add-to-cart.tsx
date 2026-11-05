@@ -389,9 +389,14 @@ export default function AddToCart({
         </div>
       )}
 
-      {/* Điện thoại: dòng nhắc tồn thấp nằm ở khối thông tin chính dưới Điểm Xanh như Mini App (`PdpLowStock`), nên ẩn ở đây. */}
-      {available && (selected?.stock ?? 0) <= LOW_STOCK_NOTICE && (
-        <p className="mt-3 text-sm font-medium text-warning-fg max-md:hidden">{stockText(selected!.stock)}</p>
+      {/* Điện thoại: dòng tồn kho nằm ở khối thông tin chính dưới Điểm Xanh như Mini App (`PdpLowStock`), nên ẩn ở đây. */}
+      {available && selected && (
+        <p
+          data-testid={selected.stock <= LOW_STOCK_NOTICE ? 'atc-low-stock' : 'atc-stock-label'}
+          className={`mt-3 text-sm max-md:hidden ${selected.stock <= LOW_STOCK_NOTICE ? 'font-medium text-warning-fg' : 'text-stone-600'}`}
+        >
+          {stockText(selected.stock)}
+        </p>
       )}
 
       <div data-section="pdp-quantity" className={`mt-4 flex items-center gap-3 tubu-pdp-order-6 max-md:justify-between ${phoneBand}`}>

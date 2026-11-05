@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cartStockNote, isLowStock, LOW_STOCK_NOTICE, stockText } from './stock-text';
+import { cartStockNote, isLowStock, LOW_STOCK_NOTICE, PLENTY_STOCK, stockText } from './stock-text';
 
 describe('stockText: một chữ tồn kho cho cả hai app', () => {
   it('hết hàng ghi "Tạm hết hàng" như thẻ (K1)', () => {
@@ -7,19 +7,35 @@ describe('stockText: một chữ tồn kho cho cả hai app', () => {
     expect(stockText(-1)).toBe('Tạm hết hàng');
   });
 
-  it('mọi n > 0 ghi "Còn n sản phẩm", không đổi chữ theo mức tồn (kể cả n > ngưỡng, không "Còn 6" trần)', () => {
-    for (const n of [1, 3, 5, 6, 40, 245]) expect(stockText(n)).toBe(`Còn ${n} sản phẩm`);
+  it('1–20 ghi "Chỉ còn n sản phẩm" (đúng số), 21–99.999 ghi "Còn hàng" (không lộ số), từ 100.000 ghi "Còn hàng — Sẵn sàng giao ngay"', () => {
+    for (const n of [1, 3, 5, 6, 19, 20]) expect(stockText(n)).toBe(`Chỉ còn ${n} sản phẩm`);
+    for (const n of [21, 40, 245, 99_999]) expect(stockText(n)).toBe('Còn hàng');
+    for (const n of [100_000, 100_001, 99_999_988]) expect(stockText(n)).toBe('Còn hàng — Sẵn sàng giao ngay');
   });
 
-  it('không có chữ giục "Chỉ còn" (thuật ngữ cấm)', () => {
-    for (const n of [0, 1, 5, 6, 40]) expect(stockText(n)).not.toMatch(/Chỉ còn/i);
+  it('ranh giới: 20 và 21, 99.999 và 100.000 sang hai chữ khác nhau', () => {
+    expect(PLENTY_STOCK).toBe(100_000);
+    expect(stockText(20)).not.toBe(stockText(21));
+    expect(stockText(99_999)).not.toBe(stockText(100_000));
+  });
+
+  it('hết hàng, số âm, NaN đều ghi "Tạm hết hàng", không "Chỉ còn"', () => {
+    for (const n of [0, -1, Number.NaN]) {
+      expect(stockText(n)).toBe('Tạm hết hàng');
+      expect(stockText(n)).not.toMatch(/Chỉ còn/i);
+    }
+  });
+
+  it('tồn từ 21 trở lên không bao giờ có chữ "Chỉ còn" và tồn từ 100.000 không có con số nào', () => {
+    for (const n of [21, 40, 99_999, 100_000]) expect(stockText(n)).not.toMatch(/Chỉ còn/i);
+    for (const n of [100_000, 999_999, 99_999_988]) expect(stockText(n)).not.toMatch(/\d/);
   });
 });
 
 describe('isLowStock: chỉ mức thấp được nhấn bằng màu cảnh báo', () => {
-  it('ngưỡng là LOW_STOCK_NOTICE (5): 1..5 thấp, 0 là hết (không phải thấp), 6 trở lên bình thường', () => {
-    expect(LOW_STOCK_NOTICE).toBe(5);
-    expect([0, 1, 5, 6, 40].map(isLowStock)).toEqual([false, true, true, false, false]);
+  it('ngưỡng là LOW_STOCK_NOTICE (20): 1..20 thấp, 0 là hết (không phải thấp), 21 trở lên bình thường', () => {
+    expect(LOW_STOCK_NOTICE).toBe(20);
+    expect([0, 1, 5, 20, 21, 40, 100_000].map(isLowStock)).toEqual([false, true, true, true, false, false, false]);
   });
 });
 
@@ -32,17 +48,17 @@ describe('cartStockNote: dòng tồn kho ở giỏ, một luật cho hai app (L5
     expect(cartStockNote(3, -1)).toBeNull();
   });
 
-  it('chạm trần mà tồn thấp (1..5): cảnh báo, chữ "Còn n sản phẩm"', () => {
-    for (const n of [1, 3, 5]) expect(cartStockNote(n, n)).toEqual({ text: `Còn ${n} sản phẩm`, tone: 'warning' });
+  it('chạm trần mà tồn thấp (1..20): cảnh báo, chữ "Chỉ còn n sản phẩm" như PDP', () => {
+    for (const n of [1, 3, 5, 20]) expect(cartStockNote(n, n)).toEqual({ text: `Chỉ còn ${n} sản phẩm`, tone: 'warning' });
   });
 
-  it('chạm trần mà tồn cao (6 trở lên): chữ thường, không cam', () => {
-    expect(cartStockNote(6, 6)).toEqual({ text: 'Còn 6 sản phẩm', tone: 'neutral' });
+  it('chạm trần mà tồn cao (21 trở lên): chữ thường ghi đúng trần "Còn n sản phẩm", không cam', () => {
+    expect(cartStockNote(21, 21)).toEqual({ text: 'Còn 21 sản phẩm', tone: 'neutral' });
     expect(cartStockNote(40, 40)).toEqual({ text: 'Còn 40 sản phẩm', tone: 'neutral' });
   });
 
   it('vượt tồn (quantity > stock, đang chặn thanh toán): luôn cảnh báo kể cả tồn cao', () => {
-    expect(cartStockNote(3, 1)).toEqual({ text: 'Còn 1 sản phẩm', tone: 'warning' });
+    expect(cartStockNote(3, 1)).toEqual({ text: 'Chỉ còn 1 sản phẩm', tone: 'warning' });
     expect(cartStockNote(50, 40)).toEqual({ text: 'Còn 40 sản phẩm', tone: 'warning' });
   });
 });

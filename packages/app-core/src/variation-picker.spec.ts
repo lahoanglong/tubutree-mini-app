@@ -38,15 +38,17 @@ describe('clampPickerQty', () => {
 });
 
 describe('pickerStockText', () => {
-  it('hết hàng, sắp hết, còn nhiều', () => {
+  it('hết hàng, sắp hết, còn nhiều, tồn ảo: cùng chữ với PDP và giỏ (stockText)', () => {
     expect(pickerStockText(0)).toBe('Tạm hết hàng');
-    expect(pickerStockText(3)).toBe('Còn 3 sản phẩm');
-    expect(pickerStockText(5)).toBe('Còn 5 sản phẩm');
-    expect(pickerStockText(6)).toBe('Còn 6 sản phẩm');
-    expect(pickerStockText(40)).toBe('Còn 40 sản phẩm');
+    expect(pickerStockText(3)).toBe('Chỉ còn 3 sản phẩm');
+    expect(pickerStockText(20)).toBe('Chỉ còn 20 sản phẩm');
+    expect(pickerStockText(21)).toBe('Còn hàng');
+    expect(pickerStockText(245)).toBe('Còn hàng');
+    expect(pickerStockText(99_999)).toBe('Còn hàng');
+    expect(pickerStockText(100_000)).toBe('Còn hàng — Sẵn sàng giao ngay');
   });
 
-  it('không có chữ "Chỉ còn" (thuật ngữ cấm, DESIGN.md: Còn {n} sản phẩm)', () => {
-    for (const n of [0, 1, 3, 5, 6, 40]) expect(pickerStockText(n)).not.toMatch(/Chỉ còn/i);
+  it('không bao giờ lộ con số từ 100.000 trở lên (tồn ảo của Pancake)', () => {
+    for (const n of [100_000, 999_999, 99_999_988]) expect(pickerStockText(n)).not.toMatch(/\d/);
   });
 });

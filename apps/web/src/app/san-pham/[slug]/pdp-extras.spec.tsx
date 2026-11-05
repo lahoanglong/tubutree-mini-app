@@ -444,24 +444,41 @@ describe('PdpSubscribeRow', () => {
   });
 });
 
-describe('PdpLowStock ("Còn N sản phẩm" dưới Điểm Xanh, đúng chữ Mini App ở điện thoại)', () => {
-  it('phân loại đang chọn còn từ 1 đến 5: nhắc "Còn N sản phẩm", chỉ hiện dưới md', async () => {
+describe('PdpLowStock (nhãn tồn kho dưới Điểm Xanh, đúng chữ Mini App ở điện thoại)', () => {
+  it('phân loại đang chọn còn từ 1 đến 20: "Chỉ còn N sản phẩm" màu cảnh báo, chỉ hiện dưới md', async () => {
     const { container } = mount(<PdpLowStock slug="dau-goi" variations={VARIATIONS} />);
     await flush();
     const p = container.querySelector('[data-testid="pdp-low-stock"]')!;
-    expect(p.textContent).toBe('Còn 4 sản phẩm');
+    expect(p.textContent).toBe('Chỉ còn 4 sản phẩm');
     expect(p.className).toContain('md:hidden');
+    expect(p.className).toContain('text-warning-fg');
   });
-  it('hết hàng hoặc còn nhiều hơn 5: không nhắc; lấy tồn kho thật thay bản ISR', async () => {
-    expect(mount(<PdpLowStock slug="dau-goi" variations={VARIATIONS} />, 'v1').container.innerHTML).toBe('');
-    mocks.getProductStock.mockResolvedValue({ v1: 0, v2: 6 });
+  it('còn 21–99.999 ghi "Còn hàng", từ 100.000 ghi "Còn hàng — Sẵn sàng giao ngay" (không lộ số), chữ thường không màu cảnh báo', async () => {
+    mocks.getProductStock.mockResolvedValue({ v1: 0, v2: 21 });
     const many = mount(<PdpLowStock slug="dau-goi" variations={VARIATIONS} />);
     await flush();
-    expect(many.container.innerHTML).toBe('');
+    const note = many.container.querySelector('[data-testid="pdp-stock-label"]')!;
+    expect(note.textContent).toBe('Còn hàng');
+    expect(note.className).toContain('md:hidden');
+    expect(note.className).not.toContain('text-warning-fg');
+    expect(many.container.querySelector('[data-testid="pdp-low-stock"]')).toBeNull();
+    many.unmount();
+    mocks.getProductStock.mockResolvedValue({ v1: 0, v2: 99_999_988 });
+    const virtual = mount(<PdpLowStock slug="dau-goi" variations={VARIATIONS} />);
+    await flush();
+    expect(virtual.container.textContent).toBe('Còn hàng — Sẵn sàng giao ngay');
+    expect(virtual.container.textContent).not.toMatch(/\d/);
+  });
+  it('hết hàng: không có dòng; lấy tồn kho thật thay bản ISR', async () => {
+    expect(mount(<PdpLowStock slug="dau-goi" variations={VARIATIONS} />, 'v1').container.innerHTML).toBe('');
+    mocks.getProductStock.mockResolvedValue({ v1: 0, v2: 0 });
+    const out = mount(<PdpLowStock slug="dau-goi" variations={VARIATIONS} />);
+    await flush();
+    expect(out.container.innerHTML).toBe('');
     mocks.getProductStock.mockResolvedValue({ v1: 0, v2: 2 });
     const few = mount(<PdpLowStock slug="dau-goi" variations={[{ id: 'v2', stock: 9 }]} />);
     await flush();
-    expect(few.container.textContent).toBe('Còn 2 sản phẩm');
+    expect(few.container.textContent).toBe('Chỉ còn 2 sản phẩm');
   });
 });
 
