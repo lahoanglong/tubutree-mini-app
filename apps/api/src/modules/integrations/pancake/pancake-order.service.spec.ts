@@ -511,13 +511,13 @@ describe('PancakeOrderService.markPushFailure — loại lỗi (hi)', () => {
   });
 
   it('pushOrder đọc lại loại lỗi ngay trước khi ghi: đơn vừa được thả sang CONFIG_RECHECK giữa chừng không bị ghi CONFIG', async () => {
-    let rowRef: () => Record<string, unknown>;
+    const holder: { row?: Record<string, unknown> } = {};
     const createOrder = jest.fn().mockImplementation(async () => {
-      rowRef().pancakeErrorKind = 'CONFIG_RECHECK';
+      holder.row!.pancakeErrorKind = 'CONFIG_RECHECK';
       throw forbidden();
     });
     const t = setup({ pancakePushStatus: PANCAKE_PUSH.PENDING, pancakeErrorKind: 'CONFIG' }, { client: { createOrder } });
-    rowRef = () => t.rows[0] as Record<string, unknown>;
+    holder.row = t.rows[0] as Record<string, unknown>;
     await expect(t.svc.pushOrder('o1')).rejects.toBeInstanceOf(PancakeApiError);
     expect(t.row().pancakeErrorKind).toBe('REJECTED');
   });
