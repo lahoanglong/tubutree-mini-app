@@ -4,6 +4,7 @@ Kế hoạch: `PLAN.md`. Phát hiện và quyết định của chủ: `audit-11
 
 ## Nhánh
 - Đợt 1 (xong): tích hợp `hard/1105`, dựng từ tip `sec/1104-audit` (3b021b59b, PR #167). Gói (gốc d79ceeb85): `hard/1105-ha`, `hard/1105-hb`, `hard/1105-hc`. Đã merge qua PR #168. Worktree và nhánh local đã dọn 05/11.
+- Đợt 3 (xong): tích hợp `hard/1105-w3`, gốc main 94a557702. Gói: `hard/1105-he`, `hard/1105-hf`, `hard/1105-hg`. Đã merge qua PR #174 (main 6ec0dee82, kéo theo docs #173) và đã deploy. Worktree và nhánh local của gói đã dọn 05/11.
 - Đợt 2 (xong): tích hợp `hard/1105-w2`, gốc main 2da8b1337. Gói: `hard/1105-hd1`, `hard/1105-hd2`, `hard/1105-hd3`. Đã merge qua PR #172 (main 94a557702) và đã deploy. Worktree, nhánh local của đợt 2 và của `sec/1104-*` đã dọn 05/11.
 
 ## Đợt 1
@@ -82,7 +83,7 @@ Kế hoạch: `PLAN.md`. Phát hiện và quyết định của chủ: `audit-11
 - Quay lại: image `:prev-7589f36c` cho cả api và web (runbook 7.2). Nếu bỏ hạn chờ: xoá dòng `DB_SESSION_OPTIONS` trong `.env` rồi tạo lại `api`.
 - File go-live: `/root/golive-archive/94a55770/`. `.pending-migrations` để nguyên ở `/opt/tubutree` cho runbook 7.2.
 
-## Đợt 3 (tích hợp `hard/1105-w3`, gốc main 94a557702 + docs 461c99ac8)
+## Đợt 3 (đã merge PR #174, đã deploy; tích hợp `hard/1105-w3`, gốc main 94a557702 + docs 461c99ac8)
 - Chủ chọn 05/11: push docs PR (#173) và làm đợt 3, thêm lỗi ZNS kẹt RETRYING. Test tối đa 2 worker. Hỏi chủ trước khi merge hoặc deploy.
 - he (Mini App, PG 46537): L4-01, L4-02, L4-03 phần Mini App, L4-04, L4-05, ô lý do cấp/thu quyền. app-core chỉ được thêm `reason` tuỳ chọn ở `staff.ts`.
 - hf (admin web + nhãn lỗi, PG 46538): L4-03 phần admin + `FIELD_LABELS`, L4-06.
@@ -126,3 +127,20 @@ Kế hoạch: `PLAN.md`. Phát hiện và quyết định của chủ: `audit-11
   - products 156, slug dài nhất 101, slug sai mẫu 0; categories slug sai mẫu 0;
   - notification_logs 58; log ZNS 0 (không có log kẹt);
   - 295 migration; PROD 94a557702.
+
+## Deploy đợt 3 (05/11, PROD 6ec0dee82)
+- PR #174: CI 8/8 xanh, merge thành main 6ec0dee82. PR docs #173 tự thành merged vì commit 461c99ac8 đã nằm trong w3.
+- dep1, 10:08–10:13:
+  - image mới: api 37615285af4c, web c5a0d3269960; sharp ổn; check-env hợp lệ;
+  - go-live trước deploy 50 PASS / 19 WARN / 0 FAIL; 1 migration chờ; đĩa trống 11G.
+- dep2, 10:14:
+  - backup `tubutree_20261105_101401.sql.gz`;
+  - migrate 295 → 296 trong 2,8 giây, 0 đang dở; API ngừng 22 giây.
+- dep3:
+  - go-live sau deploy 50 PASS / 18 WARN / 0 FAIL; smoke xanh; `/api/img` 200;
+  - `?slugs=` 20 mục 200, 21 mục 400 kèm câu mới, nên bản mới đang chạy;
+  - log API 15 phút 0 dòng ERROR/57014/55P03/P2028; container không khởi động lại.
+- WARN `queues.backlog`: pancake-push có 1 job failed, đã có từ trước.
+- Quay lại: image `:prev-94a55770` cho cả api (09985aa679fc) và web (60ce23ad126e), theo runbook 7.2 và §1.23. Migration 180000 thuộc IMAGE_COMPATIBLE.
+- Mini App (ZMP) chưa lên bản mới. Cho tới lúc đó, không gắn chiến dịch vào slug dài hơn 120 ký tự (§1.23).
+- File go-live: `/root/golive-archive/6ec0dee8/`. `/opt/tubutree` sạch.
