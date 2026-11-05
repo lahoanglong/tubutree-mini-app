@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hasVisibleText } from './admin-visible-text';
+import { hasVisibleText, isPhoneInput, stripInvisible } from './admin-visible-text';
 
 describe('hasVisibleText: ô bắt buộc của màn quản trị có chữ nhìn thấy được', () => {
   it('chuỗi rỗng hoặc chỉ khoảng trắng → false', () => {
@@ -30,4 +30,22 @@ describe('hasVisibleText: ô bắt buộc của màn quản trị có chữ nhì
   it('U+200D giữa các thành phần emoji ghép không làm mất chữ nhìn thấy', () => {
     expect(hasVisibleText('👨‍👩‍👧')).toBe(true);
   });
+});
+
+describe('stripInvisible', () => {
+  it('bỏ ký tự vô hình ở mọi vị trí, giữ khoảng trắng', () => {
+    expect(stripInvisible('0912\u2060345\u200b678')).toBe('0912345678');
+    expect(stripInvisible('\ufeff0912 345\u00ad 678\u200e')).toBe('0912 345 678');
+    expect(stripInvisible('\u200b\u2060')).toBe('');
+  });
+});
+
+describe('isPhoneInput: cùng luật với searchPhone của API (apps/api/src/modules/admin/admin-order-filter.ts)', () => {
+  it.each(['0912345678', '+84 912 345 678', '0912.345.678', '(028) 3822-1234', ' 0912345678 ', '912345678', '0912\u2060345678', '\u200b0912345678'])(
+    '%j là SĐT',
+    (v) => expect(isPhoneInput(v)).toBe(true),
+  );
+  it.each(['', '   ', '12', '+', 'abc', '0912345678 Lan', '09123x45678', '\u200b\u200b', '84+912345678'])('%j không phải SĐT', (v) =>
+    expect(isPhoneInput(v)).toBe(false),
+  );
 });

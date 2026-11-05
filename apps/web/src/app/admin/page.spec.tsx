@@ -1269,6 +1269,13 @@ describe('admin/page — tab Người dùng', () => {
       typeInto(phone, junk);
       expect(grant.disabled, JSON.stringify(junk)).toBe(true);
     }
+    for (const junk of ['12', '0912345678 Lan']) {
+      typeInto(phone, junk);
+      expect(grant.disabled, JSON.stringify(junk)).toBe(true);
+    }
+    // Ký tự vô hình giữa số (dán từ Zalo/Word): API bỏ chúng rồi mới chuẩn hoá, nên nút phải mở.
+    typeInto(phone, '0912\u2060345678');
+    expect(grant.disabled).toBe(false);
     typeInto(phone, '0955555555');
     expect(grant.disabled).toBe(false);
   });

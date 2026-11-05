@@ -177,7 +177,7 @@ import { formatDate, formatDateTime } from '@/lib/format-date';
 import { isRefundInProgress, orderPaymentStatusShort, shippingStatusLabel } from '@/lib/order-view';
 import { OrderPaymentSummary } from '@/components/admin/order-payment-summary';
 import { actionErrorText, loadErrorText } from '@/lib/admin-error-text';
-import { hasVisibleText } from '@/lib/admin-visible-text';
+import { hasVisibleText, isPhoneInput, stripInvisible } from '@/lib/admin-visible-text';
 import { STAFF_USER_MAX_PAGE, staffUserSearchProblem } from '@/lib/staff-user-search';
 
 type Tab =
@@ -2572,7 +2572,7 @@ function GrantRoleForm({ onDone }: { onDone: () => void }) {
     setMsg(null);
     if (!role) return;
     // Chụp giá trị lúc bấm: hộp xác nhận và lệnh đổi phải nói về cùng một SĐT dù ô nhập có bị sửa giữa chừng.
-    const target = { phone: phone.trim(), role, tierId: needsTier ? tierId : undefined };
+    const target = { phone: stripInvisible(phone).trim(), role, tierId: needsTier ? tierId : undefined };
     setChecking(true);
     const current = await lookupRoleByPhone(target.phone);
     setChecking(false);
@@ -2634,7 +2634,7 @@ function GrantRoleForm({ onDone }: { onDone: () => void }) {
         {needsTier && <DealerTierSelect value={tierId} onChange={setTierId} className="min-w-0 flex-1" />}
         <button
           className={BTN_PRIMARY}
-          disabled={!phoneKey(phone) || !role || (needsTier && !tierId.trim()) || mut.isPending || checking}
+          disabled={!isPhoneInput(phone) || !role || (needsTier && !tierId.trim()) || mut.isPending || checking}
           title={needsTier && !tierId.trim() ? 'Cần chọn bậc đại lý để cấp vai trò DEALER' : undefined}
           onClick={submit}
         >
