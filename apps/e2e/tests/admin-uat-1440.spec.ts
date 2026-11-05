@@ -7,7 +7,7 @@ import { test, expect, type Locator, type Page } from '@playwright/test';
  * UAT quản trị 1440x900: đóng vai ADMIN bấm thật qua Sản phẩm + Story Studio, Đơn hàng, Học viện, Giờ vàng, Mã giảm giá, Người dùng và Cộng đồng,
  * với API và DB thật (chạy qua scripts/web-gate.sh, E2E_SCOPE=web). Chỉ /auth/refresh được giả (phiên ADMIN ký bằng đúng JWT_ACCESS_SECRET của API).
  *
- * Các lỗi tìm thấy ở lượt UAT này mang mã `W9-xx` trong thông báo của expect tương ứng (lời báo mã giảm trên 100%, lời báo 404 khi cấp vai trò, xoá trắng mô tả khoá học).
+ * Hai lỗi của lượt UAT này mang mã trong thông báo của expect bảo vệ chúng: W9-01 (lời báo mã giảm trên 100%) và W9-03 (xoá trắng mô tả khoá học).
  * Ảnh chụp (fullPage) ghi vào W9_SCREENS_DIR nếu đặt, tên `NN-<luồng>-<bước>.png`.
  */
 
@@ -806,7 +806,7 @@ test.describe('Admin UAT 1440x900 với API và DB thật', () => {
     expect(unknown.status).toBe(404);
     const grantMsg = page.locator('div.rounded-card').filter({ has: page.getByRole('heading', { name: 'Cấp / đổi vai trò theo SĐT' }) }).locator('p.text-danger-fg').last();
     await expect(grantMsg).toBeVisible();
-    expect((await grantMsg.innerText()).trim(), 'W9-02: lời báo 404 nêu đúng SĐT đã chuẩn hoá').toBe('Không tìm thấy người dùng có SĐT 0900000777 (cần mở Mini App Zalo ≥1 lần).');
+    expect((await grantMsg.innerText()).trim(), 'lời báo 404 nêu đúng SĐT đã chuẩn hoá').toBe('Không tìm thấy người dùng có SĐT 0900000777 (cần mở Mini App Zalo ≥1 lần).');
     await shot(page, 'nguoi-dung', 'sdt-chua-co-nguoi-dung');
     expect(await roles(), 'không có vai trò nào bị đổi bởi SĐT rác').toEqual(rolesBefore);
     // Hợp lệ
