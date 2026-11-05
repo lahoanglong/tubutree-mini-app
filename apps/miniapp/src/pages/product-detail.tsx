@@ -950,7 +950,7 @@ export default function ProductDetailPage() {
             </Box>
           ))}
         </Box>
-        <Button variant="ghost" onPress={() => setShippingPolicyOpen(true)} style={{ marginTop: 4, minWidth: 0 }}>
+        <Button variant="ghost" onPress={() => setShippingPolicyOpen(true)} style={{ minWidth: 0 }}>
           {POLICY_TITLES['van-chuyen']}
         </Button>
         {/* Chat OA ở đây, không ở thanh CTA dính: thêm nút 48px vào thanh làm hai nút chính hẹp lại ở màn 360px. */}

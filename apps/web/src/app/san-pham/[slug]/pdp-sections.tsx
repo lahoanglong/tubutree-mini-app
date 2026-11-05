@@ -76,7 +76,7 @@ export function PdpPromises({ children }: { children?: React.ReactNode }) {
           </li>
         ))}
       </ul>
-      <Link href="/chinh-sach/van-chuyen" className={`${ui.btnText} max-md:px-0 ${phoneBrandText}`}>
+      <Link href="/chinh-sach/van-chuyen" className={`${ui.btnText} ${phoneBrandText}`}>
         {LEGAL_PAGES['van-chuyen'].title}
       </Link>
       {children}
