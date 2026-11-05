@@ -63,7 +63,6 @@ const OPS_HEALTH_KEY = ['admin-ops-health'] as const;
 const ago = (iso: string | null) => (iso ? formatDateTime(iso) : 'chưa có');
 const newer = (a: string | null | undefined, b: string | null | undefined) => !!a && (!b || a > b);
 
-/** Số tồn tuyệt đối đã cũ: chạy lại sẽ đè tồn kho mới hơn (hồi sinh hàng đã bán) — API cũng từ chối. */
 /** Gợi ý theo loại lỗi đẩy ở danh sách đơn kẹt (cùng nghĩa với PancakeSyncPanel ở chi tiết đơn). */
 const STUCK_KIND_HINT: Record<string, string> = {
   DATA: 'Thiếu dữ liệu đơn: sửa thông tin người nhận rồi bấm "Đẩy lại Pancake".',
@@ -72,6 +71,7 @@ const STUCK_KIND_HINT: Record<string, string> = {
   TRANSIENT: 'Pancake tạm lỗi: hệ thống tự thử lại.',
 };
 
+/** Số tồn tuyệt đối đã cũ: chạy lại sẽ đè tồn kho mới hơn (hồi sinh hàng đã bán) — API cũng từ chối. */
 const isStaleStockEvent = (e: OpsWebhookEvent) => e.source === 'pancake' && e.eventType === 'variation.stock_changed';
 
 const OPEN_ORDER_BTN = 'min-h-[44px] text-xs font-medium text-forest-700 hover:underline sm:min-h-0';
