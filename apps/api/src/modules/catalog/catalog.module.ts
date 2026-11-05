@@ -9,6 +9,8 @@ import { ImageResizeController } from './image-resize.controller';
 import { ImageResizeService } from './image-resize.service';
 import { ProductAdminController } from './product-admin.controller';
 import { ProductAdminService } from './product-admin.service';
+import { StoryAssetsController } from './story-assets.controller';
+import { StoryAssetsService } from './story-assets.service';
 import { CategoryAdminController } from './category-admin.controller';
 import { CategoryAdminService } from './category-admin.service';
 import { ProductCategoryAdminController } from './product-category-admin.controller';
@@ -20,8 +22,8 @@ import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
 
 @Module({
   imports: [ImageRegistryModule, FlashSaleModule, OrdersModule, SubscriptionsModule],
-  controllers: [CatalogController, HomeController, CategoryAdminController, ProductCategoryAdminController, ProductAdminController, PublicImageController, ImageResizeController],
-  providers: [CatalogService, HomeService, CategoryAdminService, ProductCategoryAdminService, ProductAdminService, PublicImageService, ImageResizeService],
+  controllers: [CatalogController, HomeController, CategoryAdminController, ProductCategoryAdminController, ProductAdminController, StoryAssetsController, PublicImageController, ImageResizeController],
+  providers: [CatalogService, HomeService, CategoryAdminService, ProductCategoryAdminService, ProductAdminService, StoryAssetsService, PublicImageService, ImageResizeService],
   exports: [CatalogService, ImageResizeService],
 })
 export class CatalogModule {}

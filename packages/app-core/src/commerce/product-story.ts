@@ -1,0 +1,192 @@
+import {
+  parseStoryConfig,
+  STORY_LIMITS,
+  type AssemblyStep,
+  type HudCalloutPoint,
+  type IngredientLayerSprite,
+  type ProductStoryConfig,
+  type StoryAmbient,
+  type StoryFrom,
+  type StoryScene,
+  type VariantArcItem,
+} from '@tubutree/shared-types';
+import { fillCopy } from '../shop-copy';
+import { STORY_PRESETS } from './story-presets';
+import { spriteForIngredient, STORY_SPRITES, type StoryTone } from './story-sprites';
+
+/** Phần của sản phẩm mà dải câu chuyện đọc. `ingredients` và `storyConfig` là cột Json nên nhận `unknown` (dòng cũ có thể là chuỗi, mảng lạ). */
+export interface StoryProductInput {
+  slug: string;
+  name: string;
+  brand?: string | null;
+  shortDesc?: string | null;
+  certifications?: string[] | null;
+  ingredients?: unknown;
+  variations: readonly { id: string; name: string }[];
+  storyConfig?: unknown;
+}
+
+export const ARC_ACTIVE = { scale: 1.22, rotateDeg: -6 } as const;
+const ARC_AMBIENTS: readonly StoryAmbient[] = ['leaf', 'amber', 'sky', 'sand'];
+
+export const ambientVar = (a: StoryAmbient): string => `var(--color-story-ambient-${a})`;
+export const toneVar = (t: StoryTone): string => `var(--color-story-tone-${t})`;
+
+/** Chữ sinh tự động: luôn là text (bỏ `<` `>`), gọn khoảng trắng, cắt theo trần của `parseStoryConfig`. */
+const clean = (v: unknown, max: number): string =>
+  typeof v === 'string' ? v.replace(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, max) : '';
+
+export function buildArcScene(variations: readonly { id: string; name: string }[], ambients: readonly StoryAmbient[] = ARC_AMBIENTS): StoryScene | null {
+  if (variations.length < 2) return null;
+  const items: VariantArcItem[] = variations.slice(0, STORY_LIMITS.maxArcItems).map((v, i) => ({
+    variationId: v.id,
+    label: clean(v.name, STORY_LIMITS.maxLabel) || `#${i + 1}`,
+    ambient: ambients[i % ambients.length] ?? 'leaf',
+  }));
+  return { kind: 'variant_arc', items };
+}
+
+interface Ing {
+  name: string;
+  percentage?: string;
+  benefit?: string;
+}
+
+/** Cột `ingredients` cũ có thể là chuỗi "A, B", mảng chuỗi, mảng {name, percentage, benefit} hay thứ lạ: luôn ra danh sách sạch, không ném lỗi. */
+function normalizeIngredients(raw: unknown): Ing[] {
+  const list: unknown[] = Array.isArray(raw) ? raw : typeof raw === 'string' ? raw.split(',') : [];
+  const out: Ing[] = [];
+  for (const it of list) {
+    const rec = typeof it === 'object' && it !== null ? (it as Record<string, unknown>) : null;
+    const name = clean(rec ? rec.name : it, STORY_LIMITS.maxLabel);
+    if (!name) continue;
+    const ing: Ing = { name };
+    const pct = rec ? rec.percentage : undefined;
+    const pctText = typeof pct === 'number' && Number.isFinite(pct) ? String(pct) : clean(pct, STORY_LIMITS.maxLabel);
+    if (pctText) ing.percentage = pctText;
+    const benefit = rec ? clean(rec.benefit, STORY_LIMITS.maxBody - 1).replace(/[.\s]+$/, '') : '';
+    if (benefit) ing.benefit = benefit;
+    out.push(ing);
+    if (out.length >= STORY_LIMITS.maxHudPoints * 2) break;
+  }
+  return out;
+}
+
+const LAYER_SLOTS: readonly { x: number; y: number; from: StoryFrom; rot: number }[] = [
+  { x: 30, y: 24, from: 'top', rot: -15 },
+  { x: 22, y: 56, from: 'left', rot: 20 },
+  { x: 74, y: 30, from: 'right', rot: 10 },
+  { x: 60, y: 58, from: 'top', rot: -30 },
+  { x: 76, y: 50, from: 'right', rot: 25 },
+];
+const HUD_SLOTS: readonly { x: number; y: number; side: 'left' | 'right' }[] = [
+  { x: 26, y: 30, side: 'left' },
+  { x: 74, y: 46, side: 'right' },
+  { x: 26, y: 62, side: 'left' },
+  { x: 74, y: 78, side: 'right' },
+];
+
+function layerFor(ing: Ing, n: number, slot: number): IngredientLayerSprite {
+  const s = LAYER_SLOTS[slot % LAYER_SLOTS.length]!;
+  const spriteId = spriteForIngredient(ing.name);
+  return { id: `d${n}-${slot}`, spriteId, label: clean(ing.name, STORY_LIMITS.maxLabel) || (STORY_SPRITES[spriteId]?.label ?? spriteId), from: s.from, xPct: s.x, yPct: s.y, scale: 1, rotateDeg: s.rot };
+}
+
+/** Kịch bản tự sinh từ dữ liệu có thật của sản phẩm; không thành phần dùng được và dưới 2 biến thể thì không có gì để kể (null). */
+export function buildDefaultStoryConfig(p: StoryProductInput): ProductStoryConfig | null {
+  const ings = normalizeIngredients(p.ingredients);
+  const scenes: StoryScene[] = [];
+  const arc = buildArcScene(p.variations);
+  if (arc) scenes.push(arc);
+  if (ings.length > 0) {
+    const names = ings.map((i) => i.name);
+    const name = clean(p.name, STORY_LIMITS.maxLabel);
+    const brand = clean(p.brand, STORY_LIMITS.maxLabel);
+    const first = names.slice(0, 3).join(', ');
+    const benefit = ings.find((i) => i.benefit)?.benefit;
+    const steps: AssemblyStep[] = [
+      { title: fillCopy('story.stepTitle1'), body: clean(fillCopy('story.def1', { a: first }), STORY_LIMITS.maxBody), layers: ings.slice(0, 2).map((g, i) => layerFor(g, 1, i)) },
+      { title: fillCopy('story.stepTitle2'), body: clean(fillCopy('story.def2', { a: names[1] ?? names[0]! }), STORY_LIMITS.maxBody), layers: ings.slice(1, 3).concat(ings.length < 2 ? ings.slice(0, 1) : []).map((g, i) => layerFor(g, 2, i + 2)) },
+      { title: fillCopy('story.stepTitle3'), body: clean(fillCopy('story.def3', { name }), STORY_LIMITS.maxBody), layers: ings.slice(0, 3).map((g, i) => layerFor(g, 3, i + 1)) },
+    ];
+    if (benefit) steps.push({ title: fillCopy('story.stepTitle4'), body: clean(fillCopy('story.def4', { a: benefit }), STORY_LIMITS.maxBody), layers: ings.slice(0, 2).map((g, i) => layerFor(g, 4, i)) });
+    steps.push({ title: fillCopy('story.stepTitle5'), body: clean(fillCopy('story.def5', { brand, name }), STORY_LIMITS.maxBody), layers: ings.slice(0, 2).map((g, i) => layerFor(g, 5, i + 3)) });
+    scenes.push({ kind: 'ingredient_assembly', steps: steps.slice(0, STORY_LIMITS.maxSteps) });
+    const points: HudCalloutPoint[] = ings.slice(0, STORY_LIMITS.maxHudPoints).map((g, i) => {
+      const slot = HUD_SLOTS[i]!;
+      const pt: HudCalloutPoint = { id: `d${i + 1}`, xPct: slot.x, yPct: slot.y, label: g.name, side: slot.side };
+      if (g.percentage) {
+        pt.value = g.percentage;
+        if (/^\d+(\.\d+)?%$/.test(g.percentage)) pt.barPct = Math.min(100, Number.parseFloat(g.percentage));
+      }
+      return pt;
+    });
+    scenes.push({ kind: 'hud_callouts', points, closing: fillCopy('story.closing') });
+  }
+  return scenes.length === 0 ? null : { version: 1, enabled: true, scenes };
+}
+
+/**
+ * Cấu hình dùng để vẽ: đã lưu (hợp lệ) > preset theo slug (chèn vòng cung từ biến thể thật) > tự sinh từ thành phần.
+ * `enabled:false` là admin tắt hẳn. Trả null thì trang chi tiết không vẽ gì thêm.
+ */
+export function resolveStoryConfig(p: StoryProductInput): ProductStoryConfig | null {
+  if (p.storyConfig !== null && p.storyConfig !== undefined) {
+    const parsed = parseStoryConfig(p.storyConfig);
+    if (parsed.ok) return parsed.value.enabled ? parsed.value : null;
+  }
+  if (Object.prototype.hasOwnProperty.call(STORY_PRESETS, p.slug)) {
+    const preset = STORY_PRESETS[p.slug]!;
+    const arc = buildArcScene(p.variations);
+    return arc ? { ...preset, scenes: [arc, ...preset.scenes] } : preset;
+  }
+  return buildDefaultStoryConfig(p);
+}
+
+export interface StoryStepView {
+  num: string;
+  title: string;
+  body: string;
+  layers: IngredientLayerSprite[];
+}
+
+export interface StoryViewModel {
+  /** false khi khách chọn giảm chuyển động: hai app vẽ bản tĩnh đủ nội dung bằng `staticLayers`. */
+  animated: boolean;
+  cutoutUrl: string | null;
+  arc: VariantArcItem[] | null;
+  steps: StoryStepView[];
+  hud: { points: HudCalloutPoint[]; closing: string } | null;
+  staticLayers: IngredientLayerSprite[];
+}
+
+export function storyView(config: ProductStoryConfig, opts: { reducedMotion: boolean }): StoryViewModel {
+  let arc: VariantArcItem[] | null = null;
+  let steps: StoryStepView[] = [];
+  let hud: StoryViewModel['hud'] = null;
+  for (const s of config.scenes) {
+    if (s.kind === 'variant_arc') arc = s.items;
+    else if (s.kind === 'ingredient_assembly') steps = s.steps.map((st, i) => ({ num: String(i + 1).padStart(2, '0'), title: st.title, body: st.body, layers: st.layers }));
+    else hud = { points: s.points, closing: s.closing };
+  }
+  const animated = !opts.reducedMotion;
+  const seen = new Set<string>();
+  const staticLayers = animated ? [] : steps.flatMap((s) => s.layers).filter((l) => (seen.has(l.id) ? false : (seen.add(l.id), true)));
+  return { animated, cutoutUrl: config.cutoutUrl ?? null, arc, steps, hud, staticLayers };
+}
+
+/** Lớp nguyên liệu đã "rơi vào" tới bước đang xem (tích luỹ); chỉ số ngoài khoảng được kẹp. */
+export function layersUpTo(steps: readonly StoryStepView[], active: number): IngredientLayerSprite[] {
+  if (steps.length === 0) return [];
+  const last = Math.min(steps.length - 1, Math.max(0, Math.trunc(active) || 0));
+  return steps.slice(0, last + 1).flatMap((s) => s.layers);
+}
+
+/** Vị trí một mục trên vòng cung biến thể; `offset` tính theo số ô lệch so với mục đang chọn (âm = bên trái). */
+export function arcSlot(index: number, active: number, total: number): { scale: number; rotateDeg: number; offset: number; lift: number } {
+  const max = Math.max(total - 1, 0);
+  const d = Math.min(max, Math.max(-max, index - active));
+  if (d === 0) return { ...ARC_ACTIVE, offset: 0, lift: 0 };
+  const dist = Math.abs(d);
+  return { scale: Math.max(0.6, 1 - 0.12 * dist), rotateDeg: d * 5, offset: d, lift: Math.min(dist, 3) * 8 };
+}

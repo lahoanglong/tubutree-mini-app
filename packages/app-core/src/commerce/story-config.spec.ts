@@ -60,9 +60,11 @@ describe('parseStoryConfig', () => {
     const cfg = withScenes([{ kind: 'hud_callouts', closing: 'c', points: [{ id: 'a', xPct: 140, yPct: -5, label: 'l', side: 'right' }] }]);
     const r = parseStoryConfig(cfg);
     expect(r.ok).toBe(true);
-    if (r.ok && r.value.scenes[0].kind === 'hud_callouts') {
-      expect(r.value.scenes[0].points[0].xPct).toBe(100);
-      expect(r.value.scenes[0].points[0].yPct).toBe(0);
+    const sc = r.ok ? r.value.scenes[0] : undefined;
+    expect(sc?.kind).toBe('hud_callouts');
+    if (sc?.kind === 'hud_callouts') {
+      expect(sc.points[0]?.xPct).toBe(100);
+      expect(sc.points[0]?.yPct).toBe(0);
     }
   });
 
@@ -85,7 +87,9 @@ describe('parseStoryConfig', () => {
     const cfg = withScenes([{ kind: 'variant_arc', items: [{ label: '<b>300</b>ml', ambient: 'leaf' }] }]);
     const r = parseStoryConfig(cfg);
     expect(r.ok).toBe(true);
-    if (r.ok && r.value.scenes[0].kind === 'variant_arc') expect(r.value.scenes[0].items[0].label).toBe('b300/bml');
+    const sc = r.ok ? r.value.scenes[0] : undefined;
+    expect(sc?.kind).toBe('variant_arc');
+    if (sc?.kind === 'variant_arc') expect(sc.items[0]?.label).toBe('b300/bml');
   });
 
   it('rejects version 2', () => {

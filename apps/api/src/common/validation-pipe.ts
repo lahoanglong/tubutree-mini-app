@@ -8,6 +8,8 @@ import { NOT_NULL_CONSTRAINT } from './decorators/optional-not-null.decorator';
  */
 export const FIELD_LABELS: Record<string, string> = {
   rating: 'Số sao',
+  pageUrl: 'Địa chỉ trang sản phẩm',
+  imageUrls: 'Địa chỉ ảnh',
   comment: 'Nội dung đánh giá',
   images: 'Ảnh',
   videoUrl: 'Video',
