@@ -251,6 +251,55 @@ export const STATES: CheckoutState[] = [
       await page.waitForTimeout(300);
     },
   },
+  // Ba trạng thái dưới đây chỉ có từ gói hk (trước đó nút khoá, không báo ô nào), nên không có ảnh "trước".
+  {
+    key: 'no-address-pressed',
+    name: 'Chưa có địa chỉ, bấm Đặt hàng',
+    ready: textVisible(/Thêm địa chỉ mới/),
+    world: (w) => {
+      w.addresses = [];
+    },
+    routes: (api) => {
+      api.post('/checkout/quote', reply(400, { statusCode: 400, message: 'Chưa có địa chỉ' }));
+    },
+    act: async (page) => {
+      await orderButton(page).click();
+      await page.waitForTimeout(500);
+    },
+  },
+  {
+    key: 'invoice-errors',
+    name: 'Hoá đơn VAT thiếu ô, bấm Đặt hàng',
+    ready: readyWithButton,
+    act: async (page) => {
+      await page.getByText('Yêu cầu xuất hoá đơn VAT').click();
+      await orderButton(page).click();
+      await page.waitForTimeout(500);
+    },
+    wide: true,
+  },
+  {
+    key: 'price-accepted',
+    name: 'Giá đổi rồi nhận giá mới',
+    ready: readyWithButton,
+    routes: (api) => {
+      let changed = false;
+      api.post('/checkout/quote', () => (changed ? { ...CHECKOUT_QUOTE, total: CHECKOUT_QUOTE.total - 5000 } : CHECKOUT_QUOTE));
+      api.post('/checkout/place-order', ({ call }) => {
+        if (!changed) {
+          changed = true;
+          return reply(400, { statusCode: 400, message: 'PRICE_CHANGED' });
+        }
+        return placedOrderFor((call.body ?? {}) as Record<string, unknown>);
+      });
+    },
+    act: async (page) => {
+      await placeAndWait(page);
+      await page.getByRole('button', { name: 'Cập nhật giá mới' }).click();
+      await page.waitForTimeout(900);
+    },
+    wide: true,
+  },
 ];
 
 export function worldFor(state: CheckoutState): World {
@@ -326,8 +375,14 @@ export async function auditPage(page: Page): Promise<PageAudit> {
     const smallTargets: string[] = [];
     const sel = 'button, a[href], [role="button"], [role="radio"], [role="checkbox"], input:not([type="hidden"]), select, textarea, summary';
     for (const el of document.querySelectorAll<HTMLElement>(sel)) {
-      if (!shown(el) || el.closest('[inert], [aria-hidden="true"]') || el.tabIndex === -1 || /tubu-hit/.test(el.className)) continue;
+      if (!shown(el) || el.closest('[inert], [aria-hidden="true"]') || el.tabIndex === -1 || /tubu-hit|sr-only/.test(el.className)) continue;
       const r = el.getBoundingClientRect();
+      // Ô chọn nằm trong nhãn bấm được: vùng chạm là cả nhãn, không phải riêng ô.
+      const wrap = el.closest('label');
+      if (el instanceof HTMLInputElement && wrap) {
+        const w = wrap.getBoundingClientRect();
+        if (w.height >= 43.5 && w.width >= 43.5) continue;
+      }
       const inline = getComputedStyle(el).display === 'inline' && el.closest('p, span, div')?.textContent !== el.textContent;
       if (inline) continue;
       if (r.height < 43.5 || r.width < 43.5) {
