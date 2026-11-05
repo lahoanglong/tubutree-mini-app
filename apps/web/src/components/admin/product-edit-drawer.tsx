@@ -1,10 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
+import { parseStoryConfig, type ProductStoryConfig } from '@tubutree/shared-types';
 import { getAdminProduct, patchAdminProduct, type CategoryOption, type ProductDetail, type ProductPatch } from '@/lib/product-categories';
 import { formatVnd } from '@/lib/format-vnd';
 import { ImageUrlField } from './image-url-field';
+import { ProductStoryStudio } from './product-story-studio';
 import { SideDrawer } from './side-drawer';
 import { useDiscardGuard } from './use-discard-guard';
 import { BTN_PRIMARY, BTN_SECONDARY, INPUT_CLASS, Notice, chipClass } from './ui';
@@ -72,8 +74,9 @@ function Form({
   const [isActive, setIsActive] = useState(product.isActive);
   const [isFeatured, setIsFeatured] = useState(product.isFeatured);
   const [categoryIds, setCategoryIds] = useState<string[]>(product.categoryIds);
+  const [story, setStory] = useState<ProductStoryConfig | null>(product.storyConfig ?? null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  useEffect(() => setMsg(null), [images, description, shortDesc, isActive, isFeatured, categoryIds]);
+  useEffect(() => setMsg(null), [images, description, shortDesc, isActive, isFeatured, categoryIds, story]);
 
   const locked = product.partnerOwned;
   const cleanImages = images.map((s) => s.trim()).filter(Boolean);
@@ -89,7 +92,11 @@ function Form({
   if (isActive !== product.isActive) patch.isActive = isActive;
   if (isFeatured !== product.isFeatured) patch.isFeatured = isFeatured;
   if (JSON.stringify([...categoryIds].sort()) !== JSON.stringify([...product.categoryIds].sort())) patch.categoryIds = categoryIds;
+  if (JSON.stringify(story) !== JSON.stringify(product.storyConfig ?? null)) patch.storyConfig = story;
   const changed = Object.keys(patch).length > 0;
+  // Cấu hình sai thì API từ chối 400: chặn ngay ở nút Lưu để admin thấy lỗi ở Story Studio thay vì sau khi bấm.
+  const storyInvalid = story !== null && !parseStoryConfig(story).ok;
+  const studioProduct = useMemo(() => ({ ...product, images: images.map((s) => s.trim()).filter(Boolean) }), [product, images]);
   useEffect(() => onDirtyChange(changed), [changed, onDirtyChange]);
 
   const save = useMutation({
@@ -110,7 +117,7 @@ function Form({
       className="space-y-4 p-4"
       onSubmit={(e) => {
         e.preventDefault();
-        if (!save.isPending && changed) save.mutate(patch);
+        if (!save.isPending && changed && !storyInvalid) save.mutate(patch);
       }}
     >
       <div className="rounded-card border border-stone-200 bg-stone-0 p-3 text-sm text-stone-700">
@@ -197,9 +204,16 @@ function Form({
         )}
       </div>
 
+      <ProductStoryStudio
+        product={studioProduct}
+        value={story}
+        onChange={setStory}
+        onAddImage={locked || images.length >= MAX_IMAGES ? undefined : (dataUrl) => setImages((prev) => [...prev, dataUrl])}
+      />
+
       {msg && <Notice tone={msg.ok ? 'success' : 'danger'} role={msg.ok ? 'status' : 'alert'}>{msg.text}</Notice>}
       <div className="flex gap-2">
-        <button type="submit" disabled={save.isPending || !changed} className={BTN_PRIMARY}>
+        <button type="submit" disabled={save.isPending || !changed || storyInvalid} className={BTN_PRIMARY}>
           {save.isPending ? 'Đang lưu…' : 'Lưu'}
         </button>
         <button type="button" onClick={onClose} className={BTN_SECONDARY}>

@@ -1,5 +1,6 @@
 'use client';
 
+import type { ProductStoryConfig } from '@tubutree/shared-types';
 import { apiFetch } from './client-api';
 
 export interface CategoryProduct {
@@ -95,6 +96,13 @@ export interface ProductDetail {
   managedByPancake: boolean;
   partnerOwned: boolean;
   cannotShowReason: string | null;
+  slug?: string;
+  /** Cấu hình câu chuyện đã lưu; null = đang dùng kịch bản mẫu hoặc tự sinh. API cũ chưa trả → coi như null. */
+  storyConfig?: ProductStoryConfig | null;
+  /** Dữ liệu để Story Studio tự sinh kịch bản (API cũ chưa trả → bỏ qua). */
+  ingredients?: unknown;
+  certifications?: string[];
+  variations?: { id: string; name: string }[];
 }
 export interface ProductPatch {
   images?: string[];
@@ -103,7 +111,17 @@ export interface ProductPatch {
   isActive?: boolean;
   isFeatured?: boolean;
   categoryIds?: string[];
+  /** null = xoá cấu hình (quay về kịch bản mẫu/tự sinh). */
+  storyConfig?: ProductStoryConfig | null;
 }
 export const getAdminProduct = (id: string) => apiFetch<ProductDetail>(`/admin/catalog-products/${encodeURIComponent(id)}`);
 export const patchAdminProduct = (id: string, body: ProductPatch) =>
   apiFetch<ProductDetail>(`/admin/catalog-products/${encodeURIComponent(id)}`, { method: 'PATCH', body });
+
+export interface StoryAssetsResult {
+  images: { url: string; width: number; height: number }[];
+  /** `dataUrl` WebP đã tách nền, chỉ để xem trước hoặc thêm vào ảnh sản phẩm; không lưu vào cấu hình câu chuyện. */
+  cutouts: { sourceUrl: string; dataUrl: string }[];
+}
+export const extractStoryAssets = (id: string, body: { pageUrl?: string; imageUrls?: string[] }) =>
+  apiFetch<StoryAssetsResult>(`/admin/products/${encodeURIComponent(id)}/story-assets/extract`, { method: 'POST', body });

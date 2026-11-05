@@ -3,6 +3,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { isStorefrontImageValue } from '../../common/uploaded-image';
 import { storedThumbnailFor } from '../../common/public-image';
 import { CATEGORY_MSG, CATEGORY_TREE_LOCK } from './category-tree';
+import { VARIATION_ORDER_BY } from './variation-order';
 import { Prisma } from '@prisma/client';
 import { parseStoryConfig } from '@tubutree/shared-types';
 import { ImageResizeService } from './image-resize.service';
@@ -40,6 +41,10 @@ const SELECT = {
   basePrice: true,
   salePrice: true,
   storyConfig: true,
+  // Story Studio tự sinh kịch bản từ thành phần và biến thể đang bán (cùng thứ tự khách thấy).
+  ingredients: true,
+  certifications: true,
+  variations: { where: { isActive: true }, select: { id: true, name: true }, orderBy: VARIATION_ORDER_BY },
 } as const;
 
 /** Sản phẩm kho Tubu lấy từ Pancake (mã seed- là hàng mẫu nhập tay): tên, giá, tồn kho do đồng bộ ghi đè. */
@@ -187,6 +192,9 @@ export class ProductAdminService {
     basePrice: number;
     salePrice: number | null;
     storyConfig?: unknown;
+    ingredients?: unknown;
+    certifications?: string[];
+    variations?: { id: string; name: string }[];
   }) {
     const managed = isPancakeManaged(p);
     return {
@@ -204,6 +212,9 @@ export class ProductAdminService {
       basePrice: p.basePrice,
       salePrice: p.salePrice,
       storyConfig: p.storyConfig ?? null,
+      ingredients: p.ingredients ?? null,
+      certifications: p.certifications ?? [],
+      variations: p.variations ?? [],
       managedByPancake: managed,
       partnerOwned: p.storefrontId !== null,
       /** Lý do chưa bật bán lại được; null = bật được. */

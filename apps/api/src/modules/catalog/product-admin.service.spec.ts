@@ -318,3 +318,26 @@ describe('ProductAdminService — câu chuyện sản phẩm (storyConfig)', () 
     expect(bad({ storyConfig: 'x' })).toBeGreaterThan(0);
   });
 });
+
+describe('ProductAdminService — dữ liệu cho Story Studio', () => {
+  it('xem trả thành phần, chứng nhận và biến thể (id, tên) để tự sinh kịch bản', async () => {
+    const ingredients = [{ name: 'Bồ kết', benefit: 'Làm sạch dịu nhẹ' }];
+    const { svc } = setup(row({ ingredients, certifications: ['Vegan'], variations: [{ id: 'v1', name: '300ml' }, { id: 'v2', name: '500ml' }] }));
+    expect(await svc.get('p1')).toMatchObject({
+      ingredients,
+      certifications: ['Vegan'],
+      variations: [{ id: 'v1', name: '300ml' }, { id: 'v2', name: '500ml' }],
+    });
+  });
+
+  it('thiếu thì trả null, mảng rỗng, mảng rỗng', async () => {
+    expect(await setup().svc.get('p1')).toMatchObject({ ingredients: null, certifications: [], variations: [] });
+  });
+
+  it('GET chỉ đọc biến thể đang bán, theo thứ tự ổn định', async () => {
+    const { svc, prisma } = setup();
+    await svc.get('p1');
+    const select = (prisma.product.findUnique as jest.Mock).mock.calls[0][0].select;
+    expect(select.variations).toMatchObject({ where: { isActive: true }, select: { id: true, name: true } });
+  });
+});
