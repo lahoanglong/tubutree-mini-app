@@ -340,7 +340,6 @@ async function seedAll(): Promise<void> {
     const w11Category = { OR: [{ id: { startsWith: W11 } }, { name: { startsWith: 'W11 ' } }] };
     await prisma.category.deleteMany({ where: { AND: [w11Category, { parentId: { not: null } }] } });
     await prisma.category.deleteMany({ where: w11Category });
-    await prisma.cronRun.deleteMany({ where: { OR: [{ job: { startsWith: W11 } }, { job: { in: CRON_REAL } }] } });
     await prisma.notificationLog.deleteMany({ where: { userId: CUSTOMER.id } });
     await prisma.pancakeWebhookEvent.deleteMany({ where: { dedupeKey: { startsWith: W11 } } });
 
@@ -404,16 +403,8 @@ async function seedAll(): Promise<void> {
     await camp('da-het', 'W11 Chiến dịch đã kết thúc', { startAt: vnAt(-20, '00:00'), endAt: vnAt(-10, '23:59') });
     await camp('dang-tat', 'W11 Chiến dịch đang tắt', { isActive: false, audience: 'RETURNING' });
 
-    // Việc nền: OK, lỗi ghi log, ném lỗi, bỏ qua; một việc chưa có tên thường.
     SEED.now = new Date();
     const ago = (min: number) => SEED.ago(min);
-    const cron = (job: string, outcome: string, extra: Record<string, unknown> = {}) =>
-      prisma.cronRun.create({ data: { job, lastStartedAt: ago(30), lastFinishedAt: ago(29), lastDurationMs: 61_000, lastOutcome: outcome, ...extra } });
-    await cron('PancakeSyncService.scheduledSync', 'OK', { lastSuccessAt: ago(29) });
-    await cron('ZnsStuckLogCron.sweepStuckZnsLogs', 'THREW', { lastSuccessAt: ago(600), lastErrorAt: ago(29), lastError: 'Error: connect ECONNREFUSED 127.0.0.1:5432', consecutiveFailures: 4 });
-    await cron('AffiliateService.dailyWalletTransfer', 'ERRORS', { lastSuccessAt: ago(1500), lastErrorAt: ago(29), lastError: 'Không chuyển được 2 lệnh hoa hồng', lastErrorCount: 2, consecutiveFailures: 1 });
-    await cron('LoyaltyCron.recalcTiers', 'SKIPPED', { lastSuccessAt: ago(2000) });
-    await cron(`${W11}job-chua-co-ten`, 'OK', { lastSuccessAt: ago(29) });
 
     // Tin ZNS: gửi được, hỏng trong 24 giờ, đang chờ gửi lại, hỏng cũ hơn 24 giờ; một mẫu có tin trong app.
     const log = (templateCode: string, channel: string, status: string, minutesAgo: number, error: string | null) =>
@@ -432,6 +423,25 @@ async function seedAll(): Promise<void> {
     await prisma.pancakeWebhookEvent.create({
       data: { eventType: 'variation.stock_changed', dedupeKey: `${W11}ev-2`, rawPayload: { data: { id: 'v-1' } }, receivedAt: ago(70), status: 'FAILED', attempts: 2, error: 'Biến thể chưa có trong danh mục' },
     });
+  });
+}
+
+/** Mốc "bây giờ" của lần seed việc nền gần nhất (cron thật ZnsStuckLogCron chạy :00 và :30 sẽ ghi đè dòng của nó, nên seed sát lúc mở trang). */
+let cronAt = new Date();
+const cronAgo = (min: number): Date => new Date(cronAt.getTime() - min * 60_000);
+
+/** Việc nền: OK, lỗi ghi log, ném lỗi, bỏ qua; một việc chưa có tên thường. */
+async function seedCronRuns(): Promise<void> {
+  cronAt = new Date();
+  await withDb(async (prisma) => {
+    await prisma.cronRun.deleteMany({ where: { OR: [{ job: { startsWith: W11 } }, { job: { in: CRON_REAL } }] } });
+    const cron = (job: string, outcome: string, extra: Record<string, unknown> = {}) =>
+      prisma.cronRun.create({ data: { job, lastStartedAt: cronAgo(30), lastFinishedAt: cronAgo(29), lastDurationMs: 61_000, lastOutcome: outcome, ...extra } });
+    await cron('PancakeSyncService.scheduledSync', 'OK', { lastSuccessAt: cronAgo(29) });
+    await cron('ZnsStuckLogCron.sweepStuckZnsLogs', 'THREW', { lastSuccessAt: cronAgo(600), lastErrorAt: cronAgo(29), lastError: 'Error: connect ECONNREFUSED 127.0.0.1:5432', consecutiveFailures: 4 });
+    await cron('AffiliateService.dailyWalletTransfer', 'ERRORS', { lastSuccessAt: cronAgo(1500), lastErrorAt: cronAgo(29), lastError: 'Không chuyển được 2 lệnh hoa hồng', lastErrorCount: 2, consecutiveFailures: 1 });
+    await cron('LoyaltyCron.recalcTiers', 'SKIPPED', { lastSuccessAt: cronAgo(2000) });
+    await cron(`${W11}job-chua-co-ten`, 'OK', { lastSuccessAt: cronAgo(29) });
   });
 }
 
@@ -942,13 +952,14 @@ for (const frame of FRAMES) {
     test('8. Sức khoẻ hệ thống: việc nền, đồng bộ Pancake, ZNS, tin báo lỗi, đơn kẹt', async ({ page }) => {
       test.setTimeout(150_000);
       const w = watch(page);
+      await seedCronRuns();
       await openAdmin(page);
       await gotoNav(page, 'Sức khoẻ hệ thống');
       await expect(page.getByRole('heading', { name: 'Sức khoẻ hệ thống', exact: true })).toBeVisible();
       const failing = page.getByRole('alert', { name: 'Việc nền đang lỗi' });
       await expect(failing).toBeVisible();
       await expect(failing).toContainText('Đóng tin ZNS kẹt chờ gửi');
-      await expect(failing).toContainText(`${vnClock(SEED.ago(29))} · lỗi liên tiếp 4`);
+      await expect(failing).toContainText(`${vnClock(cronAgo(29))} · lỗi liên tiếp 4`);
 
       const zns = page.getByRole('region', { name: 'Tin ZNS' });
       await expect(zns).toContainText('Tin gửi hỏng trong 24 giờ');
@@ -962,8 +973,8 @@ for (const frame of FRAMES) {
       await expect(cron).toContainText('Ném lỗi');
       await expect(cron).toContainText('Lỗi 2 lần ghi log');
       await expect(cron).toContainText('Bỏ qua');
-      await expect(cron).toContainText(`Bắt đầu ${vnClock(SEED.ago(30))}`);
-      await expect(cron).toContainText(`Xong ${vnClock(SEED.ago(29))}`);
+      await expect(cron).toContainText(`Bắt đầu ${vnClock(cronAgo(30))}`);
+      await expect(cron).toContainText(`Xong ${vnClock(cronAgo(29))}`);
       await expect(cron).toContainText('connect ECONNREFUSED');
       await expectCleanScreen(page, 'suc-khoe-viec-nen');
       await shot(page, 'suc-khoe', 'viec-nen');
