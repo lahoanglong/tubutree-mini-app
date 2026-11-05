@@ -119,7 +119,8 @@ test.describe('Web khách: giỏ và thanh toán', () => {
     await page.goto('/thanh-toan');
     await page.getByRole('button', { name: 'Đặt hàng' }).click();
     await expect(page.locator('[role="alert"]:not(#__next-route-announcer__)')).toBeVisible();
-    await page.getByRole('button', { name: 'Đặt hàng' }).click();
+    // 503 là chưa rõ kết quả: nút đổi thành "Thử lại · tổng" và gửi lại đúng đơn này.
+    await page.getByRole('button', { name: /^Thử lại/ }).click();
     await expect(page.getByRole('heading', { name: 'Cảm ơn bạn đã chọn Tubu' })).toBeVisible();
 
     const sent = api.callsTo('POST', '/checkout/place-order');
