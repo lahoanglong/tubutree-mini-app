@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import type { PrismaService } from '../../src/prisma/prisma.service';
-import { DataRetentionService } from '../../src/modules/data-retention/data-retention.service';
+import { DataRetentionService, RETENTION_LOCK_KEY } from '../../src/modules/data-retention/data-retention.service';
 import { createUser, randCode } from './helpers';
 
 type Captured = { query: string; params: string };
@@ -118,8 +118,13 @@ describe('Index hiệu năng 2026-11-04 (real Postgres)', () => {
   it('D10: các lô xoá của data-retention đi bằng index thời gian', async () => {
     const config = { get: async (_k: string, d: unknown) => d } as never;
     const svc = new DataRetentionService(prisma as unknown as PrismaService, config);
+    // runAll giành khoá lượt chạy `run:cron:data-retention.cleanup` trong cron_leases (ttl 2 phút): một lượt khác còn giữ khoá (spec trước nhả
+    // lỗi, tiến trình khác trên cùng DB) thì runAll trả LOCKED, không có câu DELETE nào để EXPLAIN và ca đỏ ngẫu nhiên. DB race là DB riêng
+    // chạy tuần tự nên xoá dòng khoá của chính key này là an toàn; kiểm thêm kết quả để lỗi (nếu còn) nói đúng nguyên nhân.
+    await prisma.$executeRawUnsafe(`DELETE FROM cron_leases WHERE name = 'run:${RETENTION_LOCK_KEY}'`);
     captured = [];
-    await svc.runAll({ now: new Date(), batchSize: 100, pauseMs: 0, maxRunMs: 5_000 });
+    const result = await svc.runAll({ now: new Date(), batchSize: 100, pauseMs: 0, maxRunMs: 5_000 });
+    expect(result).not.toHaveProperty('skipped');
     const expected: Record<string, RegExp> = {
       notification_logs: /notification_logs_sentAt_idx/,
       pancake_webhook_events: /pancake_webhook_events_receivedAt_idx/,
