@@ -3097,11 +3097,8 @@ model NotificationLog {
   @@index([templateCode, sentAt])
   // Trang mẫu tin 30 ngày và data-retention lọc theo khoảng sentAt.
   @@index([sentAt], map: "notification_logs_sentAt_idx")
-  // Partial, chỉ có trong SQL (20261104130000_perf_indexes_notification_points_retention):
-  // "notification_logs_zns_failed_sentAt_idx" ("sentAt") WHERE channel='ZNS' AND status='FAILED' — znsHealth 24 giờ.
-  // Để đợt sau: từ migration 20261105180000_hg_zns_stuck_logs_index, index thường (channel, status, sentAt) bên dưới cũng phục vụ truy vấn này
-  // (planner đã chọn nó trong perf-indexes-1104.race-spec), nên index một phần này nhiều khả năng thừa. Chưa xoá vì luật migration chỉ mở rộng;
-  // đợt sau đo rồi mới gỡ bằng một migration riêng.
+  // Chỉ mục một phần "notification_logs_zns_failed_sentAt_idx" (tạo ở 20261104130000_perf_indexes_notification_points_retention) đã gỡ ở
+  // 20261106010000_w7_drop_zns_failed_sentat_index: znsHealth 24 giờ và trang mẫu tin đi bằng chỉ mục thường (channel, status, sentAt) bên dưới.
   // Hộp tin in-app (userId + channel ORDER BY sentAt DESC, id DESC) và số chưa đọc (userId + channel + status). Index thường,
   // không phải một phần, để generic plan của prepared statement (channel = $n) vẫn dùng được.
   @@index([userId, channel, sentAt(sort: Desc), id(sort: Desc)], map: "notification_logs_userId_channel_sentAt_id_idx")

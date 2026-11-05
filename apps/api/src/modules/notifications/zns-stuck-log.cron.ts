@@ -12,9 +12,20 @@ import { runExclusive } from '../../common/cron-leader/run-exclusive';
 import { captureServerError } from '../../config/sentry';
 import { CRON_TZ } from '../../common/cron-tz';
 
+/**
+ * Log ZNS còn RETRYING quá chừng này kể từ lúc tạo thì đóng FAILED. Phải không nhỏ hơn mọi `dedupeWithinMs` đang dùng, để log đã quá mọi cửa chống
+ * trùng khi bị đóng và lượt notify() sau không thể gửi trùng nhờ việc nó thôi chặn: lớn nhất là khoá cấu hình `community.author_notify_interval_minutes`
+ * (tối đa 1440 phút = 24 giờ); các nơi khác dùng 10 phút (CSKH) hoặc không cửa sổ. Log có khoá không cửa sổ (chặn vĩnh viễn) chỉ gửi lại được qua
+ * `retryZns` (chỉ có nhắc hạ hạng, và nơi đó chỉ gọi lại khi notify() ném lỗi lúc xếp hàng, không gọi lại khi log đóng FAILED bất đồng bộ).
+ * Retry của job chỉ kéo dài ~16 phút (6 lượt, backoff 30 giây nhân đôi) nên không job hợp lệ nào còn RETRYING sau 24 giờ.
+ */
+export const ZNS_RETRYING_EXPIRE_MS = 24 * 3_600_000;
+
 export type ZnsStuckSweepResult =
   | { skipped: 'RUNNING' | 'LOCKED' | 'NO_QUEUE' | 'REDIS' | 'ERROR' }
   | { scanned: number; closed: number; sent: number; ambiguous: number; alive: number };
+
+export type ZnsExpireResult = { skipped: 'RUNNING' | 'LOCKED' | 'ERROR' } | { scanned: number; expired: number };
 
 /** Log cuối cùng đã xét ở lượt trước, theo (sentAt, id): lượt sau đi tiếp ngay sau nó. */
 type Cursor = { sentAt: string; id: string };
@@ -32,6 +43,9 @@ export class ZnsStuckLogCron {
   private static readonly STUCK_AFTER_MS = 3_600_000;
   private static readonly BATCH = 200;
   private static readonly LOCK_KEY = 'cron:notifications.zns_stuck_logs';
+  private static readonly EXPIRE_LOCK_KEY = 'cron:notifications.zns_retrying_expiry';
+  private static readonly EXPIRE_REASON =
+    'Hết thời gian chờ kết quả gửi ZNS (24 giờ): log còn RETRYING quá 24 giờ mà không có kết cục nên đóng FAILED, không gửi lại tin (đóng khi quét log kẹt). Nếu Zalo đã nhận tin, tra tracking_id = id log rồi đối soát tay theo runbook 1.20.';
   /** Con trỏ quay vòng nằm trong Redis để bản API nào giành được khoá lượt chạy cũng đi tiếp đúng chỗ; hết hạn sau 1 ngày thì quét lại từ đầu. */
   private static readonly CURSOR_KEY = 'zns-stuck-cron:cursor';
   private static readonly CURSOR_TTL_S = 86_400;
@@ -40,6 +54,7 @@ export class ZnsStuckLogCron {
 
   private readonly logger = new Logger(ZnsStuckLogCron.name);
   private running = false;
+  private expiring = false;
   /** Bản sao trong bộ nhớ, dùng khi Redis không đọc/ghi được con trỏ. */
   private memCursor: Cursor | null = null;
 
@@ -65,6 +80,53 @@ export class ZnsStuckLogCron {
     } finally {
       this.running = false;
     }
+  }
+
+  /**
+   * Log ZNS RETRYING quá 24 giờ (kể cả log đã gắn tiền tố "Chờ đối soát tay" mà sweepStuckZnsLogs bỏ qua từ đó) chuyển FAILED để không treo mãi
+   * ở Sức khoẻ hệ thống và go-live:check. Không đọc hàng đợi, không gọi Zalo, không xếp job: chỉ ghi bằng CAS (closeStuckZnsLog theo status RETRYING, sentAt
+   * cũ hơn mốc, đúng chuỗi lỗi đã đọc), nhả khoá chống trùng như mọi đường đóng khác, và giữ lỗi cũ sau lý do mới. Chạy lệch nửa giờ so với quét log kẹt
+   * để log còn xác định được kết cục (job failed, job completed SENT) đã được quét đó xử lý đúng trước.
+   */
+  @Cron('15 * * * *', { timeZone: CRON_TZ })
+  @TrackCron({ alertAfter: 3 })
+  async expireStaleRetryingZnsLogs(): Promise<ZnsExpireResult> {
+    if (this.expiring) { markCronSkipped('RUNNING'); return { skipped: 'RUNNING' }; }
+    this.expiring = true;
+    try {
+      const run = await runExclusive(this.prisma, ZnsStuckLogCron.EXPIRE_LOCK_KEY, () => this.expireStale());
+      if (!run.acquired) { markCronSkipped('LOCKED'); return { skipped: 'LOCKED' }; }
+      return run.value;
+    } catch (err) {
+      this.logger.error(`expireStaleRetryingZnsLogs lỗi: ${err instanceof Error ? err.message : err}`);
+      return { skipped: 'ERROR' };
+    } finally {
+      this.expiring = false;
+    }
+  }
+
+  private async expireStale(): Promise<ZnsExpireResult> {
+    const cutoff = new Date(Date.now() - ZNS_RETRYING_EXPIRE_MS);
+    // Log đã đóng rời khỏi tập (status FAILED) nên không cần con trỏ: mỗi lượt lấy lại BATCH log cũ nhất còn RETRYING. Đúng thứ tự cột của notification_logs_channel_status_sentAt_idx.
+    const rows = await this.prisma.notificationLog.findMany({
+      where: { channel: 'ZNS', status: 'RETRYING', sentAt: { lt: cutoff } },
+      orderBy: [{ sentAt: 'asc' }, { id: 'asc' }],
+      take: ZnsStuckLogCron.BATCH,
+      select: { id: true },
+    });
+    let expired = 0;
+    for (const { id } of rows) {
+      try {
+        if (await this.notifications.closeStuckZnsLog(id, ZnsStuckLogCron.EXPIRE_REASON, ['RETRYING'], { olderThan: cutoff, keepError: true })) expired++;
+      } catch (err) {
+        this.logger.error(`Hết hạn log ZNS RETRYING: ghi log ${id} lỗi: ${err instanceof Error ? err.message : err}`);
+        captureServerError(err);
+      }
+    }
+    if (expired > 0) {
+      this.logger.warn(`Hết hạn log ZNS: đã đóng FAILED ${expired}/${rows.length} log còn RETRYING quá 24 giờ (không gửi lại tin; đối soát tay theo runbook 1.20 nếu cần).`);
+    }
+    return { scanned: rows.length, expired };
   }
 
   private async sweep(queue: Queue): Promise<ZnsStuckSweepResult> {

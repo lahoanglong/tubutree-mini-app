@@ -567,16 +567,29 @@ export class NotificationsService {
    * nên khoá không cần nhả để tin sau đi được, nhưng job sống lại (khôi phục Redis, retry tay) mà log FAILED còn khoá nguyên thì deliverZns gửi
    * tiếp trong lúc khoá đã mở cho log mới = gửi đôi; nhả khoá thì deliverZns trả SKIPPED. Tiền tố khoá còn trong chuỗi nên vẫn đối soát được.
    * Không gọi Zalo và không tạo job.
+   * `olderThan`: chỉ đóng khi `sentAt` cũ hơn mốc (CAS cho bước hết hạn RETRYING 24 giờ của ZnsStuckLogCron, không đóng log vừa sang lượt thử mới).
    */
-  async closeStuckZnsLog(logId: string, reason: string, from: readonly string[] = ['PENDING', 'RETRYING']): Promise<boolean> {
-    const log = await this.prisma.notificationLog.findUnique({ where: { id: logId }, select: { payload: true } });
+  async closeStuckZnsLog(
+    logId: string,
+    reason: string,
+    from: readonly string[] = ['PENDING', 'RETRYING'],
+    opts: { olderThan?: Date; keepError?: boolean } = {},
+  ): Promise<boolean> {
+    const log = await this.prisma.notificationLog.findUnique({ where: { id: logId }, select: { payload: true, ...(opts.keepError ? { error: true } : {}) } });
     if (!log) return false;
     // Chỉ closer ghi payload của log đang PENDING/RETRYING nên đọc rồi ghi kèm CAS theo status là đủ; key đã nhả (đường khác đóng trước) thì không nhả lần hai.
     const released = releasedPayload(log.payload, logId);
     const release = released ? { payload: released } : {};
+    // keepError: giữ lỗi cũ (tiền tố đối soát, lỗi lần thử trước) sau lý do mới để admin đối soát vẫn đọc được; CAS theo đúng chuỗi đã đọc nên lượt thử mới ghi lỗi khác giữa chừng thì không bị đè.
+    const prior = opts.keepError ? (log as { error?: string | null }).error ?? null : null;
     const closed = await this.prisma.notificationLog.updateMany({
-      where: { id: logId, status: { in: [...from] } },
-      data: { status: 'FAILED', error: reason, ...release },
+      where: {
+        id: logId,
+        status: { in: [...from] },
+        ...(opts.olderThan ? { sentAt: { lt: opts.olderThan } } : {}),
+        ...(opts.keepError ? { error: prior } : {}),
+      },
+      data: { status: 'FAILED', error: prior ? `${reason} | ${prior.slice(0, 500)}` : reason, ...release },
     });
     return closed.count > 0;
   }
