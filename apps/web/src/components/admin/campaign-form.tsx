@@ -218,7 +218,9 @@ export function CampaignForm({
     // Máy chủ coi mọi bước đưa chiến dịch sang "khách thấy" là một lần bật và kiểm trang chiến dịch (trống thì từ chối). Sản phẩm và mã gắn bằng lời gọi riêng,
     // nên phần làm chiến dịch hiện ra (bật, gia hạn ngày, đổi đích lúc đang chạy) để lại cuối, sau khi đã gắn; chiến dịch vẫn chạy bản cũ trong lúc đó, không tắt.
     const deferDates = staysActive && savedEnded && goesLive;
-    const deferLink = staysActive && linkChanged && goesLive;
+    // Chỉ đích CAMPAIGN_PAGE cần để cuối (máy chủ kiểm trang không trống). Đích khác đi ở bước 1: nếu đích cũ là CAMPAIGN_PAGE thì phải đổi đích trước khi gỡ
+    // sản phẩm/mã, nếu không máy chủ thấy trang đang chạy bị làm trống.
+    const deferLink = staysActive && linkChanged && goesLive && linkType === 'CAMPAIGN_PAGE';
     const turnOn = isActive && !(saved !== null && saved.active);
     const step1Active = isActive && saved !== null && saved.active;
     let snap: SavedState = saved ?? {
