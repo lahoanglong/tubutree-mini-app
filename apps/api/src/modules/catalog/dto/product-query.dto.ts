@@ -1,5 +1,7 @@
 import { Transform, Type } from 'class-transformer';
 import { IsBoolean, IsIn, IsInt, IsNumber, IsOptional, IsString, Matches, Max, MaxLength, Min } from 'class-validator';
+import { PRODUCT_SLUGS_LIST_MAX, PRODUCT_SLUGS_QUERY_MAX_CHARS } from '@tubutree/shared-types';
+import { MaxCsvItems } from '../../../common/decorators/max-csv-items.decorator';
 import { PaginationQuery } from '../../../common/pagination';
 import { SEED_PATTERN } from '../catalog-seed';
 import { SEARCH_Q_MAX_LENGTH } from './suggest-query.dto';
@@ -40,7 +42,7 @@ export class ProductQuery extends PaginationQuery {
   inStock?: boolean;
 
   /** Danh sách slug cách nhau bằng dấu phẩy (tối đa 20): lấy giá/trạng thái hiện hành của các sản phẩm đã xem gần đây. */
-  @IsOptional() @IsString() @MaxLength(2000)
+  @IsOptional() @IsString() @MaxLength(PRODUCT_SLUGS_QUERY_MAX_CHARS) @MaxCsvItems(PRODUCT_SLUGS_LIST_MAX)
   slugs?: string;
 
   /** Điểm đánh giá trung bình tối thiểu (ratingAvg). Miniapp gửi 4 ("Từ 4★"). */
