@@ -8,10 +8,11 @@ import { useAuthStore } from '../store/auth';
 import { SessionUnavailable, useBlockedMessage, useLoginWithNotice } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { usePublicConfig } from '../hooks/use-public-config';
+import { POST_CARD_SKELETON, POST_CARD_SKELETON_COUNT } from '@tubutree/app-core/community-skeleton';
 import { vi } from '../i18n/vi';
 import { PullToRefresh } from '../components/pull-to-refresh';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
-import { Skeleton } from '../components/ui/skeleton';
+import { PostCardSkeleton } from '../components/ui/skeleton';
 import { Button } from '../components/ui/button';
 import { IconButton } from '../components/ui/icon-button';
 import { Chip } from '../components/ui/chip';
@@ -29,6 +30,20 @@ const SORTS: { key: FeedSort; label: string }[] = [
   { key: 'new', label: vi.community.sortNew },
   { key: 'popular', label: vi.community.sortPopular },
 ];
+
+/** Khung chờ danh sách bài: thẻ chờ cách nhau và cách đầu danh sách đúng khe 8px của thẻ thật (`marginTop` 8), nên bài về không làm trang nhảy. */
+function PostListSkeleton({ testId }: { testId?: string }) {
+  return (
+    <div
+      {...(testId ? { 'data-testid': testId } : null)}
+      style={{ display: 'flex', flexDirection: 'column', gap: POST_CARD_SKELETON.gap, paddingTop: POST_CARD_SKELETON.gap }}
+    >
+      {Array.from({ length: POST_CARD_SKELETON_COUNT }, (_, i) => (
+        <PostCardSkeleton key={i} />
+      ))}
+    </div>
+  );
+}
 
 export default function FeedPage() {
   const phase = useAuthPhase();
@@ -95,11 +110,7 @@ export default function FeedPage() {
     return (
       <Page style={{ background: 'var(--color-bg-canvas)' }}>
         <PageHeader title={vi.community.title} />
-        <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {Array.from({ length: 3 }, (_, i) => (
-            <Skeleton key={i} height={140} radius="var(--radius-card)" />
-          ))}
-        </div>
+        <PostListSkeleton />
       </Page>
     );
   }
@@ -121,11 +132,7 @@ export default function FeedPage() {
       return (
         <Page style={{ background: 'var(--color-bg-canvas)' }}>
           <PageHeader title={vi.community.title} />
-          <div data-testid="feed-preview-loading" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {Array.from({ length: 3 }, (_, i) => (
-              <Skeleton key={i} height={140} radius="var(--radius-card)" />
-            ))}
-          </div>
+          <PostListSkeleton testId="feed-preview-loading" />
         </Page>
       );
     }
@@ -240,11 +247,7 @@ export default function FeedPage() {
       )}
 
       {feed.isLoading ? (
-        <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {Array.from({ length: 4 }, (_, i) => (
-            <Skeleton key={i} height={110} radius="var(--radius-card)" />
-          ))}
-        </div>
+        <PostListSkeleton />
       ) : feed.isError ? (
         <ErrorState message={getLoadErrorMessage(feed.error)} onRetry={() => void feed.refetch()} />
       ) : posts.length === 0 ? (

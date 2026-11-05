@@ -1,8 +1,9 @@
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ERROR_NETWORK } from '@tubutree/app-core/client-copy';
+import { POST_CARD_SKELETON, POST_CARD_SKELETON_COUNT } from '@tubutree/app-core/community-skeleton';
 import type { FeedItem } from '../services/feed-api';
 
 const mocks = vi.hoisted(() => ({
@@ -431,6 +432,15 @@ describe('FeedPage — xem trước công khai khi chưa đăng nhập (D5-07, c
     expect(await screen.findByText('Đăng nhập để xem cộng đồng')).toBeInTheDocument();
   });
 
+  it('đang tải xem trước: khung chờ dựng bằng thẻ bài (3 thẻ, cao đúng số đo chung), không còn 3 khối xám 140px', () => {
+    mocks.config = { communityPublicPreview: true };
+    mocks.getPreview.mockReturnValue(new Promise(() => {}));
+    renderPage();
+    const cards = within(screen.getByTestId('feed-preview-loading')).getAllByTestId('post-card-skeleton');
+    expect(cards).toHaveLength(POST_CARD_SKELETON_COUNT);
+    for (const c of cards) expect(c.style.height).toBe(`${POST_CARD_SKELETON.height}px`);
+  });
+
   it('đang tải xem trước: khung chờ, chưa hiện cổng đăng nhập để khỏi nháy', () => {
     mocks.config = { communityPublicPreview: true };
     mocks.getPreview.mockReturnValue(new Promise(() => {}));
@@ -478,5 +488,35 @@ describe('FeedPage — xem trước công khai khi chưa đăng nhập (D5-07, c
     renderPage();
     await screen.findByText('Lan Anh');
     expect(mocks.getPreview).not.toHaveBeenCalled();
+  });
+});
+
+describe('FeedPage: khung chờ giống thẻ bài thật (không nhảy khi bài về)', () => {
+  const skeletons = () => screen.getAllByTestId('post-card-skeleton');
+
+  it('đang khôi phục phiên: 3 thẻ chờ tràn ngang, cao đúng số đo chung, cách nhau bằng khe của thẻ thật', () => {
+    mocks.auth.status = 'loading';
+    renderPage();
+    const cards = skeletons();
+    expect(cards).toHaveLength(POST_CARD_SKELETON_COUNT);
+    for (const c of cards) expect(c.style.height).toBe(`${POST_CARD_SKELETON.height}px`);
+    const list = cards[0]!.parentElement as HTMLElement;
+    expect(list.style.gap).toBe(`${POST_CARD_SKELETON.gap}px`);
+    expect(list.style.paddingTop).toBe(`${POST_CARD_SKELETON.gap}px`);
+    expect(list.style.padding).not.toBe('12px');
+  });
+
+  it('đã đăng nhập, bảng tin đang tải: thẻ chờ thay cho 4 khối xám 110px, tự ẩn với trình đọc màn hình', () => {
+    mocks.getFeed.mockReturnValue(new Promise(() => {}));
+    renderPage();
+    const cards = skeletons();
+    expect(cards).toHaveLength(POST_CARD_SKELETON_COUNT);
+    for (const c of cards) expect(c.getAttribute('aria-hidden')).toBe('true');
+  });
+
+  it('bài về thì thẻ chờ biến mất và thẻ thật thế chỗ', async () => {
+    renderPage();
+    await screen.findByText('Lan Anh');
+    expect(screen.queryByTestId('post-card-skeleton')).toBeNull();
   });
 });
