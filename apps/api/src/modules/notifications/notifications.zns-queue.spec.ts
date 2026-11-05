@@ -170,6 +170,14 @@ describe('NotificationsService.deliverZns', () => {
     expect(sqlOf(executeRaw)).toMatch(/status IN \('PENDING', 'RETRYING'\)/);
   });
 
+  it('lỗi tạm thời còn lượt nhưng log đã bị đóng FAILED (UPDATE 0 dòng) → SKIPPED, không tốn lượt thử lại', async () => {
+    const failure = { ok: false, retryable: true, code: -124, reason: 'x' };
+    const { svc, executeRaw, findUnique } = setup({ sendTemplate: jest.fn().mockResolvedValue(failure) });
+    executeRaw.mockResolvedValue(0);
+    findUnique.mockResolvedValueOnce({ status: 'PENDING', payload: { data: {} } }).mockResolvedValueOnce({ status: 'FAILED' });
+    expect(await svc.deliverZns(JOB, false)).toBe('SKIPPED');
+  });
+
   it('log đã SENT (job chạy lặp) → không gửi lần nữa', async () => {
     const { svc, sendTemplate } = setup({ status: 'SENT' });
     expect(await svc.deliverZns(JOB, false)).toBe('SENT');

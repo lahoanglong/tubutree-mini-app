@@ -485,6 +485,8 @@ export class NotificationsService {
         this.logger.warn(`ZNS log ${job.notificationLogId} đã SENT bởi lượt khác; kết quả lỗi của lượt này bị bỏ qua: ${error}`);
         return 'SENT';
       }
+      // Lượt RETRYING muộn gặp log đã đóng FAILED (sự kiện failed/cron, đã nhả khoá): không còn gì để thử lại, đừng tốn lượt của BullMQ.
+      if (now?.status === 'FAILED') return 'SKIPPED';
     }
     return retrying ? 'RETRY' : 'FAILED';
   }

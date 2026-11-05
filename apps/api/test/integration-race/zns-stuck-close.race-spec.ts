@@ -198,7 +198,7 @@ describe('đóng log ZNS kẹt (real Postgres)', () => {
       await new Promise((r) => setTimeout(r, 50));
       expect(await svc.closeStuckZnsLog(a.id, 'job hỏng')).toBe(true);
       settle({ ok: false, retryable: true, code: -1, reason: 'timeout' });
-      expect(await w1).toBe('RETRY');
+      expect(await w1).toBe('SKIPPED');
       const after = await row(a.id);
       expect(after.status).toBe('FAILED');
       expect(after.error).toBe('job hỏng');
