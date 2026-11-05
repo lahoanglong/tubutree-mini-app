@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ fetchProduct: vi.fn(), fetchRelated: vi.fn(), fetchBoughtTogether: vi.fn(), openOAChat: vi.fn(), hasOA: true, chatOn: false, returnWindowDays: undefined as number | undefined, authStatus: 'guest', navigate: vi.fn(), login: vi.fn() }));
+const mocks = vi.hoisted(() => ({ fetchLegalDoc: vi.fn(), fetchProduct: vi.fn(), fetchRelated: vi.fn(), fetchBoughtTogether: vi.fn(), openOAChat: vi.fn(), hasOA: true, chatOn: false, returnWindowDays: undefined as number | undefined, authStatus: 'guest', navigate: vi.fn(), login: vi.fn() }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: ReactNode }) => <div className="zaui-page">{children}</div>,
@@ -20,6 +20,7 @@ vi.mock('../services/shop-api', () => ({
   getCart: vi.fn().mockResolvedValue({ items: [], itemCount: 0 }),
   addToCart: vi.fn(),
 }));
+vi.mock('../services/legal-api', () => ({ fetchLegalDoc: mocks.fetchLegalDoc }));
 vi.mock('../services/account-api', () => ({ getCoupons: vi.fn().mockResolvedValue([]) }));
 vi.mock('../services/groupbuy-api', () => ({ createGroupBuy: vi.fn() }));
 vi.mock('../services/affiliate-api', () => ({ getAffiliateMe: vi.fn().mockResolvedValue({ isAffiliate: false }) }));
@@ -90,6 +91,19 @@ describe('ProductDetailPage — nút Chat Zalo OA trong khối "Cam kết Tubu" 
     fireEvent.click(chat);
     expect(mocks.openOAChat).toHaveBeenCalledTimes(1);
     expect(mocks.openOAChat).toHaveBeenCalledWith(expect.stringContaining('Xà phòng sả chanh'));
+  });
+
+  it('khối "Cam kết Tubu" có nút "Chính sách vận chuyển": bấm mở chính sách ngay trong app, không rời trang', async () => {
+    mocks.fetchLegalDoc.mockResolvedValue({ content: 'Giao trong 2 đến 4 ngày làm việc.', vars: {} });
+    renderPdp();
+    await screen.findByRole('heading', { level: 1, name: 'Xà phòng sả chanh' });
+    const block = screen.getByRole('heading', { name: 'Cam kết Tubu' }).parentElement!;
+    const link = within(block).getByRole('button', { name: 'Chính sách vận chuyển' });
+    expect(parseInt(link.style.minHeight, 10)).toBeGreaterThanOrEqual(44);
+    fireEvent.click(link);
+    expect(await screen.findByText('Giao trong 2 đến 4 ngày làm việc.')).toBeInTheDocument();
+    expect(mocks.fetchLegalDoc).toHaveBeenCalledWith('van-chuyen');
+    expect(mocks.navigate).not.toHaveBeenCalled();
   });
 
   it('cam kết đổi trả nêu số ngày từ cấu hình; chưa có cấu hình thì không nêu số', async () => {

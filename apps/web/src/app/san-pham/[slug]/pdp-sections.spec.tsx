@@ -64,6 +64,15 @@ describe('PdpPromises', () => {
     expect(byText(container, 'button', 'Chat')).not.toBeNull();
   });
 
+  it('có liên kết tới chính sách vận chuyển của web (/chinh-sach/van-chuyen), nhãn lấy từ tiêu đề trang chính sách, vùng chạm 44px', () => {
+    const { container } = mount(<PdpPromises />);
+    const links = Array.from(container.querySelectorAll('a'));
+    expect(links.map((a) => [a.textContent, a.getAttribute('href')])).toEqual([['Chính sách vận chuyển', '/chinh-sach/van-chuyen']]);
+    expect(links[0]!.className).toContain('min-h-11');
+    expect(unnamedControls(container)).toEqual([]);
+    expect(smallTouchTargets(container)).toEqual([]);
+  });
+
   it('số ngày đổi trả lấy từ cấu hình; chưa có cấu hình thì không nêu số', () => {
     cfg.returnWindowDays = 10;
     expect(mount(<PdpPromises />).container.textContent).toContain('Đổi trả trong 10 ngày nếu lỗi');
