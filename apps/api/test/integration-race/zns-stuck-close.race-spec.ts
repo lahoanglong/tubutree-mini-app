@@ -263,4 +263,43 @@ describe('đóng log ZNS kẹt (real Postgres)', () => {
     expect((await row(fresh.id)).status).toBe('FAILED');
     expect((await row(old[0]!.id)).status).toBe('RETRYING');
   });
+
+  it('250 log cũ còn sống (job delayed) không che log chết mới hơn: con trỏ keyset (sentAt, id) trên Postgres thật đóng nó trong ceil(N / 200) lượt', async () => {
+    const u = await newUser();
+    const t0 = Date.UTC(1999, 0, 1);
+    // Nhiều log cùng sentAt để keyset phải phân định bằng id.
+    const aliveIds = (
+      await Promise.all(
+        Array.from({ length: 250 }, (_, i) =>
+          prisma.notificationLog.create({
+            data: { userId: u.id, templateCode: 'IT_STUCK', channel: 'ZNS', payload: { data: {} }, status: i % 2 ? 'RETRYING' : 'PENDING', sentAt: new Date(t0 + Math.floor(i / 5) * 1000) },
+          }),
+        ),
+      )
+    ).map((l) => l.id);
+    const dead = await prisma.notificationLog.create({
+      data: { userId: u.id, templateCode: 'IT_STUCK', channel: 'ZNS', payload: { data: {} }, status: 'PENDING', sentAt: new Date(t0 + 3_600_000) },
+    });
+    const mine = new Set(aliveIds);
+    const queue = {
+      getJob: async (jobId: string) => {
+        const id = jobId.replace(/^zns-/, '');
+        if (id === dead.id) return { getState: async () => 'failed', failedReason: 'it' };
+        return mine.has(id) ? { getState: async () => 'delayed' } : { getState: async () => 'active' };
+      },
+    };
+    const candidates = await prisma.notificationLog.count({
+      where: { channel: 'ZNS', status: { in: ['PENDING', 'RETRYING'] }, sentAt: { lt: new Date(Date.now() - 3_600_000) }, OR: [{ error: null }, { error: { not: { startsWith: ZNS_REVIEW_PREFIX } } }] },
+    });
+    expect(candidates).toBeGreaterThanOrEqual(251);
+    const cron = new ZnsStuckLogCron(prisma, svc, queue as never);
+    let sweeps = 0;
+    while ((await row(dead.id)).status !== 'FAILED' && sweeps < 10) {
+      await cron.sweepStuckZnsLogs();
+      sweeps++;
+    }
+    expect((await row(dead.id)).status).toBe('FAILED');
+    expect(sweeps).toBeLessThanOrEqual(Math.ceil(candidates / 200));
+    expect(sweeps).toBeGreaterThanOrEqual(2);
+  });
 });

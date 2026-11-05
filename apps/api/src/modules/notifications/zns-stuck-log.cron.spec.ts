@@ -13,11 +13,24 @@ jest.mock('../../config/sentry', () => ({ captureServerError: jest.fn() }));
 type LogRow = { id: string; status: 'PENDING' | 'RETRYING' };
 type JobSpec = { state: string; returnvalue?: unknown; failedReason?: string } | null | Error;
 
-function setup(logs: LogRow[], jobs: Record<string, JobSpec>, opts: { noQueue?: boolean; acquired?: boolean } = {}) {
+type KeyStore = { get: jest.Mock; set: jest.Mock; del: jest.Mock };
+
+function setup(logs: LogRow[], jobs: Record<string, JobSpec>, opts: { noQueue?: boolean; acquired?: boolean; client?: KeyStore } = {}) {
   (runExclusive as jest.Mock).mockImplementation(holdsLease(opts.acquired ?? true));
   // Mỗi trạng thái một truy vấn (index (channel, status, sentAt) cho đúng thứ tự sentAt); mock trả theo status của điều kiện, sentAt tăng theo thứ tự khai báo.
   const sentAt = (id: string) => new Date(2026, 0, 1, 0, logs.findIndex((l) => l.id === id));
-  const findMany = jest.fn(async ({ where }: { where: { status: string } }) => logs.filter((l) => l.status === where.status).map((l) => ({ ...l, sentAt: sentAt(l.id) })));
+  type KeysetWhere = { status: string; AND?: { OR: [{ sentAt: { gt: Date } }, { sentAt: Date; id: { gt: string } }] }[] };
+  const findMany = jest.fn(async ({ where, take }: { where: KeysetWhere; take?: number }) => {
+    const keyset = where.AND?.[0]?.OR;
+    const after = (r: { id: string; sentAt: Date }) =>
+      !keyset || r.sentAt > keyset[0].sentAt.gt || (r.sentAt.getTime() === keyset[1].sentAt.getTime() && r.id > keyset[1].id.gt);
+    return logs
+      .filter((l) => l.status === where.status)
+      .map((l) => ({ ...l, sentAt: sentAt(l.id) }))
+      .filter(after)
+      .sort((a, b) => a.sentAt.getTime() - b.sentAt.getTime() || (a.id < b.id ? -1 : 1))
+      .slice(0, take);
+  });
   const prisma = { notificationLog: { findMany } } as unknown as PrismaService;
   const closeStuckZnsLog = jest.fn().mockResolvedValue(true);
   const markStuckZnsSent = jest.fn().mockResolvedValue(true);
@@ -29,7 +42,7 @@ function setup(logs: LogRow[], jobs: Record<string, JobSpec>, opts: { noQueue?: 
     if (!spec) return undefined;
     return { getState: async () => spec.state, returnvalue: spec.returnvalue, failedReason: spec.failedReason };
   });
-  const cron = new ZnsStuckLogCron(prisma, notifications, opts.noQueue ? undefined : ({ getJob } as unknown as Queue));
+  const cron = new ZnsStuckLogCron(prisma, notifications, opts.noQueue ? undefined : ({ getJob, client: opts.client ? Promise.resolve(opts.client) : undefined } as unknown as Queue));
   return { cron, findMany, closeStuckZnsLog, markStuckZnsSent, markZnsLogForReview, getJob };
 }
 
@@ -59,7 +72,7 @@ describe('ZnsStuckLogCron: truy vấn', () => {
             sentAt: { lt: new Date('2026-11-05T09:00:00.000Z') },
             OR: [{ error: null }, { error: { not: { startsWith: ZNS_REVIEW_PREFIX } } }],
           },
-          orderBy: { sentAt: 'asc' },
+          orderBy: [{ sentAt: 'asc' }, { id: 'asc' }],
           take: 200,
           select: { id: true, status: true, sentAt: true },
         });
@@ -78,6 +91,84 @@ describe('ZnsStuckLogCron: truy vấn', () => {
     const result = await cron.sweepStuckZnsLogs();
     expect(result).toMatchObject({ scanned: 200 });
     expect(getJob).toHaveBeenCalledTimes(200);
+  });
+});
+
+describe('ZnsStuckLogCron: con trỏ quay vòng (log cũ còn sống không che log kẹt mới hơn)', () => {
+  const alive = Array.from({ length: 250 }, (_, i) => ({ id: `a${String(i).padStart(3, '0')}`, status: 'PENDING' as const }));
+  const aliveJobs = Object.fromEntries(alive.map((l) => [l.id, { state: 'delayed' } as JobSpec]));
+  const withDead = () => setup([...alive, { id: 'dead', status: 'PENDING' }], { ...aliveJobs, dead: { state: 'failed' } });
+
+  it('250 log còn sống (job delayed) cũ hơn + 1 log chết mới hơn: đóng trong tối đa 2 lượt, mỗi lượt không quá 200 lần đọc job', async () => {
+    const { cron, getJob, closeStuckZnsLog } = withDead();
+    await expect(cron.sweepStuckZnsLogs()).resolves.toMatchObject({ scanned: 200, closed: 0, alive: 200 });
+    expect(getJob).toHaveBeenCalledTimes(200);
+    expect(closeStuckZnsLog).not.toHaveBeenCalled();
+    getJob.mockClear();
+    await expect(cron.sweepStuckZnsLogs()).resolves.toMatchObject({ scanned: 51, closed: 1, alive: 50 });
+    expect(getJob).toHaveBeenCalledTimes(51);
+    expect(closeStuckZnsLog).toHaveBeenCalledWith('dead', expect.any(String), ['PENDING', 'RETRYING']);
+  });
+
+  it('hết danh sách thì con trỏ quay về đầu: lượt kế tiếp quét lại từ log cũ nhất, không dùng khoá tìm kiếm', async () => {
+    const { cron, findMany } = withDead();
+    await cron.sweepStuckZnsLogs();
+    await cron.sweepStuckZnsLogs();
+    findMany.mockClear();
+    await expect(cron.sweepStuckZnsLogs()).resolves.toMatchObject({ scanned: 200 });
+    expect(findMany.mock.calls[0]![0].where.AND).toBeUndefined();
+  });
+
+  it('lượt sau đi tiếp ngay sau log cuối đã xét theo (sentAt, id)', async () => {
+    const { cron, findMany } = withDead();
+    await cron.sweepStuckZnsLogs();
+    findMany.mockClear();
+    await cron.sweepStuckZnsLogs();
+    expect(findMany.mock.calls[0]![0].where.AND).toEqual([
+      { OR: [{ sentAt: { gt: new Date(2026, 0, 1, 0, 199) } }, { sentAt: new Date(2026, 0, 1, 0, 199), id: { gt: 'a199' } }] },
+    ]);
+  });
+
+  it('đọc Redis lỗi: bỏ cả lượt như cũ và con trỏ không nhúc nhích (lượt sau vẫn bắt đầu từ đầu)', async () => {
+    const { cron, getJob, findMany } = withDead();
+    getJob.mockRejectedValueOnce(new Error('redis down'));
+    await expect(cron.sweepStuckZnsLogs()).resolves.toEqual({ skipped: 'REDIS' });
+    findMany.mockClear();
+    await cron.sweepStuckZnsLogs();
+    expect(findMany.mock.calls[0]![0].where.AND).toBeUndefined();
+  });
+
+  it('con trỏ nằm trong Redis dùng chung: bản API khác tiếp tục từ chỗ bản trước dừng; hết danh sách thì xoá khoá', async () => {
+    const store = new Map<string, string>();
+    const client: KeyStore = {
+      get: jest.fn(async (k: string) => store.get(k) ?? null),
+      set: jest.fn(async (k: string, v: string) => void store.set(k, v)),
+      del: jest.fn(async (k: string) => void store.delete(k)),
+    };
+    const logs = [...alive, { id: 'dead', status: 'PENDING' as const }];
+    const jobs = { ...aliveJobs, dead: { state: 'failed' } as JobSpec };
+    const first = setup(logs, jobs, { client });
+    await first.cron.sweepStuckZnsLogs();
+    expect(client.set).toHaveBeenCalledTimes(1);
+    const second = setup(logs, jobs, { client });
+    await expect(second.cron.sweepStuckZnsLogs()).resolves.toMatchObject({ scanned: 51, closed: 1 });
+    expect(client.del).toHaveBeenCalledTimes(1);
+    expect(store.size).toBe(0);
+  });
+
+  it('Redis không ghi/đọc được con trỏ: lượt quét vẫn chạy bằng con trỏ trong bộ nhớ, không ném', async () => {
+    const client: KeyStore = {
+      get: jest.fn().mockRejectedValue(new Error('boom')),
+      set: jest.fn().mockRejectedValue(new Error('boom')),
+      del: jest.fn().mockRejectedValue(new Error('boom')),
+    };
+    const { cron, closeStuckZnsLog } = (() => {
+      const r = setup([...alive, { id: 'dead', status: 'PENDING' }], { ...aliveJobs, dead: { state: 'failed' } }, { client });
+      return { cron: r.cron, closeStuckZnsLog: r.closeStuckZnsLog };
+    })();
+    await cron.sweepStuckZnsLogs();
+    await expect(cron.sweepStuckZnsLogs()).resolves.toMatchObject({ closed: 1 });
+    expect(closeStuckZnsLog).toHaveBeenCalledWith('dead', expect.any(String), expect.any(Array));
   });
 });
 

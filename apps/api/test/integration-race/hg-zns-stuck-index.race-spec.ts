@@ -35,8 +35,8 @@ describe('hg: index quét log ZNS kẹt (real Postgres)', () => {
    * EXPLAIN truy vấn của cron cho một trạng thái trong một transaction rồi ROLLBACK (mọi SET LOCAL và DDL thử đều bị huỷ).
    * Câu PREPARE sống theo kết nối chứ không theo transaction: gỡ đúng câu mình tạo (không DEALLOCATE ALL, sẽ xoá câu Prisma đang cache).
    */
-  async function explainStuck(mode: 'force_custom_plan' | 'force_generic_plan', opts: { seqscanOff?: boolean; setup?: string[] } = {}): Promise<string> {
-    const { seqscanOff = true, setup = [] } = opts;
+  async function explainStuck(mode: 'force_custom_plan' | 'force_generic_plan', opts: { seqscanOff?: boolean; setup?: string[]; keyset?: boolean } = {}): Promise<string> {
+    const { seqscanOff = true, setup = [], keyset = false } = opts;
     let plan = '';
     await prisma
       .$transaction(async (tx) => {
@@ -46,14 +46,20 @@ describe('hg: index quét log ZNS kẹt (real Postgres)', () => {
         let prepared = false;
         try {
           await tx.$executeRawUnsafe(
-            `PREPARE hg_stuck(text, text, timestamp, text, int) AS
-             SELECT id, status FROM notification_logs
-              WHERE channel = $1 AND status = $2 AND "sentAt" < $3 AND (error IS NULL OR error NOT LIKE $4)
-              ORDER BY "sentAt" ASC LIMIT $5`,
+            keyset
+              ? `PREPARE hg_stuck(text, text, timestamp, text, int, timestamp, text) AS
+                 SELECT id, status FROM notification_logs
+                  WHERE channel = $1 AND status = $2 AND "sentAt" < $3 AND (error IS NULL OR error NOT LIKE $4)
+                    AND ("sentAt" > $6 OR ("sentAt" = $6 AND id > $7))
+                  ORDER BY "sentAt" ASC, id ASC LIMIT $5`
+              : `PREPARE hg_stuck(text, text, timestamp, text, int) AS
+                 SELECT id, status FROM notification_logs
+                  WHERE channel = $1 AND status = $2 AND "sentAt" < $3 AND (error IS NULL OR error NOT LIKE $4)
+                  ORDER BY "sentAt" ASC, id ASC LIMIT $5`,
           );
           prepared = true;
           const rows = await tx.$queryRawUnsafe<{ 'QUERY PLAN': string }[]>(
-            `EXPLAIN EXECUTE hg_stuck('ZNS', 'PENDING', now() - interval '1 hour', 'Chờ đối soát tay: %', 200)`,
+            `EXPLAIN EXECUTE hg_stuck('ZNS', 'PENDING', now() - interval '1 hour', 'Chờ đối soát tay: %', 200${keyset ? ", now() - interval '2 hour', 'x'" : ''})`,
           );
           plan = rows.map((r) => r['QUERY PLAN']).join('\n');
         } finally {
@@ -69,6 +75,12 @@ describe('hg: index quét log ZNS kẹt (real Postgres)', () => {
 
   it('cài đặt planner mặc định (KHÔNG tắt seqscan), plan theo tham số thật như lượt đầu của prepared statement: đi index (channel, status, sentAt), không quét bảng', async () => {
     const plan = await explainStuck('force_custom_plan', { seqscanOff: false });
+    expect(plan).toContain('notification_logs_channel_status_sentAt_idx');
+    expect(plan).not.toMatch(/Seq Scan/);
+  });
+
+  it('truy vấn có con trỏ keyset (sentAt, id) và ORDER BY sentAt, id: planner mặc định vẫn đi index (channel, status, sentAt), không quét bảng', async () => {
+    const plan = await explainStuck('force_custom_plan', { seqscanOff: false, keyset: true });
     expect(plan).toContain('notification_logs_channel_status_sentAt_idx');
     expect(plan).not.toMatch(/Seq Scan/);
   });

@@ -16,6 +16,12 @@ export type ZnsStuckSweepResult =
   | { skipped: 'RUNNING' | 'LOCKED' | 'NO_QUEUE' | 'REDIS' | 'ERROR' }
   | { scanned: number; closed: number; sent: number; ambiguous: number; alive: number };
 
+/** Log cuối cùng đã xét ở lượt trước, theo (sentAt, id): lượt sau đi tiếp ngay sau nó. */
+type Cursor = { sentAt: string; id: string };
+
+/** IRedisClient của BullMQ chuyển tiếp mọi lệnh sang ioredis nhưng chỉ khai báo SET kiểu node-redis; ioredis nhận SET key value EX seconds. */
+type KeyValueClient = { set(key: string, value: string, mode: 'EX', seconds: number): Promise<unknown> };
+
 type Verdict = 'CLOSE_GONE' | 'CLOSE_FAILED' | 'MARK_SENT' | 'AMBIGUOUS' | 'ALIVE';
 
 /**
@@ -29,11 +35,16 @@ export class ZnsStuckLogCron {
   private static readonly STUCK_AFTER_MS = 3_600_000;
   private static readonly BATCH = 200;
   private static readonly LOCK_KEY = 'cron:notifications.zns_stuck_logs';
+  /** Con trỏ quay vòng nằm trong Redis để bản API nào giành được khoá lượt chạy cũng đi tiếp đúng chỗ; hết hạn sau 1 ngày thì quét lại từ đầu. */
+  private static readonly CURSOR_KEY = 'zns-stuck-cron:cursor';
+  private static readonly CURSOR_TTL_S = 86_400;
   /** Giá trị processor trả khi Zalo đã nhận tin (xem NotificationsProcessor.sendZns). */
   private static readonly SENT_RETURN = 'SENT';
 
   private readonly logger = new Logger(ZnsStuckLogCron.name);
   private running = false;
+  /** Bản sao trong bộ nhớ, dùng khi Redis không đọc/ghi được con trỏ. */
+  private memCursor: Cursor | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -60,7 +71,11 @@ export class ZnsStuckLogCron {
   }
 
   private async sweep(queue: Queue): Promise<ZnsStuckSweepResult> {
-    // Mỗi trạng thái một truy vấn (channel = , status = , ORDER BY sentAt): đúng thứ tự cột của notification_logs_channel_status_sentAt_idx
+    // Mỗi lượt chỉ xét tối đa BATCH log (mỗi log hai lần gọi Redis): log cũ mà job còn sống (delayed tới hết giờ yên tĩnh, đang chạy lâu)
+    // luôn nằm đầu danh sách theo sentAt, nên nếu mỗi lượt đều bắt đầu từ đầu thì log kẹt thật mới hơn không bao giờ tới lượt.
+    // Con trỏ (sentAt, id) đi tiếp qua các lượt và quay về đầu khi hết danh sách, nên mọi log ứng viên được xét trong ceil(N / BATCH) lượt.
+    const cursor = await this.loadCursor(queue);
+    // Mỗi trạng thái một truy vấn (channel = , status = , ORDER BY sentAt, id): đúng thứ tự cột của notification_logs_channel_status_sentAt_idx
     // nên planner đi thẳng index, còn `status IN (...)` buộc sắp lại hoặc đi theo index sentAt và lọc gần hết bảng.
     const stuckOf = (status: 'PENDING' | 'RETRYING') =>
       this.prisma.notificationLog.findMany({
@@ -70,13 +85,16 @@ export class ZnsStuckLogCron {
           sentAt: { lt: new Date(Date.now() - ZnsStuckLogCron.STUCK_AFTER_MS) },
           // Log đã xét là mơ hồ (không có đường tự gỡ) bị loại: nếu không, chúng chiếm hết `take` theo sentAt tăng dần và log kẹt mới hơn không bao giờ được xét.
           OR: [{ error: null }, { error: { not: { startsWith: ZNS_REVIEW_PREFIX } } }],
+          ...(cursor ? { AND: [{ OR: [{ sentAt: { gt: new Date(cursor.sentAt) } }, { sentAt: new Date(cursor.sentAt), id: { gt: cursor.id } }] }] } : {}),
         },
-        orderBy: { sentAt: 'asc' },
+        orderBy: [{ sentAt: 'asc' }, { id: 'asc' }],
         take: ZnsStuckLogCron.BATCH,
         select: { id: true, status: true, sentAt: true },
       });
     const [pending, retrying] = await Promise.all([stuckOf('PENDING'), stuckOf('RETRYING')]);
-    const logs = [...pending, ...retrying].sort((a, b) => a.sentAt.getTime() - b.sentAt.getTime()).slice(0, ZnsStuckLogCron.BATCH);
+    const logs = [...pending, ...retrying]
+      .sort((a, b) => a.sentAt.getTime() - b.sentAt.getTime() || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+      .slice(0, ZnsStuckLogCron.BATCH);
 
     // Đọc hết trạng thái job trước, ghi sau: Redis chập chờn giữa chừng thì bỏ cả lượt, không đóng log nào trên bằng chứng nửa vời.
     const verdicts: { id: string; status: string; verdict: Verdict; failedReason?: string }[] = [];
@@ -87,6 +105,10 @@ export class ZnsStuckLogCron {
       markCronSkipped('REDIS');
       return { skipped: 'REDIS' };
     }
+
+    // Chỉ đi tiếp con trỏ khi cả lượt đọc Redis xong (nhánh REDIS ở trên đã return, con trỏ đứng yên): đủ BATCH là còn log phía sau, thiếu là hết danh sách.
+    const last = logs[logs.length - 1];
+    await this.saveCursor(queue, logs.length >= ZnsStuckLogCron.BATCH && last ? { sentAt: last.sentAt.toISOString(), id: last.id } : null);
 
     const result = { scanned: logs.length, closed: 0, sent: 0, ambiguous: 0, alive: 0 };
     for (const { id, status, verdict, failedReason } of verdicts) {
@@ -121,6 +143,34 @@ export class ZnsStuckLogCron {
       );
     }
     return result;
+  }
+
+  /** Đọc con trỏ: Redis lỗi hay hỏng dữ liệu thì dùng bản trong bộ nhớ (quét lại từ đầu cũng an toàn vì cron chỉ đọc rồi ghi bằng CAS). */
+  private async loadCursor(queue: Queue): Promise<Cursor | null> {
+    try {
+      const client = await withQueueTimeout(Promise.resolve(queue.client), `${QUEUE_NOTIFICATIONS} client`, undefined, { breaker: false });
+      if (!client) return this.memCursor;
+      const raw = await withQueueTimeout(Promise.resolve(client.get(ZnsStuckLogCron.CURSOR_KEY)), `${QUEUE_NOTIFICATIONS} cursor get`, undefined, { breaker: false });
+      if (raw == null) return null;
+      const parsed = JSON.parse(raw) as Partial<Cursor>;
+      if (typeof parsed.sentAt !== 'string' || typeof parsed.id !== 'string' || Number.isNaN(new Date(parsed.sentAt).getTime())) return null;
+      return { sentAt: parsed.sentAt, id: parsed.id };
+    } catch (err) {
+      this.logger.warn(`Quét log ZNS kẹt: không đọc được con trỏ trong Redis, dùng bản trong bộ nhớ (${err instanceof Error ? err.message : err})`);
+      return this.memCursor;
+    }
+  }
+
+  private async saveCursor(queue: Queue, cursor: Cursor | null): Promise<void> {
+    this.memCursor = cursor;
+    try {
+      const client = await withQueueTimeout(Promise.resolve(queue.client), `${QUEUE_NOTIFICATIONS} client`, undefined, { breaker: false });
+      if (!client) return;
+      if (cursor) await withQueueTimeout(Promise.resolve((client as unknown as KeyValueClient).set(ZnsStuckLogCron.CURSOR_KEY, JSON.stringify(cursor), 'EX', ZnsStuckLogCron.CURSOR_TTL_S)), `${QUEUE_NOTIFICATIONS} cursor set`, undefined, { breaker: false });
+      else await withQueueTimeout(Promise.resolve(client.del(ZnsStuckLogCron.CURSOR_KEY)), `${QUEUE_NOTIFICATIONS} cursor del`, undefined, { breaker: false });
+    } catch (err) {
+      this.logger.warn(`Quét log ZNS kẹt: không ghi được con trỏ vào Redis (${err instanceof Error ? err.message : err})`);
+    }
   }
 
   private async judge(queue: Queue, logId: string, status: string): Promise<{ verdict: Verdict; failedReason?: string }> {
