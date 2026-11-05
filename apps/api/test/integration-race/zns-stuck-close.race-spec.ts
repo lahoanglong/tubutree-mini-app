@@ -135,6 +135,23 @@ describe('đóng log ZNS kẹt (real Postgres)', () => {
     expect(after.error ?? '').not.toContain(ZNS_REVIEW_PREFIX);
   });
 
+  it('log A FAILED vì hết lượt (Zalo chưa nhận), log B cùng khoá đã SENT, rồi job của A bị retry tay: nhả khoá nên ra SKIPPED, Zalo không được gọi', async () => {
+    const u = await newUser();
+    const key = `it-stuck-final-fail:${Date.now()}`;
+    const a = await mkLog(u.id, key, 'PENDING');
+    sendTemplate.mockResolvedValueOnce({ ok: false, retryable: true, code: -1, reason: 'timeout' });
+    expect(await svc.deliverZns(jobOf(a.id), true)).toBe('FAILED');
+    const failed = await row(a.id);
+    expect(failed.status).toBe('FAILED');
+    expect(failed.payload).toEqual({ data: {}, dedupeKey: `${key}:failed:${a.id}` });
+    // Nơi gọi gửi lại bằng log B cùng khoá: B đi bình thường.
+    const b = await mkLog(u.id, key, 'PENDING');
+    expect(await svc.deliverZns(jobOf(b.id), false)).toBe('SENT');
+    sendTemplate.mockClear();
+    expect(await svc.deliverZns(jobOf(a.id), false)).toBe('SKIPPED');
+    expect(sendTemplate).not.toHaveBeenCalled();
+  });
+
   it('markStuckZnsSent chỉ từ RETRYING; đua với closeStuckZnsLog thì đúng một bên thắng', async () => {
     const u = await newUser();
     const pending = await mkLog(u.id, null, 'PENDING');

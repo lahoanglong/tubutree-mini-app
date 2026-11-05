@@ -477,7 +477,10 @@ export class NotificationsService {
       await this.prisma.notificationLog.update({ where, data: { status: 'RETRYING', error } });
       return 'RETRY';
     }
-    await this.prisma.notificationLog.update({ where, data: { status: 'FAILED', error } });
+    // Job completed vẫn retry tay được: log FAILED còn khoá nguyên thì lần chạy lại gửi tiếp dù nơi gọi đã gửi tin cùng sự kiện bằng log khác.
+    const current = await this.prisma.notificationLog.findUnique({ where, select: { payload: true } });
+    const released = current ? releasedPayload(current.payload, job.notificationLogId) : undefined;
+    await this.prisma.notificationLog.update({ where, data: { status: 'FAILED', error, ...(released ? { payload: released } : {}) } });
     return 'FAILED';
   }
 
