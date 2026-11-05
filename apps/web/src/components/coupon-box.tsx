@@ -278,6 +278,12 @@ export function CouponBox({
             {fillCopy('coupon.pickApply')}
           </button>
         </div>
+        {/* Bảng trượt: lời báo mã sai/hết hạn nằm ngay dưới ô nhập. Đặt cuối bảng thì nằm dưới cả danh sách mã, ngoài màn hình 320x568 và khách thấy như bấm không có gì xảy ra. */}
+        {inSheet && err && (
+          <p role="alert" className="mt-2 text-caption text-danger-fg">
+            {err}
+          </p>
+        )}
       </div>
       {(rows.length > 0 || inSheet) && (
         <p className="mb-2.5 mt-4 text-label font-semibold text-[color:var(--color-text-secondary)]">{fillCopy('coupon.pickMine')}</p>
@@ -463,11 +469,6 @@ export function CouponBox({
         <BottomSheet open={open} onClose={() => setOpen(false)} title={fillCopy('coupon.pickTitle')} description={fillCopy('coupon.oneCodeHint')}>
           <div id="coupon-panel">
             {panelBody}
-            {err && (
-              <p role="alert" className="mt-2 text-caption text-danger-fg">
-                {err}
-              </p>
-            )}
           </div>
         </BottomSheet>
       ) : (
