@@ -1,3 +1,4 @@
+import { isPancakeForbiddenError } from '@tubutree/shared-types';
 import { BadRequestException } from '@nestjs/common';
 import { PANCAKE_CANCEL, PANCAKE_CANCEL_REFUSED_PREFIX, PANCAKE_PUSH, PancakeOrderService } from './pancake-order.service';
 import type { PrismaService } from '../../../prisma/prisma.service';
@@ -491,6 +492,18 @@ describe('PancakeOrderService.markPushFailure — loại lỗi (hi)', () => {
     expect(t.row().pancakeErrorKind).toBe('REJECTED');
     await t.svc.markPushFailure('o1', forbidden(), true);
     expect(t.row().pancakeErrorKind).toBe('REJECTED');
+  });
+
+  it('REJECTED vì 401/403 riêng đơn: lời lỗi mang tiền tố cố định (web nhận biết, không dò chuỗi tự do); CONFIG thì không', async () => {
+    const rejected = setup({ pancakePushStatus: PANCAKE_PUSH.PENDING, pancakeErrorKind: 'CONFIG_RECHECK' });
+    await rejected.svc.markPushFailure('o1', forbidden(), true);
+    expect(isPancakeForbiddenError(rejected.row().pancakeSyncError as string)).toBe(true);
+    const config = setup({ pancakePushStatus: PANCAKE_PUSH.PENDING });
+    await config.svc.markPushFailure('o1', forbidden(), true);
+    expect(isPancakeForbiddenError(config.row().pancakeSyncError as string)).toBe(false);
+    const other = setup({ pancakePushStatus: PANCAKE_PUSH.PENDING, pancakeErrorKind: 'REJECTED' });
+    await other.svc.markPushFailure('o1', new PancakeApiError('Pancake trả 422 khi tạo đơn: x', false, false, 422), true);
+    expect(isPancakeForbiddenError(other.row().pancakeSyncError as string)).toBe(false);
   });
 
   it('đánh đổi đã chấp nhận: khoá bị thu hồi SAU khi nhóm CONFIG được thả → đơn CONFIG_RECHECK nhận 401 thành REJECTED (không báo động tổng)', async () => {

@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { PANCAKE_FORBIDDEN_ERROR_PREFIX } from '@tubutree/shared-types';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { OpsHealthTab } from './ops-health-tab';
 import { recomputeSoldMessage } from './ops-health-crons';
@@ -209,7 +210,7 @@ describe('OpsHealthTab — việc cụ thể cần xử lý (R2-PLATFORM-1, R2-A
       ...HEALTH,
       pancake: {
         ...HEALTH.pancake,
-        pushErrors: { transient: 3, data: 1, rejected: 2, config: 4, unclassified: 0 },
+        pushErrors: { transient: 3, data: 1, rejected: 2, config: 4, configRecheck: 6, unclassified: 0 },
         stuckOrders: [{ ...HEALTH.pancake.stuckOrders[0]!, pancakeErrorKind: 'REJECTED' }],
       },
     };
@@ -219,7 +220,28 @@ describe('OpsHealthTab — việc cụ thể cần xử lý (R2-PLATFORM-1, R2-A
     expect(pancake.textContent).toContain('Chờ đẩy, Pancake tạm lỗi (tự thử lại)3');
     expect(pancake.textContent).toContain('thiếu dữ liệu hoặc Pancake từ chối (cần sửa đơn)3');
     expect(pancake.textContent).toContain('Lỗi khoá API Pancake (báo kỹ thuật)4');
+    expect(pancake.textContent).toContain('Chờ thử lại sau khi khoá đã đẩy được đơn khác6');
     expect(c.querySelector('section[aria-label="Đơn kẹt"]')!.textContent).toContain('Pancake từ chối dữ liệu đơn: sửa theo lỗi rồi bấm "Đẩy lại Pancake"');
+  });
+
+  it('hi: gợi ý ở danh sách đơn kẹt cho CONFIG_RECHECK và cho REJECTED vì 401/403 riêng đơn', async () => {
+    const base = HEALTH.pancake.stuckOrders[0]!;
+    const health = {
+      ...HEALTH,
+      pancake: {
+        ...HEALTH.pancake,
+        stuckOrders: [
+          { ...base, id: 's1', code: 'TUBURECHECK', pancakeErrorKind: 'CONFIG_RECHECK' },
+          { ...base, id: 's2', code: 'TUBUFORBID', pancakeErrorKind: 'REJECTED', pancakeSyncError: `${PANCAKE_FORBIDDEN_ERROR_PREFIX}Pancake trả 403 khi tạo đơn` },
+        ],
+      },
+    };
+    vi.stubGlobal('fetch', vi.fn(mockFetch({ '/admin/ops/health': { body: health } }).fn));
+    const c = await mount(<OpsHealthTab onOpenOrder={vi.fn()} />);
+    const text = c.querySelector('section[aria-label="Đơn kẹt"]')!.textContent!;
+    expect(text).toContain('Khoá API đã đẩy được đơn khác: hệ thống tự thử lại đơn này');
+    expect(text).toContain('Pancake từ chối quyền cho riêng đơn này');
+    expect(text).not.toContain('sửa theo lỗi rồi bấm');
   });
 
   it('API cũ chưa trả pushErrors thì không hiện dòng loại lỗi', async () => {

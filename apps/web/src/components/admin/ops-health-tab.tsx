@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, CircleCheck, RefreshCw } from 'lucide-react';
+import { isPancakeForbiddenError } from '@tubutree/shared-types';
 import {
   dismissOpsWebhookEvent,
   getOpsHealth,
@@ -68,8 +69,16 @@ const STUCK_KIND_HINT: Record<string, string> = {
   DATA: 'Thiếu dữ liệu đơn: sửa thông tin người nhận rồi bấm "Đẩy lại Pancake".',
   REJECTED: 'Pancake từ chối dữ liệu đơn: sửa theo lỗi rồi bấm "Đẩy lại Pancake".',
   CONFIG: 'Khoá API Pancake sai hoặc hết hạn: báo kỹ thuật, đừng đẩy lại từng đơn.',
+  CONFIG_RECHECK: 'Khoá API đã đẩy được đơn khác: hệ thống tự thử lại đơn này; lại bị từ chối thì là lỗi riêng của đơn.',
   TRANSIENT: 'Pancake tạm lỗi: hệ thống tự thử lại.',
 };
+
+const FORBIDDEN_HINT = 'Pancake từ chối quyền cho riêng đơn này: kiểm tra trang/kho/sản phẩm của đơn trên Pancake, tạo tay nếu cần.';
+
+function stuckHint(o: { pancakeErrorKind?: string | null; pancakeSyncError?: string | null }): string | undefined {
+  if (o.pancakeErrorKind === 'REJECTED' && isPancakeForbiddenError(o.pancakeSyncError)) return FORBIDDEN_HINT;
+  return o.pancakeErrorKind ? STUCK_KIND_HINT[o.pancakeErrorKind] : undefined;
+}
 
 /** Số tồn tuyệt đối đã cũ: chạy lại sẽ đè tồn kho mới hơn (hồi sinh hàng đã bán) — API cũng từ chối. */
 const isStaleStockEvent = (e: OpsWebhookEvent) => e.source === 'pancake' && e.eventType === 'variation.stock_changed';
@@ -562,6 +571,7 @@ function HealthBody({
               <Row label="Chờ đẩy, Pancake tạm lỗi (tự thử lại)" value={h.pancake.pushErrors.transient} />
               <Row label="Lỗi vĩnh viễn: thiếu dữ liệu hoặc Pancake từ chối (cần sửa đơn)" value={h.pancake.pushErrors.data + h.pancake.pushErrors.rejected} warn={h.pancake.pushErrors.data + h.pancake.pushErrors.rejected > 0} />
               <Row label="Lỗi khoá API Pancake (báo kỹ thuật)" value={h.pancake.pushErrors.config} warn={h.pancake.pushErrors.config > 0} />
+              <Row label="Chờ thử lại sau khi khoá đã đẩy được đơn khác" value={h.pancake.pushErrors.configRecheck ?? 0} />
             </>
           )}
           <Row label={`Đơn kẹt quá ${t.unsyncedMinutes} phút`} value={h.pancake.stuck} warn={h.pancake.stuck >= t.stuckOrders} />
@@ -846,7 +856,7 @@ function HealthBody({
                 <span className="min-w-0">
                   <b className="text-stone-900">{o.code}</b>
                   <span className="text-xs text-stone-500"> · đặt {formatDateTime(o.createdAt)} · {PUSH_STATUS_LABELS[o.pancakePushStatus ?? ''] ?? o.pancakePushStatus ?? 'chưa đẩy'} · {o.pancakePushAttempts} lần thử</span>
-                  {o.pancakeErrorKind && STUCK_KIND_HINT[o.pancakeErrorKind] && <span className="block text-xs font-medium text-stone-700">{STUCK_KIND_HINT[o.pancakeErrorKind]}</span>}
+                  {stuckHint(o) && <span className="block text-xs font-medium text-stone-700">{stuckHint(o)}</span>}
                   {o.pancakeSyncError && <span className="block break-words text-xs text-danger-fg">{o.pancakeSyncError}</span>}
                 </span>
                 {openOrder(o.code)}

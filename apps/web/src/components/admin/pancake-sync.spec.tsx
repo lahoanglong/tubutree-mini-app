@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import type { AdminOrder } from '@/lib/admin-client';
+import { PANCAKE_FORBIDDEN_ERROR_PREFIX } from '@tubutree/shared-types';
 
 // PANCAKE-9, ADMINOPS-4: admin không thấy đơn nào chưa lên kho Pancake, lỗi gì, và không có cách đẩy lại.
 
@@ -142,6 +143,22 @@ describe('loại lỗi đẩy + câu hướng dẫn (hi)', () => {
     const o = order({ pancakeErrorKind: kind });
     expect(pancakeSyncState(o)).toMatchObject({ label, flag: true });
     expect(pancakeErrorGuide(o)?.text).toContain(text);
+  });
+
+  it('CONFIG_RECHECK: nhãn riêng, câu hướng dẫn nói khoá đã đẩy được đơn khác và hệ thống tự thử lại', () => {
+    const o = order({ pancakeErrorKind: 'CONFIG_RECHECK', pancakePushStatus: 'PENDING', pancakeSyncError: 'cũ', pancakeNextRetryAt: '2026-10-13T03:30:00.000Z' });
+    expect(pancakeSyncState(o)).toMatchObject({ label: 'Pancake: chờ thử lại sau khi khoá đã đẩy được đơn khác', flag: true });
+    const guide = pancakeErrorGuide(o);
+    expect(guide).toMatchObject({ kind: 'CONFIG_RECHECK', configBlocked: false });
+    expect(guide?.text).toContain('Khoá API đã đẩy được đơn khác');
+    expect(guide?.text).toContain('10:30');
+  });
+
+  it('REJECTED vì 401/403 riêng đơn (lời lỗi mang tiền tố của shared-types): câu riêng, không bảo "sửa dữ liệu theo lỗi bên dưới"', () => {
+    const o = order({ pancakeErrorKind: 'REJECTED', pancakeSyncError: `${PANCAKE_FORBIDDEN_ERROR_PREFIX}Pancake trả 403 khi tạo đơn` });
+    expect(pancakeErrorGuide(o)?.text).toContain('Pancake từ chối quyền cho riêng đơn này');
+    expect(pancakeErrorGuide(o)?.text).not.toContain('sửa dữ liệu theo lỗi bên dưới');
+    expect(pancakeErrorGuide(order({ pancakeErrorKind: 'REJECTED', pancakeSyncError: 'Pancake trả 403 khi tạo đơn' }))?.text).toContain('sửa dữ liệu theo lỗi bên dưới');
   });
 
   it('lỗi tạm: nêu giờ tự thử lại kế tiếp (HH:MM giờ Việt Nam)', () => {

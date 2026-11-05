@@ -1,4 +1,5 @@
-import { PancakeApiError, PancakeOrderDataError } from './pancake-outbound';
+import { PANCAKE_FORBIDDEN_ERROR_PREFIX } from '@tubutree/shared-types';
+import { PancakeApiError, PancakeOrderDataError, pancakeErrorText } from './pancake-outbound';
 
 /**
  * Loại lỗi đẩy đơn sang Pancake, một nguồn cho processor, cron, admin và go-live:
@@ -37,6 +38,15 @@ export function kindAfterFailure(err: unknown, priorKind: string | null | undefi
   const kind = classifyPushError(err);
   if (kind === PUSH_ERROR_KIND.CONFIG && (priorKind === PUSH_ERROR_KIND.CONFIG_RECHECK || priorKind === PUSH_ERROR_KIND.REJECTED)) return PUSH_ERROR_KIND.REJECTED;
   return kind;
+}
+
+/**
+ * Lời lỗi ghi vào `pancakeSyncError`. 401/403 đã tính là REJECTED (lỗi riêng đơn) mang tiền tố của shared-types để admin web hiện đúng
+ * câu hướng dẫn mà không dò chuỗi tự do.
+ */
+export function storedErrorText(err: unknown, kind: PushErrorKind): string {
+  const forbidden = err instanceof PancakeApiError && (err.status === 401 || err.status === 403);
+  return forbidden && kind === PUSH_ERROR_KIND.REJECTED ? `${PANCAKE_FORBIDDEN_ERROR_PREFIX}${pancakeErrorText(err)}` : pancakeErrorText(err);
 }
 
 export const isPermanentPushError = (kind: PushErrorKind): boolean => kind !== PUSH_ERROR_KIND.TRANSIENT;

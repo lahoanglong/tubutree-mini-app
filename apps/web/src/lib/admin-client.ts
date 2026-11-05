@@ -2112,7 +2112,7 @@ export interface OpsHealth {
     attention: number;
     attentionOrders: OpsAttentionOrder[];
     /** Đơn chưa lên Pancake theo loại lỗi đẩy gần nhất. Tuỳ chọn: API cũ chưa trả trường này. */
-    pushErrors?: { transient: number; data: number; rejected: number; config: number; unclassified: number };
+    pushErrors?: { transient: number; data: number; rejected: number; config: number; configRecheck?: number; unclassified: number };
     catalog: { lastOkAt: string | null; lastErrorAt: string | null; lastError: string | null; detail: { count?: number; failed?: number } | null };
   };
   gomdon: {

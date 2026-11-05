@@ -36,7 +36,7 @@ import {
   pancakeOrderHasCode,
 } from './pancake-outbound';
 import { enqueuePancakeCancel, enqueuePancakePayment, enqueuePancakePush, PANCAKE_JOB_PUSH, removeFailedPancakePush } from './pancake-queue';
-import { classifyPushError, isPushFailureSettled, kindAfterFailure, PUSH_ERROR_KIND, PUSH_RETRY } from './pancake-push-error';
+import { classifyPushError, isPushFailureSettled, kindAfterFailure, PUSH_ERROR_KIND, PUSH_RETRY, storedErrorText } from './pancake-push-error';
 import { withQueueTimeout } from '../../../jobs/queue-timeout';
 import {
   ATTENTION_CANCEL_PENDING,
@@ -301,12 +301,13 @@ export class PancakeOrderService {
     } catch (err) {
       // Từ chối dứt khoát → Pancake chắc chắn chưa tạo: gỡ mốc để lần sau không phải tra cứu.
       const definite = err instanceof PancakeApiError && !err.transient;
+      const kind = kindAfterFailure(err, order.pancakeErrorKind);
       await this.prisma.order.updateMany({
         where: { id: order.id, pancakeOrderId: null },
         data: {
           pancakePushStatus: PANCAKE_PUSH.PENDING,
-          pancakeSyncError: pancakeErrorText(err),
-          pancakeErrorKind: kindAfterFailure(err, order.pancakeErrorKind),
+          pancakeSyncError: storedErrorText(err, kind),
+          pancakeErrorKind: kind,
           ...(definite && !sentBefore ? { pancakePushClaimedAt: null } : {}),
         },
       });
@@ -350,7 +351,7 @@ export class PancakeOrderService {
     const idle = { id: order.id, pancakeOrderId: null, OR: [{ pancakePushStatus: null }, { pancakePushStatus: { not: PANCAKE_PUSH.PUSHING } }] };
     await this.prisma.order.updateMany({
       where: idle,
-      data: { pancakeSyncError: pancakeErrorText(err), pancakeErrorKind: kind, ...(final ? { pancakePushStatus: PANCAKE_PUSH.FAILED } : {}) },
+      data: { pancakeSyncError: storedErrorText(err, kind), pancakeErrorKind: kind, ...(final ? { pancakePushStatus: PANCAKE_PUSH.FAILED } : {}) },
     });
     if (kind === PUSH_ERROR_KIND.CONFIG) {
       // Khoá API sai làm hỏng mọi đơn như nhau: không đốt lượt từng đơn (cron chỉ dò bằng một đơn mỗi giờ, xem

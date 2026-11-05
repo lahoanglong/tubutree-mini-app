@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { isPancakeForbiddenError } from '@tubutree/shared-types';
 import { retryPancakePush, type AdminOrder } from '@/lib/admin-client';
 import type { Tone } from '@/lib/recycling';
 import { formatDateTime } from '@/lib/format-date';
@@ -26,6 +27,7 @@ const KIND_LABEL: Record<string, { tone: Tone; label: string }> = {
   DATA: { tone: 'danger', label: 'Pancake: thiếu dữ liệu đơn' },
   REJECTED: { tone: 'danger', label: 'Pancake: từ chối dữ liệu đơn' },
   CONFIG: { tone: 'danger', label: 'Pancake: sai khoá API' },
+  CONFIG_RECHECK: { tone: 'warning', label: 'Pancake: chờ thử lại sau khi khoá đã đẩy được đơn khác' },
   TRANSIENT: { tone: 'warning', label: 'Pancake: tạm lỗi, tự thử lại' },
 };
 
@@ -47,7 +49,21 @@ export function pancakeErrorGuide(order: AdminOrder): PancakeErrorGuide | null {
     case 'DATA':
       return { kind, configBlocked: false, text: 'Thiếu dữ liệu đơn để tạo đơn kho: sửa thông tin người nhận của đơn rồi bấm "Đẩy lại Pancake".' };
     case 'REJECTED':
-      return { kind, configBlocked: false, text: 'Pancake từ chối dữ liệu đơn: sửa dữ liệu theo lỗi bên dưới rồi bấm "Đẩy lại Pancake".' };
+      return {
+        kind,
+        configBlocked: false,
+        text: isPancakeForbiddenError(order.pancakeSyncError)
+          ? 'Pancake từ chối quyền cho riêng đơn này (khoá API vẫn đẩy được đơn khác): kiểm tra trang/kho/sản phẩm của đơn trên Pancake, tạo tay nếu cần.'
+          : 'Pancake từ chối dữ liệu đơn: sửa dữ liệu theo lỗi bên dưới rồi bấm "Đẩy lại Pancake".',
+      };
+    case 'CONFIG_RECHECK':
+      return {
+        kind,
+        configBlocked: false,
+        text: order.pancakeNextRetryAt
+          ? `Khoá API đã đẩy được đơn khác: hệ thống thử lại đơn này tới ${clock(order.pancakeNextRetryAt)}. Lại bị từ chối thì đó là lỗi riêng của đơn.`
+          : 'Khoá API đã đẩy được đơn khác nhưng hệ thống không còn tự thử lại đơn này: bấm "Đẩy lại Pancake".',
+      };
     case 'CONFIG':
       return {
         kind,
