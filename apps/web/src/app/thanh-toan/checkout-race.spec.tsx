@@ -48,7 +48,7 @@ const mount = async () => {
   await flush(8);
   return r;
 };
-const placeButton = (r: Rendered) => byText(r.container, 'button', 'Đặt hàng') as HTMLButtonElement;
+const placeButton = (r: Rendered) => byText(r.container, 'button', /^(Đặt hàng|Thử lại ·)/) as HTMLButtonElement;
 const radio = (r: Rendered, label: string) =>
   [...r.container.querySelectorAll('label')].find((l) => l.textContent?.includes(label))!.querySelector('input')!;
 

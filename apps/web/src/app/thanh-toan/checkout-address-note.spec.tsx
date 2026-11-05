@@ -58,7 +58,7 @@ const mount = async () => {
 const btn = (c: HTMLElement, name: string) =>
   Array.from(c.querySelectorAll('button')).find((b) => {
     const label = (b.getAttribute('aria-label') ?? b.textContent ?? '').trim();
-    return label === name || (name === 'Đặt hàng' && label.startsWith('Đặt hàng · '));
+    return label === name || (name === 'Đặt hàng' && (label.startsWith('Đặt hàng · ') || label.startsWith('Thử lại · ')));
   }) as HTMLButtonElement | undefined;
 const rowValue = (c: HTMLElement, label: string) =>
   Array.from(c.querySelectorAll('div.flex')).find((d) => d.firstElementChild?.textContent === label)?.lastElementChild?.textContent;

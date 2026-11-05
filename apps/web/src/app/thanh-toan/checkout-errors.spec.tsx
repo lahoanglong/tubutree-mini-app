@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
-import { ApiError } from '@/lib/client-api';
+import { ApiError, NetworkError } from '@/lib/client-api';
 
 const ADDR = {
   id: 'a1', recipient: 'An', phone: '0912345678', province: 'Hà Nội', district: '', ward: 'Ba Đình', street: '1 Phố Huế',
@@ -121,5 +121,35 @@ describe('/thanh-toan — lỗi đặt đơn như Mini App', () => {
     click(placeButton(r));
     await flush(8);
     expect(r.container.querySelector('[data-testid="checkout-cart-issue"]')!.textContent).toContain('Vượt giới hạn mua ưu đãi.');
+  });
+});
+
+describe('/thanh-toan — gửi lỗi mạng giữ nguyên đơn (hk)', () => {
+  const placed = { id: 'o1', code: 'TT001', status: 'CONFIRMED', subtotal: 100000, discount: 0, shippingFee: 30000, total: 130000, paymentMethod: 'COD', createdAt: '2026-11-05T00:00:00Z', items: [] };
+
+  it('lỗi mạng: nút đổi thành "Thử lại · tổng", dải đáy nói chưa gửi được đơn, bấm lại gửi đúng body và khoá cũ', async () => {
+    m.placeOrder.mockRejectedValueOnce(new NetworkError(true)).mockResolvedValueOnce(placed);
+    const r = await mount();
+    click(placeButton(r));
+    await flush(8);
+    const retry = byText(r.container, 'button', 'Thử lại · 130.000đ') as HTMLButtonElement;
+    expect(retry).toBeTruthy();
+    expect(retry.disabled).toBe(false);
+    expect(byText(r.container, 'button', 'Đặt hàng · ')).toBeNull();
+    expect(r.container.textContent).toContain('Chưa gửi được đơn. Bấm Thử lại, hệ thống không tạo đơn trùng.');
+    click(retry);
+    await flush(8);
+    expect(m.placeOrder).toHaveBeenCalledTimes(2);
+    expect(m.placeOrder.mock.calls[1]![0]).toEqual(m.placeOrder.mock.calls[0]![0]);
+    expect(m.placeOrder.mock.calls[1]![1]).toBe(m.placeOrder.mock.calls[0]![1]);
+  });
+
+  it('lỗi 4xx rõ ràng: nút vẫn là "Đặt hàng · tổng", không nói "Chưa gửi được đơn"', async () => {
+    m.placeOrder.mockRejectedValue(new ApiError('Địa chỉ không hợp lệ.', 400));
+    const r = await mount();
+    click(placeButton(r));
+    await flush(8);
+    expect(byText(r.container, 'button', 'Đặt hàng · 130.000đ')).toBeTruthy();
+    expect(r.container.textContent).not.toContain('Chưa gửi được đơn');
   });
 });

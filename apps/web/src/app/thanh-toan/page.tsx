@@ -532,12 +532,24 @@ export default function CheckoutPage() {
   const placeDisabled =
     !addressId || !quote || quoteStale || place.isPending || !invoiceValid || hasLineProblem || (!zeroNote && payment === '');
   const totalText = checkoutTotalText({ total: quote?.total ?? null, hasAddress: !!addressId }, formatVnd);
-  const placeLabel = place.isPending ? 'Đang đặt hàng…' : quote ? fillCopy('checkout.placeWith', { price: formatVnd(quote.total) }) : 'Đặt hàng';
+  // Lần đặt vừa rồi chưa rõ kết quả (mất mạng, quá thời gian, 5xx): nút nói rõ là gửi lại cùng đơn (cùng khoá, không tạo đơn trùng).
+  const retryingPlace = place.isError && isOutcomeUnknown(place.error);
+  const placeLabel = place.isPending
+    ? 'Đang đặt hàng…'
+    : quote
+      ? fillCopy(retryingPlace ? 'checkout.retryWith' : 'checkout.placeWith', { price: formatVnd(quote.total) })
+      : 'Đặt hàng';
   // Lời báo đặt lỗi/giỏ cần sửa nằm cuối khung tóm tắt; thanh dính đáy nhắc lại để khách không phải cuộn xuống mới biết vì sao.
   // Đỏ chỉ cho lỗi thật (đặt lỗi, giá đổi, giỏ cần sửa); lý do khoá nút do thiếu địa chỉ/chưa tính được là chữ phụ như Mini.
   const barError =
     cartIssue ??
-    (priceChanged ? fillCopy('checkout.priceChangedHint') : place.isError ? (placeErrorMessage ?? 'Đặt hàng thất bại.') : null);
+    (priceChanged
+      ? fillCopy('checkout.priceChangedHint')
+      : retryingPlace
+        ? fillCopy('checkout.retryNote')
+        : place.isError
+          ? (placeErrorMessage ?? 'Đặt hàng thất bại.')
+          : null);
   const barNote = barError ? null : (checkoutPlaceHint({ hasAddress: !!addressId, quoteFailed: quoteQ.isError }) ?? (hasLineProblem ? fillCopy('checkout.fixLinesHint') : null));
 
   return (
