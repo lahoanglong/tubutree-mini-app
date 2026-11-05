@@ -460,15 +460,17 @@ export class PancakeOrderService {
       );
     } catch (err) {
       if (err instanceof PancakePushSettlingError) throw err;
-      // Từ chối dứt khoát → Pancake chắc chắn chưa tạo: gỡ dấu để lần sau không phải tra cứu. Dấu cũ chưa gỡ được thì giữ (lệnh cũ chưa rõ kết quả).
+      // Từ chối dứt khoát → Pancake chắc chắn chưa tạo: gỡ dấu của chính lượt này để lần sau không phải tra cứu. Dấu cũ chưa rõ kết quả (đã phải tra
+      // theo mã trước khi tạo) thì giữ. Mọi câu ghi cuối lượt ghim token `fence`: lượt đã mất quyền (quá hạn thuê, lượt khác claim) không ghi gì.
       const definite = err instanceof PancakeApiError && !err.transient;
-      await this.writeAttemptError(order.id, err, { pancakePushStatus: PANCAKE_PUSH.PENDING, ...(definite && priorStamp === null ? { pancakePushClaimedAt: null } : {}) });
+      if (definite && priorStamp === null) await this.clearSendStamp(order.id, sendStamp, fence);
+      await this.writeAttemptError(order.id, err, { pancakePushStatus: PANCAKE_PUSH.PENDING }, fence);
       throw err;
     }
     if (!pancakeOrderId) {
       // Không rõ đơn đã tạo chưa — giữ mốc, lần thử sau tra theo mã đơn (không tạo mù thêm đơn).
       const err = new PancakeApiError(`Pancake không trả mã đơn khi tạo đơn ${order.code}.`, true);
-      await this.writeAttemptError(order.id, err, { pancakePushStatus: PANCAKE_PUSH.PENDING });
+      await this.writeAttemptError(order.id, err, { pancakePushStatus: PANCAKE_PUSH.PENDING }, fence);
       throw err;
     }
     await this.saveCreated(order, pancakeOrderId, paymentSynced);
@@ -527,9 +529,21 @@ export class PancakeOrderService {
     return `${ATTENTION_PUSH_FAILED} (kho chưa thấy đơn): ${cause}. ${hint}`;
   }
 
-  /** Ghi lỗi của một lượt đẩy ngay trong pushOrder (trạng thái PENDING, lời lỗi, loại lỗi). */
-  private async writeAttemptError(orderId: string, err: unknown, extra: Record<string, unknown>): Promise<void> {
-    await this.recordFailure(orderId, err, extra, false);
+  /**
+   * Ghi lỗi của một lượt đẩy ngay trong pushOrder (trạng thái PENDING, lời lỗi, loại lỗi). `fence` = `pancakeLastAttemptAt` lần ghi cuối của lượt:
+   * lượt đã mất quyền (hạn thuê qua, lượt khác claim và đổi mốc) thì câu ghi hụt, không đè kết cục của lượt đang giữ quyền.
+   */
+  private async writeAttemptError(orderId: string, err: unknown, extra: Record<string, unknown>, fence: Date): Promise<void> {
+    const r = await this.recordFailure(orderId, err, extra, false, fence);
+    if (r && !r.written) this.logger.warn(`Đơn ${r.code}: lượt đẩy đã mất quyền (mốc lượt đã đổi), không ghi kết cục lỗi: ${pancakeErrorText(err)}`);
+  }
+
+  /** Gỡ dấu gửi của chính lượt này (Pancake từ chối dứt khoát: lệnh chắc chắn chưa tạo). Ghim dấu và token: dấu/lượt khác không bị gỡ. */
+  private async clearSendStamp(orderId: string, sendStamp: Date, fence: Date): Promise<void> {
+    await this.prisma.order.updateMany({
+      where: { id: orderId, pancakeOrderId: null, pancakePushClaimedAt: sendStamp, pancakeLastAttemptAt: fence },
+      data: { pancakePushClaimedAt: null },
+    });
   }
 
   /**
@@ -538,7 +552,7 @@ export class PancakeOrderService {
    * chừng) không bị ghi đè bằng loại tính từ bản đọc cũ. Điều kiện hụt thì đọc lại (kể cả `pancakeOrderId`) và tính lại (tối đa 3 vòng).
    * `fromJob` (markPushFailure): chỉ ghi khi không có tiến trình nào đang PUSHING, và lỗi CONFIG hoàn lượt đã đốt trong CÙNG câu ghi
    * (không có trạng thái trung gian FAILED mà lượt thử chưa hoàn). Gọi từ pushOrder (đang giữ quyền đẩy, trạng thái PUSHING của chính
-   * mình) thì không áp hai điều đó.
+   * mình) thì không áp hai điều đó, mà ghim `fence` (token của lượt) vào điều kiện ghi.
    * `kept`: lỗi tạm gặp loại cũ cần giữ (`keepsPriorKind`): KHÔNG ghi lời lỗi/loại, từ job thì không ghi gì (không đổi trạng thái, không
    * đốt/hoàn lượt), từ pushOrder chỉ ghi `extra` (rời trạng thái PUSHING).
    * `written` false: không ghi được (tiến trình khác đang PUSHING): người gọi không báo hay hoàn/đốt lượt.
@@ -549,6 +563,7 @@ export class PancakeOrderService {
     err: unknown,
     extra: Record<string, unknown>,
     fromJob: boolean,
+    fence?: Date,
   ): Promise<{ id: string; code: string; createdAt: Date; paidAt: Date | null; kind: PushErrorKind; kept: boolean; written: boolean } | null> {
     for (let attempt = 0; ; attempt++) {
       const order = await this.prisma.order.findUnique({
@@ -567,6 +582,7 @@ export class PancakeOrderService {
         pancakeOrderId: null,
         pancakeErrorKind: order.pancakeErrorKind,
         ...(fromJob ? pushLeaseFreeWhere() : {}),
+        ...(fence ? { pancakeLastAttemptAt: fence } : {}),
       };
       const data = kept ? extra : { ...extra, pancakeSyncError: storedErrorText(err, kind), pancakeErrorKind: kind };
       // Khoá API sai làm hỏng mọi đơn như nhau: không đốt lượt từng đơn (cron chỉ dò bằng một đơn mỗi giờ).

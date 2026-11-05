@@ -709,6 +709,42 @@ const url = process.env.TEST_REDIS_URL;
     }
   });
 
+  it('A2: lượt A chờ Pancake quá hạn thuê; B và C claim nhưng KHÔNG gửi (dấu còn trong cửa sổ); A trả lỗi: câu ghi cuối của A hụt hàng rào, không đè trạng thái (tổng createOrder = 1)', async () => {
+    const lease = jest.replaceProperty(PancakeOrderService, 'PUSH_LEASE_MS', 150);
+    const x = await order();
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    let n = 0;
+    respond(async (code) => {
+      if (code !== x.code) return { success: true, data: { id: `pk-${code}` } };
+      n += 1;
+      await gate;
+      throw new PancakeApiError('Pancake trả 503 khi tạo đơn', true, false, 503);
+    });
+    const row = () => prisma.order.findUniqueOrThrow({ where: { id: x.id } });
+    let a: Promise<unknown> = Promise.resolve();
+    try {
+      a = service.pushOrder(x.id).catch((e: unknown) => e);
+      await until(async () => n >= 1);
+      await sleep(300); // quá hạn thuê (150ms): B vào được
+      const b = await service.pushOrder(x.id).catch((e: unknown) => e);
+      expect(b).toBeInstanceOf(PancakePushSettlingError);
+      expect(await row()).toMatchObject({ pancakePushStatus: 'PENDING', pancakePushAttempts: 2 });
+      const c = await service.pushOrder(x.id).catch((e: unknown) => e);
+      expect(c).toBeInstanceOf(PancakePushSettlingError);
+    } finally {
+      release(); // không nhả cổng thì lượt A treo mãi và afterAll không đóng được worker khi ca đỏ
+    }
+    expect(await a).toMatchObject({ transient: true });
+    lease.restore();
+    // Lượt A lỗi 503 SAU khi mất quyền: nếu câu #5 không ghim token thì đơn mang TRANSIENT + lời lỗi của A và PENDING của lượt B bị đè.
+    const after = await row();
+    expect(after).toMatchObject({ pancakePushStatus: 'PENDING', pancakePushAttempts: 3, pancakeSyncError: null, pancakeOrderId: null });
+    expect(after.pancakeErrorKind).toBeNull();
+    expect(after.pancakePushClaimedAt).toBeInstanceOf(Date);
+    expect(n).toBe(1);
+  });
+
   it('markOverdue không đánh STALE đơn quá 72 giờ đang PUSHING trong hạn thuê quyền đẩy; hết hạn thuê thì lần quét sau mới đánh', async () => {
     const x = await order();
     // createdAt rất cũ để đơn đứng đầu lô markOverdue (xếp theo ngày đặt tăng dần) dù DB dùng chung có đơn quá hạn của spec khác.

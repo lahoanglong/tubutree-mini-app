@@ -1,5 +1,5 @@
 import { isPancakeForbiddenError, PANCAKE_FORBIDDEN_ERROR_PREFIX } from '@tubutree/shared-types';
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Logger } from '@nestjs/common';
 import { PANCAKE_CANCEL, PANCAKE_CANCEL_REFUSED_PREFIX, PANCAKE_PUSH, PancakeOrderService, pushRetryGateDecision } from './pancake-order.service';
 import type { PrismaService } from '../../../prisma/prisma.service';
 import type { PancakeClient } from './pancake.client';
@@ -1875,5 +1875,72 @@ describe('PancakeOrderService.pushOrder — dấu gửi: tối đa MỘT lệnh 
       expect(createOrder).toHaveBeenCalledTimes(1);
       expect(t.row().pancakePushStatus).toBe(PANCAKE_PUSH.PENDING);
     });
+  });
+});
+
+describe('PancakeOrderService.pushOrder — hàng rào token: câu ghi cuối lượt không đè lượt đã nhận quyền', () => {
+  const lostLease = (t: ReturnType<typeof setup>) => {
+    // Lượt B claim sau khi hết hạn thuê của lượt A đang chờ Pancake trả lời: pancakeLastAttemptAt đổi sang mốc của B.
+    const b = new Date(Date.now() + 1_000);
+    t.row().pancakeLastAttemptAt = b;
+    return b;
+  };
+  const warnOf = (t: ReturnType<typeof setup>) => jest.spyOn((t.svc as unknown as { logger: Logger }).logger, 'warn').mockImplementation(() => undefined);
+
+  it('lỗi tạm sau khi mất quyền → câu ghi #5 hụt: không ghi PENDING/lời lỗi/loại lỗi, chỉ ghi cảnh báo', async () => {
+    const t = setup();
+    const warn = warnOf(t);
+    let b!: Date;
+    t.client.createOrder.mockImplementation(async () => {
+      b = lostLease(t);
+      throw new PancakeApiError('timeout of 15000ms exceeded', true);
+    });
+    await expect(t.svc.pushOrder('o1')).rejects.toThrow('timeout');
+    expect(t.row()).toMatchObject({ pancakePushStatus: PANCAKE_PUSH.PUSHING, pancakeLastAttemptAt: b, pancakeSyncError: null });
+    expect(t.row().pancakeErrorKind ?? null).toBeNull();
+    expect(t.row().pancakePushClaimedAt).toBeInstanceOf(Date);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('mất quyền'));
+  });
+
+  it('Pancake từ chối dứt khoát sau khi mất quyền → không gỡ dấu, không ghi gì', async () => {
+    const t = setup();
+    warnOf(t);
+    t.client.createOrder.mockImplementation(async () => {
+      lostLease(t);
+      throw new PancakeApiError('Pancake trả 422 khi tạo đơn: x', false, false, 422);
+    });
+    await expect(t.svc.pushOrder('o1')).rejects.toThrow('422');
+    expect(t.row()).toMatchObject({ pancakePushStatus: PANCAKE_PUSH.PUSHING, pancakeSyncError: null });
+    expect(t.row().pancakePushClaimedAt).toBeInstanceOf(Date);
+  });
+
+  it('Pancake không trả mã đơn sau khi mất quyền → không ghi gì', async () => {
+    const t = setup({}, { client: { createOrder: jest.fn().mockResolvedValue({ success: true }) } });
+    warnOf(t);
+    t.client.createOrder.mockImplementation(async () => {
+      lostLease(t);
+      return { success: true };
+    });
+    await expect(t.svc.pushOrder('o1')).rejects.toMatchObject({ transient: true });
+    expect(t.row()).toMatchObject({ pancakePushStatus: PANCAKE_PUSH.PUSHING, pancakeSyncError: null });
+  });
+
+  it('còn quyền, dấu đã sang lượt khác → lỗi dứt khoát vẫn ghi PENDING + lời lỗi nhưng KHÔNG gỡ dấu của lượt kia', async () => {
+    const t = setup();
+    const other = new Date(Date.now() + 5_000);
+    t.client.createOrder.mockImplementation(async () => {
+      t.row().pancakePushClaimedAt = other;
+      throw new PancakeApiError('Pancake trả 422 khi tạo đơn: x', false, false, 422);
+    });
+    await expect(t.svc.pushOrder('o1')).rejects.toThrow('422');
+    expect(t.row()).toMatchObject({ pancakePushStatus: PANCAKE_PUSH.PENDING, pancakePushClaimedAt: other });
+    expect(t.row().pancakeSyncError).toContain('422');
+  });
+
+  it('còn quyền, dấu của chính lượt này → lỗi dứt khoát gỡ dấu và ghi PENDING + lời lỗi', async () => {
+    const t = setup({}, { client: { createOrder: jest.fn().mockRejectedValue(new PancakeApiError('Pancake trả 422 khi tạo đơn: x', false, false, 422)) } });
+    await expect(t.svc.pushOrder('o1')).rejects.toThrow('422');
+    expect(t.row()).toMatchObject({ pancakePushStatus: PANCAKE_PUSH.PENDING, pancakePushClaimedAt: null });
+    expect(t.row().pancakeSyncError).toContain('422');
   });
 });
