@@ -796,6 +796,13 @@
   transition: background var(--motion-emphasize);
 }
 .tubu-story-product { position: absolute; inset: 12%; width: 76%; height: 76%; object-fit: contain; }
+/* Ảnh có nền (poster, ảnh chụp bối cảnh) vào thẻ nổi, cùng số đo với Mini: bo 24px, viền mảnh, bóng mềm. */
+.tubu-story-stage[data-frame='floating-card'] .tubu-story-product {
+  border-radius: var(--radius-sheet); overflow: hidden;
+  border: 1px solid var(--color-border-subtle);
+  background: var(--color-bg-surface);
+  box-shadow: var(--elevation-2);
+}
 .tubu-story-layer { position: absolute; display: block; width: 24%; aspect-ratio: 1 / 1; pointer-events: none; }
 .tubu-story-layer[data-animated='true'] { animation: tubu-story-fall var(--p-dur-emphasize) var(--p-ease-out) both; }
 .tubu-story-layer[data-from='top'] { --story-from: 0 -160%; }

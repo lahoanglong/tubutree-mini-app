@@ -46,6 +46,19 @@ describe('parseStoryConfig', () => {
     expect(parseStoryConfig(cfg).ok).toBe(false);
   });
 
+  it('imageFrame: nhận floating-card và cutout, bỏ trống thì không có khoá, giá trị lạ bị từ chối', () => {
+    for (const f of ['floating-card', 'cutout'] as const) {
+      const r = parseStoryConfig({ ...valid(), imageFrame: f });
+      expect(r.ok && r.value.imageFrame).toBe(f);
+    }
+    const none = parseStoryConfig(valid());
+    expect(none.ok && 'imageFrame' in none.value).toBe(false);
+    const nul = parseStoryConfig({ ...valid(), imageFrame: null });
+    expect(nul.ok && 'imageFrame' in nul.value).toBe(false);
+    expect(parseStoryConfig({ ...valid(), imageFrame: 'polaroid' }).ok).toBe(false);
+    expect(parseStoryConfig({ ...valid(), imageFrame: 3 }).ok).toBe(false);
+  });
+
   it('rejects javascript: cutoutUrl', () => {
     expect(parseStoryConfig({ ...valid(), cutoutUrl: 'javascript:alert(1)' }).ok).toBe(false);
   });

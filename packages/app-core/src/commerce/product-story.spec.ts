@@ -11,6 +11,7 @@ import {
   resolveStoryConfig,
   STORY_LAYER_WIDTH_PCT,
   STORY_PRODUCT_INSET_PCT,
+  storyImageFrame,
   storyView,
   toneVar,
   type StoryProductInput,
@@ -229,6 +230,30 @@ describe('storyView', () => {
     expect(layersUpTo(v.steps, 99)).toHaveLength(layersUpTo(v.steps, v.steps.length - 1).length);
     expect(layersUpTo(v.steps, -3)).toHaveLength(n0);
     expect(layersUpTo([], 0)).toEqual([]);
+  });
+});
+
+describe('khung ảnh sản phẩm trên sân khấu', () => {
+  const base: ProductStoryConfig = { version: 1, enabled: true, scenes: [assembly] };
+
+  it('không đặt gì: có ảnh tách nền thì cutout, không có (ảnh gốc poster hay ảnh chụp có nền) thì thẻ nổi', () => {
+    expect(storyImageFrame(base)).toBe('floating-card');
+    expect(storyImageFrame({ ...base, cutoutUrl: 'https://cdn.example.com/chai.webp' })).toBe('cutout');
+  });
+
+  it('admin đặt imageFrame thì theo admin, kể cả khi có ảnh tách nền', () => {
+    expect(storyImageFrame({ ...base, cutoutUrl: 'https://cdn.example.com/chai.webp', imageFrame: 'floating-card' })).toBe('floating-card');
+    expect(storyImageFrame({ ...base, imageFrame: 'cutout' })).toBe('cutout');
+  });
+
+  it('storyView mang khung sang hai app, với cả bản tĩnh khi giảm chuyển động', () => {
+    expect(storyView(base, { reducedMotion: false }).frame).toBe('floating-card');
+    expect(storyView({ ...base, cutoutUrl: 'https://cdn.example.com/chai.webp' }, { reducedMotion: true }).frame).toBe('cutout');
+  });
+
+  it('cấu hình đã lưu có imageFrame giữ nguyên qua resolveStoryConfig', () => {
+    const saved = { ...base, imageFrame: 'cutout' };
+    expect(resolveStoryConfig(product({ storyConfig: saved }))?.imageFrame).toBe('cutout');
   });
 });
 
