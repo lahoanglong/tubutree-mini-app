@@ -710,7 +710,8 @@ function CouponRow({
               {couponHintShort(hint)}
             </Text>
           ) : (
-            <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            // Như gợi ý ở trên: không cắt "…", máy 320px thì xuống dòng trong hàng 44px.
+            <Text size="xSmall" data-testid="coupon-placeholder" style={{ color: 'var(--color-text-tertiary)', minWidth: 0, lineHeight: 'var(--type-label-lh)' }}>
               Chọn hoặc nhập mã giảm giá
             </Text>
           )}

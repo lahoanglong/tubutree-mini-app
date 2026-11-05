@@ -142,6 +142,16 @@ export function CouponBox({
   };
   // Thu gọn mặc định: ô nhập + danh sách voucher dài hàng trăm px, đẩy nút thanh toán xuống khỏi màn điện thoại.
   const [open, setOpen] = useState(false);
+  // Mở hoặc gập bảng xoá lời báo cũ: lời báo chỉ có một chỗ ở mỗi lúc (trong khung ô nhập khi đang mở, cuối khối khi bảng đóng) và không bao giờ nhảy từ nút DOM này sang nút kia,
+  // nên trình đọc màn hình không đọc lại lỗi cũ chỉ vì khách mở hay gập.
+  const togglePanel = () => {
+    setErr(null);
+    setOpen((v) => !v);
+  };
+  const closePanel = () => {
+    setErr(null);
+    setOpen(false);
+  };
   // Lỗi từ bấm "Dùng"/"Bỏ chọn" ở hàng mã phía dưới: lời báo nằm ở đầu bảng nên kéo về tầm nhìn, không thì khách thấy như bấm không có gì xảy ra.
   const errRef = useRef<HTMLParagraphElement | null>(null);
   useEffect(() => {
@@ -274,6 +284,12 @@ export function CouponBox({
               setCode(e.target.value);
               if (err) setErr(null);
             }}
+            onKeyDown={(e) => {
+              // Enter áp mã như nút "Áp dụng". Bỏ qua khi bộ gõ tiếng Việt đang chốt chữ (Telex/VNI dùng Enter để chốt) để không áp mã dở.
+              if (e.key !== 'Enter' || e.nativeEvent.isComposing || e.keyCode === 229) return;
+              e.preventDefault();
+              if (code.trim() && !busy) apply.mutate(code);
+            }}
             placeholder={fillCopy('coupon.pickPlaceholder')}
             autoCapitalize="characters"
             autoComplete="off"
@@ -327,7 +343,7 @@ export function CouponBox({
   const sheetRow = (
     <button
       type="button"
-      onClick={() => setOpen((v) => !v)}
+      onClick={togglePanel}
       aria-haspopup="dialog"
       className="tubu-press flex min-h-11 w-full items-center justify-between gap-2 text-left shadow-[inset_0_-1px_0_var(--color-border-subtle)]"
     >
@@ -347,7 +363,7 @@ export function CouponBox({
           <span
             data-testid={hint ? 'coupon-hint' : undefined}
             className={`min-w-0 text-caption font-normal ${
-              hint ? 'text-[color:var(--color-text-brand)] leading-4' : 'truncate text-[color:var(--color-text-tertiary)]'
+              hint ? 'text-[color:var(--color-text-brand)] leading-4' : 'leading-4 text-[color:var(--color-text-tertiary)]'
             }`}
           >
             {hint ? couponHintShort(hint) : 'Chọn hoặc nhập mã giảm giá'}
@@ -382,7 +398,7 @@ export function CouponBox({
             <span className="flex items-center">
               <button
                 type="button"
-                onClick={() => setOpen((v) => !v)}
+                onClick={togglePanel}
                 {...panelAria}
                 className="inline-flex min-h-11 items-center gap-0.5 px-2 text-caption font-medium text-[color:var(--color-text-brand)]"
               >
@@ -402,7 +418,7 @@ export function CouponBox({
           </div>
           <button
             type="button"
-            onClick={() => setOpen((v) => !v)}
+            onClick={togglePanel}
             {...panelAria}
             data-testid="coupon-change"
             className="flex min-h-11 w-full items-center justify-between gap-2 text-left md:hidden"
@@ -437,7 +453,7 @@ export function CouponBox({
       ) : (
         <button
           type="button"
-          onClick={() => setOpen((v) => !v)}
+          onClick={togglePanel}
           {...panelAria}
           className="flex min-h-11 w-full items-center justify-between gap-2 text-left text-sm font-semibold text-[color:var(--color-text-primary)]"
         >
@@ -471,7 +487,7 @@ export function CouponBox({
         </button>
       )}
       {inSheet ? (
-        <BottomSheet open={open} onClose={() => setOpen(false)} title={fillCopy('coupon.pickTitle')} description={fillCopy('coupon.oneCodeHint')}>
+        <BottomSheet open={open} onClose={closePanel} title={fillCopy('coupon.pickTitle')} description={fillCopy('coupon.oneCodeHint')}>
           <div id="coupon-panel">
             {panelBody}
           </div>

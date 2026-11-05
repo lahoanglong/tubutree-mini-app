@@ -435,6 +435,78 @@ describe('CouponBox — gọn một dòng, mở khi bấm', () => {
     expect(box.querySelector('input[name="coupon-code"]')!.closest('div.rounded-card')!.contains(alerts[0]!)).toBe(true);
   });
 
+  const press = (el: Element | null, key: string, init: KeyboardEventInit = {}) =>
+    act(() => {
+      el!.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init }));
+    });
+
+  it('Enter ở ô nhập áp mã như nút "Áp dụng" (mã được chuẩn hoá chữ hoa)', async () => {
+    const box = await mount();
+    click(toggle(box));
+    const input = box.querySelector('input[name="coupon-code"]');
+    typeInto(input, 'abc');
+    press(input, 'Enter');
+    await flush(6);
+    expect(state.applied).toEqual(['ABC']);
+  });
+
+  it('Enter khi ô trống hay chỉ có dấu cách, hoặc phím khác Enter: không áp mã', async () => {
+    const box = await mount();
+    click(toggle(box));
+    const input = box.querySelector('input[name="coupon-code"]');
+    press(input, 'Enter');
+    typeInto(input, '   ');
+    press(input, 'Enter');
+    typeInto(input, 'abc');
+    press(input, 'Tab');
+    press(input, 'a');
+    await flush(6);
+    expect(state.applied).toEqual([]);
+  });
+
+  it('Enter lúc bộ gõ tiếng Việt đang chốt chữ (isComposing) không áp mã dở', async () => {
+    const box = await mount();
+    click(toggle(box));
+    const input = box.querySelector('input[name="coupon-code"]');
+    typeInto(input, 'giam');
+    press(input, 'Enter', { isComposing: true });
+    await flush(6);
+    expect(state.applied).toEqual([]);
+  });
+
+  it('Enter lúc đang áp mã (nút "Áp dụng" bận) không gửi lần hai', async () => {
+    let release!: () => void;
+    state.applyGate = new Promise<void>((r) => (release = r));
+    const box = await mount();
+    click(toggle(box));
+    const input = box.querySelector('input[name="coupon-code"]');
+    typeInto(input, 'abc');
+    press(input, 'Enter');
+    await flush(2);
+    press(input, 'Enter');
+    press(input, 'Enter');
+    release();
+    await flush(6);
+    expect(state.applied).toEqual(['ABC']);
+  });
+
+  it('lời báo lỗi chỉ có một nút DOM: gập hay mở panel xoá nó, không dời sang chỗ khác nên không bị đọc lại', async () => {
+    state.applyError = new Error('Mã giảm giá không tồn tại.');
+    const box = await mount();
+    click(toggle(box));
+    typeInto(box.querySelector('input[name="coupon-code"]'), 'abc');
+    click(byText(box, 'button', 'Áp dụng'));
+    await flush();
+    const first = box.querySelector('[role="alert"]');
+    expect(first).not.toBeNull();
+    click(toggle(box));
+    await flush();
+    expect(box.querySelectorAll('[role="alert"]')).toHaveLength(0);
+    click(toggle(box));
+    await flush();
+    expect(box.querySelectorAll('[role="alert"]')).toHaveLength(0);
+  });
+
   it('đã áp mã: chỉ hiện thẻ mã đang dùng, chưa mở ô nhập khi khách chưa bấm', async () => {
     const r = render(<CouponBox currentCode="WELCOME30" subtotal={100000} />);
     mounted.push(r);
@@ -729,6 +801,19 @@ describe('CouponBox — tự áp mã giảm nhiều nhất ở thanh toán', () 
     expect(document.querySelector('[role="dialog"]')).toBeNull();
   });
 
+  it('điện thoại: lỗi gỡ mã ở cuối hàng, mở bảng thì lỗi cũ biến mất (không hiện thêm một lời báo thứ hai trong bảng)', async () => {
+    phone();
+    const box = await mountHarness();
+    state.removeError = new Error('Mất mạng, thử lại nhé');
+    click(remove(box));
+    await flush(10);
+    expect(document.querySelectorAll('[role="alert"]')).toHaveLength(1);
+    click(box.querySelector<HTMLButtonElement>('[data-testid="coupon-change"]'));
+    await flush(3);
+    expect(dialog()).not.toBeNull();
+    expect(document.querySelectorAll('[role="alert"]')).toHaveLength(0);
+  });
+
   it('khách tự chọn mã khác → nhãn "Đã tự áp" biến mất', async () => {
     phone();
     const box = await mountHarness();
@@ -879,13 +964,14 @@ describe('CouponBox — dạng bảng trượt (điện thoại, trong thanh dí
     expect(row.querySelector('svg.h-5.w-5'), 'icon vé 20px').not.toBeNull();
   };
 
-  it('chưa có mã: một dòng, gợi ý cắt "…" và "Chọn mã" ở mép phải', async () => {
+  it('chưa có mã: hàng 44px, lời mời không cắt "…" (320px thì xuống dòng) và "Chọn mã" ở mép phải', async () => {
     const box = await mountSheet();
     const row = box.querySelector<HTMLButtonElement>('button[aria-haspopup="dialog"]')!;
     oneLine(row);
     expect(row.textContent).toContain('Mã giảm giá');
     const hint = [...row.querySelectorAll('span')].find((el) => el.children.length === 0 && el.textContent === 'Chọn hoặc nhập mã giảm giá')!;
-    expect(hint.className).toMatch(/\btruncate\b/);
+    expect(hint.className).not.toMatch(/\btruncate\b/);
+    expect(hint.className).toMatch(/\bleading-4\b/);
     expect(hint.className).toMatch(/\bmin-w-0\b/);
     expect(row.textContent!.endsWith('Chọn mã')).toBe(true);
   });

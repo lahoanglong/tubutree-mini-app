@@ -743,7 +743,11 @@ describe('CartPage: gợi ý mã dùng được ở dòng "Mã giảm giá" (ch�
     mocks.getCoupons.mockResolvedValue([]);
     mocks.getCouponPreviews.mockResolvedValue([preview('WELCOME30', { discount: 30_000 })]);
     renderPage();
-    expect(await screen.findByText('Chọn hoặc nhập mã giảm giá')).toBeInTheDocument();
+    const invite = await screen.findByText('Chọn hoặc nhập mã giảm giá');
+    expect(invite).toBeInTheDocument();
+    // Lời mời không cắt "…": máy 320px thì xuống dòng trong hàng 44px, như dòng gợi ý (parity với web `coupon-box`).
+    expect(invite.getAttribute('data-testid')).toBe('coupon-placeholder');
+    expect(invite.getAttribute('style')).not.toMatch(/ellipsis|nowrap|hidden/);
     await waitFor(() => expect(mocks.getCoupons).toHaveBeenCalled());
     await act(async () => {
       await new Promise((r) => setTimeout(r, 450));

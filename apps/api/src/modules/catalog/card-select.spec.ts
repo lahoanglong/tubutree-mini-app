@@ -1,7 +1,7 @@
 import { CatalogService } from './catalog.service';
 import { WishlistService } from '../wishlist/wishlist.service';
 import { CartService } from '../cart/cart.service';
-import { CARD_PRODUCT_SELECT, CARD_SELECT, withCoverImages } from './card-select';
+import { CARD_PRODUCT_SELECT, CARD_SELECT, cardInStock, withCoverImages } from './card-select';
 import { PUBLIC_IMAGE_PREFIX } from '../../common/public-image';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { CouponsService } from '../coupons/coupons.service';
@@ -143,6 +143,46 @@ describe('đường thẻ sản phẩm của khách không đọc cột nặng (
     );
     expect(out[0]!.thumbnail).toBe('/public-image/product/x/thumb?v=1');
     expect(out[1]!.thumbnail).toMatch(new RegExp(`^${PUBLIC_IMAGE_PREFIX}/product/np/0\\?v=[0-9a-f]{16}$`));
+  });
+});
+
+describe('thẻ sản phẩm không mang số tồn ra ngoài (Smart Stock, tồn ảo 99.999.988)', () => {
+  const virtual = [row('a', { variations: [{ id: 'a-v', sku: 'a-s', retailPrice: 1000, salePrice: null, stock: 99_999_988 }] }), row('b', { variations: [{ id: 'b-v', sku: 'b-s', retailPrice: 1000, salePrice: null, stock: 0 }] })];
+  const noStock = (out: unknown) => {
+    const json = JSON.stringify(out);
+    expect(json).not.toContain('99999988');
+    expect(json).not.toContain('"stock"');
+    expect(json).not.toContain('"variations"');
+  };
+
+  it.each([
+    ['list', (s: CatalogService) => s.list({ page: 1, limit: 5 } as never)],
+    ['list best_seller', (s: CatalogService) => s.list({ page: 1, limit: 5, sort: 'best_seller' } as never)],
+    ['related', (s: CatalogService) => s.related('x')],
+    ['boughtTogether', (s: CatalogService) => s.boughtTogether('x')],
+    ['cardsByIds', (s: CatalogService) => s.cardsByIds(['a', 'b'])],
+    ['getForYou', (s: CatalogService) => s.getForYou('u1')],
+  ])('%s: chỉ còn cờ inStock', async (_name, run) => {
+    const { prisma } = fakePrisma(virtual);
+    const out = await run(new CatalogService(prisma));
+    noStock(out);
+    const cards = (Array.isArray(out) ? out : (out as { data: { id: string; inStock: boolean }[] }).data) as { id: string; inStock: boolean }[];
+    expect(cards.length).toBeGreaterThan(0);
+    for (const c of cards) expect(c.inStock).toBe(c.id === 'a');
+  });
+
+  it('wishlist.list: chỉ còn cờ inStock', async () => {
+    const { prisma } = fakePrisma(virtual, { wishlist: { findMany: jest.fn().mockResolvedValue([{ productId: 'a' }, { productId: 'b' }]) } });
+    const out = await new WishlistService(prisma).list('u1');
+    noStock(out);
+    expect(out.map((c) => [c.id, c.inStock])).toEqual([['a', true], ['b', false]]);
+  });
+
+  it('cardInStock: còn hàng khi có ít nhất một phân loại tồn > 0; tồn 0, âm hay không có phân loại là hết', () => {
+    expect(cardInStock([{ stock: 0 }, { stock: 1 }])).toBe(true);
+    expect(cardInStock([{ stock: 99_999_988 }])).toBe(true);
+    expect(cardInStock([{ stock: 0 }, { stock: -2 }])).toBe(false);
+    expect(cardInStock([])).toBe(false);
   });
 });
 
