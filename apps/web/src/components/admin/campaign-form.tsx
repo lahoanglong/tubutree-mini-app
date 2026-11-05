@@ -154,7 +154,7 @@ export function CampaignForm({
     audience,
     productIdsKey,
   ]);
-  const check = useCampaignCheck(checkInput);
+  const check = useCampaignCheck(checkInput, { paused: busy });
   const imageCheck = useBannerImageCheck(image);
   // Khoá theo phán quyết của máy chủ cho đúng bản nháp này; đang kiểm, kiểm lỗi hay API cũ không trả `verdict` thì không khoá (máy chủ vẫn quyết lúc lưu).
   const blocked = check.status === 'ready' && check.verdict?.blocked === true;
@@ -457,7 +457,7 @@ export function CampaignForm({
       </Field>
 
       <CampaignPreview image={image} title={title} subtitle={subtitle} placement={placement} />
-      <CampaignCheckPanel check={check} image={imageCheck} />
+      <CampaignCheckPanel check={check} image={imageCheck} onRecheck={check.recheck} />
 
       {error && (
         <p role="alert" className="text-sm text-danger-fg">

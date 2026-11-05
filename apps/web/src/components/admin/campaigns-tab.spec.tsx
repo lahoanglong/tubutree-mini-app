@@ -14,8 +14,6 @@ const mocks = vi.hoisted(() => ({
   create: vi.fn(),
   update: vi.fn(),
   remove: vi.fn(),
-  setProducts: vi.fn(),
-  setCoupons: vi.fn(),
   check: vi.fn(),
 }));
 vi.mock('@/lib/admin-campaigns-client', () => ({
@@ -24,8 +22,6 @@ vi.mock('@/lib/admin-campaigns-client', () => ({
   createAdminCampaign: mocks.create,
   updateAdminCampaign: mocks.update,
   deleteAdminCampaign: mocks.remove,
-  setAdminCampaignProducts: mocks.setProducts,
-  setAdminCampaignCoupons: mocks.setCoupons,
   checkAdminCampaign: mocks.check,
 }));
 vi.mock('./product-picker', () => ({
@@ -86,9 +82,7 @@ beforeEach(() => {
   mocks.create.mockReset().mockResolvedValue(detail('new1'));
   mocks.update.mockReset().mockResolvedValue(detail('a'));
   mocks.remove.mockReset().mockResolvedValue({ ok: true });
-  mocks.setProducts.mockReset().mockResolvedValue({ count: 1 });
-  mocks.setCoupons.mockReset().mockResolvedValue({ count: 1 });
-  mocks.check.mockReset().mockResolvedValue({ issues: [], blockers: 0, warnings: 0, usable: { products: 1, coupons: 0 } });
+  mocks.check.mockReset().mockResolvedValue({ issues: [], blockers: 0, warnings: 0, verdict: { blocked: false, codes: [] } });
 });
 afterEach(() => {
   mounted?.unmount();
@@ -245,8 +239,6 @@ describe('CampaignsTab: tạo chiến dịch', () => {
       isActive: true,
     });
     expect(mocks.update).not.toHaveBeenCalled();
-    expect(mocks.setProducts).not.toHaveBeenCalled();
-    expect(mocks.setCoupons).not.toHaveBeenCalled();
   });
 
   it('giờ và phút chọn ở hai ô giờ/phút được cộng vào mốc (09:15 VN = 02:15 UTC)', async () => {
@@ -326,8 +318,6 @@ describe('CampaignsTab: tạo chiến dịch', () => {
     await flush(8);
     expect(mocks.create).toHaveBeenCalledTimes(1);
     expect(mocks.create.mock.calls[0]![0]).toMatchObject({ isActive: true, productIds: ['p1'], couponCodes: ['THU10', 'xanh5'] });
-    expect(mocks.setProducts).not.toHaveBeenCalled();
-    expect(mocks.setCoupons).not.toHaveBeenCalled();
     expect(mocks.update).not.toHaveBeenCalled();
   });
 
@@ -410,8 +400,6 @@ describe('CampaignsTab: sửa chiến dịch', () => {
     await flush(8);
     expect(mocks.update).toHaveBeenCalledWith('a', expect.objectContaining({ title: 'Tên mới', startAt: '2026-10-31T17:00:00.000Z', endAt: '2026-11-10T16:59:00.000Z' }));
     expect(mocks.update.mock.calls[0]![1]).not.toHaveProperty('slug');
-    expect(mocks.setProducts).not.toHaveBeenCalled();
-    expect(mocks.setCoupons).not.toHaveBeenCalled();
     expect(mocks.create).not.toHaveBeenCalled();
   });
 
@@ -424,8 +412,6 @@ describe('CampaignsTab: sửa chiến dịch', () => {
     await flush(8);
     expect(mocks.update).toHaveBeenCalledTimes(1);
     expect(mocks.update.mock.calls[0]![1]).toMatchObject({ productIds: [], couponCodes: ['MOI5'] });
-    expect(mocks.setProducts).not.toHaveBeenCalled();
-    expect(mocks.setCoupons).not.toHaveBeenCalled();
   });
 
   it('xoá subtitle và giá trị đích bằng null để API xoá thật', async () => {
@@ -700,8 +686,6 @@ describe('CampaignsTab: khối "Kiểm trước khi bật" và xem trước tron
     expect(mocks.create).toHaveBeenCalledTimes(1);
     expect(mocks.create.mock.calls[0]![0]).toMatchObject({ isActive: true, productIds: ['p1'], couponCodes: ['THU10'] });
     expect(mocks.update).not.toHaveBeenCalled();
-    expect(mocks.setProducts).not.toHaveBeenCalled();
-    expect(mocks.setCoupons).not.toHaveBeenCalled();
   });
 
   it('máy chủ từ chối lệnh lưu (400 kèm lý do): hiện đúng câu lý do, không có lưu dở; Lưu lại gửi lại đúng một lệnh tạo', async () => {
@@ -876,7 +860,6 @@ describe('CampaignsTab: khoá lưu theo phán quyết của máy chủ', () => {
     await flush(10);
     expect(calls()).toHaveLength(1);
     expect(calls()[0]).toMatchObject({ linkType: 'PRODUCT', linkValue: 'sua-hat', productIds: [], isActive: true });
-    expect(mocks.setProducts).not.toHaveBeenCalled();
   });
 
   it('gia hạn chiến dịch đã hết hạn kèm thêm sản phẩm: một lệnh sửa mang endAt mới và productIds', async () => {
@@ -892,7 +875,6 @@ describe('CampaignsTab: khoá lưu theo phán quyết của máy chủ', () => {
     await flush(10);
     expect(calls()).toHaveLength(1);
     expect(calls()[0]).toMatchObject({ endAt: '2026-11-30T16:59:00.000Z', productIds: ['p1'] });
-    expect(mocks.setProducts).not.toHaveBeenCalled();
   });
 
   it('chỉ gửi danh sách khi danh sách đổi: sửa tiêu đề thì không có productIds/couponCodes', async () => {
@@ -905,6 +887,98 @@ describe('CampaignsTab: khoá lưu theo phán quyết của máy chủ', () => {
     await flush(10);
     expect(calls()[0]).not.toHaveProperty('productIds');
     expect(calls()[0]).not.toHaveProperty('couponCodes');
+  });
+
+  describe('kiểm lại thủ công và khi quay lại cửa sổ', () => {
+    const fire = (type: 'focus' | 'visibilitychange') => act(async () => { (type === 'focus' ? window : document).dispatchEvent(new Event(type)); });
+    const recheckBtn = (c: HTMLElement) => byText(c, 'button', 'Kiểm lại') as HTMLButtonElement;
+    const setVisibility = (v: 'visible' | 'hidden') => Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => v });
+    afterEach(() => setVisibility('visible'));
+
+    it('nút "Kiểm lại" hỏi máy chủ lại ngay với cùng bản nháp và lấy phán quyết mới', async () => {
+      mocks.check.mockResolvedValueOnce(result(OPEN)).mockResolvedValue(result(SHUT));
+      const c = await mount();
+      await edit(c);
+      typeInto(field(c, 'Tên chiến dịch'), 'Tên mới');
+      await settle();
+      expect(saveBtn(c).disabled).toBe(false);
+      const before = mocks.check.mock.calls.length;
+      click(recheckBtn(c));
+      await settle();
+      expect(mocks.check.mock.calls.length).toBe(before + 1);
+      expect(mocks.check.mock.calls.at(-1)![0]).toEqual(mocks.check.mock.calls.at(-2)![0]);
+      expect(saveBtn(c).disabled).toBe(true);
+    });
+
+    it('kiểm lại không nhấp nháy: trong lúc chờ kết quả mới vẫn giữ kết quả của đúng bản nháp đó', async () => {
+      mocks.check.mockResolvedValue(result(SHUT));
+      const c = await mount();
+      await edit(c);
+      typeInto(field(c, 'Tên chiến dịch'), 'Tên mới');
+      await settle();
+      let release!: (v: unknown) => void;
+      mocks.check.mockReturnValueOnce(new Promise((r) => (release = r)));
+      click(recheckBtn(c));
+      await flush(3);
+      expect(saveBtn(c).disabled).toBe(true);
+      await act(async () => release(result(OPEN)));
+      await settle();
+      expect(saveBtn(c).disabled).toBe(false);
+    });
+
+    it('cửa sổ được focus lại: tự kiểm lại đúng một lần dù focus và visibilitychange cùng bắn', async () => {
+      mocks.check.mockResolvedValue(result(OPEN));
+      const c = await mount();
+      await edit(c);
+      typeInto(field(c, 'Tên chiến dịch'), 'Tên mới');
+      await settle();
+      const before = mocks.check.mock.calls.length;
+      await fire('focus');
+      await fire('visibilitychange');
+      await fire('focus');
+      await settle();
+      expect(mocks.check.mock.calls.length).toBe(before + 1);
+    });
+
+    it('tab bị ẩn (visibilitychange sang hidden) thì không kiểm', async () => {
+      mocks.check.mockResolvedValue(result(OPEN));
+      const c = await mount();
+      await edit(c);
+      typeInto(field(c, 'Tên chiến dịch'), 'Tên mới');
+      await settle();
+      const before = mocks.check.mock.calls.length;
+      setVisibility('hidden');
+      await fire('visibilitychange');
+      await settle();
+      expect(mocks.check.mock.calls.length).toBe(before);
+    });
+
+    it('đang lưu thì focus lại không bắn kiểm', async () => {
+      mocks.check.mockResolvedValue(result(OPEN));
+      let finish!: (v: unknown) => void;
+      mocks.update.mockReturnValueOnce(new Promise((r) => (finish = r)));
+      const c = await mount();
+      await edit(c);
+      typeInto(field(c, 'Tên chiến dịch'), 'Tên mới');
+      await settle();
+      click(saveBtn(c));
+      await flush(3);
+      const before = mocks.check.mock.calls.length;
+      await fire('focus');
+      await settle();
+      expect(mocks.check.mock.calls.length).toBe(before);
+      await act(async () => finish(detail('a')));
+    });
+
+    it('chưa đủ để kiểm (input null) thì "Kiểm lại" và focus không gọi gì', async () => {
+      const c = await mount();
+      click(byText(c, 'button', 'Tạo chiến dịch'));
+      await flush(4);
+      const before = mocks.check.mock.calls.length;
+      await fire('focus');
+      await settle();
+      expect(mocks.check.mock.calls.length).toBe(before);
+    });
   });
 
   it('máy chủ từ chối lúc lưu dù form chưa khoá (kiểm chưa kịp hay API cũ): hiện đúng câu lý do, form giữ nguyên', async () => {

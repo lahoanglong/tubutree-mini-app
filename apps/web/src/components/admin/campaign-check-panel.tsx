@@ -21,9 +21,11 @@ export function imageIssues(image: BannerImageCheck): CampaignIssue[] {
 export function CampaignCheckPanel({
   check,
   image,
+  onRecheck,
 }: {
   check: CampaignCheckState;
   image: BannerImageCheck;
+  onRecheck?: () => void;
 }) {
   const issues = [...check.issues, ...imageIssues(image)];
   const settled = check.status === 'ready';
@@ -33,7 +35,19 @@ export function CampaignCheckPanel({
       data-testid="campaign-check"
       className="space-y-2 rounded-card border border-stone-200 p-3"
     >
-      <h3 className="text-xs font-medium text-stone-700">Kiểm trước khi bật</h3>
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-xs font-medium text-stone-700">Kiểm trước khi bật</h3>
+        {onRecheck && check.status !== 'idle' && (
+          <button
+            type="button"
+            onClick={onRecheck}
+            disabled={check.status === 'loading'}
+            className="inline-flex min-h-[44px] items-center text-xs font-medium text-forest-700 underline sm:min-h-[36px] disabled:opacity-50"
+          >
+            Kiểm lại
+          </button>
+        )}
+      </div>
       {check.status === 'idle' && (
         <p className="text-xs text-stone-500">Điền ngày bắt đầu, kết thúc và đích bấm để kiểm.</p>
       )}

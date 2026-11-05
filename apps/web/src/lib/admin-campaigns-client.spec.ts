@@ -9,8 +9,6 @@ import {
   deleteAdminCampaign,
   getAdminCampaign,
   listAdminCampaigns,
-  setAdminCampaignCoupons,
-  setAdminCampaignProducts,
   updateAdminCampaign,
 } from './admin-campaigns-client';
 
@@ -33,15 +31,6 @@ describe('admin-campaigns-client: đúng đường dẫn và thân gửi lên /a
       ['/admin/campaigns', { method: 'POST', body: { title: 'A', placement: 'HOME_TOP', image: 'https://x/y.jpg', startAt: 's', endAt: 'e' } }],
       ['/admin/campaigns/c1', { method: 'PATCH', body: { isActive: false } }],
       ['/admin/campaigns/c1', { method: 'DELETE' }],
-    ]);
-  });
-
-  it('đặt sản phẩm và mã là PUT thay cả danh sách', async () => {
-    await setAdminCampaignProducts('c1', ['p1', 'p2']);
-    await setAdminCampaignCoupons('c1', ['THU10']);
-    expect(apiFetch.mock.calls).toEqual([
-      ['/admin/campaigns/c1/products', { method: 'PUT', body: { productIds: ['p1', 'p2'] } }],
-      ['/admin/campaigns/c1/coupons', { method: 'PUT', body: { codes: ['THU10'] } }],
     ]);
   });
 

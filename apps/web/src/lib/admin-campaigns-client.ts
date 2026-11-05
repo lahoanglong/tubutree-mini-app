@@ -93,6 +93,4 @@ export const getAdminCampaign = (id: string) => apiFetch<AdminCampaignDetail>(pa
 export const createAdminCampaign = (body: AdminCampaignInput) => apiFetch<AdminCampaignDetail>(BASE, { method: 'POST', body });
 export const updateAdminCampaign = (id: string, body: AdminCampaignPatch) => apiFetch<AdminCampaignDetail>(path(id), { method: 'PATCH', body });
 export const deleteAdminCampaign = (id: string) => apiFetch<{ ok: boolean }>(path(id), { method: 'DELETE' });
-export const setAdminCampaignProducts = (id: string, productIds: string[]) => apiFetch<{ count: number }>(`${path(id)}/products`, { method: 'PUT', body: { productIds } });
-export const setAdminCampaignCoupons = (id: string, codes: string[]) => apiFetch<{ count: number }>(`${path(id)}/coupons`, { method: 'PUT', body: { codes } });
 export const checkAdminCampaign = (body: CampaignCheckInput) => apiFetch<CampaignCheckResult>(`${BASE}/check`, { method: 'POST', body });
