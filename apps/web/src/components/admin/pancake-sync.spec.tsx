@@ -115,6 +115,20 @@ describe('PancakeSyncPanel', () => {
     expect(container.querySelector('[role="status"]')?.textContent).toBe('Đã xếp lệnh đẩy đơn TUBU1 sang Pancake.');
   });
 
+  it('hộp thoại xác nhận không hứa "không sinh đơn trùng", chỉ dặn kho chưa giao tay/tạo tay', async () => {
+    const { container } = mount(<PancakeSyncPanel order={order()} />);
+    click(byText(container, 'button', 'Đẩy lại Pancake'));
+    await flush();
+    const text = document.querySelector('[role="alertdialog"]')?.textContent ?? '';
+    expect(text).toContain('Gửi lại đơn TUBU1 sang kho Pancake.');
+    expect(text).toContain('Chỉ bấm khi kho chưa giao tay/tạo tay đơn này.');
+    expect(text).not.toMatch(/không sinh đơn trùng|tra theo mã đơn|không (?:bị )?trùng/i);
+    await act(async () => {
+      confirmButton().click();
+    });
+    await flush();
+  });
+
   it('API từ chối (đơn vừa rời kho) → hiện lời API', async () => {
     mocks.retryPancakePush.mockRejectedValue(new Error('Đơn TUBU1 đã ở trạng thái SHIPPING — không đẩy để tránh kho giao lần hai.'));
     const { container } = mount(<PancakeSyncPanel order={order()} />);
@@ -188,6 +202,24 @@ describe('loại lỗi đẩy + câu hướng dẫn (hi)', () => {
     expect(text).not.toMatch(/(?<!Không )tạo tay|nhập tay|tạo thủ công/i);
     expect(pancakeErrorGuide(order({ pancakePushStatus: 'STALE' }))?.text).toBe(text);
     expect(pancakeErrorGuide(order({ pancakePushStatus: 'STALE', pancakeOrderId: '9' }))).toBeNull();
+  });
+
+  it('đơn STALE mà admin không đẩy lại được (đã rời kho / còn hàng đặt trước): câu riêng, không bảo bấm "Đẩy lại Pancake"', () => {
+    const items = [{ id: 'i1', productName: 'Sen đá', unitPrice: 40000, quantity: 5, total: 200000, backorderedQty: 3 }];
+    const noRetry = [order({ pancakePushStatus: 'STALE', status: 'DELIVERED' }), order({ pancakePushStatus: 'STALE', type: 'DEALER', items })];
+    for (const o of noRetry) {
+      expect(canRetryPancakePush(o)).toBe(false);
+      const text = pancakeErrorGuide(o)?.text ?? '';
+      expect(text).toContain('đã ngừng tự đẩy');
+      expect(text).toContain('giao tay chưa');
+      expect(text).not.toContain('bấm "Đẩy lại Pancake"');
+      expect(text).not.toMatch(/(?<!Không )tạo tay|nhập tay|tạo thủ công/i);
+    }
+    const retryable = pancakeErrorGuide(order({ pancakePushStatus: 'STALE', status: 'CONFIRMED' }))?.text ?? '';
+    expect(retryable).toContain('bấm "Đẩy lại Pancake"');
+    const { container } = mount(<PancakeSyncPanel order={noRetry[0]!} />);
+    expect(container.querySelector('button')).toBeNull();
+    expect(container.querySelector('[data-testid="pancake-error-guide"]')?.textContent).not.toContain('bấm "Đẩy lại Pancake"');
   });
 
   it('lỗi tạm: nêu giờ tự thử lại kế tiếp (HH:MM giờ Việt Nam)', () => {

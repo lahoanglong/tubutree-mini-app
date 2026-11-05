@@ -36,6 +36,10 @@ export const PANCAKE_FORBIDDEN_GUIDE =
 export const PANCAKE_STALE_GUIDE =
   'Đơn quá hạn tự đẩy: hệ thống đã ngừng tự đẩy đơn này (kể cả khi khách trả tiền sau). Kiểm tra kho đã giao tay chưa; chưa thì bấm "Đẩy lại Pancake". Không làm cả hai, kẻo kho giao hai lần.';
 
+/** Đơn STALE mà admin không "Đẩy lại" được (đã rời kho, còn hàng đặt trước): không có nút nên không bảo bấm. */
+export const PANCAKE_STALE_NO_RETRY_GUIDE =
+  'Đơn quá hạn tự đẩy: hệ thống đã ngừng tự đẩy đơn này (kể cả khi khách trả tiền sau) và đơn không còn ở trạng thái cho phép đẩy lại (đã rời kho, hoặc còn hàng đặt trước), nên không có nút đẩy lại. Kiểm tra kho đã giao tay chưa.';
+
 /** Loại lỗi đẩy (API: pancake-push-error.ts) → nhãn ngắn ở danh sách. */
 const KIND_LABEL: Record<string, { tone: Tone; label: string }> = {
   DATA: { tone: 'danger', label: 'Pancake: thiếu dữ liệu đơn' },
@@ -58,7 +62,9 @@ const clock = (iso: string) => formatDateTime(iso).slice(0, 5);
 /** Câu hướng dẫn cho admin theo loại lỗi đẩy; null khi đơn đã lên Pancake hoặc chưa có loại lỗi. */
 export function pancakeErrorGuide(order: AdminOrder): PancakeErrorGuide | null {
   if (order.pancakeOrderId) return null;
-  if (order.pancakePushStatus === 'STALE') return { kind: 'STALE', configBlocked: false, text: PANCAKE_STALE_GUIDE };
+  if (order.pancakePushStatus === 'STALE') {
+    return { kind: 'STALE', configBlocked: false, text: canRetryPancakePush(order) ? PANCAKE_STALE_GUIDE : PANCAKE_STALE_NO_RETRY_GUIDE };
+  }
   if (!order.pancakeErrorKind || !KIND_LABEL[order.pancakeErrorKind]) return null;
   const kind = order.pancakeErrorKind;
   switch (kind) {
@@ -206,7 +212,7 @@ export function PancakeSyncPanel({ order }: { order: AdminOrder }) {
       title: 'Đẩy lại Pancake',
       message: guide?.configBlocked
         ? `Khoá API Pancake đang bị từ chối. Chỉ bấm khi kỹ thuật đã sửa khoá; đơn ${order.code} sẽ được gửi lại đúng một lần.`
-        : `Gửi lại đơn ${order.code} sang kho Pancake. Hệ thống tra theo mã đơn trước khi tạo nên không sinh đơn trùng; chỉ bấm khi kho chưa giao tay đơn này.`,
+        : `Gửi lại đơn ${order.code} sang kho Pancake. Chỉ bấm khi kho chưa giao tay/tạo tay đơn này.`,
       confirmLabel: 'Đẩy lại',
     });
     if (!ok || inFlight.current) return;
