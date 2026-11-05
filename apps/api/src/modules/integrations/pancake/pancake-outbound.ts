@@ -19,6 +19,17 @@ export class PancakeApiError extends Error {
 }
 
 /**
+ * Lượt này thua tranh chấp quyền đẩy: tiến trình khác (job push, job thanh toán, cron) đang giữ hoặc vừa ghi kết cục cho đơn. Là lỗi tạm
+ * để BullMQ thử lại, nhưng KHÔNG được ghi lên đơn (sẽ đè loại lỗi mà tiến trình kia vừa ghi).
+ */
+export class PancakePushBusyError extends PancakeApiError {
+  constructor(message: string) {
+    super(message, true);
+    this.name = 'PancakePushBusyError';
+  }
+}
+
+/**
  * Pancake trả lời được nhưng từ chối lệnh huỷ, và lần đọc lại ngay sau đó cho thấy đơn CHƯA bàn giao vận chuyển: khác
  * hẳn lỗi mất kết nối — trạng thái Pancake đã biết chắc tại thời điểm hỏi.
  */

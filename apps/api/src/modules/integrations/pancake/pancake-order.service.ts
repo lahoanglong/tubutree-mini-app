@@ -32,11 +32,12 @@ import {
   PancakeApiError,
   PancakeCancelRefusedError,
   PancakeOrderDataError,
+  PancakePushBusyError,
   pancakeErrorText,
   pancakeOrderHasCode,
 } from './pancake-outbound';
 import { enqueuePancakeCancel, enqueuePancakePayment, enqueuePancakePush, PANCAKE_JOB_PUSH, removeFailedPancakePush } from './pancake-queue';
-import { classifyPushError, isPushFailureSettled, kindAfterFailure, PUSH_ERROR_KIND, PUSH_RETRY, storedErrorText } from './pancake-push-error';
+import { classifyPushError, isPushFailureSettled, kindAfterFailure, PUSH_ERROR_KIND, PUSH_RETRY, storedErrorText, type PushErrorKind } from './pancake-push-error';
 import { withQueueTimeout } from '../../../jobs/queue-timeout';
 import {
   ATTENTION_CANCEL_PENDING,
@@ -275,7 +276,7 @@ export class PancakeOrderService {
       const current = await this.prisma.order.findUniqueOrThrow({ where: { id: order.id }, include: { items: true } });
       if (current.pancakeOrderId) return current.pancakeOrderId;
       if (pancakePushGate(current) !== 'PUSH') return this.pushOrder(order.id);
-      throw new PancakeApiError(`Đơn ${order.code} đang được đẩy sang Pancake bởi tiến trình khác — thử lại sau.`, true);
+      throw new PancakePushBusyError(`Đơn ${order.code} đang được đẩy sang Pancake bởi tiến trình khác — thử lại sau.`);
     }
 
     // Đặt mốc "đã gửi lệnh tạo" bằng cập nhật có điều kiện: mốc cũ chỉ đọc được từ chính câu lệnh này. Lần đọc đơn đầu
@@ -301,16 +302,7 @@ export class PancakeOrderService {
     } catch (err) {
       // Từ chối dứt khoát → Pancake chắc chắn chưa tạo: gỡ mốc để lần sau không phải tra cứu.
       const definite = err instanceof PancakeApiError && !err.transient;
-      const kind = kindAfterFailure(err, order.pancakeErrorKind);
-      await this.prisma.order.updateMany({
-        where: { id: order.id, pancakeOrderId: null },
-        data: {
-          pancakePushStatus: PANCAKE_PUSH.PENDING,
-          pancakeSyncError: storedErrorText(err, kind),
-          pancakeErrorKind: kind,
-          ...(definite && !sentBefore ? { pancakePushClaimedAt: null } : {}),
-        },
-      });
+      await this.writeAttemptError(order.id, err, { pancakePushStatus: PANCAKE_PUSH.PENDING, ...(definite && !sentBefore ? { pancakePushClaimedAt: null } : {}) });
       throw err;
     }
     if (!pancakeOrderId) {
@@ -341,30 +333,66 @@ export class PancakeOrderService {
    * (CONFIG_RECHECK) hay đã REJECTED tính là REJECTED (`kindAfterFailure`): khoá đã đẩy được đơn khác thì lỗi là của riêng đơn.
    */
   async markPushFailure(orderId: string, err: unknown, final: boolean): Promise<void> {
-    const order = await this.prisma.order.findUnique({
-      where: { id: orderId },
-      select: { id: true, code: true, pancakeOrderId: true, createdAt: true, paidAt: true, pancakeErrorKind: true },
-    });
-    if (!order || order.pancakeOrderId) return;
-    const kind = kindAfterFailure(err, order.pancakeErrorKind);
-    // Đang PUSHING = tiến trình khác giữ quyền đẩy (lần này thua tranh chấp): không ghi đè, kẻo mở khoá cho lần tạo thứ hai.
-    const idle = { id: order.id, pancakeOrderId: null, OR: [{ pancakePushStatus: null }, { pancakePushStatus: { not: PANCAKE_PUSH.PUSHING } }] };
-    await this.prisma.order.updateMany({
-      where: idle,
-      data: { pancakeSyncError: storedErrorText(err, kind), pancakeErrorKind: kind, ...(final ? { pancakePushStatus: PANCAKE_PUSH.FAILED } : {}) },
-    });
-    if (kind === PUSH_ERROR_KIND.CONFIG) {
-      // Khoá API sai làm hỏng mọi đơn như nhau: không đốt lượt từng đơn (cron chỉ dò bằng một đơn mỗi giờ, xem
-      // PancakePushReconcileService) và không báo từng đơn; báo động tổng `pancake.config` (ops-alerts) lo việc báo một lần.
-      await this.prisma.order.updateMany({ where: { ...idle, pancakePushAttempts: { gt: 0 } }, data: { pancakePushAttempts: { increment: -1 } } });
-      return;
-    }
-    if (kind !== PUSH_ERROR_KIND.TRANSIENT || (final && !this.inTransientGrace(order, err))) {
-      const hint =
-        kind === PUSH_ERROR_KIND.TRANSIENT
-          ? 'Hệ thống tự thử lại mỗi 15 phút; sửa nguyên nhân rồi bấm "Đẩy lại Pancake".'
-          : `Thử lại không tự hết lỗi: sửa nguyên nhân rồi bấm "Đẩy lại Pancake" (hệ thống chỉ hỏi lại mỗi ${PUSH_RETRY.SLOW_MINUTES} phút).`;
+    // Thua tranh chấp quyền đẩy: kết cục do tiến trình kia ghi, ghi TRANSIENT lúc này sẽ đè loại lỗi nó vừa đặt (vd REJECTED).
+    if (err instanceof PancakePushBusyError) return;
+    const order = await this.recordFailure(orderId, err, final ? { pancakePushStatus: PANCAKE_PUSH.FAILED } : {}, true);
+    if (!order) return;
+    const { kind } = order;
+    if (kind === PUSH_ERROR_KIND.CONFIG) return; // báo động tổng `pancake.config` (ops-alerts) lo việc báo một lần, không báo từng đơn
+    // CONFIG_RECHECK coi như lỗi tạm: khoá đã đẩy được đơn khác, cron thử lại bình thường.
+    const transientLike = kind === PUSH_ERROR_KIND.TRANSIENT || kind === PUSH_ERROR_KIND.CONFIG_RECHECK;
+    if (!transientLike || (final && !this.inTransientGrace(order, err))) {
+      const hint = transientLike
+        ? 'Hệ thống tự thử lại mỗi 15 phút; sửa nguyên nhân rồi bấm "Đẩy lại Pancake".'
+        : `Thử lại không tự hết lỗi: sửa nguyên nhân rồi bấm "Đẩy lại Pancake" (hệ thống chỉ hỏi lại mỗi ${PUSH_RETRY.SLOW_MINUTES} phút). Không tạo tay đơn này trên Pancake: hệ thống vẫn tự hỏi lại, làm vậy sẽ thành hai đơn kho.`;
       await flagPancakeAttention(this.prisma, this.alerts, order, `${ATTENTION_PUSH_FAILED} (kho chưa thấy đơn): ${pancakeErrorText(err)}. ${hint}`, this.logger);
+    }
+  }
+
+  /** Ghi lỗi của một lượt đẩy ngay trong pushOrder (trạng thái PENDING, lời lỗi, loại lỗi). */
+  private async writeAttemptError(orderId: string, err: unknown, extra: Record<string, unknown>): Promise<void> {
+    await this.recordFailure(orderId, err, extra, false);
+  }
+
+  /**
+   * Ghi lời lỗi + loại lỗi cho một đơn chưa lên Pancake. Loại ghi ra phụ thuộc loại lỗi TRƯỚC của đơn (`kindAfterFailure`), nên đọc ngay
+   * trước khi ghi và ghi có điều kiện `pancakeErrorKind` còn nguyên: một đơn vừa được thả sang CONFIG_RECHECK (đơn khác lên Pancake giữa
+   * chừng) không bị ghi đè bằng loại tính từ bản đọc cũ. Điều kiện hụt thì đọc lại và tính lại (tối đa 3 vòng).
+   * `fromJob` (markPushFailure): chỉ ghi khi không có tiến trình nào đang PUSHING, và lỗi CONFIG hoàn lượt đã đốt trong CÙNG câu ghi
+   * (không có trạng thái trung gian FAILED mà lượt thử chưa hoàn). Gọi từ pushOrder (đang giữ quyền đẩy, trạng thái PUSHING của chính
+   * mình) thì không áp hai điều đó.
+   * Trả null khi đơn không còn (hoặc đã lên Pancake).
+   */
+  private async recordFailure(
+    orderId: string,
+    err: unknown,
+    extra: Record<string, unknown>,
+    fromJob: boolean,
+  ): Promise<{ id: string; code: string; createdAt: Date; paidAt: Date | null; kind: PushErrorKind } | null> {
+    for (let attempt = 0; ; attempt++) {
+      const order = await this.prisma.order.findUnique({
+        where: { id: orderId },
+        select: { id: true, code: true, pancakeOrderId: true, createdAt: true, paidAt: true, pancakeErrorKind: true, pancakeSyncError: true },
+      });
+      if (!order || order.pancakeOrderId) return null;
+      const kind = kindAfterFailure(err, order);
+      // Đang PUSHING = tiến trình khác giữ quyền đẩy (lần này thua tranh chấp): không ghi đè, kẻo mở khoá cho lần tạo thứ hai.
+      const where = {
+        id: order.id,
+        pancakeOrderId: null,
+        pancakeErrorKind: order.pancakeErrorKind,
+        ...(fromJob ? { OR: [{ pancakePushStatus: null }, { pancakePushStatus: { not: PANCAKE_PUSH.PUSHING } }] } : {}),
+      };
+      const data = { ...extra, pancakeSyncError: storedErrorText(err, kind), pancakeErrorKind: kind };
+      // Khoá API sai làm hỏng mọi đơn như nhau: không đốt lượt từng đơn (cron chỉ dò bằng một đơn mỗi giờ).
+      const refunded =
+        fromJob && kind === PUSH_ERROR_KIND.CONFIG
+          ? await this.prisma.order.updateMany({ where: { ...where, pancakePushAttempts: { gt: 0 } }, data: { ...data, pancakePushAttempts: { increment: -1 } } })
+          : { count: 0 };
+      const written = refunded.count > 0 ? refunded : await this.prisma.order.updateMany({ where, data });
+      if (written.count > 0 || attempt >= 2) return { ...order, kind };
+      const again = await this.prisma.order.findUnique({ where: { id: orderId }, select: { pancakeErrorKind: true } });
+      if (again?.pancakeErrorKind === order.pancakeErrorKind) return { ...order, kind };
     }
   }
 

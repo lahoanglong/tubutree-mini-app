@@ -1,3 +1,4 @@
+import { PANCAKE_FORBIDDEN_ERROR_PREFIX } from '@tubutree/shared-types';
 import { PancakeApiError, PancakeOrderDataError } from './pancake-outbound';
 import { classifyPushError, isPermanentPushError, kindAfterFailure, nextPushRetryAt, PUSH_RETRY } from './pancake-push-error';
 
@@ -78,15 +79,27 @@ describe('nextPushRetryAt', () => {
     expect(nextPushRetryAt({ ...base, pancakeErrorKind: 'CONFIG_RECHECK' }, now)?.toISOString()).toBe('2026-11-05T10:30:00.000Z');
   });
 
-  it('kindAfterFailure: 401/403 sau khi khoá đã đẩy được đơn khác (CONFIG_RECHECK) hay đơn đã bị từ chối thì là lỗi riêng đơn', () => {
+  it('kindAfterFailure: 401/403 là lỗi riêng đơn khi đơn đã được thả (CONFIG_RECHECK), hoặc đã REJECTED vì chính 401/403 (lời lỗi cũ mang tiền tố)', () => {
     const e403 = new PancakeApiError('x', false, false, 403);
-    expect(kindAfterFailure(e403, null)).toBe('CONFIG');
-    expect(kindAfterFailure(e403, 'CONFIG')).toBe('CONFIG');
-    expect(kindAfterFailure(e403, 'TRANSIENT')).toBe('CONFIG');
-    expect(kindAfterFailure(e403, 'CONFIG_RECHECK')).toBe('REJECTED');
-    expect(kindAfterFailure(e403, 'REJECTED')).toBe('REJECTED');
-    expect(kindAfterFailure(new PancakeApiError('x', true, false, 503), 'CONFIG_RECHECK')).toBe('TRANSIENT');
-    expect(kindAfterFailure(new PancakeOrderDataError('thiếu SĐT'), 'CONFIG_RECHECK')).toBe('DATA');
+    const prior = (kind: string | null, text: string | null = null) => ({ pancakeErrorKind: kind, pancakeSyncError: text });
+    const forbiddenText = `${PANCAKE_FORBIDDEN_ERROR_PREFIX}Pancake trả 403`;
+    expect(kindAfterFailure(e403, prior(null))).toBe('CONFIG');
+    expect(kindAfterFailure(e403, prior('CONFIG'))).toBe('CONFIG');
+    expect(kindAfterFailure(e403, prior('TRANSIENT'))).toBe('CONFIG');
+    expect(kindAfterFailure(e403, prior('CONFIG_RECHECK'))).toBe('REJECTED');
+    expect(kindAfterFailure(e403, prior('REJECTED', forbiddenText))).toBe('REJECTED');
+    expect(kindAfterFailure(e403, prior('REJECTED', 'Pancake trả 422 khi tạo đơn'))).toBe('CONFIG');
+    expect(kindAfterFailure(e403, prior('REJECTED'))).toBe('CONFIG');
+  });
+
+  it('kindAfterFailure: lỗi tạm không xoá dấu CONFIG_RECHECK; các loại khác theo classifyPushError', () => {
+    const prior = (kind: string | null) => ({ pancakeErrorKind: kind, pancakeSyncError: null });
+    const t503 = new PancakeApiError('x', true, false, 503);
+    expect(kindAfterFailure(t503, prior('CONFIG_RECHECK'))).toBe('CONFIG_RECHECK');
+    expect(kindAfterFailure(t503, prior('REJECTED'))).toBe('TRANSIENT');
+    expect(kindAfterFailure(t503, prior(null))).toBe('TRANSIENT');
+    expect(kindAfterFailure(new PancakeApiError('x', false, false, 422), prior('CONFIG_RECHECK'))).toBe('REJECTED');
+    expect(kindAfterFailure(new PancakeOrderDataError('thiếu SĐT'), prior('CONFIG_RECHECK'))).toBe('DATA');
   });
 
   it('đã lên Pancake, STALE, hay quá cửa sổ 72 giờ thì không còn lần tự thử', () => {

@@ -1,10 +1,10 @@
-import { isPancakeForbiddenError } from '@tubutree/shared-types';
+import { isPancakeForbiddenError, PANCAKE_FORBIDDEN_ERROR_PREFIX } from '@tubutree/shared-types';
 import { BadRequestException } from '@nestjs/common';
 import { PANCAKE_CANCEL, PANCAKE_CANCEL_REFUSED_PREFIX, PANCAKE_PUSH, PancakeOrderService } from './pancake-order.service';
 import type { PrismaService } from '../../../prisma/prisma.service';
 import type { PancakeClient } from './pancake.client';
 import type { PancakeCreateOrderBody } from './pancake.types';
-import { PancakeApiError, PancakeCancelRefusedError, PancakeOrderDataError } from './pancake-outbound';
+import { PancakeApiError, PancakeCancelRefusedError, PancakeOrderDataError, PancakePushBusyError } from './pancake-outbound';
 import { QUEUE_COMMAND_TIMEOUT_MS, QueueTimeoutError } from '../../../jobs/queue-timeout';
 import { baseOrder, fakeOrderDb, fakeQueue } from '../../../../test/fakes/pancake-order.fake';
 
@@ -473,17 +473,61 @@ describe('PancakeOrderService.markPushFailure — loại lỗi (hi)', () => {
 
   const forbidden = () => new PancakeApiError('Pancake trả 403 khi tạo đơn: forbidden', false, false, 403);
 
+  const forbiddenText = `${PANCAKE_FORBIDDEN_ERROR_PREFIX}Pancake trả 403 khi tạo đơn`;
   it.each([
-    [null, 'CONFIG', 2],
-    ['CONFIG', 'CONFIG', 2],
-    ['CONFIG_RECHECK', 'REJECTED', 3],
-    ['REJECTED', 'REJECTED', 3],
-  ])('401/403 khi loại lỗi trước đó là %s → %s (lượt thử còn %s)', async (prior, expected, attempts) => {
-    const t = setup({ pancakePushStatus: PANCAKE_PUSH.PENDING, pancakePushAttempts: 3, pancakeErrorKind: prior });
+    [null, null, 'CONFIG', 2],
+    ['CONFIG', null, 'CONFIG', 2],
+    ['CONFIG_RECHECK', null, 'REJECTED', 3],
+    ['REJECTED', forbiddenText, 'REJECTED', 3],
+    ['REJECTED', 'Pancake trả 422 khi tạo đơn: thiếu kho', 'CONFIG', 2],
+    ['REJECTED', null, 'CONFIG', 2],
+  ])('401/403 khi loại trước đó là %s (lời lỗi cũ %s) → %s (lượt thử còn %s)', async (prior, priorText, expected, attempts) => {
+    const t = setup({ pancakePushStatus: PANCAKE_PUSH.PENDING, pancakePushAttempts: 3, pancakeErrorKind: prior, pancakeSyncError: priorText });
     await t.svc.markPushFailure('o1', forbidden(), true);
     expect(t.row()).toMatchObject({ pancakeErrorKind: expected, pancakePushAttempts: attempts });
     if (expected === 'REJECTED') expect(t.row().pancakeAttention).toEqual(expect.any(String));
     else expect(t.row().pancakeAttention ?? null).toBeNull();
+  });
+
+  it('CONFIG_RECHECK + lỗi tạm 503 → vẫn CONFIG_RECHECK (không báo trong ân hạn); rồi 403 → REJECTED', async () => {
+    const t = setup({ pancakePushStatus: PANCAKE_PUSH.PENDING, pancakeErrorKind: 'CONFIG_RECHECK', createdAt: new Date(), paidAt: null });
+    await t.svc.markPushFailure('o1', new PancakeApiError('Pancake trả 503 khi tạo đơn', true, false, 503), false);
+    expect(t.row().pancakeErrorKind).toBe('CONFIG_RECHECK');
+    expect(t.alerts.alert).not.toHaveBeenCalled();
+    await t.svc.markPushFailure('o1', forbidden(), true);
+    expect(t.row().pancakeErrorKind).toBe('REJECTED');
+  });
+
+  it('CONFIG_RECHECK + 429 cuối lượt → vẫn CONFIG_RECHECK, không thành CONFIG (không góp vào báo động tổng)', async () => {
+    const t = setup({ pancakePushStatus: PANCAKE_PUSH.PENDING, pancakeErrorKind: 'CONFIG_RECHECK' });
+    await t.svc.markPushFailure('o1', new PancakeApiError('Pancake trả 429 khi tạo đơn', true, false, 429), true);
+    expect(t.row().pancakeErrorKind).toBe('CONFIG_RECHECK');
+  });
+
+  it('lần này thua tranh chấp quyền đẩy (PancakePushBusyError): không ghi TRANSIENT đè loại tiến trình kia vừa ghi', async () => {
+    const t = setup({ pancakePushStatus: PANCAKE_PUSH.PENDING, pancakeErrorKind: 'REJECTED', pancakeSyncError: forbiddenText });
+    await t.svc.markPushFailure('o1', new PancakePushBusyError('Đơn TUBU1 đang được đẩy bởi tiến trình khác'), true);
+    expect(t.row()).toMatchObject({ pancakeErrorKind: 'REJECTED', pancakeSyncError: forbiddenText, pancakePushStatus: PANCAKE_PUSH.PENDING });
+  });
+
+  it('pushOrder đọc lại loại lỗi ngay trước khi ghi: đơn vừa được thả sang CONFIG_RECHECK giữa chừng không bị ghi CONFIG', async () => {
+    let rowRef: () => Record<string, unknown>;
+    const createOrder = jest.fn().mockImplementation(async () => {
+      rowRef().pancakeErrorKind = 'CONFIG_RECHECK';
+      throw forbidden();
+    });
+    const t = setup({ pancakePushStatus: PANCAKE_PUSH.PENDING, pancakeErrorKind: 'CONFIG' }, { client: { createOrder } });
+    rowRef = () => t.rows[0] as Record<string, unknown>;
+    await expect(t.svc.pushOrder('o1')).rejects.toBeInstanceOf(PancakeApiError);
+    expect(t.row().pancakeErrorKind).toBe('REJECTED');
+  });
+
+  it('CONFIG: hoàn lượt nằm CÙNG câu updateMany ghi FAILED + CONFIG (không có trạng thái trung gian)', async () => {
+    const t = setup({ pancakePushStatus: PANCAKE_PUSH.PENDING, pancakePushAttempts: 3 });
+    await t.svc.markPushFailure('o1', new PancakeApiError('Pancake trả 401 khi tạo đơn', false, false, 401), true);
+    const writes = (t.prisma.order.updateMany as jest.Mock).mock.calls.map(([a]) => a.data as Record<string, unknown>);
+    expect(writes.some((d) => d.pancakeErrorKind === 'CONFIG' && d.pancakePushStatus === PANCAKE_PUSH.FAILED && JSON.stringify(d.pancakePushAttempts) === '{"increment":-1}')).toBe(true);
+    expect(writes.some((d) => d.pancakeErrorKind === undefined && JSON.stringify(d.pancakePushAttempts) === '{"increment":-1}')).toBe(false);
   });
 
   it('qua pushOrder thật: đơn CONFIG_RECHECK gặp 403 ngay trong lượt đẩy → REJECTED, lời lỗi không bị ghi đè về CONFIG', async () => {
