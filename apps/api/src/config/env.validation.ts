@@ -168,6 +168,10 @@ export const envSchema = z.object({
   AI_ADVISOR_ENABLED: z.string().default(''),
   AI_ADVISOR_GLOBAL_PER_MIN: z.string().default(''),
   AI_ADVISOR_MAX_CONCURRENT: z.string().default(''),
+  // Story Studio (admin soạn kịch bản câu chuyện sản phẩm): antigravity > Claude trực tiếp > deepseek/gemini. Khoá chỉ đọc ở API, không bao giờ trả ra client.
+  // Để trống KEY thì bước Claude bị bỏ qua. Không dùng cho AI tư vấn khách (llm.client.ts giữ nguyên yêu cầu không dùng Claude).
+  ANTHROPIC_API_KEY: z.string().default(''),
+  CLAUDE_API_MODEL: z.string().default(''),
 }).superRefine((env, ctx) => {
   for (const message of dbSessionOptionsIssues(env.DATABASE_URL, env.DB_SESSION_OPTIONS)) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['DB_SESSION_OPTIONS'], message });

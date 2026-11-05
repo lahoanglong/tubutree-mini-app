@@ -1,3 +1,4 @@
+import type { ProductStoryConfig } from '@tubutree/shared-types';
 import type { HttpClient } from '../http';
 import { errorStatus } from './error-status';
 
@@ -55,6 +56,8 @@ export interface ProductDetail {
   salePrice: number | null;
   certifications: string[];
   ingredients?: { name: string; percentage?: string; benefit?: string }[] | null;
+  /** Cấu hình dải câu chuyện sản phẩm (admin đặt); thiếu hoặc API cũ → dùng preset hoặc tự sinh từ thành phần. */
+  storyConfig?: ProductStoryConfig | null;
   sold?: number;
   variations: VariationDetail[];
   /** Ai giao (D4): gian hàng tự giao có phí giao/ngưỡng miễn phí riêng. API cũ chưa trả → coi như Tubu giao. */

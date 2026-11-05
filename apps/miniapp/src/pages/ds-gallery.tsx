@@ -1,9 +1,10 @@
 import { useState, type ReactNode } from 'react';
 import { Page } from 'zmp-ui';
 import { Truck } from 'lucide-react';
-import { GALLERY_COMBO_ITEMS, GALLERY_PICKER_ROWS, GALLERY_SLIDES, GALLERY_SORT_OPTIONS, GALLERY_VOUCHERS, galleryCombo, galleryEnd, type GalleryVoucher } from '@tubutree/app-core/commerce/ds-gallery-data';
+import { GALLERY_STORY_PRODUCTS, GALLERY_COMBO_ITEMS, GALLERY_PICKER_ROWS, GALLERY_SLIDES, GALLERY_SORT_OPTIONS, GALLERY_VOUCHERS, galleryCombo, galleryEnd, type GalleryVoucher } from '@tubutree/app-core/commerce/ds-gallery-data';
 import { BannerCarousel } from '../components/ui/banner-carousel';
 import { ComboCard } from '../components/ui/combo-card';
+import { ProductStoryShowcase } from '../components/ui/product-story-showcase';
 import { cartComboBlocks } from '@tubutree/app-core/commerce/cart-combo';
 import { CartComboBlock } from '../components/cart-combo-block';
 import { Countdown } from '../components/ui/countdown';
@@ -259,6 +260,14 @@ export default function DsGalleryPage() {
           <Variant label="1 slide: không chấm, không nút Dừng">
             <BannerCarousel slides={GALLERY_SLIDES.slice(0, 1)} />
           </Variant>
+        </Group>
+
+        <Group name="product-story-showcase">
+          {GALLERY_STORY_PRODUCTS.map((g) => (
+            <Variant key={g.product.id} label={g.label}>
+              <ProductStoryShowcase product={g.product} />
+            </Variant>
+          ))}
         </Group>
       </div>
     </Page>

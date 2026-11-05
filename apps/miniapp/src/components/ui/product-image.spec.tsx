@@ -21,6 +21,22 @@ describe('ảnh thay thế thống nhất (B-23)', () => {
   });
 });
 
+describe('ảnh tách nền', () => {
+  it('fit="contain": ảnh dọc hiện trọn vẹn (không cắt đỉnh và đáy) và không viền 1px quanh vùng trong suốt', () => {
+    const { container } = render(<div style={{ position: 'relative' }}><ProductImage src="https://img.test/a.webp" brand="Tubu" fit="contain" /></div>);
+    const img = container.querySelector('img')!;
+    expect(img.style.objectFit).toBe('contain');
+    expect(img.style.outline).toBe('');
+  });
+
+  it('mặc định vẫn cover và có viền trung tính cho ảnh nền trắng', () => {
+    const { container } = render(<div style={{ position: 'relative' }}><ProductImage src="https://img.test/a.jpg" brand="Tubu" /></div>);
+    const img = container.querySelector('img')!;
+    expect(img.style.objectFit).toBe('cover');
+    expect(img.style.outline).toBe('1px solid var(--color-media-outline)');
+  });
+});
+
 describe('ảnh đổi cỡ (R-5)', () => {
   const PANCAKE = 'https://content.pancake.vn/2-26/s800x800/a.jpg';
 

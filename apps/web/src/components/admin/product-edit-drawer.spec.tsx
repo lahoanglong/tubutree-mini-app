@@ -190,3 +190,48 @@ describe('ProductEditDrawer: trần ô mô tả khớp DTO', () => {
     expect(patches(m)).toEqual([{ description: `${long}!` }]);
   });
 });
+
+describe('ProductEditDrawer: câu chuyện sản phẩm', () => {
+  const withData = () =>
+    product({ slug: 'dau-goi', ingredients: [{ name: 'Bồ kết', benefit: 'Làm sạch dịu nhẹ' }], variations: [{ id: 'v1', name: '300ml' }, { id: 'v2', name: '500ml' }] });
+
+  it('tự sinh rồi Lưu chỉ gửi storyConfig', async () => {
+    const { m } = mount({ server: withData() });
+    await flush();
+    click(byText(document.body, 'button', 'Tự sinh Story'));
+    expect(saveBtn().disabled).toBe(false);
+    click(saveBtn());
+    await flush();
+    const sent = patches(m);
+    expect(sent).toHaveLength(1);
+    expect(Object.keys(sent[0])).toEqual(['storyConfig']);
+    expect(sent[0].storyConfig.version).toBe(1);
+  });
+
+  it('không đổi gì ở câu chuyện thì Lưu không gửi storyConfig', async () => {
+    const { m } = mount({ server: withData() });
+    await flush();
+    typeInto(textarea(), 'Mô tả mới');
+    click(saveBtn());
+    await flush();
+    expect(patches(m)[0]).not.toHaveProperty('storyConfig');
+  });
+
+  it('dùng kịch bản mẫu gửi storyConfig null để xoá cấu hình đã lưu', async () => {
+    const saved = { version: 1, enabled: true, scenes: [] };
+    const { m } = mount({ server: { ...withData(), storyConfig: saved as never } });
+    await flush();
+    click(byText(document.body, 'button', 'Dùng kịch bản mẫu'));
+    click(saveBtn());
+    await flush();
+    expect(patches(m)[0]).toEqual({ storyConfig: null });
+  });
+
+  it('cấu hình sai chặn nút Lưu', async () => {
+    const bad = { version: 1, enabled: true, scenes: [{ kind: 'hud_callouts', closing: '', points: [{ id: 'a', xPct: Number.NaN, yPct: 1, label: 'x', side: 'left' }] }] };
+    mount({ server: { ...withData(), storyConfig: bad as never } });
+    await flush();
+    typeInto(textarea(), 'Mô tả mới');
+    expect(saveBtn().disabled).toBe(true);
+  });
+});

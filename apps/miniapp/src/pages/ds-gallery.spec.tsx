@@ -10,10 +10,10 @@ vi.mock('zmp-ui', async (importOriginal) => ({
 
 import DsGalleryPage from './ds-gallery';
 
-const GROUPS = ['section-header', 'section', 'countdown', 'flash-sold-bar', 'sort-bar', 'voucher-ticket', 'combo-card', 'banner-carousel'];
+const GROUPS = ['section-header', 'section', 'countdown', 'flash-sold-bar', 'sort-bar', 'voucher-ticket', 'combo-card', 'banner-carousel', 'product-story-showcase'];
 
 describe('ds-gallery (Mini)', () => {
-  it('có đủ 8 mục, mỗi mục ít nhất 2 biến thể hoặc trạng thái', () => {
+  it('có đủ 9 mục, mỗi mục ít nhất 2 biến thể hoặc trạng thái', () => {
     render(<DsGalleryPage />);
     for (const g of GROUPS) {
       const el = document.getElementById(`ds-${g}`);

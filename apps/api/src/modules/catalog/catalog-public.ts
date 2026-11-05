@@ -16,6 +16,7 @@ const PUBLIC_PRODUCT_DETAIL_KEYS = [
   'salePrice',
   'certifications',
   'ingredients',
+  'storyConfig',
   'ratingAvg',
   'reviewCount',
   'metaTitle',
