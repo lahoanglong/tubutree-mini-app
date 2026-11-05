@@ -16,8 +16,9 @@ const PAGE_SIZE = 20;
 const STATUS_FILTERS: { value: CouponStatusFilter; label: string }[] = [
   { value: '', label: 'Tất cả' },
   { value: 'active', label: 'Đang chạy' },
+  { value: 'upcoming', label: 'Sắp diễn ra' },
   { value: 'inactive', label: 'Đã tắt' },
-  { value: 'expired', label: 'Hết hạn' },
+  { value: 'expired', label: 'Đã hết hạn' },
 ];
 
 
@@ -27,11 +28,11 @@ function couponValue(c: AdminCoupon): string {
   return `Giảm ${formatVnd(c.value)}`;
 }
 
-function couponState(c: AdminCoupon, now: number): { label: string; tone: 'success' | 'neutral' | 'danger' | 'warning' } {
+function couponState(c: AdminCoupon, now: number): { label: string; tone: 'success' | 'neutral' | 'danger' | 'warning' | 'info' } {
   if (!c.isActive) return { label: 'Đã tắt', tone: 'danger' };
-  if (new Date(c.endAt).getTime() < now) return { label: 'Hết hạn', tone: 'neutral' };
+  if (new Date(c.endAt).getTime() < now) return { label: 'Đã hết hạn', tone: 'neutral' };
   if (c.usageLimit != null && c.redeemedCount >= c.usageLimit) return { label: 'Hết lượt', tone: 'warning' };
-  if (new Date(c.startAt).getTime() > now) return { label: 'Chưa bắt đầu', tone: 'neutral' };
+  if (new Date(c.startAt).getTime() > now) return { label: 'Sắp diễn ra', tone: 'info' };
   return { label: 'Đang chạy', tone: 'success' };
 }
 

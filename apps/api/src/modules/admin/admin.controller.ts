@@ -59,7 +59,7 @@ import {
   type RecyclingFilter,
 } from './admin-order-filter';
 import { OptionalNotNull } from '../../common/decorators/optional-not-null.decorator';
-import { COUPON_TITLE_MAX } from './coupon-input-rules';
+import { COUPON_LIST_STATUSES, COUPON_TITLE_MAX, type CouponListStatus } from './coupon-input-rules';
 import { DEALER_PRICE_CSV_MAX_LENGTH } from './dealer-price-import';
 import { soldExternalRowsOrThrow } from './sold-external-csv';
 import { trimInvisible } from '../../common/text-trim';
@@ -265,7 +265,7 @@ export class CreateCouponDto {
 export class ListCouponsQuery extends PaginationQuery {
   @IsOptional() @Trim() @IsString() @MaxLength(64) q?: string;
   @IsOptional() @IsIn(['PUBLIC', 'TIER', 'USER_GROUP', 'BIRTHDAY', 'INVITE', 'CLAIM']) scope?: string;
-  @IsOptional() @IsIn(['active', 'inactive', 'expired']) status?: 'active' | 'inactive' | 'expired';
+  @IsOptional() @IsIn(COUPON_LIST_STATUSES) status?: CouponListStatus;
 }
 export class UpdateCouponDto {
   @OptionalNotNull() @IsBoolean() isActive?: boolean;

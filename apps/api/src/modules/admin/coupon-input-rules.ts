@@ -5,6 +5,10 @@ import { formatVnd } from '../orders/refund-destination';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 
+/** Bộ lọc trạng thái của danh sách mã: đang chạy (đã tới ngày bắt đầu), sắp diễn ra (còn bật, chưa tới ngày bắt đầu), đã tắt, đã hết hạn. */
+export const COUPON_LIST_STATUSES = ['active', 'upcoming', 'inactive', 'expired'] as const;
+export type CouponListStatus = (typeof COUPON_LIST_STATUSES)[number];
+
 /** Mã % từ mức này trở lên bắt buộc có Giảm tối đa: 100% không trần là gõ nhầm hoặc mã lộ ra là mất cả đơn. */
 export const COUPON_PERCENT_NEEDS_CAP = 50;
 

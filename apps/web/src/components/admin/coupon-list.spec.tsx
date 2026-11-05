@@ -233,6 +233,49 @@ describe('CouponList — xem, tắt, gia hạn mã (ADMINOPS-8)', () => {
   });
 });
 
+describe('CouponList — trạng thái theo ngày và bộ lọc (W13)', () => {
+  const day = 86_400_000;
+  const at = (n: number) => new Date(Date.now() + n * day).toISOString();
+  const mount = async (data: AdminCoupon[]) => {
+    const api = mockFetch({ '/admin/coupons': { body: { data, meta: { page: 1, limit: 20, total: data.length } } } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const r = render(<CouponList />);
+    mounted.push(r);
+    await flush();
+    return { r, api };
+  };
+
+  it('nhãn: Đang chạy, Sắp diễn ra, Đã hết hạn, Đã tắt, Hết lượt', async () => {
+    const { r } = await mount([
+      coupon({ id: 'a', code: 'RUN', startAt: at(-2), endAt: at(2) }),
+      coupon({ id: 'b', code: 'SOON', startAt: at(3), endAt: at(9) }),
+      coupon({ id: 'c', code: 'OLD', startAt: at(-9), endAt: at(-2) }),
+      coupon({ id: 'd', code: 'OFF', startAt: at(-2), endAt: at(2), isActive: false }),
+      coupon({ id: 'e', code: 'FULL', startAt: at(-2), endAt: at(2), usageLimit: 7, redeemedCount: 7 }),
+    ]);
+    const badge = (code: string) => {
+      const li = [...r.container.querySelectorAll('li')].find((x) => x.textContent?.includes(code))!;
+      return [...li.querySelectorAll('span')].map((x) => x.textContent).filter((t) => /^(Đang chạy|Sắp diễn ra|Đã hết hạn|Đã tắt|Hết lượt)$/.test(t ?? ''));
+    };
+    expect(badge('RUN')).toEqual(['Đang chạy']);
+    expect(badge('SOON')).toEqual(['Sắp diễn ra']);
+    expect(badge('OLD')).toEqual(['Đã hết hạn']);
+    expect(badge('OFF')).toEqual(['Đã tắt']);
+    expect(badge('FULL')).toEqual(['Hết lượt']);
+  });
+
+  it('chip lọc gồm Sắp diễn ra và Đã hết hạn, mỗi chip gửi đúng status lên máy chủ', async () => {
+    const { r, api } = await mount([coupon()]);
+    const chips = [...r.container.querySelectorAll('[role="group"][aria-label="Lọc trạng thái mã"] button')].map((b) => b.textContent);
+    expect(chips).toEqual(['Tất cả', 'Đang chạy', 'Sắp diễn ra', 'Đã tắt', 'Đã hết hạn']);
+    for (const [label, status] of [['Sắp diễn ra', 'upcoming'], ['Đã hết hạn', 'expired'], ['Đang chạy', 'active'], ['Đã tắt', 'inactive']] as const) {
+      click(byText(r.container, 'button', label));
+      await flush();
+      expect(api.calls.at(-1)?.url, label).toContain(`status=${status}`);
+    }
+  });
+});
+
 describe('CouponList — hiện ở mục Nhận mã', () => {
   const listBody = (c: AdminCoupon) => ({ '/admin/coupons': { body: { data: [c], meta: { page: 1, limit: 20, total: 1 } } } });
 
