@@ -161,7 +161,7 @@ export function ProductStoryShowcase({ product, selectedVariationId, onSelectVar
   const title = fillCopy('story.title');
 
   const stage = (
-    <div className="min-w-0 md:order-2 md:sticky md:top-[calc(var(--header-h)+1rem)] md:self-start">
+    <div className="tubu-story-sticky min-w-0 md:order-2 md:self-start">
       <div data-testid="story-stage" className="tubu-story-stage" style={{ background: ambient }}>
         <ProductImage src={image} brand={product.brand} alt={fillCopy('story.stageAlt', { name: product.name })} width={448} sizes={STAGE_SIZES} fit="contain" className="tubu-story-product" />
         {layers.map((l) => (
@@ -224,7 +224,7 @@ export function ProductStoryShowcase({ product, selectedVariationId, onSelectVar
   const steps =
     stepCount === 0 ? null : view.animated ? (
       <div className="min-w-0 md:order-1">
-        <div className="md:sticky md:top-[calc(var(--header-h)+1rem)]">
+        <div className="tubu-story-sticky">
         <nav aria-label={fillCopy('story.stepsLabel')} className="tubu-story-chips">
           {view.steps.map((s, i) => (
             <button

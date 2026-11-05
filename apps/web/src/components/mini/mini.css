@@ -869,6 +869,7 @@
 
 @media (min-width: 48rem) {
   .tubu-story-sentinel { display: block; height: 40vh; }
+  .tubu-story-sticky { position: sticky; top: calc(var(--header-h, 0px) + 1rem); }
 }
 @media (prefers-reduced-motion: reduce) {
   .tubu-story-layer[data-animated='true'], .tubu-story-stage, .tubu-story-arc-item, .tubu-story-progress > span { animation: none; transition: none; }

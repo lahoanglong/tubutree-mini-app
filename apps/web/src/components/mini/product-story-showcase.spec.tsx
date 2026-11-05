@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProductDetail } from '@tubutree/app-core/api/catalog';
 import type { ProductStoryConfig } from '@tubutree/shared-types';
@@ -212,7 +214,7 @@ describe('ProductStoryShowcase (web)', () => {
     const { container } = mount(<ProductStoryShowcase product={PRODUCT} />);
     const grid = container.querySelector('[data-testid="product-story"] .md\\:grid-cols-2')!;
     expect(grid).not.toBeNull();
-    expect(q(grid, 'story-stage')!.parentElement!.className).toContain('md:sticky');
+    expect(q(grid, 'story-stage')!.parentElement!.className).toContain('tubu-story-sticky');
     expect(q(grid, 'story-step-panel')).not.toBeNull();
   });
 
@@ -220,10 +222,13 @@ describe('ProductStoryShowcase (web)', () => {
     const { container } = mount(<ProductStoryShowcase product={PRODUCT} />);
     const stageCol = q(container, 'story-stage')!.parentElement!;
     const stepsCol = q(container, 'story-step-panel')!.parentElement!;
-    for (const el of [stageCol, stepsCol]) {
-      expect(el.className).toContain('md:top-[calc(var(--header-h)+1rem)]');
-      expect(el.className).not.toContain('md:top-24');
-    }
+    for (const el of [stageCol, stepsCol]) expect(el.className).toContain('tubu-story-sticky');
+    const css = readFileSync(resolve(__dirname, 'mini.css'), 'utf8');
+    const at = css.indexOf('.tubu-story-sticky {');
+    expect(css.slice(css.lastIndexOf('@media', at), at)).toContain('min-width: 48rem');
+    const rule = /\.tubu-story-sticky\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(rule).toContain('position: sticky');
+    expect(rule).toContain('var(--header-h, 0px)');
   });
 
   it('không có bước nào (chỉ vòng cung và HUD): một cột, sân khấu căn giữa, không để nửa phải trống', () => {
