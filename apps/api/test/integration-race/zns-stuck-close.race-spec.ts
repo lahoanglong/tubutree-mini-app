@@ -152,6 +152,44 @@ describe('đóng log ZNS kẹt (real Postgres)', () => {
     expect(sendTemplate).not.toHaveBeenCalled();
   });
 
+  describe('worker chậm ghi kết cục lỗi sau khi worker khác đã ghi SENT cho cùng log', () => {
+    /** W1 đang chờ Zalo (sendTemplate treo), W2 ghi SENT xong, rồi Zalo trả lỗi cho W1. */
+    const w1FailsAfterW2Sent = async (finalAttempt: boolean) => {
+      const u = await newUser();
+      const key = `it-late-fail:${finalAttempt}:${Date.now()}`;
+      const a = await mkLog(u.id, key, 'RETRYING');
+      let settle!: (v: unknown) => void;
+      sendTemplate.mockImplementationOnce(() => new Promise((resolve) => (settle = resolve)));
+      const w1 = svc.deliverZns(jobOf(a.id), finalAttempt);
+      await new Promise((r) => setTimeout(r, 50));
+      await (svc as unknown as { markZnsSent(id: string): Promise<void> }).markZnsSent(a.id);
+      settle({ ok: false, retryable: true, code: -1, reason: 'timeout' });
+      return { u, key, a, outcome: await w1 };
+    };
+
+    it('lượt cuối lỗi: log vẫn SENT, khoá nguyên, trả SENT (không ném, không FAILED), log B cùng khoá ra SKIPPED', async () => {
+      const { u, key, a, outcome } = await w1FailsAfterW2Sent(true);
+      expect(outcome).toBe('SENT');
+      const after = await row(a.id);
+      expect(after.status).toBe('SENT');
+      expect(after.error).toBeNull();
+      expect(after.payload).toEqual({ data: {}, dedupeKey: key });
+      const b = await mkLog(u.id, key, 'PENDING');
+      sendTemplate.mockClear();
+      expect(await svc.deliverZns(jobOf(b.id), false)).toBe('SKIPPED');
+      expect(sendTemplate).not.toHaveBeenCalled();
+    });
+
+    it('lỗi tạm thời còn lượt: log vẫn SENT, trả SENT để BullMQ không thử lại và gửi đôi', async () => {
+      const { key, a, outcome } = await w1FailsAfterW2Sent(false);
+      expect(outcome).toBe('SENT');
+      const after = await row(a.id);
+      expect(after.status).toBe('SENT');
+      expect(after.error).toBeNull();
+      expect(after.payload).toEqual({ data: {}, dedupeKey: key });
+    });
+  });
+
   it('markStuckZnsSent chỉ từ RETRYING; đua với closeStuckZnsLog thì đúng một bên thắng', async () => {
     const u = await newUser();
     const pending = await mkLog(u.id, null, 'PENDING');

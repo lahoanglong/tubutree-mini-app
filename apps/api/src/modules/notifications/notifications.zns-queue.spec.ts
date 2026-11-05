@@ -29,7 +29,7 @@ function setup(opts: { queueAdd?: jest.Mock; sendTemplate?: jest.Mock; status?: 
   const sendTemplate = opts.sendTemplate ?? jest.fn().mockResolvedValue({ ok: true });
   const analytics = { recordBestEffort: jest.fn().mockResolvedValue(undefined) } as unknown as AnalyticsEventsService;
   const svc = new NotificationsService(prisma, { sendTemplate } as unknown as ZnsClient, analytics, { add } as never);
-  return { svc, create, update, updateMany, add, sendTemplate, executeRaw };
+  return { svc, create, update, updateMany, add, sendTemplate, executeRaw, findUnique };
 }
 
 /** Chuỗi SQL của lần gọi $executeRaw thứ n (tagged template). */
@@ -115,29 +115,37 @@ describe('NotificationsService.deliverZns', () => {
     expect(executeRaw).toHaveBeenCalledTimes(3);
   });
 
-  it('HTTP 200 + error != 0 không phải SENT: lỗi vĩnh viễn → FAILED ngay (kể cả còn lượt), lưu mã + lý do', async () => {
+  it('HTTP 200 + error != 0 không phải SENT: lỗi vĩnh viễn → FAILED ngay (kể cả còn lượt), lưu mã + lý do, trong một câu UPDATE không đè SENT', async () => {
     const failure = { ok: false, retryable: false, code: -118, reason: 'user not exist' };
-    const { svc, update } = setup({ sendTemplate: jest.fn().mockResolvedValue(failure) });
+    const { svc, update, executeRaw } = setup({ sendTemplate: jest.fn().mockResolvedValue(failure) });
     expect(await svc.deliverZns(JOB, false)).toBe('FAILED');
-    expect(update).toHaveBeenCalledWith({
-      where: { id: 'log-2' },
-      data: { status: 'FAILED', error: expect.stringMatching(/-118.*user not exist/) },
-    });
+    expect(update).not.toHaveBeenCalled();
+    expect(sqlOf(executeRaw)).toMatch(/status <> 'SENT'/);
+    expect(executeRaw.mock.calls[0]).toEqual(expect.arrayContaining(['FAILED', 'log-2', expect.stringMatching(/-118.*user not exist/)]));
   });
 
-  it('lỗi tạm thời còn lượt → RETRYING + RETRY; hết lượt → FAILED', async () => {
+  it('lỗi tạm thời còn lượt → RETRYING + RETRY; hết lượt → FAILED (cả hai qua câu UPDATE có điều kiện status <> SENT)', async () => {
     const failure = { ok: false, retryable: true, code: -124, reason: 'token expired' };
-    const { svc, update } = setup({ sendTemplate: jest.fn().mockResolvedValue(failure) });
+    const { svc, update, executeRaw } = setup({ sendTemplate: jest.fn().mockResolvedValue(failure) });
     expect(await svc.deliverZns(JOB, false)).toBe('RETRY');
-    expect(update).toHaveBeenLastCalledWith({
-      where: { id: 'log-2' },
-      data: { status: 'RETRYING', error: expect.stringContaining('token expired') },
-    });
+    expect(executeRaw.mock.calls[0]).toEqual(expect.arrayContaining(['RETRYING', 'log-2', expect.stringContaining('token expired')]));
     expect(await svc.deliverZns(JOB, true)).toBe('FAILED');
-    expect(update).toHaveBeenLastCalledWith({
-      where: { id: 'log-2' },
-      data: { status: 'FAILED', error: expect.stringContaining('token expired') },
-    });
+    expect(executeRaw.mock.calls[1]).toEqual(expect.arrayContaining(['FAILED', 'log-2', expect.stringContaining('token expired')]));
+    expect(sqlOf(executeRaw, 1)).toMatch(/status <> 'SENT'/);
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  // Worker khác đã ghi SENT trong lúc ta chờ Zalo: UPDATE trúng 0 dòng, log đã SENT -> báo SENT (processor không ném, BullMQ không thử lại).
+  it.each([
+    ['lỗi vĩnh viễn', { ok: false, retryable: false, code: -118, reason: 'x' }, false],
+    ['lỗi tạm thời còn lượt', { ok: false, retryable: true, code: -124, reason: 'x' }, false],
+    ['lỗi tạm thời lượt cuối', { ok: false, retryable: true, code: -124, reason: 'x' }, true],
+  ])('%s nhưng log đã SENT bởi worker khác (UPDATE 0 dòng) → trả SENT, không RETRY/FAILED', async (_n, failure, final) => {
+    const { svc, executeRaw, findUnique } = setup({ sendTemplate: jest.fn().mockResolvedValue(failure) });
+    executeRaw.mockResolvedValue(0);
+    // Lần đọc đầu là của claimUnderDedupeLock (log còn PENDING); lần sau, khi UPDATE trúng 0 dòng, thấy SENT.
+    findUnique.mockResolvedValueOnce({ status: 'PENDING', payload: { data: {} } }).mockResolvedValueOnce({ status: 'SENT' });
+    expect(await svc.deliverZns(JOB, final)).toBe('SENT');
   });
 
   it('log đã SENT (job chạy lặp) → không gửi lần nữa', async () => {

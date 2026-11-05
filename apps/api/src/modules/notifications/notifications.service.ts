@@ -89,7 +89,10 @@ function releasedPayload(payload: unknown, logId: string): Prisma.InputJsonObjec
   return { ...p, dedupeKey: releasedZnsDedupeKey(key, logId) } as Prisma.InputJsonObject;
 }
 
-/** Log ZNS đã đóng vì không xếp được hàng đợi và đã nhả khoá chống trùng (xem dispatchZns). */
+/**
+ * Log ZNS đã đóng FAILED và đã nhả khoá chống trùng. Mọi đường nhả đều ghi `<khoá>:failed:<id>`: dispatchZns (không xếp được hàng đợi),
+ * claimUnderDedupeLock (nhánh FAILED), closeStuckZnsLog (cron và sự kiện failed của processor) và deliverZns (FAILED cuối, writeFailure).
+ */
 function isReleasedZnsLog(payload: unknown, logId: string): boolean {
   const key = (payload as { dedupeKey?: unknown } | null)?.dedupeKey;
   return typeof key === 'string' && key.endsWith(`:failed:${logId}`);
@@ -473,15 +476,31 @@ export class NotificationsService {
       return 'SENT';
     }
     const error = znsFailureText(result);
-    if (result.retryable && !finalAttempt) {
-      await this.prisma.notificationLog.update({ where, data: { status: 'RETRYING', error } });
-      return 'RETRY';
+    const retrying = result.retryable && !finalAttempt;
+    // Một câu UPDATE có điều kiện status <> 'SENT' (xem writeFailure): worker khác có thể đã ghi SENT cho log này trong lúc ta chờ Zalo.
+    // Khi đó log đã đúng là "đã gửi": trả SENT (processor không ném nên BullMQ không thử lại), không đè FAILED/RETRYING và không nhả khoá.
+    if ((await this.writeFailure(job.notificationLogId, retrying ? 'RETRYING' : 'FAILED', error)) === 0) {
+      const now = await this.prisma.notificationLog.findUnique({ where, select: { status: true } });
+      if (now?.status === 'SENT') return 'SENT';
     }
-    // Job completed vẫn retry tay được: log FAILED còn khoá nguyên thì lần chạy lại gửi tiếp dù nơi gọi đã gửi tin cùng sự kiện bằng log khác.
-    const current = await this.prisma.notificationLog.findUnique({ where, select: { payload: true } });
-    const released = current ? releasedPayload(current.payload, job.notificationLogId) : undefined;
-    await this.prisma.notificationLog.update({ where, data: { status: 'FAILED', error, ...(released ? { payload: released } : {}) } });
-    return 'FAILED';
+    return retrying ? 'RETRY' : 'FAILED';
+  }
+
+  /**
+   * Ghi kết cục chưa gửi được (RETRYING còn lượt, FAILED hết lượt) bằng MỘT câu UPDATE, không ghi đè log đã SENT. FAILED nhả luôn khoá
+   * chống trùng trong cùng câu (`<khoá>:failed:<id>`, cùng quy tắc releasedPayload): job completed vẫn retry tay được, log FAILED còn khoá
+   * nguyên thì lần chạy lại gửi tiếp dù nơi gọi đã gửi tin cùng sự kiện bằng log khác. Trả số dòng đã ghi (0 = log đã SENT hoặc biến mất).
+   */
+  private async writeFailure(logId: string, status: 'RETRYING' | 'FAILED', error: string): Promise<number> {
+    const release = status === 'FAILED';
+    return this.prisma.$executeRaw`
+      UPDATE notification_logs
+         SET status = ${status}, "error" = ${error},
+             payload = CASE
+               WHEN ${release}::boolean AND jsonb_typeof(payload -> 'dedupeKey') = 'string' AND (payload ->> 'dedupeKey') !~ ':failed:[^:]+$'
+               THEN jsonb_set(payload, '{dedupeKey}', to_jsonb((payload ->> 'dedupeKey') || ':failed:' || id))
+               ELSE payload END
+       WHERE id = ${logId} AND status <> 'SENT'`;
   }
 
   /**
