@@ -103,8 +103,10 @@ const isUniqueViolation = (e: unknown): boolean => e instanceof Prisma.PrismaCli
  */
 function rethrowForeignKey(e: unknown, what: string): never {
   if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2003') {
-    if (String(e.meta?.field_name ?? '').includes('campaignId')) throw new NotFoundException('Không tìm thấy chiến dịch.');
-    throw new BadRequestException(`${what} vừa bị xoá, tải lại danh sách rồi chọn lại.`);
+    const field = String(e.meta?.field_name ?? '');
+    if (field.includes('campaignId')) throw new NotFoundException('Không tìm thấy chiến dịch.');
+    const label = field.includes('couponId') ? 'Có mã' : field.includes('productId') ? 'Có sản phẩm' : what;
+    throw new BadRequestException(`${label} vừa bị xoá, tải lại danh sách rồi chọn lại.`);
   }
   throw e;
 }
@@ -151,7 +153,19 @@ export class CampaignsAdminService {
       sortOrder: dto.sortOrder ?? 0,
     };
     const before = dto.id ? await this.prisma.campaign.findUnique({ where: { id: dto.id } }) : null;
-    const { verdict, issues } = await this.judge(this.prisma, before, { ...subject, isActive: dto.isActive ?? true }, { productIds: dto.productIds, couponCodes: dto.couponCodes }, now, true);
+    // Cùng bước kiểm đầu vào như lúc lưu (chỉ đọc): lỗi 400 của chúng thành verdict chặn kèm đúng câu lúc lưu.
+    let products: string[] | undefined;
+    let coupons: ResolvedCoupons | undefined;
+    try {
+      if (!before || subject.linkType !== before.linkType || subject.linkValue !== before.linkValue) await this.assertLinkTarget(this.prisma, subject.linkType, subject.linkValue);
+      products = dto.productIds ? await this.resolveProductIds(dto.productIds) : undefined;
+      coupons = dto.couponCodes ? await this.resolveCoupons(dto.couponCodes) : undefined;
+    } catch (e) {
+      if (!(e instanceof BadRequestException)) throw e;
+      const reason = e.message;
+      return { issues: [{ level: 'BLOCK', code: 'INVALID', message: reason }], blockers: 1, warnings: 0, verdict: { blocked: true, codes: ['INVALID'], reason } };
+    }
+    const { verdict, issues } = await this.judge(this.prisma, before, { ...subject, isActive: dto.isActive ?? true }, { productIds: products, couponCodes: coupons?.codes }, now, true);
     return { issues, ...countHealth(issues), verdict: { blocked: verdict.blocked, codes: verdict.codes, ...(verdict.reason ? { reason: verdict.reason } : {}) } };
   }
 
@@ -338,7 +352,7 @@ export class CampaignsAdminService {
         if (writeRow && (lists.products || lists.coupons)) updated = (await tx.campaign.findUnique({ where: { id }, include: DETAIL_INCLUDE })) ?? updated;
         return { updated, current };
       }, PRISMA_TRANSACTION_OPTIONS)
-      .catch((e: unknown) => rethrowForeignKey(e, lists.products ? 'Có sản phẩm' : 'Có mã'));
+      .catch((e: unknown) => rethrowForeignKey(e, lists.products && lists.coupons ? 'Có sản phẩm hoặc mã' : lists.products ? 'Có sản phẩm' : 'Có mã'));
   }
 
   /** Kiểm tồn tại và trần số lượng trước giao dịch; trả danh sách đã bỏ trùng. */

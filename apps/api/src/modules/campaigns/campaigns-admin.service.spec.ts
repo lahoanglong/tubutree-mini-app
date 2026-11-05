@@ -331,6 +331,26 @@ describe('P2003 khi mục bị xoá giữa lúc kiểm và ghi', () => {
   });
 });
 
+describe('P2003 chọn nhãn theo cột vi phạm khi PATCH gửi cả hai danh sách', () => {
+  const both = { productIds: ['p1'], couponCodes: ['THU10'] };
+  const coupons = [{ id: 'k1', code: 'THU10', scope: 'PUBLIC', batch: null }];
+  it('couponId → "Có mã", không nói sản phẩm', async () => {
+    const a = setup({ products: [{ id: 'p1' }], coupons });
+    a.prisma.$transaction.mockRejectedValue(fkViolation('CampaignCoupon_couponId_fkey (index)'));
+    await expect(a.svc.update('c1', both, NOW)).rejects.toThrow(/^Có mã vừa bị xoá/);
+  });
+  it('productId → "Có sản phẩm"', async () => {
+    const a = setup({ products: [{ id: 'p1' }], coupons });
+    a.prisma.$transaction.mockRejectedValue(fkViolation('CampaignProduct_productId_fkey (index)'));
+    await expect(a.svc.update('c1', both, NOW)).rejects.toThrow(/^Có sản phẩm vừa bị xoá/);
+  });
+  it('không rõ cột: dùng nhãn chung theo danh sách có mặt', async () => {
+    const a = setup({ products: [{ id: 'p1' }], coupons });
+    a.prisma.$transaction.mockRejectedValue(fkViolation('khac'));
+    await expect(a.svc.update('c1', both, NOW)).rejects.toThrow(/^Có sản phẩm hoặc mã vừa bị xoá/);
+  });
+});
+
 describe('CampaignsAdminService.setCoupons', () => {
   const coupon = (over: Record<string, unknown> = {}) => ({ id: 'k1', code: 'THU10', scope: 'PUBLIC', batch: null, ...over });
 
@@ -494,6 +514,47 @@ describe('CampaignsAdminService: kiểm sức khoẻ trước khi bật', () => 
       expect(out).toEqual({ issues: [], blockers: 0, warnings: 0, verdict: { blocked: false, codes: [] } });
       // Hai lượt đọc liên kết đã lưu: một cho bản nháp (không gửi danh sách), một cho bản đã lưu làm mốc "trước" của phán quyết.
       expect(prisma.campaignProduct.findMany).toHaveBeenCalledTimes(2);
+    });
+
+    it('đích PRODUCT trỏ slug không tồn tại: verdict chặn với đúng câu lỗi lúc lưu, không ghi gì', async () => {
+      const { svc, prisma } = setup();
+      const out = await svc.check(dto({ linkType: 'PRODUCT', linkValue: 'khong-co', productIds: [] }), NOW);
+      expect(out.verdict).toMatchObject({ blocked: true, codes: ['INVALID'] });
+      expect(out.verdict.reason).toBe('Không có sản phẩm với slug "khong-co". Kiểm lại slug.');
+      expect(out).toMatchObject({ blockers: 1 });
+      expect(out.issues).toEqual([{ level: 'BLOCK', code: 'INVALID', message: 'Không có sản phẩm với slug "khong-co". Kiểm lại slug.' }]);
+      expect(prisma.campaign.update).not.toHaveBeenCalled();
+      expect(prisma.campaign.create).not.toHaveBeenCalled();
+    });
+
+    it('đích danh mục không tồn tại: verdict chặn', async () => {
+      const out = await setup().svc.check(dto({ linkType: 'CATEGORY', linkValue: 'khong-co', productIds: [] }), NOW);
+      expect(out.verdict).toMatchObject({ blocked: true, codes: ['INVALID'], reason: 'Không có danh mục với slug "khong-co". Kiểm lại slug danh mục.' });
+    });
+
+    it('sửa chiến dịch đã lưu mà không đổi đích: không kiểm lại tồn tại slug (khớp lúc lưu)', async () => {
+      const { svc } = setup({ existing: row({ isActive: false, linkType: 'PRODUCT', linkValue: 'da-an' }), linked: [linkedTo('c1')] });
+      const out = await svc.check(dto({ id: 'c1', linkType: 'PRODUCT', linkValue: 'da-an', isActive: false }), NOW);
+      expect(out.verdict.blocked).toBe(false);
+    });
+
+    it('sản phẩm lạ trong danh sách: verdict chặn với câu "Không tìm thấy sản phẩm"', async () => {
+      const out = await setup({ products: [] }).svc.check(dto({ productIds: ['zzz'] }), NOW);
+      expect(out.verdict).toMatchObject({ blocked: true, codes: ['INVALID'] });
+      expect(out.verdict.reason).toBe('Không tìm thấy sản phẩm: zzz.');
+    });
+
+    it('mã lô thẻ in và mã lạ: verdict chặn với câu lúc lưu', async () => {
+      const batched = await setup({ coupons: [{ id: 'k1', code: 'TH-ABC', scope: 'PUBLIC', batch: 'TH' }] }).svc.check(dto({ couponCodes: ['th-abc'] }), NOW);
+      expect(batched.verdict).toMatchObject({ blocked: true, codes: ['INVALID'], reason: 'Mã thuộc lô thẻ in, không gắn vào chiến dịch: TH-ABC.' });
+      const unknown = await setup().svc.check(dto({ couponCodes: ['NOPE'] }), NOW);
+      expect(unknown.verdict.reason).toBe('Không tìm thấy mã: NOPE.');
+    });
+
+    it('lỗi không phải 400 (hạ tầng) vẫn ném, không bị nuốt thành verdict', async () => {
+      const { svc, prisma } = setup();
+      prisma.product.findMany.mockRejectedValue(new Error('db down'));
+      await expect(svc.check(dto({ productIds: ['p1'] }), NOW)).rejects.toThrow('db down');
     });
 
     it('đích sai định dạng: 400 như lúc lưu', async () => {

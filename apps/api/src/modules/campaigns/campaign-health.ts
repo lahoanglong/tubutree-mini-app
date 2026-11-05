@@ -16,7 +16,9 @@ export type HealthCode =
   | 'COUPON_NOT_STARTED'
   | 'COUPON_EXHAUSTED'
   | 'COUPON_ENDS_EARLY'
-  | 'PRODUCTS_UNAVAILABLE';
+  | 'PRODUCTS_UNAVAILABLE'
+  /** Đầu vào lưu sai (slug đích, sản phẩm hay mã không dùng được): chỉ do `check` báo, giống lỗi 400 lúc lưu. */
+  | 'INVALID';
 
 export interface HealthIssue {
   code: HealthCode;
