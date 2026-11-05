@@ -262,6 +262,18 @@ describe('CampaignsTab: tạo chiến dịch', () => {
     expect(c.querySelector('[role="alert"]')!.textContent).toContain('Giờ kết thúc phải sau giờ bắt đầu');
   });
 
+  it('thứ tự ngoài 0 đến 9999: form tự báo bằng tiếng Việt thay vì bong bóng kiểm tra của trình duyệt, không gửi gì', async () => {
+    const c = await mount();
+    await open(c);
+    fillBasics(c);
+    typeInto(field(c, 'Thứ tự hiển thị'), '99999');
+    expect(c.querySelector('form')!.noValidate).toBe(true);
+    click(byText(c, 'button', 'Lưu chiến dịch'));
+    await flush(4);
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(c.querySelector('[role="alert"]')!.textContent).toContain('Thứ tự là số nguyên từ 0 đến 9999.');
+  });
+
   it('thiếu tên, ảnh hoặc mốc thì nút Lưu khoá, không gửi gì', async () => {
     const c = await mount();
     await open(c);

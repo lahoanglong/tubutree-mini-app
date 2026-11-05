@@ -234,6 +234,7 @@ export function CampaignForm({
 
   return (
     <form
+      noValidate
       aria-label={initial ? 'Sửa chiến dịch' : 'Tạo chiến dịch mới'}
       onSubmit={(e) => {
         e.preventDefault();
