@@ -54,6 +54,40 @@ describe('Feed: gửi trùng đăng bài / tạo sự kiện (real Postgres)', (
     expect(await prisma.feedPost.count({ where: { userId: u.id } })).toBe(3);
   });
 
+  describe('khác một trường nội dung khách gửi thì là bài mới, không bị nuốt', () => {
+    const base = { kind: 'TIP' as const, body: 'Cùng chú thích', images: ['https://res.cloudinary.com/a.jpg'] };
+    const variants: [string, Record<string, unknown>][] = [
+      ['ảnh khác', { images: ['https://res.cloudinary.com/b.jpg'] }],
+      ['không ảnh', { images: [] }],
+      ['loại bài khác', { kind: 'SHOWCASE' }],
+      ['thẻ #tag khác', { tagSlugs: ['sen-da'] }],
+      ['tiêu đề khác', { title: 'Tiêu đề mới' }],
+    ];
+    it.each(variants)('%s → 2 bài', async (_n, over) => {
+      const u = await createUser(prisma);
+      const first = await feed.createPost(u.id, 'CUSTOMER', { ...base });
+      const second = await feed.createPost(u.id, 'CUSTOMER', { ...base, ...over });
+      expect(second.id).not.toBe(first.id);
+      expect(await prisma.feedPost.count({ where: { userId: u.id } })).toBe(2);
+    });
+
+    it('danh mục khác → 2 bài', async () => {
+      const u = await createUser(prisma);
+      const cat = await prisma.communityCategory.create({ data: { slug: `cat-${Date.now()}-${Math.random()}`, name: 'Mục' } });
+      const first = await feed.createPost(u.id, 'CUSTOMER', { ...base });
+      const second = await feed.createPost(u.id, 'CUSTOMER', { ...base, categoryId: cat.id });
+      expect(second.id).not.toBe(first.id);
+    });
+
+    it('giống hệt (kể cả ảnh, thẻ) → trả bài cũ', async () => {
+      const u = await createUser(prisma);
+      const input = { ...base, tagSlugs: ['sen-da'] };
+      const first = await feed.createPost(u.id, 'CUSTOMER', input);
+      const again = await feed.createPost(u.id, 'CUSTOMER', input);
+      expect(again.id).toBe(first.id);
+    });
+  });
+
   it('tạo sự kiện cùng tiêu đề + giờ 4 lần song song → 1 sự kiện', async () => {
     const title = `Sự kiện đôi ${Date.now()}`;
     const dto = { title, startAt: new Date('2027-01-01T00:00:00Z'), endAt: new Date('2027-01-10T00:00:00Z') };

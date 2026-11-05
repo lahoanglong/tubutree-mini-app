@@ -3658,20 +3658,58 @@ describe('CommunityFeedService: gửi lại cùng nội dung trong 5 phút (m5)'
     expect(prisma.$executeRaw).toHaveBeenCalled();
   });
 
-  it('createPost: đã có bài cùng người + tiêu đề + nội dung + sự kiện vừa tạo → trả bài đó, không tạo/thưởng thêm', async () => {
+  const cand = (over: Record<string, unknown> = {}) => ({ id: 'old', status: 'PUBLISHED', productTags: [], tags: [], ...over });
+
+  it('createPost: ứng viên trùng đủ trường nội dung → trả bài đó, không tạo/thưởng thêm', async () => {
     const prisma = makePrisma();
-    (prisma.feedPost.findFirst as jest.Mock).mockResolvedValue({ id: 'old', status: 'PUBLISHED' });
+    (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([cand()]);
     const reward = { rewardPost: jest.fn(), rewardAnswer: jest.fn(), rewardBestAnswer: jest.fn() };
-    const r = await makeSvc(prisma, reward).createPost('u1', 'STAFF', { kind: 'TIP', body: 'mẹo hay' });
+    const r = await makeSvc(prisma, reward).createPost('u1', 'STAFF', { kind: 'TIP', body: 'mẹo hay', images: ['https://i/1.jpg'], categoryId: undefined });
     expect(r).toEqual({ id: 'old', status: 'PUBLISHED' });
     expect(prisma.feedPost.create).not.toHaveBeenCalled();
     expect(reward.rewardPost).not.toHaveBeenCalled();
-    const where = (prisma.feedPost.findFirst as jest.Mock).mock.calls[0][0].where;
-    expect(where).toMatchObject({ userId: 'u1', body: 'mẹo hay', title: null });
+    const where = (prisma.feedPost.findMany as jest.Mock).mock.calls[0][0].where;
+    expect(where).toMatchObject({ userId: 'u1', body: 'mẹo hay', title: null, kind: 'TIP', categoryId: null, images: { equals: ['https://i/1.jpg'] } });
     expect(where.createdAt.gte).toBeInstanceOf(Date);
   });
 
-  it('createPost: chưa có bài trùng → tạo bình thường dưới khoá theo người', async () => {
+  it('createPost: cùng chú thích nhưng khác sản phẩm gắn → bài mới (ứng viên không bị nuốt)', async () => {
+    const prisma = makePrisma();
+    (prisma.product.findMany as jest.Mock).mockResolvedValue([{ id: 'prod1' }]);
+    (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([cand({ productTags: [{ productId: 'prodX' }] })]);
+    await makeSvc(prisma).createPost('u1', 'STAFF', { kind: 'TIP', body: 'mẹo hay', productSlugs: ['a'] });
+    expect(prisma.feedPost.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('createPost: cùng sản phẩm gắn (khác thứ tự) → coi là trùng', async () => {
+    const prisma = makePrisma();
+    (prisma.product.findMany as jest.Mock).mockResolvedValue([{ id: 'p1' }, { id: 'p2' }]);
+    (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([cand({ productTags: [{ productId: 'p2' }, { productId: 'p1' }] })]);
+    const r = await makeSvc(prisma).createPost('u1', 'STAFF', { kind: 'TIP', body: 'mẹo hay', productSlugs: ['a', 'b'] });
+    expect(r.id).toBe('old');
+    expect(prisma.feedPost.create).not.toHaveBeenCalled();
+  });
+
+  it('createPost: khác thẻ #tag → bài mới; cùng thẻ (khác hoa thường/dấu #) → trùng', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([cand({ tags: [{ tag: { slug: 'sen-da' } }] })]);
+    await makeSvc(prisma).createPost('u1', 'STAFF', { kind: 'TIP', body: 'mẹo hay', tagSlugs: ['tuoi-nuoc'] });
+    expect(prisma.feedPost.create).toHaveBeenCalledTimes(1);
+    const prisma2 = makePrisma();
+    (prisma2.feedPost.findMany as jest.Mock).mockResolvedValue([cand({ tags: [{ tag: { slug: 'sen-da' } }] })]);
+    const r = await makeSvc(prisma2).createPost('u1', 'STAFF', { kind: 'TIP', body: 'mẹo hay', tagSlugs: ['#Sen Đá'] });
+    expect(r.id).toBe('old');
+    expect(prisma2.feedPost.create).not.toHaveBeenCalled();
+  });
+
+  it('createPost: bài có thẻ/sản phẩm nhưng ứng viên không có → bài mới; bài không thẻ mà ứng viên có thẻ → bài mới', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([cand({ tags: [{ tag: { slug: 'sen-da' } }] })]);
+    await makeSvc(prisma).createPost('u1', 'STAFF', { kind: 'TIP', body: 'mẹo hay' });
+    expect(prisma.feedPost.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('createPost: chưa có ứng viên → tạo bình thường dưới khoá theo người', async () => {
     const prisma = makePrisma();
     const r = await makeSvc(prisma).createPost('u1', 'STAFF', { kind: 'TIP', body: 'mẹo mới' });
     expect(r.id).toBe('new');

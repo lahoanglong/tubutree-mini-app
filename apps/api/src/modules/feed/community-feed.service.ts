@@ -647,19 +647,38 @@ export class CommunityFeedService {
     // qua nhánh auto-PUBLISHED) thay vì chặn hẳn, để admin còn duyệt tay nếu là báo động giả.
     const flagged = containsBannedContent(`${title ?? ''}\n${body}`, await this.bannedKeywords());
     const status = trusted && !flagged ? 'PUBLISHED' : 'PENDING';
-    // Bấm đăng hai lần / mạng chập chờn gửi lại: cùng người, cùng tiêu đề + nội dung + sự kiện trong 5 phút thì trả bài đã có,
-    // không tạo thêm (và không thưởng, không cộng uy tín lần nữa). Khoá tư vấn theo người buộc hai yêu cầu song song xếp hàng.
+    // Sản phẩm gắn và thẻ #tag nằm ở bảng quan hệ nên so trùng ở JS trên vài ứng viên: lấy trước khi vào giao dịch.
+    const products = slugs.length
+      ? await this.prisma.product.findMany({ where: { slug: { in: slugs }, isActive: true }, select: { id: true } })
+      : [];
+    const tagLabels = (input.tagSlugs ?? [])
+      .map((raw) => (raw ?? '').trim().replace(/^#+/, '').trim())
+      .filter((s) => s.length > 0)
+      .slice(0, MAX_TAGS);
+    const wantedProducts = [...new Set(products.map((p) => p.id))].sort();
+    const wantedTags = [...new Set(tagLabels.map(slugifyTag))].sort();
+    const sameSet = (a: string[], b: string[]) => a.length === b.length && a.every((v, i) => v === b[i]);
+    // Bấm đăng hai lần / mạng chập chờn gửi lại: cùng người và cùng MỌI trường nội dung khách gửi (tiêu đề, nội dung, loại, danh mục,
+    // ảnh, sự kiện, sản phẩm gắn, thẻ) trong 5 phút thì trả bài đã có, không tạo thêm (và không thưởng, không cộng uy tín lần nữa).
+    // Thiếu một trường là nuốt bài thật mà vẫn báo thành công. Khoá tư vấn theo người buộc hai yêu cầu song song xếp hàng.
     const createDeduped = async (tx: Prisma.TransactionClient) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`feed-post:${userId}`}))`;
-      const existing = await tx.feedPost.findFirst({
+      const candidates = await tx.feedPost.findMany({
         where: {
-          userId, title, body, status: { not: 'REMOVED' },
+          userId, title, body, kind, categoryId: input.categoryId ?? null, images: { equals: images },
+          status: { not: 'REMOVED' },
           meta: input.eventId ? { path: ['eventId'], equals: input.eventId } : { equals: Prisma.DbNull },
           createdAt: { gte: new Date(Date.now() - FEED_CREATE_DEDUPE_MS) },
         },
-        select: { id: true, status: true },
+        select: { id: true, status: true, productTags: { select: { productId: true } }, tags: { select: { tag: { select: { slug: true } } } } },
         orderBy: { createdAt: 'desc' },
+        take: 10,
       });
+      const existing = candidates.find(
+        (c) =>
+          sameSet([...new Set(c.productTags.map((t) => t.productId))].sort(), wantedProducts) &&
+          sameSet([...new Set(c.tags.map((t) => t.tag.slug))].sort(), wantedTags),
+      );
       if (existing) return { id: existing.id, status: existing.status as string, duplicate: true };
       const created = await tx.feedPost.create({
         data: {
@@ -675,22 +694,13 @@ export class CommunityFeedService {
     );
     if (post.duplicate) return { id: post.id, status: post.status };
 
-    if (slugs.length) {
-      const products = await this.prisma.product.findMany({
-        where: { slug: { in: slugs }, isActive: true }, select: { id: true },
+    if (products.length) {
+      await this.prisma.postProductTag.createMany({
+        data: products.map((p) => ({ postId: post.id, productId: p.id })),
+        skipDuplicates: true,
       });
-      if (products.length) {
-        await this.prisma.postProductTag.createMany({
-          data: products.map((p) => ({ postId: post.id, productId: p.id })),
-          skipDuplicates: true,
-        });
-      }
     }
 
-    const tagLabels = (input.tagSlugs ?? [])
-      .map((raw) => (raw ?? '').trim().replace(/^#+/, '').trim())
-      .filter((s) => s.length > 0)
-      .slice(0, MAX_TAGS);
     if (tagLabels.length) {
       try {
         // Hai nhãn cùng slug là một Tag: nhãn đầu giữ name, như upsert nối tiếp trước đây.
