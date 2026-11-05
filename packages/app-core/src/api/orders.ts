@@ -90,12 +90,13 @@ export interface OrderListFilter {
 
 // Bug 1 fix: truoc day khong truyen page/limit -> BE mac dinh page=1 limit=20, khach co >20 don
 // khong bao gio xem duoc don cu hon qua app. Nhan them page/limit de orders.tsx phan trang duoc.
-export const fetchOrders = (http: HttpClient, filter: OrderListFilter = {}, page = 1, limit = 20) =>
+export const fetchOrders = (http: HttpClient, filter: OrderListFilter = {}, page = 1, limit = 20, cursor?: string) =>
   http.get<PageResponse<OrderView>>('/orders', {
     query: {
       ...(filter.status ? { status: filter.status } : filter.group ? { group: filter.group } : {}),
       page,
       limit,
+      ...(cursor ? { cursor } : {}),
     },
   });
 /** Một phần của dải "Việc cần làm": đơn mới nhất của bộ lọc và tổng đơn khớp (meta.total của GET /orders). */
