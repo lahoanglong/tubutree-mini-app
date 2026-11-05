@@ -109,7 +109,7 @@ test.describe('Web khách: thanh toán', () => {
     expect(cart.match(/Tạm tính/g)).toHaveLength(1);
   });
 
-  test('1280: khách chưa có địa chỉ, nút Đặt hàng khoá và lý do nằm ngay cạnh nút, trong màn (K2 c)', async ({ page, api }, testInfo) => {
+  test('1280: khách chưa có địa chỉ, nút Đặt hàng bấm được để chỉ chỗ thiếu và lý do nằm ngay cạnh nút, trong màn (K2 c)', async ({ page, api }, testInfo) => {
     test.skip(testInfo.project.name !== 'Web Customer', 'Khung tóm tắt có nút Đặt hàng riêng chỉ từ lg');
     mockBuyer(api, { wallet: 0, points: 0 });
     api.get('/me/addresses', []);
@@ -119,7 +119,7 @@ test.describe('Web khách: thanh toán', () => {
     const part = page.locator('[data-mini-part="place-order"]');
     const place = part.getByRole('button', { name: /^Đặt hàng/ });
     await expect(place).toBeVisible();
-    await expect(place).toBeDisabled();
+    await expect(place).toBeEnabled();
     const reason = part.getByRole('status').filter({ hasText: 'Chọn địa chỉ giao hàng để đặt hàng.' });
     await expect(reason).toBeVisible();
     await expect(reason).toBeInViewport({ ratio: 1 });
@@ -127,6 +127,10 @@ test.describe('Web khách: thanh toán', () => {
     const [b, r] = await Promise.all([place.boundingBox(), reason.boundingBox()]);
     expect(r!.y - (b!.y + b!.height)).toBeLessThan(24);
     expect(r!.y).toBeGreaterThanOrEqual(b!.y + b!.height - 1);
+    // Bấm nút không đặt đơn: báo thiếu địa chỉ ngay dưới khối địa chỉ.
+    await place.click();
+    await expect(page.locator('#checkout-address-error')).toBeVisible();
+    expect(api.callsTo('POST', '/checkout/place-order')).toHaveLength(0);
   });
 
   test('375: thanh toán, giỏ hàng, tài khoản, Kho quà không tràn ngang', async ({ page, api }, testInfo) => {
