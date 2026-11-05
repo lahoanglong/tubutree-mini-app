@@ -19,6 +19,7 @@ import { AffiliateService } from '../../src/modules/affiliate/affiliate.service'
 import { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import { FlashSaleService } from '../../src/modules/flash-sale/flash-sale.service';
 import { CouponsService } from '../../src/modules/coupons/coupons.service';
+import { PANCAKE_FORBIDDEN_ERROR_PREFIX } from '@tubutree/shared-types';
 import { createOrder, createUser, randCode, sleep } from './helpers';
 
 /**
@@ -58,6 +59,14 @@ const url = process.env.TEST_REDIS_URL;
     moduleRef = await Test.createTestingModule({ imports: [PrismaModule] }).compile();
     await moduleRef.init();
     prisma = moduleRef.get(PrismaService);
+    // Nhật ký MỌI giá trị pancakeErrorKind từng được ghi (không lấy mẫu): trigger AFTER UPDATE ghi lại mỗi lần cột đổi giá trị.
+    await prisma.$executeRawUnsafe('DROP TABLE IF EXISTS it_hi_kind_log');
+    await prisma.$executeRawUnsafe('CREATE TABLE it_hi_kind_log (id bigserial PRIMARY KEY, order_id text NOT NULL, kind text)');
+    await prisma.$executeRawUnsafe(`CREATE OR REPLACE FUNCTION it_hi_kind_log_fn() RETURNS trigger AS $$
+      BEGIN INSERT INTO it_hi_kind_log (order_id, kind) VALUES (NEW.id, NEW."pancakeErrorKind"); RETURN NEW; END; $$ LANGUAGE plpgsql`);
+    await prisma.$executeRawUnsafe('DROP TRIGGER IF EXISTS it_hi_kind_log_trg ON orders');
+    await prisma.$executeRawUnsafe(`CREATE TRIGGER it_hi_kind_log_trg AFTER UPDATE ON orders FOR EACH ROW
+      WHEN (OLD."pancakeErrorKind" IS DISTINCT FROM NEW."pancakeErrorKind") EXECUTE FUNCTION it_hi_kind_log_fn()`);
     const name = `it-hi-pancake-push-${Date.now()}`;
     queue = new Queue(name, {
       connection: connection(),
@@ -70,6 +79,11 @@ const url = process.env.TEST_REDIS_URL;
   });
 
   afterAll(async () => {
+    if (prisma) {
+      await prisma.$executeRawUnsafe('DROP TRIGGER IF EXISTS it_hi_kind_log_trg ON orders').catch(() => undefined);
+      await prisma.$executeRawUnsafe('DROP FUNCTION IF EXISTS it_hi_kind_log_fn()').catch(() => undefined);
+      await prisma.$executeRawUnsafe('DROP TABLE IF EXISTS it_hi_kind_log').catch(() => undefined);
+    }
     await worker?.close();
     await queue?.close();
     await moduleRef?.close();
@@ -314,11 +328,14 @@ const url = process.env.TEST_REDIS_URL;
     expect(alerts.alert.mock.calls.filter(([code]) => mine.has(code as string))).toHaveLength(0);
   });
 
-  it('job BullMQ thử lại (503 rồi 403) trên đơn CONFIG_RECHECK → REJECTED, không bao giờ về CONFIG nên báo động tổng pancake.config không bật', async () => {
+  /** Mọi giá trị pancakeErrorKind đơn từng được ghi (theo thứ tự), từ nhật ký trigger. */
+  const kindsWritten = async (orderId: string) =>
+    (await prisma.$queryRawUnsafe<{ kind: string | null }[]>('SELECT kind FROM it_hi_kind_log WHERE order_id = $1 ORDER BY id', orderId)).map((r) => r.kind);
+
+  const retryThen403 = async (seed: { pancakeErrorKind: string; pancakeSyncError: string | null }) => {
     const x = await order();
-    await prisma.order.update({ where: { id: x.id }, data: { pancakeErrorKind: 'CONFIG_RECHECK', pancakePushStatus: 'PENDING' } });
+    await prisma.order.update({ where: { id: x.id }, data: { ...seed, pancakePushStatus: 'PENDING' } });
     let n = 0;
-    const seen = new Set<string | null>();
     respond((code) => {
       if (code !== x.code) return { success: true, data: { id: `pk-${code}` } };
       n += 1;
@@ -326,13 +343,48 @@ const url = process.env.TEST_REDIS_URL;
       throw new PancakeApiError('Pancake trả 403 khi tạo đơn: forbidden', false, false, 403);
     });
     await service.enqueuePush(x.id);
-    await until(async () => {
-      const r = await prisma.order.findUniqueOrThrow({ where: { id: x.id } });
-      seen.add(r.pancakeErrorKind);
-      return r.pancakeErrorKind === 'REJECTED' && r.pancakeAttention != null;
-    });
+    await until(async () => n >= 2 && (await prisma.order.findUniqueOrThrow({ where: { id: x.id } })).pancakePushStatus !== 'PUSHING');
+    await sleep(200);
     expect(n).toBe(2);
-    expect(seen.has('CONFIG')).toBe(false);
-    expect(await prisma.order.count({ where: { id: x.id, pancakeErrorKind: 'CONFIG' } })).toBe(0);
+    return { x, row: await prisma.order.findUniqueOrThrow({ where: { id: x.id } }) };
+  };
+
+  it('job BullMQ thử lại (503 rồi 403) trên đơn CONFIG_RECHECK → REJECTED; nhật ký trigger chứng minh KHÔNG BAO GIỜ qua CONFIG', async () => {
+    const { x, row } = await retryThen403({ pancakeErrorKind: 'CONFIG_RECHECK', pancakeSyncError: null });
+    expect(row.pancakeErrorKind).toBe('REJECTED');
+    expect(row.pancakeAttention).not.toBeNull();
+    const kinds = await kindsWritten(x.id);
+    expect(kinds).toContain('REJECTED');
+    expect(kinds).not.toContain('CONFIG');
+    expect(kinds).not.toContain('TRANSIENT');
+  });
+
+  it('đơn REJECTED vì 403 gặp 503 rồi 403 → vẫn REJECTED; nhật ký trigger: không CONFIG, không TRANSIENT, lời lỗi giữ tiền tố', async () => {
+    const { x, row } = await retryThen403({ pancakeErrorKind: 'REJECTED', pancakeSyncError: `${PANCAKE_FORBIDDEN_ERROR_PREFIX}Pancake trả 403 cũ` });
+    expect(row.pancakeErrorKind).toBe('REJECTED');
+    expect(row.pancakeSyncError).toContain(PANCAKE_FORBIDDEN_ERROR_PREFIX);
+    const kinds = await kindsWritten(x.id);
+    expect(kinds).not.toContain('CONFIG');
+    expect(kinds).not.toContain('TRANSIENT');
+  });
+
+  it('đơn STALE vừa được thanh toán: không đường tự động nào gọi createOrder, gắn Cần xử lý; "Đẩy lại" của admin vẫn đẩy được', async () => {
+    const x = await order();
+    await prisma.order.update({ where: { id: x.id }, data: { pancakePushStatus: 'STALE', paymentMethod: 'ZALOPAY', paymentStatus: 'PAID' } });
+    const pk = `pk-${randCode(8)}`;
+    respond(() => ({ success: true, data: { id: pk } }));
+    const callsOfX = () => client.createOrder.mock.calls.filter(([body]) => (body as { custom_id: string }).custom_id === x.code).length;
+    await service.syncPayment(x.id);
+    await service.enqueuePush(x.id);
+    await service.enqueuePayment(x.id);
+    await sleep(500);
+    expect(callsOfX()).toBe(0);
+    const stale = await prisma.order.findUniqueOrThrow({ where: { id: x.id } });
+    expect(stale).toMatchObject({ pancakePushStatus: 'STALE', pancakeOrderId: null });
+    expect(stale.pancakeAttention).toContain('quá hạn tự đẩy');
+
+    await service.retryPushByAdmin('admin-it', x.code);
+    await until(async () => (await prisma.order.findUniqueOrThrow({ where: { id: x.id } })).pancakeOrderId === pk);
+    expect(callsOfX()).toBe(1);
   });
 });
