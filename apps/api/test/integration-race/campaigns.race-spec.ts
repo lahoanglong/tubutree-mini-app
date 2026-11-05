@@ -250,6 +250,18 @@ describe('Campaigns (real Postgres)', () => {
      * Tất định, không dựa may rủi: giữ khoá dòng chiến dịch trong một giao dịch, gọi `update` (không await) rồi xoá liên kết ngay trong giao dịch giữ khoá.
      * `update` phải chờ khoá (chưa xong sau một khoảng ngắn), và khi nhả khoá nó thấy trang trống nên 400, không ghi gì.
      */
+    /** Chờ tới khi có backend Postgres đang CHỜ khoá (wait_event_type = 'Lock') chạy câu lệnh khớp `query`; không chỉ ngủ rồi đoán. */
+    const waitForLockWait = async (query: RegExp, event?: (e: string | null) => boolean) => {
+      for (let i = 0; i < 100; i++) {
+        const rows = await prisma.$queryRaw<{ query: string; wait_event: string | null }[]>`
+          SELECT query, wait_event FROM pg_stat_activity
+          WHERE datname = current_database() AND pid <> pg_backend_pid() AND wait_event_type = 'Lock'`;
+        if (rows.some((r) => query.test(r.query) && (!event || event(r.wait_event)))) return;
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      throw new Error(`không thấy backend nào chờ khoá với câu lệnh ${query}`);
+    };
+
     const updateWhileLockHeld = async (id: string, patch: Parameters<CampaignsAdminService['update']>[1]) => {
       let settled = false;
       let outcome: Promise<unknown> | undefined;
@@ -260,7 +272,7 @@ describe('Campaigns (real Postgres)', () => {
             (v) => ((settled = true), v),
             (e: unknown) => ((settled = true), e),
           );
-          await new Promise((r) => setTimeout(r, 500));
+          await waitForLockWait(/FOR UPDATE/);
           expect(settled).toBe(false);
           await tx.campaignProduct.deleteMany({ where: { campaignId: id } });
         },
@@ -283,6 +295,45 @@ describe('Campaigns (real Postgres)', () => {
       const out = await updateWhileLockHeld(c.id, { linkType: 'CAMPAIGN_PAGE' });
       expect(out).toBeInstanceOf(BadRequestException);
       expect((await prisma.campaign.findUniqueOrThrow({ where: { id: c.id } })).linkType).toBe('URL_INTERNAL');
+    });
+
+    /**
+     * Tất định cho "kiểm + ghi cùng MỘT giao dịch". Test giữ khoá bảng SHARE trên `campaigns`: nó xung đột với UPDATE (ROW EXCLUSIVE) nhưng không với
+     * SELECT ... FOR UPDATE (ROW SHARE), nên `update(isActive)` qua được khoá dòng và bước kiểm rồi đứng đúng ở bước GHI. `setProducts(id, [])` phải xếp
+     * hàng sau khoá dòng của update; nhả khoá bảng thì update xong trước, rồi setProducts thấy trang bật mà sắp trống nên 400. Nếu kiểm và ghi tách thành
+     * hai giao dịch thì khoá dòng đã nhả trước bước ghi, setProducts chen vào gỡ A (lúc đó chiến dịch còn tắt) rồi trang bật lên sẽ trống.
+     * (Dùng khoá bảng thay vì trigger: UPDATE khoá dòng trước khi chạy trigger BEFORE nên trigger không dừng được ở giữa kiểm và ghi.)
+     */
+    it('update dừng ở bước ghi: PUT sản phẩm [] phải chờ khoá dòng, nhả khoá thì update thành công, PUT 400, chiến dịch bật và còn [A]', async () => {
+      const c = await admin.create(base('trg', { linkType: 'CAMPAIGN_PAGE', linkValue: undefined, isActive: false }));
+      const a = await product('SP trg', 'trg');
+      await admin.setProducts(c.id, [a.id]);
+      let updDone = false;
+      let putDone = false;
+      let upd: Promise<unknown> | undefined;
+      let put: Promise<unknown> | undefined;
+      await prisma.$transaction(
+        async (tx) => {
+          await tx.$executeRawUnsafe('LOCK TABLE "campaigns" IN SHARE MODE');
+          upd = admin.update(c.id, { isActive: true }).then(
+            (v) => ((updDone = true), v),
+            (e: unknown) => ((updDone = true), e),
+          );
+          await waitForLockWait(/UPDATE/, (e) => e === 'relation');
+          put = admin.setProducts(c.id, []).then(
+            (v) => ((putDone = true), v),
+            (e: unknown) => ((putDone = true), e),
+          );
+          await waitForLockWait(/FOR UPDATE/, (e) => e !== 'relation');
+          expect(updDone).toBe(false);
+          expect(putDone).toBe(false);
+        },
+        { timeout: 20_000 },
+      );
+      expect(await upd).toMatchObject({ isActive: true });
+      expect(await put).toBeInstanceOf(BadRequestException);
+      expect((await prisma.campaign.findUniqueOrThrow({ where: { id: c.id } })).isActive).toBe(true);
+      expect(await linksOf(c.id)).toEqual({ products: 1, coupons: 0 });
     });
 
     it('đang chạy CAMPAIGN_PAGE [A]: đổi đích sang PRODUCT trước thì gỡ A được (đúng thứ tự form); gỡ A trước khi đổi đích thì 400', async () => {
