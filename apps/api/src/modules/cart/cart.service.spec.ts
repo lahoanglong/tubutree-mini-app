@@ -663,6 +663,19 @@ describe('CartService guard tồn kho', () => {
       expect(msg).not.toMatch(/\d/);
     });
 
+    it.each([[100_000], [99_999_988]])('tồn ảo %i: addItem vượt tổng 999 báo trần mỗi món, không ghi con số tồn', async (stock) => {
+      const msg = await messageOf(svcWithStock(stock, 900).addItem('u1', { variationId: 'v1', quantity: 100 }));
+      expect(msg).toBe('Mỗi món chỉ có tối đa 999 sản phẩm trong giỏ.');
+      expect(msg).not.toContain(String(stock));
+    });
+
+    it('tồn ảo: cộng dồn đúng tới 999 vẫn được, 1.000 thì chặn (giỏ không vượt trần payload)', async () => {
+      const cap = 'Mỗi món chỉ có tối đa 999 sản phẩm trong giỏ.';
+      // 998 + 1 = 999 qua cổng kiểm tồn và trần, chỉ rơi ở bước ghi (mock không có $transaction): lỗi đó không phải câu chặn.
+      expect(await messageOf(svcWithStock(99_999_988, 998).addItem('u1', { variationId: 'v1', quantity: 1 }))).not.toBe(cap);
+      expect(await messageOf(svcWithStock(99_999_988, 999).addItem('u1', { variationId: 'v1', quantity: 1 }))).toBe(cap);
+    });
+
     it('tồn thấp đúng ngưỡng 20 vẫn ghi số, tồn 21 thì không (ranh giới)', async () => {
       expect(await messageOf(svcWithStock(20, 0).updateItem('u1', 'it1', 21))).toBe('Chỉ còn 20 sản phẩm.');
       expect(await messageOf(svcWithStock(21, 0).updateItem('u1', 'it1', 22))).toBe('Số lượng này vượt số hàng đang có.');
@@ -672,7 +685,7 @@ describe('CartService guard tồn kho', () => {
       expect(await messageOf(svcWithStock(0, 0).addItem('u1', { variationId: 'v1', quantity: 1 }))).toBe('Sản phẩm đã hết hàng.');
     });
 
-    it('payload giỏ: tồn ảo 99.999.988 bị kẹp ở 100.000, tồn thường giữ nguyên để client chặn nút +', async () => {
+    it('payload giỏ: tồn từ 1.000 trở lên (kể cả tồn ảo 99.999.988) bị kẹp ở 1.000, tồn nhỏ hơn giữ nguyên để client chặn nút +', async () => {
       const row = (id: string, stock: number) => ({
         id: `ci-${id}`,
         variationId: id,
@@ -684,7 +697,7 @@ describe('CartService guard tồn kho', () => {
       } as unknown as PrismaService;
       const flashSvc = { resolveEffective: jest.fn().mockResolvedValue(new Map()) } as unknown as FlashSaleService;
       const cart = await new CartService(prisma, coupons, config, flashSvc, analytics, combo).getCart('u1');
-      expect(cart.items.map((i) => i.stock)).toEqual([100_000, 100_000, 40]);
+      expect(cart.items.map((i) => i.stock)).toEqual([1000, 1000, 40]);
       expect(JSON.stringify(cart)).not.toContain('99999988');
     });
   });

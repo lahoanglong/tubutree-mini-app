@@ -176,11 +176,11 @@ describe('AddToCart — quay lại sau đăng nhập', () => {
 
   it('API từ chối (hết hàng) thì hiện lời nhắn của API thay vì im lặng', async () => {
     sessionStorage.setItem('tubu_pending_add', JSON.stringify({ variationId: 'v1', quantity: 2, at: Date.now() }));
-    mocks.addToCart.mockRejectedValue(new Error('Chỉ còn 0 sản phẩm trong kho.'));
+    mocks.addToCart.mockRejectedValue(new Error('Sản phẩm đã hết hàng.'));
     mocks.auth = { status: 'authenticated', initialized: true, user: { id: 'u1' } };
     const { container } = mount();
     await flush();
-    expect(container.textContent).toContain('Chỉ còn 0 sản phẩm trong kho.');
+    expect(container.textContent).toContain('Sản phẩm đã hết hàng.');
   });
 });
 
@@ -411,7 +411,7 @@ describe('AddToCart — áp mã mua chung từ ?ma=', () => {
   });
 
   it('thêm giỏ lỗi: không áp mã', async () => {
-    mocks.addToCart.mockRejectedValue(new Error('Chỉ còn 0 sản phẩm trong kho.'));
+    mocks.addToCart.mockRejectedValue(new Error('Sản phẩm đã hết hàng.'));
     openedFrom(`?ma=${CODE}`);
     const { container } = mount();
     await flush();
@@ -893,13 +893,13 @@ describe('AddToCart — Mua ngay', () => {
 
   it('API từ chối (hết hàng): ở lại trang, hiện lời nhắn, nút mở lại để thử tiếp', async () => {
     login();
-    mocks.addToCart.mockRejectedValue(new Error('Chỉ còn 1 sản phẩm trong kho.'));
+    mocks.addToCart.mockRejectedValue(new Error('Chỉ còn 1 sản phẩm.'));
     const { container } = mount();
     await flush();
     click(buyButtons(container)[0]!);
     await flush();
     expect(mocks.push).not.toHaveBeenCalled();
-    expect(container.textContent).toContain('Chỉ còn 1 sản phẩm trong kho.');
+    expect(container.textContent).toContain('Chỉ còn 1 sản phẩm.');
     expect(buyButtons(container)[0]!.disabled).toBe(false);
   });
 

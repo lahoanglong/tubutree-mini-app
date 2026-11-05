@@ -132,6 +132,19 @@ describe('/gio-hang — dòng hết hàng / chạm trần tồn kho (BUYERWEB-10
     expect(button(container, 'Tăng số lượng Dầu gội bồ kết')!.disabled).toBe(true);
   });
 
+  it('vượt tồn mà tồn cao (50 trên tồn 40): dòng báo "Vượt số hàng đang có…" (không phải "chọn hết"), cảnh báo, không ghi số tồn, nút Giảm kẹp về đúng tồn', async () => {
+    state.cart = cartOf([line({ stock: 40, quantity: 50 })]);
+    const { container } = await mount();
+    const note = Array.from(container.querySelectorAll('p')).find((p) => p.textContent === 'Vượt số hàng đang có, giảm bớt để thanh toán')!;
+    expect(note).toBeTruthy();
+    expect(note.className).toContain('text-warning-fg');
+    expect(container.textContent).not.toContain('Đã chọn hết số hàng đang có');
+    expect(container.textContent).not.toMatch(/Còn 40 sản phẩm/);
+    click(button(container, 'Giảm số lượng Dầu gội bồ kết')!);
+    await flush();
+    expect(state.updates).toEqual([{ id: 'i1', q: 40 }]);
+  });
+
   it('chạm trần mà tồn thấp (3/3) và vượt tồn (5 trên tồn 3): cảnh báo; chưa chạm trần (2/5) không có dòng (L5 3)', async () => {
     const noteOf = (c: HTMLElement) => Array.from(c.querySelectorAll('p')).find((p) => /^(?:Chỉ còn|Còn) \d+ sản phẩm$/.test(p.textContent ?? ''));
     state.cart = cartOf([line({ stock: 3, quantity: 3 })]);

@@ -142,6 +142,11 @@ export function CouponBox({
   };
   // Thu gọn mặc định: ô nhập + danh sách voucher dài hàng trăm px, đẩy nút thanh toán xuống khỏi màn điện thoại.
   const [open, setOpen] = useState(false);
+  // Lỗi từ bấm "Dùng"/"Bỏ chọn" ở hàng mã phía dưới: lời báo nằm ở đầu bảng nên kéo về tầm nhìn, không thì khách thấy như bấm không có gì xảy ra.
+  const errRef = useRef<HTMLParagraphElement | null>(null);
+  useEffect(() => {
+    if (open && err) errRef.current?.scrollIntoView?.({ block: 'nearest' });
+  }, [open, err]);
   const couponsQ = useQuery({ queryKey: ['my-coupons'], queryFn: getMyCoupons });
   const previewSig = preview ? JSON.stringify([preview, previewKey ?? '']) : null;
   const settledSig = useSettled(previewSig, PREVIEW_DEBOUNCE_MS);
@@ -280,7 +285,7 @@ export function CouponBox({
         </div>
         {/* Lời báo mã sai/hết hạn nằm ngay dưới ô nhập khi bảng/panel đang mở. Đặt sau cả danh sách mã thì ở bảng 320x568 và ở thẻ tóm tắt dính 1440x900 nó nằm ngoài tầm nhìn, khách thấy như bấm không có gì xảy ra. */}
         {open && err && (
-          <p role="alert" className="mt-2 text-caption text-danger-fg">
+          <p ref={errRef} role="alert" className="mt-2 text-caption text-danger-fg">
             {err}
           </p>
         )}

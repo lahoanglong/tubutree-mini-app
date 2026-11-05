@@ -29,10 +29,10 @@ export interface CartStockNote {
 /**
  * Dòng tồn kho dưới tên sản phẩm ở giỏ, một luật cho cả hai app (web khổ điện thoại phải giống Mini). Chỉ hiện khi khách đã chạm trần tồn (`quantity === stock`, giải thích
  * vì sao nút + khoá) hoặc vượt tồn (`quantity > stock`, đang chặn thanh toán); chưa chạm trần thì không có dòng nên hàng giỏ không đổi cao lúc tải. Hết hàng (`stock <= 0`) trả `null`:
- * chỗ gọi đã có câu hết hàng riêng. Tồn 1–20 dùng `stockText` (ghi đúng số); tồn cao hơn chỉ báo đã chọn hết số hàng đang có, KHÔNG ghi con số thật: luật Smart Stock không lộ tồn trên ngưỡng.
+ * chỗ gọi đã có câu hết hàng riêng. Tồn 1–20 dùng `stockText` (ghi đúng số); tồn cao hơn KHÔNG ghi con số thật (luật Smart Stock không lộ tồn trên ngưỡng): chạm trần báo đã chọn hết số hàng đang có, vượt tồn báo phải giảm bớt (khách cần biết là đang vượt chứ không phải vừa đủ).
  */
 export function cartStockNote(quantity: number, stock: number): CartStockNote | null {
   if (stock <= 0 || quantity < stock) return null;
-  const text = isLowStock(stock) ? stockText(stock) : fillTileCopy('stock.max');
+  const text = isLowStock(stock) ? stockText(stock) : fillTileCopy(quantity > stock ? 'stock.over' : 'stock.max');
   return { text, tone: quantity > stock || isLowStock(stock) ? 'warning' : 'neutral' };
 }

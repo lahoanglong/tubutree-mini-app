@@ -77,6 +77,7 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'badge.discountSpoken': null,
   'stock.out': 12,
   'stock.max': 30,
+  'stock.over': 50,
   'stock.few': 26,
   'stock.in': 10,
   'stock.plenty': 32,

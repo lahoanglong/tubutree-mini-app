@@ -205,6 +205,19 @@ describe('CartPage — vượt tồn kho (BUYERMINI-18) và suất giờ vàng (
     expect(note.parentElement!.querySelector('svg')).toBeNull();
   });
 
+  it('vượt tồn mà tồn cao (50 trên tồn 40): dòng báo "Vượt số hàng đang có…" (không phải "chọn hết"), không ghi số tồn, nút − kẹp về đúng tồn', async () => {
+    mocks.getCart.mockResolvedValue(summary({ items: [{ ...OK_LINE, quantity: 50, stock: 40, total: 2_500_000 }] }));
+    renderPage();
+    const note = await screen.findByText('Vượt số hàng đang có, giảm bớt để thanh toán');
+    expect(note.getAttribute('style')).toContain('--color-text-warning');
+    expect(screen.queryByText('Đã chọn hết số hàng đang có')).toBeNull();
+    expect(screen.queryByText(/Còn 40 sản phẩm/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Giảm số lượng' }));
+    // Một lần bấm − về thẳng tồn (40), không phải 49: không còn vượt nên dòng báo đổi sang "chọn hết".
+    expect(screen.getByText('Đã chọn hết số hàng đang có')).toBeInTheDocument();
+    expect(screen.queryByText('Vượt số hàng đang có, giảm bớt để thanh toán')).toBeNull();
+  });
+
   it('chạm trần mà tồn thấp (3/3): cảnh báo kèm icon; chưa chạm trần (2/40) không có dòng (L5 3)', async () => {
     mocks.getCart.mockResolvedValue(summary({ items: [{ ...OK_LINE, quantity: 3, stock: 3, total: 150_000 }] }));
     const low = renderPage();

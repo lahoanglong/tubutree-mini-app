@@ -58,9 +58,9 @@ describe('cartStockNote: dòng tồn kho ở giỏ, một luật cho hai app (L5
     expect(cartStockNote(40, 40)).toEqual({ text: 'Đã chọn hết số hàng đang có', tone: 'neutral' });
   });
 
-  it('vượt tồn (quantity > stock, đang chặn thanh toán): luôn cảnh báo kể cả tồn cao, tồn cao vẫn không lộ số', () => {
+  it('vượt tồn (quantity > stock, đang chặn thanh toán): luôn cảnh báo kể cả tồn cao; tồn cao nói "vượt" (không phải "vừa đủ") mà vẫn không lộ số', () => {
     expect(cartStockNote(3, 1)).toEqual({ text: 'Chỉ còn 1 sản phẩm', tone: 'warning' });
-    expect(cartStockNote(50, 40)).toEqual({ text: 'Đã chọn hết số hàng đang có', tone: 'warning' });
+    expect(cartStockNote(50, 40)).toEqual({ text: 'Vượt số hàng đang có, giảm bớt để thanh toán', tone: 'warning' });
   });
 
   it('tồn trên ngưỡng không bao giờ có chữ số trong dòng ghi chú (21, 40, 999, 99.999, 100.000, 99.999.988)', () => {
