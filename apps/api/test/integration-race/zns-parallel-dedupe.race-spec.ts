@@ -7,7 +7,7 @@ import { AnalyticsEventsService } from '../../src/modules/analytics/analytics-ev
 import { NotificationsService, type ZnsSendJobData } from '../../src/modules/notifications/notifications.service';
 import { ZnsClient } from '../../src/modules/integrations/zns/zns.client';
 import type { ZaloOaTokenService } from '../../src/modules/integrations/zns/zalo-oa-token.service';
-import { createUser, warmPool } from './helpers';
+import { createUser, warmPool, uniquePhone } from './helpers';
 
 /** Worker ZNS chạy 5 job song song: hai log cùng (khách, dedupeKey) chỉ gửi Zalo một lần dù Zalo trả chậm. */
 describe('deliverZns song song cùng dedupeKey (real Postgres)', () => {
@@ -51,7 +51,7 @@ describe('deliverZns song song cùng dedupeKey (real Postgres)', () => {
       data: { userId, templateCode: 'IT_DEDUPE', channel: 'ZNS', payload: { data: { n: String(n) }, dedupeKey }, status: over.status ?? 'PENDING', ...(over.sentAt ? { sentAt: over.sentAt } : {}) },
     });
   const jobOf = (logId: string, n: number): ZnsSendJobData => ({ notificationLogId: logId, phone: '0900000001', templateId: 'zt', templateData: { n: String(n) } });
-  const newUser = () => createUser(prisma, { phone: `09${Date.now().toString().slice(-8)}` });
+  const newUser = () => createUser(prisma, { phone: uniquePhone() });
 
   it('log A có sentAt sớm hơn nhưng commit sau log B (hai tx chồng nhau), hai worker song song: Zalo nhận đúng một lần', async () => {
     const u = await newUser();
@@ -112,6 +112,33 @@ describe('deliverZns song song cùng dedupeKey (real Postgres)', () => {
     expect(hits).toBe(0);
   });
 
+  it('log bị đóng "Bỏ qua" vì log kia đã SENT: nhả khoá, job sống lại (khôi phục Redis, retry tay) ra SKIPPED, Zalo không được gọi', async () => {
+    const u = await newUser();
+    const key = `it-dedupe-revive-skip:${Date.now()}`;
+    await mkLog(u.id, key, 1, { status: 'SENT' });
+    const b = await mkLog(u.id, key, 2);
+    expect(await svc.deliverZns(jobOf(b.id, 2), false)).toBe('SKIPPED');
+    const closed = await prisma.notificationLog.findUniqueOrThrow({ where: { id: b.id } });
+    expect(closed.status).toBe('FAILED');
+    expect(closed.payload).toEqual({ data: { n: '2' }, dedupeKey: `${key}:failed:${b.id}` });
+    expect(await svc.deliverZns(jobOf(b.id, 2), false)).toBe('SKIPPED');
+    expect(hits).toBe(0);
+  });
+
+  it('log bị đóng "Không gửi" ở lượt cuối vì log kia vẫn RETRYING: nhả khoá, job sống lại ra SKIPPED, giữ dedupeWithinMs', async () => {
+    const u = await newUser();
+    const key = `it-dedupe-revive-final:${Date.now()}`;
+    await mkLog(u.id, key, 1, { status: 'RETRYING' });
+    const b = await prisma.notificationLog.create({
+      data: { userId: u.id, templateCode: 'IT_DEDUPE', channel: 'ZNS', payload: { data: {}, dedupeKey: key, dedupeWithinMs: 3_600_000 }, status: 'PENDING' },
+    });
+    expect(await svc.deliverZns(jobOf(b.id, 2), true)).toBe('FAILED');
+    const closed = await prisma.notificationLog.findUniqueOrThrow({ where: { id: b.id } });
+    expect(closed.payload).toEqual({ data: {}, dedupeKey: `${key}:failed:${b.id}`, dedupeWithinMs: 3_600_000 });
+    expect(await svc.deliverZns(jobOf(b.id, 2), false)).toBe('SKIPPED');
+    expect(hits).toBe(0);
+  });
+
   it('dedupeWithinMs: log SENT cũ hơn cửa sổ không chặn tin mới cùng khoá', async () => {
     const u = await newUser();
     const key = `it-dedupe-window:${Date.now()}`;
@@ -121,6 +148,17 @@ describe('deliverZns song song cùng dedupeKey (real Postgres)', () => {
     });
     expect(await svc.deliverZns(jobOf(b.id, 2), false)).toBe('SENT');
     expect(hits).toBe(1);
+  });
+
+  it('newUser: hai khách tạo liên tiếp trong cùng một mili giây không đụng khoá duy nhất của phone', async () => {
+    const now = jest.spyOn(Date, 'now').mockReturnValue(1_800_000_000_000);
+    try {
+      const a = await newUser();
+      const b = await newUser();
+      expect(a.phone).not.toBe(b.phone);
+    } finally {
+      now.mockRestore();
+    }
   });
 
   it('khoá khác nhau thì cả hai đều gửi', async () => {

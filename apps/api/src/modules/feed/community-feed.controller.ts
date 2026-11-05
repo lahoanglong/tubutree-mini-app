@@ -1,8 +1,10 @@
 import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Query, Res, StreamableFile, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
-import type { JwtPayload } from '@tubutree/shared-types';
+import { PRODUCT_SLUG_MAX, type JwtPayload } from '@tubutree/shared-types';
 import { Throttle } from '@nestjs/throttler';
-import { ArrayMaxSize, IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsOptional, IsString, Max, Min, MaxLength, MinLength } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { trimInvisible } from './text-trim';
+import { ArrayMaxSize, IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Max, Min, MaxLength, MinLength } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -27,7 +29,7 @@ export class CreatePostDto {
   @IsOptional() @IsString() @MaxLength(160) title?: string;
   @IsString() @MinLength(1) @MaxLength(5000) body!: string;
   @IsOptional() @IsArray() @ArrayMaxSize(MAX_POST_IMAGES) @IsUploadedImage(FEED_POST_IMAGE, { each: true }) images?: string[];
-  @IsOptional() @IsArray() @ArrayMaxSize(20) @IsString({ each: true }) @MaxLength(200, { each: true }) productSlugs?: string[];
+  @IsOptional() @IsArray() @ArrayMaxSize(20) @IsString({ each: true }) @MaxLength(PRODUCT_SLUG_MAX, { each: true }) productSlugs?: string[];
   @IsOptional() @IsArray() @ArrayMaxSize(20) @IsString({ each: true }) @MaxLength(100, { each: true }) tagSlugs?: string[];
   @IsOptional() @IsString() eventId?: string;
 }
@@ -51,7 +53,8 @@ class PinDto {
   @IsOptional() @IsBoolean() pinned?: boolean;
 }
 export class CreateEventDto {
-  @IsString() @MaxLength(160) title!: string;
+  @Transform(({ value }) => (typeof value === 'string' ? trimInvisible(value) : value))
+  @IsString() @IsNotEmpty({ message: 'Tiêu đề sự kiện không được để trống.' }) @MaxLength(160) title!: string;
   @OptionalNotNull() @IsString() @MaxLength(2000) description?: string;
   @OptionalNotNull() @IsString() coverUrl?: string;
   @IsDateString() startAt!: string;

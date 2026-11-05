@@ -178,6 +178,15 @@ describe('queries — danh sách đơn và trang Duyệt (infinite)', () => {
     expect(calls[0]!.opts).toEqual({ query: { status: 'SHIPPING', page: 3, limit: 20 } });
   });
 
+  it('ordersListQuery: pageParam dạng {page, cursor} gửi thêm cursor; dạng số hoặc thiếu cursor giữ nguyên như cũ', async () => {
+    const { http, calls } = fakeHttp();
+    const q = orders.ordersListQuery(http, 'all', {});
+    await q.queryFn({ pageParam: { page: 2, cursor: 'CUR1' } });
+    await q.queryFn({ pageParam: { page: 1 } });
+    expect(calls[0]!.opts).toEqual({ query: { page: 2, limit: 20, cursor: 'CUR1' } });
+    expect(calls[1]!.opts).toEqual({ query: { page: 1, limit: 20 } });
+  });
+
   it('ordersListQuery: không bộ lọc chỉ gửi page và limit', async () => {
     const { http, calls } = fakeHttp();
     await orders.ordersListQuery(http, 'all', {}, 10).queryFn({ pageParam: 2 });

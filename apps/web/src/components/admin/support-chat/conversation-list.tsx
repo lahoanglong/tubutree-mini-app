@@ -40,6 +40,7 @@ export function ConversationList({ selectedId, onSelect }: { selectedId: string 
           name="q"
           aria-label="Tìm theo số điện thoại hoặc mã"
           placeholder="SĐT hoặc mã #K7Q2"
+          maxLength={64}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           className={INPUT_CLASS}

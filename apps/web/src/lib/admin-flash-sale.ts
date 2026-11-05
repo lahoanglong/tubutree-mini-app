@@ -14,9 +14,3 @@ export function flashSaleState(sale: Pick<AdminFlashSale, 'startAt' | 'endAt' | 
   if (!sale.isActive) return 'off';
   return new Date(sale.startAt).getTime() > now ? 'scheduled' : 'live';
 }
-
-/** Lọc phía client (API chưa lọc theo thời gian): mặc định chỉ các đợt chưa kết thúc. */
-export function filterFlashSales<T extends Pick<AdminFlashSale, 'startAt' | 'endAt' | 'isActive'>>(sales: T[], filter: FlashSaleFilter, now: number = Date.now()): T[] {
-  if (filter === 'all') return sales;
-  return sales.filter((s) => (flashSaleState(s, now) === 'ended') === (filter === 'ended'));
-}

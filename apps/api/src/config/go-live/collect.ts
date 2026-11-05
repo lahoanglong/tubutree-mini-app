@@ -5,6 +5,7 @@ import { promisify } from 'node:util';
 import type { PrismaClient } from '@prisma/client';
 import { Queue } from 'bullmq';
 import { COD_MAX_PER_ORDER } from '../../modules/checkout/checkout-split';
+import { ZNS_REVIEW_PREFIX } from '../../modules/notifications/zns-review-prefix';
 import { parseCronBackup, type BackupSnapshot } from './backup-checks';
 import { CONFIG_KEYS_OF_INTEREST, type DbSnapshot } from './db-checks';
 import { collectDemoData } from './demo-data-checks';
@@ -97,6 +98,10 @@ export async function collectDbSnapshot(prisma: PrismaClient, expectedMigrations
           : [],
       );
 
+      const znsReviewPending = await guarded('znsReview', 0, () =>
+        count('notification_logs', `channel = 'ZNS' AND status IN ('PENDING', 'RETRYING') AND "error" LIKE '${ZNS_REVIEW_PREFIX}%'`),
+      );
+
       const membershipTiers = await guarded('membershipTiers', [], async () =>
         (await exists('membership_tiers')) ? (await tx.membershipTier.findMany({ select: { pointMultiplier: true } })).map((t) => Number(t.pointMultiplier)) : [],
       );
@@ -133,6 +138,7 @@ export async function collectDbSnapshot(prisma: PrismaClient, expectedMigrations
         adminCount: admin.adminCount,
         pendingAdminGrants: admin.pendingAdminGrants,
         znsTemplates,
+        znsReviewPending,
         codMaxPerOrder: COD_MAX_PER_ORDER,
         sessionTimeouts,
         demoData,

@@ -1,5 +1,6 @@
 import { api } from './api';
 import type { StorefrontStatusCode } from '@tubutree/app-core/storefront-signup';
+import { imageTimeout } from './http';
 
 export interface StorefrontItem {
   id: string;
@@ -93,7 +94,7 @@ export const updateStorefront = (
       | 'warehousePhone'
     >
   >,
-) => api.patch('/storefront/me', dto).then((r) => r.data as StorefrontEdit);
+) => api.patch('/storefront/me', dto, imageTimeout(dto)).then((r) => r.data as StorefrontEdit);
 export const publishStorefront = (isPublished: boolean) =>
   api.post('/storefront/me/publish', { isPublished }).then((r) => r.data as StorefrontEdit);
 

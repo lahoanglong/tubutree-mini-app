@@ -24,6 +24,7 @@ step "migrate status"; npx prisma migrate status > $OUT/migrate-status.log 2>&1;
 step "drift"; npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --exit-code > $OUT/drift.log 2>&1; echo "exit $?"; tail -2 $OUT/drift.log
 step "partial idx"; npx tsx prisma/check-partial-indexes.ts > $OUT/partial.log 2>&1; echo "exit $?"; tail -2 $OUT/partial.log
 step "jest api"; npx jest > $OUT/jest-api.log 2>&1; echo "exit $?"; grep -E "^(Tests|Test Suites):" $OUT/jest-api.log
+# Spec zns-stuck-cursor-redis cần Redis RÁC (nó ghi/xoá khoá thật zns-stuck-cron:cursor): đặt TEST_REDIS_URL, ví dụ docker run --rm -d --tmpfs /data -p 46589:6379 --name tubu-verify-redis redis:7-alpine rồi TEST_REDIS_URL=redis://127.0.0.1:46589 và docker stop tubu-verify-redis sau khi chạy; không đặt thì spec bị bỏ qua.
 step "race suite"; npx jest -c test/integration-race/jest.config.js --runInBand > $OUT/race.log 2>&1; echo "exit $?"; grep -E "^(Tests|Test Suites):" $OUT/race.log
 step "vitest miniapp"; (cd $R/apps/miniapp && npx vitest run) > $OUT/vitest-miniapp.log 2>&1; echo "exit $?"; grep -E "Test Files|Tests " $OUT/vitest-miniapp.log
 step "vitest web"; (cd $R/apps/web && npx vitest run) > $OUT/vitest-web.log 2>&1; echo "exit $?"; grep -E "Test Files|Tests " $OUT/vitest-web.log

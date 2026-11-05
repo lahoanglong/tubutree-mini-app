@@ -6,8 +6,10 @@ import { smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
 // R2-BUYERWEB-8: danh sách đơn chỉ có mã đơn, số sản phẩm và ngày; khách nhiều đơn không nhận ra đơn nào là đơn nào.
 
 const state = vi.hoisted(() => ({
-  calls: [] as { page: number; filter: Record<string, string> }[],
+  calls: [] as { page: number; filter: Record<string, string>; cursor?: string }[],
   orders: [] as Record<string, unknown>[],
+  /** Trang trả theo thứ tự gọi khi test muốn phân trang bằng con trỏ; rỗng = một trang như cũ. */
+  keyset: [] as { data: Record<string, unknown>[]; nextCursor: string | null }[],
 }));
 vi.mock('@/lib/auth-context', () => ({
   useAuth: () => ({
@@ -21,8 +23,10 @@ vi.mock('@/lib/auth-context', () => ({
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/shop-client')>()),
   getMe: async () => ({ pointsBalance: 0, walletBalance: 0 }),
-  fetchOrdersPage: async (page: number, filter: Record<string, string> = {}) => {
-    state.calls.push({ page, filter });
+  fetchOrdersPage: async (page: number, filter: Record<string, string> = {}, cursor?: string) => {
+    state.calls.push({ page, filter, ...(cursor ? { cursor } : {}) });
+    const k = state.keyset[state.calls.length - 1];
+    if (k) return { data: k.data, meta: { page, limit: 20, total: 1, nextCursor: k.nextCursor } };
     return { data: state.orders, meta: { page, limit: 20, total: state.orders.length } };
   },
 }));
@@ -47,6 +51,7 @@ const mount = async () => {
 beforeEach(() => {
   state.calls = [];
   state.orders = [];
+  state.keyset = [];
 });
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
@@ -148,5 +153,31 @@ describe('danh sách đơn — nút Thanh toán', () => {
     const c = await mount();
     expect(c.querySelector('a[aria-label="Thanh toán đơn TB-6"]')?.textContent).toBe('Thanh toán ngay');
     expect(c.querySelector('li')!.textContent).toMatch(/Hạn \d/);
+  });
+});
+
+describe('danh sách đơn — phân trang bằng con trỏ keyset', () => {
+  it('API trả nextCursor: "Xem thêm" gửi con trỏ đó, dù tổng/limit báo đã hết trang kiểu offset', async () => {
+    state.keyset = [
+      { data: [order('TB-1', [item('A')])], nextCursor: 'CUR1' },
+      { data: [order('TB-2', [item('B')])], nextCursor: null },
+    ];
+    const c = await mount();
+    click(byText(c, 'button', 'Xem thêm đơn cũ hơn')!);
+    await flush(6);
+    expect(state.calls[1]).toMatchObject({ page: 2, cursor: 'CUR1' });
+    expect(c.textContent).toContain('TB-2');
+    expect(byText(c, 'button', 'Xem thêm đơn cũ hơn')).toBeNull();
+  });
+
+  it('đơn lặp giữa hai trang chỉ hiện một lần', async () => {
+    state.keyset = [
+      { data: [order('TB-1', [item('A')])], nextCursor: 'CUR1' },
+      { data: [order('TB-1', [item('A')]), order('TB-2', [item('B')])], nextCursor: null },
+    ];
+    const c = await mount();
+    click(byText(c, 'button', 'Xem thêm đơn cũ hơn')!);
+    await flush(6);
+    expect(c.textContent?.match(/TB-1/g)).toHaveLength(1);
   });
 });

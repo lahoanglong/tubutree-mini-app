@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
+import { PRODUCT_SLUG_MAX } from '@tubutree/shared-types';
 import { SendMessageDto } from './send-message.dto';
 
 const errs = (o: object) => validateSync(plainToInstance(SendMessageDto, o));
@@ -18,6 +19,10 @@ describe('SendMessageDto', () => {
   it('imageUrl phải là https://res.cloudinary.com, không nhận base64', () => {
     expect(errs({ ...base, imageUrl: 'https://evil.example.com/a.jpg' })).not.toHaveLength(0);
     expect(errs({ ...base, imageUrl: 'data:image/jpeg;base64,AAAA' })).not.toHaveLength(0);
+  });
+  it('context.productSlug nhận slug sản phẩm dài tới PRODUCT_SLUG_MAX (khách mở chat từ sản phẩm slug dài), PRODUCT_SLUG_MAX + 1 thì lỗi', () => {
+    expect(errs({ ...base, body: 'x', context: { productSlug: 'a'.repeat(PRODUCT_SLUG_MAX) } })).toHaveLength(0);
+    expect(errs({ ...base, body: 'x', context: { productSlug: 'a'.repeat(PRODUCT_SLUG_MAX + 1) } })).not.toHaveLength(0);
   });
   it('context.orderCode tối đa 40 ký tự', () => {
     expect(errs({ ...base, body: 'x', context: { orderCode: 'a'.repeat(41) } })).not.toHaveLength(0);

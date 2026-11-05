@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { loadMoreFailed } from '@tubutree/app-core/client-copy';
 import { useInfiniteQuery, useQuery, type InfiniteData, type UseInfiniteQueryResult } from '@tanstack/react-query';
-import type { WalletTxnPage } from '@tubutree/app-core/api/wallet';
+import type { WalletTxnPage as CoreWalletTxnPage } from '@tubutree/app-core/api/wallet';
 import { walletCopy } from '@tubutree/app-core/account-copy';
 import { CheckCircle2, ChevronRight, Clock, History, Leaf, ShoppingBag, Wallet, type LucideIcon } from 'lucide-react';
 import { loyaltyQuery } from '@tubutree/app-core/queries/loyalty';
@@ -16,6 +16,7 @@ import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { isWebRouteReady } from '@/lib/route-map';
 import { coreHttp } from '@/lib/core-http';
+import { FIRST_PAGE, nextPageParam } from '@/lib/keyset-paging';
 import { formatCount, pointsSummary } from '@/lib/checkout-points';
 import { formatVnd } from '@/lib/format-vnd';
 import { ui } from '@/lib/guest-ui';
@@ -28,6 +29,9 @@ import { LedgerShell, SignedAmount } from '../ledger-shell';
 import { loadErrorText } from '@/lib/error-text';
 
 const TITLE = 'Ví Tubu';
+const WALLET_PAGE_LIMIT = 20;
+/** Trang sao kê kèm con trỏ keyset (API mới); API cũ không trả `nextCursor`. */
+type WalletTxnPage = CoreWalletTxnPage & { meta: CoreWalletTxnPage['meta'] & { nextCursor?: string | null } };
 
 const errText = loadErrorText;
 
@@ -41,9 +45,13 @@ export default function WalletPage() {
   const loyaltyQ = useQuery({ ...loyaltyQuery(coreHttp), enabled: authed });
   // Khoá con của ['wallet'] nên làm mới ví cũng làm mới luôn sao kê.
   const txQ = useInfiniteQuery({
-    ...walletTransactionsQuery(coreHttp),
-    initialPageParam: 1,
-    getNextPageParam: (last) => (last.meta.page * last.meta.limit < last.meta.total ? last.meta.page + 1 : undefined),
+    queryKey: walletTransactionsQuery(coreHttp).queryKey,
+    queryFn: ({ pageParam }) =>
+      pageParam.cursor
+        ? coreHttp.get<WalletTxnPage>('/me/wallet/transactions', { query: { page: pageParam.page, limit: WALLET_PAGE_LIMIT, cursor: pageParam.cursor } })
+        : walletTransactionsQuery(coreHttp).queryFn({ pageParam: pageParam.page }),
+    initialPageParam: FIRST_PAGE,
+    getNextPageParam: nextPageParam,
     enabled: authed,
   });
 

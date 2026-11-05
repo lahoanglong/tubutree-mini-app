@@ -1,4 +1,5 @@
 import { api } from './api';
+import { imageTimeout } from './http';
 
 export type ShiftStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
 
@@ -66,7 +67,7 @@ export const copyWeek = (sourceWeekStart: string, targetWeekStart: string) =>
 export const cancelShift = (
   id: string,
   body: { reason: string; isEmergency?: boolean; evidenceUrl?: string },
-) => api.post<{ cancelled: boolean; penalty: boolean }>(`/staff/shifts/${id}/cancel`, body).then((r) => r.data);
+) => api.post<{ cancelled: boolean; penalty: boolean }>(`/staff/shifts/${id}/cancel`, body, imageTimeout(body)).then((r) => r.data);
 
 // ── Admin ──
 export const adminGetShifts = (fromISO: string, toISO: string, staffId?: string) =>

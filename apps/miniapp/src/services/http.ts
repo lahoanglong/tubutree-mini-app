@@ -34,6 +34,25 @@ export function isHttpError(error: unknown): error is HttpError {
   return typeof error === 'object' && error !== null && (error as { isHttpError?: unknown }).isHttpError === true;
 }
 
+/**
+ * Trần cho request mang ảnh. Bản Mini App PROD không có Cloudinary nên ảnh đi base64 trong body (vài MB):
+ * 15 s không đủ trên mạng di động yếu, khách không gửi được yêu cầu đổi/trả, đánh giá, hồ sơ.
+ */
+export const IMAGE_UPLOAD_TIMEOUT_MS = 90_000;
+
+/** Có chuỗi data URL (ảnh base64) ở bất kỳ tầng nào của thân request. */
+function carriesInlineImage(value: unknown): boolean {
+  if (typeof value === 'string') return value.startsWith('data:');
+  if (Array.isArray(value)) return value.some(carriesInlineImage);
+  if (value && typeof value === 'object') return Object.values(value).some(carriesInlineImage);
+  return false;
+}
+
+/** Config cho request có thể mang ảnh: chỉ nâng trần lên 90 s khi thân thật sự chứa ảnh base64, còn lại giữ 15 s mặc định. */
+export function imageTimeout(body: unknown): { timeout: number } | undefined {
+  return carriesInlineImage(body) ? { timeout: IMAGE_UPLOAD_TIMEOUT_MS } : undefined;
+}
+
 export interface RequestConfig {
   params?: Record<string, unknown>;
   headers?: Record<string, string>;

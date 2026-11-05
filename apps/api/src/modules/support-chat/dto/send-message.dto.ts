@@ -1,10 +1,11 @@
 import { Type } from 'class-transformer';
 import { IsIn, IsObject, IsOptional, IsString, Matches, MaxLength, ValidateNested } from 'class-validator';
+import { PRODUCT_SLUG_MAX } from '@tubutree/shared-types';
 import { IsUploadedMediaUrl } from '../../../common/uploaded-image';
 
 export class SendMessageContextDto {
   @IsOptional() @IsString() @MaxLength(40) orderCode?: string;
-  @IsOptional() @IsString() @MaxLength(120) productSlug?: string;
+  @IsOptional() @IsString() @MaxLength(PRODUCT_SLUG_MAX) productSlug?: string;
 }
 
 export class SendMessageDto {

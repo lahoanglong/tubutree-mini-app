@@ -7,6 +7,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { Search } from 'lucide-react';
+import { FIRST_PAGE, nextPageParam, uniqueByKey } from '@/lib/keyset-paging';
 import { fetchOrdersPage, formatVnd, type OrderDTO } from '@/lib/shop-client';
 import {
   ORDER_TABS,
@@ -57,11 +58,11 @@ export function OrdersSection() {
   // ['orders', …]: các trang khác (chi tiết đơn) làm mới theo tiền tố ['orders'].
   const ordersQ = useInfiniteQuery({
     queryKey: ['orders', tab, query],
-    queryFn: ({ pageParam }) => fetchOrdersPage(pageParam, filter),
-    initialPageParam: 1,
-    getNextPageParam: (last) => (last.meta.page * last.meta.limit < last.meta.total ? last.meta.page + 1 : undefined),
+    queryFn: ({ pageParam }) => (pageParam.cursor ? fetchOrdersPage(pageParam.page, filter, pageParam.cursor) : fetchOrdersPage(pageParam.page, filter)),
+    initialPageParam: FIRST_PAGE,
+    getNextPageParam: nextPageParam,
   });
-  const orders = ordersQ.data?.pages.flatMap((p) => p.data) ?? [];
+  const orders = uniqueByKey(ordersQ.data?.pages.flatMap((p) => p.data) ?? [], (o) => o.code);
   const total = ordersQ.data?.pages[0]?.meta.total ?? 0;
 
   const submitSearch = (e: React.FormEvent) => {

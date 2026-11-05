@@ -15,7 +15,10 @@ function makePrisma(over: Record<string, unknown> = {}) {
       findMany: jest.fn().mockResolvedValue([]),
       findUnique: jest.fn().mockResolvedValue({ id: 'post1', userId: 'author', kind: 'SHOWCASE' }),
       // pickWinner đòi người thắng có bài dự thi: mặc định coi mọi người đều đã dự.
-      findFirst: jest.fn().mockResolvedValue({ id: 'entry1' }),
+      // Truy vấn chống gửi trùng của createPost (có lọc createdAt) mặc định không thấy bài nào.
+      findFirst: jest.fn().mockImplementation(async ({ where }: { where?: { createdAt?: unknown } } = {}) =>
+        where?.createdAt ? null : { id: 'entry1' },
+      ),
       create: jest.fn().mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({ id: 'new', ...data })),
       update: jest.fn().mockResolvedValue({}),
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
@@ -70,6 +73,7 @@ function makePrisma(over: Record<string, unknown> = {}) {
     communityEvent: {
       findMany: jest.fn().mockResolvedValue([]),
       findUnique: jest.fn().mockResolvedValue(null),
+      findFirst: jest.fn().mockResolvedValue(null),
       create: jest.fn().mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({ id: 'ev1', ...data })),
       update: jest.fn().mockResolvedValue({}),
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
@@ -94,6 +98,16 @@ function makePrisma(over: Record<string, unknown> = {}) {
     typeof arg === 'function' ? (arg as (tx: unknown) => unknown)(merged) : Promise.all(arg as Promise<unknown>[]),
   );
   return merged as unknown as PrismaService;
+}
+
+/** Truy vấn sản phẩm gắn bài chạy bằng `SELECT ... FOR KEY SHARE` (raw): mock trả các id này cho đúng câu đó, câu raw khác giữ mặc định. */
+function withLockedProducts(prisma: PrismaService, ids: string[]) {
+  const raw = prisma.$queryRaw as jest.Mock;
+  const fallback = raw.getMockImplementation();
+  raw.mockImplementation(async (q: { sql?: string; strings?: string[] }) => {
+    const text = String(q?.sql ?? q?.strings?.join('?') ?? '');
+    return text.includes('"products"') ? ids.map((id) => ({ id })) : fallback ? fallback(q) : [{ status: 'PUBLISHED' }];
+  });
 }
 
 /**
@@ -643,16 +657,35 @@ describe('CommunityFeedService.createPost: trần ảnh của khách vãng lai (
     await makeSvc(prisma).createPost('g1', 'CUSTOMER', { body: 'Có ảnh', images: [PNG] });
     const raw = prisma as unknown as { $transaction: jest.Mock; $executeRaw: jest.Mock };
     expect(raw.$transaction).toHaveBeenCalledTimes(1);
-    const lockCall = raw.$executeRaw.mock.calls[0];
+    const lockCall = raw.$executeRaw.mock.calls[1];
     expect(lockCall[0].join('?')).toContain('pg_advisory_xact_lock');
     expect(lockCall[1]).toBe('guest-feed-images');
-    expect(raw.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan((prisma.$queryRaw as jest.Mock).mock.invocationCallOrder[0] ?? 0);
+    expect(raw.$executeRaw.mock.invocationCallOrder[1]).toBeLessThan((prisma.$queryRaw as jest.Mock).mock.invocationCallOrder[0] ?? 0);
   });
 
-  it('người dùng thật hoặc bài không ảnh base64: không mở giao dịch, không khoá', async () => {
+  it('khóa theo người lấy TRƯỚC khoá toàn cục (updatePost chỉ lấy khoá toàn cục nên không deadlock)', async () => {
+    const prisma = prismaFor(guest, 0, 0);
+    await makeSvc(prisma).createPost('g1', 'CUSTOMER', { body: 'Có ảnh', images: [PNG] });
+    const raw = prisma as unknown as { $executeRaw: jest.Mock };
+    expect(raw.$executeRaw.mock.calls.map((c) => c[1])).toEqual(['feed-post:g1', 'guest-feed-images']);
+  });
+
+  it('gửi lại đúng bài ảnh đang chờ duyệt khi đã chạm trần: nhận bài đã có, không lỗi trần, không đụng trần ảnh', async () => {
+    const prisma = prismaFor(guest, GUEST_PENDING_IMAGE_POSTS_MAX, GUEST_PENDING_IMAGE_BYTES_MAX);
+    (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([{ id: 'p2', status: 'PENDING', productTags: [], tags: [] }]);
+    const r = await makeSvc(prisma).createPost('g1', 'CUSTOMER', { body: 'Có ảnh', images: [PNG] });
+    expect(r).toEqual({ id: 'p2', status: 'PENDING' });
+    expect(prisma.feedPost.create).not.toHaveBeenCalled();
+    expect(prisma.$queryRaw).not.toHaveBeenCalled();
+    const raw = prisma as unknown as { $executeRaw: jest.Mock };
+    expect(raw.$executeRaw.mock.calls.map((c) => c[1])).toEqual(['feed-post:g1']);
+  });
+
+  it('người dùng thật hoặc bài không ảnh base64: không lấy khoá trần ảnh khách (chỉ khoá chống gửi trùng theo người)', async () => {
     const prisma = prismaFor({ phone: '0900000000', zaloId: null }, 0, 0);
     await makeSvc(prisma).createPost('u1', 'CUSTOMER', { body: 'Có ảnh', images: [PNG] });
-    expect((prisma as unknown as { $transaction: jest.Mock }).$transaction).not.toHaveBeenCalled();
+    const raw = prisma as unknown as { $executeRaw: jest.Mock };
+    expect(raw.$executeRaw.mock.calls.map((c) => c[1])).toEqual(['feed-post:u1']);
   });
 
   it('đã có 2 bài ảnh chờ duyệt → từ chối bài thứ 3, không ghi', async () => {
@@ -1345,7 +1378,7 @@ describe('CommunityFeedService.createPost (mở rộng)', () => {
 
   it('tạo SHOWCASE PUBLISHED kèm ảnh + gắn SP theo slug → thưởng post', async () => {
     const prisma = makePrisma();
-    (prisma.product.findMany as jest.Mock).mockResolvedValue([{ id: 'prod1' }, { id: 'prod2' }]);
+    withLockedProducts(prisma, ['prod1', 'prod2']);
     (prisma.feedPost.create as jest.Mock).mockResolvedValue({ id: 'newpost' });
     const reward = { rewardPost: jest.fn(), rewardAnswer: jest.fn(), rewardBestAnswer: jest.fn() };
     const r = await makeSvc(prisma, reward).createPost('u1', 'STAFF', {
@@ -1436,11 +1469,10 @@ describe('CommunityFeedService.createPost (mở rộng)', () => {
     });
   });
 
-  it('tạo Tag lỗi → bài vẫn tạo (gắn tag không chặn đăng bài)', async () => {
+  it('tạo Tag lỗi → cả createPost lỗi (thẻ ghi cùng giao dịch với bài, bài không nằm lại thiếu thẻ)', async () => {
     const prisma = makePrisma({ tag: { createMany: jest.fn().mockRejectedValue(new Error('boom')), findMany: jest.fn() } });
     (prisma.feedPost.create as jest.Mock).mockResolvedValue({ id: 'newpost' });
-    const r = await makeSvc(prisma).createPost('u1', 'STAFF', { kind: 'TIP', body: 'mẹo hay', tagSlugs: ['sen-da'] });
-    expect(r).toEqual({ id: 'newpost', status: 'PUBLISHED' });
+    await expect(makeSvc(prisma).createPost('u1', 'STAFF', { kind: 'TIP', body: 'mẹo hay', tagSlugs: ['sen-da'] })).rejects.toThrow('boom');
     expect(prisma.postTag.createMany).not.toHaveBeenCalled();
   });
 });
@@ -3636,5 +3668,207 @@ describe('B-136: dữ liệu công khai của Cộng đồng không chứa ảnh
     (prisma.communityProfile.findMany as jest.Mock).mockResolvedValue([{ reputation: 5, level: 1, user: { fullName: 'Long', avatarUrl: AVATAR } }]);
     const out = await makeSvc(prisma).getLeaderboard();
     expect(JSON.stringify(out)).not.toContain(AVATAR);
+  });
+});
+
+describe('CommunityFeedService: gửi lại cùng nội dung trong 5 phút (m5)', () => {
+  it('createEvent: đã có sự kiện cùng tiêu đề + giờ vừa tạo → trả sự kiện đó, không tạo thêm', async () => {
+    const prisma = makePrisma();
+    (prisma.communityEvent.findFirst as jest.Mock).mockResolvedValue({ id: 'ev-old', title: 'Thi khoe vườn' });
+    const dto = { title: 'Thi khoe vườn', startAt: new Date('2026-08-01'), endAt: new Date('2026-08-10') };
+    const r = await makeSvc(prisma).createEvent(dto);
+    expect(r).toMatchObject({ id: 'ev-old' });
+    expect(prisma.communityEvent.create).not.toHaveBeenCalled();
+    const where = (prisma.communityEvent.findFirst as jest.Mock).mock.calls[0][0].where;
+    expect(where).toMatchObject({ title: dto.title, startAt: dto.startAt, endAt: dto.endAt });
+    expect(where.createdAt.gte).toBeInstanceOf(Date);
+    expect(prisma.$executeRaw).toHaveBeenCalled();
+  });
+
+  it('createEvent: so trùng chỉ với sự kiện còn OPEN và cùng mô tả, ảnh bìa, quà; tiêu đề cắt khoảng trắng hai đầu', async () => {
+    const prisma = makePrisma();
+    const dto = { title: '  Thi khoe vườn ', description: 'Mô tả', coverUrl: 'https://c/1.jpg', startAt: new Date('2026-08-01'), endAt: new Date('2026-08-10'), rewardPoints: 30_000 };
+    await makeSvc(prisma).createEvent(dto);
+    const where = (prisma.communityEvent.findFirst as jest.Mock).mock.calls[0][0].where;
+    expect(where).toMatchObject({ status: 'OPEN', title: 'Thi khoe vườn', description: 'Mô tả', coverUrl: 'https://c/1.jpg', rewardPoints: 30_000 });
+    expect((prisma.communityEvent.create as jest.Mock).mock.calls[0][0].data.title).toBe('Thi khoe vườn');
+  });
+
+  it('createEvent: không mô tả/ảnh bìa/quà → so với null và 0', async () => {
+    const prisma = makePrisma();
+    await makeSvc(prisma).createEvent({ title: 'A', startAt: new Date('2026-08-01'), endAt: new Date('2026-08-10') });
+    expect((prisma.communityEvent.findFirst as jest.Mock).mock.calls[0][0].where).toMatchObject({ description: null, coverUrl: null, rewardPoints: 0 });
+  });
+
+  const cand = (over: Record<string, unknown> = {}) => ({ id: 'old', status: 'PUBLISHED', productTags: [], tags: [], ...over });
+
+  it('createPost: ứng viên trùng đủ trường nội dung → trả bài đó, không tạo/thưởng thêm', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([cand()]);
+    const reward = { rewardPost: jest.fn(), rewardAnswer: jest.fn(), rewardBestAnswer: jest.fn() };
+    const r = await makeSvc(prisma, reward).createPost('u1', 'STAFF', { kind: 'TIP', body: 'mẹo hay', images: ['https://i/1.jpg'], categoryId: undefined });
+    expect(r).toEqual({ id: 'old', status: 'PUBLISHED' });
+    expect(prisma.feedPost.create).not.toHaveBeenCalled();
+    expect(reward.rewardPost).not.toHaveBeenCalled();
+    const where = (prisma.feedPost.findMany as jest.Mock).mock.calls[0][0].where;
+    expect(where).toMatchObject({ userId: 'u1', body: 'mẹo hay', title: null, kind: 'TIP', categoryId: null, images: { equals: ['https://i/1.jpg'] } });
+    expect(where.createdAt.gte).toBeInstanceOf(Date);
+  });
+
+  it('createPost: cùng chú thích nhưng khác sản phẩm gắn → bài mới (ứng viên không bị nuốt)', async () => {
+    const prisma = makePrisma();
+    withLockedProducts(prisma, ['prod1']);
+    (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([cand({ productTags: [{ productId: 'prodX' }] })]);
+    await makeSvc(prisma).createPost('u1', 'STAFF', { kind: 'TIP', body: 'mẹo hay', productSlugs: ['a'] });
+    expect(prisma.feedPost.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('createPost: cùng sản phẩm gắn (khác thứ tự) → coi là trùng', async () => {
+    const prisma = makePrisma();
+    withLockedProducts(prisma, ['p1', 'p2']);
+    (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([cand({ productTags: [{ productId: 'p2' }, { productId: 'p1' }] })]);
+    const r = await makeSvc(prisma).createPost('u1', 'STAFF', { kind: 'TIP', body: 'mẹo hay', productSlugs: ['a', 'b'] });
+    expect(r.id).toBe('old');
+    expect(prisma.feedPost.create).not.toHaveBeenCalled();
+  });
+
+  it('createPost: khác thẻ #tag → bài mới; cùng thẻ (khác hoa thường/dấu #) → trùng', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([cand({ tags: [{ tag: { slug: 'sen-da' } }] })]);
+    await makeSvc(prisma).createPost('u1', 'STAFF', { kind: 'TIP', body: 'mẹo hay', tagSlugs: ['tuoi-nuoc'] });
+    expect(prisma.feedPost.create).toHaveBeenCalledTimes(1);
+    const prisma2 = makePrisma();
+    (prisma2.feedPost.findMany as jest.Mock).mockResolvedValue([cand({ tags: [{ tag: { slug: 'sen-da' } }] })]);
+    const r = await makeSvc(prisma2).createPost('u1', 'STAFF', { kind: 'TIP', body: 'mẹo hay', tagSlugs: ['#Sen Đá'] });
+    expect(r.id).toBe('old');
+    expect(prisma2.feedPost.create).not.toHaveBeenCalled();
+  });
+
+  it('createPost: bài có thẻ/sản phẩm nhưng ứng viên không có → bài mới; bài không thẻ mà ứng viên có thẻ → bài mới', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([cand({ tags: [{ tag: { slug: 'sen-da' } }] })]);
+    await makeSvc(prisma).createPost('u1', 'STAFF', { kind: 'TIP', body: 'mẹo hay' });
+    expect(prisma.feedPost.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('createPost: ghi thẻ lỗi (không phải trùng) → cả createPost lỗi, không nuốt lỗi để lại bài thiếu thẻ', async () => {
+    const prisma = makePrisma();
+    (prisma.tag.createMany as jest.Mock).mockRejectedValue(new Error('DB hỏng'));
+    await expect(makeSvc(prisma).createPost('u1', 'STAFF', { kind: 'TIP', body: 'mẹo', tagSlugs: ['sen-da'] })).rejects.toThrow('DB hỏng');
+  });
+
+  it('createPost: thẻ và sản phẩm gắn được ghi TRONG giao dịch tạo bài (trước khi nhả khoá theo người), thưởng chạy sau', async () => {
+    const prisma = makePrisma();
+    withLockedProducts(prisma, ['p1']);
+    const order: string[] = [];
+    (prisma.feedPost.create as jest.Mock).mockImplementation(async () => (order.push('create'), { id: 'newpost' }));
+    (prisma.postProductTag.createMany as jest.Mock).mockImplementation(async () => (order.push('productTags'), { count: 1 }));
+    (prisma.postTag.createMany as jest.Mock).mockImplementation(async () => (order.push('postTags'), { count: 1 }));
+    const tx = prisma.$transaction as jest.Mock;
+    const inner = tx.getMockImplementation()!;
+    tx.mockImplementation(async (fn: unknown) => {
+      const r = await inner(fn);
+      order.push('commit');
+      return r;
+    });
+    const reward = { rewardPost: jest.fn(async () => void order.push('reward')), rewardAnswer: jest.fn(), rewardBestAnswer: jest.fn() };
+    await makeSvc(prisma, reward).createPost('u1', 'STAFF', { kind: 'TIP', body: 'mẹo', tagSlugs: ['sen-da'], productSlugs: ['a'] });
+    expect(order.slice(0, 5)).toEqual(['create', 'productTags', 'postTags', 'commit', 'reward']);
+  });
+
+  it('createPost: sản phẩm đọc bằng SELECT ... FOR KEY SHARE trong giao dịch (sau khoá theo người); sản phẩm biến mất → bài vẫn tạo, bỏ sản phẩm đó', async () => {
+    const prisma = makePrisma();
+    withLockedProducts(prisma, []);
+    const r = await makeSvc(prisma).createPost('u1', 'STAFF', { kind: 'TIP', body: 'mẹo', productSlugs: ['da-bi-xoa'] });
+    expect(r.id).toBe('new');
+    expect(prisma.postProductTag.createMany).not.toHaveBeenCalled();
+    expect(prisma.product.findMany).not.toHaveBeenCalled();
+    const raw = prisma as unknown as { $executeRaw: jest.Mock; $queryRaw: jest.Mock };
+    const productCall = raw.$queryRaw.mock.calls.findIndex((c: [{ sql?: string }]) => String(c[0]?.sql ?? '').includes('"products"'));
+    expect(productCall).toBeGreaterThanOrEqual(0);
+    const sql = String(raw.$queryRaw.mock.calls[productCall][0].sql);
+    expect(sql).toContain('FOR KEY SHARE');
+    expect(sql).toContain('"isActive"');
+    expect(raw.$queryRaw.mock.invocationCallOrder[productCall]).toBeGreaterThan(raw.$executeRaw.mock.invocationCallOrder[0]!);
+  });
+
+  it('createPost: tiêu đề chỉ gồm ký tự vô hình → coi như không có tiêu đề', async () => {
+    const prisma = makePrisma();
+    await makeSvc(prisma).createPost('u1', 'STAFF', { kind: 'TIP', title: '\u200b\ufeff', body: 'nội dung' });
+    expect((prisma.feedPost.create as jest.Mock).mock.calls[0][0].data.title).toBeNull();
+  });
+
+  it('createPost: nội dung chỉ gồm ký tự vô hình → BadRequest, không tạo', async () => {
+    const prisma = makePrisma();
+    await expect(makeSvc(prisma).createPost('u1', 'STAFF', { kind: 'TIP', body: '\u200b\u00a0\ufeff' })).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.feedPost.create).not.toHaveBeenCalled();
+  });
+
+  it('createPost: chưa có ứng viên → tạo bình thường dưới khoá theo người', async () => {
+    const prisma = makePrisma();
+    const r = await makeSvc(prisma).createPost('u1', 'STAFF', { kind: 'TIP', body: 'mẹo mới' });
+    expect(r.id).toBe('new');
+    expect(prisma.feedPost.create).toHaveBeenCalledTimes(1);
+    expect(prisma.$executeRaw).toHaveBeenCalled();
+  });
+});
+
+describe('chữ người dùng chỉ gồm ký tự vô hình bị coi là trống ở sửa bài, bình luận, báo cáo, lý do (L6-01)', () => {
+  const ZW = '\u200b\ufeff\u2060';
+
+  it('editPost: body toàn ký tự vô hình → BadRequest, không ghi', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ userId: 'author', status: 'PUBLISHED' });
+    await expect(makeSvc(prisma).editPost('author', 'p1', { body: ZW })).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.feedPost.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('editPost: tiêu đề toàn ký tự vô hình → null; body có ký tự vô hình hai đầu được cắt', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ userId: 'author', status: 'PUBLISHED' });
+    await makeSvc(prisma).editPost('author', 'p1', { title: ZW, body: `${ZW} nội dung ${ZW}` });
+    const data = (prisma.feedPost.updateMany as jest.Mock).mock.calls[0][0].data;
+    expect(data.title).toBeNull();
+    expect(data.body).toBe('nội dung');
+  });
+
+  it.each(['', '\u200b\ufeff', '   '])('editPost: bài QUESTION sửa tiêu đề %j → 400 như createPost, không ghi', async (title) => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ userId: 'author', status: 'PUBLISHED', kind: 'QUESTION' });
+    await expect(makeSvc(prisma).editPost('author', 'p1', { title })).rejects.toThrow('Câu hỏi cần có tiêu đề.');
+    expect(prisma.feedPost.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('editPost: bài QUESTION sửa sang tiêu đề hợp lệ vẫn được; loại khác tiêu đề vô hình → null', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ userId: 'author', status: 'PUBLISHED', kind: 'QUESTION' });
+    await makeSvc(prisma).editPost('author', 'p1', { title: ' Lá vàng vì sao? ' });
+    expect((prisma.feedPost.updateMany as jest.Mock).mock.calls[0][0].data.title).toBe('Lá vàng vì sao?');
+    const prisma2 = makePrisma();
+    (prisma2.feedPost.findUnique as jest.Mock).mockResolvedValue({ userId: 'author', status: 'PUBLISHED', kind: 'TIP' });
+    await makeSvc(prisma2).editPost('author', 'p1', { title: '\u200b' });
+    expect((prisma2.feedPost.updateMany as jest.Mock).mock.calls[0][0].data.title).toBeNull();
+  });
+
+  it('addComment: nội dung toàn ký tự vô hình → BadRequest, không tạo', async () => {
+    const prisma = makePrisma();
+    await expect(makeSvc(prisma).addComment('u1', 'CUSTOMER', 'p1', ZW)).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.feedComment.create).not.toHaveBeenCalled();
+  });
+
+  it('report: lý do toàn ký tự vô hình → lý do mặc định', async () => {
+    const prisma = makePrisma();
+    await makeSvc(prisma).report('u1', { targetType: 'POST', targetId: 'p1', reason: ZW });
+    expect((prisma.communityReport.create as jest.Mock).mock.calls[0][0].data.reason).toBe('Không phù hợp');
+  });
+
+  it.each(['rejectPost', 'hidePost'] as const)('%s: lý do toàn ký tự vô hình → lý do mặc định trong thông báo', async (method) => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ id: 'p1', userId: 'author', status: method === 'rejectPost' ? 'PENDING' : 'PUBLISHED', title: 'Tiêu đề', body: 'nội dung' });
+    const notify = { notify: jest.fn().mockResolvedValue(undefined) };
+    await (makeSvc(prisma, undefined, notify) as unknown as Record<string, (id: string, r?: string) => Promise<unknown>>)[method]!('p1', ZW);
+    const data = notify.notify.mock.calls[0]![2] as { reason: string };
+    expect(data.reason).not.toContain('\u200b');
+    expect(data.reason.length).toBeGreaterThan(3);
   });
 });

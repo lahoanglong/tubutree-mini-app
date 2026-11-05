@@ -5,7 +5,7 @@ import { PrismaService } from '../../src/prisma/prisma.service';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import { RewardPointsService } from '../../src/modules/wallet/reward-points.service';
 import { SeasonPassService } from '../../src/modules/game/season-pass.service';
-import { createRealUser, randCode, setConfig, summarize } from './helpers';
+import { createRealUser, randCode, setConfig, summarize, withDbUrlParams } from './helpers';
 
 /**
  * R6-SYNC-3: Season Pass claim đọc SystemConfig (cache 60s nguội) BÊN TRONG transaction → mỗi tx giữ một
@@ -40,7 +40,7 @@ describe('SeasonPassService.claim với pool 2 kết nối, cache config nguội
   });
 
   async function coldModule() {
-    process.env.DATABASE_URL = `${BASE_URL}&connection_limit=2&pool_timeout=4`;
+    process.env.DATABASE_URL = withDbUrlParams(BASE_URL, { connection_limit: '2', pool_timeout: '4' });
     moduleRef = await Test.createTestingModule({
       imports: [PrismaModule],
       providers: [SystemConfigService, RewardPointsService, SeasonPassService],

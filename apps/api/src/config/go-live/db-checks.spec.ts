@@ -168,7 +168,7 @@ describe('evaluateDb', () => {
       expect(withR8.detail).toContain('đánh giá trùng');
     });
 
-    it('bảy migration chỉ thêm chỉ mục của đợt hardening 05/11 nằm trong danh sách tương thích image', () => {
+    it('tám migration chỉ thêm chỉ mục của đợt hardening 05/11 nằm trong danh sách tương thích image', () => {
       const phase2 = [
         '20261105130000_hd1_coupon_milestone_period_idx',
         '20261105130100_hd1_users_guest_partial_idx',
@@ -177,10 +177,18 @@ describe('evaluateDb', () => {
         '20261105130400_hd1_feed_new_order_index',
         '20261105130500_hd1_reviews_public_list_index',
         '20261105140000_payouts_status_index',
+        '20261105180000_hg_zns_stuck_logs_index',
       ];
       for (const m of phase2) expect(IMAGE_COMPATIBLE_MIGRATIONS).toContain(m);
       const r = byId(run(behind(1_000, phase2), 'pre-deploy'), 'db.pending_scope');
       expect(r.status).toBe('PASS');
+    });
+
+    it('hg: migration chỉ mục quét log ZNS kẹt nằm trong danh sách tương thích image và danh sách nặng (không khoá orders)', () => {
+      const name = '20261105180000_hg_zns_stuck_logs_index';
+      expect(IMAGE_COMPATIBLE_MIGRATIONS).toContain(name);
+      expect(HEAVY_MIGRATIONS).toContainEqual({ name, ordersLock: false });
+      expect(byId(run(behind(1_000, [name]), 'pre-deploy'), 'db.pending_scope').status).toBe('PASS');
     });
 
     it('migration tương thích image cộng một migration khác: db.pending_scope WARN, đếm đúng phần ngoài danh sách', () => {
@@ -729,6 +737,21 @@ describe('evaluateDb', () => {
       expect(r.status).toBe('WARN');
       expect(r.detail).toContain('2/3');
       expect(r.detail).toContain('ORDER_CONFIRMED');
+    });
+    it('log ZNS chờ đối soát tay: 0 thì PASS (cả khi chưa đo), > 0 thì WARN nêu số log và cách đối soát', () => {
+      expect(byId(run(dbWith({ znsReviewPending: 0 })), 'db.zns_review_pending').status).toBe('PASS');
+      expect(byId(run(dbWith({})), 'db.zns_review_pending').status).toBe('PASS');
+      const r = byId(run(dbWith({ znsReviewPending: 3 })), 'db.zns_review_pending');
+      expect(r.status).toBe('WARN');
+      expect(r.detail).toContain('3');
+      expect(r.hint).toContain('Chờ đối soát tay');
+      expect(r.hint).toContain('1.20');
+      expect(r.hint).not.toMatch(/\bjob\b/i);
+    });
+    it('không đọc được số log chờ đối soát (degraded.znsReview) không hạ dòng db.zns_templates', () => {
+      const s = dbWith({ appliedMigrations: GOOD_DB.appliedMigrations.slice(0, 1), degraded: { znsReview: 'P2022' } });
+      expect(byId(run(s, 'pre-deploy'), 'db.zns_templates').status).toBe('PASS');
+      expect(byId(run(s, 'pre-deploy'), 'db.zns_review_pending').status).toBe('WARN');
     });
     it('kênh khác ZNS không bị tính', () => {
       const s = dbWith({ znsTemplates: [{ code: 'X', channel: 'INAPP', zaloTemplateId: null }, { code: 'Y', channel: 'ZNS', zaloTemplateId: '1' }] });

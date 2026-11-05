@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { filterFlashSales, flashSaleState } from './admin-flash-sale';
+import { flashSaleState } from './admin-flash-sale';
 
 const NOW = Date.parse('2026-11-03T05:00:00Z');
 const sale = (startH: number, endH: number, isActive = true) => ({
@@ -15,11 +15,5 @@ describe('flashSaleState', () => {
     expect(flashSaleState(sale(-5, -1), NOW)).toBe('ended');
     expect(flashSaleState(sale(-5, -1, false), NOW)).toBe('ended');
     expect(flashSaleState(sale(-1, 1, false), NOW)).toBe('off');
-  });
-  it('lọc: mặc định chưa kết thúc, "Đã kết thúc", "Tất cả"', () => {
-    const all = [sale(-1, 1), sale(1, 3, false), sale(-5, -1)];
-    expect(filterFlashSales(all, 'open', NOW)).toHaveLength(2);
-    expect(filterFlashSales(all, 'ended', NOW)).toEqual([all[2]]);
-    expect(filterFlashSales(all, 'all', NOW)).toHaveLength(3);
   });
 });

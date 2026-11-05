@@ -38,6 +38,7 @@ import {
   type PricelistRow,
   type DealerOrderRules,
 } from '../services/dealer-api';
+import { errorCode } from '@tubutree/app-core/api/error-status';
 import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { formatDate, formatRatePct, formatVnd } from '../utils/format';
 import { usePublicConfig } from '../hooks/use-public-config';
@@ -74,6 +75,7 @@ import { SegmentedTabs } from '../components/ui/segmented-tabs';
 import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { Heading, Text } from '../components/ui/text';
 import { DEALER_MAX_QTY, preorderQty, realDiscountPct } from './dealer-pricing';
+import { INPUT_LIMITS } from '../utils/input-limits';
 
 const INK = 'var(--color-dealer-ink)';
 
@@ -144,7 +146,12 @@ function DealerApply({ rejected, rejectionReason }: { rejected: boolean; rejecti
       openSnackbar({ text: 'Đã gửi hồ sơ đăng ký đại lý!', type: 'success' });
       void qc.invalidateQueries({ queryKey: ['dealer-me'] });
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e) => {
+      // Mất phản hồi rồi bấm lại: hồ sơ đã nhận, làm mới trạng thái để sang màn chờ duyệt thay vì đứng ở form.
+      const already = errorCode(e) === 'DEALER_APPLICATION_PENDING';
+      if (already) void qc.invalidateQueries({ queryKey: ['dealer-me'] });
+      openSnackbar({ text: getErrorMessage(e), type: already ? 'info' : 'error' });
+    },
   });
 
   const set = (k: keyof DealerApplyInput) => (e: { target: { value: string } }) =>
@@ -211,19 +218,19 @@ function DealerApply({ rejected, rejectionReason }: { rejected: boolean; rejecti
 
         <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
           <Field label="Tên doanh nghiệp / cửa hàng *">
-            <Input value={form.businessName} onChange={set('businessName')} />
+            <Input maxLength={INPUT_LIMITS.dealerBusinessName} value={form.businessName} onChange={set('businessName')} />
           </Field>
           <Field label="Mã số thuế">
-            <Input value={form.taxCode ?? ''} onChange={set('taxCode')} />
+            <Input maxLength={INPUT_LIMITS.dealerTaxCode} value={form.taxCode ?? ''} onChange={set('taxCode')} />
           </Field>
           <Field label="Người đại diện *">
-            <Input value={form.ownerName} onChange={set('ownerName')} />
+            <Input maxLength={INPUT_LIMITS.dealerOwnerName} value={form.ownerName} onChange={set('ownerName')} />
           </Field>
           <Field label="Số điện thoại *">
-            <Input value={form.phone} onChange={set('phone')} />
+            <Input maxLength={INPUT_LIMITS.dealerPhone} value={form.phone} onChange={set('phone')} />
           </Field>
           <Field label="Địa chỉ kinh doanh *">
-            <Input value={form.address} onChange={set('address')} />
+            <Input maxLength={INPUT_LIMITS.dealerAddress} value={form.address} onChange={set('address')} />
           </Field>
           <ImageUpload
             label="Ảnh CCCD mặt trước *"
@@ -573,7 +580,7 @@ function PriceAndOrder({ creditLimit, debt, rules }: { creditLimit: number; debt
       )}
 
       <BottomSheet open={saveOpen} onClose={() => setSaveOpen(false)} title="Lưu mẫu đơn">
-        <Input placeholder="Tên mẫu (vd Đơn tháng)" value={tplName} onChange={(e) => setTplName(e.target.value)} />
+        <Input maxLength={INPUT_LIMITS.dealerTemplateName} placeholder="Tên mẫu (vd Đơn tháng)" value={tplName} onChange={(e) => setTplName(e.target.value)} />
         <Button
           fullWidth
           loading={saveTpl.isPending}

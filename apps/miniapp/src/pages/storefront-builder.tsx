@@ -54,6 +54,7 @@ import { useSectionStyle } from '../components/storefront-builder/use-section-st
 import { CARD_MARGIN, SCROLL_BODY } from '../components/storefront-builder/shared';
 import { StatsSection } from '../components/storefront-builder/stats-panel';
 import { StorefrontSignupFlow } from './storefront-signup';
+import { INPUT_LIMITS } from '../utils/input-limits';
 
 /** Mỗi nhánh render có đúng một h1 và cùng nền; trang chi tiết khối tự vẽ h1 (tên khối) nên không dùng PageHeader. */
 function BuilderShell({ children, style, bare }: { children: ReactNode; style?: CSSProperties; bare?: boolean }) {
@@ -489,7 +490,7 @@ function Builder({ sf, tier, tierPending, nextTier }: { sf: StorefrontEdit; tier
       <BottomSheet open={!!renaming} onClose={() => setRenaming(null)} title={BUILDER_COPY.renameSection}>
         {renaming && (
           <>
-            <Input
+            <Input maxLength={INPUT_LIMITS.collectionTitle}
               aria-label={BUILDER_COPY.renameSection}
               value={renaming.title}
               onChange={(e) => setRenaming({ ...renaming, title: e.target.value })}

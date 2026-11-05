@@ -1,3 +1,4 @@
+import { PRODUCT_SLUGS_LIST_MAX } from '@tubutree/shared-types';
 import { BadRequestException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { Prisma, type Category } from '@prisma/client';
@@ -49,7 +50,7 @@ type FulfillerStore = {
 /** Trần số id trả về từ SQL tìm không dấu — catalog hiện vài trăm SP; chặn trường hợp từ khoá quá chung. */
 const TEXT_MATCH_LIMIT = 2000;
 /** Số slug tối đa một lần lấy theo `slugs` (khớp số mục của dải "Đã xem gần đây" trên Mini App). */
-const MAX_LIST_SLUGS = 20;
+const MAX_LIST_SLUGS = PRODUCT_SLUGS_LIST_MAX;
 /** Số sản phẩm của dải "Có thể bạn cũng thích" (cùng nhãn). */
 const RELATED_LIMIT = 8;
 /** Số sản phẩm ghi trong một transaction khi tính lại số đã bán: khoá dòng ngắn, không giữ cả catalog. */

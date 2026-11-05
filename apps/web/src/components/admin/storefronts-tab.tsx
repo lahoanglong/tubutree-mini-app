@@ -181,6 +181,7 @@ export function StorefrontsTab({ initialStatus = '' }: { initialStatus?: Storefr
           type="search"
           aria-label="Tìm gian hàng"
           placeholder="Tên gian hàng, mã, tên hoặc SĐT chủ"
+          maxLength={100}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           className={`${FIELD_CLASS} ${TOUCH_H} min-w-0 flex-1 sm:max-w-sm`}

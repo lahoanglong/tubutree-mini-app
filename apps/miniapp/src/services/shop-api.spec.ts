@@ -207,7 +207,7 @@ describe('shop-api — createReview', () => {
     const data = { id: 'r1', rating: 4, comment: null, images: [], videoUrl: null, createdAt: '2026-10-01T00:00:00.000Z', pointsEarned: 0, updated: false };
     post.mockResolvedValue({ data });
     const r = await createReview('nuoc-rua-chen', { rating: 4, orderId: 'o1' });
-    expect(post).toHaveBeenCalledWith('/products/nuoc-rua-chen/reviews', { rating: 4, orderId: 'o1' });
+    expect(post).toHaveBeenCalledWith('/products/nuoc-rua-chen/reviews', { rating: 4, orderId: 'o1' }, undefined);
     expect(r.pointsEarned).toBe(0);
     expect(r.updated).toBe(false);
   });

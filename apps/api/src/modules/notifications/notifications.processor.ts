@@ -1,7 +1,7 @@
-import { Processor, WorkerHost } from '@nestjs/bullmq';
+import { OnWorkerEvent, Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
-import { DelayedError, type Job } from 'bullmq';
-import { INAPP_RETRY_JOB, NotificationsService, type InAppRetryJobData, type ZnsSendJobData } from './notifications.service';
+import { DelayedError, UnrecoverableError, type Job } from 'bullmq';
+import { INAPP_RETRY_JOB, NotificationsService, oneLineReason, ZNS_SEND_JOB, type InAppRetryJobData, type ZnsSendJobData } from './notifications.service';
 import { QUEUE_NOTIFICATIONS, QUEUE_NOTIFICATIONS_INAPP_RETRY } from '../../jobs/queues';
 import { captureServerError } from '../../config/sentry';
 
@@ -37,13 +37,38 @@ export class NotificationsProcessor extends WorkerHost {
     super();
   }
 
-  async process(job: Job<ZnsSendJobData | InAppRetryJobData>, token?: string): Promise<void> {
+  async process(job: Job<ZnsSendJobData | InAppRetryJobData>, token?: string): Promise<'SENT' | void> {
     // Chỉ còn job xếp trước khi hàng riêng ra đời (còn nằm trong hàng này lúc deploy); job mới đi QUEUE_NOTIFICATIONS_INAPP_RETRY.
     if (job.name === INAPP_RETRY_JOB) return retryInApp(this.notifications, this.logger, job as Job<InAppRetryJobData>);
     return this.sendZns(job as Job<ZnsSendJobData>, token);
   }
 
-  private async sendZns(job: Job<ZnsSendJobData>, token?: string): Promise<void> {
+  /**
+   * BullMQ phát 'failed' cho cả lượt lỗi còn được thử lại; chỉ khi job không chạy lại nữa (hết lượt, hoặc stalled quá giới hạn)
+   * mà log còn PENDING/RETRYING thì không ai ghi kết cục nữa. Không ném: lỗi ở đây không được làm sập worker; cron quét log kẹt là đường dự phòng.
+   */
+  @OnWorkerEvent('failed')
+  async onFailed(job: Job<ZnsSendJobData> | undefined, err: Error): Promise<void> {
+    if (!job || job.name !== ZNS_SEND_JOB) return;
+    const attempts = job.opts?.attempts ?? 1;
+    // Chỉ cấu trúc mới cho biết BullMQ không chạy lại nữa; câu lỗi chỉ để chọn lời giải thích (lỗi DB/mạng có chữ "stalled" ở lượt chưa cuối vẫn được chạy lại).
+    const unrecoverable = err instanceof UnrecoverableError || err?.name === 'UnrecoverableError';
+    if (!unrecoverable && job.attemptsMade < attempts) return;
+    const stalled = /stalled/i.test(err?.message ?? '');
+    const logId = job.data?.notificationLogId;
+    if (!logId) return;
+    const why = stalled ? 'tác vụ gửi bị treo quá giới hạn của hàng đợi' : 'tác vụ gửi hỏng ở lượt cuối, không còn lượt thử lại';
+    try {
+      const closed = await this.notifications.closeStuckZnsLog(logId, `Gửi ZNS dừng: ${why}. Chi tiết kỹ thuật: ${oneLineReason(err?.message ?? err)}`);
+      if (closed) this.logger.warn(`Đã đóng log ZNS ${logId} thành FAILED vì ${why}.`);
+    } catch (closeErr) {
+      this.logger.error(`Không đóng được log ZNS ${logId} sau khi job hỏng hẳn: ${closeErr instanceof Error ? closeErr.message : closeErr}`);
+      captureServerError(closeErr);
+    }
+  }
+
+  /** Trả 'SENT' làm returnvalue của job: dấu vết để ZnsStuckLogCron ghi nốt SENT khi markZnsSent đã nuốt lỗi ghi. */
+  private async sendZns(job: Job<ZnsSendJobData>, token?: string): Promise<'SENT' | void> {
     // Lượt thử lại do BullMQ xếp theo backoff nên có thể rơi sau 21h dù lượt đầu đã được dời; dời tiếp tới hết giờ yên tĩnh.
     // moveToDelayed + DelayedError không tính là một lượt thử (attemptsMade giữ nguyên), và chạy trước deliverZns để log vẫn còn nguyên trạng thái.
     const quietMs = await this.notifications.quietDelayMs();
@@ -53,7 +78,7 @@ export class NotificationsProcessor extends WorkerHost {
     }
     const attempts = job.opts.attempts ?? 1;
     const outcome = await this.notifications.deliverZns(job.data, job.attemptsMade + 1 >= attempts);
-    if (outcome === 'SENT') return;
+    if (outcome === 'SENT') return 'SENT';
     if (outcome === 'SKIPPED') {
       this.logger.warn(`Bỏ qua job ZNS đến muộn của notificationLog ${job.data.notificationLogId}: log đã đóng (khoá đã nhả để gửi lại, hoặc đã có tin cho cùng sự kiện).`);
       return;

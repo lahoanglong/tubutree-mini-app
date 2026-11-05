@@ -1,7 +1,9 @@
+import { randomBytes } from 'crypto';
 import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, Logger, NotFoundException, Optional, ServiceUnavailableException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { OrderStatus } from '@tubutree/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
+import { merchantSku } from './merchant-sku';
 import { VARIATION_ORDER_BY } from '../catalog/variation-order';
 import { paginated, skipTake } from '../../common/pagination';
 import { maskFullName, publicDisplayName } from '../../common/mask-name';
@@ -616,9 +618,12 @@ export class MerchantService {
       }
     }
 
-    const baseSlug = slugify(dto.name);
-    const uniqueSlug = `${baseSlug}-${Date.now().toString(36)}`;
-    const sku = `MCH-${Date.now().toString(36).toUpperCase()}`;
+    const baseSlug = slugify(dto.name) || 'san-pham';
+    // Mã thời gian (8–9 ký tự) + 6 hex ngẫu nhiên (dùng chung cho slug và sku): hai sản phẩm đăng cùng một mili giây không đụng unique slug hay sku. Tối đa 200 + 1 + 9 + 6 = 216 ký tự, vừa PRODUCT_SLUG_MAX.
+    const now = Date.now();
+    const randomCode = randomBytes(3).toString('hex');
+    const uniqueSlug = `${baseSlug}-${now.toString(36)}${randomCode}`;
+    const sku = merchantSku(randomCode, now);
     const retailPrice = link ? link.retailPrice : dto.basePrice;
     const salePrice = link ? link.salePrice : (dto.salePrice ?? null);
 

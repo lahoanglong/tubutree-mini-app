@@ -26,6 +26,7 @@ import { formatVnd } from '@/lib/format-vnd';
 import { ui } from '@/lib/guest-ui';
 import { PAGE_WIDE } from '@/lib/page-frame';
 import { loadErrorText } from '@/lib/error-text';
+import { FIRST_PAGE, nextPageParam, uniqueByKey } from '@/lib/keyset-paging';
 
 const PAGE_LIMIT = 20;
 
@@ -49,14 +50,11 @@ function OrdersPageBody() {
   // Khoá bắt đầu bằng ['orders'] nên invalidateQueries({ queryKey: ['orders'] }) ở trang chuyển khoản/huỷ đơn làm mới danh sách.
   const orders = useInfiniteQuery({
     ...ordersListQuery(coreHttp, tab, current.filter ?? {}, PAGE_LIMIT),
-    initialPageParam: 1,
-    getNextPageParam: (last) => {
-      const { page, limit, total } = last.meta;
-      return page * limit < total ? page + 1 : undefined;
-    },
+    initialPageParam: FIRST_PAGE,
+    getNextPageParam: nextPageParam,
     enabled: phase === 'authenticated' && !isSubscriptions,
   });
-  const list = orders.data?.pages.flatMap((pg) => pg.data) ?? [];
+  const list = uniqueByKey(orders.data?.pages.flatMap((pg) => pg.data) ?? [], (o) => o.code);
 
   // Chỉ nhắc mã chào mừng khi khách thật sự đang có mã (API trả kèm mã còn dùng được), số lấy từ chính mã đó: cấu hình có mệnh giá
   // không có nghĩa khách nhận được (chưa cấp, đã dùng, hết hạn, tài khoản vãng lai).

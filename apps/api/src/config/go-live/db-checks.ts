@@ -22,7 +22,7 @@ const MULTI_REVIEWS_MIGRATION = REQUIRED_MIGRATIONS[2];
 /**
  * Migration mà image cũ vẫn chạy đúng trên schema sau khi áp: quay lại bằng image (runbook 7.2) hợp lệ khi danh sách chờ áp chỉ
  * gồm tên trong danh sách này. Gồm ba migration của đợt đầu, hai migration nhỏ thêm sau đó (hai cột NULL trên variations, một
- * cột trên bảng trả hàng cũ), waste_exchange (chỉ thêm bảng và cột mới mà image cũ không đọc) và bảy migration đợt hardening
+ * cột trên bảng trả hàng cũ), waste_exchange (chỉ thêm bảng và cột mới mà image cũ không đọc) và tám migration đợt hardening
  * 05/11 chỉ dựng chỉ mục (không đổi dữ liệu, không đổi cột).
  */
 export const IMAGE_COMPATIBLE_MIGRATIONS: readonly string[] = [
@@ -37,6 +37,7 @@ export const IMAGE_COMPATIBLE_MIGRATIONS: readonly string[] = [
   '20261105130400_hd1_feed_new_order_index',
   '20261105130500_hd1_reviews_public_list_index',
   '20261105140000_payouts_status_index',
+  '20261105180000_hg_zns_stuck_logs_index',
 ];
 
 /**
@@ -77,6 +78,7 @@ export const HEAVY_MIGRATIONS: ReadonlyArray<{ name: string; ordersLock: boolean
   { name: '20261105130100_hd1_users_guest_partial_idx', ordersLock: false },
   { name: '20261105130200_hd1_notification_inapp_indexes', ordersLock: false },
   { name: '20261105130300_hd1_points_history_index', ordersLock: false },
+  { name: '20261105180000_hg_zns_stuck_logs_index', ordersLock: false },
 ];
 
 export const ORDERS_LOCK_SECONDS_PER_300K = 14;
@@ -122,13 +124,15 @@ export interface DbSnapshot {
   adminCount: number;
   pendingAdminGrants: number;
   znsTemplates: ZnsTemplateRow[];
+  /** Log ZNS còn PENDING/RETRYING mang tiền tố chờ đối soát tay (cron quét log kẹt đã đánh dấu); vắng nghĩa là chưa đo. */
+  znsReviewPending?: number;
   /** COD_MAX_PER_ORDER trong code (checkout-split.ts). */
   codMaxPerOrder: number;
   /** current_setting của ba hạn chờ, đọc trên kết nối dựng đúng như API (cùng DB_SESSION_OPTIONS). */
   sessionTimeouts: Record<DbSessionOptionName, string>;
   demoData?: DemoDataSnapshot;
   /** Phần collector không đọc được vì schema DB cũ hơn mã (P2021/P2022): mã lỗi theo từng phần. Vắng nghĩa là đọc đủ. */
-  degraded?: Partial<Record<'configs' | 'waste' | 'membershipTiers' | 'dealerTiers' | 'admin' | 'zns' | 'demoData', string>>;
+  degraded?: Partial<Record<'configs' | 'waste' | 'membershipTiers' | 'dealerTiers' | 'admin' | 'zns' | 'znsReview' | 'demoData', string>>;
 }
 
 export const CONFIG_KEYS_OF_INTEREST = [
@@ -672,6 +676,19 @@ function znsCheck(s: DbSnapshot): CheckResult {
   return pass(G_DB, 'db.zns_templates', title, `${zns.length} mẫu ZNS đều có mã số`);
 }
 
+function znsReviewCheck(s: DbSnapshot): CheckResult {
+  const title = 'Log ZNS chờ đối soát tay';
+  const n = s.znsReviewPending ?? 0;
+  if (n === 0) return pass(G_DB, 'db.zns_review_pending', title, 'không có log nào');
+  return warn(
+    G_DB,
+    'db.zns_review_pending',
+    title,
+    `${n} log ZNS còn PENDING/RETRYING mà tác vụ gửi đã hoàn tất hoặc đã mất khỏi hàng đợi, chưa rõ Zalo đã nhận tin chưa; tin cùng sự kiện bị chặn gửi lại cho tới khi đối soát`,
+    'Lọc cột error bắt đầu bằng "Chờ đối soát tay". Đối soát từng log với Zalo OA (tracking_id = id log): Zalo đã nhận thì ghi SENT, chưa nhận thì đóng FAILED. Cách làm ở runbook 1.20.',
+  );
+}
+
 /**
  * Dòng của phần DB không đọc được vì schema cũ: trước deploy VÀ còn migration chờ áp thì chỉ WARN (sẽ kiểm lại ở bước 10 sau migrate).
  * Sau deploy, hoặc hết migration chờ mà vẫn thiếu cột/bảng, là FAIL: schema phải đã khớp mã, nên đó là lệch schema hay lỗi mã.
@@ -724,6 +741,7 @@ export function evaluateDb(s: DbSnapshot, ctx: DbContext): CheckResult[] {
     ...part('dealerTiers', [dealerTierCheck(s)]),
     ...part('admin', [adminCheck(s)]),
     ...part('zns', [znsCheck(s)]),
+    ...part('znsReview', [znsReviewCheck(s)]),
     ...(d.demoData ? degradeResults(demo, d.demoData, ctx.phase, pendingCount) : demo),
   ];
 }

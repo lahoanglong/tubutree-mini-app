@@ -1,18 +1,26 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
-import { IsBoolean, IsDateString, IsInt, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Transform } from 'class-transformer';
+import { IsBoolean, IsDateString, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Matches, Max, MaxLength, Min } from 'class-validator';
+import { emptyToUndefined } from '../../common/cursor-page-query.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { AllowStaff } from '../../common/staff-permissions';
 import { Trim } from '../../common/decorators/trim.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { JwtPayload } from '@tubutree/shared-types';
 import type { CouponActor } from '../admin/coupon-input-rules';
-import { FlashSaleService } from './flash-sale.service';
+import { FLASH_ADMIN_CURSOR_RE, FlashSaleService } from './flash-sale.service';
 import { OptionalNotNull } from '../../common/decorators/optional-not-null.decorator';
 
 export class CreateSaleDto {
   @Trim() @IsString() @IsNotEmpty() @MaxLength(200) title!: string;
   @IsDateString() startAt!: string;
   @IsDateString() endAt!: string;
+}
+/** `?status&take&cursor` của tab Giờ vàng; không truyền cả ba thì giữ kết quả cũ (toàn bộ đợt kèm item). */
+export class ListFlashSalesQuery {
+  @IsOptional() @Transform(emptyToUndefined) @IsIn(['open', 'ended', 'all']) status?: 'open' | 'ended' | 'all';
+  @IsOptional() @Transform(emptyToUndefined) @Matches(/^[1-9]\d{0,3}$/, { message: 'Số dòng mỗi trang phải là số nguyên dương.' }) take?: string;
+  @IsOptional() @Transform(emptyToUndefined) @IsString() @MaxLength(100) @Matches(FLASH_ADMIN_CURSOR_RE, { message: 'Con trỏ trang không hợp lệ.' }) cursor?: string;
 }
 class UpdateSaleDto {
   @OptionalNotNull() @Trim() @IsString() @IsNotEmpty() @MaxLength(200) title?: string;
@@ -43,8 +51,15 @@ export class FlashSaleAdminController {
   constructor(private readonly flashSale: FlashSaleService) {}
 
   @Get()
-  list() {
-    return this.flashSale.listSales();
+  list(@Query() q: ListFlashSalesQuery) {
+    if (q.status === undefined && q.take === undefined && q.cursor === undefined) return this.flashSale.listSales();
+    return this.flashSale.listSalesPage(q);
+  }
+
+  // Sau các route cố định của GET (hiện chỉ có `list`), nên không nuốt đường dẫn nào khác.
+  @Get(':id')
+  getOne(@Param('id') id: string) {
+    return this.flashSale.getSale(id);
   }
 
   @Post()

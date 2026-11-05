@@ -207,6 +207,24 @@ describe('WalletPage — hiển thị (hành vi giữ nguyên khi chuyển DS v2
     expect(screen.queryByRole('button', { name: 'Xem thêm' })).toBeNull();
   });
 
+  it('sao kê phân trang theo con trỏ: trang 2 gửi nextCursor của trang 1, dòng mới chen đầu không làm lặp dòng', async () => {
+    stubLoaded();
+    const t2 = TXN_PAGE_1.data[1]!;
+    mocks.getWalletTransactions.mockImplementation((page: number, _limit?: number, cursor?: string) =>
+      Promise.resolve(
+        cursor === 'cur-1'
+          ? { data: [t2, TXN_PAGE_2.data[0]], meta: { page: 2, limit: 2, total: 4, nextCursor: null } }
+          : { ...TXN_PAGE_1, meta: { ...TXN_PAGE_1.meta, nextCursor: 'cur-1' } },
+      ),
+    );
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Xem thêm' }));
+    await waitFor(() => expect(mocks.getWalletTransactions).toHaveBeenCalledWith(2, 20, 'cur-1'));
+    expect(await screen.findByText('Điều chỉnh')).toBeInTheDocument();
+    expect(screen.getAllByText('Số dư 1.200.000đ')).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: 'Xem thêm' })).toBeNull();
+  });
+
   it('sao kê phân trang theo số trang: có biến động mới chen vào giữa hai lần tải thì dòng cuối trang 1 lặp lại ở đầu trang 2 — mỗi dòng chỉ hiện một lần, không cảnh báo key trùng', async () => {
     stubLoaded();
     const t2 = TXN_PAGE_1.data[1]!;

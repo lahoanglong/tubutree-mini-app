@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import type { PrismaService } from '../../src/prisma/prisma.service';
-import { DataRetentionService } from '../../src/modules/data-retention/data-retention.service';
+import { DataRetentionService, RETENTION_LOCK_KEY } from '../../src/modules/data-retention/data-retention.service';
 import { createUser, randCode } from './helpers';
 
 type Captured = { query: string; params: string };
@@ -27,6 +27,15 @@ describe('Index hiệu năng 2026-11-04 (real Postgres)', () => {
        SELECT '${prefix}-n'||g, 'u'||(g % 50), 'T', CASE WHEN g % 10 = 0 THEN 'ZNS' ELSE 'INAPP' END, '{}'::jsonb,
               CASE WHEN g % 3 = 0 THEN 'FAILED' ELSE 'SENT' END, 'e'||(g % 4), now() - (g || ' minutes')::interval
        FROM generate_series(1, 3000) g`,
+    );
+    // 3000 dòng trên chỉ trải 50 giờ gần nhất, nên `sentAt >= now-30 ngày` chọn ~100% bảng: với seqscan bị tắt, mọi index đều phải đọc hết và planner
+    // chọn theo kích thước/độ phình index (đỏ ngẫu nhiên trên DB mới: nó chọn notification_logs_userId_sentAt_idx). Thêm dòng cũ 31-170 ngày (dưới mốc
+    // retention 180 ngày nên D10 không xoá) để khoảng 30 ngày chỉ chọn ~13% bảng; đó mới là tính chọn lọc mà index sentAt phục vụ.
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO notification_logs (id, "userId", "templateCode", channel, payload, status, error, "sentAt")
+       SELECT '${prefix}-o'||g, 'u'||(g % 50), 'T', CASE WHEN g % 10 = 0 THEN 'ZNS' ELSE 'INAPP' END, '{}'::jsonb,
+              CASE WHEN g % 3 = 0 THEN 'FAILED' ELSE 'SENT' END, 'e'||(g % 4), now() - ((31 + g % 140) * 86400 + g % 86400 || ' seconds')::interval
+       FROM generate_series(1, 20000) g`,
     );
     await prisma.$executeRawUnsafe(
       `INSERT INTO points_transactions (id, "userId", delta, reason, "refType", "refId", "createdAt")
@@ -80,6 +89,22 @@ describe('Index hiệu năng 2026-11-04 (real Postgres)', () => {
     return sql;
   }
 
+  /**
+   * Sự kiện `query` của Prisma (engine thư viện) do phía native gọi lại qua hàng đợi sự kiện của Node, độc lập với việc promise của truy vấn resolve:
+   * không có gì bảo đảm câu cuối đã tới `captured` ngay sau `await`. Chờ tới khi có câu khớp (tối đa 3 giây) thay vì đọc ngay; khi không thấy
+   * thì lỗi in kèm danh sách câu đã bắt để biết do thiếu sự kiện hay do code không sinh câu đó.
+   */
+  async function capturedMatching(re: RegExp, label: string | (() => string)): Promise<Captured> {
+    const found = () => captured.find((c) => re.test(c.query));
+    for (let waited = 0; !found() && waited < 3000; waited += 10) await new Promise((resolve) => setTimeout(resolve, 10));
+    const hit = found();
+    if (!hit) {
+      const seen = captured.map((c) => c.query.slice(0, 90).replace(/\s+/g, ' '));
+      throw new Error(`${typeof label === 'function' ? label() : label}: không bắt được câu khớp ${re}; captured.length=${captured.length}; đã bắt: ${JSON.stringify(seen)}`);
+    }
+    return hit;
+  }
+
   async function planOf(q: Captured): Promise<string> {
     const sql = inline(q);
     return prisma.$transaction(async (tx) => {
@@ -94,22 +119,27 @@ describe('Index hiệu năng 2026-11-04 (real Postgres)', () => {
     captured = [];
     await prisma.notificationLog.count({ where });
     await prisma.notificationLog.groupBy({ by: ['error'], where, _count: { _all: true }, orderBy: { _count: { error: 'desc' } }, take: 1 });
+    // Cả hai truy vấn (count và groupBy) đều phải tới: chờ cho đến khi đủ hai câu thay vì đọc ngay sau await.
+    for (let waited = 0; captured.filter((q) => /FROM "(public"\.")?notification_logs"/.test(q.query)).length < 2 && waited < 3000; waited += 10) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
     const qs = captured.filter((q) => /FROM "(public"\.")?notification_logs"/.test(q.query));
-    expect(qs.length).toBeGreaterThanOrEqual(2);
-    for (const q of qs) expect(await planOf(q)).toMatch(/notification_logs_zns_failed_sentAt_idx/);
+    if (qs.length < 2) throw new Error(`D4 ZNS FAILED: chỉ bắt được ${qs.length}/2 câu; captured.length=${captured.length}; đã bắt: ${JSON.stringify(captured.map((c) => c.query.slice(0, 90)))}`);
+    // Từ gói hg có thêm index thường (channel, status, sentAt) cũng khớp đúng điều kiện này; planner chọn cái nào tuỳ thống kê. Điều cần giữ: đi index, không quét bảng.
+    for (const q of qs) expect(await planOf(q)).toMatch(/notification_logs_zns_failed_sentAt_idx|notification_logs_channel_status_sentAt_idx/);
   });
 
   it('D4: lọc khoảng sentAt (trang mẫu tin 30 ngày) dùng index sentAt', async () => {
     captured = [];
     await prisma.notificationLog.count({ where: { sentAt: { gte: new Date(Date.now() - 30 * 86_400_000) } } });
-    const q = captured.find((c) => /FROM "(public"\.")?notification_logs"/.test(c.query))!;
+    const q = await capturedMatching(/FROM "(public"\.")?notification_logs"/, 'D4 khoảng sentAt');
     expect(await planOf(q)).toMatch(/notification_logs_sentAt_idx/);
   });
 
   it('D5: dò dòng điểm của đơn theo refId + refType=ORDER dùng partial index', async () => {
     captured = [];
     await prisma.pointsTransaction.findFirst({ where: { reason: 'ORDER_DELIVERED:X', refType: 'ORDER', refId: `${prefix}-ord` }, select: { userId: true } });
-    const q = captured.find((c) => /FROM "(public"\.")?points_transactions"/.test(c.query))!;
+    const q = await capturedMatching(/FROM "(public"\.")?points_transactions"/, 'D5');
     expect(q.query).toMatch(/"refType"/);
     expect(await planOf(q)).toMatch(/points_transactions_order_refId_idx/);
   });
@@ -117,8 +147,13 @@ describe('Index hiệu năng 2026-11-04 (real Postgres)', () => {
   it('D10: các lô xoá của data-retention đi bằng index thời gian', async () => {
     const config = { get: async (_k: string, d: unknown) => d } as never;
     const svc = new DataRetentionService(prisma as unknown as PrismaService, config);
+    // runAll giành khoá lượt chạy `run:cron:data-retention.cleanup` trong cron_leases (ttl 2 phút): một lượt khác còn giữ khoá (spec trước nhả
+    // lỗi, tiến trình khác trên cùng DB) thì runAll trả LOCKED, không có câu DELETE nào để EXPLAIN và ca đỏ ngẫu nhiên. DB race là DB riêng
+    // chạy tuần tự nên xoá dòng khoá của chính key này là an toàn; kiểm thêm kết quả để lỗi (nếu còn) nói đúng nguyên nhân.
+    await prisma.$executeRawUnsafe(`DELETE FROM cron_leases WHERE name = 'run:${RETENTION_LOCK_KEY}'`);
     captured = [];
-    await svc.runAll({ now: new Date(), batchSize: 100, pauseMs: 0, maxRunMs: 5_000 });
+    const result = await svc.runAll({ now: new Date(), batchSize: 100, pauseMs: 0, maxRunMs: 5_000 });
+    expect(result).not.toHaveProperty('skipped');
     const expected: Record<string, RegExp> = {
       notification_logs: /notification_logs_sentAt_idx/,
       pancake_webhook_events: /pancake_webhook_events_receivedAt_idx/,
@@ -128,9 +163,10 @@ describe('Index hiệu năng 2026-11-04 (real Postgres)', () => {
       refresh_tokens: /refresh_tokens_expiresAt_idx/,
     };
     for (const [table, re] of Object.entries(expected)) {
-      const q = captured.find((c) => new RegExp(`^\\s*DELETE FROM "(public"\\.")?${table}"`).test(c.query));
-      expect(q).toBeDefined();
-      expect(await planOf(q!)).toMatch(re);
+      const batchSql = new RegExp(`^\\s*DELETE FROM "(public"\\.")?${table}"`);
+      const caught = () => captured.filter((c) => /^\s*DELETE FROM/.test(c.query)).map((c) => c.query.slice(0, 60).replace(/\s+/g, ' '));
+      const q = await capturedMatching(batchSql, () => `D10 bảng ${table}; result=${JSON.stringify(result)}; câu xoá đã bắt=${JSON.stringify(caught())}`);
+      expect(await planOf(q)).toMatch(re);
     }
   });
 });

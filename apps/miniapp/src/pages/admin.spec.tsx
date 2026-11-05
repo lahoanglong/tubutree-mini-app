@@ -289,8 +289,10 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
       expect(mocks.revokeStaff).not.toHaveBeenCalled();
       expect(screen.queryByText('Thu hồi quyền?')).not.toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: 'Thu hồi · Lan' }));
+      expect(screen.getByRole('button', { name: 'Thu hồi' })).toBeDisabled();
+      fireEvent.change(screen.getByLabelText('Lý do'), { target: { value: 'Nghỉ việc' } });
       fireEvent.click(screen.getByRole('button', { name: 'Thu hồi' }));
-      await waitFor(() => expect(mocks.revokeStaff).toHaveBeenCalledWith('0901234567'));
+      await waitFor(() => expect(mocks.revokeStaff).toHaveBeenCalledWith('0901234567', 'Nghỉ việc'));
       await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã thu hồi quyền.', type: 'success' }));
       expect(screen.queryByText('Thu hồi quyền?')).not.toBeInTheDocument();
       // Người chưa có tên: hỏi bằng SĐT.
@@ -312,6 +314,7 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
       renderPage();
       await screen.findByText('Lan');
       fireEvent.click(screen.getByRole('button', { name: 'Thu hồi · Lan' }));
+      fireEvent.change(screen.getByLabelText('Lý do'), { target: { value: 'Nghỉ việc' } });
       fireEvent.click(screen.getByRole('button', { name: 'Thu hồi' }));
       await waitFor(() =>
         expect(mocks.openSnackbar).toHaveBeenCalledWith({
@@ -321,12 +324,51 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
       );
     });
 
-    it('Huỷ lời mời chờ mở app gọi thu hồi theo SĐT, không hỏi lại', async () => {
+    it('Huỷ lời mời chờ mở app hỏi lý do rồi gọi thu hồi theo SĐT (không dùng window.confirm)', async () => {
       const confirm = confirmSpy();
       renderPage();
       fireEvent.click(await screen.findByRole('button', { name: 'Huỷ lời mời · 0987654321' }));
-      await waitFor(() => expect(mocks.revokeStaff).toHaveBeenCalledWith('0987654321'));
+      expect(mocks.revokeStaff).not.toHaveBeenCalled();
+      expect(screen.getByRole('heading', { level: 2, name: 'Huỷ lời mời?' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Thu hồi' })).toBeNull();
+      expect(screen.getByRole('button', { name: 'Giữ lại' })).toBeInTheDocument();
+      fireEvent.change(screen.getByLabelText('Lý do'), { target: { value: 'Mời nhầm số' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Huỷ lời mời' }));
+      await waitFor(() => expect(mocks.revokeStaff).toHaveBeenCalledWith('0987654321', 'Mời nhầm số'));
       expect(confirm).not.toHaveBeenCalled();
+    });
+
+    it('thu hồi: sheet giữ mở trong lúc gửi và khi lỗi (kèm lý do đã gõ), chỉ đóng khi thành công', async () => {
+      let finish!: (v: { revoked: number; downgraded: boolean }) => void;
+      mocks.revokeStaff.mockImplementationOnce(() => new Promise((res) => { finish = res; }));
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Thu hồi · Lan' }));
+      fireEvent.change(screen.getByLabelText('Lý do'), { target: { value: 'Nghỉ việc' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Thu hồi' }));
+      await waitFor(() => expect(mocks.revokeStaff).toHaveBeenCalledTimes(1));
+      expect(screen.getByRole('heading', { level: 2, name: 'Thu hồi quyền?' })).toBeInTheDocument();
+      finish({ revoked: 1, downgraded: false });
+      await waitFor(() => expect(screen.queryByRole('heading', { level: 2, name: 'Thu hồi quyền?' })).not.toBeInTheDocument());
+
+      mocks.revokeStaff.mockRejectedValueOnce(new Error('Không thu hồi được'));
+      fireEvent.click(await screen.findByRole('button', { name: 'Thu hồi · Lan' }));
+      fireEvent.change(await screen.findByLabelText('Lý do'), { target: { value: 'Nghỉ việc' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Thu hồi' }));
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Không thu hồi được', type: 'error' }));
+      expect(screen.getByRole('heading', { level: 2, name: 'Thu hồi quyền?' })).toBeInTheDocument();
+      expect(screen.getByLabelText('Lý do')).toHaveValue('Nghỉ việc');
+    });
+
+    it('lý do thu hồi: cắt khoảng trắng, dưới 3 ký tự thì chưa cho thu hồi, tối đa 500 ký tự', async () => {
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Thu hồi · Lan' }));
+      const reason = screen.getByLabelText('Lý do');
+      expect(reason).toHaveAttribute('maxlength', '500');
+      fireEvent.change(reason, { target: { value: '  ab  ' } });
+      expect(screen.getByRole('button', { name: 'Thu hồi' })).toBeDisabled();
+      fireEvent.change(reason, { target: { value: '  Hết hợp đồng  ' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Thu hồi' }));
+      await waitFor(() => expect(mocks.revokeStaff).toHaveBeenCalledWith('0901234567', 'Hết hợp đồng'));
     });
 
     it('Thêm nhân sự: chỉ lưu được khi SĐT hợp lệ; cấp NHÂN VIÊN báo "áp ngay" hoặc "áp khi mở app"', async () => {
@@ -339,17 +381,30 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
       fireEvent.change(phone, { target: { value: '12345' } });
       expect(screen.getByRole('button', { name: 'Lưu quyền' })).toBeDisabled();
       fireEvent.change(phone, { target: { value: '0901112223' } });
+      expect(screen.getByRole('button', { name: 'Lưu quyền' })).toBeDisabled();
+      fireEvent.change(screen.getByLabelText('Lý do'), { target: { value: 'Nhân viên mới' } });
       expect(screen.getByRole('button', { name: 'Lưu quyền' })).toBeEnabled();
       fireEvent.click(screen.getByRole('button', { name: 'Lưu quyền' }));
-      await waitFor(() => expect(mocks.grantStaff).toHaveBeenCalledWith('0901112223', 'STAFF', undefined));
+      await waitFor(() => expect(mocks.grantStaff).toHaveBeenCalledWith('0901112223', 'STAFF', undefined, 'Nhân viên mới'));
       await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã cấp quyền & áp ngay.', type: 'success' }));
       await waitFor(() => expect(screen.queryByText('Thêm nhân sự theo SĐT')).not.toBeInTheDocument());
 
       mocks.grantStaff.mockResolvedValue({ granted: 'STAFF', applied: false });
       fireEvent.click(screen.getByRole('button', { name: 'Thêm' }));
       fireEvent.change(screen.getByLabelText('Số điện thoại'), { target: { value: '0907778889' } });
+      fireEvent.change(screen.getByLabelText('Lý do'), { target: { value: 'Nhân viên mới' } });
       fireEvent.click(screen.getByRole('button', { name: 'Lưu quyền' }));
       await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã lưu quyền (sẽ áp khi họ mở app).', type: 'success' }));
+    });
+
+    it('đóng sheet Thêm mà chưa lưu thì lý do không kéo sang lần mở sau', async () => {
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Thêm' }));
+      fireEvent.change(screen.getByLabelText('Lý do'), { target: { value: 'Lý do của người trước' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+      await waitFor(() => expect(screen.queryByText('Thêm nhân sự theo SĐT')).not.toBeInTheDocument());
+      fireEvent.click(screen.getByRole('button', { name: 'Thêm' }));
+      expect(await screen.findByLabelText('Lý do')).toHaveValue('');
     });
 
     it('cấp QUẢN TRỊ phải xác nhận thêm bằng tấm xác nhận; Huỷ thì không gọi API và giữ SĐT đã gõ, đồng ý thì gửi vai trò ADMIN', async () => {
@@ -363,6 +418,7 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
       fireEvent.click(admin);
       expect(admin).toHaveAttribute('aria-pressed', 'true');
       fireEvent.change(screen.getByLabelText('Số điện thoại'), { target: { value: '0901112223' } });
+      fireEvent.change(screen.getByLabelText('Lý do'), { target: { value: 'Giao quyền quản trị' } });
       fireEvent.click(screen.getByRole('button', { name: 'Lưu quyền' }));
       expect(screen.getByRole('heading', { level: 2, name: 'Cấp quyền quản trị?' })).toBeInTheDocument();
       expect(screen.getByText('Xác nhận cấp quyền ADMIN (toàn quyền quản trị) cho SĐT 0901112223?')).toBeInTheDocument();
@@ -372,7 +428,7 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
       expect((screen.getByLabelText('Số điện thoại') as HTMLInputElement).value).toBe('0901112223');
       fireEvent.click(screen.getByRole('button', { name: 'Lưu quyền' }));
       fireEvent.click(screen.getByRole('button', { name: 'Cấp quyền quản trị' }));
-      await waitFor(() => expect(mocks.grantStaff).toHaveBeenCalledWith('0901112223', 'ADMIN', undefined));
+      await waitFor(() => expect(mocks.grantStaff).toHaveBeenCalledWith('0901112223', 'ADMIN', undefined, 'Giao quyền quản trị'));
       expect(confirm).not.toHaveBeenCalled();
     });
 
@@ -400,8 +456,9 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
         expect(screen.getByRole('button', { name: 'Kho' })).toHaveAttribute('aria-pressed', 'true');
         expect(screen.getByRole('button', { name: 'Kế toán' })).toHaveAttribute('aria-pressed', 'false');
         fireEvent.change(screen.getByLabelText('Số điện thoại'), { target: { value: '0901112223' } });
+        fireEvent.change(screen.getByLabelText('Lý do'), { target: { value: 'Giao quyền quản trị' } });
         fireEvent.click(screen.getByRole('button', { name: 'Lưu quyền' }));
-        await waitFor(() => expect(mocks.grantStaff).toHaveBeenCalledWith('0901112223', 'STAFF', ['CSKH', 'KHO']));
+        await waitFor(() => expect(mocks.grantStaff).toHaveBeenCalledWith('0901112223', 'STAFF', ['CSKH', 'KHO'], 'Giao quyền quản trị'));
       });
 
       it('gõ SĐT của nhân viên đang có: hiện nhóm đang có và nói lưu sẽ thay; SĐT lạ thì giữ dòng gợi ý chung', async () => {
@@ -409,9 +466,11 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
         fireEvent.click(await screen.findByRole('button', { name: 'Thêm' }));
         expect(screen.getByText('Không chọn nhóm nào: chỉ dùng quầy thu ngân, Đổi rác và chấm công.')).toBeInTheDocument();
         fireEvent.change(screen.getByLabelText('Số điện thoại'), { target: { value: '0901234567' } });
+        fireEvent.change(screen.getByLabelText('Lý do'), { target: { value: 'Giao quyền quản trị' } });
         expect(screen.getByText(/Nhóm đang có: Kho, Kế toán\. .*thay bằng nhóm bạn chọn/)).toBeInTheDocument();
         expect(screen.queryByText(/chỉ dùng quầy thu ngân/)).toBeNull();
         fireEvent.change(screen.getByLabelText('Số điện thoại'), { target: { value: '0907778889' } });
+        fireEvent.change(screen.getByLabelText('Lý do'), { target: { value: 'Giao quyền quản trị' } });
         expect(screen.getByText('Không chọn nhóm nào: chỉ dùng quầy thu ngân, Đổi rác và chấm công.')).toBeInTheDocument();
       });
 
@@ -420,6 +479,7 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
         renderPage();
         fireEvent.click(await screen.findByRole('button', { name: 'Thêm' }));
         fireEvent.change(screen.getByLabelText('Số điện thoại'), { target: { value: '0901234567' } });
+        fireEvent.change(screen.getByLabelText('Lý do'), { target: { value: 'Giao quyền quản trị' } });
         fireEvent.click(screen.getByRole('button', { name: 'Chăm sóc khách' }));
         fireEvent.click(screen.getByRole('button', { name: 'Lưu quyền' }));
         await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã đổi nhóm việc của 0901234567 thành Chăm sóc khách.', type: 'success' }));
@@ -430,6 +490,7 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
         renderPage();
         fireEvent.click(await screen.findByRole('button', { name: 'Thêm' }));
         fireEvent.change(screen.getByLabelText('Số điện thoại'), { target: { value: '0901234567' } });
+        fireEvent.change(screen.getByLabelText('Lý do'), { target: { value: 'Giao quyền quản trị' } });
         fireEvent.click(screen.getByRole('button', { name: 'Lưu quyền' }));
         await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: '0901234567 đã là nhân viên, nhóm việc giữ nguyên.', type: 'success' }));
       });
@@ -439,6 +500,7 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
         renderPage();
         fireEvent.click(await screen.findByRole('button', { name: 'Thêm' }));
         fireEvent.change(screen.getByLabelText('Số điện thoại'), { target: { value: '0907778889' } });
+        fireEvent.change(screen.getByLabelText('Lý do'), { target: { value: 'Giao quyền quản trị' } });
         fireEvent.click(screen.getByRole('button', { name: 'Lưu quyền' }));
         await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã lưu quyền (sẽ áp khi họ mở app).', type: 'success' }));
       });
@@ -447,6 +509,7 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
         renderPage();
         fireEvent.click(await screen.findByRole('button', { name: 'Thêm' }));
         fireEvent.change(screen.getByLabelText('Số điện thoại'), { target: { value: '0987654321' } });
+        fireEvent.change(screen.getByLabelText('Lý do'), { target: { value: 'Giao quyền quản trị' } });
         expect(screen.getByText(/Lời mời đang chờ với nhóm: Chăm sóc khách\. .*giữ nguyên nhóm của lời mời/)).toBeInTheDocument();
         expect(screen.queryByText(/chỉ dùng quầy thu ngân/)).toBeNull();
       });
@@ -456,6 +519,7 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
         fireEvent.click(await screen.findByRole('button', { name: 'Thêm' }));
         fireEvent.click(screen.getByRole('button', { name: 'Kho' }));
         fireEvent.change(screen.getByLabelText('Số điện thoại'), { target: { value: '0901112223' } });
+        fireEvent.change(screen.getByLabelText('Lý do'), { target: { value: 'Giao quyền quản trị' } });
         fireEvent.click(screen.getByRole('button', { name: 'Lưu quyền' }));
         await waitFor(() => expect(screen.queryByText('Thêm nhân sự theo SĐT')).not.toBeInTheDocument());
         fireEvent.click(screen.getByRole('button', { name: 'Thêm' }));
@@ -469,9 +533,10 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Quản trị' }));
         expect(screen.queryByRole('group', { name: 'Nhóm việc' })).toBeNull();
         fireEvent.change(screen.getByLabelText('Số điện thoại'), { target: { value: '0901112223' } });
+        fireEvent.change(screen.getByLabelText('Lý do'), { target: { value: 'Giao quyền quản trị' } });
         fireEvent.click(screen.getByRole('button', { name: 'Lưu quyền' }));
         fireEvent.click(screen.getByRole('button', { name: 'Cấp quyền quản trị' }));
-        await waitFor(() => expect(mocks.grantStaff).toHaveBeenCalledWith('0901112223', 'ADMIN', undefined));
+        await waitFor(() => expect(mocks.grantStaff).toHaveBeenCalledWith('0901112223', 'ADMIN', undefined, 'Giao quyền quản trị'));
       });
     });
 
@@ -480,6 +545,7 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
       renderPage();
       fireEvent.click(await screen.findByRole('button', { name: 'Thêm' }));
       fireEvent.change(screen.getByLabelText('Số điện thoại'), { target: { value: '0901112223' } });
+      fireEvent.change(screen.getByLabelText('Lý do'), { target: { value: 'Giao quyền quản trị' } });
       fireEvent.click(screen.getByRole('button', { name: 'Lưu quyền' }));
       await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'SĐT không tồn tại', type: 'error' }));
       expect((screen.getByLabelText('Số điện thoại') as HTMLInputElement).value).toBe('0901112223');
@@ -642,6 +708,45 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
       await waitFor(() => expect(mocks.createTemplate).toHaveBeenCalledWith({ name: 'Ca tối', startMin: 1080, endMin: 1260 }));
       await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã thêm ca chuẩn.', type: 'success' }));
       await waitFor(() => expect(screen.getByLabelText('Tên ca')).toHaveValue(''));
+    });
+
+    it('Ca chuẩn: tải danh sách lỗi thì báo lỗi kèm nút thử lại, chưa cho thêm (tránh thêm trùng khi danh sách đang trống)', async () => {
+      mocks.adminGetTemplates.mockRejectedValueOnce(new Error('mạng lỗi'));
+      await openShifts();
+      fireEvent.click(screen.getByRole('button', { name: 'Ca chuẩn' }));
+      expect(await screen.findByText('mạng lỗi')).toBeInTheDocument();
+      fireEvent.change(screen.getByLabelText('Tên ca'), { target: { value: 'Ca tối' } });
+      expect(screen.getByRole('button', { name: 'Thêm ca chuẩn' })).toBeDisabled();
+      fireEvent.click(screen.getByRole('button', { name: 'Thử lại' }));
+      expect(await screen.findByText('Ca sáng · 08:00–12:00')).toBeInTheDocument();
+      expect(screen.queryByText('mạng lỗi')).not.toBeInTheDocument();
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Thêm ca chuẩn' })).toBeEnabled());
+    });
+
+    it('Ca chuẩn: làm mới danh sách lỗi khi đã có dữ liệu cũ thì vẫn hiện lỗi + Thử lại (nút Thêm khoá có lời giải thích)', async () => {
+      await openShifts();
+      fireEvent.click(screen.getByRole('button', { name: 'Ca chuẩn' }));
+      expect(await screen.findByText('Ca sáng · 08:00–12:00')).toBeInTheDocument();
+      mocks.adminGetTemplates.mockRejectedValueOnce(new Error('mạng chập chờn'));
+      fireEvent.click(screen.getByRole('button', { name: 'Xoá ca chuẩn Ca sáng' }));
+      expect(await screen.findByText('mạng chập chờn')).toBeInTheDocument();
+      fireEvent.change(screen.getByLabelText('Tên ca'), { target: { value: 'Ca tối' } });
+      expect(screen.getByRole('button', { name: 'Thêm ca chuẩn' })).toBeDisabled();
+      fireEvent.click(screen.getByRole('button', { name: 'Thử lại' }));
+      await waitFor(() => expect(screen.queryByText('mạng chập chờn')).not.toBeInTheDocument());
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Thêm ca chuẩn' })).toBeEnabled());
+    });
+
+    it('Ca chuẩn: tên trùng ca đã có (không phân biệt hoa thường) thì báo và không cho thêm', async () => {
+      await openShifts();
+      fireEvent.click(screen.getByRole('button', { name: 'Ca chuẩn' }));
+      expect(await screen.findByText('Ca sáng · 08:00–12:00')).toBeInTheDocument();
+      fireEvent.change(screen.getByLabelText('Tên ca'), { target: { value: ' ca SÁNG ' } });
+      expect(screen.getByText('Đã có ca chuẩn cùng tên.')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Thêm ca chuẩn' })).toBeDisabled();
+      fireEvent.change(screen.getByLabelText('Tên ca'), { target: { value: 'Ca tối' } });
+      expect(screen.queryByText('Đã có ca chuẩn cùng tên.')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Thêm ca chuẩn' })).toBeEnabled();
     });
   });
 
@@ -825,6 +930,16 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
       expect(screen.getByText('08:00 → 12:30 · trễ')).toBeInTheDocument();
       expect(screen.getByText('22:00 → đang mở')).toBeInTheDocument();
       expect(screen.getByText('14h30')).toBeInTheDocument();
+    });
+
+    it('Xem giờ: tải chi tiết lỗi thì báo lỗi kèm nút thử lại', async () => {
+      await openPayroll();
+      mocks.adminGetDetail.mockRejectedValueOnce(new Error('không tải được giờ công'));
+      fireEvent.click(screen.getByRole('button', { name: 'Xem giờ · Lan' }));
+      expect(await screen.findByText('không tải được giờ công')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Thử lại' }));
+      expect(await screen.findByText('T2 02/03 · 4h30')).toBeInTheDocument();
+      expect(screen.queryByText('không tải được giờ công')).not.toBeInTheDocument();
     });
 
     it('Sửa giờ phiên: nạp giờ cũ, lưu gửi giờ vào/ra theo ngày làm, báo và tải lại', async () => {

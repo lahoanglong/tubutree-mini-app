@@ -1,5 +1,15 @@
 import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { CAMPAIGN_ENTITY_SLUG_MAX, CAMPAIGN_ENTITY_SLUG_RE } from '@tubutree/shared-types';
+import { getMetadataStorage } from 'class-validator';
+import * as crypto from 'crypto';
+
+const actualCrypto = jest.requireActual<typeof import('crypto')>('crypto');
+jest.mock('crypto', () => {
+  const actual = jest.requireActual<typeof import('crypto')>('crypto');
+  return { ...actual, randomBytes: jest.fn((n: number) => actual.randomBytes(n)) };
+});
+import { CreateMerchantProductDto } from './merchant.controller';
 import { CTV_CANNOT_CREATE_PRODUCT, MerchantService } from './merchant.service';
 import {
   linkTubuFulfilledVariation,
@@ -105,6 +115,70 @@ describe('MerchantService — đăng sản phẩm (SELLER-1, D4)', () => {
     expect(data.variations.create.stock).toBe(12);
     expect(JSON.stringify(data)).not.toContain('MCH_');
     expect(notify).toHaveBeenCalledWith('admin-1', 'OPS_MERCHANT_PRODUCT_PENDING', expect.objectContaining({ mode: 'Đối tác tự giao' }));
+  });
+
+  it('slug sinh từ tên dài nhất DTO cho phép cộng hậu tố thời gian (kể cả đến năm 2100) vừa CAMPAIGN_ENTITY_SLUG_MAX và khớp CAMPAIGN_ENTITY_SLUG_RE, để chiến dịch gắn được vào sản phẩm đối tác', async () => {
+    const nameMax = (getMetadataStorage() as unknown as { getTargetValidationMetadatas: (t: unknown, s: unknown, a: boolean, b: boolean) => Array<{ propertyName: string; name?: string; constraints?: number[] }> })
+      .getTargetValidationMetadatas(CreateMerchantProductDto, null, false, false)
+      .find((m) => m.propertyName === 'name' && m.name === 'maxLength')!.constraints![0]!;
+    const year2100 = jest.spyOn(Date, 'now').mockReturnValue(Date.UTC(2100, 0, 1));
+    try {
+      const { svc, productCreate } = build();
+      await svc.createProduct('u1', { ...BASE, name: 'a'.repeat(nameMax) });
+      const slug = productCreate.mock.calls[0][0].data.slug as string;
+      expect(slug.length).toBeLessThanOrEqual(CAMPAIGN_ENTITY_SLUG_MAX);
+      expect(slug).toMatch(CAMPAIGN_ENTITY_SLUG_RE);
+    } finally {
+      year2100.mockRestore();
+    }
+  });
+
+  it('tên toàn ký hiệu: phần tên slug là "san-pham", slug hợp lệ (không bắt đầu bằng "-"); tên bình thường giữ nguyên dạng cũ', async () => {
+    const now = jest.spyOn(Date, 'now').mockReturnValue(1_800_000_000_000);
+    try {
+      const code = (1_800_000_000_000).toString(36);
+      const slugOf = async (name: string) => {
+        const { svc, productCreate } = build();
+        await svc.createProduct('u1', { ...BASE, name });
+        return productCreate.mock.calls[0][0].data.slug as string;
+      };
+      expect(await slugOf('!!! ???')).toMatch(new RegExp(`^san-pham-${code}[0-9a-f]{6}$`));
+      expect(await slugOf('()')).toMatch(CAMPAIGN_ENTITY_SLUG_RE);
+      expect(await slugOf('Mật ong rừng')).toMatch(new RegExp(`^mat-ong-rung-${code}[0-9a-f]{6}$`));
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it('hai sản phẩm cùng tên đăng cùng một mili giây cho slug và sku khác nhau (không đụng unique), vẫn vừa trần', async () => {
+    const now = jest.spyOn(Date, 'now').mockReturnValue(1_800_000_000_000);
+    const rand = (crypto.randomBytes as unknown as jest.Mock)
+      .mockImplementationOnce(() => Buffer.from([0xaa, 0xbb, 0xcc]) as never)
+      .mockImplementationOnce(() => Buffer.from([0x11, 0x22, 0x33]) as never);
+    try {
+      const a = build();
+      const b = build();
+      await a.svc.createProduct('u1', { ...BASE, name: 'Mật ong rừng' });
+      await b.svc.createProduct('u1', { ...BASE, name: 'Mật ong rừng' });
+      const dataA = a.productCreate.mock.calls[0][0].data;
+      const dataB = b.productCreate.mock.calls[0][0].data;
+      expect(dataA.slug).not.toBe(dataB.slug);
+      expect(dataA.variations.create.sku).not.toBe(dataB.variations.create.sku);
+      expect(dataA.slug).toMatch(/^mat-ong-rung-[0-9a-z]+aabbcc$/);
+      expect(dataA.variations.create.sku).toMatch(/^MCH-[0-9A-Z]+-AABBCC$/);
+      expect(dataA.slug).toMatch(CAMPAIGN_ENTITY_SLUG_RE);
+    } finally {
+      rand.mockReset().mockImplementation((n: number) => actualCrypto.randomBytes(n));
+      now.mockRestore();
+    }
+  });
+
+  it('định dạng hậu tố với số ngẫu nhiên thật: slug kết thúc bằng 6 hex, sku là MCH-<mã thời gian>-<6 hex viết hoa>', async () => {
+    const { svc, productCreate } = build();
+    await svc.createProduct('u1', { ...BASE, name: 'Mật ong rừng' });
+    const data = productCreate.mock.calls[0][0].data;
+    expect(data.slug).toMatch(/^mat-ong-rung-[0-9a-z]+[0-9a-f]{6}$/);
+    expect(data.variations.create.sku).toMatch(/^MCH-[0-9A-Z]+-[0-9A-F]{6}$/);
   });
 
   it('không nhập tồn kho → 0, không tự hứa 100 sản phẩm', async () => {

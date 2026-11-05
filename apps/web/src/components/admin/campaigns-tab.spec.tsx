@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CAMPAIGN_INTERNAL_TARGETS } from '@tubutree/app-core/commerce/campaign';
+import { CAMPAIGN_ENTITY_SLUG_MAX } from '@tubutree/shared-types';
 import { answerConfirm, byText, click, confirmDialog, flush, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
 import { unlabeledFields, unnamedControls } from '@/test-utils/a11y';
 
@@ -274,6 +275,15 @@ describe('CampaignsTab: tạo chiến dịch', () => {
     expect(field(c, 'Slug sản phẩm')).not.toBeNull();
     selectValue(field(c, 'Đích khi bấm'), 'CATEGORY');
     expect(field(c, 'Slug danh mục')).not.toBeNull();
+  });
+
+  it('ô slug sản phẩm và danh mục nhận tới CAMPAIGN_ENTITY_SLUG_MAX ký tự như DTO, slug dài không bị cắt', async () => {
+    const c = await mount();
+    await open(c);
+    selectValue(field(c, 'Đích khi bấm'), 'PRODUCT');
+    expect((field(c, 'Slug sản phẩm') as HTMLInputElement).maxLength).toBe(CAMPAIGN_ENTITY_SLUG_MAX);
+    selectValue(field(c, 'Đích khi bấm'), 'CATEGORY');
+    expect((field(c, 'Slug danh mục') as HTMLInputElement).maxLength).toBe(CAMPAIGN_ENTITY_SLUG_MAX);
   });
 
   it('đích Trang trong app: không có ô gõ tự do, chỉ liệt kê đích hợp lệ của CAMPAIGN_INTERNAL_TARGETS, gửi giá trị đã chọn', async () => {

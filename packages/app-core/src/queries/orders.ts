@@ -19,7 +19,9 @@ export const orderQuery = (http: HttpClient, code: string) => ({
 /** Khoá bắt đầu bằng ['orders'] để invalidateQueries({ queryKey: ['orders'] }) làm mới cả danh sách. `tab` là khoá tab trạng thái. Dùng với useInfiniteQuery (initialPageParam 1): trang lấy từ pageParam, không nằm trong khoá. */
 export const ordersListQuery = (http: HttpClient, tab: string, filter: OrderListFilter, limit = 20) => ({
   queryKey: ['orders', 'list', tab] as const,
-  queryFn: ({ pageParam }: { pageParam: number }) => fetchOrders(http, filter, pageParam, limit),
+  // pageParam là số trang (offset) hoặc {page, cursor} khi API trả con trỏ keyset; thiếu cursor thì như cũ.
+  queryFn: ({ pageParam }: { pageParam: number | { page: number; cursor?: string } }) =>
+    typeof pageParam === 'number' ? fetchOrders(http, filter, pageParam, limit) : fetchOrders(http, filter, pageParam.page, limit, pageParam.cursor),
 });
 export const ordersHomeStripQuery = (http: HttpClient) => ({
   queryKey: ['orders', 'home-strip'] as const,

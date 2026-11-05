@@ -27,8 +27,8 @@ export interface StaffListResponse {
 export const listStaff = (http: HttpClient) => http.get<StaffListResponse>('/admin/staff');
 
 /** `permissions` chỉ gửi khi có (cấp STAFF): không gửi = không đổi nhóm việc đã lưu. */
-export const grantStaff = (http: HttpClient, phone: string, role: StaffRole, permissions?: string[]) =>
-    http.post<{ granted: StaffRole; applied: boolean; permissionsChanged?: boolean }>('/admin/staff/grant', { phone, role, ...(permissions ? { permissions } : {}) });
+export const grantStaff = (http: HttpClient, phone: string, role: StaffRole, permissions?: string[], reason?: string) =>
+    http.post<{ granted: StaffRole; applied: boolean; permissionsChanged?: boolean }>('/admin/staff/grant', { phone, role, ...(permissions ? { permissions } : {}), ...(reason ? { reason } : {}) });
 
-export const revokeStaff = (http: HttpClient, phone: string) =>
-    http.post<{ revoked: number; downgraded: boolean; storeBlocked?: boolean }>('/admin/staff/revoke', { phone });
+export const revokeStaff = (http: HttpClient, phone: string, reason?: string) =>
+    http.post<{ revoked: number; downgraded: boolean; storeBlocked?: boolean }>('/admin/staff/revoke', { phone, ...(reason ? { reason } : {}) });

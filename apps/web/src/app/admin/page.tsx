@@ -37,7 +37,8 @@ import {
   listDealerRewards,
   createDealerReward,
   deleteDealerReward,
-  listFlashSales,
+  listFlashSalesPage,
+  getFlashSale,
   createFlashSale,
   updateFlashSale,
   addFlashSaleItem,
@@ -64,7 +65,7 @@ import {
   type AdminBrand,
   type ConfigRow,
   type BrandCert,
-  type AdminFlashSale,
+  type AdminFlashSaleSummary,
   type AdminFaq,
   type ContentKitFaq,
   type AdminCourse,
@@ -162,7 +163,7 @@ import { seedDealerClaimFilter, seedPayoutFilter } from '@/components/admin/inbo
 import { OpsInboxPoller, useOpsInbox } from '@/components/admin/use-ops-inbox';
 import { COUPON_END_PAST_MESSAGE, isCouponEndPast, vnTodayKey } from '@/lib/admin-reports';
 import { vnLocalToIso, isoToVnLocal } from '@/lib/admin-campaign-form';
-import { FLASH_SALE_PAGE_SIZE, filterFlashSales, flashSaleState, type FlashSaleFilter, type FlashSaleState } from '@/lib/admin-flash-sale';
+import { FLASH_SALE_PAGE_SIZE, flashSaleState, type FlashSaleFilter, type FlashSaleState } from '@/lib/admin-flash-sale';
 import type { WasteSeed } from '@/components/admin/waste-tab';
 import type { ExternalClaimsSeed } from '@/components/admin/external-claims-tab';
 import type { CommunityView } from '@/components/admin/community-moderation-tab';
@@ -1671,6 +1672,7 @@ function OrdersTab({
             type="text"
             aria-label="Tìm đơn theo mã đơn, mã vận đơn, mã Pancake, SĐT, tên khách hoặc tên người nhận"
             placeholder={narrow ? 'Mã đơn, SĐT, tên…' : 'Tìm mã đơn, vận đơn, SĐT, tên khách hoặc người nhận…'}
+            maxLength={100}
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             className={`${FIELD_CLASS} ${TOUCH_H} flex-1`}
@@ -2606,6 +2608,7 @@ function GrantRoleForm({ onDone }: { onDone: () => void }) {
             <input
               className={`${FIELD_CLASS} ${TOUCH_H} w-full sm:w-auto`}
               placeholder="SĐT, vd 0912345678"
+              maxLength={20}
               value={phone}
               disabled={checking}
               onChange={(e) => setPhone(e.target.value)}
@@ -2795,6 +2798,7 @@ function CouponsTab({ onOpenConfig }: { onOpenConfig?: () => void } = {}) {
         <input
           placeholder="Mã (vd WELCOME30)"
           aria-label="Mã giảm giá"
+          maxLength={64}
           value={f.code}
           // Khách luôn nhập mã dạng HOA không khoảng trắng (Mini App/web tự đổi): lưu đúng dạng đó.
           onChange={(e) => setF({ ...f, code: e.target.value.toUpperCase().replace(/\s+/g, '') })}
@@ -2883,12 +2887,12 @@ function BrandsTab() {
       <div className="flex flex-wrap items-end gap-2 rounded-card border border-stone-200 bg-stone-0 p-3">
         <div className={cell}>
           <Field label="Tên nhãn">
-            <input placeholder="Tên nhãn (vd Dừa Bến Tre)" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={field} />
+            <input placeholder="Tên nhãn (vd Dừa Bến Tre)" maxLength={120} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={field} />
           </Field>
         </div>
         <div className={cell}>
           <Field label="Tagline (câu giới thiệu ngắn)">
-            <input placeholder="Tagline" value={form.tagline} onChange={(e) => setForm({ ...form, tagline: e.target.value })} className={field} />
+            <input placeholder="Tagline" maxLength={200} value={form.tagline} onChange={(e) => setForm({ ...form, tagline: e.target.value })} className={field} />
           </Field>
         </div>
         <button onClick={() => create.mutate()} disabled={!form.name.trim() || create.isPending} className={BTN_PRIMARY}>Tạo nhãn</button>
@@ -3044,12 +3048,12 @@ function BrandRow({ brand }: { brand: AdminBrand }) {
             <div className="mt-2 flex flex-wrap items-end gap-2">
               <div className={cell}>
                 <Field label="Tiêu đề khuyến mãi">
-                  <input placeholder="Tiêu đề (MUA 2 TẶNG 1)" value={promo.title} onChange={(e) => setPromo({ ...promo, title: e.target.value })} className={grow} />
+                  <input placeholder="Tiêu đề (MUA 2 TẶNG 1)" maxLength={160} value={promo.title} onChange={(e) => setPromo({ ...promo, title: e.target.value })} className={grow} />
                 </Field>
               </div>
               <div className={cell}>
                 <Field label="Mô tả">
-                  <input placeholder="Mô tả" value={promo.subtitle} onChange={(e) => setPromo({ ...promo, subtitle: e.target.value })} className={grow} />
+                  <input placeholder="Mô tả" maxLength={240} value={promo.subtitle} onChange={(e) => setPromo({ ...promo, subtitle: e.target.value })} className={grow} />
                 </Field>
               </div>
               <Field label="Bắt đầu từ ngày">
@@ -3104,10 +3108,10 @@ function BrandInfoForm({ brand }: { brand: AdminBrand }) {
         <ImageUrlField label="Logo" value={f.logoUrl} onChange={(v) => setF({ ...f, logoUrl: v })} />
         <ImageUrlField label="Ảnh bìa" value={f.coverUrl} onChange={(v) => setF({ ...f, coverUrl: v })} />
         <Field label="Tagline">
-          <input placeholder="Tagline" value={f.tagline} onChange={(e) => setF({ ...f, tagline: e.target.value })} className={input} />
+          <input placeholder="Tagline" maxLength={200} value={f.tagline} onChange={(e) => setF({ ...f, tagline: e.target.value })} className={input} />
         </Field>
         <Field label="Nguồn gốc">
-          <input placeholder="Nguồn gốc (vd Bến Tre)" value={f.origin} onChange={(e) => setF({ ...f, origin: e.target.value })} className={input} />
+          <input placeholder="Nguồn gốc (vd Bến Tre)" maxLength={200} value={f.origin} onChange={(e) => setF({ ...f, origin: e.target.value })} className={input} />
         </Field>
       </div>
       <div className="mt-2">
@@ -3201,7 +3205,7 @@ function DealerRewardsSection() {
         </Field>
         <div className="grow basis-full sm:basis-48">
           <Field label="Tiêu đề chương trình">
-            <input placeholder="Tiêu đề (Tour Phú Quốc)" value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} className={`${field} w-full`} />
+            <input placeholder="Tiêu đề (Tour Phú Quốc)" maxLength={160} value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} className={`${field} w-full`} />
           </Field>
         </div>
         <Field label="Mốc doanh số (đ)">
@@ -3217,13 +3221,19 @@ function DealerRewardsSection() {
 
 function FlashSalesTab() {
   const qc = useQueryClient();
-  const q = useQuery({ queryKey: ['admin-flash-sales'], queryFn: listFlashSales });
+  const [saleFilter, setSaleFilter] = useState<FlashSaleFilter>('open');
+  // Phân trang keyset ở API: lọc theo trạng thái và "Tải thêm" đều chạy phía máy chủ, danh sách không kèm item.
+  const q = useInfiniteQuery({
+    queryKey: ['admin-flash-sales', 'list', saleFilter],
+    queryFn: ({ pageParam }) => listFlashSalesPage({ status: saleFilter, cursor: pageParam, take: FLASH_SALE_PAGE_SIZE }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+  });
+  const sales = q.data?.pages.flatMap((p) => p.items) ?? [];
   const [f, setF] = useState({ title: '', startAt: '', endAt: '' });
   const [startPending, setStartPending] = useState(false);
   const [endPending, setEndPending] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  const [saleFilter, setSaleFilter] = useState<FlashSaleFilter>('open');
-  const [shown, setShown] = useState(FLASH_SALE_PAGE_SIZE);
   const create = useMutation({
     mutationFn: () =>
       createFlashSale({
@@ -3239,7 +3249,6 @@ function FlashSalesTab() {
     onError: (e) => setMsg({ ok: false, text: actionErrorText(e) }),
   });
   const field = `${FIELD_CLASS} ${TOUCH_H}`;
-  const visibleSales = filterFlashSales(q.data ?? [], saleFilter);
 
   return (
     <div className="space-y-4">
@@ -3250,6 +3259,7 @@ function FlashSalesTab() {
             <Field label="Tên đợt">
               <input
                 placeholder="vd Giờ vàng cuối tuần"
+                maxLength={200}
                 value={f.title}
                 onChange={(e) => setF({ ...f, title: e.target.value })}
                 className={`${field} w-full`}
@@ -3279,30 +3289,26 @@ function FlashSalesTab() {
       </div>
 
       <div className="space-y-3">
-        {q.isError && <LoadError message="Không tải được danh sách đợt giờ vàng." onRetry={() => void q.refetch()} />}
-        {q.data && q.data.length > 0 && (
-          <div className="flex flex-wrap gap-1" role="group" aria-label="Lọc đợt giờ vàng">
-            {FLASH_SALE_FILTERS.map((x) => (
-              <button
-                key={x.k}
-                type="button"
-                aria-pressed={saleFilter === x.k}
-                onClick={() => { setSaleFilter(x.k); setShown(FLASH_SALE_PAGE_SIZE); }}
-                className={chipClass(saleFilter === x.k)}
-              >
-                {x.label}
-              </button>
-            ))}
-          </div>
+        {q.isError && !q.data && <LoadError message="Không tải được danh sách đợt giờ vàng." onRetry={() => void q.refetch()} />}
+        <div className="flex flex-wrap gap-1" role="group" aria-label="Lọc đợt giờ vàng">
+          {FLASH_SALE_FILTERS.map((x) => (
+            <button key={x.k} type="button" aria-pressed={saleFilter === x.k} onClick={() => setSaleFilter(x.k)} className={chipClass(saleFilter === x.k)}>
+              {x.label}
+            </button>
+          ))}
+        </div>
+        {sales.map((s) => <FlashSaleRow key={s.id} sale={s} />)}
+        {q.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
+        <LoadMoreButton hasMore={!!q.hasNextPage} loading={q.isFetchingNextPage} error={q.isFetchNextPageError} onClick={() => void q.fetchNextPage()} />
+        {q.data && sales.length === 0 && (
+          <Empty>
+            {saleFilter === 'ended'
+              ? 'Chưa có đợt nào đã kết thúc.'
+              : saleFilter === 'open'
+                ? 'Không có đợt nào chưa kết thúc. Tạo đợt mới ở trên.'
+                : 'Chưa có đợt giờ vàng nào. Tạo đợt đầu tiên ở trên.'}
+          </Empty>
         )}
-        {visibleSales.slice(0, shown).map((s) => <FlashSaleRow key={s.id} sale={s} />)}
-        {visibleSales.length > shown && (
-          <button type="button" onClick={() => setShown((n) => n + FLASH_SALE_PAGE_SIZE)} className={BTN_SECONDARY}>
-            Xem thêm ({visibleSales.length - shown} đợt)
-          </button>
-        )}
-        {q.data?.length === 0 && <Empty>Chưa có đợt giờ vàng nào. Tạo đợt đầu tiên ở trên.</Empty>}
-        {q.data && q.data.length > 0 && visibleSales.length === 0 && <Empty>{saleFilter === 'ended' ? 'Chưa có đợt nào đã kết thúc.' : 'Không có đợt nào chưa kết thúc. Tạo đợt mới ở trên.'}</Empty>}
       </div>
     </div>
   );
@@ -3326,18 +3332,13 @@ const FLASH_SALE_STATE: Record<FlashSaleState, { label: string; tone: 'success' 
 
 const EMPTY_ITEM = { variationId: '', flashPrice: '', quota: '', perUserLimit: '' };
 
-function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
+function FlashSaleRow({ sale }: { sale: AdminFlashSaleSummary }) {
   const qc = useQueryClient();
   const { confirm, dialog } = useConfirm();
   const refresh = () => qc.invalidateQueries({ queryKey: ['admin-flash-sales'] });
   const [rowErr, setRowErr] = useState<string | null>(null);
   const toggleActive = useMutation({
     mutationFn: () => updateFlashSale(sale.id, { isActive: !sale.isActive }),
-    onSuccess: () => { setRowErr(null); refresh(); },
-    onError: (e) => setRowErr(actionErrorText(e)),
-  });
-  const delItem = useMutation({
-    mutationFn: (itemId: string) => deleteFlashSaleItem(itemId),
     onSuccess: () => { setRowErr(null); refresh(); },
     onError: (e) => setRowErr(actionErrorText(e)),
   });
@@ -3396,27 +3397,7 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
     onError: (e) => setRowErr(actionErrorText(e)),
   });
 
-  const [item, setItem] = useState(EMPTY_ITEM);
-  const [pickedVariation, setPickedVariation] = useState<PickedItem | null>(null);
-  const [itemErr, setItemErr] = useState<string | null>(null);
-  const variationLabels = useVariationLabels(sale.items.map((it) => it.variationId));
-  const addItem = useMutation({
-    mutationFn: () =>
-      addFlashSaleItem(sale.id, {
-        variationId: item.variationId.trim(),
-        flashPrice: Number(item.flashPrice),
-        quota: Number(item.quota),
-        perUserLimit: item.perUserLimit ? Number(item.perUserLimit) : undefined,
-      }),
-    onSuccess: () => {
-      setItem(EMPTY_ITEM);
-      setPickedVariation(null);
-      setItemErr(null);
-      refresh();
-    },
-    onError: (e) => setItemErr(actionErrorText(e)),
-  });
-  const itemReady = !!item.variationId.trim() && Number(item.flashPrice) >= 1 && Number(item.quota) >= 1;
+  const [open, setOpen] = useState(false);
 
   const fmt = formatDateTime;
   const field = `${FIELD_CLASS} ${TOUCH_H}`;
@@ -3449,7 +3430,7 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
         <div className="mt-3 flex flex-wrap items-end gap-2 rounded-control border border-stone-200 bg-stone-50 p-3">
           <div className="grow basis-full sm:basis-48">
             <Field label="Tên đợt (sửa)">
-              <input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} className={`${field} w-full`} />
+              <input maxLength={200} value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} className={`${field} w-full`} />
             </Field>
           </div>
           <Field label="Bắt đầu lúc (sửa)">
@@ -3485,72 +3466,123 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
       {rowErr && <p className="mt-1 text-sm text-danger-fg">{rowErr}</p>}
 
       <div className="mt-3 border-t border-stone-200 pt-3">
-        <div className="mb-1 text-sm font-medium text-stone-900">Sản phẩm trong đợt ({sale.items.length})</div>
-        <div className="space-y-1">
-          {sale.items.map((it) => (
-            <div key={it.id} className={LIST_ITEM_CLASS}>
-              <span className="min-w-0 break-words">
-                {variationLabels.labelFor(it.variationId)} · {formatVnd(it.flashPrice)} · đã bán {it.soldCount}/{it.quota} · giới hạn {it.perUserLimit}/khách
-              </span>
-              <FlashItemOrder key={`${it.id}:${it.sortOrder ?? 0}`} itemId={it.id} sortOrder={it.sortOrder} label={variationLabels.labelFor(it.variationId)} onSaved={() => void refresh()} />
-              <button
-                onClick={async () => {
-                  const label = variationLabels.labelFor(it.variationId);
-                  const ok = await confirm({
-                    title: 'Xoá sản phẩm khỏi đợt',
-                    message: `Xoá "${label}" khỏi đợt "${sale.title}"? Đã bán ${it.soldCount}/${it.quota}. Không hoàn tác được.`,
-                    confirmLabel: 'Xoá sản phẩm',
-                    cancelLabel: 'Giữ lại',
-                    tone: 'danger',
-                  });
-                  if (ok) delItem.mutate(it.id);
-                }}
-                className={`${BTN_LINK_DANGER} shrink-0 text-xs`}
-              >Xoá</button>
-            </div>
-          ))}
-          {sale.items.length === 0 && <p className="text-xs text-stone-500">Chưa có sản phẩm nào trong đợt này.</p>}
-        </div>
-
-        {ended ? (
-          <p className="mt-2 text-xs text-stone-500">Đợt đã kết thúc, không thêm sản phẩm được nữa.</p>
-        ) : (
-          <>
-        <div className="mt-2 flex flex-wrap items-end gap-2">
-          <ProductPicker
-            mode="variation"
-            label="Chọn biến thể sản phẩm cho đợt giờ vàng"
-            value={pickedVariation}
-            onChange={(v) => {
-              setPickedVariation(v);
-              setItem((cur) => ({ ...cur, variationId: v?.id ?? '' }));
-            }}
-            className="min-w-[14rem] flex-1"
-          />
-          <div className="w-28">
-            <Field label="Giá flash (đ)">
-              <input type="number" min={1} step={1} inputMode="numeric" placeholder="vd 59000" value={item.flashPrice} onChange={(e) => setItem({ ...item, flashPrice: e.target.value })} className={`${field} w-full`} />
-            </Field>
-          </div>
-          <div className="w-32">
-            <Field label="Số lượng bán (quota)">
-              <input type="number" min={1} step={1} inputMode="numeric" placeholder="vd 20" value={item.quota} onChange={(e) => setItem({ ...item, quota: e.target.value })} className={`${field} w-full`} />
-            </Field>
-          </div>
-          <div className="w-32">
-            <Field label="Giới hạn mỗi khách">
-              <input type="number" min={1} step={1} inputMode="numeric" placeholder="mặc định" value={item.perUserLimit} onChange={(e) => setItem({ ...item, perUserLimit: e.target.value })} className={`${field} w-full`} />
-            </Field>
-          </div>
-          <button onClick={() => addItem.mutate()} disabled={!itemReady || addItem.isPending} className={BTN_PRIMARY}>
-            Thêm SP
-          </button>
-        </div>
-        <p className="mt-1 text-xs text-stone-500">Gõ tên sản phẩm (không cần dấu) hoặc SKU rồi chọn đúng biến thể.</p>
-          </>
-        )}
-        {itemErr && <p className="mt-1 text-sm text-danger-fg">{itemErr}</p>}
+        <button type="button" aria-expanded={open} onClick={() => setOpen((v) => !v)} className={BTN_SECONDARY}>
+          {open ? 'Ẩn sản phẩm' : `Xem sản phẩm (${sale.itemCount})`}
+        </button>
+        {open && <FlashSaleItemsPanel sale={sale} ended={ended} />}
       </div>
+      {dialog}
+    </div>
+  );
+}
+
+function FlashSaleItemsPanel({ sale, ended }: { sale: AdminFlashSaleSummary; ended: boolean }) {
+  const qc = useQueryClient();
+  const { confirm, dialog } = useConfirm();
+  // Item chỉ tải khi mở đợt; làm mới cả danh sách (số item) lẫn chi tiết sau mỗi thay đổi.
+  const detail = useQuery({ queryKey: ['admin-flash-sales', 'detail', sale.id], queryFn: () => getFlashSale(sale.id) });
+  const refresh = () => qc.invalidateQueries({ queryKey: ['admin-flash-sales'] });
+  const items = detail.data?.items ?? [];
+  const [rowErr, setRowErr] = useState<string | null>(null);
+  const delItem = useMutation({
+    mutationFn: (itemId: string) => deleteFlashSaleItem(itemId),
+    onSuccess: () => { setRowErr(null); refresh(); },
+    onError: (e) => setRowErr(actionErrorText(e)),
+  });
+  const [item, setItem] = useState(EMPTY_ITEM);
+  const [pickedVariation, setPickedVariation] = useState<PickedItem | null>(null);
+  const [itemErr, setItemErr] = useState<string | null>(null);
+  const variationLabels = useVariationLabels(items.map((it) => it.variationId));
+  const addItem = useMutation({
+    mutationFn: () =>
+      addFlashSaleItem(sale.id, {
+        variationId: item.variationId.trim(),
+        flashPrice: Number(item.flashPrice),
+        quota: Number(item.quota),
+        perUserLimit: item.perUserLimit ? Number(item.perUserLimit) : undefined,
+      }),
+    onSuccess: () => {
+      setItem(EMPTY_ITEM);
+      setPickedVariation(null);
+      setItemErr(null);
+      refresh();
+    },
+    onError: (e) => setItemErr(actionErrorText(e)),
+  });
+  const itemReady = !!item.variationId.trim() && Number(item.flashPrice) >= 1 && Number(item.quota) >= 1;
+
+  const field = `${FIELD_CLASS} ${TOUCH_H}`;
+
+  if (detail.isError) return <LoadError message="Không tải được sản phẩm của đợt này." onRetry={() => void detail.refetch()} />;
+  if (!detail.data) return <p className="mt-2 text-sm text-stone-500">Đang tải sản phẩm…</p>;
+
+  return (
+    <div className="mt-2">
+      <div className="mb-1 text-sm font-medium text-stone-900">Sản phẩm trong đợt ({items.length})</div>
+      <div className="space-y-1">
+        {items.map((it) => (
+          <div key={it.id} className={LIST_ITEM_CLASS}>
+            <span className="min-w-0 break-words">
+              {variationLabels.labelFor(it.variationId)} · {formatVnd(it.flashPrice)} · đã bán {it.soldCount}/{it.quota} · giới hạn {it.perUserLimit}/khách
+            </span>
+            <FlashItemOrder key={`${it.id}:${it.sortOrder ?? 0}`} itemId={it.id} sortOrder={it.sortOrder} label={variationLabels.labelFor(it.variationId)} onSaved={() => void refresh()} />
+            <button
+              onClick={async () => {
+                const label = variationLabels.labelFor(it.variationId);
+                const ok = await confirm({
+                  title: 'Xoá sản phẩm khỏi đợt',
+                  message: `Xoá "${label}" khỏi đợt "${sale.title}"? Đã bán ${it.soldCount}/${it.quota}. Không hoàn tác được.`,
+                  confirmLabel: 'Xoá sản phẩm',
+                  cancelLabel: 'Giữ lại',
+                  tone: 'danger',
+                });
+                if (ok) delItem.mutate(it.id);
+              }}
+              className={`${BTN_LINK_DANGER} shrink-0 text-xs`}
+            >Xoá</button>
+          </div>
+        ))}
+        {items.length === 0 && <p className="text-xs text-stone-500">Chưa có sản phẩm nào trong đợt này.</p>}
+      </div>
+      {ended ? (
+        <p className="mt-2 text-xs text-stone-500">Đợt đã kết thúc, không thêm sản phẩm được nữa.</p>
+      ) : (
+        <>
+          <div className="mt-2 flex flex-wrap items-end gap-2">
+            <ProductPicker
+              mode="variation"
+              label="Chọn biến thể sản phẩm cho đợt giờ vàng"
+              value={pickedVariation}
+              onChange={(v) => {
+                setPickedVariation(v);
+                setItem((cur) => ({ ...cur, variationId: v?.id ?? '' }));
+              }}
+              className="min-w-[14rem] flex-1"
+            />
+            <div className="w-28">
+              <Field label="Giá flash (đ)">
+                <input type="number" min={1} step={1} inputMode="numeric" placeholder="vd 59000" value={item.flashPrice} onChange={(e) => setItem({ ...item, flashPrice: e.target.value })} className={`${field} w-full`} />
+              </Field>
+            </div>
+            <div className="w-32">
+              <Field label="Số lượng bán (quota)">
+                <input type="number" min={1} step={1} inputMode="numeric" placeholder="vd 20" value={item.quota} onChange={(e) => setItem({ ...item, quota: e.target.value })} className={`${field} w-full`} />
+              </Field>
+            </div>
+            <div className="w-32">
+              <Field label="Giới hạn mỗi khách">
+                <input type="number" min={1} step={1} inputMode="numeric" placeholder="mặc định" value={item.perUserLimit} onChange={(e) => setItem({ ...item, perUserLimit: e.target.value })} className={`${field} w-full`} />
+              </Field>
+            </div>
+            <button onClick={() => addItem.mutate()} disabled={!itemReady || addItem.isPending} className={BTN_PRIMARY}>
+              Thêm SP
+            </button>
+          </div>
+          <p className="mt-1 text-xs text-stone-500">Gõ tên sản phẩm (không cần dấu) hoặc SKU rồi chọn đúng biến thể.</p>
+        </>
+      )}
+      {itemErr && <p className="mt-1 text-sm text-danger-fg">{itemErr}</p>}
+      {rowErr && <p className="mt-1 text-sm text-danger-fg">{rowErr}</p>}
       {dialog}
     </div>
   );
@@ -3589,6 +3621,7 @@ function FaqTab() {
             <Field label="Nhóm">
               <input
                 placeholder="Nhóm (vd Vận chuyển, Đổi trả)"
+                maxLength={100}
                 value={form.category}
                 onChange={(e) => setForm({ ...form, category: e.target.value })}
                 className={`${field} w-56`}
@@ -3607,6 +3640,7 @@ function FaqTab() {
           <Field label="Câu hỏi">
             <input
               placeholder="Câu hỏi"
+              maxLength={500}
               value={form.question}
               onChange={(e) => setForm({ ...form, question: e.target.value })}
               className={`${INPUT_CLASS} ${TOUCH_H}`}
@@ -3615,6 +3649,7 @@ function FaqTab() {
           <Field label="Câu trả lời">
             <textarea
               placeholder="Câu trả lời"
+              maxLength={4000}
               value={form.answer}
               onChange={(e) => setForm({ ...form, answer: e.target.value })}
               rows={3}
@@ -3701,17 +3736,17 @@ function FaqRow({ faq }: { faq: AdminFaq }) {
         <div className="mt-3 space-y-2 border-t border-stone-200 pt-3">
           <div className="flex flex-wrap items-end gap-2">
             <Field label="Nhóm">
-              <input placeholder="Nhóm" value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })} className={`${field} w-56`} />
+              <input placeholder="Nhóm" maxLength={100} value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })} className={`${field} w-56`} />
             </Field>
             <Field label="Thứ tự hiển thị">
               <input type="number" placeholder="Thứ tự" value={f.sortOrder} onChange={(e) => setF({ ...f, sortOrder: Number(e.target.value) })} className={`${field} w-32`} />
             </Field>
           </div>
           <Field label="Câu hỏi">
-            <input placeholder="Câu hỏi" value={f.question} onChange={(e) => setF({ ...f, question: e.target.value })} className={`${INPUT_CLASS} ${TOUCH_H}`} />
+            <input placeholder="Câu hỏi" maxLength={500} value={f.question} onChange={(e) => setF({ ...f, question: e.target.value })} className={`${INPUT_CLASS} ${TOUCH_H}`} />
           </Field>
           <Field label="Câu trả lời">
-            <textarea placeholder="Câu trả lời" value={f.answer} onChange={(e) => setF({ ...f, answer: e.target.value })} rows={3} className={INPUT_CLASS} />
+            <textarea placeholder="Câu trả lời" maxLength={4000} value={f.answer} onChange={(e) => setF({ ...f, answer: e.target.value })} rows={3} className={INPUT_CLASS} />
           </Field>
           <button
             onClick={() => save.mutate()}
@@ -3768,6 +3803,7 @@ function QuickReplyTab() {
             <Field label="Nhóm">
               <input
                 placeholder="Nhóm (vd Vận chuyển, Đổi trả)"
+                maxLength={60}
                 value={form.category}
                 onChange={(e) => setForm({ ...form, category: e.target.value })}
                 className={`${field} w-56`}
@@ -3776,6 +3812,7 @@ function QuickReplyTab() {
             <Field label="Tên nội bộ">
               <input
                 placeholder="Tên nội bộ"
+                maxLength={120}
                 value={form.title}
                 onChange={(e) => setForm({ ...form, title: e.target.value })}
                 className={`${field} w-56`}
@@ -3794,6 +3831,7 @@ function QuickReplyTab() {
           <Field label="Nội dung tin trả lời">
             <textarea
               placeholder="Nội dung tin trả lời"
+              maxLength={2000}
               value={form.content}
               onChange={(e) => setForm({ ...form, content: e.target.value })}
               rows={3}
@@ -3899,10 +3937,10 @@ function QuickReplyRow({ item }: { item: AdminQuickReply }) {
         <div className="mt-3 space-y-2 border-t border-stone-200 pt-3">
           <div className="flex flex-wrap items-end gap-2">
             <Field label="Nhóm">
-              <input placeholder="Nhóm" value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })} className={`${field} w-56`} />
+              <input placeholder="Nhóm" maxLength={60} value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })} className={`${field} w-56`} />
             </Field>
             <Field label="Tên nội bộ">
-              <input placeholder="Tên nội bộ" value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} className={`${field} w-56`} />
+              <input placeholder="Tên nội bộ" maxLength={120} value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} className={`${field} w-56`} />
             </Field>
           </div>
           <Field label="Từ khoá kích hoạt">
@@ -3915,7 +3953,7 @@ function QuickReplyRow({ item }: { item: AdminQuickReply }) {
             />
           </Field>
           <Field label="Nội dung tin trả lời">
-            <textarea placeholder="Nội dung" value={f.content} onChange={(e) => setF({ ...f, content: e.target.value })} rows={3} className={INPUT_CLASS} />
+            <textarea placeholder="Nội dung" maxLength={2000} value={f.content} onChange={(e) => setF({ ...f, content: e.target.value })} rows={3} className={INPUT_CLASS} />
           </Field>
           <label className="flex min-h-[44px] items-center gap-2 text-sm text-stone-600 sm:min-h-0">
             <input type="checkbox" className="h-4 w-4 accent-forest-600" checked={f.isGreeting} onChange={(e) => setF({ ...f, isGreeting: e.target.checked })} />
@@ -4137,6 +4175,7 @@ function AcademyTab() {
               <Field label="Tiêu đề khoá học">
                 <input
                   placeholder="Tiêu đề khoá học"
+                  maxLength={200}
                   value={form.title}
                   onChange={(e) => setForm({ ...form, title: e.target.value })}
                   className={`${field} w-full`}
@@ -4278,7 +4317,7 @@ function CourseRow({ course }: { course: AdminCourse }) {
             <div className="mb-2 font-display text-sm font-medium text-stone-900">Thông tin khoá học</div>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <Field label="Tiêu đề khoá học">
-                <input placeholder="Tiêu đề" value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} className={input} />
+                <input placeholder="Tiêu đề" maxLength={200} value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} className={input} />
               </Field>
               <Field label="Thứ tự">
                 <input type="number" placeholder="Thứ tự" value={f.sortOrder} onChange={(e) => setF({ ...f, sortOrder: Number(e.target.value) })} className={input} />
@@ -4312,6 +4351,7 @@ function CourseRow({ course }: { course: AdminCourse }) {
                   <Field label="Tiêu đề bài học">
                     <input
                       placeholder="Tiêu đề bài học"
+                      maxLength={200}
                       value={lesson.title}
                       onChange={(e) => setLesson({ ...lesson, title: e.target.value })}
                       className={`${field} w-full`}
@@ -4427,7 +4467,7 @@ function LessonRow({ lesson }: { lesson: AdminLesson }) {
           <div className="flex flex-wrap items-end gap-2">
             <div className="grow basis-full sm:basis-40">
               <Field label="Tiêu đề bài học">
-                <input placeholder="Tiêu đề" value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} className={`${field} w-full`} />
+                <input placeholder="Tiêu đề" maxLength={200} value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} className={`${field} w-full`} />
               </Field>
             </div>
             <Field label="Loại bài học">

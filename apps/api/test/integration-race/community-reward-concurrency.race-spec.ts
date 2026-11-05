@@ -5,7 +5,7 @@ import type { PrismaService } from '../../src/prisma/prisma.service';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import { RewardPointsService } from '../../src/modules/wallet/reward-points.service';
 import { CommunityRewardService } from '../../src/modules/feed/community-reward.service';
-import { createUser, randCode, setConfig, summarize } from './helpers';
+import { createUser, randCode, setConfig, summarize, withDbUrlParams } from './helpers';
 
 /**
  * R6-SYNC-3 + R6-SYNC-6: thưởng bài cộng đồng khi duyệt song song.
@@ -36,9 +36,9 @@ describe('CommunityRewardService.rewardPost đồng thời (real Postgres)', () 
     process.env.DATABASE_URL = BASE_URL;
   });
 
-  async function build(poolQuery = '') {
+  async function build(pool?: Record<string, string>) {
     await setConfig(db, 'community.post_reward_points', 1);
-    process.env.DATABASE_URL = `${BASE_URL}${poolQuery}`;
+    process.env.DATABASE_URL = pool ? withDbUrlParams(BASE_URL, pool) : BASE_URL;
     moduleRef = await Test.createTestingModule({
       imports: [PrismaModule],
       providers: [SystemConfigService, RewardPointsService, CommunityRewardService],
@@ -53,7 +53,7 @@ describe('CommunityRewardService.rewardPost đồng thời (real Postgres)', () 
   it('pool 2 kết nối, cache nguội: 6 người khác nhau cùng được thưởng, không ai mất', async () => {
     await setConfig(db, 'community.daily_post_reward_cap', 1);
     const list = await Promise.all(Array.from({ length: 6 }, () => createUser(db)));
-    await build('&connection_limit=2&pool_timeout=4');
+    await build({ connection_limit: '2', pool_timeout: '4' });
 
     const results = await Promise.allSettled(list.map((u) => community.rewardPost(u.id, `it-post-${randCode(8)}`)));
     expect(summarize(results).errors).toEqual([]);

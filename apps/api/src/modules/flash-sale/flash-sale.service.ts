@@ -145,6 +145,12 @@ function assertSaleWindow(startAt: Date, endAt: Date, maxDays: number, checkEndI
 
 const vnd = (n: number) => `${Math.round(n).toLocaleString('vi-VN')}đ`;
 
+const FLASH_ADMIN_PAGE_DEFAULT = 20;
+const FLASH_ADMIN_PAGE_MAX = 50;
+/** Con trỏ do chính API sinh (`ISO|id`); chỉ nhận đúng dạng đó để không đẩy năm ≥ 10000 hay NUL xuống Prisma/Postgres (500). */
+export const FLASH_ADMIN_CURSOR_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\|[A-Za-z0-9_-]{1,64}$/;
+const ADMIN_ITEM_SELECT = { id: true, variationId: true, flashPrice: true, quota: true, soldCount: true, perUserLimit: true, sortOrder: true } as const;
+
 @Injectable()
 export class FlashSaleService {
   private readonly logger = new Logger(FlashSaleService.name);
@@ -667,14 +673,55 @@ export class FlashSaleService {
     return { ok: true };
   }
 
-  /** Danh sách toàn bộ đợt flash sale kèm item (admin). */
+  /**
+   * Một trang đợt flash sale cho tab Giờ vàng (admin), keyset theo (startAt, id) (tăng dần cho `open`, giảm dần cho còn lại), không kèm item: item chỉ
+   * tải khi mở một đợt (`getSale`). `open` = chưa quá giờ kết thúc, khớp cách tab phân loại "đã kết thúc".
+   */
+  async listSalesPage(q: { status?: 'open' | 'ended' | 'all'; take?: string; cursor?: string }) {
+    const take = Math.min(Math.max(Number(q.take) || FLASH_ADMIN_PAGE_DEFAULT, 1), FLASH_ADMIN_PAGE_MAX);
+    // `open` đi từ đợt sớm nhất: đợt đang chạy hay sắp chạy nằm trang đầu dù đã tạo sẵn nhiều khung xa (generate-slots).
+    const dir = q.status === 'open' ? 'asc' : 'desc';
+    const cmp = dir === 'asc' ? 'gt' : 'lt';
+    const and: Prisma.FlashSaleWhereInput[] = [];
+    if (q.status === 'open') and.push({ endAt: { gte: new Date() } });
+    if (q.status === 'ended') and.push({ endAt: { lt: new Date() } });
+    if (q.cursor) {
+      if (!FLASH_ADMIN_CURSOR_RE.test(q.cursor)) throw new BadRequestException('Con trỏ trang không hợp lệ.');
+      const [iso, id] = q.cursor.split('|') as [string, string];
+      const at = new Date(iso);
+      if (Number.isNaN(at.getTime())) throw new BadRequestException('Con trỏ trang không hợp lệ.');
+      and.push({ OR: [{ startAt: { [cmp]: at } }, { startAt: at, id: { [cmp]: id } }] });
+    }
+    const rows = await this.prisma.flashSale.findMany({
+      where: { AND: and },
+      orderBy: [{ startAt: dir }, { id: dir }],
+      take: take + 1,
+      select: { id: true, title: true, startAt: true, endAt: true, isActive: true, _count: { select: { items: true } } },
+    });
+    const page = rows.slice(0, take);
+    const last = page[page.length - 1];
+    return {
+      items: page.map(({ _count, ...sale }) => ({ ...sale, itemCount: _count.items })),
+      nextCursor: rows.length > take && last ? `${last.startAt.toISOString()}|${last.id}` : null,
+    };
+  }
+
+  /** Một đợt kèm item (admin), tải khi mở đợt trong tab Giờ vàng. */
+  async getSale(id: string) {
+    const sale = await this.prisma.flashSale.findUnique({
+      where: { id },
+      include: { items: { select: ADMIN_ITEM_SELECT } },
+    });
+    if (!sale) throw new NotFoundException('Không tìm thấy đợt flash sale.');
+    return sale;
+  }
+
+  /** Danh sách toàn bộ đợt flash sale kèm item (admin). Giữ cho lời gọi không phân trang. */
   async listSales() {
     return this.prisma.flashSale.findMany({
       orderBy: { startAt: 'desc' },
       include: {
-        items: {
-          select: { id: true, variationId: true, flashPrice: true, quota: true, soldCount: true, perUserLimit: true, sortOrder: true },
-        },
+        items: { select: ADMIN_ITEM_SELECT },
       },
     });
   }

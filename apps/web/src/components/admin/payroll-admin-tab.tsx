@@ -311,7 +311,7 @@ export function PayrollAdminTab() {
           </div>
           <EvidenceUpload label="Ảnh xác nhận chuyển khoản" hint="bắt buộc" max={1} value={proof ? [proof] : []} onChange={(v) => setProof(v[0] ?? '')} />
           <Field label="Ghi chú (tuỳ chọn)">
-            <input value={note} onChange={(e) => setNote(e.target.value)} className={INPUT_CLASS} />
+            <input maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} className={INPUT_CLASS} />
           </Field>
         </div>
       </Sheet>

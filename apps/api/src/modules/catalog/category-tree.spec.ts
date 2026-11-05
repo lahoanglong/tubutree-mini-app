@@ -1,7 +1,9 @@
+import { CAMPAIGN_ENTITY_SLUG_MAX, CAMPAIGN_ENTITY_SLUG_RE } from '@tubutree/shared-types';
 import {
   CATEGORY_MAX_CHILDREN,
   CATEGORY_MAX_ROOTS,
   CATEGORY_MSG,
+  CATEGORY_NAME_MAX,
   categorySlugBase,
   sameCategoryName,
   uniqueCategorySlug,
@@ -22,6 +24,15 @@ describe('category-tree', () => {
   it('uniqueCategorySlug thêm hậu tố -2, -3 khi trùng', () => {
     expect(uniqueCategorySlug('bep', new Set())).toBe('bep');
     expect(uniqueCategorySlug('bep', new Set(['bep', 'bep-2']))).toBe('bep-3');
+  });
+
+  it('slug danh mục từ tên dài nhất cộng hậu tố trùng (đến -99999) vừa CAMPAIGN_ENTITY_SLUG_MAX và khớp CAMPAIGN_ENTITY_SLUG_RE', () => {
+    const base = categorySlugBase('a'.repeat(CATEGORY_NAME_MAX));
+    const taken = new Set([base, ...Array.from({ length: 99_997 }, (_, i) => `${base}-${i + 2}`)]);
+    const slug = uniqueCategorySlug(base, taken);
+    expect(slug.endsWith('-99999')).toBe(true);
+    expect(slug.length).toBeLessThanOrEqual(CAMPAIGN_ENTITY_SLUG_MAX);
+    expect(slug).toMatch(CAMPAIGN_ENTITY_SLUG_RE);
   });
 
   it('sameCategoryName so tên không phân biệt hoa thường, dấu, khoảng trắng đầu cuối', () => {

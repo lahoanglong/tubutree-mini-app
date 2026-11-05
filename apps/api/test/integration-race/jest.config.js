@@ -19,4 +19,6 @@ module.exports = {
   setupFiles: ['<rootDir>/setup-env.ts'],
   setupFilesAfterEnv: ['<rootDir>/tier-isolation.ts'],
   testTimeout: 60000,
+  // Ép chạy tuần tự dù quên --runInBand: perf-indexes-1104 (D10) xoá khoá cron_leases của data-retention còn data-retention.race-spec cần khoá đó, và nhiều spec cùng đếm/quét một bảng.
+  maxWorkers: 1,
 };

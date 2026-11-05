@@ -269,9 +269,9 @@ export function WasteItemsSection() {
             <h3 className="text-sm font-semibold text-stone-900">{editing ? `Sửa món ${editing.name}` : 'Thêm món'}</h3>
             {editing?.hazardous && <Notice tone="warning">Đã đánh dấu nguy hại: không bỏ được cờ, món chỉ nhận khi khách mang tới điểm nhận.</Notice>}
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Mã món"><input name="code" className={INPUT_CLASS} value={f.code} onChange={(e) => setForm({ code: e.target.value })} /></Field>
-              <Field label="Tên món"><input name="name" className={INPUT_CLASS} value={f.name} onChange={(e) => setForm({ name: e.target.value })} /></Field>
-              <Field label="Đơn vị"><input name="unitLabel" className={INPUT_CLASS} value={f.unitLabel} onChange={(e) => setForm({ unitLabel: e.target.value })} /></Field>
+              <Field label="Mã món"><input name="code" className={INPUT_CLASS} maxLength={40} value={f.code} onChange={(e) => setForm({ code: e.target.value })} /></Field>
+              <Field label="Tên món"><input name="name" className={INPUT_CLASS} maxLength={120} value={f.name} onChange={(e) => setForm({ name: e.target.value })} /></Field>
+              <Field label="Đơn vị"><input name="unitLabel" className={INPUT_CLASS} maxLength={20} value={f.unitLabel} onChange={(e) => setForm({ unitLabel: e.target.value })} /></Field>
               <Field label="Số đơn vị mỗi mức quy đổi"><input name="unitsPerPoint" inputMode="numeric" className={INPUT_CLASS} value={f.unitsPerPoint} onChange={(e) => setForm({ unitsPerPoint: e.target.value })} /></Field>
               <Field label="Điểm mỗi mức quy đổi"><input name="pointsPerGroup" inputMode="numeric" className={INPUT_CLASS} value={f.pointsPerGroup} onChange={(e) => setForm({ pointsPerGroup: e.target.value })} /></Field>
               <Field label="Giọt nước mỗi đơn vị"><input name="dropsPerUnit" inputMode="numeric" className={INPUT_CLASS} value={f.dropsPerUnit} onChange={(e) => setForm({ dropsPerUnit: e.target.value })} /></Field>
@@ -289,9 +289,9 @@ export function WasteItemsSection() {
               </Field>
             </div>
             <Field label="Hướng dẫn chuẩn bị (không ghi số trần; câu trần do hệ thống dựng)">
-              <textarea name="prepInstructions" rows={3} className={INPUT_CLASS} value={f.prepInstructions} onChange={(e) => setForm({ prepInstructions: e.target.value })} />
+              <textarea name="prepInstructions" rows={3} className={INPUT_CLASS} maxLength={2000} value={f.prepInstructions} onChange={(e) => setForm({ prepInstructions: e.target.value })} />
             </Field>
-            <Field label="Ảnh (đường dẫn)"><input name="imageUrl" className={INPUT_CLASS} value={f.imageUrl} onChange={(e) => setForm({ imageUrl: e.target.value })} /></Field>
+            <Field label="Ảnh (đường dẫn)"><input name="imageUrl" className={INPUT_CLASS} maxLength={500} value={f.imageUrl} onChange={(e) => setForm({ imageUrl: e.target.value })} /></Field>
             <label className="flex items-center gap-2 text-xs text-stone-700">
               <input
                 type="checkbox"

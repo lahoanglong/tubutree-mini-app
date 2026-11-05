@@ -265,6 +265,7 @@ export function ClaimCampaignPanel({ onOpenConfig }: { onOpenConfig?: () => void
             <Field label="Tiền tố lô" hint="2–16 chữ in hoa/số, vd SHOPEE11. Mã in ra: SHOPEE11-XXXXXXXX.">
               <input
                 aria-label="Tiền tố lô"
+                maxLength={16}
                 value={f.prefix}
                 onChange={(e) => setF({ ...f, prefix: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '') })}
                 className={field}
@@ -279,6 +280,7 @@ export function ClaimCampaignPanel({ onOpenConfig }: { onOpenConfig?: () => void
             <Field label="Mã chung" hint="In cùng một mã lên mọi thẻ của đợt, vd SHOPEETHANG11.">
               <input
                 aria-label="Mã chung"
+                maxLength={64}
                 value={f.code}
                 onChange={(e) => setF({ ...f, code: e.target.value.toUpperCase().replace(/\s+/g, '') })}
                 className={field}
@@ -333,6 +335,7 @@ export function ClaimCampaignPanel({ onOpenConfig }: { onOpenConfig?: () => void
         <Field label="Đợt thẻ trên link" hint={cardOk ? 'Vd 2611. Bỏ trống = không ghi đợt.' : 'Chỉ chữ thường không dấu, số, gạch ngang hoặc gạch dưới, tối đa 40 ký tự.'}>
           <input
             aria-label="Đợt thẻ trên link"
+            maxLength={40}
             value={f.linkCard}
             onChange={(e) => setF({ ...f, linkCard: e.target.value.toLowerCase().trim() })}
             className={field}

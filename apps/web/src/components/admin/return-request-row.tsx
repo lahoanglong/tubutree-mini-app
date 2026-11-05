@@ -215,6 +215,7 @@ export function ReturnRow({
               <input
                 aria-label="Ghi chú duyệt / lý do từ chối"
                 placeholder="Ghi chú duyệt hoặc lý do từ chối"
+                maxLength={500}
                 value={note}
                 onChange={(e) => {
                   setNote(e.target.value);

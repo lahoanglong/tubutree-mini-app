@@ -335,3 +335,19 @@ export async function legacyBankCommissionPayout(
     return payout;
   });
 }
+
+let phoneSeq = Math.floor(Math.random() * 1e8);
+/**
+ * Số điện thoại duy nhất cho khách thử (`users.phone` là khoá duy nhất). Đếm tăng từ một mốc ngẫu nhiên mỗi lần nạp file thay vì theo
+ * đồng hồ: hai lần tạo trong cùng một mili giây không đụng nhau. `prefix` là đầu số (hai chữ số) để một ca cần nhiều khách khác dạng.
+ */
+export function uniquePhone(prefix = '09'): string {
+  return `${prefix}${String(phoneSeq++ % 1e8).padStart(8, '0')}`;
+}
+
+/** Thêm tham số kết nối vào DATABASE_URL dù URL gốc đã có `?` hay chưa (CI có `?schema=public`, máy cục bộ có thể không). */
+export function withDbUrlParams(url: string, params: Record<string, string>): string {
+  const u = new URL(url);
+  for (const [k, v] of Object.entries(params)) u.searchParams.set(k, v);
+  return u.toString();
+}

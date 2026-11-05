@@ -10,6 +10,8 @@ import { useAuthPhase } from '../hooks/use-auth-phase';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 import { formatVnd } from '../utils/format';
+import { uniqueById } from '../utils/unique-by-id';
+import { FIRST_PAGE, nextPageParam } from '../utils/keyset-paging';
 import { PageHeader } from '../components/ui/page-header';
 import { SegmentedTabs } from '../components/ui/segmented-tabs';
 import { Button } from '../components/ui/button';
@@ -45,6 +47,11 @@ export default function OrdersPage() {
   const tabs = ordersTabs(hasSubscription || keepSubsTab);
   const [picked, setPicked] = useState<OrdersTabKey | null>(null);
   const tab = picked && tabs.some((t) => t.key === picked) ? picked : parseOrdersTab(location.search, tabs);
+  // Khách rời tab Định kỳ đúng lúc danh sách gói còn đang làm mới (vẫn thấy gói cũ) thì lúc bấm chưa biết là hết gói; khi danh sách
+  // về rỗng, gỡ tab ở đây thay vì chỉ ở lúc bấm.
+  useEffect(() => {
+    if (tab !== 'subscriptions' && !hasSubscription) setKeepSubsTab(false);
+  }, [tab, hasSubscription]);
   const awaitingTabs = picked === null && subsLoading && new URLSearchParams(location.search).get('tab') === 'subscriptions';
   // State ổn định (không dựng target trong JSX) — ReorderSheet reset lựa chọn theo identity của target.
   const [reorderTarget, setReorderTarget] = useState<ReorderTarget | null>(null);
@@ -62,15 +69,12 @@ export default function OrdersPage() {
   // Key bắt đầu bằng ['orders'] để invalidateQueries({ queryKey: ['orders'] }) hiện có vẫn làm mới danh sách.
   const orders = useInfiniteQuery({
     queryKey: ['orders', 'list', tab],
-    queryFn: ({ pageParam }) => fetchOrders(current.filter ?? {}, pageParam, PAGE_LIMIT),
-    initialPageParam: 1,
-    getNextPageParam: (lastPage) => {
-      const { page, limit, total } = lastPage.meta;
-      return page * limit < total ? page + 1 : undefined;
-    },
+    queryFn: ({ pageParam }) => (pageParam.cursor ? fetchOrders(current.filter ?? {}, pageParam.page, PAGE_LIMIT, pageParam.cursor) : fetchOrders(current.filter ?? {}, pageParam.page, PAGE_LIMIT)),
+    initialPageParam: FIRST_PAGE,
+    getNextPageParam: nextPageParam,
     enabled: phase === 'authenticated' && !isSubscriptions && !awaitingTabs,
   });
-  const list = orders.data?.pages.flatMap((pg) => pg.data) ?? [];
+  const list = uniqueById(orders.data?.pages.flatMap((pg) => pg.data) ?? []);
 
   // Chỉ nhắc mã chào mừng khi khách thật sự đang có mã (API trả kèm mã còn dùng được), số lấy từ chính mã đó: config có mệnh giá
   // không có nghĩa khách nhận được (chưa cấp, đã dùng, hết hạn, tài khoản vãng lai). Cùng khoá với khối "Quà khách mới" ở Trang chủ.
