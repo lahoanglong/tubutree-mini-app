@@ -305,13 +305,11 @@ export interface WalletTxn {
 }
 export interface WalletTxnPage {
   data: WalletTxn[];
-  meta: { page: number; limit: number; total: number; nextCursor?: string | null };
+  meta: { page: number; limit: number; total: number };
 }
 export const WALLET_PAGE_SIZE = 20;
-export const getWalletTransactions = (page: number, cursor?: string) =>
-  apiFetch<WalletTxnPage>(
-    `/me/wallet/transactions?page=${page}&limit=${WALLET_PAGE_SIZE}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
-  );
+export const getWalletTransactions = (page: number) =>
+  apiFetch<WalletTxnPage>(`/me/wallet/transactions?page=${page}&limit=${WALLET_PAGE_SIZE}`);
 
 export interface PointsTxn {
   id: string;
