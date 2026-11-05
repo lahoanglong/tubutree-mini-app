@@ -724,14 +724,26 @@ Job `zns-send` nằm ở hàng `notifications` như cũ nên bản cũ xử lý 
 - Xoá cache (ảnh đổi cỡ lỗi, đổi tham số đổi cỡ mà quên tăng `RESIZE_PIPELINE_VERSION`): `$DC exec -T api sh -c 'rm -rf /tmp/tubu-img-cache/*'`. KHÔNG `docker volume rm tubutree_img_cache`: volume tạo lại từ image cũ (chưa có thư mục này) sẽ thuộc root, user `node` không ghi được, mọi `/img` phải đổi cỡ lại và log chỉ có dòng cảnh báo `Không ghi được cache ảnh`.
 - Lỡ gặp volume thuộc root: `docker run --rm -u 0 -v tubutree_img_cache:/d --entrypoint chown "$API_NAME" 1000:1000 /d` rồi `$DC restart api` (`API_NAME` lấy như Bước 2 mục 5; `node` có uid 1000).
 
-### 1.23 Đợt 3 hard/1105 (he, hf, hg): Mini App bản cũ chạy cùng API mới
+### 1.23 Đợt 3 hard/1105 (he, hf, hg): Mini App bản cũ chạy cùng API mới, và khi quay lại
 
-Web và API lên cùng một lần, quay lại cùng cặp (như 1.21). Mini App là bản ZMP riêng, lên sau; trong lúc chờ:
+Web và API lên cùng một lần, quay lại cùng cặp (như 1.21). Mini App là bản ZMP riêng, lên sau.
 
-- **Slug chiến dịch tới 240 ký tự.** API và admin nhận slug sản phẩm/danh mục của chiến dịch tới 240 ký tự (`PRODUCT_SLUG_MAX`). Mini App bản cũ chỉ dựng link cho slug tới 120 ký tự: banner gắn slug dài hơn bị bỏ khỏi carousel, không báo lỗi. Cho tới khi bản ZMP mới lên: không gắn chiến dịch vào sản phẩm/danh mục có slug dài hơn 120 ký tự, hoặc mở Mini App kiểm banner sau khi tạo. Nếu đã quay API về `:prev-*`: lưu lại chiến dịch có slug dài hơn 120 ký tự trên admin cũ bị 400 "Nhập slug sản phẩm hợp lệ." (bản cũ chặn 120); để nguyên hoặc đổi đích.
-- **"Tải thêm" đơn hàng/ví theo con trỏ.** API mới trả `meta.nextCursor`; web mới và Mini App mới gửi lại `cursor` ở trang sau, API cũ không trả thì client tự quay về `page`. Quay API về `:prev-*` giữa lúc khách đang cuộn danh sách thì lần "tải thêm" kế tiếp bị 400 "Không nhận trường «cursor»." một lần; khách tải lại trang là hết. Không cần làm gì thêm.
-- **`GET /products?slugs=` quá 20 mục trả 400** (trước bị cắt im lặng). Web và Mini App chỉ gửi tối đa 20, khách không gặp.
-- Trước deploy (cần chủ cho phép đọc PROD): `SELECT count(*), max(length(slug)) FROM products;` và `SELECT count(*) FROM products WHERE slug LIKE '-%';`. Sản phẩm có slug dài hơn 240 ký tự hoặc bắt đầu bằng `-` (sinh trước bản này) không gắn được vào chiến dịch; khác 0 thì báo điều phối.
+**Trước deploy** (cần chủ cho phép đọc PROD). Slug không khớp `CAMPAIGN_ENTITY_SLUG_RE` thì không gắn được vào chiến dịch. Sản phẩm Pancake sinh trước bản này có thể có slug như vậy. Kết quả khác 0 thì báo điều phối:
+
+```sql
+SELECT count(*) FROM products   WHERE slug !~ '^[A-Za-z0-9][A-Za-z0-9_-]{0,239}$';
+SELECT count(*) FROM categories WHERE slug !~ '^[A-Za-z0-9][A-Za-z0-9_-]{0,239}$';
+```
+
+**Trong lúc Mini App còn bản cũ:**
+- **Slug chiến dịch tới 240 ký tự.** API và admin nhận slug sản phẩm/danh mục của chiến dịch tới 240 ký tự (`PRODUCT_SLUG_MAX`). Mini App bản cũ chỉ dựng link cho slug tới 120 ký tự: banner gắn slug dài hơn bị bỏ khỏi carousel, không báo lỗi. Cho tới khi bản ZMP mới lên: không gắn chiến dịch vào sản phẩm/danh mục có slug dài hơn 120 ký tự, hoặc mở Mini App kiểm banner sau khi tạo.
+- **`GET /products?slugs=` quá 20 mục trả 400** (trước bị cắt im lặng). Web và Mini App (mọi bản) chỉ lưu tối đa 20 mục "Đã xem gần đây", khách không gặp.
+
+**Nếu quay web + API về `:prev-*`:**
+- **Banner gắn slug dài hơn 120 ký tự** biến mất trên web và trên Mini App bản cũ (bản cũ bỏ slide) cho tới khi deploy lại. Muốn banner hiện thì đổi đích sang slug tới 120 ký tự. Form sửa chiến dịch của admin cũ luôn gửi lại đích, nên lưu chiến dịch đó (dù chỉ đổi tiêu đề, ảnh, ngày) bị 400: slug 121–200 ký tự "Nhập slug sản phẩm hợp lệ." (hoặc "danh mục"), 201–240 ký tự "… không được dài quá 200 ký tự.". Đổi đích sang slug tới 120 ký tự rồi mới lưu được.
+- **"Tải thêm" đơn hàng/ví của khách.** API mới trả `meta.nextCursor`; web mới và Mini App mới gửi lại `cursor` ở trang sau, API cũ không trả thì client tự quay về `page`. Khách đang mở danh sách từ trước khi quay lại: mỗi lần bấm "Tải thêm" đều bị 400 "Không nhận trường «cursor»." cho tới khi tải lại trang. Tải lại là hết. Không cần làm gì thêm.
+- **Tab Giờ vàng ở admin.** Admin mới đọc danh sách đợt theo trang (`?status&take&cursor`) và chi tiết qua `GET /admin/flash-sales/:id`; API cũ trả mảng và không có route chi tiết, nên tab lỗi trắng. Tab admin đang mở từ trước khi quay lại thì tải lại trang. Lỗi chỉ gặp lúc web và API lệch bản.
+- **Mini App bản mới đã lên rồi mới quay API:** dải "Đã xem gần đây" gửi chuỗi `slugs` tới 4820 ký tự, API cũ chặn 2000 nên trả 400. Dải không vỡ, chỉ hiện giá đã lưu trên máy. Chat hỗ trợ mở từ sản phẩm có slug dài hơn 120 ký tự cũng bị 400 (API cũ chặn 120, lỗi có từ trước). Quay API lâu thì cân nhắc đưa Mini App về bản build từ commit cũ.
 
 ## 2. Trỏ lại GitHub Actions (máy ảo GCP đã đóng)
 
