@@ -457,6 +457,12 @@ describe('CampaignsAdminService: kiểm sức khoẻ trước khi bật', () => 
       expect(prisma.campaignProduct.findMany).not.toHaveBeenCalled();
     });
 
+    it('trả kèm số món dùng được để form chọn thứ tự gắn', async () => {
+      const { svc } = setup({ healthProducts: [visibleProduct({ id: 'p1' }), visibleProduct({ id: 'p2', isActive: false })] });
+      const out = await svc.check(dto({ productIds: ['p1', 'p2'] }), NOW);
+      expect(out.usable).toEqual({ products: 1, coupons: 0 });
+    });
+
     it('chưa chọn sản phẩm/mã: trang trống là BLOCK', async () => {
       const { svc } = setup();
       const out = await svc.check(dto({ productIds: [], couponCodes: [] }), NOW);

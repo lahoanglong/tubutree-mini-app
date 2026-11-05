@@ -1,4 +1,4 @@
-import { campaignHealth, countHealth, type HealthCoupon, type HealthFacts, type HealthProduct, type HealthSubject } from './campaign-health';
+import { campaignHealth, countHealth, usableCounts, type HealthCoupon, type HealthFacts, type HealthProduct, type HealthSubject } from './campaign-health';
 import { compareBannerOrder } from './campaign-public';
 
 const NOW = new Date('2026-11-05T05:00:00Z');
@@ -202,3 +202,14 @@ describe('compareBannerOrder (cùng thứ tự với truy vấn banner công kha
     expect([...list].sort(compareBannerOrder).map((x) => x.id)).toEqual(['a', 'c', 'd', 'b']);
   });
 });
+
+describe('usableCounts (món dùng được trên trang chiến dịch)', () => {
+  it('đếm sản phẩm khách thấy và mã dùng được đúng như luật trang trống', () => {
+    const f = facts({
+      products: [product(), product({ visible: false }), product({ inStock: false })],
+      coupons: [coupon(), coupon({ code: 'TAT', isActive: false }), coupon({ code: 'CHUA', startAt: at(2) }), coupon({ code: 'HET', endAt: at(-1) })],
+    });
+    expect(usableCounts(subject(), f)).toEqual({ products: 2, coupons: 1 });
+  });
+});
+

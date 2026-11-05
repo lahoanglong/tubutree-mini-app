@@ -7,7 +7,7 @@ import { ImageRegistryStale } from '../catalog/image-registry-stale';
 import { normalizeCouponCode } from '../coupons/coupons.service';
 import { assertWindow, campaignStatus, normalizeLink, slugFromTitle, type CampaignStatus } from './campaign-admin-rules';
 import { countHealth, type HealthIssue, type HealthSubject } from './campaign-health';
-import { campaignHealthBatch } from './campaign-health-loader';
+import { campaignHealthBatch, campaignHealthDetailBatch } from './campaign-health-loader';
 import { CAMPAIGN_MAX_COUPONS, CAMPAIGN_MAX_PRODUCTS, type CheckCampaignDto, type CreateCampaignDto, type UpdateCampaignDto } from './dto/campaign.dto';
 
 export interface AdminCampaignRow {
@@ -34,6 +34,8 @@ export interface AdminCampaignRow {
 
 export interface CampaignCheckResult {
   issues: HealthIssue[];
+  /** Số món khách dùng được trên trang chiến dịch theo danh sách đang soạn (form chọn thứ tự gắn từ đây). */
+  usable: { products: number; coupons: number };
   blockers: number;
   warnings: number;
 }
@@ -146,8 +148,9 @@ export class CampaignsAdminService {
     const fresh = dto.id === undefined;
     const productIds = dto.productIds ?? (fresh ? [] : undefined);
     const couponCodes = dto.couponCodes ?? (fresh ? [] : undefined);
-    const [issues = []] = await campaignHealthBatch(this.prisma, [{ subject, ...(productIds ? { productIds } : {}), ...(couponCodes ? { couponCodes } : {}) }], now);
-    return { issues, ...countHealth(issues) };
+    const [detail] = await campaignHealthDetailBatch(this.prisma, [{ subject, ...(productIds ? { productIds } : {}), ...(couponCodes ? { couponCodes } : {}) }], now);
+    const issues = detail?.issues ?? [];
+    return { issues, usable: detail?.usable ?? { products: 0, coupons: 0 }, ...countHealth(issues) };
   }
 
   /** Bật chiến dịch mà còn lỗi chặn thì 400 với câu đầu tiên. Kiểm lại ngay trong request, không tin gì từ trình duyệt. */
