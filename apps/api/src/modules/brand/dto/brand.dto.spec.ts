@@ -37,3 +37,20 @@ describe('Trần độ dài chữ của DTO nhãn hàng (SEC-V11)', () => {
     expect(await props(cls as never, { ...valid, [field]: 'x'.repeat(max + 1) })).toContain(field);
   });
 });
+
+describe('Tiêu đề khuyến mãi và chương trình đại lý không được rỗng', () => {
+  const messages = async (cls: new () => object, body: object) => (await errors(cls, body)).flatMap((e) => Object.values(e.constraints ?? {}));
+  const valid = { type: 'GIFT', threshold: 1, startAt: '2026-11-01T00:00:00Z', endAt: '2026-11-02T00:00:00Z' };
+
+  it.each([
+    [PromotionDto],
+    [UpdatePromotionDto],
+    [DealerRewardDto],
+    [UpdateDealerRewardDto],
+  ] as const)('%p: tiêu đề toàn khoảng trắng hay ký tự vô hình bị từ chối bằng lời tiếng Việt', async (cls) => {
+    for (const title of ['', '   ', '​', ' ​﻿ ']) {
+      expect(await messages(cls as never, { ...valid, title })).toContain('Tiêu đề không được để trống.');
+    }
+    expect(await messages(cls as never, { ...valid, title: 'Giảm 20%' })).not.toContain('Tiêu đề không được để trống.');
+  });
+});
