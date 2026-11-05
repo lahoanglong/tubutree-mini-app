@@ -337,10 +337,13 @@ export class PancakeOrderService {
   async markPushFailure(orderId: string, err: unknown, final: boolean): Promise<void> {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
-      select: { id: true, code: true, pancakeOrderId: true, createdAt: true, paidAt: true },
+      select: { id: true, code: true, pancakeOrderId: true, createdAt: true, paidAt: true, pancakeLastAttemptAt: true },
     });
     if (!order || order.pancakeOrderId) return;
-    const kind = classifyPushError(err);
+    let kind = classifyPushError(err);
+    // 401/403 trong khi khoá API vừa chứng tỏ còn dùng được là lỗi riêng của đơn này, không phải khoá hỏng: coi như bị từ chối
+    // (đốt lượt, nhịp chậm) để đơn không được thả khỏi nhóm CONFIG rồi hoàn lượt mãi.
+    if (kind === PUSH_ERROR_KIND.CONFIG && (await this.apiKeyProvenRecently(order.pancakeLastAttemptAt))) kind = PUSH_ERROR_KIND.REJECTED;
     // Đang PUSHING = tiến trình khác giữ quyền đẩy (lần này thua tranh chấp): không ghi đè, kẻo mở khoá cho lần tạo thứ hai.
     const idle = { id: order.id, pancakeOrderId: null, OR: [{ pancakePushStatus: null }, { pancakePushStatus: { not: PANCAKE_PUSH.PUSHING } }] };
     await this.prisma.order.updateMany({
@@ -360,6 +363,21 @@ export class PancakeOrderService {
           : `Thử lại không tự hết lỗi: sửa nguyên nhân rồi bấm "Đẩy lại Pancake" (hệ thống chỉ hỏi lại mỗi ${PUSH_RETRY.SLOW_MINUTES} phút).`;
       await flagPancakeAttention(this.prisma, this.alerts, order, `${ATTENTION_PUSH_FAILED} (kho chưa thấy đơn): ${pancakeErrorText(err)}. ${hint}`, this.logger);
     }
+  }
+
+  /**
+   * Khoá API còn dùng được: có đơn khác lên Pancake (lượt đẩy bắt đầu trong 60 phút qua VÀ không sớm hơn lượt đẩy đang lỗi quá
+   * 60 giây). Mốc thứ hai chặn trường hợp khoá bị thu hồi giữa chừng: đơn thành công từ trước đó không chứng minh được gì. Dùng DB
+   * (không cần Redis hay cột mới); chỉ chạy ở nhánh 401/403 hiếm gặp.
+   */
+  private async apiKeyProvenRecently(attemptStartedAt: Date | null): Promise<boolean> {
+    const floor = Date.now() - PUSH_RETRY.SLOW_MINUTES * 60_000;
+    const since = new Date(Math.max(floor, (attemptStartedAt?.getTime() ?? 0) - 60_000));
+    const ok = await this.prisma.order.findFirst({
+      where: { pancakeOrderId: { not: null }, pancakeLastAttemptAt: { gte: since } },
+      select: { id: true },
+    });
+    return ok != null;
   }
 
   /**

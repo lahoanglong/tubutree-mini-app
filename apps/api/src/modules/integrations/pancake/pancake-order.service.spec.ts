@@ -470,6 +470,22 @@ describe('PancakeOrderService.markPushFailure — loại lỗi (hi)', () => {
     expect(t.alerts.alert).not.toHaveBeenCalled();
   });
 
+  it('401/403 riêng một đơn khi khoá vừa được chứng minh còn dùng (đơn khác lên Pancake trong 60 phút): REJECTED, đốt lượt, báo đơn', async () => {
+    const t = setup({ pancakePushStatus: PANCAKE_PUSH.PENDING, pancakePushAttempts: 3, pancakeLastAttemptAt: new Date() });
+    t.rows.push({ ...t.rows[0], id: 'o2', code: 'TUBU2', pancakeOrderId: 'pk-ok', pancakePushStatus: PANCAKE_PUSH.SYNCED, pancakeLastAttemptAt: new Date(Date.now() - 20_000) });
+    await t.svc.markPushFailure('o1', new PancakeApiError('Pancake trả 403 khi tạo đơn', false, false, 403), true);
+    expect(t.row()).toMatchObject({ pancakeErrorKind: 'REJECTED', pancakePushStatus: PANCAKE_PUSH.FAILED, pancakePushAttempts: 3 });
+    expect(t.row().pancakeAttention).toEqual(expect.any(String));
+  });
+
+  it('401/403 khi lần đẩy thành công gần nhất đã cũ (quá 60 phút) hay đứng trước lượt đẩy của đơn: vẫn CONFIG', async () => {
+    const t = setup({ pancakePushStatus: PANCAKE_PUSH.PENDING, pancakePushAttempts: 3, pancakeLastAttemptAt: new Date() });
+    t.rows.push({ ...t.rows[0], id: 'o2', code: 'TUBU2', pancakeOrderId: 'pk-old', pancakePushStatus: PANCAKE_PUSH.SYNCED, pancakeLastAttemptAt: new Date(Date.now() - 3 * 3_600_000) });
+    t.rows.push({ ...t.rows[0], id: 'o3', code: 'TUBU3', pancakeOrderId: 'pk-before', pancakePushStatus: PANCAKE_PUSH.SYNCED, pancakeLastAttemptAt: new Date(Date.now() - 10 * 60_000) });
+    await t.svc.markPushFailure('o1', new PancakeApiError('Pancake trả 403 khi tạo đơn', false, false, 403), true);
+    expect(t.row()).toMatchObject({ pancakeErrorKind: 'CONFIG', pancakePushAttempts: 2 });
+  });
+
   it('lượt đẩy thành công xoá loại lỗi', async () => {
     const t = setup({ pancakePushStatus: PANCAKE_PUSH.FAILED, pancakeErrorKind: 'REJECTED', pancakeSyncError: 'cũ' });
     await t.svc.pushOrder('o1');

@@ -203,6 +203,8 @@ const url = process.env.TEST_REDIS_URL;
   });
 
   it('401 hàng loạt: không đốt lượt từng đơn, không báo từng đơn; cron chỉ dò bằng MỘT đơn, dò thành công thì thả cả nhóm', async () => {
+    // Đơn lên Pancake từ spec trước chứng minh khoá còn dùng: lùi mốc để 401 ở đây là lỗi khoá thật.
+    await prisma.order.updateMany({ where: { pancakeOrderId: { not: null }, pancakeLastAttemptAt: { gte: new Date(Date.now() - 2 * 3_600_000) } }, data: { pancakeLastAttemptAt: new Date(Date.now() - 3 * 3_600_000) } });
     const orders = await Promise.all([order(), order(), order(), order()]);
     respond(() => {
       throw new PancakeApiError('Pancake trả 401 khi tạo đơn: invalid api key', false, false, 401);
@@ -234,5 +236,27 @@ const url = process.env.TEST_REDIS_URL;
     await sleep(300);
     const after = await prisma.order.findMany({ where: { id: { in: ids } } });
     expect(after.filter((r) => r.pancakeOrderId === null).every((r) => r.pancakeErrorKind === null)).toBe(true);
+  });
+
+  it('403 riêng một đơn trong khi đơn khác đẩy được: đơn lỗi thành REJECTED (đốt lượt), không thành CONFIG, cron không dò lại ngay', async () => {
+    const [a, b] = await Promise.all([order(), order()]);
+    respond(async (code) => {
+      if (code === b.code) return { success: true, data: { id: `pk-${code}` } };
+      await until(async () => (await prisma.order.findUniqueOrThrow({ where: { id: b.id } })).pancakeOrderId != null);
+      throw new PancakeApiError('Pancake trả 403 khi tạo đơn: forbidden', false, false, 403);
+    });
+    alerts.alert.mockClear();
+    await Promise.all([service.enqueuePush(a.id), service.enqueuePush(b.id)]);
+    await until(async () => (await prisma.order.findUniqueOrThrow({ where: { id: a.id } })).pancakePushStatus === 'FAILED');
+    const rowA = await prisma.order.findUniqueOrThrow({ where: { id: a.id } });
+    expect(rowA).toMatchObject({ pancakeErrorKind: 'REJECTED', pancakeOrderId: null });
+    expect(rowA.pancakePushAttempts).toBeGreaterThanOrEqual(1);
+    expect(rowA.pancakeAttention).not.toBeNull();
+
+    const callsOfA = () => client.createOrder.mock.calls.filter(([body]) => (body as { custom_id: string }).custom_id === a.code).length;
+    expect(callsOfA()).toBe(1);
+    await reconcile.reconcile();
+    await sleep(300);
+    expect(callsOfA()).toBe(1);
   });
 });
