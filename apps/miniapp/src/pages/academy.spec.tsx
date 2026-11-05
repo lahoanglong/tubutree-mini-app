@@ -131,6 +131,16 @@ describe('AcademyPage — danh sách khoá học, hành vi giữ nguyên khi chu
     expect(container.querySelector('img[src="https://img.test/b.jpg"]')).not.toBeNull();
   });
 
+  it('ảnh bìa tải lỗi (URL chết) thì về biểu tượng sách, không để ảnh vỡ', async () => {
+    mocks.fetchCourses.mockResolvedValue([COURSE('b', { coverUrl: 'https://img.test/chet.jpg' })]);
+    const { container } = renderPage();
+    await screen.findByText('Khoá b');
+    const img = container.querySelector('img[src="https://img.test/chet.jpg"]')!;
+    expect(img).not.toBeNull();
+    fireEvent.error(img);
+    expect(container.querySelector('img')).toBeNull();
+  });
+
   it('bấm một khoá mở /academy/<id>', async () => {
     renderPage();
     fireEvent.click(await screen.findByText('Khoá b'));

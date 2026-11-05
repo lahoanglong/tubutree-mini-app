@@ -391,6 +391,19 @@ describe('CouponBox — gọn một dòng, mở khi bấm', () => {
     expect(box.querySelector('[role="alert"]')!.textContent).toBe('Mã giảm giá đã hết lượt dùng.');
   });
 
+  it('sau khi báo mã lỗi, khách sửa ô nhập thì lời báo cũ biến mất (không treo lỗi của mã khác)', async () => {
+    state.applyError = new Error('Mã giảm giá không tồn tại.');
+    const box = await mount();
+    click(toggle(box));
+    typeInto(box.querySelector('input[name="coupon-code"]'), 'abc');
+    click(byText(box, 'button', 'Áp dụng'));
+    await flush();
+    expect(box.querySelector('[role="alert"]')!.textContent).toBe('Mã giảm giá không tồn tại.');
+    typeInto(box.querySelector('input[name="coupon-code"]'), 'abcd');
+    await flush();
+    expect(box.querySelector('[role="alert"]')).toBeNull();
+  });
+
   it('đã áp mã: chỉ hiện thẻ mã đang dùng, chưa mở ô nhập khi khách chưa bấm', async () => {
     const r = render(<CouponBox currentCode="WELCOME30" subtotal={100000} />);
     mounted.push(r);

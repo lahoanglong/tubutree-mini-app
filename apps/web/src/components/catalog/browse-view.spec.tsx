@@ -268,6 +268,9 @@ describe('BrowseView — danh sách và trạng thái URL', () => {
     expect(nav.replaces[0]).toBe('/san-pham?sort=newest&page=3');
     expect(container.textContent).not.toContain(browseText.noResultFiltered);
     expect(container.querySelector('[data-testid="catalog-grid"]')).toBeNull();
+    // Đang chuyển về trang cuối thì chưa phải "không có kết quả": không hiện kệ gợi ý, không bắn thêm yêu cầu bán chạy.
+    expect(container.querySelector('section[aria-label="Có thể bạn thích"]')).toBeNull();
+    expect(productCalls().some((q) => q?.sort === 'best_seller')).toBe(false);
   });
 
   it('danh sách thật sự rỗng (total = 0) ở trang > 1: không chuyển hướng', async () => {
@@ -960,6 +963,37 @@ describe('BrowseView — tải thêm, rỗng, lỗi', () => {
     await flush();
     expect(container.textContent).toContain('Không tìm thấy "xyz"');
     expect(buttonByName(container, 'Xoá tìm kiếm & bộ lọc')).not.toBeNull();
+  });
+
+  it('tìm không ra: dưới thông báo có kệ "Có thể bạn thích" với sản phẩm bán chạy, không để màn trống', async () => {
+    nav.search = 'q=mat+hoa+dua';
+    routes['/products'] = (q) => (q?.sort === 'best_seller' ? pageOf([product(7), product(8)], 2) : pageOf([], 0));
+    const { container } = mount();
+    await flush(8);
+    expect(container.textContent).toContain('Không tìm thấy "mat hoa dua"');
+    const rail = container.querySelector('section[aria-label="Có thể bạn thích"]');
+    expect(rail).not.toBeNull();
+    expect(rail!.querySelector('a[href="/san-pham/sp-7"]')).not.toBeNull();
+    // Đã nằm trong cột có đệm: kệ không thêm đệm ngang nữa (trước đó lùi vào 32px so với lề 16px của trang).
+    expect(rail!.className).not.toContain('px-4');
+    expect(productCalls().some((q) => q?.sort === 'best_seller')).toBe(true);
+  });
+
+  it('có kết quả: không có kệ "Có thể bạn thích" và không tải thêm kệ bán chạy', async () => {
+    nav.search = 'q=nuoc';
+    const { container } = mount();
+    await flush(8);
+    expect(container.querySelector('section[aria-label="Có thể bạn thích"]')).toBeNull();
+    expect(productCalls().some((q) => q?.sort === 'best_seller')).toBe(false);
+  });
+
+  it('ô tìm ẩn nút xoá gốc của trình duyệt, chỉ còn nút xoá của giao diện (không hiện hai dấu x)', async () => {
+    nav.search = 'q=xyz';
+    const { container } = mount();
+    await flush();
+    const input = container.querySelector<HTMLInputElement>('#browse-q')!;
+    expect(input.className).toContain('[&::-webkit-search-cancel-button]:hidden');
+    expect(container.querySelectorAll(`button[aria-label="${browseText.clearSearch}"]`).length).toBe(1);
   });
 
   it('catalog trống ở danh sách ?all=1: báo chưa có sản phẩm, không có nút xoá bộ lọc', async () => {
