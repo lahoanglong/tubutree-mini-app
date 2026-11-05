@@ -34,7 +34,7 @@ Bấm "Tạo voucher". Khách nhập mã ở ô "Nhập mã giảm giá" khi tha
 
 **Mẫu thông báo.** **Nội dung › Mẫu thông báo.** Mỗi mẫu có "Kênh": "Trong app" hoặc "ZNS + trong app", "Mã mẫu ZNS" và "Nội dung trong app". Khách chỉ nhận tin Zalo khi mẫu là ZNS **và** có mã mẫu Zalo đã duyệt (duyệt 7 đến 14 ngày). Nhãn "Thiếu mã mẫu ZNS": mẫu đó chỉ hiện khi khách mở app. Duyệt xong mẫu thì nhập mã, bấm "Lưu".
 
-**Nhãn hàng.** **Đại lý và đối tác › Nhãn hàng** › "Tạo nhãn" (tên, tagline). Bấm "Quản lý": "Đăng (publish)" hoặc "Ẩn (chuyển nháp)", "Cấp chính hãng", logo, ảnh bìa, nguồn gốc, câu chuyện thương hiệu. "Gán SP theo tên nhãn" gắn sản phẩm có tên khớp. Chỉ gán được, không sửa được các trường khác của sản phẩm.
+**Nhãn hàng.** **Đại lý và đối tác › Nhãn hàng** › "Tạo nhãn" (tên, tagline). Bấm "Quản lý": "Đăng" hoặc "Ẩn (chuyển nháp)", "Cấp chính hãng", logo, ảnh bìa, nguồn gốc, câu chuyện thương hiệu. "Gán SP theo tên nhãn" gắn sản phẩm có tên khớp. Chỉ gán được, không sửa được các trường khác của sản phẩm.
 
 **Nhiệm vụ Vườn Xanh.** **Đổi rác và game › Nhiệm vụ.** Sửa tiêu đề, mô tả, "Điểm thưởng" (0 đến mức tối đa), bấm "Lưu". Điểm mới chỉ áp cho lượt nhận sau khi lưu. Danh mục quà đổi điểm cố định: muốn thêm quà hoặc đổi giá điểm, nhờ kỹ thuật.
 

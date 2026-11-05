@@ -1637,6 +1637,16 @@ describe('admin/page — tab Nhãn hàng', () => {
     expect(mocks.createBrand).toHaveBeenCalledWith({ name: 'Dừa Bến Tre', tagline: undefined });
   });
 
+  it('mở Quản lý nhãn: chữ nhìn thấy bằng tiếng Việt, không còn "verified", "Proof URL", "(publish)"', async () => {
+    mocks.brands = [{ ...BRAND, isPublished: false }];
+    const { container } = await openBrands();
+    await openRow(container);
+    expect(btn(container, 'Đăng')).toBeTruthy();
+    expect(container.querySelector('input[placeholder="Link minh chứng"]')).not.toBeNull();
+    expect([...container.querySelectorAll('label')].some((l) => l.textContent?.trim() === 'Đã xác minh')).toBe(true);
+    expect(container.textContent).not.toMatch(/\bverified\b|Proof URL|\(publish\)/);
+  });
+
   it('hàng nhãn: số người theo dõi từ 1.000 trở lên có dấu chấm ngăn nghìn', async () => {
     mocks.brands = [{ ...BRAND, followerCount: 1234 }];
     const { container } = await openBrands();
@@ -1666,7 +1676,7 @@ describe('admin/page — tab Nhãn hàng', () => {
     await openRow(container);
     expect(btn(container, 'Thu gọn')).toBeTruthy();
 
-    const publish = btn(container, 'Đăng (publish)');
+    const publish = btn(container, 'Đăng');
     expect(publish.className).toContain('min-h-[44px]');
     mocks.updateBrand.mockResolvedValue({});
     click(publish);

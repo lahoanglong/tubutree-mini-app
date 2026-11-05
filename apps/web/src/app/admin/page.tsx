@@ -2986,7 +2986,7 @@ function BrandRow({ brand }: { brand: AdminBrand }) {
         <div className="mt-3 space-y-4 border-t border-stone-200 pt-3">
           <div className="flex flex-wrap gap-2">
             <button onClick={() => patch.mutate({ isPublished: !brand.isPublished })} className={BTN_SECONDARY}>
-              {brand.isPublished ? 'Ẩn (chuyển nháp)' : 'Đăng (publish)'}
+              {brand.isPublished ? 'Ẩn (chuyển nháp)' : 'Đăng'}
             </button>
             <button onClick={() => verify.mutate(!brand.isVerified)} className={`${BTN_SECONDARY} inline-flex items-center gap-1`}>
               {brand.isVerified ? 'Bỏ chính hãng' : <>Cấp <Check className="h-4 w-4" aria-hidden /> chính hãng</>}
@@ -3131,10 +3131,10 @@ function BrandInfoForm({ brand }: { brand: AdminBrand }) {
           <div key={i} className="flex flex-wrap items-center gap-2 text-sm">
             <input placeholder="Mã (ORG)" aria-label={`Mã chứng nhận ${i + 1}`} maxLength={40} value={c.code} onChange={(e) => setCert(i, { code: e.target.value })} className={`${field} w-24`} />
             <input placeholder="Nhãn (Hữu cơ USDA)" aria-label={`Tên chứng nhận ${i + 1}`} maxLength={200} value={c.label} onChange={(e) => setCert(i, { label: e.target.value })} className={`${field} grow basis-40`} />
-            <input placeholder="Proof URL" aria-label={`Link bằng chứng chứng nhận ${i + 1}`} maxLength={500} value={c.proofUrl ?? ''} onChange={(e) => setCert(i, { proofUrl: e.target.value })} className={`${field} w-40`} />
+            <input placeholder="Link minh chứng" aria-label={`Link bằng chứng chứng nhận ${i + 1}`} maxLength={500} value={c.proofUrl ?? ''} onChange={(e) => setCert(i, { proofUrl: e.target.value })} className={`${field} w-40`} />
             <label className="inline-flex min-h-[44px] items-center gap-1.5 text-stone-700 sm:min-h-0">
               <input type="checkbox" className="h-4 w-4 accent-forest-600" checked={c.verified ?? false} onChange={(e) => setCert(i, { verified: e.target.checked })} />
-              <Check className="h-4 w-4" aria-hidden /> verified
+              <Check className="h-4 w-4" aria-hidden /> Đã xác minh
             </label>
             <button onClick={() => setCerts((cs) => cs.filter((_, idx) => idx !== i))} className={`${BTN_LINK_DANGER} text-xs`}>Xoá</button>
           </div>
