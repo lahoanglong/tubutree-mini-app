@@ -9,6 +9,8 @@ import { NOT_NULL_CONSTRAINT } from './decorators/optional-not-null.decorator';
 export const FIELD_LABELS: Record<string, string> = {
   a: 'Câu trả lời',
   rating: 'Số sao',
+  pageUrl: 'Địa chỉ trang sản phẩm',
+  imageUrls: 'Địa chỉ ảnh',
   comment: 'Nội dung đánh giá',
   images: 'Ảnh',
   videoUrl: 'Video',
@@ -199,6 +201,7 @@ export const FIELD_LABELS: Record<string, string> = {
   stock: 'Tồn kho',
   storefront: 'Gian hàng',
   storeFrontUrl: 'Đường dẫn gian hàng',
+  storyConfig: 'Cấu hình câu chuyện sản phẩm',
   story: 'Câu chuyện',
   subdomain: 'Tên miền phụ',
   subtitle: 'Phụ đề',

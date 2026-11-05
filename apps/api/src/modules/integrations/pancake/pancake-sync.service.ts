@@ -11,6 +11,7 @@ import type { PancakeProductDTO, PancakeProductsResponse, PancakeVariationDTO } 
 import { CRON_TZ } from '../../../common/cron-tz';
 import { LEGACY_FAKE_PANCAKE_PREFIX } from './pancake-fulfilment';
 import { pancakeProductSlug } from './pancake-product-slug';
+import { BROKEN_VARIANT_NAME_MARKER, isBrokenVariantName, variantAttributes, variantLabel } from './pancake-variant-fields';
 import { CronLeaderService } from '../../../common/cron-leader/cron-leader.service';
 import { RunLease } from '../../../common/cron-leader/run-lease';
 import { SystemConfigService } from '../../system-config/system-config.service';
@@ -475,7 +476,7 @@ export class PancakeSyncService implements OnModuleInit {
       // So giá cũ ↔ mới để phát hiện GIẢM GIÁ (§6.14.10 Price Drop Alert).
       const prev = await this.prisma.variation.findUnique({
         where: { pancakeId: v.id },
-        select: { retailPrice: true, salePrice: true, isActive: true, pancakeHold: true },
+        select: { retailPrice: true, salePrice: true, isActive: true, pancakeHold: true, name: true },
       });
       const { prices, noPrice } = this.variationPrices(v, prev);
       const hold = this.holdPatch(prev, v.is_removed ? PANCAKE_HOLD.REMOVED : noPrice ? PANCAKE_HOLD.NO_PRICE : null);
@@ -492,7 +493,7 @@ export class PancakeSyncService implements OnModuleInit {
         where: { pancakeId: v.id },
         update: {
           sku: v.sku ?? v.id,
-          attributes: v.fields ?? {},
+          attributes: variantAttributes(v.fields),
           ...prices,
           ...hold,
           weight: v.weight ?? null,
@@ -503,8 +504,8 @@ export class PancakeSyncService implements OnModuleInit {
           pancakeId: v.id,
           productId: product.id,
           sku: v.sku ?? v.id,
-          name: v.fields ? Object.values(v.fields).join(' - ') : p.name,
-          attributes: v.fields ?? {},
+          name: variantLabel(v.fields) ?? p.name,
+          attributes: variantAttributes(v.fields),
           retailPrice: prices.retailPrice ?? 0,
           salePrice: prices.salePrice ?? null,
           ...hold,
@@ -513,6 +514,14 @@ export class PancakeSyncService implements OnModuleInit {
           weight: v.weight ?? null,
         },
       });
+      // Tên chỉ ghi lúc tạo, nên dòng đã ghi hỏng thì lành ở đây. Câu UPDATE tự kiểm lại tên VẪN còn dấu hiệu hỏng: admin sửa
+      // tay giữa lúc đọc `prev` và lúc này thì không bị đè.
+      if (isBrokenVariantName(prev?.name)) {
+        await this.prisma.variation.updateMany({
+          where: { pancakeId: v.id, name: { contains: BROKEN_VARIANT_NAME_MARKER } },
+          data: { name: variantLabel(v.fields) ?? p.name },
+        });
+      }
       // `remain_quantity` vắng mặt (null/undefined) = Pancake KHÔNG nói gì về tồn kho lần này.
       // Trước đây `?? 0` biến "không biết" thành "hết hàng" và xoá sạch tồn của variation đó.
       // Kèm lúc đọc: webhook nhận sau lúc đọc đã áp trong lúc lượt này chạy thì số đọc trước đó không ghi đè (R5-SYNC-3).

@@ -79,7 +79,7 @@ describe('ProductDetailPage — phân loại mở sẵn theo cùng luật với 
   it('không có Giờ vàng: mở phân loại đại diện 500g', async () => {
     mocks.fetchActiveFlashSales.mockResolvedValue([]);
     renderPdp();
-    await screen.findByText('500g');
+    await screen.findAllByText('500g');
     expect(chip('500g')).toHaveAttribute('aria-pressed', 'true');
     expect(chip('1kg')).toHaveAttribute('aria-pressed', 'false');
   });
@@ -87,7 +87,7 @@ describe('ProductDetailPage — phân loại mở sẵn theo cùng luật với 
   it('Giờ vàng 1kg 100.000đ rẻ hơn thẻ, vào không kèm state (gợi ý tìm, bài cộng đồng, Đã xem gần đây): mở 1kg, giá 100.000đ như thẻ', async () => {
     mocks.fetchActiveFlashSales.mockResolvedValue([flash('v-1kg', 100_000, 300_000)]);
     renderPdp();
-    await screen.findByText('1kg');
+    await screen.findAllByText('1kg');
     expect(chip('1kg')).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getAllByText('100.000đ').length).toBeGreaterThan(0);
   });
@@ -95,7 +95,7 @@ describe('ProductDetailPage — phân loại mở sẵn theo cùng luật với 
   it('Giờ vàng 1kg 250.000đ đắt hơn thẻ: mở 500g, không nhãn Giờ vàng', async () => {
     mocks.fetchActiveFlashSales.mockResolvedValue([flash('v-1kg', 250_000, 300_000)]);
     renderPdp();
-    await screen.findByText('500g');
+    await screen.findAllByText('500g');
     expect(chip('500g')).toHaveAttribute('aria-pressed', 'true');
   });
 
@@ -105,7 +105,7 @@ describe('ProductDetailPage — phân loại mở sẵn theo cùng luật với 
   ])('hai suất: mở phân loại của suất thắng (500g 120.000đ), %s', async (_n, items) => {
     mocks.fetchActiveFlashSales.mockResolvedValue(items);
     renderPdp();
-    await screen.findByText('500g');
+    await screen.findAllByText('500g');
     expect(chip('500g')).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getAllByText('120.000đ').length).toBeGreaterThan(0);
   });
@@ -113,21 +113,21 @@ describe('ProductDetailPage — phân loại mở sẵn theo cùng luật với 
   it('state.variationId còn Giờ vàng: ưu tiên phân loại đó dù suất khác rẻ hơn', async () => {
     mocks.fetchActiveFlashSales.mockResolvedValue([flash('v-1kg', 140_000, 300_000), flash('v-500', 120_000, 150_000)]);
     renderPdp({ variationId: 'v-1kg' });
-    await screen.findByText('1kg');
+    await screen.findAllByText('1kg');
     expect(chip('1kg')).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('state.variationId của suất đã hết: về phân loại mặc định', async () => {
     mocks.fetchActiveFlashSales.mockResolvedValue([]);
     renderPdp({ variationId: 'v-1kg' });
-    await screen.findByText('500g');
+    await screen.findAllByText('500g');
     expect(chip('500g')).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('B-140: state.pinnedVariationId (món gian hàng CTV ghim) mở đúng phân loại ghim dù không có Giờ vàng', async () => {
     mocks.fetchActiveFlashSales.mockResolvedValue([]);
     renderPdp({ pinnedVariationId: 'v-1kg' });
-    await screen.findByText('1kg');
+    await screen.findAllByText('1kg');
     expect(chip('1kg')).toHaveAttribute('aria-pressed', 'true');
   });
 
@@ -135,7 +135,7 @@ describe('ProductDetailPage — phân loại mở sẵn theo cùng luật với 
     let release: (v: unknown[]) => void = () => undefined;
     mocks.fetchActiveFlashSales.mockReturnValue(new Promise((r) => { release = r; }));
     renderPdp();
-    await screen.findByText('500g');
+    await screen.findAllByText('500g');
     expect(chip('500g')).toHaveAttribute('aria-pressed', 'true');
     release([flash('v-1kg', 100_000, 300_000)]);
     await waitFor(() => expect(chip('1kg')).toHaveAttribute('aria-pressed', 'true'));
@@ -147,7 +147,7 @@ describe('ProductDetailPage — phân loại mở sẵn theo cùng luật với 
     let release: (v: unknown[]) => void = () => undefined;
     mocks.fetchActiveFlashSales.mockReturnValue(new Promise((r) => { release = r; }));
     renderPdp();
-    await screen.findByText('500g');
+    await screen.findAllByText('500g');
     fireEvent.click(await screen.findByRole('button', { name: /Thêm vào giỏ/ }));
     const confirm = await screen.findAllByRole('button', { name: /Thêm vào giỏ · / });
     fireEvent.click(confirm[confirm.length - 1]!);
@@ -163,7 +163,7 @@ describe('ProductDetailPage — phân loại mở sẵn theo cùng luật với 
     mocks.addToCart.mockResolvedValue({ items: [], itemCount: 1 });
     mocks.fetchActiveFlashSales.mockResolvedValue([]);
     renderPdp();
-    await screen.findByText('500g');
+    await screen.findAllByText('500g');
     fireEvent.click(await screen.findByRole('button', { name: /Thêm vào giỏ/ }));
     const group = await screen.findByRole('group', { name: 'Phân loại' });
     expect(mocks.addToCart).not.toHaveBeenCalled();
@@ -178,7 +178,7 @@ describe('ProductDetailPage — phân loại mở sẵn theo cùng luật với 
     mocks.addToCart.mockResolvedValue({ items: [], itemCount: 1 });
     mocks.fetchActiveFlashSales.mockResolvedValue([]);
     renderPdp();
-    await screen.findByText('500g');
+    await screen.findAllByText('500g');
     fireEvent.click(await screen.findByRole('button', { name: /Thêm vào giỏ/ }));
     await screen.findByRole('group', { name: 'Phân loại' });
     const confirm = await screen.findAllByRole('button', { name: /Thêm vào giỏ · / });
@@ -206,7 +206,7 @@ describe('ProductDetailPage — phân loại mở sẵn theo cùng luật với 
     let release: (v: unknown[]) => void = () => undefined;
     mocks.fetchActiveFlashSales.mockReturnValue(new Promise((r) => { release = r; }));
     renderPdp();
-    await screen.findByText('500g');
+    await screen.findAllByText('500g');
     fireEvent.click(chip('500g'));
     release([flash('v-1kg', 100_000, 300_000)]);
     await new Promise((r) => setTimeout(r, 30));
@@ -218,14 +218,14 @@ describe('ProductDetailPage — phân loại mở sẵn theo cùng luật với 
     mocks.fetchProduct.mockResolvedValue({ ...product, variations: [product.variations[0]!, { ...product.variations[1]!, stock: 0 }].reverse() });
     mocks.fetchActiveFlashSales.mockResolvedValue([flash('v-500', 90_000, 150_000)]);
     renderPdp();
-    await screen.findByText('1kg');
+    await screen.findAllByText('1kg');
     expect(chip('1kg')).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('Giờ vàng lỗi: vẫn mở trang với phân loại đại diện', async () => {
     mocks.fetchActiveFlashSales.mockRejectedValue(new Error('x'));
     renderPdp();
-    await screen.findByText('500g');
+    await screen.findAllByText('500g');
     expect(chip('500g')).toHaveAttribute('aria-pressed', 'true');
   });
 });

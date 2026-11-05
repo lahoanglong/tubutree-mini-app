@@ -107,7 +107,8 @@ export default function AddToCart({
   const [success, setSuccess] = useState(false);
   // Câu về mã nhóm chưa áp được: màu cảnh báo, tách khỏi câu "Đã thêm vào giỏ!" (đã thành công) kẻo hai ý trái nhau chung một màu.
   const [warn, setWarn] = useState<string | null>(null);
-  const userPicked = useRef(false);
+  const ownPicked = useRef(false);
+  const userPicked = shared?.userPicked ?? ownPicked;
   const [sheetMode, setSheetMode] = useState<VariationSheetMode | null>(null);
   const [sheetOpened, setSheetOpened] = useState(false);
 
@@ -136,6 +137,10 @@ export default function AddToCart({
   // trường hợp chuyển sang phân loại còn ít/hết hàng nhưng vẫn giữ số lượng của phân loại cũ,
   // dẫn đến gửi lên giỏ hàng số lượng vượt tồn kho (hoặc bằng 0 nếu hết hàng).
   const maxQty = Math.max(selected?.stock ?? 1, 1);
+  // Khung câu chuyện (PdpStory) có thanh mua riêng, nên cần biết khối mua đang cho mua hay không: khoá nút khi hết hàng hoặc gian hàng tạm nghỉ.
+  const setBuyable = shared?.setBuyable;
+  const buyable = available && !blockedReason;
+  useEffect(() => setBuyable?.(buyable), [buyable, setBuyable]);
 
   // Đổi phân loại → reset số lượng về 1 thay vì giữ số lượng cũ (có thể vượt tồn kho mới).
   // Chọn từ bảng phân loại thì giữ số lượng khách vừa chọn trong bảng.
@@ -393,7 +398,7 @@ export default function AddToCart({
         <span className="text-sm font-semibold text-stone-900 md:hidden">Số lượng</span>
         <QuantitySelector value={qty} max={maxQty} onChange={setQty} />
         {/* Từ md: nút thêm giỏ ngay cạnh số lượng. Dưới md hai nút nằm ở thanh dính đáy (bên dưới). */}
-        <button type="button" onClick={onAdd} disabled={cannotBuy} aria-disabled={busy || undefined} className={`${ui.btnSecondary} hidden flex-1 md:inline-flex`}>
+        <button type="button" data-testid="pdp-add-to-cart" onClick={onAdd} disabled={cannotBuy} aria-disabled={busy || undefined} className={`${ui.btnSecondary} hidden flex-1 md:inline-flex`}>
           {addLabel}
         </button>
       </div>
@@ -407,7 +412,7 @@ export default function AddToCart({
           <p className={`text-sm text-[var(--color-text-secondary)] md:pt-2 ${phoneCaption} ${phoneBandPad} max-md:pb-3`}>{overLimitText}</p>
         )}
       </div>
-      <button type="button" onClick={onBuyNow} disabled={cannotBuy} aria-disabled={busy || undefined} className={`${ui.btnPrimary} mt-3 hidden w-full md:inline-flex`}>
+      <button type="button" data-testid="pdp-buy-now" onClick={onBuyNow} disabled={cannotBuy} aria-disabled={busy || undefined} className={`${ui.btnPrimary} mt-3 hidden w-full md:inline-flex`}>
         {buyLabel}
       </button>
 
@@ -449,7 +454,7 @@ export default function AddToCart({
           </Link>
           {available ? (
             <div className="flex min-w-0 flex-1 gap-2.5">
-              <button type="button" onClick={onAdd} disabled={cannotBuy} aria-disabled={busy || undefined} className={`${uiBar.secondary} ${phoneSecondary} min-w-0 flex-1`}>
+              <button type="button" data-testid="pdp-add-to-cart" onClick={onAdd} disabled={cannotBuy} aria-disabled={busy || undefined} className={`${uiBar.secondary} ${phoneSecondary} min-w-0 flex-1`}>
                 {busy && !buying ? 'Đang thêm…' : 'Thêm vào giỏ'}
               </button>
               {/* Hai dòng (nhãn + giá) như Mini App: một dòng "Mua ngay · giá" tràn ở 320-390px. */}

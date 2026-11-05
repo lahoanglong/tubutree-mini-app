@@ -497,6 +497,8 @@ model Product {
   forSegment       String[]
   ingredients      Json?
   certifications   String[]
+  /// Cấu hình câu chuyện sản phẩm (ProductStoryConfig, kiểm bằng parseStoryConfig của shared-types). NULL = dùng preset hoặc tự sinh từ thành phần.
+  storyConfig      Json?
   variations       Variation[]
   reviews          Review[]
   groupBuys        GroupBuy[]

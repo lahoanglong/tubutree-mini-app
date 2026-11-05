@@ -177,6 +177,19 @@
 
   --color-rating: var(--honey-500);
 
+  /* Dải câu chuyện sản phẩm: quầng nền đổi theo biến thể và màu nét của sprite nguyên liệu (trang trí, không mang chữ). */
+  --color-story-ambient-leaf: var(--forest-100);
+  --color-story-ambient-amber: var(--amber-50);
+  --color-story-ambient-rose: var(--red-50);
+  --color-story-ambient-sky: var(--blue-50);
+  --color-story-ambient-sand: var(--stone-100);
+  --color-story-tone-leaf: var(--forest-500);
+  --color-story-tone-amber: var(--honey-500);
+  --color-story-tone-rose: var(--red-600);
+  --color-story-tone-sky: var(--blue-600);
+  --color-story-tone-sand: var(--stone-300);
+  --color-story-tone-ink: var(--stone-800);
+
   /* Commerce: nền ô ảnh/bìa/chip, rãnh tiến độ, phiếu giảm giá, hạng, đồng hồ. */
   --color-bg-media: var(--stone-100); /* nền ô ảnh sản phẩm và khung chờ ảnh */
   --color-bg-cover: var(--forest-700); /* bìa gian hàng/thương hiệu chưa có ảnh */

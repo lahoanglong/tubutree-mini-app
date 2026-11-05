@@ -201,6 +201,7 @@ export class CatalogService {
     metaDesc: true,
     forSegment: true,
     ingredients: true,
+    storyConfig: true,
     certifications: true,
     storefrontId: true,
     approvalStatus: true,

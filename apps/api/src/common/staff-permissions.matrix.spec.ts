@@ -213,6 +213,8 @@ const EXPECTED: Record<string, Access> = {
   'POST /admin/payroll/adjust': ADMIN_ONLY,
   'GET /admin/catalog-products/:id': ADMIN_ONLY,
   'PATCH /admin/catalog-products/:id': ADMIN_ONLY,
+  'POST /admin/products/:id/story-assets/extract': ADMIN_ONLY,
+  'POST /admin/products/:id/story-config/generate': ADMIN_ONLY,
   'POST /admin/product-categories/assign': ADMIN_ONLY,
   'GET /admin/categories': ADMIN_ONLY,
   'POST /admin/categories': ADMIN_ONLY,

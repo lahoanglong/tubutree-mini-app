@@ -68,3 +68,5 @@ export { MoveButtons } from './move-buttons';
 export type { MoveButtonsProps } from './move-buttons';
 export { QuestStrip } from './quest-strip';
 export type { QuestStripProps } from './quest-strip';
+export { ProductStoryShowcase } from './product-story-showcase';
+export type { ProductStoryShowcaseProps } from './product-story-showcase';

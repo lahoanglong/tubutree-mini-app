@@ -396,7 +396,7 @@ describe('PancakeSyncService — tồn kho không còn ghi đè tuyệt đối',
 
 });
 
-type Model = { findMany: jest.Mock; updateMany: jest.Mock; upsert: jest.Mock; create: jest.Mock; update: jest.Mock };
+type Model = { findMany: jest.Mock; findUnique: jest.Mock; updateMany: jest.Mock; upsert: jest.Mock; create: jest.Mock; update: jest.Mock };
 type M = { variation: Model; product: Model };
 const mk = (prisma: PrismaService) => prisma as unknown as M;
 const variation = (id: string, over: Record<string, unknown> = {}) => ({ id, sku: id, retail_price: 1000, fields: {}, ...over });
@@ -928,3 +928,70 @@ describe('PancakeSyncService + ImageResizeService — tích hợp (R-182)', () =
   });
 });
 
+
+describe('PancakeSyncService — tên và phân loại biến thể từ payload Pancake', () => {
+  const PANCAKE_FIELDS = [{ id: 'ecbe456a-1111-4222-8333-444455556666', name: 'PHÂN LOẠI', value: '1 chai', keyValue: '1 CHAI' }];
+  const ACTIVE_PREV = { retailPrice: 1000, salePrice: null, isActive: true, pancakeHold: null };
+
+  const run = async (v: Record<string, unknown>, prev: Record<string, unknown> | null = null) => {
+    const prisma = makePrisma({ variation: { findUnique: jest.fn().mockResolvedValue(prev) } });
+    await new PancakeSyncService(prisma, makeClient([[product('a', [v])]]), lifecycle).syncProducts('2026-11-05T00:00:00.000Z');
+    return { prisma, upsert: mk(prisma).variation.upsert.mock.calls[0][0], updateMany: mk(prisma).variation.updateMany };
+  };
+
+  it('tạo biến thể từ payload dạng mảng: tên là value, không phải "[object Object]", attributes là {tên: giá trị}', async () => {
+    const { upsert } = await run(variation('v-a', { fields: PANCAKE_FIELDS }));
+    expect(upsert.create.name).toBe('1 chai');
+    expect(upsert.create.attributes).toEqual({ 'PHÂN LOẠI': '1 chai' });
+    expect(upsert.update.attributes).toEqual({ 'PHÂN LOẠI': '1 chai' });
+  });
+
+  it('nhiều phân loại nối " - " theo thứ tự Pancake', async () => {
+    const { upsert } = await run(variation('v-a', { fields: [{ name: 'MÀU', value: 'Đỏ' }, { name: 'SIZE', value: 'L' }] }));
+    expect(upsert.create.name).toBe('Đỏ - L');
+  });
+
+  it('payload dạng object {tên: giá trị} vẫn cho tên đúng', async () => {
+    const { upsert } = await run(variation('v-a', { fields: { size: '100ml' } }));
+    expect(upsert.create.name).toBe('100ml');
+    expect(upsert.create.attributes).toEqual({ size: '100ml' });
+  });
+
+  it.each([[[]], [{}], [null], [undefined], [[null, { name: 'A', value: '  ' }]]])('phân loại rỗng hoặc rác %j: tên rơi về tên sản phẩm, attributes {}', async (fields) => {
+    const { upsert } = await run(variation('v-a', { fields }));
+    expect(upsert.create.name).toBe('Nước rửa chén');
+    expect(upsert.create.attributes).toEqual({});
+  });
+
+  it('biến thể đang mang "[object Object]": tên được sửa bằng một câu updateMany chỉ khớp khi tên VẪN còn dấu hiệu hỏng', async () => {
+    const { upsert, updateMany, prisma } = await run(variation('v-a', { fields: PANCAKE_FIELDS }), { ...ACTIVE_PREV, name: '[object Object]' });
+    expect(mk(prisma).variation.updateMany).toHaveBeenCalledWith({
+      where: { pancakeId: 'v-a', name: { contains: '[object Object]' } },
+      data: { name: '1 chai' },
+    });
+    expect(updateMany).toHaveBeenCalledTimes(1);
+    expect(upsert.update).not.toHaveProperty('name');
+  });
+
+  it('tên hỏng mà payload không đọc được phân loại: sửa về tên sản phẩm', async () => {
+    const { updateMany } = await run(variation('v-a', { fields: [] }), { ...ACTIVE_PREV, name: '[object Object] - [object Object]' });
+    expect(updateMany).toHaveBeenCalledWith({ where: { pancakeId: 'v-a', name: { contains: '[object Object]' } }, data: { name: 'Nước rửa chén' } });
+  });
+
+  it('tên do admin sửa tay (không chứa dấu hiệu hỏng): giữ nguyên, không ghi name', async () => {
+    const { upsert, updateMany } = await run(variation('v-a', { fields: PANCAKE_FIELDS }), { ...ACTIVE_PREV, name: 'Chai 500ml (admin đặt)' });
+    expect(updateMany).not.toHaveBeenCalled();
+    expect(upsert.update).not.toHaveProperty('name');
+  });
+
+  it('tên đã đúng như Pancake: không ghi gì thêm', async () => {
+    const { upsert, updateMany } = await run(variation('v-a', { fields: PANCAKE_FIELDS }), { ...ACTIVE_PREV, name: '1 chai' });
+    expect(updateMany).not.toHaveBeenCalled();
+    expect(upsert.update).not.toHaveProperty('name');
+  });
+
+  it('đọc tên hiện tại của biến thể để quyết định (select có name)', async () => {
+    const { prisma } = await run(variation('v-a', { fields: PANCAKE_FIELDS }), ACTIVE_PREV);
+    expect(mk(prisma).variation.findUnique).toHaveBeenCalledWith(expect.objectContaining({ select: expect.objectContaining({ name: true }) }));
+  });
+});

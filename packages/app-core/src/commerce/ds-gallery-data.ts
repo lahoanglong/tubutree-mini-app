@@ -1,4 +1,4 @@
-import type { ProductCard } from '../api/catalog';
+import type { ProductCard, ProductDetail } from '../api/catalog';
 import type { CouponDTO } from '../api/loyalty';
 import { productCardView, type ProductCardView } from './product-card-view';
 import { pickerRows, type PickerRow } from './voucher-picker';
@@ -114,4 +114,44 @@ export const GALLERY_SORT_OPTIONS: { value: string; label: string; spoken?: stri
   { value: 'best', label: 'Bán chạy' },
   { value: 'new', label: 'Mới' },
   { value: 'price', label: 'Giá ⇅', spoken: 'Giá, đổi chiều sắp xếp' },
+];
+
+const storyVariation = (id: string, name: string, price: number) => ({ id, sku: id, name, attributes: {}, retailPrice: price, salePrice: null, stock: 20 });
+
+/**
+ * Sản phẩm giả cho `ProductStoryShowcase` trong gallery: slug thật của một sản phẩm có kịch bản mẫu (vẽ đủ vòng cung, 5 bước, điểm chỉ),
+ * slug lạ có thành phần (tự sinh), và sản phẩm chỉ có biến thể (chỉ vòng cung).
+ */
+const STORY_BASE = {
+  brand: 'Pơ Lang',
+  shortDesc: 'Dầu gội thảo dược tinh dầu bưởi.',
+  description: 'Dầu gội thảo dược tinh dầu bưởi, giảm gãy rụng.',
+  images: [],
+  thumbnail: null,
+  basePrice: 165_000,
+  salePrice: null,
+  certifications: ['Vegan'],
+} as const;
+export const GALLERY_STORY_PRODUCTS: { label: string; product: ProductDetail }[] = [
+  {
+    label: 'kịch bản mẫu theo slug: vòng cung, 5 bước, điểm chỉ',
+    product: { ...STORY_BASE, id: 'gs1', slug: 'dau-goi-buoi-po-lang', name: 'Dầu gội bưởi Pơ Lang', certifications: [...STORY_BASE.certifications], images: [], variations: [storyVariation('v1', '300ml', 165_000), storyVariation('v2', '500ml', 245_000)] },
+  },
+  {
+    label: 'tự sinh từ thành phần (slug chưa có kịch bản)',
+    product: {
+      ...STORY_BASE,
+      id: 'gs2',
+      slug: 'san-pham-moi',
+      name: 'Dầu gội mới',
+      certifications: [],
+      images: [],
+      ingredients: [{ name: 'Bồ kết', percentage: '3%', benefit: 'Làm sạch dịu nhẹ' }, { name: 'Hương nhu', benefit: 'Thư giãn da đầu' }],
+      variations: [storyVariation('v1', '300ml', 165_000)],
+    },
+  },
+  {
+    label: 'chỉ có biến thể: chỉ vòng cung',
+    product: { ...STORY_BASE, id: 'gs3', slug: 'san-pham-hai-loai', name: 'Sản phẩm hai loại', certifications: [], images: [], variations: [storyVariation('v1', '250g', 99_000), storyVariation('v2', '500g', 179_000)] },
+  },
 ];

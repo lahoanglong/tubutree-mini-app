@@ -198,6 +198,20 @@ describe('evaluateDb', () => {
       expect(byId(run(behind(1_000, [name]), 'pre-deploy'), 'db.pending_scope').status).toBe('PASS');
     });
 
+    it('câu chuyện sản phẩm: migration thêm cột JSONB NULL trên products nằm trong danh sách tương thích image, không phải migration nặng', () => {
+      const name = '20261105200000_product_story_config';
+      expect(IMAGE_COMPATIBLE_MIGRATIONS).toContain(name);
+      expect(HEAVY_MIGRATIONS.map((m) => m.name)).not.toContain(name);
+      expect(byId(run(behind(1_000, [name]), 'pre-deploy'), 'db.pending_scope').status).toBe('PASS');
+    });
+
+    it('w5: migration dữ liệu sửa tên biến thể nằm trong danh sách tương thích image, không phải migration nặng', () => {
+      const name = '20261105230000_w5_variation_name_repair';
+      expect(IMAGE_COMPATIBLE_MIGRATIONS).toContain(name);
+      expect(HEAVY_MIGRATIONS.map((m) => m.name)).not.toContain(name);
+      expect(byId(run(behind(1_000, [name]), 'pre-deploy'), 'db.pending_scope').status).toBe('PASS');
+    });
+
     it('w7: migration gỡ chỉ mục một phần của log ZNS FAILED nằm trong danh sách tương thích image, không phải migration nặng', () => {
       const name = '20261106010000_w7_drop_zns_failed_sentat_index';
       expect(IMAGE_COMPATIBLE_MIGRATIONS).toContain(name);

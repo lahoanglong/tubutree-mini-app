@@ -104,6 +104,7 @@ test.describe('Web khách: trang sản phẩm khổ điện thoại giống Mini
       'pdp-notes',
       'pdp-variation-chips',
       'pdp-quantity',
+      'pdp-story',
       'pdp-bundles',
       'pdp-quick-reviews',
       'pdp-groupbuy',
