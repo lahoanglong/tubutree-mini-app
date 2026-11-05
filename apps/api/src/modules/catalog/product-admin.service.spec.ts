@@ -123,6 +123,14 @@ describe('ProductAdminService — sửa sản phẩm', () => {
     }
   });
 
+  it('mô tả 6000 ký tự có khoảng trắng hai đầu qua pipe và được cắt khoảng trắng (đo sau trim như mô tả ngắn); 6001 ký tự thật vẫn bị chặn', async () => {
+    const pipe = createValidationPipe();
+    const run = (body: object) => pipe.transform(body, { type: 'body', metatype: UpdateProductDto, data: undefined }).then((v) => v as UpdateProductDto, (e: { response: { message: string[] } }) => e.response.message);
+    const core = 'a'.repeat(6000);
+    expect(await run({ description: `  ${core}\n ` })).toMatchObject({ description: core });
+    expect(await run({ description: `  ${core}b ` })).toEqual(['Mô tả không được dài quá 6000 ký tự.']);
+  });
+
   it('pipe chặn mô tả 6001 ký tự và mô tả ngắn 401 ký tự bằng câu tiếng Việt', async () => {
     const pipe = createValidationPipe();
     const run = (body: object) => pipe.transform(body, { type: 'body', metatype: UpdateProductDto, data: undefined }).then(() => null, (e: { response: { message: string[] } }) => e.response.message);

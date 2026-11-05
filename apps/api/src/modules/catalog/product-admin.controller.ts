@@ -13,7 +13,7 @@ const IMAGE_MAX = 1_500_000;
 
 export class UpdateProductDto {
   @OptionalNotNull() @IsArray() @ArrayMaxSize(PRODUCT_IMAGES_MAX) @IsString({ each: true }) @MaxLength(IMAGE_MAX, { each: true }) images?: string[];
-  @OptionalNotNull() @IsString() @MaxLength(6000) description?: string;
+  @OptionalNotNull() @Transform(trim) @IsString() @MaxLength(6000) description?: string;
   /** null hoặc chuỗi rỗng = xoá mô tả ngắn. */
   @IsOptional() @ValidateIf((_, v) => v !== null) @Transform(trim) @IsString() @MaxLength(400) shortDesc?: string | null;
   @OptionalNotNull() @IsBoolean() isActive?: boolean;
