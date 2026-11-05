@@ -263,14 +263,17 @@ describe('AddressForm — khổ điện thoại giống Mini App', () => {
     expect(headingClasses).toContain('md:not-sr-only');
   });
 
-  it('nhãn và lời báo lỗi cỡ 13px (text-caption), không dùng text-xs 12px', async () => {
+  it('nhãn dùng bậc field-label (12px/500), lời báo lỗi cỡ 13px (text-caption), không dùng text-xs', async () => {
     mocks.me = {};
     const c = await mount();
     click(saveBtn(c));
     await flush();
     const labels = Array.from(c.querySelectorAll('form label > span'));
     expect(labels.length).toBeGreaterThan(0);
-    for (const l of labels) expect(l.className).toContain('text-caption');
+    for (const l of labels) {
+      expect(l.className).toContain('text-field-label');
+      expect(l.className).not.toContain('text-xs');
+    }
     const errors = Array.from(c.querySelectorAll('form p[id]'));
     expect(errors.length).toBeGreaterThan(0);
     for (const e of errors) {

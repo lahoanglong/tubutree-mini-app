@@ -1,5 +1,6 @@
 import type { CardVariant } from '@tubutree/app-core/commerce/product-card-view';
 import { tileBodyHeight, TILE_METRICS } from '@tubutree/app-core/commerce/tile-metrics';
+import { POST_CARD_SKELETON, POST_CARD_SKELETON_LINES } from '@tubutree/app-core/community-skeleton';
 
 /**
  * Skeleton loading theo spec §7.7: first-load dùng skeleton match đúng layout cuối,
@@ -74,6 +75,48 @@ export function ProductTileSkeleton({ variant = 'grid', brand, note = false, foo
         </div>
         {footerHeight ? <div style={{ height: footerHeight }} /> : null}
       </div>
+    </div>
+  );
+}
+
+export interface PostCardSkeletonProps {
+  /** Chỗ gọi đặt lớp ngoài (web thêm lớp tràn ngang ở điện thoại); Mini không dùng. */
+  className?: string;
+}
+
+/**
+ * Khung chờ thẻ bài đăng của bảng tin: nền thẻ, lề trong và chiều cao theo `POST_CARD_SKELETON` (app-core, dùng chung với web) nên danh sách không nhảy
+ * khi bài về. Tràn ngang như thẻ thật; khe giữa các thẻ do chỗ gọi đặt bằng `POST_CARD_SKELETON.gap`.
+ */
+export function PostCardSkeleton({ className }: PostCardSkeletonProps) {
+  const m = POST_CARD_SKELETON;
+  return (
+    <div
+      data-testid="post-card-skeleton"
+      aria-hidden="true"
+      {...(className ? { className } : null)}
+      style={{
+        boxSizing: 'border-box',
+        height: m.height,
+        padding: m.inset,
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: m.gap,
+        background: 'var(--color-bg-surface)',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: m.gap }}>
+        <Skeleton width={m.avatar} height={m.avatar} radius="var(--radius-pill)" style={{ flex: '0 0 auto' }} />
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: m.tight }}>
+          <Skeleton width="35%" height={m.author} />
+          <Skeleton width="55%" height={m.meta} />
+        </div>
+      </div>
+      <Skeleton width="70%" height={m.title} />
+      {POST_CARD_SKELETON_LINES.map((w) => (
+        <Skeleton key={w} width={w} height={m.line} />
+      ))}
     </div>
   );
 }

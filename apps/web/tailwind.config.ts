@@ -90,6 +90,8 @@ const config: Config = {
         caption: ['var(--type-caption-size)', { lineHeight: 'var(--type-caption-lh)' }],
         // Nhãn 12px (--type-label-*): nhãn thanh dưới và nhãn nhỏ của thẻ.
         label: ['var(--type-label-size)', { lineHeight: 'var(--type-label-lh)' }],
+        // Nhãn trên ô nhập 12px/500 (--type-field-label-*): mảnh hơn nhãn chip/huy hiệu (600) ở trên.
+        'field-label': ['var(--type-field-label-size)', { lineHeight: 'var(--type-field-label-lh)', fontWeight: 'var(--type-field-label-weight)' }],
       },
       borderRadius: { sm: '6px', md: '10px', lg: '16px', xl: '24px' },
       // Bóng đổ ấm của DS v2 (tokens.css --elevation-*); cần tokens.css được nạp trong globals.css.

@@ -276,6 +276,8 @@
   --type-body-sm-size: 14px; --type-body-sm-lh: 1.57; --type-body-sm-weight: 400;
   --type-caption-size: 13px; --type-caption-lh: 1.54; --type-caption-weight: 400;
   --type-label-size: 12px; --type-label-lh: 1.33; --type-label-weight: 600;
+  /* Nhãn trên ô nhập (Field, địa chỉ, hoá đơn VAT, hồ sơ, đổi trả): cùng cỡ và dòng với nhãn chip/huy hiệu nhưng mảnh hơn (500 thay vì 600). */
+  --type-field-label-size: 12px; --type-field-label-lh: 1.33; --type-field-label-weight: 500;
   --type-price-xl-size: 24px; --type-price-xl-lh: 1.33; --type-price-xl-weight: 700;
   --type-price-lg-size: 20px; --type-price-lg-lh: 1.4; --type-price-lg-weight: 700;
   --type-price-md-size: 16px; --type-price-md-lh: 1.375; --type-price-md-weight: 600;

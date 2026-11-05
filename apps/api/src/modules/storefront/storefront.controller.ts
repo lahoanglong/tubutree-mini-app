@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Res, Streamab
 import { Throttle } from '@nestjs/throttler';
 import type { Response } from 'express';
 import { IsArray, IsBoolean, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Matches, Max, MaxLength, Min } from 'class-validator';
-import { Transform, Type } from 'class-transformer';
+import { Type } from 'class-transformer';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { PublicCache } from '../../common/decorators/public-cache.decorator';
@@ -10,6 +10,7 @@ import { StorefrontService } from './storefront.service';
 import { StorefrontQuestService } from './storefront-quest.service';
 import { OptionalNotNull } from '../../common/decorators/optional-not-null.decorator';
 import { MAX_PAGE, PAGE_TOO_DEEP_MSG } from '../../common/pagination';
+import { Trim } from '../../common/decorators/trim.decorator';
 
 // Ảnh có thể là URL Cloudinary HOẶC data URL base64 (fallback khi chưa cấu hình Cloudinary),
 // nên trần phải rộng — đủ cho ảnh nén ~1MB nhưng chặn payload vô hạn (body limit là 10MB).
@@ -17,54 +18,54 @@ const IMAGE_MAX = 1_500_000;
 
 export class UpdateStorefrontDto {
   @OptionalNotNull()
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @Trim()
   @IsString()
   @IsNotEmpty({ message: 'Tên gian hàng không được để trống.' })
   @MaxLength(120)
   title?: string;
-  @OptionalNotNull() @IsString() @MaxLength(200) headerNote?: string;
+  @OptionalNotNull() @Trim() @IsString() @MaxLength(200) headerNote?: string;
   @OptionalNotNull() @IsString() @MaxLength(IMAGE_MAX) avatarUrl?: string;
   @OptionalNotNull() @IsString() @MaxLength(IMAGE_MAX) coverUrl?: string;
   // Chưa có danh sách theme cố định (mặc định 'leaf-orange'); màu thật nằm ở themeColor (mã hex #rrggbb, mặc định '#16a34a').
   @OptionalNotNull() @IsString() @MaxLength(40) theme?: string;
   @OptionalNotNull() @IsString() @Matches(/^#[0-9a-fA-F]{6}$/, { message: 'themeColor phải là mã màu hex dạng #rrggbb.' }) themeColor?: string;
-  @OptionalNotNull() @IsString() subdomain?: string;
-  @OptionalNotNull() @IsString() @MaxLength(200) bankName?: string;
-  @OptionalNotNull() @IsString() @MaxLength(200) bankBin?: string;
-  @OptionalNotNull() @IsString() @MaxLength(200) bankAccountNo?: string;
-  @OptionalNotNull() @IsString() @MaxLength(200) bankAccountName?: string;
-  @OptionalNotNull() @IsString() @MaxLength(200) warehouseAddress?: string;
-  @OptionalNotNull() @IsString() @MaxLength(200) warehouseCity?: string;
-  @OptionalNotNull() @IsString() @MaxLength(200) warehouseDistrict?: string;
-  @OptionalNotNull() @IsString() @MaxLength(200) warehouseWard?: string;
-  @OptionalNotNull() @IsString() @MaxLength(200) warehousePhone?: string;
+  @OptionalNotNull() @Trim() @IsString() subdomain?: string;
+  @OptionalNotNull() @Trim() @IsString() @MaxLength(200) bankName?: string;
+  @OptionalNotNull() @Trim() @IsString() @MaxLength(200) bankBin?: string;
+  @OptionalNotNull() @Trim() @IsString() @MaxLength(200) bankAccountNo?: string;
+  @OptionalNotNull() @Trim() @IsString() @MaxLength(200) bankAccountName?: string;
+  @OptionalNotNull() @Trim() @IsString() @MaxLength(200) warehouseAddress?: string;
+  @OptionalNotNull() @Trim() @IsString() @MaxLength(200) warehouseCity?: string;
+  @OptionalNotNull() @Trim() @IsString() @MaxLength(200) warehouseDistrict?: string;
+  @OptionalNotNull() @Trim() @IsString() @MaxLength(200) warehouseWard?: string;
+  @OptionalNotNull() @Trim() @IsString() @MaxLength(200) warehousePhone?: string;
 }
 class PublishDto { @IsBoolean() isPublished!: boolean; }
 class ApplyTemplateDto { @IsString() categoryId!: string; }
 class CreateCollectionDto {
-  @IsString() @MaxLength(80) title!: string;
+  @Trim() @IsString() @MaxLength(80) title!: string;
   @IsOptional() @IsIn(['NORMAL', 'COMBO']) kind?: 'NORMAL' | 'COMBO';
   @IsOptional() @IsIn(['GRID', 'CAROUSEL', 'STACK']) layout?: 'GRID' | 'CAROUSEL' | 'STACK';
   @IsOptional() @IsInt() @Min(0) @Max(100) comboDiscountPct?: number;
 }
 class UpdateCollectionDto {
-  @OptionalNotNull() @IsString() @MaxLength(80) title?: string;
+  @OptionalNotNull() @Trim() @IsString() @MaxLength(80) title?: string;
   @OptionalNotNull() @IsIn(['GRID', 'CAROUSEL', 'STACK']) layout?: 'GRID' | 'CAROUSEL' | 'STACK';
   @OptionalNotNull() @IsInt() @Min(0) @Max(100) comboDiscountPct?: number;
 }
 class AddItemDto {
   @IsString() productId!: string;
   @IsOptional() @IsString() variationId?: string;
-  @IsOptional() @IsString() @MaxLength(200) note?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(200) note?: string;
 }
 class UpdateItemDto {
-  @OptionalNotNull() @IsString() @MaxLength(200) note?: string;
+  @OptionalNotNull() @Trim() @IsString() @MaxLength(200) note?: string;
   @OptionalNotNull() @IsBoolean() isPinned?: boolean;
   @OptionalNotNull() @IsBoolean() isHidden?: boolean;
 }
 class ReorderDto { @IsArray() @IsString({ each: true }) orderedIds!: string[]; }
 export class PickerQuery {
-  @IsOptional() @IsString() search?: string;
+  @IsOptional() @Trim() @IsString() search?: string;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(MAX_PAGE, { message: PAGE_TOO_DEEP_MSG }) page?: number;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) limit?: number;
 }

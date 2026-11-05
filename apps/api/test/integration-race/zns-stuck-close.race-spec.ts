@@ -327,4 +327,97 @@ describe('đóng log ZNS kẹt (real Postgres)', () => {
     expect(sweeps).toBeLessThanOrEqual(Math.ceil(candidates / 200));
     expect(sweeps).toBeGreaterThanOrEqual(2);
   });
+
+  describe('hết hạn log RETRYING quá 24 giờ (expireStaleRetryingZnsLogs)', () => {
+    // sentAt năm 1980: cũ hơn mọi log còn sót của spec khác nên luôn nằm đầu lượt quét 200 log (thứ tự sentAt tăng dần).
+    const longAgo = (n: number) => new Date(Date.UTC(1980, 0, 1, 0, 0, n));
+    const mkOld = (userId: string, status: string, sentAt: Date, over: { error?: string | null; dedupeKey?: string } = {}) =>
+      prisma.notificationLog.create({
+        data: {
+          userId,
+          templateCode: 'IT_STUCK',
+          channel: 'ZNS',
+          payload: over.dedupeKey ? { data: {}, dedupeKey: over.dedupeKey } : { data: {} },
+          status,
+          sentAt,
+          ...(over.error !== undefined ? { error: over.error } : {}),
+        },
+      });
+    const mkCron = () => new ZnsStuckLogCron(prisma, svc, undefined as never);
+
+    it('log RETRYING có tiền tố đối soát quá 24 giờ: đóng FAILED, giữ lỗi cũ sau lý do mới, nhả khoá, không gọi Zalo', async () => {
+      const u = await newUser();
+      const key = `it-expire:${Date.now()}`;
+      const reviewError = `${ZNS_REVIEW_PREFIX}Zalo trả kết quả không rõ (timeout sau khi gửi)`;
+      const log = await mkOld(u.id, 'RETRYING', longAgo(1), { error: reviewError, dedupeKey: key });
+      const res = await mkCron().expireStaleRetryingZnsLogs();
+      expect(res).toMatchObject({ expired: expect.any(Number) });
+      const after = await row(log.id);
+      expect(after.status).toBe('FAILED');
+      expect(after.error).toContain('Hết thời gian chờ kết quả gửi ZNS (24 giờ)');
+      expect(after.error).toContain(reviewError);
+      expect(after.payload).toEqual({ data: {}, dedupeKey: `${key}:failed:${log.id}` });
+      expect(sendTemplate).not.toHaveBeenCalled();
+      // Job cũ sống lại sau đó: SKIPPED, Zalo không được gọi.
+      expect(await svc.deliverZns(jobOf(log.id), false)).toBe('SKIPPED');
+      expect(sendTemplate).not.toHaveBeenCalled();
+    });
+
+    it('log RETRYING không tiền tố cũng bị đóng; log trẻ hơn 24 giờ, PENDING, SENT và FAILED không bị đụng', async () => {
+      const u = await newUser();
+      const old = await mkOld(u.id, 'RETRYING', longAgo(2), { error: 'lần thử trước lỗi' });
+      const youngIsh = await mkOld(u.id, 'RETRYING', new Date(Date.now() - 23 * 3_600_000));
+      const pending = await mkOld(u.id, 'PENDING', longAgo(3));
+      const sent = await mkOld(u.id, 'SENT', longAgo(4));
+      const failed = await mkOld(u.id, 'FAILED', longAgo(5), { error: 'lý do cũ' });
+      await mkCron().expireStaleRetryingZnsLogs();
+      const closed = await row(old.id);
+      expect(closed.status).toBe('FAILED');
+      expect(closed.error).toContain('lần thử trước lỗi');
+      expect((await row(youngIsh.id)).status).toBe('RETRYING');
+      expect((await row(pending.id)).status).toBe('PENDING');
+      expect((await row(sent.id)).status).toBe('SENT');
+      const f = await row(failed.id);
+      expect([f.status, f.error]).toEqual(['FAILED', 'lý do cũ']);
+    });
+
+    it('CAS: log đã sang SENT hoặc đổi lỗi giữa lúc quét và lúc ghi thì không bị đóng; chạy hai lượt song song chỉ đóng một lần', async () => {
+      const u = await newUser();
+      const raced = await mkOld(u.id, 'RETRYING', longAgo(6), { error: 'lỗi A' });
+      const cutoff = new Date(Date.now() - 24 * 3_600_000);
+      // Worker ghi lỗi mới (lần thử mới) sau khi cron đã đọc "lỗi A": CAS theo chuỗi đã đọc không đè.
+      const realFind = prisma.notificationLog.findUnique.bind(prisma.notificationLog);
+      const spy = jest.spyOn(prisma.notificationLog, 'findUnique').mockImplementationOnce(((args: never) => {
+        const read = realFind(args);
+        return read.then(async (v) => {
+          await prisma.notificationLog.update({ where: { id: raced.id }, data: { error: 'lỗi B từ lần thử mới' } });
+          return v;
+        });
+      }) as never);
+      expect(await svc.closeStuckZnsLog(raced.id, 'hết hạn', ['RETRYING'], { olderThan: cutoff, keepError: true })).toBe(false);
+      spy.mockRestore();
+      expect(await row(raced.id)).toMatchObject({ status: 'RETRYING', error: 'lỗi B từ lần thử mới' });
+
+      const sentMid = await mkOld(u.id, 'RETRYING', longAgo(7));
+      await prisma.notificationLog.update({ where: { id: sentMid.id }, data: { status: 'SENT' } });
+      expect(await svc.closeStuckZnsLog(sentMid.id, 'hết hạn', ['RETRYING'], { olderThan: cutoff, keepError: true })).toBe(false);
+      expect((await row(sentMid.id)).status).toBe('SENT');
+
+      const twice = await mkOld(u.id, 'RETRYING', longAgo(8));
+      const results = await Promise.all([
+        svc.closeStuckZnsLog(twice.id, 'hết hạn 1', ['RETRYING'], { olderThan: cutoff, keepError: true }),
+        svc.closeStuckZnsLog(twice.id, 'hết hạn 2', ['RETRYING'], { olderThan: cutoff, keepError: true }),
+      ]);
+      expect(results.filter(Boolean)).toHaveLength(1);
+      expect((await row(twice.id)).status).toBe('FAILED');
+    });
+
+    it('log cũ vừa sang lượt thử mới (sentAt mới) giữa lúc quét và lúc ghi thì không bị đóng', async () => {
+      const u = await newUser();
+      const log = await mkOld(u.id, 'RETRYING', longAgo(9));
+      await prisma.notificationLog.update({ where: { id: log.id }, data: { sentAt: new Date() } });
+      expect(await svc.closeStuckZnsLog(log.id, 'hết hạn', ['RETRYING'], { olderThan: new Date(Date.now() - 24 * 3_600_000), keepError: true })).toBe(false);
+      expect((await row(log.id)).status).toBe('RETRYING');
+    });
+  });
 });

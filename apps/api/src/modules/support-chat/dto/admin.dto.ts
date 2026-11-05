@@ -1,8 +1,8 @@
 import { IsBoolean, IsIn, IsOptional, IsString, Matches, MaxLength, MinLength, ValidateIf } from 'class-validator';
-import { Transform } from 'class-transformer';
+import { Trim } from '../../../common/decorators/trim.decorator';
 
 export class AdminReplyDto {
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value)) @IsString() @MinLength(1) @MaxLength(1000) body!: string;
+  @Trim() @IsString() @MinLength(1) @MaxLength(1000) body!: string;
 }
 
 export class AdminSettingsDto {
@@ -13,7 +13,7 @@ export class AdminSettingsDto {
 }
 
 export class AdminListQuery {
-  @IsOptional() @IsString() @MaxLength(64) @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value)) q?: string;
+  @IsOptional() @IsString() @MaxLength(64) @Trim() q?: string;
   @IsOptional() @IsIn(['unforwarded']) filter?: 'unforwarded';
   @IsOptional() @IsString() @MaxLength(64) cursor?: string;
 }

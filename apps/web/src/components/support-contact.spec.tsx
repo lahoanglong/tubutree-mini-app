@@ -59,8 +59,15 @@ describe('SupportContact — kênh hỗ trợ', () => {
     const c = await mount();
     expect(c.textContent).toContain('Cần hỗ trợ?');
     expect(c.querySelector('a[href="tel:0984606774"]')?.textContent).toBe('Gọi hotline 0984 606 774');
-    expect(c.querySelector('a[href="mailto:tubutree@gmail.com"]')).not.toBeNull();
+    expect(c.querySelector(`a[href="mailto:tubutree@gmail.com?subject=${encodeURIComponent('Hỗ trợ đơn TT001')}"]`)).not.toBeNull();
     expect(byText(c, 'button', 'Zalo OA')).toBeNull();
+  });
+
+  it('email mang mã đơn ở tiêu đề thư; không có mã đơn thì mailto trơn', async () => {
+    const withCode = await mount({ orderCode: 'TB 9/1' });
+    expect(withCode.querySelector('a[href^="mailto:"]')!.getAttribute('href')).toBe(`mailto:tubutree@gmail.com?subject=${encodeURIComponent('Hỗ trợ đơn TB 9/1')}`);
+    const plain = await mount({});
+    expect(plain.querySelector('a[href="mailto:tubutree@gmail.com"]')).not.toBeNull();
   });
 
   it('tổng đài số liền 18001234: hiện "1800 1234" nhưng tel: giữ số gốc', async () => {
@@ -89,7 +96,7 @@ describe('SupportContact — kênh hỗ trợ', () => {
     mocks.supportError = true;
     const c = await mount();
     expect(c.querySelector('a[href="tel:0984606774"]')).not.toBeNull();
-    expect(c.querySelector('a[href="mailto:tubutree@gmail.com"]')).not.toBeNull();
+    expect(c.querySelector('a[href^="mailto:tubutree@gmail.com"]')).not.toBeNull();
   });
 
   describe('chat với Tubu Tree', () => {

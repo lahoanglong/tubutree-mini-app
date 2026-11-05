@@ -7,20 +7,24 @@ import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { OptionalNotNull } from '../../../common/decorators/optional-not-null.decorator';
 import { Roles } from '../../../common/decorators/roles.decorator';
 import { WasteAdminItemsService } from './waste-admin-items.service';
+import { Trim } from '../../../common/decorators/trim.decorator';
 
 const CODE_RULE = /^[A-Z0-9_]{2,40}$/;
 const CODE_MESSAGE = 'Mã món chỉ gồm chữ in hoa, số và dấu gạch dưới, 2 đến 40 ký tự.';
 
 export class WasteItemCreateDto implements WasteItemUpsertRequest {
   @Matches(CODE_RULE, { message: CODE_MESSAGE })
+  @Trim()
   code!: string;
 
   @IsString()
   @Length(1, 120)
+  @Trim()
   name!: string;
 
   @IsString()
   @Length(1, 20)
+  @Trim()
   unitLabel!: string;
 
   @IsInt()
@@ -58,6 +62,7 @@ export class WasteItemCreateDto implements WasteItemUpsertRequest {
   @IsOptional()
   @IsString()
   @MaxLength(2000)
+  @Trim()
   prepInstructions?: string;
 
   @IsOptional()
@@ -85,16 +90,19 @@ export class WasteItemCreateDto implements WasteItemUpsertRequest {
 export class WasteItemUpdateDto implements Partial<WasteItemUpsertRequest> {
   @OptionalNotNull()
   @Matches(CODE_RULE, { message: CODE_MESSAGE })
+  @Trim()
   code?: string;
 
   @OptionalNotNull()
   @IsString()
   @Length(1, 120)
+  @Trim()
   name?: string;
 
   @OptionalNotNull()
   @IsString()
   @Length(1, 20)
+  @Trim()
   unitLabel?: string;
 
   @OptionalNotNull()
@@ -137,6 +145,7 @@ export class WasteItemUpdateDto implements Partial<WasteItemUpsertRequest> {
   @ValidateIf((_, v) => v !== null)
   @IsString()
   @MaxLength(2000)
+  @Trim()
   prepInstructions?: string | null;
 
   @IsOptional()

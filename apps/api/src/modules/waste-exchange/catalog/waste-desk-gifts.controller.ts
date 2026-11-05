@@ -4,10 +4,12 @@ import { IsString, Length } from 'class-validator';
 import type { WasteDeskGiftFulfilRequest } from '@tubutree/shared-types';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { WasteGiftRedemptionsService } from './waste-gift-redemptions.service';
+import { Trim } from '../../../common/decorators/trim.decorator';
 
 export class WasteDeskGiftFulfilDto implements WasteDeskGiftFulfilRequest {
   @IsString()
   @Length(4, 40)
+  @Trim()
   code!: string;
 
   @IsString()

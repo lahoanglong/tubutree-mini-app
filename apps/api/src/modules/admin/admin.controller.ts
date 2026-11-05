@@ -62,6 +62,7 @@ import { OptionalNotNull } from '../../common/decorators/optional-not-null.decor
 import { COUPON_TITLE_MAX } from './coupon-input-rules';
 import { DEALER_PRICE_CSV_MAX_LENGTH } from './dealer-price-import';
 import { soldExternalRowsOrThrow } from './sold-external-csv';
+import { trimInvisible } from '../../common/text-trim';
 
 /**
  * value <= max CHỈ khi type=PERCENT (chặn admin nhập % vô lý, vd 500%).
@@ -131,7 +132,7 @@ function RequiredScopeMeta(validationOptions?: ValidationOptions) {
 class ReviewDto {
   @IsBoolean() approve!: boolean;
   @IsOptional() @IsString() tierId?: string;
-  @IsOptional() @IsString() reason?: string;
+  @IsOptional() @Trim() @IsString() reason?: string;
 }
 export class ReviewMerchantProductDto {
   @ApiProperty() @IsBoolean() approve!: boolean;
@@ -186,7 +187,7 @@ export class ReviewMerchantProductDto {
   expectedUpdatedAt?: string | null;
 }
 export class UnlinkMerchantProductDto {
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @Trim()
   @IsString()
   @IsNotEmpty({ message: 'Nhập lý do gỡ liên kết để báo đối tác.' })
   @MaxLength(300)
@@ -229,7 +230,7 @@ export function MaxIfAmount(max: number, validationOptions?: ValidationOptions) 
 // Export để test DTO validation trực tiếp (xem admin.controller.spec.ts).
 export class CreateCouponDto {
   // Khách luôn gửi mã dạng HOA (miniapp/web toUpperCase) → lưu đúng dạng đó (ADMINOPS-7).
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim().toUpperCase() : value))
+  @Transform(({ value }) => (typeof value === 'string' ? trimInvisible(value).toUpperCase() : value))
   @IsString() @IsNotEmpty() @MaxLength(64) @Matches(COUPON_CODE_RE, { message: COUPON_CODE_MSG })
   code!: string;
   @IsIn(['PERCENT', 'AMOUNT', 'FREESHIP']) type!: 'PERCENT' | 'AMOUNT' | 'FREESHIP';
@@ -259,10 +260,10 @@ export class CreateCouponDto {
   @IsOptional() @IsBoolean() newCustomerOnly?: boolean;
   // Hiện ở mục "Nhận mã" công khai; chỉ mã CLAIM chung (service chặn phần còn lại, assertListable).
   @IsOptional() @IsBoolean() listed?: boolean;
-  @IsOptional() @IsString() @MaxLength(COUPON_TITLE_MAX) title?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(COUPON_TITLE_MAX) title?: string;
 }
 export class ListCouponsQuery extends PaginationQuery {
-  @IsOptional() @IsString() @MaxLength(64) q?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(64) q?: string;
   @IsOptional() @IsIn(['PUBLIC', 'TIER', 'USER_GROUP', 'BIRTHDAY', 'INVITE', 'CLAIM']) scope?: string;
   @IsOptional() @IsIn(['active', 'inactive', 'expired']) status?: 'active' | 'inactive' | 'expired';
 }
@@ -272,7 +273,7 @@ export class UpdateCouponDto {
   @IsOptional() @ValidateIf((_o, v) => v !== null) @IsInt() @Min(1) usageLimit?: number | null;
   @OptionalNotNull() @IsBoolean() listed?: boolean;
   /** null xoá tên hiển thị. */
-  @IsOptional() @ValidateIf((_o, v) => v !== null) @IsString() @MaxLength(COUPON_TITLE_MAX) title?: string | null;
+  @IsOptional() @Trim() @ValidateIf((_o, v) => v !== null) @IsString() @MaxLength(COUPON_TITLE_MAX) title?: string | null;
 }
 /** Trần mảng `rows` của hai đường nhập hàng loạt; khớp trần mảng của bộ đọc thân request để lỗi nêu đúng trường. Client admin chỉ gửi csv. */
 const IMPORT_ROWS_MAX = 500;
@@ -295,7 +296,7 @@ export class ImportSoldExternalDto {
   @IsOptional() @IsString() @MaxLength(DEALER_PRICE_CSV_MAX_LENGTH) csv?: string;
   @IsOptional() @IsArray() @ArrayMaxSize(IMPORT_ROWS_MAX) @ValidateNested({ each: true }) @Type(() => SoldExternalRowDto) rows?: SoldExternalRowDto[];
 }
-class UpdateOrderStatusDto {
+export class UpdateOrderStatusDto {
   @IsIn(['PENDING_PAYMENT', 'CONFIRMED', 'PACKED', 'SHIPPING', 'DELIVERED', 'RETURNED', 'CANCELLED'])
   status!: 'PENDING_PAYMENT' | 'CONFIRMED' | 'PACKED' | 'SHIPPING' | 'DELIVERED' | 'RETURNED' | 'CANCELLED';
 
@@ -303,13 +304,14 @@ class UpdateOrderStatusDto {
   @OptionalNotNull()
   @IsString()
   @MaxLength(500)
+  @Trim()
   note?: string;
 }
 
 export class ConfirmOrderPaymentDto {
   /** Mã giao dịch ngân hàng (vd FT26270…) — lưu vào lịch sử đơn để đối soát. */
-  @IsOptional() @IsString() @MaxLength(100) bankRef?: string;
-  @IsOptional() @IsString() @MaxLength(500) note?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(100) bankRef?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(500) note?: string;
   /** Số tiền thực nhận trên sao kê (đồng) — mặc định tổng đơn. Đơn đã huỷ: khoản hoàn tiền về muộn ghi đúng số này. */
   @IsOptional() @IsInt() @Min(1) amount?: number;
 }
@@ -332,7 +334,7 @@ export class DealerAppsQuery extends PaginationQuery {
 
 export class ListOrdersQuery extends PaginationQuery {
   @IsOptional() @IsIn([...ADMIN_ORDER_STATUSES]) status?: (typeof ADMIN_ORDER_STATUSES)[number];
-  @IsOptional() @IsString() @MaxLength(100) search?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(100) search?: string;
   /** attention = "Cần xử lý thu gom"; all = mọi đơn có chọn thu gom tái chế. */
   @IsOptional() @IsIn(['attention', 'all']) recycling?: RecyclingFilter;
   /** pending = đơn VAT chưa xuất xong; issued = đã phát hành; all = mọi đơn có yêu cầu VAT. */
@@ -361,7 +363,7 @@ export class ListOrdersQuery extends PaginationQuery {
 /** Bộ lọc của file CSV — đúng bộ lọc danh sách đơn, không phân trang. */
 export class ExportOrdersQuery {
   @IsOptional() @IsIn([...ADMIN_ORDER_STATUSES]) status?: (typeof ADMIN_ORDER_STATUSES)[number];
-  @IsOptional() @IsString() @MaxLength(100) search?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(100) search?: string;
   @IsOptional() @IsIn(['attention', 'all']) recycling?: RecyclingFilter;
   @IsOptional() @IsIn(['pending', 'issued', 'all']) invoice?: InvoiceFilter;
   @IsOptional() @IsIn([...PANCAKE_FILTERS]) pancake?: PancakeFilter;
@@ -379,7 +381,7 @@ export class ExportOrdersQuery {
 
 /** Bộ lọc của số đếm theo trạng thái: đúng bộ lọc danh sách trừ `status` (mỗi chip tự là một trạng thái). */
 export class OrderStatusCountsQuery {
-  @IsOptional() @IsString() @MaxLength(100) search?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(100) search?: string;
   @IsOptional() @IsIn(['attention', 'all']) recycling?: RecyclingFilter;
   @IsOptional() @IsIn(['pending', 'issued', 'all']) invoice?: InvoiceFilter;
   @IsOptional() @IsIn([...PANCAKE_FILTERS]) pancake?: PancakeFilter;
@@ -396,20 +398,20 @@ export class OrderStatusCountsQuery {
 }
 
 export class ExportUsersQuery {
-  @IsOptional() @IsString() @MaxLength(100) search?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(100) search?: string;
   /** `guests=1`: xuất cả phiên khách vãng lai (mặc định chỉ tài khoản thật, như danh sách). */
   @IsOptional() @Transform(({ value }) => value === '1' || value === 'true' || value === true) @IsBoolean() guests?: boolean;
 }
 
 export class ListUsersQuery extends PaginationQuery {
   /** SĐT (chứa), tên (chứa, không phân biệt hoa thường) hoặc id đúng — cho ô chọn khách. */
-  @IsOptional() @IsString() @MaxLength(100) search?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(100) search?: string;
   /** `guests=1`: hiện cả phiên khách vãng lai (mặc định chỉ tài khoản thật). */
   @IsOptional() @Transform(({ value }) => value === '1' || value === 'true' || value === true) @IsBoolean() guests?: boolean;
 }
 
 export class ProductSearchQuery {
-  @IsOptional() @IsString() @MaxLength(100) q?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(100) q?: string;
 }
 
 export class VariationLookupQuery {
@@ -460,12 +462,12 @@ export class GomdonRetryDto {
 
 export class GomdonMarkHandledDto {
   /** Ghi chú admin đã xử lý thế nào (vd "đã tạo vận đơn GHN tay") — chỉ vào log vết. */
-  @IsOptional() @IsString() @MaxLength(500) note?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(500) note?: string;
 }
 
 export class ResolvePancakeAttentionDto {
   /** Ghi chú admin đã xử lý thế nào (vd "đã gọi khách, kho nhận lại hàng") — chỉ vào log vết. */
-  @IsOptional() @IsString() @MaxLength(500) note?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(500) note?: string;
 }
 
 export class ResolvePaymentUnlinkedDto {
@@ -479,13 +481,13 @@ export class ResolvePaymentUnlinkedDto {
 }
 
 export class SetUserRoleDto {
-  @IsString() @MaxLength(20) phone!: string;
+  @Trim() @IsString() @MaxLength(20) phone!: string;
   @IsIn(['CUSTOMER', 'AFFILIATE', 'DEALER', 'STAFF', 'ADMIN'])
   role!: 'CUSTOMER' | 'AFFILIATE' | 'DEALER' | 'STAFF' | 'ADMIN';
   /** Bắt buộc khi role = DEALER (kiểm ở AdminService.setUserRole — C-008). */
   @IsOptional() @IsString() @MaxLength(100) tierId?: string;
   /** Lý do đổi vai trò, ghi vào lịch sử vai trò của người đó. */
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value)) @IsString() @MinLength(3) @MaxLength(500) reason!: string;
+  @Trim() @IsString() @MinLength(3) @MaxLength(500) reason!: string;
 }
 
 @Roles('ADMIN')

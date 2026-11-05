@@ -108,7 +108,7 @@ describe('/tai-khoan/don-hang/[code] — khối "Cần hỗ trợ?" (Q-17)', () 
     const { container } = await mount();
     const b = block(container)!;
     expect(b.querySelector('a[href="tel:0984606774"]')?.textContent).toBe('Gọi hotline 0984 606 774');
-    expect(b.querySelector('a[href="mailto:tubutree@gmail.com"]')).not.toBeNull();
+    expect(b.querySelector('a[href="mailto:tubutree@gmail.com?subject=' + encodeURIComponent('Hỗ trợ đơn TB-9') + '"]')).not.toBeNull();
     expect(b.textContent).not.toContain('Zalo OA');
   });
 

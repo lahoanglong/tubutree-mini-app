@@ -77,6 +77,8 @@ export type OrderView = Omit<OrderDTO, 'items'> & {
   fulfilment?: { kind: 'TUBU' | 'MERCHANT'; name: string; phone: string | null };
   /** Các đơn khác cùng lần đặt (đơn bị tách theo nơi giao). */
   siblings?: { code: string; status: string; total: number; fulfillerName: string }[];
+  /** Lý do huỷ viết sẵn cho khách đọc (API đã lọc); API cũ chưa trả. */
+  cancelReason?: string | null;
 };
 
 /** Response place-order: đơn chính, kèm danh sách đơn con khi lần đặt bị tách theo nơi giao. */

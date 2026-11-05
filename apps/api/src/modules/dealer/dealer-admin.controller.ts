@@ -5,6 +5,7 @@ import { AllowStaff } from '../../common/staff-permissions';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PaginationQuery } from '../../common/pagination';
 import { DealerService } from './dealer.service';
+import { Trim } from '../../common/decorators/trim.decorator';
 
 const CLAIM_STATUSES = ['PENDING', 'APPROVED', 'REJECTED', 'PAID'] as const;
 
@@ -14,11 +15,11 @@ export class ListRewardClaimsQuery extends PaginationQuery {
 }
 
 export class ReviewRewardClaimDto {
-  @IsOptional() @IsString() @MaxLength(500) note?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(500) note?: string;
 }
 
 export class RejectRewardClaimDto {
-  @IsString() @IsNotEmpty() @MaxLength(500) reason!: string;
+  @Trim() @IsString() @IsNotEmpty() @MaxLength(500) reason!: string;
 }
 
 /**
@@ -62,8 +63,8 @@ export class DealerAdminController {
 
 export class ConfirmDealerPaymentDto {
   /** Mã giao dịch ngân hàng (vd FT26270…) — lưu vào ghi chú lịch sử đơn để đối soát. */
-  @IsOptional() @IsString() @MaxLength(100) bankRef?: string;
-  @IsOptional() @IsString() @MaxLength(500) note?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(100) bankRef?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(500) note?: string;
 }
 
 /**
@@ -91,8 +92,8 @@ export class DealerOrderAdminController {
 export class RecordDealerCreditPaymentDto {
   @IsInt() @Min(1) amount!: number;
   /** Mã giao dịch ngân hàng (vd FT26270…) — lưu vào ghi chú sổ công nợ để đối soát. */
-  @IsOptional() @IsString() @MaxLength(100) bankRef?: string;
-  @IsOptional() @IsString() @MaxLength(500) note?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(100) bankRef?: string;
+  @IsOptional() @Trim() @IsString() @MaxLength(500) note?: string;
   /** Báo cáo chuyển khoản của đại lý mà khoản này xử lý; đóng báo cáo cùng lúc ghi sổ (DealerCreditPaymentReport). */
   @IsOptional() @IsString() @MaxLength(64) reportId?: string;
 }
@@ -140,7 +141,7 @@ export class ListCreditReportsQuery {
 
 export class DismissCreditReportDto {
   /** Bắt buộc: "Không thấy tiền" mà không ghi vì sao thì người sau không đối chiếu được. */
-  @IsString() @IsNotEmpty() @MaxLength(500) reason!: string;
+  @Trim() @IsString() @IsNotEmpty() @MaxLength(500) reason!: string;
 }
 
 /**

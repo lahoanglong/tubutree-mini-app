@@ -586,6 +586,15 @@
       "props": "ProductTileSkeletonProps"
     },
     {
+      "name": "PostCardSkeleton",
+      "miniapp": "apps/miniapp/src/components/ui/skeleton.tsx",
+      "web": "apps/web/src/components/mini/skeleton.tsx",
+      "props": "PostCardSkeletonProps",
+      "screens": [
+        "/feed"
+      ]
+    },
+    {
       "name": "SlotTabs",
       "miniapp": "apps/miniapp/src/components/ui/slot-tabs.tsx",
       "web": "apps/web/src/components/mini/slot-tabs.tsx",

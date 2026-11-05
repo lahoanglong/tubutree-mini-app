@@ -22,6 +22,7 @@ import { clampTake } from '../../common/pagination';
 import { AffiliateService, PERSONAL_TAX_ID_FORMAT_MESSAGE, PERSONAL_TAX_ID_PATTERN, WALLET_ONLY_MESSAGE } from './affiliate.service';
 import { PlaceOrderForCustomerDto, QuoteOrderForCustomerDto } from './dto/place-order-for-customer.dto';
 import { RegisterAffiliateDto } from './dto/register-affiliate.dto';
+import { Trim } from '../../common/decorators/trim.decorator';
 
 
 class CreateLinkDto {
@@ -35,7 +36,7 @@ export class PayoutDto {
   // Client cũ vẫn gửi bankInfo kèm method BANK: nhận để trả đúng câu "chỉ chuyển vào Ví" thay vì lỗi định dạng tài khoản.
   @IsOptional() @IsObject() bankInfo?: Record<string, unknown>;
   /** MST cá nhân hoặc số CCCD, bắt buộc khi lần chuyển bị khấu trừ thuế TNCN mà hồ sơ chưa có (SELLER-11). */
-  @IsOptional() @IsString() @Matches(PERSONAL_TAX_ID_PATTERN, { message: PERSONAL_TAX_ID_FORMAT_MESSAGE }) taxId?: string;
+  @IsOptional() @Trim() @IsString() @Matches(PERSONAL_TAX_ID_PATTERN, { message: PERSONAL_TAX_ID_FORMAT_MESSAGE }) taxId?: string;
 }
 
 export class TaxStatementQuery {
@@ -48,7 +49,7 @@ class ClaimMilestoneDto {
 }
 
 class TouchDto {
-  @IsString() @MaxLength(64) referralCode!: string;
+  @Trim() @IsString() @MaxLength(64) referralCode!: string;
   @IsOptional() @IsString() @MaxLength(64) storefrontSlug?: string;
   @IsOptional() @IsIn(['ctv', 'brand']) kind?: string;
   /** Mili giây đã trôi từ lúc khách bấm link (client đo). Hạn ghi công tính từ đó; thiếu, âm hoặc sai kiểu thì tính từ lúc nhận. */

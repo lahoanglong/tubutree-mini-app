@@ -1073,6 +1073,53 @@ describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo vari
     expect(q).not.toHaveProperty('take');
   });
 
+  describe('detailView: cancelReason', () => {
+    const build = (status: string, historyRows: unknown[]) => {
+      const history = jest.fn().mockImplementation((args: { select?: Record<string, boolean> }) =>
+        Promise.resolve(args.select && 'actorType' in args.select ? historyRows : []),
+      );
+      const prisma = {
+        order: { findUnique: jest.fn().mockResolvedValue({ ...baseOrder, status, items: [] }), findMany: jest.fn().mockResolvedValue([]) },
+        variation: { findMany: jest.fn() },
+        orderStatusHistory: { findMany: history },
+      } as unknown as PrismaService;
+      return { history, svc: new OrdersService(prisma, loyalty, cart, notifications, config, affiliate, reversal) };
+    };
+
+    it('đơn đã huỷ: trả câu an toàn từ dòng huỷ của sổ lịch sử, đọc đúng đơn và không kèm actorId', async () => {
+      const { svc, history } = build('CANCELLED', [
+        { fromStatus: 'CONFIRMED', toStatus: 'CANCELLED', actorType: 'PANCAKE', note: 'Pancake: giao không thành, hàng đã hoàn về kho', createdAt: new Date('2026-11-05T03:00:00Z') },
+      ]);
+      const view = await svc.detailView('u1', 'TUBU1');
+      expect(view.cancelReason).toBe('Tubu Tree đã huỷ đơn này. Cần biết thêm, bạn liên hệ CSKH.');
+      expect(JSON.stringify(view)).not.toContain('hàng đã hoàn về kho');
+      const q = history.mock.calls.map((c) => c[0]).find((a) => a.select && 'actorType' in a.select);
+      expect(q.where).toEqual({ orderId: 'o1', toStatus: 'CANCELLED' });
+      expect(Object.keys(q.select).sort()).toEqual(['actorType', 'createdAt', 'fromStatus', 'note', 'toStatus']);
+    });
+
+    it('khách tự huỷ có lý do: "Bạn đã huỷ: <nhãn>"', async () => {
+      const { svc } = build('CANCELLED', [
+        { fromStatus: 'CONFIRMED', toStatus: 'CANCELLED', actorType: 'CUSTOMER', note: 'Khách huỷ: Đổi ý, không muốn mua nữa', createdAt: new Date('2026-11-05T03:00:00Z') },
+      ]);
+      expect((await svc.detailView('u1', 'TUBU1')).cancelReason).toBe('Bạn đã huỷ: Đổi ý, không muốn mua nữa');
+    });
+
+    it('đơn đã huỷ nhưng sổ không có dòng huỷ (đơn cũ): null', async () => {
+      const { svc } = build('CANCELLED', []);
+      expect((await svc.detailView('u1', 'TUBU1')).cancelReason).toBeNull();
+    });
+
+    it('đơn chưa huỷ: null và không đọc ghi chú của sổ lịch sử', async () => {
+      const { svc, history } = build('CONFIRMED', [
+        { fromStatus: 'CONFIRMED', toStatus: 'CANCELLED', actorType: 'ADMIN', note: 'Admin: bí mật', createdAt: new Date() },
+      ]);
+      const view = await svc.detailView('u1', 'TUBU1');
+      expect(view.cancelReason).toBeNull();
+      expect(history.mock.calls.every((c) => !(c[0].select && 'actorType' in c[0].select))).toBe(true);
+    });
+  });
+
   it('D4: đơn đối tác tự giao → chi tiết đơn nêu gian hàng giao + hotline, và các đơn cùng lần đặt', async () => {
     const order = { ...baseOrder, code: 'TUBU2', items: [], fulfiller: 'MERCHANT', fulfillerStorefrontId: 'sf-a', checkoutGroup: 'TUBU1' };
     const siblings = [{ code: 'TUBU1', status: 'CONFIRMED', total: 120_000, fulfiller: 'TUBU', fulfillerStorefront: null }];

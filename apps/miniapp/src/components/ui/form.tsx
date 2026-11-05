@@ -40,12 +40,12 @@ export function Field({ label, error, children }: FieldProps) {
     <div>
       {only ? (
         <label id={labelId} htmlFor={controlId} style={{ display: 'block', marginBottom: 4 }}>
-          <Text variant="caption" tone="secondary">
+          <Text variant="field-label" tone="secondary">
             {label}
           </Text>
         </label>
       ) : (
-        <Text variant="caption" tone="secondary" as="div" style={{ marginBottom: 4 }} data-testid="field-label">
+        <Text variant="field-label" tone="secondary" as="div" style={{ marginBottom: 4 }} data-testid="field-label">
           <span id={labelId}>{label}</span>
         </Text>
       )}

@@ -7,10 +7,11 @@ import { AllowStaff } from '../../common/staff-permissions';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AdminCouponBatchService, BATCH_PREFIX_RE, COUPON_BATCH_MAX, LINK_TOKEN_RE } from './admin-coupon-batch.service';
 import { COUPON_AMOUNT_MAX, MaxIfAmount, MaxIfPercent } from './admin.controller';
+import { trimInvisible } from '../../common/text-trim';
 
-const upperTrim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim().toUpperCase() : value);
+const upperTrim = ({ value }: { value: unknown }) => (typeof value === 'string' ? trimInvisible(value).toUpperCase() : value);
 
-const lowerTrim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim().toLowerCase() : value);
+const lowerTrim = ({ value }: { value: unknown }) => (typeof value === 'string' ? trimInvisible(value).toLowerCase() : value);
 
 /** Trang đích và nhãn nguồn của link in trong CSV. */
 export class ClaimLinkDto {

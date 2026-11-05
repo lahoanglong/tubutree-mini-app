@@ -5,13 +5,14 @@ import { IsDate, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-valid
 import { Roles } from '../../common/decorators/roles.decorator';
 import { OptionalNotNull } from '../../common/decorators/optional-not-null.decorator';
 import { AdminGameSeasonService } from './admin-game-season.service';
+import { Trim } from '../../common/decorators/trim.decorator';
+import { trimInvisible } from '../../common/text-trim';
 
-const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
 /** Chuỗi rỗng nghĩa là xoá giá trị (cột cho phép null). */
-const blankToNull = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() || null : value);
+const blankToNull = ({ value }: { value: unknown }) => (typeof value === 'string' ? trimInvisible(value) || null : value);
 
 export class CreateSeasonDto {
-  @Transform(trim) @IsString() @IsNotEmpty() @MaxLength(80) name!: string;
+  @Trim() @IsString() @IsNotEmpty() @MaxLength(80) name!: string;
   @IsOptional() @Transform(blankToNull) @IsString() @MaxLength(120) theme?: string | null;
   @IsOptional() @Transform(blankToNull) @IsString() @MaxLength(80) region?: string | null;
   @Type(() => Date) @IsDate() startAt!: Date;
@@ -19,7 +20,7 @@ export class CreateSeasonDto {
 }
 
 export class UpdateSeasonDto {
-  @OptionalNotNull() @Transform(trim) @IsString() @IsNotEmpty() @MaxLength(80) name?: string;
+  @OptionalNotNull() @Trim() @IsString() @IsNotEmpty() @MaxLength(80) name?: string;
   @IsOptional() @Transform(blankToNull) @IsString() @MaxLength(120) theme?: string | null;
   @IsOptional() @Transform(blankToNull) @IsString() @MaxLength(80) region?: string | null;
   @OptionalNotNull() @Type(() => Date) @IsDate() startAt?: Date;

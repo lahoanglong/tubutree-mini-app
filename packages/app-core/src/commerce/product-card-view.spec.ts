@@ -93,6 +93,15 @@ describe('hết hàng', () => {
     expect(v.price).toBe(39_000);
   });
 
+  it('tồn ảo (Pancake 99.999.988) gửi thừa trong dữ liệu thẻ không lộ ra chữ hay chữ đọc nào: thẻ chỉ biết còn hay hết', () => {
+    const virtual = { ...product(), variations: [{ id: 'v1', sku: 'S1', retailPrice: 52_000, salePrice: null, stock: 99_999_988 }] } as ProductCard;
+    for (const variant of ['grid', 'rail-sm', 'rail-md', 'rank', 'line'] as const) {
+      const v = view({ product: virtual, variant });
+      expect(v.stock).toBe('in');
+      expect(JSON.stringify(v), variant).not.toMatch(/99\.?999\.?988/);
+    }
+  });
+
   it('còn hàng: stock in, không chữ', () => {
     const v = view();
     expect(v.stock).toBe('in');

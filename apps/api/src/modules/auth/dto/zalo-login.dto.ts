@@ -1,4 +1,5 @@
 import { Allow, IsString, IsNotEmpty, IsOptional } from 'class-validator';
+import { Trim } from '../../../common/decorators/trim.decorator';
 
 /** POST /api/auth/zalo-mini-app */
 export class ZaloMiniAppLoginDto {
@@ -18,6 +19,7 @@ export class ZaloMiniAppLoginDto {
   /** Mã giới thiệu từ deep link ?ref= (nếu được bạn bè mời vào app). */
   @IsString()
   @IsOptional()
+  @Trim()
   referralCode?: string;
 
   /** Nguồn chạm đầu {source, campaign?, at?} từ máy khách. Cố ý không validate chặt ở đây: số liệu phân tích không được làm 400 một lần đăng nhập, common/attribution.ts bỏ giá trị bẩn. */

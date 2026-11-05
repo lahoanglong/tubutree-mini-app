@@ -5,6 +5,7 @@ import { notifyAdmins } from '../../common/notify-admins';
 import { formatVndText as vnd } from '../../common/format-vnd';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UpdateMeDto } from './dto/update-me.dto';
+import { trimInvisible } from '../../common/text-trim';
 import { CreateAddressDto, NO_HTML, UpdateAddressDto } from './dto/address.dto';
 import { GeoService } from '../integrations/pancake/geo.service';
 import { assertDeliverableAddress } from '../integrations/pancake/address-geo';
@@ -70,7 +71,7 @@ export class UsersService {
     const { dob, ...rest } = dto;
     if (rest.fullName !== undefined && !NO_HTML.test(rest.fullName)) {
       const current = await this.prisma.user.findUnique({ where: { id: userId }, select: { fullName: true } });
-      if (current?.fullName?.trim() !== rest.fullName.trim()) throw new BadRequestException('Tên không được chứa ký tự < hoặc >.');
+      if (trimInvisible(current?.fullName ?? '') !== trimInvisible(rest.fullName)) throw new BadRequestException('Tên không được chứa ký tự < hoặc >.');
     }
     const data: { fullName?: string; email?: string; avatarUrl?: string } = { ...rest };
     if (dob !== undefined) {

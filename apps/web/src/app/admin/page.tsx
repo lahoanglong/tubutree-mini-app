@@ -3126,9 +3126,9 @@ function BrandInfoForm({ brand }: { brand: AdminBrand }) {
       <div className="space-y-1">
         {certs.map((c, i) => (
           <div key={i} className="flex flex-wrap items-center gap-2 text-sm">
-            <input placeholder="Mã (ORG)" aria-label={`Mã chứng nhận ${i + 1}`} value={c.code} onChange={(e) => setCert(i, { code: e.target.value })} className={`${field} w-24`} />
-            <input placeholder="Nhãn (Hữu cơ USDA)" aria-label={`Tên chứng nhận ${i + 1}`} value={c.label} onChange={(e) => setCert(i, { label: e.target.value })} className={`${field} grow basis-40`} />
-            <input placeholder="Proof URL" aria-label={`Link bằng chứng chứng nhận ${i + 1}`} value={c.proofUrl ?? ''} onChange={(e) => setCert(i, { proofUrl: e.target.value })} className={`${field} w-40`} />
+            <input placeholder="Mã (ORG)" aria-label={`Mã chứng nhận ${i + 1}`} maxLength={40} value={c.code} onChange={(e) => setCert(i, { code: e.target.value })} className={`${field} w-24`} />
+            <input placeholder="Nhãn (Hữu cơ USDA)" aria-label={`Tên chứng nhận ${i + 1}`} maxLength={200} value={c.label} onChange={(e) => setCert(i, { label: e.target.value })} className={`${field} grow basis-40`} />
+            <input placeholder="Proof URL" aria-label={`Link bằng chứng chứng nhận ${i + 1}`} maxLength={500} value={c.proofUrl ?? ''} onChange={(e) => setCert(i, { proofUrl: e.target.value })} className={`${field} w-40`} />
             <label className="inline-flex min-h-[44px] items-center gap-1.5 text-stone-700 sm:min-h-0">
               <input type="checkbox" className="h-4 w-4 accent-forest-600" checked={c.verified ?? false} onChange={(e) => setCert(i, { verified: e.target.checked })} />
               <Check className="h-4 w-4" aria-hidden /> verified
@@ -4094,6 +4094,7 @@ function ContentKitEditor({
               placeholder="Câu hỏi"
               aria-label={`Câu hỏi ${i + 1}`}
               value={f.q}
+              maxLength={300}
               onChange={(e) => setFaq(i, { q: e.target.value })}
               className={field}
             />
@@ -4101,6 +4102,7 @@ function ContentKitEditor({
               placeholder="Câu trả lời"
               aria-label={`Câu trả lời ${i + 1}`}
               value={f.a}
+              maxLength={2000}
               onChange={(e) => setFaq(i, { a: e.target.value })}
               className={field}
             />
@@ -4197,6 +4199,7 @@ function AcademyTab() {
             <textarea
               placeholder="Mô tả"
               value={form.description}
+              maxLength={5000}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
               rows={2}
               className={INPUT_CLASS}
@@ -4328,7 +4331,7 @@ function CourseRow({ course }: { course: AdminCourse }) {
             </div>
             <div className="mt-2">
               <Field label="Mô tả">
-                <textarea placeholder="Mô tả" value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} rows={2} className={INPUT_CLASS} />
+                <textarea placeholder="Mô tả" value={f.description} maxLength={5000} onChange={(e) => setF({ ...f, description: e.target.value })} rows={2} className={INPUT_CLASS} />
               </Field>
             </div>
             <button onClick={() => save.mutate()} disabled={!f.title.trim() || save.isPending} className={`${BTN_PRIMARY} mt-2`}>
@@ -4384,6 +4387,7 @@ function CourseRow({ course }: { course: AdminCourse }) {
                   <input
                     placeholder="Video URL"
                     value={lesson.videoUrl}
+                    maxLength={500}
                     onChange={(e) => setLesson({ ...lesson, videoUrl: e.target.value })}
                     className={input}
                   />
@@ -4394,6 +4398,7 @@ function CourseRow({ course }: { course: AdminCourse }) {
                   <textarea
                     placeholder="Nội dung bài viết"
                     value={lesson.body}
+                    maxLength={50000}
                     onChange={(e) => setLesson({ ...lesson, body: e.target.value })}
                     rows={3}
                     className={INPUT_CLASS}
@@ -4487,12 +4492,12 @@ function LessonRow({ lesson }: { lesson: AdminLesson }) {
           </div>
           {f.contentType === 'VIDEO' ? (
             <Field label="Link video">
-              <input placeholder="Video URL" value={f.videoUrl} onChange={(e) => setF({ ...f, videoUrl: e.target.value })} className={`${INPUT_CLASS} ${TOUCH_H}`} />
+              <input placeholder="Video URL" value={f.videoUrl} maxLength={500} onChange={(e) => setF({ ...f, videoUrl: e.target.value })} className={`${INPUT_CLASS} ${TOUCH_H}`} />
               <VideoUrlNote url={f.videoUrl} />
             </Field>
           ) : (
             <Field label="Nội dung bài viết">
-              <textarea placeholder="Nội dung bài viết" value={f.body} onChange={(e) => setF({ ...f, body: e.target.value })} rows={3} className={INPUT_CLASS} />
+              <textarea placeholder="Nội dung bài viết" value={f.body} maxLength={50000} onChange={(e) => setF({ ...f, body: e.target.value })} rows={3} className={INPUT_CLASS} />
             </Field>
           )}
           <button onClick={() => save.mutate()} disabled={!f.title.trim() || save.isPending} className={BTN_PRIMARY}>

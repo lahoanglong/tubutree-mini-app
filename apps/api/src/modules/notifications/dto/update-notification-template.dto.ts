@@ -1,5 +1,6 @@
 import { IsIn, IsOptional, IsString, MaxLength, ValidateIf } from 'class-validator';
 import { OptionalNotNull } from '../../../common/decorators/optional-not-null.decorator';
+import { Trim } from '../../../common/decorators/trim.decorator';
 
 export class UpdateNotificationTemplateDto {
   @OptionalNotNull()
@@ -16,5 +17,6 @@ export class UpdateNotificationTemplateDto {
   @OptionalNotNull()
   @IsString()
   @MaxLength(1000)
+  @Trim()
   bodyTemplate?: string;
 }

@@ -548,3 +548,30 @@ describe('BrandService.listBrands — select gọn (L3-17)', () => {
     });
   });
 });
+
+describe('BrandService: chứng nhận lưu dạng object thuần', () => {
+  class CertDto {
+    code = 'ORG';
+    label = 'Hữu cơ';
+    verified = true;
+  }
+  const isPlain = (v: unknown) => Object.getPrototypeOf(v) === Object.prototype;
+
+  it('createBrand và updateBrand đổi thể hiện lớp DTO thành object thuần trước khi ghi cột Json', async () => {
+    const prisma = makePrisma();
+    prisma.brand.create.mockResolvedValue({ id: 'b1' });
+    prisma.brand.findUniqueOrThrow.mockResolvedValue({ id: 'b1', logoUrl: null, coverUrl: null });
+    prisma.brand.update.mockResolvedValue({ id: 'b1' });
+    const svc = new BrandService(prisma, brandConfig);
+
+    await svc.createBrand({ name: 'Tubu', certifications: [new CertDto()] });
+    const created = prisma.brand.create.mock.calls[0][0].data.certifications as unknown[];
+    expect(created).toEqual([{ code: 'ORG', label: 'Hữu cơ', verified: true }]);
+    expect(isPlain(created[0])).toBe(true);
+
+    await svc.updateBrand('b1', { certifications: [new CertDto()] });
+    const updated = prisma.brand.update.mock.calls[0][0].data.certifications as unknown[];
+    expect(updated).toEqual([{ code: 'ORG', label: 'Hữu cơ', verified: true }]);
+    expect(isPlain(updated[0])).toBe(true);
+  });
+});

@@ -95,7 +95,7 @@ export class NotificationTemplatesAdminService {
         _count: { _all: true },
       }),
       // Prisma `distinct` nạp MỌI dòng lỗi 30 ngày về Node rồi mới lọc; DISTINCT ON trả đúng một dòng mới nhất mỗi mẫu. channel/status
-      // viết literal để khớp partial index notification_logs_zns_failed_sentAt_idx; id chốt thứ tự khi hai lỗi cùng sentAt.
+      // viết literal để khớp index (channel, status, sentAt) notification_logs_channel_status_sentAt_idx; id chốt thứ tự khi hai lỗi cùng sentAt.
       this.prisma.$queryRaw<{ templateCode: string; error: string | null; sentAt: Date }[]>`
         SELECT DISTINCT ON ("templateCode") "templateCode", error, "sentAt"
         FROM notification_logs

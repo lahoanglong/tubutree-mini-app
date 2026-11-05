@@ -1,5 +1,6 @@
 import { IsBoolean, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
 import { OptionalNotNull } from '../../../common/decorators/optional-not-null.decorator';
+import { Trim } from '../../../common/decorators/trim.decorator';
 
 // Trần độ dài cho MỌI trường text: body limit là 10MB còn cột Postgres là text không giới hạn.
 // Thiếu trần thì một tài khoản đã đăng nhập lưu được địa chỉ dài vài MB, và snapshot địa chỉ đó
@@ -14,12 +15,12 @@ const NO_HTML_MSG = { message: 'Tên người nhận và địa chỉ không đ�
 const GEO_MSG = { message: 'Tỉnh/thành chưa theo địa giới mới, bạn chọn lại nhé.' };
 
 export class CreateAddressDto {
-  @IsString() @MaxLength(120) @Matches(NO_HTML, NO_HTML_MSG) recipient!: string;
-  @IsString() @MaxLength(20) @Matches(VN_PHONE, PHONE_MSG) phone!: string;
-  @IsString() @MaxLength(120) province!: string;
-  @IsString() @MaxLength(120) district!: string;
-  @IsString() @MaxLength(120) ward!: string;
-  @IsString() @MaxLength(255) @Matches(NO_HTML, NO_HTML_MSG) street!: string;
+  @Trim() @IsString() @MaxLength(120) @Matches(NO_HTML, NO_HTML_MSG) recipient!: string;
+  @Trim() @IsString() @MaxLength(20) @Matches(VN_PHONE, PHONE_MSG) phone!: string;
+  @Trim() @IsString() @MaxLength(120) province!: string;
+  @Trim() @IsString() @MaxLength(120) district!: string;
+  @Trim() @IsString() @MaxLength(120) ward!: string;
+  @Trim() @IsString() @MaxLength(255) @Matches(NO_HTML, NO_HTML_MSG) street!: string;
   @IsString() @MaxLength(20) @Matches(NEW_GEO, GEO_MSG) provinceCode!: string;
   @IsString() @MaxLength(20) districtCode!: string;
   @IsString() @MaxLength(20) wardCode!: string;
@@ -27,12 +28,12 @@ export class CreateAddressDto {
 }
 
 export class UpdateAddressDto {
-  @OptionalNotNull() @IsString() @MaxLength(120) @Matches(NO_HTML, NO_HTML_MSG) recipient?: string;
-  @OptionalNotNull() @IsString() @MaxLength(20) @Matches(VN_PHONE, PHONE_MSG) phone?: string;
-  @OptionalNotNull() @IsString() @MaxLength(120) province?: string;
-  @OptionalNotNull() @IsString() @MaxLength(120) district?: string;
-  @OptionalNotNull() @IsString() @MaxLength(120) ward?: string;
-  @OptionalNotNull() @IsString() @MaxLength(255) @Matches(NO_HTML, NO_HTML_MSG) street?: string;
+  @OptionalNotNull() @Trim() @IsString() @MaxLength(120) @Matches(NO_HTML, NO_HTML_MSG) recipient?: string;
+  @OptionalNotNull() @Trim() @IsString() @MaxLength(20) @Matches(VN_PHONE, PHONE_MSG) phone?: string;
+  @OptionalNotNull() @Trim() @IsString() @MaxLength(120) province?: string;
+  @OptionalNotNull() @Trim() @IsString() @MaxLength(120) district?: string;
+  @OptionalNotNull() @Trim() @IsString() @MaxLength(120) ward?: string;
+  @OptionalNotNull() @Trim() @IsString() @MaxLength(255) @Matches(NO_HTML, NO_HTML_MSG) street?: string;
   @OptionalNotNull() @IsString() @MaxLength(20) @Matches(NEW_GEO, GEO_MSG) provinceCode?: string;
   @OptionalNotNull() @IsString() @MaxLength(20) districtCode?: string;
   @OptionalNotNull() @IsString() @MaxLength(20) wardCode?: string;

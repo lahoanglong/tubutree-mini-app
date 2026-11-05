@@ -1,6 +1,5 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Put } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { Transform } from 'class-transformer';
 import { ArrayMaxSize, IsArray, IsString, MaxLength, MinLength } from 'class-validator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -9,25 +8,25 @@ import { AdminService } from './admin.service';
 import { AllowStaff } from '../../common/staff-permissions';
 import { StaffLookupThrottle } from '../../common/throttle/throttle.config';
 import { ForfeitCommissionsDto } from './dto/forfeit-commissions.dto';
+import { Trim } from '../../common/decorators/trim.decorator';
 
-const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
 
 export class BlockUserDto {
-  @Transform(trim) @IsString() @MinLength(3) @MaxLength(500) reason!: string;
+  @Trim() @IsString() @MinLength(3) @MaxLength(500) reason!: string;
 }
 
 export class RevokeSessionsDto {
-  @Transform(trim) @IsString() @MinLength(3) @MaxLength(500) reason!: string;
+  @Trim() @IsString() @MinLength(3) @MaxLength(500) reason!: string;
 }
 
 export class UnblockUserDto {
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value)) @IsString() @MinLength(3) @MaxLength(500) reason!: string;
+  @Trim() @IsString() @MinLength(3) @MaxLength(500) reason!: string;
 }
 
 export class StaffPermissionsDto {
   /** Nhóm việc của nhân viên — xem common/staff-permissions.ts. Mảng rỗng = chỉ quầy thu ngân/đổi vỏ/chấm công. */
   @IsArray() @ArrayMaxSize(10) @IsString({ each: true }) permissions!: string[];
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value)) @IsString() @MinLength(3) @MaxLength(500) reason!: string;
+  @Trim() @IsString() @MinLength(3) @MaxLength(500) reason!: string;
 }
 
 @ApiTags('admin-users')

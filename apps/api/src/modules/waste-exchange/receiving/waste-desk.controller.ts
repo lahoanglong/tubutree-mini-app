@@ -7,13 +7,14 @@ import { deviceMetaOf } from '../core/waste-events';
 import { WasteConfirmService } from './waste-confirm.service';
 import { WasteDeskService } from './waste-desk.service';
 import { WasteConfirmDto, WasteRejectDto } from './waste-receiving.dto';
+import { Trim } from '../../../common/decorators/trim.decorator';
 
 export class WasteDeskLookupDto {
-  @IsString() @MaxLength(64) code!: string;
+  @Trim() @IsString() @MaxLength(64) code!: string;
 }
 
 export class WastePerkDto {
-  @IsString() @MaxLength(300) perkText!: string;
+  @Trim() @IsString() @MaxLength(300) perkText!: string;
 }
 
 @Controller('waste/desk')

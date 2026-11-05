@@ -5,10 +5,11 @@ import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { CashbackService } from './cashback.service';
 import { CashbackProviderRegistry } from './providers/cashback-provider.registry';
+import { Trim } from '../../common/decorators/trim.decorator';
 
 export class ClickDto {
   @IsString() @MaxLength(64) merchantId!: string;
-  @IsOptional() @IsUrl({ protocols: ['https'], require_protocol: true }) @MaxLength(2048) productUrl?: string;
+  @IsOptional() @Trim() @IsUrl({ protocols: ['https'], require_protocol: true }) @MaxLength(2048) productUrl?: string;
 }
 
 @Controller()

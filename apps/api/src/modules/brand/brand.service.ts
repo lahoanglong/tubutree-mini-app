@@ -87,6 +87,9 @@ function assertPromotionWindow(startAt: Date, endAt: Date): void {
   if (!(endAt.getTime() > startAt.getTime())) throw new BadRequestException('Ngày kết thúc phải sau ngày bắt đầu.');
 }
 
+/** Mảng chứng nhận đã qua ValidationPipe là các thể hiện lớp DTO; lưu vào cột Json dạng object thuần. */
+const plainCerts = (value: unknown): unknown => (Array.isArray(value) ? value.map((c) => ({ ...(c as object) })) : value);
+
 @Injectable()
 export class BrandService {
   constructor(
@@ -242,7 +245,7 @@ export class BrandService {
         tagline: dto.tagline ?? null,
         story: dto.story ?? null,
         origin: dto.origin ?? null,
-        certifications: (dto.certifications as object) ?? undefined,
+        certifications: (plainCerts(dto.certifications) as object) ?? undefined,
         isPublished: dto.isPublished ?? false,
       },
     });
@@ -266,6 +269,7 @@ export class BrandService {
     const current = await this.prisma.brand.findUniqueOrThrow({ where: { id } });
     this.assertImageChanges(dto, current);
     const data: Record<string, unknown> = { ...dto };
+    if (Array.isArray(dto.certifications)) data.certifications = plainCerts(dto.certifications);
     if (typeof dto.slug === 'string') {
       // Chặn slug rỗng tường minh (dto.slug='') — trước đây bị guard `&& dto.slug.trim()` bỏ qua
       // nên '' vẫn lọt vào `data = {...dto}` và ghi đè cột slug @unique thành rỗng.
