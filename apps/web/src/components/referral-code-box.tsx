@@ -19,7 +19,7 @@ function Tile() {
 
 function CodeChip({ code }: { code: string }) {
   return (
-    <span className="rounded-control border border-dashed border-promo-solid bg-promo-bg px-1.5 py-0.5 text-xs font-bold tracking-wide text-promo-fg">
+    <span className="rounded-control border border-dashed border-promo-solid bg-promo-bg px-1.5 py-0.5 text-caption font-bold tracking-wide text-promo-fg">
       {code}
     </span>
   );
@@ -64,7 +64,7 @@ export function ReferralCodeBox({
             <div className="text-sm font-semibold text-stone-900">Mã người giới thiệu</div>
             <div className="mt-0.5 flex flex-wrap items-center gap-2">
               <CodeChip code={fixedCode} />
-              <span className="text-xs text-success-fg">
+              <span className="text-caption text-success-fg">
                 {linkedCode ? 'Bạn đang mua qua link giới thiệu' : 'Mã hợp lệ, đơn này ghi nhận cho người giới thiệu'}
               </span>
             </div>
@@ -100,10 +100,10 @@ export function ReferralCodeBox({
           <Tile />
           <span className="min-w-0">
             <span className="block text-sm font-semibold text-stone-900">Mã người giới thiệu</span>
-            <span className="block text-xs text-stone-600">Có người giới thiệu Tubu cho bạn? Nhập mã của họ</span>
+            <span className="block text-caption text-stone-600">Có người giới thiệu Tubu cho bạn? Nhập mã của họ</span>
           </span>
         </span>
-        <span className="flex flex-none items-center gap-0.5 text-xs font-bold text-forest-700">
+        <span className="flex flex-none items-center gap-0.5 text-caption font-bold text-forest-700">
           Nhập mã
           <ChevronRight className="h-4 w-4" aria-hidden="true" />
         </span>
@@ -161,7 +161,7 @@ export function ReferralCodeBox({
         className={error ? ui.fieldError : ui.field}
       />
       {error && (
-        <p role="alert" className="flex items-start gap-1.5 text-xs text-danger-fg">
+        <p role="alert" className="flex items-start gap-1.5 text-caption text-danger-fg">
           <TriangleAlert className="mt-0.5 h-3.5 w-3.5 flex-none" aria-hidden="true" />
           {error}
         </p>
