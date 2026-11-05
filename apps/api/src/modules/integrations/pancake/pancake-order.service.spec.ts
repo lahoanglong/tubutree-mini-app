@@ -778,6 +778,34 @@ describe('PancakeOrderService.syncPayment — 401/403 (hi)', () => {
   });
 });
 
+describe('PancakeOrderService — đơn STALE không có đường tự động nào đẩy', () => {
+  it('pushOrder trên đơn STALE (Gomdon, job push, hook khác): không gọi Pancake, không đổi trạng thái', async () => {
+    const t = setup({ pancakePushStatus: PANCAKE_PUSH.STALE });
+    expect(await t.svc.pushOrder('o1')).toBeNull();
+    expect(t.client.createOrder).not.toHaveBeenCalled();
+    expect(t.client.searchOrders).not.toHaveBeenCalled();
+    expect(t.row().pancakePushStatus).toBe(PANCAKE_PUSH.STALE);
+  });
+
+  it('đơn STALE vừa được thanh toán (job thanh toán): không đẩy, gắn "Cần xử lý" bảo kiểm kho rồi mới bấm Đẩy lại, job không lỗi', async () => {
+    const t = setup({ pancakePushStatus: PANCAKE_PUSH.STALE, paymentMethod: 'ZALOPAY', paymentStatus: 'PAID' });
+    await expect(t.svc.syncPayment('o1')).resolves.toBeUndefined();
+    expect(t.client.createOrder).not.toHaveBeenCalled();
+    expect(t.row().pancakePushStatus).toBe(PANCAKE_PUSH.STALE);
+    expect(t.row().pancakeAttention).toContain('quá hạn tự đẩy');
+    expect(t.row().pancakeAttention).toContain('Đẩy lại Pancake');
+  });
+
+  it('"Đẩy lại" của admin vẫn đưa đơn STALE lên Pancake', async () => {
+    const t = setup({ pancakePushStatus: PANCAKE_PUSH.STALE, status: 'CONFIRMED' });
+    await t.svc.retryPushByAdmin('admin1', 'TUBU1');
+    expect(t.row().pancakePushStatus).toBe(PANCAKE_PUSH.PENDING);
+    await t.svc.pushOrder('o1');
+    expect(t.client.createOrder).toHaveBeenCalledTimes(1);
+    expect(t.row().pancakePushStatus).toBe(PANCAKE_PUSH.SYNCED);
+  });
+});
+
 describe('PancakeOrderService.syncPayment', () => {
   it('đơn đã lên Pancake lúc chờ chuyển khoản, nay PAID → PUT transfer_money = tổng, cod = 0', async () => {
     const t = setup({ pancakeOrderId: 'pk-1', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID' });

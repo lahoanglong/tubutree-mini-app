@@ -223,6 +223,12 @@ export class PancakeOrderService {
       this.logger.log(`Đơn thu gom ${order.code} chờ vận đơn Gomdon — Gomdon đẩy sang Pancake khi có mã.`);
       return null;
     }
+    // Quá cửa sổ tự đẩy (markOverdue): không đường tự động nào được đẩy nữa (job thanh toán, Gomdon, cron, hook), vì kho có thể đã giao tay
+    // và đẩy tiếp là hai đơn kho. Chỉ "Đẩy lại" của admin (đặt PENDING trước khi xếp job) đưa đơn lên lại.
+    if (order.pancakePushStatus === PANCAKE_PUSH.STALE) {
+      this.logger.warn(`Đơn ${order.code} đã quá hạn tự đẩy Pancake (STALE): không tự đẩy, chờ admin bấm "Đẩy lại Pancake".`);
+      return null;
+    }
     if (!this.client.isConfigured()) {
       this.logger.warn(`Pancake chưa cấu hình — đơn ${order.code} giữ trạng thái chờ đồng bộ.`);
       await this.prisma.order.updateMany({
@@ -265,6 +271,8 @@ export class PancakeOrderService {
           { pancakePushStatus: { not: PANCAKE_PUSH.PUSHING } },
           { pancakeLastAttemptAt: { lt: new Date(now.getTime() - PancakeOrderService.PUSH_LEASE_MS) } },
         ],
+        // Cùng luật với chặn STALE ở trên, nhưng nguyên tử: đơn vừa bị markOverdue giữa lúc đọc và claim không được claim.
+        AND: [{ OR: [{ pancakePushStatus: null }, { pancakePushStatus: { not: PANCAKE_PUSH.STALE } }] }],
       },
       data: {
         pancakePushStatus: PANCAKE_PUSH.PUSHING,
@@ -275,6 +283,7 @@ export class PancakeOrderService {
     if (claim.count === 0) {
       const current = await this.prisma.order.findUniqueOrThrow({ where: { id: order.id }, include: { items: true } });
       if (current.pancakeOrderId) return current.pancakeOrderId;
+      if (current.pancakePushStatus === PANCAKE_PUSH.STALE) return null;
       if (pancakePushGate(current) !== 'PUSH') return this.pushOrder(order.id);
       throw new PancakePushBusyError(`Đơn ${order.code} đang được đẩy sang Pancake bởi tiến trình khác — thử lại sau.`);
     }
@@ -483,6 +492,17 @@ export class PancakeOrderService {
     const order = await this.prisma.order.findUniqueOrThrow({ where: { id: orderId }, include: { items: true } });
     if (order.pancakePaymentSynced || order.status === 'CANCELLED' || order.status === 'RETURNED') return;
     if (isMerchantFulfilledOrder(order)) return;
+    if (!order.pancakeOrderId && order.pancakePushStatus === PANCAKE_PUSH.STALE) {
+      // Đơn quá hạn tự đẩy vừa được thanh toán: không đường tự động nào đẩy. Nhắc người kiểm kho (đã giao tay chưa) trước khi bấm Đẩy lại.
+      await flagPancakeAttention(
+        this.prisma,
+        this.alerts,
+        order,
+        `Đơn quá hạn tự đẩy vừa được thanh toán: kiểm tra kho đã giao tay chưa; chưa thì bấm "Đẩy lại Pancake".`,
+        this.logger,
+      );
+      return;
+    }
     if (!order.pancakeOrderId) {
       try {
         await this.pushOrder(order.id);
