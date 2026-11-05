@@ -104,7 +104,7 @@ describe('/thanh-toan — lỗi theo từng dòng hàng (hk)', () => {
   it('còn dòng cần sửa: ghi lý do khoá nút ở dải đáy', async () => {
     m.items = [line('i1', 'Dầu gội', { stock: 0 })];
     const r = await mount();
-    expect(r.container.textContent).toContain('Sửa sản phẩm hết hàng ở trên để đặt tiếp.');
+    expect(r.container.textContent).toContain('Sửa sản phẩm đang báo lỗi để đặt tiếp.');
   });
 
   it('dòng lỗi nằm sau dòng thứ 6: danh sách trong khung Đơn hàng tự mở ra để thấy dòng lỗi', async () => {

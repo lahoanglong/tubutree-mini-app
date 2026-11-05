@@ -2222,7 +2222,7 @@ describe('CheckoutPage — lỗi theo từng dòng hàng (hk)', () => {
     mocks.getCart.mockResolvedValue({ ...CART, items: [SOLD_OUT, SECOND] });
     renderPage();
     await screen.findByTestId('checkout-line-problem');
-    expect(await screen.findByText('Sửa sản phẩm hết hàng ở trên để đặt tiếp.')).toBeInTheDocument();
+    expect(await screen.findByText('Sửa sản phẩm đang báo lỗi để đặt tiếp.')).toBeInTheDocument();
     expect(screen.queryByTestId('checkout-cart-issue')).not.toBeInTheDocument();
   });
 });
