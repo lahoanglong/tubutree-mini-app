@@ -123,6 +123,7 @@ const mocks = vi.hoisted(() => ({
   createAcademyCourse: vi.fn(),
   updateAcademyCourse: vi.fn(),
   deleteAcademyCourse: vi.fn(),
+  getPosCreditEnabled: vi.fn(),
   addAcademyLesson: vi.fn(),
   updateAcademyLesson: vi.fn(),
   deleteAcademyLesson: vi.fn(),
@@ -374,6 +375,7 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
     getContentKit: async () => mocks.kit,
     saveContentKit: (...args: unknown[]) => mocks.saveContentKit(...args),
     listAcademyCourses: async () => mocks.courses,
+    getPosCreditEnabled: () => mocks.getPosCreditEnabled(),
     createAcademyCourse: (...args: unknown[]) => mocks.createAcademyCourse(...args),
     updateAcademyCourse: (...args: unknown[]) => mocks.updateAcademyCourse(...args),
     deleteAcademyCourse: (...args: unknown[]) => mocks.deleteAcademyCourse(...args),
@@ -393,6 +395,7 @@ const mount = async () => {
 
 beforeEach(() => {
   mocks.auth = { user: { role: 'ADMIN' }, status: 'authenticated', initialized: true };
+  mocks.getPosCreditEnabled.mockReset().mockResolvedValue(true);
   mocks.recycling = 0;
   mocks.pancake = 0;
   mocks.listOrders.mockReset();
@@ -494,6 +497,17 @@ describe('admin/page — khung, đăng nhập, thanh tab', () => {
     expect(link.textContent).toBe('Đăng nhập');
     expect(link.getAttribute('href')).toBe('/dang-nhap');
     expect(link.className).toContain('text-forest-700');
+  });
+
+  it('W9: chưa có phiên đăng nhập thì không gọi thẻ thành viên (/me/loyalty/member-card trả 401 mỗi lần mở /admin)', async () => {
+    mocks.auth = { user: null, status: 'unauthenticated', initialized: true };
+    await mount();
+    expect(mocks.getPosCreditEnabled).not.toHaveBeenCalled();
+  });
+
+  it('W9: đã đăng nhập (nhân viên hay quản trị viên) thì hỏi công tắc tích điểm tại quầy đúng một lần', async () => {
+    await mount();
+    expect(mocks.getPosCreditEnabled).toHaveBeenCalledTimes(1);
   });
 
   it('không phải ADMIN: chỉ hiện thông báo không có quyền, không có thanh tab', async () => {

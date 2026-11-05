@@ -482,7 +482,8 @@ export default function AdminPage() {
   const role = user?.role;
   // Nhân viên: nhóm việc đọc lại từ API (JwtStrategy đọc DB) — gán/gỡ nhóm có hiệu lực mà không cần đăng nhập lại.
   // Cờ tích điểm tại quầy đang tắt thì không mời vào màn thu ngân; chưa biết (đang tải hoặc lỗi) thì vẫn hiện để nhân viên quầy không mất lối vào.
-  const posOffQ = useQuery({ queryKey: ['pos-credit-enabled'], queryFn: getPosCreditEnabled, staleTime: 60_000 });
+  // Chỉ hỏi sau khi có phiên: trước đó /me/loyalty/member-card trả 401 ở mỗi lần mở /admin (token chưa được làm mới xong).
+  const posOffQ = useQuery({ queryKey: ['pos-credit-enabled'], queryFn: getPosCreditEnabled, staleTime: 60_000, enabled: status === 'authenticated' });
   const accessQ = useQuery({
     queryKey: ['admin-ops-access'],
     queryFn: getOpsAccess,
