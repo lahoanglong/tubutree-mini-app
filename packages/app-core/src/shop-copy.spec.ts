@@ -32,6 +32,8 @@ const WORST: Record<string, string> = {
 // Khoá cần giá trị xấu nhất riêng (số tiền rút gọn có thể ghi "999,9tr", dài hơn "999k" dùng chung cho x).
 const WORST_BY_KEY: Record<string, Record<string, string>> = {
   'coupon.hintShort': { x: '999,9tr' },
+  'order.payBy': { at: '23:59 31/12' },
+  'order.payByLeft': { at: '23:59 31/12', t: '99 ngày 23 giờ' },
   'shop.tierHintNext': { name: 'Đồng' },
 };
 
