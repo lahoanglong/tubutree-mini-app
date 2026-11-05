@@ -457,16 +457,29 @@ describe('CampaignsAdminService: kiểm sức khoẻ trước khi bật', () => 
       expect(prisma.campaignProduct.findMany).not.toHaveBeenCalled();
     });
 
-    it('trả kèm số món dùng được để form chọn thứ tự gắn', async () => {
-      const { svc } = setup({ healthProducts: [visibleProduct({ id: 'p1' }), visibleProduct({ id: 'p2', isActive: false })] });
-      const out = await svc.check(dto({ productIds: ['p1', 'p2'] }), NOW);
-      expect(out.usable).toEqual({ products: 1, coupons: 0 });
+    it('verdict: tạo mới đang bật mà trang trống thì blocked kèm lý do; tạo mới có sản phẩm hiển thị thì không', async () => {
+      const empty = setup().svc;
+      expect((await empty.check(dto({ productIds: [], couponCodes: [] }), NOW)).verdict).toMatchObject({ blocked: true, codes: ['PAGE_EMPTY'] });
+      const ok = setup({ healthProducts: [visibleProduct({ id: 'p1' })] }).svc;
+      expect((await ok.check(dto({ productIds: ['p1'] }), NOW)).verdict).toEqual({ blocked: false, codes: [] });
     });
 
-    it('trả kèm giờ máy chủ để form không phụ thuộc đồng hồ máy admin', async () => {
-      const { svc } = setup({ healthProducts: [visibleProduct({ id: 'p1' })] });
-      const out = await svc.check(dto({ productIds: ['p1'] }), NOW);
-      expect(out.now).toBe(NOW.toISOString());
+    it('verdict: bản nháp tắt (isActive false) không bị chặn dù có lỗi; issues vẫn báo như thể đã bật', async () => {
+      const out = await setup().svc.check(dto({ isActive: false, productIds: [] }), NOW);
+      expect(out.verdict.blocked).toBe(false);
+      expect(out.issues.map((i) => i.code)).toContain('PAGE_EMPTY');
+    });
+
+    it('verdict có id: before là bản đã lưu; trang đang chạy còn sản phẩm mà bản nháp gỡ hết thì blocked "làm trang đang chạy thành trống"', async () => {
+      const { svc } = setup({ existing: row({ isActive: true }), linked: [{ campaignId: 'c1', product: visibleProduct() }] });
+      const out = await svc.check(dto({ id: 'c1', productIds: [] }), NOW);
+      expect(out.verdict).toMatchObject({ blocked: true, codes: ['PAGE_EMPTY'] });
+      expect(out.verdict.reason).toContain('Lần lưu này làm trang đang chạy thành trống');
+    });
+
+    it('verdict có id: lỗi cũ có sẵn (trang đang chạy đã trống) mà bản nháp không làm tệ thêm thì không chặn', async () => {
+      const { svc } = setup({ existing: row({ isActive: true }) });
+      expect((await svc.check(dto({ id: 'c1', productIds: [] }), NOW)).verdict.blocked).toBe(false);
     });
 
     it('chưa chọn sản phẩm/mã: trang trống là BLOCK', async () => {
@@ -478,8 +491,9 @@ describe('CampaignsAdminService: kiểm sức khoẻ trước khi bật', () => 
     it('sửa chiến dịch đã lưu mà không gửi danh sách: đọc liên kết đang lưu', async () => {
       const { svc, prisma } = setup({ linked: [linkedTo('c1')] });
       const out = await svc.check(dto({ id: 'c1' }), NOW);
-      expect(out).toEqual({ issues: [], usable: { products: 1, coupons: 0 }, now: NOW.toISOString(), blockers: 0, warnings: 0 });
-      expect(prisma.campaignProduct.findMany).toHaveBeenCalledTimes(1);
+      expect(out).toEqual({ issues: [], blockers: 0, warnings: 0, verdict: { blocked: false, codes: [] } });
+      // Hai lượt đọc liên kết đã lưu: một cho bản nháp (không gửi danh sách), một cho bản đã lưu làm mốc "trước" của phán quyết.
+      expect(prisma.campaignProduct.findMany).toHaveBeenCalledTimes(2);
     });
 
     it('đích sai định dạng: 400 như lúc lưu', async () => {
@@ -507,8 +521,8 @@ describe('CampaignsAdminService: PUT sản phẩm/mã không làm trang chiến 
   const usable = { code: 'THU10', isActive: true, startAt: new Date('2026-11-01T00:00:00Z'), endAt: new Date('2026-12-01T00:00:00Z'), usageLimit: null, usedCount: 0 };
 
   it('setProducts: gỡ hết sản phẩm khỏi trang đang bật, không còn mã dùng được: 400 câu trang trống, huỷ giao dịch', async () => {
-    const { svc, prisma } = setup({ existing: live() });
-    await expect(svc.setProducts('c1', [], NOW)).rejects.toThrow(/Trang chiến dịch đang trống/);
+    const { svc, prisma } = setup({ existing: live(), linked: linked() });
+    await expect(svc.setProducts('c1', [], NOW)).rejects.toThrow(/Lần lưu này làm trang đang chạy thành trống/);
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     expect(typeof prisma.$transaction.mock.calls[0][0]).toBe('function');
   });
@@ -519,7 +533,7 @@ describe('CampaignsAdminService: PUT sản phẩm/mã không làm trang chiến 
   });
 
   it('setProducts: còn sản phẩm hiển thị sau khi ghi thì cho', async () => {
-    const { svc } = setup({ existing: live(), products: [{ id: 'p' }], linked: linked() });
+    const { svc } = setup({ existing: live(), healthProducts: [visibleProduct({ id: 'p' })], linked: linked() });
     await expect(svc.setProducts('c1', ['p'], NOW)).resolves.toEqual({ count: 1 });
   });
 
@@ -531,8 +545,8 @@ describe('CampaignsAdminService: PUT sản phẩm/mã không làm trang chiến 
   });
 
   it('setCoupons: gỡ hết mã của trang đang bật mà không còn sản phẩm hiển thị: 400 câu trang trống', async () => {
-    const { svc } = setup({ existing: live() });
-    await expect(svc.setCoupons('c1', [], NOW)).rejects.toThrow(/Trang chiến dịch đang trống/);
+    const { svc } = setup({ existing: live(), couponLinks: [{ campaignId: 'c1', coupon: usable }] });
+    await expect(svc.setCoupons('c1', [], NOW)).rejects.toThrow(/Lần lưu này làm trang đang chạy thành trống/);
   });
 
   it('setCoupons: còn sản phẩm hiển thị thì cho; chiến dịch tắt thì cho', async () => {
@@ -607,3 +621,47 @@ describe('CampaignsAdminService: bật lại (khách không thấy thành khách
   });
 });
 
+
+describe('CampaignsAdminService: một lệnh lưu trường + danh sách trong một giao dịch', () => {
+  const live = (over: Record<string, unknown> = {}) => row({ isActive: true, linkType: 'CAMPAIGN_PAGE', ...over });
+  const hasP = (id: string) => ({ healthProducts: [visibleProduct({ id })] });
+
+  it('PATCH kèm productIds: khoá dòng, ghi trường rồi thay danh sách, đúng một giao dịch', async () => {
+    const { svc, prisma } = setup({ existing: live({ isActive: false, products: [], coupons: [] }), ...hasP('p1') });
+    await svc.update('c1', { title: 'Mới', productIds: ['p1', 'p1'] }, NOW);
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(prisma.campaign.update).toHaveBeenCalledTimes(1);
+    expect(prisma.campaignProduct.deleteMany).toHaveBeenCalledWith({ where: { campaignId: 'c1' } });
+    expect(prisma.campaignProduct.createMany).toHaveBeenCalledWith({ data: [{ campaignId: 'c1', productId: 'p1', sortOrder: 0 }] });
+    expect(prisma.campaignCoupon.deleteMany).not.toHaveBeenCalled();
+    expect(prisma.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(prisma.campaign.update.mock.invocationCallOrder[0]);
+  });
+
+  it('PATCH bị chặn (trang đang chạy thành trống): 400 và KHÔNG ghi gì (không đổi trường, không đụng danh sách)', async () => {
+    const { svc, prisma } = setup({ existing: live(), linked: [{ campaignId: 'c1', product: visibleProduct() }] });
+    await expect(svc.update('c1', { title: 'Không lưu', productIds: [] }, NOW)).rejects.toThrow(/Lần lưu này làm trang đang chạy thành trống/);
+    expect(prisma.campaign.update).not.toHaveBeenCalled();
+    expect(prisma.campaignProduct.deleteMany).not.toHaveBeenCalled();
+    expect(prisma.campaignCoupon.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('PATCH couponCodes: mã lạ hay mã lô thẻ in bị 400 trước khi mở giao dịch', async () => {
+    const { svc, prisma } = setup({ existing: live({ isActive: false }) });
+    await expect(svc.update('c1', { couponCodes: ['KHONGCO'] }, NOW)).rejects.toThrow(/Không tìm thấy mã/);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('tạo mới đang bật kèm sản phẩm hiển thị: một giao dịch, tạo dòng rồi ghi danh sách', async () => {
+    const { svc, prisma } = setup({ existing: row({ products: [], coupons: [] }), ...hasP('p1') });
+    await svc.create({ title: 'Mới', placement: 'HOME_TOP', image: PNG, linkType: 'CAMPAIGN_PAGE', startAt: '2026-11-01T00:00:00.000Z', endAt: '2026-11-20T00:00:00.000Z', isActive: true, productIds: ['p1'] }, NOW);
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(prisma.campaign.create).toHaveBeenCalledTimes(1);
+    expect(prisma.campaignProduct.createMany).toHaveBeenCalledWith({ data: [{ campaignId: 'new', productId: 'p1', sortOrder: 0 }] });
+  });
+
+  it('tạo mới đang bật mà trang trống: 400, không tạo dòng nào', async () => {
+    const { svc, prisma } = setup();
+    await expect(svc.create({ title: 'Mới', placement: 'HOME_TOP', image: PNG, linkType: 'CAMPAIGN_PAGE', startAt: '2026-11-01T00:00:00.000Z', endAt: '2026-11-20T00:00:00.000Z', isActive: true }, NOW)).rejects.toThrow(/Trang chiến dịch đang trống/);
+    expect(prisma.campaign.create).not.toHaveBeenCalled();
+  });
+});

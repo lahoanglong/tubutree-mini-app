@@ -377,6 +377,128 @@ describe('Campaigns (real Postgres)', () => {
       await expect(admin.update(c.id, { endAt: later })).resolves.toMatchObject({ isActive: true });
     });
 
+    describe('lưu một lệnh: PATCH/POST kèm danh sách, một giao dịch, 400 thì không ghi gì', () => {
+      const offset = (days: number) => new Date(Date.now() + days * DAY);
+      const couponAt = (suffix: string, startDays: number, endDays: number) =>
+        prisma.coupon.create({
+          data: { code: `ITCMP${tag.toUpperCase()}${suffix}`, type: 'PERCENT', value: 10, scope: 'PUBLIC', startAt: offset(startDays), endAt: offset(endDays) },
+        });
+      const page = (slug: string, over: Record<string, unknown> = {}) =>
+        admin.create(base(slug, { linkType: 'CAMPAIGN_PAGE', linkValue: undefined, isActive: false, startAt: offset(-5).toISOString(), endAt: offset(20).toISOString(), ...over }));
+      const row = (id: string) => prisma.campaign.findUniqueOrThrow({ where: { id } });
+      const codesOf = async (id: string) => (await prisma.campaignCoupon.findMany({ where: { campaignId: id }, include: { coupon: true } })).map((l) => l.coupon.code).sort();
+
+      it('(1) dời startAt sang tương lai kèm thêm mã Y mở đúng mốc mới, mã cũ X hết hạn trước đó: được, một lệnh; thiếu Y thì 400 và không ghi gì', async () => {
+        const x = await couponAt('X1', -10, 1);
+        const y = await couponAt('Y1', 5, 30);
+        const c = await page('v1');
+        await admin.setCoupons(c.id, [x.code]);
+        await admin.update(c.id, { isActive: true });
+        const startAt = offset(5).toISOString();
+        const before = await row(c.id);
+        await expect(admin.update(c.id, { startAt, title: 'Chỉ dời giờ' })).rejects.toThrow(/Lần lưu này làm trang đang chạy thành trống/);
+        expect(await row(c.id)).toMatchObject({ title: before.title, startAt: before.startAt });
+        const out = await admin.update(c.id, { startAt, couponCodes: [x.code, y.code] });
+        expect(out.couponCodes.sort()).toEqual([x.code, y.code].sort());
+        expect((await row(c.id)).startAt.toISOString()).toBe(startAt);
+        expect(await codesOf(c.id)).toEqual([x.code, y.code].sort());
+      });
+
+      it('(2) trang đã trống sẵn (lỗi cũ) + dời startAt về quá khứ: được', async () => {
+        const c = await page('v2');
+        await prisma.campaign.update({ where: { id: c.id }, data: { isActive: true } });
+        const startAt = offset(-8).toISOString();
+        await expect(admin.update(c.id, { startAt })).resolves.toMatchObject({ isActive: true });
+        expect((await row(c.id)).startAt.toISOString()).toBe(startAt);
+      });
+
+      it('(3) startAt có giây, trang trống sẵn, chỉ sửa tiêu đề (gửi lại đúng startAt): được', async () => {
+        const startAt = new Date(Date.now() - 3 * DAY + 1234).toISOString();
+        const c = await page('v3', { startAt });
+        await prisma.campaign.update({ where: { id: c.id }, data: { isActive: true } });
+        await expect(admin.update(c.id, { title: 'Tiêu đề mới', startAt })).resolves.toMatchObject({ title: 'Tiêu đề mới' });
+        expect((await row(c.id)).title).toBe('Tiêu đề mới');
+      });
+
+      it('(4) CAMPAIGN_PAGE [A] đang chạy → PRODUCT và bỏ A trong một lệnh: được', async () => {
+        const c = await livePage('v4');
+        const target = await product('SP đích v4', 'v4-dich');
+        await expect(admin.update(c.id, { linkType: 'PRODUCT', linkValue: target.slug, productIds: [] })).resolves.toMatchObject({ linkType: 'PRODUCT', isActive: true });
+        expect(await linksOf(c.id)).toEqual({ products: 0, coupons: 0 });
+      });
+
+      it('(5) đang chạy đổi sang CAMPAIGN_PAGE kèm thêm sản phẩm trong một lệnh: được; thiếu sản phẩm thì 400 và đích không đổi', async () => {
+        const c = await admin.create(base('v5'));
+        await expect(admin.update(c.id, { linkType: 'CAMPAIGN_PAGE' })).rejects.toThrow(/Trang chiến dịch đang trống/);
+        expect((await row(c.id)).linkType).toBe('URL_INTERNAL');
+        const a = await product('SP v5', 'v5');
+        await expect(admin.update(c.id, { linkType: 'CAMPAIGN_PAGE', productIds: [a.id] })).resolves.toMatchObject({ linkType: 'CAMPAIGN_PAGE', isActive: true });
+        expect(await linksOf(c.id)).toEqual({ products: 1, coupons: 0 });
+      });
+
+      it('(6) bỏ A và sửa tiêu đề (trang thành trống): 400, tiêu đề KHÔNG đổi, A còn nguyên', async () => {
+        const c = await livePage('v6');
+        const before = await row(c.id);
+        await expect(admin.update(c.id, { title: 'Không được lưu', productIds: [] })).rejects.toThrow(/Lần lưu này làm trang đang chạy thành trống/);
+        expect((await row(c.id)).title).toBe(before.title);
+        expect(await linksOf(c.id)).toEqual({ products: 1, coupons: 0 });
+      });
+
+      it('(7) gia hạn chiến dịch đã hết hạn mà đích là sản phẩm đang ẩn: 400, endAt không đổi', async () => {
+        const hidden = await product('SP ẩn v7', 'v7');
+        await prisma.product.update({ where: { id: hidden.id }, data: { isActive: false } });
+        const c = await admin.create(base('v7', { linkType: 'PRODUCT', linkValue: hidden.slug, isActive: false, startAt: offset(-3).toISOString(), endAt: offset(-1).toISOString() }));
+        await prisma.campaign.update({ where: { id: c.id }, data: { isActive: true } });
+        await expect(admin.update(c.id, { endAt: offset(5).toISOString() })).rejects.toBeInstanceOf(BadRequestException);
+        expect((await row(c.id)).endAt.getTime()).toBeLessThan(Date.now());
+      });
+
+      it('(8) tạo mới CAMPAIGN_PAGE đang bật kèm sản phẩm hiển thị: một request; thiếu sản phẩm thì 400 và không có dòng nào', async () => {
+        const a = await product('SP v8', 'v8');
+        const slug = `it-cmp-${tag}-v8`;
+        await expect(admin.create(base('v8', { linkType: 'CAMPAIGN_PAGE', linkValue: undefined, isActive: true }))).rejects.toThrow(/Trang chiến dịch đang trống/);
+        expect(await prisma.campaign.count({ where: { slug } })).toBe(0);
+        const out = await admin.create(base('v8', { linkType: 'CAMPAIGN_PAGE', linkValue: undefined, isActive: true, productIds: [a.id] }));
+        expect(out).toMatchObject({ isActive: true, products: [{ id: a.id }] });
+        expect(await linksOf(out.id)).toEqual({ products: 1, coupons: 0 });
+      });
+
+      it('(9) thay mã X đang dùng được bằng Y chưa mở trên trang đang chạy: 400, X còn nguyên', async () => {
+        const x = await couponAt('X9', -5, 20);
+        const y = await couponAt('Y9', 3, 30);
+        const c = await page('v9');
+        await admin.setCoupons(c.id, [x.code]);
+        await admin.update(c.id, { isActive: true });
+        await expect(admin.update(c.id, { couponCodes: [y.code] })).rejects.toThrow(/Lần lưu này làm trang đang chạy thành trống/);
+        expect(await codesOf(c.id)).toEqual([x.code]);
+      });
+
+      it('PATCH một lệnh gỡ sản phẩm song song PUT mã []: không bao giờ có trang đang chạy mà trống (nhiều vòng)', async () => {
+        for (let round = 0; round < 8; round++) {
+          const c = await page(`pr${round}`);
+          const a = await product(`SP pr${round}`, `pr${round}`);
+          const k = await couponAt(`PR${round}`, -1, 10);
+          await admin.setProducts(c.id, [a.id]);
+          await admin.setCoupons(c.id, [k.code]);
+          await admin.update(c.id, { isActive: true });
+          const results = await Promise.allSettled([admin.update(c.id, { productIds: [] }), admin.setCoupons(c.id, [])]);
+          expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+          for (const r of results) if (r.status === 'rejected') expect(r.reason).toBeInstanceOf(BadRequestException);
+          const left = await linksOf(c.id);
+          expect(left.products + left.coupons).toBe(1);
+        }
+      });
+
+      it('hai PATCH một lệnh cùng bỏ hết sản phẩm của trang đang chạy: đúng một lệnh thắng nếu còn mã, không thì cả hai bị chặn; trang không bao giờ trống', async () => {
+        for (let round = 0; round < 6; round++) {
+          const c = await livePage(`pp${round}`);
+          const results = await Promise.allSettled([admin.update(c.id, { title: 'A', productIds: [] }), admin.update(c.id, { title: 'B', productIds: [] })]);
+          expect(results.every((r) => r.status === 'rejected')).toBe(true);
+          expect(await linksOf(c.id)).toEqual({ products: 1, coupons: 0 });
+        }
+      });
+    });
+
     it('banner thứ 6 cùng chỗ bị cảnh báo chồng banner theo đúng thứ tự hiển thị thật', async () => {
       for (let i = 0; i < 5; i++) await admin.create(base(`day${i}`, { placement: 'OFFERS_TOP', sortOrder: i }));
       const sixth = await admin.create(base('day5', { placement: 'OFFERS_TOP', sortOrder: 9999 }));

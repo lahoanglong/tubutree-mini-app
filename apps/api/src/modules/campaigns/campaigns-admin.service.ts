@@ -6,8 +6,8 @@ import { PRISMA_TRANSACTION_OPTIONS, PrismaService } from '../../prisma/prisma.s
 import { ImageRegistryStale } from '../catalog/image-registry-stale';
 import { normalizeCouponCode } from '../coupons/coupons.service';
 import { assertWindow, campaignStatus, normalizeLink, slugFromTitle, type CampaignStatus } from './campaign-admin-rules';
-import { countHealth, type HealthIssue, type HealthSubject } from './campaign-health';
-import { campaignHealthBatch, campaignHealthDetailBatch } from './campaign-health-loader';
+import { countHealth, saveVerdict, type HealthIssue, type HealthSubject, type SaveVerdict } from './campaign-health';
+import { campaignHealthBatch } from './campaign-health-loader';
 import { CAMPAIGN_MAX_COUPONS, CAMPAIGN_MAX_PRODUCTS, type CheckCampaignDto, type CreateCampaignDto, type UpdateCampaignDto } from './dto/campaign.dto';
 
 export interface AdminCampaignRow {
@@ -34,12 +34,10 @@ export interface AdminCampaignRow {
 
 export interface CampaignCheckResult {
   issues: HealthIssue[];
-  /** Số món khách dùng được trên trang chiến dịch theo danh sách đang soạn (form chọn thứ tự gắn từ đây). */
-  usable: { products: number; coupons: number };
-  /** Giờ máy chủ (ISO) lúc kiểm: form tính "đang hiện cho khách" theo đồng hồ này, không theo máy admin. */
-  now: string;
   blockers: number;
   warnings: number;
+  /** Phán quyết của lần lưu này theo ĐÚNG luật `saveVerdict` mà tạo/sửa/PUT dùng (before là bản đã lưu khi có id, không hiện khi tạo mới). */
+  verdict: { blocked: boolean; codes: string[]; reason?: string };
 }
 
 export interface AdminCampaignDetail extends Omit<AdminCampaignRow, 'image' | 'productCount' | 'couponCount' | 'health'> {
@@ -59,6 +57,12 @@ const DETAIL_INCLUDE = {
 } satisfies Prisma.CampaignInclude;
 
 type DetailRow = Prisma.CampaignGetPayload<{ include: typeof DETAIL_INCLUDE }>;
+
+/** Mã đã tra: danh sách chuẩn hoá bỏ trùng theo thứ tự, và id của từng mã. */
+interface ResolvedCoupons {
+  codes: string[];
+  ids: Map<string, string>;
+}
 
 function baseFields(c: Campaign, now: Date) {
   return {
@@ -133,7 +137,7 @@ export class CampaignsAdminService {
     }));
   }
 
-  /** Kiểm một chiến dịch chưa lưu (hoặc đang sửa) như thể đã bật. Không ghi gì. */
+  /** Kiểm một chiến dịch chưa lưu (hoặc đang sửa) như thể đã bật, và cho biết lần lưu này có bị chặn không. Không ghi gì. */
   async check(dto: CheckCampaignDto, now: Date = new Date()): Promise<CampaignCheckResult> {
     const linkType = dto.linkType ?? 'CAMPAIGN_PAGE';
     const subject: HealthSubject = {
@@ -146,27 +150,43 @@ export class CampaignsAdminService {
       endAt: new Date(dto.endAt),
       sortOrder: dto.sortOrder ?? 0,
     };
-    // Chiến dịch mới chưa có liên kết trong DB: không gửi danh sách nghĩa là danh sách rỗng. Sửa chiến dịch đã lưu mà không gửi thì dùng liên kết đang lưu.
-    const fresh = dto.id === undefined;
-    const productIds = dto.productIds ?? (fresh ? [] : undefined);
-    const couponCodes = dto.couponCodes ?? (fresh ? [] : undefined);
-    const [detail] = await campaignHealthDetailBatch(this.prisma, [{ subject, ...(productIds ? { productIds } : {}), ...(couponCodes ? { couponCodes } : {}) }], now);
-    const issues = detail?.issues ?? [];
-    return { issues, usable: detail?.usable ?? { products: 0, coupons: 0 }, now: now.toISOString(), ...countHealth(issues) };
+    const before = dto.id ? await this.prisma.campaign.findUnique({ where: { id: dto.id } }) : null;
+    const { verdict, issues } = await this.judge(this.prisma, before, { ...subject, isActive: dto.isActive ?? true }, { productIds: dto.productIds, couponCodes: dto.couponCodes }, now, true);
+    return { issues, ...countHealth(issues), verdict: { blocked: verdict.blocked, codes: verdict.codes, ...(verdict.reason ? { reason: verdict.reason } : {}) } };
   }
 
-  /** Bật chiến dịch mà còn lỗi chặn thì 400 với câu đầu tiên. Kiểm lại ngay trong request, không tin gì từ trình duyệt. */
-  private async assertCanActivate(client: Prisma.TransactionClient | PrismaService, subject: HealthSubject, now: Date): Promise<void> {
-    const [issues = []] = await campaignHealthBatch(client, [{ subject, ...(subject.id ? {} : { productIds: [], couponCodes: [] }) }], now);
-    const block = issues.find((i) => i.level === 'BLOCK');
-    if (block) throw new BadRequestException(block.message);
-  }
-
-  /** Chỉ ném khi trang chiến dịch trống theo dữ kiện hiện có (lỗi cũ khác của chiến dịch đang chạy không chặn việc sửa). */
-  private async assertPageNotEmptyAt(client: Prisma.TransactionClient | PrismaService, subject: HealthSubject, now: Date): Promise<void> {
-    const [issues = []] = await campaignHealthBatch(client, [{ subject }], now);
-    const empty = issues.find((i) => i.code === 'PAGE_EMPTY');
-    if (empty) throw new BadRequestException(empty.message);
+  /**
+   * Phán quyết MỘT lần cho mọi đường lưu, trước khi ghi (trong khoá dòng của giao dịch gọi). Health "sau" tính với danh sách sẽ được ghi (đúng trạng thái sau lưu);
+   * health "trước" chỉ tính khi cần (chiến dịch đang hiện và không đổi đích). Chiến dịch lưu xong vẫn không hiện cho khách thì khỏi tính gì, trừ khi `always` (check cần issues).
+   */
+  private async judge(
+    client: Prisma.TransactionClient | PrismaService,
+    before: Campaign | null,
+    after: HealthSubject & { isActive: boolean },
+    lists: { productIds?: readonly string[] | undefined; couponCodes?: readonly string[] | undefined },
+    now: Date,
+    always = false,
+  ): Promise<{ verdict: SaveVerdict; issues: HealthIssue[] }> {
+    const visible = after.isActive && after.endAt > now;
+    if (!visible && !always) return { verdict: { blocked: false, codes: [] }, issues: [] };
+    const fresh = after.id === undefined;
+    const [issues = []] = await campaignHealthBatch(
+      client,
+      [
+        {
+          subject: after,
+          ...(lists.productIds ? { productIds: [...lists.productIds] } : fresh ? { productIds: [] } : {}),
+          ...(lists.couponCodes ? { couponCodes: [...lists.couponCodes] } : fresh ? { couponCodes: [] } : {}),
+        },
+      ],
+      now,
+    );
+    const beforeState = before ? { isActive: before.isActive, endAt: before.endAt, linkType: before.linkType, linkValue: before.linkValue } : null;
+    const stayed = beforeState !== null && beforeState.isActive && beforeState.endAt > now;
+    const sameLink = before !== null && before.linkType === after.linkType && before.linkValue === after.linkValue;
+    const healthBefore = before && stayed && sameLink ? ((await campaignHealthBatch(client, [{ subject: subjectOf(before) }], now))[0] ?? []) : [];
+    const verdict = saveVerdict({ before: beforeState, after: { isActive: after.isActive, endAt: after.endAt, linkType: after.linkType, linkValue: after.linkValue }, healthBefore, healthAfter: issues, now });
+    return { verdict, issues };
   }
 
   async get(id: string, now: Date = new Date()): Promise<AdminCampaignDetail> {
@@ -185,29 +205,27 @@ export class CampaignsAdminService {
     const isActive = dto.isActive ?? true;
     const audience = dto.audience ?? 'ALL';
     const sortOrder = dto.sortOrder ?? 0;
-    if (isActive && endAt > now) await this.assertCanActivate(this.prisma, { placement: dto.placement, audience, linkType, linkValue, startAt, endAt, sortOrder }, now);
     const slug = dto.slug ?? slugFromTitle(dto.title);
     if (await this.prisma.campaign.findUnique({ where: { slug }, select: { id: true } })) {
       throw new ConflictException(`Đã có chiến dịch dùng slug "${slug}". Đổi tên hoặc nhập slug khác.`);
     }
+    const products = dto.productIds ? await this.resolveProductIds(dto.productIds) : undefined;
+    const coupons = dto.couponCodes ? await this.resolveCoupons(dto.couponCodes) : undefined;
     try {
-      const created = await this.prisma.campaign.create({
-        data: {
-          slug,
-          title: dto.title,
-          subtitle: dto.subtitle?.trim() || null,
-          placement: dto.placement,
-          image: dto.image,
-          linkType,
-          linkValue,
-          audience,
-          startAt,
-          endAt,
-          sortOrder,
-          isActive,
-        },
-        include: DETAIL_INCLUDE,
-      });
+      const created = await this.prisma
+        .$transaction(async (tx) => {
+          // Cùng luật với mọi đường lưu: chiến dịch mới hiện cho khách thì không được còn lỗi chặn; vi phạm thì không ghi gì (chưa ghi dòng nào).
+          const { verdict } = await this.judge(tx, null, { placement: dto.placement, audience, linkType, linkValue, startAt, endAt, sortOrder, isActive }, { productIds: products, couponCodes: coupons?.codes }, now);
+          if (verdict.blocked) throw new BadRequestException(verdict.reason);
+          const row = await tx.campaign.create({
+            data: { slug, title: dto.title, subtitle: dto.subtitle?.trim() || null, placement: dto.placement, image: dto.image, linkType, linkValue, audience, startAt, endAt, sortOrder, isActive },
+            include: DETAIL_INCLUDE,
+          });
+          if (products) await this.writeProducts(tx, row.id, products);
+          if (coupons) await this.writeCoupons(tx, row.id, coupons);
+          return products?.length || coupons?.codes.length ? ((await tx.campaign.findUnique({ where: { id: row.id }, include: DETAIL_INCLUDE })) ?? row) : row;
+        }, PRISMA_TRANSACTION_OPTIONS)
+        .catch((e: unknown) => rethrowForeignKey(e, 'Có sản phẩm hoặc mã'));
       // Ảnh banner https chỉ đổi cỡ được khi có trong danh sách của /img: nạp lại ngay thay vì đợi 5 phút.
       this.imageStale?.markStale();
       return toDetail(created, now);
@@ -218,61 +236,11 @@ export class CampaignsAdminService {
   }
 
   async update(id: string, dto: UpdateCampaignDto, now: Date = new Date()): Promise<AdminCampaignDetail> {
-    const startAt = dto.startAt === undefined ? undefined : new Date(dto.startAt);
-    const endAt = dto.endAt === undefined ? undefined : new Date(dto.endAt);
-
-    // Đọc, kiểm và ghi cùng một giao dịch sau khi khoá dòng: PUT sản phẩm/mã cùng khoá dòng này nên không chen vào giữa lúc kiểm và lúc ghi.
-    const { updated, current } = await this.prisma.$transaction(async (tx) => {
-      await this.lockRow(tx, id);
-      const current = await tx.campaign.findUnique({ where: { id } });
-      if (!current) throw new NotFoundException('Không tìm thấy chiến dịch.');
-      if (startAt || endAt) assertWindow(startAt ?? current.startAt, endAt ?? current.endAt);
-
-      const data: Prisma.CampaignUpdateInput = {
-        ...(dto.title !== undefined ? { title: dto.title } : {}),
-        ...(dto.subtitle !== undefined ? { subtitle: dto.subtitle?.trim() || null } : {}),
-        ...(dto.placement !== undefined ? { placement: dto.placement } : {}),
-        ...(dto.image !== undefined ? { image: dto.image } : {}),
-        ...(dto.audience !== undefined ? { audience: dto.audience } : {}),
-        ...(startAt ? { startAt } : {}),
-        ...(endAt ? { endAt } : {}),
-        ...(dto.sortOrder !== undefined ? { sortOrder: dto.sortOrder } : {}),
-        ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
-      };
-      let linkChanged = false;
-      if (dto.linkType !== undefined || dto.linkValue !== undefined) {
-        const linkType = dto.linkType ?? current.linkType;
-        data.linkType = linkType;
-        data.linkValue = normalizeLink(linkType, dto.linkValue !== undefined ? dto.linkValue : current.linkValue);
-        // Lưu lại đúng đích cũ không kiểm lại: sản phẩm đã ẩn không được chặn việc sửa tiêu đề hay giờ của banner.
-        linkChanged = linkType !== current.linkType || data.linkValue !== current.linkValue;
-        if (linkChanged) await this.assertLinkTarget(tx, linkType, data.linkValue);
-      }
-
-      // "Bật" là mọi bước đưa chiến dịch từ khách-không-thấy sang khách-thấy: đang tắt hoặc đã quá endAt trước đó, và sau khi ghi thì bật và chưa hết hạn.
-      // Đổi đích lúc đang chạy cũng kiểm. Lỗi cũ không chặn việc sửa tiêu đề hay giờ của chiến dịch đang chạy.
-      const merged = {
-        placement: dto.placement ?? current.placement,
-        audience: dto.audience ?? current.audience,
-        linkType: data.linkType === undefined ? current.linkType : (data.linkType as CampaignLinkType),
-        linkValue: data.linkValue === undefined ? current.linkValue : (data.linkValue as string | null),
-        startAt: startAt ?? current.startAt,
-        endAt: endAt ?? current.endAt,
-        sortOrder: dto.sortOrder ?? current.sortOrder,
-      };
-      const wasVisible = current.isActive && current.endAt > now;
-      const willBeVisible = (dto.isActive ?? current.isActive) && merged.endAt > now;
-      if (willBeVisible && (!wasVisible || linkChanged)) await this.assertCanActivate(tx, { id, ...merged }, now);
-      // Dời mốc bắt đầu của trang đang chạy đổi mốc tính "mã còn dùng được" (mã hết hạn trước mốc mới thì không còn dùng được): kiểm riêng lỗi trang trống với mốc mới.
-      else if (willBeVisible && wasVisible && merged.linkType === 'CAMPAIGN_PAGE' && merged.startAt.getTime() !== current.startAt.getTime()) {
-        await this.assertPageNotEmptyAt(tx, { id, ...merged }, now);
-      }
-
-      const updated = await tx.campaign.update({ where: { id }, data, include: DETAIL_INCLUDE });
-      return { updated, current };
-    }, PRISMA_TRANSACTION_OPTIONS);
+    const products = dto.productIds ? await this.resolveProductIds(dto.productIds) : undefined;
+    const coupons = dto.couponCodes ? await this.resolveCoupons(dto.couponCodes) : undefined;
+    const { updated, current } = await this.commit(id, dto, { products, coupons }, now, true);
     if (dto.image !== undefined && dto.image !== current.image) this.imageStale?.markStale();
-    return toDetail(updated, now);
+    return toDetail(updated!, now);
   }
 
   async remove(id: string): Promise<{ ok: true }> {
@@ -307,46 +275,80 @@ export class CampaignsAdminService {
   }
 
   /**
-   * Gọi trong giao dịch, SAU khi đã ghi danh sách mới và trước khi commit: trang chiến dịch đang bật (chưa kết thúc) mà sau lần ghi này không còn
-   * sản phẩm hiển thị nào và không còn mã dùng được thì ném 400, giao dịch huỷ nên không ghi gì. Chiến dịch tắt hay đã kết thúc thì cho.
+   * Một lệnh lưu = MỘT giao dịch: khoá dòng, đọc trước, phán quyết (`judge`), rồi ghi trường và thay danh sách. Phán quyết chặn thì ném 400 trước khi ghi nên không ghi gì.
+   * `writeRow` false khi chỉ thay danh sách (PUT sản phẩm/mã giữ cho web cũ): không đụng dòng chiến dịch.
    */
-  private async assertPageNotEmptied(tx: Prisma.TransactionClient, id: string, now: Date): Promise<void> {
-    const c = await tx.campaign.findUnique({ where: { id } });
-    if (!c || !c.isActive || c.endAt <= now || c.linkType !== 'CAMPAIGN_PAGE') return;
-    const [issues = []] = await campaignHealthBatch(tx, [{ subject: subjectOf(c) }], now);
-    const empty = issues.find((i) => i.code === 'PAGE_EMPTY');
-    if (empty) throw new BadRequestException(empty.message);
+  private async commit(
+    id: string,
+    dto: UpdateCampaignDto,
+    lists: { products: string[] | undefined; coupons: ResolvedCoupons | undefined },
+    now: Date,
+    writeRow: boolean,
+  ): Promise<{ updated: DetailRow | null; current: Campaign }> {
+    const startAt = dto.startAt === undefined ? undefined : new Date(dto.startAt);
+    const endAt = dto.endAt === undefined ? undefined : new Date(dto.endAt);
+    return this.prisma
+      .$transaction(async (tx) => {
+        await this.lockRow(tx, id);
+        const current = await tx.campaign.findUnique({ where: { id } });
+        if (!current) throw new NotFoundException('Không tìm thấy chiến dịch.');
+        if (startAt || endAt) assertWindow(startAt ?? current.startAt, endAt ?? current.endAt);
+
+        const data: Prisma.CampaignUpdateInput = {
+          ...(dto.title !== undefined ? { title: dto.title } : {}),
+          ...(dto.subtitle !== undefined ? { subtitle: dto.subtitle?.trim() || null } : {}),
+          ...(dto.placement !== undefined ? { placement: dto.placement } : {}),
+          ...(dto.image !== undefined ? { image: dto.image } : {}),
+          ...(dto.audience !== undefined ? { audience: dto.audience } : {}),
+          ...(startAt ? { startAt } : {}),
+          ...(endAt ? { endAt } : {}),
+          ...(dto.sortOrder !== undefined ? { sortOrder: dto.sortOrder } : {}),
+          ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
+        };
+        if (dto.linkType !== undefined || dto.linkValue !== undefined) {
+          const linkType = dto.linkType ?? current.linkType;
+          data.linkType = linkType;
+          data.linkValue = normalizeLink(linkType, dto.linkValue !== undefined ? dto.linkValue : current.linkValue);
+          // Lưu lại đúng đích cũ không kiểm lại: sản phẩm đã ẩn không được chặn việc sửa tiêu đề hay giờ của banner.
+          if (linkType !== current.linkType || data.linkValue !== current.linkValue) await this.assertLinkTarget(tx, linkType, data.linkValue);
+        }
+
+        const merged = {
+          placement: dto.placement ?? current.placement,
+          audience: dto.audience ?? current.audience,
+          linkType: data.linkType === undefined ? current.linkType : (data.linkType as CampaignLinkType),
+          linkValue: data.linkValue === undefined ? current.linkValue : (data.linkValue as string | null),
+          startAt: startAt ?? current.startAt,
+          endAt: endAt ?? current.endAt,
+          sortOrder: dto.sortOrder ?? current.sortOrder,
+        };
+        const { verdict } = await this.judge(tx, current, { id, ...merged, isActive: dto.isActive ?? current.isActive }, { productIds: lists.products, couponCodes: lists.coupons?.codes }, now);
+        if (verdict.blocked) throw new BadRequestException(verdict.reason);
+
+        let updated = writeRow ? await tx.campaign.update({ where: { id }, data, include: DETAIL_INCLUDE }) : null;
+        if (lists.products) await this.writeProducts(tx, id, lists.products);
+        if (lists.coupons) await this.writeCoupons(tx, id, lists.coupons);
+        if (writeRow && (lists.products || lists.coupons)) updated = (await tx.campaign.findUnique({ where: { id }, include: DETAIL_INCLUDE })) ?? updated;
+        return { updated, current };
+      }, PRISMA_TRANSACTION_OPTIONS)
+      .catch((e: unknown) => rethrowForeignKey(e, lists.products ? 'Có sản phẩm' : 'Có mã'));
   }
 
-  /** Thay hết danh sách sản phẩm; thứ tự gửi lên là thứ tự hiển thị. */
-  async setProducts(id: string, productIds: readonly string[], now: Date = new Date()): Promise<{ count: number }> {
-    if (productIds.length > CAMPAIGN_MAX_PRODUCTS) {
-      throw new BadRequestException(`Mỗi chiến dịch tối đa ${CAMPAIGN_MAX_PRODUCTS} sản phẩm.`);
-    }
-    await this.assertExists(id);
+  /** Kiểm tồn tại và trần số lượng trước giao dịch; trả danh sách đã bỏ trùng. */
+  private async resolveProductIds(productIds: readonly string[]): Promise<string[]> {
+    if (productIds.length > CAMPAIGN_MAX_PRODUCTS) throw new BadRequestException(`Mỗi chiến dịch tối đa ${CAMPAIGN_MAX_PRODUCTS} sản phẩm.`);
     const ids = [...new Set(productIds)];
     if (ids.length > 0) {
       const found = new Set((await this.prisma.product.findMany({ where: { id: { in: ids } }, select: { id: true } })).map((p) => p.id));
       const unknown = ids.filter((v) => !found.has(v));
       if (unknown.length > 0) throw new BadRequestException(`Không tìm thấy sản phẩm: ${named(unknown)}.`);
     }
-    await this.prisma
-      .$transaction(async (tx) => {
-        await this.lockRow(tx, id);
-        await tx.campaignProduct.deleteMany({ where: { campaignId: id } });
-        if (ids.length > 0) await tx.campaignProduct.createMany({ data: ids.map((productId, sortOrder) => ({ campaignId: id, productId, sortOrder })) });
-        await this.assertPageNotEmptied(tx, id, now);
-      })
-      .catch((e: unknown) => rethrowForeignKey(e, 'Có sản phẩm'));
-    return { count: ids.length };
+    return ids;
   }
 
-  /** Thay hết mã gắn kèm. Chỉ mã công khai/nhận được, không thuộc lô thẻ in: các mã khác không hiện trên trang nên gắn vào chỉ gây hiểu nhầm. */
-  async setCoupons(id: string, rawCodes: readonly string[], now: Date = new Date()): Promise<{ count: number }> {
-    if (rawCodes.length > CAMPAIGN_MAX_COUPONS) {
-      throw new BadRequestException(`Mỗi chiến dịch gắn tối đa ${CAMPAIGN_MAX_COUPONS} mã.`);
-    }
-    await this.assertExists(id);
+  /** Chỉ mã công khai/nhận được, không thuộc lô thẻ in: các mã khác không hiện trên trang nên gắn vào chỉ gây hiểu nhầm. */
+  private async resolveCoupons(rawCodes: readonly string[]): Promise<ResolvedCoupons> {
+    if (rawCodes.length > CAMPAIGN_MAX_COUPONS) throw new BadRequestException(`Mỗi chiến dịch gắn tối đa ${CAMPAIGN_MAX_COUPONS} mã.`);
     const codes = [...new Set(rawCodes.map(normalizeCouponCode).filter((c) => c !== ''))];
     const byCode = new Map<string, { id: string; code: string; scope: CouponScope; batch: string | null }>();
     if (codes.length > 0) {
@@ -358,15 +360,34 @@ export class CampaignsAdminService {
     if (batched.length > 0) throw new BadRequestException(`Mã thuộc lô thẻ in, không gắn vào chiến dịch: ${named(batched)}.`);
     const wrongScope = codes.filter((c) => !ATTACHABLE_SCOPES.includes(byCode.get(c)!.scope));
     if (wrongScope.length > 0) throw new BadRequestException(`Mã dành riêng cho người nhận (hạng, nhóm, sinh nhật, mời), không gắn được: ${named(wrongScope)}.`);
+    return { codes, ids: new Map(codes.map((c) => [c, byCode.get(c)!.id])) };
+  }
 
-    await this.prisma
-      .$transaction(async (tx) => {
-        await this.lockRow(tx, id);
-        await tx.campaignCoupon.deleteMany({ where: { campaignId: id } });
-        if (codes.length > 0) await tx.campaignCoupon.createMany({ data: codes.map((code, sortOrder) => ({ campaignId: id, couponId: byCode.get(code)!.id, sortOrder })) });
-        await this.assertPageNotEmptied(tx, id, now);
-      })
-      .catch((e: unknown) => rethrowForeignKey(e, 'Có mã'));
-    return { count: codes.length };
+  private async writeProducts(tx: Prisma.TransactionClient, id: string, ids: readonly string[]): Promise<void> {
+    await tx.campaignProduct.deleteMany({ where: { campaignId: id } });
+    if (ids.length > 0) await tx.campaignProduct.createMany({ data: ids.map((productId, sortOrder) => ({ campaignId: id, productId, sortOrder })) });
+  }
+
+  private async writeCoupons(tx: Prisma.TransactionClient, id: string, c: ResolvedCoupons): Promise<void> {
+    await tx.campaignCoupon.deleteMany({ where: { campaignId: id } });
+    if (c.codes.length > 0) await tx.campaignCoupon.createMany({ data: c.codes.map((code, sortOrder) => ({ campaignId: id, couponId: c.ids.get(code)!, sortOrder })) });
+  }
+
+  /** Thay hết danh sách sản phẩm (PUT giữ cho web cũ); thứ tự gửi lên là thứ tự hiển thị. Cùng phán quyết với PATCH. */
+  async setProducts(id: string, productIds: readonly string[], now: Date = new Date()): Promise<{ count: number }> {
+    if (productIds.length > CAMPAIGN_MAX_PRODUCTS) throw new BadRequestException(`Mỗi chiến dịch tối đa ${CAMPAIGN_MAX_PRODUCTS} sản phẩm.`);
+    await this.assertExists(id);
+    const ids = await this.resolveProductIds(productIds);
+    await this.commit(id, {}, { products: ids, coupons: undefined }, now, false);
+    return { count: ids.length };
+  }
+
+  /** Thay hết mã gắn kèm (PUT giữ cho web cũ). Cùng phán quyết với PATCH. */
+  async setCoupons(id: string, rawCodes: readonly string[], now: Date = new Date()): Promise<{ count: number }> {
+    if (rawCodes.length > CAMPAIGN_MAX_COUPONS) throw new BadRequestException(`Mỗi chiến dịch gắn tối đa ${CAMPAIGN_MAX_COUPONS} mã.`);
+    await this.assertExists(id);
+    const coupons = await this.resolveCoupons(rawCodes);
+    await this.commit(id, {}, { products: undefined, coupons }, now, false);
+    return { count: coupons.codes.length };
   }
 }

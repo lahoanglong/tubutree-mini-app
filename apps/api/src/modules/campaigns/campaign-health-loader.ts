@@ -4,7 +4,7 @@ import { normalizeCouponCode } from '../coupons/coupons.service';
 import { isPublicProduct } from '../catalog/public-product';
 import { hasServedImagePrefix } from '../../common/served-image';
 import { campaignLinkUsable } from '@tubutree/shared-types';
-import { campaignHealth, PeerIndex, usableCounts, type HealthCoupon, type HealthIssue, type HealthProduct, type HealthSubject } from './campaign-health';
+import { campaignHealth, PeerIndex, type HealthCoupon, type HealthIssue, type HealthProduct, type HealthSubject } from './campaign-health';
 
 type HealthPrisma = Pick<PrismaService, '$queryRaw' | 'campaign' | 'campaignProduct' | 'campaignCoupon' | 'product' | 'coupon' | 'category'>;
 
@@ -39,26 +39,14 @@ const toProduct = (p: ProductRow): HealthProduct => ({
 
 const unique = <T>(items: readonly T[]) => [...new Set(items)];
 
-export interface HealthDetail {
-  issues: HealthIssue[];
-  usable: { products: number; coupons: number };
-}
-
 /**
  * Kiểm sức khoẻ nhiều chiến dịch bằng số truy vấn cố định (tối đa 8, không phụ thuộc số chiến dịch): liên kết sản phẩm, liên kết mã, sản phẩm đang soạn,
  * mã đang soạn, đích sản phẩm, đích danh mục, chiến dịch bật cùng vị trí, và (chỉ khi có chiến dịch khác) đầu ảnh của chúng để biết cái nào thật sự ra slide. Thứ tự kết quả theo thứ tự `requests`.
  */
 export async function campaignHealthBatch(prisma: HealthPrisma, requests: readonly HealthRequest[], now: Date): Promise<HealthIssue[][]> {
-  return (await campaignHealthDetailBatch(prisma, requests, now)).map((d) => d.issues);
-}
-
-export async function campaignHealthDetailBatch(prisma: HealthPrisma, requests: readonly HealthRequest[], now: Date): Promise<HealthDetail[]> {
   // Đã kết thúc thì không có gì để tra: bỏ khỏi mọi truy vấn (campaignHealth tự trả riêng ENDED).
   const live = requests.filter((r) => r.subject.endAt > now);
-  const none = (r: HealthRequest): HealthDetail => {
-    const facts = { now, target: null, products: [], coupons: [], peers: [] };
-    return { issues: campaignHealth(r.subject, facts), usable: usableCounts(r.subject, facts) };
-  };
+  const none = (r: HealthRequest): HealthIssue[] => campaignHealth(r.subject, { now, target: null, products: [], coupons: [], peers: [] });
   if (live.length === 0) return requests.map(none);
 
   const savedProductIds = unique(live.filter((r) => r.productIds === undefined && r.subject.id).map((r) => r.subject.id as string));
@@ -128,6 +116,6 @@ export async function campaignHealthDetailBatch(prisma: HealthPrisma, requests: 
     }
     if (s.endAt <= now) return none(r);
     const facts = { now, target, products, coupons, ...(peerIndexByPlacement.get(s.placement) ?? { peers: [], index: new PeerIndex([]) }) };
-    return { issues: campaignHealth(s, facts), usable: usableCounts(s, facts) };
+    return campaignHealth(s, facts);
   });
 }

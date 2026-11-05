@@ -1,4 +1,4 @@
-import { campaignHealthBatch, campaignHealthDetailBatch, type HealthRequest } from './campaign-health-loader';
+import { campaignHealthBatch, type HealthRequest } from './campaign-health-loader';
 import type { HealthSubject } from './campaign-health';
 
 const NOW = new Date('2026-11-05T05:00:00Z');
@@ -146,13 +146,6 @@ describe('campaignHealthBatch', () => {
     const [issues = []] = await campaignHealthBatch(prisma as never, [{ subject: subject('old', { endAt: at(-1), linkType: 'PRODUCT', linkValue: 'sp' }) }], NOW);
     expect(issues.map((i) => i.code)).toEqual(['ENDED']);
     expect(calls(prisma)).toBe(0);
-  });
-
-  it('campaignHealthDetailBatch trả kèm số món dùng được của danh sách đang soạn', async () => {
-    const prisma = fakePrisma({ products: [prod('a'), prod('b', { isActive: false })], coupons: [{ code: 'OK1', isActive: true, startAt: at(-9), endAt: at(30), usageLimit: null, usedCount: 0 }] });
-    const [r] = await campaignHealthDetailBatch(prisma as never, [{ subject: subject('x'), productIds: ['a', 'b'], couponCodes: ['ok1'] }], NOW);
-    expect(r?.usable).toEqual({ products: 1, coupons: 1 });
-    expect(r?.issues.map((i) => i.code)).toEqual(['PRODUCTS_UNAVAILABLE']);
   });
 
   it('danh sách rỗng: không truy vấn', async () => {

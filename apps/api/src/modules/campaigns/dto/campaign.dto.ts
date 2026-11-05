@@ -25,6 +25,10 @@ export class CreateCampaignDto {
   @IsDateString() endAt!: string;
   @IsOptional() @IsInt() @Min(0) @Max(9999) sortOrder?: number;
   @IsOptional() @IsBoolean() isActive?: boolean;
+  /** Thay hết danh sách sản phẩm trong CÙNG lệnh lưu (một giao dịch); không gửi thì giữ nguyên. */
+  @IsOptional() @IsArray() @ArrayMaxSize(CAMPAIGN_MAX_PRODUCTS) @IsString({ each: true }) @IsNotEmpty({ each: true }) productIds?: string[];
+  /** Thay hết mã gắn kèm trong CÙNG lệnh lưu; không gửi thì giữ nguyên. */
+  @IsOptional() @IsArray() @ArrayMaxSize(CAMPAIGN_MAX_COUPONS) @IsString({ each: true }) @IsNotEmpty({ each: true }) @MaxLength(64, { each: true }) couponCodes?: string[];
 }
 
 /** Không nhận `slug`: đổi slug làm gãy mọi liên kết đã chia sẻ. */
@@ -40,6 +44,10 @@ export class UpdateCampaignDto {
   @OptionalNotNull() @IsDateString() endAt?: string;
   @OptionalNotNull() @IsInt() @Min(0) @Max(9999) sortOrder?: number;
   @OptionalNotNull() @IsBoolean() isActive?: boolean;
+  /** Thay hết danh sách sản phẩm trong CÙNG lệnh lưu (một giao dịch); không gửi thì giữ nguyên. */
+  @OptionalNotNull() @IsArray() @ArrayMaxSize(CAMPAIGN_MAX_PRODUCTS) @IsString({ each: true }) @IsNotEmpty({ each: true }) productIds?: string[];
+  /** Thay hết mã gắn kèm trong CÙNG lệnh lưu; không gửi thì giữ nguyên. */
+  @OptionalNotNull() @IsArray() @ArrayMaxSize(CAMPAIGN_MAX_COUPONS) @IsString({ each: true }) @IsNotEmpty({ each: true }) @MaxLength(64, { each: true }) couponCodes?: string[];
 }
 
 export class SetCampaignProductsDto {
@@ -60,6 +68,8 @@ export class CheckCampaignDto {
   @IsDateString() startAt!: string;
   @IsDateString() endAt!: string;
   @IsOptional() @IsInt() @Min(0) @Max(9999) sortOrder?: number;
+  /** Mặc định bật (kiểm "như thể đã bật"); phán quyết lưu dùng giá trị này. */
+  @IsOptional() @IsBoolean() isActive?: boolean;
   @IsOptional() @IsArray() @ArrayMaxSize(CAMPAIGN_MAX_PRODUCTS) @IsString({ each: true }) @IsNotEmpty({ each: true }) productIds?: string[];
   @IsOptional() @IsArray() @ArrayMaxSize(CAMPAIGN_MAX_COUPONS) @IsString({ each: true }) @IsNotEmpty({ each: true }) @MaxLength(64, { each: true }) couponCodes?: string[];
 }

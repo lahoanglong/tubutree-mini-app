@@ -250,12 +250,6 @@ export function campaignHealth(s: HealthSubject, f: HealthFacts): HealthIssue[] 
   return [...blocks, ...warns];
 }
 
-/** Số món khách dùng được trên trang chiến dịch: sản phẩm khách thấy và mã dùng được (cùng luật với trang trống). Form dựa vào đây để chọn thứ tự gắn. */
-export function usableCounts(s: HealthSubject, f: HealthFacts): { products: number; coupons: number } {
-  const ref = s.startAt > f.now ? s.startAt : f.now;
-  return { products: f.products.filter((p) => p.visible).length, coupons: couponIssues(s, f, ref).usable };
-}
-
 export function countHealth(issues: readonly HealthIssue[]): { blockers: number; warnings: number } {
   const blockers = issues.filter((i) => i.level === 'BLOCK').length;
   return { blockers, warnings: issues.length - blockers };
