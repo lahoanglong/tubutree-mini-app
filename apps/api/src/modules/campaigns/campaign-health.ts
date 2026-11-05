@@ -260,3 +260,45 @@ export function countHealth(issues: readonly HealthIssue[]): { blockers: number;
   const blockers = issues.filter((i) => i.level === 'BLOCK').length;
   return { blockers, warnings: issues.length - blockers };
 }
+
+/** Phần của chiến dịch mà phán quyết lưu cần: có hiện cho khách không (bật và chưa hết hạn) và đích. */
+export interface VerdictState {
+  isActive: boolean;
+  endAt: Date;
+  linkType: CampaignLinkType;
+  linkValue: string | null;
+}
+
+export interface SaveVerdict {
+  blocked: boolean;
+  /** Các mã BLOCK làm lần lưu bị chặn (rỗng khi không chặn). */
+  codes: HealthCode[];
+  reason?: string;
+}
+
+const visibleAt = (s: VerdictState, now: Date) => s.isActive && s.endAt > now;
+
+/**
+ * MỘT luật phán quyết cho mọi đường lưu (tạo, sửa, PUT sản phẩm/mã, kiểm trước khi lưu). `before` null là chiến dịch chưa tồn tại; health của hai bên
+ * là kết quả `campaignHealth` ở trạng thái trước và sau lần lưu.
+ * - After không hiện cho khách (tắt hoặc đã hết hạn): cho lưu.
+ * - Từ không hiện sang hiện, hoặc đổi đích lúc đang hiện: chặn nếu after có BẤT KỲ BLOCK (chiến dịch vừa xuất hiện với khách thì lỗi nào cũng là lỗi mới).
+ * - Vẫn hiện, cùng đích: chỉ chặn BLOCK MỚI mà trước đó chưa có (gỡ sản phẩm cuối, đổi mã, dời giờ làm trang trống). Lỗi cũ không chặn việc sửa tiêu đề hay giờ.
+ */
+export function saveVerdict(o: {
+  before: VerdictState | null;
+  after: VerdictState;
+  healthBefore: readonly HealthIssue[];
+  healthAfter: readonly HealthIssue[];
+  now: Date;
+}): SaveVerdict {
+  if (!visibleAt(o.after, o.now)) return { blocked: false, codes: [] };
+  const afterBlocks = o.healthAfter.filter((i) => i.level === 'BLOCK');
+  const stayed = o.before !== null && visibleAt(o.before, o.now);
+  const linkChanged = o.before !== null && (o.before.linkType !== o.after.linkType || o.before.linkValue !== o.after.linkValue);
+  const offending = stayed && !linkChanged ? afterBlocks.filter((i) => !o.healthBefore.some((b) => b.level === 'BLOCK' && b.code === i.code)) : afterBlocks;
+  const first = offending[0];
+  if (!first) return { blocked: false, codes: [] };
+  const emptied = stayed && !linkChanged && first.code === 'PAGE_EMPTY';
+  return { blocked: true, codes: offending.map((i) => i.code), reason: emptied ? `Lần lưu này làm trang đang chạy thành trống. ${first.message}` : first.message };
+}

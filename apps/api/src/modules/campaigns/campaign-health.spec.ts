@@ -1,4 +1,4 @@
-import { campaignHealth, countHealth, PeerIndex, usableCounts, type HealthCoupon, type HealthFacts, type HealthProduct, type HealthSubject } from './campaign-health';
+import { campaignHealth, countHealth, PeerIndex, saveVerdict, usableCounts, type HealthCoupon, type HealthFacts, type HealthProduct, type HealthSubject } from './campaign-health';
 import { compareBannerOrder } from './campaign-public';
 
 const NOW = new Date('2026-11-05T05:00:00Z');
@@ -259,3 +259,73 @@ describe('usableCounts (món dùng được trên trang chiến dịch)', () => 
   });
 });
 
+
+describe('saveVerdict: một luật phán quyết cho mọi đường lưu', () => {
+  const state = (over: Record<string, unknown> = {}) => ({ isActive: true, endAt: at(5), linkType: 'CAMPAIGN_PAGE' as const, linkValue: null, ...over });
+  const block = (code: 'PAGE_EMPTY' | 'LINK_PRODUCT_HIDDEN' | 'LINK_PRODUCT_MISSING') => ({ level: 'BLOCK' as const, code, message: `m-${code}` });
+  const warn = { level: 'WARN' as const, code: 'CROWDED' as const, message: 'w' };
+  const run = (o: { before: ReturnType<typeof state> | null; after: ReturnType<typeof state>; hb?: ReturnType<typeof block>[]; ha?: (ReturnType<typeof block> | typeof warn)[] }) =>
+    saveVerdict({ before: o.before, after: o.after, healthBefore: o.hb ?? [], healthAfter: o.ha ?? [], now: NOW });
+
+  describe('after không hiện cho khách: luôn cho lưu', () => {
+    it('tắt', () => expect(run({ before: state(), after: state({ isActive: false }), ha: [block('PAGE_EMPTY')] }).blocked).toBe(false));
+    it('đã hết hạn', () => expect(run({ before: state(), after: state({ endAt: at(-1) }), ha: [block('PAGE_EMPTY')] }).blocked).toBe(false));
+    it('endAt đúng bằng now là đã hết', () => expect(run({ before: state(), after: state({ endAt: NOW }), ha: [block('PAGE_EMPTY')] }).blocked).toBe(false));
+  });
+
+  describe('không hiện → hiện: chặn nếu after có BẤT KỲ BLOCK (lỗi cũ cũng chặn)', () => {
+    const cases: [string, ReturnType<typeof state> | null][] = [
+      ['tạo mới (before null)', null],
+      ['đang tắt', state({ isActive: false })],
+      ['đã hết hạn', state({ endAt: at(-1) })],
+    ];
+    it.each(cases)('%s: có BLOCK thì chặn', (_n, before) => {
+      const v = run({ before, after: state(), hb: [block('PAGE_EMPTY')], ha: [block('PAGE_EMPTY')] });
+      expect(v).toMatchObject({ blocked: true, codes: ['PAGE_EMPTY'] });
+      expect(v.reason).toContain('m-PAGE_EMPTY');
+    });
+    it.each(cases)('%s: không BLOCK (chỉ WARN) thì cho', (_n, before) => {
+      expect(run({ before, after: state(), ha: [warn] }).blocked).toBe(false);
+    });
+  });
+
+  describe('đổi đích lúc đang hiện: chặn nếu after có BẤT KỲ BLOCK', () => {
+    it('đổi loại đích, BLOCK cũ cùng mã vẫn chặn', () => {
+      const v = run({ before: state(), after: state({ linkType: 'PRODUCT', linkValue: 'sp' }), hb: [block('LINK_PRODUCT_HIDDEN')], ha: [block('LINK_PRODUCT_HIDDEN')] });
+      expect(v).toMatchObject({ blocked: true, codes: ['LINK_PRODUCT_HIDDEN'] });
+    });
+    it('đổi slug trong cùng loại đích', () => {
+      const v = run({ before: state({ linkType: 'PRODUCT', linkValue: 'a' }), after: state({ linkType: 'PRODUCT', linkValue: 'b' }), ha: [block('LINK_PRODUCT_MISSING')] });
+      expect(v.blocked).toBe(true);
+    });
+    it('đổi đích mà after sạch: cho', () => {
+      expect(run({ before: state(), after: state({ linkType: 'PRODUCT', linkValue: 'sp' }) }).blocked).toBe(false);
+    });
+  });
+
+  describe('vẫn hiện, cùng đích: chỉ chặn BLOCK MỚI', () => {
+    it('lỗi cũ còn nguyên: cho (sửa tiêu đề, dời giờ không bị chặn)', () => {
+      expect(run({ before: state(), after: state(), hb: [block('PAGE_EMPTY')], ha: [block('PAGE_EMPTY')] }).blocked).toBe(false);
+    });
+    it('PAGE_EMPTY mới: chặn, lý do nói trang đang chạy thành trống và còn câu gốc', () => {
+      const v = run({ before: state(), after: state(), ha: [block('PAGE_EMPTY')] });
+      expect(v).toMatchObject({ blocked: true, codes: ['PAGE_EMPTY'] });
+      expect(v.reason).toContain('Lần lưu này làm trang đang chạy thành trống');
+      expect(v.reason).toContain('m-PAGE_EMPTY');
+    });
+    it('mã BLOCK mới khác với lỗi cũ: chặn và chỉ nêu mã mới', () => {
+      const v = run({ before: state(), after: state(), hb: [block('LINK_PRODUCT_HIDDEN')], ha: [block('LINK_PRODUCT_HIDDEN'), block('PAGE_EMPTY')] });
+      expect(v).toMatchObject({ blocked: true, codes: ['PAGE_EMPTY'] });
+    });
+    it('hết lỗi: cho', () => {
+      expect(run({ before: state(), after: state(), hb: [block('PAGE_EMPTY')] }).blocked).toBe(false);
+    });
+    it('chỉ WARN mới: cho', () => {
+      expect(run({ before: state(), after: state(), ha: [warn] }).blocked).toBe(false);
+    });
+  });
+
+  it('không chặn thì không có reason', () => {
+    expect(run({ before: state(), after: state() })).toEqual({ blocked: false, codes: [] });
+  });
+});
