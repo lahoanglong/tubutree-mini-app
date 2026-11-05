@@ -91,10 +91,20 @@ describe('ProductStoryStudio', () => {
   });
 
   it('không đủ dữ liệu để sinh thì báo bằng chữ, không đổi cấu hình', () => {
-    const { onChange } = mount({ value: null, product: product({ ingredients: null, variations: [{ id: 'v1', name: '1' }] }) });
+    const { onChange } = mount({ value: null, product: product({ brand: 'Tubu', name: 'Xà phòng', ingredients: null, variations: [{ id: 'v1', name: '1' }] }) });
     click(byText(document.body, 'button', 'Tự sinh Story'));
     expect(onChange).not.toHaveBeenCalled();
     expect(document.body.textContent).toContain('Chưa đủ dữ liệu');
+  });
+
+  it('sản phẩm của nhãn chủ lực chưa có dữ liệu: Tự sinh cho đúng kịch bản cấp nhãn mà khách đang thấy (điểm Thương hiệu từ tên)', () => {
+    const { onChange } = mount({ value: null, product: product({ brand: 'Tubu Tree', name: 'Dầu gội thảo dược PƠ LANG 300g', ingredients: null, variations: [{ id: 'v1', name: '300g' }] }) });
+    click(byText(document.body, 'button', 'Tự sinh Story'));
+    const pts = hudPoints(last(onChange));
+    expect(pts.map((p) => [p.label, p.value])).toEqual([
+      ['Thương hiệu', 'Pơ Lang'],
+      ['Quy cách', '300g'],
+    ]);
   });
 
   it('công tắc bật/tắt đổi enabled', () => {
