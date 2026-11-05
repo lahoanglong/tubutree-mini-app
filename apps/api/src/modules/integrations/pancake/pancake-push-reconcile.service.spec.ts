@@ -373,7 +373,19 @@ describe('PancakePushReconcileService.reconcile — đơn cũ, huỷ, thanh toá
     expect(t.probe.mock.calls[0][0]).toMatchObject({ take: 1, where: { pancakeErrorKind: 'CONFIG', pancakeOrderId: null } });
     expect(t.enqueuePush).toHaveBeenCalledTimes(1);
     expect(t.enqueuePush).toHaveBeenCalledWith('oc');
-    expect(updateMany).toHaveBeenCalledWith({ where: { id: 'oc', pancakeOrderId: null }, data: { pancakeLastAttemptAt: expect.any(Date) } });
+    // Mốc lần thử là token hàng rào của lượt đang bay: đơn đang PUSHING trong hạn thuê không được đóng dấu (pushLeaseFreeWhere).
+    expect(updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'oc',
+        pancakeOrderId: null,
+        AND: [
+          {
+            OR: [{ pancakePushStatus: null }, { pancakePushStatus: { not: 'PUSHING' } }, { pancakeLastAttemptAt: null }, { pancakeLastAttemptAt: { lt: expect.any(Date) } }],
+          },
+        ],
+      },
+      data: { pancakeLastAttemptAt: expect.any(Date) },
+    });
   });
 
   it('hi: không có đơn lỗi cấu hình thì không dò', async () => {

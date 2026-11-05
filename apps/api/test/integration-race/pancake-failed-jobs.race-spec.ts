@@ -745,6 +745,30 @@ const url = process.env.TEST_REDIS_URL;
     expect(n).toBe(1);
   });
 
+  it('cron dò khoá bị từ chối: đơn dò vừa được một lượt đẩy claim PUSHING giữa lúc chọn và lúc đóng dấu thì mốc lần thử của lượt đó giữ nguyên (token hàng rào)', async () => {
+    const x = await order();
+    await prisma.order.update({ where: { id: x.id }, data: { pancakeErrorKind: 'CONFIG', pancakePushStatus: 'FAILED', pancakeLastAttemptAt: new Date('2000-01-01T00:00:00Z') } });
+    // Đơn lỗi cấu hình của spec khác không được đứng trước X trong lượt dò (cũ nhất trước).
+    await prisma.order.updateMany({ where: { pancakeErrorKind: 'CONFIG', id: { not: x.id }, pancakeOrderId: null }, data: { pancakeLastAttemptAt: new Date() } });
+    const claimedAt = new Date(Date.now() - 1_000);
+    const enqueuePush = jest.fn().mockResolvedValue(undefined);
+    const racing = new PancakePushReconcileService(
+      prismaStaleRead(
+        'findMany',
+        async () => {
+          await prisma.order.update({ where: { id: x.id }, data: { pancakePushStatus: 'PUSHING', pancakeLastAttemptAt: claimedAt } });
+        },
+        (args) => (args as { where?: { pancakeErrorKind?: string } }).where?.pancakeErrorKind === 'CONFIG',
+      ),
+      client as unknown as PancakeClient,
+      { enqueuePush, enqueueCancel: jest.fn(), enqueuePayment: jest.fn(), sweepSettledFailedJobs: jest.fn().mockResolvedValue(0) } as unknown as PancakeOrderService,
+      alerts as unknown as GomdonAlertService,
+    );
+    await racing.reconcile();
+    expect(enqueuePush.mock.calls.map(([id]) => id)).toContain(x.id);
+    expect(await prisma.order.findUniqueOrThrow({ where: { id: x.id } })).toMatchObject({ pancakePushStatus: 'PUSHING', pancakeLastAttemptAt: claimedAt });
+  });
+
   it('markOverdue không đánh STALE đơn quá 72 giờ đang PUSHING trong hạn thuê quyền đẩy; hết hạn thuê thì lần quét sau mới đánh', async () => {
     const x = await order();
     // createdAt rất cũ để đơn đứng đầu lô markOverdue (xếp theo ngày đặt tăng dần) dù DB dùng chung có đơn quá hạn của spec khác.

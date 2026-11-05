@@ -230,7 +230,12 @@ export class PancakePushReconcileService {
         take: 1,
       });
       if (!probe) return;
-      await this.prisma.order.updateMany({ where: { id: probe.id, pancakeOrderId: null }, data: { pancakeLastAttemptAt: new Date() } });
+      // pancakeLastAttemptAt vừa là hạn thuê vừa là token hàng rào của lượt đẩy: đơn vừa được lượt khác claim (PUSHING trong hạn thuê) giữa lúc chọn và
+      // lúc đóng dấu thì không đóng, kẻo kéo dài hạn thuê và làm câu ghi cuối của lượt đó hụt.
+      await this.prisma.order.updateMany({
+        where: { id: probe.id, pancakeOrderId: null, AND: [pushLeaseFreeWhere()] },
+        data: { pancakeLastAttemptAt: new Date() },
+      });
       await this.pancakeOrder.enqueuePush(probe.id);
       this.logger.warn(`Khoá API Pancake đang bị từ chối: dò lại bằng đơn ${probe.code}.`);
     } catch (err) {
