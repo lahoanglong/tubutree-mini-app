@@ -15,6 +15,7 @@ import { OrderReversalService, type ReversalResult } from './order-reversal.serv
 import { OrderStatusService } from './order-status.service';
 import { WastePickupHooks } from '../waste-exchange/pickup/waste-pickup-hooks.service';
 import { cancelReasonNote } from './cancel-reasons';
+import { customerCancelReason } from './customer-cancel-reason';
 import { parseRefundDestination, type RefundDestinationInput } from './refund-destination';
 import { announceBankRefund, announceDeletedAccountRefund, receivedRefundNote, refundReportedUnderpayment } from './refund-queue';
 import { refundNote } from './order-returns.service';
@@ -112,6 +113,11 @@ export type OrderView = Omit<OrderListRow, 'items' | BuyerHiddenOrderField> & {
   pointsReturnReversed?: number;
   /** Chỉ chi tiết đơn: lúc đơn chạm từng trạng thái (ISO), từ sổ lịch sử; chỉ trạng thái + giờ, không ghi chú hay người thao tác. */
   statusTimes?: Record<string, string>;
+  /**
+   * Chỉ chi tiết đơn phía khách: lý do huỷ viết sẵn cho khách đọc (customerCancelReason); null khi đơn chưa huỷ hoặc không rõ ai huỷ.
+   * Không bao giờ là ghi chú nội bộ của sổ lịch sử.
+   */
+  cancelReason?: string | null;
   /**
    * Đơn chờ thanh toán mà hàng đã bàn giao vận chuyển (Pancake đã gửi hàng, hệ thống thôi tự huỷ): Tubu xử lý tay với khách.
    * App/web thay hạn thanh toán, nút trả tiền và nút huỷ bằng câu trung tính "Tubu đang xử lý đơn này" (R5-SYNC-1).
@@ -280,20 +286,33 @@ export class OrdersService {
    * (cancel/repurchase/requestReturn) dùng detail() thô, không tốn thêm truy vấn; đơn trả ra cho khách vẫn qua forBuyer. */
   async detailView(userId: string, code: string): Promise<OrderView> {
     const order = await this.detail(userId, code);
-    const [[view], fulfilment, reviewOf, pointsReturnReversed, statusTimes] = await Promise.all([
+    const [[view], fulfilment, reviewOf, pointsReturnReversed, statusTimes, cancelReason] = await Promise.all([
       this.attachItemMedia([order], userId),
       this.fulfilmentOf(order),
       orderLineReviews(this.prisma, order),
       order.status === 'DELIVERED' || order.status === 'RETURNED' ? returnPointsTaken(this.prisma, order) : undefined,
       this.statusTimesOf(order),
+      this.cancelReasonOf(order),
     ]);
     return {
       ...view!,
       statusTimes,
+      cancelReason,
       items: view!.items.map((it) => ({ ...it, ...reviewOf(it.id) })),
       ...fulfilment,
       pointsReturnReversed,
     };
+  }
+
+  /** Lý do huỷ cho khách: chỉ đơn đã huỷ mới đọc sổ lịch sử (có ghi chú), và chỉ đưa ra câu đã qua customerCancelReason. */
+  private async cancelReasonOf(order: { id: string; status: string }): Promise<string | null> {
+    if (order.status !== 'CANCELLED') return null;
+    const rows = await this.prisma.orderStatusHistory.findMany({
+      where: { orderId: order.id, toStatus: 'CANCELLED' },
+      orderBy: { createdAt: 'desc' },
+      select: { fromStatus: true, toStatus: true, actorType: true, note: true, createdAt: true },
+    });
+    return customerCancelReason(rows);
   }
 
   /**

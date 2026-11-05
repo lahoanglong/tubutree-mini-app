@@ -116,6 +116,11 @@ export interface OrderDTO {
    * và giờ, không có ghi chú hay người thao tác. Thiếu khoá = không rõ giờ (đơn tạo thẳng ở trạng thái đầu thì dùng createdAt). API cũ chưa trả.
    */
   statusTimes?: Partial<Record<OrderStatus, string>>;
+  /**
+   * Chỉ chi tiết đơn của khách: lý do huỷ viết sẵn cho khách đọc (tiếng Việt, đã lọc ghi chú nội bộ). null = đơn chưa huỷ hoặc không rõ
+   * ai huỷ; thiếu khoá = API cũ chưa trả (bày như đơn không có lý do).
+   */
+  cancelReason?: string | null;
   items: OrderItemDTO[];
   createdAt: string;
   updatedAt: string;
