@@ -175,11 +175,12 @@ describe('/thanh-toan — mua một phần giỏ (R2-BUYERWEB-6)', () => {
     expect(byText(r.container, 'a', 'Đổi lựa chọn')?.getAttribute('href')).toBe('/gio-hang');
   });
 
-  it('lựa chọn nhắc dòng đã bị xoá khỏi giỏ → bỏ dòng đó; hết dòng → toàn giỏ', async () => {
+  it('lựa chọn nhắc dòng đã bị xoá khỏi giỏ → bỏ dòng đó; hết dòng → báo món đã chọn không còn, không tính tiền cả giỏ', async () => {
     rememberCheckoutSelection(['gone']);
     const r = await mount();
-    expect(m.quote.mock.calls[0]![3]).toBeUndefined();
-    expect(r.container.querySelector('[aria-label="Sản phẩm trong đơn"]')!.textContent).toContain('Dầu gội');
+    expect(m.quote).not.toHaveBeenCalled();
+    expect(r.container.querySelector('[aria-label="Sản phẩm trong đơn"]')).toBeNull();
+    expect(r.container.textContent).toContain('Món bạn chọn không còn trong giỏ');
   });
 
   it('đặt xong dọn lựa chọn để đơn sau không dính', async () => {

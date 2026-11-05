@@ -185,8 +185,11 @@ export default function CheckoutPage() {
 
   // Dòng đã nhớ có thể không còn trong giỏ → đối chiếu với giỏ thật trước khi quote.
   const cartReady = rawSelection == null || cart.isSuccess;
-  const itemIds = reconcileSelection(rawSelection, (cart.data?.items ?? []).map((it) => it.id));
+  // Chỉ đối chiếu khi giỏ đã về: trước đó danh sách dòng còn rỗng nên lựa chọn nào cũng thành "chết". Lựa chọn chết là mảng rỗng,
+  // không bao giờ rơi về cả giỏ (xem màn báo bên dưới).
+  const itemIds = cart.data ? reconcileSelection(rawSelection, cart.data.items.map((it) => it.id)) : undefined;
   const itemIdsKey = itemIds ? itemIds.join(',') : '';
+  const selectionDead = !!itemIds && itemIds.length === 0;
 
   // Số dư PHẢI đọc từ query (được invalidate sau mọi thao tác tiền), KHÔNG từ auth store —
   // store chỉ được nạp lại lúc mở app và sau khi đặt đơn, nên khách vừa nhận tiền vào Ví hoặc vừa
@@ -206,7 +209,7 @@ export default function CheckoutPage() {
   const quote = useQuery({
     queryKey: ['quote', addressId, pointsToUse, ctvSlug, itemIdsKey],
     queryFn: () => checkoutQuote(addressId!, pointsToUse, ctvSlug, itemIds),
-    enabled: !!addressId && authed && cartReady && cartHasItems,
+    enabled: !!addressId && authed && cartReady && cartHasItems && !selectionDead,
   });
 
   useEffect(() => {
@@ -498,7 +501,7 @@ export default function CheckoutPage() {
     );
   }
 
-  if ((cart.data?.items.length ?? 0) === 0 && maybePlaced) {
+  if (checkoutItems.length === 0 && maybePlaced) {
     return (
       <Shell>
         <EmptyState
@@ -519,8 +522,26 @@ export default function CheckoutPage() {
     );
   }
 
+  // Khách đã chọn một phần giỏ mà các món đó không còn (xoá ở nơi khác): không tính tiền phần khác, báo và đưa về giỏ.
+  if (checkoutItems.length === 0 && (cart.data?.items.length ?? 0) > 0) {
+    return (
+      <Shell>
+        <EmptyState
+          art="basket"
+          heading={fillCopy('checkout.selectionLostHeading')}
+          body={fillCopy('checkout.selectionLostBody')}
+          ctaLabel={fillCopy('checkout.lineToCart')}
+          onCta={() => {
+            clearCheckoutSelection();
+            navigate('/cart', { replace: true });
+          }}
+        />
+      </Shell>
+    );
+  }
+
   // Giỏ trống (vd mở từ deeplink) → không cho đặt đơn rỗng.
-  if ((cart.data?.items.length ?? 0) === 0) {
+  if (checkoutItems.length === 0) {
     return (
       <Shell>
         <EmptyState
@@ -541,7 +562,7 @@ export default function CheckoutPage() {
   // chặn bấm-2-lần khi `loading` bất kể `disabled`, và handler onPress cũng tự kiểm `submitting`
   // trước khi mutate — gộp lại `disabled` chỉ khiến spinner không hiện trong lúc đặt hàng (đúng
   // bug audit A4-01/A4-02/A4-04 mà lần migrate này phải sửa), không thêm được lớp bảo vệ nào mới.
-  const lineProblems = checkoutLineProblems(checkoutItems);
+  const lineProblems = checkoutLineProblems(checkoutItems, { keepLastLine: !!itemIds });
   const hasLineProblem = Object.keys(lineProblems).length > 0;
   const shownCartIssue = cartIssue;
   // Thiếu địa chỉ hoặc ô hoá đơn thì nút vẫn bấm được: bấm để chỉ ra ô thiếu (lỗi ngay dưới ô, con trỏ nhảy tới). Chỉ những lý do
@@ -698,7 +719,11 @@ export default function CheckoutPage() {
                       <Button
                         variant="secondary"
                         loading={lineFix.isPending && lineFix.variables?.id === it.id}
-                        onPress={() => lineFix.mutate({ id: it.id, fix: lineProblems[it.id]!.fix })}
+                        onPress={() => {
+                          const fix = lineProblems[it.id]!.fix;
+                          if (fix.kind === 'cart') navigate('/cart');
+                          else lineFix.mutate({ id: it.id, fix });
+                        }}
                       >
                         {lineProblems[it.id]!.fixLabel}
                       </Button>

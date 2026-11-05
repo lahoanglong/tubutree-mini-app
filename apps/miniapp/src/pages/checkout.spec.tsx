@@ -101,6 +101,7 @@ vi.mock('../services/geo-api', () => ({
 
 import { describeNested, findNestedInteractive } from '../components/ui/nested-interactive';
 import CheckoutPage, { attachablePickup } from './checkout';
+import { recallCheckoutSelection, rememberCheckoutSelection } from '../utils/checkout-selection';
 import { makeRequestSummary, makeWasteMe } from '../services/waste-test-fixtures';
 import { createQueryClient } from '../services/query-client';
 import { vi as viCopy } from '../i18n/vi';
@@ -2342,5 +2343,110 @@ describe('CheckoutPage — lỗi ô nhập và nút đặt hàng bấm được 
     await waitFor(() => expect(email).not.toHaveAttribute('aria-invalid'));
     const body = await placeOrderClick();
     expect((body.invoiceRequest as { email: string }).email).toBe('a@b.vn');
+  });
+});
+
+describe('CheckoutPage — thanh toán một phần giỏ: dòng chọn cuối cùng và lựa chọn đã chết (hk)', () => {
+  const mk = (id: string, name: string, over: Record<string, unknown> = {}) => ({
+    id, variationId: `v-${id}`, productName: name, variationName: null, slug: id, thumbnail: null, unitPrice: 50_000, quantity: 1, stock: 5, total: 50_000, ...over,
+  });
+  const quoteItemIds = () => mocks.checkoutQuote.mock.calls.map((c) => c[3]);
+
+  beforeEach(() => {
+    mocks.publicConfig.waste.pickup = false;
+    vi.clearAllMocks();
+    mocks.placeOrder.mockReset();
+    sessionStorage.clear();
+    localStorage.clear();
+    mocks.sfCtx.slug = null;
+    mocks.sfCtx.referralCode = null;
+    mocks.locState = null;
+    mocks.getCouponPreviews.mockResolvedValue([]);
+    mocks.getAddresses.mockResolvedValue([ADDRESS]);
+    mocks.checkoutQuote.mockResolvedValue(QUOTE);
+    mocks.ensurePhone.mockResolvedValue('0900000000');
+    mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
+    mocks.removeCartItem.mockResolvedValue(CART);
+    mocks.updateCartItem.mockResolvedValue(CART);
+  });
+
+  it('dòng hết hàng là dòng DUY NHẤT được chọn: nút là "Về giỏ hàng", không xoá tại màn (xoá thì lựa chọn rỗng và màn chuyển sang cả giỏ)', async () => {
+    mocks.locState = { itemIds: ['A'] };
+    mocks.getCart.mockResolvedValue({ ...CART, items: [mk('A', 'Dầu gội', { stock: 0 }), mk('B', 'Mật ong'), mk('C', 'Xà bông')] });
+    renderPage();
+    const problem = await screen.findByTestId('checkout-line-problem');
+    expect(within(problem).queryByRole('button', { name: 'Bỏ khỏi đơn' })).not.toBeInTheDocument();
+    fireEvent.click(within(problem).getByRole('button', { name: 'Về giỏ hàng' }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/cart');
+    expect(mocks.removeCartItem).not.toHaveBeenCalled();
+    expect(screen.queryByText('Mật ong')).not.toBeInTheDocument();
+    expect(quoteItemIds().every((ids) => JSON.stringify(ids) === JSON.stringify(['A']))).toBe(true);
+  });
+
+  it('được chọn từ hai dòng: dòng hết hàng vẫn bỏ được tại màn (còn dòng khác trong lựa chọn)', async () => {
+    mocks.locState = { itemIds: ['A', 'B'] };
+    mocks.getCart.mockResolvedValue({ ...CART, items: [mk('A', 'Dầu gội', { stock: 0 }), mk('B', 'Mật ong'), mk('C', 'Xà bông')] });
+    renderPage();
+    const problem = await screen.findByTestId('checkout-line-problem');
+    fireEvent.click(within(problem).getByRole('button', { name: 'Bỏ khỏi đơn' }));
+    await waitFor(() => expect(mocks.removeCartItem).toHaveBeenCalledWith('A'));
+  });
+
+  it('lựa chọn đã chết (xoá ở nơi khác): báo món đã chọn không còn, KHÔNG báo giá hay dựng đơn cho cả giỏ, nút Về giỏ hàng và dọn bộ nhớ', async () => {
+    mocks.locState = { itemIds: ['gone'] };
+    mocks.getCart.mockResolvedValue({ ...CART, items: [mk('B', 'Mật ong'), mk('C', 'Xà bông')] });
+    renderPage();
+    expect(await screen.findByText('Món bạn chọn không còn trong giỏ')).toBeInTheDocument();
+    expect(screen.queryByText(/Đặt hàng/)).not.toBeInTheDocument();
+    expect(screen.queryByText('Mật ong')).not.toBeInTheDocument();
+    expect(mocks.checkoutQuote).not.toHaveBeenCalled();
+    expect(mocks.placeOrder).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Về giỏ hàng' }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/cart', { replace: true });
+    expect(recallCheckoutSelection()).toBeUndefined();
+  });
+
+  it('mở lại màn không có state điều hướng, lựa chọn nhớ theo phiên: chỉ báo giá phần đã chọn, không bao giờ cả giỏ', async () => {
+    rememberCheckoutSelection(['A']);
+    mocks.getCart.mockResolvedValue({ ...CART, items: [mk('A', 'Dầu gội'), mk('B', 'Mật ong')] });
+    renderPage();
+    await waitFor(() => expect(mocks.checkoutQuote).toHaveBeenCalled());
+    expect(await screen.findByText('Dầu gội')).toBeInTheDocument();
+    expect(screen.queryByText('Mật ong')).not.toBeInTheDocument();
+    expect(quoteItemIds().every((ids) => JSON.stringify(ids) === JSON.stringify(['A']))).toBe(true);
+    expect(recallCheckoutSelection()).toEqual(['A']);
+  });
+
+  it('đặt một phần chưa rõ kết quả, rồi các món đã đặt biến khỏi giỏ: màn "Đơn có thể đã được tạo" gửi lại đúng đơn cũ, không rơi về cả giỏ', async () => {
+    mocks.locState = { itemIds: ['A'] };
+    mocks.getCart.mockResolvedValue({ ...CART, items: [mk('A', 'Dầu gội'), mk('B', 'Mật ong')] });
+    mocks.placeOrder.mockRejectedValueOnce(new HttpError('Network Error', 'ERR_NETWORK')).mockResolvedValueOnce({ id: 'o1', code: 'TT001' });
+    renderPage();
+    const first = await placeOrderClick();
+    expect(first.itemIds).toEqual(['A']);
+    mocks.getCart.mockResolvedValue({ ...CART, items: [mk('B', 'Mật ong')] });
+    act(() => {
+      window.dispatchEvent(new Event('visibilitychange'));
+    });
+    expect(await screen.findByText('Đơn của bạn có thể đã được tạo')).toBeInTheDocument();
+    expect(screen.queryByText('Mật ong')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Kiểm tra lại' }));
+    await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(2));
+    expect(mocks.placeOrder.mock.calls[1]![0]).toEqual(mocks.placeOrder.mock.calls[0]![0]);
+    expect(mocks.placeOrder.mock.calls[1]![1]).toBe(mocks.placeOrder.mock.calls[0]![1]);
+  });
+
+  it('lựa chọn nhớ theo phiên đã chết, mở không có state: vẫn là màn báo, vẽ lại nhiều lần cũng không đổi sang cả giỏ', async () => {
+    rememberCheckoutSelection(['gone']);
+    mocks.getCart.mockResolvedValue({ ...CART, items: [mk('B', 'Mật ong')] });
+    renderPage();
+    expect(await screen.findByText('Món bạn chọn không còn trong giỏ')).toBeInTheDocument();
+    act(() => {
+      window.dispatchEvent(new Event('visibilitychange'));
+    });
+    await waitFor(() => expect(mocks.getCart.mock.calls.length).toBeGreaterThan(1));
+    expect(screen.getByText('Món bạn chọn không còn trong giỏ')).toBeInTheDocument();
+    expect(mocks.checkoutQuote).not.toHaveBeenCalled();
   });
 });

@@ -49,6 +49,8 @@ const mount = async () => {
   return r;
 };
 const placeButton = (r: Rendered) => byText(r.container, 'button', /^(Đặt hàng|Thử lại ·)/) as HTMLButtonElement;
+// Đặt một phần giỏ xong mà các món đã đặt biến khỏi giỏ: màn không rơi về cả giỏ mà hiện "Kiểm tra lại", cùng gửi lại đúng đơn cũ.
+const resendButton = (r: Rendered) => byText(r.container, 'button', /^(Đặt hàng|Thử lại ·|Kiểm tra lại)/) as HTMLButtonElement;
 const radio = (r: Rendered, label: string) =>
   [...r.container.querySelectorAll('label')].find((l) => l.textContent?.includes(label))!.querySelector('input')!;
 
@@ -76,7 +78,7 @@ describe('/thanh-toan — đua giữa kết quả đặt đơn và dữ liệu n
     return r;
   };
   const expectResentSame = async (r: Rendered) => {
-    click(placeButton(r));
+    click(resendButton(r));
     await flush(6);
     expect(m.placeOrder).toHaveBeenCalledTimes(2);
     expect(m.placeOrder.mock.calls[1]![0]).toEqual(m.placeOrder.mock.calls[0]![0]);
@@ -125,11 +127,11 @@ describe('/thanh-toan — đua giữa kết quả đặt đơn và dữ liệu n
     const [b1, k1] = m.placeOrder.mock.calls[0]!;
     expect(b1.itemIds).toEqual(['A']);
     m.placeOrder.mockReset().mockRejectedValueOnce(new ApiError('x', 401)).mockRejectedValueOnce(new ApiError('x', 429)).mockResolvedValue({ id: 'o1', code: 'TT1', paymentMethod: 'COD', total: 130000 });
-    click(placeButton(r));
+    click(resendButton(r));
     await flush(6);
-    click(placeButton(r));
+    click(resendButton(r));
     await flush(6);
-    click(placeButton(r));
+    click(resendButton(r));
     await flush(6);
     expect(m.placeOrder).toHaveBeenCalledTimes(3);
     expect(m.placeOrder.mock.calls[2]![0]).toEqual(b1);

@@ -45,6 +45,30 @@ describe('checkoutLineProblems', () => {
   });
 });
 
+describe('checkoutLineProblems — dòng cuối cùng của thanh toán một phần', () => {
+  it('chỉ còn đúng một dòng được chọn mà hết hàng: không xoá tại màn (xoá là rỗng lựa chọn, màn sẽ chuyển sang cả giỏ), sửa nhanh là về giỏ hàng', () => {
+    const p = checkoutLineProblems([line({ id: 'a', stock: 0 })], { keepLastLine: true }).a!;
+    expect(p.kind).toBe('sold-out');
+    expect(p.fix).toEqual({ kind: 'cart' });
+    expect(p.fixLabel).toBe('Về giỏ hàng');
+  });
+
+  it('còn từ hai dòng được chọn trở lên: vẫn bỏ được dòng hết hàng', () => {
+    const map = checkoutLineProblems([line({ id: 'a', stock: 0 }), line({ id: 'b' })], { keepLastLine: true });
+    expect(map.a!.fix).toEqual({ kind: 'remove' });
+    expect(map.a!.fixLabel).toBe('Bỏ khỏi đơn');
+  });
+
+  it('dòng vượt tồn vẫn giảm được dù là dòng duy nhất (giảm không làm rỗng lựa chọn)', () => {
+    const p = checkoutLineProblems([line({ id: 'a', quantity: 5, stock: 2 })], { keepLastLine: true }).a!;
+    expect(p.fix).toEqual({ kind: 'reduce', quantity: 2 });
+  });
+
+  it('không bật keepLastLine (thanh toán cả giỏ) thì như cũ', () => {
+    expect(checkoutLineProblems([line({ id: 'a', stock: 0 })]).a!.fix).toEqual({ kind: 'remove' });
+  });
+});
+
 describe('isPriceChangedError', () => {
   it('nhận mã PRICE_CHANGED ở cả hai dạng lỗi: axios của Mini App (thân phản hồi) và ApiError của web (message)', () => {
     expect(isPriceChangedError({ response: { status: 400, data: { statusCode: 400, message: 'PRICE_CHANGED' } } })).toBe(true);

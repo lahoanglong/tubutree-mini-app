@@ -52,13 +52,14 @@ describe('reconcileSelection — đối chiếu với giỏ thật', () => {
     expect(reconcileSelection(['a', 'gone'], ['a', 'c'])).toEqual(['a']);
   });
 
-  it('không còn dòng nào → toàn giỏ (không tạo đơn rỗng)', () => {
-    expect(reconcileSelection(['gone'], ['a', 'c'])).toBeUndefined();
+  it('không còn dòng nào → mảng rỗng, KHÔNG rơi về toàn giỏ (khách chọn một phần thì không được tính tiền phần khác)', () => {
+    expect(reconcileSelection(['gone'], ['a', 'c'])).toEqual([]);
+    expect(reconcileSelection([], ['a'])).toEqual([]);
   });
 
-  it('lựa chọn hết hạn thì DỌN LUÔN bộ nhớ, không để lần sau phải đối chiếu danh sách chết', () => {
+  it('hàm không dọn bộ nhớ: lần vẽ sau (không còn state điều hướng) vẫn thấy lựa chọn chết thay vì đọc ra "không nhớ gì" và chuyển sang toàn giỏ', () => {
     rememberCheckoutSelection(['gone']);
-    expect(reconcileSelection(['gone'], ['a'])).toBeUndefined();
-    expect(recallCheckoutSelection()).toBeUndefined();
+    expect(reconcileSelection(['gone'], ['a'])).toEqual([]);
+    expect(recallCheckoutSelection()).toEqual(['gone']);
   });
 });

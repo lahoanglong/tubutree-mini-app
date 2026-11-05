@@ -36,7 +36,7 @@ import { normalizeTaxCode } from '@tubutree/app-core/commerce/tax-code';
 import { validateInvoiceFields, type InvoiceField } from '@tubutree/app-core/commerce/checkout-form';
 import { checkoutPlaceHint, checkoutTotalText, collapseCheckoutLines } from '@tubutree/app-core/commerce/checkout-display';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
-import { checkoutLineProblems, priceChangedActions, type LineFix, type LineProblem } from '@tubutree/app-core/commerce/checkout-issues';
+import { checkoutLineProblems, priceChangedActions, type LineAction, type LineFix, type LineProblem } from '@tubutree/app-core/commerce/checkout-issues';
 import { checkoutEtaLabel, placedOrderKinds } from '@tubutree/app-core/shipping-eta';
 import { checkoutPointsOffer, convertedPointsLine, formatCount, idlePointsLabel, lockedPointsLabel, pointsCapState, zeroTotalNote, type CheckoutPointsOffer } from '@/lib/checkout-points';
 import {
@@ -279,7 +279,7 @@ export default function CheckoutPage() {
   }, [focusTick]); // eslint-disable-line react-hooks/exhaustive-deps
   // Hết hàng/vượt tồn: báo ngay dưới đúng dòng kèm cách sửa nhanh và chặn đặt (khách đi thẳng vào /thanh-toan hay lưu đường dẫn
   // không phải chờ tới lúc bấm đặt mới biết). Chỉ xét các dòng đang thanh toán.
-  const lineProblems = checkoutLineProblems(checkoutItems);
+  const lineProblems = checkoutLineProblems(checkoutItems, { keepLastLine: !!itemIds });
   const hasLineProblem = Object.keys(lineProblems).length > 0;
 
   const attempt = useRef<{ body: PlaceBody; key: string; rev: number } | null>(null);
@@ -396,7 +396,10 @@ export default function CheckoutPage() {
     pendingId: lineFix.isPending ? (lineFix.variables?.id ?? null) : null,
     errorFor: lineFix.isError ? (lineFix.variables?.id ?? null) : null,
     errorText: lineFix.isError ? actionErrorText(lineFix.error) : null,
-    onFix: (id, fix) => lineFix.mutate({ id, fix }),
+    onFix: (id, fix) => {
+      if (fix.kind === 'cart') router.push('/gio-hang');
+      else lineFix.mutate({ id, fix });
+    },
   };
 
   // Từ lg nút Đặt hàng nằm cuối khung "Đơn hàng", có thể ngoài màn khi khách đang điền form hoá đơn ở cột trái: đặt lỗi thì cuộn khối nút + lời báo vào màn
@@ -493,6 +496,24 @@ export default function CheckoutPage() {
             </Link>
           </div>
         </div>
+      </Shell>
+    );
+  }
+
+  // Khách đã chọn một phần giỏ mà các món đó không còn (xoá ở nơi khác): không tính tiền phần khác, báo và đưa về giỏ.
+  if (cartEmpty && (cartQ.data?.items.length ?? 0) > 0) {
+    return (
+      <Shell>
+        <EmptyState
+          art="basket"
+          heading={fillCopy('checkout.selectionLostHeading')}
+          body={fillCopy('checkout.selectionLostBody')}
+          ctaLabel={fillCopy('checkout.lineToCart')}
+          onCta={() => {
+            clearCheckoutSelection();
+            router.replace('/gio-hang');
+          }}
+        />
       </Shell>
     );
   }
@@ -1168,7 +1189,7 @@ interface LineFixView {
   pendingId: string | null;
   errorFor: string | null;
   errorText: string | null;
-  onFix: (id: string, fix: LineFix) => void;
+  onFix: (id: string, fix: LineAction) => void;
 }
 
 function LineProblemNote({ id, fix }: { id: string; fix: LineFixView }) {

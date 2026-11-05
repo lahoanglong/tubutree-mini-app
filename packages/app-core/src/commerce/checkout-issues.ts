@@ -14,11 +14,22 @@ export interface CheckoutLineInput {
 
 export type LineFix = { kind: 'remove' } | { kind: 'reduce'; quantity: number };
 
+/** Cách sửa một dòng: sửa tại màn, hoặc rời màn về giỏ khi sửa tại màn sẽ làm rỗng lựa chọn. */
+export type LineAction = LineFix | { kind: 'cart' };
+
+export interface LineProblemOptions {
+  /**
+   * Thanh toán một phần giỏ: dòng hết hàng duy nhất còn trong lựa chọn không được xoá tại màn. Xoá làm lựa chọn rỗng, và màn
+   * không được rơi về tính tiền cả giỏ, nên cách sửa là về giỏ hàng.
+   */
+  keepLastLine?: boolean;
+}
+
 export interface LineProblem {
   kind: 'sold-out' | 'over';
   /** Chữ báo ngay dưới dòng hàng. */
   text: string;
-  fix: LineFix;
+  fix: LineAction;
   /** Nhãn nút sửa nhanh. */
   fixLabel: string;
 }
@@ -37,11 +48,15 @@ export function checkoutLineProblem(line: CheckoutLineInput): LineProblem | null
   };
 }
 
-export function checkoutLineProblems(lines: readonly CheckoutLineInput[]): Record<string, LineProblem> {
+export function checkoutLineProblems(lines: readonly CheckoutLineInput[], options: LineProblemOptions = {}): Record<string, LineProblem> {
   const out: Record<string, LineProblem> = {};
   for (const l of lines) {
     const p = checkoutLineProblem(l);
-    if (p) out[l.id] = p;
+    if (!p) continue;
+    out[l.id] =
+      options.keepLastLine && lines.length === 1 && p.fix.kind === 'remove'
+        ? { ...p, fix: { kind: 'cart' }, fixLabel: fillCopy('checkout.lineToCart') }
+        : p;
   }
   return out;
 }
