@@ -582,6 +582,34 @@ describe('AdminService.setUserRole', () => {
     },
   );
 
+  // W9-02: SĐT chỉ có ký tự vô hình hoặc không có chữ số trước đây lọt xuống tra DB với chuỗi rỗng và báo "có SĐT  (cần mở…)".
+  it.each(['', '   ', '\u200b\u200b\u200b', 'abc', '12'])('SĐT %p không phải số điện thoại → 400 tiếng Việt, không tra DB', async (typed) => {
+    const findUnique = jest.fn();
+    const prisma = makePrisma({ user: { findUnique, update: jest.fn() } });
+    const run = mkAdmin(prisma).setUserRole('admin1', typed, 'STAFF');
+    await expect(run).rejects.toBeInstanceOf(BadRequestException);
+    await expect(run).rejects.toThrow(/^Số điện thoại không hợp lệ/);
+    expect(findUnique).not.toHaveBeenCalled();
+  });
+
+  // Ký tự vô hình ở GIỮA số (dán từ Zalo/Word) không phải lỗi của admin: bỏ chúng rồi mới chuẩn hoá, không báo "SĐT không hợp lệ".
+  it.each(['0899\u2060625240', '0899625\u200b240', '\ufeff0899 625\u00ad 240'])('SĐT %p có ký tự vô hình giữa số → tra theo 0899625240', async (typed) => {
+    const findUnique = jest.fn().mockResolvedValue({ id: 'u1', phone: '0899625240', role: 'ADMIN' });
+    const update = jest.fn().mockResolvedValue({ id: 'u1', phone: '0899625240', role: 'STAFF', fullName: 'X' });
+    const prisma = makePrisma({ user: { findUnique, update, count: jest.fn().mockResolvedValue(1) } });
+    (rbac.revokeGrantsAbove as jest.Mock).mockClear();
+    await mkAdmin(prisma).setUserRole('admin1', typed, 'STAFF');
+    expect(findUnique).toHaveBeenCalledWith({ where: { phone: '0899625240' } });
+    expect(rbac.revokeGrantsAbove).toHaveBeenCalledWith('0899625240', 'STAFF', expect.anything());
+  });
+
+  it.each(['0912345678 Lan', '12'])('SĐT %p lẫn chữ hoặc quá ngắn → 400 tiếng Việt, không tra DB', async (typed) => {
+    const findUnique = jest.fn();
+    const prisma = makePrisma({ user: { findUnique, update: jest.fn() } });
+    await expect(mkAdmin(prisma).setUserRole('admin1', typed, 'STAFF')).rejects.toThrow(/^Số điện thoại không hợp lệ/);
+    expect(findUnique).not.toHaveBeenCalled();
+  });
+
   it('không thấy user → thông báo kèm SĐT đã chuẩn hoá để admin đối chiếu', async () => {
     const prisma = makePrisma({ user: { findUnique: jest.fn().mockResolvedValue(null), update: jest.fn() } });
     await expect(mkAdmin(prisma).setUserRole('admin1', '+84944555666', 'STAFF')).rejects.toThrow(

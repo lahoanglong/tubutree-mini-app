@@ -42,3 +42,15 @@ describe('Academy DTO: trần độ dài', () => {
     expect(await validate(dto)).toEqual([]);
   });
 });
+
+describe('UpdateCourseDto: xoá trắng Mô tả và Ảnh bìa', () => {
+  it('chuỗi rỗng hợp lệ (cách giao diện xoá trắng); chỉ ký tự vô hình cũng thành rỗng', async () => {
+    expect(await keys(UpdateCourseDto, { description: '', coverUrl: '' })).toEqual([]);
+    expect(plainToInstance(UpdateCourseDto, { description: '​﻿' }).description).toBe('');
+  });
+
+  it('null không phải cách xoá: bị chặn thay vì lọt xuống DB', async () => {
+    expect(await keys(UpdateCourseDto, { description: null })).toContain('description.optionalNotNull');
+    expect(await keys(UpdateCourseDto, { coverUrl: null })).toContain('coverUrl.optionalNotNull');
+  });
+});

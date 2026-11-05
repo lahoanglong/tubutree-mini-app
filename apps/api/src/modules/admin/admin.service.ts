@@ -18,6 +18,7 @@ import { vnMonthBounds } from '../affiliate/ctv-milestones';
 import { NotificationsService } from '../notifications/notifications.service';
 import { paginated, skipTake } from '../../common/pagination';
 import { TtlMemo } from '../../common/ttl-memo';
+import { removeInvisible } from '../../common/text-trim';
 import { escapePrismaLike, foldVietnamese } from '../catalog/search-text';
 import { OrderReversalService } from '../orders/order-reversal.service';
 import { OrderStatusService, toHttpBadRequest } from '../orders/order-status.service';
@@ -673,7 +674,8 @@ export class AdminService {
     tierId?: string,
     reason?: string,
   ) {
-    const normalized = searchPhone(phone) ?? phone.trim();
+    const normalized = searchPhone(removeInvisible(phone));
+    if (!normalized) throw new BadRequestException('Số điện thoại không hợp lệ: chỉ nhập chữ số, ví dụ 0912345678.');
     const dealerTierId = role === 'DEALER' ? tierId?.trim() : undefined;
     // DEALER không bậc → dealerContext trả tier null và đơn CREDIT bỏ qua hạn mức công nợ (C-008); cùng
     // luật với duyệt hồ sơ đại lý: bắt buộc chọn bậc tồn tại, merge vào metadata sẵn có (giữ segments/onboardedAt).

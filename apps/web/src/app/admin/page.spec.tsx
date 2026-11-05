@@ -123,6 +123,7 @@ const mocks = vi.hoisted(() => ({
   createAcademyCourse: vi.fn(),
   updateAcademyCourse: vi.fn(),
   deleteAcademyCourse: vi.fn(),
+  getPosCreditEnabled: vi.fn(),
   addAcademyLesson: vi.fn(),
   updateAcademyLesson: vi.fn(),
   deleteAcademyLesson: vi.fn(),
@@ -374,6 +375,7 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
     getContentKit: async () => mocks.kit,
     saveContentKit: (...args: unknown[]) => mocks.saveContentKit(...args),
     listAcademyCourses: async () => mocks.courses,
+    getPosCreditEnabled: () => mocks.getPosCreditEnabled(),
     createAcademyCourse: (...args: unknown[]) => mocks.createAcademyCourse(...args),
     updateAcademyCourse: (...args: unknown[]) => mocks.updateAcademyCourse(...args),
     deleteAcademyCourse: (...args: unknown[]) => mocks.deleteAcademyCourse(...args),
@@ -393,6 +395,7 @@ const mount = async () => {
 
 beforeEach(() => {
   mocks.auth = { user: { role: 'ADMIN' }, status: 'authenticated', initialized: true };
+  mocks.getPosCreditEnabled.mockReset().mockResolvedValue(true);
   mocks.recycling = 0;
   mocks.pancake = 0;
   mocks.listOrders.mockReset();
@@ -494,6 +497,17 @@ describe('admin/page — khung, đăng nhập, thanh tab', () => {
     expect(link.textContent).toBe('Đăng nhập');
     expect(link.getAttribute('href')).toBe('/dang-nhap');
     expect(link.className).toContain('text-forest-700');
+  });
+
+  it('W9: chưa có phiên đăng nhập thì không gọi thẻ thành viên (/me/loyalty/member-card trả 401 mỗi lần mở /admin)', async () => {
+    mocks.auth = { user: null, status: 'unauthenticated', initialized: true };
+    await mount();
+    expect(mocks.getPosCreditEnabled).not.toHaveBeenCalled();
+  });
+
+  it('W9: đã đăng nhập (nhân viên hay quản trị viên) thì hỏi công tắc tích điểm tại quầy đúng một lần', async () => {
+    await mount();
+    expect(mocks.getPosCreditEnabled).toHaveBeenCalledTimes(1);
   });
 
   it('không phải ADMIN: chỉ hiện thông báo không có quyền, không có thanh tab', async () => {
@@ -1105,6 +1119,21 @@ describe('admin/page — tab Người dùng', () => {
     });
   });
 
+  it('W9: lý do khoá chỉ có ký tự vô hình giữ nút Khoá tài khoản khoá', async () => {
+    const { container } = await openUsers();
+    act(() => (container.querySelector('button[aria-label="Khoá Nguyễn An"]') as HTMLButtonElement).click());
+    await flush();
+    const dialog = document.body.querySelector('[role="alertdialog"]')!;
+    const accept = [...dialog.querySelectorAll('button')].find((b) => b.textContent === 'Khoá tài khoản')!;
+    for (const junk of ['\u200b\u200b\u200b', '\ufeff\u2060\u200b']) {
+      typeInto(dialog.querySelector('textarea'), junk);
+      expect(accept.disabled, JSON.stringify(junk)).toBe(true);
+    }
+    typeInto(dialog.querySelector('textarea'), 'Bom hàng COD');
+    expect(accept.disabled).toBe(false);
+    await answerDialog(false);
+  });
+
   it('khoá người dùng: bắt buộc nhập lý do trong hộp thoại, gửi đúng id + lý do, báo thành công', async () => {
     mocks.blockUser.mockReset().mockResolvedValue({ id: 'u1', isBlocked: true, blockedAt: null, blockedReason: 'Bom hàng COD', revokedSessions: 2 });
     const { container } = await openUsers();
@@ -1229,6 +1258,26 @@ describe('admin/page — tab Người dùng', () => {
     const bad = [...container.querySelectorAll('p')].find((p) => p.textContent === 'Không tìm thấy SĐT')!;
     expect(bad.className).toContain('text-danger-fg');
     expect(mocks.setUserRole).toHaveBeenCalledTimes(2);
+  });
+
+  it('W9-02: nút Cấp quyền khoá khi SĐT chỉ có ký tự vô hình hoặc không có chữ số, dù đã chọn vai trò', async () => {
+    const { container } = await openUsers();
+    const grant = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Cấp quyền')!;
+    const phone = container.querySelector('input[placeholder^="SĐT"]') as HTMLInputElement;
+    selectValue(container.querySelector('select[class*="min-h-[44px]"]'), 'CUSTOMER');
+    for (const junk of ['\u200b\u200b\u200b', '\ufeff\u2060', 'abc', '   ']) {
+      typeInto(phone, junk);
+      expect(grant.disabled, JSON.stringify(junk)).toBe(true);
+    }
+    for (const junk of ['12', '0912345678 Lan']) {
+      typeInto(phone, junk);
+      expect(grant.disabled, JSON.stringify(junk)).toBe(true);
+    }
+    // Ký tự vô hình giữa số (dán từ Zalo/Word): API bỏ chúng rồi mới chuẩn hoá, nên nút phải mở.
+    typeInto(phone, '0912\u2060345678');
+    expect(grant.disabled).toBe(false);
+    typeInto(phone, '0955555555');
+    expect(grant.disabled).toBe(false);
   });
 
   it('D15-02: không có vai trò mặc định, mọi lần đổi vai trò đều hỏi xác nhận kèm hậu quả hạ quyền', async () => {
@@ -1428,6 +1477,17 @@ describe('admin/page — tab Voucher', () => {
       expect(el.className).toContain('border-stone-450');
       expect(el.className).toContain('min-w-0');
     }
+  });
+
+  it('W9: mã chỉ có ký tự vô hình giữ nút Tạo mã giảm giá khoá', async () => {
+    const { container } = await openCoupons();
+    const create = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Tạo mã giảm giá')!;
+    for (const junk of ['\u200b\u200b\u200b', '\ufeff\u2060\u200b']) {
+      typeInto(container.querySelector('input[placeholder^="Mã"]'), junk);
+      expect(create.disabled, JSON.stringify(junk)).toBe(true);
+    }
+    typeInto(container.querySelector('input[placeholder^="Mã"]'), 'WELCOME30');
+    expect(create.disabled).toBe(false);
   });
 
   it('Tạo voucher khoá tới khi có mã, gửi đúng dữ liệu; thành công báo success, lỗi báo danger', async () => {
@@ -1786,6 +1846,19 @@ describe('admin/page — tab Flash Sale', () => {
     window.history.replaceState(null, '', '/admin?tab=flashSales');
     return mount();
   };
+
+  it('W9: tên đợt chỉ có ký tự vô hình giữ nút Tạo đợt khoá dù đã đủ hai mốc giờ', async () => {
+    const { container } = await openSales();
+    const create = btn(container, 'Tạo đợt');
+    setDateTime(container, 'Giờ vàng bắt đầu lúc', '2026-10-20T08:00');
+    setDateTime(container, 'Giờ vàng kết thúc lúc', '2026-10-21T08:00');
+    for (const junk of ['\u200b\u200b\u200b', '\ufeff\u2060']) {
+      typeInto(labelledInput(container, 'Tên đợt'), junk);
+      expect(create.disabled, JSON.stringify(junk)).toBe(true);
+    }
+    typeInto(labelledInput(container, 'Tên đợt'), 'Đợt mới');
+    expect(create.disabled).toBe(false);
+  });
 
   it('form tạo đợt: ô nhập/nút 44px, khoá tới khi đủ tên + 2 mốc giờ, gửi mốc giờ ISO; báo success/danger', async () => {
     const { container } = await openSales();
@@ -2448,6 +2521,29 @@ describe('admin/page — tab Academy', () => {
     expect(para(container, 'Trùng tên khoá').className).toContain('text-danger-fg');
   });
 
+  it('W9: tiêu đề khoá và tiêu đề bài chỉ có ký tự vô hình giữ nút Tạo khoá học, Lưu thông tin, Thêm bài học khoá', async () => {
+    mocks.courses = [COURSE];
+    const { container } = await openAcademy();
+    const create = btn(container, 'Tạo khoá học');
+    for (const junk of ['\u200b\u200b\u200b', '\ufeff\u2060']) {
+      typeInto(container.querySelector('input[placeholder="Tiêu đề khoá học"]'), junk);
+      expect(create.disabled, `tạo ${JSON.stringify(junk)}`).toBe(true);
+    }
+    await openCourse(container);
+    const save = btn(container, 'Lưu thông tin');
+    const add = btn(container, 'Thêm bài học');
+    for (const junk of ['\u200b\u200b\u200b', '\ufeff\u2060']) {
+      typeInto(save.parentElement!.querySelector('input[placeholder="Tiêu đề"]'), junk);
+      expect(save.disabled, `lưu ${JSON.stringify(junk)}`).toBe(true);
+      typeInto(container.querySelector('input[placeholder="Tiêu đề bài học"]'), junk);
+      expect(add.disabled, `bài ${JSON.stringify(junk)}`).toBe(true);
+    }
+    typeInto(save.parentElement!.querySelector('input[placeholder="Tiêu đề"]'), 'Khoá đổi tên');
+    typeInto(container.querySelector('input[placeholder="Tiêu đề bài học"]'), 'Bài mới');
+    expect(save.disabled).toBe(false);
+    expect(add.disabled).toBe(false);
+  });
+
   it('hàng khoá học: huy hiệu Đã đăng/Nháp theo tông, nút Quản lý 44px, Đăng/Xoá khoá gọi đúng API', async () => {
     mocks.courses = [COURSE];
     const { container } = await openAcademy();
@@ -2503,7 +2599,6 @@ describe('admin/page — tab Academy', () => {
     await flush();
     expect(mocks.updateAcademyCourse).toHaveBeenCalledWith('c1', {
       title: 'Bán hàng 101',
-      description: 'Khoá nhập môn',
       coverUrl: 'https://c.test/x.png',
       sortOrder: 1,
     });
@@ -2511,6 +2606,54 @@ describe('admin/page — tab Academy', () => {
     expect(ok.className).toContain('text-success-fg');
     expect(ok.querySelector('svg')).not.toBeNull();
     expect(ok.textContent).not.toContain('✓');
+  });
+
+  it('W9-03: xoá trắng Mô tả và Ảnh bìa rồi Lưu gửi chuỗi rỗng (không bỏ khoá khỏi body, nếu không giá trị cũ ở lại)', async () => {
+    mocks.courses = [{ ...COURSE, coverUrl: 'https://c.test/cu.png' }];
+    const { container } = await openAcademy();
+    await openCourse(container);
+    const save = btn(container, 'Lưu thông tin');
+    const panel = save.parentElement!;
+    typeInto(panel.querySelector('textarea'), '');
+    typeInto(panel.querySelector('input[type=url]'), '');
+    mocks.updateAcademyCourse.mockResolvedValue({});
+    click(save);
+    await flush();
+    expect(mocks.updateAcademyCourse).toHaveBeenCalledWith('c1', { title: 'Bán hàng 101', description: '', coverUrl: '', sortOrder: 1 });
+  });
+
+  it('chỉ sửa tiêu đề: body không mang description/coverUrl, để mô tả người khác vừa thêm không bị ghi đè', async () => {
+    mocks.courses = [{ ...COURSE, description: null }];
+    const { container } = await openAcademy();
+    await openCourse(container);
+    const save = btn(container, 'Lưu thông tin');
+    typeInto(save.parentElement!.querySelector('input[placeholder="Tiêu đề"]'), 'Bán hàng 102');
+    mocks.updateAcademyCourse.mockResolvedValue({});
+    click(save);
+    await flush();
+    expect(mocks.updateAcademyCourse).toHaveBeenCalledTimes(1);
+    expect(mocks.updateAcademyCourse).toHaveBeenCalledWith('c1', { title: 'Bán hàng 102', sortOrder: 1 });
+  });
+
+  it('xoá mô tả có sẵn: body có description rỗng, và sau khi lưu xong, gõ rồi xoá lại vẫn được gửi', async () => {
+    mocks.courses = [COURSE];
+    const { container } = await openAcademy();
+    await openCourse(container);
+    const save = btn(container, 'Lưu thông tin');
+    const description = save.parentElement!.querySelector('textarea');
+    mocks.updateAcademyCourse.mockResolvedValue({});
+    typeInto(description, '');
+    click(save);
+    await flush();
+    expect(mocks.updateAcademyCourse).toHaveBeenLastCalledWith('c1', { title: 'Bán hàng 101', description: '', sortOrder: 1 });
+    typeInto(description, 'Mô tả mới');
+    click(save);
+    await flush();
+    expect(mocks.updateAcademyCourse).toHaveBeenLastCalledWith('c1', { title: 'Bán hàng 101', description: 'Mô tả mới', sortOrder: 1 });
+    typeInto(description, '');
+    click(save);
+    await flush();
+    expect(mocks.updateAcademyCourse).toHaveBeenLastCalledWith('c1', { title: 'Bán hàng 101', description: '', sortOrder: 1 });
   });
 
   it('thêm bài học: ô nhập 44px, khoá tới khi có tiêu đề, gửi đúng dữ liệu theo loại nội dung', async () => {

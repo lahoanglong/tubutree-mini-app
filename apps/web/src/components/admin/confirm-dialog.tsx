@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { safeAreaPadX } from '@/lib/safe-area';
+import { hasVisibleText } from '@/lib/admin-visible-text';
 import { INPUT_CLASS } from './ui';
 
 export interface ConfirmOptions {
@@ -88,7 +89,7 @@ export function ConfirmDialog({ options, onAnswer }: { options: ConfirmOptions; 
   const danger = options.tone === 'danger';
   const input = options.input;
   const invalid = input?.validate?.(text) ?? null;
-  const blocked = (!!input?.required && text.trim().length === 0) || invalid !== null;
+  const blocked = (!!input?.required && !hasVisibleText(text)) || invalid !== null;
 
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;

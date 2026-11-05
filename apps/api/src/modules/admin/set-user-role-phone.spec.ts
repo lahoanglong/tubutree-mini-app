@@ -12,6 +12,10 @@ describe('SetUserRoleDto.phone (ô SĐT form Cấp / đổi vai trò)', () => {
     await expect(run('0912.345.678')).resolves.toBeDefined();
   });
 
+  it.each(['', '   ', '\u200b\u200b\u200b', '\ufeff\u2060'])('SĐT %p (rỗng sau khi bỏ ký tự vô hình) → 400 tiếng Việt', async (phone) => {
+    await expect(run(phone)).rejects.toMatchObject({ response: { message: ['Số điện thoại không hợp lệ: ô đang trống.'] } });
+  });
+
   it('chuỗi quá 20 ký tự → 400 tiếng Việt', async () => {
     await expect(run('0'.repeat(21))).rejects.toMatchObject({ response: { message: ['Số điện thoại không được dài quá 20 ký tự.'] } });
   });
