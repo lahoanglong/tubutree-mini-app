@@ -187,6 +187,21 @@ describe('ProductStoryShowcase (Mini)', () => {
     document.body.style.overflow = '';
   });
 
+  it('fullscreen buyDisabled: hai nút khoá, nút Mua ngay đổi thành Hết hàng và không gọi xử lý', () => {
+    const onAdd = vi.fn();
+    const onBuy = vi.fn();
+    render(<ProductStoryShowcase product={baseProduct} previewConfig={fullConfig()} fullscreen buyDisabled onAddToCart={onAdd} onBuyNow={onBuy} />);
+    const add = screen.getByTestId('story-add-to-cart');
+    const buy = screen.getByTestId('story-buy-now');
+    expect(add).toBeDisabled();
+    expect(buy).toBeDisabled();
+    expect(buy).toHaveTextContent('Hết hàng');
+    fireEvent.click(add);
+    fireEvent.click(buy);
+    expect(onAdd).not.toHaveBeenCalled();
+    expect(onBuy).not.toHaveBeenCalled();
+  });
+
   it('fullscreen content scroller reserves room under the pinned bar', () => {
     render(<ProductStoryShowcase product={baseProduct} previewConfig={fullConfig()} fullscreen />);
     const css = readFileSync(resolve(__dirname, '../../css/story.css'), 'utf8');

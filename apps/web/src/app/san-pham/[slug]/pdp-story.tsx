@@ -16,6 +16,14 @@ import type { ProductDetail } from '@/lib/api';
 export function PdpStory({ product }: { product: ProductDetail }) {
   const selection = usePdpSelection();
   const [open, setOpen] = useState(false);
+  const pick = useCallback(
+    (id: string) => {
+      if (!selection) return;
+      selection.userPicked.current = true;
+      selection.setSelectedId(id);
+    },
+    [selection],
+  );
   const config = useMemo(() => resolveStoryConfig(product), [product]);
   // Kiểu của web chưa khai `attributes` của phân loại; dải câu chuyện không đọc nó, chỉ cần khớp hợp đồng chung với Mini.
   const core = useMemo<CoreProductDetail>(() => ({ ...product, variations: product.variations.map((v) => ({ attributes: {}, ...v })) }), [product]);
@@ -35,7 +43,7 @@ export function PdpStory({ product }: { product: ProductDetail }) {
       <ProductStoryShowcase
         product={core}
         selectedVariationId={selection?.selectedId}
-        onSelectVariation={selection?.setSelectedId}
+        onSelectVariation={selection ? pick : undefined}
       />
       <button
         type="button"
@@ -50,7 +58,8 @@ export function PdpStory({ product }: { product: ProductDetail }) {
           product={core}
           fullscreen
           selectedVariationId={selection?.selectedId}
-          onSelectVariation={selection?.setSelectedId}
+          onSelectVariation={selection ? pick : undefined}
+          buyDisabled={selection?.buyable === false}
           onClose={() => setOpen(false)}
           onAddToCart={() => trigger('[data-testid="pdp-add-to-cart"]')}
           onBuyNow={() => trigger('[data-testid="buy-now"], [data-testid="pdp-buy-now"]')}

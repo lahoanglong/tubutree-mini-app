@@ -111,4 +111,27 @@ describe('ProductDetailPage — câu chuyện sản phẩm', () => {
     fireEvent.click(within(dialog).getByTestId(testId));
     expect(screen.queryByRole('dialog', { name: 'Câu chuyện sản phẩm' })).toBeNull();
   });
+  it('phân loại đang chọn hết hàng: hai nút của khung câu chuyện khoá, như thanh mua của trang', async () => {
+    mocks.fetchProduct.mockResolvedValue(
+      product({
+        ingredients: [{ name: 'Sả chanh', percentage: '12%' }],
+        variations: [{ id: 'v1', sku: 'S1', name: '250g', attributes: {}, retailPrice: 100000, salePrice: null, stock: 0 }],
+      }),
+    );
+    renderPdp();
+    await screen.findByTestId('product-story');
+    fireEvent.click(screen.getByRole('button', { name: 'Xem câu chuyện sản phẩm' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Câu chuyện sản phẩm' });
+    expect(within(dialog).getByTestId('story-add-to-cart')).toBeDisabled();
+    expect(within(dialog).getByTestId('story-buy-now')).toBeDisabled();
+  });
+
+  it('còn hàng: hai nút của khung câu chuyện dùng được', async () => {
+    mocks.fetchProduct.mockResolvedValue(product({ ingredients: [{ name: 'Sả chanh', percentage: '12%' }] }));
+    renderPdp();
+    await screen.findByTestId('product-story');
+    fireEvent.click(screen.getByRole('button', { name: 'Xem câu chuyện sản phẩm' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Câu chuyện sản phẩm' });
+    expect(within(dialog).getByTestId('story-buy-now')).toBeEnabled();
+  });
 });

@@ -18,6 +18,8 @@ export interface ProductStoryShowcaseProps {
   onSelectVariation?: (id: string) => void;
   onAddToCart?: () => void;
   onBuyNow?: () => void;
+  /** Hết hàng hoặc chưa mua được: khoá hai nút ở thanh dưới của khung toàn màn. */
+  buyDisabled?: boolean;
   /** Ghi đè cấu hình (Admin Live Preview): vẽ cả khi `enabled: false`. */
   previewConfig?: ProductStoryConfig;
   /** true: khung 100dvh dạng Reel, có thanh mua ghim đáy. */
@@ -261,7 +263,7 @@ function Scenes({ props, view }: { props: ProductStoryShowcaseProps; view: Story
 const FOCUSABLE = 'button:not([disabled]), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
 function Fullscreen({ props, body }: { props: ProductStoryShowcaseProps; body: JSX.Element }) {
-  const { onClose, onAddToCart, onBuyNow } = props;
+  const { onClose, onAddToCart, onBuyNow, buyDisabled = false } = props;
   const root = useRef<HTMLDivElement>(null);
   const closeBtn = useRef<HTMLButtonElement>(null);
   const closeRef = useRef(onClose);
@@ -311,11 +313,11 @@ function Fullscreen({ props, body }: { props: ProductStoryShowcaseProps; body: J
         {body}
       </div>
       <div className="tubu-story-bar">
-        <Button variant="secondary" size="lg" data-testid="story-add-to-cart" onPress={() => onAddToCart?.()}>
+        <Button variant="secondary" size="lg" data-testid="story-add-to-cart" disabled={buyDisabled} onPress={() => onAddToCart?.()}>
           {fillCopy('story.addToCart')}
         </Button>
-        <Button variant="primary" size="lg" data-testid="story-buy-now" onPress={() => onBuyNow?.()}>
-          {fillCopy('story.buyNow')}
+        <Button variant="primary" size="lg" data-testid="story-buy-now" disabled={buyDisabled} onPress={() => onBuyNow?.()}>
+          {fillCopy(buyDisabled ? 'story.soldOut' : 'story.buyNow')}
         </Button>
       </div>
     </div>,

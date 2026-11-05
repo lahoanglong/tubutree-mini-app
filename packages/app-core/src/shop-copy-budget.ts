@@ -366,6 +366,7 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'story.closing': 22,
   'story.addToCart': 14,
   'story.buyNow': 10,
+  'story.soldOut': 10,
   'story.stageAlt': null,
   'story.stepTitle1': 26,
   'story.stepTitle2': 22,

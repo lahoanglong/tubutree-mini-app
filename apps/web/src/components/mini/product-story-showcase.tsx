@@ -15,6 +15,8 @@ export interface ProductStoryShowcaseProps {
   onSelectVariation?: (id: string) => void;
   onAddToCart?: () => void;
   onBuyNow?: () => void;
+  /** Hết hàng hoặc chưa mua được: khoá hai nút ở thanh dưới của khung toàn màn. */
+  buyDisabled?: boolean;
   /** Ghi đè cấu hình (Live Preview của Admin): có thì vẽ kể cả khi `enabled: false`. */
   previewConfig?: ProductStoryConfig;
   /** Khung 100dvh dạng Reel, có nút đóng và thanh mua ghim đáy. */
@@ -66,7 +68,7 @@ function Callout({ point }: { point: HudCalloutPoint }) {
   );
 }
 
-export function ProductStoryShowcase({ product, selectedVariationId, onSelectVariation, onAddToCart, onBuyNow, previewConfig, fullscreen = false, onClose }: ProductStoryShowcaseProps) {
+export function ProductStoryShowcase({ product, selectedVariationId, onSelectVariation, onAddToCart, onBuyNow, buyDisabled = false, previewConfig, fullscreen = false, onClose }: ProductStoryShowcaseProps) {
   const config = useMemo(() => previewConfig ?? resolveStoryConfig(product), [previewConfig, product]);
   // Mặc định bản có chuyển động: HTML dựng sẵn và lần hydrate đầu phải khớp nhau; thiết lập giảm chuyển động chỉ biết ở trình duyệt.
   const [reduced, setReduced] = useState(false);
@@ -278,11 +280,11 @@ export function ProductStoryShowcase({ product, selectedVariationId, onSelectVar
       </header>
       <div className="tubu-story-scroll">{body}</div>
       <div className="tubu-story-bar">
-        <button type="button" data-testid="story-add-to-cart" className="tubu-story-btn tubu-story-btn-secondary" onClick={() => onAddToCart?.()}>
+        <button type="button" data-testid="story-add-to-cart" disabled={buyDisabled} className="tubu-story-btn tubu-story-btn-secondary" onClick={() => onAddToCart?.()}>
           {fillCopy('story.addToCart')}
         </button>
-        <button type="button" data-testid="story-buy-now" className="tubu-story-btn tubu-story-btn-primary" onClick={() => onBuyNow?.()}>
-          {fillCopy('story.buyNow')}
+        <button type="button" data-testid="story-buy-now" disabled={buyDisabled} className="tubu-story-btn tubu-story-btn-primary" onClick={() => onBuyNow?.()}>
+          {fillCopy(buyDisabled ? 'story.soldOut' : 'story.buyNow')}
         </button>
       </div>
     </section>

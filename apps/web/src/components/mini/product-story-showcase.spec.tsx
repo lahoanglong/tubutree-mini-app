@@ -130,6 +130,22 @@ describe('ProductStoryShowcase (web)', () => {
     opener.remove();
   });
 
+  it('fullscreen buyDisabled: hai nút khoá, nút Mua ngay đổi thành Hết hàng và không gọi xử lý', () => {
+    const onAdd = vi.fn();
+    const onBuy = vi.fn();
+    const { container, unmount } = mount(<ProductStoryShowcase product={PRODUCT} fullscreen buyDisabled onAddToCart={onAdd} onBuyNow={onBuy} />);
+    const add = q(container, 'story-add-to-cart') as HTMLButtonElement;
+    const buy = q(container, 'story-buy-now') as HTMLButtonElement;
+    expect(add.disabled).toBe(true);
+    expect(buy.disabled).toBe(true);
+    expect(buy.textContent).toBe('Hết hàng');
+    click(add);
+    click(buy);
+    expect(onAdd).not.toHaveBeenCalled();
+    expect(onBuy).not.toHaveBeenCalled();
+    unmount();
+  });
+
   it('HUD callouts render label and value as text', () => {
     const { container } = mount(<ProductStoryShowcase product={PRODUCT} />);
     const hud = q(container, 'story-hud')!;

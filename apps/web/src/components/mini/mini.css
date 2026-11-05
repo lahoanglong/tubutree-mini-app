@@ -860,6 +860,8 @@
 .tubu-story-btn { flex: 1 1 0; min-width: 0; min-height: 3rem; border: 0; border-radius: var(--radius-control); font: inherit; font-weight: 600; cursor: pointer; }
 .tubu-story-btn-secondary { background: var(--color-action-secondary-bg); color: var(--color-action-secondary-fg); }
 .tubu-story-btn-primary { background: var(--color-action-primary-bg); color: var(--color-action-primary-fg); }
+.tubu-story-btn-primary:disabled { background: var(--color-action-primary-bg-disabled); color: var(--color-action-primary-fg-disabled); cursor: not-allowed; }
+.tubu-story-btn-secondary:disabled { background: var(--color-action-secondary-bg-disabled); color: var(--color-action-secondary-fg-disabled); cursor: not-allowed; }
 
 @media (min-width: 48rem) {
   .tubu-story-sentinel { display: block; height: 40vh; }

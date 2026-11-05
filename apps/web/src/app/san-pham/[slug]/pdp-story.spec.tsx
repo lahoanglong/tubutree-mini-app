@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProductDetail } from '@tubutree/app-core/api/catalog';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
@@ -22,7 +23,11 @@ const PRODUCT = {
 } as unknown as ProductDetail;
 
 let mounted: Rendered[] = [];
-const Probe = () => <p data-testid="probe">{usePdpSelection()?.selectedId}</p>;
+let latest: ReturnType<typeof usePdpSelection> = null;
+const Probe = () => {
+  latest = usePdpSelection();
+  return <p data-testid="probe">{latest?.selectedId}</p>;
+};
 const mount = async (product: ProductDetail) => {
   const r = render(
     <PdpSelectionProvider initialId="v1">
@@ -77,5 +82,22 @@ describe('PdpStory', () => {
     click(c.querySelector('[data-testid="story-add-to-cart"]'));
     await flush();
     expect(onAdd).toHaveBeenCalledTimes(1);
+  });
+  it('chọn phân loại ở vòng cung đánh dấu khách đã tự chọn, để tồn kho thật về sau không đổi phân loại dưới tay họ', async () => {
+    const c = await mount(PRODUCT);
+    expect(latest!.userPicked.current).toBe(false);
+    click(c.querySelectorAll('[data-testid="story-arc-item"]')[1]!);
+    expect(latest!.userPicked.current).toBe(true);
+  });
+
+  it('khối mua báo hết hàng: hai nút của khung toàn màn khoá, báo còn hàng thì mở lại', async () => {
+    const c = await mount(PRODUCT);
+    click(c.querySelector('[data-testid="pdp-story-open"]'));
+    expect((c.querySelector('[data-testid="story-buy-now"]') as HTMLButtonElement).disabled).toBe(false);
+    act(() => latest!.setBuyable(false));
+    expect((c.querySelector('[data-testid="story-buy-now"]') as HTMLButtonElement).disabled).toBe(true);
+    expect((c.querySelector('[data-testid="story-add-to-cart"]') as HTMLButtonElement).disabled).toBe(true);
+    act(() => latest!.setBuyable(true));
+    expect((c.querySelector('[data-testid="story-buy-now"]') as HTMLButtonElement).disabled).toBe(false);
   });
 });

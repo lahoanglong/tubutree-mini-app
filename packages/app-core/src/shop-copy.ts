@@ -369,6 +369,7 @@ export const SHOP_COPY: Record<string, string> = {
   'story.closing': 'An lành cho cả nhà',
   'story.addToCart': 'Thêm vào giỏ',
   'story.buyNow': 'Mua ngay',
+  'story.soldOut': 'Hết hàng',
   'story.stageAlt': 'Sản phẩm {name}',
   'story.stepTitle1': 'Tinh tuyển nguyên liệu',
   'story.stepTitle2': 'Kết hợp thành phần',
