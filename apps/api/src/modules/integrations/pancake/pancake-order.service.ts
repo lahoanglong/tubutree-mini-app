@@ -440,7 +440,15 @@ export class PancakeOrderService {
     if (order.pancakePaymentSynced || order.status === 'CANCELLED' || order.status === 'RETURNED') return;
     if (isMerchantFulfilledOrder(order)) return;
     if (!order.pancakeOrderId) {
-      await this.pushOrder(order.id);
+      try {
+        await this.pushOrder(order.id);
+      } catch (err) {
+        // Job thanh toán không qua markPushFailure của job push: khoá API sai (401/403) cũng không được đốt lượt đơn này.
+        if (classifyPushError(err) === PUSH_ERROR_KIND.CONFIG) {
+          await this.markPushFailure(order.id, err, true).catch((e) => this.logger.error(`Không ghi được lỗi đẩy Pancake cho đơn ${order.code}: ${pancakeErrorText(e)}`));
+        }
+        throw err;
+      }
       return;
     }
     const onCredit = await this.isOnDealerCredit(order);
@@ -452,7 +460,8 @@ export class PancakeOrderService {
       await this.putOrder(order.pancakeOrderId, payload);
     } catch (err) {
       await this.setPushError(order.id, err);
-      if (final) {
+      // 401/403 là lỗi cấu hình: job thanh toán dừng ngay (không còn lượt cuối để báo), mà đơn đã lên kho có thể bị thu COD lần nữa.
+      if (final || classifyPushError(err) === PUSH_ERROR_KIND.CONFIG) {
         await flagPancakeAttention(
           this.prisma,
           this.alerts,

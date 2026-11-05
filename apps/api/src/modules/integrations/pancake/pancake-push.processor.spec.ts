@@ -81,6 +81,15 @@ describe('PancakePushProcessor', () => {
     await expect(down.proc.process(makeJob('o1', 0, 5, 'cancel'))).rejects.toBe(err);
   });
 
+  it('job thanh toán gặp 401/403 → dừng ngay (UnrecoverableError), lỗi tạm vẫn ném nguyên để BullMQ thử lại', async () => {
+    const cfg = mk({ syncPayment: jest.fn().mockRejectedValue(new PancakeApiError('Pancake trả 401', false, false, 401)) });
+    await expect(cfg.proc.process(makeJob('o1', 0, 5, 'payment'))).rejects.toBeInstanceOf(UnrecoverableError);
+    const err = new PancakeApiError('Pancake trả 503', true, false, 503);
+    const tmp = mk({ syncPayment: jest.fn().mockRejectedValue(err) });
+    const failure = await tmp.proc.process(makeJob('o1', 0, 5, 'payment')).catch((e: unknown) => e);
+    expect(failure).toBe(err);
+  });
+
   it('job cancel / payment → gọi đúng handler kèm cờ lần cuối', async () => {
     const { svc, proc } = mk();
     await proc.process(makeJob('o1', 4, 5, 'cancel'));

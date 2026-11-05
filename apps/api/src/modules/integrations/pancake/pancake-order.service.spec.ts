@@ -578,6 +578,36 @@ describe('PancakeOrderService.retryPushByAdmin: nhãn phương thức trả trư
   });
 });
 
+describe('PancakeOrderService.syncPayment — 401/403 (hi)', () => {
+  const unauthorized = () => new PancakeApiError('Pancake trả 401 khi tạo đơn: invalid api key', false, false, 401);
+
+  it('chưa lên Pancake mà tạo đơn bị 401: ghi loại CONFIG, hoàn lượt đã đốt, không báo từng đơn', async () => {
+    const t = setup({ paymentMethod: 'ZALOPAY', paymentStatus: 'PAID', pancakePushAttempts: 2 }, { client: { createOrder: jest.fn().mockRejectedValue(unauthorized()) } });
+    await expect(t.svc.syncPayment('o1')).rejects.toBeInstanceOf(PancakeApiError);
+    expect(t.row()).toMatchObject({ pancakeErrorKind: 'CONFIG', pancakePushStatus: PANCAKE_PUSH.FAILED, pancakePushAttempts: 2 });
+    expect(t.row().pancakeAttention ?? null).toBeNull();
+    expect(t.alerts.alert).not.toHaveBeenCalled();
+  });
+
+  it('đã lên Pancake mà PUT thanh toán bị 401: báo "Cần xử lý" ngay lượt đầu (shipper có thể thu COD lần nữa), kể cả khi chưa phải lượt cuối', async () => {
+    const t = setup(
+      { pancakeOrderId: 'pk-1', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID' },
+      { client: { updateOrder: jest.fn().mockRejectedValue(new PancakeApiError('Pancake trả 403 khi cập nhật đơn', false, false, 403)) } },
+    );
+    await expect(t.svc.syncPayment('o1', false)).rejects.toBeInstanceOf(PancakeApiError);
+    expect(t.row().pancakeAttention).toContain('Chưa báo được');
+  });
+
+  it('lỗi tạm ở lượt chưa cuối vẫn không báo (hành vi cũ)', async () => {
+    const t = setup(
+      { pancakeOrderId: 'pk-1', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID' },
+      { client: { updateOrder: jest.fn().mockRejectedValue(new PancakeApiError('Pancake trả 503', true, false, 503)) } },
+    );
+    await expect(t.svc.syncPayment('o1', false)).rejects.toBeInstanceOf(PancakeApiError);
+    expect(t.row().pancakeAttention ?? null).toBeNull();
+  });
+});
+
 describe('PancakeOrderService.syncPayment', () => {
   it('đơn đã lên Pancake lúc chờ chuyển khoản, nay PAID → PUT transfer_money = tổng, cod = 0', async () => {
     const t = setup({ pancakeOrderId: 'pk-1', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID' });

@@ -5,7 +5,7 @@ import { PancakeOrderService } from './pancake-order.service';
 import { QUEUE_PANCAKE_PUSH } from '../../../jobs/queues';
 import { PANCAKE_JOB_CANCEL, PANCAKE_JOB_PAYMENT } from './pancake-queue';
 import { PancakeCancelRefusedError, pancakeErrorText } from './pancake-outbound';
-import { classifyPushError, isPermanentPushError } from './pancake-push-error';
+import { classifyPushError, isPermanentPushError, PUSH_ERROR_KIND } from './pancake-push-error';
 
 /**
  * Worker queue pancake-push (outbound). Retry+backoff (5 lần, exponential 2s) do BullMQ tự quản qua
@@ -40,7 +40,13 @@ export class PancakePushProcessor extends WorkerHost {
       return;
     }
     if (job.name === PANCAKE_JOB_PAYMENT) {
-      await this.pancakeOrder.syncPayment(orderId, final);
+      try {
+        await this.pancakeOrder.syncPayment(orderId, final);
+      } catch (err) {
+        // Khoá API sai: thử lại 4 lần nữa cũng 401/403, chỉ thêm tải lên Pancake.
+        if (classifyPushError(err) === PUSH_ERROR_KIND.CONFIG) throw new UnrecoverableError(pancakeErrorText(err));
+        throw err;
+      }
       return;
     }
 
