@@ -93,4 +93,22 @@ describe('ProductDetailPage — câu chuyện sản phẩm', () => {
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(screen.queryByRole('dialog')).toBeNull();
   });
+
+  it.each(['story-add-to-cart', 'story-buy-now'])('%s: đóng khung câu chuyện trước khi xử lý, để bảng chọn phân loại và thông báo không bị che', async (testId) => {
+    mocks.fetchProduct.mockResolvedValue(
+      product({
+        ingredients: [{ name: 'Sả chanh', percentage: '12%' }],
+        variations: [
+          { id: 'v1', sku: 'S1', name: '250g', attributes: {}, retailPrice: 100000, salePrice: null, stock: 5 },
+          { id: 'v2', sku: 'S2', name: '500g', attributes: {}, retailPrice: 180000, salePrice: null, stock: 5 },
+        ],
+      }),
+    );
+    renderPdp();
+    await screen.findByTestId('product-story');
+    fireEvent.click(screen.getByRole('button', { name: 'Xem câu chuyện sản phẩm' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Câu chuyện sản phẩm' });
+    fireEvent.click(within(dialog).getByTestId(testId));
+    expect(screen.queryByRole('dialog', { name: 'Câu chuyện sản phẩm' })).toBeNull();
+  });
 });

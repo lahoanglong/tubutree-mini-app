@@ -1176,8 +1176,15 @@ export default function ProductDetailPage() {
             product={p}
             selectedVariationId={selected?.id}
             onSelectVariation={(id) => setSelectedId(id)}
-            onAddToCart={() => void handleAdd()}
-            onBuyNow={() => void handleBuyNow()}
+            // Đóng khung trước: nó nằm trên bảng chọn phân loại (z-index cao hơn modal của zmp-ui) nên bảng và thông báo sẽ bị che.
+            onAddToCart={() => {
+              setStoryOpen(false);
+              void handleAdd();
+            }}
+            onBuyNow={() => {
+              setStoryOpen(false);
+              void handleBuyNow();
+            }}
             onClose={() => setStoryOpen(false)}
           />
         </Suspense>
