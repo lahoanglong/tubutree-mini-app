@@ -5,6 +5,7 @@ import type { PrismaService } from '../../../prisma/prisma.service';
 import type { PancakeClient } from './pancake.client';
 import type { PancakeCreateOrderBody } from './pancake.types';
 import { PancakeApiError, PancakeCancelRefusedError, PancakeOrderDataError, PancakePushBusyError } from './pancake-outbound';
+import { ATTENTION_PUSH_FAILED } from './pancake-attention';
 import { QUEUE_COMMAND_TIMEOUT_MS, QueueTimeoutError } from '../../../jobs/queue-timeout';
 import { baseOrder, fakeOrderDb, fakeQueue } from '../../../../test/fakes/pancake-order.fake';
 
@@ -817,6 +818,33 @@ describe('PancakeOrderService — đơn STALE không có đường tự động 
     expect(t.row().pancakePushStatus).toBe(PANCAKE_PUSH.STALE);
     expect(t.row().pancakeAttention).toContain('quá hạn tự đẩy');
     expect(t.row().pancakeAttention).toContain('Đẩy lại Pancake');
+  });
+
+  it('nhắc của đơn STALE vừa thanh toán mở đầu bằng ATTENTION_PUSH_FAILED: đẩy thành công sau "Đẩy lại" tự gỡ nhắc', async () => {
+    const t = setup({ pancakePushStatus: PANCAKE_PUSH.STALE, paymentMethod: 'ZALOPAY', paymentStatus: 'PAID' });
+    await t.svc.syncPayment('o1');
+    expect(t.row().pancakeAttention).toMatch(new RegExp(`^${ATTENTION_PUSH_FAILED}`));
+    await t.svc.retryPushByAdmin('admin1', 'TUBU1');
+    await t.svc.pushOrder('o1');
+    expect(t.row()).toMatchObject({ pancakePushStatus: PANCAKE_PUSH.SYNCED, pancakeOrderId: 'pk-new' });
+    expect(t.row().pancakeAttention ?? null).toBeNull();
+  });
+
+  it('huỷ đơn STALE vừa thanh toán: đường huỷ gỡ nhắc "kiểm tra kho rồi Đẩy lại" như mọi lời nhắc đẩy lỗi', async () => {
+    const t = setup({ pancakePushStatus: PANCAKE_PUSH.STALE, paymentMethod: 'ZALOPAY', paymentStatus: 'PAID' });
+    await t.svc.syncPayment('o1');
+    expect(t.row().pancakeAttention).not.toBeNull();
+    t.row().status = 'CANCELLED';
+    await t.svc.cancelOnPancake('o1');
+    expect(t.row().pancakeAttention ?? null).toBeNull();
+  });
+
+  it('đơn STALE đã rời kho (đang giao/đã giao) rồi mới được thanh toán: không nhắc "bấm Đẩy lại" (admin không đẩy lại được, kho giao lần hai)', async () => {
+    const t = setup({ pancakePushStatus: PANCAKE_PUSH.STALE, paymentMethod: 'ZALOPAY', paymentStatus: 'PAID', status: 'DELIVERED' });
+    await expect(t.svc.syncPayment('o1')).resolves.toBeUndefined();
+    expect(t.client.createOrder).not.toHaveBeenCalled();
+    expect(t.row().pancakeAttention ?? null).toBeNull();
+    expect(t.alerts.alert).not.toHaveBeenCalled();
   });
 
   it('"Đẩy lại" của admin vẫn đưa đơn STALE lên Pancake', async () => {

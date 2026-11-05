@@ -513,12 +513,15 @@ export class PancakeOrderService {
     if (order.pancakePaymentSynced || order.status === 'CANCELLED' || order.status === 'RETURNED') return;
     if (isMerchantFulfilledOrder(order)) return;
     if (!order.pancakeOrderId && order.pancakePushStatus === PANCAKE_PUSH.STALE) {
+      // Đơn đã rời kho (đang giao/đã giao): admin không "Đẩy lại" được (retryPushByAdmin chặn để kho không giao lần hai), nhắc đó vô nghĩa.
+      if (pancakePushGate(order) === 'LEFT_WAREHOUSE') return;
       // Đơn quá hạn tự đẩy vừa được thanh toán: không đường tự động nào đẩy. Nhắc người kiểm kho (đã giao tay chưa) trước khi bấm Đẩy lại.
+      // Mở đầu bằng ATTENTION_PUSH_FAILED để đẩy thành công và đường huỷ (ATTENTION_SETTLED_BY_CANCEL) tự gỡ nhắc, như lời đẩy lỗi khác.
       await flagPancakeAttention(
         this.prisma,
         this.alerts,
         order,
-        `Đơn quá hạn tự đẩy vừa được thanh toán: kiểm tra kho đã giao tay chưa; chưa thì bấm "Đẩy lại Pancake".`,
+        `${ATTENTION_PUSH_FAILED} (quá hạn tự đẩy) — khách vừa thanh toán: kiểm tra kho đã giao tay chưa; chưa thì bấm "Đẩy lại Pancake".`,
         this.logger,
       );
       return;

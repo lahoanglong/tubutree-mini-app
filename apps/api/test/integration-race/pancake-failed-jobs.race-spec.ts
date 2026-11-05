@@ -387,6 +387,18 @@ const url = process.env.TEST_REDIS_URL;
     await service.retryPushByAdmin('admin-it', x.code);
     await until(async () => (await prisma.order.findUniqueOrThrow({ where: { id: x.id } })).pancakeOrderId === pk);
     expect(callsOfX()).toBe(1);
+    // Nhắc "kiểm tra kho rồi Đẩy lại" mở đầu bằng ATTENTION_PUSH_FAILED nên lần đẩy thành công tự gỡ nó.
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: x.id } })).pancakeAttention).toBeNull();
+  });
+
+  it('huỷ đơn STALE vừa thanh toán: đường huỷ gỡ nhắc "kiểm tra kho rồi Đẩy lại"', async () => {
+    const x = await order();
+    await prisma.order.update({ where: { id: x.id }, data: { pancakePushStatus: 'STALE', paymentMethod: 'ZALOPAY', paymentStatus: 'PAID' } });
+    await service.syncPayment(x.id);
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: x.id } })).pancakeAttention).not.toBeNull();
+    await prisma.order.update({ where: { id: x.id }, data: { status: 'CANCELLED', reversalEffectsAt: new Date() } });
+    await service.cancelOnPancake(x.id);
+    expect(await prisma.order.findUniqueOrThrow({ where: { id: x.id } })).toMatchObject({ pancakeAttention: null, pancakeCancelStatus: 'NOT_FOUND' });
   });
 
   /** Lượt đẩy đang bay (createOrder chặn tại cổng); trong lúc đó đơn bị đánh STALE (như markStale của lượt khác), rồi lượt bay mới trả kết quả. */
