@@ -227,24 +227,34 @@ export function CampaignForm({
     }
     void qc.invalidateQueries({ queryKey: ['admin-campaigns'] });
     const productIds = products.map((p) => p.id);
-    if (productIds.join('\n') !== baseline.products.join('\n')) {
+    const attachProducts = async () => {
+      if (productIds.join('\n') === baseline.products.join('\n')) return null;
       try {
         await setAdminCampaignProducts(id, productIds);
         baseline.products = productIds;
+        return null;
       } catch (e) {
-        setBusy(false);
-        return setError(
-          `Đã lưu chiến dịch nhưng chưa gắn được sản phẩm: ${errText(e, 'lỗi không rõ')}`,
-        );
+        return `Đã lưu chiến dịch nhưng chưa gắn được sản phẩm: ${errText(e, 'lỗi không rõ')}`;
       }
-    }
-    if (codes.join('\n') !== baseline.codes.join('\n')) {
+    };
+    const attachCoupons = async () => {
+      if (codes.join('\n') === baseline.codes.join('\n')) return null;
       try {
         await setAdminCampaignCoupons(id, codes);
         baseline.codes = codes;
+        return null;
       } catch (e) {
+        return `Đã lưu chiến dịch nhưng chưa gắn được mã: ${errText(e, 'lỗi không rõ')}`;
+      }
+    };
+    // Máy chủ chặn lần gỡ làm trang chiến dịch đang bật thành trống: gắn trước phần còn nội dung, gỡ phần kia sau.
+    const steps =
+      productIds.length > 0 ? [attachProducts, attachCoupons] : [attachCoupons, attachProducts];
+    for (const step of steps) {
+      const failure = await step();
+      if (failure) {
         setBusy(false);
-        return setError(`Đã lưu chiến dịch nhưng chưa gắn được mã: ${errText(e, 'lỗi không rõ')}`);
+        return setError(failure);
       }
     }
     if (isActive && !keepActive) {

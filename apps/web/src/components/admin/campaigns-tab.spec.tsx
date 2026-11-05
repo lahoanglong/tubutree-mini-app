@@ -704,6 +704,31 @@ describe('CampaignsTab: khối "Kiểm trước khi bật" và xem trước tron
     expect(mocks.update.mock.calls.map((x) => x[1].isActive)).toEqual([false, true]);
   });
 
+  it('sửa trang đang bật đổi cả sản phẩm lẫn mã: gắn trước phần còn có nội dung, để trang không có lúc trống (máy chủ chặn gỡ hết)', async () => {
+    const order: string[] = [];
+    mocks.setProducts.mockImplementation(async () => (order.push('products'), { count: 0 }));
+    mocks.setCoupons.mockImplementation(async () => (order.push('coupons'), { count: 1 }));
+    const c = await mount();
+    click(c.querySelector('button[aria-label="Sửa chiến dịch Chiến dịch a"]'));
+    await flush(6);
+    click(c.querySelector('button[aria-label="Bỏ Sản phẩm cũ khỏi chiến dịch"]'));
+    typeInto(field(c, 'Mã giảm giá gắn kèm'), 'MOI5');
+    click(save(c));
+    await flush(8);
+    expect(order).toEqual(['coupons', 'products']);
+
+    mounted?.unmount();
+    order.length = 0;
+    const d = await mount();
+    click(d.querySelector('button[aria-label="Sửa chiến dịch Chiến dịch a"]'));
+    await flush(6);
+    click(byText(d, 'button', 'Chọn: Thêm sản phẩm'));
+    typeInto(field(d, 'Mã giảm giá gắn kèm'), '');
+    click(save(d));
+    await flush(8);
+    expect(order).toEqual(['products', 'coupons']);
+  });
+
   it('xem trước banner: hai khung dựng bằng băng chuyền thật với ảnh và tên đang nhập', async () => {
     const c = await mount();
     await open(c);

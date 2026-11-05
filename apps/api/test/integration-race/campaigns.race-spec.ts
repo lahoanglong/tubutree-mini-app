@@ -180,6 +180,48 @@ describe('Campaigns (real Postgres)', () => {
       expect(out.issues.map((i) => i.code).sort()).toEqual(['COUPON_EXPIRED', 'PRODUCTS_UNAVAILABLE']);
     });
 
+    const usableCoupon = (suffix: string) =>
+      prisma.coupon.create({
+        data: { code: `ITCMP${tag.toUpperCase()}${suffix}`, type: 'PERCENT', value: 10, scope: 'PUBLIC', startAt: new Date(Date.now() - DAY), endAt: new Date(Date.now() + DAY) },
+      });
+    const livePage = async (slug: string) => {
+      const c = await admin.create(base(slug, { linkType: 'CAMPAIGN_PAGE', linkValue: undefined, isActive: false }));
+      await admin.setProducts(c.id, [(await product(`SP ${slug}`, slug)).id]);
+      await admin.update(c.id, { isActive: true });
+      return c;
+    };
+    const linksOf = async (id: string) => ({
+      products: await prisma.campaignProduct.count({ where: { campaignId: id } }),
+      coupons: await prisma.campaignCoupon.count({ where: { campaignId: id } }),
+    });
+
+    it('trang đang bật: gỡ sản phẩm cuối bị chặn và không ghi gì; còn mã dùng được thì gỡ được; chiến dịch tắt thì gỡ thoải mái', async () => {
+      const c = await livePage('put1');
+      await expect(admin.setProducts(c.id, [])).rejects.toThrow(/Trang chiến dịch đang trống/);
+      expect(await linksOf(c.id)).toEqual({ products: 1, coupons: 0 });
+
+      const k = await usableCoupon('PUT1');
+      await admin.setCoupons(c.id, [k.code]);
+      await expect(admin.setProducts(c.id, [])).resolves.toEqual({ count: 0 });
+      await expect(admin.setCoupons(c.id, [])).rejects.toBeInstanceOf(BadRequestException);
+      expect(await linksOf(c.id)).toEqual({ products: 0, coupons: 1 });
+
+      await admin.update(c.id, { isActive: false });
+      await expect(admin.setCoupons(c.id, [])).resolves.toEqual({ count: 0 });
+    });
+
+    it('hai nhân viên cùng gỡ sản phẩm và mã cuối của trang đang bật: đúng một lệnh thắng, trang không bao giờ trống', async () => {
+      const c = await livePage('put2');
+      const k = await usableCoupon('PUT2');
+      await admin.setCoupons(c.id, [k.code]);
+      const results = await Promise.allSettled([admin.setProducts(c.id, []), admin.setCoupons(c.id, [])]);
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+      const failed = results.find((r): r is PromiseRejectedResult => r.status === 'rejected')!;
+      expect(failed.reason).toBeInstanceOf(BadRequestException);
+      const left = await linksOf(c.id);
+      expect(left.products + left.coupons).toBe(1);
+    });
+
     it('banner thứ 6 cùng chỗ bị cảnh báo chồng banner theo đúng thứ tự hiển thị thật', async () => {
       for (let i = 0; i < 5; i++) await admin.create(base(`day${i}`, { placement: 'OFFERS_TOP', sortOrder: i }));
       const sixth = await admin.create(base('day5', { placement: 'OFFERS_TOP', sortOrder: 9999 }));

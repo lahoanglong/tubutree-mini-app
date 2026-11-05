@@ -284,12 +284,24 @@ export class CampaignsAdminService {
    * Việc đầu của mỗi giao dịch "xoá hết rồi ghi lại": hai người thay danh sách cùng lúc thì người sau chờ ở đây tới khi người trước xong.
    * Thiếu khoá thì cả hai cùng xoá một danh sách cũ rồi cùng ghi, và chiến dịch giữ lẫn sản phẩm của hai bên.
    */
-  private lockRow(id: string) {
-    return this.prisma.$queryRaw`SELECT "id" FROM "campaigns" WHERE "id" = ${id} FOR UPDATE`;
+  private lockRow(tx: Pick<Prisma.TransactionClient, '$queryRaw'>, id: string) {
+    return tx.$queryRaw`SELECT "id" FROM "campaigns" WHERE "id" = ${id} FOR UPDATE`;
+  }
+
+  /**
+   * Gọi trong giao dịch, SAU khi đã ghi danh sách mới và trước khi commit: trang chiến dịch đang bật (chưa kết thúc) mà sau lần ghi này không còn
+   * sản phẩm hiển thị nào và không còn mã dùng được thì ném 400, giao dịch huỷ nên không ghi gì. Chiến dịch tắt hay đã kết thúc thì cho.
+   */
+  private async assertPageNotEmptied(tx: Prisma.TransactionClient, id: string, now: Date): Promise<void> {
+    const c = await tx.campaign.findUnique({ where: { id } });
+    if (!c || !c.isActive || c.endAt <= now || c.linkType !== 'CAMPAIGN_PAGE') return;
+    const [issues = []] = await campaignHealthBatch(tx, [{ subject: subjectOf(c) }], now);
+    const empty = issues.find((i) => i.code === 'PAGE_EMPTY');
+    if (empty) throw new BadRequestException(empty.message);
   }
 
   /** Thay hết danh sách sản phẩm; thứ tự gửi lên là thứ tự hiển thị. */
-  async setProducts(id: string, productIds: readonly string[]): Promise<{ count: number }> {
+  async setProducts(id: string, productIds: readonly string[], now: Date = new Date()): Promise<{ count: number }> {
     if (productIds.length > CAMPAIGN_MAX_PRODUCTS) {
       throw new BadRequestException(`Mỗi chiến dịch tối đa ${CAMPAIGN_MAX_PRODUCTS} sản phẩm.`);
     }
@@ -300,16 +312,19 @@ export class CampaignsAdminService {
       const unknown = ids.filter((v) => !found.has(v));
       if (unknown.length > 0) throw new BadRequestException(`Không tìm thấy sản phẩm: ${named(unknown)}.`);
     }
-    const clear = this.prisma.campaignProduct.deleteMany({ where: { campaignId: id } });
-    const writes = ids.length > 0
-      ? [clear, this.prisma.campaignProduct.createMany({ data: ids.map((productId, sortOrder) => ({ campaignId: id, productId, sortOrder })) })]
-      : [clear];
-    await this.prisma.$transaction([this.lockRow(id), ...writes]).catch((e: unknown) => rethrowForeignKey(e, 'Có sản phẩm'));
+    await this.prisma
+      .$transaction(async (tx) => {
+        await this.lockRow(tx, id);
+        await tx.campaignProduct.deleteMany({ where: { campaignId: id } });
+        if (ids.length > 0) await tx.campaignProduct.createMany({ data: ids.map((productId, sortOrder) => ({ campaignId: id, productId, sortOrder })) });
+        await this.assertPageNotEmptied(tx, id, now);
+      })
+      .catch((e: unknown) => rethrowForeignKey(e, 'Có sản phẩm'));
     return { count: ids.length };
   }
 
   /** Thay hết mã gắn kèm. Chỉ mã công khai/nhận được, không thuộc lô thẻ in: các mã khác không hiện trên trang nên gắn vào chỉ gây hiểu nhầm. */
-  async setCoupons(id: string, rawCodes: readonly string[]): Promise<{ count: number }> {
+  async setCoupons(id: string, rawCodes: readonly string[], now: Date = new Date()): Promise<{ count: number }> {
     if (rawCodes.length > CAMPAIGN_MAX_COUPONS) {
       throw new BadRequestException(`Mỗi chiến dịch gắn tối đa ${CAMPAIGN_MAX_COUPONS} mã.`);
     }
@@ -326,11 +341,14 @@ export class CampaignsAdminService {
     const wrongScope = codes.filter((c) => !ATTACHABLE_SCOPES.includes(byCode.get(c)!.scope));
     if (wrongScope.length > 0) throw new BadRequestException(`Mã dành riêng cho người nhận (hạng, nhóm, sinh nhật, mời), không gắn được: ${named(wrongScope)}.`);
 
-    const clear = this.prisma.campaignCoupon.deleteMany({ where: { campaignId: id } });
-    const writes = codes.length > 0
-      ? [clear, this.prisma.campaignCoupon.createMany({ data: codes.map((code, sortOrder) => ({ campaignId: id, couponId: byCode.get(code)!.id, sortOrder })) })]
-      : [clear];
-    await this.prisma.$transaction([this.lockRow(id), ...writes]).catch((e: unknown) => rethrowForeignKey(e, 'Có mã'));
+    await this.prisma
+      .$transaction(async (tx) => {
+        await this.lockRow(tx, id);
+        await tx.campaignCoupon.deleteMany({ where: { campaignId: id } });
+        if (codes.length > 0) await tx.campaignCoupon.createMany({ data: codes.map((code, sortOrder) => ({ campaignId: id, couponId: byCode.get(code)!.id, sortOrder })) });
+        await this.assertPageNotEmptied(tx, id, now);
+      })
+      .catch((e: unknown) => rethrowForeignKey(e, 'Có mã'));
     return { count: codes.length };
   }
 }
