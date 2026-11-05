@@ -308,4 +308,51 @@ describe('ProductStoryStudio', () => {
       expect(document.querySelector<HTMLTextAreaElement>('[data-testid="story-ai"] textarea')!.disabled).toBe(true);
     });
   });
+
+  describe('mẫu câu chuyện thương hiệu và khung ảnh', () => {
+    const SOKFARM = 'duong-hoa-dua-sokfarm-d6c685';
+    const presetBtn = () => document.querySelector<HTMLButtonElement>('[data-testid="story-apply-brand-preset"]');
+    const frame = () => document.querySelector<HTMLSelectElement>('[data-testid="story-frame"]')!;
+    const kinds = (c: ProductStoryConfig | null) => c?.scenes.map((s) => s.kind);
+
+    it('nút áp mẫu chỉ hiện với sản phẩm có mẫu theo slug (kể cả slug PROD có hậu tố băm)', () => {
+      mount({ value: null });
+      expect(presetBtn()).toBeNull();
+      mount({ value: null, product: product({ slug: SOKFARM }) });
+      expect(presetBtn()?.textContent).toBe('Áp dụng mẫu câu chuyện thương hiệu');
+    });
+
+    it('bấm áp mẫu: điền vòng cung từ phân loại thật cộng lắp ghép và điểm chỉ của mẫu, giữ ảnh sân khấu, khung ảnh và công tắc; chưa lưu gì', () => {
+      const saved: ProductStoryConfig = { ...config(), enabled: false, cutoutUrl: 'https://cdn.example.com/cut.png', imageFrame: 'floating-card' };
+      const { onChange, m } = mount({ value: saved, product: product({ slug: SOKFARM, name: 'Đường hoa dừa SOKFARM' }) });
+      click(presetBtn());
+      const c = last(onChange)!;
+      expect(kinds(c)).toEqual(['variant_arc', 'ingredient_assembly', 'hud_callouts']);
+      const asm = c.scenes.find((s) => s.kind === 'ingredient_assembly');
+      expect(asm && asm.kind === 'ingredient_assembly' && asm.steps.map((st) => st.title)).toEqual(['Từ hoa dừa', 'Nhiệt độ thấp', 'Không qua tinh luyện']);
+      expect(c.enabled).toBe(false);
+      expect(c.cutoutUrl).toBe('https://cdn.example.com/cut.png');
+      expect(c.imageFrame).toBe('floating-card');
+      expect(document.body.textContent).toContain('Đã áp dụng mẫu câu chuyện thương hiệu');
+      expect(m.calls).toHaveLength(0);
+    });
+
+    it('khung ảnh: mặc định Tự động; chọn thẻ nổi hoặc ảnh tách nền ghi imageFrame; chọn lại Tự động xoá khoá', () => {
+      const { onChange } = mount({ value: config() });
+      expect(frame().value).toBe('auto');
+      selectValue(frame(), 'floating-card');
+      expect(last(onChange)?.imageFrame).toBe('floating-card');
+      expect(frame().value).toBe('floating-card');
+      selectValue(frame(), 'cutout');
+      expect(last(onChange)?.imageFrame).toBe('cutout');
+      selectValue(frame(), 'auto');
+      expect(last(onChange)).not.toHaveProperty('imageFrame');
+      expect(frame().value).toBe('auto');
+    });
+
+    it('khung ảnh khoá khi form bị khoá', () => {
+      mount({ value: config(), disabled: true });
+      expect(frame().disabled).toBe(true);
+    });
+  });
 });

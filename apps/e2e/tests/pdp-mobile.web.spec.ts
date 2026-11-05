@@ -194,7 +194,7 @@ test.describe('Web khách: trang sản phẩm khổ điện thoại giống Mini
     await expect(page.locator('[data-section="pdp-quantity"]')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Tăng số lượng' })).toBeVisible();
   });
-  test('chip phân loại hết hàng khoá như Mini App; "Còn 3 sản phẩm" nằm trong khối thông tin chính', async ({ page, api, request }) => {
+  test('chip phân loại hết hàng khoá như Mini App; "Chỉ còn 3 sản phẩm" nằm trong khối thông tin chính', async ({ page, api, request }) => {
     // Cần từ 2 phân loại để có chip hết hàng; ngoài CI DB không có thì skip kèm lý do, trên CI thì đỏ (assertProductOnCi).
     const p = await multiVariationProduct(request);
     assertProductOnCi(p, 'sản phẩm từ 2 phân loại');
@@ -203,9 +203,9 @@ test.describe('Web khách: trang sản phẩm khổ điện thoại giống Mini
     await openPdp375(page, api, p!, (i) => (i === 0 ? 0 : 3));
     await expect(page.locator('[data-section="pdp-variation-chips"]')).toBeVisible();
 
-    // "Còn N sản phẩm" nằm trong khối thông tin chính (dưới giá/Điểm Xanh) như Mini App, không trôi xuống dải Phân loại.
+    // "Chỉ còn N sản phẩm" nằm trong khối thông tin chính (dưới giá/Điểm Xanh) như Mini App, không trôi xuống dải Phân loại.
     const low = page.locator('[data-testid="pdp-low-stock"]');
-    await expect(low).toHaveText('Còn 3 sản phẩm');
+    await expect(low).toHaveText('Chỉ còn 3 sản phẩm');
     const lowBox = (await low.boundingBox())!;
     const mainBox = (await page.locator('[data-section="pdp-main"]').boundingBox())!;
     expect(lowBox.y).toBeGreaterThanOrEqual(mainBox.y);

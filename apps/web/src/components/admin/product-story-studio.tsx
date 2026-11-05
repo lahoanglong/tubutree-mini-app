@@ -2,9 +2,10 @@
 
 import { useMemo, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { parseStoryConfig, STORY_LIMITS, type AssemblyStep, type HudCalloutPoint, type ProductStoryConfig, type StoryScene } from '@tubutree/shared-types';
+import { parseStoryConfig, STORY_LIMITS, type AssemblyStep, type HudCalloutPoint, type ProductStoryConfig, type StoryImageFrame, type StoryScene } from '@tubutree/shared-types';
 import type { ProductDetail as PublicProduct } from '@tubutree/app-core/api/catalog';
 import { resolveStoryConfig, STORY_PRODUCT_INSET_PCT } from '@tubutree/app-core/commerce/product-story';
+import { findStoryPreset } from '@tubutree/app-core/commerce/story-presets-launch';
 import { STORY_SPRITES } from '@tubutree/app-core/commerce/story-sprites';
 import { ProductStoryShowcase } from '@/components/mini/product-story-showcase';
 import { extractStoryAssets, generateStoryDraft, type ProductDetail, type StoryAssetsResult, type StoryDraftProvider } from '@/lib/product-categories';
@@ -16,6 +17,8 @@ const OWN_IMAGE = /^\/public-image\/product\/[A-Za-z0-9_-]+\/(\d{1,2})(?:\?|$)/;
 const IMAGE_URL = /\.(png|jpe?g|webp|gif)(\?.*)?$/i;
 const clamp = (n: number) => Math.min(100, Math.max(0, Math.round(n)));
 const AI_NOTE_MAX = 500;
+const FRAME_AUTO = 'auto';
+const FRAME_LABEL: Record<StoryImageFrame, string> = { 'floating-card': 'Thẻ nổi (ảnh có nền, poster)', cutout: 'Ảnh tách nền đặt thẳng lên nền cảnh' };
 const PROVIDER_NAME: Record<StoryDraftProvider, string> = { antigravity: 'Antigravity', anthropic: 'Claude', deepseek: 'DeepSeek', gemini: 'Gemini' };
 
 type Assembly = Extract<StoryScene, { kind: 'ingredient_assembly' }>;
@@ -83,6 +86,7 @@ export function ProductStoryStudio({
       }),
     [product],
   );
+  const brandPreset = useMemo(() => (product.slug ? findStoryPreset(product.slug) : undefined), [product.slug]);
   const current = value ?? generated ?? EMPTY;
   const check = value ? parseStoryConfig(value) : null;
   const preview = useMemo(() => previewProduct(product), [product]);
@@ -102,16 +106,16 @@ export function ProductStoryStudio({
     onSuccess: (r) => setFound(r),
   });
 
-  // Bản nháp AI thay cảnh lắp ghép và điểm chỉ; giữ vòng cung (bám phân loại thật), ảnh sân khấu và công tắc bật/tắt của sản phẩm. Chưa lưu: admin xem trước rồi tự bấm Lưu.
+  // Bản nháp AI thay cảnh lắp ghép và điểm chỉ; giữ vòng cung (bám phân loại thật), ảnh sân khấu, khung ảnh và công tắc bật/tắt của sản phẩm. Chưa lưu: admin xem trước rồi tự bấm Lưu.
   const draft = useMutation({
     mutationFn: () => generateStoryDraft(product.id, aiNote),
     onSuccess: (r) => {
-      const { cutoutUrl, enabled } = current;
+      const { cutoutUrl, imageFrame, enabled } = current;
       const kept = current.scenes.filter((s) => s.kind === 'variant_arc');
       setNote(null);
       setPick(0);
       setAiInfo({ provider: r.provider, warnings: r.warnings });
-      onChange({ version: 1, enabled, ...(cutoutUrl ? { cutoutUrl } : {}), scenes: [...kept, ...r.config.scenes] });
+      onChange({ version: 1, enabled, ...(cutoutUrl ? { cutoutUrl } : {}), ...(imageFrame ? { imageFrame } : {}), scenes: [...kept, ...r.config.scenes] });
     },
   });
 
@@ -163,11 +167,29 @@ export function ProductStoryStudio({
           onClick={() => {
             if (!generated) return setNote('Chưa đủ dữ liệu: cần thành phần hoặc từ 2 biến thể để tự sinh kịch bản.');
             setNote(null);
-            onChange(generated);
+            const { cutoutUrl, imageFrame } = current;
+            onChange({ ...generated, ...(cutoutUrl ? { cutoutUrl } : {}), ...(imageFrame ? { imageFrame } : {}) });
           }}
         >
           ⚡ Tự sinh Story từ Thành phần &amp; Mô tả
         </button>
+        {brandPreset && generated && (
+          <button
+            type="button"
+            data-testid="story-apply-brand-preset"
+            className={BTN_SECONDARY}
+            disabled={disabled}
+            onClick={() => {
+              // Mẫu thay các bước và điểm chỉ; giữ ảnh sân khấu, khung ảnh và công tắc bật/tắt đang đặt. Chưa lưu: admin xem trước rồi tự bấm Lưu.
+              const { cutoutUrl, imageFrame, enabled } = current;
+              setNote('Đã áp dụng mẫu câu chuyện thương hiệu vào khung xem trước. Đối chiếu chữ với bao bì rồi bấm Lưu sản phẩm.');
+              setPick(0);
+              onChange({ ...generated, enabled, ...(cutoutUrl ? { cutoutUrl } : {}), ...(imageFrame ? { imageFrame } : {}) });
+            }}
+          >
+            Áp dụng mẫu câu chuyện thương hiệu
+          </button>
+        )}
         {value && (
           <button
             type="button"
@@ -181,6 +203,32 @@ export function ProductStoryStudio({
             Dùng kịch bản mẫu
           </button>
         )}
+      </div>
+      <div className="space-y-1">
+        <label className="block text-sm font-medium text-stone-900" htmlFor={`story-frame-${product.id}`}>
+          Khung ảnh sản phẩm
+        </label>
+        <select
+          id={`story-frame-${product.id}`}
+          data-testid="story-frame"
+          className={`${FIELD_CLASS} w-full sm:w-auto`}
+          value={current.imageFrame ?? FRAME_AUTO}
+          disabled={disabled}
+          onChange={(e) => {
+            const v = e.target.value;
+            edit((c) => {
+              if (v === FRAME_AUTO) delete c.imageFrame;
+              else c.imageFrame = v as StoryImageFrame;
+            });
+          }}
+        >
+          <option value={FRAME_AUTO}>Tự động: có ảnh tách nền thì đặt thẳng, không thì thẻ nổi</option>
+          {(Object.keys(FRAME_LABEL) as StoryImageFrame[]).map((f) => (
+            <option key={f} value={f}>
+              {FRAME_LABEL[f]}
+            </option>
+          ))}
+        </select>
       </div>
       <div className="space-y-2" data-testid="story-ai">
         <label className="block text-sm font-medium text-stone-900" htmlFor={`story-ai-note-${product.id}`}>

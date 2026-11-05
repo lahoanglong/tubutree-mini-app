@@ -22,6 +22,14 @@
   position: absolute;
   inset: 12%;
 }
+/* Ảnh có nền (poster, ảnh chụp bối cảnh) vào thẻ nổi: bo 24px, viền mảnh, bóng mềm, để không lộ cạnh vuông thô trên nền cảnh. */
+.tubu-story-frame[data-frame='floating-card'] .tubu-story-product {
+  border-radius: var(--radius-sheet);
+  overflow: hidden;
+  border: 1px solid var(--color-border-subtle);
+  background: var(--color-bg-surface);
+  box-shadow: var(--elevation-2);
+}
 
 .tubu-story-layer {
   position: absolute;

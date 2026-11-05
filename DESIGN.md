@@ -204,7 +204,7 @@ Thuật ngữ cấm trong chữ khách đọc (`FORBIDDEN_TERMS`), cột phải 
 | Flash sale | Giờ vàng |
 | giờ vàng viết thường | Giờ vàng (hoa chữ G) |
 | HSD | Hạn dùng hoặc Dùng đến |
-| Chỉ còn | Còn {n} sản phẩm |
+| Chỉ còn (trừ đúng câu "Chỉ còn {n} sản phẩm" của `stockText` khi tồn 1–20; "Chỉ còn n suất" vẫn cấm) | Còn {n} sản phẩm |
 | Vui lòng, chúng tôi | Bạn hoặc Tubu |
 | cửa hàng | Gian hàng |
 | ba dấu chấm `...` | … (một ký tự) |

@@ -85,6 +85,30 @@ describe('ProductStoryShowcase (Mini)', () => {
     expect(screen.getByTestId('product-story')).toHaveAttribute('data-animated', 'true');
   });
 
+  it('khung ảnh: ảnh gốc (không có ảnh tách nền) vào thẻ nổi ở cả sân khấu và khung HUD; có ảnh tách nền thì cutout; admin đặt thì theo admin', () => {
+    const { unmount } = render(<ProductStoryShowcase product={baseProduct} previewConfig={fullConfig()} />);
+    expect(screen.getByTestId('story-stage')).toHaveAttribute('data-frame', 'floating-card');
+    expect(screen.getByTestId('story-hud').querySelector('[data-frame]')).toHaveAttribute('data-frame', 'floating-card');
+    unmount();
+
+    const cut = render(<ProductStoryShowcase product={baseProduct} previewConfig={{ ...fullConfig(), cutoutUrl: 'https://example.com/cut.png' }} />);
+    expect(screen.getByTestId('story-stage')).toHaveAttribute('data-frame', 'cutout');
+    cut.unmount();
+
+    render(<ProductStoryShowcase product={baseProduct} previewConfig={{ ...fullConfig(), cutoutUrl: 'https://example.com/cut.png', imageFrame: 'floating-card' }} />);
+    expect(screen.getByTestId('story-stage')).toHaveAttribute('data-frame', 'floating-card');
+  });
+
+  it('CSS thẻ nổi: bo 24px (radius-sheet), viền mảnh, bóng mềm, nền surface, chỉ áp cho khung floating-card', () => {
+    const css = readFileSync(resolve(__dirname, '../../css/story.css'), 'utf8');
+    const block = /\.tubu-story-frame\[data-frame='floating-card'\] \.tubu-story-product \{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(block).toMatch(/border-radius:\s*var\(--radius-sheet\)/);
+    expect(block).toMatch(/border:\s*1px solid var\(--color-border-subtle\)/);
+    expect(block).toMatch(/box-shadow:\s*var\(--elevation-2\)/);
+    expect(block).toMatch(/background:\s*var\(--color-bg-surface\)/);
+    expect(block).toMatch(/overflow:\s*hidden/);
+  });
+
   it('previewConfig draws even when enabled is false', () => {
     render(<ProductStoryShowcase product={baseProduct} previewConfig={{ ...fullConfig(), enabled: false }} />);
     expect(screen.getByTestId('product-story')).toBeInTheDocument();

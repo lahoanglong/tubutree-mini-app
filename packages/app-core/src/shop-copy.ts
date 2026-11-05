@@ -464,7 +464,8 @@ export const FORBIDDEN_TERMS: readonly { pattern: RegExp; use: string }[] = [
   { pattern: /Flash sale/i, use: 'Giờ vàng' },
   { pattern: /giờ vàng/, use: 'Giờ vàng (hoa chữ G)' },
   { pattern: /\bHSD\b/, use: 'Hạn dùng hoặc Dùng đến' },
-  { pattern: /Chỉ còn/i, use: 'Còn {n} sản phẩm' },
+  // Ngoại lệ duy nhất: mẫu `Chỉ còn {n} sản phẩm` (khoá stock.few của `stockText`, tồn 1–20); chữ đã điền số ở mã chạy thật vẫn bị bắt. "Chỉ còn n suất" (Giờ vàng) và mọi chỗ khác vẫn cấm.
+  { pattern: /Chỉ còn(?! \{n\} sản phẩm)/i, use: 'Còn {n} sản phẩm' },
   { pattern: /Vui lòng|chúng tôi/i, use: 'Bạn hoặc Tubu' },
   { pattern: /cửa hàng/i, use: 'Gian hàng' },
   { pattern: /\.{3}/, use: '… (một ký tự)' },
