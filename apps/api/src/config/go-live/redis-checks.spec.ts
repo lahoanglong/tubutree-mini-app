@@ -1,4 +1,4 @@
-import { EXPECTED_QUEUES, evaluateRedis } from './redis-checks';
+import { EXPECTED_QUEUES, evaluateRedis, summarizePancakeFailed } from './redis-checks';
 import type { RedisSnapshot } from './redis-checks';
 import { GOOD_REDIS, byId } from './go-live.fixtures';
 
@@ -107,5 +107,99 @@ describe('evaluateRedis', () => {
       const s = patch({ queues: queues.map((q) => (q.name === 'gomdon-events' ? { ...q, counts: { waiting: 50, active: 9, delayed: 4, failed: 0 } } : q)) });
       expect(status(s, 'queues.backlog')).toBe('PASS');
     });
+
+    describe('job lỗi của pancake-push theo đơn (hi)', () => {
+      const withPancake = (failed: number, pancakeFailed: NonNullable<RedisSnapshot['queues'][number]['pancakeFailed']>) =>
+        patch({ queues: queues.map((q) => (q.name === 'pancake-push' ? { ...q, counts: { waiting: 0, active: 0, delayed: 0, failed }, pancakeFailed } : q)) });
+
+      it('job lỗi của đơn đã huỷ/đã lên Pancake: PASS, nêu số đã xử lý chờ dọn', () => {
+        const r = byId(evaluateRedis(withPancake(2, { settled: 2, open: [], unexamined: 0 })), 'queues.backlog');
+        expect(r.status).toBe('PASS');
+        expect(r.detail).toContain('2 job lỗi của đơn đã xử lý, chờ dọn');
+      });
+
+      it('đơn còn mở: WARN, nêu mã đơn và lý do ngắn', () => {
+        const r = byId(evaluateRedis(withPancake(2, { settled: 1, open: [{ code: 'TUBUSUB7659607093', reason: 'Pancake từ chối dữ liệu đơn' }], unexamined: 0 })), 'queues.backlog');
+        expect(r.status).toBe('WARN');
+        expect(r.detail).toContain('TUBUSUB7659607093 (Pancake từ chối dữ liệu đơn)');
+        expect(r.detail).toContain('1 job lỗi của đơn đã xử lý');
+      });
+
+      it('chỉ liệt kê tối đa 5 mã đơn, phần còn lại gộp thành "và N đơn khác"', () => {
+        const open = Array.from({ length: 7 }, (_, i) => ({ code: `TUBU${i}`, reason: 'khoá API Pancake sai/hết hạn' }));
+        const r = byId(evaluateRedis(withPancake(7, { settled: 0, open, unexamined: 0 })), 'queues.backlog');
+        expect(r.detail).toContain('TUBU4 (');
+        expect(r.detail).not.toContain('TUBU5 (');
+        expect(r.detail).toContain('và 2 đơn khác');
+      });
+
+      it('job lỗi chưa đọc hết thì coi như còn mở (không biết thì không bỏ qua)', () => {
+        expect(status(withPancake(300, { settled: 200, open: [], unexamined: 100 }), 'queues.backlog')).toBe('WARN');
+      });
+
+      it('mọi WARN đều có cách sửa', () => {
+        const r = byId(evaluateRedis(withPancake(1, { settled: 0, open: [{ code: 'TUBU1', reason: 'thiếu dữ liệu đơn' }], unexamined: 0 })), 'queues.backlog');
+        expect(r.hint.length).toBeGreaterThan(10);
+      });
+    });
+  });
+});
+
+describe('summarizePancakeFailed', () => {
+  const order = (id: string, over: Partial<{ status: string; pancakeOrderId: string | null; pancakeErrorKind: string | null }> = {}) => ({
+    id,
+    code: `TUBU-${id}`,
+    status: 'CONFIRMED',
+    pancakeOrderId: null,
+    pancakeErrorKind: 'REJECTED',
+    ...over,
+  });
+
+  it('đơn đã huỷ → đã xử lý; đơn còn mở chưa lên Pancake → còn mở kèm lý do', () => {
+    const r = summarizePancakeFailed(
+      [
+        { name: 'push', orderId: 'a' },
+        { name: 'push', orderId: 'b' },
+      ],
+      [order('a', { status: 'CANCELLED' }), order('b')],
+      2,
+    );
+    expect(r).toEqual({ settled: 1, open: [{ code: 'TUBU-b', reason: 'Pancake từ chối dữ liệu đơn' }], unexamined: 0 });
+  });
+
+  it('đơn đã có pancakeOrderId hoặc đã giao → đã xử lý; đơn đã bị xoá → đã xử lý', () => {
+    const r = summarizePancakeFailed(
+      [
+        { name: 'push', orderId: 'a' },
+        { name: 'push', orderId: 'b' },
+        { name: 'push', orderId: 'gone' },
+      ],
+      [order('a', { pancakeOrderId: 'pk1' }), order('b', { status: 'DELIVERED' })],
+      3,
+    );
+    expect(r.settled).toBe(3);
+    expect(r.open).toEqual([]);
+  });
+
+  it('lệnh thanh toán/huỷ lỗi luôn còn mở (kết cục nằm ở cột khác)', () => {
+    const r = summarizePancakeFailed([{ name: 'cancel', orderId: 'a' }], [order('a', { status: 'CANCELLED' })], 1);
+    expect(r.open).toEqual([{ code: 'TUBU-a', reason: 'lệnh thanh toán/huỷ lỗi' }]);
+  });
+
+  it('lý do theo loại lỗi, loại lạ thì "lỗi chưa phân loại"', () => {
+    const r = summarizePancakeFailed(
+      [
+        { name: 'push', orderId: 'a' },
+        { name: 'push', orderId: 'b' },
+        { name: 'push', orderId: 'c' },
+      ],
+      [order('a', { pancakeErrorKind: 'CONFIG' }), order('b', { pancakeErrorKind: null }), order('c', { pancakeErrorKind: 'DATA' })],
+      3,
+    );
+    expect(r.open.map((o) => o.reason)).toEqual(['khoá API Pancake sai/hết hạn', 'lỗi chưa phân loại', 'thiếu dữ liệu đơn']);
+  });
+
+  it('số job lỗi nhiều hơn số đã đọc → unexamined', () => {
+    expect(summarizePancakeFailed([{ name: 'push', orderId: 'a' }], [order('a', { status: 'CANCELLED' })], 250).unexamined).toBe(249);
   });
 });
