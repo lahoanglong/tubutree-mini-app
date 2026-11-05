@@ -1105,6 +1105,21 @@ describe('admin/page — tab Người dùng', () => {
     });
   });
 
+  it('W9: lý do khoá chỉ có ký tự vô hình giữ nút Khoá tài khoản khoá', async () => {
+    const { container } = await openUsers();
+    act(() => (container.querySelector('button[aria-label="Khoá Nguyễn An"]') as HTMLButtonElement).click());
+    await flush();
+    const dialog = document.body.querySelector('[role="alertdialog"]')!;
+    const accept = [...dialog.querySelectorAll('button')].find((b) => b.textContent === 'Khoá tài khoản')!;
+    for (const junk of ['\u200b\u200b\u200b', '\ufeff\u2060\u200b']) {
+      typeInto(dialog.querySelector('textarea'), junk);
+      expect(accept.disabled, JSON.stringify(junk)).toBe(true);
+    }
+    typeInto(dialog.querySelector('textarea'), 'Bom hàng COD');
+    expect(accept.disabled).toBe(false);
+    await answerDialog(false);
+  });
+
   it('khoá người dùng: bắt buộc nhập lý do trong hộp thoại, gửi đúng id + lý do, báo thành công', async () => {
     mocks.blockUser.mockReset().mockResolvedValue({ id: 'u1', isBlocked: true, blockedAt: null, blockedReason: 'Bom hàng COD', revokedSessions: 2 });
     const { container } = await openUsers();
@@ -1441,6 +1456,17 @@ describe('admin/page — tab Voucher', () => {
       expect(el.className).toContain('border-stone-450');
       expect(el.className).toContain('min-w-0');
     }
+  });
+
+  it('W9: mã chỉ có ký tự vô hình giữ nút Tạo mã giảm giá khoá', async () => {
+    const { container } = await openCoupons();
+    const create = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Tạo mã giảm giá')!;
+    for (const junk of ['\u200b\u200b\u200b', '\ufeff\u2060\u200b']) {
+      typeInto(container.querySelector('input[placeholder^="Mã"]'), junk);
+      expect(create.disabled, JSON.stringify(junk)).toBe(true);
+    }
+    typeInto(container.querySelector('input[placeholder^="Mã"]'), 'WELCOME30');
+    expect(create.disabled).toBe(false);
   });
 
   it('Tạo voucher khoá tới khi có mã, gửi đúng dữ liệu; thành công báo success, lỗi báo danger', async () => {
@@ -1799,6 +1825,19 @@ describe('admin/page — tab Flash Sale', () => {
     window.history.replaceState(null, '', '/admin?tab=flashSales');
     return mount();
   };
+
+  it('W9: tên đợt chỉ có ký tự vô hình giữ nút Tạo đợt khoá dù đã đủ hai mốc giờ', async () => {
+    const { container } = await openSales();
+    const create = btn(container, 'Tạo đợt');
+    setDateTime(container, 'Giờ vàng bắt đầu lúc', '2026-10-20T08:00');
+    setDateTime(container, 'Giờ vàng kết thúc lúc', '2026-10-21T08:00');
+    for (const junk of ['\u200b\u200b\u200b', '\ufeff\u2060']) {
+      typeInto(labelledInput(container, 'Tên đợt'), junk);
+      expect(create.disabled, JSON.stringify(junk)).toBe(true);
+    }
+    typeInto(labelledInput(container, 'Tên đợt'), 'Đợt mới');
+    expect(create.disabled).toBe(false);
+  });
 
   it('form tạo đợt: ô nhập/nút 44px, khoá tới khi đủ tên + 2 mốc giờ, gửi mốc giờ ISO; báo success/danger', async () => {
     const { container } = await openSales();
@@ -2459,6 +2498,29 @@ describe('admin/page — tab Academy', () => {
     click(create);
     await flush();
     expect(para(container, 'Trùng tên khoá').className).toContain('text-danger-fg');
+  });
+
+  it('W9: tiêu đề khoá và tiêu đề bài chỉ có ký tự vô hình giữ nút Tạo khoá học, Lưu thông tin, Thêm bài học khoá', async () => {
+    mocks.courses = [COURSE];
+    const { container } = await openAcademy();
+    const create = btn(container, 'Tạo khoá học');
+    for (const junk of ['\u200b\u200b\u200b', '\ufeff\u2060']) {
+      typeInto(container.querySelector('input[placeholder="Tiêu đề khoá học"]'), junk);
+      expect(create.disabled, `tạo ${JSON.stringify(junk)}`).toBe(true);
+    }
+    await openCourse(container);
+    const save = btn(container, 'Lưu thông tin');
+    const add = btn(container, 'Thêm bài học');
+    for (const junk of ['\u200b\u200b\u200b', '\ufeff\u2060']) {
+      typeInto(save.parentElement!.querySelector('input[placeholder="Tiêu đề"]'), junk);
+      expect(save.disabled, `lưu ${JSON.stringify(junk)}`).toBe(true);
+      typeInto(container.querySelector('input[placeholder="Tiêu đề bài học"]'), junk);
+      expect(add.disabled, `bài ${JSON.stringify(junk)}`).toBe(true);
+    }
+    typeInto(save.parentElement!.querySelector('input[placeholder="Tiêu đề"]'), 'Khoá đổi tên');
+    typeInto(container.querySelector('input[placeholder="Tiêu đề bài học"]'), 'Bài mới');
+    expect(save.disabled).toBe(false);
+    expect(add.disabled).toBe(false);
   });
 
   it('hàng khoá học: huy hiệu Đã đăng/Nháp theo tông, nút Quản lý 44px, Đăng/Xoá khoá gọi đúng API', async () => {

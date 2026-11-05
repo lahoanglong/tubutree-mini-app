@@ -177,6 +177,7 @@ import { formatDate, formatDateTime } from '@/lib/format-date';
 import { isRefundInProgress, orderPaymentStatusShort, shippingStatusLabel } from '@/lib/order-view';
 import { OrderPaymentSummary } from '@/components/admin/order-payment-summary';
 import { actionErrorText, loadErrorText } from '@/lib/admin-error-text';
+import { hasVisibleText } from '@/lib/admin-visible-text';
 import { STAFF_USER_MAX_PAGE, staffUserSearchProblem } from '@/lib/staff-user-search';
 
 type Tab =
@@ -2856,7 +2857,7 @@ function CouponsTab({ onOpenConfig }: { onOpenConfig?: () => void } = {}) {
           </Field>
         </div>
       </div>
-      <button onClick={() => create.mutate()} disabled={!f.code || startPending || endPending || endBeforeStart || endAlreadyPast} className={`${BTN_PRIMARY} w-full`}>Tạo mã giảm giá</button>
+      <button onClick={() => create.mutate()} disabled={!hasVisibleText(f.code) || startPending || endPending || endBeforeStart || endAlreadyPast} className={`${BTN_PRIMARY} w-full`}>Tạo mã giảm giá</button>
       {endBeforeStart && <p role="alert" className="text-xs text-danger-fg">Ngày hết hạn không được sớm hơn ngày bắt đầu. Hãy chọn lại ngày hết hạn hoặc ngày bắt đầu để tạo mã.</p>}
       {endAlreadyPast && <p role="alert" className="text-xs text-danger-fg">{COUPON_END_PAST_MESSAGE}</p>}
       {msg && <p className={`text-sm ${create.isError ? 'text-danger-fg' : 'text-success-fg'}`}>{msg}</p>}
@@ -3274,7 +3275,7 @@ function FlashSalesTab() {
           </Field>
           <button
             onClick={() => { setMsg(null); create.mutate(); }}
-            disabled={!f.title.trim() || !f.startAt || !f.endAt || startPending || endPending || create.isPending}
+            disabled={!hasVisibleText(f.title) || !f.startAt || !f.endAt || startPending || endPending || create.isPending}
             className={BTN_PRIMARY}
           >
             {create.isPending ? 'Đang tạo…' : 'Tạo đợt'}
@@ -4207,7 +4208,7 @@ function AcademyTab() {
           </Field>
           <button
             onClick={() => { setMsg(null); create.mutate(); }}
-            disabled={!form.title.trim() || create.isPending}
+            disabled={!hasVisibleText(form.title) || create.isPending}
             className={BTN_PRIMARY}
           >
             {create.isPending ? 'Đang tạo…' : 'Tạo khoá học'}
@@ -4334,7 +4335,7 @@ function CourseRow({ course }: { course: AdminCourse }) {
                 <textarea placeholder="Mô tả" value={f.description} maxLength={5000} onChange={(e) => setF({ ...f, description: e.target.value })} rows={2} className={INPUT_CLASS} />
               </Field>
             </div>
-            <button onClick={() => save.mutate()} disabled={!f.title.trim() || save.isPending} className={`${BTN_PRIMARY} mt-2`}>
+            <button onClick={() => save.mutate()} disabled={!hasVisibleText(f.title) || save.isPending} className={`${BTN_PRIMARY} mt-2`}>
               {save.isPending ? 'Đang lưu…' : 'Lưu thông tin'}
             </button>
             {save.isSuccess && <span className="ml-2 inline-flex items-center gap-1 text-sm text-success-fg">Đã lưu <Check className="h-4 w-4" aria-hidden /></span>}
@@ -4407,7 +4408,7 @@ function CourseRow({ course }: { course: AdminCourse }) {
               )}
               <button
                 onClick={() => addLesson.mutate()}
-                disabled={!lesson.title.trim() || addLesson.isPending}
+                disabled={!hasVisibleText(lesson.title) || addLesson.isPending}
                 className={BTN_PRIMARY}
               >
                 Thêm bài học
@@ -4500,7 +4501,7 @@ function LessonRow({ lesson }: { lesson: AdminLesson }) {
               <textarea placeholder="Nội dung bài viết" value={f.body} maxLength={50000} onChange={(e) => setF({ ...f, body: e.target.value })} rows={3} className={INPUT_CLASS} />
             </Field>
           )}
-          <button onClick={() => save.mutate()} disabled={!f.title.trim() || save.isPending} className={BTN_PRIMARY}>
+          <button onClick={() => save.mutate()} disabled={!hasVisibleText(f.title) || save.isPending} className={BTN_PRIMARY}>
             {save.isPending ? 'Đang lưu…' : 'Lưu'}
           </button>
           {save.isError && <p className="text-xs text-danger-fg">{actionErrorText(save.error)}</p>}

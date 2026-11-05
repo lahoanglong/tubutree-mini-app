@@ -505,6 +505,17 @@ describe('CommunityModerationTab: sự kiện cộng đồng', () => {
   };
   const createBtn = (r: Rendered) => byText(r.container.querySelector('form')!, 'button', 'Tạo sự kiện') as HTMLButtonElement;
 
+  it('W9: tên sự kiện chỉ có ký tự vô hình giữ nút Tạo sự kiện khoá dù đã đủ giờ', async () => {
+    const { r } = await openEvents();
+    fillCreate(r, { start: '2026-12-01T10:00', end: '2026-12-01T12:00' });
+    for (const junk of ['\u200b\u200b\u200b', '\ufeff\u2060']) {
+      fillCreate(r, { title: junk });
+      expect(createBtn(r).disabled, JSON.stringify(junk)).toBe(true);
+    }
+    fillCreate(r, { title: 'Thi ảnh' });
+    expect(createBtn(r).disabled).toBe(false);
+  });
+
   it('liệt kê sự kiện đang mở với hạn, điểm thưởng; chuyển sang "Đã đóng" thấy người thắng', async () => {
     const { r } = await openEvents();
     const row = r.container.querySelector('[data-event="e1"]')!;

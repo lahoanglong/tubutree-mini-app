@@ -15,6 +15,7 @@ import { publicConfigQuery } from '@tubutree/app-core/queries/config';
 import { formatNumber } from '@/components/game/format';
 import { coreHttp } from '@/lib/core-http';
 import { actionErrorText } from '@/lib/admin-error-text';
+import { hasVisibleText } from '@/lib/admin-visible-text';
 import { formatDateTime } from '@/lib/format-date';
 import { formatVnd } from '@/lib/format-vnd';
 import { vnDateTimeISO } from '@/lib/week';
@@ -258,7 +259,7 @@ function CreateEventForm({ onCreated }: { onCreated: () => void }) {
 
   const rewardOk = reward === '' || /^\d+$/.test(reward);
   const orderOk = !startAt || !endAt || endAt > startAt;
-  const valid = title.trim().length > 0 && !!startAt && !!endAt && orderOk && rewardOk;
+  const valid = hasVisibleText(title) && !!startAt && !!endAt && orderOk && rewardOk;
   const rewardHint =
     config?.loyalty && config.community
       ? `1 điểm = ${formatVnd(config.loyalty.vndPerPointRedeem)}, tối đa ${formatNumber(config.community.eventRewardMaxPoints)} điểm. Để 0 nếu không có quà.`
