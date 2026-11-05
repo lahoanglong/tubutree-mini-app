@@ -27,7 +27,7 @@ export interface PancakeSyncState {
  * hai đơn kho, giao và thu COD hai lần. Nên không bao giờ khuyên tạo tay ở đây.
  */
 export const PANCAKE_FORBIDDEN_GUIDE =
-  'Pancake từ chối quyền cho riêng đơn này (khoá API vẫn đẩy được đơn khác). Không tạo tay đơn này trên Pancake: hệ thống vẫn tự thử lại mỗi giờ (tới 72 giờ), tạo tay sẽ thành hai đơn kho. Kiểm tra trang/kho/sản phẩm của đơn trên Pancake hoặc báo kỹ thuật.';
+  'Pancake từ chối quyền cho riêng đơn này (khoá API vẫn đẩy được đơn khác). Không tạo tay đơn này trên Pancake: hệ thống vẫn tự thử lại mỗi giờ (tới 72 giờ), làm vậy sẽ thành hai đơn kho. Kiểm tra trang/kho/sản phẩm của đơn trên Pancake hoặc báo kỹ thuật.';
 
 /** Loại lỗi đẩy (API: pancake-push-error.ts) → nhãn ngắn ở danh sách. */
 const KIND_LABEL: Record<string, { tone: Tone; label: string }> = {
