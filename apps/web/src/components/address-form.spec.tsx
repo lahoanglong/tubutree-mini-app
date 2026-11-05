@@ -248,3 +248,29 @@ describe('AddressForm tạo mới — điền sẵn từ hồ sơ và địa gi�
     expect(selectByLabel(c, 'Phường/Xã')!.getAttribute('aria-required')).toBe('true');
   });
 });
+
+describe('AddressForm — khổ điện thoại giống Mini App', () => {
+  it('dưới md: không khung viền quanh form và tiêu đề chỉ để trình đọc màn hình (Mini không có hai thứ này)', async () => {
+    const c = await mount();
+    const form = c.querySelector('form')!;
+    expect(form.className).toContain('max-md:border-0');
+    expect(form.className).toContain('max-md:p-0');
+    expect(c.querySelector('form h3')!.className).toContain('max-md:sr-only');
+  });
+
+  it('nhãn và lời báo lỗi cỡ 13px (text-caption), không dùng text-xs 12px', async () => {
+    mocks.me = {};
+    const c = await mount();
+    click(saveBtn(c));
+    await flush();
+    const labels = Array.from(c.querySelectorAll('form label > span'));
+    expect(labels.length).toBeGreaterThan(0);
+    for (const l of labels) expect(l.className).toContain('text-caption');
+    const errors = Array.from(c.querySelectorAll('form p[id]'));
+    expect(errors.length).toBeGreaterThan(0);
+    for (const e of errors) {
+      expect(e.className).toContain('text-caption');
+      expect(e.className).not.toContain('text-xs');
+    }
+  });
+});

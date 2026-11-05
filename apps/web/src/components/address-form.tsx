@@ -104,7 +104,7 @@ export function AddressForm({
       ref={formRef}
       noValidate
       aria-label={title}
-      className="space-y-3 rounded-control border border-stone-300 p-3"
+      className="space-y-3 rounded-control border border-stone-300 p-3 max-md:rounded-none max-md:border-0 max-md:p-0"
       onSubmit={(e) => {
         e.preventDefault();
         setSubmitted(true);
@@ -115,7 +115,7 @@ export function AddressForm({
         save.mutate(addressPayload(form, geo));
       }}
     >
-      <Heading className="font-semibold text-stone-900">{title}</Heading>
+      <Heading className="font-semibold text-stone-900 max-md:sr-only">{title}</Heading>
       <TextField
         label="Người nhận"
         value={form.recipient}
@@ -187,7 +187,7 @@ function TextField({
   return (
     <div>
       <label className="block">
-        <span className="text-xs font-medium text-stone-700">{label}</span>
+        <span className="text-caption font-medium text-[color:var(--color-text-secondary)]">{label}</span>
         <input
           value={value}
           onChange={(e) => onChange(e.target.value)}
@@ -202,7 +202,7 @@ function TextField({
         />
       </label>
       {error && (
-        <p id={errorId} className="mt-0.5 flex items-start gap-1 text-xs text-danger-fg">
+        <p id={errorId} className="mt-0.5 flex items-start gap-1 text-caption text-danger-fg">
           <AlertTriangle className="mt-px h-3 w-3 shrink-0" aria-hidden />
           {error}
         </p>

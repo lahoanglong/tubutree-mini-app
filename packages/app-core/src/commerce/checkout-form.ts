@@ -28,7 +28,7 @@ export const ADDRESS_STREET_MAX = 255;
 
 export const ADDRESS_FIELD_ORDER: readonly AddressField[] = ['recipient', 'phone', 'province', 'ward', 'street'];
 
-export function validateAddressFields(form: AddressFormValues, geo: AddressGeoCodes): AddressFieldErrors {
+export function validateAddressFields<G extends AddressGeoCodes>(form: AddressFormValues, geo: G): AddressFieldErrors {
   const e: AddressFieldErrors = {};
   const recipient = form.recipient.trim();
   const street = form.street.trim();
