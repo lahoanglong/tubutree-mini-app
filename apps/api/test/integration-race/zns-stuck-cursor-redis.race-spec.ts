@@ -3,7 +3,8 @@ import { ZnsStuckLogCron } from '../../src/modules/notifications/zns-stuck-log.c
 
 /**
  * Con trỏ quay vòng của cron đi qua proxy IRedisClient thật của BullMQ tới Redis thật (SET key val { EX } phải thành SET ... EX của ioredis).
- * Bộ race chưa có hạ tầng Redis nên spec chỉ chạy khi có TEST_REDIS_URL, ví dụ:
+ * CHỈ trỏ vào Redis rác: spec ghi và xoá khoá THẬT `zns-stuck-cron:cursor` (cùng tên khoá production), trỏ nhầm vào Redis đang chạy sẽ xoá con trỏ của cron thật.
+ * CI dựng service redis (race.yml); chạy tay thì cần TEST_REDIS_URL, ví dụ:
  *   docker run --rm -d --tmpfs /data -p 46589:6379 --name tubu-hg-redis redis:7-alpine
  *   TEST_REDIS_URL=redis://127.0.0.1:46589 npx jest -c test/integration-race/jest.config.js --runInBand zns-stuck-cursor-redis
  */
@@ -16,7 +17,17 @@ const url = process.env.TEST_REDIS_URL;
 
   beforeAll(async () => {
     const u = new URL(url as string);
-    queue = new Queue(`it-zns-cursor-${Date.now()}`, { connection: { host: u.hostname, port: Number(u.port) || 6379, maxRetriesPerRequest: null } });
+    const db = Number(u.pathname.replace(/^\//, ''));
+    queue = new Queue(`it-zns-cursor-${Date.now()}`, {
+      connection: {
+        host: u.hostname,
+        port: Number(u.port) || 6379,
+        ...(u.username ? { username: decodeURIComponent(u.username) } : {}),
+        ...(u.password ? { password: decodeURIComponent(u.password) } : {}),
+        ...(Number.isInteger(db) && db > 0 ? { db } : {}),
+        maxRetriesPerRequest: null,
+      },
+    });
     cron = new ZnsStuckLogCron({} as never, {} as never, queue);
     await (await queue.client).del(KEY);
   });
