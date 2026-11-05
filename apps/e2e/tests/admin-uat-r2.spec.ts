@@ -719,7 +719,6 @@ for (const frame of FRAMES) {
       await paste(name, 'W11 Nhãn Nháp');
       const dup = await submitAndRead(page, () => create.click(), /\/admin\/brands$/);
       note('nhan-hang', `trùng tên nhãn: ${dup.status} ${dup.body}`);
-      note('nhan-hang', `lời báo trùng tên trên màn: "${(await page.locator('p.text-danger-fg').last().innerText()).trim()}"`);
       expect(dup.status, 'trùng tên nhãn là lỗi nhập, không phải lỗi máy chủ').toBeLessThan(500);
       await paste(name, 'W11 Nhãn Mới Tạo');
       await paste(tagline, 'Câu giới thiệu thử');
@@ -834,6 +833,7 @@ for (const frame of FRAMES) {
       await expect(form.getByRole('alert').filter({ hasText: 'Thứ tự là số nguyên từ 0 đến 9999.' })).toBeVisible();
       await paste(form.getByRole('spinbutton', { name: 'Thứ tự hiển thị' }), '5');
       await save.click();
+      await expect(page.locator('p.text-danger-fg').last(), 'lời báo trùng tên nói rõ tên nhãn ngay trên màn').toHaveText('Đã có nhãn hàng trùng tên "W11 Nhãn Nháp". Hãy đặt tên khác.');
       await expect(page.getByRole('status').filter({ hasText: 'Đã lưu chiến dịch.' })).toBeVisible();
       const created = row('W11 Chiến dịch tạo từ form');
       await expect(created, 'giờ 23:30 và 00:30 giờ VN lưu rồi đọc lại đúng').toContainText(`${dmy(4)} 23:30 → ${dmy(9)} 00:30`);
