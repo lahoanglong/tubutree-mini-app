@@ -28,13 +28,13 @@ Bấm "Tạo voucher". Khách nhập mã ở ô "Nhập mã giảm giá" khi tha
 
 **Nội dung bán hàng cho CTV.** **Nội dung › Bộ nội dung CTV** › chọn sản phẩm, điền "Bài mẫu (mỗi dòng 1 caption)", "USP / điểm bán hàng (mỗi dòng 1 ý)", "Video URL (mỗi dòng 1 link)", FAQ, bấm "Lưu Content Kit". CTV mở trang sản phẩm trong Mini App, bấm "Nội dung bán hàng" và thấy bài mẫu đã gắn sẵn link giới thiệu của họ. Sản phẩm mới ra: làm Content Kit trong tuần đầu.
 
-**Khoá học cho CTV.** **Nội dung › Học viện CTV** › "Tạo khoá học mới": tiêu đề, thứ tự, ảnh bìa, mô tả, "Tạo khoá học". Bấm "Quản lý" để thêm bài (bài viết hoặc video). Khoá ở trạng thái "Nháp" đến khi bấm "Đăng (publish)". CTV thấy trong Mini App mục "CTV Academy".
+**Khoá học cho CTV.** **Nội dung › Học viện CTV** › "Tạo khoá học mới": tiêu đề, thứ tự, ảnh bìa, mô tả, "Tạo khoá học". Bấm "Quản lý" để thêm bài (bài viết hoặc video). Khoá ở trạng thái "Nháp" đến khi bấm "Đăng". CTV thấy trong Mini App mục "CTV Academy".
 
 **Câu hỏi thường gặp.** **Nội dung › Câu hỏi thường gặp** › điền "Nhóm", "Câu hỏi", "Câu trả lời", "Thứ tự hiển thị", bấm "Thêm câu hỏi". Trợ lý tư vấn trong app dùng các câu này để trả lời khách: viết đúng, ngắn, không hứa quá.
 
 **Mẫu thông báo.** **Nội dung › Mẫu thông báo.** Mỗi mẫu có "Kênh": "Trong app" hoặc "ZNS + trong app", "Mã mẫu ZNS" và "Nội dung trong app". Khách chỉ nhận tin Zalo khi mẫu là ZNS **và** có mã mẫu Zalo đã duyệt (duyệt 7 đến 14 ngày). Nhãn "Thiếu mã mẫu ZNS": mẫu đó chỉ hiện khi khách mở app. Duyệt xong mẫu thì nhập mã, bấm "Lưu".
 
-**Nhãn hàng.** **Đại lý và đối tác › Nhãn hàng** › "Tạo nhãn" (tên, tagline). Bấm "Quản lý": "Đăng (publish)" hoặc "Ẩn (chuyển nháp)", "Cấp chính hãng", logo, ảnh bìa, nguồn gốc, câu chuyện thương hiệu. "Gán SP theo tên nhãn" gắn sản phẩm có tên khớp. Chỉ gán được, không sửa được các trường khác của sản phẩm.
+**Nhãn hàng.** **Đại lý và đối tác › Nhãn hàng** › "Tạo nhãn" (tên, tagline). Bấm "Quản lý": "Đăng" hoặc "Ẩn (chuyển nháp)", "Cấp chính hãng", logo, ảnh bìa, nguồn gốc, câu chuyện thương hiệu. "Gán SP theo tên nhãn" gắn sản phẩm có tên khớp. Chỉ gán được, không sửa được các trường khác của sản phẩm.
 
 **Nhiệm vụ Vườn Xanh.** **Đổi rác và game › Nhiệm vụ.** Sửa tiêu đề, mô tả, "Điểm thưởng" (0 đến mức tối đa), bấm "Lưu". Điểm mới chỉ áp cho lượt nhận sau khi lưu. Danh mục quà đổi điểm cố định: muốn thêm quà hoặc đổi giá điểm, nhờ kỹ thuật.
 

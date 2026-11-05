@@ -141,11 +141,13 @@ function SourceTable({
               {showWeek && <td className="px-3 py-2 text-stone-700">{r.second}</td>}
               <td className="px-3 py-2 text-right text-stone-700">{r.newUsers}</td>
               <td className="px-3 py-2 text-right text-stone-700">
-                {r.firstOrderUsers} <span className="text-stone-500">({formatPct(r.firstOrderUsers, r.newUsers)})</span>
+                {r.firstOrderUsers}
+                {r.newUsers > 0 && <>{' '}<span className="text-stone-500">({formatPct(r.firstOrderUsers, r.newUsers)})</span></>}
                 {r.open1 && growing}
               </td>
               <td className="px-3 py-2 text-right text-stone-700">
-                {r.secondOrderUsers} <span className="text-stone-500">({formatPct(r.secondOrderUsers, r.firstOrderUsers)} của có đơn đầu)</span>
+                {r.secondOrderUsers}
+                {r.firstOrderUsers > 0 && <>{' '}<span className="text-stone-500">({formatPct(r.secondOrderUsers, r.firstOrderUsers)} của có đơn đầu)</span></>}
                 {r.open2 && growing}
               </td>
               <td className="px-3 py-2 text-right text-stone-900">

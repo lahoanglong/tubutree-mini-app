@@ -39,6 +39,19 @@ describe('CreateCampaignDto', () => {
   });
 });
 
+describe('lời báo ảnh sai', () => {
+  const IMAGE_MESSAGE = 'Ảnh banner chỉ nhận link bắt đầu bằng https:// hoặc ảnh tải lên (png, jpeg, webp, gif).';
+  const imageMessages = async (cls: new () => object, image: string) =>
+    (await errs(cls, { ...ok, image })).filter((e) => e.property === 'image').flatMap((e) => Object.values(e.constraints ?? {}));
+
+  it.each([
+    ['link thiếu https://', 'cdn.x.com/a.jpg'],
+    ['http', 'http://cdn.x.com/a.jpg'],
+  ])('tạo và sửa: %s báo bằng tiếng Việt gọi đúng tên "Ảnh banner", không lộ tên trường image', async (_name, image) => {
+    for (const cls of [CreateCampaignDto, UpdateCampaignDto]) expect(await imageMessages(cls, image)).toEqual([IMAGE_MESSAGE]);
+  });
+});
+
 describe('UpdateCampaignDto', () => {
   it('toàn bộ trường tuỳ chọn, nhưng null không được là giá trị của cột không-null', async () => {
     expect(await errs(UpdateCampaignDto, {})).toHaveLength(0);

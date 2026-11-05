@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
@@ -215,10 +215,11 @@ export class BrandService {
    * luôn gửi lại cả hai ô, nên nhãn có logo cũ (http, SVG) vẫn sửa được lời giới thiệu mà không bị chặn vì ảnh không đụng tới.
    */
   private assertImageChanges(dto: { logoUrl?: string; coverUrl?: string }, current: { logoUrl: string | null; coverUrl: string | null } | null) {
+    const label = { logoUrl: 'Logo', coverUrl: 'Ảnh bìa' } as const;
     for (const k of ['logoUrl', 'coverUrl'] as const) {
       const v = dto[k];
       if (v === undefined || v === (current?.[k] ?? undefined)) continue;
-      if (!isStorefrontImageValue(v)) throw new BadRequestException(`${k} chỉ nhận link https hoặc ảnh tải lên (png, jpeg, webp, gif).`);
+      if (!isStorefrontImageValue(v)) throw new BadRequestException(`${label[k]} chỉ nhận link https hoặc ảnh tải lên (png, jpeg, webp, gif).`);
     }
   }
 
@@ -234,21 +235,50 @@ export class BrandService {
     isPublished?: boolean;
   }) {
     const slug = dto.slug?.trim() ? slugifyVi(dto.slug) : slugifyVi(dto.name);
-    if (!slug) throw new BadRequestException('Tên nhãn không hợp lệ để tạo slug.');
+    if (!slug) throw new BadRequestException('Tên nhãn cần có ít nhất một chữ cái hoặc chữ số.');
     this.assertImageChanges(dto, null);
-    return this.prisma.brand.create({
-      data: {
-        name: dto.name,
-        slug,
-        logoUrl: dto.logoUrl ?? null,
-        coverUrl: dto.coverUrl ?? null,
-        tagline: dto.tagline ?? null,
-        story: dto.story ?? null,
-        origin: dto.origin ?? null,
-        certifications: (plainCerts(dto.certifications) as object) ?? undefined,
-        isPublished: dto.isPublished ?? false,
-      },
-    });
+    return this.nameConflictAware({ name: dto.name, slug, slugFromName: !dto.slug?.trim() }, () =>
+      this.prisma.brand.create({
+        data: {
+          name: dto.name,
+          slug,
+          logoUrl: dto.logoUrl ?? null,
+          coverUrl: dto.coverUrl ?? null,
+          tagline: dto.tagline ?? null,
+          story: dto.story ?? null,
+          origin: dto.origin ?? null,
+          certifications: (plainCerts(dto.certifications) as object) ?? undefined,
+          isPublished: dto.isPublished ?? false,
+        },
+      }),
+    );
+  }
+
+  /**
+   * Tên và slug nhãn đều unique. Trùng thì nói rõ cột nào trùng (theo meta.target) thay vì câu chung "vi phạm ràng buộc duy nhất" của bộ lọc Prisma;
+   * meta.target có thể là mảng cột hoặc tên ràng buộc dạng chuỗi tuỳ bộ điều khiển.
+   */
+  private async nameConflictAware<T>(by: { name?: string; slug?: string; slugFromName?: boolean }, write: () => Promise<T>): Promise<T> {
+    try {
+      return await write();
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        const target = err.meta?.target;
+        const fields = (Array.isArray(target) ? target : [target]).map((f) => String(f ?? '').toLowerCase());
+        const slugOnly = fields.some((f) => f.includes('slug')) && !fields.some((f) => f.includes('name'));
+        if (slugOnly && by.slug) {
+          throw new ConflictException(
+            by.slugFromName
+              ? `Tên này tạo đường dẫn /${by.slug} trùng với nhãn khác, hãy đổi tên.`
+              : `Đường dẫn /${by.slug} đã có nhãn khác dùng, hãy đổi đường dẫn.`,
+          );
+        }
+        if (!slugOnly && by.name) {
+          throw new ConflictException(`Đã có nhãn hàng trùng tên "${by.name.trim()}". Hãy đặt tên khác.`);
+        }
+      }
+      throw err;
+    }
   }
 
   async updateBrand(
@@ -289,7 +319,10 @@ export class BrandService {
       if (!owner) throw new BadRequestException('userId chủ nhãn không tồn tại.');
       data.ownerUserId = owner.id;
     }
-    return this.prisma.brand.update({ where: { id }, data });
+    return this.nameConflictAware(
+      { name: typeof dto.name === 'string' ? dto.name : undefined, slug: typeof data.slug === 'string' ? data.slug : undefined },
+      () => this.prisma.brand.update({ where: { id }, data }),
+    );
   }
 
   verifyBrand(id: string, isVerified: boolean) {

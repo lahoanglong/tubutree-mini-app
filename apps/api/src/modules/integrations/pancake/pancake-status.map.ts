@@ -72,7 +72,8 @@ const NAMED: Record<string, PancakeStatusAction> = {
 };
 
 export function resolvePancakeStatus(raw: unknown): PancakeStatusAction | null {
-  if (raw === null || raw === undefined) return null;
+  // Mảng [3] hay object có toString() đọc thành "3" qua String(): chỉ chuỗi và số mới là mã/tên trạng thái.
+  if (typeof raw !== 'string' && typeof raw !== 'number') return null;
   const key = String(raw).trim().toLowerCase();
   if (Object.prototype.hasOwnProperty.call(NUMERIC, key)) return NUMERIC[key] ?? null;
   return NAMED[key] ?? null;

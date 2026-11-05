@@ -2028,3 +2028,225 @@ describe('PancakeProcessor — invoice.issued ghi invoiceUrl (RB-04)', () => {
     expect(issuedWrites().map((a) => a.data)).toEqual([{ invoiceStatus: 'ISSUED' }]);
   });
 });
+
+describe('PancakeProcessor — payload webhook thiếu trường hoặc kiểu lạ (W11)', () => {
+  const RECEIVED_AT = new Date('2026-11-06T01:00:00.000Z');
+  const baseOrder = { id: 'o1', code: 'TUBU1', userId: 'u1', status: 'PACKED', note: null, paymentMethod: 'COD', paymentStatus: 'UNPAID', total: 100000, items: [], shippingHistory: [] };
+
+  function runEvent(order: Record<string, unknown> | null, eventType: string, rawPayload: Record<string, unknown>) {
+    const alerts = { alert: jest.fn().mockResolvedValue(undefined) };
+    const t = setup(order, undefined, alerts);
+    (t.prisma.pancakeWebhookEvent.findUnique as jest.Mock).mockResolvedValue({ id: 'e1', status: 'RECEIVED', eventType, rawPayload, receivedAt: RECEIVED_AT });
+    return { ...t, alerts, go: () => t.proc.process({ data: { eventId: 'e1' } }) };
+  }
+  const stockValues = (prisma: unknown) => {
+    const raw = (prisma as { $executeRaw: jest.Mock }).$executeRaw;
+    return raw.mock.calls.map((c) => Prisma.sql(c[0] as string[], ...(c.slice(1) as Prisma.Sql[])));
+  };
+
+  describe('id đơn Pancake không đọc được', () => {
+    it('id là object: lời báo/ghi chú không có "[object Object]"; khớp theo mã như webhook không mang id', async () => {
+      const t = runEvent({ ...baseOrder, pancakeOrderId: 'p1' }, 'orders', { id: { a: 1 }, status: 2, note: 'Order code: TUBU1' });
+      await t.go();
+      expect(JSON.stringify(t.alerts.alert.mock.calls)).not.toContain('[object Object]');
+      expect(attentionFlags(t.orderUpdateMany).join()).not.toContain('[object Object]');
+      expect(t.alerts.alert).not.toHaveBeenCalled();
+      expect(statusFlips(t.txUpdateMany).map((f) => f.data.status)).toEqual(['SHIPPING']);
+    });
+
+    it('khoản "đã thanh toán" của đơn chưa gắn Pancake mà id là object: ghi chú lịch sử ghi "?" thay vì "[object Object]"', async () => {
+      const order = { ...baseOrder, status: 'CONFIRMED', paymentMethod: 'BANK_TRANSFER', pancakeOrderId: null };
+      const t = runEvent(order, 'orders', { id: { a: 1 }, note: 'Order code: TUBU1', is_paid: true });
+      await t.go();
+      const notes = t.historyCreate.mock.calls.map((c) => (c[0] as { data: { note: string } }).data.note);
+      expect(notes).toHaveLength(1);
+      expect(notes[0]).toContain('#?)');
+      expect(JSON.stringify(t.alerts.alert.mock.calls)).not.toContain('[object Object]');
+    });
+  });
+
+  describe('vận chuyển', () => {
+    const shipping = { ...baseOrder, status: 'SHIPPING', shippingPartner: 'GHN', shippingCode: 'GHN1', shippingStatus: 'picked', pancakeOrderId: 'p1' };
+
+    it('hãng/mã/trạng thái là object hoặc mảng: giữ giá trị cũ, không ghi "[object Object]" cho khách thấy; mã vận đơn là số vẫn đọc được', async () => {
+      const t = runEvent(shipping, 'order.shipping_updated', { id: 'p1', partner: { partner_name: { a: 1 }, extend_code: 123456789012, partner_status: ['x'] } });
+      await t.go();
+      const data = t.orderUpdate.mock.calls[0][0].data;
+      expect(data).toMatchObject({ shippingPartner: 'GHN', shippingCode: '123456789012', shippingStatus: 'picked' });
+      expect(JSON.stringify(data)).not.toContain('[object Object]');
+    });
+
+    it.each([[true], ['undefined'], ['null'], ['[object Object]'], ['  ']])('trạng thái vận chuyển %j: không ghi', async (status) => {
+      const t = runEvent(shipping, 'order.shipping_updated', { id: 'p1', partner: { partner_name: 'GHN', partner_status: status } });
+      await t.go();
+      expect(t.orderUpdate.mock.calls[0]?.[0].data.shippingStatus ?? 'picked').toBe('picked');
+    });
+
+    it('updated_at ở tương lai xa (đồng hồ Pancake lệch/rác) không làm mọi cập nhật thật sau đó bị coi là "cũ"', async () => {
+      const poisoned = [{ at: '2026-11-05T00:00:00.000Z', status: 'picked', carrier: 'GHN', code: 'GHN1', pancakeAt: '2099-01-01T00:00:00.000Z' }];
+      const t = runEvent({ ...shipping, shippingHistory: poisoned }, 'order.shipping_updated', {
+        id: 'p1',
+        updated_at: '2026-11-06T08:00:00',
+        partner: { partner_name: 'GHN', extend_code: 'GHN1', partner_status: 'on_the_way' },
+      });
+      await t.go();
+      expect(t.orderUpdate).toHaveBeenCalledTimes(1);
+      expect(t.orderUpdate.mock.calls[0][0].data.shippingStatus).toBe('on_the_way');
+    });
+
+    it('updated_at ở tương lai xa không được ghi làm mốc để so lần sau', async () => {
+      const t = runEvent(shipping, 'order.shipping_updated', { id: 'p1', updated_at: '2099-01-01T00:00:00Z', partner: { partner_name: 'GHN', partner_status: 'on_the_way' } });
+      await t.go();
+      const history = t.orderUpdate.mock.calls[0][0].data.shippingHistory as Array<Record<string, unknown>>;
+      expect(history.at(-1)).not.toHaveProperty('pancakeAt');
+    });
+  });
+
+  describe('variation.stock_changed', () => {
+    it.each([[''], ['   '], [true], [[]], [{}], ['abc'], [1e12], [-1], ['1e3']])('remain_quantity=%j: không đọc được hoặc âm → không áp, sự kiện vẫn PROCESSED', async (raw) => {
+      const t = runEvent(null, 'variation.stock_changed', { variation_id: 'LP-1', remain_quantity: raw });
+      await t.go();
+      expect(stockValues(t.prisma)).toHaveLength(0);
+      expect((t.prisma.pancakeWebhookEvent.update as jest.Mock).mock.calls[0][0].data.status).toBe('PROCESSED');
+    });
+
+    it.each([['15', 15], [12.7, 12], [0, 0], ['0', 0]])('remain_quantity=%j: áp %j', async (raw, expected) => {
+      const t = runEvent(null, 'variation.stock_changed', { variation_id: 'LP-1', remain_quantity: raw });
+      await t.go();
+      expect(stockValues(t.prisma)[0]!.values).toContain(expected);
+    });
+
+    it.each([[{ a: 1 }], [[]], [true], [''], [1.5]])('variation_id=%j: không đọc được → không áp, không thành "[object Object]"', async (id) => {
+      const t = runEvent(null, 'variation.stock_changed', { variation_id: id, remain_quantity: 5 });
+      await t.go();
+      expect(stockValues(t.prisma)).toHaveLength(0);
+    });
+
+    it('variation_id là số: đổi thành chuỗi mã', async () => {
+      const t = runEvent(null, 'variation.stock_changed', { variation_id: 4242, remain_quantity: 5 });
+      await t.go();
+      expect(stockValues(t.prisma)[0]!.values).toContain('4242');
+    });
+
+    it('updated_at ở tương lai xa: không dùng làm mốc so (kẻo mọi webhook tồn kho thật sau đó bị bỏ)', async () => {
+      const t = runEvent(null, 'variation.stock_changed', { variation_id: 'LP-1', remain_quantity: 5, updated_at: '2099-01-01T00:00:00Z' });
+      await t.go();
+      const q = stockValues(t.prisma)[0]!;
+      expect(q.sql).not.toContain('pancakeStockEventAt');
+      expect(q.values).toContainEqual(RECEIVED_AT);
+    });
+  });
+
+  describe('ô tiền có mặt mà không đọc được: ghi warn nêu mã đơn và tên ô', () => {
+    const warnSpy = () => jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    const bankOrder = { ...baseOrder, paymentMethod: 'BANK_TRANSFER' };
+
+    it('prepaid "269.000" (ngăn nghìn): không tính là đã trả, nhưng có warn nêu TUBU1 và prepaid', async () => {
+      const warn = warnSpy();
+      try {
+        const t = setup(bankOrder);
+        await (t.proc as unknown as { onPaymentReconcile: (d: unknown) => Promise<unknown> }).onPaymentReconcile({ id: 'p1', prepaid: '269.000' });
+        expect(warn).toHaveBeenCalledWith(expect.stringMatching(/TUBU1.*prepaid|prepaid.*TUBU1/));
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it('prepaid "269000.000" đọc được: đủ tiền thì lật PAID, không warn về ô tiền', async () => {
+      const warn = warnSpy();
+      try {
+        const t = setup({ ...bankOrder, total: 269000 });
+        await (t.proc as unknown as { onPaymentReconcile: (d: unknown) => Promise<unknown> }).onPaymentReconcile({ id: 'p1', prepaid: '269000.000' });
+        expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('prepaid'));
+        expect(t.orderUpdateMany.mock.calls.some((c) => (c[0] as { data?: { paymentStatus?: string } }).data?.paymentStatus === 'PAID')).toBe(true);
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it.each([[undefined], [null], [''], [0]])('prepaid=%j vắng hoặc 0: không warn', async (raw) => {
+      const warn = warnSpy();
+      try {
+        const t = setup(bankOrder);
+        await (t.proc as unknown as { onPaymentReconcile: (d: unknown) => Promise<unknown> }).onPaymentReconcile({ id: 'p1', prepaid: raw });
+        expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('prepaid'));
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it('tổng "269.000" không đọc được: so tổng bỏ qua, có warn nêu TUBU1 và tên ô', async () => {
+      const warn = warnSpy();
+      try {
+        const t = setup(baseOrder);
+        await (t.proc as unknown as { onTotalReconcile: (d: unknown) => Promise<unknown> }).onTotalReconcile({ id: 'p1', status: 1, total_price_after_sub_discount: '269.000' });
+        expect(warn).toHaveBeenCalledWith(expect.stringMatching(/TUBU1.*total_price_after_sub_discount|total_price_after_sub_discount.*TUBU1/));
+      } finally {
+        warn.mockRestore();
+      }
+    });
+  });
+
+  describe('mã đơn Tubu trong payload', () => {
+    const { proc } = setup(null);
+    it('external_order_id là object hoặc số: bỏ qua, đọc mã từ ghi chú', () => {
+      expect(proc.extractOrderCode({ extension: { external_order_id: { a: 1 } }, note: 'Order code: TUBU9' })).toBe('TUBU9');
+      expect(proc.extractOrderCode({ extension: { external_order_id: 123 }, note: 'Order code: TUBU9' })).toBe('TUBU9');
+      expect(proc.extractOrderCode({ extension: { external_order_id: ['TUBU1'] } })).toBeNull();
+    });
+    it('external_order_id có khoảng trắng đầu cuối: cắt; rỗng: bỏ qua', () => {
+      expect(proc.extractOrderCode({ extension: { external_order_id: '  TUBU9 ' } })).toBe('TUBU9');
+      expect(proc.extractOrderCode({ extension: { external_order_id: '   ' }, note: 'Order code: TUBU7' })).toBe('TUBU7');
+    });
+    it.each([[null], ['abc'], [5], [[]]])('extension=%j và note không phải chuỗi: null, không ném', (extension) => {
+      expect(proc.extractOrderCode({ extension, note: { a: 1 } })).toBeNull();
+    });
+  });
+
+  describe('trạng thái cũ tới sau trạng thái mới không làm lùi đơn', () => {
+    const code = (status: number | string) => ({ id: 'p1', status });
+    it.each([
+      ['DELIVERED', [1, 12, 13, 8, 9, 2, 'confirmed', 'shipping']],
+      ['SHIPPING', [1, 12, 13, 8, 9, 'confirmed', 'packed']],
+      ['PACKED', [1, 'confirmed']],
+      ['CANCELLED', [1, 12, 'confirmed']],
+      ['RETURNED', [1, 12, 'packed']],
+    ])('đơn %s nhận trạng thái Pancake %j: không có lần lật trạng thái nào', async (status, incoming) => {
+      for (const incomingStatus of incoming as Array<number | string>) {
+        const { proc, txUpdateMany } = setup({ ...baseOrder, status, pancakeOrderId: 'p1', paymentStatus: 'PAID' });
+        await expect(proc.onStatusUpdated(code(incomingStatus))).resolves.toBeUndefined();
+        expect(statusFlips(txUpdateMany)).toHaveLength(0);
+      }
+    });
+
+    it.each([[99], [-1], ['abc'], [{}], [[]], [[3]], [true], [null], [''], [3.5]])('status=%j không phải mã trạng thái: giữ nguyên đơn', async (status) => {
+      const { proc, txUpdateMany } = setup({ ...baseOrder, status: 'SHIPPING', pancakeOrderId: 'p1' });
+      await proc.onStatusUpdated({ id: 'p1', status });
+      expect(statusFlips(txUpdateMany)).toHaveLength(0);
+    });
+  });
+
+  describe('cùng một sự kiện bắn trùng', () => {
+    it('5 worker nhận cùng sự kiện song song: chỉ một lần chạy handler (một lần lật trạng thái, một lần cộng điểm, một lần ghi PROCESSED)', async () => {
+      const t = runEvent({ ...baseOrder, status: 'SHIPPING', pancakeOrderId: 'p1' }, 'order.status_updated', { id: 'p1', status: 3 });
+      let claimed = false;
+      (t.prisma.pancakeWebhookEvent.updateMany as jest.Mock).mockImplementation(async () => {
+        if (claimed) return { count: 0 };
+        claimed = true;
+        return { count: 1 };
+      });
+      await Promise.all(Array.from({ length: 5 }, () => t.go()));
+      expect(statusFlips(t.txUpdateMany)).toHaveLength(1);
+      expect(t.loyalty.creditOrderPoints).toHaveBeenCalledTimes(1);
+      expect(t.prisma.pancakeWebhookEvent.update).toHaveBeenCalledTimes(1);
+    });
+
+    it('sự kiện đã PROCESSED khi job thứ hai tới: không claim, không chạy handler', async () => {
+      const t = runEvent({ ...baseOrder, status: 'SHIPPING', pancakeOrderId: 'p1' }, 'order.status_updated', { id: 'p1', status: 3 });
+      (t.prisma.pancakeWebhookEvent.findUnique as jest.Mock).mockResolvedValue({ id: 'e1', status: 'PROCESSED', eventType: 'order.status_updated', rawPayload: { id: 'p1', status: 3 } });
+      await Promise.all(Array.from({ length: 5 }, () => t.go()));
+      expect(t.prisma.pancakeWebhookEvent.updateMany).not.toHaveBeenCalled();
+      expect(statusFlips(t.txUpdateMany)).toHaveLength(0);
+    });
+  });
+});

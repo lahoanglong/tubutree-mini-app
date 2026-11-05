@@ -164,6 +164,31 @@ describe('ReportsTab (D1-04: báo cáo theo khoảng ngày)', () => {
     expect(container.querySelector('tr[data-source-row="2026-09-21|card-2610"]')?.querySelectorAll('td')[3]?.textContent).not.toContain('đang tăng');
   });
 
+  it('chưa có khách nào lên đơn đầu: ô đơn 2 chỉ ghi số, không ghi "(— của có đơn đầu)" vì không có gốc để chia', async () => {
+    const empty = { week: '2026-10-12', source: 'unknown', label: 'Không rõ', newUsers: 2, firstOrderUsers: 0, secondOrderUsers: 0, revenue: 0, firstWindowClosed: true, secondWindowClosed: true };
+    mocks.getSourceReport.mockResolvedValue({ ...SOURCES, rows: [empty], bySource: [{ source: 'unknown', label: 'Không rõ', newUsers: 2, firstOrderUsers: 0, secondOrderUsers: 0, revenue: 0 }] });
+    const { container } = mount(<ReportsTab />);
+    await flush();
+    const row = container.querySelector('tr[data-source-row="2026-10-12|unknown"]')!;
+    const cells = Array.from(row.querySelectorAll('td')).map((td) => td.textContent?.replace(/\s+/g, ' ').trim());
+    expect(cells[3]).toBe('0 (0%)');
+    expect(cells[4]).toBe('0');
+    expect(container.textContent).not.toContain('(—');
+  });
+
+  it('chữ "Từ ngày" và "Đến ngày" xếp cùng hàng với ô ngày, có khoảng cách và căn giữa', async () => {
+    const { container } = mount(<ReportsTab />);
+    await flush();
+    for (const name of ['Từ ngày', 'Đến ngày']) {
+      const input = container.querySelector<HTMLInputElement>(`input[aria-label="${name}"]`)!;
+      const label = input.closest('label')!;
+      expect(label.className).toMatch(/\bflex\b/);
+      expect(label.className).toMatch(/\bitems-center\b/);
+      expect(label.className).toMatch(/\bgap-/);
+      expect(input.className).not.toMatch(/\bmt-1\b/);
+    }
+  });
+
   it('khoảng quá 180 ngày: báo cáo nguồn báo lỗi và không gọi API (báo cáo doanh thu vẫn chạy tới 366 ngày)', async () => {
     const { container } = mount(<ReportsTab />);
     await flush();
