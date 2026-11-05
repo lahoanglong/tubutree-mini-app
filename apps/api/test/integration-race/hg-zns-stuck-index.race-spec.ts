@@ -50,7 +50,7 @@ describe('hg: index quét log ZNS kẹt (real Postgres)', () => {
               ? `PREPARE hg_stuck(text, text, timestamp, text, int, timestamp, text) AS
                  SELECT id, status FROM notification_logs
                   WHERE channel = $1 AND status = $2 AND "sentAt" < $3 AND (error IS NULL OR error NOT LIKE $4)
-                    AND ("sentAt" > $6 OR ("sentAt" = $6 AND id > $7))
+                    AND "sentAt" >= $6 AND ("sentAt" > $6 OR ("sentAt" = $6 AND id > $7))
                   ORDER BY "sentAt" ASC, id ASC LIMIT $5`
               : `PREPARE hg_stuck(text, text, timestamp, text, int) AS
                  SELECT id, status FROM notification_logs
@@ -83,6 +83,8 @@ describe('hg: index quét log ZNS kẹt (real Postgres)', () => {
     const plan = await explainStuck('force_custom_plan', { seqscanOff: false, keyset: true });
     expect(plan).toContain('notification_logs_channel_status_sentAt_idx');
     expect(plan).not.toMatch(/Seq Scan/);
+    // Cận dưới sentAt nằm trong Index Cond (cắt đầu dải), không chỉ là Filter sau khi đọc.
+    expect(plan).toMatch(/Index Cond: .*"sentAt" >= /);
   });
 
   it('plan theo tham số thật khi tắt seqscan: index mới là lựa chọn so với các index còn lại', async () => {

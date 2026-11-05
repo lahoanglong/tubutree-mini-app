@@ -79,7 +79,9 @@ export class ZnsStuckLogCron {
         where: {
           channel: 'ZNS',
           status,
-          sentAt: { lt: new Date(Date.now() - ZnsStuckLogCron.STUCK_AFTER_MS) },
+          // Prisma không có so sánh bộ ("sentAt", id) > (c, id): cận dưới sentAt >= c là điều kiện thừa so với OR keyset ở dưới, nhưng nó cho planner
+          // cắt đầu dải index (channel, status, sentAt) thay vì đọc từ đầu rồi lọc; (sentAt = c AND id > c.id) vẫn do OR bên dưới phân định.
+          sentAt: { lt: new Date(Date.now() - ZnsStuckLogCron.STUCK_AFTER_MS), ...(cursor ? { gte: new Date(cursor.sentAt) } : {}) },
           // Log đã xét là mơ hồ (không có đường tự gỡ) bị loại: nếu không, chúng chiếm hết `take` theo sentAt tăng dần và log kẹt mới hơn không bao giờ được xét.
           OR: [{ error: null }, { error: { not: { startsWith: ZNS_REVIEW_PREFIX } } }],
           ...(cursor ? { AND: [{ OR: [{ sentAt: { gt: new Date(cursor.sentAt) } }, { sentAt: new Date(cursor.sentAt), id: { gt: cursor.id } }] }] } : {}),

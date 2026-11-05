@@ -19,7 +19,7 @@ function setup(logs: LogRow[], jobs: Record<string, JobSpec>, opts: { noQueue?: 
   (runExclusive as jest.Mock).mockImplementation(holdsLease(opts.acquired ?? true));
   // Mỗi trạng thái một truy vấn (index (channel, status, sentAt) cho đúng thứ tự sentAt); mock trả theo status của điều kiện, sentAt tăng theo thứ tự khai báo.
   const sentAt = (id: string) => new Date(2026, 0, 1, 0, logs.findIndex((l) => l.id === id));
-  type KeysetWhere = { status: string; AND?: { OR: [{ sentAt: { gt: Date } }, { sentAt: Date; id: { gt: string } }] }[] };
+  type KeysetWhere = { status: string; sentAt: { lt: Date; gte?: Date }; AND?: { OR: [{ sentAt: { gt: Date } }, { sentAt: Date; id: { gt: string } }] }[] };
   const findMany = jest.fn(async ({ where, take }: { where: KeysetWhere; take?: number }) => {
     const keyset = where.AND?.[0]?.OR;
     const after = (r: { id: string; sentAt: Date }) =>
@@ -124,6 +124,8 @@ describe('ZnsStuckLogCron: con trỏ quay vòng (log cũ còn sống không che 
     await cron.sweepStuckZnsLogs();
     findMany.mockClear();
     await cron.sweepStuckZnsLogs();
+    // Cận dưới sentAt >= c nằm cùng điều kiện sentAt < ngưỡng để index (channel, status, sentAt) cắt được đầu dải; (sentAt = c AND id > c.id) giữ nguyên ở OR.
+    expect(findMany.mock.calls[0]![0].where.sentAt).toEqual({ lt: expect.any(Date), gte: new Date(2026, 0, 1, 0, 199) });
     expect(findMany.mock.calls[0]![0].where.AND).toEqual([
       { OR: [{ sentAt: { gt: new Date(2026, 0, 1, 0, 199) } }, { sentAt: new Date(2026, 0, 1, 0, 199), id: { gt: 'a199' } }] },
     ]);
