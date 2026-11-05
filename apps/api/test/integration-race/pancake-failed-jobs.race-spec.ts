@@ -263,7 +263,11 @@ const url = process.env.TEST_REDIS_URL;
     const { x, callsOfX, dueForCron } = await tickOne();
     await dueForCron();
     await reconcile.reconcile();
-    await until(async () => (await prisma.order.findUniqueOrThrow({ where: { id: x.id } })).pancakeErrorKind === 'REJECTED');
+    // pushOrder ghi REJECTED trước, markPushFailure (báo đơn) sau: chờ tới khi cả hai xong.
+    await until(async () => {
+      const r = await prisma.order.findUniqueOrThrow({ where: { id: x.id } });
+      return r.pancakeErrorKind === 'REJECTED' && r.pancakeAttention != null;
+    });
     const row = await prisma.order.findUniqueOrThrow({ where: { id: x.id } });
     expect(row.pancakeOrderId).toBeNull();
     expect(row.pancakePushAttempts).toBeGreaterThanOrEqual(1);
