@@ -190,7 +190,7 @@ export function ProductStoryShowcase({ product, selectedVariationId, onSelectVar
                 role="radio"
                 aria-checked={on}
                 data-testid="story-arc-item"
-                className="tubu-story-arc-item"
+                className="tubu-story-arc-item tubu-hit-44-square"
                 style={{ transform: `translateY(-${slot.lift / 16}rem) rotate(${slot.rotateDeg}deg) scale(${slot.scale})` }}
                 onClick={() => pickArc(i)}
               >
@@ -217,7 +217,7 @@ export function ProductStoryShowcase({ product, selectedVariationId, onSelectVar
               data-testid="story-step-chip"
               aria-current={i === activeStep ? 'step' : undefined}
               aria-label={fillCopy('story.stepN', { n: i + 1 })}
-              className="tubu-story-chip"
+              className="tubu-story-chip tubu-hit-44-square"
               onClick={() => setStep(i)}
             >
               {s.num}

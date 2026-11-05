@@ -173,7 +173,7 @@ export function ProductStoryStudio({
       <div className="space-y-2">
         <div className="text-sm font-medium text-stone-900">Lấy ảnh từ link</div>
         <div className="flex flex-wrap gap-2">
-          <input aria-label="Link trang sản phẩm hoặc ảnh" className={`${INPUT_CLASS} min-w-0 flex-1`} placeholder="https://…" value={link} onChange={(e) => setLink(e.target.value)} />
+          <input aria-label="Link trang sản phẩm hoặc ảnh" className={`${INPUT_CLASS} min-w-0 flex-1`} placeholder="https://…" maxLength={2048} value={link} onChange={(e) => setLink(e.target.value)} />
           <button type="button" className={BTN_SECONDARY} disabled={disabled || extract.isPending || link.trim() === ''} onClick={() => extract.mutate()}>
             {extract.isPending ? 'Đang lấy…' : 'Lấy ảnh'}
           </button>
