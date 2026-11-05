@@ -1,5 +1,6 @@
 /** Màu + thứ tự timeline cho trạng thái đơn (spec §6.4). */
 
+import { deliveredBaseAt } from '@tubutree/app-core/commerce/order-tracking';
 import type { BadgeTone } from '../components/ui/badge';
 import { vi } from '../i18n/vi';
 import { formatNumber, formatPoints } from './format';
@@ -107,15 +108,15 @@ export function orderPointsNote(
 }
 
 /**
- * Hạn đổi/trả còn mở không — cùng cách tính của API (OrdersService.requestReturn): mốc giao, thiếu thì updatedAt.
+ * Hạn đổi/trả còn mở không — cùng mốc với API (`deliveredBaseAt`: ngày giao, lần lật DELIVERED trong sổ, rồi updatedAt).
  * Không có mốc nào thì để API quyết định (coi như còn hạn).
  */
 export function returnWindowState(
-  o: { deliveredAt?: string | null; updatedAt?: string | null },
+  o: { deliveredAt?: string | null; updatedAt?: string | null; statusTimes?: Partial<Record<string, string>> },
   windowDays: number,
   now: number = Date.now(),
 ): { open: boolean; daysLeft: number } {
-  const base = o.deliveredAt ?? o.updatedAt;
+  const base = deliveredBaseAt(o);
   if (!base) return { open: true, daysLeft: windowDays };
   const left = (new Date(base).getTime() + windowDays * 864e5 - now) / 864e5;
   return left > 0 ? { open: true, daysLeft: Math.ceil(left) } : { open: false, daysLeft: 0 };

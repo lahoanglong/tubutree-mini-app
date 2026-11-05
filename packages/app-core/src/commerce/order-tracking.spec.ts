@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   canCancelOrder,
   canPayOrder,
+  deliveredBaseAt,
   orderActionLabel,
   orderActionPlan,
   orderHeadline,
@@ -310,6 +311,23 @@ describe('điều kiện từng nút', () => {
     expect(returnWindowOpen(order({ deliveredAt: iso(-8 * 24 * HOUR) }), 7, NOW)).toBe(false);
     expect(returnWindowOpen(order({ deliveredAt: null, updatedAt: iso(-8 * 24 * HOUR) }), 7, NOW)).toBe(false);
     expect(returnWindowOpen(order({ deliveredAt: null, updatedAt: null }), 7, NOW)).toBe(true);
+  });
+
+  it('hạn đổi/trả: thiếu deliveredAt thì lấy lần lật DELIVERED trong sổ, không lấy updatedAt đã trôi theo ghi sau khi giao', () => {
+    const lateWrite = { deliveredAt: null, updatedAt: iso(-HOUR), statusTimes: { DELIVERED: iso(-9 * 24 * HOUR) } };
+    expect(returnWindowOpen(order({ status: 'DELIVERED', ...lateWrite }), 7, NOW)).toBe(false);
+    expect(orderHeadline(order({ status: 'DELIVERED', ...lateWrite }), { now: NOW, returnDays: 7 }).milestone).toBe('Đã hết hạn đổi/trả.');
+    const open = order({ status: 'DELIVERED', deliveredAt: null, updatedAt: iso(-HOUR), statusTimes: { DELIVERED: '2026-11-03T05:00:00Z' } });
+    expect(returnWindowOpen(open, 7, NOW)).toBe(true);
+    expect(orderHeadline(open, { now: NOW, returnDays: 7 }).milestone).toBe('Đổi/trả được đến 10/11.');
+  });
+
+  it('deliveredBaseAt: deliveredAt, rồi statusTimes.DELIVERED, rồi updatedAt, không có thì null', () => {
+    const times = { DELIVERED: '2026-10-30T00:00:00Z' };
+    expect(deliveredBaseAt({ deliveredAt: '2026-11-01T00:00:00Z', statusTimes: times, updatedAt: '2026-11-04T00:00:00Z' })).toBe('2026-11-01T00:00:00Z');
+    expect(deliveredBaseAt({ deliveredAt: null, statusTimes: times, updatedAt: '2026-11-04T00:00:00Z' })).toBe('2026-10-30T00:00:00Z');
+    expect(deliveredBaseAt({ statusTimes: {}, updatedAt: '2026-11-04T00:00:00Z' })).toBe('2026-11-04T00:00:00Z');
+    expect(deliveredBaseAt({})).toBeNull();
   });
 
   it('pendingReviewItem: bỏ dòng đã đánh giá, không có trang sản phẩm, không được đánh giá', () => {

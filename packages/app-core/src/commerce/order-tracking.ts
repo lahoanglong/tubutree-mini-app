@@ -108,9 +108,17 @@ export function canCancelOrder(o: TrackOrder, userId?: string | null): boolean {
   return !carrierBooked(o);
 }
 
-/** Hạn đổi/trả còn mở không, cùng cách tính của máy chủ: mốc giao, thiếu thì `updatedAt`. Không có mốc nào thì để máy chủ quyết (coi như còn). */
+/**
+ * Mốc tính hạn đổi/trả, cùng thứ tự với máy chủ (OrderReturnsService.request): ngày giao, thiếu thì lần lật DELIVERED trong sổ,
+ * thiếu nữa mới `updatedAt`. `updatedAt` trôi theo mọi lần ghi sau khi giao nên chỉ là mốc cuối cùng.
+ */
+export function deliveredBaseAt(o: Pick<TrackOrder, 'deliveredAt' | 'statusTimes' | 'updatedAt'>): string | null {
+  return o.deliveredAt ?? o.statusTimes?.DELIVERED ?? o.updatedAt ?? null;
+}
+
+/** Hạn đổi/trả còn mở không, theo `deliveredBaseAt`. Không có mốc nào thì để máy chủ quyết (coi như còn). */
 export function returnWindowOpen(o: TrackOrder, days: number, now: number = Date.now()): boolean {
-  const base = o.deliveredAt ?? o.updatedAt;
+  const base = deliveredBaseAt(o);
   if (!base) return true;
   return Date.parse(base) + days * DAY_MS > now;
 }
@@ -215,7 +223,7 @@ export function orderHeadline(o: TrackOrder, ctx: TrackCtx = {}): OrderHeadline 
       next = `${fillCopy('order.next.handed')} ${fillCopy('order.next.shipping', { n: days })}`;
       break;
     case 'DELIVERED': {
-      const base = o.deliveredAt ?? o.updatedAt;
+      const base = deliveredBaseAt(o);
       if (base && !Number.isNaN(Date.parse(base))) {
         milestone = returnWindowOpen(o, days, now) ? fillCopy('order.returnUntil', { date: dayMonth(Date.parse(base) + days * DAY_MS) }) : fillCopy('order.returnClosed');
       }
