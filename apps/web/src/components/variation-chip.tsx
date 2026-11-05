@@ -61,7 +61,7 @@ export function VariationChip({ variation, pricing, active, onClick }: Variation
             {formatVnd(pricing.price)}
             {savePct > 0 && (
               <>
-                <span aria-hidden="true" className="ml-1 font-semibold text-[var(--color-text-price-deal)]">
+                <span aria-hidden="true" className="ml-0.5 font-semibold text-[var(--color-text-price-deal)]">
                   {fillTileCopy('badge.discount', { pct: savePct })}
                 </span>
                 <span className="sr-only">, {fillTileCopy('badge.discountSpoken', { pct: savePct })}</span>

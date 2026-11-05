@@ -195,7 +195,7 @@ export function resolveStoryConfig(p: StoryProductInput): ProductStoryConfig | n
   const auto = buildDefaultStoryConfig(p);
   // Có thành phần thật thì kịch bản tự sinh giàu hơn; còn lại, sản phẩm của năm nhãn chủ lực nhận kịch bản cấp nhãn (không ghi đè gì đã lưu).
   if (auto?.scenes.some((s) => s.kind === 'ingredient_assembly')) return auto;
-  const brandConfig = buildBrandStoryConfig(p);
+  const brandConfig = buildBrandStoryConfig(p, p.variations.length);
   if (brandConfig) {
     const arc = buildArcScene(p.variations);
     return arc ? { ...brandConfig, scenes: [arc, ...brandConfig.scenes] } : brandConfig;

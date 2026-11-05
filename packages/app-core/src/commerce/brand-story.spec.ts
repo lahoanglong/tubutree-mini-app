@@ -30,14 +30,27 @@ describe('detectStoryBrand: nhận nhãn từ tên và slug', () => {
     expect(detectStoryBrand(p)).toBe(id);
   });
 
-  it('chỉ có slug hoặc chỉ có cột brand cũng nhận (chính tả "Sokfram" của catalog cũ)', () => {
-    expect(detectStoryBrand({ slug: 'dau-goi-po-lang-300g-77bb42', name: 'Dầu gội 300g' })).toBe('polang');
+  it('cột brand đúng nhãn cũng nhận (chính tả "Sokfram" của catalog cũ)', () => {
     expect(detectStoryBrand({ slug: 'x-1', name: 'Mật hoa dừa', brand: 'Sokfram' })).toBe('sokfarm');
     expect(detectStoryBrand({ slug: 'x-2', name: 'Bánh gạo', brand: 'BH.Nong' })).toBe('bhnong');
   });
 
+  it('chỉ slug nhắc nhãn mà tên không nhắc thì không nhận (slug không đáng tin: "BH nóng" cũng ra bh-nong)', () => {
+    expect(detectStoryBrand({ slug: 'dau-goi-po-lang-300g-77bb42', name: 'Dầu gội 300g', brand: 'Tubu Tree' })).toBeNull();
+    expect(detectStoryBrand({ slug: 'banh-trang-bh-nong-gion-200g-aaaaaa', name: 'Bánh tráng BH nóng giòn 200g', brand: 'Tubu Tree' })).toBeNull();
+  });
+
   it.each(NOT_BRAND)('không nhận nhãn khác: $name', (p) => {
     expect(detectStoryBrand(p)).toBeNull();
+  });
+
+  it('đổi tên sang nhãn khác thì theo tên, slug cũ không có vai trò', () => {
+    expect(detectStoryBrand({ slug: 'dau-duong-toc-bo-ket-po-lang', name: 'Nước giặt hương Bạc hà Fuwa3e 500ml', brand: 'Tubu Tree' })).toBe('fuwa3e');
+  });
+
+  it('tên khớp hai nhãn (combo) thì không đoán', () => {
+    expect(detectStoryBrand({ slug: 'combo-sokfarm-1', name: 'Combo Sokfarm và Fuwa3e', brand: 'Tubu Tree' })).toBeNull();
+    expect(buildBrandStoryConfig({ slug: 'combo-sokfarm-1', name: 'Combo Sokfarm và Fuwa3e' })).toBeNull();
   });
 
   it('không khớp mờ trong từ khác (polanger, bhnongthon)', () => {
@@ -61,8 +74,17 @@ describe('titleSizes và titleScent: chỉ đọc thẳng từ tên', () => {
     ['Combo 1ml 2ml 3ml', ['1ml', '2ml']],
     ['Combo son dưỡng PƠ LANG (1 thỏi có màu & 1 thỏi không màu)', []],
     ['Nước Đông Trùng Hạ Thảo 70ml x 10 Chai', ['70ml']],
+    ['Mật ong Pơ Lang 1 lít', ['1L']],
+    ['Mật ong Pơ Lang 500 gr', ['500g']],
+    ['Nước rửa chén Fuwa3e 3,8L tặng 1 chai 500ml', ['3,8L']],
+    ['Nước rửa chén Fuwa3e 3,8L kèm khăn 200g', ['3,8L']],
+    ['Combo Fuwa3e nước giặt 500ml + nước rửa chén 200ml', ['500ml']],
   ])('quy cách "%s"', (name, want) => {
     expect(titleSizes(name)).toEqual(want);
+  });
+
+  it('tên lưu dạng NFD (dấu tách rời) vẫn đọc được "gói"', () => {
+    expect(titleSizes('Mật cô đặc Sokfarm - Hộp 12 gói'.normalize('NFD'))).toEqual(['12 gói']);
   });
 
   it.each([
@@ -70,9 +92,21 @@ describe('titleSizes và titleScent: chỉ đọc thẳng từ tên', () => {
     ['Xịt thơm hương Xuân Fuwa3e 300ml', 'Xuân'],
     ['Nước giặt hương Cam Fuwa3e 100ml', 'Cam'],
     ['Nước giặt hương Bạc hà - 500ml', 'Bạc hà'],
-    ['Nước giặt hương Một Hai Ba 500ml', 'Một Hai'],
+    ['Nước giặt hương Bạc hà, 3,8L', 'Bạc hà'],
+    ['Nước giặt hương Cam | 500ml', 'Cam'],
+    ['Nước giặt hương Quế.', 'Quế'],
+    ['NƯỚC GIẶT HƯƠNG BẠC HÀ', 'Bạc hà'],
+    ['Nước lau sàn hương Sả chanh 1L', 'Sả chanh'],
+    ['Nước giặt hương Một Hai Ba 500ml', null],
     ['Nước giặt hương 500ml', null],
     ['Nước rửa chén Fuwa3e 500ml', null],
+    ['Dầu gội Pơ Lang không hương liệu 300ml', null],
+    ['Dầu gội bồ kết hương nhu Pơ Lang', null],
+    ['Sữa tắm DURICA hương thảo 500ml', null],
+    ['Nước giặt không hương Cam 500ml', null],
+    ['Nước giặt hương Chanh + Sả', null],
+    ['Nước giặt hương Cam & Bưởi', null],
+    ['Nước giặt hương Cam Bưởi', null],
   ])('hương "%s"', (name, want) => {
     expect(titleScent(name)).toBe(want);
   });
@@ -97,22 +131,33 @@ describe('buildBrandStoryConfig', () => {
     expect(hud.closing).toBe('Fuwa3e, có tại Tubu Tree');
   });
 
-  it('tên không có quy cách hay hương: vẫn có điểm Thương hiệu', () => {
-    const cfg = buildBrandStoryConfig({ slug: 'xoai-say-deo-bh-nong-5f75de', name: 'Xoài sấy dẻo BH.NONG' })!;
-    const hud = cfg.scenes[0]!;
-    if (hud.kind !== 'hud_callouts') throw new Error('phải là hud_callouts');
-    expect(hud.points.map((p) => p.label)).toEqual(['Thương hiệu']);
-    expect(hud.points[0]!.value).toBe('BH.NONG');
+  it('một phân loại mà tên không có quy cách lẫn hương: không dựng khối (nút Xem câu chuyện sẽ hứa nhiều hơn một dòng tên nhãn)', () => {
+    expect(buildBrandStoryConfig({ slug: 'xoai-say-deo-bh-nong-5f75de', name: 'Xoài sấy dẻo BH.NONG' })).toBeNull();
+    expect(buildBrandStoryConfig({ slug: 'xoai-say-deo-bh-nong-5f75de', name: 'Xoài sấy dẻo BH.NONG' }, 0)).toBeNull();
   });
 
-  it('mọi sản phẩm mẫu PROD ra cấu hình hợp lệ và chữ cố định không có tuyên bố cần giấy tờ', () => {
+  it('có từ hai phân loại: chỉ ghi Thương hiệu, không ghi quy cách và hương vì chỉ đúng với một phân loại (vòng cung cho khách đổi loại)', () => {
+    const cfg = buildBrandStoryConfig({ slug: 'nuoc-giat-huong-bac-ha-fuwa3e-500ml-751754', name: 'Nước giặt hương Bạc hà Fuwa3e 500ml' }, 2)!;
+    const hud = cfg.scenes[0]!;
+    if (hud.kind !== 'hud_callouts') throw new Error('phải là hud_callouts');
+    expect(hud.points.map((p) => [p.label, p.value])).toEqual([['Thương hiệu', 'Fuwa3e']]);
+    expect(parseStoryConfig(cfg).ok).toBe(true);
+  });
+
+  it('mọi sản phẩm mẫu PROD ra cấu hình hợp lệ (hoặc không có khối) và chữ cố định không có tuyên bố cần giấy tờ', () => {
     const BANNED = /trà vinh|bến tre|quảng nam|đắk lắk|thanh h[oó]a|hữu cơ|organic|vegan|diệt khuẩn|kháng khuẩn|lành tính|an toàn|chữa|điều trị|tốt nhất|số 1|tự nhiên|xuất xứ|chứng nhận|nguyên liệu|dứa|enzyme/i;
     for (const p of PROD) {
-      const cfg = buildBrandStoryConfig(p)!;
-      expect(parseStoryConfig(cfg).ok, p.name).toBe(true);
-      for (const s of cfg.scenes) {
-        if (s.kind !== 'hud_callouts') continue;
-        for (const pt of s.points) expect(`${pt.label} ${s.closing}`, p.name).not.toMatch(BANNED);
+      for (const count of [1, 2]) {
+        const cfg = buildBrandStoryConfig(p, count);
+        if (!cfg) {
+          expect(count, `${p.name} một phân loại không quy cách/hương thì không có khối`).toBe(1);
+          continue;
+        }
+        expect(parseStoryConfig(cfg).ok, p.name).toBe(true);
+        for (const s of cfg.scenes) {
+          if (s.kind !== 'hud_callouts') continue;
+          for (const pt of s.points) expect(`${pt.label} ${s.closing}`, p.name).not.toMatch(BANNED);
+        }
       }
     }
   });
@@ -126,8 +171,16 @@ describe('resolveStoryConfig với kịch bản cấp nhãn', () => {
   const brandProduct = { slug: 'nuoc-giat-huong-bac-ha-fuwa3e-500ml-751754', name: 'Nước giặt hương Bạc hà Fuwa3e 500ml', brand: 'Tubu Tree' };
   const kinds = (c: ProductStoryConfig | null) => c?.scenes.map((s) => s.kind);
 
-  it('chưa có cấu hình, hai phân loại: vòng cung rồi điểm chỉ', () => {
-    expect(kinds(resolveStoryConfig({ ...brandProduct, variations: two }))).toEqual(['variant_arc', 'hud_callouts']);
+  it('chưa có cấu hình, hai phân loại: vòng cung rồi điểm chỉ, điểm chỉ chỉ ghi Thương hiệu (khách đổi sang 3,5L thì "500ml" trong tên không còn đúng)', () => {
+    const got = resolveStoryConfig({ ...brandProduct, variations: two });
+    expect(kinds(got)).toEqual(['variant_arc', 'hud_callouts']);
+    const hud = got!.scenes.find((s) => s.kind === 'hud_callouts');
+    if (hud?.kind !== 'hud_callouts') throw new Error('phải có hud');
+    expect(hud.points.map((p) => p.label)).toEqual(['Thương hiệu']);
+  });
+
+  it('nhãn chủ lực, một phân loại, tên không quy cách lẫn hương: không dựng gì (không có khối rỗng, không có nút Xem câu chuyện)', () => {
+    expect(resolveStoryConfig({ slug: 'xoai-say-deo-bh-nong-5f75de', name: 'Xoài sấy dẻo BH.NONG', brand: 'Tubu Tree', variations: [two[0]!] })).toBeNull();
   });
 
   it('chưa có cấu hình, một phân loại: chỉ điểm chỉ', () => {
