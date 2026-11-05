@@ -2,6 +2,7 @@ import type { Prisma } from '@prisma/client';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { normalizeCouponCode } from '../coupons/coupons.service';
 import { isPublicProduct } from '../catalog/public-product';
+import { SERVED_IMAGE_MIMES, servedImagePrefix } from '../../common/served-image';
 import { bannerLinkUsable } from './campaign-public';
 import { campaignHealth, PeerIndex, usableCounts, type HealthCoupon, type HealthIssue, type HealthProduct, type HealthSubject } from './campaign-health';
 
@@ -35,7 +36,7 @@ const PEER_LIMIT = 500;
  * cả ảnh base64 (tới ~1,5 MB mỗi chiến dịch) về. Chỉ nhìn tiền tố nên ảnh có tiền tố hợp lệ nhưng thân base64 hỏng vẫn tính là ra slide
  * (hiếm; sai theo hướng thừa một cảnh báo CROWDED, không bao giờ thiếu).
  */
-const RASTER_PREFIXES = ['data:image/png;base64,', 'data:image/jpeg;base64,', 'data:image/jpg;base64,', 'data:image/webp;base64,', 'data:image/gif;base64,'];
+const RASTER_PREFIXES = SERVED_IMAGE_MIMES.map(servedImagePrefix);
 const UNSERVABLE_IMAGE: Prisma.CampaignWhereInput = {
   OR: [{ image: '' }, { AND: [{ image: { startsWith: 'data:' } }, { NOT: { OR: RASTER_PREFIXES.map((p) => ({ image: { startsWith: p } })) } }] }],
 };
