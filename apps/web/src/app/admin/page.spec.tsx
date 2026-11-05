@@ -1887,6 +1887,41 @@ describe('admin/page — tab Flash Sale', () => {
     expect(create.disabled).toBe(false);
   });
 
+  it('W13: giờ kết thúc không sau giờ bắt đầu thì báo ngay trên form tạo đợt, giữ nút Tạo đợt khoá và không gửi gì', async () => {
+    const { container } = await openSales();
+    const create = btn(container, 'Tạo đợt');
+    const alertText = () => container.querySelector('[role="alert"]')?.textContent ?? '';
+    typeInto(labelledInput(container, 'Tên đợt'), 'Đợt mới');
+    setDateTime(container, 'Giờ vàng bắt đầu lúc', '2026-10-20T08:00');
+    setDateTime(container, 'Giờ vàng kết thúc lúc', '2026-10-20T08:00');
+    expect(alertText()).toContain('Giờ kết thúc phải sau giờ bắt đầu');
+    expect(create.disabled).toBe(true);
+    setDateTime(container, 'Giờ vàng kết thúc lúc', '2026-10-19T23:45');
+    expect(alertText()).toContain('Giờ kết thúc phải sau giờ bắt đầu');
+    expect(create.disabled).toBe(true);
+    click(create);
+    await flush();
+    expect(mocks.createFlashSale).not.toHaveBeenCalled();
+    setDateTime(container, 'Giờ vàng kết thúc lúc', '2026-10-20T09:00');
+    expect(alertText()).toBe('');
+    expect(create.disabled).toBe(false);
+  });
+
+  it('W13: ô sửa đợt cũng báo và khoá nút Lưu thay đổi khi giờ kết thúc không sau giờ bắt đầu', async () => {
+    mocks.flashSales = [{ ...SALE, startAt: new Date(Date.now() + 2 * 864e5).toISOString(), endAt: new Date(Date.now() + 3 * 864e5).toISOString() }];
+    const { container } = await openSales();
+    click(btn(container, 'Sửa đợt'));
+    const save = btn(container, 'Lưu thay đổi');
+    const alertText = () => container.querySelector('[role="alert"]')?.textContent ?? '';
+    typeInto(labelledInput(container, 'Tên đợt (sửa)'), 'Đợt đã đổi tên');
+    expect(save.disabled).toBe(false);
+    expect(alertText()).toBe('');
+    const start = readDateTime(container, 'Giờ vàng bắt đầu lúc (sửa)');
+    setDateTime(container, 'Giờ vàng kết thúc lúc (sửa)', start);
+    expect(alertText()).toContain('Giờ kết thúc phải sau giờ bắt đầu');
+    expect(save.disabled).toBe(true);
+  });
+
   it('form tạo đợt: ô nhập/nút 44px, khoá tới khi đủ tên + 2 mốc giờ, gửi mốc giờ ISO; báo success/danger', async () => {
     const { container } = await openSales();
     const heading = container.querySelector('h2')!;
@@ -1983,7 +2018,7 @@ describe('admin/page — tab Flash Sale', () => {
     const add = btn(container, 'Thêm SP');
     expect(add.disabled).toBe(true);
     expect(add.className).toContain('bg-forest-600');
-    for (const label of ['Giá flash (đ)', 'Số lượng bán (quota)', 'Giới hạn mỗi khách']) {
+    for (const label of ['Giá flash (đ)', 'Số lượng bán', 'Giới hạn mỗi khách']) {
       const el = labelledInput(container, label);
       expect(el.className).toContain('min-h-[44px]');
       expect(el.className).toContain('min-w-0');
@@ -2125,10 +2160,10 @@ describe('admin/page — tab Flash Sale: nhập liệu rõ ràng, sửa và xoá
     click(container.querySelector('[role="option"]'));
   };
 
-  it('ô thêm sản phẩm có nhãn Giá flash / Số lượng bán (quota) / Giới hạn mỗi khách và bắt đầu RỖNG, không phải 0', async () => {
+  it('ô thêm sản phẩm có nhãn Giá flash / Số lượng bán / Giới hạn mỗi khách và bắt đầu RỖNG, không phải 0', async () => {
     mocks.flashSales = [upcoming()];
     const { container } = await openSalesWithItems();
-    for (const label of ['Giá flash (đ)', 'Số lượng bán (quota)', 'Giới hạn mỗi khách']) {
+    for (const label of ['Giá flash (đ)', 'Số lượng bán', 'Giới hạn mỗi khách']) {
       const el = labelledInput(container, label);
       expect(el, label).toBeTruthy();
       expect(el.value).toBe('');
@@ -2143,14 +2178,14 @@ describe('admin/page — tab Flash Sale: nhập liệu rõ ràng, sửa và xoá
     expect(add.disabled).toBe(true);
     typeInto(labelledInput(container, 'Giá flash (đ)'), '59000');
     expect(add.disabled).toBe(true);
-    typeInto(labelledInput(container, 'Số lượng bán (quota)'), '20');
+    typeInto(labelledInput(container, 'Số lượng bán'), '20');
     expect(add.disabled).toBe(false);
     mocks.addFlashSaleItem.mockResolvedValue({});
     click(add);
     await flush();
     expect(mocks.addFlashSaleItem).toHaveBeenCalledWith('s9', { variationId: 'v1', flashPrice: 59000, quota: 20, perUserLimit: undefined });
     expect(labelledInput(container, 'Giá flash (đ)').value).toBe('');
-    expect(labelledInput(container, 'Số lượng bán (quota)').value).toBe('');
+    expect(labelledInput(container, 'Số lượng bán').value).toBe('');
   });
 
   it('Sửa đợt: điền sẵn tên + giờ, chỉ gửi trường đã đổi (sửa tên không đụng tới giờ)', async () => {
@@ -2171,7 +2206,7 @@ describe('admin/page — tab Flash Sale: nhập liệu rõ ràng, sửa và xoá
   });
 
   it('Sửa đợt: đổi giờ bắt đầu gửi mốc ISO; Huỷ đóng form không gọi API', async () => {
-    mocks.flashSales = [upcoming()];
+    mocks.flashSales = [upcoming({ endAt: '2031-06-01T00:00:00.000Z' })];
     const { container } = await openSales();
     click(btn(container, 'Sửa đợt'));
     setDateTime(container, 'Giờ vàng bắt đầu lúc (sửa)', '2031-01-02T08:30');
