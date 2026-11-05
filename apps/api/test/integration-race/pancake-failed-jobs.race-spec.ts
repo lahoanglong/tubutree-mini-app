@@ -8,6 +8,17 @@ import { PancakePushReconcileService } from '../../src/modules/integrations/panc
 import type { PancakeClient } from '../../src/modules/integrations/pancake/pancake.client';
 import { PancakeApiError } from '../../src/modules/integrations/pancake/pancake-outbound';
 import type { GomdonAlertService } from '../../src/modules/integrations/gomdon/gomdon-alert.service';
+import { PancakeSyncHooks } from '../../src/modules/integrations/pancake/pancake-sync-hooks';
+import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
+import { LoyaltyService } from '../../src/modules/loyalty/loyalty.service';
+import { OrdersService } from '../../src/modules/orders/orders.service';
+import { OrderStatusService } from '../../src/modules/orders/order-status.service';
+import { OrderReversalService } from '../../src/modules/orders/order-reversal.service';
+import { CartService } from '../../src/modules/cart/cart.service';
+import { AffiliateService } from '../../src/modules/affiliate/affiliate.service';
+import { NotificationsService } from '../../src/modules/notifications/notifications.service';
+import { FlashSaleService } from '../../src/modules/flash-sale/flash-sale.service';
+import { CouponsService } from '../../src/modules/coupons/coupons.service';
 import { createOrder, createUser, randCode, sleep } from './helpers';
 
 /**
@@ -122,6 +133,42 @@ const url = process.env.TEST_REDIS_URL;
     await prisma.order.update({ where: { id: o.id }, data: { status: 'CANCELLED', reversalEffectsAt: new Date() } });
     expect(await service.sweepSettledFailedJobs(500)).toBeGreaterThanOrEqual(1);
     expect(await queue.getJob(o.id)).toBeUndefined();
+  });
+
+  it('huỷ đơn qua đường huỷ thật (OrderStatusService → PancakeSyncHooks.afterLocalCancel), đơn chưa từng claim: job push lỗi bị gỡ', async () => {
+    const cancelApp = await Test.createTestingModule({
+      imports: [PrismaModule],
+      providers: [
+        SystemConfigService,
+        LoyaltyService,
+        OrderReversalService,
+        OrderStatusService,
+        OrdersService,
+        { provide: PancakeSyncHooks, useValue: new PancakeSyncHooks(prisma, client as unknown as PancakeClient, queue) },
+        { provide: CartService, useValue: {} },
+        { provide: AffiliateService, useValue: { reverseCommissionsForOrder: jest.fn().mockResolvedValue(undefined), lockCommissionsForOrder: jest.fn() } },
+        { provide: NotificationsService, useValue: { notify: jest.fn().mockResolvedValue(undefined), notifySafe: jest.fn().mockResolvedValue(true) } },
+        { provide: FlashSaleService, useValue: { restore: jest.fn().mockResolvedValue(undefined) } },
+        { provide: CouponsService, useValue: { release: jest.fn().mockResolvedValue(undefined) } },
+      ],
+    }).compile();
+    await cancelApp.init();
+    try {
+      const o = await order();
+      respond(() => {
+        throw new PancakeApiError('Pancake trả 422 khi tạo đơn: [tags]: is invalid', false, false, 422);
+      });
+      await service.enqueuePush(o.id);
+      await until(async () => (await queue.getJob(o.id))?.getState().then((st) => st === 'failed') ?? false);
+      const failed = await prisma.order.findUniqueOrThrow({ where: { id: o.id } });
+      expect(failed.pancakePushClaimedAt).toBeNull();
+
+      const staff = await createUser(prisma, { role: 'ADMIN' });
+      await cancelApp.get(OrderStatusService).setStatus(o.id, 'CANCELLED', { actorType: 'ADMIN', actorId: staff.id });
+      expect(await queue.getJob(o.id)).toBeUndefined();
+    } finally {
+      await cancelApp.close();
+    }
   });
 
   it('huỷ đơn qua enqueueCancel cũng gỡ job push lỗi của đơn', async () => {

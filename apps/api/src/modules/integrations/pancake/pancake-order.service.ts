@@ -188,7 +188,7 @@ export class PancakeOrderService {
   }
 
   async enqueueCancel(orderId: string): Promise<void> {
-    // Đơn đã huỷ thì dấu "đẩy lỗi" cũ không còn việc gì để làm; gỡ trước để go-live không đếm nó là việc còn treo.
+    // Lệnh huỷ được xếp lại (cron, job): gỡ dấu "đẩy lỗi" còn sót của đơn đã huỷ. Đường huỷ thật gỡ ở PancakeSyncHooks.afterLocalCancel.
     await removeFailedPancakePush(this.pushQueue, orderId);
     return enqueuePancakeCancel(this.pushQueue, orderId);
   }

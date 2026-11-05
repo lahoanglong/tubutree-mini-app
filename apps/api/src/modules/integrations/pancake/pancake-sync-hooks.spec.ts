@@ -141,6 +141,28 @@ describe('PancakeSyncHooks.precheckCancel (D1)', () => {
   });
 });
 
+describe('PancakeSyncHooks.afterLocalCancel — job push lỗi (hi)', () => {
+  it('đơn chưa từng lên Pancake (return sớm) vẫn gỡ job push đã lỗi; job đang chạy thì giữ', async () => {
+    const t = setup();
+    const failed = { getState: jest.fn().mockResolvedValue('failed'), remove: jest.fn().mockResolvedValue(undefined) };
+    t.queue.getJob.mockResolvedValue(failed);
+    expect(await t.hooks.afterLocalCancel('o1')).toBe(true);
+    expect(t.queue.getJob).toHaveBeenCalledWith('o1');
+    expect(failed.remove).toHaveBeenCalledTimes(1);
+
+    const active = { getState: jest.fn().mockResolvedValue('active'), remove: jest.fn() };
+    t.queue.getJob.mockResolvedValue(active);
+    await t.hooks.afterLocalCancel('o1');
+    expect(active.remove).not.toHaveBeenCalled();
+  });
+
+  it('lỗi Redis khi gỡ không làm hỏng việc huỷ', async () => {
+    const t = setup();
+    t.queue.getJob.mockRejectedValue(new Error('redis'));
+    await expect(t.hooks.afterLocalCancel('o1')).resolves.toBe(true);
+  });
+});
+
 describe('PancakeSyncHooks.afterLocalCancel', () => {
   it('CONFIRMED → ghi kết quả + id tìm được, không xếp job', async () => {
     const t = setup({ status: 'CANCELLED', pancakePushClaimedAt: new Date() });
