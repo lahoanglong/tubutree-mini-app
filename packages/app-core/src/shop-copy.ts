@@ -273,6 +273,7 @@ export const SHOP_COPY: Record<string, string> = {
   'checkout.lineRemove': 'Bỏ khỏi đơn',
   'checkout.lineReduce': 'Giảm còn {n}',
   'checkout.retryWith': 'Thử lại · {price}',
+  'checkout.retryNote': 'Chưa gửi được đơn. Bấm Thử lại, hệ thống không tạo đơn trùng.',
   'checkout.fixLinesHint': 'Sửa sản phẩm hết hàng ở trên để đặt tiếp.',
   'checkout.taxCodeInvalid': 'Mã số thuế gồm 10 số (chi nhánh thêm -3 số) hoặc 12 số.',
   'checkout.invoiceIncomplete': 'Bạn điền đủ MST, tên công ty, địa chỉ và email hợp lệ nhé.',

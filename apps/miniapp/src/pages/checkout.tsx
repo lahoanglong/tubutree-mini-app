@@ -558,6 +558,9 @@ export default function CheckoutPage() {
   const previewTier = wholeCart ? (cart.data?.tierDiscount ?? 0) : 0;
   // Lý do nút Đặt hàng đang khoá do thiếu địa chỉ hoặc báo giá lỗi: nói ngay trên nút (cùng câu với web).
   const placeHint = checkoutPlaceHint({ hasAddress: !!addressId, quoteFailed: quote.isError }) ?? (hasLineProblem ? fillCopy('checkout.fixLinesHint') : null);
+  // Lần đặt vừa rồi chưa rõ kết quả (mất mạng, quá thời gian, 5xx): nút nói rõ là gửi lại cùng đơn (cùng khoá, không tạo đơn trùng).
+  const retryingPlace = placeNotice === 'unknown';
+  const placeBarNote = placeHint ?? (retryingPlace ? fillCopy('checkout.retryNote') : null);
   const previewRecalcNote = !wholeCart && (!!cart.data?.couponCode || (cart.data?.comboDiscount ?? 0) > 0 || (cart.data?.tierDiscount ?? 0) > 0);
 
   return (
@@ -1209,10 +1212,10 @@ export default function CheckoutPage() {
         summary={
           // Vùng báo luôn có mặt, chỉ đổi chữ: vùng gắn vào cùng lúc với chữ thì đọc màn hình (VoiceOver trong Zalo) thường không đọc.
           // Lúc rỗng đặt absolute để không chiếm khoảng cách (gap) của thanh.
-          <div role="status" style={placeHint ? undefined : { position: 'absolute' }}>
-            {placeHint && (
-              <DsText variant="caption" tone="secondary">
-                {placeHint}
+          <div role="status" style={placeBarNote ? undefined : { position: 'absolute' }}>
+            {placeBarNote && (
+              <DsText variant="caption" tone={placeHint ? 'secondary' : 'danger'}>
+                {placeBarNote}
               </DsText>
             )}
           </div>
@@ -1237,7 +1240,9 @@ export default function CheckoutPage() {
             {order.isPending
               ? vi.checkout.placing
               : quote.data
-                ? vi.checkout.placeOrderWith(formatVnd(quote.data.total))
+                ? retryingPlace
+                  ? fillCopy('checkout.retryWith', { price: formatVnd(quote.data.total) })
+                  : vi.checkout.placeOrderWith(formatVnd(quote.data.total))
                 : vi.checkout.placeOrder}
           </Button>
         }

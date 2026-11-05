@@ -135,7 +135,7 @@ function paymentBox(): HTMLElement {
 }
 
 async function placeOrderClick() {
-  const btn = await screen.findByText(/Đặt hàng · /);
+  const btn = await screen.findByText(/(Đặt hàng|Thử lại) · /);
   await waitFor(() => expect(btn.closest('button')).not.toBeDisabled());
   fireEvent.click(btn);
   await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(1));
@@ -222,7 +222,7 @@ describe('CheckoutPage — mã giới thiệu CTV (C-020)', () => {
     ['CCCD dán có khoảng trắng', '001 234 567 890', '001234567890'],
   ])('hoá đơn VAT: %s vẫn gửi đúng (ô không cắt chuỗi thô trước khi chuẩn hoá)', async (_n, pasted, sent) => {
     renderPage();
-    await screen.findByText(/Đặt hàng · /);
+    await screen.findByText(/(Đặt hàng|Thử lại) · /);
     fireEvent.click(screen.getByText('Yêu cầu xuất hoá đơn VAT'));
     const input = (label: string) => document.querySelector(`input[label="${label}"]`) as HTMLInputElement;
     const tax = input('Mã số thuế');
@@ -1024,7 +1024,7 @@ describe('CheckoutPage — hết hàng / vượt suất lúc đặt (BUYERMINI-1
     const problem = await screen.findByTestId('checkout-line-problem');
     expect(within(problem).getByText('Còn 1 sản phẩm')).toBeInTheDocument();
     expect(screen.queryByTestId('checkout-cart-issue')).not.toBeInTheDocument();
-    const btn = await screen.findByText(/Đặt hàng · /);
+    const btn = await screen.findByText(/(Đặt hàng|Thử lại) · /);
     expect(btn.closest('button')).toBeDisabled();
   });
 
@@ -1175,7 +1175,7 @@ describe('CheckoutPage — COD theo từng đơn, báo giá quyết định phư
     mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
   });
 
-  const placeButton = async () => (await screen.findByText(/Đặt hàng · /)).closest('button')!;
+  const placeButton = async () => (await screen.findByText(/(Đặt hàng|Thử lại) · /)).closest('button')!;
   const describedBy = (el: HTMLElement) => document.getElementById(el.getAttribute('aria-describedby')!)!.textContent;
 
   it('COD bị khoá: dòng COD vô hiệu kèm đúng lý do máy chủ, tự chọn chuyển khoản, đặt hàng gửi BANK_TRANSFER', async () => {
@@ -1271,7 +1271,7 @@ describe('CheckoutPage — bấm lại sau lỗi mạng không đặt đơn th�
   });
 
   async function clickPlace(times: number) {
-    const btn = await screen.findByText(/Đặt hàng · /);
+    const btn = await screen.findByText(/(Đặt hàng|Thử lại) · /);
     await waitFor(() => expect(btn.closest('button')).not.toBeDisabled());
     fireEvent.click(btn);
     await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(times));
@@ -1298,7 +1298,7 @@ describe('CheckoutPage — bấm lại sau lỗi mạng không đặt đơn th�
     await clickPlace(2);
     fireEvent.click(within(paymentBox()).getByRole('radio', { name: /Chuyển khoản ngân hàng/ }));
     // Khách tự đổi lựa chọn sau lần chưa rõ kết quả: lần bấm đầu chỉ nhắc kiểm tra Đơn hàng, lần sau mới đặt đơn mới.
-    fireEvent.click(await screen.findByText(/Đặt hàng · /));
+    fireEvent.click(await screen.findByText(/(Đặt hàng|Thử lại) · /));
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đơn trước có thể đã được tạo. Kiểm tra mục Đơn hàng trước khi đặt lại.', type: 'error' }));
     expect(mocks.placeOrder).toHaveBeenCalledTimes(2);
     await clickPlace(3);
@@ -1432,7 +1432,7 @@ describe('CheckoutPage — mất mạng khi bấm Đặt hàng (R4-BUYER-1)', ()
         <CheckoutPage />
       </QueryClientProvider>,
     );
-    const btn = await screen.findByText(/Đặt hàng · /);
+    const btn = await screen.findByText(/(Đặt hàng|Thử lại) · /);
     await waitFor(() => expect(btn.closest('button')).not.toBeDisabled());
 
     onlineManager.setOnline(false);
@@ -1592,8 +1592,8 @@ describe('CheckoutPage — Thu kèm rác (§12.2 bước 2)', () => {
     await placeOrderClick();
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalled());
     expect(mocks.getWasteMe).toHaveBeenCalledTimes(1);
-    await waitFor(() => expect(screen.getByText(/Đặt hàng · /).closest('button')).not.toBeDisabled());
-    fireEvent.click(screen.getByText(/Đặt hàng · /));
+    await waitFor(() => expect(screen.getByText(/Thử lại · /).closest('button')).not.toBeDisabled());
+    fireEvent.click(screen.getByText(/Thử lại · /));
     await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(2));
     expect(mocks.placeOrder.mock.calls[1]).toEqual(mocks.placeOrder.mock.calls[0]);
     expect((mocks.placeOrder.mock.calls[1]![0] as { wasteRequestId?: string }).wasteRequestId).toBe('req-p');
@@ -1638,7 +1638,7 @@ describe('CheckoutPage — đóng băng yêu cầu sau lần đặt chưa rõ k�
   const apiError = (status: number, code: string, message: string) =>
     new HttpError('Bad Request', 'ERR_BAD_REQUEST', { status, data: { statusCode: status, code, message } });
   async function click(times: number) {
-    const btn = await screen.findByText(/Đặt hàng · /);
+    const btn = await screen.findByText(/(Đặt hàng|Thử lại) · /);
     await waitFor(() => expect(btn.closest('button')).not.toBeDisabled());
     fireEvent.click(btn);
     await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(times));
@@ -1663,7 +1663,7 @@ describe('CheckoutPage — đóng băng yêu cầu sau lần đặt chưa rõ k�
     mount();
     await click(1);
     fireEvent.click(within(paymentBox()).getByRole('radio', { name: /Chuyển khoản ngân hàng/ }));
-    fireEvent.click(await screen.findByText(/Đặt hàng · /));
+    fireEvent.click(await screen.findByText(/(Đặt hàng|Thử lại) · /));
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: PREVIOUS, type: 'error' }));
     expect(mocks.placeOrder).toHaveBeenCalledTimes(1);
     await click(2);
@@ -1699,7 +1699,7 @@ describe('CheckoutPage — đóng băng yêu cầu sau lần đặt chưa rõ k�
     mount();
     await click(1);
     fireEvent.click(within(paymentBox()).getByRole('radio', { name: /Chuyển khoản ngân hàng/ }));
-    fireEvent.click(await screen.findByText(/Đặt hàng · /));
+    fireEvent.click(await screen.findByText(/(Đặt hàng|Thử lại) · /));
     const notice = await screen.findByTestId('place-notice');
     await waitFor(() => expect(notice).toHaveTextContent('bấm Đặt hàng lần nữa để đặt đơn mới với lựa chọn hiện tại'));
     expect(within(notice).getByRole('button', { name: 'Đơn của tôi' })).toBeInTheDocument();
@@ -1801,7 +1801,7 @@ describe('CheckoutPage — dòng giao dự kiến ở bước thanh toán (D6-20
     withShipments('MERCHANT');
     renderPage();
     // Dòng ngày chỉ nằm trong khối có báo giá: đợi báo giá xong (nút Đặt hàng mở) rồi mới khẳng định không có.
-    const btn = await screen.findByText(/Đặt hàng · /);
+    const btn = await screen.findByText(/(Đặt hàng|Thử lại) · /);
     await waitFor(() => expect(btn.closest('button')).not.toBeDisabled());
     expect(screen.queryByText(viCopy.success.etaLabel)).toBeNull();
   });
@@ -1996,7 +1996,7 @@ describe('CheckoutPage: tự áp mã giảm nhiều nhất, gợi ý khi chưa �
     mocks.applyCoupon.mockReturnValue(new Promise((r) => (release = r)));
     renderPage();
     await waitFor(() => expect(mocks.applyCoupon).toHaveBeenCalledTimes(1));
-    const btn = (await screen.findByText(/Đặt hàng · /)).closest('button')!;
+    const btn = (await screen.findByText(/(Đặt hàng|Thử lại) · /)).closest('button')!;
     expect(btn).toBeDisabled();
     await act(async () => {
       release(APPLIED);
@@ -2223,5 +2223,49 @@ describe('CheckoutPage — lỗi theo từng dòng hàng (hk)', () => {
     await screen.findByTestId('checkout-line-problem');
     expect(await screen.findByText('Sửa sản phẩm hết hàng ở trên để đặt tiếp.')).toBeInTheDocument();
     expect(screen.queryByTestId('checkout-cart-issue')).not.toBeInTheDocument();
+  });
+});
+
+describe('CheckoutPage — gửi lỗi mạng (hk)', () => {
+  beforeEach(() => {
+    mocks.publicConfig.waste.pickup = false;
+    vi.clearAllMocks();
+    mocks.placeOrder.mockReset();
+    sessionStorage.clear();
+    localStorage.clear();
+    mocks.sfCtx.slug = null;
+    mocks.sfCtx.referralCode = null;
+    mocks.getCouponPreviews.mockResolvedValue([]);
+    mocks.getAddresses.mockResolvedValue([ADDRESS]);
+    mocks.getCart.mockResolvedValue(CART);
+    mocks.checkoutQuote.mockResolvedValue(QUOTE);
+    mocks.ensurePhone.mockResolvedValue('0900000000');
+    mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
+  });
+
+  it('lỗi mạng: dải đáy nói chưa gửi được đơn, nút đổi thành "Thử lại · tổng", bấm lại gửi đúng body và khoá cũ, không đặt hai đơn', async () => {
+    mocks.placeOrder.mockRejectedValueOnce(new HttpError('Network Error', 'ERR_NETWORK')).mockResolvedValueOnce({ id: 'o1', code: 'TT001' });
+    renderPage();
+    await placeOrderClick();
+    const retry = await screen.findByText('Thử lại · 70.000đ');
+    const status = screen.getAllByRole('status').find((el) => el.textContent?.includes('Chưa gửi được đơn'));
+    expect(status).toHaveTextContent('Chưa gửi được đơn. Bấm Thử lại, hệ thống không tạo đơn trùng.');
+    expect(screen.queryByText(/Đặt hàng · /)).not.toBeInTheDocument();
+    await waitFor(() => expect(retry.closest('button')).not.toBeDisabled());
+    fireEvent.click(retry);
+    await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(2));
+    expect(mocks.placeOrder.mock.calls[1]![0]).toEqual(mocks.placeOrder.mock.calls[0]![0]);
+    expect(mocks.placeOrder.mock.calls[1]![1]).toBe(mocks.placeOrder.mock.calls[0]![1]);
+    expect(await screen.findByTestId('order-success')).toBeInTheDocument();
+  });
+
+  it('lỗi 4xx của máy chủ: nút vẫn là "Đặt hàng · tổng", không có câu "Chưa gửi được đơn"', async () => {
+    mocks.placeOrder.mockRejectedValue(new HttpError('Bad Request', 'ERR_BAD_REQUEST', { status: 400, data: { statusCode: 400, message: 'Mã giảm giá đã hết hạn.' } }));
+    renderPage();
+    await placeOrderClick();
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalled());
+    expect(screen.getByText(/Đặt hàng · /)).toBeInTheDocument();
+    expect(screen.queryByText(/Chưa gửi được đơn/)).not.toBeInTheDocument();
   });
 });
