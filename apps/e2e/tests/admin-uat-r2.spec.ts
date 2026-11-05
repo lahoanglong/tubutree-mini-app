@@ -190,6 +190,57 @@ async function adminGet(request: import('@playwright/test').APIRequestContext, u
   return request.get(`${API}${urlPath}`, { headers: { authorization: `Bearer ${adminToken()}` } });
 }
 
+async function apiJson(urlPath: string): Promise<any> { // eslint-disable-line @typescript-eslint/no-explicit-any
+  const r = await fetch(`${API}${urlPath}`, { headers: { authorization: `Bearer ${adminToken()}` } });
+  if (!r.ok) throw new Error(`${urlPath}: HTTP ${r.status}`);
+  return r.json();
+}
+
+/**
+ * Các số của màn doanh thu không chỉ có dữ liệu của spec này: chạy chung với admin-uat-1440 (cùng DB, đơn E2EW9) thì DB đã có đơn khác.
+ * Nên đọc số của API trước khi tạo đơn E2EW11 (BASE) rồi kiểm hai điều: màn hiện đúng số API lúc kiểm, và API tăng đúng phần đơn của spec này.
+ */
+const RANGES = { r30: [-29, 0], yesterday: [-1, -1], today: [0, 0], r90: [-89, 0], g: [-12, -12] } as const;
+type RangeKey = keyof typeof RANGES;
+interface RangeTotals { revenue: number; gmv: number; orders: number; cancelled: number; partialRefund: number }
+interface RangeRead { totals: RangeTotals; dayRevenue: Record<string, number> }
+interface Triple { today: number; yesterday: number; week: number }
+interface Baseline {
+  stats: { totalRevenue: number; gmv: number; codPendingValue: number };
+  today: { orders: Triple; revenue: Triple; gmv: Triple };
+  ranges: Record<RangeKey, RangeRead>;
+}
+let BASE!: Baseline;
+
+async function readRange(key: RangeKey): Promise<RangeRead> {
+  const [from, to] = RANGES[key];
+  const j = await apiJson(`/admin/reports/revenue?from=${ymd(from)}&to=${ymd(to)}`);
+  const dayRevenue: Record<string, number> = {};
+  for (const r of j.byDay as { day: string; revenue: number }[]) dayRevenue[r.day] = (dayRevenue[r.day] ?? 0) + Number(r.revenue);
+  const t = j.totals;
+  return { totals: { revenue: Number(t.revenue), gmv: Number(t.gmv), orders: Number(t.orders), cancelled: Number(t.cancelled), partialRefund: Number(t.partialRefund) }, dayRevenue };
+}
+
+async function readStats(): Promise<Baseline['stats']> {
+  const j = await apiJson('/admin/dashboard/stats');
+  return { totalRevenue: Number(j.totalRevenue), gmv: Number(j.gmv), codPendingValue: Number(j.codPendingValue) };
+}
+
+async function readToday(): Promise<Baseline['today']> {
+  const j = await apiJson('/admin/dashboard/today');
+  const triple = (t: Triple): Triple => ({ today: Number(t.today), yesterday: Number(t.yesterday), week: Number(t.week) });
+  return { orders: triple(j.orders), revenue: triple(j.revenue), gmv: triple(j.gmv) };
+}
+
+async function snapshot(): Promise<Baseline> {
+  const ranges = {} as Record<RangeKey, RangeRead>;
+  for (const key of Object.keys(RANGES) as RangeKey[]) ranges[key] = await readRange(key);
+  return { stats: await readStats(), today: await readToday(), ranges };
+}
+
+/** Đơn của spec này nằm trong khoảng ngày `key`. */
+const inRange = (key: RangeKey): readonly SeedOrder[] => ORDERS.filter((o) => o.day >= RANGES[key][0] && o.day <= RANGES[key][1]);
+
 async function submitAndRead(page: Page, trigger: () => Promise<void>, urlPath: RegExp, method = 'POST'): Promise<{ status: number; body: string }> {
   const wait = page.waitForResponse((r) => urlPath.test(new URL(r.url()).pathname) && r.request().method() === method);
   await trigger();
@@ -357,6 +408,8 @@ async function seedAll(): Promise<void> {
     await user(ADMIN_ID, `${W11}admin-zalo`, 'W11 Admin', null, 'E2EW11AD1', 'ADMIN');
     await user(CUSTOMER.id, `${W11}cust-zalo`, CUSTOMER.name, CUSTOMER.phone, 'E2EW11CU1');
 
+    BASE = await snapshot();
+
     for (const o of ORDERS) {
       const stuck = o.code === 'E2EW11-D';
       await prisma.order.create({
@@ -468,30 +521,35 @@ for (const frame of FRAMES) {
       });
     });
 
-    test('1. Tổng quan chỉ số: doanh thu, đơn mới nhất, mốc 00:30 và 23:30', async ({ page, request }) => {
+    test('1. Tổng quan chỉ số: doanh thu, đơn mới nhất, mốc 00:30 và 23:30', async ({ page }) => {
       const w = watch(page);
       await openAdmin(page);
       await gotoNav(page, 'Tổng quan chỉ số');
       const revenueCard = page.locator('div.shadow-card').filter({ hasText: 'Doanh thu đã thu' }).first();
       await expect(revenueCard).toBeVisible();
-      const stats = await (await adminGet(request, '/admin/dashboard/stats')).json();
+      const stats = await readStats();
 
-      await expect(revenueCard.locator('.text-2xl')).toHaveText(vnd(sum(PAID)));
-      expect(stats.totalRevenue, 'API: doanh thu đã thu bằng tổng đơn đã giao đã thanh toán').toBe(sum(PAID));
-      await expect(revenueCard.getByText(vnd(sum(GMV)))).toBeVisible();
-      await expect(revenueCard.getByText(vnd(order('D').total))).toBeVisible();
+      await expect(revenueCard.locator('.text-2xl')).toHaveText(vnd(stats.totalRevenue));
+      expect(stats.totalRevenue - BASE.stats.totalRevenue, 'API: doanh thu đã thu tăng đúng tổng đơn đã giao đã thanh toán của spec').toBe(sum(PAID));
+      expect(stats.gmv - BASE.stats.gmv, 'API: giá trị đơn tăng đúng tổng đơn đã xác nhận trở đi của spec').toBe(sum(GMV));
+      expect(stats.codPendingValue - BASE.stats.codPendingValue, 'API: COD chưa thu tăng đúng đơn D').toBe(order('D').total);
+      await expect(revenueCard.getByText(vnd(stats.gmv), { exact: true })).toBeVisible();
+      await expect(revenueCard.getByText(vnd(stats.codPendingValue), { exact: true })).toBeVisible();
       await shot(page, 'tong-quan', 'the-so');
 
-      // Đơn mới nhất: sáu đơn gần nhất, mỗi dòng có mã, tiền đúng dạng, giờ-ngày VN.
-      const rows = page.locator('table tbody tr').filter({ hasText: 'E2EW11-' });
-      for (const code of ['A', 'B', 'C', 'D', 'E', 'F']) {
-        const o = order(code);
+      // Đơn mới nhất: sáu đơn gần nhất trong DB (có thể gồm đơn của spec khác), mỗi dòng có mã, tiền đúng dạng, giờ-ngày VN.
+      const newest: { code: string; total: unknown; createdAt: Date }[] = await withDb((prisma) => prisma.order.findMany({ orderBy: { createdAt: 'desc' }, take: 6, select: { code: true, total: true, createdAt: true } }));
+      expect(newest).toHaveLength(6);
+      const rows = page.locator('table tbody tr');
+      await expect(rows).toHaveCount(6);
+      for (const o of newest) {
         const row = rows.filter({ hasText: o.code });
         await expect(row, `đơn ${o.code} có trong bảng đơn mới nhất`).toHaveCount(1);
-        await expect(row).toContainText(vnd(o.total));
-        await expect(row, `${o.code}: giờ-ngày theo giờ Việt Nam, không lệch theo múi giờ ${frame.tz}`).toContainText(shown(o.day, o.at));
+        await expect(row).toContainText(vnd(Number(o.total)));
+        await expect(row, `${o.code}: giờ-ngày theo giờ Việt Nam, không lệch theo múi giờ ${frame.tz}`).toContainText(vnClock(o.createdAt));
+        const mine = ORDERS.find((x) => x.code === o.code);
+        if (mine) await expect(row, `${o.code}: đúng mốc ${mine.at} giờ VN đã seed`).toContainText(shown(mine.day, mine.at));
       }
-      await expect(rows.filter({ hasText: order('G').code })).toHaveCount(0);
       const wrapped = await page.evaluate(() => {
         const lines = (el: Element) => {
           const r = document.createRange();
@@ -499,7 +557,6 @@ for (const frame of FRAMES) {
           return new Set(Array.from(r.getClientRects()).filter((x) => x.width > 0).map((x) => Math.round(x.top))).size;
         };
         return Array.from(document.querySelectorAll('table tbody tr'))
-          .filter((tr) => tr.textContent?.includes('E2EW11-'))
           .flatMap((tr) => [tr.querySelector('td:first-child button')!, tr.querySelector('td:last-child')!])
           .filter((el) => lines(el) > 1)
           .map((el) => (el.textContent ?? '').trim());
@@ -510,7 +567,7 @@ for (const frame of FRAMES) {
       expectCleanWatch('tong-quan', w);
     });
 
-    test('2. Báo cáo: số theo khoảng ngày, bảng ngày × kênh, nút xuất, nhập khoảng ngày', async ({ page, request }) => {
+    test('2. Báo cáo: số theo khoảng ngày, bảng ngày × kênh, nút xuất, nhập khoảng ngày', async ({ page }) => {
       test.setTimeout(120_000);
       const w = watch(page);
       await openAdmin(page);
@@ -518,24 +575,34 @@ for (const frame of FRAMES) {
       await expect(page.getByRole('heading', { name: 'Doanh thu theo ngày và kênh' })).toBeVisible();
       const tile = (label: string) => page.locator(`[data-kpi="${label}"] dd`);
 
-      // Mặc định 30 ngày gần nhất: A..G, không có H (40 ngày trước).
-      const in30 = ORDERS.filter((o) => o.day >= -29);
-      await expect(tile('Doanh thu (đã thu)')).toHaveText(vnd(sum(in30.filter((o) => PAID.includes(o)))));
-      await expect(tile('Tổng giá trị đơn đặt')).toHaveText(vnd(sum(in30.filter((o) => GMV.includes(o)))));
-      await expect(tile('Đơn đặt')).toHaveText(String(in30.length));
-      await expect(tile('Đơn huỷ / trả')).toHaveText('1');
-      await expect(tile('Đã hoàn một phần')).toHaveText('0đ');
-      const api = await (await adminGet(request, `/admin/reports/revenue?from=${ymd(-29)}&to=${ymd(0)}`)).json();
-      expect(api.totals.revenue).toBe(sum(in30.filter((o) => PAID.includes(o))));
+      // Mặc định 30 ngày gần nhất: A..G, không có H (40 ngày trước). Màn hiện đúng số API lúc kiểm; API tăng đúng phần đơn của spec.
+      const in30 = inRange('r30');
+      const now30 = await readRange('r30');
+      const base30 = BASE.ranges.r30;
+      await expect(tile('Doanh thu (đã thu)')).toHaveText(vnd(now30.totals.revenue));
+      await expect(tile('Tổng giá trị đơn đặt')).toHaveText(vnd(now30.totals.gmv));
+      await expect(tile('Đơn đặt')).toHaveText(String(now30.totals.orders));
+      await expect(tile('Đơn huỷ / trả')).toHaveText(String(now30.totals.cancelled));
+      await expect(tile('Đã hoàn một phần')).toHaveText(vnd(now30.totals.partialRefund));
+      expect(now30.totals.revenue - base30.totals.revenue).toBe(sum(in30.filter((o) => PAID.includes(o))));
+      expect(now30.totals.gmv - base30.totals.gmv).toBe(sum(in30.filter((o) => GMV.includes(o))));
+      expect(now30.totals.orders - base30.totals.orders).toBe(in30.length);
+      expect(now30.totals.cancelled - base30.totals.cancelled).toBe(1);
+      expect(now30.totals.partialRefund - base30.totals.partialRefund).toBe(0);
 
-      // 00:30 hôm nay và 23:30 hôm qua nằm ở hai dòng ngày khác nhau, mỗi dòng đúng số tiền của đơn đó.
+      // 00:30 hôm nay và 23:30 hôm qua nằm ở hai dòng ngày khác nhau; mỗi dòng đúng số API của ngày đó, và ngày đó tăng đúng số tiền của đơn.
       const dayRow = (days: number) => page.locator(`tr[data-day="${ymd(days)}"]`);
-      await expect(dayRow(0), 'đơn 00:30 giờ VN phải nằm ở ngày hôm nay, không lùi về hôm qua').toContainText(dmy(0));
-      await expect(dayRow(0)).toContainText(vnd(order('A').total));
-      await expect(dayRow(-1), 'đơn 23:30 giờ VN phải nằm ở ngày hôm qua, không nhảy sang hôm nay').toContainText(dmy(-1));
-      await expect(dayRow(-1)).toContainText(vnd(order('B').total));
-      await expect(dayRow(-12)).toContainText(vnd(order('G').total));
-      await expect(page.locator('tr[data-total]')).toContainText(vnd(sum(in30.filter((o) => PAID.includes(o)))));
+      const dayRev = (r: RangeRead, days: number) => r.dayRevenue[ymd(days)] ?? 0;
+      for (const [days, code, why] of [
+        [0, 'A', 'đơn 00:30 giờ VN phải nằm ở ngày hôm nay, không lùi về hôm qua'],
+        [-1, 'B', 'đơn 23:30 giờ VN phải nằm ở ngày hôm qua, không nhảy sang hôm nay'],
+        [-12, 'G', 'đơn G nằm đúng ngày của nó'],
+      ] as const) {
+        expect(dayRev(now30, days) - dayRev(base30, days), why).toBe(order(code).total);
+        await expect(dayRow(days), why).toContainText(dmy(days));
+        await expect(dayRow(days), why).toContainText(vnd(dayRev(now30, days)));
+      }
+      await expect(page.locator('tr[data-total]')).toContainText(vnd(now30.totals.revenue));
       await expect(page.getByText(new RegExp(`${escapeRe(dmy(-29))} – ${escapeRe(dmy(0))} \\(30 ngày\\)`))).toBeVisible();
       for (const label of ['Từ ngày', 'Đến ngày']) {
         const gap = await page.evaluate((text) => {
@@ -558,13 +625,16 @@ for (const frame of FRAMES) {
       await expectCleanScreen(page, 'bao-cao-30-ngay');
       await shot(page, 'bao-cao', '30-ngay');
 
-      // Các mốc nhanh.
-      await page.getByRole('button', { name: 'Hôm qua', exact: true }).click();
-      await expect(tile('Doanh thu (đã thu)')).toHaveText(vnd(order('B').total));
-      await page.getByRole('button', { name: 'Hôm nay', exact: true }).click();
-      await expect(tile('Doanh thu (đã thu)')).toHaveText(vnd(order('A').total));
-      await page.getByRole('button', { name: '90 ngày', exact: true }).click();
-      await expect(tile('Doanh thu (đã thu)')).toHaveText(vnd(sum(PAID)));
+      // Các mốc nhanh: màn hiện số API của khoảng đó, và khoảng đó tăng đúng phần đơn của spec.
+      const checkQuick = async (key: RangeKey, button: string) => {
+        await page.getByRole('button', { name: button, exact: true }).click();
+        const now = await readRange(key);
+        expect(now.totals.revenue - BASE.ranges[key].totals.revenue, `${button}: doanh thu tăng đúng đơn của spec`).toBe(sum(inRange(key).filter((o) => PAID.includes(o))));
+        await expect(tile('Doanh thu (đã thu)'), button).toHaveText(vnd(now.totals.revenue));
+      };
+      await checkQuick('yesterday', 'Hôm qua');
+      await checkQuick('today', 'Hôm nay');
+      await checkQuick('r90', '90 ngày');
       for (const label of ['7 ngày', 'Tháng này', 'Tháng trước']) {
         await page.getByRole('button', { name: label, exact: true }).click();
         await expect(page.getByRole('button', { name: label, exact: true })).toHaveAttribute('aria-pressed', 'true');
@@ -578,7 +648,9 @@ for (const frame of FRAMES) {
       await paste(from, dmy(-12).replace(/\//g, ''));
       await paste(to, dmy(-12).replace(/\//g, ''));
       await expect(from).toHaveValue(dmy(-12));
-      await expect(tile('Doanh thu (đã thu)')).toHaveText(vnd(order('G').total));
+      const nowG = await readRange('g');
+      expect(nowG.totals.revenue - BASE.ranges.g.totals.revenue).toBe(order('G').total);
+      await expect(tile('Doanh thu (đã thu)')).toHaveText(vnd(nowG.totals.revenue));
       await expect(page.getByRole('button', { name: '7 ngày', exact: true })).toHaveAttribute('aria-pressed', 'false');
       await paste(from, '31/02/2026');
       await from.blur();
@@ -611,13 +683,25 @@ for (const frame of FRAMES) {
       await expect(page.getByRole('heading', { name: 'Hôm nay', exact: true })).toBeVisible();
       const stats = page.getByRole('region', { name: 'Số bán hàng hôm nay' });
       const revenue = stats.getByRole('group', { name: 'Đã thu từ đơn hôm nay', exact: true });
-      await expect(revenue).toContainText(vnd(order('A').total));
-      await expect(revenue).toContainText(`Giá trị đơn đặt ${vnd(order('A').total)}`);
-      await expect(revenue, 'hôm nay (00:30 giờ VN) kém hôm qua (23:30 giờ VN) đúng chênh lệch giữa hai đơn').toContainText(new RegExp(`[−-]${escapeRe(vnd(order('B').total - order('A').total))} so với hôm qua`));
-      await expect(revenue).toContainText(`7 ngày ${vnd(order('A').total + order('B').total + order('C').total)}`);
       const orders = stats.getByRole('group', { name: 'Đơn hôm nay', exact: true });
-      await expect(orders).toContainText('Bằng hôm qua (1)');
-      await expect(orders).toContainText('7 ngày 5');
+
+      // Số API lúc kiểm (có thể gồm đơn của spec khác); API tăng đúng phần đơn của spec này.
+      const t = await readToday();
+      const b = BASE.today;
+      const A = order('A').total, B = order('B').total, C = order('C').total, D = order('D').total;
+      expect([t.revenue.today - b.revenue.today, t.revenue.yesterday - b.revenue.yesterday, t.revenue.week - b.revenue.week]).toEqual([A, B, A + B + C]);
+      expect([t.gmv.today - b.gmv.today, t.gmv.yesterday - b.gmv.yesterday, t.gmv.week - b.gmv.week]).toEqual([A, B, A + B + C + D]);
+      expect([t.orders.today - b.orders.today, t.orders.yesterday - b.orders.yesterday, t.orders.week - b.orders.week]).toEqual([1, 1, 5]);
+
+      /** "+3 so với hôm qua" / "−3 so với hôm qua" / "Bằng hôm qua (n)": dấu trừ của màn là U+2212, nhận cả gạch ngang thường. */
+      const vs = (today: number, yesterday: number, fmt: (n: number) => string): string | RegExp =>
+        today === yesterday ? `Bằng hôm qua (${fmt(yesterday)})` : today > yesterday ? `+${fmt(today - yesterday)} so với hôm qua` : new RegExp(`[−-]${escapeRe(fmt(yesterday - today))} so với hôm qua`);
+      await expect(revenue).toContainText(vnd(t.revenue.today));
+      await expect(revenue).toContainText(`Giá trị đơn đặt ${vnd(t.gmv.today)}`);
+      await expect(revenue, 'so với hôm qua đúng chênh lệch giữa hai ngày').toContainText(vs(t.revenue.today, t.revenue.yesterday, vnd));
+      await expect(revenue).toContainText(`7 ngày ${vnd(t.revenue.week)}`);
+      await expect(orders).toContainText(vs(t.orders.today, t.orders.yesterday, String));
+      await expect(orders).toContainText(`7 ngày ${t.orders.week}`);
       await expectCleanScreen(page, 'hom-nay');
       await shot(page, 'hom-nay', 'tong-quan');
       expectCleanWatch('hom-nay', w);
@@ -749,6 +833,7 @@ for (const frame of FRAMES) {
       const dup = await submitAndRead(page, () => create.click(), /\/admin\/brands$/);
       note('nhan-hang', `trùng tên nhãn: ${dup.status} ${dup.body}`);
       expect(dup.status, 'trùng tên nhãn là lỗi nhập, không phải lỗi máy chủ').toBeLessThan(500);
+      await expect(page.locator('p.text-danger-fg').last(), 'lời báo trùng tên nói rõ tên nhãn ngay trên màn').toHaveText('Đã có nhãn hàng trùng tên "W11 Nhãn Nháp". Hãy đặt tên khác.');
       await paste(name, 'W11 Nhãn Mới Tạo');
       await paste(tagline, 'Câu giới thiệu thử');
       await create.click();
@@ -862,7 +947,6 @@ for (const frame of FRAMES) {
       await expect(form.getByRole('alert').filter({ hasText: 'Thứ tự là số nguyên từ 0 đến 9999.' })).toBeVisible();
       await paste(form.getByRole('spinbutton', { name: 'Thứ tự hiển thị' }), '5');
       await save.click();
-      await expect(page.locator('p.text-danger-fg').last(), 'lời báo trùng tên nói rõ tên nhãn ngay trên màn').toHaveText('Đã có nhãn hàng trùng tên "W11 Nhãn Nháp". Hãy đặt tên khác.');
       await expect(page.getByRole('status').filter({ hasText: 'Đã lưu chiến dịch.' })).toBeVisible();
       const created = row('W11 Chiến dịch tạo từ form');
       await expect(created, 'giờ 23:30 và 00:30 giờ VN lưu rồi đọc lại đúng').toContainText(`${dmy(4)} 23:30 → ${dmy(9)} 00:30`);
