@@ -636,6 +636,11 @@ describe('LoyaltyConfigCard', () => {
     return { puts, ...mount(<LoyaltyConfigCard rows={rows} />) };
   }
 
+  it('tổng điểm điểm danh trong tuần có dấu chấm ngăn nghìn', () => {
+    const { container } = setup();
+    expect(container.textContent).toContain('Tổng 8.000 điểm/tuần');
+  });
+
   it('7 ô điểm danh; ô sai (>100.000) → báo lỗi, KHÔNG gửi PUT', async () => {
     const { container, puts } = setup();
     expect(container.querySelectorAll('input[aria-label^="Điểm ngày"]')).toHaveLength(7);

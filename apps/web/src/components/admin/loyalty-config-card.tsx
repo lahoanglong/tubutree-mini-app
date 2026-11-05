@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Gift } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { formatVnNumber } from '@tubutree/app-core/number-format';
 import { setConfig, type ConfigRow } from '@/lib/admin-client';
 import { configValue, LOYALTY_DEFAULTS, LOYALTY_KEYS, parseCheckinPoints, parseIntInRange } from '@/lib/admin-config-forms';
 import { Field, INPUT_CLASS, Notice } from './ui';
@@ -203,7 +204,7 @@ export function LoyaltyConfigCard({ rows }: { rows: ConfigRow[] | undefined }) {
             ))}
           </div>
           <p className="mt-1 text-[11px] text-stone-500">
-            Tổng {weekTotal} điểm/tuần mỗi khách đã đăng nhập Zalo; khách vãng lai chỉ nhận giọt nước. Điểm điểm danh & tại quầy KHÔNG tính vào xét hạng.
+            Tổng {formatVnNumber(weekTotal)} điểm/tuần mỗi khách đã đăng nhập Zalo; khách vãng lai chỉ nhận giọt nước. Điểm điểm danh & tại quầy KHÔNG tính vào xét hạng.
           </p>
         </div>
 
