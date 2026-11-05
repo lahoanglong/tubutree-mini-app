@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from 'react';
+import { useId, useState, type CSSProperties } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, TriangleAlert } from 'lucide-react';
 import { getProvinces, getCommunes, type GeoOption } from '../services/geo-api';
@@ -53,6 +53,7 @@ export function GeoPicker({
   errorProvince?: string;
   errorWard?: string;
 }) {
+  const errId = useId();
   const provincesQ = useQuery({ queryKey: ['geo-provinces'], queryFn: getProvinces, staleTime: Infinity });
   const communesQ = useQuery({
     queryKey: ['geo-communes', value.provinceCode],
@@ -72,12 +73,13 @@ export function GeoPicker({
           options={provincesQ.data ?? []}
           value={value.provinceCode}
           invalid={!!errorProvince}
+          errorId={`${errId}-province`}
           onSelect={(code) => {
             const name = provincesQ.data?.find((p) => p.code === code)?.name ?? '';
             onChange({ province: name, provinceCode: code, ward: '', wardCode: '' });
           }}
         />
-        {errorProvince && <ErrText>{errorProvince}</ErrText>}
+        {errorProvince && <ErrText id={`${errId}-province`}>{errorProvince}</ErrText>}
         {/* API lỗi thì Select sẽ im lặng mãi ở placeholder nếu không có dòng này — cho user biết + retry */}
         {provincesQ.isError && !errorProvince && (
           <button type="button" onClick={() => void provincesQ.refetch()} style={RETRY_STYLE}>
@@ -104,13 +106,14 @@ export function GeoPicker({
           options={communesQ.data ?? []}
           value={value.wardCode}
           invalid={!!errorWard}
+          errorId={`${errId}-ward`}
           disabled={!value.provinceCode}
           onSelect={(code) => {
             const name = communesQ.data?.find((c) => c.code === code)?.name ?? '';
             onChange({ ...value, ward: name, wardCode: code });
           }}
         />
-        {errorWard && <ErrText>{errorWard}</ErrText>}
+        {errorWard && <ErrText id={`${errId}-ward`}>{errorWard}</ErrText>}
         {communesQ.isError && !errorWard && (
           <button type="button" onClick={() => void communesQ.refetch()} style={RETRY_STYLE}>
             <Icon icon={TriangleAlert} size="sm" tone="danger" />
@@ -131,6 +134,7 @@ function GeoSelect({
   options,
   value,
   invalid,
+  errorId,
   disabled,
   onSelect,
 }: {
@@ -139,6 +143,7 @@ function GeoSelect({
   options: readonly GeoOption[];
   value: string;
   invalid: boolean;
+  errorId?: string;
   disabled?: boolean;
   onSelect: (code: string) => void;
 }) {
@@ -165,6 +170,8 @@ function GeoSelect({
         type="button"
         aria-haspopup="dialog"
         aria-label={`${label}: ${selected?.name ?? placeholder}`}
+        aria-invalid={invalid || undefined}
+        aria-describedby={invalid ? errorId : undefined}
         disabled={disabled}
         onClick={() => setOpen(true)}
         style={{
@@ -242,9 +249,9 @@ function GeoSelect({
   );
 }
 
-function ErrText({ children }: { children: React.ReactNode }) {
+function ErrText({ id, children }: { id?: string; children: React.ReactNode }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+    <div id={id} style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
       <Icon icon={TriangleAlert} size="sm" tone="danger" />
       <Text variant="caption" tone="danger">
         {children}
