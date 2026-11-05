@@ -17,6 +17,8 @@ export interface OrderStatusHeroProps {
 /** Đầu trang theo dõi đơn: trạng thái, một câu nói đơn đang ở đâu, lý do huỷ (đơn đã huỷ), mốc cần biết (ngày giao, hạn trả, hạn đổi/trả) và bước kế tiếp. */
 export function OrderStatusHero({ headline, statusLabel, stamp, tone }: OrderStatusHeroProps) {
   const inherit = { color: 'inherit' } as const;
+  // Lý do huỷ có thể là chữ khách gõ (link, số tài khoản) không có dấu cách: không ngắt thì web cắt mất cuối dòng, Mini cuộn ngang cả trang.
+  const wrap = { ...inherit, overflowWrap: 'anywhere' } as const;
   return (
     <section
       data-testid="status-hero"
@@ -30,22 +32,22 @@ export function OrderStatusHero({ headline, statusLabel, stamp, tone }: OrderSta
         {statusLabel}
       </Heading>
       {headline.sentence && (
-        <Text variant="body-md" as="p" style={inherit}>
+        <Text variant="body-md" as="p" style={wrap}>
           {headline.sentence}
         </Text>
       )}
       {headline.reason && (
-        <Text variant="body-sm" as="p" data-testid="order-cancel-reason" style={{ ...inherit, fontWeight: 600 }}>
+        <Text variant="body-sm" as="p" data-testid="order-cancel-reason" style={{ ...wrap, fontWeight: 600 }}>
           {headline.reason}
         </Text>
       )}
       {headline.milestone && (
-        <Text variant="body-sm" as="p" data-testid="order-milestone" style={{ ...inherit, fontWeight: 600 }}>
+        <Text variant="body-sm" as="p" data-testid="order-milestone" style={{ ...wrap, fontWeight: 600 }}>
           {headline.milestone}
         </Text>
       )}
       {headline.next && (
-        <Text variant="caption" as="p" data-testid="order-next" style={inherit}>
+        <Text variant="caption" as="p" data-testid="order-next" style={wrap}>
           {headline.next}
         </Text>
       )}

@@ -130,6 +130,14 @@ describe('OrderStatusHero (web)', () => {
     const without = mount(<OrderStatusHero headline={head(null)} {...props} />);
     expect(without.container.querySelector('[data-testid="order-cancel-reason"]')).toBeNull();
   });
+
+  it('lý do huỷ là chuỗi dài không dấu cách (link, số tài khoản): được ngắt dòng, không bị body overflow-x: clip cắt mất cuối', () => {
+    const props = { statusLabel: 'Đã huỷ', stamp: { label: 'Huỷ lúc', at: '2026-11-03T05:00:00Z' }, tone };
+    const long = `Bạn đã huỷ: Lý do khác. https://example.com/${'a'.repeat(80)}`;
+    const { container } = mount(<OrderStatusHero headline={orderHeadline(order({ status: 'CANCELLED', cancelReason: long }), { now: NOW })} {...props} />);
+    expect(container.querySelector<HTMLElement>('[data-testid="order-cancel-reason"]')!.style.overflowWrap).toBe('anywhere');
+    expect(container.querySelector<HTMLElement>('[data-testid="order-next"]')!.style.overflowWrap).toBe('anywhere');
+  });
 });
 
 describe('OrderActionBar (web)', () => {

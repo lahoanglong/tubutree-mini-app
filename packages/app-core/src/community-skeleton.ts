@@ -1,7 +1,7 @@
 /**
  * Số đo (px) khung chờ thẻ bài đăng của bảng tin: `PostCardSkeleton` của Mini và web cùng đọc ở đây (như `TILE_METRICS` với thẻ sản phẩm).
- * Thẻ thật cao theo nội dung; đo ở 375px thì bài ngắn không ảnh cao ≈176px ở web và ≈180px ở Mini, nên khung chờ giữ 180 để trang
- * không nhảy khi bài về. Hai nhánh chờ cũ là khối xám 140px và 110px không giống thẻ nào.
+ * Thẻ thật cao theo nội dung; đo ở 375px thì bài ngắn không ảnh cao ≈180px ở Mini và ≈176px ở web. Khung chờ dùng chung 180 để Mini và
+ * web khổ điện thoại giống nhau: Mini không nhảy, web lệch ≈4px mỗi thẻ khi bài ngắn về (bài có ảnh cao hơn nhiều, lệch nào cũng có). Hai nhánh chờ cũ là khối xám 140px và 110px không giống thẻ nào.
  */
 export const POST_CARD_SKELETON = {
   height: 180,

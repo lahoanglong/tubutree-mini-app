@@ -127,6 +127,14 @@ describe('OrderStatusHero', () => {
     expect(sentence.nextElementSibling).toBe(reason);
     expect(reason.nextElementSibling).toBe(screen.getByTestId('order-next'));
   });
+
+  it('lý do huỷ là chuỗi dài không dấu cách (link, số tài khoản): được ngắt dòng, không đẩy trang cuộn ngang', () => {
+    const long = `Bạn đã huỷ: Lý do khác. https://example.com/${'a'.repeat(80)}`;
+    const headline = orderHeadline(order({ status: 'CANCELLED', cancelReason: long }), { now: NOW });
+    render(<OrderStatusHero headline={headline} statusLabel="Đã huỷ" stamp={{ label: 'Huỷ lúc', at: '2026-11-03T05:00:00Z' }} tone={tone} />);
+    expect(screen.getByTestId('order-cancel-reason').style.overflowWrap).toBe('anywhere');
+    expect(screen.getByTestId('order-next').style.overflowWrap).toBe('anywhere');
+  });
 });
 
 describe('OrderActionBar', () => {
