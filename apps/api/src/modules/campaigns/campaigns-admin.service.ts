@@ -36,6 +36,8 @@ export interface CampaignCheckResult {
   issues: HealthIssue[];
   /** Số món khách dùng được trên trang chiến dịch theo danh sách đang soạn (form chọn thứ tự gắn từ đây). */
   usable: { products: number; coupons: number };
+  /** Giờ máy chủ (ISO) lúc kiểm: form tính "đang hiện cho khách" theo đồng hồ này, không theo máy admin. */
+  now: string;
   blockers: number;
   warnings: number;
 }
@@ -150,7 +152,7 @@ export class CampaignsAdminService {
     const couponCodes = dto.couponCodes ?? (fresh ? [] : undefined);
     const [detail] = await campaignHealthDetailBatch(this.prisma, [{ subject, ...(productIds ? { productIds } : {}), ...(couponCodes ? { couponCodes } : {}) }], now);
     const issues = detail?.issues ?? [];
-    return { issues, usable: detail?.usable ?? { products: 0, coupons: 0 }, ...countHealth(issues) };
+    return { issues, usable: detail?.usable ?? { products: 0, coupons: 0 }, now: now.toISOString(), ...countHealth(issues) };
   }
 
   /** Bật chiến dịch mà còn lỗi chặn thì 400 với câu đầu tiên. Kiểm lại ngay trong request, không tin gì từ trình duyệt. */

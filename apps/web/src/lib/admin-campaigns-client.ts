@@ -37,6 +37,8 @@ export interface CampaignCheckResult {
   issues: CampaignIssue[];
   /** Số món khách dùng được trên trang chiến dịch theo danh sách đang soạn; API cũ không trả. */
   usable?: { products: number; coupons: number };
+  /** Giờ máy chủ (ISO); API cũ không trả. */
+  now?: string;
   blockers: number;
   warnings: number;
 }

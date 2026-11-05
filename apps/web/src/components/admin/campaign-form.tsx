@@ -181,7 +181,9 @@ export function CampaignForm({
   const imageCheck = useBannerImageCheck(image);
   // Cùng luật với máy chủ (PATCH): lỗi chặn chỉ khoá khi lần lưu này đưa chiến dịch từ khách-không-thấy sang khách-thấy (đang tắt hoặc đã quá hạn, rồi bật và chưa hết hạn)
   // hoặc đổi đích lúc đang chạy. Lỗi cũ của chiến dịch đang chạy không khoá việc sửa tiêu đề hay giờ; khối kiểm vẫn hiện lỗi đó.
-  const nowMs = Date.now();
+  // Đồng hồ máy chủ khi đã kiểm được (máy admin lệch vài phút vẫn ra cùng kết quả như máy chủ).
+  const clockNow = () => Date.now() + check.skewMs;
+  const nowMs = clockNow();
   const wasVisible = saved !== null && saved.active && Date.parse(saved.endAt) > nowMs;
   const willBeVisible = isActive && endIso !== null && Date.parse(endIso) > nowMs;
   const linkValueNow = needsValue(linkType) ? linkValue.trim() : '';
@@ -226,8 +228,8 @@ export function CampaignForm({
     const value = needsValue(linkType) ? linkValue.trim() : '';
     setBusy(true);
     let id = savedId;
-    const goesLive = isActive && Date.parse(endIso) > Date.now();
-    const savedEnded = saved !== null && saved.active && Date.parse(saved.endAt) <= Date.now();
+    const goesLive = isActive && Date.parse(endIso) > clockNow();
+    const savedEnded = saved !== null && saved.active && Date.parse(saved.endAt) <= clockNow();
     const staysActive = isActive && saved !== null && saved.active;
     // Máy chủ coi mọi bước đưa chiến dịch sang "khách thấy" là một lần bật và kiểm trang chiến dịch (trống thì từ chối). Sản phẩm và mã gắn bằng lời gọi riêng,
     // nên phần làm chiến dịch hiện ra (bật, gia hạn ngày, đổi đích lúc đang chạy) để lại cuối, sau khi đã gắn; chiến dịch vẫn chạy bản cũ trong lúc đó, không tắt.

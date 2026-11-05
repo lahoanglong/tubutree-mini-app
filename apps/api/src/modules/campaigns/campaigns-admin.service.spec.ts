@@ -463,6 +463,12 @@ describe('CampaignsAdminService: kiểm sức khoẻ trước khi bật', () => 
       expect(out.usable).toEqual({ products: 1, coupons: 0 });
     });
 
+    it('trả kèm giờ máy chủ để form không phụ thuộc đồng hồ máy admin', async () => {
+      const { svc } = setup({ healthProducts: [visibleProduct({ id: 'p1' })] });
+      const out = await svc.check(dto({ productIds: ['p1'] }), NOW);
+      expect(out.now).toBe(NOW.toISOString());
+    });
+
     it('chưa chọn sản phẩm/mã: trang trống là BLOCK', async () => {
       const { svc } = setup();
       const out = await svc.check(dto({ productIds: [], couponCodes: [] }), NOW);
@@ -472,7 +478,7 @@ describe('CampaignsAdminService: kiểm sức khoẻ trước khi bật', () => 
     it('sửa chiến dịch đã lưu mà không gửi danh sách: đọc liên kết đang lưu', async () => {
       const { svc, prisma } = setup({ linked: [linkedTo('c1')] });
       const out = await svc.check(dto({ id: 'c1' }), NOW);
-      expect(out).toEqual({ issues: [], usable: { products: 1, coupons: 0 }, blockers: 0, warnings: 0 });
+      expect(out).toEqual({ issues: [], usable: { products: 1, coupons: 0 }, now: NOW.toISOString(), blockers: 0, warnings: 0 });
       expect(prisma.campaignProduct.findMany).toHaveBeenCalledTimes(1);
     });
 

@@ -947,6 +947,17 @@ describe('CampaignsTab: luật "bật" của form khớp máy chủ', () => {
     });
   });
 
+  it('đồng hồ máy admin chậm 5 phút: dùng `now` của máy chủ để biết chiến dịch đã hết hạn (gia hạn là một lần bật, còn lỗi chặn thì khoá)', async () => {
+    mocks.get.mockResolvedValue(detail('a', { endAt: '2026-11-05T05:03:00.000Z' }));
+    mocks.check.mockResolvedValue({ ...BLOCK, now: '2026-11-05T05:05:00.000Z' });
+    const c = await mount();
+    await edit(c);
+    await settle();
+    typeInto(field(c, 'Kết thúc: ngày'), '30/11/2026');
+    await settle();
+    expect(saveBtn(c).disabled).toBe(true);
+  });
+
   it('đổi đích khi chiến dịch đang tắt: lưu một lần cùng các trường khác, bật ở cuối', async () => {
     mocks.list.mockResolvedValue([row('d', { status: 'off', isActive: false })]);
     mocks.get.mockResolvedValue(detail('d', { isActive: false, status: 'off', linkType: 'URL_INTERNAL', linkValue: '/offers' }));

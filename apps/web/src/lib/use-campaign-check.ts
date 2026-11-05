@@ -17,11 +17,13 @@ export interface CampaignCheckState {
   issues: CampaignIssue[];
   blockers: number;
   warnings: number;
+  /** Giờ máy chủ trừ giờ máy admin (ms) lúc nhận kết quả; 0 khi API không trả `now`. */
+  skewMs: number;
   /** Lý do chưa kiểm được (status `error`). */
   message?: string;
 }
 
-const IDLE: CampaignCheckState = { status: 'idle', issues: [], blockers: 0, warnings: 0 };
+const IDLE: CampaignCheckState = { status: 'idle', issues: [], blockers: 0, warnings: 0, skewMs: 0 };
 
 /**
  * Kiểm chiến dịch đang soạn bằng `POST /admin/campaigns/check`. `input` null (form chưa đủ để kiểm) thì không gọi gì. Máy chủ trả 400 vì đích sai
@@ -50,6 +52,7 @@ export function useCampaignCheck(input: CampaignCheckInput | null): CampaignChec
             issues: r.issues,
             blockers: r.blockers,
             warnings: r.warnings,
+            skewMs: r.now ? Date.parse(r.now) - Date.now() : 0,
           }),
         (e: unknown) => {
           if (!live) return;
@@ -59,6 +62,7 @@ export function useCampaignCheck(input: CampaignCheckInput | null): CampaignChec
               issues: [{ code: 'INVALID', level: 'BLOCK', message: e.message }],
               blockers: 1,
               warnings: 0,
+              skewMs: 0,
             });
             return;
           }
@@ -67,6 +71,7 @@ export function useCampaignCheck(input: CampaignCheckInput | null): CampaignChec
             issues: [],
             blockers: 0,
             warnings: 0,
+            skewMs: 0,
             message: actionErrorText(e),
           });
         },
