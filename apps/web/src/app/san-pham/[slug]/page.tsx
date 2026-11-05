@@ -30,6 +30,7 @@ import { PdpQuickReviews } from './pdp-quick-reviews';
 import { PdpRails } from './pdp-rails';
 import { PdpLayout } from '@/components/layouts/pdp-layout';
 import { PdpDescription, PdpIngredients, PdpPromises, PdpRating } from './pdp-sections';
+import { PdpStory } from './pdp-story';
 import BackLink from '@/components/back-link';
 import { PAGE_WIDE } from '@/lib/page-frame';
 import { phoneBandPad, phoneBrandLabel } from '@/lib/phone-ui';
@@ -274,6 +275,8 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           }
           below={
             <div className="min-w-0">
+              {/* Dải câu chuyện nằm đầu phần dưới: máy tính có đủ bề ngang cho hai cột cuộn kể chuyện; mô tả và thành phần vẫn là chữ trong HTML ở dưới. */}
+              <PdpStory product={product} />
               {/* Từ lg hai cột (nội dung bán hàng | đánh giá) để thanh phân bổ sao không kéo dài cả bề ngang 1200px; dưới lg vẫn xếp dọc như cũ. */}
               <div data-testid="pdp-below-cols" className="lg:grid lg:grid-cols-2 lg:items-start lg:gap-x-8">
                 <div className="min-w-0">

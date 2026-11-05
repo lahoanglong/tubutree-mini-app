@@ -264,6 +264,24 @@ describe('/san-pham/[slug] — thư viện ảnh (BUYERWEB-17)', () => {
     expect(section.textContent).not.toMatch(/<\/?(p|ul|li)>/);
   });
 
+  it('page renders SSR description text and ingredients even when story present', async () => {
+    api.product = {
+      ...PRODUCT,
+      ingredients: [{ name: 'Bồ kết', percentage: '12%', benefit: 'Sạch dịu' }],
+      storyConfig: {
+        version: 1,
+        enabled: true,
+        scenes: [{ kind: 'hud_callouts', closing: 'An lành', points: [{ id: 'p1', xPct: 40, yPct: 40, label: 'Bồ kết', side: 'left' }] }],
+      },
+    };
+    const c = await mount();
+    expect(c.querySelector('[data-testid="product-story"]')).not.toBeNull();
+    expect(c.querySelector('[data-testid="pdp-story-open"]')!.textContent).toBe('Xem câu chuyện sản phẩm');
+    const section = Array.from(c.querySelectorAll('section')).find((x) => x.textContent?.includes('Mô tả sản phẩm'))!;
+    expect(section.textContent).toContain('• Bồ kết');
+    expect(c.textContent).toContain('Sạch dịu');
+  });
+
   it('truy cập: một h1, nút có tên, vùng chạm đủ 44px', async () => {
     const c = await mount();
     expect(headingProblems(c)).toEqual([]);
