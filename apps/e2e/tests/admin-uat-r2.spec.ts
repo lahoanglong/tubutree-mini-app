@@ -25,9 +25,12 @@ const DAY_MS = 86_400_000;
 const VN_OFFSET_MS = 7 * 3_600_000;
 const p2 = (n: number) => String(n).padStart(2, '0');
 
-/** Ngày theo lịch Việt Nam `days` ngày kể từ bây giờ. */
+/** Mốc "bây giờ" chốt một lần lúc seed: mọi ngày tính từ đây, để chạy qua nửa đêm giờ VN không làm lệch kỳ vọng giữa chừng. */
+const CLOCK = { at: Date.now() };
+
+/** Ngày theo lịch Việt Nam `days` ngày kể từ mốc CLOCK. */
 function vnDay(days: number): { y: string; m: string; d: string } {
-  const t = new Date(Date.now() + VN_OFFSET_MS + days * DAY_MS);
+  const t = new Date(CLOCK.at + VN_OFFSET_MS + days * DAY_MS);
   return { y: String(t.getUTCFullYear()), m: p2(t.getUTCMonth() + 1), d: p2(t.getUTCDate()) };
 }
 const ymd = (days: number): string => { const { y, m, d } = vnDay(days); return `${y}-${m}-${d}`; };
@@ -325,6 +328,8 @@ const CRON_REAL = ['PancakeSyncService.scheduledSync', 'ZnsStuckLogCron.sweepStu
 const LEGAL_NAME = { read: false, value: undefined as unknown };
 
 async function seedAll(): Promise<void> {
+  CLOCK.at = Date.now();
+  SEED.now = new Date(CLOCK.at);
   await withDb(async (prisma) => {
     if (!LEGAL_NAME.read) {
       LEGAL_NAME.value = (await prisma.systemConfig.findUnique({ where: { key: 'company.legal_name' } }))?.value;
@@ -403,7 +408,6 @@ async function seedAll(): Promise<void> {
     await camp('da-het', 'W11 Chiến dịch đã kết thúc', { startAt: vnAt(-20, '00:00'), endAt: vnAt(-10, '23:59') });
     await camp('dang-tat', 'W11 Chiến dịch đang tắt', { isActive: false, audience: 'RETURNING' });
 
-    SEED.now = new Date();
     const ago = (min: number) => SEED.ago(min);
 
     // Tin ZNS: gửi được, hỏng trong 24 giờ, đang chờ gửi lại, hỏng cũ hơn 24 giờ; một mẫu có tin trong app.
