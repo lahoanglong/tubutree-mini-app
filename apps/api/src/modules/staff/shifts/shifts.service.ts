@@ -1,3 +1,4 @@
+import { normalizeTemplateName } from './shift-template-name';
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { SystemConfigService } from '../../system-config/system-config.service';
@@ -11,7 +12,7 @@ export interface ShiftItem {
   templateId?: string;
 }
 
-const templateNameKey = (name: string): string => name.trim().toLocaleLowerCase('vi');
+const templateNameKey = (name: string): string => normalizeTemplateName(name).toLocaleLowerCase('vi');
 
 @Injectable()
 export class ShiftsService {
@@ -283,7 +284,7 @@ export class ShiftsService {
   }
   async createTemplate(input: { name: string; startMin: number; endMin: number; sortOrder?: number }) {
     if (input.endMin <= input.startMin) throw new BadRequestException('Giờ kết thúc phải sau giờ bắt đầu.');
-    const data = { ...input, name: input.name.trim() };
+    const data = { ...input, name: normalizeTemplateName(input.name) };
     // Không có unique index: bảng đang chạy thật có thể đã chứa tên trùng nên thêm ràng buộc sẽ làm migration hỏng.
     // Khoá advisory xếp hàng hai lần thêm song song để cùng một tên không lọt qua cả hai lần kiểm.
     return this.prisma.$transaction(async (tx) => {
@@ -307,7 +308,7 @@ export class ShiftsService {
     id: string,
     data: { name?: string; startMin?: number; endMin?: number; active?: boolean; sortOrder?: number },
   ) {
-    const patch = data.name === undefined ? data : { ...data, name: data.name.trim() };
+    const patch = data.name === undefined ? data : { ...data, name: normalizeTemplateName(data.name) };
     if (patch.name === undefined) return this.applyTemplatePatch(this.prisma, id, patch);
     // Cùng khoá với createTemplate: đổi tên và thêm ca song song không được cùng lọt qua kiểm trùng.
     return this.prisma.$transaction(async (tx) => {

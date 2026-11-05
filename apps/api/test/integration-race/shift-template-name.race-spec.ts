@@ -31,6 +31,23 @@ describe('ShiftsService.createTemplate / updateTemplate — so tên ca chuẩn (
     return t;
   };
 
+  it('"Ca sáng" gõ dạng tổ hợp (NFD) trùng với dạng dựng sẵn (NFC), và tên lưu là NFC', async () => {
+    const tag = randCode(6);
+    const nfc = `Ca sáng ${tag}`;
+    await make(nfc);
+    await expect(make(nfc.normalize('NFD'))).rejects.toBeInstanceOf(ConflictException);
+    const other = await make(`Ca chiều ${tag}`.normalize('NFD'));
+    expect((await prisma.shiftTemplate.findUniqueOrThrow({ where: { id: other.id } })).name).toBe(`Ca chiều ${tag}`.normalize('NFC'));
+  });
+
+  it('hai dấu cách liền nhau trùng với một dấu cách, và tên lưu gộp thành một', async () => {
+    const tag = randCode(6);
+    await make(`Ca đêm ${tag}`);
+    await expect(make(`Ca  đêm ${tag}`)).rejects.toBeInstanceOf(ConflictException);
+    const t = await make(`Ca   khuya ${tag}`);
+    expect((await prisma.shiftTemplate.findUniqueOrThrow({ where: { id: t.id } })).name).toBe(`Ca khuya ${tag}`);
+  });
+
   it('"Ca_1" không bị coi là trùng "Ca 1" (dấu gạch dưới không phải ký tự đại diện)', async () => {
     const tag = randCode(6);
     await make(`Ca 1 ${tag}`);

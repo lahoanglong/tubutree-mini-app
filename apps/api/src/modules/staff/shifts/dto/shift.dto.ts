@@ -1,3 +1,4 @@
+import { normalizeTemplateName } from '../shift-template-name';
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -97,7 +98,7 @@ export class BulkApproveDto {
   ids!: string[];
 }
 
-const trimString = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
+const trimString = ({ value }: { value: unknown }) => (typeof value === 'string' ? normalizeTemplateName(value) : value);
 
 export class ShiftTemplateDto {
   @Transform(trimString)
