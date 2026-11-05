@@ -50,7 +50,7 @@ export function PdpStory({ product, placement = 'wide' }: { product: ProductDeta
         type="button"
         data-testid="pdp-story-open"
         onClick={() => setOpen(true)}
-        className="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-control bg-[var(--color-action-secondary-bg)] px-4 font-semibold text-[var(--color-action-secondary-fg)] md:w-auto"
+        className="mt-4 flex min-h-11 w-full items-center justify-center rounded-control bg-[var(--color-action-secondary-bg)] px-4 font-semibold text-[var(--color-action-secondary-fg)] md:mx-auto md:w-fit"
       >
         {fillCopy('story.open')}
       </button>

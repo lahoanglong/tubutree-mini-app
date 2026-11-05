@@ -210,7 +210,7 @@
   z-index: var(--z-dialog);
   display: flex;
   flex-direction: column;
-  background: var(--color-bg-canvas);
+  background: var(--color-bg-surface);
 }
 .tubu-story-dialog-head {
   display: flex;

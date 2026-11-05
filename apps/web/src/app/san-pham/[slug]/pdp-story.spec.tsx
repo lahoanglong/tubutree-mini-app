@@ -72,6 +72,9 @@ describe('PdpStory', () => {
     const c = await mount(PRODUCT);
     const open = c.querySelector<HTMLElement>('[data-testid="pdp-story-open"]')!;
     expect(open.className).toContain('min-h-11');
+    // Từ md nút canh giữa dưới dải (không còn dính trái): khối, mx-auto, w-fit.
+    expect(open.className.split(' ')).toEqual(expect.arrayContaining(['flex', 'md:mx-auto', 'md:w-fit']));
+    expect(open.className.split(' ')).not.toContain('md:w-auto');
     click(open);
     expect(c.querySelector('[role="dialog"]')).not.toBeNull();
     click(c.querySelector('[data-testid="story-buy-now"]'));

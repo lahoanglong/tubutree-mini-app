@@ -241,3 +241,35 @@ describe('ProductStoryShowcase (web)', () => {
     expect(grid.className).toContain('md:mx-auto');
   });
 });
+
+describe('Mini ↔ web: ba điểm lệch nhỏ của dải câu chuyện', () => {
+  const rule = (css: string, selector: string): string => {
+    // Gộp mọi khối mở đầu dòng bằng selector này; selector ghép xuống dòng (`.a,\n.b {`) cũng tính vào .b.
+    const blocks = [...css.matchAll(new RegExp(`^${selector.replace(/\./g, '\\.')} \\{[^}]*\\}`, 'gm'))].map((m) => m[0]);
+    expect(blocks.length, `thiếu quy tắc ${selector}`).toBeGreaterThan(0);
+    return blocks.join('\n');
+  };
+  const decl = (block: string, prop: string): string | undefined => new RegExp(`(?:^|[\\s;{])${prop}:\\s*([^;}]+)`).exec(block)?.[1]?.trim();
+  const webCss = readFileSync(resolve(__dirname, 'mini.css'), 'utf8');
+  const miniCss = readFileSync(resolve(__dirname, '../../../../miniapp/src/css/story.css'), 'utf8');
+
+  it('khung toàn màn: cùng nền (surface) ở Mini và web', () => {
+    expect(decl(rule(miniCss, '.tubu-story-dialog'), 'background')).toBe('var(--color-bg-surface)');
+    expect(decl(rule(webCss, '.tubu-story-full'), 'background')).toBe('var(--color-bg-surface)');
+  });
+
+  it('thẻ điểm chỉ HUD: cùng cỡ chữ, đệm, viền, nền và kiểu chữ nhãn/giá trị ở hai app', () => {
+    const mini = rule(miniCss, '.tubu-story-callout');
+    const web = rule(webCss, '.tubu-story-callout');
+    for (const prop of ['padding', 'background', 'width']) expect(decl(web, prop), prop).toBe(decl(mini, prop));
+    expect(decl(web, 'border')).toBe(decl(mini, 'border'));
+    expect(decl(web, 'border-radius')).toBe(decl(mini, 'border-radius'));
+    expect(decl(web, 'font-size')).toBe('var(--type-caption-size)');
+    expect(miniCss).toMatch(/\.tubu-story-callout-label,\s*\.tubu-story-callout-value\s*\{[^}]*font-size:\s*var\(--type-caption-size\)/);
+    expect(decl(rule(webCss, '.tubu-story-callout-label'), 'font-weight')).toBe(decl(rule(miniCss, '.tubu-story-callout-label'), 'font-weight'));
+    expect(decl(rule(webCss, '.tubu-story-callout-label'), 'color')).toBe(decl(rule(miniCss, '.tubu-story-callout-label'), 'color'));
+    expect(decl(rule(webCss, '.tubu-story-callout-value'), 'color')).toBe(decl(rule(miniCss, '.tubu-story-callout-value'), 'color'));
+    expect(decl(rule(webCss, '.tubu-story-callout-value'), 'font-weight')).toBeUndefined();
+  });
+});
+
