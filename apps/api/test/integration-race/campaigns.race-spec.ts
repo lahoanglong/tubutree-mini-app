@@ -294,6 +294,18 @@ describe('Campaigns (real Postgres)', () => {
       expect(await linksOf(c.id)).toEqual({ products: 0, coupons: 0 });
     });
 
+    it('trang đang chạy chỉ còn mã hết hạn ngày mai: dời startAt sang sau hạn mã thì 400 và startAt không đổi; dời sớm hoặc giữ nguyên thì được', async () => {
+      const c = await admin.create(base('dstart', { linkType: 'CAMPAIGN_PAGE', linkValue: undefined, isActive: false, endAt: new Date(Date.now() + 10 * DAY).toISOString() }));
+      const k = await usableCoupon('DSTART');
+      await admin.setCoupons(c.id, [k.code]);
+      await admin.update(c.id, { isActive: true });
+      const before = (await prisma.campaign.findUniqueOrThrow({ where: { id: c.id } })).startAt.getTime();
+      await expect(admin.update(c.id, { startAt: new Date(Date.now() + 3 * DAY).toISOString() })).rejects.toThrow(/Trang chiến dịch đang trống/);
+      expect((await prisma.campaign.findUniqueOrThrow({ where: { id: c.id } })).startAt.getTime()).toBe(before);
+      await expect(admin.update(c.id, { title: 'Đổi tên' })).resolves.toMatchObject({ isActive: true });
+      await expect(admin.update(c.id, { startAt: new Date(Date.now() - 2 * DAY).toISOString() })).resolves.toMatchObject({ isActive: true });
+    });
+
     it('sửa chiến dịch đang bật đổi đích sang trang chiến dịch kèm sản phẩm: trường khác trước, gắn sản phẩm, đích ở cuối thì được; đổi đích trước khi có sản phẩm thì 400', async () => {
       const c = await admin.create(base('doi-dich'));
       await expect(admin.update(c.id, { linkType: 'CAMPAIGN_PAGE' })).rejects.toThrow(/Trang chiến dịch đang trống/);

@@ -162,6 +162,13 @@ export class CampaignsAdminService {
     if (block) throw new BadRequestException(block.message);
   }
 
+  /** Chỉ ném khi trang chiến dịch trống theo dữ kiện hiện có (lỗi cũ khác của chiến dịch đang chạy không chặn việc sửa). */
+  private async assertPageNotEmptyAt(client: Prisma.TransactionClient | PrismaService, subject: HealthSubject, now: Date): Promise<void> {
+    const [issues = []] = await campaignHealthBatch(client, [{ subject }], now);
+    const empty = issues.find((i) => i.code === 'PAGE_EMPTY');
+    if (empty) throw new BadRequestException(empty.message);
+  }
+
   async get(id: string, now: Date = new Date()): Promise<AdminCampaignDetail> {
     const row = await this.prisma.campaign.findUnique({ where: { id }, include: DETAIL_INCLUDE });
     if (!row) throw new NotFoundException('Không tìm thấy chiến dịch.');
@@ -256,6 +263,10 @@ export class CampaignsAdminService {
       const wasVisible = current.isActive && current.endAt > now;
       const willBeVisible = (dto.isActive ?? current.isActive) && merged.endAt > now;
       if (willBeVisible && (!wasVisible || linkChanged)) await this.assertCanActivate(tx, { id, ...merged }, now);
+      // Dời mốc bắt đầu của trang đang chạy đổi mốc tính "mã còn dùng được" (mã hết hạn trước mốc mới thì không còn dùng được): kiểm riêng lỗi trang trống với mốc mới.
+      else if (willBeVisible && wasVisible && merged.linkType === 'CAMPAIGN_PAGE' && merged.startAt.getTime() !== current.startAt.getTime()) {
+        await this.assertPageNotEmptyAt(tx, { id, ...merged }, now);
+      }
 
       const updated = await tx.campaign.update({ where: { id }, data, include: DETAIL_INCLUDE });
       return { updated, current };

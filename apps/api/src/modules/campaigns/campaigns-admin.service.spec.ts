@@ -569,6 +569,35 @@ describe('CampaignsAdminService: bật lại (khách không thấy thành khách
     expect(shorten.prisma.campaign.update).toHaveBeenCalledTimes(1);
   });
 
+  describe('dời startAt của trang chiến dịch đang chạy', () => {
+    const couponX = { code: 'X', isActive: true, startAt: new Date('2026-10-01T00:00:00Z'), endAt: new Date('2026-11-06T00:00:00Z'), usageLimit: null, usedCount: 0 };
+    const onlyCoupon = () => setup({ existing: row({ isActive: true }), couponLinks: [{ campaignId: 'c1', coupon: couponX }] });
+
+    it('mã duy nhất hết hạn trước mốc bắt đầu mới: trang thành trống nên 400, không ghi', async () => {
+      const { svc, prisma } = onlyCoupon();
+      await expect(svc.update('c1', { startAt: '2026-11-10T00:00:00.000Z', endAt: '2026-11-20T00:00:00.000Z' }, NOW)).rejects.toThrow(/Trang chiến dịch đang trống/);
+      expect(prisma.campaign.update).not.toHaveBeenCalled();
+    });
+
+    it('không đổi startAt, hoặc dời sớm hơn, hoặc trang còn sản phẩm hiển thị: cho', async () => {
+      const same = onlyCoupon();
+      await same.svc.update('c1', { title: 'Tên mới' }, NOW);
+      expect(same.prisma.campaign.update).toHaveBeenCalledTimes(1);
+      const earlier = onlyCoupon();
+      await earlier.svc.update('c1', { startAt: '2026-10-30T00:00:00.000Z' }, NOW);
+      expect(earlier.prisma.campaign.update).toHaveBeenCalledTimes(1);
+      const withProduct = setup({ existing: row({ isActive: true }), linked: [{ campaignId: 'c1', product: visibleProduct() }], couponLinks: [{ campaignId: 'c1', coupon: couponX }] });
+      await withProduct.svc.update('c1', { startAt: '2026-11-10T00:00:00.000Z', endAt: '2026-11-20T00:00:00.000Z' }, NOW);
+      expect(withProduct.prisma.campaign.update).toHaveBeenCalledTimes(1);
+    });
+
+    it('đích khác trang chiến dịch, hoặc lỗi cũ không phải PAGE_EMPTY: không chặn việc dời giờ', async () => {
+      const url = setup({ existing: row({ isActive: true, linkType: 'URL_INTERNAL', linkValue: '/offers' }) });
+      await url.svc.update('c1', { startAt: '2026-11-10T00:00:00.000Z', endAt: '2026-11-20T00:00:00.000Z' }, NOW);
+      expect(url.prisma.campaign.update).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('update chạy trong một giao dịch, khoá dòng chiến dịch trước khi đọc và kiểm', async () => {
     const { svc, prisma } = setup({ existing: row({ isActive: false }), linked: [{ campaignId: 'c1', product: visibleProduct() }] });
     await svc.update('c1', { isActive: true }, NOW);
