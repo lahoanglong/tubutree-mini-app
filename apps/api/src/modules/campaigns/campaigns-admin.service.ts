@@ -124,7 +124,8 @@ export class CampaignsAdminService {
       image: publicImage('campaign', c.id, 'cover', c.image),
       productCount: c._count.products,
       couponCount: c._count.coupons,
-      health: countHealth(health[i] ?? []),
+      // Chiến dịch đã kết thúc không phải sự cố của danh sách: ENDED chỉ báo ở form (check) khi admin đang đặt ngày.
+      health: countHealth((health[i] ?? []).filter((x) => x.code !== 'ENDED')),
     }));
   }
 

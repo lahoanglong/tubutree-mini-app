@@ -469,3 +469,15 @@ describe('CampaignsAdminService: kiểm sức khoẻ trước khi bật', () => 
     });
   });
 });
+
+describe('CampaignsAdminService: danh sách không tính ENDED vào health', () => {
+  it('chiến dịch đã kết thúc không bị huy hiệu cảnh báo vì ngày; check (form) vẫn báo ENDED', async () => {
+    const ended = row({ id: 'e', endAt: new Date('2026-11-04T00:00:00Z') });
+    const { svc, prisma } = setup({ linked: [{ campaignId: 'e', product: visibleProduct() }] });
+    prisma.campaign.findMany.mockResolvedValue([{ ...ended, _count: { products: 1, coupons: 0 } }]);
+    const [first] = await svc.list(undefined, NOW);
+    expect(first?.health).toEqual({ blockers: 0, warnings: 0 });
+    const out = await svc.check({ id: 'e', placement: 'HOME_TOP', startAt: '2026-11-01T00:00:00.000Z', endAt: '2026-11-04T00:00:00.000Z' }, NOW);
+    expect(out.issues.map((i) => i.code)).toEqual(['ENDED']);
+  });
+});

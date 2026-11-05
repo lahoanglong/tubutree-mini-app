@@ -475,6 +475,15 @@ describe('CampaignsTab: danh sách có kết quả kiểm', () => {
     expect(c.textContent).toContain('Chiến dịch a');
   });
 
+  it('chiến dịch đã kết thúc không có lỗi hay cảnh báo (API không tính ENDED vào danh sách) thì lọc "Có vấn đề" không giữ lại', async () => {
+    mocks.list.mockResolvedValue([row('cu', { status: 'ended', health: { blockers: 0, warnings: 0 } }), row('b', { health: { blockers: 0, warnings: 1 } })]);
+    const c = await mount();
+    click(chip(c, 'Có vấn đề'));
+    await flush(2);
+    expect(c.textContent).not.toContain('Chiến dịch cu');
+    expect(c.textContent).toContain('Chiến dịch b');
+  });
+
   it('không dòng nào có vấn đề: lọc "Có vấn đề" báo một câu, không để trống trơn', async () => {
     const c = await mount();
     click(chip(c, 'Có vấn đề'));
