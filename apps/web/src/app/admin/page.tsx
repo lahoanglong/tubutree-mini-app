@@ -4250,15 +4250,21 @@ function CourseRow({ course }: { course: AdminCourse }) {
     coverUrl: course.coverUrl ?? '',
     sortOrder: course.sortOrder,
   });
+  // Mô tả và ảnh bìa chỉ gửi khi admin đã đổi so với lúc mở (xoá trắng thì gửi ''): form giữ bản chụp lúc mount, nên gửi cả khi không đổi
+  // sẽ ghi đè giá trị người khác vừa thêm. Lưu xong thì bản chụp là giá trị vừa lưu, để lần xoá kế tiếp vẫn được gửi.
+  const baseline = useRef({ description: (course.description ?? '').trim(), coverUrl: (course.coverUrl ?? '').trim() });
   const save = useMutation({
-    mutationFn: () =>
+    mutationFn: (v: { title: string; description: string; coverUrl: string; sortOrder: number }) =>
       updateAcademyCourse(course.id, {
-        title: f.title.trim(),
-        description: f.description.trim(),
-        coverUrl: f.coverUrl.trim(),
-        sortOrder: Number(f.sortOrder) || 0,
+        title: v.title,
+        ...(v.description !== baseline.current.description ? { description: v.description } : {}),
+        ...(v.coverUrl !== baseline.current.coverUrl ? { coverUrl: v.coverUrl } : {}),
+        sortOrder: v.sortOrder,
       }),
-    onSuccess: refresh,
+    onSuccess: (_result, v) => {
+      baseline.current = { description: v.description, coverUrl: v.coverUrl };
+      refresh();
+    },
   });
 
   const [lesson, setLesson] = useState<{
@@ -4336,7 +4342,11 @@ function CourseRow({ course }: { course: AdminCourse }) {
                 <textarea placeholder="Mô tả" value={f.description} maxLength={5000} onChange={(e) => setF({ ...f, description: e.target.value })} rows={2} className={INPUT_CLASS} />
               </Field>
             </div>
-            <button onClick={() => save.mutate()} disabled={!hasVisibleText(f.title) || save.isPending} className={`${BTN_PRIMARY} mt-2`}>
+            <button
+              onClick={() => save.mutate({ title: f.title.trim(), description: f.description.trim(), coverUrl: f.coverUrl.trim(), sortOrder: Number(f.sortOrder) || 0 })}
+              disabled={!hasVisibleText(f.title) || save.isPending}
+              className={`${BTN_PRIMARY} mt-2`}
+            >
               {save.isPending ? 'Đang lưu…' : 'Lưu thông tin'}
             </button>
             {save.isSuccess && <span className="ml-2 inline-flex items-center gap-1 text-sm text-success-fg">Đã lưu <Check className="h-4 w-4" aria-hidden /></span>}

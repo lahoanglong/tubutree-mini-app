@@ -2599,7 +2599,6 @@ describe('admin/page — tab Academy', () => {
     await flush();
     expect(mocks.updateAcademyCourse).toHaveBeenCalledWith('c1', {
       title: 'Bán hàng 101',
-      description: 'Khoá nhập môn',
       coverUrl: 'https://c.test/x.png',
       sortOrder: 1,
     });
@@ -2621,6 +2620,40 @@ describe('admin/page — tab Academy', () => {
     click(save);
     await flush();
     expect(mocks.updateAcademyCourse).toHaveBeenCalledWith('c1', { title: 'Bán hàng 101', description: '', coverUrl: '', sortOrder: 1 });
+  });
+
+  it('chỉ sửa tiêu đề: body không mang description/coverUrl, để mô tả người khác vừa thêm không bị ghi đè', async () => {
+    mocks.courses = [{ ...COURSE, description: null }];
+    const { container } = await openAcademy();
+    await openCourse(container);
+    const save = btn(container, 'Lưu thông tin');
+    typeInto(save.parentElement!.querySelector('input[placeholder="Tiêu đề"]'), 'Bán hàng 102');
+    mocks.updateAcademyCourse.mockResolvedValue({});
+    click(save);
+    await flush();
+    expect(mocks.updateAcademyCourse).toHaveBeenCalledTimes(1);
+    expect(mocks.updateAcademyCourse).toHaveBeenCalledWith('c1', { title: 'Bán hàng 102', sortOrder: 1 });
+  });
+
+  it('xoá mô tả có sẵn: body có description rỗng, và sau khi lưu xong, gõ rồi xoá lại vẫn được gửi', async () => {
+    mocks.courses = [COURSE];
+    const { container } = await openAcademy();
+    await openCourse(container);
+    const save = btn(container, 'Lưu thông tin');
+    const description = save.parentElement!.querySelector('textarea');
+    mocks.updateAcademyCourse.mockResolvedValue({});
+    typeInto(description, '');
+    click(save);
+    await flush();
+    expect(mocks.updateAcademyCourse).toHaveBeenLastCalledWith('c1', { title: 'Bán hàng 101', description: '', sortOrder: 1 });
+    typeInto(description, 'Mô tả mới');
+    click(save);
+    await flush();
+    expect(mocks.updateAcademyCourse).toHaveBeenLastCalledWith('c1', { title: 'Bán hàng 101', description: 'Mô tả mới', sortOrder: 1 });
+    typeInto(description, '');
+    click(save);
+    await flush();
+    expect(mocks.updateAcademyCourse).toHaveBeenLastCalledWith('c1', { title: 'Bán hàng 101', description: '', sortOrder: 1 });
   });
 
   it('thêm bài học: ô nhập 44px, khoá tới khi có tiêu đề, gửi đúng dữ liệu theo loại nội dung', async () => {
