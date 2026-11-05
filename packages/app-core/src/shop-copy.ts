@@ -117,7 +117,7 @@ export const SHOP_COPY: Record<string, string> = {
   'order.timeline.less': 'Thu gọn',
   'order.timeline.done': 'đã qua',
   'order.timeline.current': 'hiện tại',
-  'order.sentence.payWait': 'Đơn đang chờ bạn chuyển khoản.',
+  'order.sentence.payWait': 'Đơn đang chờ bạn thanh toán.',
   'order.sentence.payManual': 'Tubu đang xử lý đơn này, liên hệ CSKH nếu cần hỗ trợ.',
   'order.sentence.payOverdue': 'Đơn đã quá hạn thanh toán và sắp tự huỷ.',
   'order.sentence.confirmed': 'Tubu đã nhận đơn và đang chuẩn bị hàng.',

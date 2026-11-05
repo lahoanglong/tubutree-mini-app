@@ -46,7 +46,7 @@ const ROWS: Row[] = [
     name: 'chờ chuyển khoản còn hạn',
     order: order({ status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentDeadline: iso(2 * HOUR) }),
     stage: 'PAY_WAIT',
-    sentence: 'Đơn đang chờ bạn chuyển khoản.',
+    sentence: 'Đơn đang chờ bạn thanh toán.',
     primary: 'pay',
     more: ['cancel', 'contact'],
   },
