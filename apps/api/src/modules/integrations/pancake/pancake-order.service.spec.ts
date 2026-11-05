@@ -504,6 +504,78 @@ describe('PancakeOrderService.markPushFailure — loại lỗi (hi)', () => {
     expect(t.row().pancakeErrorKind).toBe('CONFIG_RECHECK');
   });
 
+  describe('bảng loại lỗi trước × lỗi mới (lỗi tạm không mang thông tin mới: giữ loại cũ và lời lỗi cũ)', () => {
+    const forbiddenOld = `${PANCAKE_FORBIDDEN_ERROR_PREFIX}Pancake trả 403 cũ`;
+    const priors: Array<[string, string | null, string | null]> = [
+      ['trống', null, null],
+      ['TRANSIENT', 'TRANSIENT', 'Pancake trả 503 cũ'],
+      ['DATA', 'DATA', 'thiếu SĐT cũ'],
+      ['CONFIG', 'CONFIG', 'Pancake trả 401 cũ'],
+      ['CONFIG_RECHECK', 'CONFIG_RECHECK', 'Pancake trả 401 cũ'],
+      ['REJECTED (422)', 'REJECTED', 'Pancake trả 422 cũ'],
+      ['REJECTED (401/403)', 'REJECTED', forbiddenOld],
+    ];
+    const errors: Array<[string, () => unknown, string[]]> = [
+      // [tên, lỗi, loại kết quả theo thứ tự các dòng priors]; keptKinds: các loại cũ được giữ nguyên lời lỗi
+      ['tạm 503', () => new PancakeApiError('Pancake trả 503 mới', true, false, 503), ['TRANSIENT', 'TRANSIENT', 'TRANSIENT', 'CONFIG', 'CONFIG_RECHECK', 'REJECTED', 'REJECTED']],
+      ['DATA', () => new PancakeOrderDataError('thiếu SĐT mới'), ['DATA', 'DATA', 'DATA', 'DATA', 'DATA', 'DATA', 'DATA']],
+      ['từ chối 422', () => new PancakeApiError('Pancake trả 422 mới', false, false, 422), ['REJECTED', 'REJECTED', 'REJECTED', 'REJECTED', 'REJECTED', 'REJECTED', 'REJECTED']],
+      ['401/403', () => new PancakeApiError('Pancake trả 403 mới', false, false, 403), ['CONFIG', 'CONFIG', 'CONFIG', 'CONFIG', 'REJECTED', 'CONFIG', 'REJECTED']],
+    ];
+    const kept = new Set(['CONFIG', 'CONFIG_RECHECK', 'REJECTED']);
+    for (const [errName, mk, expectedKinds] of errors) {
+      priors.forEach(([priorName, priorKind, priorText], i) => {
+        it(`${priorName} × ${errName} → ${expectedKinds[i]}`, async () => {
+          const t = setup({
+            pancakePushStatus: PANCAKE_PUSH.PENDING,
+            pancakePushAttempts: 3,
+            pancakeErrorKind: priorKind,
+            pancakeSyncError: priorText,
+            createdAt: new Date('2020-01-01T00:00:00Z'),
+            paidAt: null,
+          });
+          await t.svc.markPushFailure('o1', mk(), true);
+          const keptPrior = errName === 'tạm 503' && priorKind !== null && kept.has(priorKind);
+          expect(t.row().pancakeErrorKind).toBe(expectedKinds[i]);
+          if (keptPrior) {
+            // Lỗi tạm: chỉ ghi log, không đổi lời lỗi, không đổi trạng thái, không hoàn/đốt lượt, không báo thêm.
+            expect(t.row()).toMatchObject({ pancakeSyncError: priorText, pancakePushStatus: PANCAKE_PUSH.PENDING, pancakePushAttempts: 3 });
+            if (priorKind !== 'CONFIG_RECHECK') expect(t.row().pancakeAttention ?? null).toBeNull();
+          } else {
+            expect(t.row().pancakeSyncError).not.toBe(priorText);
+          }
+          expect(t.row().pancakePushAttempts).toBe(expectedKinds[i] === 'CONFIG' && !keptPrior ? 2 : 3);
+        });
+      });
+    }
+  });
+
+  it('nhánh "Pancake không trả mã đơn" đi qua cùng luật: đơn đã REJECTED vì 403 giữ loại và lời lỗi, chỉ rời trạng thái PUSHING', async () => {
+    const text = `${PANCAKE_FORBIDDEN_ERROR_PREFIX}Pancake trả 403 cũ`;
+    const t = setup(
+      { pancakePushStatus: PANCAKE_PUSH.PENDING, pancakeErrorKind: 'REJECTED', pancakeSyncError: text },
+      { client: { createOrder: jest.fn().mockResolvedValue({}) } },
+    );
+    await expect(t.svc.pushOrder('o1')).rejects.toBeInstanceOf(PancakeApiError);
+    expect(t.row()).toMatchObject({ pancakeErrorKind: 'REJECTED', pancakeSyncError: text, pancakePushStatus: PANCAKE_PUSH.PENDING });
+    const fresh = setup({ pancakePushStatus: PANCAKE_PUSH.PENDING }, { client: { createOrder: jest.fn().mockResolvedValue({}) } });
+    await expect(fresh.svc.pushOrder('o1')).rejects.toBeInstanceOf(PancakeApiError);
+    expect(fresh.row().pancakeErrorKind).toBe('TRANSIENT');
+  });
+
+  it('đơn đã lên Pancake giữa lúc đọc và ghi (tiến trình khác đẩy xong): không ghi lỗi, không báo "Cần xử lý", không đốt hay hoàn lượt', async () => {
+    const t = setup({ pancakePushStatus: PANCAKE_PUSH.PENDING, pancakePushAttempts: 3, createdAt: new Date('2020-01-01T00:00:00Z'), paidAt: null });
+    const real = (t.prisma.order.updateMany as jest.Mock).getMockImplementation()!;
+    (t.prisma.order.updateMany as jest.Mock).mockImplementationOnce(async (args: unknown) => {
+      Object.assign(t.row(), { pancakeOrderId: 'pk-9', pancakePushStatus: PANCAKE_PUSH.SYNCED });
+      return real(args);
+    });
+    await t.svc.markPushFailure('o1', new PancakeOrderDataError('thiếu SĐT'), true);
+    expect(t.row()).toMatchObject({ pancakeOrderId: 'pk-9', pancakePushStatus: PANCAKE_PUSH.SYNCED, pancakePushAttempts: 3 });
+    expect(t.row().pancakeAttention ?? null).toBeNull();
+    expect(t.row().pancakeSyncError ?? null).toBeNull();
+  });
+
   it('lần này thua tranh chấp quyền đẩy (PancakePushBusyError): không ghi TRANSIENT đè loại tiến trình kia vừa ghi', async () => {
     const t = setup({ pancakePushStatus: PANCAKE_PUSH.PENDING, pancakeErrorKind: 'REJECTED', pancakeSyncError: forbiddenText });
     await t.svc.markPushFailure('o1', new PancakePushBusyError('Đơn TUBU1 đang được đẩy bởi tiến trình khác'), true);

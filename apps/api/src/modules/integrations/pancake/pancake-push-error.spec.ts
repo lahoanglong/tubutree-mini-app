@@ -92,14 +92,14 @@ describe('nextPushRetryAt', () => {
     expect(kindAfterFailure(e403, prior('REJECTED'))).toBe('CONFIG');
   });
 
-  it('kindAfterFailure: lỗi tạm không xoá dấu CONFIG_RECHECK; các loại khác theo classifyPushError', () => {
+  it('kindAfterFailure: lỗi tạm không mang thông tin mới về đơn → giữ loại cũ khi cũ ∈ {CONFIG, CONFIG_RECHECK, REJECTED}; ngược lại TRANSIENT', () => {
     const prior = (kind: string | null) => ({ pancakeErrorKind: kind, pancakeSyncError: null });
     const t503 = new PancakeApiError('x', true, false, 503);
-    expect(kindAfterFailure(t503, prior('CONFIG_RECHECK'))).toBe('CONFIG_RECHECK');
-    expect(kindAfterFailure(t503, prior('REJECTED'))).toBe('TRANSIENT');
-    expect(kindAfterFailure(t503, prior(null))).toBe('TRANSIENT');
+    for (const kept of ['CONFIG', 'CONFIG_RECHECK', 'REJECTED']) expect(kindAfterFailure(t503, prior(kept))).toBe(kept);
+    for (const other of [null, 'TRANSIENT', 'DATA']) expect(kindAfterFailure(t503, prior(other))).toBe('TRANSIENT');
     expect(kindAfterFailure(new PancakeApiError('x', false, false, 422), prior('CONFIG_RECHECK'))).toBe('REJECTED');
     expect(kindAfterFailure(new PancakeOrderDataError('thiếu SĐT'), prior('CONFIG_RECHECK'))).toBe('DATA');
+    expect(kindAfterFailure(new PancakeApiError('x', false, false, 401), prior('DATA'))).toBe('CONFIG');
   });
 
   it('đã lên Pancake, STALE, hay quá cửa sổ 72 giờ thì không còn lần tự thử', () => {

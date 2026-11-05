@@ -33,14 +33,30 @@ export interface PriorPushError {
   pancakeSyncError: string | null | undefined;
 }
 
+const KINDS_KEPT_ON_TRANSIENT: readonly string[] = [PUSH_ERROR_KIND.CONFIG, PUSH_ERROR_KIND.CONFIG_RECHECK, PUSH_ERROR_KIND.REJECTED];
+
 /**
- * Loại lỗi GHI cho đơn sau một lượt đẩy lỗi, theo lần lỗi TRƯỚC của chính đơn đó. Khác `classifyPushError` ở hai chỗ:
- *  - 401/403 là lỗi riêng của đơn (REJECTED: đốt lượt, nhịp 60 phút, báo đơn) khi đơn đã được thả khỏi nhóm CONFIG (CONFIG_RECHECK, tức
- *    khoá vừa đẩy được đơn khác), hoặc đã REJECTED chính vì 401/403 (lời lỗi cũ mang tiền tố). REJECTED vì lý do khác (422...) gặp 401 là
- *    dấu hiệu khoá hỏng: CONFIG, góp vào báo động tổng.
- *  - Lỗi tạm không xoá dấu CONFIG_RECHECK: 503/429 chen giữa rồi 403 vẫn là lỗi riêng của đơn.
- * Đánh đổi chấp nhận (chỉ báo từng đơn, không báo động tổng; đơn khác cùng dính nên vẫn có người biết): khoá bị thu hồi đúng giữa lúc
- * thả nhóm và lượt thử kế tiếp thì đơn CONFIG_RECHECK cũng thành REJECTED; và một đơn MỚI (loại trước đó trống) gặp 401 đúng lúc một
+ * Lỗi tạm không mang thông tin mới về đơn nên không được xoá loại đã định (CONFIG, CONFIG_RECHECK, REJECTED): xoá thì lần 401/403 kế tiếp
+ * mất ngữ cảnh, rơi về CONFIG và bật báo động tổng giả. True khi lượt lỗi này là lỗi tạm gặp loại cũ cần giữ; khi đó người gọi giữ nguyên
+ * cả `pancakeSyncError` (lời lỗi định loại, kể cả tiền tố 401/403) và chỉ ghi log.
+ */
+export function keepsPriorKind(err: unknown, prior: PriorPushError): boolean {
+  return classifyPushError(err) === PUSH_ERROR_KIND.TRANSIENT && prior.pancakeErrorKind != null && KINDS_KEPT_ON_TRANSIENT.includes(prior.pancakeErrorKind);
+}
+
+export interface PriorPushError {
+  pancakeErrorKind: string | null | undefined;
+  pancakeSyncError: string | null | undefined;
+}
+
+/**
+ * Loại lỗi GHI cho đơn sau một lượt đẩy lỗi, theo lần lỗi TRƯỚC của chính đơn đó. Bảng prior × lỗi mới:
+ *  - lỗi tạm: giữ prior nếu prior ∈ {CONFIG, CONFIG_RECHECK, REJECTED (mọi loại)}; còn lại (trống, TRANSIENT, DATA) là TRANSIENT.
+ *  - DATA và từ chối 4xx khác (422...): luôn DATA / REJECTED.
+ *  - 401/403: REJECTED khi prior là CONFIG_RECHECK (khoá vừa đẩy được đơn khác nên lỗi là của riêng đơn) hoặc prior là REJECTED chính vì
+ *    401/403 (lời lỗi cũ mang tiền tố); còn lại (trống, TRANSIENT, DATA, CONFIG, REJECTED vì lý do khác) là CONFIG, góp vào báo động tổng.
+ * Đánh đổi chấp nhận (chỉ báo từng đơn, không báo động tổng; đơn khác cùng dính nên vẫn có người biết): (1) khoá bị thu hồi đúng giữa lúc
+ * thả nhóm và lượt thử kế tiếp thì đơn CONFIG_RECHECK cũng thành REJECTED; (2) một đơn MỚI (loại trước đó trống) gặp 401 đúng lúc một
  * request bắt đầu trước khi thu hồi khoá vẫn thành công và chạy saveCreated (thả nhóm) cũng có thể thành REJECTED ở lượt thử sau.
  */
 export function kindAfterFailure(err: unknown, prior: PriorPushError): PushErrorKind {
@@ -51,7 +67,7 @@ export function kindAfterFailure(err: unknown, prior: PriorPushError): PushError
     if (priorKind === PUSH_ERROR_KIND.REJECTED && isPancakeForbiddenError(prior.pancakeSyncError)) return PUSH_ERROR_KIND.REJECTED;
     return kind;
   }
-  if (kind === PUSH_ERROR_KIND.TRANSIENT && priorKind === PUSH_ERROR_KIND.CONFIG_RECHECK) return PUSH_ERROR_KIND.CONFIG_RECHECK;
+  if (keepsPriorKind(err, prior)) return priorKind as PushErrorKind;
   return kind;
 }
 
