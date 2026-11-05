@@ -76,7 +76,7 @@ export function variantLabel(raw: unknown): string | null {
 
 /**
  * `{tên: giá trị}` để cột `variations.attributes` luôn đúng kiểu `Record<string, string>` mà API và client khai báo. Khoá trùng
- * thêm " (n)" thay vì đè nhau; phần tử không có tên lấy `option_<vị trí>`. Thứ tự khoá của jsonb không được giữ, nên nhãn
+ * thêm " (n)" thay vì đè nhau; phần tử không có tên lấy `option_<n>` (n đếm trong các phân loại đọc được, phần tử rác không tính). Thứ tự khoá của jsonb không được giữ, nên nhãn
  * không dựng lại từ cột này mà dựng từ payload (`variantLabel`).
  */
 export function variantAttributes(raw: unknown): Record<string, string> {

@@ -1,4 +1,5 @@
 import { test } from './support/mock-api';
+import { assertSeededOnCi } from './support/a11y-db';
 import { seedTourPublicData } from './support/tour-db';
 import { solidPng } from './support/noise-png';
 import { tourEntries } from './support/tour';
@@ -10,7 +11,7 @@ import { captureVisual } from './support/visual';
  * Dữ liệu render phía máy chủ (SSR) lấy từ DB e2e đã seed. Chỉ chạy khi có VISUAL_DIR.
  */
 test.beforeAll(async () => {
-  await seedTourPublicData();
+  assertSeededOnCi(await seedTourPublicData());
 });
 
 // Ảnh đi qua `/api/img` (bản đổi cỡ) và `/api/public-image/` (ảnh gốc khi bản đổi cỡ hỏng): mock-api chỉ trả JSON nên cả hai là 404 và banner chiến dịch thành khung ảnh vỡ.

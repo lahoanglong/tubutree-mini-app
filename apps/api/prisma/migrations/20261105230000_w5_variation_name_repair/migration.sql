@@ -7,22 +7,31 @@
 UPDATE "variations" v
 SET "name" = COALESCE(
   (
-    SELECT string_agg(btrim(f."val"), ' - ' ORDER BY f."ord")
+    SELECT string_agg(f."val", ' - ' ORDER BY f."ord")
     FROM (
       SELECT
-        e."ord",
-        CASE jsonb_typeof(e."item")
-          WHEN 'string' THEN e."item" #>> '{}'
-          WHEN 'number' THEN e."item" #>> '{}'
-          WHEN 'object' THEN CASE jsonb_typeof(e."item" -> 'value')
-            WHEN 'string' THEN e."item" ->> 'value'
-            WHEN 'number' THEN e."item" ->> 'value'
-          END
-        END AS "val"
-      FROM jsonb_array_elements(CASE WHEN jsonb_typeof(v."attributes") = 'array' THEN v."attributes" ELSE '[]'::jsonb END)
-        WITH ORDINALITY AS e("item", "ord")
+        r."ord",
+        -- Cắt mọi khoảng trắng hai đầu như String.prototype.trim (tab, xuống dòng, U+00A0, U+FEFF), không chỉ dấu cách như btrim().
+        regexp_replace(
+          CASE jsonb_typeof(r."raw")
+            WHEN 'string' THEN r."raw" #>> '{}'
+            WHEN 'number' THEN r."raw" #>> '{}'
+          END,
+          '^[[:space:]\u00a0\ufeff]+|[[:space:]\u00a0\ufeff]+$', '', 'g'
+        ) AS "val"
+      FROM (
+        -- Phần tử object: "value", không có thì "v" (dạng {k, v}), như variantLabel ở pancake-variant-fields.ts.
+        SELECT
+          e."ord",
+          CASE WHEN jsonb_typeof(e."item") = 'object'
+            THEN COALESCE(NULLIF(e."item" -> 'value', 'null'::jsonb), e."item" -> 'v')
+            ELSE e."item"
+          END AS "raw"
+        FROM jsonb_array_elements(CASE WHEN jsonb_typeof(v."attributes") = 'array' THEN v."attributes" ELSE '[]'::jsonb END)
+          WITH ORDINALITY AS e("item", "ord")
+      ) r
     ) f
-    WHERE f."val" IS NOT NULL AND btrim(f."val") <> '' AND f."val" NOT LIKE '%[object Object]%'
+    WHERE f."val" IS NOT NULL AND f."val" <> '' AND f."val" NOT LIKE '%[object Object]%'
   ),
   (SELECT p."name" FROM "products" p WHERE p."id" = v."productId"),
   v."name"

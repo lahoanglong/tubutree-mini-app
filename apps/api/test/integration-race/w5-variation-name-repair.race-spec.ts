@@ -38,6 +38,9 @@ describe('migration 20261105230000 sửa tên biến thể "[object Object]" (re
       empty: await mk('empty', '[object Object]', []),
       scalar: await mk('scalar', '[object Object]', 'không phải mảng'),
       embedded: await mk('emb', 'Chai [object Object]', [{ name: 'X', value: '500ml' }]),
+      whitespace: await mk('ws', '[object Object]', [{ name: 'A', value: '\t1 chai\n' }, { name: 'B', value: '\u00a0Hộp\ufeff' }]),
+      blankOnly: await mk('blank', '[object Object]', [{ name: 'A', value: '\t\r\n' }]),
+      kv: await mk('kv', '[object Object]', [{ k: 'size', v: '100ml' }]),
     };
     const untouched = {
       good: await mk('good', '500ml', [{ id: 'z', name: 'PHÂN LOẠI', value: '500ml', keyValue: '500ML' }]),
@@ -69,6 +72,10 @@ describe('migration 20261105230000 sửa tên biến thể "[object Object]" (re
     expect(await name(broken.empty)).toBe(p.name);
     expect(await name(broken.scalar)).toBe(p.name);
     expect(await name(broken.embedded)).toBe('500ml');
+    // Cắt khoảng trắng như String.prototype.trim của variantLabel, không chỉ dấu cách.
+    expect(await name(broken.whitespace)).toBe('1 chai - Hộp');
+    expect(await name(broken.blankOnly)).toBe(p.name);
+    expect(await name(broken.kv)).toBe('100ml');
 
     expect(await read(untouchedIds)).toEqual(beforeUntouched);
     const afterBroken = await read(brokenIds);
