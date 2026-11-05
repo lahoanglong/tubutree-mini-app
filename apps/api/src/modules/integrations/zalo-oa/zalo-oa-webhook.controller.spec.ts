@@ -111,6 +111,119 @@ describe('ZaloOaWebhookController.handle (verify token tĩnh)', () => {
   });
 });
 
+describe('ZaloOaWebhookController.handle (kiểu trường không đúng)', () => {
+  const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+  beforeEach(() => warn.mockClear());
+  afterAll(() => warn.mockRestore());
+
+  it('sender.id là số → đổi thành chuỗi, lưu bình thường (không 500)', async () => {
+    const { ctrl, create, add } = makeController(SECRET);
+    const payload = { event_name: 'user_send_text', sender: { id: 123 }, timestamp: Date.now() } as never;
+    await expect(ctrl.handle(payload, SECRET)).resolves.toEqual({ received: true });
+    expect(create.mock.calls[0][0].data).toMatchObject({ zaloUserId: '123', messageText: null });
+    expect(add).toHaveBeenCalledTimes(1);
+  });
+
+  it('msg_id và text là số → thành chuỗi', async () => {
+    const { ctrl, create } = makeController(SECRET);
+    await ctrl.handle({ ...body, message: { msg_id: 456, text: 789 } } as never, SECRET);
+    expect(create.mock.calls[0][0].data).toMatchObject({ msgId: '456', messageText: '789' });
+  });
+
+  it('sender.id và msg_id đúng ngưỡng số nguyên an toàn (2^53 - 1) vẫn được nhận nguyên vẹn', async () => {
+    const { ctrl, create } = makeController(SECRET);
+    await ctrl.handle({ ...body, sender: { id: Number.MAX_SAFE_INTEGER }, message: { msg_id: Number.MAX_SAFE_INTEGER } } as never, SECRET);
+    expect(create.mock.calls[0][0].data).toMatchObject({ zaloUserId: '9007199254740991', msgId: '9007199254740991' });
+  });
+
+  it.each([
+    ['sender.id là object', { ...body, sender: { id: { a: 1 } } }],
+    ['sender.id là mảng', { ...body, sender: { id: ['x'] } }],
+    ['sender.id là boolean', { ...body, sender: { id: true } }],
+    ['msg_id là object', { ...body, message: { ...body.message, msg_id: { a: 1 } } }],
+    ['msg_id là mảng', { ...body, message: { ...body.message, msg_id: [1] } }],
+    ['msg_id là boolean', { ...body, message: { ...body.message, msg_id: false } }],
+    ['text là object', { ...body, message: { ...body.message, text: { a: 1 } } }],
+    ['text là mảng', { ...body, message: { ...body.message, text: ['a'] } }],
+    ['text là boolean', { ...body, message: { ...body.message, text: true } }],
+    // JSON.parse làm tròn số nguyên vượt 2^53 (246845883529197922 → 246845883529197920): lưu chuỗi đó là lưu một id khác.
+    ['sender.id là số nguyên vượt 2^53', { ...body, sender: JSON.parse('{"id":246845883529197922}') }],
+    ['msg_id là số nguyên vượt 2^53', { ...body, message: { ...body.message, msg_id: JSON.parse('246845883529197922') } }],
+    ['sender.id là số thập phân', { ...body, sender: { id: 1.5 } }],
+    ['msg_id là số thập phân', { ...body, message: { ...body.message, msg_id: 1.5 } }],
+    ['timestamp là object', { ...body, timestamp: { a: 1 } }],
+    ['timestamp là mảng', { ...body, timestamp: [1] }],
+    ['timestamp là boolean', { ...body, timestamp: true }],
+  ])('%s → bỏ qua sự kiện, trả 200, ghi cảnh báo, không lưu/enqueue', async (_name, payload) => {
+    const { ctrl, create, add } = makeController(SECRET);
+    await expect(ctrl.handle(payload as never, SECRET)).resolves.toEqual({ received: true });
+    expect(create).not.toHaveBeenCalled();
+    expect(add).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('tin thiếu msg_id: khoá chống trùng là sha256 ổn định của sender.id + timestamp + text', async () => {
+    const { ctrl, create } = makeController(SECRET);
+    const payload = { event_name: 'user_send_text', sender: { id: 'zalo-u1' }, message: { text: 'Chào' }, timestamp: '1700000000000' };
+    await ctrl.handle(payload, SECRET);
+    await ctrl.handle({ ...payload }, SECRET);
+    const [first, second] = create.mock.calls.map((c) => c[0].data.msgId);
+    expect(first).toMatch(/^[0-9a-f]{64}$/);
+    expect(second).toBe(first);
+    await ctrl.handle({ ...payload, message: { text: 'Khác' } }, SECRET);
+    await ctrl.handle({ ...payload, timestamp: '1700000000001' }, SECRET);
+    await ctrl.handle({ ...payload, sender: { id: 'zalo-u2' } }, SECRET);
+    const keys = new Set(create.mock.calls.map((c) => c[0].data.msgId));
+    expect(keys.size).toBe(4);
+  });
+
+  it('tin thiếu cả msg_id lẫn timestamp: không có khoá băm (msgId null), hai tin cùng người cùng chữ ở hai lúc khác nhau đều được xử lý', async () => {
+    const seen = new Set<string>();
+    const create = jest.fn().mockImplementation(async ({ data }: { data: { msgId: string | null } }) => {
+      if (data.msgId && seen.has(data.msgId)) throw DUP_ERR;
+      if (data.msgId) seen.add(data.msgId);
+      return { id: 'evt1' };
+    });
+    const { ctrl, add } = makeController(SECRET, create);
+    const payload = { event_name: 'user_send_text', sender: { id: 'zalo-u1' }, message: { text: 'giá' } };
+    await ctrl.handle(payload, SECRET);
+    await ctrl.handle({ ...payload }, SECRET);
+    expect(create.mock.calls.map((c) => c[0].data.msgId)).toEqual([null, null]);
+    expect(add).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    ['timestamp rỗng', ''],
+    ['timestamp toàn khoảng trắng', '  '],
+    ['timestamp không phải số', 'không-phải-số'],
+  ])('%s → coi như thiếu timestamp: msgId null, không băm chữ gốc làm khoá', async (_name, timestamp) => {
+    const { ctrl, create } = makeController(SECRET);
+    await ctrl.handle({ event_name: 'user_send_text', sender: { id: 'zalo-u1' }, message: { text: 'giá', msg_id: '' }, timestamp } as never, SECRET);
+    expect(create.mock.calls[0][0].data.msgId).toBeNull();
+  });
+
+  it('msg_id rỗng nhưng có timestamp hợp lệ → vẫn dùng khoá băm', async () => {
+    const { ctrl, create } = makeController(SECRET);
+    await ctrl.handle({ event_name: 'user_send_text', sender: { id: 'zalo-u1' }, message: { text: 'giá', msg_id: '' }, timestamp: '1700000000000' }, SECRET);
+    expect(create.mock.calls[0][0].data.msgId).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it('gửi trùng tin không msg_id hai lần → lần hai đụng P2002, enqueue đúng một lần', async () => {
+    const seen = new Set<string>();
+    const create = jest.fn().mockImplementation(async ({ data }: { data: { msgId: string | null } }) => {
+      if (data.msgId && seen.has(data.msgId)) throw DUP_ERR;
+      if (data.msgId) seen.add(data.msgId);
+      return { id: 'evt1' };
+    });
+    const { ctrl, add } = makeController(SECRET, create);
+    const payload = { event_name: 'user_send_text', sender: { id: 123 }, timestamp: 1700000000000 } as never;
+    await expect(ctrl.handle(payload, SECRET)).resolves.toEqual({ received: true });
+    await expect(ctrl.handle(payload, SECRET)).resolves.toEqual({ received: true });
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(add).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('ZaloOaWebhookController.handle (X-ZEvent-Signature, BAOMAT-06)', () => {
   const APP_ID = '1234567890';
   const OA_KEY = 'oa-secret-key';
@@ -179,6 +292,23 @@ describe('ZaloOaWebhookController.handle (X-ZEvent-Signature, BAOMAT-06)', () =>
     const sig = createHash('sha256').update(Buffer.concat([Buffer.from(APP_ID), rawBody, Buffer.from(ts + OA_KEY)])).digest('hex');
     await expect(ctrl.handle(parsed, undefined, sig, { rawBody })).resolves.toEqual({ received: true });
     expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  it('sender.id vượt 2^53 trong thân thô: chữ ký (tính trên byte gốc) vẫn khớp nhưng sự kiện bị bỏ, không lưu id đã bị làm tròn', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    try {
+      const { ctrl, create } = build(both);
+      const ts = String(Date.now());
+      const rawText = `{"app_id":"${APP_ID}","event_name":"user_send_text","sender":{"id":246845883529197922},"message":{"msg_id":"m1","text":"Giá"},"timestamp":"${ts}"}`;
+      const sig = zaloOaEventSignature(APP_ID, rawText, ts, OA_KEY);
+      const parsed = JSON.parse(rawText);
+      expect(String(parsed.sender.id)).toBe('246845883529197920');
+      await expect(ctrl.handle(parsed, undefined, sig, { rawBody: Buffer.from(rawText, 'utf8') })).resolves.toEqual({ received: true });
+      expect(create).not.toHaveBeenCalled();
+      expect(warn).toHaveBeenCalledTimes(1);
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it('thân thô khác thân đã parse (thân giả, chữ ký của thân thật) → 401', async () => {
