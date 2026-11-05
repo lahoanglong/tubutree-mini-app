@@ -73,7 +73,7 @@ function Stat({ label, value, href }: { label: string; value: string; href: stri
       href={href}
       className="tubu-press block min-h-11 rounded-card bg-[var(--color-bg-surface)] px-1 py-2.5 text-center shadow-[var(--elevation-1)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-forest-600"
     >
-      <Text variant={statValueVariant(value)} as="div" tone="brand" style={{ fontVariantNumeric: 'tabular-nums' }}>
+      <Text variant={statValueVariant(value)} as="div" tone="brand" style={{ fontVariantNumeric: 'tabular-nums', lineHeight: 'var(--type-price-md-lh)' }}>
         {value}
       </Text>
       <Text variant="caption" tone="tertiary" as="div">

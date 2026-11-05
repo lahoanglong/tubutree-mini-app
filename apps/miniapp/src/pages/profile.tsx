@@ -545,7 +545,7 @@ function Stat({ label, value, onClick }: { label: string; value: string; onClick
         boxShadow: 'var(--elevation-1)',
       }}
     >
-      <Text variant={statValueVariant(value)} as="div" tone="brand" style={{ fontVariantNumeric: 'tabular-nums' }}>
+      <Text variant={statValueVariant(value)} as="div" tone="brand" style={{ fontVariantNumeric: 'tabular-nums', lineHeight: 'var(--type-price-md-lh)' }}>
         {value}
       </Text>
       <Text variant="caption" tone="tertiary" as="div">

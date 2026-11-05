@@ -196,6 +196,7 @@ describe('hub /tai-khoan — ba số và hàng trạng thái đơn', () => {
     const big = stat(await mount(), 'Ví Tubu');
     expect(big.textContent).toContain('1.234.567đ');
     expect(byText(big, 'div', '1.234.567đ')!.style.fontSize).toBe('var(--type-price-sm-size)');
+    expect(byText(big, 'div', '1.234.567đ')!.style.lineHeight).toBe('var(--type-price-md-lh)');
     mocks.meWallet = 50000;
     const small = stat(await mount(), 'Ví Tubu');
     expect(byText(small, 'div', '50.000đ')!.style.fontSize).toBe('var(--type-price-md-size)');

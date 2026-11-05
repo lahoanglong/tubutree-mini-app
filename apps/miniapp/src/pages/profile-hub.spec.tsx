@@ -162,6 +162,7 @@ describe('Thanh số dư ở hub Cá nhân (C-086)', () => {
       const { unmount } = renderPage();
       const big = await screen.findByRole('button', { name: /^1\.234\.567đ\s*Ví Tubu$/ });
       expect(within(big).getByText('1.234.567đ').style.fontSize).toBe('var(--type-price-sm-size)');
+      expect(within(big).getByText('1.234.567đ').style.lineHeight).toBe('var(--type-price-md-lh)');
       unmount();
     } finally {
       vi.mocked(getWallet).mockResolvedValue({ walletBalance: 50000 } as never);
