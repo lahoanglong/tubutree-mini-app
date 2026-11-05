@@ -11,8 +11,10 @@ import type { ErrorRequestHandler, NextFunction, Request, RequestHandler, Respon
  */
 
 export const DEFAULT_BODY_LIMIT = '256kb';
-// Webhook đối tác (Pancake, Zalo OA, ngân hàng, ZaloPay): payload do bên ngoài quyết định, để dư hơn route của app.
-export const WEBHOOK_BODY_LIMIT = '1mb';
+// Webhook sự kiện nhỏ (ZaloPay, Zalo OA, Zalo Mini App, cashback/AccessTrade, Gomdon): thân được parse trước khi xác thực chữ ký/token nên
+// người ẩn danh tới được trần này. Payload thật của các nguồn này chỉ vài trăm byte tới vài KB (ZaloPay: data/mac/type; Gomdon: vài chục
+// trường ngắn; Zalo Mini App: tối đa 20 khoá; AccessTrade: 5 trường; Zalo OA: một sự kiện tin nhắn), 64 KB là dư hàng chục lần.
+export const WEBHOOK_BODY_LIMIT = '64kb';
 // Ảnh base64 (6 ảnh đổi/trả × 1,5M ký tự là trần lớn nhất của DTO) và CSV import (300 nghìn ký tự).
 export const LARGE_BODY_LIMIT = '10mb';
 // Pancake gửi nguyên object đơn (dòng hàng + variation_info + customer + histories). Đơn lớn mà bị 400/413 thì sự kiện không được lưu
@@ -189,7 +191,7 @@ function makeJwtChecker(accessSecret: string, refreshTtlDays: number) {
  * json + urlencoded theo nhóm route; parser dựng một lần cho mỗi mức trần.
  * `inflate: false` ở tầng của app (mặc định và lớn): thân nén (gzip/deflate/br) bị 415 thay vì giải nén trước khi xác thực,
  * đây là lớp chặn bom nén. Webhook đối tác vẫn giải nén (đối tác có thể gửi gzip và bỏ sự kiện sau vài lần lỗi), trần
- * 1 MB/10 MB tính trên kích thước sau giải nén. Tầng 10 MB của app chỉ mở cho request có Bearer hợp lệ, nhưng `/auth/guest`
+ * 64 KB/10 MB tính trên kích thước sau giải nén. Tầng 10 MB của app chỉ mở cho request có Bearer hợp lệ, nhưng `/auth/guest`
  * cấp JWT cho bất kỳ ai nên đó không phải hàng rào chống ẩn danh; nó chỉ giữ thân lớn khỏi request không từng đăng nhập.
  */
 export function createBodyParsers(accessSecret: string, refreshTtlDays = 30): RequestHandler[] {
