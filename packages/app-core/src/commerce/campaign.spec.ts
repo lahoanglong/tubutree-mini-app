@@ -84,6 +84,12 @@ describe('campaignLinkUsable (shared-types) khớp campaignHref: usable khi và 
   });
 });
 
+describe('campaignLinkUsable: loại đích lạ (dữ liệu từ máy chủ mới hơn)', () => {
+  it('trả đúng false, không trả giá trị khác', () => {
+    expect(campaignLinkUsable({ linkType: 'LOAI_MOI' as CampaignBanner['linkType'], linkValue: 'x' })).toBe(false);
+  });
+});
+
 describe('campaignHref', () => {
   it('trang chiến dịch theo nền', () => {
     expect(campaignHref(banner(), 'mini')).toBe('/campaign/giua-thu');

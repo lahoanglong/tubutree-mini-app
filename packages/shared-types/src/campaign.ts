@@ -64,7 +64,8 @@ export function campaignLinkUsable(c: { linkType: CampaignLinkType; linkValue: s
     default: {
       // Thêm loại đích mới mà quên xử lý ở đây thì TypeScript báo lỗi tại dòng này.
       const unhandled: never = c.linkType;
-      return unhandled;
+      void unhandled;
+      return false;
     }
   }
 }
