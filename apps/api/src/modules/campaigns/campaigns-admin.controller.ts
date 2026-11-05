@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query } from '@
 import { Roles } from '../../common/decorators/roles.decorator';
 import { AllowStaff } from '../../common/staff-permissions';
 import { CampaignsAdminService } from './campaigns-admin.service';
-import { AdminCampaignListQuery, CreateCampaignDto, SetCampaignCouponsDto, SetCampaignProductsDto, UpdateCampaignDto } from './dto/campaign.dto';
+import { AdminCampaignListQuery, CheckCampaignDto, CreateCampaignDto, SetCampaignCouponsDto, SetCampaignProductsDto, UpdateCampaignDto } from './dto/campaign.dto';
 
 @Roles('ADMIN')
 @AllowStaff('MARKETING')
@@ -18,6 +18,11 @@ export class CampaignsAdminController {
   @Get(':id')
   get(@Param('id') id: string) {
     return this.campaigns.get(id);
+  }
+
+  @Post('check')
+  check(@Body() dto: CheckCampaignDto) {
+    return this.campaigns.check(dto);
   }
 
   @Post()

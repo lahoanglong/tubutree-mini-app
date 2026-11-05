@@ -52,7 +52,7 @@ const mount = async () => {
   await flush(8);
   return r;
 };
-const placeButton = (r: Rendered) => byText(r.container, 'button', 'Đặt hàng') as HTMLButtonElement;
+const placeButton = (r: Rendered) => byText(r.container, 'button', /^(Đặt hàng|Thử lại ·)/) as HTMLButtonElement;
 
 beforeEach(() => {
   sessionStorage.clear();

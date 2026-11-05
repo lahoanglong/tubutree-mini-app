@@ -119,22 +119,23 @@ describe('chi tiết đơn như Mini App', () => {
     mocks.order = structuredClone(COD_DELIVERED);
     const { container } = await mount();
     const hero = container.querySelector('[data-testid="status-hero"]') as HTMLElement;
-    expect(hero.className).toContain('max-md:bg-[var(--hero-bg)]');
-    expect(hero.style.getPropertyValue('--hero-bg')).toBe('var(--color-status-success-bg)');
-    expect(hero.firstElementChild!.className).toContain('max-md:flex-col-reverse');
+    expect(hero.style.background).toBe('var(--color-status-success-bg)');
+    expect(hero.style.color).toBe('var(--color-status-success-fg)');
+    expect(hero.firstElementChild!.textContent).toMatch(/^Giao lúc/);
     expect(text(hero)).toContain('Giao thành công');
+    expect(text(hero)).toContain('Đơn đã giao thành công.');
   });
 
   it('hành trình: đơn COD bỏ bước chờ thanh toán, nhãn như Mini App', async () => {
     mocks.order = structuredClone(COD_DELIVERED);
     const { container } = await mount();
-    const steps = [...container.querySelectorAll('#order-timeline-title ~ ol > li')].map((li) => li.textContent!.replace(/ — .*/, ''));
+    const steps = [...container.querySelectorAll('ol[aria-label="Hành trình đơn hàng"] > li')].map((li) => li.getAttribute('data-step'));
     expect(steps).toEqual(['Đã xác nhận', 'Đang đóng gói', 'Đang giao', 'Giao thành công']);
   });
 
   it('hành trình: đơn chuyển khoản mở đầu bằng "Chờ thanh toán"', async () => {
     const { container } = await mount();
-    const steps = [...container.querySelectorAll('#order-timeline-title ~ ol > li')].map((li) => li.textContent!.replace(/ — .*/, ''));
+    const steps = [...container.querySelectorAll('ol[aria-label="Hành trình đơn hàng"] > li')].map((li) => li.getAttribute('data-step'));
     expect(steps).toHaveLength(5);
     expect(steps[0]).toBe('Chờ thanh toán');
   });
@@ -156,5 +157,7 @@ describe('chi tiết đơn như Mini App', () => {
     expect(text(container)).toContain('Serum Visante · 30ml ×1');
     const review = [...container.querySelectorAll('a')].find((a) => a.textContent === 'Viết đánh giá')!;
     expect(review.className).toContain('max-md:no-underline');
+    // 12px chữ như Mini App nhưng vùng chạm 44px nhờ ::after (Playwright đo thấy 96x24 khi thiếu lớp này).
+    expect(review.className).toContain('tubu-hit-44');
   });
 });

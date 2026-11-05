@@ -78,6 +78,23 @@ const mount = async () => {
 };
 const btn = (c: HTMLElement, text: string) =>
   Array.from(c.querySelectorAll('button')).find((b) => (b.textContent ?? '').trim() === text) as HTMLButtonElement | undefined;
+// Nút phụ nằm trong menu "Thêm thao tác" (BottomSheet dựng ở document.body, ngoài container).
+const moreBtn = (c: HTMLElement) => c.querySelector<HTMLButtonElement>('button[aria-label="Thêm thao tác"]');
+const menuRow = (text: string) =>
+  Array.from(document.body.querySelectorAll<HTMLElement>('[role="group"] [role="button"]')).find((n) => (n.textContent ?? '').trim() === text);
+const menuHas = (c: HTMLElement, text: string) => {
+  const more = moreBtn(c);
+  if (!more) return false;
+  click(more);
+  const found = !!menuRow(text);
+  const close = document.body.querySelector<HTMLButtonElement>('button[aria-label="Đóng"]');
+  if (close) click(close);
+  return found;
+};
+const pressMenu = (c: HTMLElement, text: string) => {
+  click(moreBtn(c)!);
+  click(menuRow(text)!);
+};
 const confirmCancelBtn = (c: HTMLElement) =>
   Array.from(c.querySelectorAll('[role="alertdialog"] button')).find((b) => b.textContent === 'Huỷ đơn') ?? null;
 const radio = (c: HTMLElement, label: RegExp) =>
@@ -120,17 +137,15 @@ describe('chi tiết đơn — hành trình đơn (BUYERWEB-13)', () => {
   it('đơn COD hiện 4 bước (bỏ chờ thanh toán), bước hiện tại có aria-current="step"', async () => {
     mocks.order = { ...BASE, status: 'PACKED' };
     const { container } = await mount();
-    const steps = Array.from(container.querySelectorAll('ol[class=""] li, section[aria-labelledby="order-timeline-title"] li'));
-    expect(steps.map((s) => s.textContent?.replace(/ — (đã qua|hiện tại)/, '').replace(/\d\d:\d\d \d\d\/\d\d\/\d{4}$/, ''))).toEqual([
-      'Đã xác nhận', 'Đang đóng gói', 'Đang giao', 'Giao thành công',
-    ]);
+    const steps = Array.from(container.querySelectorAll('ol[aria-label="Hành trình đơn hàng"] > li'));
+    expect(steps.map((s) => s.getAttribute('data-step'))).toEqual(['Đã xác nhận', 'Đang đóng gói', 'Đang giao', 'Giao thành công']);
     expect(steps.map((s) => s.getAttribute('aria-current'))).toEqual([null, 'step', null, null]);
   });
 
   it('đơn đã huỷ/hoàn: không dựng hành trình', async () => {
     mocks.order = { ...BASE, status: 'CANCELLED' };
     const { container } = await mount();
-    expect(container.querySelector('#order-timeline-title')).toBeNull();
+    expect(container.querySelector('#order-track-title')).toBeNull();
   });
 
   it('hành trình vận chuyển: mới nhất trước, nhãn tiếng Việt, kèm giờ giờ VN, mã lạ không in thô', async () => {
@@ -144,10 +159,10 @@ describe('chi tiết đơn — hành trình đơn (BUYERWEB-13)', () => {
     };
     const { container } = await mount();
     const text = container.textContent ?? '';
-    expect(text).toContain('Hành trình vận chuyển');
+    expect(container.querySelector('ul[aria-label="Mốc vận chuyển"]')).not.toBeNull();
     expect(text.indexOf('Đang cập nhật')).toBeLessThan(text.indexOf('Đang giao hàng'));
     expect(text.indexOf('Đang giao hàng')).toBeLessThan(text.indexOf('Đã tạo vận đơn'));
-    expect(text).toContain('10:00 01/10/2026');
+    expect(text).toMatch(/10:00 01\/10/);
     expect(text).not.toContain('WEIRD_42');
   });
 });
@@ -270,7 +285,7 @@ describe('chi tiết đơn — huỷ đơn (BUYERWEB-13)', () => {
   it('MONEY-6: đơn chuyển khoản chưa ghi nhận tiền → cảnh báo đừng huỷ vội, tiền về muộn vẫn được hoàn', async () => {
     mocks.order = { ...BASE, status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID' };
     const { container } = await mount();
-    click(btn(container, 'Huỷ đơn')!);
+    pressMenu(container, 'Huỷ đơn');
     const note = container.querySelector('[role="alertdialog"] [role="note"]');
     expect(note?.textContent).toContain('Nếu bạn vừa chuyển khoản');
     expect(note?.textContent).toContain('Tiền về sau khi huỷ vẫn được hoàn');
@@ -307,20 +322,20 @@ describe('chi tiết đơn — huỷ đơn (BUYERWEB-13)', () => {
     expect(btn(container, 'Huỷ đơn')).toBeUndefined();
   });
 
-  it('huỷ lỗi rồi đơn chuyển SHIPPING (không còn nút nào): không dựng thanh nút dính đáy rỗng, body không có has-sticky-bar', async () => {
+  it('huỷ lỗi rồi đơn chuyển SHIPPING: thanh nút chỉ còn "Liên hệ Tubu", không còn nút huỷ', async () => {
     mocks.order = { ...BASE, status: 'PACKED' };
     mocks.cancel.mockImplementation(async () => {
       mocks.order = { ...BASE, status: 'SHIPPING', shippingPartner: 'GHN', shippingCode: 'GHN1933', canCancel: false };
       throw new Error('Đơn đã bàn giao cho đơn vị vận chuyển.');
     });
     const { container } = await mount();
-    expect(container.querySelector('[data-testid="order-action-bar"]')).not.toBeNull();
+    expect(btn(container, 'Huỷ đơn')).toBeDefined();
     click(btn(container, 'Huỷ đơn')!);
     confirmWithReason(container);
     await flush(12);
     expect(container.querySelector('[role="alert"]')).not.toBeNull();
-    expect(container.querySelector('[data-testid="order-action-bar"]')).toBeNull();
-    expect(document.body.classList.contains('has-sticky-bar')).toBe(false);
+    expect(btn(container, 'Huỷ đơn')).toBeUndefined();
+    expect(btn(container, 'Liên hệ Tubu')).toBeDefined();
   });
 
   it('đơn đang đóng gói (chưa bàn giao vận chuyển) vẫn huỷ được — D1, BUYERWEB-5', async () => {
@@ -428,13 +443,13 @@ describe('chi tiết đơn — yêu cầu đổi/trả (BUYERWEB-13)', () => {
 
   it('đơn chưa giao không có nút đổi/trả', async () => {
     const { container } = await mount();
-    expect(btn(container, 'Yêu cầu đổi/trả')).toBeUndefined();
+    expect(menuHas(container, 'Yêu cầu đổi/trả')).toBe(false);
   });
 
   it('BUYERMINI-11 (web): chọn dòng + lý do chọn sẵn → gửi đúng dòng, số lượng, mã lý do, nhận về Ví', async () => {
     mocks.order = delivered;
     const { container } = await mount();
-    click(btn(container, 'Yêu cầu đổi/trả')!);
+    pressMenu(container, 'Yêu cầu đổi/trả');
     const box = container.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
     expect(box.checked).toBe(true);
     click(radio(container, /^Sản phẩm lỗi, hỏng$/));
@@ -450,6 +465,24 @@ describe('chi tiết đơn — yêu cầu đổi/trả (BUYERWEB-13)', () => {
     expect(container.textContent).toContain('Đã gửi yêu cầu đổi/trả');
   });
 
+  it('mở form từ menu: cuộn form vào tầm nhìn và chuyển focus vào tiêu đề form (form nằm cuối trang, khách đang ở đầu trang)', async () => {
+    const scroll = vi.fn();
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scroll;
+    try {
+      mocks.order = delivered;
+      const { container } = await mount();
+      pressMenu(container, 'Yêu cầu đổi/trả');
+      const title = container.querySelector<HTMLElement>('#return-form-title')!;
+      expect(title).not.toBeNull();
+      expect(scroll).toHaveBeenCalled();
+      expect(scroll.mock.contexts.at(-1)).toBe(title);
+      expect(document.activeElement).toBe(title);
+    } finally {
+      Element.prototype.scrollIntoView = original;
+    }
+  });
+
   // R3-UI-6: Mini App hiện "Dự kiến hoàn" theo D3 trước khi gửi; web phải cho khách thấy cùng con số (cùng API).
   describe('ước tính tiền hoàn (R3-UI-6)', () => {
     const estimateText = (c: HTMLElement) => c.querySelector('[data-testid="return-estimate"]')?.textContent ?? null;
@@ -462,7 +495,7 @@ describe('chi tiết đơn — yêu cầu đổi/trả (BUYERWEB-13)', () => {
           : { isFull: false, goods: 90000, shipping: 0, refund: 90000, moneyRefundable: true, pointsUsedBack: 0, lines: [] },
       );
       const { container } = await mount();
-      click(btn(container, 'Yêu cầu đổi/trả')!);
+      pressMenu(container, 'Yêu cầu đổi/trả');
       await flush(6);
       expect(mocks.estimate).toHaveBeenCalledWith('TB-9', { items: [{ orderItemId: 'i1', quantity: 1 }], reasonCode: undefined });
       expect(estimateText(container)).toContain('Dự kiến hoàn 90.000đ');
@@ -478,7 +511,7 @@ describe('chi tiết đơn — yêu cầu đổi/trả (BUYERWEB-13)', () => {
     it('bỏ chọn hết dòng → không hiện ước tính', async () => {
       mocks.order = delivered;
       const { container } = await mount();
-      click(btn(container, 'Yêu cầu đổi/trả')!);
+      pressMenu(container, 'Yêu cầu đổi/trả');
       await flush(6);
       click(container.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
       await flush(4);
@@ -489,7 +522,7 @@ describe('chi tiết đơn — yêu cầu đổi/trả (BUYERWEB-13)', () => {
       mocks.order = delivered;
       mocks.estimate.mockResolvedValue({ isFull: false, goods: 0, shipping: 0, refund: 0, moneyRefundable: false, pointsUsedBack: 0, lines: [] });
       const { container } = await mount();
-      click(btn(container, 'Yêu cầu đổi/trả')!);
+      pressMenu(container, 'Yêu cầu đổi/trả');
       await flush(6);
       expect(estimateText(container)).toBeNull();
     });
@@ -498,7 +531,7 @@ describe('chi tiết đơn — yêu cầu đổi/trả (BUYERWEB-13)', () => {
       mocks.order = delivered;
       mocks.estimate.mockRejectedValue(new Error('boom'));
       const { container } = await mount();
-      click(btn(container, 'Yêu cầu đổi/trả')!);
+      pressMenu(container, 'Yêu cầu đổi/trả');
       await flush(6);
       expect(estimateText(container)).toBeNull();
       click(radio(container, /^Sản phẩm lỗi, hỏng$/));
@@ -511,7 +544,7 @@ describe('chi tiết đơn — yêu cầu đổi/trả (BUYERWEB-13)', () => {
   it('R2-LIFECYCLE-10: form có ô tải ảnh minh chứng thay cho lời dặn gửi email; ảnh đi cùng yêu cầu', async () => {
     mocks.order = delivered;
     const { container } = await mount();
-    click(btn(container, 'Yêu cầu đổi/trả')!);
+    pressMenu(container, 'Yêu cầu đổi/trả');
     const form = container.querySelector('form[aria-labelledby="return-form-title"]')!;
     expect(form.textContent).not.toContain('email');
     expect(form.textContent).toContain('Ảnh minh chứng (khuyến khích, tối đa 3)');
@@ -531,7 +564,7 @@ describe('chi tiết đơn — yêu cầu đổi/trả (BUYERWEB-13)', () => {
   it('không đính ảnh thì body không có khoá images', async () => {
     mocks.order = delivered;
     const { container } = await mount();
-    click(btn(container, 'Yêu cầu đổi/trả')!);
+    pressMenu(container, 'Yêu cầu đổi/trả');
     click(radio(container, /^Sản phẩm lỗi, hỏng$/));
     click(btn(container, 'Gửi yêu cầu')!);
     await flush(8);
@@ -542,7 +575,7 @@ describe('chi tiết đơn — yêu cầu đổi/trả (BUYERWEB-13)', () => {
     mocks.order = { ...delivered, items: [{ ...BASE.items[0], quantity: 3 }] };
     mocks.returns = [{ id: 'r0', orderId: 'o9', status: 'APPROVED', reason: 'x', refundAmount: 100000, items: [{ orderItemId: 'i1', quantity: 1, refundAmount: 100000 }], createdAt: '2026-10-06T00:00:00Z' }];
     const { container } = await mount();
-    click(btn(container, 'Trả thêm sản phẩm')!);
+    pressMenu(container, 'Trả thêm sản phẩm');
     const plus = container.querySelector<HTMLButtonElement>('button[aria-label="Tăng số lượng Dầu gội"]')!;
     click(plus);
     click(plus);
@@ -557,7 +590,7 @@ describe('chi tiết đơn — yêu cầu đổi/trả (BUYERWEB-13)', () => {
   it('chưa chọn lý do / "Lý do khác" thiếu mô tả: báo lỗi, không gửi', async () => {
     mocks.order = delivered;
     const { container } = await mount();
-    click(btn(container, 'Yêu cầu đổi/trả')!);
+    pressMenu(container, 'Yêu cầu đổi/trả');
     click(btn(container, 'Gửi yêu cầu')!);
     await flush();
     expect(container.querySelector('form [role="alert"]')?.textContent).toBe('Chọn lý do đổi/trả.');
@@ -575,7 +608,7 @@ describe('chi tiết đơn — yêu cầu đổi/trả (BUYERWEB-13)', () => {
   it('MONEY-9: đơn COD trả hàng chọn hoàn về ngân hàng → gửi kèm tài khoản', async () => {
     mocks.order = delivered;
     const { container } = await mount();
-    click(btn(container, 'Yêu cầu đổi/trả')!);
+    pressMenu(container, 'Yêu cầu đổi/trả');
     click(radio(container, /^Bể vỡ, móp méo khi vận chuyển$/));
     click(radio(container, /Tài khoản ngân hàng/));
     typeInto(field(container, 'Tên ngân hàng'), 'VCB');
@@ -592,7 +625,7 @@ describe('chi tiết đơn — yêu cầu đổi/trả (BUYERWEB-13)', () => {
     mocks.order = delivered;
     mocks.requestReturn.mockRejectedValue(new Error('Quá hạn đổi/trả (7 ngày từ khi nhận hàng).'));
     const { container } = await mount();
-    click(btn(container, 'Yêu cầu đổi/trả')!);
+    pressMenu(container, 'Yêu cầu đổi/trả');
     click(radio(container, /^Sản phẩm lỗi, hỏng$/));
     click(btn(container, 'Gửi yêu cầu')!);
     await flush(8);
@@ -607,7 +640,7 @@ describe('chi tiết đơn — yêu cầu đổi/trả (BUYERWEB-13)', () => {
     mocks.order = delivered;
     mocks.returns = [{ id: 'r1', orderId: 'o9', status, reason: 'x', adminNote: status === 'REJECTED' ? 'Ảnh không rõ' : null, createdAt: '2026-10-06T00:00:00Z' }];
     const { container } = await mount();
-    if (status === 'REQUESTED') expect(btn(container, 'Yêu cầu đổi/trả')).toBeUndefined();
+    if (status === 'REQUESTED') expect(menuHas(container, 'Yêu cầu đổi/trả')).toBe(false);
     expect(container.textContent).toContain(expected);
   });
 
@@ -622,8 +655,8 @@ describe('chi tiết đơn — yêu cầu đổi/trả (BUYERWEB-13)', () => {
     expect(text).toContain('Đổi/trả đã duyệt — đã hoàn 300.000đ vào Ví Tubu');
     expect(text).toContain('Trả: Dầu gội ×2');
     expect(text).toContain('Tubu sẽ liên hệ để nhận lại hàng.');
-    expect(btn(container, 'Trả thêm sản phẩm')).toBeUndefined();
-    expect(btn(container, 'Yêu cầu đổi/trả')).toBeUndefined();
+    expect(menuHas(container, 'Trả thêm sản phẩm')).toBe(false);
+    expect(menuHas(container, 'Yêu cầu đổi/trả')).toBe(false);
   });
 
   it('R6-BUYER-9: mỗi yêu cầu trả gộp khoản hoàn vào một dòng (không lặp khối Hoàn tiền) và dòng sản phẩm ghi "Đã trả x/y"', async () => {
@@ -674,7 +707,7 @@ describe('chi tiết đơn — yêu cầu đổi/trả (BUYERWEB-13)', () => {
     mocks.order = delivered;
     mocks.returnsError = true;
     const { container } = await mount();
-    expect(btn(container, 'Yêu cầu đổi/trả')).toBeDefined();
+    expect(menuHas(container, 'Yêu cầu đổi/trả')).toBe(true);
   });
 });
 
@@ -708,9 +741,9 @@ describe('chi tiết đơn — hoàn tiền và hạn thanh toán (D2, BUYERMINI
   });
 
   it('BUYERMINI-8 (web): đơn ZaloPay đang chờ tiền hiện hạn thanh toán giờ VN (chuyển khoản hiện trong khung QR)', async () => {
-    mocks.order = { ...BASE, status: 'PENDING_PAYMENT', paymentMethod: 'ZALOPAY', paymentStatus: 'UNPAID', paymentDeadline: '2026-10-14T03:00:00Z' };
+    mocks.order = { ...BASE, status: 'PENDING_PAYMENT', paymentMethod: 'ZALOPAY', paymentStatus: 'UNPAID', paymentDeadline: '2099-10-14T03:00:00Z' };
     const { container } = await mount();
-    expect(container.textContent).toContain('Thanh toán trước 10:00 14/10/2026 — quá hạn đơn sẽ tự huỷ.');
+    expect(container.textContent).toContain('Thanh toán trước 10:00 14/10/2099');
   });
 });
 
@@ -718,12 +751,33 @@ describe('chi tiết đơn — truy cập', () => {
   it('đủ h1/h2/h3 không nhảy cấp, mọi điều khiển có tên, vùng chạm 44px (đơn đã giao, form đổi/trả mở)', async () => {
     mocks.order = { ...BASE, status: 'DELIVERED', deliveredAt: new Date(Date.now() - 864e5).toISOString(), shippingHistory: [{ at: '2026-10-02T03:00:00Z', status: 'delivered', code: 'X' }] };
     const { container } = await mount();
-    click(btn(container, 'Yêu cầu đổi/trả')!);
+    pressMenu(container, 'Yêu cầu đổi/trả');
     await flush();
     expect(byText(container, 'h3', 'Yêu cầu đổi/trả')).not.toBeNull();
     expect(headingProblems(container)).toEqual([]);
     expect(unnamedControls(container)).toEqual([]);
     expect(smallTouchTargets(container)).toEqual([]);
+  });
+});
+
+describe('chi tiết đơn — từ md, "Thanh toán ngay" cuộn tới khung QR nhúng', () => {
+  it('cuộn tới khung QR rồi chuyển focus vào khung (người dùng bàn phím không đứng lại ở nút), không rời trang', async () => {
+    const scroll = vi.fn();
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scroll;
+    try {
+      mocks.order = { ...BASE, status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', paymentDeadline: '2099-01-01T03:00:00Z' };
+      const { container } = await mount();
+      const panel = container.querySelector<HTMLElement>('#order-pay-panel')!;
+      expect(panel).not.toBeNull();
+      const bar = container.querySelector('[data-testid="order-action-bar"]') as HTMLElement;
+      click(btn(bar, 'Thanh toán ngay')!);
+      expect(scroll.mock.contexts.at(-1)).toBe(panel);
+      expect(document.activeElement).toBe(panel);
+      expect(mocks.push).not.toHaveBeenCalled();
+    } finally {
+      Element.prototype.scrollIntoView = original;
+    }
   });
 });
 
@@ -742,31 +796,34 @@ describe('chi tiết đơn — điện thoại (như Mini App)', () => {
 
   const PENDING = { ...BASE, status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', paymentDeadline: '2099-01-01T03:00:00Z' };
   const bar = (c: HTMLElement) => c.querySelector('[data-testid="order-action-bar"]') as HTMLElement;
+  // Nút nhìn thấy ở thanh (bỏ nút "Thêm thao tác" chỉ có icon).
+  const barLabels = (c: HTMLElement) =>
+    Array.from(bar(c).querySelectorAll('button')).map((b) => b.getAttribute('aria-label') ?? b.textContent?.trim()).filter((t) => t !== 'Thêm thao tác');
 
   it('đơn chờ chuyển khoản: không nhúng khung QR, dải trạng thái có hạn, thanh đáy "Huỷ đơn | Thanh toán ngay" tới trang chuyển khoản', async () => {
     mocks.order = { ...PENDING };
     const { container } = await mount();
     expect(container.querySelector('img[src*="vietqr"]')).toBeNull();
     expect(container.textContent).not.toContain('Chuyển khoản trước');
-    expect(container.querySelector('[data-testid="status-hero"]')?.textContent).toContain('Thanh toán trước');
-    expect(container.querySelector('[data-testid="status-hero"]')?.textContent).toContain('quá hạn đơn sẽ tự huỷ.');
-    const labels = Array.from(bar(container).querySelectorAll('button, a')).map((n) => n.textContent?.trim());
-    expect(labels).toEqual(['Huỷ đơn', 'Thanh toán ngay']);
-    expect(bar(container).querySelector('a')?.getAttribute('href')).toBe('/thanh-toan/chuyen-khoan/TB-9');
+    expect(container.querySelector('[data-testid="status-hero"]')?.textContent).toContain('Thanh toán trước 10:00 01/01/2099');
+    expect(container.querySelector('[data-testid="status-hero"]')?.textContent).toContain('Đơn đang chờ bạn thanh toán.');
+    expect(barLabels(container)).toEqual(['Thanh toán ngay']);
+    expect(menuHas(container, 'Huỷ đơn')).toBe(true);
+    click(btn(bar(container), 'Thanh toán ngay')!);
+    expect(mocks.push).toHaveBeenCalledWith('/thanh-toan/chuyen-khoan/TB-9');
   });
 
   it('đơn chờ chuyển khoản đã quá hạn: không còn nút "Thanh toán ngay"', async () => {
     mocks.order = { ...PENDING, paymentDeadline: '2020-01-01T03:00:00Z' };
     const { container } = await mount();
-    expect(bar(container)?.querySelector('a')).toBeNull();
+    expect(barLabels(container)).toEqual(['Liên hệ Tubu']);
   });
 
-  it('đơn đã giao: thanh đáy chỉ có "Mua lại đơn này", "Yêu cầu đổi/trả" là nút phụ ngoài thanh', async () => {
+  it('đơn đã giao: thanh đáy chỉ có "Mua lại đơn này", "Yêu cầu đổi/trả" nằm trong menu Thêm thao tác', async () => {
     mocks.order = { ...BASE, status: 'DELIVERED', deliveredAt: new Date(Date.now() - 864e5).toISOString() };
     const { container } = await mount();
-    expect(Array.from(bar(container).querySelectorAll('button')).map((b) => b.textContent?.trim())).toEqual(['Mua lại đơn này']);
-    const ret = btn(container, 'Yêu cầu đổi/trả')!;
-    expect(bar(container).contains(ret)).toBe(false);
+    expect(barLabels(container)).toEqual(['Mua lại đơn này']);
+    expect(menuHas(container, 'Yêu cầu đổi/trả')).toBe(true);
   });
 
   it('huỷ đơn mở Sheet đáy (dialog), focus vào "Giữ đơn", đóng thì focus về nút "Huỷ đơn" đã bấm', async () => {
@@ -825,16 +882,14 @@ describe('chi tiết đơn — điện thoại (như Mini App)', () => {
   it('đơn chờ chuyển khoản không huỷ được (canCancel=false): vẫn có thanh đáy với "Thanh toán ngay"', async () => {
     mocks.order = { ...PENDING, canCancel: false };
     const { container } = await mount();
-    const labels = Array.from(bar(container).querySelectorAll('button, a')).map((n) => n.textContent?.trim());
-    expect(labels).toEqual(['Thanh toán ngay']);
+    expect(barLabels(container)).toEqual(['Thanh toán ngay']);
   });
 
-  it('"Yêu cầu đổi/trả" nằm sau danh sách trạng thái yêu cầu đã có, như Mini App', async () => {
+  it('yêu cầu cũ bị từ chối: vẫn hiện trạng thái và vẫn có thể yêu cầu đổi/trả mới trong menu', async () => {
     mocks.order = { ...BASE, status: 'DELIVERED', deliveredAt: new Date(Date.now() - 864e5).toISOString() };
     mocks.returns = [{ id: 'r0', orderId: 'o9', status: 'REJECTED', reason: 'DAMAGED', createdAt: '2026-10-02T03:00:00Z', items: [{ orderItemId: 'i1', quantity: 1 }] }];
     const { container } = await mount();
-    const status = container.querySelector('[role="status"]')!;
-    const ret = btn(container, 'Yêu cầu đổi/trả')!;
-    expect(status.compareDocumentPosition(ret) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(container.querySelector('[role="status"]')).not.toBeNull();
+    expect(menuHas(container, 'Yêu cầu đổi/trả')).toBe(true);
   });
 });

@@ -23,6 +23,8 @@ describe('Sức khoẻ vận hành + việc cần xử lý (real Postgres)', () 
     getFailed: async () =>
       Array.from({ length: queueFailures[name] ?? 0 }, () => ({ finishedOn: Date.now() - 60_000 })),
   });
+  /** Đơn năm 2000 dựng để đứng đầu danh sách đơn kẹt; ở lại DB dùng chung thì cron của spec khác (markOverdue) đánh STALE nó và nó chiếm chỗ mãi. */
+  const oldStuckOrderIds: string[] = [];
   let env: Record<string, string>;
   let health: OpsHealthService;
   let inbox: OpsInboxService;
@@ -57,6 +59,7 @@ describe('Sức khoẻ vận hành + việc cần xử lý (real Postgres)', () 
   });
 
   afterAll(async () => {
+    if (prisma && oldStuckOrderIds.length > 0) await prisma.order.deleteMany({ where: { id: { in: oldStuckOrderIds } } });
     await prisma?.$disconnect();
   });
 
@@ -74,6 +77,7 @@ describe('Sức khoẻ vận hành + việc cần xử lý (real Postgres)', () 
     // Danh sách đơn kẹt xếp cũ nhất trước và cắt ở STUCK_LIST: đơn kẹt do spec khác để lại trong DB dùng chung không được đẩy đơn này ra ngoài.
     const old = new Date(Date.UTC(2000, 0, 1));
     const stuck = await createOrder(prisma, { userId: u.id, pancakePushStatus: 'FAILED', pancakeSyncError: 'HTTP 500', createdAt: old });
+    oldStuckOrderIds.push(stuck.id);
     await createOrder(prisma, { userId: u.id, pancakePushStatus: 'PENDING' });
     await prisma.pancakeWebhookEvent.create({ data: { eventType: 'order', rawPayload: {}, status: 'FAILED', error: 'boom' } });
     await prisma.pancakeWebhookEvent.create({
@@ -95,6 +99,31 @@ describe('Sức khoẻ vận hành + việc cần xử lý (real Postgres)', () 
 
     await health.recordCatalogRun({ ok: true, count: 12 });
     expect((await health.snapshot()).problems.map((p) => p.key)).not.toContain('pancake.catalog');
+  });
+
+  it('đơn kẹt mang cờ "Đẩy lại Pancake" (NOW/WAIT) tính từ cột thật của cổng đẩy, không lộ cột phụ', async () => {
+    const u = await createUser(prisma, {});
+    // Cũ nhất trước và cắt ở STUCK_LIST: dùng ngày rất cũ, mỗi đơn một ngày, để đơn kẹt của spec khác không đẩy chúng ra ngoài.
+    const day = (n: number) => new Date(Date.UTC(1999, 0, n));
+    const now = await createOrder(prisma, { userId: u.id, pancakePushStatus: 'STALE', createdAt: day(1) });
+    const payment = await createOrder(prisma, { userId: u.id, pancakePushStatus: 'STALE', paymentMethod: 'ZALOPAY', paymentStatus: 'UNPAID', createdAt: day(2) });
+    const gomdon = await createOrder(prisma, { userId: u.id, pancakePushStatus: 'STALE', hasRecyclingPickup: true, gomdonStatus: 'CREATING', createdAt: day(3) });
+    // Ngày 1999 xếp đầu danh sách "cũ nhất trước, cắt 20 dòng": để lại thì đẩy đơn kẹt của ca/spec sau ra ngoài, nên xoá khi xong ca.
+    let byCode: Map<string, Record<string, unknown>>;
+    try {
+      const s = await health.snapshot();
+      byCode = new Map(s.pancake.stuckOrders.map((o) => [o.code, o as Record<string, unknown>]));
+    } finally {
+      await prisma.order.deleteMany({ where: { id: { in: [now.id, payment.id, gomdon.id] } } });
+    }
+    expect([now, payment, gomdon].map((o) => [byCode.get(o.code)?.pancakeRetry, byCode.get(o.code)?.pancakeRetryWaitingFor])).toEqual([
+      ['NOW', null],
+      ['WAIT', 'khách thanh toán'],
+      ['WAIT', 'vận đơn Gomdon'],
+    ]);
+    // Từng khoá một: arrayContaining đòi CÓ ĐỦ cả nhóm nên một khoá rò lẻ vẫn lọt.
+    const gateOnlyColumns = ['items', 'type', 'fulfiller', 'paymentMethod', 'paymentStatus', 'hasRecyclingPickup', 'gomdonOrderId', 'gomdonPartnerCode', 'gomdonStatus'];
+    for (const o of byCode.values()) for (const k of gateOnlyColumns) expect(o).not.toHaveProperty(k);
   });
 
   it('nhãn đơn của webhook lỗi lấy bằng SQL gọn khớp pancakeEventRef trên nguyên rawPayload, mọi dạng payload', async () => {

@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import type { PrismaClient } from '@prisma/client';
-import { parseRemoteTypes, collectBackupSnapshot, collectDbSnapshot, listExpectedMigrations } from './collect';
+import { parseRemoteTypes, collectBackupSnapshot, collectDbSnapshot, listExpectedMigrations, findFailedOrders } from './collect';
 
 type Row = Record<string, unknown>;
 
@@ -303,5 +303,37 @@ describe('collectBackupSnapshot (phần đọc file)', () => {
 describe('parseRemoteTypes', () => {
   it('hai cột và ba cột (có mô tả) đều ra đúng tên và loại', () => {
     expect(parseRemoteTypes('gdrive:  drive\ntubucrypt:  crypt  mã hoá bản backup\n\n')).toEqual({ gdrive: 'drive', tubucrypt: 'crypt' });
+  });
+});
+
+describe('findFailedOrders (go-live trước deploy, DB chưa có cột pancakeErrorKind)', () => {
+  const row = { id: 'a', code: 'TUBU1', status: 'CONFIRMED', pancakeOrderId: null };
+  const missingColumn = Object.assign(new Error('The column `orders.pancakeErrorKind` does not exist'), { code: 'P2022' });
+
+  it('DB đã có cột: trả đủ kèm loại lỗi, một truy vấn', async () => {
+    const findMany = jest.fn().mockResolvedValue([{ ...row, pancakeErrorKind: 'REJECTED' }]);
+    expect(await findFailedOrders({ order: { findMany } } as never, ['a'])).toEqual([{ ...row, pancakeErrorKind: 'REJECTED' }]);
+    expect(findMany).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['P2022', missingColumn],
+    ['P2010 + 42703', Object.assign(new Error('raw'), { code: 'P2010', meta: { code: '42703' } })],
+  ])('thiếu cột (%s): hỏi lại không có cột, đối chiếu theo đơn vẫn chạy, loại lỗi null', async (_n, err) => {
+    const findMany = jest.fn().mockRejectedValueOnce(err).mockResolvedValueOnce([row]);
+    expect(await findFailedOrders({ order: { findMany } } as never, ['a'])).toEqual([{ ...row, pancakeErrorKind: null }]);
+    expect(findMany).toHaveBeenCalledTimes(2);
+    expect(findMany.mock.calls[1][0].select).not.toHaveProperty('pancakeErrorKind');
+  });
+
+  it('lỗi khác (mất kết nối DB) vẫn ném để dòng go-live rơi về đếm thô', async () => {
+    const findMany = jest.fn().mockRejectedValue(new Error('ECONNREFUSED'));
+    await expect(findFailedOrders({ order: { findMany } } as never, ['a'])).rejects.toThrow('ECONNREFUSED');
+  });
+
+  it('không có id thì không truy vấn', async () => {
+    const findMany = jest.fn();
+    expect(await findFailedOrders({ order: { findMany } } as never, [])).toEqual([]);
+    expect(findMany).not.toHaveBeenCalled();
   });
 });

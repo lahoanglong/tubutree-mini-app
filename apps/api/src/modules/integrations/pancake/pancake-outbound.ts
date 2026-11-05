@@ -10,9 +10,33 @@ export class PancakeApiError extends Error {
     message: string,
     readonly transient: boolean,
     readonly notFound = false,
+    /** Mã HTTP Pancake trả (không có khi mất kết nối hay `success:false` trong HTTP 200). */
+    readonly status?: number,
   ) {
     super(message);
     this.name = 'PancakeApiError';
+  }
+}
+
+/**
+ * Lượt này thua tranh chấp quyền đẩy: tiến trình khác (job push, job thanh toán, cron) đang giữ hoặc vừa ghi kết cục cho đơn. Là lỗi tạm
+ * để BullMQ thử lại, nhưng KHÔNG được ghi lên đơn (sẽ đè loại lỗi mà tiến trình kia vừa ghi).
+ */
+export class PancakePushBusyError extends PancakeApiError {
+  constructor(message: string) {
+    super(message, true);
+    this.name = 'PancakePushBusyError';
+  }
+}
+
+/**
+ * Lượt này không được gửi lệnh tạo đơn vì một lệnh tạo khác (chưa rõ kết quả) vừa được gửi trong cửa sổ chờ `SEND_SETTLE_MS`: Pancake có thể
+ * đang tạo đơn hoặc chưa tra được theo mã. Là Busy: BullMQ thử lại, markPushFailure không ghi gì (không đốt/hoàn lượt, không đổi loại lỗi, không báo).
+ */
+export class PancakePushSettlingError extends PancakePushBusyError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'PancakePushSettlingError';
   }
 }
 

@@ -83,9 +83,9 @@ const ORDER = {
   items: [{ id: 'i1', productName: 'Dầu gội', variationName: '500ml', unitPrice: 150000, quantity: 2, total: 300000 }],
 };
 
-// Nút Chép mã, hoá đơn, phiếu thu rác và lời mời OA nạp bằng next/dynamic; lần nạp đầu phải biên dịch, trên máy CI chậm lâu hơn các nhịp flush() của mount.
+// Hoá đơn, phiếu thu rác và lời mời OA nạp bằng next/dynamic; lần nạp đầu phải biên dịch, trên máy CI chậm lâu hơn các nhịp flush() của mount.
 beforeAll(async () => {
-  await Promise.all([import('./copy-shipping-code'), import('./order-extras')]);
+  await import('./order-extras');
 });
 
 let mounted: Rendered[] = [];
@@ -119,11 +119,11 @@ afterEach(() => {
 describe('chi tiết đơn web — mốc thời gian và Điểm Xanh', () => {
   it('đơn đã giao có mốc giao: "Giao lúc"; đơn chưa giao: "Đặt lúc"', async () => {
     mocks.order = { ...ORDER, status: 'DELIVERED', deliveredAt: '2026-10-03T03:00:00Z' };
-    expect(text((await mount()).container)).toContain('Giao lúc 10:00 03/10/2026');
+    expect(text((await mount()).container)).toMatch(/Giao lúc 10:00 03\/10(?!\d)/);
     mounted.forEach((m) => m.unmount());
     mounted = [];
     mocks.order = { ...ORDER };
-    expect(text((await mount()).container)).toContain('Đặt lúc 10:00 01/10/2026');
+    expect(text((await mount()).container)).toMatch(/Đặt lúc 10:00 01\/10(?!\d)/);
   });
 
   it('hành trình ghi giờ từng bước đã tới; bước chưa tới không có giờ; đơn huỷ ghi "Huỷ lúc"', async () => {
@@ -134,15 +134,15 @@ describe('chi tiết đơn web — mốc thời gian và Điểm Xanh', () => {
       statusTimes: { CONFIRMED: '2026-10-01T03:05:00Z', PACKED: '2026-10-02T04:30:00Z' },
     };
     const { container } = await mount();
-    const steps = [...container.querySelectorAll('#order-timeline-title ~ ol > li')].map((li) => li.textContent ?? '');
+    const steps = [...container.querySelectorAll('ol[aria-label="Hành trình đơn hàng"] > li')].map((li) => li.textContent ?? '');
     expect(steps).toHaveLength(4);
-    expect(steps[0]).toContain('10:05 01/10/2026');
-    expect(steps[1]).toContain('11:30 02/10/2026');
+    expect(steps[0]).toMatch(/10:05 01\/10/);
+    expect(steps[1]).toMatch(/11:30 02\/10/);
     expect(steps[2]).not.toMatch(/\d\d:\d\d/);
     mounted.forEach((m) => m.unmount());
     mounted = [];
     mocks.order = { ...ORDER, status: 'CANCELLED', statusTimes: { CANCELLED: '2026-10-03T07:45:00Z' } };
-    expect(text((await mount()).container)).toContain('Huỷ lúc 14:45 03/10/2026');
+    expect(text((await mount()).container)).toMatch(/Huỷ lúc 14:45 03\/10(?!\d)/);
   });
 
   it('dòng Điểm Xanh theo trạng thái: chưa giao thì "Nhận +…", đã giao thì "Đã cộng +…"', async () => {
@@ -199,16 +199,17 @@ describe('chi tiết đơn web — dòng hàng và vận chuyển', () => {
     expect(t).not.toContain('lost');
   });
 
-  it('thứ tự khối như Mini App: Vận chuyển, Địa chỉ giao hàng, câu "không huỷ được", rồi phần liên hệ', async () => {
+  it('thứ tự khối như Mini App: câu "không huỷ được" ở đầu trang, rồi Vận chuyển, Địa chỉ giao hàng, phần liên hệ', async () => {
     mocks.order = { ...ORDER, status: 'SHIPPING', shippingPartner: 'GHN', shippingCode: 'GHN123' };
     const t = text((await mount()).container);
     const at = (s: string) => t.indexOf(s);
+    expect(at('không huỷ được')).toBeGreaterThan(-1);
+    expect(at('không huỷ được')).toBeLessThan(at('Vận chuyển'));
     expect(at('Vận chuyển')).toBeGreaterThan(-1);
     expect(at('Vận chuyển')).toBeLessThan(at('Địa chỉ giao hàng'));
-    expect(at('Địa chỉ giao hàng')).toBeLessThan(at('nên không huỷ được'));
   });
 
-  it('có cả hoá đơn VAT và phiếu thu rác: Vận chuyển → Hoá đơn VAT → thu rác → Địa chỉ → "không huỷ được" → liên hệ', async () => {
+  it('có cả hoá đơn VAT và phiếu thu rác: Vận chuyển → Hoá đơn VAT → thu rác → Địa chỉ → liên hệ', async () => {
     mocks.order = {
       ...ORDER,
       status: 'SHIPPING',
@@ -220,7 +221,7 @@ describe('chi tiết đơn web — dòng hàng và vận chuyển', () => {
     };
     mocks.waste = { id: 'w1', code: 'RC-77' };
     const t = text((await mount()).container);
-    const order = ['Vận chuyển', 'Hoá đơn VAT', 'Yêu cầu thu rác RC-77', 'Địa chỉ giao hàng', 'nên không huỷ được', 'Cần hỗ trợ'].map((s) => t.indexOf(s));
+    const order = ['Vận chuyển', 'Hoá đơn VAT', 'Yêu cầu thu rác RC-77', 'Địa chỉ giao hàng', 'Cần hỗ trợ'].map((s) => t.indexOf(s));
     expect(order.every((i) => i > -1)).toBe(true);
     expect([...order].sort((x, y) => x - y)).toEqual(order);
   });
@@ -237,7 +238,7 @@ describe('chi tiết đơn web — dòng hàng và vận chuyển', () => {
   it('đơn đã giao cho vận chuyển: nói rõ không huỷ được, khi nhận hàng có thể gửi yêu cầu đổi/trả', async () => {
     mocks.order = { ...ORDER, status: 'SHIPPING' };
     expect(text((await mount()).container)).toContain(
-      'Đơn đã giao cho đơn vị vận chuyển nên không huỷ được. Khi nhận hàng, bạn có thể gửi yêu cầu đổi/trả.',
+      'Hàng đã giao cho đơn vị vận chuyển nên đơn không huỷ được. Khi nhận hàng, bạn có thể đổi/trả trong 7 ngày.',
     );
   });
 
@@ -368,20 +369,23 @@ describe('chi tiết đơn web — hạn đổi/trả', () => {
   it('đơn đã giao quá hạn (theo returnWindowDays của cấu hình): báo quá hạn, không nút đổi/trả', async () => {
     mocks.order = { ...ORDER, status: 'DELIVERED', deliveredAt: '2026-09-01T00:00:00Z' };
     const { container } = await mount();
-    expect(text(container)).toContain('Đã quá hạn đổi/trả (7 ngày kể từ khi nhận hàng). Cần hỗ trợ thêm, liên hệ Tubu bên dưới.');
-    expect(byText(container, 'button', 'Yêu cầu đổi/trả')).toBeNull();
+    expect(text(container)).toContain('Đã hết hạn đổi/trả.');
+    expect(container.querySelector('button[aria-label="Thêm thao tác"]')).not.toBeNull();
+    click(container.querySelector('button[aria-label="Thêm thao tác"]'));
+    expect(Array.from(document.body.querySelectorAll('[role="group"] [role="button"]')).map((n) => n.textContent?.trim())).not.toContain('Yêu cầu đổi/trả');
   });
 
   it('còn hạn: có nút đổi/trả, không có câu quá hạn', async () => {
     mocks.order = { ...ORDER, status: 'DELIVERED', deliveredAt: new Date().toISOString() };
     const { container } = await mount();
-    expect(byText(container, 'button', 'Yêu cầu đổi/trả')).not.toBeNull();
-    expect(text(container)).not.toContain('Đã quá hạn đổi/trả');
+    click(container.querySelector('button[aria-label="Thêm thao tác"]'));
+    expect(Array.from(document.body.querySelectorAll('[role="group"] [role="button"]')).map((n) => n.textContent?.trim())).toContain('Yêu cầu đổi/trả');
+    expect(text(container)).not.toContain('Đã hết hạn đổi/trả');
   });
 
   it('cấu hình chưa tải/không có returnWindowDays: dùng 7 ngày như Mini App', async () => {
     mocks.config = {};
     mocks.order = { ...ORDER, status: 'DELIVERED', deliveredAt: '2026-09-01T00:00:00Z' };
-    expect(text((await mount()).container)).toContain('(7 ngày kể từ khi nhận hàng)');
+    expect(text((await mount()).container)).toContain('Đã hết hạn đổi/trả.');
   });
 });

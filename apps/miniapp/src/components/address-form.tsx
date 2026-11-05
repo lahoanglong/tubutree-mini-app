@@ -1,5 +1,5 @@
 import { ADDRESS_INPUT_LIMIT } from '../utils/input-limits';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar, Input } from 'zmp-ui';
 import { UserRound } from 'lucide-react';
@@ -8,6 +8,7 @@ import { updateAddress } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
 import { requestZaloProfile } from '../services/zalo-profile';
 import { usableProfileName } from '@tubutree/app-core/profile-name';
+import { validateAddressFields, type AddressField } from '@tubutree/app-core/commerce/checkout-form';
 import { useAuthStore } from '../store/auth';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
@@ -27,30 +28,11 @@ import { Button } from './ui/button';
 type FormFields = 'recipient' | 'phone' | 'street';
 type FormState = Record<FormFields, string>;
 const EMPTY_FORM: FormState = { recipient: '', phone: '', street: '' };
-/** SĐT Việt Nam: 0xxxxxxxxx hoặc +84xxxxxxxxx (9 số sau đầu số). */
-const VN_PHONE = /^(0|\+84)\d{9}$/;
 const FIELD_LABEL: Record<FormFields, string> = {
   recipient: vi.checkout.recipient,
   phone: vi.checkout.phone,
   street: vi.checkout.street,
 };
-
-function validate(form: FormState): Partial<Record<FormFields, string>> {
-  const errors: Partial<Record<FormFields, string>> = {};
-  (Object.keys(form) as FormFields[]).forEach((k) => {
-    if (!form[k].trim()) errors[k] = vi.checkout.requiredField;
-  });
-  if (form.phone.trim() && !VN_PHONE.test(form.phone.replace(/\s/g, ''))) {
-    errors.phone = vi.checkout.phoneInvalid;
-  }
-  return errors;
-}
-function validateGeo(g: GeoValue): { province?: string; ward?: string } {
-  const e: { province?: string; ward?: string } = {};
-  if (!g.provinceCode) e.province = vi.checkout.requiredField;
-  if (!g.wardCode) e.ward = vi.checkout.requiredField;
-  return e;
-}
 
 export interface AddressFormProps {
   initial?: AddressDTO | null;
@@ -90,10 +72,14 @@ export function AddressForm({ initial, askZaloProfile = false, onCancel, onSaved
         : EMPTY_GEO
       : (recallLastGeo(undefined, user?.id) ?? pickLastGeo(queryClient.getQueryData<AddressDTO[]>(['addresses'])) ?? EMPTY_GEO),
   );
-  const [errors, setErrors] = useState<Partial<Record<FormFields, string>>>({});
   const [touched, setTouched] = useState<Partial<Record<FormFields, boolean>>>({});
-  const [geoErr, setGeoErr] = useState<{ province?: string; ward?: string }>({});
+  const [submitted, setSubmitted] = useState(false);
+  const [focusTick, setFocusTick] = useState(0);
   const [askingZalo, setAskingZalo] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  // Cùng luật, cùng câu với form địa chỉ của web: ô chữ báo khi rời ô hoặc khi bấm Lưu; tỉnh/phường báo khi bấm Lưu.
+  const all = validateAddressFields(form, geo);
+  const shown = (f: AddressField) => (submitted || touched[f as FormFields] ? all[f] : undefined);
 
   // Chỉ điền vào ô còn trống: khách có thể đã gõ trong lúc sheet quyền của Zalo còn mở.
   const fillFromZalo = async (announceMiss: boolean) => {
@@ -147,39 +133,38 @@ export function AddressForm({ initial, askZaloProfile = false, onCancel, onSaved
     onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
 
-  const setField = (k: FormFields) => (e: { target: { value: string } }) => {
-    const next = { ...form, [k]: e.target.value };
-    setForm(next);
-    // Validate lại ngay khi user sửa field đã chạm — lỗi biến mất tức thì khi sửa đúng.
-    if (touched[k]) setErrors(validate(next));
-  };
-  const blurField = (k: FormFields) => () => {
-    setTouched((t) => ({ ...t, [k]: true }));
-    setErrors(validate(form));
-  };
+  const setField = (k: FormFields) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const blurField = (k: FormFields) => () => setTouched((t) => (t[k] ? t : { ...t, [k]: true }));
   const submit = () => {
-    const allErrors = validate(form);
-    const gErr = validateGeo(geo);
-    setErrors(allErrors);
-    setGeoErr(gErr);
-    setTouched({ recipient: true, phone: true, street: true });
-    if (Object.keys(allErrors).length === 0 && Object.keys(gErr).length === 0) save.mutate();
+    setSubmitted(true);
+    if (Object.keys(all).length > 0) {
+      setFocusTick((n) => n + 1);
+      return;
+    }
+    save.mutate();
   };
+  // Ô lỗi đầu tiên theo thứ tự trên màn hình nhận con trỏ (và được cuộn vào giữa màn): khách không phải tự dò ô đỏ giữa form dài.
+  useEffect(() => {
+    if (focusTick === 0) return;
+    const el = rootRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]');
+    el?.focus();
+    el?.scrollIntoView?.({ block: 'center' });
+  }, [focusTick]);
   const renderField = (k: FormFields) => (
-    <Field label={FIELD_LABEL[k]} error={touched[k] ? errors[k] : undefined}>
+    <Field label={FIELD_LABEL[k]} error={shown(k)}>
       <Input
         value={form[k]}
         maxLength={ADDRESS_INPUT_LIMIT[k]}
         onChange={setField(k)}
         onBlur={blurField(k)}
         inputMode={k === 'phone' ? 'numeric' : undefined}
-        status={touched[k] && errors[k] ? 'error' : undefined}
+        status={shown(k) ? 'error' : undefined}
       />
     </Field>
   );
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <div ref={rootRef} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {!initial && (!form.recipient.trim() || !form.phone.trim()) && (
         <Button variant="secondary" icon={UserRound} loading={askingZalo} onPress={() => void fillFromZalo(true)}>
           Điền nhanh từ Zalo
@@ -189,12 +174,9 @@ export function AddressForm({ initial, askZaloProfile = false, onCancel, onSaved
       {renderField('phone')}
       <GeoPicker
         value={geo}
-        onChange={(g) => {
-          setGeo(g);
-          setGeoErr(validateGeo(g));
-        }}
-        errorProvince={geoErr.province}
-        errorWard={geoErr.ward}
+        onChange={setGeo}
+        errorProvince={shown('province')}
+        errorWard={shown('ward')}
       />
       {renderField('street')}
       <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>

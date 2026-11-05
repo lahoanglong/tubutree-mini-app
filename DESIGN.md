@@ -98,6 +98,17 @@ Kệ ngang chỉ dùng `rail-sm`, `flash` và `rank` (`--tile-w-sm`, 128px) ho�
 
 `ShopHeader`, `ShopStatsRow`, `ShopTopBar`, `ShopSection` (vẽ theo `layout` của bộ sưu tập: kệ ≤10, lưới ≤6, dòng ≤5, combo), `TierBadge` (ẩn bậc thấp nhất).
 
+### Theo dõi đơn hàng
+
+| Cần | Dùng |
+|---|---|
+| đầu trang đơn: trạng thái, một câu, mốc (ngày giao, hạn trả, hạn đổi/trả), bước kế tiếp | `OrderStatusHero` (chữ từ `orderHeadline` của `packages/app-core/src/commerce/order-tracking.ts`) |
+| hành trình 5 bước có giờ thật, bước hiện tại `aria-current="step"`, mốc hãng gộp dưới "Đang giao" mới nhất trên cùng | `OrderTrack` (dữ liệu từ `orderTrack`) |
+| hãng vận chuyển, mã vận đơn, nút "Chép mã" | `OrderShipping` |
+| thanh nút của đơn: đúng một nút chính theo trạng thái, việc còn lại vào "Thêm thao tác" | `OrderActionBar` (kế hoạch từ `orderActionPlan`; điều kiện từng nút lấy từ cờ API, không đoán) |
+
+Máy tính (từ `lg`): hai cột gọn ở `/tai-khoan/don-hang/:code`, trái trạng thái + hành trình + vận chuyển + sản phẩm, phải tiền + địa chỉ + nút.
+
 ### Màn dựng gian hàng (CTV)
 
 | Cần | Dùng |

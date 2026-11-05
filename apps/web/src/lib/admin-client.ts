@@ -148,6 +148,14 @@ export interface AdminOrder {
   pancakePushStatus?: string | null;
   /** Lỗi gần nhất khi đẩy / cập nhật / huỷ đơn bên Pancake. */
   pancakeSyncError?: string | null;
+  /** Loại lỗi đẩy gần nhất: DATA | CONFIG | REJECTED | TRANSIENT; null/thiếu = chưa phân loại (API cũ). */
+  pancakeErrorKind?: string | null;
+  /** Lần cron tự đẩy lại kế tiếp (ISO); null = không còn lần nào, người phải bấm "Đẩy lại Pancake". API cũ chưa trả. */
+  pancakeNextRetryAt?: string | null;
+  /** "Đẩy lại Pancake" có nhận đơn không, do API quyết (cùng vị từ với retryPushByAdmin): NOW nhận, WAIT đơn đang chờ việc khác, NEVER không bao giờ; null = đã lên Pancake; thiếu = API cũ. */
+  pancakeRetry?: 'NOW' | 'WAIT' | 'NEVER' | null;
+  /** Việc đơn đang chờ khi pancakeRetry = WAIT (khách thanh toán, đủ hàng đặt trước, vận đơn Gomdon...). */
+  pancakeRetryWaitingFor?: string | null;
   pancakePushAttempts?: number;
   pancakeLastAttemptAt?: string | null;
   /** PENDING | CANCELLED | NOT_FOUND | TOO_LATE | FAILED — kết quả huỷ bên Pancake khi đơn bị huỷ. */
@@ -2004,6 +2012,11 @@ export interface OpsStuckOrder {
   pancakePushAttempts: number;
   pancakeLastAttemptAt: string | null;
   pancakeSyncError: string | null;
+  pancakeErrorKind?: string | null;
+  /** "Đẩy lại Pancake" có nhận đơn không (NOW/WAIT/NEVER), cùng vị từ với retryPushByAdmin; thiếu = API cũ. */
+  pancakeRetry?: 'NOW' | 'WAIT' | 'NEVER' | null;
+  /** Việc đơn đang chờ khi pancakeRetry = WAIT. */
+  pancakeRetryWaitingFor?: string | null;
 }
 export interface OpsQueueRow {
   name: string;
@@ -2106,6 +2119,8 @@ export interface OpsHealth {
     stuckOrders: OpsStuckOrder[];
     attention: number;
     attentionOrders: OpsAttentionOrder[];
+    /** Đơn chưa lên Pancake theo loại lỗi đẩy gần nhất. Tuỳ chọn: API cũ chưa trả trường này. */
+    pushErrors?: { transient: number; data: number; rejected: number; config: number; configRecheck?: number; unclassified: number };
     catalog: { lastOkAt: string | null; lastErrorAt: string | null; lastError: string | null; detail: { count?: number; failed?: number } | null };
   };
   gomdon: {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatVnRange, isoToVnLocal, parseCouponCodes, vnLocalToIso } from './admin-campaign-form';
+import { bannerImageFit, formatVnRange, isoToVnLocal, parseCouponCodes, vnLocalToIso } from './admin-campaign-form';
 
 describe('mốc giờ chiến dịch theo giờ Việt Nam', () => {
   it('nhập 01/11/2026 00:00 thì gửi 2026-10-31T17:00:00.000Z, bất kể múi giờ của máy admin', () => {
@@ -36,5 +36,26 @@ describe('parseCouponCodes: ô nhập mã gắn kèm', () => {
   });
   it('rỗng thì không có mã', () => {
     expect(parseCouponCodes('  \n ')).toEqual([]);
+  });
+});
+
+describe('bannerImageFit: ảnh có vừa khung banner 5:2 không', () => {
+  it('đúng 5:2 và lệch trong 10% thì vừa', () => {
+    expect(bannerImageFit(1500, 600)).toEqual({ ok: true });
+    expect(bannerImageFit(1650, 600).ok).toBe(true);
+    expect(bannerImageFit(1350, 600).ok).toBe(true);
+  });
+  it('lệch hơn 10%: báo ảnh sẽ bị cắt, kèm tỉ lệ đề nghị', () => {
+    const wide = bannerImageFit(1800, 600);
+    expect(wide.ok).toBe(false);
+    expect(wide.message).toContain('sẽ bị cắt');
+    expect(wide.message).toContain('5:2');
+    expect(wide.message).toContain('1800×600');
+    expect(bannerImageFit(1000, 1000).ok).toBe(false);
+    expect(bannerImageFit(1200, 800).message).toContain('1,5:1');
+  });
+  it('kích thước 0 hay NaN: không kết luận', () => {
+    expect(bannerImageFit(0, 0).ok).toBe(true);
+    expect(bannerImageFit(Number.NaN, 600).ok).toBe(true);
   });
 });

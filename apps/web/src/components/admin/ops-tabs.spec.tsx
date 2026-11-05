@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { PANCAKE_FORBIDDEN_ERROR_PREFIX } from '@tubutree/shared-types';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { OpsHealthTab } from './ops-health-tab';
 import { recomputeSoldMessage } from './ops-health-crons';
@@ -203,6 +204,99 @@ describe('OpsHealthTab — việc cụ thể cần xử lý (R2-PLATFORM-1, R2-A
       backlogOrders: [{ id: 'o7', code: 'TUBU2026101417244', createdAt: '2026-10-14T02:10:00.000Z', gomdonStatus: null, paymentMethod: 'COD' }],
     },
   };
+
+  it('hi: đơn chờ đẩy theo loại lỗi và gợi ý theo loại ở danh sách đơn kẹt', async () => {
+    const health = {
+      ...HEALTH,
+      pancake: {
+        ...HEALTH.pancake,
+        pushErrors: { transient: 3, data: 1, rejected: 2, config: 4, configRecheck: 6, unclassified: 0 },
+        stuckOrders: [{ ...HEALTH.pancake.stuckOrders[0]!, pancakeErrorKind: 'REJECTED' }],
+      },
+    };
+    vi.stubGlobal('fetch', vi.fn(mockFetch({ '/admin/ops/health': { body: health } }).fn));
+    const c = await mount(<OpsHealthTab onOpenOrder={vi.fn()} />);
+    const pancake = c.querySelector('section[aria-label="Pancake"]')!;
+    expect(pancake.textContent).toContain('Chờ đẩy, Pancake tạm lỗi (tự thử lại)3');
+    expect(pancake.textContent).toContain('thiếu dữ liệu hoặc Pancake từ chối (cần sửa đơn)3');
+    expect(pancake.textContent).toContain('Lỗi khoá API Pancake (báo kỹ thuật)4');
+    expect(pancake.textContent).toContain('Chờ thử lại sau khi khoá đã đẩy được đơn khác6');
+    expect(c.querySelector('section[aria-label="Đơn kẹt"]')!.textContent).toContain('Pancake từ chối dữ liệu đơn: sửa theo lỗi rồi bấm "Đẩy lại Pancake"');
+  });
+
+  it('hi: gợi ý ở danh sách đơn kẹt cho CONFIG_RECHECK và cho REJECTED vì 401/403 riêng đơn', async () => {
+    const base = HEALTH.pancake.stuckOrders[0]!;
+    const health = {
+      ...HEALTH,
+      pancake: {
+        ...HEALTH.pancake,
+        stuckOrders: [
+          { ...base, id: 's1', code: 'TUBURECHECK', pancakeErrorKind: 'CONFIG_RECHECK' },
+          { ...base, id: 's2', code: 'TUBUFORBID', pancakeErrorKind: 'REJECTED', pancakeSyncError: `${PANCAKE_FORBIDDEN_ERROR_PREFIX}Pancake trả 403 khi tạo đơn` },
+        ],
+      },
+    };
+    vi.stubGlobal('fetch', vi.fn(mockFetch({ '/admin/ops/health': { body: health } }).fn));
+    const c = await mount(<OpsHealthTab onOpenOrder={vi.fn()} />);
+    const text = c.querySelector('section[aria-label="Đơn kẹt"]')!.textContent!;
+    expect(text).toContain('Khoá API đã đẩy được đơn khác: hệ thống tự thử lại đơn này');
+    expect(text).toContain('Pancake từ chối quyền cho riêng đơn này');
+    expect(text).toContain('Không tạo tay đơn này trên Pancake');
+    expect(text).not.toMatch(/(?<!Không )tạo tay/i);
+    expect(text).not.toContain('sửa theo lỗi rồi bấm');
+  });
+
+  it('hi: đơn STALE ở danh sách đơn kẹt hiện câu ngừng tự đẩy, không câu "vẫn tự thử lại"', async () => {
+    const base = HEALTH.pancake.stuckOrders[0]!;
+    const health = {
+      ...HEALTH,
+      pancake: {
+        ...HEALTH.pancake,
+        stuckOrders: [{ ...base, id: 's3', code: 'TUBUSTALE', pancakePushStatus: 'STALE', pancakeErrorKind: 'REJECTED', pancakeSyncError: `${PANCAKE_FORBIDDEN_ERROR_PREFIX}Pancake trả 403` }],
+      },
+    };
+    vi.stubGlobal('fetch', vi.fn(mockFetch({ '/admin/ops/health': { body: health } }).fn));
+    const c = await mount(<OpsHealthTab onOpenOrder={vi.fn()} />);
+    const text = c.querySelector('section[aria-label="Đơn kẹt"]')!.textContent!;
+    expect(text).toContain('đã ngừng tự đẩy');
+    expect(text).not.toContain('vẫn tự thử lại');
+  });
+
+  it('đơn STALE ở danh sách đơn kẹt: câu theo cờ pancakeRetry của API (NOW bảo bấm, WAIT nêu việc chờ, NEVER không bảo bấm), API cũ không cờ thì như NOW', async () => {
+    const base = HEALTH.pancake.stuckOrders[0]!;
+    const stale = { ...base, pancakePushStatus: 'STALE', pancakeSyncError: null };
+    const health = {
+      ...HEALTH,
+      pancake: {
+        ...HEALTH.pancake,
+        stuck: 4,
+        stuckOrders: [
+          { ...stale, id: 'k1', code: 'TUBUNOW', pancakeRetry: 'NOW' },
+          { ...stale, id: 'k2', code: 'TUBUWAIT', pancakeRetry: 'WAIT', pancakeRetryWaitingFor: 'vận đơn Gomdon' },
+          { ...stale, id: 'k3', code: 'TUBUNEVER', pancakeRetry: 'NEVER' },
+          { ...stale, id: 'k4', code: 'TUBUOLD' },
+        ],
+      },
+    };
+    vi.stubGlobal('fetch', vi.fn(mockFetch({ '/admin/ops/health': { body: health } }).fn));
+    const c = await mount(<OpsHealthTab onOpenOrder={vi.fn()} />);
+    const rows = Array.from(c.querySelectorAll('section[aria-label="Đơn kẹt"] li')).map((li) => li.textContent ?? '');
+    const row = (code: string) => rows.find((r) => r.includes(code))!;
+    expect(row('TUBUNOW')).toContain('đã ngừng tự đẩy');
+    expect(row('TUBUNOW')).toContain('bấm "Đẩy lại Pancake"');
+    expect(row('TUBUNOW')).not.toContain('CHƯA đẩy lại được');
+    expect(row('TUBUWAIT')).toContain('đang chờ vận đơn Gomdon');
+    expect(row('TUBUWAIT')).toContain('CHƯA đẩy lại được');
+    expect(row('TUBUNEVER')).toContain('không có nút đẩy lại');
+    expect(row('TUBUNEVER')).not.toContain('bấm "Đẩy lại Pancake"');
+    expect(row('TUBUOLD')).toContain('bấm "Đẩy lại Pancake"');
+  });
+
+  it('API cũ chưa trả pushErrors thì không hiện dòng loại lỗi', async () => {
+    vi.stubGlobal('fetch', vi.fn(mockFetch({ '/admin/ops/health': { body: HEALTH } }).fn));
+    const c = await mount(<OpsHealthTab onOpenOrder={vi.fn()} />);
+    expect(c.querySelector('section[aria-label="Pancake"]')!.textContent).not.toContain('Lỗi khoá API Pancake');
+  });
 
   it('liệt kê webhook lỗi (mã đơn, loại sự kiện, số lần thử, lỗi), đơn cần sửa tay Pancake, báo động Gomdon, đơn thu gom chờ vận đơn', async () => {
     vi.stubGlobal('fetch', vi.fn(mockFetch({ '/admin/ops/health': { body: ISSUES } }).fn));

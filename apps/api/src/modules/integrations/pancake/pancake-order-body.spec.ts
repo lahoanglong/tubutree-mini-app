@@ -193,3 +193,22 @@ describe('pancakePaymentState', () => {
     expect(pancakePaymentState(o, credit)).toBe(state);
   });
 });
+
+describe('buildPancakeOrderBody — thẻ', () => {
+  it('body không mang tags; tagNames là tên thẻ logic', () => {
+    const r = buildPancakeOrderBody(order({ platform: 'web' }), { recipient, variations, onDealerCredit: false });
+    expect(r.body).not.toHaveProperty('tags');
+    expect(r.tagNames).toEqual(['WEB', 'RETAIL', 'COD']);
+  });
+
+  it('đơn định kỳ (platform system) mang thẻ DINH_KY thay vì rơi về MINIAPP', () => {
+    const r = buildPancakeOrderBody(order({ platform: 'system' }), { recipient, variations, onDealerCredit: false });
+    expect(r.tagNames).toEqual(['DINH_KY', 'RETAIL', 'COD']);
+    expect(r.tagNames).not.toContain('MINIAPP');
+  });
+
+  it('body không mang tên thẻ lạ ở bất kỳ khoá nào, kể cả đơn định kỳ', () => {
+    const r = buildPancakeOrderBody(order({ platform: 'system' }), { recipient, variations, onDealerCredit: false });
+    expect(JSON.stringify(r.body)).not.toContain('DINH_KY');
+  });
+});

@@ -1,9 +1,11 @@
+import type { CampaignLinkType } from '@tubutree/shared-types';
 import type { HttpClient } from '../http';
 import type { PageResponse, ProductCard } from './catalog';
 import type { CouponDTO } from './loyalty';
 
 export type CampaignPlacement = 'HOME_TOP' | 'OFFERS_TOP';
-export type CampaignLinkType = 'CAMPAIGN_PAGE' | 'PRODUCT' | 'CATEGORY' | 'URL_INTERNAL';
+// Định nghĩa ở shared-types (một nguồn cho API và app); giữ tên export cũ.
+export type { CampaignLinkType };
 export type CampaignAudience = 'ALL' | 'NEW' | 'RETURNING';
 
 /** Một banner đang chạy (`GET /campaigns`, cũng là khối `campaigns` của `GET /home`). `image` luôn dùng được: API bỏ chiến dịch có ảnh hỏng. */

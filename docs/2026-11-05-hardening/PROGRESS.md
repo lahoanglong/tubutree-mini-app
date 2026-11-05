@@ -4,6 +4,7 @@ Kế hoạch: `PLAN.md`. Phát hiện và quyết định của chủ: `audit-11
 
 ## Nhánh
 - Đợt 1 (xong): tích hợp `hard/1105`, dựng từ tip `sec/1104-audit` (3b021b59b, PR #167). Gói (gốc d79ceeb85): `hard/1105-ha`, `hard/1105-hb`, `hard/1105-hc`. Đã merge qua PR #168. Worktree và nhánh local đã dọn 05/11.
+- Đợt 3 (xong): tích hợp `hard/1105-w3`, gốc main 94a557702. Gói: `hard/1105-he`, `hard/1105-hf`, `hard/1105-hg`. Đã merge qua PR #174 (main 6ec0dee82, kéo theo docs #173) và đã deploy. Worktree và nhánh local của gói đã dọn 05/11.
 - Đợt 2 (xong): tích hợp `hard/1105-w2`, gốc main 2da8b1337. Gói: `hard/1105-hd1`, `hard/1105-hd2`, `hard/1105-hd3`. Đã merge qua PR #172 (main 94a557702) và đã deploy. Worktree, nhánh local của đợt 2 và của `sec/1104-*` đã dọn 05/11.
 
 ## Đợt 1
@@ -82,7 +83,7 @@ Kế hoạch: `PLAN.md`. Phát hiện và quyết định của chủ: `audit-11
 - Quay lại: image `:prev-7589f36c` cho cả api và web (runbook 7.2). Nếu bỏ hạn chờ: xoá dòng `DB_SESSION_OPTIONS` trong `.env` rồi tạo lại `api`.
 - File go-live: `/root/golive-archive/94a55770/`. `.pending-migrations` để nguyên ở `/opt/tubutree` cho runbook 7.2.
 
-## Đợt 3 (tích hợp `hard/1105-w3`, gốc main 94a557702 + docs 461c99ac8)
+## Đợt 3 (đã merge PR #174, đã deploy; tích hợp `hard/1105-w3`, gốc main 94a557702 + docs 461c99ac8)
 - Chủ chọn 05/11: push docs PR (#173) và làm đợt 3, thêm lỗi ZNS kẹt RETRYING. Test tối đa 2 worker. Hỏi chủ trước khi merge hoặc deploy.
 - he (Mini App, PG 46537): L4-01, L4-02, L4-03 phần Mini App, L4-04, L4-05, ô lý do cấp/thu quyền. app-core chỉ được thêm `reason` tuỳ chọn ở `staff.ts`.
 - hf (admin web + nhãn lỗi, PG 46538): L4-03 phần admin + `FIELD_LABELS`, L4-06.
@@ -126,3 +127,46 @@ Kế hoạch: `PLAN.md`. Phát hiện và quyết định của chủ: `audit-11
   - products 156, slug dài nhất 101, slug sai mẫu 0; categories slug sai mẫu 0;
   - notification_logs 58; log ZNS 0 (không có log kẹt);
   - 295 migration; PROD 94a557702.
+
+## Deploy đợt 3 (05/11, PROD 6ec0dee82)
+- PR #174: CI 8/8 xanh, merge thành main 6ec0dee82. PR docs #173 tự thành merged vì commit 461c99ac8 đã nằm trong w3.
+- dep1, 10:08–10:13:
+  - image mới: api 37615285af4c, web c5a0d3269960; sharp ổn; check-env hợp lệ;
+  - go-live trước deploy 50 PASS / 19 WARN / 0 FAIL; 1 migration chờ; đĩa trống 11G.
+- dep2, 10:14:
+  - backup `tubutree_20261105_101401.sql.gz`;
+  - migrate 295 → 296 trong 2,8 giây, 0 đang dở; API ngừng 22 giây.
+- dep3:
+  - go-live sau deploy 50 PASS / 18 WARN / 0 FAIL; smoke xanh; `/api/img` 200;
+  - `?slugs=` 20 mục 200, 21 mục 400 kèm câu mới, nên bản mới đang chạy;
+  - log API 15 phút 0 dòng ERROR/57014/55P03/P2028; container không khởi động lại.
+- WARN `queues.backlog`: pancake-push có 1 job failed, đã có từ trước.
+- Quay lại: image `:prev-94a55770` cho cả api (09985aa679fc) và web (60ce23ad126e), theo runbook 7.2 và §1.23. Migration 180000 thuộc IMAGE_COMPATIBLE.
+- Mini App (ZMP) chưa lên bản mới. Cho tới lúc đó, không gắn chiến dịch vào slug dài hơn 120 ký tự (§1.23).
+- File go-live: `/root/golive-archive/6ec0dee8/`. `/opt/tubutree` sạch.
+
+## Đợt 4 (tích hợp `hard/1105-w4`, gốc main 6ec0dee82 + docs 9c3ab9f20)
+- Chủ giao 05/11:
+  - (1) job pancake-push lỗi: tìm gốc, sửa triệt để trong mã, dọn PROD;
+  - (2) làm cả 3 nâng cấp, tuần tự: kiểm chiến dịch trước khi bật, checkout mobile 375px, trang theo dõi đơn.
+  - Tối đa 2 subagent và 2 worker test cùng lúc. Gate + Opus xong thì PR, merge, deploy (chủ đã duyệt đọc PROD, PR, deploy). Chủ để điều phối tự chốt thiết kế.
+- Đọc PROD (chỉ đọc):
+  - job lỗi duy nhất là đơn thử `TUBUSUB7659607093` (định kỳ, platform `system`, CONFIRMED, UNPAID);
+  - 73 lần đẩy, đều `422 [tags]: is invalid`; STALE từ 28/10;
+  - gói định kỳ thử vẫn ACTIVE, kỳ tới 22/11.
+- Nguyên nhân gốc: body gửi `tags` dạng tên tự do; Pancake chỉ nhận thẻ `{id, name}` có trong shop. PR #39 có bản sửa, bị giữ vì đơn thử.
+- Chủ chọn: điều phối huỷ đơn và gói thử bằng hàm hệ thống. Script `/root/ops-20261105/cancel-test-order.js`:
+  - Opus duyệt GO; đã sửa 3 điểm: chạy lại được, hạn 60s khi đóng app, kiểm admin + gỡ cờ Pancake.
+  - Chạy 05/11 10:40 sau backup `tubutree_20261105_104032.sql.gz`, EXIT=0, log `/root/ops-20261105/cancel.log`.
+  - Kết quả: đơn CONFIRMED → CANCELLED qua `AdminService.updateOrderStatus` (actor admin của chủ); gói định kỳ → CANCELLED (`SubscriptionsService.setStatus`); cờ "Cần xử lý Pancake" gỡ (`resolvePancakeAttention`); job lỗi gỡ. Hàng `pancake-push` còn failed 0.
+- Gói:
+  - `hi` (Pancake, PG 46540): gộp PR #39; phân loại lỗi; job lỗi không đọng; go-live chỉ WARN đơn còn cần xử lý; admin hiển thị rõ.
+  - `hj` (chiến dịch, PG 46541): API kiểm BLOCK/WARN; admin xem trước banner 375px + desktop; huy hiệu trên danh sách.
+  - `hk` (checkout mobile) và `hl` (theo dõi đơn): làm sau khi `hi`/`hj` xong.
+- Chỉ thị PO giữa đợt: mỗi gói chỉ cần tsc + eslint + test liên quan xanh và TỐI ĐA một lượt review; `hi` chốt sau vòng sửa 10, không review Opus lại.
+- Kết quả từng gói (đã gộp vào `hard/1105-w4`):
+  - `hj` (merge f8dcdbaf5): Opus APPROVE r5, r6; sửa r7 đã kiểm lại. Lưu chiến dịch một lệnh một giao dịch, luật `saveVerdict` chung, route `POST /admin/campaigns/check`, huy hiệu sức khoẻ, xem trước banner. Không migration. Runbook 1.25.
+  - `hi` (merge 3223ca770): 10 vòng sửa (9 vòng Opus). Loại lỗi `pancakeErrorKind` (migration `20261105190000_hi_order_pancake_error_kind`), dọn job lỗi, go-live chỉ WARN đơn còn cần xử lý. Chống hai đơn kho: lease 60s cho mọi câu ghi trạng thái, dấu gửi `pancakePushClaimedAt` với cửa lắng 5 phút (tối đa một lệnh tạo chưa rõ kết quả mỗi cửa), fence token cho câu ghi cuối lượt, báo "Pancake có 2 đơn" nếu vẫn lọt. Vòng 10 chỉ điều phối tự đọc diff. Runbook 1.24, `so-tay-van-hanh/kho.md`.
+  - `hk` (merge 7e0c01f59): checkout Mini + web 375. Lỗi từng ô địa chỉ/hoá đơn, nhảy tới ô lỗi; PRICE_CHANGED có nút nhận giá mới; hết hàng/vượt tồn báo dưới dòng kèm sửa nhanh; mất mạng thì "Thử lại · tổng" cùng khoá. Một lượt Opus: 2 MAJOR (bỏ dòng cuối khi thanh toán một phần rơi về cả giỏ; câu "Chưa gửi được đơn" sai) + 6 mục khác, đã sửa kèm test. `hk-findings.md`.
+  - `hl` (merge f14c193ce): trang theo dõi đơn Mini + web. Một câu trạng thái + mốc, hành trình gom mốc hãng, một nút chính mỗi trạng thái, web lg hai cột; logic chung `app-core/commerce/order-tracking.ts`. Một lượt Opus: 1 MAJOR (form đổi/trả mở ngoài màn ở web <md) + 8 mục khác, đã sửa kèm test. Bỏ suy luận lý do huỷ (API không trả). `hl-findings.md`.
+- Câu hỏi để gói sau: nhãn "Mặc định" và chip mã 12px lên 13px (bậc chữ dùng chung); API trả lý do huỷ cho khách; giữ khối "Cần hỗ trợ?" cuối trang đơn; xoá khoá chữ `checkout.invoiceIncomplete`.

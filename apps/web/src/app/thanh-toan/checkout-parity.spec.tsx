@@ -175,11 +175,12 @@ describe('/thanh-toan — mua một phần giỏ (R2-BUYERWEB-6)', () => {
     expect(byText(r.container, 'a', 'Đổi lựa chọn')?.getAttribute('href')).toBe('/gio-hang');
   });
 
-  it('lựa chọn nhắc dòng đã bị xoá khỏi giỏ → bỏ dòng đó; hết dòng → toàn giỏ', async () => {
+  it('lựa chọn nhắc dòng đã bị xoá khỏi giỏ → bỏ dòng đó; hết dòng → báo món đã chọn không còn, không tính tiền cả giỏ', async () => {
     rememberCheckoutSelection(['gone']);
     const r = await mount();
-    expect(m.quote.mock.calls[0]![3]).toBeUndefined();
-    expect(r.container.querySelector('[aria-label="Sản phẩm trong đơn"]')!.textContent).toContain('Dầu gội');
+    expect(m.quote).not.toHaveBeenCalled();
+    expect(r.container.querySelector('[aria-label="Sản phẩm trong đơn"]')).toBeNull();
+    expect(r.container.textContent).toContain('Món bạn chọn không còn trong giỏ');
   });
 
   it('đặt xong dọn lựa chọn để đơn sau không dính', async () => {
@@ -200,19 +201,21 @@ describe('/thanh-toan — hoá đơn VAT (R2-BUYERWEB-6)', () => {
     expect(m.placeOrder.mock.calls[0]![0].invoiceRequest).toBeUndefined();
   });
 
-  it('bật yêu cầu: khoá đặt hàng tới khi đủ MST, tên, địa chỉ, email đúng; rồi gửi kèm đơn', async () => {
+  it('bật yêu cầu: chưa đủ MST, tên, địa chỉ, email đúng thì bấm không đặt; đủ rồi mới gửi kèm đơn', async () => {
     const r = await mount();
     click(checkbox(r, 'Yêu cầu xuất hoá đơn VAT'));
     await flush(1);
-    expect(placeButton(r).disabled).toBe(true);
-    expect(r.container.textContent).toContain('Bạn điền đủ MST, tên công ty, địa chỉ và email hợp lệ nhé.');
+    click(placeButton(r));
+    await flush(2);
+    expect(m.placeOrder).not.toHaveBeenCalled();
     typeInto(field(r, 'Mã số thuế'), ' 0312345678 ');
     typeInto(field(r, 'Tên công ty'), 'Công ty A');
     typeInto(field(r, 'Địa chỉ xuất hoá đơn'), '1 Phố Huế, Hà Nội');
     typeInto(field(r, 'Email nhận hoá đơn'), 'ketoan@');
-    expect(placeButton(r).disabled).toBe(true);
+    click(placeButton(r));
+    await flush(2);
+    expect(m.placeOrder).not.toHaveBeenCalled();
     typeInto(field(r, 'Email nhận hoá đơn'), 'ketoan@a.vn');
-    expect(placeButton(r).disabled).toBe(false);
     click(placeButton(r));
     await flush(4);
     expect(m.placeOrder.mock.calls[0]![0].invoiceRequest).toEqual({
@@ -326,20 +329,22 @@ describe('/thanh-toan — ghi chú (BUYERWEB-20)', () => {
 });
 
 describe('/thanh-toan — hết hàng (R2-BUYERWEB-11)', () => {
-  it('vào thẳng khi có dòng hết hàng: cảnh báo ngay, khoá đặt hàng, có nút về giỏ', async () => {
+  it('vào thẳng khi có dòng hết hàng: báo ngay dưới dòng đó, khoá đặt hàng, có nút bỏ khỏi đơn', async () => {
     m.items = [line('i1', 'Dầu gội', { stock: 0 })];
     const r = await mount();
-    const alert = r.container.querySelector('[data-testid="checkout-cart-issue"]')!;
-    expect(alert.textContent).toContain('Dầu gội');
-    expect(alert.textContent).toContain('đã hết hàng');
-    expect(alert.querySelector('a[href="/gio-hang"]')?.textContent).toBe('Về giỏ hàng để sửa');
+    const note = r.container.querySelector('[data-testid="checkout-line-problem"]')!;
+    expect(note.textContent).toContain('Hết hàng');
+    expect(byText(note, 'button', 'Bỏ khỏi đơn')).toBeTruthy();
+    expect(r.container.querySelector('[data-testid="checkout-cart-issue"]')).toBeNull();
     expect(placeButton(r).disabled).toBe(true);
   });
 
-  it('vượt tồn kho: nói còn bao nhiêu', async () => {
+  it('vượt tồn kho: nói còn bao nhiêu và cho giảm về số đó', async () => {
     m.items = [line('i1', 'Dầu gội', { quantity: 4, stock: 2 })];
     const r = await mount();
-    expect(r.container.querySelector('[data-testid="checkout-cart-issue"]')!.textContent).toContain('hiện còn 2');
+    const note = r.container.querySelector('[data-testid="checkout-line-problem"]')!;
+    expect(note.textContent).toContain('Còn 2 sản phẩm');
+    expect(byText(note, 'button', 'Giảm còn 2')).toBeTruthy();
     expect(placeButton(r).disabled).toBe(true);
   });
 

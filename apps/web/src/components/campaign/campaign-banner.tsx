@@ -14,6 +14,8 @@ const HINT_KEY: Partial<Record<CampaignPlacement, string>> = { OFFERS_TOP: OFFER
 // Từ lg bề rộng nội dung ~1152px: tỉ lệ điện thoại 5/2 cho banner cao 460px, che gần hết màn hình laptop (P2 #37). 4/1 cho ~288px. Ghi đè ngay ở khung banner
 // Ưu đãi (không đụng `--banner-ratio` toàn cục của Trang chủ và điện thoại); khung chờ và banner thật cùng lớp để không nhảy khi tải.
 const WIDE_RATIO = 'lg:[--banner-ratio:4/1]';
+/** Cùng giá trị với lớp trên, cho khung xem trước của admin (không đợi cỡ màn hình lg). */
+export const WIDE_BANNER_RATIO = '4/1';
 
 /** Khung giữ chỗ đúng tỉ lệ banner (cùng cách của Trang chủ): chiều cao theo bề rộng nên không lệch ở mọi cỡ màn hình. */
 function BannerFrame() {

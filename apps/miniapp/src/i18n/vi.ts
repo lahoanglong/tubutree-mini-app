@@ -124,7 +124,6 @@ export const vi = {
     endsIn: (t: string) => `Còn ${t}`,
     soldPct: (n: number) => `Đã bán ${n}%`,
     priceChangedTitle: 'Giá ưu đãi đã thay đổi',
-    priceChangedCta: 'Xem lại giỏ hàng',
     upcomingTitle: 'Sắp diễn ra',
     live: 'Đang diễn ra',
     remindMe: 'Nhắc tôi',

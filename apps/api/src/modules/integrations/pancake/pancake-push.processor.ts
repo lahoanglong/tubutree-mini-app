@@ -4,7 +4,8 @@ import { UnrecoverableError, type Job } from 'bullmq';
 import { PancakeOrderService } from './pancake-order.service';
 import { QUEUE_PANCAKE_PUSH } from '../../../jobs/queues';
 import { PANCAKE_JOB_CANCEL, PANCAKE_JOB_PAYMENT } from './pancake-queue';
-import { PancakeApiError, PancakeCancelRefusedError, PancakeOrderDataError, pancakeErrorText } from './pancake-outbound';
+import { PancakeCancelRefusedError, pancakeErrorText } from './pancake-outbound';
+import { classifyPushError, isPermanentPushError, PUSH_ERROR_KIND } from './pancake-push-error';
 
 /**
  * Worker queue pancake-push (outbound). Retry+backoff (5 lần, exponential 2s) do BullMQ tự quản qua
@@ -39,15 +40,22 @@ export class PancakePushProcessor extends WorkerHost {
       return;
     }
     if (job.name === PANCAKE_JOB_PAYMENT) {
-      await this.pancakeOrder.syncPayment(orderId, final);
+      try {
+        await this.pancakeOrder.syncPayment(orderId, final);
+      } catch (err) {
+        // Khoá API sai: thử lại 4 lần nữa cũng 401/403, chỉ thêm tải lên Pancake.
+        if (classifyPushError(err) === PUSH_ERROR_KIND.CONFIG) throw new UnrecoverableError(pancakeErrorText(err));
+        throw err;
+      }
       return;
     }
 
     try {
       await this.pancakeOrder.pushOrder(orderId);
     } catch (err) {
-      // Thiếu dữ liệu người nhận, hay Pancake từ chối dứt khoát (4xx, không phải mất kết nối/5xx/429): thử lại ngay không giúp gì.
-      const unrecoverable = err instanceof PancakeOrderDataError || (err instanceof PancakeApiError && !err.transient);
+      // Thiếu dữ liệu người nhận, khoá API sai (401/403) hay Pancake từ chối dứt khoát (4xx, không phải mất kết nối/5xx/408/429, và 409/425 khi tạo đơn):
+      // thử lại ngay không giúp gì. Một nguồn phân loại: pancake-push-error.ts.
+      const unrecoverable = isPermanentPushError(classifyPushError(err));
       if (final || unrecoverable) {
         this.logger.error(`Đẩy Pancake THẤT BẠI (lần ${job.attemptsMade + 1}) cho đơn ${orderId}: ${pancakeErrorText(err)}`);
       }
