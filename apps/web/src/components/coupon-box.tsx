@@ -278,8 +278,8 @@ export function CouponBox({
             {fillCopy('coupon.pickApply')}
           </button>
         </div>
-        {/* Bảng trượt: lời báo mã sai/hết hạn nằm ngay dưới ô nhập. Đặt cuối bảng thì nằm dưới cả danh sách mã, ngoài màn hình 320x568 và khách thấy như bấm không có gì xảy ra. */}
-        {inSheet && err && (
+        {/* Lời báo mã sai/hết hạn nằm ngay dưới ô nhập khi bảng/panel đang mở. Đặt sau cả danh sách mã thì ở bảng 320x568 và ở thẻ tóm tắt dính 1440x900 nó nằm ngoài tầm nhìn, khách thấy như bấm không có gì xảy ra. */}
+        {open && err && (
           <p role="alert" className="mt-2 text-caption text-danger-fg">
             {err}
           </p>
@@ -508,7 +508,7 @@ export function CouponBox({
           </p>
         )}
       </div>
-      {err && (!inSheet || !open) && (
+      {err && !open && (
         <p role="alert" className="mt-2 text-caption text-danger-fg">
           {err}
         </p>

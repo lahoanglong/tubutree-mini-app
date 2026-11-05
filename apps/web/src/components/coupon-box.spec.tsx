@@ -404,6 +404,19 @@ describe('CouponBox — gọn một dòng, mở khi bấm', () => {
     expect(box.querySelector('[role="alert"]')).toBeNull();
   });
 
+  it('panel tại chỗ (desktop): lời báo nằm trong khung ô nhập, không dưới cả danh sách mã (thẻ tóm tắt dính cắt phần đuôi)', async () => {
+    state.applyError = new Error('Mã giảm giá không tồn tại.');
+    state.coupons = [c('A1'), c('B2')];
+    const box = await mount();
+    click(toggle(box));
+    typeInto(box.querySelector('input[name="coupon-code"]'), 'abc');
+    click(byText(box, 'button', 'Áp dụng'));
+    await flush();
+    const alerts = box.querySelectorAll('[role="alert"]');
+    expect(alerts).toHaveLength(1);
+    expect(box.querySelector('input[name="coupon-code"]')!.closest('div.rounded-card')!.contains(alerts[0]!)).toBe(true);
+  });
+
   it('đã áp mã: chỉ hiện thẻ mã đang dùng, chưa mở ô nhập khi khách chưa bấm', async () => {
     const r = render(<CouponBox currentCode="WELCOME30" subtotal={100000} />);
     mounted.push(r);
@@ -1051,9 +1064,9 @@ describe('CouponBox — dạng bảng trượt (điện thoại, trong thanh dí
     const alerts = still.querySelectorAll('[role="alert"]');
     expect(alerts).toHaveLength(1);
     const card = still.querySelector('input[name="coupon-code"]')!.closest('div.rounded-card')!;
-    expect(card.contains(alerts[0])).toBe(true);
+    expect(card.contains(alerts[0]!)).toBe(true);
     const mine = byText(still, 'p', 'Mã giảm giá của bạn')!;
-    expect(alerts[0].compareDocumentPosition(mine) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(alerts[0]!.compareDocumentPosition(mine) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });
 
