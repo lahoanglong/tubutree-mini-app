@@ -1242,6 +1242,8 @@ model Order {
   pancakePushStatus      String?
   /// Lỗi gần nhất khi gọi Pancake cho đơn này (tạo / cập nhật thanh toán / huỷ) — hiện cho admin.
   pancakeSyncError       String?
+  /// Loại lỗi đẩy gần nhất (pancake-push-error.ts): DATA | CONFIG | REJECTED | TRANSIENT. Null = chưa lỗi hay đã đẩy xong.
+  pancakeErrorKind       String?
   pancakePushAttempts    Int                   @default(0)
   pancakeLastAttemptAt   DateTime?
   /// Mốc gửi lệnh tạo đơn mà CHƯA biết kết quả (timeout, mất response, chết giữa chừng). Còn giá trị khi chưa có

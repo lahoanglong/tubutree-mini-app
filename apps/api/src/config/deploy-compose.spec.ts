@@ -170,6 +170,15 @@ describe('BullMQ giữ job đã xong/thất bại có giới hạn', () => {
     expect(m).not.toBeNull();
     expect(Number(m![1])).toBeLessThanOrEqual(1000);
   });
+
+  it('removeOnFail có hạn tuổi: job lỗi của đơn đã xong không nằm trong tập failed mãi (go-live đếm nó mỗi lần deploy)', () => {
+    const src = readFileSync(join(__dirname, '../jobs/queue.module.ts'), 'utf8');
+    const m = /removeOnFail:\s*\{[^}]*age:\s*([\d\s*]+)[^}]*count:\s*(\d+)/.exec(src);
+    expect(m).not.toBeNull();
+    const seconds = m![1]!.split('*').reduce((n, x) => n * Number(x.trim()), 1);
+    expect(seconds).toBeGreaterThanOrEqual(7 * 86_400);
+    expect(seconds).toBeLessThanOrEqual(60 * 86_400);
+  });
 });
 
 describe('docker-compose.prod.yml và docker-compose.vietnix.yml không lệch nhau ngoài chỗ có chủ ý', () => {

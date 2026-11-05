@@ -104,6 +104,8 @@ export interface PancakeBodyResult {
   /** Đơn Pancake đã mang thông tin không thu COD. */
   paymentSynced: boolean;
   paymentState: PancakePaymentState;
+  /** Tên thẻ logic (pancakeTags); service đổi sang id thẻ có trong shop trước khi gửi. */
+  tagNames: string[];
 }
 
 const vnd = (n: number) => `${n.toLocaleString('vi-VN')}đ`;
@@ -123,11 +125,15 @@ export function pancakePaymentNote(state: PancakePaymentState, paymentMethod: st
   }
 }
 
+export const PANCAKE_TAG_SUBSCRIPTION = 'DINH_KY';
+
 export function pancakeTags(
   order: Pick<PancakePushOrder, 'type' | 'platform' | 'hasRecyclingPickup' | 'gomdonPartnerCode'>,
   state: PancakePaymentState,
 ): string[] {
-  const tags = [order.platform === 'web' ? 'WEB' : 'MINIAPP', order.type === 'DEALER' ? 'DEALER' : 'RETAIL'];
+  // Đơn tự sinh từ gói định kỳ (platform 'system') không do khách đặt trên Mini App/web: kho cần phân biệt.
+  const channel = order.platform === 'web' ? 'WEB' : order.platform === 'system' ? PANCAKE_TAG_SUBSCRIPTION : 'MINIAPP';
+  const tags = [channel, order.type === 'DEALER' ? 'DEALER' : 'RETAIL'];
   if (order.hasRecyclingPickup) {
     tags.push(PANCAKE_TAG_RECYCLING);
     if (order.gomdonPartnerCode) tags.push(PANCAKE_TAG_GOMDON);
@@ -322,7 +328,6 @@ export function buildPancakeOrderBody(order: PancakePushOrder, ctx: PancakeBodyC
     transfer_money: prepaid,
     cod,
     custom_id: order.code,
-    tags: pancakeTags(order, state),
     note: pancakeOrderNote(order.code, ctx.recyclingNote, pancakePaymentNote(state, order.paymentMethod, amountDue, cod), order.note),
     extension: {
       external_order_id: order.code,
@@ -331,5 +336,5 @@ export function buildPancakeOrderBody(order: PancakePushOrder, ctx: PancakeBodyC
         : undefined,
     },
   };
-  return { body, amountDue, paymentSynced: isPancakePrepaid(state), paymentState: state };
+  return { body, amountDue, paymentSynced: isPancakePrepaid(state), paymentState: state, tagNames: pancakeTags(order, state) };
 }

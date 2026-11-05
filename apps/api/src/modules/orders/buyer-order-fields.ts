@@ -18,6 +18,7 @@ export const BUYER_HIDDEN_ORDER_FIELDS = [
   'autoCancelBlockedAt',
   'pancakePushStatus',
   'pancakeSyncError',
+  'pancakeErrorKind',
   'pancakePushAttempts',
   'pancakeLastAttemptAt',
   'pancakePushClaimedAt',

@@ -35,7 +35,7 @@ async function main(): Promise<number> {
       { env: process.env, phase },
       {
         db: async () => collectDbSnapshot(prisma, await listExpectedMigrations(path.resolve(__dirname, '../prisma/migrations'))),
-        redis: () => collectRedisSnapshot(process.env.REDIS_URL ?? 'redis://localhost:6379'),
+        redis: () => collectRedisSnapshot(process.env.REDIS_URL ?? 'redis://localhost:6379', prisma),
         backup: () => collectBackupSnapshot(process.env),
       },
     );

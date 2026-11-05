@@ -79,6 +79,37 @@ describe('PancakeClient đơn hàng (PANCAKE-2, PANCAKE-4, PANCAKE-14)', () => {
     }
   });
 
+  it('409 chỉ là lỗi tạm ở đường TẠO đơn; PUT (huỷ, thanh toán) và đọc đơn giữ phân loại cũ: 409 dứt khoát', async () => {
+    const put = makeOrderClient({ put: jest.fn().mockRejectedValue(axiosErr(409)) });
+    await expect(put.updateOrder('1', { status: 6 })).rejects.toMatchObject({ transient: false, status: 409 });
+    const get = makeOrderClient({ get: jest.fn().mockRejectedValue(axiosErr(409)) });
+    await expect(get.getOrder('1')).rejects.toMatchObject({ transient: false, status: 409 });
+    const post = makeOrderClient({ post: jest.fn().mockRejectedValue(axiosErr(409)) });
+    await expect(post.createOrder({ items: [] } as never)).rejects.toMatchObject({ transient: true, status: 409 });
+  });
+
+  it.each([408, 429, 500])('PUT: HTTP %s vẫn là lỗi tạm', async (status) => {
+    const client = makeOrderClient({ put: jest.fn().mockRejectedValue(axiosErr(status)) });
+    await expect(client.updateOrder('1', { status: 6 })).rejects.toMatchObject({ transient: true });
+  });
+
+  it('425 chỉ là lỗi tạm ở đường TẠO đơn; PUT và đọc đơn: 425 dứt khoát, không bật unreachableUntil', async () => {
+    const put = makeOrderClient({ put: jest.fn().mockRejectedValue(axiosErr(425)) });
+    await expect(put.updateOrder('1', { status: 6 })).rejects.toMatchObject({ transient: false, status: 425 });
+    const get = makeOrderClient({ get: jest.fn().mockRejectedValue(axiosErr(425)) });
+    await expect(get.getOrder('1')).rejects.toMatchObject({ transient: false, status: 425 });
+  });
+
+  it.each([408, 409, 425, 429, 500])('createOrder: HTTP %s → lỗi tạm, mang mã HTTP', async (status) => {
+    const client = makeOrderClient({ post: jest.fn().mockRejectedValue(axiosErr(status)) });
+    await expect(client.createOrder({ items: [] } as never)).rejects.toMatchObject({ transient: true, status });
+  });
+
+  it.each([400, 401, 403, 422])('createOrder: HTTP %s → từ chối dứt khoát, mang mã HTTP', async (status) => {
+    const client = makeOrderClient({ post: jest.fn().mockRejectedValue(axiosErr(status)) });
+    await expect(client.createOrder({ items: [] } as never)).rejects.toMatchObject({ transient: false, status });
+  });
+
   it('createOrder: HTTP 200 kèm success:false → từ chối dứt khoát, mang lời Pancake', async () => {
     const client = makeOrderClient({ post: jest.fn().mockResolvedValue({ data: { success: false, message: 'Hết hàng' } }) });
     await expect(client.createOrder({ items: [] } as never)).rejects.toMatchObject({
@@ -146,5 +177,48 @@ describe('PancakeClient đọc danh mục/geo: lỗi HTTP thành câu tiếng Vi
       transient: false,
       message: expect.stringContaining('Pancake trả 401 khi đọc danh mục trang 1: api_key sai'),
     });
+  });
+});
+
+describe('PancakeClient.resolveOrderTags', () => {
+  const shopTags = { data: { success: true, data: [{ id: 5000, name: 'Chờ cọc' }, { id: 12, name: ' Webb ' }, { id: 13, name: 'miniapp' }] } };
+
+  it('khớp tên trim + không phân biệt hoa thường, bỏ tên không có', async () => {
+    const client = makeClient(jest.fn().mockResolvedValue(shopTags));
+    await expect(client.resolveOrderTags(['MINIAPP', 'webb', 'KHONG_CO', 'miniapp'])).resolves.toEqual([
+      { id: 13, name: 'miniapp' },
+      { id: 12, name: ' Webb ' },
+    ]);
+  });
+
+  it('lần thứ hai dùng cache, không gọi GET lần nữa', async () => {
+    const get = jest.fn().mockResolvedValue(shopTags);
+    const client = makeClient(get);
+    await client.resolveOrderTags(['MINIAPP']);
+    await client.resolveOrderTags(['MINIAPP']);
+    expect(get).toHaveBeenCalledTimes(1);
+  });
+
+  it('đọc danh sách lỗi → [] (không ném), lần sau thử lại', async () => {
+    const get = jest.fn().mockRejectedValueOnce(new Error('boom')).mockResolvedValue(shopTags);
+    const client = makeClient(get);
+    await expect(client.resolveOrderTags(['MINIAPP'])).resolves.toEqual([]);
+    await expect(client.resolveOrderTags(['MINIAPP'])).resolves.toEqual([{ id: 13, name: 'miniapp' }]);
+    expect(get).toHaveBeenCalledTimes(2);
+  });
+
+  it('success:false trong HTTP 200 → [] và fetchOrderTags ném', async () => {
+    const client = makeClient(jest.fn().mockResolvedValue({ data: { success: false, message: 'x' } }));
+    await expect(client.fetchOrderTags()).rejects.toThrow();
+    await expect(client.resolveOrderTags(['MINIAPP'])).resolves.toEqual([]);
+  });
+
+  it('invalidateOrderTags → lần sau gọi lại GET', async () => {
+    const get = jest.fn().mockResolvedValue(shopTags);
+    const client = makeClient(get);
+    await client.resolveOrderTags(['MINIAPP']);
+    client.invalidateOrderTags();
+    await client.resolveOrderTags(['MINIAPP']);
+    expect(get).toHaveBeenCalledTimes(2);
   });
 });
