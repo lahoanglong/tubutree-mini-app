@@ -68,3 +68,15 @@ test('web 375: mở form đổi/trả từ menu thì form nằm trong tầm nhì
   await expect(page.locator('#return-form-title')).toBeFocused();
 });
 
+test('web 1280: "Thanh toán ngay" cuộn tới khung QR nhúng và chuyển focus vào khung, không rời trang', async ({ page, api }, testInfo) => {
+  test.skip(testInfo.project.name !== 'Web Customer Mobile', 'Một project đủ cho cả hai khổ: khổ do spec tự đặt');
+  const state = stateOf('pending-payment');
+  const w = await mockWorld(api, page, 'web', state, Date.now());
+  await openState(page, 'web', 1280, w.order.code);
+  await state.ready(page);
+  const panel = page.locator('#order-pay-panel');
+  await expect(panel).toBeVisible();
+  await page.getByTestId('order-side').getByRole('button', { name: 'Thanh toán ngay' }).click();
+  await expect(panel).toBeFocused();
+  await expect(page).toHaveURL(new RegExp(`/tai-khoan/don-hang/${w.order.code}$`));
+});

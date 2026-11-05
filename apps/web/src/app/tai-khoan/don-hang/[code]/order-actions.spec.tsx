@@ -760,6 +760,27 @@ describe('chi tiết đơn — truy cập', () => {
   });
 });
 
+describe('chi tiết đơn — từ md, "Thanh toán ngay" cuộn tới khung QR nhúng', () => {
+  it('cuộn tới khung QR rồi chuyển focus vào khung (người dùng bàn phím không đứng lại ở nút), không rời trang', async () => {
+    const scroll = vi.fn();
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scroll;
+    try {
+      mocks.order = { ...BASE, status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', paymentDeadline: '2099-01-01T03:00:00Z' };
+      const { container } = await mount();
+      const panel = container.querySelector<HTMLElement>('#order-pay-panel')!;
+      expect(panel).not.toBeNull();
+      const bar = container.querySelector('[data-testid="order-action-bar"]') as HTMLElement;
+      click(btn(bar, 'Thanh toán ngay')!);
+      expect(scroll.mock.contexts.at(-1)).toBe(panel);
+      expect(document.activeElement).toBe(panel);
+      expect(mocks.push).not.toHaveBeenCalled();
+    } finally {
+      Element.prototype.scrollIntoView = original;
+    }
+  });
+});
+
 describe('chi tiết đơn — điện thoại (như Mini App)', () => {
   beforeEach(() => {
     vi.stubGlobal('matchMedia', (query: string) => ({

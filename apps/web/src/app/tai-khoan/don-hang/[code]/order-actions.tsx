@@ -144,10 +144,12 @@ export function OrderActions({
     if (kind === 'pay') {
       // Từ md khung QR nằm ngay trong trang: cuộn tới nó thay vì rời trang.
       const panel = isPhone ? null : document.getElementById('order-pay-panel');
-      if (panel) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      else router.push(bankPaymentHref(o.code));
-    }
-    else if (kind === 'cancel') {
+      if (panel) {
+        panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        // Cuộn xong mà focus còn ở nút thì người dùng bàn phím phải Tab ngược cả trang để tới mã QR.
+        panel.focus({ preventScroll: true });
+      } else router.push(bankPaymentHref(o.code));
+    } else if (kind === 'cancel') {
       if (cancel.isPending) return;
       cancel.reset();
       setConfirmCancel(true);

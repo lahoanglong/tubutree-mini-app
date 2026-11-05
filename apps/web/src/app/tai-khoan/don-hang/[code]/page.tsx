@@ -223,7 +223,7 @@ export default function OrderDetailPage() {
             <OrderStatusHero headline={headline} statusLabel={buyerOrderStatusLabel(o)} stamp={stamp} tone={STATUS_COLOR[o.status] ?? STATUS_COLOR.CONFIRMED!} />
           </div>
       {showPayPanel && (
-        <div id="order-pay-panel" className="order-2 mt-2 max-md:px-4">
+        <div id="order-pay-panel" tabIndex={-1} className="order-2 mt-2 outline-none max-md:px-4">
           {canPayNow(o) && panelState === 'ready' && (
             <p className="rounded-card border border-warning-fg bg-warning-bg px-4 py-3 text-sm text-warning-fg">
               Quét mã bên dưới để thanh toán, hệ thống tự xác nhận khi nhận được tiền.
