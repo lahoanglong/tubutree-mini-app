@@ -2,7 +2,7 @@ import { exposedStock, PRODUCT_SLUGS_LIST_MAX } from '@tubutree/shared-types';
 import { BadRequestException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { Prisma, type Category } from '@prisma/client';
-import { CARD_PRODUCT_SELECT, CARD_VARIATION_SELECT, withCoverImages } from './card-select';
+import { CARD_PRODUCT_SELECT, CARD_VARIATION_SELECT, cardInStock, withCoverImages } from './card-select';
 import { VARIATION_ORDER_BY, cardPriceWithFlash, cardPrices, sortVariationsByPrice, type FlashOffer } from './variation-order';
 import { activeFlashWhere, isStillDiscounted } from '../flash-sale/flash-active';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -971,7 +971,7 @@ export class CatalogService {
           ratingAvg: p.ratingAvg,
           reviewCount: p.reviewCount,
           sold,
-          inStock: p.variations.some((v) => v.stock > 0),
+          inStock: cardInStock(p.variations),
           createdAt: p.createdAt?.toISOString(),
           isLoved: isLoved({ ratingAvg: p.ratingAvg, reviewCount: p.reviewCount, sold }, loved),
           fulfiller: await this.fulfillerOf(p.fulfilment ?? 'TUBU', p.storefrontId ? (stores.get(p.storefrontId) ?? null) : null),

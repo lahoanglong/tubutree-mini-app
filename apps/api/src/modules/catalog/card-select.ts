@@ -31,6 +31,14 @@ export const CARD_PRODUCT_SELECT = {
   variations: { where: { isActive: true }, orderBy: VARIATION_ORDER_BY, select: CARD_VARIATION_SELECT },
 } satisfies Prisma.ProductSelect;
 
+/**
+ * Thẻ danh sách chỉ cần biết còn hàng hay không: số tồn (kể cả tồn ảo 99.999.988 của hàng không quản kho) được chọn từ DB để tính cờ này
+ * và KHÔNG được đưa vào payload thẻ. Thẻ của danh mục và wishlist gọi hàm này thay vì tự đọc `stock`; spec của file này khoá rằng payload các thẻ đó không có số tồn.
+ */
+export function cardInStock(variations: readonly { stock: number }[]): boolean {
+  return variations.some((v) => v.stock > 0);
+}
+
 type RawReader = { $queryRaw: <T>(query: TemplateStringsArray, ...values: unknown[]) => Promise<T> };
 
 /**
