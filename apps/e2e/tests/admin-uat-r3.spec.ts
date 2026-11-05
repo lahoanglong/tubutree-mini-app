@@ -471,13 +471,14 @@ async function seedAll(): Promise<void> {
     await sale('W13 Đợt đã kết thúc', vnAt(-3, '09:00'), vnAt(-3, '11:00'));
     await sale('W13 Đợt đang tắt', vnAt(4, '09:00'), vnAt(4, '11:00'), false);
 
-    // Mã giảm giá: đủ năm trạng thái theo ngày.
+    // Mã giảm giá: đủ năm trạng thái theo ngày, thêm một mã vừa tắt vừa hết hạn (nhãn Đã tắt, chỉ nằm ở bộ lọc Đã tắt).
     const coupon = (code: string, over: Record<string, unknown>) =>
       prisma.coupon.create({ data: { code, type: 'PERCENT', value: 10, maxDiscount: 30_000, minOrder: 100_000, startAt: vnAt(-5, '00:00'), endAt: vnAt(5, '23:59'), usageLimit: 100, perUserLimit: 1, scope: 'PUBLIC', isActive: true, ...over } });
     await coupon('E2EW13RUN', {});
     await coupon('E2EW13SOON', { startAt: vnAt(3, '00:00'), endAt: vnAt(10, '23:59'), type: 'AMOUNT', value: 20_000, maxDiscount: null });
     await coupon('E2EW13OLD', { startAt: vnAt(-20, '00:00'), endAt: vnAt(-10, '23:59') });
     await coupon('E2EW13OFF', { isActive: false });
+    await coupon('E2EW13DEAD', { isActive: false, startAt: vnAt(-20, '00:00'), endAt: vnAt(-10, '23:59') });
     const full = await coupon('E2EW13FULL', { usageLimit: 1, usedCount: 1, perUserLimit: 0 });
     await prisma.couponRedemption.create({ data: { couponId: full.id, userId: CUSTOMER.id } });
 
@@ -717,24 +718,28 @@ for (const frame of FRAMES) {
       await expect(item('E2EW13OLD')).toContainText('Đã hết hạn');
       await expect(item('E2EW13OLD')).toContainText(`${dmy(-20)} – ${dmy(-10)}`);
       await expect(item('E2EW13OFF')).toContainText('Đã tắt');
+      await expect(item('E2EW13DEAD'), 'mã tắt mà cũng hết hạn mang nhãn Đã tắt').toContainText('Đã tắt');
       await expect(item('E2EW13FULL')).toContainText('Hết lượt');
       await expect(item('E2EW13FULL')).toContainText('Đã dùng 1/1 lượt · không giới hạn/khách');
       await expectCleanScreen(page, 'ma-giam-gia');
       await shot(page, 'ma-giam-gia', 'danh-sach');
 
-      // Bộ lọc theo trạng thái khớp với nhãn của từng dòng: không dòng nào mang nhãn khác bộ lọc đang chọn.
+      // Bộ lọc theo trạng thái khớp với nhãn của từng dòng: mỗi mã nằm đúng một bộ lọc, trừ mã hết lượt (còn bật, trong hạn) nằm ở "Đang chạy" mang nhãn "Hết lượt":
+      // bộ lọc theo ngày và cờ bật, không theo lượt dùng, nên đây là hành vi chủ đích. Mã vừa tắt vừa hết hạn chỉ nằm ở "Đã tắt".
       const badgeOf = async (code: string) => (await item(code).locator('span').filter({ hasText: /^(Đang chạy|Sắp diễn ra|Đã hết hạn|Đã tắt|Hết lượt)$/ }).first().innerText()).trim();
-      const expectFilter = async (name: string, label: string, present: string[], absent: string[]) => {
+      const ALL_CODES = ['E2EW13RUN', 'E2EW13SOON', 'E2EW13OLD', 'E2EW13OFF', 'E2EW13DEAD', 'E2EW13FULL'];
+      const expectFilter = async (name: string, present: Record<string, string>, absent: string[]) => {
         await chip(name).click();
         await expect(chip(name)).toHaveAttribute('aria-pressed', 'true');
-        for (const code of present) await expect(item(code), `${name}: có ${code}`).toBeVisible();
+        for (const code of Object.keys(present)) await expect(item(code), `${name}: có ${code}`).toBeVisible();
         for (const code of absent) await expect(item(code), `${name}: không có ${code}`).toHaveCount(0);
-        for (const code of present) expect(await badgeOf(code), `${name}: nhãn của ${code} khớp bộ lọc`).toBe(label);
+        for (const [code, label] of Object.entries(present)) expect(await badgeOf(code), `${name}: nhãn của ${code}`).toBe(label);
       };
-      await expectFilter('Đang chạy', 'Đang chạy', ['E2EW13RUN'], ['E2EW13SOON', 'E2EW13OLD', 'E2EW13OFF']);
-      await expectFilter('Sắp diễn ra', 'Sắp diễn ra', ['E2EW13SOON'], ['E2EW13RUN', 'E2EW13OLD', 'E2EW13OFF']);
-      await expectFilter('Đã hết hạn', 'Đã hết hạn', ['E2EW13OLD'], ['E2EW13RUN', 'E2EW13SOON']);
-      await expectFilter('Đã tắt', 'Đã tắt', ['E2EW13OFF'], ['E2EW13RUN', 'E2EW13SOON', 'E2EW13OLD']);
+      const others = (...keep: string[]) => ALL_CODES.filter((c) => !keep.includes(c));
+      await expectFilter('Đang chạy', { E2EW13RUN: 'Đang chạy', E2EW13FULL: 'Hết lượt' }, others('E2EW13RUN', 'E2EW13FULL'));
+      await expectFilter('Sắp diễn ra', { E2EW13SOON: 'Sắp diễn ra' }, others('E2EW13SOON'));
+      await expectFilter('Đã hết hạn', { E2EW13OLD: 'Đã hết hạn' }, others('E2EW13OLD'));
+      await expectFilter('Đã tắt', { E2EW13OFF: 'Đã tắt', E2EW13DEAD: 'Đã tắt' }, others('E2EW13OFF', 'E2EW13DEAD'));
       await chip('Tất cả').click();
       await search.fill('');
 
