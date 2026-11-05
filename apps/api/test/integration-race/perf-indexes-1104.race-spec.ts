@@ -94,13 +94,13 @@ describe('Index hiệu năng 2026-11-04 (real Postgres)', () => {
    * không có gì bảo đảm câu cuối đã tới `captured` ngay sau `await`. Chờ tới khi có câu khớp (tối đa 3 giây) thay vì đọc ngay; khi không thấy
    * thì lỗi in kèm danh sách câu đã bắt để biết do thiếu sự kiện hay do code không sinh câu đó.
    */
-  async function capturedMatching(re: RegExp, label: string): Promise<Captured> {
+  async function capturedMatching(re: RegExp, label: string | (() => string)): Promise<Captured> {
     const found = () => captured.find((c) => re.test(c.query));
     for (let waited = 0; !found() && waited < 3000; waited += 10) await new Promise((resolve) => setTimeout(resolve, 10));
     const hit = found();
     if (!hit) {
       const seen = captured.map((c) => c.query.slice(0, 90).replace(/\s+/g, ' '));
-      throw new Error(`${label}: không bắt được câu khớp ${re}; captured.length=${captured.length}; đã bắt: ${JSON.stringify(seen)}`);
+      throw new Error(`${typeof label === 'function' ? label() : label}: không bắt được câu khớp ${re}; captured.length=${captured.length}; đã bắt: ${JSON.stringify(seen)}`);
     }
     return hit;
   }
@@ -165,7 +165,7 @@ describe('Index hiệu năng 2026-11-04 (real Postgres)', () => {
     for (const [table, re] of Object.entries(expected)) {
       const batchSql = new RegExp(`^\\s*DELETE FROM "(public"\\.")?${table}"`);
       const caught = () => captured.filter((c) => /^\s*DELETE FROM/.test(c.query)).map((c) => c.query.slice(0, 60).replace(/\s+/g, ' '));
-      const q = await capturedMatching(batchSql, `D10 bảng ${table}; result=${JSON.stringify(result)}; câu xoá đã bắt=${JSON.stringify(caught())}`);
+      const q = await capturedMatching(batchSql, () => `D10 bảng ${table}; result=${JSON.stringify(result)}; câu xoá đã bắt=${JSON.stringify(caught())}`);
       expect(await planOf(q)).toMatch(re);
     }
   });
