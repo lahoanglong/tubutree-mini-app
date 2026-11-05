@@ -49,7 +49,7 @@ export function InvoiceSection({
         <div className="mt-2 grid gap-3 sm:grid-cols-2">
           {fields.map((f) => (
             <label key={f.key} htmlFor={`${id}-${f.key}`} className={f.key === 'address' ? 'block sm:col-span-2' : 'block'}>
-              <span className="text-caption font-medium text-[color:var(--color-text-secondary)]">{f.label}</span>
+              <span className="text-field-label text-[color:var(--color-text-secondary)]">{f.label}</span>
               <input
                 id={`${id}-${f.key}`}
                 type={f.type ?? 'text'}

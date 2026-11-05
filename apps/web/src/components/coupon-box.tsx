@@ -257,7 +257,7 @@ export function CouponBox({
         </button>
       )}
       <div className="rounded-card border border-[color:var(--color-border-subtle)] bg-[color:var(--color-bg-canvas)] p-3">
-        <label htmlFor="coupon-code" className="mb-2 block text-label font-semibold text-[color:var(--color-text-secondary)]">
+        <label htmlFor="coupon-code" className="mb-2 block text-field-label text-[color:var(--color-text-secondary)]">
           {fillCopy('coupon.pickManual')}
         </label>
         <div className="flex gap-2">

@@ -182,6 +182,8 @@ Thứ tự khối Trang chủ cho khách cũ: header dính → thẻ thành viê
 
 Chữ mua sắm dùng chung chỉ thêm vào `packages/app-core/src/shop-copy.ts` (khoá `SHOP_COPY`, kèm ngân sách độ dài ở `shop-copy-budget.ts`); màn gọi `fillCopy('<khoá>')`, không viết chữ thẳng trong mã. Chữ đã chốt: "Bán chạy nhất", "Miễn phí giao hàng", "Được yêu thích", "Tubu chọn", "Mã giảm giá", "Thương hiệu", "Gian hàng", "Giờ vàng" (hoa chữ G), "Tạm hết hàng", "Ngừng bán", "Kết thúc sau {t}". Giọng: "bạn" và "Tubu".
 
+Nhãn đặt trên ô nhập (`Field`, địa chỉ, hoá đơn VAT, hồ sơ, đổi trả, ô nhập mã giảm giá) dùng bậc riêng `--type-field-label-*`: 12px, dòng 1,33, độ đậm 500 (Mini: `<Text variant="field-label">`; web: lớp `text-field-label`, `apps/web/src/field-label-style.spec.ts` quét các file có nhãn ô nhập). Bậc `--type-label-*` (12px, 600) chỉ dành cho chip, huy hiệu và nhãn nhỏ trên thẻ, không dùng cho nhãn ô nhập.
+
 Thuật ngữ cấm trong chữ khách đọc (`FORBIDDEN_TERMS`), cột phải là chữ dùng thay:
 
 | Cấm (mẫu) | Dùng |

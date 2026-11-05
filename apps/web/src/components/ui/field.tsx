@@ -34,11 +34,11 @@ export function Field({ label, error, children }: FieldProps) {
   return (
     <div>
       {only ? (
-        <label id={labelId} htmlFor={controlId} className="mb-1 block text-xs text-stone-600">
+        <label id={labelId} htmlFor={controlId} className="mb-1 block text-field-label text-stone-600">
           {label}
         </label>
       ) : (
-        <div id={labelId} className="mb-1 text-xs text-stone-600">
+        <div id={labelId} className="mb-1 text-field-label text-stone-600">
           {label}
         </div>
       )}

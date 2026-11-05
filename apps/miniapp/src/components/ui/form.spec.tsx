@@ -15,6 +15,27 @@ describe('Field', () => {
     expect(screen.getByText('Không hợp lệ')).toBeInTheDocument();
   });
 
+  it('nhãn ô nhập dùng bậc field-label (12px/1,33/500), cả khi bọc một control lẫn khi bọc nhóm', () => {
+    const { container } = render(
+      <>
+        <Field label="Số điện thoại">
+          <input />
+        </Field>
+        <Field label="Giới tính">
+          <input type="radio" aria-label="Nam" />
+          <input type="radio" aria-label="Nữ" />
+        </Field>
+      </>,
+    );
+    for (const label of ['Số điện thoại', 'Giới tính']) {
+      const holder = screen.getByText(label).closest('[style*="--type-"]') as HTMLElement;
+      expect(holder.style.fontSize).toBe('var(--type-field-label-size)');
+      expect(holder.style.lineHeight).toBe('var(--type-field-label-lh)');
+      expect(holder.style.fontWeight).toBe('var(--type-field-label-weight)');
+    }
+    expect(container.innerHTML).not.toContain('--type-caption-size');
+  });
+
   it('omits error text when none given', () => {
     render(
       <Field label="Tên">

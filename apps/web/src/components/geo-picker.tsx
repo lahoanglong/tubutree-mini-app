@@ -44,7 +44,7 @@ export function GeoPicker({
   return (
     <>
       <div>
-        <label htmlFor={provinceId} className="mb-1 block text-caption font-medium text-stone-700">
+        <label htmlFor={provinceId} className="mb-1 block text-field-label text-stone-700">
           Tỉnh/Thành phố
         </label>
         <select
@@ -79,7 +79,7 @@ export function GeoPicker({
       </div>
 
       <div>
-        <label htmlFor={wardId} className="mb-1 block text-caption font-medium text-stone-700">
+        <label htmlFor={wardId} className="mb-1 block text-field-label text-stone-700">
           Phường/Xã
         </label>
         <select

@@ -187,7 +187,7 @@ function TextField({
   return (
     <div>
       <label className="block">
-        <span className="text-caption font-medium text-[color:var(--color-text-secondary)]">{label}</span>
+        <span className="text-field-label text-[color:var(--color-text-secondary)]">{label}</span>
         <input
           value={value}
           onChange={(e) => onChange(e.target.value)}

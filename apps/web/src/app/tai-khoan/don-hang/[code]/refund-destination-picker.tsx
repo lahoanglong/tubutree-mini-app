@@ -71,7 +71,7 @@ export function RefundDestinationPicker({
     extra: { inputMode?: 'numeric'; placeholder?: string } = {},
   ) => (
     <label className="block">
-      <span className="text-xs font-medium text-stone-700">{label}</span>
+      <span className="text-field-label text-stone-700">{label}</span>
       <input
         value={bank[key]}
         onChange={(e) => onBank({ ...bank, [key]: e.target.value })}

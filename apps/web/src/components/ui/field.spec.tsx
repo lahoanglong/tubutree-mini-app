@@ -42,6 +42,26 @@ describe('Field', () => {
     expect(document.getElementById(ids[1]!)!.textContent).toContain('Số điện thoại chưa đúng');
   });
 
+  it('nhãn dùng bậc field-label (12px/1,33/500) như Field của Mini App, cả khi bọc một control lẫn khi bọc nhóm', () => {
+    const { container } = mount(
+      <>
+        <Field label="Họ tên">
+          <input />
+        </Field>
+        <Field label="Giới tính">
+          <input type="radio" />
+          <input type="radio" />
+        </Field>
+      </>,
+    );
+    const single = container.querySelector('label')!;
+    const group = document.getElementById(container.querySelector('[role="group"]')!.getAttribute('aria-labelledby')!)!;
+    for (const el of [single, group]) {
+      expect(el.className).toContain('text-field-label');
+      expect(el.className).not.toContain('text-xs');
+    }
+  });
+
   it('nhiều con: bọc nhóm role=group có tên theo nhãn', () => {
     const { container } = mount(
       <Field label="Giới tính" error="Chọn một">

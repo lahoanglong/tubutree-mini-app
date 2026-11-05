@@ -217,7 +217,7 @@ export function ReturnRequestForm({
           ))}
         </div>
         <label className="mt-2 block">
-          <span className="text-xs font-medium text-stone-700">Mô tả thêm</span>
+          <span className="text-field-label text-stone-700">Mô tả thêm</span>
           <textarea
             value={reason}
             onChange={(e) => setReason(e.target.value)}
