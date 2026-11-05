@@ -106,16 +106,16 @@ export function ProductStoryStudio({
     onSuccess: (r) => setFound(r),
   });
 
-  // Bản nháp AI thay cảnh lắp ghép và điểm chỉ; giữ vòng cung (bám phân loại thật), ảnh sân khấu và công tắc bật/tắt của sản phẩm. Chưa lưu: admin xem trước rồi tự bấm Lưu.
+  // Bản nháp AI thay cảnh lắp ghép và điểm chỉ; giữ vòng cung (bám phân loại thật), ảnh sân khấu, khung ảnh và công tắc bật/tắt của sản phẩm. Chưa lưu: admin xem trước rồi tự bấm Lưu.
   const draft = useMutation({
     mutationFn: () => generateStoryDraft(product.id, aiNote),
     onSuccess: (r) => {
-      const { cutoutUrl, enabled } = current;
+      const { cutoutUrl, imageFrame, enabled } = current;
       const kept = current.scenes.filter((s) => s.kind === 'variant_arc');
       setNote(null);
       setPick(0);
       setAiInfo({ provider: r.provider, warnings: r.warnings });
-      onChange({ version: 1, enabled, ...(cutoutUrl ? { cutoutUrl } : {}), scenes: [...kept, ...r.config.scenes] });
+      onChange({ version: 1, enabled, ...(cutoutUrl ? { cutoutUrl } : {}), ...(imageFrame ? { imageFrame } : {}), scenes: [...kept, ...r.config.scenes] });
     },
   });
 
@@ -167,7 +167,8 @@ export function ProductStoryStudio({
           onClick={() => {
             if (!generated) return setNote('Chưa đủ dữ liệu: cần thành phần hoặc từ 2 biến thể để tự sinh kịch bản.');
             setNote(null);
-            onChange(generated);
+            const { cutoutUrl, imageFrame } = current;
+            onChange({ ...generated, ...(cutoutUrl ? { cutoutUrl } : {}), ...(imageFrame ? { imageFrame } : {}) });
           }}
         >
           ⚡ Tự sinh Story từ Thành phần &amp; Mô tả

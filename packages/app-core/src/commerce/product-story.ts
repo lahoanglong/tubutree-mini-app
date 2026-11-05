@@ -186,6 +186,7 @@ export function resolveStoryConfig(p: StoryProductInput): ProductStoryConfig | n
   }
   const preset = findStoryPreset(p.slug);
   if (preset) {
+    if (!preset.enabled) return null;
     const arc = buildArcScene(p.variations);
     return arc ? { ...preset, scenes: [arc, ...preset.scenes] } : preset;
   }

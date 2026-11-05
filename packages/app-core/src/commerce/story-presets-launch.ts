@@ -32,49 +32,53 @@ function preset(steps: AssemblyStep[], points: HudCalloutPoint[], closing: strin
   };
 }
 
-/** Mỗi mục: slug gốc (không hậu tố) → kịch bản. Thứ tự theo Rollout Plan mục 4. */
+/**
+ * Mỗi mục: slug gốc (không hậu tố) → kịch bản. Thứ tự theo Rollout Plan mục 4. Chỉ đặt lớp hình ở bước có sprite thật sự khớp nguyên liệu
+ * (giọt mật, giọt dầu, lát dứa, hạt cà phê, hạt granola); bước chưa có hình phù hợp để trống thay vì gắn nhãn lên hình khác vật.
+ * Cả năm kịch bản bật sẵn (`enabled: true`); admin tắt từng sản phẩm bằng ô "Bật câu chuyện sản phẩm" trong Story Studio rồi Lưu.
+ */
 export const LAUNCH_STORY_PRESETS: Record<string, ProductStoryConfig> = {
   'duong-hoa-dua-sokfarm': preset(
     [
-      step('Từ hoa dừa', 'Đường làm từ mật hoa dừa.', L('honey-drop', 'Mật hoa dừa', 'top', 30, 24, 1.1, -15)),
-      step('Nhiệt độ thấp', 'Bao bì ghi công nghệ chế biến nhiệt độ thấp.', L('water-droplet', 'Nhiệt độ thấp', 'left', 22, 56, 0.9, 15)),
-      step('Không qua tinh luyện', 'Bao bì ghi không qua tinh luyện.', L('honey-drop', 'Mật hoa dừa', 'right', 74, 30, 0.9, 10)),
+      step('Từ hoa dừa', 'Đường hoa dừa, thơm hương dừa.', L('honey-drop', 'Mật hoa dừa', 'top', 30, 24, 1.1, -15)),
+      step('Nhiệt độ thấp', 'Bao bì ghi công nghệ chế biến nhiệt độ thấp.'),
+      step('Không qua tinh luyện', 'Bao bì ghi không qua tinh luyện.'),
     ],
     [pt('h1', 26, 30, 'left', '100% nguyên chất'), pt('h2', 74, 46, 'right', 'Thơm hương dừa'), pt('h3', 26, 64, 'left', 'Chế biến nhiệt độ thấp'), pt('h4', 74, 80, 'right', 'Không qua tinh luyện')],
     'Vị ngọt tự nhiên từ hoa dừa',
   ),
   'banh-mam-hat-yen-mach-bh-nong': preset(
     [
-      step('Gạo lứt mầm', 'Tên bánh in trên bao có gạo lứt mầm.', L('granola-clusters', 'Gạo lứt mầm', 'top', 30, 24, 1, -15)),
+      step('Gạo lứt mầm', 'Tên bánh in trên bao có gạo lứt mầm.'),
       step('Hạt yến mạch', 'Và có hạt yến mạch.', L('granola-clusters', 'Hạt yến mạch', 'right', 74, 30, 1.1, 10)),
-      step('Nhiều lớp mỏng', 'Bao bì ghi công nghệ 1000 lớp Đài Loan.', L('water-droplet', 'Lớp bánh', 'left', 22, 58, 0.9, 20)),
+      step('Nhiều lớp mỏng', 'Bao bì ghi công nghệ 1000 lớp.'),
     ],
-    [pt('h1', 26, 30, 'left', 'Gạo lứt mầm'), pt('h2', 74, 46, 'right', 'Hạt yến mạch'), pt('h3', 26, 64, 'left', 'Ăn sáng ít ngọt'), pt('h4', 74, 80, 'right', 'Công nghệ 1000 lớp')],
-    'Bữa sáng ít ngọt',
+    [pt('h1', 26, 34, 'left', 'Gạo lứt mầm'), pt('h2', 74, 52, 'right', 'Hạt yến mạch'), pt('h3', 26, 72, 'left', 'Công nghệ 1000 lớp')],
+    'Bánh gạo lứt mầm yến mạch',
   ),
   'dau-rua-mat-po-lang-100ml-55ml': preset(
     [
-      step('Dầu bơ', 'Tên sản phẩm có dầu bơ.', L('oil-drop', 'Dầu bơ', 'top', 30, 24, 1.1, -15)),
-      step('Dầu hạt chanh dây', 'Trên chai ghi thêm dầu hạt chanh dây.', L('oil-drop', 'Dầu hạt chanh dây', 'right', 74, 30, 0.9, 10)),
-      step('Vitamin E', 'Trên chai ghi có vitamin E.', L('water-droplet', 'Vitamin E', 'left', 22, 58, 0.9, 20)),
+      step('Dầu bơ', 'Bao bì ghi có dầu bơ.', L('oil-drop', 'Dầu bơ', 'top', 30, 24, 1.1, -15)),
+      step('Dầu hạt chanh dây', 'Bao bì ghi thêm dầu hạt chanh dây.', L('oil-drop', 'Dầu hạt chanh dây', 'right', 74, 30, 0.9, 10)),
+      step('Vitamin E', 'Bao bì ghi có vitamin E.'),
     ],
     [pt('h1', 26, 34, 'left', 'Dầu bơ'), pt('h2', 74, 52, 'right', 'Dầu hạt chanh dây'), pt('h3', 26, 72, 'left', 'Vitamin E')],
     'Dầu bơ, dầu hạt chanh dây, vitamin E',
   ),
   'nuoc-rua-chen-fuwa3e-3-8l': preset(
     [
-      step('Vỏ dứa', 'Nguyên liệu là vỏ dứa.', L('pineapple-enzyme', 'Vỏ dứa', 'top', 30, 24, 1.1, -15)),
-      step('Lên men thành enzyme', 'Bao bì ghi làm sạch bằng enzyme vỏ dứa lên men.', L('water-droplet', 'Enzyme', 'left', 22, 56, 0.9, 15)),
-      step('Hương dứa', 'Bao bì ghi hương dứa.', L('pineapple-enzyme', 'Hương dứa', 'right', 74, 30, 0.9, 10)),
+      step('Enzyme vỏ dứa', 'Ảnh sản phẩm ghi làm sạch bằng enzyme vỏ dứa lên men.', L('pineapple-enzyme', 'Vỏ dứa', 'top', 30, 24, 1.1, -15)),
+      step('Hương dứa', 'Ảnh sản phẩm ghi hương dứa.', L('pineapple-enzyme', 'Hương dứa', 'right', 74, 30, 0.9, 10)),
+      step('Can 3,8L', 'Một can 3,8 lít.'),
     ],
-    [pt('h1', 26, 34, 'left', 'Enzyme vỏ dứa lên men'), pt('h2', 74, 52, 'right', 'Thành phần gốc thực vật'), pt('h3', 26, 72, 'left', 'Hương dứa')],
+    [pt('h1', 26, 34, 'left', 'Enzyme vỏ dứa lên men'), pt('h2', 74, 52, 'right', 'Hương dứa'), pt('h3', 26, 72, 'left', 'Can 3,8L')],
     'Sạch bằng enzyme từ vỏ dứa',
   ),
   'ca-phe-sau-rieng-thom-beo-durica-le-plateau-hop-g-x-10-goi': preset(
     [
       step('Cà phê', 'Hương vị bắt đầu từ cà phê.', L('arabica-bean', 'Cà phê', 'top', 30, 24, 1.1, -15)),
-      step('Sầu riêng', 'Kết hợp với sầu riêng, thơm béo.', L('honey-drop', 'Sầu riêng', 'right', 74, 30, 0.9, 10)),
-      step('Hộp mười gói', 'Mỗi hộp có mười gói.', L('water-droplet', 'Gói pha', 'left', 22, 58, 0.9, 20)),
+      step('Sầu riêng', 'Kết hợp với sầu riêng, thơm béo.'),
+      step('Hộp mười gói', 'Mỗi hộp có mười gói.'),
     ],
     [pt('h1', 26, 34, 'left', 'Cà phê'), pt('h2', 74, 52, 'right', 'Sầu riêng'), pt('h3', 26, 72, 'left', 'Hộp 10 gói')],
     'Cà phê thơm béo vị sầu riêng',

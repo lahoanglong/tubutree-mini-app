@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseStoryConfig, STORY_LIMITS, type ProductStoryConfig } from '@tubutree/shared-types';
-import { resolveStoryConfig } from './product-story';
+import { resolveStoryConfig, storyView } from './product-story';
 import { STORY_PRESETS } from './story-presets';
 import { baseSlug, findStoryPreset, LAUNCH_STORY_PRESETS } from './story-presets-launch';
 import { STORY_SPRITES } from './story-sprites';
@@ -27,7 +27,7 @@ describe('LAUNCH_STORY_PRESETS', () => {
     for (const key of Object.keys(LAUNCH_STORY_PRESETS)) expect(baseSlug(key), key).toBe(key);
   });
 
-  it.each(Object.keys(LAUNCH_STORY_PRESETS))('%s: qua parseStoryConfig, 3 bước có hình, 3–4 điểm chỉ, bật sẵn, không có vòng cung', (key) => {
+  it.each(Object.keys(LAUNCH_STORY_PRESETS))('%s: qua parseStoryConfig, 3 bước, ít nhất một bước có hình khớp, 3–4 điểm chỉ, bật sẵn, không có vòng cung', (key) => {
     const cfg = LAUNCH_STORY_PRESETS[key]!;
     const r = parseStoryConfig(cfg);
     expect(r.ok, r.ok ? '' : r.error).toBe(true);
@@ -35,8 +35,8 @@ describe('LAUNCH_STORY_PRESETS', () => {
     const hud = cfg.scenes.find((s) => s.kind === 'hud_callouts');
     if (assembly?.kind !== 'ingredient_assembly' || hud?.kind !== 'hud_callouts') throw new Error('thiếu cảnh');
     expect(assembly.steps).toHaveLength(3);
+    expect(assembly.steps.some((st) => st.layers.length > 0), `${key}: không bước nào có hình`).toBe(true);
     for (const st of assembly.steps) {
-      expect(st.layers.length, `${key}: ${st.title}`).toBeGreaterThan(0);
       for (const l of st.layers) expect(STORY_SPRITES, `${key}: ${l.spriteId}`).toHaveProperty(l.spriteId ?? '');
     }
     expect(hud.points.length).toBeGreaterThanOrEqual(3);
@@ -54,14 +54,14 @@ describe('LAUNCH_STORY_PRESETS', () => {
 
   it('không có tuyên bố cần giấy tờ: vùng miền, hữu cơ, vegan, diệt khuẩn, calo, công dụng sức khoẻ, so sánh hơn', () => {
     const BANNED =
-      /trà vinh|bến tre|quảng nam|đắk lắk|đắc lắc|thanh hoá|thanh hóa|tây nguyên|hữu cơ|organic|low ?gi|vegan|thuần chay|diệt khuẩn|kháng khuẩn|calo|protein|canxi|chất xơ|lành tính|an toàn|không hoá chất|không hóa chất|chữa|điều trị|mọc tóc|giảm |tốt nhất|số 1|số một|thượng hạng|tự nhiên 100|sấy thăng hoa|thăng hoa/i;
+      /trà vinh|bến tre|quảng nam|đắk lắk|đắc lắc|thanh hoá|thanh hóa|tây nguyên|hữu cơ|organic|low ?gi|vegan|thuần chay|diệt khuẩn|kháng khuẩn|calo|protein|canxi|chất xơ|lành tính|an toàn|không hoá chất|không hóa chất|chữa|điều trị|mọc tóc|giảm |tốt nhất|số 1|số một|thượng hạng|tự nhiên 100|sấy thăng hoa|thăng hoa|đài loan|việt nam|nhập khẩu|xuất xứ|chứng nhận|tiêu chuẩn|sản xuất|thực vật|nguyên liệu|tinh khiết|không đường|không chất bảo quản|thanh lọc|detox|trẻ hoá|trẻ hóa|làm trắng|khử mùi|dưỡng ẩm|da |tóc/i;
     for (const [key, cfg] of Object.entries(LAUNCH_STORY_PRESETS)) {
       for (const line of textOf(cfg)) expect(line, `${key}: "${line}"`).not.toMatch(BANNED);
     }
   });
 
-  it('con số chỉ gồm ba giá trị in trên bao bì: 100% nguyên chất (Sokfarm), 1000 lớp (BH.NONG), hộp 10 gói (DURICA)', () => {
-    const allowed = new Set(['100', '1000', '10']);
+  it('con số chỉ gồm giá trị có trong tên hoặc in trên bao bì: 100% (Sokfarm), 1000 lớp (BH.NONG), can 3,8L (Fuwa3e), hộp 10 gói (DURICA)', () => {
+    const allowed = new Set(['100', '1000', '3', '8', '10']);
     for (const [key, cfg] of Object.entries(LAUNCH_STORY_PRESETS)) {
       for (const line of textOf(cfg)) for (const n of line.match(/\d+/g) ?? []) expect(allowed.has(n), `${key}: "${line}" có số ${n}`).toBe(true);
     }
@@ -148,6 +148,21 @@ describe('resolveStoryConfig với sản phẩm PROD đợt đầu', () => {
   });
 
   it('preset đợt đầu không có ảnh tách nền nên sân khấu dùng thẻ nổi', () => {
-    expect(resolveStoryConfig(sokfarm)?.cutoutUrl).toBeUndefined();
+    const cfg = resolveStoryConfig(sokfarm);
+    expect(cfg?.cutoutUrl).toBeUndefined();
+    if (!cfg) throw new Error('thiếu cấu hình');
+    expect(storyView(cfg, { reducedMotion: false }).frame).toBe('floating-card');
+    expect(storyView(cfg, { reducedMotion: true }).frame).toBe('floating-card');
+  });
+
+  it('preset tắt (enabled=false) thì không vẽ gì, kể cả khi sản phẩm khớp slug', () => {
+    const spy = { ...LAUNCH_STORY_PRESETS['duong-hoa-dua-sokfarm']!, enabled: false };
+    const original = LAUNCH_STORY_PRESETS['duong-hoa-dua-sokfarm']!;
+    LAUNCH_STORY_PRESETS['duong-hoa-dua-sokfarm'] = spy;
+    try {
+      expect(resolveStoryConfig(sokfarm)).toBeNull();
+    } finally {
+      LAUNCH_STORY_PRESETS['duong-hoa-dua-sokfarm'] = original;
+    }
   });
 });
