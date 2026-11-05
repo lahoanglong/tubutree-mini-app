@@ -5,6 +5,7 @@ import { CreateQuizDto } from '../modules/admin/admin-game-quiz.controller';
 import { ProductQuery } from '../modules/catalog/dto/product-query.dto';
 import { FeedQuery } from '../modules/feed/feed-query.dto';
 import { ListOrdersQuery } from '../modules/admin/admin.controller';
+import { ProductQuery as ProductQueryForSlugs } from '../modules/catalog/dto/product-query.dto';
 import { DealerRewardDto } from '../modules/brand/dto/brand.dto';
 import { createValidationPipe } from './validation-pipe';
 
@@ -28,6 +29,11 @@ describe('nhãn lỗi trùng chữ trên màn quản trị', () => {
     expect(quiz?.[0]).toMatch(/^Chủ đề /);
     expect((await messages(ProductQuery, { category: 5 }))?.[0]).toMatch(/^Danh mục /);
     expect(await messages(FeedQuery, { category: 'x'.repeat(101) })).toEqual(['Chủ đề không được dài quá 100 ký tự.']);
+  });
+
+  it('slugs quá 20 mục: câu 400 nêu nhãn trường và số mục tối đa', async () => {
+    const slugs = Array.from({ length: 21 }, (_, i) => `s${i}`).join(',');
+    expect(await messages(ProductQueryForSlugs, { slugs })).toEqual(['Danh sách sản phẩm chỉ nhận tối đa 20 mục, cách nhau bằng dấu phẩy.']);
   });
 
   it('storefront là ô "Gian hàng" của bộ lọc đơn', async () => {

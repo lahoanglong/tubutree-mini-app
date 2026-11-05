@@ -1,9 +1,9 @@
-import { ValidationPipe } from '@nestjs/common';
+import { createValidationPipe } from '../../../common/validation-pipe';
 import { PRODUCT_SLUG_MAX, PRODUCT_SLUGS_LIST_MAX, PRODUCT_SLUGS_QUERY_MAX_CHARS } from '@tubutree/shared-types';
 import { ProductQuery } from './product-query.dto';
 
 // Cùng cấu hình ValidationPipe với main.ts — forbidNonWhitelisted: field lạ bị từ chối (400).
-const pipe = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true });
+const pipe = createValidationPipe();
 const asQuery = (value: Record<string, unknown>) =>
   pipe.transform(value, { type: 'query', metatype: ProductQuery, data: undefined });
 
@@ -45,7 +45,7 @@ describe('ProductQuery (dự án 4b)', () => {
     expect(twenty.length).toBe(PRODUCT_SLUGS_QUERY_MAX_CHARS - 1);
     await expect(asQuery({ slugs: twenty })).resolves.toMatchObject({ slugs: twenty });
     const twentyOne = Array.from({ length: PRODUCT_SLUGS_LIST_MAX + 1 }, (_, i) => `s${i}`).join(',');
-    await expect(asQuery({ slugs: twentyOne })).rejects.toMatchObject({ response: { message: [expect.stringMatching(/tối đa 20 mục/)] } });
+    await expect(asQuery({ slugs: twentyOne })).rejects.toMatchObject({ response: { message: [expect.stringMatching(/^Danh sách sản phẩm chỉ nhận tối đa 20 mục/)] } });
     await expect(asQuery({ slugs: 'x'.repeat(PRODUCT_SLUGS_QUERY_MAX_CHARS + 1) })).rejects.toThrow();
   });
   it('slugs nhận chuỗi slug cách nhau bằng dấu phẩy, từ chối chuỗi quá dài', async () => {

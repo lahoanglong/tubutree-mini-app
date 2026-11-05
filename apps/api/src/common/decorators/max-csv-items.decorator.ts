@@ -8,7 +8,7 @@ export function MaxCsvItems(max: number, validationOptions?: ValidationOptions):
       constraints: [max],
       validator: {
         validate: (value: unknown) => typeof value !== 'string' || value.split(',').filter((x) => x.trim() !== '').length <= max,
-        defaultMessage: buildMessage((eachPrefix) => `${eachPrefix}Danh sách chỉ nhận tối đa ${max} mục, cách nhau bằng dấu phẩy.`, validationOptions),
+        defaultMessage: buildMessage((eachPrefix) => `${eachPrefix}$property must contain at most ${max}`, validationOptions),
       },
     },
     validationOptions,

@@ -188,6 +188,7 @@ export const FIELD_LABELS: Record<string, string> = {
   shortfallReason: 'Lý do thiếu hàng',
   sku: 'Mã SKU',
   slug: 'Đường dẫn',
+  slugs: 'Danh sách sản phẩm',
   sortOrder: 'Thứ tự',
   startDate: 'Ngày bắt đầu',
   startMin: 'Giờ bắt đầu',
@@ -280,6 +281,7 @@ const TEMPLATES: Record<string, (subject: string, original: string) => string> =
   min: (s, o) => `${s} không được nhỏ hơn ${trailingNumber(o)}.`,
   max: (s, o) => `${s} không được lớn hơn ${trailingNumber(o)}.`,
   arrayMinSize: (s, o) => `${s} phải có ít nhất ${trailingNumber(o)} mục.`,
+  maxCsvItems: (s, o) => `${s} chỉ nhận tối đa ${trailingNumber(o)} mục, cách nhau bằng dấu phẩy.`,
   arrayMaxSize: (s, o) => `${s} chỉ được có tối đa ${trailingNumber(o)} mục.`,
 };
 
