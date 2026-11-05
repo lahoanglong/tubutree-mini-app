@@ -64,6 +64,12 @@ describe('nextPushRetryAt', () => {
     expect(nextPushRetryAt({ ...base, status: 'CONFIRMED' }, now)).not.toBeNull();
   });
 
+  it('mốc kế tiếp rơi sau cửa sổ 72 giờ thì không còn lần tự thử (cron sẽ không nhặt đơn nữa)', () => {
+    const createdAt = new Date(now.getTime() - 72 * 3_600_000 + 5 * 60_000);
+    expect(nextPushRetryAt({ ...base, createdAt, pancakeLastAttemptAt: new Date(now.getTime() - 60_000) }, now)).toBeNull();
+    expect(nextPushRetryAt({ ...base, createdAt: new Date(now.getTime() - 71 * 3_600_000) }, now)).not.toBeNull();
+  });
+
   it('lỗi cấu hình (CONFIG): không có lần tự thử của đơn (cả nhóm nghỉ, cron chỉ dò bằng một đơn)', () => {
     expect(nextPushRetryAt({ ...base, pancakeErrorKind: 'CONFIG' }, now)).toBeNull();
   });

@@ -704,10 +704,8 @@ export class PancakeOrderService {
     if (saved.count === 0) return;
     await clearPancakeAttention(this.prisma, order.id, ATTENTION_PUSH_FAILED);
     await removeFailedPancakePush(this.pushQueue, order.id);
-    // Đơn này từng bị 401/403 mà nay đẩy được: khoá API đã đúng lại, thả cả nhóm đơn đang bị loại khỏi lô thử lại của cron.
-    if (order.pancakeErrorKind === PUSH_ERROR_KIND.CONFIG) {
-      await this.prisma.order.updateMany({ where: { pancakeOrderId: null, pancakeErrorKind: PUSH_ERROR_KIND.CONFIG }, data: { pancakeErrorKind: null } });
-    }
+    // Một lần đẩy thành công (đơn nào cũng được) nghĩa là khoá API đã đúng lại: thả cả nhóm đơn đang bị loại khỏi lô thử lại của cron.
+    await this.prisma.order.updateMany({ where: { pancakeOrderId: null, pancakeErrorKind: PUSH_ERROR_KIND.CONFIG }, data: { pancakeErrorKind: null } });
     // Đơn đổi trạng thái trong lúc đang tạo: huỷ ngay bên Pancake / báo đã thanh toán.
     const now = await this.prisma.order.findUniqueOrThrow({ where: { id: order.id } });
     if (now.status === 'CANCELLED') {

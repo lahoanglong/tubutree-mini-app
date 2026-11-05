@@ -65,7 +65,10 @@ export function nextPushRetryAt(o: PushRetryInput, now: Date = new Date()): Date
   const interval = (slow ? PUSH_RETRY.SLOW_MINUTES : PUSH_RETRY.FAST_MINUTES) * 60_000;
   const earliest = Math.max((o.pancakeLastAttemptAt?.getTime() ?? 0) + interval, now.getTime());
   const tick = PUSH_RETRY.FAST_MINUTES * 60_000;
-  return new Date(Math.ceil(earliest / tick) * tick);
+  const at = Math.ceil(earliest / tick) * tick;
+  // Cron chỉ nhặt đơn đặt chưa quá MAX_AGE_HOURS: mốc rơi sau đó thì không còn lần tự thử nào.
+  if (at - o.createdAt.getTime() >= PUSH_RETRY.MAX_AGE_HOURS * 3_600_000) return null;
+  return new Date(at);
 }
 
 /**

@@ -205,7 +205,7 @@ export class PancakePushReconcileService {
 
   /**
    * Đơn đang bị lỗi cấu hình Pancake (401/403): cả nhóm bị loại khỏi lô thử lại; mỗi giờ thử đúng MỘT đơn để biết khoá đã được sửa chưa.
-   * Đẩy thành công thì PancakeOrderService thả cả nhóm (xem releaseConfigBlocked); lại 401 thì lượt thử của đơn dò được hoàn lại.
+   * Đẩy thành công thì PancakeOrderService thả cả nhóm (xem saveCreated); lại 401 thì lượt thử của đơn dò được hoàn lại.
    */
   private async probeConfigBlocked(): Promise<void> {
     try {

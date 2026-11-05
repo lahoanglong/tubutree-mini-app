@@ -476,6 +476,18 @@ describe('PancakeOrderService.markPushFailure — loại lỗi (hi)', () => {
     expect(t.row()).toMatchObject({ pancakeErrorKind: null, pancakeSyncError: null });
   });
 
+  it('BẤT KỲ lần đẩy thành công (đơn không mang CONFIG) cũng thả cả nhóm đơn đang bị loại vì lỗi cấu hình', async () => {
+    const t = setup(
+      { id: 'o1' },
+      {},
+    );
+    t.rows.push({ ...t.rows[0], id: 'o2', code: 'TUBU2', pancakeErrorKind: 'CONFIG', pancakePushStatus: PANCAKE_PUSH.FAILED });
+    t.rows.push({ ...t.rows[0], id: 'o3', code: 'TUBU3', pancakeErrorKind: 'REJECTED', pancakePushStatus: PANCAKE_PUSH.FAILED });
+    await t.svc.pushOrder('o1');
+    expect(t.row('o2').pancakeErrorKind).toBeNull();
+    expect(t.row('o3').pancakeErrorKind).toBe('REJECTED');
+  });
+
   it('lượt đẩy lỗi 401 ngay trong pushOrder: lượt thử không bị đốt', async () => {
     const t = setup({}, { client: { createOrder: jest.fn().mockRejectedValue(new PancakeApiError('Pancake trả 401 khi tạo đơn', false, false, 401)) } });
     await expect(t.svc.pushOrder('o1')).rejects.toBeInstanceOf(PancakeApiError);
