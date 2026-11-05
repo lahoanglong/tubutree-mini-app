@@ -2418,6 +2418,17 @@ describe('CheckoutPage — lỗi ô nhập và nút đặt hàng bấm được 
     expect(mocks.placeOrder).not.toHaveBeenCalled();
   });
 
+  it('danh sách địa chỉ đang tải: chưa báo "Chọn địa chỉ…", chưa có nút Đặt hàng bấm được', async () => {
+    mocks.getAddresses.mockReturnValue(new Promise(() => undefined));
+    renderPage();
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+    expect(screen.queryByText('Chọn địa chỉ giao hàng để đặt hàng.')).not.toBeInTheDocument();
+    const place = screen.queryAllByRole('button').find((b) => /^Đặt hàng/.test(b.textContent ?? ''));
+    expect(place === undefined || place.hasAttribute('disabled') || place.getAttribute('aria-disabled') === 'true').toBe(true);
+  });
+
   it('hoá đơn thiếu ô: bấm Đặt hàng không gửi đơn, mỗi ô báo riêng dưới ô đó (aria-invalid + aria-describedby), ô đầu tiên nhận con trỏ', async () => {
     renderPage();
     await screen.findByText('Đặt hàng · 70.000đ');

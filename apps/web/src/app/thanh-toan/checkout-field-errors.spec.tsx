@@ -9,7 +9,7 @@ const ADDR = {
 };
 const QUOTE = { subtotal: 100000, discount: 0, pointsUsed: 0, pointsDiscount: 0, shippingFee: 30000, total: 130000, pointsEarned: 0, pointsBalance: 0, redeemablePoints: 0 };
 
-const m = vi.hoisted(() => ({ addresses: [] as unknown[], placeOrder: vi.fn() }));
+const m = vi.hoisted(() => ({ addresses: [] as unknown[], addressesPromise: null as Promise<unknown[]> | null, placeOrder: vi.fn() }));
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn() }) }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: { id: 'u', walletBalance: 0 }, status: 'authenticated' }) }));
@@ -22,7 +22,7 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   }),
   getMe: async () => ({ pointsBalance: 0, walletBalance: 0 }),
   getMyCoupons: async () => [],
-  getAddresses: async () => m.addresses,
+  getAddresses: async () => (m.addressesPromise ? m.addressesPromise : m.addresses),
   checkoutQuote: async () => QUOTE,
   placeOrder: (...args: unknown[]) => m.placeOrder(...args),
 }));
@@ -48,6 +48,7 @@ beforeEach(() => {
   sessionStorage.clear();
   localStorage.clear();
   m.addresses = [ADDR];
+  m.addressesPromise = null;
   m.placeOrder.mockReset().mockReturnValue(new Promise(() => undefined));
 });
 afterEach(() => {
@@ -68,6 +69,14 @@ describe('/thanh-toan — lỗi ô nhập và nút đặt hàng bấm được (
     expect(alert?.textContent).toContain('Chọn địa chỉ giao hàng để đặt hàng.');
     expect(block.contains(document.activeElement)).toBe(true);
     expect(m.placeOrder).not.toHaveBeenCalled();
+  });
+
+  it('danh sách địa chỉ đang tải: chưa báo "Chọn địa chỉ…", chưa có nút Đặt hàng bấm được', async () => {
+    m.addressesPromise = new Promise(() => undefined);
+    const r = await mount();
+    expect(r.container.textContent).not.toContain('Chọn địa chỉ giao hàng để đặt hàng.');
+    const place = byText(r.container, 'button', /^Đặt hàng/) as HTMLButtonElement | null;
+    expect(place === null || place.disabled).toBe(true);
   });
 
   it('hoá đơn thiếu ô: bấm không gửi đơn, mỗi ô báo riêng (aria-invalid + aria-describedby), ô đầu tiên nhận con trỏ', async () => {
