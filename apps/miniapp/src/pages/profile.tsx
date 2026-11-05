@@ -7,6 +7,7 @@ import {
   Heart, MapPin, MessageCircle, Leaf, GraduationCap, Users, Pencil, Bell, Store, Settings, Info, ChevronRight, Copy, Sparkles, BookOpen, ShieldCheck, CalendarClock, Wallet, BadgeDollarSign, CreditCard, Package, Truck, PackageCheck, Recycle, Repeat, type LucideIcon,
 } from 'lucide-react';
 import { canSeeAcademy, orderRowLabel, profileCopy } from '@tubutree/app-core/account-copy';
+import { statValueVariant } from '@tubutree/app-core/account-stat';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { CASHBACK_ENABLED, SUBSCRIPTIONS_IN_MINIAPP } from '../utils/features';
 import { ORDER_STATUS_ROW } from '@tubutree/app-core/home-layout';
@@ -544,7 +545,7 @@ function Stat({ label, value, onClick }: { label: string; value: string; onClick
         boxShadow: 'var(--elevation-1)',
       }}
     >
-      <Text variant="price-md" as="div" tone="brand" style={{ fontVariantNumeric: 'tabular-nums' }}>
+      <Text variant={statValueVariant(value)} as="div" tone="brand" style={{ fontVariantNumeric: 'tabular-nums' }}>
         {value}
       </Text>
       <Text variant="caption" tone="tertiary" as="div">

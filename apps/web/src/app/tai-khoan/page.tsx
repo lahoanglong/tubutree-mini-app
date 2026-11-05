@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronRight, Copy, CreditCard, Leaf, MessageCircle, Package, PackageCheck, Pencil, Repeat, Truck, type LucideIcon } from 'lucide-react';
 import { orderRowLabel, profileCopy } from '@tubutree/app-core/account-copy';
+import { statValueVariant } from '@tubutree/app-core/account-stat';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { ORDER_STATUS_ROW } from '@tubutree/app-core/home-layout';
 import { PROFILE_REFERRAL_SECTION } from '@tubutree/app-core/profile-sections';
@@ -72,7 +73,7 @@ function Stat({ label, value, href }: { label: string; value: string; href: stri
       href={href}
       className="tubu-press block min-h-11 rounded-card bg-[var(--color-bg-surface)] px-1 py-2.5 text-center shadow-[var(--elevation-1)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-forest-600"
     >
-      <Text variant="price-md" as="div" tone="brand" style={{ fontVariantNumeric: 'tabular-nums' }}>
+      <Text variant={statValueVariant(value)} as="div" tone="brand" style={{ fontVariantNumeric: 'tabular-nums' }}>
         {value}
       </Text>
       <Text variant="caption" tone="tertiary" as="div">
