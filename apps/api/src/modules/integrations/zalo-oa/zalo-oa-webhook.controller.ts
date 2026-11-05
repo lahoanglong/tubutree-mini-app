@@ -125,8 +125,9 @@ export class ZaloOaWebhookController {
 
     // msgId dedup: Zalo có thể gửi lại cùng 1 tin (retry/at-least-once) → unique index chặn
     // tạo trùng row + enqueue trùng job (nếu không, "tin đầu tiên" có thể bị coi là 2 tin
-    // khác nhau → gửi lời chào 2 lần). Tin không có msg_id thì dùng băm của người gửi + timestamp + nội dung làm khoá.
-    const msgId = rawMsgId || this.fallbackMsgId(zaloUserId, timestamp ?? '', text ?? '');
+    // khác nhau → gửi lời chào 2 lần). Tin không có msg_id thì dùng băm của người gửi + timestamp + nội dung làm khoá, nhưng chỉ khi
+    // có timestamp số: thiếu nó thì "giá" hôm nay và "giá" ba ngày sau cho cùng khoá và tin sau bị nuốt, nên không dedup (msgId null).
+    const msgId = rawMsgId || (this.isEpochText(timestamp) ? this.fallbackMsgId(zaloUserId, timestamp, text ?? '') : null);
     let event: { id: string };
     try {
       event = await this.prisma.oaInboundMessage.create({
@@ -145,6 +146,10 @@ export class ZaloOaWebhookController {
       this.logger.error(`Enqueue tin OA ${event.id} lỗi: ${err instanceof Error ? err.message : err}`);
     }
     return { received: true };
+  }
+
+  private isEpochText(timestamp: string | null): timestamp is string {
+    return timestamp !== null && timestamp.trim() !== '' && Number.isFinite(Number(timestamp));
   }
 
   /** Ngăn cách bằng NUL để (a, bc) và (ab, c) không cho cùng khoá. */
