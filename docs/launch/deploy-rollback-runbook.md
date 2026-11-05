@@ -724,6 +724,15 @@ Job `zns-send` nằm ở hàng `notifications` như cũ nên bản cũ xử lý 
 - Xoá cache (ảnh đổi cỡ lỗi, đổi tham số đổi cỡ mà quên tăng `RESIZE_PIPELINE_VERSION`): `$DC exec -T api sh -c 'rm -rf /tmp/tubu-img-cache/*'`. KHÔNG `docker volume rm tubutree_img_cache`: volume tạo lại từ image cũ (chưa có thư mục này) sẽ thuộc root, user `node` không ghi được, mọi `/img` phải đổi cỡ lại và log chỉ có dòng cảnh báo `Không ghi được cache ảnh`.
 - Lỡ gặp volume thuộc root: `docker run --rm -u 0 -v tubutree_img_cache:/d --entrypoint chown "$API_NAME" 1000:1000 /d` rồi `$DC restart api` (`API_NAME` lấy như Bước 2 mục 5; `node` có uid 1000).
 
+### 1.23 Đợt 3 hard/1105 (he, hf, hg): Mini App bản cũ chạy cùng API mới
+
+Web và API lên cùng một lần, quay lại cùng cặp (như 1.21). Mini App là bản ZMP riêng, lên sau; trong lúc chờ:
+
+- **Slug chiến dịch tới 240 ký tự.** API và admin nhận slug sản phẩm/danh mục của chiến dịch tới 240 ký tự (`PRODUCT_SLUG_MAX`). Mini App bản cũ chỉ dựng link cho slug tới 120 ký tự: banner gắn slug dài hơn bị bỏ khỏi carousel, không báo lỗi. Cho tới khi bản ZMP mới lên: không gắn chiến dịch vào sản phẩm/danh mục có slug dài hơn 120 ký tự, hoặc mở Mini App kiểm banner sau khi tạo. Nếu đã quay API về `:prev-*`: lưu lại chiến dịch có slug dài hơn 120 ký tự trên admin cũ bị 400 "Nhập slug sản phẩm hợp lệ." (bản cũ chặn 120); để nguyên hoặc đổi đích.
+- **"Tải thêm" đơn hàng/ví theo con trỏ.** API mới trả `meta.nextCursor`; web mới và Mini App mới gửi lại `cursor` ở trang sau, API cũ không trả thì client tự quay về `page`. Quay API về `:prev-*` giữa lúc khách đang cuộn danh sách thì lần "tải thêm" kế tiếp bị 400 "Không nhận trường «cursor»." một lần; khách tải lại trang là hết. Không cần làm gì thêm.
+- **`GET /products?slugs=` quá 20 mục trả 400** (trước bị cắt im lặng). Web và Mini App chỉ gửi tối đa 20, khách không gặp.
+- Trước deploy (cần chủ cho phép đọc PROD): `SELECT count(*), max(length(slug)) FROM products;` và `SELECT count(*) FROM products WHERE slug LIKE '-%';`. Sản phẩm có slug dài hơn 240 ký tự hoặc bắt đầu bằng `-` (sinh trước bản này) không gắn được vào chiến dịch; khác 0 thì báo điều phối.
+
 ## 2. Trỏ lại GitHub Actions (máy ảo GCP đã đóng)
 
 Việc của người giữ quyền admin repo GitHub (Settings, Secrets and variables, Actions). Không cần làm trước deploy tay, nhưng phải làm trước khi dùng lại `ops.yml`.
