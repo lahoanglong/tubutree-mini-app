@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Box, Page, Text, useNavigate, useParams, useLocation } from 'zmp-ui';
 import { announce, useNotify } from '../hooks/use-notify';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Repeat, ChevronRight, ShoppingCart, Share2, Users, Truck, Megaphone, Check, MessageCircle, Ticket } from 'lucide-react';
+import { BookOpen, Repeat, ChevronRight, ShoppingCart, Share2, Users, Truck, Megaphone, Check, MessageCircle, Ticket } from 'lucide-react';
 import { PRODUCT_NOT_FOUND } from '@tubutree/app-core/client-copy';
 import {
   fetchProduct,
@@ -52,6 +52,7 @@ import { pdpShelves } from '@tubutree/app-core/commerce/pdp-view';
 import { formatRating } from '@tubutree/app-core/commerce/card-meta';
 import { offerAmount } from '@tubutree/app-core/commerce/voucher-picker';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { resolveStoryConfig } from '@tubutree/app-core/commerce/product-story';
 import { returnsPromise } from '@tubutree/app-core/returns-copy';
 import { needsVariationPicker } from '@tubutree/app-core/variation-picker';
 import { inCartQuantity, lineNote, variationLinePreview } from '@tubutree/app-core/commerce/flash-line';
@@ -86,6 +87,9 @@ import { PdpOffersSheet } from '../components/product/pdp-offers-sheet';
 import { PdpQuickReviews } from '../components/product/pdp-quick-reviews';
 import { PdpFeed } from '../components/product/pdp-feed';
 import { ListRow } from '../components/ui/list-row';
+
+// Cảnh câu chuyện kéo theo sprite, CSS và ảnh: nạp lười để gói đầu của trang không phải gánh khi khách không mở tới.
+const ProductStoryShowcase = lazy(() => import('../components/ui/product-story-showcase').then((m) => ({ default: m.ProductStoryShowcase })));
 
 type CartLines = readonly { variationId: string; quantity: number }[] | undefined;
 
@@ -140,6 +144,7 @@ export default function ProductDetailPage() {
     | { variationId?: string; pinnedVariationId?: string; listSource?: string; reviewOrderId?: string; applyCoupon?: string }
     | null;
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [storyOpen, setStoryOpen] = useState(false);
   // Bảng đóng có hiệu ứng ~200ms nên nút xác nhận còn bấm được: khoá đồng bộ để bấm đúp không thêm giỏ hai lần hay gọi login hai lần.
   const confirming = useRef(false);
   const autoPick = useRef<{ slug: string; id: string | null } | null>(null);
@@ -485,6 +490,7 @@ export default function ProductDetailPage() {
 
   const scrollToId = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
+  const hasStory = resolveStoryConfig(p) !== null;
   const shelves = pdpShelves({ currentId: p.id, boughtTogether: boughtTogether.data ?? [], brand: related.data ?? [], feed: feed.data ?? [] });
 
   const handleShare = () => {
@@ -565,7 +571,22 @@ export default function ProductDetailPage() {
     <Page className="page page-bleed" style={{ background: 'var(--color-bg-canvas)', paddingBottom: 96 }}>
 
       <StorefrontContextBar />
-      <Gallery key={p.slug} images={p.images.length > 0 ? p.images : p.thumbnail ? [p.thumbnail] : []} alt={p.name} />
+      <div style={{ position: 'relative' }}>
+        <Gallery key={p.slug} images={p.images.length > 0 ? p.images : p.thumbnail ? [p.thumbnail] : []} alt={p.name} />
+        {hasStory && (
+          <Button
+            variant="secondary"
+            icon={BookOpen}
+            onPress={() => {
+              haptic('light');
+              setStoryOpen(true);
+            }}
+            style={{ position: 'absolute', top: 'var(--space-inline-md)', left: 'var(--space-inline-md)', background: 'var(--color-bg-surface)' }}
+          >
+            {fillCopy('story.open')}
+          </Button>
+        )}
+      </div>
       {flashItem && priceView.isFlash && (
         <FlashPriceBar
           price={price}
@@ -900,6 +921,21 @@ export default function ProductDetailPage() {
         </Box>
       )}
 
+      {hasStory && (
+        <Suspense fallback={null}>
+          <ProductStoryShowcase
+            product={p}
+            selectedVariationId={selected?.id}
+            onSelectVariation={(id) => {
+              haptic('light');
+              setSelectedId(id);
+            }}
+            onAddToCart={() => void handleAdd()}
+            onBuyNow={() => void handleBuyNow()}
+          />
+        </Suspense>
+      )}
+
       {/* ── Thành phần (spec §6.2 — niềm tin cho persona sợ hoá chất) ── */}
       {p.ingredients && p.ingredients.length > 0 && (
         <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
@@ -1133,6 +1169,19 @@ export default function ProductDetailPage() {
           )
         }
       />
+      {storyOpen && (
+        <Suspense fallback={null}>
+          <ProductStoryShowcase
+            fullscreen
+            product={p}
+            selectedVariationId={selected?.id}
+            onSelectVariation={(id) => setSelectedId(id)}
+            onAddToCart={() => void handleAdd()}
+            onBuyNow={() => void handleBuyNow()}
+            onClose={() => setStoryOpen(false)}
+          />
+        </Suspense>
+      )}
     </Page>
   );
 }

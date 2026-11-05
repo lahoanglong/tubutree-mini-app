@@ -699,3 +699,22 @@ body.with-back-btn .page.page-bleed {
     box-shadow: var(--elevation-2);
   }
 }
+
+/* ── Câu chuyện sản phẩm (ProductStoryShowcase): mặc định cho biến CSS mà mã đặt tại chỗ theo dữ liệu; cảnh ở css/story.css ── */
+.tubu-story-layer {
+  --lx: 50%;
+  --ly: 50%;
+  --rot: 0deg;
+  --sc: 1;
+  --fx: 0%;
+  --fy: 0%;
+}
+.tubu-story-arc-item {
+  --arc-offset: 0;
+  --arc-lift: 0;
+  --arc-rot: 0deg;
+  --arc-scale: 1;
+}
+.tubu-story-dialog {
+  --story-bar-h: 72px;
+}

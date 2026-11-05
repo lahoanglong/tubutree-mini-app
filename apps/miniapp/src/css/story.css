@@ -1,0 +1,264 @@
+/* Cảnh câu chuyện sản phẩm. Chuyển động chỉ bằng transform/opacity (không kích hoạt layout) và tắt hẳn khi khách chọn giảm chuyển động.
+   Giá trị đổi theo dữ liệu (vị trí lớp, độ nghiêng vòng cung) đi vào qua biến CSS đặt tại chỗ; mặc định khai ở css/tokens.css (nơi lint:vars đọc định nghĩa). */
+
+.tubu-story {
+  background: var(--color-bg-surface);
+}
+.tubu-story[data-inline='true'] {
+  padding: var(--space-block);
+  margin-top: var(--space-stack-sm);
+}
+
+.tubu-story-frame {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  border-radius: var(--radius-card);
+  overflow: hidden;
+}
+.tubu-story-stage {
+  transition: background var(--dur-base) var(--ease-out);
+}
+.tubu-story-product {
+  position: absolute;
+  inset: 12%;
+}
+
+.tubu-story-layer {
+  position: absolute;
+  width: 24%;
+  aspect-ratio: 1 / 1;
+  left: var(--lx);
+  top: var(--ly);
+  transform: translate(-50%, -50%) rotate(var(--rot)) scale(var(--sc));
+  animation: tubu-story-drop var(--dur-slow) var(--ease-out) both;
+  pointer-events: none;
+}
+.tubu-story-layer[data-static='true'] {
+  animation: none;
+}
+@keyframes tubu-story-drop {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) translate(var(--fx), var(--fy)) rotate(var(--rot)) scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) rotate(var(--rot)) scale(var(--sc));
+  }
+}
+
+.tubu-story-arc {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: var(--space-stack-sm);
+  padding: var(--space-block) 0 var(--space-stack-xs);
+}
+.tubu-story-arc-item {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 var(--space-inline-sm);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-pill);
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--type-label-size);
+  line-height: var(--type-label-lh);
+  font-weight: 600;
+  cursor: pointer;
+  transform: translateX(calc(var(--arc-offset) * 6px)) translateY(calc(var(--arc-lift) * 1px)) rotate(var(--arc-rot)) scale(var(--arc-scale));
+  transition: transform var(--dur-base) var(--ease-out);
+}
+.tubu-story-arc-item[aria-checked='true'] {
+  border: 2px solid var(--color-action-primary-bg);
+}
+
+.tubu-story-steps {
+  margin-top: var(--space-block);
+}
+.tubu-story-chips {
+  display: flex;
+  gap: var(--space-stack-sm);
+  padding: var(--space-stack-xs) 0;
+  scroll-snap-type: x mandatory;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tubu-story-chips::-webkit-scrollbar {
+  display: none;
+}
+.tubu-story-chip {
+  flex: 0 0 auto;
+  scroll-snap-align: center;
+  min-width: 44px;
+  min-height: 44px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--color-bg-chip);
+  color: var(--color-text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--type-label-size);
+  font-weight: 600;
+  cursor: pointer;
+}
+.tubu-story-chip[aria-current='step'] {
+  background: var(--color-action-primary-bg);
+  color: var(--color-action-primary-fg);
+}
+.tubu-story-panel {
+  margin-top: var(--space-stack-sm);
+}
+.tubu-story-step-title {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: var(--type-title-sm-size);
+  line-height: var(--type-title-sm-lh);
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+.tubu-story-step-body {
+  margin: var(--space-stack-xs) 0 0;
+  font-size: var(--type-body-md-size);
+  line-height: var(--type-body-md-lh);
+  color: var(--color-text-secondary);
+}
+.tubu-story-static {
+  list-style: none;
+  margin: var(--space-block) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-block);
+}
+.tubu-story-static-num {
+  font-size: var(--type-label-size);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.tubu-story-hud {
+  margin-top: var(--space-block);
+}
+.tubu-story-hud-lines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.tubu-story-dot {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  transform: translate(-50%, -50%);
+  border-radius: var(--radius-pill);
+  background: var(--color-action-primary-bg);
+  border: 2px solid var(--color-bg-surface);
+}
+.tubu-story-callout {
+  position: absolute;
+  width: 44%;
+  transform: translateY(-50%);
+  padding: var(--space-stack-xs) var(--space-inline-sm);
+  border-radius: var(--radius-control);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-default);
+  box-sizing: border-box;
+}
+.tubu-story-callout[data-side='left'] {
+  left: 3%;
+}
+.tubu-story-callout[data-side='right'] {
+  right: 3%;
+}
+.tubu-story-callout-label,
+.tubu-story-callout-value {
+  font-size: var(--type-caption-size);
+  line-height: var(--type-caption-lh);
+  overflow-wrap: anywhere;
+}
+.tubu-story-callout-label {
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+.tubu-story-callout-value {
+  color: var(--color-text-secondary);
+}
+.tubu-story-callout-track {
+  height: 6px;
+  margin-top: var(--space-stack-xs);
+  border-radius: var(--radius-pill);
+  background: var(--color-track);
+  overflow: hidden;
+}
+.tubu-story-callout-fill {
+  height: 100%;
+  background: var(--color-action-primary-bg);
+}
+.tubu-story-closing {
+  margin: var(--space-block) 0 0;
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: var(--type-display-md-size);
+  line-height: var(--type-display-md-lh);
+  color: var(--color-text-primary);
+}
+
+.tubu-story-dialog {
+  position: fixed;
+  inset: 0;
+  height: 100dvh;
+  z-index: var(--z-dialog);
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg-canvas);
+}
+.tubu-story-dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-stack-xs) var(--space-stack-xs) var(--space-stack-xs) var(--space-block);
+  background: var(--color-bg-surface);
+}
+.tubu-story-close {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+.tubu-story-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-block);
+  padding-bottom: calc(var(--story-bar-h) + var(--safe-bottom, 0px) + var(--space-block));
+}
+.tubu-story-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  box-sizing: border-box;
+  height: calc(var(--story-bar-h) + var(--safe-bottom, 0px));
+  padding: var(--space-inline-md) var(--space-block) var(--safe-bottom, 0px);
+  display: flex;
+  gap: var(--space-stack-sm);
+  background: var(--color-bg-surface);
+  box-shadow: var(--elevation-nav);
+}
+.tubu-story-bar > * {
+  flex: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tubu-story-layer {
+    animation: none;
+  }
+  .tubu-story-stage,
+  .tubu-story-arc-item {
+    transition: none;
+  }
+}

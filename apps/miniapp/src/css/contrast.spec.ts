@@ -76,6 +76,15 @@ describe('cặp màu commerce của gói tokens-a11y đạt 4,5:1 (chữ) — WC
     ['--color-status-success-fg', '--color-bg-surface'],
     ['--color-text-brand', '--color-bg-surface'],
     ['--color-text-secondary', '--color-action-primary-bg-disabled'],
+    // Câu chuyện sản phẩm (ProductStoryShowcase): chip bước, nhãn vòng cung trên quầng nền, thẻ chú thích HUD.
+    ['--color-action-primary-fg', '--color-action-primary-bg'],
+    ['--color-text-primary', '--color-bg-chip'],
+    ['--color-text-primary', '--color-story-ambient-leaf'],
+    ['--color-text-primary', '--color-story-ambient-amber'],
+    ['--color-text-primary', '--color-story-ambient-rose'],
+    ['--color-text-primary', '--color-story-ambient-sky'],
+    ['--color-text-primary', '--color-story-ambient-sand'],
+    ['--color-text-secondary', '--color-bg-surface'],
   ];
 
   it.each(pairs)('%s trên %s', (fg, bg) => {
