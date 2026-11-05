@@ -28,15 +28,8 @@ const files = [...walk(join(SRC, 'app/admin')), ...walk(join(SRC, 'components/ad
 const NON_TEXT = new Set(['number', 'checkbox', 'radio', 'file', 'date', 'datetime-local', 'time', 'month', 'hidden', 'range', 'color', 'password']);
 
 function constValue(name: string, localText: string): number | null {
-  const re = new RegExp(`(?:const|readonly)\\s+${name}\\s*=\\s*([\\d_]+)`);
-  const local = localText.match(re);
-  if (local) return Number(local[1]!.replace(/_/g, ''));
-  for (const f of [...walk(join(SRC, 'lib')), ...walk(resolve(REPO, 'packages/shared-types/src'))]) {
-    if (!f.endsWith('.ts')) continue;
-    const m = readFileSync(f, 'utf8').match(re);
-    if (m) return Number(m[1]!.replace(/_/g, ''));
-  }
-  return null;
+  const lib = [...walk(join(SRC, 'lib')), ...walk(resolve(REPO, 'packages/shared-types/src'))].filter((f) => f.endsWith('.ts')).map((f) => readFileSync(f, 'utf8'));
+  return apiConstValue(name, [localText, ...lib]);
 }
 
 interface FoundInput {
@@ -104,9 +97,7 @@ function dtoCap(spec: string): number | null {
   }
   const v = arg.trim();
   if (/^[\d_]+$/.test(v)) return Number(v.replace(/_/g, ''));
-  const re = new RegExp(`(?:const|readonly)\\s+${v}\\s*=\\s*([\\d_]+)`);
-  const c = source.match(re) ?? apiSources().map((t) => t.match(re)).find(Boolean);
-  return c ? Number(c[1]!.replace(/_/g, '')) : null;
+  return apiConstValue(v, [source, ...apiSources()]);
 }
 
 let apiCache: string[] | null = null;

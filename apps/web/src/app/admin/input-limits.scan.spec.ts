@@ -44,6 +44,11 @@ describe('findFieldCaps: dạng service chặn độ dài thấp hơn DTO', () =
     expect(apiConstValue('X', ['', 'const X = 9;'])).toBe(9);
     expect(apiConstValue('X', ['', ''])).toBeNull();
   });
+  it('hằng là bí danh của hằng khác (export const A = B;) đọc theo chuỗi, kể cả qua nhiều file', () => {
+    expect(apiConstValue('A', ['export const A = B;', 'export const B = 240;'])).toBe(240);
+    expect(apiConstValue('A', ['export const A = B;', 'export const B = C;', 'const C = 7_000;'])).toBe(7000);
+    expect(apiConstValue('A', ['export const A = A;'])).toBeNull();
+  });
   it('không bắt trường khác tên', () => {
     expect(caps('if (shortDescription.length > 5 || mydescription.length > 5) throw 1;')).toEqual([]);
   });

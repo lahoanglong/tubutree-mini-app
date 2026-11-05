@@ -19,12 +19,16 @@ export interface SourceFile {
 const NUM = '[\\d_]+';
 const toNumber = (raw: string) => Number(raw.replace(/_/g, ''));
 
-/** Hằng số của API: tìm ở chính file trước, rồi lần lượt ở các nguồn API khác. Không bao giờ lấy từ mã web. */
-export function apiConstValue(name: string, sources: string[]): number | null {
-  const re = new RegExp(`(?:const|readonly)\\s+${name}\\s*=\\s*(${NUM})\\b`);
+/** Hằng số: tìm ở chính file trước, rồi lần lượt ở các nguồn khác; hằng là bí danh của hằng khác (`const A = B;`) thì đọc theo (tối đa 5 bước). Không bao giờ lấy từ mã web. */
+export function apiConstValue(name: string, sources: string[], depth = 0): number | null {
+  if (depth > 5) return null;
+  const num = new RegExp(`(?:const|readonly)\\s+${name}\\s*=\\s*(${NUM})\\b`);
+  const alias = new RegExp(`(?:const|readonly)\\s+${name}\\s*=\\s*([A-Z][A-Z0-9_]*)\\s*;`);
   for (const text of sources) {
-    const m = text.match(re);
+    const m = text.match(num);
     if (m) return toNumber(m[1]!);
+    const a = text.match(alias);
+    if (a && a[1] !== name) return apiConstValue(a[1]!, sources, depth + 1);
   }
   return null;
 }
