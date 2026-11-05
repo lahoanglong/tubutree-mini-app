@@ -155,6 +155,7 @@ function PitReportSection() {
         Mọi lần chi hoa hồng cho CTV trong tháng (giờ Việt Nam), gộp theo người nhận, để kế toán kê khai thuế TNCN đã khấu trừ và
         cấp chứng từ khấu trừ khi CTV yêu cầu. MST/CCCD là số CTV khai lúc chuyển hoa hồng vào Ví.
       </Notice>
+      {!valid && <p className="text-sm text-stone-600">Chọn đủ tháng và năm để xem báo cáo.</p>}
       {q.isLoading && valid && <p className="text-sm text-stone-500">Đang tải báo cáo…</p>}
       {q.isError && <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được báo cáo thuế TNCN.</LoadError>}
       {q.data && (
@@ -309,6 +310,7 @@ export function PayoutRow({ payout: p, canReview = true }: { payout: AdminPayout
             <span className="font-semibold text-stone-900">{formatVnd(p.amount)}</span>
             {p.fee > 0 && <span className="text-xs text-stone-500">(đã trừ phí {formatVnd(p.fee)})</span>}
             <ToneBadge tone={STATUS_TONE[p.status]}>{PAYOUT_STATUS_LABEL[p.status]}</ToneBadge>
+            {p.method === 'WALLET_BALANCE' && <ToneBadge tone="info">Chuyển vào Ví Tubu</ToneBadge>}
           </div>
           <div className="mt-0.5 text-sm text-stone-600">
             CTV: <span className="font-medium text-stone-800">{userLabel}</span>
