@@ -530,3 +530,39 @@ describe('CampaignsAdminService: PUT sản phẩm/mã không làm trang chiến 
     await expect(off.svc.setCoupons('c1', [], NOW)).resolves.toEqual({ count: 0 });
   });
 });
+
+describe('CampaignsAdminService: bật lại (khách không thấy thành khách thấy) và giao dịch của update', () => {
+  const endedRow = (over: Record<string, unknown> = {}) => row({ isActive: true, endAt: new Date('2026-11-04T00:00:00Z'), ...over });
+
+  it('danh sách: chiến dịch đã kết thúc (kể cả trang không còn gì) có health 0/0, không lọt lọc "Có vấn đề"', async () => {
+    const { svc, prisma } = setup();
+    prisma.campaign.findMany.mockResolvedValue([{ ...endedRow({ id: 'e' }), _count: { products: 0, coupons: 0 } }]);
+    const [first] = await svc.list(undefined, NOW);
+    expect(first?.status).toBe('ended');
+    expect(first?.health).toEqual({ blockers: 0, warnings: 0 });
+  });
+
+  it('gia hạn chiến dịch đã kết thúc (vẫn isActive) là một lần bật: trang trống thì 400, không ghi', async () => {
+    const { svc, prisma } = setup({ existing: endedRow() });
+    await expect(svc.update('c1', { endAt: '2026-12-01T00:00:00.000Z' }, NOW)).rejects.toThrow(/Trang chiến dịch đang trống/);
+    expect(prisma.campaign.update).not.toHaveBeenCalled();
+  });
+
+  it('gia hạn khi trang đã có sản phẩm hiển thị thì cho; rút ngắn chiến dịch đang chạy về quá khứ không bị kiểm', async () => {
+    const ok = setup({ existing: endedRow(), linked: [{ campaignId: 'c1', product: visibleProduct() }] });
+    await ok.svc.update('c1', { endAt: '2026-12-01T00:00:00.000Z' }, NOW);
+    expect(ok.prisma.campaign.update).toHaveBeenCalledTimes(1);
+    const shorten = setup({ existing: row({ isActive: true }) });
+    await shorten.svc.update('c1', { endAt: '2026-11-03T00:00:00.000Z' }, NOW);
+    expect(shorten.prisma.campaign.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('update chạy trong một giao dịch, khoá dòng chiến dịch trước khi đọc và kiểm', async () => {
+    const { svc, prisma } = setup({ existing: row({ isActive: false }), linked: [{ campaignId: 'c1', product: visibleProduct() }] });
+    await svc.update('c1', { isActive: true }, NOW);
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(prisma.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(prisma.campaign.findUnique.mock.invocationCallOrder[0]);
+  });
+});
+

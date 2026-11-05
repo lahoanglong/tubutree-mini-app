@@ -222,6 +222,50 @@ describe('Campaigns (real Postgres)', () => {
       expect(left.products + left.coupons).toBe(1);
     });
 
+    it('bật chiến dịch song song gỡ sản phẩm cuối của trang: sau cả hai không bao giờ có trang đang bật mà trống (nhiều vòng)', async () => {
+      for (let round = 0; round < 8; round++) {
+        const c = await admin.create(base(`rc${round}`, { linkType: 'CAMPAIGN_PAGE', linkValue: undefined, isActive: false }));
+        await admin.setProducts(c.id, [(await product(`SP rc${round}`, `rc${round}`)).id]);
+        const results = await Promise.allSettled([admin.update(c.id, { isActive: true }), admin.setProducts(c.id, [])]);
+        for (const r of results) if (r.status === 'rejected') expect(r.reason).toBeInstanceOf(BadRequestException);
+        const row = await prisma.campaign.findUniqueOrThrow({ where: { id: c.id } });
+        const left = await linksOf(c.id);
+        expect(row.isActive && left.products + left.coupons === 0).toBe(false);
+      }
+    });
+
+    it('đổi đích sang trang chiến dịch song song gỡ sản phẩm cuối: không bao giờ có trang chiến dịch đang bật mà trống (nhiều vòng)', async () => {
+      for (let round = 0; round < 8; round++) {
+        const c = await admin.create(base(`rl${round}`));
+        await admin.setProducts(c.id, [(await product(`SP rl${round}`, `rl${round}`)).id]);
+        const results = await Promise.allSettled([admin.update(c.id, { linkType: 'CAMPAIGN_PAGE' }), admin.setProducts(c.id, [])]);
+        for (const r of results) if (r.status === 'rejected') expect(r.reason).toBeInstanceOf(BadRequestException);
+        const row = await prisma.campaign.findUniqueOrThrow({ where: { id: c.id } });
+        const left = await linksOf(c.id);
+        expect(row.isActive && row.linkType === 'CAMPAIGN_PAGE' && left.products + left.coupons === 0).toBe(false);
+      }
+    });
+
+    it('sửa chiến dịch đang bật đổi đích sang trang chiến dịch kèm sản phẩm: trường khác trước, gắn sản phẩm, đích ở cuối thì được; đổi đích trước khi có sản phẩm thì 400', async () => {
+      const c = await admin.create(base('doi-dich'));
+      await expect(admin.update(c.id, { linkType: 'CAMPAIGN_PAGE' })).rejects.toThrow(/Trang chiến dịch đang trống/);
+      expect((await prisma.campaign.findUniqueOrThrow({ where: { id: c.id } })).linkType).toBe('URL_INTERNAL');
+      await admin.update(c.id, { title: 'Đổi tên' });
+      await admin.setProducts(c.id, [(await product('SP doi-dich', 'doi-dich')).id]);
+      await expect(admin.update(c.id, { linkType: 'CAMPAIGN_PAGE' })).resolves.toMatchObject({ linkType: 'CAMPAIGN_PAGE', isActive: true });
+    });
+
+    it('gia hạn chiến dịch đã hết hạn là một lần bật: trang trống thì 400 và endAt không đổi; có sản phẩm thì gia hạn được', async () => {
+      const past = base('het-han', { linkType: 'CAMPAIGN_PAGE', linkValue: undefined, isActive: false, startAt: new Date(Date.now() - 3 * DAY).toISOString(), endAt: new Date(Date.now() - DAY).toISOString() });
+      const c = await admin.create(past);
+      await prisma.campaign.update({ where: { id: c.id }, data: { isActive: true } });
+      const later = new Date(Date.now() + DAY).toISOString();
+      await expect(admin.update(c.id, { endAt: later })).rejects.toThrow(/Trang chiến dịch đang trống/);
+      expect((await prisma.campaign.findUniqueOrThrow({ where: { id: c.id } })).endAt.getTime()).toBeLessThan(Date.now());
+      await admin.setProducts(c.id, [(await product('SP het-han', 'het-han')).id]);
+      await expect(admin.update(c.id, { endAt: later })).resolves.toMatchObject({ isActive: true });
+    });
+
     it('banner thứ 6 cùng chỗ bị cảnh báo chồng banner theo đúng thứ tự hiển thị thật', async () => {
       for (let i = 0; i < 5; i++) await admin.create(base(`day${i}`, { placement: 'OFFERS_TOP', sortOrder: i }));
       const sixth = await admin.create(base('day5', { placement: 'OFFERS_TOP', sortOrder: 9999 }));
