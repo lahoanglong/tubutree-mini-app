@@ -188,6 +188,23 @@ describe('đóng log ZNS kẹt (real Postgres)', () => {
       expect(sendTemplate).not.toHaveBeenCalled();
     });
 
+    it('log đã bị đóng FAILED (sự kiện failed/cron) và nhả khoá, worker cũ ghi RETRYING muộn: log vẫn FAILED, khoá vẫn nhả', async () => {
+      const u = await newUser();
+      const key = `it-late-retry-closed:${Date.now()}`;
+      const a = await mkLog(u.id, key, 'RETRYING');
+      let settle!: (v: unknown) => void;
+      sendTemplate.mockImplementationOnce(() => new Promise((resolve) => (settle = resolve)));
+      const w1 = svc.deliverZns(jobOf(a.id), false);
+      await new Promise((r) => setTimeout(r, 50));
+      expect(await svc.closeStuckZnsLog(a.id, 'job hỏng')).toBe(true);
+      settle({ ok: false, retryable: true, code: -1, reason: 'timeout' });
+      expect(await w1).toBe('RETRY');
+      const after = await row(a.id);
+      expect(after.status).toBe('FAILED');
+      expect(after.error).toBe('job hỏng');
+      expect(after.payload).toEqual({ data: {}, dedupeKey: `${key}:failed:${a.id}` });
+    });
+
     it('lỗi tạm thời còn lượt: log vẫn SENT, trả SENT để BullMQ không thử lại và gửi đôi', async () => {
       const { key, a, outcome } = await w1FailsAfterW2Sent(false);
       expect(outcome).toBe('SENT');

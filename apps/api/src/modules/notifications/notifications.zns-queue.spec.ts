@@ -148,6 +148,28 @@ describe('NotificationsService.deliverZns', () => {
     expect(await svc.deliverZns(JOB, final)).toBe('SENT');
   });
 
+  it('UPDATE 0 dòng mà log đã SENT: logger.warn kèm logId và lỗi Zalo của lượt này (không thành lỗi im lặng)', async () => {
+    const failure = { ok: false, retryable: true, code: -124, reason: 'token expired' };
+    const { svc, executeRaw, findUnique } = setup({ sendTemplate: jest.fn().mockResolvedValue(failure) });
+    executeRaw.mockResolvedValue(0);
+    findUnique.mockResolvedValueOnce({ status: 'PENDING', payload: { data: {} } }).mockResolvedValueOnce({ status: 'SENT' });
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    try {
+      expect(await svc.deliverZns(JOB, false)).toBe('SENT');
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('log-2'));
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('token expired'));
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('ghi RETRYING chỉ từ PENDING/RETRYING (không mở lại log FAILED đã đóng); ghi FAILED từ mọi trạng thái trừ SENT', async () => {
+    const failure = { ok: false, retryable: true, code: -124, reason: 'x' };
+    const { svc, executeRaw } = setup({ sendTemplate: jest.fn().mockResolvedValue(failure) });
+    await svc.deliverZns(JOB, false);
+    expect(sqlOf(executeRaw)).toMatch(/status IN \('PENDING', 'RETRYING'\)/);
+  });
+
   it('log đã SENT (job chạy lặp) → không gửi lần nữa', async () => {
     const { svc, sendTemplate } = setup({ status: 'SENT' });
     expect(await svc.deliverZns(JOB, false)).toBe('SENT');

@@ -481,15 +481,19 @@ export class NotificationsService {
     // Khi đó log đã đúng là "đã gửi": trả SENT (processor không ném nên BullMQ không thử lại), không đè FAILED/RETRYING và không nhả khoá.
     if ((await this.writeFailure(job.notificationLogId, retrying ? 'RETRYING' : 'FAILED', error)) === 0) {
       const now = await this.prisma.notificationLog.findUnique({ where, select: { status: true } });
-      if (now?.status === 'SENT') return 'SENT';
+      if (now?.status === 'SENT') {
+        this.logger.warn(`ZNS log ${job.notificationLogId} đã SENT bởi lượt khác; kết quả lỗi của lượt này bị bỏ qua: ${error}`);
+        return 'SENT';
+      }
     }
     return retrying ? 'RETRY' : 'FAILED';
   }
 
   /**
-   * Ghi kết cục chưa gửi được (RETRYING còn lượt, FAILED hết lượt) bằng MỘT câu UPDATE, không ghi đè log đã SENT. FAILED nhả luôn khoá
+   * Ghi kết cục chưa gửi được (RETRYING còn lượt, FAILED hết lượt) bằng MỘT câu UPDATE, không ghi đè log đã SENT. RETRYING chỉ từ PENDING/RETRYING:
+   * log đã đóng FAILED bởi sự kiện failed/cron (đã nhả khoá) không được worker cũ mở lại. FAILED nhả luôn khoá
    * chống trùng trong cùng câu (`<khoá>:failed:<id>`, cùng quy tắc releasedPayload): job completed vẫn retry tay được, log FAILED còn khoá
-   * nguyên thì lần chạy lại gửi tiếp dù nơi gọi đã gửi tin cùng sự kiện bằng log khác. Trả số dòng đã ghi (0 = log đã SENT hoặc biến mất).
+   * nguyên thì lần chạy lại gửi tiếp dù nơi gọi đã gửi tin cùng sự kiện bằng log khác. Trả số dòng đã ghi (0 = log đã SENT, hoặc đã đóng khi ghi RETRYING, hoặc biến mất).
    */
   private async writeFailure(logId: string, status: 'RETRYING' | 'FAILED', error: string): Promise<number> {
     const release = status === 'FAILED';
@@ -500,7 +504,8 @@ export class NotificationsService {
                WHEN ${release}::boolean AND jsonb_typeof(payload -> 'dedupeKey') = 'string' AND (payload ->> 'dedupeKey') !~ ':failed:[^:]+$'
                THEN jsonb_set(payload, '{dedupeKey}', to_jsonb((payload ->> 'dedupeKey') || ':failed:' || id))
                ELSE payload END
-       WHERE id = ${logId} AND status <> 'SENT'`;
+       WHERE id = ${logId}
+         AND (CASE WHEN ${release}::boolean THEN status <> 'SENT' ELSE status IN ('PENDING', 'RETRYING') END)`;
   }
 
   /**
