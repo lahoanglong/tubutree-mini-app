@@ -582,6 +582,16 @@ describe('AdminService.setUserRole', () => {
     },
   );
 
+  // W9-02: SĐT chỉ có ký tự vô hình hoặc không có chữ số trước đây lọt xuống tra DB với chuỗi rỗng và báo "có SĐT  (cần mở…)".
+  it.each(['', '   ', '\u200b\u200b\u200b', 'abc', '12'])('SĐT %p không phải số điện thoại → 400 tiếng Việt, không tra DB', async (typed) => {
+    const findUnique = jest.fn();
+    const prisma = makePrisma({ user: { findUnique, update: jest.fn() } });
+    const run = mkAdmin(prisma).setUserRole('admin1', typed, 'STAFF');
+    await expect(run).rejects.toBeInstanceOf(BadRequestException);
+    await expect(run).rejects.toThrow(/^Số điện thoại không hợp lệ/);
+    expect(findUnique).not.toHaveBeenCalled();
+  });
+
   it('không thấy user → thông báo kèm SĐT đã chuẩn hoá để admin đối chiếu', async () => {
     const prisma = makePrisma({ user: { findUnique: jest.fn().mockResolvedValue(null), update: jest.fn() } });
     await expect(mkAdmin(prisma).setUserRole('admin1', '+84944555666', 'STAFF')).rejects.toThrow(

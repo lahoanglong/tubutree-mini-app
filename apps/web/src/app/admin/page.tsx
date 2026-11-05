@@ -2632,7 +2632,7 @@ function GrantRoleForm({ onDone }: { onDone: () => void }) {
         {needsTier && <DealerTierSelect value={tierId} onChange={setTierId} className="min-w-0 flex-1" />}
         <button
           className={BTN_PRIMARY}
-          disabled={!phone.trim() || !role || (needsTier && !tierId.trim()) || mut.isPending || checking}
+          disabled={!phoneKey(phone) || !role || (needsTier && !tierId.trim()) || mut.isPending || checking}
           title={needsTier && !tierId.trim() ? 'Cần chọn bậc đại lý để cấp vai trò DEALER' : undefined}
           onClick={submit}
         >

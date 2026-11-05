@@ -1231,6 +1231,19 @@ describe('admin/page — tab Người dùng', () => {
     expect(mocks.setUserRole).toHaveBeenCalledTimes(2);
   });
 
+  it('W9-02: nút Cấp quyền khoá khi SĐT chỉ có ký tự vô hình hoặc không có chữ số, dù đã chọn vai trò', async () => {
+    const { container } = await openUsers();
+    const grant = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Cấp quyền')!;
+    const phone = container.querySelector('input[placeholder^="SĐT"]') as HTMLInputElement;
+    selectValue(container.querySelector('select[class*="min-h-[44px]"]'), 'CUSTOMER');
+    for (const junk of ['\u200b\u200b\u200b', '\ufeff\u2060', 'abc', '   ']) {
+      typeInto(phone, junk);
+      expect(grant.disabled, JSON.stringify(junk)).toBe(true);
+    }
+    typeInto(phone, '0955555555');
+    expect(grant.disabled).toBe(false);
+  });
+
   it('D15-02: không có vai trò mặc định, mọi lần đổi vai trò đều hỏi xác nhận kèm hậu quả hạ quyền', async () => {
     const { container } = await openUsers();
     const roleSelect = container.querySelector('select[class*="min-h-[44px]"]') as HTMLSelectElement;
