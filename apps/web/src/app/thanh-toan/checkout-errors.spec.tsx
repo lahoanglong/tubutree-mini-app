@@ -136,7 +136,7 @@ describe('/thanh-toan — gửi lỗi mạng giữ nguyên đơn (hk)', () => {
     expect(retry).toBeTruthy();
     expect(retry.disabled).toBe(false);
     expect(byText(r.container, 'button', 'Đặt hàng · ')).toBeNull();
-    expect(r.container.textContent).toContain('Chưa gửi được đơn. Bấm Thử lại, hệ thống không tạo đơn trùng.');
+    expect(r.container.textContent).toContain('Chưa rõ đơn đã được ghi nhận chưa. Bấm Thử lại để gửi lại đúng đơn này, hệ thống không tạo đơn trùng.');
     click(retry);
     await flush(8);
     expect(m.placeOrder).toHaveBeenCalledTimes(2);
@@ -144,12 +144,45 @@ describe('/thanh-toan — gửi lỗi mạng giữ nguyên đơn (hk)', () => {
     expect(m.placeOrder.mock.calls[1]![1]).toBe(m.placeOrder.mock.calls[0]![1]);
   });
 
-  it('lỗi 4xx rõ ràng: nút vẫn là "Đặt hàng · tổng", không nói "Chưa gửi được đơn"', async () => {
+  it('lỗi 4xx rõ ràng: nút vẫn là "Đặt hàng · tổng", không nói "Chưa rõ đơn đã được ghi nhận chưa"', async () => {
     m.placeOrder.mockRejectedValue(new ApiError('Địa chỉ không hợp lệ.', 400));
     const r = await mount();
     click(placeButton(r));
     await flush(8);
     expect(byText(r.container, 'button', 'Đặt hàng · 130.000đ')).toBeTruthy();
-    expect(r.container.textContent).not.toContain('Chưa gửi được đơn');
+    expect(r.container.textContent).not.toContain('Chưa rõ đơn đã được ghi nhận chưa');
+  });
+
+  it('khung báo lỗi theo tên nút: nói Bấm Thử lại, không còn "Bấm Đặt hàng lần nữa để thử lại"', async () => {
+    m.placeOrder.mockRejectedValueOnce(new NetworkError(true));
+    const r = await mount();
+    click(placeButton(r));
+    await flush(8);
+    const alert = r.container.querySelector('[role="alert"]')!;
+    expect(alert.textContent).toContain('Đơn có thể đã được ghi nhận. Bấm Thử lại để gửi lại đúng đơn này');
+    expect(alert.textContent).not.toContain('Bấm Đặt hàng lần nữa');
+  });
+
+  it('đổi lựa chọn sau lỗi chưa rõ kết quả (đổi cách thanh toán): nút về "Đặt hàng · tổng", không còn câu "không tạo đơn trùng"; bấm kế bị chặn, bấm sau gửi với khoá khác', async () => {
+    m.placeOrder.mockRejectedValueOnce(new NetworkError(true)).mockResolvedValue(placed);
+    const r = await mount();
+    click(placeButton(r));
+    await flush(8);
+    expect(byText(r.container, 'button', 'Thử lại · 130.000đ')).toBeTruthy();
+    const bank = [...r.container.querySelectorAll('label')].find((l) => l.textContent?.includes('Chuyển khoản'))!.querySelector('input')!;
+    bank.click();
+    await flush(6);
+    expect(byText(r.container, 'button', 'Đặt hàng · 130.000đ')).toBeTruthy();
+    expect(byText(r.container, 'button', 'Thử lại · ')).toBeNull();
+    expect(r.container.textContent).not.toContain('hệ thống không tạo đơn trùng');
+    expect(r.container.textContent).not.toContain('Bấm Thử lại');
+    click(byText(r.container, 'button', 'Đặt hàng · 130.000đ')!);
+    await flush(8);
+    expect(m.placeOrder).toHaveBeenCalledTimes(1);
+    expect(r.container.textContent).toContain('Đơn trước có thể đã được tạo');
+    click(byText(r.container, 'button', 'Đặt hàng · 130.000đ')!);
+    await flush(8);
+    expect(m.placeOrder).toHaveBeenCalledTimes(2);
+    expect(m.placeOrder.mock.calls[1]![1]).not.toBe(m.placeOrder.mock.calls[0]![1]);
   });
 });

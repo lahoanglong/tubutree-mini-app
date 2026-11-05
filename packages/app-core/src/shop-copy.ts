@@ -276,7 +276,7 @@ export const SHOP_COPY: Record<string, string> = {
   'checkout.selectionLostHeading': 'Món bạn chọn không còn trong giỏ',
   'checkout.selectionLostBody': 'Có thể bạn đã bỏ món đó ở nơi khác. Về giỏ hàng để chọn lại món cần mua.',
   'checkout.retryWith': 'Thử lại · {price}',
-  'checkout.retryNote': 'Chưa gửi được đơn. Bấm Thử lại, hệ thống không tạo đơn trùng.',
+  'checkout.retryNote': 'Chưa rõ đơn đã được ghi nhận chưa. Bấm Thử lại để gửi lại đúng đơn này, hệ thống không tạo đơn trùng.',
   'checkout.fixLinesHint': 'Sửa sản phẩm hết hàng ở trên để đặt tiếp.',
   'checkout.taxCodeInvalid': 'Mã số thuế gồm 10 số (chi nhánh thêm -3 số) hoặc 12 số.',
   'checkout.invoiceIncomplete': 'Bạn điền đủ MST, tên công ty, địa chỉ và email hợp lệ nhé.',

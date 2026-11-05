@@ -147,13 +147,20 @@ export default function CheckoutPage() {
   // Đếm số lần khách tự đổi lựa chọn. Không so các trường của body: phương thức thanh toán, điểm dùng được, địa chỉ mặc định
   // được tính lại từ dữ liệu máy chủ ngay khi nạp lại, không phải khách đổi ý.
   const choiceRev = useRef(0);
+  // Bản sao của choiceRev và của rev lần đặt đang treo trong state để vẽ: nút chỉ là "Thử lại" khi lựa chọn hiện tại đúng là lần đặt bị treo.
+  const [choiceTick, setChoiceTick] = useState(0);
+  const [unknownRev, setUnknownRev] = useState<number | null>(null);
+  const bumpChoice = () => {
+    choiceRev.current += 1;
+    setChoiceTick(choiceRev.current);
+  };
   // Đơn trả về theo yêu cầu đã gửi (có thể là đơn cũ được gửi lại), không theo radio đang chọn lúc phản hồi về.
   const sentMethod = useRef('');
   // Bản sao của cờ đóng băng trong state: giỏ nạp lại thành rỗng thì form và nút Đặt hàng biến mất, màn giỏ trống phải còn lối gửi lại.
   const [maybePlaced, setMaybePlaced] = useState(false);
   const [placeNotice, setPlaceNotice] = useState<'unknown' | 'previous' | null>(null);
   const chosen = <A extends unknown[]>(fn: (...args: A) => void) => (...args: A) => {
-    choiceRev.current += 1;
+    bumpChoice();
     fn(...args);
   };
 
@@ -243,7 +250,7 @@ export default function CheckoutPage() {
     previewParams: couponPreviewParams,
     previewKey: couponPreviewKey,
     onChanged: () => {
-      choiceRev.current += 1;
+      bumpChoice();
     },
   });
 
@@ -352,6 +359,7 @@ export default function CheckoutPage() {
     },
     onSuccess: (o) => {
       unknownAttempt.current = null;
+      setUnknownRev(null);
       setMaybePlaced(false);
       haptic('heavy');
       // Nhớ thông tin hoá đơn cho lần đặt sau (đỡ nhập lại).
@@ -388,6 +396,7 @@ export default function CheckoutPage() {
     onError: (e: unknown) => {
       if (e instanceof Error && e.message === PREVIOUS_MAYBE_PLACED) {
         unknownAttempt.current = null;
+        setUnknownRev(null);
         setMaybePlaced(false);
         setPlaceNotice('previous');
         openSnackbar({ text: PREVIOUS_MAYBE_PLACED, type: 'error' });
@@ -399,6 +408,7 @@ export default function CheckoutPage() {
       if (isOutcomeUnknown(e)) unknownAttempt.current ??= attempt.current;
       else if (!rejectedBeforeService) unknownAttempt.current = null;
       setMaybePlaced(unknownAttempt.current !== null);
+      setUnknownRev(unknownAttempt.current?.rev ?? null);
       setPlaceNotice(isOutcomeUnknown(e) ? 'unknown' : null);
       // 4xx cho yêu cầu thu rác đã đóng/bị khoá: tải lại để công tắc biến mất. Lỗi mạng/quá thời gian/5xx có thể đến sau khi
       // server đã tạo đơn, nên không tải lại: bấm lại phải gửi cùng body, cùng khoá.
@@ -453,7 +463,7 @@ export default function CheckoutPage() {
   const lineFix = useMutation({
     mutationFn: ({ id, fix }: { id: string; fix: LineFix }) => (fix.kind === 'remove' ? removeCartItem(id) : updateCartItem(id, fix.quantity)),
     onSuccess: () => {
-      choiceRev.current += 1;
+      bumpChoice();
       setCartIssue(null);
       void queryClient.invalidateQueries({ queryKey: ['cart'] });
       void queryClient.invalidateQueries({ queryKey: ['quote'] });
@@ -606,7 +616,7 @@ export default function CheckoutPage() {
   // Lý do nút Đặt hàng đang khoá do thiếu địa chỉ hoặc báo giá lỗi: nói ngay trên nút (cùng câu với web).
   const placeHint = checkoutPlaceHint({ hasAddress: !!addressId, quoteFailed: quote.isError }) ?? (hasLineProblem ? fillCopy('checkout.fixLinesHint') : null);
   // Lần đặt vừa rồi chưa rõ kết quả (mất mạng, quá thời gian, 5xx): nút nói rõ là gửi lại cùng đơn (cùng khoá, không tạo đơn trùng).
-  const retryingPlace = placeNotice === 'unknown';
+  const retryingPlace = placeNotice === 'unknown' && unknownRev !== null && unknownRev === choiceTick;
   const placeBarNote = placeHint ?? (retryingPlace ? fillCopy('checkout.retryNote') : null);
   const previewRecalcNote = !wholeCart && (!!cart.data?.couponCode || (cart.data?.comboDiscount ?? 0) > 0 || (cart.data?.tierDiscount ?? 0) > 0);
 
@@ -943,7 +953,7 @@ export default function CheckoutPage() {
             onClick={() => {
               if (!pointsUsable) return;
               haptic('light');
-              choiceRev.current += 1;
+              bumpChoice();
               setUsePoints((v) => !v);
             }}
             flex
@@ -996,7 +1006,7 @@ export default function CheckoutPage() {
           {vi.checkout.note}
         </Text>
         <Input aria-label={vi.checkout.note} placeholder={vi.checkout.notePlaceholder} maxLength={500} value={note} onChange={(e) => {
-          choiceRev.current += 1;
+          bumpChoice();
           setNote(e.target.value);
         }} />
       </Box>
@@ -1022,7 +1032,7 @@ export default function CheckoutPage() {
                 className="tubu-press"
                 onClick={() => {
                   haptic('light');
-                  choiceRev.current += 1;
+                  bumpChoice();
                   setAttachWaste((v) => !v);
                 }}
                 flex
@@ -1080,7 +1090,7 @@ export default function CheckoutPage() {
           className="tubu-press"
           onClick={() => {
             haptic('light');
-            choiceRev.current += 1;
+            bumpChoice();
             setWantInvoice((v) => !v);
           }}
           flex
@@ -1103,7 +1113,7 @@ export default function CheckoutPage() {
                 status={invoiceError('taxCode') ? 'error' : undefined}
                 onBlur={touchInvoice('taxCode')}
                 onChange={(e) => {
-                  choiceRev.current += 1;
+                  bumpChoice();
                   setInvoice((f) => ({ ...f, taxCode: e.target.value }));
                 }}
               />
@@ -1115,7 +1125,7 @@ export default function CheckoutPage() {
                 status={invoiceError('companyName') ? 'error' : undefined}
                 onBlur={touchInvoice('companyName')}
                 onChange={(e) => {
-                  choiceRev.current += 1;
+                  bumpChoice();
                   setInvoice((f) => ({ ...f, companyName: e.target.value }));
                 }}
               />
@@ -1127,7 +1137,7 @@ export default function CheckoutPage() {
                 status={invoiceError('address') ? 'error' : undefined}
                 onBlur={touchInvoice('address')}
                 onChange={(e) => {
-                  choiceRev.current += 1;
+                  bumpChoice();
                   setInvoice((f) => ({ ...f, address: e.target.value }));
                 }}
               />
@@ -1140,7 +1150,7 @@ export default function CheckoutPage() {
                 status={invoiceError('email') ? 'error' : undefined}
                 onBlur={touchInvoice('email')}
                 onChange={(e) => {
-                  choiceRev.current += 1;
+                  bumpChoice();
                   setInvoice((f) => ({ ...f, email: e.target.value }));
                 }}
               />
@@ -1261,10 +1271,12 @@ export default function CheckoutPage() {
 
       {placeNotice && (
         <Box p={4} data-testid="place-notice" role="alert" style={{ background: 'var(--color-bg-surface)' }}>
-          {placeNotice === 'unknown' ? (
+          {placeNotice === 'unknown' && retryingPlace ? (
             <Text size="small">
-              Đơn có thể đã được ghi nhận. Bấm Đặt hàng lần nữa để thử lại — hệ thống nhận ra yêu cầu trùng nên không tạo thêm đơn. Hoặc xem Đơn của tôi.
+              Đơn có thể đã được ghi nhận. Bấm Thử lại để gửi lại đúng đơn này — hệ thống nhận ra yêu cầu trùng nên không tạo thêm đơn. Hoặc xem Đơn của tôi.
             </Text>
+          ) : placeNotice === 'unknown' ? (
+            <Text size="small">{PREVIOUS_MAYBE_PLACED}</Text>
           ) : (
             <Text size="small">
               Nếu đơn trước chưa có trong Đơn của tôi, bấm Đặt hàng lần nữa để đặt đơn mới với lựa chọn hiện tại.
@@ -1390,7 +1402,7 @@ export default function CheckoutPage() {
         previewKey={cartPreviewKey(checkoutItems)}
         busy={autoCoupon.busy}
         onCouponApplied={() => {
-          choiceRev.current += 1;
+          bumpChoice();
           void cart.refetch();
           void quote.refetch();
         }}

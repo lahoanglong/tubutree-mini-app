@@ -129,11 +129,18 @@ export default function CheckoutPage() {
   // Đếm số lần khách tự đổi lựa chọn. Không so các trường của body: phương thức thanh toán, yêu cầu thu rác, điểm dùng
   // được tính lại từ dữ liệu máy chủ (ví tụt, yêu cầu rác gắn mã đơn) ngay khi nạp lại sau đơn đã tạo, không phải khách đổi ý.
   const choiceRev = useRef(0);
+  // Bản sao của choiceRev và của rev lần đặt đang treo trong state để vẽ: nút chỉ là "Thử lại" khi lựa chọn hiện tại đúng là lần đặt bị treo.
+  const [choiceTick, setChoiceTick] = useState(0);
+  const [unknownRev, setUnknownRev] = useState<number | null>(null);
+  const bumpChoice = () => {
+    choiceRev.current += 1;
+    setChoiceTick(choiceRev.current);
+  };
   const bootedRef = useRef(false);
   // Bản sao của cờ đóng băng trong state: giỏ nguyên vẹn nạp lại thành rỗng thì form (và nút Đặt hàng) biến mất, màn giỏ trống phải còn lối gửi lại.
   const [maybePlaced, setMaybePlaced] = useState(false);
   const chosen = <A extends unknown[]>(fn: (...args: A) => void) => (...args: A) => {
-    choiceRev.current += 1;
+    bumpChoice();
     fn(...args);
   };
 
@@ -330,6 +337,7 @@ export default function CheckoutPage() {
     onSuccess: (order) => {
       orderKeys.current.reset();
       unknownAttempt.current = null;
+      setUnknownRev(null);
       setMaybePlaced(false);
       // Theo đơn máy chủ đã tạo, không theo radio đang chọn lúc phản hồi về.
       const isBank = order.paymentMethod === 'BANK_TRANSFER';
@@ -354,6 +362,7 @@ export default function CheckoutPage() {
       if (isOutcomeUnknown(e)) unknownAttempt.current ??= attempt.current;
       else if (!rejectedBeforeService) unknownAttempt.current = null;
       setMaybePlaced(unknownAttempt.current !== null);
+      setUnknownRev(unknownAttempt.current?.rev ?? null);
       // 4xx cho yêu cầu thu rác đã đóng/bị khoá: tải lại để công tắc biến mất. Lỗi mạng/quá thời gian/5xx có thể đến sau khi máy
       // chủ đã tạo đơn, nên không tải lại: bấm lại phải gửi cùng body, cùng khoá.
       if (attachWaste && !isOutcomeUnknown(e)) void qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.me });
@@ -385,7 +394,7 @@ export default function CheckoutPage() {
   const lineFix = useMutation({
     mutationFn: ({ id, fix }: { id: string; fix: LineFix }) => (fix.kind === 'remove' ? removeCartItem(id) : updateCartItem(id, fix.quantity)),
     onSuccess: () => {
-      choiceRev.current += 1;
+      bumpChoice();
       place.reset();
       void qc.invalidateQueries({ queryKey: ['cart'] });
       void qc.invalidateQueries({ queryKey: ['quote'] });
@@ -585,7 +594,7 @@ export default function CheckoutPage() {
   };
   const totalText = checkoutTotalText({ total: quote?.total ?? null, hasAddress: !!addressId }, formatVnd);
   // Lần đặt vừa rồi chưa rõ kết quả (mất mạng, quá thời gian, 5xx): nút nói rõ là gửi lại cùng đơn (cùng khoá, không tạo đơn trùng).
-  const retryingPlace = place.isError && isOutcomeUnknown(place.error);
+  const retryingPlace = place.isError && isOutcomeUnknown(place.error) && unknownRev !== null && unknownRev === choiceTick;
   const placeLabel = place.isPending
     ? 'Đang đặt hàng…'
     : quote
@@ -686,7 +695,7 @@ export default function CheckoutPage() {
                 chosen(setAddressId)(a.id);
               }}
               onUpdated={() => {
-                choiceRev.current += 1;
+                bumpChoice();
                 void qc.invalidateQueries({ queryKey: ['addresses'] });
                 void qc.invalidateQueries({ queryKey: ['quote'] });
               }}
@@ -1065,9 +1074,18 @@ export default function CheckoutPage() {
           {place.isError && !priceChanged && placeCartNotice === null && (
             <div role="alert" className={`mt-2 ${ui.error}`}>
               <p>{placeErrorMessage ?? 'Đặt hàng thất bại.'}</p>
-              {isOutcomeUnknown(place.error) && (
+              {isOutcomeUnknown(place.error) && !retryingPlace && (
                 <p className="mt-1 text-[color:var(--color-text-secondary)]">
-                  Đơn có thể đã được ghi nhận. Bấm Đặt hàng lần nữa để thử lại — hệ thống nhận ra yêu cầu trùng nên không tạo thêm đơn. Hoặc xem{' '}
+                  {PREVIOUS_MAYBE_PLACED} Mở{' '}
+                  <Link href="/tai-khoan/don-hang" className="font-semibold text-[color:var(--color-text-brand)] underline">
+                    Đơn của tôi
+                  </Link>
+                  .
+                </p>
+              )}
+              {retryingPlace && (
+                <p className="mt-1 text-[color:var(--color-text-secondary)]">
+                  Đơn có thể đã được ghi nhận. Bấm Thử lại để gửi lại đúng đơn này — hệ thống nhận ra yêu cầu trùng nên không tạo thêm đơn. Hoặc xem{' '}
                   <Link href="/tai-khoan/don-hang" className="font-semibold text-[color:var(--color-text-brand)] underline">
                     Đơn của tôi
                   </Link>

@@ -1690,7 +1690,7 @@ describe('CheckoutPage — đóng băng yêu cầu sau lần đặt chưa rõ k�
     mount();
     await click(1);
     const notice = await screen.findByTestId('place-notice');
-    expect(notice).toHaveTextContent('Đơn có thể đã được ghi nhận. Bấm Đặt hàng lần nữa để thử lại');
+    expect(notice).toHaveTextContent('Đơn có thể đã được ghi nhận. Bấm Thử lại để gửi lại đúng đơn này');
     fireEvent.click(within(notice).getByRole('button', { name: 'Đơn của tôi' }));
     expect(mocks.navigate).toHaveBeenCalledWith('/orders');
   });
@@ -2250,8 +2250,8 @@ describe('CheckoutPage — gửi lỗi mạng (hk)', () => {
     renderPage();
     await placeOrderClick();
     const retry = await screen.findByText('Thử lại · 70.000đ');
-    const status = screen.getAllByRole('status').find((el) => el.textContent?.includes('Chưa gửi được đơn'));
-    expect(status).toHaveTextContent('Chưa gửi được đơn. Bấm Thử lại, hệ thống không tạo đơn trùng.');
+    const status = screen.getAllByRole('status').find((el) => el.textContent?.includes('Chưa rõ đơn đã được ghi nhận chưa'));
+    expect(status).toHaveTextContent('Chưa rõ đơn đã được ghi nhận chưa. Bấm Thử lại để gửi lại đúng đơn này, hệ thống không tạo đơn trùng.');
     expect(screen.queryByText(/Đặt hàng · /)).not.toBeInTheDocument();
     await waitFor(() => expect(retry.closest('button')).not.toBeDisabled());
     fireEvent.click(retry);
@@ -2261,13 +2261,68 @@ describe('CheckoutPage — gửi lỗi mạng (hk)', () => {
     expect(await screen.findByTestId('order-success')).toBeInTheDocument();
   });
 
-  it('lỗi 4xx của máy chủ: nút vẫn là "Đặt hàng · tổng", không có câu "Chưa gửi được đơn"', async () => {
+  it('lỗi 4xx của máy chủ: nút vẫn là "Đặt hàng · tổng", không có câu "Chưa rõ đơn đã được ghi nhận chưa"', async () => {
     mocks.placeOrder.mockRejectedValue(new HttpError('Bad Request', 'ERR_BAD_REQUEST', { status: 400, data: { statusCode: 400, message: 'Mã giảm giá đã hết hạn.' } }));
     renderPage();
     await placeOrderClick();
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalled());
     expect(screen.getByText(/Đặt hàng · /)).toBeInTheDocument();
-    expect(screen.queryByText(/Chưa gửi được đơn/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Chưa rõ đơn đã được ghi nhận chưa/)).not.toBeInTheDocument();
+  });
+
+  it('khối báo cố định theo tên nút: nói Bấm Thử lại, không còn "Bấm Đặt hàng lần nữa để thử lại"', async () => {
+    mocks.placeOrder.mockRejectedValueOnce(new HttpError('Network Error', 'ERR_NETWORK'));
+    renderPage();
+    await placeOrderClick();
+    const notice = await screen.findByTestId('place-notice');
+    expect(notice).toHaveTextContent('Đơn có thể đã được ghi nhận. Bấm Thử lại để gửi lại đúng đơn này');
+    expect(notice).not.toHaveTextContent('Bấm Đặt hàng lần nữa');
+  });
+
+  it('đổi lựa chọn sau lỗi chưa rõ kết quả (đổi cách thanh toán): nút về "Đặt hàng · tổng", không còn câu "không tạo đơn trùng"; bấm kế bị chặn, bấm sau gửi với khoá khác', async () => {
+    mocks.placeOrder.mockRejectedValueOnce(new HttpError('Network Error', 'ERR_NETWORK')).mockResolvedValue({ id: 'o2', code: 'TT002' });
+    renderPage();
+    await placeOrderClick();
+    expect(await screen.findByText('Thử lại · 70.000đ')).toBeInTheDocument();
+    fireEvent.click(within(paymentBox()).getByRole('radio', { name: /Chuyển khoản ngân hàng/ }));
+    expect(await screen.findByText('Đặt hàng · 70.000đ')).toBeInTheDocument();
+    expect(screen.queryByText(/Thử lại · /)).not.toBeInTheDocument();
+    expect(screen.queryByText(/hệ thống không tạo đơn trùng/)).not.toBeInTheDocument();
+    expect(screen.getByTestId('place-notice')).not.toHaveTextContent('Bấm Thử lại');
+    fireEvent.click(screen.getByText('Đặt hàng · 70.000đ'));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đơn trước có thể đã được tạo. Kiểm tra mục Đơn hàng trước khi đặt lại.', type: 'error' }));
+    expect(mocks.placeOrder).toHaveBeenCalledTimes(1);
+    fireEvent.click(await screen.findByText('Đặt hàng · 70.000đ'));
+    await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(2));
+    expect(mocks.placeOrder.mock.calls[1]![1]).not.toBe(mocks.placeOrder.mock.calls[0]![1]);
+  });
+
+  it('sửa nhanh một dòng sau lỗi chưa rõ kết quả: nhãn nút và câu đáy đổi, bấm kế không gửi (chặn cũ), bấm sau gửi với tổng mới', async () => {
+    const OVER = { ...CART.items[0]!, quantity: 3, stock: 1, total: 150_000 };
+    mocks.placeOrder.mockRejectedValueOnce(new HttpError('Network Error', 'ERR_NETWORK')).mockResolvedValue({ id: 'o2', code: 'TT002' });
+    renderPage();
+    await placeOrderClick();
+    await screen.findByText('Thử lại · 70.000đ');
+    mocks.getCart.mockResolvedValue({ ...CART, items: [OVER] });
+    act(() => {
+      window.dispatchEvent(new Event('visibilitychange'));
+    });
+    const problem = await screen.findByTestId('checkout-line-problem');
+    mocks.getCart.mockResolvedValue(CART);
+    mocks.checkoutQuote.mockResolvedValue({ ...QUOTE, total: 45_000 });
+    fireEvent.click(within(problem).getByRole('button', { name: 'Giảm còn 1' }));
+    await waitFor(() => expect(mocks.updateCartItem).toHaveBeenCalledWith('ci1', 1));
+    const btn = await screen.findByText('Đặt hàng · 45.000đ');
+    expect(screen.queryByText(/Thử lại · /)).not.toBeInTheDocument();
+    expect(screen.queryByText(/hệ thống không tạo đơn trùng/)).not.toBeInTheDocument();
+    await waitFor(() => expect(btn.closest('button')).not.toBeDisabled());
+    fireEvent.click(btn);
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đơn trước có thể đã được tạo. Kiểm tra mục Đơn hàng trước khi đặt lại.', type: 'error' }));
+    expect(mocks.placeOrder).toHaveBeenCalledTimes(1);
+    fireEvent.click(await screen.findByText('Đặt hàng · 45.000đ'));
+    await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(2));
+    // Khoá chống trùng chỉ tính theo các trường yêu cầu (số lượng nằm ở giỏ, không ở body) nên vẫn là khoá cũ: máy chủ quyết đơn cũ hay đơn mới.
+    expect((mocks.placeOrder.mock.calls[1]![0] as Record<string, unknown>).expectedTotal).toBe(45_000);
   });
 });
 

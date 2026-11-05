@@ -276,7 +276,7 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'checkout.selectionLostHeading': 36,
   'checkout.selectionLostBody': 76,
   'checkout.retryWith': 24,
-  'checkout.retryNote': 64,
+  'checkout.retryNote': 112,
   'checkout.fixLinesHint': 48,
   'checkout.taxCodeInvalid': null,
   'checkout.invoiceIncomplete': null,
