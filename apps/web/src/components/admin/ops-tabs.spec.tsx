@@ -241,6 +241,8 @@ describe('OpsHealthTab — việc cụ thể cần xử lý (R2-PLATFORM-1, R2-A
     const text = c.querySelector('section[aria-label="Đơn kẹt"]')!.textContent!;
     expect(text).toContain('Khoá API đã đẩy được đơn khác: hệ thống tự thử lại đơn này');
     expect(text).toContain('Pancake từ chối quyền cho riêng đơn này');
+    expect(text).toContain('Không tạo tay đơn này trên Pancake');
+    expect(text).not.toMatch(/(?<!Không )tạo tay/i);
     expect(text).not.toContain('sửa theo lỗi rồi bấm');
   });
 

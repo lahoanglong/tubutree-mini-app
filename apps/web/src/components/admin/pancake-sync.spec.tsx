@@ -161,6 +161,23 @@ describe('loại lỗi đẩy + câu hướng dẫn (hi)', () => {
     expect(pancakeErrorGuide(order({ pancakeErrorKind: 'REJECTED', pancakeSyncError: 'Pancake trả 403 khi tạo đơn' }))?.text).toContain('sửa dữ liệu theo lỗi bên dưới');
   });
 
+  it('không câu hướng dẫn nào khuyên tạo tay đơn trên Pancake (cron vẫn tự đẩy → hai đơn kho, giao và thu COD hai lần)', () => {
+    const forbidden = `${PANCAKE_FORBIDDEN_ERROR_PREFIX}Pancake trả 403`;
+    const orders = [
+      order({ pancakeErrorKind: 'DATA' }),
+      order({ pancakeErrorKind: 'REJECTED' }),
+      order({ pancakeErrorKind: 'REJECTED', pancakeSyncError: forbidden }),
+      order({ pancakeErrorKind: 'CONFIG' }),
+      order({ pancakeErrorKind: 'CONFIG_RECHECK', pancakeNextRetryAt: '2026-10-13T03:30:00.000Z' }),
+      order({ pancakeErrorKind: 'TRANSIENT', pancakeNextRetryAt: null }),
+    ];
+    for (const o of orders) expect(pancakeErrorGuide(o)?.text).not.toMatch(/(?<!Không )tạo tay|nhập tay|tạo thủ công/i);
+    const forbiddenText = pancakeErrorGuide(orders[2]!)?.text ?? '';
+    expect(forbiddenText).toContain('Không tạo tay đơn này trên Pancake');
+    expect(forbiddenText).toContain('tới 72 giờ');
+    expect(forbiddenText).toContain('hai đơn kho');
+  });
+
   it('lỗi tạm: nêu giờ tự thử lại kế tiếp (HH:MM giờ Việt Nam)', () => {
     const o = order({ pancakeErrorKind: 'TRANSIENT', pancakePushStatus: 'PENDING', pancakeNextRetryAt: '2026-10-13T03:30:00.000Z' });
     expect(pancakeSyncState(o)).toMatchObject({ label: 'Pancake: tạm lỗi, tự thử lại', flag: true });

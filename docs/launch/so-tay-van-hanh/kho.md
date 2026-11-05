@@ -8,7 +8,7 @@ Bạn dùng: Pancake, web **Quản trị** (nhóm việc Kho thấy: Việc cầ
 ## Đầu ca
 
 1. Mở **Quản trị › Tổng quan › Việc cần xử lý**. Thẻ của bạn: "Cần xử lý Pancake", "Đơn chưa lên Pancake", "Cần xử lý thu gom", "Hàng trả chờ nhận về kho". Bấm thẻ để mở đúng danh sách.
-2. Đơn nhãn **"Pancake: đẩy lỗi"** hoặc **"quá hạn tự đẩy"** là đơn chưa tới Pancake. Mở đơn, mục "Kho Pancake", bấm "Đẩy lại Pancake". Hệ thống tra theo mã đơn trước nên không tạo trùng. **Chỉ bấm khi bạn chưa tạo tay đơn đó trên Pancake.**
+2. Đơn nhãn **"Pancake: đẩy lỗi"** hoặc **"quá hạn tự đẩy"** là đơn chưa tới Pancake. Mở đơn, mục "Kho Pancake", bấm "Đẩy lại Pancake". Hệ thống tra theo mã đơn trước nên không tạo trùng. **Chỉ bấm khi bạn chưa tạo tay đơn đó trên Pancake.** Đừng tạo tay đơn đó khi hệ thống còn tự thử lại (nhãn "đẩy lỗi": cron hỏi lại mỗi 15 phút đến 1 giờ trong 72 giờ đầu): tạo tay rồi cron tạo nữa sẽ thành hai đơn kho, giao và thu COD hai lần. Chỉ đơn nhãn "quá hạn tự đẩy" mới không còn tự đẩy nữa.
 3. Hai nhãn này là bình thường, không làm gì: "Pancake: chờ thanh toán" (khách trả qua cổng, chưa trả xong) và "Pancake: chờ đủ hàng" (đơn đại lý đặt trước).
 4. Mở Pancake, lọc đơn mới. Đơn từ Tubu có thẻ **MINIAPP** hoặc **WEB**.
 5. Xem tồn các sản phẩm chạy mạnh trên Pancake. Tubu chưa có cảnh báo sắp hết hàng (**⏳ đang làm**).

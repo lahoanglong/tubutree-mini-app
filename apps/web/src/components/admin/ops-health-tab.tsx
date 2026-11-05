@@ -22,6 +22,7 @@ import { ApiError } from '@/lib/client-api';
 import { formatDateTime } from '@/lib/format-date';
 import { smtpErrorSummary } from '@/lib/ops-email-error';
 import { useConfirm } from './confirm-dialog';
+import { PANCAKE_FORBIDDEN_GUIDE } from './pancake-sync';
 import { BTN_DANGER_OUTLINE, BTN_SECONDARY, BTN_XS_SECONDARY, Notice, ScrollRegion, LoadError } from './ui';
 import { actionErrorText } from '@/lib/admin-error-text';
 import { failingCronJobs, recomputeSoldMessage } from './ops-health-crons';
@@ -73,10 +74,9 @@ const STUCK_KIND_HINT: Record<string, string> = {
   TRANSIENT: 'Pancake tạm lỗi: hệ thống tự thử lại.',
 };
 
-const FORBIDDEN_HINT = 'Pancake từ chối quyền cho riêng đơn này: kiểm tra trang/kho/sản phẩm của đơn trên Pancake, tạo tay nếu cần.';
 
 function stuckHint(o: { pancakeErrorKind?: string | null; pancakeSyncError?: string | null }): string | undefined {
-  if (o.pancakeErrorKind === 'REJECTED' && isPancakeForbiddenError(o.pancakeSyncError)) return FORBIDDEN_HINT;
+  if (o.pancakeErrorKind === 'REJECTED' && isPancakeForbiddenError(o.pancakeSyncError)) return PANCAKE_FORBIDDEN_GUIDE;
   return o.pancakeErrorKind ? STUCK_KIND_HINT[o.pancakeErrorKind] : undefined;
 }
 
