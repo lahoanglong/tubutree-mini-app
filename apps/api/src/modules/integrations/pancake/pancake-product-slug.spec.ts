@@ -28,7 +28,11 @@ describe('pancakeProductSlug', () => {
     expect(exact).toHaveLength(CAMPAIGN_ENTITY_SLUG_MAX);
   });
 
-  it('tên toàn ký hiệu giữ hành vi cũ: phần tên rỗng, slug là "-" cộng hậu tố', () => {
-    expect(pancakeProductSlug('!!! ???', 'abc123')).toBe('-abc123');
+  it('tên toàn ký hiệu hoặc chỉ khoảng trắng: phần tên là "san-pham", slug hợp lệ và giữ hậu tố', () => {
+    for (const name of ['!!! ???', '   ', '', '()-_']) {
+      const slug = pancakeProductSlug(name, 'ABC123');
+      expect(slug).toBe('san-pham-abc123');
+      expect(slug).toMatch(CAMPAIGN_ENTITY_SLUG_RE);
+    }
   });
 });
