@@ -90,7 +90,11 @@ export const NOT_STALE_WHERE: Prisma.OrderWhereInput = {
 
 /**
  * Điều kiện "không lượt đẩy nào đang giữ quyền": không PUSHING, hoặc PUSHING đã quá `PUSH_LEASE_MS` (tiến trình đẩy đã chết). Một luật
- * cho claim, câu ghi lỗi của job và markOverdue.
+ * cho claim, câu ghi lỗi của job, markOverdue, "Đẩy lại" của admin và ghi trạng thái cổng/cấu hình (setPushStatus, NOT_CONFIGURED).
+ * Ghi đè PUSHING còn hạn thuê là mở khoá cho lượt thứ hai: nó claim được, `findOnPancake` chưa thấy đơn đang bay và tạo đơn kho lần hai.
+ * Chỉ ba loại câu ghi `pancakePushStatus` được bỏ điều kiện này, mỗi loại có lý do: claim (chính nó lấy lease), `saveCreated` (đẩy xong thì
+ * SYNCED là kết cục thật), và câu của chính lượt đang giữ lease (ghi PENDING lúc lỗi trong pushOrder). STALE (markStale) cũng được bỏ vì
+ * nó chặn mọi claim chứ không mở khoá.
  */
 export function pushLeaseFreeWhere(now: Date = new Date()): Prisma.OrderWhereInput {
   return {
@@ -322,7 +326,7 @@ export class PancakeOrderService {
     if (!this.client.isConfigured()) {
       this.logger.warn(`Pancake chưa cấu hình — đơn ${order.code} giữ trạng thái chờ đồng bộ.`);
       await this.prisma.order.updateMany({
-        where: { id: order.id, pancakeOrderId: null, AND: [NOT_STALE_WHERE] },
+        where: { id: order.id, pancakeOrderId: null, AND: [NOT_STALE_WHERE, pushLeaseFreeWhere()] },
         data: { pancakePushStatus: PANCAKE_PUSH.NOT_CONFIGURED, pancakeSyncError: 'Pancake chưa cấu hình (PANCAKE_API_KEY/SHOP_ID).' },
       });
       return null;
@@ -495,6 +499,7 @@ export class PancakeOrderService {
       if (kept && fromJob) return { ...order, kind, kept, written: true };
       // Đang PUSHING trong hạn thuê = tiến trình khác giữ quyền đẩy (lần này thua tranh chấp): không ghi đè, kẻo mở khoá cho lần tạo thứ
       // hai. PUSHING quá hạn thuê là tiến trình đã chết: ghi được, cùng luật với claim (không thì lỗi DATA ném trước claim kẹt PUSHING mãi).
+      // Từ pushOrder (fromJob false) chính lượt này giữ lease PUSHING nên ghi PENDING không đè ai.
       const where: Prisma.OrderWhereInput = {
         id: order.id,
         pancakeOrderId: null,
@@ -883,6 +888,7 @@ export class PancakeOrderService {
     );
   }
 
+  /** Không cần pushLeaseFreeWhere: STALE chặn mọi claim (NOT_STALE_WHERE) nên ghi đè PUSHING không mở khoá cho lượt thứ hai; lượt đang bay thành công vẫn về SYNCED. */
   private async markStale(order: Pick<Order, 'id' | 'code' | 'status'>, why: string): Promise<void> {
     const r = await this.prisma.order.updateMany({
       where: { id: order.id, pancakeOrderId: null, NOT: { pancakePushStatus: PANCAKE_PUSH.STALE } },
@@ -900,8 +906,15 @@ export class PancakeOrderService {
     );
   }
 
+  /**
+   * Ghi trạng thái của cổng (SKIPPED/WAITING_*). Cổng đọc từ bản chụp: khách vừa trả tiền và job thanh toán đã claim PUSHING giữa lúc đọc và
+   * ghi thì không được đè (xem pushLeaseFreeWhere); hụt thì không ghi gì, lượt đang bay tự quyết kết cục.
+   */
   private setPushStatus(orderId: string, status: string) {
-    return this.prisma.order.updateMany({ where: { id: orderId, pancakeOrderId: null, AND: [NOT_STALE_WHERE] }, data: { pancakePushStatus: status } });
+    return this.prisma.order.updateMany({
+      where: { id: orderId, pancakeOrderId: null, AND: [NOT_STALE_WHERE, pushLeaseFreeWhere()] },
+      data: { pancakePushStatus: status },
+    });
   }
 
   /**

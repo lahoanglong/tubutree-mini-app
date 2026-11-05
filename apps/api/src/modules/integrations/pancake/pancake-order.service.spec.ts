@@ -1141,6 +1141,49 @@ describe('PancakeOrderService — STALE chỉ rời bằng đẩy thành công h
   });
 });
 
+describe('PancakeOrderService.pushOrder: câu ghi trạng thái của cổng/cấu hình không đè lượt đẩy đang giữ quyền (PUSHING trong hạn thuê)', () => {
+  /** Lệnh đọc đơn trả bản chụp CŨ rồi lượt khác claim PUSHING (job thanh toán đang gọi createOrder): khe giữa "đọc cổng" và "ghi trạng thái". */
+  const claimedAfterRead = (t: ReturnType<typeof setup>, claimedAt: Date) =>
+    t.prisma.order.findUniqueOrThrow.mockImplementationOnce(async () => {
+      const snapshot = { ...t.row() };
+      Object.assign(t.row(), { pancakePushStatus: PANCAKE_PUSH.PUSHING, pancakeLastAttemptAt: claimedAt, pancakePushAttempts: 1 });
+      return snapshot;
+    });
+
+  const gates: Array<[string, Record<string, unknown>]> = [
+    ['WAIT_PAYMENT', { paymentMethod: 'ZALOPAY', paymentStatus: 'UNPAID' }],
+    ['WAIT_STOCK', { type: 'DEALER', items: [{ id: 'i1', variationId: 'v1', quantity: 5, unitPrice: 70_000, backorderedQty: 3 }] }],
+    ['DEAD', { status: 'CANCELLED' }],
+  ];
+
+  it.each(gates)('cổng %s: lượt khác vừa claim PUSHING sau khi đọc → không ghi đè, lượt đang bay tự quyết kết cục', async (_gate, order) => {
+    const t = setup(order);
+    const claimedAt = new Date();
+    claimedAfterRead(t, claimedAt);
+    expect(await t.svc.pushOrder('o1')).toBeNull();
+    expect(t.row()).toMatchObject({ pancakePushStatus: PANCAKE_PUSH.PUSHING, pancakeLastAttemptAt: claimedAt });
+    expect(t.client.createOrder).not.toHaveBeenCalled();
+  });
+
+  it('Pancake chưa cấu hình: lượt khác vừa claim PUSHING giữa lúc đọc và ghi → không ghi NOT_CONFIGURED đè', async () => {
+    const t = setup({ pancakePushStatus: PANCAKE_PUSH.PENDING });
+    t.client.isConfigured.mockImplementation(() => {
+      Object.assign(t.row(), { pancakePushStatus: PANCAKE_PUSH.PUSHING, pancakeLastAttemptAt: new Date() });
+      return false;
+    });
+    expect(await t.svc.pushOrder('o1')).toBeNull();
+    expect(t.row().pancakePushStatus).toBe(PANCAKE_PUSH.PUSHING);
+    expect(t.row().pancakeSyncError).toBeNull();
+  });
+
+  it('PUSHING đã quá hạn thuê (tiến trình đẩy chết): cổng vẫn ghi được trạng thái chờ', async () => {
+    const t = setup({ paymentMethod: 'ZALOPAY', paymentStatus: 'UNPAID' });
+    claimedAfterRead(t, new Date(Date.now() - PancakeOrderService.PUSH_LEASE_MS - 5_000));
+    expect(await t.svc.pushOrder('o1')).toBeNull();
+    expect(t.row().pancakePushStatus).toBe(PANCAKE_PUSH.WAITING_PAYMENT);
+  });
+});
+
 describe('PancakeOrderService.syncPayment', () => {
   it('đơn đã lên Pancake lúc chờ chuyển khoản, nay PAID → PUT transfer_money = tổng, cod = 0', async () => {
     const t = setup({ pancakeOrderId: 'pk-1', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID' });

@@ -144,6 +144,34 @@ const url = process.env.TEST_REDIS_URL;
     throw new Error('hết giờ chờ điều kiện');
   };
 
+  /**
+   * prisma bọc: sau khi `order.<method>` thật (đúng một lần, lệnh gọi đầu thoả `when`) trả bản chụp, chạy `hook` rồi mới giao bản chụp CŨ cho
+   * người gọi. Dựng đúng khe "đọc rồi ghi" mà một câu ghi có điều kiện phải chịu được.
+   */
+  const prismaStaleRead = (method: string, hook: () => Promise<void>, when: (args: unknown) => boolean = () => true) => {
+    let fired = false;
+    return new Proxy(prisma, {
+      get(target, prop) {
+        const value = Reflect.get(target, prop, target);
+        if (prop !== 'order') return typeof value === 'function' ? value.bind(target) : value;
+        return new Proxy(value, {
+          get(model, m) {
+            const fn = Reflect.get(model, m, model);
+            if (m !== method) return typeof fn === 'function' ? fn.bind(model) : fn;
+            return async (args: unknown) => {
+              const snapshot = await fn.call(model, args);
+              if (!fired && when(args)) {
+                fired = true;
+                await hook();
+              }
+              return snapshot;
+            };
+          },
+        });
+      },
+    });
+  };
+
   it('đơn lỗi vĩnh viễn → huỷ đơn → job lỗi bị gỡ khỏi tập failed', async () => {
     const o = await order();
     respond(() => {
@@ -517,23 +545,9 @@ const url = process.env.TEST_REDIS_URL;
     // Dịch vụ thứ hai bọc prisma: findFirst của retryPushByAdmin trả bản chụp (đơn chưa PUSHING), rồi job push thật claim đơn và vào createOrder
     // TRƯỚC khi bản chụp cũ về tay retryPushByAdmin. Đúng khe giữa "đọc quyết định" và "đặt PENDING".
     const racing = new PancakeOrderService(
-      new Proxy(prisma, {
-        get(target, prop) {
-          const value = Reflect.get(target, prop, target);
-          if (prop !== 'order') return typeof value === 'function' ? value.bind(target) : value;
-          return new Proxy(value, {
-            get(model, method) {
-              const fn = Reflect.get(model, method, model);
-              if (method !== 'findFirst') return typeof fn === 'function' ? fn.bind(model) : fn;
-              return async (args: unknown) => {
-                const snapshot = await fn.call(model, args);
-                await service.enqueuePush(x.id);
-                await until(async () => n >= 1);
-                return snapshot;
-              };
-            },
-          });
-        },
+      prismaStaleRead('findFirst', async () => {
+        await service.enqueuePush(x.id);
+        await until(async () => n >= 1);
       }),
       client as unknown as PancakeClient,
       queue,
@@ -555,6 +569,50 @@ const url = process.env.TEST_REDIS_URL;
     await until(async () => (await prisma.order.findUniqueOrThrow({ where: { id: x.id } })).pancakeOrderId === pk);
     expect(n).toBe(1);
     expect(await prisma.order.findUniqueOrThrow({ where: { id: x.id } })).toMatchObject({ pancakePushStatus: 'SYNCED', pancakePushAttempts: 3 });
+  });
+
+  it('B đọc đơn lúc CHƯA thanh toán, khách trả tiền và job A claim PUSHING, B ghi trạng thái chờ, job C vào: createOrder đúng MỘT lần', async () => {
+    const x = await order();
+    await prisma.order.update({ where: { id: x.id }, data: { paymentMethod: 'ZALOPAY', paymentStatus: 'UNPAID', pancakePushStatus: null } });
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    let n = 0;
+    const pk = `pk-${randCode(8)}`;
+    respond(async (code) => {
+      if (code !== x.code) return { success: true, data: { id: `pk-${code}` } };
+      n += 1;
+      await gate;
+      return { success: true, data: { id: pk } };
+    });
+    const status = async () => (await prisma.order.findUniqueOrThrow({ where: { id: x.id } })).pancakePushStatus;
+    let a: Promise<unknown> = Promise.resolve();
+    let c: Promise<unknown> = Promise.resolve();
+    try {
+      // B: đọc đơn (chưa thanh toán → cổng WAIT_PAYMENT); trước khi B kịp ghi, khách trả tiền và job thanh toán A claim đơn, vào createOrder.
+      const b = new PancakeOrderService(
+        prismaStaleRead('findUniqueOrThrow', async () => {
+          await prisma.order.update({ where: { id: x.id }, data: { paymentStatus: 'PAID' } });
+          a = service.pushOrder(x.id).catch((e: unknown) => e);
+          await until(async () => n >= 1);
+        }),
+        client as unknown as PancakeClient,
+        queue,
+        undefined,
+        alerts as unknown as GomdonAlertService,
+      );
+      expect(await b.pushOrder(x.id)).toBeNull();
+      // Lượt A còn giữ quyền đẩy: B không được ghi WAITING_PAYMENT đè PUSHING (mất lease thì C claim được).
+      expect(await status()).toBe('PUSHING');
+      // C (cron/hook) chạm đơn ngay sau đó: nếu lease đã mất thì C claim, `findOnPancake` chưa thấy đơn đang bay và tạo đơn kho lần hai.
+      c = service.pushOrder(x.id).catch((e: unknown) => e);
+      await sleep(300);
+    } finally {
+      release(); // không nhả cổng thì lượt đang bay treo mãi và afterAll không đóng được worker khi ca đỏ
+    }
+    await Promise.all([a, c]);
+    await until(async () => (await prisma.order.findUniqueOrThrow({ where: { id: x.id } })).pancakeOrderId === pk);
+    expect(n).toBe(1);
+    expect(await prisma.order.findUniqueOrThrow({ where: { id: x.id } })).toMatchObject({ pancakePushStatus: 'SYNCED', pancakeOrderId: pk });
   });
 
   it('cron tự đẩy bỏ qua đơn STALE: không xếp job, không đóng dấu lần thử, không gọi createOrder', async () => {
