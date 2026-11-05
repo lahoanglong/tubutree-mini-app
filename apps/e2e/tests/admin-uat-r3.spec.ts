@@ -566,16 +566,16 @@ for (const frame of FRAMES) {
       await setWhen('Giờ vàng bắt đầu lúc', 10, '09', '00');
       await setWhen('Giờ vàng kết thúc lúc', 10, '09', '00');
       const postsBefore = w.posts.length;
-      await expect(page.getByRole('alert').filter({ hasText: /Giờ kết thúc phải sau giờ bắt đầu/ }), 'bắt đầu bằng kết thúc: báo ngay trên form').toBeVisible();
+      await expect(page.locator('[aria-live="polite"]').filter({ hasText: /Giờ kết thúc phải sau giờ bắt đầu/ }), 'bắt đầu bằng kết thúc: báo ngay trên form').toBeVisible();
       await expect(create, 'bắt đầu bằng kết thúc: nút Tạo khoá').toBeDisabled();
       await setWhen('Giờ vàng kết thúc lúc', 9, '23', '45');
-      await expect(page.getByRole('alert').filter({ hasText: /Giờ kết thúc phải sau giờ bắt đầu/ }), 'kết thúc trước bắt đầu: báo ngay trên form').toBeVisible();
+      await expect(page.locator('[aria-live="polite"]').filter({ hasText: /Giờ kết thúc phải sau giờ bắt đầu/ }), 'kết thúc trước bắt đầu: báo ngay trên form').toBeVisible();
       await expect(create).toBeDisabled();
       await expectCleanScreen(page, 'gio-vang-loi-gio');
       await shot(page, 'gio-vang', 'form-loi-gio', true);
       expect(w.posts.slice(postsBefore).filter((p) => /flash-sales/.test(p)), 'UI chặn trước khi gửi: không có lệnh ghi nào tới máy chủ').toEqual([]);
       await setWhen('Giờ vàng kết thúc lúc', 10, '11', '00');
-      await expect(page.getByRole('alert').filter({ hasText: /Giờ kết thúc phải sau giờ bắt đầu/ })).toHaveCount(0);
+      await expect(page.locator('[aria-live="polite"]').filter({ hasText: /Giờ kết thúc phải sau giờ bắt đầu/ })).toHaveCount(0);
       await expect(create).toBeEnabled();
       await create.click();
       await expect(page.getByText('Đã tạo đợt giờ vàng!')).toBeVisible();
@@ -589,7 +589,7 @@ for (const frame of FRAMES) {
       await expect(save, 'chưa đổi gì: nút Lưu khoá').toBeDisabled();
       await paste(mine.getByRole('textbox', { name: 'Tên đợt (sửa)', exact: true }), 'W13 Đợt tạo từ form (đã sửa)');
       await paste(mine.getByRole('textbox', { name: 'Giờ vàng kết thúc lúc (sửa): ngày', exact: true }), dmyDigits(9));
-      await expect(mine.getByRole('alert').filter({ hasText: /Giờ kết thúc phải sau giờ bắt đầu/ }), 'sửa kết thúc về trước bắt đầu: báo ngay').toBeVisible();
+      await expect(mine.locator('[aria-live="polite"]').filter({ hasText: /Giờ kết thúc phải sau giờ bắt đầu/ }), 'sửa kết thúc về trước bắt đầu: báo ngay').toBeVisible();
       await expect(save).toBeDisabled();
       await shot(page, 'gio-vang', 'sua-loi-gio', true);
       await paste(mine.getByRole('textbox', { name: 'Giờ vàng kết thúc lúc (sửa): ngày', exact: true }), dmyDigits(10));

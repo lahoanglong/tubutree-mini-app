@@ -595,7 +595,7 @@ test.describe('Admin UAT 1440x900 với API và DB thật', () => {
     await paste(title, 'W9 Giờ ngược');
     await setDate('bắt đầu', dmy(31), '12');
     await setDate('kết thúc', dmy(30), '10');
-    await expect(page.getByRole('alert').filter({ hasText: 'Giờ kết thúc phải sau giờ bắt đầu' }), 'giờ kết thúc trước giờ bắt đầu: form báo ngay, chưa cần gửi lên máy chủ').toBeVisible();
+    await expect(page.locator('[aria-live="polite"]').filter({ hasText: 'Giờ kết thúc phải sau giờ bắt đầu' }), 'giờ kết thúc trước giờ bắt đầu: form báo ngay, chưa cần gửi lên máy chủ').toBeVisible();
     await expect(create, 'giờ kết thúc trước giờ bắt đầu giữ nút Tạo đợt khoá').toBeDisabled();
     const rowsAfterBackwards = await mine();
     expect(rowsAfterBackwards.filter((x: { title: string }) => x.title === 'W9 Giờ ngược'), 'đợt có giờ kết thúc trước giờ bắt đầu không được tạo').toEqual([]);
