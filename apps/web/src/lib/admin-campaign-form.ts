@@ -46,3 +46,26 @@ export function parseCouponCodes(text: string): string[] {
   }
   return out;
 }
+
+/** Khung banner trên điện thoại (và Trang chủ web) là 5:2; ảnh lệch hơn 10% so với khung thì bị cắt. */
+export const BANNER_FRAME_RATIO = 5 / 2;
+export const BANNER_RATIO_TOLERANCE = 0.1;
+
+export interface BannerImageFit {
+  ok: boolean;
+  /** Câu cảnh báo tiếng Việt khi ảnh sẽ bị cắt; không có khi vừa khung. */
+  message?: string;
+}
+
+/** Ảnh `width`×`height` có vừa khung banner không. Kích thước không hợp lệ thì không kết luận (ok). */
+export function bannerImageFit(width: number, height: number): BannerImageFit {
+  if (!(width > 0) || !(height > 0)) return { ok: true };
+  const ratio = width / height;
+  // Cộng sai số nhỏ vì 2,75 / 2,5 - 1 ra 0,1000…09 trong số thực.
+  if (Math.abs(ratio / BANNER_FRAME_RATIO - 1) <= BANNER_RATIO_TOLERANCE + 1e-9) return { ok: true };
+  const shown = (Math.round(ratio * 10) / 10).toString().replace('.', ',');
+  return {
+    ok: false,
+    message: `Ảnh ${width}×${height} (tỉ lệ ${shown}:1) lệch khung banner 5:2 hơn 10%, ảnh sẽ bị cắt. Nên dùng ảnh tỉ lệ 5:2, ví dụ 1500×600.`,
+  };
+}

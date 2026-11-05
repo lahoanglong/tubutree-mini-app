@@ -1,3 +1,7 @@
+/** Các loại đích của banner chiến dịch (khớp enum CampaignLinkType của Prisma). Một nguồn cho API (DTO), app-core và web. */
+export const CAMPAIGN_LINK_TYPES = ['CAMPAIGN_PAGE', 'PRODUCT', 'CATEGORY', 'URL_INTERNAL'] as const;
+export type CampaignLinkType = (typeof CAMPAIGN_LINK_TYPES)[number];
+
 export interface CampaignInternalTarget {
   value: string;
   label: string;
@@ -37,3 +41,31 @@ export const PRODUCT_SLUGS_QUERY_MAX_CHARS = PRODUCT_SLUGS_LIST_MAX * (PRODUCT_S
 /** Slug sản phẩm/danh mục gắn vào chiến dịch dùng chung trần với mọi slug sản phẩm. */
 export const CAMPAIGN_ENTITY_SLUG_MAX = PRODUCT_SLUG_MAX;
 export const CAMPAIGN_ENTITY_SLUG_RE = new RegExp(`^[A-Za-z0-9][A-Za-z0-9_-]{0,${CAMPAIGN_ENTITY_SLUG_MAX - 1}}$`);
+
+/** Carousel banner hiển thị tối đa chừng này slide: nhiều hơn là khách không xem hết và ảnh nặng. App-core và kiểm sức khoẻ chiến dịch của API dùng chung số này. */
+export const CAMPAIGN_SLIDES_MAX = 5;
+
+/** Mini App bản cũ chỉ dựng liên kết banner cho slug tới chừng này ký tự; dài hơn thì banner bị bỏ khỏi carousel (runbook §1.23). */
+export const CAMPAIGN_LEGACY_SLUG_MAX = 120;
+
+/**
+ * Đích banner có dựng được liên kết ở app không (khi sai thì banner bị bỏ khỏi carousel). Một nguồn cho app-core (`campaignHref`) và kiểm sức khoẻ chiến dịch
+ * của API. Không xét tính năng nào đang tắt: `liveRoute` chỉ đổi route đích, không biến liên kết thành null.
+ */
+export function campaignLinkUsable(c: { linkType: CampaignLinkType; linkValue: string | null }): boolean {
+  switch (c.linkType) {
+    case 'CAMPAIGN_PAGE':
+      return true;
+    case 'PRODUCT':
+    case 'CATEGORY':
+      return !!c.linkValue && CAMPAIGN_ENTITY_SLUG_RE.test(c.linkValue);
+    case 'URL_INTERNAL':
+      return CAMPAIGN_INTERNAL_TARGETS.some((t) => t.value === c.linkValue);
+    default: {
+      // Thêm loại đích mới mà quên xử lý ở đây thì TypeScript báo lỗi tại dòng này.
+      const unhandled: never = c.linkType;
+      void unhandled;
+      return false;
+    }
+  }
+}

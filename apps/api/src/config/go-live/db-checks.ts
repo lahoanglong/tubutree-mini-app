@@ -22,8 +22,8 @@ const MULTI_REVIEWS_MIGRATION = REQUIRED_MIGRATIONS[2];
 /**
  * Migration mà image cũ vẫn chạy đúng trên schema sau khi áp: quay lại bằng image (runbook 7.2) hợp lệ khi danh sách chờ áp chỉ
  * gồm tên trong danh sách này. Gồm ba migration của đợt đầu, hai migration nhỏ thêm sau đó (hai cột NULL trên variations, một
- * cột trên bảng trả hàng cũ), waste_exchange (chỉ thêm bảng và cột mới mà image cũ không đọc) và tám migration đợt hardening
- * 05/11 chỉ dựng chỉ mục (không đổi dữ liệu, không đổi cột).
+ * cột trên bảng trả hàng cũ), waste_exchange (chỉ thêm bảng và cột mới mà image cũ không đọc), tám migration đợt hardening
+ * 05/11 chỉ dựng chỉ mục (không đổi dữ liệu, không đổi cột) và hi (một cột NULL mới trên orders mà image cũ không đọc).
  */
 export const IMAGE_COMPATIBLE_MIGRATIONS: readonly string[] = [
   ...REQUIRED_MIGRATIONS,
@@ -38,6 +38,7 @@ export const IMAGE_COMPATIBLE_MIGRATIONS: readonly string[] = [
   '20261105130500_hd1_reviews_public_list_index',
   '20261105140000_payouts_status_index',
   '20261105180000_hg_zns_stuck_logs_index',
+  '20261105190000_hi_order_pancake_error_kind',
 ];
 
 /**

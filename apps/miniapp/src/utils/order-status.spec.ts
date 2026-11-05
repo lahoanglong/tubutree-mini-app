@@ -117,6 +117,11 @@ describe('returnWindowState', () => {
     expect(returnWindowState({ updatedAt: daysAgo(10) }, 7, now).open).toBe(false);
     expect(returnWindowState({}, 7, now)).toEqual({ open: true, daysLeft: 7 });
   });
+  it('thiếu deliveredAt thì lấy lần lật DELIVERED trong sổ, updatedAt mới hơn không kéo dài hạn', () => {
+    const o = { updatedAt: daysAgo(0.1), statusTimes: { DELIVERED: daysAgo(9) } };
+    expect(returnWindowState(o, 7, now)).toEqual({ open: false, daysLeft: 0 });
+    expect(returnWindowState({ ...o, statusTimes: { DELIVERED: daysAgo(2) } }, 7, now)).toEqual({ open: true, daysLeft: 5 });
+  });
 });
 
 describe('discountRows (R2-BUYERMINI-8: tách mã giảm giá và Điểm Xanh bằng số tiền thật)', () => {

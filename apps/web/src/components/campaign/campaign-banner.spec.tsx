@@ -8,7 +8,7 @@ import { flush, render, type Rendered } from '@/test-utils/dom';
 const mocks = vi.hoisted(() => ({ get: vi.fn() }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get } }));
 
-import { CampaignBanner } from './campaign-banner';
+import { CampaignBanner, WIDE_BANNER_RATIO } from './campaign-banner';
 
 const DAY = 86_400_000;
 const camp = (id: string, over: Partial<Banner> = {}): Banner => ({
@@ -56,6 +56,7 @@ describe('CampaignBanner (web) — banner đầu trang Ưu đãi', () => {
     mocks.get.mockResolvedValue([camp('chung')]);
     const c = await mount('OFFERS_TOP', 'new');
     expect(c.querySelector('[data-offers-banner]')!.className).toContain('lg:[--banner-ratio:4/1]');
+    expect(c.querySelector('[data-offers-banner]')!.className).toContain(`lg:[--banner-ratio:${WIDE_BANNER_RATIO}]`);
     mounted!.unmount();
     localStorage.setItem(OFFERS_BANNER_HINT_KEY, '1');
     mocks.get.mockReturnValue(new Promise(() => undefined));

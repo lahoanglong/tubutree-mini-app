@@ -9,6 +9,7 @@ import {
   QUEUE_SUPPORT_CHAT_NOTIFY,
   QUEUE_ZALO_OA_EVENTS,
 } from '../../jobs/queues';
+import { isPushFailureSettled, PUSH_ERROR_KIND } from '../../modules/integrations/pancake/pancake-push-error';
 import { fail, pass, warn, type CheckResult, type GoLivePhase } from './types';
 
 const G_REDIS = 'Redis';
@@ -28,11 +29,63 @@ export const EXPECTED_QUEUES = [
 
 const QUEUES_TITLE = `Đủ ${EXPECTED_QUEUES.length} hàng đợi truy cập được`;
 
+/**
+ * Job lỗi của hàng pancake-push đối chiếu với đơn trong DB: đơn đã lên Pancake/huỷ/giao thì dấu lỗi chỉ chờ dọn, không phải việc treo.
+ * `unexamined` = job lỗi vượt số đã đọc: coi như còn mở (không biết thì không bỏ qua).
+ */
+export interface PancakeFailedJobs {
+  settled: number;
+  open: { code: string; reason: string }[];
+  unexamined: number;
+}
+
 export interface QueueSnapshot {
   name: string;
   ok: boolean;
   error?: string;
   counts?: { waiting: number; active: number; delayed: number; failed: number };
+  /** Chỉ có ở pancake-push khi đọc được cả job lỗi lẫn DB; thiếu thì dùng `counts.failed` như các hàng khác. */
+  pancakeFailed?: PancakeFailedJobs;
+}
+
+const FAILED_REASON_VI: Record<string, string> = {
+  [PUSH_ERROR_KIND.CONFIG]: 'khoá API Pancake sai/hết hạn',
+  [PUSH_ERROR_KIND.DATA]: 'thiếu dữ liệu đơn',
+  [PUSH_ERROR_KIND.CONFIG_RECHECK]: 'khoá API vừa đẩy được đơn khác, chờ thử lại',
+  [PUSH_ERROR_KIND.REJECTED]: 'Pancake từ chối dữ liệu đơn',
+  [PUSH_ERROR_KIND.TRANSIENT]: 'Pancake tạm lỗi',
+};
+
+export interface FailedJobRef {
+  name: string;
+  orderId: string | null;
+}
+export interface FailedOrderRef {
+  id: string;
+  code: string;
+  status: string;
+  pancakeOrderId: string | null;
+  pancakeErrorKind: string | null;
+}
+
+/**
+ * Gộp job lỗi của pancake-push với đơn: job push của đơn đã có kết cục là "đã xử lý, chờ dọn"; job push của đơn còn mở, và job
+ * thanh toán/huỷ (kết cục nằm ở cột khác, chưa đối chiếu) là việc còn mở.
+ */
+export function summarizePancakeFailed(jobs: FailedJobRef[], orders: FailedOrderRef[], totalFailed: number): PancakeFailedJobs {
+  const byId = new Map(orders.map((o) => [o.id, o]));
+  const out: PancakeFailedJobs = { settled: 0, open: [], unexamined: Math.max(0, totalFailed - jobs.length) };
+  for (const j of jobs) {
+    const o = j.orderId ? byId.get(j.orderId) : undefined;
+    if (j.name === 'push' && isPushFailureSettled(o ?? null)) {
+      out.settled += 1;
+      continue;
+    }
+    const code = o?.code ?? j.orderId ?? '(không rõ đơn)';
+    const reason = j.name !== 'push' ? 'lệnh thanh toán/huỷ lỗi' : (FAILED_REASON_VI[o?.pancakeErrorKind ?? ''] ?? 'lỗi chưa phân loại');
+    out.open.push({ code, reason });
+  }
+  return out;
 }
 
 /** Ảnh chụp chỉ-đọc của Redis; null nghĩa là lệnh CONFIG không đọc được. */
@@ -116,12 +169,26 @@ export function evaluateRedis(s: RedisSnapshot, phase: GoLivePhase = 'post-deplo
       : fail(G_QUEUE, 'queues.reachable', QUEUES_TITLE, `không đọc được: ${broken.join(', ')}`, 'Xem log api (docker compose logs api); thường là Redis hết bộ nhớ hoặc kết nối bị ngắt.'),
   );
 
-  const noisy = s.queues.filter((q) => q.ok && q.counts && (q.counts.failed > 0 || q.counts.waiting > BACKLOG_WAITING));
+  // Job lỗi của đơn đã có kết cục (pancake-push) không tính là còn treo: báo PASS kèm số "chờ dọn".
+  const failedOpen = (q: QueueSnapshot) => (q.pancakeFailed ? q.pancakeFailed.open.length + q.pancakeFailed.unexamined : (q.counts?.failed ?? 0));
+  const noisy = s.queues.filter((q) => q.ok && q.counts && (failedOpen(q) > 0 || q.counts.waiting > BACKLOG_WAITING));
+  const settled = s.queues.reduce((n, q) => n + (q.pancakeFailed?.settled ?? 0), 0);
+  const settledNote = settled > 0 ? `; pancake-push: ${settled} job lỗi của đơn đã xử lý, chờ dọn` : '';
   if (noisy.length === 0) {
-    out.push(pass(G_QUEUE, 'queues.backlog', 'Hàng đợi không ứ, không job lỗi', 'failed = 0, waiting không quá 50 ở mọi hàng'));
+    out.push(pass(G_QUEUE, 'queues.backlog', 'Hàng đợi không ứ, không job lỗi', `failed = 0, waiting không quá 50 ở mọi hàng${settledNote}`));
   } else {
-    const detail = noisy.map((q) => `${q.name}: failed ${q.counts?.failed}, waiting ${q.counts?.waiting}`).join('; ');
-    out.push(warn(G_QUEUE, 'queues.backlog', 'Hàng đợi không ứ, không job lỗi', detail, 'Mở Quản trị, Sức khoẻ hệ thống để xem nguyên nhân từng hàng; job lỗi cũ có thể tồn từ lúc thử, quyết định có xử lý hay bỏ.'));
+    const detail =
+      noisy
+        .map((q) => {
+          const pf = q.pancakeFailed;
+          if (!pf) return `${q.name}: failed ${q.counts?.failed}, waiting ${q.counts?.waiting}`;
+          const shown = pf.open.slice(0, 5).map((o) => `${o.code} (${o.reason})`);
+          const more = pf.open.length - shown.length + pf.unexamined;
+          const list = [...shown, ...(more > 0 ? [`và ${more} đơn khác`] : [])].join(', ');
+          return `${q.name}: failed ${failedOpen(q)} còn cần xử lý${list ? `: ${list}` : ''}, waiting ${q.counts?.waiting}`;
+        })
+        .join('; ') + settledNote;
+    out.push(warn(G_QUEUE, 'queues.backlog', 'Hàng đợi không ứ, không job lỗi', detail, 'Mở Quản trị, Sức khoẻ hệ thống để xem nguyên nhân từng hàng; job lỗi cũ có thể tồn từ lúc thử, quyết định có xử lý hay bỏ. Đơn Pancake lỗi: xem lý do trong ngoặc, sửa rồi bấm "Đẩy lại Pancake" ở chi tiết đơn.'));
   }
   return out;
 }

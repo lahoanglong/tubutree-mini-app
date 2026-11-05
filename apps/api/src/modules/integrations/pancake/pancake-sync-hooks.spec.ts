@@ -106,6 +106,20 @@ describe('PancakeSyncHooks.precheckCancel (D1)', () => {
       expect(await t.hooks.precheckCancel(subject({ pancakeOrderId: 'pk-1' }), 'INTERACTIVE')).toMatchObject({ kind: 'DEFERRED' });
     });
 
+    it('Pancake trả 409 dứt khoát cho lệnh huỷ → DEFERRED, không PancakeUnreachableError, không bật unreachableUntil (đơn vẫn huỷ ở Tubu)', async () => {
+      const t = setup({}, { updateOrder: jest.fn().mockRejectedValue(new PancakeApiError('Pancake trả 409 khi cập nhật đơn', false, false, 409)) });
+      const d = await t.hooks.precheckCancel(subject({ pancakeOrderId: 'pk-1' }), 'INTERACTIVE');
+      expect(d.kind).toBe('DEFERRED');
+      expect((t.hooks as unknown as { unreachableUntil: number }).unreachableUntil).toBe(0);
+    });
+
+    it('Pancake trả 425 cho lệnh huỷ → DEFERRED, không bật unreachableUntil', async () => {
+      const t = setup({}, { updateOrder: jest.fn().mockRejectedValue(new PancakeApiError('Pancake trả 425 khi cập nhật đơn', false, false, 425)) });
+      const d = await t.hooks.precheckCancel(subject({ pancakeOrderId: 'pk-1' }), 'INTERACTIVE');
+      expect(d.kind).toBe('DEFERRED');
+      expect((t.hooks as unknown as { unreachableUntil: number }).unreachableUntil).toBe(0);
+    });
+
     it('nhiều đơn cùng mã trên Pancake, một đơn đã gửi hàng → từ chối như đã bàn giao', async () => {
       const t = setup(
         {},
@@ -131,6 +145,28 @@ describe('PancakeSyncHooks.precheckCancel (D1)', () => {
       cancelStatus: 'CANCELLED',
       pancakeOrderId: '88',
     });
+  });
+});
+
+describe('PancakeSyncHooks.afterLocalCancel — job push lỗi (hi)', () => {
+  it('đơn chưa từng lên Pancake (return sớm) vẫn gỡ job push đã lỗi; job đang chạy thì giữ', async () => {
+    const t = setup();
+    const failed = { getState: jest.fn().mockResolvedValue('failed'), remove: jest.fn().mockResolvedValue(undefined) };
+    t.queue.getJob.mockResolvedValue(failed);
+    expect(await t.hooks.afterLocalCancel('o1')).toBe(true);
+    expect(t.queue.getJob).toHaveBeenCalledWith('o1');
+    expect(failed.remove).toHaveBeenCalledTimes(1);
+
+    const active = { getState: jest.fn().mockResolvedValue('active'), remove: jest.fn() };
+    t.queue.getJob.mockResolvedValue(active);
+    await t.hooks.afterLocalCancel('o1');
+    expect(active.remove).not.toHaveBeenCalled();
+  });
+
+  it('lỗi Redis khi gỡ không làm hỏng việc huỷ', async () => {
+    const t = setup();
+    t.queue.getJob.mockRejectedValue(new Error('redis'));
+    await expect(t.hooks.afterLocalCancel('o1')).resolves.toBe(true);
   });
 });
 

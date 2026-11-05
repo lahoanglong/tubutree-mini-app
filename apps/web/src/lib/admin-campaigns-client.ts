@@ -21,9 +21,43 @@ export interface AdminCampaignRow {
   productCount: number;
   couponCount: number;
   status: AdminCampaignStatus;
+  /** Kết quả kiểm trước khi bật, tính như thể chiến dịch đang bật. */
+  health: { blockers: number; warnings: number };
 }
 
-export interface AdminCampaignDetail extends Omit<AdminCampaignRow, 'image' | 'productCount' | 'couponCount'> {
+export type CampaignIssueLevel = 'BLOCK' | 'WARN';
+
+export interface CampaignIssue {
+  code: string;
+  level: CampaignIssueLevel;
+  message: string;
+}
+
+export interface CampaignCheckResult {
+  issues: CampaignIssue[];
+  blockers: number;
+  warnings: number;
+  /** Phán quyết lần lưu này theo cùng luật với máy chủ lúc lưu; API cũ không trả (form không khoá, máy chủ vẫn quyết). */
+  verdict?: { blocked: boolean; codes: string[]; reason?: string };
+}
+
+/** Thân kiểm trước khi lưu: cùng trường với tạo/sửa (không cần ảnh), kèm sản phẩm và mã đang soạn. `id` có khi sửa chiến dịch đã lưu. */
+export interface CampaignCheckInput {
+  id?: string;
+  placement: CampaignPlacement;
+  linkType: CampaignLinkType;
+  linkValue?: string;
+  audience: CampaignAudience;
+  startAt: string;
+  endAt: string;
+  sortOrder: number;
+  /** Mặc định bật khi không gửi (kiểm "như thể đã bật"). */
+  isActive?: boolean;
+  productIds: string[];
+  couponCodes: string[];
+}
+
+export interface AdminCampaignDetail extends Omit<AdminCampaignRow, 'image' | 'productCount' | 'couponCount' | 'health'> {
   /** Ảnh nguyên bản (link https hoặc ảnh nén) để form sửa gửi lại đúng giá trị. */
   image: string;
   products: { id: string; name: string; slug: string }[];
@@ -43,6 +77,9 @@ export interface AdminCampaignInput {
   endAt: string;
   sortOrder?: number;
   isActive?: boolean;
+  /** Thay hết danh sách trong cùng lệnh lưu (một giao dịch); không gửi thì giữ nguyên. */
+  productIds?: string[];
+  couponCodes?: string[];
 }
 
 /** Sửa: không có slug (đổi slug làm gãy link đã chia sẻ); subtitle/linkValue null là xoá. */
@@ -56,5 +93,4 @@ export const getAdminCampaign = (id: string) => apiFetch<AdminCampaignDetail>(pa
 export const createAdminCampaign = (body: AdminCampaignInput) => apiFetch<AdminCampaignDetail>(BASE, { method: 'POST', body });
 export const updateAdminCampaign = (id: string, body: AdminCampaignPatch) => apiFetch<AdminCampaignDetail>(path(id), { method: 'PATCH', body });
 export const deleteAdminCampaign = (id: string) => apiFetch<{ ok: boolean }>(path(id), { method: 'DELETE' });
-export const setAdminCampaignProducts = (id: string, productIds: string[]) => apiFetch<{ count: number }>(`${path(id)}/products`, { method: 'PUT', body: { productIds } });
-export const setAdminCampaignCoupons = (id: string, codes: string[]) => apiFetch<{ count: number }>(`${path(id)}/coupons`, { method: 'PUT', body: { codes } });
+export const checkAdminCampaign = (body: CampaignCheckInput) => apiFetch<CampaignCheckResult>(`${BASE}/check`, { method: 'POST', body });

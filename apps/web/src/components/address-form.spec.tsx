@@ -248,3 +248,34 @@ describe('AddressForm tạo mới — điền sẵn từ hồ sơ và địa gi�
     expect(selectByLabel(c, 'Phường/Xã')!.getAttribute('aria-required')).toBe('true');
   });
 });
+
+describe('AddressForm — khổ điện thoại giống Mini App', () => {
+  it('dưới md: không khung viền quanh form và tiêu đề chỉ để trình đọc màn hình (Mini không có hai thứ này)', async () => {
+    const c = await mount();
+    const form = c.querySelector('form')!;
+    // Khung viết kiểu mobile-first: lớp không tiền tố là khổ điện thoại (không viền, không đệm), viền và đệm chỉ bật từ md.
+    const formClasses = form.className.split(/\s+/);
+    expect(formClasses).not.toContain('border');
+    expect(formClasses).not.toContain('p-3');
+    expect(formClasses).toEqual(expect.arrayContaining(['md:border', 'md:p-3']));
+    const headingClasses = c.querySelector('form h3')!.className.split(/\s+/);
+    expect(headingClasses).toContain('sr-only');
+    expect(headingClasses).toContain('md:not-sr-only');
+  });
+
+  it('nhãn và lời báo lỗi cỡ 13px (text-caption), không dùng text-xs 12px', async () => {
+    mocks.me = {};
+    const c = await mount();
+    click(saveBtn(c));
+    await flush();
+    const labels = Array.from(c.querySelectorAll('form label > span'));
+    expect(labels.length).toBeGreaterThan(0);
+    for (const l of labels) expect(l.className).toContain('text-caption');
+    const errors = Array.from(c.querySelectorAll('form p[id]'));
+    expect(errors.length).toBeGreaterThan(0);
+    for (const e of errors) {
+      expect(e.className).toContain('text-caption');
+      expect(e.className).not.toContain('text-xs');
+    }
+  });
+});

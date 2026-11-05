@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, CircleCheck, RefreshCw } from 'lucide-react';
+import { isPancakeForbiddenError } from '@tubutree/shared-types';
 import {
   dismissOpsWebhookEvent,
   getOpsHealth,
@@ -15,12 +16,14 @@ import {
   type OpsEmailChannel,
   type OpsWebhookChannel,
   type OpsHealth,
+  type OpsStuckOrder,
   type OpsWebhookEvent,
 } from '@/lib/admin-client';
 import { ApiError } from '@/lib/client-api';
 import { formatDateTime } from '@/lib/format-date';
 import { smtpErrorSummary } from '@/lib/ops-email-error';
 import { useConfirm } from './confirm-dialog';
+import { PANCAKE_FORBIDDEN_GUIDE, pancakeStaleGuideText } from './pancake-sync';
 import { BTN_DANGER_OUTLINE, BTN_SECONDARY, BTN_XS_SECONDARY, Notice, ScrollRegion, LoadError } from './ui';
 import { actionErrorText } from '@/lib/admin-error-text';
 import { failingCronJobs, recomputeSoldMessage } from './ops-health-crons';
@@ -62,6 +65,21 @@ const OPS_HEALTH_KEY = ['admin-ops-health'] as const;
 
 const ago = (iso: string | null) => (iso ? formatDateTime(iso) : 'chưa có');
 const newer = (a: string | null | undefined, b: string | null | undefined) => !!a && (!b || a > b);
+
+/** Gợi ý theo loại lỗi đẩy ở danh sách đơn kẹt (cùng nghĩa với PancakeSyncPanel ở chi tiết đơn). */
+const STUCK_KIND_HINT: Record<string, string> = {
+  DATA: 'Thiếu dữ liệu đơn: sửa thông tin người nhận rồi bấm "Đẩy lại Pancake".',
+  REJECTED: 'Pancake từ chối dữ liệu đơn: sửa theo lỗi rồi bấm "Đẩy lại Pancake".',
+  CONFIG: 'Khoá API Pancake sai hoặc hết hạn: báo kỹ thuật, đừng đẩy lại từng đơn.',
+  CONFIG_RECHECK: 'Khoá API đã đẩy được đơn khác: hệ thống tự thử lại đơn này; lại bị từ chối thì là lỗi riêng của đơn.',
+  TRANSIENT: 'Pancake tạm lỗi: hệ thống tự thử lại.',
+};
+
+function stuckHint(o: OpsStuckOrder): string | undefined {
+  if (o.pancakePushStatus === 'STALE') return pancakeStaleGuideText(o);
+  if (o.pancakeErrorKind === 'REJECTED' && isPancakeForbiddenError(o.pancakeSyncError)) return PANCAKE_FORBIDDEN_GUIDE;
+  return o.pancakeErrorKind ? STUCK_KIND_HINT[o.pancakeErrorKind] : undefined;
+}
 
 /** Số tồn tuyệt đối đã cũ: chạy lại sẽ đè tồn kho mới hơn (hồi sinh hàng đã bán) — API cũng từ chối. */
 const isStaleStockEvent = (e: OpsWebhookEvent) => e.source === 'pancake' && e.eventType === 'variation.stock_changed';
@@ -549,6 +567,14 @@ function HealthBody({
           <Row label="Tin báo lỗi chưa xử lý" value={h.pancake.webhookFailedOpen} warn={h.pancake.webhookFailedOpen > 0} />
           <Row label="Tin báo kẹt chưa xử lý" value={h.pancake.webhookStuck} warn={h.pancake.webhookStuck > 0} />
           <Row label="Đơn chưa lên Pancake" value={h.pancake.unsynced} />
+          {h.pancake.pushErrors && (
+            <>
+              <Row label="Chờ đẩy, Pancake tạm lỗi (tự thử lại)" value={h.pancake.pushErrors.transient} />
+              <Row label="Lỗi vĩnh viễn: thiếu dữ liệu hoặc Pancake từ chối (cần sửa đơn)" value={h.pancake.pushErrors.data + h.pancake.pushErrors.rejected} warn={h.pancake.pushErrors.data + h.pancake.pushErrors.rejected > 0} />
+              <Row label="Lỗi khoá API Pancake (báo kỹ thuật)" value={h.pancake.pushErrors.config} warn={h.pancake.pushErrors.config > 0} />
+              <Row label="Chờ thử lại sau khi khoá đã đẩy được đơn khác" value={h.pancake.pushErrors.configRecheck ?? 0} />
+            </>
+          )}
           <Row label={`Đơn kẹt quá ${t.unsyncedMinutes} phút`} value={h.pancake.stuck} warn={h.pancake.stuck >= t.stuckOrders} />
           <Row label="Đơn cần xử lý theo Pancake" value={h.pancake.attention} warn={h.pancake.attention > 0} />
           <Row
@@ -831,6 +857,7 @@ function HealthBody({
                 <span className="min-w-0">
                   <b className="text-stone-900">{o.code}</b>
                   <span className="text-xs text-stone-500"> · đặt {formatDateTime(o.createdAt)} · {PUSH_STATUS_LABELS[o.pancakePushStatus ?? ''] ?? o.pancakePushStatus ?? 'chưa đẩy'} · {o.pancakePushAttempts} lần thử</span>
+                  {stuckHint(o) && <span className="block text-xs font-medium text-stone-700">{stuckHint(o)}</span>}
                   {o.pancakeSyncError && <span className="block break-words text-xs text-danger-fg">{o.pancakeSyncError}</span>}
                 </span>
                 {openOrder(o.code)}

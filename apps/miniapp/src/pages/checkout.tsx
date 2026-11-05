@@ -3,7 +3,7 @@ import { Box, Page, Text, Input, useNavigate, useLocation, useSnackbar } from 'z
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { WasteMeDTO, WasteRequestSummaryDTO } from '@tubutree/shared-types';
 import { Ticket, ChevronRight, Sprout, AlertCircle, Recycle } from 'lucide-react';
-import { getAddresses, getCart, checkoutQuote, placeOrder, type PlacedOrder } from '../services/shop-api';
+import { getAddresses, getCart, checkoutQuote, placeOrder, removeCartItem, updateCartItem, type PlacedOrder } from '../services/shop-api';
 import { cartPreviewKey, cartProductIds } from '../utils/coupon-scope';
 import { fulfillerLabel, shipmentsNote } from '../utils/shipments';
 import { getWallet, getLoyalty } from '../services/account-api';
@@ -14,13 +14,16 @@ import { trackEvent } from '../services/analytics';
 import { useAuthStore } from '../store/auth';
 import { AuthPhaseView } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
+import { useNotify } from '../hooks/use-notify';
 import { useStorefrontContext } from '../store/storefront-context';
 import { AddressSection } from '../components/checkout/address-section';
 import { OrderSuccess } from '../components/checkout/order-success';
 import { VoucherSheet } from '../components/checkout/voucher-sheet';
 import { useCheckoutCoupon } from '../components/checkout/use-coupon-hint';
-import { normalizeTaxCode, shouldShowTaxCodeError } from '@tubutree/app-core/commerce/tax-code';
+import { normalizeTaxCode } from '@tubutree/app-core/commerce/tax-code';
+import { validateInvoiceFields, type InvoiceField } from '@tubutree/app-core/commerce/checkout-form';
 import { flashLimitNotice, isCartFixableError } from '@tubutree/app-core/commerce/flash-limit';
+import { checkoutLineProblems, isPriceChangedError, priceChangedActions, type LineFix } from '@tubutree/app-core/commerce/checkout-issues';
 import { checkoutPlaceHint, checkoutTotalText } from '@tubutree/app-core/commerce/checkout-display';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { couponAutoCopy, couponHintText } from '@tubutree/app-core/coupon-use';
@@ -61,7 +64,7 @@ import { formatLineQty } from '../utils/waste-labels';
 import { PageHeader } from '../components/ui/page-header';
 import { ProductThumb } from '../components/ui/product-thumb';
 import { BottomSheet } from '../components/ui/bottom-sheet';
-import { Radio, Checkbox } from '../components/ui/form';
+import { Radio, Checkbox, Field } from '../components/ui/form';
 import { rowKeyboardProps } from '../components/ui/row-keyboard';
 import { KeyValueRow } from '../components/ui/key-value-row';
 import { StickyActionBar } from '../components/ui/sticky-action-bar';
@@ -86,6 +89,7 @@ export default function CheckoutPage() {
   const navigate = useNavigate();
   const [policy, setPolicy] = useState<WebPolicySlug | null>(null);
   const { openSnackbar } = useSnackbar();
+  const { notify } = useNotify();
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
   const phase = useAuthPhase();
@@ -115,6 +119,8 @@ export default function CheckoutPage() {
   const [summarySheetOpen, setSummarySheetOpen] = useState(false);
   const [placed, setPlaced] = useState<PlacedOrder | null>(null);
   const [priceChanged, setPriceChanged] = useState(false);
+  // Mốc thời gian lúc khách nhận giá mới: báo "Tổng mới" khi báo giá tải lại xong sau mốc này.
+  const [priceAcceptedAt, setPriceAcceptedAt] = useState<number | null>(null);
   const [totalChanged, setTotalChanged] = useState<string | null>(null);
   // Lỗi đặt đơn chỉ sửa được ở giỏ (hết tồn, vượt suất giờ vàng): giữ trên màn kèm đường về giỏ, không để toast trôi mất.
   const [cartIssue, setCartIssue] = useState<string | null>(null);
@@ -141,13 +147,20 @@ export default function CheckoutPage() {
   // Đếm số lần khách tự đổi lựa chọn. Không so các trường của body: phương thức thanh toán, điểm dùng được, địa chỉ mặc định
   // được tính lại từ dữ liệu máy chủ ngay khi nạp lại, không phải khách đổi ý.
   const choiceRev = useRef(0);
+  // Bản sao của choiceRev và của rev lần đặt đang treo trong state để vẽ: nút chỉ là "Thử lại" khi lựa chọn hiện tại đúng là lần đặt bị treo.
+  const [choiceTick, setChoiceTick] = useState(0);
+  const [unknownRev, setUnknownRev] = useState<number | null>(null);
+  const bumpChoice = () => {
+    choiceRev.current += 1;
+    setChoiceTick(choiceRev.current);
+  };
   // Đơn trả về theo yêu cầu đã gửi (có thể là đơn cũ được gửi lại), không theo radio đang chọn lúc phản hồi về.
   const sentMethod = useRef('');
   // Bản sao của cờ đóng băng trong state: giỏ nạp lại thành rỗng thì form và nút Đặt hàng biến mất, màn giỏ trống phải còn lối gửi lại.
   const [maybePlaced, setMaybePlaced] = useState(false);
   const [placeNotice, setPlaceNotice] = useState<'unknown' | 'previous' | null>(null);
   const chosen = <A extends unknown[]>(fn: (...args: A) => void) => (...args: A) => {
-    choiceRev.current += 1;
+    bumpChoice();
     fn(...args);
   };
 
@@ -179,8 +192,11 @@ export default function CheckoutPage() {
 
   // Dòng đã nhớ có thể không còn trong giỏ → đối chiếu với giỏ thật trước khi quote.
   const cartReady = rawSelection == null || cart.isSuccess;
-  const itemIds = reconcileSelection(rawSelection, (cart.data?.items ?? []).map((it) => it.id));
+  // Chỉ đối chiếu khi giỏ đã về: trước đó danh sách dòng còn rỗng nên lựa chọn nào cũng thành "chết". Lựa chọn chết là mảng rỗng,
+  // không bao giờ rơi về cả giỏ (xem màn báo bên dưới).
+  const itemIds = cart.data ? reconcileSelection(rawSelection, cart.data.items.map((it) => it.id)) : undefined;
   const itemIdsKey = itemIds ? itemIds.join(',') : '';
+  const selectionDead = !!itemIds && itemIds.length === 0;
 
   // Số dư PHẢI đọc từ query (được invalidate sau mọi thao tác tiền), KHÔNG từ auth store —
   // store chỉ được nạp lại lúc mở app và sau khi đặt đơn, nên khách vừa nhận tiền vào Ví hoặc vừa
@@ -197,11 +213,25 @@ export default function CheckoutPage() {
   const pointsToUse = usePoints ? points.usable : 0;
   // Giỏ chưa tải xong hoặc không có món nào thì không báo giá: máy chủ trả 400 cho giỏ rỗng.
   const cartHasItems = (cart.data?.items.length ?? 0) > 0;
+  const quoteEnabled = !!addressId && authed && cartReady && cartHasItems && !selectionDead;
   const quote = useQuery({
     queryKey: ['quote', addressId, pointsToUse, ctvSlug, itemIdsKey],
     queryFn: () => checkoutQuote(addressId!, pointsToUse, ctvSlug, itemIds),
-    enabled: !!addressId && authed && cartReady && cartHasItems,
+    enabled: quoteEnabled,
   });
+
+  useEffect(() => {
+    if (priceAcceptedAt === null) return;
+    // Báo giá lỗi hoặc đang tắt (giỏ thành rỗng, hết địa chỉ) thì không còn lần báo giá nào để báo: xoá mốc, kẻo lần báo giá
+    // về sau (giỏ có hàng lại) bật câu "Đã cập nhật giá" sai lúc.
+    if (quote.isError || !quoteEnabled) {
+      setPriceAcceptedAt(null);
+      return;
+    }
+    if (!quote.isSuccess || quote.isFetching || !quote.data || quote.dataUpdatedAt <= priceAcceptedAt) return;
+    setPriceAcceptedAt(null);
+    notify({ text: fillCopy('checkout.priceUpdated', { price: formatVnd(quote.data.total) }), type: 'success' });
+  }, [priceAcceptedAt, quoteEnabled, quote.isError, quote.isSuccess, quote.isFetching, quote.data, quote.dataUpdatedAt, notify]);
 
   const checkoutItems = itemIds
     ? (cart.data?.items ?? []).filter((it) => itemIds.includes(it.id))
@@ -223,7 +253,7 @@ export default function CheckoutPage() {
     previewParams: couponPreviewParams,
     previewKey: couponPreviewKey,
     onChanged: () => {
-      choiceRev.current += 1;
+      bumpChoice();
     },
   });
 
@@ -235,6 +265,27 @@ export default function CheckoutPage() {
   }, [partnerPoints.disabled, usePoints]);
 
   const invoiceValid = isInvoiceValid(wantInvoice, invoice);
+  // Lời báo ô hoá đơn: hiện khi khách rời ô, hoặc khi bấm Đặt hàng mà còn thiếu (lúc đó con trỏ nhảy tới ô lỗi đầu tiên).
+  const invoiceErrors = wantInvoice ? validateInvoiceFields(invoice) : {};
+  const [invoiceTouched, setInvoiceTouched] = useState<Partial<Record<InvoiceField, boolean>>>({});
+  const [placeAttempted, setPlaceAttempted] = useState(false);
+  // Lần bấm Đặt hàng tính cho ô hoá đơn tách riêng khỏi địa chỉ: bật hoá đơn SAU một lần bấm thiếu địa chỉ thì bốn ô chưa được đỏ ngay.
+  const [invoiceAttempted, setInvoiceAttempted] = useState(false);
+  const [focusTick, setFocusTick] = useState(0);
+  const invoiceError = (f: InvoiceField) => (invoiceAttempted || invoiceTouched[f] ? invoiceErrors[f] : undefined);
+  const touchInvoice = (f: InvoiceField) => () => setInvoiceTouched((t) => (t[f] ? t : { ...t, [f]: true }));
+  const addressRef = useRef<HTMLDivElement>(null);
+  const invoiceRef = useRef<HTMLDivElement>(null);
+  // Bấm Đặt hàng khi còn thiếu địa chỉ hoặc ô hoá đơn: cuộn tới và đưa con trỏ vào chỗ thiếu đầu tiên theo thứ tự trên màn hình.
+  useEffect(() => {
+    if (focusTick === 0) return;
+    const target = !addressId
+      ? (addressRef.current?.querySelector<HTMLElement>('button, [role=radio], input') ?? addressRef.current)
+      : invoiceRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]');
+    target?.focus();
+    target?.scrollIntoView?.({ block: 'center' });
+  }, [focusTick]);
+
 
   // Đơn 0đ: BE ép COD + xác nhận luôn (không thu tiền). Gửi đúng phương thức đó và không mở màn QR chuyển
   // khoản cho khoản 0đ dù khách đã lỡ chọn chuyển khoản trước khi dùng điểm.
@@ -313,6 +364,7 @@ export default function CheckoutPage() {
     },
     onSuccess: (o) => {
       unknownAttempt.current = null;
+      setUnknownRev(null);
       setMaybePlaced(false);
       haptic('heavy');
       // Nhớ thông tin hoá đơn cho lần đặt sau (đỡ nhập lại).
@@ -349,6 +401,7 @@ export default function CheckoutPage() {
     onError: (e: unknown) => {
       if (e instanceof Error && e.message === PREVIOUS_MAYBE_PLACED) {
         unknownAttempt.current = null;
+        setUnknownRev(null);
         setMaybePlaced(false);
         setPlaceNotice('previous');
         openSnackbar({ text: PREVIOUS_MAYBE_PLACED, type: 'error' });
@@ -360,6 +413,7 @@ export default function CheckoutPage() {
       if (isOutcomeUnknown(e)) unknownAttempt.current ??= attempt.current;
       else if (!rejectedBeforeService) unknownAttempt.current = null;
       setMaybePlaced(unknownAttempt.current !== null);
+      setUnknownRev(unknownAttempt.current?.rev ?? null);
       setPlaceNotice(isOutcomeUnknown(e) ? 'unknown' : null);
       // 4xx cho yêu cầu thu rác đã đóng/bị khoá: tải lại để công tắc biến mất. Lỗi mạng/quá thời gian/5xx có thể đến sau khi
       // server đã tạo đơn, nên không tải lại: bấm lại phải gửi cùng body, cùng khoá.
@@ -375,7 +429,8 @@ export default function CheckoutPage() {
         openSnackbar({ text: getErrorMessage(e), type: 'error' });
         return;
       }
-      if (getErrorMessage(e) === 'PRICE_CHANGED') {
+      // `getErrorMessage` đã biến mã không dấu thành câu chung, nên nhận ra bằng thân phản hồi thô.
+      if (isPriceChangedError(e)) {
         setPriceChanged(true);
         return;
       }
@@ -405,6 +460,23 @@ export default function CheckoutPage() {
         void queryClient.invalidateQueries({ queryKey: ['cart'] });
       }
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
+    },
+  });
+
+  // Sửa nhanh dòng hết hàng/vượt tồn ngay tại màn: khách không rời trang nên các ô đã nhập còn nguyên. Đổi dòng là đổi lựa chọn
+  // của khách, nên một lần đặt đang đóng băng (chưa rõ kết quả) không được phát lại nữa.
+  const lineFix = useMutation({
+    mutationFn: ({ id, fix }: { id: string; fix: LineFix }) => (fix.kind === 'remove' ? removeCartItem(id) : updateCartItem(id, fix.quantity)),
+    // Chờ giỏ và báo giá về mới thôi bận: nút xoá còn bấm được trong lúc giỏ cũ còn hiện thì lần bấm hai gọi xoá dòng đã mất và nhận 404.
+    onSuccess: async () => {
+      bumpChoice();
+      setCartIssue(null);
+      await Promise.all([queryClient.invalidateQueries({ queryKey: ['cart'] }), queryClient.invalidateQueries({ queryKey: ['quote'] })]);
+    },
+    // Bị từ chối thường vì tồn vừa đổi: tải lại giỏ để nút "Giảm còn n" theo tồn mới.
+    onError: (e: unknown) => {
+      notify({ text: getErrorMessage(e), type: 'error' });
+      void queryClient.invalidateQueries({ queryKey: ['cart'] });
     },
   });
 
@@ -448,7 +520,7 @@ export default function CheckoutPage() {
     );
   }
 
-  if ((cart.data?.items.length ?? 0) === 0 && maybePlaced) {
+  if (checkoutItems.length === 0 && maybePlaced) {
     return (
       <Shell>
         <EmptyState
@@ -469,8 +541,26 @@ export default function CheckoutPage() {
     );
   }
 
+  // Khách đã chọn một phần giỏ mà các món đó không còn (xoá ở nơi khác): không tính tiền phần khác, báo và đưa về giỏ.
+  if (checkoutItems.length === 0 && (cart.data?.items.length ?? 0) > 0) {
+    return (
+      <Shell>
+        <EmptyState
+          art="basket"
+          heading={fillCopy('checkout.selectionLostHeading')}
+          body={fillCopy('checkout.selectionLostBody')}
+          ctaLabel={fillCopy('checkout.lineToCart')}
+          onCta={() => {
+            clearCheckoutSelection();
+            navigate('/cart', { replace: true });
+          }}
+        />
+      </Shell>
+    );
+  }
+
   // Giỏ trống (vd mở từ deeplink) → không cho đặt đơn rỗng.
-  if ((cart.data?.items.length ?? 0) === 0) {
+  if (checkoutItems.length === 0) {
     return (
       <Shell>
         <EmptyState
@@ -491,9 +581,14 @@ export default function CheckoutPage() {
   // chặn bấm-2-lần khi `loading` bất kể `disabled`, và handler onPress cũng tự kiểm `submitting`
   // trước khi mutate — gộp lại `disabled` chỉ khiến spinner không hiện trong lúc đặt hàng (đúng
   // bug audit A4-01/A4-02/A4-04 mà lần migrate này phải sửa), không thêm được lớp bảo vệ nào mới.
-  const overStockLine = checkoutItems.find((it) => it.quantity > it.stock);
-  const shownCartIssue = overStockLine ? vi.checkout.overStock(overStockLine.productName, overStockLine.stock) : cartIssue;
-  const canPlace = !!addressId && quote.isSuccess && !quote.isFetching && !!invoiceValid && !overStockLine && (!!zeroNote || payment !== '') && !autoCoupon.busy;
+  const lineProblems = checkoutLineProblems(checkoutItems, { keepLastLine: !!itemIds });
+  const hasLineProblem = Object.keys(lineProblems).length > 0;
+  const shownCartIssue = cartIssue;
+  // Thiếu địa chỉ hoặc ô hoá đơn thì nút vẫn bấm được: bấm để chỉ ra ô thiếu (lỗi ngay dưới ô, con trỏ nhảy tới). Chỉ những lý do
+  // không phải ô nhập (đang tính tiền, dòng cần sửa, chưa có cách thanh toán, đang áp mã) mới khoá hẳn, và đã có chữ nói lý do.
+  const formBlocked = !addressId || !invoiceValid;
+  const placeLocked =
+    hasLineProblem || autoCoupon.busy || (!!addressId && (!quote.isSuccess || quote.isFetching || (!zeroNote && payment === '')));
 
   // Chưa có báo giá (chưa chọn địa chỉ) thì chưa biết tổng đơn → chưa khoá, chưa có lý do.
   const paymentMethods = [
@@ -528,7 +623,10 @@ export default function CheckoutPage() {
   const previewDiscount = wholeCart && cart.data?.couponCode ? (cart.data.discount ?? 0) : 0;
   const previewTier = wholeCart ? (cart.data?.tierDiscount ?? 0) : 0;
   // Lý do nút Đặt hàng đang khoá do thiếu địa chỉ hoặc báo giá lỗi: nói ngay trên nút (cùng câu với web).
-  const placeHint = checkoutPlaceHint({ hasAddress: !!addressId, quoteFailed: quote.isError });
+  const placeHint = checkoutPlaceHint({ hasAddress: !!addressId, quoteFailed: quote.isError }) ?? (hasLineProblem ? fillCopy('checkout.fixLinesHint') : null);
+  // Lần đặt vừa rồi chưa rõ kết quả (mất mạng, quá thời gian, 5xx): nút nói rõ là gửi lại cùng đơn (cùng khoá, không tạo đơn trùng).
+  const retryingPlace = placeNotice === 'unknown' && unknownRev !== null && unknownRev === choiceTick;
+  const placeBarNote = placeHint ?? (retryingPlace ? fillCopy('checkout.retryNote') : null);
   const previewRecalcNote = !wholeCart && (!!cart.data?.couponCode || (cart.data?.comboDiscount ?? 0) > 0 || (cart.data?.tierDiscount ?? 0) > 0);
 
   return (
@@ -564,11 +662,29 @@ export default function CheckoutPage() {
         </Box>
       )}
 
-      <AddressSection
-        addresses={addresses.data ?? []}
-        selectedId={addressId}
-        onSelect={chosen(setAddressId)}
-      />
+      <div
+        ref={addressRef}
+        data-testid="checkout-address-block"
+        role="group"
+        aria-label={vi.checkout.address}
+        tabIndex={-1}
+        aria-describedby={placeAttempted && !addressId ? 'checkout-address-error' : undefined}
+        style={{ outline: 'none' }}
+      >
+        <AddressSection
+          addresses={addresses.data ?? []}
+          selectedId={addressId}
+          onSelect={chosen(setAddressId)}
+        />
+      </div>
+      {placeAttempted && !addressId && (
+        <Box id="checkout-address-error" role="alert" px={4} pt={2} style={{ background: 'var(--color-bg-surface)' }}>
+          <DsText variant="caption" tone="danger" as="div">
+            <span aria-hidden="true">⚠ </span>
+            {fillCopy('checkout.addressNeeded')}
+          </DsText>
+        </Box>
+      )}
 
       {/* ── Sản phẩm sẽ mua ── (liệt kê món; nếu checkout TẬP CON thì chỉ hiện món đã chọn) */}
       {(() => {
@@ -616,6 +732,22 @@ export default function CheckoutPage() {
                   <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
                     {formatVnd(it.unitPrice)} × {it.quantity}
                   </Text>
+                  {lineProblems[it.id] && (
+                    <Box data-testid="checkout-line-problem" role="alert" mt={1} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                      <DsText variant="caption" tone="danger">{lineProblems[it.id]!.text}</DsText>
+                      <Button
+                        variant="secondary"
+                        loading={lineFix.isPending && lineFix.variables?.id === it.id}
+                        onPress={() => {
+                          const fix = lineProblems[it.id]!.fix;
+                          if (fix.kind === 'cart') navigate('/cart');
+                          else lineFix.mutate({ id: it.id, fix });
+                        }}
+                      >
+                        {lineProblems[it.id]!.fixLabel}
+                      </Button>
+                    </Box>
+                  )}
                 </Box>
                 <Text size="small" bold style={{ whiteSpace: 'nowrap' }}>{formatVnd(it.total)}</Text>
               </Box>
@@ -830,7 +962,7 @@ export default function CheckoutPage() {
             onClick={() => {
               if (!pointsUsable) return;
               haptic('light');
-              choiceRev.current += 1;
+              bumpChoice();
               setUsePoints((v) => !v);
             }}
             flex
@@ -883,7 +1015,7 @@ export default function CheckoutPage() {
           {vi.checkout.note}
         </Text>
         <Input aria-label={vi.checkout.note} placeholder={vi.checkout.notePlaceholder} maxLength={500} value={note} onChange={(e) => {
-          choiceRev.current += 1;
+          bumpChoice();
           setNote(e.target.value);
         }} />
       </Box>
@@ -909,7 +1041,7 @@ export default function CheckoutPage() {
                 className="tubu-press"
                 onClick={() => {
                   haptic('light');
-                  choiceRev.current += 1;
+                  bumpChoice();
                   setAttachWaste((v) => !v);
                 }}
                 flex
@@ -967,7 +1099,11 @@ export default function CheckoutPage() {
           className="tubu-press"
           onClick={() => {
             haptic('light');
-            choiceRev.current += 1;
+            bumpChoice();
+            if (!wantInvoice) {
+              setInvoiceAttempted(false);
+              setInvoiceTouched({});
+            }
             setWantInvoice((v) => !v);
           }}
           flex
@@ -982,50 +1118,57 @@ export default function CheckoutPage() {
           <Checkbox checked={wantInvoice} onChange={() => {}} />
         </Box>
         {wantInvoice && (
-          <Box flex flexDirection="column" style={{ gap: 10, marginTop: 10 }}>
-            <Input maxLength={INPUT_LIMITS.invoiceTaxCode}
-              label="Mã số thuế"
-              value={invoice.taxCode}
-              status={shouldShowTaxCodeError(invoice.taxCode) ? 'error' : undefined}
-              errorText={shouldShowTaxCodeError(invoice.taxCode) ? fillCopy('checkout.taxCodeInvalid') : undefined}
-              onChange={(e) => {
-                choiceRev.current += 1;
-                setInvoice((f) => ({ ...f, taxCode: e.target.value }));
-              }}
-            />
-            <Input maxLength={INPUT_LIMITS.invoiceCompanyName}
-              label="Tên công ty"
-              value={invoice.companyName}
-              onChange={(e) => {
-                choiceRev.current += 1;
-                setInvoice((f) => ({ ...f, companyName: e.target.value }));
-              }}
-            />
-            <Input maxLength={INPUT_LIMITS.invoiceAddress}
-              label="Địa chỉ xuất hoá đơn"
-              value={invoice.address}
-              onChange={(e) => {
-                choiceRev.current += 1;
-                setInvoice((f) => ({ ...f, address: e.target.value }));
-              }}
-            />
-            <Input maxLength={INPUT_LIMITS.invoiceEmail}
-              label="Email nhận hoá đơn"
-              value={invoice.email}
-              onChange={(e) => {
-                choiceRev.current += 1;
-                setInvoice((f) => ({ ...f, email: e.target.value }));
-              }}
-            />
-            {!invoiceValid && (
-              <Box flex alignItems="center" style={{ gap: 4, marginTop: 4 }}>
-                <AlertCircle size={13} color="var(--color-text-danger)" aria-hidden />
-                <Text size="xSmall" style={{ color: 'var(--color-text-danger)' }}>
-                  {fillCopy('checkout.invoiceIncomplete')}
-                </Text>
-              </Box>
-            )}
-          </Box>
+          <div ref={invoiceRef} style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
+            <Field label="Mã số thuế" error={invoiceError('taxCode')}>
+              <Input
+                maxLength={INPUT_LIMITS.invoiceTaxCode}
+                value={invoice.taxCode}
+                status={invoiceError('taxCode') ? 'error' : undefined}
+                onBlur={touchInvoice('taxCode')}
+                onChange={(e) => {
+                  bumpChoice();
+                  setInvoice((f) => ({ ...f, taxCode: e.target.value }));
+                }}
+              />
+            </Field>
+            <Field label="Tên công ty" error={invoiceError('companyName')}>
+              <Input
+                maxLength={INPUT_LIMITS.invoiceCompanyName}
+                value={invoice.companyName}
+                status={invoiceError('companyName') ? 'error' : undefined}
+                onBlur={touchInvoice('companyName')}
+                onChange={(e) => {
+                  bumpChoice();
+                  setInvoice((f) => ({ ...f, companyName: e.target.value }));
+                }}
+              />
+            </Field>
+            <Field label="Địa chỉ xuất hoá đơn" error={invoiceError('address')}>
+              <Input
+                maxLength={INPUT_LIMITS.invoiceAddress}
+                value={invoice.address}
+                status={invoiceError('address') ? 'error' : undefined}
+                onBlur={touchInvoice('address')}
+                onChange={(e) => {
+                  bumpChoice();
+                  setInvoice((f) => ({ ...f, address: e.target.value }));
+                }}
+              />
+            </Field>
+            <Field label="Email nhận hoá đơn" error={invoiceError('email')}>
+              <Input
+                maxLength={INPUT_LIMITS.invoiceEmail}
+                inputMode="email"
+                value={invoice.email}
+                status={invoiceError('email') ? 'error' : undefined}
+                onBlur={touchInvoice('email')}
+                onChange={(e) => {
+                  bumpChoice();
+                  setInvoice((f) => ({ ...f, email: e.target.value }));
+                }}
+              />
+            </Field>
+          </div>
         )}
       </Box>
 
@@ -1141,10 +1284,12 @@ export default function CheckoutPage() {
 
       {placeNotice && (
         <Box p={4} data-testid="place-notice" role="alert" style={{ background: 'var(--color-bg-surface)' }}>
-          {placeNotice === 'unknown' ? (
+          {placeNotice === 'unknown' && retryingPlace ? (
             <Text size="small">
-              Đơn có thể đã được ghi nhận. Bấm Đặt hàng lần nữa để thử lại — hệ thống nhận ra yêu cầu trùng nên không tạo thêm đơn. Hoặc xem Đơn của tôi.
+              Đơn có thể đã được ghi nhận. Bấm Thử lại để gửi lại đúng đơn này — hệ thống nhận ra yêu cầu trùng nên không tạo thêm đơn. Hoặc xem Đơn của tôi.
             </Text>
+          ) : placeNotice === 'unknown' ? (
+            <Text size="small">{PREVIOUS_MAYBE_PLACED}</Text>
           ) : (
             <Text size="small">
               Nếu đơn trước chưa có trong Đơn của tôi, bấm Đặt hàng lần nữa để đặt đơn mới với lựa chọn hiện tại.
@@ -1168,10 +1313,10 @@ export default function CheckoutPage() {
         summary={
           // Vùng báo luôn có mặt, chỉ đổi chữ: vùng gắn vào cùng lúc với chữ thì đọc màn hình (VoiceOver trong Zalo) thường không đọc.
           // Lúc rỗng đặt absolute để không chiếm khoảng cách (gap) của thanh.
-          <div role="status" style={placeHint ? undefined : { position: 'absolute' }}>
-            {placeHint && (
-              <DsText variant="caption" tone="secondary">
-                {placeHint}
+          <div role="status" style={placeBarNote ? undefined : { position: 'absolute' }}>
+            {placeBarNote && (
+              <DsText variant="caption" tone={placeHint ? 'secondary' : 'danger'}>
+                {placeBarNote}
               </DsText>
             )}
           </div>
@@ -1180,9 +1325,15 @@ export default function CheckoutPage() {
           <Button
             fullWidth
             loading={order.isPending || submitting}
-            disabled={!canPlace}
+            disabled={placeLocked}
             onPress={async () => {
               if (submitting) return;
+              if (formBlocked) {
+                setPlaceAttempted(true);
+                setInvoiceAttempted(true);
+                setFocusTick((n) => n + 1);
+                return;
+              }
               setSubmitting(true);
               try {
                 // Xin SĐT đúng lúc đặt hàng (như Homefarm) nếu tài khoản chưa có — không chặn nếu user từ chối.
@@ -1196,7 +1347,9 @@ export default function CheckoutPage() {
             {order.isPending
               ? vi.checkout.placing
               : quote.data
-                ? vi.checkout.placeOrderWith(formatVnd(quote.data.total))
+                ? retryingPlace
+                  ? fillCopy('checkout.retryWith', { price: formatVnd(quote.data.total) })
+                  : vi.checkout.placeOrderWith(formatVnd(quote.data.total))
                 : vi.checkout.placeOrder}
           </Button>
         }
@@ -1206,19 +1359,33 @@ export default function CheckoutPage() {
         open={priceChanged}
         onClose={() => setPriceChanged(false)}
         title={vi.flashSale.priceChangedTitle}
-        description={fillCopy('flash.priceChangedBody')}
+        description={fillCopy('checkout.priceChangedBody')}
         footer={
-          <Button
-            fullWidth
-            onPress={() => {
-              setPriceChanged(false);
-              void queryClient.invalidateQueries({ queryKey: ['cart'] });
-              void queryClient.invalidateQueries({ queryKey: ['quote'] });
-              navigate('/cart');
-            }}
-          >
-            {vi.flashSale.priceChangedCta}
-          </Button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <Button
+              fullWidth
+              onPress={() => {
+                setPriceChanged(false);
+                setPriceAcceptedAt(Date.now());
+                void queryClient.invalidateQueries({ queryKey: ['cart'] });
+                void queryClient.invalidateQueries({ queryKey: ['quote'] });
+              }}
+            >
+              {priceChangedActions().accept}
+            </Button>
+            <Button
+              fullWidth
+              variant="secondary"
+              onPress={() => {
+                setPriceChanged(false);
+                void queryClient.invalidateQueries({ queryKey: ['cart'] });
+                void queryClient.invalidateQueries({ queryKey: ['quote'] });
+                navigate('/cart');
+              }}
+            >
+              {priceChangedActions().viewCart}
+            </Button>
+          </div>
         }
       >
         {null}
@@ -1249,7 +1416,7 @@ export default function CheckoutPage() {
         previewKey={cartPreviewKey(checkoutItems)}
         busy={autoCoupon.busy}
         onCouponApplied={() => {
-          choiceRev.current += 1;
+          bumpChoice();
           void cart.refetch();
           void quote.refetch();
         }}

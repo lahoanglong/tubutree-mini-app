@@ -28,6 +28,24 @@ const healthy: ProblemInput = {
   orders: { deliveredEffectsPending: 0, deliveredEffectsRefs: [], deliveredEffectsStale: 0, graceMinutes: 10, windowDays: 14 },
 };
 
+describe('opsProblems: khoá API Pancake bị từ chối (hi)', () => {
+  it('không có đơn lỗi cấu hình → không báo', () => {
+    expect(opsProblems({ ...healthy, pancake: { ...healthy.pancake, configBlocked: 0, configRefs: [] } }, T)).toEqual([]);
+  });
+
+  it('có đơn lỗi cấu hình → MỘT problem pancake.config gộp mọi đơn (không báo từng đơn), nêu mã đơn và việc cần làm', () => {
+    const p = opsProblems({ ...healthy, pancake: { ...healthy.pancake, configBlocked: 12, configRefs: ['TUBU1', 'TUBU2'] } }, T);
+    expect(p.map((x) => x.key)).toEqual(['pancake.config']);
+    expect(p[0]!.message).toContain('12 đơn');
+    expect(p[0]!.message).toContain('TUBU1, TUBU2');
+    expect(p[0]!.message).toContain('PANCAKE_API_KEY');
+  });
+
+  it('Pancake chưa cấu hình → không báo lỗi cấu hình khoá', () => {
+    expect(opsProblems({ ...healthy, pancake: { ...healthy.pancake, configured: false, configBlocked: 3, configRefs: ['TUBU1'] } }, T)).toEqual([]);
+  });
+});
+
 describe('opsProblems: tin ZNS hỏng 24 giờ', () => {
   it('dưới ngưỡng 5 → không báo; từ 5 → problem zns.failed kèm lỗi gặp nhiều nhất', () => {
     expect(opsProblems({ ...healthy, zns: { failed24h: 4, topError: 'x' } }, T)).toEqual([]);

@@ -55,7 +55,7 @@ describe('/thanh-toan — mất mạng khi bấm Đặt hàng (R4-BUYER-1 cho we
     root = createRoot(container);
     act(() => root!.render(<QueryClientProvider client={client}><CheckoutPage /></QueryClientProvider>));
     await flush(8);
-    const place = () => [...container!.querySelectorAll('button')].find((b) => /^Đặt hàng|^Đang đặt hàng/.test(b.textContent ?? ''))!;
+    const place = () => [...container!.querySelectorAll('button')].find((b) => /^Đặt hàng|^Thử lại ·|^Đang đặt hàng/.test(b.textContent ?? ''))!;
     expect(place().disabled).toBe(false);
 
     onlineManager.setOnline(false);
@@ -64,7 +64,7 @@ describe('/thanh-toan — mất mạng khi bấm Đặt hàng (R4-BUYER-1 cho we
 
     expect(m.placeOrder).toHaveBeenCalledTimes(1);
     expect(container.querySelector('[role="alert"]')?.textContent).toContain('Mất kết nối. Kiểm tra mạng rồi thử lại.');
-    expect(place().textContent).toBe('Đặt hàng · 130.000đ');
+    expect(place().textContent).toBe('Thử lại · 130.000đ');
     expect(place().disabled).toBe(false);
 
     onlineManager.setOnline(true);

@@ -80,6 +80,7 @@ export const FIELD_LABELS: Record<string, string> = {
   correct: 'Đáp án đúng',
   count: 'Số lượng',
   couponCode: 'Mã giảm giá',
+  couponCodes: 'Danh sách mã giảm giá',
   coverUrl: 'Ảnh bìa',
   creditLimit: 'Hạn mức công nợ',
   csv: 'Dữ liệu CSV',

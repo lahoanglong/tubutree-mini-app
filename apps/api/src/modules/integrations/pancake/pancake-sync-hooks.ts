@@ -15,7 +15,7 @@ import {
   isPancakeCancelled,
   isPancakeHandedOver,
 } from './pancake-outbound';
-import { enqueuePancakeCancel, enqueuePancakePayment } from './pancake-queue';
+import { enqueuePancakeCancel, enqueuePancakePayment, removeFailedPancakePush } from './pancake-queue';
 import { ATTENTION_CANCEL_PENDING, flagPancakeAttention } from './pancake-attention';
 import { isMerchantFulfilledOrder } from './pancake-fulfilment';
 
@@ -149,6 +149,8 @@ export class PancakeSyncHooks {
    */
   async afterLocalCancel(orderId: string, decision?: PancakeCancelDecision): Promise<boolean> {
     let queuedOrSettled = false;
+    // Đơn đã huỷ thì dấu "đẩy lỗi" cũ trong tập failed hết việc (kể cả đơn chưa từng claim, return sớm bên dưới): gỡ để go-live không đếm.
+    await removeFailedPancakePush(this.queue, orderId);
     try {
       // NONE vẫn đọc lại bên dưới: lần đẩy chạy song song có thể đã tạo đơn Pancake sau lúc hỏi.
       if (decision?.kind === 'CONFIRMED') {

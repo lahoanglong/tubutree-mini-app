@@ -44,16 +44,14 @@ export function clearCheckoutSelection(): void {
 
 /**
  * Lọc lựa chọn theo giỏ THẬT vừa tải về: dòng đã nhớ có thể không còn (xoá ở tab khác, API gộp dòng).
- * Còn một phần → chỉ thanh toán phần còn lại; không còn dòng nào → `undefined` (toàn giỏ) và dọn bộ nhớ, thay vì
- * tạo đơn rỗng. Màn thanh toán liệt kê từng món sẽ trả tiền nên khách vẫn thấy mình đang mua gì.
+ * Còn một phần → chỉ thanh toán phần còn lại. Không còn dòng nào → mảng RỖNG, không phải `undefined`: khách đã chọn một phần thì
+ * không được tính tiền phần khác; nơi gọi báo "món đã chọn không còn" kèm lối về giỏ. Hàm thuần, không dọn bộ nhớ: nơi gọi dọn
+ * khi khách rời màn báo.
  */
 export function reconcileSelection(
   selection: RememberedSelection | undefined,
   cartItemIds: string[],
 ): string[] | undefined {
   if (selection == null) return undefined;
-  const alive = selection.filter((id) => cartItemIds.includes(id));
-  if (alive.length > 0) return alive;
-  clearCheckoutSelection();
-  return undefined;
+  return selection.filter((id) => cartItemIds.includes(id));
 }

@@ -306,3 +306,80 @@ describe('OpsHealthService.znsHealth (tin ZNS hỏng 24 giờ)', () => {
     expect(await call(svc)).toEqual({ failed24h: 0, topError: null });
   });
 });
+
+describe('OpsHealthService.pancakeHealth — danh sách đơn kẹt mang cờ "Đẩy lại Pancake" (cùng vị từ với retryPushByAdmin)', () => {
+  const base = {
+    id: 'o1',
+    code: 'TUBU1',
+    type: 'RETAIL',
+    fulfiller: 'TUBU',
+    status: 'CONFIRMED',
+    paymentMethod: 'COD',
+    paymentStatus: 'UNPAID',
+    createdAt: new Date('2026-10-01T00:00:00Z'),
+    pancakeOrderId: null,
+    pancakePushStatus: 'STALE',
+    pancakePushAttempts: 0,
+    pancakeLastAttemptAt: null,
+    pancakeSyncError: null,
+    pancakeErrorKind: null,
+    hasRecyclingPickup: false,
+    gomdonOrderId: null,
+    gomdonPartnerCode: null,
+    gomdonStatus: null,
+    items: [{ backorderedQty: 0 }],
+  };
+
+  const run = async (rows: unknown[]) => {
+    const findMany = jest.fn(async (args: { select?: Record<string, unknown> }) => (args.select && 'pancakePushStatus' in args.select ? rows : []));
+    const prisma = {
+      $queryRaw: jest.fn().mockResolvedValue([{ at: null }]),
+      pancakeWebhookEvent: { findFirst: jest.fn().mockResolvedValue(null), count: jest.fn().mockResolvedValue(0), findMany: jest.fn().mockResolvedValue([]) },
+      order: { count: jest.fn().mockResolvedValue(rows.length), findMany, groupBy: jest.fn().mockResolvedValue([]) },
+      opsHealthState: { findUnique: jest.fn().mockResolvedValue(null) },
+    };
+    const svc = new OpsHealthService(prisma as never, { get: () => '' } as never, []);
+    const t = { unsyncedMinutes: 30 } as never;
+    const out = (await (svc as unknown as { pancakeHealth(now: Date, t: unknown): Promise<{ stuckOrders: Record<string, unknown>[] }> }).pancakeHealth(new Date('2026-11-05T00:00:00Z'), t));
+    return { out, findMany };
+  };
+
+  it('NOW / WAIT (kèm việc đang chờ) / NEVER theo cổng đẩy, không lộ cột phụ dùng để tính', async () => {
+    const { out } = await run([
+      base,
+      { ...base, id: 'o2', code: 'TUBU2', type: 'DEALER', items: [{ backorderedQty: 3 }] },
+      { ...base, id: 'o3', code: 'TUBU3', hasRecyclingPickup: true, gomdonStatus: 'CREATING' },
+      { ...base, id: 'o4', code: 'TUBU4', paymentMethod: 'ZALOPAY', paymentStatus: 'UNPAID' },
+      { ...base, id: 'o5', code: 'TUBU5', fulfiller: 'MERCHANT' },
+    ]);
+    expect(out.stuckOrders.map((o) => [o.code, o.pancakeRetry, o.pancakeRetryWaitingFor])).toEqual([
+      ['TUBU1', 'NOW', null],
+      ['TUBU2', 'WAIT', 'đủ hàng đặt trước'],
+      ['TUBU3', 'WAIT', 'vận đơn Gomdon'],
+      ['TUBU4', 'WAIT', 'khách thanh toán'],
+      ['TUBU5', 'NEVER', null],
+    ]);
+    for (const o of out.stuckOrders) {
+      for (const hidden of ['type', 'fulfiller', 'paymentMethod', 'paymentStatus', 'hasRecyclingPickup', 'gomdonOrderId', 'gomdonPartnerCode', 'gomdonStatus', 'items']) {
+        expect(o).not.toHaveProperty(hidden);
+      }
+      expect(o).toMatchObject({ pancakePushStatus: 'STALE', status: 'CONFIRMED' });
+    }
+  });
+
+  it('truy vấn đơn kẹt lấy đủ cột của cổng đẩy (kể cả dòng hàng đặt trước)', async () => {
+    const { findMany } = await run([base]);
+    const call = findMany.mock.calls.find(([a]) => a.select && 'pancakePushStatus' in a.select)![0];
+    expect(call.select).toMatchObject({
+      type: true,
+      fulfiller: true,
+      paymentMethod: true,
+      paymentStatus: true,
+      hasRecyclingPickup: true,
+      gomdonOrderId: true,
+      gomdonPartnerCode: true,
+      gomdonStatus: true,
+      items: { select: { backorderedQty: true } },
+    });
+  });
+});

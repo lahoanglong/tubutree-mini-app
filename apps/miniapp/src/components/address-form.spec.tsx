@@ -93,7 +93,7 @@ describe('AddressForm', () => {
     } as never;
     renderForm(<AddressForm initial={initial} onCancel={() => {}} onSaved={() => {}} />);
     fireEvent.click(screen.getByText('Lưu'));
-    await waitFor(() => expect(screen.getAllByText(/Bạn điền giúp Tubu mục này nhé/).length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getAllByText(/Chọn tỉnh\/thành\./).length).toBeGreaterThan(0));
     expect(accountApi.updateAddress).not.toHaveBeenCalled();
   });
 
@@ -112,7 +112,7 @@ describe('AddressForm', () => {
     // chung 1 node text với tiền tố "⚠ " (component ErrText riêng của geo-picker.tsx, không đi
     // qua Field) nên khớp bằng regex thay vì so khớp chuỗi tuyệt đối.
     await waitFor(() =>
-      expect(screen.getAllByText(/Bạn điền giúp Tubu mục này nhé/).length).toBeGreaterThan(0),
+      expect(screen.getAllByText(/Chọn tỉnh\/thành\./).length).toBeGreaterThan(0),
     );
     expect(shopApi.createAddress).not.toHaveBeenCalled();
     expect(accountApi.updateAddress).not.toHaveBeenCalled();
@@ -246,7 +246,7 @@ describe('AddressForm', () => {
       renderForm(<AddressForm initial={null} onCancel={() => {}} onSaved={() => {}} />);
       typeStreet();
       fireEvent.click(screen.getByText('Lưu'));
-      await waitFor(() => expect(screen.getAllByText(/Bạn điền giúp Tubu mục này nhé/).length).toBeGreaterThan(0));
+      await waitFor(() => expect(screen.getAllByText(/Chọn tỉnh\/thành\./).length).toBeGreaterThan(0));
       expect(shopApi.createAddress).not.toHaveBeenCalled();
     });
 
@@ -298,8 +298,58 @@ describe('AddressForm', () => {
       renderForm(<AddressForm initial={null} onCancel={() => {}} onSaved={() => {}} />);
       typeStreet();
       fireEvent.click(screen.getByText('Lưu'));
-      await waitFor(() => expect(screen.getAllByText(/Bạn điền giúp Tubu mục này nhé/).length).toBeGreaterThan(0));
+      await waitFor(() => expect(screen.getAllByText(/Chọn tỉnh\/thành\./).length).toBeGreaterThan(0));
       expect(shopApi.createAddress).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('AddressForm — lỗi từng ô và con trỏ (gói hk)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    mocks.user.current = { fullName: '', phone: null };
+  });
+
+  it('bấm Lưu khi trống: mỗi ô một câu riêng ngay dưới ô, con trỏ nhảy tới ô lỗi đầu tiên (Người nhận)', async () => {
+    renderForm(<AddressForm initial={null} onCancel={() => {}} onSaved={() => {}} />);
+    fireEvent.click(screen.getByText('Lưu'));
+    expect(await screen.findByText('Nhập tên người nhận.')).toBeInTheDocument();
+    expect(screen.getByText('Nhập số điện thoại.')).toBeInTheDocument();
+    expect(screen.getByText('Chọn tỉnh/thành.')).toBeInTheDocument();
+    expect(screen.getByText('Chọn phường/xã.')).toBeInTheDocument();
+    expect(screen.getByText('Nhập số nhà, tên đường.')).toBeInTheDocument();
+    await waitFor(() => expect(inputNear('Người nhận')).toHaveFocus());
+    const name = inputNear('Người nhận');
+    expect(name).toHaveAttribute('aria-invalid', 'true');
+    expect(document.getElementById(name.getAttribute('aria-describedby')!)).toHaveTextContent('Nhập tên người nhận.');
+  });
+
+  it('tên đã có, SĐT sai: con trỏ về ô SĐT, câu nói rõ dạng cần nhập', async () => {
+    mocks.user.current = { fullName: 'Long', phone: '123' };
+    renderForm(<AddressForm initial={null} onCancel={() => {}} onSaved={() => {}} />);
+    fireEvent.click(screen.getByText('Lưu'));
+    expect(await screen.findByText('Số điện thoại chưa đúng. Nhập 10 số bắt đầu bằng 0 (hoặc +84 và 9 số).')).toBeInTheDocument();
+    await waitFor(() => expect(inputNear('Số điện thoại')).toHaveFocus());
+  });
+
+  it('rời ô SĐT khi còn sai thì báo ngay, chưa cần bấm Lưu; các ô chưa chạm chưa đỏ', () => {
+    mocks.user.current = { fullName: 'Long', phone: '123' };
+    renderForm(<AddressForm initial={null} onCancel={() => {}} onSaved={() => {}} />);
+    expect(screen.queryByText(/Số điện thoại chưa đúng/)).toBeNull();
+    fireEvent.blur(inputNear('Số điện thoại'));
+    expect(screen.getByText(/Số điện thoại chưa đúng/)).toBeInTheDocument();
+    expect(screen.queryByText('Nhập số nhà, tên đường.')).toBeNull();
+  });
+
+  it('ô chọn tỉnh/thành báo lỗi cho trình đọc màn hình: aria-invalid và aria-describedby trỏ vào câu lỗi', async () => {
+    mocks.user.current = { fullName: 'Long', phone: '0900000000' };
+    renderForm(<AddressForm initial={null} onCancel={() => {}} onSaved={() => {}} />);
+    fireEvent.change(inputNear('Số nhà, tên đường'), { target: { value: '1 Nguyễn Huệ' } });
+    fireEvent.click(screen.getByText('Lưu'));
+    const province = await screen.findByRole('button', { name: /^Tỉnh\/Thành phố:/ });
+    await waitFor(() => expect(province).toHaveAttribute('aria-invalid', 'true'));
+    expect(document.getElementById(province.getAttribute('aria-describedby')!)).toHaveTextContent('Chọn tỉnh/thành.');
+    await waitFor(() => expect(province).toHaveFocus());
   });
 });

@@ -23,7 +23,8 @@ import { InAppRetryProcessor, NotificationsProcessor } from '../modules/notifica
           // Redis chạy noeviction với trần bộ nhớ (docker-compose.vietnix.yml): job thất bại kèm
           // stacktrace × mọi queue không được giữ quá nhiều. Trạng thái thật nằm ở DB (orders.pancakeOrderId,
           // orders.gomdonStatus/gomdonCancelStatus, *_webhook_events, notification_logs) cho cron/admin.
-          removeOnFail: 1000,
+          // Hạn tuổi (giây) để job lỗi của việc đã có kết cục không nằm mãi trong tập failed (count chỉ giữ khi lỗi dồn dập).
+          removeOnFail: { age: 30 * 24 * 3600, count: 1000 },
         },
       }),
     }),

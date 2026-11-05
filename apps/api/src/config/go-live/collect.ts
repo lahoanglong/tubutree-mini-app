@@ -9,7 +9,8 @@ import { ZNS_REVIEW_PREFIX } from '../../modules/notifications/zns-review-prefix
 import { parseCronBackup, type BackupSnapshot } from './backup-checks';
 import { CONFIG_KEYS_OF_INTEREST, type DbSnapshot } from './db-checks';
 import { collectDemoData } from './demo-data-checks';
-import { EXPECTED_QUEUES, type QueueSnapshot, type RedisSnapshot } from './redis-checks';
+import { QUEUE_PANCAKE_PUSH } from '../../jobs/queues';
+import { EXPECTED_QUEUES, summarizePancakeFailed, type FailedOrderRef, type PancakeFailedJobs, type QueueSnapshot, type RedisSnapshot } from './redis-checks';
 import { describeError } from './secrets';
 import type { Env } from './types';
 
@@ -172,11 +173,41 @@ async function configGet(client: RedisCall, name: string): Promise<string | null
   }
 }
 
+/** Số job lỗi tối đa đọc để đối chiếu với đơn; phần vượt được tính là còn mở. */
+const FAILED_JOBS_READ = 200;
+
 /**
- * Chỉ dùng lệnh đọc (PING, CONFIG GET, đếm job) và lệnh mức kết nối của BullMQ. `skipMetasUpdate` tắt việc Queue tự
+ * Đơn của các job lỗi. Go-live trước deploy chạy image mới trên DB chưa áp migration cột `pancakeErrorKind`: truy vấn có cột đó báo
+ * thiếu cột (P2022/42703) thì hỏi lại không có cột, phần đối chiếu theo đơn vẫn chạy (chỉ mất lý do theo loại lỗi).
+ */
+export async function findFailedOrders(prisma: Pick<PrismaClient, 'order'>, ids: string[]): Promise<FailedOrderRef[]> {
+  if (ids.length === 0) return [];
+  try {
+    return await prisma.order.findMany({ where: { id: { in: ids } }, select: { id: true, code: true, status: true, pancakeOrderId: true, pancakeErrorKind: true } });
+  } catch (err) {
+    if (!isSchemaMismatch(err)) throw err;
+    const rows = await prisma.order.findMany({ where: { id: { in: ids } }, select: { id: true, code: true, status: true, pancakeOrderId: true } });
+    return rows.map((r) => ({ ...r, pancakeErrorKind: null }));
+  }
+}
+
+/** Đọc job lỗi của pancake-push và đối chiếu đơn (chỉ đọc). Không đọc được thì trả undefined: dòng go-live rơi về đếm thô. */
+async function readPancakeFailed(q: Queue, prisma: Pick<PrismaClient, 'order'>, totalFailed: number): Promise<PancakeFailedJobs | undefined> {
+  try {
+    const jobs = await withTimeout(q.getFailed(0, FAILED_JOBS_READ - 1), 5000, 'đọc job lỗi pancake-push');
+    const refs = jobs.map((j) => ({ name: j.name, orderId: typeof j.data?.orderId === 'string' ? (j.data.orderId as string) : null }));
+    const ids = [...new Set(refs.flatMap((r) => (r.orderId ? [r.orderId] : [])))];
+    return summarizePancakeFailed(refs, await findFailedOrders(prisma, ids), totalFailed);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Chỉ dùng lệnh đọc (PING, CONFIG GET, đếm job, liệt kê job lỗi của pancake-push) và lệnh mức kết nối của BullMQ. `skipMetasUpdate` tắt việc Queue tự
  * ghi khoá meta lúc khởi tạo, nên lượt kiểm không để lại dấu nào trong Redis.
  */
-export async function collectRedisSnapshot(redisUrl: string): Promise<RedisSnapshot> {
+export async function collectRedisSnapshot(redisUrl: string, prisma?: Pick<PrismaClient, 'order'>): Promise<RedisSnapshot> {
   const base: RedisSnapshot = { reachable: false, dbIndex: redisDbIndex(redisUrl), maxmemoryPolicy: null, maxmemoryBytes: null, appendonly: null, queues: [] };
   const opts = { skipMetasUpdate: true, skipVersionCheck: true } as const;
   const first = new Queue(EXPECTED_QUEUES[0], { ...opts, connection: { url: redisUrl, retryStrategy: () => null, connectTimeout: 5000, enableOfflineQueue: false } });
@@ -199,11 +230,15 @@ export async function collectRedisSnapshot(redisUrl: string): Promise<RedisSnaps
           queues.push(q);
         }
         const counts = await withTimeout(q.getJobCounts('waiting', 'active', 'delayed', 'failed'), 5000, `đếm job ${name}`);
-        snaps.push({
+        const snap: QueueSnapshot = {
           name,
           ok: true,
           counts: { waiting: counts.waiting ?? 0, active: counts.active ?? 0, delayed: counts.delayed ?? 0, failed: counts.failed ?? 0 },
-        });
+        };
+        if (name === QUEUE_PANCAKE_PUSH && prisma && (counts.failed ?? 0) > 0) {
+          snap.pancakeFailed = await readPancakeFailed(q, prisma, counts.failed ?? 0);
+        }
+        snaps.push(snap);
       } catch (err) {
         snaps.push({ name, ok: false, error: describeError(err) });
       }

@@ -1,26 +1,30 @@
 'use client';
 
 import { useId } from 'react';
-import { fillCopy } from '@tubutree/app-core/shop-copy';
+import type { InvoiceField, InvoiceFieldErrors } from '@tubutree/app-core/commerce/checkout-form';
 import { ui } from '@/lib/guest-ui';
 import { CheckMark, mini, miniCheckbox, miniCheckboxGutter, miniCheckboxWrap } from '@/components/order-mobile/mobile-ui';
 import type { InvoiceInfo } from '@/lib/checkout-rules';
-import { shouldShowTaxCodeError } from '@tubutree/app-core/commerce/tax-code';
 
-/** Yêu cầu xuất hoá đơn VAT (doanh nghiệp): bật thì cần đủ MST, tên công ty, địa chỉ và email — API validate IsEmail. */
+/**
+ * Yêu cầu xuất hoá đơn VAT (doanh nghiệp): bật thì cần đủ MST, tên công ty, địa chỉ và email — API validate IsEmail.
+ * `errors` là các lỗi đã được phép hiện (ô đã rời, hoặc khách đã bấm Đặt hàng): mỗi ô báo riêng ngay dưới ô.
+ */
 export function InvoiceSection({
   want,
   onWant,
   invoice,
   onInvoice,
-  valid,
+  errors,
+  onTouch,
   disabled,
 }: {
   want: boolean;
   onWant: (v: boolean) => void;
   invoice: InvoiceInfo;
   onInvoice: (v: InvoiceInfo) => void;
-  valid: boolean;
+  errors: InvoiceFieldErrors;
+  onTouch: (field: InvoiceField) => void;
   disabled: boolean;
 }) {
   const id = useId();
@@ -45,28 +49,27 @@ export function InvoiceSection({
         <div className="mt-2 grid gap-3 sm:grid-cols-2">
           {fields.map((f) => (
             <label key={f.key} htmlFor={`${id}-${f.key}`} className={f.key === 'address' ? 'block sm:col-span-2' : 'block'}>
-              <span className="text-xs font-medium text-[color:var(--color-text-secondary)]">{f.label}</span>
+              <span className="text-caption font-medium text-[color:var(--color-text-secondary)]">{f.label}</span>
               <input
                 id={`${id}-${f.key}`}
                 type={f.type ?? 'text'}
                 value={invoice[f.key]}
                 onChange={(e) => set({ [f.key]: e.target.value })}
+                onBlur={() => onTouch(f.key)}
                 autoComplete={f.autoComplete}
                 disabled={disabled}
-                aria-invalid={f.key === 'taxCode' && shouldShowTaxCodeError(invoice.taxCode) ? true : undefined}
-                aria-describedby={f.key === 'taxCode' && shouldShowTaxCodeError(invoice.taxCode) ? `${id}-taxCode-err` : undefined}
+                aria-invalid={errors[f.key] ? true : undefined}
+                aria-describedby={errors[f.key] ? `${id}-${f.key}-err` : undefined}
                 className={`${ui.field} mt-1`}
               />
-              {f.key === 'taxCode' && shouldShowTaxCodeError(invoice.taxCode) && (
-                <span id={`${id}-taxCode-err`} className="mt-1 block text-xs text-danger-fg">{fillCopy('checkout.taxCodeInvalid')}</span>
+              {errors[f.key] && (
+                <span id={`${id}-${f.key}-err`} className="mt-1 block text-caption text-danger-fg">
+                  <span aria-hidden="true">⚠ </span>
+                  {errors[f.key]}
+                </span>
               )}
             </label>
           ))}
-          {!valid && (
-            <p role="status" className="text-xs text-danger-fg sm:col-span-2">
-              {fillCopy('checkout.invoiceIncomplete')}
-            </p>
-          )}
         </div>
       )}
     </section>

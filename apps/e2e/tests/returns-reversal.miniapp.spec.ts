@@ -173,7 +173,10 @@ test.describe('Zalo Mini App E2E - Luồng Huỷ đơn & Đổi trả (Phase 5)'
     // Nhãn thật của trạng thái DELIVERED (i18n vi.orderStatus) — không phải chuỗi của hãng VC.
     await expect(page.getByText('Giao thành công', { exact: true }).first()).toBeVisible({ timeout: 15_000 });
 
+    // Yêu cầu đổi/trả là việc phụ: nằm trong menu "Thêm thao tác", không phải nút chính của đơn đã giao.
     const openBtn = page.getByRole('button', { name: 'Yêu cầu đổi/trả' });
+    await expect(openBtn).toHaveCount(0);
+    await page.getByRole('button', { name: 'Thêm thao tác' }).click();
     await expect(openBtn).toBeVisible();
     await openBtn.click();
 
@@ -211,6 +214,8 @@ test.describe('Zalo Mini App E2E - Luồng Huỷ đơn & Đổi trả (Phase 5)'
     // invalidate ['my-returns'] → GET /orders/me/returns trả yêu cầu vừa tạo → thay nút bằng trạng thái.
     await expect(page.getByText('Yêu cầu đổi/trả đang xử lý (trong 24h)')).toBeVisible({ timeout: 5_000 });
     await expect(page.getByText(`Trả: ${line.productName} ×1`)).toBeVisible();
+    await page.getByRole('button', { name: 'Thêm thao tác' }).click();
+    await expect(page.getByRole('group', { name: 'Thao tác với đơn' })).toBeVisible();
     await expect(openBtn).toHaveCount(0);
     expect(api.callsTo('POST', '/orders/:code/return-request')).toHaveLength(1);
   });

@@ -762,6 +762,54 @@
         ],
         "reason": "web có lịch sử trình duyệt: fallbackHref là trang đích khi mở thẳng link chia sẻ, className để PageHeader ẩn nút nổi từ md; Mini lấy lịch sử từ zmp-ui nên không nhận props"
       }
+    },
+    {
+      "name": "OrderStatusHero",
+      "miniapp": "apps/miniapp/src/components/orders/order-status-hero.tsx",
+      "web": "apps/web/src/components/orders/order-status-hero.tsx",
+      "props": "OrderStatusHeroProps",
+      "screens": [
+        "/order/:code"
+      ]
+    },
+    {
+      "name": "OrderTrack",
+      "miniapp": "apps/miniapp/src/components/orders/order-track.tsx",
+      "web": "apps/web/src/components/orders/order-track.tsx",
+      "props": "OrderTrackProps",
+      "screens": [
+        "/order/:code"
+      ]
+    },
+    {
+      "name": "OrderShipping",
+      "miniapp": "apps/miniapp/src/components/orders/order-shipping.tsx",
+      "web": "apps/web/src/components/orders/order-shipping.tsx",
+      "props": "OrderShippingProps",
+      "propsDiff": {
+        "webOnly": [
+          "trackingHref"
+        ],
+        "reason": "Mini App không mở trang ngoài (Zalo 4.1) nên không có liên kết tra cứu của hãng; web mở tab mới, chỉ http/https đã lọc"
+      },
+      "screens": [
+        "/order/:code"
+      ]
+    },
+    {
+      "name": "OrderActionBar",
+      "miniapp": "apps/miniapp/src/components/orders/order-action-bar.tsx",
+      "web": "apps/web/src/components/orders/order-action-bar.tsx",
+      "props": "OrderActionBarProps",
+      "propsDiff": {
+        "webOnly": [
+          "focusRef"
+        ],
+        "reason": "web dời focus về nút chính sau khi đóng hộp xác nhận huỷ mở từ thanh (Safari không focus nút khi bấm); BottomSheet của Mini App tự trả focus về nơi mở"
+      },
+      "screens": [
+        "/order/:code"
+      ]
     }
   ],
   "webOnly": [

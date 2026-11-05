@@ -14,6 +14,8 @@ import { K_ACCESS as ZALO_OA_ACCESS_KEY, K_EXPIRES as ZALO_OA_EXPIRES_KEY } from
 import { GomdonClient } from '../integrations/gomdon/gomdon.client';
 import { hasGomdonCredentials } from '../integrations/gomdon/gomdon-config';
 import { PANCAKE_EVENT_STATUS, pancakeEventRef } from '../integrations/pancake/pancake-webhook-dedupe';
+import { PUSH_ERROR_KIND } from '../integrations/pancake/pancake-push-error';
+import { pushRetryGateDecision } from '../integrations/pancake/pancake-order.service';
 import { GOMDON_EVENT_STATUS } from '../integrations/gomdon/gomdon-webhook.service';
 import { GOMDON_STATE } from '../integrations/gomdon/gomdon-status';
 import { pancakeUnsyncedWhere, recyclingAttentionWhere } from '../admin/admin-order-filter';
@@ -177,6 +179,30 @@ export type QueueHealth =
  * hàng đợi BullMQ và đơn kẹt. Cron 5 phút so với ngưỡng `ops.*` rồi báo admin in-app (thêm webhook ngoài nếu đặt
  * OPS_ALERT_WEBHOOK_URL, thêm email nếu đặt OPS_ALERT_EMAIL_TO + SMTP_*); @Cron chỉ chạy trên instance giữ khoá leader (CronLeaderService).
  */
+export interface PushErrorTally {
+  transient: number;
+  data: number;
+  rejected: number;
+  config: number;
+  /** CONFIG_RECHECK: khoá vừa đẩy được đơn khác, đang chờ cron thử lại. Không cộng vào `config` nên không kích báo động `pancake.config`. */
+  configRecheck: number;
+  unclassified: number;
+}
+
+/** Đếm đơn chưa lên Pancake theo `pancakeErrorKind` (null hoặc giá trị lạ = unclassified). */
+export function tallyPushErrors(groups: { pancakeErrorKind: string | null; _count: { _all: number } }[]): PushErrorTally {
+  const out: PushErrorTally = { transient: 0, data: 0, rejected: 0, config: 0, configRecheck: 0, unclassified: 0 };
+  const keyOf: Record<string, keyof PushErrorTally> = {
+    [PUSH_ERROR_KIND.TRANSIENT]: 'transient',
+    [PUSH_ERROR_KIND.DATA]: 'data',
+    [PUSH_ERROR_KIND.REJECTED]: 'rejected',
+    [PUSH_ERROR_KIND.CONFIG]: 'config',
+    [PUSH_ERROR_KIND.CONFIG_RECHECK]: 'configRecheck',
+  };
+  for (const g of groups) out[keyOf[g.pancakeErrorKind ?? ''] ?? 'unclassified'] += g._count._all;
+  return out;
+}
+
 @Injectable()
 export class OpsHealthService {
   private readonly logger = new Logger(OpsHealthService.name);
@@ -235,6 +261,8 @@ export class OpsHealthService {
           stuckRefs: refs(pancake.stuckOrders, (o) => o.code),
           webhookRefs: refs(pancake.failedEvents, (e) => (e.orderRef ? `${e.orderRef} (${e.eventType})` : null)),
           attentionRefs: refs(pancake.attentionOrders, (o) => o.code),
+          configBlocked: pancake.pushErrors.config,
+          configRefs: refs(pancake.configOrders, (o) => o.code),
         },
         gomdon: {
           ...gomdon,
@@ -360,10 +388,12 @@ export class OpsHealthService {
       failedEvents,
       unsynced,
       stuck,
-      stuckOrders,
+      stuckRows,
       attention,
       attentionOrders,
       catalog,
+      pushErrorGroups,
+      configOrders,
     ] = await Promise.all([
         this.prisma.$queryRaw<{ at: Date | null }[]>`
           SELECT max("pancakeLastAttemptAt") AS "at" FROM "orders"
@@ -408,6 +438,17 @@ export class OpsHealthService {
             pancakePushAttempts: true,
             pancakeLastAttemptAt: true,
             pancakeSyncError: true,
+            pancakeErrorKind: true,
+            // Chỉ để tính cờ "Đẩy lại Pancake" (pushRetryGateDecision cần đủ cột của cổng đẩy); không trả ra ngoài.
+            type: true,
+            fulfiller: true,
+            paymentMethod: true,
+            paymentStatus: true,
+            hasRecyclingPickup: true,
+            gomdonOrderId: true,
+            gomdonPartnerCode: true,
+            gomdonStatus: true,
+            items: { select: { backorderedQty: true } },
           },
         }),
         this.prisma.order.count({ where: { pancakeAttentionAt: { not: null } } }),
@@ -418,7 +459,20 @@ export class OpsHealthService {
           select: { id: true, code: true, pancakeAttention: true, pancakeAttentionAt: true },
         }),
         this.prisma.opsHealthState.findUnique({ where: { key: CATALOG_STATE_KEY } }),
+        this.prisma.order.groupBy({ by: ['pancakeErrorKind'], where: pancakeUnsyncedWhere(now), _count: { _all: true } }),
+        this.prisma.order.findMany({
+          where: { AND: [pancakeUnsyncedWhere(now), { pancakeErrorKind: PUSH_ERROR_KIND.CONFIG }] },
+          orderBy: { createdAt: 'asc' },
+          take: STUCK_LIST,
+          select: { code: true },
+        }),
       ]);
+    // Cùng vị từ với retryPushByAdmin và danh sách đơn của admin: web chọn câu hướng dẫn STALE theo cờ, không tự suy lại từ cột.
+    const stuckOrders = stuckRows.map(({ type, fulfiller, paymentMethod, paymentStatus, hasRecyclingPickup, gomdonOrderId, gomdonPartnerCode, gomdonStatus, items, ...shown }) => {
+      const retry = pushRetryGateDecision({ ...shown, pancakeOrderId: null, type, fulfiller, paymentMethod, paymentStatus, hasRecyclingPickup, gomdonOrderId, gomdonPartnerCode, gomdonStatus, items });
+      return { ...shown, pancakeRetry: retry.kind, pancakeRetryWaitingFor: retry.kind === 'WAIT' ? retry.waitingFor : null };
+    });
+    const pushErrors = tallyPushErrors(pushErrorGroups);
     const lastWebhook = lastByStatus.reduce<Date | null>((m, r) => (r && (!m || r.receivedAt > m) ? r.receivedAt : m), null);
     const failedRefs = await this.pancakeEventRefs(failedEvents.map((e) => e.id));
     const catalogRun: CatalogRun & { detail: unknown } = {
@@ -446,6 +500,9 @@ export class OpsHealthService {
       stuckOrders,
       attention,
       attentionOrders,
+      /** Đơn chưa lên Pancake theo loại lỗi đẩy gần nhất (unclassified = chưa có lỗi hay đơn cũ trước cột loại lỗi). */
+      pushErrors,
+      configOrders,
       catalog: catalogRun,
     };
   }
