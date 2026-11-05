@@ -156,6 +156,40 @@ describe('Feed: gửi trùng đăng bài / tạo sự kiện (real Postgres)', (
     await prisma.tag.deleteMany({ where: { slug } });
   });
 
+  it('xoá cứng sản phẩm giữa lúc đọc và lúc gắn: xoá phải chờ giao dịch tạo bài, bài tạo xong có thẻ sản phẩm, không lỗi khoá ngoại', async () => {
+    const u = await createUser(prisma);
+    const code = randCode(8).toLowerCase();
+    const product = await prisma.product.create({
+      data: { pancakeId: `it-p-${code}`, brand: 'IT', slug: `it-sp-${code}`, name: `SP ${code}`, description: 'IT', basePrice: 1000, approvalStatus: 'APPROVED' },
+    });
+    // Giữ khoá FOR UPDATE trên dòng users của tác giả: lần ghi bài của createPost (khoá ngoại userId) đứng chờ SAU khi nó đã đọc sản phẩm.
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    let held!: () => void;
+    const heldP = new Promise<void>((r) => (held = r));
+    const holder = prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${u.id} FOR UPDATE`;
+      held();
+      await gate;
+    });
+    await heldP;
+    const create = feed.createPost(u.id, 'CUSTOMER', { kind: 'TIP', body: `Gắn SP ${code}`, productSlugs: [product.slug] });
+    await new Promise((r) => setTimeout(r, 500));
+    let deleted = false;
+    const del = prisma.product.delete({ where: { id: product.id } }).then(() => { deleted = true; });
+    await new Promise((r) => setTimeout(r, 500));
+    expect(deleted).toBe(false);
+    release();
+    await holder;
+    const post = await create;
+    await del;
+    expect(deleted).toBe(true);
+    expect(post.id).toBeTruthy();
+    expect(await prisma.feedPost.count({ where: { id: post.id } })).toBe(1);
+    expect(await prisma.postProductTag.count({ where: { postId: post.id } })).toBe(0);
+    await prisma.feedPost.deleteMany({ where: { userId: u.id } });
+  });
+
   it('khách vãng lai có 2 bài ảnh chờ duyệt (chạm trần) gửi lại bài thứ 2 → nhận bài đó, không lỗi trần, số bài không đổi', async () => {
     const u = await createUser(prisma);
     const img = (n: number) => `data:image/png;base64,${'A'.repeat(200)}${n}`;
