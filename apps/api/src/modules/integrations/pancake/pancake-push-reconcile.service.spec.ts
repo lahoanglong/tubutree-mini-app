@@ -349,6 +349,14 @@ describe('PancakePushReconcileService.reconcile — đơn cũ, huỷ, thanh toá
     expect(pace.OR[0].AND[1]).toEqual({ OR: [{ pancakeErrorKind: null }, { pancakeErrorKind: { notIn: ['DATA', 'REJECTED'] } }] });
   });
 
+  it('đơn STALE bị loại khỏi lô tự đẩy ngay ở where (không chiếm lô, không bị đóng dấu lần thử, không xếp job)', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const { svc } = mk({ order: { findMany } });
+    await svc.reconcile();
+    const where = findMany.mock.calls[0][0].where;
+    expect(where.AND).toContainEqual({ OR: [{ pancakePushStatus: null }, { pancakePushStatus: { not: 'STALE' } }] });
+  });
+
   it('hi: nhóm đơn lỗi cấu hình (CONFIG) bị loại khỏi lô thử lại của cron', async () => {
     const findMany = jest.fn().mockResolvedValue([]);
     const { svc } = mk({ order: { findMany } });

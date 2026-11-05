@@ -8,6 +8,7 @@ import {
   PANCAKE_CANCEL_REFUSED_PREFIX,
   PANCAKE_PUSH,
   PANCAKE_PUSHABLE_STATUSES,
+  NOT_STALE_WHERE,
   PancakeOrderService,
   pushLeaseFreeWhere,
 } from './pancake-order.service';
@@ -123,6 +124,8 @@ export class PancakePushReconcileService {
                 { pancakeLastAttemptAt: { lt: slowCutoff } },
               ],
             },
+            // Đơn STALE không có đường tự động nào (pushOrder bỏ qua): để lại thì chiếm lô, bị đóng dấu lần thử và xếp job vô ích mỗi 15 phút.
+            NOT_STALE_WHERE,
           ],
         },
         select: {

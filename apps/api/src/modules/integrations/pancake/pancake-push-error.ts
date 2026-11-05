@@ -44,11 +44,6 @@ export function keepsPriorKind(err: unknown, prior: PriorPushError): boolean {
   return classifyPushError(err) === PUSH_ERROR_KIND.TRANSIENT && prior.pancakeErrorKind != null && KINDS_KEPT_ON_TRANSIENT.includes(prior.pancakeErrorKind);
 }
 
-export interface PriorPushError {
-  pancakeErrorKind: string | null | undefined;
-  pancakeSyncError: string | null | undefined;
-}
-
 /**
  * Loại lỗi GHI cho đơn sau một lượt đẩy lỗi, theo lần lỗi TRƯỚC của chính đơn đó. Bảng prior × lỗi mới:
  *  - lỗi tạm: giữ prior nếu prior ∈ {CONFIG, CONFIG_RECHECK, REJECTED (mọi loại)}; còn lại (trống, TRANSIENT, DATA) là TRANSIENT.

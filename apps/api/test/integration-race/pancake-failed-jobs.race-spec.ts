@@ -475,6 +475,19 @@ const url = process.env.TEST_REDIS_URL;
     expect(calls()).toBe(0);
   });
 
+  it('cron tự đẩy bỏ qua đơn STALE: không xếp job, không đóng dấu lần thử, không gọi createOrder', async () => {
+    const x = await order();
+    // Đóng dấu mọi đơn chưa từng thử khác để lô 50 đơn của pushStale (chưa thử đứng đầu) chắc chắn đủ chỗ cho X nếu X còn đủ điều kiện.
+    await prisma.order.updateMany({ where: { pancakeOrderId: null, id: { not: x.id }, pancakeLastAttemptAt: null }, data: { pancakeLastAttemptAt: new Date() } });
+    await prisma.order.update({ where: { id: x.id }, data: { createdAt: new Date(Date.now() - 30 * 60_000), pancakePushStatus: 'STALE', pancakeLastAttemptAt: null } });
+    respond(() => ({ success: true, data: { id: 'pk-unused' } }));
+    await reconcile.reconcile();
+    await sleep(300);
+    expect(await queue.getJob(x.id)).toBeUndefined();
+    expect(await prisma.order.findUniqueOrThrow({ where: { id: x.id } })).toMatchObject({ pancakePushStatus: 'STALE', pancakeLastAttemptAt: null });
+    expect(client.createOrder.mock.calls.filter(([b]) => (b as { custom_id: string }).custom_id === x.code)).toHaveLength(0);
+  });
+
   it('markOverdue không đánh STALE đơn quá 72 giờ đang PUSHING trong hạn thuê quyền đẩy; hết hạn thuê thì lần quét sau mới đánh', async () => {
     const x = await order();
     // createdAt rất cũ để đơn đứng đầu lô markOverdue (xếp theo ngày đặt tăng dần) dù DB dùng chung có đơn quá hạn của spec khác.
