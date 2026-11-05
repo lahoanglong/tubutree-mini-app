@@ -1,9 +1,12 @@
 // @vitest-environment jsdom
+import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CAMPAIGN_INTERNAL_TARGETS } from '@tubutree/app-core/commerce/campaign';
 import { CAMPAIGN_ENTITY_SLUG_MAX } from '@tubutree/shared-types';
 import { answerConfirm, byText, click, confirmDialog, flush, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
 import { unlabeledFields, unnamedControls } from '@/test-utils/a11y';
+import { ApiError } from '@/lib/client-api';
+import { CHECK_DEBOUNCE_MS } from '@/lib/use-campaign-check';
 
 const mocks = vi.hoisted(() => ({
   list: vi.fn(),
@@ -13,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   remove: vi.fn(),
   setProducts: vi.fn(),
   setCoupons: vi.fn(),
+  check: vi.fn(),
 }));
 vi.mock('@/lib/admin-campaigns-client', () => ({
   listAdminCampaigns: mocks.list,
@@ -22,6 +26,7 @@ vi.mock('@/lib/admin-campaigns-client', () => ({
   deleteAdminCampaign: mocks.remove,
   setAdminCampaignProducts: mocks.setProducts,
   setAdminCampaignCoupons: mocks.setCoupons,
+  checkAdminCampaign: mocks.check,
 }));
 vi.mock('./product-picker', () => ({
   ProductPicker: ({ onChange, label }: { onChange: (v: { id: string; label: string } | null) => void; label: string }) => (
@@ -55,10 +60,11 @@ const row = (id: string, over: Record<string, unknown> = {}) => ({
   productCount: 0,
   couponCount: 0,
   status: 'live',
+  health: { blockers: 0, warnings: 0 },
   ...over,
 });
 const detail = (id: string, over: Record<string, unknown> = {}) => {
-  const { productCount: _p, couponCount: _c, ...base } = row(id);
+  const { productCount: _p, couponCount: _c, health: _h, ...base } = row(id);
   return { ...base, image: `https://img.test/${id}.jpg`, products: [{ id: 'p9', name: 'Sản phẩm cũ', slug: 'sp-cu' }], couponCodes: ['OLD10'], ...over };
 };
 
@@ -79,6 +85,7 @@ beforeEach(() => {
   mocks.remove.mockReset().mockResolvedValue({ ok: true });
   mocks.setProducts.mockReset().mockResolvedValue({ count: 1 });
   mocks.setCoupons.mockReset().mockResolvedValue({ count: 1 });
+  mocks.check.mockReset().mockResolvedValue({ issues: [], blockers: 0, warnings: 0 });
 });
 afterEach(() => {
   mounted?.unmount();
@@ -231,8 +238,9 @@ describe('CampaignsTab: tạo chiến dịch', () => {
       startAt: '2026-10-31T17:00:00.000Z',
       endAt: '2026-11-09T17:00:00.000Z',
       sortOrder: 0,
-      isActive: true,
+      isActive: false,
     });
+    expect(mocks.update).toHaveBeenCalledWith('new1', { isActive: true });
     expect(mocks.setProducts).not.toHaveBeenCalled();
     expect(mocks.setCoupons).not.toHaveBeenCalled();
     expect(c.textContent).toContain('Đã lưu chiến dịch');
@@ -439,5 +447,313 @@ describe('CampaignsTab: truy cập', () => {
     await flush(2);
     expect(unnamedControls(c)).toEqual([]);
     expect(unlabeledFields(c)).toEqual([]);
+  });
+});
+
+describe('CampaignsTab: danh sách có kết quả kiểm', () => {
+  it('mỗi dòng hiện huy hiệu "n lỗi chặn" và "n cảnh báo"; dòng không vấn đề không có huy hiệu', async () => {
+    mocks.list.mockResolvedValue([row('a'), row('b', { health: { blockers: 2, warnings: 1 } }), row('c', { health: { blockers: 0, warnings: 3 } })]);
+    const c = await mount();
+    const text = (id: string) => c.querySelector(`button[aria-label="Sửa chiến dịch Chiến dịch ${id}"]`)!.closest('.rounded-card')!.textContent ?? '';
+    expect(text('a')).not.toMatch(/lỗi chặn|cảnh báo/);
+    expect(text('b')).toContain('2 lỗi chặn');
+    expect(text('b')).toContain('1 cảnh báo');
+    expect(text('c')).toContain('3 cảnh báo');
+    expect(text('c')).not.toContain('lỗi chặn');
+  });
+
+  it('lọc nhanh "Có vấn đề" chỉ giữ dòng có lỗi chặn hoặc cảnh báo; bỏ lọc thì đủ dòng', async () => {
+    mocks.list.mockResolvedValue([row('a'), row('b', { health: { blockers: 1, warnings: 0 } })]);
+    const c = await mount();
+    click(chip(c, 'Có vấn đề'));
+    await flush(2);
+    expect(c.textContent).not.toContain('Chiến dịch a');
+    expect(c.textContent).toContain('Chiến dịch b');
+    expect(chip(c, 'Có vấn đề').getAttribute('aria-pressed')).toBe('true');
+    click(chip(c, 'Có vấn đề'));
+    await flush(2);
+    expect(c.textContent).toContain('Chiến dịch a');
+  });
+
+  it('không dòng nào có vấn đề: lọc "Có vấn đề" báo một câu, không để trống trơn', async () => {
+    const c = await mount();
+    click(chip(c, 'Có vấn đề'));
+    await flush(2);
+    expect(c.textContent).toContain('Không có chiến dịch nào có vấn đề');
+  });
+
+  it('dòng đang tắt mà còn lỗi chặn: nút Bật khoá kèm lý do; dòng đang bật hay chỉ có cảnh báo thì không khoá', async () => {
+    mocks.list.mockResolvedValue([
+      row('d', { status: 'off', isActive: false, health: { blockers: 1, warnings: 0 } }),
+      row('e', { status: 'off', isActive: false, health: { blockers: 0, warnings: 2 } }),
+    ]);
+    const c = await mount();
+    const on = (id: string) => c.querySelector<HTMLButtonElement>(`button[aria-label="Bật chiến dịch Chiến dịch ${id}"]`)!;
+    expect(on('d').disabled).toBe(true);
+    expect(on('d').title).toContain('1 lỗi chặn');
+    expect(on('e').disabled).toBe(false);
+  });
+});
+
+describe('CampaignsTab: khối "Kiểm trước khi bật" và xem trước trong form', () => {
+  const open = async (c: HTMLElement) => {
+    click(byText(c, 'button', 'Tạo chiến dịch'));
+    await flush(2);
+  };
+  const fillBasics = (c: HTMLElement) => {
+    typeInto(field(c, 'Tên chiến dịch'), 'Giữa Thu');
+    typeInto(field(c, 'Ảnh banner (tỉ lệ 5:2, ví dụ 1500×600)'), 'https://img.test/thu.jpg');
+    typeInto(field(c, 'Bắt đầu: ngày'), '01/11/2026');
+    typeInto(field(c, 'Kết thúc: ngày'), '10/11/2026');
+  };
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, CHECK_DEBOUNCE_MS + 60));
+    });
+  const panel = (c: HTMLElement) => c.querySelector('[data-testid="campaign-check"]') as HTMLElement;
+  const issue = (code: string, level: 'BLOCK' | 'WARN', message: string) => ({ code, level, message });
+  const save = (c: HTMLElement) => byText(c, 'button', 'Lưu chiến dịch') as HTMLButtonElement;
+
+  it('form chưa đủ để kiểm: không gọi máy chủ, nhắc điền ngày và đích', async () => {
+    const c = await mount();
+    await open(c);
+    await settle();
+    expect(mocks.check).not.toHaveBeenCalled();
+    expect(panel(c).textContent).toContain('Điền ngày bắt đầu');
+  });
+
+  it('đủ ngày: gọi kiểm sau khi ngừng gõ (gộp nhiều lần đổi thành một), gửi mốc ISO, sản phẩm và mã đang soạn', async () => {
+    const c = await mount();
+    await open(c);
+    fillBasics(c);
+    click(byText(c, 'button', 'Chọn: Thêm sản phẩm'));
+    typeInto(field(c, 'Mã giảm giá gắn kèm'), 'thu10, xanh5');
+    await settle();
+    expect(mocks.check).toHaveBeenCalledTimes(1);
+    expect(mocks.check.mock.calls[0]![0]).toEqual({
+      placement: 'HOME_TOP',
+      linkType: 'CAMPAIGN_PAGE',
+      audience: 'ALL',
+      startAt: '2026-10-31T17:00:00.000Z',
+      endAt: '2026-11-09T17:00:00.000Z',
+      sortOrder: 0,
+      productIds: ['p1'],
+      couponCodes: ['thu10', 'xanh5'],
+    });
+  });
+
+  it('đổi đích gọi kiểm lại với linkValue; sửa chiến dịch đã lưu gửi kèm id', async () => {
+    const c = await mount();
+    click(c.querySelector('button[aria-label="Sửa chiến dịch Chiến dịch a"]'));
+    await flush(6);
+    selectValue(field(c, 'Đích khi bấm'), 'PRODUCT');
+    typeInto(field(c, 'Slug sản phẩm'), 'sua-hat');
+    await settle();
+    expect(mocks.check).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'a', linkType: 'PRODUCT', linkValue: 'sua-hat', productIds: ['p9'] }));
+  });
+
+  it('kết quả sạch: "Sẵn sàng" màu xanh và nút Lưu mở', async () => {
+    const c = await mount();
+    await open(c);
+    fillBasics(c);
+    await settle();
+    expect(panel(c).querySelector('[data-testid="campaign-check-ready"]')!.textContent).toBe('Sẵn sàng');
+    expect(save(c).disabled).toBe(false);
+  });
+
+  it('lỗi chặn hiện đỏ, cảnh báo hiện vàng; còn lỗi chặn mà "Đang bật" thì nút Lưu khoá kèm lý do, bỏ chọn "Đang bật" để lưu nháp', async () => {
+    mocks.check.mockResolvedValue({
+      issues: [issue('PAGE_EMPTY', 'BLOCK', 'Trang chiến dịch đang trống.'), issue('ENDED', 'WARN', 'Ngày kết thúc đã qua.')],
+      blockers: 1,
+      warnings: 1,
+    });
+    const c = await mount();
+    await open(c);
+    fillBasics(c);
+    await settle();
+    const block = panel(c).querySelector('[data-level="BLOCK"]')!;
+    const warn = panel(c).querySelector('[data-level="WARN"]')!;
+    expect(block.textContent).toContain('Trang chiến dịch đang trống.');
+    expect(block.className).toBe(warn.className);
+    expect(block.querySelector('span')!.className).toContain('danger');
+    expect(warn.querySelector('span')!.className).toContain('warning');
+    expect(panel(c).querySelector('[data-testid="campaign-check-ready"]')).toBeNull();
+    expect(save(c).disabled).toBe(true);
+    expect(c.querySelector('[data-testid="campaign-check-lock"]')!.textContent).toContain('1 lỗi chặn');
+    expect(save(c).getAttribute('aria-describedby')).toBe('campaign-lock-reason');
+
+    click(c.querySelector('input[aria-label="Đang bật"]'));
+    expect(save(c).disabled).toBe(false);
+    expect(c.querySelector('[data-testid="campaign-check-lock"]')).toBeNull();
+    click(save(c));
+    await flush(8);
+    expect(mocks.create.mock.calls[0]![0]).toMatchObject({ isActive: false });
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  it('chỉ có cảnh báo thì không khoá nút Lưu', async () => {
+    mocks.check.mockResolvedValue({ issues: [issue('COUPON_OFF', 'WARN', 'Mã đang tắt: A.')], blockers: 0, warnings: 1 });
+    const c = await mount();
+    await open(c);
+    fillBasics(c);
+    await settle();
+    expect(panel(c).textContent).toContain('Mã đang tắt: A.');
+    expect(save(c).disabled).toBe(false);
+  });
+
+  it('sửa đích rồi kiểm lại: lỗi chặn biến mất, hiện "Sẵn sàng" và mở khoá nút', async () => {
+    mocks.check.mockResolvedValueOnce({ issues: [issue('LINK_PRODUCT_MISSING', 'BLOCK', 'Không có sản phẩm với slug "sai".')], blockers: 1, warnings: 0 });
+    const c = await mount();
+    await open(c);
+    fillBasics(c);
+    selectValue(field(c, 'Đích khi bấm'), 'PRODUCT');
+    typeInto(field(c, 'Slug sản phẩm'), 'sai');
+    await settle();
+    expect(save(c).disabled).toBe(true);
+    typeInto(field(c, 'Slug sản phẩm'), 'sua-hat');
+    await settle();
+    expect(panel(c).querySelector('[data-testid="campaign-check-ready"]')).not.toBeNull();
+    expect(save(c).disabled).toBe(false);
+  });
+
+  it('máy chủ trả 400 vì đích sai định dạng: hiện đúng câu đó như lỗi chặn', async () => {
+    mocks.check.mockRejectedValue(new ApiError('Nhập slug sản phẩm hợp lệ.', 400));
+    const c = await mount();
+    await open(c);
+    fillBasics(c);
+    selectValue(field(c, 'Đích khi bấm'), 'PRODUCT');
+    typeInto(field(c, 'Slug sản phẩm'), 'có dấu');
+    await settle();
+    expect(panel(c).querySelector('[data-level="BLOCK"]')!.textContent).toContain('Nhập slug sản phẩm hợp lệ.');
+    expect(save(c).disabled).toBe(true);
+  });
+
+  it('kiểm lỗi mạng: báo chưa kiểm được nhưng KHÔNG khoá nút Lưu (máy chủ vẫn kiểm lúc bật)', async () => {
+    mocks.check.mockRejectedValue(new Error('mất mạng'));
+    const c = await mount();
+    await open(c);
+    fillBasics(c);
+    await settle();
+    expect(panel(c).textContent).toContain('Chưa kiểm được');
+    expect(save(c).disabled).toBe(false);
+  });
+
+  it('thứ tự lưu: tạo tắt, gắn sản phẩm, gắn mã, rồi bật ở bước cuối', async () => {
+    const order: string[] = [];
+    mocks.create.mockImplementation(async () => (order.push('create'), detail('new1')));
+    mocks.setProducts.mockImplementation(async () => (order.push('products'), { count: 1 }));
+    mocks.setCoupons.mockImplementation(async () => (order.push('coupons'), { count: 1 }));
+    mocks.update.mockImplementation(async () => (order.push('activate'), detail('new1')));
+    const c = await mount();
+    await open(c);
+    fillBasics(c);
+    click(byText(c, 'button', 'Chọn: Thêm sản phẩm'));
+    typeInto(field(c, 'Mã giảm giá gắn kèm'), 'THU10');
+    click(save(c));
+    await flush(10);
+    expect(order).toEqual(['create', 'products', 'coupons', 'activate']);
+    expect(mocks.update).toHaveBeenCalledWith('new1', { isActive: true });
+  });
+
+  it('bật ở bước cuối bị máy chủ từ chối: báo đã lưu nhưng chưa bật được, form giữ lại; Lưu lại không tạo trùng và thử bật lại', async () => {
+    mocks.update.mockRejectedValueOnce(new Error('Trang chiến dịch đang trống: thêm sản phẩm.'));
+    const c = await mount();
+    await open(c);
+    fillBasics(c);
+    click(save(c));
+    await flush(10);
+    expect(c.querySelector('[role="alert"]')!.textContent).toContain('Đã lưu chiến dịch nhưng chưa bật được');
+    expect(c.querySelector('[role="alert"]')!.textContent).toContain('Trang chiến dịch đang trống');
+    expect(c.textContent).not.toContain('Đã lưu chiến dịch.');
+    click(save(c));
+    await flush(10);
+    expect(mocks.create).toHaveBeenCalledTimes(1);
+    expect(mocks.update).toHaveBeenLastCalledWith('new1', { isActive: true });
+    expect(c.textContent).toContain('Đã lưu chiến dịch.');
+  });
+
+  it('sửa chiến dịch đang bật: giữ bật trong lần sửa, không gọi bật thêm; sửa chiến dịch đang tắt và bật: sửa tắt rồi bật ở cuối', async () => {
+    const c = await mount();
+    click(c.querySelector('button[aria-label="Sửa chiến dịch Chiến dịch a"]'));
+    await flush(6);
+    typeInto(field(c, 'Tên chiến dịch'), 'Tên mới');
+    click(save(c));
+    await flush(8);
+    expect(mocks.update).toHaveBeenCalledTimes(1);
+    expect(mocks.update.mock.calls[0]![1]).toMatchObject({ title: 'Tên mới', isActive: true });
+    mounted?.unmount();
+
+    mocks.update.mockClear();
+    mocks.list.mockResolvedValue([row('d', { status: 'off', isActive: false })]);
+    mocks.get.mockResolvedValue(detail('d', { isActive: false, status: 'off' }));
+    const d = await mount();
+    click(d.querySelector('button[aria-label="Sửa chiến dịch Chiến dịch d"]'));
+    await flush(6);
+    click(d.querySelector('input[aria-label="Đang bật"]'));
+    click(save(d));
+    await flush(8);
+    expect(mocks.update.mock.calls.map((x) => x[1].isActive)).toEqual([false, true]);
+  });
+
+  it('xem trước banner: hai khung dựng bằng băng chuyền thật với ảnh và tên đang nhập', async () => {
+    const c = await mount();
+    await open(c);
+    expect(c.textContent).toContain('Chọn ảnh để xem trước');
+    fillBasics(c);
+    expect(c.querySelector('[data-testid="campaign-preview-phone"] img')!.getAttribute('src')).toBe('https://img.test/thu.jpg');
+    expect(c.querySelector('[data-testid="campaign-preview-desktop"] img')!.getAttribute('alt')).toBe('Giữa Thu');
+    expect(c.querySelectorAll('[data-testid^="campaign-preview-"] section[aria-roledescription="carousel"]')).toHaveLength(2);
+  });
+
+  describe('kiểm ảnh ở trình duyệt', () => {
+    const RealImage = globalThis.Image;
+    const stubImage = (size: { w: number; h: number } | 'error') => {
+      class FakeImage {
+        onload: (() => void) | null = null;
+        onerror: (() => void) | null = null;
+        naturalWidth = size === 'error' ? 0 : size.w;
+        naturalHeight = size === 'error' ? 0 : size.h;
+        set src(_v: string) {
+          setTimeout(() => (size === 'error' ? this.onerror?.() : this.onload?.()), 0);
+        }
+      }
+      globalThis.Image = FakeImage as unknown as typeof Image;
+    };
+    afterEach(() => {
+      globalThis.Image = RealImage;
+    });
+
+    it('ảnh lệch khung 5:2 hơn 10%: cảnh báo vàng "ảnh sẽ bị cắt" kèm tỉ lệ đề nghị, không khoá nút', async () => {
+      stubImage({ w: 1200, h: 800 });
+      const c = await mount();
+      await open(c);
+      fillBasics(c);
+      await settle();
+      const warn = panel(c).querySelector('[data-level="WARN"]')!;
+      expect(warn.textContent).toContain('sẽ bị cắt');
+      expect(warn.textContent).toContain('5:2');
+      expect(panel(c).querySelector('[data-testid="campaign-check-ready"]')).toBeNull();
+      expect(save(c).disabled).toBe(false);
+    });
+
+    it('ảnh đúng tỉ lệ: không cảnh báo', async () => {
+      stubImage({ w: 1500, h: 600 });
+      const c = await mount();
+      await open(c);
+      fillBasics(c);
+      await settle();
+      expect(panel(c).querySelector('[data-level]')).toBeNull();
+      expect(panel(c).querySelector('[data-testid="campaign-check-ready"]')).not.toBeNull();
+    });
+
+    it('ảnh không tải được: cảnh báo vàng, không khoá nút', async () => {
+      stubImage('error');
+      const c = await mount();
+      await open(c);
+      fillBasics(c);
+      await settle();
+      expect(panel(c).querySelector('[data-level="WARN"]')!.textContent).toContain('Không tải được ảnh');
+      expect(save(c).disabled).toBe(false);
+    });
   });
 });

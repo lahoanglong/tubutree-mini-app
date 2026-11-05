@@ -4,6 +4,7 @@ const apiFetch = vi.hoisted(() => vi.fn(async (..._a: unknown[]) => ({})));
 vi.mock('./client-api', () => ({ apiFetch }));
 
 import {
+  checkAdminCampaign,
   createAdminCampaign,
   deleteAdminCampaign,
   getAdminCampaign,
@@ -47,5 +48,22 @@ describe('admin-campaigns-client: đúng đường dẫn và thân gửi lên /a
   it('id có ký tự đặc biệt được mã hoá trong đường dẫn', async () => {
     await getAdminCampaign('a/b');
     expect(apiFetch.mock.calls[0]).toEqual(['/admin/campaigns/a%2Fb']);
+  });
+});
+
+describe('admin-campaigns-client: kiểm trước khi bật', () => {
+  it('POST /admin/campaigns/check với thân form', async () => {
+    const body = {
+      placement: 'HOME_TOP' as const,
+      linkType: 'CAMPAIGN_PAGE' as const,
+      audience: 'ALL' as const,
+      startAt: 's',
+      endAt: 'e',
+      sortOrder: 0,
+      productIds: ['p1'],
+      couponCodes: [],
+    };
+    await checkAdminCampaign(body);
+    expect(apiFetch.mock.calls).toEqual([['/admin/campaigns/check', { method: 'POST', body }]]);
   });
 });

@@ -3,12 +3,27 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CampaignPlacement } from '@tubutree/app-core/api/campaign';
-import { deleteAdminCampaign, getAdminCampaign, listAdminCampaigns, updateAdminCampaign, type AdminCampaignRow, type AdminCampaignStatus } from '@/lib/admin-campaigns-client';
+import {
+  deleteAdminCampaign,
+  getAdminCampaign,
+  listAdminCampaigns,
+  updateAdminCampaign,
+  type AdminCampaignRow,
+  type AdminCampaignStatus,
+} from '@/lib/admin-campaigns-client';
 import { formatVnRange } from '@/lib/admin-campaign-form';
 import type { Tone } from '@/lib/recycling';
 import { AUDIENCE_LABELS, CampaignForm, PLACEMENT_LABELS } from './campaign-form';
 import { useConfirm } from './confirm-dialog';
-import { BTN_LINK, BTN_LINK_DANGER, BTN_PRIMARY, BTN_SECONDARY, LoadError, ToneBadge, chipClass } from './ui';
+import {
+  BTN_LINK,
+  BTN_LINK_DANGER,
+  BTN_PRIMARY,
+  BTN_SECONDARY,
+  LoadError,
+  ToneBadge,
+  chipClass,
+} from './ui';
 import { actionErrorText } from '@/lib/admin-error-text';
 
 type Filter = CampaignPlacement | '';
@@ -28,7 +43,32 @@ const msg = (e: unknown, fallback: string) => (e instanceof Error ? actionErrorT
 /** Form đang mở thì Sửa và Tắt/Bật của dòng bị khoá: Tắt rồi Lưu form sẽ bật lại chiến dịch (form giữ giá trị lúc mở), Sửa dòng khác làm mất bản nháp. */
 const FORM_OPEN_HINT = 'Đóng form đang mở trước.';
 
-function CampaignRow({ row, formOpen, onEdit, onError }: { row: AdminCampaignRow; formOpen: boolean; onEdit: () => void; onError: (id: string, text: string | null) => void }) {
+/** Nhãn lỗi chặn/cảnh báo của một dòng; không có gì thì không vẽ. */
+function HealthBadges({ health }: { health: AdminCampaignRow['health'] }) {
+  if (health.blockers === 0 && health.warnings === 0) return null;
+  return (
+    <>
+      {health.blockers > 0 && (
+        <ToneBadge tone="danger" title="Còn lỗi chặn: chưa bật được cho tới khi sửa">
+          {health.blockers} lỗi chặn
+        </ToneBadge>
+      )}
+      {health.warnings > 0 && <ToneBadge tone="warning">{health.warnings} cảnh báo</ToneBadge>}
+    </>
+  );
+}
+
+function CampaignRow({
+  row,
+  formOpen,
+  onEdit,
+  onError,
+}: {
+  row: AdminCampaignRow;
+  formOpen: boolean;
+  onEdit: () => void;
+  onError: (id: string, text: string | null) => void;
+}) {
   const qc = useQueryClient();
   const { confirm, dialog } = useConfirm();
   const refresh = () => qc.invalidateQueries({ queryKey: ['admin-campaigns'] });
@@ -59,12 +99,28 @@ function CampaignRow({ row, formOpen, onEdit, onError }: { row: AdminCampaignRow
     if (ok) del.mutate();
   };
   const st = STATUS[row.status];
-  const meta = [PLACEMENT_LABELS[row.placement], AUDIENCE_LABELS[row.audience], `${row.productCount} sản phẩm`, `${row.couponCount} mã`].join(' · ');
+  // Chiến dịch đang tắt mà còn lỗi chặn thì máy chủ từ chối bật: khoá sẵn nút kèm lý do thay vì để bấm rồi báo lỗi.
+  const turnOnBlocked = !row.isActive && row.health.blockers > 0;
+  const toggleHint = formOpen
+    ? FORM_OPEN_HINT
+    : turnOnBlocked
+      ? `Còn ${row.health.blockers} lỗi chặn. Bấm Sửa để xem và khắc phục trước khi bật.`
+      : undefined;
+  const meta = [
+    PLACEMENT_LABELS[row.placement],
+    AUDIENCE_LABELS[row.audience],
+    `${row.productCount} sản phẩm`,
+    `${row.couponCount} mã`,
+  ].join(' · ');
   return (
     <div className="flex flex-wrap items-center gap-3">
       {row.image ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={row.image} alt="" className="h-10 w-24 shrink-0 rounded-control bg-stone-100 object-cover" />
+        <img
+          src={row.image}
+          alt=""
+          className="h-10 w-24 shrink-0 rounded-control bg-stone-100 object-cover"
+        />
       ) : (
         <span aria-hidden="true" className="h-10 w-24 shrink-0 rounded-control bg-stone-100" />
       )}
@@ -72,18 +128,41 @@ function CampaignRow({ row, formOpen, onEdit, onError }: { row: AdminCampaignRow
         <div className="flex flex-wrap items-center gap-2 font-medium text-stone-900">
           <span className="break-words">{row.title}</span>
           <ToneBadge tone={st.tone}>{st.label}</ToneBadge>
+          <HealthBadges health={row.health} />
         </div>
-        <div className="break-words text-xs text-stone-600">{formatVnRange(row.startAt, row.endAt)}</div>
+        <div className="break-words text-xs text-stone-600">
+          {formatVnRange(row.startAt, row.endAt)}
+        </div>
         <div className="break-words text-xs text-stone-500">{meta}</div>
       </div>
       <div className="flex shrink-0 flex-wrap justify-end gap-2">
-        <button type="button" aria-label={`Sửa chiến dịch ${row.title}`} disabled={formOpen} title={formOpen ? FORM_OPEN_HINT : undefined} onClick={onEdit} className={BTN_SECONDARY}>
+        <button
+          type="button"
+          aria-label={`Sửa chiến dịch ${row.title}`}
+          disabled={formOpen}
+          title={formOpen ? FORM_OPEN_HINT : undefined}
+          onClick={onEdit}
+          className={BTN_SECONDARY}
+        >
           Sửa
         </button>
-        <button type="button" aria-label={`${row.isActive ? 'Tắt' : 'Bật'} chiến dịch ${row.title}`} disabled={formOpen || toggle.isPending} title={formOpen ? FORM_OPEN_HINT : undefined} onClick={() => toggle.mutate()} className={BTN_SECONDARY}>
+        <button
+          type="button"
+          aria-label={`${row.isActive ? 'Tắt' : 'Bật'} chiến dịch ${row.title}`}
+          disabled={formOpen || toggle.isPending || turnOnBlocked}
+          title={toggleHint}
+          onClick={() => toggle.mutate()}
+          className={BTN_SECONDARY}
+        >
           {row.isActive ? 'Tắt' : 'Bật'}
         </button>
-        <button type="button" aria-label={`Xoá chiến dịch ${row.title}`} disabled={del.isPending} onClick={() => void askDelete()} className={BTN_LINK_DANGER}>
+        <button
+          type="button"
+          aria-label={`Xoá chiến dịch ${row.title}`}
+          disabled={del.isPending}
+          onClick={() => void askDelete()}
+          className={BTN_LINK_DANGER}
+        >
           Xoá
         </button>
       </div>
@@ -92,8 +171,20 @@ function CampaignRow({ row, formOpen, onEdit, onError }: { row: AdminCampaignRow
   );
 }
 
-function EditForm({ id, onDone, onCancel }: { id: string; onDone: () => void; onCancel: () => void }) {
-  const q = useQuery({ queryKey: ['admin-campaign', id], queryFn: () => getAdminCampaign(id), gcTime: 0 });
+function EditForm({
+  id,
+  onDone,
+  onCancel,
+}: {
+  id: string;
+  onDone: () => void;
+  onCancel: () => void;
+}) {
+  const q = useQuery({
+    queryKey: ['admin-campaign', id],
+    queryFn: () => getAdminCampaign(id),
+    gcTime: 0,
+  });
   if (q.isError) {
     return (
       <div className="space-y-2">
@@ -119,7 +210,14 @@ export function CampaignsTab() {
   const [form, setForm] = useState<{ mode: 'create' } | { mode: 'edit'; id: string } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [rowError, setRowError] = useState<{ id: string; text: string } | null>(null);
-  const q = useQuery({ queryKey: ['admin-campaigns', filter || 'all'], queryFn: () => listAdminCampaigns(filter || undefined) });
+  const [onlyIssues, setOnlyIssues] = useState(false);
+  const q = useQuery({
+    queryKey: ['admin-campaigns', filter || 'all'],
+    queryFn: () => listAdminCampaigns(filter || undefined),
+  });
+  const rows = onlyIssues
+    ? q.data?.filter((r) => r.health.blockers + r.health.warnings > 0)
+    : q.data;
   const setError = (id: string, text: string | null) => setRowError(text ? { id, text } : null);
   const done = () => {
     setForm(null);
@@ -129,12 +227,30 @@ export function CampaignsTab() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div role="group" aria-label="Lọc theo vị trí" className="flex flex-wrap gap-2">
-          {FILTERS.map((f) => (
-            <button key={f.k || 'all'} type="button" aria-pressed={filter === f.k} onClick={() => setFilter(f.k)} className={chipClass(filter === f.k)}>
-              {f.label}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <div role="group" aria-label="Lọc theo vị trí" className="flex flex-wrap gap-2">
+            {FILTERS.map((f) => (
+              <button
+                key={f.k || 'all'}
+                type="button"
+                aria-pressed={filter === f.k}
+                onClick={() => setFilter(f.k)}
+                className={chipClass(filter === f.k)}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+          <div role="group" aria-label="Lọc nhanh" className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              aria-pressed={onlyIssues}
+              onClick={() => setOnlyIssues((v) => !v)}
+              className={chipClass(onlyIssues)}
+            >
+              Có vấn đề
             </button>
-          ))}
+          </div>
         </div>
         {!form && (
           <button
@@ -156,7 +272,9 @@ export function CampaignsTab() {
         </p>
       )}
       {form?.mode === 'create' && <CampaignForm onDone={done} onCancel={() => setForm(null)} />}
-      {form?.mode === 'edit' && <EditForm id={form.id} onDone={done} onCancel={() => setForm(null)} />}
+      {form?.mode === 'edit' && (
+        <EditForm id={form.id} onDone={done} onCancel={() => setForm(null)} />
+      )}
 
       <div className="space-y-3">
         {q.isError && (
@@ -164,7 +282,7 @@ export function CampaignsTab() {
             Không tải được danh sách chiến dịch.
           </LoadError>
         )}
-        {q.data?.map((row) => (
+        {rows?.map((row) => (
           <div key={row.id} className="rounded-card border border-stone-200 bg-stone-0 p-3">
             <CampaignRow
               row={row}
@@ -182,7 +300,16 @@ export function CampaignsTab() {
             )}
           </div>
         ))}
-        {q.data?.length === 0 && <p className="rounded-card border border-stone-200 bg-stone-0 p-6 text-center text-sm text-stone-500">Chưa có chiến dịch nào. Bấm “Tạo chiến dịch” để thêm banner đầu tiên.</p>}
+        {onlyIssues && q.data && q.data.length > 0 && rows?.length === 0 && (
+          <p className="rounded-card border border-stone-200 bg-stone-0 p-6 text-center text-sm text-stone-500">
+            Không có chiến dịch nào có vấn đề.
+          </p>
+        )}
+        {q.data?.length === 0 && (
+          <p className="rounded-card border border-stone-200 bg-stone-0 p-6 text-center text-sm text-stone-500">
+            Chưa có chiến dịch nào. Bấm “Tạo chiến dịch” để thêm banner đầu tiên.
+          </p>
+        )}
       </div>
     </div>
   );
