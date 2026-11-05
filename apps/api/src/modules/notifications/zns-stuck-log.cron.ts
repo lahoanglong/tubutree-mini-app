@@ -112,12 +112,16 @@ export class ZnsStuckLogCron {
       where: { channel: 'ZNS', status: 'RETRYING', sentAt: { lt: cutoff } },
       orderBy: [{ sentAt: 'asc' }, { id: 'asc' }],
       take: ZnsStuckLogCron.BATCH,
-      select: { id: true },
+      select: { id: true, error: true },
     });
     let expired = 0;
-    for (const { id } of rows) {
+    const reviewExpired: string[] = [];
+    for (const { id, error } of rows) {
       try {
-        if (await this.notifications.closeStuckZnsLog(id, ZnsStuckLogCron.EXPIRE_REASON, ['RETRYING'], { olderThan: cutoff, keepError: true })) expired++;
+        if (await this.notifications.closeStuckZnsLog(id, ZnsStuckLogCron.EXPIRE_REASON, ['RETRYING'], { olderThan: cutoff, keepError: true })) {
+          expired++;
+          if (error?.startsWith(ZNS_REVIEW_PREFIX)) reviewExpired.push(id);
+        }
       } catch (err) {
         this.logger.error(`Hết hạn log ZNS RETRYING: ghi log ${id} lỗi: ${err instanceof Error ? err.message : err}`);
         captureServerError(err);
@@ -125,6 +129,13 @@ export class ZnsStuckLogCron {
     }
     if (expired > 0) {
       this.logger.warn(`Hết hạn log ZNS: đã đóng FAILED ${expired}/${rows.length} log còn RETRYING quá 24 giờ (không gửi lại tin; đối soát tay theo runbook 1.20 nếu cần).`);
+    }
+    // Đóng xong, log rời db.zns_review_pending mà không vào ZNS_FAILED_24H_ALERT (chỉ số đó đếm theo sentAt trong 24 giờ): không báo lỗi ở đây
+    // thì một tin khách có thể chưa nhận biến mất khỏi mọi bảng theo dõi.
+    if (reviewExpired.length > 0) {
+      const msg = `Hết hạn ${reviewExpired.length} log ZNS đang chờ đối soát tay (khách có thể chưa nhận tin), đối soát theo runbook 1.20: ${reviewExpired.join(', ')}`;
+      this.logger.error(msg);
+      captureServerError(new Error(msg));
     }
     return { scanned: rows.length, expired };
   }

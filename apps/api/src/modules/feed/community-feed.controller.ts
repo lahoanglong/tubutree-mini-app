@@ -2,8 +2,6 @@ import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Query,
 import type { Response } from 'express';
 import { PRODUCT_SLUG_MAX, type JwtPayload } from '@tubutree/shared-types';
 import { Throttle } from '@nestjs/throttler';
-import { Transform } from 'class-transformer';
-import { trimInvisible } from '../../common/text-trim';
 import { ArrayMaxSize, IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Max, Min, MaxLength, MinLength } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
@@ -54,7 +52,6 @@ class PinDto {
   @IsOptional() @IsBoolean() pinned?: boolean;
 }
 export class CreateEventDto {
-  @Transform(({ value }) => (typeof value === 'string' ? trimInvisible(value) : value))
   @Trim() @IsString() @IsNotEmpty({ message: 'Tiêu đề sự kiện không được để trống.' }) @MaxLength(160) title!: string;
   @OptionalNotNull() @Trim() @IsString() @MaxLength(2000) description?: string;
   @OptionalNotNull() @IsString() coverUrl?: string;

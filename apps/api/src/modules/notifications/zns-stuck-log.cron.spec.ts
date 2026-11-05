@@ -330,7 +330,7 @@ describe('ZnsStuckLogCron.expireStaleRetryingZnsLogs: log RETRYING quá 24 giờ
   const NOW = new Date('2026-11-06T10:00:00.000Z');
   const CUTOFF = new Date('2026-11-05T10:00:00.000Z');
 
-  function setupExpiry(rows: { id: string }[], opts: { acquired?: boolean; closeResult?: boolean | boolean[] } = {}) {
+  function setupExpiry(rows: { id: string; error?: string | null }[], opts: { acquired?: boolean; closeResult?: boolean | boolean[] } = {}) {
     (runExclusive as jest.Mock).mockImplementation(holdsLease(opts.acquired ?? true));
     const findMany = jest.fn().mockResolvedValue(rows);
     const closeStuckZnsLog = jest.fn();
@@ -355,8 +355,33 @@ describe('ZnsStuckLogCron.expireStaleRetryingZnsLogs: log RETRYING quá 24 giờ
       where: { channel: 'ZNS', status: 'RETRYING', sentAt: { lt: CUTOFF } },
       orderBy: [{ sentAt: 'asc' }, { id: 'asc' }],
       take: 200,
-      select: { id: true },
+      select: { id: true, error: true },
     });
+  });
+
+  it('log đã gắn tiền tố đối soát mà hết hạn: báo lỗi lên Sentry kèm id (log rời db.zns_review_pending, không vào ZNS_FAILED_24H_ALERT)', async () => {
+    const { cron } = setupExpiry(
+      [
+        { id: 'r1', error: 'Chờ đối soát tay: job completed nhưng không báo SENT' },
+        { id: 'plain', error: 'Zalo timeout' },
+        { id: 'r2', error: 'Chờ đối soát tay: job mất khỏi hàng đợi' },
+      ],
+      { closeResult: [true, true, false] },
+    );
+    jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    await expect(cron.expireStaleRetryingZnsLogs()).resolves.toEqual({ scanned: 3, expired: 2 });
+    expect(captureServerError).toHaveBeenCalledTimes(1);
+    const msg = (captureServerError as jest.Mock).mock.calls[0]![0].message as string;
+    expect(msg).toMatch(/Hết hạn 1 log ZNS đang chờ đối soát tay/);
+    expect(msg).toContain('r1');
+    expect(msg).not.toContain('r2');
+    expect(msg).not.toContain('plain');
+  });
+
+  it('chỉ log không có tiền tố đối soát hết hạn: không báo Sentry', async () => {
+    const { cron } = setupExpiry([{ id: 'a', error: null }, { id: 'b', error: 'Zalo timeout' }]);
+    await expect(cron.expireStaleRetryingZnsLogs()).resolves.toEqual({ scanned: 2, expired: 2 });
+    expect(captureServerError).not.toHaveBeenCalled();
   });
 
   it('đóng từng log: CAS chỉ từ RETRYING, cùng mốc cắt, giữ lỗi cũ; lý do nêu rõ hết thời gian chờ và không gửi lại', async () => {

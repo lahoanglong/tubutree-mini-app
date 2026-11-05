@@ -147,6 +147,11 @@ describe('UsersService.updateMe: tên có < > (BAOMAT-09)', () => {
     await svc.updateMe('u1', { fullName: 'Hoa <3' });
     expect(update).toHaveBeenCalled();
   });
+  it('tên đang lưu có ký tự vô hình hai đầu (U+200B từ Zalo), DTO đã cắt bằng Trim → vẫn coi là tên cũ, ghi được', async () => {
+    const { svc, update } = svcWithName('​Hoa <3﻿');
+    await svc.updateMe('u1', { fullName: 'Hoa <3', dob: '1995-03-20' });
+    expect(update).toHaveBeenCalled();
+  });
   it('tên đang lưu "Hoa <3", gửi "Hoa <4" → 400', async () => {
     const { svc, update } = svcWithName('Hoa <3');
     await expect(svc.updateMe('u1', { fullName: 'Hoa <4' })).rejects.toBeInstanceOf(BadRequestException);
