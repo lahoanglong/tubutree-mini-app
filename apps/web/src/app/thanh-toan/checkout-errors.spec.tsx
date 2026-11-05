@@ -60,12 +60,32 @@ describe('/thanh-toan — lỗi đặt đơn như Mini App', () => {
     await flush(8);
     const alert = r.container.querySelector('[data-testid="checkout-price-changed"]')!;
     expect(alert.textContent).toContain('Giá ưu đãi đã thay đổi');
-    expect(alert.textContent).toContain('Vài sản phẩm Giờ vàng vừa hết suất hoặc hết giờ. Bạn xem lại giỏ trước khi đặt nhé.');
+    expect(alert.textContent).toContain('Vài sản phẩm Giờ vàng vừa hết suất hoặc hết giờ nên giá đã đổi. Bạn cập nhật giá mới rồi đặt tiếp nhé.');
     expect(alert.querySelector('a')!.getAttribute('href')).toBe('/gio-hang');
     expect(alert.querySelector('a')!.textContent).toBe('Xem lại giỏ hàng');
+    expect(byText(alert, 'button', 'Cập nhật giá mới')).toBeTruthy();
     expect(r.container.textContent).not.toContain('PRICE_CHANGED');
     expect(m.cart.mock.calls.length).toBeGreaterThan(carts);
     expect(m.quote.mock.calls.length).toBeGreaterThan(quotes);
+  });
+
+  it('"Cập nhật giá mới": bỏ banner lỗi, báo tổng mới ngay tại màn, đặt tiếp gửi đúng tổng mới', async () => {
+    m.placeOrder.mockRejectedValueOnce(new ApiError('PRICE_CHANGED', 400)).mockResolvedValueOnce({ id: 'o1', code: 'TT001', status: 'CONFIRMED', subtotal: 95000, discount: 0, shippingFee: 30000, total: 125000, paymentMethod: 'COD', createdAt: '2026-11-05T00:00:00Z', items: [] });
+    const r = await mount();
+    // Báo giá tải lại ngay sau lỗi giá đổi, nên giá mới về từ lần tải đó.
+    m.quote.mockResolvedValue({ ...QUOTE, total: 125000 });
+    click(placeButton(r));
+    await flush(8);
+    click(byText(r.container, 'button', 'Cập nhật giá mới')!);
+    await flush(8);
+    expect(r.container.querySelector('[data-testid="checkout-price-changed"]')).toBeNull();
+    const note = r.container.querySelector('[data-testid="checkout-price-updated"]')!;
+    expect(note.getAttribute('role')).toBe('status');
+    expect(note.textContent).toContain('Đã cập nhật giá. Tổng mới 125.000đ.');
+    click(byText(r.container, 'button', 'Đặt hàng · 125.000đ')!);
+    await flush(8);
+    expect(m.placeOrder).toHaveBeenCalledTimes(2);
+    expect((m.placeOrder.mock.calls[1]![0] as { expectedTotal: number }).expectedTotal).toBe(125000);
   });
 
   it('CART_CHANGED (giỏ vừa đổi ở tab khác): giữ câu của máy chủ và tải lại giỏ, báo giá, đơn', async () => {

@@ -33,6 +33,7 @@ import { pointsOfferText } from '@tubutree/app-core/points-offer';
 import { normalizeTaxCode } from '@tubutree/app-core/commerce/tax-code';
 import { checkoutPlaceHint, checkoutTotalText, collapseCheckoutLines } from '@tubutree/app-core/commerce/checkout-display';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { priceChangedActions } from '@tubutree/app-core/commerce/checkout-issues';
 import { checkoutEtaLabel, placedOrderKinds } from '@tubutree/app-core/shipping-eta';
 import { checkoutPointsOffer, convertedPointsLine, formatCount, idlePointsLabel, lockedPointsLabel, pointsCapState, zeroTotalNote, type CheckoutPointsOffer } from '@/lib/checkout-points';
 import {
@@ -260,7 +261,10 @@ export default function CheckoutPage() {
   const overStock = outOfStockLine(checkoutItems);
 
   const attempt = useRef<{ body: PlaceBody; key: string; rev: number } | null>(null);
+  // Khách đã bấm "Cập nhật giá mới" sau lỗi giá đổi: báo tổng mới cho tới lần đặt kế tiếp.
+  const [priceAccepted, setPriceAccepted] = useState(false);
   const place = useMutation({
+    onMutate: () => setPriceAccepted(false),
     mutationFn: () => {
       const body: PlaceBody = {
         addressId: addressId!,
@@ -522,16 +526,36 @@ export default function CheckoutPage() {
         <div
           role="alert"
           data-testid="checkout-price-changed"
-          className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-card border border-warning-fg bg-warning-bg px-4 py-3 text-sm text-warning-fg"
+          className="mb-4 rounded-card border border-warning-fg bg-warning-bg px-4 py-3 text-sm text-warning-fg"
         >
-          <div className="min-w-0 flex-1">
-            <p className="font-semibold">Giá ưu đãi đã thay đổi</p>
-            <p className="mt-0.5">{fillCopy('flash.priceChangedBody')}</p>
+          <p className="font-semibold">Giá ưu đãi đã thay đổi</p>
+          <p className="mt-0.5">{fillCopy('checkout.priceChangedBody')}</p>
+          <div className="mt-3 flex flex-col gap-2 md:flex-row">
+            <button
+              type="button"
+              className={ui.btnPrimary}
+              disabled={quoteStale}
+              onClick={() => {
+                place.reset();
+                setPriceAccepted(true);
+              }}
+            >
+              {priceChangedActions().accept}
+            </button>
+            <Link href="/gio-hang" className={ui.btnSecondary}>
+              {priceChangedActions().viewCart}
+            </Link>
           </div>
-          <Link href="/gio-hang" className={ui.btnSecondary}>
-            Xem lại giỏ hàng
-          </Link>
         </div>
+      )}
+      {priceAccepted && quote && !quoteStale && !place.isError && (
+        <p
+          role="status"
+          data-testid="checkout-price-updated"
+          className="mb-4 rounded-card bg-success-bg px-4 py-3 text-sm font-semibold text-success-fg"
+        >
+          {fillCopy('checkout.priceUpdated', { price: formatVnd(quote.total) })}
+        </p>
       )}
       {cartIssue && (
         <div

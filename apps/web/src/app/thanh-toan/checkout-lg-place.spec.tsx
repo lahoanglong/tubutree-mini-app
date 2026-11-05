@@ -173,7 +173,7 @@ describe('/thanh-toan lg: lỗi đặt đơn thấy được (K2 d)', () => {
     const c = await mount();
     click(lgButton(c));
     await flush(6);
-    expect(errorNote(c)!.textContent).toBe('Giá ưu đãi đã thay đổi. Bạn xem lại giỏ hàng trước khi đặt nhé.');
+    expect(errorNote(c)!.textContent).toBe('Giá ưu đãi đã thay đổi. Bạn cập nhật giá mới rồi đặt tiếp nhé.');
     expect(errorNote(c)!.getAttribute('aria-hidden')).toBe('true');
     expect(part(c).querySelector('[role="alert"]')).toBeNull();
     expect(c.querySelectorAll('[data-testid="checkout-price-changed"]')).toHaveLength(1);
