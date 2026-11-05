@@ -577,6 +577,31 @@ const url = process.env.TEST_REDIS_URL;
     expect(await prisma.order.findUniqueOrThrow({ where: { id: x.id } })).toMatchObject({ pancakePushStatus: 'SYNCED', pancakePushAttempts: 3 });
   });
 
+  it('"Đẩy lại" đọc xong quyết định thì một lượt gửi lệnh tạo bị hết giờ (dấu gửi vừa đóng): 409 "vừa được gửi", không xếp job, createOrder đúng MỘT lần', async () => {
+    const x = await order();
+    await prisma.order.update({ where: { id: x.id }, data: { pancakePushStatus: 'FAILED', pancakePushAttempts: 2, createdAt: new Date(Date.now() - 20 * 60_000) } });
+    respond((code) => {
+      if (code !== x.code) return { success: true, data: { id: `pk-${code}` } };
+      throw new PancakeApiError('timeout of 15000ms exceeded', true);
+    });
+    const racing = new PancakeOrderService(
+      prismaStaleRead('findFirst', async () => {
+        await expect(service.pushOrder(x.id)).rejects.toMatchObject({ transient: true });
+      }),
+      client as unknown as PancakeClient,
+      queue,
+      undefined,
+      alerts as unknown as GomdonAlertService,
+    );
+    const enqueued = jest.spyOn(racing, 'enqueuePush');
+    const err = await racing.retryPushByAdmin('admin-it', x.code).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ConflictException);
+    expect((err as Error).message).toMatch(/^Đơn .+ vừa được gửi sang Pancake lúc \d\d:\d\d, Pancake có thể đang tạo đơn\. Thử lại sau \d\d:\d\d\.$/);
+    expect(enqueued).not.toHaveBeenCalled();
+    expect(calls()).toBe(1);
+    expect(await prisma.order.findUniqueOrThrow({ where: { id: x.id } })).toMatchObject({ pancakePushStatus: 'PENDING', pancakePushAttempts: 3 });
+  });
+
   it('B đọc đơn lúc CHƯA thanh toán, khách trả tiền và job A claim PUSHING, B ghi trạng thái chờ, job C vào: createOrder đúng MỘT lần', async () => {
     const x = await order();
     await prisma.order.update({ where: { id: x.id }, data: { paymentMethod: 'ZALOPAY', paymentStatus: 'UNPAID', pancakePushStatus: null } });
@@ -677,6 +702,8 @@ const url = process.env.TEST_REDIS_URL;
     client.searchOrders.mockImplementation(async (code: string) =>
       code === x.code && storedAt > 0 && Date.now() >= storedAt + visibleAfter ? [{ id: pk, status: 0, custom_id: x.code }] : [],
     );
+    // Cron kéo cả đơn tồn của các ca trên vào hàng đợi: chỉ đếm lệnh tạo của đơn X.
+    const callsOfX = () => client.createOrder.mock.calls.filter(([b]) => (b as { custom_id: string }).custom_id === x.code).length;
     const searchesOfX = () => client.searchOrders.mock.calls.filter(([c]) => c === x.code).length;
     try {
       client.searchOrders.mockClear();
@@ -688,7 +715,7 @@ const url = process.env.TEST_REDIS_URL;
       await expect(service.pushOrder(x.id)).rejects.toBeInstanceOf(PancakePushSettlingError);
       await sleep(visibleAfter + 100);
       await expect(service.pushOrder(x.id)).rejects.toBeInstanceOf(PancakePushSettlingError);
-      expect(calls()).toBe(1);
+      expect(callsOfX()).toBe(1);
       expect(searchesOfX()).toBe(0);
       expect(await prisma.order.findUniqueOrThrow({ where: { id: x.id } })).toMatchObject({
         pancakePushStatus: 'PENDING',
@@ -700,7 +727,7 @@ const url = process.env.TEST_REDIS_URL;
       await sleep(Math.max(0, stamp!.getTime() + settle - Date.now()) + 50);
       await reconcile.reconcile();
       await until(async () => (await prisma.order.findUniqueOrThrow({ where: { id: x.id } })).pancakeOrderId === pk);
-      expect(calls()).toBe(1);
+      expect(callsOfX()).toBe(1);
       expect(searchesOfX()).toBe(1);
       expect(await prisma.order.findUniqueOrThrow({ where: { id: x.id } })).toMatchObject({ pancakePushStatus: 'SYNCED', pancakeOrderId: pk, pancakePushClaimedAt: null });
     } finally {

@@ -1,6 +1,6 @@
 import { isPancakeForbiddenError, PANCAKE_FORBIDDEN_ERROR_PREFIX } from '@tubutree/shared-types';
 import { BadRequestException, ConflictException, Logger } from '@nestjs/common';
-import { PANCAKE_CANCEL, PANCAKE_CANCEL_REFUSED_PREFIX, PANCAKE_PUSH, PancakeOrderService, pushRetryGateDecision } from './pancake-order.service';
+import { PANCAKE_CANCEL, PANCAKE_CANCEL_REFUSED_PREFIX, PANCAKE_PUSH, PancakeOrderService, pushInFlightMessage, pushRetryGateDecision } from './pancake-order.service';
 import type { PrismaService } from '../../../prisma/prisma.service';
 import type { PancakeClient } from './pancake.client';
 import type { PancakeCreateOrderBody } from './pancake.types';
@@ -780,7 +780,7 @@ describe('PancakeOrderService.retryPushByAdmin: ghi nguyên tử, không đè l�
     changeAfterRead(t, (row) => Object.assign(row, { pancakePushStatus: PANCAKE_PUSH.PUSHING, pancakePushAttempts: 6, pancakeLastAttemptAt: claimedAt }));
     const err = await t.svc.retryPushByAdmin('admin1', 'TUBU1').catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ConflictException);
-    expect((err as Error).message).toBe('Đơn TUBU1 đang được đẩy sang Pancake, tải lại sau ít phút.');
+    expect((err as Error).message).toBe(pushInFlightMessage('TUBU1'));
     expect(t.row()).toMatchObject({ pancakePushStatus: PANCAKE_PUSH.PUSHING, pancakePushAttempts: 6, pancakeLastAttemptAt: claimedAt });
     expect(t.queue.add).not.toHaveBeenCalled();
   });
@@ -800,6 +800,61 @@ describe('PancakeOrderService.retryPushByAdmin: ghi nguyên tử, không đè l�
     await t.svc.retryPushByAdmin('admin1', 'TUBU1');
     expect(t.row()).toMatchObject({ pancakePushStatus: PANCAKE_PUSH.PENDING, pancakePushAttempts: 0 });
     expect(t.queue.add).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('PancakeOrderService.retryPushByAdmin: lệnh tạo vừa gửi trong cửa sổ chờ (D3)', () => {
+  const sentAt = new Date('2026-11-05T03:00:00Z'); // 10:00 giờ Việt Nam
+  const at = (iso: string) => jest.useFakeTimers({ now: new Date(iso) });
+  afterEach(() => jest.useRealTimers());
+
+  it('dấu gửi 2 phút trước → 409 nêu giờ gửi và giờ thử lại (giờ Việt Nam), không đặt lại lượt, không xếp job', async () => {
+    at('2026-11-05T03:02:00Z');
+    const t = setup({ pancakePushStatus: PANCAKE_PUSH.FAILED, pancakePushAttempts: 4, pancakePushClaimedAt: sentAt });
+    const err = await t.svc.retryPushByAdmin('admin1', 'TUBU1').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ConflictException);
+    expect((err as Error).message).toBe('Đơn TUBU1 vừa được gửi sang Pancake lúc 10:00, Pancake có thể đang tạo đơn. Thử lại sau 10:05.');
+    expect(t.row()).toMatchObject({ pancakePushStatus: PANCAKE_PUSH.FAILED, pancakePushAttempts: 4 });
+    expect(t.queue.add).not.toHaveBeenCalled();
+  });
+
+  it('dấu gửi đúng cuối cửa sổ vẫn chờ, qua cửa sổ thì đẩy lại được', async () => {
+    const t = setup({ pancakePushStatus: PANCAKE_PUSH.FAILED, pancakePushClaimedAt: sentAt });
+    at('2026-11-05T03:05:00Z');
+    await expect(t.svc.retryPushByAdmin('admin1', 'TUBU1')).rejects.toBeInstanceOf(ConflictException);
+    at('2026-11-05T03:05:01Z');
+    await t.svc.retryPushByAdmin('admin1', 'TUBU1');
+    expect(t.row().pancakePushStatus).toBe(PANCAKE_PUSH.PENDING);
+    expect(t.queue.add).toHaveBeenCalledTimes(1);
+  });
+
+  it('đơn STALE có dấu gửi trong cửa sổ cũng phải chờ', async () => {
+    at('2026-11-05T03:01:00Z');
+    const t = setup({ pancakePushStatus: PANCAKE_PUSH.STALE, pancakePushClaimedAt: sentAt });
+    await expect(t.svc.retryPushByAdmin('admin1', 'TUBU1')).rejects.toBeInstanceOf(ConflictException);
+    expect(t.row().pancakePushStatus).toBe(PANCAKE_PUSH.STALE);
+  });
+
+  it('dấu gửi xuất hiện SAU lúc đọc (lượt khác vừa gửi lệnh tạo): câu ghi có điều kiện hụt → 409 nêu giờ gửi, không đặt lại lượt', async () => {
+    at('2026-11-05T03:01:00Z');
+    const t = setup({ pancakePushStatus: PANCAKE_PUSH.FAILED, pancakePushAttempts: 4 });
+    t.prisma.order.findFirst.mockImplementationOnce(async () => {
+      const snapshot = { ...t.row() };
+      t.row().pancakePushClaimedAt = sentAt;
+      return snapshot;
+    });
+    const err = await t.svc.retryPushByAdmin('admin1', 'TUBU1').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ConflictException);
+    expect((err as Error).message).toContain('vừa được gửi sang Pancake lúc 10:00');
+    expect(t.row()).toMatchObject({ pancakePushStatus: PANCAKE_PUSH.FAILED, pancakePushAttempts: 4 });
+    expect(t.queue.add).not.toHaveBeenCalled();
+  });
+
+  it('lời "đang được đẩy" của 400 (quyết định) và 409 (câu ghi hụt) là MỘT chuỗi dùng chung', async () => {
+    const pushing = setup({ pancakePushStatus: PANCAKE_PUSH.PUSHING, pancakeLastAttemptAt: new Date() });
+    const refused = await pushing.svc.retryPushByAdmin('admin1', 'TUBU1').catch((e: unknown) => e);
+    expect(refused).toBeInstanceOf(BadRequestException);
+    expect((refused as Error).message).toBe(pushInFlightMessage('TUBU1'));
   });
 });
 

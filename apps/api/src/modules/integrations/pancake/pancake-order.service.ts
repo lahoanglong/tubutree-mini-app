@@ -633,7 +633,7 @@ export class PancakeOrderService {
       return { kind: 'WAIT', waitingFor: 'cấu hình Pancake (PANCAKE_API_KEY/SHOP_ID)', refusal: 'Pancake chưa được cấu hình (PANCAKE_API_KEY/SHOP_ID).' };
     }
     if (this.pushInFlight(order)) {
-      return { kind: 'WAIT', waitingFor: 'lượt đẩy đang chạy xong', refusal: `Đơn ${order.code} đang được đẩy sang Pancake — chờ ít phút rồi tải lại.` };
+      return { kind: 'WAIT', waitingFor: 'lượt đẩy đang chạy xong', refusal: pushInFlightMessage(order.code) };
     }
     return byOrder;
   }
@@ -650,16 +650,19 @@ export class PancakeOrderService {
     if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
     const decision = this.retryDecision(order);
     if (decision.kind !== 'NOW') throw new BadRequestException(decision.refusal);
-    // Quyết định ở trên đọc từ bản chụp: lượt đẩy khác có thể claim PUSHING ngay sau đó. Đè PENDING lên claim ấy mở khoá cho lượt thứ hai
-    // (job thanh toán, cron) tạo thêm một đơn kho. Nên ghi có điều kiện "chưa đã có trên Pancake, không lượt nào giữ quyền đẩy".
+    // Lệnh tạo vừa gửi trong cửa sổ chờ (chưa rõ kết quả): đẩy lại lúc này chỉ để job gặp lỗi chờ. Nói rõ giờ thử lại thay vì xếp job vô ích.
+    if (this.sendSettling(order.pancakePushClaimedAt)) throw new ConflictException(sendSettlingMessage(order.code, order.pancakePushClaimedAt!));
+    // Quyết định ở trên đọc từ bản chụp: lượt đẩy khác có thể claim PUSHING hoặc đóng dấu gửi ngay sau đó. Đè PENDING lên claim ấy mở khoá cho lượt
+    // thứ hai (job thanh toán, cron) tạo thêm một đơn kho. Nên ghi có điều kiện "chưa có trên Pancake, không lượt nào giữ quyền đẩy, cửa sổ chờ đã mở".
     const reset = await this.prisma.order.updateMany({
-      where: { id: order.id, pancakeOrderId: null, AND: [pushLeaseFreeWhere()] },
+      where: { id: order.id, pancakeOrderId: null, AND: [pushLeaseFreeWhere(), sendWindowOpenWhere()] },
       data: { pancakePushStatus: PANCAKE_PUSH.PENDING, pancakePushAttempts: 0 },
     });
     if (reset.count === 0) {
-      const current = await this.prisma.order.findUnique({ where: { id: order.id }, select: { pancakeOrderId: true } });
+      const current = await this.prisma.order.findUnique({ where: { id: order.id }, select: { pancakeOrderId: true, pancakePushClaimedAt: true } });
       if (current?.pancakeOrderId) throw new ConflictException(`Đơn ${order.code} vừa lên Pancake (#${current.pancakeOrderId}), tải lại danh sách.`);
-      throw new ConflictException(`Đơn ${order.code} đang được đẩy sang Pancake, tải lại sau ít phút.`);
+      if (this.sendSettling(current?.pancakePushClaimedAt)) throw new ConflictException(sendSettlingMessage(order.code, current!.pancakePushClaimedAt!));
+      throw new ConflictException(pushInFlightMessage(order.code));
     }
     // enqueuePush gỡ job push đã lỗi cùng jobId trước khi add: BullMQ bỏ qua `add` khi jobId còn nằm ở tập failed.
     await this.enqueuePush(order.id);
@@ -980,6 +983,11 @@ export class PancakeOrderService {
     });
     if (r.count === 0) return;
     this.logger.warn(`Không tự đẩy đơn ${order.code} sang Pancake: ${why}.`);
+  }
+
+  /** Còn trong cửa sổ chờ kể từ lúc gửi lệnh tạo đơn gần nhất (cùng ranh giới với `sendWindowOpenWhere`: dấu đúng cuối cửa sổ vẫn chờ). */
+  private sendSettling(stamp: Date | null | undefined): boolean {
+    return stamp != null && Date.now() - stamp.getTime() <= PancakeOrderService.SEND_SETTLE_MS;
   }
 
   private pushInFlight(order: Pick<Order, 'pancakePushStatus' | 'pancakeLastAttemptAt'>): boolean {
