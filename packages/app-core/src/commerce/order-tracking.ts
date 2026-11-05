@@ -207,7 +207,8 @@ export function orderHeadline(o: TrackOrder, ctx: TrackCtx = {}): OrderHeadline 
     case 'CARRIER_BOOKED':
       milestone = eta;
       // Hãng mới gắn mã vận đơn, hàng chưa tới tay bưu tá: không nói "đã giao cho đơn vị vận chuyển" (trái với "hàng sắp được lấy").
-      next = fillCopy('order.next.carrierBooked');
+      // API đã trả `canCancel` thì theo API: báo huỷ được thì không ghi "không huỷ được".
+      next = canCancelOrder(o, ctx.userId) ? fillCopy('order.next.cancelable') : fillCopy('order.next.carrierBooked');
       break;
     case 'SHIPPING':
       milestone = eta;
@@ -339,8 +340,6 @@ export function orderActionPlan(o: TrackOrder, ctx: TrackCtx = {}): OrderActionP
       break;
     case 'PAY_MANUAL':
     case 'CARRIER_BOOKED':
-      primary = 'contact';
-      break;
     case 'PAY_OVERDUE':
     case 'SHIPPING':
       primary = 'contact';

@@ -99,6 +99,22 @@ const ROWS: Row[] = [
     more: [],
   },
   {
+    name: 'hãng đã nhận hàng nhưng API báo huỷ được (mã Gomdon thu rác chưa lấy, mã vận đơn hãng khác mã Gomdon)',
+    order: order({ status: 'PACKED', shippingCode: 'GHN123', gomdonOrderId: 'GOM1', hasRecyclingPickup: true, gomdonStatus: '1', canCancel: true }),
+    stage: 'CARRIER_BOOKED',
+    sentence: 'Tubu đã đặt đơn vị vận chuyển, hàng sắp được lấy.',
+    primary: 'contact',
+    more: ['cancel'],
+  },
+  {
+    name: 'chờ chuyển khoản, Tubu xử lý tay nhưng API báo huỷ được',
+    order: order({ status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentDeadline: iso(2 * HOUR), manualHandling: true, canCancel: true }),
+    stage: 'PAY_MANUAL',
+    sentence: 'Tubu đang xử lý đơn này, liên hệ CSKH nếu cần hỗ trợ.',
+    primary: 'contact',
+    more: ['cancel'],
+  },
+  {
     name: 'đang giao',
     order: order({ status: 'SHIPPING', shippingCode: 'GHN123' }),
     stage: 'SHIPPING',
@@ -214,6 +230,16 @@ describe('orderActionPlan và orderHeadline theo trạng thái', () => {
     expect(head.milestone).toBe('Dự kiến giao 06/11 – 08/11');
     expect(head.next).toBe('Đơn đã có mã vận đơn của hãng nên không huỷ được.');
     expect(orderHeadline(order({ status: 'DELIVERED', deliveredAt: iso(-HOUR) }), { now: NOW, etaLabel: '06/11 – 08/11' }).milestone).not.toContain('Dự kiến giao');
+  });
+
+  it('hãng đã có mã vận đơn nhưng API báo huỷ được: theo API, không ghi "không huỷ được" mà nói huỷ được', () => {
+    const o = order({ status: 'PACKED', shippingCode: 'GHN123', gomdonOrderId: 'GOM1', hasRecyclingPickup: true, gomdonStatus: '1', canCancel: true });
+    expect(canCancelOrder(o)).toBe(true);
+    const head = orderHeadline(o, { now: NOW });
+    expect(head.stage).toBe('CARRIER_BOOKED');
+    expect(head.next).toBe('Bạn huỷ được đơn tới khi hàng giao cho đơn vị vận chuyển.');
+    expect(head.next).not.toContain('không huỷ được');
+    expect(orderActionPlan(o, { now: NOW }).more).toContain('cancel');
   });
 
   it('đang giao: bước kế tiếp nói không huỷ được và hạn đổi/trả sau khi nhận', () => {
