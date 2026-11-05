@@ -100,6 +100,16 @@ function makePrisma(over: Record<string, unknown> = {}) {
   return merged as unknown as PrismaService;
 }
 
+/** Truy vấn sản phẩm gắn bài chạy bằng `SELECT ... FOR KEY SHARE` (raw): mock trả các id này cho đúng câu đó, câu raw khác giữ mặc định. */
+function withLockedProducts(prisma: PrismaService, ids: string[]) {
+  const raw = prisma.$queryRaw as jest.Mock;
+  const fallback = raw.getMockImplementation();
+  raw.mockImplementation(async (q: { sql?: string; strings?: string[] }) => {
+    const text = String(q?.sql ?? q?.strings?.join('?') ?? '');
+    return text.includes('"products"') ? ids.map((id) => ({ id })) : fallback ? fallback(q) : [{ status: 'PUBLISHED' }];
+  });
+}
+
 /**
  * `feedPost.updateMany` theo ngữ nghĩa thật: chỉ khớp (count 1) khi trạng thái HIỆN TẠI thoả `where.status`, và đổi trạng thái
  * khi khớp. Dùng cho test cần phân biệt bài đã chuyển từ PENDING hay từ PUBLISHED.
@@ -1368,7 +1378,7 @@ describe('CommunityFeedService.createPost (mở rộng)', () => {
 
   it('tạo SHOWCASE PUBLISHED kèm ảnh + gắn SP theo slug → thưởng post', async () => {
     const prisma = makePrisma();
-    (prisma.product.findMany as jest.Mock).mockResolvedValue([{ id: 'prod1' }, { id: 'prod2' }]);
+    withLockedProducts(prisma, ['prod1', 'prod2']);
     (prisma.feedPost.create as jest.Mock).mockResolvedValue({ id: 'newpost' });
     const reward = { rewardPost: jest.fn(), rewardAnswer: jest.fn(), rewardBestAnswer: jest.fn() };
     const r = await makeSvc(prisma, reward).createPost('u1', 'STAFF', {
@@ -3707,7 +3717,7 @@ describe('CommunityFeedService: gửi lại cùng nội dung trong 5 phút (m5)'
 
   it('createPost: cùng chú thích nhưng khác sản phẩm gắn → bài mới (ứng viên không bị nuốt)', async () => {
     const prisma = makePrisma();
-    (prisma.product.findMany as jest.Mock).mockResolvedValue([{ id: 'prod1' }]);
+    withLockedProducts(prisma, ['prod1']);
     (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([cand({ productTags: [{ productId: 'prodX' }] })]);
     await makeSvc(prisma).createPost('u1', 'STAFF', { kind: 'TIP', body: 'mẹo hay', productSlugs: ['a'] });
     expect(prisma.feedPost.create).toHaveBeenCalledTimes(1);
@@ -3715,7 +3725,7 @@ describe('CommunityFeedService: gửi lại cùng nội dung trong 5 phút (m5)'
 
   it('createPost: cùng sản phẩm gắn (khác thứ tự) → coi là trùng', async () => {
     const prisma = makePrisma();
-    (prisma.product.findMany as jest.Mock).mockResolvedValue([{ id: 'p1' }, { id: 'p2' }]);
+    withLockedProducts(prisma, ['p1', 'p2']);
     (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([cand({ productTags: [{ productId: 'p2' }, { productId: 'p1' }] })]);
     const r = await makeSvc(prisma).createPost('u1', 'STAFF', { kind: 'TIP', body: 'mẹo hay', productSlugs: ['a', 'b'] });
     expect(r.id).toBe('old');
@@ -3749,7 +3759,7 @@ describe('CommunityFeedService: gửi lại cùng nội dung trong 5 phút (m5)'
 
   it('createPost: thẻ và sản phẩm gắn được ghi TRONG giao dịch tạo bài (trước khi nhả khoá theo người), thưởng chạy sau', async () => {
     const prisma = makePrisma();
-    (prisma.product.findMany as jest.Mock).mockResolvedValue([{ id: 'p1' }]);
+    withLockedProducts(prisma, ['p1']);
     const order: string[] = [];
     (prisma.feedPost.create as jest.Mock).mockImplementation(async () => (order.push('create'), { id: 'newpost' }));
     (prisma.postProductTag.createMany as jest.Mock).mockImplementation(async () => (order.push('productTags'), { count: 1 }));
@@ -3766,14 +3776,20 @@ describe('CommunityFeedService: gửi lại cùng nội dung trong 5 phút (m5)'
     expect(order.slice(0, 5)).toEqual(['create', 'productTags', 'postTags', 'commit', 'reward']);
   });
 
-  it('createPost: sản phẩm đọc TRONG giao dịch (sau khoá theo người); sản phẩm biến mất giữa chừng → bài vẫn tạo, bỏ sản phẩm đó', async () => {
+  it('createPost: sản phẩm đọc bằng SELECT ... FOR KEY SHARE trong giao dịch (sau khoá theo người); sản phẩm biến mất → bài vẫn tạo, bỏ sản phẩm đó', async () => {
     const prisma = makePrisma();
-    (prisma.product.findMany as jest.Mock).mockResolvedValue([]);
+    withLockedProducts(prisma, []);
     const r = await makeSvc(prisma).createPost('u1', 'STAFF', { kind: 'TIP', body: 'mẹo', productSlugs: ['da-bi-xoa'] });
     expect(r.id).toBe('new');
     expect(prisma.postProductTag.createMany).not.toHaveBeenCalled();
-    const raw = prisma as unknown as { $executeRaw: jest.Mock };
-    expect((prisma.product.findMany as jest.Mock).mock.invocationCallOrder[0]).toBeGreaterThan(raw.$executeRaw.mock.invocationCallOrder[0]!);
+    expect(prisma.product.findMany).not.toHaveBeenCalled();
+    const raw = prisma as unknown as { $executeRaw: jest.Mock; $queryRaw: jest.Mock };
+    const productCall = raw.$queryRaw.mock.calls.findIndex((c: [{ sql?: string }]) => String(c[0]?.sql ?? '').includes('"products"'));
+    expect(productCall).toBeGreaterThanOrEqual(0);
+    const sql = String(raw.$queryRaw.mock.calls[productCall][0].sql);
+    expect(sql).toContain('FOR KEY SHARE');
+    expect(sql).toContain('"isActive"');
+    expect(raw.$queryRaw.mock.invocationCallOrder[productCall]).toBeGreaterThan(raw.$executeRaw.mock.invocationCallOrder[0]!);
   });
 
   it('createPost: tiêu đề chỉ gồm ký tự vô hình → coi như không có tiêu đề', async () => {
@@ -3794,5 +3810,65 @@ describe('CommunityFeedService: gửi lại cùng nội dung trong 5 phút (m5)'
     expect(r.id).toBe('new');
     expect(prisma.feedPost.create).toHaveBeenCalledTimes(1);
     expect(prisma.$executeRaw).toHaveBeenCalled();
+  });
+});
+
+describe('chữ người dùng chỉ gồm ký tự vô hình bị coi là trống ở sửa bài, bình luận, báo cáo, lý do (L6-01)', () => {
+  const ZW = '\u200b\ufeff\u2060';
+
+  it('editPost: body toàn ký tự vô hình → BadRequest, không ghi', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ userId: 'author', status: 'PUBLISHED' });
+    await expect(makeSvc(prisma).editPost('author', 'p1', { body: ZW })).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.feedPost.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('editPost: tiêu đề toàn ký tự vô hình → null; body có ký tự vô hình hai đầu được cắt', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ userId: 'author', status: 'PUBLISHED' });
+    await makeSvc(prisma).editPost('author', 'p1', { title: ZW, body: `${ZW} nội dung ${ZW}` });
+    const data = (prisma.feedPost.updateMany as jest.Mock).mock.calls[0][0].data;
+    expect(data.title).toBeNull();
+    expect(data.body).toBe('nội dung');
+  });
+
+  it.each(['', '\u200b\ufeff', '   '])('editPost: bài QUESTION sửa tiêu đề %j → 400 như createPost, không ghi', async (title) => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ userId: 'author', status: 'PUBLISHED', kind: 'QUESTION' });
+    await expect(makeSvc(prisma).editPost('author', 'p1', { title })).rejects.toThrow('Câu hỏi cần có tiêu đề.');
+    expect(prisma.feedPost.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('editPost: bài QUESTION sửa sang tiêu đề hợp lệ vẫn được; loại khác tiêu đề vô hình → null', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ userId: 'author', status: 'PUBLISHED', kind: 'QUESTION' });
+    await makeSvc(prisma).editPost('author', 'p1', { title: ' Lá vàng vì sao? ' });
+    expect((prisma.feedPost.updateMany as jest.Mock).mock.calls[0][0].data.title).toBe('Lá vàng vì sao?');
+    const prisma2 = makePrisma();
+    (prisma2.feedPost.findUnique as jest.Mock).mockResolvedValue({ userId: 'author', status: 'PUBLISHED', kind: 'TIP' });
+    await makeSvc(prisma2).editPost('author', 'p1', { title: '\u200b' });
+    expect((prisma2.feedPost.updateMany as jest.Mock).mock.calls[0][0].data.title).toBeNull();
+  });
+
+  it('addComment: nội dung toàn ký tự vô hình → BadRequest, không tạo', async () => {
+    const prisma = makePrisma();
+    await expect(makeSvc(prisma).addComment('u1', 'CUSTOMER', 'p1', ZW)).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.feedComment.create).not.toHaveBeenCalled();
+  });
+
+  it('report: lý do toàn ký tự vô hình → lý do mặc định', async () => {
+    const prisma = makePrisma();
+    await makeSvc(prisma).report('u1', { targetType: 'POST', targetId: 'p1', reason: ZW });
+    expect((prisma.communityReport.create as jest.Mock).mock.calls[0][0].data.reason).toBe('Không phù hợp');
+  });
+
+  it.each(['rejectPost', 'hidePost'] as const)('%s: lý do toàn ký tự vô hình → lý do mặc định trong thông báo', async (method) => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ id: 'p1', userId: 'author', status: method === 'rejectPost' ? 'PENDING' : 'PUBLISHED', title: 'Tiêu đề', body: 'nội dung' });
+    const notify = { notify: jest.fn().mockResolvedValue(undefined) };
+    await (makeSvc(prisma, undefined, notify) as unknown as Record<string, (id: string, r?: string) => Promise<unknown>>)[method]!('p1', ZW);
+    const data = notify.notify.mock.calls[0]![2] as { reason: string };
+    expect(data.reason).not.toContain('\u200b');
+    expect(data.reason.length).toBeGreaterThan(3);
   });
 });

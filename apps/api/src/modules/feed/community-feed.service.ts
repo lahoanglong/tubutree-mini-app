@@ -79,7 +79,7 @@ const MAX_AUTHOR_NOTIFY_INTERVAL_MIN = 1440;
 
 /** Tên bài trong thông báo: tiêu đề, bài không tiêu đề thì lấy đầu nội dung. */
 function previewTitle(title: string | null, body: string): string {
-  const raw = (title?.trim() || body.trim()).replace(/\s+/g, ' ');
+  const raw = (trimInvisible(title ?? '') || trimInvisible(body)).replace(/\s+/g, ' ');
   return raw.length > REJECT_TITLE_PREVIEW ? `${raw.slice(0, REJECT_TITLE_PREVIEW)}…` : raw;
 }
 
@@ -672,10 +672,13 @@ export class CommunityFeedService {
     const guestIncoming = dataImages.length && (!guestUser || !isRealUser(guestUser)) ? dataImages : [];
     const createDeduped = async (tx: Prisma.TransactionClient) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`feed-post:${userId}`}))`;
-      // Đọc sản phẩm ngay trong giao dịch, một lần cho cả so trùng lẫn ghi gắn: sản phẩm ngừng bán hoặc không còn thì bỏ lặng lẽ như
-      // trước, không để khoảng hở giữa lúc đọc và lúc ghi làm lỗi khoá ngoại.
+      // Đọc sản phẩm ngay trong giao dịch, một lần cho cả so trùng lẫn ghi gắn, bằng SELECT ... FOR KEY SHARE: dòng sản phẩm bị khoá
+      // đến khi giao dịch commit nên xoá cứng sản phẩm phải chờ, không xen vào giữa lúc đọc và lúc ghi `post_product_tags` (lỗi khoá
+      // ngoại làm hỏng cả giao dịch). Sản phẩm ngừng bán hoặc không còn thì bỏ lặng lẽ như trước; sắp theo id để thứ tự khoá cố định.
       const products = slugs.length
-        ? await tx.product.findMany({ where: { slug: { in: slugs }, isActive: true }, select: { id: true } })
+        ? await tx.$queryRaw<{ id: string }[]>(
+            Prisma.sql`SELECT "id" FROM "products" WHERE "slug" IN (${Prisma.join(slugs)}) AND "isActive" = true ORDER BY "id" FOR KEY SHARE`,
+          )
         : [];
       const wantedProducts = [...new Set(products.map((p) => p.id))].sort();
       const candidates = await tx.feedPost.findMany({
@@ -953,7 +956,7 @@ export class CommunityFeedService {
 
   async addComment(userId: string, role: string, postId: string, body: string) {
     // NFC: cùng chữ có dấu gõ bằng hai cách (dựng sẵn / tổ hợp) phải coi là một khi so trùng, và lưu một dạng.
-    const text = (body ?? '').trim().normalize('NFC');
+    const text = trimInvisible(body ?? '').normalize('NFC');
     if (!text) throw new BadRequestException('Nội dung bình luận trống.');
     if (text.length > MAX_COMMENT) throw new BadRequestException('Bình luận quá dài.');
     const post = await this.prisma.feedPost.findUnique({ where: { id: postId }, select: { id: true, userId: true, kind: true, status: true, title: true, body: true } });
@@ -1139,18 +1142,23 @@ export class CommunityFeedService {
   ) {
     const post = await this.prisma.feedPost.findUnique({
       where: { id: postId },
-      select: { userId: true, status: true, title: true, body: true },
+      select: { userId: true, status: true, title: true, body: true, kind: true },
     });
     if (!post) throw new NotFoundException('Bài viết không tồn tại.');
     if (post.userId !== userId) throw new ForbiddenException('Chỉ chủ bài mới sửa được.');
     if (post.status === 'REMOVED') throw new NotFoundException('Bài viết không tồn tại.');
     const data: Record<string, unknown> = { editedAt: new Date() };
     if (patch.body !== undefined) {
-      const b = patch.body.trim();
+      const b = trimInvisible(patch.body);
       if (!b || b.length > MAX_BODY) throw new BadRequestException('Nội dung không hợp lệ.');
       data.body = b;
     }
-    if (patch.title !== undefined) data.title = patch.title.trim().slice(0, MAX_TITLE) || null;
+    if (patch.title !== undefined) {
+      const t = trimInvisible(patch.title).slice(0, MAX_TITLE) || null;
+      // Cùng luật với createPost: câu hỏi luôn cần tiêu đề, loại khác để trống thì thành không có tiêu đề.
+      if (post.kind === 'QUESTION' && !t) throw new BadRequestException('Câu hỏi cần có tiêu đề.');
+      data.title = t;
+    }
     if (patch.images !== undefined) {
       const images = patch.images.filter((u) => u?.trim()).slice(0, MAX_FEED_IMAGES);
       data.images = images;
@@ -1297,7 +1305,7 @@ export class CommunityFeedService {
     try {
       await this.notifications?.notify(post.userId, 'COMMUNITY_POST_REJECTED', {
         title: previewTitle(post.title, post.body),
-        reason: reason?.trim() || DEFAULT_REJECT_REASON,
+        reason: trimInvisible(reason ?? '') || DEFAULT_REJECT_REASON,
       });
     } catch (err) {
       this.logger.warn(`notify(reject) failed ${postId}: ${(err as Error).message}`);
@@ -1308,7 +1316,7 @@ export class CommunityFeedService {
     try {
       await this.notifications?.notify(post.userId, 'COMMUNITY_POST_HIDDEN', {
         title: previewTitle(post.title, post.body),
-        reason: reason?.trim() || DEFAULT_REJECT_REASON,
+        reason: trimInvisible(reason ?? '') || DEFAULT_REJECT_REASON,
       });
     } catch (err) {
       this.logger.warn(`notify(hidden) failed ${postId}: ${(err as Error).message}`);
@@ -1318,7 +1326,7 @@ export class CommunityFeedService {
   /** Báo cáo bài/bình luận vi phạm — tạo CommunityReport OPEN. */
   async report(reporterId: string, dto: { targetType: string; targetId: string; reason: string }) {
     const type = dto.targetType === 'COMMENT' ? 'COMMENT' : 'POST';
-    const reason = (dto.reason ?? '').trim().slice(0, 500) || 'Không phù hợp';
+    const reason = trimInvisible(dto.reason ?? '').slice(0, 500) || 'Không phù hợp';
     // targetId trước đây là chuỗi tuỳ ý, không kiểm tra gì: gửi 60 báo cáo/phút trỏ vào id bịa
     // hoặc vào bình luận của người khác ở bài khác là hàng chờ kiểm duyệt ngập id rác, mà hub
     // admin chỉ hiện đúng cái cuid đó — bấm "Ẩn nội dung" là gỡ nhầm nội dung lành.

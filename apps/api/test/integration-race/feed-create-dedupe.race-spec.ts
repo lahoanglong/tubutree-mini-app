@@ -156,6 +156,70 @@ describe('Feed: gửi trùng đăng bài / tạo sự kiện (real Postgres)', (
     await prisma.tag.deleteMany({ where: { slug } });
   });
 
+  /** Chờ tới khi `pred` đúng (trần 5 giây); hết hạn thì báo rõ đang chờ cái gì thay vì treo hoặc đoán bằng hẹn giờ. */
+  async function waitUntil(label: string, pred: () => Promise<boolean>) {
+    const deadline = Date.now() + 5_000;
+    while (Date.now() < deadline) {
+      if (await pred()) return;
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    throw new Error(`hết 5 giây mà chưa thấy: ${label}`);
+  }
+  /** Có câu lệnh khớp `pattern` đang đứng chờ một khoá (wait_event_type = Lock) trong DB này. */
+  const waitingOnLock = async (pattern: string) => {
+    const rows = await prisma.$queryRaw<{ n: number }[]>`
+      SELECT count(*)::int AS "n" FROM pg_stat_activity
+      WHERE datname = current_database() AND wait_event_type = 'Lock' AND query LIKE ${pattern}`;
+    return (rows[0]?.n ?? 0) > 0;
+  };
+
+  it('xoá cứng sản phẩm giữa lúc đọc và lúc gắn: xoá phải chờ giao dịch tạo bài, bài tạo xong có thẻ sản phẩm, không lỗi khoá ngoại', async () => {
+    const u = await createUser(prisma);
+    const code = randCode(8).toLowerCase();
+    const product = await prisma.product.create({
+      data: { pancakeId: `it-p-${code}`, brand: 'IT', slug: `it-sp-${code}`, name: `SP ${code}`, description: 'IT', basePrice: 1000, approvalStatus: 'APPROVED' },
+    });
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    let held!: () => void;
+    const heldP = new Promise<void>((r) => (held = r));
+    let holder: Promise<void> | undefined;
+    let create: Promise<{ id: string }> | undefined;
+    let del: Promise<unknown> | undefined;
+    let deleted = false;
+    try {
+      // Giữ khoá FOR UPDATE trên dòng users của tác giả: lần ghi bài của createPost (khoá ngoại userId) đứng chờ SAU khi nó đã đọc sản phẩm.
+      holder = prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${u.id} FOR UPDATE`;
+        held();
+        await gate;
+      });
+      await heldP;
+      create = feed.createPost(u.id, 'CUSTOMER', { kind: 'TIP', body: `Gắn SP ${code}`, productSlugs: [product.slug] });
+      // createPost đã qua bước đọc sản phẩm (FOR KEY SHARE) và đang chờ khoá dòng users ở bước ghi bài.
+      await waitUntil('createPost chờ khoá ở INSERT feed_posts', () => waitingOnLock('%INSERT INTO "public"."feed_posts"%'));
+      del = prisma.product.delete({ where: { id: product.id } }).then(() => { deleted = true; });
+      await waitUntil('xoá sản phẩm chờ khoá do createPost giữ', () => waitingOnLock('%DELETE FROM "public"."products"%'));
+      expect(deleted).toBe(false);
+    } finally {
+      release();
+    }
+    try {
+      await holder;
+      const post = await create!;
+      await del;
+      expect(deleted).toBe(true);
+      expect(post.id).toBeTruthy();
+      expect(await prisma.feedPost.count({ where: { id: post.id } })).toBe(1);
+      // post_product_tags.productId là ON DELETE CASCADE: xoá cứng sau khi bài tạo xong gỡ luôn dòng gắn, bài vẫn còn.
+      expect(await prisma.postProductTag.count({ where: { postId: post.id } })).toBe(0);
+    } finally {
+      await Promise.allSettled([holder, create, del]);
+      await prisma.feedPost.deleteMany({ where: { userId: u.id } });
+      await prisma.product.deleteMany({ where: { slug: product.slug } });
+    }
+  });
+
   it('khách vãng lai có 2 bài ảnh chờ duyệt (chạm trần) gửi lại bài thứ 2 → nhận bài đó, không lỗi trần, số bài không đổi', async () => {
     const u = await createUser(prisma);
     const img = (n: number) => `data:image/png;base64,${'A'.repeat(200)}${n}`;
