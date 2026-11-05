@@ -328,7 +328,6 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'checkout.retryNote': 112,
   'checkout.fixLinesHint': 48,
   'checkout.taxCodeInvalid': null,
-  'checkout.invoiceIncomplete': null,
   'checkout.moreLines': 24,
   'checkout.fewerLines': 10,
   'checkout.placeWith': 24,
