@@ -56,3 +56,17 @@ Không động: luồng huỷ/đổi trả/hoàn tiền (máy chủ), thanh toá
 | 17 | `web-375/delivered.jpg` -> `hl-after/web-375/delivered.jpg` | Vùng chạm thấp ở web 375: 2 (96x24, 95x24) -> 0 (liên kết có lớp `tubu-hit-44` như Mini, audit bỏ qua phần tử có lớp `tubu-hit-*`) |
 
 Tổng đo (13 trạng thái mỗi bộ, 8 ở web 1280; `hl-after/*/audit.jsonl` chỉ giữ lần chụp cuối): không bộ nào tràn ngang trước hay sau. Chữ dưới 13px ở web 375: 5-15 -> 3-6 đoạn mỗi trạng thái; ở web 1280: 10-26 -> 9-16 (phần còn lại ở thanh đầu trang, thanh bên và các khối không thuộc gói). Vùng chạm thấp ở web 1280: 8 -> 8, tất cả ở thanh đầu trang (ngoài phạm vi gói).
+
+## Vòng sửa sau review
+
+| Việc | Cách sửa |
+|---|---|
+| Web dưới md: mở form đổi/trả từ menu nằm ngoài màn | Form cuộn tiêu đề vào tầm nhìn và chuyển focus vào đó khi mở; "Thanh toán ngay" từ md cuộn tới khung QR rồi chuyển focus vào khung (`#order-pay-panel`, `tabIndex={-1}`) |
+| Câu "Đơn tự huỷ vì quá hạn thanh toán" | Bỏ. Đơn huỷ chỉ nói "Đơn đã huỷ."; dữ liệu giả đơn huỷ không còn `paymentDeadline` vì API không trả hạn cho đơn huỷ |
+| Đơn đã gắn mã vận đơn của hãng nhưng chưa bàn giao nói hai câu mâu thuẫn | Khoá riêng `order.next.carrierBooked`: "Đơn đã có mã vận đơn của hãng nên không huỷ được." |
+| Hạn đổi/trả kéo dài theo `updatedAt` | Một hàm mốc `deliveredBaseAt` (ngày giao, lần lật DELIVERED trong sổ, rồi `updatedAt`) cho `returnWindowOpen`, dòng "Đổi/trả được đến" và `returnWindowState` của Mini lẫn web |
+| Đơn Tubu xử lý tay hoặc hãng đã nhận hàng mà API báo `canCancel` | Nút huỷ và câu "không huỷ được" theo `canCancel` của API |
+| Đơn đã giao đọc "Giao thành công, đang diễn ra" | `orderTrack` trả mọi bước `done` và `current = steps.length`; không còn `aria-current` ở đơn đã giao |
+| Khung vận chuyển trắng khi lịch sử toàn dòng rác | Điều kiện hiện khung đếm `shippingEvents(...).length` ở Mini và web |
+| Mốc vận chuyển ghi muộn lên đầu | `shippingEvents` xếp giảm dần theo `at`; mốc thiếu giờ giữ chỗ, giờ trùng giữ thứ tự ghi |
+| Báo "Đã sao chép mã vận đơn" ở web không được đọc | Vùng `role="status"` có sẵn (rỗng) dưới mã vận đơn, chỉ đổi chữ |
