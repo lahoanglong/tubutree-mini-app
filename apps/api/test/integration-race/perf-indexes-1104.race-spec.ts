@@ -28,6 +28,15 @@ describe('Index hiệu năng 2026-11-04 (real Postgres)', () => {
               CASE WHEN g % 3 = 0 THEN 'FAILED' ELSE 'SENT' END, 'e'||(g % 4), now() - (g || ' minutes')::interval
        FROM generate_series(1, 3000) g`,
     );
+    // 3000 dòng trên chỉ trải 50 giờ gần nhất, nên `sentAt >= now-30 ngày` chọn ~100% bảng: với seqscan bị tắt, mọi index đều phải đọc hết và planner
+    // chọn theo kích thước/độ phình index (đỏ ngẫu nhiên trên DB mới: nó chọn notification_logs_userId_sentAt_idx). Thêm dòng cũ 31-170 ngày (dưới mốc
+    // retention 180 ngày nên D10 không xoá) để khoảng 30 ngày chỉ chọn ~13% bảng; đó mới là tính chọn lọc mà index sentAt phục vụ.
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO notification_logs (id, "userId", "templateCode", channel, payload, status, error, "sentAt")
+       SELECT '${prefix}-o'||g, 'u'||(g % 50), 'T', CASE WHEN g % 10 = 0 THEN 'ZNS' ELSE 'INAPP' END, '{}'::jsonb,
+              CASE WHEN g % 3 = 0 THEN 'FAILED' ELSE 'SENT' END, 'e'||(g % 4), now() - ((31 + g % 140) * 86400 + g % 86400 || ' seconds')::interval
+       FROM generate_series(1, 20000) g`,
+    );
     await prisma.$executeRawUnsafe(
       `INSERT INTO points_transactions (id, "userId", delta, reason, "refType", "refId", "createdAt")
        SELECT '${prefix}-p'||g, '${userId}', 1, 'R'||g, CASE WHEN g % 2 = 0 THEN 'ORDER' ELSE 'OTHER' END, 'ref'||g, now()
