@@ -111,7 +111,9 @@ describe('Sức khoẻ vận hành + việc cần xử lý (real Postgres)', () 
       ['WAIT', 'khách thanh toán'],
       ['WAIT', 'vận đơn Gomdon'],
     ]);
-    for (const o of byCode.values()) expect(Object.keys(o)).not.toEqual(expect.arrayContaining(['items', 'fulfiller', 'paymentMethod']));
+    // Từng khoá một: arrayContaining đòi CÓ ĐỦ cả nhóm nên một khoá rò lẻ vẫn lọt.
+    const gateOnlyColumns = ['items', 'type', 'fulfiller', 'paymentMethod', 'paymentStatus', 'hasRecyclingPickup', 'gomdonOrderId', 'gomdonPartnerCode', 'gomdonStatus'];
+    for (const o of byCode.values()) for (const k of gateOnlyColumns) expect(o).not.toHaveProperty(k);
   });
 
   it('nhãn đơn của webhook lỗi lấy bằng SQL gọn khớp pancakeEventRef trên nguyên rawPayload, mọi dạng payload', async () => {
