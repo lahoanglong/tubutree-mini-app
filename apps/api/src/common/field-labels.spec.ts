@@ -108,3 +108,59 @@ describe('FIELD_LABELS_BY_DTO: nhãn riêng theo DTO', () => {
     expect(same).toEqual([]);
   });
 });
+
+/** Class dùng nhãn chung của trường có nhãn riêng ở nơi khác: phải khai ở đây kèm lý do, để class mới (kế thừa, PartialType) không rơi im lặng về nhãn chung. */
+const COMMON_LABEL_OK: Record<string, Record<string, string>> = {
+  CreateFaqDto: { category: 'form FAQ ở màn quản trị ghi "Nhóm"' },
+  UpdateFaqDto: { category: 'form FAQ ở màn quản trị ghi "Nhóm"' },
+  CreateQuickReplyDto: { category: 'form Trả lời nhanh ở màn quản trị ghi "Nhóm"' },
+  UpdateQuickReplyDto: { category: 'form Trả lời nhanh ở màn quản trị ghi "Nhóm"' },
+};
+
+describe('trường có nhãn riêng theo DTO không rơi im lặng về nhãn chung', () => {
+  it('class nào có trường nằm trong FIELD_LABELS_BY_DTO mà không có dòng riêng thì phải khai trong COMMON_LABEL_OK kèm lý do', () => {
+    loadAllValidatedFiles();
+    const metas = (getMetadataStorage() as unknown as { validationMetadatas: Map<unknown, Array<{ propertyName: string; target: unknown }>> }).validationMetadatas;
+    const perDtoFields = new Set(Object.values(FIELD_LABELS_BY_DTO).flatMap((f) => Object.keys(f)));
+    const unlisted: string[] = [];
+    for (const list of metas.values()) {
+      for (const m of list) {
+        const dto = (m.target as { name?: string }).name ?? '';
+        if (!perDtoFields.has(m.propertyName)) continue;
+        if (FIELD_LABELS_BY_DTO[dto]?.[m.propertyName] || COMMON_LABEL_OK[dto]?.[m.propertyName]) continue;
+        unlisted.push(`${dto}.${m.propertyName}`);
+      }
+    }
+    expect([...new Set(unlisted)].sort()).toEqual([]);
+  });
+
+  it('không có class nào kế thừa hay bọc (extends, PartialType, PickType, OmitType) DTO có nhãn riêng mà tự không có dòng trong bảng', () => {
+    const owners = Object.keys(FIELD_LABELS_BY_DTO);
+    const hits: string[] = [];
+    for (const file of walk(SRC)) {
+      const text = readFileSync(file, 'utf8');
+      for (const owner of owners) {
+        for (const m of text.matchAll(new RegExp(`class\\s+(\\w+)\\s+extends\\s+(?:\\w+Type\\(\\s*)?${owner}\\b`, 'g'))) {
+          if (!FIELD_LABELS_BY_DTO[m[1]!]) hits.push(`${m[1]} kế thừa ${owner} (${file.slice(SRC.length + 1)})`);
+        }
+      }
+    }
+    expect(hits).toEqual([]);
+  });
+
+  it('mục COMMON_LABEL_OK trỏ tới class và trường có thật, có lý do, và không trùng bảng theo DTO', () => {
+    loadAllValidatedFiles();
+    const metas = (getMetadataStorage() as unknown as { validationMetadatas: Map<unknown, Array<{ propertyName: string; target: unknown }>> }).validationMetadatas;
+    const real = new Set<string>();
+    for (const list of metas.values()) for (const m of list) real.add(`${(m.target as { name?: string }).name}.${m.propertyName}`);
+    const bad: string[] = [];
+    for (const [dto, fields] of Object.entries(COMMON_LABEL_OK)) {
+      for (const [f, reason] of Object.entries(fields)) {
+        if (!real.has(`${dto}.${f}`)) bad.push(`${dto}.${f}: không có trong DTO`);
+        if (reason.trim().length < 8) bad.push(`${dto}.${f}: thiếu lý do`);
+        if (FIELD_LABELS_BY_DTO[dto]?.[f]) bad.push(`${dto}.${f}: đã có nhãn riêng`);
+      }
+    }
+    expect(bad).toEqual([]);
+  });
+});
