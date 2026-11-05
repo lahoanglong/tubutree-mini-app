@@ -246,6 +246,54 @@ describe('Campaigns (real Postgres)', () => {
       }
     });
 
+    /**
+     * Tất định, không dựa may rủi: giữ khoá dòng chiến dịch trong một giao dịch, gọi `update` (không await) rồi xoá liên kết ngay trong giao dịch giữ khoá.
+     * `update` phải chờ khoá (chưa xong sau một khoảng ngắn), và khi nhả khoá nó thấy trang trống nên 400, không ghi gì.
+     */
+    const updateWhileLockHeld = async (id: string, patch: Parameters<CampaignsAdminService['update']>[1]) => {
+      let settled = false;
+      let outcome: Promise<unknown> | undefined;
+      await prisma.$transaction(
+        async (tx) => {
+          await tx.$queryRaw`SELECT "id" FROM "campaigns" WHERE "id" = ${id} FOR UPDATE`;
+          outcome = admin.update(id, patch).then(
+            (v) => ((settled = true), v),
+            (e: unknown) => ((settled = true), e),
+          );
+          await new Promise((r) => setTimeout(r, 500));
+          expect(settled).toBe(false);
+          await tx.campaignProduct.deleteMany({ where: { campaignId: id } });
+        },
+        { timeout: 20_000 },
+      );
+      return outcome!;
+    };
+
+    it('giữ khoá dòng: bật chiến dịch phải chờ, khi người giữ khoá gỡ sản phẩm cuối rồi commit thì lệnh bật 400 và trang không bật', async () => {
+      const c = await admin.create(base('lk1', { linkType: 'CAMPAIGN_PAGE', linkValue: undefined, isActive: false }));
+      await admin.setProducts(c.id, [(await product('SP lk1', 'lk1')).id]);
+      const out = await updateWhileLockHeld(c.id, { isActive: true });
+      expect(out).toBeInstanceOf(BadRequestException);
+      expect((await prisma.campaign.findUniqueOrThrow({ where: { id: c.id } })).isActive).toBe(false);
+    });
+
+    it('giữ khoá dòng: đổi đích sang trang chiến dịch phải chờ, khi người giữ khoá gỡ sản phẩm cuối thì lệnh đổi 400 và đích không đổi', async () => {
+      const c = await admin.create(base('lk2'));
+      await admin.setProducts(c.id, [(await product('SP lk2', 'lk2')).id]);
+      const out = await updateWhileLockHeld(c.id, { linkType: 'CAMPAIGN_PAGE' });
+      expect(out).toBeInstanceOf(BadRequestException);
+      expect((await prisma.campaign.findUniqueOrThrow({ where: { id: c.id } })).linkType).toBe('URL_INTERNAL');
+    });
+
+    it('đang chạy CAMPAIGN_PAGE [A]: đổi đích sang PRODUCT trước thì gỡ A được (đúng thứ tự form); gỡ A trước khi đổi đích thì 400', async () => {
+      const c = await livePage('pg2p');
+      const target = await product('SP đích', 'pg2p-dich');
+      await expect(admin.setProducts(c.id, [])).rejects.toThrow(/Trang chiến dịch đang trống/);
+      await expect(admin.update(c.id, { linkType: 'PRODUCT', linkValue: target.slug })).resolves.toMatchObject({ linkType: 'PRODUCT', isActive: true });
+      await expect(admin.setProducts(c.id, [])).resolves.toEqual({ count: 0 });
+      expect(await linksOf(c.id)).toEqual({ products: 0, coupons: 0 });
+    });
+
     it('sửa chiến dịch đang bật đổi đích sang trang chiến dịch kèm sản phẩm: trường khác trước, gắn sản phẩm, đích ở cuối thì được; đổi đích trước khi có sản phẩm thì 400', async () => {
       const c = await admin.create(base('doi-dich'));
       await expect(admin.update(c.id, { linkType: 'CAMPAIGN_PAGE' })).rejects.toThrow(/Trang chiến dịch đang trống/);
