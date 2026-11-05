@@ -44,6 +44,15 @@ function scalarText(value: unknown): string | null | typeof INVALID {
 }
 
 /**
+ * Như scalarText nhưng số chỉ nhận khi là số nguyên an toàn: JSON.parse làm tròn số nguyên vượt 2^53 (chữ ký vẫn khớp vì tính trên
+ * thân thô), nên lưu chuỗi của số đó là lưu một id khác và bot nhắn nhầm người.
+ */
+function idText(value: unknown): string | null | typeof INVALID {
+  if (typeof value === 'number') return Number.isSafeInteger(value) ? String(value) : INVALID;
+  return scalarText(value);
+}
+
+/**
  * `X-ZEvent-Signature` của webhook Zalo OA: sha256(appId + thân + timestamp + khoá bí mật của OA), hex thường (header có thể
  * mang tiền tố `mac=`). `rawBody` là đúng byte Zalo gửi (`req.rawBody`, giữ ở `keepRawBody` của common/body-limits.ts): băm lại
  * JSON.stringify của thân đã parse làm mất `\/` và `\uXXXX` nên lệch.
@@ -103,8 +112,8 @@ export class ZaloOaWebhookController {
     // sẽ bị worker khớp từ khoá và "trả lời" lại OA. Trả 200 để Zalo không gửi lại.
     if (typeof body.event_name !== 'string' || !body.event_name.startsWith(USER_SEND_PREFIX)) return { received: true };
 
-    const senderId = scalarText(body.sender?.id);
-    const rawMsgId = scalarText(body.message?.msg_id);
+    const senderId = idText(body.sender?.id);
+    const rawMsgId = idText(body.message?.msg_id);
     const text = scalarText(body.message?.text);
     const timestamp = scalarText(body['timestamp']);
     if (senderId === INVALID || rawMsgId === INVALID || text === INVALID || timestamp === INVALID) {

@@ -130,6 +130,12 @@ describe('ZaloOaWebhookController.handle (kiểu trường không đúng)', () =
     expect(create.mock.calls[0][0].data).toMatchObject({ msgId: '456', messageText: '789' });
   });
 
+  it('sender.id và msg_id đúng ngưỡng số nguyên an toàn (2^53 - 1) vẫn được nhận nguyên vẹn', async () => {
+    const { ctrl, create } = makeController(SECRET);
+    await ctrl.handle({ ...body, sender: { id: Number.MAX_SAFE_INTEGER }, message: { msg_id: Number.MAX_SAFE_INTEGER } } as never, SECRET);
+    expect(create.mock.calls[0][0].data).toMatchObject({ zaloUserId: '9007199254740991', msgId: '9007199254740991' });
+  });
+
   it.each([
     ['sender.id là object', { ...body, sender: { id: { a: 1 } } }],
     ['sender.id là mảng', { ...body, sender: { id: ['x'] } }],
@@ -140,6 +146,11 @@ describe('ZaloOaWebhookController.handle (kiểu trường không đúng)', () =
     ['text là object', { ...body, message: { ...body.message, text: { a: 1 } } }],
     ['text là mảng', { ...body, message: { ...body.message, text: ['a'] } }],
     ['text là boolean', { ...body, message: { ...body.message, text: true } }],
+    // JSON.parse làm tròn số nguyên vượt 2^53 (246845883529197922 → 246845883529197920): lưu chuỗi đó là lưu một id khác.
+    ['sender.id là số nguyên vượt 2^53', { ...body, sender: JSON.parse('{"id":246845883529197922}') }],
+    ['msg_id là số nguyên vượt 2^53', { ...body, message: { ...body.message, msg_id: JSON.parse('246845883529197922') } }],
+    ['sender.id là số thập phân', { ...body, sender: { id: 1.5 } }],
+    ['msg_id là số thập phân', { ...body, message: { ...body.message, msg_id: 1.5 } }],
   ])('%s → bỏ qua sự kiện, trả 200, ghi cảnh báo, không lưu/enqueue', async (_name, payload) => {
     const { ctrl, create, add } = makeController(SECRET);
     await expect(ctrl.handle(payload as never, SECRET)).resolves.toEqual({ received: true });
@@ -247,6 +258,23 @@ describe('ZaloOaWebhookController.handle (X-ZEvent-Signature, BAOMAT-06)', () =>
     const sig = createHash('sha256').update(Buffer.concat([Buffer.from(APP_ID), rawBody, Buffer.from(ts + OA_KEY)])).digest('hex');
     await expect(ctrl.handle(parsed, undefined, sig, { rawBody })).resolves.toEqual({ received: true });
     expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  it('sender.id vượt 2^53 trong thân thô: chữ ký (tính trên byte gốc) vẫn khớp nhưng sự kiện bị bỏ, không lưu id đã bị làm tròn', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    try {
+      const { ctrl, create } = build(both);
+      const ts = String(Date.now());
+      const rawText = `{"app_id":"${APP_ID}","event_name":"user_send_text","sender":{"id":246845883529197922},"message":{"msg_id":"m1","text":"Giá"},"timestamp":"${ts}"}`;
+      const sig = zaloOaEventSignature(APP_ID, rawText, ts, OA_KEY);
+      const parsed = JSON.parse(rawText);
+      expect(String(parsed.sender.id)).toBe('246845883529197920');
+      await expect(ctrl.handle(parsed, undefined, sig, { rawBody: Buffer.from(rawText, 'utf8') })).resolves.toEqual({ received: true });
+      expect(create).not.toHaveBeenCalled();
+      expect(warn).toHaveBeenCalledTimes(1);
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it('thân thô khác thân đã parse (thân giả, chữ ký của thân thật) → 401', async () => {
