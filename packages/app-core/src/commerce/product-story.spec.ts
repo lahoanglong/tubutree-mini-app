@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseStoryConfig, type ProductStoryConfig } from '@tubutree/shared-types';
+import { parseStoryConfig, type ProductStoryConfig, type StoryScene } from '@tubutree/shared-types';
 import {
   ambientVar,
   arcSlot,
@@ -30,11 +30,16 @@ const polang = [
   { name: 'Bồ kết', benefit: 'Làm sạch dịu nhẹ' },
   { name: 'Hương nhu', benefit: 'Thư giãn da đầu' },
 ];
-const stored = (label: string): ProductStoryConfig => ({
+const stored = (label: string, ids: string[] = ['v1', 'v2']): ProductStoryConfig => ({
   version: 1,
   enabled: true,
-  scenes: [{ kind: 'variant_arc', items: [{ label, ambient: 'sky' }] }],
+  scenes: [{ kind: 'variant_arc', items: ids.map((id, i) => ({ variationId: id, label: i === 0 ? label : `Mục ${i + 1}`, ambient: 'sky' as const })) }],
 });
+const assembly: StoryScene = { kind: 'ingredient_assembly', steps: [{ title: 'Bước', body: 'x', layers: [{ id: 'l', spriteId: 'honey-drop', label: 'Mật', from: 'top', xPct: 50, yPct: 50, scale: 1, rotateDeg: 0 }] }] };
+const arcIds = (c: ProductStoryConfig | null) => {
+  const a = c?.scenes.find((s) => s.kind === 'variant_arc');
+  return a && a.kind === 'variant_arc' ? a.items.map((i) => i.variationId) : null;
+};
 
 describe('token var', () => {
   it('ambientVar và toneVar trả biến CSS semantic, không hex', () => {
@@ -103,8 +108,35 @@ describe('buildDefaultStoryConfig', () => {
 
 describe('resolveStoryConfig', () => {
   it('cấu hình đã lưu thắng preset', () => {
-    const cfg = resolveStoryConfig(product({ slug: 'dau-goi-buoi-po-lang', storyConfig: stored('Đã lưu') }));
-    expect(cfg?.scenes[0]).toMatchObject({ kind: 'variant_arc', items: [{ label: 'Đã lưu' }] });
+    const cfg = resolveStoryConfig(product({ slug: 'dau-goi-buoi-po-lang', variations: variations(2), storyConfig: stored('Đã lưu') }));
+    expect(cfg?.scenes[0]).toMatchObject({ kind: 'variant_arc', items: [{ label: 'Đã lưu' }, { label: 'Mục 2' }] });
+  });
+
+  it('vòng cung đã lưu khớp đúng biến thể thật thì giữ nguyên chữ và màu của admin', () => {
+    const cfg = resolveStoryConfig(product({ variations: variations(2), storyConfig: stored('Chai nhỏ') }));
+    expect(cfg?.scenes[0]).toMatchObject({ items: [{ variationId: 'v1', label: 'Chai nhỏ', ambient: 'sky' }, { variationId: 'v2' }] });
+  });
+
+  it('vòng cung đã lưu trỏ biến thể đã xoá thì dựng lại từ biến thể thật, không còn mục mồ côi', () => {
+    const cfg = resolveStoryConfig(product({ variations: variations(2), storyConfig: stored('x', ['v1', 'v9']) }));
+    expect(arcIds(cfg)).toEqual(['v1', 'v2']);
+  });
+
+  it('vòng cung đã lưu thiếu một biến thể đang bán thì dựng lại để khách chọn được đủ', () => {
+    const cfg = resolveStoryConfig(product({ variations: variations(3), storyConfig: stored('x', ['v1', 'v2']) }));
+    expect(arcIds(cfg)).toEqual(['v1', 'v2', 'v3']);
+  });
+
+  it('mục vòng cung không có variationId không chọn được gì nên cũng dựng lại', () => {
+    const noId: ProductStoryConfig = { version: 1, enabled: true, scenes: [{ kind: 'variant_arc', items: [{ label: 'a', ambient: 'leaf' }, { label: 'b', ambient: 'sky' }] }] };
+    expect(arcIds(resolveStoryConfig(product({ variations: variations(2), storyConfig: noId })))).toEqual(['v1', 'v2']);
+  });
+
+  it('còn dưới 2 biến thể thì bỏ vòng cung đã lưu, các cảnh khác vẫn giữ; hết cảnh thì null', () => {
+    const mixed: ProductStoryConfig = { version: 1, enabled: true, scenes: [...stored('x').scenes, assembly] };
+    const one = resolveStoryConfig(product({ variations: variations(1), storyConfig: mixed }));
+    expect(one?.scenes.map((s) => s.kind)).toEqual(['ingredient_assembly']);
+    expect(resolveStoryConfig(product({ variations: variations(1), storyConfig: stored('x') }))).toBeNull();
   });
 
   it('enabled:false tắt hẳn, kể cả khi có preset', () => {
@@ -141,6 +173,11 @@ describe('storyView', () => {
     expect(v.arc).toHaveLength(2);
     expect(v.hud?.points.length).toBeGreaterThanOrEqual(3);
     expect(v.staticLayers).toEqual([]);
+  });
+
+  it('cấu hình cũ có vòng cung rỗng không làm hai app vỡ: arc là null', () => {
+    const raw = { version: 1, enabled: true, scenes: [{ kind: 'variant_arc', items: [] }, assembly] } as unknown as ProductStoryConfig;
+    expect(storyView(raw, { reducedMotion: false }).arc).toBeNull();
   });
 
   it('giảm chuyển động: animated=false và gom mọi lớp nguyên liệu (không trùng id) cho bản tĩnh', () => {

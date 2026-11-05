@@ -107,4 +107,21 @@ describe('parseStoryConfig', () => {
     const cfg = withScenes([{ kind: 'ingredient_assembly', steps: [{ title: 't', body: 'b', layers: [layer({ from: 'diagonal' })] }] }]);
     expect(parseStoryConfig(cfg).ok).toBe(false);
   });
+  it('rejects a variant_arc scene with zero items', () => {
+    const r = parseStoryConfig(withScenes([{ kind: 'variant_arc', items: [] }]));
+    expect(r.ok).toBe(false);
+  });
+
+  it('accepts a cutoutUrl that points at a registered product image, with or without version', () => {
+    for (const u of ['/public-image/product/p1/3', '/public-image/product/p1/3?v=0a1b2c3d4e5f6071']) {
+      const r = parseStoryConfig({ ...valid(), cutoutUrl: u });
+      expect(r.ok && r.value.cutoutUrl).toBe(u);
+    }
+  });
+
+  it('rejects public-image references that are not a product image slot', () => {
+    for (const u of ['/public-image/brand/p1/logo', '/public-image/product/p1/../x', '/public-image/product/p1/3?v=zz', '/public-image/product//3', '//evil.test/public-image/product/p1/3']) {
+      expect(parseStoryConfig({ ...valid(), cutoutUrl: u }).ok).toBe(false);
+    }
+  });
 });

@@ -94,17 +94,21 @@ function num(v: unknown, lo: number, hi: number, what: string): number {
   return Math.min(hi, Math.max(lo, v as number));
 }
 
+/** Ảnh sản phẩm đã đăng ký ở API: `/public-image/product/<id>/<số thứ tự>` (mã `v` tuỳ chọn). Máy khách ghép thêm địa chỉ API phía trước. */
+const OWN_PRODUCT_IMAGE = /^\/public-image\/product\/[A-Za-z0-9_-]{1,64}\/\d{1,2}(?:\?v=[0-9a-f]{1,32})?$/;
+
 function url(v: unknown, what: string): string {
   if (typeof v !== 'string') return fail(`${what} phải là đường dẫn`);
   const s = v.trim();
   if (s.length > 2048) fail(`${what} quá dài`);
   if (s.startsWith('/api/') && !s.includes('..') && !s.includes('//')) return s;
+  if (OWN_PRODUCT_IMAGE.test(s)) return s;
   try {
     if (new URL(s).protocol === 'https:') return s;
   } catch {
     /* rơi xuống lỗi */
   }
-  return fail(`${what} chỉ nhận link https`);
+  return fail(`${what} chỉ nhận link https hoặc ảnh đã đăng ký`);
 }
 
 function arr(v: unknown, max: number, what: string): unknown[] {
@@ -135,7 +139,9 @@ function layer(raw: unknown): IngredientLayerSprite {
 function scene(raw: unknown): StoryScene {
   if (!isObj(raw)) return fail('cảnh không hợp lệ');
   if (raw.kind === 'variant_arc') {
-    const items = arr(raw.items, STORY_LIMITS.maxArcItems, 'mục vòng cung').map((it): VariantArcItem => {
+    const rawItems = arr(raw.items, STORY_LIMITS.maxArcItems, 'mục vòng cung');
+    if (rawItems.length === 0) fail('vòng cung cần ít nhất một mục');
+    const items = rawItems.map((it): VariantArcItem => {
       if (!isObj(it)) return fail('mục vòng cung không hợp lệ');
       if (!AMBIENTS.includes(it.ambient as StoryAmbient)) fail('màu nền không hợp lệ');
       const out: VariantArcItem = { label: text(it.label, STORY_LIMITS.maxLabel, 'nhãn'), ambient: it.ambient as StoryAmbient };

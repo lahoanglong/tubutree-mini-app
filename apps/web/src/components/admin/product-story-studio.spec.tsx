@@ -52,7 +52,7 @@ const config = (): ProductStoryConfig => ({
   ],
 });
 
-function mount(opts: { value: ProductStoryConfig | null; product?: ProductDetail; disabled?: boolean; routes?: Parameters<typeof mockFetch>[0] }) {
+function mount(opts: { value: ProductStoryConfig | null; product?: ProductDetail; disabled?: boolean; onAddImage?: (d: string) => void; routes?: Parameters<typeof mockFetch>[0] }) {
   const onChange = vi.fn();
   const m = mockFetch(opts.routes ?? {});
   vi.stubGlobal('fetch', vi.fn(m.fn));
@@ -63,6 +63,7 @@ function mount(opts: { value: ProductStoryConfig | null; product?: ProductDetail
         product={opts.product ?? product()}
         value={v}
         disabled={opts.disabled}
+        onAddImage={opts.onAddImage}
         onChange={(n) => {
           onChange(n);
           setV(n);
@@ -181,6 +182,35 @@ describe('ProductStoryStudio', () => {
     expect(JSON.parse(String(m.calls[0]!.init!.body))).toEqual({ pageUrl: 'https://shop.example.com/p' });
     click(byText(document.body, 'button', 'Dùng làm ảnh sân khấu'));
     expect(last(onChange)!.cutoutUrl).toBe('https://shop.example.com/a.png');
+  });
+
+  it('có bản tách nền và chỗ thêm ảnh: đăng ký bản tách nền làm ảnh sản phẩm rồi trỏ cutoutUrl vào ảnh đó, không trỏ link bên thứ ba', async () => {
+    const onAddImage = vi.fn();
+    const { onChange } = mount({
+      value: config(),
+      onAddImage,
+      routes: { '/story-assets/extract': { body: { images: [{ url: 'https://shop.example.com/a.png', width: 800, height: 800 }], cutouts: [{ sourceUrl: 'https://shop.example.com/a.png', dataUrl: 'data:image/webp;base64,AAAA' }] } } },
+    });
+    typeInto(document.querySelector('input[aria-label="Link trang sản phẩm hoặc ảnh"]'), 'https://shop.example.com/p');
+    click(byText(document.body, 'button', 'Lấy ảnh'));
+    await flush();
+    click(byText(document.body, 'button', 'Dùng làm ảnh sân khấu'));
+    expect(onAddImage).toHaveBeenCalledWith('data:image/webp;base64,AAAA');
+    expect(last(onChange)!.cutoutUrl).toBe('/public-image/product/p1/1');
+  });
+
+  it('xem trước và khung chỉ điểm vẽ ảnh đã đăng ký bằng chính ảnh trong form, vì đường dẫn tương đối chưa trỏ được tới API', () => {
+    const images = ['https://cdn.example.com/a.jpg', 'data:image/webp;base64,BBBB'];
+    mount({ value: { ...config(), cutoutUrl: '/public-image/product/p1/1' }, product: product({ images }) });
+    expect(document.querySelector('[data-testid="story-hud-canvas"] img')?.getAttribute('src')).toBe(images[1]);
+  });
+
+  it('ảnh http không có bản tách nền: không có nút dùng (cấu hình sẽ không hợp lệ)', async () => {
+    mount({ value: config(), routes: { '/story-assets/extract': { body: { images: [{ url: 'http://shop.example.com/a.png', width: 800, height: 800 }], cutouts: [] } } } });
+    typeInto(document.querySelector('input[aria-label="Link trang sản phẩm hoặc ảnh"]'), 'https://shop.example.com/p');
+    click(byText(document.body, 'button', 'Lấy ảnh'));
+    await flush();
+    expect(byText(document.body, 'button', 'Dùng làm ảnh sân khấu')).toBeFalsy();
   });
 
   it('link ảnh trực tiếp gửi imageUrls thay vì pageUrl', async () => {

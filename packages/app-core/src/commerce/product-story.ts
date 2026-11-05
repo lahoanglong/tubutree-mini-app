@@ -127,13 +127,36 @@ export function buildDefaultStoryConfig(p: StoryProductInput): ProductStoryConfi
 }
 
 /**
+ * Vòng cung là bộ chọn phân loại nên phải khớp biến thể đang bán: giữ bản đã lưu khi nó liệt kê đúng các biến thể thật (giữ chữ
+ * và màu admin đặt); lệch (đã xoá, thêm mới, thiếu variationId) thì dựng lại từ biến thể thật; dưới 2 biến thể thì bỏ cảnh.
+ * Hết cảnh thì null để trang không vẽ khung rỗng.
+ */
+function reconcileArc(config: ProductStoryConfig, variations: readonly { id: string; name: string }[]): ProductStoryConfig | null {
+  if (!config.scenes.some((s) => s.kind === 'variant_arc')) return config;
+  const fresh = buildArcScene(variations);
+  const real = variations.slice(0, STORY_LIMITS.maxArcItems).map((v) => v.id);
+  const scenes: StoryScene[] = [];
+  for (const sc of config.scenes) {
+    if (sc.kind !== 'variant_arc') {
+      scenes.push(sc);
+      continue;
+    }
+    if (!fresh) continue;
+    const ids = sc.items.map((i) => i.variationId);
+    const same = ids.length === real.length && ids.every((id, i) => id === real[i]);
+    scenes.push(same ? sc : fresh);
+  }
+  return scenes.length === 0 ? null : { ...config, scenes };
+}
+
+/**
  * Cấu hình dùng để vẽ: đã lưu (hợp lệ) > preset theo slug (chèn vòng cung từ biến thể thật) > tự sinh từ thành phần.
  * `enabled:false` là admin tắt hẳn. Trả null thì trang chi tiết không vẽ gì thêm.
  */
 export function resolveStoryConfig(p: StoryProductInput): ProductStoryConfig | null {
   if (p.storyConfig !== null && p.storyConfig !== undefined) {
     const parsed = parseStoryConfig(p.storyConfig);
-    if (parsed.ok) return parsed.value.enabled ? parsed.value : null;
+    if (parsed.ok) return parsed.value.enabled ? reconcileArc(parsed.value, p.variations) : null;
   }
   if (Object.prototype.hasOwnProperty.call(STORY_PRESETS, p.slug)) {
     const preset = STORY_PRESETS[p.slug]!;
@@ -165,7 +188,7 @@ export function storyView(config: ProductStoryConfig, opts: { reducedMotion: boo
   let steps: StoryStepView[] = [];
   let hud: StoryViewModel['hud'] = null;
   for (const s of config.scenes) {
-    if (s.kind === 'variant_arc') arc = s.items;
+    if (s.kind === 'variant_arc') arc = s.items.length > 0 ? s.items : null;
     else if (s.kind === 'ingredient_assembly') steps = s.steps.map((st, i) => ({ num: String(i + 1).padStart(2, '0'), title: st.title, body: st.body, layers: st.layers }));
     else hud = { points: s.points, closing: s.closing };
   }

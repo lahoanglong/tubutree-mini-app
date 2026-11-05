@@ -12,6 +12,7 @@ import { actionErrorText } from '@/lib/admin-error-text';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_SMALL, FIELD_CLASS, INPUT_CLASS, Notice, chipClass } from './ui';
 
 const EMPTY: ProductStoryConfig = { version: 1, enabled: true, scenes: [] };
+const OWN_IMAGE = /^\/public-image\/product\/[A-Za-z0-9_-]+\/(\d{1,2})(?:\?|$)/;
 const IMAGE_URL = /\.(png|jpe?g|webp|gif)(\?.*)?$/i;
 const clamp = (n: number) => Math.min(100, Math.max(0, Math.round(n)));
 
@@ -99,7 +100,13 @@ export function ProductStoryStudio({
 
   const steps = asm(current)?.steps ?? [];
   const points = hud(current)?.points ?? [];
-  const stage = current.cutoutUrl ?? product.images[0] ?? null;
+  const ownSlot = current.cutoutUrl ? OWN_IMAGE.exec(current.cutoutUrl) : null;
+  const cutoutSrc = ownSlot ? (product.images[Number(ownSlot[1])] ?? null) : (current.cutoutUrl ?? null);
+  const stage = cutoutSrc ?? product.images[0] ?? null;
+  const previewConfig = useMemo(() => {
+    const { cutoutUrl: _own, ...rest } = current;
+    return cutoutSrc ? { ...rest, cutoutUrl: cutoutSrc } : rest;
+  }, [current, cutoutSrc]);
   const sel = Math.min(pick, Math.max(points.length - 1, 0));
 
   const setStep = (i: number, fn: (s: AssemblyStep) => void) =>
@@ -194,22 +201,36 @@ export function ProductStoryStudio({
                 <div className="text-[11px] text-stone-500">
                   {im.width}×{im.height}
                 </div>
-                <button
-                  type="button"
-                  className={BTN_SMALL}
-                  disabled={disabled}
-                  onClick={() =>
-                    edit((c) => {
-                      c.cutoutUrl = im.url;
-                    })
-                  }
-                >
-                  Dùng làm ảnh sân khấu
-                </button>
-                {cut && onAddImage && (
-                  <button type="button" className={BTN_SMALL} disabled={disabled} onClick={() => onAddImage(cut.dataUrl)}>
-                    Thêm bản tách nền vào ảnh sản phẩm
+                {cut && onAddImage ? (
+                  <button
+                    type="button"
+                    className={BTN_SMALL}
+                    disabled={disabled}
+                    onClick={() => {
+                      const slot = product.images.length;
+                      onAddImage(cut.dataUrl);
+                      edit((c) => {
+                        c.cutoutUrl = `/public-image/product/${product.id}/${slot}`;
+                      });
+                    }}
+                  >
+                    Dùng làm ảnh sân khấu
                   </button>
+                ) : (
+                  im.url.startsWith('https://') && (
+                    <button
+                      type="button"
+                      className={BTN_SMALL}
+                      disabled={disabled}
+                      onClick={() =>
+                        edit((c) => {
+                          c.cutoutUrl = im.url;
+                        })
+                      }
+                    >
+                      Dùng làm ảnh sân khấu
+                    </button>
+                  )
                 )}
               </li>
             );
@@ -409,7 +430,7 @@ export function ProductStoryStudio({
           data-mode={mode}
           className={`mx-auto overflow-hidden rounded-card border border-stone-300 bg-stone-0 ${mode === 'phone' ? 'w-[375px] max-w-full' : 'w-full'}`}
         >
-          <ProductStoryShowcase product={preview} previewConfig={current} />
+          <ProductStoryShowcase product={preview} previewConfig={previewConfig} />
         </div>
       </div>
     </fieldset>
