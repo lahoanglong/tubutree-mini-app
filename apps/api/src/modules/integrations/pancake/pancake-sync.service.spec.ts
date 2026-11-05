@@ -1129,7 +1129,9 @@ describe('PancakeSyncService — payload thiếu trường hoặc kiểu lạ (W
     });
 
     it.each([
-      [250.5, 251],
+      [250.5, 250],
+      [250.9, 250],
+      ['250.9', 250],
       ['500', 500],
       [-5, null],
       [{}, null],

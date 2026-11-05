@@ -117,7 +117,7 @@ describe('Payload Pancake kiểu lạ không làm hỏng đồng bộ và tồn 
     expect(b.basePrice).toBe(269000);
     const v = (pid: string) => prisma.variation.findUniqueOrThrow({ where: { pancakeId: pid } });
 
-    expect(await v(`w11-B1-${tag}`)).toMatchObject({ sku: `w11-B1-${tag}`, retailPrice: 269000, salePrice: 199000, weight: 251, stock: 7, pancakeStock: 7, name: '1 chai', isActive: true });
+    expect(await v(`w11-B1-${tag}`)).toMatchObject({ sku: `w11-B1-${tag}`, retailPrice: 269000, salePrice: 199000, weight: 250, stock: 7, pancakeStock: 7, name: '1 chai', isActive: true });
     expect(await v(`w11-B3-${tag}`)).toMatchObject({ stock: 0, pancakeStock: 0, weight: null, sku: `W11-B3-${tag}` });
     expect(await v(`w11-B4-${tag}`)).toMatchObject({ retailPrice: 0, salePrice: null, isActive: false, pancakeHold: 'NO_PRICE', stock: 0, pancakeStock: 0 });
     expect(await v(String(numericId))).toMatchObject({ sku: String(numericId), retailPrice: 50000, stock: 4, isActive: true });

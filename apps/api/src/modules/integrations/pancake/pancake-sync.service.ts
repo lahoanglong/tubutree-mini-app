@@ -559,8 +559,8 @@ export class PancakeSyncService implements OnModuleInit {
     // Cột `sku` là khoá duy nhất: ghi nguyên văn chuỗi Pancake gửi (không cắt khoảng trắng, kẻo lệch so với các lần đồng bộ trước và
     // với sku admin đã dán); rỗng/khoảng trắng/object lấy mã biến thể, số đổi thành chuỗi.
     const sku = typeof v.sku === 'string' ? (v.sku.trim() ? v.sku : vid) : (payloadText(v.sku) ?? vid);
-    // Cột `weight` là Int: số lẻ làm Prisma ném và hỏng cả sản phẩm; số âm/rác là không biết.
-    const weight = payloadNonNegInt(v.weight, { round: true });
+    // Cột `weight` là Int: chuỗi làm Prisma ném và hỏng cả sản phẩm; số lẻ bỏ phần lẻ (đúng giá trị Prisma vẫn ghi trước đây); âm/rác là không biết.
+    const weight = payloadNonNegInt(v.weight, { trunc: true });
     const label = variantLabel(v.fields) ?? productName;
     // `remain_quantity` vắng mặt hoặc không đọc được = Pancake KHÔNG nói gì về tồn kho lần này (không phải "hết hàng").
     // Số âm (POS cho bán lố kho) là hết hàng: tồn bán được không âm.
