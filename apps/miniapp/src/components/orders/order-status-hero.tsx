@@ -11,7 +11,7 @@ export interface OrderStatusHeroProps {
   tone: { bg: string; fg: string };
 }
 
-/** Đầu trang theo dõi đơn: trạng thái, một câu nói đơn đang ở đâu, mốc cần biết (ngày giao, hạn trả, hạn đổi/trả) và bước kế tiếp. */
+/** Đầu trang theo dõi đơn: trạng thái, một câu nói đơn đang ở đâu, lý do huỷ (đơn đã huỷ), mốc cần biết (ngày giao, hạn trả, hạn đổi/trả) và bước kế tiếp. */
 export function OrderStatusHero({ headline, statusLabel, stamp, tone }: OrderStatusHeroProps) {
   const inherit = { color: 'inherit' } as const;
   return (
@@ -29,6 +29,11 @@ export function OrderStatusHero({ headline, statusLabel, stamp, tone }: OrderSta
       {headline.sentence && (
         <Text variant="body-md" as="p" style={inherit}>
           {headline.sentence}
+        </Text>
+      )}
+      {headline.reason && (
+        <Text variant="body-sm" as="p" data-testid="order-cancel-reason" style={{ ...inherit, fontWeight: 600 }}>
+          {headline.reason}
         </Text>
       )}
       {headline.milestone && (

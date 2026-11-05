@@ -118,6 +118,18 @@ describe('OrderStatusHero (web)', () => {
     expect(container.querySelector('[data-testid="order-milestone"]')?.textContent).toBe('Dự kiến giao 06/11 – 08/11');
     expect(container.querySelector('[data-testid="order-next"]')?.textContent).toContain('không huỷ được');
   });
+
+  it('đơn huỷ có lý do từ API: một dòng riêng ngay dưới câu "Đơn đã huỷ.", trước bước kế tiếp; không có lý do thì không dựng dòng', () => {
+    const head = (cancelReason?: string | null) => orderHeadline(order({ status: 'CANCELLED', cancelReason }), { now: NOW });
+    const props = { statusLabel: 'Đã huỷ', stamp: { label: 'Huỷ lúc', at: '2026-11-03T05:00:00Z' }, tone };
+    const withReason = mount(<OrderStatusHero headline={head('Tubu Tree đã huỷ đơn này. Cần biết thêm, bạn liên hệ CSKH.')} {...props} />);
+    const reason = withReason.container.querySelector('[data-testid="order-cancel-reason"]')!;
+    expect(reason.textContent).toBe('Tubu Tree đã huỷ đơn này. Cần biết thêm, bạn liên hệ CSKH.');
+    expect(reason.previousElementSibling?.textContent).toBe('Đơn đã huỷ.');
+    expect(reason.nextElementSibling).toBe(withReason.container.querySelector('[data-testid="order-next"]'));
+    const without = mount(<OrderStatusHero headline={head(null)} {...props} />);
+    expect(without.container.querySelector('[data-testid="order-cancel-reason"]')).toBeNull();
+  });
 });
 
 describe('OrderActionBar (web)', () => {

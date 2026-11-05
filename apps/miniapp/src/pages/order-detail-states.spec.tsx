@@ -282,11 +282,23 @@ describe('OrderDetailPage — nút theo trạng thái (gói hl)', () => {
     expect(emptyFrames).toHaveLength(0);
   });
 
-  it('đơn chuyển khoản đã huỷ: chỉ nói "Đơn đã huỷ.", không suy ra lý do quá hạn thanh toán (API không trả lý do huỷ)', async () => {
+  it('đơn chuyển khoản đã huỷ mà API chưa trả cancelReason: chỉ nói "Đơn đã huỷ.", không suy ra lý do quá hạn thanh toán', async () => {
     const base = { ...ORDER, status: 'CANCELLED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', createdAt: hoursFromNow(-30), updatedAt: hoursFromNow(-5) };
     mocks.fetchOrder.mockResolvedValue({ ...base, paymentDeadline: hoursFromNow(-6), statusTimes: { CANCELLED: hoursFromNow(-6) } });
     renderPage();
     expect(await screen.findByText('Đơn đã huỷ.')).toBeInTheDocument();
     expect(screen.queryByText(/quá hạn thanh toán/)).toBeNull();
+    expect(screen.queryByTestId('order-cancel-reason')).toBeNull();
+  });
+
+  it('đơn huỷ API trả cancelReason: khối đầu trang hiện đúng câu lý do (lời khách, tự huỷ quá hạn, Tubu huỷ)', async () => {
+    const base = { ...ORDER, status: 'CANCELLED', createdAt: hoursFromNow(-30), updatedAt: hoursFromNow(-5), statusTimes: { CANCELLED: hoursFromNow(-6) } };
+    for (const reason of ['Bạn đã huỷ: Đổi ý, không muốn mua nữa', 'Đơn tự huỷ vì quá hạn thanh toán', 'Tubu Tree đã huỷ đơn này. Cần biết thêm, bạn liên hệ CSKH.']) {
+      mocks.fetchOrder.mockResolvedValue({ ...base, cancelReason: reason });
+      const { unmount } = renderPage();
+      const hero = await screen.findByTestId('status-hero');
+      expect(within(hero).getByTestId('order-cancel-reason')).toHaveTextContent(reason);
+      unmount();
+    }
   });
 });
