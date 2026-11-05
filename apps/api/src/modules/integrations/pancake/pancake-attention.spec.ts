@@ -2,6 +2,7 @@ import { ConflictException } from '@nestjs/common';
 import {
   ATTENTION_COD_RETURN_UNVERIFIED,
   ATTENTION_PARTIAL_RETURN_ACK,
+  ATTENTION_PUSH_FAILED,
   flagPancakeAttention,
   removeAttentionReason,
   removeAttentionReasonsByPrefix,
@@ -11,6 +12,37 @@ import { baseOrder, fakeOrderDb } from '../../../../test/fakes/pancake-order.fak
 import type { PrismaService } from '../../../prisma/prisma.service';
 
 const WAYBILL = 'Pancake báo vận đơn GHN X1 cho đơn đã "Đã trả hàng" (đã hoàn tiền) — KHÔNG ghi lên đơn.';
+
+describe('writePancakeAttention — lời "Chưa đẩy được đơn sang Pancake" chỉ ghi cho đơn CHƯA lên Pancake', () => {
+  const failed = `${ATTENTION_PUSH_FAILED} (kho chưa thấy đơn): Pancake trả 422. Thử lại không tự hết lỗi.`;
+
+  it('đơn đã có mã Pancake (đẩy xong chen giữa lúc đọc và lúc gắn): không ghi, không báo admin', async () => {
+    const { prisma, row } = fakeOrderDb([baseOrder({ pancakeOrderId: 'pk-1', pancakePushStatus: 'SYNCED' })]);
+    const alerts = { alert: jest.fn().mockResolvedValue(undefined) };
+    await flagPancakeAttention(prisma as unknown as PrismaService, alerts as never, { id: 'o1', code: 'TUBU1' }, failed);
+    expect(row().pancakeAttention ?? null).toBeNull();
+    expect(alerts.alert).not.toHaveBeenCalled();
+  });
+
+  it('ô đang có lý do khác mà đơn đã lên Pancake: không ghi, không lặp vòng đọc-ghi, ô giữ nguyên', async () => {
+    const { prisma, row } = fakeOrderDb([baseOrder({ pancakeOrderId: 'pk-1', pancakeAttention: ATTENTION_COD_RETURN_UNVERIFIED })]);
+    expect(await writePancakeAttention(prisma as never, 'o1', failed)).toBeNull();
+    expect(row().pancakeAttention).toBe(ATTENTION_COD_RETURN_UNVERIFIED);
+    expect(prisma.order.findUnique.mock.calls.length).toBeLessThanOrEqual(1);
+  });
+
+  it('đơn chưa lên Pancake: ghi như thường', async () => {
+    const { prisma, row } = fakeOrderDb([baseOrder()]);
+    expect(await writePancakeAttention(prisma as never, 'o1', failed)).toBe(failed);
+    expect(row().pancakeAttention).toBe(failed);
+  });
+
+  it('lý do loại khác (vận đơn, thanh toán chưa báo...) vẫn ghi cho đơn đã lên Pancake', async () => {
+    const { prisma, row } = fakeOrderDb([baseOrder({ pancakeOrderId: 'pk-1' })]);
+    expect(await writePancakeAttention(prisma as never, 'o1', WAYBILL)).toBe(WAYBILL);
+    expect(row().pancakeAttention).toBe(WAYBILL);
+  });
+});
 
 describe('writePancakeAttention — một ô nhiều lý do (PNK-02)', () => {
   it('ô trống hoặc lý do thường: ghi đè như cũ', async () => {

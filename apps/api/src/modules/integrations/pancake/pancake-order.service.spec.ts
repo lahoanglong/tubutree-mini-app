@@ -1097,6 +1097,21 @@ describe('PancakeOrderService — STALE chỉ rời bằng đẩy thành công h
     });
   });
 
+  it('lượt lỗi: đơn lên Pancake giữa lúc đọc và lúc gắn nhắc → không còn "Chưa đẩy được…" nằm lại, không báo admin', async () => {
+    const t = setup({ pancakePushStatus: PANCAKE_PUSH.PENDING });
+    const real = t.prisma.order.findUnique.getMockImplementation()!;
+    // Lệnh đọc của failureReminder (có include) trả bản chụp CŨ rồi đơn mới lên Pancake (saveCreated).
+    t.prisma.order.findUnique.mockImplementation(async (args: Parameters<typeof real>[0] & { include?: unknown }) => {
+      const snapshot = await real(args);
+      if (args.include) Object.assign(t.row(), { pancakeOrderId: 'pk-1', pancakePushStatus: PANCAKE_PUSH.SYNCED });
+      return snapshot;
+    });
+    await t.svc.markPushFailure('o1', new PancakeOrderDataError('thiếu SĐT'), true);
+    expect(t.row()).toMatchObject({ pancakeOrderId: 'pk-1', pancakePushStatus: PANCAKE_PUSH.SYNCED });
+    expect(t.row().pancakeAttention ?? null).toBeNull();
+    expect(t.alerts.alert).not.toHaveBeenCalled();
+  });
+
   it('markPushFailure(final) trên đơn STALE gặp 401: vẫn hoàn lượt đã đốt và vẫn STALE', async () => {
     const t = setup({ pancakePushStatus: PANCAKE_PUSH.STALE, pancakePushAttempts: 3 });
     await t.svc.markPushFailure('o1', new PancakeApiError('Pancake trả 401 khi tạo đơn', false, false, 401), true);

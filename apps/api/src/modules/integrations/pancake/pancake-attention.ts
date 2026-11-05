@@ -84,6 +84,8 @@ const ATTENTION_WRITE_ATTEMPTS = 10;
 /**
  * Ghi lý do lên ô "Cần xử lý Pancake" (một ô cho mọi lý do). Dòng "COD chờ Kế toán" và dòng "hoàn tay chờ Kế toán" không bị ghi đè: nó chỉ gỡ khi Kế toán quyết,
  * nên lý do mới được nối sau nó. Đọc rồi ghi có điều kiện theo giá trị đã đọc (lý do vừa chen giữa không bị đè; thua thì đọc lại).
+ * Lý do mở đầu bằng ATTENTION_PUSH_FAILED chỉ ghi khi đơn CHƯA có mã Pancake, ngay trong câu ghi: lượt đẩy xong chen giữa lúc đọc và lúc
+ * gắn đã gỡ nhắc này (saveCreated), ghi sau đó sẽ để lại lời "chưa đẩy được" trên đơn đã lên kho. Lý do loại khác ghi như cũ.
  * Trả chuỗi vừa ghi, hoặc null khi không đổi gì.
  */
 export async function writePancakeAttention(
@@ -95,6 +97,7 @@ export async function writePancakeAttention(
   onlyOpenOrder = false,
 ): Promise<string | null> {
   const open = onlyOpenOrder ? { status: { notIn: ['CANCELLED', 'RETURNED'] as OrderStatus[] } } : {};
+  const unsynced = reason.startsWith(ATTENTION_PUSH_FAILED) ? { pancakeOrderId: null } : null;
   const changed = { OR: [{ pancakeAttention: null }, { pancakeAttention: { not: reason } }] };
   // NOT (NULL LIKE ..) ra NULL trong SQL: ô trống phải được nêu riêng, không thì dòng không khớp.
   const notCod = { OR: [{ pancakeAttention: null }, { NOT: { pancakeAttention: { contains: ATTENTION_COD_RETURN_UNVERIFIED } } }] };
@@ -103,8 +106,8 @@ export async function writePancakeAttention(
   };
   const first = await db.order.updateMany({
     where: onlyReplacingPrefix
-      ? { id: orderId, ...open, AND: [changed, notCod, notHeld, { OR: [{ pancakeAttention: null }, { pancakeAttention: { startsWith: onlyReplacingPrefix } }] }] }
-      : { id: orderId, ...open, AND: [changed, notCod, notHeld] },
+      ? { id: orderId, ...open, ...unsynced, AND: [changed, notCod, notHeld, { OR: [{ pancakeAttention: null }, { pancakeAttention: { startsWith: onlyReplacingPrefix } }] }] }
+      : { id: orderId, ...open, ...unsynced, AND: [changed, notCod, notHeld] },
     data: { pancakeAttention: reason, pancakeAttentionAt: new Date() },
   });
   if (first.count === 1) return reason;
@@ -112,8 +115,9 @@ export async function writePancakeAttention(
   // Không khớp: cùng lý do đang chờ, đơn đã đóng (onlyOpenOrder), hoặc ô đang giữ dòng COD chờ Kế toán — trường hợp sau nối lý do
   // mới vào sau dòng đó. Ô có thể đổi tiếp giữa các bước (Kế toán gỡ COD, instance khác nối), nên mỗi lượt ghi theo đúng giá trị vừa đọc.
   for (let attempt = 0; attempt < ATTENTION_WRITE_ATTEMPTS; attempt += 1) {
-    const row = await db.order.findUnique({ where: { id: orderId }, select: { pancakeAttention: true, status: true } });
+    const row = await db.order.findUnique({ where: { id: orderId }, select: { pancakeAttention: true, status: true, pancakeOrderId: true } });
     if (!row) return null;
+    if (unsynced && row.pancakeOrderId) return null;
     if (onlyOpenOrder && (row.status === 'CANCELLED' || row.status === 'RETURNED')) return null;
     const current = row.pancakeAttention ?? null;
     // Lý do đã nằm trong ô (ở bất kỳ vị trí nào, vd 'X | COD' do order-status nối) thì không đổi và không báo lại.
@@ -121,7 +125,7 @@ export async function writePancakeAttention(
     // Cùng phép thử với notCod/notHeld của lệnh ghi đầu: còn dòng chờ Kế toán thì nối sau nó; vừa được Kế toán gỡ thì ghi như lệnh đầu.
     const next = current && ACCOUNTANT_OWNED_REASONS.some((r) => current.includes(r)) ? `${current}${ATTENTION_SEPARATOR}${reason}` : reason;
     const r = await db.order.updateMany({
-      where: { id: orderId, ...open, pancakeAttention: current },
+      where: { id: orderId, ...open, ...unsynced, pancakeAttention: current },
       data: { pancakeAttention: next, pancakeAttentionAt: new Date() },
     });
     if (r.count === 1) return next;

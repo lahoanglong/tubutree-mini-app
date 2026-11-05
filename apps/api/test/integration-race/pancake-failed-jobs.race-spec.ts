@@ -615,6 +615,31 @@ const url = process.env.TEST_REDIS_URL;
     expect(await prisma.order.findUniqueOrThrow({ where: { id: x.id } })).toMatchObject({ pancakePushStatus: 'SYNCED', pancakeOrderId: pk });
   });
 
+  it('lượt đẩy lỗi dứt khoát, đơn lên Pancake đúng giữa lúc đọc và lúc gắn nhắc: không còn "Chưa đẩy được…" nằm lại trên đơn đã SYNCED', async () => {
+    const x = await order();
+    await prisma.order.update({ where: { id: x.id }, data: { pancakePushStatus: 'PENDING' } });
+    // Lệnh đọc của failureReminder (có include) trả bản chụp CŨ (chưa có mã Pancake), rồi đơn lên Pancake và saveCreated gỡ nhắc: lời gắn
+    // sau đó phải bị câu ghi từ chối trong chính điều kiện `pancakeOrderId IS NULL`.
+    const racing = new PancakeOrderService(
+      prismaStaleRead(
+        'findUnique',
+        async () => {
+          await prisma.order.update({ where: { id: x.id }, data: { pancakeOrderId: `pk-${randCode(8)}`, pancakePushStatus: 'SYNCED' } });
+        },
+        (args) => (args as { include?: unknown }).include !== undefined,
+      ),
+      client as unknown as PancakeClient,
+      queue,
+      undefined,
+      alerts as unknown as GomdonAlertService,
+    );
+    alerts.alert.mockClear();
+    await racing.markPushFailure(x.id, new PancakeApiError('Pancake trả 422 khi tạo đơn: x', false, false, 422), true);
+    const after = await prisma.order.findUniqueOrThrow({ where: { id: x.id } });
+    expect(after).toMatchObject({ pancakePushStatus: 'SYNCED', pancakeAttention: null });
+    expect(alerts.alert.mock.calls.filter(([code]) => code === x.code)).toHaveLength(0);
+  });
+
   it('cron tự đẩy bỏ qua đơn STALE: không xếp job, không đóng dấu lần thử, không gọi createOrder', async () => {
     const x = await order();
     // Đóng dấu mọi đơn chưa từng thử khác để lô 50 đơn của pushStale (chưa thử đứng đầu) chắc chắn đủ chỗ cho X nếu X còn đủ điều kiện.
