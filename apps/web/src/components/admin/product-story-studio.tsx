@@ -165,7 +165,7 @@ export function ProductStoryStudio({
           className={BTN_PRIMARY}
           disabled={disabled}
           onClick={() => {
-            if (!generated) return setNote('Chưa đủ dữ liệu: cần thành phần hoặc từ 2 biến thể để tự sinh kịch bản.');
+            if (!generated) return setNote('Chưa đủ dữ liệu: cần thành phần, từ 2 biến thể, hoặc tên sản phẩm của nhãn chủ lực có quy cách hay hương để tự sinh kịch bản.');
             setNote(null);
             const { cutoutUrl, imageFrame } = current;
             onChange({ ...generated, ...(cutoutUrl ? { cutoutUrl } : {}), ...(imageFrame ? { imageFrame } : {}) });

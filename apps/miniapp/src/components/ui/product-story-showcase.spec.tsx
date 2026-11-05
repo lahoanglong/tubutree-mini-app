@@ -172,6 +172,19 @@ describe('ProductStoryShowcase (Mini)', () => {
     expect(hud).toHaveTextContent('An lành cho cả nhà');
   });
 
+  it('sản phẩm của nhãn chủ lực chưa có cấu hình: tự vẽ điểm chỉ Thương hiệu, Quy cách, Hương đọc từ tên cùng câu kết', () => {
+    const brand = { ...baseProduct, slug: 'nuoc-giat-huong-bac-ha-fuwa3e-500ml-751754', name: 'Nước giặt hương Bạc hà Fuwa3e 500ml', brand: 'Tubu Tree' } as unknown as ProductDetail;
+    render(<ProductStoryShowcase product={brand} />);
+    const hud = screen.getByTestId('story-hud');
+    const callouts = within(hud).getAllByTestId('story-callout');
+    expect(callouts).toHaveLength(3);
+    expect(callouts[0]).toHaveTextContent('Thương hiệu');
+    expect(callouts[0]).toHaveTextContent('Fuwa3e');
+    expect(callouts[1]).toHaveTextContent('500ml');
+    expect(callouts[2]).toHaveTextContent('Bạc hà');
+    expect(hud).toHaveTextContent('Fuwa3e, có tại Tubu Tree');
+  });
+
   it('hostile label renders as text not HTML', () => {
     const hostile = '<img src=x onerror=alert(1)> & "q"';
     const { container } = render(<ProductStoryShowcase product={baseProduct} previewConfig={fullConfig({ label: hostile })} />);
