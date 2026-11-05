@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parseStoryConfig, type ProductStoryConfig, type StoryScene } from '@tubutree/shared-types';
 import {
@@ -7,6 +9,7 @@ import {
   buildDefaultStoryConfig,
   layersUpTo,
   resolveStoryConfig,
+  STORY_PRODUCT_INSET_PCT,
   storyView,
   toneVar,
   type StoryProductInput,
@@ -201,6 +204,19 @@ describe('storyView', () => {
     expect(layersUpTo(v.steps, 99)).toHaveLength(layersUpTo(v.steps, v.steps.length - 1).length);
     expect(layersUpTo(v.steps, -3)).toHaveLength(n0);
     expect(layersUpTo([], 0)).toEqual([]);
+  });
+});
+
+describe('khung sân khấu dùng chung', () => {
+  const read = (rel: string) => readFileSync(resolve(__dirname, '../../../../', rel), 'utf8');
+  const inset = (css: string) => /\.tubu-story-product\s*\{[^}]*?inset:\s*(\d+(?:\.\d+)?)%/.exec(css)?.[1];
+
+  it('toạ độ xPct/yPct tính trên khung vuông; ảnh sản phẩm lề cùng một số ở CSS Mini, CSS web và Studio', () => {
+    expect(inset(read('apps/miniapp/src/css/story.css'))).toBe(String(STORY_PRODUCT_INSET_PCT));
+    expect(inset(read('apps/web/src/components/mini/mini.css'))).toBe(String(STORY_PRODUCT_INSET_PCT));
+    const studio = read('apps/web/src/components/admin/product-story-studio.tsx');
+    expect(studio).toContain('STORY_PRODUCT_INSET_PCT');
+    expect(studio).toContain('aspect-square');
   });
 });
 

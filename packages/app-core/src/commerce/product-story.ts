@@ -26,6 +26,11 @@ export interface StoryProductInput {
   storyConfig?: unknown;
 }
 
+/**
+ * Khung sân khấu là hình vuông 1:1; xPct/yPct của lớp nguyên liệu và điểm chỉ tính theo khung này. Ảnh sản phẩm nằm trong khung với lề
+ * từng này phần trăm mỗi cạnh ở Mini, web và Studio, nên một điểm đặt lên chai ở Studio rơi đúng chỗ đó ở hai app.
+ */
+export const STORY_PRODUCT_INSET_PCT = 12;
 export const ARC_ACTIVE = { scale: 1.22, rotateDeg: -6 } as const;
 const ARC_AMBIENTS: readonly StoryAmbient[] = ['leaf', 'amber', 'sky', 'sand'];
 

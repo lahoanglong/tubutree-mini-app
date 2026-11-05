@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { parseStoryConfig, STORY_LIMITS, type AssemblyStep, type HudCalloutPoint, type ProductStoryConfig, type StoryScene } from '@tubutree/shared-types';
 import type { ProductDetail as PublicProduct } from '@tubutree/app-core/api/catalog';
-import { resolveStoryConfig } from '@tubutree/app-core/commerce/product-story';
+import { resolveStoryConfig, STORY_PRODUCT_INSET_PCT } from '@tubutree/app-core/commerce/product-story';
 import { STORY_SPRITES } from '@tubutree/app-core/commerce/story-sprites';
 import { ProductStoryShowcase } from '@/components/mini/product-story-showcase';
 import { extractStoryAssets, type ProductDetail, type StoryAssetsResult } from '@/lib/product-categories';
@@ -349,7 +349,7 @@ export function ProductStoryStudio({
         <div
           data-testid="story-hud-canvas"
           role="presentation"
-          className="relative mx-auto aspect-[3/4] w-full max-w-[320px] cursor-crosshair overflow-hidden rounded-card border border-stone-200 bg-stone-100"
+          className="relative mx-auto aspect-square w-full max-w-[320px] cursor-crosshair overflow-hidden rounded-card border border-stone-200 bg-stone-100"
           onClick={(e) => {
             if (points.length === 0 || disabled) return;
             const r = e.currentTarget.getBoundingClientRect();
@@ -363,7 +363,7 @@ export function ProductStoryStudio({
           }}
         >
           {/* eslint-disable-next-line @next/next/no-img-element -- ảnh tuỳ chọn của admin, cần khung cố định để quy đổi toạ độ */}
-          {stage && <img src={stage} alt="" className="pointer-events-none absolute inset-0 h-full w-full object-contain" />}
+          {stage && <img src={stage} alt="" className="pointer-events-none absolute object-contain" style={{ inset: `${STORY_PRODUCT_INSET_PCT}%`, width: `${100 - 2 * STORY_PRODUCT_INSET_PCT}%`, height: `${100 - 2 * STORY_PRODUCT_INSET_PCT}%` }} />}
           {points.map((p, i) => (
             <span
               key={p.id}
