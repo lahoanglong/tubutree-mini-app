@@ -5,7 +5,7 @@ import { SystemConfigService } from '../../src/modules/system-config/system-conf
 import { AnalyticsEventsService } from '../../src/modules/analytics/analytics-events.service';
 import { CommunityFeedService } from '../../src/modules/feed/community-feed.service';
 import { CommunityRewardService } from '../../src/modules/feed/community-reward.service';
-import { createUser as makeUser, summarize, warmPool } from './helpers';
+import { createUser as makeUser, randCode, summarize, warmPool } from './helpers';
 
 /** m5: bấm gửi đôi / mạng gửi lại POST /feed và POST /feed/events (song song) chỉ tạo một bản ghi. */
 describe('Feed: gửi trùng đăng bài / tạo sự kiện (real Postgres)', () => {
@@ -117,6 +117,43 @@ describe('Feed: gửi trùng đăng bài / tạo sự kiện (real Postgres)', (
     const a = await feed.createEvent({ ...dto, title: t });
     const b = await feed.createEvent({ ...dto, title: `${t} ` });
     expect(b.id).toBe(a.id);
+  });
+
+  it('4 yêu cầu song song y hệt có cả thẻ #tag lẫn sản phẩm gắn → 1 bài, thẻ và sản phẩm gắn đủ', async () => {
+    const u = await createUser(prisma);
+    const code = randCode(8).toLowerCase();
+    const product = await prisma.product.create({
+      data: { pancakeId: `it-p-${code}`, brand: 'IT', slug: `it-sp-${code}`, name: `SP ${code}`, description: 'IT', basePrice: 1000, approvalStatus: 'APPROVED' },
+    });
+    const input = { kind: 'TIP' as const, body: `Có thẻ ${code}`, tagSlugs: [`sen-da-${code}`, `tuoi-nuoc-${code}`], productSlugs: [product.slug] };
+    const res = await Promise.allSettled(Array.from({ length: 4 }, () => feed.createPost(u.id, 'CUSTOMER', input)));
+    expect(summarize(res).errors).toEqual([]);
+    const ids = new Set(res.map((r) => (r as PromiseFulfilledResult<{ id: string }>).value.id));
+    expect(ids.size).toBe(1);
+    const posts = await prisma.feedPost.findMany({
+      where: { userId: u.id },
+      select: { id: true, tags: { select: { tag: { select: { slug: true } } } }, productTags: { select: { productId: true } } },
+    });
+    expect(posts).toHaveLength(1);
+    expect(posts[0]!.tags.map((t) => t.tag.slug).sort()).toEqual([`sen-da-${code}`, `tuoi-nuoc-${code}`]);
+    expect(posts[0]!.productTags.map((t) => t.productId)).toEqual([product.id]);
+    await prisma.feedPost.deleteMany({ where: { userId: u.id } });
+    await prisma.product.delete({ where: { id: product.id } });
+    await prisma.tag.deleteMany({ where: { slug: { endsWith: `-${code}` } } });
+  });
+
+  it('thẻ mới chưa tồn tại tạo đồng thời bởi 2 người khác nhau → cả 2 bài có thẻ, chỉ 1 dòng tag', async () => {
+    const [a, b] = [await createUser(prisma), await createUser(prisma)];
+    const slug = `the-moi-${randCode(8).toLowerCase()}`;
+    const mk = (uid: string) => feed.createPost(uid, 'CUSTOMER', { kind: 'TIP', body: `Bài ${uid}`, tagSlugs: [slug] });
+    const res = await Promise.allSettled([mk(a.id), mk(b.id)]);
+    expect(summarize(res).errors).toEqual([]);
+    expect(await prisma.tag.count({ where: { slug } })).toBe(1);
+    for (const u of [a, b]) {
+      const p = await prisma.feedPost.findFirstOrThrow({ where: { userId: u.id }, select: { tags: { select: { tag: { select: { slug: true } } } } } });
+      expect(p.tags.map((t) => t.tag.slug)).toEqual([slug]);
+    }
+    await prisma.tag.deleteMany({ where: { slug } });
   });
 
   it('khách vãng lai có 2 bài ảnh chờ duyệt (chạm trần) gửi lại bài thứ 2 → nhận bài đó, không lỗi trần, số bài không đổi', async () => {

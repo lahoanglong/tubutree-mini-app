@@ -701,45 +701,40 @@ export class CommunityFeedService {
         },
         select: { id: true },
       });
-      return { id: created.id, status: status as string, duplicate: false };
-    };
-    const post = await this.prisma.$transaction(createDeduped);
-    if (post.duplicate) return { id: post.id, status: post.status };
-
-    if (products.length) {
-      await this.prisma.postProductTag.createMany({
-        data: products.map((p) => ({ postId: post.id, productId: p.id })),
-        skipDuplicates: true,
-      });
-    }
-
-    if (tagLabels.length) {
-      try {
+      // Sản phẩm gắn và thẻ ghi CÙNG giao dịch, trước khi nhả khoá theo người: nếu ghi sau commit thì yêu cầu gửi song song lấy khoá,
+      // thấy bài chưa có thẻ/sản phẩm (≠ yêu cầu của nó) và tạo bài thứ hai. Không nuốt lỗi ở đây (Postgres hỏng cả giao dịch sau
+      // lỗi): lỗi DB thật thì cả yêu cầu lỗi và bài không được tạo.
+      if (products.length) {
+        await tx.postProductTag.createMany({
+          data: products.map((p) => ({ postId: created.id, productId: p.id })),
+          skipDuplicates: true,
+        });
+      }
+      if (tagLabels.length) {
         // Hai nhãn cùng slug là một Tag: nhãn đầu giữ name, như upsert nối tiếp trước đây.
         const nameBySlug = new Map<string, string>();
         for (const label of tagLabels) {
           const slug = slugifyTag(label);
           if (!nameBySlug.has(slug)) nameBySlug.set(slug, label);
         }
-        const slugs = [...nameBySlug.keys()];
-        await this.prisma.tag.createMany({
-          data: slugs.map((slug) => ({ slug, name: nameBySlug.get(slug)! })),
+        // Sắp theo slug: hai giao dịch cùng tạo thẻ mới theo cùng một thứ tự khoá dòng nên không deadlock.
+        const tagSlugs = [...nameBySlug.keys()].sort();
+        await tx.tag.createMany({
+          data: tagSlugs.map((slug) => ({ slug, name: nameBySlug.get(slug)! })),
           skipDuplicates: true,
         });
-        const rows = await this.prisma.tag.findMany({ where: { slug: { in: slugs } }, select: { id: true, slug: true } });
+        const rows = await tx.tag.findMany({ where: { slug: { in: tagSlugs } }, select: { id: true, slug: true } });
         const idBySlug = new Map(rows.map((t) => [t.slug, t.id]));
-        const tags = slugs.flatMap((slug) => {
+        const tagRows = tagSlugs.flatMap((slug) => {
           const id = idBySlug.get(slug);
-          return id ? [{ id }] : [];
+          return id ? [{ postId: created.id, tagId: id }] : [];
         });
-        await this.prisma.postTag.createMany({
-          data: tags.map((t) => ({ postId: post.id, tagId: t.id })),
-          skipDuplicates: true,
-        });
-      } catch (err) {
-        this.logger.warn(`gắn tag thất bại cho bài ${post.id}: ${(err as Error).message}`);
+        await tx.postTag.createMany({ data: tagRows, skipDuplicates: true });
       }
-    }
+      return { id: created.id, status: status as string, duplicate: false };
+    };
+    const post = await this.prisma.$transaction(createDeduped);
+    if (post.duplicate) return { id: post.id, status: post.status };
 
     if (status === 'PUBLISHED') {
       try {
