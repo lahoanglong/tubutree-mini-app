@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { Campaign, CampaignAudience, CampaignLinkType, CampaignPlacement, CouponScope } from '@prisma/client';
-import { isLockBusy } from '../../common/lock-busy';
+import { isLockBusy, isLockContention, throwIfLockBusy } from '../../common/lock-busy';
 import { publicImage } from '../../common/public-image';
 import { PRISMA_TRANSACTION_OPTIONS, PrismaService } from '../../prisma/prisma.service';
 import { ImageRegistryStale } from '../catalog/image-registry-stale';
@@ -114,14 +114,18 @@ function rethrowForeignKey(e: unknown, what: string): never {
 
 /**
  * Hạn chờ khoá trong giao dịch lưu chiến dịch, nhỏ hơn hạn giao dịch (5 giây của `PRISMA_TRANSACTION_OPTIONS`): giữ khoá lâu hơn thế thì Postgres tự huỷ câu đang chờ
- * (55P03) và lệnh lưu báo 409, thay vì chờ tới khi Prisma huỷ giao dịch và trả 500 với một câu bị kẹt.
+ * (55P03) và lệnh lưu báo 409, thay vì chờ tới khi Prisma huỷ giao dịch (P2028 rồi 503).
  */
 const CAMPAIGN_LOCK_TIMEOUT = '3s';
 const SAVE_BUSY_MESSAGE = 'Chiến dịch đang được người khác lưu, thử lại sau giây lát';
 
-/** Lỗi của giao dịch lưu. Thua tranh khoá (hết hạn chờ khoá, hết hạn giao dịch, deadlock, thua tuần tự hoá) thử lại được: 409 tiếng Việt, giao dịch đã huỷ nên không ghi gì. */
+/**
+ * Lỗi của giao dịch lưu. Chỉ tranh khoá thật (55P03, 40P01, P2034) là 409 tiếng Việt: người khác đang lưu, thử lại là qua, giao dịch đã huỷ nên không ghi gì.
+ * Hết hạn giao dịch (P2028) và statement timeout (57014) đi đường chung của dự án (503 và LOCK_BUSY_MESSAGE, có lên Sentry) như mọi nơi khác.
+ */
 function rethrowSaveFailure(e: unknown, what: string): never {
-  if (isLockBusy(e)) throw new ConflictException(SAVE_BUSY_MESSAGE);
+  if (isLockContention(e)) throw new ConflictException(SAVE_BUSY_MESSAGE);
+  if (isLockBusy(e)) throwIfLockBusy(e);
   return rethrowForeignKey(e, what);
 }
 

@@ -18,6 +18,19 @@ export function isLockBusy(err: unknown): boolean {
 }
 
 /**
+ * Tranh khoá thật giữa hai người cùng lưu: hết hạn chờ khoá (55P03), deadlock (40P01) hoặc xung đột ghi (Prisma P2034). Hẹp hơn `isLockBusy`:
+ * KHÔNG gồm hết hạn giao dịch (P2028, kể cả không mở được trong maxWait) hay statement timeout (57014), vì hai lỗi đó là quá tải chứ không phải người khác đang sửa.
+ */
+export function isLockContention(err: unknown): boolean {
+  if (typeof err !== 'object' || err === null || err instanceof HttpException) return false;
+  const e = err as { code?: unknown; meta?: { code?: unknown } };
+  if (e.code === 'P2034') return true;
+  if (e.code === 'P2010' && (e.meta?.code === '55P03' || e.meta?.code === '40P01')) return true;
+  const message = err instanceof Error ? err.message : '';
+  return /\b55P03\b|\b40P01\b|lock timeout|deadlock detected/i.test(message);
+}
+
+/**
  * Thua race tx Serializable (Postgres 40001): Prisma báo P2034 với câu ORM, nhưng câu `$queryRaw`/`$executeRaw` ném P2010 với
  * `meta.code === '40001'` (dự phòng: SQLSTATE hoặc "could not serialize access" trong message). Tx đã rollback hết nên chạy lại được.
  */

@@ -1,6 +1,7 @@
-import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { CAMPAIGN_ENTITY_SLUG_MAX } from '@tubutree/shared-types';
+import { LOCK_BUSY_MESSAGE } from '../../common/lock-busy';
 import { ImageRegistryStale } from '../catalog/image-registry-stale';
 import { CampaignsAdminService } from './campaigns-admin.service';
 
@@ -376,23 +377,43 @@ describe('hạn chờ khoá của giao dịch lưu (lock_timeout)', () => {
     expect(b.prisma.$executeRaw).toHaveBeenCalledTimes(1);
   });
 
+  const attempts = (err: unknown) => {
+    const a = setup({ existing: row({ isActive: false }) });
+    a.prisma.$transaction.mockRejectedValue(err);
+    const b = setup({ existing: row({ products: [], coupons: [] }) });
+    b.prisma.$transaction.mockRejectedValue(err);
+    const c = setup({ existing: row({ isActive: false }), coupons: [{ id: 'k1', code: 'THU10', scope: 'PUBLIC', batch: null }] });
+    c.prisma.$transaction.mockRejectedValue(err);
+    return [
+      () => a.svc.update('c1', { title: 'Mới' }, NOW),
+      () => b.svc.create({ title: 'Mới', placement: 'HOME_TOP', image: PNG, linkType: 'URL_INTERNAL', linkValue: '/offers', startAt: '2026-11-01T00:00:00.000Z', endAt: '2026-11-20T00:00:00.000Z', isActive: false }, NOW),
+      () => c.svc.setCoupons('c1', ['THU10'], NOW),
+    ];
+  };
+
   it.each([
     ['55P03 của câu raw (P2010)', lockTimeoutError()],
     ['55P03 trong message', new Error('canceling statement due to lock timeout (55P03)')],
-    ['giao dịch Prisma hết hạn (P2028)', new Prisma.PrismaClientKnownRequestError('Transaction API error', { code: 'P2028', clientVersion: 'test' })],
-    ['deadlock (P2034)', new Prisma.PrismaClientKnownRequestError('deadlock detected', { code: 'P2034', clientVersion: 'test' })],
-  ])('%s: update, create và PUT đều trả 409 tiếng Việt', async (_n, err) => {
-    const a = setup({ existing: row({ isActive: false }) });
-    a.prisma.$transaction.mockRejectedValue(err);
-    await expect(a.svc.update('c1', { title: 'Mới' }, NOW)).rejects.toMatchObject({ status: 409, message: BUSY });
-    const b = setup({ existing: row({ products: [], coupons: [] }) });
-    b.prisma.$transaction.mockRejectedValue(err);
-    await expect(
-      b.svc.create({ title: 'Mới', placement: 'HOME_TOP', image: PNG, linkType: 'URL_INTERNAL', linkValue: '/offers', startAt: '2026-11-01T00:00:00.000Z', endAt: '2026-11-20T00:00:00.000Z', isActive: false }, NOW),
-    ).rejects.toMatchObject({ status: 409, message: BUSY });
-    const c = setup({ existing: row({ isActive: false }), coupons: [{ id: 'k1', code: 'THU10', scope: 'PUBLIC', batch: null }] });
-    c.prisma.$transaction.mockRejectedValue(err);
-    await expect(c.svc.setCoupons('c1', ['THU10'], NOW)).rejects.toMatchObject({ status: 409, message: BUSY });
+    ['deadlock 40P01 trong message', new Error('deadlock detected (40P01)')],
+    ['deadlock P2034', new Prisma.PrismaClientKnownRequestError('deadlock detected', { code: 'P2034', clientVersion: 'test' })],
+    ['write conflict P2034', new Prisma.PrismaClientKnownRequestError('Transaction failed due to a write conflict or a deadlock', { code: 'P2034', clientVersion: 'test' })],
+  ])('tranh khoá thật, %s: update, create và PUT đều trả 409 tiếng Việt', async (_n, err) => {
+    for (const run of attempts(err)) await expect(run()).rejects.toMatchObject({ status: 409, message: BUSY });
+  });
+
+  it.each([
+    ['giao dịch hết hạn P2028', new Prisma.PrismaClientKnownRequestError('Transaction API error', { code: 'P2028', clientVersion: 'test' })],
+    ['statement timeout 57014 trong message', new Error('canceling statement due to statement timeout (57014)')],
+  ])('không phải tranh khoá, %s: đi đường chung của dự án (503 và LOCK_BUSY_MESSAGE), không phải 409', async (_n, err) => {
+    for (const run of attempts(err)) {
+      const out = await run().then(
+        () => undefined,
+        (e: unknown) => e,
+      );
+      expect(out).toBeInstanceOf(ServiceUnavailableException);
+      expect(out).not.toBeInstanceOf(ConflictException);
+      expect((out as Error).message).toBe(LOCK_BUSY_MESSAGE);
+    }
   });
 
   it('lỗi khác (không phải thua khoá) vẫn ném nguyên; 400 nghiệp vụ không bị đổi thành 409', async () => {
