@@ -5,7 +5,7 @@ import type { Env } from '../../config/env.validation';
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_VERSION = '2023-06-01';
 const DEFAULT_MODEL = 'claude-sonnet-5-5';
-const TIMEOUT_MS = 60_000;
+const DEFAULT_TIMEOUT_MS = 50_000;
 
 /**
  * Gọi trực tiếp Claude cho Story Studio của admin (bước giữa antigravity và deepseek/gemini). KHÔNG dùng cho AI tư vấn khách.
@@ -26,10 +26,14 @@ export class AnthropicClient {
     return this.key.length > 0;
   }
 
-  async complete(system: string, user: string, maxTokens: number): Promise<string> {
+  /**
+   * Sonnet 5.5 từ chối (400) mọi `temperature`, `top_p`, `top_k` khác mặc định nên không gửi các tham số đó. Suy nghĩ thích ứng
+   * mặc định bật và tính vào `max_tokens`; `effort: low` giữ phần suy nghĩ ngắn cho việc soạn JSON ngắn này.
+   */
+  async complete(system: string, user: string, maxTokens: number, timeoutMs: number = DEFAULT_TIMEOUT_MS): Promise<string> {
     if (!this.isConfigured()) throw new Error('Claude chưa cấu hình khoá.');
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const res = await fetch(ANTHROPIC_URL, {
         method: 'POST',
@@ -37,16 +41,24 @@ export class AnthropicClient {
         body: JSON.stringify({
           model: this.model,
           max_tokens: maxTokens,
-          temperature: 0.6,
+          output_config: { effort: 'low' },
           system,
           messages: [{ role: 'user', content: user }],
         }),
         signal: controller.signal,
       });
-      const body = (await res.json().catch(() => ({}))) as { content?: { type?: string; text?: string }[]; error?: { type?: unknown } };
+      const body = (await res.json().catch(() => ({}))) as {
+        content?: { type?: string; text?: string }[];
+        stop_reason?: unknown;
+        error?: { type?: unknown };
+      };
       if (!res.ok) {
         const type = typeof body.error?.type === 'string' ? body.error.type.slice(0, 60) : 'unknown';
         throw new Error(`Claude ${res.status} ${type}`);
+      }
+      // max_tokens: JSON cụt giữa chừng; refusal: model từ chối. Cả hai đều không phải bản nháp dùng được.
+      if (body.stop_reason !== undefined && body.stop_reason !== 'end_turn') {
+        throw new Error(`Claude dừng sớm: ${typeof body.stop_reason === 'string' ? body.stop_reason.slice(0, 30) : 'unknown'}`);
       }
       const text = (body.content ?? [])
         .filter((b) => b.type === 'text' && typeof b.text === 'string')

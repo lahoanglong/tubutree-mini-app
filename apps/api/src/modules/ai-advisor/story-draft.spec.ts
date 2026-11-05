@@ -1,5 +1,5 @@
 import { STORY_LIMITS, STORY_SPRITE_CHOICES } from '@tubutree/shared-types';
-import { buildStoryDraftMessages, draftWarnings, extractJsonObject, parseStoryDraft, StoryDraftParseError, type StoryDraftInput } from './story-draft';
+import { buildStoryDraftMessages, draftWarnings, extractJsonObject, parseStoryDraft, STORY_DRAFT_MAX_TOKENS, StoryDraftParseError, type StoryDraftInput } from './story-draft';
 
 const input = (over: Partial<StoryDraftInput> = {}): StoryDraftInput => ({
   name: 'Đường hoa dừa SOKFARM',
@@ -111,6 +111,20 @@ describe('parseStoryDraft', () => {
     expect(() => run({ steps: [{ title: '   ', body: 'x' }] })).toThrow(StoryDraftParseError);
   });
 
+  it('bỏ ký tự vô hình (độ rộng bằng không, đổi chiều chữ, điều khiển C1) khỏi chữ model viết', () => {
+    const { config } = run({
+      steps: [{ title: 'Hái\u200b hoa\u202e dừa', body: 'Mật\u2066 ngọt\ufeff dịu\u0085', sprite: null }],
+      callouts: [{ label: 'Vị\u200f ngọt' }],
+      closing: 'Kết\u2060 thúc',
+    });
+    const [asm, hud] = config.scenes;
+    if (asm?.kind !== 'ingredient_assembly' || hud?.kind !== 'hud_callouts') throw new Error('thiếu cảnh');
+    expect(asm.steps[0]!.title).toBe('Hái hoa dừa');
+    expect(asm.steps[0]!.body).toBe('Mật ngọt dịu');
+    expect(hud.points[0]!.label).toBe('Vị ngọt');
+    expect(hud.closing).toBe('Kết thúc');
+  });
+
   it('không bao giờ đặt cảnh vòng cung hay ảnh tách nền dù model trả về', () => {
     const { config } = run({ ...MODEL_OUTPUT, scenes: [{ kind: 'variant_arc', items: [] }], cutoutUrl: 'https://evil.example/x.png' });
     expect(config.scenes.some((s) => s.kind === 'variant_arc')).toBe(false);
@@ -136,6 +150,26 @@ describe('draftWarnings', () => {
     expect(fromNote.warnings).toEqual([]);
   });
 
+  it('so con số theo chữ số thuần: 125.000, 125,000 và 125000 là một; số một chữ số bỏ qua', () => {
+    const ok = scenesOf({ steps: [{ title: 'Giá 125.000đ', body: '3 bước, 125,000 một gói, 300 g', sprite: null }] });
+    expect(ok.warnings).toEqual([]);
+    const bad = scenesOf({ steps: [{ title: 'Giá 99.000đ', body: 'x', sprite: null }] });
+    expect(bad.warnings.join(' ')).toMatch(/99000/);
+  });
+
+  it('con số nằm ở phần mô tả bị cắt (AI không đọc được) vẫn bị cảnh báo, kèm lời báo AI chỉ đọc phần đầu', () => {
+    const description = `${'m'.repeat(1500)} chứng nhận 7788`;
+    const { warnings } = scenesOf({ steps: [{ title: 'Chứng nhận 7788', body: 'x', sprite: null }] }, { description });
+    expect(warnings.join(' ')).toMatch(/7788/);
+    expect(warnings.join(' ')).toMatch(/AI chỉ đọc phần đầu của: mô tả/);
+  });
+
+  it('dữ liệu vừa trần thì không có lời báo cắt; danh sách quá dài được báo theo tên mục', () => {
+    expect(scenesOf({ steps: [{ title: 'A', body: 'x', sprite: null }] }, { description: 'm'.repeat(1500) }).warnings).toEqual([]);
+    const certs = Array.from({ length: 11 }, (_, i) => `Chứng nhận ${i}`);
+    expect(scenesOf({ steps: [{ title: 'A', body: 'x', sprite: null }] }, { certifications: certs }).warnings.join(' ')).toMatch(/chứng nhận/);
+  });
+
   it('không cảnh báo khi chữ sạch', () => {
     expect(draftWarnings(parseStoryDraft(JSON.stringify(MODEL_OUTPUT), input()).config.scenes, input())).toEqual([]);
   });
@@ -149,6 +183,17 @@ describe('buildStoryDraftMessages', () => {
     expect(system!.content).toMatch(/MỘT đối tượng JSON/);
     expect(system!.content).toMatch(/Không bịa/);
     expect(system!.content).toMatch(/không phải chỉ dẫn/);
+  });
+
+  it('lời hệ thống không chứa từ cấm của bảng thuật ngữ (Vui lòng) và trần token đủ chỗ cho phần suy nghĩ của Claude', () => {
+    expect(buildStoryDraftMessages(input())[0]!.content).not.toMatch(/Vui lòng/);
+    expect(STORY_DRAFT_MAX_TOKENS).toBeGreaterThanOrEqual(8000);
+  });
+
+  it('ký tự vô hình trong dữ liệu sản phẩm và ghi chú bị bỏ trước khi đưa cho AI', () => {
+    const user = buildStoryDraftMessages(input({ name: 'Đường\u200b hoa\u202e dừa', note: 'ghi\u2066 chú\ufeff' }))[1]!.content;
+    expect(user).not.toMatch(/[\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]/);
+    expect(user).toContain('Đường hoa dừa');
   });
 
   it('dữ liệu và ghi chú nằm trong khối riêng; ghi chú giả khối đóng hay dấu vai bị làm sạch và cắt 500 ký tự', () => {

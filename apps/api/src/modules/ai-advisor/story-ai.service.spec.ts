@@ -3,7 +3,7 @@ import type { AdvisorProvider } from './advisor-config';
 import type { AnthropicClient } from './anthropic.client';
 import { LlmUnavailableException, type LlmClient } from './llm.client';
 import type { StoryDraftInput } from './story-draft';
-import { STORY_AI_BUDGET_MS, STORY_AI_MSG, StoryAiService } from './story-ai.service';
+import { STORY_AI_BUDGET_MS, STORY_AI_GATEWAY_CAP_MS, STORY_AI_MAX_CONCURRENT, STORY_AI_MIN_SLICE_MS, STORY_AI_MSG, StoryAiService } from './story-ai.service';
 
 const input: StoryDraftInput = {
   name: 'Dầu rửa mặt PƠ LANG',
@@ -87,27 +87,80 @@ describe('StoryAiService.draft', () => {
     expect(JSON.stringify((err as ServiceUnavailableException).getResponse())).not.toMatch(/secret-detail|authentication_error/);
   });
 
-  it('gateway nhận prompt nguyên văn và trần token cho JSON kịch bản', async () => {
+  it('gateway nhận prompt nguyên văn, trần token cho JSON kịch bản và hạn chờ không vượt mức dành cho gateway', async () => {
     const { svc, llm } = make({ configured: ['antigravity'] });
     await svc.draft(input);
     const call = (llm.completeVia as jest.Mock).mock.calls[0]!;
-    expect(call[2]).toEqual({ maxTokens: 2000, rawGatewayPrompt: true });
+    expect(call[2]).toEqual({ maxTokens: 8000, rawGatewayPrompt: true, timeoutMs: STORY_AI_GATEWAY_CAP_MS });
     expect(call[1][1].content).toContain('Dầu rửa mặt PƠ LANG');
   });
 
-  it('quá ngân sách thời gian thì không mở thêm provider kế tiếp', async () => {
+  it('Claude nhận trần token cao đủ cho phần suy nghĩ và toàn bộ ngân sách còn lại làm hạn chờ', async () => {
+    const { svc, anthropic } = make({ configured: [], claude: true });
+    await svc.draft(input);
+    const [, , maxTokens, timeoutMs] = (anthropic.complete as jest.Mock).mock.calls[0]!;
+    expect(maxTokens).toBe(8000);
+    expect(timeoutMs).toBeLessThanOrEqual(STORY_AI_BUDGET_MS);
+    expect(timeoutMs).toBeGreaterThan(STORY_AI_BUDGET_MS - 1_000);
+  });
+
+  it('ngân sách tổng phải ngắn hơn hạn đọc 60 giây của Apache', () => {
+    expect(STORY_AI_BUDGET_MS).toBeLessThan(60_000);
+  });
+
+  it('antigravity chậm tới hạn riêng thì Claude vẫn còn phần ngân sách còn lại, nhưng ít hơn toàn bộ', async () => {
+    let now = 5_000_000;
+    jest.spyOn(Date, 'now').mockImplementation(() => now);
+    const { svc, anthropic } = make({
+      configured: ['antigravity'],
+      claude: true,
+      via: async () => {
+        now += STORY_AI_GATEWAY_CAP_MS;
+        throw new LlmUnavailableException('timeout');
+      },
+    });
+    await svc.draft(input);
+    expect((anthropic.complete as jest.Mock).mock.calls[0]![3]).toBe(STORY_AI_BUDGET_MS - STORY_AI_GATEWAY_CAP_MS);
+    jest.restoreAllMocks();
+  });
+
+  it('còn dưới mức tối thiểu thì không mở thêm provider kế tiếp', async () => {
     let now = 1_000_000;
     jest.spyOn(Date, 'now').mockImplementation(() => now);
     const { svc, calls } = make({
       configured: ['antigravity', 'deepseek'],
       claude: true,
       via: async () => {
-        now += STORY_AI_BUDGET_MS;
+        now += STORY_AI_BUDGET_MS - STORY_AI_MIN_SLICE_MS + 1;
         throw new LlmUnavailableException('timeout');
       },
     });
     await expect(svc.draft(input)).rejects.toThrow(new ServiceUnavailableException(STORY_AI_MSG.failed));
     expect(calls).toEqual(['antigravity']);
     jest.restoreAllMocks();
+  });
+
+  it('cổng đồng thời riêng: quá STORY_AI_MAX_CONCURRENT lượt đang chạy thì từ chối lượt mới bằng câu bận, không gọi AI', async () => {
+    const releases: (() => void)[] = [];
+    let open = false;
+    const { svc, llm } = make({
+      configured: ['antigravity'],
+      via: () => (open ? Promise.resolve(GOOD) : new Promise<string>((res) => releases.push(() => res(GOOD)))),
+    });
+    const running = Array.from({ length: STORY_AI_MAX_CONCURRENT }, () => svc.draft(input));
+    await Promise.resolve();
+    await expect(svc.draft(input)).rejects.toThrow(new ServiceUnavailableException(STORY_AI_MSG.busy));
+    expect(llm.completeVia).toHaveBeenCalledTimes(STORY_AI_MAX_CONCURRENT);
+    open = true;
+    releases.forEach((r) => r());
+    await Promise.all(running);
+    await expect(svc.draft(input)).resolves.toBeDefined();
+  });
+
+  it('lượt lỗi vẫn trả chỗ trong cổng đồng thời', async () => {
+    const { svc } = make({ configured: ['antigravity'], via: async () => { throw new Error('boom'); } });
+    for (let i = 0; i < STORY_AI_MAX_CONCURRENT + 2; i++) {
+      await expect(svc.draft(input)).rejects.toThrow(new ServiceUnavailableException(STORY_AI_MSG.failed));
+    }
   });
 });

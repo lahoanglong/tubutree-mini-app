@@ -29,7 +29,7 @@ const NOT_IN_EXAMPLE: Record<string, string> = {
   AI_ADVISOR_ENABLED: 'AI tư vấn tuỳ chọn',
   AI_ADVISOR_GLOBAL_PER_MIN: 'AI tư vấn tuỳ chọn',
   AI_ADVISOR_MAX_CONCURRENT: 'AI tư vấn tuỳ chọn',
-  ANTHROPIC_API_KEY: 'Story Studio của admin: bước Claude tuỳ chọn, trống thì bỏ qua; đặt qua ops.yml set-env, không ghi khoá vào file mẫu',
+  ANTHROPIC_API_KEY: 'Story Studio của admin: bước Claude tuỳ chọn, trống thì bỏ qua; ghi tay vào .env trên máy chủ (chmod 600), ops.yml set-env chưa ghi khoá này; không ghi khoá vào file mẫu',
   CLAUDE_API_MODEL: 'Story Studio: trống = claude-sonnet-5-5',
 };
 

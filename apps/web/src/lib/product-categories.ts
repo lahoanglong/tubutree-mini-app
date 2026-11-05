@@ -133,5 +133,11 @@ export interface StoryDraftResult {
   provider: StoryDraftProvider;
   warnings: string[];
 }
+/** Dài hơn ngân sách 55 giây của API (story-ai.service.ts) để nhận được bản nháp hoặc lời báo lỗi của API thay vì tự ngắt trước. */
+export const STORY_DRAFT_TIMEOUT_MS = 65_000;
 export const generateStoryDraft = (id: string, note: string) =>
-  apiFetch<StoryDraftResult>(`/admin/products/${encodeURIComponent(id)}/story-config/generate`, { method: 'POST', body: note.trim() === '' ? {} : { note: note.trim() } });
+  apiFetch<StoryDraftResult>(`/admin/products/${encodeURIComponent(id)}/story-config/generate`, {
+    method: 'POST',
+    body: note.trim() === '' ? {} : { note: note.trim() },
+    timeoutMs: STORY_DRAFT_TIMEOUT_MS,
+  });

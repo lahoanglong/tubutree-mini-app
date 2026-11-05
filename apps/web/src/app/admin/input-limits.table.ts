@@ -3,6 +3,7 @@ import { CAMPAIGN_ENTITY_SLUG_MAX } from '@tubutree/shared-types';
 /** Bảng ô gõ chữ ở màn quản trị → trường DTO và trần độ dài. Spec `input-limits.spec.ts` đối chiếu với mã nguồn API. */
 /** `dto` dạng `đường/dẫn.ts:Lớp.trường`, đọc từ mã nguồn API (`@MaxLength`, `@Length` hoặc `@Matches`). `stricter`: ô chặn thấp hơn DTO có chủ đích. */
 export const INPUT_LIMITS: Record<string, { dto: string; max: number; stricter?: string }> = {
+  "components/admin/product-story-studio.tsx::aiNote": { dto: "apps/api/src/modules/catalog/story-draft.controller.ts:GenerateStoryDraftDto.note", max: 500 },
   "components/admin/product-story-studio.tsx::link": { dto: "apps/api/src/modules/catalog/story-assets.controller.ts:ExtractStoryAssetsDto.pageUrl", max: 2048 },
   "app/admin/page.tsx::searchInput": { dto: "apps/api/src/modules/admin/admin.controller.ts:ListOrdersQuery.search", max: 100 },
   "app/admin/page.tsx::phone": { dto: "apps/api/src/modules/admin/admin.controller.ts:SetUserRoleDto.phone", max: 20 },

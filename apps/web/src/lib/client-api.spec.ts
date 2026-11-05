@@ -247,6 +247,24 @@ describe('client-api — mạng yếu / mất mạng (BUYERWEB-12)', () => {
     expect((err as Error).message).toBe('Máy chủ phản hồi quá lâu. Thử lại sau ít phút.');
   });
 
+  it('timeoutMs riêng của lời gọi thay REQUEST_TIMEOUT_MS: chưa ngắt ở mốc mặc định, ngắt đúng ở mốc riêng', async () => {
+    vi.useFakeTimers();
+    fetchMock.mockImplementation(
+      (_url: string, init: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          init.signal!.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+        }),
+    );
+    let settled = false;
+    const pending = apiFetch('/admin/slow', { method: 'POST', body: {}, timeoutMs: REQUEST_TIMEOUT_MS * 3 }).catch((e: unknown) => ((settled = true), e));
+    await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS + 1);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS * 2);
+    const err = await pending;
+    expect(err).toBeInstanceOf(NetworkError);
+    expect((err as NetworkError).timedOut).toBe(true);
+  });
+
   it('thân phản hồi treo sau khi đã có header cũng bị ngắt (không kẹt ở "Đang đặt hàng…")', async () => {
     vi.useFakeTimers();
     fetchMock.mockImplementation(

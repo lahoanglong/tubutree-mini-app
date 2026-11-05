@@ -268,7 +268,7 @@ describe('ProductCategoriesTab (gán danh mục hàng loạt)', () => {
       await flush();
       click(container.querySelector('button[aria-label="Sửa Nước rửa chén"]'));
       await flush();
-      expect(document.body.querySelector('textarea')).toBeNull();
+      expect([...document.body.querySelectorAll('textarea')].filter((t) => !t.closest('[data-testid="story-ai"]'))).toHaveLength(0);
       expect(document.body.querySelector<HTMLInputElement>('[role="dialog"] input[type="checkbox"]')!.disabled).toBe(true);
       click(byText(document.body, 'button', 'Giặt tẩy'));
       click(byText(document.body, 'button', 'Lưu'));
