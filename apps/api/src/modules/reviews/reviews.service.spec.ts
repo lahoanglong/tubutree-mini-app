@@ -736,6 +736,12 @@ describe('ReviewsService.listByProduct: lọc theo sao, ảnh, video ở máy ch
     [{ media: 'photo' as const }, { ...VISIBLE, imageVersions: { isEmpty: false } }],
     [{ media: 'video' as const }, { ...VISIBLE, videoUrl: { not: null } }],
     [{ rating: 4, media: 'photo' as const }, { ...VISIBLE, rating: 4, imageVersions: { isEmpty: false } }],
+    [{ hasVideo: true }, { ...VISIBLE, videoUrl: { not: null } }],
+    [{ hasVideo: false }, VISIBLE],
+    [{ rating: 2, hasVideo: true }, { ...VISIBLE, rating: 2, videoUrl: { not: null } }],
+    [{ media: 'photo' as const, hasVideo: true }, { ...VISIBLE, imageVersions: { isEmpty: false }, videoUrl: { not: null } }],
+    [{ media: 'video' as const, hasVideo: true }, { ...VISIBLE, videoUrl: { not: null } }],
+    [{ media: 'video' as const, hasVideo: false }, { ...VISIBLE, videoUrl: { not: null } }],
   ])('bộ lọc %j → findMany where %j, mới nhất trước, mỗi trang 100', async (filter, where) => {
     const prisma = listPrisma([]);
     await new ReviewsService(prisma, analytics, loyalty).listByProduct('tinh-dau', filter);
@@ -761,6 +767,23 @@ describe('ReviewsService.listByProduct: lọc theo sao, ảnh, video ở máy ch
     const r = await new ReviewsService(prisma, analytics, loyalty).listByProduct('tinh-dau', { rating: 1 });
     expect(r.items.map((i) => i.rating)).toEqual([1, 1, 1]);
     expect(r).toMatchObject({ count: 123, average: 4.9, distribution: { 5: 120, 4: 0, 3: 0, 2: 0, 1: 3 }, videoCount: 2 });
+    expect(prisma.review.groupBy).toHaveBeenCalledWith({ by: ['rating'], where: VISIBLE, _count: { _all: true } });
+    expect(prisma.review.count).toHaveBeenCalledWith({ where: { ...VISIBLE, videoUrl: { not: null } } });
+  });
+
+  it('hasVideo + số sao: điều kiện video vào truy vấn danh sách, thống kê sao và số video vẫn tính trên mọi đánh giá đang hiện', async () => {
+    const withVideo = (id: string) => ({ ...row(id, 1), videoUrl: `https://res.cloudinary.com/x/${id}.mp4` });
+    const prisma = listPrisma(
+      Array.from({ length: 101 }, (_, i) => withVideo(`v${i}`)),
+      [{ rating: 5, n: 240 }, { rating: 1, n: 110 }],
+      130,
+    );
+    const r = await new ReviewsService(prisma, analytics, loyalty).listByProduct('tinh-dau', { rating: 1, hasVideo: true });
+    expect(r.items).toHaveLength(100);
+    expect(r.items.every((i) => i.rating === 1 && i.videoUrl !== null)).toBe(true);
+    expect(r.nextCursor).not.toBeNull();
+    expect(r).toMatchObject({ count: 350, videoCount: 130, distribution: { 5: 240, 4: 0, 3: 0, 2: 0, 1: 110 } });
+    expect(prisma.review.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { ...VISIBLE, rating: 1, videoUrl: { not: null } } }));
     expect(prisma.review.groupBy).toHaveBeenCalledWith({ by: ['rating'], where: VISIBLE, _count: { _all: true } });
     expect(prisma.review.count).toHaveBeenCalledWith({ where: { ...VISIBLE, videoUrl: { not: null } } });
   });
@@ -815,6 +838,22 @@ describe('ReviewsService.listByProduct: phân trang con trỏ', () => {
     );
     expect(prisma.review.groupBy).toHaveBeenCalledWith({ by: ['rating'], where: VISIBLE, _count: { _all: true } });
     expect(prisma.review.count).toHaveBeenCalledWith({ where: { ...VISIBLE, videoUrl: { not: null } } });
+  });
+
+  it('có cursor + hasVideo → điều kiện video nằm trong nhánh bộ lọc, trước con trỏ', async () => {
+    const prisma = listPrisma([]);
+    const cursor = encodeKeysetCursor({ createdAt: at(99), id: 'r99' });
+    await new ReviewsService(prisma, analytics, loyalty).listByProduct('tinh-dau', { hasVideo: true, cursor });
+    expect(prisma.review.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          AND: [
+            { ...VISIBLE, videoUrl: { not: null } },
+            { OR: [{ createdAt: { lt: at(99) } }, { createdAt: at(99), id: { lt: 'r99' } }] },
+          ],
+        },
+      }),
+    );
   });
 
   it.each(['khong-phai-con-tro', Buffer.from('abc|r1').toString('base64url'), Buffer.from('123|').toString('base64url')])(

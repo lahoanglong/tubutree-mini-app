@@ -1,8 +1,9 @@
-import { Type } from 'class-transformer';
-import { ArrayMaxSize, IsArray, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 import { IsUploadedImage, IsUploadedMediaUrl, PUBLIC_CONTENT_IMAGE } from '../../../common/uploaded-image';
 import { Trim } from '../../../common/decorators/trim.decorator';
 import { KeysetCursorField } from '../../../common/keyset-cursor';
+import { toQueryBool } from '../../../common/query-bool';
 
 export class CreateReviewDto {
   @IsInt() @Min(1) @Max(5) rating!: number;
@@ -27,6 +28,8 @@ export type ReviewMediaFilter = (typeof REVIEW_MEDIA_FILTERS)[number];
 export class PublicReviewsQuery {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(5) rating?: number;
   @IsOptional() @IsIn(REVIEW_MEDIA_FILTERS) media?: ReviewMediaFilter;
+  /** `true`/`1` chỉ giữ đánh giá có video; `false`/`0` như không gửi. Gộp được với `media=photo` (vừa có ảnh vừa có video). */
+  @IsOptional() @Transform(toQueryBool) @IsBoolean() hasVideo?: boolean;
   /** `nextCursor` của trang trước (cùng bộ lọc). Không gửi là trang đầu, như trước khi có phân trang. */
   @KeysetCursorField() cursor?: string;
 }

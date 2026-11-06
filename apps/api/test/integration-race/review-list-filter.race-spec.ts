@@ -104,6 +104,31 @@ describe('Danh sách đánh giá công khai: lọc ở máy chủ trên mọi đ
     expect(r.items.every((i) => i.videoUrl === VID)).toBe(true);
   });
 
+  it('hasVideo=true: 2 đánh giá video cũ nằm ngoài 100 dòng mới nhất vẫn được trả; thống kê sao và số video không đổi', async () => {
+    const r = await reviews.listByProduct(slug, { hasVideo: true });
+    expect(r.items.map((i) => i.comment)).toEqual(['Đánh giá 4', 'Đánh giá 3']);
+    expect(r.items.every((i) => i.videoUrl === VID)).toBe(true);
+    expect(r.items).toHaveLength(r.videoCount);
+    expect(r).toMatchObject(STATS);
+  });
+
+  it('hasVideo=true cùng điều kiện với media=video; hasVideo=false như không lọc', async () => {
+    const viaFlag = await reviews.listByProduct(slug, { hasVideo: true });
+    const viaMedia = await reviews.listByProduct(slug, { media: 'video' });
+    expect(viaFlag.items.map((i) => i.id)).toEqual(viaMedia.items.map((i) => i.id));
+    const off = await reviews.listByProduct(slug, { hasVideo: false });
+    expect(off.items).toHaveLength(100);
+    expect(off.nextCursor).toEqual(expect.any(String));
+  });
+
+  it('hasVideo=true gộp với số sao và ảnh: rating=2 → 2 dòng, rating=1 → rỗng, media=photo → rỗng (đánh giá video không có ảnh)', async () => {
+    expect((await reviews.listByProduct(slug, { hasVideo: true, rating: 2 })).items).toHaveLength(2);
+    const one = await reviews.listByProduct(slug, { hasVideo: true, rating: 1 });
+    expect(one.items).toEqual([]);
+    expect(one).toMatchObject(STATS);
+    expect((await reviews.listByProduct(slug, { hasVideo: true, media: 'photo' })).items).toEqual([]);
+  });
+
   it('rating=1 + media=photo: chỉ dòng thoả cả hai', async () => {
     const r = await reviews.listByProduct(slug, { rating: 1, media: 'photo' });
     expect(r.items.map((i) => i.comment)).toEqual(['Đánh giá 1', 'Đánh giá 0']);
