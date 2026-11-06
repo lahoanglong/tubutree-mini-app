@@ -8,6 +8,7 @@ import type { CartComboGroup, CouponPreviewRequest, FlashAllowanceResponse, Coup
 import { cartStorefrontSlug } from './cart-key';
 import type { MyRefund, RefundBankInput, ReturnReasonCode } from '../utils/refund-rules';
 import { imageTimeout } from './http';
+import { reviewFilterQuery, type ReviewFilterKey } from '@tubutree/app-core/commerce/review-filter';
 
 /** Shape phân trang backend trả về (§12.1): { data, meta }. */
 export interface PageResponse<T> {
@@ -569,8 +570,10 @@ export interface ReviewSummary {
   distribution?: Record<string, number>;
   items: ReviewItem[];
 }
-export const fetchReviews = (slug: string) =>
-  api.get<ReviewSummary>(`/products/${slug}/reviews`).then((r) => r.data);
+/** `filter`: chip đang chọn; máy chủ lọc trên mọi đánh giá đang hiện. Không truyền là danh sách đầy đủ.
+ * `no-cache`: mỗi lần tải hỏi lại máy chủ (không đổi thì 304), đánh giá vừa viết hiện ngay thay vì chờ hết `max-age=30`. */
+export const fetchReviews = (slug: string, filter: ReviewFilterKey = 'all') =>
+  api.get<ReviewSummary>(`/products/${slug}/reviews${reviewFilterQuery(filter)}`, { cache: 'no-cache' }).then((r) => r.data);
 
 /** Một đánh giá khách đã viết cho sản phẩm, gắn với lần mua (đơn) của nó — để gắn nút sửa đúng dòng. */
 export interface MyReviewRef {

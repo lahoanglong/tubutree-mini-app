@@ -129,6 +129,7 @@ export const FIELD_LABELS: Record<string, string> = {
   maxPrice: 'Giá cao nhất',
   maxQty: 'Số lượng tối đa',
   memberCode: 'Mã thành viên',
+  media: 'Ảnh hoặc video',
   message: 'Tin nhắn',
   method: 'Phương thức',
   minOrder: 'Đơn tối thiểu',

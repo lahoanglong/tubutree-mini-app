@@ -1,4 +1,5 @@
-import { ArrayMaxSize, IsArray, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { Type } from 'class-transformer';
+import { ArrayMaxSize, IsArray, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 import { IsUploadedImage, IsUploadedMediaUrl, PUBLIC_CONTENT_IMAGE } from '../../../common/uploaded-image';
 import { Trim } from '../../../common/decorators/trim.decorator';
 
@@ -16,4 +17,13 @@ export class CreateReviewDto {
   @IsOptional() @IsUploadedMediaUrl({ message: 'Video đánh giá phải là video đã tải lên từ ứng dụng.' }) videoUrl?: string;
   // Lần mua (đơn) được đánh giá: mỗi đơn đã nhận một đánh giá. Đơn đã có đánh giá thì lần gửi này sửa nó.
   @IsOptional() @IsString() @MaxLength(64) orderId?: string;
+}
+
+export const REVIEW_MEDIA_FILTERS = ['photo', 'video'] as const;
+export type ReviewMediaFilter = (typeof REVIEW_MEDIA_FILTERS)[number];
+
+/** Bộ lọc danh sách đánh giá công khai: số sao và/hoặc có ảnh, có video. Lọc trong truy vấn, không trên 100 dòng đã trả. */
+export class PublicReviewsQuery {
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(5) rating?: number;
+  @IsOptional() @IsIn(REVIEW_MEDIA_FILTERS) media?: ReviewMediaFilter;
 }

@@ -1,3 +1,4 @@
+import { reviewFilterQuery, type ReviewFilterKey } from '@tubutree/app-core/commerce/review-filter';
 import { apiFetch } from './client-api';
 
 /** Một dòng của danh sách đánh giá công khai (GET /products/:slug/reviews). Ảnh base64 đã thành đường dẫn API. */
@@ -86,7 +87,10 @@ export interface SavedReview {
 
 const productPath = (slug: string) => `/products/${encodeURIComponent(slug)}/reviews`;
 
-export const fetchProductReviews = (slug: string) => apiFetch<ProductReviews>(productPath(slug));
+/** `filter`: chip đang chọn; máy chủ lọc trên mọi đánh giá đang hiện. Không truyền là danh sách đầy đủ.
+ * `no-cache`: mỗi lần tải hỏi lại máy chủ (không đổi thì 304), đánh giá vừa viết hiện ngay thay vì chờ hết `max-age=30`. */
+export const fetchProductReviews = (slug: string, filter: ReviewFilterKey = 'all') =>
+  apiFetch<ProductReviews>(`${productPath(slug)}${reviewFilterQuery(filter)}`, { cache: 'no-cache' });
 export const fetchCanReview = (slug: string) => apiFetch<CanReview>(`${productPath(slug)}/can-review`);
 export const fetchMyReview = (id: string) => apiFetch<MyReview>(`/reviews/${encodeURIComponent(id)}`);
 export const saveReview = (slug: string, body: ReviewInput) => apiFetch<SavedReview>(productPath(slug), { method: 'POST', body });

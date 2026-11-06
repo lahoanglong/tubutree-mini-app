@@ -51,6 +51,14 @@ describe('api trên fetch: yêu cầu', () => {
     expect(res.status).toBe(200);
   });
 
+  it('cache do người gọi truyền đi thẳng vào fetch; không truyền thì để trình duyệt tự quyết', async () => {
+    const { calls } = stubFetch(() => ({ status: 200, body: {} }));
+    await api.get('/products/a/reviews', { cache: 'no-cache' });
+    await api.get('/products');
+    expect(calls[0]!.init.cache).toBe('no-cache');
+    expect('cache' in calls[1]!.init).toBe(false);
+  });
+
   it('không có token → không gắn Authorization', async () => {
     const { calls } = stubFetch(() => ({ status: 200, body: {} }));
     await api.get('/products');
