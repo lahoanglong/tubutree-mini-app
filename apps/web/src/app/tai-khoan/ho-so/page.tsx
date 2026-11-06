@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Camera, Gift, Loader2 } from 'lucide-react';
 import { formatDobDisplay, profileCopy } from '@tubutree/app-core/account-copy';
 import { DOB_PLACEHOLDER, maskDobInput, validateDobVn } from '@tubutree/app-core/dob-input';
+import { cleanProfileName, profileNameError } from '@tubutree/app-core/profile-name';
 import { updateMe } from '@tubutree/app-core/api/account';
 import { meQuery } from '@tubutree/app-core/queries/account';
 import { AvatarCropSheet } from '@/components/account/avatar-crop-sheet';
@@ -89,6 +90,7 @@ export default function EditProfilePage() {
   const dobDisplay = formatDobDisplay(dob);
   const dobError = dobEditable && (dobTouched || dobText.length === 10) ? dobCheck.error : null;
   const emailInvalid = touched && email.trim() !== '' && !EMAIL.test(email.trim());
+  const nameError = touched ? profileNameError(fullName) : null;
 
   const handleAvatarFile = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -132,7 +134,7 @@ export default function EditProfilePage() {
   const save = useMutation({
     mutationFn: async () => {
       // API chỉ cho đặt ngày sinh một lần và từ chối cả khi gửi lại đúng giá trị cũ, nên đã có thì không gửi.
-      const base = { fullName: fullName.trim() || undefined, email: email.trim() || undefined, dob: !me?.dob && dob ? dob : undefined };
+      const base = { fullName: cleanProfileName(fullName), email: email.trim() || undefined, dob: !me?.dob && dob ? dob : undefined };
       try {
         return { avatarSkipped: false, res: await updateMe(coreHttp, { ...base, avatarUrl: avatarUrl ?? undefined }) };
       } catch (err) {
@@ -144,7 +146,7 @@ export default function EditProfilePage() {
     onSuccess: ({ res, avatarSkipped }) => {
       setSaveError(null);
       updateProfile({
-        fullName: fullName.trim() || user?.fullName || null,
+        fullName: cleanProfileName(fullName) || user?.fullName || null,
         avatarUrl: avatarSkipped ? (user?.avatarUrl ?? null) : (avatarUrl ?? res?.avatarUrl ?? user?.avatarUrl ?? null),
       });
       if (res) qc.setQueryData(['me'], res);
@@ -162,6 +164,7 @@ export default function EditProfilePage() {
   const submit = () => {
     setTouched(true);
     if (save.isPending || uploadingAvatar) return;
+    if (profileNameError(fullName)) return;
     if (email.trim() !== '' && !EMAIL.test(email.trim())) return;
     if (dobEditable && dobCheck.error) {
       setDobTouched(true);
@@ -255,8 +258,17 @@ export default function EditProfilePage() {
         </div>
       </div>
 
-      <Field label="Họ và tên">
-        <input type="text" value={fullName} maxLength={120} autoComplete="name" readOnly={confirmingDob} onChange={(e) => setFullName(e.target.value)} className={`${ui.field} ${FIELD_MINI}`} />
+      <Field label="Họ và tên" error={nameError ?? undefined}>
+        <input
+          type="text"
+          value={fullName}
+          maxLength={120}
+          autoComplete="name"
+          readOnly={confirmingDob}
+          onChange={(e) => setFullName(e.target.value)}
+          onBlur={() => setTouched(true)}
+          className={`${nameError ? ui.fieldError : ui.field} ${FIELD_MINI}`}
+        />
       </Field>
 
       <Field label="Email" error={emailInvalid ? 'Email không hợp lệ' : undefined}>
@@ -327,7 +339,7 @@ export default function EditProfilePage() {
           </button>
         </div>
       ) : (
-        <button type="submit" aria-busy={save.isPending ? 'true' : undefined} disabled={emailInvalid || uploadingAvatar} className={`${ui.btnPrimary} w-full max-md:min-h-12`}>
+        <button type="submit" aria-busy={save.isPending ? 'true' : undefined} disabled={emailInvalid || !!nameError || uploadingAvatar} className={`${ui.btnPrimary} w-full max-md:min-h-12`}>
           {save.isPending ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />

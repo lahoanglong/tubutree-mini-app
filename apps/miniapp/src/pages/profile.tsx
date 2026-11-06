@@ -7,7 +7,7 @@ import {
   Heart, MapPin, MessageCircle, Leaf, GraduationCap, Users, Pencil, Bell, Store, Settings, Info, ChevronRight, Copy, Sparkles, BookOpen, ShieldCheck, CalendarClock, Wallet, BadgeDollarSign, CreditCard, Package, Truck, PackageCheck, Recycle, Repeat, type LucideIcon,
 } from 'lucide-react';
 import { canSeeAcademy, orderRowLabel, profileCopy } from '@tubutree/app-core/account-copy';
-import { statValueVariant } from '@tubutree/app-core/account-stat';
+import { STAT_VALUE_LINE_HEIGHT, statValueTracking, statValueVariant } from '@tubutree/app-core/account-stat';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { CASHBACK_ENABLED, SUBSCRIPTIONS_IN_MINIAPP } from '../utils/features';
 import { ORDER_STATUS_ROW } from '@tubutree/app-core/home-layout';
@@ -529,6 +529,7 @@ function UnreadCount({ count }: { count: number }) {
 }
 
 function Stat({ label, value, onClick }: { label: string; value: string; onClick?: () => void }) {
+  const variant = statValueVariant(value);
   return (
     <div
       role="button"
@@ -545,7 +546,12 @@ function Stat({ label, value, onClick }: { label: string; value: string; onClick
         boxShadow: 'var(--elevation-1)',
       }}
     >
-      <Text variant={statValueVariant(value)} as="div" tone="brand" style={{ fontVariantNumeric: 'tabular-nums', lineHeight: 'var(--type-price-md-lh)' }}>
+      <Text
+        variant={variant}
+        as="div"
+        tone="brand"
+        style={{ fontVariantNumeric: 'tabular-nums', lineHeight: STAT_VALUE_LINE_HEIGHT, letterSpacing: statValueTracking(variant), overflowWrap: 'anywhere' }}
+      >
         {value}
       </Text>
       <Text variant="caption" tone="tertiary" as="div">

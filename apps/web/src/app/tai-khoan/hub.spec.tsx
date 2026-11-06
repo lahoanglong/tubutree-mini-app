@@ -196,10 +196,20 @@ describe('hub /tai-khoan — ba số và hàng trạng thái đơn', () => {
     const big = stat(await mount(), 'Ví Tubu');
     expect(big.textContent).toContain('1.234.567đ');
     expect(byText(big, 'div', '1.234.567đ')!.style.fontSize).toBe('var(--type-price-sm-size)');
-    expect(byText(big, 'div', '1.234.567đ')!.style.lineHeight).toBe('var(--type-price-md-lh)');
+    expect(byText(big, 'div', '1.234.567đ')!.style.lineHeight).toBe('calc(var(--type-price-md-size) * var(--type-price-md-lh))');
     mocks.meWallet = 50000;
     const small = stat(await mount(), 'Ví Tubu');
     expect(byText(small, 'div', '50.000đ')!.style.fontSize).toBe('var(--type-price-md-size)');
+  });
+
+  it('ví 10 triệu tới 100 triệu xuống cỡ label 12px, giữ dòng 22px, xuống dòng trong ô thay vì tràn ngang', async () => {
+    mocks.meWallet = 100_000_000;
+    const big = stat(await mount(), 'Ví Tubu');
+    const value = byText(big, 'div', '100.000.000đ')!;
+    expect(value.style.fontSize).toBe('var(--type-label-size)');
+    expect(value.style.lineHeight).toBe('calc(var(--type-price-md-size) * var(--type-price-md-lh))');
+    expect(value.style.overflowWrap).toBe('anywhere');
+    mocks.meWallet = 50000;
   });
 
   it('chưa tải được mã giảm giá: dấu "—", không đoán số', async () => {

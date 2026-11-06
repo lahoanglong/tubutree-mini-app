@@ -6,3 +6,22 @@ export function usableProfileName(name: string | null | undefined): string {
   const n = (name ?? '').trim();
   return n.toLowerCase() === GUEST_PLACEHOLDER_NAME.toLowerCase() ? '' : n;
 }
+
+// Cùng tập ký tự vô hình với `trimInvisible` của API (apps/api/src/common/text-trim.ts), để client và API cùng coi một tên là rỗng.
+const INVISIBLE = '­᠎​-‏‪-‮⁠-⁤⁦-⁩﻿';
+const EDGE = new RegExp(`^[\\s${INVISIBLE}]+|[\\s${INVISIBLE}]+$`, 'g');
+
+/** Họ tên khách gõ ở form hồ sơ, cắt khoảng trắng và ký tự vô hình hai đầu như `Trim` của UpdateMeDto. */
+export function cleanProfileName(name: string): string {
+  return name.replace(EDGE, '');
+}
+
+export const PROFILE_NAME_REQUIRED = 'Nhập họ tên để lưu hồ sơ.';
+
+/**
+ * Lỗi ô Họ và tên khi lưu hồ sơ. Xoá trắng tên (hoặc chỉ còn khoảng trắng, ký tự vô hình) thì chặn lưu: trước đây form bỏ tên rỗng
+ * khỏi lời gọi, API giữ tên cũ mà vẫn báo "Đã cập nhật hồ sơ".
+ */
+export function profileNameError(name: string): string | null {
+  return cleanProfileName(name) ? null : PROFILE_NAME_REQUIRED;
+}

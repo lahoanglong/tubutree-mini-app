@@ -162,7 +162,7 @@ describe('Thanh số dư ở hub Cá nhân (C-086)', () => {
       const { unmount } = renderPage();
       const big = await screen.findByRole('button', { name: /^1\.234\.567đ\s*Ví Tubu$/ });
       expect(within(big).getByText('1.234.567đ').style.fontSize).toBe('var(--type-price-sm-size)');
-      expect(within(big).getByText('1.234.567đ').style.lineHeight).toBe('var(--type-price-md-lh)');
+      expect(within(big).getByText('1.234.567đ').style.lineHeight).toBe('calc(var(--type-price-md-size) * var(--type-price-md-lh))');
       unmount();
     } finally {
       vi.mocked(getWallet).mockResolvedValue({ walletBalance: 50000 } as never);
@@ -170,6 +170,20 @@ describe('Thanh số dư ở hub Cá nhân (C-086)', () => {
     renderPage();
     const small = await screen.findByRole('button', { name: /^50\.000đ\s*Ví Tubu$/ });
     expect(within(small).getByText('50.000đ').style.fontSize).toBe('var(--type-price-md-size)');
+  });
+
+  it('ví 10 triệu tới 100 triệu xuống cỡ label 12px, giữ dòng 22px, xuống dòng trong ô thay vì tràn ngang', async () => {
+    vi.mocked(getWallet).mockResolvedValue({ walletBalance: 100_000_000 } as never);
+    try {
+      renderPage();
+      const big = await screen.findByRole('button', { name: /^100\.000\.000đ\s*Ví Tubu$/ });
+      const value = within(big).getByText('100.000.000đ');
+      expect(value.style.fontSize).toBe('var(--type-label-size)');
+      expect(value.style.lineHeight).toBe('calc(var(--type-price-md-size) * var(--type-price-md-lh))');
+      expect(value.style.overflowWrap).toBe('anywhere');
+    } finally {
+      vi.mocked(getWallet).mockResolvedValue({ walletBalance: 50000 } as never);
+    }
   });
 
   it('khách thường thấy lời mời "Mở gian hàng Cộng tác viên" (không nhắc hoa hồng); CTV thấy "Cộng tác viên"', async () => {
