@@ -29,7 +29,8 @@ export function exposedStock(stock: number): number {
  * Tồn gửi cho một dòng giỏ. Client nhận ra dòng vượt tồn bằng `quantity > stock` (cảnh báo ở giỏ, chặn và nút sửa ở thanh toán), nên:
  * tồn 0..LOW_STOCK_NOTICE gửi đúng số (đã được in ra); tồn cao hơn mà dòng đang vượt thì gửi `quantity - 1` (vẫn trên LOW_STOCK_NOTICE vì
  * quantity > stock > LOW_STOCK_NOTICE, nên client kéo về LOW_STOCK_NOTICE như `overStockTarget`); còn lại gửi `max(PUBLIC_STOCK_IN, quantity)`:
- * không nhỏ hơn số đang có trong giỏ để dòng hợp lệ không bị coi là vượt. Không lần nào gửi tồn thật trên LOW_STOCK_NOTICE.
+ * không nhỏ hơn số đang có trong giỏ để dòng hợp lệ không bị coi là vượt. Trên LOW_STOCK_NOTICE, số gửi đi chỉ phụ thuộc số lượng và việc dòng có vượt
+ * tồn hay không, không phụ thuộc tồn thật. Dòng vượt đúng một đơn vị thì quantity − 1 trùng tồn: khách tự biết điều đó, như khi máy chủ từ chối ở tồn + 1.
  */
 export function cartLineStock(stock: number, quantity: number): number {
   if (stock <= LOW_STOCK_NOTICE) return Math.max(stock, 0);

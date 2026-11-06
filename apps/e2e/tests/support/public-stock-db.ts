@@ -51,7 +51,11 @@ export async function seedStockWorld(): Promise<StockWorld | null> {
     const productId = `zz-e2e-w31-${tag}`;
     const slug = `e2e-w31-ton-kho-${tag}`;
     await prisma.product.create({
-      data: { id: productId, slug, name: `Nước rửa chén W31 ${tag}`, brand: 'Tubu Tree', description: 'Sản phẩm thử tồn kho công khai.', basePrice: 45_000 },
+      data: {
+        id: productId, slug, name: `Nước rửa chén W31 ${tag}`, brand: 'Tubu Tree', description: 'Sản phẩm thử tồn kho công khai.', basePrice: 45_000,
+        // Cũ nhất theo ngày tạo: kệ "Mới nhất" và mọi cách xếp theo ngày không đưa sản phẩm này lên đầu cho spec khác.
+        createdAt: new Date('2020-01-01T00:00:00Z'),
+      },
     });
     const vid = (key: keyof typeof REAL) => `${productId}-${key}`;
     const variation = (key: keyof typeof REAL, name: string) =>
@@ -88,22 +92,24 @@ export async function seedStockWorld(): Promise<StockWorld | null> {
   }
 }
 
-/** Xoá dữ liệu của `seedStockWorld`. Bảng khác có thể đã ghi khoá ngoại tới sản phẩm (lượt xem...): xoá không được thì tắt sản phẩm để danh sách không còn thấy. */
+/**
+ * Xoá dữ liệu của `seedStockWorld`, không ném lỗi giữa chừng (hook afterAll lỗi là đỏ cả lượt). Bảng khác có thể đã ghi khoá ngoại tới sản phẩm hay khách
+ * (lượt xem...): sản phẩm xoá không được thì tắt để danh sách không còn thấy; khách xoá không được thì để lại trong DB tạm.
+ */
 export async function removeStockWorld(world: StockWorld): Promise<void> {
   const url = seedDatabaseUrl();
   if (!writableTempDb(url)) return;
   const prisma = prismaFor(url);
   try {
-    await prisma.orderItem.deleteMany({ where: { orderId: world.ids.order } });
-    await prisma.order.deleteMany({ where: { id: world.ids.order } });
-    await prisma.cart.deleteMany({ where: { userId: world.ids.user } });
-    try {
-      await prisma.variation.deleteMany({ where: { productId: world.ids.product } });
-      await prisma.product.delete({ where: { id: world.ids.product } });
-      await prisma.user.delete({ where: { id: world.ids.user } });
-    } catch {
-      await prisma.product.update({ where: { id: world.ids.product }, data: { isActive: false } });
-    }
+    const tried = (op: Promise<unknown>) => op.then(() => true, () => false);
+    await tried(prisma.orderItem.deleteMany({ where: { orderId: world.ids.order } }));
+    await tried(prisma.order.deleteMany({ where: { id: world.ids.order } }));
+    await tried(prisma.cart.deleteMany({ where: { userId: world.ids.user } }));
+    const gone =
+      (await tried(prisma.variation.deleteMany({ where: { productId: world.ids.product } }))) &&
+      (await tried(prisma.product.deleteMany({ where: { id: world.ids.product } })));
+    if (!gone) await tried(prisma.product.updateMany({ where: { id: world.ids.product }, data: { isActive: false } }));
+    await tried(prisma.user.deleteMany({ where: { id: world.ids.user } }));
   } finally {
     await prisma.$disconnect();
   }
