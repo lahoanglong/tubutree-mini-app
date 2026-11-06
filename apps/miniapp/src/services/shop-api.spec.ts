@@ -227,8 +227,8 @@ describe('shop-api — fetchReviews', () => {
     expect(get.mock.calls).toEqual([
       ['/products/nuoc-rua-chen/reviews', { cache: 'no-cache' }],
       ['/products/nuoc-rua-chen/reviews?rating=1', { cache: 'no-cache' }],
-      ['/products/nuoc-rua-chen/reviews?media=video', { cache: 'no-cache' }],
-      ['/products/nuoc-rua-chen/reviews?media=video&cursor=MTc2%7Cr99', { cache: 'no-cache' }],
+      ['/products/nuoc-rua-chen/reviews?hasVideo=true', { cache: 'no-cache' }],
+      ['/products/nuoc-rua-chen/reviews?hasVideo=true&cursor=MTc2%7Cr99', { cache: 'no-cache' }],
       ['/products/nuoc-rua-chen/reviews?cursor=abc', { cache: 'no-cache' }],
     ]);
   });

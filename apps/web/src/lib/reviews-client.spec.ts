@@ -15,12 +15,14 @@ describe('fetchProductReviews', () => {
     await fetchProductReviews('nuoc-rua-chen');
     await fetchProductReviews('nuoc-rua-chen', 2);
     await fetchProductReviews('nuoc-rua-chen', 'photo');
+    await fetchProductReviews('nuoc-rua-chen', 'video');
     await fetchProductReviews('nuoc-rua-chen', 2, 'MTc2|r99');
     await fetchProductReviews('nuoc-rua-chen', 'all', 'abc');
     expect(apiFetch.mock.calls).toEqual([
       ['/products/nuoc-rua-chen/reviews', { cache: 'no-cache' }],
       ['/products/nuoc-rua-chen/reviews?rating=2', { cache: 'no-cache' }],
       ['/products/nuoc-rua-chen/reviews?media=photo', { cache: 'no-cache' }],
+      ['/products/nuoc-rua-chen/reviews?hasVideo=true', { cache: 'no-cache' }],
       ['/products/nuoc-rua-chen/reviews?rating=2&cursor=MTc2%7Cr99', { cache: 'no-cache' }],
       ['/products/nuoc-rua-chen/reviews?cursor=abc', { cache: 'no-cache' }],
     ]);

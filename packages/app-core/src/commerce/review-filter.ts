@@ -16,19 +16,35 @@ export interface ReviewFilterChip {
  * Đang chọn "Có video" mà số video về 0 (đánh giá video cuối cùng bị ẩn) thì chip ở lại, ghi (0): chip biến mất khi đang chọn để lại danh sách trống
  * "không có đánh giá khớp" mà không chip nào đang sáng.
  * Đủ năm mức sao, kể cả 2 và 1 sao: biểu đồ phân bố đã vẽ cả năm mức, khách phải lọc riêng được đánh giá thấp để kiểm chứng (ẩn đi là mất tin cậy).
+ * Số trên chip Tất cả, 5..1 sao, Có video là số của máy chủ trên mọi đánh giá đang hiện (`count`, `distribution`, `videoCount`, không theo chip đang chọn);
+ * API cũ thiếu trường nào thì đếm trên các đánh giá đã tải. Có ảnh không ghi số: máy chủ không đếm, còn đếm trên 100 dòng mới nhất thì sai với sản phẩm nhiều đánh giá.
  */
-export function reviewFilterChips(videoCount: number | undefined, selected?: ReviewFilterKey): ReviewFilterChip[] {
+export function reviewFilterChips(summary: ReviewCountSource | undefined, selected?: ReviewFilterKey): ReviewFilterChip[] {
+  const items = summary?.items ?? [];
+  const tally = (server: number | undefined, keep: (r: ReviewCountItem) => boolean) => (summary ? (server ?? items.filter(keep).length) : undefined);
+  const dist = summary?.distribution;
   const chips: ReviewFilterChip[] = [
-    { key: 'all', label: 'Tất cả' },
-    { key: 5, label: '5 sao' },
-    { key: 4, label: '4 sao' },
-    { key: 3, label: '3 sao' },
-    { key: 2, label: '2 sao' },
-    { key: 1, label: '1 sao' },
+    { key: 'all', label: 'Tất cả', count: tally(summary?.count, () => true) },
+    ...[5, 4, 3, 2, 1].map((star) => ({
+      key: star,
+      label: `${star} sao`,
+      count: tally(dist ? (dist[String(star)] ?? 0) : undefined, (r) => r.rating === star),
+    })),
     { key: 'photo', label: 'Có ảnh' },
   ];
-  if ((videoCount ?? 0) > 0 || selected === 'video') chips.push({ key: 'video', label: 'Có video', count: videoCount ?? 0 });
+  const videos = tally(summary?.videoCount, (r) => Boolean(r.videoUrl)) ?? 0;
+  if (videos > 0 || selected === 'video') chips.push({ key: 'video', label: 'Có video', count: videos });
   return chips;
+}
+
+type ReviewCountItem = { rating: number; videoUrl: string | null };
+
+/** Phần của `GET /products/:slug/reviews` dùng để ghi số trên chip; API cũ có thể thiếu bất kỳ trường nào. */
+export interface ReviewCountSource {
+  count?: number;
+  distribution?: Record<string, number>;
+  videoCount?: number;
+  items?: readonly ReviewCountItem[];
 }
 
 type ReviewLike = { id: string; rating: number; images: readonly string[]; videoUrl: string | null };
@@ -46,10 +62,13 @@ export function filterReviews<T extends ReviewLike>(items: readonly T[], key: Re
 /**
  * Tham số gửi `GET /products/:slug/reviews` cho chip đang chọn; '' khi xem tất cả hoặc số sao máy chủ không nhận (ngoài 1..5).
  * `cursor` là `nextCursor` của trang trước cùng chip: máy chủ trả trang kế tiếp (đánh giá cũ hơn), không gửi là trang đầu.
+ * Có video gửi `hasVideo=true` (W34). API chặn trường lạ, nên bản API trước W34 trả 400 cho tham số này: app chỉ được lên sau API.
+ * Bản Mini App cũ còn gửi `media=video`, API vẫn nhận.
  */
 export function reviewFilterQuery(key: ReviewFilterKey, cursor?: string | null): string {
   const params: string[] = [];
-  if (key === 'photo' || key === 'video') params.push(`media=${key}`);
+  if (key === 'photo') params.push('media=photo');
+  else if (key === 'video') params.push('hasVideo=true');
   else if (typeof key === 'number' && Number.isInteger(key) && key >= 1 && key <= 5) params.push(`rating=${key}`);
   if (cursor) params.push(`cursor=${encodeURIComponent(cursor)}`);
   return params.length > 0 ? `?${params.join('&')}` : '';

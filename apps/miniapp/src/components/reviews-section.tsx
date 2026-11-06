@@ -212,7 +212,7 @@ export function ReviewsSection({
     moreOn ? { pages: moreQ.data?.pages, isFetching: moreQ.isFetching, isError: moreQ.isError } : undefined,
   );
   const filtered = list.items;
-  const chips = reviewFilterChips(data?.videoCount, filter);
+  const chips = reviewFilterChips(data, filter);
   const showMore = () => {
     const step = reviewMoreStep(visible, filtered.length, list.hasMore);
     setVisible(step.visible);

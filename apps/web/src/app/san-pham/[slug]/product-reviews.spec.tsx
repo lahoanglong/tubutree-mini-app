@@ -340,7 +340,7 @@ describe('ProductReviews (web) — danh sách công khai', () => {
   it('hàng chip lọc như Mini App: Tất cả (chọn sẵn), 5/4/3/2/1 sao, Có ảnh; chọn chip thì chỉ còn đánh giá khớp', async () => {
     const c = await mount();
     const chips = () => Array.from(c.querySelectorAll<HTMLButtonElement>('button[aria-pressed]'));
-    expect(chips().map((b) => b.textContent)).toEqual(['Tất cả', '5 sao', '4 sao', '3 sao', '2 sao', '1 sao', 'Có ảnh']);
+    expect(chips().map((b) => b.textContent)).toEqual(['Tất cả(3)', '5 sao(2)', '4 sao(0)', '3 sao(1)', '2 sao(0)', '1 sao(0)', 'Có ảnh']);
     expect(chips()[0]!.getAttribute('aria-pressed')).toBe('true');
     await pick(c, '5 sao');
     expect(c.querySelectorAll('li.border-t')).toHaveLength(2);
@@ -399,6 +399,24 @@ describe('ProductReviews (web) — danh sách công khai', () => {
     expect(c.textContent).toContain('Không có đánh giá khớp bộ lọc.');
     await pick(c, 'Tất cả');
     expect(button(c, /^Có video/)).toBeFalsy();
+  });
+
+  // Sản phẩm 123 đánh giá: trang đầu chỉ có 100 dòng 5 sao mới nhất. Số trên chip phải là số máy chủ đếm trên mọi đánh giá.
+  it('chip ghi số máy chủ đếm (count, distribution, videoCount), không đếm 100 dòng đã tải; "Có ảnh" không ghi số', async () => {
+    mocks.list = { ...LIST, count: 123, distribution: { '5': 120, '1': 3 }, videoCount: 2, items: Array.from({ length: 100 }, (_, i) => review(`n${i}`, 5)) };
+    const c = await mount();
+    const chips = Array.from(c.querySelectorAll<HTMLButtonElement>('button[aria-pressed]')).map((b) => b.textContent);
+    expect(chips).toEqual(['Tất cả(123)', '5 sao(120)', '4 sao(0)', '3 sao(0)', '2 sao(0)', '1 sao(3)', 'Có ảnh', 'Có video(2)']);
+  });
+
+  it('API cũ chưa trả videoCount: chip "Có video" đếm trên các đánh giá đã tải thay vì biến mất; bấm thì hỏi máy chủ bộ lọc video', async () => {
+    const { videoCount: _omit, ...old } = LIST;
+    mocks.list = { ...old, items: [review('a', 5), review('v', 4, { videoUrl: 'https://cdn/v.mp4' })] };
+    const c = await mount();
+    expect(button(c, /^Có video/)?.textContent).toBe('Có video(1)');
+    await pick(c, /^Có video/);
+    expect(mocks.listCalls).toEqual(['all', 'video']);
+    expect(c.querySelectorAll('li.border-t')).toHaveLength(1);
   });
 
   it('gửi máy chủ đúng chip: "Tất cả" không kèm bộ lọc, chip sao kèm số sao, "Có ảnh" kèm photo', async () => {
