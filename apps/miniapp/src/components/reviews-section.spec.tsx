@@ -388,6 +388,38 @@ describe('ReviewsSection (C-076 di cư DS v2: giữ nguyên hành vi)', () => {
     expect(screen.queryByRole('button', { name: /Có video/ })).toBeNull();
   });
 
+  // Đánh giá video cuối cùng bị admin ẩn trong lúc khách đang xem "Có video", rồi danh sách tải lại nền (ở app thật: sau khi khách sửa đánh giá của mình
+  // làm mới `['reviews', slug]`, hoặc vào lại màn khi dữ liệu quá 10 giây). Test dùng đổi focus làm cách gọi tải lại nền; hành vi kiểm là chip, không phải cách gọi.
+  describe('đang chọn "Có video" mà đánh giá video cuối cùng bị ẩn', () => {
+    afterEach(() => focusManager.setFocused(undefined));
+
+    it('chip vẫn còn, vẫn đang chọn, ghi (0); danh sách trống báo không khớp; chọn chip khác thì chip biến mất', async () => {
+      let videoGone = false;
+      mocks.fetchReviews.mockImplementation(async (_slug: string, f: number | string = 'all') => {
+        const base = videoGone ? { ...DATA, videoCount: 0, items: DATA.items.map((r) => ({ ...r, videoUrl: null })) } : DATA;
+        if (f === 'all') return base;
+        return { ...base, items: base.items.filter((r) => (f === 'video' ? Boolean(r.videoUrl) : f === 'photo' ? (r.images as string[]).length > 0 : r.rating === f)) };
+      });
+      renderSection();
+      await screen.findByText('Nhận xét a');
+      fireEvent.click(screen.getByRole('button', { name: /Có video/ }));
+      expect(await screen.findByText('Nhận xét b')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Có video/ })).toHaveAttribute('aria-pressed', 'true');
+
+      videoGone = true;
+      act(() => {
+        focusManager.setFocused(false);
+        focusManager.setFocused(true);
+      });
+      const chip = await screen.findByRole('button', { name: /^Có video\(0\)$/ });
+      expect(chip).toHaveAttribute('aria-pressed', 'true');
+      await waitFor(() => expect(screen.getByText('Không có đánh giá khớp bộ lọc.')).toBeInTheDocument());
+
+      fireEvent.click(screen.getByRole('button', { name: 'Tất cả' }));
+      await waitFor(() => expect(screen.queryByRole('button', { name: /Có video/ })).toBeNull());
+    });
+  });
+
   it('chưa đăng nhập: "Viết đánh giá" mời đăng nhập, không mở form', async () => {
     mocks.auth = { status: 'guest' };
     renderSection();
