@@ -31,6 +31,13 @@ export default function AddressesPage() {
     enabled: phase === 'authenticated',
   });
 
+  // Báo giá của trang thanh toán giữ 10 giây: đổi địa chỉ mà không đánh dấu báo giá cũ thì khách quay lại kịp trong 10 giây vẫn thấy phí
+  // ship theo địa chỉ trước, đặt đơn thì bị báo tổng tiền đổi.
+  const refresh = () => {
+    void qc.invalidateQueries({ queryKey: ['addresses'] });
+    void qc.invalidateQueries({ queryKey: ['quote'] });
+  };
+
   const [editing, setEditing] = useState<AddressDTO | 'new' | null>(null);
   const [confirmDel, setConfirmDel] = useState<AddressDTO | null>(null);
 
@@ -38,7 +45,7 @@ export default function AddressesPage() {
     mutationFn: (id: string) => updateAddress(id, { isDefault: true }),
     onSuccess: () => {
       haptic('light');
-      void qc.invalidateQueries({ queryKey: ['addresses'] });
+      refresh();
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
@@ -48,7 +55,7 @@ export default function AddressesPage() {
     onSuccess: () => {
       setConfirmDel(null);
       openSnackbar({ text: 'Đã xoá địa chỉ.', type: 'success' });
-      void qc.invalidateQueries({ queryKey: ['addresses'] });
+      refresh();
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
@@ -143,7 +150,7 @@ export default function AddressesPage() {
             initial={editing === 'new' ? null : editing}
             onCancel={() => setEditing(null)}
             onSaved={() => {
-              void qc.invalidateQueries({ queryKey: ['addresses'] });
+              refresh();
               setEditing(null);
             }}
           />

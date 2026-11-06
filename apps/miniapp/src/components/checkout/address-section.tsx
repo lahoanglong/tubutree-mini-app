@@ -16,9 +16,11 @@ interface AddressSectionProps {
   addresses: AddressDTO[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  /** Máy chủ từ chối báo giá cho địa chỉ đang chọn với mã ADDRESS_OUTDATED (vd phường không thuộc tỉnh) dù mã đã theo địa giới mới. */
+  quoteOutdated?: boolean;
 }
 
-export function AddressSection({ addresses, selectedId, onSelect }: AddressSectionProps) {
+export function AddressSection({ addresses, selectedId, onSelect, quoteOutdated = false }: AddressSectionProps) {
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const queryClient = useQueryClient();
@@ -47,10 +49,13 @@ export function AddressSection({ addresses, selectedId, onSelect }: AddressSecti
 
       {addresses.map((a) => {
         const active = selectedId === a.id;
+        const legacy = isLegacyGeo(a);
         return (
           <AddressCard key={a.id} address={a} active={active} onClick={() => onSelect(a.id)}>
-            {active && isLegacyGeo(a) && editing === null && (
-              <LegacyGeoNotice
+            {active && (legacy || quoteOutdated) && editing === null && (
+              <GeoFixNotice
+                text={legacy ? vi.checkout.addressLegacy : vi.checkout.addressMismatch}
+                cta={legacy ? vi.checkout.addressLegacyCta : vi.checkout.addressFixCta}
                 onFix={() => {
                   haptic('light');
                   setAdding(false);
@@ -137,7 +142,7 @@ export function AddressSection({ addresses, selectedId, onSelect }: AddressSecti
 }
 
 /** Cảnh báo nằm trong chính thẻ địa chỉ đang chọn để khách biết địa chỉ nào cần chọn lại tỉnh/phường. */
-function LegacyGeoNotice({ onFix }: { onFix: () => void }) {
+function GeoFixNotice({ text, cta, onFix }: { text: string; cta: string; onFix: () => void }) {
   return (
     <div
       role="alert"
@@ -154,11 +159,11 @@ function LegacyGeoNotice({ onFix }: { onFix: () => void }) {
       <span style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
         <AlertTriangle size={16} color="var(--color-status-warning-fg)" aria-hidden style={{ flexShrink: 0, marginTop: 2 }} />
         <Text variant="body-sm" as="span" style={{ color: 'var(--color-status-warning-fg)' }}>
-          {vi.checkout.addressLegacy}
+          {text}
         </Text>
       </span>
       <Button variant="secondary" onPress={onFix}>
-        {vi.checkout.addressLegacyCta}
+        {cta}
       </Button>
     </div>
   );

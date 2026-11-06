@@ -682,6 +682,7 @@ export default function CheckoutPage() {
           addresses={addresses.data ?? []}
           selectedId={addressId}
           onSelect={chosen(setAddressId)}
+          quoteOutdated={!quote.isFetching && getErrorCode(quote.error) === 'ADDRESS_OUTDATED'}
         />
       </div>
       {placeAttempted && !addressId && (

@@ -1009,6 +1009,27 @@ describe('CheckoutPage — tổng tiền đổi lúc đặt (PANCAKE-13) và đ�
     await screen.findByText('Phương thức thanh toán');
     expect(screen.queryByText(/theo địa giới cũ/)).not.toBeInTheDocument();
   });
+
+  it('địa chỉ hệ mới nhưng máy chủ báo ADDRESS_OUTDATED (phường không thuộc tỉnh) → cảnh báo trong thẻ đang chọn + nút Sửa địa chỉ mở form sửa', async () => {
+    const message = 'Phường/xã không thuộc tỉnh/thành đã chọn. Bạn chọn lại địa chỉ nhé.';
+    const response = { status: 400, data: { statusCode: 400, code: 'ADDRESS_OUTDATED', message } };
+    mocks.checkoutQuote.mockRejectedValue(new HttpError('Bad Request', 'ERR_BAD_REQUEST', response));
+    renderPage();
+    const card = (await screen.findByText(/1 Lê Lợi/)).closest('[data-ds="checkout-address-card"]') as HTMLElement;
+    const alert = await within(card).findByRole('alert');
+    expect(alert).toHaveTextContent('không khớp với tỉnh/thành');
+    expect(alert).not.toHaveTextContent('theo địa giới cũ');
+    fireEvent.click(within(alert).getByRole('button', { name: 'Sửa địa chỉ' }));
+    await waitFor(() => expect(screen.queryByText(/không khớp với tỉnh\/thành/)).not.toBeInTheDocument());
+    expect(screen.getByDisplayValue('Ánh')).toBeInTheDocument();
+  });
+
+  it('báo giá lỗi vì lý do khác (mạng) → không mời sửa địa chỉ', async () => {
+    mocks.checkoutQuote.mockRejectedValue(new Error('Mạng lỗi'));
+    renderPage();
+    await screen.findByText('Thử lại');
+    expect(screen.queryByRole('button', { name: 'Sửa địa chỉ' })).not.toBeInTheDocument();
+  });
 });
 
 describe('CheckoutPage — thêm địa chỉ mới giữa lúc thanh toán (W31)', () => {
