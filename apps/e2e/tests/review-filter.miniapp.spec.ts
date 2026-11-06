@@ -41,12 +41,14 @@ test.describe('Zalo Mini App E2E - lọc đánh giá theo sao ở máy chủ', (
     await reviews.scrollIntoViewIfNeeded();
     await expect(reviews.getByRole('heading', { name: 'Đánh giá (123)' })).toBeVisible({ timeout: 15_000 });
     await expect(reviews.getByText('Nhận xét moi0')).toBeVisible();
+    await expect(reviews.getByText('Đang hiện 100 đánh giá mới nhất')).toBeVisible();
 
     await reviews.getByRole('button', { name: '1 sao', exact: true }).click();
     await expect(reviews.getByText('Nhận xét cu1')).toBeVisible();
     await expect(reviews.getByText('Nhận xét cu3')).toBeVisible();
     await expect(reviews.getByText('Không có đánh giá khớp bộ lọc.')).toHaveCount(0);
     await expect(reviews.getByText('Nhận xét moi0')).toHaveCount(0);
+    await expect(reviews.getByText('Đang hiện 100 đánh giá mới nhất')).toHaveCount(0);
     await expect(reviews.getByRole('heading', { name: 'Đánh giá (123)' })).toBeVisible();
     expect(api.callsTo('GET', '/products/:slug/reviews').map((c) => c.query.toString())).toContain('rating=1');
 

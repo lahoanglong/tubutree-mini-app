@@ -56,12 +56,14 @@ test.describe('Web khách: lọc đánh giá theo sao ở máy chủ', () => {
     await section.scrollIntoViewIfNeeded();
     await expect(section.getByRole('heading', { name: 'Đánh giá (128)' })).toBeVisible({ timeout: 15_000 });
     await expect(section.getByText('Nhận xét moi0')).toBeVisible();
+    await expect(section.getByText('Đang hiện 100 đánh giá mới nhất')).toBeVisible();
 
     await section.getByRole('button', { name: '1 sao', exact: true }).click();
     await expect(section.getByText('Nhận xét cu1')).toBeVisible();
     await expect(section.getByText('Nhận xét cu3')).toBeVisible();
     await expect(section.getByText('Không có đánh giá khớp bộ lọc.')).toHaveCount(0);
     await expect(section.getByText('Nhận xét moi0')).toHaveCount(0);
+    await expect(section.getByText('Đang hiện 100 đánh giá mới nhất')).toHaveCount(0);
     await expect(section.getByRole('heading', { name: 'Đánh giá (128)' })).toBeVisible();
     const queries = () => api.callsTo('GET', `/products/${p!.slug}/reviews`).map((c) => c.query.toString());
     expect(queries()).toContain('rating=1');
