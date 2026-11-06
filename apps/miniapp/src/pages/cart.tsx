@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Trash2, Ticket, ChevronRight, AlertTriangle, Zap } from 'lucide-react';
 import { cartSaving, lineCompareAt } from '@tubutree/app-core/commerce/pdp-view';
 import { cartTotalLabel } from '@tubutree/app-core/commerce/cart-total';
-import { cartStockNote } from '@tubutree/app-core/commerce/stock-text';
+import { cartStockNote, isLowStock, overStockTarget, qtyPickMax } from '@tubutree/app-core/commerce/stock-text';
 import { cartComboBlocks, comboRemovalNotice, comboSavingPending, type ComboRemovalNotice } from '@tubutree/app-core/commerce/cart-combo';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import {
@@ -511,8 +511,9 @@ function CartLineRow({
   // (UI cập nhật tức thời qua local state, request chỉ bay sau ~380ms ổn định).
   const [localQty, setLocalQty] = useState(line.quantity);
   const debouncedQty = useDebounced(localQty, 380);
-  // Theo số đang chọn trên màn (localQty) để dòng hiện cùng lúc nút + khoá khi khách bấm tới trần, không đợi máy chủ. Cam chỉ khi tồn thấp hoặc đang vượt, tồn cao thì chữ thường (cùng luật với web).
-  const stockNote = cartStockNote(localQty, line.stock);
+  // Tồn thấp: theo số đang chọn trên màn (localQty) để dòng hiện cùng lúc nút + khoá, không đợi máy chủ. Tồn trên 20: theo số của máy chủ như web,
+  // vì báo "vượt" theo số vừa bấm là cho khách đọc ra tồn thật ngay trên máy, không cần máy chủ trả lời.
+  const stockNote = cartStockNote(isLowStock(line.stock) ? localQty : line.quantity, line.stock);
   const soldOut = line.stock <= 0;
   // CHỈ đồng bộ về line.quantity khi KHÔNG có thay đổi đang chờ flush — tránh case
   // refetch cart (do mutate line khác) trả về quantity CŨ và snap UI ngược lại khi
@@ -607,9 +608,9 @@ function CartLineRow({
         )}
         {(stockNote || soldOut) && (
           <Box flex alignItems="center" style={{ gap: 4, marginTop: 2 }}>
-            {(soldOut || stockNote?.tone === 'warning') && <AlertTriangle size={13} color="var(--color-text-warning)" aria-hidden />}
-            <Text size="xSmall" style={{ color: soldOut || stockNote?.tone === 'warning' ? 'var(--color-text-warning)' : 'var(--color-text-secondary)' }}>
-              {stockNote ? stockNote.text : vi.cart.outOfStock}
+            <AlertTriangle size={13} color="var(--color-text-warning)" aria-hidden />
+            <Text size="xSmall" style={{ color: 'var(--color-text-warning)' }}>
+              {stockNote ?? vi.cart.outOfStock}
             </Text>
           </Box>
         )}
@@ -626,8 +627,14 @@ function CartLineRow({
             vẫn cho cả khối giá xuống dòng thay vì tràn. */}
         <Box flex alignItems="center" justifyContent="space-between" style={{ marginTop: 6, flexWrap: 'wrap', rowGap: 4, columnGap: 8 }}>
           <PriceTag value={line.unitPrice} compareAt={compareAt} size="sm" layout={compareAt ? 'stack' : 'inline'} tone={compareAt || line.isFlash ? 'deal' : 'default'} />
-          {/* Giỏ đang vượt tồn (tồn đổi sau khi thêm): nút − kẹp về tối đa bằng tồn như web, khách không phải bấm từng số xuống. */}
-          <QuantitySelector size="sm" value={localQty} max={Math.max(1, line.stock)} disabled={soldOut} onChange={(q) => setLocalQty(Math.min(q, Math.max(1, line.stock)))} />
+          {/* Giỏ đang vượt tồn (tồn đổi sau khi thêm): nút − kéo thẳng về mức thanh toán được như web (`overStockTarget`), khách không phải bấm từng số xuống. */}
+          <QuantitySelector
+            size="sm"
+            value={localQty}
+            max={line.quantity > line.stock ? line.quantity : qtyPickMax(line.stock)}
+            disabled={soldOut}
+            onChange={(q) => setLocalQty(q < localQty && line.quantity > line.stock ? Math.min(q, overStockTarget(line.stock)) : q)}
+          />
         </Box>
         {/* Số của server (line.total): máy chủ có thể tính lại giá cả dòng (flash hết suất). Ẩn khi SL chưa khớp server (chờ debounce) và khi PATCH còn bay (số lúc đó do client tự nhân). */}
         {line.quantity > 1 && localQty === line.quantity && !pending && (

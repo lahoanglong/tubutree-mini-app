@@ -6,7 +6,7 @@ import { Zap } from 'lucide-react';
 import { clampPickerQty, pickerStartId, pickerStockText } from '@tubutree/app-core/variation-picker';
 import { inCartQuantity, lineNote, variationLinePreview } from '@tubutree/app-core/commerce/flash-line';
 import { fillTileCopy } from '@tubutree/app-core/commerce/tile-copy';
-import { isLowStock } from '@tubutree/app-core/commerce/stock-text';
+import { isLowStock, qtyPickMax } from '@tubutree/app-core/commerce/stock-text';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { variationPricing, type FlashPriceItem } from '@tubutree/app-core/flash-price';
 import { formatVnd } from '@/lib/shop-client';
@@ -174,7 +174,7 @@ export function VariationSheet({
         <Text variant="body-sm" style={{ fontWeight: 600 }}>
           Số lượng
         </Text>
-        <QuantitySelector value={qty} max={Math.max(1, selected?.stock ?? 1)} onChange={setQty} />
+        <QuantitySelector value={qty} max={qtyPickMax(selected?.stock ?? 0)} onChange={setQty} />
       </div>
       {reserveNote && (
         // Vùng thông báo có chỗ giữ cố định (2 dòng chữ caption, đủ cho cả câu mất giá lẫn câu giỏ có sẵn; `--type-caption-lh` là số không đơn vị nên nhân với cỡ chữ) từ lúc mở: chữ hiện ra không làm bảng cao thêm và đẩy ô Số lượng dưới ngón tay đang bấm "+".

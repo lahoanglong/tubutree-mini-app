@@ -1586,6 +1586,35 @@ describe('OrdersService.repurchase v2 — mỗi dòng xử lý độc lập (A2-
     expect(res.results).toEqual([{ orderItemId: 'i1', status: 'partial', reason: 'EXCEEDS_STOCK', addedQuantity: 2 }]);
   });
 
+  it('tồn trên 20 mà thiếu: kẹp tổng trong giỏ về 20, không kẹp sát tồn (số trong giỏ và câu "chỉ thêm được n" sẽ in tồn thật)', async () => {
+    const { svc, addItems } = makeRepurchaseService({
+      items: [line('i1', 'v1', 30)],
+      variations: [variation('v1', 25)],
+      inCart: [{ variationId: 'v1', quantity: 4 }],
+    });
+    const res = await svc.repurchase('u1', 'TUBU1');
+    expect(addItems).toHaveBeenCalledWith('u1', [{ variationId: 'v1', quantity: 16, addSource: 'repurchase' }], { topUp: expect.any(Function) });
+    expect(res.results).toEqual([{ orderItemId: 'i1', status: 'partial', reason: 'EXCEEDS_STOCK', addedQuantity: 16 }]);
+  });
+
+  it('tồn trên 20, đủ hàng: thêm đủ số muốn dù tổng vượt 20', async () => {
+    const { svc, addItems } = makeRepurchaseService({ items: [line('i1', 'v1', 24)], variations: [variation('v1', 25)] });
+    const res = await svc.repurchase('u1', 'TUBU1');
+    expect(addItems).toHaveBeenCalledWith('u1', [{ variationId: 'v1', quantity: 24, addSource: 'repurchase' }], { topUp: expect.any(Function) });
+    expect(res.results).toEqual([{ orderItemId: 'i1', status: 'added', addedQuantity: 24 }]);
+  });
+
+  it('tồn trên 20, thiếu, giỏ đã có từ 20 trở lên: bỏ dòng (EXCEEDS_STOCK) thay vì thêm tới sát tồn', async () => {
+    const { svc, addItems } = makeRepurchaseService({
+      items: [line('i1', 'v1', 10)],
+      variations: [variation('v1', 25)],
+      inCart: [{ variationId: 'v1', quantity: 22 }],
+    });
+    const res = await svc.repurchase('u1', 'TUBU1');
+    expect(addItems).not.toHaveBeenCalled();
+    expect(res.results).toEqual([{ orderItemId: 'i1', status: 'skipped', reason: 'EXCEEDS_STOCK', addedQuantity: 0 }]);
+  });
+
   it('2 dòng cùng variation: dòng sau tính cả phần dòng trước vừa thêm', async () => {
     const { svc } = makeRepurchaseService({
       items: [line('i1', 'v1', 2), line('i2', 'v1', 2)],

@@ -1,5 +1,6 @@
 import { fillCopy } from '../shop-copy';
 import { vnd } from './money';
+import { isLowStock } from './stock-text';
 
 /** Điều khách cần biết về một dòng của đơn cũ trước khi mua lại. */
 export interface ReorderLineFacts {
@@ -28,7 +29,8 @@ export interface ReorderLineNotice {
 /**
  * Câu dưới từng dòng của sheet Mua lại.
  * - Không bán được: "Ngừng bán" hoặc "Tạm hết hàng", và chỉ câu đó.
- * - Còn ít hơn số đã mua: báo đã giảm số lượng, kèm số đã mua. Không in số tồn (tồn trên 20 không bao giờ ghi số).
+ * - Còn ít hơn số đã mua mà tồn 1–20: báo đã giảm số lượng, kèm số đã mua, không in số tồn. Tồn trên 20 thì sheet không giảm và không báo
+ *   (bộ chọn không kẹp theo tồn đó); máy chủ kẹp lúc thêm vào giỏ.
  * - Đơn trước mua nhiều hơn trần của sheet: báo trần, vì số lượng cũng bị giảm dù còn đủ hàng.
  * - Giá đổi so với đơn giá đã trả: tăng hay giảm, kèm giá cũ.
  */
@@ -39,7 +41,7 @@ export function reorderLineNotices(f: ReorderLineFacts): ReorderLineNotice[] {
       : [{ kind: 'out', tone: 'danger', text: fillCopy('stock.out') }];
   }
   const notices: ReorderLineNotice[] = [];
-  if (f.stock !== null && f.stock < f.orderedQuantity && f.stock <= f.cap) {
+  if (f.stock !== null && f.stock < f.orderedQuantity && f.stock <= f.cap && isLowStock(f.stock)) {
     notices.push({ kind: 'reduced', tone: 'warning', text: fillCopy('reorder.qtyReduced', { old: f.orderedQuantity }) });
   } else if (f.orderedQuantity > f.cap) {
     notices.push({ kind: 'reduced', tone: 'warning', text: fillCopy('reorder.qtyCapped', { n: f.cap }) });

@@ -35,6 +35,12 @@ describe('clampPickerQty', () => {
     expect(clampPickerQty(v('a', 1, 0), 2)).toBe(1);
     expect(clampPickerQty(undefined, 2)).toBe(1);
   });
+
+  it('tồn trên 20: không kẹp về tồn (lộ tồn thật), chỉ kẹp ở trần cố định 99', () => {
+    expect(clampPickerQty(v('a', 1, 25), 30)).toBe(30);
+    expect(clampPickerQty(v('a', 1, 25), 150)).toBe(99);
+    expect(clampPickerQty(v('a', 1, 20), 30)).toBe(20);
+  });
 });
 
 describe('pickerStockText', () => {

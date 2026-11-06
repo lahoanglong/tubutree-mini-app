@@ -195,27 +195,34 @@ describe('CartPage — vượt tồn kho (BUYERMINI-18) và suất giờ vàng (
     expect(mocks.navigate).not.toHaveBeenCalledWith('/checkout', expect.anything());
   });
 
-  it('chạm trần mà tồn cao (40/40): dòng "Đã chọn hết số hàng đang có" chữ thường, không icon cảnh báo, KHÔNG ghi con số tồn (Smart Stock)', async () => {
+  it('tồn cao (40) mà đã chọn 40: không có dòng tồn kho, nút + vẫn bấm được (khoá ở 40 là lộ tồn thật, Smart Stock)', async () => {
     mocks.getCart.mockResolvedValue(summary({ items: [{ ...OK_LINE, quantity: 40, stock: 40, total: 2_000_000 }] }));
     renderPage();
-    const note = await screen.findByText('Đã chọn hết số hàng đang có');
+    await screen.findByText('Xà bông thảo mộc');
+    expect(screen.queryByText(/hàng đang có/)).toBeNull();
     expect(screen.queryByText(/Còn 40 sản phẩm/)).toBeNull();
-    expect(note.getAttribute('style')).toContain('--color-text-secondary');
-    expect(note.getAttribute('style')).not.toContain('--color-text-warning');
-    expect(note.parentElement!.querySelector('svg')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Tăng số lượng' })).toHaveAttribute('aria-disabled', 'false');
   });
 
-  it('vượt tồn mà tồn cao (50 trên tồn 40): dòng báo "Vượt số hàng đang có…" (không phải "chọn hết"), không ghi số tồn, nút − kẹp về đúng tồn', async () => {
+  it('tồn cao: nút + dừng ở trần cố định 99, không ở tồn', async () => {
+    mocks.getCart.mockResolvedValue(summary({ items: [{ ...OK_LINE, quantity: 99, stock: 500, total: 4_950_000 }] }));
+    renderPage();
+    await screen.findByText('Xà bông thảo mộc');
+    expect(screen.getByRole('button', { name: 'Tăng số lượng' })).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('vượt tồn mà tồn cao (50 trên tồn 40): dòng báo "Vượt số hàng đang có…", cảnh báo, không ghi số tồn; nút − về 20, không về sát tồn', async () => {
     mocks.getCart.mockResolvedValue(summary({ items: [{ ...OK_LINE, quantity: 50, stock: 40, total: 2_500_000 }] }));
+    mocks.updateCartItem.mockReturnValue(new Promise(() => undefined));
     renderPage();
     const note = await screen.findByText('Vượt số hàng đang có, giảm bớt để thanh toán');
     expect(note.getAttribute('style')).toContain('--color-text-warning');
-    expect(screen.queryByText('Đã chọn hết số hàng đang có')).toBeNull();
     expect(screen.queryByText(/Còn 40 sản phẩm/)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Tăng số lượng' })).toHaveAttribute('aria-disabled', 'true');
     fireEvent.click(screen.getByRole('button', { name: 'Giảm số lượng' }));
-    // Một lần bấm − về thẳng tồn (40), không phải 49: không còn vượt nên dòng báo đổi sang "chọn hết".
-    expect(screen.getByText('Đã chọn hết số hàng đang có')).toBeInTheDocument();
-    expect(screen.queryByText('Vượt số hàng đang có, giảm bớt để thanh toán')).toBeNull();
+    await waitFor(() => expect(mocks.updateCartItem).toHaveBeenCalledWith(OK_LINE.id, 20), { timeout: 2_000 });
+    await waitFor(() => expect(screen.queryByText('Vượt số hàng đang có, giảm bớt để thanh toán')).toBeNull());
+    expect(mocks.updateCartItem).not.toHaveBeenCalledWith(OK_LINE.id, 40);
   });
 
   it('chạm trần mà tồn thấp (3/3): cảnh báo kèm icon; chưa chạm trần (2/40) không có dòng (L5 3)', async () => {
@@ -231,13 +238,29 @@ describe('CartPage — vượt tồn kho (BUYERMINI-18) và suất giờ vàng (
     expect(screen.queryByText(/^(?:Chỉ còn|Còn) \d+ sản phẩm$/)).toBeNull();
   });
 
-  it('bấm + tới trần: dòng tồn kho hiện cùng lúc nút + khoá, không đợi máy chủ (L5 3)', async () => {
-    mocks.getCart.mockResolvedValue(summary({ items: [{ ...OK_LINE, quantity: 39, stock: 40, total: 1_950_000 }] }));
+  it('bấm + tới trần tồn thấp: dòng tồn kho hiện cùng lúc nút + khoá, không đợi máy chủ (L5 3)', async () => {
+    mocks.getCart.mockResolvedValue(summary({ items: [{ ...OK_LINE, quantity: 4, stock: 5, total: 200_000 }] }));
+    mocks.updateCartItem.mockReturnValue(new Promise(() => undefined));
     renderPage();
     await screen.findByText('Xà bông thảo mộc');
-    expect(screen.queryByText('Đã chọn hết số hàng đang có')).toBeNull();
+    expect(screen.queryByText('Chỉ còn 5 sản phẩm')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Tăng số lượng' }));
-    expect(screen.getByText('Đã chọn hết số hàng đang có')).toBeInTheDocument();
+    expect(screen.getByText('Chỉ còn 5 sản phẩm')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Tăng số lượng' })).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('bấm + qua tồn cao (40 → 41): nút + không khoá ở 40, máy chủ là nơi từ chối', async () => {
+    mocks.getCart.mockResolvedValue(summary({ items: [{ ...OK_LINE, quantity: 39, stock: 40, total: 1_950_000 }] }));
+    mocks.updateCartItem.mockReturnValue(new Promise(() => undefined));
+    renderPage();
+    await screen.findByText('Xà bông thảo mộc');
+    const plus = screen.getByRole('button', { name: 'Tăng số lượng' });
+    fireEvent.click(plus);
+    expect(plus).toHaveAttribute('aria-disabled', 'false');
+    fireEvent.click(plus);
+    // Số trên màn vượt tồn nhưng máy chủ chưa nhận: không báo "vượt" ngay trên máy (báo là đọc ra tồn thật mà không cần hỏi máy chủ).
+    expect(screen.queryByText('Vượt số hàng đang có, giảm bớt để thanh toán')).toBeNull();
+    await waitFor(() => expect(mocks.updateCartItem).toHaveBeenCalledWith(OK_LINE.id, 41), { timeout: 2_000 });
   });
 
   it('hết hàng hẳn → báo hết hàng thay vì "Còn 0 sản phẩm"', async () => {

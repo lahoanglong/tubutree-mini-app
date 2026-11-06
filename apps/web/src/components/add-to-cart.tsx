@@ -25,7 +25,7 @@ import { useFlashSalesLoaded, useRunningFlash } from '@/lib/use-flash-sales';
 import { useFlashAllowance } from '@/lib/use-flash-allowance';
 import { usePdpSelection } from './pdp-selection';
 import { LOW_STOCK_NOTICE, useProductStock } from './pdp-stock';
-import { stockText } from '@tubutree/app-core/commerce/stock-text';
+import { qtyPickMax, stockText } from '@tubutree/app-core/commerce/stock-text';
 import { cartKey, useCartKey } from '@/lib/cart-key';
 import { StickyActionBar } from './sticky-action-bar';
 import { QuantitySelector } from '@/components/ui/quantity-selector';
@@ -133,10 +133,10 @@ export default function AddToCart({
   // Chấp nhận một lần co lại: phiên hết hạn hoặc mất mạng khi khôi phục (guest, unavailable) thì dải giữ chỗ bỏ đi và phần dưới dịch lên một lần, hiếm và chỉ khi cờ phiên cũ còn.
   const reserveFlashNote = (phase === 'authenticated' || restoring) && !!line?.pricing.isFlash;
   const available = (selected?.stock ?? 0) > 0;
-  // Số lượng luôn giới hạn theo tồn kho của phân loại đang chọn (tối thiểu 1) — tránh
-  // trường hợp chuyển sang phân loại còn ít/hết hàng nhưng vẫn giữ số lượng của phân loại cũ,
-  // dẫn đến gửi lên giỏ hàng số lượng vượt tồn kho (hoặc bằng 0 nếu hết hàng).
-  const maxQty = Math.max(selected?.stock ?? 1, 1);
+  // Số lượng luôn giới hạn theo trần nút + của phân loại đang chọn (`qtyPickMax`, tối thiểu 1) — tránh
+  // trường hợp chuyển sang phân loại còn ít/hết hàng nhưng vẫn giữ số lượng của phân loại cũ.
+  // Tồn trên 20 không kẹp về tồn (lộ tồn thật): máy chủ từ chối phần vượt bằng câu không có số.
+  const maxQty = qtyPickMax(selected?.stock ?? 0);
   // Khung câu chuyện (PdpStory) có thanh mua riêng, nên cần biết khối mua đang cho mua hay không: khoá nút khi hết hàng hoặc gian hàng tạm nghỉ.
   const setBuyable = shared?.setBuyable;
   const buyable = available && !blockedReason;
@@ -303,7 +303,7 @@ export default function AddToCart({
     if (!target || target.stock <= 0) return;
     // Bấm mua là đã chọn: Giờ vàng hay tồn kho về muộn không được đổi phân loại dưới tay khách.
     userPicked.current = true;
-    await add(target.id, Math.min(chosen?.quantity ?? qty, Math.max(target.stock, 1)), buyNow);
+    await add(target.id, Math.min(chosen?.quantity ?? qty, qtyPickMax(target.stock)), buyNow);
   };
   const confirming = useRef(false);
   const confirmVariation = (id: string, quantity: number) => {

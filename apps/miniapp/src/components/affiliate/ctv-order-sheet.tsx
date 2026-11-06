@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { Input, useSnackbar, useNavigate } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { qtyPickMax } from '@tubutree/app-core/commerce/stock-text';
 import { Trash2, Plus, Minus, UserPlus, TriangleAlert, type LucideIcon } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Chip } from '../ui/chip';
@@ -118,7 +119,7 @@ export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
       if (idx >= 0) {
         const next = [...prev];
         const cur = next[idx]!;
-        next[idx] = { ...cur, quantity: Math.min(cur.quantity + 1, Math.max(v.stock, 1)) };
+        next[idx] = { ...cur, quantity: Math.min(cur.quantity + 1, qtyPickMax(v.stock)) };
         return next;
       }
       return [
@@ -142,7 +143,7 @@ export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
       prev
         .map((l) =>
           l.variationId === variationId
-            ? { ...l, quantity: Math.min(Math.max(l.quantity + delta, 0), Math.max(l.stock, 1)) }
+            ? { ...l, quantity: Math.min(Math.max(l.quantity + delta, 0), qtyPickMax(l.stock)) }
             : l,
         )
         .filter((l) => l.quantity > 0),

@@ -83,6 +83,17 @@ describe('reorder-types', () => {
     expect(selectedLines(out, { v1: { checked: true, quantity: 1 } })).toEqual([]);
   });
 
+  it('tồn trên 20: không kẹp SL mặc định và trần về tồn (lộ tồn thật), không báo "Không đủ"; máy chủ kẹp lúc thêm', () => {
+    const l = lineFromOrderItem(orderItem({ quantity: 30, stock: 25, available: true, currentPrice: 60000 }));
+    expect(l.defaultQuantity).toBe(30);
+    expect(l.maxQuantity).toBe(MAX_REORDER_QTY);
+    expect(l.notices).toEqual([]);
+    const t = orderReorderTarget({ code: 'TUBU1', items: [orderItem({ quantity: 30, stock: 25, available: true })] });
+    expect(selectedLines(t, initialSelection(t))[0]!.quantity).toBe(30);
+    expect(lineFromPurchasedItem(purchased({ stock: 25 })).maxQuantity).toBe(MAX_REORDER_QTY);
+    expect(lineFromPurchasedItem(purchased({ stock: 20 })).maxQuantity).toBe(20);
+  });
+
   it('trần số lượng 99: tồn kho lớn hơn 99 vẫn kẹp 99 (đơn cũ và SP đã mua)', () => {
     expect(lineFromOrderItem(orderItem({ stock: 500, available: true, quantity: 300 }))).toMatchObject({ maxQuantity: 99, defaultQuantity: 99 });
     const p = itemReorderTarget(purchased({ stock: 500 }));

@@ -7,6 +7,7 @@ import { Minus, Plus, Trash2, TriangleAlert, UserPlus } from 'lucide-react';
 import { createCtvOrder, type CtvOrderInput, type CtvOrderResult } from '@tubutree/app-core/api/affiliate';
 import type { ProductSuggestion, VariationDetail } from '@tubutree/app-core/api/catalog';
 import { isSuggestable, parseTypedVnPhone } from '@tubutree/app-core/affiliate-rules';
+import { qtyPickMax } from '@tubutree/app-core/commerce/stock-text';
 import { createOrderKeyRing } from '@tubutree/app-core/order-key-ring';
 import {
   affiliateCommissionsQuery,
@@ -122,7 +123,7 @@ function CtvOrderForm({ onClose }: { onClose: () => void }) {
       if (idx >= 0) {
         const next = [...prev];
         const cur = next[idx]!;
-        next[idx] = { ...cur, quantity: Math.min(cur.quantity + 1, Math.max(v.stock, 1)) };
+        next[idx] = { ...cur, quantity: Math.min(cur.quantity + 1, qtyPickMax(v.stock)) };
         return next;
       }
       return [...prev, { variationId: v.id, productName, variationName: v.name, unitPrice: v.salePrice ?? v.retailPrice, quantity: 1, stock: v.stock }];
@@ -133,7 +134,7 @@ function CtvOrderForm({ onClose }: { onClose: () => void }) {
   const setQty = (variationId: string, delta: number) => {
     setLines((prev) =>
       prev
-        .map((l) => (l.variationId === variationId ? { ...l, quantity: Math.min(Math.max(l.quantity + delta, 0), Math.max(l.stock, 1)) } : l))
+        .map((l) => (l.variationId === variationId ? { ...l, quantity: Math.min(Math.max(l.quantity + delta, 0), qtyPickMax(l.stock)) } : l))
         .filter((l) => l.quantity > 0),
     );
   };

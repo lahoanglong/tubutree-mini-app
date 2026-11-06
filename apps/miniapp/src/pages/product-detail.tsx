@@ -57,7 +57,7 @@ import { returnsPromise } from '@tubutree/app-core/returns-copy';
 import { needsVariationPicker } from '@tubutree/app-core/variation-picker';
 import { inCartQuantity, lineNote, variationLinePreview } from '@tubutree/app-core/commerce/flash-line';
 import { useFlashAllowance } from '../hooks/use-flash-allowance';
-import { isLowStock } from '@tubutree/app-core/commerce/stock-text';
+import { isLowStock, qtyPickMax } from '@tubutree/app-core/commerce/stock-text';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { useRecordRecentlyViewed } from '../hooks/use-record-recently-viewed';
 import { rememberCheckoutSelection } from '../utils/checkout-selection';
@@ -243,10 +243,10 @@ export default function ProductDetailPage() {
   // Flash sale đang chạy cho ĐÚNG phân loại đang chọn (BE re-resolve giá thật lúc thêm giỏ/checkout).
   const flashItem = selected ? runningFlash(flashQ.data).find((f) => f.variationId === selected.id) : undefined;
 
-  // Đổi phân loại → kẹp lại số lượng theo tồn kho mới (chỉ phụ thuộc id/stock, không phải ref).
+  // Đổi phân loại → kẹp lại số lượng theo trần nút + của phân loại mới (chỉ phụ thuộc id/stock, không phải ref).
   useEffect(() => {
-    if (selected && quantity > Math.max(1, selected.stock)) {
-      setQuantity(Math.max(1, selected.stock));
+    if (selected && quantity > qtyPickMax(selected.stock)) {
+      setQuantity(qtyPickMax(selected.stock));
     }
   }, [selected, quantity]);
 
@@ -813,7 +813,7 @@ export default function ProductDetailPage() {
         </Text>
         <QuantitySelector
           value={quantity}
-          max={Math.max(1, selected?.stock ?? 1)}
+          max={qtyPickMax(selected?.stock ?? 0)}
           onChange={(n) => {
             haptic('light');
             setQuantity(n);

@@ -2,7 +2,7 @@ import { BadRequestException, Injectable, Logger, NotFoundException, Optional } 
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import { Prisma } from '@prisma/client';
-import { exposedStock, type OrderStatus } from '@tubutree/shared-types';
+import { exposedStock, overStockTarget, type OrderStatus } from '@tubutree/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { decodeKeysetCursor, encodeKeysetCursor, KEYSET_ORDER, keysetAfter } from '../../common/keyset-cursor';
 import { paginated, skipTake } from '../../common/pagination';
@@ -633,7 +633,9 @@ export class OrdersService {
       const room = v.stock - (inCart.get(v.id) ?? 0);
       if (room <= 0) { skip('EXCEEDS_STOCK'); continue; }
       const want = requested?.get(line.id) ?? line.quantity;
-      const qty = Math.min(want, room);
+      // Thiếu hàng thì kẹp. Tồn trên 20 không kẹp sát tồn (số trong giỏ và câu "chỉ thêm được n" sẽ in tồn thật) mà kẹp tổng trong giỏ về overStockTarget.
+      const qty = want <= room ? want : Math.min(room, overStockTarget(v.stock) - (inCart.get(v.id) ?? 0));
+      if (qty <= 0) { skip('EXCEEDS_STOCK'); continue; }
       inCart.set(v.id, (inCart.get(v.id) ?? 0) + qty);
       pending.push({ slot: results.length, line, variationId: v.id, qty, want });
       results.push({ orderItemId: line.id, status: 'added', addedQuantity: qty });

@@ -1,5 +1,6 @@
 import type { OrderItemView, PurchasedItem } from '@tubutree/app-core/api/orders';
 import { isDiscontinuedItem, reorderComparablePrice, reorderLineNotices, type ReorderLineNotice } from '@tubutree/app-core/commerce/reorder-notice';
+import { qtyPickMax } from '@tubutree/app-core/commerce/stock-text';
 
 /** Điểm vào cần ghi nguồn riêng: nhắc mua lại ở trang thông báo (cùng giá trị 'notification' với Mini App). */
 export type ReorderSource = 'notification';
@@ -43,7 +44,7 @@ export function lineFromOrderItem(it: OrderItemView): ReorderLine {
   // API cũ không trả stock/available → coi như còn hàng (Ruling 19), server kẹp theo tồn thật.
   const stock = typeof it.stock === 'number' ? Math.max(it.stock, 0) : MAX_REORDER_QTY;
   const available = it.available !== false && stock > 0;
-  const maxQuantity = Math.min(stock, MAX_REORDER_QTY);
+  const maxQuantity = Math.min(qtyPickMax(stock), MAX_REORDER_QTY);
   const notices = reorderLineNotices({
     available,
     discontinued: isDiscontinuedItem(it),
@@ -79,7 +80,7 @@ export function lineFromPurchasedItem(p: PurchasedItem): ReorderLine {
     thumbnail: p.thumbnail,
     unitPrice: price,
     defaultQuantity: 1,
-    maxQuantity: Math.min(stock, MAX_REORDER_QTY),
+    maxQuantity: Math.min(qtyPickMax(stock), MAX_REORDER_QTY),
     available,
     notices: reorderLineNotices({ available, discontinued: false, orderedQuantity: 1, stock, cap: MAX_REORDER_QTY, paidPrice: price, currentPrice: price }),
   };

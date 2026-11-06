@@ -18,3 +18,11 @@ export const PLENTY_STOCK = 100_000;
 export function exposedStock(stock: number): number {
   return Math.min(stock, PLENTY_STOCK);
 }
+
+/**
+ * Số lượng mà một dòng đang đòi quá tồn được kéo về: giỏ bấm −, nút sửa ở màn thanh toán, máy chủ kẹp khi mua lại. Tồn 1..LOW_STOCK_NOTICE
+ * đã được in ra nên về đúng tồn; tồn cao hơn về LOW_STOCK_NOTICE, vì kéo về sát tồn là đặt con số tồn thật lên bộ chọn. Hết hàng trả 1.
+ */
+export function overStockTarget(stock: number): number {
+  return Math.max(1, Math.min(stock, LOW_STOCK_NOTICE));
+}
