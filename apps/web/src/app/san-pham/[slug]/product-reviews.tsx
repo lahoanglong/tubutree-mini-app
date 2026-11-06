@@ -15,7 +15,15 @@ import { ui } from '@/lib/guest-ui';
 import { Chip } from '@/components/mini/chip';
 import { mini } from '@/components/order-mobile/mobile-ui';
 import { formatRating } from '@tubutree/app-core/commerce/card-meta';
-import { filterReviews, reviewFilterChips, type ReviewFilterKey } from '@tubutree/app-core/commerce/review-filter';
+import {
+  REVIEW_LIST_LIMIT,
+  reviewFilterChips,
+  reviewListCapped,
+  reviewListKey,
+  reviewListView,
+  type ReviewFilterKey,
+} from '@tubutree/app-core/commerce/review-filter';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { MAX_PUBLIC_DATA_URL_LENGTH } from '@/lib/image-compress';
 import { loginHref } from '@/lib/return-to';
 import {
@@ -51,6 +59,26 @@ const EmptyState = dynamic(() => import('@/components/mini/empty-state').then((m
 });
 
 const PAGE_SIZE = 5;
+
+/** Chờ và lỗi của danh sách đánh giá: dùng chung cho danh sách đầy đủ và kết quả chip lọc. */
+function ListLoading() {
+  return (
+    <p aria-busy="true" className="mt-3 text-sm text-stone-600">
+      Đang tải đánh giá…
+    </p>
+  );
+}
+
+function ListFailed({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div className="mt-3">
+      <p className={ui.error}>Không tải được đánh giá.</p>
+      <button type="button" className={`${ui.btnText} text-forest-700`} onClick={onRetry}>
+        Thử lại
+      </button>
+    </div>
+  );
+}
 
 /**
  * Đánh giá đang soạn, luôn gắn một lần mua (đơn): viết mới cho đơn khách chọn từ chi tiết đơn, không chọn thì đơn còn viết
@@ -114,7 +142,7 @@ export function ProductReviews({ slug }: { slug: string }) {
   const openForOrderId = params?.get(REVIEW_ORDER_PARAM) ?? undefined;
   const phase = useAuthPhase();
   const hydrated = useHydrated();
-  const listQ = useQuery({ queryKey: ['reviews', slug], queryFn: () => fetchProductReviews(slug) });
+  const listQ = useQuery({ queryKey: reviewListKey(slug, 'all'), queryFn: () => fetchProductReviews(slug) });
   const eligQ = useQuery({
     queryKey: ['can-review', slug],
     queryFn: () => fetchCanReview(slug),
@@ -124,6 +152,8 @@ export function ProductReviews({ slug }: { slug: string }) {
   const [target, setTarget] = useState<FormTarget | null>(null);
   const [visible, setVisible] = useState(PAGE_SIZE);
   const [filter, setFilter] = useState<ReviewFilterKey>('all');
+  // Chip lọc hỏi máy chủ: danh sách đầy đủ chỉ có 100 đánh giá mới nhất, lọc trên đó báo "không có đánh giá khớp" sai.
+  const filteredQ = useQuery({ queryKey: reviewListKey(slug, filter), queryFn: () => fetchProductReviews(slug, filter), enabled: filter !== 'all' });
   const [notice, setNotice] = useState<string | null>(null);
 
   const elig = phase === 'authenticated' ? eligQ.data : undefined;
@@ -158,7 +188,9 @@ export function ProductReviews({ slug }: { slug: string }) {
   const data = hydrated ? listQ.data : undefined;
   const listLoading = listQ.isLoading || (!hydrated && !listQ.isError);
   const dist = data?.distribution ?? {};
-  const items = filterReviews(data?.items ?? [], filter);
+  const list = reviewListView(filter, listQ, filteredQ);
+  const items = list.items;
+  const capped = list.status === 'ready' && reviewListCapped(filter, data, items.length);
   const chips = reviewFilterChips(data?.videoCount);
 
   return (
@@ -228,14 +260,9 @@ export function ProductReviews({ slug }: { slug: string }) {
       )}
 
       {listLoading ? (
-        <p className="mt-3 text-sm text-stone-600">Đang tải đánh giá…</p>
+        <ListLoading />
       ) : listQ.isError ? (
-        <div className="mt-3">
-          <p className={ui.error}>Không tải được đánh giá.</p>
-          <button type="button" className={`${ui.btnText} text-forest-700`} onClick={() => void listQ.refetch()}>
-            Thử lại
-          </button>
-        </div>
+        <ListFailed onRetry={() => void listQ.refetch()} />
       ) : !data || data.count === 0 ? (
         <EmptyState variant="inline" art="sprout" heading="Chưa có đánh giá" body="Hãy là người đầu tiên chia sẻ trải nghiệm." />
       ) : (
@@ -283,6 +310,12 @@ export function ProductReviews({ slug }: { slug: string }) {
             ))}
           </div>
 
+          {list.status === 'loading' ? (
+            <ListLoading />
+          ) : list.status === 'error' ? (
+            <ListFailed onRetry={() => void filteredQ.refetch()} />
+          ) : (
+          <>
           <ul className="mt-3">
             {items.slice(0, visible).map((r) => {
               const mine = mineById.get(r.id);
@@ -352,6 +385,9 @@ export function ProductReviews({ slug }: { slug: string }) {
             <button type="button" className={`${ui.btnSecondary} ${mini.ghost} w-full`} onClick={() => setVisible((v) => v + PAGE_SIZE)}>
               Xem thêm ({items.length - visible})
             </button>
+          )}
+          {capped && <p className="mt-3 text-xs text-tertiary">{fillCopy('pdp.reviewsCapped', { n: REVIEW_LIST_LIMIT })}</p>}
+          </>
           )}
         </>
       )}

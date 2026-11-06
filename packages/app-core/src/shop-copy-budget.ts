@@ -311,6 +311,7 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'pdp.variation': 12,
   'pdp.reviews': 12,
   'pdp.reviewsAll': 18,
+  'pdp.reviewsCapped': 31,
   'pdp.alsoLike': 24,
   'pdp.brandShelf': 20,
   'pdp.brandShelfLabel': null,

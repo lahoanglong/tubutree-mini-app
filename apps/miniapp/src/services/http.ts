@@ -58,6 +58,8 @@ export interface RequestConfig {
   headers?: Record<string, string>;
   /** Mili giây; 0 = không giới hạn. Mặc định lấy từ createTransport. */
   timeout?: number;
+  /** Chế độ cache HTTP của fetch; mặc định để trình duyệt tự quyết theo Cache-Control. */
+  cache?: RequestCache;
 }
 
 export interface HttpResponse<T = unknown> {
@@ -74,6 +76,7 @@ export interface TransportRequest {
   data?: unknown;
   headers: Headers;
   timeout?: number;
+  cache?: RequestCache;
 }
 
 // Giữ đúng cách mã hoá của axios 1.x: máy chủ và các spec đã quen "a+b", "ids[]=1", "a:b".
@@ -166,7 +169,13 @@ export function createTransport(baseURL: string, defaultTimeoutMs: number) {
     const headers: Record<string, string> = {};
     let text: string;
     try {
-      const res = await fetch(url, { method: req.method, headers: req.headers, body, signal: controller.signal });
+      const res = await fetch(url, {
+        method: req.method,
+        headers: req.headers,
+        body,
+        signal: controller.signal,
+        ...(req.cache ? { cache: req.cache } : {}),
+      });
       status = res.status;
       res.headers.forEach((value, name) => {
         headers[name.toLowerCase()] = value;

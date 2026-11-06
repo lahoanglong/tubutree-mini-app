@@ -20,6 +20,7 @@ import {
   fetchHasAnyOrder,
   fetchOrders,
   fetchPurchasedItems,
+  fetchReviews,
   normalizeRepurchaseResponse,
   repurchaseOrder,
   type CartSummary,
@@ -210,6 +211,22 @@ describe('shop-api — createReview', () => {
     expect(post).toHaveBeenCalledWith('/products/nuoc-rua-chen/reviews', { rating: 4, orderId: 'o1' }, undefined);
     expect(r.pointsEarned).toBe(0);
     expect(r.updated).toBe(false);
+  });
+});
+
+describe('shop-api — fetchReviews', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('gửi bộ lọc của chip cho máy chủ và luôn hỏi lại máy chủ (no-cache) để đánh giá vừa viết hiện ngay', async () => {
+    get.mockResolvedValue({ data: { average: 0, count: 0, items: [] } });
+    await fetchReviews('nuoc-rua-chen');
+    await fetchReviews('nuoc-rua-chen', 1);
+    await fetchReviews('nuoc-rua-chen', 'video');
+    expect(get.mock.calls).toEqual([
+      ['/products/nuoc-rua-chen/reviews', { cache: 'no-cache' }],
+      ['/products/nuoc-rua-chen/reviews?rating=1', { cache: 'no-cache' }],
+      ['/products/nuoc-rua-chen/reviews?media=video', { cache: 'no-cache' }],
+    ]);
   });
 });
 

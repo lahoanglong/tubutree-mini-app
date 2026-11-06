@@ -1,4 +1,5 @@
 import type { HttpClient } from '../http';
+import { reviewFilterQuery, type ReviewFilterKey } from '../commerce/review-filter';
 
 export interface ReviewItem {
   id: string;
@@ -17,7 +18,8 @@ export interface ReviewSummary {
   distribution?: Record<string, number>;
   items: ReviewItem[];
 }
-export const fetchReviews = (http: HttpClient, slug: string) => http.get<ReviewSummary>(`/products/${slug}/reviews`);
+export const fetchReviews = (http: HttpClient, slug: string, filter: ReviewFilterKey = 'all') =>
+  http.get<ReviewSummary>(`/products/${slug}/reviews${reviewFilterQuery(filter)}`);
 
 /** Một đánh giá khách đã viết cho sản phẩm, gắn với lần mua (đơn) của nó — để gắn nút sửa đúng dòng. */
 export interface MyReviewRef {

@@ -720,6 +720,56 @@ describe('ReviewsService.listByProduct — thống kê trên mọi đánh giá �
   });
 });
 
+// Lọc ở client chỉ chạy trên 100 dòng mới nhất: sản phẩm có 120 đánh giá 5 sao mới và vài đánh giá 1 sao cũ thì chip "1 sao"
+// báo "không có đánh giá khớp". Bộ lọc phải vào điều kiện của truy vấn danh sách; thống kê vẫn tính trên mọi đánh giá đang hiện.
+describe('ReviewsService.listByProduct: lọc theo sao, ảnh, video ở máy chủ', () => {
+  const VISIBLE = { productId: 'p1', isVisible: true };
+  const row = (id: string, rating: number) => ({
+    id, rating, comment: null, imageVersions: [], videoUrl: null, createdAt: new Date(), user: { fullName: 'An', avatarUrl: null },
+  });
+
+  it.each([
+    [{}, VISIBLE],
+    [{ rating: 1 }, { ...VISIBLE, rating: 1 }],
+    [{ rating: 5 }, { ...VISIBLE, rating: 5 }],
+    [{ media: 'photo' as const }, { ...VISIBLE, imageVersions: { isEmpty: false } }],
+    [{ media: 'video' as const }, { ...VISIBLE, videoUrl: { not: null } }],
+    [{ rating: 4, media: 'photo' as const }, { ...VISIBLE, rating: 4, imageVersions: { isEmpty: false } }],
+  ])('bộ lọc %j → findMany where %j, mới nhất trước, tối đa 100', async (filter, where) => {
+    const prisma = listPrisma([]);
+    await new ReviewsService(prisma, analytics, loyalty).listByProduct('tinh-dau', filter);
+    expect(prisma.review.findMany).toHaveBeenCalledTimes(1);
+    expect(prisma.review.findMany).toHaveBeenCalledWith(expect.objectContaining({ where, orderBy: { createdAt: 'desc' }, take: 100 }));
+  });
+
+  it('chip "Có video" và danh sách lọc video dùng cùng một điều kiện (số trên chip khớp số dòng)', async () => {
+    const prisma = listPrisma([]);
+    await new ReviewsService(prisma, analytics, loyalty).listByProduct('tinh-dau', { media: 'video' });
+    const listWhere = prisma.review.findMany.mock.calls[0][0].where;
+    expect(prisma.review.count).toHaveBeenCalledWith({ where: listWhere });
+  });
+
+  it('đang lọc 1 sao: số đánh giá, điểm trung bình, phân bổ sao, số video vẫn tính trên mọi đánh giá đang hiện', async () => {
+    const prisma = listPrisma(
+      Array.from({ length: 3 }, (_, i) => row(`r${i}`, 1)),
+      [{ rating: 5, n: 120 }, { rating: 1, n: 3 }],
+      2,
+    );
+    const r = await new ReviewsService(prisma, analytics, loyalty).listByProduct('tinh-dau', { rating: 1 });
+    expect(r.items.map((i) => i.rating)).toEqual([1, 1, 1]);
+    expect(r).toMatchObject({ count: 123, average: 4.9, distribution: { 5: 120, 4: 0, 3: 0, 2: 0, 1: 3 }, videoCount: 2 });
+    expect(prisma.review.groupBy).toHaveBeenCalledWith({ by: ['rating'], where: VISIBLE, _count: { _all: true } });
+    expect(prisma.review.count).toHaveBeenCalledWith({ where: { ...VISIBLE, videoUrl: { not: null } } });
+  });
+
+  it('sản phẩm không tồn tại → NotFound, không truy vấn đánh giá', async () => {
+    const prisma = listPrisma([]);
+    (prisma.product.findUnique as jest.Mock).mockResolvedValueOnce(null);
+    await expect(new ReviewsService(prisma, analytics, loyalty).listByProduct('khong-co', { rating: 1 })).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.review.findMany).not.toHaveBeenCalled();
+  });
+});
+
 describe('ReviewsService.findOwn (nội dung đầy đủ để sửa đánh giá)', () => {
   const PNG = 'data:image/png;base64,iVBORw0KGgo=';
   const row = { id: 'r1', userId: 'u1', orderId: 'o1', rating: 4, comment: 'ổn', images: [PNG], videoUrl: null, isVisible: true, createdAt: new Date('2026-10-01T00:00:00.000Z') };
