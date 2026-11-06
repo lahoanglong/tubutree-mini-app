@@ -66,6 +66,9 @@ export function VoucherSheet({
   // Lời báo lỗi áp/gỡ mã nằm ngay dưới ô nhập (cùng chỗ với web CouponBox), không chỉ là toast: toast biến mất sau vài giây còn khách đang nhìn ô nhập để sửa mã.
   // Mở hoặc đóng tấm, sửa mã, áp hay gỡ thành công đều xoá lời báo cũ, để trình đọc màn hình không đọc lại lỗi cũ.
   const [err, setErr] = useState<string | null>(null);
+  // Đếm mỗi lần báo lỗi: lỗi về nhanh thì lần xoá ở onMutate và lỗi mới rơi vào cùng một lần vẽ, chữ không đổi nên lời báo giữ nguyên nút DOM
+  // (trình đọc màn hình không đọc lại, tấm không cuộn lại). Số đổi thì lời báo dựng lại (key) và hiệu ứng cuộn chạy lại, như CouponBox của web.
+  const [errSeq, setErrSeq] = useState(0);
   const errRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     setErr(null);
@@ -73,14 +76,16 @@ export function VoucherSheet({
   // Lỗi từ nút "Dùng mã"/"Bỏ chọn" ở hàng mã phía dưới: lời báo nằm ở đầu tấm nên kéo về tầm nhìn, không thì khách thấy như bấm không có gì xảy ra.
   useEffect(() => {
     if (visible && err) errRef.current?.scrollIntoView?.({ block: 'nearest' });
-  }, [visible, err]);
+  }, [visible, err, errSeq]);
   // Lời báo nằm trong tấm: khách đóng tấm trong lúc lệnh còn chạy thì không ai thấy nó (và mở lại tấm lại xoá), nên lỗi về muộn vẫn ra toast.
   const visibleRef = useRef(visible);
   visibleRef.current = visible;
   const reportError = (e: unknown) => {
     const text = getErrorMessage(e);
-    if (visibleRef.current) setErr(text);
-    else notify({ text, type: 'error' });
+    if (visibleRef.current) {
+      setErr(text);
+      setErrSeq((n) => n + 1);
+    } else notify({ text, type: 'error' });
   };
 
   const couponsQ = useQuery({
@@ -211,7 +216,7 @@ export function VoucherSheet({
             </Button>
           </div>
           {err && (
-            <div ref={errRef} role="alert" style={{ marginTop: 'var(--space-stack-sm)' }}>
+            <div key={errSeq} ref={errRef} role="alert" style={{ marginTop: 'var(--space-stack-sm)' }}>
               <Text variant="caption" tone="danger" as="p">{err}</Text>
             </div>
           )}

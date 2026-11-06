@@ -162,7 +162,7 @@ describe('ReviewsSection (C-076 di cư DS v2: giữ nguyên hành vi)', () => {
     serve(DATA);
     renderSection();
     await screen.findByText('Nhận xét a');
-    fireEvent.click(screen.getByRole('button', { name: '5 sao' }));
+    fireEvent.click(screen.getByRole('button', { name: /^5 sao\(/ }));
     expect(await screen.findByText('Nhận xét a')).toBeInTheDocument();
     expect(screen.queryByText('Nhận xét c')).toBeNull();
     expect(mocks.fetchReviews).toHaveBeenLastCalledWith('nuoc-rua-chen', 5);
@@ -174,22 +174,44 @@ describe('ReviewsSection (C-076 di cư DS v2: giữ nguyên hành vi)', () => {
     expect(await screen.findByText('Nhận xét b')).toBeInTheDocument();
     expect(screen.queryByText('Nhận xét c')).toBeNull();
     expect(mocks.fetchReviews).toHaveBeenLastCalledWith('nuoc-rua-chen', 'video');
-    fireEvent.click(screen.getByRole('button', { name: '4 sao' }));
+    fireEvent.click(screen.getByRole('button', { name: /^4 sao\(/ }));
     expect(await screen.findByText('Không có đánh giá khớp bộ lọc.')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Tất cả' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Tất cả\(/ }));
     expect(screen.getAllByText(/^Nhận xét /)).toHaveLength(3);
     expect(screen.getByRole('heading', { level: 2, name: 'Đánh giá (3)' })).toBeInTheDocument();
+  });
+
+  // Sản phẩm 123 đánh giá: trang đầu chỉ có 100 dòng 5 sao mới nhất. Số trên chip phải là số máy chủ đếm trên mọi đánh giá.
+  it('chip ghi số máy chủ đếm (count, distribution, videoCount), không đếm 100 dòng đã tải; "Có ảnh" không ghi số', async () => {
+    const newest = Array.from({ length: 100 }, (_, i) => review(`n${i}`, 5));
+    serve({ ...DATA, count: 123, distribution: { '5': 120, '1': 3 }, videoCount: 2, items: newest });
+    renderSection();
+    await screen.findByText('Nhận xét n0');
+    expect(screen.getByRole('button', { name: /^Tất cả\(123\)$/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^5 sao\(120\)$/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^4 sao\(0\)$/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^1 sao\(3\)$/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Có video\(2\)$/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Có ảnh' })).toBeInTheDocument();
+  });
+
+  it('API cũ chưa trả videoCount: chip "Có video" đếm trên các đánh giá đã tải thay vì biến mất', async () => {
+    const { videoCount: _omit, ...old } = DATA;
+    mocks.fetchReviews.mockResolvedValue(old);
+    renderSection();
+    await screen.findByText('Nhận xét a');
+    expect(screen.getByRole('button', { name: /^Có video\(1\)$/ })).toBeInTheDocument();
   });
 
   it('chip "2 sao" và "1 sao" hiện đúng đánh giá thấp máy chủ trả', async () => {
     serve({ ...DATA, count: 4, distribution: { '5': 1, '2': 2, '1': 1 }, items: [review('s5', 5), review('s2', 2), review('s2b', 2), review('s1', 1)] });
     renderSection();
     await screen.findByText('Nhận xét s5');
-    fireEvent.click(screen.getByRole('button', { name: '2 sao' }));
+    fireEvent.click(screen.getByRole('button', { name: /^2 sao\(/ }));
     expect(await screen.findByText('Nhận xét s2')).toBeInTheDocument();
     expect(screen.getByText('Nhận xét s2b')).toBeInTheDocument();
     expect(screen.queryByText('Nhận xét s1')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: '1 sao' }));
+    fireEvent.click(screen.getByRole('button', { name: /^1 sao\(/ }));
     expect(await screen.findByText('Nhận xét s1')).toBeInTheDocument();
     expect(screen.queryByText('Nhận xét s2')).toBeNull();
   });
@@ -208,7 +230,7 @@ describe('ReviewsSection (C-076 di cư DS v2: giữ nguyên hành vi)', () => {
     renderSection();
     await screen.findByText('Nhận xét n0');
     expect(screen.getByRole('button', { name: 'Xem thêm đánh giá' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '1 sao' }));
+    fireEvent.click(screen.getByRole('button', { name: /^1 sao\(/ }));
     await waitFor(() => expect(mocks.fetchReviews).toHaveBeenLastCalledWith('nuoc-rua-chen', 1));
     expect(document.querySelector('[aria-busy="true"]')).not.toBeNull();
     expect(screen.queryByText('Không có đánh giá khớp bộ lọc.')).toBeNull();
@@ -260,13 +282,13 @@ describe('ReviewsSection (C-076 di cư DS v2: giữ nguyên hành vi)', () => {
       await screen.findByText('Nhận xét p0');
       fireEvent.click(screen.getByRole('button', { name: 'Xem thêm đánh giá' }));
       await screen.findByText('Nhận xét q2');
-      fireEvent.click(screen.getByRole('button', { name: '4 sao' }));
+      fireEvent.click(screen.getByRole('button', { name: /^4 sao\(/ }));
       await screen.findByText('Nhận xét q0');
       expect(shown()).toEqual(['Nhận xét q0', 'Nhận xét q1', 'Nhận xét q2']);
       fireEvent.click(screen.getByRole('button', { name: 'Xem thêm đánh giá' }));
       expect(await screen.findByText('Nhận xét q9')).toBeInTheDocument();
       expect(mocks.fetchReviews).toHaveBeenCalledWith('nuoc-rua-chen', 4, 'k1');
-      fireEvent.click(screen.getByRole('button', { name: 'Tất cả' }));
+      fireEvent.click(screen.getByRole('button', { name: /^Tất cả\(/ }));
       await waitFor(() => expect(shown()).toEqual(['Nhận xét p0', 'Nhận xét p1', 'Nhận xét p2', 'Nhận xét p3', 'Nhận xét p4']));
       expect(screen.getByRole('button', { name: 'Xem thêm đánh giá' })).toBeInTheDocument();
     });
@@ -372,7 +394,7 @@ describe('ReviewsSection (C-076 di cư DS v2: giữ nguyên hành vi)', () => {
     });
     renderSection();
     await screen.findByText('Nhận xét a');
-    fireEvent.click(screen.getByRole('button', { name: '3 sao' }));
+    fireEvent.click(screen.getByRole('button', { name: /^3 sao\(/ }));
     const retry = await screen.findByRole('button', { name: 'Thử lại' });
     expect(screen.getByRole('heading', { level: 2, name: 'Đánh giá (3)' })).toBeInTheDocument();
     expect(screen.queryByText('Không có đánh giá khớp bộ lọc.')).toBeNull();
@@ -415,7 +437,7 @@ describe('ReviewsSection (C-076 di cư DS v2: giữ nguyên hành vi)', () => {
       expect(chip).toHaveAttribute('aria-pressed', 'true');
       await waitFor(() => expect(screen.getByText('Không có đánh giá khớp bộ lọc.')).toBeInTheDocument());
 
-      fireEvent.click(screen.getByRole('button', { name: 'Tất cả' }));
+      fireEvent.click(screen.getByRole('button', { name: /^Tất cả\(/ }));
       await waitFor(() => expect(screen.queryByRole('button', { name: /Có video/ })).toBeNull());
     });
   });

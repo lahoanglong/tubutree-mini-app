@@ -30,10 +30,11 @@ const review = (id: string, rating: number, extra: Record<string, unknown> = {})
 });
 const NEWEST = Array.from({ length: 100 }, (_, i) => review(`moi${i}`, 5));
 const OLD_ONE_STAR = [review('cu1', 1), review('cu2', 1, { images: ['https://res.cloudinary.com/tubu/image/upload/v1/cu2.jpg'] }), review('cu3', 1)];
-const SUMMARY = { average: 4.9, count: 128, videoCount: 0, distribution: { '5': 125, '1': 3 } };
+const OLD_VIDEO = review('vid1', 4, { videoUrl: 'https://res.cloudinary.com/tubu/video/upload/v1/vid1.mp4' });
+const SUMMARY = { average: 4.9, count: 128, videoCount: 1, distribution: { '5': 125, '1': 3 } };
 
 test.describe('Web khách: lọc đánh giá theo sao ở máy chủ', () => {
-  test('chip "1 sao" gửi rating=1 và hiện đủ 3 đánh giá 1 sao cũ; "Có ảnh" gửi media=photo; "Tất cả" trở lại danh sách mới nhất', async ({ page, api, request }) => {
+  test('chip ghi số máy chủ; "1 sao" gửi rating=1 và hiện đủ 3 đánh giá 1 sao cũ; "Có ảnh" gửi media=photo; "Có video" gửi hasVideo=true; "Tất cả" trở lại danh sách mới nhất', async ({ page, api, request }) => {
     const p = await firstProduct(request);
     test.skip(!p, 'DB e2e chưa có sản phẩm nào');
     api.get('/flash-sales/active', []);
@@ -48,6 +49,7 @@ test.describe('Web khách: lọc đánh giá theo sao ở máy chủ', () => {
       const rating = call.query.get('rating');
       if (rating) return { ...SUMMARY, items: OLD_ONE_STAR.filter((r) => r.rating === Number(rating)), nextCursor: null };
       if (call.query.get('media') === 'photo') return { ...SUMMARY, items: OLD_ONE_STAR.filter((r) => r.images.length > 0), nextCursor: null };
+      if (call.query.get('hasVideo') === 'true') return { ...SUMMARY, items: [OLD_VIDEO], nextCursor: null };
       return { ...SUMMARY, items: NEWEST, nextCursor: 'c-moi99' };
     });
     await page.goto(`/san-pham/${p!.slug}`);
@@ -57,8 +59,10 @@ test.describe('Web khách: lọc đánh giá theo sao ở máy chủ', () => {
     await expect(section.getByRole('heading', { name: 'Đánh giá (128)' })).toBeVisible({ timeout: 15_000 });
     await expect(section.getByText('Nhận xét moi0')).toBeVisible();
     await expect(section.getByRole('button', { name: 'Xem thêm đánh giá' })).toBeVisible();
+    await expect(section.getByRole('button', { name: /^Tất cả ?\(128\)$/ })).toBeVisible();
+    await expect(section.getByRole('button', { name: /^5 sao ?\(125\)$/ })).toBeVisible();
 
-    await section.getByRole('button', { name: '1 sao', exact: true }).click();
+    await section.getByRole('button', { name: /^1 sao ?\(3\)$/ }).click();
     await expect(section.getByText('Nhận xét cu1')).toBeVisible();
     await expect(section.getByText('Nhận xét cu3')).toBeVisible();
     await expect(section.getByText('Không có đánh giá khớp bộ lọc.')).toHaveCount(0);
@@ -73,7 +77,13 @@ test.describe('Web khách: lọc đánh giá theo sao ở máy chủ', () => {
     await expect(section.getByText('Nhận xét cu1')).toHaveCount(0);
     expect(queries()).toContain('media=photo');
 
-    await section.getByRole('button', { name: 'Tất cả', exact: true }).click();
+    await section.getByRole('button', { name: /^Có video ?\(1\)$/ }).click();
+    await expect(section.getByText('Nhận xét vid1')).toBeVisible();
+    await expect(section.getByText('Nhận xét cu2')).toHaveCount(0);
+    expect(queries()).toContain('hasVideo=true');
+    expect(queries().filter((q) => q.includes('media=video'))).toEqual([]);
+
+    await section.getByRole('button', { name: /^Tất cả ?\(128\)$/ }).click();
     await expect(section.getByText('Nhận xét moi0')).toBeVisible();
   });
 
@@ -119,16 +129,16 @@ test.describe('Web khách: lọc đánh giá theo sao ở máy chủ', () => {
     await expect(rows.last()).toContainText('Nhận xét t2-3');
     await expect(more).toHaveCount(0);
 
-    await section.getByRole('button', { name: '4 sao', exact: true }).click();
+    await section.getByRole('button', { name: /^4 sao ?\(4\)$/ }).click();
     await expect(rows).toHaveCount(4);
-    await section.getByRole('button', { name: 'Tất cả', exact: true }).click();
+    await section.getByRole('button', { name: /^Tất cả ?\(12\)$/ }).click();
     await expect(rows).toHaveCount(5);
     await expect(more).toBeVisible();
   });
 });
 
 plain.describe('API thật: GET /products/:slug/reviews lọc trên mọi đánh giá đang hiện', () => {
-  plain('?rating=1 trả đủ 3 đánh giá 1 sao cũ khi 100 dòng mới nhất toàn 5 sao; media lọc ảnh/video; tham số sai trả 400; cursor lấy trang kế', async ({ request }) => {
+  plain('?rating=1 trả đủ 3 đánh giá 1 sao cũ khi 100 dòng mới nhất toàn 5 sao; media lọc ảnh/video, hasVideo lọc video; tham số sai trả 400; cursor lấy trang kế', async ({ request }) => {
     const url = seedDatabaseUrl();
     if (process.env.GITHUB_ACTIONS === 'true') expect(writableTempDb(url), 'job CI phải ghi được DB tạm của nó').toBe(true);
     plain.skip(!writableTempDb(url), 'DB không phải DB tạm của web-gate hay CI: không ghi');
@@ -178,9 +188,11 @@ plain.describe('API thật: GET /products/:slug/reviews lọc trên mọi đánh
       expect(one).toMatchObject({ count: 129, distribution: { '5': 125, '2': 1, '1': 3 } });
 
       expect(((await (await get('?media=photo')).json()) as Body).items.map((i) => i.images)).toEqual([[IMG]]);
+      expect(((await (await get('?hasVideo=true')).json()) as Body).items.map((i) => i.videoUrl)).toEqual([VID]);
+      // Bản Mini App cũ (trước W35) còn gửi media=video.
       expect(((await (await get('?media=video')).json()) as Body).items.map((i) => i.videoUrl)).toEqual([VID]);
       expect(((await (await get('?rating=3')).json()) as Body).items).toEqual([]);
-      for (const bad of ['?rating=9', '?rating=abc', '?media=audio', '?cursor=khong-hop-le']) expect((await get(bad)).status(), bad).toBe(400);
+      for (const bad of ['?rating=9', '?rating=abc', '?media=audio', '?hasVideo=abc', '?cursor=khong-hop-le']) expect((await get(bad)).status(), bad).toBe(400);
 
       // Phân trang con trỏ: 129 đánh giá đang hiện = 100 + 29; rating=5: 100 + 25. Không trùng, không sót, trang cuối nextCursor null.
       expect(allBody.nextCursor).toEqual(expect.any(String));

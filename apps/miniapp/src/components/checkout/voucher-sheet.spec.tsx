@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type * as ZmpUi from 'zmp-ui';
@@ -736,6 +736,49 @@ describe('VoucherSheet — lời báo lỗi áp/gỡ mã ngay dưới ô nhập 
     fireEvent.click(screen.getByRole('button', { name: 'Áp dụng' }));
     await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(2));
     expect(screen.getByRole('alert')).toHaveTextContent(WRONG);
+  });
+
+  // Lệnh mới xoá lời báo cũ lúc bắt đầu (onMutate), nhưng lỗi về nhanh thì lần xoá và lỗi mới rơi vào cùng một lần vẽ: chữ không đổi,
+  // lời báo giữ nguyên nút DOM nên trình đọc màn hình không đọc lại và tấm không cuộn lại tới nó. `act` gộp hai cập nhật đó vào một lần vẽ.
+  const retryInOneRender = async (press: () => void) => {
+    await act(async () => {
+      press();
+      for (let i = 0; i < 5; i++) await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  };
+
+  it('chọn mã ở danh sách bị từ chối hai lần liền, lỗi về trong cùng một lần vẽ: lời báo là nút DOM mới và được kéo vào tầm nhìn lần nữa (W35)', async () => {
+    renderSheet();
+    const use = await screen.findByRole('button', { name: /^Dùng mã GIAM10/ });
+    fireEvent.click(use);
+    const first = await screen.findByRole('alert');
+    expect(first).toHaveTextContent(WRONG);
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1));
+
+    await retryInOneRender(() => fireEvent.click(screen.getByRole('button', { name: /^Dùng mã GIAM10/ })));
+    expect(mocks.applyCoupon).toHaveBeenCalledTimes(2);
+    const second = screen.getByRole('alert');
+    expect(second).toHaveTextContent(WRONG);
+    expect(second).not.toBe(first);
+    expect(first.isConnected).toBe(false);
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
+    expect(scrollIntoView).toHaveBeenCalledTimes(2);
+    expect(scrollIntoView.mock.instances[1]).toBe(second);
+  });
+
+  it('mã tay sai hai lần, lỗi về trong cùng một lần vẽ: lời báo dưới ô nhập dựng lại và cuộn tới lần nữa (W35)', async () => {
+    renderSheet();
+    await screen.findByRole('button', { name: /^Dùng mã/ });
+    typeAndApply('SAI');
+    const first = await screen.findByRole('alert');
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1));
+
+    await retryInOneRender(() => fireEvent.click(screen.getByRole('button', { name: 'Áp dụng' })));
+    const second = screen.getByRole('alert');
+    expect(second).not.toBe(first);
+    expect(first.isConnected).toBe(false);
+    expect(scrollIntoView).toHaveBeenCalledTimes(2);
+    expect(scrollIntoView.mock.instances[1]).toBe(second);
   });
 
   it('khách đóng tấm khi lệnh áp mã còn chạy: lỗi về muộn vẫn tới khách bằng toast, không bị nuốt', async () => {
