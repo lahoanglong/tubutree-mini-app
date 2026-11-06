@@ -22,7 +22,16 @@ vi.mock('../services/shop-api', () => ({ getAddresses: mocks.getAddresses }));
 vi.mock('../services/account-api', () => ({ updateAddress: mocks.updateAddress, deleteAddress: mocks.deleteAddress }));
 vi.mock('../store/auth', () => ({ useAuthStore: (sel: (s: { status: string }) => unknown) => sel({ status: mocks.authStatus }) }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
-vi.mock('../components/address-form', () => ({ AddressForm: () => <div>form</div> }));
+vi.mock('../components/address-form', () => ({
+  AddressForm: ({ initial, onSaved }: { initial: { id: string } | null; onSaved: (a: unknown) => void }) => (
+    <div>
+      form
+      <button type="button" onClick={() => onSaved({ ...initial, ward: 'P2' })}>
+        Lưu thử
+      </button>
+    </div>
+  ),
+}));
 
 import AddressesPage from './addresses';
 
@@ -30,8 +39,9 @@ const ADDR = {
   id: 'a1', recipient: 'Lan', phone: '0900000000', street: '1 Lê Lợi', ward: 'P1', district: 'Q1', province: 'HCM', isDefault: false,
 };
 
-function renderPage() {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+const newClient = () => new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+
+function renderPage(qc = newClient()) {
   return render(<QueryClientProvider client={qc}><AddressesPage /></QueryClientProvider>);
 }
 
@@ -156,5 +166,61 @@ describe('Sổ địa chỉ: khung trang DS v2 (C-076, C-114)', () => {
     await waitFor(() => expect(mocks.deleteAddress).toHaveBeenCalledWith('a1'));
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã xoá địa chỉ.', type: 'success' }));
     await waitFor(() => expect(screen.queryByText('Xoá địa chỉ này?')).toBeNull());
+  });
+});
+
+describe('Sổ địa chỉ: đổi địa chỉ thì báo giá thanh toán đang lưu phải tính lại (W33)', () => {
+  // Báo giá của trang thanh toán giữ 10 giây (staleTime). Khách sửa địa chỉ rồi quay lại trong 10 giây mà báo giá không bị đánh dấu cũ
+  // thì trang vẫn hiện phí ship theo địa chỉ trước, và lúc đặt máy chủ báo tổng tiền đổi.
+  const QUOTE_KEY = ['quote', 'a1', 0, null, 'i1'];
+  const QUOTE_STALE_MS = 10_000;
+  const reopenCheckout = (qc: QueryClient, queryFn: () => Promise<unknown>) =>
+    qc.fetchQuery({ queryKey: QUOTE_KEY, queryFn, staleTime: QUOTE_STALE_MS });
+
+  let qc: QueryClient;
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getAddresses.mockResolvedValue([ADDR]);
+    mocks.updateAddress.mockResolvedValue({});
+    mocks.deleteAddress.mockResolvedValue({});
+    qc = newClient();
+    qc.setQueryData(QUOTE_KEY, { shippingFee: 20_000, total: 70_000 });
+  });
+
+  it('chứng: không đổi gì thì quay lại thanh toán dùng lại báo giá đang lưu', async () => {
+    const quoteFn = vi.fn().mockResolvedValue({ shippingFee: 30_000, total: 80_000 });
+    renderPage(qc);
+    await screen.findByRole('button', { name: 'Sửa' });
+    await expect(reopenCheckout(qc, quoteFn)).resolves.toEqual({ shippingFee: 20_000, total: 70_000 });
+    expect(quoteFn).not.toHaveBeenCalled();
+  });
+
+  it('sửa địa chỉ xong → quay lại thanh toán trong 10 giây là báo giá được tính lại', async () => {
+    const quoteFn = vi.fn().mockResolvedValue({ shippingFee: 30_000, total: 80_000 });
+    renderPage(qc);
+    fireEvent.click(await screen.findByRole('button', { name: 'Sửa' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu thử' }));
+    await waitFor(() => expect(screen.queryByText('form')).toBeNull());
+    await expect(reopenCheckout(qc, quoteFn)).resolves.toEqual({ shippingFee: 30_000, total: 80_000 });
+    expect(quoteFn).toHaveBeenCalledTimes(1);
+  });
+
+  it('thêm địa chỉ, đặt mặc định, xoá địa chỉ → báo giá đang lưu cũng bị tính lại', async () => {
+    renderPage(qc);
+    fireEvent.click(await screen.findByRole('button', { name: 'Thêm địa chỉ mới' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu thử' }));
+    await waitFor(() => expect(qc.getQueryState(QUOTE_KEY)?.isInvalidated).toBe(true));
+
+    qc.setQueryData(QUOTE_KEY, { shippingFee: 20_000, total: 70_000 });
+    fireEvent.click(await screen.findByRole('button', { name: 'Đặt mặc định' }));
+    await waitFor(() => expect(mocks.updateAddress).toHaveBeenCalled());
+    await waitFor(() => expect(qc.getQueryState(QUOTE_KEY)?.isInvalidated).toBe(true));
+
+    qc.setQueryData(QUOTE_KEY, { shippingFee: 20_000, total: 70_000 });
+    fireEvent.click(await screen.findByRole('button', { name: 'Xoá' }));
+    const title = await screen.findByRole('heading', { level: 2, name: 'Xoá địa chỉ này?' });
+    fireEvent.click(within(title.closest('[data-testid="page"] > div') as HTMLElement).getByRole('button', { name: 'Xoá' }));
+    await waitFor(() => expect(mocks.deleteAddress).toHaveBeenCalledWith('a1'));
+    await waitFor(() => expect(qc.getQueryState(QUOTE_KEY)?.isInvalidated).toBe(true));
   });
 });

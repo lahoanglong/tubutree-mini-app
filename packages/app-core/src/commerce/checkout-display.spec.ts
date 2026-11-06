@@ -15,8 +15,15 @@ describe('checkoutPlaceHint', () => {
     expect(fillCopy('checkout.quoteFailed')).toContain('Thử lại');
   });
 
+  it('máy chủ từ chối địa chỉ (ADDRESS_OUTDATED): bảo sửa địa chỉ, không bảo bấm Thử lại', () => {
+    expect(checkoutPlaceHint({ hasAddress: true, quoteFailed: true, addressOutdated: true })).toBe(fillCopy('checkout.addressFix'));
+    expect(fillCopy('checkout.addressFix')).not.toContain('Thử lại');
+    expect(checkoutPlaceHint({ hasAddress: false, quoteFailed: true, addressOutdated: true })).toBe(fillCopy('checkout.addressNeeded'));
+  });
+
   it('đủ địa chỉ và báo giá tốt: không có lý do', () => {
     expect(checkoutPlaceHint({ hasAddress: true, quoteFailed: false })).toBeNull();
+    expect(checkoutPlaceHint({ hasAddress: true, quoteFailed: false, addressOutdated: true })).toBeNull();
   });
 });
 

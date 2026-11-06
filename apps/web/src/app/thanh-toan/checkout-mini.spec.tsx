@@ -157,6 +157,9 @@ describe('/thanh-toan — địa chỉ địa giới cũ', () => {
     const btn = c.querySelector<HTMLElement>('[data-testid="sticky-bar"]')!.querySelector('button')!;
     expect(btn.disabled).toBe(true);
     expect(c.textContent).toContain('Hãy bấm Sửa ở địa chỉ đó');
+    const bar = c.querySelector<HTMLElement>('[data-testid="sticky-bar"]')!;
+    expect(bar.textContent).toContain('Sửa địa chỉ giao hàng rồi đặt hàng.');
+    expect(bar.textContent).not.toContain('Bấm Thử lại');
   });
 
   it('phường sai tỉnh (địa chỉ mã mới, không phải địa giới cũ): báo giá ADDRESS_OUTDATED thì địa chỉ đang chọn vẫn có nút Sửa ở điện thoại', async () => {

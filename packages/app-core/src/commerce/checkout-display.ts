@@ -5,10 +5,12 @@ export const CHECKOUT_LINES_COLLAPSED = 5;
 
 /**
  * Lý do nút Đặt hàng đang khoá, nói ngay cạnh nút (Mini App và web dùng chung). Thiếu địa chỉ thắng lỗi báo giá vì báo giá
- * chưa được hỏi khi chưa có địa chỉ; null khi không có lý do nào của riêng hai điều kiện này.
+ * chưa được hỏi khi chưa có địa chỉ; null khi không có lý do nào của riêng hai điều kiện này. Máy chủ từ chối địa chỉ
+ * (ADDRESS_OUTDATED) thì bấm Thử lại không bao giờ qua: chỉ sửa địa chỉ mới qua.
  */
-export function checkoutPlaceHint(i: { hasAddress: boolean; quoteFailed: boolean }): string | null {
+export function checkoutPlaceHint(i: { hasAddress: boolean; quoteFailed: boolean; addressOutdated?: boolean }): string | null {
   if (!i.hasAddress) return fillCopy('checkout.addressNeeded');
+  if (i.quoteFailed && i.addressOutdated) return fillCopy('checkout.addressFix');
   if (i.quoteFailed) return fillCopy('checkout.quoteFailed');
   return null;
 }

@@ -138,3 +138,28 @@ describe('AddressSection — cảnh báo địa giới cũ nằm trong đúng th
     expect(within(cardOf(/Chi/)).getByRole('button', { name: viCopy.checkout.addressLegacyCta })).toBeInTheDocument();
   });
 });
+
+describe('AddressSection — máy chủ báo địa chỉ hệ mới không giao được (ADDRESS_OUTDATED, W33)', () => {
+  const OK2: AddressDTO = { ...ADDR, id: 'a2', recipient: 'Bình', isDefault: false };
+  const cardOf = (name: RegExp) => screen.getByRole('radio', { name }).parentElement as HTMLElement;
+  const ui = (quoteOutdated: boolean) => (
+    <QueryClientProvider client={new QueryClient()}>
+      <AddressSection addresses={[ADDR, OK2]} selectedId="a1" onSelect={() => {}} quoteOutdated={quoteOutdated} />
+    </QueryClientProvider>
+  );
+
+  it('quoteOutdated → cảnh báo phường không khớp + nút Sửa địa chỉ chỉ trong thẻ đang chọn, mở form sửa', () => {
+    render(ui(true));
+    const alert = within(cardOf(/Ánh/)).getByRole('alert');
+    expect(alert).toHaveTextContent(viCopy.checkout.addressMismatch);
+    expect(within(cardOf(/Bình/)).queryByRole('alert')).toBeNull();
+    fireEvent.click(within(alert).getByRole('button', { name: viCopy.checkout.addressFixCta }));
+    expect(screen.getByTestId('address-form')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('báo giá hợp lệ → không cảnh báo', () => {
+    render(ui(false));
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+});

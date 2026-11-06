@@ -630,7 +630,8 @@ export default function CheckoutPage() {
   const previewDiscount = wholeCart && cart.data?.couponCode ? (cart.data.discount ?? 0) : 0;
   const previewTier = wholeCart ? (cart.data?.tierDiscount ?? 0) : 0;
   // Lý do nút Đặt hàng đang khoá do thiếu địa chỉ hoặc báo giá lỗi: nói ngay trên nút (cùng câu với web).
-  const placeHint = checkoutPlaceHint({ hasAddress: !!addressId, quoteFailed: quote.isError }) ?? (hasLineProblem ? fillCopy('checkout.fixLinesHint') : null);
+  const addressOutdated = getErrorCode(quote.error) === 'ADDRESS_OUTDATED';
+  const placeHint = checkoutPlaceHint({ hasAddress: !!addressId, quoteFailed: quote.isError, addressOutdated }) ?? (hasLineProblem ? fillCopy('checkout.fixLinesHint') : null);
   // Lần đặt vừa rồi chưa rõ kết quả (mất mạng, quá thời gian, 5xx): nút nói rõ là gửi lại cùng đơn (cùng khoá, không tạo đơn trùng).
   const retryingPlace = placeNotice === 'unknown' && unknownRev !== null && unknownRev === choiceTick;
   const placeBarNote = placeHint ?? (retryingPlace ? fillCopy('checkout.retryNote') : null);
@@ -682,6 +683,7 @@ export default function CheckoutPage() {
           addresses={addresses.data ?? []}
           selectedId={addressId}
           onSelect={chosen(setAddressId)}
+          quoteOutdated={addressOutdated && !quote.isFetching}
         />
       </div>
       {placeAttempted && !addressId && (

@@ -257,6 +257,8 @@ export const vi = {
     addressDefault: 'Mặc định',
     addressLegacy: 'Địa chỉ này theo địa giới cũ (trước khi sắp xếp tỉnh/phường năm 2025) nên chưa giao được. Bạn cập nhật lại tỉnh/thành và phường/xã giúp Tubu nhé.',
     addressLegacyCta: 'Cập nhật địa chỉ',
+    addressMismatch: 'Tỉnh/thành hoặc phường/xã của địa chỉ này chưa đúng nên Tubu chưa giao được. Bạn chọn lại tỉnh/thành và phường/xã giúp Tubu nhé.',
+    addressFixCta: 'Sửa địa chỉ',
     totalChangedTitle: 'Tổng tiền đơn vừa thay đổi',
     totalChangedCta: 'Xem lại đơn',
     recipient: 'Người nhận',

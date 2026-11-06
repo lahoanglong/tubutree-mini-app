@@ -328,6 +328,7 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'reorder.allSkipped': null,
   'checkout.addressNeeded': null,
   'checkout.quoteFailed': null,
+  'checkout.addressFix': null,
   'checkout.totalPending': 10,
   'checkout.shipNeedsAddress': 28,
   'checkout.calculating': 12,

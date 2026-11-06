@@ -330,6 +330,7 @@ export const SHOP_COPY: Record<string, string> = {
   // Thanh toán (K2): Mini App và web cùng một nguồn chữ
   'checkout.addressNeeded': 'Chọn địa chỉ giao hàng để đặt hàng.',
   'checkout.quoteFailed': 'Chưa tính được tổng tiền. Bấm Thử lại ở phần tóm tắt rồi đặt hàng.',
+  'checkout.addressFix': 'Sửa địa chỉ giao hàng rồi đặt hàng.',
   'checkout.totalPending': 'Chưa tính',
   'checkout.shipNeedsAddress': 'Nhập địa chỉ để tính phí',
   'checkout.calculating': 'Đang tính…',
