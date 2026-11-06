@@ -29,6 +29,8 @@ describe('reviewFormIssue: lỗi trước khi gửi đánh giá', () => {
   it('đếm như API: bỏ khoảng trắng hai đầu, emoji một ký tự', () => {
     expect(reviewCommentLength('  Tốt  ')).toBe(3);
     expect(reviewCommentLength('😀😀')).toBe(2);
+    expect(reviewCommentLength('❤️❤️')).toBe(2);
+    expect(reviewCommentLength('👍🏻')).toBe(2);
     expect(reviewFormIssue({ rating: 5, comment: `${' '.repeat(50)}${'a'.repeat(REVIEW_COMMENT_MAX)}${' '.repeat(50)}` })).toBeNull();
     expect(reviewFormIssue({ rating: 5, comment: '😀'.repeat(REVIEW_COMMENT_MAX) })).toBeNull();
   });

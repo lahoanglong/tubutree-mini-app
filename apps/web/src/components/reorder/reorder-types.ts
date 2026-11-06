@@ -1,5 +1,5 @@
 import type { OrderItemView, PurchasedItem } from '@tubutree/app-core/api/orders';
-import { isDiscontinuedItem, reorderLineNotices, type ReorderLineNotice } from '@tubutree/app-core/commerce/reorder-notice';
+import { isDiscontinuedItem, reorderComparablePrice, reorderLineNotices, type ReorderLineNotice } from '@tubutree/app-core/commerce/reorder-notice';
 
 /** Điểm vào cần ghi nguồn riêng: nhắc mua lại ở trang thông báo (cùng giá trị 'notification' với Mini App). */
 export type ReorderSource = 'notification';
@@ -18,7 +18,7 @@ export interface ReorderLine {
   defaultQuantity: number;
   maxQuantity: number;
   available: boolean;
-  /** Câu dưới dòng: hết hàng hay ngừng bán, đã giảm số lượng vì còn ít hơn đơn trước, giá đổi so với giá đã trả. */
+  /** Câu dưới dòng: hết hàng hay ngừng bán, đã giảm số lượng (thiếu hàng hoặc quá trần), giá đổi so với giá đã trả. */
   notices: readonly ReorderLineNotice[];
 }
 
@@ -49,8 +49,9 @@ export function lineFromOrderItem(it: OrderItemView): ReorderLine {
     discontinued: isDiscontinuedItem(it),
     orderedQuantity: it.quantity,
     stock: typeof it.stock === 'number' ? Math.max(it.stock, 0) : null,
+    cap: MAX_REORDER_QTY,
     paidPrice: it.unitPrice,
-    currentPrice: typeof it.currentPrice === 'number' ? it.currentPrice : null,
+    currentPrice: reorderComparablePrice(it),
   });
   return {
     key: it.id,
@@ -80,7 +81,7 @@ export function lineFromPurchasedItem(p: PurchasedItem): ReorderLine {
     defaultQuantity: 1,
     maxQuantity: Math.min(stock, MAX_REORDER_QTY),
     available,
-    notices: reorderLineNotices({ available, discontinued: false, orderedQuantity: 1, stock, paidPrice: price, currentPrice: price }),
+    notices: reorderLineNotices({ available, discontinued: false, orderedQuantity: 1, stock, cap: MAX_REORDER_QTY, paidPrice: price, currentPrice: price }),
   };
 }
 

@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { isDiscontinuedItem, reorderLineNotices, reorderSkippedNote, type ReorderLineFacts } from './reorder-notice';
+import { isDiscontinuedItem, reorderComparablePrice, reorderLineNotices, reorderSkippedNote, type ReorderLineFacts } from './reorder-notice';
 
 const line = (over: Partial<ReorderLineFacts> = {}): ReorderLineFacts => ({
   available: true,
   discontinued: false,
   orderedQuantity: 2,
   stock: 50,
+  cap: 99,
   paidPrice: 120_000,
   currentPrice: 120_000,
   ...over,
@@ -28,6 +29,15 @@ describe('reorderLineNotices: câu dưới từng dòng sheet Mua lại', () => 
     expect(reorderLineNotices(line({ orderedQuantity: 2, stock: 2 }))).toEqual([]);
   });
 
+  it('đơn trước mua quá trần của sheet: báo trần dù còn đủ hàng; tồn dưới trần mà thiếu thì báo không đủ', () => {
+    const capped = { kind: 'reduced', tone: 'warning', text: 'Mua lại tối đa 99 mỗi món, đã giảm số lượng' };
+    expect(reorderLineNotices(line({ orderedQuantity: 120, stock: 500 }))).toEqual([capped]);
+    expect(reorderLineNotices(line({ orderedQuantity: 300, stock: 150 }))).toEqual([capped]);
+    expect(reorderLineNotices(line({ orderedQuantity: 120, stock: null }))).toEqual([capped]);
+    expect(reorderLineNotices(line({ orderedQuantity: 120, stock: 50 })).map((n) => n.text)).toEqual(['Không đủ 120 như đơn trước, đã giảm số lượng']);
+    expect(reorderLineNotices(line({ orderedQuantity: 99, stock: 500 }))).toEqual([]);
+  });
+
   it('API cũ không cho biết tồn hay giá: không đoán', () => {
     expect(reorderLineNotices(line({ orderedQuantity: 5, stock: null, currentPrice: null }))).toEqual([]);
   });
@@ -47,6 +57,20 @@ describe('reorderSkippedNote: câu đầu sheet', () => {
     expect(reorderSkippedNote([{ available: true }])).toBeNull();
     expect(reorderSkippedNote([{ available: true }, { available: false }, { available: false }])).toBe('2 món hết hàng hoặc ngừng bán sẽ không được thêm vào giỏ.');
     expect(reorderSkippedNote([{ available: false }])).toBe('Các món trong đơn này đều đã hết hàng hoặc ngừng bán.');
+  });
+});
+
+describe('reorderComparablePrice: chỉ so giá khi Giờ vàng không xen vào', () => {
+  it('không Giờ vàng: giá đang bán', () => {
+    expect(reorderComparablePrice({ currentPrice: 99_000, flashActive: false, flashSaleItemId: null })).toBe(99_000);
+    expect(reorderComparablePrice({ currentPrice: 99_000, flashActive: false })).toBe(99_000);
+  });
+
+  it('dòng mua giá Giờ vàng, biến thể đang có Giờ vàng, API cũ chưa có cờ, thiếu giá: không so', () => {
+    expect(reorderComparablePrice({ currentPrice: 120_000, flashActive: false, flashSaleItemId: 'fi1' })).toBeNull();
+    expect(reorderComparablePrice({ currentPrice: 120_000, flashActive: true, flashSaleItemId: null })).toBeNull();
+    expect(reorderComparablePrice({ currentPrice: 120_000 })).toBeNull();
+    expect(reorderComparablePrice({ currentPrice: null, flashActive: false })).toBeNull();
   });
 });
 

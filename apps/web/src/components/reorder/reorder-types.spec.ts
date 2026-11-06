@@ -7,7 +7,7 @@ import {
 
 const orderItem = (over: Partial<OrderItemView> = {}): OrderItemView => ({
   id: 'oi1', variationId: 'v1', productName: 'Nước rửa chén', productSlug: 'nrc', variationName: 'Chanh',
-  unitPrice: 60000, quantity: 2, total: 120000, backorderedQty: 0, ...over,
+  unitPrice: 60000, quantity: 2, total: 120000, backorderedQty: 0, flashActive: false, ...over,
 });
 const purchased = (over: Partial<PurchasedItem> = {}): PurchasedItem => ({
   variationId: 'v1', productId: 'p1', slug: 'nrc', productName: 'Nước rửa chén', variationName: 'Chanh', brand: 'Tubu',
@@ -36,6 +36,16 @@ describe('reorder-types', () => {
     expect(texts({ stock: 0, available: false, productPublic: false })).toEqual(['Ngừng bán']);
     expect(texts({ stock: 9, available: true, currentPrice: 50000 })).toEqual(['Giá giảm so với đơn trước (60.000đ)']);
     expect(texts({ stock: 9, available: true, currentPrice: 60000 })).toEqual([]);
+  });
+
+  it('dòng đơn: Giờ vàng xen vào thì không so giá; đơn trước quá trần 99 thì báo trần', () => {
+    const texts = (over: Parameters<typeof orderItem>[0]) => lineFromOrderItem(orderItem(over)).notices.map((n) => n.text);
+    expect(texts({ stock: 9, available: true, currentPrice: 70000, flashSaleItemId: 'fi1' })).toEqual([]);
+    expect(texts({ stock: 9, available: true, currentPrice: 70000, flashActive: true })).toEqual([]);
+    expect(texts({ stock: 9, available: true, currentPrice: 70000, flashActive: undefined })).toEqual([]);
+    const capped = lineFromOrderItem(orderItem({ stock: 500, available: true, quantity: 120, currentPrice: 60000 }));
+    expect(capped).toMatchObject({ defaultQuantity: 99 });
+    expect(capped.notices.map((n) => n.text)).toEqual(['Mua lại tối đa 99 mỗi món, đã giảm số lượng']);
   });
 
   it('dòng đơn hết hàng / không khả dụng → available=false', () => {

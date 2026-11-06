@@ -56,7 +56,7 @@ function renderSheet(ui: ReactElement) {
 
 const item = (id: string, productName: string, over: Partial<OrderItemView> = {}): OrderItemView => ({
   id, variationId: `v-${id}`, productName, productSlug: id, variationName: '', unitPrice: 60000, quantity: 1, total: 60000, backorderedQty: 0,
-  stock: 50, available: true, discontinued: false, currentPrice: 60000, ...over,
+  stock: 50, available: true, discontinued: false, currentPrice: 60000, flashActive: false, ...over,
 });
 
 describe('ReorderSheet: câu báo từng món của đơn cũ', () => {

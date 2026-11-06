@@ -11,9 +11,15 @@ export interface ReviewFormIssue {
   message: string;
 }
 
-/** Độ dài nhận xét như API đếm: bỏ khoảng trắng hai đầu, emoji (cặp surrogate) tính một ký tự như `isLength` của class-validator. */
+/**
+ * Độ dài nhận xét như API đếm (`@MaxLength` gọi `isLength` của validator, sau `Trim`): đơn vị UTF-16, cặp surrogate (emoji) tính một,
+ * ký tự kèm bộ chọn biến thể U+FE0E/U+FE0F (như "❤️") cũng tính một. Đếm khác đi thì form chặn đánh giá cũ mà API vẫn nhận.
+ */
 export function reviewCommentLength(comment: string): number {
-  return Array.from(comment.trim()).length;
+  const s = comment.trim();
+  const presentation = s.match(/[^\uFE0F\uFE0E][\uFE0F\uFE0E]/g)?.length ?? 0;
+  const surrogates = s.match(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g)?.length ?? 0;
+  return s.length - presentation - surrogates;
 }
 
 const isStar = (n: number) => Number.isInteger(n) && n >= 1 && n <= 5;

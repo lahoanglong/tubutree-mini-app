@@ -9,6 +9,8 @@ export interface ReorderLineFacts {
   orderedQuantity: number;
   /** Số còn bán (API đã kẹp tồn ảo); null khi API cũ không cho biết. */
   stock: number | null;
+  /** Trần số lượng một dòng của sheet (bộ chọn số lượng). */
+  cap: number;
   /** Đơn giá đã trả ở đơn trước. */
   paidPrice: number;
   /** Đơn giá đang bán; null khi API cũ không cho biết. */
@@ -27,6 +29,7 @@ export interface ReorderLineNotice {
  * Câu dưới từng dòng của sheet Mua lại.
  * - Không bán được: "Ngừng bán" hoặc "Tạm hết hàng", và chỉ câu đó.
  * - Còn ít hơn số đã mua: báo đã giảm số lượng, kèm số đã mua. Không in số tồn (tồn trên 20 không bao giờ ghi số).
+ * - Đơn trước mua nhiều hơn trần của sheet: báo trần, vì số lượng cũng bị giảm dù còn đủ hàng.
  * - Giá đổi so với đơn giá đã trả: tăng hay giảm, kèm giá cũ.
  */
 export function reorderLineNotices(f: ReorderLineFacts): ReorderLineNotice[] {
@@ -36,8 +39,10 @@ export function reorderLineNotices(f: ReorderLineFacts): ReorderLineNotice[] {
       : [{ kind: 'out', tone: 'danger', text: fillCopy('stock.out') }];
   }
   const notices: ReorderLineNotice[] = [];
-  if (f.stock !== null && f.stock < f.orderedQuantity) {
+  if (f.stock !== null && f.stock < f.orderedQuantity && f.stock <= f.cap) {
     notices.push({ kind: 'reduced', tone: 'warning', text: fillCopy('reorder.qtyReduced', { old: f.orderedQuantity }) });
+  } else if (f.orderedQuantity > f.cap) {
+    notices.push({ kind: 'reduced', tone: 'warning', text: fillCopy('reorder.qtyCapped', { n: f.cap }) });
   }
   if (f.currentPrice !== null && f.currentPrice > f.paidPrice) {
     notices.push({ kind: 'priceUp', tone: 'warning', text: fillCopy('reorder.priceUp', { old: vnd(f.paidPrice) }) });
@@ -52,6 +57,16 @@ export function reorderSkippedNote(lines: readonly { available: boolean }[]): st
   const skipped = lines.filter((l) => !l.available).length;
   if (skipped === 0) return null;
   return skipped === lines.length ? fillCopy('reorder.allSkipped') : fillCopy('reorder.someSkipped', { n: skipped });
+}
+
+/**
+ * Giá đang bán để so với giá đã trả, null khi không so được. Giờ vàng làm phép so sai: dòng mua giá Giờ vàng (`flashSaleItemId`)
+ * so với giá thường sẽ ra "giá tăng", còn biến thể đang có Giờ vàng (`flashActive`) thì giỏ có thể tính giá Giờ vàng thay giá đang bán.
+ * API cũ chưa có `flashActive`: không so.
+ */
+export function reorderComparablePrice(it: { currentPrice?: number | null; flashActive?: boolean; flashSaleItemId?: string | null }): number | null {
+  if (it.flashActive !== false || it.flashSaleItemId) return null;
+  return typeof it.currentPrice === 'number' ? it.currentPrice : null;
 }
 
 /**

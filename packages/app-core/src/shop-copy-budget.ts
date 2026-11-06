@@ -322,6 +322,7 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'cart.subtotal': 10,
   'cart.subtotalNet': 20,
   'reorder.qtyReduced': 48,
+  'reorder.qtyCapped': 48,
   'reorder.priceUp': 44,
   'reorder.priceDown': 44,
   'reorder.someSkipped': null,

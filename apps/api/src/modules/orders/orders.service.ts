@@ -58,6 +58,8 @@ export interface OrderItemMedia {
   /** Không còn bán biến thể này nữa (biến thể tắt hay bị xoá, sản phẩm tắt hay chưa duyệt), khác hết hàng tạm thời: sheet Mua lại ghi "Ngừng bán". */
   discontinued: boolean;
   currentPrice: number | null;
+  /** Biến thể đang có đợt Giờ vàng chạy: giỏ có thể tính giá Giờ vàng thay `currentPrice`, nên sheet Mua lại không so giá với đơn trước. */
+  flashActive: boolean;
 }
 export type OrderWithItems = Prisma.OrderGetPayload<{ include: { items: true } }>;
 
@@ -127,7 +129,7 @@ export type OrderView = Omit<OrderListRow, 'items' | BuyerHiddenOrderField> & {
   manualHandling: boolean;
 };
 
-const MISSING_MEDIA: OrderItemMedia = { thumbnail: null, stock: 0, available: false, productPublic: false, discontinued: true, currentPrice: null };
+const MISSING_MEDIA: OrderItemMedia = { thumbnail: null, stock: 0, available: false, productPublic: false, discontinued: true, currentPrice: null, flashActive: false };
 
 export type RepurchaseAddSource = 'repurchase' | 'reorder_notification';
 export type RepurchaseSkipReason = 'OUT_OF_STOCK' | 'INACTIVE' | 'NOT_APPROVED' | 'EXCEEDS_STOCK';
@@ -385,19 +387,27 @@ export class OrdersService {
     const ids = [...new Set(orders.flatMap((o) => o.items.map((it) => it.variationId)))];
     // Hạn thanh toán của đơn chờ chuyển khoản: danh sách đơn cũng cần để thẻ đơn ghi "Hạn …" (cùng luật với chi tiết đơn).
     const deadlines = await pendingPaymentDeadlines(orders, this.config);
-    const variations = ids.length
-      ? await this.prisma.variation.findMany({
-          where: { id: { in: ids } },
-          select: {
-            id: true,
-            stock: true,
-            isActive: true,
-            retailPrice: true,
-            salePrice: true,
-            product: { select: { id: true, thumbnail: true, isActive: true, approvalStatus: true } },
-          },
-        })
-      : [];
+    const now = new Date();
+    const [variations, flashing] = ids.length
+      ? await Promise.all([
+          this.prisma.variation.findMany({
+            where: { id: { in: ids } },
+            select: {
+              id: true,
+              stock: true,
+              isActive: true,
+              retailPrice: true,
+              salePrice: true,
+              product: { select: { id: true, thumbnail: true, isActive: true, approvalStatus: true } },
+            },
+          }),
+          this.prisma.flashSaleItem.findMany({
+            where: { variationId: { in: ids }, flashSale: { isActive: true, startAt: { lte: now }, endAt: { gt: now } } },
+            select: { variationId: true },
+          }),
+        ])
+      : [[], []];
+    const flashActive = new Set(flashing.map((f) => f.variationId));
     // Ảnh đầu chỉ cần cho sản phẩm không có thumbnail (dự phòng) và chỉ đọc phần tử đầu, không kéo cả mảng base64.
     const covered = await withCoverImages(this.prisma, variations.map((v) => v.product));
     const coverOf = new Map(covered.map((p) => [p.id, p.images]));
@@ -421,6 +431,7 @@ export class OrdersService {
         productPublic: isPublicProduct(v.product),
         discontinued: !(v.isActive && isPublicProduct(v.product)),
         currentPrice: v.salePrice ?? v.retailPrice,
+        flashActive: flashActive.has(variationId),
       };
     };
     return orders.map((o) => ({

@@ -14,11 +14,11 @@ const line = (id: string, name: string, over: Record<string, unknown>) => ({
 const ORDER = {
   ...makeOrder({ code: CODE, status: 'DELIVERED', paymentStatus: 'PAID' }),
   items: [
-    line('ok', 'Nước rửa chén Tubu', { unitPrice: 65000, quantity: 2, total: 130000, stock: 10, available: true, discontinued: false, currentPrice: 65000 }),
-    line('out', 'Xà phòng Tubu tạm hết', { unitPrice: 19000, quantity: 1, total: 19000, stock: 0, available: false, discontinued: false, currentPrice: 19000 }),
-    line('gone', 'Nước lau sàn Tubu cũ', { unitPrice: 45000, quantity: 1, total: 45000, stock: 3, available: false, discontinued: true, currentPrice: 45000 }),
-    line('few', 'Nước giặt Tubu 2L', { unitPrice: 60000, quantity: 3, total: 180000, stock: 1, available: true, discontinued: false, currentPrice: 70000 }),
-    line('down', 'Nước xả vải Tubu', { unitPrice: 50000, quantity: 1, total: 50000, stock: 10, available: true, discontinued: false, currentPrice: 45000 }),
+    line('ok', 'Nước rửa chén Tubu', { unitPrice: 65000, quantity: 2, total: 130000, stock: 10, available: true, discontinued: false, currentPrice: 65000, flashActive: false }),
+    line('out', 'Xà phòng Tubu tạm hết', { unitPrice: 19000, quantity: 1, total: 19000, stock: 0, available: false, discontinued: false, currentPrice: 19000, flashActive: false }),
+    line('gone', 'Nước lau sàn Tubu cũ', { unitPrice: 45000, quantity: 1, total: 45000, stock: 3, available: false, discontinued: true, currentPrice: 45000, flashActive: false }),
+    line('few', 'Nước giặt Tubu 2L', { unitPrice: 60000, quantity: 3, total: 180000, stock: 1, available: true, discontinued: false, currentPrice: 70000, flashActive: false }),
+    line('down', 'Nước xả vải Tubu', { unitPrice: 50000, quantity: 1, total: 50000, stock: 10, available: true, discontinued: false, currentPrice: 45000, flashActive: false }),
   ],
 };
 

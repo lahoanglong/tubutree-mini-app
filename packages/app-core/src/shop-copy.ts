@@ -322,6 +322,7 @@ export const SHOP_COPY: Record<string, string> = {
   'cart.subtotalNet': 'Tạm tính (đã giảm)',
   // Mua lại đơn cũ: câu dưới từng dòng và câu đầu sheet (web và Mini App)
   'reorder.qtyReduced': 'Không đủ {old} như đơn trước, đã giảm số lượng',
+  'reorder.qtyCapped': 'Mua lại tối đa {n} mỗi món, đã giảm số lượng',
   'reorder.priceUp': 'Giá tăng so với đơn trước ({old})',
   'reorder.priceDown': 'Giá giảm so với đơn trước ({old})',
   'reorder.someSkipped': '{n} món hết hàng hoặc ngừng bán sẽ không được thêm vào giỏ.',
