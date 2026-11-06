@@ -351,7 +351,8 @@ export class ReviewsService {
   }
 
   /**
-   * Danh sách công khai: đánh giá đang hiện khớp bộ lọc (số sao, có ảnh, có video), mới nhất trước, mỗi trang tối đa LIST_LIMIT dòng.
+   * Danh sách công khai: đánh giá đang hiện khớp bộ lọc (số sao, có ảnh, có video qua `media=video` hoặc `hasVideo`), mới nhất
+   * trước, mỗi trang tối đa LIST_LIMIT dòng.
    * Còn dòng phía sau thì `nextCursor` là con trỏ keyset (createdAt, id) của dòng cuối, gửi lại kèm cùng bộ lọc để lấy trang tiếp;
    * hết thì null. Không gửi `cursor` là trang đầu như trước (client cũ bỏ qua `nextCursor`).
    * Bộ lọc nằm trong truy vấn: lọc ở client chỉ thấy LIST_LIMIT dòng mới nhất nên sản phẩm nhiều đánh giá báo không có dòng
@@ -368,7 +369,8 @@ export class ReviewsService {
     const listWhere: Prisma.ReviewWhereInput = {
       ...where,
       ...(filter.rating ? { rating: filter.rating } : {}),
-      ...(filter.media === 'photo' ? { imageVersions: { isEmpty: false } } : filter.media === 'video' ? hasVideo : {}),
+      ...(filter.media === 'photo' ? { imageVersions: { isEmpty: false } } : {}),
+      ...(filter.media === 'video' || filter.hasVideo ? hasVideo : {}),
     };
     const [reviews, byRating, videoCount] = await Promise.all([
       this.prisma.review.findMany({

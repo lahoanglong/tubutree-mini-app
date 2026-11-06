@@ -57,6 +57,12 @@ describe('GET /products/:slug/reviews: tham số lọc rating, media qua HTTP', 
     ['?media=photo', { media: 'photo' }],
     ['?media=video', { media: 'video' }],
     ['?rating=4&media=photo', { rating: 4, media: 'photo' }],
+    ['?hasVideo=true', { hasVideo: true }],
+    ['?hasVideo=1', { hasVideo: true }],
+    ['?hasVideo=false', { hasVideo: false }],
+    ['?hasVideo=0', { hasVideo: false }],
+    ['?rating=2&hasVideo=true&cursor=abc', { rating: 2, hasVideo: true, cursor: 'abc' }],
+    ['?media=photo&hasVideo=true', { media: 'photo', hasVideo: true }],
     ['?cursor=MTc2MTk1NTIwMDAwMHxyOTk', { cursor: 'MTc2MTk1NTIwMDAwMHxyOTk' }],
     ['?rating=1&media=video&cursor=abc', { rating: 1, media: 'video', cursor: 'abc' }],
     ['?cursor=', {}],
@@ -68,7 +74,7 @@ describe('GET /products/:slug/reviews: tham số lọc rating, media qua HTTP', 
     expect({ ...listByProduct.mock.calls[0]![1] }).toEqual(filter);
   });
 
-  it.each(['?rating=0', '?rating=6', '?rating=1.5', '?rating=abc', '?rating=', '?rating=1&rating=2', '?rating[x]=1', '?media=audio', '?media=photo&media=video', '?khac=1', '?cursor=a&cursor=b', '?cursor[x]=1', `?cursor=${'a'.repeat(121)}`])(
+  it.each(['?rating=0', '?rating=6', '?rating=1.5', '?rating=abc', '?rating=', '?rating=1&rating=2', '?rating[x]=1', '?media=audio', '?media=photo&media=video', '?hasVideo=', '?hasVideo=yes', '?hasVideo=TRUE', '?hasVideo=2', '?hasVideo=true&hasVideo=true', '?hasVideo[x]=1', '?khac=1', '?cursor=a&cursor=b', '?cursor[x]=1', `?cursor=${'a'.repeat(121)}`])(
     '%s → 400, không gọi service, không gắn cache công khai',
     async (qs) => {
       const res = await get(qs);

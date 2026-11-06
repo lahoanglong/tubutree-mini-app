@@ -6,13 +6,7 @@ import { PaginationQuery } from '../../../common/pagination';
 import { SEED_PATTERN } from '../catalog-seed';
 import { SEARCH_Q_MAX_LENGTH } from './suggest-query.dto';
 import { Trim } from '../../../common/decorators/trim.decorator';
-
-/** Query string luôn là chuỗi: 'true'/'1' → true, 'false'/'0' → false; giá trị khác để IsBoolean từ chối. */
-function toBool({ value }: { value: unknown }): unknown {
-  if (value === true || value === 'true' || value === '1') return true;
-  if (value === false || value === 'false' || value === '0') return false;
-  return value;
-}
+import { toQueryBool } from '../../../common/query-bool';
 
 /** Kiểu sắp xếp công khai của danh sách sản phẩm; dùng chung cho `/products` và `/brand/public/:slug/products`. */
 export const PRODUCT_SORTS = ['price_asc', 'price_desc', 'newest', 'best_seller', 'best_seller_30d', 'rating'] as const;
@@ -39,7 +33,7 @@ export class ProductQuery extends PaginationQuery {
   maxPrice?: number;
 
   /** Chỉ SP còn ít nhất 1 phân loại đang bán có tồn > 0. */
-  @IsOptional() @Transform(toBool) @IsBoolean()
+  @IsOptional() @Transform(toQueryBool) @IsBoolean()
   inStock?: boolean;
 
   /** Danh sách slug cách nhau bằng dấu phẩy (tối đa 20): lấy giá/trạng thái hiện hành của các sản phẩm đã xem gần đây. */
