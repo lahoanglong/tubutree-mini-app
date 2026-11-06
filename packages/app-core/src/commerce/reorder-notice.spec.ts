@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { isDiscontinuedItem, reorderComparablePrice, reorderLineNotices, reorderSkippedNote, type ReorderLineFacts } from './reorder-notice';
+import {
+  isDiscontinuedItem,
+  reorderComparablePrice,
+  reorderLineNotices,
+  reorderPriceAt,
+  reorderPricing,
+  reorderSkippedNote,
+  type ReorderLineFacts,
+} from './reorder-notice';
 
 const line = (over: Partial<ReorderLineFacts> = {}): ReorderLineFacts => ({
   available: true,
@@ -78,6 +86,61 @@ describe('reorderComparablePrice: chỉ so giá khi Giờ vàng không xen vào'
     expect(reorderComparablePrice({ currentPrice: 120_000, flashActive: true, flashSaleItemId: null })).toBeNull();
     expect(reorderComparablePrice({ currentPrice: 120_000 })).toBeNull();
     expect(reorderComparablePrice({ currentPrice: null, flashActive: false })).toBeNull();
+  });
+});
+
+// Giỏ tính giá Giờ vàng cho cả dòng khi số lượng không vượt số suất khách còn mua được, vượt thì cả dòng giá thường
+// (priceFlashLine ở API). Sheet Mua lại tính cùng luật để giá và tạm tính khớp giỏ.
+describe('reorderPricing + reorderPriceAt: giá hiệu lực theo số lượng chọn', () => {
+  const order = (over: Partial<Parameters<typeof reorderPricing>[0]> = {}) =>
+    reorderPricing({ unitPrice: 120_000, currentPrice: 120_000, flashPrice: null, flashAllowance: null, ...over });
+
+  it('không có Giờ vàng: giá đang bán ở mọi số lượng', () => {
+    expect(reorderPriceAt(order(), 1).unitPrice).toBe(120_000);
+    expect(reorderPriceAt(order(), 50).unitPrice).toBe(120_000);
+  });
+
+  it('còn suất Giờ vàng: số lượng không vượt suất → giá Giờ vàng; vượt suất → cả dòng giá đang bán', () => {
+    const p = order({ flashPrice: 90_000, flashAllowance: 3 });
+    expect(reorderPriceAt(p, 1).unitPrice).toBe(90_000);
+    expect(reorderPriceAt(p, 3).unitPrice).toBe(90_000);
+    expect(reorderPriceAt(p, 4).unitPrice).toBe(120_000);
+  });
+
+  it('hết suất của khách (allowance 0): giá đang bán', () => {
+    expect(reorderPriceAt(order({ flashPrice: 90_000, flashAllowance: 0 }), 1).unitPrice).toBe(120_000);
+  });
+
+  it('giá Giờ vàng không bao giờ cao hơn giá đang bán; không biết số suất thì áp cho mọi số lượng', () => {
+    expect(reorderPriceAt(order({ flashPrice: 130_000, flashAllowance: 5 }), 1).unitPrice).toBe(120_000);
+    expect(reorderPriceAt(order({ flashPrice: 90_000, flashAllowance: null }), 40).unitPrice).toBe(90_000);
+  });
+
+  it('so với giá đã trả theo giá hiệu lực: Giờ vàng thấp hơn giá đã trả → giảm; vượt suất về giá thường cao hơn → tăng', () => {
+    const p = order({ unitPrice: 100_000, currentPrice: 120_000, flashPrice: 90_000, flashAllowance: 2 });
+    expect(reorderPriceAt(p, 2).notice).toMatchObject({ kind: 'priceDown', text: 'Giá giảm so với đơn trước (100.000đ)' });
+    expect(reorderPriceAt(p, 3).notice).toMatchObject({ kind: 'priceUp', text: 'Giá tăng so với đơn trước (100.000đ)' });
+  });
+
+  it('dòng đơn trước mua giá Giờ vàng, nay hết suất: so giá hiệu lực hiện tại (giá thường) nên báo tăng thật', () => {
+    const p = order({ unitPrice: 90_000, currentPrice: 120_000, flashPrice: null, flashAllowance: null });
+    expect(reorderPriceAt(p, 1).notice).toMatchObject({ kind: 'priceUp' });
+  });
+
+  it('giá hiệu lực bằng giá đã trả: không báo', () => {
+    expect(reorderPriceAt(order({ unitPrice: 90_000, currentPrice: 120_000, flashPrice: 90_000, flashAllowance: 5 }), 2).notice).toBeNull();
+  });
+
+  it('API cũ (không có flashPrice): giữ luật cũ, chỉ so khi biết không có Giờ vàng xen vào', () => {
+    const base = { unitPrice: 100_000, currentPrice: 120_000 };
+    expect(reorderPriceAt(reorderPricing({ ...base, flashActive: false }), 1)).toMatchObject({ unitPrice: 120_000, notice: { kind: 'priceUp' } });
+    expect(reorderPriceAt(reorderPricing({ ...base, flashActive: true }), 1)).toMatchObject({ unitPrice: 120_000, notice: null });
+    expect(reorderPriceAt(reorderPricing({ ...base, flashSaleItemId: 'fi1', flashActive: false }), 1).notice).toBeNull();
+    expect(reorderPriceAt(reorderPricing(base), 1).notice).toBeNull();
+  });
+
+  it('thiếu giá đang bán: dùng giá đã trả, không báo', () => {
+    expect(reorderPriceAt(reorderPricing({ unitPrice: 100_000, currentPrice: null, flashPrice: null, flashAllowance: null }), 1)).toEqual({ unitPrice: 100_000, notice: null });
   });
 });
 

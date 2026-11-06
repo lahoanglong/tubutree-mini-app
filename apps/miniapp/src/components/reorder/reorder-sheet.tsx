@@ -12,7 +12,7 @@ import { QuantitySelector } from '../ui/quantity-selector';
 import { SR_ONLY } from '../ui/sr-only';
 import { Text } from '../ui/text';
 import {
-  initialSelection, selectedLines, selectionTotals, targetLines,
+  initialSelection, lineAt, selectedLines, selectionTotals, targetLines,
   type LineSelection, type ReorderLine, type ReorderSource, type ReorderTarget,
 } from './reorder-types';
 import { ProductThumb } from '../ui/product-thumb';
@@ -129,6 +129,7 @@ function ReorderLineRow({
 }) {
   const checked = line.available && (value?.checked ?? false);
   const qty = value?.quantity ?? line.defaultQuantity;
+  const { unitPrice, notices } = lineAt(line, qty);
   return (
     <div
       data-testid="reorder-line"
@@ -150,8 +151,8 @@ function ReorderLineRow({
             {line.variationName}
           </Text>
         )}
-        {line.available && <PriceTag value={line.unitPrice} size="sm" />}
-        <LineNotices notices={line.notices} />
+        {line.available && <PriceTag value={unitPrice} size="sm" />}
+        <LineNotices notices={notices} />
         {line.available && (
           <QuantitySelector value={qty} max={line.maxQuantity} size="md" itemLabel={line.productName} onChange={(n) => onChange({ checked, quantity: n })} />
         )}

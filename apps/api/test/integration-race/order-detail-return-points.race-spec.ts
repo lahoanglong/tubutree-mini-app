@@ -56,7 +56,7 @@ describe('Chi tiết đơn: Điểm Xanh thực thu lại do trả hàng (real P
         { provide: PancakeOrderService, useValue: { enqueuePush: jest.fn().mockResolvedValue(undefined) } },
         { provide: CartService, useValue: {} },
         { provide: NotificationsService, useValue: { notify: jest.fn().mockResolvedValue(undefined), notifySafe: jest.fn().mockResolvedValue(true) } },
-        { provide: FlashSaleService, useValue: { restore: jest.fn().mockResolvedValue(undefined) } },
+        { provide: FlashSaleService, useValue: { resolveEffective: jest.fn().mockResolvedValue(new Map()), restore: jest.fn().mockResolvedValue(undefined) } },
         { provide: CouponsService, useValue: { release: jest.fn().mockResolvedValue(undefined) } },
         { provide: RbacService, useValue: {} },
         { provide: GomdonOrderService, useValue: {} },
