@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { OrderItemView, PurchasedItem } from '../../services/shop-api';
 import {
-  MAX_REORDER_QTY, initialSelection, itemReorderTarget, lineFromOrderItem, lineFromPurchasedItem,
+  MAX_REORDER_QTY, initialSelection, itemReorderTarget, lineAt, lineFromOrderItem, lineFromPurchasedItem,
   orderReorderTarget, selectedLines, selectionTotals,
 } from './reorder-types';
 
@@ -24,6 +24,7 @@ describe('reorder-types', () => {
         { kind: 'reduced', tone: 'warning', text: 'Không đủ 2 như đơn trước, đã giảm số lượng' },
         { kind: 'priceUp', tone: 'warning', text: 'Giá tăng so với đơn trước (60.000đ)' },
       ],
+      pricing: { standing: 65000, flashPrice: null, flashAllowance: null, paidPrice: 60000, comparable: true },
     });
   });
 
@@ -46,6 +47,13 @@ describe('reorder-types', () => {
     const capped = lineFromOrderItem(orderItem({ stock: 500, available: true, quantity: 120, currentPrice: 60000 }));
     expect(capped).toMatchObject({ defaultQuantity: 99 });
     expect(capped.notices.map((n) => n.text)).toEqual(['Mua lại tối đa 99 mỗi món, đã giảm số lượng']);
+  });
+
+  it('lineAt: dòng không bán được giữ đúng một câu, không thêm câu giá dù giá hiện tại đã đổi', () => {
+    const out = lineFromOrderItem(orderItem({ stock: 0, available: false, currentPrice: 120000 }));
+    expect(lineAt(out, 1).notices.map((n) => n.text)).toEqual(['Tạm hết hàng']);
+    const off = lineFromOrderItem(orderItem({ stock: 5, available: false, discontinued: true, currentPrice: 50000 }));
+    expect(lineAt(off, 1).notices.map((n) => n.text)).toEqual(['Ngừng bán']);
   });
 
   it('dòng đơn hết hàng / không khả dụng → available=false', () => {

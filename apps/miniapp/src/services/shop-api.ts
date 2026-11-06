@@ -661,10 +661,14 @@ export interface OrderItemMedia {
   /** Ngừng bán (biến thể tắt hay bị xoá, sản phẩm gỡ), khác hết hàng tạm thời. API cũ không trả: xem `isDiscontinuedItem`. */
   discontinued?: boolean;
   currentPrice?: number | null;
-  /** Biến thể đang có Giờ vàng: giỏ có thể tính giá Giờ vàng, không so giá với đơn trước. API cũ không trả. */
+  /** Biến thể đang có Giờ vàng. API cũ chỉ có cờ này nên không so giá với đơn trước; API mới có `flashPrice`. API cũ không trả. */
   flashActive?: boolean;
   /** Dòng này mua giá Giờ vàng. */
   flashSaleItemId?: string | null;
+  /** Giá Giờ vàng giỏ sẽ tính khi số lượng không vượt `flashAllowance`; null = không có suất mở. API cũ không trả (xem `reorderPricing`). */
+  flashPrice?: number | null;
+  /** Số suất Giờ vàng khách còn mua được (0 = hết, giỏ tính giá thường). */
+  flashAllowance?: number | null;
 }
 export type OrderItemView = OrderItemDTO & OrderItemMedia;
 export type OrderView = Omit<OrderDTO, 'items'> & {
@@ -750,6 +754,10 @@ export interface PurchasedItem {
   /** Hàng chỉ bán lẻ (đối tác): không đặt định kỳ được. API cũ chưa trả: coi là chưa biết, không mời "Định kỳ". */
   retailOnly?: boolean;
   lastPurchasedAt: string;
+  /** Giá Giờ vàng giỏ sẽ tính khi số lượng không vượt `flashAllowance`; null = không có suất mở. API cũ không trả. */
+  flashPrice?: number | null;
+  /** Số suất Giờ vàng khách còn mua được (0 = hết, giỏ tính giá thường). */
+  flashAllowance?: number | null;
 }
 export interface PurchasedItemsPage {
   items: PurchasedItem[];

@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Optional } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { exposedStock } from '@tubutree/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -7,6 +7,7 @@ import { isPancakeFulfilledLine } from '../integrations/pancake/pancake-fulfilme
 import { VARIATION_ID_RE } from './variation-id';
 import { publicProductThumb } from '../../common/public-image';
 import { withCoverImages } from '../catalog/card-select';
+import { FlashSaleService, type EffectivePrice } from '../flash-sale/flash-sale.service';
 
 export interface PurchasedItem {
   variationId: string;
@@ -24,6 +25,13 @@ export interface PurchasedItem {
   lastPurchasedAt: string;
   /** Hàng chỉ bán lẻ (gian hàng đối tác hoặc do đối tác tự giao): không đặt định kỳ được. Cùng luật isRetailOnly ở trang chi tiết sản phẩm. */
   retailOnly: boolean;
+  /**
+   * Giá Giờ vàng giỏ sẽ tính cho khách đang xem khi số lượng không vượt `flashAllowance` (đã lấy min với giá đang bán, cùng luật
+   * priceFlashLine của giỏ); null = không có suất Giờ vàng mở.
+   */
+  flashPrice: number | null;
+  /** Số suất Giờ vàng khách này còn mua được (0 = đã dùng hết, giỏ tính giá thường); null khi không có suất mở. */
+  flashAllowance: number | null;
 }
 export interface PurchasedItemsPage {
   items: PurchasedItem[];
@@ -70,7 +78,11 @@ export function decodePurchasedCursor(cursor: string): { ms: number; variationId
  */
 @Injectable()
 export class PurchasedItemsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    // Optional: không có thì sản phẩm không mang giá Giờ vàng (sheet Mua lại dùng giá đang bán).
+    @Optional() private readonly flashSale?: FlashSaleService,
+  ) {}
 
   async list(userId: string, opts: PurchasedItemsOptions = {}): Promise<PurchasedItemsPage> {
     const limit = Math.min(Math.max(Math.floor(opts.limit ?? DEFAULT_LIMIT), 1), MAX_LIMIT);
@@ -114,13 +126,18 @@ export class PurchasedItemsService {
       },
     });
     // Ảnh đầu chỉ cần cho sản phẩm không có thumbnail (dự phòng) và chỉ đọc phần tử đầu, không kéo cả mảng base64.
-    const covered = await withCoverImages(this.prisma, variations.map((v) => v.product));
+    const [covered, offers] = await Promise.all([
+      withCoverImages(this.prisma, variations.map((v) => v.product)),
+      // Cùng nguồn giá với giỏ: suất còn lại và số suất của chính khách này.
+      this.flashSale?.resolveEffective(page.map((r) => r.variationId), new Date(), userId) ?? new Map<string, EffectivePrice>(),
+    ]);
     const coverOf = new Map(covered.map((p) => [p.id, p.images]));
     const byId = new Map(variations.map((v) => [v.id, v]));
     const items: PurchasedItem[] = [];
     for (const r of page) {
       const v = byId.get(r.variationId);
       if (!v) continue;
+      const offer = offers.get(r.variationId);
       items.push({
         variationId: v.id,
         productId: v.product.id,
@@ -136,6 +153,8 @@ export class PurchasedItemsService {
         timesBought: Number(r.timesBought),
         lastPurchasedAt: new Date(r.lastPurchasedAt).toISOString(),
         retailOnly: !isPancakeFulfilledLine({ pancakeId: v.pancakeId, fulfilment: v.product.fulfilment }) || isPartnerOwnedProduct(v.product),
+        flashPrice: offer ? Math.min(offer.flashPrice, v.salePrice ?? v.retailPrice) : null,
+        flashAllowance: offer?.allowance ?? null,
       });
     }
     const last = page[page.length - 1]!;

@@ -165,6 +165,29 @@ describe('Giữ/trả kho nhiều dòng theo thứ tự id biến thể (real Po
     }
   }
 
+  /**
+   * Đơn cũ của một khách mới có dòng [hi, lo], ngược thứ tự khoá của checkout, để huỷ đơn khoá hi trước. Dòng đơn không có cột thứ tự và
+   * `orders.cancel` đọc chúng không `orderBy`, nên thứ tự là thứ tự vật lý: chỗ trống do dòng đã xoá ở vòng trước có thể đảo thứ tự chèn.
+   * Thử lại với đơn mới tới khi đọc ra đúng [hi, lo] (cùng cách cartWith): sắp mảng trước khi so sẽ làm ca mất tiền đề.
+   */
+  async function earlierOrderWithLines(lo: { id: string }, hi: { id: string }) {
+    const line = (v: { id: string }) => ({ variationId: v.id, productName: 'Nước giặt', variationName: 'Chai', unitPrice: PRICE, quantity: 1, total: PRICE, paidTotal: PRICE });
+    for (let attempt = 0; ; attempt++) {
+      const owner = await customer();
+      const earlier = await createOrder(prisma, {
+        userId: owner.u.id,
+        subtotal: 2 * PRICE,
+        shippingFee: 0,
+        total: 2 * PRICE,
+        items: { create: [line(hi), line(lo)] },
+      });
+      const read = (await prisma.order.findUniqueOrThrow({ where: { id: earlier.id }, include: { items: true } })).items.map((i) => i.variationId);
+      if (attempt < 5 && read.join() !== [hi.id, lo.id].join()) continue;
+      expect(read).toEqual([hi.id, lo.id]);
+      return { owner, earlier };
+    }
+  }
+
   async function holdVariations(ids: string[]) {
     let release!: () => void;
     const gate = new Promise<void>((resolve) => (release = resolve));
@@ -252,17 +275,7 @@ describe('Giữ/trả kho nhiều dòng theo thứ tự id biến thể (real Po
   it(`khách huỷ đơn có dòng [B,A] ‖ checkout [A,B] → không 40P01 (${ROUNDS} vòng)`, async () => {
     for (let round = 0; round < ROUNDS; round++) {
       const { lo, hi } = await twoVariations();
-      const owner = await customer();
-      const line = (v: { id: string }) => ({ variationId: v.id, productName: 'Nước giặt', variationName: 'Chai', unitPrice: PRICE, quantity: 1, total: PRICE, paidTotal: PRICE });
-      const earlier = await createOrder(prisma, {
-        userId: owner.u.id,
-        subtotal: 2 * PRICE,
-        shippingFee: 0,
-        total: 2 * PRICE,
-        items: { create: [line(hi), line(lo)] },
-      });
-      const itemOrder = await prisma.order.findUniqueOrThrow({ where: { id: earlier.id }, include: { items: true } });
-      expect(itemOrder.items.map((i) => i.variationId)).toEqual([hi.id, lo.id]);
+      const { owner, earlier } = await earlierOrderWithLines(lo, hi);
       await prisma.variation.updateMany({ where: { id: { in: [lo.id, hi.id] } }, data: { stock: STOCK - 1, reservedStock: 1 } });
       const x = await cartWith([lo.id, hi.id]);
 

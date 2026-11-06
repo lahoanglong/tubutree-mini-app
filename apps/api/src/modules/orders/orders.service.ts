@@ -8,6 +8,7 @@ import { decodeKeysetCursor, encodeKeysetCursor, KEYSET_ORDER, keysetAfter } fro
 import { paginated, skipTake } from '../../common/pagination';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { CartService } from '../cart/cart.service';
+import { FlashSaleService, type EffectivePrice } from '../flash-sale/flash-sale.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
@@ -58,8 +59,15 @@ export interface OrderItemMedia {
   /** Không còn bán biến thể này nữa (biến thể tắt hay bị xoá, sản phẩm tắt hay chưa duyệt), khác hết hàng tạm thời: sheet Mua lại ghi "Ngừng bán". */
   discontinued: boolean;
   currentPrice: number | null;
-  /** Biến thể đang có đợt Giờ vàng chạy: giỏ có thể tính giá Giờ vàng thay `currentPrice`, nên sheet Mua lại không so giá với đơn trước. */
+  /** Biến thể đang có đợt Giờ vàng chạy. Client cũ dùng cờ này để khỏi so giá; client mới dùng `flashPrice` và `flashAllowance`. */
   flashActive: boolean;
+  /**
+   * Giá Giờ vàng giỏ sẽ tính cho khách đang xem khi số lượng không vượt `flashAllowance` (đã lấy min với giá đang bán, cùng luật
+   * priceFlashLine của giỏ); null = không có suất Giờ vàng mở. Trường luôn có mặt ở API mới.
+   */
+  flashPrice: number | null;
+  /** Số suất Giờ vàng khách này còn mua được (0 = đã dùng hết, giỏ tính giá thường); null khi không có suất mở. */
+  flashAllowance: number | null;
 }
 export type OrderWithItems = Prisma.OrderGetPayload<{ include: { items: true } }>;
 
@@ -129,7 +137,9 @@ export type OrderView = Omit<OrderListRow, 'items' | BuyerHiddenOrderField> & {
   manualHandling: boolean;
 };
 
-const MISSING_MEDIA: OrderItemMedia = { thumbnail: null, stock: 0, available: false, productPublic: false, discontinued: true, currentPrice: null, flashActive: false };
+const MISSING_MEDIA: OrderItemMedia = {
+  thumbnail: null, stock: 0, available: false, productPublic: false, discontinued: true, currentPrice: null, flashActive: false, flashPrice: null, flashAllowance: null,
+};
 
 export type RepurchaseAddSource = 'repurchase' | 'reorder_notification';
 export type RepurchaseSkipReason = 'OUT_OF_STOCK' | 'INACTIVE' | 'NOT_APPROVED' | 'EXCEEDS_STOCK';
@@ -222,6 +232,8 @@ export class OrdersService {
     @Optional() private readonly orderStatus?: OrderStatusService,
     // Optional như trên: call site dựng tay 7-9 tham số vẫn chạy.
     @Optional() private readonly wastePickupHooks?: WastePickupHooks,
+    // Optional như trên: không có thì dòng đơn không mang giá Giờ vàng (sheet Mua lại dùng giá đang bán).
+    @Optional() private readonly flashSale?: FlashSaleService,
   ) {}
 
   async list(userId: string, filter: OrderListFilter, page: number, limit: number) {
@@ -388,7 +400,7 @@ export class OrdersService {
     // Hạn thanh toán của đơn chờ chuyển khoản: danh sách đơn cũng cần để thẻ đơn ghi "Hạn …" (cùng luật với chi tiết đơn).
     const deadlines = await pendingPaymentDeadlines(orders, this.config);
     const now = new Date();
-    const [variations, flashing] = ids.length
+    const [variations, flashing, offers] = ids.length
       ? await Promise.all([
           this.prisma.variation.findMany({
             where: { id: { in: ids } },
@@ -405,8 +417,10 @@ export class OrdersService {
             where: { variationId: { in: ids }, flashSale: { isActive: true, startAt: { lte: now }, endAt: { gt: now } } },
             select: { variationId: true },
           }),
+          // Cùng nguồn giá với giỏ: suất còn lại và số suất của chính khách này.
+          this.flashSale?.resolveEffective(ids, now, viewerId) ?? new Map<string, EffectivePrice>(),
         ])
-      : [[], []];
+      : [[], [], new Map<string, EffectivePrice>()];
     const flashActive = new Set(flashing.map((f) => f.variationId));
     // Ảnh đầu chỉ cần cho sản phẩm không có thumbnail (dự phòng) và chỉ đọc phần tử đầu, không kéo cả mảng base64.
     const covered = await withCoverImages(this.prisma, variations.map((v) => v.product));
@@ -424,14 +438,18 @@ export class OrdersService {
     const media = (variationId: string, productSlug: string | null): OrderItemMedia => {
       const v = byId.get(variationId);
       if (!v) return { ...MISSING_MEDIA, productPublic: productSlug ? (publicBySlug.get(productSlug) ?? false) : false };
+      const standing = v.salePrice ?? v.retailPrice;
+      const offer = offers.get(variationId);
       return {
         thumbnail: publicProductThumb(v.product),
         stock: exposedStock(v.stock),
         available: v.isActive && isPublicProduct(v.product) && v.stock > 0,
         productPublic: isPublicProduct(v.product),
         discontinued: !(v.isActive && isPublicProduct(v.product)),
-        currentPrice: v.salePrice ?? v.retailPrice,
+        currentPrice: standing,
         flashActive: flashActive.has(variationId),
+        flashPrice: offer ? Math.min(offer.flashPrice, standing) : null,
+        flashAllowance: offer?.allowance ?? null,
       };
     };
     return orders.map((o) => ({

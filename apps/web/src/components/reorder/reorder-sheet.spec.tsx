@@ -11,8 +11,8 @@ vi.mock('@/lib/cart-key', () => ({ cartStorefrontSlug: () => null }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push }) }));
 
 import { ReorderSheet } from './reorder-sheet';
-import { orderReorderTarget, type ReorderLine, type ReorderTarget } from './reorder-types';
-import type { OrderItemView } from '@tubutree/app-core/api/orders';
+import { itemReorderTarget, lineFromOrderItem, orderReorderTarget, type ReorderLine, type ReorderTarget } from './reorder-types';
+import type { OrderItemView, PurchasedItem } from '@tubutree/app-core/api/orders';
 
 const CART = { items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 199000, itemCount: 2 };
 const line = (key: string, name: string, over: Partial<ReorderLine> = {}): ReorderLine => ({
@@ -252,5 +252,72 @@ describe('ReorderSheet — truy cập (A11Y-06/08)', () => {
     expect(rows[1]!.className).not.toContain('opacity');
     expect(rows[1]!.querySelector('.opacity-50')).not.toBeNull();
     expect(rows[1]!.querySelector('.opacity-50')!.textContent).toBe('');
+  });
+});
+
+// Giá trên sheet phải là giá giỏ sẽ tính: Giờ vàng còn suất của chính khách → giá Giờ vàng cho cả dòng khi số lượng không vượt suất,
+// vượt thì cả dòng giá đang bán (cùng luật priceFlashLine ở API). Bộ chọn số lượng không lộ tồn trên 20.
+describe('ReorderSheet: giá hiệu lực khớp giỏ và trần tồn', () => {
+  const row = () => document.querySelector<HTMLElement>('[data-testid="reorder-line"]')!;
+  const priceOf = () => row().querySelector('p.font-bold')?.textContent;
+  const noticesOf = () => Array.from(row().querySelectorAll('[data-notice]')).map((n) => n.textContent);
+  const plusOf = (name: string) => document.querySelector<HTMLButtonElement>(`button[aria-label="Tăng số lượng ${name}"]`)!;
+  const footer = () => document.querySelector('[data-sheet-footer]')?.textContent ?? '';
+
+  it('còn suất Giờ vàng: dòng và tạm tính theo giá Giờ vàng; vượt số suất thì cả dòng về giá đang bán, như giỏ', () => {
+    mount({ target: orderReorderTarget({ code: 'TUBU5', items: [item('i1', 'Trà xanh', { quantity: 2, flashActive: true, flashPrice: 40000, flashAllowance: 3 })] }) });
+    expect(priceOf()).toBe('40.000đ');
+    expect(footer()).toContain('80.000đ');
+    expect(noticesOf()).toEqual(['Giá giảm so với đơn trước (60.000đ)']);
+    click(plusOf('Trà xanh'));
+    click(plusOf('Trà xanh'));
+    expect(priceOf()).toBe('60.000đ');
+    expect(footer()).toContain('240.000đ');
+    expect(noticesOf()).toEqual([]);
+  });
+
+  it('khách đã dùng hết suất Giờ vàng: giá đang bán, không báo giảm giá', () => {
+    mount({ target: orderReorderTarget({ code: 'TUBU6', items: [item('i1', 'Trà xanh', { flashActive: true, flashPrice: 40000, flashAllowance: 0 })] }) });
+    expect(priceOf()).toBe('60.000đ');
+    expect(noticesOf()).toEqual([]);
+  });
+
+  it('đơn trước mua giá Giờ vàng, nay hết suất: giá đang bán và báo tăng so với giá đã trả', () => {
+    mount({ target: orderReorderTarget({ code: 'TUBU7', items: [item('i1', 'Trà xanh', { unitPrice: 40000, flashSaleItemId: 'fi1', flashActive: true, flashPrice: null, flashAllowance: null })] }) });
+    expect(priceOf()).toBe('60.000đ');
+    expect(noticesOf()).toEqual(['Giá tăng so với đơn trước (40.000đ)']);
+  });
+
+  it('API cũ chỉ có cờ flashActive: giữ giá đang bán và không so giá', () => {
+    mount({ target: orderReorderTarget({ code: 'TUBU8', items: [item('i1', 'Trà xanh', { flashActive: true, currentPrice: 70000 })] }) });
+    expect(priceOf()).toBe('70.000đ');
+    expect(noticesOf()).toEqual([]);
+  });
+
+  it('Mua lại một sản phẩm đã mua: giá Giờ vàng theo số lượng chọn', () => {
+    const purchased: PurchasedItem = {
+      variationId: 'v9', productId: 'p9', slug: 's9', productName: 'Dầu gội', variationName: '', brand: 'Tubu', thumbnail: null, price: 60000, salePrice: null,
+      stock: 50, inStock: true, timesBought: 2, lastPurchasedAt: '2026-10-01T00:00:00.000Z', flashPrice: 45000, flashAllowance: 2,
+    };
+    mount({ target: itemReorderTarget(purchased) });
+    expect(priceOf()).toBe('45.000đ');
+    click(plusOf('Dầu gội'));
+    click(plusOf('Dầu gội'));
+    expect(priceOf()).toBe('60.000đ');
+    expect(footer()).toContain('180.000đ');
+  });
+
+  it.each([21, 99, 100_000])('tồn công khai %i (trên 20): bộ chọn không kẹp theo tồn, không nói "Chỉ còn", không in số tồn', (stock) => {
+    expect(lineFromOrderItem(item('i1', 'Trà xanh', { quantity: 3, stock })).maxQuantity).toBe(99);
+    mount({ target: orderReorderTarget({ code: 'TUBU9', items: [item('i1', 'Trà xanh', { quantity: 3, stock })] }) });
+    const text = document.body.textContent ?? '';
+    expect(text).not.toMatch(/Chỉ còn|còn lại/);
+    expect(text).not.toContain(String(stock));
+    expect(text).not.toContain(stock.toLocaleString('vi-VN'));
+    expect(plusOf('Trà xanh').disabled).toBe(false);
+  });
+
+  it.each([1, 12, 20])('tồn %i (từ 1 đến 20): trần của bộ chọn đúng bằng tồn', (stock) => {
+    expect(lineFromOrderItem(item('i1', 'Trà xanh', { quantity: 1, stock })).maxQuantity).toBe(stock);
   });
 });
