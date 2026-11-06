@@ -86,6 +86,30 @@ for (const size of SIZES) {
       await expect(alert).toBeInViewport();
     });
 
+    // Cùng một câu lỗi lặp lại không đổi chữ: lời báo phải là nút DOM mới (cùng luật với hộp mã của web). Đánh dấu nút cũ bằng thuộc tính; nút mới dựng lại thì không có dấu đó.
+    // Việc kéo lại vào tầm nhìn chỉ kiểm được ở 320px, nơi danh sách dài hơn khung của tấm nên lời báo thật sự khuất khi bấm nút cuối; ở 375px lời báo vẫn nằm trong màn.
+    test('lỗi lặp lại cùng một câu từ nút "Dùng mã" cuối danh sách: lời báo dựng lại (ở 320px còn được kéo vào tầm nhìn lần nữa)', async ({ page, api }) => {
+      await openPicker(page);
+      const last = dialog(page).getByRole('button', { name: /^Dùng mã / }).last();
+      await last.click();
+      const alert = dialog(page).getByRole('alert');
+      await expect(alert).toHaveText(WRONG);
+      await expect(alert).toBeInViewport();
+      await alert.evaluate((el) => el.setAttribute('data-lan-dau', '1'));
+
+      await last.scrollIntoViewIfNeeded();
+      // Ở 320x568 danh sách dài hơn khung 70vh của tấm: cuộn tới nút cuối thì lời báo ở đầu tấm khuất khỏi tầm nhìn.
+      if (size.width === 320) await expect(alert).not.toBeInViewport();
+
+      const second = page.waitForResponse((r) => r.request().method() === 'POST' && r.url().includes('/cart/coupon'));
+      await last.click();
+      await second;
+      await expect(alert).toHaveText(WRONG);
+      await expect(alert).not.toHaveAttribute('data-lan-dau', '1');
+      await expect(alert).toBeInViewport();
+      expect(api.callsTo('POST', '/cart/coupon')).toHaveLength(2);
+    });
+
     test('bấm "Áp dụng" lần hai với cùng mã sai: lời báo dựng lại, vẫn trong tầm nhìn', async ({ page, api }) => {
       await openPicker(page);
       await codeInput(page).fill('SAI');

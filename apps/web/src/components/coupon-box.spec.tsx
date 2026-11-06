@@ -423,6 +423,64 @@ describe('CouponBox — gọn một dòng, mở khi bấm', () => {
     }
   });
 
+  // Cùng một câu lỗi lặp lại: chữ không đổi nên nếu lời báo giữ nguyên nút DOM thì trình đọc màn hình không đọc lại và bảng không cuộn lại tới lời báo.
+  it('áp mã sai hai lần với cùng một câu lỗi: lời báo là nút DOM mới và được kéo vào tầm nhìn lần nữa', async () => {
+    const scroll = vi.fn();
+    const prev = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scroll;
+    try {
+      state.applyError = new Error('Mã giảm giá không tồn tại.');
+      const box = await mount();
+      click(toggle(box));
+      typeInto(box.querySelector('input[name="coupon-code"]'), 'abc');
+      click(byText(box, 'button', 'Áp dụng'));
+      await flush();
+      const first = box.querySelector('[role="alert"]')!;
+      expect(first.textContent).toBe('Mã giảm giá không tồn tại.');
+      expect(scroll).toHaveBeenCalledTimes(1);
+
+      click(byText(box, 'button', 'Áp dụng'));
+      await flush();
+      const second = box.querySelector('[role="alert"]')!;
+      expect(second.textContent).toBe('Mã giảm giá không tồn tại.');
+      expect(second).not.toBe(first);
+      expect(first.isConnected).toBe(false);
+      expect(box.querySelectorAll('[role="alert"]')).toHaveLength(1);
+      expect(scroll).toHaveBeenCalledTimes(2);
+      expect(scroll.mock.instances[1]).toBe(second);
+    } finally {
+      Element.prototype.scrollIntoView = prev;
+    }
+  });
+
+  it('chọn mã ở danh sách bị lỗi hai lần liền: mỗi lần lời báo dựng lại và cuộn tới, lời báo cũ không còn trên trang', async () => {
+    const scroll = vi.fn();
+    const prev = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scroll;
+    try {
+      state.applyError = new Error('Mã giảm giá đã hết lượt dùng.');
+      state.coupons = [c('A1')];
+      const box = await mount();
+      click(toggle(box));
+      await flush(3);
+      click(card(box, 'A1').querySelector('button[aria-label$="mã A1"]'));
+      await flush();
+      const first = box.querySelector('[role="alert"]')!;
+      expect(first.textContent).toBe('Mã giảm giá đã hết lượt dùng.');
+      expect(scroll).toHaveBeenCalledTimes(1);
+
+      click(card(box, 'A1').querySelector('button[aria-label$="mã A1"]'));
+      await flush();
+      const second = box.querySelector('[role="alert"]')!;
+      expect(second).not.toBe(first);
+      expect(first.isConnected).toBe(false);
+      expect(scroll).toHaveBeenCalledTimes(2);
+      expect(scroll.mock.instances[1]).toBe(second);
+    } finally {
+      Element.prototype.scrollIntoView = prev;
+    }
+  });
+
   it('panel tại chỗ (desktop): lời báo nằm trong khung ô nhập, không dưới cả danh sách mã (thẻ tóm tắt dính cắt phần đuôi)', async () => {
     state.applyError = new Error('Mã giảm giá không tồn tại.');
     state.coupons = [c('A1'), c('B2')];
@@ -888,6 +946,24 @@ describe('CouponBox — tự áp mã giảm nhiều nhất ở thanh toán', () 
     expect(box.querySelector('[role="alert"]')?.textContent).toContain('Mất mạng');
     expect(label(box)).not.toBeNull();
     expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it('điện thoại: gỡ mã lỗi hai lần với cùng một câu lỗi khi bảng đang đóng: lời báo dưới hàng mã là nút DOM mới, chỉ còn một', async () => {
+    phone();
+    const box = await mountHarness();
+    state.removeError = new Error('Mất mạng, thử lại nhé');
+    click(remove(box));
+    await flush(10);
+    const first = box.querySelector('[role="alert"]')!;
+    expect(first.textContent).toContain('Mất mạng');
+
+    click(remove(box));
+    await flush(10);
+    const second = box.querySelector('[role="alert"]')!;
+    expect(second.textContent).toContain('Mất mạng');
+    expect(second).not.toBe(first);
+    expect(first.isConnected).toBe(false);
+    expect(box.querySelectorAll('[role="alert"]')).toHaveLength(1);
   });
 
   it('điện thoại: lỗi gỡ mã ở cuối hàng, mở bảng thì lỗi cũ biến mất (không hiện thêm một lời báo thứ hai trong bảng)', async () => {

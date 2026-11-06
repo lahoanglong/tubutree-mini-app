@@ -44,6 +44,18 @@ test.describe('Zalo Mini App E2E - ô Điểm Xanh và Ví ở 320px', () => {
   }
 });
 
+// Màn 375px (iPhone cỡ chuẩn, ô ~112px): cỡ chữ chọn theo bề ngang ô nên khác 320px, vẫn một dòng và cách mép. Chỉ "1.000 điểm" đòi giữ từ 14px (còn dư chỗ
+// kể cả Chrome Linux, Inter rộng hơn macOS); các số dài hơn có thể lùi về 12px trên máy dựng chữ rộng mà vẫn đúng luật.
+test.describe('Zalo Mini App E2E - ô Điểm Xanh và Ví ở 375px', () => {
+  test.use({ viewport: { width: 375, height: 667 } });
+  for (const c of STAT_CASES) {
+    test(`${c.pointsText} một dòng, ${c.walletText} không sát mép, không tràn`, async ({ page, api }) => {
+      const [points] = await openStats(page, api, c);
+      if (c.pointsText === '1.000 điểm') expect(fontPx(points.font), points.text).toBeGreaterThanOrEqual(14);
+    });
+  }
+});
+
 test.describe('Zalo Mini App E2E - ô Điểm Xanh và Ví ở 414px', () => {
   test.use({ viewport: { width: 414, height: 896 } });
   test(`${WIDE_CASE.pointsText} và ${WIDE_CASE.walletText} giữ cỡ 16px khi ô đủ chỗ, vẫn một dòng, cách mép`, async ({ page, api }) => {
