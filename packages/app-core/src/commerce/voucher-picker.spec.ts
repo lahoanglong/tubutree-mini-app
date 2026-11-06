@@ -119,6 +119,21 @@ describe('pickerRows: nhãn nút, lý do, mức giảm', () => {
     expect(zero).toMatchObject({ group: 'short', reason: MIN_SENTENCE });
   });
 
+  it('W28: nhóm "chưa đủ" xếp theo số thiếu của máy chủ (số đang hiện), không theo số đoán từ tạm tính', () => {
+    // Tạm tính 350k có hàng Giờ vàng: đoán A (min 350k) thiếu 0 và B (min 450k) thiếu 100k; máy chủ nói A thiếu 150k, B thiếu 50k nên B đứng trước.
+    const a = c('A', { minOrder: 350_000 });
+    const b = c('B', { minOrder: 450_000 });
+    const previews = previewMap(
+      preview('A', { eligible: false, reason: MIN_SENTENCE, shortfall: 150_000 }),
+      preview('B', { eligible: false, reason: MIN_SENTENCE, shortfall: 50_000 }),
+    );
+    const rows = pickerRows([a, b], ctx({ subtotal: 350_000, previews }));
+    expect(rows.map((r) => [r.coupon.code, r.reason])).toEqual([
+      ['B', 'Mua thêm 50k để dùng'],
+      ['A', 'Mua thêm 150k để dùng'],
+    ]);
+  });
+
   it('W28: shortfall chỉ có nghĩa với lý do đơn tối thiểu: mã bị chặn vì lý do khác không đổi thành "Mua thêm"', () => {
     const coupon = c('HETLUOT', { minOrder: 199_000 });
     const row = pickerRows([coupon], ctx({ previews: previewMap(preview('HETLUOT', { eligible: false, reason: 'Bạn đã dùng hết lượt cho mã này.', shortfall: 49_000 })) }))[0]!;

@@ -144,7 +144,9 @@ export function pickerRows<T extends CouponDTO>(coupons: readonly T[], ctx: Pick
       reason,
     };
     const gain = preview ? Math.max(0, preview.discount || 0) + Math.max(0, preview.freeshipSaving ?? 0) : estimate(coupon, ctx.subtotal, ctx.shippingFee);
-    return { row, index, gain, missing, end: endTime(coupon) };
+    // Nhóm "chưa đủ" xếp theo đúng số đang hiện cho khách: số của máy chủ khi có, không phải số đoán từ tạm tính.
+    const rankMissing = group === 'short' && preview?.shortfall != null && preview.shortfall > 0 ? preview.shortfall : missing;
+    return { row, index, gain, missing: rankMissing, end: endTime(coupon) };
   });
   built.sort(
     (a, b) =>

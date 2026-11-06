@@ -1074,11 +1074,11 @@ describe('CartService guard tồn kho', () => {
     });
 
     // W28: giỏ (210.000đ: Granola giá Giờ vàng 120.000đ + X 90.000đ) rơi dưới đơn tối thiểu của mã.
-    it('giỏ rơi dưới đơn tối thiểu cả khi tính hàng Giờ vàng: gỡ mã và nói còn thiếu bao nhiêu (couponRemoved.shortfall)', async () => {
+    it('giỏ rơi dưới đơn tối thiểu cả khi tính hàng Giờ vàng: gỡ mã, số thiếu tính trên phần hàng không Giờ vàng (90.000đ) chứ không trên cả giỏ (210.000đ)', async () => {
       const prisma = cartWith('MIN300');
       const c = await new CartService(prisma, couponsWith({ code: 'MIN300', minOrder: 300000 }), config, flashG, analytics, combo).getCart('u1');
       expect(c.couponCode).toBeNull();
-      expect(c.couponRemoved).toEqual({ code: 'MIN300', reason: 'Đơn tối thiểu 300.000đ để dùng mã này.', shortfall: 90000 });
+      expect(c.couponRemoved).toEqual({ code: 'MIN300', reason: 'Đơn tối thiểu 300.000đ để dùng mã này.', shortfall: 210000 });
       expect(c).not.toHaveProperty('couponShortfall');
     });
 

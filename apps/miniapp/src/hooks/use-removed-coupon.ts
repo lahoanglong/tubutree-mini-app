@@ -1,14 +1,29 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { rememberRemovedCoupon, removedCouponNotice, type RemovedCoupon, type RemovedCouponMemory } from '@tubutree/app-core/coupon-min-order';
+import { useQueryClient } from '@tanstack/react-query';
+import {
+  couponGoodsOf,
+  rememberRemovedCoupon,
+  removedCouponNotice,
+  type CouponGoodsSource,
+  type RemovedCoupon,
+  type RemovedCouponMemory,
+} from '@tubutree/app-core/coupon-min-order';
 
-type CartLike = { couponCode?: string | null; couponRemoved?: RemovedCoupon | null; subtotal?: number };
+type CartLike = CouponGoodsSource & { couponCode?: string | null; couponRemoved?: RemovedCoupon | null };
+
+/** Xoá lời báo gỡ mã khỏi mọi giỏ đang cache: trang khác (giỏ ↔ thanh toán) dựng hook mới từ cache sẽ không dựng lại lời báo khách đã đóng. */
+function clearRemovedCoupon(cart: unknown): unknown {
+  if (cart && typeof cart === 'object' && (cart as { couponRemoved?: unknown }).couponRemoved) return { ...cart, couponRemoved: null };
+  return cart;
+}
 
 /**
  * Nhớ mã máy chủ vừa gỡ khỏi giỏ (giỏ rơi dưới đơn tối thiểu, mã hết hạn hay bị tắt): `couponRemoved` chỉ có ở đúng lần đọc giỏ làm nó gỡ.
  * Chỉ nhìn lại khi `couponRemoved` đổi (đối tượng mới từ máy chủ), khi giỏ có hay mất mã, và khi giỏ trống hay có hàng trở lại: giỏ lạc quan
- * (`recompute`) giữ nguyên đối tượng cũ nên không ghi lại tổng giỏ lúc gỡ, và số thiếu đi theo tổng giỏ hiện tại. Cùng hành vi với hook của web.
+ * (`recompute`) giữ nguyên đối tượng cũ nên không ghi lại phần hàng tính mã lúc gỡ, và số thiếu đi theo phần hàng tính mã hiện tại. Cùng hành vi với hook của web.
  */
 export function useRemovedCoupon(cart: CartLike | null | undefined, formatMoney: (n: number) => string) {
+  const queryClient = useQueryClient();
   const [memory, setMemory] = useState<RemovedCouponMemory | null>(null);
   const latest = useRef(cart);
   latest.current = cart;
@@ -21,6 +36,14 @@ export function useRemovedCoupon(cart: CartLike | null | undefined, formatMoney:
     if (now) setMemory((prev) => rememberRemovedCoupon(prev, now));
   }, [removed, code, hasItems]);
 
-  const dismiss = useCallback(() => setMemory(null), []);
-  return { notice: removedCouponNotice(memory, cart?.subtotal ?? 0, formatMoney), dismiss };
+  const dismiss = useCallback(() => {
+    setMemory(null);
+    queryClient.setQueriesData({ queryKey: ['cart'] }, clearRemovedCoupon);
+  }, [queryClient]);
+  // Lệnh sửa/xoá dòng giỏ làm máy chủ gỡ mã: `couponRemoved` chỉ nằm trong phản hồi của lệnh đó (lần đọc giỏ sau mã đã không còn). Ghi thẳng vào đây thay vì
+  // qua cache: giỏ được làm mới ngay sau lệnh nên lần vẽ lại có thể không bao giờ thấy trạng thái giữa chừng.
+  const remember = useCallback((response: CartLike) => {
+    if (response.couponRemoved) setMemory((prev) => rememberRemovedCoupon(prev, response));
+  }, []);
+  return { notice: removedCouponNotice(memory, cart ? couponGoodsOf(cart) : 0, formatMoney), dismiss, remember };
 }

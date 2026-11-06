@@ -7,7 +7,12 @@ import { useRemovedCoupon } from './use-removed-coupon';
 
 // W28: máy chủ chỉ báo `couponRemoved` ở đúng lần đọc giỏ làm nó gỡ mã; trang phải nhớ lời báo tới khi giỏ lại có mã, khách đóng, hoặc giỏ trống.
 
-type Cart = { couponCode: string | null; couponRemoved?: { code: string; reason: string; shortfall?: number } | null; subtotal: number };
+type Cart = {
+  couponCode: string | null;
+  couponRemoved?: { code: string; reason: string; shortfall?: number } | null;
+  subtotal: number;
+  items?: { total: number; isFlash?: boolean }[];
+};
 
 const fmt = (n: number) => `${n.toLocaleString('vi-VN')}đ`;
 const REMOVED = { code: 'MIN300', reason: 'Đơn tối thiểu 300.000đ để dùng mã này.', shortfall: 90_000 };
@@ -84,5 +89,18 @@ describe('useRemovedCoupon (web)', () => {
   it('chưa có giỏ (đang tải): không có lời báo, không lỗi', () => {
     show(undefined);
     expect(text()).toBe('');
+  });
+
+  it('khách đóng: couponRemoved cũng bị xoá khỏi cache giỏ, trang khác dựng hook mới từ cache không dựng lại lời báo', () => {
+    client.setQueryData(['cart', null], { couponCode: null, couponRemoved: REMOVED, subtotal: 210_000 });
+    show({ couponCode: null, couponRemoved: REMOVED, subtotal: 210_000 });
+    act(() => r!.container.querySelector('button')!.click());
+    expect((client.getQueryData(['cart', null]) as Cart).couponRemoved).toBeNull();
+  });
+
+  it('khách mua thêm hàng Giờ vàng sau khi mã bị gỡ: phần hàng tính mã không đổi nên số thiếu giữ nguyên', () => {
+    show({ couponCode: null, couponRemoved: REMOVED, subtotal: 210_000, items: [{ total: 210_000 }] });
+    show({ couponCode: null, couponRemoved: REMOVED, subtotal: 420_000, items: [{ total: 210_000 }, { total: 210_000, isFlash: true }] });
+    expect(text()).toBe('Đã gỡ mã MIN300 vì giỏ chưa đủ đơn tối thiểu. Mua thêm 90.000đ để dùng lại.');
   });
 });

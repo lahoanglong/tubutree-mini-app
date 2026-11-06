@@ -63,14 +63,14 @@ for (const size of SIZES) {
 
     test('xoá món làm giỏ rơi dưới đơn tối thiểu: lời báo nói mã nào bị gỡ và còn thiếu bao nhiêu, bấm Đóng thì mất', async ({ page, api }) => {
       const full = footerCart({ lines: 2, unit: 100_000, coupon: { code: 'MIN150', discount: 20_000 } });
-      const afterDelete = { ...footerCart({ lines: 1, unit: 100_000 }), couponCode: null, discount: 0, couponRemoved: REMOVED };
+      const afterDelete = { ...footerCart({ lines: 1, unit: 100_000 }), couponCode: null, discount: 0 };
       let deleted = false;
       mockFooterCart(api, { lines: 2, unit: 100_000 });
-      // Giỏ Mini App bỏ qua phản hồi của lệnh xoá và tải lại GET /cart: chính lần đọc đó làm máy chủ gỡ mã nên `couponRemoved` về ở đó.
+      // Như máy chủ thật: lệnh xoá làm giỏ rơi dưới mức nên chính lệnh đó gỡ mã và báo `couponRemoved` trong phản hồi; lần đọc GET /cart sau mã đã không còn nên không báo nữa.
       api.get('/cart', () => (deleted ? afterDelete : full));
       api.delete('/cart/items/:id', () => {
         deleted = true;
-        return afterDelete;
+        return { ...afterDelete, couponRemoved: REMOVED };
       });
       await page.goto('/cart');
       await expect(page.getByTestId('coupon-code')).toHaveText('MIN150', { timeout: 15_000 });

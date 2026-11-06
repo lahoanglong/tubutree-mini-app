@@ -25,6 +25,7 @@ export function recompute(cart: CartSummary, items: CartLine[], editedId?: strin
     comboDiscount: 0,
     discount: 0,
     tierDiscount: 0,
+    couponShortfall: undefined,
     itemCount: lines.reduce((s, l) => s + l.quantity, 0),
   };
 }

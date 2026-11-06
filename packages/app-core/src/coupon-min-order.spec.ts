@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { couponMinOrderCopy, couponNoticeText, heldCouponNotice, rememberRemovedCoupon, removedCouponNotice, type RemovedCouponMemory } from './coupon-min-order';
+import { couponGoodsOf, couponMinOrderCopy, couponNoticeText, heldCouponNotice, rememberRemovedCoupon, removedCouponNotice, type RemovedCouponMemory } from './coupon-min-order';
 
 const fmt = (n: number) => `${n.toLocaleString('vi-VN')}đ`;
 
@@ -66,39 +66,59 @@ describe('rememberRemovedCoupon: nhớ mã vừa bị máy chủ gỡ vì giỏ 
   const removed = { code: 'MIN300', reason: 'Đơn tối thiểu 300.000đ để dùng mã này.', shortfall: 90_000 };
 
   it('máy chủ báo vừa gỡ mã: ghi nhớ kèm tổng giỏ lúc gỡ', () => {
-    expect(rememberRemovedCoupon(null, { couponCode: null, couponRemoved: removed, subtotal: 210_000 })).toEqual({ ...removed, subtotal: 210_000 });
+    expect(rememberRemovedCoupon(null, { couponCode: null, couponRemoved: removed, subtotal: 210_000 })).toEqual({ ...removed, goods: 210_000 });
   });
 
   it('lần đọc giỏ sau không còn couponRemoved (máy chủ chỉ báo một lần): giữ lời báo cũ', () => {
-    const prev: RemovedCouponMemory = { ...removed, subtotal: 210_000 };
+    const prev: RemovedCouponMemory = { ...removed, goods: 210_000 };
     expect(rememberRemovedCoupon(prev, { couponCode: null, couponRemoved: null, subtotal: 210_000 })).toBe(prev);
     expect(rememberRemovedCoupon(prev, { couponCode: null, subtotal: 260_000 })).toBe(prev);
   });
 
   it('giỏ lại có mã (khách áp lại hay áp mã khác): hết cần nhắc', () => {
-    const prev: RemovedCouponMemory = { ...removed, subtotal: 210_000 };
+    const prev: RemovedCouponMemory = { ...removed, goods: 210_000 };
     expect(rememberRemovedCoupon(prev, { couponCode: 'GIAM10', couponRemoved: null, subtotal: 310_000 })).toBeNull();
   });
 
   it('giỏ trống: hết cần nhắc', () => {
-    const prev: RemovedCouponMemory = { ...removed, subtotal: 210_000 };
+    const prev: RemovedCouponMemory = { ...removed, goods: 210_000 };
     expect(rememberRemovedCoupon(prev, { couponCode: null, couponRemoved: null, subtotal: 0 })).toBeNull();
     expect(rememberRemovedCoupon(null, { couponCode: null, couponRemoved: removed, subtotal: 0 })).toBeNull();
   });
 
   it('gỡ lần hai (mã khác): thay lời báo cũ', () => {
-    const prev: RemovedCouponMemory = { ...removed, subtotal: 210_000 };
+    const prev: RemovedCouponMemory = { ...removed, goods: 210_000 };
     const next = { code: 'MIN500', reason: 'Đơn tối thiểu 500.000đ để dùng mã này.', shortfall: 380_000 };
-    expect(rememberRemovedCoupon(prev, { couponCode: null, couponRemoved: next, subtotal: 120_000 })).toEqual({ ...next, subtotal: 120_000 });
+    expect(rememberRemovedCoupon(prev, { couponCode: null, couponRemoved: next, subtotal: 120_000 })).toEqual({ ...next, goods: 120_000 });
   });
 
   it('chưa nhớ gì và giỏ chưa có mã gỡ: vẫn không có gì', () => {
     expect(rememberRemovedCoupon(null, { couponCode: null, subtotal: 100_000 })).toBeNull();
   });
+
+  it('giỏ có dòng Giờ vàng: nhớ phần hàng tính mã (không tính dòng Giờ vàng), không nhớ tạm tính', () => {
+    const items = [{ total: 120_000, isFlash: true }, { total: 90_000, isFlash: false }, { total: 30_000 }];
+    expect(rememberRemovedCoupon(null, { couponCode: null, couponRemoved: removed, subtotal: 240_000, items })).toEqual({ ...removed, goods: 120_000 });
+  });
+});
+
+describe('couponGoodsOf: phần hàng tính mã của giỏ', () => {
+  it('bỏ dòng Giờ vàng, cộng các dòng còn lại', () => {
+    expect(couponGoodsOf({ subtotal: 330_000, items: [{ total: 120_000, isFlash: true }, { total: 90_000 }, { total: 120_000, isFlash: false }] })).toBe(210_000);
+  });
+
+  it('giỏ toàn hàng Giờ vàng: 0', () => {
+    expect(couponGoodsOf({ subtotal: 120_000, items: [{ total: 120_000, isFlash: true }] })).toBe(0);
+  });
+
+  it('API cũ không trả danh sách dòng: dùng tạm tính', () => {
+    expect(couponGoodsOf({ subtotal: 210_000 })).toBe(210_000);
+    expect(couponGoodsOf({})).toBe(0);
+  });
 });
 
 describe('removedCouponNotice: lời báo mã đã bị gỡ', () => {
-  const mem: RemovedCouponMemory = { code: 'MIN300', reason: 'Đơn tối thiểu 300.000đ để dùng mã này.', shortfall: 90_000, subtotal: 210_000 };
+  const mem: RemovedCouponMemory = { code: 'MIN300', reason: 'Đơn tối thiểu 300.000đ để dùng mã này.', shortfall: 90_000, goods: 210_000 };
 
   it('nói mã nào đã gỡ và còn thiếu bao nhiêu', () => {
     expect(removedCouponNotice(mem, 210_000, fmt)).toEqual({
@@ -107,7 +127,7 @@ describe('removedCouponNotice: lời báo mã đã bị gỡ', () => {
     });
   });
 
-  it('khách mua thêm sau khi mã bị gỡ: số thiếu giảm theo tổng giỏ', () => {
+  it('khách mua thêm sau khi mã bị gỡ: số thiếu giảm theo phần hàng tính mã', () => {
     expect(removedCouponNotice(mem, 250_000, fmt)?.text).toBe('Đã gỡ mã MIN300 vì giỏ chưa đủ đơn tối thiểu. Mua thêm 50.000đ để dùng lại.');
   });
 
@@ -120,8 +140,13 @@ describe('removedCouponNotice: lời báo mã đã bị gỡ', () => {
     expect(removedCouponNotice(mem, 340_000, fmt)?.text).toBe('Giỏ đã đủ đơn tối thiểu của mã MIN300. Bấm Chọn mã để dùng lại.');
   });
 
+  it('khách mua thêm hàng Giờ vàng: phần hàng tính mã không đổi nên số thiếu không giảm (không báo đã đủ khi máy chủ vẫn từ chối)', () => {
+    const goods = couponGoodsOf({ subtotal: 420_000, items: [{ total: 210_000 }, { total: 210_000, isFlash: true }] });
+    expect(removedCouponNotice(mem, goods, fmt)?.text).toBe('Đã gỡ mã MIN300 vì giỏ chưa đủ đơn tối thiểu. Mua thêm 90.000đ để dùng lại.');
+  });
+
   it('mã bị gỡ vì lý do khác đơn tối thiểu (hết hạn, bị tắt): nói đúng lý do của máy chủ', () => {
-    const other: RemovedCouponMemory = { code: 'TAT50', reason: 'Mã giảm giá đã ngừng áp dụng.', subtotal: 210_000 };
+    const other: RemovedCouponMemory = { code: 'TAT50', reason: 'Mã giảm giá đã ngừng áp dụng.', goods: 210_000 };
     expect(removedCouponNotice(other, 210_000, fmt)).toEqual({ code: 'TAT50', text: 'Đã gỡ mã TAT50: Mã giảm giá đã ngừng áp dụng.' });
   });
 

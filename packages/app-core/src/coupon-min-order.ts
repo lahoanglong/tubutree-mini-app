@@ -52,9 +52,24 @@ export interface RemovedCoupon {
   shortfall?: number;
 }
 
-/** Lời báo đã nhớ, kèm tổng giỏ lúc gỡ để số thiếu đi theo khi khách mua thêm hay bỏ bớt. */
+/** Lời báo đã nhớ, kèm phần hàng tính mã lúc gỡ (`goods`) để số thiếu đi theo khi khách mua thêm hay bỏ bớt. */
 export interface RemovedCouponMemory extends RemovedCoupon {
-  subtotal: number;
+  goods: number;
+}
+
+/** Giỏ đủ để đo phần hàng tính mã: `items` có thể thiếu ở API cũ, khi đó dùng tạm tính. */
+export interface CouponGoodsSource {
+  subtotal?: number;
+  items?: { total: number; isFlash?: boolean }[];
+}
+
+/**
+ * Phần hàng tính mã của giỏ: tổng thành tiền các dòng không phải Giờ vàng (máy chủ loại dòng Giờ vàng khỏi điều kiện đơn tối thiểu). Combo không trừ ở đây:
+ * giỏ lạc quan đưa combo về 0 trong lúc chờ máy chủ nên số trừ sẽ nhảy, mà combo hiếm khi đổi giữa lúc khách bỏ và mua thêm hàng.
+ */
+export function couponGoodsOf(cart: CouponGoodsSource): number {
+  if (!cart.items) return cart.subtotal ?? 0;
+  return cart.items.reduce((sum, l) => (l.isFlash ? sum : sum + l.total), 0);
 }
 
 /**
@@ -63,27 +78,26 @@ export interface RemovedCouponMemory extends RemovedCoupon {
  */
 export function rememberRemovedCoupon(
   prev: RemovedCouponMemory | null,
-  cart: { couponCode?: string | null; couponRemoved?: RemovedCoupon | null; subtotal?: number },
+  cart: CouponGoodsSource & { couponCode?: string | null; couponRemoved?: RemovedCoupon | null },
 ): RemovedCouponMemory | null {
-  const subtotal = cart.subtotal ?? 0;
-  if (subtotal <= 0) return null;
-  if (cart.couponRemoved) return { ...cart.couponRemoved, subtotal };
+  if ((cart.subtotal ?? 0) <= 0) return null;
+  if (cart.couponRemoved) return { ...cart.couponRemoved, goods: couponGoodsOf(cart) };
   if (cart.couponCode) return null;
   return prev;
 }
 
 /**
- * Chữ của lời báo mã đã bị gỡ. Số thiếu đi theo tổng giỏ hiện tại so với lúc gỡ (mua thêm thì giảm, bỏ bớt thì tăng); đủ mức rồi thì mời chọn
- * lại mã. Đây là số ước để nhắc khách: mã chỉ dùng được khi máy chủ xét lại, và nếu hàng mua thêm là Giờ vàng thì phần được tính không tăng.
+ * Chữ của lời báo mã đã bị gỡ. Số thiếu đi theo phần hàng tính mã hiện tại so với lúc gỡ (mua thêm thì giảm, bỏ bớt thì tăng; hàng Giờ vàng không đổi số
+ * vì máy chủ không tính nó); đủ mức rồi thì mời chọn lại mã. Đây là số ước để nhắc khách: mã chỉ dùng được khi máy chủ xét lại.
  */
 export function removedCouponNotice(
   mem: RemovedCouponMemory | null | undefined,
-  subtotalNow: number,
+  goodsNow: number,
   formatMoney: (n: number) => string,
 ): { code: string; text: string } | null {
   if (!mem) return null;
   if (mem.shortfall === undefined) return { code: mem.code, text: couponMinOrderCopy.removedOther(mem.code, mem.reason) };
-  const remaining = mem.shortfall - (subtotalNow - mem.subtotal);
+  const remaining = mem.shortfall - (goodsNow - mem.goods);
   return {
     code: mem.code,
     text: remaining > 0 ? couponMinOrderCopy.removed(mem.code, formatMoney(remaining)) : couponMinOrderCopy.removedEnough(mem.code),

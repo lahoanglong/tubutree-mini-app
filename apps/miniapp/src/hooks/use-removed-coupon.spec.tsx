@@ -1,14 +1,25 @@
+import type { ReactNode } from 'react';
 import { act, renderHook } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it } from 'vitest';
 import { useRemovedCoupon } from './use-removed-coupon';
 
 // W28: máy chủ chỉ báo `couponRemoved` ở đúng lần đọc giỏ làm nó gỡ mã; trang phải nhớ lời báo tới khi giỏ lại có mã, khách đóng, hoặc giỏ trống.
 
-type Cart = { couponCode: string | null; couponRemoved?: { code: string; reason: string; shortfall?: number } | null; subtotal: number };
+type Cart = {
+  couponCode: string | null;
+  couponRemoved?: { code: string; reason: string; shortfall?: number } | null;
+  subtotal: number;
+  items?: { total: number; isFlash?: boolean }[];
+};
 
 const fmt = (n: number) => `${n.toLocaleString('vi-VN')}đ`;
 const REMOVED = { code: 'MIN300', reason: 'Đơn tối thiểu 300.000đ để dùng mã này.', shortfall: 90_000 };
-const hook = (cart: Cart | undefined) => renderHook((props: { cart: Cart | undefined }) => useRemovedCoupon(props.cart, fmt), { initialProps: { cart } });
+const hook = (cart: Cart | undefined, client = new QueryClient()) =>
+  renderHook((props: { cart: Cart | undefined }) => useRemovedCoupon(props.cart, fmt), {
+    initialProps: { cart },
+    wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>,
+  });
 
 describe('useRemovedCoupon (Mini App)', () => {
   it('giỏ báo vừa gỡ mã: có lời báo kèm số thiếu', () => {
@@ -54,5 +65,33 @@ describe('useRemovedCoupon (Mini App)', () => {
   it('chưa có giỏ (đang tải): không có lời báo, không lỗi', () => {
     const { result } = hook(undefined);
     expect(result.current.notice).toBeNull();
+  });
+
+  it('khách đóng: couponRemoved cũng bị xoá khỏi cache giỏ, trang khác dựng hook mới từ cache không dựng lại lời báo', () => {
+    const client = new QueryClient();
+    client.setQueryData(['cart', null], { couponCode: null, couponRemoved: REMOVED, subtotal: 210_000 });
+    const { result } = hook({ couponCode: null, couponRemoved: REMOVED, subtotal: 210_000 }, client);
+    act(() => result.current.dismiss());
+    expect((client.getQueryData(['cart', null]) as Cart).couponRemoved).toBeNull();
+  });
+
+  it('remember: phản hồi của lệnh sửa/xoá mang couponRemoved thì có lời báo dù giỏ đọc lại không còn couponRemoved', () => {
+    const { result, rerender } = hook({ couponCode: 'MIN300', subtotal: 210_000, items: [{ total: 210_000 }] });
+    act(() => result.current.remember({ couponCode: null, couponRemoved: REMOVED, subtotal: 210_000, items: [{ total: 210_000 }] }));
+    expect(result.current.notice?.text).toBe('Đã gỡ mã MIN300 vì giỏ chưa đủ đơn tối thiểu. Mua thêm 90.000đ để dùng lại.');
+    rerender({ cart: { couponCode: null, couponRemoved: null, subtotal: 210_000, items: [{ total: 210_000 }] } });
+    expect(result.current.notice?.code).toBe('MIN300');
+  });
+
+  it('remember: phản hồi không có couponRemoved thì không đổi gì', () => {
+    const { result } = hook({ couponCode: 'GIAM10', subtotal: 210_000 });
+    act(() => result.current.remember({ couponCode: 'GIAM10', subtotal: 160_000 }));
+    expect(result.current.notice).toBeNull();
+  });
+
+  it('khách mua thêm hàng Giờ vàng sau khi mã bị gỡ: phần hàng tính mã không đổi nên số thiếu giữ nguyên', () => {
+    const { result, rerender } = hook({ couponCode: null, couponRemoved: REMOVED, subtotal: 210_000, items: [{ total: 210_000 }] });
+    rerender({ cart: { couponCode: null, couponRemoved: REMOVED, subtotal: 420_000, items: [{ total: 210_000 }, { total: 210_000, isFlash: true }] } });
+    expect(result.current.notice?.text).toBe('Đã gỡ mã MIN300 vì giỏ chưa đủ đơn tối thiểu. Mua thêm 90.000đ để dùng lại.');
   });
 });

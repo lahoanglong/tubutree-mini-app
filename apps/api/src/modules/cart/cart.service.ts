@@ -306,7 +306,8 @@ export class CartService {
             // Chỉ gỡ đúng mã đã đọc: giữa lúc đọc và ghi, tab khác có thể đã áp mã mới — không được xoá nhầm mã đó.
             const cleared = await this.prisma.cart.updateMany({ where: { id: cartId, couponCode }, data: { couponCode: null } });
             if (cleared.count > 0) {
-              const short = couponShortfallOf(err2);
+              // Mã chỉ dùng lại được khi phần hàng tính mã (loại Giờ vàng, trừ combo) đạt mức: số thiếu lấy từ lần xét trên phần đó (`err`), không phải trên cả giỏ (`err2`).
+              const short = err2 instanceof CouponMinOrderError ? couponShortfallOf(err) : undefined;
               couponRemoved = { code: couponCode, reason: err2.message, ...(short !== undefined ? { shortfall: short } : {}) };
               couponCode = null;
             } else {

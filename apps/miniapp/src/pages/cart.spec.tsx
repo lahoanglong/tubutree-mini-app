@@ -1328,4 +1328,46 @@ describe('CartPage — W28: đơn tối thiểu của mã khi giỏ đổi', () 
     fireEvent.click(screen.getByRole('button', { name: 'Đóng lời báo mã MIN300 đã gỡ' }));
     await waitFor(() => expect(screen.queryByTestId('coupon-removed-notice')).toBeNull());
   });
+
+  // Máy chủ gỡ mã ngay trong lệnh xoá và chỉ báo `couponRemoved` trong phản hồi của lệnh; lần đọc giỏ sau đó mã đã không còn nên không báo nữa.
+  describe('xoá món làm giỏ rơi dưới đơn tối thiểu (phản hồi của lệnh xoá mang couponRemoved, lần đọc lại thì không)', () => {
+    const OTHER = { ...OK_LINE, id: 'ci-b', variationId: 'v-b', productName: 'Dầu gội', total: 100_000, unitPrice: 100_000 };
+    const FULL = summary({ items: [OK_LINE, OTHER], subtotal: 150_000, itemCount: 2, couponCode: 'MIN150', discount: 20_000 });
+    const REMOVED = { code: 'MIN150', reason: 'Đơn tối thiểu 150.000đ để dùng mã này.', shortfall: 100_000 };
+
+    beforeEach(() => {
+      mocks.getCart.mockResolvedValueOnce(FULL).mockResolvedValue(summary({ couponCode: null, couponRemoved: null }));
+      mocks.removeCartItem.mockResolvedValue(summary({ couponCode: null, couponRemoved: REMOVED }));
+    });
+
+    it('báo mã bị gỡ kèm số cần mua thêm, vẫn còn sau khi giỏ được đọc lại', async () => {
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Xoá Dầu gội' }));
+      const note = await screen.findByTestId('coupon-removed-notice');
+      expect(note).toHaveTextContent('Đã gỡ mã MIN150 vì giỏ chưa đủ đơn tối thiểu. Mua thêm 100.000đ để dùng lại.');
+      await waitFor(() => expect(mocks.getCart.mock.calls.length).toBeGreaterThanOrEqual(2));
+      expect(screen.getByTestId('coupon-removed-notice')).toBeInTheDocument();
+    });
+
+    it('bấm Đóng: lời báo mất và không hiện lại khi giỏ được đọc lại', async () => {
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Xoá Dầu gội' }));
+      await screen.findByTestId('coupon-removed-notice');
+      fireEvent.click(screen.getByRole('button', { name: 'Đóng lời báo mã MIN150 đã gỡ' }));
+      await waitFor(() => expect(screen.queryByTestId('coupon-removed-notice')).toBeNull());
+      await new Promise((r) => setTimeout(r, 50));
+      expect(screen.queryByTestId('coupon-removed-notice')).toBeNull();
+    });
+
+    it('đổi số lượng (PATCH) làm máy chủ gỡ mã: cũng báo', async () => {
+      mocks.updateCartItem.mockResolvedValue(summary({ couponCode: null, couponRemoved: REMOVED }));
+      mocks.getCart.mockReset();
+      const two = { ...OK_LINE, quantity: 2, total: 100_000, unitPrice: 50_000 };
+      mocks.getCart.mockResolvedValueOnce(summary({ items: [two], subtotal: 100_000, itemCount: 2, couponCode: 'MIN150', discount: 20_000 })).mockResolvedValue(summary({ couponCode: null, couponRemoved: null }));
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Giảm số lượng' }));
+      await waitFor(() => expect(mocks.updateCartItem).toHaveBeenCalledWith('ci-ok', 1), { timeout: 2_000 });
+      expect(await screen.findByTestId('coupon-removed-notice')).toHaveTextContent('Đã gỡ mã MIN150');
+    });
+  });
 });
