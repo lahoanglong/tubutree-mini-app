@@ -30,7 +30,8 @@ test('Mini App 375: máy chủ báo phường không thuộc tỉnh cho địa c
 
   const card = page.locator('[data-ds="checkout-address-card"]').filter({ hasText: CHECKOUT_ADDRESS.street });
   const alert = card.getByRole('alert');
-  await expect(alert).toContainText('không khớp với tỉnh/thành', { timeout: 15_000 });
+  await expect(alert).toContainText('chưa đúng nên Tubu chưa giao được', { timeout: 15_000 });
+  await expect(page.getByText('Sửa địa chỉ giao hàng rồi đặt hàng.')).toBeVisible();
   await alert.getByRole('button', { name: 'Sửa địa chỉ' }).click();
   await expect(page.getByLabel(/Người nhận/).first()).toHaveValue(CHECKOUT_ADDRESS.recipient);
 
@@ -73,6 +74,8 @@ test('Mini App 375: sửa địa chỉ ở Sổ địa chỉ rồi quay lại th
   await expect(page.getByRole('button', { name: /Đặt hàng · 149\.000/ })).toBeEnabled({ timeout: 15_000 });
 
   // Điều hướng trong app (giữ bộ nhớ đệm như khi khách mở Sổ địa chỉ rồi bấm quay lại), không tải lại trang.
+  // Mã cũ chỉ lộ lỗi khi quay lại trước khi báo giá hết 10 giây; máy chậm hơn thì ca này xanh cả với mã cũ.
+  // Chứng cứ chắc chắn nằm ở vitest `addresses.spec.tsx` (đọc lại báo giá với đúng staleTime 10 giây).
   await page.evaluate(() => {
     history.pushState({}, '', '/addresses');
     window.dispatchEvent(new PopStateEvent('popstate'));

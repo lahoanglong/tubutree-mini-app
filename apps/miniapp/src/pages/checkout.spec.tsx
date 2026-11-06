@@ -1017,10 +1017,12 @@ describe('CheckoutPage — tổng tiền đổi lúc đặt (PANCAKE-13) và đ�
     renderPage();
     const card = (await screen.findByText(/1 Lê Lợi/)).closest('[data-ds="checkout-address-card"]') as HTMLElement;
     const alert = await within(card).findByRole('alert');
-    expect(alert).toHaveTextContent('không khớp với tỉnh/thành');
+    expect(alert).toHaveTextContent('chưa đúng nên Tubu chưa giao được');
     expect(alert).not.toHaveTextContent('theo địa giới cũ');
+    expect(screen.getByText('Sửa địa chỉ giao hàng rồi đặt hàng.')).toBeInTheDocument();
+    expect(screen.queryByText(/Bấm Thử lại ở phần tóm tắt/)).not.toBeInTheDocument();
     fireEvent.click(within(alert).getByRole('button', { name: 'Sửa địa chỉ' }));
-    await waitFor(() => expect(screen.queryByText(/không khớp với tỉnh\/thành/)).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText(/chưa đúng nên Tubu chưa giao được/)).not.toBeInTheDocument());
     expect(screen.getByDisplayValue('Ánh')).toBeInTheDocument();
   });
 

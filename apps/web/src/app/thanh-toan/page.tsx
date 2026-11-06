@@ -622,7 +622,8 @@ export default function CheckoutPage() {
         : place.isError
           ? (placeErrorMessage ?? 'Đặt hàng thất bại.')
           : null);
-  const barNote = barError ? null : (checkoutPlaceHint({ hasAddress: !!addressId, quoteFailed: quoteQ.isError }) ?? (hasLineProblem ? fillCopy('checkout.fixLinesHint') : null));
+  const addressOutdated = quoteQ.error instanceof ApiError && quoteQ.error.code === 'ADDRESS_OUTDATED';
+  const barNote = barError ? null : (checkoutPlaceHint({ hasAddress: !!addressId, quoteFailed: quoteQ.isError, addressOutdated }) ?? (hasLineProblem ? fillCopy('checkout.fixLinesHint') : null));
 
   return (
     <Shell>
@@ -697,7 +698,7 @@ export default function CheckoutPage() {
             <AddressPicker
               addresses={addrQ.data ?? []}
               selectedId={addressId}
-              quoteOutdated={quoteQ.error instanceof ApiError && quoteQ.error.code === 'ADDRESS_OUTDATED'}
+              quoteOutdated={addressOutdated}
               loadFailed={addrQ.isError}
               userId={user?.id}
               onSelect={chosen(setAddressId)}
