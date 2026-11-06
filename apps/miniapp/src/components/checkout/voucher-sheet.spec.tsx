@@ -705,4 +705,45 @@ describe('VoucherSheet — lời báo lỗi áp/gỡ mã ngay dưới ô nhập 
     expect(alert.textContent).not.toMatch(/Failed to fetch|TypeError/);
     expect(alert.textContent?.trim().length).toBeGreaterThan(0);
   });
+
+  it.each([[500], [429]])('lỗi %i không kèm lời máy chủ: câu chung bằng tiếng Việt, không lộ chữ kỹ thuật', async (status) => {
+    mocks.applyCoupon.mockRejectedValue(Object.assign(new Error(`Request failed with status code ${status}`), { isHttpError: true, response: { status } }));
+    renderSheet();
+    await screen.findByRole('button', { name: /^Dùng mã/ });
+    typeAndApply('SAI');
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).not.toMatch(/status code|Request failed|Throttler|Error/);
+    expect(alert.textContent?.trim().length).toBeGreaterThan(0);
+  });
+
+  it('lỗi lặp lại cùng một câu: lời báo được dựng lại và cuộn tới lần nữa, không im lặng', async () => {
+    renderSheet();
+    await screen.findByRole('button', { name: /^Dùng mã/ });
+    typeAndApply('SAI');
+    await screen.findByRole('alert');
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Áp dụng' }));
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(2));
+    expect(screen.getByRole('alert')).toHaveTextContent(WRONG);
+  });
+
+  it('khách đóng tấm khi lệnh áp mã còn chạy: lỗi về muộn vẫn tới khách bằng toast, không bị nuốt', async () => {
+    let rejectApply: (e: unknown) => void = () => {};
+    mocks.applyCoupon.mockReturnValue(new Promise((_, reject) => { rejectApply = reject; }));
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const tree = (visible: boolean) => (
+      <QueryClientProvider client={qc}>
+        <VoucherSheet visible={visible} onClose={() => {}} subtotal={100_000} />
+      </QueryClientProvider>
+    );
+    const r = render(tree(true));
+    await screen.findByRole('button', { name: /^Dùng mã/ });
+    typeAndApply('SAI');
+    await waitFor(() => expect(mocks.applyCoupon).toHaveBeenCalledTimes(1));
+    r.rerender(tree(false));
+    rejectApply(rejection(WRONG));
+    await waitFor(() => expect(errorToasts()).toHaveLength(1));
+    expect(errorToasts()[0]![0]).toEqual(expect.objectContaining({ text: WRONG, type: 'error' }));
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
 });

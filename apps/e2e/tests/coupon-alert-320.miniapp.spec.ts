@@ -13,8 +13,11 @@ const SIZES = [
   { width: 375, height: 812 },
 ] as const;
 
-const WALLET = [{ code: 'GIAM30K', type: 'AMOUNT', value: 30_000, minOrder: null, maxDiscount: null, endAt: new Date(Date.now() + 12 * 86_400_000).toISOString() }];
-const PREVIEWS = [{ code: 'GIAM30K', eligible: true, discount: 30_000 }];
+// Sáu mã: danh sách dài hơn khung 70vh của tấm (320x568), nên bấm mã cuối thì lời báo ở đầu tấm đã cuộn khỏi tầm nhìn nếu không được kéo lại.
+const WALLET = [10, 20, 30, 40, 50, 60].map((k) => ({
+  code: `GIAM${k}K`, type: 'AMOUNT', value: k * 1_000, minOrder: null, maxDiscount: null, endAt: new Date(Date.now() + 12 * 86_400_000).toISOString(),
+}));
+const PREVIEWS = WALLET.map((c) => ({ code: c.code, eligible: true, discount: c.value }));
 
 const dialog = (page: Page) => page.getByRole('dialog');
 const codeInput = (page: Page) => dialog(page).getByLabel('Nhập mã giảm giá khác');
@@ -23,7 +26,7 @@ const applyButton = (page: Page) => dialog(page).getByRole('button', { name: 'Á
 async function openPicker(page: Page): Promise<void> {
   await page.getByTestId('coupon-row').click();
   await expect(dialog(page).getByRole('heading', { name: 'Chọn mã giảm giá' })).toBeVisible({ timeout: 15_000 });
-  await expect(dialog(page).getByRole('button', { name: /^Dùng mã GIAM30K/ })).toBeVisible({ timeout: 15_000 });
+  await expect(dialog(page).getByRole('button', { name: /^Dùng mã / }).first()).toBeVisible({ timeout: 15_000 });
 }
 
 for (const size of SIZES) {
@@ -75,12 +78,23 @@ for (const size of SIZES) {
       await expect(dialog(page).getByRole('alert')).toHaveCount(0);
     });
 
-    test('lỗi từ nút "Dùng mã" ở danh sách: lời báo hiện ở đầu tấm và nằm trong tầm nhìn', async ({ page }) => {
+    test('lỗi từ nút "Dùng mã" cuối danh sách: lời báo ở đầu tấm được kéo vào tầm nhìn', async ({ page }) => {
       await openPicker(page);
-      await dialog(page).getByRole('button', { name: /^Dùng mã GIAM30K/ }).click();
+      await dialog(page).getByRole('button', { name: /^Dùng mã / }).last().click();
       const alert = dialog(page).getByRole('alert');
       await expect(alert).toHaveText(WRONG);
       await expect(alert).toBeInViewport();
+    });
+
+    test('bấm "Áp dụng" lần hai với cùng mã sai: lời báo dựng lại, vẫn trong tầm nhìn', async ({ page, api }) => {
+      await openPicker(page);
+      await codeInput(page).fill('SAI');
+      await applyButton(page).click();
+      await expect(dialog(page).getByRole('alert')).toHaveText(WRONG);
+      await applyButton(page).click();
+      await expect.poll(() => api.callsTo('POST', '/cart/coupon').length).toBe(2);
+      await expect(dialog(page).getByRole('alert')).toHaveText(WRONG);
+      await expect(dialog(page).getByRole('alert')).toBeInViewport();
     });
   });
 }

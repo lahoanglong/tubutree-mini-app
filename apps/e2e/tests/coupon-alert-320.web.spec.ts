@@ -16,7 +16,10 @@ const user = {
   id: 'u1', fullName: 'Nguyễn Văn An', referralCode: 'AN123', phone: '0912345678', role: 'CUSTOMER',
   pointsBalance: 0, pointsConvertedBalance: 0, walletBalance: 0,
 };
-const WALLET = [{ code: 'GIAM30K', type: 'AMOUNT', value: 30_000, minOrder: null, maxDiscount: null, endAt: new Date(Date.now() + 12 * 86_400_000).toISOString() }];
+// Sáu mã: danh sách dài hơn hộp ở 320x568, nên bấm mã cuối thì lời báo ở đầu hộp đã cuộn khỏi tầm nhìn nếu không được kéo lại.
+const WALLET = [10, 20, 30, 40, 50, 60].map((k) => ({
+  code: `GIAM${k}K`, type: 'AMOUNT', value: k * 1_000, minOrder: null, maxDiscount: null, endAt: new Date(Date.now() + 12 * 86_400_000).toISOString(),
+}));
 
 const dialog = (page: Page) => page.getByRole('dialog');
 const codeInput = (page: Page) => page.locator('input[name="coupon-code"]');
@@ -97,10 +100,10 @@ for (const size of SIZES) {
       await expect(dialog(page).getByRole('alert')).toHaveCount(0);
     });
 
-    test('lỗi từ nút "Dùng mã" ở danh sách: lời báo hiện ở đầu hộp và nằm trong tầm nhìn', async ({ page, api }) => {
+    test('lỗi từ nút "Dùng mã" cuối danh sách: lời báo ở đầu hộp được kéo vào tầm nhìn', async ({ page, api }) => {
       await openCart(page, api, size);
       await openBox(page);
-      await dialog(page).getByRole('button', { name: /^Dùng mã GIAM30K/ }).click();
+      await dialog(page).getByRole('button', { name: /^Dùng mã / }).last().click();
       const alert = dialog(page).getByRole('alert');
       await expect(alert).toHaveText(WRONG);
       await expect(alert).toBeInViewport();

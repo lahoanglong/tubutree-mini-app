@@ -72,6 +72,14 @@ export function VoucherSheet({
   useEffect(() => {
     if (visible && err) errRef.current?.scrollIntoView?.({ block: 'nearest' });
   }, [visible, err]);
+  // Lời báo nằm trong tấm: khách đóng tấm trong lúc lệnh còn chạy thì không ai thấy nó (và mở lại tấm lại xoá), nên lỗi về muộn vẫn ra toast.
+  const visibleRef = useRef(visible);
+  visibleRef.current = visible;
+  const reportError = (e: unknown) => {
+    const text = getErrorMessage(e);
+    if (visibleRef.current) setErr(text);
+    else notify({ text, type: 'error' });
+  };
 
   const couponsQ = useQuery({
     queryKey: ['coupons'],
@@ -92,6 +100,8 @@ export function VoucherSheet({
 
   const applyMut = useMutation({
     mutationFn: (code: string) => applyCoupon(code.trim().toUpperCase()),
+    // Xoá lời báo cũ lúc bắt đầu: lỗi lặp lại cùng một câu vẫn dựng lại lời báo, cuộn tới và được trình đọc màn hình đọc lại.
+    onMutate: () => setErr(null),
     onSuccess: (cart, code) => {
       queryClient.setQueryData(cartKey(), cart);
       void queryClient.invalidateQueries({ queryKey: ['quote'] });
@@ -116,11 +126,12 @@ export function VoucherSheet({
       onCouponApplied?.();
       onClose();
     },
-    onError: (e: unknown) => setErr(getErrorMessage(e)),
+    onError: reportError,
   });
 
   const removeMut = useMutation({
     mutationFn: removeCoupon,
+    onMutate: () => setErr(null),
     onSuccess: (cart) => {
       queryClient.setQueryData(cartKey(), cart);
       void queryClient.invalidateQueries({ queryKey: ['quote'] });
@@ -129,7 +140,7 @@ export function VoucherSheet({
       notify({ text: 'Đã bỏ mã giảm giá', type: 'success', duration: 2000 });
       onCouponApplied?.();
     },
-    onError: (e: unknown) => setErr(getErrorMessage(e)),
+    onError: reportError,
   });
 
   const isAnyMutating = applyMut.isPending || removeMut.isPending || busy;
