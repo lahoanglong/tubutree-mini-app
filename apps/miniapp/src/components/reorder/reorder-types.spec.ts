@@ -24,6 +24,7 @@ describe('reorder-types', () => {
         { kind: 'reduced', tone: 'warning', text: 'Không đủ 2 như đơn trước, đã giảm số lượng' },
         { kind: 'priceUp', tone: 'warning', text: 'Giá tăng so với đơn trước (60.000đ)' },
       ],
+      pricing: { standing: 65000, flashPrice: null, flashAllowance: null, paidPrice: 60000, comparable: true },
     });
   });
 

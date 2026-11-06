@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ComponentProps, ReactElement } from 'react';
 import type * as UiForm from '../ui/form';
@@ -35,8 +35,8 @@ vi.mock('../ui/form', async (importOriginal) => {
 
 import { vi as copy } from '../../i18n/vi';
 import { ReorderSheet } from './reorder-sheet';
-import { orderReorderTarget, type ReorderLine, type ReorderTarget } from './reorder-types';
-import type { OrderItemView } from '../../services/shop-api';
+import { itemReorderTarget, lineFromOrderItem, orderReorderTarget, type ReorderLine, type ReorderTarget } from './reorder-types';
+import type { OrderItemView, PurchasedItem } from '../../services/shop-api';
 
 const CART = { items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 200000, itemCount: 2 };
 const line = (key: string, name: string, over: Partial<ReorderLine> = {}): ReorderLine => ({
@@ -253,5 +253,72 @@ describe('ReorderSheet', () => {
   it('target=null → không hiện gì', () => {
     renderSheet(<ReorderSheet target={null} source="order_card" onClose={() => {}} />);
     expect(screen.queryByRole('button', { name: /Thêm vào giỏ/ })).toBeNull();
+  });
+});
+
+// Giá trên sheet phải là giá giỏ sẽ tính: Giờ vàng còn suất của chính khách → giá Giờ vàng cho cả dòng khi số lượng không vượt suất,
+// vượt thì cả dòng giá đang bán (cùng luật priceFlashLine ở API). Bộ chọn số lượng không lộ tồn trên 20.
+describe('ReorderSheet: giá hiệu lực khớp giỏ và trần tồn', () => {
+  beforeEach(() => vi.clearAllMocks());
+  const open = (target: ReorderTarget) => renderSheet(<ReorderSheet target={target} source="order_card" onClose={() => {}} />);
+  const row = () => screen.getByTestId('reorder-line');
+  const rowNotices = () => Array.from(row().querySelectorAll('[data-notice]')).map((n) => n.textContent);
+  const plusOf = (name: string) => screen.getByRole('button', { name: `Tăng số lượng ${name}` });
+
+  it('còn suất Giờ vàng: dòng và tạm tính theo giá Giờ vàng; vượt số suất thì cả dòng về giá đang bán, như giỏ', () => {
+    open(orderReorderTarget({ code: 'TUBU5', items: [item('i1', 'Trà xanh', { quantity: 2, flashActive: true, flashPrice: 40000, flashAllowance: 3 })] }));
+    expect(within(row()).getByText('40.000đ')).toBeInTheDocument();
+    expect(screen.getByText('80.000đ')).toBeInTheDocument();
+    expect(rowNotices()).toEqual(['Giá giảm so với đơn trước (60.000đ)']);
+    fireEvent.click(plusOf('Trà xanh'));
+    fireEvent.click(plusOf('Trà xanh'));
+    expect(within(row()).getByText('60.000đ')).toBeInTheDocument();
+    expect(screen.getByText('240.000đ')).toBeInTheDocument();
+    expect(rowNotices()).toEqual([]);
+  });
+
+  it('khách đã dùng hết suất Giờ vàng: giá đang bán, không báo giảm giá', () => {
+    open(orderReorderTarget({ code: 'TUBU6', items: [item('i1', 'Trà xanh', { flashActive: true, flashPrice: 40000, flashAllowance: 0 })] }));
+    expect(within(row()).getByText('60.000đ')).toBeInTheDocument();
+    expect(rowNotices()).toEqual([]);
+  });
+
+  it('đơn trước mua giá Giờ vàng, nay hết suất: giá đang bán và báo tăng so với giá đã trả', () => {
+    open(orderReorderTarget({ code: 'TUBU7', items: [item('i1', 'Trà xanh', { unitPrice: 40000, flashSaleItemId: 'fi1', flashActive: true, flashPrice: null, flashAllowance: null })] }));
+    expect(within(row()).getByText('60.000đ')).toBeInTheDocument();
+    expect(rowNotices()).toEqual(['Giá tăng so với đơn trước (40.000đ)']);
+  });
+
+  it('API cũ chỉ có cờ flashActive: giữ giá đang bán và không so giá', () => {
+    open(orderReorderTarget({ code: 'TUBU8', items: [item('i1', 'Trà xanh', { flashActive: true, currentPrice: 70000 })] }));
+    expect(within(row()).getByText('70.000đ')).toBeInTheDocument();
+    expect(rowNotices()).toEqual([]);
+  });
+
+  it('Mua lại một sản phẩm đã mua: giá Giờ vàng theo số lượng chọn', () => {
+    const purchased: PurchasedItem = {
+      variationId: 'v9', productId: 'p9', slug: 's9', productName: 'Dầu gội', variationName: '', brand: 'Tubu', thumbnail: null, price: 60000, salePrice: null,
+      stock: 50, inStock: true, timesBought: 2, lastPurchasedAt: '2026-10-01T00:00:00.000Z', flashPrice: 45000, flashAllowance: 2,
+    };
+    open(itemReorderTarget(purchased));
+    expect(within(row()).getByText('45.000đ')).toBeInTheDocument();
+    fireEvent.click(plusOf('Dầu gội'));
+    fireEvent.click(plusOf('Dầu gội'));
+    expect(within(row()).getByText('60.000đ')).toBeInTheDocument();
+    expect(screen.getByText('180.000đ')).toBeInTheDocument();
+  });
+
+  it.each([21, 99, 100_000])('tồn công khai %i (trên 20): bộ chọn không kẹp theo tồn, không nói "Chỉ còn", không in số tồn', (stock) => {
+    expect(lineFromOrderItem(item('i1', 'Trà xanh', { quantity: 3, stock })).maxQuantity).toBe(99);
+    open(orderReorderTarget({ code: 'TUBU9', items: [item('i1', 'Trà xanh', { quantity: 3, stock })] }));
+    const text = document.body.textContent ?? '';
+    expect(text).not.toMatch(/Chỉ còn|còn lại/);
+    expect(text).not.toContain(String(stock));
+    expect(text).not.toContain(stock.toLocaleString('vi-VN'));
+    expect(plusOf('Trà xanh')).toBeEnabled();
+  });
+
+  it.each([1, 12, 20])('tồn %i (từ 1 đến 20): trần của bộ chọn đúng bằng tồn', (stock) => {
+    expect(lineFromOrderItem(item('i1', 'Trà xanh', { quantity: 1, stock })).maxQuantity).toBe(stock);
   });
 });

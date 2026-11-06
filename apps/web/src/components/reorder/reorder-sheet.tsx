@@ -10,7 +10,7 @@ import { Sheet } from '@/components/ui/sheet';
 import { homeErrorMessage } from '@/components/home/home-block-error';
 import type { ReorderSummary } from './reorder-summary';
 import {
-  initialSelection, selectedLines, selectionTotals, targetLines,
+  initialSelection, lineAt, selectedLines, selectionTotals, targetLines,
   type LineSelection, type ReorderLine, type ReorderSource, type ReorderTarget,
 } from './reorder-types';
 import { useReorder } from './use-reorder';
@@ -138,6 +138,7 @@ export function ReorderSheet({ target, source, onClose, onDone, navigateToCart }
 function ReorderLineRow({ line, value, onChange }: { line: ReorderLine; value: LineSelection | undefined; onChange: (v: LineSelection) => void }) {
   const checked = line.available && (value?.checked ?? false);
   const qty = value?.quantity ?? line.defaultQuantity;
+  const { unitPrice, notices } = lineAt(line, qty);
   return (
     <div data-testid="reorder-line" className="flex items-start gap-2.5">
       <label className="flex h-11 w-11 flex-none items-center justify-center">
@@ -157,8 +158,8 @@ function ReorderLineRow({ line, value, onChange }: { line: ReorderLine; value: L
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <p className={`truncate text-sm font-semibold ${line.available ? 'text-stone-900' : 'text-[color:var(--color-text-secondary)]'}`}>{line.productName}</p>
         {line.variationName && <p className="text-xs text-stone-600">{line.variationName}</p>}
-        {line.available && <p className="text-sm font-bold text-stone-900">{formatVnd(line.unitPrice)}</p>}
-        <LineNotices notices={line.notices} />
+        {line.available && <p className="text-sm font-bold text-stone-900">{formatVnd(unitPrice)}</p>}
+        <LineNotices notices={notices} />
         {line.available && (
           <QuantitySelector value={qty} max={line.maxQuantity} size="md" itemLabel={line.productName} onChange={(n) => onChange({ checked, quantity: n })} />
         )}

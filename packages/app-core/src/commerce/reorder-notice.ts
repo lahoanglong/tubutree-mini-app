@@ -46,12 +46,67 @@ export function reorderLineNotices(f: ReorderLineFacts): ReorderLineNotice[] {
   } else if (f.orderedQuantity > f.cap) {
     notices.push({ kind: 'reduced', tone: 'warning', text: fillCopy('reorder.qtyCapped', { n: f.cap }) });
   }
-  if (f.currentPrice !== null && f.currentPrice > f.paidPrice) {
-    notices.push({ kind: 'priceUp', tone: 'warning', text: fillCopy('reorder.priceUp', { old: vnd(f.paidPrice) }) });
-  } else if (f.currentPrice !== null && f.currentPrice < f.paidPrice) {
-    notices.push({ kind: 'priceDown', tone: 'success', text: fillCopy('reorder.priceDown', { old: vnd(f.paidPrice) }) });
-  }
+  const price = f.currentPrice === null ? null : priceNotice(f.paidPrice, f.currentPrice);
+  if (price) notices.push(price);
   return notices;
+}
+
+/** Tăng hay giảm so với đơn giá đã trả, kèm giá cũ; null khi bằng nhau. */
+function priceNotice(paid: number, now: number): ReorderLineNotice | null {
+  if (now > paid) return { kind: 'priceUp', tone: 'warning', text: fillCopy('reorder.priceUp', { old: vnd(paid) }) };
+  if (now < paid) return { kind: 'priceDown', tone: 'success', text: fillCopy('reorder.priceDown', { old: vnd(paid) }) };
+  return null;
+}
+
+/** Giá một dòng của sheet Mua lại: đủ dữ kiện để tính giá giỏ sẽ tính theo số lượng khách chọn. */
+export interface ReorderPricing {
+  /** Giá đang bán (giá thường); giá đã trả khi API không cho biết giá hiện tại. */
+  standing: number;
+  /** Giá Giờ vàng giỏ sẽ tính khi số lượng không vượt `flashAllowance`; null = không có suất Giờ vàng mở. */
+  flashPrice: number | null;
+  /** Số suất Giờ vàng khách còn mua được; null = API không giới hạn hay không cho biết (áp cho mọi số lượng). */
+  flashAllowance: number | null;
+  /** Đơn giá đã trả ở đơn trước; null khi không có đơn trước (mua lại một sản phẩm). */
+  paidPrice: number | null;
+  /** Có đủ cơ sở để so giá với `paidPrice` không (Giờ vàng không làm phép so sai). */
+  comparable: boolean;
+}
+
+/**
+ * Dữ kiện giá của một dòng đơn cũ. API mới luôn gửi `flashPrice` (null = không có suất mở) nên biết chắc giá giỏ sẽ tính và so
+ * giá được kể cả khi dòng đơn cũ mua giá Giờ vàng. API cũ không gửi: giữ luật cũ, chỉ so khi biết không có Giờ vàng xen vào.
+ */
+export function reorderPricing(it: {
+  unitPrice: number;
+  currentPrice?: number | null;
+  flashActive?: boolean;
+  flashSaleItemId?: string | null;
+  flashPrice?: number | null;
+  flashAllowance?: number | null;
+}): ReorderPricing {
+  const knowsFlash = it.flashPrice !== undefined;
+  return {
+    standing: it.currentPrice ?? it.unitPrice,
+    flashPrice: it.flashPrice ?? null,
+    flashAllowance: it.flashAllowance ?? null,
+    paidPrice: it.unitPrice,
+    comparable: knowsFlash ? typeof it.currentPrice === 'number' : reorderComparablePrice(it) !== null,
+  };
+}
+
+/** Dữ kiện giá của một sản phẩm đã mua (rail "Mua lại"): không có đơn trước nên không so giá. */
+export function purchasedPricing(p: { price: number; salePrice: number | null; flashPrice?: number | null; flashAllowance?: number | null }): ReorderPricing {
+  return { standing: p.salePrice ?? p.price, flashPrice: p.flashPrice ?? null, flashAllowance: p.flashAllowance ?? null, paidPrice: null, comparable: false };
+}
+
+/**
+ * Đơn giá và câu giá của dòng ở số lượng khách chọn, cùng luật với giỏ (priceFlashLine ở API): Giờ vàng còn suất và số lượng không
+ * vượt số suất khách còn mua được → min(giá Giờ vàng, giá đang bán); vượt → cả dòng giá đang bán.
+ */
+export function reorderPriceAt(p: ReorderPricing, quantity: number): { unitPrice: number; notice: ReorderLineNotice | null } {
+  const flash = p.flashPrice !== null && (p.flashAllowance === null || quantity <= p.flashAllowance);
+  const unitPrice = flash ? Math.min(p.flashPrice as number, p.standing) : p.standing;
+  return { unitPrice, notice: p.comparable && p.paidPrice !== null ? priceNotice(p.paidPrice, unitPrice) : null };
 }
 
 /** Câu đầu sheet khi có dòng không thêm được: một phần hay cả đơn. null khi mọi dòng còn bán. */

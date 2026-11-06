@@ -1,5 +1,7 @@
 import type { OrderItemView, PurchasedItem } from '@tubutree/app-core/api/orders';
-import { isDiscontinuedItem, reorderComparablePrice, reorderLineNotices, type ReorderLineNotice } from '@tubutree/app-core/commerce/reorder-notice';
+import {
+  isDiscontinuedItem, purchasedPricing, reorderLineNotices, reorderPriceAt, reorderPricing, type ReorderLineNotice, type ReorderPricing,
+} from '@tubutree/app-core/commerce/reorder-notice';
 import { qtyPickMax } from '@tubutree/app-core/commerce/stock-text';
 
 /** Điểm vào cần ghi nguồn riêng: nhắc mua lại ở trang thông báo (cùng giá trị 'notification' với Mini App). */
@@ -15,12 +17,23 @@ export interface ReorderLine {
   productName: string;
   variationName: string;
   thumbnail: string | null;
+  /** Đơn giá ở số lượng mặc định; ở số lượng khác xem `lineAt`. */
   unitPrice: number;
   defaultQuantity: number;
   maxQuantity: number;
   available: boolean;
   /** Câu dưới dòng: hết hàng hay ngừng bán, đã giảm số lượng (thiếu hàng hoặc quá trần), giá đổi so với giá đã trả. */
   notices: readonly ReorderLineNotice[];
+  /** Dữ kiện giá (giá Giờ vàng theo số suất) để tính lại giá và câu giá theo số lượng chọn. Thiếu: giá và câu cố định như `unitPrice`, `notices`. */
+  pricing?: ReorderPricing;
+}
+
+/** Đơn giá và câu dưới dòng ở số lượng khách chọn: Giờ vàng chỉ áp tới số suất còn mua được, vượt thì cả dòng giá đang bán (như giỏ). */
+export function lineAt(line: ReorderLine, quantity: number): { unitPrice: number; notices: readonly ReorderLineNotice[] } {
+  if (!line.pricing) return { unitPrice: line.unitPrice, notices: line.notices };
+  const { unitPrice, notice } = reorderPriceAt(line.pricing, quantity);
+  const rest = line.notices.filter((n) => n.kind !== 'priceUp' && n.kind !== 'priceDown');
+  return { unitPrice, notices: notice ? [...rest, notice] : rest };
 }
 
 export type ReorderTarget =
@@ -45,6 +58,9 @@ export function lineFromOrderItem(it: OrderItemView): ReorderLine {
   const stock = typeof it.stock === 'number' ? Math.max(it.stock, 0) : MAX_REORDER_QTY;
   const available = it.available !== false && stock > 0;
   const maxQuantity = Math.min(qtyPickMax(stock), MAX_REORDER_QTY);
+  const defaultQuantity = available ? clampQty(it.quantity, maxQuantity) : it.quantity;
+  const pricing = reorderPricing(it);
+  const price = reorderPriceAt(pricing, defaultQuantity);
   const notices = reorderLineNotices({
     available,
     discontinued: isDiscontinuedItem(it),
@@ -52,7 +68,7 @@ export function lineFromOrderItem(it: OrderItemView): ReorderLine {
     stock: typeof it.stock === 'number' ? Math.max(it.stock, 0) : null,
     cap: MAX_REORDER_QTY,
     paidPrice: it.unitPrice,
-    currentPrice: reorderComparablePrice(it),
+    currentPrice: pricing.comparable ? price.unitPrice : null,
   });
   return {
     key: it.id,
@@ -60,18 +76,20 @@ export function lineFromOrderItem(it: OrderItemView): ReorderLine {
     productName: it.productName,
     variationName: it.variationName,
     thumbnail: it.thumbnail ?? null,
-    unitPrice: it.currentPrice ?? it.unitPrice,
-    defaultQuantity: available ? clampQty(it.quantity, maxQuantity) : it.quantity,
+    unitPrice: price.unitPrice,
+    defaultQuantity,
     maxQuantity,
     available,
     notices,
+    pricing,
   };
 }
 
 export function lineFromPurchasedItem(p: PurchasedItem): ReorderLine {
   const stock = Math.max(p.stock, 0);
   const available = p.inStock !== false && stock > 0;
-  const price = p.salePrice ?? p.price;
+  const pricing = purchasedPricing(p);
+  const price = reorderPriceAt(pricing, 1).unitPrice;
   return {
     key: p.variationId,
     variationId: p.variationId,
@@ -83,6 +101,7 @@ export function lineFromPurchasedItem(p: PurchasedItem): ReorderLine {
     maxQuantity: Math.min(qtyPickMax(stock), MAX_REORDER_QTY),
     available,
     notices: reorderLineNotices({ available, discontinued: false, orderedQuantity: 1, stock, cap: MAX_REORDER_QTY, paidPrice: price, currentPrice: price }),
+    pricing,
   };
 }
 
@@ -109,9 +128,9 @@ export function selectedLines(t: ReorderTarget, sel: Record<string, LineSelectio
 }
 
 export function selectionTotals(t: ReorderTarget, sel: Record<string, LineSelection>): { units: number; subtotal: number } {
-  const price = new Map(targetLines(t).map((l) => [l.key, l.unitPrice]));
+  const lines = new Map(targetLines(t).map((l) => [l.key, l]));
   return selectedLines(t, sel).reduce(
-    (acc, s) => ({ units: acc.units + s.quantity, subtotal: acc.subtotal + s.quantity * (price.get(s.key) ?? 0) }),
+    (acc, s) => ({ units: acc.units + s.quantity, subtotal: acc.subtotal + s.quantity * lineAt(lines.get(s.key)!, s.quantity).unitPrice }),
     { units: 0, subtotal: 0 },
   );
 }

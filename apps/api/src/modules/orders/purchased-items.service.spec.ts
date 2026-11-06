@@ -10,11 +10,11 @@ const variation = (id: string, over: Record<string, unknown> = {}, product: Reco
   product: { id: `p-${id}`, slug: `sp-${id}`, name: `Sản phẩm ${id}`, brand: 'Tubu', thumbnail: `https://img.test/${id}.jpg`, images: [], fulfilment: 'TUBU', storefrontId: null, ...product },
 });
 
-function setup(rows: ReturnType<typeof row>[], variations: ReturnType<typeof variation>[]) {
+function setup(rows: ReturnType<typeof row>[], variations: ReturnType<typeof variation>[], flashSale?: { resolveEffective: jest.Mock }) {
   const queryRaw = jest.fn().mockResolvedValue(rows);
   const findMany = jest.fn().mockResolvedValue(variations);
   const prisma = { $queryRaw: queryRaw, variation: { findMany } } as unknown as PrismaService;
-  return { svc: new PurchasedItemsService(prisma), queryRaw, findMany };
+  return { svc: new PurchasedItemsService(prisma, flashSale as never), queryRaw, findMany };
 }
 const sqlOf = (m: jest.Mock) => m.mock.calls[0]![0] as Prisma.Sql;
 
@@ -34,9 +34,43 @@ describe('PurchasedItemsService.list', () => {
     expect(page.items[0]).toEqual({
       variationId: 'v2', productId: 'p-v2', slug: 'sp-v2', productName: 'Sản phẩm v2', variationName: 'Loại v2',
       brand: 'Tubu', thumbnail: 'https://img.test/v2.jpg', price: 65000, salePrice: 59000, stock: 0, inStock: false,
-      timesBought: 3, lastPurchasedAt: '2026-09-10T03:00:00.123Z', retailOnly: false,
+      timesBought: 3, lastPurchasedAt: '2026-09-10T03:00:00.123Z', retailOnly: false, flashPrice: null, flashAllowance: null,
     });
     expect(page.nextCursor).toBeNull();
+  });
+
+  // Rail "Mua lại" mở cùng sheet với đơn cũ: sheet phải hiện giá giỏ sẽ tính, gồm giá Giờ vàng còn suất của chính khách này.
+  describe('giá Giờ vàng giỏ sẽ tính (flashPrice, flashAllowance)', () => {
+    const offer = (over: Record<string, unknown> = {}) => ({ flashPrice: 45000, itemId: 'fi1', endAt: new Date(), soldCount: 2, quota: 10, quotaLeft: 8, perUserLeft: 2, allowance: 2, ...over });
+    const resolver = (entries: Record<string, unknown>) => ({ resolveEffective: jest.fn().mockResolvedValue(new Map(Object.entries(entries))) });
+
+    it('tra một lần cho cả trang theo khách đang xem; biến thể có suất mở mang giá và số suất, biến thể khác null', async () => {
+      const flashSale = resolver({ v2: offer() });
+      const { svc } = setup([row('v1'), row('v2')], [variation('v1'), variation('v2')], flashSale);
+      const page = await svc.list('u1');
+      expect(flashSale.resolveEffective).toHaveBeenCalledTimes(1);
+      expect(flashSale.resolveEffective).toHaveBeenCalledWith(['v1', 'v2'], expect.any(Date), 'u1');
+      expect(page.items.map((i) => [i.variationId, i.flashPrice, i.flashAllowance])).toEqual([['v1', null, null], ['v2', 45000, 2]]);
+    });
+
+    it('giá Giờ vàng cao hơn giá đang bán thì lấy giá đang bán; hết suất của khách: allowance 0', async () => {
+      const flashSale = resolver({ v1: offer({ flashPrice: 70000 }), v2: offer({ perUserLeft: 0, allowance: 0 }) });
+      const { svc } = setup([row('v1'), row('v2')], [variation('v1', { salePrice: 59000 }), variation('v2')], flashSale);
+      const page = await svc.list('u1');
+      expect(page.items.map((i) => [i.flashPrice, i.flashAllowance])).toEqual([[59000, 2], [45000, 0]]);
+    });
+
+    it('không có bộ tra Giờ vàng (call site cũ): cả hai null', async () => {
+      const { svc } = setup([row('v1')], [variation('v1')]);
+      expect((await svc.list('u1')).items[0]).toMatchObject({ flashPrice: null, flashAllowance: null });
+    });
+
+    it('trang rỗng: không tra Giờ vàng', async () => {
+      const flashSale = resolver({});
+      const { svc } = setup([], [], flashSale);
+      await svc.list('u1');
+      expect(flashSale.resolveEffective).not.toHaveBeenCalled();
+    });
   });
 
   it('retailOnly: hàng do đối tác tự giao (fulfilment MERCHANT) hoặc của gian hàng đối tác (có storefrontId) thì true, hàng Tubu thì false', async () => {

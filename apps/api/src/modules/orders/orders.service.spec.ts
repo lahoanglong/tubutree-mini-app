@@ -897,6 +897,7 @@ describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo vari
     variations: Record<string, unknown>[],
     products: Record<string, unknown>[] = [],
     flashing: string[] = [],
+    flashSale?: { resolveEffective: jest.Mock },
   ) {
     const variationFindMany = jest.fn().mockResolvedValue(variations);
     const productFindMany = jest.fn().mockResolvedValue(products);
@@ -913,7 +914,8 @@ describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo vari
       orderStatusHistory: { findMany: jest.fn().mockResolvedValue([]) },
       $transaction: jest.fn(async (ops: Promise<unknown>[]) => Promise.all(ops)),
     } as unknown as PrismaService;
-    return { svc: new OrdersService(prisma, loyalty, cart, notifications, config, affiliate, reversal), variationFindMany, productFindMany, flashItemFindMany };
+    const svc = new OrdersService(prisma, loyalty, cart, notifications, config, affiliate, reversal, undefined, undefined, undefined, flashSale as never);
+    return { svc, variationFindMany, productFindMany, flashItemFindMany };
   }
 
   it('list: MỘT truy vấn variation cho cả trang; mỗi dòng có thumbnail/stock/available/currentPrice', async () => {
@@ -1020,6 +1022,49 @@ describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo vari
     expect(where.variationId).toEqual({ in: ['v1', 'v2'] });
     expect(where.flashSale).toMatchObject({ isActive: true, startAt: { lte: expect.any(Date) }, endAt: { gt: expect.any(Date) } });
     expect(res.data[0]!.items.map((it) => it.flashActive)).toEqual([false, true]);
+  });
+
+  // Sheet Mua lại phải hiện đúng giá giỏ sẽ tính: giá Giờ vàng còn suất của chính khách này (cùng nguồn với giỏ), không phải giá thường.
+  describe('giá Giờ vàng giỏ sẽ tính (flashPrice, flashAllowance)', () => {
+    const offer = (over: Record<string, unknown> = {}) => ({ flashPrice: 40000, itemId: 'fi1', endAt: new Date(), soldCount: 1, quota: 10, quotaLeft: 9, perUserLeft: 3, allowance: 3, ...over });
+    const resolver = (entries: Record<string, unknown>) => ({ resolveEffective: jest.fn().mockResolvedValue(new Map(Object.entries(entries))) });
+
+    it('tra một lần cho cả trang theo khách đang xem; biến thể có suất mở mang giá và số suất, biến thể khác null', async () => {
+      const flashSale = resolver({ v2: offer() });
+      const { svc } = makeMediaService([{ ...baseOrder, items: [line('i1', 'v1'), line('i2', 'v2')] }], [v('v1'), v('v2')], [], [], flashSale);
+      const res = await svc.list('u1', {}, 1, 20);
+      expect(flashSale.resolveEffective).toHaveBeenCalledTimes(1);
+      expect(flashSale.resolveEffective).toHaveBeenCalledWith(['v1', 'v2'], expect.any(Date), 'u1');
+      expect(res.data[0]!.items.map((it) => [it.flashPrice, it.flashAllowance])).toEqual([[null, null], [40000, 3]]);
+    });
+
+    it('giá Giờ vàng cao hơn giá đang bán thì lấy giá đang bán (giỏ lấy giá thấp hơn)', async () => {
+      const flashSale = resolver({ v1: offer({ flashPrice: 70000 }) });
+      const { svc } = makeMediaService([{ ...baseOrder, items: [line('i1', 'v1')] }], [v('v1', { salePrice: 55000 })], [], [], flashSale);
+      const res = await svc.list('u1', {}, 1, 20);
+      expect(res.data[0]!.items[0]).toMatchObject({ currentPrice: 55000, flashPrice: 55000 });
+    });
+
+    it('khách đã dùng hết suất: vẫn trả giá và allowance 0 để sheet tính giá thường', async () => {
+      const flashSale = resolver({ v1: offer({ perUserLeft: 0, allowance: 0 }) });
+      const { svc } = makeMediaService([{ ...baseOrder, items: [line('i1', 'v1')] }], [v('v1')], [], [], flashSale);
+      const res = await svc.list('u1', {}, 1, 20);
+      expect(res.data[0]!.items[0]).toMatchObject({ flashPrice: 40000, flashAllowance: 0 });
+    });
+
+    it('không có suất nào mở, hay chưa có bộ tra Giờ vàng (call site cũ): cả hai null, trường vẫn có mặt để client biết API mới', async () => {
+      const none = makeMediaService([{ ...baseOrder, items: [line('i1', 'v1')] }], [v('v1')], [], [], resolver({}));
+      expect((await none.svc.list('u1', {}, 1, 20)).data[0]!.items[0]).toMatchObject({ flashPrice: null, flashAllowance: null });
+      const bare = makeMediaService([{ ...baseOrder, items: [line('i1', 'v1')] }], [v('v1')]);
+      expect((await bare.svc.list('u1', {}, 1, 20)).data[0]!.items[0]).toMatchObject({ flashPrice: null, flashAllowance: null });
+    });
+
+    it('dòng đã mất biến thể: không có giá Giờ vàng', async () => {
+      const flashSale = resolver({});
+      const { svc } = makeMediaService([{ ...baseOrder, items: [line('i1', 'gone')] }], [], [], [], flashSale);
+      const res = await svc.list('u1', {}, 1, 20);
+      expect(res.data[0]!.items[0]).toMatchObject({ flashPrice: null, flashAllowance: null });
+    });
   });
 
   it('variation đã bị xoá → discontinued true dù sản phẩm còn bán', async () => {
