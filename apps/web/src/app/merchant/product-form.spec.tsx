@@ -172,12 +172,18 @@ describe('W24: ô giá nhận dấu chấm ngăn nghìn', () => {
     expect(mocks.createProduct).toHaveBeenCalledWith(expect.objectContaining({ basePrice: sent, stock: 5 }));
   });
 
-  it.each([['5'], ['12.5'], ['abc'], ['999'], ['100.000.001']])('đăng mới: giá %j báo lỗi rõ và không gửi', async (typed) => {
+  it.each([
+    ['5', 'Giá bán tối thiểu 1.000đ.'],
+    ['12.5', 'Nhập giá bằng số đồng, ví dụ 120.000 hoặc 120000.'],
+    ['abc', 'Nhập giá bằng số đồng, ví dụ 120.000 hoặc 120000.'],
+    ['999', 'Giá bán tối thiểu 1.000đ.'],
+    ['100.000.001', 'Giá bán tối đa 100.000.000đ.'],
+  ])('đăng mới: giá %j báo lỗi rõ và không gửi', async (typed, message) => {
     mount(<CreateProductModal onClose={() => undefined} onSuccess={() => undefined} />);
     fillCreate(typed);
     await send();
     expect(mocks.createProduct).not.toHaveBeenCalled();
-    expect(document.querySelector('[role="alert"]')?.textContent).toMatch(/^(Nhập giá bằng số đồng|Giá bán tối)/);
+    expect(document.querySelector('[role="alert"]')?.textContent).toBe(message);
   });
 
   it('ô giá là ô văn bản (type=number nuốt "120.000" thành 120) và có gợi ý cách gõ', () => {

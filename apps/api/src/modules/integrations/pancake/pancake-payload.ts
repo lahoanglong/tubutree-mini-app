@@ -69,6 +69,9 @@ export function payloadNonNegInt(x: unknown, opts: { round?: boolean; trunc?: bo
  * Mẫu ngăn nghìn của GIÁ: nhóm đầu 1-3 chữ số khác 0, rồi các nhóm đúng ba chữ số ("5.000", "120.000", "1.234.567"). Với tiền Việt, cách đọc
  * thập phân của mẫu này ("5.000" = 5đ, "120.000" = 120đ) không phải giá bán hợp lệ, nên khác với tồn kho và tổng đơn, giá đọc là ngăn nghìn.
  * Nhóm đầu bắt đầu bằng 0 ("0.500") không khớp nên vẫn bị từ chối.
+ *
+ * Đánh đổi đã chấp nhận: giá thật 1-999đ mà Pancake gửi dạng chuỗi ba số lẻ ("500.000" = 500đ) bị đọc thành 500.000đ, không có cảnh báo.
+ * Mẫu này không phân biệt được hai cách đọc; nếu có sản phẩm bán dưới 1.000đ, đặt giá dạng số nguyên trên Pancake.
  */
 const PRICE_THOUSANDS = /^[1-9]\d{0,2}(?:\.\d{3})+$/;
 

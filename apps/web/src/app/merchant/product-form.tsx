@@ -255,7 +255,7 @@ export function CreateProductModal({ onClose, onSuccess }: { onClose: () => void
               <input id="merchant-product-stock" type="number" inputMode="numeric" value={stock} onChange={(e) => setStock(e.target.value)} required min={0} max={MAX_STOCK} className={INPUT} />
             </div>
             <p id="merchant-product-price-hint" className="col-span-2 text-xs text-stone-600">
-              Giá ghi bằng đồng: gõ 120.000 hay 120000 đều được. Tối thiểu 1.000đ.
+              Giá ghi bằng đồng, ví dụ 120000 (dán 120.000 cũng được). Tối thiểu 1.000đ.
             </p>
           </div>
         )}

@@ -1256,6 +1256,31 @@ describe('PancakeSyncService — payload thiếu trường hoặc kiểu lạ (W
         },
       );
 
+      it('W24: cùng cặp giá sale ≥ retail chỉ warn một lần dù cron gặp lại; giá đổi thì warn lại', async () => {
+        const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+        try {
+          const sales = [50000, 50000, 60000];
+          let fetches = 0;
+          const client = {
+            isConfigured: () => true,
+            // Mỗi lượt đồng bộ đọc một trang có dữ liệu rồi một trang rỗng (như makeClient).
+            fetchProducts: jest.fn(async () => {
+              const k = fetches++;
+              const data = k % 2 === 0 ? [product('a', [variation('v-a', { retail_price: 50000, sale_price: sales[k / 2] })])] : [];
+              return { success: true, data, total_pages: 1, total_entries: 1 };
+            }),
+          } as unknown as PancakeClient;
+          const svc = new PancakeSyncService(makePrisma(), client, lifecycle);
+          for (let i = 0; i < sales.length; i++) await svc.syncProducts(SINCE);
+          const warned = () => warn.mock.calls.filter((c) => String(c[0]).includes('không thấp hơn retail_price'));
+          expect(warned()).toHaveLength(2);
+          expect(String(warned()[0]![0])).toContain('sale_price 50000');
+          expect(String(warned()[1]![0])).toContain('sale_price 60000');
+        } finally {
+          warn.mockRestore();
+        }
+      });
+
       it('W24: sale_price thấp hơn retail_price một đồng vẫn là khuyến mãi, không warn', async () => {
         const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
         try {

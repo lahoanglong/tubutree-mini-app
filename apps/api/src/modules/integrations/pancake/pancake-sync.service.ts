@@ -420,6 +420,19 @@ export class PancakeSyncService implements OnModuleInit {
     return prev?.pancakeHold != null ? { isActive: true, pancakeHold: null } : {};
   }
 
+  /** Cron chạy mỗi 15 phút: cùng một cặp giá sai chỉ cảnh báo một lần cho tới khi giá đổi hoặc tiến trình khởi động lại. */
+  private readonly warnedSaleNotBelowRetail = new Set<string>();
+
+  private warnSaleNotBelowRetail(variationId: string, sale: number, retail: number): void {
+    const key = `${variationId}|${retail}|${sale}`;
+    if (this.warnedSaleNotBelowRetail.has(key)) return;
+    if (this.warnedSaleNotBelowRetail.size >= 5000) this.warnedSaleNotBelowRetail.clear();
+    this.warnedSaleNotBelowRetail.add(key);
+    this.logger.warn(
+      `Biến thể Pancake ${variationId} có sale_price ${sale} không thấp hơn retail_price ${retail} — bỏ giá khuyến mãi, bán theo giá gốc. Sửa giá khuyến mãi trên Pancake.`,
+    );
+  }
+
   private variationPrices(
     v: PancakeVariationDTO,
     prev: { retailPrice: number; pancakeHold: string | null } | null,
@@ -428,9 +441,7 @@ export class PancakeSyncService implements OnModuleInit {
     if (retail !== null) {
       const sale = positivePrice(v.sale_price);
       if (sale !== null && sale >= retail) {
-        this.logger.warn(
-          `Biến thể Pancake ${v.id} có sale_price ${sale} không thấp hơn retail_price ${retail} — bỏ giá khuyến mãi, bán theo giá gốc. Sửa giá khuyến mãi trên Pancake.`,
-        );
+        this.warnSaleNotBelowRetail(v.id, sale, retail);
         return { prices: { retailPrice: retail, salePrice: null }, noPrice: false };
       }
       return { prices: { retailPrice: retail, salePrice: sale }, noPrice: false };
