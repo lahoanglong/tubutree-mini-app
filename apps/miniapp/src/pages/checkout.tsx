@@ -771,6 +771,7 @@ export default function CheckoutPage() {
         <Box
           className="tubu-press"
           role="button"
+          data-testid="coupon-row"
           {...rowKeyboardProps()}
           onClick={() => {
             haptic('light');
@@ -796,12 +797,13 @@ export default function CheckoutPage() {
               <Ticket size={20} color="var(--color-promo-fg)" />
             </Box>
             <Box style={{ minWidth: 0 }}>
-              <Text bold size="small" style={{ color: 'var(--color-text-primary)' }}>
+              <Text bold size="small" data-testid="coupon-label" style={{ color: 'var(--color-text-primary)' }}>
                 Mã giảm giá
               </Text>
               {cart.data?.couponCode ? (
                 <Box flex alignItems="center" style={{ gap: 8, marginTop: 2, minWidth: 0 }}>
                   <span
+                    data-testid="coupon-code"
                     style={{
                       background: 'var(--color-promo-bg)',
                       border: '1px dashed var(--color-promo-solid-bg)',
@@ -819,25 +821,25 @@ export default function CheckoutPage() {
                     {cart.data.couponCode}
                   </span>
                   {quote.data && quote.data.discount > 0 && (
-                    <Text size="xSmall" style={{ color: 'var(--color-text-success)', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                    <Text size="xSmall" data-testid="coupon-discount" style={{ color: 'var(--color-text-success)', flexShrink: 0, whiteSpace: 'nowrap' }}>
                       -{formatVnd(quote.data.discount)}
                     </Text>
                   )}
                 </Box>
               ) : autoCoupon.hint ? (
-                <Text size="xSmall" style={{ color: 'var(--color-text-brand)', marginTop: 2 }}>
+                <Text size="xSmall" data-testid="coupon-hint" style={{ color: 'var(--color-text-brand)', marginTop: 2 }}>
                   {couponHintText(autoCoupon.hint, formatVnd)}
                 </Text>
               ) : (
-                <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', marginTop: 2 }}>
-                  Chọn hoặc nhập mã giảm giá
+                <Text size="xSmall" data-testid="coupon-placeholder" style={{ color: 'var(--color-text-tertiary)', marginTop: 2 }}>
+                  Chọn hoặc nhập mã
                 </Text>
               )}
             </Box>
           </Box>
 
           <Box flex alignItems="center" style={{ gap: 4, flexShrink: 0, whiteSpace: 'nowrap', color: 'var(--color-text-brand)' }}>
-            <Text size="xSmall" bold style={{ color: 'var(--color-text-brand)' }}>
+            <Text size="xSmall" bold data-testid="coupon-cta" style={{ color: 'var(--color-text-brand)' }}>
               {cart.data?.couponCode ? 'Thay đổi' : 'Chọn mã'}
             </Text>
             <ChevronRight size={16} color="var(--color-text-brand)" />

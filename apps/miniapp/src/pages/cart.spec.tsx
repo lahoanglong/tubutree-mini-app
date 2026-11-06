@@ -743,7 +743,7 @@ describe('CartPage: gợi ý mã dùng được ở dòng "Mã giảm giá" (ch�
     mocks.getCoupons.mockResolvedValue([]);
     mocks.getCouponPreviews.mockResolvedValue([preview('WELCOME30', { discount: 30_000 })]);
     renderPage();
-    const invite = await screen.findByText('Chọn hoặc nhập mã giảm giá');
+    const invite = await screen.findByText('Chọn hoặc nhập mã');
     expect(invite).toBeInTheDocument();
     // Lời mời không cắt "…": máy 320px thì xuống dòng trong hàng 44px, như dòng gợi ý (parity với web `coupon-box`).
     expect(invite.getAttribute('data-testid')).toBe('coupon-placeholder');
@@ -756,6 +756,31 @@ describe('CartPage: gợi ý mã dùng được ở dòng "Mã giảm giá" (ch�
     expect(screen.queryByText(/mã dùng được/)).toBeNull();
   });
 
+  it('hàng mã (máy 320px): nhãn và nội dung chung một khối flex-wrap để nội dung xuống dưới nhãn thay vì bị cắt; hàng giữ vùng chạm 44', async () => {
+    mocks.getCart.mockResolvedValue(summary({}));
+    mocks.getCoupons.mockResolvedValue([]);
+    renderPage();
+    const invite = await screen.findByTestId('coupon-placeholder');
+    const label = screen.getByTestId('coupon-label');
+    expect(label.parentElement).toBe(invite.parentElement);
+    expect(invite.parentElement!.style.flexWrap).toBe('wrap');
+    const row = screen.getByTestId('coupon-row');
+    expect(row.getAttribute('role')).toBe('button');
+    expect(row.style.minHeight).toBe('44px');
+    expect(screen.getByTestId('coupon-cta').textContent).toBe('Chọn mã');
+  });
+
+  it('hàng mã đã áp: mã và số giảm cùng khối với nhãn, nút ghi "Thay đổi"', async () => {
+    mocks.getCart.mockResolvedValue(summary({ couponCode: 'XANH10', discount: 2_000 }));
+    renderPage();
+    const code = await screen.findByTestId('coupon-code');
+    const label = screen.getByTestId('coupon-label');
+    expect(code.parentElement!.parentElement).toBe(label.parentElement);
+    expect(label.parentElement!.style.flexWrap).toBe('wrap');
+    expect(screen.getByTestId('coupon-discount').textContent).toBe('-2.000đ');
+    expect(screen.getByTestId('coupon-cta').textContent).toBe('Thay đổi');
+  });
+
   it('giỏ chưa có mã, có mã dùng được → "N mã · giảm đến X" (bản ngắn, vừa một dòng), hỏi đúng tham số, không gọi áp mã', async () => {
     mocks.getCart.mockResolvedValue(summary({}));
     mocks.getCouponPreviews.mockResolvedValue([
@@ -765,7 +790,7 @@ describe('CartPage: gợi ý mã dùng được ở dòng "Mã giảm giá" (ch�
     ]);
     renderPage();
     expect(await screen.findByText('2 mã · giảm đến 30k')).toBeInTheDocument();
-    expect(screen.queryByText('Chọn hoặc nhập mã giảm giá')).toBeNull();
+    expect(screen.queryByText('Chọn hoặc nhập mã')).toBeNull();
     expect(mocks.getCouponPreviews).toHaveBeenCalledTimes(1);
     expect(mocks.getCouponPreviews).toHaveBeenCalledWith({ storefrontSlug: undefined, itemIds: undefined });
   });
@@ -775,13 +800,13 @@ describe('CartPage: gợi ý mã dùng được ở dòng "Mã giảm giá" (ch�
     mocks.getCouponPreviews.mockResolvedValue([preview('BIG', { eligible: false, reason: 'x', discount: 9 })]);
     const first = renderPage();
     await waitFor(() => expect(mocks.getCouponPreviews).toHaveBeenCalledTimes(1));
-    expect(await screen.findByText('Chọn hoặc nhập mã giảm giá')).toBeInTheDocument();
+    expect(await screen.findByText('Chọn hoặc nhập mã')).toBeInTheDocument();
     expect(screen.queryByText(/mã dùng được/)).toBeNull();
     first.unmount();
     mocks.getCouponPreviews.mockRejectedValue(new Error('API cũ'));
     renderPage();
     await waitFor(() => expect(mocks.getCouponPreviews).toHaveBeenCalledTimes(2));
-    expect(await screen.findByText('Chọn hoặc nhập mã giảm giá')).toBeInTheDocument();
+    expect(await screen.findByText('Chọn hoặc nhập mã')).toBeInTheDocument();
   });
 
   it('giỏ đã có mã → không hỏi xem trước, chip mã như cũ', async () => {

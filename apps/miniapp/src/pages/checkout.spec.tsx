@@ -1855,7 +1855,7 @@ describe('CheckoutPage: tự áp mã giảm nhiều nhất, gợi ý khi chưa �
   it('ví không có mã nào → không hỏi xem trước (không tính thừa trên máy chủ), giữ câu cũ', async () => {
     mocks.getCoupons.mockResolvedValue([]);
     renderPage();
-    expect(await screen.findByText('Chọn hoặc nhập mã giảm giá')).toBeInTheDocument();
+    expect(await screen.findByText('Chọn hoặc nhập mã')).toBeInTheDocument();
     await waitFor(() => expect(mocks.getCoupons).toHaveBeenCalled());
     await act(async () => {
       await new Promise((r) => setTimeout(r, 450));
@@ -1935,7 +1935,7 @@ describe('CheckoutPage: tự áp mã giảm nhiều nhất, gợi ý khi chưa �
     mocks.getCouponPreviews.mockResolvedValue([preview('BIG', { eligible: false, reason: 'x', discount: 9 })]);
     renderPage();
     await waitFor(() => expect(mocks.getCouponPreviews).toHaveBeenCalledTimes(1));
-    expect(await screen.findByText('Chọn hoặc nhập mã giảm giá')).toBeInTheDocument();
+    expect(await screen.findByText('Chọn hoặc nhập mã')).toBeInTheDocument();
     expect(mocks.applyCoupon).not.toHaveBeenCalled();
     expect(screen.queryByText(/mã dùng được/)).toBeNull();
   });

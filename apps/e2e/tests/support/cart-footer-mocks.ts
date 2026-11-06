@@ -20,6 +20,8 @@ export interface FooterCartOptions {
   unit?: number;
   /** Dòng đầu có giá gạch cao hơn giá bán chừng này (tiết kiệm = saving × số lượng), như món sale. */
   saving?: number;
+  /** Giỏ đã áp mã: hàng mã ở chân dính hiện mã và "-số tiền giảm". */
+  coupon?: { code: string; discount: number };
 }
 
 export const FREESHIP_THRESHOLD = 200_000;
@@ -51,9 +53,9 @@ export function footerCart(o: FooterCartOptions = {}): CartSummary {
   const subtotal = items.reduce((s, l) => s + l.total, 0);
   return {
     items,
-    couponCode: null,
+    couponCode: o.coupon?.code ?? null,
     subtotal,
-    discount: 0,
+    discount: o.coupon?.discount ?? 0,
     comboDiscount: o.combo ?? 0,
     freeship: reached,
     freeshipThreshold: FREESHIP_THRESHOLD,
