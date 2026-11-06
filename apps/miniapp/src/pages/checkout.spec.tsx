@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => ({
   voucherProps: [] as Record<string, unknown>[],
   openSnackbar: vi.fn(),
   getAddresses: vi.fn(),
+  createAddress: vi.fn(),
+  getCommunes: vi.fn(),
   getCart: vi.fn(),
   checkoutQuote: vi.fn(),
   placeOrder: vi.fn(),
@@ -47,7 +49,7 @@ vi.mock('../services/shop-api', () => ({
   getCouponPreviews: mocks.getCouponPreviews,
   applyCoupon: mocks.applyCoupon,
   removeCoupon: mocks.removeCoupon,
-  createAddress: vi.fn(),
+  createAddress: mocks.createAddress,
 }));
 vi.mock('../services/account-api', () => ({
   getWallet: mocks.getWallet,
@@ -96,7 +98,7 @@ vi.mock('../components/checkout/order-success', () => ({ OrderSuccess: () => <di
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 vi.mock('../services/geo-api', () => ({
   getProvinces: vi.fn().mockResolvedValue([{ code: '84_VN79', name: 'TP. Hồ Chí Minh' }]),
-  getCommunes: vi.fn().mockResolvedValue([]),
+  getCommunes: (...args: unknown[]) => mocks.getCommunes(...args) ?? Promise.resolve([]),
 }));
 
 import { describeNested, findNestedInteractive } from '../components/ui/nested-interactive';
@@ -1006,6 +1008,59 @@ describe('CheckoutPage — tổng tiền đổi lúc đặt (PANCAKE-13) và đ�
     renderPage();
     await screen.findByText('Phương thức thanh toán');
     expect(screen.queryByText(/theo địa giới cũ/)).not.toBeInTheDocument();
+  });
+});
+
+describe('CheckoutPage — thêm địa chỉ mới giữa lúc thanh toán (W31)', () => {
+  const A2 = {
+    ...ADDRESS, id: 'a2', recipient: 'Long', phone: '0900000000', street: '9 Hai Bà Trưng', ward: 'Phường Sài Gòn', wardCode: '84_VN79_26734', isDefault: false,
+  };
+
+  beforeEach(() => {
+    mocks.publicConfig.waste.pickup = false;
+    vi.clearAllMocks();
+    sessionStorage.clear();
+    localStorage.clear();
+    mocks.sfCtx.slug = null;
+    mocks.sfCtx.referralCode = null;
+    mocks.user.fullName = 'Long';
+    mocks.user.phone = '0900000000';
+    mocks.getCart.mockResolvedValue(CART);
+    mocks.checkoutQuote.mockResolvedValue(QUOTE);
+    mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
+    mocks.getCommunes.mockResolvedValue([{ code: A2.wardCode, name: A2.ward }]);
+    mocks.createAddress.mockResolvedValue(A2);
+  });
+
+  afterEach(() => {
+    mocks.getCommunes.mockReset();
+    mocks.createAddress.mockReset();
+  });
+
+  it('địa chỉ vừa thêm vẫn được chọn và báo giá theo nó khi danh sách địa chỉ tải lại về sau, không nhảy về địa chỉ mặc định cũ', async () => {
+    let release: (list: unknown) => void = () => undefined;
+    mocks.getAddresses
+      .mockResolvedValueOnce([ADDRESS])
+      .mockImplementationOnce(() => new Promise((resolve) => (release = resolve)))
+      .mockResolvedValue([ADDRESS, A2]);
+    renderPage();
+    fireEvent.click(await screen.findByText('Thêm địa chỉ mới'));
+    fireEvent.change(await screen.findByLabelText('Số nhà, tên đường'), { target: { value: A2.street } });
+    fireEvent.click(screen.getByRole('button', { name: /^Tỉnh\/Thành phố/ }));
+    fireEvent.click(await screen.findByRole('option', { name: 'TP. Hồ Chí Minh' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Phường\/Xã/ })).not.toBeDisabled());
+    fireEvent.click(screen.getByRole('button', { name: /^Phường\/Xã/ }));
+    fireEvent.click(await screen.findByRole('option', { name: A2.ward }));
+    fireEvent.click(screen.getByText('Lưu'));
+    await waitFor(() => expect(mocks.createAddress).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mocks.getAddresses).toHaveBeenCalledTimes(2));
+
+    release([ADDRESS, A2]);
+    const card = (text: string) => screen.getByText(new RegExp(text)).closest('[role="radio"]');
+    await waitFor(() => expect(card(A2.street)).toHaveAttribute('aria-checked', 'true'));
+    expect(card(ADDRESS.street)).toHaveAttribute('aria-checked', 'false');
+    await waitFor(() => expect(mocks.checkoutQuote.mock.calls.at(-1)?.[0]).toBe('a2'));
   });
 });
 
