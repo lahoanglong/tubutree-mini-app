@@ -1,4 +1,4 @@
-import { IsEmail, IsString, Matches, MaxLength } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsString, Matches, MaxLength } from 'class-validator';
 import { OptionalNotNull } from '../../../common/decorators/optional-not-null.decorator';
 import { IsAvatarUrl } from '../../../common/uploaded-image';
 import { Trim } from '../../../common/decorators/trim.decorator';
@@ -6,6 +6,8 @@ import { Trim } from '../../../common/decorators/trim.decorator';
 export class UpdateMeDto {
   @OptionalNotNull()
   @IsString()
+  // Rỗng sau khi cắt (chỉ khoảng trắng, ký tự vô hình) là xoá tên: chặn bằng lỗi rõ thay vì lưu tên rỗng. Không gửi fullName vẫn giữ tên cũ.
+  @IsNotEmpty()
   @MaxLength(120)
   // `<` `>` kiểm ở UsersService.updateMe, chỉ khi tên thực sự đổi: tên Zalo được ghi đè mỗi lần đăng nhập mà không qua DTO
   // và client luôn gửi lại fullName, nên chặn ở đây sẽ khoá khách có tên như "Hoa <3" khỏi sửa hồ sơ.

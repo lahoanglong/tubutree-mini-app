@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import type { INestApplication } from '@nestjs/common';
+import { BadRequestException, type INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { createValidationPipe } from '../../common/validation-pipe';
 import { PUBLIC_CACHE_POLICY_KEY } from '../../common/decorators/public-cache.decorator';
@@ -57,7 +57,10 @@ describe('GET /products/:slug/reviews: tham số lọc rating, media qua HTTP', 
     ['?media=photo', { media: 'photo' }],
     ['?media=video', { media: 'video' }],
     ['?rating=4&media=photo', { rating: 4, media: 'photo' }],
-  ])('%s → 200, service nhận bộ lọc %j (rating là số)', async (qs, filter) => {
+    ['?cursor=MTc2MTk1NTIwMDAwMHxyOTk', { cursor: 'MTc2MTk1NTIwMDAwMHxyOTk' }],
+    ['?rating=1&media=video&cursor=abc', { rating: 1, media: 'video', cursor: 'abc' }],
+    ['?cursor=', {}],
+  ])('%s → 200, service nhận bộ lọc %j (rating là số, cursor rỗng coi như trang đầu)', async (qs, filter) => {
     const res = await get(qs);
     expect(res.status).toBe(200);
     expect(listByProduct).toHaveBeenCalledTimes(1);
@@ -65,7 +68,7 @@ describe('GET /products/:slug/reviews: tham số lọc rating, media qua HTTP', 
     expect({ ...listByProduct.mock.calls[0]![1] }).toEqual(filter);
   });
 
-  it.each(['?rating=0', '?rating=6', '?rating=1.5', '?rating=abc', '?rating=', '?rating=1&rating=2', '?rating[x]=1', '?media=audio', '?media=photo&media=video', '?khac=1'])(
+  it.each(['?rating=0', '?rating=6', '?rating=1.5', '?rating=abc', '?rating=', '?rating=1&rating=2', '?rating[x]=1', '?media=audio', '?media=photo&media=video', '?khac=1', '?cursor=a&cursor=b', '?cursor[x]=1', `?cursor=${'a'.repeat(121)}`])(
     '%s → 400, không gọi service, không gắn cache công khai',
     async (qs) => {
       const res = await get(qs);
@@ -74,6 +77,13 @@ describe('GET /products/:slug/reviews: tham số lọc rating, media qua HTTP', 
       expect(listByProduct).not.toHaveBeenCalled();
     },
   );
+
+  it('con trỏ hỏng (service báo 400): trả 400, không gắn cache công khai để CDN không giữ lỗi', async () => {
+    listByProduct.mockRejectedValueOnce(new BadRequestException('Con trỏ trang không hợp lệ. Bạn tải lại danh sách nhé.'));
+    const res = await get('?cursor=hong');
+    expect(res.status).toBe(400);
+    expect(res.headers.get('cache-control') ?? '').not.toContain('public');
+  });
 
   it('kết quả lọc cache công khai như danh sách đầy đủ (CDN tách bản theo URL có query)', async () => {
     const res = await get('?rating=1');

@@ -111,6 +111,26 @@ describe('Sửa hồ sơ theo DS v2 (C-076, C-114)', () => {
     expect(mocks.updateMe).not.toHaveBeenCalled();
   });
 
+  it.each(['', '   ', '\u200b '])('xoá trắng họ tên (%j) rồi bấm Lưu: báo lỗi ở ô, khoá nút, không gọi API, không báo thành công', async (blank) => {
+    renderPage();
+    const name = await screen.findByLabelText('Họ và tên');
+    await waitFor(() => expect(name).toHaveValue('Lan'));
+    fireEvent.change(name, { target: { value: blank } });
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
+    expect(await screen.findByText('Nhập họ tên để lưu hồ sơ.')).toBeInTheDocument();
+    expect(name).toHaveAttribute('aria-invalid', 'true');
+    const save = screen.getByRole('button', { name: 'Lưu thay đổi' });
+    expect(save).toBeDisabled();
+    fireEvent.click(save);
+    expect(mocks.updateMe).not.toHaveBeenCalled();
+    expect(mocks.openSnackbar).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'success' }));
+    expect(mocks.navigate).not.toHaveBeenCalled();
+    fireEvent.change(name, { target: { value: ' Lan C ' } });
+    expect(screen.queryByText('Nhập họ tên để lưu hồ sơ.')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
+    await waitFor(() => expect(mocks.updateMe).toHaveBeenCalledWith(expect.objectContaining({ fullName: 'Lan C' })));
+  });
+
   it('lưu thành công: gửi tên/email/ngày sinh đã cắt khoảng trắng, báo thành công, đồng bộ auth store, quay lại', async () => {
     mocks.getMe.mockResolvedValue({ ...ME, dob: null });
     renderPage();

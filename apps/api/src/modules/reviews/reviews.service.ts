@@ -10,6 +10,7 @@ import { decodeServedImage } from '../../common/served-image';
 import { returnedProductsByOrder, REVIEWABLE_ORDER, reviewRewardLockKey } from './review-eligibility';
 import { reviewReturnReason, takeBackReviewReward } from './review-reward-reversal';
 import { publicDisplayName } from '../../common/mask-name';
+import { decodeKeysetCursor, encodeKeysetCursor, KEYSET_ORDER, keysetAfter } from '../../common/keyset-cursor';
 
 type Db = PrismaService | Prisma.TransactionClient;
 
@@ -350,13 +351,16 @@ export class ReviewsService {
   }
 
   /**
-   * Danh sách công khai: đánh giá đang hiện khớp bộ lọc (số sao, có ảnh, có video), mới nhất trước, tối đa LIST_LIMIT dòng.
+   * Danh sách công khai: đánh giá đang hiện khớp bộ lọc (số sao, có ảnh, có video), mới nhất trước, mỗi trang tối đa LIST_LIMIT dòng.
+   * Còn dòng phía sau thì `nextCursor` là con trỏ keyset (createdAt, id) của dòng cuối, gửi lại kèm cùng bộ lọc để lấy trang tiếp;
+   * hết thì null. Không gửi `cursor` là trang đầu như trước (client cũ bỏ qua `nextCursor`).
    * Bộ lọc nằm trong truy vấn: lọc ở client chỉ thấy LIST_LIMIT dòng mới nhất nên sản phẩm nhiều đánh giá báo không có dòng
    * khớp dù có. Điểm trung bình, số đánh giá, phân bổ sao và số đánh giá có video luôn tính trên TẤT CẢ đánh giá đang hiện
    * (khớp ratingAvg/reviewCount của sản phẩm), không theo bộ lọc và không chỉ trên các dòng trả về. Response lọc vẫn mang thống
    * kê để mọi chip nhận cùng một dạng: tiêu đề, biểu đồ sao và chip "Có video" không đổi khi khách đổi chip.
    */
   async listByProduct(slug: string, filter: PublicReviewsQuery = {}) {
+    const cursor = filter.cursor ? decodeKeysetCursor(filter.cursor) : null;
     const product = await this.prisma.product.findUnique({ where: { slug }, select: { id: true } });
     if (!product) throw new NotFoundException('Không tìm thấy sản phẩm.');
     const where = { productId: product.id, isVisible: true };
@@ -368,8 +372,9 @@ export class ReviewsService {
     };
     const [reviews, byRating, videoCount] = await Promise.all([
       this.prisma.review.findMany({
-        where: listWhere,
-        orderBy: { createdAt: 'desc' },
+        where: cursor ? { AND: [listWhere, keysetAfter(cursor)] } : listWhere,
+        // id phá hoà khi nhiều đánh giá cùng mili giây: trang sau không lặp, không sót dòng.
+        orderBy: KEYSET_ORDER,
         // Không chọn `images`: base64 tới ~700 nghìn ký tự/ảnh, phải giải nén TOAST cả trăm dòng cho mỗi lượt xem trang.
         select: {
           id: true,
@@ -380,11 +385,13 @@ export class ReviewsService {
           createdAt: true,
           user: { select: { fullName: true } },
         },
-        take: LIST_LIMIT,
+        take: LIST_LIMIT + 1,
       }),
       this.prisma.review.groupBy({ by: ['rating'], where, _count: { _all: true } }),
       this.prisma.review.count({ where: { ...where, ...hasVideo } }),
     ]);
+    const hasMore = reviews.length > LIST_LIMIT;
+    const page = hasMore ? reviews.slice(0, LIST_LIMIT) : reviews;
     // Phân bổ sao 5→1 (breakdown) cho UI biểu đồ.
     const distribution: Record<number, number> = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
     let count = 0;
@@ -399,7 +406,7 @@ export class ReviewsService {
       count,
       videoCount,
       distribution,
-      items: reviews.map((r) => ({
+      items: page.map((r) => ({
         id: r.id,
         rating: r.rating,
         comment: r.comment,
@@ -410,6 +417,7 @@ export class ReviewsService {
         // Mọi review đều ràng buộc đơn DELIVERED (§6.13) → luôn là khách đã mua.
         verifiedPurchase: true,
       })),
+      nextCursor: hasMore ? encodeKeysetCursor(page[page.length - 1]!) : null,
     };
   }
 

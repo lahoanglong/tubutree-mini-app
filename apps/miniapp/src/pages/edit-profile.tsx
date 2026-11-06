@@ -5,6 +5,7 @@ import { Camera, Gift, Loader2 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { formatDobDisplay, profileCopy } from '@tubutree/app-core/account-copy';
 import { DOB_PLACEHOLDER, maskDobInput, validateDobVn } from '@tubutree/app-core/dob-input';
+import { cleanProfileName, profileNameError } from '@tubutree/app-core/profile-name';
 import { getMe, updateMe } from '../services/account-api';
 import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
@@ -68,6 +69,7 @@ export default function EditProfilePage() {
   const dobDisplay = formatDobDisplay(dob);
   const dobError = dobEditable && (dobTouched || dobText.length === 10) ? dobCheck.error : null;
   const emailInvalid = touched && email.trim() !== '' && !EMAIL.test(email.trim());
+  const nameError = touched ? profileNameError(fullName) : null;
 
   const handlePickAvatar = () => {
     if (!canChangeAvatar || confirmingDob) return;
@@ -123,7 +125,7 @@ export default function EditProfilePage() {
       const dobToSend = !meQ.data?.dob && dob ? dob : undefined;
       try {
         const res = await updateMe({
-          fullName: fullName.trim() || undefined,
+          fullName: cleanProfileName(fullName),
           email: email.trim() || undefined,
           avatarUrl: avatarUrl ?? undefined,
           dob: dobToSend,
@@ -134,7 +136,7 @@ export default function EditProfilePage() {
         if (msg.includes('avatarUrl')) {
           // Ảnh cũ không hợp lệ không được chặn việc sửa tên/email/ngày sinh; việc bỏ ảnh được báo ở onSuccess.
           const res = await updateMe({
-            fullName: fullName.trim() || undefined,
+            fullName: cleanProfileName(fullName),
             email: email.trim() || undefined,
             dob: dobToSend,
           });
@@ -151,7 +153,7 @@ export default function EditProfilePage() {
         useAuthStore.setState({
           user: {
             ...cur,
-            fullName: fullName.trim() || cur.fullName,
+            fullName: cleanProfileName(fullName) || cur.fullName,
             avatarUrl: avatarSkipped ? cur.avatarUrl : (avatarUrl ?? res?.avatarUrl ?? cur.avatarUrl),
           },
         });
@@ -252,8 +254,15 @@ export default function EditProfilePage() {
             )}
           </div>
 
-          <Field label="Họ và tên">
-            <Input value={fullName} readOnly={confirmingDob} onChange={(e) => setFullName(e.target.value)} maxLength={120} />
+          <Field label="Họ và tên" error={nameError ?? undefined}>
+            <Input
+              value={fullName}
+              readOnly={confirmingDob}
+              onChange={(e) => setFullName(e.target.value)}
+              onBlur={() => setTouched(true)}
+              maxLength={120}
+              status={nameError ? 'error' : undefined}
+            />
           </Field>
 
           <Field label="Email" error={emailInvalid ? 'Email không hợp lệ' : undefined}>
@@ -319,10 +328,10 @@ export default function EditProfilePage() {
               <Button
                 fullWidth
                 loading={save.isPending}
-                disabled={emailInvalid || uploadingAvatar}
+                disabled={emailInvalid || !!nameError || uploadingAvatar}
                 onPress={() => {
                   setTouched(true);
-                  if (uploadingAvatar || (email.trim() !== '' && !EMAIL.test(email.trim()))) return;
+                  if (uploadingAvatar || profileNameError(fullName) || (email.trim() !== '' && !EMAIL.test(email.trim()))) return;
                   save.mutate();
                 }}
               >
@@ -336,9 +345,10 @@ export default function EditProfilePage() {
             <Button
               fullWidth
               loading={save.isPending}
-              disabled={emailInvalid || uploadingAvatar}
+              disabled={emailInvalid || !!nameError || uploadingAvatar}
               onPress={() => {
                 setTouched(true);
+                if (profileNameError(fullName)) return;
                 if (email.trim() !== '' && !EMAIL.test(email.trim())) return;
                 if (dobEditable && dobCheck.error) {
                   setDobTouched(true);

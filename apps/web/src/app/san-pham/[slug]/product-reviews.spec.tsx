@@ -15,6 +15,10 @@ const mocks = vi.hoisted(() => ({
   list: null as unknown,
   /** Kết quả riêng của một chip (Error để báo lỗi, Promise để giữ ở trạng thái chờ); thiếu thì lọc `list` như máy chủ. */
   filtered: {} as Record<string, unknown>,
+  /** Trang sau trang đầu theo `<chip>@<cursor>` (Error để báo lỗi). */
+  pages: {} as Record<string, unknown>,
+  /** Máy chủ giả có thứ tự (thay `list`/`pages`) cho ca nhiều trang. */
+  serve: null as null | ((filter: number | string, cursor?: string) => unknown),
   listCalls: [] as unknown[],
   elig: null as unknown,
   mine: {} as Record<string, unknown>,
@@ -34,7 +38,19 @@ vi.mock('@/components/evidence-upload', () => ({
 }));
 vi.mock('@/lib/reviews-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/reviews-client')>()),
-  fetchProductReviews: async (_slug: string, filter: number | string = 'all') => {
+  fetchProductReviews: async (_slug: string, filter: number | string = 'all', cursor?: string) => {
+    if (mocks.serve) {
+      mocks.listCalls.push(cursor ? `${filter}@${cursor}` : filter);
+      const out = await mocks.serve(filter, cursor);
+      if (out instanceof Error) throw out;
+      return out;
+    }
+    if (cursor) {
+      mocks.listCalls.push(`${filter}@${cursor}`);
+      const page = mocks.pages[`${filter}@${cursor}`];
+      if (page instanceof Error) throw page;
+      return page;
+    }
     mocks.listCalls.push(filter);
     if (filter === 'all') return mocks.list;
     const own = mocks.filtered[String(filter)];
@@ -128,6 +144,8 @@ beforeEach(() => {
   mocks.search = '';
   mocks.list = structuredClone(LIST);
   mocks.filtered = {};
+  mocks.pages = {};
+  mocks.serve = null;
   mocks.listCalls = [];
   mocks.elig = structuredClone(ELIG_REPEAT);
   mocks.mine = { a: structuredClone(MINE_A), b: structuredClone(MINE_B) };
@@ -160,12 +178,150 @@ describe('ProductReviews (web) — danh sách công khai', () => {
     expect(cls.some((k) => k.includes('stone-200'))).toBe(false);
   });
 
-  it('hơn 5 đánh giá: hiện 5 rồi "Xem thêm"', async () => {
+  it('hơn 5 đánh giá: hiện 5 rồi "Xem thêm đánh giá"; hiện hết mà không còn trang thì ẩn nút, không gọi trang kế', async () => {
     mocks.list = { ...LIST, count: 7, items: Array.from({ length: 7 }, (_, i) => review(`r${i}`, 5)) };
     const c = await mount();
     expect(c.querySelectorAll('li.border-t')).toHaveLength(5);
-    click(button(c, 'Xem thêm (2)'));
+    click(button(c, 'Xem thêm đánh giá'));
     expect(c.querySelectorAll('li.border-t')).toHaveLength(7);
+    expect(button(c, 'Xem thêm đánh giá')).toBeFalsy();
+    expect(mocks.listCalls).toEqual(['all']);
+  });
+
+  // Phân trang con trỏ: mỗi trang máy chủ 100 dòng kèm nextCursor; mock dùng trang nhỏ để thấy chỗ nối.
+  describe('"Xem thêm đánh giá": tải trang kế bằng nextCursor', () => {
+    const FIRST = Array.from({ length: 6 }, (_, i) => review(`p${i}`, 5));
+    const SECOND = [review('q0', 4), review('q1', 4), review('q2', 4)];
+    const PAGED = { ...LIST, count: 9, distribution: { '5': 6, '4': 3 } };
+    const shown = (c: HTMLElement) => Array.from(c.querySelectorAll('li.border-t p')).map((p) => p.textContent);
+    const settle = async (c: HTMLElement, text: string) => {
+      for (let n = 0; n < 40 && !c.textContent!.includes(text); n++) await flush();
+    };
+
+    it('hết dòng đã tải thì gọi trang kế đúng con trỏ, nối vào cuối, dòng cũ giữ nguyên; hết trang thì ẩn nút', async () => {
+      mocks.list = { ...PAGED, items: FIRST, nextCursor: 'c1' };
+      mocks.pages = { 'all@c1': { ...PAGED, items: SECOND, nextCursor: null } };
+      const c = await mount();
+      expect(shown(c)).toEqual(['Nhận xét p0', 'Nhận xét p1', 'Nhận xét p2', 'Nhận xét p3', 'Nhận xét p4']);
+      click(button(c, 'Xem thêm đánh giá'));
+      await settle(c, 'Nhận xét q2');
+      expect(mocks.listCalls).toEqual(['all', 'all@c1']);
+      expect(shown(c)).toEqual([...FIRST, ...SECOND].map((r) => `Nhận xét ${r.id}`));
+      expect(button(c, 'Xem thêm đánh giá')).toBeFalsy();
+    });
+
+    it('chip lọc: trang kế gửi kèm chip và con trỏ của chip; đổi chip về trang đầu', async () => {
+      mocks.list = { ...PAGED, items: FIRST, nextCursor: 'c1' };
+      mocks.filtered = { '4': { ...PAGED, items: SECOND, nextCursor: 'k1' } };
+      mocks.pages = { 'all@c1': { ...PAGED, items: SECOND, nextCursor: null }, '4@k1': { ...PAGED, items: [review('q9', 4)], nextCursor: null } };
+      const c = await mount();
+      click(button(c, 'Xem thêm đánh giá'));
+      await settle(c, 'Nhận xét q2');
+      await pick(c, '4 sao');
+      expect(shown(c)).toEqual(['Nhận xét q0', 'Nhận xét q1', 'Nhận xét q2']);
+      click(button(c, 'Xem thêm đánh giá'));
+      await settle(c, 'Nhận xét q9');
+      expect(mocks.listCalls).toContain('4@k1');
+      expect(shown(c)).toEqual(['Nhận xét q0', 'Nhận xét q1', 'Nhận xét q2', 'Nhận xét q9']);
+      await pick(c, 'Tất cả');
+      expect(shown(c)).toEqual(['Nhận xét p0', 'Nhận xét p1', 'Nhận xét p2', 'Nhận xét p3', 'Nhận xét p4']);
+      expect(button(c, 'Xem thêm đánh giá')).toBeTruthy();
+    });
+
+    /** Máy chủ giả có thứ tự: trang `size` dòng, con trỏ là id dòng cuối, như keyset của API. */
+    const server = (rows: () => ReturnType<typeof review>[], size = 6) => (_f: number | string, cursor?: string) => {
+      const all = rows();
+      const start = cursor ? all.findIndex((r) => r.id === cursor) + 1 : 0;
+      const items = all.slice(start, start + size);
+      return { ...PAGED, count: all.length, items, nextCursor: start + size < all.length ? items.at(-1)!.id : null };
+    };
+    const ROWS = Array.from({ length: 15 }, (_, i) => review(`r${i}`, 5));
+    const ids = (list: string[]) => list.map((id) => `Nhận xét ${id}`);
+
+    it('nhiều trang: mỗi lần bấm tải thêm khi dòng đã tải không đủ; đang tải thì nút quay và không nhận bấm; trang cuối thì ẩn nút', async () => {
+      let release: () => void = () => undefined;
+      const base = server(() => ROWS);
+      mocks.serve = (f, cursor) => (cursor === 'r5' ? new Promise((r) => (release = () => r(base(f, cursor)))) : base(f, cursor));
+      const c = await mount();
+      click(button(c, 'Xem thêm đánh giá'));
+      await flush(4);
+      const busy = button(c, 'Xem thêm đánh giá')!;
+      expect(busy.getAttribute('aria-busy')).toBe('true');
+      expect(busy.querySelector('svg.animate-spin')).not.toBeNull();
+      click(busy);
+      await flush(4);
+      expect(mocks.listCalls).toEqual(['all', 'all@r5']);
+      await act(async () => release());
+      await settle(c, 'Nhận xét r9');
+      expect(shown(c)).toEqual(ids(ROWS.slice(0, 10).map((r) => r.id)));
+      expect(button(c, 'Xem thêm đánh giá')!.querySelector('svg.animate-spin')).toBeNull();
+      click(button(c, 'Xem thêm đánh giá'));
+      await settle(c, 'Nhận xét r14');
+      expect(mocks.listCalls).toEqual(['all', 'all@r5', 'all@r11']);
+      expect(shown(c)).toEqual(ids(ROWS.map((r) => r.id)));
+      expect(button(c, 'Xem thêm đánh giá')).toBeFalsy();
+    });
+
+    it('trang đầu tải lại có đánh giá mới (dòng cuối đổi): các trang sau tải lại từ con trỏ mới, đủ số dòng đang hiện', async () => {
+      let rows = ROWS;
+      mocks.serve = server(() => rows);
+      const c = await mount();
+      click(button(c, 'Xem thêm đánh giá'));
+      await settle(c, 'Nhận xét r9');
+      click(button(c, 'Xem thêm đánh giá'));
+      await settle(c, 'Nhận xét r14');
+      rows = [review('moi', 5), ...ROWS];
+      try {
+        await act(async () => {
+          focusManager.setFocused(false);
+          focusManager.setFocused(true);
+        });
+        const want = ids(['moi', ...ROWS.slice(0, 14).map((r) => r.id)]);
+        for (let n = 0; n < 60 && JSON.stringify(shown(c)) !== JSON.stringify(want); n++) await flush();
+        expect(shown(c)).toEqual(want);
+        expect(mocks.listCalls).toEqual(expect.arrayContaining(['all@r4', 'all@r10']));
+      } finally {
+        focusManager.setFocused(undefined);
+      }
+    });
+
+    it('lỗi tải lại nền khi còn dòng đã tải chưa hiện: vẫn có nút "Xem thêm đánh giá", không thay bằng báo lỗi', async () => {
+      let fail = false;
+      const ok = server(() => ROWS);
+      mocks.serve = (f, cursor) => (cursor && fail ? new Error('mất mạng') : ok(f, cursor));
+      const c = await mount();
+      click(button(c, 'Xem thêm đánh giá'));
+      await settle(c, 'Nhận xét r9');
+      fail = true;
+      try {
+        await act(async () => {
+          focusManager.setFocused(false);
+          focusManager.setFocused(true);
+        });
+        for (let n = 0; n < 40 && mocks.listCalls.filter((x) => x === 'all@r5').length < 2; n++) await flush();
+        await flush(8);
+        expect(mocks.listCalls.filter((x) => x === 'all@r5')).toHaveLength(2);
+        expect(shown(c)).toHaveLength(10);
+        expect(c.textContent).not.toContain('Không tải được đánh giá.');
+        expect(button(c, 'Xem thêm đánh giá')).toBeTruthy();
+      } finally {
+        focusManager.setFocused(undefined);
+      }
+    });
+
+    it('trang kế tải lỗi: dòng đang hiện giữ nguyên, "Không tải được đánh giá." kèm Thử lại; thử lại thì nối trang kế', async () => {
+      mocks.list = { ...PAGED, items: FIRST, nextCursor: 'c1' };
+      mocks.pages = { 'all@c1': new Error('mất mạng') };
+      const c = await mount();
+      click(button(c, 'Xem thêm đánh giá'));
+      await settle(c, 'Không tải được đánh giá.');
+      expect(shown(c)).toEqual(FIRST.map((r) => `Nhận xét ${r.id}`));
+      mocks.pages = { 'all@c1': { ...PAGED, items: SECOND, nextCursor: null } };
+      click(button(c, 'Thử lại'));
+      await settle(c, 'Nhận xét q2');
+      expect(shown(c)).toHaveLength(9);
+      expect(c.textContent).not.toContain('Không tải được đánh giá.');
+    });
   });
 
   it('lọc 2 sao và 1 sao: chỉ còn đúng đánh giá mức đó, mức không có đánh giá ra trạng thái rỗng', async () => {
@@ -206,7 +362,7 @@ describe('ProductReviews (web) — danh sách công khai', () => {
     mocks.list = { ...LIST, count: 8, videoCount: 1, items: Array.from({ length: 8 }, (_, i) => review(`r${i}`, 5, i === 6 ? { videoUrl: 'https://cdn/v.mp4' } : {})) };
     const c = await mount();
     expect(button(c, /^Có video/)!.textContent).toBe('Có video(1)');
-    click(button(c, 'Xem thêm (3)'));
+    click(button(c, 'Xem thêm đánh giá'));
     expect(c.querySelectorAll('li.border-t')).toHaveLength(8);
     await pick(c, '5 sao');
     expect(c.querySelectorAll('li.border-t')).toHaveLength(5);
@@ -225,21 +381,21 @@ describe('ProductReviews (web) — danh sách công khai', () => {
   // Lỗi gốc: danh sách đầy đủ chỉ có 100 đánh giá mới nhất. Sản phẩm 120 đánh giá 5 sao mới + 3 đánh giá 1 sao cũ thì lọc 1 sao
   // trên 100 dòng đó ra rỗng dù phân bố sao ghi 3.
   it('100 dòng mới nhất toàn 5 sao: chip "1 sao" chờ máy chủ (không báo rỗng tạm), rồi hiện đủ 3 đánh giá 1 sao cũ', async () => {
-    mocks.list = { ...LIST, count: 123, distribution: { '5': 120, '1': 3 }, items: Array.from({ length: 100 }, (_, i) => review(`n${i}`, 5)) };
+    mocks.list = { ...LIST, count: 123, distribution: { '5': 120, '1': 3 }, items: Array.from({ length: 100 }, (_, i) => review(`n${i}`, 5)), nextCursor: 'c-n99' };
     let answer: (v: unknown) => void = () => undefined;
     mocks.filtered = { '1': new Promise((r) => (answer = r)) };
     const c = await mount();
-    expect(c.textContent).toContain('Đang hiện 100 đánh giá mới nhất');
+    expect(button(c, 'Xem thêm đánh giá')).toBeTruthy();
     await pick(c, '1 sao');
     expect(c.querySelector('[aria-busy="true"]')?.textContent).toBe('Đang tải đánh giá…');
     expect(c.textContent).not.toContain('Không có đánh giá khớp bộ lọc.');
     expect(c.querySelectorAll('li.border-t')).toHaveLength(0);
-    await act(async () => answer({ ...LIST, count: 123, items: [review('cu1', 1), review('cu2', 1), review('cu3', 1)] }));
+    await act(async () => answer({ ...LIST, count: 123, items: [review('cu1', 1), review('cu2', 1), review('cu3', 1)], nextCursor: null }));
     await flush(8);
     expect(c.querySelectorAll('li.border-t')).toHaveLength(3);
     expect(c.textContent).toContain('Nhận xét cu3');
     expect(c.textContent).not.toContain('Không có đánh giá khớp bộ lọc.');
-    expect(c.textContent).not.toContain('Đang hiện 100 đánh giá mới nhất');
+    expect(button(c, 'Xem thêm đánh giá')).toBeFalsy();
     expect(c.querySelector('h2')?.textContent).toBe('Đánh giá (123)');
   });
 
@@ -257,13 +413,13 @@ describe('ProductReviews (web) — danh sách công khai', () => {
     expect(c.textContent).toContain('Nhận xét c');
   });
 
-  it('điện thoại: dải trắng riêng; "Viết đánh giá" và "Xem thêm (n)" là nút chữ thương hiệu, không viền như Mini App', async () => {
+  it('điện thoại: dải trắng riêng; "Viết đánh giá" và "Xem thêm đánh giá" là nút chữ thương hiệu, không viền như Mini App', async () => {
     mocks.list = { ...LIST, count: 7, items: Array.from({ length: 7 }, (_, i) => review(`r${i}`, 5)) };
     const c = await mount();
     const section = c.querySelector('section#danh-gia')!;
     expect(section.getAttribute('data-section')).toBe('pdp-reviews');
     expect(section.className).toContain('max-md:bg-[var(--color-bg-surface)]');
-    for (const name of ['Viết đánh giá', 'Xem thêm (2)']) {
+    for (const name of ['Viết đánh giá', 'Xem thêm đánh giá']) {
       const b = button(c, name)!;
       expect(b.className).toContain('max-md:bg-transparent');
       expect(b.className).toContain('max-md:border-transparent');
