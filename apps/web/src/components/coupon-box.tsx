@@ -138,6 +138,13 @@ export function CouponBox({
   const inSheet = sheet || phone;
   const [code, setCode] = useState('');
   const [err, setErr] = useState<string | null>(null);
+  // Đếm mỗi lần báo lỗi. Lệnh mới xoá lời báo cũ lúc bắt đầu (onMutate), nhưng khi lỗi về ngay trong cùng một lần vẽ với lần xoá đó thì `err` không đổi chữ
+  // và lời báo giữ nguyên nút DOM: trình đọc màn hình không đọc lại, bảng không cuộn lại tới lời báo. Số đổi thì lời báo dựng lại (key) và hiệu ứng cuộn chạy lại.
+  const [errSeq, setErrSeq] = useState(0);
+  const showErr = (text: string) => {
+    setErr(text);
+    setErrSeq((n) => n + 1);
+  };
   const [showAll, setShowAll] = useState(false);
   const [applyWarning, setApplyWarning] = useState<string | null>(null);
   // Lời báo tự tắt nhưng dừng đồng hồ khi trỏ/focus đang ở trên nó (WCAG 2.2.1); `warnSeq` đếm lại khi cùng một chữ được báo lần nữa.
@@ -163,7 +170,7 @@ export function CouponBox({
   const errRef = useRef<HTMLParagraphElement | null>(null);
   useEffect(() => {
     if (open && err) errRef.current?.scrollIntoView?.({ block: 'nearest' });
-  }, [open, err]);
+  }, [open, err, errSeq]);
   const couponsQ = useQuery({ queryKey: ['my-coupons'], queryFn: getMyCoupons });
   const previewSig = preview ? JSON.stringify([preview, previewKey ?? '']) : null;
   const settledSig = useSettled(previewSig, PREVIEW_DEBOUNCE_MS);
@@ -213,6 +220,8 @@ export function CouponBox({
   const apply = useMutation({
     mutationKey: COUPON_MUTATION_KEY,
     mutationFn: (c: string) => applyCoupon(c.trim().toUpperCase()),
+    // Lời báo cũ biến mất ngay khi thử lại, như VoucherSheet của Mini: khách thấy lần thử mới đang chạy chứ không nhìn lỗi cũ.
+    onMutate: () => setErr(null),
     onSuccess: (cart, appliedCode) => {
       setErr(null);
       setCode('');
@@ -229,7 +238,7 @@ export function CouponBox({
       afterChange(cart);
     },
     onError: (e) => {
-      setErr(actionErrorText(e));
+      showErr(actionErrorText(e));
       // Khách có thể đã thu gọn trong lúc chờ: đưa ô nhập ra lại để sửa mã.
       setOpen(true);
     },
@@ -237,13 +246,14 @@ export function CouponBox({
   const drop = useMutation({
     mutationKey: COUPON_MUTATION_KEY,
     mutationFn: removeCoupon,
+    onMutate: () => setErr(null),
     onSuccess: (cart) => {
       showApplyWarning(null);
       memory.markOff();
       setAutoCode(null);
       afterChange(cart);
     },
-    onError: (e) => setErr(actionErrorText(e)),
+    onError: (e) => showErr(actionErrorText(e)),
   });
   const autoApplyMut = useMutation({
     mutationKey: COUPON_MUTATION_KEY,
@@ -310,7 +320,7 @@ export function CouponBox({
         </div>
         {/* Lời báo mã sai/hết hạn nằm ngay dưới ô nhập khi bảng/panel đang mở. Đặt sau cả danh sách mã thì ở bảng 320x568 và ở thẻ tóm tắt dính 1440x900 nó nằm ngoài tầm nhìn, khách thấy như bấm không có gì xảy ra. */}
         {open && err && (
-          <p ref={errRef} role="alert" className="mt-2 text-caption text-danger-fg">
+          <p key={errSeq} ref={errRef} role="alert" className="mt-2 text-caption text-danger-fg">
             {err}
           </p>
         )}
@@ -564,7 +574,7 @@ export function CouponBox({
         )}
       </div>
       {err && !open && (
-        <p role="alert" className="mt-2 text-caption text-danger-fg">
+        <p key={errSeq} role="alert" className="mt-2 text-caption text-danger-fg">
           {err}
         </p>
       )}
