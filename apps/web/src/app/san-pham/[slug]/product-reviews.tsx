@@ -5,7 +5,7 @@ import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useSearchParams } from 'next/navigation';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Star, Video } from 'lucide-react';
+import { Check, Loader2, Star, Video } from 'lucide-react';
 import { REVIEW_NEEDS_PURCHASE } from '@tubutree/app-core/review-copy';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { useHydrated } from '@/lib/use-hydrated';
@@ -165,6 +165,8 @@ export function ProductReviews({ slug }: { slug: string }) {
     initialPageParam: firstNext ?? '',
     getNextPageParam: (last) => last.nextCursor ?? undefined,
     enabled: moreOn && firstNext !== null,
+    // Trang đầu tải lại mà đổi dòng cuối (vừa có đánh giá mới) thì khoá đổi: giữ các trang đang hiện của cùng chip tới khi bản mới về.
+    placeholderData: (prev, prevQuery) => (prevQuery?.queryKey[3] === filter ? prev : undefined),
   });
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -213,11 +215,16 @@ export function ProductReviews({ slug }: { slug: string }) {
     if (moreLoading) return;
     const step = reviewMoreStep(visible, items.length, list.hasMore);
     setVisible(step.visible);
-    if (!step.fetch) return;
-    if (!moreOn) setMoreOn(true);
-    else if (!moreQ.data) void moreQ.refetch();
-    else void moreQ.fetchNextPage();
+    if (step.fetch) setMoreOn(true);
   };
+  // Dòng đã tải chưa đủ số dòng cần hiện (vừa bấm, hoặc bộ trang sau vừa tải lại từ trang đầu mới): tải tiếp trang kế.
+  const wantMore = moreOn && list.status === 'ready' && list.hasMore && visible >= items.length;
+  const { fetchNextPage } = moreQ;
+  const moreSettled = !!moreQ.data && !moreQ.isPlaceholderData && !moreQ.isFetching && !moreQ.isError;
+  useEffect(() => {
+    if (wantMore && moreSettled) void fetchNextPage();
+  }, [wantMore, moreSettled, fetchNextPage]);
+  const retryMore = () => void (moreQ.isFetchNextPageError ? moreQ.fetchNextPage() : moreQ.refetch());
 
   return (
     <section id="danh-gia" data-section="pdp-reviews" aria-labelledby="danh-gia-title" className={`${pdpBand} scroll-mt-20`}>
@@ -409,8 +416,8 @@ export function ProductReviews({ slug }: { slug: string }) {
             })}
           </ul>
           {items.length === 0 && <EmptyState variant="inline" art="search" heading="Không có đánh giá khớp bộ lọc." />}
-          {list.more === 'error' ? (
-            <ListFailed onRetry={() => void (moreQ.data ? moreQ.fetchNextPage() : moreQ.refetch())} />
+          {list.more === 'error' && visible >= items.length ? (
+            <ListFailed onRetry={retryMore} />
           ) : (
             reviewHasMore(visible, list) && (
               <button
@@ -420,6 +427,7 @@ export function ProductReviews({ slug }: { slug: string }) {
                 aria-disabled={moreLoading || undefined}
                 onClick={showMore}
               >
+                {moreLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
                 {fillCopy('pdp.reviewsMore')}
               </button>
             )

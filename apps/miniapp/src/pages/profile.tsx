@@ -1,7 +1,7 @@
 import { ctvMenuEntry } from '@tubutree/app-core/storefront-signup';
 import { BRAND_OWNER_TITLE } from '@tubutree/app-core/client-copy';
 import { Page, useLocation, useNavigate, useSnackbar } from 'zmp-ui';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   Heart, MapPin, MessageCircle, Leaf, GraduationCap, Users, Pencil, Bell, Store, Settings, Info, ChevronRight, Copy, Sparkles, BookOpen, ShieldCheck, CalendarClock, Wallet, BadgeDollarSign, CreditCard, Package, Truck, PackageCheck, Recycle, Repeat, type LucideIcon,
@@ -528,10 +528,29 @@ function UnreadCount({ count }: { count: number }) {
   );
 }
 
+/** Bề ngang thật của ô (đổi theo màn, xoay máy): chọn cỡ chữ lớn nhất còn vừa. Chưa đo được thì undefined, app-core coi như ô 320px. */
+function useCellWidth<T extends HTMLElement>() {
+  const ref = useRef<T>(null);
+  const [width, setWidth] = useState<number>();
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const read = () => setWidth(el.getBoundingClientRect().width || undefined);
+    read();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(read);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  return [ref, width] as const;
+}
+
 function Stat({ label, value, onClick }: { label: string; value: string; onClick?: () => void }) {
-  const variant = statValueVariant(value);
+  const [cell, cellWidth] = useCellWidth<HTMLDivElement>();
+  const variant = statValueVariant(value, cellWidth);
   return (
     <div
+      ref={cell}
       role="button"
       {...rowKeyboardProps()}
       className="tubu-press"

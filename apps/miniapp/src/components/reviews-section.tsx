@@ -143,6 +143,8 @@ export function ReviewsSection({
     initialPageParam: firstNext ?? '',
     getNextPageParam: (last) => last.nextCursor ?? undefined,
     enabled: moreOn && firstNext !== null,
+    // Trang đầu tải lại mà đổi dòng cuối (vừa có đánh giá mới) thì khoá đổi: giữ các trang đang hiện của cùng chip tới khi bản mới về.
+    placeholderData: (prev, prevQuery) => (prevQuery?.queryKey[3] === filter ? prev : undefined),
   });
   // Chỉ hỏi khi đã đăng nhập; chưa đăng nhập thì vẫn hiện nút để còn mời login.
   const eligQ = useQuery({
@@ -212,11 +214,16 @@ export function ReviewsSection({
   const showMore = () => {
     const step = reviewMoreStep(visible, filtered.length, list.hasMore);
     setVisible(step.visible);
-    if (!step.fetch) return;
-    if (!moreOn) setMoreOn(true);
-    else if (!moreQ.data) void moreQ.refetch();
-    else void moreQ.fetchNextPage();
+    if (step.fetch) setMoreOn(true);
   };
+  // Dòng đã tải chưa đủ số dòng cần hiện (vừa bấm, hoặc bộ trang sau vừa tải lại từ trang đầu mới): tải tiếp trang kế.
+  const wantMore = moreOn && list.status === 'ready' && list.hasMore && visible >= filtered.length;
+  const { fetchNextPage } = moreQ;
+  const moreSettled = !!moreQ.data && !moreQ.isPlaceholderData && !moreQ.isFetching && !moreQ.isError;
+  useEffect(() => {
+    if (wantMore && moreSettled) void fetchNextPage();
+  }, [wantMore, moreSettled, fetchNextPage]);
+  const retryMore = () => void (moreQ.isFetchNextPageError ? moreQ.fetchNextPage() : moreQ.refetch());
 
   return (
     <section id="danh-gia" aria-label="Đánh giá sản phẩm" style={{ padding: 16, marginTop: 8, background: 'var(--color-bg-surface)' }}>
@@ -408,11 +415,8 @@ export function ReviewsSection({
               );
             })}
             {filtered.length === 0 && <EmptyState variant="inline" art="search" heading="Không có đánh giá khớp bộ lọc." />}
-            {list.more === 'error' ? (
-              <ErrorState
-                message={getLoadErrorMessage(moreQ.error)}
-                onRetry={() => void (moreQ.data ? moreQ.fetchNextPage() : moreQ.refetch())}
-              />
+            {list.more === 'error' && visible >= filtered.length ? (
+              <ErrorState message={getLoadErrorMessage(moreQ.error)} onRetry={retryMore} />
             ) : (
               reviewHasMore(visible, list) && (
                 <Button variant="ghost" fullWidth loading={list.more === 'loading'} onPress={showMore}>

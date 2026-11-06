@@ -228,7 +228,7 @@ describe('ReviewsSection (C-076 di cư DS v2: giữ nguyên hành vi)', () => {
     const shown = () => screen.getAllByText(/^Nhận xét /).map((el) => el.textContent);
 
     it('hiện 5 dòng; bấm thì hiện dòng đã tải, hết dòng thì gọi trang kế đúng con trỏ, nối vào cuối, dòng cũ giữ nguyên; hết trang thì ẩn nút', async () => {
-      mocks.fetchReviews.mockImplementation(async (_slug: string, f: number | string = 'all', cursor?: string) =>
+      mocks.fetchReviews.mockImplementation(async (_slug: string, _f: number | string = 'all', cursor?: string) =>
         cursor === 'c1' ? { ...PAGED, items: second, nextCursor: null } : { ...PAGED, items: first, nextCursor: 'c1' },
       );
       renderSection();
@@ -268,6 +268,79 @@ describe('ReviewsSection (C-076 di cư DS v2: giữ nguyên hành vi)', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Tất cả' }));
       await waitFor(() => expect(shown()).toEqual(['Nhận xét p0', 'Nhận xét p1', 'Nhận xét p2', 'Nhận xét p3', 'Nhận xét p4']));
       expect(screen.getByRole('button', { name: 'Xem thêm đánh giá' })).toBeInTheDocument();
+    });
+
+    /** Máy chủ giả có thứ tự: trang `size` dòng, con trỏ là id dòng cuối, như keyset của API. */
+    const server = (rows: () => ReturnType<typeof review>[], size = 6) =>
+      async (_slug: string, _f: number | string = 'all', cursor?: string) => {
+        const all = rows();
+        const start = cursor ? all.findIndex((r) => r.id === cursor) + 1 : 0;
+        const items = all.slice(start, start + size);
+        return { ...PAGED, count: all.length, items, nextCursor: start + size < all.length ? items.at(-1)!.id : null };
+      };
+    const ROWS = Array.from({ length: 15 }, (_, i) => review(`r${i}`, 5));
+
+    it('nhiều trang: mỗi lần bấm tải thêm khi dòng đã tải không đủ, tới trang cuối thì ẩn nút', async () => {
+      mocks.fetchReviews.mockImplementation(server(() => ROWS));
+      renderSection();
+      await screen.findByText('Nhận xét r0');
+      fireEvent.click(screen.getByRole('button', { name: 'Xem thêm đánh giá' }));
+      await waitFor(() => expect(shown()).toHaveLength(10));
+      expect(mocks.fetchReviews.mock.calls.map((c) => c[2])).toEqual([undefined, 'r5']);
+      fireEvent.click(screen.getByRole('button', { name: 'Xem thêm đánh giá' }));
+      await waitFor(() => expect(shown()).toHaveLength(15));
+      expect(mocks.fetchReviews.mock.calls.map((c) => c[2])).toEqual([undefined, 'r5', 'r11']);
+      expect(shown()).toEqual(ROWS.map((r) => `Nhận xét ${r.id}`));
+      expect(screen.queryByRole('button', { name: 'Xem thêm đánh giá' })).toBeNull();
+    });
+
+    describe('trang đầu tải lại có đánh giá mới', () => {
+      afterEach(() => focusManager.setFocused(undefined));
+
+      it('dòng cuối trang đầu đổi: các trang sau tải lại từ con trỏ mới, đủ số dòng đang hiện, không sót, không trùng', async () => {
+        let rows = ROWS;
+        mocks.fetchReviews.mockImplementation(server(() => rows));
+        renderSection();
+        await screen.findByText('Nhận xét r0');
+        fireEvent.click(screen.getByRole('button', { name: 'Xem thêm đánh giá' }));
+        await waitFor(() => expect(shown()).toHaveLength(10));
+        fireEvent.click(screen.getByRole('button', { name: 'Xem thêm đánh giá' }));
+        await waitFor(() => expect(shown()).toHaveLength(15));
+        rows = [review('moi', 5), ...ROWS];
+        act(() => {
+          focusManager.setFocused(false);
+          focusManager.setFocused(true);
+        });
+        await screen.findByText('Nhận xét moi');
+        // Trang đầu mới dừng ở r4: bộ trang sau tải lại từ r4 và tự tải tiếp cho đủ 15 dòng đang hiện (trước đây chỉ còn 12).
+        await waitFor(() => expect(shown()).toEqual(['moi', ...ROWS.slice(0, 14).map((r) => r.id)].map((id) => `Nhận xét ${id}`)));
+        expect(mocks.fetchReviews.mock.calls.map((c) => c[2])).toEqual(expect.arrayContaining(['r4', 'r10']));
+        expect(screen.getByRole('button', { name: 'Xem thêm đánh giá' })).toBeInTheDocument();
+      });
+    });
+
+    it('lỗi tải lại nền khi còn dòng đã tải chưa hiện: vẫn có nút "Xem thêm đánh giá", không thay bằng báo lỗi', async () => {
+      let fail = false;
+      const ok = server(() => ROWS, 6);
+      mocks.fetchReviews.mockImplementation(async (slug: string, f: number | string = 'all', cursor?: string) => {
+        if (cursor && fail) throw new Error('mất mạng');
+        return ok(slug, f, cursor);
+      });
+      renderSection();
+      await screen.findByText('Nhận xét r0');
+      fireEvent.click(screen.getByRole('button', { name: 'Xem thêm đánh giá' }));
+      await waitFor(() => expect(shown()).toHaveLength(10));
+      fail = true;
+      act(() => {
+        focusManager.setFocused(false);
+        focusManager.setFocused(true);
+      });
+      await waitFor(() => expect(mocks.fetchReviews.mock.calls.filter((c) => c[2] === 'r5')).toHaveLength(2));
+      await new Promise((r) => setTimeout(r, 20));
+      expect(shown()).toHaveLength(10);
+      expect(screen.queryByRole('button', { name: 'Thử lại' })).toBeNull();
+      expect(screen.getByRole('button', { name: 'Xem thêm đánh giá' })).toBeInTheDocument();
+      focusManager.setFocused(undefined);
     });
 
     it('trang kế tải lỗi: dòng đang hiện giữ nguyên, báo lỗi có "Thử lại"; thử lại thì nối trang kế', async () => {

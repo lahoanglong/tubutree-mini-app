@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, it, expect } from 'vitest';
 import { PROFILE_NAME_REQUIRED, cleanProfileName, profileNameError, usableProfileName } from './profile-name';
 
@@ -18,7 +20,9 @@ describe('usableProfileName', () => {
 
 describe('profileNameError: chặn lưu hồ sơ khi họ tên rỗng', () => {
   it('rỗng, chỉ khoảng trắng, chỉ ký tự vô hình: báo lỗi yêu cầu nhập họ tên', () => {
-    for (const name of ['', '   ', '\t\n', '\u200b', ' \u200b\ufeff\u00a0 ']) expect(profileNameError(name), JSON.stringify(name)).toBe(PROFILE_NAME_REQUIRED);
+    for (const name of ['', '   ', '\t\n', '\u200b', ' \u200b\ufeff\u00a0 ', '\u3164', '\u3164 \u3164', '\u2800', '\u115f\u1160\uffa0']) {
+      expect(profileNameError(name), JSON.stringify(name)).toBe(PROFILE_NAME_REQUIRED);
+    }
     expect(PROFILE_NAME_REQUIRED).toBe('Nhập họ tên để lưu hồ sơ.');
   });
   it('tên thật (kể cả một ký tự, có dấu, emoji ghép) thì không lỗi', () => {
@@ -33,5 +37,14 @@ describe('cleanProfileName: cắt hai đầu như API, giữ phần giữa', () 
   });
   it('giữ ký tự nối emoji ở giữa', () => {
     expect(cleanProfileName(' Hoa 👨\u200d👩 ')).toBe('Hoa 👨\u200d👩');
+  });
+});
+
+describe('tập ký tự vô hình khớp API', () => {
+  it('profile-name.ts và Trim của API (text-trim.ts) dùng cùng một chuỗi INVISIBLE, viết bằng mã \\u', () => {
+    const line = (file: string) => readFileSync(resolve(__dirname, file), 'utf8').match(/^const INVISIBLE = '([^']*)';$/m)?.[1];
+    const mine = line('profile-name.ts');
+    expect(mine).toMatch(/^(\\u[0-9a-f]{4}-?)+$/);
+    expect(mine).toBe(line('../../../apps/api/src/common/text-trim.ts'));
   });
 });

@@ -67,10 +67,29 @@ function RowBody({ item, unread = 0, dot = false }: { item: AccountMenuItem; unr
   );
 }
 
+/** Bề ngang thật của ô (đổi theo màn, xoay máy): chọn cỡ chữ lớn nhất còn vừa. Chưa đo được thì undefined, app-core coi như ô 320px. */
+function useCellWidth<T extends HTMLElement>() {
+  const ref = useRef<T>(null);
+  const [width, setWidth] = useState<number>();
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const read = () => setWidth(el.getBoundingClientRect().width || undefined);
+    read();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(read);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  return [ref, width] as const;
+}
+
 function Stat({ label, value, href }: { label: string; value: string; href: string }) {
-  const variant = statValueVariant(value);
+  const [cell, cellWidth] = useCellWidth<HTMLAnchorElement>();
+  const variant = statValueVariant(value, cellWidth);
   return (
     <Link
+      ref={cell}
       href={href}
       className="tubu-press block min-h-11 rounded-card bg-[var(--color-bg-surface)] px-1 py-2.5 text-center shadow-[var(--elevation-1)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-forest-600"
     >

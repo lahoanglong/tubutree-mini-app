@@ -8,7 +8,7 @@ export function usableProfileName(name: string | null | undefined): string {
 }
 
 // Cùng tập ký tự vô hình với `trimInvisible` của API (apps/api/src/common/text-trim.ts), để client và API cùng coi một tên là rỗng.
-const INVISIBLE = '­᠎​-‏‪-‮⁠-⁤⁦-⁩﻿';
+const INVISIBLE = '\u00ad\u115f\u1160\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\u2800\u3164\ufeff\uffa0';
 const EDGE = new RegExp(`^[\\s${INVISIBLE}]+|[\\s${INVISIBLE}]+$`, 'g');
 
 /** Họ tên khách gõ ở form hồ sơ, cắt khoảng trắng và ký tự vô hình hai đầu như `Trim` của UpdateMeDto. */

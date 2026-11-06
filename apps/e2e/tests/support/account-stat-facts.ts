@@ -51,3 +51,6 @@ export const STAT_CASES = [
 
 /** Cách mép ô ít nhất 6px: 4px đệm của ô cộng 2px để chữ không dính sát viền bo. */
 export const STAT_MIN_GAP = 6;
+
+/** Màn 414px (ô ~125px): đủ chỗ thì giữ cỡ price-md 16px, không thu nhỏ như ở 320px. */
+export const WIDE_CASE = { points: 999_999, wallet: 100_000_000, pointsText: '999.999 điểm', walletText: '100.000.000đ' };
