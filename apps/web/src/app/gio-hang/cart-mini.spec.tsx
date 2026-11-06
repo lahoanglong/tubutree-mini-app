@@ -113,7 +113,7 @@ describe('/gio-hang — thẻ mã giảm giá như Mini App', () => {
     const c = await mount();
     const head = c.querySelector<HTMLButtonElement>('button[aria-controls="coupon-panel"]')!;
     expect(head.textContent).toContain('Mã giảm giá');
-    expect(head.textContent).toContain('Chọn hoặc nhập mã');
+    expect(head.querySelector('[data-testid="coupon-placeholder"]')?.textContent).toBe('Chọn hoặc nhập mã');
     expect(head.textContent).toContain('Chọn mã');
     expect(head.textContent).not.toContain('Bạn có');
   });

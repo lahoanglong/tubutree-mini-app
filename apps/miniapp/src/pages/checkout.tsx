@@ -782,7 +782,7 @@ export default function CheckoutPage() {
           justifyContent="space-between"
           style={{ cursor: 'pointer', minHeight: 44, gap: 8 }}
         >
-          <Box flex alignItems="center" style={{ gap: 10, minWidth: 0 }}>
+          <Box flex alignItems="center" style={{ gap: 10, minWidth: 0, flex: 1 }}>
             <Box
               style={{
                 width: 36,
@@ -801,7 +801,7 @@ export default function CheckoutPage() {
                 Mã giảm giá
               </Text>
               {cart.data?.couponCode ? (
-                <Box flex alignItems="center" style={{ gap: 8, marginTop: 2, minWidth: 0 }}>
+                <Box flex alignItems="center" style={{ flexWrap: 'wrap', columnGap: 'var(--space-inline-sm)', rowGap: 'var(--space-inline-xs)', marginTop: 2, minWidth: 0 }}>
                   <span
                     data-testid="coupon-code"
                     style={{
@@ -832,7 +832,7 @@ export default function CheckoutPage() {
                 </Text>
               ) : (
                 <Text size="xSmall" data-testid="coupon-placeholder" style={{ color: 'var(--color-text-tertiary)', marginTop: 2 }}>
-                  Chọn hoặc nhập mã
+                  {fillCopy('coupon.rowInvite')}
                 </Text>
               )}
             </Box>

@@ -82,6 +82,7 @@ describe('SHOP_COPY', () => {
     expect(SHOP_COPY['badge.loved']).toBe('Được yêu thích');
     expect(SHOP_COPY['badge.featured']).toBe('Tubu chọn');
     expect(SHOP_COPY['coupon.title']).toBe('Mã giảm giá');
+    expect(SHOP_COPY['coupon.rowInvite']).toBe('Chọn hoặc nhập mã');
     expect(SHOP_COPY['brand.title']).toBe('Thương hiệu');
     expect(SHOP_COPY['stock.out']).toBe('Tạm hết hàng');
     expect(SHOP_COPY['stock.discontinued']).toBe('Ngừng bán');

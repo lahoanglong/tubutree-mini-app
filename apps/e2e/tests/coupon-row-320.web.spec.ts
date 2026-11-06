@@ -55,7 +55,7 @@ test.describe('Giỏ web: hàng mã giảm giá ở 320px', () => {
     const f = await rowFacts(page);
     expectRowIntact(f);
     expect(f.lines['coupon-placeholder'], `lời mời ${f.lines['coupon-placeholder']} dòng`).toBe(1);
-    expect(f.tops['coupon-placeholder']!, 'lời mời nằm dưới nhãn').toBeGreaterThan(f.tops['coupon-label']!);
+    expect(f.mids['coupon-placeholder']! - f.mids['coupon-label']!, 'lời mời nằm dưới nhãn (xuống dòng)').toBeGreaterThan(8);
   });
 
   test('có gợi ý mã: gợi ý một dòng, không "…", hàng vẫn 44px', async ({ page, api }) => {

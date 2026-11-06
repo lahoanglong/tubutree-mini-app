@@ -317,7 +317,7 @@ describe('CouponBox — dòng thu gọn nói khách đang có mã dùng được
     ]);
     const box = await mountWith({ addressId: 'a1' });
     expect(toggle(box).textContent).toContain('Bạn có 2 mã dùng được · giảm đến 43.800đ');
-    expect(toggle(box).textContent).not.toContain('Chọn hoặc nhập mã');
+    expect(box.querySelector('[data-testid="coupon-placeholder"]')).toBeNull();
     expect(toggle(box).textContent).toContain('Chọn mã');
     expect(state.applied).toEqual([]);
   });
@@ -325,12 +325,13 @@ describe('CouponBox — dòng thu gọn nói khách đang có mã dùng được
   it('không mã nào dùng được, đang tải hoặc lỗi → giữ câu cũ', async () => {
     state.coupons = [c('BIG', { minOrder: 900000 })];
     state.previews.mockResolvedValue([{ code: 'BIG', eligible: false, reason: 'x', discount: 9 }]);
-    expect(toggle(await mountWith({ addressId: 'a1' })).textContent).toContain('Chọn hoặc nhập mã');
+    const invite = (el: HTMLElement) => el.querySelector('[data-testid="coupon-placeholder"]')?.textContent;
+    expect(invite(toggle(await mountWith({ addressId: 'a1' })))).toBe('Chọn hoặc nhập mã');
     state.previews.mockRejectedValue(new Error('404'));
-    expect(toggle(await mountWith({ addressId: 'a1' })).textContent).toContain('Chọn hoặc nhập mã');
+    expect(invite(toggle(await mountWith({ addressId: 'a1' })))).toBe('Chọn hoặc nhập mã');
     state.previews.mockReturnValue(new Promise(() => {}));
     const loading = toggle(await mountWith({ addressId: 'a1' }));
-    expect(loading.textContent).toContain('Chọn hoặc nhập mã');
+    expect(invite(loading)).toBe('Chọn hoặc nhập mã');
     expect(loading.textContent).not.toContain('mã dùng được');
   });
 
@@ -354,7 +355,7 @@ describe('CouponBox — gọn một dòng, mở khi bấm', () => {
     expect(toggle(box).getAttribute('aria-expanded')).toBe('false');
     expect(toggle(box).getAttribute('aria-controls')).toBe('coupon-panel');
     expect(toggle(box).textContent).toContain('Mã giảm giá');
-    expect(toggle(box).textContent).toContain('Chọn hoặc nhập mã');
+    expect(toggle(box).querySelector('[data-testid="coupon-placeholder"]')?.textContent).toBe('Chọn hoặc nhập mã');
     expect(toggle(box).textContent).toContain('Chọn mã');
     expect(panel(box).hidden).toBe(true);
   });
@@ -982,7 +983,7 @@ describe('CouponBox — dạng bảng trượt (điện thoại, trong thanh dí
   });
 
   // Hàng này là CouponRow của Mini (pages/cart.tsx): hàng 44px, icon 20, "Mã giảm giá", gợi ý, "Chọn mã ›"; hết chỗ (320px) thì gợi ý xuống dưới nhãn.
-  // Bản cũ có ô icon 36px và cột hai dòng cố định (nhãn trên, gợi ý dưới) nên cao hơn Mini và chiếm chỗ của thanh dính.
+  // Không có ô icon 36px và không có cột hai dòng cố định (nhãn trên, gợi ý dưới): hàng cao bằng Mini nên không chiếm thêm chỗ của thanh dính.
   const oneLine = (row: HTMLElement) => {
     expect(row.className).toMatch(/\bmin-h-11\b/);
     expect(row.querySelector('.flex-col'), 'không cột hai dòng').toBeNull();

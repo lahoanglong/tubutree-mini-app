@@ -353,7 +353,7 @@ export function CouponBox({
       <span className="flex min-w-0 flex-1 items-center gap-2">
         <Ticket className="h-5 w-5 flex-none text-promo-fg" aria-hidden="true" />
         {/* Nhãn và nội dung cùng một dòng khi đủ chỗ; máy hẹp (320px) thì nội dung xuống dòng dưới nhãn, thay vì bị cắt "…" hay vỡ ba dòng. Hai dòng vẫn gọn trong 44px. */}
-        <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5">
+        <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2">
           <span data-testid="coupon-label" className="flex-none text-sm font-medium text-[color:var(--color-text-primary)]">Mã giảm giá</span>
           {currentCode ? (
             <span className="flex min-w-0 items-center gap-2">
@@ -376,7 +376,7 @@ export function CouponBox({
                 hint ? 'text-[color:var(--color-text-brand)] leading-4' : 'leading-4 text-[color:var(--color-text-tertiary)]'
               }`}
             >
-              {hint ? couponHintShort(hint) : 'Chọn hoặc nhập mã'}
+              {hint ? couponHintShort(hint) : fillCopy('coupon.rowInvite')}
             </span>
           )}
         </span>
@@ -434,13 +434,13 @@ export function CouponBox({
             data-testid="coupon-change"
             className="flex min-h-11 w-full items-center justify-between gap-2 text-left md:hidden"
           >
-            <span className="inline-flex min-w-0 items-center gap-2.5">
+            <span className="inline-flex min-w-0 flex-1 items-center gap-2.5">
               <span className="grid h-9 w-9 flex-none place-items-center rounded-control bg-promo-bg">
                 <Ticket className="h-5 w-5 text-promo-fg" aria-hidden="true" />
               </span>
               <span className="flex min-w-0 flex-col text-sm font-semibold text-[color:var(--color-text-primary)]">
                 <span data-testid="coupon-label">Mã giảm giá</span>
-                <span className="inline-flex min-w-0 items-center gap-2">
+                <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
                   <span data-testid="coupon-code" className="min-w-0 truncate rounded-control border border-dashed border-promo-solid bg-promo-bg px-1.5 py-0.5 text-label font-bold text-promo-fg">
                     {currentCode}
                   </span>
@@ -484,7 +484,7 @@ export function CouponBox({
                 </span>
               ) : (
                 <span data-testid="coupon-placeholder" className="text-caption font-normal text-[color:var(--color-text-tertiary)]">
-                  Chọn hoặc nhập mã
+                  {fillCopy('coupon.rowInvite')}
                 </span>
               )}
             </span>

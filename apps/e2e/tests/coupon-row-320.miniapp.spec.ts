@@ -7,7 +7,7 @@ import { expectRowIntact, rowFacts } from './support/coupon-row-facts';
  * Hàng mã giảm giá ở chân dính giỏ Mini App (CouponRow) trên máy hẹp 320px: chữ không bị cắt "…" và lời mời không rớt xuống 3 dòng chật chội.
  * Nhãn "Mã giảm giá" nằm trên, nội dung (mã đã áp + số giảm, gợi ý, hoặc lời mời) xuống dòng dưới khi dòng đầu không đủ chỗ, và cả hàng
  * vẫn cao đúng 44px (vùng chạm), nên chân dính không cao thêm. Ở 375px lời mời vẫn cùng dòng với nhãn; mã đã áp xuống dòng dưới vì cả dòng
- * cần 349px trên hàng rộng 343px (trước đây mã bị cắt vài điểm ảnh). API mock toàn bộ.
+ * cần 349px trên hàng rộng 343px. API mock toàn bộ.
  */
 test.use({ viewport: { width: 320, height: 568 } });
 
@@ -27,7 +27,7 @@ test.describe('Giỏ Mini App: hàng mã giảm giá ở 320px', () => {
     const f = await rowFacts(page);
     expectRowIntact(f);
     expect(f.lines['coupon-placeholder'], `lời mời ${f.lines['coupon-placeholder']} dòng`).toBe(1);
-    expect(f.tops['coupon-placeholder']!, 'lời mời nằm dưới nhãn').toBeGreaterThan(f.tops['coupon-label']!);
+    expect(f.mids['coupon-placeholder']! - f.mids['coupon-label']!, 'lời mời nằm dưới nhãn (xuống dòng)').toBeGreaterThan(8);
   });
 
   test('có gợi ý mã: gợi ý một dòng, không "…", hàng vẫn 44px', async ({ page, api }) => {
@@ -81,7 +81,7 @@ test.describe('Giỏ Mini App: hàng mã giảm giá ở 375px', () => {
     expect(Math.abs(f.mids['coupon-placeholder']! - f.mids['coupon-label']!), 'lời mời lệch dòng so với nhãn').toBeLessThanOrEqual(3);
   });
 
-  test('đã áp mã: mã và số giảm hiện đủ, không "…" (trước đây mã bị cắt vài điểm ảnh)', async ({ page, api }) => {
+  test('đã áp mã: mã và số giảm hiện đủ, không "…"', async ({ page, api }) => {
     await openCart(page, api, { coupon: { code: 'WELCOME30', discount: 30_000 } });
     const f = await rowFacts(page);
     expectRowIntact(f);

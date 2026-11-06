@@ -692,7 +692,7 @@ function CouponRow({
                     borderRadius: 'var(--radius-control)',
                     padding: '2px 6px',
                     color: 'var(--clay-700)',
-                    fontSize: 11,
+                    fontSize: 'var(--type-label-size)',
                     fontWeight: 700,
                     minWidth: 0,
                     overflow: 'hidden',
@@ -714,7 +714,7 @@ function CouponRow({
               </Text>
             ) : (
               <Text size="xSmall" data-testid="coupon-placeholder" style={{ color: 'var(--color-text-tertiary)', minWidth: 0, lineHeight: 'var(--type-label-lh)' }}>
-                Chọn hoặc nhập mã
+                {fillCopy('coupon.rowInvite')}
               </Text>
             )}
           </Box>

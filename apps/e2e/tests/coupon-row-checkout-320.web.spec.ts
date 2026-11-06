@@ -19,8 +19,21 @@ const APPLIED: CheckoutState = {
   },
 };
 
+const APPLIED_LONG: CheckoutState = {
+  key: 'coupon-applied-long',
+  name: 'Đã áp XANHTHANG11',
+  ready: () => undefined,
+  world: (w) => {
+    w.cart.couponCode = 'XANHTHANG11';
+    w.cart.discount = 50_000;
+    w.quote.discount = 50_000;
+  },
+};
+
 // Hàng thanh toán là hai dòng (nhãn trên, nội dung dưới) trong ô cao 44px tối thiểu, nên cho phép cao hơn hàng ở chân dính giỏ.
 const MAX_H = 56;
+// Mã dài và số giảm không đủ chỗ cạnh nhau: số giảm xuống dòng dưới mã (ba dòng), vẫn không cắt chữ.
+const MAX_H_WRAPPED = 84;
 
 async function open(page: Page, api: MockApi, state: CheckoutState, size: { width: number; height: number }): Promise<void> {
   await mockWorld(api, page, 'web', state, Promise.resolve());
@@ -41,15 +54,23 @@ for (const size of [{ width: 320, height: 568 }, { width: 375, height: 812 }]) {
       expect(f.lines['coupon-placeholder'], `lời mời ${f.lines['coupon-placeholder']} dòng`).toBe(1);
     });
 
-    test('đã áp mã: mã và số giảm một dòng, không "…"', async ({ page, api }) => {
+    test('đã áp mã: mã và số giảm hiện đủ, không "…" (hết chỗ thì số giảm xuống dưới mã)', async ({ page, api }) => {
       await open(page, api, APPLIED, size);
       const f = await rowFacts(page, await rowId(page));
-      expectRowIntact(f, MAX_H);
+      expectRowIntact(f, MAX_H_WRAPPED);
       await expect(page.getByTestId('coupon-code')).toHaveText('WELCOME30');
       await expect(page.getByTestId('coupon-discount')).toHaveText('-30.000đ');
       expect(f.lines['coupon-code'], 'mã một dòng').toBe(1);
       expect(f.lines['coupon-discount'], 'số giảm một dòng').toBe(1);
       expect(f.lines['coupon-cta'], 'nút "Thay đổi" một dòng').toBe(1);
+    });
+
+    test('mã 11 ký tự và số giảm 50.000đ: đủ chữ, số giảm xuống dưới mã khi hết chỗ, không "…"', async ({ page, api }) => {
+      await open(page, api, APPLIED_LONG, size);
+      const f = await rowFacts(page, await rowId(page));
+      expectRowIntact(f, MAX_H_WRAPPED);
+      await expect(page.getByTestId('coupon-code')).toHaveText('XANHTHANG11');
+      await expect(page.getByTestId('coupon-discount')).toHaveText('-50.000đ');
     });
   });
 }
