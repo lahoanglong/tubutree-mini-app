@@ -248,6 +248,8 @@ export const SHOP_COPY: Record<string, string> = {
   'coupon.pickMine': 'Mã giảm giá của bạn',
   'coupon.pickManual': 'Nhập mã giảm giá khác',
   'coupon.pickPlaceholder': 'Nhập mã',
+  // Lời mời ở hàng mã (giỏ, thanh toán) khi chưa có mã và chưa có gợi ý; nhãn "Mã giảm giá" nằm ngay trên nên không lặp "giảm giá".
+  'coupon.rowInvite': 'Chọn hoặc nhập mã',
   'coupon.pickApply': 'Áp dụng',
   'coupon.pickLoading': 'Đang tải danh sách mã',
   'coupon.pickLoadError': 'Không thể tải danh sách mã giảm giá: {reason}',

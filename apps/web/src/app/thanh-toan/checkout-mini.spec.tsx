@@ -122,7 +122,7 @@ describe('/thanh-toan — khối Sản phẩm và thẻ mã', () => {
   it('thẻ mã giảm giá riêng, chữ "Chọn mã"', async () => {
     const c = await mount();
     const coupon = c.querySelector<HTMLElement>('[data-mini-block="coupon"]')!;
-    expect(coupon.textContent).toContain('Chọn hoặc nhập mã giảm giá');
+    expect(coupon.querySelector('[data-testid="coupon-placeholder"]')?.textContent).toBe('Chọn hoặc nhập mã');
     expect(coupon.textContent).toContain('Chọn mã');
   });
 });

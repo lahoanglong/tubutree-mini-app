@@ -163,10 +163,12 @@ export function VoucherSheet({
                 value={customCode}
                 onChange={(e) => setCustomCode(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleApplyCustom();
-                  }
+                  // Enter áp mã như nút "Áp dụng". Bỏ qua khi bộ gõ tiếng Việt đang chốt chữ (Telex/VNI dùng Enter để chốt) để không áp mã dở,
+                  // và khi khách giữ phím (`repeat`): mã sai thì mỗi lần lặp phím lại gửi một yêu cầu.
+                  if (e.key !== 'Enter' || e.nativeEvent.isComposing || e.keyCode === 229) return;
+                  e.preventDefault();
+                  if (e.repeat) return;
+                  handleApplyCustom();
                 }}
               />
             </div>

@@ -654,10 +654,11 @@ function CouponRow({
 
   return (
     <>
-      {/* Hàng gọn nằm trong chân dính (mã là bước cuối trước khi bấm Thanh toán): một dòng, vùng chạm 44. */}
+      {/* Hàng gọn nằm trong chân dính (mã là bước cuối trước khi bấm Thanh toán): hàng 44, nội dung xuống dưới nhãn khi hết chỗ. */}
       <Box
         className="tubu-press"
         role="button"
+        data-testid="coupon-row"
         {...rowKeyboardProps()}
         onClick={() => {
           haptic('light');
@@ -676,49 +677,51 @@ function CouponRow({
       >
         <Box flex alignItems="center" style={{ gap: 8, minWidth: 0, flex: 1 }}>
           <Ticket size={20} color="var(--clay-700)" aria-hidden style={{ flex: '0 0 auto' }} />
-          <Text size="small" bold style={{ color: 'var(--color-text-primary)', flex: '0 0 auto' }}>
-            Mã giảm giá
-          </Text>
-          {summary.couponCode ? (
-            <Box flex alignItems="center" style={{ gap: 8, minWidth: 0 }}>
-              <span
-                style={{
-                  background: 'var(--clay-50)',
-                  border: '1px dashed var(--clay-500)',
-                  borderRadius: 'var(--radius-control)',
-                  padding: '2px 6px',
-                  color: 'var(--clay-700)',
-                  fontSize: 11,
-                  fontWeight: 700,
-                  minWidth: 0,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {summary.couponCode}
-              </span>
-              {summary.discount > 0 && (
-                <Text size="xSmall" style={{ color: 'var(--color-text-success)', flexShrink: 0, whiteSpace: 'nowrap' }}>
-                  -{formatVnd(summary.discount)}
-                </Text>
-              )}
-            </Box>
-          ) : hint ? (
-            // couponHintShort rút số tiền xuống k/tr nên một dòng ở 375px; không cắt "…" phòng khi máy 320px hay cỡ chữ lớn thì xuống dòng trong hàng 44px.
-            <Text size="xSmall" data-testid="coupon-hint" style={{ color: 'var(--color-text-brand)', minWidth: 0, lineHeight: 'var(--type-label-lh)' }}>
-              {couponHintShort(hint)}
+          {/* Nhãn và nội dung cùng một dòng khi đủ chỗ; máy hẹp (320px) thì nội dung xuống dòng dưới nhãn, thay vì bị cắt "…" hay vỡ ba dòng. Hai dòng vẫn gọn trong 44px. */}
+          <Box style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: 'var(--space-inline-sm)', rowGap: 'var(--space-inline-xs)', minWidth: 0, flex: 1 }}>
+            <Text size="small" bold data-testid="coupon-label" style={{ color: 'var(--color-text-primary)', flex: '0 0 auto' }}>
+              Mã giảm giá
             </Text>
-          ) : (
-            // Như gợi ý ở trên: không cắt "…", máy 320px thì xuống dòng trong hàng 44px.
-            <Text size="xSmall" data-testid="coupon-placeholder" style={{ color: 'var(--color-text-tertiary)', minWidth: 0, lineHeight: 'var(--type-label-lh)' }}>
-              Chọn hoặc nhập mã giảm giá
-            </Text>
-          )}
+            {summary.couponCode ? (
+              <Box flex alignItems="center" style={{ gap: 8, minWidth: 0 }}>
+                <span
+                  data-testid="coupon-code"
+                  style={{
+                    background: 'var(--clay-50)',
+                    border: '1px dashed var(--clay-500)',
+                    borderRadius: 'var(--radius-control)',
+                    padding: '2px 6px',
+                    color: 'var(--clay-700)',
+                    fontSize: 'var(--type-label-size)',
+                    fontWeight: 700,
+                    minWidth: 0,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {summary.couponCode}
+                </span>
+                {summary.discount > 0 && (
+                  <Text size="xSmall" data-testid="coupon-discount" style={{ color: 'var(--color-text-success)', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                    -{formatVnd(summary.discount)}
+                  </Text>
+                )}
+              </Box>
+            ) : hint ? (
+              <Text size="xSmall" data-testid="coupon-hint" style={{ color: 'var(--color-text-brand)', minWidth: 0, lineHeight: 'var(--type-label-lh)' }}>
+                {couponHintShort(hint)}
+              </Text>
+            ) : (
+              <Text size="xSmall" data-testid="coupon-placeholder" style={{ color: 'var(--color-text-tertiary)', minWidth: 0, lineHeight: 'var(--type-label-lh)' }}>
+                {fillCopy('coupon.rowInvite')}
+              </Text>
+            )}
+          </Box>
         </Box>
 
         <Box flex alignItems="center" style={{ gap: 2, flexShrink: 0, whiteSpace: 'nowrap', color: 'var(--color-text-brand)' }}>
-          <Text size="xSmall" bold style={{ color: 'var(--color-text-brand)' }}>
+          <Text size="xSmall" bold data-testid="coupon-cta" style={{ color: 'var(--color-text-brand)' }}>
             {summary.couponCode ? 'Thay đổi' : 'Chọn mã'}
           </Text>
           <ChevronRight size={16} color="var(--color-text-brand)" aria-hidden />

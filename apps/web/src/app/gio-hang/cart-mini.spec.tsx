@@ -109,11 +109,11 @@ describe('/gio-hang — dòng "Thành tiền" như Mini App (544c9ad7, 7edb9c02)
 });
 
 describe('/gio-hang — thẻ mã giảm giá như Mini App', () => {
-  it('có phụ đề "Chọn hoặc nhập mã giảm giá" và "Chọn mã"', async () => {
+  it('có phụ đề "Chọn hoặc nhập mã" và "Chọn mã"', async () => {
     const c = await mount();
     const head = c.querySelector<HTMLButtonElement>('button[aria-controls="coupon-panel"]')!;
     expect(head.textContent).toContain('Mã giảm giá');
-    expect(head.textContent).toContain('Chọn hoặc nhập mã giảm giá');
+    expect(head.querySelector('[data-testid="coupon-placeholder"]')?.textContent).toBe('Chọn hoặc nhập mã');
     expect(head.textContent).toContain('Chọn mã');
     expect(head.textContent).not.toContain('Bạn có');
   });
