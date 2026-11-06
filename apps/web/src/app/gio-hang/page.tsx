@@ -10,6 +10,8 @@ import { CART_OUT_OF_STOCK, CART_OVER_STOCK_BLOCKED, cartOutOfStockBlocked } fro
 import { cartTotalLabel } from '@tubutree/app-core/commerce/cart-total';
 import { cartComboBlocks, comboRemovalNotice, comboSavingPending, type ComboRemovalNotice } from '@tubutree/app-core/commerce/cart-combo';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { couponNoticeText } from '@tubutree/app-core/coupon-min-order';
+import { useRemovedCoupon } from '@/lib/use-removed-coupon';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { useMediaQuery } from '@/lib/use-media-query';
 import { addToCart, getCart, getCartSelection, updateCartItem, removeCartItem, formatVnd, type CartLine } from '@/lib/shop-client';
@@ -55,6 +57,8 @@ export default function CartPage() {
   const qc = useQueryClient();
   const cartKeyNow = useCartKey();
   const cartQ = useQuery({ queryKey: cartKeyNow, queryFn: getCart, enabled: phase === 'authenticated' });
+  // Máy chủ gỡ mã khi giỏ rơi dưới đơn tối thiểu và chỉ báo đúng một lần: nhớ để khách thấy mã nào mất và cần mua thêm bao nhiêu.
+  const removedCoupon = useRemovedCoupon(cartQ.data, formatVnd);
   // Chọn món để thanh toán một phần giỏ: nhớ tập ĐÃ BỎ CHỌN nên món mới thêm tự được chọn và món đã xoá tự biến mất.
   const [deselected, setDeselected] = useState<Set<string>>(() => new Set());
   // Chọn một phần giỏ (còn ít nhất một dòng): hỏi máy chủ giá của đúng phần đó, cùng nhịp debounce với xem trước mã. Chọn cả giỏ
@@ -412,7 +416,9 @@ export default function CartPage() {
       appliedDiscount={shownDiscount}
       subtotal={selectedSubtotal}
       // Câu giải thích chỉ hiện khi thuộc phần đang hiển thị: cả giỏ, hoặc giá phần chọn đã có; chưa có thì thôi (không mượn câu của cả giỏ).
-      notice={shown?.couponNotice ?? null}
+      notice={couponNoticeText(shown, formatVnd)}
+      removedNotice={removedCoupon.notice}
+      onDismissRemoved={removedCoupon.dismiss}
       // Không chọn món nào: không hỏi máy chủ (itemIds rỗng bị coi là cả giỏ), thẻ giữ cách hiện cũ.
       preview={
         selectedItems.length === 0

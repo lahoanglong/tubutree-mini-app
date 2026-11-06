@@ -27,6 +27,9 @@ import { checkoutLineProblems, isPriceChangedError, priceChangedActions, type Li
 import { checkoutPlaceHint, checkoutTotalText } from '@tubutree/app-core/commerce/checkout-display';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { couponAutoCopy, couponHintText } from '@tubutree/app-core/coupon-use';
+import { couponNoticeText } from '@tubutree/app-core/coupon-min-order';
+import { CouponRemovedNotice } from '../components/checkout/coupon-removed-notice';
+import { useRemovedCoupon } from '../hooks/use-removed-coupon';
 import { pointsOfferText } from '@tubutree/app-core/points-offer';
 import { ReferralCodeBox, effectiveReferralCode } from '../components/checkout/referral-code-box';
 import { Skeleton } from '../components/ui/skeleton';
@@ -166,6 +169,8 @@ export default function CheckoutPage() {
 
   // Guard auth: tránh gọi /cart, /me/addresses khi chưa silent-login xong (deeplink → 401).
   const cart = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: authed });
+  // Mã bị máy chủ gỡ lúc đọc giỏ (giỏ rơi dưới đơn tối thiểu, hết hạn, bị tắt) chỉ được báo một lần: nhớ để khách thấy vì sao tổng tăng.
+  const removedCoupon = useRemovedCoupon(cart.data, formatVnd);
   const addresses = useQuery({ queryKey: ['addresses'], queryFn: getAddresses, enabled: authed });
 
   useEffect(() => {
@@ -219,6 +224,8 @@ export default function CheckoutPage() {
     queryFn: () => checkoutQuote(addressId!, pointsToUse, ctvSlug, itemIds),
     enabled: quoteEnabled,
   });
+  // Lời báo của mã đang giữ: báo giá (nếu đã có) thắng giỏ, kèm số cần mua thêm khi mã chỉ thiếu đơn tối thiểu.
+  const couponLine = cart.data?.couponCode ? couponNoticeText({ ...(quote.data ?? cart.data), couponCode: cart.data.couponCode }, formatVnd) : null;
 
   useEffect(() => {
     if (priceAcceptedAt === null) return;
@@ -874,16 +881,17 @@ export default function CheckoutPage() {
             </button>
           </Box>
         )}
-        {cart.data?.couponCode && (quote.data ? quote.data.couponNotice : cart.data.couponNotice) && (
+        {couponLine && (
           <Text
             size="xSmall"
             role="status"
             data-testid="coupon-notice"
             style={{ color: 'var(--color-text-warning)', marginTop: 6 }}
           >
-            {quote.data ? quote.data.couponNotice : cart.data.couponNotice}
+            {couponLine}
           </Text>
         )}
+        <CouponRemovedNotice notice={removedCoupon.notice} onDismiss={removedCoupon.dismiss} />
       </Box>
 
       {/* Chỉ coi là mã gắn sẵn khi đúng là mã CTV: slug gian hàng nhãn/cửa hàng không phải mã giới thiệu và không được gửi kèm đơn. */}

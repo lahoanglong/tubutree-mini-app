@@ -96,6 +96,50 @@ describe('pickerRows: nhãn nút, lý do, mức giảm', () => {
     expect(row.reason).not.toContain('Mua thêm');
   });
 
+  it('W28: xem trước có shortfall (số thiếu máy chủ tính trên hàng không Giờ vàng, sau combo) thì "Mua thêm … để dùng" theo số đó, không đoán từ tạm tính', () => {
+    const coupon = c('MIN400', { minOrder: 400_000 });
+    const sentence = 'Đơn tối thiểu 400.000đ để dùng mã này.';
+    // Giờ vàng 300k + hàng thường 50k = tạm tính 350k: tạm tính nói thiếu 50k nhưng máy chủ chỉ tính 50k hàng thường nên thiếu 350k.
+    const row = pickerRows([coupon], ctx({ subtotal: 350_000, previews: previewMap(preview('MIN400', { eligible: false, reason: sentence, shortfall: 350_000 })) }))[0]!;
+    expect(row).toMatchObject({ group: 'short', action: 'short', label: 'Chưa đủ', reason: 'Mua thêm 350k để dùng' });
+    expect(row.view.condition).toBe('');
+  });
+
+  it('W28: tạm tính đã đủ ngưỡng mà máy chủ vẫn đòi: số shortfall thay câu "không tính hàng Giờ vàng", số lẻ nghìn ghi đủ đồng', () => {
+    const coupon = c('GV', { minOrder: 199_000 });
+    const k = pickerRows([coupon], ctx({ subtotal: 250_000, previews: previewMap(preview('GV', { eligible: false, reason: MIN_SENTENCE, shortfall: 30_000 })) }))[0]!;
+    expect(k).toMatchObject({ group: 'short', reason: 'Mua thêm 30k để dùng' });
+    const odd = pickerRows([coupon], ctx({ subtotal: 250_000, previews: previewMap(preview('GV', { eligible: false, reason: MIN_SENTENCE, shortfall: 61_500 })) }))[0]!;
+    expect(odd.reason).toBe('Mua thêm 61.500đ để dùng');
+  });
+
+  it('W28: shortfall bằng 0 hoặc không có (mã gắn sản phẩm, API cũ): giữ cách cũ, câu của máy chủ', () => {
+    const coupon = c('GV', { minOrder: 199_000 });
+    const zero = pickerRows([coupon], ctx({ subtotal: 150_000, previews: previewMap(preview('GV', { eligible: false, reason: MIN_SENTENCE, shortfall: 0 })) }))[0]!;
+    expect(zero).toMatchObject({ group: 'short', reason: MIN_SENTENCE });
+  });
+
+  it('W28: nhóm "chưa đủ" xếp theo số thiếu của máy chủ (số đang hiện), không theo số đoán từ tạm tính', () => {
+    // Tạm tính 350k có hàng Giờ vàng: đoán A (min 350k) thiếu 0 và B (min 450k) thiếu 100k; máy chủ nói A thiếu 150k, B thiếu 50k nên B đứng trước.
+    const a = c('A', { minOrder: 350_000 });
+    const b = c('B', { minOrder: 450_000 });
+    const previews = previewMap(
+      preview('A', { eligible: false, reason: MIN_SENTENCE, shortfall: 150_000 }),
+      preview('B', { eligible: false, reason: MIN_SENTENCE, shortfall: 50_000 }),
+    );
+    const rows = pickerRows([a, b], ctx({ subtotal: 350_000, previews }));
+    expect(rows.map((r) => [r.coupon.code, r.reason])).toEqual([
+      ['B', 'Mua thêm 50k để dùng'],
+      ['A', 'Mua thêm 150k để dùng'],
+    ]);
+  });
+
+  it('W28: shortfall chỉ có nghĩa với lý do đơn tối thiểu: mã bị chặn vì lý do khác không đổi thành "Mua thêm"', () => {
+    const coupon = c('HETLUOT', { minOrder: 199_000 });
+    const row = pickerRows([coupon], ctx({ previews: previewMap(preview('HETLUOT', { eligible: false, reason: 'Bạn đã dùng hết lượt cho mã này.', shortfall: 49_000 })) }))[0]!;
+    expect(row).toMatchObject({ group: 'blocked', reason: 'Bạn đã dùng hết lượt cho mã này.' });
+  });
+
   it('máy chủ chặn câu đơn tối thiểu dù tạm tính đã đủ (máy chủ không tính hàng Giờ vàng, trừ combo): vẫn "Chưa đủ" nhưng nói đúng vì sao, bỏ dòng điều kiện trùng', () => {
     const row = pickerRows([c('GV', { minOrder: 199_000 })], ctx({ subtotal: 250_000, previews: previewMap(preview('GV', { eligible: false, reason: MIN_SENTENCE })) }))[0]!;
     expect(row).toMatchObject({ group: 'short', action: 'short', label: 'Chưa đủ', reason: 'Đơn tối thiểu 199k không tính hàng Giờ vàng và phần giảm combo' });
