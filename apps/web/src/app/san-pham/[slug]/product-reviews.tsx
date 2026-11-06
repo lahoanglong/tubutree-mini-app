@@ -211,7 +211,7 @@ export function ProductReviews({ slug }: { slug: string }) {
     moreOn ? { pages: moreQ.data?.pages, isFetching: moreQ.isFetching, isError: moreQ.isError } : undefined,
   );
   const items = list.items;
-  const chips = reviewFilterChips(data?.videoCount, filter);
+  const chips = reviewFilterChips(data, filter);
   const moreLoading = list.more === 'loading';
   const showMore = () => {
     if (moreLoading) return;

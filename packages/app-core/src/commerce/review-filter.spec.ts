@@ -18,30 +18,73 @@ const r = (id: string, rating: number, over: Partial<{ images: string[]; videoUr
 describe('reviewFilterChips', () => {
   it('không có video thì bảy chip: Tất cả, đủ năm mức sao từ 5 xuống 1, Có ảnh', () => {
     const labels = ['Tất cả', '5 sao', '4 sao', '3 sao', '2 sao', '1 sao', 'Có ảnh'];
-    expect(reviewFilterChips(0).map((c) => c.label)).toEqual(labels);
+    expect(reviewFilterChips({ videoCount: 0 }).map((c) => c.label)).toEqual(labels);
     expect(reviewFilterChips(undefined).map((c) => c.label)).toEqual(labels);
   });
 
   it('khoá lọc của chip sao là chính số sao, 2 và 1 sao không bị bỏ sót', () => {
-    expect(reviewFilterChips(0).filter((c) => typeof c.key === 'number').map((c) => c.key)).toEqual([5, 4, 3, 2, 1]);
+    expect(reviewFilterChips({ videoCount: 0 }).filter((c) => typeof c.key === 'number').map((c) => c.key)).toEqual([5, 4, 3, 2, 1]);
   });
 
   it('có video thì thêm chip "Có video" kèm số lượng ở cuối', () => {
-    expect(reviewFilterChips(2).at(-1)).toEqual({ key: 'video', label: 'Có video', count: 2 });
+    expect(reviewFilterChips({ videoCount: 2 }).at(-1)).toEqual({ key: 'video', label: 'Có video', count: 2 });
   });
 
   // W30: khách đang xem "Có video" mà đánh giá video cuối cùng bị ẩn (danh sách đầy đủ tải lại, videoCount về 0): chip không được biến mất dưới tay khách,
   // nếu không danh sách trống báo "không có đánh giá khớp" mà không chip nào đang chọn.
   it('đang chọn "Có video" mà số video về 0: chip vẫn còn, đang chọn, ghi (0)', () => {
-    expect(reviewFilterChips(0, 'video').at(-1)).toEqual({ key: 'video', label: 'Có video', count: 0 });
+    expect(reviewFilterChips({ videoCount: 0 }, 'video').at(-1)).toEqual({ key: 'video', label: 'Có video', count: 0 });
     expect(reviewFilterChips(undefined, 'video').at(-1)).toEqual({ key: 'video', label: 'Có video', count: 0 });
   });
 
   it('chọn chip khác thì chip "Có video" vẫn chỉ hiện khi có video', () => {
     for (const sel of ['all', 'photo', 5, 1] as const) {
-      expect(reviewFilterChips(0, sel).some((c) => c.key === 'video')).toBe(false);
-      expect(reviewFilterChips(3, sel).at(-1)).toEqual({ key: 'video', label: 'Có video', count: 3 });
+      expect(reviewFilterChips({ videoCount: 0 }, sel).some((c) => c.key === 'video')).toBe(false);
+      expect(reviewFilterChips({ videoCount: 3 }, sel).at(-1)).toEqual({ key: 'video', label: 'Có video', count: 3 });
     }
+  });
+
+  // W35: sản phẩm hơn 100 đánh giá: trang đầu chỉ có 100 dòng mới nhất, số đếm trên chip phải là số của máy chủ trên mọi đánh giá đang hiện.
+  it('số đếm trên chip Tất cả, 5..1 sao, Có video lấy từ máy chủ (count, distribution, videoCount), không đếm trên 100 dòng đã tải', () => {
+    const items = Array.from({ length: 100 }, (_, i) => r(`m${i}`, 5));
+    const chips = reviewFilterChips({ count: 123, distribution: { '5': 120, '1': 3 }, videoCount: 2, items });
+    expect(chips.map((c) => [c.key, c.count])).toEqual([
+      ['all', 123],
+      [5, 120],
+      [4, 0],
+      [3, 0],
+      [2, 0],
+      [1, 3],
+      ['photo', undefined],
+      ['video', 2],
+    ]);
+  });
+
+  it('API cũ chưa trả số đếm: đếm trên các đánh giá đã tải', () => {
+    const items = [r('a', 5), r('b', 5, { videoUrl: 'v.mp4' }), r('c', 1), r('d', 4, { images: ['x.jpg'] })];
+    const chips = reviewFilterChips({ items });
+    expect(chips.map((c) => [c.key, c.count])).toEqual([
+      ['all', 4],
+      [5, 2],
+      [4, 1],
+      [3, 0],
+      [2, 0],
+      [1, 1],
+      ['photo', undefined],
+      ['video', 1],
+    ]);
+  });
+
+  it('máy chủ trả tổng nhưng thiếu phân bố sao: Tất cả theo máy chủ, chip sao đếm trên các đánh giá đã tải', () => {
+    const chips = reviewFilterChips({ count: 50, videoCount: 0, items: [r('a', 5), r('b', 3)] });
+    expect(chips.find((c) => c.key === 'all')?.count).toBe(50);
+    expect(chips.find((c) => c.key === 5)?.count).toBe(1);
+    expect(chips.find((c) => c.key === 3)?.count).toBe(1);
+    expect(chips.some((c) => c.key === 'video')).toBe(false);
+  });
+
+  it('chưa có dữ liệu (đang tải): chip không ghi số nào', () => {
+    expect(reviewFilterChips(undefined).every((c) => c.count === undefined)).toBe(true);
   });
 });
 
@@ -73,18 +116,18 @@ describe('filterReviews', () => {
 });
 
 describe('reviewFilterQuery: bộ lọc gửi máy chủ (máy chủ lọc trên mọi đánh giá, không chỉ 100 dòng mới nhất)', () => {
-  it('"all" không gửi tham số; chip sao gửi rating; Có ảnh/Có video gửi media', () => {
+  it('"all" không gửi tham số; chip sao gửi rating; Có ảnh gửi media=photo; Có video gửi hasVideo=true (W35)', () => {
     expect(reviewFilterQuery('all')).toBe('');
     expect([5, 4, 3, 2, 1].map((k) => reviewFilterQuery(k))).toEqual(['?rating=5', '?rating=4', '?rating=3', '?rating=2', '?rating=1']);
     expect(reviewFilterQuery('photo')).toBe('?media=photo');
-    expect(reviewFilterQuery('video')).toBe('?media=video');
+    expect(reviewFilterQuery('video')).toBe('?hasVideo=true');
   });
 
-  it('mọi chip đang vẽ đều có tham số máy chủ nhận (rating 1..5, media photo/video)', () => {
-    for (const chip of reviewFilterChips(3)) {
+  it('mọi chip đang vẽ đều có tham số máy chủ nhận (rating 1..5, media=photo, hasVideo=true)', () => {
+    for (const chip of reviewFilterChips({ videoCount: 3 })) {
       const qs = reviewFilterQuery(chip.key);
       if (chip.key === 'all') expect(qs).toBe('');
-      else expect(qs).toMatch(/^\?(rating=[1-5]|media=(photo|video))$/);
+      else expect(qs).toMatch(/^\?(rating=[1-5]|media=photo|hasVideo=true)$/);
     }
   });
 
@@ -145,7 +188,8 @@ describe('phân trang: trang đầu + các trang tải thêm', () => {
     expect(reviewFilterQuery('all', 'MTc2|r99')).toBe('?cursor=MTc2%7Cr99');
     expect(reviewFilterQuery(1, 'abc')).toBe('?rating=1&cursor=abc');
     expect(reviewFilterQuery('photo', 'abc')).toBe('?media=photo&cursor=abc');
-    expect(reviewFilterQuery('video', null)).toBe('?media=video');
+    expect(reviewFilterQuery('video', null)).toBe('?hasVideo=true');
+    expect(reviewFilterQuery('video', 'abc')).toBe('?hasVideo=true&cursor=abc');
     expect(reviewFilterQuery(5, '')).toBe('?rating=5');
     expect(reviewFilterQuery(0, 'abc')).toBe('?cursor=abc');
   });
@@ -155,7 +199,7 @@ describe('phân trang: trang đầu + các trang tải thêm', () => {
     expect(reviewMoreKey('sp', 'all', 'c1').slice(0, 3)).toEqual(reviewMorePrefix('sp'));
     expect(reviewMoreKey('sp', 1, 'c1')).not.toEqual(reviewMoreKey('sp', 'all', 'c1'));
     expect(reviewMoreKey('sp', 'all', 'c2')).not.toEqual(reviewMoreKey('sp', 'all', 'c1'));
-    for (const chip of reviewFilterChips(3)) expect(reviewListKey('sp', chip.key)).not.toEqual(reviewMorePrefix('sp'));
+    for (const chip of reviewFilterChips({ videoCount: 3 })) expect(reviewListKey('sp', chip.key)).not.toEqual(reviewMorePrefix('sp'));
   });
 
   it('trang đầu có nextCursor: hasMore; chưa tải thêm thì chỉ dòng trang đầu', () => {

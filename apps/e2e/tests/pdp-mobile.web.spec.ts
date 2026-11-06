@@ -168,8 +168,8 @@ test.describe('Web khách: trang sản phẩm khổ điện thoại giống Mini
 
     // Hàng chip lọc của khối đánh giá đầy đủ như Mini App.
     const chips = page.locator('[data-section="pdp-reviews"] button[aria-pressed]');
-    await expect(chips.first()).toHaveText('Tất cả');
-    await expect(chips).toHaveText(['Tất cả', '5 sao', '4 sao', '3 sao', '2 sao', '1 sao', 'Có ảnh']);
+    await expect(chips.first()).toHaveText('Tất cả(2)');
+    await expect(chips).toHaveText(['Tất cả(2)', '5 sao(1)', '4 sao(1)', '3 sao(0)', '2 sao(0)', '1 sao(0)', 'Có ảnh']);
 
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
     await page.screenshot({ path: testInfo.outputPath(shot), fullPage: true });
