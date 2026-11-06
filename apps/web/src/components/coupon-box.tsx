@@ -340,39 +340,48 @@ export function CouponBox({
     </>
   );
 
-  // Điện thoại trong thanh dính: đúng CouponRow của Mini (pages/cart.tsx), MỘT dòng 44px. Nhãn 14px đậm 500, gợi ý và chữ phải 13px (Text small
-  // và xSmall của zmp-ui). Gạch chân là bóng trong như Mini nên dòng không cao thêm 1px vì viền.
+  // Điện thoại trong thanh dính: đúng CouponRow của Mini (pages/cart.tsx), hàng 44px. Nhãn 14px đậm 500, gợi ý và chữ phải 13px (Text small
+  // và xSmall của zmp-ui). Gạch chân là bóng trong như Mini nên dòng không cao thêm 1px vì viền. Hết chỗ thì nội dung xuống dưới nhãn (hai dòng vẫn 44px).
   const sheetRow = (
     <button
       type="button"
       onClick={togglePanel}
       aria-haspopup="dialog"
+      data-testid="coupon-row"
       className="tubu-press flex min-h-11 w-full items-center justify-between gap-2 text-left shadow-[inset_0_-1px_0_var(--color-border-subtle)]"
     >
       <span className="flex min-w-0 flex-1 items-center gap-2">
         <Ticket className="h-5 w-5 flex-none text-promo-fg" aria-hidden="true" />
-        <span className="flex-none text-sm font-medium text-[color:var(--color-text-primary)]">Mã giảm giá</span>
-        {currentCode ? (
-          <span className="flex min-w-0 items-center gap-2">
-            <span className="min-w-0 truncate rounded-control border border-dashed border-promo-solid bg-promo-bg px-1.5 py-0.5 text-caption font-bold text-promo-fg">
-              {currentCode}
+        {/* Nhãn và nội dung cùng một dòng khi đủ chỗ; máy hẹp (320px) thì nội dung xuống dòng dưới nhãn, thay vì bị cắt "…" hay vỡ ba dòng. Hai dòng vẫn gọn trong 44px. */}
+        <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2">
+          <span data-testid="coupon-label" className="flex-none text-sm font-medium text-[color:var(--color-text-primary)]">Mã giảm giá</span>
+          {currentCode ? (
+            <span className="flex min-w-0 items-center gap-2">
+              <span
+                data-testid="coupon-code"
+                className="min-w-0 truncate rounded-control border border-dashed border-promo-solid bg-promo-bg px-1.5 py-0.5 text-label font-bold text-promo-fg"
+              >
+                {currentCode}
+              </span>
+              {appliedDiscount > 0 && (
+                <span data-testid="coupon-discount" className="shrink-0 whitespace-nowrap text-caption font-normal text-success-fg">
+                  -{formatVnd(appliedDiscount)}
+                </span>
+              )}
             </span>
-            {appliedDiscount > 0 && (
-              <span className="shrink-0 whitespace-nowrap text-caption font-normal text-success-fg">-{formatVnd(appliedDiscount)}</span>
-            )}
-          </span>
-        ) : (
-          <span
-            data-testid={hint ? 'coupon-hint' : undefined}
-            className={`min-w-0 text-caption font-normal ${
-              hint ? 'text-[color:var(--color-text-brand)] leading-4' : 'leading-4 text-[color:var(--color-text-tertiary)]'
-            }`}
-          >
-            {hint ? couponHintShort(hint) : 'Chọn hoặc nhập mã giảm giá'}
-          </span>
-        )}
+          ) : (
+            <span
+              data-testid={hint ? 'coupon-hint' : 'coupon-placeholder'}
+              className={`min-w-0 text-caption font-normal ${
+                hint ? 'text-[color:var(--color-text-brand)] leading-4' : 'leading-4 text-[color:var(--color-text-tertiary)]'
+              }`}
+            >
+              {hint ? couponHintShort(hint) : fillCopy('coupon.rowInvite')}
+            </span>
+          )}
+        </span>
       </span>
-      <span className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap text-caption font-medium text-[color:var(--color-text-brand)]">
+      <span data-testid="coupon-cta" className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap text-caption font-medium text-[color:var(--color-text-brand)]">
         {currentCode ? 'Thay đổi' : actionLabel}
         <ChevronRight className="h-4 w-4" aria-hidden="true" />
       </span>
@@ -425,25 +434,25 @@ export function CouponBox({
             data-testid="coupon-change"
             className="flex min-h-11 w-full items-center justify-between gap-2 text-left md:hidden"
           >
-            <span className="inline-flex min-w-0 items-center gap-2.5">
+            <span className="inline-flex min-w-0 flex-1 items-center gap-2.5">
               <span className="grid h-9 w-9 flex-none place-items-center rounded-control bg-promo-bg">
                 <Ticket className="h-5 w-5 text-promo-fg" aria-hidden="true" />
               </span>
               <span className="flex min-w-0 flex-col text-sm font-semibold text-[color:var(--color-text-primary)]">
-                Mã giảm giá
-                <span className="inline-flex min-w-0 items-center gap-2">
-                  <span className="min-w-0 truncate rounded-control border border-dashed border-promo-solid bg-promo-bg px-1.5 py-0.5 text-caption font-bold text-promo-fg">
+                <span data-testid="coupon-label">Mã giảm giá</span>
+                <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+                  <span data-testid="coupon-code" className="min-w-0 truncate rounded-control border border-dashed border-promo-solid bg-promo-bg px-1.5 py-0.5 text-label font-bold text-promo-fg">
                     {currentCode}
                   </span>
                   {appliedDiscount > 0 && (
-                    <span className="shrink-0 whitespace-nowrap text-caption font-normal text-success-fg">
+                    <span data-testid="coupon-discount" className="shrink-0 whitespace-nowrap text-caption font-normal text-success-fg">
                       -{formatVnd(appliedDiscount)}
                     </span>
                   )}
                 </span>
               </span>
             </span>
-            <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-caption font-medium text-[color:var(--color-text-brand)]">
+            <span data-testid="coupon-cta" className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-caption font-medium text-[color:var(--color-text-brand)]">
               Thay đổi
               <ChevronRight
                 className={`h-4 w-4 transition-transform ${open ? 'rotate-90' : ''}`}
@@ -457,6 +466,7 @@ export function CouponBox({
           type="button"
           onClick={togglePanel}
           {...panelAria}
+          data-testid="coupon-row"
           className="flex min-h-11 w-full items-center justify-between gap-2 text-left text-sm font-semibold text-[color:var(--color-text-primary)]"
         >
           <span className="inline-flex items-center gap-2 max-md:gap-2.5">
@@ -467,19 +477,19 @@ export function CouponBox({
               />
             </span>
             <span className="flex flex-col">
-              Mã giảm giá
+              <span data-testid="coupon-label">Mã giảm giá</span>
               {hint ? (
-                <span className="text-caption font-normal text-[color:var(--color-text-brand)]">
+                <span data-testid="coupon-hint" className="text-caption font-normal text-[color:var(--color-text-brand)]">
                   {couponHintText(hint, formatVnd)}
                 </span>
               ) : (
-                <span className="text-caption font-normal text-[color:var(--color-text-tertiary)]">
-                  Chọn hoặc nhập mã giảm giá
+                <span data-testid="coupon-placeholder" className="text-caption font-normal text-[color:var(--color-text-tertiary)]">
+                  {fillCopy('coupon.rowInvite')}
                 </span>
               )}
             </span>
           </span>
-          <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-caption font-medium text-[color:var(--color-text-brand)]">
+          <span data-testid="coupon-cta" className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-caption font-medium text-[color:var(--color-text-brand)]">
             {actionLabel}
             <ChevronRight
               className={`h-4 w-4 transition-transform ${open ? 'rotate-90' : ''}`}

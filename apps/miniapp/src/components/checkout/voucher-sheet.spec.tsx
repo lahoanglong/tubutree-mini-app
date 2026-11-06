@@ -220,6 +220,62 @@ describe('VoucherSheet — hành vi (C-076 di cư DS v2: giữ nguyên hành vi)
     await waitFor(() => expect(mocks.applyCoupon).toHaveBeenCalledWith('WELCOME'));
   });
 
+  describe('Enter ở ô nhập mã', () => {
+    const settle = () => new Promise<void>((r) => setTimeout(r, 30));
+    const openInput = async (value = 'abc') => {
+      renderSheet();
+      await screen.findByRole('button', { name: /^Dùng mã/ });
+      const input = screen.getByLabelText('Nhập mã giảm giá khác');
+      fireEvent.change(input, { target: { value } });
+      return input;
+    };
+
+    it('bộ gõ tiếng Việt đang chốt chữ (isComposing) thì Enter KHÔNG áp mã dở', async () => {
+      const input = await openInput();
+      fireEvent.keyDown(input, { key: 'Enter', isComposing: true });
+      await settle();
+      expect(mocks.applyCoupon).not.toHaveBeenCalled();
+    });
+
+    it('Safari báo keyCode 229 khi chốt chữ: Enter KHÔNG áp mã dở', async () => {
+      const input = await openInput();
+      fireEvent.keyDown(input, { key: 'Enter', keyCode: 229 });
+      await settle();
+      expect(mocks.applyCoupon).not.toHaveBeenCalled();
+    });
+
+    it('ô trống hoặc chỉ có dấu cách, và phím khác Enter: không áp mã', async () => {
+      const input = await openInput('   ');
+      fireEvent.keyDown(input, { key: 'Enter' });
+      fireEvent.change(input, { target: { value: 'abc' } });
+      fireEvent.keyDown(input, { key: 'Tab' });
+      fireEvent.keyDown(input, { key: 'a' });
+      await settle();
+      expect(mocks.applyCoupon).not.toHaveBeenCalled();
+    });
+
+    it('giữ phím Enter (repeat): chỉ lần nhấn đầu áp mã, các lần lặp không gửi thêm', async () => {
+      mocks.applyCoupon.mockRejectedValue(new Error('Mã không hợp lệ'));
+      const input = await openInput('SAI');
+      fireEvent.keyDown(input, { key: 'Enter' });
+      await waitFor(() => expect(mocks.applyCoupon).toHaveBeenCalledTimes(1));
+      await settle();
+      for (let i = 0; i < 4; i++) fireEvent.keyDown(input, { key: 'Enter', repeat: true });
+      await settle();
+      expect(mocks.applyCoupon).toHaveBeenCalledTimes(1);
+    });
+
+    it('đang áp mã (chưa trả lời): Enter lần hai không gửi trùng', async () => {
+      mocks.applyCoupon.mockReturnValue(new Promise(() => {}));
+      const input = await openInput();
+      fireEvent.keyDown(input, { key: 'Enter' });
+      await waitFor(() => expect(mocks.applyCoupon).toHaveBeenCalledTimes(1));
+      fireEvent.keyDown(input, { key: 'Enter' });
+      await settle();
+      expect(mocks.applyCoupon).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('mã đang dùng: nhãn "Đang dùng" và "Bỏ dùng" gỡ mã, báo trang nhưng KHÔNG đóng sheet', async () => {
     const onClose = vi.fn();
     const onCouponApplied = vi.fn();

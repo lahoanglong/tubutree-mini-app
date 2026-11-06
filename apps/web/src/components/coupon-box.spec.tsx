@@ -317,7 +317,7 @@ describe('CouponBox — dòng thu gọn nói khách đang có mã dùng được
     ]);
     const box = await mountWith({ addressId: 'a1' });
     expect(toggle(box).textContent).toContain('Bạn có 2 mã dùng được · giảm đến 43.800đ');
-    expect(toggle(box).textContent).not.toContain('Chọn hoặc nhập mã giảm giá');
+    expect(box.querySelector('[data-testid="coupon-placeholder"]')).toBeNull();
     expect(toggle(box).textContent).toContain('Chọn mã');
     expect(state.applied).toEqual([]);
   });
@@ -325,12 +325,13 @@ describe('CouponBox — dòng thu gọn nói khách đang có mã dùng được
   it('không mã nào dùng được, đang tải hoặc lỗi → giữ câu cũ', async () => {
     state.coupons = [c('BIG', { minOrder: 900000 })];
     state.previews.mockResolvedValue([{ code: 'BIG', eligible: false, reason: 'x', discount: 9 }]);
-    expect(toggle(await mountWith({ addressId: 'a1' })).textContent).toContain('Chọn hoặc nhập mã giảm giá');
+    const invite = (el: HTMLElement) => el.querySelector('[data-testid="coupon-placeholder"]')?.textContent;
+    expect(invite(toggle(await mountWith({ addressId: 'a1' })))).toBe('Chọn hoặc nhập mã');
     state.previews.mockRejectedValue(new Error('404'));
-    expect(toggle(await mountWith({ addressId: 'a1' })).textContent).toContain('Chọn hoặc nhập mã giảm giá');
+    expect(invite(toggle(await mountWith({ addressId: 'a1' })))).toBe('Chọn hoặc nhập mã');
     state.previews.mockReturnValue(new Promise(() => {}));
     const loading = toggle(await mountWith({ addressId: 'a1' }));
-    expect(loading.textContent).toContain('Chọn hoặc nhập mã giảm giá');
+    expect(invite(loading)).toBe('Chọn hoặc nhập mã');
     expect(loading.textContent).not.toContain('mã dùng được');
   });
 
@@ -354,7 +355,7 @@ describe('CouponBox — gọn một dòng, mở khi bấm', () => {
     expect(toggle(box).getAttribute('aria-expanded')).toBe('false');
     expect(toggle(box).getAttribute('aria-controls')).toBe('coupon-panel');
     expect(toggle(box).textContent).toContain('Mã giảm giá');
-    expect(toggle(box).textContent).toContain('Chọn hoặc nhập mã giảm giá');
+    expect(toggle(box).querySelector('[data-testid="coupon-placeholder"]')?.textContent).toBe('Chọn hoặc nhập mã');
     expect(toggle(box).textContent).toContain('Chọn mã');
     expect(panel(box).hidden).toBe(true);
   });
@@ -981,8 +982,8 @@ describe('CouponBox — dạng bảng trượt (điện thoại, trong thanh dí
     expect(document.querySelector('[role="dialog"]')).toBeNull();
   });
 
-  // Hàng này là CouponRow của Mini (pages/cart.tsx): MỘT dòng 44px, icon 20, "Mã giảm giá", gợi ý cắt bằng "…", "Chọn mã ›".
-  // Bản cũ có ô icon 36px và cột hai dòng (nhãn trên, gợi ý dưới) nên cao hơn Mini và chiếm chỗ của thanh dính.
+  // Hàng này là CouponRow của Mini (pages/cart.tsx): hàng 44px, icon 20, "Mã giảm giá", gợi ý, "Chọn mã ›"; hết chỗ (320px) thì gợi ý xuống dưới nhãn.
+  // Không có ô icon 36px và không có cột hai dòng cố định (nhãn trên, gợi ý dưới): hàng cao bằng Mini nên không chiếm thêm chỗ của thanh dính.
   const oneLine = (row: HTMLElement) => {
     expect(row.className).toMatch(/\bmin-h-11\b/);
     expect(row.querySelector('.flex-col'), 'không cột hai dòng').toBeNull();
@@ -995,11 +996,37 @@ describe('CouponBox — dạng bảng trượt (điện thoại, trong thanh dí
     const row = box.querySelector<HTMLButtonElement>('button[aria-haspopup="dialog"]')!;
     oneLine(row);
     expect(row.textContent).toContain('Mã giảm giá');
-    const hint = [...row.querySelectorAll('span')].find((el) => el.children.length === 0 && el.textContent === 'Chọn hoặc nhập mã giảm giá')!;
+    const hint = [...row.querySelectorAll('span')].find((el) => el.children.length === 0 && el.textContent === 'Chọn hoặc nhập mã')!;
     expect(hint.className).not.toMatch(/\btruncate\b/);
     expect(hint.className).toMatch(/\bleading-4\b/);
     expect(hint.className).toMatch(/\bmin-w-0\b/);
     expect(row.textContent!.endsWith('Chọn mã')).toBe(true);
+  });
+
+  it('máy 320px: nhãn và nội dung chung một khối flex-wrap để nội dung xuống dưới nhãn thay vì bị cắt; hàng giữ min-h-11', async () => {
+    const box = await mountSheet();
+    const row = box.querySelector<HTMLButtonElement>('button[aria-haspopup="dialog"]')!;
+    expect(row.getAttribute('data-testid')).toBe('coupon-row');
+    const label = row.querySelector('[data-testid="coupon-label"]')!;
+    const invite = row.querySelector('[data-testid="coupon-placeholder"]')!;
+    expect(invite.textContent).toBe('Chọn hoặc nhập mã');
+    expect(label.parentElement).toBe(invite.parentElement);
+    expect(label.parentElement!.className).toMatch(/\bflex-wrap\b/);
+    expect(row.querySelector('[data-testid="coupon-cta"]')!.textContent).toBe('Chọn mã');
+  });
+
+  it('đã áp mã: mã và số giảm cùng khối flex-wrap với nhãn, nút ghi "Thay đổi"', async () => {
+    const r = render(<CouponBox sheet currentCode="WELCOME30" appliedDiscount={30000} subtotal={300000} />);
+    mounted.push(r);
+    await flush(6);
+    const row = r.container.querySelector<HTMLButtonElement>('button[aria-haspopup="dialog"]')!;
+    const label = row.querySelector('[data-testid="coupon-label"]')!;
+    const code = row.querySelector('[data-testid="coupon-code"]')!;
+    expect(code.textContent).toBe('WELCOME30');
+    expect(code.parentElement!.parentElement).toBe(label.parentElement);
+    expect(label.parentElement!.className).toMatch(/\bflex-wrap\b/);
+    expect(row.querySelector('[data-testid="coupon-discount"]')!.textContent).toBe('-30.000đ');
+    expect(row.querySelector('[data-testid="coupon-cta"]')!.textContent).toBe('Thay đổi');
   });
 
   it('chưa có mã nhưng có mã dùng được: gợi ý bản ngắn "N mã · giảm đến X" cũng nằm trong dòng đó', async () => {

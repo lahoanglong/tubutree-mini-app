@@ -249,6 +249,7 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'coupon.pickMine': 20,
   'coupon.pickManual': 22,
   'coupon.pickPlaceholder': 10,
+  'coupon.rowInvite': 18,
   'coupon.pickApply': 10,
   'coupon.pickLoading': null,
   'coupon.pickLoadError': null,
