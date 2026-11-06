@@ -125,5 +125,6 @@ describe('overStockMessage', () => {
   it('còn ít hơn số đặt → nói còn bao nhiêu; hết hàng → bảo bỏ khỏi giỏ', () => {
     expect(overStockMessage('Dầu gội', 2)).toBe('Sản phẩm "Dầu gội" hiện còn 2 sản phẩm. Sửa số lượng trong giỏ để tiếp tục.');
     expect(overStockMessage('Dầu gội', 0)).toBe('Sản phẩm "Dầu gội" đã hết hàng. Bỏ khỏi giỏ để đặt các món còn lại.');
+    expect(overStockMessage('Dầu gội', 25)).toBe('Số lượng sản phẩm "Dầu gội" vượt số hàng đang có. Sửa số lượng trong giỏ để tiếp tục.');
   });
 });

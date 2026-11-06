@@ -30,9 +30,11 @@ export const DEALER_PRICE_LOADING = 'Đang tải bảng giá, đợi chút rồi
 
 /** Câu báo dòng hết hàng/vượt tồn ở màn thanh toán. */
 export function overStockMessage(productName: string, stock: number): string {
-  return stock > 0
+  if (!(stock > 0)) return `Sản phẩm "${productName}" đã hết hàng. Bỏ khỏi giỏ để đặt các món còn lại.`;
+  // Tồn trên LOW_STOCK_NOTICE (20) không bao giờ ghi số (Smart Stock).
+  return stock <= 20
     ? `Sản phẩm "${productName}" hiện còn ${stock} sản phẩm. Sửa số lượng trong giỏ để tiếp tục.`
-    : `Sản phẩm "${productName}" đã hết hàng. Bỏ khỏi giỏ để đặt các món còn lại.`;
+    : `Số lượng sản phẩm "${productName}" vượt số hàng đang có. Sửa số lượng trong giỏ để tiếp tục.`;
 }
 
 export const STOREFRONT_TEMPLATE_HINT = 'Chọn danh mục gần với sản phẩm bạn muốn giới thiệu. Tubu tự thêm sẵn 8 sản phẩm nổi bật, bạn chỉnh sửa sau cũng được.';

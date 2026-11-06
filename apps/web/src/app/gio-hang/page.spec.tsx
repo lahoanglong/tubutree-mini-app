@@ -145,6 +145,7 @@ describe('/gio-hang — dòng hết hàng / chạm trần tồn kho (BUYERWEB-10
     expect(note).toBeTruthy();
     expect(note.className).toContain('text-warning-fg');
     expect(container.textContent).not.toMatch(/Còn 40 sản phẩm/);
+    expect(button(container, 'Tăng số lượng Dầu gội bồ kết')!.disabled).toBe(true);
     click(button(container, 'Giảm số lượng Dầu gội bồ kết')!);
     await flush();
     expect(state.updates).toEqual([{ id: 'i1', q: 20 }]);

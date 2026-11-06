@@ -112,6 +112,18 @@ describe('SubscriptionsService.create', () => {
     expect(data.paymentMethod).toBe('COD');
   });
 
+  it('số lượng vượt tồn → 400 câu không có số khi tồn trên 20, không ghi gì; tồn đủ thì tạo', async () => {
+    const variation = (stock: number) => ({ id: 'v1', pancakeId: 'pv1', stock, isActive: true, product: { name: 'P', isActive: true, approvalStatus: 'APPROVED' } });
+    const high = makeService({ variation: variation(25) });
+    await expect(high.svc.create('u1', dto({ quantity: 30 }))).rejects.toThrow('P: số lượng này vượt số hàng đang có.');
+    expect(high.create).not.toHaveBeenCalled();
+    const low = makeService({ variation: variation(3) });
+    await expect(low.svc.create('u1', dto({ quantity: 5 }))).rejects.toThrow('P chỉ còn 3 sản phẩm.');
+    const ok = makeService({ variation: variation(25) });
+    await ok.svc.create('u1', dto({ quantity: 25 }));
+    expect(ok.create).toHaveBeenCalled();
+  });
+
   it('từ chối phương thức trả không hỗ trợ cho gói định kỳ (ZALOPAY) (C-015)', async () => {
     const { svc, create } = makeService();
     await expect(svc.create('u1', dto({ paymentMethod: 'ZALOPAY' as never }))).rejects.toThrow('Ví Tubu');

@@ -270,7 +270,7 @@ export default function CartPage() {
   const renderLine = (it: CartLine) => {
     // Hết hàng / vượt tồn: `+` chỉ làm khách mất dòng (quantity kẹp về 0 → API xoá) mà không báo gì.
     const soldOut = it.stock <= 0;
-    const atMax = it.quantity >= qtyPickMax(it.stock);
+    const atMax = it.quantity >= qtyPickMax(it.stock) || it.quantity > it.stock;
     const stockNote = cartStockNote(it.quantity, it.stock);
     const busy = busyItemId === it.id;
     const compareAt = lineCompareAt(it);

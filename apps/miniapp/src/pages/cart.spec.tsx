@@ -218,9 +218,10 @@ describe('CartPage — vượt tồn kho (BUYERMINI-18) và suất giờ vàng (
     const note = await screen.findByText('Vượt số hàng đang có, giảm bớt để thanh toán');
     expect(note.getAttribute('style')).toContain('--color-text-warning');
     expect(screen.queryByText(/Còn 40 sản phẩm/)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Tăng số lượng' })).toHaveAttribute('aria-disabled', 'true');
     fireEvent.click(screen.getByRole('button', { name: 'Giảm số lượng' }));
-    expect(screen.queryByText('Vượt số hàng đang có, giảm bớt để thanh toán')).toBeNull();
     await waitFor(() => expect(mocks.updateCartItem).toHaveBeenCalledWith(OK_LINE.id, 20), { timeout: 2_000 });
+    await waitFor(() => expect(screen.queryByText('Vượt số hàng đang có, giảm bớt để thanh toán')).toBeNull());
     expect(mocks.updateCartItem).not.toHaveBeenCalledWith(OK_LINE.id, 40);
   });
 
@@ -257,6 +258,8 @@ describe('CartPage — vượt tồn kho (BUYERMINI-18) và suất giờ vàng (
     fireEvent.click(plus);
     expect(plus).toHaveAttribute('aria-disabled', 'false');
     fireEvent.click(plus);
+    // Số trên màn vượt tồn nhưng máy chủ chưa nhận: không báo "vượt" ngay trên máy (báo là đọc ra tồn thật mà không cần hỏi máy chủ).
+    expect(screen.queryByText('Vượt số hàng đang có, giảm bớt để thanh toán')).toBeNull();
     await waitFor(() => expect(mocks.updateCartItem).toHaveBeenCalledWith(OK_LINE.id, 41), { timeout: 2_000 });
   });
 

@@ -27,6 +27,7 @@ import { CRON_TZ } from '../../common/cron-tz';
 import { generateUniqueOrderCode } from '../../common/order-code';
 import { formatVnDate, startOfVnDay, vnDateKey } from '../../common/vn-time';
 import { isPartnerOwnedVariation, partnerGoodsError, partnerGoodsMessage } from '../cart/partner-goods';
+import { overStockText } from '../cart/cart.stock-message';
 import { TrackCron } from '../../common/cron-run/track-cron';
 import { publicImage } from '../../common/public-image';
 
@@ -206,6 +207,9 @@ export class SubscriptionsService {
     if (!isPancakeFulfilledLine({ pancakeId: variation.pancakeId, fulfilment: variation.product.fulfilment })) {
       throw new BadRequestException('Sản phẩm do gian hàng đối tác tự giao, chưa hỗ trợ giao định kỳ.');
     }
+    // Bộ chọn số lượng không kẹp theo tồn trên 20 (không lộ tồn), nên chặn ở đây: gói đòi nhiều hơn tồn hiện có thì kỳ nào cũng hụt hàng.
+    // Hết hàng hẳn vẫn cho hẹn như trước.
+    if (variation.stock > 0 && dto.quantity > variation.stock) throw new BadRequestException(overStockText(variation.stock, variation.product.name));
     const address = await this.prisma.address.findUnique({ where: { id: dto.addressId } });
     if (!address || address.userId !== userId) throw new BadRequestException('Địa chỉ không hợp lệ.');
 

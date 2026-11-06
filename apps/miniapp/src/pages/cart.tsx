@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Trash2, Ticket, ChevronRight, AlertTriangle, Zap } from 'lucide-react';
 import { cartSaving, lineCompareAt } from '@tubutree/app-core/commerce/pdp-view';
 import { cartTotalLabel } from '@tubutree/app-core/commerce/cart-total';
-import { cartStockNote, overStockTarget, qtyPickMax } from '@tubutree/app-core/commerce/stock-text';
+import { cartStockNote, isLowStock, overStockTarget, qtyPickMax } from '@tubutree/app-core/commerce/stock-text';
 import { cartComboBlocks, comboRemovalNotice, comboSavingPending, type ComboRemovalNotice } from '@tubutree/app-core/commerce/cart-combo';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import {
@@ -499,8 +499,9 @@ function CartLineRow({
   // (UI cập nhật tức thời qua local state, request chỉ bay sau ~380ms ổn định).
   const [localQty, setLocalQty] = useState(line.quantity);
   const debouncedQty = useDebounced(localQty, 380);
-  // Theo số đang chọn trên màn (localQty) để dòng hiện cùng lúc nút + khoá khi khách bấm tới trần, không đợi máy chủ. Cam chỉ khi tồn thấp hoặc đang vượt, tồn cao thì chữ thường (cùng luật với web).
-  const stockNote = cartStockNote(localQty, line.stock);
+  // Tồn thấp: theo số đang chọn trên màn (localQty) để dòng hiện cùng lúc nút + khoá, không đợi máy chủ. Tồn trên 20: theo số của máy chủ như web,
+  // vì báo "vượt" theo số vừa bấm là cho khách đọc ra tồn thật ngay trên máy, không cần máy chủ trả lời.
+  const stockNote = cartStockNote(isLowStock(line.stock) ? localQty : line.quantity, line.stock);
   const soldOut = line.stock <= 0;
   // CHỈ đồng bộ về line.quantity khi KHÔNG có thay đổi đang chờ flush — tránh case
   // refetch cart (do mutate line khác) trả về quantity CŨ và snap UI ngược lại khi
@@ -618,7 +619,7 @@ function CartLineRow({
           <QuantitySelector
             size="sm"
             value={localQty}
-            max={qtyPickMax(line.stock)}
+            max={line.quantity > line.stock ? line.quantity : qtyPickMax(line.stock)}
             disabled={soldOut}
             onChange={(q) => setLocalQty(q < localQty && line.quantity > line.stock ? Math.min(q, overStockTarget(line.stock)) : q)}
           />
