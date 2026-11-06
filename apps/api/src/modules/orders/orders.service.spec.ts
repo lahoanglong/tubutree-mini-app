@@ -930,11 +930,11 @@ describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo vari
     expect(res.data[1]!.items[0]).toMatchObject({ id: 'i3', available: true });
   });
 
-  it('ảnh bìa dòng đơn: tồn ảo 99.999.988 bị kẹp ở 100.000, vẫn còn hàng', async () => {
-    const orders = [{ ...baseOrder, id: 'o1', code: 'A', items: [line('i1', 'v1')] }];
-    const { svc } = makeMediaService(orders, [v('v1', { stock: 99_999_988 })]);
+  it('ảnh bìa dòng đơn: tồn ảo 99.999.988 bị kẹp ở 100.000, tồn thật trên 20 là 99, vẫn còn hàng (W31)', async () => {
+    const orders = [{ ...baseOrder, id: 'o1', code: 'A', items: [line('i1', 'v1'), line('i2', 'v2'), line('i3', 'v3')] }];
+    const { svc } = makeMediaService(orders, [v('v1', { stock: 99_999_988 }), v('v2', { stock: 37 }), v('v3', { stock: 12 })]);
     const res = await svc.list('u1', {}, 1, 20);
-    expect(res.data[0]!.items[0]).toMatchObject({ stock: 100_000, available: true });
+    expect(res.data[0]!.items.map((i) => [i.id, i.stock, i.available])).toEqual([['i1', 100_000, true], ['i2', 99, true], ['i3', 12, true]]);
   });
 
   it('D11: danh sách đơn của khách select riêng, không kéo shippingHistory/invoiceRequest; chi tiết đơn vẫn đọc đủ cột', async () => {
