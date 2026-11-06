@@ -11,17 +11,18 @@ vi.mock('@/lib/cart-key', () => ({ cartStorefrontSlug: () => null }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push }) }));
 
 import { ReorderSheet } from './reorder-sheet';
-import type { ReorderLine, ReorderTarget } from './reorder-types';
+import { orderReorderTarget, type ReorderLine, type ReorderTarget } from './reorder-types';
+import type { OrderItemView } from '@tubutree/app-core/api/orders';
 
 const CART = { items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 199000, itemCount: 2 };
 const line = (key: string, name: string, over: Partial<ReorderLine> = {}): ReorderLine => ({
   key, variationId: `v-${key}`, productName: name, variationName: 'Chanh', thumbnail: null, unitPrice: 50000,
-  defaultQuantity: 2, maxQuantity: 5, available: true, ...over,
+  defaultQuantity: 2, maxQuantity: 5, available: true, notices: [], ...over,
 });
 const ORDER: ReorderTarget = {
   kind: 'order',
   orderCode: 'TUBU1',
-  lines: [line('a', 'Nước rửa chén'), line('b', 'Xà phòng', { available: false, maxQuantity: 0 })],
+  lines: [line('a', 'Nước rửa chén'), line('b', 'Xà phòng', { available: false, maxQuantity: 0, notices: [{ kind: 'out', tone: 'danger', text: 'Tạm hết hàng' }] })],
 };
 const ITEM: ReorderTarget = { kind: 'item', line: line('a', 'Nước rửa chén', { defaultQuantity: 1 }) };
 const ITEM_B: ReorderTarget = { kind: 'item', line: line('d', 'Dầu gội', { defaultQuantity: 1 }) };
@@ -42,6 +43,54 @@ beforeEach(() => {
 afterEach(() => {
   mounted?.unmount();
   mounted = null;
+});
+
+const item = (id: string, productName: string, over: Partial<OrderItemView> = {}): OrderItemView => ({
+  id, variationId: `v-${id}`, productName, productSlug: id, variationName: '', unitPrice: 60000, quantity: 1, total: 60000, backorderedQty: 0,
+  stock: 50, available: true, discontinued: false, currentPrice: 60000, flashActive: false, ...over,
+});
+const noticesByRow = () =>
+  Array.from(document.querySelectorAll('[data-testid="reorder-line"]')).map((row) => Array.from(row.querySelectorAll('[data-notice]')).map((n) => n.textContent));
+const skippedNote = () => document.querySelector('[data-testid="reorder-skipped-note"]')?.textContent ?? null;
+
+describe('ReorderSheet: câu báo từng món của đơn cũ', () => {
+  it('hết hàng, ngừng bán, đã giảm số lượng, giá tăng: mỗi dòng nói rõ; đầu sheet nêu số món không thêm được', () => {
+    mount({
+      target: orderReorderTarget({
+        code: 'TUBU2',
+        items: [
+          item('i1', 'Trà xanh', { stock: 0, available: false }),
+          item('i2', 'Mật ong', { stock: 3, available: false, discontinued: true }),
+          item('i3', 'Nước rửa chén', { quantity: 5, stock: 2, currentPrice: 65000 }),
+          item('i4', 'Xà phòng', { currentPrice: 50000 }),
+        ],
+      }),
+    });
+    expect(skippedNote()).toBe('2 món hết hàng hoặc ngừng bán sẽ không được thêm vào giỏ.');
+    expect(noticesByRow()).toEqual([
+      ['Tạm hết hàng'],
+      ['Ngừng bán'],
+      ['Không đủ 5 như đơn trước, đã giảm số lượng', 'Giá tăng so với đơn trước (60.000đ)'],
+      ['Giá giảm so với đơn trước (60.000đ)'],
+    ]);
+    expect(document.querySelector('[data-notice="priceUp"]')?.className).toContain('text-warning-fg');
+    expect(document.querySelector('[data-notice="priceDown"]')?.className).toContain('text-success-fg');
+    expect(document.querySelector('[data-notice="out"]')?.className).toContain('text-danger-fg');
+    expect(cta().textContent).toBe('Thêm vào giỏ (3)');
+  });
+
+  it('cả đơn không còn món nào bán được: câu đầu sheet riêng, CTA (0) bị khoá', () => {
+    mount({ target: orderReorderTarget({ code: 'TUBU3', items: [item('i1', 'Trà xanh', { stock: 0, available: false }), item('i2', 'Mật ong', { available: false, discontinued: true })] }) });
+    expect(skippedNote()).toBe('Các món trong đơn này đều đã hết hàng hoặc ngừng bán.');
+    expect(cta().textContent).toBe('Thêm vào giỏ (0)');
+    expect(cta().disabled).toBe(true);
+  });
+
+  it('mọi món còn bán, giá như cũ: không có câu báo nào', () => {
+    mount({ target: orderReorderTarget({ code: 'TUBU4', items: [item('i1', 'Trà xanh')] }) });
+    expect(skippedNote()).toBeNull();
+    expect(document.querySelector('[data-notice]')).toBeNull();
+  });
 });
 
 describe('ReorderSheet', () => {

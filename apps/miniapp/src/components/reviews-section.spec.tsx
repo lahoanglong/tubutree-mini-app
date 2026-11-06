@@ -55,6 +55,7 @@ vi.mock('./image-upload', () => ({
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import { ReviewsSection, Stars } from './reviews-section';
+import { getErrorMessage } from '../services/api';
 
 const review = (id: string, rating: number, extra: Record<string, unknown> = {}) => ({
   id,
@@ -1044,3 +1045,135 @@ describe('Sao rỗng đủ tương phản (D8-7)', () => {
   });
 });
 
+
+describe('ReviewsSection: form đánh giá dùng được bằng bàn phím, lỗi nói rõ và được focus (W27)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.auth = { status: 'authenticated' };
+    mocks.cloudinary = true;
+    mocks.fetchReviews.mockResolvedValue(DATA);
+    mocks.canReview.mockResolvedValue(ELIG_NEW);
+    mocks.fetchMyReview.mockImplementation(async (id: string) => MYREVIEWS[id]);
+    mocks.createReview.mockResolvedValue({ updated: false, pointsEarned: 0 });
+  });
+
+  const openForm = async () => {
+    renderSection();
+    fireEvent.click(await screen.findByRole('button', { name: 'Viết đánh giá' }));
+    return screen.findByRole('radiogroup', { name: 'Số sao' });
+  };
+  const star = (group: HTMLElement, n: number) => within(group).getByRole('radio', { name: `${n} sao` });
+  const tabStops = (group: HTMLElement) => within(group).getAllByRole('radio').map((r) => r.tabIndex);
+
+  it('hàng sao một điểm dừng Tab (sao đang chọn); mũi tên đổi sao và chuyển focus, đi vòng ở hai đầu; Home, End', async () => {
+    const group = await openForm();
+    expect(tabStops(group)).toEqual([-1, -1, -1, -1, 0]);
+    star(group, 5).focus();
+    fireEvent.keyDown(star(group, 5), { key: 'ArrowLeft' });
+    expect(star(group, 4)).toHaveAttribute('aria-checked', 'true');
+    expect(star(group, 4)).toHaveFocus();
+    fireEvent.keyDown(star(group, 4), { key: 'ArrowUp' });
+    expect(star(group, 3)).toHaveFocus();
+    fireEvent.keyDown(star(group, 3), { key: 'End' });
+    expect(star(group, 5)).toHaveAttribute('aria-checked', 'true');
+    fireEvent.keyDown(star(group, 5), { key: 'ArrowRight' });
+    expect(star(group, 1)).toHaveAttribute('aria-checked', 'true');
+    fireEvent.keyDown(star(group, 1), { key: 'ArrowDown' });
+    expect(star(group, 2)).toHaveFocus();
+    fireEvent.keyDown(star(group, 2), { key: 'Home' });
+    expect(star(group, 1)).toHaveAttribute('aria-checked', 'true');
+    expect(tabStops(group)).toEqual([0, -1, -1, -1, -1]);
+    // Phím có Ctrl/Alt/⌘ là phím tắt của máy, không đổi sao.
+    fireEvent.keyDown(star(group, 1), { key: 'ArrowRight', altKey: true });
+    expect(star(group, 1)).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('Enter của bộ gõ tiếng Việt (isComposing, keyCode 229) không bấm nút sao hay nút Gửi; ô nhận xét để bộ gõ tự xử lý', async () => {
+    const group = await openForm();
+    expect(fireEvent.keyDown(star(group, 3), { key: 'Enter', keyCode: 229 })).toBe(false);
+    expect(fireEvent.keyDown(screen.getByRole('button', { name: 'Gửi đánh giá' }), { key: 'Enter', isComposing: true })).toBe(false);
+    expect(fireEvent.keyDown(star(group, 3), { key: 'Enter', keyCode: 13 })).toBe(true);
+    expect(fireEvent.keyDown(screen.getByLabelText('Nội dung đánh giá'), { key: 'Enter', keyCode: 229 })).toBe(true);
+    expect(mocks.createReview).not.toHaveBeenCalled();
+  });
+
+  it('Ctrl+Enter hoặc ⌘+Enter trong ô nhận xét gửi đánh giá; lúc bộ gõ đang chốt chữ thì không', async () => {
+    await openForm();
+    const box = screen.getByLabelText('Nội dung đánh giá');
+    expect(box).toHaveAttribute('aria-keyshortcuts', 'Control+Enter Meta+Enter');
+    fireEvent.change(box, { target: { value: 'Dùng êm' } });
+    fireEvent.keyDown(box, { key: 'Enter', ctrlKey: true, isComposing: true });
+    fireEvent.keyDown(box, { key: 'Enter', metaKey: true, keyCode: 229 });
+    fireEvent.keyDown(box, { key: 'Enter', keyCode: 13 });
+    expect(mocks.createReview).not.toHaveBeenCalled();
+    fireEvent.keyDown(box, { key: 'Enter', ctrlKey: true, keyCode: 13 });
+    await waitFor(() => expect(mocks.createReview).toHaveBeenCalledTimes(1));
+    expect(mocks.createReview.mock.calls[0]![1]).toMatchObject({ rating: 5, comment: 'Dùng êm', orderId: 'o1' });
+  });
+
+  it('bấm Gửi hai lần cùng nhịp, thêm Ctrl+Enter: chỉ một lời gọi', async () => {
+    mocks.createReview.mockImplementation(() => new Promise(() => {}));
+    await openForm();
+    const send = screen.getByRole('button', { name: 'Gửi đánh giá' });
+    fireEvent.click(send);
+    fireEvent.click(send);
+    fireEvent.keyDown(screen.getByLabelText('Nội dung đánh giá'), { key: 'Enter', ctrlKey: true, keyCode: 13 });
+    await waitFor(() => expect(mocks.createReview).toHaveBeenCalledTimes(1));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(mocks.createReview).toHaveBeenCalledTimes(1);
+  });
+
+  it('máy chủ báo lỗi: câu lỗi trong form (role=alert) được focus, không qua snackbar; gửi lại được', async () => {
+    const err = Object.assign(new Error('Request failed with status code 400'), {
+      isAxiosError: true,
+      response: { status: 400, data: { message: 'Đơn này chưa giao tới bạn nên chưa đánh giá được.' } },
+    });
+    mocks.createReview.mockRejectedValueOnce(err);
+    await openForm();
+    fireEvent.click(screen.getByRole('button', { name: 'Gửi đánh giá' }));
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(getErrorMessage(err));
+    await waitFor(() => expect(alert).toHaveFocus());
+    expect(mocks.openSnackbar).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'error' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Gửi đánh giá' }));
+    await waitFor(() => expect(mocks.createReview).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+  });
+
+  it('nhận xét quá 2.000 ký tự (chữ dán, nháp cũ): chặn gửi, lỗi dưới ô (role=alert), ô được focus và aria-invalid; sửa ngắn lại thì hết lỗi', async () => {
+    await openForm();
+    const box = screen.getByLabelText('Nội dung đánh giá');
+    fireEvent.change(box, { target: { value: 'a'.repeat(2001) } });
+    fireEvent.click(screen.getByRole('button', { name: 'Gửi đánh giá' }));
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Nhận xét tối đa 2.000 ký tự, bạn đang có 2.001 ký tự.');
+    expect(box).toHaveFocus();
+    expect(box).toHaveAttribute('aria-invalid', 'true');
+    expect(box.getAttribute('aria-describedby')).toBe(alert.id);
+    expect(mocks.createReview).not.toHaveBeenCalled();
+    fireEvent.change(box, { target: { value: 'Dùng êm' } });
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(box).not.toHaveAttribute('aria-invalid');
+  });
+
+  it('đánh giá cũ lưu số sao ngoài 1–5: điểm dừng Tab ở sao đầu; gửi thì chặn, lỗi dưới hàng sao, focus sao đầu; chọn sao thì hết lỗi', async () => {
+    mocks.canReview.mockResolvedValue(ELIG_ALL);
+    mocks.fetchMyReview.mockResolvedValue({ ...MINE_B, rating: 0 });
+    renderSection();
+    fireEvent.click(await screen.findByRole('button', { name: 'Sửa đánh giá của bạn' }));
+    const group = await screen.findByRole('radiogroup', { name: 'Số sao' });
+    expect(tabStops(group)).toEqual([0, -1, -1, -1, -1]);
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu đánh giá' }));
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Chọn từ 1 đến 5 sao để gửi đánh giá.');
+    expect(star(group, 1)).toHaveFocus();
+    expect(group).toHaveAttribute('aria-invalid', 'true');
+    expect(group.getAttribute('aria-describedby')).toBe(alert.id);
+    expect(mocks.createReview).not.toHaveBeenCalled();
+    fireEvent.click(star(group, 4));
+    expect(screen.queryByRole('alert')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu đánh giá' }));
+    await waitFor(() => expect(mocks.createReview).toHaveBeenCalledTimes(1));
+    expect(mocks.createReview.mock.calls[0]![1]).toMatchObject({ rating: 4 });
+  });
+});

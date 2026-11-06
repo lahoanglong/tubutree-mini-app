@@ -879,3 +879,146 @@ describe('Stars: tên đọc theo vi-VN (G3 MINOR)', () => {
     expect(r.container.querySelector('[role="img"]')!.getAttribute('aria-label')).toBe('5 trên 5 sao');
   });
 });
+
+describe('ProductReviews (web) — form đánh giá dùng được bằng bàn phím, lỗi nói rõ và được focus (W27)', () => {
+  /** Bắn keydown; trả false khi trang chặn mặc định (như fireEvent). keyCode gắn tay vì KeyboardEventInit của jsdom bỏ qua. */
+  const key = (el: Element | null, init: KeyboardEventInit & { keyCode?: number }) => {
+    if (!el) throw new Error('key: không thấy phần tử');
+    const e = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init });
+    if (init.keyCode !== undefined) Object.defineProperty(e, 'keyCode', { value: init.keyCode });
+    let ok = true;
+    act(() => {
+      ok = el.dispatchEvent(e);
+    });
+    return ok;
+  };
+  const tabStops = (c: HTMLElement) => Array.from(c.querySelectorAll<HTMLElement>('[role="radiogroup"] [role="radio"]')).map((r) => r.tabIndex);
+  const openNew = async () => {
+    mocks.elig = structuredClone(ELIG_NEW);
+    const c = await mount();
+    click(button(c, 'Viết đánh giá'));
+    await flush();
+    return c;
+  };
+
+  it('hàng sao một điểm dừng Tab (sao đang chọn); mũi tên đổi sao và chuyển focus, đi vòng ở hai đầu; Home, End', async () => {
+    const c = await openNew();
+    expect(tabStops(c)).toEqual([-1, -1, -1, -1, 0]);
+    star(c, 5)!.focus();
+    key(star(c, 5), { key: 'ArrowLeft' });
+    expect(star(c, 4)!.getAttribute('aria-checked')).toBe('true');
+    expect(document.activeElement).toBe(star(c, 4));
+    key(star(c, 4), { key: 'ArrowUp' });
+    expect(document.activeElement).toBe(star(c, 3));
+    key(star(c, 3), { key: 'End' });
+    expect(star(c, 5)!.getAttribute('aria-checked')).toBe('true');
+    key(star(c, 5), { key: 'ArrowRight' });
+    expect(star(c, 1)!.getAttribute('aria-checked')).toBe('true');
+    key(star(c, 1), { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(star(c, 2));
+    key(star(c, 2), { key: 'Home' });
+    expect(star(c, 1)!.getAttribute('aria-checked')).toBe('true');
+    expect(tabStops(c)).toEqual([0, -1, -1, -1, -1]);
+    key(star(c, 1), { key: 'ArrowRight', altKey: true });
+    expect(star(c, 1)!.getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('Enter của bộ gõ tiếng Việt (isComposing, keyCode 229) không bấm nút sao hay nút Gửi; ô nhận xét để bộ gõ tự xử lý', async () => {
+    const c = await openNew();
+    expect(key(star(c, 3), { key: 'Enter', keyCode: 229 })).toBe(false);
+    expect(key(button(c, 'Gửi đánh giá'), { key: 'Enter', isComposing: true })).toBe(false);
+    expect(key(star(c, 3), { key: 'Enter', keyCode: 13 })).toBe(true);
+    expect(key(c.querySelector('textarea'), { key: 'Enter', keyCode: 229 })).toBe(true);
+    expect(mocks.saved).toEqual([]);
+  });
+
+  it('Ctrl+Enter hoặc ⌘+Enter trong ô nhận xét gửi đánh giá; lúc bộ gõ đang chốt chữ thì không', async () => {
+    const c = await openNew();
+    const box = c.querySelector('textarea')!;
+    expect(box.getAttribute('aria-keyshortcuts')).toBe('Control+Enter Meta+Enter');
+    typeInto(box, 'Dùng êm');
+    key(box, { key: 'Enter', ctrlKey: true, isComposing: true });
+    key(box, { key: 'Enter', metaKey: true, keyCode: 229 });
+    key(box, { key: 'Enter', keyCode: 13 });
+    await flush();
+    expect(mocks.saved).toEqual([]);
+    expect(key(box, { key: 'Enter', metaKey: true, keyCode: 13 })).toBe(false);
+    await flush();
+    expect(mocks.saved.map((s) => s.body.comment)).toEqual(['Dùng êm']);
+  });
+
+  it('bấm Gửi hai lần cùng nhịp rồi Ctrl+Enter: chỉ một lần gửi', async () => {
+    let finish!: (v: unknown) => void;
+    mocks.saveResult = new Promise((r) => (finish = r));
+    const c = await openNew();
+    const submit = button(c, 'Gửi đánh giá')!;
+    act(() => {
+      submit.click();
+      submit.click();
+    });
+    key(c.querySelector('textarea'), { key: 'Enter', ctrlKey: true });
+    await flush();
+    expect(mocks.saved).toHaveLength(1);
+    finish({ id: 'a', updated: false, pointsEarned: 0 });
+    await flush();
+    expect(c.querySelector('[role="status"]')?.textContent).toBe('Đã gửi đánh giá của bạn');
+  });
+
+  it('lỗi máy chủ: câu lỗi role=alert được focus để trình đọc đọc ngay; sửa xong gửi lại được', async () => {
+    mocks.saveResult = new Error('Đơn này chưa giao tới bạn hoặc không có sản phẩm này nên chưa đánh giá được.');
+    const c = await openNew();
+    click(button(c, 'Gửi đánh giá'));
+    await flush();
+    const alert = c.querySelector<HTMLElement>('[role="alert"]')!;
+    expect(alert.textContent).toBe('Đơn này chưa giao tới bạn hoặc không có sản phẩm này nên chưa đánh giá được.');
+    expect(document.activeElement).toBe(alert);
+    mocks.saveResult = { id: 'a', updated: false, pointsEarned: 0 };
+    click(button(c, 'Gửi đánh giá'));
+    await flush();
+    expect(mocks.saved).toHaveLength(2);
+    expect(c.querySelector('[role="status"]')?.textContent).toBe('Đã gửi đánh giá của bạn');
+  });
+
+  it('nhận xét quá 2.000 ký tự (dán vào): không gửi, báo số ký tự, focus ô nhận xét; sửa chữ thì lỗi tắt', async () => {
+    const c = await openNew();
+    const box = c.querySelector('textarea')!;
+    typeInto(box, 'a'.repeat(2001));
+    click(button(c, 'Gửi đánh giá'));
+    await flush();
+    expect(mocks.saved).toEqual([]);
+    const alert = c.querySelector<HTMLElement>('[role="alert"]')!;
+    expect(alert.textContent).toBe('Nhận xét tối đa 2.000 ký tự, bạn đang có 2.001 ký tự.');
+    expect(document.activeElement).toBe(box);
+    expect(box.getAttribute('aria-invalid')).toBe('true');
+    expect(box.getAttribute('aria-describedby')).toBe(alert.id);
+    typeInto(box, 'a'.repeat(2000));
+    expect(c.querySelector('[role="alert"]')).toBeNull();
+    expect(box.hasAttribute('aria-invalid')).toBe(false);
+    click(button(c, 'Gửi đánh giá'));
+    await flush();
+    expect(mocks.saved).toHaveLength(1);
+  });
+
+  it('sửa đánh giá lưu số sao lệch (0): điểm dừng Tab ở sao đầu, báo chọn 1–5 sao và focus sao đầu; chọn sao thì lưu được', async () => {
+    mocks.mine.a = { ...structuredClone(MINE_A), rating: 0 };
+    mocks.saveResult = { id: 'a', updated: true, pointsEarned: 0 };
+    const c = await mount();
+    click(buttonNamed(c, 'Sửa đánh giá đơn TB0001'));
+    await flush();
+    expect(tabStops(c)).toEqual([0, -1, -1, -1, -1]);
+    click(button(c, 'Lưu đánh giá'));
+    await flush();
+    expect(mocks.saved).toEqual([]);
+    const group = c.querySelector('[role="radiogroup"]')!;
+    const alert = c.querySelector<HTMLElement>('[role="alert"]')!;
+    expect(alert.textContent).toBe('Chọn từ 1 đến 5 sao để gửi đánh giá.');
+    expect(group.getAttribute('aria-invalid')).toBe('true');
+    expect(group.getAttribute('aria-describedby')).toBe(alert.id);
+    expect(document.activeElement).toBe(star(c, 1));
+    click(star(c, 4));
+    expect(c.querySelector('[role="alert"]')).toBeNull();
+    click(button(c, 'Lưu đánh giá'));
+    await flush();
+    expect(mocks.saved[0]!.body).toMatchObject({ rating: 4, orderId: 'o1' });
+  });
+});

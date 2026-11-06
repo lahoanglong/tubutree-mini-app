@@ -652,7 +652,13 @@ export interface OrderItemMedia {
   available?: boolean;
   /** Trang sản phẩm còn mở công khai; false thì không dẫn tới trang sản phẩm hay mời đánh giá (API cũ không trả: coi như còn). */
   productPublic?: boolean;
+  /** Ngừng bán (biến thể tắt hay bị xoá, sản phẩm gỡ), khác hết hàng tạm thời. API cũ không trả: xem `isDiscontinuedItem`. */
+  discontinued?: boolean;
   currentPrice?: number | null;
+  /** Biến thể đang có Giờ vàng: giỏ có thể tính giá Giờ vàng, không so giá với đơn trước. API cũ không trả. */
+  flashActive?: boolean;
+  /** Dòng này mua giá Giờ vàng. */
+  flashSaleItemId?: string | null;
 }
 export type OrderItemView = OrderItemDTO & OrderItemMedia;
 export type OrderView = Omit<OrderDTO, 'items'> & {

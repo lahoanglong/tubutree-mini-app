@@ -16,6 +16,7 @@ import {
   type LineSelection, type ReorderLine, type ReorderSource, type ReorderTarget,
 } from './reorder-types';
 import { ProductThumb } from '../ui/product-thumb';
+import { reorderSkippedNote, type ReorderLineNotice } from '@tubutree/app-core/commerce/reorder-notice';
 
 export interface ReorderSheetProps {
   target: ReorderTarget | null;
@@ -58,6 +59,7 @@ export function ReorderSheet({ target, source, onClose, navigateToCart }: Reorde
   }, [target]); // chỉ khi target đổi; đổi `source` không tính là mở mới
 
   const lines = view ? targetLines(view) : [];
+  const skippedNote = reorderSkippedNote(lines);
   const { units, subtotal } = view ? selectionTotals(view, sel) : { units: 0, subtotal: 0 };
 
   // Khoá ĐỒNG BỘ chống chạm đúp: isPending của react-query chỉ cập nhật sau một nhịp notify
@@ -98,6 +100,11 @@ export function ReorderSheet({ target, source, onClose, navigateToCart }: Reorde
       }
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {skippedNote && (
+          <Text variant="body-sm" tone="secondary" as="p" data-testid="reorder-skipped-note">
+            {skippedNote}
+          </Text>
+        )}
         {lines.map((line) => (
           <ReorderLineRow
             key={line.key}
@@ -143,17 +150,26 @@ function ReorderLineRow({
             {line.variationName}
           </Text>
         )}
-        {line.available ? (
-          <>
-            <PriceTag value={line.unitPrice} size="sm" />
-            <QuantitySelector value={qty} max={line.maxQuantity} size="md" itemLabel={line.productName} onChange={(n) => onChange({ checked, quantity: n })} />
-          </>
-        ) : (
-          <Text variant="caption" tone="danger" as="div">
-            {vi.reorder.unavailable}
-          </Text>
+        {line.available && <PriceTag value={line.unitPrice} size="sm" />}
+        <LineNotices notices={line.notices} />
+        {line.available && (
+          <QuantitySelector value={qty} max={line.maxQuantity} size="md" itemLabel={line.productName} onChange={(n) => onChange({ checked, quantity: n })} />
         )}
       </div>
     </div>
+  );
+}
+
+/** Hết hàng, ngừng bán, đã giảm số lượng, giá đổi: mỗi câu một dòng ngay dưới giá, đọc liền với tên món. */
+function LineNotices({ notices }: { notices: readonly ReorderLineNotice[] }) {
+  if (notices.length === 0) return null;
+  return (
+    <>
+      {notices.map((n) => (
+        <Text key={n.kind} variant="caption" tone={n.tone} as="div" data-notice={n.kind}>
+          {n.text}
+        </Text>
+      ))}
+    </>
   );
 }

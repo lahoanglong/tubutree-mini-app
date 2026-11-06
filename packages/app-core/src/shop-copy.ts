@@ -309,6 +309,9 @@ export const SHOP_COPY: Record<string, string> = {
   'pdp.reviews': 'Đánh giá',
   'pdp.reviewsAll': 'Xem tất cả ({n})',
   'pdp.reviewsMore': 'Xem thêm đánh giá',
+  // Form viết đánh giá (web và Mini App): lỗi ở ô, đọc qua role=alert
+  'review.ratingInvalid': 'Chọn từ 1 đến 5 sao để gửi đánh giá.',
+  'review.commentTooLong': 'Nhận xét tối đa {max} ký tự, bạn đang có {n} ký tự.',
   'pdp.alsoLike': 'Có thể bạn cũng thích',
   // Tiêu đề dải không kèm tên (tên dài thì xuống dòng); tên thương hiệu nằm ở nhãn đọc của dải.
   'pdp.brandShelf': 'Cùng thương hiệu',
@@ -317,6 +320,13 @@ export const SHOP_COPY: Record<string, string> = {
   'cart.saving': 'Tiết kiệm {x}',
   'cart.subtotal': 'Tạm tính',
   'cart.subtotalNet': 'Tạm tính (đã giảm)',
+  // Mua lại đơn cũ: câu dưới từng dòng và câu đầu sheet (web và Mini App)
+  'reorder.qtyReduced': 'Không đủ {old} như đơn trước, đã giảm số lượng',
+  'reorder.qtyCapped': 'Mua lại tối đa {n} mỗi món, đã giảm số lượng',
+  'reorder.priceUp': 'Giá tăng so với đơn trước ({old})',
+  'reorder.priceDown': 'Giá giảm so với đơn trước ({old})',
+  'reorder.someSkipped': '{n} món hết hàng hoặc ngừng bán sẽ không được thêm vào giỏ.',
+  'reorder.allSkipped': 'Các món trong đơn này đều đã hết hàng hoặc ngừng bán.',
   // Thanh toán (K2): Mini App và web cùng một nguồn chữ
   'checkout.addressNeeded': 'Chọn địa chỉ giao hàng để đặt hàng.',
   'checkout.quoteFailed': 'Chưa tính được tổng tiền. Bấm Thử lại ở phần tóm tắt rồi đặt hàng.',

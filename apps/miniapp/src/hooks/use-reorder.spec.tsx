@@ -20,7 +20,7 @@ import type { ReorderLine, ReorderTarget } from '../components/reorder/reorder-t
 
 const CART = { items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 200000, itemCount: 1 };
 const line = (key: string): ReorderLine => ({
-  key, variationId: `v-${key}`, productName: `SP ${key}`, variationName: '', thumbnail: null, unitPrice: 1000, defaultQuantity: 1, maxQuantity: 5, available: true,
+  key, variationId: `v-${key}`, productName: `SP ${key}`, variationName: '', thumbnail: null, unitPrice: 1000, defaultQuantity: 1, maxQuantity: 5, available: true, notices: [],
 });
 const ITEM: ReorderTarget = { kind: 'item', line: line('v1') };
 const ORDER: ReorderTarget = { kind: 'order', orderCode: 'TUBU1', lines: [line('a'), line('b')] };

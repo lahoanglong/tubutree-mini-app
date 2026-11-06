@@ -15,6 +15,7 @@ import {
 } from './reorder-types';
 import { useReorder } from './use-reorder';
 import { ProductThumb } from '@/components/mini';
+import { reorderSkippedNote, type ReorderLineNotice } from '@tubutree/app-core/commerce/reorder-notice';
 
 export interface ReorderSheetProps {
   target: ReorderTarget | null;
@@ -53,6 +54,7 @@ export function ReorderSheet({ target, source, onClose, onDone, navigateToCart }
   }
   const view = target ?? shown;
   const lines = view ? targetLines(view) : [];
+  const skippedNote = reorderSkippedNote(lines);
   const { units, subtotal } = view ? selectionTotals(view, sel) : { units: 0, subtotal: 0 };
 
   // Khoá ĐỒNG BỘ chống chạm đúp: isPending của react-query chỉ cập nhật sau một nhịp notify.
@@ -120,6 +122,11 @@ export function ReorderSheet({ target, source, onClose, onDone, navigateToCart }
       }
     >
       <div className="flex flex-col gap-3">
+        {skippedNote && (
+          <p className="text-sm text-[color:var(--color-text-secondary)]" data-testid="reorder-skipped-note">
+            {skippedNote}
+          </p>
+        )}
         {lines.map((line) => (
           <ReorderLineRow key={line.key} line={line} value={sel[line.key]} onChange={(v) => setSel((s) => ({ ...s, [line.key]: v }))} />
         ))}
@@ -150,15 +157,28 @@ function ReorderLineRow({ line, value, onChange }: { line: ReorderLine; value: L
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <p className={`truncate text-sm font-semibold ${line.available ? 'text-stone-900' : 'text-[color:var(--color-text-secondary)]'}`}>{line.productName}</p>
         {line.variationName && <p className="text-xs text-stone-600">{line.variationName}</p>}
-        {line.available ? (
-          <>
-            <p className="text-sm font-bold text-stone-900">{formatVnd(line.unitPrice)}</p>
-            <QuantitySelector value={qty} max={line.maxQuantity} size="md" itemLabel={line.productName} onChange={(n) => onChange({ checked, quantity: n })} />
-          </>
-        ) : (
-          <p className="text-xs text-danger-fg">{reorderText.unavailable}</p>
+        {line.available && <p className="text-sm font-bold text-stone-900">{formatVnd(line.unitPrice)}</p>}
+        <LineNotices notices={line.notices} />
+        {line.available && (
+          <QuantitySelector value={qty} max={line.maxQuantity} size="md" itemLabel={line.productName} onChange={(n) => onChange({ checked, quantity: n })} />
         )}
       </div>
     </div>
+  );
+}
+
+const NOTICE_TONE: Record<ReorderLineNotice['tone'], string> = { danger: 'text-danger-fg', warning: 'text-warning-fg', success: 'text-success-fg' };
+
+/** Hết hàng, ngừng bán, đã giảm số lượng, giá đổi: mỗi câu một dòng ngay dưới giá, đọc liền với tên món. */
+function LineNotices({ notices }: { notices: readonly ReorderLineNotice[] }) {
+  if (notices.length === 0) return null;
+  return (
+    <>
+      {notices.map((n) => (
+        <p key={n.kind} className={`text-xs ${NOTICE_TONE[n.tone]}`} data-notice={n.kind}>
+          {n.text}
+        </p>
+      ))}
+    </>
   );
 }

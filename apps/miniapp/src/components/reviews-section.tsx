@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Input, useSnackbar } from 'zmp-ui';
 import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Check, Star, Video } from 'lucide-react';
@@ -27,6 +27,8 @@ import {
   type ReviewFilterKey,
 } from '@tubutree/app-core/commerce/review-filter';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { ratingFromKey, reviewFormIssue, type ReviewFormField } from '@tubutree/app-core/commerce/review-form';
+import { isImeEnter, isSubmitShortcut } from '@tubutree/app-core/keyboard';
 import { REVIEW_NEEDS_PURCHASE, REWARD_ALREADY_GIVEN, VIDEO_UPLOADING, rewardHint } from '@tubutree/app-core/review-copy';
 import { MultiImageUpload, VideoUpload, isCloudinaryConfigured } from './image-upload';
 import { formatDate, formatNumber } from '../utils/format';
@@ -493,6 +495,15 @@ function WriteReview({
   const { rating, comment, images, video } = draft;
   // Đang tải video lên: gửi lúc này sẽ lưu đánh giá không kèm video (mất phần thưởng video, sửa lại cũng không được cộng thêm).
   const [videoBusy, setVideoBusy] = useState(false);
+  // Lỗi đang hiện: ở hàng sao, ở ô nhận xét, hay lỗi gửi do máy chủ trả (dưới nút). Đọc qua role=alert, focus tới chỗ cần sửa.
+  const [issue, setIssue] = useState<{ field: ReviewFormField | 'submit'; message: string } | null>(null);
+  const starRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const commentBox = useRef<HTMLDivElement>(null);
+  const submitAlert = useRef<HTMLDivElement>(null);
+  // Khoá đồng bộ chống chạm đúp: isPending chỉ đổi sau lần vẽ kế tiếp nên hai chạm cùng nhịp vẫn gửi hai lần.
+  const sending = useRef(false);
+  const ratingErrorId = useId();
+  const commentErrorId = useId();
 
   const submit = useMutation({
     mutationFn: () =>
@@ -527,26 +538,77 @@ function WriteReview({
       void qc.invalidateQueries({ queryKey: ['loyalty'] });
       onDone();
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e) => setIssue({ field: 'submit', message: getErrorMessage(e) }),
+    onSettled: () => {
+      sending.current = false;
+    },
   });
 
+  useEffect(() => {
+    if (issue?.field === 'submit') submitAlert.current?.focus();
+  }, [issue]);
+
+  const pickRating = (i: number) => {
+    haptic('light');
+    onDraftChange({ rating: i });
+    if (issue?.field === 'rating') setIssue(null);
+  };
+
+  const send = () => {
+    if (sending.current || submit.isPending || videoBusy) return;
+    const found = reviewFormIssue({ rating, comment });
+    if (found) {
+      setIssue(found);
+      if (found.field === 'rating') (starRefs.current[rating - 1] ?? starRefs.current[0])?.focus();
+      else commentBox.current?.querySelector('textarea')?.focus();
+      return;
+    }
+    setIssue(null);
+    sending.current = true;
+    submit.mutate();
+  };
+
   const bonus = !isEdit && (Boolean(video) || images.length > 0);
+  const ratingStop = Number.isInteger(rating) && rating >= 1 && rating <= 5 ? rating : 1;
 
   return (
-    <div>
-      <div role="radiogroup" aria-label="Số sao" style={{ display: 'flex', justifyContent: 'center', gap: 4, margin: '8px 0 16px' }}>
+    // Enter mà bộ gõ tiếng Việt dùng để chốt chữ không được bấm nút đang focus (sao, Gửi); ô nhận xét giữ nguyên cho bộ gõ.
+    <div
+      onKeyDown={(e) => {
+        if (isImeEnter(e.nativeEvent) && !(e.target instanceof HTMLTextAreaElement)) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      }}
+    >
+      <div
+        role="radiogroup"
+        aria-label="Số sao"
+        aria-invalid={issue?.field === 'rating' || undefined}
+        aria-describedby={issue?.field === 'rating' ? ratingErrorId : undefined}
+        onKeyDown={(e) => {
+          if (e.altKey || e.ctrlKey || e.metaKey) return;
+          const next = ratingFromKey(e.key, rating);
+          if (next === null) return;
+          e.preventDefault();
+          pickRating(next);
+          starRefs.current[next - 1]?.focus();
+        }}
+        style={{ display: 'flex', justifyContent: 'center', gap: 4, margin: '8px 0 16px' }}
+      >
         {[1, 2, 3, 4, 5].map((i) => (
           <button
             key={i}
+            ref={(el) => {
+              starRefs.current[i - 1] = el;
+            }}
             type="button"
             role="radio"
             aria-checked={i === rating}
             aria-label={`${i} sao`}
+            tabIndex={i === ratingStop ? 0 : -1}
             className="tubu-press"
-            onClick={() => {
-              haptic('light');
-              onDraftChange({ rating: i });
-            }}
+            onClick={() => pickRating(i)}
             style={{
               minWidth: 44,
               minHeight: 44,
@@ -562,13 +624,40 @@ function WriteReview({
           </button>
         ))}
       </div>
-      <Input.TextArea maxLength={INPUT_LIMITS.reviewComment}
-        aria-label="Nội dung đánh giá"
-        placeholder="Chia sẻ cảm nhận của bạn về sản phẩm (không bắt buộc)…"
-        value={comment}
-        onChange={(e) => onDraftChange({ comment: e.target.value })}
-        rows={4}
-      />
+      {issue?.field === 'rating' && (
+        <div id={ratingErrorId} role="alert" style={{ margin: '0 0 var(--space-stack-sm)', textAlign: 'center' }}>
+          <Text variant="caption" tone="danger" as="p">
+            {issue.message}
+          </Text>
+        </div>
+      )}
+      <div ref={commentBox}>
+        <Input.TextArea maxLength={INPUT_LIMITS.reviewComment}
+          aria-label="Nội dung đánh giá"
+          aria-invalid={issue?.field === 'comment' || undefined}
+          aria-describedby={issue?.field === 'comment' ? commentErrorId : undefined}
+          aria-keyshortcuts="Control+Enter Meta+Enter"
+          placeholder="Chia sẻ cảm nhận của bạn về sản phẩm (không bắt buộc)…"
+          value={comment}
+          onChange={(e) => {
+            onDraftChange({ comment: e.target.value });
+            if (issue?.field === 'comment') setIssue(null);
+          }}
+          onKeyDown={(e) => {
+            if (!isSubmitShortcut(e.nativeEvent)) return;
+            e.preventDefault();
+            send();
+          }}
+          rows={4}
+        />
+      </div>
+      {issue?.field === 'comment' && (
+        <div id={commentErrorId} role="alert" style={{ marginTop: 'var(--space-inline-xs)' }}>
+          <Text variant="caption" tone="danger" as="p">
+            {issue.message}
+          </Text>
+        </div>
+      )}
       <MultiImageUpload value={images} onChange={(v) => onDraftChange({ images: v })} max={5} />
       <VideoUpload value={video} onChange={(v) => onDraftChange({ video: v })} onBusyChange={setVideoBusy} />
       {(purchaseCount > 1 || isEdit) && orderCode && (
@@ -604,7 +693,14 @@ function WriteReview({
           {REWARD_ALREADY_GIVEN}
         </Text>
       )}
-      <Button fullWidth loading={submit.isPending} disabled={videoBusy} onPress={() => submit.mutate()} style={{ marginTop: 16 }}>
+      {issue?.field === 'submit' && (
+        <div ref={submitAlert} tabIndex={-1} role="alert" style={{ marginTop: 'var(--space-stack-sm)' }}>
+          <Text variant="body-sm" tone="danger" as="p">
+            {issue.message}
+          </Text>
+        </div>
+      )}
+      <Button fullWidth loading={submit.isPending} disabled={videoBusy} onPress={send} style={{ marginTop: 16 }}>
         {videoBusy ? VIDEO_UPLOADING : isEdit ? 'Lưu đánh giá' : 'Gửi đánh giá'}
       </Button>
     </div>

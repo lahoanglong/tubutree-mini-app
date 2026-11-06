@@ -722,6 +722,7 @@ describe('OrdersService.list / activeCount — nhóm trạng thái (tab Đơn h�
     const prisma = {
       order: { findMany, count },
       variation: { findMany: jest.fn().mockResolvedValue([]) },
+      flashSaleItem: { findMany: jest.fn().mockResolvedValue([]) },
       orderStatusHistory: { findMany: jest.fn().mockResolvedValue([]) },
       $transaction: jest.fn(async (ops: Promise<unknown>[]) => Promise.all(ops)),
     } as unknown as PrismaService;
@@ -768,6 +769,7 @@ describe('OrdersService.list / activeCount — nhóm trạng thái (tab Đơn h�
       const prisma = {
         order: { findMany: table.findMany, count: table.count },
         variation: { findMany: jest.fn().mockResolvedValue([]) },
+        flashSaleItem: { findMany: jest.fn().mockResolvedValue([]) },
         orderStatusHistory: { findMany: jest.fn().mockResolvedValue([]) },
         $transaction: jest.fn(async (ops: Promise<unknown>[]) => Promise.all(ops)),
       } as unknown as PrismaService;
@@ -836,6 +838,7 @@ describe('OrdersService.list — ô tìm kiếm theo mã đơn / tên sản ph�
     const prisma = {
       order: { findMany, count },
       variation: { findMany: jest.fn().mockResolvedValue([]) },
+      flashSaleItem: { findMany: jest.fn().mockResolvedValue([]) },
       orderStatusHistory: { findMany: jest.fn().mockResolvedValue([]) },
       $transaction: jest.fn(async (ops: Promise<unknown>[]) => Promise.all(ops)),
     } as unknown as PrismaService;
@@ -889,9 +892,15 @@ describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo vari
     product: { thumbnail: `https://img.test/${id}.jpg`, images: [], isActive: true, approvalStatus: 'APPROVED', ...product },
   });
 
-  function makeMediaService(orders: Record<string, unknown>[], variations: Record<string, unknown>[], products: Record<string, unknown>[] = []) {
+  function makeMediaService(
+    orders: Record<string, unknown>[],
+    variations: Record<string, unknown>[],
+    products: Record<string, unknown>[] = [],
+    flashing: string[] = [],
+  ) {
     const variationFindMany = jest.fn().mockResolvedValue(variations);
     const productFindMany = jest.fn().mockResolvedValue(products);
+    const flashItemFindMany = jest.fn().mockResolvedValue(flashing.map((variationId) => ({ variationId })));
     const prisma = {
       order: {
         findMany: jest.fn().mockResolvedValue(orders),
@@ -900,10 +909,11 @@ describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo vari
       },
       variation: { findMany: variationFindMany },
       product: { findMany: productFindMany },
+      flashSaleItem: { findMany: flashItemFindMany },
       orderStatusHistory: { findMany: jest.fn().mockResolvedValue([]) },
       $transaction: jest.fn(async (ops: Promise<unknown>[]) => Promise.all(ops)),
     } as unknown as PrismaService;
-    return { svc: new OrdersService(prisma, loyalty, cart, notifications, config, affiliate, reversal), variationFindMany, productFindMany };
+    return { svc: new OrdersService(prisma, loyalty, cart, notifications, config, affiliate, reversal), variationFindMany, productFindMany, flashItemFindMany };
   }
 
   it('list: MỘT truy vấn variation cho cả trang; mỗi dòng có thumbnail/stock/available/currentPrice', async () => {
@@ -989,6 +999,39 @@ describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo vari
     expect(res.data[0]!.items[0]!.productPublic).toBe(expected);
   });
 
+  it.each([
+    ['đang bán', {}, {}, false],
+    ['hết tồn nhưng còn bán (Tạm hết hàng)', { stock: 0 }, {}, false],
+    ['variation tắt', { isActive: false }, {}, true],
+    ['sản phẩm tắt', {}, { isActive: false }, true],
+    ['sản phẩm chưa duyệt', {}, { approvalStatus: 'PENDING_REVIEW' }, true],
+  ])('discontinued (Mua lại ghi "Ngừng bán" thay vì "Tạm hết hàng"): %s', async (_label, vOver, pOver, expected) => {
+    const { svc } = makeMediaService([{ ...baseOrder, items: [line('i1', 'v1')] }], [v('v1', vOver, pOver)]);
+    const res = await svc.list('u1', {}, 1, 20);
+    expect(res.data[0]!.items[0]!.discontinued).toBe(expected);
+  });
+
+  it('flashActive: biến thể có đợt Giờ vàng đang chạy (một truy vấn cho cả trang, lọc đợt bật và trong khung giờ)', async () => {
+    const orders = [{ ...baseOrder, items: [line('i1', 'v1'), line('i2', 'v2')] }];
+    const { svc, flashItemFindMany } = makeMediaService(orders, [v('v1'), v('v2')], [], ['v2']);
+    const res = await svc.list('u1', {}, 1, 20);
+    expect(flashItemFindMany).toHaveBeenCalledTimes(1);
+    const where = flashItemFindMany.mock.calls[0]![0].where;
+    expect(where.variationId).toEqual({ in: ['v1', 'v2'] });
+    expect(where.flashSale).toMatchObject({ isActive: true, startAt: { lte: expect.any(Date) }, endAt: { gt: expect.any(Date) } });
+    expect(res.data[0]!.items.map((it) => it.flashActive)).toEqual([false, true]);
+  });
+
+  it('variation đã bị xoá → discontinued true dù sản phẩm còn bán', async () => {
+    const { svc } = makeMediaService(
+      [{ ...baseOrder, items: [{ ...line('i1', 'gone'), productSlug: 'tra-xanh' }] }],
+      [],
+      [{ slug: 'tra-xanh', isActive: true, approvalStatus: 'APPROVED' }],
+    );
+    const res = await svc.list('u1', {}, 1, 20);
+    expect(res.data[0]!.items[0]).toMatchObject({ available: false, productPublic: true, discontinued: true });
+  });
+
   describe('variation đã bị xoá (gắn mã Pancake xoá biến thể tạm của sản phẩm đối tác): productPublic tra theo slug đã lưu trong dòng đơn', () => {
     const goneLine = (slug: string | null) => ({ ...line('i1', 'gone'), productSlug: slug });
 
@@ -1063,6 +1106,7 @@ describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo vari
     const prisma = {
       order: { findUnique: jest.fn().mockResolvedValue(order), findMany: jest.fn().mockResolvedValue([]) },
       variation: { findMany: jest.fn() },
+      flashSaleItem: { findMany: jest.fn().mockResolvedValue([]) },
       orderStatusHistory: { findMany: history },
     } as unknown as PrismaService;
     const view = await new OrdersService(prisma, loyalty, cart, notifications, config, affiliate, reversal).detailView('u1', 'TUBU1');
@@ -1088,6 +1132,7 @@ describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo vari
       const prisma = {
         order: { findUnique: jest.fn().mockResolvedValue({ ...baseOrder, status, items: [] }), findMany: jest.fn().mockResolvedValue([]) },
         variation: { findMany: jest.fn() },
+        flashSaleItem: { findMany: jest.fn().mockResolvedValue([]) },
         orderStatusHistory: { findMany: history },
       } as unknown as PrismaService;
       return { history, svc: new OrdersService(prisma, loyalty, cart, notifications, config, affiliate, reversal) };
@@ -1134,6 +1179,7 @@ describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo vari
       order: { findUnique: jest.fn().mockResolvedValue(order), findMany: jest.fn().mockResolvedValue(siblings) },
       storefront: { findUnique: jest.fn().mockResolvedValue({ title: 'Xanh Shop', warehousePhone: '0909000111' }) },
       variation: { findMany: jest.fn() },
+      flashSaleItem: { findMany: jest.fn().mockResolvedValue([]) },
       orderStatusHistory: { findMany: jest.fn().mockResolvedValue([]) },
     } as unknown as PrismaService;
     const view = await new OrdersService(prisma, loyalty, cart, notifications, config, affiliate, reversal).detailView('u1', 'TUBU2');
@@ -1152,6 +1198,7 @@ describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo vari
         order: { findUnique: jest.fn().mockResolvedValue(order), findMany: jest.fn().mockResolvedValue(siblings) },
         storefront: { findUnique: jest.fn().mockResolvedValue({ title: 'Xanh Shop', warehousePhone: null }) },
         variation: { findMany: jest.fn() },
+        flashSaleItem: { findMany: jest.fn().mockResolvedValue([]) },
         orderStatusHistory: { findMany: jest.fn().mockResolvedValue([]) },
       } as unknown as PrismaService;
       return new OrdersService(prisma, loyalty, cart, notifications, config, affiliate, reversal).detailView('u1', String(order.code));
@@ -1180,6 +1227,7 @@ describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo vari
         order: { findUnique: jest.fn().mockResolvedValue(order), findMany: jest.fn().mockResolvedValue([sibling()]) },
         storefront: { findUnique: jest.fn().mockResolvedValue({ title: 'Xanh Shop', warehousePhone: null }) },
         variation: { findMany: jest.fn() },
+        flashSaleItem: { findMany: jest.fn().mockResolvedValue([]) },
         orderStatusHistory: { findMany: jest.fn().mockResolvedValue([]) },
       } as unknown as PrismaService;
       await new OrdersService(prisma, loyalty, cart, notifications, config, affiliate, reversal).detailView('u1', 'TUBU2');
@@ -1298,6 +1346,7 @@ describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo vari
       const prisma = {
         order: { findUnique: jest.fn().mockResolvedValue(order), findMany: jest.fn().mockResolvedValue([order]), count: jest.fn().mockResolvedValue(1) },
         variation: { findMany: variationFindMany },
+        flashSaleItem: { findMany: jest.fn().mockResolvedValue([]) },
         orderStatusHistory: { findMany: jest.fn().mockResolvedValue([]) },
         review: { findMany: reviewFindMany },
         pointsTransaction: { aggregate: jest.fn().mockResolvedValue({ _sum: { delta: null } }) },
@@ -1366,6 +1415,7 @@ describe('OrdersService.list — hạn thanh toán trên thẻ đơn (D7-2)', ()
     const prisma = {
       order: { findMany: jest.fn().mockResolvedValue(orders), count: jest.fn().mockResolvedValue(orders.length) },
       variation: { findMany: jest.fn().mockResolvedValue([]) },
+      flashSaleItem: { findMany: jest.fn().mockResolvedValue([]) },
       orderStatusHistory: { findMany: jest.fn().mockResolvedValue([]) },
       $transaction: jest.fn(async (ops: Promise<unknown>[]) => Promise.all(ops)),
     } as unknown as PrismaService;
@@ -1425,6 +1475,7 @@ describe('OrdersService.repurchase v2 — mỗi dòng xử lý độc lập (A2-
     const prisma = {
       order: { findUnique: jest.fn().mockResolvedValue({ ...baseOrder, status: 'DELIVERED', items: opts.items }) },
       variation: { findMany: jest.fn().mockResolvedValue(opts.variations) },
+      flashSaleItem: { findMany: jest.fn().mockResolvedValue([]) },
       orderStatusHistory: { findMany: jest.fn().mockResolvedValue([]) },
       cart: { findUnique: jest.fn().mockResolvedValue(opts.inCart ? { items: opts.inCart } : null) },
     } as unknown as PrismaService;
