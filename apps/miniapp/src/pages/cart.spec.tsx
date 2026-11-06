@@ -781,6 +781,19 @@ describe('CartPage: gợi ý mã dùng được ở dòng "Mã giảm giá" (ch�
     expect(screen.getByTestId('coupon-cta').textContent).toBe('Thay đổi');
   });
 
+  it('mã dài (trên 15 ký tự): pill cho xuống dòng ngay trong pill, không cắt "…" mất ký tự mã', async () => {
+    const long = 'KHUYENMAI-THANG-MUOI-MOT-VIP-2026';
+    mocks.getCart.mockResolvedValue(summary({ couponCode: long, discount: 2_000 }));
+    renderPage();
+    const code = await screen.findByTestId('coupon-code');
+    expect(code.textContent).toBe(long);
+    expect(code.style.overflowWrap).toBe('anywhere');
+    expect(code.style.maxWidth).toBe('100%');
+    expect(code.style.textOverflow).toBe('');
+    expect(code.style.whiteSpace).not.toBe('nowrap');
+    expect(code.style.overflow).not.toBe('hidden');
+  });
+
   it('giỏ chưa có mã, có mã dùng được → "N mã · giảm đến X" (bản ngắn, vừa một dòng), hỏi đúng tham số, không gọi áp mã', async () => {
     mocks.getCart.mockResolvedValue(summary({}));
     mocks.getCouponPreviews.mockResolvedValue([

@@ -439,7 +439,7 @@
   "apps/miniapp/src/pages/campaign.tsx": 10,
   "apps/miniapp/src/pages/cart.tsx": 47,
   "apps/miniapp/src/pages/cashback.tsx": 31,
-  "apps/miniapp/src/pages/checkout.tsx": 67,
+  "apps/miniapp/src/pages/checkout.tsx": 65,
   "apps/miniapp/src/pages/community-events.tsx": 22,
   "apps/miniapp/src/pages/community-moderation.tsx": 40,
   "apps/miniapp/src/pages/dealer.tsx": 115,

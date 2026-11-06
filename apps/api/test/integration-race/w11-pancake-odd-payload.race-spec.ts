@@ -108,8 +108,9 @@ describe('Payload Pancake kiểu lạ không làm hỏng đồng bộ và tồn 
           { id: `w11-B1-${tag}`, sku: '', retail_price: '269000', sale_price: '199000', weight: 250.5, remain_quantity: '7', fields: [{ name: 'PHÂN LOẠI', value: '1 chai' }], images: ['https://img.test/b1.jpg'] },
           { id: { a: 1 }, sku: `w11-skip-${tag}`, retail_price: 1000 },
           { id: `w11-B3-${tag}`, sku: `W11-B3-${tag}`, retail_price: 100000, remain_quantity: -3, weight: -5 },
-          { id: `w11-B4-${tag}`, retail_price: '12.000', remain_quantity: 1e12, sale_price: {} },
+          { id: `w11-B4-${tag}`, retail_price: '12.5', remain_quantity: 1e12, sale_price: {} },
           { id: numericId, sku: {}, retail_price: 50000, remain_quantity: 4, is_removed: 'false' },
+          { id: `w11-B6-${tag}`, retail_price: '12.000', remain_quantity: 3 },
         ],
       },
     ];
@@ -129,6 +130,7 @@ describe('Payload Pancake kiểu lạ không làm hỏng đồng bộ và tồn 
     expect(await v(`w11-B1-${tag}`)).toMatchObject({ sku: `w11-B1-${tag}`, retailPrice: 269000, salePrice: 199000, weight: 250, stock: 7, pancakeStock: 7, name: '1 chai', isActive: true });
     expect(await v(`w11-B3-${tag}`)).toMatchObject({ stock: 0, pancakeStock: 0, weight: null, sku: `W11-B3-${tag}` });
     expect(await v(`w11-B4-${tag}`)).toMatchObject({ retailPrice: 0, salePrice: null, isActive: false, pancakeHold: 'NO_PRICE', stock: 0, pancakeStock: 0 });
+    expect(await v(`w11-B6-${tag}`)).toMatchObject({ retailPrice: 12000, salePrice: null, isActive: true, pancakeHold: null, stock: 3, pancakeStock: 3 });
     expect(await v(String(numericId))).toMatchObject({ sku: String(numericId), retailPrice: 50000, stock: 4, isActive: true });
     expect(await prisma.variation.count({ where: { sku: `w11-skip-${tag}` } })).toBe(0);
   });

@@ -359,7 +359,7 @@ export function CouponBox({
             <span className="flex min-w-0 items-center gap-2">
               <span
                 data-testid="coupon-code"
-                className="min-w-0 truncate rounded-control border border-dashed border-promo-solid bg-promo-bg px-1.5 py-0.5 text-label font-bold text-promo-fg"
+                className="min-w-0 max-w-full rounded-control border border-dashed border-promo-solid bg-promo-bg px-1.5 py-0.5 text-label font-bold text-promo-fg [overflow-wrap:anywhere]"
               >
                 {currentCode}
               </span>
@@ -434,14 +434,14 @@ export function CouponBox({
             data-testid="coupon-change"
             className="flex min-h-11 w-full items-center justify-between gap-2 text-left md:hidden"
           >
-            <span className="inline-flex min-w-0 flex-1 items-center gap-2.5">
+            <span className="inline-flex min-w-0 flex-1 items-center gap-2">
               <span className="grid h-9 w-9 flex-none place-items-center rounded-control bg-promo-bg">
                 <Ticket className="h-5 w-5 text-promo-fg" aria-hidden="true" />
               </span>
               <span className="flex min-w-0 flex-col text-sm font-semibold text-[color:var(--color-text-primary)]">
                 <span data-testid="coupon-label">Mã giảm giá</span>
                 <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
-                  <span data-testid="coupon-code" className="min-w-0 truncate rounded-control border border-dashed border-promo-solid bg-promo-bg px-1.5 py-0.5 text-label font-bold text-promo-fg">
+                  <span data-testid="coupon-code" className="min-w-0 max-w-full rounded-control border border-dashed border-promo-solid bg-promo-bg px-1.5 py-0.5 text-label font-bold text-promo-fg [overflow-wrap:anywhere]">
                     {currentCode}
                   </span>
                   {appliedDiscount > 0 && (
@@ -452,7 +452,7 @@ export function CouponBox({
                 </span>
               </span>
             </span>
-            <span data-testid="coupon-cta" className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-caption font-medium text-[color:var(--color-text-brand)]">
+            <span data-testid="coupon-cta" className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap text-caption font-medium text-[color:var(--color-text-brand)]">
               Thay đổi
               <ChevronRight
                 className={`h-4 w-4 transition-transform ${open ? 'rotate-90' : ''}`}

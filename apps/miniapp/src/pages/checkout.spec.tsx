@@ -614,6 +614,21 @@ describe('CheckoutPage — mã giữ trong giỏ nhưng chưa áp (MONEY-3)', ()
     await screen.findByText('SALE');
     expect(screen.queryByTestId('coupon-notice')).toBeNull();
   });
+
+  it('mã dài (trên 15 ký tự): pill xuống dòng trong pill, đủ ký tự, không "…"; khoảng cách dùng token', async () => {
+    const long = 'KHUYENMAI-THANG-MUOI-MOT-VIP-2026';
+    mocks.getCart.mockResolvedValue({ ...CART, couponCode: long, discount: 5000 });
+    mocks.checkoutQuote.mockResolvedValue({ ...QUOTE, discount: 5000, couponNotice: null });
+    renderPage();
+    const code = await screen.findByTestId('coupon-code');
+    expect(code.textContent).toBe(long);
+    expect(code.style.overflowWrap).toBe('anywhere');
+    expect(code.style.maxWidth).toBe('100%');
+    expect(code.style.textOverflow).toBe('');
+    expect(code.style.whiteSpace).not.toBe('nowrap');
+    const cta = screen.getByTestId('coupon-cta').parentElement!;
+    expect(cta.style.gap).toBe('var(--space-inline-xs)');
+  });
 });
 
 // Hàng "Tổng cộng" của khối tóm tắt (KeyValueRow: nhãn và giá trị cùng một dòng).
