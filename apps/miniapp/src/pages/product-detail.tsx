@@ -1165,7 +1165,7 @@ export default function ProductDetailPage() {
                 <span style={BUY_NOW_LINE}>{buyNowMutation.isPending ? 'Đang xử lý…' : 'Mua ngay'}</span>
                 {/* Khoảng trắng giữa hai khối (flex không vẽ ra) để chữ nhìn thấy khớp aria-label (WCAG 2.5.3). */}
                 {' '}
-                <span style={{ ...BUY_NOW_LINE, fontSize: 'var(--type-caption-size)', fontWeight: 500 }}>
+                <span style={{ ...BUY_NOW_LINE, fontSize: 'var(--type-caption-size)', fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>
                   {formatVnd(line.lineTotal)}
                 </span>
               </Button>

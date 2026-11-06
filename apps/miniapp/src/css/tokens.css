@@ -161,9 +161,9 @@ body.with-back-btn .page.page-bleed {
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
-/* Nhấn nhanh, thả chậm; không đổi opacity (ảnh mờ 10% làm thẻ nhũn). Nút/chip/icon co 0,96, thẻ co nhẹ hơn. */
+/* Nhấn nhanh, thả chậm; không đổi opacity (ảnh mờ 10% làm thẻ nhũn). Nút/chip/icon co 0,97 như nút DS (.tubu-btn), thẻ co nhẹ hơn. */
 .tubu-press:active {
-  transform: scale(0.96);
+  transform: scale(0.97);
   transition-duration: var(--p-dur-press);
 }
 .tubu-press-card {

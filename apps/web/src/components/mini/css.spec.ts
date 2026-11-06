@@ -78,7 +78,7 @@ describe('mini.css không đổi giao diện máy tính', () => {
 
 describe('mini.css: phản hồi nhấn (polish PL-11) khớp Mini App', () => {
   it('có .tubu-press-card (co 0,985) và .tubu-btn:active (co 0,97); không luật :active nào đổi opacity', () => {
-    expect(css).toMatch(/\.tubu-press:active\s*\{[^}]*scale\(0\.96\)/);
+    expect(css).toMatch(/\.tubu-press:active\s*\{[^}]*scale\(0\.97\)/);
     expect(css).toMatch(/\.tubu-press-card:active\s*\{[^}]*scale\(0\.985\)/);
     expect(css).toMatch(/\.tubu-btn:active\s*\{[^}]*scale\(0\.97\)/);
     const activeBlocks = [...strip(css).matchAll(/[^{}]*:active[^{}]*\{([^}]*)\}/g)].map((m) => m[1]!);
