@@ -741,6 +741,7 @@ describe('ReviewsService.listByProduct: lọc theo sao, ảnh, video ở máy ch
     [{ rating: 2, hasVideo: true }, { ...VISIBLE, rating: 2, videoUrl: { not: null } }],
     [{ media: 'photo' as const, hasVideo: true }, { ...VISIBLE, imageVersions: { isEmpty: false }, videoUrl: { not: null } }],
     [{ media: 'video' as const, hasVideo: true }, { ...VISIBLE, videoUrl: { not: null } }],
+    [{ media: 'video' as const, hasVideo: false }, { ...VISIBLE, videoUrl: { not: null } }],
   ])('bộ lọc %j → findMany where %j, mới nhất trước, mỗi trang 100', async (filter, where) => {
     const prisma = listPrisma([]);
     await new ReviewsService(prisma, analytics, loyalty).listByProduct('tinh-dau', filter);
