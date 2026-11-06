@@ -24,7 +24,10 @@ export interface FlashPriceBarProps {
  */
 export function FlashPriceBar({ price, compareAt, pct, endAt, soldPct, soldOut = false, perUserLimit, onEnd }: FlashPriceBarProps) {
   return (
-    <div data-testid="flash-price-bar" style={{ background: 'var(--color-flash-bg)', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+    <div
+      data-testid="flash-price-bar"
+      style={{ background: 'var(--color-flash-bg)', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 8, fontVariantNumeric: 'tabular-nums' }}
+    >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
         <Badge tone="flash" size="sm" icon={Zap}>
           {fillCopy('flash.title')}

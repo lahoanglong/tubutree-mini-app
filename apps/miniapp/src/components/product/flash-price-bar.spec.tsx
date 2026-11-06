@@ -37,6 +37,20 @@ describe('FlashPriceBar', () => {
     expect(screen.queryByText(/Mỗi khách tối đa/)).toBeNull();
   });
 
+  // Số tỉ lệ (mặc định của Inter) mỗi chữ số rộng khác nhau: đồng hồ nhảy hay đổi phân loại làm hàng xô ngang ở 320/375px.
+  it('mọi chữ số trong thanh (giá, giá gạch, -x%, đồng hồ, đã bán, giới hạn mua) dùng số tabular', () => {
+    render(<FlashPriceBar {...base} endAt={iso(7_500_000)} perUserLimit={5} />);
+    const numeric = (el: HTMLElement) => {
+      for (let e: HTMLElement | null = el; e; e = e.parentElement) if (e.style.fontVariantNumeric) return e.style.fontVariantNumeric;
+      return 'normal';
+    };
+    const ownText = (el: HTMLElement) => Array.from(el.childNodes).filter((n) => n.nodeType === Node.TEXT_NODE).map((n) => n.textContent).join('');
+    const withDigits = Array.from(screen.getByTestId('flash-price-bar').querySelectorAll<HTMLElement>('*')).filter((e) => /\d/.test(ownText(e)));
+    expect(withDigits.map(ownText)).toEqual(expect.arrayContaining(['84.000đ', '120.000đ', '-30%', 'Đã bán 40%']));
+    expect(withDigits.length).toBeGreaterThanOrEqual(6);
+    expect(withDigits.filter((e) => numeric(e) !== 'tabular-nums').map(ownText)).toEqual([]);
+  });
+
   it('hết giờ: gọi onEnd đúng một lần', () => {
     const onEnd = vi.fn();
     render(<FlashPriceBar {...base} endAt={iso(1_500)} onEnd={onEnd} />);

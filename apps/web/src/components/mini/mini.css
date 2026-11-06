@@ -56,7 +56,7 @@
   -webkit-tap-highlight-color: transparent;
 }
 .tubu-press:active {
-  transform: scale(0.96);
+  transform: scale(0.97);
   transition-duration: var(--p-dur-press);
 }
 .tubu-press-card {

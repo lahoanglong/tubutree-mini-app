@@ -982,6 +982,8 @@ describe('AddToCart — Mua ngay', () => {
       const buy = Array.from(bar(container).querySelectorAll<HTMLButtonElement>('button')).find((b) => b.textContent === 'Mua ngay 150.000đ')!;
       expect(buy.getAttribute('aria-label')).toBe('Mua ngay 150.000đ');
       expect([...buy.querySelectorAll('span')].map((x) => x.textContent)).toEqual(['Mua ngay', '150.000đ']);
+      // Như Mini App: giá đổi theo phân loại và số lượng, số tabular giữ nhãn không xô ngang.
+      expect(buy.querySelectorAll('span')[1]!.className.split(/\s+/)).toContain('tabular-nums');
       expect(bar(container).textContent).not.toContain('Tạm tính');
     });
 
