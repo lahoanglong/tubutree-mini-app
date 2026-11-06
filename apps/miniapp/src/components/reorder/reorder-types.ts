@@ -29,7 +29,7 @@ export interface ReorderLine {
 
 /** Đơn giá và câu dưới dòng ở số lượng khách chọn: Giờ vàng chỉ áp tới số suất còn mua được, vượt thì cả dòng giá đang bán (như giỏ). */
 export function lineAt(line: ReorderLine, quantity: number): { unitPrice: number; notices: readonly ReorderLineNotice[] } {
-  if (!line.pricing) return { unitPrice: line.unitPrice, notices: line.notices };
+  if (!line.pricing || !line.available) return { unitPrice: line.unitPrice, notices: line.notices };
   const { unitPrice, notice } = reorderPriceAt(line.pricing, quantity);
   const rest = line.notices.filter((n) => n.kind !== 'priceUp' && n.kind !== 'priceDown');
   return { unitPrice, notices: notice ? [...rest, notice] : rest };
