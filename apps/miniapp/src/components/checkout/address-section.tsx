@@ -23,6 +23,15 @@ export function AddressSection({ addresses, selectedId, onSelect }: AddressSecti
   const [editingId, setEditingId] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const editing = addresses.find((a) => a.id === editingId) ?? null;
+  // Đưa địa chỉ vừa lưu vào danh sách trước khi chọn: danh sách tải lại về sau, mà trang thanh toán thấy id đang chọn không có trong danh sách
+  // thì chọn lại địa chỉ mặc định, đơn đi về địa chỉ cũ.
+  const keepSaved = (a: AddressDTO) => {
+    queryClient.setQueryData<AddressDTO[]>(['addresses'], (old = []) =>
+      old.some((x) => x.id === a.id) ? old.map((x) => (x.id === a.id ? a : x)) : [...old, a],
+    );
+    void queryClient.invalidateQueries({ queryKey: ['addresses'] });
+    onSelect(a.id);
+  };
 
   return (
     <div style={{ padding: 16, marginTop: 8, background: 'var(--color-bg-surface)' }}>
@@ -59,9 +68,8 @@ export function AddressSection({ addresses, selectedId, onSelect }: AddressSecti
             initial={editing}
             onCancel={() => setEditingId(null)}
             onSaved={(a) => {
-              void queryClient.invalidateQueries({ queryKey: ['addresses'] });
               void queryClient.invalidateQueries({ queryKey: ['quote'] });
-              onSelect(a.id);
+              keepSaved(a);
               setEditingId(null);
             }}
           />
@@ -75,8 +83,7 @@ export function AddressSection({ addresses, selectedId, onSelect }: AddressSecti
             askZaloProfile={addresses.length === 0}
             onCancel={() => setAdding(false)}
             onSaved={(a) => {
-              void queryClient.invalidateQueries({ queryKey: ['addresses'] });
-              onSelect(a.id);
+              keepSaved(a);
               setAdding(false);
             }}
           />

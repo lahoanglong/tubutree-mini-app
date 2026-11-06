@@ -685,20 +685,26 @@ describe('CartService guard tồn kho', () => {
       expect(await messageOf(svcWithStock(0, 0).addItem('u1', { variationId: 'v1', quantity: 1 }))).toBe('Sản phẩm đã hết hàng.');
     });
 
-    it('payload giỏ: tồn từ 1.000 trở lên (kể cả tồn ảo 99.999.988) bị kẹp ở 1.000, tồn nhỏ hơn giữ nguyên để client chặn nút +', async () => {
-      const row = (id: string, stock: number) => ({
+    it('payload giỏ không mang tồn thật trên 20: tồn thấp đúng số, dòng vượt tồn là số lượng − 1, còn lại max(99, số lượng) (W31)', async () => {
+      const row = (id: string, stock: number, quantity = 1) => ({
         id: `ci-${id}`,
         variationId: id,
-        quantity: 1,
+        quantity,
         variation: { isActive: true, productId: `p-${id}`, salePrice: null, retailPrice: 50000, stock, name: id, product: { name: `SP ${id}`, slug: id, thumbnail: null, isActive: true, approvalStatus: 'APPROVED' } },
       });
       const prisma = {
-        cart: { upsert: jest.fn().mockResolvedValue({ id: 'c1' }), findUnique: jest.fn().mockResolvedValue({ id: 'c1', couponCode: null, items: [row('virtual', 99_999_988), row('plenty', 100_000), row('normal', 40)] }) },
+        cart: { upsert: jest.fn().mockResolvedValue({ id: 'c1' }), findUnique: jest.fn().mockResolvedValue({ id: 'c1', couponCode: null, items: [
+          row('virtual', 99_999_988), row('plenty', 100_000), row('normal', 40), row('low', 7, 3), row('over', 25, 30), row('big', 5000, 150), row('out', 0, 2),
+        ] }) },
       } as unknown as PrismaService;
       const flashSvc = { resolveEffective: jest.fn().mockResolvedValue(new Map()) } as unknown as FlashSaleService;
       const cart = await new CartService(prisma, coupons, config, flashSvc, analytics, combo).getCart('u1');
-      expect(cart.items.map((i) => i.stock)).toEqual([1000, 1000, 40]);
-      expect(JSON.stringify(cart)).not.toContain('99999988');
+      expect(cart.items.map((i) => [i.variationId, i.stock])).toEqual([
+        ['virtual', 99], ['plenty', 99], ['normal', 99], ['low', 7], ['over', 29], ['big', 150], ['out', 0],
+      ]);
+      const json = JSON.stringify(cart);
+      expect(json).not.toContain('99999988');
+      for (const real of [100_000, 40, 25, 5000]) expect(json).not.toContain(`"stock":${real}`);
     });
   });
 

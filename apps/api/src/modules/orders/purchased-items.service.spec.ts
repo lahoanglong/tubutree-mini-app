@@ -19,10 +19,10 @@ function setup(rows: ReturnType<typeof row>[], variations: ReturnType<typeof var
 const sqlOf = (m: jest.Mock) => m.mock.calls[0]![0] as Prisma.Sql;
 
 describe('PurchasedItemsService.list — tồn ảo', () => {
-  it('tồn ảo 99.999.988 bị kẹp ở 100.000, tồn âm về 0 và vẫn báo hết hàng', async () => {
-    const { svc } = setup([row('v1'), row('v2')], [variation('v1', { stock: 99_999_988 }), variation('v2', { stock: -3 })]);
+  it('tồn ảo 99.999.988 bị kẹp ở 100.000, tồn thật trên 20 là 99, tồn âm về 0 và vẫn báo hết hàng (W31)', async () => {
+    const { svc } = setup([row('v1'), row('v2'), row('v3')], [variation('v1', { stock: 99_999_988 }), variation('v2', { stock: -3 }), variation('v3', { stock: 64 })]);
     const page = await svc.list('u1');
-    expect(page.items.map((i) => [i.stock, i.inStock])).toEqual([[100_000, true], [0, false]]);
+    expect(page.items.map((i) => [i.variationId, i.stock, i.inStock])).toEqual([['v1', 100_000, true], ['v2', 0, false], ['v3', 99, true]]);
   });
 });
 

@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
-import { strikePrice } from '@tubutree/shared-types';
+import { cartLineStock, strikePrice } from '@tubutree/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CouponMinOrderError, CouponsService, normalizeCouponCode } from '../coupons/coupons.service';
 import { CouponClaimService } from '../coupons/coupon-claim.service';
@@ -32,9 +32,6 @@ import {
 import { fulfillerOf, merchantStoreUnavailableReason, storeUnavailableOnAddMessage } from '../checkout/checkout-split';
 import { isPartnerStore } from '../merchant/partner-store';
 import { publicImage } from '../../common/public-image';
-
-/** Tồn lớn nhất payload giỏ gửi cho client: một ô nhiều hơn MAX_ITEM_QUANTITY để nút + khoá đúng ở trần mỗi món mà không lộ tồn thật. */
-const CART_STOCK_CAP = MAX_ITEM_QUANTITY + 1;
 
 const ADD_ITEM_INCLUDE = {
   product: {
@@ -236,8 +233,8 @@ export class CartService {
         // tính "Tiết kiệm" khi lớn hơn unitPrice (bằng nhau thì không vẽ gì). Chỉ là số hiển thị: không số tiền nào của giỏ đọc trường này.
         listUnitPrice: strikePrice({ retailPrice: it.variation.retailPrice, salePrice: it.variation.salePrice, flashPrice: flash?.flashPrice }),
         quantity: it.quantity,
-        // Client chỉ cần trần để khoá nút +, mà máy chủ không nhận quá MAX_ITEM_QUANTITY mỗi món: kẹp ở CART_STOCK_CAP nên tồn ảo và tồn lớn không ra khỏi giỏ.
-        stock: Math.min(it.variation.stock, CART_STOCK_CAP),
+        // Không gửi tồn thật trên LOW_STOCK_NOTICE nhưng giữ `quantity > stock` đúng khi dòng vượt tồn (xem cartLineStock).
+        stock: cartLineStock(it.variation.stock, it.quantity),
         weight: it.variation.weight ?? null,
         total: unitPrice * it.quantity,
         isFlash: !!flash,
@@ -404,7 +401,7 @@ export class CartService {
     if (currentQty + addQty > variation.stock) {
       throw new BadRequestException(overStockText(variation.stock));
     }
-    // Payload giỏ kẹp stock ở CART_STOCK_CAP; giỏ vượt trần mỗi món thì client coi là vượt tồn và chặn thanh toán, nên máy chủ chặn từ lúc cộng dồn.
+    // Trần mỗi món: máy chủ chặn từ lúc cộng dồn, không để dòng giỏ vượt MAX_ITEM_QUANTITY rồi mới hỏng ở thanh toán.
     if (currentQty + addQty > MAX_ITEM_QUANTITY) {
       throw new BadRequestException(`Mỗi món chỉ có tối đa ${MAX_ITEM_QUANTITY} sản phẩm trong giỏ.`);
     }

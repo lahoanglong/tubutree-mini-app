@@ -1,5 +1,6 @@
-import { exposedStock } from '@tubutree/shared-types';
+import { cartLineStock, exposedStock, PUBLIC_STOCK_IN } from '@tubutree/shared-types';
 import { describe, expect, it } from 'vitest';
+import { checkoutLineProblem } from './checkout-issues';
 import { cartStockNote, isLowStock, LOW_STOCK_NOTICE, overStockTarget, PLENTY_STOCK, QTY_PICK_CAP, qtyPickMax, stockText } from './stock-text';
 
 describe('stockText: một chữ tồn kho cho cả hai app', () => {
@@ -98,12 +99,66 @@ describe('overStockTarget: mức kéo về của dòng vượt tồn', () => {
   });
 });
 
-describe('exposedStock: tồn gửi ra client', () => {
-  it('dưới ngưỡng ảo giữ nguyên để client chặn nút +, từ 100.000 trở lên bị kẹp, con số Pancake không ra ngoài', () => {
-    expect(exposedStock(0)).toBe(0);
-    expect(exposedStock(7)).toBe(7);
-    expect(exposedStock(PLENTY_STOCK - 1)).toBe(PLENTY_STOCK - 1);
-    expect(exposedStock(PLENTY_STOCK)).toBe(PLENTY_STOCK);
-    expect(exposedStock(99_999_988)).toBe(PLENTY_STOCK);
+const REAL_STOCKS = [-3, 0, 1, 7, 19, 20, 21, 22, 25, 40, 98, 99, 100, 150, 523, 999, 1000, 5000, PLENTY_STOCK - 1, PLENTY_STOCK, 99_999_988];
+
+describe('exposedStock: tồn gửi ra client (W31)', () => {
+  it('hết hàng 0, 1..20 đúng số, 21..99.999 là 99, tồn ảo là đúng 100.000', () => {
+    expect(PUBLIC_STOCK_IN).toBe(99);
+    for (const n of [-3, 0, Number.NaN]) expect(exposedStock(n)).toBe(0);
+    for (const n of [1, 7, 20]) expect(exposedStock(n)).toBe(n);
+    for (const n of [21, 25, 98, 99, 100, 523, 5000, PLENTY_STOCK - 1]) expect(exposedStock(n)).toBe(PUBLIC_STOCK_IN);
+    for (const n of [PLENTY_STOCK, 99_999_988]) expect(exposedStock(n)).toBe(PLENTY_STOCK);
+  });
+
+  it('tồn thật trên 20 không bao giờ ra ngoài: chỉ còn hai giá trị cố định', () => {
+    const out = new Set(REAL_STOCKS.filter((n) => n > LOW_STOCK_NOTICE).map(exposedStock));
+    expect([...out].sort((a, b) => a - b)).toEqual([PUBLIC_STOCK_IN, PLENTY_STOCK]);
+  });
+
+  it('client vẽ y như với tồn thật: chữ tồn kho, trần nút +, tồn thấp', () => {
+    for (const n of REAL_STOCKS) {
+      expect(stockText(exposedStock(n))).toBe(stockText(n));
+      expect(qtyPickMax(exposedStock(n))).toBe(qtyPickMax(n));
+      expect(isLowStock(exposedStock(n))).toBe(isLowStock(n));
+    }
+  });
+});
+
+describe('cartLineStock: tồn gửi cho một dòng giỏ (W31)', () => {
+  it('tồn 0..20 đúng số; tồn cao đang vượt thì quantity − 1; còn lại max(99, quantity)', () => {
+    expect(cartLineStock(5, 8)).toBe(5);
+    expect(cartLineStock(0, 2)).toBe(0);
+    expect(cartLineStock(-2, 1)).toBe(0);
+    expect(cartLineStock(25, 30)).toBe(29);
+    expect(cartLineStock(21, 22)).toBe(21);
+    expect(cartLineStock(25, 3)).toBe(PUBLIC_STOCK_IN);
+    expect(cartLineStock(25, 25)).toBe(PUBLIC_STOCK_IN);
+    expect(cartLineStock(5000, 150)).toBe(150);
+    expect(cartLineStock(99_999_988, 999)).toBe(999);
+  });
+
+  it('tồn trên 20 không suy ra được: cùng số lượng thì mọi tồn thật cùng phía (vượt hay không) ra cùng một số', () => {
+    const high = REAL_STOCKS.filter((n) => n > LOW_STOCK_NOTICE);
+    for (const q of [1, 20, 21, 22, 30, 98, 99, 100, 150, 999]) {
+      const over = new Set(high.filter((s) => q > s).map((s) => cartLineStock(s, q)));
+      const within = new Set(high.filter((s) => q <= s).map((s) => cartLineStock(s, q)));
+      expect(over.size).toBeLessThanOrEqual(1);
+      expect(within.size).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('giỏ và thanh toán xử lý y như với tồn thật: vượt hay không, chữ ghi chú, mức kéo về, lỗi dòng thanh toán, trần nút +', () => {
+    for (const stock of REAL_STOCKS) {
+      for (const q of [1, 2, 19, 20, 21, 22, 25, 30, 98, 99, 100, 150, 999]) {
+        const shown = cartLineStock(stock, q);
+        expect(q > shown).toBe(q > stock);
+        expect(cartStockNote(q, shown)).toBe(cartStockNote(q, stock));
+        expect(checkoutLineProblem({ id: 'l', productName: 'P', quantity: q, stock: shown })).toEqual(
+          checkoutLineProblem({ id: 'l', productName: 'P', quantity: q, stock }),
+        );
+        expect(qtyPickMax(shown)).toBe(qtyPickMax(stock));
+        if (q > stock && stock > 0) expect(overStockTarget(shown)).toBe(overStockTarget(stock));
+      }
+    }
   });
 });
