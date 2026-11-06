@@ -1,12 +1,12 @@
 'use client';
 
-import { Suspense, useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronRight, Copy, CreditCard, Leaf, MessageCircle, Package, PackageCheck, Pencil, Repeat, Truck, type LucideIcon } from 'lucide-react';
 import { orderRowLabel, profileCopy } from '@tubutree/app-core/account-copy';
-import { STAT_VALUE_LINE_HEIGHT, statValueTracking, statValueVariant } from '@tubutree/app-core/account-stat';
+import { STAT_VALUE_LINE_HEIGHT, STAT_VALUE_LOOKS, statValueFits, statValueStart } from '@tubutree/app-core/account-stat';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { ORDER_STATUS_ROW } from '@tubutree/app-core/home-layout';
 import { PROFILE_REFERRAL_SECTION } from '@tubutree/app-core/profile-sections';
@@ -67,11 +67,11 @@ function RowBody({ item, unread = 0, dot = false }: { item: AccountMenuItem; unr
   );
 }
 
-/** Bề ngang thật của ô (đổi theo màn, xoay máy): chọn cỡ chữ lớn nhất còn vừa. Chưa đo được thì undefined, app-core coi như ô 320px. */
+/** Bề ngang thật của ô (đổi theo màn, xoay máy), đo trước khi vẽ: chọn cỡ chữ lớn nhất còn vừa. Chưa đo được thì undefined, app-core coi như ô 320px. */
 function useCellWidth<T extends HTMLElement>() {
   const ref = useRef<T>(null);
   const [width, setWidth] = useState<number>();
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
     const read = () => setWidth(el.getBoundingClientRect().width || undefined);
@@ -84,9 +84,36 @@ function useCellWidth<T extends HTMLElement>() {
   return [ref, width] as const;
 }
 
+/** Phông Inter nạp kiểu swap: lần đo đầu có thể đang ở phông dự phòng, nạp xong thì đo lại. */
+function useFontsReady() {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    let live = true;
+    void document.fonts?.ready.then(() => {
+      if (live) setReady(true);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
+  return ready;
+}
+
 function Stat({ label, value, href }: { label: string; value: string; href: string }) {
   const [cell, cellWidth] = useCellWidth<HTMLAnchorElement>();
-  const variant = statValueVariant(value, cellWidth);
+  const text = useRef<HTMLSpanElement>(null);
+  // Bước đã lùi sau khi đo chữ thật, gắn với đúng số, bề ngang ô và phông lúc đo; đổi một trong ba thì đo lại từ bước ước lượng.
+  const [fit, setFit] = useState<{ key: string; step: number } | null>(null);
+  const fontsReady = useFontsReady();
+  const key = `${value}|${cellWidth ?? ''}|${fontsReady}`;
+  const step = fit?.key === key ? fit.step : statValueStart(value, cellWidth);
+  const last = STAT_VALUE_LOOKS.length - 1;
+  useLayoutEffect(() => {
+    const width = text.current?.getBoundingClientRect().width;
+    if (!cellWidth || !width || step >= last || statValueFits(width, cellWidth)) return;
+    setFit({ key, step: step + 1 });
+  }, [key, step, cellWidth, last]);
+  const look = STAT_VALUE_LOOKS[step]!;
   return (
     <Link
       ref={cell}
@@ -94,12 +121,14 @@ function Stat({ label, value, href }: { label: string; value: string; href: stri
       className="tubu-press block min-h-11 rounded-card bg-[var(--color-bg-surface)] px-1 py-2.5 text-center shadow-[var(--elevation-1)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-forest-600"
     >
       <Text
-        variant={variant}
+        variant={look.variant}
         as="div"
         tone="brand"
-        style={{ fontVariantNumeric: 'tabular-nums', lineHeight: STAT_VALUE_LINE_HEIGHT, letterSpacing: statValueTracking(variant), overflowWrap: 'anywhere' }}
+        style={{ fontVariantNumeric: 'tabular-nums', lineHeight: STAT_VALUE_LINE_HEIGHT, letterSpacing: look.letterSpacing, overflowWrap: 'anywhere' }}
       >
-        {value}
+        <span ref={text} style={step < last ? { whiteSpace: 'nowrap' } : undefined}>
+          {value}
+        </span>
       </Text>
       <Text variant="caption" tone="tertiary" as="div">
         {label}

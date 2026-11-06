@@ -1,11 +1,11 @@
 import type { Page } from '@playwright/test';
 import { test, expect, makeUser, mockSession, type MockApi } from './support/mock-api';
-import { STAT_CASES, STAT_MIN_GAP, WIDE_CASE, statFacts } from './support/account-stat-facts';
+import { STAT_CASES, STAT_MIN_GAP, WIDE_CASE, WIDE_LONG_CASE, fontPx, statFacts } from './support/account-stat-facts';
 
 /**
  * Zalo Mini App, trang Cá nhân ở 320px: ô Điểm Xanh từ 1.000 điểm không gãy hai dòng, ô Ví từ 10 triệu tới 100 triệu không sát mép
  * hay tràn ngang. Ba ô chia đều nên mỗi ô chỉ khoảng 93px; đo bằng chữ thật (Inter) trong trình duyệt. Ở 414px ô đủ chỗ thì
- * số giữ cỡ 16px, không thu nhỏ theo luật của màn 320px.
+ * số giữ cỡ 16px, không thu nhỏ theo luật của màn 320px; số dài nhất không nhỏ hơn 14px.
  */
 type Case = (typeof STAT_CASES)[number];
 
@@ -49,5 +49,10 @@ test.describe('Zalo Mini App E2E - ô Điểm Xanh và Ví ở 414px', () => {
   test(`${WIDE_CASE.pointsText} và ${WIDE_CASE.walletText} giữ cỡ 16px khi ô đủ chỗ, vẫn một dòng, cách mép`, async ({ page, api }) => {
     const facts = await openStats(page, api, WIDE_CASE);
     for (const f of facts) expect(f.font, f.text).toMatch(/^600 16px /);
+  });
+
+  test(`${WIDE_LONG_CASE.pointsText} và ${WIDE_LONG_CASE.walletText} một dòng, cách mép, không nhỏ hơn 14px`, async ({ page, api }) => {
+    const facts = await openStats(page, api, WIDE_LONG_CASE);
+    for (const f of facts) expect(fontPx(f.font), f.text).toBeGreaterThanOrEqual(14);
   });
 });

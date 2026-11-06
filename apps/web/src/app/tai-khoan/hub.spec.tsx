@@ -202,6 +202,42 @@ describe('hub /tai-khoan — ba số và hàng trạng thái đơn', () => {
     expect(byText(small, 'div', '50.000đ')!.style.fontSize).toBe('var(--type-price-md-size)');
   });
 
+  // jsdom không dựng chữ: giả bề ngang ô 93,33px (màn 320px) và bề ngang chữ theo cỡ đang vẽ.
+  const fakeWidths = (chars: (size: string) => number) => {
+    const real = Element.prototype.getBoundingClientRect;
+    return vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+      const box = (width: number) => ({ x: 0, y: 0, top: 0, left: 0, right: width, bottom: 0, width, height: 0, toJSON: () => ({}) }) as DOMRect;
+      if (this.tagName === 'A' && this.textContent?.endsWith('Ví Tubu')) return box(93.33);
+      if (this.tagName === 'SPAN' && this.textContent === '50.000đ') return box(chars((this.parentElement as HTMLElement).style.fontSize));
+      return real.call(this);
+    });
+  };
+
+  it('đo chữ thật: chữ không vừa ô (cách mép dưới 6px) thì lùi một cỡ, vừa rồi thì dừng', async () => {
+    const rect = fakeWidths((size) => (size === 'var(--type-price-md-size)' ? 90 : 70));
+    try {
+      const tile = stat(await mount(), 'Ví Tubu');
+      expect(byText(tile, 'div', '50.000đ')!.style.fontSize).toBe('var(--type-price-sm-size)');
+      expect(byText(tile, 'span', '50.000đ')!.style.whiteSpace).toBe('nowrap');
+    } finally {
+      rect.mockRestore();
+    }
+  });
+
+  it('đo chữ thật: tới cỡ nhỏ nhất vẫn không vừa thì khít -0,04em và cho xuống dòng trong ô, không tràn ngang', async () => {
+    const rect = fakeWidths(() => 100);
+    try {
+      const tile = stat(await mount(), 'Ví Tubu');
+      expect(byText(tile, 'div', '50.000đ')!.style.letterSpacing).toBe('-0.04em');
+      const value = byText(tile, 'div', '50.000đ')!;
+      expect(value.style.fontSize).toBe('var(--type-label-size)');
+      expect(value.style.overflowWrap).toBe('anywhere');
+      expect(byText(tile, 'span', '50.000đ')!.style.whiteSpace).toBe('');
+    } finally {
+      rect.mockRestore();
+    }
+  });
+
   it('ví 10 triệu tới 100 triệu xuống cỡ label 12px, giữ dòng 22px, xuống dòng trong ô thay vì tràn ngang', async () => {
     mocks.meWallet = 100_000_000;
     const big = stat(await mount(), 'Ví Tubu');

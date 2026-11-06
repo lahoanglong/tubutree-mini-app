@@ -161,15 +161,53 @@ describe('Thanh số dư ở hub Cá nhân (C-086)', () => {
     try {
       const { unmount } = renderPage();
       const big = await screen.findByRole('button', { name: /^1\.234\.567đ\s*Ví Tubu$/ });
-      expect(within(big).getByText('1.234.567đ').style.fontSize).toBe('var(--type-price-sm-size)');
-      expect(within(big).getByText('1.234.567đ').style.lineHeight).toBe('calc(var(--type-price-md-size) * var(--type-price-md-lh))');
+      expect(within(big).getByText('1.234.567đ').parentElement!.style.fontSize).toBe('var(--type-price-sm-size)');
+      expect(within(big).getByText('1.234.567đ').parentElement!.style.lineHeight).toBe('calc(var(--type-price-md-size) * var(--type-price-md-lh))');
       unmount();
     } finally {
       vi.mocked(getWallet).mockResolvedValue({ walletBalance: 50000 } as never);
     }
     renderPage();
     const small = await screen.findByRole('button', { name: /^50\.000đ\s*Ví Tubu$/ });
-    expect(within(small).getByText('50.000đ').style.fontSize).toBe('var(--type-price-md-size)');
+    expect(within(small).getByText('50.000đ').parentElement!.style.fontSize).toBe('var(--type-price-md-size)');
+  });
+
+  // jsdom không dựng chữ: giả bề ngang ô 93,33px (màn 320px) và bề ngang chữ theo cỡ đang vẽ.
+  const fakeWidths = (chars: (size: string) => number) => {
+    const real = Element.prototype.getBoundingClientRect;
+    return vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+      const box = (width: number) => ({ x: 0, y: 0, top: 0, left: 0, right: width, bottom: 0, width, height: 0, toJSON: () => ({}) }) as DOMRect;
+      if (this.getAttribute('role') === 'button' && this.textContent?.endsWith('Ví Tubu')) return box(93.33);
+      if (this.tagName === 'SPAN' && this.textContent === '50.000đ') return box(chars((this.parentElement as HTMLElement).style.fontSize));
+      return real.call(this);
+    });
+  };
+
+  it('đo chữ thật: chữ không vừa ô (cách mép dưới 6px) thì lùi một cỡ, vừa rồi thì dừng', async () => {
+    const rect = fakeWidths((size) => (size === 'var(--type-price-md-size)' ? 90 : 70));
+    try {
+      renderPage();
+      const tile = await screen.findByRole('button', { name: /^50\.000đ\s*Ví Tubu$/ });
+      await waitFor(() => expect(within(tile).getByText('50.000đ').parentElement!.style.fontSize).toBe('var(--type-price-sm-size)'));
+      expect(within(tile).getByText('50.000đ').style.whiteSpace).toBe('nowrap');
+    } finally {
+      rect.mockRestore();
+    }
+  });
+
+  it('đo chữ thật: tới cỡ nhỏ nhất vẫn không vừa thì khít -0,04em và cho xuống dòng trong ô, không tràn ngang', async () => {
+    const rect = fakeWidths(() => 100);
+    try {
+      renderPage();
+      const tile = await screen.findByRole('button', { name: /^50\.000đ\s*Ví Tubu$/ });
+      await waitFor(() => expect(within(tile).getByText('50.000đ').parentElement!.style.letterSpacing).toBe('-0.04em'));
+      const value = within(tile).getByText('50.000đ');
+      expect(value.parentElement!.style.fontSize).toBe('var(--type-label-size)');
+      expect(value.style.whiteSpace).toBe('');
+      expect(value.parentElement!.style.overflowWrap).toBe('anywhere');
+    } finally {
+      rect.mockRestore();
+    }
   });
 
   it('ví 10 triệu tới 100 triệu xuống cỡ label 12px, giữ dòng 22px, xuống dòng trong ô thay vì tràn ngang', async () => {
@@ -177,7 +215,7 @@ describe('Thanh số dư ở hub Cá nhân (C-086)', () => {
     try {
       renderPage();
       const big = await screen.findByRole('button', { name: /^100\.000\.000đ\s*Ví Tubu$/ });
-      const value = within(big).getByText('100.000.000đ');
+      const value = within(big).getByText('100.000.000đ').parentElement!;
       expect(value.style.fontSize).toBe('var(--type-label-size)');
       expect(value.style.lineHeight).toBe('calc(var(--type-price-md-size) * var(--type-price-md-lh))');
       expect(value.style.overflowWrap).toBe('anywhere');
@@ -213,7 +251,7 @@ describe('Thanh số dư ở hub Cá nhân (C-086)', () => {
   it('số ở ba ô số dư dùng font sans tabular, không phải serif của tiêu đề (D6-13)', async () => {
     renderPage();
     const tile = await screen.findByRole('button', { name: /^50\.000đ\s*Ví Tubu$/ });
-    const value = Array.from(tile.querySelectorAll<HTMLElement>('*')).find((el) => el.textContent === '50.000đ' && el.children.length === 0)!;
+    const value = Array.from(tile.querySelectorAll<HTMLElement>('*')).find((el) => el.textContent === '50.000đ' && el.children.length === 0)!.parentElement!;
     expect(value).toBeTruthy();
     expect(value.style.fontFamily).toContain('--font-ui');
     expect(value.style.fontFamily).not.toContain('--font-display');

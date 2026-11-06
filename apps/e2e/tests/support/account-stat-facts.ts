@@ -52,5 +52,16 @@ export const STAT_CASES = [
 /** Cách mép ô ít nhất 6px: 4px đệm của ô cộng 2px để chữ không dính sát viền bo. */
 export const STAT_MIN_GAP = 6;
 
-/** Màn 414px (ô ~125px): đủ chỗ thì giữ cỡ price-md 16px, không thu nhỏ như ở 320px. */
-export const WIDE_CASE = { points: 999_999, wallet: 100_000_000, pointsText: '999.999 điểm', walletText: '100.000.000đ' };
+/** Màn 414px (ô ~125px): 11 ký tự còn đủ chỗ thì giữ cỡ price-md 16px, không thu nhỏ như ở 320px. */
+export const WIDE_CASE = { points: 10_000, wallet: 10_000_000, pointsText: '10.000 điểm', walletText: '10.000.000đ' };
+
+/**
+ * Màn 414px, số dài nhất: Chrome trên Linux vẽ Inter rộng hơn macOS nên 12 ký tự có thể không vừa 16px.
+ * Chỉ đòi một dòng, cách mép và không nhỏ hơn price-sm 14px.
+ */
+export const WIDE_LONG_CASE = STAT_CASES[2]!;
+
+/** Cỡ chữ (px) trong chuỗi phông `getComputedStyle`, ví dụ "600 14px Inter, …" thì 14. */
+export function fontPx(font: string): number {
+  return Number(/ (\d+(?:\.\d+)?)px /.exec(font)?.[1]);
+}

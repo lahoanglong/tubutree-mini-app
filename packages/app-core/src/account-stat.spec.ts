@@ -1,7 +1,15 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { STAT_NARROW_CELL_PX, STAT_VALUE_LINE_HEIGHT, STAT_VALUE_SIZE_PX, statValueTracking, statValueVariant } from './account-stat';
+import {
+  STAT_NARROW_CELL_PX,
+  STAT_VALUE_LINE_HEIGHT,
+  STAT_VALUE_LOOKS,
+  STAT_VALUE_SIZE_PX,
+  statValueFits,
+  statValueStart,
+  statValueVariant,
+} from './account-stat';
 
 describe('statValueVariant: chưa đo được ô thì chọn theo ô 93px ở 320px (vừa một dòng, cách mép ô)', () => {
   it('tới 8 ký tự giữ price-md', () => {
@@ -42,10 +50,27 @@ describe('statValueVariant: chưa đo được ô thì chọn theo ô 93px ở 3
     expect(statValueVariant('1.000 điểm', STAT_NARROW_CELL_PX)).toBe('price-sm');
   });
 
-  it('chỉ cỡ label khít chữ lại', () => {
-    expect(statValueTracking('label')).toBe('-0.02em');
-    expect(statValueTracking('price-sm')).toBeUndefined();
-    expect(statValueTracking('price-md')).toBeUndefined();
+  it('dãy cỡ từ lớn tới nhỏ: chỉ cỡ label khít chữ, bước cuối khít hơn', () => {
+    expect(STAT_VALUE_LOOKS).toEqual([
+      { variant: 'price-md' },
+      { variant: 'price-sm' },
+      { variant: 'label', letterSpacing: '-0.02em' },
+      { variant: 'label', letterSpacing: '-0.04em' },
+    ]);
+  });
+
+  it('statValueStart: bước đầu theo ước lượng (app đo chữ thật rồi lùi bước)', () => {
+    expect(statValueStart('999.999đ')).toBe(0);
+    expect(statValueStart('1.000 điểm')).toBe(1);
+    expect(statValueStart('100.000.000đ')).toBe(2);
+    expect(statValueStart('100.000.000đ', 124.67)).toBe(0);
+  });
+
+  it('statValueFits: chữ cách mép ô ít nhất 6px mỗi bên', () => {
+    expect(statValueFits(81.33, 93.33)).toBe(true);
+    expect(statValueFits(83.14, 93.33)).toBe(false);
+    expect(statValueFits(119, 124.67)).toBe(false);
+    expect(statValueFits(104, 124.67)).toBe(true);
   });
 
   it('chiều cao dòng cố định theo dòng price-md cho mọi cỡ', () => {

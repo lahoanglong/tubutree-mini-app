@@ -24,12 +24,34 @@ export function statValueVariant(value: string, cellWidth?: number): StatValueVa
   return 'label';
 }
 
+/** Cách hiện số trong ô: cỡ chữ và khoảng chữ. */
+export interface StatValueLook {
+  variant: StatValueVariant;
+  letterSpacing?: string;
+}
+
 /**
- * Cỡ label 12px khít chữ lại 0,02em (~3px với 12 ký tự): "100.000.000đ" và "999.999 điểm" cách mép ô hơn 6px thay vì chưa tới 5px.
- * Hai cỡ lớn hơn đã đủ chỗ nên giữ khoảng chữ gốc.
+ * Các bước từ lớn tới nhỏ. Cỡ label khít chữ lại 0,02em (~3px với 12 ký tự); bước cuối khít 0,04em cho số rất dài ở ô hẹp trên máy
+ * dựng chữ rộng (Chrome Linux, ~0,6em mỗi ký tự). Bước cuối vẫn chưa vừa (ví từ một tỷ) thì số xuống dòng trong ô.
  */
-export function statValueTracking(variant: StatValueVariant): string | undefined {
-  return variant === 'label' ? '-0.02em' : undefined;
+export const STAT_VALUE_LOOKS: readonly StatValueLook[] = [
+  { variant: 'price-md' },
+  { variant: 'price-sm' },
+  { variant: 'label', letterSpacing: '-0.02em' },
+  { variant: 'label', letterSpacing: '-0.04em' },
+];
+
+/**
+ * Bước bắt đầu (chỉ số trong STAT_VALUE_LOOKS) ước theo độ dài và bề ngang ô. Ước lượng theo chữ của macOS nên có máy dựng rộng hơn:
+ * app đo chữ thật (không xuống dòng) trước khi vẽ và lùi bước tới khi `statValueFits`.
+ */
+export function statValueStart(value: string, cellWidth?: number): number {
+  return STAT_VALUE_LOOKS.findIndex((look) => look.variant === statValueVariant(value, cellWidth));
+}
+
+/** Chữ rộng `textWidth` (đo trên một dòng) cách mép ô bề ngang `cellWidth` ít nhất 6px mỗi bên. */
+export function statValueFits(textWidth: number, cellWidth: number): boolean {
+  return textWidth <= cellWidth - 2 * EDGE_GAP;
 }
 
 /**
