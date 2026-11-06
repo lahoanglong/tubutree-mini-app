@@ -612,3 +612,97 @@ describe('VoucherSheet: số xem trước cũ không được tin khi giỏ đ�
     expect(mocks.getCouponPreviews).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('VoucherSheet — lời báo lỗi áp/gỡ mã ngay dưới ô nhập (W26, khớp web CouponBox)', () => {
+  const WRONG = 'Mã giảm giá không tồn tại hoặc đã hết hạn.';
+  const rejection = (message: string) => Object.assign(new Error(message), { isHttpError: true, response: { status: 400, data: { message } } });
+  const scrollIntoView = vi.fn();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getCoupons.mockResolvedValue(COUPONS);
+    mocks.applyCoupon.mockRejectedValue(rejection(WRONG));
+    mocks.removeCoupon.mockResolvedValue({ couponCode: null });
+    // jsdom không có scrollIntoView; đây là describe cuối file và mỗi file có môi trường riêng nên không cần trả lại.
+    Element.prototype.scrollIntoView = scrollIntoView;
+  });
+
+  const input = () => screen.getByLabelText('Nhập mã giảm giá khác');
+  const typeAndApply = (value: string) => {
+    fireEvent.change(input(), { target: { value } });
+    fireEvent.click(screen.getByRole('button', { name: 'Áp dụng' }));
+  };
+  const errorToasts = () => mocks.openSnackbar.mock.calls.filter(([arg]) => (arg as { type?: string }).type === 'error');
+
+  it('mã tay sai: lời máy chủ hiện trong role="alert" ngay dưới ô nhập, không còn toast lỗi', async () => {
+    renderSheet();
+    await screen.findByRole('button', { name: /^Dùng mã/ });
+    typeAndApply('SAI');
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(WRONG);
+    expect(alert.parentElement).toContainElement(input());
+    expect(errorToasts()).toHaveLength(0);
+  });
+
+  it('sửa mã: lời báo cũ biến mất ngay, không chờ lần áp sau', async () => {
+    renderSheet();
+    await screen.findByRole('button', { name: /^Dùng mã/ });
+    typeAndApply('SAI');
+    await screen.findByRole('alert');
+    fireEvent.change(input(), { target: { value: 'SAI2' } });
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('đóng rồi mở lại tấm: lời báo cũ không còn', async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const tree = (visible: boolean) => (
+      <QueryClientProvider client={qc}>
+        <VoucherSheet visible={visible} onClose={() => {}} subtotal={100_000} />
+      </QueryClientProvider>
+    );
+    const r = render(tree(true));
+    await screen.findByRole('button', { name: /^Dùng mã/ });
+    typeAndApply('SAI');
+    await screen.findByRole('alert');
+    r.rerender(tree(false));
+    r.rerender(tree(true));
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('lỗi từ nút "Dùng mã" ở danh sách phía dưới: lời báo hiện ở đầu tấm và được kéo vào tầm nhìn', async () => {
+    renderSheet();
+    fireEvent.click(await screen.findByRole('button', { name: /^Dùng mã/ }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(WRONG);
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' });
+  });
+
+  it('gỡ mã lỗi: cũng báo trong role="alert" thay vì toast', async () => {
+    mocks.removeCoupon.mockRejectedValue(rejection('Không gỡ được mã lúc này, thử lại sau.'));
+    renderSheet('giam10');
+    fireEvent.click(await screen.findByRole('button', { name: /^Bỏ chọn mã/ }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Không gỡ được mã lúc này, thử lại sau.');
+    expect(errorToasts()).toHaveLength(0);
+  });
+
+  it('gỡ mã thành công xoá lời báo cũ và tấm vẫn mở', async () => {
+    const onClose = vi.fn();
+    renderSheet('giam10', { onClose });
+    await screen.findByRole('button', { name: /^Bỏ chọn mã/ });
+    typeAndApply('SAI');
+    await screen.findByRole('alert');
+    fireEvent.click(screen.getByRole('button', { name: /^Bỏ chọn mã/ }));
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+    expect(mocks.removeCoupon).toHaveBeenCalledTimes(1);
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('lỗi không phải của máy chủ: câu chung bằng tiếng Việt, không lộ chữ kỹ thuật', async () => {
+    mocks.applyCoupon.mockRejectedValue(new TypeError('Failed to fetch'));
+    renderSheet();
+    await screen.findByRole('button', { name: /^Dùng mã/ });
+    typeAndApply('SAI');
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).not.toMatch(/Failed to fetch|TypeError/);
+    expect(alert.textContent?.trim().length).toBeGreaterThan(0);
+  });
+});

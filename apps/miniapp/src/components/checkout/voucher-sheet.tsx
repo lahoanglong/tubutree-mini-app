@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Input } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { pickerRows } from '@tubutree/app-core/commerce/voucher-picker';
@@ -61,6 +61,17 @@ export function VoucherSheet({
   const queryClient = useQueryClient();
   const { notify } = useNotify();
   const [customCode, setCustomCode] = useState('');
+  // Lời báo lỗi áp/gỡ mã nằm ngay dưới ô nhập (cùng chỗ với web CouponBox), không chỉ là toast: toast biến mất sau vài giây còn khách đang nhìn ô nhập để sửa mã.
+  // Mở hoặc đóng tấm, sửa mã, áp hay gỡ thành công đều xoá lời báo cũ, để trình đọc màn hình không đọc lại lỗi cũ.
+  const [err, setErr] = useState<string | null>(null);
+  const errRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    setErr(null);
+  }, [visible]);
+  // Lỗi từ nút "Dùng mã"/"Bỏ chọn" ở hàng mã phía dưới: lời báo nằm ở đầu tấm nên kéo về tầm nhìn, không thì khách thấy như bấm không có gì xảy ra.
+  useEffect(() => {
+    if (visible && err) errRef.current?.scrollIntoView?.({ block: 'nearest' });
+  }, [visible, err]);
 
   const couponsQ = useQuery({
     queryKey: ['coupons'],
@@ -85,6 +96,7 @@ export function VoucherSheet({
       queryClient.setQueryData(cartKey(), cart);
       void queryClient.invalidateQueries({ queryKey: ['quote'] });
       haptic('medium');
+      setErr(null);
       setCustomCode('');
       // Mã được giữ nhưng chưa giảm cho giỏ này (vd combo kéo phần hàng dưới đơn tối thiểu): nói lý do, không báo "đã áp dụng".
       // Lời báo là của CẢ giỏ: nếu xem trước cho phần đang chọn (mua một phần) nói mã dùng được thì mã được áp cho đơn này.
@@ -104,7 +116,7 @@ export function VoucherSheet({
       onCouponApplied?.();
       onClose();
     },
-    onError: (e: unknown) => notify({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e: unknown) => setErr(getErrorMessage(e)),
   });
 
   const removeMut = useMutation({
@@ -113,10 +125,11 @@ export function VoucherSheet({
       queryClient.setQueryData(cartKey(), cart);
       void queryClient.invalidateQueries({ queryKey: ['quote'] });
       haptic('light');
+      setErr(null);
       notify({ text: 'Đã bỏ mã giảm giá', type: 'success', duration: 2000 });
       onCouponApplied?.();
     },
-    onError: (e: unknown) => notify({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e: unknown) => setErr(getErrorMessage(e)),
   });
 
   const isAnyMutating = applyMut.isPending || removeMut.isPending || busy;
@@ -161,7 +174,10 @@ export function VoucherSheet({
                 aria-label={fillCopy('coupon.pickManual')}
                 placeholder={fillCopy('coupon.pickPlaceholder')}
                 value={customCode}
-                onChange={(e) => setCustomCode(e.target.value)}
+                onChange={(e) => {
+                  setCustomCode(e.target.value);
+                  if (err) setErr(null);
+                }}
                 onKeyDown={(e) => {
                   // Enter áp mã như nút "Áp dụng". Bỏ qua khi bộ gõ tiếng Việt đang chốt chữ (Telex/VNI dùng Enter để chốt) để không áp mã dở,
                   // và khi khách giữ phím (`repeat`): mã sai thì mỗi lần lặp phím lại gửi một yêu cầu.
@@ -181,6 +197,11 @@ export function VoucherSheet({
               {fillCopy('coupon.pickApply')}
             </Button>
           </div>
+          {err && (
+            <div ref={errRef} role="alert" style={{ marginTop: 'var(--space-stack-sm)' }}>
+              <Text variant="caption" tone="danger" as="p">{err}</Text>
+            </div>
+          )}
         </div>
 
         {/* Section 2: Mã giảm giá có sẵn (Phía dưới) */}
