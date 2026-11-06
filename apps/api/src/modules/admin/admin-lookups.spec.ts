@@ -274,7 +274,8 @@ describe('AdminService.listReviews — duyệt đánh giá', () => {
     const out = await svc.listReviews(1, 20, 'hidden', 1);
     const args = findMany.mock.calls[0]![0];
     expect(args.where).toEqual({ isVisible: false, rating: 1 });
-    expect(args.orderBy).toEqual({ createdAt: 'desc' });
+    // id phá hoà khi nhiều đánh giá cùng mili giây (import, đợt khách gửi cùng lúc): phân trang theo số trang không lặp và không sót dòng giữa hai trang.
+    expect(args.orderBy).toEqual([{ createdAt: 'desc' }, { id: 'desc' }]);
     expect(args.skip).toBe(0);
     expect(args.take).toBe(20);
     expect(count).toHaveBeenCalledWith({ where: args.where });

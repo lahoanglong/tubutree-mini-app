@@ -600,7 +600,7 @@ export class AdminService {
     const [items, total] = await this.prisma.$transaction([
       this.prisma.review.findMany({
         where,
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         ...skipTake(page, limit),
         select: {
           id: true,

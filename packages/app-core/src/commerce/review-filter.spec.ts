@@ -29,6 +29,20 @@ describe('reviewFilterChips', () => {
   it('có video thì thêm chip "Có video" kèm số lượng ở cuối', () => {
     expect(reviewFilterChips(2).at(-1)).toEqual({ key: 'video', label: 'Có video', count: 2 });
   });
+
+  // W30: khách đang xem "Có video" mà đánh giá video cuối cùng bị ẩn (danh sách đầy đủ tải lại, videoCount về 0): chip không được biến mất dưới tay khách,
+  // nếu không danh sách trống báo "không có đánh giá khớp" mà không chip nào đang chọn.
+  it('đang chọn "Có video" mà số video về 0: chip vẫn còn, đang chọn, ghi (0)', () => {
+    expect(reviewFilterChips(0, 'video').at(-1)).toEqual({ key: 'video', label: 'Có video', count: 0 });
+    expect(reviewFilterChips(undefined, 'video').at(-1)).toEqual({ key: 'video', label: 'Có video', count: 0 });
+  });
+
+  it('chọn chip khác thì chip "Có video" vẫn chỉ hiện khi có video', () => {
+    for (const sel of ['all', 'photo', 5, 1] as const) {
+      expect(reviewFilterChips(0, sel).some((c) => c.key === 'video')).toBe(false);
+      expect(reviewFilterChips(3, sel).at(-1)).toEqual({ key: 'video', label: 'Có video', count: 3 });
+    }
+  });
 });
 
 describe('filterReviews', () => {

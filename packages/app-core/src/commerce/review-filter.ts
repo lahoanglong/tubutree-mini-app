@@ -13,9 +13,11 @@ export interface ReviewFilterChip {
 
 /**
  * Chip "Có video" chỉ có khi sản phẩm thật sự có video; các chip còn lại luôn hiện để hàng chip không đổi theo dữ liệu.
+ * Đang chọn "Có video" mà số video về 0 (đánh giá video cuối cùng bị ẩn) thì chip ở lại, ghi (0): chip biến mất khi đang chọn để lại danh sách trống
+ * "không có đánh giá khớp" mà không chip nào đang sáng.
  * Đủ năm mức sao, kể cả 2 và 1 sao: biểu đồ phân bố đã vẽ cả năm mức, khách phải lọc riêng được đánh giá thấp để kiểm chứng (ẩn đi là mất tin cậy).
  */
-export function reviewFilterChips(videoCount: number | undefined): ReviewFilterChip[] {
+export function reviewFilterChips(videoCount: number | undefined, selected?: ReviewFilterKey): ReviewFilterChip[] {
   const chips: ReviewFilterChip[] = [
     { key: 'all', label: 'Tất cả' },
     { key: 5, label: '5 sao' },
@@ -25,7 +27,7 @@ export function reviewFilterChips(videoCount: number | undefined): ReviewFilterC
     { key: 1, label: '1 sao' },
     { key: 'photo', label: 'Có ảnh' },
   ];
-  if ((videoCount ?? 0) > 0) chips.push({ key: 'video', label: 'Có video', count: videoCount });
+  if ((videoCount ?? 0) > 0 || selected === 'video') chips.push({ key: 'video', label: 'Có video', count: videoCount ?? 0 });
   return chips;
 }
 
