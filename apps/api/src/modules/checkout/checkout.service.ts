@@ -63,6 +63,7 @@ import {
   couponFreeshipTubuPartReason,
   couponNotAppliedNotice,
   couponRejectReason,
+  couponShortfallOf,
 } from '../coupons/coupon-notice';
 import { GeoService } from '../integrations/pancake/geo.service';
 import { assertDeliverableAddress } from '../integrations/pancake/address-geo';
@@ -295,6 +296,7 @@ export class CheckoutService {
       discount: computed.discount,
       couponApplied: computed.couponApplied,
       couponNotice: computed.couponNotice,
+      ...(computed.couponShortfall !== undefined ? { couponShortfall: computed.couponShortfall } : {}),
       comboDiscount: computed.comboDiscount,
       tierDiscount: computed.tierDiscount,
       pointsUsed: computed.pointsUsed,
@@ -989,7 +991,8 @@ export class CheckoutService {
     const coupons: CouponPreviewItem[] = [];
     for (const [code, r] of results) {
       if (r instanceof BadRequestException) {
-        coupons.push({ code, eligible: false, reason: couponRejectReason(r, cart.items), discount: 0 });
+        const shortfall = couponShortfallOf(r);
+        coupons.push({ code, eligible: false, reason: couponRejectReason(r, cart.items), discount: 0, ...(shortfall !== undefined ? { shortfall } : {}) });
         continue;
       }
       const discount = Math.min(r.discount, base.goodsAfterCombo);
@@ -1088,6 +1091,7 @@ export class CheckoutService {
     let freeship = false;
     let couponValid = false;
     let couponNotice: string | null = null;
+    let couponShortfall: number | undefined;
     if (cart.couponCode) {
       try {
         const r = await this.coupons.validateAndCompute(cart.couponCode, userId, goodsAfterCombo, couponLines);
@@ -1102,6 +1106,7 @@ export class CheckoutService {
         // của khách cho đơn không được giảm đồng nào (MONEY-3). Lỗi hạ tầng thì báo lỗi, không âm thầm bỏ mã.
         if (!(err instanceof BadRequestException)) throw err;
         couponNotice = couponNotAppliedNotice(couponRejectReason(err, cart.items), flashSubtotal > 0, combo.total > 0);
+        couponShortfall = couponShortfallOf(err);
       }
     }
     const goodsAfterCoupon = Math.max(0, goodsAfterCombo - discount);
@@ -1229,6 +1234,7 @@ export class CheckoutService {
         discount,
         couponApplied,
         couponNotice,
+        couponShortfall,
         comboDiscount: combo.total,
         comboPerLine: combo.perLine,
         tierDiscount,

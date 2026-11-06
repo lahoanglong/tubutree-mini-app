@@ -4,12 +4,14 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { pickerRows } from '@tubutree/app-core/commerce/voucher-picker';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { couponNotAppliedNotice } from '@tubutree/app-core/commerce/coupon-notice';
+import { couponNoticeText } from '@tubutree/app-core/coupon-min-order';
 import { getCoupons } from '../../services/account-api';
 import type { CouponPreviewRequest } from '@tubutree/shared-types';
 import { applyCoupon, getCouponPreviews, removeCoupon } from '../../services/shop-api';
 import { getErrorMessage, getLoadErrorMessage } from '../../services/api';
 import { useNotify } from '../../hooks/use-notify';
 import { haptic } from '../../utils/haptic';
+import { formatVnd } from '../../utils/format';
 import { serverNow } from '../../utils/server-clock';
 import { PREVIEW_DEBOUNCE_MS, useDebounced } from '../../utils/use-debounced';
 import { BottomSheet } from '../ui/bottom-sheet';
@@ -118,7 +120,7 @@ export function VoucherSheet({
       const previewBlocked = preview && !preview.eligible && preview.reason && cart.discount === 0 ? preview.reason : null;
       notify(
         heldOnly
-          ? { text: cart.couponNotice!, type: 'warning', duration: 5000 }
+          ? { text: couponNoticeText(cart, formatVnd) ?? cart.couponNotice!, type: 'warning', duration: 5000 }
           : previewBlocked
             ? { text: couponNotAppliedNotice(previewBlocked), type: 'warning', duration: 5000 }
             : { text: `Đã áp dụng mã ${cart.couponCode ?? ''}`, type: 'success', duration: 2000 },

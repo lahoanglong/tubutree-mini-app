@@ -104,7 +104,11 @@ export function pickerRows<T extends CouponDTO>(coupons: readonly T[], ctx: Pick
       group = serverMin || (serverReason === null && missing > 0) ? 'short' : 'blocked';
       // Tạm tính trên màn đã đạt ngưỡng mà máy chủ vẫn đòi: máy chủ loại dòng Giờ vàng và trừ phần giảm combo trước khi so đơn tối thiểu, nên
       // nhắc lại câu "Đơn tối thiểu …" chỉ khiến khách thấy đã đủ mà bị chặn; nói đúng phần không được tính.
-      if (serverMin && coupon.minOrder != null && coupon.minOrder > 0 && ctx.subtotal >= coupon.minOrder) {
+      // Máy chủ gửi kèm số còn thiếu (đã tính trên đúng phần hàng nó xét): nói "Mua thêm …" theo số đó thay vì câu đơn tối thiểu, kể cả khi tạm tính đã đủ.
+      if (serverMin && preview.shortfall != null && preview.shortfall > 0) {
+        reason = needMore(preview.shortfall);
+        minInReason = true;
+      } else if (serverMin && coupon.minOrder != null && coupon.minOrder > 0 && ctx.subtotal >= coupon.minOrder) {
         reason = fillCopy('coupon.minOrderBase', { min: vndShort(coupon.minOrder) });
         minInReason = true;
       }
@@ -140,7 +144,9 @@ export function pickerRows<T extends CouponDTO>(coupons: readonly T[], ctx: Pick
       reason,
     };
     const gain = preview ? Math.max(0, preview.discount || 0) + Math.max(0, preview.freeshipSaving ?? 0) : estimate(coupon, ctx.subtotal, ctx.shippingFee);
-    return { row, index, gain, missing, end: endTime(coupon) };
+    // Nhóm "chưa đủ" xếp theo đúng số đang hiện cho khách: số của máy chủ khi có, không phải số đoán từ tạm tính.
+    const rankMissing = group === 'short' && preview?.shortfall != null && preview.shortfall > 0 ? preview.shortfall : missing;
+    return { row, index, gain, missing: rankMissing, end: endTime(coupon) };
   });
   built.sort(
     (a, b) =>

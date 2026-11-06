@@ -1069,6 +1069,35 @@ describe('CartService guard tồn kho', () => {
       expect(c.couponCode).toBeNull();
       expect(c.couponRemoved).toEqual({ code: 'TAT50', reason: 'Mã giảm giá đã ngừng áp dụng.' });
       expect(prisma.cart.updateMany).toHaveBeenCalledWith({ where: { id: 'c1', couponCode: 'TAT50' }, data: { couponCode: null } });
+      expect(c.couponRemoved).not.toHaveProperty('shortfall');
+      expect(c).not.toHaveProperty('couponShortfall');
+    });
+
+    // W28: giỏ (210.000đ: Granola giá Giờ vàng 120.000đ + X 90.000đ) rơi dưới đơn tối thiểu của mã.
+    it('giỏ rơi dưới đơn tối thiểu cả khi tính hàng Giờ vàng: gỡ mã, số thiếu tính trên phần hàng không Giờ vàng (90.000đ) chứ không trên cả giỏ (210.000đ)', async () => {
+      const prisma = cartWith('MIN300');
+      const c = await new CartService(prisma, couponsWith({ code: 'MIN300', minOrder: 300000 }), config, flashG, analytics, combo).getCart('u1');
+      expect(c.couponCode).toBeNull();
+      expect(c.couponRemoved).toEqual({ code: 'MIN300', reason: 'Đơn tối thiểu 300.000đ để dùng mã này.', shortfall: 210000 });
+      expect(c).not.toHaveProperty('couponShortfall');
+    });
+
+    it('chỉ hàng Giờ vàng kéo phần tính mã xuống dưới đơn tối thiểu: giữ mã, couponShortfall là phần thiếu trên hàng không Giờ vàng', async () => {
+      const prisma = cartWith('MIN200');
+      const c = await new CartService(prisma, couponsWith({ code: 'MIN200', minOrder: 200000 }), config, flashG, analytics, combo).getCart('u1');
+      expect(c.couponCode).toBe('MIN200');
+      expect(c.discount).toBe(0);
+      expect(c.couponNotice).toContain('Đơn tối thiểu 200.000đ');
+      expect(c.couponShortfall).toBe(110000);
+      expect(c.couponRemoved).toBeNull();
+      expect(prisma.cart.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('mã không đạt vì lý do khác đơn tối thiểu (sản phẩm của mã đang giờ vàng): không có couponShortfall', async () => {
+      const prisma = cartWith('PSGRAN');
+      const c = await new CartService(prisma, couponsWith({ code: 'PSGRAN', applyTo: { productIds: ['pG'] } }), config, flashG, analytics, combo).getCart('u1');
+      expect(c.couponNotice).toContain(COUPON_PRODUCT_FLASH_REASON);
+      expect(c).not.toHaveProperty('couponShortfall');
     });
   });
 

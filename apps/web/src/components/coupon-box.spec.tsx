@@ -722,6 +722,52 @@ describe('CouponBox — báo mã chưa áp dụng theo lý do máy chủ', () =>
     expect(warn(box)).toBeNull();
   });
 
+  describe('W28: lời báo mã đã bị gỡ vì giỏ rơi dưới đơn tối thiểu', () => {
+    const REMOVED = { code: 'MIN300', text: 'Đã gỡ mã MIN300 vì giỏ chưa đủ đơn tối thiểu. Mua thêm 90.000đ để dùng lại.' };
+
+    it('giỏ không còn mã: hiện lời báo trong vùng trạng thái, có nút Đóng đủ lớn và bấm được', async () => {
+      phone();
+      const onDismiss = vi.fn();
+      const r = render(<CouponBox currentCode={null} subtotal={210000} removedNotice={REMOVED} onDismissRemoved={onDismiss} />);
+      mounted.push(r);
+      await flush(6);
+      const note = r.container.querySelector('[data-testid="coupon-removed-notice"]')!;
+      expect(note.textContent).toContain(REMOVED.text);
+      expect(note.closest('[role="status"]')).not.toBeNull();
+      const close = note.querySelector<HTMLButtonElement>('button')!;
+      expect(close.getAttribute('aria-label')).toBe('Đóng lời báo mã MIN300 đã gỡ');
+      expect(smallTouchTargets(r.container)).toEqual([]);
+      expect(unnamedControls(r.container)).toEqual([]);
+      click(close);
+      expect(onDismiss).toHaveBeenCalledTimes(1);
+    });
+
+    it('giỏ đã có mã (áp lại hay mã khác): không hiện lời báo gỡ dù trang còn giữ chữ', async () => {
+      phone();
+      const r = render(<CouponBox currentCode="GIAM10" subtotal={310000} removedNotice={REMOVED} />);
+      mounted.push(r);
+      await flush(6);
+      expect(r.container.querySelector('[data-testid="coupon-removed-notice"]')).toBeNull();
+    });
+
+    it('không có removedNotice: không dựng gì, vùng trạng thái vẫn có mặt', async () => {
+      phone();
+      const r = render(<CouponBox currentCode={null} subtotal={210000} />);
+      mounted.push(r);
+      await flush(6);
+      expect(r.container.querySelector('[data-testid="coupon-removed-notice"]')).toBeNull();
+      expect(r.container.querySelector('[role="status"]')).not.toBeNull();
+    });
+
+    it('không có onDismissRemoved: không có nút Đóng (trang nào không giữ trí nhớ thì lời báo là chữ thuần)', async () => {
+      phone();
+      const r = render(<CouponBox currentCode={null} subtotal={210000} removedNotice={REMOVED} />);
+      mounted.push(r);
+      await flush(6);
+      expect(r.container.querySelector('[data-testid="coupon-removed-notice"] button')).toBeNull();
+    });
+  });
+
   it('lời báo tự tắt sau 5 giây', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {

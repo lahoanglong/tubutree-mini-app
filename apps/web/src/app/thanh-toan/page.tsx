@@ -36,6 +36,8 @@ import { normalizeTaxCode } from '@tubutree/app-core/commerce/tax-code';
 import { validateInvoiceFields, type InvoiceField } from '@tubutree/app-core/commerce/checkout-form';
 import { checkoutPlaceHint, checkoutTotalText, collapseCheckoutLines } from '@tubutree/app-core/commerce/checkout-display';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { couponNoticeText } from '@tubutree/app-core/coupon-min-order';
+import { useRemovedCoupon } from '@/lib/use-removed-coupon';
 import { checkoutLineProblems, priceChangedActions, type LineAction, type LineFix, type LineProblem } from '@tubutree/app-core/commerce/checkout-issues';
 import { checkoutEtaLabel, placedOrderKinds } from '@tubutree/app-core/shipping-eta';
 import { checkoutPointsOffer, convertedPointsLine, formatCount, idlePointsLabel, lockedPointsLabel, pointsCapState, zeroTotalNote, type CheckoutPointsOffer } from '@/lib/checkout-points';
@@ -145,6 +147,8 @@ export default function CheckoutPage() {
   };
 
   const cartQ = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: phase === 'authenticated' });
+  // Mã bị máy chủ gỡ lúc đọc giỏ (giỏ rơi dưới đơn tối thiểu, hết hạn, bị tắt) chỉ được báo một lần: nhớ để khách thấy vì sao tổng tăng.
+  const removedCoupon = useRemovedCoupon(cartQ.data, formatVnd);
   const addrQ = useQuery({ queryKey: ['addresses'], queryFn: getAddresses, enabled: phase === 'authenticated' });
   // Số dư Ví Tubu lấy từ máy chủ (không từ ảnh chụp lúc đăng nhập): khách vừa được hoàn tiền về ví hoặc vừa tiêu ví
   // ở Mini App sẽ thấy đúng số, thay vì chọn được rồi bị từ chối "số dư không đủ".
@@ -963,7 +967,9 @@ export default function CheckoutPage() {
                 appliedDiscount={quote?.discount ?? 0}
                 subtotal={previewSubtotal}
                 shippingFee={quote?.shippingFee ?? null}
-                notice={quote ? quote.couponNotice : cart.couponNotice}
+                notice={couponNoticeText({ ...(quote ?? cart), couponCode: cart.couponCode }, formatVnd)}
+                removedNotice={removedCoupon.notice}
+                onDismissRemoved={removedCoupon.dismiss}
                 disabled={place.isPending}
                 // Luồng có itemIds ("Mua ngay", chọn món) không tự áp, kể cả khi giỏ chỉ có đúng món đó: máy chủ giữ mã lại trên giỏ sau khi đặt.
                 autoApply={!itemIds && (!!addressId || addrQ.data?.length === 0)}

@@ -597,6 +597,34 @@ describe('CheckoutPage — mã giữ trong giỏ nhưng chưa áp (MONEY-3)', ()
     expect(screen.getByText('UAT50K')).toBeTruthy();
   });
 
+  it('W28: báo giá có couponShortfall (thiếu đơn tối thiểu) → câu giải thích nói luôn cần mua thêm bao nhiêu', async () => {
+    const notice = 'Mã chưa được áp dụng cho đơn này: Đơn tối thiểu 400.000đ để dùng mã này.';
+    // Máy chủ trả số thiếu ở cả giỏ lẫn báo giá (cùng một phép tính), nên lúc giỏ về trước báo giá lời báo đã có số.
+    mocks.getCart.mockResolvedValue({ ...CART, couponCode: 'UAT50K', couponNotice: notice, couponShortfall: 100_000 });
+    mocks.checkoutQuote.mockResolvedValue({ ...QUOTE, discount: 0, couponNotice: notice, couponShortfall: 100_000 });
+    renderPage();
+    const el = await screen.findByTestId('coupon-notice');
+    expect(el.textContent).toBe(`${notice} Mua thêm 100.000đ để áp mã UAT50K.`);
+  });
+
+  it('W28: mã chưa áp vì lý do khác (không có số thiếu) → giữ nguyên câu của máy chủ, không nói mua thêm', async () => {
+    const notice = 'Mã chưa được áp dụng cho đơn này: Bạn đã dùng hết lượt cho mã này.';
+    mocks.getCart.mockResolvedValue({ ...CART, couponCode: 'UAT50K', couponNotice: notice });
+    mocks.checkoutQuote.mockResolvedValue({ ...QUOTE, discount: 0, couponNotice: notice });
+    renderPage();
+    expect((await screen.findByTestId('coupon-notice')).textContent).toBe(notice);
+  });
+
+  it('W28: máy chủ vừa gỡ mã vì giỏ rơi dưới đơn tối thiểu → thanh toán nói mã nào bị gỡ và cần mua thêm bao nhiêu, bấm Đóng thì mất', async () => {
+    mocks.getCart.mockResolvedValue({ ...CART, couponCode: null, couponRemoved: { code: 'MIN400', reason: 'Đơn tối thiểu 400.000đ để dùng mã này.', shortfall: 100_000 } });
+    mocks.checkoutQuote.mockResolvedValue({ ...QUOTE, discount: 0, couponNotice: null });
+    renderPage();
+    const note = await screen.findByTestId('coupon-removed-notice');
+    expect(note).toHaveTextContent('Đã gỡ mã MIN400 vì giỏ chưa đủ đơn tối thiểu. Mua thêm 100.000đ để dùng lại.');
+    fireEvent.click(screen.getByRole('button', { name: 'Đóng lời báo mã MIN400 đã gỡ' }));
+    await waitFor(() => expect(screen.queryByTestId('coupon-removed-notice')).toBeNull());
+  });
+
   it('mua một phần giỏ: giỏ (cả giỏ) giữ mã kèm lời báo nhưng báo giá của phần chọn áp được mã → không hiện lời báo của giỏ', async () => {
     mocks.getCart.mockResolvedValue({ ...CART, couponCode: 'SALE', discount: 0, couponNotice: 'Mã chưa được áp dụng cho đơn này (phần giảm combo không được tính vào điều kiện của mã): Đơn tối thiểu 95.000đ để dùng mã này.' });
     mocks.checkoutQuote.mockResolvedValue({ ...QUOTE, discount: 10_000, couponNotice: null });

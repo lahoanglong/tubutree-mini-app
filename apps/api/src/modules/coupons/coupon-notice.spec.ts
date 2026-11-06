@@ -8,7 +8,10 @@ import {
   couponFreeshipTubuPartReason,
   couponNotAppliedNotice,
   couponRejectedWithFlash,
+  couponShortfallOf,
 } from './coupon-notice';
+import { BadRequestException } from '@nestjs/common';
+import { CouponMinOrderError, CouponProductScopeError } from './coupons.service';
 
 // Chữ khách đọc: "Giờ vàng" hoa chữ G và "mã miễn phí giao hàng", đúng tên chip `coupon.freeship` của app (thiết kế §4 Q5); "mã FREESHIP" đọc như một mã khác tên FREESHIP (review/extra-critique-2 P1 #7).
 const NOTICES: [name: string, text: string][] = [
@@ -60,5 +63,25 @@ describe('coupon-notice: chữ khách đọc', () => {
   it.each(NOTICES)('%s: không có "FREESHIP" và không có "giờ vàng" viết thường', (_name, text) => {
     expect(text).not.toMatch(/FREESHIP/i);
     expect(text).not.toMatch(/giờ vàng/);
+  });
+});
+
+describe('couponShortfallOf: số tiền còn thiếu để đạt đơn tối thiểu (W28)', () => {
+  it('thiếu đơn tối thiểu: minOrder trừ phần hàng được tính', () => {
+    expect(couponShortfallOf(new CouponMinOrderError(300_000, 210_000))).toBe(90_000);
+  });
+
+  it('không bao giờ âm dù base lệch lên trên minOrder', () => {
+    expect(couponShortfallOf(new CouponMinOrderError(100_000, 100_000))).toBe(0);
+    expect(couponShortfallOf(new CouponMinOrderError(100_000, 130_000))).toBe(0);
+  });
+
+  it('mã gắn sản phẩm: không có số (mua thêm phải là đúng các sản phẩm đó, không phải món bất kỳ)', () => {
+    expect(couponShortfallOf(new CouponMinOrderError(300_000, 210_000, true))).toBeUndefined();
+  });
+
+  it('lý do khác đơn tối thiểu: không có số', () => {
+    expect(couponShortfallOf(new CouponProductScopeError(['p1']))).toBeUndefined();
+    expect(couponShortfallOf(new BadRequestException('Mã giảm giá đã hết hạn hoặc chưa hiệu lực.'))).toBeUndefined();
   });
 });

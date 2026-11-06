@@ -172,6 +172,17 @@ describe('VoucherSheet — hành vi (C-076 di cư DS v2: giữ nguyên hành vi)
     expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Đã áp dụng mã GIAM10', type: 'success' }));
   });
 
+  it('W28: mã được giữ vì thiếu đơn tối thiểu kèm couponShortfall: lời báo cảnh báo nói luôn cần mua thêm bao nhiêu', async () => {
+    const notice = 'Mã chưa được áp dụng cho đơn này: Đơn tối thiểu 200.000đ để dùng mã này.';
+    mocks.applyCoupon.mockResolvedValue({ couponCode: 'GIAM10', discount: 0, freeship: false, couponNotice: notice, couponShortfall: 110_000 });
+    renderSheet();
+    fireEvent.click(await screen.findByRole('button', { name: /^Dùng mã/  }));
+    await waitFor(() => expect(mocks.applyCoupon).toHaveBeenCalledWith('GIAM10'));
+    await waitFor(() =>
+      expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: `${notice} Mua thêm 110.000đ để áp mã GIAM10.`, type: 'warning' })),
+    );
+  });
+
   it('mã được giữ nhưng giỏ giảm 0đ kèm lời báo (combo kéo dưới đơn tối thiểu): hiện lời báo dạng cảnh báo, không báo "đã áp dụng"', async () => {
     const notice = 'Mã chưa được áp dụng cho đơn này (phần giảm combo không được tính vào điều kiện của mã): Đơn tối thiểu 95.000đ để dùng mã này.';
     mocks.applyCoupon.mockResolvedValue({ couponCode: 'GIAM10', discount: 0, freeship: false, couponNotice: notice });

@@ -35,6 +35,9 @@ import { StorefrontContextBar } from '../components/storefront-context-bar';
 import { VoucherSheet } from '../components/checkout/voucher-sheet';
 import { useCouponHint } from '../components/checkout/use-coupon-hint';
 import { couponHintShort } from '@tubutree/app-core/coupon-use';
+import { couponNoticeText, heldCouponNotice } from '@tubutree/app-core/coupon-min-order';
+import { CouponRemovedNotice } from '../components/checkout/coupon-removed-notice';
+import { useRemovedCoupon } from '../hooks/use-removed-coupon';
 import { useStorefrontContext } from '../store/storefront-context';
 import { rememberCheckoutSelection } from '../utils/checkout-selection';
 import { PageHeader } from '../components/ui/page-header';
@@ -64,6 +67,7 @@ const UNDO_WINDOW_MS = 3500;
 function useOptimisticCart<TVars>(
   mutationFn: (vars: TVars) => Promise<CartSummary>,
   apply: (prev: CartSummary, vars: TVars) => CartSummary,
+  onResponse?: (response: CartSummary) => void,
 ) {
   const queryClient = useQueryClient();
   const { openSnackbar } = useSnackbar();
@@ -75,6 +79,9 @@ function useOptimisticCart<TVars>(
       if (prev) queryClient.setQueryData(cartKey(), apply(prev, vars));
       return { prev };
     },
+    // Phản hồi không ghi vào cache (bấm +/− liên tiếp không bị phản hồi cũ kéo số lượng lùi; số đúng do lần đọc lại sau `onSettled` cập nhật), nhưng
+    // `couponRemoved` chỉ nằm ở phản hồi này nên chuyển cho nơi nhớ lời báo.
+    onSuccess: (data) => onResponse?.(data),
     onError: (e: unknown, _vars, ctx) => {
       if (ctx?.prev) queryClient.setQueryData(cartKey(), ctx.prev);
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
@@ -91,6 +98,8 @@ export default function CartPage() {
 
   const cartKeyNow = useCartKey();
   const cart = useQuery({ queryKey: cartKeyNow, queryFn: getCart, enabled: phase === 'authenticated' });
+  // Máy chủ gỡ mã khi giỏ rơi dưới đơn tối thiểu và chỉ báo đúng một lần: nhớ để khách thấy mã nào mất và cần mua thêm bao nhiêu.
+  const removedCoupon = useRemovedCoupon(cart.data, formatVnd);
   const [removed, setRemoved] = useState<CartLine | null>(null);
   // Hộp báo "bộ sẽ mất giảm" trước khi xoá món khoá của combo. Dữ liệu giữ lại sau khi đóng để chữ không trống trong lúc tấm trượt xuống.
   const [pendingRemove, setPendingRemove] = useState<{ line: CartLine; notice: ComboRemovalNotice } | null>(null);
@@ -148,10 +157,12 @@ export default function CartPage() {
     ({ id, qty }: { id: string; qty: number }) => updateCartItem(id, qty),
     (prev, { id, qty }) =>
       recompute(prev, prev.items.map((l) => (l.id === id ? { ...l, quantity: qty } : l)), id),
+    removedCoupon.remember,
   );
   const remove = useOptimisticCart(
     ({ id }: { id: string; line: CartLine }) => removeCartItem(id),
     (prev, { id }) => recompute(prev, prev.items.filter((l) => l.id !== id)),
+    removedCoupon.remember,
   );
 
   const handleRemove = (line: CartLine) => {
@@ -376,6 +387,7 @@ export default function CartPage() {
           tubuSelectedSubtotal={tubuSubtotal(buyableSelected)}
           onCheckout={goCheckout}
           savingLines={buyableSelected}
+          removedNotice={<CouponRemovedNotice notice={removedCoupon.notice} onDismiss={removedCoupon.dismiss} />}
           coupon={
             <CouponRow
               summary={summary}
@@ -747,7 +759,10 @@ function StickySummary({
   onCheckout,
   savingLines,
   coupon,
+  removedNotice,
 }: {
+  /** Lời báo mã vừa bị máy chủ gỡ (đơn tối thiểu, hết hạn, bị tắt); tự không dựng gì khi không có. */
+  removedNotice: ReactNode;
   summary: CartSummary;
   selectedSubtotal: number;
   selectedCount: number;
@@ -785,7 +800,10 @@ function StickySummary({
   const saving = cartSaving(savingLines, comboDiscount);
   // Giảm giá của phần chọn tính trên tạm tính CỦA CHÍNH phần chọn máy chủ trả (giá có thể đổi so với giỏ đã tải, vd hết giờ vàng).
   const shownSubtotal = !allSelected && priced ? priced.subtotal : selectedSubtotal;
-  const subsetNotice = !allSelected && priced?.couponCode ? priced.couponNotice : null;
+  // Lời báo của mã đang giữ trên phần đang hiển thị, kèm số cần mua thêm khi mã chỉ thiếu đơn tối thiểu. Cả giỏ chỉ nói khi mã giữ chưa áp (thêm dòng cho chân dính vốn chật
+  // ở 320px); phần chọn nói cả câu của máy chủ về mã đã áp (vd Giờ vàng không giảm thêm) như trước.
+  const couponSrc = shown?.couponCode ? shown : null;
+  const couponLine = allSelected ? heldCouponNotice(couponSrc, formatVnd) : couponNoticeText(couponSrc, formatVnd);
 
   return (
     <StickyActionBar
@@ -836,11 +854,12 @@ function StickySummary({
             <KeyValueRow label={vi.cart.discount} value={`-${formatVnd(discount)}`} tone="success" style={COMPACT_ROW} />
           )}
           {tierDiscount > 0 && <KeyValueRow label={vi.cart.tierDiscount} value={`-${formatVnd(tierDiscount)}`} tone="success" style={COMPACT_ROW} />}
-          {subsetNotice && (
+          {couponLine && (
             <Text size="xSmall" role="status" data-testid="coupon-notice" style={{ color: 'var(--color-text-warning)' }}>
-              {subsetNotice}
+              {couponLine}
             </Text>
           )}
+          {removedNotice}
           {outOfStockNames.length > 0 && (
             <Box flex alignItems="flex-start" role="status" style={{ gap: 4 }}>
               <AlertTriangle size={13} color="var(--color-text-warning)" aria-hidden style={{ flexShrink: 0, marginTop: 2 }} />
