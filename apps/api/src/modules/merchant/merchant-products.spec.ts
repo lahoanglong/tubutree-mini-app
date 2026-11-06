@@ -239,7 +239,13 @@ describe('MerchantService — đăng sản phẩm (SELLER-1, D4)', () => {
 
   it('SELLER-14: giá khuyến mãi cao hơn giá gốc → 400', async () => {
     const { svc } = build();
-    await expect(svc.createProduct('u1', { ...BASE, salePrice: 250_000 })).rejects.toThrow('không được cao hơn giá gốc');
+    await expect(svc.createProduct('u1', { ...BASE, salePrice: 250_000 })).rejects.toThrow('Giá khuyến mãi phải thấp hơn giá gốc');
+  });
+
+  it('W24: giá khuyến mãi bằng giá gốc cũng 400 (không phải khuyến mãi), thấp hơn thì lưu', async () => {
+    const { svc } = build();
+    await expect(svc.createProduct('u1', { ...BASE, salePrice: 200_000 })).rejects.toThrow('Giá khuyến mãi phải thấp hơn giá gốc');
+    await expect(svc.createProduct('u1', { ...BASE, salePrice: 199_000 })).resolves.toBeDefined();
   });
 });
 
@@ -663,6 +669,47 @@ describe('MerchantService — sửa/ngừng bán sản phẩm', () => {
     });
   });
 
+  describe('W24: giá khuyến mãi phải thấp hơn giá gốc khi sửa', () => {
+    it('đối tác gửi giá khuyến mãi bằng hoặc cao hơn giá gốc → 400, không ghi gì', async () => {
+      for (const salePrice of [200_000, 250_000]) {
+        const { svc, productUpdate } = buildEdit(OWN);
+        await expect(svc.updateProduct('u1', 'prod-a', { salePrice })).rejects.toThrow('Giá khuyến mãi phải thấp hơn giá gốc');
+        expect(productUpdate).not.toHaveBeenCalled();
+      }
+    });
+
+    it('gửi giá khuyến mãi thấp hơn giá gốc → lưu', async () => {
+      const { svc, productUpdate } = buildEdit(OWN);
+      await svc.updateProduct('u1', 'prod-a', { salePrice: 150_000 });
+      expect(productUpdate.mock.calls[0]![0].data).toMatchObject({ basePrice: 200_000, salePrice: 150_000 });
+    });
+
+    it('hạ giá gốc xuống bằng hoặc dưới giá khuyến mãi đã lưu (không gửi lại giá khuyến mãi) → 400, không để giá khuyến mãi bằng giá gốc', async () => {
+      for (const basePrice of [150_000, 120_000]) {
+        const { svc, productUpdate } = buildEdit({ ...OWN, salePrice: 150_000 });
+        await expect(svc.updateProduct('u1', 'prod-a', { basePrice })).rejects.toThrow('Giá khuyến mãi phải thấp hơn giá gốc');
+        expect(productUpdate).not.toHaveBeenCalled();
+      }
+    });
+
+    it('đặt giá gốc cao hơn giá khuyến mãi đã lưu → lưu, giá khuyến mãi giữ nguyên', async () => {
+      const { svc, productUpdate } = buildEdit({ ...OWN, salePrice: 150_000 });
+      await svc.updateProduct('u1', 'prod-a', { basePrice: 180_000 });
+      expect(productUpdate.mock.calls[0]![0].data).toMatchObject({ basePrice: 180_000, salePrice: 150_000 });
+    });
+
+    it('giá khuyến mãi đã lưu bằng giá gốc từ trước: sửa tên vẫn lưu (không bắt đối tác sửa giá)', async () => {
+      const { svc, draftUpsert } = buildEdit({ ...OWN, salePrice: 200_000 });
+      await svc.updateProduct('u1', 'prod-a', { name: 'Mật ong rừng U Minh' });
+      expect(draftUpsert).toHaveBeenCalled();
+    });
+
+    it('giá khuyến mãi đã lưu cao hơn giá gốc: vẫn chặn như trước', async () => {
+      const { svc } = buildEdit({ ...OWN, salePrice: 250_000 });
+      await expect(svc.updateProduct('u1', 'prod-a', { name: 'Mật ong rừng U Minh' })).rejects.toThrow('Giá khuyến mãi phải thấp hơn giá gốc');
+    });
+  });
+
   describe('R3-MERCHANT-4: sửa nội dung sản phẩm đang bán không gỡ nó khỏi trang bán', () => {
     it('đổi tên → lưu bản sửa chờ duyệt, tên/mô tả/ảnh đang bán và trạng thái APPROVED giữ nguyên', async () => {
       const { svc, productUpdate, draftUpsert } = buildEdit(OWN);
@@ -832,7 +879,7 @@ describe('MerchantService — sửa/ngừng bán sản phẩm', () => {
         expect(ok.productUpdate.mock.calls[0]![0].data).toMatchObject({ basePrice: 140_000, salePrice: 120_000 });
         const bad = buildEdit(CARRIED);
         await expect(bad.svc.updateProduct('u1', 'prod-a', { pancakeCode: null, basePrice: 100_000, salePrice: 120_000 })).rejects.toThrow(
-          'Giá khuyến mãi không được cao hơn giá gốc',
+          'Giá khuyến mãi phải thấp hơn giá gốc',
         );
       });
 

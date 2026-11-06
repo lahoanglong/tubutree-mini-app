@@ -253,6 +253,9 @@ export const CTV_CANNOT_CREATE_PRODUCT =
 export const MERCHANT_SELF_SHIP_USE_FULFIL_TAB =
   'Đơn này shop tự giao: hãy đổi trạng thái bằng các nút ở tab "Đơn cần giao" (nhận đơn, đã đóng gói, bắt đầu giao, đã giao).';
 
+/** Giá khuyến mãi bằng hoặc cao hơn giá gốc không phải khuyến mãi: khách thấy cùng một giá mà vẫn có nhãn giảm. */
+export const SALE_PRICE_NOT_BELOW_BASE = 'Giá khuyến mãi phải thấp hơn giá gốc.';
+
 @Injectable()
 export class MerchantService {
   private readonly logger = new Logger(MerchantService.name);
@@ -603,8 +606,8 @@ export class MerchantService {
 
   async createProduct(userId: string, dto: CreateMerchantProductDto) {
     const store = await this.assertCanSellOwnProducts(userId);
-    if (dto.salePrice != null && dto.salePrice > dto.basePrice) {
-      throw new BadRequestException('Giá khuyến mãi không được cao hơn giá gốc.');
+    if (dto.salePrice != null && dto.salePrice >= dto.basePrice) {
+      throw new BadRequestException(SALE_PRICE_NOT_BELOW_BASE);
     }
     // "Tubu giao hộ": giá và tồn theo biến thể Pancake; admin duyệt mới chuyển biến thể đó sang sản phẩm này.
     let link: LinkablePancakeVariation | null = null;
@@ -732,8 +735,11 @@ export class MerchantService {
     // Giữ nó thì khách bị tính giá khuyến mãi cũ trong khi danh sách của đối tác hiện giá mới, hoặc gặp 400 mà form không có ô sửa.
     const dropsPancakeSale = codeChange === null && dto.basePrice !== undefined && dto.salePrice === undefined;
     const salePrice = pancakePrice ? pancakePrice.sale : dto.salePrice === undefined ? (dropsPancakeSale ? null : product.salePrice) : dto.salePrice;
-    if (!pancakePrice && salePrice != null && salePrice > basePrice) {
-      throw new BadRequestException('Giá khuyến mãi không được cao hơn giá gốc.');
+    // Lần sửa đụng tới giá (gửi giá gốc hoặc giá khuyến mãi) phải để giá khuyến mãi thấp hơn hẳn giá gốc, kể cả giá khuyến mãi cũ mang sang.
+    // Lần sửa không đụng tới giá (đổi tên, mô tả) chỉ bị chặn khi giá khuyến mãi đã lưu cao hơn giá gốc: bằng nhau từ trước thì vẫn lưu được.
+    const touchesPrice = typeof dto.salePrice === 'number' || dto.basePrice !== undefined;
+    if (!pancakePrice && salePrice != null && (touchesPrice ? salePrice >= basePrice : salePrice > basePrice)) {
+      throw new BadRequestException(SALE_PRICE_NOT_BELOW_BASE);
     }
     // Nội dung so sánh là bản sửa đang chờ (nếu có): sửa tiếp thì gộp vào bản chờ chứ không bắt đầu lại từ nội dung đang bán.
     const draft = product.editDraft;

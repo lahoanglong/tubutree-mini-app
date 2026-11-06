@@ -11,7 +11,7 @@ import type { PancakeProductDTO, PancakeProductsResponse, PancakeVariationDTO } 
 import { CRON_TZ } from '../../../common/cron-tz';
 import { LEGACY_FAKE_PANCAKE_PREFIX } from './pancake-fulfilment';
 import { pancakeProductSlug } from './pancake-product-slug';
-import { payloadId, payloadNonNegInt, payloadQuantity, payloadRemoved, payloadText, payloadTextList } from './pancake-payload';
+import { payloadId, payloadNonNegInt, payloadPrice, payloadQuantity, payloadRemoved, payloadText, payloadTextList } from './pancake-payload';
 import { BROKEN_VARIANT_NAME_MARKER, isBrokenVariantName, variantAttributes, variantLabel } from './pancake-variant-fields';
 import { CronLeaderService } from '../../../common/cron-leader/cron-leader.service';
 import { RunLease } from '../../../common/cron-leader/run-lease';
@@ -58,9 +58,12 @@ export class CatalogSyncBusyError extends ConflictException {
 /** Cột Int của Postgres: giá/tồn lớn hơn làm câu ghi ném và hỏng cả sản phẩm. */
 const INT4_MAX = 2_147_483_647;
 
-/** Giá bán đọc được: số nguyên (hoặc chuỗi số kiểu máy) từ 1 tới trần cột Int; còn lại null — "không biết giá", không phải 0đ. */
+/**
+ * Giá bán đọc được: số nguyên, chuỗi số kiểu máy ("269000.000") hoặc chuỗi ngăn nghìn kiểu Việt Nam ("120.000") từ 1 tới trần cột Int;
+ * còn lại null — "không biết giá", không phải 0đ.
+ */
 const positivePrice = (x: unknown): number | null => {
-  const n = payloadNonNegInt(x);
+  const n = payloadPrice(x);
   return n !== null && n > 0 && n <= INT4_MAX ? n : null;
 };
 
@@ -422,7 +425,16 @@ export class PancakeSyncService implements OnModuleInit {
     prev: { retailPrice: number; pancakeHold: string | null } | null,
   ): { prices: { retailPrice?: number; salePrice?: number | null }; noPrice: boolean } {
     const retail = positivePrice(v.retail_price);
-    if (retail !== null) return { prices: { retailPrice: retail, salePrice: positivePrice(v.sale_price) }, noPrice: false };
+    if (retail !== null) {
+      const sale = positivePrice(v.sale_price);
+      if (sale !== null && sale >= retail) {
+        this.logger.warn(
+          `Biến thể Pancake ${v.id} có sale_price ${sale} không thấp hơn retail_price ${retail} — bỏ giá khuyến mãi, bán theo giá gốc. Sửa giá khuyến mãi trên Pancake.`,
+        );
+        return { prices: { retailPrice: retail, salePrice: null }, noPrice: false };
+      }
+      return { prices: { retailPrice: retail, salePrice: sale }, noPrice: false };
+    }
     this.logger.warn(
       `Biến thể Pancake ${v.id} thiếu/không hợp lệ retail_price (${JSON.stringify(v.retail_price) ?? 'undefined'}) — ` +
         (prev && prev.retailPrice > 0 ? `giữ giá cũ ${prev.retailPrice}.` : 'không mở bán tới khi có giá.'),

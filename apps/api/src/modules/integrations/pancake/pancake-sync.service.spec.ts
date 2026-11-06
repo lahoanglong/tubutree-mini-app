@@ -1229,13 +1229,51 @@ describe('PancakeSyncService — payload thiếu trường hoặc kiểu lạ (W
         expect(firstUpsert(prisma).create).toMatchObject({ retailPrice: 269000, salePrice: 199000 });
       });
 
-      it.each([['12.000'], ['269.000đ'], [12000.5], [''], ['abc'], [{}], [[]], [true], [-1], [1e21]])('retail_price=%j: không đọc được → biến thể mới không mở bán, không ghi giá lạ', async (retail) => {
+      it.each([['5.000', 5000], ['120.000', 120000], ['1.234.567', 1234567]])('W24: retail_price chuỗi ngăn nghìn %j đọc là %j (không thành 5 hay 120)', async (raw, expected) => {
+        const { prisma } = await sync([product('a', [variation('v-a', { retail_price: raw, sale_price: undefined })])]);
+        expect(firstUpsert(prisma).create).toMatchObject({ retailPrice: expected, salePrice: null });
+        expect(firstUpsert(prisma).create.pancakeHold ?? null).toBeNull();
+        expect(mk(prisma).product.create.mock.calls[0][0].data).toMatchObject({ basePrice: expected });
+      });
+
+      it('W24: sale_price chuỗi ngăn nghìn thấp hơn retail_price: lưu cả hai', async () => {
+        const { prisma } = await sync([product('a', [variation('v-a', { retail_price: '120.000', sale_price: '99.000' })])]);
+        expect(firstUpsert(prisma).create).toMatchObject({ retailPrice: 120000, salePrice: 99000 });
+      });
+
+      it.each([[50000], ['50.000'], [60000], ['60.000'], ['50000.000']])(
+        'W24: sale_price=%j không thấp hơn retail_price 50000: bỏ giá khuyến mãi, bán theo giá gốc, có warn nói rõ',
+        async (sale) => {
+          const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+          try {
+            const { prisma } = await sync([product('a', [variation('v-a', { retail_price: 50000, sale_price: sale })])]);
+            expect(firstUpsert(prisma).create).toMatchObject({ retailPrice: 50000, salePrice: null });
+            expect(firstUpsert(prisma).create.pancakeHold ?? null).toBeNull();
+            expect(warn).toHaveBeenCalledWith(expect.stringContaining('không thấp hơn retail_price'));
+          } finally {
+            warn.mockRestore();
+          }
+        },
+      );
+
+      it('W24: sale_price thấp hơn retail_price một đồng vẫn là khuyến mãi, không warn', async () => {
+        const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+        try {
+          const { prisma } = await sync([product('a', [variation('v-a', { retail_price: 50000, sale_price: 49999 })])]);
+          expect(firstUpsert(prisma).create).toMatchObject({ retailPrice: 50000, salePrice: 49999 });
+          expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('không thấp hơn retail_price'));
+        } finally {
+          warn.mockRestore();
+        }
+      });
+
+      it.each([['269.000đ'], [12000.5], [''], ['abc'], [{}], [[]], [true], [-1], [1e21], ['0.500']])('retail_price=%j: không đọc được → biến thể mới không mở bán, không ghi giá lạ', async (retail) => {
         const { prisma } = await sync([product('a', [variation('v-a', { retail_price: retail })])]);
         expect(firstUpsert(prisma).create).toMatchObject({ retailPrice: 0, isActive: false, pancakeHold: 'NO_PRICE' });
         expect(mk(prisma).product.create.mock.calls[0][0].data).toMatchObject({ basePrice: 0, isActive: false, pancakeHold: 'NO_PRICE' });
       });
 
-      it.each([['12.000'], [{}], [[]], ['abc']])('sale_price=%j: bỏ giá khuyến mãi, giữ giá lẻ', async (sale) => {
+      it.each([['0.500'], [{}], [[]], ['abc']])('sale_price=%j: bỏ giá khuyến mãi, giữ giá lẻ', async (sale) => {
         const { prisma } = await sync([product('a', [variation('v-a', { retail_price: 50000, sale_price: sale })])]);
         expect(firstUpsert(prisma).create).toMatchObject({ retailPrice: 50000, salePrice: null });
       });

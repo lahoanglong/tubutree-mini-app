@@ -782,7 +782,7 @@ export default function CheckoutPage() {
           justifyContent="space-between"
           style={{ cursor: 'pointer', minHeight: 44, gap: 8 }}
         >
-          <Box flex alignItems="center" style={{ gap: 10, minWidth: 0, flex: 1 }}>
+          <Box flex alignItems="center" style={{ gap: 'var(--space-inline-sm)', minWidth: 0, flex: 1 }}>
             <Box
               style={{
                 width: 36,
@@ -813,9 +813,8 @@ export default function CheckoutPage() {
                       fontSize: 'var(--type-label-size)',
                       fontWeight: 700,
                       minWidth: 0,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
+                      maxWidth: '100%',
+                      overflowWrap: 'anywhere',
                     }}
                   >
                     {cart.data.couponCode}
@@ -838,7 +837,7 @@ export default function CheckoutPage() {
             </Box>
           </Box>
 
-          <Box flex alignItems="center" style={{ gap: 4, flexShrink: 0, whiteSpace: 'nowrap', color: 'var(--color-text-brand)' }}>
+          <Box flex alignItems="center" style={{ gap: 'var(--space-inline-xs)', flexShrink: 0, whiteSpace: 'nowrap', color: 'var(--color-text-brand)' }}>
             <Text size="xSmall" bold data-testid="coupon-cta" style={{ color: 'var(--color-text-brand)' }}>
               {cart.data?.couponCode ? 'Thay đổi' : 'Chọn mã'}
             </Text>

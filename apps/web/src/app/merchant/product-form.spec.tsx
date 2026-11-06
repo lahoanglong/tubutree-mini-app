@@ -147,6 +147,75 @@ describe('WEB-1: MerchantProductPrice hiện giá khách thực trả', () => {
   });
 });
 
+describe('W24: ô giá nhận dấu chấm ngăn nghìn', () => {
+  const fillCreate = (price: string) => {
+    typeInto(inputById('merchant-product-name'), 'Bột giặt');
+    typeInto(document.getElementById('merchant-product-description'), 'Bột giặt sinh học');
+    typeInto(inputById('merchant-product-price'), price);
+    typeInto(inputById('merchant-product-stock'), '5');
+  };
+  const send = async () => {
+    click(byText(document.body, 'button', 'Gửi kiểm duyệt'));
+    await flush();
+  };
+
+  it.each([
+    ['120.000', 120000],
+    ['5.000', 5000],
+    ['1.250.000', 1250000],
+    ['120000', 120000],
+    ['120.000đ', 120000],
+  ])('đăng mới: giá %j gửi lên %j (không thành 120 hay 5)', async (typed, sent) => {
+    mount(<CreateProductModal onClose={() => undefined} onSuccess={() => undefined} />);
+    fillCreate(typed);
+    await send();
+    expect(mocks.createProduct).toHaveBeenCalledWith(expect.objectContaining({ basePrice: sent, stock: 5 }));
+  });
+
+  it.each([['5'], ['12.5'], ['abc'], ['999'], ['100.000.001']])('đăng mới: giá %j báo lỗi rõ và không gửi', async (typed) => {
+    mount(<CreateProductModal onClose={() => undefined} onSuccess={() => undefined} />);
+    fillCreate(typed);
+    await send();
+    expect(mocks.createProduct).not.toHaveBeenCalled();
+    expect(document.querySelector('[role="alert"]')?.textContent).toMatch(/^(Nhập giá bằng số đồng|Giá bán tối)/);
+  });
+
+  it('ô giá là ô văn bản (type=number nuốt "120.000" thành 120) và có gợi ý cách gõ', () => {
+    mount(<CreateProductModal onClose={() => undefined} onSuccess={() => undefined} />);
+    const input = inputById('merchant-product-price');
+    expect(input.type).toBe('text');
+    expect(input.inputMode).toBe('numeric');
+    const hint = document.getElementById(input.getAttribute('aria-describedby')!);
+    expect(hint?.textContent).toContain('120.000');
+  });
+
+  const OWN_SHIP = () => PRODUCT({ pancakeLinkCode: null, linkState: null, isActive: true });
+
+  it('sửa: gõ "95.000" gửi basePrice 95000', async () => {
+    mount(<EditProductModal product={OWN_SHIP()} onClose={() => undefined} onSuccess={() => undefined} />);
+    typeInto(inputById('merchant-edit-price'), '95.000');
+    await save();
+    expect(mocks.updateProduct).toHaveBeenCalledWith('u', { basePrice: 95000 });
+  });
+
+  it('sửa: "120.000" đúng bằng giá đang bán thì không có gì để lưu, không gửi', async () => {
+    const onClose = vi.fn();
+    mount(<EditProductModal product={OWN_SHIP()} onClose={onClose} onSuccess={() => undefined} />);
+    typeInto(inputById('merchant-edit-price'), '120.000');
+    await save();
+    expect(mocks.updateProduct).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('sửa: giá "5" báo lỗi, không gửi', async () => {
+    mount(<EditProductModal product={OWN_SHIP()} onClose={() => undefined} onSuccess={() => undefined} />);
+    typeInto(inputById('merchant-edit-price'), '5');
+    await save();
+    expect(mocks.updateProduct).not.toHaveBeenCalled();
+    expect(document.querySelector('[role="alert"]')?.textContent).toBe('Giá bán tối thiểu 1.000đ.');
+  });
+});
+
 describe('WEB-12: hộp thoại form đối tác', () => {
   it('mở: focus vào hộp và khóa cuộn nền; Esc đóng, trả focus về nút đã mở và mở lại cuộn nền', () => {
     const opener = document.createElement('button');

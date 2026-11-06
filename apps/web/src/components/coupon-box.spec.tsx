@@ -569,6 +569,22 @@ describe('CouponBox — gọn một dòng, mở khi bấm', () => {
     expect(byText(box, 'button', 'Đổi mã')).toBeNull();
   });
 
+  it('điện thoại, mã dài: chip xuống dòng trong chip (không truncate), khoảng cách icon và nút như Mini (gap-2, gap-0.5)', async () => {
+    phone();
+    const long = 'KHUYENMAI-THANG-MUOI-MOT-VIP-2026';
+    const r = render(<CouponBox currentCode={long} subtotal={100000} appliedDiscount={30000} />);
+    mounted.push(r);
+    await flush(4);
+    const card = r.container.querySelector<HTMLButtonElement>('[data-testid="coupon-change"]')!;
+    const code = card.querySelector('[data-testid="coupon-code"]')!;
+    expect(code.textContent).toBe(long);
+    expect(code.className).not.toMatch(/\btruncate\b/);
+    expect(code.className).toContain('[overflow-wrap:anywhere]');
+    expect(card.querySelector('[data-testid="coupon-cta"]')!.className).toMatch(/\bgap-0\.5\b/);
+    expect(card.firstElementChild!.className).toMatch(/\bgap-2\b/);
+    expect(card.firstElementChild!.className).not.toMatch(/\bgap-2\.5\b/);
+  });
+
   it('điện thoại, đã áp mã: thẻ như Mini App có chip mã, số đã giảm và chữ "Thay đổi"; bấm mở bảng chọn mã, có nút bỏ mã', async () => {
     phone();
     state.coupons = [c('A1')];
@@ -1027,6 +1043,18 @@ describe('CouponBox — dạng bảng trượt (điện thoại, trong thanh dí
     expect(label.parentElement!.className).toMatch(/\bflex-wrap\b/);
     expect(row.querySelector('[data-testid="coupon-discount"]')!.textContent).toBe('-30.000đ');
     expect(row.querySelector('[data-testid="coupon-cta"]')!.textContent).toBe('Thay đổi');
+  });
+
+  it('mã dài (trên 15 ký tự): pill xuống dòng ngay trong pill (không truncate), đủ ký tự', async () => {
+    const long = 'KHUYENMAI-THANG-MUOI-MOT-VIP-2026';
+    const r = render(<CouponBox sheet currentCode={long} appliedDiscount={30000} subtotal={300000} />);
+    mounted.push(r);
+    await flush(6);
+    const code = r.container.querySelector('[data-testid="coupon-code"]')!;
+    expect(code.textContent).toBe(long);
+    expect(code.className).not.toMatch(/\btruncate\b/);
+    expect(code.className).toContain('[overflow-wrap:anywhere]');
+    expect(code.className).toMatch(/\bmax-w-full\b/);
   });
 
   it('chưa có mã nhưng có mã dùng được: gợi ý bản ngắn "N mã · giảm đến X" cũng nằm trong dòng đó', async () => {

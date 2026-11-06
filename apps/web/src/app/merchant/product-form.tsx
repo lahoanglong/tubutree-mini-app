@@ -12,6 +12,7 @@ import {
   type MerchantProduct,
   type UpdateMerchantProductInput,
 } from '@/lib/merchant-client';
+import { merchantPriceError, parseMerchantPrice } from '@/lib/merchant-price';
 import { safeAreaPadX } from '@/lib/safe-area';
 import { formatVnd } from '@/lib/shop-client';
 import { useModalA11y } from '@/lib/use-modal-a11y';
@@ -19,7 +20,6 @@ import { BTN_XS_SECONDARY, INPUT_CLASS, Notice, TOUCH_H } from '@/components/adm
 import { actionErrorText } from '@/lib/error-text';
 
 const INPUT = `mt-1 ${INPUT_CLASS} ${TOUCH_H}`;
-const MAX_PRICE = 100_000_000;
 const MAX_STOCK = 100_000;
 
 /**
@@ -145,11 +145,17 @@ export function CreateProductModal({ onClose, onSuccess }: { onClose: () => void
         .map((c) => c.trim())
         .filter(Boolean),
     };
-    mut.mutate(
-      tubuFulfils && linked
-        ? { ...common, basePrice: linked.retailPrice, tubuFulfils: true, pancakeCode: linked.pancakeId }
-        : { ...common, basePrice: Number(basePrice), stock: Number(stock) },
-    );
+    if (tubuFulfils && linked) {
+      mut.mutate({ ...common, basePrice: linked.retailPrice, tubuFulfils: true, pancakeCode: linked.pancakeId });
+      return;
+    }
+    const price = parseMerchantPrice(basePrice);
+    const priceError = merchantPriceError(price);
+    if (priceError) {
+      setMsg(priceError);
+      return;
+    }
+    mut.mutate({ ...common, basePrice: price!, stock: Number(stock) });
   };
 
   return (
@@ -231,12 +237,26 @@ export function CreateProductModal({ onClose, onSuccess }: { onClose: () => void
           <div className="grid grid-cols-2 gap-2">
             <div>
               <label htmlFor="merchant-product-price" className="block text-xs font-medium text-stone-700">Giá bán (đồng) *</label>
-              <input id="merchant-product-price" type="number" inputMode="numeric" value={basePrice} onChange={(e) => setBasePrice(e.target.value)} required min={1000} max={MAX_PRICE} className={`${INPUT} font-semibold`} />
+              <input
+                id="merchant-product-price"
+                type="text"
+                inputMode="numeric"
+                autoComplete="off"
+                placeholder="120.000"
+                aria-describedby="merchant-product-price-hint"
+                value={basePrice}
+                onChange={(e) => setBasePrice(e.target.value)}
+                required
+                className={`${INPUT} font-semibold`}
+              />
             </div>
             <div>
               <label htmlFor="merchant-product-stock" className="block text-xs font-medium text-stone-700">Tồn kho bạn đang có *</label>
               <input id="merchant-product-stock" type="number" inputMode="numeric" value={stock} onChange={(e) => setStock(e.target.value)} required min={0} max={MAX_STOCK} className={INPUT} />
             </div>
+            <p id="merchant-product-price-hint" className="col-span-2 text-xs text-stone-600">
+              Giá ghi bằng đồng: gõ 120.000 hay 120000 đều được. Tối thiểu 1.000đ.
+            </p>
           </div>
         )}
 
@@ -321,6 +341,14 @@ export function EditProductModal({ product, onClose, onSuccess }: { product: Mer
       setMsg('Bấm "Kiểm tra mã" để xác nhận mã biến thể Pancake mới trước khi lưu.');
       return;
     }
+    const price = parseMerchantPrice(basePrice);
+    if (!priceStockHidden) {
+      const priceError = merchantPriceError(price);
+      if (priceError) {
+        setMsg(priceError);
+        return;
+      }
+    }
     const dto: UpdateMerchantProductInput = {};
     if (name.trim() !== base.name) dto.name = name.trim();
     if (shortDesc.trim() !== (base.shortDesc ?? '')) dto.shortDesc = shortDesc.trim();
@@ -331,11 +359,11 @@ export function EditProductModal({ product, onClose, onSuccess }: { product: Mer
       // Giá và khuyến mãi của mã Pancake cũ còn nằm trên sản phẩm: gửi giá đối tác đang thấy kèm salePrice null để khách trả
       // đúng số đó, không phụ thuộc việc server có tự bỏ giá khuyến mãi cũ hay không.
       dto.pancakeCode = null;
-      dto.basePrice = Number(basePrice);
+      dto.basePrice = price!;
       dto.salePrice = null;
     }
     if (!priceStockHidden) {
-      if (codeMode !== 'selfShip' && Number(basePrice) !== product.basePrice) dto.basePrice = Number(basePrice);
+      if (codeMode !== 'selfShip' && price !== product.basePrice) dto.basePrice = price!;
       if (Number(stock) !== (product.variations?.[0]?.stock ?? 0)) dto.stock = Number(stock);
     }
     if (Object.keys(dto).length === 0) {
@@ -439,13 +467,13 @@ export function EditProductModal({ product, onClose, onSuccess }: { product: Mer
               <label htmlFor="merchant-edit-price" className="block text-xs font-medium text-stone-700">Giá bán (đồng)</label>
               <input
                 id="merchant-edit-price"
-                type="number"
+                type="text"
                 inputMode="numeric"
+                autoComplete="off"
+                placeholder="120.000"
                 value={basePrice}
                 onChange={(e) => setBasePrice(e.target.value)}
                 required
-                min={1000}
-                max={MAX_PRICE}
                 aria-describedby={codeMode === 'selfShip' ? 'merchant-edit-price-hint' : undefined}
                 className={INPUT}
               />
