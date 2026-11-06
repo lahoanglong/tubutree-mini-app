@@ -16,6 +16,7 @@ describe('Danh sách đánh giá công khai: lọc ở máy chủ trên mọi đ
   let prisma: PrismaService;
   let reviews: ReviewsService;
   let slug: string;
+  let productId: string;
 
   const IMG = 'https://res.cloudinary.com/tubu/image/upload/v1/it-review.jpg';
   const PNG = 'data:image/png;base64,iVBORw0KGgo=';
@@ -35,6 +36,7 @@ describe('Danh sách đánh giá công khai: lọc ở máy chủ trên mọi đ
       data: { pancakeId: `it-rf-p-${tag}`, brand: 'IT', slug: `it-rf-${tag.toLowerCase()}`, name: `SP lọc đánh giá ${tag}`, description: 'IT', basePrice: 100_000 },
     });
     slug = p.slug;
+    productId = p.id;
     const u = await createUser(prisma);
     const t0 = Date.parse('2026-01-01T00:00:00.000Z');
     // Cũ nhất trước: 3 đánh giá 1 sao (một có ảnh https, một có ảnh base64), 2 đánh giá 2 sao có video, 1 đánh giá 1 sao bị ẩn,
@@ -105,5 +107,20 @@ describe('Danh sách đánh giá công khai: lọc ở máy chủ trên mọi đ
   it('rating=1 + media=photo: chỉ dòng thoả cả hai', async () => {
     const r = await reviews.listByProduct(slug, { rating: 1, media: 'photo' });
     expect(r.items.map((i) => i.comment)).toEqual(['Đánh giá 1', 'Đánh giá 0']);
+  });
+
+  it('chip số sao đọc theo index (productId, isVisible, rating, createdAt DESC), không đọc mọi đánh giá rồi bỏ dòng khác sao', async () => {
+    const rows = await prisma.$queryRaw<{ indexdef: string }[]>`SELECT indexdef FROM pg_indexes WHERE indexname = 'reviews_productId_isVisible_rating_createdAt_idx'`;
+    expect(rows[0]?.indexdef).toMatch(/\("productId", "isVisible", rating, "createdAt" DESC\)$/);
+    await prisma.$executeRawUnsafe('ANALYZE reviews');
+    const plan = await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET LOCAL enable_seqscan = off');
+      return tx.$queryRawUnsafe<{ 'QUERY PLAN': string }[]>(
+        `EXPLAIN SELECT id FROM reviews WHERE "productId" = $1 AND "isVisible" = true AND rating = 1 ORDER BY "createdAt" DESC LIMIT 100`,
+        productId,
+      );
+    });
+    const text = plan.map((r) => r['QUERY PLAN']).join('\n');
+    expect(text).toContain('reviews_productId_isVisible_rating_createdAt_idx');
   });
 });

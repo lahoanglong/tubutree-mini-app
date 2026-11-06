@@ -3065,6 +3065,7 @@ model Review {
   @@index([productId])
   // listByProduct: WHERE productId AND isVisible ORDER BY createdAt DESC LIMIT n — khỏi sắp lại mọi đánh giá của sản phẩm.
   @@index([productId, isVisible, createdAt(sort: Desc)])
+  @@index([productId, isVisible, rating, createdAt(sort: Desc)])
   @@map("reviews")
 }
 

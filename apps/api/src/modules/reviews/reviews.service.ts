@@ -353,7 +353,8 @@ export class ReviewsService {
    * Danh sách công khai: đánh giá đang hiện khớp bộ lọc (số sao, có ảnh, có video), mới nhất trước, tối đa LIST_LIMIT dòng.
    * Bộ lọc nằm trong truy vấn: lọc ở client chỉ thấy LIST_LIMIT dòng mới nhất nên sản phẩm nhiều đánh giá báo không có dòng
    * khớp dù có. Điểm trung bình, số đánh giá, phân bổ sao và số đánh giá có video luôn tính trên TẤT CẢ đánh giá đang hiện
-   * (khớp ratingAvg/reviewCount của sản phẩm), không theo bộ lọc và không chỉ trên các dòng trả về.
+   * (khớp ratingAvg/reviewCount của sản phẩm), không theo bộ lọc và không chỉ trên các dòng trả về. Response lọc vẫn mang thống
+   * kê để mọi chip nhận cùng một dạng: tiêu đề, biểu đồ sao và chip "Có video" không đổi khi khách đổi chip.
    */
   async listByProduct(slug: string, filter: PublicReviewsQuery = {}) {
     const product = await this.prisma.product.findUnique({ where: { slug }, select: { id: true } });
