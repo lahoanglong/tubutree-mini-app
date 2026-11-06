@@ -1,4 +1,4 @@
-import { payloadId, payloadNonNegInt, payloadNumericString, payloadQuantity, payloadRemoved, payloadText } from './pancake-payload';
+import { payloadId, payloadNonNegInt, payloadNumericString, payloadPrice, payloadQuantity, payloadRemoved, payloadText } from './pancake-payload';
 
 const STRANGE: unknown[] = [null, undefined, {}, { a: 1 }, [], ['x'], true, false, () => 1, Symbol('s'), NaN, Infinity, -Infinity];
 
@@ -121,5 +121,50 @@ describe('chuỗi số có phần lẻ (Pancake gửi "269000.000", "7.00")', ()
     expect(payloadNumericString('1e3')).toBeNull();
     expect(payloadNumericString('')).toBeNull();
     expect(Object.is(payloadQuantity('-0.4'), 0)).toBe(true);
+  });
+});
+
+describe('payloadPrice (W24): giá đọc được cả chuỗi ngăn nghìn kiểu Việt Nam', () => {
+  it.each([
+    ['5.000', 5000],
+    ['120.000', 120000],
+    ['269.000', 269000],
+    ['1.234.567', 1234567],
+    [' 120.000 ', 120000],
+    ['5.123', 5123],
+  ])('%j → %j', (raw, expected) => {
+    expect(payloadPrice(raw)).toBe(expected);
+  });
+
+  it.each([
+    ['269000', 269000],
+    ['269000.000', 269000],
+    ['199000.00', 199000],
+    ['1.00', 1],
+    ['12.0000', 12],
+    [50000, 50000],
+    [0, 0],
+  ])('cách đọc cũ vẫn giữ: %j → %j', (raw, expected) => {
+    expect(payloadPrice(raw)).toBe(expected);
+  });
+
+  it.each([['0.500'], ['0.000'], ['-5.000'], ['12.34'], ['1234.567'], ['120.000đ'], ['1,5'], ['1e5'], ['abc'], [''], ['  ']])(
+    '%j không phải giá → null',
+    (raw) => {
+      expect(payloadPrice(raw)).toBeNull();
+    },
+  );
+
+  it.each([[12000.5], [-1], [Number.NaN], [Infinity], [1e21], [null], [undefined], [{}], [[]], [true]])('%j không phải giá → null', (raw) => {
+    expect(payloadPrice(raw)).toBeNull();
+  });
+
+  it('nhóm ngăn nghìn quá lớn (ngoài số nguyên an toàn) → null', () => {
+    expect(payloadPrice(`1${'.000'.repeat(6)}`)).toBeNull();
+  });
+
+  it('tồn kho, khối lượng và tổng đơn KHÔNG đổi: "5.000" ở đó vẫn bị từ chối vì có thể là 5', () => {
+    expect(payloadNonNegInt('5.000')).toBeNull();
+    expect(payloadQuantity('5.000')).toBeNull();
   });
 });

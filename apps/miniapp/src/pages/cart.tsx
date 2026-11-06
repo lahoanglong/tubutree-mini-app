@@ -677,7 +677,7 @@ function CouponRow({
       >
         <Box flex alignItems="center" style={{ gap: 8, minWidth: 0, flex: 1 }}>
           <Ticket size={20} color="var(--clay-700)" aria-hidden style={{ flex: '0 0 auto' }} />
-          {/* Nhãn và nội dung cùng một dòng khi đủ chỗ; máy hẹp (320px) thì nội dung xuống dòng dưới nhãn, thay vì bị cắt "…" hay vỡ ba dòng. Hai dòng vẫn gọn trong 44px. */}
+          {/* Nhãn và nội dung cùng một dòng khi đủ chỗ; máy hẹp (320px) thì nội dung xuống dòng dưới nhãn, thay vì bị cắt "…" hay vỡ ba dòng. Hai dòng vẫn gọn trong 44px. Mã dài bất thường thì xuống dòng ngay trong pill (khách phải đọc đủ mã), hàng cao thêm. */}
           <Box style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: 'var(--space-inline-sm)', rowGap: 'var(--space-inline-xs)', minWidth: 0, flex: 1 }}>
             <Text size="small" bold data-testid="coupon-label" style={{ color: 'var(--color-text-primary)', flex: '0 0 auto' }}>
               Mã giảm giá
@@ -695,9 +695,8 @@ function CouponRow({
                     fontSize: 'var(--type-label-size)',
                     fontWeight: 700,
                     minWidth: 0,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
+                    maxWidth: '100%',
+                    overflowWrap: 'anywhere',
                   }}
                 >
                   {summary.couponCode}

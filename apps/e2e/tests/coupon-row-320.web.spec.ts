@@ -83,14 +83,20 @@ test.describe('Giỏ web: hàng mã giảm giá ở 320px', () => {
     await expect(page.getByTestId('coupon-discount')).toHaveText('-50.000đ');
   });
 
-  test('mã dài bất thường: không tràn hàng, hàng vẫn 44px (cắt có kiểm soát là chốt cuối)', async ({ page, api }) => {
-    await openCart(page, api, W320, { coupon: { code: 'KHUYENMAI-THANG-MUOI-MOT-VIP-2026', discount: 1_250_000 } });
-    const f = await rowFacts(page);
-    expect(f.rowH, `hàng mã cao ${f.rowH}px`).toBeLessThanOrEqual(44.5);
-    expect(f.outside, `phần tử tràn ra ngoài hàng: ${JSON.stringify(f.outside)}`).toEqual([]);
-    expect(f.pageOverflow, 'trang tràn ngang').toBe(false);
-    await expect(page.getByTestId('coupon-discount')).toHaveText('-1.250.000đ');
-  });
+  for (const code of ['KHUYENMAI-THANG-MUOI', 'KHUYENMAI-THANG-MUOI-MOT-VIP-2026']) {
+    test(`mã dài ${code.length} ký tự: xuống dòng ngay trong pill, đủ từng ký tự, không "…", không tràn`, async ({ page, api }) => {
+      await openCart(page, api, W320, { coupon: { code, discount: 1_250_000 } });
+      const f = await rowFacts(page);
+      expect(f.clipped, `chữ bị cắt: ${JSON.stringify(f.clipped)}`).toEqual([]);
+      expect(f.outside, `phần tử tràn ra ngoài hàng: ${JSON.stringify(f.outside)}`).toEqual([]);
+      expect(f.pageOverflow, 'trang tràn ngang').toBe(false);
+      await expect(page.getByTestId('coupon-code')).toHaveText(code);
+      await expect(page.getByTestId('coupon-discount')).toHaveText('-1.250.000đ');
+      expect(f.lines['coupon-code'], 'mã hết chỗ một dòng thì xuống dòng, không cắt').toBeGreaterThan(1);
+      expect(f.lines['coupon-cta'], 'nút "Thay đổi" một dòng').toBe(1);
+      expect(f.lines['coupon-discount'], 'số giảm một dòng').toBe(1);
+    });
+  }
 
   test('chạm vào hàng vẫn mở hộp thoại nhập mã', async ({ page, api }) => {
     await openCart(page, api, W320);

@@ -15,6 +15,8 @@ export interface RowFacts {
   lines: Record<string, number>;
   mids: Record<string, number>;
   tops: Record<string, number>;
+  /** Khung (px, theo trang) của từng phần tử có `data-testid`: để đo độ dư giữa hai phần tử cùng dòng. */
+  boxes: Record<string, { left: number; right: number; top: number; bottom: number }>;
 }
 
 export async function rowFacts(page: Page, rowTestId = 'coupon-row'): Promise<RowFacts> {
@@ -25,6 +27,7 @@ export async function rowFacts(page: Page, rowTestId = 'coupon-row'): Promise<Ro
     const lines: Record<string, number> = {};
     const mids: Record<string, number> = {};
     const tops: Record<string, number> = {};
+    const boxes: RowFacts['boxes'] = {};
     for (const el of row.querySelectorAll<HTMLElement>('*')) {
       const cs = getComputedStyle(el);
       const b = el.getBoundingClientRect();
@@ -37,6 +40,7 @@ export async function rowFacts(page: Page, rowTestId = 'coupon-row'): Promise<Ro
       lines[id] = Math.round(b.height / lh);
       mids[id] = b.top + b.height / 2;
       tops[id] = b.top;
+      boxes[id] = { left: b.left, right: b.right, top: b.top, bottom: b.bottom };
     }
     return {
       rowH: Math.round(rect.height * 10) / 10,
@@ -47,6 +51,7 @@ export async function rowFacts(page: Page, rowTestId = 'coupon-row'): Promise<Ro
       lines,
       mids,
       tops,
+      boxes,
     };
   });
 }

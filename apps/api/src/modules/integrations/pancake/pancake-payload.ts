@@ -66,6 +66,31 @@ export function payloadNonNegInt(x: unknown, opts: { round?: boolean; trunc?: bo
 }
 
 /**
+ * Mẫu ngăn nghìn của GIÁ: nhóm đầu 1-3 chữ số khác 0, rồi các nhóm đúng ba chữ số ("5.000", "120.000", "1.234.567"). Với tiền Việt, cách đọc
+ * thập phân của mẫu này ("5.000" = 5đ, "120.000" = 120đ) không phải giá bán hợp lệ, nên khác với tồn kho và tổng đơn, giá đọc là ngăn nghìn.
+ * Nhóm đầu bắt đầu bằng 0 ("0.500") không khớp nên vẫn bị từ chối.
+ *
+ * Đánh đổi đã chấp nhận: giá thật 1-999đ mà Pancake gửi dạng chuỗi ba số lẻ ("500.000" = 500đ) bị đọc thành 500.000đ, không có cảnh báo.
+ * Mẫu này không phân biệt được hai cách đọc; nếu có sản phẩm bán dưới 1.000đ, đặt giá dạng số nguyên trên Pancake.
+ */
+const PRICE_THOUSANDS = /^[1-9]\d{0,2}(?:\.\d{3})+$/;
+
+/**
+ * Giá VND từ ô Pancake: như `payloadNonNegInt` (số nguyên, hoặc chuỗi số thập phân như "269000.000"), cộng chuỗi ngăn nghìn kiểu Việt Nam
+ * ("5.000" → 5000, "1.234.567" → 1234567). Không dùng cho tồn kho, khối lượng hay tổng đơn: ở đó "5.000" có thể đúng là 5.
+ */
+export function payloadPrice(x: unknown): number | null {
+  if (typeof x === 'string') {
+    const s = x.trim();
+    if (PRICE_THOUSANDS.test(s)) {
+      const n = Number(s.replace(/\./g, ''));
+      return Number.isSafeInteger(n) ? n : null;
+    }
+  }
+  return payloadNonNegInt(x);
+}
+
+/**
  * Số lượng tồn: số nguyên (bỏ phần lẻ), có thể ÂM — POS Pancake cho bán lố kho nên số âm là dữ liệu thật, nơi gọi tự quyết (bán: coi
  * là 0). null khi không đọc được hoặc ngoài cột Int.
  */
