@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Star } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -34,6 +34,13 @@ export function ReviewsTab() {
     queryKey: ['admin-reviews', page, visibility, rating],
     queryFn: () => listAdminReviews(page, visibility || undefined, rating || undefined, PAGE_SIZE),
   });
+  // Ẩn/hiện đánh giá cuối của một trang làm danh sách co lại (lọc "Đang hiện"/"Đã ẩn" thì dòng rời khỏi danh sách): trang đang xem rỗng mà các trang trước còn đánh giá.
+  // Về trang cuối còn dữ liệu thay vì báo "không có đánh giá nào" trong khi bộ đếm ghi còn đánh giá.
+  const lastPage = q.data ? Math.max(1, Math.ceil(q.data.meta.total / q.data.meta.limit)) : 1;
+  const pastEnd = !!q.data && q.data.data.length === 0 && q.data.meta.total > 0 && page > lastPage;
+  useEffect(() => {
+    if (pastEnd) setPage(lastPage);
+  }, [pastEnd, lastPage]);
 
   return (
     <div className="space-y-3">
@@ -80,12 +87,12 @@ export function ReviewsTab() {
           {loadErrorText(q.error) || 'Không tải được danh sách đánh giá.'}
         </LoadError>
       )}
-      {q.isLoading && <p className="text-sm text-stone-500">Đang tải đánh giá…</p>}
-      {q.data && q.data.data.length === 0 && <p className="rounded-card border border-stone-200 bg-stone-0 p-4 text-sm text-stone-500">Không có đánh giá nào khớp bộ lọc.</p>}
+      {(q.isLoading || pastEnd) && <p className="text-sm text-stone-500">Đang tải đánh giá…</p>}
+      {q.data && q.data.data.length === 0 && !pastEnd && <p className="rounded-card border border-stone-200 bg-stone-0 p-4 text-sm text-stone-500">Không có đánh giá nào khớp bộ lọc.</p>}
       <div className="space-y-3">
         {q.data?.data.map((r) => <ReviewRow key={r.id} review={r} />)}
       </div>
-      {q.data && <PageNav page={q.data.meta.page} limit={q.data.meta.limit} total={q.data.meta.total} onPage={setPage} noun="đánh giá" />}
+      {q.data && !pastEnd && <PageNav page={q.data.meta.page} limit={q.data.meta.limit} total={q.data.meta.total} onPage={setPage} noun="đánh giá" />}
     </div>
   );
 }

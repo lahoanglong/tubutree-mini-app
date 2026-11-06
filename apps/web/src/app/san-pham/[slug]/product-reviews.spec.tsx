@@ -370,6 +370,37 @@ describe('ProductReviews (web) — danh sách công khai', () => {
     expect(c.querySelectorAll('li.border-t')).toHaveLength(1);
   });
 
+  // Đánh giá video cuối cùng bị ẩn lúc khách đang xem chip "Có video", rồi danh sách tải lại nền (ở app thật: làm mới `['reviews', slug]` sau khi khách viết hoặc sửa
+  // đánh giá). Test dùng đổi focus làm cách gọi tải lại nền; hành vi kiểm là chip không được biến mất (danh sách trống mà không chip nào sáng).
+  it('đang chọn "Có video" mà video cuối cùng bị ẩn: chip ở lại ghi (0) và còn sáng, "Tất cả" mới bỏ chip', async () => {
+    const withVideo = { ...LIST, count: 3, videoCount: 1, items: [review('a', 5), review('b', 5), review('v', 4, { videoUrl: 'https://cdn/v.mp4' })] };
+    const gone = { ...LIST, count: 2, videoCount: 0, items: [review('a', 5), review('b', 5)] };
+    let videoGone = false;
+    mocks.serve = (filter) => {
+      const src = videoGone ? gone : withVideo;
+      return filter === 'video' ? { ...src, items: src.items.filter((r) => r.videoUrl) } : src;
+    };
+    const c = await mount();
+    await pick(c, /^Có video/);
+    expect(c.querySelectorAll('li.border-t')).toHaveLength(1);
+    videoGone = true;
+    try {
+      await act(async () => {
+        focusManager.setFocused(false);
+        focusManager.setFocused(true);
+      });
+      await flush(8);
+    } finally {
+      focusManager.setFocused(undefined);
+    }
+    const chip = button(c, /^Có video/);
+    expect(chip?.textContent).toBe('Có video(0)');
+    expect(chip?.getAttribute('aria-pressed')).toBe('true');
+    expect(c.textContent).toContain('Không có đánh giá khớp bộ lọc.');
+    await pick(c, 'Tất cả');
+    expect(button(c, /^Có video/)).toBeFalsy();
+  });
+
   it('gửi máy chủ đúng chip: "Tất cả" không kèm bộ lọc, chip sao kèm số sao, "Có ảnh" kèm photo', async () => {
     const c = await mount();
     expect(mocks.listCalls).toEqual(['all']);
