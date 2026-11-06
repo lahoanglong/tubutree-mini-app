@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { filterReviews, reviewFilterChips, reviewFilterQuery, reviewListKey, reviewListView } from './review-filter';
+import { REVIEW_LIST_LIMIT, filterReviews, reviewFilterChips, reviewFilterQuery, reviewListCapped, reviewListKey, reviewListView } from './review-filter';
+import { fillCopy } from '../shop-copy';
 
 const r = (id: string, rating: number, over: Partial<{ images: string[]; videoUrl: string | null }> = {}) => ({ id, rating, images: [] as string[], videoUrl: null as string | null, ...over });
 
@@ -106,5 +107,34 @@ describe('reviewListView: danh sách hiển thị theo chip đang chọn', () =>
     expect(reviewListView('photo', all, { data: undefined, isPending: false, isError: true })).toEqual({ status: 'error', items: [] });
     const stale = { data: { items: [r('p', 4, { images: ['x.jpg'] })] }, isPending: false, isError: true };
     expect(reviewListView('photo', all, stale)).toEqual({ status: 'ready', items: stale.data.items });
+  });
+});
+
+describe('reviewListCapped: báo danh sách chỉ là 100 đánh giá mới nhất', () => {
+  const stats = { count: 130, videoCount: 2, distribution: { '5': 125, '2': 2, '1': 3 } };
+
+  it('dưới 100 dòng thì không báo, dù tổng lớn hơn', () => {
+    expect(REVIEW_LIST_LIMIT).toBe(100);
+    expect(reviewListCapped('all', stats, 99)).toBe(false);
+    expect(reviewListCapped(1, stats, 3)).toBe(false);
+    expect(reviewListCapped('photo', stats, 0)).toBe(false);
+  });
+
+  it('đủ 100 dòng: báo khi tổng của chip lớn hơn số đang hiện', () => {
+    expect(reviewListCapped('all', stats, 100)).toBe(true);
+    expect(reviewListCapped(5, stats, 100)).toBe(true);
+    expect(reviewListCapped('all', { count: 100 }, 100)).toBe(false);
+    expect(reviewListCapped(5, { count: 130, distribution: { '5': 100 } }, 100)).toBe(false);
+    expect(reviewListCapped('video', { count: 300, videoCount: 100 }, 100)).toBe(false);
+    expect(reviewListCapped('video', { count: 300, videoCount: 140 }, 100)).toBe(true);
+  });
+
+  it('chip "Có ảnh" không có tổng, chưa có thống kê: đủ 100 dòng là báo', () => {
+    expect(reviewListCapped('photo', stats, 100)).toBe(true);
+    expect(reviewListCapped('all', undefined, 100)).toBe(true);
+  });
+
+  it('câu báo', () => {
+    expect(fillCopy('pdp.reviewsCapped', { n: REVIEW_LIST_LIMIT })).toBe('Đang hiện 100 đánh giá mới nhất');
   });
 });

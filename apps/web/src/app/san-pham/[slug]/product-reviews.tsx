@@ -15,7 +15,15 @@ import { ui } from '@/lib/guest-ui';
 import { Chip } from '@/components/mini/chip';
 import { mini } from '@/components/order-mobile/mobile-ui';
 import { formatRating } from '@tubutree/app-core/commerce/card-meta';
-import { reviewFilterChips, reviewListKey, reviewListView, type ReviewFilterKey } from '@tubutree/app-core/commerce/review-filter';
+import {
+  REVIEW_LIST_LIMIT,
+  reviewFilterChips,
+  reviewListCapped,
+  reviewListKey,
+  reviewListView,
+  type ReviewFilterKey,
+} from '@tubutree/app-core/commerce/review-filter';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { MAX_PUBLIC_DATA_URL_LENGTH } from '@/lib/image-compress';
 import { loginHref } from '@/lib/return-to';
 import {
@@ -182,6 +190,7 @@ export function ProductReviews({ slug }: { slug: string }) {
   const dist = data?.distribution ?? {};
   const list = reviewListView(filter, listQ, filteredQ);
   const items = list.items;
+  const capped = list.status === 'ready' && reviewListCapped(filter, data, items.length);
   const chips = reviewFilterChips(data?.videoCount);
 
   return (
@@ -377,6 +386,7 @@ export function ProductReviews({ slug }: { slug: string }) {
               Xem thêm ({items.length - visible})
             </button>
           )}
+          {capped && <p className="mt-3 text-xs text-tertiary">{fillCopy('pdp.reviewsCapped', { n: REVIEW_LIST_LIMIT })}</p>}
           </>
           )}
         </>

@@ -206,6 +206,7 @@ describe('ReviewsSection (C-076 di cư DS v2: giữ nguyên hành vi)', () => {
     );
     renderSection();
     await screen.findByText('Nhận xét n0');
+    expect(screen.getByText('Đang hiện 100 đánh giá mới nhất')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '1 sao' }));
     await waitFor(() => expect(mocks.fetchReviews).toHaveBeenLastCalledWith('nuoc-rua-chen', 1));
     expect(document.querySelector('[aria-busy="true"]')).not.toBeNull();
@@ -215,6 +216,7 @@ describe('ReviewsSection (C-076 di cư DS v2: giữ nguyên hành vi)', () => {
     expect(await screen.findByText('Nhận xét cu1')).toBeInTheDocument();
     expect(screen.getByText('Nhận xét cu3')).toBeInTheDocument();
     expect(screen.queryByText('Không có đánh giá khớp bộ lọc.')).toBeNull();
+    expect(screen.queryByText('Đang hiện 100 đánh giá mới nhất')).toBeNull();
     expect(screen.getByRole('heading', { level: 2, name: 'Đánh giá (123)' })).toBeInTheDocument();
   });
 

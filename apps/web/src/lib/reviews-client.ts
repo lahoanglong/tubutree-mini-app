@@ -87,9 +87,10 @@ export interface SavedReview {
 
 const productPath = (slug: string) => `/products/${encodeURIComponent(slug)}/reviews`;
 
-/** `filter`: chip đang chọn; máy chủ lọc trên mọi đánh giá đang hiện. Không truyền là danh sách đầy đủ. */
+/** `filter`: chip đang chọn; máy chủ lọc trên mọi đánh giá đang hiện. Không truyền là danh sách đầy đủ.
+ * `no-cache`: mỗi lần tải hỏi lại máy chủ (không đổi thì 304), đánh giá vừa viết hiện ngay thay vì chờ hết `max-age=30`. */
 export const fetchProductReviews = (slug: string, filter: ReviewFilterKey = 'all') =>
-  apiFetch<ProductReviews>(`${productPath(slug)}${reviewFilterQuery(filter)}`);
+  apiFetch<ProductReviews>(`${productPath(slug)}${reviewFilterQuery(filter)}`, { cache: 'no-cache' });
 export const fetchCanReview = (slug: string) => apiFetch<CanReview>(`${productPath(slug)}/can-review`);
 export const fetchMyReview = (id: string) => apiFetch<MyReview>(`/reviews/${encodeURIComponent(id)}`);
 export const saveReview = (slug: string, body: ReviewInput) => apiFetch<SavedReview>(productPath(slug), { method: 'POST', body });

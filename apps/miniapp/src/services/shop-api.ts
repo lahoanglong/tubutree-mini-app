@@ -570,9 +570,10 @@ export interface ReviewSummary {
   distribution?: Record<string, number>;
   items: ReviewItem[];
 }
-/** `filter`: chip đang chọn; máy chủ lọc trên mọi đánh giá đang hiện. Không truyền là danh sách đầy đủ. */
+/** `filter`: chip đang chọn; máy chủ lọc trên mọi đánh giá đang hiện. Không truyền là danh sách đầy đủ.
+ * `no-cache`: mỗi lần tải hỏi lại máy chủ (không đổi thì 304), đánh giá vừa viết hiện ngay thay vì chờ hết `max-age=30`. */
 export const fetchReviews = (slug: string, filter: ReviewFilterKey = 'all') =>
-  api.get<ReviewSummary>(`/products/${slug}/reviews${reviewFilterQuery(filter)}`).then((r) => r.data);
+  api.get<ReviewSummary>(`/products/${slug}/reviews${reviewFilterQuery(filter)}`, { cache: 'no-cache' }).then((r) => r.data);
 
 /** Một đánh giá khách đã viết cho sản phẩm, gắn với lần mua (đơn) của nó — để gắn nút sửa đúng dòng. */
 export interface MyReviewRef {

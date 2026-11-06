@@ -15,7 +15,15 @@ import { apiMediaUrl, getErrorMessage, getLoadErrorMessage } from '../services/a
 import { useAuthStore } from '../store/auth';
 import { useLoginWithNotice } from './ui/auth-gate';
 import { formatRating } from '@tubutree/app-core/commerce/card-meta';
-import { reviewFilterChips, reviewListKey, reviewListView, type ReviewFilterKey } from '@tubutree/app-core/commerce/review-filter';
+import {
+  REVIEW_LIST_LIMIT,
+  reviewFilterChips,
+  reviewListCapped,
+  reviewListKey,
+  reviewListView,
+  type ReviewFilterKey,
+} from '@tubutree/app-core/commerce/review-filter';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { REVIEW_NEEDS_PURCHASE, REWARD_ALREADY_GIVEN, VIDEO_UPLOADING, rewardHint } from '@tubutree/app-core/review-copy';
 import { MultiImageUpload, VideoUpload, isCloudinaryConfigured } from './image-upload';
 import { formatDate, formatNumber } from '../utils/format';
@@ -181,6 +189,7 @@ export function ReviewsSection({
   const dist = data?.distribution ?? {};
   const list = reviewListView(filter, reviewsQ, filteredQ);
   const filtered = list.items;
+  const capped = list.status === 'ready' && reviewListCapped(filter, data, filtered.length);
   const chips = reviewFilterChips(data?.videoCount);
 
   return (
@@ -375,6 +384,11 @@ export function ReviewsSection({
               <Button variant="ghost" fullWidth onPress={() => setVisible((v) => v + 5)}>
                 Xem thêm ({filtered.length - visible})
               </Button>
+            )}
+            {capped && (
+              <Text variant="caption" tone="tertiary" as="p">
+                {fillCopy('pdp.reviewsCapped', { n: REVIEW_LIST_LIMIT })}
+              </Text>
             )}
           </div>
           )}

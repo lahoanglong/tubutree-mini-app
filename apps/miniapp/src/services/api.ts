@@ -94,6 +94,7 @@ interface PendingRequest {
   data?: unknown;
   headers: Headers;
   timeout?: number;
+  cache?: RequestCache;
   retried?: boolean;
   retried429?: boolean;
 }
@@ -191,7 +192,7 @@ async function execute<T>(req: PendingRequest): Promise<HttpResponse<T>> {
 function request<T, R>(method: string, url: string, data: unknown, config: RequestConfig | undefined): Promise<R> {
   const headers = new Headers({ Accept: 'application/json, text/plain, */*' });
   for (const [name, value] of Object.entries(config?.headers ?? {})) headers.set(name, value);
-  return execute<T>({ method, url, data, headers, params: config?.params, timeout: config?.timeout }) as Promise<R>;
+  return execute<T>({ method, url, data, headers, params: config?.params, timeout: config?.timeout, cache: config?.cache }) as Promise<R>;
 }
 
 /**

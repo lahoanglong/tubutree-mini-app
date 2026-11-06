@@ -49,7 +49,8 @@ export function reviewFilterQuery(key: ReviewFilterKey): string {
 
 /**
  * Khoá cache danh sách theo chip. "Tất cả" dùng chung khoá với dải Đánh giá nhanh và phần thống kê; chip khác thêm khoá lọc phía
- * sau nên làm mới `['reviews', slug]` sau khi viết, sửa đánh giá cũng làm mới mọi chip.
+ * sau nên làm mới `['reviews', slug]` sau khi viết, sửa đánh giá cũng làm mới mọi chip. Hàm tải của hai app gửi `cache: 'no-cache'`:
+ * API đặt `max-age=30`, không có cờ đó trình duyệt trả lại bản cũ trong 30 giây và đánh giá vừa viết chưa hiện.
  */
 export function reviewListKey(slug: string, key: ReviewFilterKey): readonly unknown[] {
   return key === 'all' ? ['reviews', slug] : ['reviews', slug, key];
@@ -71,4 +72,24 @@ export function reviewListView<T extends ReviewLike>(key: ReviewFilterKey, all: 
   const src = key === 'all' ? all : filtered;
   if (src.data) return { status: 'ready', items: filterReviews(src.data.items, key) };
   return { status: src.isError ? 'error' : 'loading', items: [] };
+}
+
+/** Số dòng tối đa API trả cho một danh sách (`LIST_LIMIT` ở reviews.service). */
+export const REVIEW_LIST_LIMIT = 100;
+
+export interface ReviewStats {
+  count: number;
+  videoCount?: number;
+  distribution?: Record<string, number>;
+}
+
+/**
+ * Danh sách của chip chỉ là 100 đánh giá mới nhất, đánh giá cũ hơn không tải: báo để khách không tưởng sản phẩm chỉ có chừng ấy.
+ * Chip có tổng (Tất cả, số sao, Có video) thì so tổng; chip "Có ảnh" không có tổng nên đủ 100 dòng là coi như bị cắt.
+ */
+export function reviewListCapped(key: ReviewFilterKey, stats: ReviewStats | undefined, shown: number): boolean {
+  if (shown < REVIEW_LIST_LIMIT) return false;
+  const total =
+    key === 'all' ? stats?.count : key === 'video' ? stats?.videoCount : typeof key === 'number' ? stats?.distribution?.[String(key)] : undefined;
+  return total === undefined || total > shown;
 }

@@ -229,6 +229,7 @@ describe('ProductReviews (web) — danh sách công khai', () => {
     let answer: (v: unknown) => void = () => undefined;
     mocks.filtered = { '1': new Promise((r) => (answer = r)) };
     const c = await mount();
+    expect(c.textContent).toContain('Đang hiện 100 đánh giá mới nhất');
     await pick(c, '1 sao');
     expect(c.querySelector('[aria-busy="true"]')?.textContent).toBe('Đang tải đánh giá…');
     expect(c.textContent).not.toContain('Không có đánh giá khớp bộ lọc.');
@@ -238,6 +239,7 @@ describe('ProductReviews (web) — danh sách công khai', () => {
     expect(c.querySelectorAll('li.border-t')).toHaveLength(3);
     expect(c.textContent).toContain('Nhận xét cu3');
     expect(c.textContent).not.toContain('Không có đánh giá khớp bộ lọc.');
+    expect(c.textContent).not.toContain('Đang hiện 100 đánh giá mới nhất');
     expect(c.querySelector('h2')?.textContent).toBe('Đánh giá (123)');
   });
 
