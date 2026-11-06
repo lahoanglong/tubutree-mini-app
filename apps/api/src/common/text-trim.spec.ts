@@ -7,6 +7,11 @@ describe('trimInvisible', () => {
     ['\u00a0\u200b', ''],
     ['a\u200bb', 'a\u200bb'],
     ['👨\u200d👩\u200d👧', '👨\u200d👩\u200d👧'],
+    ['\u3164', ''],
+    [' \u3164 \u3164 ', ''],
+    ['\u115f\u1160\uffa0\u2800', ''],
+    ['\u3164An\u3164', 'An'],
+    ['한글', '한글'],
   ])('%j → %j', (input, out) => {
     expect(trimInvisible(input)).toBe(out);
   });

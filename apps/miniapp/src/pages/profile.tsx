@@ -1,13 +1,13 @@
 import { ctvMenuEntry } from '@tubutree/app-core/storefront-signup';
 import { BRAND_OWNER_TITLE } from '@tubutree/app-core/client-copy';
 import { Page, useLocation, useNavigate, useSnackbar } from 'zmp-ui';
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   Heart, MapPin, MessageCircle, Leaf, GraduationCap, Users, Pencil, Bell, Store, Settings, Info, ChevronRight, Copy, Sparkles, BookOpen, ShieldCheck, CalendarClock, Wallet, BadgeDollarSign, CreditCard, Package, Truck, PackageCheck, Recycle, Repeat, type LucideIcon,
 } from 'lucide-react';
 import { canSeeAcademy, orderRowLabel, profileCopy } from '@tubutree/app-core/account-copy';
-import { statValueVariant } from '@tubutree/app-core/account-stat';
+import { STAT_VALUE_LINE_HEIGHT, STAT_VALUE_LOOKS, statValueFits, statValueStart } from '@tubutree/app-core/account-stat';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { CASHBACK_ENABLED, SUBSCRIPTIONS_IN_MINIAPP } from '../utils/features';
 import { ORDER_STATUS_ROW } from '@tubutree/app-core/home-layout';
@@ -528,9 +528,56 @@ function UnreadCount({ count }: { count: number }) {
   );
 }
 
+/** Bề ngang thật của ô (đổi theo màn, xoay máy), đo trước khi vẽ: chọn cỡ chữ lớn nhất còn vừa. Chưa đo được thì undefined, app-core coi như ô 320px. */
+function useCellWidth<T extends HTMLElement>() {
+  const ref = useRef<T>(null);
+  const [width, setWidth] = useState<number>();
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const read = () => setWidth(el.getBoundingClientRect().width || undefined);
+    read();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(read);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  return [ref, width] as const;
+}
+
+/** Phông Inter nạp kiểu swap: lần đo đầu có thể đang ở phông dự phòng, nạp xong thì đo lại. */
+function useFontsReady() {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    let live = true;
+    void document.fonts?.ready.then(() => {
+      if (live) setReady(true);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
+  return ready;
+}
+
 function Stat({ label, value, onClick }: { label: string; value: string; onClick?: () => void }) {
+  const [cell, cellWidth] = useCellWidth<HTMLDivElement>();
+  const text = useRef<HTMLSpanElement>(null);
+  // Bước đã lùi sau khi đo chữ thật, gắn với đúng số, bề ngang ô và phông lúc đo; đổi một trong ba thì đo lại từ bước ước lượng.
+  const [fit, setFit] = useState<{ key: string; step: number } | null>(null);
+  const fontsReady = useFontsReady();
+  const key = `${value}|${cellWidth ?? ''}|${fontsReady}`;
+  const step = fit?.key === key ? fit.step : statValueStart(value, cellWidth);
+  const last = STAT_VALUE_LOOKS.length - 1;
+  useLayoutEffect(() => {
+    const width = text.current?.getBoundingClientRect().width;
+    if (!cellWidth || !width || step >= last || statValueFits(width, cellWidth)) return;
+    setFit({ key, step: step + 1 });
+  }, [key, step, cellWidth, last]);
+  const look = STAT_VALUE_LOOKS[step]!;
   return (
     <div
+      ref={cell}
       role="button"
       {...rowKeyboardProps()}
       className="tubu-press"
@@ -545,8 +592,15 @@ function Stat({ label, value, onClick }: { label: string; value: string; onClick
         boxShadow: 'var(--elevation-1)',
       }}
     >
-      <Text variant={statValueVariant(value)} as="div" tone="brand" style={{ fontVariantNumeric: 'tabular-nums', lineHeight: 'var(--type-price-md-lh)' }}>
-        {value}
+      <Text
+        variant={look.variant}
+        as="div"
+        tone="brand"
+        style={{ fontVariantNumeric: 'tabular-nums', lineHeight: STAT_VALUE_LINE_HEIGHT, letterSpacing: look.letterSpacing, overflowWrap: 'anywhere' }}
+      >
+        <span ref={text} style={step < last ? { whiteSpace: 'nowrap' } : undefined}>
+          {value}
+        </span>
       </Text>
       <Text variant="caption" tone="tertiary" as="div">
         {label}

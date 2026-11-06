@@ -35,7 +35,6 @@ const WORST_BY_KEY: Record<string, Record<string, string>> = {
   'order.payBy': { at: '23:59 31/12' },
   'order.action.payLeft': { t: '99 ngày 23 giờ' },
   'order.payByLeft': { at: '23:59 31/12', t: '99 ngày 23 giờ' },
-  'pdp.reviewsCapped': { n: '100' },
   'shop.tierHintNext': { name: 'Đồng' },
   'support.hotline': { phone: '0984 606 774' },
   'support.orderContext': { code: 'TUBU20261015001' },

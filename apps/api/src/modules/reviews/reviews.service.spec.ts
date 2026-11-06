@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { ReviewsService, reviewImageRef, reviewImageVersions } from './reviews.service';
+import { encodeKeysetCursor } from '../../common/keyset-cursor';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import type { LoyaltyService } from '../loyalty/loyalty.service';
@@ -691,9 +692,9 @@ describe('ReviewsService.listByProduct — thống kê trên mọi đánh giá �
     id, rating, comment: null, imageVersions: [], videoUrl: null, createdAt: new Date(), user: { fullName: 'An', avatarUrl: null },
   });
 
-  it('150 đánh giá đang hiện mà chỉ trả 100 dòng → count/average/distribution vẫn theo 150', async () => {
+  it('150 đánh giá đang hiện mà trang chỉ trả 100 dòng → count/average/distribution vẫn theo 150', async () => {
     const prisma = listPrisma(
-      Array.from({ length: 100 }, (_, i) => row(`r${i}`, 5)),
+      Array.from({ length: 101 }, (_, i) => row(`r${i}`, 5)),
       [{ rating: 5, n: 100 }, { rating: 1, n: 50 }],
       7,
     );
@@ -705,11 +706,11 @@ describe('ReviewsService.listByProduct — thống kê trên mọi đánh giá �
     expect(r.videoCount).toBe(7);
   });
 
-  it('dòng trả về: chỉ đánh giá đang hiện, mới nhất trước, tối đa 100; thống kê cùng điều kiện đang hiện', async () => {
+  it('dòng trả về: chỉ đánh giá đang hiện, mới nhất trước (id phá hoà), xin 101 dòng để biết còn trang sau; thống kê cùng điều kiện đang hiện', async () => {
     const prisma = listPrisma([]);
     await new ReviewsService(prisma, analytics, loyalty).listByProduct('tinh-dau');
     expect(prisma.review.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { productId: 'p1', isVisible: true }, orderBy: { createdAt: 'desc' }, take: 100 }),
+      expect.objectContaining({ where: { productId: 'p1', isVisible: true }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 101 }),
     );
     expect(prisma.review.groupBy).toHaveBeenCalledWith({ by: ['rating'], where: { productId: 'p1', isVisible: true }, _count: { _all: true } });
   });
@@ -735,11 +736,13 @@ describe('ReviewsService.listByProduct: lọc theo sao, ảnh, video ở máy ch
     [{ media: 'photo' as const }, { ...VISIBLE, imageVersions: { isEmpty: false } }],
     [{ media: 'video' as const }, { ...VISIBLE, videoUrl: { not: null } }],
     [{ rating: 4, media: 'photo' as const }, { ...VISIBLE, rating: 4, imageVersions: { isEmpty: false } }],
-  ])('bộ lọc %j → findMany where %j, mới nhất trước, tối đa 100', async (filter, where) => {
+  ])('bộ lọc %j → findMany where %j, mới nhất trước, mỗi trang 100', async (filter, where) => {
     const prisma = listPrisma([]);
     await new ReviewsService(prisma, analytics, loyalty).listByProduct('tinh-dau', filter);
     expect(prisma.review.findMany).toHaveBeenCalledTimes(1);
-    expect(prisma.review.findMany).toHaveBeenCalledWith(expect.objectContaining({ where, orderBy: { createdAt: 'desc' }, take: 100 }));
+    expect(prisma.review.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 101 }),
+    );
   });
 
   it('chip "Có video" và danh sách lọc video dùng cùng một điều kiện (số trên chip khớp số dòng)', async () => {
@@ -768,6 +771,63 @@ describe('ReviewsService.listByProduct: lọc theo sao, ảnh, video ở máy ch
     await expect(new ReviewsService(prisma, analytics, loyalty).listByProduct('khong-co', { rating: 1 })).rejects.toBeInstanceOf(NotFoundException);
     expect(prisma.review.findMany).not.toHaveBeenCalled();
   });
+});
+
+// Sản phẩm hơn 100 đánh giá: trang đầu trả 100 dòng kèm nextCursor; gửi lại nextCursor (cùng bộ lọc) lấy 100 dòng kế tiếp.
+// Con trỏ là (createdAt, id) của dòng cuối, không phải offset: đánh giá mới đến giữa chừng không đẩy dòng cũ lặp lại sang trang sau.
+describe('ReviewsService.listByProduct: phân trang con trỏ', () => {
+  const VISIBLE = { productId: 'p1', isVisible: true };
+  const at = (i: number) => new Date(Date.UTC(2026, 10, 1) - i * 60_000);
+  const row = (i: number) => ({
+    id: `r${i}`, rating: 5, comment: null, imageVersions: [], videoUrl: null, createdAt: at(i), user: { fullName: 'An', avatarUrl: null },
+  });
+
+  it('101 dòng khớp → trả 100, nextCursor là con trỏ của dòng thứ 100 (không phải dòng thừa)', async () => {
+    const prisma = listPrisma(Array.from({ length: 101 }, (_, i) => row(i)), [{ rating: 5, n: 250 }]);
+    const r = await new ReviewsService(prisma, analytics, loyalty).listByProduct('tinh-dau');
+    expect(r.items).toHaveLength(100);
+    expect(r.items.at(-1)!.id).toBe('r99');
+    expect(r.nextCursor).toBe(encodeKeysetCursor({ createdAt: at(99), id: 'r99' }));
+    expect(r.count).toBe(250);
+  });
+
+  it.each([0, 1, 100])('%i dòng khớp → hết trang, nextCursor null', async (n) => {
+    const r = await new ReviewsService(listPrisma(Array.from({ length: n }, (_, i) => row(i))), analytics, loyalty).listByProduct('tinh-dau');
+    expect(r.items).toHaveLength(n);
+    expect(r.nextCursor).toBeNull();
+  });
+
+  it('có cursor → điều kiện bộ lọc AND đứng sau con trỏ; thống kê, số video không đổi theo trang', async () => {
+    const prisma = listPrisma([]);
+    const cursor = encodeKeysetCursor({ createdAt: at(99), id: 'r99' });
+    await new ReviewsService(prisma, analytics, loyalty).listByProduct('tinh-dau', { rating: 4, media: 'photo', cursor });
+    expect(prisma.review.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          AND: [
+            { ...VISIBLE, rating: 4, imageVersions: { isEmpty: false } },
+            { OR: [{ createdAt: { lt: at(99) } }, { createdAt: at(99), id: { lt: 'r99' } }] },
+          ],
+        },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: 101,
+      }),
+    );
+    expect(prisma.review.groupBy).toHaveBeenCalledWith({ by: ['rating'], where: VISIBLE, _count: { _all: true } });
+    expect(prisma.review.count).toHaveBeenCalledWith({ where: { ...VISIBLE, videoUrl: { not: null } } });
+  });
+
+  it.each(['khong-phai-con-tro', Buffer.from('abc|r1').toString('base64url'), Buffer.from('123|').toString('base64url')])(
+    'cursor hỏng %s → 400 "Con trỏ trang không hợp lệ", không truy vấn sản phẩm hay đánh giá',
+    async (cursor) => {
+      const prisma = listPrisma([]);
+      const err = await new ReviewsService(prisma, analytics, loyalty).listByProduct('tinh-dau', { cursor }).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect((err as BadRequestException).message).toBe('Con trỏ trang không hợp lệ. Bạn tải lại danh sách nhé.');
+      expect(prisma.product.findUnique).not.toHaveBeenCalled();
+      expect(prisma.review.findMany).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe('ReviewsService.findOwn (nội dung đầy đủ để sửa đánh giá)', () => {

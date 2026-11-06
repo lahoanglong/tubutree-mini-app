@@ -184,6 +184,26 @@ describe('/tai-khoan/ho-so — các ô nhập', () => {
 });
 
 describe('/tai-khoan/ho-so — lưu (PATCH /me)', () => {
+  it.each(['', '   ', '\u200b '])('xoá trắng họ tên (%j) rồi bấm Lưu: báo lỗi ở ô, aria-invalid, khoá nút, không gọi API, không báo thành công', async (blank) => {
+    const { container } = await mount();
+    const name = field(container, 'Họ và tên');
+    typeInto(name, blank);
+    click(saveBtn(container));
+    await flush(4);
+    expect(container.textContent).toContain('Nhập họ tên để lưu hồ sơ.');
+    expect(name.getAttribute('aria-invalid')).toBe('true');
+    expect(saveBtn(container).disabled).toBe(true);
+    click(saveBtn(container));
+    await flush(4);
+    expect(mocks.patch).not.toHaveBeenCalled();
+    expect(statusText(container)).not.toContain('Đã cập nhật hồ sơ');
+    typeInto(name, ' Lan C ');
+    expect(container.textContent).not.toContain('Nhập họ tên để lưu hồ sơ.');
+    click(saveBtn(container));
+    await flush(6);
+    expect(mocks.patch.mock.calls[0]![1].fullName).toBe('Lan C');
+  });
+
   it('gửi tên, email đã cắt khoảng trắng, không gửi lại ngày sinh đã đặt (API chỉ cho đặt một lần); báo thành công; đồng bộ phiên và làm mới /me', async () => {
     const { container } = await mount();
     typeInto(field(container, 'Họ và tên'), '  Lan B  ');
@@ -319,15 +339,6 @@ describe('/tai-khoan/ho-so — lưu (PATCH /me)', () => {
     await flush(6);
     expect(mocks.patch).toHaveBeenCalledTimes(2);
     expect(mocks.patch.mock.calls[1]![1].dob).toBeUndefined();
-  });
-
-  it('tên để trống thì không gửi tên và giữ tên cũ trong phiên', async () => {
-    const { container } = await mount();
-    typeInto(field(container, 'Họ và tên'), '   ');
-    click(saveBtn(container));
-    await flush(6);
-    expect(mocks.patch.mock.calls[0]![1].fullName).toBeUndefined();
-    expect(mocks.auth.updateProfile).toHaveBeenCalledWith({ fullName: 'Lan', avatarUrl: null });
   });
 
   it('máy chủ chê avatarUrl: thử lại một lần không kèm avatarUrl', async () => {

@@ -56,4 +56,10 @@ describe('UpdateMeDto.fullName', () => {
   it('từ chối tên quá 120 ký tự', () => {
     expect(errorsOf({ fullName: 'a'.repeat(121) })).toEqual(['fullName']);
   });
+  it.each(['', '   ', '\t', '\u200b', ' \u200b\ufeff ', '\u3164', ' \u3164 \u3164 ', '\u2800'])('từ chối tên rỗng sau khi cắt %j (trước đây lưu tên rỗng và báo thành công)', (fullName) => {
+    expect(errorsOf({ fullName })).toEqual(['fullName']);
+  });
+  it('không gửi fullName (chỉ sửa email, ngày sinh) vẫn hợp lệ', () => {
+    expect(errorsOf({ email: 'an@example.com' })).toEqual([]);
+  });
 });

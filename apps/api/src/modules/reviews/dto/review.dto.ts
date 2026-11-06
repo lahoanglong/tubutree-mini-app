@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import { ArrayMaxSize, IsArray, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 import { IsUploadedImage, IsUploadedMediaUrl, PUBLIC_CONTENT_IMAGE } from '../../../common/uploaded-image';
 import { Trim } from '../../../common/decorators/trim.decorator';
+import { KeysetCursorField } from '../../../common/keyset-cursor';
 
 export class CreateReviewDto {
   @IsInt() @Min(1) @Max(5) rating!: number;
@@ -26,4 +27,6 @@ export type ReviewMediaFilter = (typeof REVIEW_MEDIA_FILTERS)[number];
 export class PublicReviewsQuery {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(5) rating?: number;
   @IsOptional() @IsIn(REVIEW_MEDIA_FILTERS) media?: ReviewMediaFilter;
+  /** `nextCursor` của trang trước (cùng bộ lọc). Không gửi là trang đầu, như trước khi có phân trang. */
+  @KeysetCursorField() cursor?: string;
 }
