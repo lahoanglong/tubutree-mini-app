@@ -340,6 +340,7 @@ export const SHOP_COPY: Record<string, string> = {
   'checkout.priceUpdated': 'Đã cập nhật giá. Tổng mới {price}.',
   'checkout.lineSoldOut': 'Hết hàng',
   'checkout.lineOver': 'Còn {n} sản phẩm',
+  'checkout.lineOverMany': 'Vượt số hàng đang có',
   'checkout.lineRemove': 'Bỏ khỏi đơn',
   'checkout.lineReduce': 'Giảm còn {n}',
   'checkout.lineToCart': 'Về giỏ hàng',

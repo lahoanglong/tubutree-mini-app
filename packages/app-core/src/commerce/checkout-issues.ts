@@ -1,4 +1,5 @@
 import { fillCopy } from '../shop-copy';
+import { isLowStock, overStockTarget } from './stock-text';
 
 /**
  * Lỗi của dòng hàng và của lần đặt ở màn thanh toán, dùng chung cho Mini App và web: báo đúng dòng, kèm cách sửa nhanh
@@ -34,17 +35,21 @@ export interface LineProblem {
   fixLabel: string;
 }
 
-/** Dòng đang đòi nhiều hơn tồn: hết hàng hẳn (tồn không dương) thì bỏ dòng, còn một ít thì giảm về đúng số còn. */
+/**
+ * Dòng đang đòi nhiều hơn tồn: hết hàng hẳn (tồn không dương) thì bỏ dòng. Tồn 1–20 thì ghi số còn và giảm về đúng số đó. Tồn trên 20 không
+ * được in: câu không có số và nút giảm về 20 (`overStockTarget`).
+ */
 export function checkoutLineProblem(line: CheckoutLineInput): LineProblem | null {
   if (line.quantity <= line.stock) return null;
   if (line.stock <= 0) {
     return { kind: 'sold-out', text: fillCopy('checkout.lineSoldOut'), fix: { kind: 'remove' }, fixLabel: fillCopy('checkout.lineRemove') };
   }
+  const target = overStockTarget(line.stock);
   return {
     kind: 'over',
-    text: fillCopy('checkout.lineOver', { n: line.stock }),
-    fix: { kind: 'reduce', quantity: line.stock },
-    fixLabel: fillCopy('checkout.lineReduce', { n: line.stock }),
+    text: isLowStock(line.stock) ? fillCopy('checkout.lineOver', { n: line.stock }) : fillCopy('checkout.lineOverMany'),
+    fix: { kind: 'reduce', quantity: target },
+    fixLabel: fillCopy('checkout.lineReduce', { n: target }),
   };
 }
 

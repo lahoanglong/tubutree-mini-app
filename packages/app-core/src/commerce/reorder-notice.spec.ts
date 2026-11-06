@@ -29,12 +29,19 @@ describe('reorderLineNotices: câu dưới từng dòng sheet Mua lại', () => 
     expect(reorderLineNotices(line({ orderedQuantity: 2, stock: 2 }))).toEqual([]);
   });
 
+  it('tồn trên 20 mà ít hơn số đã mua: không báo gì ở sheet (báo "không đủ" là lộ tồn đang dưới số đã mua), máy chủ kẹp lúc thêm', () => {
+    expect(reorderLineNotices(line({ orderedQuantity: 30, stock: 25 }))).toEqual([]);
+    expect(reorderLineNotices(line({ orderedQuantity: 30, stock: 21 }))).toEqual([]);
+    expect(reorderLineNotices(line({ orderedQuantity: 30, stock: 20 })).map((n) => n.kind)).toEqual(['reduced']);
+  });
+
   it('đơn trước mua quá trần của sheet: báo trần dù còn đủ hàng; tồn dưới trần mà thiếu thì báo không đủ', () => {
     const capped = { kind: 'reduced', tone: 'warning', text: 'Mua lại tối đa 99 mỗi món, đã giảm số lượng' };
     expect(reorderLineNotices(line({ orderedQuantity: 120, stock: 500 }))).toEqual([capped]);
     expect(reorderLineNotices(line({ orderedQuantity: 300, stock: 150 }))).toEqual([capped]);
     expect(reorderLineNotices(line({ orderedQuantity: 120, stock: null }))).toEqual([capped]);
-    expect(reorderLineNotices(line({ orderedQuantity: 120, stock: 50 })).map((n) => n.text)).toEqual(['Không đủ 120 như đơn trước, đã giảm số lượng']);
+    expect(reorderLineNotices(line({ orderedQuantity: 120, stock: 50 }))).toEqual([capped]);
+    expect(reorderLineNotices(line({ orderedQuantity: 120, stock: 15 })).map((n) => n.text)).toEqual(['Không đủ 120 như đơn trước, đã giảm số lượng']);
     expect(reorderLineNotices(line({ orderedQuantity: 99, stock: 500 }))).toEqual([]);
   });
 

@@ -29,7 +29,7 @@ import { actionErrorText, loadErrorText } from '@/lib/error-text';
 import { LineItemSkeleton } from '@/components/ui/skeleton';
 import { Badge, Countdown, KeyValueRow, ProductThumb } from '@/components/mini';
 import { PAGE_WIDE } from '@/lib/page-frame';
-import { cartStockNote } from '@tubutree/app-core/commerce/stock-text';
+import { cartStockNote, overStockTarget, qtyPickMax } from '@tubutree/app-core/commerce/stock-text';
 import { CartComboBlock } from '@/components/cart-combo-block';
 import { ConfirmSheet } from '@/components/ui/confirm-sheet';
 import { useAutoDismiss } from '@/lib/use-auto-dismiss';
@@ -270,7 +270,7 @@ export default function CartPage() {
   const renderLine = (it: CartLine) => {
     // Hết hàng / vượt tồn: `+` chỉ làm khách mất dòng (quantity kẹp về 0 → API xoá) mà không báo gì.
     const soldOut = it.stock <= 0;
-    const atMax = it.quantity >= Math.max(1, it.stock);
+    const atMax = it.quantity >= qtyPickMax(it.stock);
     const stockNote = cartStockNote(it.quantity, it.stock);
     const busy = busyItemId === it.id;
     const compareAt = lineCompareAt(it);
@@ -347,22 +347,18 @@ export default function CartPage() {
               {CART_OUT_OF_STOCK}
             </p>
           )}
-          {/* Chạm trần tồn: giải thích nút + khoá. Cam chỉ khi tồn thấp hoặc đang vượt, tồn cao thì chữ thường (cùng luật `cartStockNote` với Mini). */}
+          {/* Tồn thấp chạm trần (giải thích nút + khoá) hoặc đang vượt tồn: cùng luật `cartStockNote` với Mini. */}
           {stockNote && (
-            <p
-              className={`mt-1 flex basis-full items-center gap-1 text-caption max-md:order-2 ${
-                stockNote.tone === 'warning' ? 'text-warning-fg' : 'text-[color:var(--color-text-secondary)]'
-              }`}
-            >
-              {stockNote.tone === 'warning' && <AlertTriangle size={13} aria-hidden className="shrink-0" />}
-              {stockNote.text}
+            <p className="mt-1 flex basis-full items-center gap-1 text-caption text-warning-fg max-md:order-2">
+              <AlertTriangle size={13} aria-hidden className="shrink-0" />
+              {stockNote}
             </p>
           )}
           <div className="mt-1 flex flex-wrap items-center gap-x-2 md:basis-full max-md:contents">
             <div className="flex items-center rounded-control border border-stone-450 text-sm max-md:order-3 max-md:ml-auto max-md:gap-2 max-md:rounded-none max-md:border-0">
               <button
                 type="button"
-                onClick={() => !busy && update.mutate({ id: it.id, q: Math.max(1, Math.min(it.stock, it.quantity - 1)) })}
+                onClick={() => !busy && update.mutate({ id: it.id, q: it.quantity > it.stock ? Math.min(it.quantity - 1, overStockTarget(it.stock)) : it.quantity - 1 })}
                 disabled={soldOut || it.quantity <= 1}
                 aria-disabled={busy || undefined}
                 aria-label={`Giảm số lượng ${it.productName}`}

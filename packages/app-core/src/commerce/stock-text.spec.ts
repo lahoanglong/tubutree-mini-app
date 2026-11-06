@@ -1,6 +1,6 @@
 import { exposedStock } from '@tubutree/shared-types';
 import { describe, expect, it } from 'vitest';
-import { cartStockNote, isLowStock, LOW_STOCK_NOTICE, PLENTY_STOCK, stockText } from './stock-text';
+import { cartStockNote, isLowStock, LOW_STOCK_NOTICE, overStockTarget, PLENTY_STOCK, QTY_PICK_CAP, qtyPickMax, stockText } from './stock-text';
 
 describe('stockText: một chữ tồn kho cho cả hai app', () => {
   it('hết hàng ghi "Tạm hết hàng" như thẻ (K1)', () => {
@@ -49,25 +49,52 @@ describe('cartStockNote: dòng tồn kho ở giỏ, một luật cho hai app (L5
     expect(cartStockNote(3, -1)).toBeNull();
   });
 
-  it('chạm trần mà tồn thấp (1..20): cảnh báo, chữ "Chỉ còn n sản phẩm" như PDP', () => {
-    for (const n of [1, 3, 5, 20]) expect(cartStockNote(n, n)).toEqual({ text: `Chỉ còn ${n} sản phẩm`, tone: 'warning' });
+  it('chạm trần mà tồn thấp (1..20): chữ "Chỉ còn n sản phẩm" như PDP', () => {
+    for (const n of [1, 3, 5, 20]) expect(cartStockNote(n, n)).toBe(`Chỉ còn ${n} sản phẩm`);
   });
 
-  it('chạm trần mà tồn cao (21 trở lên): chữ thường báo đã chọn hết số hàng, KHÔNG ghi con số tồn, không cam', () => {
-    expect(cartStockNote(21, 21)).toEqual({ text: 'Đã chọn hết số hàng đang có', tone: 'neutral' });
-    expect(cartStockNote(40, 40)).toEqual({ text: 'Đã chọn hết số hàng đang có', tone: 'neutral' });
+  it('tồn cao (21 trở lên) mà số đã chọn bằng tồn: không có dòng, vì "đã chọn hết" là nói ra tồn thật', () => {
+    expect(cartStockNote(21, 21)).toBeNull();
+    expect(cartStockNote(40, 40)).toBeNull();
   });
 
-  it('vượt tồn (quantity > stock, đang chặn thanh toán): luôn cảnh báo kể cả tồn cao; tồn cao nói "vượt" (không phải "vừa đủ") mà vẫn không lộ số', () => {
-    expect(cartStockNote(3, 1)).toEqual({ text: 'Chỉ còn 1 sản phẩm', tone: 'warning' });
-    expect(cartStockNote(50, 40)).toEqual({ text: 'Vượt số hàng đang có, giảm bớt để thanh toán', tone: 'warning' });
+  it('vượt tồn (quantity > stock, đang chặn thanh toán): tồn thấp ghi số, tồn cao nói "vượt" mà không có số', () => {
+    expect(cartStockNote(3, 1)).toBe('Chỉ còn 1 sản phẩm');
+    expect(cartStockNote(50, 40)).toBe('Vượt số hàng đang có, giảm bớt để thanh toán');
   });
 
   it('tồn trên ngưỡng không bao giờ có chữ số trong dòng ghi chú (21, 40, 999, 99.999, 100.000, 99.999.988)', () => {
     for (const stock of [LOW_STOCK_NOTICE + 1, 40, 999, PLENTY_STOCK - 1, PLENTY_STOCK, 99_999_988]) {
-      expect(cartStockNote(stock, stock)!.text).not.toMatch(/\d/);
-      expect(cartStockNote(stock + 1, stock)!.text).not.toMatch(/\d/);
+      expect(cartStockNote(stock, stock)).toBeNull();
+      expect(cartStockNote(stock + 1, stock)).not.toMatch(/\d/);
     }
+  });
+});
+
+describe('qtyPickMax: trần nút + của bộ chọn số lượng', () => {
+  it('tồn 1..20 (đã in "Chỉ còn n"): nút + khoá đúng ở tồn', () => {
+    for (const n of [1, 5, 19, 20]) expect(qtyPickMax(n)).toBe(n);
+  });
+
+  it('tồn trên 20: trần cố định, không phụ thuộc tồn, nên bấm + không dò ra tồn thật', () => {
+    expect(QTY_PICK_CAP).toBe(99);
+    for (const stock of [21, 25, 98, 99, 100, 500, 1000, PLENTY_STOCK]) expect(qtyPickMax(stock)).toBe(QTY_PICK_CAP);
+  });
+
+  it('hết hàng: 1 (bộ chọn khoá riêng, không về 0)', () => {
+    expect(qtyPickMax(0)).toBe(1);
+    expect(qtyPickMax(-3)).toBe(1);
+  });
+});
+
+describe('overStockTarget: mức kéo về của dòng vượt tồn', () => {
+  it('tồn 1..20 về đúng tồn; tồn trên 20 về 20, không về sát tồn thật; hết hàng về 1', () => {
+    expect(overStockTarget(3)).toBe(3);
+    expect(overStockTarget(20)).toBe(20);
+    expect(overStockTarget(21)).toBe(LOW_STOCK_NOTICE);
+    expect(overStockTarget(25)).toBe(LOW_STOCK_NOTICE);
+    expect(overStockTarget(PLENTY_STOCK)).toBe(LOW_STOCK_NOTICE);
+    expect(overStockTarget(0)).toBe(1);
   });
 });
 

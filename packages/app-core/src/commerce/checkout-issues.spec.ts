@@ -31,6 +31,16 @@ describe('checkoutLineProblem', () => {
     expect(p.fixLabel).toBe('Giảm còn 3');
   });
 
+  it('vượt tồn mà tồn trên 20: không ghi số tồn, sửa nhanh giảm về 20 (giảm về sát tồn là in tồn thật)', () => {
+    const p = checkoutLineProblem(line({ quantity: 30, stock: 25 }))!;
+    expect(p.kind).toBe('over');
+    expect(p.text).toBe('Vượt số hàng đang có');
+    expect(p.fix).toEqual({ kind: 'reduce', quantity: 20 });
+    expect(p.fixLabel).toBe('Giảm còn 20');
+    expect(`${p.text} ${p.fixLabel}`).not.toContain('25');
+    expect(checkoutLineProblem(line({ quantity: 30, stock: 20 }))!.text).toBe('Còn 20 sản phẩm');
+  });
+
   it('tồn âm (dữ liệu lỗi) coi như hết hàng', () => {
     expect(checkoutLineProblem(line({ stock: -2 }))!.kind).toBe('sold-out');
   });

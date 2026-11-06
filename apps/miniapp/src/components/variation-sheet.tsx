@@ -3,7 +3,7 @@ import { Zap } from 'lucide-react';
 import { clampPickerQty, pickerStartId, pickerStockText } from '@tubutree/app-core/variation-picker';
 import { inCartQuantity, lineNote, variationLinePreview } from '@tubutree/app-core/commerce/flash-line';
 import { fillTileCopy } from '@tubutree/app-core/commerce/tile-copy';
-import { isLowStock } from '@tubutree/app-core/commerce/stock-text';
+import { isLowStock, qtyPickMax } from '@tubutree/app-core/commerce/stock-text';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { variationPricing, type FlashPriceItem } from '@tubutree/app-core/flash-price';
 import { formatVnd } from '../utils/format';
@@ -179,7 +179,7 @@ export function VariationSheet({
         </Text>
         <QuantitySelector
           value={qty}
-          max={Math.max(1, selected?.stock ?? 1)}
+          max={qtyPickMax(selected?.stock ?? 0)}
           onChange={(n) => {
             haptic('light');
             setQty(n);

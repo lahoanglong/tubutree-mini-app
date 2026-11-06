@@ -8,7 +8,7 @@ import { useRouter } from 'next/navigation';
 import { ChevronRight, Leaf, MessageCircle, Megaphone, Repeat, Ticket, Truck, Users } from 'lucide-react';
 import type { PublicConfig } from '@tubutree/app-core/api/config';
 import { offerAmount, offerRows } from '@tubutree/app-core/commerce/voucher-picker';
-import { stockText } from '@tubutree/app-core/commerce/stock-text';
+import { qtyPickMax, stockText } from '@tubutree/app-core/commerce/stock-text';
 import { serverNow } from '@tubutree/app-core/server-clock';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { createGroupBuy } from '@tubutree/app-core/api/groupbuy';
@@ -388,7 +388,7 @@ export function PdpSubscribeRow({ slug, variations }: { slug: string; variations
           onClose={() => setOpen(false)}
           onNotice={setNotice}
           variationId={selected.id}
-          quantity={Math.min(sel?.quantity ?? 1, Math.max(1, stock))}
+          quantity={Math.min(sel?.quantity ?? 1, qtyPickMax(stock))}
         />
       )}
     </div>

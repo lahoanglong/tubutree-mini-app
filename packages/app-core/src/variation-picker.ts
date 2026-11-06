@@ -1,4 +1,4 @@
-import { stockText } from './commerce/stock-text';
+import { qtyPickMax, stockText } from './commerce/stock-text';
 import { pickDefaultVariation } from './flash-price';
 
 type PickerVariation = { id: string; sku?: string; retailPrice: number; salePrice?: number | null; stock: number };
@@ -14,8 +14,9 @@ export function pickerStartId(variations: readonly PickerVariation[], preferredI
   return (preferred ?? pickDefaultVariation(variations))?.id ?? null;
 }
 
+/** Số lượng trong 1..trần nút + (`qtyPickMax`): tồn trên 20 không kẹp về tồn. */
 export function clampPickerQty(variation: { stock: number } | undefined, qty: number): number {
-  const max = Math.max(1, variation?.stock ?? 1);
+  const max = qtyPickMax(variation?.stock ?? 0);
   return Math.min(Math.max(1, Math.floor(qty) || 1), max);
 }
 
