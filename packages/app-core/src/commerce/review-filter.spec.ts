@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { filterReviews, reviewFilterChips } from './review-filter';
+import { filterReviews, reviewFilterChips, reviewFilterQuery, reviewListKey, reviewListView } from './review-filter';
 
 const r = (id: string, rating: number, over: Partial<{ images: string[]; videoUrl: string | null }> = {}) => ({ id, rating, images: [] as string[], videoUrl: null as string | null, ...over });
 
@@ -43,5 +43,68 @@ describe('filterReviews', () => {
   it('"photo" chỉ lấy đánh giá có ảnh, "video" chỉ lấy đánh giá có video', () => {
     expect(filterReviews(items, 'photo').map((x) => x.id)).toEqual(['a']);
     expect(filterReviews(items, 'video').map((x) => x.id)).toEqual(['c']);
+  });
+});
+
+describe('reviewFilterQuery: bộ lọc gửi máy chủ (máy chủ lọc trên mọi đánh giá, không chỉ 100 dòng mới nhất)', () => {
+  it('"all" không gửi tham số; chip sao gửi rating; Có ảnh/Có video gửi media', () => {
+    expect(reviewFilterQuery('all')).toBe('');
+    expect([5, 4, 3, 2, 1].map((k) => reviewFilterQuery(k))).toEqual(['?rating=5', '?rating=4', '?rating=3', '?rating=2', '?rating=1']);
+    expect(reviewFilterQuery('photo')).toBe('?media=photo');
+    expect(reviewFilterQuery('video')).toBe('?media=video');
+  });
+
+  it('mọi chip đang vẽ đều có tham số máy chủ nhận (rating 1..5, media photo/video)', () => {
+    for (const chip of reviewFilterChips(3)) {
+      const qs = reviewFilterQuery(chip.key);
+      if (chip.key === 'all') expect(qs).toBe('');
+      else expect(qs).toMatch(/^\?(rating=[1-5]|media=(photo|video))$/);
+    }
+  });
+
+  it('số sao ngoài 1..5 hoặc không nguyên thì không gửi (máy chủ trả 400 cho giá trị đó)', () => {
+    for (const k of [0, 6, 2.5, -1, Number.NaN]) expect(reviewFilterQuery(k)).toBe('');
+  });
+});
+
+describe('reviewListKey: khoá cache danh sách theo bộ lọc', () => {
+  it('"Tất cả" dùng chung khoá với dải Đánh giá nhanh; chip khác thêm khoá lọc phía sau (làm mới ["reviews", slug] làm mới cả chúng)', () => {
+    expect(reviewListKey('nuoc-rua-chen', 'all')).toEqual(['reviews', 'nuoc-rua-chen']);
+    expect(reviewListKey('nuoc-rua-chen', 1)).toEqual(['reviews', 'nuoc-rua-chen', 1]);
+    expect(reviewListKey('nuoc-rua-chen', 'photo')).toEqual(['reviews', 'nuoc-rua-chen', 'photo']);
+    expect(reviewListKey('a', 5)).not.toEqual(reviewListKey('a', 4));
+  });
+});
+
+describe('reviewListView: danh sách hiển thị theo chip đang chọn', () => {
+  const all = { data: { items: [r('a', 5), r('b', 5)] }, isPending: false, isError: false };
+  const none = { data: undefined, isPending: true, isError: false };
+
+  it('"Tất cả" lấy dòng của danh sách đầy đủ', () => {
+    expect(reviewListView('all', all, none)).toEqual({ status: 'ready', items: all.data.items });
+  });
+
+  it('chip lọc đang chờ máy chủ: "loading", KHÔNG lọc tạm danh sách đầy đủ (tránh báo "không có đánh giá khớp" sai)', () => {
+    expect(reviewListView(1, all, none)).toEqual({ status: 'loading', items: [] });
+  });
+
+  it('chip lọc có kết quả máy chủ: lấy đúng dòng máy chủ trả, kể cả khi danh sách đầy đủ không có dòng nào khớp', () => {
+    const one = { data: { items: [r('z', 1)] }, isPending: false, isError: false };
+    expect(reviewListView(1, all, one)).toEqual({ status: 'ready', items: one.data.items });
+  });
+
+  it('API cũ bỏ qua tham số lọc và trả cả danh sách: vẫn chỉ hiện dòng khớp chip', () => {
+    const ignored = { data: { items: [r('a', 5), r('z', 1)] }, isPending: false, isError: false };
+    expect(reviewListView(1, all, ignored).items.map((x) => x.id)).toEqual(['z']);
+  });
+
+  it('máy chủ trả rỗng: "ready" với danh sách rỗng (app vẽ "Không có đánh giá khớp bộ lọc.")', () => {
+    expect(reviewListView(3, all, { data: { items: [] }, isPending: false, isError: false })).toEqual({ status: 'ready', items: [] });
+  });
+
+  it('lỗi tải chip lọc mà chưa có dữ liệu: "error"; đã có dữ liệu cũ thì vẫn hiện dữ liệu đó', () => {
+    expect(reviewListView('photo', all, { data: undefined, isPending: false, isError: true })).toEqual({ status: 'error', items: [] });
+    const stale = { data: { items: [r('p', 4, { images: ['x.jpg'] })] }, isPending: false, isError: true };
+    expect(reviewListView('photo', all, stale)).toEqual({ status: 'ready', items: stale.data.items });
   });
 });

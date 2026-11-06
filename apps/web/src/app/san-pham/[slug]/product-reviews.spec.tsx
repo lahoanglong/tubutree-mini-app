@@ -13,6 +13,9 @@ const mocks = vi.hoisted(() => ({
   auth: { status: 'authenticated', initialized: true, sessionUnavailable: false } as Record<string, unknown>,
   search: '',
   list: null as unknown,
+  /** Kết quả riêng của một chip (Error để báo lỗi, Promise để giữ ở trạng thái chờ); thiếu thì lọc `list` như máy chủ. */
+  filtered: {} as Record<string, unknown>,
+  listCalls: [] as unknown[],
   elig: null as unknown,
   mine: {} as Record<string, unknown>,
   myCalls: [] as string[],
@@ -31,7 +34,16 @@ vi.mock('@/components/evidence-upload', () => ({
 }));
 vi.mock('@/lib/reviews-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/reviews-client')>()),
-  fetchProductReviews: async () => mocks.list,
+  fetchProductReviews: async (_slug: string, filter: number | string = 'all') => {
+    mocks.listCalls.push(filter);
+    if (filter === 'all') return mocks.list;
+    const own = mocks.filtered[String(filter)];
+    if (own instanceof Error) throw own;
+    if (own) return own;
+    const all = mocks.list as { items: { rating: number; images: string[]; videoUrl: string | null }[] };
+    const items = all.items.filter((r) => (filter === 'photo' ? r.images.length > 0 : filter === 'video' ? Boolean(r.videoUrl) : r.rating === filter));
+    return { ...all, items };
+  },
   fetchCanReview: async () => {
     mocks.eligCalls += 1;
     if (mocks.elig instanceof Error) throw mocks.elig;
@@ -91,6 +103,11 @@ const mount = async () => {
   return r.container;
 };
 const button = (c: HTMLElement, text: string | RegExp) => byText(c, 'button', text);
+/** Bấm chip lọc rồi đợi kết quả máy chủ của chip đó. */
+const pick = async (c: HTMLElement, text: string | RegExp) => {
+  click(button(c, text));
+  await flush(8);
+};
 const buttonNamed = (c: HTMLElement, name: string) => c.querySelector<HTMLButtonElement>(`button[aria-label="${name}"]`);
 const form = (c: HTMLElement) => c.querySelector('form');
 const configureVideo = () => {
@@ -110,6 +127,8 @@ beforeEach(() => {
   mocks.auth = { status: 'authenticated', initialized: true, sessionUnavailable: false };
   mocks.search = '';
   mocks.list = structuredClone(LIST);
+  mocks.filtered = {};
+  mocks.listCalls = [];
   mocks.elig = structuredClone(ELIG_REPEAT);
   mocks.mine = { a: structuredClone(MINE_A), b: structuredClone(MINE_B) };
   mocks.myCalls = [];
@@ -152,13 +171,13 @@ describe('ProductReviews (web) — danh sách công khai', () => {
   it('lọc 2 sao và 1 sao: chỉ còn đúng đánh giá mức đó, mức không có đánh giá ra trạng thái rỗng', async () => {
     mocks.list = { ...LIST, count: 4, items: [review('s5', 5), review('s2', 2), review('s2b', 2), review('s1', 1)] };
     const c = await mount();
-    click(button(c, '2 sao'));
+    await pick(c, '2 sao');
     expect(c.querySelectorAll('li.border-t')).toHaveLength(2);
     expect(button(c, '2 sao')!.getAttribute('aria-pressed')).toBe('true');
-    click(button(c, '1 sao'));
+    await pick(c, '1 sao');
     expect(c.querySelectorAll('li.border-t')).toHaveLength(1);
     expect(c.textContent).toContain('Nhận xét s1');
-    click(button(c, '4 sao'));
+    await pick(c, '4 sao');
     expect(c.querySelectorAll('li.border-t')).toHaveLength(0);
   });
 
@@ -167,12 +186,12 @@ describe('ProductReviews (web) — danh sách công khai', () => {
     const chips = () => Array.from(c.querySelectorAll<HTMLButtonElement>('button[aria-pressed]'));
     expect(chips().map((b) => b.textContent)).toEqual(['Tất cả', '5 sao', '4 sao', '3 sao', '2 sao', '1 sao', 'Có ảnh']);
     expect(chips()[0]!.getAttribute('aria-pressed')).toBe('true');
-    click(button(c, '5 sao'));
+    await pick(c, '5 sao');
     expect(c.querySelectorAll('li.border-t')).toHaveLength(2);
     expect(button(c, '5 sao')!.getAttribute('aria-pressed')).toBe('true');
-    click(button(c, 'Có ảnh'));
+    await pick(c, 'Có ảnh');
     expect(c.querySelectorAll('li.border-t')).toHaveLength(1);
-    click(button(c, '4 sao'));
+    await pick(c, '4 sao');
     expect(c.querySelectorAll('li.border-t')).toHaveLength(0);
     // Như Mini App: trạng thái rỗng dùng EmptyState inline (hình kính lúp), không phải một dòng chữ nhỏ.
     for (let n = 0; n < 40 && !c.textContent!.includes('Không có đánh giá khớp bộ lọc.'); n++) await flush();
@@ -189,10 +208,51 @@ describe('ProductReviews (web) — danh sách công khai', () => {
     expect(button(c, /^Có video/)!.textContent).toBe('Có video(1)');
     click(button(c, 'Xem thêm (3)'));
     expect(c.querySelectorAll('li.border-t')).toHaveLength(8);
-    click(button(c, '5 sao'));
+    await pick(c, '5 sao');
     expect(c.querySelectorAll('li.border-t')).toHaveLength(5);
-    click(button(c, /^Có video/));
+    await pick(c, /^Có video/);
     expect(c.querySelectorAll('li.border-t')).toHaveLength(1);
+  });
+
+  it('gửi máy chủ đúng chip: "Tất cả" không kèm bộ lọc, chip sao kèm số sao, "Có ảnh" kèm photo', async () => {
+    const c = await mount();
+    expect(mocks.listCalls).toEqual(['all']);
+    await pick(c, '1 sao');
+    await pick(c, 'Có ảnh');
+    expect(mocks.listCalls).toEqual(['all', 1, 'photo']);
+  });
+
+  // Lỗi gốc: danh sách đầy đủ chỉ có 100 đánh giá mới nhất. Sản phẩm 120 đánh giá 5 sao mới + 3 đánh giá 1 sao cũ thì lọc 1 sao
+  // trên 100 dòng đó ra rỗng dù phân bố sao ghi 3.
+  it('100 dòng mới nhất toàn 5 sao: chip "1 sao" chờ máy chủ (không báo rỗng tạm), rồi hiện đủ 3 đánh giá 1 sao cũ', async () => {
+    mocks.list = { ...LIST, count: 123, distribution: { '5': 120, '1': 3 }, items: Array.from({ length: 100 }, (_, i) => review(`n${i}`, 5)) };
+    let answer: (v: unknown) => void = () => undefined;
+    mocks.filtered = { '1': new Promise((r) => (answer = r)) };
+    const c = await mount();
+    await pick(c, '1 sao');
+    expect(c.querySelector('[aria-busy="true"]')?.textContent).toBe('Đang tải đánh giá…');
+    expect(c.textContent).not.toContain('Không có đánh giá khớp bộ lọc.');
+    expect(c.querySelectorAll('li.border-t')).toHaveLength(0);
+    await act(async () => answer({ ...LIST, count: 123, items: [review('cu1', 1), review('cu2', 1), review('cu3', 1)] }));
+    await flush(8);
+    expect(c.querySelectorAll('li.border-t')).toHaveLength(3);
+    expect(c.textContent).toContain('Nhận xét cu3');
+    expect(c.textContent).not.toContain('Không có đánh giá khớp bộ lọc.');
+    expect(c.querySelector('h2')?.textContent).toBe('Đánh giá (123)');
+  });
+
+  it('chip lọc tải lỗi: "Không tải được đánh giá." kèm Thử lại, thống kê vẫn còn; thử lại thì hiện kết quả', async () => {
+    mocks.filtered = { '3': new Error('mất mạng') };
+    const c = await mount();
+    await pick(c, '3 sao');
+    expect(c.textContent).toContain('Không tải được đánh giá.');
+    expect(c.textContent).not.toContain('Không có đánh giá khớp bộ lọc.');
+    expect(c.querySelector('h2')?.textContent).toBe('Đánh giá (3)');
+    mocks.filtered = {};
+    click(button(c, 'Thử lại'));
+    await flush(8);
+    expect(c.querySelectorAll('li.border-t')).toHaveLength(1);
+    expect(c.textContent).toContain('Nhận xét c');
   });
 
   it('điện thoại: dải trắng riêng; "Viết đánh giá" và "Xem thêm (n)" là nút chữ thương hiệu, không viền như Mini App', async () => {

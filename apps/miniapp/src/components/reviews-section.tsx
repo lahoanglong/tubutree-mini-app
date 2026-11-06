@@ -15,7 +15,7 @@ import { apiMediaUrl, getErrorMessage, getLoadErrorMessage } from '../services/a
 import { useAuthStore } from '../store/auth';
 import { useLoginWithNotice } from './ui/auth-gate';
 import { formatRating } from '@tubutree/app-core/commerce/card-meta';
-import { filterReviews, reviewFilterChips, type ReviewFilterKey } from '@tubutree/app-core/commerce/review-filter';
+import { reviewFilterChips, reviewListKey, reviewListView, type ReviewFilterKey } from '@tubutree/app-core/commerce/review-filter';
 import { REVIEW_NEEDS_PURCHASE, REWARD_ALREADY_GIVEN, VIDEO_UPLOADING, rewardHint } from '@tubutree/app-core/review-copy';
 import { MultiImageUpload, VideoUpload, isCloudinaryConfigured } from './image-upload';
 import { formatDate, formatNumber } from '../utils/format';
@@ -65,6 +65,16 @@ interface ReviewDraft {
 
 const EMPTY_DRAFT: ReviewDraft = { rating: 5, comment: '', images: [], video: '' };
 
+/** Khung chờ của danh sách đánh giá: dùng chung cho danh sách đầy đủ và kết quả chip lọc. */
+function ListSkeleton() {
+  return (
+    <div aria-busy="true" style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <Skeleton width="100%" height={64} />
+      <Skeleton width="100%" height={64} />
+    </div>
+  );
+}
+
 const draftFromReview = (r: MyReview): ReviewDraft => ({
   rating: r.rating,
   comment: r.comment ?? '',
@@ -109,7 +119,9 @@ export function ReviewsSection({
   const [edited, setEdited] = useState<{ key: string; draft: ReviewDraft } | null>(null);
   const [filter, setFilter] = useState<ReviewFilterKey>('all');
   const [visible, setVisible] = useState(5);
-  const reviewsQ = useQuery({ queryKey: ['reviews', slug], queryFn: () => fetchReviews(slug) });
+  const reviewsQ = useQuery({ queryKey: reviewListKey(slug, 'all'), queryFn: () => fetchReviews(slug) });
+  // Chip lọc hỏi máy chủ: danh sách đầy đủ chỉ có 100 đánh giá mới nhất, lọc trên đó báo "không có đánh giá khớp" sai.
+  const filteredQ = useQuery({ queryKey: reviewListKey(slug, filter), queryFn: () => fetchReviews(slug, filter), enabled: filter !== 'all' });
   // Chỉ hỏi khi đã đăng nhập; chưa đăng nhập thì vẫn hiện nút để còn mời login.
   const eligQ = useQuery({
     queryKey: ['can-review', slug],
@@ -167,7 +179,8 @@ export function ReviewsSection({
           : null;
   const data = reviewsQ.data;
   const dist = data?.distribution ?? {};
-  const filtered = filterReviews(data?.items ?? [], filter);
+  const list = reviewListView(filter, reviewsQ, filteredQ);
+  const filtered = list.items;
   const chips = reviewFilterChips(data?.videoCount);
 
   return (
@@ -216,10 +229,7 @@ export function ReviewsSection({
         ))}
 
       {reviewsQ.isLoading ? (
-        <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <Skeleton width="100%" height={64} />
-          <Skeleton width="100%" height={64} />
-        </div>
+        <ListSkeleton />
       ) : reviewsQ.isError ? (
         <ErrorState message={getLoadErrorMessage(reviewsQ.error)} onRetry={() => void reviewsQ.refetch()} />
       ) : data && data.count > 0 ? (
@@ -277,6 +287,11 @@ export function ReviewsSection({
             ))}
           </div>
 
+          {list.status === 'loading' ? (
+            <ListSkeleton />
+          ) : list.status === 'error' ? (
+            <ErrorState message={getLoadErrorMessage(filteredQ.error)} onRetry={() => void filteredQ.refetch()} />
+          ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 12 }}>
             {filtered.slice(0, visible).map((r) => {
               const mine = mineById.get(r.id);
@@ -362,6 +377,7 @@ export function ReviewsSection({
               </Button>
             )}
           </div>
+          )}
         </>
       ) : (
         <EmptyState variant="inline" art="sprout" heading="Chưa có đánh giá" body="Hãy là người đầu tiên chia sẻ trải nghiệm." />

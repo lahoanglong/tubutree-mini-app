@@ -147,37 +147,93 @@ describe('ReviewsSection (C-076 di cư DS v2: giữ nguyên hành vi)', () => {
     expect(srcs).toEqual(['http://localhost:3001/api/reviews/p/images/0?v=abc1234567', 'https://res.cloudinary.com/x/a.jpg']);
   });
 
-  it('chip lọc: "5 sao", "Có ảnh", "Có video" lọc đúng danh sách, "Tất cả" trả lại đủ', async () => {
+  /** API thật lọc theo chip trên mọi đánh giá đang hiện; mock trả đúng các dòng khớp tham số, thống kê giữ nguyên. */
+  const serve = (summary: Omit<typeof DATA, 'distribution'> & { distribution: Record<string, number> }) =>
+    mocks.fetchReviews.mockImplementation(async (_slug: string, f: number | string = 'all') => {
+      if (f === 'all') return summary;
+      const items = summary.items.filter((r) =>
+        f === 'photo' ? (r.images as string[]).length > 0 : f === 'video' ? Boolean(r.videoUrl) : r.rating === f,
+      );
+      return { ...summary, items };
+    });
+
+  it('chip lọc hỏi máy chủ đúng tham số: "5 sao", "Có ảnh", "Có video", mức không có đánh giá ra trạng thái rỗng, "Tất cả" trả lại đủ', async () => {
+    serve(DATA);
     renderSection();
     await screen.findByText('Nhận xét a');
     fireEvent.click(screen.getByRole('button', { name: '5 sao' }));
-    expect(screen.getByText('Nhận xét a')).toBeInTheDocument();
+    expect(await screen.findByText('Nhận xét a')).toBeInTheDocument();
     expect(screen.queryByText('Nhận xét c')).toBeNull();
+    expect(mocks.fetchReviews).toHaveBeenLastCalledWith('nuoc-rua-chen', 5);
     fireEvent.click(screen.getByRole('button', { name: 'Có ảnh' }));
-    expect(screen.getByText('Nhận xét c')).toBeInTheDocument();
+    expect(await screen.findByText('Nhận xét c')).toBeInTheDocument();
     expect(screen.queryByText('Nhận xét a')).toBeNull();
+    expect(mocks.fetchReviews).toHaveBeenLastCalledWith('nuoc-rua-chen', 'photo');
     fireEvent.click(screen.getByRole('button', { name: /Có video/ }));
-    expect(screen.getByText('Nhận xét b')).toBeInTheDocument();
+    expect(await screen.findByText('Nhận xét b')).toBeInTheDocument();
     expect(screen.queryByText('Nhận xét c')).toBeNull();
+    expect(mocks.fetchReviews).toHaveBeenLastCalledWith('nuoc-rua-chen', 'video');
     fireEvent.click(screen.getByRole('button', { name: '4 sao' }));
-    expect(screen.getByText('Không có đánh giá khớp bộ lọc.')).toBeInTheDocument();
+    expect(await screen.findByText('Không có đánh giá khớp bộ lọc.')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Tất cả' }));
     expect(screen.getAllByText(/^Nhận xét /)).toHaveLength(3);
+    expect(screen.getByRole('heading', { level: 2, name: 'Đánh giá (3)' })).toBeInTheDocument();
   });
 
-  it('chip "2 sao" và "1 sao" lọc đúng đánh giá thấp, mức không có đánh giá ra trạng thái rỗng', async () => {
-    mocks.fetchReviews.mockResolvedValue({ ...DATA, count: 4, distribution: { '5': 1, '2': 2, '1': 1 }, items: [review('s5', 5), review('s2', 2), review('s2b', 2), review('s1', 1)] });
+  it('chip "2 sao" và "1 sao" hiện đúng đánh giá thấp máy chủ trả', async () => {
+    serve({ ...DATA, count: 4, distribution: { '5': 1, '2': 2, '1': 1 }, items: [review('s5', 5), review('s2', 2), review('s2b', 2), review('s1', 1)] });
     renderSection();
     await screen.findByText('Nhận xét s5');
     fireEvent.click(screen.getByRole('button', { name: '2 sao' }));
-    expect(screen.getByText('Nhận xét s2')).toBeInTheDocument();
+    expect(await screen.findByText('Nhận xét s2')).toBeInTheDocument();
     expect(screen.getByText('Nhận xét s2b')).toBeInTheDocument();
     expect(screen.queryByText('Nhận xét s1')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '1 sao' }));
-    expect(screen.getByText('Nhận xét s1')).toBeInTheDocument();
+    expect(await screen.findByText('Nhận xét s1')).toBeInTheDocument();
     expect(screen.queryByText('Nhận xét s2')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: '4 sao' }));
-    expect(screen.getByText('Không có đánh giá khớp bộ lọc.')).toBeInTheDocument();
+  });
+
+  // Lỗi gốc: danh sách đầy đủ chỉ có 100 đánh giá mới nhất. Sản phẩm 120 đánh giá 5 sao mới + 3 đánh giá 1 sao cũ thì lọc 1 sao
+  // trên 100 dòng đó ra rỗng dù phân bố sao ghi 3.
+  it('100 dòng mới nhất toàn 5 sao: chip "1 sao" chờ máy chủ (không báo rỗng tạm), rồi hiện đủ 3 đánh giá 1 sao cũ', async () => {
+    const newest = Array.from({ length: 100 }, (_, i) => review(`n${i}`, 5));
+    const old1 = [review('cu1', 1), review('cu2', 1), review('cu3', 1)];
+    let answer: (v: unknown) => void = () => undefined;
+    mocks.fetchReviews.mockImplementation((_slug: string, f: number | string = 'all') =>
+      f === 'all'
+        ? Promise.resolve({ ...DATA, count: 123, distribution: { '5': 120, '1': 3 }, items: newest })
+        : new Promise((r) => (answer = r)),
+    );
+    renderSection();
+    await screen.findByText('Nhận xét n0');
+    fireEvent.click(screen.getByRole('button', { name: '1 sao' }));
+    await waitFor(() => expect(mocks.fetchReviews).toHaveBeenLastCalledWith('nuoc-rua-chen', 1));
+    expect(document.querySelector('[aria-busy="true"]')).not.toBeNull();
+    expect(screen.queryByText('Không có đánh giá khớp bộ lọc.')).toBeNull();
+    expect(screen.queryByText('Nhận xét n0')).toBeNull();
+    answer({ ...DATA, count: 123, distribution: { '5': 120, '1': 3 }, items: old1 });
+    expect(await screen.findByText('Nhận xét cu1')).toBeInTheDocument();
+    expect(screen.getByText('Nhận xét cu3')).toBeInTheDocument();
+    expect(screen.queryByText('Không có đánh giá khớp bộ lọc.')).toBeNull();
+    expect(screen.getByRole('heading', { level: 2, name: 'Đánh giá (123)' })).toBeInTheDocument();
+  });
+
+  it('chip lọc tải lỗi: báo lỗi có "Thử lại", phần thống kê vẫn còn; thử lại thì hiện kết quả', async () => {
+    let fail = true;
+    mocks.fetchReviews.mockImplementation(async (_slug: string, f: number | string = 'all') => {
+      if (f === 'all') return DATA;
+      if (fail) throw new Error('mất mạng');
+      return { ...DATA, items: [review('c', 3, { images: ['https://i/1.jpg'] })] };
+    });
+    renderSection();
+    await screen.findByText('Nhận xét a');
+    fireEvent.click(screen.getByRole('button', { name: '3 sao' }));
+    const retry = await screen.findByRole('button', { name: 'Thử lại' });
+    expect(screen.getByRole('heading', { level: 2, name: 'Đánh giá (3)' })).toBeInTheDocument();
+    expect(screen.queryByText('Không có đánh giá khớp bộ lọc.')).toBeNull();
+    fail = false;
+    fireEvent.click(retry);
+    expect(await screen.findByText('Nhận xét c')).toBeInTheDocument();
   });
 
   it('không có video nào → không có chip "Có video"', async () => {
