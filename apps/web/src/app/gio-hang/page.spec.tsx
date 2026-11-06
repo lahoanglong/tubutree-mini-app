@@ -946,3 +946,42 @@ describe('/gio-hang — gom món của combo dưới đầu nhóm, báo trước
     });
   });
 });
+
+describe('/gio-hang — W28: đơn tối thiểu của mã khi giỏ đổi', () => {
+  const REASON = 'Đơn tối thiểu 200.000đ để dùng mã này.';
+  const one = (over: Record<string, unknown> = {}) => ({ ...cartOf([line({ id: 'i1', quantity: 2, stock: 9, total: 300000 })]), ...over });
+
+  it('mã giữ nhưng chưa áp vì thiếu đơn tối thiểu: lời báo nói luôn cần mua thêm bao nhiêu', async () => {
+    state.cart = one({ couponCode: 'MIN200', couponNotice: `Mã chưa được áp dụng cho đơn này: ${REASON}`, couponShortfall: 110000 });
+    const { container } = await mount();
+    expect(container.querySelector('[data-testid="coupon-notice"]')!.textContent).toBe(
+      `Mã chưa được áp dụng cho đơn này: ${REASON} Mua thêm 110.000đ để áp mã MIN200.`,
+    );
+  });
+
+  it('mã giữ nhưng chưa áp vì lý do khác đơn tối thiểu (không có số thiếu): giữ nguyên câu máy chủ, không nói mua thêm', async () => {
+    state.cart = one({ couponCode: 'PSGRAN', couponNotice: 'Mã chưa được áp dụng cho đơn này: Sản phẩm áp dụng mã đang có giá Giờ vàng.' });
+    const { container } = await mount();
+    expect(container.querySelector('[data-testid="coupon-notice"]')!.textContent).not.toContain('Mua thêm');
+  });
+
+  it('máy chủ gỡ mã vì giỏ rơi dưới đơn tối thiểu: báo mã nào, cần mua thêm bao nhiêu; lần đọc giỏ sau vẫn còn; bấm Đóng thì mất', async () => {
+    state.cart = one({ subtotal: 210000, couponRemoved: { code: 'MIN300', reason: 'Đơn tối thiểu 300.000đ để dùng mã này.', shortfall: 90000 } });
+    const { container } = await mount();
+    const note = () => container.querySelector('[data-testid="coupon-removed-notice"]');
+    expect(note()!.textContent).toContain('Đã gỡ mã MIN300 vì giỏ chưa đủ đơn tối thiểu. Mua thêm 90.000đ để dùng lại.');
+    // Lần đọc giỏ sau (bấm +): máy chủ không còn nói gì về mã đã gỡ nhưng lời báo vẫn còn.
+    state.cart = one({ subtotal: 210000 });
+    click(button(container, 'Tăng số lượng Dầu gội bồ kết'));
+    await flush(6);
+    expect(note()!.textContent).toContain('Đã gỡ mã MIN300');
+    click(note()!.querySelector('button'));
+    expect(note()).toBeNull();
+  });
+
+  it('giỏ không có mã bị gỡ: không có lời báo', async () => {
+    state.cart = one();
+    const { container } = await mount();
+    expect(container.querySelector('[data-testid="coupon-removed-notice"]')).toBeNull();
+  });
+});

@@ -7,7 +7,7 @@ import { FlashQuotaLineError } from '../flash-sale/flash-sale.service';
 import { LOCK_BUSY_MESSAGE } from '../../common/lock-busy';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { CartService } from '../cart/cart.service';
-import { CouponProductScopeError, type CouponsService } from '../coupons/coupons.service';
+import { CouponMinOrderError, CouponProductScopeError, type CouponsService } from '../coupons/coupons.service';
 import { COUPON_PRODUCT_FLASH_REASON } from '../coupons/coupon-notice';
 // P0 A3-05 (quyền lợi hạng): các test "tier perks" bên dưới dựng PricingService THẬT (không mock)
 // để khẳng định khách THẬT SỰ nhận đúng số tiền hứa, không chỉ "hàm được gọi đúng tham số" — nên cần
@@ -1616,6 +1616,26 @@ describe('CheckoutService — MONEY-3: mã không đạt điều kiện trên ph
     expect(q.couponNotice).toContain('Giờ vàng');
   });
 
+  // W28: số tiền còn thiếu tính trên phần hàng máy chủ dùng để xét (89.000đ không Giờ vàng), không phải 167.000đ cả giỏ.
+  it('W28 quote: mã thiếu đơn tối thiểu → couponShortfall là phần thiếu trên hàng không Giờ vàng', async () => {
+    const { svc } = build({ cartData: FLASH_MIX, validateAndCompute: jest.fn().mockRejectedValue(new CouponMinOrderError(150000, 89000)) });
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(q.couponApplied).toBe(false);
+    expect(q.couponShortfall).toBe(61000);
+  });
+
+  it('W28 quote: mã bị từ chối vì lý do khác (hết lượt) hoặc mã gắn sản phẩm → không có couponShortfall', async () => {
+    const other = build({ cartData: FLASH_MIX, validateAndCompute: jest.fn().mockRejectedValue(new BadRequestException('Bạn đã dùng hết lượt cho mã này.')) });
+    expect(await other.svc.quote('u1', { addressId: 'addr1' } as never)).not.toHaveProperty('couponShortfall');
+    const scoped = build({ cartData: FLASH_MIX, validateAndCompute: jest.fn().mockRejectedValue(new CouponMinOrderError(150000, 89000, true)) });
+    expect(await scoped.svc.quote('u1', { addressId: 'addr1' } as never)).not.toHaveProperty('couponShortfall');
+  });
+
+  it('W28 quote: mã áp được → không có couponShortfall', async () => {
+    const { svc } = build({ cartData: FLASH_MIX, validateAndCompute: jest.fn().mockResolvedValue({ discount: 10000, freeship: false }) });
+    expect(await svc.quote('u1', { addressId: 'addr1' } as never)).not.toHaveProperty('couponShortfall');
+  });
+
   it('lỗi hạ tầng khi kiểm mã (không phải BadRequest) → báo lỗi, không âm thầm đặt đơn bỏ mã', async () => {
     const { svc, orderCreate } = build({ cartData: FLASH_MIX, validateAndCompute: jest.fn().mockRejectedValue(new Error('db timeout')) });
     await expect(svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never)).rejects.toThrow('db timeout');
@@ -2156,6 +2176,28 @@ describe('CheckoutService — freeship đơn đầu (D2-08)', () => {
     const res = await svc.couponPreviews('u1', {} as never);
     expect(res.coupons).toEqual([
       { code: 'FREESHIP', eligible: false, reason: FIRST_ORDER_FREESHIP_REASON, discount: 0 },
+      { code: 'GIAM10', eligible: true, discount: 10000 },
+    ]);
+  });
+
+  it('W28 xem trước mã: mã thiếu đơn tối thiểu kèm shortfall; mã gắn sản phẩm và mã lỗi khác không có shortfall', async () => {
+    const { svc, coupons, loyalty } = setup({ config: config(OFF) });
+    (loyalty as unknown as { getAvailableCoupons: jest.Mock }).getAvailableCoupons = jest
+      .fn()
+      .mockResolvedValue([{ code: 'MIN300' }, { code: 'SCOPED' }, { code: 'HETLUOT' }, { code: 'GIAM10' }]);
+    (coupons as unknown as { previewMany: jest.Mock }).previewMany = jest.fn().mockResolvedValue(
+      new Map<string, unknown>([
+        ['MIN300', new CouponMinOrderError(300000, 210000)],
+        ['SCOPED', new CouponMinOrderError(300000, 210000, true)],
+        ['HETLUOT', new BadRequestException('Bạn đã dùng hết lượt cho mã này.')],
+        ['GIAM10', { discount: 10000, freeship: false }],
+      ]),
+    );
+    const res = await svc.couponPreviews('u1', {} as never);
+    expect(res.coupons).toEqual([
+      { code: 'MIN300', eligible: false, reason: 'Đơn tối thiểu 300.000đ để dùng mã này.', discount: 0, shortfall: 90000 },
+      { code: 'SCOPED', eligible: false, reason: 'Đơn tối thiểu 300.000đ để dùng mã này.', discount: 0 },
+      { code: 'HETLUOT', eligible: false, reason: 'Bạn đã dùng hết lượt cho mã này.', discount: 0 },
       { code: 'GIAM10', eligible: true, discount: 10000 },
     ]);
   });

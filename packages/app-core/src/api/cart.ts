@@ -1,5 +1,6 @@
 import type { CartComboGroup } from '@tubutree/shared-types';
 import type { HttpClient, RequestOptions } from '../http';
+import type { RemovedCoupon } from '../coupon-min-order';
 
 export type { CartComboGroup };
 
@@ -56,6 +57,10 @@ export interface CartSummary {
   couponCode: string | null;
   /** Mã đang giữ nhưng chưa áp cho giỏ hiện tại (vd hàng giờ vàng không tính vào điều kiện). */
   couponNotice?: string | null;
+  /** Số tiền hàng còn thiếu để mã đang giữ đạt đơn tối thiểu (máy chủ tính trên phần hàng nó xét); không có khi mã chưa áp vì lý do khác. API cũ chưa trả. */
+  couponShortfall?: number | null;
+  /** Mã máy chủ vừa gỡ khỏi giỏ ở lần đọc này (giỏ rơi dưới đơn tối thiểu, mã hết hạn hay bị tắt); chỉ báo đúng một lần nên app phải nhớ. API cũ chưa trả. */
+  couponRemoved?: RemovedCoupon | null;
   subtotal: number;
   /** Giảm giá combo của gian hàng đang ghi công (đã trừ trước khi tính mã); API cũ chưa trả → coi như 0. */
   comboDiscount?: number;

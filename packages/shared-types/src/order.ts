@@ -137,6 +137,11 @@ export interface CouponPreviewDTO {
   discount: number;
   /** Phí giao mã freeship miễn được; chỉ có khi gửi kèm `addressId` (thanh toán). */
   freeshipSaving?: number;
+  /**
+   * Số tiền hàng còn thiếu để đạt đơn tối thiểu của mã, tính trên đúng phần hàng máy chủ dùng để xét (đã loại Giờ vàng, trừ combo).
+   * Chỉ có khi mã bị từ chối vì đơn tối thiểu và không gắn sản phẩm; API cũ không có trường này.
+   */
+  shortfall?: number;
 }
 
 /** Tham số xem trước: cùng tham số báo giá. Thiếu `addressId` (trang giỏ) thì không tính phí giao. */

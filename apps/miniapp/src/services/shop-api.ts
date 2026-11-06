@@ -151,6 +151,10 @@ export interface CartSummary {
   couponCode: string | null;
   /** Mã đang giữ nhưng chưa áp cho giỏ hiện tại (vd hàng giờ vàng không tính vào điều kiện). */
   couponNotice?: string | null;
+  /** Số tiền hàng còn thiếu để mã đang giữ đạt đơn tối thiểu (máy chủ tính trên phần hàng nó xét); không có khi mã chưa áp vì lý do khác. API cũ chưa trả. */
+  couponShortfall?: number | null;
+  /** Mã máy chủ vừa gỡ khỏi giỏ ở lần đọc này (giỏ rơi dưới đơn tối thiểu, hết hạn, bị tắt); chỉ báo đúng một lần nên app phải nhớ. API cũ chưa trả. */
+  couponRemoved?: { code: string; reason: string; shortfall?: number } | null;
   subtotal: number;
   /** Giảm giá combo của gian hàng đang ghi công (đã trừ trước khi tính mã); API cũ chưa trả → coi như 0. */
   comboDiscount?: number;
@@ -173,6 +177,8 @@ export interface CheckoutQuote {
   discount: number;
   /** Mã trong giỏ chưa được áp cho đơn này (không giảm, không tiêu lượt) — câu giải thích cho khách. */
   couponNotice?: string | null;
+  /** Số tiền hàng còn thiếu để mã đạt đơn tối thiểu của lần đặt này (máy chủ tính trên phần hàng nó xét). API cũ chưa trả. */
+  couponShortfall?: number | null;
   comboDiscount: number;
   /** Ưu đãi hạng thành viên tự động (API cũ chưa trả). */
   tierDiscount?: number;

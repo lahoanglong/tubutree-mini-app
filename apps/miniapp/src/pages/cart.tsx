@@ -35,6 +35,9 @@ import { StorefrontContextBar } from '../components/storefront-context-bar';
 import { VoucherSheet } from '../components/checkout/voucher-sheet';
 import { useCouponHint } from '../components/checkout/use-coupon-hint';
 import { couponHintShort } from '@tubutree/app-core/coupon-use';
+import { couponNoticeText } from '@tubutree/app-core/coupon-min-order';
+import { CouponRemovedNotice } from '../components/checkout/coupon-removed-notice';
+import { useRemovedCoupon } from '../hooks/use-removed-coupon';
 import { useStorefrontContext } from '../store/storefront-context';
 import { rememberCheckoutSelection } from '../utils/checkout-selection';
 import { PageHeader } from '../components/ui/page-header';
@@ -91,6 +94,8 @@ export default function CartPage() {
 
   const cartKeyNow = useCartKey();
   const cart = useQuery({ queryKey: cartKeyNow, queryFn: getCart, enabled: phase === 'authenticated' });
+  // Máy chủ gỡ mã khi giỏ rơi dưới đơn tối thiểu và chỉ báo đúng một lần: nhớ để khách thấy mã nào mất và cần mua thêm bao nhiêu.
+  const removedCoupon = useRemovedCoupon(cart.data, formatVnd);
   const [removed, setRemoved] = useState<CartLine | null>(null);
   // Hộp báo "bộ sẽ mất giảm" trước khi xoá món khoá của combo. Dữ liệu giữ lại sau khi đóng để chữ không trống trong lúc tấm trượt xuống.
   const [pendingRemove, setPendingRemove] = useState<{ line: CartLine; notice: ComboRemovalNotice } | null>(null);
@@ -376,6 +381,7 @@ export default function CartPage() {
           tubuSelectedSubtotal={tubuSubtotal(buyableSelected)}
           onCheckout={goCheckout}
           savingLines={buyableSelected}
+          removedNotice={<CouponRemovedNotice notice={removedCoupon.notice} onDismiss={removedCoupon.dismiss} />}
           coupon={
             <CouponRow
               summary={summary}
@@ -747,7 +753,10 @@ function StickySummary({
   onCheckout,
   savingLines,
   coupon,
+  removedNotice,
 }: {
+  /** Lời báo mã vừa bị máy chủ gỡ (đơn tối thiểu, hết hạn, bị tắt); tự không dựng gì khi không có. */
+  removedNotice: ReactNode;
   summary: CartSummary;
   selectedSubtotal: number;
   selectedCount: number;
@@ -785,7 +794,8 @@ function StickySummary({
   const saving = cartSaving(savingLines, comboDiscount);
   // Giảm giá của phần chọn tính trên tạm tính CỦA CHÍNH phần chọn máy chủ trả (giá có thể đổi so với giỏ đã tải, vd hết giờ vàng).
   const shownSubtotal = !allSelected && priced ? priced.subtotal : selectedSubtotal;
-  const subsetNotice = !allSelected && priced?.couponCode ? priced.couponNotice : null;
+  // Lời báo của mã đang giữ trên phần đang hiển thị (cả giỏ hoặc phần chọn đã có giá), kèm số cần mua thêm khi mã chỉ thiếu đơn tối thiểu.
+  const couponLine = couponNoticeText(shown?.couponCode ? shown : null, formatVnd);
 
   return (
     <StickyActionBar
@@ -836,11 +846,12 @@ function StickySummary({
             <KeyValueRow label={vi.cart.discount} value={`-${formatVnd(discount)}`} tone="success" style={COMPACT_ROW} />
           )}
           {tierDiscount > 0 && <KeyValueRow label={vi.cart.tierDiscount} value={`-${formatVnd(tierDiscount)}`} tone="success" style={COMPACT_ROW} />}
-          {subsetNotice && (
+          {couponLine && (
             <Text size="xSmall" role="status" data-testid="coupon-notice" style={{ color: 'var(--color-text-warning)' }}>
-              {subsetNotice}
+              {couponLine}
             </Text>
           )}
+          {removedNotice}
           {outOfStockNames.length > 0 && (
             <Box flex alignItems="flex-start" role="status" style={{ gap: 4 }}>
               <AlertTriangle size={13} color="var(--color-text-warning)" aria-hidden style={{ flexShrink: 0, marginTop: 2 }} />

@@ -23,6 +23,7 @@ import { VoucherPicker } from '@/components/mini/voucher-picker';
 import { ui } from '@/lib/guest-ui';
 import { MD_DOWN, useMediaQuery } from '@/lib/use-media-query';
 import { autoCouponMemory, couponAutoCopy, couponHint, couponHintShort, couponHintText, pickBestCoupon } from '@tubutree/app-core/coupon-use';
+import { couponMinOrderCopy } from '@tubutree/app-core/coupon-min-order';
 import { autoCouponName } from '@/lib/coupon-name';
 import { cartKey } from '@/lib/cart-key';
 import { actionErrorText, loadErrorText } from '@/lib/error-text';
@@ -85,7 +86,13 @@ export function CouponBox({
   memoryUserId,
   sheet = false,
   productIds,
+  removedNotice = null,
+  onDismissRemoved,
 }: {
+  /** Lời báo máy chủ vừa gỡ mã khỏi giỏ (đơn tối thiểu, hết hạn, bị tắt). Chỉ hiện khi giỏ chưa có mã; trang giữ trí nhớ và quyết định lúc nào bỏ. */
+  removedNotice?: { code: string; text: string } | null;
+  /** Khách bấm Đóng ở lời báo gỡ mã; không truyền thì lời báo là chữ thuần, không có nút. */
+  onDismissRemoved?: () => void;
   currentCode: string | null;
   subtotal: number;
   /** Phí vận chuyển đã tính của đơn (thanh toán); chưa biết thì null và thẻ freeship không nói được số tiền. */
@@ -539,6 +546,21 @@ export function CouponBox({
           <p data-testid="coupon-apply-warning" {...warnHold} className="mt-2 text-caption text-warning-fg">
             {applyWarning}
           </p>
+        )}
+        {!currentCode && removedNotice && (
+          <div data-testid="coupon-removed-notice" className="mt-2 flex items-start gap-2 text-caption text-warning-fg">
+            <p className="min-w-0 flex-1 [overflow-wrap:anywhere]">{removedNotice.text}</p>
+            {onDismissRemoved && (
+              <button
+                type="button"
+                onClick={onDismissRemoved}
+                aria-label={couponMinOrderCopy.dismissAria(removedNotice.code)}
+                className="min-h-11 min-w-11 flex-none px-2 text-caption font-semibold text-[color:var(--color-text-brand)]"
+              >
+                {couponMinOrderCopy.dismiss}
+              </button>
+            )}
+          </div>
         )}
       </div>
       {err && !open && (

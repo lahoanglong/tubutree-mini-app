@@ -1,5 +1,5 @@
 import type { BadRequestException } from '@nestjs/common';
-import { CouponProductScopeError } from './coupons.service';
+import { CouponMinOrderError, CouponProductScopeError } from './coupons.service';
 
 /** Lý do khi mã vẫn hợp lệ nhưng phần hàng được tính giảm ra 0đ (vd giỏ toàn hàng giờ vàng, mã không có đơn tối thiểu). */
 export const COUPON_ZERO_DISCOUNT_REASON = 'Không có sản phẩm nào trong đơn được giảm theo mã này.';
@@ -53,6 +53,15 @@ export function couponRejectedWithFlash(reason: string, base: number): string {
 /** Mã gắn sản phẩm mà sản phẩm đó chỉ có trong giỏ ở giá giờ vàng. */
 export const COUPON_PRODUCT_FLASH_REASON =
   'Sản phẩm áp dụng mã đang có giá Giờ vàng. Giá Giờ vàng là giá ưu đãi cuối nên không giảm thêm theo mã, bạn dùng được mã này khi Giờ vàng kết thúc.';
+
+/**
+ * Số tiền hàng còn thiếu để mã đạt đơn tối thiểu, tính trên đúng phần hàng máy chủ dùng để xét (đã loại Giờ vàng, đã trừ combo), nên
+ * app không tự trừ từ tổng giỏ. undefined khi mã bị từ chối vì lý do khác, hoặc mã gắn sản phẩm (phải mua đúng các sản phẩm đó, không phải món bất kỳ).
+ */
+export function couponShortfallOf(err: BadRequestException): number | undefined {
+  if (!(err instanceof CouponMinOrderError) || err.scoped) return undefined;
+  return Math.max(0, err.minOrder - err.base);
+}
 
 /**
  * Câu lý do mã bị từ chối để báo khách: mã gắn sản phẩm mà sản phẩm đó có trong giỏ nhưng chỉ ở giá giờ vàng (dòng giờ vàng bị

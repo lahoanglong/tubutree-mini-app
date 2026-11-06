@@ -26,6 +26,10 @@ const state = vi.hoisted(() => ({
   gate: null as Promise<void> | null,
   /** Server giữ mã nhưng chưa áp cho đơn (MONEY-3). */
   couponNotice: null as string | null,
+  /** Số thiếu để mã đạt đơn tối thiểu (W28), máy chủ tính trên phần hàng nó xét. */
+  couponShortfall: undefined as number | undefined,
+  /** Mã máy chủ vừa gỡ khỏi giỏ ở lần đọc này (W28). */
+  couponRemoved: null as { code: string; reason: string; shortfall?: number } | null,
   /** Chưa có địa chỉ nào để chọn. */
   noAddress: false,
   /** Lời báo chỉ có ở giỏ (cả giỏ), báo giá không có. */
@@ -46,6 +50,7 @@ const cartNow = () => ({
   ],
   couponCode: state.couponCode,
   couponNotice: state.cartNotice ?? state.couponNotice,
+  couponRemoved: state.couponRemoved,
   subtotal: SUBTOTAL,
   discount: discountOf(),
   freeship: false,
@@ -90,7 +95,7 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
       };
     }
     return {
-      subtotal: SUBTOTAL, discount: discountOf(), couponNotice: state.couponNotice, pointsUsed: 0, pointsDiscount: 0, shippingFee: 30000,
+      subtotal: SUBTOTAL, discount: discountOf(), couponNotice: state.couponNotice, couponShortfall: state.couponShortfall, pointsUsed: 0, pointsDiscount: 0, shippingFee: 30000,
       total: SUBTOTAL - discountOf() + 30000, pointsEarned: 0, pointsBalance: 0, redeemablePoints: 0,
     };
   },
@@ -132,6 +137,8 @@ beforeEach(() => {
   state.coupons = [COUPON];
   state.gate = null;
   state.couponNotice = null;
+  state.couponShortfall = undefined;
+  state.couponRemoved = null;
   state.noAddress = false;
   state.cartNotice = null;
   state.previewCalls = [];
@@ -227,6 +234,30 @@ describe('/thanh-toan — Mã giảm giá (C-025)', () => {
     const { container } = await mount();
     expect(container.querySelector('[data-testid="coupon-notice"]')?.textContent).toBe(state.couponNotice);
     expect(container.textContent).not.toContain('Giảm giá (');
+  });
+
+  it('W28: mã chưa áp vì thiếu đơn tối thiểu → lời báo của báo giá nói luôn cần mua thêm bao nhiêu', async () => {
+    state.couponCode = 'UAT50K';
+    state.couponNotice = 'Mã chưa được áp dụng cho đơn này: Đơn tối thiểu 400.000đ để dùng mã này.';
+    state.couponShortfall = 100000;
+    const { container } = await mount();
+    expect(container.querySelector('[data-testid="coupon-notice"]')?.textContent).toBe(`${state.couponNotice} Mua thêm 100.000đ để áp mã UAT50K.`);
+  });
+
+  it('W28: máy chủ vừa gỡ mã vì giỏ rơi dưới đơn tối thiểu → thanh toán nói mã nào bị gỡ và cần mua thêm bao nhiêu, bấm Đóng thì mất', async () => {
+    state.couponRemoved = { code: 'MIN400', reason: 'Đơn tối thiểu 400.000đ để dùng mã này.', shortfall: 100000 };
+    const { container } = await mount();
+    const note = () => container.querySelector('[data-testid="coupon-removed-notice"]');
+    expect(note()!.textContent).toContain('Đã gỡ mã MIN400 vì giỏ chưa đủ đơn tối thiểu. Mua thêm 100.000đ để dùng lại.');
+    click(note()!.querySelector('button'));
+    expect(note()).toBeNull();
+  });
+
+  it('W28: mã chưa áp vì lý do khác (không có số thiếu): giữ nguyên câu của server', async () => {
+    state.couponCode = 'UAT50K';
+    state.couponNotice = 'Mã chưa được áp dụng cho đơn này: Bạn đã dùng hết lượt cho mã này.';
+    const { container } = await mount();
+    expect(container.querySelector('[data-testid="coupon-notice"]')?.textContent).toBe(state.couponNotice);
   });
 
   it('giỏ giữ mã kèm lời báo nhưng báo giá (phần đang chọn) áp được mã: không hiện lời báo của giỏ', async () => {

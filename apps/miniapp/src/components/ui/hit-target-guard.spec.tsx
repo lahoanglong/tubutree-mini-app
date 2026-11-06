@@ -7,6 +7,7 @@ import { Chip } from './chip';
 import { Checkbox, Radio, Switch } from './form';
 import { IconButton } from './icon-button';
 import { ListRow } from './list-row';
+import { CouponRemovedNotice } from '../checkout/coupon-removed-notice';
 import { QuantitySelector } from './quantity-selector';
 import { ProductStoryShowcase } from './product-story-showcase';
 import { SegmentedTabs } from './segmented-tabs';
@@ -68,6 +69,7 @@ describe('vùng chạm DS v2 >= 44x44', () => {
     ['Radio có nhãn', () => <Radio label="A" checked={false} onChange={() => {}} />],
     ['ProductStoryShowcase (vòng cung, chip bước)', () => <ProductStoryShowcase product={storyProduct} previewConfig={storyConfig} />],
     ['Switch có nhãn', () => <Switch label="A" checked={false} onChange={() => {}} />],
+    ['CouponRemovedNotice (nút Đóng lời báo mã đã gỡ)', () => <CouponRemovedNotice notice={{ code: 'A', text: 'B' }} onDismiss={() => {}} />],
   ];
 
   it.each(cases)('%s', (_name, ui) => {

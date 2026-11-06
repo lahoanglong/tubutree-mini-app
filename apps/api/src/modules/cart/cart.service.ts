@@ -25,6 +25,7 @@ import {
   COUPON_ZERO_DISCOUNT_REASON,
   couponFlashExcludedNotice,
   couponNotAppliedNotice,
+  couponShortfallOf,
   couponRejectReason,
   couponRejectedWithFlash,
 } from '../coupons/coupon-notice';
@@ -259,7 +260,9 @@ export class CartService {
     let couponCode = cart.couponCode;
     let couponNotice: string | null = null;
     // Mã vừa bị gỡ khỏi giỏ ở lần đọc này (hết hạn, bị tắt, hết lượt): checkout nói đúng lý do khi tổng tăng vì mất mã.
-    let couponRemoved: { code: string; reason: string } | null = null;
+    let couponRemoved: { code: string; reason: string; shortfall?: number } | null = null;
+    // Mã giữ trong giỏ nhưng chưa áp vì phần hàng được tính còn thiếu đơn tối thiểu: số tiền thiếu (app nói "mua thêm …", không tự trừ từ tổng giỏ).
+    let couponShortfall: number | undefined;
     const applyCoupon = async (code: string) => {
       const r = await this.coupons.validateAndCompute(code, userId, couponBase, couponLines, userFacts);
       // Coupon PERCENT không tự giới hạn ở subtotal khi value>100% và không set maxDiscount
@@ -287,6 +290,7 @@ export class CartService {
           discount = 0;
           freeship = false;
           couponNotice = couponNotAppliedNotice(couponRejectReason(err, lines), lines.some((l) => l.isFlash), combo.total > 0);
+          couponShortfall = couponShortfallOf(err);
         } else {
           // Có thể flash tạm thời kéo couponBase xuống dưới minOrder. Nếu coupon vẫn hợp lệ trên
           // TOÀN giỏ (gồm flash) → GIỮ mã (chờ flash kết thúc), tạm không giảm. Nếu hỏng cả trên
@@ -296,12 +300,14 @@ export class CartService {
             discount = 0;
             freeship = false;
             couponNotice = couponNotAppliedNotice(couponRejectReason(err, lines), lines.some((l) => l.isFlash), combo.total > 0);
+            couponShortfall = couponShortfallOf(err);
           } catch (err2) {
             if (!(err2 instanceof BadRequestException)) throw err2;
             // Chỉ gỡ đúng mã đã đọc: giữa lúc đọc và ghi, tab khác có thể đã áp mã mới — không được xoá nhầm mã đó.
             const cleared = await this.prisma.cart.updateMany({ where: { id: cartId, couponCode }, data: { couponCode: null } });
             if (cleared.count > 0) {
-              couponRemoved = { code: couponCode, reason: err2.message };
+              const short = couponShortfallOf(err2);
+              couponRemoved = { code: couponCode, reason: err2.message, ...(short !== undefined ? { shortfall: short } : {}) };
               couponCode = null;
             } else {
               // Tab khác vừa áp mã mới: trả mã đó cùng mức giảm của chính nó (tính một lần, không gỡ, không lặp lại), để mã và số giảm khớp nhau.
@@ -315,6 +321,7 @@ export class CartService {
                 } catch (err3) {
                   if (!(err3 instanceof BadRequestException)) throw err3;
                   couponNotice = couponNotAppliedNotice(couponRejectReason(err3, lines), lines.some((l) => l.isFlash), combo.total > 0);
+                  couponShortfall = couponShortfallOf(err3);
                 }
               }
             }
@@ -341,6 +348,7 @@ export class CartService {
       items: lines,
       couponCode,
       couponNotice,
+      ...(couponShortfall !== undefined ? { couponShortfall } : {}),
       couponRemoved,
       subtotal,
       comboDiscount: combo.total,

@@ -29,6 +29,8 @@ export interface CheckoutQuote {
   discount: number;
   /** Mã trong giỏ chưa được áp cho đơn này (không giảm, không tiêu lượt) — câu giải thích cho khách. */
   couponNotice?: string | null;
+  /** Số tiền hàng còn thiếu để mã đạt đơn tối thiểu của lần đặt này (máy chủ tính trên phần hàng nó xét); không có khi mã chưa áp vì lý do khác. API cũ chưa trả. */
+  couponShortfall?: number | null;
   comboDiscount: number;
   /** Ưu đãi hạng thành viên tự động (API cũ chưa trả). */
   tierDiscount?: number;

@@ -37,6 +37,8 @@ export class CouponMinOrderError extends BadRequestException {
   constructor(
     readonly minOrder: number,
     readonly base: number,
+    /** Mã gắn sản phẩm: đơn tối thiểu tính riêng trên các dòng sản phẩm đó, nên "mua thêm" không phải mua món bất kỳ. */
+    readonly scoped = false,
   ) {
     super(`Đơn tối thiểu ${minOrder.toLocaleString('vi-VN')}đ để dùng mã này.`);
   }
@@ -90,7 +92,7 @@ function couponScopedSubtotal(coupon: Coupon, subtotal: number, lines: CouponLin
     if (matched.length === 0) throw new CouponProductScopeError(productIds);
     subtotal = Math.min(subtotal, matched.reduce((s, l) => s + l.total, 0));
   }
-  if (coupon.minOrder && subtotal < coupon.minOrder) throw new CouponMinOrderError(coupon.minOrder, subtotal);
+  if (coupon.minOrder && subtotal < coupon.minOrder) throw new CouponMinOrderError(coupon.minOrder, subtotal, productIds !== null);
   return { subtotal, productIds };
 }
 
