@@ -201,23 +201,92 @@ describe('ReviewsSection (C-076 di cư DS v2: giữ nguyên hành vi)', () => {
     let answer: (v: unknown) => void = () => undefined;
     mocks.fetchReviews.mockImplementation((_slug: string, f: number | string = 'all') =>
       f === 'all'
-        ? Promise.resolve({ ...DATA, count: 123, distribution: { '5': 120, '1': 3 }, items: newest })
+        ? Promise.resolve({ ...DATA, count: 123, distribution: { '5': 120, '1': 3 }, items: newest, nextCursor: 'c-n99' })
         : new Promise((r) => (answer = r)),
     );
     renderSection();
     await screen.findByText('Nhận xét n0');
-    expect(screen.getByText('Đang hiện 100 đánh giá mới nhất')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Xem thêm đánh giá' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '1 sao' }));
     await waitFor(() => expect(mocks.fetchReviews).toHaveBeenLastCalledWith('nuoc-rua-chen', 1));
     expect(document.querySelector('[aria-busy="true"]')).not.toBeNull();
     expect(screen.queryByText('Không có đánh giá khớp bộ lọc.')).toBeNull();
     expect(screen.queryByText('Nhận xét n0')).toBeNull();
-    answer({ ...DATA, count: 123, distribution: { '5': 120, '1': 3 }, items: old1 });
+    answer({ ...DATA, count: 123, distribution: { '5': 120, '1': 3 }, items: old1, nextCursor: null });
     expect(await screen.findByText('Nhận xét cu1')).toBeInTheDocument();
     expect(screen.getByText('Nhận xét cu3')).toBeInTheDocument();
     expect(screen.queryByText('Không có đánh giá khớp bộ lọc.')).toBeNull();
-    expect(screen.queryByText('Đang hiện 100 đánh giá mới nhất')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Xem thêm đánh giá' })).toBeNull();
     expect(screen.getByRole('heading', { level: 2, name: 'Đánh giá (123)' })).toBeInTheDocument();
+  });
+
+  // Phân trang con trỏ: mỗi trang máy chủ 100 dòng kèm nextCursor; mock dùng trang nhỏ để thấy chỗ nối.
+  describe('"Xem thêm đánh giá": tải trang kế bằng nextCursor', () => {
+    const first = Array.from({ length: 6 }, (_, i) => review(`p${i}`, 5));
+    const second = [review('q0', 4), review('q1', 4), review('q2', 4)];
+    const PAGED = { ...DATA, count: 9, distribution: { '5': 6, '4': 3 } };
+    const shown = () => screen.getAllByText(/^Nhận xét /).map((el) => el.textContent);
+
+    it('hiện 5 dòng; bấm thì hiện dòng đã tải, hết dòng thì gọi trang kế đúng con trỏ, nối vào cuối, dòng cũ giữ nguyên; hết trang thì ẩn nút', async () => {
+      mocks.fetchReviews.mockImplementation(async (_slug: string, f: number | string = 'all', cursor?: string) =>
+        cursor === 'c1' ? { ...PAGED, items: second, nextCursor: null } : { ...PAGED, items: first, nextCursor: 'c1' },
+      );
+      renderSection();
+      await screen.findByText('Nhận xét p0');
+      expect(shown()).toEqual(['Nhận xét p0', 'Nhận xét p1', 'Nhận xét p2', 'Nhận xét p3', 'Nhận xét p4']);
+      fireEvent.click(screen.getByRole('button', { name: 'Xem thêm đánh giá' }));
+      expect(await screen.findByText('Nhận xét q2')).toBeInTheDocument();
+      expect(mocks.fetchReviews).toHaveBeenCalledWith('nuoc-rua-chen', 'all', 'c1');
+      expect(shown()).toEqual([...first, ...second].map((r) => `Nhận xét ${r.id}`));
+      expect(screen.queryByRole('button', { name: 'Xem thêm đánh giá' })).toBeNull();
+      expect(screen.getByRole('heading', { level: 2, name: 'Đánh giá (9)' })).toBeInTheDocument();
+    });
+
+    it('không có nextCursor (hết trang, hoặc API cũ) và đã hiện hết: không có nút, không gọi trang kế', async () => {
+      mocks.fetchReviews.mockResolvedValue({ ...PAGED, items: first.slice(0, 5) });
+      renderSection();
+      await screen.findByText('Nhận xét p4');
+      expect(screen.queryByRole('button', { name: 'Xem thêm đánh giá' })).toBeNull();
+      expect(mocks.fetchReviews).toHaveBeenCalledTimes(1);
+    });
+
+    it('chip lọc: trang kế gửi kèm chip và con trỏ của chip; đổi chip về trang đầu, bỏ trang đã tải thêm', async () => {
+      mocks.fetchReviews.mockImplementation(async (_slug: string, f: number | string = 'all', cursor?: string) => {
+        if (f === 4) return cursor === 'k1' ? { ...PAGED, items: [review('q9', 4)], nextCursor: null } : { ...PAGED, items: second, nextCursor: 'k1' };
+        return cursor === 'c1' ? { ...PAGED, items: second, nextCursor: null } : { ...PAGED, items: first, nextCursor: 'c1' };
+      });
+      renderSection();
+      await screen.findByText('Nhận xét p0');
+      fireEvent.click(screen.getByRole('button', { name: 'Xem thêm đánh giá' }));
+      await screen.findByText('Nhận xét q2');
+      fireEvent.click(screen.getByRole('button', { name: '4 sao' }));
+      await screen.findByText('Nhận xét q0');
+      expect(shown()).toEqual(['Nhận xét q0', 'Nhận xét q1', 'Nhận xét q2']);
+      fireEvent.click(screen.getByRole('button', { name: 'Xem thêm đánh giá' }));
+      expect(await screen.findByText('Nhận xét q9')).toBeInTheDocument();
+      expect(mocks.fetchReviews).toHaveBeenCalledWith('nuoc-rua-chen', 4, 'k1');
+      fireEvent.click(screen.getByRole('button', { name: 'Tất cả' }));
+      await waitFor(() => expect(shown()).toEqual(['Nhận xét p0', 'Nhận xét p1', 'Nhận xét p2', 'Nhận xét p3', 'Nhận xét p4']));
+      expect(screen.getByRole('button', { name: 'Xem thêm đánh giá' })).toBeInTheDocument();
+    });
+
+    it('trang kế tải lỗi: dòng đang hiện giữ nguyên, báo lỗi có "Thử lại"; thử lại thì nối trang kế', async () => {
+      let fail = true;
+      mocks.fetchReviews.mockImplementation(async (_slug: string, _f: number | string = 'all', cursor?: string) => {
+        if (cursor !== 'c1') return { ...PAGED, items: first, nextCursor: 'c1' };
+        if (fail) throw new Error('mất mạng');
+        return { ...PAGED, items: second, nextCursor: null };
+      });
+      renderSection();
+      await screen.findByText('Nhận xét p0');
+      fireEvent.click(screen.getByRole('button', { name: 'Xem thêm đánh giá' }));
+      const retry = await screen.findByRole('button', { name: 'Thử lại' });
+      expect(shown()).toEqual(first.map((r) => `Nhận xét ${r.id}`));
+      fail = false;
+      fireEvent.click(retry);
+      expect(await screen.findByText('Nhận xét q2')).toBeInTheDocument();
+      expect(shown()).toHaveLength(9);
+    });
   });
 
   it('chip lọc tải lỗi: báo lỗi có "Thử lại", phần thống kê vẫn còn; thử lại thì hiện kết quả', async () => {

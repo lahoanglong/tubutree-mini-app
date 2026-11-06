@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { REVIEW_LIST_LIMIT, filterReviews, reviewFilterChips, reviewFilterQuery, reviewListCapped, reviewListKey, reviewListView } from './review-filter';
+import {
+  REVIEW_STEP,
+  filterReviews,
+  reviewFilterChips,
+  reviewFilterQuery,
+  reviewHasMore,
+  reviewListKey,
+  reviewListView,
+  reviewMoreKey,
+  reviewMorePrefix,
+  reviewMoreStep,
+} from './review-filter';
 import { fillCopy } from '../shop-copy';
 
 const r = (id: string, rating: number, over: Partial<{ images: string[]; videoUrl: string | null }> = {}) => ({ id, rating, images: [] as string[], videoUrl: null as string | null, ...over });
@@ -82,16 +93,16 @@ describe('reviewListView: danh sách hiển thị theo chip đang chọn', () =>
   const none = { data: undefined, isPending: true, isError: false };
 
   it('"Tất cả" lấy dòng của danh sách đầy đủ', () => {
-    expect(reviewListView('all', all, none)).toEqual({ status: 'ready', items: all.data.items });
+    expect(reviewListView('all', all, none)).toEqual({ status: 'ready', items: all.data.items, hasMore: false, more: 'idle' });
   });
 
   it('chip lọc đang chờ máy chủ: "loading", KHÔNG lọc tạm danh sách đầy đủ (tránh báo "không có đánh giá khớp" sai)', () => {
-    expect(reviewListView(1, all, none)).toEqual({ status: 'loading', items: [] });
+    expect(reviewListView(1, all, none)).toEqual({ status: 'loading', items: [], hasMore: false, more: 'idle' });
   });
 
   it('chip lọc có kết quả máy chủ: lấy đúng dòng máy chủ trả, kể cả khi danh sách đầy đủ không có dòng nào khớp', () => {
     const one = { data: { items: [r('z', 1)] }, isPending: false, isError: false };
-    expect(reviewListView(1, all, one)).toEqual({ status: 'ready', items: one.data.items });
+    expect(reviewListView(1, all, one)).toEqual({ status: 'ready', items: one.data.items, hasMore: false, more: 'idle' });
   });
 
   it('API cũ bỏ qua tham số lọc và trả cả danh sách: vẫn chỉ hiện dòng khớp chip', () => {
@@ -100,41 +111,97 @@ describe('reviewListView: danh sách hiển thị theo chip đang chọn', () =>
   });
 
   it('máy chủ trả rỗng: "ready" với danh sách rỗng (app vẽ "Không có đánh giá khớp bộ lọc.")', () => {
-    expect(reviewListView(3, all, { data: { items: [] }, isPending: false, isError: false })).toEqual({ status: 'ready', items: [] });
+    expect(reviewListView(3, all, { data: { items: [] }, isPending: false, isError: false })).toEqual({ status: 'ready', items: [], hasMore: false, more: 'idle' });
   });
 
   it('lỗi tải chip lọc mà chưa có dữ liệu: "error"; đã có dữ liệu cũ thì vẫn hiện dữ liệu đó', () => {
-    expect(reviewListView('photo', all, { data: undefined, isPending: false, isError: true })).toEqual({ status: 'error', items: [] });
+    expect(reviewListView('photo', all, { data: undefined, isPending: false, isError: true })).toEqual({ status: 'error', items: [], hasMore: false, more: 'idle' });
     const stale = { data: { items: [r('p', 4, { images: ['x.jpg'] })] }, isPending: false, isError: true };
-    expect(reviewListView('photo', all, stale)).toEqual({ status: 'ready', items: stale.data.items });
+    expect(reviewListView('photo', all, stale)).toEqual({ status: 'ready', items: stale.data.items, hasMore: false, more: 'idle' });
   });
 });
 
-describe('reviewListCapped: báo danh sách chỉ là 100 đánh giá mới nhất', () => {
-  const stats = { count: 130, videoCount: 2, distribution: { '5': 125, '2': 2, '1': 3 } };
+// Sản phẩm hơn 100 đánh giá: trang đầu kèm nextCursor, bấm "Xem thêm đánh giá" tải trang kế nối vào cuối; đổi chip về trang đầu.
+describe('phân trang: trang đầu + các trang tải thêm', () => {
+  const page = (ids: string[], nextCursor: string | null = null, rating = 5) => ({ items: ids.map((id) => r(id, rating)), nextCursor });
+  const src = (data: ReturnType<typeof page> | undefined) => ({ data, isPending: !data, isError: false });
+  const none = src(undefined);
 
-  it('dưới 100 dòng thì không báo, dù tổng lớn hơn', () => {
-    expect(REVIEW_LIST_LIMIT).toBe(100);
-    expect(reviewListCapped('all', stats, 99)).toBe(false);
-    expect(reviewListCapped(1, stats, 3)).toBe(false);
-    expect(reviewListCapped('photo', stats, 0)).toBe(false);
+  it('reviewFilterQuery kèm cursor: nối sau bộ lọc, mã hoá URL; không cursor thì như cũ', () => {
+    expect(reviewFilterQuery('all', 'MTc2|r99')).toBe('?cursor=MTc2%7Cr99');
+    expect(reviewFilterQuery(1, 'abc')).toBe('?rating=1&cursor=abc');
+    expect(reviewFilterQuery('photo', 'abc')).toBe('?media=photo&cursor=abc');
+    expect(reviewFilterQuery('video', null)).toBe('?media=video');
+    expect(reviewFilterQuery(5, '')).toBe('?rating=5');
+    expect(reviewFilterQuery(0, 'abc')).toBe('?cursor=abc');
   });
 
-  it('đủ 100 dòng: báo khi tổng của chip lớn hơn số đang hiện', () => {
-    expect(reviewListCapped('all', stats, 100)).toBe(true);
-    expect(reviewListCapped(5, stats, 100)).toBe(true);
-    expect(reviewListCapped('all', { count: 100 }, 100)).toBe(false);
-    expect(reviewListCapped(5, { count: 130, distribution: { '5': 100 } }, 100)).toBe(false);
-    expect(reviewListCapped('video', { count: 300, videoCount: 100 }, 100)).toBe(false);
-    expect(reviewListCapped('video', { count: 300, videoCount: 140 }, 100)).toBe(true);
+  it('khoá trang tải thêm: dưới ["reviews", slug] (làm mới sau khi viết đánh giá), tách theo chip và con trỏ trang đầu', () => {
+    expect(reviewMoreKey('sp', 'all', 'c1')).toEqual(['reviews', 'sp', 'more', 'all', 'c1']);
+    expect(reviewMoreKey('sp', 'all', 'c1').slice(0, 3)).toEqual(reviewMorePrefix('sp'));
+    expect(reviewMoreKey('sp', 1, 'c1')).not.toEqual(reviewMoreKey('sp', 'all', 'c1'));
+    expect(reviewMoreKey('sp', 'all', 'c2')).not.toEqual(reviewMoreKey('sp', 'all', 'c1'));
+    for (const chip of reviewFilterChips(3)) expect(reviewListKey('sp', chip.key)).not.toEqual(reviewMorePrefix('sp'));
   });
 
-  it('chip "Có ảnh" không có tổng, chưa có thống kê: đủ 100 dòng là báo', () => {
-    expect(reviewListCapped('photo', stats, 100)).toBe(true);
-    expect(reviewListCapped('all', undefined, 100)).toBe(true);
+  it('trang đầu có nextCursor: hasMore; chưa tải thêm thì chỉ dòng trang đầu', () => {
+    const v = reviewListView('all', src(page(['a', 'b'], 'c1')), none);
+    expect(v).toMatchObject({ status: 'ready', hasMore: true, more: 'idle' });
+    expect(v.items.map((x) => x.id)).toEqual(['a', 'b']);
   });
 
-  it('câu báo', () => {
-    expect(fillCopy('pdp.reviewsCapped', { n: REVIEW_LIST_LIMIT })).toBe('Đang hiện 100 đánh giá mới nhất');
+  it('nối trang tải thêm vào cuối theo thứ tự, giữ nguyên dòng trang đầu; hasMore theo trang cuối', () => {
+    const more = { pages: [page(['c', 'd'], 'c2'), page(['e'], null)], isFetching: false, isError: false };
+    const v = reviewListView('all', src(page(['a', 'b'], 'c1')), none, more);
+    expect(v.items.map((x) => x.id)).toEqual(['a', 'b', 'c', 'd', 'e']);
+    expect(v.hasMore).toBe(false);
+    expect(reviewListView('all', src(page(['a'], 'c1')), none, { ...more, pages: [page(['c'], 'c2')] }).hasMore).toBe(true);
+  });
+
+  it('dòng trùng id giữa hai trang (đánh giá mới chen vào lúc đang xem) chỉ hiện một lần', () => {
+    const v = reviewListView('all', src(page(['a', 'b'], 'c1')), none, { pages: [page(['b', 'c'])], isFetching: false, isError: false });
+    expect(v.items.map((x) => x.id)).toEqual(['a', 'b', 'c']);
+  });
+
+  it('chip lọc: trang tải thêm nối vào kết quả của chip, không vào "Tất cả"', () => {
+    const one = src(page(['x'], 'k1', 1));
+    const v = reviewListView(1, src(page(['a'], 'c1')), one, { pages: [page(['y'], null, 1)], isFetching: false, isError: false });
+    expect(v.items.map((x) => x.id)).toEqual(['x', 'y']);
+    expect(v.hasMore).toBe(false);
+  });
+
+  it('đang tải trang kế: more "loading", dòng đã có vẫn hiện; lỗi: more "error", dòng đã có vẫn hiện', () => {
+    const first = src(page(['a'], 'c1'));
+    const loading = reviewListView('all', first, none, { pages: undefined, isFetching: true, isError: false });
+    expect(loading).toMatchObject({ more: 'loading', hasMore: true });
+    expect(loading.items.map((x) => x.id)).toEqual(['a']);
+    const failed = reviewListView('all', first, none, { pages: [page(['b'], 'c2')], isFetching: false, isError: true });
+    expect(failed).toMatchObject({ more: 'error', hasMore: true });
+    expect(failed.items.map((x) => x.id)).toEqual(['a', 'b']);
+  });
+
+  it('API cũ không trả nextCursor: không có trang sau', () => {
+    expect(reviewListView('all', { data: { items: [r('a', 5)] }, isPending: false, isError: false }, none).hasMore).toBe(false);
+  });
+
+  it('reviewMoreStep: mỗi lần hiện thêm REVIEW_STEP dòng; dòng đã tải không còn dư mà còn trang thì tải trang kế', () => {
+    expect(REVIEW_STEP).toBe(5);
+    expect(reviewMoreStep(5, 100, true)).toEqual({ visible: 10, fetch: false });
+    expect(reviewMoreStep(95, 100, true)).toEqual({ visible: 100, fetch: true });
+    expect(reviewMoreStep(5, 6, true)).toEqual({ visible: 10, fetch: true });
+    expect(reviewMoreStep(5, 6, false)).toEqual({ visible: 10, fetch: false });
+    // Đang chờ trang kế (hiện vượt số đã tải) mà bấm lại: không cộng dồn quá số đã tải.
+    expect(reviewMoreStep(15, 6, true)).toEqual({ visible: 11, fetch: true });
+  });
+
+  it('reviewHasMore: còn dòng đã tải chưa hiện hoặc máy chủ còn trang', () => {
+    const items = [r('a', 5), r('b', 5)];
+    expect(reviewHasMore(1, { items, hasMore: false })).toBe(true);
+    expect(reviewHasMore(2, { items, hasMore: false })).toBe(false);
+    expect(reviewHasMore(5, { items, hasMore: true })).toBe(true);
+  });
+
+  it('chữ nút dùng chung hai app', () => {
+    expect(fillCopy('pdp.reviewsMore')).toBe('Xem thêm đánh giá');
   });
 });

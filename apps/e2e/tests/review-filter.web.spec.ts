@@ -46,9 +46,9 @@ test.describe('Web khách: lọc đánh giá theo sao ở máy chủ', () => {
     api.get('/me/wishlist/ids', []);
     api.get(`/products/${p!.slug}/reviews`, ({ call }) => {
       const rating = call.query.get('rating');
-      if (rating) return { ...SUMMARY, items: OLD_ONE_STAR.filter((r) => r.rating === Number(rating)) };
-      if (call.query.get('media') === 'photo') return { ...SUMMARY, items: OLD_ONE_STAR.filter((r) => r.images.length > 0) };
-      return { ...SUMMARY, items: NEWEST };
+      if (rating) return { ...SUMMARY, items: OLD_ONE_STAR.filter((r) => r.rating === Number(rating)), nextCursor: null };
+      if (call.query.get('media') === 'photo') return { ...SUMMARY, items: OLD_ONE_STAR.filter((r) => r.images.length > 0), nextCursor: null };
+      return { ...SUMMARY, items: NEWEST, nextCursor: 'c-moi99' };
     });
     await page.goto(`/san-pham/${p!.slug}`);
 
@@ -56,14 +56,14 @@ test.describe('Web khách: lọc đánh giá theo sao ở máy chủ', () => {
     await section.scrollIntoViewIfNeeded();
     await expect(section.getByRole('heading', { name: 'Đánh giá (128)' })).toBeVisible({ timeout: 15_000 });
     await expect(section.getByText('Nhận xét moi0')).toBeVisible();
-    await expect(section.getByText('Đang hiện 100 đánh giá mới nhất')).toBeVisible();
+    await expect(section.getByRole('button', { name: 'Xem thêm đánh giá' })).toBeVisible();
 
     await section.getByRole('button', { name: '1 sao', exact: true }).click();
     await expect(section.getByText('Nhận xét cu1')).toBeVisible();
     await expect(section.getByText('Nhận xét cu3')).toBeVisible();
     await expect(section.getByText('Không có đánh giá khớp bộ lọc.')).toHaveCount(0);
     await expect(section.getByText('Nhận xét moi0')).toHaveCount(0);
-    await expect(section.getByText('Đang hiện 100 đánh giá mới nhất')).toHaveCount(0);
+    await expect(section.getByRole('button', { name: 'Xem thêm đánh giá' })).toHaveCount(0);
     await expect(section.getByRole('heading', { name: 'Đánh giá (128)' })).toBeVisible();
     const queries = () => api.callsTo('GET', `/products/${p!.slug}/reviews`).map((c) => c.query.toString());
     expect(queries()).toContain('rating=1');
@@ -76,10 +76,59 @@ test.describe('Web khách: lọc đánh giá theo sao ở máy chủ', () => {
     await section.getByRole('button', { name: 'Tất cả', exact: true }).click();
     await expect(section.getByText('Nhận xét moi0')).toBeVisible();
   });
+
+  // Mỗi trang máy chủ kèm `nextCursor`; API giả trả trang nhỏ (8 rồi 4 dòng) để thấy chỗ nối sau 1 lần bấm.
+  test('"Xem thêm đánh giá" tải trang kế bằng cursor, nối vào cuối, giữ dòng cũ; hết trang thì ẩn nút; đổi chip về trang đầu', async ({ page, api, request }) => {
+    const p = await firstProduct(request);
+    test.skip(!p, 'DB e2e chưa có sản phẩm nào');
+    const FIRST = Array.from({ length: 8 }, (_, i) => review(`t1-${i}`, 5));
+    const SECOND = Array.from({ length: 4 }, (_, i) => review(`t2-${i}`, 4));
+    const PAGED = { average: 4.7, count: 12, videoCount: 0, distribution: { '5': 8, '4': 4 } };
+    api.get('/flash-sales/active', []);
+    api.get('/config/public', { freeshipThreshold: 350000, subscribeDiscountPct: 0.12 });
+    api.get(`/products/${p!.slug}`, { variations: p!.variations });
+    api.get(`/products/${p!.slug}/related`, []);
+    api.get(`/products/${p!.slug}/bought-together`, []);
+    api.get('/products/for-you', []);
+    api.get('/products', { data: [], meta: { page: 1, limit: 12, total: 0 } });
+    api.get('/me/wishlist/ids', []);
+    api.get(`/products/${p!.slug}/reviews`, ({ call }) => {
+      const cursor = call.query.get('cursor');
+      if (call.query.get('rating') === '4') return { ...PAGED, items: cursor ? [] : SECOND, nextCursor: null };
+      if (cursor === 'c-t1-7') return { ...PAGED, items: SECOND, nextCursor: null };
+      return { ...PAGED, items: FIRST, nextCursor: 'c-t1-7' };
+    });
+    await page.goto(`/san-pham/${p!.slug}`);
+
+    const section = page.locator('[data-section="pdp-reviews"]');
+    await section.scrollIntoViewIfNeeded();
+    await expect(section.getByText('Nhận xét t1-0')).toBeVisible({ timeout: 15_000 });
+    const rows = section.locator('li').filter({ hasText: /Nhận xét t\d-\d/ });
+    await expect(rows).toHaveCount(5);
+    const more = section.getByRole('button', { name: 'Xem thêm đánh giá' });
+    const queries = () => api.callsTo('GET', `/products/${p!.slug}/reviews`).map((c) => c.query.toString());
+    expect(queries().filter((q) => q.includes('cursor'))).toEqual([]);
+
+    await more.click();
+    await expect(section.getByText('Nhận xét t2-0')).toBeVisible();
+    expect(queries().filter((q) => q.includes('cursor'))).toEqual(['cursor=c-t1-7']);
+    await expect(rows).toHaveCount(10);
+    await expect(section.getByText('Nhận xét t1-0')).toBeVisible();
+    await more.click();
+    await expect(rows).toHaveCount(12);
+    await expect(rows.last()).toContainText('Nhận xét t2-3');
+    await expect(more).toHaveCount(0);
+
+    await section.getByRole('button', { name: '4 sao', exact: true }).click();
+    await expect(rows).toHaveCount(4);
+    await section.getByRole('button', { name: 'Tất cả', exact: true }).click();
+    await expect(rows).toHaveCount(5);
+    await expect(more).toBeVisible();
+  });
 });
 
 plain.describe('API thật: GET /products/:slug/reviews lọc trên mọi đánh giá đang hiện', () => {
-  plain('?rating=1 trả đủ 3 đánh giá 1 sao cũ khi 100 dòng mới nhất toàn 5 sao; media lọc ảnh/video; tham số sai trả 400', async ({ request }) => {
+  plain('?rating=1 trả đủ 3 đánh giá 1 sao cũ khi 100 dòng mới nhất toàn 5 sao; media lọc ảnh/video; tham số sai trả 400; cursor lấy trang kế', async ({ request }) => {
     const url = seedDatabaseUrl();
     if (process.env.GITHUB_ACTIONS === 'true') expect(writableTempDb(url), 'job CI phải ghi được DB tạm của nó').toBe(true);
     plain.skip(!writableTempDb(url), 'DB không phải DB tạm của web-gate hay CI: không ghi');
@@ -109,7 +158,13 @@ plain.describe('API thật: GET /products/:slug/reviews lọc trên mọi đánh
         data: rows.map((r, i) => ({ userId: user.id, productId: product.id, orderId: `e2e-rf-${tag}-${i}`, comment: `E2E ${i}`, createdAt: new Date(t0 + i * 60_000), ...r })),
       });
       const get = (qs: string) => request.get(`${API_ORIGIN}/api/products/${product.slug}/reviews${qs}`);
-      type Body = { count: number; videoCount: number; distribution: Record<string, number>; items: { rating: number; comment: string; videoUrl: string | null; images: string[] }[] };
+      type Body = {
+        count: number;
+        videoCount: number;
+        distribution: Record<string, number>;
+        items: { id: string; rating: number; comment: string; videoUrl: string | null; images: string[] }[];
+        nextCursor: string | null;
+      };
 
       const all = await get('');
       expect(all.status()).toBe(200);
@@ -125,7 +180,20 @@ plain.describe('API thật: GET /products/:slug/reviews lọc trên mọi đánh
       expect(((await (await get('?media=photo')).json()) as Body).items.map((i) => i.images)).toEqual([[IMG]]);
       expect(((await (await get('?media=video')).json()) as Body).items.map((i) => i.videoUrl)).toEqual([VID]);
       expect(((await (await get('?rating=3')).json()) as Body).items).toEqual([]);
-      for (const bad of ['?rating=9', '?rating=abc', '?media=audio']) expect((await get(bad)).status(), bad).toBe(400);
+      for (const bad of ['?rating=9', '?rating=abc', '?media=audio', '?cursor=khong-hop-le']) expect((await get(bad)).status(), bad).toBe(400);
+
+      // Phân trang con trỏ: 129 đánh giá đang hiện = 100 + 29; rating=5: 100 + 25. Không trùng, không sót, trang cuối nextCursor null.
+      expect(allBody.nextCursor).toEqual(expect.any(String));
+      const rest = (await (await get(`?cursor=${encodeURIComponent(allBody.nextCursor!)}`)).json()) as Body;
+      expect(rest.items).toHaveLength(29);
+      expect(rest.nextCursor).toBeNull();
+      expect(new Set([...allBody.items, ...rest.items].map((i) => i.id)).size).toBe(129);
+      expect(rest.items.at(-1)!.comment).toBe('E2E 0');
+      const five = (await (await get('?rating=5')).json()) as Body;
+      const fiveRest = (await (await get(`?rating=5&cursor=${encodeURIComponent(five.nextCursor!)}`)).json()) as Body;
+      expect([five.items.length, fiveRest.items.length, fiveRest.nextCursor]).toEqual([100, 25, null]);
+      expect(fiveRest.items.every((i) => i.rating === 5)).toBe(true);
+      expect(one.nextCursor).toBeNull();
     } finally {
       await prisma.review.deleteMany({ where: { productId: product.id } });
       await prisma.product.delete({ where: { id: product.id } });

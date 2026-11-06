@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Input, useSnackbar } from 'zmp-ui';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Check, Star, Video } from 'lucide-react';
 import {
   fetchReviews,
@@ -16,11 +16,14 @@ import { useAuthStore } from '../store/auth';
 import { useLoginWithNotice } from './ui/auth-gate';
 import { formatRating } from '@tubutree/app-core/commerce/card-meta';
 import {
-  REVIEW_LIST_LIMIT,
+  REVIEW_STEP,
   reviewFilterChips,
-  reviewListCapped,
+  reviewHasMore,
   reviewListKey,
   reviewListView,
+  reviewMoreKey,
+  reviewMorePrefix,
+  reviewMoreStep,
   type ReviewFilterKey,
 } from '@tubutree/app-core/commerce/review-filter';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
@@ -126,10 +129,21 @@ export function ReviewsSection({
   // thì form lấy nội dung của đánh giá đó. null = chưa gõ gì: form lấy đánh giá hiện có (sửa) hoặc form trống (viết mới).
   const [edited, setEdited] = useState<{ key: string; draft: ReviewDraft } | null>(null);
   const [filter, setFilter] = useState<ReviewFilterKey>('all');
-  const [visible, setVisible] = useState(5);
+  const [visible, setVisible] = useState(REVIEW_STEP);
+  const qc = useQueryClient();
   const reviewsQ = useQuery({ queryKey: reviewListKey(slug, 'all'), queryFn: () => fetchReviews(slug) });
   // Chip lọc hỏi máy chủ: danh sách đầy đủ chỉ có 100 đánh giá mới nhất, lọc trên đó báo "không có đánh giá khớp" sai.
   const filteredQ = useQuery({ queryKey: reviewListKey(slug, filter), queryFn: () => fetchReviews(slug, filter), enabled: filter !== 'all' });
+  // Trang sau trang đầu (mỗi trang 100 dòng) chỉ tải khi khách bấm "Xem thêm đánh giá" hết dòng đã tải; đổi chip thì bỏ hết.
+  const [moreOn, setMoreOn] = useState(false);
+  const firstNext = (filter === 'all' ? reviewsQ.data : filteredQ.data)?.nextCursor ?? null;
+  const moreQ = useInfiniteQuery({
+    queryKey: reviewMoreKey(slug, filter, firstNext ?? ''),
+    queryFn: ({ pageParam }) => fetchReviews(slug, filter, pageParam),
+    initialPageParam: firstNext ?? '',
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+    enabled: moreOn && firstNext !== null,
+  });
   // Chỉ hỏi khi đã đăng nhập; chưa đăng nhập thì vẫn hiện nút để còn mời login.
   const eligQ = useQuery({
     queryKey: ['can-review', slug],
@@ -187,10 +201,22 @@ export function ReviewsSection({
           : null;
   const data = reviewsQ.data;
   const dist = data?.distribution ?? {};
-  const list = reviewListView(filter, reviewsQ, filteredQ);
+  const list = reviewListView(
+    filter,
+    reviewsQ,
+    filteredQ,
+    moreOn ? { pages: moreQ.data?.pages, isFetching: moreQ.isFetching, isError: moreQ.isError } : undefined,
+  );
   const filtered = list.items;
-  const capped = list.status === 'ready' && reviewListCapped(filter, data, filtered.length);
   const chips = reviewFilterChips(data?.videoCount);
+  const showMore = () => {
+    const step = reviewMoreStep(visible, filtered.length, list.hasMore);
+    setVisible(step.visible);
+    if (!step.fetch) return;
+    if (!moreOn) setMoreOn(true);
+    else if (!moreQ.data) void moreQ.refetch();
+    else void moreQ.fetchNextPage();
+  };
 
   return (
     <section id="danh-gia" aria-label="Đánh giá sản phẩm" style={{ padding: 16, marginTop: 8, background: 'var(--color-bg-surface)' }}>
@@ -288,7 +314,9 @@ export function ReviewsSection({
                 onPress={() => {
                   haptic('light');
                   setFilter(f.key);
-                  setVisible(5);
+                  setVisible(REVIEW_STEP);
+                  setMoreOn(false);
+                  qc.removeQueries({ queryKey: reviewMorePrefix(slug) });
                 }}
               >
                 {f.label}
@@ -380,15 +408,17 @@ export function ReviewsSection({
               );
             })}
             {filtered.length === 0 && <EmptyState variant="inline" art="search" heading="Không có đánh giá khớp bộ lọc." />}
-            {filtered.length > visible && (
-              <Button variant="ghost" fullWidth onPress={() => setVisible((v) => v + 5)}>
-                Xem thêm ({filtered.length - visible})
-              </Button>
-            )}
-            {capped && (
-              <Text variant="caption" tone="tertiary" as="p">
-                {fillCopy('pdp.reviewsCapped', { n: REVIEW_LIST_LIMIT })}
-              </Text>
+            {list.more === 'error' ? (
+              <ErrorState
+                message={getLoadErrorMessage(moreQ.error)}
+                onRetry={() => void (moreQ.data ? moreQ.fetchNextPage() : moreQ.refetch())}
+              />
+            ) : (
+              reviewHasMore(visible, list) && (
+                <Button variant="ghost" fullWidth loading={list.more === 'loading'} onPress={showMore}>
+                  {fillCopy('pdp.reviewsMore')}
+                </Button>
+              )
             )}
           </div>
           )}

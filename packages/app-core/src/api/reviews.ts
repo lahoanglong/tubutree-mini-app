@@ -17,9 +17,11 @@ export interface ReviewSummary {
   videoCount?: number;
   distribution?: Record<string, number>;
   items: ReviewItem[];
+  /** Còn trang sau thì gửi lại kèm cùng chip để lấy tiếp; null là hết. Thiếu khi API cũ (chưa phân trang). */
+  nextCursor?: string | null;
 }
-export const fetchReviews = (http: HttpClient, slug: string, filter: ReviewFilterKey = 'all') =>
-  http.get<ReviewSummary>(`/products/${slug}/reviews${reviewFilterQuery(filter)}`);
+export const fetchReviews = (http: HttpClient, slug: string, filter: ReviewFilterKey = 'all', cursor?: string | null) =>
+  http.get<ReviewSummary>(`/products/${slug}/reviews${reviewFilterQuery(filter, cursor)}`);
 
 /** Một đánh giá khách đã viết cho sản phẩm, gắn với lần mua (đơn) của nó — để gắn nút sửa đúng dòng. */
 export interface MyReviewRef {

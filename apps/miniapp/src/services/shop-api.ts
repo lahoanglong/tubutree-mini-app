@@ -569,11 +569,14 @@ export interface ReviewSummary {
   videoCount?: number;
   distribution?: Record<string, number>;
   items: ReviewItem[];
+  /** Còn trang sau thì gửi lại kèm cùng chip để lấy tiếp; null là hết. Thiếu khi API cũ (chưa phân trang). */
+  nextCursor?: string | null;
 }
 /** `filter`: chip đang chọn; máy chủ lọc trên mọi đánh giá đang hiện. Không truyền là danh sách đầy đủ.
+ * `cursor`: `nextCursor` của trang trước cùng chip; không truyền là trang đầu.
  * `no-cache`: mỗi lần tải hỏi lại máy chủ (không đổi thì 304), đánh giá vừa viết hiện ngay thay vì chờ hết `max-age=30`. */
-export const fetchReviews = (slug: string, filter: ReviewFilterKey = 'all') =>
-  api.get<ReviewSummary>(`/products/${slug}/reviews${reviewFilterQuery(filter)}`, { cache: 'no-cache' }).then((r) => r.data);
+export const fetchReviews = (slug: string, filter: ReviewFilterKey = 'all', cursor?: string | null) =>
+  api.get<ReviewSummary>(`/products/${slug}/reviews${reviewFilterQuery(filter, cursor)}`, { cache: 'no-cache' }).then((r) => r.data);
 
 /** Một đánh giá khách đã viết cho sản phẩm, gắn với lần mua (đơn) của nó — để gắn nút sửa đúng dòng. */
 export interface MyReviewRef {

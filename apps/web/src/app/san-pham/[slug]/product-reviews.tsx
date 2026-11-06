@@ -4,7 +4,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useSearchParams } from 'next/navigation';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, Star, Video } from 'lucide-react';
 import { REVIEW_NEEDS_PURCHASE } from '@tubutree/app-core/review-copy';
 import { useAuthPhase } from '@/lib/auth-phase';
@@ -16,11 +16,14 @@ import { Chip } from '@/components/mini/chip';
 import { mini } from '@/components/order-mobile/mobile-ui';
 import { formatRating } from '@tubutree/app-core/commerce/card-meta';
 import {
-  REVIEW_LIST_LIMIT,
+  REVIEW_STEP,
   reviewFilterChips,
-  reviewListCapped,
+  reviewHasMore,
   reviewListKey,
   reviewListView,
+  reviewMoreKey,
+  reviewMorePrefix,
+  reviewMoreStep,
   type ReviewFilterKey,
 } from '@tubutree/app-core/commerce/review-filter';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
@@ -57,8 +60,6 @@ const EmptyState = dynamic(() => import('@/components/mini/empty-state').then((m
   ssr: false,
   loading: () => <div aria-hidden="true" className="h-[206px]" />,
 });
-
-const PAGE_SIZE = 5;
 
 /** Chờ và lỗi của danh sách đánh giá: dùng chung cho danh sách đầy đủ và kết quả chip lọc. */
 function ListLoading() {
@@ -150,10 +151,21 @@ export function ProductReviews({ slug }: { slug: string }) {
     retry: false,
   });
   const [target, setTarget] = useState<FormTarget | null>(null);
-  const [visible, setVisible] = useState(PAGE_SIZE);
+  const [visible, setVisible] = useState(REVIEW_STEP);
   const [filter, setFilter] = useState<ReviewFilterKey>('all');
+  const qc = useQueryClient();
   // Chip lọc hỏi máy chủ: danh sách đầy đủ chỉ có 100 đánh giá mới nhất, lọc trên đó báo "không có đánh giá khớp" sai.
   const filteredQ = useQuery({ queryKey: reviewListKey(slug, filter), queryFn: () => fetchProductReviews(slug, filter), enabled: filter !== 'all' });
+  // Trang sau trang đầu (mỗi trang 100 dòng) chỉ tải khi khách bấm "Xem thêm đánh giá" hết dòng đã tải; đổi chip thì bỏ hết.
+  const [moreOn, setMoreOn] = useState(false);
+  const firstNext = (filter === 'all' ? listQ.data : filteredQ.data)?.nextCursor ?? null;
+  const moreQ = useInfiniteQuery({
+    queryKey: reviewMoreKey(slug, filter, firstNext ?? ''),
+    queryFn: ({ pageParam }) => fetchProductReviews(slug, filter, pageParam),
+    initialPageParam: firstNext ?? '',
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+    enabled: moreOn && firstNext !== null,
+  });
   const [notice, setNotice] = useState<string | null>(null);
 
   const elig = phase === 'authenticated' ? eligQ.data : undefined;
@@ -188,10 +200,24 @@ export function ProductReviews({ slug }: { slug: string }) {
   const data = hydrated ? listQ.data : undefined;
   const listLoading = listQ.isLoading || (!hydrated && !listQ.isError);
   const dist = data?.distribution ?? {};
-  const list = reviewListView(filter, listQ, filteredQ);
+  const list = reviewListView(
+    filter,
+    listQ,
+    filteredQ,
+    moreOn ? { pages: moreQ.data?.pages, isFetching: moreQ.isFetching, isError: moreQ.isError } : undefined,
+  );
   const items = list.items;
-  const capped = list.status === 'ready' && reviewListCapped(filter, data, items.length);
   const chips = reviewFilterChips(data?.videoCount);
+  const moreLoading = list.more === 'loading';
+  const showMore = () => {
+    if (moreLoading) return;
+    const step = reviewMoreStep(visible, items.length, list.hasMore);
+    setVisible(step.visible);
+    if (!step.fetch) return;
+    if (!moreOn) setMoreOn(true);
+    else if (!moreQ.data) void moreQ.refetch();
+    else void moreQ.fetchNextPage();
+  };
 
   return (
     <section id="danh-gia" data-section="pdp-reviews" aria-labelledby="danh-gia-title" className={`${pdpBand} scroll-mt-20`}>
@@ -302,7 +328,9 @@ export function ProductReviews({ slug }: { slug: string }) {
                 count={f.count}
                 onPress={() => {
                   setFilter(f.key);
-                  setVisible(PAGE_SIZE);
+                  setVisible(REVIEW_STEP);
+                  setMoreOn(false);
+                  qc.removeQueries({ queryKey: reviewMorePrefix(slug) });
                 }}
               >
                 {f.label}
@@ -381,12 +409,21 @@ export function ProductReviews({ slug }: { slug: string }) {
             })}
           </ul>
           {items.length === 0 && <EmptyState variant="inline" art="search" heading="Không có đánh giá khớp bộ lọc." />}
-          {items.length > visible && (
-            <button type="button" className={`${ui.btnSecondary} ${mini.ghost} w-full`} onClick={() => setVisible((v) => v + PAGE_SIZE)}>
-              Xem thêm ({items.length - visible})
-            </button>
+          {list.more === 'error' ? (
+            <ListFailed onRetry={() => void (moreQ.data ? moreQ.fetchNextPage() : moreQ.refetch())} />
+          ) : (
+            reviewHasMore(visible, list) && (
+              <button
+                type="button"
+                className={`${ui.btnSecondary} ${mini.ghost} w-full`}
+                aria-busy={moreLoading || undefined}
+                aria-disabled={moreLoading || undefined}
+                onClick={showMore}
+              >
+                {fillCopy('pdp.reviewsMore')}
+              </button>
+            )
           )}
-          {capped && <p className="mt-3 text-xs text-tertiary">{fillCopy('pdp.reviewsCapped', { n: REVIEW_LIST_LIMIT })}</p>}
           </>
           )}
         </>

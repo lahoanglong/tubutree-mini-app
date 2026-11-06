@@ -15,6 +15,8 @@ const mocks = vi.hoisted(() => ({
   list: null as unknown,
   /** Kết quả riêng của một chip (Error để báo lỗi, Promise để giữ ở trạng thái chờ); thiếu thì lọc `list` như máy chủ. */
   filtered: {} as Record<string, unknown>,
+  /** Trang sau trang đầu theo `<chip>@<cursor>` (Error để báo lỗi). */
+  pages: {} as Record<string, unknown>,
   listCalls: [] as unknown[],
   elig: null as unknown,
   mine: {} as Record<string, unknown>,
@@ -34,7 +36,13 @@ vi.mock('@/components/evidence-upload', () => ({
 }));
 vi.mock('@/lib/reviews-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/reviews-client')>()),
-  fetchProductReviews: async (_slug: string, filter: number | string = 'all') => {
+  fetchProductReviews: async (_slug: string, filter: number | string = 'all', cursor?: string) => {
+    if (cursor) {
+      mocks.listCalls.push(`${filter}@${cursor}`);
+      const page = mocks.pages[`${filter}@${cursor}`];
+      if (page instanceof Error) throw page;
+      return page;
+    }
     mocks.listCalls.push(filter);
     if (filter === 'all') return mocks.list;
     const own = mocks.filtered[String(filter)];
@@ -128,6 +136,7 @@ beforeEach(() => {
   mocks.search = '';
   mocks.list = structuredClone(LIST);
   mocks.filtered = {};
+  mocks.pages = {};
   mocks.listCalls = [];
   mocks.elig = structuredClone(ELIG_REPEAT);
   mocks.mine = { a: structuredClone(MINE_A), b: structuredClone(MINE_B) };
@@ -160,12 +169,69 @@ describe('ProductReviews (web) — danh sách công khai', () => {
     expect(cls.some((k) => k.includes('stone-200'))).toBe(false);
   });
 
-  it('hơn 5 đánh giá: hiện 5 rồi "Xem thêm"', async () => {
+  it('hơn 5 đánh giá: hiện 5 rồi "Xem thêm đánh giá"; hiện hết mà không còn trang thì ẩn nút, không gọi trang kế', async () => {
     mocks.list = { ...LIST, count: 7, items: Array.from({ length: 7 }, (_, i) => review(`r${i}`, 5)) };
     const c = await mount();
     expect(c.querySelectorAll('li.border-t')).toHaveLength(5);
-    click(button(c, 'Xem thêm (2)'));
+    click(button(c, 'Xem thêm đánh giá'));
     expect(c.querySelectorAll('li.border-t')).toHaveLength(7);
+    expect(button(c, 'Xem thêm đánh giá')).toBeFalsy();
+    expect(mocks.listCalls).toEqual(['all']);
+  });
+
+  // Phân trang con trỏ: mỗi trang máy chủ 100 dòng kèm nextCursor; mock dùng trang nhỏ để thấy chỗ nối.
+  describe('"Xem thêm đánh giá": tải trang kế bằng nextCursor', () => {
+    const FIRST = Array.from({ length: 6 }, (_, i) => review(`p${i}`, 5));
+    const SECOND = [review('q0', 4), review('q1', 4), review('q2', 4)];
+    const PAGED = { ...LIST, count: 9, distribution: { '5': 6, '4': 3 } };
+    const shown = (c: HTMLElement) => Array.from(c.querySelectorAll('li.border-t p')).map((p) => p.textContent);
+    const settle = async (c: HTMLElement, text: string) => {
+      for (let n = 0; n < 40 && !c.textContent!.includes(text); n++) await flush();
+    };
+
+    it('hết dòng đã tải thì gọi trang kế đúng con trỏ, nối vào cuối, dòng cũ giữ nguyên; hết trang thì ẩn nút', async () => {
+      mocks.list = { ...PAGED, items: FIRST, nextCursor: 'c1' };
+      mocks.pages = { 'all@c1': { ...PAGED, items: SECOND, nextCursor: null } };
+      const c = await mount();
+      expect(shown(c)).toEqual(['Nhận xét p0', 'Nhận xét p1', 'Nhận xét p2', 'Nhận xét p3', 'Nhận xét p4']);
+      click(button(c, 'Xem thêm đánh giá'));
+      await settle(c, 'Nhận xét q2');
+      expect(mocks.listCalls).toEqual(['all', 'all@c1']);
+      expect(shown(c)).toEqual([...FIRST, ...SECOND].map((r) => `Nhận xét ${r.id}`));
+      expect(button(c, 'Xem thêm đánh giá')).toBeFalsy();
+    });
+
+    it('chip lọc: trang kế gửi kèm chip và con trỏ của chip; đổi chip về trang đầu', async () => {
+      mocks.list = { ...PAGED, items: FIRST, nextCursor: 'c1' };
+      mocks.filtered = { '4': { ...PAGED, items: SECOND, nextCursor: 'k1' } };
+      mocks.pages = { 'all@c1': { ...PAGED, items: SECOND, nextCursor: null }, '4@k1': { ...PAGED, items: [review('q9', 4)], nextCursor: null } };
+      const c = await mount();
+      click(button(c, 'Xem thêm đánh giá'));
+      await settle(c, 'Nhận xét q2');
+      await pick(c, '4 sao');
+      expect(shown(c)).toEqual(['Nhận xét q0', 'Nhận xét q1', 'Nhận xét q2']);
+      click(button(c, 'Xem thêm đánh giá'));
+      await settle(c, 'Nhận xét q9');
+      expect(mocks.listCalls).toContain('4@k1');
+      expect(shown(c)).toEqual(['Nhận xét q0', 'Nhận xét q1', 'Nhận xét q2', 'Nhận xét q9']);
+      await pick(c, 'Tất cả');
+      expect(shown(c)).toEqual(['Nhận xét p0', 'Nhận xét p1', 'Nhận xét p2', 'Nhận xét p3', 'Nhận xét p4']);
+      expect(button(c, 'Xem thêm đánh giá')).toBeTruthy();
+    });
+
+    it('trang kế tải lỗi: dòng đang hiện giữ nguyên, "Không tải được đánh giá." kèm Thử lại; thử lại thì nối trang kế', async () => {
+      mocks.list = { ...PAGED, items: FIRST, nextCursor: 'c1' };
+      mocks.pages = { 'all@c1': new Error('mất mạng') };
+      const c = await mount();
+      click(button(c, 'Xem thêm đánh giá'));
+      await settle(c, 'Không tải được đánh giá.');
+      expect(shown(c)).toEqual(FIRST.map((r) => `Nhận xét ${r.id}`));
+      mocks.pages = { 'all@c1': { ...PAGED, items: SECOND, nextCursor: null } };
+      click(button(c, 'Thử lại'));
+      await settle(c, 'Nhận xét q2');
+      expect(shown(c)).toHaveLength(9);
+      expect(c.textContent).not.toContain('Không tải được đánh giá.');
+    });
   });
 
   it('lọc 2 sao và 1 sao: chỉ còn đúng đánh giá mức đó, mức không có đánh giá ra trạng thái rỗng', async () => {
@@ -206,7 +272,7 @@ describe('ProductReviews (web) — danh sách công khai', () => {
     mocks.list = { ...LIST, count: 8, videoCount: 1, items: Array.from({ length: 8 }, (_, i) => review(`r${i}`, 5, i === 6 ? { videoUrl: 'https://cdn/v.mp4' } : {})) };
     const c = await mount();
     expect(button(c, /^Có video/)!.textContent).toBe('Có video(1)');
-    click(button(c, 'Xem thêm (3)'));
+    click(button(c, 'Xem thêm đánh giá'));
     expect(c.querySelectorAll('li.border-t')).toHaveLength(8);
     await pick(c, '5 sao');
     expect(c.querySelectorAll('li.border-t')).toHaveLength(5);
@@ -225,21 +291,21 @@ describe('ProductReviews (web) — danh sách công khai', () => {
   // Lỗi gốc: danh sách đầy đủ chỉ có 100 đánh giá mới nhất. Sản phẩm 120 đánh giá 5 sao mới + 3 đánh giá 1 sao cũ thì lọc 1 sao
   // trên 100 dòng đó ra rỗng dù phân bố sao ghi 3.
   it('100 dòng mới nhất toàn 5 sao: chip "1 sao" chờ máy chủ (không báo rỗng tạm), rồi hiện đủ 3 đánh giá 1 sao cũ', async () => {
-    mocks.list = { ...LIST, count: 123, distribution: { '5': 120, '1': 3 }, items: Array.from({ length: 100 }, (_, i) => review(`n${i}`, 5)) };
+    mocks.list = { ...LIST, count: 123, distribution: { '5': 120, '1': 3 }, items: Array.from({ length: 100 }, (_, i) => review(`n${i}`, 5)), nextCursor: 'c-n99' };
     let answer: (v: unknown) => void = () => undefined;
     mocks.filtered = { '1': new Promise((r) => (answer = r)) };
     const c = await mount();
-    expect(c.textContent).toContain('Đang hiện 100 đánh giá mới nhất');
+    expect(button(c, 'Xem thêm đánh giá')).toBeTruthy();
     await pick(c, '1 sao');
     expect(c.querySelector('[aria-busy="true"]')?.textContent).toBe('Đang tải đánh giá…');
     expect(c.textContent).not.toContain('Không có đánh giá khớp bộ lọc.');
     expect(c.querySelectorAll('li.border-t')).toHaveLength(0);
-    await act(async () => answer({ ...LIST, count: 123, items: [review('cu1', 1), review('cu2', 1), review('cu3', 1)] }));
+    await act(async () => answer({ ...LIST, count: 123, items: [review('cu1', 1), review('cu2', 1), review('cu3', 1)], nextCursor: null }));
     await flush(8);
     expect(c.querySelectorAll('li.border-t')).toHaveLength(3);
     expect(c.textContent).toContain('Nhận xét cu3');
     expect(c.textContent).not.toContain('Không có đánh giá khớp bộ lọc.');
-    expect(c.textContent).not.toContain('Đang hiện 100 đánh giá mới nhất');
+    expect(button(c, 'Xem thêm đánh giá')).toBeFalsy();
     expect(c.querySelector('h2')?.textContent).toBe('Đánh giá (123)');
   });
 
@@ -257,13 +323,13 @@ describe('ProductReviews (web) — danh sách công khai', () => {
     expect(c.textContent).toContain('Nhận xét c');
   });
 
-  it('điện thoại: dải trắng riêng; "Viết đánh giá" và "Xem thêm (n)" là nút chữ thương hiệu, không viền như Mini App', async () => {
+  it('điện thoại: dải trắng riêng; "Viết đánh giá" và "Xem thêm đánh giá" là nút chữ thương hiệu, không viền như Mini App', async () => {
     mocks.list = { ...LIST, count: 7, items: Array.from({ length: 7 }, (_, i) => review(`r${i}`, 5)) };
     const c = await mount();
     const section = c.querySelector('section#danh-gia')!;
     expect(section.getAttribute('data-section')).toBe('pdp-reviews');
     expect(section.className).toContain('max-md:bg-[var(--color-bg-surface)]');
-    for (const name of ['Viết đánh giá', 'Xem thêm (2)']) {
+    for (const name of ['Viết đánh giá', 'Xem thêm đánh giá']) {
       const b = button(c, name)!;
       expect(b.className).toContain('max-md:bg-transparent');
       expect(b.className).toContain('max-md:border-transparent');

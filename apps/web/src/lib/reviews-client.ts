@@ -20,6 +20,8 @@ export interface ProductReviews {
   videoCount?: number;
   distribution?: Record<string, number>;
   items: PublicReview[];
+  /** Còn trang sau thì gửi lại kèm cùng chip để lấy tiếp; null là hết. Thiếu khi API cũ (chưa phân trang). */
+  nextCursor?: string | null;
 }
 
 /** Đánh giá khách đã viết cho sản phẩm, gắn với lần mua (đơn) của nó, mới nhất trước. */
@@ -88,9 +90,10 @@ export interface SavedReview {
 const productPath = (slug: string) => `/products/${encodeURIComponent(slug)}/reviews`;
 
 /** `filter`: chip đang chọn; máy chủ lọc trên mọi đánh giá đang hiện. Không truyền là danh sách đầy đủ.
+ * `cursor`: `nextCursor` của trang trước cùng chip; không truyền là trang đầu.
  * `no-cache`: mỗi lần tải hỏi lại máy chủ (không đổi thì 304), đánh giá vừa viết hiện ngay thay vì chờ hết `max-age=30`. */
-export const fetchProductReviews = (slug: string, filter: ReviewFilterKey = 'all') =>
-  apiFetch<ProductReviews>(`${productPath(slug)}${reviewFilterQuery(filter)}`, { cache: 'no-cache' });
+export const fetchProductReviews = (slug: string, filter: ReviewFilterKey = 'all', cursor?: string | null) =>
+  apiFetch<ProductReviews>(`${productPath(slug)}${reviewFilterQuery(filter, cursor)}`, { cache: 'no-cache' });
 export const fetchCanReview = (slug: string) => apiFetch<CanReview>(`${productPath(slug)}/can-review`);
 export const fetchMyReview = (id: string) => apiFetch<MyReview>(`/reviews/${encodeURIComponent(id)}`);
 export const saveReview = (slug: string, body: ReviewInput) => apiFetch<SavedReview>(productPath(slug), { method: 'POST', body });

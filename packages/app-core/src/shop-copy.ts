@@ -308,7 +308,7 @@ export const SHOP_COPY: Record<string, string> = {
   'pdp.variation': 'Phân loại',
   'pdp.reviews': 'Đánh giá',
   'pdp.reviewsAll': 'Xem tất cả ({n})',
-  'pdp.reviewsCapped': 'Đang hiện {n} đánh giá mới nhất',
+  'pdp.reviewsMore': 'Xem thêm đánh giá',
   'pdp.alsoLike': 'Có thể bạn cũng thích',
   // Tiêu đề dải không kèm tên (tên dài thì xuống dòng); tên thương hiệu nằm ở nhãn đọc của dải.
   'pdp.brandShelf': 'Cùng thương hiệu',
