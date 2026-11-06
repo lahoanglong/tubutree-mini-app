@@ -989,6 +989,28 @@ describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo vari
     expect(res.data[0]!.items[0]!.productPublic).toBe(expected);
   });
 
+  it.each([
+    ['đang bán', {}, {}, false],
+    ['hết tồn nhưng còn bán (Tạm hết hàng)', { stock: 0 }, {}, false],
+    ['variation tắt', { isActive: false }, {}, true],
+    ['sản phẩm tắt', {}, { isActive: false }, true],
+    ['sản phẩm chưa duyệt', {}, { approvalStatus: 'PENDING_REVIEW' }, true],
+  ])('discontinued (Mua lại ghi "Ngừng bán" thay vì "Tạm hết hàng"): %s', async (_label, vOver, pOver, expected) => {
+    const { svc } = makeMediaService([{ ...baseOrder, items: [line('i1', 'v1')] }], [v('v1', vOver, pOver)]);
+    const res = await svc.list('u1', {}, 1, 20);
+    expect(res.data[0]!.items[0]!.discontinued).toBe(expected);
+  });
+
+  it('variation đã bị xoá → discontinued true dù sản phẩm còn bán', async () => {
+    const { svc } = makeMediaService(
+      [{ ...baseOrder, items: [{ ...line('i1', 'gone'), productSlug: 'tra-xanh' }] }],
+      [],
+      [{ slug: 'tra-xanh', isActive: true, approvalStatus: 'APPROVED' }],
+    );
+    const res = await svc.list('u1', {}, 1, 20);
+    expect(res.data[0]!.items[0]).toMatchObject({ available: false, productPublic: true, discontinued: true });
+  });
+
   describe('variation đã bị xoá (gắn mã Pancake xoá biến thể tạm của sản phẩm đối tác): productPublic tra theo slug đã lưu trong dòng đơn', () => {
     const goneLine = (slug: string | null) => ({ ...line('i1', 'gone'), productSlug: slug });
 

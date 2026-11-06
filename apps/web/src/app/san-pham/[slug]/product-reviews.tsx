@@ -27,6 +27,8 @@ import {
   type ReviewFilterKey,
 } from '@tubutree/app-core/commerce/review-filter';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { REVIEW_COMMENT_MAX, reviewFormIssue, type ReviewFormIssue } from '@tubutree/app-core/commerce/review-form';
+import { isImeEnter, isSubmitShortcut } from '@tubutree/app-core/keyboard';
 import { MAX_PUBLIC_DATA_URL_LENGTH } from '@/lib/image-compress';
 import { loginHref } from '@/lib/return-to';
 import {
@@ -528,6 +530,14 @@ function ReviewForm({
   const [videoUrl, setVideoUrl] = useState<string | null>(initial?.videoUrl ?? null);
   // Đang tải video lên: gửi lúc này sẽ lưu đánh giá không kèm video (mất phần thưởng video, sửa lại cũng không được cộng thêm).
   const [videoBusy, setVideoBusy] = useState(false);
+  // Lỗi ở hàng sao hay ô nhận xét trước khi gửi: đọc qua role=alert, focus tới chỗ cần sửa. Lỗi máy chủ nằm ở `save.error`.
+  const [issue, setIssue] = useState<ReviewFormIssue | null>(null);
+  const commentRef = useRef<HTMLTextAreaElement>(null);
+  const saveAlert = useRef<HTMLParagraphElement>(null);
+  // Khoá đồng bộ chống gửi đúp (Enter hai lần, bấm hai lần cùng nhịp): isPending chỉ đổi sau lần vẽ kế tiếp.
+  const sending = useRef(false);
+  const ratingErrorId = useId();
+  const commentErrorId = useId();
 
   const save = useMutation({
     mutationFn: () =>
@@ -544,7 +554,33 @@ function ReviewForm({
       void qc.invalidateQueries({ queryKey: ['order'] });
       onSaved(savedMessage(res, hidden || initial?.isVisible === false));
     },
+    onSettled: () => {
+      sending.current = false;
+    },
   });
+
+  useEffect(() => {
+    if (save.error) saveAlert.current?.focus();
+  }, [save.error]);
+
+  const pickRating = (i: number) => {
+    setRating(i);
+    if (issue?.field === 'rating') setIssue(null);
+  };
+
+  const send = () => {
+    if (videoBusy || save.isPending || sending.current) return;
+    const found = reviewFormIssue({ rating, comment });
+    if (found) {
+      setIssue(found);
+      if (found.field === 'comment') commentRef.current?.focus();
+      else starsGroup.ref.current?.querySelector<HTMLElement>('[role="radio"][tabindex="0"]')?.focus();
+      return;
+    }
+    setIssue(null);
+    sending.current = true;
+    save.mutate();
+  };
 
   const hasMedia = images.length > 0 || videoUrl !== null;
   const hint = rewardHint({
@@ -562,13 +598,25 @@ function ReviewForm({
       className={`mt-3 p-4 ${ui.card}`}
       onSubmit={(e) => {
         e.preventDefault();
-        if (!videoBusy) save.mutate();
+        send();
+      }}
+      // Enter mà bộ gõ tiếng Việt dùng để chốt chữ không được gửi form hay bấm nút đang focus; ô nhận xét để bộ gõ tự xử lý.
+      onKeyDown={(e) => {
+        if (isImeEnter(e.nativeEvent) && !(e.target instanceof HTMLTextAreaElement)) e.preventDefault();
       }}
     >
       <h3 className="text-base font-semibold text-stone-900">{isEdit ? 'Sửa đánh giá' : 'Đánh giá sản phẩm'}</h3>
       {note && <p className="mt-1 text-sm text-stone-600">{note}</p>}
       {isEdit && (hidden || initial?.isVisible === false) && <p className="mt-1 text-sm text-warning-fg">{EDIT_HIDDEN_NOTE}</p>}
-      <div ref={starsGroup.ref} onKeyDown={starsGroup.onKeyDown} role="radiogroup" aria-label="Số sao" className="mt-2 flex gap-1">
+      <div
+        ref={starsGroup.ref}
+        onKeyDown={starsGroup.onKeyDown}
+        role="radiogroup"
+        aria-label="Số sao"
+        aria-invalid={issue?.field === 'rating' || undefined}
+        aria-describedby={issue?.field === 'rating' ? ratingErrorId : undefined}
+        className="mt-2 flex gap-1"
+      >
         {[1, 2, 3, 4, 5].map((i) => (
           <button
             key={i}
@@ -576,25 +624,47 @@ function ReviewForm({
             role="radio"
             aria-checked={i === rating}
             aria-label={`${i} sao`}
-            onClick={() => setRating(i)}
+            onClick={() => pickRating(i)}
             className="inline-flex h-11 w-11 items-center justify-center rounded-control"
           >
             <Star aria-hidden="true" className={`h-7 w-7 ${i <= rating ? 'fill-honey-500 text-honey-500' : 'fill-[color:var(--stone-450)] text-[color:var(--stone-450)]'}`} />
           </button>
         ))}
       </div>
+      {issue?.field === 'rating' && (
+        <p id={ratingErrorId} role="alert" className={`mt-1 ${ui.error}`}>
+          {issue.message}
+        </p>
+      )}
       <label htmlFor={commentId} className="mt-3 block text-sm font-semibold text-stone-900">
         Nhận xét <span className="font-normal text-stone-600">(không bắt buộc)</span>
       </label>
       <textarea
         id={commentId}
         value={comment}
-        onChange={(e) => setComment(e.target.value)}
-        maxLength={2000}
+        ref={commentRef}
+        onChange={(e) => {
+          setComment(e.target.value);
+          if (issue?.field === 'comment') setIssue(null);
+        }}
+        onKeyDown={(e) => {
+          if (!isSubmitShortcut(e.nativeEvent)) return;
+          e.preventDefault();
+          send();
+        }}
+        aria-invalid={issue?.field === 'comment' || undefined}
+        aria-describedby={issue?.field === 'comment' ? commentErrorId : undefined}
+        aria-keyshortcuts="Control+Enter Meta+Enter"
+        maxLength={REVIEW_COMMENT_MAX}
         rows={4}
         placeholder="Chia sẻ cảm nhận của bạn về sản phẩm…"
         className={`${ui.field} mt-1 py-2`}
       />
+      {issue?.field === 'comment' && (
+        <p id={commentErrorId} role="alert" className={`mt-1 ${ui.error}`}>
+          {issue.message}
+        </p>
+      )}
       <div className="mt-3">
         <EvidenceUpload
           value={images}
@@ -609,7 +679,7 @@ function ReviewForm({
       <ReviewVideoUpload value={videoUrl} onChange={setVideoUrl} onBusyChange={setVideoBusy} disabled={save.isPending} />
       <p className={`mt-3 text-sm ${!isEdit && rewardAvailable && hasMedia ? 'font-semibold text-success-fg' : 'text-stone-600'}`}>{hint}</p>
       {save.isError && (
-        <p role="alert" className={`mt-2 ${ui.error}`}>
+        <p ref={saveAlert} tabIndex={-1} role="alert" className={`mt-2 ${ui.error}`}>
           {actionErrorText(save.error)}
         </p>
       )}

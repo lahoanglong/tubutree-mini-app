@@ -55,6 +55,8 @@ export interface OrderItemMedia {
   available: boolean;
   /** Trang sản phẩm còn mở công khai (đang bán và đã duyệt): false thì nút "Viết đánh giá" / liên kết sản phẩm sẽ dẫn tới 404. */
   productPublic: boolean;
+  /** Không còn bán biến thể này nữa (biến thể tắt hay bị xoá, sản phẩm tắt hay chưa duyệt), khác hết hàng tạm thời: sheet Mua lại ghi "Ngừng bán". */
+  discontinued: boolean;
   currentPrice: number | null;
 }
 export type OrderWithItems = Prisma.OrderGetPayload<{ include: { items: true } }>;
@@ -125,7 +127,7 @@ export type OrderView = Omit<OrderListRow, 'items' | BuyerHiddenOrderField> & {
   manualHandling: boolean;
 };
 
-const MISSING_MEDIA: OrderItemMedia = { thumbnail: null, stock: 0, available: false, productPublic: false, currentPrice: null };
+const MISSING_MEDIA: OrderItemMedia = { thumbnail: null, stock: 0, available: false, productPublic: false, discontinued: true, currentPrice: null };
 
 export type RepurchaseAddSource = 'repurchase' | 'reorder_notification';
 export type RepurchaseSkipReason = 'OUT_OF_STOCK' | 'INACTIVE' | 'NOT_APPROVED' | 'EXCEEDS_STOCK';
@@ -417,6 +419,7 @@ export class OrdersService {
         stock: exposedStock(v.stock),
         available: v.isActive && isPublicProduct(v.product) && v.stock > 0,
         productPublic: isPublicProduct(v.product),
+        discontinued: !(v.isActive && isPublicProduct(v.product)),
         currentPrice: v.salePrice ?? v.retailPrice,
       };
     };

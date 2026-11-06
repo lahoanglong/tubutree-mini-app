@@ -5,7 +5,7 @@ import type { ReorderLine } from './reorder-types';
 
 const CART: CartSummary = { items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 199000, itemCount: 0 };
 const line = (key: string, productName: string): ReorderLine => ({
-  key, variationId: `v-${key}`, productName, variationName: '', thumbnail: null, unitPrice: 1, defaultQuantity: 1, maxQuantity: 9, available: true,
+  key, variationId: `v-${key}`, productName, variationName: '', thumbnail: null, unitPrice: 1, defaultQuantity: 1, maxQuantity: 9, available: true, notices: [],
 });
 const lines = [line('a', 'Nước rửa chén'), line('b', 'Xà phòng'), line('c', 'Nước lau sàn')];
 

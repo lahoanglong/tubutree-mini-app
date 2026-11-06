@@ -652,6 +652,8 @@ export interface OrderItemMedia {
   available?: boolean;
   /** Trang sản phẩm còn mở công khai; false thì không dẫn tới trang sản phẩm hay mời đánh giá (API cũ không trả: coi như còn). */
   productPublic?: boolean;
+  /** Ngừng bán (biến thể tắt hay bị xoá, sản phẩm gỡ), khác hết hàng tạm thời. API cũ không trả: xem `isDiscontinuedItem`. */
+  discontinued?: boolean;
   currentPrice?: number | null;
 }
 export type OrderItemView = OrderItemDTO & OrderItemMedia;

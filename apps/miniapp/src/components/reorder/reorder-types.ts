@@ -1,4 +1,5 @@
 import type { OrderItemView, PurchasedItem } from '../../services/shop-api';
+import { isDiscontinuedItem, reorderLineNotices, type ReorderLineNotice } from '@tubutree/app-core/commerce/reorder-notice';
 
 export type { ReorderSource } from '../../services/buy-flow-events';
 
@@ -16,6 +17,8 @@ export interface ReorderLine {
   defaultQuantity: number;
   maxQuantity: number;
   available: boolean;
+  /** Câu dưới dòng: hết hàng hay ngừng bán, đã giảm số lượng vì còn ít hơn đơn trước, giá đổi so với giá đã trả. */
+  notices: readonly ReorderLineNotice[];
 }
 
 export type ReorderTarget =
@@ -40,6 +43,14 @@ export function lineFromOrderItem(it: OrderItemView): ReorderLine {
   const stock = typeof it.stock === 'number' ? Math.max(it.stock, 0) : MAX_REORDER_QTY;
   const available = it.available !== false && stock > 0;
   const maxQuantity = Math.min(stock, MAX_REORDER_QTY);
+  const notices = reorderLineNotices({
+    available,
+    discontinued: isDiscontinuedItem(it),
+    orderedQuantity: it.quantity,
+    stock: typeof it.stock === 'number' ? Math.max(it.stock, 0) : null,
+    paidPrice: it.unitPrice,
+    currentPrice: typeof it.currentPrice === 'number' ? it.currentPrice : null,
+  });
   return {
     key: it.id,
     variationId: it.variationId,
@@ -50,21 +61,25 @@ export function lineFromOrderItem(it: OrderItemView): ReorderLine {
     defaultQuantity: available ? clampQty(it.quantity, maxQuantity) : it.quantity,
     maxQuantity,
     available,
+    notices,
   };
 }
 
 export function lineFromPurchasedItem(p: PurchasedItem): ReorderLine {
   const stock = Math.max(p.stock, 0);
+  const available = p.inStock !== false && stock > 0;
+  const price = p.salePrice ?? p.price;
   return {
     key: p.variationId,
     variationId: p.variationId,
     productName: p.productName,
     variationName: p.variationName,
     thumbnail: p.thumbnail,
-    unitPrice: p.salePrice ?? p.price,
+    unitPrice: price,
     defaultQuantity: 1,
     maxQuantity: Math.min(stock, MAX_REORDER_QTY),
-    available: p.inStock !== false && stock > 0,
+    available,
+    notices: reorderLineNotices({ available, discontinued: false, orderedQuantity: 1, stock, paidPrice: price, currentPrice: price }),
   };
 }
 
