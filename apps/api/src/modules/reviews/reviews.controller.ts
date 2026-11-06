@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, ParseIntPipe, Post, Res, StreamableFile } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseIntPipe, Post, Query, Res, StreamableFile } from '@nestjs/common';
 import type { Response } from 'express';
 import { IsBoolean } from 'class-validator';
 import type { JwtPayload } from '@tubutree/shared-types';
@@ -7,7 +7,7 @@ import { PublicCache } from '../../common/decorators/public-cache.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { ReviewsService } from './reviews.service';
-import { CreateReviewDto } from './dto/review.dto';
+import { CreateReviewDto, PublicReviewsQuery } from './dto/review.dto';
 
 class VisibilityDto {
   @IsBoolean() isVisible!: boolean;
@@ -35,8 +35,8 @@ export class ReviewsController {
   @Public()
   @PublicCache('USER_CONTENT')
   @Get('products/:slug/reviews')
-  list(@Param('slug') slug: string) {
-    return this.reviews.listByProduct(slug);
+  list(@Param('slug') slug: string, @Query() filter: PublicReviewsQuery) {
+    return this.reviews.listByProduct(slug, filter);
   }
 
   /**

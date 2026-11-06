@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
-import { CreateReviewDto } from './dto/review.dto';
+import { CreateReviewDto, type PublicReviewsQuery } from './dto/review.dto';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { isUploadedImage, isUploadedMediaUrl, PUBLIC_CONTENT_IMAGE } from '../../common/uploaded-image';
@@ -350,17 +350,24 @@ export class ReviewsService {
   }
 
   /**
-   * Danh sách công khai: mọi đánh giá đang hiện, mới nhất trước, tối đa LIST_LIMIT dòng. Điểm trung bình, số đánh giá,
-   * phân bổ sao và số đánh giá có video tính trên TẤT CẢ đánh giá đang hiện (khớp ratingAvg/reviewCount của sản phẩm),
-   * không chỉ trên các dòng trả về.
+   * Danh sách công khai: đánh giá đang hiện khớp bộ lọc (số sao, có ảnh, có video), mới nhất trước, tối đa LIST_LIMIT dòng.
+   * Bộ lọc nằm trong truy vấn: lọc ở client chỉ thấy LIST_LIMIT dòng mới nhất nên sản phẩm nhiều đánh giá báo không có dòng
+   * khớp dù có. Điểm trung bình, số đánh giá, phân bổ sao và số đánh giá có video luôn tính trên TẤT CẢ đánh giá đang hiện
+   * (khớp ratingAvg/reviewCount của sản phẩm), không theo bộ lọc và không chỉ trên các dòng trả về.
    */
-  async listByProduct(slug: string) {
+  async listByProduct(slug: string, filter: PublicReviewsQuery = {}) {
     const product = await this.prisma.product.findUnique({ where: { slug }, select: { id: true } });
     if (!product) throw new NotFoundException('Không tìm thấy sản phẩm.');
     const where = { productId: product.id, isVisible: true };
+    const hasVideo = { videoUrl: { not: null } };
+    const listWhere: Prisma.ReviewWhereInput = {
+      ...where,
+      ...(filter.rating ? { rating: filter.rating } : {}),
+      ...(filter.media === 'photo' ? { imageVersions: { isEmpty: false } } : filter.media === 'video' ? hasVideo : {}),
+    };
     const [reviews, byRating, videoCount] = await Promise.all([
       this.prisma.review.findMany({
-        where,
+        where: listWhere,
         orderBy: { createdAt: 'desc' },
         // Không chọn `images`: base64 tới ~700 nghìn ký tự/ảnh, phải giải nén TOAST cả trăm dòng cho mỗi lượt xem trang.
         select: {
@@ -375,7 +382,7 @@ export class ReviewsService {
         take: LIST_LIMIT,
       }),
       this.prisma.review.groupBy({ by: ['rating'], where, _count: { _all: true } }),
-      this.prisma.review.count({ where: { ...where, videoUrl: { not: null } } }),
+      this.prisma.review.count({ where: { ...where, ...hasVideo } }),
     ]);
     // Phân bổ sao 5→1 (breakdown) cho UI biểu đồ.
     const distribution: Record<number, number> = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
