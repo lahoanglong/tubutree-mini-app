@@ -129,6 +129,10 @@ Máy tính (từ `lg`): hai cột gọn ở `/tai-khoan/don-hang/:code`, trái t
 
 `Badge`, `Button`, `Card`, `Chip`, `Icon`, `IconButton`, `ListRow`, `KeyValueRow`, `ProgressBar`, `QuantitySelector`, `SearchField`, `StickyActionBar`, `Text`, `Heading`, `Timeline`, `StatTile`, `BottomSheet`, `EmptyState`, `BackButton`.
 
+### Xem ảnh đánh giá và chọn địa giới (W42B)
+
+`ReviewMediaLightbox` (Mini + web): ảnh/video đánh giá toàn màn hình, nền `--color-bg-lightbox` làm mờ, mở 220ms theo đường cong drawer (cùng tấm đáy), bộ đếm `n / N` số đều, nút Trước/Sau và × ≥ 44px, vuốt ngang, nút back đóng. `AddressLocationSheet` (chỉ web; Mini đã có trong `geo-picker.tsx`): sheet tìm không dấu cho Tỉnh/Thành phố và Phường/Xã, dòng ≥ 44px, chọn tỉnh xong tự mở Phường/Xã. Thêm giỏ: `playCartFeedback` (chấm bay 420ms tới `[data-cart-target]`) và huy hiệu giỏ nảy `.cart-badge-bump` 220ms; giảm chuyển động thì bỏ cả hai.
+
 ### Khuôn trang web (chỉ web)
 
 `HubLayout`, `ListingLayout`, `PdpLayout`, `StoreLayout` ở `apps/web/src/components/layouts/`. Chi tiết ở mục Khuôn trang web máy tính.

@@ -113,6 +113,11 @@
   /* Nền mờ sau sheet và hộp thoại: MỘT màu cho zmp Sheet của Mini App (`--zaui-mask-overlay-color`, mặc định zmp-ui #000000b3 = đen 70%),
      `mini/bottom-sheet` và `ui/sheet` của web ở mọi khổ. Sheet không tự đặt màu nền riêng. */
   --color-bg-sheet-scrim: rgba(0, 0, 0, 0.7);
+  /* Nền xem ảnh/video đánh giá toàn màn hình (ReviewMediaLightbox, Mini App và web): đen 90% + làm mờ nền phía sau; chữ trên nền này dùng --color-text-inverse. */
+  --color-bg-lightbox: rgba(0, 0, 0, 0.9);
+  /* Nút tròn (đóng, trước/sau) và nhãn "Đã mua hàng" nổi trên nền lightbox: đen 40% / trắng 15%. */
+  --color-bg-lightbox-control: rgba(0, 0, 0, 0.4);
+  --color-bg-lightbox-chip: rgba(255, 255, 255, 0.15);
 
   --color-text-primary: var(--stone-900);
   --color-text-secondary: var(--stone-600);

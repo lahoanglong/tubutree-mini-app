@@ -1,7 +1,9 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Input, useSnackbar } from 'zmp-ui';
 import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Check, Star, Video } from 'lucide-react';
+import { Check, Play, Star, Video } from 'lucide-react';
+import { reviewMediaItems } from '@tubutree/app-core/commerce/review-media';
+import { ReviewMediaLightbox } from './review-media-lightbox';
 import {
   fetchReviews,
   createReview,
@@ -117,13 +119,18 @@ export function ReviewsSection({
   slug,
   openForOrderId,
   onOrderLinkUsed,
+  onQuickAdd,
 }: {
   slug: string;
   openForOrderId?: string;
   onOrderLinkUsed?: () => void;
+  /** Có thì lightbox ảnh đánh giá hiện nút "Thêm vào giỏ": đóng lightbox rồi chạy luồng thêm giỏ của trang. */
+  onQuickAdd?: () => void;
 }) {
   const { status } = useAuthStore();
   const login = useLoginWithNotice();
+  // Đánh giá đang xem ảnh/video toàn màn hình và vị trí tệp.
+  const [lightbox, setLightbox] = useState<{ id: string; index: number } | null>(null);
   const [writing, setWriting] = useState(false);
   const [target, setTarget] = useState<FormTarget | null>(null);
   // BottomSheet gỡ nội dung khỏi DOM khi đóng; nháp nằm ở đây để chạm nhầm lên mask/vuốt xuống
@@ -212,6 +219,8 @@ export function ReviewsSection({
     moreOn ? { pages: moreQ.data?.pages, isFetching: moreQ.isFetching, isError: moreQ.isError } : undefined,
   );
   const filtered = list.items;
+  const lbReview = lightbox ? filtered.find((x) => x.id === lightbox.id) : undefined;
+  const lbMedia = lbReview ? reviewMediaItems(lbReview) : [];
   const chips = reviewFilterChips(data, filter);
   const showMore = () => {
     const step = reviewMoreStep(visible, filtered.length, list.hasMore);
@@ -392,31 +401,53 @@ export function ReviewsSection({
                     {r.comment}
                   </Text>
                 )}
-                {r.images.length > 0 && (
+                {(r.images.length > 0 || r.videoUrl) && (
                   <div style={{ display: 'flex', gap: 6, marginTop: 8, overflowX: 'auto' }}>
-                    {r.images.map((img) => (
-                      <img
-                        key={img}
-                        src={apiMediaUrl(img)}
-                        alt="ảnh đánh giá"
-                        loading="lazy"
-                        style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 'var(--radius-media)' }}
-                      />
+                    {reviewMediaItems(r).map((m, i) => (
+                      <button
+                        key={m.src}
+                        type="button"
+                        className="tubu-press"
+                        aria-label={m.kind === 'image' ? fillCopy('review.mediaOpenImage', { n: i + 1 }) : fillCopy('review.mediaOpenVideo')}
+                        aria-haspopup="dialog"
+                        onClick={() => {
+                          haptic('light');
+                          setLightbox({ id: r.id, index: i });
+                        }}
+                        style={{ width: 64, height: 64, minWidth: 44, minHeight: 44, flex: '0 0 auto', padding: 0, border: 'none', overflow: 'hidden', borderRadius: 'var(--radius-media)', cursor: 'pointer', background: m.kind === 'video' ? 'var(--color-bg-inverse)' : 'transparent', color: 'var(--color-text-inverse)', display: 'grid', placeItems: 'center' }}
+                      >
+                        {m.kind === 'image' ? (
+                          <img src={apiMediaUrl(m.src)} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                        ) : (
+                          <Play size={24} aria-hidden="true" />
+                        )}
+                      </button>
                     ))}
                   </div>
-                )}
-                {r.videoUrl && (
-                  <video
-                    src={r.videoUrl}
-                    controls
-                    preload="metadata"
-                    playsInline
-                    style={{ width: '100%', maxHeight: 220, marginTop: 8, borderRadius: 'var(--radius-media)', background: 'var(--color-bg-inverse)' }}
-                  />
                 )}
               </div>
               );
             })}
+            <ReviewMediaLightbox
+              open={lbReview !== undefined && lbMedia.length > 0}
+              onClose={() => setLightbox(null)}
+              items={lbMedia}
+              index={lightbox?.index ?? 0}
+              onIndexChange={(index) => setLightbox((cur) => (cur ? { ...cur, index } : cur))}
+              author={lbReview?.author ?? ''}
+              rating={lbReview?.rating ?? 0}
+              verifiedPurchase={lbReview?.verifiedPurchase}
+              comment={lbReview?.comment}
+              resolveSrc={apiMediaUrl}
+              onAdd={
+                onQuickAdd
+                  ? () => {
+                      setLightbox(null);
+                      onQuickAdd();
+                    }
+                  : undefined
+              }
+            />
             {filtered.length === 0 && <EmptyState variant="inline" art="search" heading="Không có đánh giá khớp bộ lọc." />}
             {list.more === 'error' && visible >= filtered.length ? (
               <ErrorState message={getLoadErrorMessage(moreQ.error)} onRetry={retryMore} />

@@ -168,7 +168,37 @@ describe('ProductReviews (web) — danh sách công khai', () => {
     expect(c.textContent).toContain('4,3');
     expect(c.querySelectorAll('li.border-t')).toHaveLength(3);
     expect(c.querySelector('[aria-label="Phân bổ số sao"]')?.textContent).toContain('5');
-    expect(c.querySelector<HTMLImageElement>('img[alt="Ảnh đánh giá"]')!.src).toMatch(/\/reviews\/c\/images\/0\?v=1$/);
+    expect(c.querySelector<HTMLImageElement>('button[aria-label="Xem ảnh đánh giá 1"] img')!.src).toMatch(/\/reviews\/c\/images\/0\?v=1$/);
+  });
+
+  describe('W42B: xem ảnh/video đánh giá toàn màn hình', () => {
+    const lightbox = () => document.querySelector<HTMLElement>('[data-testid="review-lightbox"]');
+    const closeLightbox = () => click(document.querySelector('[data-testid="review-lightbox"] button[aria-label="Đóng"]'));
+
+    it('bấm ảnh mở lightbox ở đúng ảnh; × đóng', async () => {
+      const c = await mount();
+      expect(lightbox()).toBeNull();
+      click(c.querySelector('button[aria-label="Xem ảnh đánh giá 1"]'));
+      const box = lightbox()!;
+      expect(box).not.toBeNull();
+      expect(box.getAttribute('role')).toBe('dialog');
+      expect(box.getAttribute('aria-modal')).toBe('true');
+      expect(box.className).toContain('review-lightbox');
+      expect(box.querySelector<HTMLImageElement>('img')!.src).toMatch(/\/reviews\/c\/images\/0\?v=1$/);
+      expect(box.querySelector('[aria-live="polite"]')!.textContent).toBe('1 / 1');
+      closeLightbox();
+      expect(lightbox()).toBeNull();
+    });
+
+    it('chỉ có một tệp thì không có nút Trước/Sau; Esc đóng', async () => {
+      const c = await mount();
+      click(c.querySelector('button[aria-label="Xem ảnh đánh giá 1"]'));
+      expect(lightbox()!.querySelector('button[aria-label="Tệp trước"]')).toBeNull();
+      act(() => {
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      });
+      expect(lightbox()).toBeNull();
+    });
   });
 
   it('W40A: mục Đánh giá vẽ số đều (tabular-nums) và ngôi sao chọn co khi nhấn (tubu-press)', async () => {

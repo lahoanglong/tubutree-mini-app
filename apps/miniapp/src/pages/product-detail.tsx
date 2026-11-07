@@ -66,6 +66,7 @@ import { getAffiliateMe } from '../services/affiliate-api';
 import { ContentKitSheet } from '../components/content-kit-sheet';
 import { POLICY_TITLES, PolicySheet } from '../components/policy-sheet';
 import { CartBadge } from '../components/ui/cart-badge';
+import { playCartFeedback } from '../utils/cart-feedback';
 import { copyText } from '../utils/clipboard';
 import { Button } from '../components/ui/button';
 import { StickyActionBar } from '../components/ui/sticky-action-bar';
@@ -150,7 +151,6 @@ export default function ProductDetailPage() {
   const confirming = useRef(false);
   const autoPick = useRef<{ slug: string; id: string | null } | null>(null);
   const [quantity, setQuantity] = useState(1);
-  const [badgeBounce, setBadgeBounce] = useState(false);
   // Nút "Thêm vào giỏ" tự xác nhận "Đã thêm" ADDED_FLASH_MS; bấm lại trong lúc đó thì tính lại cửa sổ từ lần bấm sau.
   const [justAdded, setJustAdded] = useState(false);
   const addedTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -310,7 +310,8 @@ export default function ProductDetailPage() {
     onSuccess: ({ cart: updatedCart, note }) => {
       queryClient.setQueryData(cartKey(), updatedCart);
       haptic('medium');
-      setBadgeBounce(true);
+      // Nút nguồn: bấm từ bảng chọn phân loại thì nút này vẫn nằm sau tấm, vẫn đo được; không thấy thì chỉ nảy huy hiệu.
+      playCartFeedback(document.querySelector('.tubu-add-source'));
       clearTimeout(addedTimer.current);
       setJustAdded(true);
       addedTimer.current = setTimeout(() => setJustAdded(false), ADDED_FLASH_MS);
@@ -1027,6 +1028,7 @@ export default function ProductDetailPage() {
       {slug && (
         <ReviewsSection
           slug={slug}
+          onQuickAdd={inStock ? () => void handleAdd() : undefined}
           openForOrderId={navState?.reviewOrderId}
           onOrderLinkUsed={() => {
             // Thay đúng mục lịch sử hiện tại, giữ mọi trạng thái điều hướng khác (from, variationId, listSource).
@@ -1107,9 +1109,9 @@ export default function ProductDetailPage() {
             role="button"
             {...rowKeyboardProps()}
             aria-label={vi.product.viewCart}
+            data-cart-target=""
             className="tubu-press"
             onClick={() => navigate('/cart')}
-            onAnimationEnd={() => setBadgeBounce(false)}
             style={{
               position: 'relative',
               width: 48,
@@ -1123,7 +1125,7 @@ export default function ProductDetailPage() {
             }}
           >
             <CartIcon />
-            <CartBadge count={cartCount} bounce={badgeBounce} />
+            <CartBadge count={cartCount} />
           </Box>
         }
         primary={
@@ -1140,6 +1142,7 @@ export default function ProductDetailPage() {
                 loading={addMutation.isPending}
                 disabled={!selected}
                 onPress={handleAdd}
+                className="tubu-add-source"
                 style={{ flex: 1 }}
               >
                 {justAdded ? (

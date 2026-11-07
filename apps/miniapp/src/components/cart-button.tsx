@@ -14,6 +14,7 @@ export function CartButton() {
     <button
       type="button"
       aria-label={count > 0 ? vi.cart.buttonLabelWithCount(count) : vi.cart.buttonLabel}
+      data-cart-target=""
       className="tubu-press"
       onClick={() => {
         haptic('light');

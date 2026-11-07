@@ -12,6 +12,7 @@ import { wishlistQuery } from '@tubutree/app-core/queries/wishlist';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { cartKey, cartStorefrontSlug, useCartKey } from '@/lib/cart-key';
 import { coreHttp } from '@/lib/core-http';
+import { playCartFeedback } from '@/lib/cart-feedback';
 import { actionErrorText } from '@/lib/error-text';
 import { useActiveFlashSales } from '@/lib/use-flash-sales';
 import { useFlashAllowance } from '@/lib/use-flash-allowance';
@@ -49,11 +50,12 @@ export function useWishlistQuickAdd(): { buttonFor: (p: ProductCard) => ReactNod
   const noticeHold = useAutoDismiss(!!notice, NOTICE_MS, () => setNotice(null), notice);
   const show = (n: Notice) => setNotice(n);
 
-  const addLine = async (variationId: string, qty: number) => {
+  const addLine = async (variationId: string, qty: number, source: Element | null = null) => {
     const cart = await addToCart(coreHttp, variationId, qty, 'wishlist', cartStorefrontSlug());
     // Badge giỏ ở header đọc cùng khoá và không remount khi khách ở lại trang này.
     qc.setQueryData(cartKey(), cart);
     show({ ok: true, text: 'Đã thêm vào giỏ!' });
+    playCartFeedback(source?.isConnected ? source : null);
   };
 
   const run = async (task: () => Promise<void>) => {
@@ -70,7 +72,7 @@ export function useWishlistQuickAdd(): { buttonFor: (p: ProductCard) => ReactNod
     }
   };
 
-  const quickAdd = (product: ProductCard) =>
+  const quickAdd = (product: ProductCard, source: Element | null = null) =>
     run(async () => {
       setBusyId(product.id);
       const detail = await fetchProduct(coreHttp, product.slug);
@@ -81,7 +83,7 @@ export function useWishlistQuickAdd(): { buttonFor: (p: ProductCard) => ReactNod
         void qc.invalidateQueries({ queryKey: wishlistQuery(coreHttp).queryKey });
       }
       else if (plan.kind === 'pick') setPicker({ product, variations: detail.variations });
-      else await addLine(plan.variationId, 1);
+      else await addLine(plan.variationId, 1, source);
     });
 
   const confirmPick = (variation: { id: string }, qty: number) =>
@@ -98,7 +100,7 @@ export function useWishlistQuickAdd(): { buttonFor: (p: ProductCard) => ReactNod
         aria-label={`Thêm ${p.name} vào giỏ`}
         aria-busy={busyId === p.id}
         aria-disabled={busyId === p.id || undefined}
-        onClick={() => void quickAdd(p)}
+        onClick={(e) => void quickAdd(p, e.currentTarget)}
         className="inline-flex h-11 w-11 items-center justify-center text-stone-700"
       >
         <span className={`flex h-8 w-8 items-center justify-center rounded-full bg-stone-0 shadow-[var(--elevation-1)] ${busyId === p.id ? 'opacity-60' : ''}`}>

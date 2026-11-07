@@ -4,6 +4,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
 import { PdpSelectionProvider, usePdpSelection } from './pdp-selection';
+import { canPdpQuickAdd } from '@/lib/pdp-quick-add';
 
 // BUYERWEB-15: khách bấm "Thêm vào giỏ" khi chưa đăng nhập phải quay lại đúng sản phẩm và món đó được thêm nốt.
 // BUYERWEB-9: tồn kho trong HTML là bản ISR cũ; trang hỏi lại tồn kho thật.
@@ -134,6 +135,29 @@ describe('AddToCart — chia sẻ trạng thái mua với PdpSelection', () => {
     mountShared({ blockedReason: 'Gian hàng tạm nghỉ' });
     await flush();
     expect(shared!.buyable).toBe(false);
+  });
+
+  // W42B: nút "Thêm vào giỏ" của lightbox ảnh đánh giá chỉ hiện khi khối mua đăng ký cầu nối; mua không được thì không đăng ký.
+  it('cầu nối thêm giỏ của lightbox: còn hàng thì đăng ký, gỡ khi khối mua bị gỡ', async () => {
+    const r = mountShared();
+    await flush();
+    expect(canPdpQuickAdd()).toBe(true);
+    r.unmount();
+    mounted = mounted.filter((m) => m !== r);
+    expect(canPdpQuickAdd()).toBe(false);
+  });
+
+  it('cầu nối thêm giỏ của lightbox: hết hàng (tồn thật) hoặc gian hàng tạm nghỉ thì không đăng ký', async () => {
+    mocks.getProductStock.mockResolvedValue({ v1: 0, v2: 0 });
+    mountShared();
+    await flush();
+    expect(canPdpQuickAdd()).toBe(false);
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+    mocks.getProductStock.mockResolvedValue({ v1: 5, v2: 5 });
+    mountShared({ blockedReason: 'Gian hàng tạm nghỉ' });
+    await flush();
+    expect(canPdpQuickAdd()).toBe(false);
   });
 
   it('chọn chip phân loại đánh dấu khách đã tự chọn trên cờ dùng chung', async () => {

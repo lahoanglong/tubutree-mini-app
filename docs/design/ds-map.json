@@ -30,6 +30,12 @@
       "props": "BottomSheetProps"
     },
     {
+      "name": "ReviewMediaLightbox",
+      "miniapp": "apps/miniapp/src/components/review-media-lightbox.tsx",
+      "web": "apps/web/src/components/review-media-lightbox.tsx",
+      "props": "ReviewMediaLightboxProps"
+    },
+    {
       "name": "ConfirmSheet",
       "miniapp": "apps/miniapp/src/components/ui/confirm-sheet.tsx",
       "web": "apps/web/src/components/ui/confirm-sheet.tsx",
@@ -822,6 +828,11 @@
     }
   ],
   "webOnly": [
+    {
+      "name": "AddressLocationSheet",
+      "web": "apps/web/src/components/address-location-sheet.tsx",
+      "reason": "Mini App đã có sẵn ô chọn tỉnh/phường mở BottomSheet có ô tìm không dấu ngay trong geo-picker.tsx (GeoSelect); web tách phần sheet ra file riêng để GeoPicker dùng cho cả hai cấp và tự sang Phường/Xã sau khi chọn tỉnh"
+    },
     {
       "name": "HubLayout",
       "web": "apps/web/src/components/layouts/hub-layout.tsx",

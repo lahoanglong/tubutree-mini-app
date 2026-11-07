@@ -31,6 +31,8 @@ import { StickyActionBar } from './sticky-action-bar';
 import { QuantitySelector } from '@/components/ui/quantity-selector';
 import { VariationChip } from './variation-chip';
 import { actionErrorText } from '@/lib/error-text';
+import { firstMeasurable, playCartFeedback } from '@/lib/cart-feedback';
+import { onPdpQuickAdd } from '@/lib/pdp-quick-add';
 
 // Bảng chỉ dùng ở khổ điện thoại khi khách bấm mua: tách khỏi First Load của trang sản phẩm.
 const VariationSheet = dynamic(() => import('./variation-sheet').then((m) => m.VariationSheet), { ssr: false });
@@ -108,6 +110,8 @@ export default function AddToCart({
   // Câu về mã nhóm chưa áp được: màu cảnh báo, tách khỏi câu "Đã thêm vào giỏ!" (đã thành công) kẻo hai ý trái nhau chung một màu.
   const [warn, setWarn] = useState<string | null>(null);
   const ownPicked = useRef(false);
+  // Nút "Thêm vào giỏ" khách vừa bấm: chấm bay xuất phát từ đây. Thêm từ bảng chọn phân loại hoặc sau đăng nhập thì nút này không còn/không có, lúc đó bay từ nút đang hiện.
+  const addSource = useRef<Element | null>(null);
   const userPicked = shared?.userPicked ?? ownPicked;
   const [sheetMode, setSheetMode] = useState<VariationSheetMode | null>(null);
   const [sheetOpened, setSheetOpened] = useState(false);
@@ -250,6 +254,7 @@ export default function AddToCart({
       setMsg(note && ok ? `Đã thêm vào giỏ! ${note}` : 'Đã thêm vào giỏ!');
       setWarn(note && !ok ? note : null);
       setSuccess(true);
+      playCartFeedback(addSource.current?.isConnected ? addSource.current : firstMeasurable('[data-testid="pdp-add-to-cart"]'));
     } catch (e) {
       setMsg(actionErrorText(e));
       setSuccess(false);
@@ -321,6 +326,11 @@ export default function AddToCart({
     });
   };
   const onAdd = () => submit(false);
+  // Lightbox ảnh đánh giá bấm "Thêm vào giỏ": chạy đúng luồng của nút trên trang (bảng chọn phân loại, đăng nhập, tồn kho).
+  // Hết hàng hoặc bị chặn mua thì không đăng ký, để lightbox không hiện nút mà bấm vô tác dụng.
+  const submitRef = useRef(submit);
+  submitRef.current = submit;
+  useEffect(() => (buyable ? onPdpQuickAdd(() => void submitRef.current(false)) : undefined), [buyable]);
   const onBuyNow = () => submit(true);
 
   if (blockedReason) {
@@ -403,7 +413,7 @@ export default function AddToCart({
         <span className="text-sm font-semibold text-stone-900 md:hidden">Số lượng</span>
         <QuantitySelector value={qty} max={maxQty} onChange={setQty} />
         {/* Từ md: nút thêm giỏ ngay cạnh số lượng. Dưới md hai nút nằm ở thanh dính đáy (bên dưới). */}
-        <button type="button" data-testid="pdp-add-to-cart" onClick={onAdd} disabled={cannotBuy} aria-disabled={busy || undefined} className={`${ui.btnSecondary} hidden flex-1 md:inline-flex`}>
+        <button type="button" data-testid="pdp-add-to-cart" onClick={(e) => { addSource.current = e.currentTarget; onAdd(); }} disabled={cannotBuy} aria-disabled={busy || undefined} className={`${ui.btnSecondary} hidden flex-1 md:inline-flex`}>
           {addLabel}
         </button>
       </div>
@@ -451,15 +461,16 @@ export default function AddToCart({
         <div className="flex items-center gap-2.5">
           <Link
             href="/gio-hang"
+            data-cart-target=""
             aria-label="Xem giỏ hàng"
             className="relative flex h-12 w-12 flex-none items-center justify-center rounded-control border border-[var(--color-action-secondary-border)] text-[var(--color-text-primary)]"
           >
             <ShoppingCart className="h-[22px] w-[22px]" aria-hidden="true" />
-            <CountBadge count={cartCount} />
+            <CountBadge count={cartCount} bump />
           </Link>
           {available ? (
             <div className="flex min-w-0 flex-1 gap-2.5">
-              <button type="button" data-testid="pdp-add-to-cart" onClick={onAdd} disabled={cannotBuy} aria-disabled={busy || undefined} className={`${uiBar.secondary} ${phoneSecondary} min-w-0 flex-1`}>
+              <button type="button" data-testid="pdp-add-to-cart" onClick={(e) => { addSource.current = e.currentTarget; onAdd(); }} disabled={cannotBuy} aria-disabled={busy || undefined} className={`${uiBar.secondary} ${phoneSecondary} min-w-0 flex-1`}>
                 {busy && !buying ? 'Đang thêm…' : 'Thêm vào giỏ'}
               </button>
               {/* Hai dòng (nhãn + giá) như Mini App: một dòng "Mua ngay · giá" tràn ở 320-390px. */}

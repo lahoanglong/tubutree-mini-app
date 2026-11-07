@@ -309,6 +309,14 @@ export const SHOP_COPY: Record<string, string> = {
   'pdp.reviews': 'Đánh giá',
   'pdp.reviewsAll': 'Xem tất cả ({n})',
   'pdp.reviewsMore': 'Xem thêm đánh giá',
+  // Xem ảnh/video đánh giá toàn màn hình (ReviewMediaLightbox): nhãn đọc của nút mở, nút trước/sau, nhãn người mua, nút thêm giỏ ở chân.
+  'review.mediaOpenImage': 'Xem ảnh đánh giá {n}',
+  'review.mediaOpenVideo': 'Xem video đánh giá',
+  'review.mediaDialog': 'Ảnh và video đánh giá',
+  'review.mediaPrev': 'Tệp trước',
+  'review.mediaNext': 'Tệp sau',
+  'review.mediaVerified': 'Đã mua hàng',
+  'review.mediaAdd': 'Thêm vào giỏ',
   // Form viết đánh giá (web và Mini App): lỗi ở ô, đọc qua role=alert
   'review.ratingInvalid': 'Chọn từ 1 đến 5 sao để gửi đánh giá.',
   'review.commentTooLong': 'Nhận xét tối đa {max} ký tự, bạn đang có {n} ký tự.',
