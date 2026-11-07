@@ -73,7 +73,7 @@ async function copyToClipboard(text: string): Promise<boolean> {
 
 function Shell({ children, narrow = false }: { children: ReactNode; narrow?: boolean }) {
   return (
-    <main className={`${narrow ? PAGE_NARROW : PAGE_WIDE} py-6`}>
+    <main className={`${narrow ? PAGE_NARROW : PAGE_WIDE} py-6 tabular-nums`}>
       <BackLink href="/tai-khoan">
         ← Tài khoản
       </BackLink>

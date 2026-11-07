@@ -228,7 +228,7 @@ export function ReviewsSection({
   const retryMore = () => void (moreQ.isFetchNextPageError ? moreQ.fetchNextPage() : moreQ.refetch());
 
   return (
-    <section id="danh-gia" aria-label="Đánh giá sản phẩm" style={{ padding: 16, marginTop: 8, background: 'var(--color-bg-surface)' }}>
+    <section id="danh-gia" aria-label="Đánh giá sản phẩm" className="tubu-nums" style={{ padding: 16, marginTop: 8, background: 'var(--color-bg-surface)' }}>
       {/* Cao bằng nút đầu mục (48px): nút chỉ hiện khi can-review đã về, hàng không được nhảy lúc đó. */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, minHeight: 48 }}>
         <SectionTitle block>Đánh giá {data && data.count > 0 ? `(${data.count})` : ''}</SectionTitle>
@@ -312,7 +312,8 @@ export function ReviewsSection({
           </div>
 
           {/* Filter chips */}
-          <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+          {/* Hàng dưới cách hàng trên 12px: chip nhìn cao ~33px, vùng chạm 44px giãn ~5,5px mỗi phía; khoảng 8px cũ làm vùng chạm hai hàng chồng nhau 3px (còn 41px). */}
+          <div style={{ display: 'flex', gap: 'var(--space-inset-card) var(--space-inline-sm)', marginTop: 12, flexWrap: 'wrap' }}>
             {chips.map((f) => (
               <Chip
                 key={String(f.key)}

@@ -34,6 +34,15 @@ describe('css/tokens.css: phản hồi nhấn (polish PL-11)', () => {
     expect(row.style.getPropertyValue('box-sizing')).toBe('border-box');
   });
 
+  it('.tubu-nums (gốc màn Cá nhân, Điểm Xanh, Mã giảm giá, CTV, Đánh giá): số đều cho điểm, tiền, mệnh giá, lịch sử', () => {
+    expect(rule('.tubu-nums')!.style.getPropertyValue('font-variant-numeric')).toBe('tabular-nums');
+  });
+
+  it('.scroll-x: hàng cuộn ngang không vẽ thanh cuộn (thanh cuộn ăn ~15px đáy hàng và cắt vùng chạm 44px của tab, chip)', () => {
+    expect(rule('.scroll-x')!.style.getPropertyValue('scrollbar-width')).toBe('none');
+    expect(rule('.scroll-x::-webkit-scrollbar')!.style.getPropertyValue('display')).toBe('none');
+  });
+
   it('.tubu-btn:active (nút DS): co 0,97', () => {
     expect(rule('.tubu-btn:active')!.style.getPropertyValue('transform')).toBe('scale(0.97)');
   });

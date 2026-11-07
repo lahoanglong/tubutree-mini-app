@@ -460,7 +460,7 @@ function MemberCardSheet({
             </div>
             <div className="mt-3 flex items-center justify-center gap-2">
               <span className="font-mono text-lg font-bold tracking-widest text-stone-900">{card.memberCode}</span>
-              <button type="button" onClick={() => void copy()} className={`${ui.btnText} gap-1 text-forest-700 no-underline`}>
+              <button type="button" onClick={() => void copy()} className={`${ui.btnText} tubu-press gap-1 text-forest-700 no-underline`}>
                 <Copy className="h-4 w-4" aria-hidden="true" />
                 {copied ? 'Đã chép' : 'Chép'}
               </button>

@@ -245,7 +245,7 @@ export default function ProfilePage() {
   };
 
   return (
-    <Page className="page" style={{ background: 'var(--color-bg-canvas)', paddingBottom: 100 }}>
+    <Page className="page tubu-nums" style={{ background: 'var(--color-bg-canvas)', paddingBottom: 100 }}>
       <h1 style={SR_ONLY}>{PAGE_TITLE}</h1>
 
       <div

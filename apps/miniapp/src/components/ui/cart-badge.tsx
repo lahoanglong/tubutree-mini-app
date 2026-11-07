@@ -22,6 +22,7 @@ export function CountBadge({ count, label, bounce }: { count: number; label: str
         color: 'var(--color-promo-solid-fg)',
         fontSize: 11,
         fontWeight: 700,
+        fontVariantNumeric: 'tabular-nums',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',

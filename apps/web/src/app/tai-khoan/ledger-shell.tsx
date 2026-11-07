@@ -5,7 +5,7 @@ import { PAGE_NARROW, PAGE_WIDE } from '@/lib/page-frame';
 /** Khung chung của các trang sổ cái trong tài khoản (Điểm Xanh, Ví Tubu). */
 export function LedgerShell({ title, children, wide = false }: { title: string; children: React.ReactNode; wide?: boolean }) {
   return (
-    <main className={`${wide ? PAGE_WIDE : PAGE_NARROW} py-6 max-md:pt-0`}>
+    <main className={`${wide ? PAGE_WIDE : PAGE_NARROW} py-6 max-md:pt-0 tabular-nums`}>
       <BackLink href="/tai-khoan" crumbs={[{ label: 'Trang chủ', href: '/' }, { label: 'Tài khoản', href: '/tai-khoan' }, { label: title }]}>
         ← Tài khoản
       </BackLink>
