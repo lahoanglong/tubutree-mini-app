@@ -10,11 +10,12 @@ import { NARROW_WIDTHS, pointsEarnClearance, probeLayout, stickyBarClearance } f
  * W38A: bốn màn mua sắm của Mini App (Trang chủ, chi tiết sản phẩm, giỏ, thanh toán) ở 320 / 360 / 375px không tràn ngang, thanh dính đáy không
  * tràn hay chồng lấp và không che dòng cuối, và mọi số tiền / số đếm vẽ bằng số đều (tabular-nums). API mock toàn bộ.
  */
-// Số giảm trong hàng mã giữ số tỉ lệ: số đều rộng hơn vài px, mà hàng mã ở 320px chỉ còn độ dư 12px (coupon-row-checkout-320).
-const COUPON_ROW_DISCOUNT = ['[data-testid="coupon-discount"]'];
+// Bỏ qua: số giảm trong hàng mã giữ số tỉ lệ (số đều rộng hơn vài px, mà hàng mã ở 320px chỉ còn độ dư 12px, xem coupon-row-checkout-320);
+// số thứ tự 01..05 của câu chuyện sản phẩm là số trang trí cỡ lớn, không phải số tiền hay số đếm.
+const NOT_FIGURES = ['[data-testid="coupon-discount"]', '.tubu-story-num'];
 
 async function expectClean(page: Page, screen: string, width: number): Promise<void> {
-  const f = await probeLayout(page, { ignoreNumeric: COUPON_ROW_DISCOUNT });
+  const f = await probeLayout(page, { ignoreNumeric: NOT_FIGURES });
   expect.soft(f.overflow, `${screen} ${width}px tràn ngang`).toEqual([]);
   expect.soft(f.stickyBar, `${screen} ${width}px thanh dính`).toEqual([]);
   expect.soft(f.notTabular, `${screen} ${width}px số không đều`).toEqual([]);

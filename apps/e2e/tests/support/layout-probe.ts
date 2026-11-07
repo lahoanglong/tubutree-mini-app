@@ -8,10 +8,11 @@ import type { Page } from '@playwright/test';
 export const NARROW_WIDTHS = [320, 360, 375] as const;
 
 /**
- * Một ô chỉ chứa số tiền, điểm, phần trăm hoặc số đếm ngắn: "65.000đ", "-15.000đ", "Tiết kiệm 54.000đ", "120 điểm", "x3", "2". Câu dài có số
- * xen giữa ("Mua thêm 107.000đ để được miễn phí giao") không tính: nó căn trái nên số nhảy bề rộng không lộ ra.
+ * Một ô chỉ chứa số tiền, điểm hoặc số đếm ngắn: "65.000đ", "-15.000đ", "Tiết kiệm 54.000đ", "120 điểm", "x3", "2". Câu dài có số
+ * xen giữa ("Mua thêm 107.000đ để được miễn phí giao") không tính: nó căn trái nên số nhảy bề rộng không lộ ra. Phần trăm cũng không tính: "-12%"
+ * hay "Nguyên chất 100%" là huy hiệu một mình, không xếp cột cạnh số khác.
  */
-export const NUMERIC_TEXT = /^(?=.{1,28}$)(?:[^\d]{0,18}\d[\d.,]*\s*(?:đ|₫|k|tr|điểm|%)(?:\s.{0,8})?|\s*[x×]?\s*\d{1,6}\s*|[^\d]{0,12}\d{1,4}\s*(?:sản phẩm|mã|món|đánh giá))$/i;
+export const NUMERIC_TEXT = /^(?=.{1,28}$)(?:[^\d]{0,18}\d[\d.,]*\s*(?:đ|₫|k|tr|điểm)(?:\s.{0,8})?|\s*[x×]?\s*\d{1,6}\s*|[^\d]{0,12}\d{1,4}\s*(?:sản phẩm|mã|món|đánh giá))$/i;
 
 export interface LayoutFindings {
   overflow: string[];
