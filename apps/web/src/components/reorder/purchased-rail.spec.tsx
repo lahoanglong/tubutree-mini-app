@@ -119,7 +119,10 @@ describe('PurchasedRail', () => {
     const c = await mount();
     click(byText(c, 'button', 'Mua lại'));
     expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+    // Nút khoá tới khi giỏ tải xong: chờ giỏ về rồi mới bấm, như khách thật.
+    await flush();
     const cta = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find((b) => b.textContent === 'Thêm vào giỏ (1)')!;
+    expect(cta.disabled).toBe(false);
     click(cta);
     await flush(8);
     expect(mocks.post).toHaveBeenCalledWith('/cart/items', { variationId: 'v1', quantity: 1, addSource: 'repurchase' }, undefined);

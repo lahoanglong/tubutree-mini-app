@@ -119,6 +119,19 @@ export function cartUnitsByVariation(items: readonly { variationId: string; quan
   return units;
 }
 
+/**
+ * Sheet chỉ tính đúng giá và số lượng gộp khi đã biết giỏ. Giỏ đang tải lần đầu thì chưa biết: chờ (khoá nút thêm), không coi như giỏ
+ * rỗng. Lỗi, không tải giỏ (sheet đóng, chưa đăng nhập) hoặc truy vấn bị tạm dừng vì mất mạng (`paused`: web để truy vấn dừng tới khi có
+ * mạng lại) thì không chờ, để khách không kẹt; giá khi đó theo số lượng của sheet.
+ */
+export function cartUnitsReady(query: {
+  enabled: boolean;
+  status: 'pending' | 'error' | 'success';
+  fetchStatus?: 'fetching' | 'paused' | 'idle';
+}): boolean {
+  return !query.enabled || query.status !== 'pending' || query.fetchStatus === 'paused';
+}
+
 /** Câu đầu sheet khi có dòng không thêm được: một phần hay cả đơn. null khi mọi dòng còn bán. */
 export function reorderSkippedNote(lines: readonly { available: boolean }[]): string | null {
   const skipped = lines.filter((l) => !l.available).length;

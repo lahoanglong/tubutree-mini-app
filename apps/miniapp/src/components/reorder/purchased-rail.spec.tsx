@@ -42,6 +42,12 @@ function renderRail(source: 'home_rail' | 'orders_tab' = 'home_rail', excludeVar
 }
 const RAIL_KEY = ['purchased-items', 10];
 
+/** Nút "Thêm vào giỏ" khoá (aria-busy) tới khi giỏ tải xong; chờ hết bận rồi mới bấm, như khách thật. */
+async function pressAddToCart() {
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Thêm vào giỏ (1)' })).not.toHaveAttribute('aria-busy'));
+  fireEvent.click(screen.getByRole('button', { name: 'Thêm vào giỏ (1)' }));
+}
+
 describe('PurchasedRail', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -97,7 +103,7 @@ describe('PurchasedRail', () => {
     renderRail();
     const region = await screen.findByRole('region', { name: 'Mua lại' });
     fireEvent.click(region.querySelector('button.tubu-btn') as HTMLElement);
-    fireEvent.click(await screen.findByRole('button', { name: 'Thêm vào giỏ (1)' }));
+    await pressAddToCart();
     await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledWith('v1', 1, 'repurchase'));
     await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/cart'));
   });
@@ -108,7 +114,7 @@ describe('PurchasedRail', () => {
     renderRail('orders_tab');
     const region = await screen.findByRole('region', { name: 'Mua lại' });
     fireEvent.click(region.querySelector('button.tubu-btn') as HTMLElement);
-    fireEvent.click(await screen.findByRole('button', { name: 'Thêm vào giỏ (1)' }));
+    await pressAddToCart();
     await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/cart'));
   });
 
@@ -118,7 +124,7 @@ describe('PurchasedRail', () => {
     renderRail();
     const region = await screen.findByRole('region', { name: 'Mua lại' });
     fireEvent.click(region.querySelector('button.tubu-btn') as HTMLElement);
-    fireEvent.click(await screen.findByRole('button', { name: 'Thêm vào giỏ (1)' }));
+    await pressAddToCart();
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
     expect(mocks.navigate).not.toHaveBeenCalledWith('/cart');
   });
@@ -333,7 +339,7 @@ describe('Mua lại ở Trang chủ (Q6)', () => {
     mocks.addToCart.mockResolvedValue(CART);
     renderRail();
     fireEvent.click(within(await screen.findByTestId('rebuy-line')).getByRole('button', { name: 'Mua lại' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Thêm vào giỏ (1)' }));
+    await pressAddToCart();
     await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/cart'));
   });
 

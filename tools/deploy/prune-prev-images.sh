@@ -9,6 +9,8 @@
 # Chỉ động tới thẻ đúng dạng prev-<8 ký tự hex> của tubutree-api và tubutree-web. KHÔNG động tới :latest, :rollback hay thẻ khác.
 # "Gần nhất" theo giờ commit của SHA trong thẻ (thứ tự deploy), không theo giờ build image: hai bản liền nhau có thể trùng giờ build.
 # Cả hai image giữ cùng một bộ SHA, nên quay api và web về cùng một bản luôn được.
+# "Bản" = một cặp image (id api + id web) khác nhau, không phải một thẻ: nhiều SHA cùng trỏ vào một cặp image (commit không đổi nội dung
+# image, hoặc thẻ dán nhầm sau rollback) chỉ tính MỘT bản, để "giữ 3 bản" luôn là 3 image khác nhau. Thẻ phụ của bản được giữ ở lại (không tốn đĩa).
 # `docker rmi <repo>:<thẻ>` chỉ gỡ thẻ khi image còn thẻ khác; gỡ thẻ cuối thì xoá image, và Docker từ chối nếu có container đang dùng.
 set -euo pipefail
 
@@ -42,17 +44,44 @@ deploy_epoch() {
   echo 0
 }
 
-shas="$(docker images --format '{{.Repository}}:{{.Tag}}' | { grep -E '^tubutree-(api|web):prev-[0-9a-f]{8}$' || true; } | sed 's/^.*:prev-//' | sort -u)"
-if [ -z "$shas" ]; then
+all_tags="$(docker images --no-trunc --format '{{.Repository}}:{{.Tag}} {{.ID}}')"
+listing="$({ grep -E '^tubutree-(api|web):prev-[0-9a-f]{8} ' <<<"$all_tags" || true; })"
+if [ -z "$listing" ]; then
   echo "Không có thẻ :prev-* nào."
   exit 0
 fi
-ordered="$(while read -r s; do echo "$(deploy_epoch "$s") $s"; done <<<"$shas" | sort -rn | awk '{print $2}')"
-keep="$(head -n "$KEEP" <<<"$ordered")"
-drop="$(tail -n +"$((KEEP + 1))" <<<"$ordered")"
+shas="$(sed -E 's/^tubutree-(api|web):prev-([0-9a-f]{8}) .*$/\2/' <<<"$listing" | sort -u)"
+image_id() { awk -v r="$1" '$1==r {print $2; exit}' <<<"$listing"; }
+# Cặp image :rollback (bản vừa chạy, dep1 vừa gắn thẻ prev cho nó) luôn là bản giữ đầu tiên: nhãn theo id image không có commit, giờ build
+# của image có thể cũ hơn mọi bản khác (api không đổi qua nhiều deploy), nên xếp theo giờ sẽ gỡ ngay thẻ vừa gắn.
+rollback_key="$(awk '$1=="tubutree-api:rollback" {print $2; exit}' <<<"$all_tags")/$(awk '$1=="tubutree-web:rollback" {print $2; exit}' <<<"$all_tags")"
+# Mỗi dòng: giờ-deploy sha khoá-bản (id api / id web); mới nhất trước, nên lần đầu gặp một khoá là bản mới nhất của cặp image đó.
+rows="$(while read -r s; do
+  key="$(image_id "tubutree-api:prev-$s")/$(image_id "tubutree-web:prev-$s")"
+  epoch="$(deploy_epoch "$s")"
+  if [ "$key" = "$rollback_key" ]; then epoch=9999999999; fi
+  echo "$epoch $s $key"
+done <<<"$shas" | sort -rn)"
+keep_lines=""
+kept_map=""
+drop=""
+kept=0
+while read -r _ sha key; do
+  first="$(awk -v k="$key" '$1==k {print $2; exit}' <<<"$kept_map")"
+  if [ -n "$first" ]; then
+    keep_lines="${keep_lines}  prev-${sha} (cùng image với prev-${first})"$'\n'
+  elif [ "$kept" -lt "$KEEP" ]; then
+    kept=$((kept + 1))
+    kept_map="${kept_map}${key} ${sha}"$'\n'
+    keep_lines="${keep_lines}  prev-${sha}"$'\n'
+  else
+    drop="${drop}${sha}"$'\n'
+  fi
+done <<<"$rows"
+drop="${drop%$'\n'}"
 
 echo "Giữ $KEEP bản gần nhất:"
-sed 's/^/  prev-/' <<<"$keep"
+printf '%s' "$keep_lines"
 if [ -z "$drop" ]; then
   echo "Không có gì để xoá."
   exit 0

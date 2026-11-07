@@ -119,7 +119,9 @@ describe('OrdersPage (tab gốc)', () => {
     renderPage();
     await screen.findByRole('button', { name: 'Đơn TUBU-777' });
     fireEvent.click(within(screen.getByTestId('order-card')).getByRole('button', { name: 'Mua lại' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Thêm vào giỏ (2)' }));
+    // Nút khoá (aria-busy) tới khi giỏ tải xong: chờ hết bận rồi mới bấm, như khách thật.
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Thêm vào giỏ (2)' })).not.toHaveAttribute('aria-busy'));
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm vào giỏ (2)' }));
     await waitFor(() =>
       expect(mocks.repurchaseOrder).toHaveBeenCalledWith('TUBU-777', { items: [{ orderItemId: 'i1', quantity: 2 }], addSource: 'repurchase' }),
     );
