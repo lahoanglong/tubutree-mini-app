@@ -17,6 +17,12 @@ const resetCls = (page: Page) => page.evaluate(() => {
   w.__clsSrc = [];
 });
 
+// Lời gọi bị giữ vẫn tính là đang bay nên 'networkidle' chỉ về khi có khoảng lặng 500ms: hạn 5 giây rồi đi tiếp thay vì treo tới hết giờ.
+const settle = async (page: Page) => {
+  await page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => undefined);
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+};
+
 function holdOnce(): { gate: Promise<void>; release: () => void } {
   let release!: () => void;
   const gate = new Promise<void>((resolve) => { release = resolve; });
@@ -44,7 +50,7 @@ for (const width of NARROW_WIDTHS) {
       api.allowUnmocked('GET /me/referral', 'GET /dealer/me', 'GET /auth/me', 'GET /brand/owner/me', 'GET /me/subscriptions', 'GET /chat/summary', 'POST /events');
       await page.goto('/profile');
       await expect(page.getByText('Nguyễn Văn An').first()).toBeVisible({ timeout: 15_000 });
-      await page.waitForLoadState('networkidle');
+      await settle(page);
       await expect(page.getByText('Hạt Giống')).toHaveCount(0);
       await resetCls(page);
       release();
@@ -65,7 +71,7 @@ for (const width of NARROW_WIDTHS) {
       });
       await page.goto('/loyalty');
       await expect(page.getByText('Lộc Biếc').first()).toBeVisible({ timeout: 15_000 });
-      await page.waitForLoadState('networkidle');
+      await settle(page);
       await expect(page.getByText('+1.250')).toHaveCount(0);
       await resetCls(page);
       release();

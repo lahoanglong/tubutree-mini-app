@@ -41,14 +41,14 @@ export async function probeTapTargets(page: Page, options: TapProbeOptions = {})
         return r.width > 1 && r.height > 1;
       };
       // Ô chọn của Mini App: khung `*-hit-area` (cao ≥ 44px) chuyển cú chạm vào đệm sang ô nhập bên trong (form.tsx, forwardPaddingTap), nên đệm cũng là vùng chạm của ô.
-      // Ô nhập nằm trong `label` thì cả nhãn là một điều khiển: chạm nhãn hay chạm ô đều bật tắt cùng một ô.
+      // Checkbox, radio nằm trong `label` thì cả nhãn là một điều khiển: chạm nhãn hay chạm ô đều bật tắt cùng một ô. Ô nhập chữ tự là vùng chạm của nó.
       const ownerOf = (x: number, y: number): Element | null => {
         if (x < 0 || y < 0 || x >= vw || y >= vh) return null;
         const hit = document.elementFromPoint(x, y);
         if (!hit) return null;
         let own: Element | null = hit.closest(selector);
         if (!own) own = hit.closest('[data-testid$="-hit-area"]')?.querySelector(selector) ?? null;
-        if (own && own.tagName === 'INPUT') own = own.closest('label') ?? own;
+        if (own instanceof HTMLInputElement && ['checkbox', 'radio'].includes(own.type)) own = own.closest('label') ?? own;
         return own;
       };
       const inlineInText = (el: Element): boolean => {

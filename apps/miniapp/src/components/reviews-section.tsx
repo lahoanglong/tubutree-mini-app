@@ -312,7 +312,7 @@ export function ReviewsSection({
           </div>
 
           {/* Filter chips */}
-          {/* Hàng dưới cách hàng trên 12px: chip nhìn cao ~33px, vùng chạm 44px giãn ~5,5px mỗi phía; khoảng 8px cũ làm vùng chạm hai hàng chồng nhau 3px (còn 41px). */}
+          {/* Hàng dưới cách hàng trên 12px: chip nhìn cao ~33px, vùng chạm 44px giãn ~5,5px mỗi phía; cách dưới 11px thì vùng chạm hai hàng chồng nhau. */}
           <div style={{ display: 'flex', gap: 'var(--space-inset-card) var(--space-inline-sm)', marginTop: 12, flexWrap: 'wrap' }}>
             {chips.map((f) => (
               <Chip
