@@ -11,7 +11,8 @@ permissions:
 
 jobs:
   test:
-    timeout-minutes: 60
+    # Bộ Playwright đầy đủ chạy 49–55 phút; thêm vài chục ca mới là chạm mốc 60 và bị huỷ dù không ca nào đỏ.
+    timeout-minutes: 90
     runs-on: ubuntu-latest
     
     steps:
