@@ -152,14 +152,16 @@ export async function probeLayout(page: Page, options: ProbeOptions = {}): Promi
 }
 
 /**
- * Khoảng cách dọc giữa mép dưới khối ngay trên dòng "Nhận … Điểm Xanh" (`.tubu-points-earn`, nút có vùng chạm dôi lên bằng lề âm) và mép trên
+ * Khoảng cách dọc giữa mép dưới khối nhìn thấy ngay trên dòng "Nhận … Điểm Xanh" (`.tubu-points-earn`, nút có vùng chạm dôi lên bằng lề âm) và mép trên
  * nội dung thật của nút (biểu tượng, chữ, mũi tên). Âm = chữ đè lên dòng giá, lỗi thật khi chữ xuống hai dòng ở 320px. null = trang không có dòng này.
  */
 export async function pointsEarnClearance(page: Page): Promise<number | null> {
   return page.evaluate(() => {
     const btn = document.querySelector<HTMLElement>('.tubu-points-earn');
-    const above = btn?.previousElementSibling;
-    if (!btn || !above) return null;
+    if (!btn) return null;
+    let above = btn.previousElementSibling;
+    while (above && above.getBoundingClientRect().height < 1) above = above.previousElementSibling;
+    if (!above) return null;
     const contentTop = Math.min(...Array.from(btn.children).map((c) => c.getBoundingClientRect().top));
     return Math.round((contentTop - above.getBoundingClientRect().bottom) * 10) / 10;
   });

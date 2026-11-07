@@ -398,14 +398,6 @@
     transition-duration: 0.01ms !important;
   }
 }
-/* Giống Mini: khách chọn giảm chuyển động thì nút và phần tử bấm được không co khi nhấn (nút ZaUI đã đổi màu nền lúc nhấn). */
-@media (prefers-reduced-motion: reduce) {
-  .tubu-btn:active,
-  .tubu-press:active,
-  .tubu-press-card:active {
-    transform: none;
-  }
-}
 
 /* Phần đã bán của Giờ vàng chạy lên đúng mức một lần lúc khối hiện ra. Mini có luật `*` toàn cục cho prefers-reduced-motion, web chỉ có luật từng lớp. */
 .tubu-flash-fill {
@@ -617,6 +609,14 @@
 .tubu-btn:active {
   transform: scale(0.97);
   transition-duration: var(--p-dur-press);
+}
+/* Giống Mini: khách chọn giảm chuyển động thì nút và phần tử bấm được không co khi nhấn (nút ZaUI đã đổi màu nền lúc nhấn). Đứng sau `.tubu-btn:active` vì hai luật cùng độ ưu tiên, luật sau thắng. */
+@media (prefers-reduced-motion: reduce) {
+  .tubu-btn:active,
+  .tubu-press:active,
+  .tubu-press-card:active {
+    transform: none;
+  }
 }
 .tubu-btn .zaui-btn-container {
   max-width: 100%;

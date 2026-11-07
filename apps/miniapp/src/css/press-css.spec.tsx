@@ -61,6 +61,12 @@ describe('css/tokens.css: phản hồi nhấn (polish PL-11)', () => {
     for (const sel of ['.tubu-btn:active', '.tubu-press:active', '.tubu-press-card:active']) {
       expect(reduced, sel).toMatch(new RegExp(`${sel.replace(/[.:]/g, '\\$&')}[^{]*\\{[^}]*transform:\\s*none`));
     }
+    // Cùng độ ưu tiên (0,2,0), @media không cộng thêm: luật reduced-motion phải đứng SAU mọi luật `:active` cùng bộ chọn thì mới thắng.
+    const mediaAt = css.search(/@media \(prefers-reduced-motion: reduce\)\s*\{\s*\.tubu-btn:active/);
+    expect(mediaAt, 'có khối reduced-motion cho nút').toBeGreaterThan(-1);
+    for (const sel of ['.tubu-btn:active', '.tubu-press:active', '.tubu-press-card:active']) {
+      expect(css.lastIndexOf(`\n${sel} {`), `${sel} (luật nhấn) phải đứng trước khối reduced-motion`).toBeLessThan(mediaAt);
+    }
   });
 
   it('mọi luật :active co theo scale đều nằm trong 0,97..0,99 (không co sâu hơn nút DS)', () => {

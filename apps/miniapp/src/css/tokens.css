@@ -563,14 +563,6 @@ body.with-back-btn .page.page-bleed {
     transition-duration: 0.01ms !important;
   }
 }
-/* Luật `*` ở trên chỉ rút thời gian, nút vẫn co 0,97 tức thì khi nhấn. Khách chọn giảm chuyển động thì không co: nút ZaUI đã đổi màu nền lúc nhấn để báo "đã nhận chạm". */
-@media (prefers-reduced-motion: reduce) {
-  .tubu-btn:active,
-  .tubu-press:active,
-  .tubu-press-card:active {
-    transform: none;
-  }
-}
 
 /* Phần đã bán của Giờ vàng chạy lên đúng mức một lần lúc khối hiện ra; luật `*` của prefers-reduced-motion ở cuối file rút còn 0,01ms. */
 .tubu-flash-fill {
@@ -635,11 +627,21 @@ body.with-back-btn .page.page-bleed {
  */
 .tubu-btn {
   max-width: 100%;
+  /* `<button>` đặt lại cả `font` của trình duyệt (Chromium/WebView Android) nên mất số đều thừa kế từ thanh dính ("Đặt hàng · 149.000đ"). */
+  font-variant-numeric: inherit;
   transition: transform var(--p-dur-release) var(--p-ease-out);
 }
 .tubu-btn:active {
   transform: scale(0.97);
   transition-duration: var(--p-dur-press);
+}
+/* Luật `*` ở cuối file chỉ rút thời gian, nút vẫn co 0,97 tức thì khi nhấn. Khách chọn giảm chuyển động thì không co: nút ZaUI đã đổi màu nền lúc nhấn để báo "đã nhận chạm". Đứng sau `.tubu-btn:active` vì hai luật cùng độ ưu tiên, luật sau thắng. */
+@media (prefers-reduced-motion: reduce) {
+  .tubu-btn:active,
+  .tubu-press:active,
+  .tubu-press-card:active {
+    transform: none;
+  }
 }
 .tubu-btn .zaui-btn-container {
   max-width: 100%;

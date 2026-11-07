@@ -185,6 +185,12 @@ describe('mini.css: sheet từ md là hộp thoại giữa màn (K7)', () => {
     expect(reduced).toMatch(/\.tubu-btn:active[^{]*\{[^}]*transform:\s*none/);
     expect(reduced).toMatch(/\.tubu-press:active[^{]*\{[^}]*transform:\s*none/);
     expect(reduced).toMatch(/\.tubu-press-card:active[^{]*\{[^}]*transform:\s*none/);
+    // Cùng độ ưu tiên (0,2,0), @media không cộng thêm: luật reduced-motion phải đứng SAU mọi luật `:active` cùng bộ chọn thì mới thắng.
+    const mediaAt = plain.search(/@media \(prefers-reduced-motion: reduce\)\s*\{\s*\.tubu-btn:active/);
+    expect(mediaAt, 'có khối reduced-motion cho nút').toBeGreaterThan(-1);
+    for (const sel of ['.tubu-btn:active', '.tubu-press:active', '.tubu-press-card:active']) {
+      expect(plain.lastIndexOf(`\n${sel} {`), `${sel} (luật nhấn) phải đứng trước khối reduced-motion`).toBeLessThan(mediaAt);
+    }
   });
 
   it('dòng Điểm Xanh PDP: đệm trên bằng đúng phần lề âm dôi lên, nên chữ xuống hai dòng thì nút cao thêm xuống dưới, không đè dòng giá', () => {
