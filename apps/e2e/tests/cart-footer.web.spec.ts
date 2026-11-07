@@ -33,7 +33,7 @@ async function openCart(page: Page, api: MockApi, o: FooterCartOptions & { hint?
   const cart = footerCart(o);
   api.get('/cart', { ...cart, items: cart.items.map((l) => ({ ...l, weight: 600 })) });
   api.get('/flash-sales/active', []);
-  api.allowUnmocked('POST /coupons/preview', 'GET /coupons/available', 'GET /products');
+  api.allowUnmocked('POST /coupons/preview', 'GET /coupons/available');
   if (o.hint) mockCouponHint(api, o.hint);
 
   await page.emulateMedia({ reducedMotion: 'reduce' });

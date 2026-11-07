@@ -176,7 +176,7 @@ describe('HomePage (phương án A, 9 khối)', () => {
   it('dải Story (W42A): vòng tròn của các món Bán chạy nhất, đứng ngay dưới lối tắt, dùng chung một lần gọi Bán chạy nhất với kệ (không tải thêm)', async () => {
     renderHome();
     const rings = await screen.findAllByTestId('story-reel-item');
-    expect(rings.map((r) => r.textContent)).toEqual(['StoryBán chạy 1', 'StoryBán chạy 2', 'StoryBán chạy 3', 'StoryBán chạy 4']);
+    expect(rings.map((r) => r.textContent)).toEqual(['Story Bán chạy 1', 'Story Bán chạy 2', 'Story Bán chạy 3', 'Story Bán chạy 4']);
     await screen.findByRole('region', { name: 'Bán chạy nhất' });
     const order = blockOrder();
     expect(order[order.indexOf('shortcuts') + 1]).toBe('stories');

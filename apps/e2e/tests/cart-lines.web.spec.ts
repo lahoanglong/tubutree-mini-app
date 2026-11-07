@@ -44,7 +44,7 @@ test.describe('Web khách: dòng giỏ ở 375px', () => {
     });
     api.get('/cart', { items, couponCode: null, subtotal: 266_000, discount: 0, freeship: false, freeshipThreshold: 500_000, itemCount: 4 });
     api.get('/flash-sales/active', []);
-    api.allowUnmocked('POST /coupons/preview', 'GET /coupons/available', 'GET /products');
+    api.allowUnmocked('POST /coupons/preview', 'GET /coupons/available');
 
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.setViewportSize({ width: 375, height: 812 });
