@@ -20,6 +20,7 @@ const state = vi.hoisted(() => ({
   milestones: null as Record<string, unknown> | null,
   storefronts: [] as unknown[],
   products: [] as unknown[],
+  picker: [] as unknown[],
   fail: new Set<string>(),
   calls: [] as Call[],
   share: vi.fn(),
@@ -70,6 +71,7 @@ vi.mock('@/lib/core-http', () => ({
       if (path === '/academy/courses') return state.courses;
       if (path === '/affiliate/analytics/storefronts') return { storefronts: state.storefronts };
       if (path === '/affiliate/analytics/products') return state.products;
+      if (path === '/storefront/me/products') return state.picker;
       if (path === '/config/public') return state.config;
       if (path === '/me/wallet') {
         await state.walletGate;
@@ -121,6 +123,7 @@ beforeEach(() => {
   state.milestones = null;
   state.storefronts = [];
   state.products = [];
+  state.picker = [];
   state.fail = new Set();
   state.calls = [];
   state.share = vi.fn(async () => 'shared');

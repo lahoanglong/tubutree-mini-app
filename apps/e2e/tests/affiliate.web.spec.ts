@@ -26,6 +26,7 @@ function mockExtras(api: MockApi, milestones: unknown = null) {
   api.get('/affiliate/analytics/storefronts', { storefronts: [] });
   api.get('/affiliate/analytics/products', []);
   api.get('/academy/courses', []);
+  api.get('/storefront/me/products', []);
   api.get('/me/wallet', { walletBalance: 0, cashbackPending: 0, commissionApproved: 80_000, commissionPending: 30_000 });
 }
 

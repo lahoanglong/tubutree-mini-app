@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -27,6 +27,10 @@ import { coreHttp } from '@/lib/core-http';
 import { platformBridge } from '@/lib/platform-bridge';
 import { isWebRouteReady } from '@/lib/route-map';
 import { SITE_URL } from '@/lib/site';
+import { pickerQuery } from '@tubutree/app-core/queries/storefront';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { featuredAffiliateProducts } from '@tubutree/app-core/commerce/affiliate-share';
+import { AffiliateFeaturedProducts } from '@/components/affiliate/featured-products';
 import { invalidateBalances } from '@/lib/balances';
 import { formatDate } from '@/lib/format-date';
 import { formatVnd } from '@/lib/format-vnd';
@@ -382,6 +386,11 @@ function Dashboard() {
   const d = dashQ.data;
   const me = meQ.data;
   const referral = me?.referralCode ?? '';
+  const featuredQ = useQuery({ ...pickerQuery(coreHttp, ''), queryKey: ['affiliate-featured-products'], enabled: tab === 'share' && referral !== '', staleTime: 60_000 });
+  const featured = useMemo(
+    () => (featuredQ.data ? featuredAffiliateProducts(featuredQ.data, { baseUrl: SITE_URL, affiliateCode: referral }) : null),
+    [featuredQ.data, referral],
+  );
 
   const head = ctvHeadline(d);
   const autoTransfer = isAutoWalletTransfer(d?.autoWalletTransfer);
@@ -459,7 +468,17 @@ function Dashboard() {
         ) : (
           <section aria-label={heroShowsWalletBalance(hero) ? hero.label : 'Hoa hồng có thể chuyển vào Ví'} className="rounded-card bg-gradient-to-br from-forest-600 to-forest-700 p-5 text-stone-0 shadow-card">
             {/* Số to là tiền dùng được ngay; hoa hồng đang chờ và số tạm tính tháng là dòng phụ. */}
-            <div className="text-sm max-md:leading-[var(--type-body-sm-lh)] max-md:opacity-[0.85]">{hero.label}</div>
+            {/* Huy hiệu hạng đứng trước nhãn trong cây DOM (số to vẫn liền sau nhãn) nhưng hiện bên phải nhờ row-reverse. */}
+            <div className="flex flex-row-reverse flex-wrap items-center justify-between gap-x-2 gap-y-1">
+              {d?.tier?.name && (
+                <span data-testid="ctv-hero-tier">
+                  <Badge tone="neutral" size="sm">
+                    {fillCopy('shop.tierBadge', { name: d.tier.name })}
+                  </Badge>
+                </span>
+              )}
+              <div className="text-sm max-md:leading-[var(--type-body-sm-lh)] max-md:opacity-[0.85]">{hero.label}</div>
+            </div>
             <div className="mt-1 font-display text-3xl font-bold tabular-nums max-md:text-[length:var(--type-display-lg-size)] max-md:leading-10">{formatVnd(hero.amount)}</div>
             <div className={`mt-1 text-xs ${phoneCaption} max-md:opacity-90`}>Đang chờ: {formatVnd(head.pending)} · {commissionPendingNote(autoTransfer)}</div>
             {head.big > 0 && <div className={`mt-1 text-xs ${phoneCaption} max-md:opacity-90`}>{transferHeroNote(autoTransfer, needsTaxId)}</div>}
@@ -580,6 +599,9 @@ function Dashboard() {
               ))}
             </ul>
           </Section>
+          <section data-testid="ctv-featured-card" className={`${ui.card} ${phoneFlatCard} p-4`}>
+            <AffiliateFeaturedProducts products={featured} error={featuredQ.isError} onRetry={() => void featuredQ.refetch()} />
+          </section>
           <Section
             title="Link chia sẻ"
             action={

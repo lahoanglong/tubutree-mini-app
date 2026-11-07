@@ -113,6 +113,7 @@ Cấu hình `ProductStoryConfig` lưu ở cột `Product.storyConfig` (kiểu v�
 |---|---|
 | đầu trang đơn: trạng thái, một câu, lý do huỷ (đơn huỷ, nguyên văn từ `cancelReason` của API), mốc (ngày giao, hạn trả, hạn đổi/trả), bước kế tiếp | `OrderStatusHero` (chữ từ `orderHeadline` của `packages/app-core/src/commerce/order-tracking.ts`) |
 | hành trình 5 bước có giờ thật, bước hiện tại `aria-current="step"`, mốc hãng gộp dưới "Đang giao" mới nhất trên cùng | `OrderTrack` (dữ liệu từ `orderTrack`) |
+| thanh tiến trình gọn 4 bước (Đã tiếp nhận, Đang chuẩn bị, Đang giao hàng, Hoàn tất; đơn huỷ hoặc hoàn trả rẽ nhánh), bước hiện tại `aria-current="step"` có viền sáng nhẹ (giảm chuyển động thì đứng yên), giờ số đều, nút "Sao chép thông tin đơn" | `OrderTimelineTracker` (dữ liệu từ `buildOrderTimelineSteps`, chữ tóm tắt từ `formatOrderShareSummary`, cả hai ở `packages/app-core/src/commerce/order-timeline.ts`) |
 | hãng vận chuyển, mã vận đơn, nút "Chép mã" | `OrderShipping` |
 | thanh nút của đơn: đúng một nút chính theo trạng thái, việc còn lại vào "Thêm thao tác" | `OrderActionBar` (kế hoạch từ `orderActionPlan`; điều kiện từng nút lấy từ cờ API, không đoán) |
 
@@ -124,6 +125,12 @@ Máy tính (từ `lg`): hai cột gọn ở `/tai-khoan/don-hang/:code`, trái t
 |---|---|
 | một khối của gian hàng ở `/storefront` (tên, kiểu, x/y món, dải ảnh, cảnh báo vượt ngân sách) | `SectionCard` |
 | chọn kiểu khối: Lưới / Kệ ngang / Danh sách / Combo | `LayoutPicker` |
+
+### Chia sẻ nhanh của CTV (W43B)
+
+| Cần | Dùng |
+|---|---|
+| khối "Sản phẩm hoa hồng nổi bật" ở tab Chia sẻ của CTV: mỗi sản phẩm một dòng có mức % và số tiền dự kiến mỗi đơn, nút "Chép link giới thiệu" (≥ 44px, chép lời giới thiệu kèm link `?ref=<mã CTV>`, 2 giây thành "Đã chép link"), có trạng thái chờ, rỗng, lỗi + "Thử lại" | `AffiliateFeaturedProducts` (danh sách và link từ `featuredAffiliateProducts` và `buildAffiliateShareUrl` ở `packages/app-core/src/commerce/affiliate-share.ts`) |
 
 ### Thành phần nền
 
