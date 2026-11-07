@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ShoppingCart } from 'lucide-react';
-import { addToCart, getCart } from '@tubutree/app-core/api/cart';
+import { addToCart, getCart, type AddToCartSource } from '@tubutree/app-core/api/cart';
 import { fetchProduct, type ProductCard, type VariationDetail } from '@tubutree/app-core/api/catalog';
 import { QUICK_ADD_SOLD_OUT, quickAddPlan } from '@tubutree/app-core/quick-add';
 import { wishlistQuery } from '@tubutree/app-core/queries/wishlist';
@@ -22,24 +22,35 @@ const VariationSheet = dynamic(() => import('@/components/variation-sheet').then
 
 const NOTICE_MS = 4000;
 
-interface Notice {
+export interface QuickAddNotice {
   ok: boolean;
   text: string;
 }
+type Notice = QuickAddNotice;
+
+export interface QuickAdd {
+  /** Thêm một thẻ vào giỏ theo đúng luật giỏ nhanh: tải chi tiết, một phân loại còn hàng thì thêm thẳng, nhiều thì mở bảng chọn, hết hàng thì báo. */
+  quickAdd: (product: ProductCard, opts?: { initialId?: string | null; origin?: Element | null }) => Promise<void>;
+  /** Hiện một thông báo nổi ở đáy màn (cùng chỗ với "Đã thêm vào giỏ!"). */
+  notify: (n: QuickAddNotice) => void;
+  /** Mã sản phẩm đang được thêm (chặn bấm lại ở nơi vẽ nút). */
+  busyId: string | null;
+  /** Thông báo nổi và bảng chọn phân loại: nơi dùng vẽ ở bất cứ đâu trong cây. */
+  feedback: ReactNode;
+}
 
 /**
- * Nút giỏ nhanh nổi ở góc dưới ảnh thẻ: vùng chạm 44px bọc vòng trắng 32px, cùng kiểu nút tim ở góc trên.
- * Thẻ không mang phân loại nên tải chi tiết lúc bấm (cũng cho tồn kho mới nhất), rồi theo cùng luật với trang chi tiết:
- * một phân loại thì thêm thẳng, nhiều thì mở bảng chọn.
+ * Đường giỏ nhanh dùng chung cho thẻ yêu thích và Reel Trang chủ. Thẻ không mang phân loại nên tải chi tiết lúc thêm (cũng cho tồn kho mới nhất), rồi theo cùng luật
+ * với trang chi tiết: một phân loại thì thêm thẳng, nhiều thì mở bảng chọn. `source` là nguồn ghi nhận lúc thêm giỏ (thiếu thì không ghi).
  */
-export function useWishlistQuickAdd(): { buttonFor: (p: ProductCard) => ReactNode; feedback: ReactNode } {
+export function useQuickAdd(source?: AddToCartSource): QuickAdd {
   const qc = useQueryClient();
   const flash = useActiveFlashSales();
   const phase = useAuthPhase();
   // Giỏ cho bảng chọn: thêm giỏ cộng dồn và máy chủ giá Giờ vàng trên cả dòng, nên nút phải biết số đã có (cùng khoá với giỏ ở thanh đầu và trang sản phẩm, thêm xong `setQueryData` cập nhật).
   const cartQ = useQuery({ queryKey: useCartKey(), queryFn: () => getCart(coreHttp, cartStorefrontSlug()), enabled: phase === 'authenticated' });
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [picker, setPicker] = useState<{ product: ProductCard; variations: VariationDetail[] } | null>(null);
+  const [picker, setPicker] = useState<{ product: ProductCard; variations: VariationDetail[]; initialId: string | null } | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   // Số suất Giờ vàng khách còn mua được (đã trừ các đơn trước) cho các phân loại của sản phẩm trong bảng; không có bảng thì không có id nên không gọi.
   const flashWithAllowance = useFlashAllowance(flash, picker?.variations.map((v) => v.id) ?? []);
@@ -50,12 +61,12 @@ export function useWishlistQuickAdd(): { buttonFor: (p: ProductCard) => ReactNod
   const noticeHold = useAutoDismiss(!!notice, NOTICE_MS, () => setNotice(null), notice);
   const show = (n: Notice) => setNotice(n);
 
-  const addLine = async (variationId: string, qty: number, source: Element | null = null) => {
-    const cart = await addToCart(coreHttp, variationId, qty, 'wishlist', cartStorefrontSlug());
+  const addLine = async (variationId: string, qty: number, origin: Element | null = null) => {
+    const cart = await addToCart(coreHttp, variationId, qty, source, cartStorefrontSlug());
     // Badge giỏ ở header đọc cùng khoá và không remount khi khách ở lại trang này.
     qc.setQueryData(cartKey(), cart);
     show({ ok: true, text: 'Đã thêm vào giỏ!' });
-    playCartFeedback(source?.isConnected ? source : null);
+    playCartFeedback(origin?.isConnected ? origin : null);
   };
 
   const run = async (task: () => Promise<void>) => {
@@ -72,7 +83,7 @@ export function useWishlistQuickAdd(): { buttonFor: (p: ProductCard) => ReactNod
     }
   };
 
-  const quickAdd = (product: ProductCard, source: Element | null = null) =>
+  const quickAdd = (product: ProductCard, opts?: { initialId?: string | null; origin?: Element | null }) =>
     run(async () => {
       setBusyId(product.id);
       const detail = await fetchProduct(coreHttp, product.slug);
@@ -82,8 +93,8 @@ export function useWishlistQuickAdd(): { buttonFor: (p: ProductCard) => ReactNod
         // Thẻ còn nút giỏ và không có lớp Hết hàng nếu không tải lại: khách bấm lại sẽ ra đúng lời báo này.
         void qc.invalidateQueries({ queryKey: wishlistQuery(coreHttp).queryKey });
       }
-      else if (plan.kind === 'pick') setPicker({ product, variations: detail.variations });
-      else await addLine(plan.variationId, 1, source);
+      else if (plan.kind === 'pick') setPicker({ product, variations: detail.variations, initialId: opts?.initialId ?? null });
+      else await addLine(plan.variationId, 1, opts?.origin ?? null);
     });
 
   const confirmPick = (variation: { id: string }, qty: number) =>
@@ -92,22 +103,6 @@ export function useWishlistQuickAdd(): { buttonFor: (p: ProductCard) => ReactNod
       await addLine(variation.id, qty);
       setPicker(null);
     });
-
-  const buttonFor = (p: ProductCard) =>
-    p.inStock === false ? null : (
-      <button
-        type="button"
-        aria-label={`Thêm ${p.name} vào giỏ`}
-        aria-busy={busyId === p.id}
-        aria-disabled={busyId === p.id || undefined}
-        onClick={(e) => void quickAdd(p, e.currentTarget)}
-        className="inline-flex h-11 w-11 items-center justify-center text-stone-700"
-      >
-        <span className={`flex h-8 w-8 items-center justify-center rounded-full bg-stone-0 shadow-[var(--elevation-1)] ${busyId === p.id ? 'opacity-60' : ''}`}>
-          <ShoppingCart className="h-[18px] w-[18px]" strokeWidth={1.9} aria-hidden="true" />
-        </span>
-      </button>
-    );
 
   const feedback = (
     <>
@@ -138,7 +133,7 @@ export function useWishlistQuickAdd(): { buttonFor: (p: ProductCard) => ReactNod
           thumbnail={picker.product.thumbnail}
           variations={picker.variations}
           flash={flashWithAllowance}
-          initialId={picker.product.pinnedVariationId ?? picker.product.repVariationId ?? null}
+          initialId={picker.initialId ?? picker.product.pinnedVariationId ?? picker.product.repVariationId ?? null}
           initialQty={1}
           cartLines={cartQ.data?.items}
           onConfirm={(v, qty) => void confirmPick(v, qty)}
@@ -146,6 +141,28 @@ export function useWishlistQuickAdd(): { buttonFor: (p: ProductCard) => ReactNod
       )}
     </>
   );
+
+  return { quickAdd, notify: show, busyId, feedback };
+}
+
+/** Nút giỏ nhanh nổi ở góc dưới ảnh thẻ: vùng chạm 44px bọc vòng trắng 32px, cùng kiểu nút tim ở góc trên. */
+export function useWishlistQuickAdd(): { buttonFor: (p: ProductCard) => ReactNode; feedback: ReactNode } {
+  const { quickAdd, busyId, feedback } = useQuickAdd('wishlist');
+  const buttonFor = (p: ProductCard) =>
+    p.inStock === false ? null : (
+      <button
+        type="button"
+        aria-label={`Thêm ${p.name} vào giỏ`}
+        aria-busy={busyId === p.id}
+        aria-disabled={busyId === p.id || undefined}
+        onClick={(e) => void quickAdd(p, { origin: e.currentTarget })}
+        className="inline-flex h-11 w-11 items-center justify-center text-stone-700"
+      >
+        <span className={`flex h-8 w-8 items-center justify-center rounded-full bg-stone-0 shadow-[var(--elevation-1)] ${busyId === p.id ? 'opacity-60' : ''}`}>
+          <ShoppingCart className="h-[18px] w-[18px]" strokeWidth={1.9} aria-hidden="true" />
+        </span>
+      </button>
+    );
 
   return { buttonFor, feedback };
 }

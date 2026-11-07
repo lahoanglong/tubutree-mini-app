@@ -951,3 +951,90 @@
 @media (prefers-reduced-motion: reduce) {
   .tubu-story-layer[data-animated='true'], .tubu-story-panel-in, .tubu-story-stage, .tubu-story-arc-item, .tubu-story-chip, .tubu-story-progress > span { animation: none; transition: none; }
 }
+
+/* ── Reel của Trang chủ (W42A): vị trí trong dải ở đầu khung toàn màn và thanh đáy "Câu chuyện kế" + "Thêm vào giỏ · giá" ── */
+.tubu-story-headline { display: flex; align-items: baseline; gap: var(--space-inline-sm); min-width: 0; }
+.tubu-story-position { color: var(--color-text-secondary); font-size: var(--type-caption-size); line-height: var(--type-caption-lh); font-variant-numeric: tabular-nums; }
+.tubu-story-btn { font-variant-numeric: tabular-nums; }
+.tubu-story-bar-reel .tubu-story-btn { font-size: var(--type-body-sm-size); line-height: 1.25; }
+.tubu-story-btn-next { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; gap: var(--space-inline-xs); padding-inline: var(--space-inset-page); }
+
+/* ── Dải Story đầu Trang chủ (W42A, StoryReelStrip): khối cao 144 ở 375px = tiêu đề 24 + 4 + hàng 116 (đệm 2, vòng 72, 6, nhãn hai dòng 32, đệm 4);
+   khung chờ dùng đúng các lớp này nên không nhảy. Vòng 72 = ảnh 64 + viền chuyển sắc 4 mỗi bên. Hàng cuộn tràn mép như kệ hàng (`tubu-bleed-rail`). ── */
+.tubu-reel-strip { --reel-ring: 72px; --reel-label-h: 32px; min-height: 144px; }
+.tubu-reel-head { margin-bottom: var(--space-stack-xs); }
+.tubu-reel-row { gap: var(--tile-gap); padding: var(--p-space-1) var(--bleed-inset, 1rem) var(--p-space-2); }
+@media (min-width: 768px) {
+  .tubu-reel-row { padding-inline: var(--p-space-4); }
+}
+.tubu-reel-item {
+  flex: 0 0 auto; width: var(--reel-ring); display: flex; flex-direction: column; align-items: center; gap: 6px;
+  margin: 0; padding: 0; border: 0; background: transparent; color: var(--color-text-primary); font: inherit; text-align: center;
+}
+.tubu-reel-item:focus-visible { outline: 2px solid var(--color-border-focus); outline-offset: 0; border-radius: var(--radius-control); }
+.tubu-reel-ring {
+  position: relative; display: block; box-sizing: border-box; width: var(--reel-ring); height: var(--reel-ring); padding: var(--p-space-2);
+  border-radius: var(--radius-pill); background: linear-gradient(135deg, var(--color-story-ring-from), var(--color-story-ring-to));
+}
+.tubu-reel-ring[data-seen='true'] { background: var(--color-story-ring-seen); }
+.tubu-reel-photo {
+  display: block; box-sizing: border-box; width: 100%; height: 100%; border: var(--p-space-1) solid var(--color-bg-surface);
+  border-radius: var(--radius-pill); background: var(--color-bg-surface); overflow: hidden;
+}
+.tubu-reel-badge { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); box-shadow: 0 0 0 2px var(--color-bg-surface); }
+.tubu-reel-label {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; box-sizing: border-box; width: 100%; height: var(--reel-label-h);
+  font-size: var(--type-label-size); line-height: var(--type-label-lh); font-weight: 500; overflow-wrap: anywhere;
+}
+.tubu-reel-item[data-seen='true'] .tubu-reel-label { color: var(--color-text-secondary); }
+.tubu-reel-skel-ring { display: block; width: var(--reel-ring); height: var(--reel-ring); border-radius: var(--radius-pill); }
+.tubu-reel-skel-label { display: block; width: 100%; height: var(--reel-label-h); }
+.tubu-reel-skel-label > .tubu-skeleton { display: block; width: 75%; height: 12px; margin: 0 auto; }
+
+/* Khung chờ toàn màn của Reel (đang tải chi tiết món): đủ nút đóng 44x44 và ô sân khấu vuông, cùng khung với `ProductStoryShowcase` toàn màn. */
+.tubu-reel-pending-stage { display: block; width: 100%; max-width: 28rem; margin: 0 auto; aspect-ratio: 1 / 1; border-radius: var(--radius-media); }
+
+/* ── Thanh tiến độ Miễn phí giao hàng ở đầu Giỏ (W42A, FreeShippingProgressBar): cao tối thiểu bằng trạng thái chưa đạt (hai dòng chữ + thanh) để đổi sang
+   "đã đạt" không làm giỏ nhảy; phần đã đầy có vệt sáng chạy nhẹ, tắt khi khách chọn giảm chuyển động. ── */
+.tubu-freeship {
+  box-sizing: border-box; padding: var(--space-inset-card); border-radius: var(--radius-card); background: var(--color-bg-surface); box-shadow: var(--elevation-1);
+  min-height: calc(2 * var(--type-body-sm-size) * var(--type-body-sm-lh) + var(--p-space-3) + var(--p-space-3) + 2 * var(--space-inset-card));
+  font-variant-numeric: tabular-nums;
+}
+.tubu-freeship[data-reached='true'] { background: var(--color-status-success-bg); }
+.tubu-freeship-text { margin: 0; color: var(--color-text-primary); font-size: var(--type-body-sm-size); line-height: var(--type-body-sm-lh); }
+.tubu-freeship[data-reached='true'] .tubu-freeship-text { color: var(--color-text-success); font-weight: 600; }
+.tubu-freeship-track { height: var(--p-space-3); margin-top: var(--p-space-3); border-radius: var(--radius-pill); background: var(--color-track); overflow: hidden; }
+.tubu-freeship-fill {
+  position: relative; height: 100%; border-radius: var(--radius-pill); overflow: hidden;
+  background: linear-gradient(90deg, var(--color-progress-fill-from), var(--color-action-primary-bg));
+  transition: width var(--dur-slow) var(--ease-out);
+}
+.tubu-freeship-fill::after {
+  content: ''; position: absolute; inset: 0; opacity: 0.5; transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, var(--color-skeleton-shimmer), transparent);
+  animation: tubu-freeship-shimmer 2.4s var(--ease-out) infinite;
+}
+@keyframes tubu-freeship-shimmer {
+  100% { transform: translateX(100%); }
+}
+
+/* ── Dải gợi ý mua thêm cho đủ Miễn phí giao hàng (W42A, FreeshipAddonRail): thẻ rộng cố định 272, cao 116; hàng cuộn nằm trong khối (không tràn mép) vì Giỏ có đệm riêng. ── */
+.tubu-addon { margin-top: var(--p-space-3); font-variant-numeric: tabular-nums; }
+.tubu-addon-head { margin-bottom: var(--space-stack-sm); }
+.tubu-addon-row { gap: var(--p-space-3); padding: var(--p-space-1) 0; }
+.tubu-addon-card {
+  flex: 0 0 auto; box-sizing: border-box; width: 272px; display: flex; gap: var(--p-space-3); padding: var(--p-space-3);
+  border: 1px solid var(--color-border-subtle); border-radius: var(--radius-card); background: var(--color-bg-surface);
+}
+.tubu-addon-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; justify-content: space-between; gap: var(--p-space-2); }
+.tubu-addon-name {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere;
+  min-height: calc(2 * var(--type-caption-size) * var(--type-caption-lh)); font-size: var(--type-caption-size); line-height: var(--type-caption-lh); color: var(--color-text-primary);
+}
+.tubu-addon-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--p-space-2); }
+.tubu-addon-add.zaui-btn { flex: 0 0 auto; min-width: 0; height: 44px; padding: 0 var(--space-inline-md); font-size: var(--type-body-sm-size); }
+@media (prefers-reduced-motion: reduce) {
+  .tubu-freeship-fill { transition: none; }
+  .tubu-freeship-fill::after { animation: none; display: none; }
+}

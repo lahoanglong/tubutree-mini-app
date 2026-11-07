@@ -438,3 +438,70 @@ describe('W40B: tải trước ảnh chương kế và chuyển chương mượt
     });
   });
 });
+
+describe('W42A: Reel của Trang chủ (reel, addPrice, onNext, position)', () => {
+  it('thanh đáy chỉ có "Câu chuyện kế" và "Thêm vào giỏ · giá": không có Mua ngay', () => {
+    const { container } = mount(<ProductStoryShowcase product={PRODUCT} fullscreen reel addPrice="289.000đ" onNext={() => {}} onClose={() => {}} />);
+    const bar = container.querySelector('.tubu-story-bar')!;
+    expect(bar.getAttribute('data-reel')).toBe('true');
+    expect(q(container, 'story-buy-now')).toBeNull();
+    expect(q(container, 'story-add-to-cart')!.textContent).toBe('Thêm vào giỏ · 289.000đ');
+    expect(q(container, 'story-next')!.textContent).toBe('Câu chuyện kế');
+    expect(q(container, 'story-next')!.getAttribute('aria-label')).toBe('Câu chuyện kế, xem sản phẩm kế tiếp');
+    expect(Array.from(bar.children).map((b) => (b as HTMLElement).dataset.testid)).toEqual(['story-next', 'story-add-to-cart']);
+  });
+
+  it('không có addPrice thì nút thêm giỏ chỉ ghi "Thêm vào giỏ"; không có onNext thì không có nút kế (món cuối dải)', () => {
+    const { container } = mount(<ProductStoryShowcase product={PRODUCT} fullscreen reel onClose={() => {}} />);
+    expect(q(container, 'story-add-to-cart')!.textContent).toBe('Thêm vào giỏ');
+    expect(q(container, 'story-next')).toBeNull();
+  });
+
+  it('chạm "Câu chuyện kế" gọi onNext, chạm nút thêm giỏ gọi onAddToCart đúng một lần', () => {
+    const onNext = vi.fn();
+    const onAdd = vi.fn();
+    const { container } = mount(<ProductStoryShowcase product={PRODUCT} fullscreen reel addPrice="1đ" onNext={onNext} onAddToCart={onAdd} onClose={() => {}} />);
+    click(q(container, 'story-next'));
+    expect(onNext).toHaveBeenCalledTimes(1);
+    click(q(container, 'story-add-to-cart'));
+    expect(onAdd).toHaveBeenCalledTimes(1);
+  });
+
+  it('hết hàng: nút thêm giỏ khoá và ghi "Hết hàng" thay giá, không gọi xử lý; nút kế vẫn bấm được', () => {
+    const onAdd = vi.fn();
+    const onNext = vi.fn();
+    const { container } = mount(<ProductStoryShowcase product={PRODUCT} fullscreen reel buyDisabled addPrice="1đ" onNext={onNext} onAddToCart={onAdd} onClose={() => {}} />);
+    const add = q(container, 'story-add-to-cart') as HTMLButtonElement;
+    expect(add.disabled).toBe(true);
+    expect(add.textContent).toBe('Hết hàng');
+    click(add);
+    expect(onAdd).not.toHaveBeenCalled();
+    click(q(container, 'story-next'));
+    expect(onNext).toHaveBeenCalledTimes(1);
+  });
+
+  it('position hiện cạnh tiêu đề đầu khung; thiếu thì không có phần tử vị trí', () => {
+    const withPos = mount(<ProductStoryShowcase product={PRODUCT} fullscreen reel position="2/8" onClose={() => {}} />);
+    expect(q(withPos.container, 'story-position')!.textContent).toBe('2/8');
+    expect(q(withPos.container, 'story-position')!.parentElement!.querySelector('h2')!.textContent).toBe('Câu chuyện sản phẩm');
+    const without = mount(<ProductStoryShowcase product={PRODUCT} fullscreen reel onClose={() => {}} />);
+    expect(q(without.container, 'story-position')).toBeNull();
+  });
+
+  it('Reel luôn có kịch bản dù món chưa cấu hình, và bỏ cảnh chọn phân loại (không có vòng cung)', () => {
+    const bare = { ...PRODUCT, storyConfig: null, ingredients: null, slug: 'chua-cau-hinh', name: 'Món mới', brand: 'Hãng X' } as ProductDetail;
+    const plain = mount(<ProductStoryShowcase product={bare} fullscreen reel onClose={() => {}} />);
+    expect(q(plain.container, 'product-story')).not.toBeNull();
+    const configured = mount(<ProductStoryShowcase product={PRODUCT} fullscreen reel onClose={() => {}} />);
+    expect(q(configured.container, 'story-arc-item')).toBeNull();
+    expect(q(configured.container, 'product-story')).not.toBeNull();
+  });
+
+  it('không có reel thì thanh đáy và hành vi cũ giữ nguyên (Thêm vào giỏ + Mua ngay, không có nút kế, không giá trên nút)', () => {
+    const { container } = mount(<ProductStoryShowcase product={PRODUCT} fullscreen position="1/3" addPrice="1đ" onNext={() => {}} onClose={() => {}} />);
+    expect(q(container, 'story-buy-now')).not.toBeNull();
+    expect(q(container, 'story-add-to-cart')!.textContent).toBe('Thêm vào giỏ');
+    expect(q(container, 'story-next')).toBeNull();
+    expect(container.querySelector('.tubu-story-bar')!.getAttribute('data-reel')).toBeNull();
+  });
+});

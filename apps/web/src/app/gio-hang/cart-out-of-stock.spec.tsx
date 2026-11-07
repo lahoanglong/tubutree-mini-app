@@ -45,17 +45,21 @@ afterEach(() => {
 describe('/gio-hang — dòng hết hàng không tính vào tạm tính và freeship', () => {
   it('chọn cả giỏ có dòng hết hàng 150.000đ: tạm tính chỉ phần còn hàng, không báo đủ miễn phí giao dù máy chủ báo freeship', async () => {
     state.cart = cartOf([line({ id: 'a', total: 350000, quantity: 2, unitPrice: 175000 }), line({ id: 'b', productName: 'Hết hàng', stock: 0 })]);
-    const b = bar(await mount()).textContent!;
+    const c = await mount();
+    const b = bar(c).textContent!;
     expect(b).toContain('350.000đ');
     expect(b).not.toContain('500.000đ');
-    expect(b).not.toContain('Bạn được miễn phí giao hàng');
-    expect(b).toContain('Mua thêm 150.000đ để được miễn phí giao hàng');
+    const f = c.querySelector<HTMLElement>('[data-testid="freeship-progress"]')!;
+    expect(f.dataset.reached).toBe('false');
+    expect(f.textContent).not.toContain('Đơn hàng đã được');
+    expect(f.textContent).toContain('Mua thêm 150.000đ để được Miễn phí giao hàng');
   });
 
   it('không có dòng hết hàng: giữ nguyên, freeship của máy chủ vẫn được tin', async () => {
     state.cart = cartOf([line({ id: 'a', total: 500000, quantity: 2, unitPrice: 250000 })]);
-    const b = bar(await mount()).textContent!;
-    expect(b).toContain('Bạn được miễn phí giao hàng');
+    const c = await mount();
+    const b = bar(c).textContent!;
+    expect(c.querySelector<HTMLElement>('[data-testid="freeship-progress"]')!.textContent).toContain('Đơn hàng đã được Miễn phí giao hàng');
     expect(b).toContain('500.000đ');
   });
 });

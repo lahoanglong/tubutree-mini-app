@@ -9,6 +9,7 @@ import { cartSaving, lineCompareAt } from '@tubutree/app-core/commerce/pdp-view'
 import { CART_OUT_OF_STOCK, CART_OVER_STOCK_BLOCKED, cartOutOfStockBlocked } from '@tubutree/app-core/cart-copy';
 import { cartTotalLabel } from '@tubutree/app-core/commerce/cart-total';
 import { cartComboBlocks, comboRemovalNotice, comboSavingPending, type ComboRemovalNotice } from '@tubutree/app-core/commerce/cart-combo';
+import { freeshipProgress } from '@tubutree/app-core/commerce/freeship-progress';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { couponNoticeText } from '@tubutree/app-core/coupon-min-order';
 import { useRemovedCoupon } from '@/lib/use-removed-coupon';
@@ -29,12 +30,13 @@ import { PageHeader } from '@/components/ui/page-header';
 import { ErrorState } from '@/components/ui/error-state';
 import { actionErrorText, loadErrorText } from '@/lib/error-text';
 import { LineItemSkeleton } from '@/components/ui/skeleton';
-import { Badge, Countdown, KeyValueRow, ProductThumb } from '@/components/mini';
+import { Badge, Countdown, FreeShippingProgressBar, KeyValueRow, ProductThumb } from '@/components/mini';
 import { PAGE_WIDE } from '@/lib/page-frame';
 import { cartStockNote, overStockTarget, qtyPickMax } from '@tubutree/app-core/commerce/stock-text';
 import { CartComboBlock } from '@/components/cart-combo-block';
 import { ConfirmSheet } from '@/components/ui/confirm-sheet';
 import { useAutoDismiss } from '@/lib/use-auto-dismiss';
+import { FreeshipAddons } from './freeship-addons';
 
 // Sau khi xoá một dòng, khách có chừng này để hoàn tác (thêm lại đúng phân loại và số lượng).
 // 10 giây: người dùng bàn phím/đọc màn hình cần đủ thời gian tới nút "Hoàn tác" (WCAG 2.2.1); đồng hồ còn dừng khi trỏ/focus đang ở trên thanh.
@@ -238,12 +240,12 @@ export default function CartPage() {
   const groups = groupByFulfiller(allItems);
   const withHeaders = showFulfillerHeaders(groups);
   const hasMerchant = groupByFulfiller(selectedItems).some((g) => g.fulfiller.kind === 'MERCHANT');
-  // Tiến độ miễn phí giao hàng theo phần ĐANG CHỌN (đúng số sẽ thanh toán); có hàng gian hàng tự giao thì chỉ tính phần Tubu giao.
+  // Tiến độ miễn phí giao hàng theo phần ĐANG CHỌN (đúng số sẽ thanh toán); có hàng gian hàng tự giao thì chỉ tính phần Tubu giao và chỉ hiện khi phần đó > 0.
   const freeshipBase = hasMerchant ? tubuSubtotal(buyableSelected) : selectedSubtotal;
   // `cart.freeship` do máy chủ tính trên cả giỏ kể cả dòng hết hàng, nên không tin khi còn dòng hết hàng đang chọn.
-  const freeshipReached = (!hasMerchant && allSelected && !!cart?.freeship && buyableSelected.length === selectedItems.length) || (!!cart && freeshipBase >= cart.freeshipThreshold);
-  const remainingFreeship =
-    cart && selectedItems.length > 0 && (!hasMerchant || freeshipBase > 0) ? Math.max(0, cart.freeshipThreshold - freeshipBase) : 0;
+  const serverFreeship = !hasMerchant && allSelected && !!cart?.freeship && buyableSelected.length === selectedItems.length;
+  const freeship = cart ? freeshipProgress({ base: freeshipBase, threshold: cart.freeshipThreshold, serverReached: serverFreeship }) : null;
+  const showFreeship = !!cart && (!hasMerchant || freeshipBase > 0);
   // Số giảm hiển thị: cả giỏ lấy từ giỏ, một phần giỏ lấy từ giá phần chọn của máy chủ; chưa có giá đó thì không hiện (thanh toán tính lại).
   const shown = allSelected ? cart : priced;
   const shownDiscount = shown?.discount ?? 0;
@@ -267,10 +269,6 @@ export default function CartPage() {
           ? cartOutOfStockBlocked(outOfStockSelected.map((it) => it.productName))
           : CART_OVER_STOCK_BLOCKED
         : null;
-  // Thanh tiến độ freeship theo phần đang chọn như StickySummary của Mini App; có hàng gian hàng tự giao thì chỉ hiện khi phần Tubu giao > 0.
-  const barRemaining = cart ? Math.max(0, cart.freeshipThreshold - freeshipBase) : 0;
-  const showFreeship = !!cart && (!hasMerchant || freeshipBase > 0);
-  const freeshipPct = cart && cart.freeshipThreshold > 0 ? Math.min(100, Math.round((freeshipBase / cart.freeshipThreshold) * 100)) : 100;
   const showBar = !cartQ.isLoading && !cartQ.isError && !!cart && cart.items.length > 0;
 
   // Một dòng giỏ; dòng của bộ combo và dòng lẻ vẽ cùng một hàm.
@@ -477,6 +475,12 @@ export default function CartPage() {
       ) : (
         <div className="grid grid-cols-1 gap-6 max-md:gap-3 md:mx-auto md:max-w-2xl lg:max-w-none lg:grid-cols-[minmax(0,1fr)_360px]">
           <div className="min-w-0">
+            {showFreeship && freeship && (
+              <div data-testid="cart-freeship" className="mb-3 max-md:mb-2">
+                <FreeShippingProgressBar base={freeshipBase} threshold={cart.freeshipThreshold} serverReached={serverFreeship} tubuOnly={hasMerchant} />
+                {!freeship.reached && <FreeshipAddons remaining={freeship.remaining} lines={allItems} />}
+              </div>
+            )}
             <label className="relative mb-3 flex min-h-11 cursor-pointer items-center gap-3 px-1 text-sm font-medium text-stone-900 max-md:mb-1 max-md:min-h-11 max-md:px-0 max-md:font-normal max-md:text-[length:var(--type-body-md-size)]">
               <span className={miniCheckboxWrap}>
                 <input
@@ -490,15 +494,6 @@ export default function CartPage() {
               </span>
               Chọn tất cả
             </label>
-            {!freeshipReached && remainingFreeship > 0 && (
-              <div className="mb-3 flex items-center gap-2 rounded-card border border-forest-200 bg-forest-50 px-4 py-3 text-sm text-forest-800 max-md:hidden">
-                <Truck className="h-4 w-4 shrink-0 text-forest-600" aria-hidden="true" />
-                <span>
-                  Mua thêm <strong className="font-bold">{formatVnd(remainingFreeship)}</strong> để được miễn phí giao hàng
-                  {hasMerchant ? ' cho phần hàng Tubu Tree giao' : ''}
-                </span>
-              </div>
-            )}
             {withHeaders && (
               <p className="mb-3 text-caption text-stone-600 max-md:mb-1">
                 Giỏ có hàng do nhiều nơi giao: mỗi nơi giao thành một đơn riêng, có phí giao riêng.
@@ -654,27 +649,6 @@ export default function CartPage() {
           )}
           {phoneCoupon && couponBox(true)}
           <div className="mt-1 space-y-1">
-            {showFreeship && (
-              <div>
-                <div className={`text-caption ${freeshipReached ? 'text-success-fg' : 'text-stone-600'}`}>
-                  {freeshipReached
-                    ? hasMerchant
-                      ? 'Miễn phí giao hàng cho phần hàng Tubu Tree giao'
-                      : 'Bạn được miễn phí giao hàng 🌿'
-                    : `Mua thêm ${formatVnd(barRemaining)} để được miễn phí giao hàng${hasMerchant ? ' cho phần hàng Tubu Tree giao' : ''}`}
-                </div>
-                {/* Đã đạt thì chỉ còn dòng chữ: thanh đầy 100% không nói thêm gì mà tốn chiều cao của chân dính (giống Mini App). */}
-                {!freeshipReached && (
-                  <div data-testid="freeship-bar" aria-hidden="true" className="mt-1 h-1 overflow-hidden rounded-full bg-track">
-                    <div
-                      data-testid="freeship-fill"
-                      className="h-full rounded-full transition-[width]"
-                      style={{ width: `${freeshipPct}%`, background: 'linear-gradient(90deg, var(--color-progress-fill-from), var(--color-action-primary-bg))' }}
-                    />
-                  </div>
-                )}
-              </div>
-            )}
             {shownCombo > 0 && <KeyValueRow label="Giảm giá combo" value={`-${formatVnd(shownCombo)}`} tone="success" style={{ padding: 0 }} />}
             {shownDiscount > 0 && <KeyValueRow label="Giảm giá" value={`-${formatVnd(shownDiscount)}`} tone="success" style={{ padding: 0 }} />}
             {shownTier > 0 && <KeyValueRow label="Ưu đãi hạng thành viên" value={`-${formatVnd(shownTier)}`} tone="success" style={{ padding: 0 }} />}

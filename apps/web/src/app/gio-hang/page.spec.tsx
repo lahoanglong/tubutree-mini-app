@@ -246,9 +246,10 @@ describe('/gio-hang — chia theo nơi giao (D4)', () => {
     expect(sections[0]!.textContent).toContain('Dầu gội bồ kết');
     expect(sections[1]!.textContent).toContain('Mật ong rừng');
     expect(container.textContent).toContain('mỗi nơi giao thành một đơn riêng');
-    expect(container.textContent).toContain('miễn phí giao hàng cho phần hàng Tubu Tree giao');
-    const banner = Array.from(container.querySelectorAll('.max-md\\:hidden')).find((e) => e.textContent?.includes('Mua thêm'));
-    expect(banner?.textContent).toContain('miễn phí giao hàng cho phần hàng Tubu Tree giao');
+    const freeship = container.querySelector<HTMLElement>('[data-testid="freeship-progress"]')!;
+    expect(freeship.textContent).toContain('Miễn phí giao hàng cho phần hàng Tubu Tree giao');
+    expect(container.querySelectorAll('[data-testid="freeship-progress"]')).toHaveLength(1);
+    expect(container.querySelector('[data-testid="sticky-bar"]')!.textContent).not.toContain('Miễn phí giao hàng');
   });
 
   it('ngưỡng miễn phí giao hàng tính trên phần hàng Tubu Tree giao, không cộng hàng gian hàng tự giao', async () => {

@@ -6,7 +6,20 @@ import { Truck } from 'lucide-react';
 import { GALLERY_STORY_PRODUCTS, GALLERY_COMBO_ITEMS, GALLERY_PICKER_ROWS, GALLERY_SLIDES, GALLERY_SORT_OPTIONS, GALLERY_VOUCHERS, galleryCombo, galleryEnd, type GalleryVoucher } from '@tubutree/app-core/commerce/ds-gallery-data';
 import { cartComboBlocks } from '@tubutree/app-core/commerce/cart-combo';
 import { CartComboBlock } from '@/components/cart-combo-block';
-import { BannerCarousel, ComboCard, Countdown, FlashSoldBar, Heading, ProductStoryShowcase, Section, SectionHeader, SortBar, Text, VoucherPicker, VoucherTicket } from '@/components/mini';
+import { BannerCarousel, ComboCard, Countdown, FlashSoldBar, Heading, FreeShippingProgressBar, FreeshipAddonRail, ProductStoryShowcase, Section, SectionHeader, SortBar, StoryReelStrip, Text, VoucherPicker, VoucherTicket } from '@/components/mini';
+
+const GALLERY_REEL_ITEMS = [
+  { slug: 'rau-muong', name: 'Rau muống', thumbnail: null, seen: false },
+  { slug: 'mat-ong', name: 'Mật ong rừng nguyên chất', thumbnail: null, seen: true },
+  { slug: 'dau-goi', name: 'Dầu gội bưởi', thumbnail: null, seen: false },
+  { slug: 'nuoc-rua-chen', name: 'Nước rửa chén sinh học', thumbnail: null, seen: false },
+];
+const GALLERY_ADDON_ITEMS = [
+  { slug: 'rau-muong', name: 'Rau muống', thumbnail: null, price: 29_000, variationId: 'v1' },
+  { slug: 'mat-ong', name: 'Mật ong rừng', thumbnail: null, price: 39_000, compareAt: 49_000, variationId: 'v2' },
+  { slug: 'dau-goi', name: 'Dầu gội bưởi', thumbnail: null, price: 45_000, variationId: 'v3' },
+];
+
 
 /**
  * Trang dev `/ds-gallery`: vẽ mọi biến thể và trạng thái của bộ section-kit bằng dữ liệu giả (app-core/commerce/ds-gallery-data),
@@ -260,6 +273,39 @@ export function DsGallery() {
               <ProductStoryShowcase product={g.product} />
             </Variant>
           ))}
+        </Group>
+
+        <Group name="story-reel-strip">
+          <Variant label="đang tải">
+            <StoryReelStrip items={[]} loading onOpen={() => undefined} />
+          </Variant>
+          <Variant label="chưa xem (viền xanh) và đã xem (viền xám)">
+            <StoryReelStrip items={GALLERY_REEL_ITEMS} onOpen={() => undefined} />
+          </Variant>
+        </Group>
+
+        <Group name="free-shipping-progress-bar">
+          <Variant label="còn thiếu 35.000đ">
+            <FreeShippingProgressBar base={164_000} threshold={199_000} />
+          </Variant>
+          <Variant label="vừa bắt đầu">
+            <FreeShippingProgressBar base={0} threshold={199_000} />
+          </Variant>
+          <Variant label="chỉ phần Tubu giao">
+            <FreeShippingProgressBar base={120_000} threshold={199_000} tubuOnly />
+          </Variant>
+          <Variant label="đã đạt">
+            <FreeShippingProgressBar base={210_000} threshold={199_000} />
+          </Variant>
+        </Group>
+
+        <Group name="freeship-addon-rail">
+          <Variant label="3 món bù đơn, có giá gạch">
+            <FreeshipAddonRail items={GALLERY_ADDON_ITEMS} onAdd={() => undefined} />
+          </Variant>
+          <Variant label="đang thêm món đầu">
+            <FreeshipAddonRail items={GALLERY_ADDON_ITEMS} busySlug="rau-muong" onAdd={() => undefined} />
+          </Variant>
         </Group>
       </div>
     </main>

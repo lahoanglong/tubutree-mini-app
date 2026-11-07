@@ -3,15 +3,15 @@ import type { QueryClient } from '@tanstack/react-query';
 import { HOME_QUERY_PREFIXES, customerKind, dedupeAgainst, homeBlockOrder, refreshHomeQueries } from './home-blocks';
 
 describe('homeBlockOrder (nguồn ở app-core, Mini App chỉ re-export)', () => {
-  it('khách cũ: thẻ thành viên, việc cần làm, banner, lối tắt, Giờ vàng TRƯỚC mua lại, danh mục, bán chạy nhất, combo, hành trình, cộng đồng, một lưới gợi ý', () => {
+  it('khách cũ: thẻ thành viên, việc cần làm, banner, lối tắt, dải Story, Giờ vàng TRƯỚC mua lại, danh mục, bán chạy nhất, combo, hành trình, cộng đồng, một lưới gợi ý', () => {
     expect(homeBlockOrder('returning')).toEqual([
-      'search', 'member', 'todo', 'banner', 'shortcuts', 'flash', 'purchased', 'categories', 'bestSellers', 'combos', 'journey', 'community', 'suggest',
+      'search', 'member', 'todo', 'banner', 'shortcuts', 'stories', 'flash', 'purchased', 'categories', 'bestSellers', 'combos', 'journey', 'community', 'suggest',
     ]);
   });
 
   it('khách mới: Quà khách mới thay thẻ thành viên, không có Mua lại', () => {
     expect(homeBlockOrder('new')).toEqual([
-      'search', 'welcome', 'todo', 'banner', 'shortcuts', 'flash', 'categories', 'bestSellers', 'combos', 'journey', 'community', 'suggest',
+      'search', 'welcome', 'todo', 'banner', 'shortcuts', 'stories', 'flash', 'categories', 'bestSellers', 'combos', 'journey', 'community', 'suggest',
     ]);
   });
 

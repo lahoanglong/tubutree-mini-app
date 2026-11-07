@@ -36,6 +36,8 @@ const mount = async () => {
   return r.container;
 };
 const bar = (c: HTMLElement) => c.querySelector<HTMLElement>('[data-testid="sticky-bar"]')!;
+// Thanh Miễn phí giao hàng nằm ĐẦU nội dung giỏ (trên "Chọn tất cả"), không còn ở chân dính.
+const freeship = (c: HTMLElement) => c.querySelector<HTMLElement>('[data-testid="freeship-progress"]')!;
 
 beforeEach(() => {
   sessionStorage.clear();
@@ -120,10 +122,11 @@ describe('/gio-hang — thẻ mã giảm giá như Mini App', () => {
 });
 
 describe('/gio-hang — thanh dính đáy như Mini App', () => {
-  it('đủ freeship: "Bạn được miễn phí giao hàng 🌿", tạm tính (chưa gồm phí giao hàng, không ghi "đã giảm" khi chưa có giảm), một nút "Thanh toán (2)", không có Tổng cộng', async () => {
+  it('đủ freeship: chúc mừng ở đầu giỏ (không còn ở chân dính), tạm tính (chưa gồm phí giao hàng, không ghi "đã giảm" khi chưa có giảm), một nút "Thanh toán (2)", không có Tổng cộng', async () => {
     const c = await mount();
+    expect(freeship(c).textContent).toBe('🎉 Đơn hàng đã được Miễn phí giao hàng');
     const b = bar(c).textContent!;
-    expect(b).toContain('Bạn được miễn phí giao hàng 🌿');
+    expect(b).not.toContain('Miễn phí giao hàng');
     expect(b).toContain('Tạm tính');
     expect(b).not.toContain('đã giảm');
     expect(b).toContain('578.000đ');
@@ -140,34 +143,35 @@ describe('/gio-hang — thanh dính đáy như Mini App', () => {
       { subtotal: 678000, freeship: false },
     );
     const c = await mount();
-    expect(bar(c).textContent).toContain('Miễn phí giao hàng cho phần hàng Tubu Tree giao');
+    expect(freeship(c).textContent).toBe('🎉 Phần hàng Tubu Tree giao đã được Miễn phí giao hàng');
+    expect(bar(c).textContent).not.toContain('Miễn phí giao hàng');
   });
 
-  it('chưa đủ freeship: câu mời mua thêm kèm thanh tiến độ theo phần trăm', async () => {
+  it('chưa đủ freeship: câu mời mua thêm kèm thanh tiến độ theo phần trăm ở đầu giỏ, không ở chân dính', async () => {
     state.cart = cartOf([line({ quantity: 1, total: 289000 })], { subtotal: 289000, freeship: false });
     const c = await mount();
-    expect(bar(c).textContent).toContain('Mua thêm 211.000đ để được miễn phí giao hàng');
-    const fill = bar(c).querySelector<HTMLElement>('[data-testid="freeship-fill"]')!;
-    expect(fill.style.width).toBe('58%');
+    expect(freeship(c).textContent).toContain('Mua thêm 211.000đ để được Miễn phí giao hàng 🚚');
+    expect(bar(c).querySelector('[data-testid="freeship-bar"]')).toBeNull();
+    const fill = freeship(c).querySelector<HTMLElement>('[data-testid="freeship-fill"]')!;
+    expect(fill.style.width).toBe('57%');
+    expect(freeship(c).querySelector('[role="progressbar"]')!.getAttribute('aria-valuenow')).toBe('57');
   });
 
   it('thanh tiến độ chỉ dùng token ngữ nghĩa như Mini App: rãnh bg-track, đầu dải --color-progress-fill-from, không bậc stone/forest (G2 MINOR)', async () => {
     state.cart = cartOf([line({ quantity: 1, total: 289000 })], { subtotal: 289000, freeship: false });
     const c = await mount();
-    const track = bar(c).querySelector<HTMLElement>('[data-testid="freeship-bar"]')!;
-    const fill = track.querySelector<HTMLElement>('[data-testid="freeship-fill"]')!;
-    expect(track.className).toMatch(/\bbg-track\b/);
-    expect(track.className).not.toMatch(/\bbg-stone-200\b/);
-    expect(fill.getAttribute('style')).toContain('var(--color-progress-fill-from)');
-    expect(track.outerHTML).not.toMatch(/var\(--(?:stone|forest)-\d+\)/);
+    const track = freeship(c).querySelector<HTMLElement>('[data-testid="freeship-bar"]')!;
+    expect(track.className).toBe('tubu-freeship-track');
+    expect(track.outerHTML).not.toMatch(/var\(--(?:stone|forest)-\d+\)|\b(?:bg|text)-(?:stone|forest)-\d+\b/);
   });
 
-  it('bỏ chọn hết: thanh dính vẫn nhắc đúng ngưỡng freeship (như StickySummary của Mini App), không "Mua thêm 0đ"', async () => {
+  it('bỏ chọn hết: thanh ở đầu giỏ vẫn nhắc đúng ngưỡng freeship, không "Mua thêm 0đ"', async () => {
     state.cart = cartOf([line({ id: 'a', quantity: 1, total: 289000 }), line({ id: 'b', quantity: 1, total: 289000 })], { subtotal: 578000, freeship: true });
     const c = await mount();
     click(c.querySelector('input[aria-label="Chọn tất cả sản phẩm"]'));
     await flush(3);
-    expect(bar(c).textContent).toContain('Mua thêm 500.000đ để được miễn phí giao hàng');
+    expect(freeship(c).textContent).toContain('Mua thêm 500.000đ để được Miễn phí giao hàng 🚚');
+    expect(bar(c).textContent).not.toContain('Mua thêm');
   });
 
   it('dấu tick nằm trong khung 24px riêng bám đúng ô chọn (chọn tất cả và từng dòng)', async () => {

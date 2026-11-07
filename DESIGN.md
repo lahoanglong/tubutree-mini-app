@@ -45,6 +45,7 @@ Chỉ nêu token dùng cho mua sắm; danh sách đầy đủ ở `packages/desi
 | `--sort-bar-top` | chỗ `SortBar` dính; trang có header cố định đặt lại |
 | `--dialog-w` (480px) | bề rộng tối đa của sheet web từ md (hộp thoại giữa màn); hai sheet web dùng chung |
 | `--color-border-focus` | viền focus của nút |
+| `--color-story-ring-from`, `--color-story-ring-to`, `--color-story-ring-seen` | viền vòng Story đầu Trang chủ: chuyển sắc xanh lá → chanh khi chưa xem, xám nhạt khi đã xem trong phiên |
 
 Tiêu đề khối trong luồng mua: Inter 16/700, -0.01em (Fraunces chỉ cho tiêu đề trang và số lớn từ 22px). Vùng chạm tối thiểu 44px, tương phản chữ tối thiểu 4,5:1.
 
@@ -72,8 +73,18 @@ Kệ ngang chỉ dùng `rail-sm`, `flash` và `rank` (`--tile-w-sm`, 128px) ho�
 | Cần | Dùng |
 |---|---|
 | dải kể câu chuyện nguyên liệu ở trang chi tiết (vòng cung biến thể, lắp ghép nguyên liệu, điểm chỉ thành phần, chế độ toàn màn hình) | `ProductStoryShowcase` |
+| dải vòng tròn Story đầu Trang chủ (mỗi vòng mở khung Reel toàn màn của một món Bán chạy nhất) | `StoryReelStrip` (logic chọn món, kịch bản dự phòng, trạng thái đã xem ở `commerce/story-reel.ts`; host `HomeStoryReel` ở `components/home/` mỗi app) |
 
 Cấu hình `ProductStoryConfig` lưu ở cột `Product.storyConfig` (kiểu và `parseStoryConfig` ở `packages/shared-types/src/product-story.ts`). Trang vẽ cấu hình đã lưu, nếu không có thì kịch bản mẫu theo slug (10 sản phẩm ở `story-presets.ts`), nếu không có thì tự sinh từ thành phần (`resolveStoryConfig`, `packages/app-core/src/commerce/product-story.ts`); không có gì để kể thì không vẽ. Nguyên liệu là sprite vector (`story-sprites.ts`), màu qua `--color-story-tone-*`, quầng nền qua `--color-story-ambient-*`. Chữ ở `story.*` của `shop-copy.ts`. Khách bật giảm chuyển động thì vẽ bản tĩnh đủ nội dung. Admin sửa và xem trước ở Story Studio trong ngăn kéo sản phẩm. Khung sân khấu là hình vuông 1:1, xPct/yPct của lớp nguyên liệu và điểm chỉ tính theo khung đó, ảnh sản phẩm lề `STORY_PRODUCT_INSET_PCT` (12%) mỗi cạnh ở Mini, web và Studio (`product-story.spec.ts` canh CSS hai app). Vòng cung chỉ giữ khi nó liệt kê đúng các phân loại đang bán, lệch thì dựng lại từ phân loại thật. Hết hàng thì hai nút ở khung toàn màn khoá (`buyDisabled`). Ảnh sân khấu (`cutoutUrl`) trỏ ảnh đã đăng ký của sản phẩm (`/public-image/product/<id>/<số>`) hoặc link https.
+
+Khung Reel là `ProductStoryShowcase` với `fullscreen` và `reel`: thanh đáy chỉ có "Thêm vào giỏ · {giá}" và "Câu chuyện kế" (không có "Mua ngay"), cấu hình lấy từ `resolveReelStoryConfig` (bỏ vòng cung; món không có thành phần, preset hay nhãn chủ lực nhận kịch bản dự phòng chỉ gồm điều có trong dữ liệu sản phẩm: tên, chứng nhận do admin nhập, mô tả ngắn, giao hàng). Món admin đã tắt câu chuyện (`enabled: false`) bị bỏ qua. Dải ẩn khi dưới 3 món.
+
+### Miễn phí giao hàng ở giỏ
+
+| Cần | Dùng |
+|---|---|
+| thanh tiến độ ở đầu giỏ: "Mua thêm {số} để được Miễn phí giao hàng", đạt thì câu chúc mừng và bỏ thanh | `FreeShippingProgressBar` (số liệu từ `freeshipProgress` ở `commerce/freeship-progress.ts`; vẽ theo phần ĐANG CHỌN, chỉ phần Tubu giao khi giỏ có hàng gian hàng tự giao; `shimmer` tắt khi giảm chuyển động) |
+| dải 3–5 món bù đơn, nút "+ Thêm" một chạm | `FreeshipAddonRail` (món chọn bằng `pickFreeshipAddons`: còn hàng, Tubu giao, chưa có trong giỏ, giá không quá số còn thiếu + 25.000đ; dưới 3 món thì ẩn) |
 
 ### Khối, tiêu đề, điều hướng trong trang
 
@@ -171,7 +182,7 @@ Trang chủ lúc lập tài liệu (nguồn thật là `shelves.ts`, đọc ở 
 | `home.bestSellers` | rail | 10 / 3 | 4 | `/best-sellers` |
 | `home.suggest` | feed | 100 / 4 | 6 | `/browse` |
 
-Thứ tự khối Trang chủ cho khách cũ: header dính → thẻ thành viên → việc cần làm → banner → lối tắt → Giờ vàng → Mua lại → danh mục → Bán chạy nhất → combo → hành trình → cộng đồng → Gợi ý hôm nay. Khách mới: `welcome` thay thẻ thành viên, không có Mua lại.
+Thứ tự khối Trang chủ cho khách cũ: header dính → thẻ thành viên → việc cần làm → banner → lối tắt → dải Story (`stories`, không tính vào 4 kệ hàng) → Giờ vàng → Mua lại → danh mục → Bán chạy nhất → combo → hành trình → cộng đồng → Gợi ý hôm nay. Khách mới: `welcome` thay thẻ thành viên, không có Mua lại.
 
 ## Luật nhãn và giá
 
@@ -282,3 +293,4 @@ Baseline chỉ được giảm. Đỏ vì bánh cóc hoặc `ds-shop-guard` thì
 | 2026-11-02 | Giỏ gom món của combo dưới đầu nhóm "Combo: {tên} · Tiết kiệm {số}"; bỏ món khoá của bộ thì hỏi trước bằng `ConfirmSheet` (không chặn), số Tiết kiệm của đầu nhóm lấy từ `comboGroups` của API (K5) | `comboGroups` cộng bằng `comboDiscount` vì cùng một lần khớp ở máy chủ nên khách thấy bộ nào giảm bao nhiêu mà tiền trả không đổi; số trong hộp báo là cận trên khi hai bộ chung một món; khi chỉ chọn một phần giỏ, đầu nhóm theo giá phần chọn của máy chủ (nhóm không còn trong đó thì bỏ chữ Tiết kiệm và nhắc chọn đủ món; còn nhưng giảm ít hơn thì ghi số của phần chọn) để khớp dòng ở chân dính, chưa có giá đó thì theo luật món khoá; sản phẩm chính của "mua kèm" là món khoá không mang giảm nhưng vẫn nằm trong khối, kẻo hộp báo hỏi về một món trông như món lẻ; giỏ vừa sửa ở máy khách (Mini) đưa `comboDiscount` ở chân về 0 và đánh dấu `comboPending`, còn số của các nhóm giữ lần trước: đầu nhóm giữ chỗ của số (ẩn, không đọc, không hiện số cũ) để không đổi số dòng và khối không nhảy dưới ngón tay khách mỗi lần bấm +/−, hộp báo bỏ món vẫn có số để báo; hai bộ chung món khi chọn một phần giỏ thì bộ mà máy chủ áp có khối riêng nên tổng đầu nhóm luôn bằng dòng ở chân; từ md vạch dọc bên trái ghi chỗ bộ kết thúc |
 | 2026-11-02 | Chữ API bỏ "Vui lòng" và "chúng tôi" (giữ mệnh đề đầu câu mà client cũ so khớp); câu khách đọc của Giờ vàng tách ra `flash-sale-notice.ts`; `terminology.spec` quét mọi file API cho hai chữ này, đoạn template xét cả từ viết thường, bỏ giá trị truy vấn (M2) | lưới cũ chỉ quét file `*-notice.ts`/`*-price.ts` nên "Vui lòng" còn ~110 chỗ trong lỗi API; client cũ trên máy khách vẫn chạy với API mới nên chỉ đổi phần đuôi câu |
 | 2026-11-05 | Thêm `ProductStoryShowcase` (dải câu chuyện sản phẩm) và Story Studio; sprite nguyên liệu là vector nội tuyến, màu qua token `--color-story-*`; kịch bản mẫu chỉ nêu điều có trong dữ liệu sản phẩm | giữ một bộ cấu hình cho Mini, web và Admin Live Preview; không tải tài nguyên ngoài nên dùng được ngoại tuyến và không phá dung lượng gói đầu; không bịa thông số (phần trăm chỉ lấy từ thành phần thật) |
+| 2026-11-07 | W42A: dải Story đầu Trang chủ (`StoryReelStrip`, khối `stories` dưới lối tắt, nguồn Bán chạy nhất, cao 144px) và thanh Miễn phí giao hàng + dải bù đơn ở ĐẦU giỏ (`FreeShippingProgressBar`, `FreeshipAddonRail`); gỡ thanh Freeship khỏi chân dính | đề bài yêu cầu; tiêu đề dải giữ "Câu chuyện sản phẩm" và kịch bản dự phòng chỉ nêu dữ liệu có thật (không ghi Đà Lạt, VietGAP, thu hoạch sáng sớm, độ giòn ngọt) vì danh mục có cả dầu gội, nước rửa chén và `story-presets-launch.spec` chặn tuyên bố cần giấy tờ; câu chúc mừng không có dấu "!" theo `shop-copy.spec`; dải bù đơn chỉ nhận món Tubu giao vì hàng gian hàng tự giao không được miễn phí giao của Tubu |

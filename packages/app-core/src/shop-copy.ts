@@ -474,6 +474,31 @@ export const SHOP_COPY: Record<string, string> = {
   'story.def3': 'Hoà quyện trong {name}.',
   'story.def4': '{a}.',
   'story.def5': '{brand} gửi bạn {name}.',
+  // Dải Story đầu Trang chủ và khung Reel toàn màn (W42A)
+  'reel.badge': 'Story',
+  'reel.openAria': 'Story {name}, mở câu chuyện',
+  'reel.openAriaSeen': 'Story {name}, đã xem, mở lại',
+  'reel.next': 'Câu chuyện kế',
+  'reel.nextAria': 'Câu chuyện kế, xem sản phẩm kế tiếp',
+  'reel.addPrice': 'Thêm vào giỏ · {price}',
+  'reel.position': '{n}/{total}',
+  'reel.loadError': 'Chưa mở được câu chuyện. Bạn thử lại nhé.',
+  'reel.fb1Title': 'Món Tubu Tree chọn',
+  'reel.fb1Body': '{name}, có trong gian hàng Tubu Tree.',
+  'reel.fbCertTitle': 'Ghi trên sản phẩm',
+  'reel.fbCertBody': 'Chứng nhận ghi trên sản phẩm: {a}.',
+  'reel.fbDescTitle': 'Giới thiệu ngắn',
+  'reel.fbShipTitle': 'Giao đến tận nhà',
+  'reel.fbShipBody': 'Đặt ngay, đơn của bạn được giao đến tận nhà.',
+  // Thanh tiến độ Miễn phí giao hàng và dải gợi ý mua thêm ở đầu Giỏ (W42A)
+  'freeship.progress': 'Mua thêm {price} để được Miễn phí giao hàng 🚚',
+  'freeship.progressTubu': 'Mua thêm {price} để được Miễn phí giao hàng cho phần hàng Tubu Tree giao 🚚',
+  'freeship.reached': '🎉 Đơn hàng đã được Miễn phí giao hàng',
+  'freeship.reachedTubu': '🎉 Phần hàng Tubu Tree giao đã được Miễn phí giao hàng',
+  'freeship.barAria': 'Đã đạt {pct}% để được Miễn phí giao hàng',
+  'freeship.addonsTitle': 'Gợi ý mua thêm cho đủ Miễn phí giao hàng',
+  'freeship.add': '+ Thêm',
+  'freeship.addAria': 'Thêm {name} vào giỏ, {price}',
 };
 
 /** Thuật ngữ không được xuất hiện trong chữ hiển thị cho khách; `use` là chữ thay thế. Bảng gốc: ux-copy mục D2 và thiết kế §4 Q5. */

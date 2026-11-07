@@ -85,10 +85,18 @@ describe('cặp màu commerce của gói tokens-a11y đạt 4,5:1 (chữ) — WC
     ['--color-text-primary', '--color-story-ambient-sky'],
     ['--color-text-primary', '--color-story-ambient-sand'],
     ['--color-text-secondary', '--color-bg-surface'],
+    // Thanh Miễn phí giao hàng khi đã đạt (W42A): chữ xanh ngọc trên nền thành công; nhãn "Story" trên viền vòng.
+    ['--color-text-success', '--color-status-success-bg'],
   ];
 
   it.each(pairs)('%s trên %s', (fg, bg) => {
     expect(ratio(tokenRgb(fg), tokenRgb(bg))).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it.each([['--color-story-ring-from'], ['--color-story-ring-to'], ['--color-story-ring-seen']])('viền vòng Story %s đạt 3:1 so với nền trắng (WCAG 1.4.11) trừ viền đã xem', (name) => {
+    const r = ratio(tokenRgb(name), tokenRgb('--color-bg-surface'));
+    if (name === '--color-story-ring-seen') expect(r).toBeGreaterThanOrEqual(1.4);
+    else expect(r).toBeGreaterThanOrEqual(3);
   });
 
   it('giá deal là cam đậm #9A5200, không phải đỏ (thiết kế §4 Q2)', () => {

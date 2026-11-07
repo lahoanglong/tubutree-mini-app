@@ -351,13 +351,13 @@ describe('HomeView — banner chiến dịch (P11)', () => {
     mocks.restoring = true;
     mocks.get.mockImplementation(() => new Promise(() => undefined));
     const none = await mount();
-    expect(none.querySelector('[data-testid="home-settling"]')!.children).toHaveLength(4);
+    expect(none.querySelector('[data-testid="home-settling"]')!.children).toHaveLength(5);
     expect(none.querySelector('[data-hub-part="banner"]')).toBeNull();
     expect(none.querySelector('[data-testid="home-banner-loading"]')).toBeNull();
     mounted?.unmount();
     localStorage.setItem(BANNER_HINT_KEY, '1');
     const hinted = await mount();
-    expect(hinted.querySelector('[data-testid="home-settling"]')!.children).toHaveLength(4);
+    expect(hinted.querySelector('[data-testid="home-settling"]')!.children).toHaveLength(5);
     const slot = hinted.querySelector<HTMLElement>('[data-hub-part="banner"]')!;
     expect(slot.className).toContain('lg:col-span-8');
     expect(slot.querySelectorAll('[data-testid="home-banner-loading"]')).toHaveLength(1);

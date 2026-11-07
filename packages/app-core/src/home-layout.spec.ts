@@ -15,15 +15,24 @@ import { rememberActiveOrder } from './home-todo-rows';
 import type { LoyaltyOverview } from './api/loyalty';
 
 describe('homeBlockOrder', () => {
-  it('khách cũ: header, thẻ thành viên, việc cần làm, banner, lối tắt, Giờ vàng trước Mua lại, Danh mục, Bán chạy nhất, combos, rồi một lưới gợi ý', () => {
+  it('khách cũ: header, thẻ thành viên, việc cần làm, banner, lối tắt, dải Story, Giờ vàng trước Mua lại, Danh mục, Bán chạy nhất, combos, rồi một lưới gợi ý', () => {
     expect(homeBlockOrder('returning')).toEqual([
-      'search', 'member', 'todo', 'banner', 'shortcuts', 'flash', 'purchased', 'categories', 'bestSellers', 'combos', 'journey', 'community', 'suggest',
+      'search', 'member', 'todo', 'banner', 'shortcuts', 'stories', 'flash', 'purchased', 'categories', 'bestSellers', 'combos', 'journey', 'community', 'suggest',
     ]);
   });
   it('khách mới: Quà khách mới thay thẻ thành viên, không Mua lại, Danh mục đứng trước Bán chạy nhất', () => {
     expect(homeBlockOrder('new')).toEqual([
-      'search', 'welcome', 'todo', 'banner', 'shortcuts', 'flash', 'categories', 'bestSellers', 'combos', 'journey', 'community', 'suggest',
+      'search', 'welcome', 'todo', 'banner', 'shortcuts', 'stories', 'flash', 'categories', 'bestSellers', 'combos', 'journey', 'community', 'suggest',
     ]);
+  });
+  it('dải Story (W42A) đứng ngay dưới lối tắt ở mọi loại khách và giữ chỗ đúng chiều cao khi chờ', () => {
+    for (const k of ['returning', 'new', 'unknown'] as const) {
+      const order = homeBlockOrder(k);
+      expect(order[order.indexOf('shortcuts') + 1]).toBe('stories');
+      expect(order.filter((b) => b === 'stories')).toHaveLength(1);
+    }
+    expect(homeKeptOrder('new').indexOf('stories')).toBe(homeKeptOrder('new').indexOf('shortcuts') + 1);
+    expect(HOME_SETTLING_HEIGHTS.stories).toBe(144);
   });
   it('chưa biết loại khách: giữ chỗ thẻ thành viên, không có khối riêng của khách cũ (Mua lại) hay khách mới (Quà)', () => {
     const order = homeBlockOrder('unknown');

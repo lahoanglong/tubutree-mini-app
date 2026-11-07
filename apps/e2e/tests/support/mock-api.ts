@@ -398,6 +398,8 @@ export const test = base.extend<{ api: MockApi; visualCapture: void }>({
       // Combo ưu đãi / Mua kèm (PDP) và kệ Combo tiết kiệm (Trang chủ) là công khai và tự ẩn khi rỗng: mặc định không có bộ nào.
       api.fallback('GET', '/bundles/combos', []);
       api.fallback('GET', '/products/:slug/bundles', { combos: [], addons: [] });
+      // Bán chạy nhất nuôi dải Story của Trang chủ và dải gợi ý bù đơn của Giỏ; cả hai tự ẩn khi rỗng, nên mọi spec chạm Giỏ hay Trang chủ không phải khai riêng: mặc định không có món nào.
+      api.fallback('GET', '/products', { data: [], meta: { page: 1, limit: 10, total: 0 }, basis: 'days30' });
       // Cá nhân, Trang chủ, thanh đáy và chuông web đọc mọi số đếm từ MỘT lời gọi /me/summary. Mock gộp này dựng từ các mock lẻ mà spec
       // đã khai (số đơn theo tab, đơn đang xử lý, tin chưa đọc, gói định kỳ), nên spec chỉ cần mô tả dữ liệu như trước; mặc định không có gì.
       api.fallback('GET', '/me/notifications/unread-count', { count: 0 });

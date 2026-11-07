@@ -380,3 +380,123 @@ describe('W40B: tải trước ảnh chương kế và chuyển chương mượt
     });
   });
 });
+
+describe('ProductStoryShowcase (Mini): chế độ Reel', () => {
+  const reelProduct = { ...baseProduct, name: 'Nước rửa chén', brand: 'Tubu', certifications: ['USDA'] } as unknown as ProductDetail;
+
+  it('món không cấu hình, không nguyên liệu vẫn có khung toàn màn (kịch bản dự phòng) khi reel; không reel vẫn không vẽ gì', () => {
+    const { rerender } = render(<ProductStoryShowcase product={reelProduct} fullscreen />);
+    expect(screen.queryByRole('dialog')).toBeNull();
+    rerender(<ProductStoryShowcase product={reelProduct} fullscreen reel />);
+    expect(screen.getByRole('dialog', { name: 'Câu chuyện sản phẩm' })).toBeInTheDocument();
+    expect(screen.getByText('Món Tubu Tree chọn')).toBeInTheDocument();
+  });
+
+  it('thanh đáy Reel: "Thêm vào giỏ · giá" và "Câu chuyện kế", không có "Mua ngay"', () => {
+    const onAdd = vi.fn();
+    const onNext = vi.fn();
+    render(<ProductStoryShowcase product={reelProduct} fullscreen reel addPrice="49.000đ" onNext={onNext} onAddToCart={onAdd} />);
+    const add = screen.getByTestId('story-add-to-cart');
+    expect(add).toHaveTextContent('Thêm vào giỏ · 49.000đ');
+    expect(screen.queryByTestId('story-buy-now')).toBeNull();
+    const next = screen.getByTestId('story-next');
+    expect(next).toHaveAccessibleName('Câu chuyện kế, xem sản phẩm kế tiếp');
+    expect(next).toHaveTextContent('Câu chuyện kế');
+    fireEvent.click(add);
+    fireEvent.click(next);
+    expect(onAdd).toHaveBeenCalledTimes(1);
+    expect(onNext).toHaveBeenCalledTimes(1);
+    expect(add.closest('.tubu-story-bar')).toHaveAttribute('data-reel', 'true');
+  });
+
+  it('không truyền onNext (món cuối dải): không có nút "Câu chuyện kế"', () => {
+    render(<ProductStoryShowcase product={reelProduct} fullscreen reel addPrice="49.000đ" onAddToCart={vi.fn()} />);
+    expect(screen.queryByTestId('story-next')).toBeNull();
+    expect(screen.getByTestId('story-add-to-cart')).toBeInTheDocument();
+  });
+
+  it('không có addPrice: nút chỉ ghi "Thêm vào giỏ"', () => {
+    render(<ProductStoryShowcase product={reelProduct} fullscreen reel onAddToCart={vi.fn()} />);
+    expect(screen.getByTestId('story-add-to-cart')).toHaveTextContent(/^Thêm vào giỏ$/);
+  });
+
+  it('buyDisabled (hết hàng): nút thêm khoá, ghi "Hết hàng", không gọi xử lý; nút kế vẫn dùng được', () => {
+    const onAdd = vi.fn();
+    const onNext = vi.fn();
+    render(<ProductStoryShowcase product={reelProduct} fullscreen reel buyDisabled addPrice="49.000đ" onNext={onNext} onAddToCart={onAdd} />);
+    const add = screen.getByTestId('story-add-to-cart');
+    expect(add).toBeDisabled();
+    expect(add).toHaveTextContent('Hết hàng');
+    fireEvent.click(add);
+    expect(onAdd).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('story-next'));
+    expect(onNext).toHaveBeenCalledTimes(1);
+  });
+
+  it('position hiện cạnh tiêu đề đầu khung ("2/8"), có số đều; không truyền thì không có', () => {
+    const { rerender } = render(<ProductStoryShowcase product={reelProduct} fullscreen reel position="2/8" />);
+    expect(screen.getByTestId('story-position')).toHaveTextContent('2/8');
+    expect(screen.getByTestId('story-position').closest('.tubu-reel-heading')).toHaveTextContent('Câu chuyện sản phẩm');
+    rerender(<ProductStoryShowcase product={reelProduct} fullscreen reel />);
+    expect(screen.queryByTestId('story-position')).toBeNull();
+  });
+
+  it('Esc và nút đóng vẫn gọi onClose; nút đóng nhận focus đầu tiên', () => {
+    const onClose = vi.fn();
+    render(<ProductStoryShowcase product={reelProduct} fullscreen reel onClose={onClose} />);
+    expect(screen.getByTestId('story-close')).toHaveFocus();
+    act(() => {
+      fireEvent.keyDown(document, { key: 'Escape' });
+    });
+    expect(onClose).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByTestId('story-close'));
+    expect(onClose).toHaveBeenCalledTimes(2);
+  });
+
+  it('Reel bỏ cảnh chọn phân loại: món nhiều phân loại có cấu hình vòng cung không vẽ chip chọn phân loại', () => {
+    render(<ProductStoryShowcase product={withVars(2)} fullscreen reel />);
+    expect(screen.queryByTestId('story-arc')).toBeNull();
+    expect(screen.queryAllByTestId('story-arc-item')).toHaveLength(0);
+  });
+
+  it('chữ cố định của Reel không có "Freeship" lẫn dấu chấm than', () => {
+    render(<ProductStoryShowcase product={reelProduct} fullscreen reel addPrice="49.000đ" onNext={vi.fn()} position="1/8" />);
+    const dialog = screen.getByRole('dialog');
+    expect(dialog.textContent).not.toMatch(/freeship/i);
+    expect(dialog.textContent).not.toContain('!');
+  });
+
+  it('chế độ không-reel giữ nguyên: hai nút Thêm vào giỏ + Mua ngay, không data-reel, không nút kế', () => {
+    render(<ProductStoryShowcase product={baseProduct} previewConfig={fullConfig()} fullscreen onNext={vi.fn()} addPrice="1đ" position="1/3" />);
+    expect(screen.getByTestId('story-add-to-cart')).toHaveTextContent(/^Thêm vào giỏ$/);
+    expect(screen.getByTestId('story-buy-now')).toBeInTheDocument();
+    expect(screen.queryByTestId('story-next')).toBeNull();
+    expect(screen.getByTestId('story-add-to-cart').closest('.tubu-story-bar')).not.toHaveAttribute('data-reel');
+  });
+});
+
+describe('css/story-reel.css: thanh đáy Reel', () => {
+  const css = readFileSync(resolve(__dirname, '../../css/story-reel.css'), 'utf8');
+
+  it('nút kế co theo nội dung, nút thêm chiếm phần còn lại và được xuống dòng (đọc đủ số tiền)', () => {
+    expect(css).toMatch(/\.tubu-story-bar\[data-reel='true'\] > \.tubu-reel-next-btn\s*\{\s*flex:\s*0 0 auto/);
+    expect(css).toMatch(/\.tubu-story-bar\[data-reel='true'\] > \*\s*\{\s*flex:\s*1 1 0;\s*min-width:\s*0/);
+    expect(css).toMatch(/\.tubu-reel-add-btn[^{]*\{[^}]*white-space:\s*normal/);
+  });
+
+  it('dưới 360px nhãn nút kế ẩn (chỉ còn mũi tên, tên truy cập giữ nguyên)', () => {
+    const style = document.createElement('style');
+    style.textContent = css;
+    document.head.appendChild(style);
+    try {
+      const media = Array.from(style.sheet!.cssRules).find(
+        (r) => r.constructor.name === 'CSSMediaRule' && /max-width:\s*359px/.test((r as CSSMediaRule).conditionText ?? (r as CSSMediaRule).media.mediaText),
+      ) as CSSMediaRule | undefined;
+      expect(media).toBeDefined();
+      const inner = Array.from(media!.cssRules) as CSSStyleRule[];
+      expect(inner.find((r) => r.selectorText === '.tubu-reel-next-label')!.style.getPropertyValue('display')).toBe('none');
+    } finally {
+      style.remove();
+    }
+  });
+});
