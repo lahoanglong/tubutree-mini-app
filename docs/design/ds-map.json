@@ -825,6 +825,24 @@
       ]
     },
     {
+      "name": "OrderTimelineTracker",
+      "miniapp": "apps/miniapp/src/components/orders/order-timeline-tracker.tsx",
+      "web": "apps/web/src/components/orders/order-timeline-tracker.tsx",
+      "props": "OrderTimelineTrackerProps",
+      "screens": [
+        "/order/:code"
+      ]
+    },
+    {
+      "name": "AffiliateFeaturedProducts",
+      "miniapp": "apps/miniapp/src/components/affiliate/featured-products.tsx",
+      "web": "apps/web/src/components/affiliate/featured-products.tsx",
+      "props": "AffiliateFeaturedProductsProps",
+      "screens": [
+        "/affiliate"
+      ]
+    },
+    {
       "name": "OrderShipping",
       "miniapp": "apps/miniapp/src/components/orders/order-shipping.tsx",
       "web": "apps/web/src/components/orders/order-shipping.tsx",

@@ -1,7 +1,11 @@
 import { render } from '@testing-library/react';
 import type { ProductDetail } from '@tubutree/app-core/api/catalog';
+import { featuredAffiliateProducts } from '@tubutree/app-core/commerce/affiliate-share';
+import { buildOrderTimelineSteps } from '@tubutree/app-core/commerce/order-timeline';
 import { Search } from 'lucide-react';
 import { describe, expect, it } from 'vitest';
+import { AffiliateFeaturedProducts } from '../affiliate/featured-products';
+import { OrderTimelineTracker } from '../orders/order-timeline-tracker';
 import { Button } from './button';
 import { Chip } from './chip';
 import { Checkbox, Radio, Switch } from './form';
@@ -30,6 +34,11 @@ const storyConfig = {
     { kind: 'ingredient_assembly' as const, steps: [{ title: 'T', body: 'B', layers: [] }, { title: 'T2', body: 'B2', layers: [] }] },
   ],
 };
+
+const featured = featuredAffiliateProducts(
+  [{ id: 'p1', name: 'Ly tre', slug: 'ly-tre', thumbnail: null, basePrice: 100000, salePrice: null, maxAffiliateRate: 10 }],
+  { baseUrl: 'https://zalo.me/s/1', affiliateCode: 'TUBU01', productPath: '/product' },
+);
 
 const px = (v: string): number => (v.endsWith('px') ? parseFloat(v) : 0);
 
@@ -74,6 +83,9 @@ describe('vùng chạm DS v2 >= 44x44', () => {
     ['FreeshipAddonRail (nút + Thêm)', () => <FreeshipAddonRail items={[{ slug: 'a', name: 'A', thumbnail: null, price: 49000, variationId: 'v' }]} onAdd={() => {}} />],
     ['Switch có nhãn', () => <Switch label="A" checked={false} onChange={() => {}} />],
     ['CouponRemovedNotice (nút Đóng lời báo mã đã gỡ)', () => <CouponRemovedNotice notice={{ code: 'A', text: 'B' }} onDismiss={() => {}} />],
+    ['OrderTimelineTracker (nút Sao chép thông tin đơn)', () => <OrderTimelineTracker steps={buildOrderTimelineSteps('SHIPPING')} shareText="Đơn hàng Tubu Tree A" />],
+    ['AffiliateFeaturedProducts (nút Chép link giới thiệu)', () => <AffiliateFeaturedProducts products={featured} />],
+    ['AffiliateFeaturedProducts lỗi (nút Thử lại)', () => <AffiliateFeaturedProducts products={null} error onRetry={() => {}} />],
   ];
 
   it.each(cases)('%s', (_name, ui) => {

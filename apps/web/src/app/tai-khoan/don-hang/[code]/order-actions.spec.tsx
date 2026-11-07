@@ -158,7 +158,8 @@ describe('chi tiết đơn — hành trình đơn (BUYERWEB-13)', () => {
       ],
     };
     const { container } = await mount();
-    const text = container.textContent ?? '';
+    // Thanh tiến trình 4 bước cũng có nhãn "Đang giao hàng": thứ tự mốc chỉ xét trong danh sách mốc vận chuyển.
+    const text = container.querySelector('ul[aria-label="Mốc vận chuyển"]')?.textContent ?? '';
     expect(container.querySelector('ul[aria-label="Mốc vận chuyển"]')).not.toBeNull();
     expect(text.indexOf('Đang cập nhật')).toBeLessThan(text.indexOf('Đang giao hàng'));
     expect(text.indexOf('Đang giao hàng')).toBeLessThan(text.indexOf('Đã tạo vận đơn'));
