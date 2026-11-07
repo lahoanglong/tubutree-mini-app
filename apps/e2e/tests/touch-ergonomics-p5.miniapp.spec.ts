@@ -11,12 +11,15 @@ import { LONG_ORDER_CODE, mockBrowse, mockFlashPage, mockLongOrder, mockNotifica
  * Phản hồi nhấn giữ nằm ở touch-press-p5.miniapp.spec.ts (Chromium). API mock toàn bộ.
  */
 
-async function expectClean(page: Page, screen: string, width: number): Promise<void> {
+/** `numbers: false` cho màn không có chữ số cần đều (gợi ý tìm kiếm, thông báo hiện giờ dạng "5 phút trước"): không đòi dò thấy phần tử nào. */
+async function expectClean(page: Page, screen: string, width: number, { numbers = true } = {}): Promise<void> {
   expect.soft(await probeTapTargets(page), `${screen} ${width}px: vùng chạm dưới 44px`).toEqual([]);
   const f = await probeLayout(page);
   expect.soft(f.overflow, `${screen} ${width}px tràn ngang`).toEqual([]);
   expect.soft(f.notTabular, `${screen} ${width}px số không đều`).toEqual([]);
-  expect.soft(await probeTabularTexts(page), `${screen} ${width}px chữ có số không đều (đồng hồ, đã bán, %, mốc giờ, khoảng giá)`).toEqual([]);
+  const t = await probeTabularTexts(page);
+  expect.soft(t.bad, `${screen} ${width}px chữ có số không đều (đồng hồ, mốc giờ, khoảng giá, số kết quả)`).toEqual([]);
+  if (numbers) expect.soft(t.checked, `${screen} ${width}px: dò số đều không thấy phần tử nào để kiểm (màn đổi chữ hay mẫu lệch)`).toBeGreaterThan(0);
 }
 
 for (const width of NARROW_WIDTHS) {
@@ -33,7 +36,7 @@ for (const width of NARROW_WIDTHS) {
       await expect(box).toBeFocused({ timeout: 15_000 });
       await box.fill('nuoc rua');
       await expect(page.getByRole('region', { name: 'Gợi ý tìm kiếm' })).toBeVisible();
-      await expectClean(page, 'Tìm kiếm (gợi ý)', width);
+      await expectClean(page, 'Tìm kiếm (gợi ý)', width, { numbers: false });
     });
 
     test('Danh sách kết quả + Bộ lọc', async ({ page, api }) => {
@@ -46,8 +49,6 @@ for (const width of NARROW_WIDTHS) {
       await page.getByRole('button', { name: 'Lọc', exact: true }).click();
       const sheet = page.locator('.zaui-sheet-content').filter({ has: page.getByRole('heading', { name: 'Bộ lọc', level: 2 }) });
       await expect(sheet).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, 0)');
-      const minPrice = sheet.getByRole('textbox', { name: /Giá từ|Từ/ }).first();
-      if (await minPrice.count()) await minPrice.fill('100000');
       await expectClean(page, 'Bộ lọc', width);
     });
 
@@ -70,7 +71,7 @@ for (const width of NARROW_WIDTHS) {
       mockNotifications(api);
       await page.goto('/notifications');
       await expect(page.getByText('Nước Rửa Chén Sinh Học Tubu 500ml').first()).toBeVisible({ timeout: 15_000 });
-      await expectClean(page, 'Thông báo', width);
+      await expectClean(page, 'Thông báo', width, { numbers: false });
     });
   });
 }

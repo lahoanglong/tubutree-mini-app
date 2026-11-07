@@ -17,12 +17,19 @@ const WATCHED = [
   /^(?:Từ|Dưới|Trên)\s.*\d/i,
 ];
 
-export async function probeTabularTexts(page: Page, scope = 'body'): Promise<string[]> {
+export interface TabularFindings {
+  /** Số phần tử nhìn thấy có chữ khớp mẫu: 0 nghĩa là dò không kiểm gì (màn đã đổi chữ, hay mẫu lệch). */
+  checked: number;
+  bad: string[];
+}
+
+export async function probeTabularTexts(page: Page, scope = 'body'): Promise<TabularFindings> {
   return page.evaluate(
     ({ scope: sel, sources }) => {
       const watched = sources.map((s) => new RegExp(s.source, s.flags));
       const root = document.querySelector(sel) ?? document.body;
-      const out: string[] = [];
+      const bad: string[] = [];
+      let checked = 0;
       for (const el of Array.from(root.querySelectorAll('*'))) {
         if (el.closest('script, style, svg, [data-probe-ignore]')) continue;
         const text = Array.from(el.childNodes)
@@ -35,12 +42,13 @@ export async function probeTabularTexts(page: Page, scope = 'body'): Promise<str
         const s = getComputedStyle(el);
         const r = el.getBoundingClientRect();
         if (s.display === 'none' || s.visibility === 'hidden' || r.width <= 1 || r.height <= 1) continue;
+        checked++;
         if (!s.fontVariantNumeric.includes('tabular-nums')) {
           const cls = (el.getAttribute('class') ?? '').trim().split(/\s+/).slice(0, 2).join('.');
-          out.push(`${el.tagName.toLowerCase()}${cls ? `.${cls}` : ''} "${text.slice(0, 40)}"`);
+          bad.push(`${el.tagName.toLowerCase()}${cls ? `.${cls}` : ''} "${text.slice(0, 40)}"`);
         }
       }
-      return out;
+      return { checked, bad };
     },
     { scope, sources: WATCHED.map((re) => ({ source: re.source, flags: re.flags })) },
   );

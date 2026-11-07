@@ -48,10 +48,10 @@ describe('SuggestList: giá sản phẩm', () => {
     expect(text).not.toContain('159.000đ');
   });
 
-  it('mỗi dòng gợi ý co khi nhấn (tubu-press-card, W41B)', () => {
+  it('mỗi dòng gợi ý co khi nhấn (tubu-press, cùng Mini App, W41B)', () => {
     const c = mount();
     const rows = Array.from(c.querySelectorAll('button'));
     expect(rows.length).toBeGreaterThan(0);
-    for (const b of rows) expect(b.className).toContain('tubu-press-card');
+    for (const b of rows) expect(b.className).toContain('tubu-press');
   });
 });

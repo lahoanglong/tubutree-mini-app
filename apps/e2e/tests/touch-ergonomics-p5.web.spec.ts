@@ -24,12 +24,15 @@ async function signIn(page: Page, api: MockApi): Promise<void> {
   api.get('/me/wishlist/ids', []);
 }
 
-async function expectClean(page: Page, screen: string, width: number, scope = 'main'): Promise<void> {
+/** `numbers: false` cho màn không có chữ số cần đều (gợi ý tìm kiếm, thông báo hiện giờ dạng "5 phút trước"): không đòi dò thấy phần tử nào. */
+async function expectClean(page: Page, screen: string, width: number, { scope = 'main', numbers = true } = {}): Promise<void> {
   expect.soft(await probeTapTargets(page, { scope }), `${screen} ${width}px: vùng chạm dưới 44px`).toEqual([]);
   const f = await probeLayout(page, { scope });
   expect.soft(f.overflow, `${screen} ${width}px tràn ngang`).toEqual([]);
   expect.soft(f.notTabular, `${screen} ${width}px số không đều`).toEqual([]);
-  expect.soft(await probeTabularTexts(page, scope), `${screen} ${width}px chữ có số không đều (đồng hồ, đã bán, %, mốc giờ, khoảng giá)`).toEqual([]);
+  const t = await probeTabularTexts(page, scope);
+  expect.soft(t.bad, `${screen} ${width}px chữ có số không đều (đồng hồ, mốc giờ, khoảng giá, số kết quả)`).toEqual([]);
+  if (numbers) expect.soft(t.checked, `${screen} ${width}px: dò số đều không thấy phần tử nào để kiểm (màn đổi chữ hay mẫu lệch)`).toBeGreaterThan(0);
 }
 
 for (const width of NARROW_WIDTHS) {
@@ -48,7 +51,7 @@ for (const width of NARROW_WIDTHS) {
       await expect(box).toBeVisible({ timeout: 30_000 });
       await box.fill('nuoc rua');
       await expect(page.getByRole('region', { name: 'Gợi ý tìm kiếm' })).toBeVisible();
-      await expectClean(page, 'Tìm kiếm (gợi ý)', width);
+      await expectClean(page, 'Tìm kiếm (gợi ý)', width, { numbers: false });
     });
 
     test('Danh sách kết quả + Bộ lọc', async ({ page, api }) => {
@@ -62,7 +65,9 @@ for (const width of NARROW_WIDTHS) {
       await page.getByRole('button', { name: 'Lọc', exact: true }).click();
       const sheet = page.getByRole('dialog').filter({ has: page.getByRole('heading', { name: 'Bộ lọc' }) });
       await expect(sheet).toBeVisible();
-      await expectClean(page, 'Bộ lọc', width, '[role="dialog"]');
+      // Tấm trượt lên 220ms: chờ nó dừng hẳn, nếu không chip đo xong đã dịch chỗ trước khi nhấn.
+      await sheet.evaluate((el) => Promise.all(el.getAnimations({ subtree: true }).map((a) => a.finished)));
+      await expectClean(page, 'Bộ lọc', width, { scope: '[role="dialog"]' });
     });
 
     test('Giờ vàng', async ({ page, api }) => {
@@ -92,7 +97,7 @@ for (const width of NARROW_WIDTHS) {
       api.allowUnmocked('GET /cart', 'GET /config/public', 'POST /events');
       await page.goto('/tai-khoan/thong-bao');
       await expect(page.getByText('Nước Rửa Chén Sinh Học Tubu 500ml').first()).toBeVisible({ timeout: 30_000 });
-      await expectClean(page, 'Thông báo', width);
+      await expectClean(page, 'Thông báo', width, { numbers: false });
     });
   });
 }

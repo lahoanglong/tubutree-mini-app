@@ -49,6 +49,8 @@ for (const width of NARROW_WIDTHS) {
       await page.getByRole('button', { name: 'Lọc', exact: true }).click();
       const sheet = page.getByRole('dialog').filter({ has: page.getByRole('heading', { name: 'Bộ lọc' }) });
       await expect(sheet).toBeVisible();
+      // Tấm trượt lên 220ms: chờ nó dừng hẳn, nếu không chip đo xong đã dịch chỗ trước khi nhấn.
+      await sheet.evaluate((el) => Promise.all(el.getAnimations({ subtree: true }).map((a) => a.finished)));
       await expectPressFeedback(page, sheet.getByRole('button', { name: 'Dưới 100k' }), 'chip khoảng giá');
       await expectPressFeedback(page, sheet.getByRole('button', { name: /^Đặt lại|^Xoá/ }).first(), 'nút Đặt lại bộ lọc');
       await expectPressFeedback(page, sheet.getByRole('button', { name: /^Xem / }), 'nút Xem kết quả');

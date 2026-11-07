@@ -483,14 +483,14 @@ export default function OrderDetailPage() {
                   style={{ gap: 8, minHeight: 44, cursor: 'pointer', borderTop: '1px solid var(--color-border-subtle)' }}
                 >
                   <Box style={{ minWidth: 0 }}>
-                    <Text size="small" bold>
+                    <Text size="small" bold style={{ fontVariantNumeric: 'tabular-nums' }}>
                       {sb.code}
                     </Text>
                     <Text size="xSmall" style={{ color: 'var(--color-text-secondary)' }}>
                       {sb.fulfillerName} giao · {vi.orderStatus[sb.status] ?? sb.status}
                     </Text>
                   </Box>
-                  <Text size="small" style={{ whiteSpace: 'nowrap' }}>
+                  <Text size="small" style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
                     {formatVnd(sb.total)}
                   </Text>
                 </Box>

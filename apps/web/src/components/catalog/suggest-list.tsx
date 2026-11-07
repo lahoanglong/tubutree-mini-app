@@ -123,7 +123,7 @@ export function SuggestList({
 
 function SuggestRow({ icon, subtitle, onPress, children }: { icon: ReactNode; subtitle?: string; onPress: () => void; children: ReactNode }) {
   return (
-    <button type="button" onClick={onPress} className="tubu-press-card flex min-h-11 w-full items-center gap-2.5 py-1.5 text-left hover:bg-stone-50">
+    <button type="button" onClick={onPress} className="tubu-press flex min-h-11 w-full items-center gap-2.5 py-1.5 text-left hover:bg-stone-50">
       {icon}
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-semibold text-stone-900">{children}</span>

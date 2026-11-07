@@ -28,6 +28,10 @@ export async function mockLongOrder(api: MockApi, page: Page, side: Side): Promi
           voucherDiscount: 15_000,
           couponCode: 'TUBUTREE-GIAM-NHIEU-DIP-CUOI-NAM',
           trackingNumber: 'GHN-8800123456789012',
+          siblings: [
+            { code: 'TUBU20261107001234567891', status: 'SHIPPING', total: 1_249_000, fulfillerName: 'Gian hàng Mộc An Sài Gòn' },
+            { code: 'TUBU20261107001234567892', status: 'PENDING', total: 86_000, fulfillerName: 'Tubu Tree' },
+          ],
           shippingAddress: { ...w.order.shippingAddress!, street: LONG_STREET },
         } as OrderWorld['order'],
       };

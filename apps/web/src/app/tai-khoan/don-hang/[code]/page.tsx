@@ -375,7 +375,7 @@ export default function OrderDetailPage() {
             {o.siblings!.map((sb) => (
               <li key={sb.code} className="flex flex-wrap items-center justify-between gap-2">
                 <span>
-                  <Link href={orderDetailHref(sb.code)} className="inline-flex min-h-11 items-center font-semibold text-forest-700 underline">
+                  <Link href={orderDetailHref(sb.code)} className="inline-flex min-h-11 items-center font-semibold tabular-nums text-forest-700 underline">
                     {sb.code}
                   </Link>{' '}
                   · {sb.fulfillerName} giao · {orderStatusLabel(sb.status)}
