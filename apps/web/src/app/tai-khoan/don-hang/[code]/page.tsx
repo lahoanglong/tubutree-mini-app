@@ -46,6 +46,8 @@ import { OrderRefunds } from './order-refunds';
 import { returnedByLine, remainingByLine, showsRefundPanel } from '@/lib/refund-rules';
 import { OrderStatusHero } from '@/components/orders/order-status-hero';
 import { OrderTrack } from '@/components/orders/order-track';
+import { OrderTimelineTracker } from '@/components/orders/order-timeline-tracker';
+import { buildOrderTimelineSteps, formatOrderShareSummary, orderTimelineStamps } from '@tubutree/app-core/commerce/order-timeline';
 import { OrderShipping } from '@/components/orders/order-shipping';
 import { mini } from '@/components/order-mobile/mobile-ui';
 import { PageHeader } from '@/components/ui/page-header';
@@ -208,6 +210,12 @@ export default function OrderDetailPage() {
   const headline = orderHeadline(trackOrder, ctx);
   const plan = orderActionPlan(trackOrder, ctx);
   const trackView = orderTrack(trackOrder, { etaLabel });
+  const timelineSteps = buildOrderTimelineSteps(o.status, orderTimelineStamps(trackOrder));
+  const shareText = formatOrderShareSummary({
+    code: o.code,
+    items: o.items.map((it) => ({ name: it.variationName && it.variationName !== it.productName ? `${it.productName} (${it.variationName})` : it.productName, quantity: it.quantity })),
+    totalAmount: o.total,
+  });
   // Đơn không có hành trình 5 bước (huỷ/hoàn) mới in mốc hãng riêng; lịch sử toàn dòng rác thì không dựng khung trống.
   const historyEvents = trackView ? [] : shippingEvents(o.shippingHistory);
   const payNote = plan.primary === 'pay' && deadlineLeft ? fillCopy('order.action.payLeft', { t: deadlineLeft }) : null;
@@ -236,6 +244,9 @@ export default function OrderDetailPage() {
       )}
 
           <div className="order-3 max-md:px-4 max-md:empty:hidden"><FollowOaPrompt /></div>
+          <section data-testid="order-timeline" className={`order-4 mt-2 p-4 md:mt-4 ${ui.card} ${mini.band}`}>
+            <OrderTimelineTracker steps={timelineSteps} now={ctx.now} shareText={shareText} />
+          </section>
           {trackView && (
             <section aria-labelledby="order-track-title" className={`order-4 mt-4 p-4 max-md:mt-2 ${ui.card} ${mini.band}`}>
               <h2 id="order-track-title" className={`${ui.sectionTitle} ${mini.sectionLabel} mb-3`}>

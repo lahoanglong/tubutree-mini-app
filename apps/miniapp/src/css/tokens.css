@@ -450,6 +450,133 @@ body.with-back-btn .page.page-bleed {
   }
 }
 
+/* ── Thanh tiến trình đơn 4 bước (OrderTimelineTracker): chấm 24px nối bằng vạch 2px; bước hiện tại có viền sáng nhẹ nhấp nhô, giảm chuyển động thì viền đứng yên.
+   Bản web giữ cùng quy tắc ở components/mini/mini.css. ── */
+.order-timeline {
+  display: flex;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.order-timeline__step {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-stack-xs);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.order-timeline__step::before {
+  content: '';
+  position: absolute;
+  top: 11px;
+  right: 50%;
+  width: 100%;
+  height: 2px;
+  background: var(--color-border-default);
+}
+.order-timeline__step:first-child::before {
+  display: none;
+}
+.order-timeline__step[data-state='completed']::before,
+.order-timeline__step[data-state='current']::before {
+  background: var(--color-action-primary-bg);
+}
+.order-timeline__step[data-state='cancelled']::before {
+  background: var(--color-status-danger-fg);
+}
+.order-timeline__dot {
+  position: relative;
+  z-index: 1;
+  box-sizing: border-box;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--color-border-default);
+  background: var(--color-bg-surface);
+}
+.order-timeline__step[data-state='completed'] .order-timeline__dot {
+  border-color: var(--color-action-primary-bg);
+  background: var(--color-action-primary-bg);
+}
+.order-timeline__step[data-state='current'] .order-timeline__dot {
+  border-color: var(--color-action-primary-bg);
+  box-shadow: 0 0 0 4px var(--color-action-secondary-bg);
+}
+.order-timeline__step[data-state='current'] .order-timeline__dot::after {
+  content: '';
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--color-action-primary-bg);
+}
+.order-timeline__step[data-state='cancelled'] .order-timeline__dot {
+  border-color: var(--color-status-danger-fg);
+  background: var(--color-status-danger-fg);
+}
+@keyframes order-step-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 4px var(--color-action-secondary-bg);
+  }
+  50% {
+    box-shadow: 0 0 0 7px var(--color-action-secondary-bg);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .order-timeline__step[data-state='current'] .order-timeline__dot {
+    animation: order-step-glow 1800ms ease-in-out infinite;
+  }
+}
+
+/* ── Khối "Sản phẩm hoa hồng nổi bật" của CTV: mỗi dòng gồm thông tin và nút chép link; hẹp thì nút xuống dưới thông tin, rộng thì cùng hàng. Bản web ở components/mini/mini.css. ── */
+.ctv-featured {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ctv-featured__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-stack-sm) var(--space-stack-md);
+  padding: var(--space-stack-sm) 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+.ctv-featured__row:last-child {
+  border-bottom: 0;
+}
+.ctv-featured__info {
+  display: flex;
+  flex: 1 1 11rem;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-stack-xs);
+}
+.ctv-featured__name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.ctv-featured__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-stack-xs) var(--space-stack-sm);
+}
+.ctv-featured__action {
+  flex: 0 0 auto;
+}
+
 /* Xem ảnh/video đánh giá toàn màn hình: nền đen 90% làm mờ phía sau, mở 220ms theo đường cong drawer (cùng tấm đáy); giảm chuyển động thì hiện ngay. */
 @keyframes review-lightbox-in {
   from {

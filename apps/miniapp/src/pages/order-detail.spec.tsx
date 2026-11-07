@@ -370,8 +370,10 @@ describe('OrderDetailPage — điểm, mốc giờ, hành trình, đổi/trả, 
     fixNow();
     mocks.fetchOrder.mockResolvedValue({ ...ORDER, status: 'DELIVERED', deliveredAt: '2026-10-05T02:30:00.000Z' });
     const first = renderPage();
-    expect(await screen.findByText('09:30 05/10')).toBeInTheDocument();
-    expect(screen.getByText(/Giao lúc/)).toBeInTheDocument();
+    // Giờ giao nằm ở đầu trang trạng thái và cả ở thanh tiến trình 4 bước: phép tra về đúng đầu trang.
+    const hero = await screen.findByTestId('status-hero');
+    expect(within(hero).getByText('09:30 05/10')).toBeInTheDocument();
+    expect(within(hero).getByText(/Giao lúc/)).toBeInTheDocument();
     first.unmount();
 
     mocks.fetchOrder.mockResolvedValue({ ...ORDER, status: 'SHIPPING' });
@@ -391,15 +393,17 @@ describe('OrderDetailPage — điểm, mốc giờ, hành trình, đổi/trả, 
     });
     const first = renderPage();
     await screen.findByText('Hành trình đơn hàng');
-    expect(screen.getByText(/^08:05 01\/10/)).toBeInTheDocument();
-    expect(screen.getByText(/^09:30 02\/10/)).toBeInTheDocument();
-    expect(screen.getAllByText(/^\d\d:\d\d \d\d\/10/).length).toBeGreaterThanOrEqual(2);
+    // Thanh tiến trình 4 bước cũng ghi các mốc này: chỉ kiểm danh sách Hành trình đơn hàng.
+    const track = within(screen.getByRole('list', { name: 'Hành trình đơn hàng' }));
+    expect(track.getByText(/^08:05 01\/10/)).toBeInTheDocument();
+    expect(track.getByText(/^09:30 02\/10/)).toBeInTheDocument();
+    expect(track.getAllByText(/^\d\d:\d\d \d\d\/10/).length).toBeGreaterThanOrEqual(2);
     first.unmount();
 
     mocks.fetchOrder.mockResolvedValue({ ...ORDER, status: 'CANCELLED', createdAt: at(1, 8, 0), statusTimes: { CANCELLED: at(3, 14, 45) } });
     renderPage();
     expect(await screen.findByText(/Huỷ lúc/)).toBeInTheDocument();
-    expect(screen.getByText('14:45 03/10')).toBeInTheDocument();
+    expect(within(screen.getByTestId('status-hero')).getByText('14:45 03/10')).toBeInTheDocument();
   });
 
   it('đơn COD không có bước "Chờ thanh toán" trong hành trình; chuyển khoản thì có', async () => {

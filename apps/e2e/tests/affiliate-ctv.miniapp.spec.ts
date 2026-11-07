@@ -48,7 +48,7 @@ test.describe('Dashboard CTV — bậc doanh số & thưởng mốc Điểm Xanh
     mockCtv(api);
     await page.goto('/affiliate');
 
-    await expect(page.getByText('CTV Đồng')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('CTV Đồng', { exact: true }).last()).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText('Bậc theo doanh số đã chốt tháng này')).toBeVisible();
     await expect(page.getByText('doanh số đã chốt để lên bậc Bạc', { exact: false })).toBeVisible();
 
