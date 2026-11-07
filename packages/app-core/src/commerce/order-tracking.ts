@@ -294,7 +294,7 @@ export function shippingEvents(history: TrackOrder['shippingHistory']): TrackEve
 
 const STEPS = ['PENDING_PAYMENT', 'CONFIRMED', 'PACKED', 'SHIPPING', 'DELIVERED'] as const;
 /** COD và Ví Tubu không bao giờ chờ thanh toán (trả khi nhận hàng, hoặc trừ ví ngay lúc đặt), nên bỏ bước đầu. */
-const NO_PAYMENT_WAIT = new Set(['COD', 'WALLET']);
+export const NO_PAYMENT_WAIT = new Set(['COD', 'WALLET']);
 
 export type TrackState = 'done' | 'current' | 'upcoming';
 

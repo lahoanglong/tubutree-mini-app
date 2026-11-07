@@ -102,6 +102,7 @@ export function mockWebAffiliate(api: MockApi): void {
   api.get('/affiliate/milestones', CTV_MILESTONES);
   api.get('/affiliate/analytics/storefronts', { storefronts: [] });
   api.get('/affiliate/analytics/products', []);
+  api.get('/storefront/me/products', []);
   api.get('/academy/courses', []);
   api.get('/me/wallet', { walletBalance: 0, cashbackPending: 0, commissionApproved: 120_000, commissionPending: 60_000 });
   api.get('/affiliate/links', [{ id: 'l1', targetType: 'HOMEPAGE', shortCode: 'abc123', clicks: 42, createdAt: '2026-10-01T03:00:00Z' }]);

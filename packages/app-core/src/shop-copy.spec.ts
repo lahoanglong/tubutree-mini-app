@@ -38,6 +38,7 @@ const WORST_BY_KEY: Record<string, Record<string, string>> = {
   'reorder.priceDown': { old: '9.999.999đ' },
   'order.action.payLeft': { t: '99 ngày 23 giờ' },
   'order.payByLeft': { at: '23:59 31/12', t: '99 ngày 23 giờ' },
+  'order.share.total': { amount: '99.999.999đ' },
   'shop.tierHintNext': { name: 'Đồng' },
   'support.hotline': { phone: '0984 606 774' },
   'support.orderContext': { code: 'TUBU20261015001' },

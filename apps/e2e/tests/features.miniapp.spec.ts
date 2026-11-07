@@ -117,7 +117,8 @@ test.describe('Zalo Mini App - Tính năng mới (Brand Owner & Storefront)', ()
     await page.getByText('Cộng tác viên', { exact: true }).click();
 
     // Dashboard CTV: bậc theo doanh số đã chốt (không còn "+X% bonus").
-    await expect(page.getByText('CTV Đồng')).toBeVisible();
+    await expect(page.getByTestId('ctv-hero-tier').getByText('CTV Đồng')).toBeVisible();
+    await expect(page.getByText('CTV Đồng', { exact: true }).last()).toBeVisible();
     await expect(page.getByText(/bonus/i)).toHaveCount(0);
 
     // Lối tắt "Gian hàng" (tên đọc đầy đủ "Gian hàng của tôi") ngay dưới thẻ hoa hồng của Dashboard Affiliate

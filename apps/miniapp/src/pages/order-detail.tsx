@@ -42,6 +42,8 @@ import { ReorderSheet } from '../components/reorder/reorder-sheet';
 import { CancelReasonPicker } from '../components/orders/cancel-reason-picker';
 import { OrderStatusHero } from '../components/orders/order-status-hero';
 import { OrderTrack } from '../components/orders/order-track';
+import { OrderTimelineTracker } from '../components/orders/order-timeline-tracker';
+import { buildOrderTimelineSteps, formatOrderShareSummary, orderTimelineStamps } from '@tubutree/app-core/commerce/order-timeline';
 import { OrderShipping } from '../components/orders/order-shipping';
 import { OrderActionBar } from '../components/orders/order-action-bar';
 import { orderActionPlan, orderHeadline, orderTrack, shippingEvents, type OrderActionKind, type TrackOrder } from '@tubutree/app-core/commerce/order-tracking';
@@ -277,6 +279,12 @@ export default function OrderDetailPage() {
   const headline = orderHeadline(tOrder, ctx);
   const plan = orderActionPlan(tOrder, ctx);
   const trackView = orderTrack(tOrder, { etaLabel });
+  const timelineSteps = buildOrderTimelineSteps(o.status, orderTimelineStamps(tOrder));
+  const shareText = formatOrderShareSummary({
+    code: o.code,
+    items: o.items.map((it) => ({ name: it.variationName && it.variationName !== it.productName ? `${it.productName} (${it.variationName})` : it.productName, quantity: it.quantity })),
+    totalAmount: o.total,
+  });
   // Đơn không có hành trình 5 bước (huỷ/hoàn) mới in mốc hãng riêng; lịch sử toàn dòng rác thì không dựng khung trống.
   const historyEvents = trackView ? [] : shippingEvents(o.shippingHistory);
   const payNote = plan.primary === 'pay' && deadlineLeft ? fillCopy('order.action.payLeft', { t: deadlineLeft }) : null;
@@ -328,6 +336,11 @@ export default function OrderDetailPage() {
           </Box>
         </Box>
       )}
+
+      {/* ── Tiến trình 4 bước nhìn một cái là biết đơn đang ở đâu, kèm nút chép thông tin đơn ── */}
+      <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
+        <OrderTimelineTracker steps={timelineSteps} now={ctx.now} shareText={shareText} />
+      </Box>
 
       {/* ── Hành trình: bước chuẩn kèm giờ thật, mốc hãng gộp dưới "Đang giao" ── */}
       {trackView && (

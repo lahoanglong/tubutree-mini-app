@@ -1,4 +1,4 @@
-import { useRef, useState, useSyncExternalStore } from 'react';
+import { useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { Input, Page, Sheet, useSnackbar, useNavigate, useLocation } from 'zmp-ui';
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -57,6 +57,9 @@ import { vi } from '../i18n/vi';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { copyText } from '../utils/clipboard';
 import { miniAppLink } from '../utils/miniapp-link';
+import { pickerProducts } from '../services/storefront-api';
+import { AffiliateFeaturedProducts } from '../components/affiliate/featured-products';
+import { featuredAffiliateProducts } from '@tubutree/app-core/commerce/affiliate-share';
 import { INPUT_LIMITS } from '../utils/input-limits';
 
 const PAGE_TITLE = 'Cộng tác viên';
@@ -361,6 +364,11 @@ function Dashboard() {
 
   const d = dashQ.data;
   const referral = meQ.data?.referralCode ?? '';
+  const featuredQ = useQuery({ queryKey: ['affiliate-featured-products'], queryFn: () => pickerProducts(''), enabled: tab === 'share' && referral !== '', staleTime: 60_000 });
+  const featured = useMemo(
+    () => (featuredQ.data ? featuredAffiliateProducts(featuredQ.data, { baseUrl: miniAppLink('/'), productPath: '/product', affiliateCode: referral }) : null),
+    [featuredQ.data, referral],
+  );
 
   const head = ctvHeadline(d);
   const autoTransfer = isAutoWalletTransfer(d?.autoWalletTransfer);
@@ -405,9 +413,19 @@ function Dashboard() {
               boxShadow: 'var(--elevation-2)',
             }}
           >
-            <Text variant="body-sm" tone="inverse" as="div" style={{ opacity: 0.85 }}>
-              {hero.label}
-            </Text>
+            {/* Huy hiệu hạng đứng trước nhãn trong cây DOM (số to vẫn liền sau nhãn) nhưng hiện bên phải nhờ row-reverse. */}
+            <div style={{ display: 'flex', flexDirection: 'row-reverse', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--space-stack-xs) var(--space-stack-sm)' }}>
+              {d?.tier?.name && (
+                <span data-testid="ctv-hero-tier">
+                  <Badge tone="neutral" size="sm">
+                    {fillCopy('shop.tierBadge', { name: d.tier.name })}
+                  </Badge>
+                </span>
+              )}
+              <Text variant="body-sm" tone="inverse" as="div" style={{ opacity: 0.85 }}>
+                {hero.label}
+              </Text>
+            </div>
             <Text
               variant="price-xl"
               tone="inverse"
@@ -730,6 +748,11 @@ function Dashboard() {
           </button>
         ))}
       </Section>
+
+      {/* Sản phẩm có hoa hồng cao: một chạm chép link giới thiệu gắn mã CTV */}
+      <Card padding={16} style={BLOCK_GAP}>
+        <AffiliateFeaturedProducts products={featured} error={featuredQ.isError} onRetry={() => void featuredQ.refetch()} />
+      </Card>
 
       {/* Link chia sẻ */}
       <Section
@@ -1215,7 +1238,7 @@ function PayoutRow({ p }: { p: AffiliatePayout }) {
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <Text variant="body-md" tone="inverse" as="div" style={BOLD}>
+      <Text variant="body-md" tone="inverse" as="div" numeric style={BOLD}>
         {value}
       </Text>
       <Text variant="caption" tone="inverse" as="div" style={{ opacity: 0.8 }}>

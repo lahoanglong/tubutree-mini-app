@@ -85,6 +85,9 @@ describe('cặp màu commerce của gói tokens-a11y đạt 4,5:1 (chữ) — WC
     ['--color-text-primary', '--color-story-ambient-sky'],
     ['--color-text-primary', '--color-story-ambient-sand'],
     ['--color-text-secondary', '--color-bg-surface'],
+    // Thanh tiến trình đơn (OrderTimelineTracker): dấu ✓ trên chấm bước đã qua và dấu ✕ trên chấm bước huỷ.
+    ['--color-text-inverse', '--color-action-primary-bg'],
+    ['--color-text-inverse', '--color-status-danger-fg'],
     // Thanh Miễn phí giao hàng khi đã đạt (W42A): chữ xanh ngọc trên nền thành công; nhãn "Story" trên viền vòng.
     ['--color-text-success', '--color-status-success-bg'],
   ];
