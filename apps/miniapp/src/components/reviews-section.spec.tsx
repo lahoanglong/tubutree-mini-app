@@ -144,8 +144,76 @@ describe('ReviewsSection (C-076 di cư DS v2: giữ nguyên hành vi)', () => {
     });
     renderSection();
     await screen.findByText('Nhận xét p');
-    const srcs = screen.getAllByAltText('ảnh đánh giá').map((i) => i.getAttribute('src'));
+    const thumbs = screen.getAllByRole('button', { name: /^Xem ảnh đánh giá \d$/ });
+    const srcs = thumbs.map((b) => b.querySelector('img')!.getAttribute('src'));
     expect(srcs).toEqual(['http://localhost:3001/api/reviews/p/images/0?v=abc1234567', 'https://res.cloudinary.com/x/a.jpg']);
+  });
+
+  describe('lightbox ảnh/video đánh giá (W42B)', () => {
+    const MEDIA = {
+      average: 5,
+      count: 1,
+      items: [review('p', 4, { author: 'Lan', verifiedPurchase: true, images: ['/reviews/p/images/0?v=1', 'https://i/2.jpg'], videoUrl: 'https://v/x.mp4' })],
+    };
+    const box = () => document.querySelector<HTMLElement>('[data-testid="review-lightbox"]');
+
+    it('thumbnail là nút ≥44px có tên; bấm mở lightbox đúng tệp, bộ đếm "2 / 3", tệp video là <video controls>', async () => {
+      mocks.fetchReviews.mockResolvedValue(MEDIA);
+      renderSection();
+      await screen.findByText('Nhận xét p');
+      expect(box()).toBeNull();
+      const second = screen.getByRole('button', { name: 'Xem ảnh đánh giá 2' });
+      expect(parseInt(second.style.minWidth, 10)).toBeGreaterThanOrEqual(44);
+      expect(parseInt(second.style.minHeight, 10)).toBeGreaterThanOrEqual(44);
+      fireEvent.click(second);
+      expect(box()).not.toBeNull();
+      expect(within(box()!).getByText('2 / 3').style.fontVariantNumeric).toBe('tabular-nums');
+      expect(box()!.querySelector('img')!.getAttribute('src')).toBe('https://i/2.jpg');
+      fireEvent.click(within(box()!).getByRole('button', { name: 'Tệp sau' }));
+      expect(within(box()!).getByText('3 / 3')).toBeInTheDocument();
+      expect(box()!.querySelector('video')!.hasAttribute('controls')).toBe(true);
+      expect(within(box()!).getByText('Đã mua hàng')).toBeInTheDocument();
+      expect(within(box()!).getByText('Lan')).toBeInTheDocument();
+    });
+
+    it('ảnh API tương đối trong lightbox cũng ghép gốc API; nút Video mở thẳng tệp video', async () => {
+      mocks.fetchReviews.mockResolvedValue(MEDIA);
+      renderSection();
+      await screen.findByText('Nhận xét p');
+      fireEvent.click(screen.getByRole('button', { name: 'Xem ảnh đánh giá 1' }));
+      expect(box()!.querySelector('img')!.getAttribute('src')).toBe('http://localhost:3001/api/reviews/p/images/0?v=1');
+      fireEvent.click(within(box()!).getByRole('button', { name: 'Đóng' }));
+      expect(box()).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Xem video đánh giá' }));
+      expect(within(box()!).getByText('3 / 3')).toBeInTheDocument();
+    });
+
+    it('Esc đóng lightbox; có onQuickAdd thì chân có "Thêm vào giỏ", bấm đóng lightbox rồi gọi onQuickAdd', async () => {
+      mocks.fetchReviews.mockResolvedValue(MEDIA);
+      const onQuickAdd = vi.fn();
+      const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+      render(
+        <QueryClientProvider client={qc}>
+          <ReviewsSection slug="nuoc-rua-chen" onQuickAdd={onQuickAdd} />
+        </QueryClientProvider>,
+      );
+      await screen.findByText('Nhận xét p');
+      fireEvent.click(screen.getByRole('button', { name: 'Xem ảnh đánh giá 1' }));
+      fireEvent.keyDown(document, { key: 'Escape' });
+      expect(box()).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Xem ảnh đánh giá 1' }));
+      fireEvent.click(within(box()!).getByRole('button', { name: /Thêm vào giỏ/ }));
+      expect(box()).toBeNull();
+      expect(onQuickAdd).toHaveBeenCalledTimes(1);
+    });
+
+    it('không có onQuickAdd thì lightbox không có nút "Thêm vào giỏ"', async () => {
+      mocks.fetchReviews.mockResolvedValue(MEDIA);
+      renderSection();
+      await screen.findByText('Nhận xét p');
+      fireEvent.click(screen.getByRole('button', { name: 'Xem ảnh đánh giá 1' }));
+      expect(within(box()!).queryByRole('button', { name: /Thêm vào giỏ/ })).toBeNull();
+    });
   });
 
   /** API thật lọc theo chip trên mọi đánh giá đang hiện; mock trả đúng các dòng khớp tham số, thống kê giữ nguyên. */

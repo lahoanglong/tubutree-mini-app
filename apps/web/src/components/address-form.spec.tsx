@@ -2,7 +2,7 @@
 import { act } from 'react';
 import { QueryClient } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { click, flush, render, selectByLabel, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
+import { chooseGeo, click, flush, render, selectByLabel, typeInto, type Rendered } from '@/test-utils/dom';
 import { headingProblems, smallTouchTargets, unlabeledFields } from '@/test-utils/a11y';
 
 // BUYERWEB-14: form địa chỉ chỉ có một dòng lỗi chung và nút Lưu xám không rõ lý do; không đánh dấu ô sai.
@@ -115,9 +115,9 @@ describe('AddressForm — báo lỗi tại từng ô (BUYERWEB-14)', () => {
     typeInto(input(c, 'Người nhận'), ' Nguyễn An ');
     typeInto(input(c, 'Số điện thoại'), '0912 345 678');
     typeInto(input(c, 'Số nhà, tên đường'), '1 Xuân Thuỷ');
-    selectValue(selectByLabel(c, 'Tỉnh/Thành phố'), 'p1');
+    chooseGeo(c, 'Tỉnh/Thành phố', 'p1');
     await flush();
-    selectValue(selectByLabel(c, 'Phường/Xã'), 'w1');
+    chooseGeo(c, 'Phường/Xã', 'w1');
     click(saveBtn(c));
     await flush(6);
     expect(submit).toHaveBeenCalledTimes(1);
@@ -139,8 +139,10 @@ describe('AddressForm — báo lỗi tại từng ô (BUYERWEB-14)', () => {
   it('chế độ sửa: ô và tỉnh/phường được điền sẵn từ địa chỉ đã lưu', async () => {
     const c = await mount({ form: { recipient: 'An', phone: '0912345678', street: '1 Xuân Thuỷ' }, geo: GEO });
     expect(input(c, 'Số điện thoại').value).toBe('0912345678');
-    expect((selectByLabel(c, 'Tỉnh/Thành phố') as HTMLSelectElement).value).toBe('p1');
-    expect((selectByLabel(c, 'Phường/Xã') as HTMLSelectElement).value).toBe('w1');
+    expect(selectByLabel(c, 'Tỉnh/Thành phố')!.getAttribute('data-value')).toBe('p1');
+    expect(selectByLabel(c, 'Tỉnh/Thành phố')!.textContent).toContain('Hà Nội');
+    expect(selectByLabel(c, 'Phường/Xã')!.getAttribute('data-value')).toBe('w1');
+    expect(selectByLabel(c, 'Phường/Xã')!.textContent).toContain('Cầu Giấy');
   });
 
   it('Huỷ gọi onCancel; truy cập: mọi ô có nhãn, vùng chạm đủ 44px', async () => {
@@ -193,7 +195,7 @@ describe('AddressForm tạo mới — điền sẵn từ hồ sơ và địa gi�
     localStorage.setItem('tubu_last_geo:u1', JSON.stringify({ province: 'Hà Nội', provinceCode: '84_VN01', ward: 'Cầu Giấy', wardCode: '84_VN0101' }));
     localStorage.setItem('tubu_last_geo:u2', JSON.stringify({ province: 'X', provinceCode: '84_VN99', ward: 'Y', wardCode: '84_VN9901' }));
     const c = await mount();
-    expect(selectByLabel(c, 'Tỉnh/Thành phố')!.value).toBe('84_VN01');
+    expect(selectByLabel(c, 'Tỉnh/Thành phố')!.getAttribute('data-value')).toBe('84_VN01');
   });
 
   it('chưa nhớ gì thì lấy địa chỉ mặc định trong sổ địa chỉ đã tải', async () => {
@@ -205,16 +207,16 @@ describe('AddressForm tạo mới — điền sẵn từ hồ sơ và địa gi�
     const r = render(<AddressForm title="Thêm địa chỉ" submitLabel="Lưu" userId="u1" onSubmit={submit} onCancel={cancel} />, client);
     mounted.push(r);
     await flush();
-    expect(selectByLabel(r.container, 'Tỉnh/Thành phố')!.value).toBe('84_VN79');
+    expect(selectByLabel(r.container, 'Tỉnh/Thành phố')!.getAttribute('data-value')).toBe('84_VN79');
   });
 
   it('lưu thành công thì nhớ tỉnh/phường cho lần sau', async () => {
     const c = await mount();
     typeInto(input(c, 'Người nhận'), 'An');
     typeInto(input(c, 'Số nhà, tên đường'), '1 Xuân Thuỷ');
-    selectValue(selectByLabel(c, 'Tỉnh/Thành phố'), '84_VN01');
+    chooseGeo(c, 'Tỉnh/Thành phố', '84_VN01');
     await flush();
-    selectValue(selectByLabel(c, 'Phường/Xã'), '84_VN0101');
+    chooseGeo(c, 'Phường/Xã', '84_VN0101');
     await flush();
     click(saveBtn(c));
     await flush();
@@ -229,9 +231,9 @@ describe('AddressForm tạo mới — điền sẵn từ hồ sơ và địa gi�
     const c = r.container;
     typeInto(input(c, 'Người nhận'), 'An');
     typeInto(input(c, 'Số nhà, tên đường'), '1 Xuân Thuỷ');
-    selectValue(selectByLabel(c, 'Tỉnh/Thành phố'), '84_VN01');
+    chooseGeo(c, 'Tỉnh/Thành phố', '84_VN01');
     await flush();
-    selectValue(selectByLabel(c, 'Phường/Xã'), '84_VN0101');
+    chooseGeo(c, 'Phường/Xã', '84_VN0101');
     await flush();
     click(saveBtn(c));
     await flush();

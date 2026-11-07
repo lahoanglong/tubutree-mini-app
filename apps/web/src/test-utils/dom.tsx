@@ -51,11 +51,27 @@ export function typeInto(el: Element | null, value: string) {
   });
 }
 
-/** Ô chọn của GeoPicker theo nhãn hiện trên màn hình (label htmlFor). */
-export function selectByLabel(root: ParentNode, label: string): HTMLSelectElement | null {
+/** Nút mở sheet của GeoPicker theo nhãn hiện trên màn hình (label htmlFor); `data-value` giữ mã đang chọn. */
+export function selectByLabel(root: ParentNode, label: string): HTMLElement | null {
   const l = Array.from(root.querySelectorAll('label')).find((x) => x.textContent?.trim() === label);
   const el = l?.htmlFor ? document.getElementById(l.htmlFor) : null;
-  return el instanceof HTMLSelectElement ? el : null;
+  return el instanceof HTMLElement ? el : null;
+}
+
+/**
+ * Chọn một dòng trong sheet địa giới: mở sheet của ô `label` nếu chưa mở (chọn tỉnh xong sheet Phường/Xã tự mở),
+ * rồi bấm dòng có mã (`data-code`) hoặc chữ khớp `optionText`.
+ */
+export function chooseGeo(root: ParentNode, label: string, optionText: string | RegExp) {
+  const listbox = () => document.querySelector<HTMLElement>(`[role="listbox"][aria-label="${label}"]`);
+  if (!listbox()) click(selectByLabel(root, label));
+  const list = listbox();
+  if (!list) throw new Error(`chooseGeo: sheet "${label}" không mở`);
+  const opt = Array.from(list.querySelectorAll<HTMLElement>('[role="option"]')).find((o) =>
+    typeof optionText === 'string' ? o.dataset.code === optionText || o.textContent?.trim() === optionText : optionText.test(o.textContent ?? ''),
+  );
+  if (!opt) throw new Error(`chooseGeo: không thấy dòng "${String(optionText)}" trong "${label}"`);
+  click(opt);
 }
 
 export function selectValue(el: Element | null, value: string) {

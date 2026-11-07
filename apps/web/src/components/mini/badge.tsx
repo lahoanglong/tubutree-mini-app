@@ -3,6 +3,7 @@
 // Nguồn: apps/miniapp/src/components/ui/badge.tsx
 import type { LucideIcon } from 'lucide-react';
 import type { CSSProperties, ReactNode } from 'react';
+import { useCartBumpKey } from '@/lib/cart-feedback';
 
 export type BadgeTone = 'success' | 'warning' | 'danger' | 'info' | 'neutral' | 'brand' | 'promo' | 'flash' | 'verified';
 
@@ -56,12 +57,15 @@ export function Badge({ children, tone = 'neutral', size = 'md', icon: IconCmp, 
 /** Alias — audit's own naming uses "StatusPill" for order/kiểm duyệt trạng thái contexts. */
 export const StatusPill = Badge;
 
-/** Huy hiệu đếm trên icon, đặt trong phần tử `position: relative`. Có `label` thì đọc được riêng, không thì để nhãn của nút cha đọc. */
-export function CountBadge({ count, label }: { count: number; label?: string }) {
+/** Huy hiệu đếm trên icon, đặt trong phần tử `position: relative`. Có `label` thì đọc được riêng, không thì để nhãn của nút cha đọc. `bump`: nảy 220ms mỗi lần khách thêm vào giỏ (chỉ huy hiệu giỏ). */
+export function CountBadge({ count, label, bump = false }: { count: number; label?: string; bump?: boolean }) {
+  const bumpKey = useCartBumpKey(bump);
   if (count <= 0) return null;
   return (
     <span
+      key={bump ? bumpKey : undefined}
       data-testid="count-badge"
+      className={bump && bumpKey > 0 ? 'cart-badge-bump' : undefined}
       {...(label ? { role: 'img', 'aria-label': label } : { 'aria-hidden': true })}
       style={{
         position: 'absolute', top: -2, right: -2, minWidth: 18, height: 18, boxSizing: 'border-box', padding: '0 4px',
