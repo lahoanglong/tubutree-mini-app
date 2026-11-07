@@ -76,3 +76,7 @@ export { FreeShippingProgressBar } from './free-shipping-progress-bar';
 export type { FreeShippingProgressBarProps } from './free-shipping-progress-bar';
 export { FreeshipAddonRail } from './freeship-addon-rail';
 export type { FreeshipAddonItem, FreeshipAddonRailProps } from './freeship-addon-rail';
+export { QuickReorderStrip } from './quick-reorder-strip';
+export type { QuickReorderStripProps } from './quick-reorder-strip';
+export { FrequentlyBoughtTogether } from './frequently-bought-together';
+export type { FrequentlyBoughtTogetherProps } from './frequently-bought-together';

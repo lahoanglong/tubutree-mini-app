@@ -1,8 +1,10 @@
 import type { ProductCard } from '../api/catalog';
 import type { PurchasedItem } from '../api/orders';
-import { cardPricing, isFlashRunning, type FlashPriceItem } from '../flash-price';
+import { isFlashRunning, type FlashPriceItem } from '../flash-price';
 import { rebuyPricing } from '../rebuy-pricing';
 import { serverNow } from '../server-clock';
+import { addOneCardPricing } from './add-one-pricing';
+import { variationLinePreview } from './flash-line';
 
 /**
  * Dải "Mua lại món quen" ở Trang chủ: món khách đã nhận hàng (hoặc, khi chưa có đơn nào, món vừa xem) dưới dạng thẻ thêm một chạm.
@@ -42,16 +44,37 @@ export interface QuickReorderParams {
   flash?: readonly FlashPriceItem[];
   /** Phân loại đã nằm ở kệ xếp trên (Giờ vàng): không lặp lại. */
   excludeVariationIds?: ReadonlySet<string>;
+  /** Số đang có trong giỏ theo phân loại (`cartUnitsByVariation`): giỏ so suất Giờ vàng với cả dòng, nên thẻ chỉ ghi giá Giờ vàng khi thêm 1 nữa vẫn trong suất. Chưa tải giỏ: bỏ trống. */
+  cartUnits?: ReadonlyMap<string, number>;
   now?: number;
   limit?: number;
 }
 
-const available = (p: PurchasedItem) => p.inStock !== false && p.stock > 0;
+/**
+ * Món đủ điều kiện lên dải: còn hàng và có giá. Chống trùng của Trang chủ (`use-home-shelves`) lọc bằng đúng vị từ này trước khi chiếm món, để tập món dải vẽ
+ * và tập món kệ giữ là một: lọc khác nhau thì có món bị chiếm mà không ai vẽ (biến khỏi mọi kệ), hoặc được vẽ mà không ai chiếm (lặp ở kệ dưới).
+ */
+export function quickReorderAvailable(p: PurchasedItem): boolean {
+  return p.inStock !== false && p.stock > 0 && (p.salePrice ?? p.price) > 0;
+}
 
-function fromPurchased(p: PurchasedItem, flash: readonly FlashPriceItem[], now: number): QuickReorderItem {
-  // Hết suất Giờ vàng (`flashAllowance` = 0): giỏ tính giá thường, nên thẻ cũng không được ghi giá Giờ vàng.
-  const live = p.flashAllowance === 0 ? [] : flash;
-  const pricing = rebuyPricing(p, live, now);
+/**
+ * Món kệ `home.purchased` của Trang chủ chiếm và vẽ. Đủ `QUICK_REORDER_MIN` món dùng được thì dải "Mua lại món quen" chỉ vẽ món dùng được, nên kệ chỉ giữ chúng;
+ * ít hơn thì dải ẩn và kệ cũ (một dòng / thẻ) vẽ đủ, kể cả món hết hàng (ghi "Tạm hết hàng"). Chống trùng của Trang chủ (`use-home-shelves`) và kệ (`PurchasedRail`)
+ * cùng gọi hàm này để tập món bị chiếm và tập món được vẽ là một: lệch thì có món biến khỏi mọi kệ, hoặc lặp ở kệ dưới. Chưa cắt trần (kệ cắt `QUICK_REORDER_MAX`).
+ */
+export function quickReorderShelfItems<T extends PurchasedItem>(items: readonly T[]): T[] {
+  const usable = items.filter(quickReorderAvailable);
+  return usable.length >= QUICK_REORDER_MIN ? usable : [...items];
+}
+
+function fromPurchased(p: PurchasedItem, flash: readonly FlashPriceItem[], now: number, inCart: number): QuickReorderItem {
+  // Giá Giờ vàng chỉ khi suất còn chạy VÀ thêm 1 nữa vẫn trong suất khách còn mua được (API: `flashAllowance`; danh sách Giờ vàng: giới hạn mỗi khách, suất còn lại của đợt).
+  // Vượt thì giỏ tính cả dòng giá thường (cả phần đã có trong giỏ), nên thẻ cũng ghi giá thường.
+  const running = flash.filter((f) => f.variationId === p.variationId);
+  const apiBlocked = p.flashAllowance != null && 1 + inCart > p.flashAllowance;
+  const overLimit = variationLinePreview({ id: p.variationId, retailPrice: p.price, salePrice: p.salePrice }, running, 1, inCart).overLimit;
+  const pricing = rebuyPricing(p, apiBlocked || overLimit ? [] : running, now);
   return {
     key: p.variationId,
     productId: p.productId,
@@ -69,9 +92,9 @@ function fromPurchased(p: PurchasedItem, flash: readonly FlashPriceItem[], now: 
 }
 
 function fromViewed(c: ProductCard, flash: readonly FlashPriceItem[], now: number): QuickReorderItem | null {
-  const pricing = cardPricing(c, flash, now);
+  const pricing = addOneCardPricing(c, flash, now);
   // Cùng luật với nút thêm nhanh của thẻ: món ghim thêm phân loại ghim, Giờ vàng thắng thì thêm phân loại của suất đó, còn lại là phân loại đại diện.
-  const variationId = c.pinnedVariationId ?? pricing.flashVariationId ?? c.repVariationId;
+  const variationId = pricing.variationId;
   if (!variationId || !c.inStock) return null;
   return {
     key: variationId,
@@ -107,7 +130,7 @@ export function buildQuickReorderItems(params: QuickReorderParams): QuickReorder
   };
   const bought = params.purchased ?? [];
   if (bought.length > 0) {
-    for (const p of bought) if (available(p)) push(fromPurchased(p, flash, now));
+    for (const p of bought) if (quickReorderAvailable(p)) push(fromPurchased(p, flash, now, params.cartUnits?.get(p.variationId) ?? 0));
   } else {
     for (const c of params.viewed ?? []) push(fromViewed(c, flash, now));
   }

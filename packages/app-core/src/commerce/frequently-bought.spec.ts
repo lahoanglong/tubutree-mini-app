@@ -101,6 +101,12 @@ describe('buildFrequentlyBoughtBundle', () => {
     expect(ended.lines[1]).toMatchObject({ variationId: 'v1', price: 50_000, compareAt: null });
   });
 
+  it('khách hết suất Giờ vàng của món bổ trợ (perUserLeft 0): giá thường và phân loại đại diện, không gạch', () => {
+    const b = buildFrequentlyBoughtBundle({ now: NOW, current: current(), candidates: [card(1), card(2)], flash: [flashOn(1, 30_000, { perUserLeft: 0 })] })!;
+    expect(b.lines[1]).toMatchObject({ variationId: 'v1', price: 50_000, compareAt: null });
+    expect(b.bundleSavings).toBe(0);
+  });
+
   it('món ghim phân loại (CTV) luôn thêm phân loại ghim', () => {
     const b = buildFrequentlyBoughtBundle({ now: NOW, current: current(), candidates: [card(1, { pinnedVariationId: 'v1-pin' }), card(2)] })!;
     expect(b.lines[1]!.variationId).toBe('v1-pin');

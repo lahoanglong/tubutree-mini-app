@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ProductCard } from '../api/catalog';
 import type { PurchasedItem } from '../api/orders';
 import type { FlashPriceItem } from '../flash-price';
-import { QUICK_REORDER_MAX, QUICK_REORDER_MIN, buildQuickReorderItems, quickReorderLines, quickReorderTotal } from './quick-reorder';
+import { QUICK_REORDER_MAX, QUICK_REORDER_MIN, buildQuickReorderItems, quickReorderAvailable, quickReorderLines, quickReorderShelfItems, quickReorderTotal } from './quick-reorder';
 
 const NOW = Date.parse('2026-11-08T03:00:00Z');
 
@@ -112,6 +112,32 @@ describe('buildQuickReorderItems: món đã mua', () => {
     expect(a).toMatchObject({ price: 100_000, isFlash: false });
   });
 
+  it('giỏ đã có đủ suất Giờ vàng còn lại (flashAllowance 1, giỏ 1): thêm 1 nữa vượt suất nên thẻ ghi giá thường', () => {
+    const items = buildQuickReorderItems({
+      now: NOW,
+      purchased: [bought(1, { flashAllowance: 1, flashPrice: 60_000 }), bought(2)],
+      flash: [flashOn(1, 60_000)],
+      cartUnits: new Map([['v1', 1]]),
+    });
+    expect(items[0]).toMatchObject({ price: 100_000, compareAt: null, isFlash: false });
+  });
+
+  it('giỏ chưa có món: còn suất thì vẫn ghi giá Giờ vàng', () => {
+    const items = buildQuickReorderItems({
+      now: NOW,
+      purchased: [bought(1, { flashAllowance: 1, flashPrice: 60_000 }), bought(2)],
+      flash: [flashOn(1, 60_000)],
+      cartUnits: new Map([['v9', 4]]),
+    });
+    expect(items[0]).toMatchObject({ price: 60_000, isFlash: true });
+  });
+
+  it('API cũ (không gửi flashAllowance): giới hạn mỗi khách của danh sách Giờ vàng và số trong giỏ quyết định', () => {
+    const base = { now: NOW, purchased: [bought(1), bought(2)], flash: [flashOn(1, 60_000, { perUserLimit: 2 })] };
+    expect(buildQuickReorderItems({ ...base, cartUnits: new Map([['v1', 1]]) })[0]).toMatchObject({ price: 60_000, isFlash: true });
+    expect(buildQuickReorderItems({ ...base, cartUnits: new Map([['v1', 2]]) })[0]).toMatchObject({ price: 100_000, isFlash: false });
+  });
+
   it('Giờ vàng chỉ áp cho đúng phân loại đã mua', () => {
     const [a] = buildQuickReorderItems({
       now: NOW,
@@ -174,5 +200,43 @@ describe('dòng giỏ và tổng của cả dải', () => {
   it('tổng là tổng giá khách trả đang hiện', () => {
     expect(quickReorderTotal(items)).toBe(90_000 + 40_000);
     expect(quickReorderTotal([])).toBe(0);
+  });
+});
+
+describe('quickReorderAvailable', () => {
+  it('còn hàng, có tồn và có giá', () => {
+    expect(quickReorderAvailable(bought(1))).toBe(true);
+    expect(quickReorderAvailable(bought(1, { inStock: false }))).toBe(false);
+    expect(quickReorderAvailable(bought(1, { stock: 0 }))).toBe(false);
+    expect(quickReorderAvailable(bought(1, { price: 0, salePrice: null }))).toBe(false);
+    expect(quickReorderAvailable(bought(1, { price: 0, salePrice: 5_000 }))).toBe(true);
+  });
+
+  it('khớp đúng tập món dải vẽ khi chưa chạm trần: không món nào dải vẽ mà vị từ loại, và ngược lại', () => {
+    const list = [bought(1, { inStock: false }), bought(2), bought(3, { stock: 0 }), bought(4), bought(5, { price: 0, salePrice: null }), bought(6)];
+    const drawn = buildQuickReorderItems({ now: NOW, purchased: list }).map((i) => i.variationId);
+    expect(drawn).toEqual(list.filter(quickReorderAvailable).map((p) => p.variationId));
+  });
+});
+
+describe('quickReorderShelfItems', () => {
+  it('đủ 2 món dùng được: kệ chỉ giữ món dùng được (đúng tập dải vẽ)', () => {
+    const list = [bought(1, { inStock: false }), bought(2), bought(3, { stock: 0 }), bought(4)];
+    expect(quickReorderShelfItems(list).map((p) => p.variationId)).toEqual(['v2', 'v4']);
+  });
+
+  it('dưới 2 món dùng được: dải ẩn nên kệ cũ vẽ đủ, kể cả món hết hàng', () => {
+    const one = [bought(1, { stock: 0 })];
+    expect(quickReorderShelfItems(one)).toEqual(one);
+    const mixed = [bought(1), bought(2, { inStock: false })];
+    expect(quickReorderShelfItems(mixed).map((p) => p.variationId)).toEqual(['v1', 'v2']);
+    expect(quickReorderShelfItems([])).toEqual([]);
+  });
+
+  it('không đổi thứ tự nguồn và trả bản sao (không sửa mảng vào)', () => {
+    const list = [bought(2), bought(1)];
+    const out = quickReorderShelfItems(list);
+    expect(out.map((p) => p.variationId)).toEqual(['v2', 'v1']);
+    expect(out).not.toBe(list);
   });
 });

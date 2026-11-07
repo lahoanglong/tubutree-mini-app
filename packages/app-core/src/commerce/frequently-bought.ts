@@ -1,6 +1,7 @@
 import type { ProductCard } from '../api/catalog';
-import { cardPricing, type FlashPriceItem } from '../flash-price';
+import type { FlashPriceItem } from '../flash-price';
 import { serverNow } from '../server-clock';
+import { addOneCardPricing } from './add-one-pricing';
 
 /**
  * Khối "Gợi ý mua kèm hợp vị" ở trang chi tiết sản phẩm: món đang xem cùng `FBT_PARTNER_MAX` món bổ trợ, tick chọn rồi thêm cả bộ một chạm.
@@ -95,8 +96,8 @@ export function pickFbtPartners(params: FbtPartnerParams): FbtLine[] {
   for (const c of Array.isArray(params.candidates) ? params.candidates : []) {
     if (partners.length >= limit) break;
     if (!c.inStock || seen.has(c.id) || params.cartProductIds?.has(c.id)) continue;
-    const pricing = cardPricing(c, flash, now);
-    const variationId = c.pinnedVariationId ?? pricing.flashVariationId ?? c.repVariationId;
+    const pricing = addOneCardPricing(c, flash, now);
+    const variationId = pricing.variationId;
     if (!variationId || !(pricing.price > 0)) continue;
     seen.add(c.id);
     partners.push({

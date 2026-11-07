@@ -1,7 +1,8 @@
 import { render } from '@testing-library/react';
 import type { ProductDetail } from '@tubutree/app-core/api/catalog';
 import { Search } from 'lucide-react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import type * as ZmpUi from 'zmp-ui';
 import { Button } from './button';
 import { Chip } from './chip';
 import { Checkbox, Radio, Switch } from './form';
@@ -13,6 +14,11 @@ import { ProductStoryShowcase } from './product-story-showcase';
 import { SegmentedTabs } from './segmented-tabs';
 import { StoryReelStrip } from './story-reel-strip';
 import { FreeshipAddonRail } from './freeship-addon-rail';
+import { FrequentlyBoughtTogether } from './frequently-bought-together';
+import { QuickReorderStrip } from './quick-reorder-strip';
+
+// `SectionHeader` (tiêu đề của dải) gọi useNavigate của ZaUI, cần router thật; vùng chạm không phụ thuộc nó.
+vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<typeof ZmpUi>()), useNavigate: () => vi.fn() }));
 
 /**
  * Vùng chạm >= 44x44 (C-021, WCAG 2.5.5) cho mọi phần tử bấm được mà DS v2 dựng. jsdom không có layout,
@@ -72,6 +78,15 @@ describe('vùng chạm DS v2 >= 44x44', () => {
     ['ProductStoryShowcase (vòng cung, chip bước)', () => <ProductStoryShowcase product={storyProduct} previewConfig={storyConfig} />],
     ['StoryReelStrip (vòng Story)', () => <StoryReelStrip items={[{ slug: 'a', name: 'A', thumbnail: null, seen: false }, { slug: 'b', name: 'B', thumbnail: null, seen: true }]} onOpen={() => {}} />],
     ['FreeshipAddonRail (nút + Thêm)', () => <FreeshipAddonRail items={[{ slug: 'a', name: 'A', thumbnail: null, price: 49000, variationId: 'v' }]} onAdd={() => {}} />],
+    ['FrequentlyBoughtTogether (dòng tick, nút Thêm)', () => (
+      <FrequentlyBoughtTogether
+        lines={[{ key: 'a', productId: 'p', slug: 'a', variationId: 'a', name: 'A', thumbnail: null, price: 49000, compareAt: null, isCurrent: true }]}
+        picked={new Set(['a'])}
+        summary={{ count: 1, bundleTotal: 49000, bundleOriginalTotal: 49000, bundleSavings: 0 }}
+        onToggle={() => {}}
+        onAdd={() => {}}
+      />
+    )],
     ['Switch có nhãn', () => <Switch label="A" checked={false} onChange={() => {}} />],
     ['CouponRemovedNotice (nút Đóng lời báo mã đã gỡ)', () => <CouponRemovedNotice notice={{ code: 'A', text: 'B' }} onDismiss={() => {}} />],
   ];
@@ -84,6 +99,19 @@ describe('vùng chạm DS v2 >= 44x44', () => {
       // ZaUI vẽ input checkbox/radio/switch đè lên ô gốc; vùng chạm là khối hitArea bọc ngoài.
       expect(reaches44(el), `${el.tagName} ${el.className} không đạt 44x44`).toBe(true);
     }
+  });
+
+  it('QuickReorderStrip: thân thẻ và "+ Thêm" đạt 44x44; "Thêm lại tất cả" của tiêu đề khai minHeight 44', () => {
+    const item = (id: string) => ({ key: id, productId: `p-${id}`, slug: id, variationId: id, name: id.toUpperCase(), thumbnail: null, price: 49000, compareAt: null, savePct: 0, isFlash: false, timesBought: 2, source: 'purchased' as const });
+    const { container } = render(<QuickReorderStrip items={[item('a'), item('b')]} onAdd={() => {}} onAddAll={() => {}} onOpen={() => {}} />);
+    const header = container.querySelector('[data-testid="section-header"]')!;
+    const headerButtons = Array.from(header.querySelectorAll<HTMLElement>('button'));
+    expect(headerButtons).toHaveLength(1);
+    // Chiều cao của hàng tiêu đề là token `--section-header-h` (44px) mà jsdom không đọc được; nút tự khai minHeight 44. Bề ngang do nhãn quyết định (đo thật ở e2e).
+    expect(px(headerButtons[0]!.style.minHeight)).toBeGreaterThanOrEqual(44);
+    const own = interactiveIn(container).filter((el) => !header.contains(el));
+    expect(own.map((el) => el.getAttribute('data-testid') ?? 'tubu-quick-open')).toEqual(['tubu-quick-open', 'quick-reorder-add', 'tubu-quick-open', 'quick-reorder-add']);
+    for (const el of own) expect(reaches44(el), `${el.tagName} ${el.className} không đạt 44x44`).toBe(true);
   });
 
   it('ProductStoryShowcase Reel (đóng, thêm giỏ · giá, câu chuyện kế)', () => {

@@ -505,7 +505,7 @@ export const SHOP_COPY: Record<string, string> = {
   'quickReorder.addAll': 'Thêm lại tất cả',
   'quickReorder.add': '+ Thêm',
   'quickReorder.addAria': 'Thêm {name} vào giỏ, {price}',
-  'quickReorder.addAllAria': 'Thêm lại {n} món vào giỏ, tổng {total}',
+  'quickReorder.addAllAria': 'Thêm lại tất cả {n} món vào giỏ, tổng {total}',
   'quickReorder.timesBought': 'Đã mua {n} lần',
   'quickReorder.addedAll': 'Đã thêm {n} món vào giỏ',
   'quickReorder.error': 'Chưa thêm được vào giỏ. Bạn thử lại nhé.',
