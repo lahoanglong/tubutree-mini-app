@@ -306,7 +306,7 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
               if (state.q) update({ q: '' });
               inputRef.current?.focus();
             }}
-            className="absolute right-0 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center text-stone-600"
+            className="absolute right-0 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center text-stone-600 transition active:scale-[0.97] motion-reduce:active:scale-100"
           >
             <X className="h-4 w-4" aria-hidden="true" />
           </button>

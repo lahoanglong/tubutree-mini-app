@@ -31,7 +31,7 @@ export function PageHeader({ title, subtitle, back = 'auto', actions, variant = 
     >
       <div style={{ flex: 1, minWidth: 0, paddingLeft: back !== false ? BACK_BUTTON_TITLE_CLEARANCE : 0 }}>
         <Heading variant="title-lg" as="h1" tone={variant === 'hero' ? 'inverse' : 'primary'}>{title}</Heading>
-        {subtitle && <Text variant="caption" tone={variant === 'hero' ? 'inverse' : 'tertiary'} as="div">{subtitle}</Text>}
+        {subtitle && <Text variant="caption" tone={variant === 'hero' ? 'inverse' : 'tertiary'} as="div" numeric style={{ overflowWrap: 'anywhere' }}>{subtitle}</Text>}
       </div>
       {actions}
     </div>

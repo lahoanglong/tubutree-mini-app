@@ -22,7 +22,7 @@ export function OrderStatusHero({ headline, statusLabel, stamp, tone }: OrderSta
       aria-label="Tình trạng đơn hàng"
       style={{ background: tone.bg, color: tone.fg, padding: 'var(--space-inset-page)', display: 'flex', flexDirection: 'column', gap: 'var(--space-stack-xs)' }}
     >
-      <Text variant="caption" as="p" style={inherit}>
+      <Text variant="caption" as="p" numeric style={inherit}>
         {stamp.label} <span>{shortDateTime(stamp.at)}</span>
       </Text>
       <Heading variant="title-sm" as="h2" font="ui" style={inherit}>
@@ -39,12 +39,12 @@ export function OrderStatusHero({ headline, statusLabel, stamp, tone }: OrderSta
         </Text>
       )}
       {headline.milestone && (
-        <Text variant="body-sm" as="p" data-testid="order-milestone" style={{ ...wrap, fontWeight: 600 }}>
+        <Text variant="body-sm" as="p" numeric data-testid="order-milestone" style={{ ...wrap, fontWeight: 600 }}>
           {headline.milestone}
         </Text>
       )}
       {headline.next && (
-        <Text variant="caption" as="p" data-testid="order-next" style={wrap}>
+        <Text variant="caption" as="p" numeric data-testid="order-next" style={wrap}>
           {headline.next}
         </Text>
       )}

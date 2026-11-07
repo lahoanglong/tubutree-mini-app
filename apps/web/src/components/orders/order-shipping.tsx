@@ -52,7 +52,7 @@ export function OrderShipping({ partner, code, status, events = [], trackingHref
             <Text variant="caption" tone="tertiary" as="div">
               {fillCopy('order.shipping.code')}
             </Text>
-            <Text variant="body-md" as="div" style={{ fontWeight: 700, overflowWrap: 'anywhere' }}>
+            <Text variant="body-md" as="div" numeric style={{ fontWeight: 700, overflowWrap: 'anywhere' }}>
               {code}
             </Text>
             {/* Vùng báo phải có sẵn trong trang trước khi bấm thì trình đọc màn hình mới đọc lúc chữ đổi; rỗng nên không chiếm chỗ. */}
@@ -93,7 +93,7 @@ export function OrderShipping({ partner, code, status, events = [], trackingHref
                 {ev.label}
               </Text>
               {ev.at && (
-                <Text variant="caption" tone="tertiary" as="div">
+                <Text variant="caption" tone="tertiary" as="div" numeric>
                   {shortDateTime(ev.at)}
                 </Text>
               )}

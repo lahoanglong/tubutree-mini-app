@@ -111,4 +111,9 @@ describe('SlotTabs (web)', () => {
     const m = mount(<SlotTabs tabs={[]} value="" onChange={() => {}} panelId="p" />);
     expect(m.container.innerHTML).toBe('');
   });
+
+  it('mỗi tab co khi nhấn (tubu-press-card, W41B): khung giờ là điều khiển chính của trang Giờ vàng', () => {
+    mount(<Harness />);
+    for (const t of tabs()) expect(t.classList.contains('tubu-press-card')).toBe(true);
+  });
 });

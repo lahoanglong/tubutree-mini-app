@@ -274,11 +274,11 @@ export default function OrderDetailPage() {
                   <div data-testid="mini-line" className="text-sm text-stone-900 md:hidden">
                     {it.productName}
                     {it.variationName ? ` · ${it.variationName}` : ''}{' '}
-                    <span className="text-xs text-[color:var(--color-text-tertiary)]">×{it.quantity}</span>
+                    <span className="text-xs tabular-nums text-[color:var(--color-text-tertiary)]">×{it.quantity}</span>
                   </div>
                   <div className="text-sm font-medium text-stone-900 max-md:hidden">{it.productName}</div>
                   {it.variationName && <div className="text-xs text-stone-600 max-md:hidden">{it.variationName}</div>}
-                  <div className="mt-0.5 text-xs text-stone-600 max-md:hidden">
+                  <div className="mt-0.5 text-xs tabular-nums text-stone-600 max-md:hidden">
                     {formatVnd(it.unitPrice)} × {it.quantity}
                   </div>
                 </div>
@@ -295,7 +295,7 @@ export default function OrderDetailPage() {
                   ) : (
                     <div className="flex min-h-12 min-w-0 flex-1 items-center gap-3">{rowBody}</div>
                   )}
-                  <div className="flex-none text-sm font-semibold text-stone-900 max-md:font-normal">{formatVnd(it.total)}</div>
+                  <div className="flex-none text-sm font-semibold tabular-nums text-stone-900 max-md:font-normal">{formatVnd(it.total)}</div>
                 </div>
                 <div className="md:ml-[68px]">
                   {(it.backorderedQty ?? 0) > 0 && (
@@ -341,7 +341,7 @@ export default function OrderDetailPage() {
           <Row label="Phí vận chuyển" value={o.shippingFee === 0 ? 'Miễn phí' : formatVnd(o.shippingFee)} valueTone={o.shippingFee === 0 ? 'success' : undefined} />
           <div className="flex justify-between border-t border-stone-200 pt-2 font-bold text-stone-900 max-md:border-t-0 max-md:pt-0 max-md:text-base">
             <span>Tổng cộng</span>
-            <span>{formatVnd(o.total)}</span>
+            <span className="tabular-nums">{formatVnd(o.total)}</span>
           </div>
           <Row label="Thanh toán" value={PAYMENT_METHOD_NAME[o.paymentMethod] ?? o.paymentMethod} />
           {o.paymentStatus && (
@@ -375,12 +375,12 @@ export default function OrderDetailPage() {
             {o.siblings!.map((sb) => (
               <li key={sb.code} className="flex flex-wrap items-center justify-between gap-2">
                 <span>
-                  <Link href={orderDetailHref(sb.code)} className="inline-flex min-h-11 items-center font-semibold text-forest-700 underline">
+                  <Link href={orderDetailHref(sb.code)} className="inline-flex min-h-11 items-center font-semibold tabular-nums text-forest-700 underline">
                     {sb.code}
                   </Link>{' '}
                   · {sb.fulfillerName} giao · {orderStatusLabel(sb.status)}
                 </span>
-                <span className="font-semibold text-stone-900">{formatVnd(sb.total)}</span>
+                <span className="font-semibold tabular-nums text-stone-900">{formatVnd(sb.total)}</span>
               </li>
             ))}
           </ul>
@@ -458,7 +458,7 @@ function Row({ label, value, positive, valueTone }: { label: string; value: stri
   return (
     <div className={`flex justify-between gap-3 ${positive ? 'text-success-fg' : 'text-stone-900'}`}>
       <span className={positive ? '' : 'text-stone-600 max-md:text-[color:var(--color-text-tertiary)]'}>{label}</span>
-      <span className={`text-right max-md:font-semibold ${valueTone === 'success' ? 'text-success-fg' : ''}`}>{value}</span>
+      <span className={`text-right tabular-nums max-md:font-semibold ${valueTone === 'success' ? 'text-success-fg' : ''}`}>{value}</span>
     </div>
   );
 }

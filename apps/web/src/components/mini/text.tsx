@@ -29,15 +29,17 @@ export interface TextProps {
   as?: ElementType;
   className?: string;
   style?: CSSProperties;
+  /** Chữ chứa số đổi theo dữ liệu (giờ, mã vận đơn, số kết quả): số đều để chữ quanh nó không rung khi số đổi. */
+  numeric?: boolean;
   'data-testid'?: string;
 }
 
 /** Chữ theo vai trò (audit A4-11): 11 bậc type-* thay cho 116 fontSize literal + <Text size> của ZaUI. */
-export function Text({ children, variant = 'body-md', tone = 'primary', as: As = 'span', className, style, ...rest }: TextProps) {
+export function Text({ children, variant = 'body-md', tone = 'primary', as: As = 'span', className, style, numeric, ...rest }: TextProps) {
   return (
     <As
       className={className}
-      style={{ fontFamily: 'var(--font-ui)', color: TONE_VAR[tone], margin: 0, ...typeStyle(variant), ...style }}
+      style={{ fontFamily: 'var(--font-ui)', color: TONE_VAR[tone], margin: 0, ...typeStyle(variant), ...(numeric ? { fontVariantNumeric: 'tabular-nums' } : null), ...style }}
       {...rest}
     >
       {children}

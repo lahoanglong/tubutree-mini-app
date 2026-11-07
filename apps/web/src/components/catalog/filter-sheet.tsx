@@ -85,7 +85,7 @@ export function FilterSheet({
           <button type="button" onClick={() => setDraft({ brands: [], inStock: false })} className={ui.btnText}>
             {browseText.filter.reset}
           </button>
-          <button type="button" onClick={apply} className={`${ui.btnPrimary} min-w-0 flex-1`}>
+          <button type="button" onClick={apply} className={`${ui.btnPrimary} min-w-0 flex-1 tabular-nums`}>
             {label}
           </button>
         </div>

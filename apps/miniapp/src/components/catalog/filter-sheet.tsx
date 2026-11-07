@@ -86,7 +86,7 @@ export function FilterSheet({ open, onClose, state, brands, onApply }: FilterShe
           <Button variant="ghost" onPress={() => setDraft({ brands: [], inStock: false })} style={{ minWidth: 0 }}>
             {vi.browse.filter.reset}
           </Button>
-          <Button onPress={apply} style={{ minWidth: 0, flex: 1 }}>
+          <Button onPress={apply} style={{ minWidth: 0, flex: 1, fontVariantNumeric: 'tabular-nums' }}>
             {label}
           </Button>
         </div>

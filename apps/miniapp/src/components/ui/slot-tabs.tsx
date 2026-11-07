@@ -32,8 +32,9 @@ const TAB: CSSProperties = {
   WebkitTapHighlightColor: 'transparent',
   fontFamily: 'inherit',
   whiteSpace: 'nowrap',
-  transitionProperty: 'color, box-shadow',
-  transitionDuration: '150ms',
+  // transform có mặt ở đây vì style nội tuyến đè `.tubu-press-card`: thiếu nó thì tab co và nhả tức thì thay vì nhả êm.
+  transitionProperty: 'color, box-shadow, transform',
+  transitionDuration: '150ms, 150ms, var(--p-dur-release)',
   transitionTimingFunction: 'ease-out',
 };
 
@@ -63,6 +64,7 @@ export function SlotTabs({ tabs, value, onChange, panelId }: SlotTabsProps) {
               refs.current[i] = el;
             }}
             type="button"
+            className="tubu-press-card"
             role="tab"
             id={slotTabId(tab.id)}
             aria-selected={selected}

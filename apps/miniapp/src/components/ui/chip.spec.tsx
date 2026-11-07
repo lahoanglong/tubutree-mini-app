@@ -91,4 +91,8 @@ describe('Chip', () => {
     render(<Chip ariaLabel="Lọc Tubu" count={3}>Tubu</Chip>);
     expect(screen.getByRole('button', { name: 'Lọc Tubu' })).toBeInTheDocument();
   });
+  it('số đều: "Dưới 100k", "4★ trở lên" không đổi bề rộng chữ số khi đổi lựa chọn (W41B)', () => {
+    render(<Chip>Dưới 100k</Chip>);
+    expect(screen.getByRole('button').style.fontVariantNumeric).toBe('tabular-nums');
+  });
 });

@@ -62,6 +62,7 @@ export function Chip({
         maxWidth: '100%',
         borderRadius: 'var(--radius-pill)',
         whiteSpace: 'nowrap',
+        fontVariantNumeric: 'tabular-nums',
         boxSizing: 'border-box',
         ...style,
       }}

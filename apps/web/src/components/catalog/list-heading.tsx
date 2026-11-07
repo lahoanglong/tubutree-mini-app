@@ -31,7 +31,7 @@ export function ListHeading({ title, count, isLoading }: ListHeadingProps) {
         className="md:!ml-0"
         style={{ margin: 0, flex: '0 0 auto', whiteSpace: 'nowrap', marginLeft: title ? 'auto' : 0, fontSize: 'var(--type-body-sm-size)', lineHeight: 'var(--type-body-sm-lh)' }}
       >
-        <Text variant="body-sm" tone="secondary">
+        <Text variant="body-sm" tone="secondary" numeric>
           {isLoading || count === undefined ? ' ' : browseText.resultCount(count)}
         </Text>
       </p>

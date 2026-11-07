@@ -123,4 +123,9 @@ describe('SlotTabs', () => {
     const { container } = render(<SlotTabs tabs={[]} value="" onChange={() => {}} panelId="p" />);
     expect(container).toBeEmptyDOMElement();
   });
+
+  it('mỗi tab co khi nhấn (tubu-press-card, W41B): khung giờ là điều khiển chính của trang Giờ vàng', () => {
+    render(<Harness />);
+    for (const tab of screen.getAllByRole('tab')) expect(tab).toHaveClass('tubu-press-card');
+  });
 });

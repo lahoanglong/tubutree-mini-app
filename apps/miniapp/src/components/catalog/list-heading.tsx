@@ -29,7 +29,7 @@ export function ListHeading({ title, count, isLoading }: ListHeadingProps) {
         data-testid="result-count"
         style={{ margin: 0, flex: '0 0 auto', whiteSpace: 'nowrap', marginLeft: title ? 'auto' : 0 }}
       >
-        <Text variant="body-sm" tone="secondary">
+        <Text variant="body-sm" tone="secondary" numeric>
           {isLoading || count === undefined ? ' ' : vi.browse.resultCount(count)}
         </Text>
       </p>
