@@ -99,7 +99,7 @@ for (const width of NARROW_WIDTHS) {
 
       await expectPressFeedback(page, page.getByRole('button', { name: 'Mua lại', exact: true }).first(), 'nút Mua lại');
       await expectPressFeedback(page, page.getByRole('button', { name: 'Thanh toán ngay' }).first(), 'nút Thanh toán ngay');
-      await expectPressFeedback(page, page.getByRole('button', { name: 'Đơn TUBU-W39A-S' }), 'thẻ đơn');
+      await expectPressFeedback(page, page.getByRole('button', { name: 'Đơn TUBU-W39A-S' }), 'thẻ đơn', page.getByTestId('order-card').filter({ has: page.getByRole('button', { name: 'Đơn TUBU-W39A-S' }) }));
       const badges = await page.getByTestId('order-card').evaluateAll((cards) =>
         cards.flatMap((c) => Array.from(c.querySelectorAll<HTMLElement>('[class*="badge"], [data-badge]')).filter((b) => b.scrollWidth > b.clientWidth + 1).map((b) => b.textContent ?? '')),
       );
@@ -113,7 +113,7 @@ for (const width of NARROW_WIDTHS) {
       await expect(page.getByTestId('order-card').first()).toBeVisible({ timeout: 15_000 });
       await expectNoPressMotion(page, page.getByRole('button', { name: 'Mua lại', exact: true }).first(), 'nút Mua lại');
       await expectNoPressMotion(page, page.getByRole('button', { name: 'Thanh toán ngay' }).first(), 'nút Thanh toán ngay');
-      await expectNoPressMotion(page, page.getByRole('button', { name: 'Đơn TUBU-W39A-S' }), 'thẻ đơn');
+      await expectNoPressMotion(page, page.getByRole('button', { name: 'Đơn TUBU-W39A-S' }), 'thẻ đơn', page.getByTestId('order-card').filter({ has: page.getByRole('button', { name: 'Đơn TUBU-W39A-S' }) }));
     });
   });
 }

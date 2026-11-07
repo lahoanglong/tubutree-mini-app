@@ -90,11 +90,12 @@ export async function probeTapTargets(page: Page, options: TapProbeOptions = {})
 }
 
 /**
- * Giữ chuột xuống trên phần tử (không nhả trên nó), đọc hệ số co `scale` của chính nó hoặc tổ tiên gần nhất đang co (tới 4 đời: nút ZaUI bọc `.tubu-btn` ở ngoài,
- * thẻ bấm được co cả thẻ), rồi nhả chuột ở chỗ khác. Chặn `click` ở pha bắt của `window` trước khi nhả để lần thử không kích hoạt hành động thật.
- * Trả hệ số co: 1 = không co.
+ * Giữ chuột xuống trên `target` (không nhả trên nó) rồi đọc hệ số co `scale` của CHÍNH `readFrom` (mặc định `target`), sau đó nhả chuột ở chỗ khác.
+ * Chỉ đọc đúng một phần tử: lấy cả tổ tiên thì nút nằm trong thẻ bấm được sẽ đọc nhầm hệ số của thẻ (nhấn nút cũng làm thẻ `:active`), và ca "nút mất
+ * hiệu ứng co" vẫn qua. Muốn đo thẻ thì nhấn một điều khiển trong thẻ và truyền chính thẻ vào `readFrom`.
+ * Chặn `click` ở pha bắt của `window` trước khi nhả để lần thử không kích hoạt hành động thật. Trả hệ số co: 1 = không co.
  */
-export async function pressScale(page: Page, target: Locator): Promise<number> {
+export async function pressScale(page: Page, target: Locator, readFrom: Locator = target): Promise<number> {
   await target.evaluate((el) => (el as HTMLElement).scrollIntoView({ block: 'center', inline: 'center' }));
   const box = (await target.boundingBox())!;
   await page.evaluate(() => {
@@ -107,17 +108,11 @@ export async function pressScale(page: Page, target: Locator): Promise<number> {
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();
   await page.waitForTimeout(260);
-  const scale = await target.evaluate((el) => {
-    let node: Element | null = el;
-    let best = 1;
-    for (let i = 0; i < 5 && node; i++, node = node.parentElement) {
-      const t = getComputedStyle(node).transform;
-      if (!t || t === 'none') continue;
-      const m = new DOMMatrixReadOnly(t);
-      const s = Math.hypot(m.a, m.b);
-      if (Math.abs(s - 1) > 1e-4) best = Math.min(best, s);
-    }
-    return Math.round(best * 1000) / 1000;
+  const scale = await readFrom.evaluate((el) => {
+    const t = getComputedStyle(el).transform;
+    if (!t || t === 'none') return 1;
+    const m = new DOMMatrixReadOnly(t);
+    return Math.round(Math.hypot(m.a, m.b) * 1000) / 1000;
   });
   await page.mouse.move(1, 1);
   await page.mouse.up();
@@ -148,14 +143,14 @@ export async function stickyBarBottomClearance(page: Page, inset: number): Promi
 export const PRESS_MIN = 0.97;
 export const PRESS_MAX = 0.99;
 
-/** Nhấn giữ `target` và đòi nó co trong 0,97..0,99; `what` là tên điều khiển để báo lỗi đúng chỗ. */
-export async function expectPressFeedback(page: Page, target: Locator, what: string): Promise<void> {
-  const scale = await pressScale(page, target);
+/** Nhấn giữ `target` và đòi `readFrom` (mặc định chính nó) co trong 0,97..0,99; `what` là tên điều khiển để báo lỗi đúng chỗ. */
+export async function expectPressFeedback(page: Page, target: Locator, what: string, readFrom?: Locator): Promise<void> {
+  const scale = await pressScale(page, target, readFrom);
   expect.soft(scale, `${what}: co khi nhấn (đo được ${scale})`).toBeGreaterThanOrEqual(PRESS_MIN);
   expect.soft(scale, `${what}: co khi nhấn (đo được ${scale})`).toBeLessThanOrEqual(PRESS_MAX);
 }
 
 /** Khách chọn giảm chuyển động: nhấn giữ không co (hệ số đúng 1). */
-export async function expectNoPressMotion(page: Page, target: Locator, what: string): Promise<void> {
-  expect.soft(await pressScale(page, target), `${what}: giảm chuyển động thì không co`).toBe(1);
+export async function expectNoPressMotion(page: Page, target: Locator, what: string, readFrom?: Locator): Promise<void> {
+  expect.soft(await pressScale(page, target, readFrom), `${what}: giảm chuyển động thì không co`).toBe(1);
 }

@@ -134,7 +134,7 @@ for (const width of NARROW_WIDTHS) {
 
       await expectPressFeedback(page, page.getByRole('button', { name: 'Mua lại', exact: true }).first(), 'nút Mua lại');
       await expectPressFeedback(page, page.getByRole('link', { name: 'Thanh toán ngay' }).first(), 'nút Thanh toán ngay');
-      await expectPressFeedback(page, page.getByRole('link', { name: 'Đơn TUBU-W39A-S' }), 'thẻ đơn');
+      await expectPressFeedback(page, page.getByRole('link', { name: 'Đơn TUBU-W39A-S' }), 'thẻ đơn', page.getByTestId('order-card').filter({ has: page.getByRole('link', { name: 'Đơn TUBU-W39A-S' }) }));
     });
 
     test('Đơn hàng, giảm chuyển động thì nút không co khi nhấn', async ({ page, api }) => {
@@ -145,7 +145,7 @@ for (const width of NARROW_WIDTHS) {
       await expect(page.getByTestId('order-card').first()).toBeVisible({ timeout: 30_000 });
       await expectNoPressMotion(page, page.getByRole('button', { name: 'Mua lại', exact: true }).first(), 'nút Mua lại');
       await expectNoPressMotion(page, page.getByRole('link', { name: 'Thanh toán ngay' }).first(), 'nút Thanh toán ngay');
-      await expectNoPressMotion(page, page.getByRole('link', { name: 'Đơn TUBU-W39A-S' }), 'thẻ đơn');
+      await expectNoPressMotion(page, page.getByRole('link', { name: 'Đơn TUBU-W39A-S' }), 'thẻ đơn', page.getByTestId('order-card').filter({ has: page.getByRole('link', { name: 'Đơn TUBU-W39A-S' }) }));
     });
   });
 }
