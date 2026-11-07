@@ -372,12 +372,12 @@ export default function OrderDetailPage() {
                 <ProductThumb src={it.thumbnail} alt="" size={48} />
                 <Text size="small" style={{ flex: 1, minWidth: 0 }}>
                   {it.productName} · {it.variationName}{' '}
-                  <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', display: 'inline' }}>
+                  <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', display: 'inline', fontVariantNumeric: 'tabular-nums' }}>
                     ×{it.quantity}
                   </Text>
                 </Text>
               </Box>
-              <Text size="small" style={{ flex: '0 0 auto' }}>
+              <Text size="small" style={{ flex: '0 0 auto', fontVariantNumeric: 'tabular-nums' }}>
                 {formatVnd(it.total)}
               </Text>
             </Box>

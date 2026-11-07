@@ -56,7 +56,7 @@ export function PageHeader({ title, subtitle, backHref, backLabel = 'Quay lại'
         </h1>
         {subtitle && (
           <div
-            className={`text-xs max-md:text-[length:var(--type-caption-size)] max-md:leading-[var(--type-caption-lh)] ${
+            className={`text-xs tabular-nums [overflow-wrap:anywhere] max-md:text-[length:var(--type-caption-size)] max-md:leading-[var(--type-caption-lh)] ${
               hero ? 'text-stone-100 max-md:text-[color:var(--color-text-inverse)]' : 'text-stone-600 max-md:text-[color:var(--color-text-tertiary)]'
             } ${subtitleClassName}`}
           >

@@ -46,7 +46,7 @@ export function OrderShipping({ partner, code, status, events = [] }: OrderShipp
             <Text variant="caption" tone="tertiary" as="div">
               {fillCopy('order.shipping.code')}
             </Text>
-            <Text variant="body-md" as="div" style={{ fontWeight: 700, overflowWrap: 'anywhere' }}>
+            <Text variant="body-md" as="div" numeric style={{ fontWeight: 700, overflowWrap: 'anywhere' }}>
               {code}
             </Text>
           </div>
@@ -68,7 +68,7 @@ export function OrderShipping({ partner, code, status, events = [] }: OrderShipp
                 {ev.label}
               </Text>
               {ev.at && (
-                <Text variant="caption" tone="tertiary" as="div">
+                <Text variant="caption" tone="tertiary" as="div" numeric>
                   {shortDateTime(ev.at)}
                 </Text>
               )}

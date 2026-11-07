@@ -38,4 +38,14 @@ describe('Text/Heading', () => {
     expect(ui.style.fontSize).toBe('var(--type-title-md-size)');
     expect(ui.style.letterSpacing).toBe('-0.01em');
   });
+  it('Text numeric: số đều (tabular-nums) cho chữ có số đổi theo dữ liệu; mặc định không ép', () => {
+    render(
+      <>
+        <Text numeric data-testid="n">14:05 07/11</Text>
+        <Text data-testid="p">Chữ thường</Text>
+      </>,
+    );
+    expect(screen.getByTestId('n').style.fontVariantNumeric).toBe('tabular-nums');
+    expect(screen.getByTestId('p').style.fontVariantNumeric).toBe('');
+  });
 });

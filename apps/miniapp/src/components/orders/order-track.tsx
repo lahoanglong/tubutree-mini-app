@@ -14,12 +14,12 @@ function StepHint({ step, now }: { step: TrackStep; now?: number }): ReactNode {
   return (
     <>
       {step.at && (
-        <Text variant="caption" tone="tertiary" as="div">
+        <Text variant="caption" tone="tertiary" as="div" numeric>
           {shortDateTime(step.at, now)}
         </Text>
       )}
       {step.eta && (
-        <Text variant="caption" tone="tertiary" as="div">
+        <Text variant="caption" tone="tertiary" as="div" numeric>
           {step.eta}
         </Text>
       )}
@@ -31,7 +31,7 @@ function StepHint({ step, now }: { step: TrackStep; now?: number }): ReactNode {
                 {ev.label}
               </Text>
               {ev.at && (
-                <Text variant="caption" tone="tertiary" as="div">
+                <Text variant="caption" tone="tertiary" as="div" numeric>
                   {shortDateTime(ev.at, now)}
                 </Text>
               )}

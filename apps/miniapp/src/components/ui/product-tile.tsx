@@ -325,6 +325,7 @@ export function ProductTile({
               variant="label"
               tone="tertiary"
               as="div"
+              numeric
               aria-hidden
               style={{ height: TILE_METRICS.meta, marginTop: TILE_METRICS.metaGap, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', ...FIXED_LINE(TILE_METRICS.meta) }}
             >

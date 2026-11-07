@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { mount } from './harness';
-import { Heading } from './text';
+import { Heading, Text } from './text';
 
 const q = (sel: string) => document.querySelector<HTMLElement>(sel);
 
@@ -19,6 +19,18 @@ describe('Heading (web)', () => {
     expect(ui.style.fontWeight).toBe('700');
     expect(ui.style.fontSize).toBe('var(--type-title-md-size)');
     expect(ui.style.letterSpacing).toBe('-0.01em');
+    m.unmount();
+  });
+
+  it('Text numeric: số đều (tabular-nums) cho chữ có số đổi theo dữ liệu; mặc định không ép', () => {
+    const m = mount(
+      <>
+        <Text numeric data-testid="n">14:05 07/11</Text>
+        <Text data-testid="p">Chữ thường</Text>
+      </>,
+    );
+    expect(q('[data-testid="n"]')!.style.fontVariantNumeric).toBe('tabular-nums');
+    expect(q('[data-testid="p"]')!.style.fontVariantNumeric).toBe('');
     m.unmount();
   });
 });

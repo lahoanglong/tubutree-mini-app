@@ -63,6 +63,7 @@ export function SlotTabs({ tabs, value, onChange, panelId }: SlotTabsProps) {
               refs.current[i] = el;
             }}
             type="button"
+            className="tubu-press-card"
             role="tab"
             id={slotTabId(tab.id)}
             aria-selected={selected}

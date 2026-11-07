@@ -59,4 +59,9 @@ describe('ListHeading', () => {
     expect(h.style.whiteSpace).toBe('nowrap');
     expect(h.style.textOverflow).toBe('ellipsis');
   });
+
+  it('số kết quả vẽ bằng số đều: đổi số khi lọc không làm hàng rung (W41B)', () => {
+    const c = mount({ title: null, count: 1234, isLoading: false });
+    expect(count(c).querySelector<HTMLElement>('span')!.style.fontVariantNumeric).toBe('tabular-nums');
+  });
 });
