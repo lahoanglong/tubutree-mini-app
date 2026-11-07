@@ -176,7 +176,7 @@ for (const vp of VIEWPORTS) {
       const dialog = page.getByRole('dialog', { name: 'Câu chuyện sản phẩm' });
       await expect(dialog.getByTestId('story-add-to-cart')).toBeVisible();
       await expect(dialog.getByTestId('story-add-to-cart')).toHaveText(/^Thêm vào giỏ · [\d.]+đ$/);
-      await expect(dialog.getByRole('button', { name: 'Xem câu chuyện của sản phẩm kế tiếp' })).toHaveText('Câu chuyện kế');
+      await expect(dialog.getByRole('button', { name: 'Câu chuyện kế, xem sản phẩm kế tiếp' })).toHaveText('Câu chuyện kế');
       await expect(dialog.getByTestId('story-buy-now')).toHaveCount(0);
       await expectTouchTarget44(dialog.getByTestId('story-add-to-cart'));
       await expectTouchTarget44(dialog.getByTestId('story-next'));

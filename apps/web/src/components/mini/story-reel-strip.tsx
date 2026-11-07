@@ -69,6 +69,8 @@ export function StoryReelStrip({ items, loading = false, onOpen, onWarm }: Story
                     {fillCopy('reel.badge')}
                   </Badge>
                 </span>
+                {/* Dấu cách giữa huy hiệu và tên: axe (WCAG 2.5.3) nối chữ hiển thị không có ký tự ngăn, nên không có nó "Storytên" không nằm trong tên truy cập "Story tên, …". */}
+                {' '}
                 <span className="tubu-reel-label">{it.name}</span>
               </button>
             ))}

@@ -87,7 +87,7 @@ function renderHost() {
   );
   return { qc, ...utils };
 }
-const ring = (n: number) => screen.getByRole('button', { name: new RegExp(`câu chuyện Món ${n}$`) });
+const ring = (n: number) => screen.getByRole('button', { name: new RegExp(`^Story Món ${n},`) });
 const dialogReady = () => screen.findByTestId('story-add-to-cart');
 
 beforeEach(() => {
@@ -118,7 +118,7 @@ describe('HomeStoryReel: dải Story', () => {
     renderHost();
     expect(await screen.findAllByTestId('story-reel-item')).toHaveLength(4);
     expect(mocks.fetchProducts).toHaveBeenCalledWith(expect.objectContaining({ sort: 'best_seller_30d' }));
-    expect(screen.getAllByTestId('story-reel-item').map((b) => b.textContent)).toEqual(['StoryMón 1', 'StoryMón 2', 'StoryMón 3', 'StoryMón 4']);
+    expect(screen.getAllByTestId('story-reel-item').map((b) => b.textContent)).toEqual(['Story Món 1', 'Story Món 2', 'Story Món 3', 'Story Món 4']);
     expect(screen.queryByTestId('story-reel-skeleton')).toBeNull();
   });
 
@@ -188,8 +188,8 @@ describe('HomeStoryReel: mở Reel', () => {
     expect(JSON.parse(sessionStorage.getItem(REEL_SEEN_KEY)!)).toEqual(['mon-1']);
     fireEvent.click(screen.getByTestId('story-close'));
     await waitFor(() => expect(screen.queryByTestId('story-add-to-cart')).toBeNull());
-    expect(screen.getByRole('button', { name: 'Xem lại câu chuyện Món 1' })).toHaveAttribute('data-seen', 'true');
-    expect(screen.getByRole('button', { name: 'Xem câu chuyện Món 2' })).toHaveAttribute('data-seen', 'false');
+    expect(screen.getByRole('button', { name: 'Story Món 1, đã xem, mở lại' })).toHaveAttribute('data-seen', 'true');
+    expect(screen.getByRole('button', { name: 'Story Món 2, mở câu chuyện' })).toHaveAttribute('data-seen', 'false');
     expect(document.body.style.overflow).toBe('');
   });
 

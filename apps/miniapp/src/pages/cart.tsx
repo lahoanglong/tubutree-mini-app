@@ -70,6 +70,9 @@ const UNDO_WINDOW_MS = 3500;
 /** Tồn giả định của dòng vừa thêm từ dải gợi ý trong lúc chờ máy chủ: 99 là mức "còn nhiều" mà API công khai trả cho tồn trên 20, nên dòng không hiện câu "chỉ còn" nhất thời. Lần đọc lại giỏ thay bằng số thật. */
 const ADDON_PENDING_STOCK = 99;
 
+/** Dòng tạm chưa có mã thật ở máy chủ: không cho đổi số lượng, xoá hay tính vào đơn cho tới khi giỏ đọc lại (mã `pending-…` gửi lên sẽ 404). */
+const isPendingAddonLine = (line: CartLine) => line.id.startsWith('pending-');
+
 /** Dòng giỏ tạm của món bù đơn vừa bấm "+ Thêm", để thanh Miễn phí giao hàng chạy ngay; số thật về khi giỏ được đọc lại. */
 function pendingAddonLine(item: FreeshipAddonItem): CartLine {
   return {
@@ -328,7 +331,7 @@ export default function CartPage() {
     setDeselected(allSelected ? new Set(summary.items.map((l) => l.id)) : new Set());
   };
   const goCheckout = () => {
-    if (selectedItems.length === 0 || overStockSelected) return;
+    if (selectedItems.length === 0 || overStockSelected || addon.isPending) return;
     // null = cố ý thanh toán toàn giỏ. Luôn ghi nhớ để lần tải lại trang thanh toán không
     // âm thầm chuyển từ "1 món đã chọn" sang "cả giỏ".
     const itemIds = allSelected ? null : selectedItems.map((l) => l.id);
@@ -391,9 +394,9 @@ export default function CartPage() {
                 key={line.id}
                 line={line}
                 selected={!deselected.has(line.id)}
-                onToggleSelect={() => toggleSelect(line.id)}
-                onQty={(qty) => update.mutate({ id: line.id, qty })}
-                onRemove={() => requestRemove(line)}
+                onToggleSelect={() => !isPendingAddonLine(line) && toggleSelect(line.id)}
+                onQty={(qty) => !isPendingAddonLine(line) && update.mutate({ id: line.id, qty })}
+                onRemove={() => !isPendingAddonLine(line) && requestRemove(line)}
                 onOpen={() => navigate(`/product/${line.slug}`)}
                 onFlashEnd={() => void queryClient.invalidateQueries({ queryKey: ['cart'] })}
                 pending={update.isPending && update.variables?.id === line.id}

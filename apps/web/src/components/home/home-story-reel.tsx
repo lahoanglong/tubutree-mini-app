@@ -4,9 +4,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { BestSellersPage } from '@tubutree/app-core/api/browse';
-import type { ProductCard, ProductDetail } from '@tubutree/app-core/api/catalog';
+import type { ProductCard, ProductDetail, VariationDetail } from '@tubutree/app-core/api/catalog';
 import { markReelSeen, readReelSeen, reelDisabled, reelItems, reelNeighbor } from '@tubutree/app-core/commerce/story-reel';
 import { productQuery } from '@tubutree/app-core/queries/catalog';
+import { quickAddPlan } from '@tubutree/app-core/quick-add';
 import { homeBestSellerQuery } from '@tubutree/app-core/queries/home';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { useQuickAdd } from '@/app/tai-khoan/yeu-thich/quick-add';
@@ -78,7 +79,7 @@ interface OverlayProps {
   onGo: (slug: string) => void;
   onClose: () => void;
   onFail: () => void;
-  onAdd: (card: ProductCard) => void;
+  onAdd: (card: ProductCard, variations: VariationDetail[]) => void;
 }
 
 /** Reel của một món: tải chi tiết, tải trước món kế, tự nhảy qua món mà admin đã tắt câu chuyện, và dựng `ProductStoryShowcase` toàn màn kiểu Reel. */
@@ -121,7 +122,7 @@ function ReelOverlay({ slug, items, onGo, onClose, onFail, onAdd }: OverlayProps
       position={fillCopy('reel.position', { n: index + 1, total: slugs.length })}
       onNext={next ? () => onGo(next) : undefined}
       onClose={onClose}
-      onAddToCart={() => onAdd(card)}
+      onAddToCart={() => onAdd(card, detail.variations)}
     />
   );
 }
@@ -157,15 +158,17 @@ export function HomeStoryReel({ initialBestSellers }: { initialBestSellers?: Bes
     notify({ ok: false, text: fillCopy('reel.loadError') });
   };
   // Reel có z-index cao hơn bảng chọn phân loại và thông báo: đóng Reel TRƯỚC khi mở chúng (như trang chi tiết).
-  const add = (card: ProductCard) => {
+  const add = (card: ProductCard, variations: VariationDetail[]) => {
     setOpenSlug(null);
     if (phase === 'guest') {
-      const variationId = pricing(card).variationId;
-      if (variationId) rememberPendingAdd({ variationId, quantity: 1 });
+      // Chỉ nhớ lượt thêm khi khách không phải chọn gì (đúng một phân loại còn hàng): nhiều phân loại thì trang sản phẩm sau đăng nhập để khách tự chọn, không thêm hộ.
+      const plan = quickAddPlan(variations);
+      if (plan.kind === 'add') rememberPendingAdd({ variationId: plan.variationId, quantity: 1 });
       router.push(loginHref(`/san-pham/${encodeURIComponent(card.slug)}`));
       return;
     }
-    void quickAdd(card);
+    // Bảng chọn phân loại mở sẵn ở phân loại mang đúng giá trên nút Reel (Giờ vàng thắng thì phân loại của suất đó).
+    void quickAdd(card, { initialId: pricing(card).variationId ?? null });
   };
 
   const loading = best.isLoading;

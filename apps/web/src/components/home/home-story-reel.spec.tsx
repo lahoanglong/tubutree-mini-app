@@ -16,8 +16,12 @@ vi.mock('@/lib/use-flash-sales', async (importOriginal) => ({ ...(await importOr
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: net.push }) }));
 // Bảng chọn thật nạp qua next/dynamic; thay bằng bản rút gọn để test không phụ thuộc bảng đáy.
 vi.mock('@/components/variation-sheet', () => ({
-  VariationSheet: (p: { open: boolean; productName: string; variations: { id: string }[] }) =>
-    p.open ? <div data-testid="variation-sheet">{p.productName}:{p.variations.length}</div> : null,
+  VariationSheet: (p: { open: boolean; productName: string; initialId?: string | null; variations: { id: string }[] }) =>
+    p.open ? (
+      <div data-testid="variation-sheet" data-initial={p.initialId ?? ''}>
+        {p.productName}:{p.variations.length}
+      </div>
+    ) : null,
 }));
 
 import { HomeStoryReel } from './home-story-reel';
@@ -155,7 +159,7 @@ describe('HomeStoryReel (web)', () => {
     mount(<HomeStoryReel initialBestSellers={PAGE(CARDS)} />);
     await flush(2);
     expect(rings()[0]!.dataset.seen).toBe('true');
-    expect(rings()[0]!.getAttribute('aria-label')).toBe('Xem lại câu chuyện Món a');
+    expect(rings()[0]!.getAttribute('aria-label')).toBe('Story Món a, đã xem, mở lại');
   });
 
   it('đóng bằng nút Đóng và bằng phím Esc; trả cuộn trang', async () => {
@@ -279,6 +283,40 @@ describe('HomeStoryReel (web)', () => {
     expect(q('product-story')).toBeNull();
     expect(calls().filter((c) => c === 'POST /cart/items')).toHaveLength(0);
     expect(document.body.querySelector('[data-testid="variation-sheet"]')!.textContent).toBe('Món a:2');
+  });
+
+  it('bảng chọn phân loại mở sẵn ở phân loại đại diện của thẻ (cùng phân loại mang giá trên nút Reel)', async () => {
+    const cards = [card('a', { repVariationId: 'v-a2' }), card('b'), card('c')];
+    details.a = detail('a', {
+      variations: [
+        { id: 'v-a1', sku: 'a1', name: 'Bé', attributes: {}, retailPrice: 50000, salePrice: null, stock: 5 },
+        { id: 'v-a2', sku: 'a2', name: 'Lớn', attributes: {}, retailPrice: 90000, salePrice: null, stock: 5 },
+      ],
+    });
+    mount(<HomeStoryReel initialBestSellers={PAGE(cards)} />);
+    await flush(2);
+    click(rings()[0]!);
+    await flush(4);
+    click(q('story-add-to-cart'));
+    await flush(6);
+    expect(document.body.querySelector('[data-testid="variation-sheet"]')!.getAttribute('data-initial')).toBe('v-a2');
+  });
+
+  it('khách vãng lai, món nhiều phân loại: chuyển tới đăng nhập nhưng KHÔNG nhớ lượt thêm (khách tự chọn phân loại ở trang sản phẩm)', async () => {
+    net.phase = 'guest';
+    details.a = detail('a', {
+      variations: [
+        { id: 'v-a1', sku: 'a1', name: 'Bé', attributes: {}, retailPrice: 50000, salePrice: null, stock: 5 },
+        { id: 'v-a2', sku: 'a2', name: 'Lớn', attributes: {}, retailPrice: 90000, salePrice: null, stock: 5 },
+      ],
+    });
+    mount(<HomeStoryReel initialBestSellers={PAGE(CARDS)} />);
+    await flush(2);
+    click(rings()[0]!);
+    await flush(4);
+    click(q('story-add-to-cart'));
+    expect(net.push).toHaveBeenCalledWith('/dang-nhap?returnTo=%2Fsan-pham%2Fa');
+    expect(sessionStorage.getItem('tubu_pending_add')).toBeNull();
   });
 
   it('khách vãng lai: nhớ món chờ thêm rồi chuyển tới đăng nhập, quay lại trang sản phẩm; không gọi API giỏ', async () => {

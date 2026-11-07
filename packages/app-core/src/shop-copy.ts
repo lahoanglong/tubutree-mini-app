@@ -468,10 +468,10 @@ export const SHOP_COPY: Record<string, string> = {
   'story.def5': '{brand} gửi bạn {name}.',
   // Dải Story đầu Trang chủ và khung Reel toàn màn (W42A)
   'reel.badge': 'Story',
-  'reel.openAria': 'Xem câu chuyện {name}',
-  'reel.openAriaSeen': 'Xem lại câu chuyện {name}',
+  'reel.openAria': 'Story {name}, mở câu chuyện',
+  'reel.openAriaSeen': 'Story {name}, đã xem, mở lại',
   'reel.next': 'Câu chuyện kế',
-  'reel.nextAria': 'Xem câu chuyện của sản phẩm kế tiếp',
+  'reel.nextAria': 'Câu chuyện kế, xem sản phẩm kế tiếp',
   'reel.addPrice': 'Thêm vào giỏ · {price}',
   'reel.position': '{n}/{total}',
   'reel.loadError': 'Chưa mở được câu chuyện. Bạn thử lại nhé.',

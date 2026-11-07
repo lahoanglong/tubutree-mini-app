@@ -10,22 +10,22 @@ const item = (slug: string, over: Partial<StoryReelStripItem> = {}): StoryReelSt
 const rings = (c: ParentNode) => Array.from(c.querySelectorAll<HTMLElement>('[data-testid="story-reel-item"]'));
 
 describe('StoryReelStrip (web)', () => {
-  it('mỗi món một vòng: tên, huy hiệu Story, aria-label "Xem câu chuyện {tên}"', () => {
+  it('mỗi món một vòng: tên, huy hiệu Story, aria-label "Story {tên}, mở câu chuyện"', () => {
     const { container } = mount(<StoryReelStrip items={[item('a'), item('b'), item('c')]} onOpen={vi.fn()} />);
     expect(rings(container).map((r) => r.dataset.slug)).toEqual(['a', 'b', 'c']);
-    expect(rings(container)[0]!.getAttribute('aria-label')).toBe('Xem câu chuyện Món a');
+    expect(rings(container)[0]!.getAttribute('aria-label')).toBe('Story Món a, mở câu chuyện');
     expect(rings(container)[0]!.textContent).toContain('Story');
     expect(container.querySelector('h2, h3, [data-testid="section-title"]')?.textContent ?? container.textContent).toContain('Câu chuyện sản phẩm');
   });
 
-  it('chưa xem và đã xem: data-seen và aria-label khác nhau ("Xem lại câu chuyện")', () => {
+  it('chưa xem và đã xem: data-seen và aria-label khác nhau ("đã xem, mở lại")', () => {
     const { container } = mount(<StoryReelStrip items={[item('a'), item('b', { seen: true }), item('c')]} onOpen={vi.fn()} />);
     const [a, b] = rings(container);
     expect(a!.dataset.seen).toBe('false');
     expect(a!.querySelector('.tubu-reel-ring')!.getAttribute('data-seen')).toBe('false');
     expect(b!.dataset.seen).toBe('true');
     expect(b!.querySelector('.tubu-reel-ring')!.getAttribute('data-seen')).toBe('true');
-    expect(b!.getAttribute('aria-label')).toBe('Xem lại câu chuyện Món b');
+    expect(b!.getAttribute('aria-label')).toBe('Story Món b, đã xem, mở lại');
   });
 
   it('chạm vòng gọi onOpen(slug); pointerdown và focus gọi onWarm(slug) để tải trước chi tiết', () => {

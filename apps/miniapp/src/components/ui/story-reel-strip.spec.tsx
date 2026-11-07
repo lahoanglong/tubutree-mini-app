@@ -8,11 +8,11 @@ import { StoryReelStrip, type StoryReelStripItem } from './story-reel-strip';
 const item = (slug: string, over: Partial<StoryReelStripItem> = {}): StoryReelStripItem => ({ slug, name: `Món ${slug}`, thumbnail: null, seen: false, ...over });
 
 describe('StoryReelStrip (Mini)', () => {
-  it('có tiêu đề khối và một nút cho mỗi vòng, tên truy cập "Xem câu chuyện {tên}"', () => {
+  it('có tiêu đề khối và một nút cho mỗi vòng, tên truy cập "Story {tên}, mở câu chuyện"', () => {
     render(<StoryReelStrip items={[item('a'), item('b'), item('c')]} onOpen={vi.fn()} />);
     expect(screen.getByRole('heading', { level: 2, name: 'Câu chuyện sản phẩm' })).toBeInTheDocument();
     expect(screen.getAllByTestId('story-reel-item')).toHaveLength(3);
-    expect(screen.getByRole('button', { name: 'Xem câu chuyện Món a' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Story Món a, mở câu chuyện' })).toBeInTheDocument();
   });
 
   it('hàng cuộn là vùng có tên (ScrollRow), mỗi vòng có huy hiệu Story và nhãn tên', () => {
@@ -24,12 +24,12 @@ describe('StoryReelStrip (Mini)', () => {
     expect(within(btn).getByText('Món a')).toHaveClass('tubu-reel-label');
   });
 
-  it('đã xem: data-seen="true" và tên truy cập đổi sang "Xem lại câu chuyện"; chưa xem là "false"', () => {
+  it('đã xem: data-seen="true" và tên truy cập đổi sang "đã xem, mở lại"; chưa xem là "false"', () => {
     render(<StoryReelStrip items={[item('a'), item('b', { seen: true })]} onOpen={vi.fn()} />);
     const [fresh, seen] = screen.getAllByTestId('story-reel-item');
     expect(fresh).toHaveAttribute('data-seen', 'false');
     expect(seen).toHaveAttribute('data-seen', 'true');
-    expect(seen).toHaveAccessibleName('Xem lại câu chuyện Món b');
+    expect(seen).toHaveAccessibleName('Story Món b, đã xem, mở lại');
   });
 
   it('mỗi vòng mang data-slug để e2e và các phép đo chung tìm đúng món', () => {
@@ -40,7 +40,7 @@ describe('StoryReelStrip (Mini)', () => {
   it('chạm một vòng gọi onOpen với đúng slug', () => {
     const onOpen = vi.fn();
     render(<StoryReelStrip items={[item('a'), item('b')]} onOpen={onOpen} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Xem câu chuyện Món b' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Story Món b, mở câu chuyện' }));
     expect(onOpen).toHaveBeenCalledWith('b');
     expect(onOpen).toHaveBeenCalledTimes(1);
   });
@@ -49,9 +49,9 @@ describe('StoryReelStrip (Mini)', () => {
     const onWarm = vi.fn();
     render(<StoryReelStrip items={[item('a'), item('b')]} onOpen={vi.fn()} onWarm={onWarm} />);
     expect(onWarm).not.toHaveBeenCalled();
-    fireEvent.pointerDown(screen.getByRole('button', { name: 'Xem câu chuyện Món a' }));
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Story Món a, mở câu chuyện' }));
     expect(onWarm).toHaveBeenLastCalledWith('a');
-    fireEvent.focus(screen.getByRole('button', { name: 'Xem câu chuyện Món b' }));
+    fireEvent.focus(screen.getByRole('button', { name: 'Story Món b, mở câu chuyện' }));
     expect(onWarm).toHaveBeenLastCalledWith('b');
   });
 

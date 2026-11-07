@@ -46,7 +46,7 @@ async function openCart(page: Page, api: MockApi, size: { width: number; height:
   api.get('/cart', { ...cart, items: cart.items.map((l) => ({ ...l, weight: 600 })) });
   api.get('/flash-sales/active', []);
   api.post('/cart/coupon', () => reply(400, { message: WRONG }));
-  api.allowUnmocked('POST /coupons/preview', 'GET /coupons/available');
+  api.allowUnmocked('POST /coupons/preview', 'GET /coupons/available', 'GET /products');
 
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.setViewportSize(size);

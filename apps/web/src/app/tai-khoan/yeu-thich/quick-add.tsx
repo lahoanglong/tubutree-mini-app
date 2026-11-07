@@ -29,7 +29,7 @@ type Notice = QuickAddNotice;
 
 export interface QuickAdd {
   /** Thêm một thẻ vào giỏ theo đúng luật giỏ nhanh: tải chi tiết, một phân loại còn hàng thì thêm thẳng, nhiều thì mở bảng chọn, hết hàng thì báo. */
-  quickAdd: (product: ProductCard) => Promise<void>;
+  quickAdd: (product: ProductCard, opts?: { initialId?: string | null }) => Promise<void>;
   /** Hiện một thông báo nổi ở đáy màn (cùng chỗ với "Đã thêm vào giỏ!"). */
   notify: (n: QuickAddNotice) => void;
   /** Mã sản phẩm đang được thêm (chặn bấm lại ở nơi vẽ nút). */
@@ -49,7 +49,7 @@ export function useQuickAdd(source?: AddToCartSource): QuickAdd {
   // Giỏ cho bảng chọn: thêm giỏ cộng dồn và máy chủ giá Giờ vàng trên cả dòng, nên nút phải biết số đã có (cùng khoá với giỏ ở thanh đầu và trang sản phẩm, thêm xong `setQueryData` cập nhật).
   const cartQ = useQuery({ queryKey: useCartKey(), queryFn: () => getCart(coreHttp, cartStorefrontSlug()), enabled: phase === 'authenticated' });
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [picker, setPicker] = useState<{ product: ProductCard; variations: VariationDetail[] } | null>(null);
+  const [picker, setPicker] = useState<{ product: ProductCard; variations: VariationDetail[]; initialId: string | null } | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   // Số suất Giờ vàng khách còn mua được (đã trừ các đơn trước) cho các phân loại của sản phẩm trong bảng; không có bảng thì không có id nên không gọi.
   const flashWithAllowance = useFlashAllowance(flash, picker?.variations.map((v) => v.id) ?? []);
@@ -81,7 +81,7 @@ export function useQuickAdd(source?: AddToCartSource): QuickAdd {
     }
   };
 
-  const quickAdd = (product: ProductCard) =>
+  const quickAdd = (product: ProductCard, opts?: { initialId?: string | null }) =>
     run(async () => {
       setBusyId(product.id);
       const detail = await fetchProduct(coreHttp, product.slug);
@@ -91,7 +91,7 @@ export function useQuickAdd(source?: AddToCartSource): QuickAdd {
         // Thẻ còn nút giỏ và không có lớp Hết hàng nếu không tải lại: khách bấm lại sẽ ra đúng lời báo này.
         void qc.invalidateQueries({ queryKey: wishlistQuery(coreHttp).queryKey });
       }
-      else if (plan.kind === 'pick') setPicker({ product, variations: detail.variations });
+      else if (plan.kind === 'pick') setPicker({ product, variations: detail.variations, initialId: opts?.initialId ?? null });
       else await addLine(plan.variationId, 1);
     });
 
@@ -131,7 +131,7 @@ export function useQuickAdd(source?: AddToCartSource): QuickAdd {
           thumbnail={picker.product.thumbnail}
           variations={picker.variations}
           flash={flashWithAllowance}
-          initialId={picker.product.pinnedVariationId ?? picker.product.repVariationId ?? null}
+          initialId={picker.initialId ?? picker.product.pinnedVariationId ?? picker.product.repVariationId ?? null}
           initialQty={1}
           cartLines={cartQ.data?.items}
           onConfirm={(v, qty) => void confirmPick(v, qty)}

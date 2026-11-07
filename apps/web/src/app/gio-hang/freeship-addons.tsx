@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ProductCard } from '@tubutree/app-core/api/catalog';
 import { pickFreeshipAddons } from '@tubutree/app-core/commerce/freeship-progress';
@@ -38,7 +38,21 @@ export function FreeshipAddons({ remaining, lines }: FreeshipAddonsProps) {
     onSuccess: (cart) => qc.setQueryData(cartKey(), cart),
   });
 
-  const picked = useMemo(() => {
+  // Khoá đồng bộ: `isPending` chỉ đổi sau khi React vẽ lại, nên hai cú chạm sát nhau trước đó sẽ gửi hai lệnh thêm (cùng món thì số lượng 2). Mỗi lúc chỉ một lệnh: giỏ trả về nguyên bản mới, hai lệnh chồng nhau thì phản hồi về sau ghi đè.
+  const inFlight = useRef(false);
+  const handleAdd = (item: FreeshipAddonItem) => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    void add
+      .mutateAsync(item)
+      .catch(() => undefined)
+      .finally(() => {
+        inFlight.current = false;
+      });
+  };
+
+  // Không bọc `useMemo`: giá và phân loại phụ thuộc kho Giờ vàng và đồng hồ (đọc trong `pricing`), nên Giờ vàng hết hạn phải tính lại ngay, không giữ giá cũ.
+  const picked = (() => {
     const candidates: Candidate[] = (best.data?.data ?? [])
       .filter((c: ProductCard) => (c.fulfiller?.kind ?? 'TUBU') === 'TUBU')
       .flatMap((c: ProductCard) => {
@@ -51,14 +65,12 @@ export function FreeshipAddons({ remaining, lines }: FreeshipAddonsProps) {
       inCartSlugs: new Set(lines.map((l) => l.slug)),
       inCartVariationIds: new Set(lines.map((l) => l.variationId)),
     });
-    // `pricing` đổi mỗi lần vẽ nhưng chỉ đọc kho Giờ vàng và đồng hồ; dải tính lại khi dữ liệu hoặc số còn thiếu đổi.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [best.data, remaining, lines]);
+  })();
 
   if (picked.length === 0) return null;
   return (
     <>
-      <FreeshipAddonRail items={picked} busySlug={add.isPending ? add.variables?.slug : null} onAdd={(item) => !add.isPending && add.mutate(item)} />
+      <FreeshipAddonRail items={picked} busySlug={add.isPending ? add.variables?.slug : null} onAdd={handleAdd} />
       {add.isError && (
         <p role="alert" className="mt-2 text-caption text-danger-fg">
           {actionErrorText(add.error)}

@@ -90,7 +90,7 @@ for (const vp of VIEWPORTS) {
       await dialog.getByTestId('story-close').click();
       await expect(dialog).toHaveCount(0);
       await expect(first).toHaveAttribute('data-seen', 'true');
-      await expect(first).toHaveAccessibleName(/^Xem lại câu chuyện /);
+      await expect(first).toHaveAccessibleName(/^Story .+, đã xem, mở lại$/);
       await expect(rings(page).nth(1)).toHaveAttribute('data-seen', 'false');
 
       await rings(page).nth(1).click();
@@ -110,7 +110,7 @@ for (const vp of VIEWPORTS) {
       const next = dialog.getByTestId('story-next');
       await expect(add).toBeVisible();
       await expect(add).toHaveText(/^Thêm vào giỏ · [\d.]+đ$/);
-      await expect(next).toHaveAccessibleName('Xem câu chuyện của sản phẩm kế tiếp');
+      await expect(next).toHaveAccessibleName('Câu chuyện kế, xem sản phẩm kế tiếp');
       await expect(dialog.getByTestId('story-buy-now')).toHaveCount(0);
       await expectTouchTarget44(add);
       await expectTouchTarget44(next);

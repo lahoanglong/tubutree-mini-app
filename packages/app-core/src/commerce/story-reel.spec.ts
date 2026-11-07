@@ -39,6 +39,16 @@ describe('reelItems', () => {
     expect(out.map((x) => x.slug)).toEqual(['a', 'd', 'e', 'f']);
   });
 
+  it('bỏ món đối tác giao (chương dự phòng nói "Món Tubu Tree chọn"); thiếu fulfiller coi là Tubu giao', () => {
+    const out = reelItems([
+      { ...card('a'), fulfiller: { kind: 'TUBU' } },
+      { ...card('b'), fulfiller: { kind: 'MERCHANT' } },
+      card('c'),
+      { ...card('d'), fulfiller: null },
+    ]);
+    expect(out.map((x) => x.slug)).toEqual(['a', 'c', 'd']);
+  });
+
   it(`tối đa ${REEL_MAX_ITEMS} vòng`, () => {
     const out = reelItems(Array.from({ length: 20 }, (_, i) => card(`s${i}`)));
     expect(out).toHaveLength(REEL_MAX_ITEMS);

@@ -400,7 +400,7 @@ describe('ProductStoryShowcase (Mini): chế độ Reel', () => {
     expect(add).toHaveTextContent('Thêm vào giỏ · 49.000đ');
     expect(screen.queryByTestId('story-buy-now')).toBeNull();
     const next = screen.getByTestId('story-next');
-    expect(next).toHaveAccessibleName('Xem câu chuyện của sản phẩm kế tiếp');
+    expect(next).toHaveAccessibleName('Câu chuyện kế, xem sản phẩm kế tiếp');
     expect(next).toHaveTextContent('Câu chuyện kế');
     fireEvent.click(add);
     fireEvent.click(next);

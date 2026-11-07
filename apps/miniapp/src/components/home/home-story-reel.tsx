@@ -42,6 +42,8 @@ function ReelWait({ onClose }: { onClose: () => void }) {
   closeRef.current = onClose;
   useEffect(() => {
     const prevOverflow = document.body.style.overflow;
+    // Nhớ vòng đã chạm để trả focus khi khung chờ biến mất (Reel thật hoặc đóng): không có thì focus rơi về body và khung Reel thật nhớ nhầm body.
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     document.body.style.overflow = 'hidden';
     closeBtn.current?.focus();
     const onKey = (e: KeyboardEvent) => {
@@ -51,6 +53,7 @@ function ReelWait({ onClose }: { onClose: () => void }) {
     return () => {
       document.removeEventListener('keydown', onKey);
       document.body.style.overflow = prevOverflow;
+      if (opener && opener !== document.body && opener.isConnected) opener.focus();
     };
   }, []);
   return createPortal(
@@ -128,7 +131,7 @@ function ReelOverlay({ slug, cards, flash, onShow, onClose, onAdd }: ReelOverlay
 }
 
 /** Bảng chọn phân loại khi phân loại đại diện của thẻ vừa hết hàng mà sản phẩm còn phân loại khác (cùng bảng với giỏ nhanh ở Yêu thích). */
-function ReelVariationPicker({ card, variations, onClose, onConfirm }: { card: ProductCard; variations: VariationDetail[]; onClose: () => void; onConfirm: (id: string, qty: number) => Promise<void> }) {
+function ReelVariationPicker({ card, variations, initialId, onClose, onConfirm }: { card: ProductCard; variations: VariationDetail[]; initialId: string | null; onClose: () => void; onConfirm: (id: string, qty: number) => Promise<void> }) {
   const phase = useAuthPhase();
   const flashQ = useQuery({ queryKey: ['flash-sales', 'active'], queryFn: fetchActiveFlashSales, staleTime: FLASH_STALE_MS });
   const cartQ = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: phase === 'authenticated' });
@@ -144,7 +147,7 @@ function ReelVariationPicker({ card, variations, onClose, onConfirm }: { card: P
         thumbnail={card.thumbnail}
         variations={variations}
         flash={flash}
-        initialId={card.pinnedVariationId ?? card.repVariationId ?? null}
+        initialId={initialId}
         initialQty={1}
         busy={busy}
         cartLines={cartQ.data?.items}
@@ -175,7 +178,7 @@ export function HomeStoryReel() {
   const store = useMemo(() => reelSeenStorage(), []);
   const [seen, setSeen] = useState(() => readReelSeen(store));
   const [openSlug, setOpenSlug] = useState<string | null>(null);
-  const [picker, setPicker] = useState<{ card: ProductCard; variations: VariationDetail[] } | null>(null);
+  const [picker, setPicker] = useState<{ card: ProductCard; variations: VariationDetail[]; initialId: string | null } | null>(null);
 
   const warm = useCallback(
     (slug: string) => {
@@ -215,7 +218,8 @@ export function HomeStoryReel() {
       return;
     }
     if (plan.kind === 'add') await addLine(plan.variationId, 1);
-    else setPicker({ card, variations });
+    // Bảng mở sẵn ở phân loại mang đúng giá trên nút Reel (Giờ vàng thắng thì phân loại của suất đó), không phải phân loại đại diện.
+    else setPicker({ card, variations, initialId: cardAddTarget(card, flashQ.data ?? [], serverNow()).variationId });
   };
 
   if (best.isLoading) return <StoryReelStrip items={[]} loading onOpen={show} />;
@@ -228,6 +232,7 @@ export function HomeStoryReel() {
         <ReelVariationPicker
           card={picker.card}
           variations={picker.variations}
+          initialId={picker.initialId}
           onClose={() => setPicker(null)}
           onConfirm={async (id, qty) => {
             await addLine(id, qty);

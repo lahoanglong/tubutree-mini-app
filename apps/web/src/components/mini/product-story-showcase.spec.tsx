@@ -447,7 +447,7 @@ describe('W42A: Reel của Trang chủ (reel, addPrice, onNext, position)', () =
     expect(q(container, 'story-buy-now')).toBeNull();
     expect(q(container, 'story-add-to-cart')!.textContent).toBe('Thêm vào giỏ · 289.000đ');
     expect(q(container, 'story-next')!.textContent).toBe('Câu chuyện kế');
-    expect(q(container, 'story-next')!.getAttribute('aria-label')).toBe('Xem câu chuyện của sản phẩm kế tiếp');
+    expect(q(container, 'story-next')!.getAttribute('aria-label')).toBe('Câu chuyện kế, xem sản phẩm kế tiếp');
     expect(Array.from(bar.children).map((b) => (b as HTMLElement).dataset.testid)).toEqual(['story-next', 'story-add-to-cart']);
   });
 

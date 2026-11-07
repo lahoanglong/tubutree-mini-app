@@ -19,17 +19,19 @@ export interface ReelCandidate {
   name: string;
   thumbnail: string | null;
   inStock: boolean;
+  /** Ai giao; thiếu (API cũ) coi là Tubu giao như dải gợi ý bù đơn. Món đối tác không lên dải: chương dự phòng nói "Món Tubu Tree chọn". */
+  fulfiller?: { kind?: string } | null;
 }
 
 /**
- * Các món lên dải: còn hàng, có tên, không trùng slug, theo đúng thứ tự nguồn (Bán chạy nhất), tối đa `REEL_MAX_ITEMS`.
+ * Các món lên dải: Tubu giao, còn hàng, có tên, không trùng slug, theo đúng thứ tự nguồn (Bán chạy nhất), tối đa `REEL_MAX_ITEMS`.
  * Dưới `REEL_MIN_ITEMS` món thì trả rỗng: dải không hiện.
  */
 export function reelItems<T extends ReelCandidate>(cards: readonly T[] | null | undefined, limit: number = REEL_MAX_ITEMS): T[] {
   const seen = new Set<string>();
   const out: T[] = [];
   for (const c of cards ?? []) {
-    if (!c.slug || !c.name.trim() || c.inStock === false || seen.has(c.slug)) continue;
+    if (!c.slug || !c.name.trim() || c.inStock === false || (c.fulfiller?.kind ?? 'TUBU') !== 'TUBU' || seen.has(c.slug)) continue;
     seen.add(c.slug);
     out.push(c);
     if (out.length >= limit) break;
