@@ -5,9 +5,11 @@ import { click, flush, render, type Rendered } from '@/test-utils/dom';
 import { unnamedControls } from '@/test-utils/a11y';
 
 // Chép ý nghĩa reorder-sheet.spec của Mini App: chọn dòng + số lượng, dòng hết hàng khoá, tổng tạm tính, lỗi giữ lựa chọn, chạm đúp một request.
-const mocks = vi.hoisted(() => ({ post: vi.fn(), push: vi.fn() }));
+const mocks = vi.hoisted(() => ({ post: vi.fn(), push: vi.fn(), getCart: vi.fn(), phase: 'guest' }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { post: mocks.post } }));
-vi.mock('@/lib/cart-key', () => ({ cartStorefrontSlug: () => null }));
+vi.mock('@/lib/cart-key', () => ({ cartStorefrontSlug: () => null, useCartKey: () => ['cart', null] }));
+vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => mocks.phase }));
+vi.mock('@/lib/shop-client', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/lib/shop-client')>()), getCart: mocks.getCart }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push }) }));
 
 import { ReorderSheet } from './reorder-sheet';
@@ -319,5 +321,81 @@ describe('ReorderSheet: giá hiệu lực khớp giỏ và trần tồn', () => 
 
   it.each([1, 12, 20])('tồn %i (từ 1 đến 20): trần của bộ chọn đúng bằng tồn', (stock) => {
     expect(lineFromOrderItem(item('i1', 'Trà xanh', { quantity: 1, stock })).maxQuantity).toBe(stock);
+  });
+});
+
+// Giỏ gộp số lượng cùng biến thể rồi mới so với số suất Giờ vàng: sheet phải tính cả phần đã có sẵn trong giỏ, nếu không tấm Mua lại
+// hiện giá Giờ vàng còn giỏ tính giá đang bán cho cả dòng.
+describe('ReorderSheet: giá theo số lượng đã có trong giỏ', () => {
+  const flashItem = (id = 'i1', over: Partial<OrderItemView> = {}) =>
+    item(id, 'Trà xanh', { quantity: 2, flashActive: true, flashPrice: 40000, flashAllowance: 3, ...over });
+  const rows = () => Array.from(document.querySelectorAll<HTMLElement>('[data-testid="reorder-line"]'));
+  const priceOf = (r: HTMLElement) => r.querySelector('p.font-bold')?.textContent;
+  const footer = () => document.querySelector('[data-sheet-footer]')?.textContent ?? '';
+
+  beforeEach(() => {
+    mocks.phase = 'authenticated';
+    mocks.getCart.mockReset().mockResolvedValue({ ...CART, items: [] });
+    mocks.post.mockReset();
+  });
+  afterEach(() => {
+    mocks.phase = 'guest';
+  });
+
+  it('giỏ đã có 2 món cùng biến thể, thêm 2: tổng 4 vượt suất 3 → dòng và tạm tính về giá đang bán như giỏ sẽ tính', async () => {
+    mocks.getCart.mockResolvedValue({ ...CART, items: [{ id: 'c1', variationId: 'v-i1', quantity: 2 }] });
+    mount({ target: orderReorderTarget({ code: 'TUBU10', items: [flashItem()] }) });
+    await flush();
+    expect(priceOf(rows()[0]!)).toBe('60.000đ');
+    expect(footer()).toContain('120.000đ');
+  });
+
+  it('giỏ chưa có món đó: vẫn giá Giờ vàng', async () => {
+    mocks.getCart.mockResolvedValue({ ...CART, items: [{ id: 'c9', variationId: 'v-khac', quantity: 9 }] });
+    mount({ target: orderReorderTarget({ code: 'TUBU10', items: [flashItem()] }) });
+    await flush();
+    expect(mocks.getCart).toHaveBeenCalled();
+    expect(priceOf(rows()[0]!)).toBe('40.000đ');
+    expect(footer()).toContain('80.000đ');
+  });
+
+  it('tải giỏ lỗi: giữ giá theo số lượng của sheet, không chặn khách', async () => {
+    mocks.getCart.mockRejectedValue(new Error('Network Error'));
+    mount({ target: orderReorderTarget({ code: 'TUBU10', items: [flashItem()] }) });
+    await flush();
+    expect(priceOf(rows()[0]!)).toBe('40.000đ');
+    expect(cta().disabled).toBe(false);
+  });
+
+  it('chỉ tải giỏ khi sheet mở và đã đăng nhập', async () => {
+    mount({ target: null });
+    await flush();
+    mounted?.unmount();
+    mocks.phase = 'guest';
+    mount({ target: orderReorderTarget({ code: 'TUBU10', items: [flashItem()] }) });
+    await flush();
+    expect(mocks.getCart).not.toHaveBeenCalled();
+  });
+
+  it('đơn có hai dòng cùng biến thể: giỏ gộp 2 + 2 = 4 > 3 nên cả hai dòng tính giá đang bán', async () => {
+    mount({ target: orderReorderTarget({ code: 'TUBU11', items: [flashItem('i1', { variationId: 'v-same' }), flashItem('i2', { variationId: 'v-same' })] }) });
+    await flush();
+    expect(rows().map(priceOf)).toEqual(['60.000đ', '60.000đ']);
+    expect(footer()).toContain('240.000đ');
+  });
+
+  it('thêm xong giỏ tải lại có phần vừa thêm: giá trên sheet không nhảy (số liệu giỏ đóng băng từ lúc bấm thêm)', async () => {
+    mocks.getCart.mockResolvedValueOnce({ ...CART, items: [] }).mockResolvedValue({ ...CART, items: [{ id: 'c1', variationId: 'v-i1', quantity: 2 }] });
+    mocks.post.mockResolvedValue({ ...CART, cart: CART, results: [{ orderItemId: 'i1', status: 'added', addedQuantity: 2 }] });
+    const onClose = vi.fn();
+    mount({ target: orderReorderTarget({ code: 'TUBU12', items: [flashItem()] }), onClose });
+    await flush();
+    expect(mocks.getCart).toHaveBeenCalledTimes(1);
+    click(cta());
+    await flush(10);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(mocks.getCart).toHaveBeenCalledTimes(2);
+    expect(priceOf(rows()[0]!)).toBe('40.000đ');
+    expect(footer()).toContain('80.000đ');
   });
 });

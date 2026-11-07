@@ -15,6 +15,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
 vi.mock('../../services/shop-api', () => ({
   fetchPurchasedItems: mocks.fetchPurchasedItems, addToCart: mocks.addToCart, repurchaseOrder: mocks.repurchaseOrder,
   fetchActiveFlashSales: mocks.fetchActiveFlashSales, fetchProducts: mocks.fetchProducts,
+  getCart: vi.fn().mockResolvedValue({ items: [] }),
 }));
 vi.mock('../../services/bundle-api', () => ({ getHomeCombos: mocks.fetchCombos }));
 vi.mock('../../hooks/use-public-config', () => ({ usePublicConfig: () => ({ subscribeDiscountPct: 0.1 }) }));

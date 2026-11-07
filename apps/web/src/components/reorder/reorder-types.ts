@@ -28,10 +28,13 @@ export interface ReorderLine {
   pricing?: ReorderPricing;
 }
 
-/** Đơn giá và câu dưới dòng ở số lượng khách chọn: Giờ vàng chỉ áp tới số suất còn mua được, vượt thì cả dòng giá đang bán (như giỏ). */
-export function lineAt(line: ReorderLine, quantity: number): { unitPrice: number; notices: readonly ReorderLineNotice[] } {
+/**
+ * Đơn giá và câu dưới dòng ở số lượng khách chọn: Giờ vàng chỉ áp tới số suất còn mua được, vượt thì cả dòng giá đang bán (như giỏ).
+ * `inCart`: số lượng cùng biến thể sẽ nằm chung dòng giỏ (xem `unitsSharingCartLine`), vì giỏ so suất theo tổng đã gộp.
+ */
+export function lineAt(line: ReorderLine, quantity: number, inCart = 0): { unitPrice: number; notices: readonly ReorderLineNotice[] } {
   if (!line.pricing || !line.available) return { unitPrice: line.unitPrice, notices: line.notices };
-  const { unitPrice, notice } = reorderPriceAt(line.pricing, quantity);
+  const { unitPrice, notice } = reorderPriceAt(line.pricing, quantity, inCart);
   const rest = line.notices.filter((n) => n.kind !== 'priceUp' && n.kind !== 'priceDown');
   return { unitPrice, notices: notice ? [...rest, notice] : rest };
 }
@@ -127,10 +130,35 @@ export function selectedLines(t: ReorderTarget, sel: Record<string, LineSelectio
     .map((l) => ({ key: l.key, variationId: l.variationId, quantity: clampQty(sel[l.key]!.quantity, l.maxQuantity) }));
 }
 
-export function selectionTotals(t: ReorderTarget, sel: Record<string, LineSelection>): { units: number; subtotal: number } {
+const NO_CART: ReadonlyMap<string, number> = new Map();
+
+/**
+ * Số lượng cùng biến thể sẽ nằm chung dòng giỏ với `line`, không tính chính nó: phần đã có sẵn trong giỏ cộng số lượng của các dòng
+ * khác cùng biến thể đang được chọn trong sheet (đơn có hai dòng cùng biến thể). Máy chủ gộp hết rồi mới so với số suất Giờ vàng.
+ */
+export function unitsSharingCartLine(
+  t: ReorderTarget,
+  sel: Record<string, LineSelection>,
+  cart: ReadonlyMap<string, number>,
+  line: ReorderLine,
+): number {
+  let units = cart.get(line.variationId) ?? 0;
+  for (const other of targetLines(t)) {
+    if (other.key === line.key || other.variationId !== line.variationId || !other.available) continue;
+    const s = sel[other.key];
+    if (s?.checked) units += clampQty(s.quantity, other.maxQuantity);
+  }
+  return units;
+}
+
+export function selectionTotals(
+  t: ReorderTarget,
+  sel: Record<string, LineSelection>,
+  cart: ReadonlyMap<string, number> = NO_CART,
+): { units: number; subtotal: number } {
   const lines = new Map(targetLines(t).map((l) => [l.key, l]));
-  return selectedLines(t, sel).reduce(
-    (acc, s) => ({ units: acc.units + s.quantity, subtotal: acc.subtotal + s.quantity * lineAt(lines.get(s.key)!, s.quantity).unitPrice }),
-    { units: 0, subtotal: 0 },
-  );
+  return selectedLines(t, sel).reduce((acc, s) => {
+    const line = lines.get(s.key)!;
+    return { units: acc.units + s.quantity, subtotal: acc.subtotal + s.quantity * lineAt(line, s.quantity, unitsSharingCartLine(t, sel, cart, line)).unitPrice };
+  }, { units: 0, subtotal: 0 });
 }

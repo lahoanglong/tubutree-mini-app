@@ -60,3 +60,34 @@ for (const width of [320, 375]) {
     });
   });
 }
+
+// Giỏ gộp số lượng cùng biến thể rồi mới so với suất Giờ vàng: tấm Mua lại phải hiện giá giỏ sẽ tính, kể cả khi giỏ đã có sẵn món đó.
+const FLASH_CODE = 'TUBU-W38B-RE';
+const FLASH_ORDER = {
+  ...makeOrder({ code: FLASH_CODE, status: 'DELIVERED', paymentStatus: 'PAID' }),
+  items: [
+    line('fl', 'Trà xanh Tubu', { unitPrice: 60000, quantity: 2, total: 120000, stock: 20, available: true, discontinued: false, currentPrice: 60000, flashActive: true, flashPrice: 40000, flashAllowance: 3 }),
+  ],
+};
+const cartHolding = (units: number) => ({
+  items: units === 0 ? [] : [{ id: 'c-fl', variationId: 'var-fl', productName: 'Trà xanh Tubu', variationName: '', slug: 'sp-fl', thumbnail: null, unitPrice: 40000, quantity: units, stock: 20, total: 40000 * units, isFlash: true }],
+  couponCode: null, subtotal: 40000 * units, discount: 0, freeship: false, freeshipThreshold: 200000, itemCount: units,
+});
+
+for (const [inCart, price, subtotal] of [[0, '40.000đ', '80.000đ'], [2, '60.000đ', '120.000đ']] as const) {
+  test(`Mua lại món đang Giờ vàng, giỏ đã có ${inCart}: tấm hiện ${price} (giá giỏ sẽ tính), tạm tính ${subtotal}`, async ({ page, api }) => {
+    mockBuyFlowSession(api);
+    mockOrdersTab(api);
+    api.get('/orders', { data: [FLASH_ORDER], meta: { page: 1, limit: 20, total: 1 } });
+    api.get('/cart', cartHolding(inCart));
+    await page.setViewportSize({ width: 375, height: 800 });
+    await page.goto('/orders');
+
+    const card = page.getByTestId('order-card').filter({ has: page.getByRole('button', { name: `Đơn ${FLASH_CODE}` }) });
+    await card.getByRole('button', { name: 'Mua lại', exact: true }).click({ timeout: 15_000 });
+    const sheet = page.getByRole('dialog');
+    const row = sheet.getByTestId('reorder-line');
+    await expect(row).toContainText(price);
+    await expect(sheet).toContainText(subtotal);
+  });
+}

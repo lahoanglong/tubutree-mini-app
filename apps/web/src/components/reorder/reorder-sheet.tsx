@@ -10,9 +10,10 @@ import { Sheet } from '@/components/ui/sheet';
 import { homeErrorMessage } from '@/components/home/home-block-error';
 import type { ReorderSummary } from './reorder-summary';
 import {
-  initialSelection, lineAt, selectedLines, selectionTotals, targetLines,
+  initialSelection, lineAt, selectedLines, selectionTotals, targetLines, unitsSharingCartLine,
   type LineSelection, type ReorderLine, type ReorderSource, type ReorderTarget,
 } from './reorder-types';
+import { useCartUnits } from './use-cart-units';
 import { useReorder } from './use-reorder';
 import { ProductThumb } from '@/components/mini';
 import { reorderSkippedNote, type ReorderLineNotice } from '@tubutree/app-core/commerce/reorder-notice';
@@ -40,6 +41,11 @@ export function ReorderSheet({ target, source, onClose, onDone, navigateToCart }
   // Đã có dòng vào giỏ mà còn dòng chưa đủ: gửi lại cùng lựa chọn sẽ cộng thêm lần nữa vào dòng đã thêm.
   const [partiallyAdded, setPartiallyAdded] = useState(false);
   const reorder = useReorder({ navigateToCart, source });
+  // Giỏ gộp số lượng cùng biến thể rồi mới so với suất Giờ vàng: giá hiện ở sheet phải tính cả phần đã có sẵn trong giỏ. Số liệu đóng
+  // băng từ lúc bấm thêm, vì giỏ tải lại sau khi thêm sẽ đếm phần vừa thêm hai lần và làm giá trên sheet nhảy.
+  const liveCart = useCartUnits(target !== null);
+  const [frozenCart, setFrozenCart] = useState<ReadonlyMap<string, number> | null>(null);
+  const cart = frozenCart ?? liveCart;
 
   // Đổi target → khởi tạo lại lựa chọn NGAY trong lúc render ("adjust state on prop change" của React),
   // nên khung hình đầu đã có dòng được chọn + CTA đúng số lượng (effect hậu-paint sẽ nháy "(0)").
@@ -50,12 +56,13 @@ export function ReorderSheet({ target, source, onClose, onDone, navigateToCart }
       setSel(initialSelection(target));
       setNotice(null);
       setPartiallyAdded(false);
+      setFrozenCart(null);
     }
   }
   const view = target ?? shown;
   const lines = view ? targetLines(view) : [];
   const skippedNote = reorderSkippedNote(lines);
-  const { units, subtotal } = view ? selectionTotals(view, sel) : { units: 0, subtotal: 0 };
+  const { units, subtotal } = view ? selectionTotals(view, sel, cart) : { units: 0, subtotal: 0 };
 
   // Khoá ĐỒNG BỘ chống chạm đúp: isPending của react-query chỉ cập nhật sau một nhịp notify.
   const inFlight = useRef(false);
@@ -69,12 +76,16 @@ export function ReorderSheet({ target, source, onClose, onDone, navigateToCart }
   const submit = async () => {
     if (!target || units === 0 || inFlight.current) return;
     inFlight.current = true;
+    setFrozenCart(liveCart);
     setNotice(null);
     let summary: ReorderSummary | null = null;
     try {
       summary = await reorder.submit(target, selectedLines(target, sel));
     } catch (err) {
-      if (mounted.current) setNotice({ kind: 'error', text: homeErrorMessage(err) });
+      if (mounted.current) {
+        setFrozenCart(null);
+        setNotice({ kind: 'error', text: homeErrorMessage(err) });
+      }
     } finally {
       inFlight.current = false;
     }
@@ -86,6 +97,7 @@ export function ReorderSheet({ target, source, onClose, onDone, navigateToCart }
     else {
       setNotice({ kind: 'problem', text: summary.message });
       if (summary.addedUnits > 0) setPartiallyAdded(true);
+      else setFrozenCart(null);
     }
   };
 
@@ -128,17 +140,23 @@ export function ReorderSheet({ target, source, onClose, onDone, navigateToCart }
           </p>
         )}
         {lines.map((line) => (
-          <ReorderLineRow key={line.key} line={line} value={sel[line.key]} onChange={(v) => setSel((s) => ({ ...s, [line.key]: v }))} />
+          <ReorderLineRow
+            key={line.key}
+            line={line}
+            value={sel[line.key]}
+            inCart={view ? unitsSharingCartLine(view, sel, cart, line) : 0}
+            onChange={(v) => setSel((s) => ({ ...s, [line.key]: v }))}
+          />
         ))}
       </div>
     </Sheet>
   );
 }
 
-function ReorderLineRow({ line, value, onChange }: { line: ReorderLine; value: LineSelection | undefined; onChange: (v: LineSelection) => void }) {
+function ReorderLineRow({ line, value, inCart, onChange }: { line: ReorderLine; value: LineSelection | undefined; inCart: number; onChange: (v: LineSelection) => void }) {
   const checked = line.available && (value?.checked ?? false);
   const qty = value?.quantity ?? line.defaultQuantity;
-  const { unitPrice, notices } = lineAt(line, qty);
+  const { unitPrice, notices } = lineAt(line, qty, inCart);
   return (
     <div data-testid="reorder-line" className="flex items-start gap-2.5">
       <label className="flex h-11 w-11 flex-none items-center justify-center">

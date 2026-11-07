@@ -3,10 +3,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ComponentProps, ReactElement } from 'react';
 import type * as UiForm from '../ui/form';
 import type * as ZmpUi from 'zmp-ui';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(), openSnackbar: vi.fn(), repurchaseOrder: vi.fn(), addToCart: vi.fn(),
+  getCart: vi.fn().mockResolvedValue({ items: [] }),
   trackReorderClicked: vi.fn(), trackReorderCompleted: vi.fn(),
   /** `checked` của MỌI lần render Checkbox theo thứ tự — để bắt "khung hình đầu" trước khi effect chạy. */
   checkboxRenders: [] as { label: string; checked: boolean }[],
@@ -16,7 +17,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
   useNavigate: () => mocks.navigate,
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
 }));
-vi.mock('../../services/shop-api', () => ({ repurchaseOrder: mocks.repurchaseOrder, addToCart: mocks.addToCart }));
+vi.mock('../../services/shop-api', () => ({ repurchaseOrder: mocks.repurchaseOrder, addToCart: mocks.addToCart, getCart: mocks.getCart }));
 vi.mock('../../services/buy-flow-events', () => ({
   trackReorderClicked: mocks.trackReorderClicked,
   trackReorderCompleted: mocks.trackReorderCompleted,
@@ -34,6 +35,7 @@ vi.mock('../ui/form', async (importOriginal) => {
 });
 
 import { vi as copy } from '../../i18n/vi';
+import { useAuthStore } from '../../store/auth';
 import { ReorderSheet } from './reorder-sheet';
 import { itemReorderTarget, lineFromOrderItem, orderReorderTarget, type ReorderLine, type ReorderTarget } from './reorder-types';
 import type { OrderItemView, PurchasedItem } from '../../services/shop-api';
@@ -320,5 +322,80 @@ describe('ReorderSheet: giá hiệu lực khớp giỏ và trần tồn', () => 
 
   it.each([1, 12, 20])('tồn %i (từ 1 đến 20): trần của bộ chọn đúng bằng tồn', (stock) => {
     expect(lineFromOrderItem(item('i1', 'Trà xanh', { quantity: 1, stock })).maxQuantity).toBe(stock);
+  });
+});
+
+// Giỏ gộp số lượng cùng biến thể rồi mới so với số suất Giờ vàng: sheet phải tính cả phần đã có sẵn trong giỏ, nếu không tấm Mua lại
+// hiện giá Giờ vàng còn giỏ tính giá đang bán cho cả dòng.
+describe('ReorderSheet: giá theo số lượng đã có trong giỏ', () => {
+  const flashItem = () => item('i1', 'Trà xanh', { quantity: 2, flashActive: true, flashPrice: 40000, flashAllowance: 3 });
+  const open = (target: ReorderTarget | null = orderReorderTarget({ code: 'TUBU10', items: [flashItem()] })) =>
+    renderSheet(<ReorderSheet target={target} source="order_card" onClose={() => {}} />);
+  const row = () => screen.getByTestId('reorder-line');
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getCart.mockReset().mockResolvedValue({ items: [] });
+    useAuthStore.setState({ status: 'authenticated' });
+  });
+  afterEach(() => useAuthStore.setState({ status: 'idle' }));
+
+  it('giỏ đã có 2 món cùng biến thể, thêm 2: tổng 4 vượt suất 3 → dòng và tạm tính về giá đang bán như giỏ sẽ tính', async () => {
+    mocks.getCart.mockResolvedValue({ items: [{ id: 'c1', variationId: 'v-i1', quantity: 2 }] });
+    open();
+    expect(await within(row()).findByText('60.000đ')).toBeInTheDocument();
+    expect(screen.getByText('120.000đ')).toBeInTheDocument();
+  });
+
+  it('giỏ chưa có món đó: vẫn giá Giờ vàng', async () => {
+    mocks.getCart.mockResolvedValue({ items: [{ id: 'c9', variationId: 'v-khac', quantity: 9 }] });
+    open();
+    await waitFor(() => expect(mocks.getCart).toHaveBeenCalled());
+    expect(within(row()).getByText('40.000đ')).toBeInTheDocument();
+    expect(screen.getByText('80.000đ')).toBeInTheDocument();
+  });
+
+  it('tải giỏ lỗi: giữ giá theo số lượng của sheet, không chặn khách', async () => {
+    mocks.getCart.mockRejectedValue(new Error('Network Error'));
+    open();
+    await waitFor(() => expect(mocks.getCart).toHaveBeenCalled());
+    expect(within(row()).getByText('40.000đ')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Thêm vào giỏ (2)' })).toBeEnabled();
+  });
+
+  it('chỉ tải giỏ khi sheet mở và đã đăng nhập', async () => {
+    open(null);
+    useAuthStore.setState({ status: 'idle' });
+    open();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(mocks.getCart).not.toHaveBeenCalled();
+  });
+
+  it('đơn có hai dòng cùng biến thể: giỏ gộp 2 + 2 = 4 > 3 nên cả hai dòng tính giá đang bán', async () => {
+    open(orderReorderTarget({
+      code: 'TUBU11',
+      items: [
+        item('i1', 'Trà xanh', { variationId: 'v-same', quantity: 2, flashActive: true, flashPrice: 40000, flashAllowance: 3 }),
+        item('i2', 'Trà xanh', { variationId: 'v-same', quantity: 2, flashActive: true, flashPrice: 40000, flashAllowance: 3 }),
+      ],
+    }));
+    await waitFor(() => expect(mocks.getCart).toHaveBeenCalled());
+    const prices = screen.getAllByTestId('reorder-line').map((r) => within(r).queryByText('60.000đ') !== null);
+    expect(prices).toEqual([true, true]);
+    expect(screen.getByText('240.000đ')).toBeInTheDocument();
+  });
+
+  it('thêm xong giỏ tải lại có phần vừa thêm: giá trên sheet không nhảy (số liệu giỏ đóng băng từ lúc bấm thêm)', async () => {
+    mocks.getCart.mockResolvedValueOnce({ items: [] }).mockResolvedValue({ items: [{ id: 'c1', variationId: 'v-i1', quantity: 2 }] });
+    mocks.repurchaseOrder.mockResolvedValue({ cart: CART, legacy: false, results: [{ orderItemId: 'i1', status: 'added', addedQuantity: 2 }] });
+    const onClose = vi.fn();
+    renderSheet(<ReorderSheet target={orderReorderTarget({ code: 'TUBU12', items: [flashItem()] })} source="order_card" onClose={onClose} />);
+    await waitFor(() => expect(mocks.getCart).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm vào giỏ (2)' }));
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mocks.getCart).toHaveBeenCalledTimes(2));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(within(row()).getByText('40.000đ')).toBeInTheDocument();
+    expect(screen.getByText('80.000đ')).toBeInTheDocument();
   });
 });

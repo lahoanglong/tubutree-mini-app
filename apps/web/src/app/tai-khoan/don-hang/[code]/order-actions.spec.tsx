@@ -28,7 +28,7 @@ vi.mock('@/lib/image-compress', async (importOriginal) => ({
   readAndCompressImage: async (f: File) => `data:image/jpeg;base64,${f.name}`,
 }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { post: mocks.corePost } }));
-vi.mock('@/lib/cart-key', () => ({ cartStorefrontSlug: () => null }));
+vi.mock('@/lib/cart-key', () => ({ cartStorefrontSlug: () => null, useCartKey: () => ['cart', null] }));
 vi.mock('@/lib/balances', () => ({ invalidateBalances: mocks.invalidateBalances }));
 vi.mock('@/lib/auth-context', () => ({
   useAuth: () => ({ user: mocks.user, status: 'authenticated', initialized: true }),
