@@ -29,6 +29,15 @@ for t in rollback "prev-${CUR_SHA:0:8}"; do
 done
 docker images --format '{{.Repository}}:{{.Tag}} {{.ID}}' | grep tubutree
 
+# Cặp :prev-* vừa gắn nằm trong 3 bản gần nhất được giữ. Chạy trước build để đĩa còn chỗ; lỗi dọn không chặn deploy.
+# </dev/null: script này đọc từ stdin (bash -s), script con không được nuốt phần còn lại.
+echo "== $(date '+%H:%M:%S') dọn :prev-* cũ (giữ 3 bản gần nhất)"
+if [ -f tools/deploy/prune-prev-images.sh ]; then
+  bash tools/deploy/prune-prev-images.sh --apply </dev/null || echo "CHÚ Ý: dọn :prev-* lỗi, bỏ qua (không chặn deploy)"
+else
+  echo "bỏ qua: bản mã này chưa có tools/deploy/prune-prev-images.sh"
+fi
+
 echo "== $(date '+%H:%M:%S') .env: trần cache ảnh"
 if ! grep -q '^IMAGE_CACHE_MAX_MB=' .env; then
   cp -p .env ".env.bak.$(date +%Y%m%d-%H%M%S)"

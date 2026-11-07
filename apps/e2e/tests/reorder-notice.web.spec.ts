@@ -83,3 +83,50 @@ test.describe('Web khách: Mua lại báo rõ từng món (W27)', () => {
     });
   }
 });
+
+// Giỏ gộp số lượng cùng biến thể rồi mới so với suất Giờ vàng: tấm Mua lại phải hiện giá giỏ sẽ tính, kể cả khi giỏ đã có sẵn món đó.
+test.describe('Web khách: Mua lại món đang Giờ vàng khi giỏ đã có sẵn (W38B)', () => {
+  const FLASH_CODE = 'TUBU2026110700038';
+  const FLASH_ORDER = {
+    ...ORDER,
+    id: `id-${FLASH_CODE}`,
+    code: FLASH_CODE,
+    items: [
+      line('fl', 'Trà xanh Tubu', { unitPrice: 60000, quantity: 2, total: 120000, stock: 20, available: true, discontinued: false, currentPrice: 60000, flashActive: true, flashPrice: 40000, flashAllowance: 3 }),
+    ],
+  };
+  const cartHolding = (units: number) => ({
+    ...EMPTY_CART,
+    items: units === 0 ? [] : [{ id: 'c-fl', variationId: 'var-fl', productName: 'Trà xanh Tubu', variationName: '', slug: 'sp-fl', thumbnail: null, unitPrice: 40000, quantity: units, stock: 20, total: 40000 * units, isFlash: true }],
+    subtotal: 40000 * units,
+    itemCount: units,
+  });
+
+  test.beforeEach(async ({ page, api }) => {
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem('tubu_web_session', '1');
+      } catch {
+        // không có localStorage: spec vẫn chạy, chỉ không có phiên khôi phục
+      }
+    });
+    mockSession(api, makeUser({ id: 'u1', fullName: 'Nguyễn Văn An' }));
+    api.get('/config/public', { freeshipThreshold: 500000 });
+    api.get('/me/purchased-items', { items: [], nextCursor: null });
+    api.get('/orders/me/refunds', []);
+    api.get('/orders', { data: [FLASH_ORDER], meta: { page: 1, limit: 20, total: 1 } });
+    api.allowUnmocked('GET /me/coupons', 'GET /me/addresses', 'GET /waste/me', 'GET /me/subscriptions', 'GET /affiliate/me', 'POST /events');
+  });
+
+  for (const [inCart, price, subtotal] of [[0, '40.000đ', '80.000đ'], [2, '60.000đ', '120.000đ']] as const) {
+    test(`giỏ đã có ${inCart}: tấm hiện ${price} (giá giỏ sẽ tính), tạm tính ${subtotal}`, async ({ page, api }) => {
+      api.get('/cart', cartHolding(inCart));
+      await page.setViewportSize({ width: 375, height: 800 });
+      await page.goto('/tai-khoan/don-hang');
+      await page.getByRole('button', { name: 'Mua lại', exact: true }).first().click({ timeout: 15_000 });
+      const sheet = page.getByRole('dialog');
+      await expect(sheet.getByTestId('reorder-line')).toContainText(price);
+      await expect(sheet).toContainText(subtotal);
+    });
+  }
+});

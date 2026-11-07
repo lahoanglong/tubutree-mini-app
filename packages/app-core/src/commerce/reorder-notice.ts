@@ -102,11 +102,21 @@ export function purchasedPricing(p: { price: number; salePrice: number | null; f
 /**
  * Đơn giá và câu giá của dòng ở số lượng khách chọn, cùng luật với giỏ (priceFlashLine ở API): Giờ vàng còn suất và số lượng không
  * vượt số suất khách còn mua được → min(giá Giờ vàng, giá đang bán); vượt → cả dòng giá đang bán.
+ *
+ * Giỏ gộp số lượng cùng biến thể rồi mới so với suất, nên `inCart` là số lượng cùng biến thể sẽ nằm chung dòng giỏ với dòng này:
+ * phần đã có sẵn trong giỏ và phần của các dòng khác cùng biến thể trong sheet. Không truyền: coi như giỏ chưa có món này.
  */
-export function reorderPriceAt(p: ReorderPricing, quantity: number): { unitPrice: number; notice: ReorderLineNotice | null } {
-  const flash = p.flashPrice !== null && (p.flashAllowance === null || quantity <= p.flashAllowance);
+export function reorderPriceAt(p: ReorderPricing, quantity: number, inCart = 0): { unitPrice: number; notice: ReorderLineNotice | null } {
+  const flash = p.flashPrice !== null && (p.flashAllowance === null || quantity + Math.max(inCart, 0) <= p.flashAllowance);
   const unitPrice = flash ? Math.min(p.flashPrice as number, p.standing) : p.standing;
   return { unitPrice, notice: p.comparable && p.paidPrice !== null ? priceNotice(p.paidPrice, unitPrice) : null };
+}
+
+/** Số lượng từng biến thể đang có trong giỏ (giỏ mỗi biến thể một dòng; cộng dồn nếu API trả trùng). Chưa tải giỏ: bảng rỗng. */
+export function cartUnitsByVariation(items: readonly { variationId: string; quantity: number }[] | undefined): ReadonlyMap<string, number> {
+  const units = new Map<string, number>();
+  for (const it of items ?? []) units.set(it.variationId, (units.get(it.variationId) ?? 0) + it.quantity);
+  return units;
 }
 
 /** Câu đầu sheet khi có dòng không thêm được: một phần hay cả đơn. null khi mọi dòng còn bán. */

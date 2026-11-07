@@ -25,6 +25,7 @@ vi.mock('../services/shop-api', () => ({
   requestReturn: vi.fn(),
   addToCart: vi.fn(),
   repurchaseOrder: vi.fn(),
+  getCart: vi.fn().mockResolvedValue({ items: [] }),
 }));
 vi.mock('../services/zmp-bridge', () => ({
   hasOA: true,

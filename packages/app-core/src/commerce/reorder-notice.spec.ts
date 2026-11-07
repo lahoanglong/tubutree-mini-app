@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  cartUnitsByVariation,
   isDiscontinuedItem,
   reorderComparablePrice,
   reorderLineNotices,
@@ -155,5 +156,53 @@ describe('isDiscontinuedItem: phân biệt ngừng bán với hết hàng', () =
     expect(isDiscontinuedItem({ available: false, stock: 7, productPublic: true })).toBe(true);
     expect(isDiscontinuedItem({ available: false, stock: 0, productPublic: true })).toBe(false);
     expect(isDiscontinuedItem({})).toBe(false);
+  });
+});
+
+describe('reorderPriceAt: số lượng cùng biến thể đã có trong giỏ (giỏ so suất Giờ vàng theo tổng đã gộp)', () => {
+  const flash = (allowance: number | null = 3) =>
+    reorderPricing({ unitPrice: 120_000, currentPrice: 120_000, flashPrice: 90_000, flashAllowance: allowance });
+
+  it('số lượng của sheet vừa suất nhưng cộng phần đã có trong giỏ thì vượt: cả dòng về giá đang bán, như giỏ sẽ tính', () => {
+    expect(reorderPriceAt(flash(), 2).unitPrice).toBe(90_000);
+    expect(reorderPriceAt(flash(), 2, 2).unitPrice).toBe(120_000);
+  });
+
+  it('tổng đúng bằng suất vẫn là giá Giờ vàng; không truyền hay truyền 0 thì như trước', () => {
+    expect(reorderPriceAt(flash(), 2, 1).unitPrice).toBe(90_000);
+    expect(reorderPriceAt(flash(), 2, 0)).toEqual(reorderPriceAt(flash(), 2));
+  });
+
+  it('số âm hay rác không làm giá rẻ đi', () => {
+    expect(reorderPriceAt(flash(), 4, -5).unitPrice).toBe(120_000);
+  });
+
+  it('không biết số suất (null): giá Giờ vàng ở mọi tổng; không có Giờ vàng: giá đang bán dù trong giỏ có bao nhiêu', () => {
+    expect(reorderPriceAt(flash(null), 2, 50).unitPrice).toBe(90_000);
+    expect(reorderPriceAt(reorderPricing({ unitPrice: 120_000, currentPrice: 120_000 }), 2, 50).unitPrice).toBe(120_000);
+  });
+
+  it('câu giá so với giá đã trả theo giá giỏ sẽ tính (đã gộp), không theo giá một mình dòng sheet', () => {
+    const p = reorderPricing({ unitPrice: 100_000, currentPrice: 120_000, flashPrice: 90_000, flashAllowance: 3 });
+    expect(reorderPriceAt(p, 2).notice).toMatchObject({ kind: 'priceDown' });
+    expect(reorderPriceAt(p, 2, 2).notice).toMatchObject({ kind: 'priceUp' });
+  });
+});
+
+describe('cartUnitsByVariation', () => {
+  it('chưa tải giỏ: bảng rỗng', () => {
+    expect(cartUnitsByVariation(undefined).size).toBe(0);
+    expect(cartUnitsByVariation([]).size).toBe(0);
+  });
+
+  it('gom số lượng theo biến thể, cộng dồn nếu trùng', () => {
+    const m = cartUnitsByVariation([
+      { variationId: 'v1', quantity: 2 },
+      { variationId: 'v2', quantity: 1 },
+      { variationId: 'v1', quantity: 3 },
+    ]);
+    expect(m.get('v1')).toBe(5);
+    expect(m.get('v2')).toBe(1);
+    expect(m.get('v3')).toBeUndefined();
   });
 });

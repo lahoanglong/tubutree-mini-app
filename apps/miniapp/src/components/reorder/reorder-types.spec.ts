@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { OrderItemView, PurchasedItem } from '../../services/shop-api';
 import {
   MAX_REORDER_QTY, initialSelection, itemReorderTarget, lineAt, lineFromOrderItem, lineFromPurchasedItem,
-  orderReorderTarget, selectedLines, selectionTotals,
+  orderReorderTarget, selectedLines, selectionTotals, unitsSharingCartLine,
 } from './reorder-types';
 
 const orderItem = (over: Partial<OrderItemView> = {}): OrderItemView => ({
@@ -119,5 +119,74 @@ describe('reorder-types', () => {
     });
     const sel = { a: { checked: true, quantity: 1 }, b: { checked: true, quantity: 3 } };
     expect(selectionTotals(t, sel)).toEqual({ units: 1, subtotal: 10000 });
+  });
+});
+
+describe('giá Giờ vàng theo giỏ: số lượng đã có trong giỏ và dòng trùng biến thể', () => {
+  const flashItem = (over: Partial<OrderItemView> = {}) =>
+    orderItem({ stock: 50, available: true, currentPrice: 120000, unitPrice: 120000, flashActive: true, flashPrice: 90000, flashAllowance: 3, ...over });
+  const cartOf = (entries: [string, number][]) => new Map(entries);
+
+  it('giỏ chưa có món: số lượng vừa suất → giá Giờ vàng (như trước)', () => {
+    const t = orderReorderTarget({ code: 'T1', items: [flashItem({ id: 'a', variationId: 'v1', quantity: 2 })] });
+    const sel = initialSelection(t);
+    expect(selectionTotals(t, sel)).toEqual({ units: 2, subtotal: 180000 });
+    expect(selectionTotals(t, sel, cartOf([]))).toEqual({ units: 2, subtotal: 180000 });
+  });
+
+  it('giỏ đã có 2 món cùng biến thể, thêm 2: tổng 4 vượt suất 3 → giỏ tính giá đang bán, sheet phải hiện đúng số đó', () => {
+    const t = orderReorderTarget({ code: 'T2', items: [flashItem({ id: 'a', variationId: 'v1', quantity: 2 })] });
+    const sel = initialSelection(t);
+    const cart = cartOf([['v1', 2]]);
+    expect(selectionTotals(t, sel, cart)).toEqual({ units: 2, subtotal: 240000 });
+    const l = t.kind === 'order' ? t.lines[0]! : (null as never);
+    expect(lineAt(l, 2, unitsSharingCartLine(t, sel, cart, l)).unitPrice).toBe(120000);
+  });
+
+  it('giỏ có món khác biến thể không ảnh hưởng', () => {
+    const t = orderReorderTarget({ code: 'T3', items: [flashItem({ id: 'a', variationId: 'v1', quantity: 2 })] });
+    expect(selectionTotals(t, initialSelection(t), cartOf([['v9', 40]]))).toEqual({ units: 2, subtotal: 180000 });
+  });
+
+  it('đơn có hai dòng cùng biến thể: giỏ gộp 2 + 2 = 4 > 3 nên cả hai dòng tính giá đang bán', () => {
+    const t = orderReorderTarget({
+      code: 'T4',
+      items: [flashItem({ id: 'a', variationId: 'v1', quantity: 2 }), flashItem({ id: 'b', variationId: 'v1', quantity: 2 })],
+    });
+    expect(selectionTotals(t, initialSelection(t))).toEqual({ units: 4, subtotal: 480000 });
+  });
+
+  it('dòng trùng biến thể bị bỏ chọn không tính vào tổng gộp', () => {
+    const t = orderReorderTarget({
+      code: 'T5',
+      items: [flashItem({ id: 'a', variationId: 'v1', quantity: 2 }), flashItem({ id: 'b', variationId: 'v1', quantity: 2 })],
+    });
+    const sel = { a: { checked: true, quantity: 2 }, b: { checked: false, quantity: 2 } };
+    expect(selectionTotals(t, sel)).toEqual({ units: 2, subtotal: 180000 });
+    const lines = t.kind === 'order' ? t.lines : [];
+    expect(unitsSharingCartLine(t, sel, cartOf([]), lines[0]!)).toBe(0);
+    // Dòng b chưa chọn: nếu khách tick thêm thì giỏ sẽ gộp với dòng a đang chọn.
+    expect(unitsSharingCartLine(t, sel, cartOf([]), lines[1]!)).toBe(2);
+  });
+
+  it('dòng trùng biến thể không khả dụng không tính vào tổng gộp', () => {
+    const t = orderReorderTarget({
+      code: 'T6',
+      items: [flashItem({ id: 'a', variationId: 'v1', quantity: 2 }), flashItem({ id: 'b', variationId: 'v1', quantity: 2, stock: 0, available: false })],
+    });
+    const sel = { a: { checked: true, quantity: 2 }, b: { checked: true, quantity: 2 } };
+    expect(selectionTotals(t, sel)).toEqual({ units: 2, subtotal: 180000 });
+  });
+
+  it('mua lại một sản phẩm đã mua (rail): cộng phần đã có trong giỏ', () => {
+    const t = itemReorderTarget(purchased({ price: 120000, salePrice: null, stock: 50, flashPrice: 90000, flashAllowance: 3 }));
+    const sel = { v1: { checked: true, quantity: 2 } };
+    expect(selectionTotals(t, sel, cartOf([]))).toEqual({ units: 2, subtotal: 180000 });
+    expect(selectionTotals(t, sel, cartOf([['v1', 2]]))).toEqual({ units: 2, subtotal: 240000 });
+  });
+
+  it('API cũ không có flashPrice: giá không đổi dù giỏ có bao nhiêu', () => {
+    const t = orderReorderTarget({ code: 'T7', items: [orderItem({ id: 'a', variationId: 'v1', quantity: 2, stock: 50, available: true, currentPrice: 120000, unitPrice: 120000 })] });
+    expect(selectionTotals(t, initialSelection(t), cartOf([['v1', 40]]))).toEqual({ units: 2, subtotal: 240000 });
   });
 });

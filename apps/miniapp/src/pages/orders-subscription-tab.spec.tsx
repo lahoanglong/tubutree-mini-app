@@ -21,6 +21,7 @@ vi.mock('../services/shop-api', () => ({
   fetchActiveFlashSales: vi.fn().mockResolvedValue([]),
   repurchaseOrder: vi.fn(),
   addToCart: vi.fn(),
+  getCart: vi.fn().mockResolvedValue({ items: [] }),
   getPublicConfig: mocks.getPublicConfig,
   getAddresses: vi.fn().mockResolvedValue([]),
 }));

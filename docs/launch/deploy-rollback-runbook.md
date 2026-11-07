@@ -963,6 +963,8 @@ docker images | grep -E 'rollback'
 
 Kỳ vọng: bốn dòng `API_ID=sha256:...`, và hai dòng image có thẻ `rollback`. Thẻ này giữ cho `docker image prune` không xoá mất image cũ. Nếu `$DC ps -q api` trống (API không chạy) thì DỪNG: không có gì để quay lại, báo Tech lead.
 
+**Dọn thẻ `:prev-*` cũ (giữ 3 bản gần nhất).** Mỗi deploy qua `dep1-prepare.sh` gắn thêm một cặp `tubutree-api:prev-<sha8>` và `tubutree-web:prev-<sha8>` (bản vừa chạy, để quay lại). Không dọn thì đĩa VPS đầy dần (ngày 2026-11-07 có 17 cặp, Docker báo image chiếm 15,5 GB và 11,6 GB gỡ được). `dep1-prepare.sh` tự gọi `tools/deploy/prune-prev-images.sh --apply` ngay sau khi gắn thẻ: giữ 3 bản gần nhất theo thứ tự deploy (giờ commit của SHA trong thẻ), gỡ phần còn lại của cả api và web. Chỉ động tới thẻ đúng dạng `prev-<8 hex>`; `:latest` và `:rollback` không bao giờ bị gỡ. Làm tay trên VPS: `bash tools/deploy/prune-prev-images.sh` (chỉ in kế hoạch), thêm `--apply` để gỡ thật, `KEEP_PREV=5` để giữ nhiều hơn. Dọn thẻ không giải phóng bộ nhớ đệm build (`docker system df` dòng Build Cache): muốn giảm thêm thì `docker builder prune` là việc riêng, build sau đó chậm hơn.
+
 ### Bước 3. Build image mới (container cũ vẫn phục vụ khách)
 
 ```bash
