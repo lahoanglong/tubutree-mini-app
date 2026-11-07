@@ -30,7 +30,7 @@ type Notice = QuickAddNotice;
 
 export interface QuickAdd {
   /** Thêm một thẻ vào giỏ theo đúng luật giỏ nhanh: tải chi tiết, một phân loại còn hàng thì thêm thẳng, nhiều thì mở bảng chọn, hết hàng thì báo. */
-  quickAdd: (product: ProductCard, opts?: { initialId?: string | null }) => Promise<void>;
+  quickAdd: (product: ProductCard, opts?: { initialId?: string | null; origin?: Element | null }) => Promise<void>;
   /** Hiện một thông báo nổi ở đáy màn (cùng chỗ với "Đã thêm vào giỏ!"). */
   notify: (n: QuickAddNotice) => void;
   /** Mã sản phẩm đang được thêm (chặn bấm lại ở nơi vẽ nút). */
