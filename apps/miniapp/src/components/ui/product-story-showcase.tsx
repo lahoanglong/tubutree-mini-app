@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
-import { X } from 'lucide-react';
+import { ChevronRight, X } from 'lucide-react';
 import type { ProductDetail } from '@tubutree/app-core/api/catalog';
 import { ambientVar, arcSlot, layersUpTo, resolveStoryConfig, storyView, type StoryViewModel } from '@tubutree/app-core/commerce/product-story';
 import { preloadImages, STORY_PRELOAD_ROOT_MARGIN, storyPreloadUrls } from '@tubutree/app-core/commerce/story-preload';
+import { resolveReelStoryConfig } from '@tubutree/app-core/commerce/story-reel';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import type { IngredientLayerSprite, ProductStoryConfig, StoryFrom } from '@tubutree/shared-types';
 import { Button } from './button';
@@ -12,6 +13,7 @@ import { ProductImage } from './product-image';
 import { SectionTitle } from './section-title';
 import { StorySprite } from './story-sprite';
 import '../../css/story.css';
+import '../../css/story-reel.css';
 
 export interface ProductStoryShowcaseProps {
   product: ProductDetail;
@@ -26,6 +28,14 @@ export interface ProductStoryShowcaseProps {
   /** true: khung 100dvh dạng Reel, có thanh mua ghim đáy. */
   fullscreen?: boolean;
   onClose?: () => void;
+  /** Reel của Trang chủ: luôn có kịch bản (không cần cấu hình riêng), bỏ cảnh chọn phân loại, thanh đáy là "Thêm vào giỏ · giá" và "Câu chuyện kế" (không có "Mua ngay"). */
+  reel?: boolean;
+  /** Giá đã định dạng ghi trên nút thêm giỏ của Reel; thiếu thì nút chỉ ghi "Thêm vào giỏ". */
+  addPrice?: string;
+  /** Chuyển sang Reel kế; không truyền thì không có nút "Câu chuyện kế". */
+  onNext?: () => void;
+  /** Vị trí trong dải, vd "2/8", hiện nhỏ cạnh tiêu đề đầu khung toàn màn. */
+  position?: string;
 }
 
 const REDUCE_QUERY = '(prefers-reduced-motion: reduce)';
@@ -293,7 +303,7 @@ function Scenes({ props, view, seen }: { props: ProductStoryShowcaseProps; view:
 const FOCUSABLE = 'button:not([disabled]), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
 function Fullscreen({ props, body }: { props: ProductStoryShowcaseProps; body: JSX.Element }) {
-  const { onClose, onAddToCart, onBuyNow, buyDisabled = false } = props;
+  const { onClose, onAddToCart, onBuyNow, buyDisabled = false, reel = false, addPrice, onNext, position } = props;
   const root = useRef<HTMLDivElement>(null);
   const closeBtn = useRef<HTMLButtonElement>(null);
   const closeRef = useRef(onClose);
@@ -331,10 +341,21 @@ function Fullscreen({ props, body }: { props: ProductStoryShowcaseProps; body: J
   }, []);
 
   const title = fillCopy('story.title');
+  const heading = <SectionTitle block>{title}</SectionTitle>;
+  const addLabel = reel && addPrice ? fillCopy('reel.addPrice', { price: addPrice }) : fillCopy('story.addToCart');
   return createPortal(
     <div ref={root} role="dialog" aria-modal="true" aria-label={title} className="tubu-story-dialog">
       <div className="tubu-story-dialog-head">
-        <SectionTitle block>{title}</SectionTitle>
+        {position ? (
+          <div className="tubu-reel-heading">
+            {heading}
+            <span data-testid="story-position" className="tubu-story-position">
+              {position}
+            </span>
+          </div>
+        ) : (
+          heading
+        )}
         <button ref={closeBtn} type="button" data-testid="story-close" aria-label={fillCopy('story.close')} className="tubu-story-close tubu-press tubu-hit-44-square" onClick={onClose}>
           <Icon icon={X} size="md" />
         </button>
@@ -342,23 +363,39 @@ function Fullscreen({ props, body }: { props: ProductStoryShowcaseProps; body: J
       <div data-testid="story-scroll" tabIndex={0} className="tubu-story-scroll">
         {body}
       </div>
-      <div className="tubu-story-bar">
-        <Button variant="secondary" size="lg" data-testid="story-add-to-cart" disabled={buyDisabled} onPress={() => onAddToCart?.()}>
-          {fillCopy('story.addToCart')}
-        </Button>
-        <Button variant="primary" size="lg" data-testid="story-buy-now" disabled={buyDisabled} onPress={() => onBuyNow?.()}>
-          {fillCopy(buyDisabled ? 'story.soldOut' : 'story.buyNow')}
-        </Button>
-      </div>
+      {reel ? (
+        <div className="tubu-story-bar" data-reel="true">
+          {onNext && (
+            <Button variant="secondary" size="lg" className="tubu-reel-next-btn" data-testid="story-next" aria-label={fillCopy('reel.nextAria')} onPress={onNext}>
+              <span className="tubu-reel-next">
+                <span className="tubu-reel-next-label">{fillCopy('reel.next')}</span>
+                <Icon icon={ChevronRight} size="sm" tone="current" />
+              </span>
+            </Button>
+          )}
+          <Button variant="primary" size="lg" className="tubu-reel-add-btn" data-testid="story-add-to-cart" disabled={buyDisabled} onPress={() => onAddToCart?.()}>
+            {buyDisabled ? fillCopy('story.soldOut') : addLabel}
+          </Button>
+        </div>
+      ) : (
+        <div className="tubu-story-bar">
+          <Button variant="secondary" size="lg" data-testid="story-add-to-cart" disabled={buyDisabled} onPress={() => onAddToCart?.()}>
+            {fillCopy('story.addToCart')}
+          </Button>
+          <Button variant="primary" size="lg" data-testid="story-buy-now" disabled={buyDisabled} onPress={() => onBuyNow?.()}>
+            {fillCopy(buyDisabled ? 'story.soldOut' : 'story.buyNow')}
+          </Button>
+        </div>
+      )}
     </div>,
     document.body,
   );
 }
 
 export function ProductStoryShowcase(props: ProductStoryShowcaseProps): JSX.Element | null {
-  const { product, previewConfig, fullscreen } = props;
+  const { product, previewConfig, fullscreen, reel = false } = props;
   const reduced = useReducedMotion();
-  const config = useMemo(() => previewConfig ?? resolveStoryConfig(product), [previewConfig, product]);
+  const config = useMemo(() => previewConfig ?? (reel ? resolveReelStoryConfig(product) : resolveStoryConfig(product)), [previewConfig, product, reel]);
   const view = useMemo(() => (config ? storyView(config, { reducedMotion: reduced }) : null), [config, reduced]);
   const sectionRef = useRef<HTMLElement>(null);
   const seen = useSeen(sectionRef, config !== null && view !== null);

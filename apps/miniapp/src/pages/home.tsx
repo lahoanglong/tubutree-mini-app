@@ -33,6 +33,7 @@ import { HomeBlockErrorSuppressed } from '../components/home/home-block-error';
 import { HomePageError } from '../components/home/home-page-error';
 import { HomeBanner } from '../components/home/home-banner';
 import { HomeCombos } from '../components/home/home-combos';
+import { HomeStoryReel } from '../components/home/home-story-reel';
 import { HomeHeader } from '../components/home/home-header';
 import { useHomeShelves } from '../components/home/use-home-shelves';
 import { useHomeFeed } from '../components/home/use-home-feed';
@@ -44,7 +45,7 @@ import { browserStorage } from '../utils/recently-viewed';
 
 /**
  * Trang chủ (màn đầu gọn, món hàng lên đầu): header dính 56px (logo, ô tìm, chuông, giỏ) → thẻ thành viên một dòng (khách cũ) hoặc dải Quà khách mới
- * → Việc cần làm → banner chiến dịch (ẩn hẳn khi không có) → 4 lối tắt + "Tất cả" → Giờ vàng → Mua lại (khách cũ) → Danh mục lưới 2×5 → Bán chạy nhất có hạng → combo
+ * → Việc cần làm → banner chiến dịch (ẩn hẳn khi không có) → 4 lối tắt + "Tất cả" → dải Story → Giờ vàng → Mua lại (khách cũ) → Danh mục lưới 2×5 → Bán chạy nhất có hạng → combo
  * → Hành trình nguyên liệu → Cộng đồng (chỉ đọc) → MỘT lưới Gợi ý hôm nay cuộn vô tận. Thứ tự khối ở app-core (`homeBlockOrder`), dùng chung với web;
  * `useHomeShelves` chống trùng món giữa các kệ hàng. Khối lỗi tải hiện thông báo gọn + "Thử lại" ngay tại chỗ (C-084), độc lập từng khối; kéo để làm mới vẫn dùng được.
  */
@@ -124,6 +125,8 @@ export default function HomePage() {
     banner: <HomeBanner kind={kind} />,
     combos: <HomeCombos views={shelves.combos} />,
     shortcuts: <ShortcutGrid />,
+    // Dải Story tự tải Bán chạy nhất (cùng khoá với kệ Bán chạy nhất) và tự ẩn khi lỗi hoặc dưới 3 món; khi chờ giữ khung cao đúng khối thật.
+    stories: <HomeStoryReel />,
     // Lỗi tải Mua lại (kể cả 404 của API cũ) đưa trang về bố cục khách mới, nơi khối này không có mặt, nên khối tự có trạng thái lỗi riêng ở PurchasedRail.
     purchased: <HomePurchasedRail source="home_rail" restoring={restoring} excludeVariations={shelves.flashVariationIds} />,
     flash: (

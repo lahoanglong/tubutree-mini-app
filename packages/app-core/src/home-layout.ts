@@ -12,7 +12,7 @@ export type HomeCustomerKind = 'returning' | 'new';
 export type HomeKindState = HomeCustomerKind | 'unknown';
 
 export type HomeBlockId =
-  | 'search' | 'member' | 'todo' | 'welcome' | 'banner' | 'shortcuts' | 'purchased' | 'flash' | 'categories' | 'bestSellers' | 'combos'
+  | 'search' | 'member' | 'todo' | 'welcome' | 'banner' | 'shortcuts' | 'stories' | 'purchased' | 'flash' | 'categories' | 'bestSellers' | 'combos'
   | 'journey' | 'community' | 'suggest';
 
 /** Header dính của Trang chủ (logo, ô tìm, chuông, giỏ): thay hàng logo 68px và ô tìm 54px cũ. */
@@ -22,17 +22,18 @@ export const HOME_HEADER_HEIGHT = 56;
 // Màn đầu gọn: header dính, thẻ thành viên (hoặc dải quà) một dòng, banner (tự ẩn khi không có chiến dịch), lối tắt, rồi tới món hàng:
 // Giờ vàng đứng TRƯỚC Mua lại để deal nằm trong màn đầu cả với khách cũ (Q6). Thẻ thành viên và dải quà cao bằng nhau (`HOME_HERO_HEIGHT` = `HOME_GIFT_HEIGHT`)
 // nên đổi loại khách không làm các khối dưới nhảy. `banner` và `combos` tự ẩn, không giữ chỗ, tới khi P11/P15 có dữ liệu.
+// `stories` (dải Story, W42A) đứng ngay dưới lối tắt, trên khu vực hàng: tự ẩn khi dưới `REEL_MIN_ITEMS` món, còn trong lúc tải giữ đúng `HOME_SETTLING_HEIGHTS.stories`.
 const RETURNING: readonly HomeBlockId[] = [
-  'search', 'member', 'todo', 'banner', 'shortcuts', 'flash', 'purchased', 'categories', 'bestSellers', 'combos', 'journey', 'community', 'suggest',
+  'search', 'member', 'todo', 'banner', 'shortcuts', 'stories', 'flash', 'purchased', 'categories', 'bestSellers', 'combos', 'journey', 'community', 'suggest',
 ];
 const NEW: readonly HomeBlockId[] = [
-  'search', 'welcome', 'todo', 'banner', 'shortcuts', 'flash', 'categories', 'bestSellers', 'combos', 'journey', 'community', 'suggest',
+  'search', 'welcome', 'todo', 'banner', 'shortcuts', 'stories', 'flash', 'categories', 'bestSellers', 'combos', 'journey', 'community', 'suggest',
 ];
 
 // Chưa biết loại khách: giữ chỗ thẻ thành viên (khối `member` hiện khung chờ) và bỏ các khối chỉ một loại có (Mua lại, Quà khách mới),
 // để phần đầu trang không đổi hình dạng khi loại khách được xác định. Bán chạy nhất có ở cả hai loại nên ở lại.
 const UNKNOWN: readonly HomeBlockId[] = [
-  'search', 'member', 'todo', 'banner', 'shortcuts', 'flash', 'categories', 'bestSellers', 'combos', 'journey', 'community', 'suggest',
+  'search', 'member', 'todo', 'banner', 'shortcuts', 'stories', 'flash', 'categories', 'bestSellers', 'combos', 'journey', 'community', 'suggest',
 ];
 
 /**
@@ -632,6 +633,8 @@ export const HOME_SETTLING_HEIGHTS = {
   // Banner tỉ lệ 5:2 (`--banner-ratio`) ở 375px trừ đệm 16 mỗi bên.
   banner: Math.round((375 - 32) / 2.5),
   shortcuts: 84,
+  // Dải Story: tiêu đề 24 + 8, vòng 72 (ảnh 64 + viền 4 mỗi bên), 6, nhãn hai dòng 32 = 142, làm tròn 144. Khối thật đặt đúng chiều cao này.
+  stories: 144,
   flash: FLASH_SKELETON_HEIGHT,
   categories: categoriesBlockHeight(CATEGORY_GRID_MAX_CELLS),
   products: 298,

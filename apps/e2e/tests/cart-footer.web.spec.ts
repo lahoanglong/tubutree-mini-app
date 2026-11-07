@@ -54,7 +54,10 @@ test.describe('Web khách: chân dính giỏ ở 375px', () => {
 
     const h = await barHeight(page);
     expect(h, `chân dính cao ${h}px`).toBeLessThanOrEqual(150);
-    await expect(bar(page).getByText('Bạn được miễn phí giao hàng')).toBeVisible();
+    // W42A: dòng báo miễn phí giao dời lên đầu giỏ; chân dính chỉ còn tổng và nút.
+    await expect(page.getByTestId('freeship-progress')).toHaveAttribute('data-reached', 'true');
+    await expect(page.getByTestId('freeship-progress')).toContainText('Miễn phí giao hàng');
+    await expect(bar(page).getByTestId('freeship-progress')).toHaveCount(0);
     await expect(page.getByTestId('freeship-bar')).toHaveCount(0);
 
     const total = (await page.getByTestId('cart-total-value').boundingBox())!;

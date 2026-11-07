@@ -37,6 +37,7 @@ import { refreshHomeQueries } from './home-blocks';
 import { HomeBlockErrorSuppressed } from './home-block-error';
 import { HomeHeader } from './home-header';
 import { HomePageError } from './home-page-error';
+import { HomeStoryReel } from './home-story-reel';
 import { MemberCard, MemberCardSkeleton, MemberCardUnavailable } from './member-card';
 import { NewCustomerGift } from './new-customer-gift';
 import { ShortcutGrid } from './shortcut-grid';
@@ -166,6 +167,7 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
     // Dưới 2 combo còn hạn thì rỗng: ẩn hẳn, không giữ chỗ (đứng dưới Bán chạy nhất nên không đẩy nội dung màn đầu).
     combos: <HomeCombos views={shelves.combos} />,
     shortcuts: <ShortcutGrid initialConfig={initial.publicConfig} />,
+    stories: <HomeStoryReel initialBestSellers={initial.bestSellers} />,
     purchased: <PurchasedRail source="home_rail" restoring={restoring} excludeVariations={shelves.flashVariationIds} />,
     flash: (
       <FlashSale

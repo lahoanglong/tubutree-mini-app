@@ -72,13 +72,18 @@ describe('/gio-hang — thanh dính đáy', () => {
     expect(bar(c)!.textContent).toContain(`Tạm tính (đã giảm)${total}`);
   });
 
-  it('chân dính gọn: chưa đạt miễn phí giao có thanh tiến độ; đạt rồi chỉ còn một dòng chữ, không thanh', async () => {
+  it('chân dính gọn: không còn thanh hay dòng Miễn phí giao hàng (chúng nằm ở đầu giỏ); chưa đạt thì thanh ở đầu giỏ, đạt rồi chỉ còn một dòng chữ, không thanh', async () => {
     const c = await mount();
-    expect(bar(c)!.querySelector('[data-testid="freeship-bar"]')).not.toBeNull();
+    expect(bar(c)!.querySelector('[data-testid="freeship-bar"]')).toBeNull();
+    expect(bar(c)!.textContent).not.toContain('Miễn phí giao hàng');
+    expect(c.querySelector('[data-testid="freeship-progress"] [data-testid="freeship-bar"]')).not.toBeNull();
+    expect(c.querySelector('[data-testid="sticky-bar"] [data-testid="freeship-progress"]')).toBeNull();
     state.cart = cartOf([line({})], { freeship: true, freeshipThreshold: 200000 });
     const reached = await mount();
-    expect(bar(reached)!.textContent).toContain('Bạn được miễn phí giao hàng');
-    expect(bar(reached)!.querySelector('[data-testid="freeship-bar"]')).toBeNull();
+    const done = reached.querySelector<HTMLElement>('[data-testid="freeship-progress"]')!;
+    expect(done.dataset.reached).toBe('true');
+    expect(done.textContent).toContain('Miễn phí giao hàng');
+    expect(done.querySelector('[data-testid="freeship-bar"]')).toBeNull();
   });
 
   it('chân dính gọn: nhãn và số tiền cùng một khối bên trái, nút Thanh toán là khối riêng cùng hàng', async () => {
