@@ -11,6 +11,7 @@ import { getCart } from '@/lib/shop-client';
 import SiteSearch from '@/components/site-search';
 import { HeaderBell } from '@/components/header-bell';
 import { useCartKey } from '@/lib/cart-key';
+import { useCartBumpKey } from '@/lib/cart-feedback';
 import { PAGE_WIDE } from '@/lib/page-frame';
 import { useShellPathname } from '@/lib/shell-pathname';
 import { readyDesktopNav } from '@/lib/web-nav';
@@ -24,6 +25,7 @@ export default function SiteHeader() {
   const wasteVisible = useWasteVisible();
   const cartQ = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: status === 'authenticated' });
   const count = cartQ.data?.itemCount ?? 0;
+  const bumpKey = useCartBumpKey();
 
   return (
     <header
@@ -50,14 +52,16 @@ export default function SiteHeader() {
           <HeaderBell authed={status === 'authenticated'} />
           <Link
             href="/gio-hang"
+            data-cart-target=""
             aria-label={count > 0 ? `Giỏ hàng, ${count} sản phẩm` : 'Giỏ hàng'}
             className="relative flex h-11 w-11 items-center justify-center rounded-control border border-stone-200 bg-stone-25 text-stone-700 transition hover:border-forest-600 hover:bg-forest-50 hover:text-forest-700"
           >
             <ShoppingBag className="h-5 w-5" aria-hidden="true" />
             {count > 0 && (
               <span
+                key={bumpKey}
                 aria-hidden="true"
-                className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-forest-600 px-1 text-xs font-bold text-stone-0 shadow-card ring-2 ring-stone-0"
+                className={`absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-forest-600 px-1 text-xs font-bold text-stone-0 shadow-card ring-2 ring-stone-0${bumpKey > 0 ? ' cart-badge-bump' : ''}`}
               >
                 {count > 99 ? '99+' : count}
               </span>

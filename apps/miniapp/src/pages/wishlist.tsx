@@ -9,6 +9,7 @@ import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { cartKey, useCartKey } from '../services/cart-key';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
+import { playCartFeedback } from '../utils/cart-feedback';
 import { VariationSheet } from '../components/variation-sheet';
 import { useFlashAllowance } from '../hooks/use-flash-allowance';
 import { AuthGate } from '../components/ui/auth-gate';
@@ -18,14 +19,14 @@ import { PageHeader } from '../components/ui/page-header';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 
 /** Nút giỏ nhanh nổi ở góc dưới ảnh thẻ (ProductTile đặt vị trí): vùng chạm 44px bọc vòng trắng 32px, cùng kiểu với nút tim ở góc trên. */
-function QuickAddButton({ name, busy, onPress }: { name: string; busy: boolean; onPress: () => void }) {
+function QuickAddButton({ name, busy, onPress }: { name: string; busy: boolean; onPress: (source: Element) => void }) {
   return (
     <button
       type="button"
       aria-label={`Thêm ${name} vào giỏ`}
       aria-busy={busy}
       disabled={busy}
-      onClick={onPress}
+      onClick={(e) => onPress(e.currentTarget)}
       style={{ width: 44, height: 44, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
     >
       <span
@@ -53,15 +54,16 @@ export default function WishlistPage() {
   // Số suất Giờ vàng khách còn mua được (đã trừ các đơn trước) cho các phân loại của sản phẩm trong bảng; không có bảng thì không có id nên không gọi.
   const flashWithAllowance = useFlashAllowance(flashQ.data, picker?.variations.map((v) => v.id) ?? []);
 
-  const addLine = async (variationId: string, qty: number) => {
+  const addLine = async (variationId: string, qty: number, source: Element | null = null) => {
     const cart = await addToCart(variationId, qty, 'wishlist');
     queryClient.setQueryData(cartKey(), cart);
     haptic('medium');
+    playCartFeedback(source?.isConnected ? source : null);
     openSnackbar({ text: vi.product.added, type: 'success', duration: 2000, position: 'top' });
   };
 
   // Thẻ không mang phân loại nên tải chi tiết lúc bấm (cũng cho tồn kho mới nhất), rồi theo cùng luật với trang chi tiết.
-  const quickAdd = async (product: ProductCardData) => {
+  const quickAdd = async (product: ProductCardData, source: Element | null = null) => {
     setBusyId(product.id);
     try {
       const detail = await queryClient.fetchQuery({ queryKey: ['product', product.slug], queryFn: () => fetchProduct(product.slug), staleTime: 0 });
@@ -71,7 +73,7 @@ export default function WishlistPage() {
         // Thẻ còn nút giỏ và không có lớp Hết hàng nếu không tải lại: khách bấm lại sẽ ra đúng lời báo này.
         void queryClient.invalidateQueries({ queryKey: ['wishlist'] });
       } else if (plan.kind === 'pick') setPicker({ product, variations: detail.variations });
-      else await addLine(plan.variationId, 1);
+      else await addLine(plan.variationId, 1, source);
     } catch (e) {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
     } finally {
@@ -111,7 +113,7 @@ export default function WishlistPage() {
             <ProductGrid
               items={wishQ.data}
               variant="grid"
-              renderImageOverlay={(p) => (p.inStock !== false ? <QuickAddButton name={p.name} busy={busyId === p.id} onPress={() => void quickAdd(p)} /> : undefined)}
+              renderImageOverlay={(p) => (p.inStock !== false ? <QuickAddButton name={p.name} busy={busyId === p.id} onPress={(source) => void quickAdd(p, source)} /> : undefined)}
             />
           ) : (
             <EmptyState

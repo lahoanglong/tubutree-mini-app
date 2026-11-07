@@ -5,7 +5,10 @@ import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useSearchParams } from 'next/navigation';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Loader2, Star, Video } from 'lucide-react';
+import { Check, Loader2, Play, Star, Video } from 'lucide-react';
+import { reviewMediaItems } from '@tubutree/app-core/commerce/review-media';
+import { ReviewMediaLightbox } from '@/components/review-media-lightbox';
+import { canPdpQuickAdd, requestPdpQuickAdd } from '@/lib/pdp-quick-add';
 import { REVIEW_NEEDS_PURCHASE } from '@tubutree/app-core/review-copy';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { useHydrated } from '@/lib/use-hydrated';
@@ -140,6 +143,9 @@ export function ProductReviewsFallback() {
  * Đánh giá trên trang sản phẩm web: danh sách công khai (mọi đánh giá đang hiện, mới nhất trước) và form viết/sửa theo
  * cùng luật với Mini App. `?danh-gia=<id đơn>` (từ chi tiết đơn) mở sẵn form cho đúng lần mua đó.
  */
+/** Đường dẫn ảnh tương đối của API ghép địa chỉ máy chủ ảnh; địa chỉ đầy đủ (video) giữ nguyên. */
+const mediaSrc = (src: string) => (src.startsWith('/') ? apiMediaUrl(src) : src);
+
 export function ProductReviews({ slug }: { slug: string }) {
   const params = useSearchParams();
   const openForOrderId = params?.get(REVIEW_ORDER_PARAM) ?? undefined;
@@ -171,6 +177,8 @@ export function ProductReviews({ slug }: { slug: string }) {
     placeholderData: (prev, prevQuery) => (prevQuery?.queryKey[3] === filter ? prev : undefined),
   });
   const [notice, setNotice] = useState<string | null>(null);
+  // Đánh giá đang xem ảnh/video toàn màn hình và vị trí tệp.
+  const [lightbox, setLightbox] = useState<{ id: string; index: number } | null>(null);
 
   const elig = phase === 'authenticated' ? eligQ.data : undefined;
   const myReviews = elig?.myReviews ?? [];
@@ -211,6 +219,8 @@ export function ProductReviews({ slug }: { slug: string }) {
     moreOn ? { pages: moreQ.data?.pages, isFetching: moreQ.isFetching, isError: moreQ.isError } : undefined,
   );
   const items = list.items;
+  const lbReview = lightbox ? items.find((x) => x.id === lightbox.id) : undefined;
+  const lbMedia = lbReview ? reviewMediaItems(lbReview) : [];
   const chips = reviewFilterChips(data, filter);
   const moreLoading = list.more === 'loading';
   const showMore = () => {
@@ -397,27 +407,60 @@ export function ProductReviews({ slug }: { slug: string }) {
                     </div>
                   )}
                   {r.comment && <p className="mt-2 whitespace-pre-line break-words text-sm text-stone-700">{r.comment}</p>}
-                  {r.images.length > 0 && (
+                  {(r.images.length > 0 || r.videoUrl) && (
                     <div className="mt-2 flex gap-2 overflow-x-auto">
-                      {r.images.map((img) => (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          key={img}
-                          src={img.startsWith('/') ? apiMediaUrl(img) : img}
-                          alt="Ảnh đánh giá"
-                          loading="lazy"
-                          className="h-16 w-16 flex-none rounded-control object-cover"
-                        />
-                      ))}
+                      {reviewMediaItems(r).map((m, i) =>
+                        m.kind === 'image' ? (
+                          <button
+                            key={m.src}
+                            type="button"
+                            aria-label={fillCopy('review.mediaOpenImage', { n: i + 1 })}
+                            aria-haspopup="dialog"
+                            onClick={() => setLightbox({ id: r.id, index: i })}
+                            className="tubu-press block h-16 min-h-11 w-16 min-w-11 flex-none overflow-hidden rounded-control"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={mediaSrc(m.src)} alt="" loading="lazy" className="block h-full w-full object-cover" />
+                          </button>
+                        ) : (
+                          <button
+                            key={m.src}
+                            type="button"
+                            aria-label={fillCopy('review.mediaOpenVideo')}
+                            aria-haspopup="dialog"
+                            onClick={() => setLightbox({ id: r.id, index: i })}
+                            className="tubu-press flex h-16 min-h-11 w-16 min-w-11 flex-none items-center justify-center rounded-control bg-stone-900 text-[var(--color-text-inverse)]"
+                          >
+                            <Play className="h-6 w-6" aria-hidden="true" />
+                          </button>
+                        ),
+                      )}
                     </div>
-                  )}
-                  {r.videoUrl && (
-                    <video src={r.videoUrl} controls preload="metadata" playsInline className="mt-2 max-h-56 w-full rounded-control bg-stone-900" />
                   )}
                 </li>
               );
             })}
           </ul>
+          <ReviewMediaLightbox
+            open={lbReview !== undefined && lbMedia.length > 0}
+            onClose={() => setLightbox(null)}
+            items={lbMedia}
+            index={lightbox?.index ?? 0}
+            onIndexChange={(index) => setLightbox((cur) => (cur ? { ...cur, index } : cur))}
+            author={lbReview?.author ?? ''}
+            rating={lbReview?.rating ?? 0}
+            verifiedPurchase={lbReview?.verifiedPurchase}
+            comment={lbReview?.comment}
+            resolveSrc={mediaSrc}
+            onAdd={
+              canPdpQuickAdd()
+                ? () => {
+                    setLightbox(null);
+                    requestPdpQuickAdd();
+                  }
+                : undefined
+            }
+          />
           {items.length === 0 && <EmptyState variant="inline" art="search" heading="Không có đánh giá khớp bộ lọc." />}
           {list.more === 'error' && visible >= items.length ? (
             <ListFailed onRetry={retryMore} />

@@ -15,11 +15,12 @@ export function PhoneCartButton() {
   return (
     <Link
       href="/gio-hang"
+      data-cart-target=""
       aria-label={count > 0 ? `Giỏ hàng, ${count} sản phẩm` : 'Giỏ hàng'}
       className="relative grid h-11 w-11 flex-none place-items-center rounded-full bg-[var(--color-action-secondary-bg)] text-[var(--color-text-primary)] md:hidden"
     >
       <ShoppingCart className="h-5 w-5" aria-hidden="true" />
-      <CountBadge count={count} />
+      <CountBadge count={count} bump />
     </Link>
   );
 }

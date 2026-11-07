@@ -1,10 +1,11 @@
 'use client';
 
-import { useId } from 'react';
-import { AlertTriangle } from 'lucide-react';
+import { useEffect, useId, useRef, useState } from 'react';
+import { AlertTriangle, ChevronDown } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { getProvinces, getCommunes } from '@/lib/geo-client';
 import { ui } from '@/lib/guest-ui';
+import { AddressLocationSheet } from '@/components/address-location-sheet';
 
 /** Giá trị địa giới: tên hiển thị + mã Pancake (gửi khi đặt đơn). Mirror miniapp geo-picker. */
 export interface GeoValue {
@@ -16,9 +17,12 @@ export interface GeoValue {
 
 export const EMPTY_GEO: GeoValue = { province: '', provinceCode: '', ward: '', wardCode: '' };
 
+const TRIGGER = 'flex items-center justify-between gap-2 text-left disabled:cursor-not-allowed';
+
 /**
  * Picker địa giới 2 cấp Tỉnh → Phường/Xã, danh mục lấy TỪ Pancake (mã "84_VN*" chuẩn
- * → đặt đơn không bị đẩy sai mã vùng). Đổi tỉnh sẽ reset phường.
+ * → đặt đơn không bị đẩy sai mã vùng). Đổi tỉnh sẽ reset phường. Mỗi cấp là một nút mở `AddressLocationSheet`
+ * (tìm không dấu); chọn tỉnh xong sheet Phường/Xã tự mở tiếp để khách khỏi bấm thêm một lần.
  */
 export function GeoPicker({
   value,
@@ -33,6 +37,14 @@ export function GeoPicker({
 }) {
   const provinceId = useId();
   const wardId = useId();
+  const [open, setOpen] = useState<'province' | 'ward' | null>(null);
+  const wardTrigger = useRef<HTMLButtonElement>(null);
+  const prevOpen = useRef(open);
+  useEffect(() => {
+    // Sheet Phường/Xã mở từ sheet Tỉnh (đã gỡ khỏi DOM) nên bộ khôi phục focus của sheet không có nút để trả về: trả về ô Phường/Xã.
+    if (prevOpen.current === 'ward' && open === null) wardTrigger.current?.focus();
+    prevOpen.current = open;
+  }, [open]);
   const provincesQ = useQuery({ queryKey: ['geo-provinces'], queryFn: getProvinces, staleTime: Infinity });
   const communesQ = useQuery({
     queryKey: ['geo-communes', value.provinceCode],
@@ -40,6 +52,9 @@ export function GeoPicker({
     enabled: !!value.provinceCode,
     staleTime: Infinity,
   });
+  const provinceName = provincesQ.data?.find((p) => p.code === value.provinceCode)?.name ?? value.province;
+  const wardName = communesQ.data?.find((c) => c.code === value.wardCode)?.name ?? value.ward;
+  const status = (q: { isLoading: boolean; isError: boolean }) => (q.isError ? 'error' : q.isLoading ? 'loading' : 'ready');
 
   return (
     <>
@@ -47,26 +62,25 @@ export function GeoPicker({
         <label htmlFor={provinceId} className="mb-1 block text-field-label text-stone-700">
           Tỉnh/Thành phố
         </label>
-        <select
+        <button
           id={provinceId}
+          type="button"
+          role="combobox"
+          aria-haspopup="dialog"
+          aria-expanded={open === 'province'}
+          aria-controls={`${provinceId}-list`}
           aria-required="true"
           aria-invalid={errorProvince ? true : undefined}
           aria-describedby={errorProvince ? `${provinceId}-err` : undefined}
-          value={value.provinceCode}
-          onChange={(e) => {
-            const code = e.target.value;
-            const name = provincesQ.data?.find((p) => p.code === code)?.name ?? '';
-            onChange({ province: name, provinceCode: code, ward: '', wardCode: '' });
-          }}
-          className={errorProvince ? ui.fieldError : ui.field}
+          data-value={value.provinceCode}
+          onClick={() => setOpen('province')}
+          className={`${errorProvince ? ui.fieldError : ui.field} ${TRIGGER}`}
         >
-          <option value="">{provincesQ.isLoading ? 'Đang tải…' : 'Chọn tỉnh/thành'}</option>
-          {(provincesQ.data ?? []).map((p) => (
-            <option key={p.code} value={p.code}>
-              {p.name}
-            </option>
-          ))}
-        </select>
+          <span className={`min-w-0 truncate ${provinceName ? '' : 'text-stone-600'}`}>
+            {provinceName || (provincesQ.isLoading ? 'Đang tải…' : 'Chọn tỉnh/thành')}
+          </span>
+          <ChevronDown className="h-4 w-4 shrink-0 text-stone-600" aria-hidden />
+        </button>
         {errorProvince && (
           <p id={`${provinceId}-err`} className="mt-0.5 flex items-start gap-1 text-caption text-danger-fg">
             <AlertTriangle className="mt-px h-3 w-3 shrink-0" aria-hidden />
@@ -82,29 +96,27 @@ export function GeoPicker({
         <label htmlFor={wardId} className="mb-1 block text-field-label text-stone-700">
           Phường/Xã
         </label>
-        <select
+        <button
+          ref={wardTrigger}
           id={wardId}
+          type="button"
+          role="combobox"
+          aria-haspopup="dialog"
+          aria-expanded={open === 'ward'}
+          aria-controls={`${wardId}-list`}
           aria-required="true"
           aria-invalid={errorWard ? true : undefined}
           aria-describedby={errorWard ? `${wardId}-err` : undefined}
-          value={value.wardCode}
+          data-value={value.wardCode}
           disabled={!value.provinceCode}
-          onChange={(e) => {
-            const code = e.target.value;
-            const name = communesQ.data?.find((c) => c.code === code)?.name ?? '';
-            onChange({ ...value, ward: name, wardCode: code });
-          }}
-          className={errorWard ? ui.fieldError : ui.field}
+          onClick={() => setOpen('ward')}
+          className={`${errorWard ? ui.fieldError : ui.field} ${TRIGGER}`}
         >
-          <option value="">
-            {!value.provinceCode ? 'Chọn tỉnh/thành trước' : communesQ.isLoading ? 'Đang tải…' : 'Chọn phường/xã'}
-          </option>
-          {(communesQ.data ?? []).map((c) => (
-            <option key={c.code} value={c.code}>
-              {c.name}
-            </option>
-          ))}
-        </select>
+          <span className={`min-w-0 truncate ${wardName ? '' : 'text-stone-600'}`}>
+            {wardName || (!value.provinceCode ? 'Chọn tỉnh/thành trước' : communesQ.isLoading ? 'Đang tải…' : 'Chọn phường/xã')}
+          </span>
+          <ChevronDown className="h-4 w-4 shrink-0 text-stone-600" aria-hidden />
+        </button>
         {errorWard && (
           <p id={`${wardId}-err`} className="mt-0.5 flex items-start gap-1 text-caption text-danger-fg">
             <AlertTriangle className="mt-px h-3 w-3 shrink-0" aria-hidden />
@@ -115,6 +127,34 @@ export function GeoPicker({
           <LoadFailed what="phường/xã" onRetry={() => void communesQ.refetch()} />
         )}
       </div>
+
+      <AddressLocationSheet
+        open={open === 'province'}
+        onClose={() => setOpen((cur) => (cur === 'province' ? null : cur))}
+        listId={`${provinceId}-list`}
+        title="Tỉnh/Thành phố"
+        options={provincesQ.data ?? []}
+        value={value.provinceCode}
+        status={status(provincesQ)}
+        onRetry={() => void provincesQ.refetch()}
+        onSelect={(o) => {
+          if (o.code === value.provinceCode) return;
+          onChange({ province: o.name, provinceCode: o.code, ward: '', wardCode: '' });
+          // Sheet tỉnh gọi onClose ngay sau onSelect; onClose chỉ đóng khi vẫn đang ở bước tỉnh nên bước Phường/Xã giữ nguyên.
+          setOpen('ward');
+        }}
+      />
+      <AddressLocationSheet
+        open={open === 'ward'}
+        onClose={() => setOpen((cur) => (cur === 'ward' ? null : cur))}
+        listId={`${wardId}-list`}
+        title="Phường/Xã"
+        options={communesQ.data ?? []}
+        value={value.wardCode}
+        status={status(communesQ)}
+        onRetry={() => void communesQ.refetch()}
+        onSelect={(o) => onChange({ ...value, ward: o.name, wardCode: o.code })}
+      />
     </>
   );
 }

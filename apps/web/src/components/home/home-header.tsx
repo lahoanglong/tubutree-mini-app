@@ -50,9 +50,9 @@ export function HomeHeader({ unreadCount }: { unreadCount: number }) {
           <CountBadge count={unreadCount} label={homeText.unreadBadge(unreadCount)} />
         </Link>
       )}
-      <Link href="/gio-hang" aria-label={count > 0 ? `Giỏ hàng, ${count} sản phẩm` : 'Giỏ hàng'} className={BUTTON}>
+      <Link href="/gio-hang" data-cart-target="" aria-label={count > 0 ? `Giỏ hàng, ${count} sản phẩm` : 'Giỏ hàng'} className={BUTTON}>
         <ShoppingCart className="h-5 w-5" aria-hidden="true" />
-        <CountBadge count={count} />
+        <CountBadge count={count} bump />
       </Link>
     </div>
   );

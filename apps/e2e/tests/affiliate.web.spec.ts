@@ -187,8 +187,11 @@ test.describe('Web khách: CTV', () => {
     const dialog = page.getByRole('dialog', { name: 'Lên đơn hộ khách' });
     await dialog.getByLabel('Tên người nhận').fill('Lê Cúc');
     await dialog.getByLabel('Số điện thoại').fill('0933 444 555');
-    await dialog.getByLabel('Tỉnh/Thành phố').selectOption('84_VN01');
-    await dialog.getByLabel('Phường/Xã').selectOption('84_VN0101');
+    await dialog.getByLabel('Tỉnh/Thành phố').click();
+    await page.getByRole('option', { name: 'Hà Nội' }).click();
+    // Chọn tỉnh xong sheet Phường/Xã tự mở.
+    await page.getByRole('option', { name: 'Phường Ba Đình' }).click();
+    await expect(dialog.getByLabel('Phường/Xã')).toContainText('Phường Ba Đình');
     await dialog.getByLabel('Địa chỉ (số nhà, đường)').fill('9 Trần Phú');
     await dialog.getByPlaceholder('Tìm sản phẩm để thêm…').fill('nước');
     await dialog.getByRole('button', { name: /Nước rửa chén/ }).click();

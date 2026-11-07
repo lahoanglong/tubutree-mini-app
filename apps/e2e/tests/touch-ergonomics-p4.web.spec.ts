@@ -110,7 +110,7 @@ for (const width of NARROW_WIDTHS) {
       await expectPressFeedback(page, page.getByRole('button', { name: 'Sửa' }).first(), 'nút Sửa');
       await expectPressFeedback(page, page.getByRole('button', { name: 'Xoá' }).first(), 'nút Xoá');
 
-      // Web sửa địa chỉ ngay trong thẻ (không có tấm đáy) và chọn Tỉnh/Phường bằng ô chọn gốc của trình duyệt: dò cả form.
+      // Web sửa địa chỉ ngay trong thẻ (không có tấm đáy), Tỉnh/Phường chọn trong sheet tìm không dấu (sheet dò riêng ở address-location-sheet.web.spec.ts): dò cả form.
       await page.getByRole('button', { name: 'Sửa' }).first().click();
       await expect(page.getByRole('heading', { name: 'Sửa địa chỉ' })).toBeVisible();
       await expect(page.getByLabel('Tỉnh/Thành phố')).toBeVisible();
