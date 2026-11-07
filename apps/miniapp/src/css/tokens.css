@@ -23,6 +23,8 @@
   --dur-release: var(--p-dur-release);
   --ease-spring: var(--p-ease-spring);
   --ease-drawer: var(--p-ease-drawer);
+  --ease-story: var(--p-ease-story);
+  --dur-story: var(--p-dur-story);
 
   /* Trắng/hổ phách trong suốt: không có token v2 tương ứng (--color-bg-scrim* là nền mờ tối/sáng khác
    * mục đích), nên định nghĩa tại đây để code chỉ tham chiếu tên, không rải rgba() thô. */

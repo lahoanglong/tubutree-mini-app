@@ -14,6 +14,8 @@
   --dur-release: var(--p-dur-release);
   --ease-spring: var(--p-ease-spring);
   --ease-drawer: var(--p-ease-drawer);
+  --ease-story: var(--p-ease-story);
+  --dur-story: var(--p-dur-story);
 
   --color-skeleton-shimmer: rgba(255, 255, 255, 0.65);
   --color-media-dot-idle: rgba(255, 255, 255, 0.85);
@@ -810,11 +812,11 @@
 }
 
 /* ProductStoryShowcase: mặc định là bố cục 375px của Mini; từ md chỉ đổi cột (lưới ở lớp Tailwind của component). */
-.tubu-story { color: var(--color-text-primary); }
+.tubu-story { color: var(--color-text-primary); font-variant-numeric: tabular-nums; }
 .tubu-story-stage {
   position: relative; aspect-ratio: 1 / 1; overflow: hidden;
   border-radius: var(--radius-media);
-  transition: background var(--motion-emphasize);
+  transition: background var(--dur-story) var(--ease-story);
 }
 .tubu-story-product { position: absolute; inset: 12%; width: 76%; height: 76%; object-fit: contain; }
 /* Ảnh có nền (poster, ảnh chụp bối cảnh) vào thẻ nổi, cùng số đo với Mini: bo 24px, viền mảnh, bóng mềm. */
@@ -825,7 +827,7 @@
   box-shadow: var(--elevation-2);
 }
 .tubu-story-layer { position: absolute; display: block; width: 24%; aspect-ratio: 1 / 1; pointer-events: none; }
-.tubu-story-layer[data-animated='true'] { animation: tubu-story-fall var(--p-dur-emphasize) var(--p-ease-out) both; }
+.tubu-story-layer[data-animated='true'] { animation: tubu-story-fall var(--dur-story) var(--ease-story) both; }
 .tubu-story-layer[data-from='top'] { --story-from: 0 -160%; }
 .tubu-story-layer[data-from='bottom'] { --story-from: 0 160%; }
 .tubu-story-layer[data-from='left'] { --story-from: -160% 0; }
@@ -856,7 +858,7 @@
 .tubu-story-arc-item {
   display: inline-flex; align-items: center; min-height: 2.75rem; min-width: 2.75rem; padding: 0 var(--space-inline-sm);
   border: 1px solid var(--color-border-default); border-radius: var(--radius-pill); background: var(--color-bg-surface); color: var(--color-text-primary);
-  font-family: var(--font-ui); font-size: var(--type-label-size); line-height: var(--type-label-lh); font-weight: 600; cursor: pointer;
+  font-family: var(--font-ui); font-size: var(--type-label-size); line-height: var(--type-label-lh); font-weight: 600; font-variant-numeric: tabular-nums; cursor: pointer;
   transform: translateX(calc(var(--arc-offset, 0) * 0.375rem)) translateY(calc(var(--arc-lift, 0) * 0.0625rem)) rotate(var(--arc-rot, 0deg)) scale(var(--arc-scale, 1));
   transition: transform var(--p-dur-enter) var(--p-ease-spring);
 }
@@ -865,12 +867,19 @@
 .tubu-story-chips { display: flex; gap: 0.5rem; }
 .tubu-story-chip {
   min-height: 2.75rem; min-width: 2.75rem; border: 0; border-radius: var(--radius-pill);
-  background: var(--color-bg-chip, var(--color-bg-subtle)); color: var(--color-text-primary); font: inherit; font-weight: 600; cursor: pointer;
+  background: var(--color-bg-chip, var(--color-bg-subtle)); color: var(--color-text-primary); font: inherit; font-weight: 600; font-variant-numeric: tabular-nums; cursor: pointer;
+  transition: transform var(--p-dur-release) var(--p-ease-out), background-color var(--dur-story) var(--ease-story), color var(--dur-story) var(--ease-story);
 }
 .tubu-story-chip[aria-current='step'] { background: var(--color-action-primary-bg); color: var(--color-action-primary-fg); }
 .tubu-story-progress { height: 0.25rem; margin-top: 0.75rem; border-radius: var(--radius-pill); background: var(--color-track); overflow: hidden; }
-.tubu-story-progress > span { display: block; height: 100%; background: var(--color-action-primary-bg); transition: width var(--motion-emphasize); }
+.tubu-story-progress > span { display: block; height: 100%; background: var(--color-action-primary-bg); transition: width var(--dur-story) var(--ease-story); }
 .tubu-story-panel, .tubu-story-static > li { padding: var(--space-block) 0; }
+/* Nội dung chương mới trượt lên 8px và hiện dần; remount theo `key` của bước nên chạy lại mỗi lần đổi chương. */
+.tubu-story-panel-in { animation: tubu-story-panel-in var(--dur-story) var(--ease-story) both; }
+@keyframes tubu-story-panel-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
 .tubu-story-num { margin: 0; color: var(--color-text-brand); font-weight: 700; font-size: var(--type-caption-size); }
 .tubu-story-step-title { margin: 0.25rem 0 0; font-size: var(--type-title-sm-size); line-height: var(--type-title-sm-lh); font-weight: 700; }
 .tubu-story-step-body { margin: 0.25rem 0 0; color: var(--color-text-secondary); font-size: var(--type-body-sm-size); line-height: var(--type-body-sm-lh); }
@@ -900,5 +909,5 @@
   .tubu-story-sticky { position: sticky; top: calc(var(--header-h, 0px) + 1rem); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .tubu-story-layer[data-animated='true'], .tubu-story-stage, .tubu-story-arc-item, .tubu-story-progress > span { animation: none; transition: none; }
+  .tubu-story-layer[data-animated='true'], .tubu-story-panel-in, .tubu-story-stage, .tubu-story-arc-item, .tubu-story-chip, .tubu-story-progress > span { animation: none; transition: none; }
 }

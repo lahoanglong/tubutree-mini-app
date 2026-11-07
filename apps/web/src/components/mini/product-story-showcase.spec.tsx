@@ -4,7 +4,9 @@ import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProductDetail } from '@tubutree/app-core/api/catalog';
 import type { ProductStoryConfig } from '@tubutree/shared-types';
+import { act } from 'react';
 import { click } from '@/test-utils/dom';
+import { resetPreloadCache } from '@tubutree/app-core/commerce/story-preload';
 import { mount } from './harness';
 import { ProductStoryShowcase } from './product-story-showcase';
 
@@ -313,5 +315,126 @@ describe('khung ảnh sản phẩm trên sân khấu (floating-card / cutout)', 
     const c = mount(<ProductStoryShowcase product={PRODUCT} previewConfig={{ ...CONFIG, imageFrame: 'floating-card' }} />);
     expect(c.container.querySelector('[data-testid="story-stage"]')?.getAttribute('data-frame')).toBe('floating-card');
     c.unmount();
+  });
+});
+
+const imgLayer = (id: string, imageUrl: string) => ({ id, imageUrl, label: id, from: 'top' as const, xPct: 30, yPct: 30, scale: 1, rotateDeg: 0 });
+const IMAGE_STORY: ProductStoryConfig = {
+  version: 1,
+  enabled: true,
+  scenes: [
+    {
+      kind: 'ingredient_assembly',
+      steps: [0, 1, 2].map((i) => ({
+        title: `Chương ${i + 1}`,
+        body: `Nội dung ${i + 1}`,
+        layers: [imgLayer(`u${i}`, `/api/ing-${i}.png`), { id: `s${i}`, spriteId: 'lemongrass', label: 'Sả', from: 'left' as const, xPct: 60, yPct: 60, scale: 1, rotateDeg: 0 }],
+      })),
+    },
+  ],
+};
+
+describe('W40B: tải trước ảnh chương kế và chuyển chương mượt (web)', () => {
+  const loaded: string[] = [];
+  beforeEach(() => {
+    loaded.length = 0;
+    resetPreloadCache();
+    vi.stubGlobal(
+      'Image',
+      class {
+        decoding = '';
+        setAttribute() {}
+        set src(v: string) {
+          loaded.push(v);
+        }
+      },
+    );
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('mở ở chương 01 thì tải ảnh nguyên liệu của chương 02; sang chương kế tải tiếp chương sau nó; cuối cùng và quay lại không tải lại', () => {
+    const { container } = mount(<ProductStoryShowcase product={PRODUCT} previewConfig={IMAGE_STORY} />);
+    expect(loaded).toEqual(['/api/ing-1.png']);
+    const chips = qa(container, 'story-step-chip');
+    click(chips[1]!);
+    expect(loaded).toEqual(['/api/ing-1.png', '/api/ing-2.png']);
+    click(qa(container, 'story-step-chip')[2]!);
+    click(qa(container, 'story-step-chip')[0]!);
+    expect(loaded).toEqual(['/api/ing-1.png', '/api/ing-2.png']);
+  });
+
+  it('chỉ tải trước khi mục Story đã gần khung nhìn: chưa cuộn tới thì không tốn dữ liệu', () => {
+    const observers: IntersectionObserverCallback[] = [];
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        constructor(cb: IntersectionObserverCallback) {
+          observers.push(cb);
+        }
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+    );
+    mount(<ProductStoryShowcase product={PRODUCT} previewConfig={IMAGE_STORY} />);
+    expect(loaded).toEqual([]);
+    const fire = (isIntersecting: boolean) =>
+      act(() => {
+        for (const cb of observers) cb([{ isIntersecting, target: document.body } as unknown as IntersectionObserverEntry], {} as IntersectionObserver);
+      });
+    fire(false);
+    expect(loaded).toEqual([]);
+    fire(true);
+    expect(loaded).toEqual(['/api/ing-1.png']);
+  });
+
+  it('giảm chuyển động: bản tĩnh đã vẽ mọi lớp nên không tải trước gì thêm', () => {
+    reduced = true;
+    mount(<ProductStoryShowcase product={PRODUCT} previewConfig={IMAGE_STORY} />);
+    expect(loaded).toEqual([]);
+  });
+
+  it('đổi chương dựng lại khối nội dung (key theo bước) để chạy lại hiệu ứng vào, chữ đổi theo', () => {
+    const { container } = mount(<ProductStoryShowcase product={PRODUCT} previewConfig={IMAGE_STORY} />);
+    const before = q(container, 'story-step-panel')!.firstElementChild!;
+    expect(before.classList.contains('tubu-story-panel-in')).toBe(true);
+    click(qa(container, 'story-step-chip')[1]!);
+    const after = q(container, 'story-step-panel')!.firstElementChild!;
+    expect(after.classList.contains('tubu-story-panel-in')).toBe(true);
+    expect(after).not.toBe(before);
+    expect(after.textContent).toContain('Chương 2');
+  });
+
+  describe('mini.css', () => {
+    const css = readFileSync(resolve(__dirname, 'mini.css'), 'utf8');
+    const reduced = [...css.matchAll(/@media \(prefers-reduced-motion: reduce\)\s*\{([\s\S]*?)\n\}/g)].map((m) => m[1]).join('\n');
+    const line = (sel: string) => new RegExp(`${sel.replace(/[.[\]()']/g, '\\$&')}\\s*\\{([^}]*)\\}`).exec(css)?.[1] ?? '';
+
+    it('chuyển chương, lớp rơi, nền cảnh và thanh tiến trình dùng ease-story 240ms như Mini', () => {
+      expect(line('.tubu-story-panel-in')).toMatch(/animation:\s*tubu-story-panel-in var\(--dur-story\) var\(--ease-story\) both/);
+      expect(line(".tubu-story-layer[data-animated='true']")).toMatch(/animation:\s*tubu-story-fall var\(--dur-story\) var\(--ease-story\) both/);
+      expect(line('.tubu-story-stage')).toMatch(/transition:\s*background var\(--dur-story\) var\(--ease-story\)/);
+      expect(line('.tubu-story-progress > span')).toMatch(/transition:\s*width var\(--dur-story\) var\(--ease-story\)/);
+      expect(line('.tubu-story-chip')).toMatch(/transition:\s*transform var\(--p-dur-release\) var\(--p-ease-out\), background-color var\(--dur-story\) var\(--ease-story\), color var\(--dur-story\) var\(--ease-story\)/);
+      expect(css).toMatch(/--ease-story:\s*var\(--p-ease-story\)/);
+      expect(css).toMatch(/--dur-story:\s*var\(--p-dur-story\)/);
+    });
+
+    it('giảm chuyển động tắt hiệu ứng vào của chương và đổi màu chip', () => {
+      expect(reduced).toMatch(/\.tubu-story-panel-in/);
+      expect(reduced).toMatch(/\.tubu-story-chip/);
+      expect(reduced).toMatch(/animation:\s*none;\s*transition:\s*none/);
+    });
+
+    it('số đều cho cả dải câu chuyện, chip và nhãn vòng cung; vùng chạm chip, vòng cung, nút đóng, nút mua từ 44px', () => {
+      expect(line('.tubu-story')).toMatch(/font-variant-numeric:\s*tabular-nums/);
+      expect(line('.tubu-story-chip')).toMatch(/font-variant-numeric:\s*tabular-nums/);
+      expect(line('.tubu-story-arc-item')).toMatch(/font-variant-numeric:\s*tabular-nums/);
+      for (const sel of ['.tubu-story-chip', '.tubu-story-arc-item', '.tubu-story-close']) {
+        expect(line(sel), sel).toMatch(/min-height:\s*2\.75rem/);
+        expect(line(sel), sel).toMatch(/min-width:\s*2\.75rem/);
+      }
+      expect(line('.tubu-story-btn')).toMatch(/min-height:\s*3rem/);
+    });
   });
 });

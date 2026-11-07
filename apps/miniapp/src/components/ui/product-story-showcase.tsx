@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import type { ProductDetail } from '@tubutree/app-core/api/catalog';
 import { ambientVar, arcSlot, layersUpTo, resolveStoryConfig, storyView, type StoryViewModel } from '@tubutree/app-core/commerce/product-story';
+import { preloadImages, STORY_PRELOAD_ROOT_MARGIN, storyPreloadUrls } from '@tubutree/app-core/commerce/story-preload';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import type { IngredientLayerSprite, ProductStoryConfig, StoryFrom } from '@tubutree/shared-types';
 import { Button } from './button';
@@ -183,7 +184,27 @@ function StepChips({ steps, active, onPick }: { steps: { num: string; title: str
   );
 }
 
-function Scenes({ props, view }: { props: ProductStoryShowcaseProps; view: StoryViewModel }) {
+/** Mục Story đã vào (hoặc sắp vào) khung nhìn. Môi trường không có IntersectionObserver coi như đã thấy, để vẫn tải trước. */
+function useSeen(ref: RefObject<Element | null>, active: boolean): boolean {
+  const [seen, setSeen] = useState(() => typeof IntersectionObserver === 'undefined');
+  useEffect(() => {
+    const el = ref.current;
+    if (seen || !active || !el) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((e) => e.isIntersecting)) return;
+        setSeen(true);
+        io.disconnect();
+      },
+      { rootMargin: STORY_PRELOAD_ROOT_MARGIN },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [ref, seen, active]);
+  return seen;
+}
+
+function Scenes({ props, view, seen }: { props: ProductStoryShowcaseProps; view: StoryViewModel; seen: boolean }) {
   const { product, selectedVariationId, onSelectVariation } = props;
   const [activeStep, setActiveStep] = useState(0);
   const [arcPick, setArcPick] = useState<number | null>(null);
@@ -198,6 +219,12 @@ function Scenes({ props, view }: { props: ProductStoryShowcaseProps; view: Story
   const step = Math.min(activeStep, Math.max(0, view.steps.length - 1));
   const layers = view.animated ? layersUpTo(view.steps, step) : view.staticLayers;
   const showStage = view.steps.length > 0 || arc !== null;
+
+  // Bản tĩnh (giảm chuyển động) đã vẽ mọi lớp ngay nên không còn gì để tải trước; bản động tải ảnh nguyên liệu của chương kế để vuốt sang không chớp trắng.
+  // Chỉ tải khi mục Story đã gần khung nhìn: khách không cuộn tới thì không tốn dữ liệu.
+  useEffect(() => {
+    if (view.animated && seen) preloadImages(storyPreloadUrls(view.steps, step));
+  }, [view.animated, view.steps, step, seen]);
 
   return (
     <>
@@ -240,8 +267,10 @@ function Scenes({ props, view }: { props: ProductStoryShowcaseProps; view: Story
           <div className="tubu-story-steps">
             <StepChips steps={view.steps} active={step} onPick={pickStep} />
             <div data-testid="story-step-panel" aria-live="polite" className="tubu-story-panel">
-              <h3 className="tubu-story-step-title">{view.steps[step]!.title}</h3>
-              <p className="tubu-story-step-body">{view.steps[step]!.body}</p>
+              <div key={step} className="tubu-story-panel-in">
+                <h3 className="tubu-story-step-title">{view.steps[step]!.title}</h3>
+                <p className="tubu-story-step-body">{view.steps[step]!.body}</p>
+              </div>
             </div>
           </div>
         ) : (
@@ -331,17 +360,19 @@ export function ProductStoryShowcase(props: ProductStoryShowcaseProps): JSX.Elem
   const reduced = useReducedMotion();
   const config = useMemo(() => previewConfig ?? resolveStoryConfig(product), [previewConfig, product]);
   const view = useMemo(() => (config ? storyView(config, { reducedMotion: reduced }) : null), [config, reduced]);
+  const sectionRef = useRef<HTMLElement>(null);
+  const seen = useSeen(sectionRef, config !== null && view !== null);
   if (!config || !view) return null;
 
   const title = fillCopy('story.title');
   const section = (
-    <section data-testid="product-story" aria-label={title} data-animated={view.animated ? 'true' : 'false'} data-inline={fullscreen ? undefined : 'true'} className="tubu-story">
+    <section ref={sectionRef} data-testid="product-story" aria-label={title} data-animated={view.animated ? 'true' : 'false'} data-inline={fullscreen ? undefined : 'true'} className="tubu-story">
       {!fullscreen && (
         <SectionTitle block style={{ marginBottom: 'var(--space-stack-sm)' }}>
           {title}
         </SectionTitle>
       )}
-      <Scenes props={props} view={view} />
+      <Scenes props={props} view={view} seen={seen} />
     </section>
   );
   return fullscreen ? <Fullscreen props={props} body={section} /> : section;

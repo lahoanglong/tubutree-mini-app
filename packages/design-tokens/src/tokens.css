@@ -96,6 +96,9 @@
   --p-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   /* Tấm đáy trượt vào: bắt đầu nhanh rồi tắt dần để tấm "đáp" xuống, không khựng ở đầu nhịp như ease-in. */
   --p-ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  /* Chuyển chương câu chuyện sản phẩm: ra nhanh rồi tắt dần êm, không bật nảy; 240ms nằm giữa 220 và 260ms. */
+  --p-ease-story: cubic-bezier(0.22, 1, 0.36, 1);
+  --p-dur-story: 240ms;
 
   /* ── Layer 2: SEMANTIC — the only layer pages/components may reference ──── */
   --color-bg-canvas: var(--stone-50);

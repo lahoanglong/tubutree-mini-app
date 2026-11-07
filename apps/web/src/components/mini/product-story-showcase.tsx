@@ -1,10 +1,11 @@
 'use client';
 
 // Nguồn: apps/miniapp/src/components/ui/product-story-showcase.tsx (cùng props, cùng test-id).
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from 'react';
 import type { ProductDetail } from '@tubutree/app-core/api/catalog';
 import type { HudCalloutPoint, IngredientLayerSprite, ProductStoryConfig } from '@tubutree/shared-types';
 import { arcSlot, ambientVar, layersUpTo, resolveStoryConfig, storyView } from '@tubutree/app-core/commerce/product-story';
+import { preloadImages, STORY_PRELOAD_ROOT_MARGIN, storyPreloadUrls } from '@tubutree/app-core/commerce/story-preload';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { ProductImage } from './product-image';
 import { StorySprite } from './story-sprite';
@@ -68,6 +69,26 @@ function Callout({ point }: { point: HudCalloutPoint }) {
   );
 }
 
+/** Mục Story đã vào (hoặc sắp vào) khung nhìn. Môi trường không có IntersectionObserver coi như đã thấy, để vẫn tải trước. */
+function useSeen(ref: RefObject<Element | null>, active: boolean): boolean {
+  const [seen, setSeen] = useState(() => typeof IntersectionObserver === 'undefined');
+  useEffect(() => {
+    const el = ref.current;
+    if (seen || !active || !el) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((e) => e.isIntersecting)) return;
+        setSeen(true);
+        io.disconnect();
+      },
+      { rootMargin: STORY_PRELOAD_ROOT_MARGIN },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [ref, seen, active]);
+  return seen;
+}
+
 export function ProductStoryShowcase({ product, selectedVariationId, onSelectVariation, onAddToCart, onBuyNow, buyDisabled = false, previewConfig, fullscreen = false, onClose }: ProductStoryShowcaseProps) {
   const config = useMemo(() => previewConfig ?? resolveStoryConfig(product), [previewConfig, product]);
   // Mặc định bản có chuyển động: HTML dựng sẵn và lần hydrate đầu phải khớp nhau; thiết lập giảm chuyển động chỉ biết ở trình duyệt.
@@ -106,6 +127,15 @@ export function ProductStoryShowcase({ product, selectedVariationId, onSelectVar
     sentinels.current.forEach((el) => el && io.observe(el));
     return () => io.disconnect();
   }, [animated, stepCount]);
+
+  // Bản tĩnh (giảm chuyển động) đã vẽ mọi lớp ngay nên không còn gì để tải trước; bản động tải ảnh nguyên liệu của chương kế để chuyển chương không chớp trắng.
+  // `reduced` mặc định false ở lần render đầu (để hydrate khớp HTML dựng sẵn) nên đọc thiết lập thật trực tiếp ở đây, không tin `animated` của lần đó.
+  // Chỉ tải khi mục Story đã gần khung nhìn: khách không cuộn tới thì không tốn dữ liệu.
+  const storySteps = view?.steps;
+  const seen = useSeen(rootRef, view !== null);
+  useEffect(() => {
+    if (animated && seen && storySteps && !prefersReducedMotion()) preloadImages(storyPreloadUrls(storySteps, step));
+  }, [animated, seen, storySteps, step]);
 
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
@@ -244,9 +274,11 @@ export function ProductStoryShowcase({ product, selectedVariationId, onSelectVar
           <span style={{ width: `${((activeStep + 1) / stepCount) * 100}%` }} />
         </div>
         <div data-testid="story-step-panel" aria-live="polite" className="tubu-story-panel">
-          <p className="tubu-story-num">{panel?.num}</p>
-          <h3 className="tubu-story-step-title">{panel?.title}</h3>
-          <p className="tubu-story-step-body">{panel?.body}</p>
+          <div key={activeStep} className="tubu-story-panel-in">
+            <p className="tubu-story-num">{panel?.num}</p>
+            <h3 className="tubu-story-step-title">{panel?.title}</h3>
+            <p className="tubu-story-step-body">{panel?.body}</p>
+          </div>
         </div>
         </div>
         {fullscreen ? null : sentinelEls}
