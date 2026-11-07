@@ -41,14 +41,14 @@ export async function probeTapTargets(page: Page, options: TapProbeOptions = {})
         return r.width > 1 && r.height > 1;
       };
       // Ô chọn của Mini App: khung `*-hit-area` (cao ≥ 44px) chuyển cú chạm vào đệm sang ô nhập bên trong (form.tsx, forwardPaddingTap), nên đệm cũng là vùng chạm của ô.
-      // Ô nhập nằm trong `label` thì cả nhãn là một điều khiển: chạm nhãn hay chạm ô đều bật tắt cùng một ô.
+      // Checkbox, radio nằm trong `label` thì cả nhãn là một điều khiển: chạm nhãn hay chạm ô đều bật tắt cùng một ô. Ô nhập chữ tự là vùng chạm của nó.
       const ownerOf = (x: number, y: number): Element | null => {
         if (x < 0 || y < 0 || x >= vw || y >= vh) return null;
         const hit = document.elementFromPoint(x, y);
         if (!hit) return null;
         let own: Element | null = hit.closest(selector);
         if (!own) own = hit.closest('[data-testid$="-hit-area"]')?.querySelector(selector) ?? null;
-        if (own && own.tagName === 'INPUT') own = own.closest('label') ?? own;
+        if (own instanceof HTMLInputElement && ['checkbox', 'radio'].includes(own.type)) own = own.closest('label') ?? own;
         return own;
       };
       const inlineInText = (el: Element): boolean => {
@@ -72,8 +72,13 @@ export async function probeTapTargets(page: Page, options: TapProbeOptions = {})
         if (el.closest('[aria-hidden="true"], [hidden], [inert], [data-probe-ignore]')) continue;
         if (ignore.some((sel) => el.closest(sel))) continue;
         if (inlineInText(el)) continue;
-        // label chỉ tính khi nó bọc một ô nhập thật: nhãn chữ trơn không phải điều khiển.
-        if (el.tagName === 'LABEL' && !el.querySelector('input, select, textarea') && !el.getAttribute('for')) continue;
+        // label chỉ tính khi nó là chữ của một ô chọn (checkbox, radio): chạm nhãn bật tắt ô, nên nhãn phải đủ lớn. Nhãn đặt trên ô nhập chữ (Người nhận, Số điện thoại)
+        // chỉ là chú thích: ô nhập bên dưới mới là vùng chạm và được dò riêng, nên nhãn chữ trơn không đo.
+        if (el.tagName === 'LABEL') {
+          const target = el.querySelector('input, select, textarea') ?? (el.getAttribute('for') ? document.getElementById(el.getAttribute('for')!) : null);
+          const type = target instanceof HTMLInputElement ? target.type : '';
+          if (!target || !['checkbox', 'radio'].includes(type)) continue;
+        }
         (el as HTMLElement).scrollIntoView({ block: 'center', inline: 'center' });
         const r = el.getBoundingClientRect();
         const cx = Math.round(r.left + r.width / 2);
@@ -158,6 +163,24 @@ export async function stickyBarBottomClearance(page: Page, inset: number): Promi
     }
     return Math.round((vh - px - lowest) * 10) / 10;
   }, inset);
+}
+
+/** Đợi tới khi khung của `target` đứng yên (hai lần đọc cách nhau 120ms giống nhau): tấm đáy còn trượt thì nhấn giữ trượt khỏi chuột. */
+export async function waitUntilStill(target: Locator): Promise<void> {
+  const rect = async () => JSON.stringify(await target.boundingBox());
+  let prev = await rect();
+  await expect
+    .poll(
+      async () => {
+        await target.page().waitForTimeout(120);
+        const now = await rect();
+        const still = now === prev;
+        prev = now;
+        return still;
+      },
+      { timeout: 5_000 },
+    )
+    .toBe(true);
 }
 
 /** Nút bấm của DS co 0,97 khi nhấn, thẻ co 0,985: mọi điều khiển phải rơi vào khoảng 0,97..0,99 (cùng khoảng `tokens.css` ở hai app chặn). */

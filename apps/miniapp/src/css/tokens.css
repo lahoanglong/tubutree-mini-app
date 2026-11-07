@@ -580,6 +580,17 @@ body.with-back-btn .page.page-bleed {
   min-width: 0;
   max-width: 100%;
   -webkit-overflow-scrolling: touch;
+  /* Hàng cuộn ngang trên điện thoại không vẽ thanh cuộn: thanh cuộn kiểu máy tính ăn mất ~15px đáy hàng và che phần dưới của tab, chip (vùng chạm 44px bị cắt). Mờ mép (.tubu-scroll-fade) đã báo còn nội dung. */
+  scrollbar-width: none;
+}
+.scroll-x::-webkit-scrollbar {
+  display: none;
+}
+
+/* Số đều cho cả màn: điểm, tiền, mệnh giá mã, hạn, lịch sử cộng/trừ điểm đổi liên tục hoặc xếp cột cạnh nhau, số tỉ lệ làm cột nhảy bề rộng.
+   Đặt ở gốc màn (số nằm sâu trong nhiều thẻ); nút và ô nhập tự đặt lại `font`, nên `.tubu-btn` đã có `font-variant-numeric: inherit` (W38A). */
+.tubu-nums {
+  font-variant-numeric: tabular-nums;
 }
 
 /*

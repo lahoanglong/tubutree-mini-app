@@ -538,6 +538,11 @@ describe('/tai-khoan/diem-xanh — thẻ thành viên số', () => {
     expect(byText(document.body, 'button', 'Đã chép')).not.toBeNull();
   });
 
+  it('W40A: nút "Chép" co khi nhấn (tubu-press như nút chép của Mini App)', async () => {
+    await open();
+    expect(byText(document.body, 'button', 'Chép')!.className).toContain('tubu-press');
+  });
+
   it('chép không được: báo lỗi, không báo "Đã sao chép"', async () => {
     vi.stubGlobal('navigator', { clipboard: { writeText: async () => Promise.reject(new Error('denied')) } });
     await open();

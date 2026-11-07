@@ -66,7 +66,7 @@ export function CountBadge({ count, label }: { count: number; label?: string }) 
       style={{
         position: 'absolute', top: -2, right: -2, minWidth: 18, height: 18, boxSizing: 'border-box', padding: '0 4px',
         borderRadius: 'var(--radius-pill)', background: 'var(--color-promo-solid-bg)', color: 'var(--color-promo-solid-fg)',
-        fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: 11, fontWeight: 700, fontVariantNumeric: 'tabular-nums', display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}
     >
       {count > 99 ? '99+' : count}

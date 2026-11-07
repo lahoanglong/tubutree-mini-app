@@ -127,7 +127,7 @@ function forgetOrderParam() {
 /** Khung chờ khi trang được dựng sẵn (ISR): tham số mở form chỉ đọc được ở trình duyệt. Giữ id để link #danh-gia cuộn tới. */
 export function ProductReviewsFallback() {
   return (
-    <section id="danh-gia" data-section="pdp-reviews" aria-labelledby="danh-gia-title" className={`${pdpBand} scroll-mt-20`}>
+    <section id="danh-gia" data-section="pdp-reviews" aria-labelledby="danh-gia-title" className={`${pdpBand} scroll-mt-20 tabular-nums`}>
       <h2 id="danh-gia-title" className={pdpSectionTitle}>
         Đánh giá
       </h2>
@@ -229,7 +229,7 @@ export function ProductReviews({ slug }: { slug: string }) {
   const retryMore = () => void (moreQ.isFetchNextPageError ? moreQ.fetchNextPage() : moreQ.refetch());
 
   return (
-    <section id="danh-gia" data-section="pdp-reviews" aria-labelledby="danh-gia-title" className={`${pdpBand} scroll-mt-20`}>
+    <section id="danh-gia" data-section="pdp-reviews" aria-labelledby="danh-gia-title" className={`${pdpBand} scroll-mt-20 tabular-nums`}>
       <div className="flex flex-wrap items-center justify-between gap-2 max-md:min-h-12">
         <h2 id="danh-gia-title" className={pdpSectionTitle}>
           Đánh giá{data && data.count > 0 ? ` (${data.count})` : ''}
@@ -327,7 +327,8 @@ export function ProductReviews({ slug }: { slug: string }) {
           </div>
 
           {/* Hàng chip lọc như Mini App: đổi bộ lọc thì danh sách về lại 5 dòng đầu. */}
-          <div className="mt-3 flex flex-wrap gap-2">
+          {/* Hàng dưới cách hàng trên 12px (gap-y-3): chip nhìn cao ~33px, vùng chạm 44px giãn ~5,5px mỗi phía; khoảng 8px làm vùng chạm hai hàng chồng nhau. */}
+          <div className="mt-3 flex flex-wrap gap-x-2 gap-y-3">
             {chips.map((f) => (
               <Chip
                 key={String(f.key)}
@@ -625,7 +626,7 @@ function ReviewForm({
             aria-checked={i === rating}
             aria-label={`${i} sao`}
             onClick={() => pickRating(i)}
-            className="inline-flex h-11 w-11 items-center justify-center rounded-control"
+            className="tubu-press inline-flex h-11 w-11 items-center justify-center rounded-control"
           >
             <Star aria-hidden="true" className={`h-7 w-7 ${i <= rating ? 'fill-honey-500 text-honey-500' : 'fill-[color:var(--stone-450)] text-[color:var(--stone-450)]'}`} />
           </button>

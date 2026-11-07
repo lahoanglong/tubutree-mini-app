@@ -6,7 +6,7 @@ import VouchersView from './vouchers-view';
 // Khung rộng (không AccountShell): kho mã xếp lưới ba cột từ lg. View đọc useSearchParams (?tab=), build tĩnh bắt buộc có Suspense bao ngoài.
 export default function VouchersPage() {
   return (
-    <main className={`${PAGE_WIDE} py-6 max-md:pt-0`}>
+    <main className={`${PAGE_WIDE} py-6 max-md:pt-0 tabular-nums`}>
       <Suspense fallback={<AuthLoading />}>
         <VouchersView />
       </Suspense>

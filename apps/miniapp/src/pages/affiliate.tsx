@@ -136,7 +136,7 @@ export default function AffiliatePage() {
   if (phase !== 'authenticated' || meQ.isLoading) {
     const skeleton = <CtvDashboardSkeleton />;
     return (
-      <Page style={{ background: 'var(--color-bg-canvas)' }}>
+      <Page className="tubu-nums" style={{ background: 'var(--color-bg-canvas)' }}>
         <PageHeader title={PAGE_TITLE} />
         {phase === 'authenticated' ? skeleton : <AuthPhaseView phase={phase} loading={skeleton} />}
       </Page>
@@ -145,7 +145,7 @@ export default function AffiliatePage() {
 
   if (meQ.isError && !meQ.data) {
     return (
-      <Page style={{ background: 'var(--color-bg-canvas)' }}>
+      <Page className="tubu-nums" style={{ background: 'var(--color-bg-canvas)' }}>
         <PageHeader title={PAGE_TITLE} />
         <ErrorState message={getLoadErrorMessage(meQ.error)} onRetry={() => void meQ.refetch()} />
       </Page>
@@ -160,7 +160,7 @@ export default function AffiliatePage() {
 function CannotRegister() {
   const navigate = useNavigate();
   return (
-    <Page style={{ background: 'var(--color-bg-canvas)' }}>
+    <Page className="tubu-nums" style={{ background: 'var(--color-bg-canvas)' }}>
       <PageHeader title={PAGE_TITLE} />
       <EmptyState
         art="leaf"
@@ -210,7 +210,7 @@ function RegisterGate() {
   ];
 
   return (
-    <Page style={{ background: 'var(--color-bg-canvas)' }}>
+    <Page className="tubu-nums" style={{ background: 'var(--color-bg-canvas)' }}>
       <PageHeader title={PAGE_TITLE} />
       <div style={{ padding: 16 }}>
         <div
@@ -380,7 +380,7 @@ function Dashboard() {
   ];
 
   return (
-    <Page style={{ background: 'var(--color-bg-canvas)' }}>
+    <Page className="tubu-nums" style={{ background: 'var(--color-bg-canvas)' }}>
       {/* Giữ tiêu đề khi cuộn: trang CTV dài, mất chữ "Cộng tác viên" là mất chỗ đang đứng. */}
       <div style={{ position: 'sticky', top: 0, zIndex: 5 }}>
         <PageHeader title={PAGE_TITLE} />

@@ -148,7 +148,7 @@ export default function LoyaltyPage() {
   );
 
   return (
-    <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 'calc(16px + var(--safe-bottom))' }}>
+    <Page className="tubu-nums" style={{ background: 'var(--color-bg-canvas)', paddingBottom: 'calc(16px + var(--safe-bottom))' }}>
       <PageHeader title="Hạng thành viên & Điểm Xanh" />
 
       {phase !== 'authenticated' ? (

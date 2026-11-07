@@ -171,6 +171,14 @@ describe('ProductReviews (web) — danh sách công khai', () => {
     expect(c.querySelector<HTMLImageElement>('img[alt="Ảnh đánh giá"]')!.src).toMatch(/\/reviews\/c\/images\/0\?v=1$/);
   });
 
+  it('W40A: mục Đánh giá vẽ số đều (tabular-nums) và ngôi sao chọn co khi nhấn (tubu-press)', async () => {
+    const c = await mount();
+    expect(c.querySelector('section#danh-gia')!.className).toContain('tabular-nums');
+    click(button(c, 'Viết đánh giá'));
+    await flush();
+    expect(star(c, 3)!.className).toContain('tubu-press');
+  });
+
   it('ngôi sao chưa tô dùng --stone-450 (đủ tương phản 3:1 với nền), không còn stone-200', async () => {
     const c = await mount();
     const cls = Array.from(c.querySelectorAll('svg')).map((s) => s.getAttribute('class') ?? '');

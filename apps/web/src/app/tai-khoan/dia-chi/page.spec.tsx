@@ -90,6 +90,13 @@ describe('/tai-khoan/dia-chi — Sổ địa chỉ (BUYERWEB-14)', () => {
     expect(btn(c, 'Đặt mặc định cho địa chỉ của Trần Bình')).toBeDefined();
   });
 
+  it('W40A: nút Sửa, Đặt mặc định, Xoá co khi nhấn (tubu-press như ActionLink của Mini App)', async () => {
+    const c = await mount();
+    for (const name of ['Sửa địa chỉ của Nguyễn An', 'Xoá địa chỉ của Nguyễn An', 'Sửa địa chỉ của Trần Bình', 'Đặt mặc định cho địa chỉ của Trần Bình', 'Xoá địa chỉ của Trần Bình']) {
+      expect(btn(c, name)!.className, name).toContain('tubu-press');
+    }
+  });
+
   it('chưa có địa chỉ nào: nói rõ và vẫn có nút thêm', async () => {
     mocks.list = [];
     const c = await mount();

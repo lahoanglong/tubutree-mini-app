@@ -135,7 +135,7 @@ export default function VouchersPage() {
   }
 
   return (
-    <Page style={PAGE_STYLE}>
+    <Page className="tubu-nums" style={PAGE_STYLE}>
       <PullToRefresh onRefresh={refresh} />
       <div ref={anchorRef} />
       <PageHeader title={fillCopy('coupon.title')} subtitle={fillCopy('coupon.oneCodeHint')} />

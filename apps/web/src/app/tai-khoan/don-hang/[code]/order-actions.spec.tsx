@@ -417,8 +417,11 @@ describe('chi tiết đơn — mua lại (BUYERWEB-13)', () => {
     click(btn(container, 'Mua lại đơn này')!);
     await flush(4);
     click(sheetCta());
-    await flush(8);
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['cart'] });
+    // Chờ đến khi giỏ được tải lại thay vì đếm số nhịp: chạy cả bộ test song song trên CI chậm hơn, 8 nhịp cố định có lần chưa kịp.
+    await vi.waitFor(async () => {
+      await flush(1);
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: ['cart'] });
+    }, { timeout: 5_000, interval: 20 });
     expect(setData.mock.calls.some(([key]) => Array.isArray(key) && key[0] === 'cart')).toBe(false);
     invalidate.mockRestore();
     setData.mockRestore();

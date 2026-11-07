@@ -20,7 +20,7 @@ import { actionErrorText } from '@/lib/error-text';
 const MiniEmptyState = dynamic(() => import('@/components/mini/empty-state').then((m) => m.EmptyState), { ssr: false });
 
 /** ActionLink của Mini App: chữ 14px/600 xanh (Xóa đỏ), không gạch chân. */
-const LINK_MINI = 'min-w-11 justify-center max-md:text-sm max-md:no-underline max-md:text-[color:var(--color-text-brand)]';
+const LINK_MINI = 'tubu-press min-w-11 justify-center max-md:text-sm max-md:no-underline max-md:text-[color:var(--color-text-brand)]';
 
 const NOTICE_MS = 4000;
 
@@ -241,7 +241,7 @@ export default function AddressBookPage() {
                           setConfirmId(a.id);
                         }}
                         aria-label={`Xoá địa chỉ của ${a.recipient}`}
-                        className={`${ui.btnText} min-w-11 justify-center text-danger-fg max-md:no-underline max-md:text-sm max-md:text-[color:var(--color-text-danger)]`}
+                        className={`${ui.btnText} tubu-press min-w-11 justify-center text-danger-fg max-md:no-underline max-md:text-sm max-md:text-[color:var(--color-text-danger)]`}
                       >
                         Xoá
                       </button>
