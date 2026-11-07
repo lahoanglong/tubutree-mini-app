@@ -449,7 +449,7 @@ export function CouponBox({
             onClick={togglePanel}
             {...panelAria}
             data-testid="coupon-change"
-            className="flex min-h-11 w-full items-center justify-between gap-2 text-left md:hidden"
+            className="tubu-press flex min-h-11 w-full items-center justify-between gap-2 text-left md:hidden"
           >
             <span className="inline-flex min-w-0 flex-1 items-center gap-2">
               <span className="grid h-9 w-9 flex-none place-items-center rounded-control bg-promo-bg">
@@ -484,7 +484,7 @@ export function CouponBox({
           onClick={togglePanel}
           {...panelAria}
           data-testid="coupon-row"
-          className="flex min-h-11 w-full items-center justify-between gap-2 text-left text-sm font-semibold text-[color:var(--color-text-primary)]"
+          className="tubu-press flex min-h-11 w-full items-center justify-between gap-2 text-left text-sm font-semibold text-[color:var(--color-text-primary)]"
         >
           <span className="inline-flex items-center gap-2 max-md:gap-2.5">
             <span className="max-md:grid max-md:h-9 max-md:w-9 max-md:flex-none max-md:place-items-center max-md:rounded-control max-md:bg-promo-bg">

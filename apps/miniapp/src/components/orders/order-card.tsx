@@ -35,7 +35,7 @@ export function OrderCard({ order: o, onOpen, onReorder, onPay }: OrderCardProps
   return (
     <div
       data-testid="order-card"
-      className="tubu-press"
+      className="tubu-press-card"
       style={{
         position: 'relative',
         isolation: 'isolate',
@@ -73,7 +73,7 @@ export function OrderCard({ order: o, onOpen, onReorder, onPay }: OrderCardProps
               {o.items.length > 1 ? ` +${o.items.length - 1}` : ''}
             </Text>
           )}
-          <Text variant="caption" tone="tertiary" as="div">
+          <Text variant="caption" tone="tertiary" as="div" style={{ fontVariantNumeric: 'tabular-nums' }}>
             {vi.orders.itemCount(orderUnitCount(o.items))} · {formatDate(o.createdAt)}
           </Text>
         </div>
@@ -82,7 +82,7 @@ export function OrderCard({ order: o, onOpen, onReorder, onPay }: OrderCardProps
       {canPay && (
         <div data-testid="order-card-actions" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
           {showsPaymentDeadline(o) ? (
-            <Text variant="caption" tone="tertiary" as="span">
+            <Text variant="caption" tone="tertiary" as="span" style={{ fontVariantNumeric: 'tabular-nums' }}>
               {vi.orders.payBy(formatDateTime(o.paymentDeadline))}
             </Text>
           ) : (

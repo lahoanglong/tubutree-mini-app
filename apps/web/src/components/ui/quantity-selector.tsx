@@ -29,7 +29,7 @@ export function QuantitySelector({ value, max, min = 1, size = 'md', onChange, e
   const icon = size === 'md' ? 'h-[18px] w-[18px]' : 'h-[15px] w-[15px]';
   const btn = (disabled: boolean) =>
     `${side} inline-flex items-center justify-center rounded-control border border-stone-450 p-0 ${
-      disabled ? 'bg-stone-100 text-stone-500' : 'bg-stone-0 text-stone-900 active:scale-95'
+      disabled ? 'bg-stone-100 text-stone-500' : 'tubu-press bg-stone-0 text-stone-900'
     }`;
   const row = (
     <div className={`flex items-center ${size === 'md' ? 'gap-3' : 'gap-2'}`}>

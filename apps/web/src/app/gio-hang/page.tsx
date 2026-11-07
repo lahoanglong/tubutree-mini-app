@@ -46,6 +46,9 @@ const UNDO_WINDOW_MS = 10_000;
 const qtyButton =
   'tubu-hit-44-square flex h-11 w-11 items-center justify-center text-lg disabled:opacity-40 aria-disabled:opacity-40 max-md:h-9 max-md:w-9 max-md:rounded-control max-md:border max-md:border-[var(--color-border-subtle)] max-md:bg-[var(--color-bg-surface)]';
 
+// Nút −/+ còn bấm được thì co 0,97 khi nhấn (`.tubu-press`, tắt khi khách chọn giảm chuyển động); đã khoá thì đứng yên như Mini App.
+const qtyButtonFor = (off: boolean) => (off ? qtyButton : `${qtyButton} tubu-press`);
+
 const EmptyCart = dynamic(() => import('./empty-cart'), { ssr: false });
 
 const clampPercent = (pct: number) => (Number.isFinite(pct) ? Math.min(100, Math.max(0, Math.round(pct))) : 0);
@@ -308,7 +311,7 @@ export default function CartPage() {
         */}
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2">
           <div className="basis-full break-words text-sm font-medium text-stone-900 max-md:pr-9">
-            <Link href={`/san-pham/${it.slug}`} className="tubu-inline-link hover:underline">
+            <Link href={`/san-pham/${it.slug}`} className="tubu-hit-44 block hover:underline">
               {it.productName}
             </Link>
           </div>
@@ -366,7 +369,7 @@ export default function CartPage() {
                 disabled={soldOut || it.quantity <= 1}
                 aria-disabled={busy || undefined}
                 aria-label={`Giảm số lượng ${it.productName}`}
-                className={qtyButton}
+                className={qtyButtonFor(soldOut || it.quantity <= 1 || busy)}
               >
                 <Minus className="h-[18px] w-[18px] md:hidden" strokeWidth={2.2} aria-hidden="true" />
                 <span className="max-md:hidden">−</span>
@@ -380,7 +383,7 @@ export default function CartPage() {
                 disabled={soldOut || atMax}
                 aria-disabled={busy || undefined}
                 aria-label={`Tăng số lượng ${it.productName}`}
-                className={qtyButton}
+                className={qtyButtonFor(soldOut || atMax || busy)}
               >
                 <Plus className="h-[18px] w-[18px] md:hidden" strokeWidth={2.2} aria-hidden="true" />
                 <span className="max-md:hidden">+</span>
@@ -474,7 +477,7 @@ export default function CartPage() {
       ) : (
         <div className="grid grid-cols-1 gap-6 max-md:gap-3 md:mx-auto md:max-w-2xl lg:max-w-none lg:grid-cols-[minmax(0,1fr)_360px]">
           <div className="min-w-0">
-            <label className="relative mb-3 flex min-h-11 cursor-pointer items-center gap-3 px-1 text-sm font-medium text-stone-900 max-md:mb-1 max-md:min-h-0 max-md:px-0 max-md:py-1 max-md:font-normal max-md:text-[length:var(--type-body-md-size)]">
+            <label className="relative mb-3 flex min-h-11 cursor-pointer items-center gap-3 px-1 text-sm font-medium text-stone-900 max-md:mb-1 max-md:min-h-11 max-md:px-0 max-md:font-normal max-md:text-[length:var(--type-body-md-size)]">
               <span className={miniCheckboxWrap}>
                 <input
                   type="checkbox"

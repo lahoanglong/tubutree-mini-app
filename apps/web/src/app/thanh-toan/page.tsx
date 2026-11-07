@@ -1296,7 +1296,7 @@ function AddressPicker({
         ) : (
           <div key={a.id}>
           <div className="flex items-start gap-1">
-            <label data-ds="checkout-address-card" className={`${addressOptionClass(selectedId === a.id)} min-w-0 flex-1 items-start max-md:block`}>
+            <label data-ds="checkout-address-card" className={`tubu-press ${addressOptionClass(selectedId === a.id)} min-w-0 flex-1 items-start max-md:block`}>
               <input
                 type="radio"
                 name="addr"

@@ -27,7 +27,8 @@ export function StickyActionBar({ children, label, hideFrom = 'md' }: { children
     };
     measure();
     const observer = typeof ResizeObserver === 'function' && bar ? new ResizeObserver(measure) : null;
-    if (bar) observer?.observe(bar);
+    // border-box: vùng an toàn đáy nằm trong đệm, đổi (xoay máy) thì chỉ hộp ngoài đổi cỡ, hộp nội dung (mặc định của ResizeObserver) đứng yên.
+    if (bar) observer?.observe(bar, { box: 'border-box' });
     return () => {
       observer?.disconnect();
       root.style.removeProperty('--sticky-bar-h');
