@@ -24,7 +24,7 @@ export const ui = {
   btnSecondary:
     'inline-flex min-h-11 items-center justify-center rounded-control border border-stone-450 bg-stone-0 px-5 text-sm font-semibold text-stone-800 transition hover:bg-stone-50 active:scale-[0.97] motion-reduce:active:scale-100 disabled:text-stone-500 disabled:active:scale-100 aria-disabled:text-stone-500 aria-disabled:active:scale-100',
   /** Nút chữ (thử lại, xoá...) — vẫn đủ 44px để bấm trên điện thoại. */
-  btnText: 'inline-flex min-h-11 items-center px-2 text-sm font-semibold underline transition active:scale-[0.97] motion-reduce:active:scale-100 disabled:opacity-50 disabled:active:scale-100 aria-disabled:opacity-50 aria-disabled:active:scale-100',
+  btnText: 'inline-flex min-h-11 min-w-11 items-center justify-center px-2 text-sm font-semibold underline transition active:scale-[0.97] motion-reduce:active:scale-100 disabled:opacity-50 disabled:active:scale-100 aria-disabled:opacity-50 aria-disabled:active:scale-100',
   error: 'text-sm text-danger-fg',
 } as const;
 
