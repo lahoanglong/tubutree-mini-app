@@ -16,8 +16,8 @@ import { getCart } from '@/lib/shop-client';
 export function useCartUnits(enabled: boolean): { units: ReadonlyMap<string, number>; ready: boolean } {
   const authed = useAuthPhase() === 'authenticated';
   const queryEnabled = enabled && authed;
-  const { data, status } = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: queryEnabled });
+  const { data, status, fetchStatus } = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: queryEnabled });
   const items = data?.items;
   const units = useMemo(() => cartUnitsByVariation(items), [items]);
-  return { units, ready: cartUnitsReady({ enabled: queryEnabled, status }) };
+  return { units, ready: cartUnitsReady({ enabled: queryEnabled, status, fetchStatus }) };
 }

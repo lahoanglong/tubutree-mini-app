@@ -224,4 +224,12 @@ describe('cartUnitsReady', () => {
   it('không tải giỏ (sheet đóng, chưa đăng nhập): không có gì để chờ', () => {
     expect(cartUnitsReady({ enabled: false, status: 'pending' })).toBe(true);
   });
+
+  it('đang tải thật (fetching): chưa sẵn sàng', () => {
+    expect(cartUnitsReady({ enabled: true, status: 'pending', fetchStatus: 'fetching' })).toBe(false);
+  });
+
+  it('mất mạng, truy vấn bị tạm dừng (paused) chưa có giỏ: sẵn sàng, không khoá nút tới khi có mạng lại', () => {
+    expect(cartUnitsReady({ enabled: true, status: 'pending', fetchStatus: 'paused' })).toBe(true);
+  });
 });

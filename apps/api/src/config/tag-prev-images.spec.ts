@@ -41,7 +41,7 @@ class Vps {
 IMG="${this.imagesFile}"
 echo "docker $*" >> "${this.log}"
 id_of() { awk -v r="$1" '$1==r {print $2; exit}' "$IMG"; }
-drop() { grep -vF "$1 " "$IMG" > "$IMG.new" || true; mv "$IMG.new" "$IMG"; }
+drop() { awk -v r="$1" '$1!=r' "$IMG" > "$IMG.new" || true; mv "$IMG.new" "$IMG"; }
 case "$1" in
   images) awk '{print $1" "$2}' "$IMG";;
   image) ref="\${@: -1}"; id="$(id_of "$ref")"; [ -n "$id" ] || exit 1
@@ -86,9 +86,9 @@ exit 0
     return { status: res.status, out: `${res.stdout}${res.stderr}` };
   }
 
-  /** Gắn thẻ cho image ĐANG CHẠY (bước 2 của dep1). */
-  tag(running: { api: string; web: string }, curSha: string, lastImage: string) {
-    return this.run(TAG, [running.api, `${API}:latest`, running.web, `${WEB}:latest`, curSha, lastImage]);
+  /** Gắn thẻ cho image ĐANG CHẠY (bước 2 của dep1). `last` = cặp image dep2 ghi ở .last-deployed-image; null = chưa có file. */
+  tag(running: { api: string; web: string }, curSha: string, last: { api: string; web: string } | null) {
+    return this.run(TAG, [running.api, `${API}:latest`, running.web, `${WEB}:latest`, curSha, last?.api ?? '', last?.web ?? '']);
   }
 
   tagRaw(args: string[]) {
@@ -116,7 +116,7 @@ const COMMITS = { aaaaaaa1: T0 + 100, bbbbbbb2: T0 + 200, ccccccc3: T0 + 300, dd
 describe('tools/deploy/tag-prev-images.sh: chọn nhãn :prev-* theo image thật, không theo ghi chép', () => {
   it('ghi chép khớp image đang chạy (dep2 ghi đúng id): nhãn là SHA đã ghi, gắn cả :rollback lẫn :prev-<nhãn> cho api và web', () => {
     const v = make(COMMITS);
-    const r = v.tag({ api: imageId(1), web: imageId(101) }, FULL('bbbbbbb2'), imageId(1));
+    const r = v.tag({ api: imageId(1), web: imageId(101) }, FULL('bbbbbbb2'), { api: imageId(1), web: imageId(101) });
     expect(r.status).toBe(0);
     expect(v.tags()).toEqual({
       [`${API}:rollback`]: imageId(1),
@@ -128,7 +128,7 @@ describe('tools/deploy/tag-prev-images.sh: chọn nhãn :prev-* theo image thậ
 
   it('chưa có ghi chép image (lần đầu sau khi nâng cấp): tin SHA đã ghi như trước', () => {
     const v = make(COMMITS);
-    const r = v.tag({ api: imageId(1), web: imageId(101) }, FULL('bbbbbbb2'), '');
+    const r = v.tag({ api: imageId(1), web: imageId(101) }, FULL('bbbbbbb2'), null);
     expect(r.status).toBe(0);
     expect(v.prevTags(API)).toEqual({ bbbbbbb2: imageId(1) });
   });
@@ -138,7 +138,7 @@ describe('tools/deploy/tag-prev-images.sh: chọn nhãn :prev-* theo image thậ
     // Đang chạy B (quay lại từ C); dep2 lần trước ghi C (SHA + image).
     v.set(`${API}:prev-bbbbbbb2`, imageId(2));
     v.set(`${WEB}:prev-bbbbbbb2`, imageId(102));
-    const r = v.tag({ api: imageId(2), web: imageId(102) }, FULL('ccccccc3'), imageId(3));
+    const r = v.tag({ api: imageId(2), web: imageId(102) }, FULL('ccccccc3'), { api: imageId(3), web: imageId(103) });
     expect(r.status).toBe(0);
     expect(v.prevTags(API)).toEqual({ bbbbbbb2: imageId(2) });
     expect(v.prevTags(WEB)).toEqual({ bbbbbbb2: imageId(102) });
@@ -147,7 +147,7 @@ describe('tools/deploy/tag-prev-images.sh: chọn nhãn :prev-* theo image thậ
 
   it('đã quay lại bản cũ mà thẻ của bản đó đã bị dọn: nhãn lấy từ 8 ký tự đầu của image id, không mượn SHA đã ghi', () => {
     const v = make(COMMITS);
-    const r = v.tag({ api: imageId(0xabcdef12), web: imageId(102) }, FULL('ccccccc3'), imageId(3));
+    const r = v.tag({ api: imageId(0xabcdef12), web: imageId(102) }, FULL('ccccccc3'), { api: imageId(3), web: imageId(103) });
     expect(r.status).toBe(0);
     expect(v.prevTags(API)).toEqual({ abcdef12: imageId(0xabcdef12) });
     expect(v.prevTags(API)).not.toHaveProperty('ccccccc3');
@@ -159,7 +159,7 @@ describe('tools/deploy/tag-prev-images.sh: chọn nhãn :prev-* theo image thậ
       v.set(`${API}:prev-${sha}`, imageId(2));
       v.set(`${WEB}:prev-${sha}`, imageId(102));
     }
-    const r = v.tag({ api: imageId(2), web: imageId(102) }, FULL('ddddddd4'), imageId(4));
+    const r = v.tag({ api: imageId(2), web: imageId(102) }, FULL('ddddddd4'), { api: imageId(4), web: imageId(104) });
     expect(r.status).toBe(0);
     expect(Object.keys(v.prevTags(API)).sort()).toEqual(['bbbbbbb2', 'ccccccc3']);
     expect(r.out).toContain('prev-bbbbbbb2');
@@ -169,7 +169,7 @@ describe('tools/deploy/tag-prev-images.sh: chọn nhãn :prev-* theo image thậ
     const v = make(COMMITS);
     v.set(`${API}:prev-bbbbbbb2`, imageId(7));
     v.set(`${WEB}:prev-bbbbbbb2`, imageId(107));
-    const r = v.tag({ api: imageId(0x1234abcd), web: imageId(102) }, FULL('bbbbbbb2'), imageId(0x1234abcd));
+    const r = v.tag({ api: imageId(0x1234abcd), web: imageId(102) }, FULL('bbbbbbb2'), { api: imageId(0x1234abcd), web: imageId(102) });
     expect(r.status).toBe(0);
     expect(v.tags()[`${API}:prev-bbbbbbb2`]).toBe(imageId(7));
     expect(v.tags()[`${WEB}:prev-bbbbbbb2`]).toBe(imageId(107));
@@ -180,7 +180,7 @@ describe('tools/deploy/tag-prev-images.sh: chọn nhãn :prev-* theo image thậ
     const v = make(COMMITS);
     v.set(`${API}:prev-bbbbbbb2`, imageId(1));
     v.set(`${WEB}:prev-bbbbbbb2`, imageId(555));
-    const r = v.tag({ api: imageId(1), web: imageId(101) }, FULL('bbbbbbb2'), imageId(1));
+    const r = v.tag({ api: imageId(1), web: imageId(101) }, FULL('bbbbbbb2'), { api: imageId(1), web: imageId(101) });
     expect(r.status).toBe(0);
     expect(v.tags()[`${WEB}:prev-bbbbbbb2`]).toBe(imageId(555));
     expect(v.prevTags(WEB)['00000001']).toBe(imageId(101));
@@ -189,7 +189,7 @@ describe('tools/deploy/tag-prev-images.sh: chọn nhãn :prev-* theo image thậ
   it('SHA đã ghi rỗng hoặc sai dạng: nhãn theo image id, vẫn gắn :rollback', () => {
     const v = make(COMMITS);
     for (const bad of ['', 'xyz', 'ZZZZZZZZ']) {
-      const r = v.tag({ api: imageId(9), web: imageId(109) }, bad, imageId(9));
+      const r = v.tag({ api: imageId(9), web: imageId(109) }, bad, { api: imageId(9), web: imageId(109) });
       expect(r.status).toBe(0);
     }
     expect(v.prevTags(API)).toEqual({ '00000009': imageId(9) });
@@ -198,11 +198,38 @@ describe('tools/deploy/tag-prev-images.sh: chọn nhãn :prev-* theo image thậ
 
   it('chạy lại cùng lượt (dep1 chạy lại an toàn): kết quả không đổi', () => {
     const v = make(COMMITS);
-    const run = () => v.tag({ api: imageId(1), web: imageId(101) }, FULL('bbbbbbb2'), imageId(1));
+    const run = () => v.tag({ api: imageId(1), web: imageId(101) }, FULL('bbbbbbb2'), { api: imageId(1), web: imageId(101) });
     run();
     const first = v.tags();
     expect(run().status).toBe(0);
     expect(v.tags()).toEqual(first);
+  });
+
+  it('quay riêng web về bản cũ (runbook 7.4), api giữ nguyên id: lệch cặp thì coi là đã quay lại, KHÔNG dán nhãn của bản bị gỡ lên web cũ', () => {
+    const v = make(COMMITS);
+    // Bản O (bbbbbbb2) chạy (A, W_O); deploy N (ccccccc3) lên (A, W_N) rồi quay web về W_O. Commit chỉ đổi web nên id api của O và N giống nhau.
+    v.set(`${API}:prev-bbbbbbb2`, imageId(1));
+    v.set(`${WEB}:prev-bbbbbbb2`, imageId(101));
+    const r = v.tag({ api: imageId(1), web: imageId(101) }, FULL('ccccccc3'), { api: imageId(1), web: imageId(102) });
+    expect(r.status).toBe(0);
+    expect(v.prevTags(API)).toEqual({ bbbbbbb2: imageId(1) });
+    expect(v.prevTags(WEB)).toEqual({ bbbbbbb2: imageId(101) });
+    expect(v.prevTags(WEB)).not.toHaveProperty('ccccccc3');
+  });
+
+  it('quay riêng web, thẻ của bản cũ đã bị dọn: nhãn theo id image api, không mượn SHA đã ghi', () => {
+    const v = make(COMMITS);
+    const r = v.tag({ api: imageId(0x1111aaaa), web: imageId(101) }, FULL('ccccccc3'), { api: imageId(0x1111aaaa), web: imageId(102) });
+    expect(r.status).toBe(0);
+    expect(v.prevTags(WEB)).toEqual({ '1111aaaa': imageId(101) });
+    expect(v.prevTags(WEB)).not.toHaveProperty('ccccccc3');
+  });
+
+  it('chỉ có id api ghi chép (không có id web): so theo api như trước', () => {
+    const v = make(COMMITS);
+    const r = v.tagRaw([imageId(1), `${API}:latest`, imageId(101), `${WEB}:latest`, FULL('bbbbbbb2'), imageId(1)]);
+    expect(r.status).toBe(0);
+    expect(v.prevTags(API)).toEqual({ bbbbbbb2: imageId(1) });
   });
 
   it('thiếu tham số → thoát 2, không gắn gì', () => {
@@ -220,20 +247,20 @@ describe('xoay vòng :prev-*: deploy, quay lại, deploy tiếp', () => {
   function lifecycle(v: Vps) {
     let running: Ids | null = null;
     let lastSha = '';
-    let lastImage = '';
+    let last: Ids | null = null;
     const truth: Record<string, Ids> = {};
     let n = 0;
     return {
       deploy(sha8: string) {
         if (running) {
-          expect(v.tag(running, lastSha, lastImage).status).toBe(0);
+          expect(v.tag(running, lastSha, last).status).toBe(0);
           expect(v.prune().status).toBe(0);
         }
         n += 1;
         running = { api: imageId(1000 + n), web: imageId(2000 + n) };
         truth[sha8] = running;
         lastSha = FULL(sha8);
-        lastImage = running.api;
+        last = running;
       },
       /** Runbook 7.2/7.3: gắn lại ảnh cũ rồi bật; dep2 KHÔNG chạy nên ghi chép (SHA, image) vẫn là của bản vừa bị gỡ. */
       rollbackTo(sha8: string) {

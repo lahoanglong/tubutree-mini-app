@@ -44,15 +44,24 @@ deploy_epoch() {
   echo 0
 }
 
-listing="$(docker images --no-trunc --format '{{.Repository}}:{{.Tag}} {{.ID}}' | { grep -E '^tubutree-(api|web):prev-[0-9a-f]{8} ' || true; })"
+all_tags="$(docker images --no-trunc --format '{{.Repository}}:{{.Tag}} {{.ID}}')"
+listing="$({ grep -E '^tubutree-(api|web):prev-[0-9a-f]{8} ' <<<"$all_tags" || true; })"
 if [ -z "$listing" ]; then
   echo "Không có thẻ :prev-* nào."
   exit 0
 fi
 shas="$(sed -E 's/^tubutree-(api|web):prev-([0-9a-f]{8}) .*$/\2/' <<<"$listing" | sort -u)"
 image_id() { awk -v r="$1" '$1==r {print $2; exit}' <<<"$listing"; }
+# Cặp image :rollback (bản vừa chạy, dep1 vừa gắn thẻ prev cho nó) luôn là bản giữ đầu tiên: nhãn theo id image không có commit, giờ build
+# của image có thể cũ hơn mọi bản khác (api không đổi qua nhiều deploy), nên xếp theo giờ sẽ gỡ ngay thẻ vừa gắn.
+rollback_key="$(awk '$1=="tubutree-api:rollback" {print $2; exit}' <<<"$all_tags")/$(awk '$1=="tubutree-web:rollback" {print $2; exit}' <<<"$all_tags")"
 # Mỗi dòng: giờ-deploy sha khoá-bản (id api / id web); mới nhất trước, nên lần đầu gặp một khoá là bản mới nhất của cặp image đó.
-rows="$(while read -r s; do echo "$(deploy_epoch "$s") $s $(image_id "tubutree-api:prev-$s")/$(image_id "tubutree-web:prev-$s")"; done <<<"$shas" | sort -rn)"
+rows="$(while read -r s; do
+  key="$(image_id "tubutree-api:prev-$s")/$(image_id "tubutree-web:prev-$s")"
+  epoch="$(deploy_epoch "$s")"
+  if [ "$key" = "$rollback_key" ]; then epoch=9999999999; fi
+  echo "$epoch $s $key"
+done <<<"$shas" | sort -rn)"
 keep_lines=""
 kept_map=""
 drop=""

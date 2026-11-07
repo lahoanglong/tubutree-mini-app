@@ -203,6 +203,25 @@ describe('tools/deploy/prune-prev-images.sh', () => {
       expect(r.rmi.sort()).toEqual(['tubutree-api:prev-ddddddd4', 'tubutree-api:prev-eeeeeee5', 'tubutree-web:prev-ddddddd4', 'tubutree-web:prev-eeeeeee5']);
     });
 
+    it('cặp image đang giữ bởi :rollback luôn thuộc bản giữ, kể cả khi nhãn là id image (không có commit) và giờ build rất cũ', () => {
+      const images = [
+        'tubutree-api:latest 2026-11-07T00:00:00Z sha256:iL',
+        'tubutree-web:latest 2026-11-07T00:00:00Z sha256:wL',
+        'tubutree-api:rollback 2020-01-01T00:00:00Z sha256:i9',
+        'tubutree-web:rollback 2020-01-01T00:00:00Z sha256:w9',
+        // Nhãn theo id image: không có commit trong repo, giờ build cũ hơn mọi bản còn lại.
+        ...withIds('deadbee1', 'sha256:i9', 'sha256:w9'),
+        ...withIds('aaaaaaa1', 'sha256:i1', 'sha256:w1'),
+        ...withIds('bbbbbbb2', 'sha256:i2', 'sha256:w2'),
+        ...withIds('ccccccc3', 'sha256:i3', 'sha256:w3'),
+      ];
+      const r = run({ commits: COMMITS, images, args: ['--apply'] });
+      expect(r.status).toBe(0);
+      // Giữ 3: bản :rollback (deadbee1), rồi aaaaaaa1 và bbbbbbb2 (mới nhất theo commit); gỡ ccccccc3 (cũ nhất trong ba bản còn lại).
+      expect(r.rmi.sort()).toEqual(['tubutree-api:prev-ccccccc3', 'tubutree-web:prev-ccccccc3']);
+      expect(r.remaining).toContain('tubutree-api:prev-deadbee1');
+    });
+
     it('kế hoạch nêu thẻ nào dùng chung image với thẻ nào', () => {
       const images = [
         ...FIXED,
