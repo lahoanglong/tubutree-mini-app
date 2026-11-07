@@ -26,6 +26,7 @@ const PRODUCTS = featuredAffiliateProducts(
 
 const rows = () => screen.getAllByTestId('ctv-featured-row');
 const row = (i: number): HTMLElement => rows()[i]!;
+const liveRegion = (): HTMLElement => document.querySelector<HTMLElement>('[aria-live="polite"]')!;
 
 beforeEach(() => {
   mocks.copyText.mockReset();
@@ -62,12 +63,12 @@ describe('AffiliateFeaturedProducts', () => {
     const copied = mocks.copyText.mock.calls[0]?.[0] as string;
     expect(copied).toContain('https://zalo.me/s/123/product/ban-chai-tre?ref=TUBU01');
     expect(copied).not.toContain('!');
-    expect(within(row(0)).getByRole('button', { name: 'Đã chép link' })).toBeInTheDocument();
+    expect(within(row(0)).getByRole('button', { name: 'Đã chép link giới thiệu Bàn chải tre' })).toBeInTheDocument();
     expect(within(row(1)).getByRole('button', { name: 'Chép link giới thiệu Ly tre' })).toBeInTheDocument();
     await act(async () => {
       vi.advanceTimersByTime(1999);
     });
-    expect(within(row(0)).getByRole('button', { name: 'Đã chép link' })).toBeInTheDocument();
+    expect(within(row(0)).getByRole('button', { name: 'Đã chép link giới thiệu Bàn chải tre' })).toBeInTheDocument();
     await act(async () => {
       vi.advanceTimersByTime(2);
     });
@@ -80,9 +81,29 @@ describe('AffiliateFeaturedProducts', () => {
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Chép link giới thiệu Ly tre' }));
     });
-    expect(within(row(1)).getByRole('status')).toHaveTextContent('Không chép được, hãy chép link thủ công.');
-    expect(within(row(0)).queryByRole('status')).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Đã chép link' })).toBeNull();
+    expect(within(row(1)).getByText('Không chép được, hãy chép link thủ công.')).toBeInTheDocument();
+    expect(within(row(0)).queryByText('Không chép được, hãy chép link thủ công.')).toBeNull();
+    expect(liveRegion()).toHaveTextContent('Không chép được, hãy chép link thủ công.');
+    expect(screen.queryByRole('button', { name: /^Đã chép link/ })).toBeNull();
+  });
+
+  it('vùng aria-live có sẵn từ lúc dựng (không chèn cùng chữ) và đọc "Đã chép link giới thiệu <tên>" sau khi chép', async () => {
+    render(<AffiliateFeaturedProducts products={PRODUCTS} />);
+    expect(liveRegion()).toBeInTheDocument();
+    expect(liveRegion()).toBeEmptyDOMElement();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Chép link giới thiệu Ly tre' }));
+    });
+    expect(liveRegion()).toHaveTextContent('Đã chép link giới thiệu Ly tre');
+  });
+
+  it('ghi chú nói số tiền là ước tính theo giá hiển thị; không hiện ở trạng thái chờ, rỗng, lỗi', () => {
+    const { rerender } = render(<AffiliateFeaturedProducts products={PRODUCTS} />);
+    expect(screen.getByText('Ước tính theo giá đang hiển thị, hoa hồng thật tính trên số tiền khách đã trả.')).toBeInTheDocument();
+    for (const ui of [<AffiliateFeaturedProducts key="a" products={null} />, <AffiliateFeaturedProducts key="b" products={[]} />, <AffiliateFeaturedProducts key="c" products={null} error />]) {
+      rerender(ui);
+      expect(screen.queryByText(/Ước tính theo giá/)).toBeNull();
+    }
   });
 
   it('đang tải: ba khung chờ, chưa có dòng nào', () => {

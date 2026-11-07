@@ -10,6 +10,7 @@ import { copyText } from '@/lib/copy-text';
 import { Badge } from '@/components/mini/badge';
 import { Button } from '@/components/mini/button';
 import { Skeleton } from '@/components/mini/skeleton';
+import { SR_ONLY } from '@/components/mini/sr-only';
 import { Heading, Text } from '@/components/mini/text';
 
 export interface AffiliateFeaturedProductsProps {
@@ -41,8 +42,14 @@ export function AffiliateFeaturedProducts({ products, error, onRetry }: Affiliat
     timer.current = setTimeout(() => setDone(null), ok ? COPIED_MS : FAILED_MS);
   };
 
+  const doneName = done ? products?.find((p) => p.id === done.id)?.name ?? '' : '';
+  const announce = done ? (done.ok ? fillCopy('ctv.featured.copiedAria', { name: doneName }) : fillCopy('ctv.featured.copyFail')) : '';
+
   return (
     <section data-testid="ctv-featured" aria-labelledby={headingId} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-stack-sm)' }}>
+      <span aria-live="polite" style={SR_ONLY}>
+        {announce}
+      </span>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-stack-xs)' }}>
         <Text variant="caption" tone="brand" as="span">
           {fillCopy('ctv.featured.eyebrow')}
@@ -92,18 +99,16 @@ export function AffiliateFeaturedProducts({ products, error, onRetry }: Affiliat
                     </Text>
                   </div>
                   {failed && (
-                    <span role="status">
-                      <Text variant="caption" tone="danger" as="span">
-                        {fillCopy('ctv.featured.copyFail')}
-                      </Text>
-                    </span>
+                    <Text variant="caption" tone="danger" as="span">
+                      {fillCopy('ctv.featured.copyFail')}
+                    </Text>
                   )}
                 </div>
                 <div className="ctv-featured__action">
                   <Button
                     variant="secondary"
                     icon={copied ? Check : Link2}
-                    aria-label={copied ? fillCopy('ctv.featured.copied') : fillCopy('ctv.featured.copyAria', { name: p.name })}
+                    aria-label={fillCopy(copied ? 'ctv.featured.copiedAria' : 'ctv.featured.copyAria', { name: p.name })}
                     onPress={() => onCopy(p)}
                   >
                     {fillCopy(copied ? 'ctv.featured.copied' : 'ctv.featured.copy')}
@@ -113,6 +118,11 @@ export function AffiliateFeaturedProducts({ products, error, onRetry }: Affiliat
             );
           })}
         </ul>
+      )}
+      {products !== null && products.length > 0 && !error && (
+        <Text variant="caption" tone="tertiary">
+          {fillCopy('ctv.featured.note')}
+        </Text>
       )}
     </section>
   );

@@ -143,6 +143,8 @@ export const SHOP_COPY: Record<string, string> = {
   'ctv.featured.copied': 'Đã chép link',
   'ctv.featured.copyFail': 'Không chép được, hãy chép link thủ công.',
   'ctv.featured.copyAria': 'Chép link giới thiệu {name}',
+  'ctv.featured.copiedAria': 'Đã chép link giới thiệu {name}',
+  'ctv.featured.note': 'Ước tính theo giá đang hiển thị, hoa hồng thật tính trên số tiền khách đã trả.',
   'ctv.featured.empty': 'Chưa có sản phẩm nào có hoa hồng để chia sẻ.',
   'ctv.featured.error': 'Chưa tải được danh sách sản phẩm.',
   'ctv.featured.retry': 'Thử lại',

@@ -140,6 +140,8 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'ctv.featured.copied': 14,
   'ctv.featured.copyFail': 45,
   'ctv.featured.copyAria': null,
+  'ctv.featured.copiedAria': null,
+  'ctv.featured.note': 80,
   'ctv.featured.empty': 55,
   'ctv.featured.error': 40,
   'ctv.featured.retry': 10,

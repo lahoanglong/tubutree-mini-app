@@ -64,6 +64,20 @@ describe('buildOrderTimelineSteps', () => {
     expect(states(steps)).toEqual(['completed', 'completed', 'cancelled']);
   });
 
+  it('CANCELLED sau khi giao hãng mà thiếu mốc Đã xác nhận (đơn COD): vẫn hiện Đang chuẩn bị ở giữa, không mang giờ', () => {
+    const steps = buildOrderTimelineSteps('CANCELLED', { createdAt: T.createdAt, shippingAt: T.shippingAt, cancelledAt: T.cancelledAt });
+    expect(keys(steps)).toEqual(['received', 'preparing', 'shipping', 'cancelled']);
+    expect(states(steps)).toEqual(['completed', 'completed', 'completed', 'cancelled']);
+    expect(steps[1]!.at).toBeNull();
+    expect(steps[2]!.at).toBe(T.shippingAt);
+  });
+
+  it('CANCELLED không bao giờ hiện bước Hoàn tất, kể cả khi có giờ giao', () => {
+    const steps = buildOrderTimelineSteps('CANCELLED', T);
+    expect(keys(steps)).not.toContain('delivered');
+    expect(keys(steps)[keys(steps).length - 1]).toBe('cancelled');
+  });
+
   it('RETURNED: bốn bước đã xong rồi nhánh Đã hoàn trả', () => {
     const steps = buildOrderTimelineSteps('RETURNED', { ...T, cancelledAt: '2026-11-09T01:00:00.000Z' });
     expect(keys(steps)).toEqual(['received', 'preparing', 'shipping', 'delivered', 'returned']);
@@ -109,6 +123,33 @@ describe('orderTimelineStamps', () => {
 
   it('không có statusTimes thì chỉ còn giờ đặt', () => {
     expect(orderTimelineStamps({ createdAt: T.createdAt })).toEqual({ createdAt: T.createdAt });
+  });
+
+  it('đơn COD/ví đang đi tiếp mà sổ không có dòng Đã xác nhận: bước chuẩn bị lấy giờ đặt', () => {
+    for (const paymentMethod of ['COD', 'WALLET']) {
+      expect(orderTimelineStamps({ createdAt: T.createdAt, status: 'CONFIRMED', paymentMethod, statusTimes: {} }).confirmedAt, paymentMethod).toBe(T.createdAt);
+    }
+  });
+
+  it('đơn COD đã đóng gói: giờ chuẩn bị là giờ Đã đóng gói của sổ, không phải giờ đặt', () => {
+    const packed = '2026-11-05T03:30:00.000Z';
+    expect(orderTimelineStamps({ createdAt: T.createdAt, status: 'PACKED', paymentMethod: 'COD', statusTimes: { PACKED: packed } }).confirmedAt).toBe(packed);
+  });
+
+  it('đơn chuyển khoản không có dòng Đã xác nhận: không đoán giờ chuẩn bị', () => {
+    const s = orderTimelineStamps({ createdAt: T.createdAt, status: 'SHIPPING', paymentMethod: 'BANK_TRANSFER', statusTimes: { SHIPPING: T.shippingAt } });
+    expect(s.confirmedAt).toBeUndefined();
+  });
+
+  it('đơn COD huỷ: không đoán giờ chuẩn bị từ giờ đặt, nên huỷ khi chưa đóng gói chỉ còn Đã tiếp nhận rồi Đã huỷ', () => {
+    const stamps = orderTimelineStamps({ createdAt: T.createdAt, status: 'CANCELLED', paymentMethod: 'COD', statusTimes: { CANCELLED: T.cancelledAt } });
+    expect(stamps.confirmedAt).toBeUndefined();
+    expect(keys(buildOrderTimelineSteps('CANCELLED', stamps))).toEqual(['received', 'cancelled']);
+  });
+
+  it('đơn COD huỷ sau khi đóng gói: giữ Đang chuẩn bị', () => {
+    const stamps = orderTimelineStamps({ createdAt: T.createdAt, status: 'CANCELLED', paymentMethod: 'COD', statusTimes: { PACKED: T.confirmedAt, CANCELLED: T.cancelledAt } });
+    expect(keys(buildOrderTimelineSteps('CANCELLED', stamps))).toEqual(['received', 'preparing', 'cancelled']);
   });
 });
 

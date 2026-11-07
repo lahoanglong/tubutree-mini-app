@@ -73,12 +73,12 @@ describe('AffiliateFeaturedProducts (web)', () => {
     const copied = mocks.copyText.mock.calls[0]?.[0] as string;
     expect(copied).toContain('https://tubutree.com/san-pham/ban-chai-tre?ref=TUBU01');
     expect(copied).not.toContain('!');
-    expect(buttonIn(first())?.getAttribute('aria-label')).toBe('Đã chép link');
+    expect(buttonIn(first())?.getAttribute('aria-label')).toBe('Đã chép link giới thiệu Bàn chải tre');
     expect(buttonIn(second())?.getAttribute('aria-label')).toBe('Chép link giới thiệu Ly tre');
     await act(async () => {
       vi.advanceTimersByTime(1999);
     });
-    expect(buttonIn(first())?.getAttribute('aria-label')).toBe('Đã chép link');
+    expect(buttonIn(first())?.getAttribute('aria-label')).toBe('Đã chép link giới thiệu Bàn chải tre');
     await act(async () => {
       vi.advanceTimersByTime(2);
     });
@@ -90,9 +90,28 @@ describe('AffiliateFeaturedProducts (web)', () => {
     const { container } = mount(<AffiliateFeaturedProducts products={PRODUCTS} />);
     click(buttonIn(rows(container)[1]!));
     await flush();
-    expect(rows(container)[1]!.querySelector('[role="status"]')?.textContent).toBe('Không chép được, hãy chép link thủ công.');
-    expect(rows(container)[0]!.querySelector('[role="status"]')).toBeNull();
-    expect(container.querySelector('button[aria-label="Đã chép link"]')).toBeNull();
+    expect(rows(container)[1]!.textContent).toContain('Không chép được, hãy chép link thủ công.');
+    expect(rows(container)[0]!.textContent).not.toContain('Không chép được');
+    expect(container.querySelector('[aria-live="polite"]')?.textContent).toBe('Không chép được, hãy chép link thủ công.');
+    expect(container.querySelector('button[aria-label^="Đã chép link"]')).toBeNull();
+  });
+
+  it('vùng aria-live có sẵn từ lúc dựng (không chèn cùng chữ) và đọc "Đã chép link giới thiệu <tên>" sau khi chép', async () => {
+    const { container } = mount(<AffiliateFeaturedProducts products={PRODUCTS} />);
+    const live = () => container.querySelector('[aria-live="polite"]');
+    expect(live()).not.toBeNull();
+    expect(live()?.textContent).toBe('');
+    click(buttonIn(rows(container)[1]!));
+    await flush();
+    expect(live()?.textContent).toBe('Đã chép link giới thiệu Ly tre');
+  });
+
+  it('ghi chú nói số tiền là ước tính theo giá hiển thị; không hiện ở trạng thái chờ, rỗng, lỗi', () => {
+    const note = 'Ước tính theo giá đang hiển thị, hoa hồng thật tính trên số tiền khách đã trả.';
+    expect(mount(<AffiliateFeaturedProducts products={PRODUCTS} />).container.textContent).toContain(note);
+    for (const ui of [<AffiliateFeaturedProducts key="a" products={null} />, <AffiliateFeaturedProducts key="b" products={[]} />, <AffiliateFeaturedProducts key="c" products={null} error />]) {
+      expect(mount(ui).container.textContent).not.toContain(note);
+    }
   });
 
   it('đang tải: khung chờ có tên, chưa có dòng nào', () => {

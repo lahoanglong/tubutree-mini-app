@@ -108,14 +108,15 @@ export async function expectFeaturedBlock(page: Page): Promise<Locator> {
 /** Chép link: lời giới thiệu có tên món và link `?ref=<mã CTV>`, không có "!"; nhãn "Đã chép link" rồi tự trả về. */
 export async function expectFeaturedCopy(page: Page, block: Locator): Promise<void> {
   const row = block.getByTestId('ctv-featured-row').nth(0);
-  await row.getByRole('button', { name: 'Chép link giới thiệu Dầu gội bồ kết' }).click();
-  await expect(row.getByRole('button', { name: 'Đã chép link' })).toBeVisible();
+  await row.getByRole('button', { name: 'Chép link giới thiệu Dầu gội bồ kết', exact: true }).click();
+  await expect(row.getByRole('button', { name: 'Đã chép link giới thiệu Dầu gội bồ kết', exact: true })).toBeVisible();
+  await expect(row.getByRole('button')).toContainText('Đã chép link');
   const text = (await copiedText(page)) ?? '';
   expect(text).toContain('Dầu gội bồ kết');
   expect(text).toMatch(new RegExp(`/(san-pham|product)/dau-goi\\?ref=${FEATURED_REF}\\b`));
   expect(text).not.toContain('!');
-  await expect(row.getByRole('button', { name: 'Chép link giới thiệu Dầu gội bồ kết' })).toBeVisible({ timeout: 4_000 });
-  await expect(block.getByTestId('ctv-featured-row').nth(1).getByRole('button', { name: 'Chép link giới thiệu Nước rửa chén hương chanh sả' })).toBeVisible();
+  await expect(row.getByRole('button', { name: 'Chép link giới thiệu Dầu gội bồ kết', exact: true })).toBeVisible({ timeout: 4_000 });
+  await expect(block.getByTestId('ctv-featured-row').nth(1).getByRole('button', { name: 'Chép link giới thiệu Nước rửa chén hương chanh sả', exact: true })).toBeVisible();
 }
 
 /** Tên hoạt hoạ của chấm bước hiện tại: nhấp nhô khi cho phép chuyển động, "none" khi người dùng giảm chuyển động. */

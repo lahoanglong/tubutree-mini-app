@@ -1,5 +1,6 @@
 import { fillCopy } from '../shop-copy';
 import { vnd } from './money';
+import { NO_PAYMENT_WAIT } from './order-tracking';
 
 /**
  * Thanh tiến trình 4 bước của đơn (Đã tiếp nhận, Đang chuẩn bị, Đang giao hàng, Hoàn tất) và đoạn tóm tắt đơn để khách chép gửi người thân hoặc CSKH.
@@ -56,13 +57,15 @@ const label = (key: OrderTimelineKey) => fillCopy(`order.timeline.${key}`);
 
 /**
  * Các bước của đơn kèm trạng thái từng bước. Đơn huỷ hoặc hoàn trả rẽ nhánh: giữ những bước đã qua rồi thêm bước cuối Đã huỷ (hoặc Đã hoàn trả).
- * Đơn huỷ không có mốc giờ của một bước nghĩa là chưa tới bước đó, nên bước ấy không hiện (không đoán bước nào đơn đã qua).
+ * Đơn huỷ chỉ giữ bước có bằng chứng đã qua: bước có mốc giờ, hoặc có bước sau nó (trừ Hoàn tất) đã có mốc giờ. Đơn COD không có dòng lịch sử Đã xác nhận,
+ * nên đơn đã giao hãng rồi mới huỷ vẫn phải hiện Đang chuẩn bị dù bước ấy thiếu giờ.
  */
 export function buildOrderTimelineSteps(status: string, timestamps: OrderTimelineStamps = {}): OrderTimelineStep[] {
   const stamp = (key: MainKey): string | null => timestamps[STAMP_OF[key]] ?? null;
 
   if (status === 'CANCELLED') {
-    const passed = MAIN_KEYS.filter((k, i) => i === 0 || (k !== 'delivered' && stamp(k) !== null));
+    const beforeDelivered = MAIN_KEYS.slice(0, -1);
+    const passed = MAIN_KEYS.filter((k, i) => i === 0 || (k !== 'delivered' && beforeDelivered.slice(i).some((later) => stamp(later) !== null)));
     return [
       ...passed.map<OrderTimelineStep>((k) => ({ key: k, label: label(k), state: 'completed', at: stamp(k) })),
       { key: 'cancelled', label: label('cancelled'), state: 'cancelled', at: timestamps.cancelledAt ?? null },
@@ -79,11 +82,22 @@ export function buildOrderTimelineSteps(status: string, timestamps: OrderTimelin
   return steps;
 }
 
-/** Mốc giờ của đơn theo dạng `buildOrderTimelineSteps` cần, lấy từ `createdAt`, `deliveredAt` và sổ `statusTimes` API trả (khoá là trạng thái đơn). */
-export function orderTimelineStamps(o: { createdAt: string; deliveredAt?: string | null; statusTimes?: Partial<Record<string, string>> | null }): OrderTimelineStamps {
+/**
+ * Mốc giờ của đơn theo dạng `buildOrderTimelineSteps` cần, lấy từ `createdAt`, `deliveredAt` và sổ `statusTimes` API trả (khoá là trạng thái đơn).
+ * Đơn COD và ví tạo thẳng ở Đã xác nhận nên sổ không có dòng cho bước ấy: lấy giờ Đã đóng gói, không có thì (đơn còn đi tiếp) giờ đặt; đơn huỷ không đoán giờ.
+ */
+export function orderTimelineStamps(o: {
+  createdAt: string;
+  status?: string;
+  paymentMethod?: string;
+  deliveredAt?: string | null;
+  statusTimes?: Partial<Record<string, string>> | null;
+}): OrderTimelineStamps {
   const times = o.statusTimes ?? {};
   const out: OrderTimelineStamps = { createdAt: o.createdAt };
-  if (times.CONFIRMED) out.confirmedAt = times.CONFIRMED;
+  const startsConfirmed = o.status !== 'CANCELLED' && NO_PAYMENT_WAIT.has(o.paymentMethod ?? '');
+  const confirmed = times.CONFIRMED ?? times.PACKED ?? (startsConfirmed ? o.createdAt : undefined);
+  if (confirmed) out.confirmedAt = confirmed;
   if (times.SHIPPING) out.shippingAt = times.SHIPPING;
   const delivered = o.deliveredAt ?? times.DELIVERED;
   if (delivered) out.deliveredAt = delivered;
