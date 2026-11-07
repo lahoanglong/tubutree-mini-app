@@ -22,11 +22,19 @@ API_C=$($DC ps -q api </dev/null); WEB_C=$($DC ps -q web </dev/null)
 API_ID=$(docker inspect -f '{{.Image}}' "$API_C"); API_NAME=$(docker inspect -f '{{.Config.Image}}' "$API_C")
 WEB_ID=$(docker inspect -f '{{.Image}}' "$WEB_C"); WEB_NAME=$(docker inspect -f '{{.Config.Image}}' "$WEB_C")
 CUR_SHA=$(cat .last-deployed-sha)
+LAST_IMAGE=$(cat .last-deployed-image 2>/dev/null || true)
 printf 'API_ID=%s\nAPI_NAME=%s\nWEB_ID=%s\nWEB_NAME=%s\n' "$API_ID" "$API_NAME" "$WEB_ID" "$WEB_NAME" | tee .rollback-images
-for t in rollback "prev-${CUR_SHA:0:8}"; do
-  docker tag "$API_ID" "${API_NAME%%:*}:$t"
-  docker tag "$WEB_ID" "${WEB_NAME%%:*}:$t"
-done
+# Nhãn :prev-* chọn theo image thật đang chạy, không dán thẳng theo .last-deployed-sha: quay lại bản cũ (runbook 7.2, 7.3) không cập nhật
+# file đó, và dán theo nó làm thẻ trỏ sai image ("3 bản dự phòng" chỉ còn 2 image khác nhau). Xem tools/deploy/tag-prev-images.sh.
+if [ -f tools/deploy/tag-prev-images.sh ]; then
+  bash tools/deploy/tag-prev-images.sh "$API_ID" "$API_NAME" "$WEB_ID" "$WEB_NAME" "$CUR_SHA" "$LAST_IMAGE" </dev/null
+else
+  echo "bỏ qua: bản mã này chưa có tools/deploy/tag-prev-images.sh, gắn thẻ theo .last-deployed-sha như cũ"
+  for t in rollback "prev-${CUR_SHA:0:8}"; do
+    docker tag "$API_ID" "${API_NAME%%:*}:$t"
+    docker tag "$WEB_ID" "${WEB_NAME%%:*}:$t"
+  done
+fi
 docker images --format '{{.Repository}}:{{.Tag}} {{.ID}}' | grep tubutree
 
 # Cặp :prev-* vừa gắn nằm trong 3 bản gần nhất được giữ. Chạy trước build để đĩa còn chỗ; lỗi dọn không chặn deploy.

@@ -52,7 +52,7 @@ const ORDER: ReorderTarget = {
 };
 
 function renderSheet(ui: ReactElement) {
-  const qc = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   return render(<QueryClientProvider client={qc}>{ui}</QueryClientProvider>);
 }
 
@@ -359,6 +359,7 @@ describe('ReorderSheet: giá theo số lượng đã có trong giỏ', () => {
     mocks.getCart.mockRejectedValue(new Error('Network Error'));
     open();
     await waitFor(() => expect(mocks.getCart).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Thêm vào giỏ (2)' })).not.toHaveAttribute('aria-busy'));
     expect(within(row()).getByText('40.000đ')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Thêm vào giỏ (2)' })).toBeEnabled();
   });
@@ -369,6 +370,7 @@ describe('ReorderSheet: giá theo số lượng đã có trong giỏ', () => {
     open();
     await new Promise((r) => setTimeout(r, 20));
     expect(mocks.getCart).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Thêm vào giỏ (2)' })).not.toHaveAttribute('aria-busy');
   });
 
   it('đơn có hai dòng cùng biến thể: giỏ gộp 2 + 2 = 4 > 3 nên cả hai dòng tính giá đang bán', async () => {
@@ -385,12 +387,38 @@ describe('ReorderSheet: giá theo số lượng đã có trong giỏ', () => {
     expect(screen.getByText('240.000đ')).toBeInTheDocument();
   });
 
+  it('giỏ chưa tải xong: nút Thêm khoá và chạm không gửi gì; giỏ về thì mở khoá, giá tính lại theo số lượng gộp, bấm gửi đúng một lần', async () => {
+    let resolveCart!: (cart: unknown) => void;
+    mocks.getCart.mockReturnValue(new Promise((r) => { resolveCart = r; }));
+    mocks.repurchaseOrder.mockResolvedValue({ cart: CART, legacy: false, results: [{ orderItemId: 'i1', status: 'added', addedQuantity: 2 }] });
+    const onClose = vi.fn();
+    renderSheet(<ReorderSheet target={orderReorderTarget({ code: 'TUBU13', items: [flashItem()] })} source="order_card" onClose={onClose} />);
+    await waitFor(() => expect(mocks.getCart).toHaveBeenCalled());
+
+    const waiting = screen.getByRole('button', { name: 'Thêm vào giỏ (2)' });
+    expect(waiting).toHaveAttribute('aria-busy', 'true');
+    fireEvent.click(waiting);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(mocks.repurchaseOrder).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+
+    resolveCart({ items: [{ id: 'c1', variationId: 'v-i1', quantity: 2 }] });
+    expect(await within(row()).findByText('60.000đ')).toBeInTheDocument();
+    expect(screen.getByText('120.000đ')).toBeInTheDocument();
+    const ready = screen.getByRole('button', { name: 'Thêm vào giỏ (2)' });
+    expect(ready).not.toHaveAttribute('aria-busy');
+    fireEvent.click(ready);
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(mocks.repurchaseOrder).toHaveBeenCalledTimes(1);
+  });
+
   it('thêm xong giỏ tải lại có phần vừa thêm: giá trên sheet không nhảy (số liệu giỏ đóng băng từ lúc bấm thêm)', async () => {
     mocks.getCart.mockResolvedValueOnce({ items: [] }).mockResolvedValue({ items: [{ id: 'c1', variationId: 'v-i1', quantity: 2 }] });
     mocks.repurchaseOrder.mockResolvedValue({ cart: CART, legacy: false, results: [{ orderItemId: 'i1', status: 'added', addedQuantity: 2 }] });
     const onClose = vi.fn();
     renderSheet(<ReorderSheet target={orderReorderTarget({ code: 'TUBU12', items: [flashItem()] })} source="order_card" onClose={onClose} />);
     await waitFor(() => expect(mocks.getCart).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Thêm vào giỏ (2)' })).not.toHaveAttribute('aria-busy'));
     fireEvent.click(screen.getByRole('button', { name: 'Thêm vào giỏ (2)' }));
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(mocks.getCart).toHaveBeenCalledTimes(2));

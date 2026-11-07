@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   cartUnitsByVariation,
+  cartUnitsReady,
   isDiscontinuedItem,
   reorderComparablePrice,
   reorderLineNotices,
@@ -204,5 +205,23 @@ describe('cartUnitsByVariation', () => {
     expect(m.get('v1')).toBe(5);
     expect(m.get('v2')).toBe(1);
     expect(m.get('v3')).toBeUndefined();
+  });
+});
+
+describe('cartUnitsReady', () => {
+  it('giỏ đang tải lần đầu: chưa sẵn sàng, để sheet không tính như giỏ rỗng', () => {
+    expect(cartUnitsReady({ enabled: true, status: 'pending' })).toBe(false);
+  });
+
+  it('giỏ đã có dữ liệu (kể cả bản cũ đang tải lại): sẵn sàng', () => {
+    expect(cartUnitsReady({ enabled: true, status: 'success' })).toBe(true);
+  });
+
+  it('tải giỏ lỗi: sẵn sàng, không giữ khách chờ vô hạn (giá theo số lượng của sheet)', () => {
+    expect(cartUnitsReady({ enabled: true, status: 'error' })).toBe(true);
+  });
+
+  it('không tải giỏ (sheet đóng, chưa đăng nhập): không có gì để chờ', () => {
+    expect(cartUnitsReady({ enabled: false, status: 'pending' })).toBe(true);
   });
 });

@@ -43,7 +43,8 @@ export function ReorderSheet({ target, source, onClose, onDone, navigateToCart }
   const reorder = useReorder({ navigateToCart, source });
   // Giỏ gộp số lượng cùng biến thể rồi mới so với suất Giờ vàng: giá hiện ở sheet phải tính cả phần đã có sẵn trong giỏ. Số liệu đóng
   // băng từ lúc bấm thêm, vì giỏ tải lại sau khi thêm sẽ đếm phần vừa thêm hai lần và làm giá trên sheet nhảy.
-  const liveCart = useCartUnits(target !== null);
+  // Giỏ đang tải lần đầu thì chưa biết phần đã có sẵn: khoá nút thêm tới khi giỏ về (giá và tạm tính tự tính lại), không tính như giỏ rỗng.
+  const { units: liveCart, ready: cartReady } = useCartUnits(target !== null);
   const [frozenCart, setFrozenCart] = useState<ReadonlyMap<string, number> | null>(null);
   const cart = frozenCart ?? liveCart;
 
@@ -74,7 +75,7 @@ export function ReorderSheet({ target, source, onClose, onDone, navigateToCart }
     };
   }, []);
   const submit = async () => {
-    if (!target || units === 0 || inFlight.current) return;
+    if (!target || units === 0 || !cartReady || inFlight.current) return;
     inFlight.current = true;
     setFrozenCart(liveCart);
     setNotice(null);
@@ -127,7 +128,13 @@ export function ReorderSheet({ target, source, onClose, onDone, navigateToCart }
               </Link>
             </p>
           )}
-          <button type="button" disabled={units === 0 || reorder.isPending || partiallyAdded} onClick={() => void submit()} className={`${ui.btnPrimary} w-full`}>
+          <button
+            type="button"
+            disabled={units === 0 || reorder.isPending || partiallyAdded || !cartReady}
+            aria-busy={!cartReady || undefined}
+            onClick={() => void submit()}
+            className={`${ui.btnPrimary} w-full`}
+          >
             {reorderText.addCta(units)}
           </button>
         </div>

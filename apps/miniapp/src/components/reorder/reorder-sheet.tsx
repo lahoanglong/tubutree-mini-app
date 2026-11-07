@@ -39,7 +39,8 @@ export function ReorderSheet({ target, source, onClose, navigateToCart }: Reorde
   const reorder = useReorder(source, { navigateToCart });
   // Giỏ gộp số lượng cùng biến thể rồi mới so với suất Giờ vàng: giá hiện ở sheet phải tính cả phần đã có sẵn trong giỏ. Số liệu đóng
   // băng từ lúc bấm thêm, vì giỏ tải lại sau khi thêm sẽ đếm phần vừa thêm hai lần và làm giá nhảy trong lúc sheet trượt xuống.
-  const liveCart = useCartUnits(target !== null);
+  // Giỏ đang tải lần đầu thì chưa biết phần đã có sẵn: khoá nút thêm tới khi giỏ về (giá và tạm tính tự tính lại), không tính như giỏ rỗng.
+  const { units: liveCart, ready: cartReady } = useCartUnits(target !== null);
   const [frozenCart, setFrozenCart] = useState<ReadonlyMap<string, number> | null>(null);
   const cart = frozenCart ?? liveCart;
 
@@ -73,7 +74,7 @@ export function ReorderSheet({ target, source, onClose, navigateToCart }: Reorde
   // (setTimeout 0) nên cú chạm thứ hai trong cùng nhịp vẫn thấy isPending=false.
   const inFlight = useRef(false);
   const submit = async () => {
-    if (!target || units === 0 || inFlight.current) return;
+    if (!target || units === 0 || !cartReady || inFlight.current) return;
     inFlight.current = true;
     setFrozenCart(liveCart);
     let added = false;
@@ -102,7 +103,7 @@ export function ReorderSheet({ target, source, onClose, navigateToCart }: Reorde
           <Text variant="caption" tone="tertiary" as="div">
             {vi.reorder.priceNote}
           </Text>
-          <Button fullWidth size="lg" loading={reorder.isPending} disabled={units === 0} onPress={() => void submit()}>
+          <Button fullWidth size="lg" loading={reorder.isPending || !cartReady} disabled={units === 0} onPress={() => void submit()}>
             {vi.reorder.addCta(units)}
           </Button>
         </div>

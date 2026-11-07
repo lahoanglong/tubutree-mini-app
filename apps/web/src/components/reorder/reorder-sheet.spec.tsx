@@ -375,6 +375,36 @@ describe('ReorderSheet: giá theo số lượng đã có trong giỏ', () => {
     mount({ target: orderReorderTarget({ code: 'TUBU10', items: [flashItem()] }) });
     await flush();
     expect(mocks.getCart).not.toHaveBeenCalled();
+    expect(cta().disabled).toBe(false);
+    expect(cta().getAttribute('aria-busy')).toBeNull();
+  });
+
+  it('giỏ chưa tải xong: nút Thêm khoá và chạm không gửi gì; giỏ về thì mở khoá, giá tính lại theo số lượng gộp, bấm gửi đúng một lần', async () => {
+    let resolveCart!: (cart: unknown) => void;
+    mocks.getCart.mockReturnValue(new Promise((r) => { resolveCart = r; }));
+    mocks.post.mockResolvedValue({ ...CART, cart: CART, results: [{ orderItemId: 'i1', status: 'added', addedQuantity: 2 }] });
+    const onClose = vi.fn();
+    mount({ target: orderReorderTarget({ code: 'TUBU13', items: [flashItem()] }), onClose });
+    await flush();
+    expect(mocks.getCart).toHaveBeenCalledTimes(1);
+
+    expect(cta().disabled).toBe(true);
+    expect(cta().getAttribute('aria-busy')).toBe('true');
+    click(cta());
+    await flush();
+    expect(mocks.post).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+
+    resolveCart({ ...CART, items: [{ id: 'c1', variationId: 'v-i1', quantity: 2 }] });
+    await flush();
+    expect(priceOf(rows()[0]!)).toBe('60.000đ');
+    expect(footer()).toContain('120.000đ');
+    expect(cta().disabled).toBe(false);
+    expect(cta().getAttribute('aria-busy')).toBeNull();
+    click(cta());
+    await flush(10);
+    expect(mocks.post).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it('đơn có hai dòng cùng biến thể: giỏ gộp 2 + 2 = 4 > 3 nên cả hai dòng tính giá đang bán', async () => {

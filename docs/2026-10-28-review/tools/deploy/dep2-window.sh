@@ -64,5 +64,8 @@ for i in $(seq 1 40); do
 done
 echo "$(date '+%H:%M:%S') web=$w"
 echo "$SHA" > .last-deployed-sha
+# Id image api vừa chạy, ghi SAU dòng SHA: dep1 lần sau so với image đang chạy để biết SHA trên còn đúng không (quay lại bản cũ không cập
+# nhật hai file này). Chết giữa hai dòng thì id cũ lệch image đang chạy, dep1 rơi vào nhánh an toàn. Xem tools/deploy/tag-prev-images.sh.
+docker inspect -f '{{.Image}}' "$($DC ps -q api </dev/null)" > .last-deployed-image 2>/dev/null || rm -f .last-deployed-image
 trap - ERR
 echo "== $(date '+%H:%M:%S') xong bước 5–9"

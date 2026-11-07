@@ -39,8 +39,8 @@ function run(opts: {
     `#!/usr/bin/env bash
 echo "docker $*" >> "${log}"
 case "$1" in
-  images) awk '{print $1}' "${imagesFile}";;
-  image) ref="\${@: -1}"; line="$(grep -F "$ref " "${imagesFile}" | head -n1)"; [ -n "$line" ] || exit 1; case "$*" in *Created*) echo "\${line#* }";; esac;;
+  images) awk '{print $1" "(NF>=3 ? $3 : "sha256:"$1)}' "${imagesFile}";;
+  image) ref="\${@: -1}"; line="$(grep -F "$ref " "${imagesFile}" | head -n1)"; [ -n "$line" ] || exit 1; case "$*" in *Created*) echo "$line" | awk '{print $2}';; esac;;
   rmi) if [ -n "$FAIL_RMI" ] && [ "$2" = "$FAIL_RMI" ]; then exit 1; fi; grep -vF "$2 " "${imagesFile}" > "${imagesFile}.new" || true; mv "${imagesFile}.new" "${imagesFile}";;
   system) echo "TYPE TOTAL";;
 esac
@@ -162,5 +162,57 @@ describe('tools/deploy/prune-prev-images.sh', () => {
     expect(r.status).toBe(0);
     expect(r.rmi).toEqual([]);
     expect(r.out).toContain('Không có thẻ :prev-* nào.');
+  });
+
+  describe('đếm theo image khác nhau, không theo số thẻ', () => {
+    /** Cặp thẻ api + web của một SHA, kèm id image (giờ build cố định, chỉ dùng khi SHA không còn trong repo). */
+    const withIds = (sha: string, apiId: string, webId: string) => [`tubutree-api:prev-${sha} 2020-01-01T00:00:00Z ${apiId}`, `tubutree-web:prev-${sha} 2020-01-01T00:00:00Z ${webId}`];
+
+    it('hai SHA cùng một cặp image tính là MỘT bản: giữ 3 image khác nhau, thẻ phụ của bản được giữ ở lại, chỉ bản thứ tư bị gỡ', () => {
+      // aaaaaaa1 và bbbbbbb2 trỏ cùng image (di chứng dán nhầm sau rollback); còn ccccccc3, ddddddd4, eeeeeee5 mỗi cái một image.
+      const images = [
+        ...FIXED,
+        ...withIds('aaaaaaa1', 'sha256:i1', 'sha256:w1'),
+        ...withIds('bbbbbbb2', 'sha256:i1', 'sha256:w1'),
+        ...withIds('ccccccc3', 'sha256:i3', 'sha256:w3'),
+        ...withIds('ddddddd4', 'sha256:i4', 'sha256:w4'),
+        ...withIds('eeeeeee5', 'sha256:i5', 'sha256:w5'),
+      ];
+      const r = run({ commits: COMMITS, images, args: ['--apply'] });
+      expect(r.status).toBe(0);
+      // Nếu đếm theo thẻ, chỉ giữ aaaaaaa1/bbbbbbb2/ccccccc3 (2 image); đếm theo image thì giữ cả image của ccccccc3 và ddddddd4 và chỉ gỡ eeeeeee5.
+      expect(r.rmi.sort()).toEqual(['tubutree-api:prev-eeeeeee5', 'tubutree-web:prev-eeeeeee5']);
+      expect(r.remaining).toEqual(expect.arrayContaining(['tubutree-api:prev-aaaaaaa1', 'tubutree-api:prev-bbbbbbb2', 'tubutree-api:prev-ccccccc3', 'tubutree-api:prev-ddddddd4']));
+    });
+
+    it('chỉ api trùng id còn web khác: hai bản riêng, không gom', () => {
+      const images = [
+        ...FIXED,
+        ...withIds('aaaaaaa1', 'sha256:i1', 'sha256:w1'),
+        ...withIds('bbbbbbb2', 'sha256:i1', 'sha256:w2'),
+        ...withIds('ccccccc3', 'sha256:i3', 'sha256:w3'),
+        ...withIds('ddddddd4', 'sha256:i4', 'sha256:w4'),
+      ];
+      const r = run({ commits: COMMITS, images, args: ['--apply'] });
+      // 4 bản khác nhau (aaaaaaa1 mới nhất, ddddddd4 cũ nhất): giữ 3 gần nhất, gỡ ddddddd4.
+      expect(r.rmi.sort()).toEqual(['tubutree-api:prev-ddddddd4', 'tubutree-web:prev-ddddddd4']);
+    });
+
+    it('chưa có bản nào trùng image: giữ nguyên hành vi cũ (3 thẻ gần nhất)', () => {
+      const r = run({ commits: COMMITS, images: ALL, args: ['--apply'] });
+      expect(r.rmi.sort()).toEqual(['tubutree-api:prev-ddddddd4', 'tubutree-api:prev-eeeeeee5', 'tubutree-web:prev-ddddddd4', 'tubutree-web:prev-eeeeeee5']);
+    });
+
+    it('kế hoạch nêu thẻ nào dùng chung image với thẻ nào', () => {
+      const images = [
+        ...FIXED,
+        ...withIds('aaaaaaa1', 'sha256:i1', 'sha256:w1'),
+        ...withIds('bbbbbbb2', 'sha256:i1', 'sha256:w1'),
+        ...withIds('ccccccc3', 'sha256:i3', 'sha256:w3'),
+      ];
+      const r = run({ commits: COMMITS, images });
+      expect(r.status).toBe(0);
+      expect(r.out).toMatch(/prev-bbbbbbb2.*cùng image.*prev-aaaaaaa1|prev-aaaaaaa1.*cùng image.*prev-bbbbbbb2/);
+    });
   });
 });
