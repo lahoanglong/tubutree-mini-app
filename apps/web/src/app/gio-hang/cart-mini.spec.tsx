@@ -253,7 +253,7 @@ describe('/gio-hang — một nhãn, nút − và tên dòng như Mini App (G2)'
 
   it('tên dòng ở điện thoại cùng độ đậm Mini (500), không nặng hơn (max-md:font-semibold)', async () => {
     const c = await mount();
-    const name = c.querySelector<HTMLAnchorElement>('a[href="/san-pham/serum"].tubu-inline-link')!.parentElement!;
+    const name = c.querySelector<HTMLAnchorElement>('a[href="/san-pham/serum"].tubu-hit-44')!.parentElement!;
     expect(name.className).toMatch(/\bfont-medium\b/);
     expect(name.className).not.toMatch(/font-semibold/);
   });

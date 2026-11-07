@@ -39,6 +39,13 @@ describe('OrderCard', () => {
     expect(openButton()).toHaveAccessibleDescription(/Nước rửa chén \+1.*3 món.*149\.000đ/);
   });
 
+  it('thẻ co nhẹ khi nhấn (`.tubu-press-card` 0,985, không phải 0,97 của nút); số món, ngày và tổng vẽ bằng số đều', () => {
+    render(<OrderCard order={ORDER} onOpen={() => {}} onReorder={() => {}} />);
+    expect(shell().className).toBe('tubu-press-card');
+    const meta = Array.from(shell().querySelectorAll<HTMLElement>('div')).find((d) => d.textContent?.startsWith('3 món'))!;
+    expect(meta.style.fontVariantNumeric).toBe('tabular-nums');
+  });
+
   it('"Mua lại" gọi onReorder, KHÔNG mở chi tiết', () => {
     const onOpen = vi.fn();
     const onReorder = vi.fn();

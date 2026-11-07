@@ -39,7 +39,7 @@ export function OrderCard({ order: o, onReorder }: OrderCardProps) {
   const canPay = canPayNow(o);
   const summaryId = useId();
   return (
-    <li data-testid="order-card" className={`relative isolate flex flex-col gap-2.5 p-3 ${ui.card} ${mini.card}`}>
+    <li data-testid="order-card" className={`tubu-press-card relative isolate flex flex-col gap-2.5 p-3 ${ui.card} ${mini.card}`}>
       <div className="flex items-center justify-between gap-2">
         <Link
           href={orderDetailHref(o.code)}
@@ -62,15 +62,15 @@ export function OrderCard({ order: o, onReorder }: OrderCardProps) {
               {o.items.length > 1 ? ` +${o.items.length - 1}` : ''}
             </div>
           )}
-          <div className="text-xs text-stone-600">
+          <div className="text-xs tabular-nums text-stone-600">
             {orderUnitCount(o.items)} món · {formatDate(o.createdAt)}
           </div>
         </div>
-        <span className="flex-none text-sm font-semibold text-stone-900">{formatVnd(o.total)}</span>
+        <span className="flex-none text-sm font-semibold tabular-nums text-stone-900">{formatVnd(o.total)}</span>
       </div>
       {canPay && (
         <div data-testid="order-card-actions" className="flex items-center justify-between gap-2">
-          {showsPaymentDeadline(o) ? <span className="text-xs text-stone-600">Hạn {formatDateTime(o.paymentDeadline)}</span> : <span />}
+          {showsPaymentDeadline(o) ? <span className="text-xs tabular-nums text-stone-600">Hạn {formatDateTime(o.paymentDeadline)}</span> : <span />}
           <Link href={bankPaymentHref(o.code)} className={`${ui.btnPrimary} relative z-10`}>
             Thanh toán ngay
           </Link>

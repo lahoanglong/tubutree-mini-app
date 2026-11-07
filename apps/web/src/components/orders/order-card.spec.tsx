@@ -38,6 +38,15 @@ describe('OrderCard', () => {
     expect(c.textContent).toContain('Giao thành công');
   });
 
+  it('tổng tiền, số món và hạn trả vẽ bằng số đều; thẻ co nhẹ khi nhấn (`.tubu-press-card`, tắt khi giảm chuyển động)', () => {
+    const c = mount(<OrderCard order={ORDER} />);
+    const total = Array.from(c.querySelectorAll('span')).find((s) => s.textContent === '149.000đ')!;
+    expect(total.className).toContain('tabular-nums');
+    expect(c.querySelector('[data-testid="order-card"]')!.className).toContain('tubu-press-card');
+    const meta = Array.from(c.querySelectorAll('div')).find((d) => d.textContent?.startsWith('3 món'))!;
+    expect(meta.className).toContain('tabular-nums');
+  });
+
   it('mã đơn là liên kết tới chi tiết đơn, có mô tả là tóm tắt (món, ngày, tổng)', () => {
     const c = mount(<OrderCard order={ORDER} />);
     const link = c.querySelector<HTMLAnchorElement>('a[href="/tai-khoan/don-hang/TUBU1"]')!;

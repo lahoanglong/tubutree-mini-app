@@ -51,7 +51,7 @@ describe('StickyActionBar', () => {
 
 // Dòng báo vì sao nút khoá làm thanh cao hơn 6rem cố định: đệm đáy của trang phải theo chiều cao đo được.
 describe('StickyActionBar — đệm đáy theo chiều cao thật', () => {
-  const observers: { cb: () => void; observed: Element[]; disconnect: ReturnType<typeof vi.fn> }[] = [];
+  const observers: { cb: () => void; observed: Element[]; options: ResizeObserverOptions[]; disconnect: ReturnType<typeof vi.fn> }[] = [];
   let height = 84;
   const cssVar = () => document.documentElement.style.getPropertyValue('--sticky-bar-h');
 
@@ -60,12 +60,14 @@ describe('StickyActionBar — đệm đáy theo chiều cao thật', () => {
     height = 84;
     class FakeResizeObserver {
       observed: Element[] = [];
+      options: ResizeObserverOptions[] = [];
       disconnect = vi.fn();
       constructor(public cb: () => void) {
         observers.push(this);
       }
-      observe(el: Element) {
+      observe(el: Element, options?: ResizeObserverOptions) {
         this.observed.push(el);
+        this.options.push(options ?? {});
       }
       unobserve() {}
     }
@@ -83,6 +85,11 @@ describe('StickyActionBar — đệm đáy theo chiều cao thật', () => {
     mounted.push(r);
     expect(cssVar()).toBe('84px');
     expect(observers[0]!.observed[0]).toBe(r.container.querySelector('[data-testid="sticky-bar"]'));
+  });
+
+  it('theo dõi hộp border-box: vùng an toàn đáy nằm trong đệm, xoay máy đổi nó mà hộp nội dung đứng yên', () => {
+    mounted.push(render(<StickyActionBar label="Mua hàng">x</StickyActionBar>));
+    expect(observers[0]!.options).toEqual([{ box: 'border-box' }]);
   });
 
   it('thanh cao thêm (hiện dòng báo lỗi) thì biến đổi theo, thanh thấp lại thì hạ xuống', () => {

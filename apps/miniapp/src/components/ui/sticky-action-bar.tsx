@@ -44,7 +44,8 @@ export function StickyActionBar({ primary, secondary, summary, lead, dense }: St
     const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => {
       if (mountedBars[mountedBars.length - 1] === entry) publishBarHeight();
     });
-    ro?.observe(el);
+    // border-box: vùng an toàn đáy nằm trong đệm, đổi (xoay máy) thì chỉ hộp ngoài đổi cỡ, hộp nội dung (mặc định của ResizeObserver) đứng yên.
+    ro?.observe(el, { box: 'border-box' });
     return () => {
       ro?.disconnect();
       mountedBars.splice(mountedBars.indexOf(entry), 1);

@@ -20,9 +20,9 @@ export const ui = {
   /** Ô nhập đang báo lỗi: đổi màu viền bằng lớp riêng, không chồng hai lớp `border-*` lên nhau (thứ tự CSS không đảm bảo). */
   fieldError: `${FIELD_BASE} border-danger-fg`,
   btnPrimary:
-    'inline-flex min-h-11 items-center justify-center rounded-control bg-forest-600 px-5 text-sm font-semibold text-stone-0 shadow-card transition hover:bg-forest-700 active:scale-95 motion-reduce:active:scale-100 disabled:bg-stone-200 disabled:text-stone-500 disabled:shadow-none disabled:active:scale-100 aria-disabled:bg-stone-200 aria-disabled:text-stone-500 aria-disabled:shadow-none aria-disabled:active:scale-100',
+    'inline-flex min-h-11 items-center justify-center rounded-control bg-forest-600 px-5 text-sm font-semibold text-stone-0 shadow-card transition hover:bg-forest-700 active:scale-[0.97] motion-reduce:active:scale-100 disabled:bg-stone-200 disabled:text-stone-500 disabled:shadow-none disabled:active:scale-100 aria-disabled:bg-stone-200 aria-disabled:text-stone-500 aria-disabled:shadow-none aria-disabled:active:scale-100',
   btnSecondary:
-    'inline-flex min-h-11 items-center justify-center rounded-control border border-stone-450 bg-stone-0 px-5 text-sm font-semibold text-stone-800 transition hover:bg-stone-50 active:scale-95 motion-reduce:active:scale-100 disabled:text-stone-500 disabled:active:scale-100 aria-disabled:text-stone-500 aria-disabled:active:scale-100',
+    'inline-flex min-h-11 items-center justify-center rounded-control border border-stone-450 bg-stone-0 px-5 text-sm font-semibold text-stone-800 transition hover:bg-stone-50 active:scale-[0.97] motion-reduce:active:scale-100 disabled:text-stone-500 disabled:active:scale-100 aria-disabled:text-stone-500 aria-disabled:active:scale-100',
   /** Nút chữ (thử lại, xoá...) — vẫn đủ 44px để bấm trên điện thoại. */
   btnText: 'inline-flex min-h-11 items-center px-2 text-sm font-semibold underline disabled:opacity-50 aria-disabled:opacity-50',
   error: 'text-sm text-danger-fg',

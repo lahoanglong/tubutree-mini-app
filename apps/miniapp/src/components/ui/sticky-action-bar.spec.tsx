@@ -75,6 +75,14 @@ describe('StickyActionBar: lead, dense, chiều cao', () => {
     expect(screen.getByTestId('sticky-bar').style.gap).toBe('8px');
   });
 
+  it('theo dõi hộp border-box: vùng an toàn đáy nằm trong đệm, xoay máy đổi nó mà hộp nội dung đứng yên', () => {
+    const options: Array<ResizeObserverOptions | undefined> = [];
+    vi.stubGlobal('ResizeObserver', class { constructor(_cb: () => void) {} observe(_el: Element, o?: ResizeObserverOptions) { options.push(o); } disconnect() {} });
+    const { unmount } = render(<StickyActionBar primary={<button>x</button>} />);
+    expect(options).toEqual([{ box: 'border-box' }]);
+    unmount();
+  });
+
   it('ghi chiều cao thật vào --sticky-bar-h khi gắn, cập nhật khi thanh đổi cao, gỡ khi tháo', () => {
     let notify: () => void = () => {};
     vi.stubGlobal('ResizeObserver', class { constructor(cb: () => void) { notify = cb; } observe() {} disconnect() {} });

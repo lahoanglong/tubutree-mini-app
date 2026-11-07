@@ -29,7 +29,7 @@ export const mini = {
  * hai lớp màu chữ cùng trên một nút thì màu nào thắng phụ thuộc thứ tự CSS (nút "Hủy" định kỳ từng hiện chữ đen).
  */
 export const miniGhostDanger =
-  'inline-flex min-h-11 min-w-max flex-1 items-center justify-center rounded-control bg-transparent px-5 text-sm font-semibold text-danger-fg transition hover:bg-stone-50 active:scale-95 disabled:opacity-50 disabled:active:scale-100';
+  'inline-flex min-h-11 min-w-max flex-1 items-center justify-center rounded-control bg-transparent px-5 text-sm font-semibold text-danger-fg transition hover:bg-stone-50 active:scale-[0.97] motion-reduce:active:scale-100 disabled:opacity-50 disabled:active:scale-100';
 
 /** Lớp cho ô chọn: gốc của trình duyệt từ md, ô tự vẽ bo góc xanh (Checkbox của zmp-ui) ở điện thoại. Đi kèm <CheckMark />. */
 export const miniCheckbox =
