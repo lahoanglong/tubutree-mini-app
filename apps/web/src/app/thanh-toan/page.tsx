@@ -1032,7 +1032,7 @@ export default function CheckoutPage() {
             <span className="text-sm font-normal leading-[var(--type-body-sm-lh)] text-[color:var(--color-text-secondary)] md:text-base md:font-bold md:leading-[inherit] md:text-[color:var(--color-text-primary)]">Tổng cộng</span>
             {/* Đang tải/đang lỗi thì hiện "…" thay vì 0đ: con số 0 đứng yên cạnh dòng báo lỗi
                 trông như đơn không mất tiền. */}
-            <span className="text-base font-bold leading-[var(--type-body-sm-lh)] md:leading-[inherit]">{totalText}</span>
+            <span className="text-base font-bold leading-[var(--type-body-sm-lh)] tabular-nums md:leading-[inherit]">{totalText}</span>
           </div>
           {quote && quote.pointsEarned > 0 && (
             <p className="mt-1 flex items-center gap-1 text-caption text-success-fg">
@@ -1158,7 +1158,7 @@ function Row({ label, value, green, valueGreen, ds }: { label: React.ReactNode; 
       className={`flex justify-between gap-2.5 py-1.5 text-sm md:mt-1 md:gap-0 md:py-0 ${green ? 'text-[color:var(--color-text-primary)] md:text-success-fg' : 'text-[color:var(--color-text-primary)]'}`}
     >
       <span className={`leading-[var(--type-body-sm-lh)] md:leading-5 text-[color:var(--color-text-secondary)] ${green ? 'md:text-inherit' : ''}`}>{label}</span>
-      <span className={`text-[0.9375rem] font-semibold leading-[var(--type-body-sm-lh)] md:text-sm md:font-normal md:leading-5 ${green || valueGreen ? 'text-success-fg' : ''}`}>{value}</span>
+      <span className={`text-[0.9375rem] font-semibold leading-[var(--type-body-sm-lh)] tabular-nums md:text-sm md:font-normal md:leading-5 ${green || valueGreen ? 'text-success-fg' : ''}`}>{value}</span>
     </div>
   );
 }
@@ -1444,12 +1444,12 @@ function MobileItems({
                   <div className="min-w-0 flex-1">
                     <div className="line-clamp-2 text-sm">{it.productName}</div>
                     {it.variationName && <div className="text-caption text-[color:var(--color-text-tertiary)]">{it.variationName}</div>}
-                    <div className="text-caption text-[color:var(--color-text-tertiary)]">
+                    <div className="text-caption tabular-nums text-[color:var(--color-text-tertiary)]">
                       {formatVnd(it.unitPrice)} × {it.quantity}
                     </div>
                     <LineProblemNote id={it.id} fix={fix} />
                   </div>
-                  <div className="whitespace-nowrap text-sm font-semibold">{formatVnd(it.total)}</div>
+                  <div className="whitespace-nowrap text-sm font-semibold tabular-nums">{formatVnd(it.total)}</div>
                 </div>
               ))}
             </div>

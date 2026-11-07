@@ -73,6 +73,7 @@ export function QuantitySelector({ value, max, min = 1, size = 'md', onChange, e
             textAlign: 'center',
             fontWeight: 600,
             font: 'inherit',
+            fontVariantNumeric: 'tabular-nums',
             color: 'var(--color-text-primary)',
             border: '1px solid var(--color-border-subtle)',
             borderRadius: 'var(--radius-control)',
@@ -80,7 +81,7 @@ export function QuantitySelector({ value, max, min = 1, size = 'md', onChange, e
           }}
         />
       ) : (
-        <Text variant={size === 'md' ? 'body-lg' : 'body-sm'} style={{ minWidth: 22, textAlign: 'center', fontWeight: 600 }}>
+        <Text variant={size === 'md' ? 'body-lg' : 'body-sm'} style={{ minWidth: 22, textAlign: 'center', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
           {value}
         </Text>
       )}

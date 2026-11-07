@@ -371,7 +371,7 @@ export default function CartPage() {
                 <Minus className="h-[18px] w-[18px] md:hidden" strokeWidth={2.2} aria-hidden="true" />
                 <span className="max-md:hidden">−</span>
               </button>
-              <span className="w-7 text-center text-stone-900 max-md:min-w-[22px] max-md:font-semibold" aria-live="polite">
+              <span className="w-7 text-center tabular-nums text-stone-900 max-md:min-w-[22px] max-md:font-semibold" aria-live="polite">
                 {it.quantity}
               </span>
               <button
