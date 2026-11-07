@@ -13,6 +13,7 @@
   --forest-700: #1B4B31;
   --forest-800: #143A26;
   --forest-900: #0D291B;
+  --lime-600: #65A30D;
 
   --sage-50: #F2F5EC;
   --sage-100: #E3EBD8;
@@ -194,6 +195,11 @@
   --color-story-tone-sky: var(--blue-600);
   --color-story-tone-sand: var(--stone-300);
   --color-story-tone-ink: var(--stone-800);
+
+  /* Dải Story đầu Trang chủ: viền vòng chuyển sắc xanh lá → chanh khi chưa xem (cả hai đầu ≥ 3:1 trên nền trắng), xám nhạt khi đã xem trong phiên. */
+  --color-story-ring-from: var(--forest-500);
+  --color-story-ring-to: var(--lime-600);
+  --color-story-ring-seen: var(--stone-300);
 
   /* Commerce: nền ô ảnh/bìa/chip, rãnh tiến độ, phiếu giảm giá, hạng, đồng hồ. */
   --color-bg-media: var(--stone-100); /* nền ô ảnh sản phẩm và khung chờ ảnh */

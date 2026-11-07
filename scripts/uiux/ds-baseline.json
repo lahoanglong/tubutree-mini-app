@@ -54,7 +54,7 @@
    "open-snackbar": {},
    "primitive-color": {
     "app/brand/[slug]/brand-actions.tsx": 14,
-    "app/gio-hang/page.tsx": 34,
+    "app/gio-hang/page.tsx": 29,
     "app/ma-giam-gia/vouchers-view.tsx": 1,
     "app/mua-chung/group-buy-view.tsx": 12,
     "app/s/[slug]/page.tsx": 27,
@@ -437,7 +437,7 @@
   "apps/miniapp/src/pages/brand-view.tsx": 35,
   "apps/miniapp/src/pages/browse.tsx": 15,
   "apps/miniapp/src/pages/campaign.tsx": 10,
-  "apps/miniapp/src/pages/cart.tsx": 47,
+  "apps/miniapp/src/pages/cart.tsx": 45,
   "apps/miniapp/src/pages/cashback.tsx": 31,
   "apps/miniapp/src/pages/checkout.tsx": 65,
   "apps/miniapp/src/pages/community-events.tsx": 22,

@@ -156,8 +156,8 @@ describe('HomePage (phương án A, 9 khối)', () => {
     mocks.fetchPurchasedItems.mockResolvedValue({ items: [{ variationId: 'v1', slug: 'da-mua' }], nextCursor: null });
     renderHome();
     await waitFor(() => expect(blockOrder()).toEqual(RETURNING));
-    // Giờ vàng đứng TRƯỚC Mua lại (Q6); Bán chạy nhất có ở cả hai loại khách (Q18).
-    expect(RETURNING.slice(0, 6)).toEqual(['search', 'member', 'todo', 'banner', 'shortcuts', 'flash']);
+    // Dải Story đứng ngay dưới lối tắt (W42A); Giờ vàng đứng TRƯỚC Mua lại (Q6); Bán chạy nhất có ở cả hai loại khách (Q18).
+    expect(RETURNING.slice(0, 7)).toEqual(['search', 'member', 'todo', 'banner', 'shortcuts', 'stories', 'flash']);
     expect(RETURNING.indexOf('flash')).toBeLessThan(RETURNING.indexOf('purchased'));
     expect(RETURNING).toContain('bestSellers');
     expect(screen.getByRole('region', { name: 'Thẻ thành viên' })).toBeInTheDocument();
@@ -171,6 +171,26 @@ describe('HomePage (phương án A, 9 khối)', () => {
     expect(best.querySelectorAll('[data-ds-part="rank"]')).toHaveLength(4);
     await userEvent.setup().click(within(best).getByRole('button', { name: 'Xem tất cả Bán chạy nhất' }));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/best-sellers');
+  });
+
+  it('dải Story (W42A): vòng tròn của các món Bán chạy nhất, đứng ngay dưới lối tắt, dùng chung một lần gọi Bán chạy nhất với kệ (không tải thêm)', async () => {
+    renderHome();
+    const rings = await screen.findAllByTestId('story-reel-item');
+    expect(rings.map((r) => r.textContent)).toEqual(['StoryBán chạy 1', 'StoryBán chạy 2', 'StoryBán chạy 3', 'StoryBán chạy 4']);
+    await screen.findByRole('region', { name: 'Bán chạy nhất' });
+    const order = blockOrder();
+    expect(order[order.indexOf('shortcuts') + 1]).toBe('stories');
+    expect(block('stories')).toContainElement(screen.getByTestId('story-reel-strip'));
+    expect(mocks.fetchProducts.mock.calls.filter(([q]) => q?.sort === 'best_seller_30d' && q?.limit === HOME_BEST_SELLER_LIMIT)).toHaveLength(1);
+  });
+
+  it('dải Story: Bán chạy nhất lỗi hoặc dưới 3 món thì không có dải (không để tiêu đề trơ), khối vẫn giữ chỗ trong bố cục', async () => {
+    mocks.fetchProducts.mockResolvedValue(PAGE([card('bs1', 'Bán chạy 1'), card('bs2', 'Bán chạy 2')]));
+    const { qc } = renderHome();
+    await waitFor(() => expect(settled(qc, ['products', 'home-best-seller'])).toBe(true));
+    expect(screen.queryByTestId('story-reel-strip')).toBeNull();
+    expect(screen.queryByTestId('story-reel-skeleton')).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Câu chuyện sản phẩm' })).toBeNull();
   });
 
   it('Danh mục dùng 4 phân khúc khi chưa có danh mục thật; không còn "Khám phá vườn"', async () => {
@@ -200,7 +220,8 @@ describe('HomePage (phương án A, 9 khối)', () => {
 
     down = false;
     await userEvent.setup().click(within(strip).getByRole('button', { name: 'Thử lại' }));
-    expect(await screen.findByText('Bán chạy 1')).toBeInTheDocument();
+    // Tên món cũng nằm ở dải Story: chỉ tính phần kệ Bán chạy nhất.
+    expect(await within(await screen.findByRole('region', { name: 'Bán chạy nhất' })).findByText('Bán chạy 1')).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByTestId('home-page-error')).toBeNull());
   });
 

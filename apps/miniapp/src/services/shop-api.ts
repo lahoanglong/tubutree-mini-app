@@ -4,7 +4,7 @@ import { api, getAccessToken } from './api';
 import { isHttpError } from './http';
 import { syncServerClock } from '../utils/server-clock';
 import { homeProductSlot, takeMeBlock, takePublicBlock, takePurchasedItems } from './home-feed';
-import type { CartComboGroup, CouponPreviewRequest, FlashAllowanceResponse, CouponPreviewsResponse, OrderDTO, OrderItemDTO, WastePublicFlags } from '@tubutree/shared-types';
+import type { CartComboGroup, CouponPreviewRequest, FlashAllowanceResponse, CouponPreviewsResponse, OrderDTO, OrderItemDTO, ProductStoryConfig, WastePublicFlags } from '@tubutree/shared-types';
 import { cartStorefrontSlug } from './cart-key';
 import type { MyRefund, RefundBankInput, ReturnReasonCode } from '../utils/refund-rules';
 import { imageTimeout } from './http';
@@ -35,6 +35,8 @@ export interface ProductCard {
   inStock: boolean;
   /** Ngày tạo (ISO) để dán nhãn "Mới"; thiếu khi API cũ → không nhãn. */
   createdAt?: string;
+  /** Ai giao món này; thiếu khi API cũ → coi như Tubu giao. Dải gợi ý bù đơn Miễn phí giao hàng chỉ nhận món Tubu giao. */
+  fulfiller?: ProductFulfiller;
 }
 
 export interface VariationDetail {
@@ -66,6 +68,8 @@ export interface ProductDetail {
   fulfiller?: ProductFulfiller;
   /** Hàng của gian hàng đối tác (tự giao hoặc Tubu giao hộ): chỉ bán giá lẻ, không định kỳ/mua chung. API cũ chưa trả → hàng Tubu. */
   partnerOwned?: boolean;
+  /** Câu chuyện sản phẩm do Admin Story Studio lưu; `resolveStoryConfig` và `reelDisabled` đọc nó (cùng kiểu với `ProductDetail` của app-core). */
+  storyConfig?: ProductStoryConfig | null;
 }
 
 export interface ProductFulfiller {

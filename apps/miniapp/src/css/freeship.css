@@ -1,0 +1,125 @@
+/* Thanh tiến độ Miễn phí giao hàng và dải gợi ý mua thêm ở đầu Giỏ (W42A). Số đo đặt ở đây (bánh cóc px của P17b chỉ đếm TSX). */
+
+.tubu-freeship {
+  box-sizing: border-box;
+  /* Cao tối thiểu bằng trạng thái chưa đạt (một dòng chữ + thanh): đạt ngưỡng, thanh biến mất thì giỏ không nhảy. */
+  min-height: 56px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-stack-sm);
+  padding: var(--space-inline-md);
+  background: var(--color-bg-surface);
+  border-radius: var(--radius-card);
+  box-shadow: var(--elevation-1);
+  font-variant-numeric: tabular-nums;
+}
+.tubu-freeship[data-reached='true'] {
+  background: var(--color-status-success-bg);
+  box-shadow: none;
+}
+.tubu-freeship-text {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--type-caption-size);
+  line-height: var(--type-caption-lh);
+  font-weight: var(--type-label-weight);
+}
+.tubu-freeship[data-reached='true'] .tubu-freeship-text {
+  color: var(--color-text-success);
+}
+.tubu-freeship-track {
+  height: 6px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--color-track);
+}
+.tubu-freeship-fill {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(90deg, var(--color-progress-fill-from), var(--color-action-primary-bg));
+  transition: width var(--dur-slow) var(--ease-out);
+}
+/* Ánh sáng chạy ngang phần đã đầy: chỉ transform nên không kích hoạt layout. */
+.tubu-freeship-fill::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, var(--color-skeleton-shimmer), transparent);
+  animation: tubu-freeship-shimmer 2.4s var(--ease-out) infinite;
+}
+@keyframes tubu-freeship-shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tubu-freeship-fill {
+    transition: none;
+  }
+  .tubu-freeship-fill::after {
+    display: none;
+    animation: none;
+  }
+}
+
+/* Dải gợi ý bù đơn: thẻ rộng cố định `--tile-w-sm`, hàng cao theo thẻ cao nhất, nút "+ Thêm" nằm đáy thẻ. */
+.tubu-addon {
+  min-width: 0;
+}
+.tubu-addon-title {
+  padding-block: var(--space-stack-xs);
+}
+.tubu-addon-row {
+  box-sizing: border-box;
+  padding: var(--space-stack-xs) 0;
+}
+.tubu-addon-track {
+  display: flex;
+  gap: var(--space-inline-md);
+  align-items: stretch;
+  width: max-content;
+  min-width: 100%;
+}
+.tubu-addon-card {
+  box-sizing: border-box;
+  flex: 0 0 var(--tile-w-sm);
+  width: var(--tile-w-sm);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-stack-xs);
+  padding: var(--space-stack-sm);
+  background: var(--color-bg-surface);
+  border-radius: var(--radius-card);
+  box-shadow: var(--elevation-1);
+  font-variant-numeric: tabular-nums;
+}
+.tubu-addon-name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  width: 100%;
+  height: 32px;
+  color: var(--color-text-primary);
+  font-size: var(--type-label-size);
+  line-height: 16px;
+  font-weight: var(--type-label-weight);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.tubu-addon-price {
+  min-height: 36px;
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+}
+.tubu-addon-add {
+  margin-top: auto;
+  width: 100%;
+}

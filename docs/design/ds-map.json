@@ -330,7 +330,35 @@
       "web": "apps/web/src/components/mini/product-story-showcase.tsx",
       "props": "ProductStoryShowcaseProps",
       "screens": [
+        "/",
         "/product/:slug"
+      ]
+    },
+    {
+      "name": "StoryReelStrip",
+      "miniapp": "apps/miniapp/src/components/ui/story-reel-strip.tsx",
+      "web": "apps/web/src/components/mini/story-reel-strip.tsx",
+      "props": "StoryReelStripProps",
+      "screens": [
+        "/"
+      ]
+    },
+    {
+      "name": "FreeShippingProgressBar",
+      "miniapp": "apps/miniapp/src/components/ui/free-shipping-progress-bar.tsx",
+      "web": "apps/web/src/components/mini/free-shipping-progress-bar.tsx",
+      "props": "FreeShippingProgressBarProps",
+      "screens": [
+        "/cart"
+      ]
+    },
+    {
+      "name": "FreeshipAddonRail",
+      "miniapp": "apps/miniapp/src/components/ui/freeship-addon-rail.tsx",
+      "web": "apps/web/src/components/mini/freeship-addon-rail.tsx",
+      "props": "FreeshipAddonRailProps",
+      "screens": [
+        "/cart"
       ]
     },
     {

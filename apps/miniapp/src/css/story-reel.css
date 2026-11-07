@@ -1,0 +1,206 @@
+/* Dải Story đầu Trang chủ và khung Reel toàn màn (W42A). Số đo đặt ở đây (bánh cóc px của P17b chỉ đếm TSX); màu và nhịp đều đi qua token.
+   Khối cao đúng `HOME_SETTLING_HEIGHTS.stories` (144): tiêu đề 24 + 8, vòng 72 (ảnh 64 + viền 4 mỗi bên), 6, nhãn hai dòng 32, dư 2 cho đáy hàng cuộn. */
+
+.tubu-reel-strip {
+  box-sizing: border-box;
+  height: 144px;
+  font-variant-numeric: tabular-nums;
+}
+.tubu-reel-head {
+  box-sizing: border-box;
+  height: 24px;
+  margin-bottom: var(--space-stack-sm);
+  padding-inline: var(--space-block);
+  display: flex;
+  align-items: center;
+}
+.tubu-reel-row {
+  box-sizing: border-box;
+  height: 112px;
+  padding-inline: var(--space-block);
+}
+/* Bọc trong một hàng flex rộng theo nội dung: phần đệm cuối của vùng cuộn không bị WebView cũ bỏ mất. */
+.tubu-reel-track {
+  display: flex;
+  gap: var(--space-inline-md);
+  width: max-content;
+  min-width: 100%;
+  align-items: flex-start;
+}
+
+.tubu-reel-item {
+  flex: 0 0 72px;
+  box-sizing: border-box;
+  width: 72px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  border-radius: var(--radius-media);
+}
+.tubu-reel-item:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: -2px;
+}
+
+.tubu-reel-ring {
+  position: relative;
+  box-sizing: border-box;
+  width: 72px;
+  height: 72px;
+  padding: 4px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--color-story-ring-from), var(--color-story-ring-to));
+}
+.tubu-reel-item[data-seen='true'] .tubu-reel-ring {
+  background: var(--color-story-ring-seen);
+}
+.tubu-reel-photo {
+  position: relative;
+  display: block;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--color-bg-media);
+}
+/* Vành trắng 2px giữa ảnh và viền chuyển sắc; vẽ bằng lớp giả trong vòng tròn nên không phụ thuộc outline bo góc của WebView. */
+.tubu-reel-photo::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 2px var(--color-bg-surface);
+  pointer-events: none;
+}
+.tubu-reel-badge {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  display: block;
+  line-height: 0;
+  border-radius: var(--radius-pill);
+  box-shadow: 0 0 0 2px var(--color-bg-surface);
+}
+.tubu-reel-label {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  box-sizing: border-box;
+  width: 100%;
+  height: 32px;
+  color: var(--color-text-primary);
+  font-size: var(--type-label-size);
+  line-height: 16px;
+  font-weight: var(--type-label-weight);
+  text-align: center;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+
+/* Khung chờ cùng số đo với khối thật (khối ngoài, tiêu đề, vòng, nhãn) để trang không nhảy khi dữ liệu về. */
+.tubu-reel-skel-title {
+  width: 96px;
+  height: 16px;
+}
+.tubu-reel-skel-ring {
+  flex: 0 0 72px;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+}
+.tubu-reel-skel-item {
+  flex: 0 0 72px;
+  width: 72px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.tubu-reel-skel-label {
+  width: 56px;
+  height: 12px;
+  margin-top: 2px;
+}
+
+/* Khung chờ toàn màn trong lúc tải chi tiết món hoặc mã nguồn của khung Reel: cùng lớp z với `.tubu-story-dialog`, nên Reel thật thay vào không nhấp nháy. */
+.tubu-reel-wait {
+  position: fixed;
+  inset: 0;
+  height: 100dvh;
+  z-index: var(--z-dialog);
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg-surface);
+}
+.tubu-reel-wait-head {
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--space-stack-xs);
+}
+.tubu-reel-wait-close {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+.tubu-reel-wait-body {
+  padding: var(--space-block);
+}
+.tubu-reel-wait-stage {
+  aspect-ratio: 1 / 1;
+  border-radius: var(--radius-card);
+}
+
+/* Đầu khung Reel: tiêu đề kèm vị trí "2/8"; thanh đáy đổi sang "Thêm vào giỏ · giá" + "Câu chuyện kế". */
+.tubu-reel-heading {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-stack-sm);
+  min-width: 0;
+}
+.tubu-story-position {
+  color: var(--color-text-secondary);
+  font-size: var(--type-label-size);
+  line-height: var(--type-label-lh);
+  font-variant-numeric: tabular-nums;
+}
+.tubu-story-bar[data-reel='true'] > * {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.tubu-story-bar[data-reel='true'] > .tubu-reel-next-btn {
+  flex: 0 0 auto;
+}
+/* Nút "Thêm vào giỏ · giá" được xuống hai dòng thay vì bị cắt "…": khách phải đọc đủ số tiền trước khi chạm. */
+.tubu-reel-add-btn .zaui-btn-container > span:not(.zaui-btn-icon):not(.zaui-btn-loading-container) {
+  white-space: normal;
+  text-align: center;
+  text-overflow: clip;
+  line-height: 1.2;
+}
+.tubu-btn.tubu-reel-next-btn {
+  min-width: 0;
+}
+.tubu-reel-next {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-stack-xs);
+  white-space: nowrap;
+}
+/* Máy hẹp (320px): hai nút không đủ chỗ cho nhãn lẫn số tiền, nên nút kế chỉ còn mũi tên (tên truy cập vẫn là `reel.nextAria`). */
+@media (max-width: 359px) {
+  .tubu-reel-next-label {
+    display: none;
+  }
+}

@@ -11,6 +11,8 @@ import { CouponRemovedNotice } from '../checkout/coupon-removed-notice';
 import { QuantitySelector } from './quantity-selector';
 import { ProductStoryShowcase } from './product-story-showcase';
 import { SegmentedTabs } from './segmented-tabs';
+import { StoryReelStrip } from './story-reel-strip';
+import { FreeshipAddonRail } from './freeship-addon-rail';
 
 /**
  * Vùng chạm >= 44x44 (C-021, WCAG 2.5.5) cho mọi phần tử bấm được mà DS v2 dựng. jsdom không có layout,
@@ -68,6 +70,8 @@ describe('vùng chạm DS v2 >= 44x44', () => {
     ['Checkbox flush (ô chọn dòng giỏ)', () => <Checkbox flush aria-label="A" checked={false} onChange={() => {}} />],
     ['Radio có nhãn', () => <Radio label="A" checked={false} onChange={() => {}} />],
     ['ProductStoryShowcase (vòng cung, chip bước)', () => <ProductStoryShowcase product={storyProduct} previewConfig={storyConfig} />],
+    ['StoryReelStrip (vòng Story)', () => <StoryReelStrip items={[{ slug: 'a', name: 'A', thumbnail: null, seen: false }, { slug: 'b', name: 'B', thumbnail: null, seen: true }]} onOpen={() => {}} />],
+    ['FreeshipAddonRail (nút + Thêm)', () => <FreeshipAddonRail items={[{ slug: 'a', name: 'A', thumbnail: null, price: 49000, variationId: 'v' }]} onAdd={() => {}} />],
     ['Switch có nhãn', () => <Switch label="A" checked={false} onChange={() => {}} />],
     ['CouponRemovedNotice (nút Đóng lời báo mã đã gỡ)', () => <CouponRemovedNotice notice={{ code: 'A', text: 'B' }} onDismiss={() => {}} />],
   ];
@@ -80,6 +84,13 @@ describe('vùng chạm DS v2 >= 44x44', () => {
       // ZaUI vẽ input checkbox/radio/switch đè lên ô gốc; vùng chạm là khối hitArea bọc ngoài.
       expect(reaches44(el), `${el.tagName} ${el.className} không đạt 44x44`).toBe(true);
     }
+  });
+
+  it('ProductStoryShowcase Reel (đóng, thêm giỏ · giá, câu chuyện kế)', () => {
+    render(<ProductStoryShowcase product={storyProduct} previewConfig={storyConfig} fullscreen reel addPrice="49.000đ" position="1/8" onNext={() => {}} />);
+    const els = interactiveIn(document.body);
+    expect(els.map((el) => el.getAttribute('data-testid'))).toEqual(expect.arrayContaining(['story-close', 'story-add-to-cart', 'story-next']));
+    for (const el of els) expect(reaches44(el), `${el.tagName} ${el.className} không đạt 44x44`).toBe(true);
   });
 
   it('ProductStoryShowcase toàn màn (đóng, thêm giỏ, mua ngay)', () => {

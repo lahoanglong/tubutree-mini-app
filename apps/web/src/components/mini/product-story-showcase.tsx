@@ -3,9 +3,11 @@
 // Nguồn: apps/miniapp/src/components/ui/product-story-showcase.tsx (cùng props, cùng test-id).
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from 'react';
 import type { ProductDetail } from '@tubutree/app-core/api/catalog';
+import { ChevronRight } from 'lucide-react';
 import type { HudCalloutPoint, IngredientLayerSprite, ProductStoryConfig } from '@tubutree/shared-types';
 import { arcSlot, ambientVar, layersUpTo, resolveStoryConfig, storyView } from '@tubutree/app-core/commerce/product-story';
 import { preloadImages, STORY_PRELOAD_ROOT_MARGIN, storyPreloadUrls } from '@tubutree/app-core/commerce/story-preload';
+import { resolveReelStoryConfig } from '@tubutree/app-core/commerce/story-reel';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { ProductImage } from './product-image';
 import { StorySprite } from './story-sprite';
@@ -23,6 +25,14 @@ export interface ProductStoryShowcaseProps {
   /** Khung 100dvh dạng Reel, có nút đóng và thanh mua ghim đáy. */
   fullscreen?: boolean;
   onClose?: () => void;
+  /** Reel của Trang chủ: luôn có kịch bản (không cần cấu hình riêng), bỏ cảnh chọn phân loại, thanh đáy là "Thêm vào giỏ · giá" và "Câu chuyện kế" (không có "Mua ngay"). */
+  reel?: boolean;
+  /** Giá đã định dạng ghi trên nút thêm giỏ của Reel; thiếu thì nút chỉ ghi "Thêm vào giỏ". */
+  addPrice?: string;
+  /** Chuyển sang Reel kế; không truyền thì không có nút "Câu chuyện kế". */
+  onNext?: () => void;
+  /** Vị trí trong dải, vd "2/8", hiện nhỏ cạnh tiêu đề đầu khung toàn màn. */
+  position?: string;
 }
 
 const STAGE_SIZES = '(min-width: 48rem) 28rem, 100vw';
@@ -89,8 +99,8 @@ function useSeen(ref: RefObject<Element | null>, active: boolean): boolean {
   return seen;
 }
 
-export function ProductStoryShowcase({ product, selectedVariationId, onSelectVariation, onAddToCart, onBuyNow, buyDisabled = false, previewConfig, fullscreen = false, onClose }: ProductStoryShowcaseProps) {
-  const config = useMemo(() => previewConfig ?? resolveStoryConfig(product), [previewConfig, product]);
+export function ProductStoryShowcase({ product, selectedVariationId, onSelectVariation, onAddToCart, onBuyNow, buyDisabled = false, previewConfig, fullscreen = false, onClose, reel = false, addPrice, onNext, position }: ProductStoryShowcaseProps) {
+  const config = useMemo(() => previewConfig ?? (reel ? resolveReelStoryConfig(product) : resolveStoryConfig(product)), [previewConfig, product, reel]);
   // Mặc định bản có chuyển động: HTML dựng sẵn và lần hydrate đầu phải khớp nhau; thiết lập giảm chuyển động chỉ biết ở trình duyệt.
   const [reduced, setReduced] = useState(false);
   useEffect(() => {
@@ -322,7 +332,14 @@ export function ProductStoryShowcase({ product, selectedVariationId, onSelectVar
       className="tubu-story tubu-story-full"
     >
       <header className="tubu-story-header">
-        <h2 className="tubu-story-heading">{title}</h2>
+        {position ? (
+          <div className="tubu-story-headline">
+            <h2 className="tubu-story-heading">{title}</h2>
+            <span data-testid="story-position" className="tubu-story-position">{position}</span>
+          </div>
+        ) : (
+          <h2 className="tubu-story-heading">{title}</h2>
+        )}
         <button ref={closeRef} type="button" data-testid="story-close" aria-label={fillCopy('story.close')} className="tubu-story-close" onClick={() => onClose?.()}>
           <span aria-hidden="true">×</span>
         </button>
@@ -337,14 +354,28 @@ export function ProductStoryShowcase({ product, selectedVariationId, onSelectVar
           body
         )}
       </div>
-      <div className="tubu-story-bar">
-        <button type="button" data-testid="story-add-to-cart" disabled={buyDisabled} className="tubu-story-btn tubu-story-btn-secondary" onClick={() => onAddToCart?.()}>
-          {fillCopy('story.addToCart')}
-        </button>
-        <button type="button" data-testid="story-buy-now" disabled={buyDisabled} className="tubu-story-btn tubu-story-btn-primary" onClick={() => onBuyNow?.()}>
-          {fillCopy(buyDisabled ? 'story.soldOut' : 'story.buyNow')}
-        </button>
-      </div>
+      {reel ? (
+        <div className="tubu-story-bar tubu-story-bar-reel" data-reel="true">
+          {onNext && (
+            <button type="button" data-testid="story-next" aria-label={fillCopy('reel.nextAria')} className="tubu-story-btn tubu-story-btn-secondary tubu-story-btn-next" onClick={onNext}>
+              {fillCopy('reel.next')}
+              <ChevronRight size={16} strokeWidth={1.75} aria-hidden="true" />
+            </button>
+          )}
+          <button type="button" data-testid="story-add-to-cart" disabled={buyDisabled} className="tubu-story-btn tubu-story-btn-primary" onClick={() => onAddToCart?.()}>
+            {buyDisabled ? fillCopy('story.soldOut') : addPrice ? fillCopy('reel.addPrice', { price: addPrice }) : fillCopy('story.addToCart')}
+          </button>
+        </div>
+      ) : (
+        <div className="tubu-story-bar">
+          <button type="button" data-testid="story-add-to-cart" disabled={buyDisabled} className="tubu-story-btn tubu-story-btn-secondary" onClick={() => onAddToCart?.()}>
+            {fillCopy('story.addToCart')}
+          </button>
+          <button type="button" data-testid="story-buy-now" disabled={buyDisabled} className="tubu-story-btn tubu-story-btn-primary" onClick={() => onBuyNow?.()}>
+            {fillCopy(buyDisabled ? 'story.soldOut' : 'story.buyNow')}
+          </button>
+        </div>
+      )}
     </section>
   );
 }

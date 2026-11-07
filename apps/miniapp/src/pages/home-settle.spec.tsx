@@ -127,15 +127,15 @@ describe('HomePage — khung chờ chung (cấp trang)', () => {
     expect(screen.queryByTestId('home-block-error')).toBeNull();
   });
 
-  it('lần mở trước có banner: khung chờ chung có thêm ô banner đứng đầu; chưa nhớ thì chỉ bốn ô', async () => {
+  it('lần mở trước có banner: khung chờ chung có thêm ô banner đứng đầu; chưa nhớ thì chỉ năm ô (đã gồm dải Story)', async () => {
     renderHome();
     await settle();
-    expect(screen.getByTestId('home-settling').children).toHaveLength(4);
+    expect(screen.getByTestId('home-settling').children).toHaveLength(5);
     localStorage.setItem(BANNER_HINT_KEY, '1');
     renderHome();
     await settle();
     const [withBanner] = screen.getAllByTestId('home-settling').slice(-1);
-    expect(withBanner?.children).toHaveLength(5);
+    expect(withBanner?.children).toHaveLength(6);
     expect(withBanner?.firstElementChild).toHaveStyle({ aspectRatio: 'var(--banner-ratio)' });
   });
 
