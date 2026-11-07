@@ -4,6 +4,7 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import type { ProductDetail } from '@tubutree/app-core/api/catalog';
 import type { ProductStoryConfig } from '@tubutree/shared-types';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { resetPreloadCache } from '@tubutree/app-core/commerce/story-preload';
 import { ProductStoryShowcase } from './product-story-showcase';
 
 const baseProduct = {
@@ -252,5 +253,130 @@ describe('ProductStoryShowcase (Mini)', () => {
     render(<ProductStoryShowcase product={baseProduct} previewConfig={fullConfig()} />);
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(screen.queryByTestId('story-buy-now')).toBeNull();
+  });
+});
+
+const imgLayer = (id: string, imageUrl: string) => ({ id, imageUrl, label: id, from: 'top' as const, xPct: 30, yPct: 30, scale: 1, rotateDeg: 0 });
+const imageStory: ProductStoryConfig = {
+  version: 1,
+  enabled: true,
+  scenes: [
+    {
+      kind: 'ingredient_assembly',
+      steps: [0, 1, 2].map((i) => ({
+        title: `Chương ${i + 1}`,
+        body: `Nội dung ${i + 1}`,
+        layers: [imgLayer(`u${i}`, `/api/ing-${i}.png`), { id: `s${i}`, spriteId: 'lemongrass', label: 'Sả', from: 'left' as const, xPct: 60, yPct: 60, scale: 1, rotateDeg: 0 }],
+      })),
+    },
+  ],
+};
+
+describe('W40B: tải trước ảnh chương kế và chuyển chương mượt (Mini)', () => {
+  const loaded: string[] = [];
+  beforeEach(() => {
+    loaded.length = 0;
+    resetPreloadCache();
+    vi.stubGlobal(
+      'Image',
+      class {
+        decoding = '';
+        setAttribute() {}
+        set src(v: string) {
+          loaded.push(v);
+        }
+      },
+    );
+  });
+
+  it('mở ở chương 01 thì tải ảnh nguyên liệu của chương 02; sang chương kế tải tiếp chương sau nó; cuối cùng và quay lại không tải lại', () => {
+    render(<ProductStoryShowcase product={baseProduct} previewConfig={imageStory} />);
+    expect(loaded).toEqual(['/api/ing-1.png']);
+    const chips = screen.getAllByTestId('story-step-chip');
+    fireEvent.click(chips[1]!);
+    expect(loaded).toEqual(['/api/ing-1.png', '/api/ing-2.png']);
+    fireEvent.click(chips[2]!);
+    fireEvent.click(chips[0]!);
+    expect(loaded).toEqual(['/api/ing-1.png', '/api/ing-2.png']);
+  });
+
+  it('chỉ tải trước khi mục Story đã gần khung nhìn: chưa cuộn tới thì không tốn dữ liệu', () => {
+    const observers: IntersectionObserverCallback[] = [];
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        constructor(cb: IntersectionObserverCallback) {
+          observers.push(cb);
+        }
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+    );
+    render(<ProductStoryShowcase product={baseProduct} previewConfig={imageStory} />);
+    expect(loaded).toEqual([]);
+    act(() => {
+      for (const cb of observers) cb([{ isIntersecting: false, target: document.body } as unknown as IntersectionObserverEntry], {} as IntersectionObserver);
+    });
+    expect(loaded).toEqual([]);
+    act(() => {
+      for (const cb of observers) cb([{ isIntersecting: true, target: document.body } as unknown as IntersectionObserverEntry], {} as IntersectionObserver);
+    });
+    expect(loaded).toEqual(['/api/ing-1.png']);
+  });
+
+  it('giảm chuyển động: bản tĩnh đã vẽ mọi lớp nên không tải trước gì thêm', () => {
+    mockMatchMedia(true);
+    render(<ProductStoryShowcase product={baseProduct} previewConfig={imageStory} />);
+    expect(loaded).toEqual([]);
+  });
+
+  it('đổi chương dựng lại khối nội dung (key theo bước) để chạy lại hiệu ứng vào, chữ đổi theo', () => {
+    render(<ProductStoryShowcase product={baseProduct} previewConfig={imageStory} />);
+    const panel = screen.getByTestId('story-step-panel');
+    const before = panel.firstElementChild!;
+    expect(before).toHaveClass('tubu-story-panel-in');
+    fireEvent.click(screen.getAllByTestId('story-step-chip')[1]!);
+    const after = screen.getByTestId('story-step-panel').firstElementChild!;
+    expect(after).toHaveClass('tubu-story-panel-in');
+    expect(after).not.toBe(before);
+    expect(after).toHaveTextContent('Chương 2');
+  });
+
+  describe('story.css', () => {
+    const css = readFileSync(resolve(__dirname, '../../css/story.css'), 'utf8');
+    const reduced = [...css.matchAll(/@media \(prefers-reduced-motion: reduce\)\s*\{([\s\S]*?)\n\}/g)].map((m) => m[1]).join('\n');
+    const rule = (sel: string) => new RegExp(`${sel.replace(/[.[\]()]/g, '\\$&')}\\s*\\{([^}]*)\\}`).exec(css)?.[1] ?? '';
+
+    it('chuyển chương, lớp rơi và nền cảnh dùng đường cong ease-story 240ms (token, không số rải rác)', () => {
+      expect(rule('.tubu-story-panel-in')).toMatch(/animation:\s*tubu-story-panel-in var\(--dur-story\) var\(--ease-story\) both/);
+      expect(rule('.tubu-story-layer')).toMatch(/animation:\s*tubu-story-drop var\(--dur-story\) var\(--ease-story\) both/);
+      expect(rule('.tubu-story-stage')).toMatch(/transition:\s*background var\(--dur-story\) var\(--ease-story\)/);
+      expect(rule('.tubu-story-chip')).toMatch(/transition:\s*transform var\(--p-dur-release\) var\(--p-ease-out\), background-color var\(--dur-story\) var\(--ease-story\), color var\(--dur-story\) var\(--ease-story\)/);
+      const tokens = readFileSync(resolve(__dirname, '../../css/tokens.css'), 'utf8');
+      expect(tokens).toMatch(/--ease-story:\s*var\(--p-ease-story\)/);
+      expect(tokens).toMatch(/--dur-story:\s*var\(--p-dur-story\)/);
+    });
+
+    it('giảm chuyển động tắt hiệu ứng vào của chương, lớp rơi, nền cảnh và đổi màu chip', () => {
+      expect(reduced).toMatch(/\.tubu-story-layer,\s*\.tubu-story-panel-in\s*\{\s*animation:\s*none/);
+      expect(reduced).toMatch(/\.tubu-story-stage,\s*\.tubu-story-arc-item,\s*\.tubu-story-chip\s*\{\s*transition:\s*none/);
+    });
+
+    it('số đều (tabular-nums) cho chữ bước, thẻ chỉ, chip, nhãn vòng cung và thanh mua của khung toàn màn', () => {
+      expect(rule('.tubu-story')).toMatch(/font-variant-numeric:\s*tabular-nums/);
+      expect(rule('.tubu-story-dialog')).toMatch(/font-variant-numeric:\s*tabular-nums/);
+      expect(rule('.tubu-story-chip')).toMatch(/font-variant-numeric:\s*tabular-nums/);
+      expect(rule('.tubu-story-arc-item')).toMatch(/font-variant-numeric:\s*tabular-nums/);
+    });
+
+    it('vùng chạm 44px: chip, mục vòng cung và nút đóng', () => {
+      for (const sel of ['.tubu-story-chip', '.tubu-story-arc-item']) {
+        expect(rule(sel), sel).toMatch(/min-width:\s*44px/);
+        expect(rule(sel), sel).toMatch(/min-height:\s*44px/);
+      }
+      expect(rule('.tubu-story-close')).toMatch(/width:\s*44px/);
+      expect(rule('.tubu-story-close')).toMatch(/height:\s*44px/);
+    });
   });
 });

@@ -5,11 +5,13 @@ import { useMutation } from '@tanstack/react-query';
 import { parseStoryConfig, STORY_LIMITS, type AssemblyStep, type HudCalloutPoint, type ProductStoryConfig, type StoryImageFrame, type StoryScene } from '@tubutree/shared-types';
 import type { ProductDetail as PublicProduct } from '@tubutree/app-core/api/catalog';
 import { resolveStoryConfig, STORY_PRODUCT_INSET_PCT } from '@tubutree/app-core/commerce/product-story';
+import { checkStoryCompleteness } from '@tubutree/app-core/commerce/story-completeness';
 import { findStoryPreset } from '@tubutree/app-core/commerce/story-presets-launch';
 import { STORY_SPRITES } from '@tubutree/app-core/commerce/story-sprites';
 import { ProductStoryShowcase } from '@/components/mini/product-story-showcase';
 import { extractStoryAssets, generateStoryDraft, type ProductDetail, type StoryAssetsResult, type StoryDraftProvider } from '@/lib/product-categories';
 import { actionErrorText } from '@/lib/admin-error-text';
+import { StoryCompletenessPanel } from './story-completeness-panel';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_SMALL, FIELD_CLASS, INPUT_CLASS, Notice, chipClass } from './ui';
 
 const EMPTY: ProductStoryConfig = { version: 1, enabled: true, scenes: [] };
@@ -129,6 +131,10 @@ export function ProductStoryStudio({
     return cutoutSrc ? { ...rest, cutoutUrl: cutoutSrc } : rest;
   }, [current, cutoutSrc]);
   const sel = Math.min(pick, Math.max(points.length - 1, 0));
+  const completeness = useMemo(
+    () => checkStoryCompleteness(current, { unsaved: value === null, baseline: generated, hasProductImage: product.images.length > 0, cutoutResolvable: !current.cutoutUrl || cutoutSrc !== null }),
+    [current, value, generated, product.images.length, cutoutSrc],
+  );
 
   const setStep = (i: number, fn: (s: AssemblyStep) => void) =>
     edit((c) => {
@@ -530,6 +536,7 @@ export function ProductStoryStudio({
             Máy tính
           </button>
         </div>
+        <StoryCompletenessPanel result={completeness} />
         <div
           data-testid="story-preview-frame"
           data-mode={mode}

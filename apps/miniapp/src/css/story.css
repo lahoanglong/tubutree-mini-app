@@ -3,6 +3,8 @@
 
 .tubu-story {
   background: var(--color-bg-surface);
+  /* Giá, trọng lượng (g/kg), kcal trong chữ bước và thẻ chỉ không rung bề rộng khi đổi chương. */
+  font-variant-numeric: tabular-nums;
 }
 .tubu-story[data-inline='true'] {
   padding: var(--space-block);
@@ -16,7 +18,7 @@
   overflow: hidden;
 }
 .tubu-story-stage {
-  transition: background var(--dur-base) var(--ease-out);
+  transition: background var(--dur-story) var(--ease-story);
 }
 .tubu-story-product {
   position: absolute;
@@ -38,7 +40,7 @@
   left: var(--lx);
   top: var(--ly);
   transform: translate(-50%, -50%) rotate(var(--rot)) scale(var(--sc));
-  animation: tubu-story-drop var(--dur-slow) var(--ease-out) both;
+  animation: tubu-story-drop var(--dur-story) var(--ease-story) both;
   pointer-events: none;
 }
 .tubu-story-layer[data-static='true'] {
@@ -74,6 +76,7 @@
   font-size: var(--type-label-size);
   line-height: var(--type-label-lh);
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
   cursor: pointer;
   transform: translateX(calc(var(--arc-offset) * 6px)) translateY(calc(var(--arc-lift) * 1px)) rotate(var(--arc-rot)) scale(var(--arc-scale));
   transition: transform var(--dur-base) var(--ease-out);
@@ -108,7 +111,9 @@
   font-family: var(--font-ui);
   font-size: var(--type-label-size);
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
   cursor: pointer;
+  transition: transform var(--p-dur-release) var(--p-ease-out), background-color var(--dur-story) var(--ease-story), color var(--dur-story) var(--ease-story);
 }
 .tubu-story-chip[aria-current='step'] {
   background: var(--color-action-primary-bg);
@@ -116,6 +121,20 @@
 }
 .tubu-story-panel {
   margin-top: var(--space-stack-sm);
+}
+/* Nội dung chương mới trượt lên 8px và hiện dần; remount theo `key` của bước nên chạy lại mỗi lần đổi chương. */
+.tubu-story-panel-in {
+  animation: tubu-story-panel-in var(--dur-story) var(--ease-story) both;
+}
+@keyframes tubu-story-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 .tubu-story-step-title {
   margin: 0;
@@ -212,6 +231,7 @@
 }
 
 .tubu-story-dialog {
+  font-variant-numeric: tabular-nums;
   position: fixed;
   inset: 0;
   height: 100dvh;
@@ -262,11 +282,13 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .tubu-story-layer {
+  .tubu-story-layer,
+  .tubu-story-panel-in {
     animation: none;
   }
   .tubu-story-stage,
-  .tubu-story-arc-item {
+  .tubu-story-arc-item,
+  .tubu-story-chip {
     transition: none;
   }
 }

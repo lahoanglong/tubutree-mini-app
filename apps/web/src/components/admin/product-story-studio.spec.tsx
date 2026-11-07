@@ -243,6 +243,79 @@ describe('ProductStoryStudio', () => {
     expect(document.querySelector<HTMLInputElement>('[data-testid="story-enabled"]')!.disabled).toBe(true);
   });
 
+  describe('Story Completeness Check trên khung xem trước', () => {
+    const rows = () => Array.from(document.querySelectorAll<HTMLElement>('[data-testid="story-check-row"]'));
+    const keyed = (key: string) => rows().find((r) => r.dataset.key === key)!;
+
+    it('chưa lưu cấu hình riêng: panel hiện ngay trên khung xem trước, mọi chương ghi "Tự động từ sản phẩm"', () => {
+      mount({ value: null });
+      const panel = document.querySelector('[data-testid="story-completeness"]')!;
+      const frame = document.querySelector('[data-testid="story-preview-frame"]')!;
+      expect(panel).not.toBeNull();
+      expect(panel.compareDocumentPosition(frame) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      const chapters = rows().filter((r) => r.dataset.key!.startsWith('step-'));
+      expect(chapters.length).toBeGreaterThan(0);
+      expect(chapters.every((r) => r.dataset.source === 'auto')).toBe(true);
+      expect(panel.textContent).toContain('Tự động từ sản phẩm');
+    });
+
+    it('chương đã sửa chuyển sang "Đã chỉnh tay", chương giữ nguyên bản tự sinh vẫn là tự động', () => {
+      mount({ value: null });
+      click(byText(document.body, 'button', 'Tự sinh Story'));
+      const before = keyed('step-02').dataset.source;
+      expect(before).toBe('auto');
+      typeInto(document.querySelector('input[aria-label="Nội dung bước 1"]'), 'Câu do admin viết lại.');
+      expect(keyed('step-01').dataset.source).toBe('custom');
+      expect(keyed('step-02').dataset.source).toBe('auto');
+      expect(keyed('step-01').textContent).toContain('Đã chỉnh tay');
+    });
+
+    it('xoá nội dung một chương thì chương đó "Cần xem" và ghi rõ thiếu gì; trạng thái đọc được bằng chữ, không chỉ bằng màu', () => {
+      mount({ value: config() });
+      typeInto(document.querySelector('input[aria-label="Nội dung bước 1"]'), '');
+      const row = keyed('step-01');
+      expect(row.dataset.state).toBe('warn');
+      expect(row.textContent).toContain('Cần xem');
+      expect(row.textContent).toContain('Thiếu nội dung');
+    });
+
+    it('ảnh sân khấu: có ảnh gốc mà chưa tách nền là cần xem; sản phẩm không có ảnh là thiếu và panel báo chưa nên xuất bản', () => {
+      mount({ value: config() });
+      expect(keyed('stage').dataset.state).toBe('warn');
+      document.body.innerHTML = '';
+      mount({ value: config(), product: product({ images: [] }) });
+      expect(keyed('stage').dataset.state).toBe('missing');
+      expect(document.querySelector('[data-testid="story-completeness"]')!.getAttribute('data-verdict')).toBe('blocked');
+      expect(document.querySelector('[data-testid="story-completeness-verdict"]')!.textContent).toContain('Chưa nên xuất bản');
+    });
+
+    it('ảnh tách nền trỏ tới ảnh sản phẩm đã xoá: ảnh sân khấu báo thiếu và chặn xuất bản', () => {
+      const cfg = config();
+      cfg.cutoutUrl = '/public-image/product/p1/9';
+      mount({ value: cfg });
+      expect(keyed('stage').dataset.state).toBe('missing');
+      expect(keyed('stage').textContent).toContain('không còn trong ảnh sản phẩm');
+      expect(document.querySelector('[data-testid="story-completeness"]')!.getAttribute('data-verdict')).toBe('blocked');
+    });
+
+    it('độ tương phản: liệt kê từng nền đang dùng kèm tỷ lệ và Đạt, vòng cung dùng nền nào thì đo nền đó', () => {
+      mount({ value: null });
+      const ambients = Array.from(document.querySelectorAll<HTMLElement>('[data-testid="story-contrast-row"]'));
+      expect(ambients.map((a) => a.dataset.ambient)).toEqual(expect.arrayContaining(['sand', 'leaf', 'amber']));
+      expect(ambients.every((a) => a.dataset.pass === 'true')).toBe(true);
+      expect(ambients[0]!.textContent).toMatch(/\d+\.\d:1 · Đạt/);
+    });
+
+    it('sửa xong đủ ảnh tách nền, chữ, nguyên liệu và điểm chỉ: panel báo sẵn sàng', () => {
+      const cfg = config();
+      cfg.cutoutUrl = 'https://cdn.example.com/cut.png';
+      mount({ value: cfg });
+      const panel = document.querySelector('[data-testid="story-completeness"]')!;
+      expect(panel.getAttribute('data-verdict')).toBe('ready');
+      expect(document.querySelector('[data-testid="story-completeness-verdict"]')!.textContent).toContain('Sẵn sàng xuất bản');
+    });
+  });
+
   describe('AI Tạo kịch bản câu chuyện', () => {
     const AI_ASM = {
       kind: 'ingredient_assembly' as const,
