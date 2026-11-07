@@ -290,12 +290,12 @@ export default function ProfilePage() {
             </Heading>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
               {tierName ? (
-                <Badge tone="brand" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <Badge tone="brand" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4, minWidth: TIER_SLOT_WIDTH }}>
                   <Icon icon={Leaf} size="sm" tone="brand" />
                   {tierName}
                 </Badge>
               ) : !tierFailed ? (
-                <span aria-hidden="true" style={{ display: 'inline-block', width: 76, height: 24, borderRadius: 'var(--radius-pill)', background: 'color-mix(in srgb, var(--color-text-inverse) 28%, transparent)' }} />
+                <span aria-hidden="true" style={{ display: 'inline-block', width: TIER_SLOT_WIDTH, height: 24, borderRadius: 'var(--radius-pill)', background: 'color-mix(in srgb, var(--color-text-inverse) 28%, transparent)' }} />
               ) : null}
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 'var(--radius-pill)', border: '1px solid var(--color-text-inverse)' }}>
                 <Icon icon={Pencil} size="sm" tone="inverse" />
@@ -490,6 +490,12 @@ export default function ProfilePage() {
     </Page>
   );
 }
+
+/**
+ * Bề ngang chung của chỗ hạng thành viên (khung chờ và nhãn thật): hàng này xuống dòng khi nhãn + nút "Chỉnh sửa" không còn vừa (320px chỉ rộng ~220px). Nếu khung chờ
+ * hẹp hơn nhãn thật vài px thì cả hai trạng thái xuống dòng khác nhau và hồ sơ nhảy 24px khi hạng về; cùng một bề ngang thì cả hai trạng thái chia dòng như nhau.
+ */
+const TIER_SLOT_WIDTH = '6.5rem';
 
 function ProfileSkeleton() {
   return (

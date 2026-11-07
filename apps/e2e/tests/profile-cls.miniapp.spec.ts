@@ -20,6 +20,12 @@ const resetCls = (page: Page) => page.evaluate(() => {
 // Lời gọi bị giữ vẫn tính là đang bay nên 'networkidle' chỉ về khi có khoảng lặng 500ms: hạn 5 giây rồi đi tiếp thay vì treo tới hết giờ.
 const settle = async (page: Page) => {
   await page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => undefined);
+  // Khung chờ chỉ có ô xám và tiêu đề serif nên Inter chưa được tải: chữ thân trang đầu tiên sẽ vẽ bằng phông dự phòng rồi đổi sang Inter, một cú nhảy của phông chứ
+  // không phải của dữ liệu về muộn. Nạp Inter xong rồi mới đo (phông trong app là tệp woff2 đóng sẵn, trên máy khách nạp gần như tức thì).
+  await page.evaluate(async () => {
+    await Promise.all(['400', '500', '600', '700'].map((w) => document.fonts.load(`${w} 14px Inter`)));
+    await document.fonts.ready;
+  });
   await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
 };
 
@@ -91,6 +97,7 @@ for (const width of NARROW_WIDTHS) {
       await page.goto('/addresses');
       await expect(page.getByRole('heading', { name: 'Sổ địa chỉ' }).first()).toBeVisible({ timeout: 15_000 });
       await expect(page.getByText('Mặc định', { exact: true })).toHaveCount(0);
+      await settle(page);
       await resetCls(page);
       release();
       await expect(page.getByText('Mặc định', { exact: true })).toBeVisible({ timeout: 15_000 });
