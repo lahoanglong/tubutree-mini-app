@@ -59,13 +59,14 @@ describe('SHELVES: luật của sổ kệ', () => {
       return [s.layout, s.maxItems, s.minItems, s.dedupeRank, s.seeAllRoute];
     };
     expect(row('home.flash')).toEqual(['rail', 8, 3, 1, '/flash-sale']);
-    expect(row('home.purchased')).toEqual(['line', 10, 1, 2, '/orders']);
+    expect(row('home.purchased')).toEqual(['rail', 6, 1, 2, '/orders']);
     expect(row('home.combos')).toEqual(['rail', 4, 2, 3, null]);
     expect(row('home.bestSellers')).toEqual(['rail', 10, 3, 4, '/best-sellers']);
     expect(row('home.suggest')).toEqual(['feed', 100, 4, 6, '/browse']);
     expect(shelf('offers.flash').maxItems).toBe(4);
     expect(shelf('pdp.combos').maxItems).toBe(2);
     expect(shelf('pdp.addons').maxItems).toBe(3);
+    expect(shelf('pdp.frequentlyBought')).toMatchObject({ layout: 'line', maxItems: 2, minItems: 1, dedupeRank: null, seeAllRoute: null });
   });
 });
 

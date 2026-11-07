@@ -1,4 +1,5 @@
 import { SECTION_BUDGET } from '../commerce/collection-view';
+import { QUICK_REORDER_MAX } from '../commerce/quick-reorder';
 import { uniqueById } from '../unique-by-id';
 
 /**
@@ -24,7 +25,8 @@ export interface ShelfSpec {
 // dedupeRank: flash 1 > purchased 2 > combos 3 > bestSellers 4 > (5 để dành cho kệ "Mới về", chưa có) > suggest/related 6.
 export const SHELVES: readonly ShelfSpec[] = [
   { id: 'home.flash', screen: 'home', intent: 'deal có hạn', layout: 'rail', maxItems: 8, minItems: 3, dedupeRank: 1, seeAllRoute: '/flash-sale' },
-  { id: 'home.purchased', screen: 'home', intent: 'mua lại', layout: 'line', maxItems: 10, minItems: 1, dedupeRank: 2, seeAllRoute: '/orders' },
+  // Dải "Mua lại món quen" (QuickReorderStrip): kệ ngang tối đa 6 thẻ thêm một chạm. Một món thì trang vẫn vẽ dòng Mua lại cũ, nên sàn vẫn là 1 (để món đó còn chiếm chỗ chống trùng).
+  { id: 'home.purchased', screen: 'home', intent: 'mua lại', layout: 'rail', maxItems: QUICK_REORDER_MAX, minItems: 1, dedupeRank: 2, seeAllRoute: '/orders' },
   { id: 'home.combos', screen: 'home', intent: 'mua nhiều tiết kiệm', layout: 'rail', maxItems: 4, minItems: 2, dedupeRank: 3, seeAllRoute: null },
   { id: 'home.bestSellers', screen: 'home', intent: 'xã hội chứng thực', layout: 'rail', maxItems: 10, minItems: 3, dedupeRank: 4, seeAllRoute: '/best-sellers' },
   { id: 'home.suggest', screen: 'home', intent: 'khám phá', layout: 'feed', maxItems: 100, minItems: 4, dedupeRank: 6, seeAllRoute: '/browse' },
@@ -34,6 +36,8 @@ export const SHELVES: readonly ShelfSpec[] = [
 
   { id: 'pdp.combos', screen: 'pdp', intent: 'mua nhiều tiết kiệm', layout: 'rail', maxItems: 2, minItems: 1, dedupeRank: null, seeAllRoute: null },
   { id: 'pdp.addons', screen: 'pdp', intent: 'mua kèm', layout: 'line', maxItems: 3, minItems: 1, dedupeRank: null, seeAllRoute: null },
+  // "Gợi ý mua kèm hợp vị" (FrequentlyBoughtTogether): món đang xem + tối đa 2 món bổ trợ tick chọn; hai món này chiếm chỗ của dải "Khách thường mua cùng" bên dưới (`pdpShelves`).
+  { id: 'pdp.frequentlyBought', screen: 'pdp', intent: 'chọn mua cả bộ gợi ý', layout: 'line', maxItems: 2, minItems: 1, dedupeRank: null, seeAllRoute: null },
   { id: 'pdp.boughtTogether', screen: 'pdp', intent: 'khách thường mua cùng', layout: 'rail', maxItems: 6, minItems: 3, dedupeRank: 4, seeAllRoute: null },
   { id: 'pdp.related', screen: 'pdp', intent: 'khám phá', layout: 'feed', maxItems: 20, minItems: 4, dedupeRank: 6, seeAllRoute: null },
 
