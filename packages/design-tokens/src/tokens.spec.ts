@@ -179,5 +179,6 @@ describe('design-tokens/tokens.css: commerce tokens (P1 tokens-a11y)', () => {
     ['--p-dur-press', '80ms'],
     ['--p-dur-release', '180ms'],
     ['--p-ease-spring', 'cubic-bezier(0.34, 1.56, 0.64, 1)'],
+    ['--p-ease-drawer', 'cubic-bezier(0.32, 0.72, 0, 1)'],
   ])('chuyển động và bóng %s', (name, value) => decl(name, value));
 });

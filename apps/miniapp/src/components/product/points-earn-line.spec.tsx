@@ -47,6 +47,7 @@ describe('PointsEarnLine — bấm mở popup Cách tính Điểm Xanh', () => {
     expect(parseInt(btn.style.minHeight, 10)).toBeGreaterThanOrEqual(44);
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(btn.style.marginBottom).not.toMatch(/^-/);
+    expect(btn).toHaveClass('tubu-points-earn');
   });
 
   it('liên kết trong popup cùng cỡ chữ với dòng chữ (không inherit)', () => {

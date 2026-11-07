@@ -738,7 +738,7 @@ export default function CheckoutPage() {
                         : String(it.variationName)}
                     </Text>
                   )}
-                  <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
+                  <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', fontVariantNumeric: 'tabular-nums' }}>
                     {formatVnd(it.unitPrice)} × {it.quantity}
                   </Text>
                   {lineProblems[it.id] && (
@@ -758,7 +758,7 @@ export default function CheckoutPage() {
                     </Box>
                   )}
                 </Box>
-                <Text size="small" bold style={{ whiteSpace: 'nowrap' }}>{formatVnd(it.total)}</Text>
+                <Text size="small" bold style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{formatVnd(it.total)}</Text>
               </Box>
             ))}
           </Box>

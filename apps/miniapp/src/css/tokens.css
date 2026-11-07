@@ -22,6 +22,7 @@
   --dur-press: var(--p-dur-press);
   --dur-release: var(--p-dur-release);
   --ease-spring: var(--p-ease-spring);
+  --ease-drawer: var(--p-ease-drawer);
 
   /* Trắng/hổ phách trong suốt: không có token v2 tương ứng (--color-bg-scrim* là nền mờ tối/sáng khác
    * mục đích), nên định nghĩa tại đây để code chỉ tham chiếu tên, không rải rgba() thô. */
@@ -207,6 +208,14 @@ body.with-back-btn .page.page-bleed {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+
+/* Dòng "Nhận … Điểm Xanh" ở PDP: vùng chạm dôi 20px lên trên (margin âm) để không đẩy nội dung, đệm trên đúng bằng phần dôi đó nên chữ xuống hai dòng
+   (khổ 320px) thì nút cao thêm xuống dưới thay vì đè lên dòng giá. Để trong CSS vì bánh cóc px của P17b chỉ đếm TSX. */
+.tubu-points-earn {
+  box-sizing: border-box;
+  margin: -20px 0 0;
+  padding: 20px 0 4px;
 }
 
 /* Khung chạm 44px của ô chọn đầu dòng (Checkbox `flush`) chỉ chiếm 24px bề ngang: đệm trái 10px + margin âm 10px hai phía, nên ô 24px nằm sát mép trái cột,
@@ -554,6 +563,14 @@ body.with-back-btn .page.page-bleed {
     transition-duration: 0.01ms !important;
   }
 }
+/* Luật `*` ở trên chỉ rút thời gian, nút vẫn co 0,97 tức thì khi nhấn. Khách chọn giảm chuyển động thì không co: nút ZaUI đã đổi màu nền lúc nhấn để báo "đã nhận chạm". */
+@media (prefers-reduced-motion: reduce) {
+  .tubu-btn:active,
+  .tubu-press:active,
+  .tubu-press-card:active {
+    transform: none;
+  }
+}
 
 /* Phần đã bán của Giờ vàng chạy lên đúng mức một lần lúc khối hiện ra; luật `*` của prefers-reduced-motion ở cuối file rút còn 0,01ms. */
 .tubu-flash-fill {
@@ -667,6 +684,10 @@ body.with-back-btn .page.page-bleed {
 .tubu-field-44 .zaui-input {
   height: 44px;
   margin: 0;
+}
+/* Số tiền trên thanh dính (tổng, Tiết kiệm, dòng giảm, "Đặt hàng · giá") đổi mỗi lần khách sửa giỏ: số đều để tổng không rung bề rộng. */
+.tubu-sticky-bar {
+  font-variant-numeric: tabular-nums;
 }
 /* Trong StickyActionBar: bỏ min-width 120px của ZaUI (để 2 nút + nút giỏ vừa 320px) và thu đệm
  * ngang 24 → 12px (nhãn có thêm 24px mỗi nút trước khi phải rút gọn). */

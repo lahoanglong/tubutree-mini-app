@@ -33,6 +33,6 @@ export const ui = {
  * chồng lớp thứ hai lên (thứ tự CSS của hai lớp `px-*` không đảm bảo, lớp gốc có thể thắng).
  */
 export const uiBar = {
-  primary: ui.btnPrimary.replace('px-5', 'px-3'),
-  secondary: ui.btnSecondary.replace('px-5', 'px-3'),
+  primary: `${ui.btnPrimary.replace('px-5', 'px-3')} tabular-nums`,
+  secondary: `${ui.btnSecondary.replace('px-5', 'px-3')} tabular-nums`,
 } as const;

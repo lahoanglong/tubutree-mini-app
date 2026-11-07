@@ -23,7 +23,7 @@ export function KeyValueRow({ label, value, emphasis, tone = 'primary', classNam
       <Text
         variant="body-sm"
         tone={tone}
-        style={{ fontWeight: emphasis ? 700 : 600, fontSize: emphasis ? 'var(--type-title-sm-size)' : undefined }}
+        style={{ fontWeight: emphasis ? 700 : 600, fontSize: emphasis ? 'var(--type-title-sm-size)' : undefined, fontVariantNumeric: 'tabular-nums' }}
       >
         {value}
       </Text>

@@ -22,7 +22,8 @@ function tierEarnFor(authStatus: string, tierId: string | null | undefined, loya
 
 /**
  * Dòng "Nhận … Điểm Xanh" dưới giá ở PDP (D2-07c), bấm mở popup Cách tính Điểm Xanh. `goods` là giá trị hàng đang chọn (đơn giá × số lượng).
- * Vùng bấm cao 44px dôi lên phía trên (margin trên âm, chữ nằm đáy nút): không chồng lên phần tử bên dưới và không đẩy nội dung.
+ * Vùng bấm cao tối thiểu 44px dôi lên phía trên (margin trên âm, chữ nằm đáy nút): không chồng lên phần tử bên dưới và không đẩy nội dung.
+ * Đệm trên bằng đúng phần dôi lên, nên khi chữ xuống hai dòng (khổ 320px) nút cao thêm xuống dưới thay vì đè lên dòng giá.
  */
 export function PointsEarnLine({ goods, authStatus, tierId }: { goods: number; authStatus: string; tierId?: string | null }) {
   const config = usePublicConfig();
@@ -44,8 +45,9 @@ export function PointsEarnLine({ goods, authStatus, tierId }: { goods: number; a
         type="button"
         aria-label={`${text}. ${POINTS_EARN_POPUP.rowAria}`}
         aria-haspopup="dialog"
+        className="tubu-points-earn"
         onClick={() => setOpen(true)}
-        style={{ display: 'flex', alignItems: 'flex-end', gap: 6, minHeight: 44, margin: '-20px 0 0', padding: '0 0 4px', background: 'none', border: 0, cursor: 'pointer', textAlign: 'left', font: 'inherit' }}
+        style={{ display: 'flex', alignItems: 'flex-end', gap: 6, minHeight: 44, background: 'none', border: 0, cursor: 'pointer', textAlign: 'left', font: 'inherit' }}
       >
         <Leaf size={15} color="var(--color-text-brand)" strokeWidth={2} aria-hidden style={{ flexShrink: 0 }} />
         <Text size="xSmall" style={{ color: 'var(--color-text-brand)', fontWeight: 600 }}>

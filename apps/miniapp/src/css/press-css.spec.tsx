@@ -27,6 +27,13 @@ describe('css/tokens.css: phản hồi nhấn (polish PL-11)', () => {
     expect(active.style.getPropertyValue('transition-duration')).toBe('var(--p-dur-press)');
   });
 
+  it('.tubu-points-earn (dòng Điểm Xanh PDP): đệm trên bằng đúng phần lề âm dôi lên, chữ xuống hai dòng không đè dòng giá', () => {
+    const row = rule('.tubu-points-earn')!;
+    expect(row.style.getPropertyValue('margin-top')).toBe('-20px');
+    expect(row.style.getPropertyValue('padding-top')).toBe('20px');
+    expect(row.style.getPropertyValue('box-sizing')).toBe('border-box');
+  });
+
   it('.tubu-btn:active (nút DS): co 0,97', () => {
     expect(rule('.tubu-btn:active')!.style.getPropertyValue('transform')).toBe('scale(0.97)');
   });
@@ -41,6 +48,19 @@ describe('css/tokens.css: phản hồi nhấn (polish PL-11)', () => {
     expect(css).toMatch(/--dur-press:\s*var\(--p-dur-press\)/);
     expect(css).toMatch(/--dur-release:\s*var\(--p-dur-release\)/);
     expect(css).toMatch(/--ease-spring:\s*var\(--p-ease-spring\)/);
+  });
+
+  it('có biến --ease-drawer trỏ token gốc (đường cong tấm đáy dùng chung với web)', () => {
+    const css = readFileSync(resolve(__dirname, 'tokens.css'), 'utf8');
+    expect(css).toMatch(/--ease-drawer:\s*var\(--p-ease-drawer\)/);
+  });
+
+  it('giảm chuyển động: nút DS và phần tử bấm được không co khi nhấn (luật * chỉ rút thời gian, nút vẫn co tức thì)', () => {
+    const css = readFileSync(resolve(__dirname, 'tokens.css'), 'utf8');
+    const reduced = [...css.matchAll(/@media \(prefers-reduced-motion: reduce\)\s*\{([\s\S]*?)\n\}/g)].map((m) => m[1]).join('\n');
+    for (const sel of ['.tubu-btn:active', '.tubu-press:active', '.tubu-press-card:active']) {
+      expect(reduced, sel).toMatch(new RegExp(`${sel.replace(/[.:]/g, '\\$&')}[^{]*\\{[^}]*transform:\\s*none`));
+    }
   });
 
   it('mọi luật :active co theo scale đều nằm trong 0,97..0,99 (không co sâu hơn nút DS)', () => {

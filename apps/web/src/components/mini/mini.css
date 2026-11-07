@@ -13,6 +13,7 @@
   --dur-press: var(--p-dur-press);
   --dur-release: var(--p-dur-release);
   --ease-spring: var(--p-ease-spring);
+  --ease-drawer: var(--p-ease-drawer);
 
   --color-skeleton-shimmer: rgba(255, 255, 255, 0.65);
   --color-media-dot-idle: rgba(255, 255, 255, 0.85);
@@ -116,6 +117,13 @@
   width: 44px;
   height: 44px;
   transform: translate(-50%, -50%);
+}
+
+/* Dòng "Nhận … Điểm Xanh" ở PDP (`PdpPointsEarn`): vùng chạm dôi 22px lên trên (margin âm) để không đẩy nội dung, đệm trên đúng bằng phần dôi đó nên chữ
+   xuống hai dòng (khổ 320px) thì nút cao thêm xuống dưới thay vì đè lên dòng giá. Cùng tên `.tubu-points-earn` với Mini App. */
+.tubu-points-earn {
+  margin-top: -22px;
+  padding-top: 22px;
 }
 
 /* Ô chọn đầu dòng giỏ (điện thoại): khung chạm 44px chỉ chiếm 24px bề ngang bố cục như `.tubu-hit-flush` của Mini App (đệm 10px + lề âm 10px hai phía,
@@ -390,6 +398,14 @@
     transition-duration: 0.01ms !important;
   }
 }
+/* Giống Mini: khách chọn giảm chuyển động thì nút và phần tử bấm được không co khi nhấn (nút ZaUI đã đổi màu nền lúc nhấn). */
+@media (prefers-reduced-motion: reduce) {
+  .tubu-btn:active,
+  .tubu-press:active,
+  .tubu-press-card:active {
+    transform: none;
+  }
+}
 
 /* Phần đã bán của Giờ vàng chạy lên đúng mức một lần lúc khối hiện ra. Mini có luật `*` toàn cục cho prefers-reduced-motion, web chỉ có luật từng lớp. */
 .tubu-flash-fill {
@@ -594,6 +610,8 @@
 
 .tubu-btn {
   max-width: 100%;
+  /* `<button>` đặt lại cả `font` của trình duyệt nên mất số đều thừa kế từ thanh dính ("Đặt hàng · 149.000đ"). */
+  font-variant-numeric: inherit;
   transition: transform var(--p-dur-release) var(--p-ease-out);
 }
 .tubu-btn:active {
@@ -662,6 +680,9 @@
     min-height: calc(var(--type-caption-size) * var(--type-caption-lh) * 2 + var(--space-inset-card) + 1px);
   }
 }
+.tubu-sticky-bar {
+  font-variant-numeric: tabular-nums;
+}
 .tubu-sticky-bar .tubu-btn {
   min-width: 0;
   padding-left: 12px;
@@ -712,7 +733,7 @@
   line-height: 20px;
   padding-bottom: var(--safe-bottom);
   outline: none;
-  animation: slideUp 0.3s ease-in both;
+  animation: slideUp 220ms var(--ease-drawer, cubic-bezier(0.32, 0.72, 0, 1)) both;
 }
 .mini-sheet-panel[data-hug] {
   min-height: unset;

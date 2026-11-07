@@ -173,6 +173,27 @@ describe('mini.css: sheet từ md là hộp thoại giữa màn (K7)', () => {
     expect(panel).toMatch(/width:\s*100%/);
   });
 
+  it('dưới md tấm trượt 220ms theo đường cong drawer, không ease-in (ease-in làm tấm khựng ở đầu nhịp)', () => {
+    const panel = /\.mini-sheet-panel\s*\{([^}]*)\}/.exec(outsideMedia)?.[1] ?? '';
+    expect(panel).toMatch(/animation:\s*slideUp 220ms var\(--ease-drawer,\s*cubic-bezier\(0\.32,\s*0\.72,\s*0,\s*1\)\)\s+both/);
+    expect(panel).not.toMatch(/ease-in/);
+    expect(plain).toMatch(/--ease-drawer:\s*var\(--p-ease-drawer\)/);
+    expect(tokens).toMatch(/--p-ease-drawer:\s*cubic-bezier\(0\.32,\s*0\.72,\s*0,\s*1\)/);
+  });
+
+  it('giảm chuyển động: nút và phần tử bấm được không co khi nhấn (như Mini)', () => {
+    expect(reduced).toMatch(/\.tubu-btn:active[^{]*\{[^}]*transform:\s*none/);
+    expect(reduced).toMatch(/\.tubu-press:active[^{]*\{[^}]*transform:\s*none/);
+    expect(reduced).toMatch(/\.tubu-press-card:active[^{]*\{[^}]*transform:\s*none/);
+  });
+
+  it('dòng Điểm Xanh PDP: đệm trên bằng đúng phần lề âm dôi lên, nên chữ xuống hai dòng thì nút cao thêm xuống dưới, không đè dòng giá', () => {
+    const row = /\.tubu-points-earn\s*\{([^}]*)\}/.exec(plain)?.[1] ?? '';
+    const margin = /margin-top:\s*-(\d+)px/.exec(row)?.[1];
+    expect(margin).toBeDefined();
+    expect(row).toMatch(new RegExp(`padding-top:\\s*${margin}px`));
+  });
+
   it('--dialog-w là 480px trong tokens.css', () => {
     expect(tokens).toMatch(/--dialog-w:\s*480px/);
   });

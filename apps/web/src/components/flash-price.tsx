@@ -25,7 +25,7 @@ export function PdpPrice({ product }: { product: PricedProduct & { variations: P
     const pricing = cardPricing(product, flash, now);
     return (
       <div className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
-        <span data-testid="pdp-price" className="text-2xl font-bold text-stone-900">
+        <span data-testid="pdp-price" className="text-2xl font-bold tabular-nums text-stone-900">
           {product.variations.length > 1 ? `Từ ${formatVnd(pricing.price)}` : formatVnd(pricing.price)}
         </span>
       </div>
@@ -45,10 +45,10 @@ function PriceRow({ pricing, flash }: { pricing: VariationPricing; flash: boolea
   return (
     <div data-testid={flash ? 'pdp-flash-price' : undefined} className={`mt-2 flex-wrap items-baseline gap-x-2 gap-y-1 ${flash ? 'hidden lg:flex' : 'flex'}`}>
       {/* Giá đang giảm màu giá deal (cam đậm, không đỏ) như PriceTag tone="deal" của Mini App; giá thường giữ chữ đen. */}
-      <span data-testid={flash ? 'pdp-flash-price-value' : 'pdp-price'} className={`text-2xl font-bold ${deal ? 'text-[color:var(--color-text-price-deal)]' : 'text-stone-900'}`}>
+      <span data-testid={flash ? 'pdp-flash-price-value' : 'pdp-price'} className={`text-2xl font-bold tabular-nums ${deal ? 'text-[color:var(--color-text-price-deal)]' : 'text-stone-900'}`}>
         {formatVnd(pricing.price)}
       </span>
-      {pricing.hasSale && <span className="text-sm text-stone-500 line-through">{formatVnd(pricing.originalPrice)}</span>}
+      {pricing.hasSale && <span className="text-sm tabular-nums text-stone-500 line-through">{formatVnd(pricing.originalPrice)}</span>}
       {pricing.hasSale && pricing.salePct > 0 && (
         <span data-testid="pdp-sale-badge">
           <Badge tone="promo" size="sm">
