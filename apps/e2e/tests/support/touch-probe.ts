@@ -107,13 +107,34 @@ export async function pressScale(page: Page, target: Locator, readFrom: Locator 
   });
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();
-  await page.waitForTimeout(260);
-  const scale = await readFrom.evaluate((el) => {
-    const t = getComputedStyle(el).transform;
-    if (!t || t === 'none') return 1;
-    const m = new DOMMatrixReadOnly(t);
-    return Math.round(Math.hypot(m.a, m.b) * 1000) / 1000;
-  });
+  // `:active` phải bật thật thì phép đo mới có nghĩa: ca "không co khi giảm chuyển động" mà `:active` chưa bật sẽ qua nhầm.
+  await target.evaluate(
+    (el) =>
+      new Promise<void>((resolve, reject) => {
+        const t0 = performance.now();
+        const tick = () => {
+          if (el.matches(':active')) resolve();
+          else if (performance.now() - t0 > 3000) reject(new Error('nhấn giữ nhưng :active không bật'));
+          else requestAnimationFrame(tick);
+        };
+        tick();
+      }),
+  );
+  const read = () =>
+    readFrom.evaluate((el) => {
+      const t = getComputedStyle(el).transform;
+      if (!t || t === 'none') return 1;
+      const m = new DOMMatrixReadOnly(t);
+      return Math.round(Math.hypot(m.a, m.b) * 1000) / 1000;
+    });
+  // Chuyển tiếp 80ms chạy theo khung hình: chờ tới khi hệ số thôi đổi (tối đa ~1,2 giây), thay vì một mốc thời gian cứng.
+  let scale = await read();
+  for (let i = 0, stable = 0; i < 24 && stable < 3; i++) {
+    await page.waitForTimeout(50);
+    const next = await read();
+    stable = next === scale ? stable + 1 : 0;
+    scale = next;
+  }
   await page.mouse.move(1, 1);
   await page.mouse.up();
   await page.waitForTimeout(60);
