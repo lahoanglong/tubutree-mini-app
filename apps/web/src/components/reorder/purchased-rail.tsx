@@ -2,16 +2,22 @@
 
 import { useContext, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { useRouter } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
 import type { PurchasedItem } from '@tubutree/app-core/api/orders';
 import type { ProductCard as ProductCardData } from '@tubutree/app-core/api/catalog';
+import { cartUnitsByVariation } from '@tubutree/app-core/commerce/reorder-notice';
+import { QUICK_REORDER_MAX, buildQuickReorderItems, quickReorderShelfItems } from '@tubutree/app-core/commerce/quick-reorder';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { PURCHASED_LINE_HEIGHT, SECTION_HEADER_HEIGHT, purchasedSkeletonHeight, readPurchasedHint, writePurchasedHint, type PurchasedHint } from '@tubutree/app-core/home-layout';
 import { rebuyPricing } from '@tubutree/app-core/rebuy-pricing';
+import { useAuthPhase } from '@/lib/auth-phase';
+import { useCartKey } from '@/lib/cart-key';
 import { homeText, reorderText } from '@/lib/home-text';
 import { browserStorage } from '@/lib/recently-viewed';
+import { getCart } from '@/lib/shop-client';
 import { ui } from '@/lib/guest-ui';
 import { usePublicConfig } from '@/lib/use-public-config';
-import { useActiveFlashSales } from '@/lib/use-flash-sales';
+import { useActiveFlashSales, useRunningFlash } from '@/lib/use-flash-sales';
 import { productHref } from '@/lib/product-href';
 import { SubscribeSheet } from '@/app/san-pham/[slug]/subscribe-sheet';
 import { Badge } from '@/components/ui/badge';
@@ -19,6 +25,7 @@ import { Button, Card, PriceTag, ProductThumb, SectionHeader, Skeleton, Text } f
 import { homeErrorMessage, HomeBlockErrorSuppressed } from '@/components/home/home-block-error';
 import { isEndpointMissing } from '@/components/home/home-blocks';
 import { useBlockQuery } from '@/components/home/use-block-query';
+import { QuickReorderBlock } from './quick-reorder-block';
 import { ReorderSheet } from './reorder-sheet';
 import { itemReorderTarget, type ReorderTarget } from './reorder-types';
 import { usePurchasedItems } from './use-purchased-items';
@@ -203,9 +210,19 @@ export function PurchasedRail({ source = 'orders_tab', restoring = false, exclud
   const [notice, setNotice] = useState<string | null>(null);
   const items = useMemo(() => (q.data?.items ?? []).filter((p) => !excludeVariations?.has(p.variationId)), [q.data, excludeVariations]);
   const onHome = source === 'home_rail';
+  // Trang chủ vẽ đúng tập mà chống trùng Trang chủ (`use-home-shelves`) chiếm, tối đa `QUICK_REORDER_MAX` (như trần của kệ): không món nào vừa bị chiếm mà không ai vẽ
+  // (biến khỏi các kệ dưới), hay được vẽ mà không ai chiếm (lặp ở kệ dưới). Tab Đơn hàng vẽ đủ như cũ.
+  const shown = useMemo(() => (onHome ? quickReorderShelfItems(items).slice(0, QUICK_REORDER_MAX) : items), [onHome, items]);
   // Khung chờ của Trang chủ cao đúng bằng khối lần trước (một dòng hay một kệ); chưa nhớ thì coi là một món. HTML server không có kho nên bản server là 'none'.
   const hint = useSyncExternalStore(subscribeNothing, () => (onHome ? readPurchasedHint(browserStorage()) : 'none'), (): PurchasedHint => 'none');
-  const settledCount = !restoring && !q.isLoading && !q.isError && q.data ? items.length : null;
+  const settledCount = !restoring && !q.isLoading && !q.isError && q.data ? shown.length : null;
+  // Dải "Mua lại món quen" thay kệ thẻ ở Trang chủ từ 2 món còn hàng; ít hơn thì giữ dòng một món / kệ cũ. Tab Đơn hàng không đổi.
+  const { flash, now } = useRunningFlash();
+  // Giỏ quyết định giá Giờ vàng của thẻ (giỏ so suất với cả dòng): chưa tải xong thì coi như chưa có món nào, đúng cách tấm Mua lại làm.
+  const phase = useAuthPhase();
+  const cartQ = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: onHome && phase === 'authenticated' });
+  const cartUnits = useMemo(() => cartUnitsByVariation(cartQ.data?.items), [cartQ.data]);
+  const quickItems = onHome ? buildQuickReorderItems({ purchased: shown, flash, cartUnits, now }) : [];
   useEffect(() => {
     if (onHome && settledCount !== null) writePurchasedHint(browserStorage(), settledCount);
   }, [onHome, settledCount]);
@@ -233,44 +250,56 @@ export function PurchasedRail({ source = 'orders_tab', restoring = false, exclud
     );
   }
   // Chưa có món nào: lỗi thật (không phải API cũ 404) vẫn hiện khối lỗi kèm "Thử lại", khách cũ không thấy kệ biến mất im lặng.
-  if (items.length === 0 && !(q.isError && !isEndpointMissing(q.error) && !pageErrorShown)) return null;
+  if (shown.length === 0 && !(q.isError && !isEndpointMissing(q.error) && !pageErrorShown)) return null;
+
+  // Làm mới lỗi nhưng còn dữ liệu cũ: vẫn hiện kệ cũ kèm một dòng báo nhẹ + "Thử lại".
+  const refreshError = q.isError && (
+    <div className="mb-2 flex items-center justify-between gap-3">
+      <p className="min-w-0 text-sm text-stone-700">{homeErrorMessage(q.error)}</p>
+      <button
+        type="button"
+        disabled={q.isFetching}
+        aria-busy={q.isFetching || undefined}
+        aria-label={homeText.retryLabel(reorderText.railTitle)}
+        onClick={() => void q.refetch()}
+        className={`${ui.btnSecondary} flex-none`}
+      >
+        {homeText.retry}
+      </button>
+    </div>
+  );
+
+  if (quickItems.length > 0) {
+    return (
+      <>
+        <QuickReorderBlock items={quickItems} />
+        {refreshError}
+      </>
+    );
+  }
 
   return (
     <section aria-label={reorderText.railTitle} style={{ paddingBottom: onHome ? 0 : 12 }}>
       <SectionHeader title={reorderText.railTitle} action={onHome ? { to: '/tai-khoan/don-hang?tab=delivered' } : undefined} />
-      {q.isError && (
-        <div className="mb-2 flex items-center justify-between gap-3">
-          <p className="min-w-0 text-sm text-stone-700">{homeErrorMessage(q.error)}</p>
-          <button
-            type="button"
-            disabled={q.isFetching}
-            aria-busy={q.isFetching || undefined}
-            aria-label={homeText.retryLabel(reorderText.railTitle)}
-            onClick={() => void q.refetch()}
-            className={`${ui.btnSecondary} flex-none`}
-          >
-            {homeText.retry}
-          </button>
-        </div>
-      )}
-      {items.length === 0 ? null : onHome && items.length === 1 ? (
-        <RebuyLine item={items[0]!} onRebuy={() => setTarget(itemReorderTarget(items[0]!))} />
-      ) : !onHome && items.length <= COMPACT_MAX_ITEMS ? (
+      {refreshError}
+      {shown.length === 0 ? null : onHome && shown.length === 1 ? (
+        <RebuyLine item={shown[0]!} onRebuy={() => setTarget(itemReorderTarget(shown[0]!))} />
+      ) : !onHome && shown.length <= COMPACT_MAX_ITEMS ? (
         <div className="flex flex-col gap-2.5 md:grid md:grid-cols-2 md:gap-4">
-          {items.map((p) => (
+          {shown.map((p) => (
             <CompactRebuyCard key={p.variationId} item={p} onRebuy={() => setTarget(itemReorderTarget(p))} onSubscribe={() => setSubscribeFor(p)} />
           ))}
         </div>
       ) : (
         <RailShell label="Sản phẩm đã mua">
           {/* Có món mua nhiều lần thì mọi thẻ giữ dòng ghi chú ('' giữ chỗ), không thì giá lệch 16px giữa thẻ có và không có ghi chú. */}
-          {items.map((p) => (
+          {shown.map((p) => (
             <RailCell key={p.variationId} variant="rail-md">
               <ProductCard
                 product={toCardProduct(p)}
                 variant="rail-md"
                 showWishlist={false}
-                note={p.timesBought > 1 ? reorderText.timesBought(p.timesBought) : items.some((x) => x.timesBought > 1) ? '' : undefined}
+                note={p.timesBought > 1 ? reorderText.timesBought(p.timesBought) : shown.some((x) => x.timesBought > 1) ? '' : undefined}
                 addLabel={reorderText.cardCta}
                 onAdd={p.inStock !== false && p.stock > 0 ? () => setTarget(itemReorderTarget(p)) : undefined}
               />

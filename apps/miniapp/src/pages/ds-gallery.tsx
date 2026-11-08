@@ -18,6 +18,10 @@ import { VoucherTicket } from '../components/ui/voucher-ticket';
 import { StoryReelStrip } from '../components/ui/story-reel-strip';
 import { FreeShippingProgressBar } from '../components/ui/free-shipping-progress-bar';
 import { FreeshipAddonRail } from '../components/ui/freeship-addon-rail';
+import { FrequentlyBoughtTogether } from '../components/ui/frequently-bought-together';
+import { QuickReorderStrip } from '../components/ui/quick-reorder-strip';
+import { frequentlyBoughtSummary, type FbtLine } from '@tubutree/app-core/commerce/frequently-bought';
+import type { QuickReorderItem } from '@tubutree/app-core/commerce/quick-reorder';
 
 const GALLERY_REEL_ITEMS = [
   { slug: 'rau-muong', name: 'Rau muống', thumbnail: null, seen: false },
@@ -30,6 +34,19 @@ const GALLERY_ADDON_ITEMS = [
   { slug: 'mat-ong', name: 'Mật ong rừng', thumbnail: null, price: 39_000, compareAt: 49_000, variationId: 'v2' },
   { slug: 'dau-goi', name: 'Dầu gội bưởi', thumbnail: null, price: 45_000, variationId: 'v3' },
 ];
+const GALLERY_QUICK_ITEMS: QuickReorderItem[] = [
+  { key: 'v1', productId: 'p1', slug: 'dau-goi', variationId: 'v1', name: 'Dầu gội bưởi · 500ml', thumbnail: null, price: 89_000, compareAt: null, savePct: 0, isFlash: false, timesBought: 4, source: 'purchased' },
+  { key: 'v2', productId: 'p2', slug: 'nuoc-rua-chen', variationId: 'v2', name: 'Nước rửa chén sinh học', thumbnail: null, price: 55_000, compareAt: 69_000, savePct: 20, isFlash: true, timesBought: 2, source: 'purchased' },
+  { key: 'v3', productId: 'p3', slug: 'mat-ong', variationId: 'v3', name: 'Mật ong rừng', thumbnail: null, price: 120_000, compareAt: null, savePct: 0, isFlash: false, timesBought: 1, source: 'purchased' },
+  { key: 'v4', productId: 'p4', slug: 'rau-muong', variationId: 'v4', name: 'Rau muống', thumbnail: null, price: 29_000, compareAt: null, savePct: 0, isFlash: false, timesBought: 1, source: 'purchased' },
+];
+const GALLERY_FBT_LINES: FbtLine[] = [
+  { key: 'v1', productId: 'p1', slug: 'dau-goi', variationId: 'v1', name: 'Dầu gội bưởi · 500ml', thumbnail: null, price: 89_000, compareAt: null, isCurrent: true },
+  { key: 'v2', productId: 'p2', slug: 'nuoc-rua-chen', variationId: 'v2', name: 'Nước rửa chén sinh học', thumbnail: null, price: 55_000, compareAt: 69_000, isCurrent: false },
+  { key: 'v3', productId: 'p3', slug: 'mat-ong', variationId: 'v3', name: 'Mật ong rừng', thumbnail: null, price: 120_000, compareAt: null, isCurrent: false },
+];
+const GALLERY_FBT_ALL = new Set(GALLERY_FBT_LINES.map((l) => l.key));
+const GALLERY_FBT_TWO = new Set(['v1', 'v3']);
 
 /**
  * Trang dev `/ds-gallery`: vẽ mọi biến thể và trạng thái của bộ section-kit bằng dữ liệu giả (app-core/commerce/ds-gallery-data),
@@ -315,6 +332,30 @@ export default function DsGalleryPage() {
           </Variant>
           <Variant label="đang thêm món đầu">
             <FreeshipAddonRail items={GALLERY_ADDON_ITEMS} busySlug="rau-muong" onAdd={() => undefined} />
+          </Variant>
+        </Group>
+
+        <Group name="quick-reorder-strip">
+          <Variant label="4 món đã mua, một món Giờ vàng có giá gạch">
+            <QuickReorderStrip items={GALLERY_QUICK_ITEMS} onAdd={() => undefined} onAddAll={() => undefined} onOpen={() => undefined} />
+          </Variant>
+          <Variant label="đang thêm món thứ hai">
+            <QuickReorderStrip items={GALLERY_QUICK_ITEMS} busyKey="v2" onAdd={() => undefined} onAddAll={() => undefined} onOpen={() => undefined} />
+          </Variant>
+          <Variant label="đang thêm lại tất cả">
+            <QuickReorderStrip items={GALLERY_QUICK_ITEMS} busyAll onAdd={() => undefined} onAddAll={() => undefined} onOpen={() => undefined} />
+          </Variant>
+        </Group>
+
+        <Group name="frequently-bought-together">
+          <Variant label="chọn hết, có tiết kiệm">
+            <FrequentlyBoughtTogether lines={GALLERY_FBT_LINES} picked={GALLERY_FBT_ALL} summary={frequentlyBoughtSummary(GALLERY_FBT_LINES, GALLERY_FBT_ALL)} onToggle={() => undefined} onAdd={() => undefined} />
+          </Variant>
+          <Variant label="bỏ tick món có giá gạch (hết dòng tiết kiệm)">
+            <FrequentlyBoughtTogether lines={GALLERY_FBT_LINES} picked={GALLERY_FBT_TWO} summary={frequentlyBoughtSummary(GALLERY_FBT_LINES, GALLERY_FBT_TWO)} onToggle={() => undefined} onAdd={() => undefined} />
+          </Variant>
+          <Variant label="đang thêm vào giỏ">
+            <FrequentlyBoughtTogether lines={GALLERY_FBT_LINES} picked={GALLERY_FBT_ALL} summary={frequentlyBoughtSummary(GALLERY_FBT_LINES, GALLERY_FBT_ALL)} busy onToggle={() => undefined} onAdd={() => undefined} />
           </Variant>
         </Group>
       </div>

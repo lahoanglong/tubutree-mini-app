@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { BestSellersBasis, BestSellersPage } from '@tubutree/app-core/api/browse';
 import { comboView, type ComboView } from '@tubutree/app-core/commerce/bundle-view';
+import { quickReorderShelfItems } from '@tubutree/app-core/commerce/quick-reorder';
 import type { HomeKindState } from '@tubutree/app-core/home-layout';
 import { COMBO_HOLD_MS, comboShelfEntry, composeHomeShelves, flashExcludedVariations, flashShelfEntry, purchasedShelfEntry } from '@tubutree/app-core/merch/home-shelves';
 import { bundleKeys } from '@tubutree/app-core/queries/bundle';
@@ -73,7 +74,7 @@ export function useHomeShelves(kind: HomeKindState): HomeShelves {
     const liveFlash = (flashData ?? []).filter((item) => Date.parse(item.endAt) > now);
     const composed = composeHomeShelves({
       flash: liveFlash.map(flashShelfEntry),
-      purchased: kind === 'returning' ? (purchasedData ?? []).map(purchasedShelfEntry) : [],
+      purchased: kind === 'returning' ? quickReorderShelfItems(purchasedData ?? []).map(purchasedShelfEntry) : [],
       combos: (combosData ?? []).flatMap((b) => comboView(b, now) ?? []).map(comboShelfEntry),
       // Hạng đi cùng món qua bước chống trùng: kệ chỉ vẽ món còn lại nhưng thẻ phải ghi hạng thật, không phải số thứ tự trong kệ đã cắt.
       bestSellers: (bestData ?? []).map((item, i) => ({ id: item.slug, item: { product: item, rank: i + 1 } })),

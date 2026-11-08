@@ -190,6 +190,8 @@ describe('ProductDetailPage — tên SP và tiêu đề mục cùng một kiểu
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.hasOA = false;
+    // Test trước đặt 'loading' (đang khôi phục phiên); còn nguyên thì trang chờ phiên xong mới chọn món mua kèm nên dải "Khách thường mua cùng" chưa hiện.
+    mocks.authStatus = 'guest';
     mocks.fetchProduct.mockResolvedValue(product);
     mocks.fetchRelated.mockResolvedValue([related]);
     mocks.fetchBoughtTogether.mockResolvedValue(together);

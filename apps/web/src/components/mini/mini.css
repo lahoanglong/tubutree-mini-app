@@ -1165,3 +1165,176 @@
   .tubu-freeship-fill { transition: none; }
   .tubu-freeship-fill::after { animation: none; display: none; }
 }
+
+/* ── Dải "Mua lại món quen" ở Trang chủ (W43A, QuickReorderStrip): cùng số đo với apps/miniapp/src/css/quick-reorder.css. Thẻ cao đúng `QUICK_REORDER_CARD_HEIGHT` (232) để khung chờ không nhảy. ── */
+/* Tiêu đề: web đã có đệm ngang của khung trang (Mini App đệm 16 ở đây vì trang không có đệm), nên chỉ giữ lớp làm mốc cho nút "Thêm lại tất cả". */
+.tubu-quick-head {
+  min-width: 0;
+}
+/* Hàng cuộn tràn mép như kệ hàng (`tubu-bleed-rail`); đệm trên và dưới 8 (`RAIL_PAD` của home-layout) chừa chỗ cho bóng và vòng focus, đệm ngang 12 như `--rail-pad-block`. */
+.tubu-quick-row {
+  box-sizing: border-box;
+  padding: var(--p-space-3) var(--space-inline-md);
+}
+.tubu-quick-track {
+  display: flex;
+  flex: 0 0 auto;
+  gap: var(--space-inline-md);
+  align-items: stretch;
+  width: max-content;
+  min-width: 100%;
+}
+.tubu-quick-cell {
+  flex: 0 0 var(--tile-w-sm);
+  width: var(--tile-w-sm);
+  display: flex;
+}
+/* Đệm 8 + ảnh 108 + cách 4 + tên 20 + giá 36 + cách 4 + nút 44 + đệm 8 = 232. */
+.tubu-quick-card {
+  box-sizing: border-box;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--p-space-2);
+  padding: var(--p-space-3);
+  background: var(--color-bg-surface);
+  border-radius: var(--radius-card);
+  box-shadow: var(--elevation-1);
+  font-variant-numeric: tabular-nums;
+}
+.tubu-quick-open {
+  box-sizing: border-box;
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  text-align: center;
+  cursor: pointer;
+}
+.tubu-quick-thumb {
+  position: relative;
+  display: block;
+  width: 108px;
+  height: 108px;
+}
+.tubu-quick-badge {
+  position: absolute;
+  top: var(--p-space-2);
+  left: var(--p-space-2);
+  max-width: calc(100% - 2 * var(--p-space-2));
+}
+.tubu-quick-name {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  height: 20px;
+  margin-top: var(--p-space-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-primary);
+  font-size: var(--type-caption-size);
+  line-height: 20px;
+  font-weight: var(--type-label-weight);
+  text-align: left;
+}
+.tubu-quick-price {
+  display: flex;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  height: 36px;
+  justify-content: flex-start;
+}
+.tubu-quick-add.zaui-btn {
+  flex: 0 0 auto;
+  width: 100%;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+}
+
+/* ── Khối "Gợi ý mua kèm hợp vị" ở trang chi tiết (W43A, FrequentlyBoughtTogether): cùng số đo với apps/miniapp/src/css/frequently-bought.css. ── */
+/* Điện thoại: dải trắng riêng tràn mép (cách dải trên 8 như Combo/Mua kèm, đệm 16 như Mini App); từ md khối nằm trong cột thông tin: không đệm ngang để chữ thẳng cột, ngăn bằng đường kẻ trên. */
+.tubu-fbt {
+  box-sizing: border-box;
+  margin-top: var(--p-space-3);
+  padding: var(--p-space-5);
+  background: var(--color-bg-surface);
+  font-variant-numeric: tabular-nums;
+}
+.tubu-fbt-list {
+  display: flex;
+  flex-direction: column;
+  margin-top: var(--p-space-2);
+}
+/* Cả dòng là vùng chạm: cao tối thiểu 64 (ảnh 48 + đệm 8 + 8), rộng hết khối. */
+.tubu-fbt-row {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: var(--p-space-4);
+  min-height: 64px;
+  padding: var(--p-space-3) 0;
+  cursor: pointer;
+}
+/* Ô tick 24 trong vùng chạm 44 (cùng cách dòng Mua kèm giá tốt). */
+.tubu-fbt-check {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  width: 44px;
+  height: 44px;
+}
+.tubu-fbt-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--p-space-1);
+}
+.tubu-fbt-tag {
+  align-self: flex-start;
+}
+.tubu-fbt-name {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  font-size: var(--type-body-sm-size);
+  line-height: var(--type-body-sm-lh);
+  color: var(--color-text-primary);
+}
+/* Giữ chỗ một dòng ngay cả khi chưa có số tiết kiệm: chữ hiện ra không đẩy nút bên dưới xuống. */
+.tubu-fbt-save {
+  margin: var(--p-space-2) 0 var(--p-space-3);
+  min-height: calc(var(--type-caption-size) * var(--type-caption-lh));
+  font-size: var(--type-caption-size);
+  line-height: var(--type-caption-lh);
+  font-weight: 600;
+  color: var(--color-text-price-deal);
+}
+/* Kết quả thêm cả bộ (web không có thông báo nổi): nằm trong dải trắng ngay dưới nút. */
+.tubu-fbt-status {
+  box-sizing: border-box;
+  padding: 0 var(--p-space-5) var(--p-space-5);
+  background: var(--color-bg-surface);
+  font-size: var(--type-body-sm-size);
+  line-height: var(--type-body-sm-lh);
+}
+@media (min-width: 768px) {
+  .tubu-fbt {
+    margin-top: var(--p-space-5);
+    padding-inline: 0;
+    border-top: 1px solid var(--color-border-subtle);
+  }
+  .tubu-fbt-status {
+    padding-inline: 0;
+  }
+}

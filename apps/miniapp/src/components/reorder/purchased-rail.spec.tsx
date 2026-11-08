@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type * as ZmpUi from 'zmp-ui';
 
 const mocks = vi.hoisted(() => ({
-  navigate: vi.fn(), openSnackbar: vi.fn(), fetchPurchasedItems: vi.fn(), addToCart: vi.fn(), repurchaseOrder: vi.fn(), fetchActiveFlashSales: vi.fn(), fetchProducts: vi.fn(), fetchCombos: vi.fn(),
+  navigate: vi.fn(), openSnackbar: vi.fn(), fetchPurchasedItems: vi.fn(), addToCart: vi.fn(), repurchaseOrder: vi.fn(), fetchActiveFlashSales: vi.fn(), fetchProducts: vi.fn(), fetchCombos: vi.fn(), addAllToCart: vi.fn(), getCart: vi.fn().mockResolvedValue({ items: [] }),
   status: 'authenticated', subs: true,
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
@@ -15,16 +15,17 @@ vi.mock('zmp-ui', async (importOriginal) => ({
 vi.mock('../../services/shop-api', () => ({
   fetchPurchasedItems: mocks.fetchPurchasedItems, addToCart: mocks.addToCart, repurchaseOrder: mocks.repurchaseOrder,
   fetchActiveFlashSales: mocks.fetchActiveFlashSales, fetchProducts: mocks.fetchProducts,
-  getCart: vi.fn().mockResolvedValue({ items: [] }),
+  getCart: mocks.getCart,
 }));
 vi.mock('../../services/bundle-api', () => ({ getHomeCombos: mocks.fetchCombos }));
+vi.mock('../../services/cart-batch', () => ({ addAllToCart: mocks.addAllToCart }));
 vi.mock('../../hooks/use-public-config', () => ({ usePublicConfig: () => ({ subscribeDiscountPct: 0.1 }) }));
 vi.mock('../../store/auth', () => ({ useAuthStore: (sel: (s: { status: string }) => unknown) => sel({ status: mocks.status }) }));
 vi.mock('../../services/buy-flow-events', () => ({ trackReorderClicked: vi.fn(), trackReorderCompleted: vi.fn() }));
 vi.mock('../../utils/features', () => ({ get SUBSCRIPTIONS_IN_MINIAPP() { return mocks.subs; } }));
 vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
 
-import { PURCHASED_HINT_KEY, purchasedSkeletonHeight } from '@tubutree/app-core/home-layout';
+import { PURCHASED_HINT_KEY, QUICK_REORDER_CARD_HEIGHT, purchasedSkeletonHeight } from '@tubutree/app-core/home-layout';
 import { rebuyPricing } from '@tubutree/app-core/rebuy-pricing';
 import { PurchasedRail } from './purchased-rail';
 import { HomeBlockErrorSuppressed } from '../home/home-block-error';
@@ -257,7 +258,7 @@ describe('PurchasedRail', () => {
   });
 });
 
-describe('kệ cuộn (3 món trở lên)', () => {
+describe('kệ cuộn ở tab Đơn hàng (3 món trở lên)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.subs = true;
@@ -268,14 +269,14 @@ describe('kệ cuộn (3 món trở lên)', () => {
   it('có món mua nhiều lần, có món mua một lần: mọi thẻ giữ dòng ghi chú để giá thẳng hàng; không món nào mua lại thì không dòng ghi chú', async () => {
     const three = (times: number[]) => times.map((timesBought, i) => ({ ...ITEM, variationId: `v${i}`, slug: `sp-${i}`, productName: `SP ${i}`, timesBought }));
     mocks.fetchPurchasedItems.mockResolvedValue({ items: three([3, 1, 1]), nextCursor: null });
-    const first = renderRail();
+    const first = renderRail('orders_tab');
     const region = await screen.findByRole('region', { name: 'Mua lại' });
     await waitFor(() => expect(region.querySelectorAll('[data-ds="product-tile"]').length).toBe(3));
     expect(region.querySelectorAll('[data-ds-part="note"]').length).toBe(3);
     expect(region).toHaveTextContent('Đã mua 3 lần');
     first.unmount();
     mocks.fetchPurchasedItems.mockResolvedValue({ items: three([1, 1, 1]), nextCursor: null });
-    renderRail();
+    renderRail('orders_tab');
     const plain = await screen.findByRole('region', { name: 'Mua lại' });
     await waitFor(() => expect(plain.querySelectorAll('[data-ds="product-tile"]').length).toBe(3));
     expect(plain.querySelectorAll('[data-ds-part="note"]').length).toBe(0);
@@ -318,12 +319,14 @@ describe('Mua lại ở Trang chủ (Q6)', () => {
     expect(mocks.navigate).toHaveBeenLastCalledWith('/product/nuoc-rua-chen', { state: { pinnedVariationId: 'v1' } });
   });
 
-  it('2 món trở lên: kệ thẻ rail-md như cũ, không có dòng 88px', async () => {
+  it('2 món trở lên: dải "Mua lại món quen" thay kệ thẻ, không có dòng 88px, không kệ rail-md', async () => {
     mocks.fetchPurchasedItems.mockResolvedValue({ items: many(2), nextCursor: null });
     renderRail();
-    const region = await screen.findByRole('region', { name: 'Mua lại' });
-    await waitFor(() => expect(region.querySelectorAll('[data-ds="product-tile"]').length).toBe(2));
-    expect(within(region).queryByTestId('rebuy-line')).toBeNull();
+    const strip = await screen.findByTestId('quick-reorder');
+    expect(within(strip).getAllByTestId('quick-reorder-card')).toHaveLength(2);
+    expect(screen.queryByTestId('rebuy-line')).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Mua lại' })).toBeNull();
+    expect(strip.querySelector('[data-ds="product-tile"]')).toBeNull();
   });
 
   it('hết hàng: dòng ghi "Tạm hết hàng", không có nút "Mua lại"', async () => {
@@ -380,9 +383,9 @@ describe('Mua lại ở Trang chủ (Q6)', () => {
   it('Giờ vàng giữ phân loại khác của cùng sản phẩm (Can 1L) thì phân loại đã mua (Can 5L) vẫn hiện ở Mua lại (P2 #3)', async () => {
     mocks.fetchPurchasedItems.mockResolvedValue({ items: [{ ...ITEM, variationId: 'v-5l', slug: 'can', productName: 'Can nước rửa', variationName: '5L' }, ...many(1)], nextCursor: null });
     renderRail('home_rail', new Set(['v-1l']));
-    const region = await screen.findByRole('region', { name: 'Mua lại' });
-    expect(region).toHaveTextContent('Can nước rửa');
-    expect(region).toHaveTextContent('5L');
+    const strip = await screen.findByTestId('quick-reorder');
+    expect(strip).toHaveTextContent('Can nước rửa · 5L');
+    expect(within(strip).getAllByTestId('quick-reorder-card').map((c) => c.getAttribute('data-variation-id'))).toEqual(['v-5l', 'v0']);
   });
 
   it('tab Đơn hàng với 1 món: vẫn thẻ gọn cũ có "Định kỳ", không dòng 88px', async () => {
@@ -412,11 +415,50 @@ describe('rebuyPricing / phân loại đã mua (B-146)', () => {
   it('thẻ trên kệ hiện giá flash của phân loại đã mua và chạm mở đúng phân loại đó', async () => {
     mocks.fetchPurchasedItems.mockResolvedValue({ items: [ITEM, { ...ITEM, variationId: 'v3', slug: 'xa-bong', productName: 'Xà bông' }, { ...ITEM, variationId: 'v4', slug: 'tay', productName: 'Tẩy' }], nextCursor: null });
     mocks.fetchActiveFlashSales.mockResolvedValue([FLASH()]);
-    renderRail();
+    renderRail('orders_tab');
     const region = await screen.findByRole('region', { name: 'Mua lại' });
     await waitFor(() => expect(region).toHaveTextContent('50.000'));
     fireEvent.click(region.querySelector('.tubu-tile-link')!);
     expect(mocks.navigate).toHaveBeenCalledWith('/product/nuoc-rua-chen', { state: { pinnedVariationId: 'v1' } });
+  });
+
+  it('dải Trang chủ cũng hiện giá flash của đúng phân loại đã mua (gạch giá niêm yết, nhãn -x%) và chạm mở đúng phân loại đó', async () => {
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: [ITEM, { ...ITEM, variationId: 'v3', slug: 'xa-bong', productName: 'Xà bông' }], nextCursor: null });
+    mocks.fetchActiveFlashSales.mockResolvedValue([FLASH()]);
+    renderRail();
+    const strip = await screen.findByTestId('quick-reorder');
+    const [first] = within(strip).getAllByTestId('quick-reorder-card');
+    await waitFor(() => expect(first).toHaveTextContent('50.000đ'));
+    expect(first).toHaveTextContent('65.000đ');
+    expect(first).toHaveTextContent('-23%');
+    fireEvent.click(within(first!).getByText('Nước rửa chén · Chanh'));
+    expect(mocks.navigate).toHaveBeenCalledWith('/product/nuoc-rua-chen', { state: { pinnedVariationId: 'v1' } });
+  });
+
+  it('hết suất Giờ vàng (flashAllowance=0): dải ghi giá thường như giỏ sẽ tính', async () => {
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: [{ ...ITEM, flashAllowance: 0 }, { ...ITEM, variationId: 'v3', slug: 'xa-bong', productName: 'Xà bông' }], nextCursor: null });
+    mocks.fetchActiveFlashSales.mockResolvedValue([FLASH()]);
+    renderRail();
+    const strip = await screen.findByTestId('quick-reorder');
+    await waitFor(() => expect(mocks.fetchActiveFlashSales).toHaveBeenCalled());
+    const [first] = within(strip).getAllByTestId('quick-reorder-card');
+    expect(first).toHaveTextContent('65.000đ');
+    expect(first).not.toHaveTextContent('50.000đ');
+  });
+
+  it('giỏ đã đủ suất Giờ vàng còn lại (giới hạn 1, giỏ có 1): dải ghi giá thường vì giỏ tính cả dòng giá thường', async () => {
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: [ITEM, { ...ITEM, variationId: 'v3', slug: 'xa-bong', productName: 'Xà bông' }], nextCursor: null });
+    mocks.fetchActiveFlashSales.mockResolvedValue([{ ...FLASH(), perUserLimit: 1 }]);
+    mocks.getCart.mockResolvedValue({ items: [{ id: 'l1', variationId: 'v1', productId: 'p1', quantity: 1 }] });
+    try {
+      renderRail();
+      const strip = await screen.findByTestId('quick-reorder');
+      await waitFor(() => expect(mocks.getCart).toHaveBeenCalled());
+      await waitFor(() => expect(within(strip).getAllByTestId('quick-reorder-card')[0]).toHaveTextContent('65.000đ'));
+      expect(within(strip).getAllByTestId('quick-reorder-card')[0]).not.toHaveTextContent('50.000đ');
+    } finally {
+      mocks.getCart.mockResolvedValue({ items: [] });
+    }
   });
 });
 
@@ -453,5 +495,154 @@ describe('PurchasedRail với tập loại trừ của useHomeShelves', () => {
     const region = await screen.findByRole('region', { name: 'Mua lại' });
     expect(region).toHaveTextContent('Đã mua sản phẩm chín');
     expect(region).not.toHaveTextContent('Đã mua sản phẩm một');
+  });
+});
+
+describe('Dải "Mua lại món quen" ở Trang chủ (W43A)', () => {
+  const many = (n: number, over: Record<string, unknown> = {}) =>
+    Array.from({ length: n }, (_, i) => ({ ...ITEM, variationId: `v${i}`, slug: `sp-${i}`, productName: `SP ${i}`, variationName: null, timesBought: 1, ...over }));
+  const addButton = (id: string) => screen.getAllByTestId('quick-reorder-add').find((b) => b.getAttribute('data-variation-id') === id)!;
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    mocks.subs = true;
+    mocks.status = 'authenticated';
+    mocks.fetchActiveFlashSales.mockResolvedValue([]);
+  });
+
+  it('tối đa 6 thẻ dù khách đã mua nhiều hơn, theo thứ tự mới nhất trước', async () => {
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: many(8), nextCursor: null });
+    renderRail();
+    const strip = await screen.findByTestId('quick-reorder');
+    expect(within(strip).getAllByTestId('quick-reorder-card').map((c) => c.getAttribute('data-variation-id'))).toEqual(['v0', 'v1', 'v2', 'v3', 'v4', 'v5']);
+  });
+
+  it('tab Đơn hàng không đổi: 2 món vẫn là kệ "Mua lại" cũ, không dải', async () => {
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: many(2), nextCursor: null });
+    renderRail('orders_tab');
+    await screen.findByRole('region', { name: 'Mua lại' });
+    expect(screen.queryByTestId('quick-reorder')).toBeNull();
+  });
+
+  it('2 món đã mua nhưng chỉ 1 còn hàng: không dải (dưới 2 món), giữ kệ cũ cho cả hai', async () => {
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: [...many(1), ...many(2, { variationId: 'v-out', stock: 0, inStock: false }).slice(0, 1)], nextCursor: null });
+    renderRail();
+    await screen.findByRole('region', { name: 'Mua lại' });
+    expect(screen.queryByTestId('quick-reorder')).toBeNull();
+  });
+
+  it('"+ Thêm": một lệnh addToCart(đúng phân loại, 1, repurchase), báo thành công, ở lại Trang chủ (không sang giỏ)', async () => {
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: many(3), nextCursor: null });
+    mocks.addToCart.mockResolvedValue(CART);
+    renderRail();
+    await screen.findByTestId('quick-reorder');
+    fireEvent.click(addButton('v1'));
+    await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledWith('v1', 1, 'repurchase'));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'success' })));
+    expect(mocks.addToCart).toHaveBeenCalledTimes(1);
+    expect(mocks.navigate).not.toHaveBeenCalled();
+  });
+
+  it('"+ Thêm" lỗi (hết hàng): báo lỗi, ở lại trang, nút mở khoá lại cho lần thử sau', async () => {
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: many(2), nextCursor: null });
+    mocks.addToCart.mockRejectedValue(new Error('Hết hàng'));
+    renderRail();
+    await screen.findByTestId('quick-reorder');
+    fireEvent.click(addButton('v0'));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+    expect(mocks.navigate).not.toHaveBeenCalled();
+    await waitFor(() => expect(addButton('v0')).not.toHaveAttribute('aria-busy', 'true'));
+    expect(addButton('v1')).toBeEnabled();
+  });
+
+  it('đang thêm một món: nút món đó bận, mọi nút khác khoá; bấm "Thêm lại tất cả" lúc đó không bay lệnh thứ hai; xong thì mở khoá', async () => {
+    let release: (v: unknown) => void = () => {};
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: many(3), nextCursor: null });
+    mocks.addToCart.mockImplementation(() => new Promise((r) => { release = r; }));
+    renderRail();
+    await screen.findByTestId('quick-reorder');
+    fireEvent.click(addButton('v0'));
+    await waitFor(() => expect(addButton('v0')).toHaveAttribute('aria-busy', 'true'));
+    expect(addButton('v1')).toBeDisabled();
+    fireEvent.click(addButton('v1'));
+    fireEvent.click(screen.getByRole('button', { name: /^Thêm lại tất cả 3 món vào giỏ/ }));
+    expect(mocks.addToCart).toHaveBeenCalledTimes(1);
+    expect(mocks.addAllToCart).not.toHaveBeenCalled();
+    await act(async () => release(CART));
+    await waitFor(() => expect(addButton('v1')).toBeEnabled());
+    expect(addButton('v0')).not.toHaveAttribute('aria-busy', 'true');
+  });
+
+  it('"Thêm lại tất cả": một lệnh lô cho mọi món đang hiện (mỗi món 1), báo số món, ở lại Trang chủ', async () => {
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: many(3), nextCursor: null });
+    mocks.addAllToCart.mockResolvedValue(CART);
+    renderRail();
+    await screen.findByTestId('quick-reorder');
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm lại tất cả 3 món vào giỏ, tổng 195.000đ' }));
+    await waitFor(() => expect(mocks.addAllToCart).toHaveBeenCalledWith([
+      { variationId: 'v0', quantity: 1 },
+      { variationId: 'v1', quantity: 1 },
+      { variationId: 'v2', quantity: 1 },
+    ]));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'success', text: 'Đã thêm 3 món vào giỏ' })));
+    expect(mocks.addToCart).not.toHaveBeenCalled();
+    expect(mocks.navigate).not.toHaveBeenCalled();
+  });
+
+  it('"Thêm lại tất cả" đang chạy: dải báo bận, mọi "+ Thêm" khoá, bấm lần hai không gọi lại', async () => {
+    let release: (v: unknown) => void = () => {};
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: many(2), nextCursor: null });
+    mocks.addAllToCart.mockImplementation(() => new Promise((r) => { release = r; }));
+    renderRail();
+    await screen.findByTestId('quick-reorder');
+    const all = screen.getByRole('button', { name: /^Thêm lại tất cả 2 món vào giỏ/ });
+    fireEvent.click(all);
+    await waitFor(() => expect(screen.getByTestId('quick-reorder')).toHaveAttribute('aria-busy', 'true'));
+    for (const b of screen.getAllByTestId('quick-reorder-add')) expect(b).toBeDisabled();
+    fireEvent.click(all);
+    fireEvent.click(addButton('v0'));
+    expect(mocks.addAllToCart).toHaveBeenCalledTimes(1);
+    expect(mocks.addToCart).not.toHaveBeenCalled();
+    await act(async () => release(CART));
+    await waitFor(() => expect(screen.getByTestId('quick-reorder')).not.toHaveAttribute('aria-busy'));
+  });
+
+  it('"Thêm lại tất cả" lỗi: báo lỗi, giỏ không đổi, nút mở khoá', async () => {
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: many(2), nextCursor: null });
+    mocks.addAllToCart.mockRejectedValue(new Error('boom'));
+    renderRail();
+    await screen.findByTestId('quick-reorder');
+    fireEvent.click(screen.getByRole('button', { name: /^Thêm lại tất cả 2 món vào giỏ/ }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error', text: 'Chưa thêm được vào giỏ. Bạn thử lại nhé.' })));
+    await waitFor(() => expect(addButton('v0')).toBeEnabled());
+  });
+
+  it('chạm thân thẻ mở sản phẩm ở đúng phân loại đã mua', async () => {
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: many(2), nextCursor: null });
+    renderRail();
+    const strip = await screen.findByTestId('quick-reorder');
+    fireEvent.click(within(strip).getByText('SP 1'));
+    expect(mocks.navigate).toHaveBeenCalledWith('/product/sp-1', { state: { pinnedVariationId: 'v1' } });
+  });
+
+  it('nhớ "many" cho lần mở sau và khung chờ cao đúng bằng dải thật (44 + 8 + thẻ + 8)', async () => {
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: many(2), nextCursor: null });
+    renderRail();
+    await screen.findByTestId('quick-reorder');
+    await waitFor(() => expect(localStorage.getItem(PURCHASED_HINT_KEY)).toBe('many'));
+    expect(purchasedSkeletonHeight('many')).toBe(44 + 8 * 2 + QUICK_REORDER_CARD_HEIGHT);
+  });
+
+  it('làm mới lỗi khi còn dữ liệu cũ: dải KHÔNG biến mất, hiện dòng báo nhẹ + "Thử lại"', async () => {
+    mocks.fetchPurchasedItems.mockResolvedValueOnce({ items: many(2), nextCursor: null }).mockRejectedValueOnce(new Error('boom'));
+    const { qc } = renderRail();
+    await screen.findByTestId('quick-reorder');
+    await act(async () => {
+      await qc.refetchQueries({ queryKey: RAIL_KEY });
+    });
+    await waitFor(() => expect(qc.getQueryState(RAIL_KEY)?.status).toBe('error'));
+    expect(screen.getByTestId('quick-reorder')).toBeInTheDocument();
+    expect(await screen.findByText('Có chút trục trặc, thử lại nhé')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Thử lại Mua lại' })).toBeInTheDocument();
   });
 });

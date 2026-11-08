@@ -57,13 +57,14 @@ export const PDP_FEED_SOURCE_LIMIT = 10;
  * Ba dải cuối PDP không trùng nhau và không có món đang xem: "Khách thường mua cùng" (kệ `pdp.boughtTogether`) > "Cùng thương hiệu" >
  * "Có thể bạn cũng thích" (kệ `pdp.related`). Trần/sàn lấy từ `SHELVES`; dải dưới sàn thì ẩn và không chiếm món của dải dưới.
  */
-export function pdpShelves<T extends { id: string }>(i: { currentId: string; boughtTogether: T[]; brand: T[]; feed: T[] }): {
+export function pdpShelves<T extends { id: string }>(i: { currentId: string; boughtTogether: T[]; brand: T[]; feed: T[]; claimed?: ReadonlySet<string> }): {
   boughtTogether: T[];
   brand: T[];
   feed: T[];
 } {
   // Dải phụ chỉ là gợi ý: API trả sai dạng (không phải mảng) thì dải đó rỗng, không được làm sập cả trang sản phẩm khi vẽ.
-  const notCurrent = (list: unknown) => (Array.isArray(list) ? (list as T[]).filter((x) => x.id !== i.currentId) : []);
+  // `claimed`: món đã nằm trong khối "Gợi ý mua kèm hợp vị" (`pickFbtPartners`) ngay trên các dải này, nên không lặp lại ở dải nào.
+  const notCurrent = (list: unknown) => (Array.isArray(list) ? (list as T[]).filter((x) => x.id !== i.currentId && !i.claimed?.has(x.id)) : []);
   const [together] = applyShelfDedupe([{ id: 'pdp.boughtTogether', items: notCurrent(i.boughtTogether) }]);
   const togetherIds = new Set(together!.items.map((x) => x.id));
   const brand = notCurrent(i.brand)

@@ -7,6 +7,7 @@ import type { ProductCard } from '@tubutree/app-core/api/catalog';
 import type { FlashSaleActiveItem } from '@tubutree/app-core/api/flash-sale';
 import type { BundleDTO } from '@tubutree/app-core/api/bundle';
 import { comboView, type ComboView } from '@tubutree/app-core/commerce/bundle-view';
+import { quickReorderShelfItems } from '@tubutree/app-core/commerce/quick-reorder';
 import type { HomeKindState } from '@tubutree/app-core/home-layout';
 import { comboShelfEntry, composeHomeShelves, flashExcludedVariations, flashShelfEntry, purchasedShelfEntry } from '@tubutree/app-core/merch/home-shelves';
 import { homeCombosQuery } from '@tubutree/app-core/queries/bundle';
@@ -95,7 +96,7 @@ export function useHomeShelves(kind: HomeKindState, initial: HomeShelvesInitial 
     const liveFlash = (flashData ?? []).filter((item) => !hydrated || Date.parse(item.endAt) > now);
     const composed = composeHomeShelves({
       flash: liveFlash.map(flashShelfEntry),
-      purchased: kind === 'returning' ? (purchasedData ?? []).map(purchasedShelfEntry) : [],
+      purchased: kind === 'returning' ? quickReorderShelfItems(purchasedData ?? []).map(purchasedShelfEntry) : [],
       // Trước hydrate không kiểm hạn combo (`liveAt` -∞): HTML dựng sẵn đã lọc theo giờ máy chủ lúc dựng, nên hydrate vẽ đúng các combo đó rồi mới kiểm hạn thật.
       combos: (combosData ?? []).flatMap((b) => comboView(b, now, hydrated ? now : Number.NEGATIVE_INFINITY) ?? []).map(comboShelfEntry),
       // Hạng đi cùng món qua bước chống trùng: kệ chỉ vẽ món còn lại nhưng thẻ phải ghi hạng thật, không phải số thứ tự trong kệ đã cắt.

@@ -48,6 +48,8 @@ import { useLoginWithNotice } from '../components/ui/auth-gate';
 import { serverNow } from '../utils/server-clock';
 import { cardPricing, defaultVariationFor, isFlashRunning, pickDefaultVariation, variationPricing } from '@tubutree/app-core/flash-price';
 import { couponUseCopy, couponUseOutcome } from '@tubutree/app-core/coupon-use';
+import { addOneVariationPricing } from '@tubutree/app-core/commerce/add-one-pricing';
+import { buildFrequentlyBoughtBundle, pickFbtPartners } from '@tubutree/app-core/commerce/frequently-bought';
 import { pdpShelves } from '@tubutree/app-core/commerce/pdp-view';
 import { formatRating } from '@tubutree/app-core/commerce/card-meta';
 import { offerAmount } from '@tubutree/app-core/commerce/voucher-picker';
@@ -83,6 +85,7 @@ import { LeafGlyph } from '../components/ui/product-image';
 import { useSizedImage } from '../utils/image-src';
 import { FlashPriceBar } from '../components/product/flash-price-bar';
 import { PdpBundles } from '../components/product/pdp-bundles';
+import { PdpFbt, useFbtCartProductIds } from '../components/product/pdp-fbt';
 import { VariationChip } from '../components/product/variation-chip';
 import { useBundlesWait } from '../components/product/use-product-bundles';
 import { PdpOffersSheet } from '../components/product/pdp-offers-sheet';
@@ -205,6 +208,14 @@ export default function ProductDetailPage() {
     queryFn: getCart,
     enabled: status === 'authenticated',
   });
+  // Món đã có trong giỏ lúc trang mở không được gợi ý mua kèm; khách đã đăng nhập thì chờ giỏ về (hoặc lỗi) rồi mới chọn món, để bộ gợi ý không đổi sau lần vẽ đầu.
+  // Chờ cả phiên: ở 'loading' (lúc app vừa mở) chưa biết giỏ của ai, đóng băng ngay sẽ chốt một danh sách rỗng rồi không tính lại khi đăng nhập xong; khoá theo việc đã đăng nhập
+  // để phiên từ lỗi/khách sang đăng nhập tính lại một lần.
+  const fbtCartIds = useFbtCartProductIds(
+    slug && `${slug}:${status === 'authenticated'}`,
+    cart.data?.items,
+    status === 'authenticated' ? !cart.isPending : status !== 'loading',
+  );
   // Giỏ lúc khách bấm "Mua ngay". Thêm xong, giỏ mới (đã có món vừa thêm) vào cache trong lúc trang này còn mount ở hiệu ứng thoát: tính lại theo giỏ mới thì
   // `inCart` đã gồm số vừa thêm, nên số nút và câu ghi chú nhảy sai chốc lát (trình đọc màn hình đọc câu sai). Giữ giỏ cũ tới khi lỗi hoặc trang gỡ.
   const [buyFreeze, setBuyFreeze] = useState<{ lines: CartLines } | null>(null);
@@ -494,7 +505,32 @@ export default function ProductDetailPage() {
   const scrollToId = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
   const hasStory = resolveStoryConfig(p) !== null;
-  const shelves = pdpShelves({ currentId: p.id, boughtTogether: boughtTogether.data ?? [], brand: related.data ?? [], feed: feed.data ?? [] });
+  // "Gợi ý mua kèm hợp vị": món đang xem (phân loại đang chọn, đúng giá trang ghi) + 2 món đầu của "Khách thường mua cùng". Hai món đó chiếm chỗ ở khối này
+  // nên dải "Khách thường mua cùng" bên dưới bỏ chúng; khối không hiện (hết hàng, chưa có phân loại, hết gợi ý) thì không chiếm món nào.
+  const fbtCurrentPricing = selected ? addOneVariationPricing(selected, flashList, inCartQuantity(cartLines, selected.id)) : null;
+  const fbtPartners = fbtCartIds ? pickFbtPartners({ currentProductId: p.id, candidates: boughtTogether.data, flash: flashList, cartProductIds: fbtCartIds }) : [];
+  const fbtBundle = buildFrequentlyBoughtBundle({
+    current: {
+      productId: p.id,
+      slug: p.slug,
+      name: selected && variations.length > 1 ? `${p.name} · ${selected.name}` : p.name,
+      thumbnail: p.thumbnail ?? null,
+      variationId: selected?.id ?? null,
+      // Giá của đơn vị vừa thêm theo giỏ hiện có: vượt suất Giờ vàng (đã dùng hết, hoặc giỏ đã đủ suất) thì giỏ tính giá thường cho cả dòng, nên khối không ghi giá Giờ vàng.
+      price: fbtCurrentPricing ? fbtCurrentPricing.price : price,
+      compareAt: fbtCurrentPricing ? fbtCurrentPricing.compareAt : originalPrice,
+      inStock: inStock && !unavailable,
+    },
+    candidates: null,
+    partners: fbtPartners,
+  });
+  const shelves = pdpShelves({
+    currentId: p.id,
+    boughtTogether: fbtCartIds ? (boughtTogether.data ?? []) : [],
+    brand: related.data ?? [],
+    feed: feed.data ?? [],
+    claimed: fbtBundle ? new Set(fbtPartners.map((l) => l.productId)) : undefined,
+  });
 
   const handleShare = () => {
     haptic('light');
@@ -861,6 +897,8 @@ export default function ProductDetailPage() {
           />
         </Suspense>
       )}
+
+      {fbtBundle && <PdpFbt bundle={fbtBundle} />}
 
       {slug && <PdpBundles slug={slug} productName={product.data?.name} />}
 

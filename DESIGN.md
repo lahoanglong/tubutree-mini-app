@@ -86,6 +86,17 @@ Khung Reel là `ProductStoryShowcase` với `fullscreen` và `reel`: thanh đáy
 | thanh tiến độ ở đầu giỏ: "Mua thêm {số} để được Miễn phí giao hàng", đạt thì câu chúc mừng và bỏ thanh | `FreeShippingProgressBar` (số liệu từ `freeshipProgress` ở `commerce/freeship-progress.ts`; vẽ theo phần ĐANG CHỌN, chỉ phần Tubu giao khi giỏ có hàng gian hàng tự giao; `shimmer` tắt khi giảm chuyển động) |
 | dải 3–5 món bù đơn, nút "+ Thêm" một chạm | `FreeshipAddonRail` (món chọn bằng `pickFreeshipAddons`: còn hàng, Tubu giao, chưa có trong giỏ, giá không quá số còn thiếu + 25.000đ; dưới 3 món thì ẩn) |
 
+### Mua lại và mua kèm một chạm
+
+| Cần | Dùng |
+|---|---|
+| dải "Mua lại món quen" ở Trang chủ: tối đa 6 thẻ ngang (ảnh vuông 128, tên một dòng, giá, "+ Thêm" một chạm) và nút "Thêm lại tất cả" | `QuickReorderStrip` (logic ở `commerce/quick-reorder.ts`: `buildQuickReorderItems` chọn món còn hàng, áp Giờ vàng đang chạy, tính phần trăm tiết kiệm và số lần đã đặt; host là `PurchasedRail` nhánh Trang chủ) |
+| khối "Gợi ý mua kèm hợp vị" ở trang chi tiết: món đang xem + 2 món bổ trợ tick chọn, nút "Thêm n món vào giỏ · tổng" | `FrequentlyBoughtTogether` (logic ở `commerce/frequently-bought.ts`: `pickFbtPartners`, `buildFrequentlyBoughtBundle`, `frequentlyBoughtSummary`, `frequentlyBoughtLines`; nguồn món là dải "Khách thường mua cùng" của API, không có nguồn riêng) |
+
+`QuickReorderStrip` là cách vẽ của kệ `home.purchased` (cùng kệ, cùng hạng chống trùng, không thêm kệ thứ 5): khách cũ có từ 2 món còn hàng thì thấy dải, một món thì vẫn là dòng Mua lại 88px, tab Đơn hàng giữ `PurchasedRail` cũ (hai chạm qua `ReorderSheet`, vì ở đó khách chọn số lượng và Định kỳ). Giá ra qua `rebuyPricing` như dòng Mua lại, và hết suất Giờ vàng của khách (`flashAllowance` = 0) thì ghi giá thường vì giỏ tính giá thường. Hàm `buildQuickReorderItems` còn nhận món vừa xem cho khách chưa có đơn nhưng Trang chủ chưa nối nguồn đó (khối `purchased` không có ở bố cục khách mới; đổi thì phải đổi `homeBlockOrder` và khung chờ).
+
+`FrequentlyBoughtTogether` nằm dưới thông tin chính và trên khối Combo/Mua kèm giá tốt; mặc định chọn hết, mỗi món một đơn vị, thêm theo lô tất cả-hoặc-không (`useBundleAdd`). Hai món bổ trợ chiếm chỗ của dải "Khách thường mua cùng" bên dưới (`pdpShelves({ claimed })`), nên dải đó có thể xuống dưới sàn 3 món và ẩn. Không có khuyến mãi riêng của bộ: số "Tiết kiệm" chỉ là phần Giờ vàng và giá bán đã giảm của từng món.
+
 ### Khối, tiêu đề, điều hướng trong trang
 
 | Cần | Dùng |
@@ -184,7 +195,7 @@ Trang chủ lúc lập tài liệu (nguồn thật là `shelves.ts`, đọc ở 
 | Kệ | Bố cục | Trần / sàn | Hạng | Xem tất cả |
 |---|---|---|---|---|
 | `home.flash` | rail | 8 / 3 | 1 | `/flash-sale` |
-| `home.purchased` | line | 10 / 1 | 2 | `/orders` |
+| `home.purchased` | rail | 6 / 1 | 2 | `/orders` |
 | `home.combos` | rail | 4 / 2 | 3 | không |
 | `home.bestSellers` | rail | 10 / 3 | 4 | `/best-sellers` |
 | `home.suggest` | feed | 100 / 4 | 6 | `/browse` |
@@ -301,3 +312,4 @@ Baseline chỉ được giảm. Đỏ vì bánh cóc hoặc `ds-shop-guard` thì
 | 2026-11-02 | Chữ API bỏ "Vui lòng" và "chúng tôi" (giữ mệnh đề đầu câu mà client cũ so khớp); câu khách đọc của Giờ vàng tách ra `flash-sale-notice.ts`; `terminology.spec` quét mọi file API cho hai chữ này, đoạn template xét cả từ viết thường, bỏ giá trị truy vấn (M2) | lưới cũ chỉ quét file `*-notice.ts`/`*-price.ts` nên "Vui lòng" còn ~110 chỗ trong lỗi API; client cũ trên máy khách vẫn chạy với API mới nên chỉ đổi phần đuôi câu |
 | 2026-11-05 | Thêm `ProductStoryShowcase` (dải câu chuyện sản phẩm) và Story Studio; sprite nguyên liệu là vector nội tuyến, màu qua token `--color-story-*`; kịch bản mẫu chỉ nêu điều có trong dữ liệu sản phẩm | giữ một bộ cấu hình cho Mini, web và Admin Live Preview; không tải tài nguyên ngoài nên dùng được ngoại tuyến và không phá dung lượng gói đầu; không bịa thông số (phần trăm chỉ lấy từ thành phần thật) |
 | 2026-11-07 | W42A: dải Story đầu Trang chủ (`StoryReelStrip`, khối `stories` dưới lối tắt, nguồn Bán chạy nhất, cao 144px) và thanh Miễn phí giao hàng + dải bù đơn ở ĐẦU giỏ (`FreeShippingProgressBar`, `FreeshipAddonRail`); gỡ thanh Freeship khỏi chân dính | đề bài yêu cầu; tiêu đề dải giữ "Câu chuyện sản phẩm" và kịch bản dự phòng chỉ nêu dữ liệu có thật (không ghi Đà Lạt, VietGAP, thu hoạch sáng sớm, độ giòn ngọt) vì danh mục có cả dầu gội, nước rửa chén và `story-presets-launch.spec` chặn tuyên bố cần giấy tờ; câu chúc mừng không có dấu "!" theo `shop-copy.spec`; dải bù đơn chỉ nhận món Tubu giao vì hàng gian hàng tự giao không được miễn phí giao của Tubu |
+| 2026-11-08 | W43A: dải `QuickReorderStrip` thay cách vẽ kệ `home.purchased` (rail 6 món, không thêm kệ thứ 5) và khối `FrequentlyBoughtTogether` (kệ `pdp.frequentlyBought`, 2 món bổ trợ) ở trang chi tiết | đề bài yêu cầu; chủ chọn thay hình kệ Mua lại thay vì thêm kệ (Trang chủ đã đủ trần 4 kệ hàng, và hai khối cùng ý "mua lại" lặp nhau) và dùng dữ liệu "Khách thường mua cùng" có sẵn thay vì nguồn catalog mới (PDP đã có Combo, Mua kèm giá tốt và dải mua cùng); một chạm thay hai chạm ở Trang chủ vì thẻ đã có bay vào giỏ và huy hiệu nảy (W42B) báo rõ đã thêm; tab Đơn hàng giữ hai chạm |

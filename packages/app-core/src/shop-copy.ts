@@ -532,6 +532,25 @@ export const SHOP_COPY: Record<string, string> = {
   'freeship.addonsTitle': 'Gợi ý mua thêm cho đủ Miễn phí giao hàng',
   'freeship.add': '+ Thêm',
   'freeship.addAria': 'Thêm {name} vào giỏ, {price}',
+
+  // Dải Mua lại món quen ở Trang chủ (W43A): thẻ ngang, "+ Thêm" một chạm và "Thêm lại tất cả".
+  'quickReorder.title': 'Mua lại món quen',
+  'quickReorder.addAll': 'Thêm lại tất cả',
+  'quickReorder.add': '+ Thêm',
+  'quickReorder.addAria': 'Thêm {name} vào giỏ, {price}',
+  'quickReorder.addAllAria': 'Thêm lại tất cả {n} món vào giỏ, tổng {total}',
+  'quickReorder.timesBought': 'Đã mua {n} lần',
+  'quickReorder.addedAll': 'Đã thêm {n} món vào giỏ',
+  'quickReorder.error': 'Chưa thêm được vào giỏ. Bạn thử lại nhé.',
+
+  // Khối Gợi ý mua kèm hợp vị ở trang chi tiết sản phẩm (W43A): tick chọn món xem + món bổ trợ, thêm cả bộ một chạm.
+  'fbt.title': 'Gợi ý mua kèm hợp vị',
+  'fbt.current': 'Món đang xem',
+  'fbt.pickSpoken': '{name}, {price}',
+  'fbt.add': 'Thêm {n} món vào giỏ · {total}',
+  'fbt.pickHint': 'Chọn món muốn thêm',
+  'fbt.added': 'Đã thêm {n} món vào giỏ',
+  'fbt.error': 'Chưa thêm được vào giỏ. Bạn thử lại nhé.',
 };
 
 /** Thuật ngữ không được xuất hiện trong chữ hiển thị cho khách; `use` là chữ thay thế. Bảng gốc: ux-copy mục D2 và thiết kế §4 Q5. */
