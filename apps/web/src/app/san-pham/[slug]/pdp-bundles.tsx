@@ -35,6 +35,9 @@ import { pdpSectionTitle } from './pdp-sections';
 
 const STALE_MS = 30_000;
 const ADDED_FLASH_MS = 1_200;
+// Khoá `fbt.selectAll` còn nằm ở PR #233 chưa vào main: chữ cố định để nhánh này không xung đột shop-copy; đổi sang fillCopy khi #233 gộp.
+const SELECT_ALL = 'Chọn tất cả';
+const selectAllSpoken = (title: string) => `${SELECT_ALL} — ${title}`;
 /** Cột thông tin của trang đã đệm 16px hai bên: khối không tự đệm thêm (Mini App đệm trong khối trắng tràn mép nên chữ vẫn thẳng hàng 16px). */
 const SURFACE = 'py-2';
 
@@ -121,6 +124,15 @@ export function PdpBundles({
   const [justAdded, setJustAdded] = useState(false);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(flashTimer.current), []);
+  const addonsRoot = useRef<HTMLElement>(null);
+  const refocus = useRef(false);
+  // "Chọn tất cả" tự gỡ khi đã chọn đủ: đưa tiêu điểm sang nút Thêm để bàn phím và trình đọc màn hình không rơi về đầu trang, và nghe luôn số món mới.
+  useEffect(() => {
+    if (!refocus.current) return;
+    refocus.current = false;
+    const root = addonsRoot.current;
+    if (root && !root.querySelector('[data-testid="addon-select-all"]')) root.querySelector<HTMLElement>('[data-testid="addon-add"]')?.focus();
+  });
   const query = useQuery({ ...productBundlesQuery(coreHttp, slug), initialData: initialBundles, initialDataUpdatedAt: initialFetchedAt, staleTime: STALE_MS, retry: 0 });
 
   // Trang ISR có thể cũ hàng giờ: trước khi hydrate vẽ đúng như máy chủ đã vẽ (giờ lúc lấy dữ liệu, mọi bộ còn hạn), nếu không lần vẽ đầu
@@ -136,6 +148,8 @@ export function PdpBundles({
   const { items: rows, held: addonsHeld } = addonSide;
 
   const summary = addonSummary(rows, picked);
+  const addonTitle = bundleHoldTitle('addon.title', addonsHeld);
+  const showSelectAll = addonsHeld === null && rows.length >= 2 && summary.count < rows.length;
   const toggle = (key: string) =>
     setPicked((prev) => {
       const next = new Set(prev);
@@ -186,8 +200,25 @@ export function PdpBundles({
       }
       addons={
         rows.length > 0 ? (
-          <section aria-label={bundleHoldTitle('addon.title', addonsHeld)} data-testid="pdp-addons" className={SURFACE}>
-            <h2 className={pdpSectionTitle}>{bundleHoldTitle('addon.title', addonsHeld)}</h2>
+          <section ref={addonsRoot} aria-label={addonTitle} data-testid="pdp-addons" className={SURFACE}>
+            <div className="flex items-center justify-between gap-2">
+              <h2 className={`${pdpSectionTitle} min-w-0 flex-1`}>{addonTitle}</h2>
+              {showSelectAll && (
+                <button
+                  type="button"
+                  data-testid="addon-select-all"
+                  aria-label={selectAllSpoken(addonTitle)}
+                  className="tubu-press tubu-hit-44 min-w-11 flex-none cursor-pointer bg-transparent p-0 text-[length:var(--type-label-size)] font-semibold leading-[var(--type-label-lh)] text-[var(--color-text-brand)]"
+                  onClick={() => {
+                    refocus.current = true;
+                    setJustAdded(false);
+                    setPicked(new Set(rows.map((r) => r.key)));
+                  }}
+                >
+                  {SELECT_ALL}
+                </button>
+              )}
+            </div>
             <EndedBody ended={addonsHeld !== null}>
               {productName && <p className="mt-0.5 text-xs text-stone-500">{fillCopy('addon.condition', { name: productName })}</p>}
               <div role="group" aria-label={fillCopy('addon.title')} className="mt-1 flex flex-col">
@@ -202,11 +233,15 @@ export function PdpBundles({
               </div>
               <div>
                 <Button
+                  data-testid="addon-add"
                   fullWidth
                   variant={justAdded ? 'secondary' : 'primary'}
                   loading={busyId === 'addons'}
                   disabled={addonsHeld !== null || (summary.count === 0 && !justAdded)}
-                  onPress={addAddons}
+                  onPress={() => {
+                    if (addonsHeld !== null || summary.count === 0) return;
+                    addAddons();
+                  }}
                 >
                   {justAdded ? fillCopy('addon.added') : summary.count > 0 ? fillCopy('addon.add', { n: summary.count }) : fillCopy('addon.pickHint')}
                 </Button>

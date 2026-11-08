@@ -410,6 +410,89 @@ describe('PdpBundles (web): Mua kèm giá tốt', () => {
     expect(mocks.push).toHaveBeenCalledTimes(1);
   });
 
+  describe('"Chọn tất cả"', () => {
+    const selectAll = (c: HTMLElement) => c.querySelector<HTMLButtonElement>('[data-testid="addon-select-all"]');
+    const addBtn = (c: HTMLElement) => c.querySelector<HTMLButtonElement>('[data-testid="addon-add"]')!;
+
+    it('có từ 2 dòng và chưa chọn đủ: nút nằm cạnh tiêu đề, tên đọc kèm tiêu đề khối; chọn thiếu một món vẫn còn nút', async () => {
+      const c = await mount({ combos: [], addons: TWO_ADDONS });
+      const all = selectAll(c)!;
+      expect(all.textContent).toBe('Chọn tất cả');
+      expect(all.getAttribute('aria-label')).toBe('Chọn tất cả — Mua kèm giá tốt');
+      expect(all.closest('[data-testid="pdp-addons"]')!.querySelector('h2')!.parentElement).toBe(all.parentElement);
+      click(rows(c)[0]!);
+      expect(selectAll(c)).not.toBeNull();
+    });
+
+    it('bấm: tick hết, nhãn nút Thêm và dòng Tiết kiệm đổi theo, nút tự gỡ và tiêu điểm sang nút Thêm', async () => {
+      const c = await mount({ combos: [], addons: TWO_ADDONS });
+      click(selectAll(c));
+      expect(rows(c).every((r) => r.checked)).toBe(true);
+      expect(addBtn(c).textContent).toBe('Thêm 2 món vào giỏ');
+      expect(c.querySelector('[data-testid="addon-save"]')!.textContent).toBe('Tiết kiệm 70.000đ');
+      expect(selectAll(c)).toBeNull();
+      expect(document.activeElement).toBe(addBtn(c));
+    });
+
+    it('chọn đủ từng dòng bằng tay thì nút cũng gỡ nhưng tiêu điểm không bị cướp khỏi dòng đang bấm', async () => {
+      const c = await mount({ combos: [], addons: TWO_ADDONS });
+      click(rows(c)[0]!);
+      click(rows(c)[1]!);
+      expect(selectAll(c)).toBeNull();
+      expect(document.activeElement).not.toBe(addBtn(c));
+    });
+
+    it('sau "Chọn tất cả" bấm Thêm gửi đủ mọi dòng một lệnh', async () => {
+      const c = await mount({ combos: [], addons: TWO_ADDONS });
+      click(selectAll(c));
+      click(addBtn(c));
+      await flush();
+      expect(mocks.addAll).toHaveBeenCalledTimes(1);
+      expect(mocks.addAll).toHaveBeenCalledWith([{ variationId: 'v-x', quantity: 1 }, { variationId: 'v-y', quantity: 1 }]);
+    });
+
+    it('bấm ngay lúc "Đã thêm vào giỏ": nhãn nút về "Thêm 2 món vào giỏ" để tiêu điểm nói đúng việc sắp làm', async () => {
+      const c = await mount({ combos: [], addons: TWO_ADDONS });
+      click(rows(c)[1]!);
+      click(addBtn(c));
+      await flush();
+      expect(addBtn(c).textContent).toBe('Đã thêm vào giỏ');
+      click(selectAll(c));
+      expect(addBtn(c).textContent).toBe('Thêm 2 món vào giỏ');
+      expect(document.activeElement).toBe(addBtn(c));
+    });
+
+    it('chỉ một dòng: không có nút', async () => {
+      const c = await mount({ combos: [], addons: [addon('a1', [item('x', { addonPrice: 60_000 })])] });
+      expect(rows(c).length).toBe(1);
+      expect(selectAll(c)).toBeNull();
+    });
+
+    it('khối đã kết thúc: không có nút và tiêu đề không còn chỗ cho nó', async () => {
+      mocks.get.mockResolvedValue({ combos: ONE_COMBO, addons: [] });
+      const r = render(<PdpBundles slug="sp-anchor" productName="Xà phòng sả" initialBundles={{ combos: ONE_COMBO, addons: TWO_ADDONS }} initialFetchedAt={Date.now() - 5 * 60_000} />);
+      mounted.push(r);
+      await flush();
+      expect(r.container.querySelector('[data-testid="pdp-addons"] h2')!.textContent).toBe('Mua kèm giá tốt · Đã kết thúc');
+      expect(rows(r.container).length).toBe(2);
+      expect(selectAll(r.container)).toBeNull();
+    });
+  });
+
+  it('bấm nút Thêm đúng lúc "Đã thêm vào giỏ" (đã bỏ chọn hết): không gửi lệnh thứ hai', async () => {
+    const c = await mount({ combos: [], addons: TWO_ADDONS });
+    click(rows(c)[1]!);
+    click(c.querySelector('[data-testid="addon-add"]'));
+    await flush();
+    expect(mocks.addAll).toHaveBeenCalledTimes(1);
+    const add = c.querySelector<HTMLButtonElement>('[data-testid="addon-add"]')!;
+    expect(add.textContent).toBe('Đã thêm vào giỏ');
+    expect(add.disabled).toBe(false);
+    click(add);
+    await flush();
+    expect(mocks.addAll).toHaveBeenCalledTimes(1);
+  });
+
   it('một sản phẩm nằm ở hai bộ: một dòng, lấy giá kèm thấp nhất', async () => {
     const c = await mount({
       combos: [],

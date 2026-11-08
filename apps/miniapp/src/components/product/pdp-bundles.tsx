@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   addonLines,
   addonRows,
@@ -29,6 +29,9 @@ import { useBundleAdd } from './use-bundle-add';
 import { useProductBundles } from './use-product-bundles';
 
 const ADDED_FLASH_MS = 1_200;
+// Khoá `fbt.selectAll` còn nằm ở PR #233 chưa vào main: chữ cố định để nhánh này không xung đột shop-copy; đổi sang fillCopy khi #233 gộp.
+const SELECT_ALL = 'Chọn tất cả';
+const selectAllSpoken = (title: string) => `${SELECT_ALL} — ${title}`;
 const SURFACE = { background: 'var(--color-bg-surface)', padding: 16 } as const;
 
 function AddonRowView({ row, on, onToggle }: { row: AddonRow; on: boolean; onToggle: () => void }) {
@@ -93,7 +96,17 @@ export function PdpBundles({ slug, productName }: { slug: string; productName?: 
   const { add, busyId } = useBundleAdd();
   const [picked, setPicked] = useState<ReadonlySet<string>>(new Set());
   const [justAdded, setJustAdded] = useState(false);
+  const addonsRoot = useRef<HTMLElement>(null);
+  const refocus = useRef(false);
   const query = useProductBundles(slug);
+
+  // "Chọn tất cả" tự gỡ khi đã chọn đủ: đưa tiêu điểm sang nút Thêm để bàn phím và trình đọc màn hình không rơi về đầu trang, và nghe luôn số món mới.
+  useEffect(() => {
+    if (!refocus.current) return;
+    refocus.current = false;
+    const root = addonsRoot.current;
+    if (root && !root.querySelector('[data-testid="addon-select-all"]')) root.querySelector<HTMLElement>('[data-testid="addon-add"]')?.focus();
+  });
 
   const addCombo = (id: string, lines: { variationId: string; quantity: number }[]) =>
     add({ id, lines, errorKey: 'shop.comboError', successText: fillCopy('shop.comboAdded') });
@@ -119,6 +132,8 @@ export function PdpBundles({ slug, productName }: { slug: string; productName?: 
   const { items: rows, held: addonsHeld } = addonSide;
 
   const summary = addonSummary(rows, picked);
+  const addonTitle = bundleHoldTitle('addon.title', addonsHeld);
+  const showSelectAll = addonsHeld === null && rows.length >= 2 && summary.count < rows.length;
   const toggle = (key: string) =>
     setPicked((prev) => {
       const next = new Set(prev);
@@ -155,8 +170,27 @@ export function PdpBundles({ slug, productName }: { slug: string; productName?: 
       }
       addons={
         rows.length > 0 ? (
-          <section aria-label={bundleHoldTitle('addon.title', addonsHeld)} data-testid="pdp-addons" style={SURFACE}>
-            <SectionTitle block>{bundleHoldTitle('addon.title', addonsHeld)}</SectionTitle>
+          <section ref={addonsRoot} aria-label={addonTitle} data-testid="pdp-addons" style={SURFACE}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--space-inline-sm)' }}>
+              <SectionTitle block style={{ flex: '1 1 auto', minWidth: 0 }}>{addonTitle}</SectionTitle>
+              {showSelectAll && (
+                <button
+                  type="button"
+                  data-testid="addon-select-all"
+                  aria-label={selectAllSpoken(addonTitle)}
+                  className="tubu-press tubu-hit-44"
+                  onClick={() => {
+                    haptic('light');
+                    refocus.current = true;
+                    setJustAdded(false);
+                    setPicked(new Set(rows.map((r) => r.key)));
+                  }}
+                  style={{ flex: '0 0 auto', padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit', fontSize: 'var(--type-label-size)', lineHeight: 'var(--type-label-lh)', fontWeight: 600, color: 'var(--color-text-brand)' }}
+                >
+                  {SELECT_ALL}
+                </button>
+              )}
+            </div>
             <HeldBody held={addonsHeld !== null}>
               {productName && (
                 <Text variant="caption" tone="tertiary" as="p" style={{ margin: '2px 0 0' }}>
@@ -174,11 +208,15 @@ export function PdpBundles({ slug, productName }: { slug: string; productName?: 
               </div>
               <div>
                 <Button
+                  data-testid="addon-add"
                   fullWidth
                   variant={justAdded ? 'secondary' : 'primary'}
                   loading={busyId === 'addons'}
                   disabled={addonsHeld !== null || (summary.count === 0 && !justAdded)}
-                  onPress={() => addAddons(addonLines(rows, picked))}
+                  onPress={() => {
+                    if (addonsHeld !== null || summary.count === 0) return;
+                    addAddons(addonLines(rows, picked));
+                  }}
                 >
                   {justAdded ? fillCopy('addon.added') : summary.count > 0 ? fillCopy('addon.add', { n: summary.count }) : fillCopy('addon.pickHint')}
                 </Button>
