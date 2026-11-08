@@ -55,7 +55,7 @@ export function QuantitySelector({ value, max, min = 1, size = 'md', onChange, d
       >
         <Minus size={size === 'md' ? 18 : 15} strokeWidth={2.2} />
       </button>
-      <Text variant={size === 'md' ? 'body-lg' : 'body-sm'} style={{ minWidth: 22, textAlign: 'center', fontWeight: 600 }}>
+      <Text variant={size === 'md' ? 'body-lg' : 'body-sm'} style={{ minWidth: 22, textAlign: 'center', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
         {value}
       </Text>
       <button

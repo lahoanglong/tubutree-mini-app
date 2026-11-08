@@ -14,7 +14,7 @@ const variations: VariationOption[] = [
 ];
 const flash = (extra: Record<string, unknown> = {}) => [{ productSlug: 'khan-uot', variationId: 'v1', flashPrice: 26_000, perUserLimit: 3, ...extra }];
 
-type SheetProps = { flash?: ReturnType<typeof flash>; initialQty?: number; mode?: 'add' | 'buy'; cartLines?: { variationId: string; quantity: number }[]; cartMayArrive?: boolean; variations?: VariationOption[]; open?: boolean };
+type SheetProps = { flash?: ReturnType<typeof flash>; initialQty?: number; mode?: 'add' | 'buy'; cartLines?: { variationId: string; quantity: number }[]; cartMayArrive?: boolean; variations?: VariationOption[]; open?: boolean; busy?: boolean };
 function sheetElement(props: SheetProps, onConfirm: () => void = () => undefined) {
   return (
     <VariationSheet
@@ -27,7 +27,7 @@ function sheetElement(props: SheetProps, onConfirm: () => void = () => undefined
       flash={props.flash ?? flash()}
       initialId="v1"
       initialQty={props.initialQty ?? 3}
-      busy={false}
+      busy={props.busy ?? false}
       cartLines={props.cartLines}
       cartMayArrive={props.cartMayArrive}
       onConfirm={onConfirm}
@@ -361,5 +361,109 @@ describe('VariationSheet: perUserLeft (số suất khách còn mua được sau 
     view.rerender(sheetElement({ mode: 'add', initialQty: 1, flash: flash({ perUserLeft: 0 }) }));
     expect(screen.getByRole('status')).toBe(before);
     expect(before).toHaveTextContent(SPENT);
+  });
+});
+
+describe('VariationSheet: khoá đổi phân loại và số lượng khi busy hoặc hết hàng', () => {
+  const selectedStock = () => screen.getByTestId('variation-sheet-stock').parentElement;
+
+  it('busy: nút xác nhận quay (aria-busy), bấm không gọi onConfirm', () => {
+    const { onConfirm } = renderSheet({ busy: true });
+    const confirm = buyButton();
+    expect(confirm).toHaveAttribute('aria-busy', 'true');
+    expect(confirm).toHaveAttribute('aria-disabled', 'true');
+    fireEvent.click(confirm);
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
+  it('không busy: nút không quay, bấm gọi onConfirm đúng phân loại và số lượng', () => {
+    const { onConfirm } = renderSheet({ busy: false });
+    expect(buyButton()).not.toHaveAttribute('aria-busy');
+    fireEvent.click(buyButton());
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ id: 'v1' }), 3);
+  });
+
+  it('busy: bấm chip khác không đổi phân loại, bấm − / + không đổi số lượng và tiền nút', () => {
+    renderSheet({ busy: true });
+    expect(selectedStock()).toHaveTextContent('Gói 80 tờ');
+    fireEvent.click(screen.getByRole('button', { name: /Gói 40 tờ/ }));
+    expect(selectedStock()).toHaveTextContent('Gói 80 tờ');
+    expect(buyButton()).toHaveTextContent('Mua ngay · 78.000đ');
+    fireEvent.click(plus());
+    fireEvent.click(minus());
+    expect(buyButton()).toHaveTextContent('Mua ngay · 78.000đ');
+    expect(plus()).toHaveAttribute('aria-disabled', 'true');
+    expect(minus()).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('busy hết thì mở khoá lại: đổi chip và bấm + chạy như bình thường', () => {
+    const view = renderSheet({ busy: true });
+    fireEvent.click(screen.getByRole('button', { name: /Gói 40 tờ/ }));
+    expect(selectedStock()).toHaveTextContent('Gói 80 tờ');
+    view.rerender(sheetElement({ busy: false }));
+    fireEvent.click(screen.getByRole('button', { name: /Gói 40 tờ/ }));
+    expect(selectedStock()).toHaveTextContent('Gói 40 tờ');
+    expect(plus()).toHaveAttribute('aria-disabled', 'false');
+    fireEvent.click(plus());
+    expect(buyButton()).toHaveTextContent('Mua ngay · 80.000đ');
+  });
+
+  it('không busy: − / + đổi số lượng, không bị khoá', () => {
+    renderSheet({ busy: false, initialQty: 3 });
+    expect(plus()).toHaveAttribute('aria-disabled', 'false');
+    fireEvent.click(plus());
+    expect(buyButton()).toHaveTextContent('Mua ngay · 140.000đ');
+  });
+
+  it('phân loại đang chọn hết hàng: bộ chọn số lượng khoá cả − lẫn +, nút ghi "Tạm hết hàng"', () => {
+    const allOut: VariationOption[] = [
+      { id: 'v1', sku: 'S1', name: 'Gói 80 tờ', retailPrice: 35_000, salePrice: null, stock: 0 },
+      { id: 'v2', sku: 'S2', name: 'Gói 40 tờ', retailPrice: 20_000, salePrice: null, stock: 0 },
+    ];
+    renderSheet({ variations: allOut, flash: [], initialQty: 1 });
+    expect(plus()).toHaveAttribute('aria-disabled', 'true');
+    expect(minus()).toHaveAttribute('aria-disabled', 'true');
+    fireEvent.click(plus());
+    expect(screen.getByRole('button', { name: 'Tạm hết hàng' })).toBeDisabled();
+  });
+
+  it('tồn của phân loại đang chọn về 0 khi bảng còn mở (số lượng 3): − bị khoá, bấm không đổi số', () => {
+    const view = renderSheet({ flash: [], initialQty: 3 });
+    expect(minus()).toHaveAttribute('aria-disabled', 'false');
+    view.rerender(sheetElement({ flash: [], initialQty: 3, variations: [{ ...variations[0]!, stock: 0 }, ...variations.slice(1)] }));
+    expect(minus()).toHaveAttribute('aria-disabled', 'true');
+    fireEvent.click(minus());
+    expect(minus().nextElementSibling).toHaveTextContent('3');
+  });
+});
+
+describe('VariationSheet: số đều (tabular-nums) cho tồn kho, giới hạn Giờ vàng, số lượng và ghi chú', () => {
+  it('tồn kho: tabular-nums ở mọi mức tồn, tồn thấp vẫn giữ màu cảnh báo', () => {
+    const a = renderSheet({ flash: [] });
+    expect(screen.getByTestId('variation-sheet-stock').style.fontVariantNumeric).toBe('tabular-nums');
+    expect(screen.getByTestId('variation-sheet-stock').style.color).toBe('');
+    a.unmount();
+    renderSheet({ flash: [], variations: [{ ...variations[0]!, stock: 3 }, ...variations.slice(1)] });
+    const low = screen.getByTestId('variation-sheet-stock');
+    expect(low.style.fontVariantNumeric).toBe('tabular-nums');
+    expect(low.style.color).toBe('var(--color-status-warning-fg)');
+  });
+
+  it('nhãn giới hạn "Tối đa 3/khách" và số lượng ở bộ chọn dùng số đều', () => {
+    renderSheet();
+    expect(screen.getByText('Tối đa 3/khách').style.fontVariantNumeric).toBe('tabular-nums');
+    expect((plus().previousElementSibling as HTMLElement).style.fontVariantNumeric).toBe('tabular-nums');
+    expect(plus().previousElementSibling).toHaveTextContent('3');
+  });
+
+  it('vùng ghi chú (role=status) dùng số đều, có chữ hay chưa', () => {
+    renderSheet({ initialQty: 3 });
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
+    expect(screen.getByRole('status').style.fontVariantNumeric).toBe('tabular-nums');
+    fireEvent.click(plus());
+    fireEvent.click(plus());
+    expect(screen.getByRole('status')).toHaveTextContent(OVER_5);
+    expect(screen.getByRole('status').style.fontVariantNumeric).toBe('tabular-nums');
   });
 });

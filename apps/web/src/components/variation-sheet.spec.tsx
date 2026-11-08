@@ -329,3 +329,141 @@ describe('VariationSheet web: hết hàng ghi "Tạm hết hàng" nhất quán',
     expect(btn.disabled).toBe(true);
   });
 });
+
+describe('VariationSheet web: khoá đổi phân loại và số lượng khi busy hoặc hết hàng', () => {
+  const selectedLabel = () => dialog().querySelector('[data-testid="variation-sheet-stock"]')!.parentElement!.textContent;
+  const chipOf = (name: RegExp) => byText(dialog(), 'button', name) as HTMLButtonElement;
+
+  function mountBusy(initial: boolean, over: Partial<Props> = {}) {
+    let setBusy!: (v: boolean) => void;
+    function Harness() {
+      const [busy, set] = useState(initial);
+      setBusy = set;
+      return <VariationSheet {...baseProps({ ...over, busy })} />;
+    }
+    mounted.push(render(<Harness />));
+    return { setBusy: (v: boolean) => act(() => setBusy(v)) };
+  }
+
+  it('busy: nút xác nhận quay (aria-busy), bấm không gọi onConfirm', () => {
+    const onConfirm = vi.fn();
+    mountSheet({ busy: true, onConfirm });
+    expect(buy().getAttribute('aria-busy')).toBe('true');
+    expect(buy().getAttribute('aria-disabled')).toBe('true');
+    click(buy());
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
+  it('không truyền busy (mặc định false): nút không quay, bấm gọi onConfirm đúng phân loại và số lượng', () => {
+    const onConfirm = vi.fn();
+    mountSheet({ onConfirm });
+    expect(buy().hasAttribute('aria-busy')).toBe(false);
+    click(buy());
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ id: 'v1' }), 3);
+  });
+
+  it('onConfirm trả Promise: nút giữ khoá tới khi Promise xong, bấm đúp chỉ gửi một lần', async () => {
+    let finish!: () => void;
+    const onConfirm = vi.fn(() => new Promise<void>((resolve) => { finish = resolve; }));
+    mountSheet({ onConfirm });
+    click(buy());
+    click(buy());
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+    await act(async () => finish());
+    click(buy());
+    expect(onConfirm).toHaveBeenCalledTimes(2);
+  });
+
+  it('busy: bấm chip khác không đổi phân loại, bấm − / + không đổi số lượng và tiền nút', () => {
+    mountSheet({ busy: true });
+    expect(selectedLabel()).toContain('Gói 80 tờ');
+    click(chipOf(/Gói 40 tờ/));
+    expect(selectedLabel()).toContain('Gói 80 tờ');
+    expect(buy().textContent).toBe('Mua ngay · 78.000đ');
+    click(plus());
+    click(minus());
+    expect(buy().textContent).toBe('Mua ngay · 78.000đ');
+    expect(plus()!.getAttribute('aria-disabled')).toBe('true');
+    expect(minus()!.getAttribute('aria-disabled')).toBe('true');
+  });
+
+  it('busy hết thì mở khoá lại: đổi chip và bấm + chạy như bình thường', () => {
+    const view = mountBusy(true);
+    click(chipOf(/Gói 40 tờ/));
+    expect(selectedLabel()).toContain('Gói 80 tờ');
+    view.setBusy(false);
+    click(chipOf(/Gói 40 tờ/));
+    expect(selectedLabel()).toContain('Gói 40 tờ');
+    expect(plus()!.getAttribute('aria-disabled')).toBe('false');
+    click(plus());
+    expect(buy().textContent).toBe('Mua ngay · 80.000đ');
+  });
+
+  it('không busy: − / + đổi số lượng, không bị khoá', () => {
+    mountSheet({ initialQty: 3 });
+    expect(plus()!.getAttribute('aria-disabled')).toBe('false');
+    click(plus());
+    expect(buy().textContent).toBe('Mua ngay · 140.000đ');
+  });
+
+  it('phân loại đang chọn hết hàng: bộ chọn số lượng khoá cả − lẫn +, nút ghi "Tạm hết hàng"', () => {
+    const allOut: VariationOption[] = [
+      { id: 'v1', sku: 'S1', name: 'Gói 80 tờ', retailPrice: 35_000, salePrice: null, stock: 0 },
+      { id: 'v2', sku: 'S2', name: 'Gói 40 tờ', retailPrice: 20_000, salePrice: null, stock: 0 },
+    ];
+    mountSheet({ variations: allOut, flash: [], initialId: null, initialQty: 1 });
+    expect(plus()!.getAttribute('aria-disabled')).toBe('true');
+    expect(minus()!.getAttribute('aria-disabled')).toBe('true');
+    expect((byText(dialog(), 'button', /^Tạm hết hàng$/) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('tồn của phân loại đang chọn về 0 khi bảng còn mở (số lượng 3): − bị khoá, bấm không đổi số', () => {
+    let setStock!: (n: number) => void;
+    function Harness() {
+      const [stock, set] = useState(245);
+      setStock = set;
+      return <VariationSheet {...baseProps({ flash: [], variations: [{ ...variations[0]!, stock }, ...variations.slice(1)] })} />;
+    }
+    mounted.push(render(<Harness />));
+    expect(minus()!.getAttribute('aria-disabled')).toBe('false');
+    act(() => setStock(0));
+    expect(minus()!.getAttribute('aria-disabled')).toBe('true');
+    click(minus());
+    expect(minus()!.nextElementSibling!.textContent).toBe('3');
+  });
+});
+
+describe('VariationSheet web: số đều (tabular-nums) cho tồn kho, giới hạn Giờ vàng, số lượng và ghi chú', () => {
+  const stockNode = () => dialog().querySelector<HTMLElement>('[data-testid="variation-sheet-stock"]')!;
+
+  it('tồn kho: tabular-nums ở mọi mức tồn, tồn thấp vẫn giữ màu cảnh báo', () => {
+    mountSheet({ flash: [] });
+    expect(stockNode().style.fontVariantNumeric).toBe('tabular-nums');
+    expect(stockNode().style.color).toBe('');
+    mounted.pop()!.unmount();
+    mountSheet({ flash: [], variations: [{ ...variations[0]!, stock: 3 }, ...variations.slice(1)] });
+    expect(stockNode().style.fontVariantNumeric).toBe('tabular-nums');
+    expect(stockNode().style.color).toBe('var(--color-status-warning-fg)');
+  });
+
+  it('nhãn giới hạn "Tối đa 3/khách" và số lượng ở bộ chọn dùng số đều', () => {
+    mountSheet();
+    const info = dialog().querySelector('[data-testid="variation-sheet-flash"]') as HTMLElement;
+    const limit = byText(info, '[aria-hidden="true"]', 'Tối đa 3/khách')!.firstElementChild as HTMLElement;
+    expect(limit.style.fontVariantNumeric).toBe('tabular-nums');
+    const qtyText = plus()!.previousElementSibling as HTMLElement;
+    expect(qtyText.textContent).toBe('3');
+    expect(qtyText.style.fontVariantNumeric).toBe('tabular-nums');
+  });
+
+  it('vùng ghi chú (role=status) dùng số đều, có chữ hay chưa', () => {
+    mountSheet({ initialQty: 3 });
+    expect(status()!.textContent).toBe('');
+    expect((status() as HTMLElement).style.fontVariantNumeric).toBe('tabular-nums');
+    click(plus());
+    click(plus());
+    expect(status()!.textContent).toBe(OVER_5);
+    expect((status() as HTMLElement).style.fontVariantNumeric).toBe('tabular-nums');
+  });
+});

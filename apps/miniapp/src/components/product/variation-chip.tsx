@@ -46,6 +46,7 @@ export function VariationChip({ variation, pricing, active, onClick }: Variation
       <Text
         variant="caption"
         as="div"
+        numeric
         style={{
           color: out ? 'var(--color-text-disabled)' : pricing.isFlash ? 'var(--color-text-price-deal)' : active ? 'var(--color-text-brand)' : 'var(--color-text-secondary)',
           display: 'inline-flex',

@@ -112,7 +112,7 @@ export function VariationSheet({
           fullWidth
           loading={busy}
           disabled={!selected || !available}
-          onPress={() => selected && onConfirm(selected, clampPickerQty(selected, qty))}
+          onPress={() => (busy || !selected ? undefined : onConfirm(selected, clampPickerQty(selected, qty)))}
         >
           {available && line ? `${label} · ${formatVnd(mode === 'buy' ? line.lineTotal : line.total)}` : fillTileCopy('stock.out')}
         </Button>
@@ -133,7 +133,7 @@ export function VariationSheet({
               </Badge>
               {line?.limit != null && (
                 <>
-                  <Text variant="caption" tone="secondary" aria-hidden="true">
+                  <Text variant="caption" tone="secondary" aria-hidden="true" numeric>
                     {fillCopy('flash.limitShort', { n: line.limit })}
                   </Text>
                   <span style={SR_ONLY}>{fillCopy('flash.limitSpoken', { n: line.limit })}</span>
@@ -146,7 +146,7 @@ export function VariationSheet({
               <>
                 {selected.name} ·{' '}
                 {/* Tồn thấp chỉ đổi màu (token cảnh báo), chữ vẫn "Còn n sản phẩm" như mọi mức tồn. */}
-                <span data-testid="variation-sheet-stock" style={isLowStock(selected.stock) ? { color: 'var(--color-status-warning-fg)' } : undefined}>
+                <span data-testid="variation-sheet-stock" style={{ fontVariantNumeric: 'tabular-nums', ...(isLowStock(selected.stock) ? { color: 'var(--color-status-warning-fg)' } : null) }}>
                   {pickerStockText(selected.stock)}
                 </span>
               </>
@@ -165,6 +165,7 @@ export function VariationSheet({
             pricing={variationPricing(v, flash)}
             active={v.id === id}
             onClick={() => {
+              if (busy) return;
               haptic('light');
               setId(v.id);
               setQty((q) => clampPickerQty(v, q));
@@ -180,6 +181,7 @@ export function VariationSheet({
         <QuantitySelector
           value={qty}
           max={qtyPickMax(selected?.stock ?? 0)}
+          disabled={!available || busy}
           onChange={(n) => {
             haptic('light');
             setQty(n);
@@ -188,7 +190,7 @@ export function VariationSheet({
       </div>
       {reserveNote && (
         // Vùng thông báo có chỗ giữ cố định (2 dòng chữ caption, đủ cho cả câu mất giá lẫn câu giỏ có sẵn; `--type-caption-lh` là số không đơn vị nên nhân với cỡ chữ) từ lúc mở: chữ hiện ra không làm bảng cao thêm và đẩy ô Số lượng dưới ngón tay đang bấm "+".
-        <div role="status" style={{ minHeight: 'calc(var(--type-caption-size) * var(--type-caption-lh) * 2)', marginTop: 'var(--space-stack-xs)' }}>
+        <div role="status" style={{ minHeight: 'calc(var(--type-caption-size) * var(--type-caption-lh) * 2)', marginTop: 'var(--space-stack-xs)', fontVariantNumeric: 'tabular-nums' }}>
           {note && (
             <Text variant="caption" tone="secondary" as="p">
               {note}

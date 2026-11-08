@@ -41,6 +41,7 @@ export function VariationSheet({
   flash,
   initialId,
   initialQty,
+  busy = false,
   cartLines,
   cartMayArrive = true,
   onConfirm,
@@ -54,6 +55,8 @@ export function VariationSheet({
   flash: readonly FlashPriceItem[];
   initialId: string | null;
   initialQty: number;
+  /** Đang gửi yêu cầu Thêm vào giỏ / Mua ngay: nút xác nhận quay, khoá đổi phân loại và số lượng. */
+  busy?: boolean;
   /**
    * Giỏ hiện tại (`GET /cart`): thêm giỏ cộng dồn và máy chủ giá cả dòng, nên số đã có của phân loại đang chọn đổi tiền hai nút. Bắt buộc ghi ra (chỗ gọi
    * quên truyền thì bảng âm thầm coi giỏ rỗng và nút ghi sai tiền); `undefined` chỉ khi giỏ chưa tải, lỗi hoặc khách chưa đăng nhập, khi đó coi là giỏ rỗng.
@@ -64,7 +67,7 @@ export function VariationSheet({
    * `false`: giỏ không bao giờ về, không có gì để nhảy nên không giữ dải trống. Chỉ đọc ở chế độ "Mua ngay", và chốt theo giá trị lúc mở bảng; mặc định `true` (giữ chỗ, như trước).
    */
   cartMayArrive?: boolean;
-  onConfirm: (variation: VariationOption, qty: number) => void;
+  onConfirm: (variation: VariationOption, qty: number) => void | Promise<void>;
 }) {
   const [id, setId] = useState<string | null>(null);
   const [qty, setQty] = useState(1);
@@ -107,8 +110,9 @@ export function VariationSheet({
           variant="primary"
           size="lg"
           fullWidth
+          loading={busy}
           disabled={!selected || !available}
-          onPress={() => selected && onConfirm(selected, clampPickerQty(selected, qty))}
+          onPress={() => (busy || !selected ? undefined : onConfirm(selected, clampPickerQty(selected, qty)))}
         >
           {available && line ? `${label} · ${formatVnd(mode === 'buy' ? line.lineTotal : line.total)}` : fillTileCopy('stock.out')}
         </Button>
@@ -130,7 +134,7 @@ export function VariationSheet({
               {line?.limit != null && (
                 <>
                   <span aria-hidden="true">
-                    <Text variant="caption" tone="secondary">
+                    <Text variant="caption" tone="secondary" numeric>
                       {fillCopy('flash.limitShort', { n: line.limit })}
                     </Text>
                   </span>
@@ -144,7 +148,7 @@ export function VariationSheet({
               <>
                 {selected.name} ·{' '}
                 {/* Tồn thấp chỉ đổi màu (token cảnh báo), chữ vẫn "Còn n sản phẩm" như mọi mức tồn. */}
-                <span data-testid="variation-sheet-stock" style={isLowStock(selected.stock) ? { color: 'var(--color-status-warning-fg)' } : undefined}>
+                <span data-testid="variation-sheet-stock" style={{ fontVariantNumeric: 'tabular-nums', ...(isLowStock(selected.stock) ? { color: 'var(--color-status-warning-fg)' } : null) }}>
                   {pickerStockText(selected.stock)}
                 </span>
               </>
@@ -163,6 +167,7 @@ export function VariationSheet({
             pricing={variationPricing(v, flash)}
             active={v.id === id}
             onClick={() => {
+              if (busy) return;
               setId(v.id);
               setQty((q) => clampPickerQty(v, q));
             }}
@@ -174,11 +179,11 @@ export function VariationSheet({
         <Text variant="body-sm" style={{ fontWeight: 600 }}>
           Số lượng
         </Text>
-        <QuantitySelector value={qty} max={qtyPickMax(selected?.stock ?? 0)} onChange={setQty} />
+        <QuantitySelector value={qty} max={qtyPickMax(selected?.stock ?? 0)} disabled={!available || busy} onChange={setQty} />
       </div>
       {reserveNote && (
         // Vùng thông báo có chỗ giữ cố định (2 dòng chữ caption, đủ cho cả câu mất giá lẫn câu giỏ có sẵn; `--type-caption-lh` là số không đơn vị nên nhân với cỡ chữ) từ lúc mở: chữ hiện ra không làm bảng cao thêm và đẩy ô Số lượng dưới ngón tay đang bấm "+".
-        <div role="status" style={{ minHeight: 'calc(var(--type-caption-size) * var(--type-caption-lh) * 2)', marginTop: 'var(--space-stack-xs)' }}>
+        <div role="status" style={{ minHeight: 'calc(var(--type-caption-size) * var(--type-caption-lh) * 2)', marginTop: 'var(--space-stack-xs)', fontVariantNumeric: 'tabular-nums' }}>
           {note && (
             <Text variant="caption" tone="secondary" as="p">
               {note}
