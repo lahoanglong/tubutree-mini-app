@@ -24,7 +24,7 @@ const t = {
   heading: 'Cảm ơn bạn đã chọn Tubu',
   subheading: 'Đơn hàng của bạn đã được ghi nhận',
   orderCode: 'Mã đơn hàng',
-  copyCode: 'Sao chép mã đơn',
+  copyCodeLabel: (codes: string) => `Sao chép mã đơn ${codes}`,
   copied: 'Đã sao chép mã đơn',
   copyFailed: (code: string) => `Không sao chép được — mã đơn: ${code}`,
   total: 'Tổng thanh toán',
@@ -49,6 +49,9 @@ const t = {
 };
 
 const MAX_SUBSCRIBE_CHECKS = 3;
+
+// KeyValueRow của web chưa gán tabular-nums cho giá trị như bản Mini; thuộc tính này kế thừa nên đặt ở dòng.
+const NUMS = { fontVariantNumeric: 'tabular-nums' } as const;
 
 interface SubscribeCandidate {
   variationId: string;
@@ -144,7 +147,7 @@ export function OrderSuccess({ order, etaLabel, continueHref }: { order: OrderDT
         continueHref={continueHref} subscribe={subscribe}
       />
       <DesktopSuccess
-        order={order} etaLabel={etaLabel} split={split} grandTotal={grandTotal} pointsEarned={pointsEarned}
+        order={order} etaLabel={etaLabel} split={split} codes={codes} grandTotal={grandTotal} pointsEarned={pointsEarned}
         continueHref={continueHref} subscribe={subscribe}
       />
       {candidate && (
@@ -164,19 +167,62 @@ interface View {
   order: OrderDTO;
   etaLabel: string | null;
   split: Split | null;
+  codes: string[];
   grandTotal: number;
   pointsEarned: number;
   continueHref: string;
   subscribe: React.ReactNode;
 }
 
-function MobileSuccess({ order, etaLabel, split, codes, grandTotal, pointsEarned, continueHref, subscribe }: View & { codes: string[] }) {
-  const router = useRouter();
+// Chép cả danh sách mã (đơn tách thì mọi mã, không chỉ mã đầu); báo kết quả bằng role="status" để trình đọc màn hình đọc lên.
+function useCopyCodes(codesText: string) {
   const [copyNote, setCopyNote] = useState<string | null>(null);
-  const codesText = codes.join(', ');
   const copyCode = () => {
     void copyText(codesText).then((ok) => setCopyNote(ok ? t.copied : t.copyFailed(codesText)));
   };
+  return { copyNote, copyCode };
+}
+
+// 3 bước tiếp theo: dùng chung cho khổ điện thoại và máy tính để hai khổ không lệch chữ.
+function NextSteps() {
+  return (
+    <section aria-label={t.nextTitle}>
+      <Heading variant="title-sm" as="h2" style={{ marginBottom: 8 }}>
+        {t.nextTitle}
+      </Heading>
+      <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {t.steps.map((s, i) => (
+          <li key={s.title} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+            <span
+              aria-hidden
+              style={{
+                width: 28, height: 28, flex: '0 0 auto', display: 'grid', placeItems: 'center', fontWeight: 700,
+                borderRadius: 'var(--radius-pill)', fontSize: 'var(--type-caption-size)',
+                background: i === 0 ? 'var(--color-action-primary-bg)' : 'var(--color-bg-subtle)',
+                color: i === 0 ? 'var(--color-action-primary-fg)' : 'var(--color-text-secondary)',
+              }}
+            >
+              {i + 1}
+            </span>
+            <div>
+              <Text variant="body-sm" as="div" style={{ fontWeight: 600 }}>
+                {s.title}
+              </Text>
+              <Text variant="caption" tone="tertiary" as="div">
+                {s.body}
+              </Text>
+            </div>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+function MobileSuccess({ order, etaLabel, split, codes, grandTotal, pointsEarned, continueHref, subscribe }: View) {
+  const router = useRouter();
+  const codesText = codes.join(', ');
+  const { copyNote, copyCode } = useCopyCodes(codesText);
   return (
     <div data-testid="order-success-mobile" className="flex flex-col gap-4 md:hidden" style={{ padding: '32px 16px 24px' }}>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 8 }}>
@@ -206,7 +252,7 @@ function MobileSuccess({ order, etaLabel, split, codes, grandTotal, pointsEarned
               </Text>
             ))}
           </div>
-          <IconButton icon={Copy} label={t.copyCode} onPress={copyCode} />
+          <IconButton icon={Copy} label={t.copyCodeLabel(codesText)} onPress={copyCode} />
         </div>
         {copyNote && (
           <Text variant="caption" tone="secondary" as="div">
@@ -214,14 +260,14 @@ function MobileSuccess({ order, etaLabel, split, codes, grandTotal, pointsEarned
           </Text>
         )}
         <div style={{ borderTop: '1px solid var(--color-border-subtle)', marginTop: 12, paddingTop: 8 }}>
-          <KeyValueRow label={split ? `Tổng ${split.length} đơn` : t.total} value={formatVnd(grandTotal)} emphasis />
+          <KeyValueRow label={split ? `Tổng ${split.length} đơn` : t.total} value={formatVnd(grandTotal)} emphasis style={NUMS} />
           {order.paymentMethod === 'COD' && (
             <Text variant="caption" tone="secondary" as="div">
               {t.prepareCash}
             </Text>
           )}
           {pointsEarned > 0 && (
-            <KeyValueRow label={t.pointsLabel} value={t.pointsValueWhen(pointsEarned)} tone="success" />
+            <KeyValueRow label={t.pointsLabel} value={t.pointsValueWhen(pointsEarned)} tone="success" style={NUMS} />
           )}
           {etaLabel && <KeyValueRow label={t.etaLabel} value={etaLabel} />}
         </div>
@@ -257,7 +303,7 @@ function MobileSuccess({ order, etaLabel, split, codes, grandTotal, pointsEarned
                       {o.fulfillerName} giao
                     </Text>
                   </span>
-                  <Text variant="body-sm" as="span" style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>
+                  <Text variant="body-sm" as="span" numeric style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>
                     {formatVnd(o.total)}
                   </Text>
                   <Icon icon={ChevronRight} size="sm" tone="muted" />
@@ -268,36 +314,7 @@ function MobileSuccess({ order, etaLabel, split, codes, grandTotal, pointsEarned
         </section>
       )}
 
-      <section aria-label={t.nextTitle}>
-        <Heading variant="title-sm" as="h2" style={{ marginBottom: 8 }}>
-          {t.nextTitle}
-        </Heading>
-        <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {t.steps.map((s, i) => (
-            <li key={s.title} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-              <span
-                aria-hidden
-                style={{
-                  width: 28, height: 28, flex: '0 0 auto', display: 'grid', placeItems: 'center', fontWeight: 700,
-                  borderRadius: 'var(--radius-pill)', fontSize: 'var(--type-caption-size)',
-                  background: i === 0 ? 'var(--color-action-primary-bg)' : 'var(--color-bg-subtle)',
-                  color: i === 0 ? 'var(--color-action-primary-fg)' : 'var(--color-text-secondary)',
-                }}
-              >
-                {i + 1}
-              </span>
-              <div>
-                <Text variant="body-sm" as="div" style={{ fontWeight: 600 }}>
-                  {s.title}
-                </Text>
-                <Text variant="caption" tone="tertiary" as="div">
-                  {s.body}
-                </Text>
-              </div>
-            </li>
-          ))}
-        </ol>
-      </section>
+      <NextSteps />
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <Button fullWidth size="lg" onPress={() => router.replace(orderDetailHref(order.code))}>
@@ -312,7 +329,9 @@ function MobileSuccess({ order, etaLabel, split, codes, grandTotal, pointsEarned
   );
 }
 
-function DesktopSuccess({ order, etaLabel, split, grandTotal, pointsEarned, continueHref, subscribe }: View) {
+function DesktopSuccess({ order, etaLabel, split, codes, grandTotal, pointsEarned, continueHref, subscribe }: View) {
+  const codesText = codes.join(', ');
+  const { copyNote, copyCode } = useCopyCodes(codesText);
   return (
     <div data-testid="order-success-desktop" className="py-16 text-center max-md:hidden">
       <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-card bg-forest-50 text-forest-600 shadow-card">
@@ -320,7 +339,18 @@ function DesktopSuccess({ order, etaLabel, split, grandTotal, pointsEarned, cont
       </div>
       <h2 className="mt-5 font-display text-2xl font-semibold text-stone-900">{t.heading}</h2>
       <p className="mt-1 text-sm text-stone-600">{t.subheading}</p>
-      {split ? (
+      <div className="mt-2 flex items-center justify-center gap-1 text-stone-700">
+        <p className="break-words">
+          {t.orderCode} <span className="font-semibold text-forest-700">{codesText}</span>
+        </p>
+        <IconButton icon={Copy} label={t.copyCodeLabel(codesText)} onPress={copyCode} />
+      </div>
+      {copyNote && (
+        <Text variant="caption" tone="secondary" as="div">
+          <span role="status">{copyNote}</span>
+        </Text>
+      )}
+      {split && (
         <div className="mx-auto mt-3 max-w-md text-left">
           <p className="text-center font-semibold text-stone-900">{t.splitTitle(split.length)}</p>
           <p className="text-center text-sm text-stone-600">{t.splitBody}</p>
@@ -333,27 +363,31 @@ function DesktopSuccess({ order, etaLabel, split, grandTotal, pointsEarned, cont
                   </Link>{' '}
                   · {o.fulfillerName} giao
                 </span>
-                <span className="font-semibold text-stone-900">{formatVnd(o.total)}</span>
+                <span className="font-semibold text-stone-900" style={NUMS}>
+                  {formatVnd(o.total)}
+                </span>
               </li>
             ))}
           </ul>
         </div>
-      ) : (
-        <p className="mt-2 text-stone-700">
-          {t.orderCode} <span className="font-semibold text-forest-700">{order.code}</span>
-        </p>
       )}
       <div className="mx-auto mt-3 max-w-md space-y-1 text-sm text-stone-700">
         <p>
-          {split ? `Tổng ${split.length} đơn` : t.total}: <span className="font-semibold text-stone-900">{formatVnd(grandTotal)}</span>
+          {split ? `Tổng ${split.length} đơn` : t.total}:{' '}
+          <span className="font-semibold text-stone-900" style={NUMS}>
+            {formatVnd(grandTotal)}
+          </span>
         </p>
         {order.paymentMethod === 'COD' && <p>{t.prepareCash}</p>}
         {pointsEarned > 0 && (
-          <p className="text-success-fg">
+          <p className="text-success-fg" style={NUMS}>
             {t.pointsLabel}: {t.pointsValue(pointsEarned)} — {t.pointsComing(pointsEarned)}
           </p>
         )}
         {etaLabel && <p>{t.etaLabel}: <span className="font-semibold text-stone-900">{etaLabel}</span></p>}
+      </div>
+      <div className="mx-auto mt-6 max-w-md text-left">
+        <NextSteps />
       </div>
       <div className="mt-6 flex flex-wrap justify-center gap-3">
         <Link href={orderDetailHref(order.code)} replace className={ui.btnPrimary}>

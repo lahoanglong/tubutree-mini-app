@@ -291,7 +291,8 @@ export const vi = {
     heading: 'Cảm ơn bạn đã chọn Tubu',
     subheading: 'Đơn hàng của bạn đã được ghi nhận',
     orderCode: 'Mã đơn hàng',
-    copyCode: 'Sao chép mã đơn',
+    /** Nhãn đọc của nút chép (icon-only): kèm mã để trình đọc màn hình báo đúng mã nào sẽ được chép. */
+    copyCodeLabel: (codes: string) => `Sao chép mã đơn ${codes}`,
     copied: 'Đã sao chép mã đơn',
     copyFailed: (code: string) => `Không sao chép được — mã đơn: ${code}`,
     total: 'Tổng thanh toán',

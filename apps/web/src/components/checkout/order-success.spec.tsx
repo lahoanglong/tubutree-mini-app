@@ -48,6 +48,19 @@ afterEach(() => {
   apiFetch.mockReset();
 });
 
+const SPLIT = [
+  { code: 'TB-1', total: 100000, fulfillerName: 'Tubu', pointsEarned: 100 },
+  { code: 'TB-2', total: 50000, fulfillerName: 'Shop A', pointsEarned: 50 },
+] as unknown as OrderDTO['splitOrders'];
+
+// Phần tử lá có chữ khớp, và tổ tiên gần nhất được gán tabular-nums (KeyValueRow của web đặt ở dòng vì thuộc tính này kế thừa).
+// Khớp nguyên văn trước ("50.000đ" không rơi vào ô "150.000đ"), chỉ khi không có mới khớp một phần (dòng điểm ở desktop là một câu).
+const leaf = (root: ParentNode, text: string) => {
+  const leaves = Array.from(root.querySelectorAll<HTMLElement>('*')).filter((e) => e.children.length === 0);
+  return leaves.find((e) => e.textContent?.trim() === text) ?? leaves.find((e) => e.textContent?.includes(text)) ?? null;
+};
+const nums = (el: Element | null) => el?.closest<HTMLElement>('[style*="tabular-nums"]') ?? null;
+
 describe('OrderSuccess khổ điện thoại', () => {
   it('lời cảm ơn, mã đơn, tổng thanh toán và hai nút như Mini App', () => {
     const m = mount(order());
@@ -141,15 +154,30 @@ describe('OrderSuccess khổ điện thoại', () => {
   it('sao chép mã: báo đã chép, hoặc báo mã để khách tự chép khi trình duyệt chặn', async () => {
     copyText.mockResolvedValueOnce(true);
     const m = mount(order());
-    click(m.querySelector('button[aria-label="Sao chép mã đơn"]'));
+    click(m.querySelector('button[aria-label="Sao chép mã đơn TB-9"]'));
     await flush();
     expect(copyText).toHaveBeenCalledWith('TB-9');
     expect(m.textContent).toContain('Đã sao chép mã đơn');
     copyText.mockResolvedValueOnce(false);
-    click(m.querySelector('button[aria-label="Sao chép mã đơn"]'));
+    click(m.querySelector('button[aria-label="Sao chép mã đơn TB-9"]'));
     await flush();
     expect(m.textContent).toContain('Không sao chép được — mã đơn: TB-9');
     expect(byText(m, 'button', 'Sao chép mã đơn')).toBeNull();
+  });
+
+  it('nút sao chép đọc rõ mã nào sẽ chép: nhãn kèm mã đơn, đơn tách thì kèm đủ danh sách (W52A)', () => {
+    const m = mount(order());
+    expect(m.querySelector('button[aria-label="Sao chép mã đơn TB-9"]')).not.toBeNull();
+    expect(m.querySelector('button[aria-label="Sao chép mã đơn"]')).toBeNull();
+    const s = mount(order({ splitOrders: SPLIT }));
+    expect(s.querySelector('button[aria-label="Sao chép mã đơn TB-1, TB-2"]')).not.toBeNull();
+  });
+
+  it('số đều (tabular-nums) cho tổng thanh toán, điểm sẽ nhận và tiền từng đơn tách (W52A)', () => {
+    const m = mount(order({ pointsEarned: 150, splitOrders: SPLIT }));
+    for (const text of ['150.000đ', '+150 điểm, về khi đơn giao xong', '100.000đ', '50.000đ']) {
+      expect(nums(leaf(m, text)), text).not.toBeNull();
+    }
   });
 });
 
@@ -195,6 +223,47 @@ describe('OrderSuccess từ md giữ màn máy tính, thêm các dòng thông ti
     expect(byText(d, 'a', 'Tiếp tục mua sắm')?.getAttribute('data-replace')).toBe('true');
     expect(d.querySelector('a[href$="TB-1"]')?.getAttribute('data-replace')).toBe('true');
     expect(d.querySelector('a[href$="TB-2"]')?.getAttribute('data-replace')).toBe('true');
+  });
+
+  it('có 3 bước Tiếp theo như Mini App và khổ điện thoại (W52A)', () => {
+    const d = desktop(order());
+    const section = d.querySelector<HTMLElement>('section[aria-label="Tiếp theo"]');
+    expect(section).not.toBeNull();
+    expect(Array.from(section!.querySelectorAll('li')).map((li) => li.querySelector('div')?.firstElementChild?.textContent)).toEqual([
+      'Xác nhận đơn', 'Đóng gói', 'Giao hàng',
+    ]);
+  });
+
+  it('nút sao chép mã đơn có nhãn kèm mã; báo kết quả bằng role="status" (W52A)', async () => {
+    copyText.mockResolvedValueOnce(true);
+    const d = desktop(order());
+    expect(d.querySelector('button[aria-label="Sao chép mã đơn"]')).toBeNull();
+    expect(d.querySelector('[role="status"]')).toBeNull();
+    click(d.querySelector('button[aria-label="Sao chép mã đơn TB-9"]'));
+    await flush();
+    expect(copyText).toHaveBeenCalledWith('TB-9');
+    expect(d.querySelector('[role="status"]')?.textContent).toBe('Đã sao chép mã đơn');
+    copyText.mockResolvedValueOnce(false);
+    click(d.querySelector('button[aria-label="Sao chép mã đơn TB-9"]'));
+    await flush();
+    expect(d.querySelector('[role="status"]')?.textContent).toBe('Không sao chép được — mã đơn: TB-9');
+  });
+
+  it('đơn tách: nút sao chép chép đủ mọi mã, nhãn liệt kê đủ mã, danh sách đơn vẫn còn (W52A)', async () => {
+    copyText.mockResolvedValueOnce(true);
+    const d = desktop(order({ splitOrders: SPLIT }));
+    click(d.querySelector('button[aria-label="Sao chép mã đơn TB-1, TB-2"]'));
+    await flush();
+    expect(copyText).toHaveBeenCalledWith('TB-1, TB-2');
+    expect(d.querySelector('a[href$="TB-1"]')).not.toBeNull();
+    expect(d.querySelector('a[href$="TB-2"]')).not.toBeNull();
+  });
+
+  it('số đều (tabular-nums) cho tổng thanh toán, điểm sẽ nhận và tiền từng đơn tách (W52A)', () => {
+    const d = desktop(order({ pointsEarned: 150, splitOrders: SPLIT }));
+    for (const text of ['150.000đ', '+150 điểm', '100.000đ', '50.000đ']) {
+      expect(nums(leaf(d, text)), text).not.toBeNull();
+    }
   });
 
   it('Tiếp tục mua sắm theo gian hàng', () => {

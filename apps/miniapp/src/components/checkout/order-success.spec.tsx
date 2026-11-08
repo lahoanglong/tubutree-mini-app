@@ -63,9 +63,42 @@ describe('OrderSuccess (DS v2, spec 4a.5)', () => {
   it('sao chép mã đơn', async () => {
     mocks.copyText.mockResolvedValue(true);
     renderSuccess();
-    fireEvent.click(screen.getByRole('button', { name: 'Sao chép mã đơn' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sao chép mã đơn TUBU-COD-12345' }));
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Đã sao chép mã đơn' })));
     expect(mocks.copyText).toHaveBeenCalledWith('TUBU-COD-12345');
+  });
+
+  it('nút sao chép đọc rõ mã nào sẽ chép: nhãn kèm mã đơn, đơn tách thì kèm đủ danh sách (W52A)', () => {
+    const { unmount } = renderSuccess();
+    expect(screen.getByRole('button', { name: 'Sao chép mã đơn TUBU-COD-12345' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Sao chép mã đơn' })).toBeNull();
+    unmount();
+    const order = {
+      ...ORDER,
+      code: 'TB1',
+      splitOrders: [
+        { id: 'o1', code: 'TB1', total: 130000, status: 'CONFIRMED', fulfiller: 'TUBU', fulfillerName: 'Tubu Tree' },
+        { id: 'o2', code: 'TB2', total: 225000, status: 'CONFIRMED', fulfiller: 'MERCHANT', fulfillerName: 'Mật ong Linh' },
+      ],
+    } as unknown as OrderDTO;
+    renderSuccess({ order });
+    expect(screen.getByRole('button', { name: 'Sao chép mã đơn TB1, TB2' })).toBeInTheDocument();
+  });
+
+  it('số đều (tabular-nums) cho tổng thanh toán, điểm sẽ nhận và tiền từng đơn tách (W52A)', () => {
+    const order = {
+      ...ORDER,
+      code: 'TB1',
+      pointsEarned: 11,
+      splitOrders: [
+        { id: 'o1', code: 'TB1', total: 130000, pointsEarned: 11, status: 'CONFIRMED', fulfiller: 'TUBU', fulfillerName: 'Tubu Tree' },
+        { id: 'o2', code: 'TB2', total: 225000, pointsEarned: 15, status: 'CONFIRMED', fulfiller: 'MERCHANT', fulfillerName: 'Mật ong Linh' },
+      ],
+    } as unknown as OrderDTO;
+    renderSuccess({ order });
+    for (const text of ['355.000đ', '+26 điểm, về khi đơn giao xong', '130.000đ', '225.000đ']) {
+      expect(screen.getByText(text).style.fontVariantNumeric, text).toBe('tabular-nums');
+    }
   });
 
   it('ngày giao dự kiến hiện đúng khoảng ngày khi đã cấu hình', async () => {
@@ -118,7 +151,7 @@ describe('OrderSuccess (DS v2, spec 4a.5)', () => {
   it('sao chép thất bại → snackbar báo kèm mã đơn để khách tự chép', async () => {
     mocks.copyText.mockResolvedValue(false);
     renderSuccess();
-    fireEvent.click(screen.getByRole('button', { name: 'Sao chép mã đơn' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sao chép mã đơn TUBU-COD-12345' }));
     await waitFor(() =>
       expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Không sao chép được — mã đơn: TUBU-COD-12345', type: 'info' })),
     );
@@ -266,7 +299,7 @@ describe('OrderSuccess (DS v2, spec 4a.5)', () => {
     renderSuccess({ order });
     const block = screen.getByText('Mã đơn hàng').parentElement as HTMLElement;
     for (const code of ['TB1', 'TB2', 'TB3']) expect(block).toHaveTextContent(code);
-    fireEvent.click(screen.getByRole('button', { name: 'Sao chép mã đơn' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sao chép mã đơn TB1, TB2, TB3' }));
     await waitFor(() => expect(mocks.copyText).toHaveBeenCalledWith('TB1, TB2, TB3'));
   });
 
