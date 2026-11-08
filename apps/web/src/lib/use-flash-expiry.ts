@@ -24,11 +24,13 @@ export function useFlashExpiry(endAt: string | undefined): void {
 
 /** Như `useFlashExpiry` cho cả danh sách đợt đang chạy: vẽ lại đúng mốc kết thúc SỚM NHẤT; đợt đó hết thì danh sách còn lại hẹn mốc kế. */
 export function useFlashListExpiry(list: readonly { endAt?: string }[]): void {
+  const now = serverNow();
   let soonest: string | undefined;
   let soonestMs = Infinity;
   for (const f of list) {
     const ms = f.endAt ? Date.parse(f.endAt) : NaN;
-    if (Number.isFinite(ms) && ms < soonestMs) {
+    // Bỏ suất đã quá hạn: kho Giờ vàng chỉ làm mới sau 5 đến 60 giây nên suất vừa hết còn nằm trong danh sách, và mốc đã qua che mất mốc của suất sau nó.
+    if (Number.isFinite(ms) && ms > now && ms < soonestMs) {
       soonestMs = ms;
       soonest = f.endAt;
     }

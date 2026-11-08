@@ -8,11 +8,13 @@ import { getWishlist } from '../services/wishlist-api';
 import { addToCart, fetchActiveFlashSales, fetchProduct, getCart, type ProductCard as ProductCardData, type VariationDetail } from '../services/shop-api';
 import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { cartKey, useCartKey } from '../services/cart-key';
+import { serverNow } from '../utils/server-clock';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 import { playCartFeedback } from '../utils/cart-feedback';
 import { VariationSheet } from '../components/variation-sheet';
 import { useFlashAllowance } from '../hooks/use-flash-allowance';
+import { useFlashListExpiry } from '../hooks/use-flash-expiry';
 import { AuthGate } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { ProductGrid } from '../components/ui/product-grid';
@@ -51,7 +53,10 @@ export default function WishlistPage() {
   const phase = useAuthPhase();
   // Gate auth: tránh gọi /me/wishlist khi chưa login → 401 → màn lỗi (đáng lẽ là empty).
   const wishQ = useQuery({ queryKey: ['wishlist'], queryFn: getWishlist, enabled: phase === 'authenticated' });
-  const flashQ = useQuery({ queryKey: ['flash-sales', 'active'], queryFn: fetchActiveFlashSales, staleTime: 30_000, enabled: picker !== null });
+  // Cùng khoá với `ProductCard` (thẻ trong lưới đã tự đọc) nên bật ở đây không thêm request: bộ lọc "Đang giảm" cần đúng danh sách mà thẻ dùng để gạch giá Giờ vàng.
+  const hasItems = (wishQ.data?.length ?? 0) > 0;
+  const flashQ = useQuery({ queryKey: ['flash-sales', 'active'], queryFn: fetchActiveFlashSales, staleTime: 30_000, enabled: hasItems || picker !== null });
+  useFlashListExpiry(flashQ.data ?? []);
   // Giỏ cho bảng chọn: thêm giỏ cộng dồn và máy chủ giá Giờ vàng trên cả dòng, nên nút phải biết số đã có (cùng khoá với giỏ ở trang chi tiết, thêm xong `setQueryData` cập nhật).
   const cartQ = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: phase === 'authenticated' });
 
@@ -61,7 +66,7 @@ export default function WishlistPage() {
   // Danh sách về rỗng thì bộ lọc về Tất cả: khi có món lại (quay lại trang trong ngăn xếp) trang không mở ở bộ lọc cũ.
   if (wishQ.data && wishQ.data.length === 0 && filter !== 'all') setFilter('all');
   // Bộ lọc chỉ có khi danh sách có món; chip đếm trên toàn danh sách, lưới và lời báo rỗng theo bộ lọc đang chọn.
-  const filterView = wishQ.data && wishQ.data.length > 0 ? wishlistFilterView(wishQ.data, filter) : null;
+  const filterView = wishQ.data && wishQ.data.length > 0 ? wishlistFilterView(wishQ.data, filter, flashQ.data ?? [], serverNow()) : null;
 
   const addLine = async (variationId: string, qty: number, source: Element | null = null) => {
     const cart = await addToCart(variationId, qty, 'wishlist');
@@ -139,7 +144,19 @@ export default function WishlistPage() {
                 ))}
               </ScrollRow>
               {filterView.empty ? (
-                <EmptyState art="search" heading={filterView.empty.message} ctaLabel={filterView.empty.ctaLabel} onCta={() => setFilter('all')} variant="inline" />
+                <EmptyState
+                  art="search"
+                  heading={filterView.empty.message}
+                  ctaLabel={filterView.empty.ctaLabel}
+                  onCta={() => {
+                    setFilter('all');
+                    // Nút vừa bấm nằm trong khối trạng thái rỗng sắp biến mất: trả focus về chip Tất cả để người dùng bàn phím không rơi về đầu trang.
+                    requestAnimationFrame(() =>
+                      document.querySelector<HTMLButtonElement>(`[role="region"][aria-label="${filterView.groupAria}"] button[aria-pressed="true"]`)?.focus(),
+                    );
+                  }}
+                  variant="inline"
+                />
               ) : (
                 <ProductGrid
                   items={filterView.items}

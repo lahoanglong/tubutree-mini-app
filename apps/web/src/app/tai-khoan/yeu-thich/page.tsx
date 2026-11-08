@@ -14,6 +14,9 @@ import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { PAGE_WIDE } from '@/lib/page-frame';
 import { loadErrorText } from '@/lib/error-text';
+import { useFlashNow } from '@/lib/flash-now';
+import { useFlashListExpiry } from '@/lib/use-flash-expiry';
+import { useActiveFlashSales } from '@/lib/use-flash-sales';
 import { useWishlistQuickAdd } from './quick-add';
 
 const TITLE = 'Sản phẩm yêu thích';
@@ -32,6 +35,10 @@ export default function WishlistPage() {
   // Chờ đăng nhập xong mới gọi: khách chưa đăng nhập gọi /me/wishlist sẽ ra 401 và hiện lỗi thay vì trạng thái rỗng.
   const wishQ = useQuery({ ...wishlistQuery(coreHttp), enabled: phase === 'authenticated' });
   const { buttonFor, feedback } = useWishlistQuickAdd();
+  // Cùng kho và cùng đồng hồ với `ProductCard` (không thêm request): "Đang giảm" đếm đúng món mà thẻ đang gạch giá, kể cả giá Giờ vàng, và tự cập nhật khi suất hết giờ.
+  const flash = useActiveFlashSales();
+  const flashNow = useFlashNow();
+  useFlashListExpiry(flash);
   const [filter, setFilter] = useState<WishlistFilterKey>('all');
   // Danh sách về rỗng thì bộ lọc về Tất cả: khi có món lại (quay lại trang) trang không mở ở bộ lọc cũ.
   if (wishQ.data && wishQ.data.length === 0 && filter !== 'all') setFilter('all');
@@ -59,7 +66,7 @@ export default function WishlistPage() {
   }
 
   // Bộ lọc chỉ có khi danh sách có món; chip đếm trên toàn danh sách, lưới và lời báo rỗng theo bộ lọc đang chọn.
-  const filterView = wishQ.data && wishQ.data.length > 0 ? wishlistFilterView(wishQ.data, filter) : null;
+  const filterView = wishQ.data && wishQ.data.length > 0 ? wishlistFilterView(wishQ.data, filter, flash, flashNow) : null;
 
   return (
     <Shell>
