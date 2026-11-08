@@ -1539,6 +1539,8 @@ describe('CartPage: thanh Miễn phí giao hàng và dải gợi ý bù đơn (W
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
     await waitFor(() => expect(barText()).toBe('Mua thêm 150.000đ để được Miễn phí giao hàng 🚚'));
     expect(addBtn('Món C')).toBeEnabled();
+    expect(addBtn('Món C')).not.toHaveAttribute('aria-busy');
+    expect(addBtn('Món C')).not.toHaveAttribute('aria-disabled');
   });
 
   it('chỉ gợi ý món Tubu giao: món gian hàng tự giao hoặc gian hàng đang nghỉ bị loại; thẻ cũ không ghi người giao vẫn tính là Tubu giao', async () => {

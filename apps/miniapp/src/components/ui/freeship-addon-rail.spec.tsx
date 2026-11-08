@@ -19,7 +19,17 @@ describe('FreeshipAddonRail (Mini)', () => {
     render(<FreeshipAddonRail items={ITEMS} onAdd={vi.fn()} />);
     expect(screen.getByRole('heading', { name: 'Gợi ý mua thêm cho đủ Miễn phí giao hàng' })).toBeInTheDocument();
     expect(screen.getAllByTestId('freeship-addon')).toHaveLength(3);
-    expect(screen.getByRole('region', { name: 'Gợi ý mua thêm cho đủ Miễn phí giao hàng' }).className).toContain('scroll-x');
+    expect(screen.getAllByRole('region', { name: 'Gợi ý mua thêm cho đủ Miễn phí giao hàng' }).some((r) => r.className.includes('scroll-x'))).toBe(true);
+  });
+
+  it('thẻ gốc là <section> có tên "Gợi ý mua thêm…"; báo bận (aria-busy) khi có món đang thêm, không báo khi rảnh', () => {
+    const { rerender } = render(<FreeshipAddonRail items={ITEMS} onAdd={vi.fn()} />);
+    const section = screen.getByTestId('freeship-addons');
+    expect(section.tagName).toBe('SECTION');
+    expect(section).toHaveAttribute('aria-label', 'Gợi ý mua thêm cho đủ Miễn phí giao hàng');
+    expect(section).not.toHaveAttribute('aria-busy');
+    rerender(<FreeshipAddonRail items={ITEMS} busySlug="a" onAdd={vi.fn()} />);
+    expect(screen.getByTestId('freeship-addons')).toHaveAttribute('aria-busy', 'true');
   });
 
   it('mỗi thẻ: tên, giá qua PriceTag (giá gạch có chữ đọc "giá gốc"), nút "+ Thêm" có tên truy cập {tên}, {giá}', () => {
@@ -50,17 +60,20 @@ describe('FreeshipAddonRail (Mini)', () => {
     expect(onAdd).toHaveBeenCalledWith(expect.objectContaining({ slug: 'c', variationId: 'v-c', price: 39_000 }));
   });
 
-  it('busySlug: nút của thẻ đó disabled + aria-busy và không gọi onAdd; thẻ khác vẫn bấm được', () => {
+  it('busySlug: nút của thẻ đó báo bận (aria-busy, aria-disabled, vòng xoay) và không gọi onAdd; thẻ khác không báo bận và vẫn bấm được', () => {
     const onAdd = vi.fn();
     render(<FreeshipAddonRail items={ITEMS} busySlug="a" onAdd={onAdd} />);
     const busyBtn = screen.getByRole('button', { name: /Thêm Món a vào giỏ/ });
-    expect(busyBtn).toBeDisabled();
     expect(busyBtn).toHaveAttribute('aria-busy', 'true');
+    expect(busyBtn).toHaveAttribute('aria-disabled', 'true');
+    expect(busyBtn.className).toContain('zaui-btn-loading');
     fireEvent.click(busyBtn);
     expect(onAdd).not.toHaveBeenCalled();
     const other = screen.getByRole('button', { name: /Thêm Món b vào giỏ/ });
     expect(other).toBeEnabled();
-    expect(other).toHaveAttribute('aria-busy', 'false');
+    expect(other).not.toHaveAttribute('aria-busy');
+    expect(other).not.toHaveAttribute('aria-disabled');
+    expect(other.className).not.toContain('zaui-btn-loading');
     fireEvent.click(other);
     expect(onAdd).toHaveBeenCalledWith(expect.objectContaining({ slug: 'b' }));
   });
