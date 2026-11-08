@@ -142,14 +142,15 @@ describe('HomeBanner — banner chiến dịch của Trang chủ', () => {
   });
 });
 
-const bundleItem = (id: string): BundleItemDTO => ({
-  productId: id, variationId: `v-${id}`, maxQty: 1, addonPrice: null, inStock: true,
-  product: { id, slug: `sp-${id}`, brand: 'Tubu', name: `Sản phẩm ${id}`, thumbnail: null, basePrice: 100_000, salePrice: null, isFeatured: false, inStock: true, repVariationId: `v-${id}` },
+const bundleItem = (id: string, over: { inStock?: boolean; slug?: string } = {}): BundleItemDTO => ({
+  productId: id, variationId: `v-${id}`, maxQty: 1, addonPrice: null, inStock: over.inStock ?? true,
+  product: { id, slug: over.slug ?? `sp-${id}`, brand: 'Tubu', name: `Sản phẩm ${id}`, thumbnail: null, basePrice: 100_000, salePrice: null, isFeatured: false, inStock: true, repVariationId: `v-${id}` },
 });
-const bundle = (id: string): BundleDTO => ({
-  id, kind: 'BUNDLE_PCT', title: `Combo ${id}`, pct: 10, endAt: new Date(Date.now() + DAY).toISOString(), anchorProductId: null, items: [bundleItem(`${id}a`), bundleItem(`${id}b`)],
+const bundle = (id: string, items: BundleItemDTO[] = [bundleItem(`${id}a`), bundleItem(`${id}b`)]): BundleDTO => ({
+  id, kind: 'BUNDLE_PCT', title: `Combo ${id}`, pct: 10, endAt: new Date(Date.now() + DAY).toISOString(), anchorProductId: null, items,
 });
 const views = (...ids: string[]) => ids.flatMap((id) => comboView(bundle(id), Date.now()) ?? []);
+const viewOf = (id: string, items: BundleItemDTO[]) => comboView(bundle(id, items), Date.now())!;
 
 describe('Khối combo của Trang chủ', () => {
   beforeEach(() => {
@@ -184,5 +185,38 @@ describe('Khối combo của Trang chủ', () => {
     fireEvent.click(screen.getByRole('button', { name: /^Thêm cả combo Combo c2/ }));
     await waitFor(() => expect(mocks.addAll).toHaveBeenCalledWith([{ variationId: 'v-c2a', quantity: 1 }, { variationId: 'v-c2b', quantity: 1 }]));
     await waitFor(() => expect(mocks.notify).toHaveBeenCalledWith(expect.objectContaining({ type: 'success' })));
+  });
+
+  it('"Xem từng món" của từng thẻ mở món đầu của đúng combo đó', () => {
+    renderCombos(views('c1', 'c2'));
+    const buttons = screen.getAllByRole('button', { name: 'Xem từng món' });
+    expect(buttons).toHaveLength(2);
+    fireEvent.click(buttons[1]!);
+    expect(mocks.navigate).toHaveBeenCalledTimes(1);
+    expect(mocks.navigate).toHaveBeenCalledWith('/product/sp-c2a');
+  });
+
+  it('món đầu hết hàng: thẻ "Combo tạm hết" vẫn có "Xem từng món", mở món còn hàng kế tiếp', () => {
+    renderCombos([viewOf('c1', [bundleItem('c1a', { inStock: false }), bundleItem('c1b')]), ...views('c2')]);
+    expect(screen.getByRole('button', { name: 'Combo tạm hết: Combo c1' })).toHaveAttribute('aria-disabled', 'true');
+    const buttons = screen.getAllByRole('button', { name: 'Xem từng món' });
+    expect(buttons).toHaveLength(2);
+    fireEvent.click(buttons[0]!);
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/product/sp-c1b');
+    fireEvent.click(buttons[1]!);
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/product/sp-c2a');
+    expect(mocks.navigate).toHaveBeenCalledTimes(2);
+  });
+
+  it('mọi món hết hàng: vẫn mở món đầu của bộ thay vì mất nút', () => {
+    renderCombos([viewOf('c1', [bundleItem('c1a', { inStock: false }), bundleItem('c1b', { inStock: false })]), ...views('c2')]);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Xem từng món' })[0]!);
+    expect(mocks.navigate).toHaveBeenCalledWith('/product/sp-c1a');
+  });
+
+  it('slug có ký tự đặc biệt được mã hoá trong đường dẫn', () => {
+    renderCombos([viewOf('c1', [bundleItem('c1a', { slug: 'qua tang/1 &' }), bundleItem('c1b')]), ...views('c2')]);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Xem từng món' })[0]!);
+    expect(mocks.navigate).toHaveBeenCalledWith('/product/qua%20tang%2F1%20%26');
   });
 });
