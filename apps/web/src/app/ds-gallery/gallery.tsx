@@ -345,6 +345,9 @@ export function DsGallery() {
           <Variant label="chỉ nhắc mở khoá">
             <CartVoucherHintStrip hint={{ apply: null, unlock: GALLERY_VOUCHER_HINT.unlock }} onApply={() => undefined} />
           </Variant>
+          <Variant label="nhắc mở khoá có nút Mua thêm (một chạm về chọn món)">
+            <CartVoucherHintStrip hint={{ apply: null, unlock: GALLERY_VOUCHER_HINT.unlock }} onApply={() => undefined} onShopMore={() => undefined} />
+          </Variant>
           <Variant label="đang áp / áp không được">
             <CartVoucherHintStrip hint={{ apply: GALLERY_VOUCHER_HINT.apply, unlock: null }} onApply={() => undefined} applying />
             <CartVoucherHintStrip hint={{ apply: GALLERY_VOUCHER_HINT.apply, unlock: null }} onApply={() => undefined} error="Mã giảm giá đã hết lượt dùng." />

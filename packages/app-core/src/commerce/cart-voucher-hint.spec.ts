@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CouponPreviewDTO } from '@tubutree/shared-types';
 import type { CouponDTO } from '../api/loyalty';
+import { fillCopy } from '../shop-copy';
 import { CART_VOUCHER_UNLOCK_MAX_GAP, cartVoucherHint } from './cart-voucher-hint';
 import type { PickerContext } from './voucher-picker';
 
@@ -182,5 +183,14 @@ describe('cartVoucherHint: khi nào im lặng', () => {
       expect(t).not.toContain('!');
       expect(t!.toLowerCase()).not.toContain('voucher');
     }
+  });
+});
+
+describe('cart.voucherHint.shopMoreCta: nhãn nút ở dòng sắp mở khoá', () => {
+  it('"Mua thêm", ngắn, không dấu chấm than, không dính thuật ngữ cấm "voucher"', () => {
+    const t = fillCopy('cart.voucherHint.shopMoreCta');
+    expect(t).toBe('Mua thêm');
+    expect(t).not.toContain('!');
+    expect(t.toLowerCase()).not.toContain('voucher');
   });
 });

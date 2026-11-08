@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
+import { useRouter } from 'next/navigation';
 import { AlertTriangle, Truck, Zap, Trash2, Minus, Plus } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { cartSaving, lineCompareAt } from '@tubutree/app-core/commerce/pdp-view';
@@ -704,9 +705,10 @@ function CartVoucherHintSection(props: {
   previewKey: string;
 }) {
   const v = useCartVoucherHint(props);
+  const router = useRouter();
   return (
     <>
-      <CartVoucherHintStrip hint={v.hint} onApply={v.apply} applying={v.applying} error={v.error} />
+      <CartVoucherHintStrip hint={v.hint} onApply={v.apply} applying={v.applying} error={v.error} onShopMore={() => router.push('/')} />
       <div aria-live="polite">
         {v.appliedNote && (
           <p data-testid="cart-voucher-applied" className="tubu-vhint-done">

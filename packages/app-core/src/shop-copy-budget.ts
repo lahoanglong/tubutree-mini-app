@@ -532,6 +532,7 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'cart.voucherHint.unlockPercent': 56,
   'cart.voucherHint.unlockShip': 62,
   'cart.voucherHint.barAria': 50,
+  'cart.voucherHint.shopMoreCta': 12,
   'quickReorder.title': 20,
   'quickReorder.addAll': 18,
   'quickReorder.add': 8,

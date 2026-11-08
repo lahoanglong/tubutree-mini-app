@@ -543,6 +543,7 @@ export const SHOP_COPY: Record<string, string> = {
   'cart.voucherHint.unlockPercent': '🔥 Mua thêm {price} để mở khoá mã giảm giá {pct}%',
   'cart.voucherHint.unlockShip': '🔥 Mua thêm {price} để mở khoá mã Miễn phí giao hàng',
   'cart.voucherHint.barAria': 'Đã đạt {pct}% đơn tối thiểu của mã giảm giá',
+  'cart.voucherHint.shopMoreCta': 'Mua thêm',
 
   // Dải Mua lại món quen ở Trang chủ (W43A): thẻ ngang, "+ Thêm" một chạm và "Thêm lại tất cả".
   'quickReorder.title': 'Mua lại món quen',

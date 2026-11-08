@@ -532,10 +532,11 @@ function CartVoucherHintSection(props: {
   previewKey: string;
 }) {
   const v = useCartVoucherHint(props);
+  const navigate = useNavigate();
   if (!v.hint) return null;
   return (
     <Box px={3} pt={2}>
-      <CartVoucherHintStrip hint={v.hint} onApply={v.apply} applying={v.applying} error={v.error} />
+      <CartVoucherHintStrip hint={v.hint} onApply={v.apply} applying={v.applying} error={v.error} onShopMore={() => navigate('/')} />
     </Box>
   );
 }

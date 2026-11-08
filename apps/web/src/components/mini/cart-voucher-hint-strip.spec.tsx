@@ -131,3 +131,88 @@ describe('CartVoucherHintStrip (web)', () => {
     });
   });
 });
+
+describe('CartVoucherHintStrip (web): nút "Mua thêm" ở dòng sắp mở khoá', () => {
+  const unlockOnly: CartVoucherHint = { apply: null, unlock: UNLOCK };
+
+  it('có onShopMore: nút "Mua thêm" nằm ngang hàng với chữ nhắc, phía trên thanh tiến trình', () => {
+    const { container } = mount(<CartVoucherHintStrip hint={unlockOnly} onApply={vi.fn()} onShopMore={vi.fn()} />);
+    const cta = q(container, 'cart-voucher-unlock-cta') as HTMLButtonElement;
+    expect(cta.textContent).toBe('Mua thêm');
+    expect(cta.className).toContain('tubu-vhint-cta');
+    const head = cta.parentElement!;
+    expect(head.className).toBe('tubu-vhint-head');
+    expect(head.querySelector('.tubu-vhint-text')!.textContent).toBe(UNLOCK.text);
+    expect(head.nextElementSibling).toBe(q(container, 'cart-voucher-unlock-bar'));
+    expect(head.parentElement).toBe(q(container, 'cart-voucher-unlock'));
+  });
+
+  it('một chạm "Mua thêm" gọi onShopMore đúng một lần và không gọi onApply', () => {
+    const onShopMore = vi.fn();
+    const onApply = vi.fn();
+    const { container } = mount(<CartVoucherHintStrip hint={unlockOnly} onApply={onApply} onShopMore={onShopMore} />);
+    click(q(container, 'cart-voucher-unlock-cta')!);
+    expect(onShopMore).toHaveBeenCalledTimes(1);
+    expect(onApply).not.toHaveBeenCalled();
+  });
+
+  it('không truyền onShopMore: giao diện cũ nguyên vẹn (không nút, không khung đầu hàng, chữ và thanh là hai con trực tiếp của dòng)', () => {
+    const { container } = mount(<CartVoucherHintStrip hint={unlockOnly} onApply={vi.fn()} />);
+    const row = q(container, 'cart-voucher-unlock')!;
+    expect(Array.from(row.children).map((el) => el.className)).toEqual(['tubu-vhint-text', 'tubu-freeship-track']);
+    expect(row.querySelector('.tubu-vhint-head')).toBeNull();
+    expect(q(container, 'cart-voucher-unlock-cta')).toBeNull();
+    expect(container.querySelector('button')).toBeNull();
+  });
+
+  it('có onShopMore nhưng không có dòng sắp mở khoá: không có nút "Mua thêm", "Áp dụng ngay" vẫn là nút duy nhất', () => {
+    const { container } = mount(<CartVoucherHintStrip hint={{ apply: APPLY, unlock: null }} onApply={vi.fn()} onShopMore={vi.fn()} />);
+    expect(q(container, 'cart-voucher-unlock-cta')).toBeNull();
+    expect(container.querySelectorAll('button').length).toBe(1);
+  });
+
+  it('cả hai dòng: hai nút độc lập, mỗi nút gọi đúng hàm của nó', () => {
+    const onApply = vi.fn();
+    const onShopMore = vi.fn();
+    const { container } = mount(<CartVoucherHintStrip hint={both} onApply={onApply} onShopMore={onShopMore} />);
+    expect(container.querySelectorAll('button').length).toBe(2);
+    click(q(container, 'cart-voucher-apply-cta')!);
+    expect(onApply).toHaveBeenCalledWith('GIAM45');
+    expect(onShopMore).not.toHaveBeenCalled();
+    click(q(container, 'cart-voucher-unlock-cta')!);
+    expect(onShopMore).toHaveBeenCalledTimes(1);
+    expect(onApply).toHaveBeenCalledTimes(1);
+  });
+
+  it('vùng chạm tối thiểu 44px, chữ không có "voucher" và không dấu chấm than, trong đầu hàng chỉ nút mang style nội tuyến', () => {
+    const { container } = mount(<CartVoucherHintStrip hint={unlockOnly} onApply={vi.fn()} onShopMore={vi.fn()} />);
+    const cta = q(container, 'cart-voucher-unlock-cta') as HTMLElement;
+    expect(cta.style.minHeight).toBe('44px');
+    expect(container.textContent).not.toMatch(/voucher/i);
+    expect(container.textContent).not.toContain('!');
+    expect(Array.from(container.querySelectorAll('.tubu-vhint-head [style]'))).toEqual([cta]);
+  });
+
+  it('nút "Mua thêm" được mô tả bằng đúng câu nhắc của dòng (aria-describedby), không truyền onShopMore thì chữ không mang id', () => {
+    const { container } = mount(<CartVoucherHintStrip hint={unlockOnly} onApply={vi.fn()} onShopMore={vi.fn()} />);
+    const id = q(container, 'cart-voucher-unlock-cta')!.getAttribute('aria-describedby');
+    expect(id).toBeTruthy();
+    const described = container.querySelector(`[id="${id}"]`)!;
+    expect(described.className).toBe('tubu-vhint-text');
+    expect(described.textContent).toBe(UNLOCK.text);
+    const plain = mount(<CartVoucherHintStrip hint={unlockOnly} onApply={vi.fn()} />);
+    expect(plain.container.querySelector('[id]')).toBeNull();
+  });
+
+  describe('mini.css', () => {
+    const css = readFileSync(resolve(__dirname, 'mini.css'), 'utf8');
+    const rule = (sel: string) => new RegExp(`${sel.replace(/[.[\]()']/g, '\\$&')}\\s*\\{([^}]*)\\}`).exec(css)?.[1] ?? '';
+
+    it('đầu hàng: chữ và nút cùng một hàng, căn giữa theo chiều dọc, khoảng cách inline-md; nút cao 44px', () => {
+      expect(rule('.tubu-vhint-head')).toMatch(/display:\s*flex/);
+      expect(rule('.tubu-vhint-head')).toMatch(/align-items:\s*center/);
+      expect(rule('.tubu-vhint-head')).toContain('gap: var(--space-inline-md)');
+      expect(rule('.tubu-vhint-cta.zaui-btn')).toMatch(/height:\s*44px/);
+    });
+  });
+});
