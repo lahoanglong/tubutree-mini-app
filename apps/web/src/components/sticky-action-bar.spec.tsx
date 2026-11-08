@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act } from 'react';
+import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, type Rendered } from '@/test-utils/dom';
 import { StickyActionBar } from './sticky-action-bar';
@@ -133,5 +134,117 @@ describe('StickyActionBar — hideFrom="lg" (giỏ, thanh toán)', () => {
     expect(document.body.classList.contains('has-sticky-bar-lg')).toBe(true);
     r.unmount();
     expect(document.body.classList.contains('has-sticky-bar-lg')).toBe(false);
+  });
+});
+
+// Chuyển trang hoặc mở lớp phủ: thanh của trang mới gắn TRƯỚC, thanh cũ tháo SAU. Tháo thanh cũ không được xoá biến và lớp của thanh mới,
+// vì thanh mới không đổi cỡ nên ResizeObserver không bắn lại để ghi bù.
+describe('StickyActionBar — hai thanh cùng gắn', () => {
+  const cssVar = () => document.documentElement.style.getPropertyValue('--sticky-bar-h');
+  const hasClass = (name: string) => document.body.classList.contains(name);
+  const heights: Record<string, number> = {};
+  let notify: Array<() => void> = [];
+  let live: Rendered[] = [];
+
+  const bar = (text: string, hideFrom?: 'md' | 'lg') => {
+    const r = render(
+      <StickyActionBar label={text} hideFrom={hideFrom}>
+        {text}
+      </StickyActionBar>,
+    );
+    live.push(r);
+    return r;
+  };
+  const drop = (r: Rendered) => {
+    live = live.filter((x) => x !== r);
+    r.unmount();
+  };
+
+  beforeEach(() => {
+    notify = [];
+    for (const k of Object.keys(heights)) delete heights[k];
+    heights['A'] = 120;
+    heights['B'] = 174;
+    vi.stubGlobal('ResizeObserver', class {
+      constructor(cb: () => void) { notify.push(cb); }
+      observe() {}
+      disconnect() {}
+    });
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      return { height: heights[this.textContent ?? ''] ?? 0 } as DOMRect;
+    });
+  });
+  afterEach(() => {
+    live.forEach((r) => r.unmount());
+    live = [];
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    document.documentElement.style.removeProperty('--sticky-bar-h');
+    document.body.classList.remove('has-sticky-bar', 'has-sticky-bar-lg');
+  });
+
+  it('A (lg) gắn trước, B (md) gắn sau, tháo A: body giữ has-sticky-bar, biến theo B, has-sticky-bar-lg gỡ vì hết thanh lg', () => {
+    const a = bar('A', 'lg');
+    expect(cssVar()).toBe('120px');
+    expect(hasClass('has-sticky-bar-lg')).toBe(true);
+    const b = bar('B', 'md');
+    expect(cssVar()).toBe('174px');
+    expect(hasClass('has-sticky-bar-lg')).toBe(true);
+    drop(a);
+    expect(hasClass('has-sticky-bar')).toBe(true);
+    expect(cssVar()).toBe('174px');
+    expect(hasClass('has-sticky-bar-lg')).toBe(false);
+    drop(b);
+    expect(cssVar()).toBe('');
+    expect(hasClass('has-sticky-bar')).toBe(false);
+  });
+
+  it('tháo thanh gắn SAU thì biến trả về thanh còn lại và has-sticky-bar-lg còn theo thanh lg, hết thanh mới xoá hết', () => {
+    const a = bar('A', 'lg');
+    const b = bar('B', 'md');
+    drop(b);
+    expect(hasClass('has-sticky-bar')).toBe(true);
+    expect(cssVar()).toBe('120px');
+    expect(hasClass('has-sticky-bar-lg')).toBe(true);
+    drop(a);
+    expect(cssVar()).toBe('');
+    expect(hasClass('has-sticky-bar')).toBe(false);
+    expect(hasClass('has-sticky-bar-lg')).toBe(false);
+  });
+
+  it('thanh không phải thanh trên cùng đổi cỡ thì không ghi đè biến; thanh trên cùng đổi cỡ thì biến đổi theo', () => {
+    bar('A');
+    bar('B');
+    heights['A'] = 200;
+    act(() => notify[0]!());
+    expect(cssVar()).toBe('174px');
+    heights['B'] = 190;
+    act(() => notify[1]!());
+    expect(cssVar()).toBe('190px');
+  });
+
+  // Root riêng: render lại qua harness (bọc QueryClientProvider) đổi kiểu gốc nên React gỡ và dựng lại thanh, không phải cập nhật tại chỗ.
+  it('thanh duy nhất đổi hideFrom từ lg sang md tại chỗ: gỡ has-sticky-bar-lg, giữ has-sticky-bar và biến', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const root = createRoot(host);
+    const el = (hideFrom: 'md' | 'lg') => (
+      <StickyActionBar label="A" hideFrom={hideFrom}>
+        A
+      </StickyActionBar>
+    );
+    try {
+      act(() => root.render(el('lg')));
+      const node = host.querySelector('[data-testid="sticky-bar"]');
+      expect(hasClass('has-sticky-bar-lg')).toBe(true);
+      act(() => root.render(el('md')));
+      expect(host.querySelector('[data-testid="sticky-bar"]')).toBe(node);
+      expect(hasClass('has-sticky-bar-lg')).toBe(false);
+      expect(hasClass('has-sticky-bar')).toBe(true);
+      expect(cssVar()).toBe('120px');
+    } finally {
+      act(() => root.unmount());
+      host.remove();
+    }
   });
 });

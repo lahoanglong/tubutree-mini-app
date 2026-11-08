@@ -863,6 +863,11 @@
     padding-right: 6px;
   }
 }
+/* Khung cuộn `.zaui-page` có thanh dính đáy: chừa đúng chiều cao thật của thanh (`--sticky-bar-h`) cộng khe 8px để Tab không để phần tử lọt dưới thanh
+   (WCAG 2.4.11). Cùng luật với apps/miniapp/src/css/tokens.css; web thường cuộn ở window nên lớp này chỉ có tác dụng khi bề mặt mini nằm trong `.zaui-page`. */
+.tubu-scroll-pad-sticky-bar {
+  scroll-padding-bottom: calc(var(--sticky-bar-h, calc(96px + var(--safe-bottom))) + 8px);
+}
 
 /* Sheet: bản DOM của zmp-ui Sheet (lớp zaui-sheet*): mặt đáy bo 16px, tay nắm, nền mờ. Từ md (máy tính) là hộp thoại giữa màn, xem khối md bên dưới. */
 @keyframes slideUp {

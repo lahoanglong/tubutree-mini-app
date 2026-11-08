@@ -152,3 +152,70 @@ describe('StickyActionBar: hai thanh cùng gắn (chuyển trang)', () => {
     old.unmount();
   });
 });
+
+describe('StickyActionBar: label (vùng có tên)', () => {
+  it('có `label` thì phần tử gốc là region có tên, đã cắt khoảng trắng hai đầu', () => {
+    render(<StickyActionBar label="  Thanh đặt hàng " primary={<button>x</button>} />);
+    const bar = screen.getByRole('region', { name: 'Thanh đặt hàng' });
+    expect(bar).toBe(screen.getByTestId('sticky-bar'));
+    expect(bar).toHaveAttribute('aria-label', 'Thanh đặt hàng');
+  });
+
+  it.each([undefined, '', '   '])('`label` = %j thì không gắn role và aria-label', (label) => {
+    render(<StickyActionBar label={label} primary={<button>x</button>} />);
+    const bar = screen.getByTestId('sticky-bar');
+    expect(bar).not.toHaveAttribute('role');
+    expect(bar).not.toHaveAttribute('aria-label');
+  });
+});
+
+// Hai thanh cùng một khung cuộn (vd thanh thứ hai hiện thêm khi mở sheet): thanh tháo trước không được gỡ lớp chừa chỗ của thanh còn lại.
+describe('StickyActionBar: nhiều thanh cùng khung .zaui-page', () => {
+  const PAD = 'tubu-scroll-pad-sticky-bar';
+  const frames: HTMLElement[] = [];
+  const makeFrame = () => {
+    const host = document.createElement('div');
+    host.className = 'zaui-page';
+    document.body.appendChild(host);
+    frames.push(host);
+    return host;
+  };
+  const mountIn = (host: HTMLElement, text: string) =>
+    render(<StickyActionBar primary={<button>{text}</button>} />, { container: host.appendChild(document.createElement('div')) });
+  afterEach(() => {
+    frames.splice(0).forEach((host) => host.remove());
+  });
+
+  it('giữ lớp khi còn thanh đang gắn trong khung, chỉ gỡ khi thanh cuối tháo (tháo theo thứ tự gắn)', () => {
+    const host = makeFrame();
+    const a = mountIn(host, 'a');
+    const b = mountIn(host, 'b');
+    expect(host).toHaveClass(PAD);
+    a.unmount();
+    expect(host).toHaveClass(PAD);
+    b.unmount();
+    expect(host).not.toHaveClass(PAD);
+  });
+
+  it('giữ lớp khi tháo thanh gắn SAU trước, chỉ gỡ khi thanh gắn trước cũng tháo', () => {
+    const host = makeFrame();
+    const a = mountIn(host, 'a');
+    const b = mountIn(host, 'b');
+    b.unmount();
+    expect(host).toHaveClass(PAD);
+    a.unmount();
+    expect(host).not.toHaveClass(PAD);
+  });
+
+  it('hai khung khác nhau: tháo thanh của khung này không gỡ lớp của khung kia', () => {
+    const first = makeFrame();
+    const second = makeFrame();
+    const a = mountIn(first, 'a');
+    const b = mountIn(second, 'b');
+    a.unmount();
+    expect(first).not.toHaveClass(PAD);
+    expect(second).toHaveClass(PAD);
+    b.unmount();
+    expect(second).not.toHaveClass(PAD);
+  });
+});
