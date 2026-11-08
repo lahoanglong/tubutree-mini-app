@@ -2,6 +2,7 @@ import { render } from '@testing-library/react';
 import type { ProductDetail } from '@tubutree/app-core/api/catalog';
 import { featuredAffiliateProducts } from '@tubutree/app-core/commerce/affiliate-share';
 import { buildOrderTimelineSteps } from '@tubutree/app-core/commerce/order-timeline';
+import { productTrustStrip } from '@tubutree/app-core/commerce/product-trust-strip';
 import { Search } from 'lucide-react';
 import { describe, expect, it, vi } from 'vitest';
 import type * as ZmpUi from 'zmp-ui';
@@ -21,6 +22,7 @@ import { FreeshipAddonRail } from './freeship-addon-rail';
 import { CartVoucherHintStrip } from './cart-voucher-hint-strip';
 import { FrequentlyBoughtTogether } from './frequently-bought-together';
 import { QuickReorderStrip } from './quick-reorder-strip';
+import { ProductTrustStrip } from './product-trust-strip';
 
 // `SectionHeader` (tiêu đề của dải) gọi useNavigate của ZaUI, cần router thật; vùng chạm không phụ thuộc nó.
 vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<typeof ZmpUi>()), useNavigate: () => vi.fn() }));
@@ -89,6 +91,7 @@ describe('vùng chạm DS v2 >= 44x44', () => {
     ['StoryReelStrip (vòng Story)', () => <StoryReelStrip items={[{ slug: 'a', name: 'A', thumbnail: null, seen: false }, { slug: 'b', name: 'B', thumbnail: null, seen: true }]} onOpen={() => {}} />],
     ['FreeshipAddonRail (nút + Thêm)', () => <FreeshipAddonRail items={[{ slug: 'a', name: 'A', thumbnail: null, price: 49000, variationId: 'v' }]} onAdd={() => {}} />],
     ['CartVoucherHintStrip (nút Áp dụng ngay)', () => <CartVoucherHintStrip hint={{ apply: { code: 'A', label: 'A', saving: 1000, text: 'B', ariaLabel: 'C' }, unlock: null }} onApply={() => {}} />],
+    ['ProductTrustStrip (lối xem chính sách)', () => <ProductTrustStrip view={productTrustStrip({ fulfillerKind: 'TUBU', returnWindowDays: 7 })} onOpenPolicy={() => {}} />],
     ['FrequentlyBoughtTogether (dòng tick, nút Thêm)', () => (
       <FrequentlyBoughtTogether
         lines={[{ key: 'a', productId: 'p', slug: 'a', variationId: 'a', name: 'A', thumbnail: null, price: 49000, compareAt: null, isCurrent: true }]}

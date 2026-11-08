@@ -24,7 +24,7 @@ import { ogBase, withBrand } from '@/lib/og';
 import { SITE_URL } from '@/lib/site';
 import { ProductReviews, ProductReviewsFallback } from './product-reviews';
 import { RecordRecentlyViewed } from './record-recently-viewed';
-import { PdpChatButton, PdpContentKitRow, PdpCoupons, PdpFlashBar, PdpFreeship, PdpGroupBuyRow, PdpLowStock, PdpPointsEarn, PdpShippingRow, PdpSold, PdpSubscribeRow } from './pdp-extras';
+import { PdpChatButton, PdpContentKitRow, PdpCoupons, PdpFlashBar, PdpFreeship, PdpGroupBuyRow, PdpLowStock, PdpPointsEarn, PdpShippingRow, PdpSold, PdpSubscribeRow, PdpTrustStrip } from './pdp-extras';
 import { PdpBundles } from './pdp-bundles';
 import { PdpQuickReviews } from './pdp-quick-reviews';
 import { PdpFbt } from './pdp-fbt';
@@ -263,6 +263,11 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                   <PdpSubscribeRow slug={product.slug} variations={product.variations} />
                 </div>
               )}
+
+              {/* Dải cam kết ngay dưới khối mua nhanh (chip, Số lượng): điện thoại order 7 đứng trước dải câu chuyện (cùng order, thứ tự HTML), như Mini App; máy tính ngay dưới khối mua. Rỗng thì ẩn. */}
+              <div data-section="pdp-trust" className="tubu-pdp-order-7 empty:hidden">
+                <PdpTrustStrip fulfillerKind={product.fulfiller?.kind} initialConfig={publicConfig} />
+              </div>
 
               {/* Điện thoại: dải câu chuyện ngay dưới khối mua nhanh (chip, Số lượng), order 7 giữa Số lượng (6) và Combo (8); máy tính dùng bản ở `below`. */}
               <PdpStory product={product} placement="phone" />

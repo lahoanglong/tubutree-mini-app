@@ -78,6 +78,8 @@ export { FreeshipAddonRail } from './freeship-addon-rail';
 export type { FreeshipAddonItem, FreeshipAddonRailProps } from './freeship-addon-rail';
 export { CartVoucherHintStrip } from './cart-voucher-hint-strip';
 export type { CartVoucherHintStripProps } from './cart-voucher-hint-strip';
+export { ProductTrustStrip } from './product-trust-strip';
+export type { ProductTrustStripProps } from './product-trust-strip';
 export { QuickReorderStrip } from './quick-reorder-strip';
 export type { QuickReorderStripProps } from './quick-reorder-strip';
 export { FrequentlyBoughtTogether } from './frequently-bought-together';

@@ -92,6 +92,9 @@ describe('cặp màu commerce của gói tokens-a11y đạt 4,5:1 (chữ) — WC
     ['--color-text-success', '--color-status-success-bg'],
     // Gợi ý mã giảm giá ở Giỏ (W44B): lời báo áp mã không được nằm trên nền canvas của trang.
     ['--color-text-danger', '--color-bg-canvas'],
+    // Dải cam kết ở trang chi tiết (W45A): tiêu đề trụ cột trên nền trắng, icon nhãn thương hiệu trên vòng nền dịu.
+    ['--color-text-primary', '--color-bg-surface'],
+    ['--color-text-brand', '--color-bg-subtle'],
   ];
 
   it.each(pairs)('%s trên %s', (fg, bg) => {

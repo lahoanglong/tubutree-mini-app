@@ -104,6 +104,8 @@ test.describe('Web khách: trang sản phẩm khổ điện thoại giống Mini
       'pdp-notes',
       'pdp-variation-chips',
       'pdp-quantity',
+      // Dải cam kết (W45A): ngay dưới Số lượng, trước dải câu chuyện; hàng gian hàng tự giao không có.
+      'pdp-trust',
       'pdp-story',
       'pdp-bundles',
       'pdp-quick-reviews',
@@ -123,6 +125,7 @@ test.describe('Web khách: trang sản phẩm khổ điện thoại giống Mini
     } else {
       expect(ids).not.toContain('pdp-variation-chips');
     }
+    if (ids.includes('pdp-trust')) expect(ids.indexOf('pdp-trust')).toBe(ids.indexOf('pdp-quantity') + 1);
     expect(ids.indexOf('pdp-quantity')).toBeLessThan(ids.indexOf('pdp-quick-reviews'));
     expect(ids.indexOf('pdp-quick-reviews')).toBeLessThan(ids.indexOf('pdp-reviews'));
 

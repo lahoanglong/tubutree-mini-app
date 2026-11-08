@@ -11,6 +11,7 @@ import { offerAmount, offerRows } from '@tubutree/app-core/commerce/voucher-pick
 import { qtyPickMax, stockText } from '@tubutree/app-core/commerce/stock-text';
 import { serverNow } from '@tubutree/app-core/server-clock';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { productTrustStrip } from '@tubutree/app-core/commerce/product-trust-strip';
 import { createGroupBuy } from '@tubutree/app-core/api/groupbuy';
 import { affiliateMeQuery } from '@tubutree/app-core/queries/affiliate';
 import { couponsQuery } from '@tubutree/app-core/queries/loyalty';
@@ -19,6 +20,7 @@ import { BottomSheet } from '@/components/mini/bottom-sheet';
 import { FlashPriceBar } from '@/components/mini/flash-price-bar';
 import { GameNoticeBar, useGameNotice } from '@/components/game/game-notice';
 import { Icon } from '@/components/mini/icon';
+import { ProductTrustStrip } from '@/components/mini/product-trust-strip';
 import { ListRow } from '@/components/mini/list-row';
 import { VoucherTicket } from '@/components/mini/voucher-ticket';
 import { usePdpSelection } from '@/components/pdp-selection';
@@ -158,6 +160,18 @@ export function PdpFreeship({ initialConfig }: { initialConfig?: PublicConfig } 
       {freeshipLine(from ?? cfg.freeshipThreshold)}
     </p>
   );
+}
+
+/**
+ * Dải cam kết (ProductTrustStrip) ngay dưới khối mua: số ngày đổi trả đọc từ cấu hình công khai như khối Cam kết Tubu ở cuối trang,
+ * `initialConfig` từ máy chủ để dải có ngay trong HTML. Hàng gian hàng tự giao không có dải (app-core quyết).
+ */
+export function PdpTrustStrip({ fulfillerKind, initialConfig }: { fulfillerKind: string | undefined; initialConfig?: PublicConfig }) {
+  const cfg = usePublicConfig(initialConfig);
+  // Tải cấu hình ở trình duyệt lỗi (429, 5xx) thì `usePublicConfig` rơi về bản dự phòng không có số ngày: giữ giá trị máy chủ đã dựng trong HTML,
+  // nếu không dải tự hứa đổi trả khi chủ shop đã tắt (đổi trả 0 ngày) và bố cục nhảy.
+  const returnWindowDays = cfg.isLoaded ? cfg.returnWindowDays : initialConfig?.returnWindowDays;
+  return <ProductTrustStrip view={productTrustStrip({ fulfillerKind, returnWindowDays })} />;
 }
 
 /**
