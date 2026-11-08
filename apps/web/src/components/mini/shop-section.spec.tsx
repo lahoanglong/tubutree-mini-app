@@ -268,6 +268,29 @@ describe('ShopSection (web) combo', () => {
     expect(c.textContent).not.toContain('Combo -');
   });
 
+  it('onSeeAll: ComboCard có nút "Xem từng món", bấm gọi onSeeAll đúng một lần và không ghi giỏ', async () => {
+    const onSeeAll = vi.fn();
+    const c = await mount(<ShopSection collection={combo()} onSeeAll={onSeeAll} />);
+    click(buttonByName(c, 'Xem từng món')!);
+    await flush();
+    expect(onSeeAll).toHaveBeenCalledTimes(1);
+    expect(mocks.addAll).not.toHaveBeenCalled();
+  });
+
+  it('onSeeAll: "Combo tạm hết" vẫn có "Xem từng món" để chọn món còn hàng', async () => {
+    const onSeeAll = vi.fn();
+    const c = await mount(<ShopSection collection={combo({ items: [item(1), item(2, { inStock: false }), item(3)] })} onSeeAll={onSeeAll} />);
+    expect(buttonByName(c, 'Combo tạm hết: Combo giặt')).toBeTruthy();
+    click(buttonByName(c, 'Xem từng món')!);
+    await flush();
+    expect(onSeeAll).toHaveBeenCalledTimes(1);
+  });
+
+  it('không truyền onSeeAll: combo không có nút "Xem từng món"', async () => {
+    const c = await mount(<ShopSection collection={combo()} />);
+    expect(buttonByName(c, 'Xem từng món')).toBeUndefined();
+  });
+
   it('combo không đủ hai sản phẩm khác nhau, hoặc không có % giảm, thì rơi về dòng', async () => {
     const a = await mount(<ShopSection collection={combo({ items: [item(1), item(1)] })} />);
     expect(a.querySelector('[data-testid="shop-combo"]')).toBeNull();
