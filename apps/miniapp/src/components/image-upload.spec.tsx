@@ -278,3 +278,152 @@ describe('ImageUpload — chính sách ảnh gửi đi (F11)', () => {
     expect(drawn[0]!.slice(3)).toEqual([1000, 750]);
   });
 });
+
+describe('W60B — khoá khi đang tải, lời báo lỗi role="alert", số đếm đều', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    vi.resetModules();
+  });
+
+  const loadConfigured = async () => {
+    vi.stubEnv('VITE_CLOUDINARY_CLOUD_NAME', 'demo');
+    vi.stubEnv('VITE_CLOUDINARY_UPLOAD_PRESET', 'unsigned');
+    vi.resetModules();
+    return import('./image-upload');
+  };
+  const pendingFetch = () => {
+    let finish!: (res: unknown) => void;
+    const fetchMock = vi.fn().mockReturnValueOnce(new Promise((resolve) => (finish = resolve)));
+    vi.stubGlobal('fetch', fetchMock);
+    return { fetchMock, finish: (url: string, extra: object = {}) => finish({ ok: true, json: async () => ({ secure_url: url, ...extra }) }) };
+  };
+  const fileInput = (c: HTMLElement) => c.querySelector('input[type="file"]') as HTMLInputElement;
+  const pickFiles = (c: HTMLElement, files: File[]) => fireEvent.change(fileInput(c), { target: { files } });
+  const png = (name: string) => new File(['x'], name, { type: 'image/png' });
+  const oversized = (name = 'big.jpg') => {
+    const f = new File(['x'], name, { type: 'image/jpeg' });
+    Object.defineProperty(f, 'size', { value: 21 * 1024 * 1024 });
+    return f;
+  };
+  const settle = () => new Promise((r) => setTimeout(r, 0));
+
+  it('ImageUpload: đang tải thì nút chọn ảnh khoá + aria-busy, tệp thứ hai chọn chen vào không chạy thêm lần tải', async () => {
+    const { ImageUpload } = await loadConfigured();
+    const net = pendingFetch();
+    const onChange = vi.fn();
+    const { container } = render(<ImageUpload label="Ảnh" value="" onChange={onChange} />);
+    const openPicker = vi.spyOn(fileInput(container), 'click');
+    const button = () => screen.getByRole('button') as HTMLButtonElement;
+    expect(button().disabled).toBe(false);
+    expect(button().hasAttribute('aria-busy')).toBe(false);
+    fireEvent.click(button());
+    expect(openPicker).toHaveBeenCalledTimes(1);
+
+    pickFiles(container, [png('a.png')]);
+    await waitFor(() => expect(button().disabled).toBe(true));
+    expect(button().getAttribute('aria-busy')).toBe('true');
+    fireEvent.click(button());
+    expect(openPicker).toHaveBeenCalledTimes(1);
+    pickFiles(container, [png('b.png')]);
+    await settle();
+    expect(net.fetchMock).toHaveBeenCalledTimes(1);
+
+    net.finish('https://res.cloudinary.com/demo/a.png');
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith('https://res.cloudinary.com/demo/a.png'));
+    expect(onChange).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(button().disabled).toBe(false));
+    expect(button().hasAttribute('aria-busy')).toBe(false);
+  });
+
+  it('ImageUpload: ảnh quá 20MB và tải thất bại đều báo qua role="alert"', async () => {
+    const { ImageUpload } = await loadConfigured();
+    const first = render(<ImageUpload label="Ảnh" value="" onChange={() => {}} />);
+    expect(screen.queryByRole('alert')).toBeNull();
+    pickFiles(first.container, [oversized()]);
+    expect((await screen.findByRole('alert')).textContent).toBe('Ảnh quá lớn (tối đa 20MB). Hãy chọn ảnh khác nhé.');
+    first.unmount();
+
+    class BrokenImage {
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      set src(_v: string) {
+        queueMicrotask(() => this.onerror?.());
+      }
+    }
+    vi.stubGlobal('Image', BrokenImage);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }));
+    const second = render(<ImageUpload label="Ảnh" value="" onChange={() => {}} />);
+    pickFiles(second.container, [png('a.png')]);
+    expect((await screen.findByRole('alert')).textContent).toBe('Tải ảnh thất bại. Hãy chọn lại tệp ảnh khác.');
+  });
+
+  it('VideoUpload: tệp thứ hai chọn chen vào lúc đang tải bị bỏ, không báo bận hai lần, lỗi hiện qua role="alert"', async () => {
+    const { VideoUpload } = await loadConfigured();
+    const net = pendingFetch();
+    const busy: boolean[] = [];
+    const { container } = render(<VideoUpload value="" onChange={() => {}} onBusyChange={(b) => busy.push(b)} />);
+    expect(screen.queryByRole('alert')).toBeNull();
+    pickFiles(container, [new File(['x'], 'v.mp4', { type: 'video/mp4' })]);
+    await waitFor(() => expect(busy).toEqual([true]));
+    pickFiles(container, [new File(['x'], 'v2.mp4', { type: 'video/mp4' })]);
+    await settle();
+    expect(net.fetchMock).toHaveBeenCalledTimes(1);
+    expect(busy).toEqual([true]);
+
+    net.finish('https://res.cloudinary.com/demo/v.mp4', { duration: 95 });
+    expect((await screen.findByRole('alert')).textContent).toBe('Video dài quá 60 giây. Hãy cắt ngắn lại rồi chọn lại nhé.');
+    expect(busy).toEqual([true, false]);
+  });
+
+  it('MultiImageUpload: đang tải thì ô "Thêm ảnh" và mọi nút "Xoá ảnh" khoá, xoá giữa chừng không gọi onChange, tệp chen vào bị bỏ', async () => {
+    const { MultiImageUpload } = await loadConfigured();
+    const net = pendingFetch();
+    const onChange = vi.fn();
+    const { container } = render(<MultiImageUpload value={['https://i/1.jpg', 'https://i/2.jpg']} onChange={onChange} max={4} />);
+    const openPicker = vi.spyOn(fileInput(container), 'click');
+    const addButton = () => container.querySelector('button.tubu-press') as HTMLButtonElement;
+    const removeButtons = () => screen.getAllByRole('button', { name: 'Xoá ảnh' }) as HTMLButtonElement[];
+    expect(addButton().disabled).toBe(false);
+    expect(addButton().hasAttribute('aria-busy')).toBe(false);
+    fireEvent.click(addButton());
+    expect(openPicker).toHaveBeenCalledTimes(1);
+
+    pickFiles(container, [png('a.png')]);
+    await waitFor(() => expect(addButton().disabled).toBe(true));
+    expect(addButton().getAttribute('aria-busy')).toBe('true');
+    expect(addButton().textContent).toBe('Đang tải…');
+    expect(removeButtons().map((b) => b.disabled)).toEqual([true, true]);
+    fireEvent.click(removeButtons()[0]!);
+    fireEvent.click(addButton());
+    expect(onChange).not.toHaveBeenCalled();
+    expect(openPicker).toHaveBeenCalledTimes(1);
+    pickFiles(container, [png('b.png')]);
+    await settle();
+    expect(net.fetchMock).toHaveBeenCalledTimes(1);
+
+    net.finish('https://res.cloudinary.com/demo/a.png');
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith(['https://i/1.jpg', 'https://i/2.jpg', 'https://res.cloudinary.com/demo/a.png']));
+    expect(onChange).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(addButton().disabled).toBe(false));
+    expect(addButton().hasAttribute('aria-busy')).toBe(false);
+    expect(removeButtons().map((b) => b.disabled)).toEqual([false, false]);
+  });
+
+  it('MultiImageUpload: ảnh quá 20MB bị bỏ qua và lời báo là role="alert"', async () => {
+    const { MultiImageUpload } = await loadConfigured();
+    const onChange = vi.fn();
+    const { container } = render(<MultiImageUpload value={[]} onChange={onChange} />);
+    expect(screen.queryByRole('alert')).toBeNull();
+    pickFiles(container, [oversized()]);
+    expect((await screen.findByRole('alert')).textContent).toBe('Đã bỏ qua 1 ảnh quá lớn (tối đa 20MB/ảnh).');
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('MultiImageUpload: nhãn đếm "n/tối đa" dùng số đều để không nhảy khi số ảnh đổi', async () => {
+    const { MultiImageUpload } = await loadConfigured();
+    render(<MultiImageUpload value={['https://i/1.jpg']} onChange={() => {}} />);
+    expect(screen.getByText('Ảnh đính kèm (1/6)').style.fontVariantNumeric).toBe('tabular-nums');
+  });
+});

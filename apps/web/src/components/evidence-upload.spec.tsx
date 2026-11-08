@@ -103,6 +103,56 @@ describe('EvidenceUpload — ảnh minh chứng đổi/trả', () => {
     expect(value(c)).toEqual(['data:image/jpeg;base64,2']);
   });
 
+  it('bộ đếm n/tối đa dùng số đều (tabular-nums) để không nhảy khi số ảnh đổi', async () => {
+    const c = await mount({ initial: ['data:image/jpeg;base64,1'] });
+    const counter = Array.from(c.querySelectorAll('span')).find((s) => s.textContent === '1/3')!;
+    expect(counter.className).toContain('tabular-nums');
+  });
+
+  describe('đang xử lý ảnh (busy)', () => {
+    const addButton = (c: HTMLElement) => Array.from(c.querySelectorAll('button')).find((b) => /Thêm ảnh|Đang xử lý ảnh/.test(b.textContent ?? ''))!;
+    const removeButtons = (c: HTMLElement) => Array.from(c.querySelectorAll<HTMLButtonElement>('button[aria-label^="Xoá ảnh minh chứng"]'));
+
+    it('nút thêm ảnh đổi chữ, disabled + aria-busy; nút xoá ảnh khoá; chọn tệp lần hai chen vào bị bỏ, không nén thêm', async () => {
+      let finish!: (v: string) => void;
+      m.compress.mockReset().mockReturnValueOnce(new Promise<string>((resolve) => (finish = resolve)));
+      const c = await mount({ initial: ['data:image/jpeg;base64,1'] });
+      expect(addButton(c).textContent).toContain('Thêm ảnh');
+      expect(addButton(c).hasAttribute('aria-busy')).toBe(false);
+
+      pick(c, [file('a.jpg')]);
+      await flush(2);
+      expect(addButton(c).textContent).toContain('Đang xử lý ảnh…');
+      expect(addButton(c).disabled).toBe(true);
+      expect(addButton(c).getAttribute('aria-busy')).toBe('true');
+      expect(removeButtons(c).map((b) => b.disabled)).toEqual([true]);
+
+      pick(c, [file('b.jpg')]);
+      await flush(2);
+      expect(m.compress).toHaveBeenCalledTimes(1);
+
+      finish('data:image/jpeg;base64,a.jpg');
+      await flush(4);
+      expect(value(c)).toEqual(['data:image/jpeg;base64,1', 'data:image/jpeg;base64,a.jpg']);
+      expect(addButton(c).textContent).toContain('Thêm ảnh');
+      expect(addButton(c).disabled).toBe(false);
+      expect(addButton(c).hasAttribute('aria-busy')).toBe(false);
+      expect(removeButtons(c).map((b) => b.disabled)).toEqual([false, false]);
+    });
+
+    it('disabled từ ngoài: chọn tệp bị bỏ, không nén và không đổi giá trị', async () => {
+      const onChange = vi.fn();
+      const r = render(<EvidenceUpload value={[]} onChange={onChange} disabled />);
+      mounted.push(r);
+      await flush(2);
+      pick(r.container, [file('a.jpg')]);
+      await flush(4);
+      expect(m.compress).not.toHaveBeenCalled();
+      expect(onChange).not.toHaveBeenCalled();
+      expect(r.container.querySelector('[role="alert"]')).toBeNull();
+    });
+  });
+
   it('có tên truy cập và vùng chạm 44px', async () => {
     const c = await mount({ initial: ['data:image/jpeg;base64,1'] });
     expect(unnamedControls(c)).toEqual([]);

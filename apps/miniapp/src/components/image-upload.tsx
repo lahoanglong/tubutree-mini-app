@@ -168,11 +168,13 @@ export function ImageUpload({
   const [error, setError] = useState<string | null>(null);
 
   const pick = () => {
+    if (uploading) return;
     haptic('light');
     inputRef.current?.click();
   };
 
   const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (uploading) return;
     const file = e.target.files?.[0];
     if (!file) return;
     setError(null);
@@ -215,6 +217,8 @@ export function ImageUpload({
         type="button"
         className="tubu-press"
         onClick={pick}
+        disabled={uploading}
+        aria-busy={uploading || undefined}
         style={{
           width: '100%',
           font: 'inherit',
@@ -255,9 +259,11 @@ export function ImageUpload({
         </button>
       )}
       {error && (
-        <Text variant="caption" tone="danger" as="div" style={{ marginTop: 4 }}>
-          {error}
-        </Text>
+        <div role="alert" style={{ marginTop: 4 }}>
+          <Text variant="caption" tone="danger" as="div">
+            {error}
+          </Text>
+        </div>
       )}
     </div>
   );
@@ -295,6 +301,7 @@ export function VideoUpload({
   };
 
   const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (uploading) return;
     const file = e.target.files?.[0];
     if (!file) return;
     setError(null);
@@ -353,9 +360,11 @@ export function VideoUpload({
         </button>
       )}
       {error && (
-        <Text variant="caption" tone="danger" as="div" style={{ marginTop: 4 }}>
-          {error}
-        </Text>
+        <div role="alert" style={{ marginTop: 4 }}>
+          <Text variant="caption" tone="danger" as="div">
+            {error}
+          </Text>
+        </div>
       )}
     </div>
   );
@@ -378,11 +387,13 @@ export function MultiImageUpload({
   const [error, setError] = useState<string | null>(null);
 
   const pick = () => {
+    if (uploading) return;
     haptic('light');
     inputRef.current?.click();
   };
 
   const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (uploading) return;
     const files = Array.from(e.target.files ?? []);
     if (files.length === 0) return;
     setError(null);
@@ -437,7 +448,7 @@ export function MultiImageUpload({
   return (
     <div style={{ marginTop: 14, marginBottom: 14 }}>
       {label && (
-        <Text variant="label" as="div" tone="secondary" style={{ marginBottom: 6 }}>
+        <Text variant="label" as="div" tone="secondary" style={{ marginBottom: 6, fontVariantNumeric: 'tabular-nums' }}>
           {label} ({value.length}/{max})
         </Text>
       )}
@@ -464,7 +475,9 @@ export function MultiImageUpload({
             <button
               type="button"
               aria-label="Xoá ảnh"
+              disabled={uploading}
               onClick={() => {
+                if (uploading) return;
                 haptic('light');
                 onChange(value.filter((_, i) => i !== idx));
               }}
@@ -506,6 +519,8 @@ export function MultiImageUpload({
             type="button"
             className="tubu-press"
             onClick={pick}
+            disabled={uploading}
+            aria-busy={uploading || undefined}
             style={{
               width: 72,
               height: 72,
@@ -532,9 +547,11 @@ export function MultiImageUpload({
       </div>
 
       {error && (
-        <Text variant="caption" tone="danger" as="div" style={{ marginTop: 4 }}>
-          {error}
-        </Text>
+        <div role="alert" style={{ marginTop: 4 }}>
+          <Text variant="caption" tone="danger" as="div">
+            {error}
+          </Text>
+        </div>
       )}
     </div>
   );
