@@ -1,8 +1,10 @@
 'use client';
 
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { wishlistFilterView, type WishlistFilterKey } from '@tubutree/app-core/commerce/wishlist-filter';
 import { wishlistQuery } from '@tubutree/app-core/queries/wishlist';
-import { ProductGrid } from '@/components/mini';
+import { Chip, EmptyState as FilterEmptyState, ProductGrid, ScrollRow } from '@/components/mini';
 import { EmptyState } from '@/components/empty-state';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { ErrorState } from '@/components/ui/error-state';
@@ -30,6 +32,9 @@ export default function WishlistPage() {
   // Chờ đăng nhập xong mới gọi: khách chưa đăng nhập gọi /me/wishlist sẽ ra 401 và hiện lỗi thay vì trạng thái rỗng.
   const wishQ = useQuery({ ...wishlistQuery(coreHttp), enabled: phase === 'authenticated' });
   const { buttonFor, feedback } = useWishlistQuickAdd();
+  const [filter, setFilter] = useState<WishlistFilterKey>('all');
+  // Danh sách về rỗng thì bộ lọc về Tất cả: khi có món lại (quay lại trang) trang không mở ở bộ lọc cũ.
+  if (wishQ.data && wishQ.data.length === 0 && filter !== 'all') setFilter('all');
 
   if (phase === 'loading') {
     return (
@@ -53,18 +58,47 @@ export default function WishlistPage() {
     );
   }
 
+  // Bộ lọc chỉ có khi danh sách có món; chip đếm trên toàn danh sách, lưới và lời báo rỗng theo bộ lọc đang chọn.
+  const filterView = wishQ.data && wishQ.data.length > 0 ? wishlistFilterView(wishQ.data, filter) : null;
+
   return (
     <Shell>
       {wishQ.isLoading ? (
         <ProductGridSkeleton count={4} />
       ) : wishQ.isError && !wishQ.data ? (
         <ErrorState message={loadErrorText(wishQ.error)} onRetry={() => void wishQ.refetch()} />
-      ) : wishQ.data && wishQ.data.length > 0 ? (
+      ) : filterView ? (
         <section aria-labelledby="wishlist-list">
           <h2 id="wishlist-list" className="sr-only">
             Danh sách sản phẩm yêu thích
           </h2>
-          <ProductGrid items={wishQ.data} variant="grid" renderImageOverlay={(p) => buttonFor(p)} />
+          <ScrollRow
+            label={filterView.groupAria}
+            style={{ display: 'flex', gap: 'var(--space-inline-sm)', paddingBlock: 'var(--space-stack-xs)', marginBottom: 'var(--space-stack-sm)' }}
+          >
+            {filterView.chips.map((c) => (
+              <Chip key={c.key} selected={c.selected} count={c.count} onPress={() => setFilter(c.key)}>
+                {c.label}
+              </Chip>
+            ))}
+          </ScrollRow>
+          {filterView.empty ? (
+            <FilterEmptyState
+              art="search"
+              heading={filterView.empty.message}
+              ctaLabel={filterView.empty.ctaLabel}
+              onCta={() => {
+                setFilter('all');
+                // Nút vừa bấm nằm trong khối trạng thái rỗng sắp biến mất: trả focus về chip Tất cả để người dùng bàn phím không rơi về đầu trang.
+                requestAnimationFrame(() =>
+                  document.querySelector<HTMLButtonElement>(`[role="region"][aria-label="${filterView.groupAria}"] button[aria-pressed="true"]`)?.focus(),
+                );
+              }}
+              variant="inline"
+            />
+          ) : (
+            <ProductGrid items={filterView.items} variant="grid" renderImageOverlay={(p) => buttonFor(p)} />
+          )}
           {feedback}
         </section>
       ) : (

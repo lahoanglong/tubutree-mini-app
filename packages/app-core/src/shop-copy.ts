@@ -573,6 +573,14 @@ export const SHOP_COPY: Record<string, string> = {
   'trust.cta.shipping': 'Xem chính sách vận chuyển',
   'trust.ctaAria.returns': 'Xem chính sách đổi trả của Tubu Tree',
   'trust.ctaAria.shipping': 'Xem chính sách vận chuyển của Tubu Tree',
+  // Sản phẩm yêu thích: dải lọc nhanh
+  'wishlist.filter.groupAria': 'Lọc sản phẩm yêu thích',
+  'wishlist.filter.all': 'Tất cả',
+  'wishlist.filter.sale': 'Đang giảm',
+  'wishlist.filter.inStock': 'Còn hàng',
+  'wishlist.empty.sale': 'Chưa có sản phẩm đang giảm giá trong danh sách yêu thích',
+  'wishlist.empty.inStock': 'Chưa có sản phẩm còn hàng trong danh sách yêu thích',
+  'wishlist.empty.cta': 'Xem tất cả sản phẩm đã lưu',
 };
 
 /** Thuật ngữ không được xuất hiện trong chữ hiển thị cho khách; `use` là chữ thay thế. Bảng gốc: ux-copy mục D2 và thiết kế §4 Q5. */

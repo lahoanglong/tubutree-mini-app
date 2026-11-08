@@ -555,4 +555,12 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'trust.cta.shipping': 26,
   'trust.ctaAria.returns': null,
   'trust.ctaAria.shipping': null,
+  // Sản phẩm yêu thích: dải lọc nhanh (chip cuộn ngang; ba nhãn + số lượng vừa một hàng ở 320px khi cuộn)
+  'wishlist.filter.groupAria': null,
+  'wishlist.filter.all': 10,
+  'wishlist.filter.sale': 12,
+  'wishlist.filter.inStock': 12,
+  'wishlist.empty.sale': 60,
+  'wishlist.empty.inStock': 60,
+  'wishlist.empty.cta': 30,
 };

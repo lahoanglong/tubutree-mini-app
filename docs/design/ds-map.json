@@ -89,7 +89,8 @@
         "/order/:code",
         "/orders",
         "/product/:slug",
-        "/s/:slug"
+        "/s/:slug",
+        "/wishlist"
       ]
     },
     {
@@ -514,7 +515,8 @@
         "/feed",
         "/orders",
         "/product/:slug",
-        "/s/:slug"
+        "/s/:slug",
+        "/wishlist"
       ]
     },
     {

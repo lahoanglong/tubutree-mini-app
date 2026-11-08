@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -176,5 +176,122 @@ describe('Trang Yêu thích: nút giỏ nhanh', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Thêm Xà bông vào giỏ' }));
     await waitFor(() => expect(mocks.snackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
     expect(screen.getByRole('button', { name: 'Thêm Xà bông vào giỏ' })).not.toBeDisabled();
+  });
+});
+
+describe('Trang Yêu thích: bộ lọc nhanh', () => {
+  const item = (id: string, name: string, salePrice: number | null, inStock: boolean) => ({ id, slug: `sp-${id}`, name, basePrice: 100000, salePrice, inStock });
+  const MIXED = [item('a', 'Nước rửa chén', 80000, true), item('b', 'Xà phòng', null, true), item('c', 'Dầu gội', 70000, false), item('d', 'Nước giặt', null, false)];
+  const chip = (label: string) => screen.getByRole('button', { name: new RegExp(`^${label}`) });
+  const names = () => screen.queryAllByTestId('product-card').map((n) => n.textContent ?? '');
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.authStatus = 'authenticated';
+    mocks.getCart.mockResolvedValue({ items: [], itemCount: 0 });
+    mocks.getWishlist.mockResolvedValue(MIXED);
+  });
+
+  it('có món: ba chip Tất cả, Đang giảm, Còn hàng kèm số đếm, Tất cả đang chọn và hiện đủ thẻ', async () => {
+    renderPage();
+    expect(await screen.findAllByTestId('product-card')).toHaveLength(4);
+    expect(screen.getByRole('region', { name: 'Lọc sản phẩm yêu thích' })).toBeInTheDocument();
+    expect(['Tất cả', 'Đang giảm', 'Còn hàng'].map((l) => chip(l).textContent)).toEqual(['Tất cả(4)', 'Đang giảm(2)', 'Còn hàng(2)']);
+    expect(chip('Tất cả')).toHaveAttribute('aria-pressed', 'true');
+    expect(chip('Đang giảm')).toHaveAttribute('aria-pressed', 'false');
+    expect(chip('Còn hàng')).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('chip có vùng chạm 44px (tubu-hit-44, rộng tối thiểu 44px)', async () => {
+    renderPage();
+    await screen.findAllByTestId('product-card');
+    for (const l of ['Tất cả', 'Đang giảm', 'Còn hàng']) {
+      expect(chip(l).className).toContain('tubu-hit-44');
+      expect(chip(l).style.minWidth).toBe('44px');
+    }
+  });
+
+  it('chọn Đang giảm: chỉ món có giá gạch, số đếm trên chip không đổi; chọn Còn hàng: chỉ món còn hàng', async () => {
+    renderPage();
+    await screen.findAllByTestId('product-card');
+    fireEvent.click(chip('Đang giảm'));
+    expect(names().map((t) => t.replace(/Thêm.*/, ''))).toEqual(['Nước rửa chén', 'Dầu gội']);
+    expect(chip('Đang giảm')).toHaveAttribute('aria-pressed', 'true');
+    expect(chip('Tất cả')).toHaveAttribute('aria-pressed', 'false');
+    expect(chip('Tất cả').textContent).toBe('Tất cả(4)');
+    fireEvent.click(chip('Còn hàng'));
+    expect(names()).toHaveLength(2);
+    expect(names().join('|')).toContain('Nước rửa chén');
+    expect(names().join('|')).toContain('Xà phòng');
+    expect(names().join('|')).not.toContain('Dầu gội');
+    fireEvent.click(chip('Tất cả'));
+    expect(names()).toHaveLength(4);
+  });
+
+  it('lọc ra rỗng: câu báo theo bộ lọc kèm nút về Tất cả; chip vẫn còn để đổi bộ lọc', async () => {
+    mocks.getWishlist.mockResolvedValue([item('a', 'Nước rửa chén', null, true), item('b', 'Xà phòng', 100000, true)]);
+    renderPage();
+    await screen.findAllByTestId('product-card');
+    fireEvent.click(chip('Đang giảm'));
+    expect(screen.queryAllByTestId('product-card')).toHaveLength(0);
+    expect(screen.getByText('Chưa có sản phẩm đang giảm giá trong danh sách yêu thích')).toBeInTheDocument();
+    expect(screen.queryByText('Chưa có sản phẩm yêu thích')).toBeNull();
+    expect(chip('Đang giảm').textContent).toBe('Đang giảm(0)');
+    fireEvent.click(screen.getByRole('button', { name: 'Xem tất cả sản phẩm đã lưu' }));
+    expect(screen.getAllByTestId('product-card')).toHaveLength(2);
+    expect(chip('Tất cả')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByText('Chưa có sản phẩm đang giảm giá trong danh sách yêu thích')).toBeNull();
+  });
+
+  it('không món nào còn hàng: Còn hàng ra câu báo riêng', async () => {
+    mocks.getWishlist.mockResolvedValue([item('a', 'Nước rửa chén', null, false)]);
+    renderPage();
+    await screen.findAllByTestId('product-card');
+    fireEvent.click(chip('Còn hàng'));
+    expect(screen.getByText('Chưa có sản phẩm còn hàng trong danh sách yêu thích')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Xem tất cả sản phẩm đã lưu' })).toBeInTheDocument();
+  });
+
+  it('danh sách về rỗng khi đang lọc rồi có món lại: bộ lọc về Tất cả, không mở ở bộ lọc cũ', async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <WishlistPage />
+      </QueryClientProvider>,
+    );
+    await screen.findAllByTestId('product-card');
+    fireEvent.click(chip('Đang giảm'));
+    mocks.getWishlist.mockResolvedValue([]);
+    await act(async () => {
+      await qc.invalidateQueries({ queryKey: ['wishlist'] });
+    });
+    expect(await screen.findByText('Chưa có sản phẩm yêu thích')).toBeInTheDocument();
+    mocks.getWishlist.mockResolvedValue(MIXED);
+    await act(async () => {
+      await qc.invalidateQueries({ queryKey: ['wishlist'] });
+    });
+    await waitFor(() => expect(screen.getAllByTestId('product-card')).toHaveLength(4));
+    expect(chip('Tất cả')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByText('Chưa có sản phẩm đang giảm giá trong danh sách yêu thích')).toBeNull();
+  });
+
+  it('danh sách yêu thích trống hoặc lỗi tải: không có dải lọc', async () => {
+    mocks.getWishlist.mockResolvedValue([]);
+    const first = renderPage();
+    expect(await screen.findByText('Chưa có sản phẩm yêu thích')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Lọc sản phẩm yêu thích' })).toBeNull();
+    first.unmount();
+    mocks.getWishlist.mockRejectedValue(new Error('boom'));
+    renderPage();
+    expect(await screen.findByRole('button', { name: 'Thử lại' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Lọc sản phẩm yêu thích' })).toBeNull();
+  });
+
+  it('thẻ trong danh sách đã lọc vẫn có nút giỏ nhanh cho món còn hàng', async () => {
+    renderPage();
+    await screen.findAllByTestId('product-card');
+    fireEvent.click(chip('Đang giảm'));
+    expect(screen.getByRole('button', { name: 'Thêm Nước rửa chén vào giỏ' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Thêm Dầu gội vào giỏ' })).toBeNull();
   });
 });
