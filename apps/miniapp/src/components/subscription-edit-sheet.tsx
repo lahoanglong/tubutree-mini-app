@@ -87,7 +87,7 @@ export function SubscriptionEditSheet({ sub, onClose }: { sub: SubscriptionDTO; 
       footer={
         <>
           {save.isError && (
-            <div role="alert" style={{ marginBottom: 6 }}>
+            <div role="alert" style={{ marginBottom: '0.375rem' }}>
               <Text variant="caption" tone="danger" as="div">
                 {getErrorMessage(save.error)}
               </Text>
@@ -122,7 +122,7 @@ export function SubscriptionEditSheet({ sub, onClose }: { sub: SubscriptionDTO; 
 
       <SectionLabel>{t.addressLabel}</SectionLabel>
       {addrFailed || addrWaiting ? (
-        <div role="alert" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '4px 0' }}>
+        <div role="alert" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', padding: '0.25rem 0' }}>
           <Text variant="body-sm" tone="danger" as="div" style={{ flex: 1, minWidth: 0 }}>
             {addrFailed ? getLoadErrorMessage(addrQ.error) : addrRetrying}
           </Text>
