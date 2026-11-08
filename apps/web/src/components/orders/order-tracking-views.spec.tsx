@@ -59,9 +59,95 @@ describe('OrderTrack (web)', () => {
     expect(container.textContent).toContain('Giao thành công, đã xong');
     expect(container.textContent).not.toContain('đang diễn ra');
   });
+
+  describe('mốc vận chuyển dài (W50B)', () => {
+    const hops = [
+      { at: '2026-11-04T02:00:00Z', status: 'Chờ lấy hàng' },
+      { at: '2026-11-04T05:00:00Z', status: 'Đã lấy hàng' },
+      { at: '2026-11-04T09:00:00Z', status: 'Nhập kho trung chuyển' },
+      { at: '2026-11-05T01:00:00Z', status: 'Đang vận chuyển' },
+      { at: '2026-11-05T03:00:00Z', status: 'Đang giao hàng' },
+    ];
+    const labels = (container: HTMLElement) =>
+      Array.from(container.querySelectorAll('ul[aria-label="Mốc vận chuyển"] > li')).map((li) => li.querySelector('div')?.textContent);
+    const toggleOf = (container: HTMLElement) => container.querySelector<HTMLButtonElement>('[data-testid="track-events-toggle"]');
+
+    it('đúng 3 mốc hoặc ít hơn: hiện đủ, không có nút mở rộng', () => {
+      for (const n of [1, 2, 3]) {
+        const track = orderTrack(order({ shippingHistory: hops.slice(5 - n) }))!;
+        const { container } = mount(<OrderTrack track={track} now={NOW} />);
+        expect(labels(container)).toHaveLength(n);
+        expect(toggleOf(container)).toBeNull();
+      }
+    });
+
+    it('5 mốc: mặc định 3 mốc mới nhất, nút "Xem thêm 2 mốc vận chuyển" mở đủ 5 rồi thu về 3', () => {
+      const track = orderTrack(order({ shippingHistory: hops }))!;
+      const { container } = mount(<OrderTrack track={track} now={NOW} />);
+      expect(labels(container)).toEqual(['Đang giao hàng', 'Đang vận chuyển', 'Nhập kho trung chuyển']);
+      const toggle = toggleOf(container)!;
+      expect(toggle.textContent).toBe('Xem thêm 2 mốc vận chuyển');
+      expect(toggle.getAttribute('aria-expanded')).toBe('false');
+      expect(toggle.getAttribute('aria-controls')).toBe(container.querySelector('ul[aria-label="Mốc vận chuyển"]')!.id);
+      expect(toggle.style.fontVariantNumeric).toBe('tabular-nums');
+      click(toggle);
+      expect(labels(container)).toEqual(['Đang giao hàng', 'Đang vận chuyển', 'Nhập kho trung chuyển', 'Đã lấy hàng', 'Chờ lấy hàng']);
+      expect(toggleOf(container)!.textContent).toBe('Thu gọn mốc vận chuyển');
+      expect(toggleOf(container)!.getAttribute('aria-expanded')).toBe('true');
+      click(toggleOf(container));
+      expect(labels(container)).toHaveLength(3);
+      expect(toggleOf(container)!.textContent).toBe('Xem thêm 2 mốc vận chuyển');
+      expect(toggleOf(container)!.getAttribute('aria-expanded')).toBe('false');
+    });
+
+    it('mốc mới nhất giữ data-latest khi thu gọn và mở; nút cao tối thiểu 44px và có tên', () => {
+      const track = orderTrack(order({ shippingHistory: hops }))!;
+      const { container } = mount(<OrderTrack track={track} now={NOW} />);
+      const latest = () => Array.from(container.querySelectorAll('ul[aria-label="Mốc vận chuyển"] > li[data-latest="true"]')).map((li) => li.querySelector('div')?.textContent);
+      expect(latest()).toEqual(['Đang giao hàng']);
+      click(toggleOf(container));
+      expect(latest()).toEqual(['Đang giao hàng']);
+      expect(unnamedControls(container)).toEqual([]);
+      expect(smallTouchTargets(container)).toEqual([]);
+      expect(toggleOf(container)!.className).toContain('min-h-11');
+    });
+  });
 });
 
 describe('OrderShipping (web)', () => {
+  const trail = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({ label: `Mốc ${n - i}`, at: `2026-11-0${Math.min(9, n - i)}T02:00:00Z`, latest: i === 0 }));
+
+  it('nút chép mã có tên truy cập nêu mã vận đơn, chữ hiện vẫn là "Chép mã"', () => {
+    const { container } = mount(<OrderShipping code="GHN123" />);
+    const button = byText(container, 'button', 'Chép mã')!;
+    expect(button.getAttribute('aria-label')).toBe('Sao chép mã vận đơn GHN123');
+  });
+
+  it('mốc mới nhất có data-latest="true", các mốc còn lại không có', () => {
+    const { container } = mount(<OrderShipping code="GHN123" events={trail(3)} />);
+    const items = Array.from(container.querySelectorAll('ul[aria-label="Mốc vận chuyển"] > li'));
+    expect(items.map((li) => li.getAttribute('data-latest'))).toEqual(['true', null, null]);
+  });
+
+  it('5 mốc: mặc định 3 mốc đầu, nút "Xem thêm 2 mốc vận chuyển" mở đủ 5 rồi thu về 3; 3 mốc thì không có nút', () => {
+    const { container } = mount(<OrderShipping code="GHN123" events={trail(5)} />);
+    const count = () => container.querySelectorAll('ul[aria-label="Mốc vận chuyển"] > li').length;
+    const toggle = () => container.querySelector<HTMLButtonElement>('[data-testid="track-events-toggle"]');
+    expect(count()).toBe(3);
+    expect(toggle()!.textContent).toBe('Xem thêm 2 mốc vận chuyển');
+    expect(toggle()!.getAttribute('aria-expanded')).toBe('false');
+    click(toggle());
+    expect(count()).toBe(5);
+    expect(toggle()!.textContent).toBe('Thu gọn mốc vận chuyển');
+    expect(toggle()!.getAttribute('aria-expanded')).toBe('true');
+    click(toggle());
+    expect(count()).toBe(3);
+    const short = mount(<OrderShipping code="GHN123" events={trail(3)} />);
+    expect(short.container.querySelector('[data-testid="track-events-toggle"]')).toBeNull();
+    expect(short.container.querySelectorAll('ul[aria-label="Mốc vận chuyển"] > li')).toHaveLength(3);
+  });
+
   it('hiện hãng và mã; "Chép mã" chép đúng mã và báo thành công', async () => {
     const { container } = mount(<OrderShipping partner="Giao Hàng Nhanh" code="GHN123" status="Đang giao hàng" />);
     expect(container.textContent).toContain('Giao Hàng Nhanh');

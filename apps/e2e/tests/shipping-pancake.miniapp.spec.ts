@@ -104,7 +104,7 @@ test.describe('Zalo Mini App E2E - Luồng Đối tác Vận chuyển (Pancake P
     // Trạng thái VC hiện ở dòng tóm tắt VÀ ở chặng mới nhất của hành trình.
     await expect(page.getByText('Đang vận chuyển tới người nhận', { exact: true })).toHaveCount(2);
 
-    await expect(page.getByRole('button', { name: 'Chép mã' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Sao chép mã vận đơn GHN123456789' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Tra cứu hành trình' })).toHaveCount(0);
 
     await expect(page.getByText('Lấy hàng thành công')).toBeVisible();
@@ -128,7 +128,7 @@ test.describe('Zalo Mini App E2E - Luồng Đối tác Vận chuyển (Pancake P
     });
 
     await page.goto(`/order/${ORDER_SHIPPING.code}`);
-    const copyBtn = page.getByRole('button', { name: 'Chép mã' });
+    const copyBtn = page.getByRole('button', { name: 'Sao chép mã vận đơn GHN123456789' });
     await expect(copyBtn).toBeVisible({ timeout: 15_000 });
     await copyBtn.click();
 
@@ -145,7 +145,7 @@ test.describe('Zalo Mini App E2E - Luồng Đối tác Vận chuyển (Pancake P
 
     await expect(page.getByTestId('order-shipping')).toHaveCount(0);
     await expect(page.getByText('Mã vận đơn')).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Chép mã' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /^Sao chép mã vận đơn/ })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Tra cứu hành trình' })).toHaveCount(0);
   });
 });

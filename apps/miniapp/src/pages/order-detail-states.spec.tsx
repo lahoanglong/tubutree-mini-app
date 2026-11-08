@@ -237,11 +237,14 @@ describe('OrderDetailPage — nút theo trạng thái (gói hl)', () => {
     const current = list.querySelectorAll('[aria-current="step"]');
     expect(current).toHaveLength(1);
     expect(current[0]!.textContent).toContain('Đang giao');
-    const events = within(within(list).getByRole('list', { name: 'Mốc vận chuyển' })).getAllByRole('listitem');
-    expect(events.map((e) => e.querySelector('div')?.textContent)).toEqual(['Đang giao hàng', 'Đang vận chuyển', 'Đã lấy hàng', 'Chờ lấy hàng']);
+    const events = () => within(within(list).getByRole('list', { name: 'Mốc vận chuyển' })).getAllByRole('listitem').map((e) => e.querySelector('div')?.textContent);
+    expect(events()).toEqual(['Đang giao hàng', 'Đang vận chuyển', 'Đã lấy hàng']);
+    expect(screen.getByTestId('track-events-toggle')).toHaveTextContent('Xem thêm 1 mốc vận chuyển');
+    fireEvent.click(screen.getByTestId('track-events-toggle'));
+    expect(events()).toEqual(['Đang giao hàng', 'Đang vận chuyển', 'Đã lấy hàng', 'Chờ lấy hàng']);
     expect(screen.getByText('Giao Hàng Nhanh')).toBeInTheDocument();
     mocks.copyText.mockResolvedValue(true);
-    fireEvent.click(screen.getByRole('button', { name: 'Chép mã' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sao chép mã vận đơn GHN6789012345' }));
     expect(mocks.copyText).toHaveBeenCalledWith('GHN6789012345');
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã sao chép mã vận đơn', type: 'success' }));
   });

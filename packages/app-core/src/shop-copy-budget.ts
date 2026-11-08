@@ -192,6 +192,9 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'order.shipping.copy': 10,
   'order.shipping.track': 20,
   'order.shipping.history': 25,
+  'order.shipping.eventsMore': 28,
+  'order.shipping.eventsLess': 24,
+  'order.shipping.copyAria': null,
 
   // Gợi ý hôm nay
   'suggest.title': 16,
