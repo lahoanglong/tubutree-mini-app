@@ -1,4 +1,5 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
+import { tabKeyTarget } from '@tubutree/app-core/commerce/flash-slots';
 import { useScrollHints } from './use-scroll-hints';
 
 export interface SegmentedTabItem {
@@ -17,14 +18,18 @@ export interface SegmentedTabsProps {
 }
 
 /** Thay 5 kiểu tab khác nhau hiện tại (pill cam, TabChip, Button ZaUI đổi variant, Chip, Text-chip
- * — audit A4-19). role="tablist"/"tab" cho a11y (0 chỗ dùng hiện tại). */
+ * — audit A4-19). role="tablist"/"tab" cho a11y (0 chỗ dùng hiện tại). Mẫu tabs của APG: một tab trong thứ tự Tab (roving tabindex),
+ * mũi tên trái/phải quay vòng, Home/End nhảy đầu cuối, đổi tab kéo theo tiêu điểm và chọn luôn tab đó. */
 export function SegmentedTabs({ items, value, onChange, scroll, label }: SegmentedTabsProps) {
   const hints = useScrollHints<HTMLDivElement>();
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
   useEffect(() => {
     if (!scroll) return;
     const active = hints.ref.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
     active?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
   }, [scroll, value, hints.ref]);
+  // Giá trị không khớp tab nào thì tab đầu giữ chỗ trong thứ tự Tab để dải không mất lối vào bằng bàn phím.
+  const selectedIndex = Math.max(0, items.findIndex((it) => it.key === value));
   return (
     <div
       {...(scroll ? hints : {})}
@@ -39,15 +44,27 @@ export function SegmentedTabs({ items, value, onChange, scroll, label }: Segment
         padding: 3,
       }}
     >
-      {items.map((it) => {
+      {items.map((it, i) => {
         const active = it.key === value;
         return (
           <button
             key={it.key}
+            ref={(el) => {
+              tabRefs.current[i] = el;
+            }}
             type="button"
             role="tab"
             aria-selected={active}
+            tabIndex={i === selectedIndex ? 0 : -1}
             onClick={() => onChange(it.key)}
+            onKeyDown={(e) => {
+              if (e.altKey || e.ctrlKey || e.metaKey) return;
+              const target = tabKeyTarget(e.key, i, items.length);
+              if (target === null) return;
+              e.preventDefault();
+              onChange(items[target]!.key);
+              tabRefs.current[target]?.focus();
+            }}
             style={{
               flex: scroll ? '0 0 auto' : 1,
               minHeight: 44,
@@ -65,7 +82,9 @@ export function SegmentedTabs({ items, value, onChange, scroll, label }: Segment
             }}
           >
             {it.label}
-            {(typeof it.count === 'number' || typeof it.count === 'string') && <span style={{ marginLeft: 4, opacity: 0.75 }}>{it.count}</span>}
+            {(typeof it.count === 'number' || typeof it.count === 'string') && (
+              <span style={{ marginLeft: 4, opacity: 0.75, fontVariantNumeric: 'tabular-nums' }}>{it.count}</span>
+            )}
           </button>
         );
       })}

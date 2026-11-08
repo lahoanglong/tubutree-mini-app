@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { click, render, type Rendered } from '@/test-utils/dom';
+import { segmentedTabsContract } from '@/test-utils/segmented-tabs-contract';
 
 const nav = vi.hoisted(() => ({ replace: vi.fn(), search: '' }));
 vi.mock('next/navigation', () => ({
@@ -60,6 +61,10 @@ describe('SegmentedTabs', () => {
     });
     expect(onChange).toHaveBeenLastCalledWith('a');
   });
+});
+
+describe('SegmentedTabs: bàn phím, roving tabindex, count (cùng hợp đồng với bản Mini App)', () => {
+  segmentedTabsContract(SegmentedTabs, (badge) => badge.classList.contains('tabular-nums'));
 });
 
 function Probe() {
