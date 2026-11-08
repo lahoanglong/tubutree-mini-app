@@ -66,11 +66,11 @@ interface Screen {
 const fixed = (path: string) => async () => path;
 
 const SCREENS: Screen[] = [
-  { name: 'Trang chủ', path: fixed('/'), ready: TILE, setup: (api) => { mockDiscovery(api, { returning: true }); mockFlash(api); } },
+  { name: 'Trang chủ', path: fixed('/'), ready: TILE, needsServerData: true, setup: (api) => { mockDiscovery(api, { returning: true }); mockFlash(api); } },
   // Hub: kệ Bán chạy nhất do máy chủ dựng từ API thật và chỉ hiện khi có từ 3 món bán chạy, nên đợi nút "Xem tất cả sản phẩm" (luôn có) chứ không đợi thẻ.
-  { name: 'Danh mục', path: fixed('/san-pham'), ready: '#browse-see-all button', setup: (api) => mockDiscovery(api, { tree: true }) },
+  { name: 'Danh mục', path: fixed('/san-pham'), ready: '#browse-see-all button', needsServerData: true, setup: (api) => mockDiscovery(api, { tree: true }) },
   // Danh sách (`all=1`): máy chủ dựng thẻ từ sản phẩm thật nên luôn có thẻ để đo.
-  { name: 'Danh mục (danh sách)', path: fixed('/san-pham?all=1'), ready: TILE, setup: (api) => mockDiscovery(api, { tree: true }) },
+  { name: 'Danh mục (danh sách)', path: fixed('/san-pham?all=1'), ready: TILE, needsServerData: true, setup: (api) => mockDiscovery(api, { tree: true }) },
   // Nút Mua ngay của thanh dưới bị khoá tới khi phiên khôi phục xong rồi mới mở: đợi `h1` thì axe có lúc đo nút đang mờ dần (color-contrast).
   {
     name: 'Chi tiết sản phẩm', ready: 'button:enabled:visible:has-text("Mua ngay")', needsServerData: true, setup: (api) => mockDiscovery(api),
@@ -96,8 +96,12 @@ test.describe('axe smoke web 375px: serious/critical', () => {
         test.skip(true, `${screen.name}: DB không phải DB tạm nên không seed, và chưa có sản phẩm nào`);
       }
       const response = await page.goto(path!);
-      if (screen.needsServerData === true && !seeded && response?.status() === 404) test.skip(true, `${screen.name}: DB không phải DB tạm nên không seed, trang 404`);
-      expect(response?.status(), `${screen.name}: ${path}`).toBe(200);
+      const status = response?.status() ?? 0;
+      // 5xx: Trang chủ và hub Danh mục cố ý ném khi cả hai lưới sản phẩm lỗi (home-initial.ts) thay vì lưu trang rỗng, nên API không phục vụ /products (API giả, API tắt) cho 500.
+      if (screen.needsServerData === true && !seeded && (status === 404 || status >= 500)) {
+        test.skip(true, `${screen.name}: DB không phải DB tạm nên không seed, trang ${status}; cần API thật + DB tạm (apps/e2e/scripts/web-gate.sh)`);
+      }
+      expect(status, `${screen.name}: ${path}`).toBe(200);
       await expect(page.locator(screen.ready).first()).toBeVisible({ timeout: 20_000 });
       // Next 15 stream metadata của trang động sau thân trang: máy tải nặng thì axe chạy lúc `<title>` chưa tới (document-title).
       await expect(page).toHaveTitle(/\S/, { timeout: 20_000 });
