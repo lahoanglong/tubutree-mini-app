@@ -19,8 +19,11 @@ export interface SectionHeaderProps {
   tone?: 'default' | 'promo';
   /** Đứng sau tiêu đề: `Countdown`, "12 mã". */
   trailing?: ReactNode;
-  /** Route của nền tảng đang chạy (web: đường dẫn web, không phải route Mini App). Nhãn mặc định "Xem tất cả". `onPress` thay `to` ở chỗ đổi tab/mở sheet (không có route), kèm `spoken` làm tên đọc vì nhãn nhìn thấy ("Tất cả (14)") chưa đủ nghĩa. */
-  action?: { label?: string; to: string; onPress?: undefined; spoken?: undefined } | { label?: string; to?: undefined; onPress: () => void; spoken?: string };
+  /** Route của nền tảng đang chạy (web: đường dẫn web, không phải route Mini App). Nhãn mặc định "Xem tất cả". `onPress` thay `to` ở chỗ đổi tab/mở sheet (không có route), kèm `spoken` làm tên đọc vì nhãn nhìn thấy ("Tất cả (14)") chưa đủ nghĩa.
+   * `disabled` khoá nút thật (không gọi `onPress`), `busy` khoá và báo `aria-busy` cho trình đọc màn hình; chỉ có ở nút `onPress`, liên kết `to` không khoá. */
+  action?:
+    | { label?: string; to: string; onPress?: undefined; spoken?: undefined; disabled?: undefined; busy?: undefined }
+    | { label?: string; to?: undefined; onPress: () => void; spoken?: string; disabled?: boolean; busy?: boolean };
   subtitle?: string;
   as?: 'h2' | 'h3';
 }
@@ -35,6 +38,7 @@ export function SectionHeader({ title, id, icon, tone = 'default', trailing, act
   const promo = tone === 'promo';
   const actionLabel = action?.label ?? fillCopy('section.seeAll');
   const H = Heading as ElementType;
+  const actionLocked = Boolean(action?.onPress && (action.disabled || action.busy));
   const actionStyle = {
     flex: '0 0 auto',
     minHeight: 44,
@@ -97,9 +101,21 @@ export function SectionHeader({ title, id, icon, tone = 'default', trailing, act
         <button
           type="button"
           className="tubu-press"
+          disabled={actionLocked}
+          aria-busy={action.busy ? true : undefined}
           aria-label={action.spoken ?? (action.label ? `${action.label} ${title}` : fillCopy('section.seeAllSpoken', { title }))}
-          onClick={action.onPress}
-          style={{ ...actionStyle, border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit' }}
+          onClick={() => {
+            if (actionLocked) return;
+            action.onPress();
+          }}
+          style={{
+            ...actionStyle,
+            border: 'none',
+            background: 'transparent',
+            cursor: actionLocked ? 'not-allowed' : 'pointer',
+            opacity: actionLocked ? 0.5 : undefined,
+            fontFamily: 'inherit',
+          }}
         >
           {actionInner}
         </button>

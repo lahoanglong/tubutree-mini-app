@@ -53,6 +53,8 @@ export function QuickReorderStrip({
               n: items.length,
               total: formatVnd(quickReorderTotal(items)),
             }),
+            disabled: locked,
+            busy: busyAll,
             onPress: () => {
               if (!locked) onAddAll();
             },

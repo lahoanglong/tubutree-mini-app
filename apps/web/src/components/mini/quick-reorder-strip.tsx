@@ -43,6 +43,8 @@ export function QuickReorderStrip({ items, busyKey = null, busyAll = false, onAd
           action={{
             label: fillCopy('quickReorder.addAll'),
             spoken: addAllSpoken,
+            disabled: locked,
+            busy: busyAll,
             onPress: () => {
               if (!locked) onAddAll();
             },

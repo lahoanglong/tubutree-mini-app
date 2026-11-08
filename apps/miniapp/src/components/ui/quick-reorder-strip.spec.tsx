@@ -86,7 +86,10 @@ describe('QuickReorderStrip (Mini)', () => {
     const other = screen.getByRole('button', { name: /Thêm Món 2 vào giỏ/ });
     expect(other).toBeDisabled();
     fireEvent.click(other);
-    fireEvent.click(screen.getByRole('button', { name: /Thêm lại tất cả 3 món/ }));
+    const addAllBtn = screen.getByRole('button', { name: /Thêm lại tất cả 3 món/ });
+    expect(addAllBtn).toBeDisabled();
+    expect(addAllBtn).not.toHaveAttribute('aria-busy');
+    fireEvent.click(addAllBtn);
     expect(onAdd).not.toHaveBeenCalled();
     expect(onAddAll).not.toHaveBeenCalled();
   });
@@ -97,7 +100,10 @@ describe('QuickReorderStrip (Mini)', () => {
     render(<QuickReorderStrip items={ITEMS} busyAll onAdd={onAdd} onAddAll={onAddAll} onOpen={vi.fn()} />);
     expect(screen.getByTestId('quick-reorder')).toHaveAttribute('aria-busy', 'true');
     for (const b of screen.getAllByTestId('quick-reorder-add')) expect(b).toBeDisabled();
-    fireEvent.click(screen.getByRole('button', { name: /Thêm lại tất cả 3 món/ }));
+    const addAllBtn = screen.getByRole('button', { name: /Thêm lại tất cả 3 món/ });
+    expect(addAllBtn).toBeDisabled();
+    expect(addAllBtn).toHaveAttribute('aria-busy', 'true');
+    fireEvent.click(addAllBtn);
     expect(onAddAll).not.toHaveBeenCalled();
   });
 

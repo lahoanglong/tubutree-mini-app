@@ -17,8 +17,11 @@ export interface SectionHeaderProps {
   tone?: 'default' | 'promo';
   /** Đứng sau tiêu đề: `Countdown`, "12 mã". */
   trailing?: ReactNode;
-  /** Route của nền tảng đang chạy (Mini: route Mini App). Nhãn mặc định "Xem tất cả". `onPress` thay `to` ở chỗ đổi tab/mở sheet (không có route), kèm `spoken` làm tên đọc vì nhãn nhìn thấy ("Tất cả (14)") chưa đủ nghĩa. */
-  action?: { label?: string; to: string; onPress?: undefined; spoken?: undefined } | { label?: string; to?: undefined; onPress: () => void; spoken?: string };
+  /** Route của nền tảng đang chạy (Mini: route Mini App). Nhãn mặc định "Xem tất cả". `onPress` thay `to` ở chỗ đổi tab/mở sheet (không có route), kèm `spoken` làm tên đọc vì nhãn nhìn thấy ("Tất cả (14)") chưa đủ nghĩa.
+   * `disabled` khoá nút thật (không rung, không gọi `onPress`), `busy` khoá và báo `aria-busy` cho trình đọc màn hình; chỉ có ở nút `onPress`, liên kết `to` không khoá. */
+  action?:
+    | { label?: string; to: string; onPress?: undefined; spoken?: undefined; disabled?: undefined; busy?: undefined }
+    | { label?: string; to?: undefined; onPress: () => void; spoken?: string; disabled?: boolean; busy?: boolean };
   subtitle?: string;
   as?: 'h2' | 'h3';
 }
@@ -34,6 +37,7 @@ export function SectionHeader({ title, id, icon, tone = 'default', trailing, act
   const promo = tone === 'promo';
   const actionLabel = action?.label ?? fillCopy('section.seeAll');
   const H = Heading as ElementType;
+  const actionLocked = Boolean(action?.onPress && (action.disabled || action.busy));
   return (
     <div data-testid="section-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, minHeight: 'var(--section-header-h)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: '1 1 auto' }}>
@@ -77,8 +81,11 @@ export function SectionHeader({ title, id, icon, tone = 'default', trailing, act
         <button
           type="button"
           className="tubu-press"
+          disabled={actionLocked}
+          aria-busy={action.onPress && action.busy ? true : undefined}
           aria-label={action.spoken ?? (action.label ? `${action.label} ${title}` : fillCopy('section.seeAllSpoken', { title }))}
           onClick={() => {
+            if (actionLocked) return;
             haptic('light');
             if (action.onPress) action.onPress();
             else navigate(action.to);
@@ -89,7 +96,8 @@ export function SectionHeader({ title, id, icon, tone = 'default', trailing, act
             padding: 0,
             border: 'none',
             background: 'transparent',
-            cursor: 'pointer',
+            cursor: actionLocked ? 'not-allowed' : 'pointer',
+            opacity: actionLocked ? 0.5 : undefined,
             fontFamily: 'inherit',
             display: 'inline-flex',
             alignItems: 'center',
