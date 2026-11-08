@@ -87,4 +87,12 @@ describe('SectionTitle / KeyValueRow', () => {
     expect(value.style.fontSize).toBe('var(--type-title-sm-size)');
     expect(value.style.color).toBe('var(--color-text-danger)');
   });
+
+  it('KeyValueRow: giá trị luôn dùng số đều (tabular-nums) như Mini App, kể cả khi emphasis', () => {
+    const plain = mount(<KeyValueRow label="Phí ship" value="15.000đ" />).container;
+    expect((plain.querySelectorAll('span')[1] as HTMLElement).style.fontVariantNumeric).toBe('tabular-nums');
+    const strong = mount(<KeyValueRow label="Tổng" value="100.000đ" emphasis />).container;
+    expect((strong.querySelectorAll('span')[1] as HTMLElement).style.fontVariantNumeric).toBe('tabular-nums');
+    expect((strong.querySelectorAll('span')[0] as HTMLElement).style.fontVariantNumeric).toBe('');
+  });
 });
