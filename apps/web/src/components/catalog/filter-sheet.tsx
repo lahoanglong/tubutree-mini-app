@@ -44,10 +44,14 @@ export function FilterSheet({
   onApply: (draft: FilterDraft) => void;
 }) {
   const [draft, setDraft] = useState<FilterDraft>(() => draftFromState(state));
+  const appliedDraft = useRef<FilterDraft | null>(null);
   const [wasOpen, setWasOpen] = useState(open);
   if (open !== wasOpen) {
     setWasOpen(open);
-    if (open) setDraft(draftFromState(state));
+    if (open) {
+      setDraft(draftFromState(state));
+      appliedDraft.current = null;
+    }
   }
 
   // Khoá đếm theo URL chuẩn của nháp: phản hồi trễ của nháp cũ rơi vào khoá cũ, không ghi đè số của nháp mới.
@@ -59,12 +63,14 @@ export function FilterSheet({
     staleTime: 30_000,
     retry: false,
   });
-  const label = applyLabel({ settled: countKey === previewKey, data: count.data, isError: count.isError });
+  const settled = countKey === previewKey;
+  const label = applyLabel({ settled, data: count.data, isError: count.isError });
+  // Nút KHÔNG bao giờ disabled; chỉ báo cho trình đọc màn hình biết nhãn "Xem kết quả" là đang đếm.
+  const countBusy = !settled || (count.isLoading && !count.isError);
 
   const toggleBrand = (b: string) =>
     setDraft((d) => ({ ...d, brands: d.brands.includes(b) ? d.brands.filter((x) => x !== b) : [...d.brands, b] }));
 
-  const appliedDraft = useRef<FilterDraft | null>(null);
   const apply = () => {
     if (appliedDraft.current === draft) return;
     appliedDraft.current = draft;
@@ -85,7 +91,7 @@ export function FilterSheet({
           <button type="button" onClick={() => setDraft({ brands: [], inStock: false })} className={ui.btnText}>
             {browseText.filter.reset}
           </button>
-          <button type="button" onClick={apply} className={`${ui.btnPrimary} min-w-0 flex-1 tabular-nums`}>
+          <button type="button" onClick={apply} aria-busy={countBusy || undefined} className={`${ui.btnPrimary} min-w-0 flex-1 tabular-nums`}>
             {label}
           </button>
         </div>

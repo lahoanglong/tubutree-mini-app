@@ -424,7 +424,18 @@ describe('BrowsePage (DS v2, spec 5b.2)', () => {
       mocks.fetchCategories.mockResolvedValue([cat('da', 'Chăm sóc da', 5)]);
       renderAt('/browse?q=nuoc&category=da');
       expect(await screen.findByRole('button', { name: 'Bỏ lọc Chăm sóc da' })).toBeInTheDocument();
-      expect(screen.queryByRole('heading', { level: 2 })).toBeNull();
+      expect(screen.queryAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Danh sách sản phẩm']);
+    });
+
+    it('đích focus của ActiveFilters: h2 ẩn "Danh sách sản phẩm" id danh-sach-san-pham, nhận focus bằng code, không nằm trong thứ tự Tab', async () => {
+      mocks.fetchCategories.mockResolvedValue([cat('da', 'Chăm sóc da', 5)]);
+      renderAt('/browse?category=da');
+      await listPainted();
+      const target = screen.getByRole('heading', { level: 2, name: 'Danh sách sản phẩm' });
+      expect(target.id).toBe('danh-sach-san-pham');
+      expect(target).toHaveAttribute('tabindex', '-1');
+      target.focus();
+      expect(document.activeElement).toBe(target);
     });
   });
 
@@ -466,7 +477,7 @@ describe('BrowsePage (DS v2, spec 5b.2)', () => {
     renderAt('/browse?brand=Tubu,M%E1%BB%99c%20An');
     expect(await screen.findByRole('button', { name: 'Bỏ lọc Tubu' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Bỏ lọc Mộc An' })).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { level: 2 })).toBeNull();
+    expect(screen.queryAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Danh sách sản phẩm']);
   });
 
   it('link từ Trang chủ ?segment=eco → lọc theo phân khúc, tên phân khúc là tiêu đề DUY NHẤT (không chip trùng)', async () => {
@@ -505,7 +516,7 @@ describe('BrowsePage (DS v2, spec 5b.2)', () => {
     mocks.fetchCategories.mockResolvedValue([cat('da', 'Chăm sóc da', 5)]);
     renderAt('/browse?category=cat-da-xoa');
     const chip = await screen.findByRole('button', { name: 'Bỏ lọc Danh mục' });
-    expect(screen.queryByRole('heading', { level: 2 })).toBeNull();
+    expect(screen.queryAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Danh sách sản phẩm']);
     fireEvent.click(chip);
     await waitFor(() => expect(loc()).toBe('/browse?all=1'));
   });

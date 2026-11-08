@@ -374,6 +374,10 @@ export default function BrowsePage() {
             }}
           />
           <div style={{ padding: '8px 16px 24px' }}>
+            {/* Đích nhận focus của ActiveFilters khi chip cuối bị gỡ bằng bàn phím (cùng id với bản web). */}
+            <h2 id="danh-sach-san-pham" tabIndex={-1} style={SR_ONLY}>
+              {vi.browse.resultList}
+            </h2>
             {products.isLoading ? (
               <CatalogGridSkeleton count={6} />
             ) : products.isError && list.length === 0 ? (
