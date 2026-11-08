@@ -2,6 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
+import { smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
 import { click } from '@/test-utils/dom';
 import { mount } from './harness';
 import { FreeshipAddonRail, type FreeshipAddonItem } from './freeship-addon-rail';
@@ -32,12 +33,37 @@ describe('FreeshipAddonRail (web)', () => {
     expect(onAdd).toHaveBeenCalledWith(a);
   });
 
-  it('busySlug khoá đúng nút của món đó (disabled, aria-busy) và để nút khác bấm được', () => {
+  it('busySlug báo bận đúng nút của món đó (aria-busy, aria-disabled, vòng xoay) và để nút khác không báo bận, bấm được', () => {
     const { container } = mount(<FreeshipAddonRail items={[item('a'), item('b')]} busySlug="a" onAdd={vi.fn()} />);
-    expect(adds(container)[0]!.disabled).toBe(true);
     expect(adds(container)[0]!.getAttribute('aria-busy')).toBe('true');
+    expect(adds(container)[0]!.getAttribute('aria-disabled')).toBe('true');
+    expect(adds(container)[0]!.querySelector('.zaui-btn-loading-icon')).not.toBeNull();
     expect(adds(container)[1]!.disabled).toBe(false);
     expect(adds(container)[1]!.getAttribute('aria-busy')).toBeNull();
+    expect(adds(container)[1]!.getAttribute('aria-disabled')).toBeNull();
+    expect(adds(container)[1]!.querySelector('.zaui-btn-loading-icon')).toBeNull();
+  });
+
+  it('thẻ gốc là <section> có tên "Gợi ý mua thêm…"; aria-busy khi có món đang thêm, không có khi rảnh', () => {
+    const idle = mount(<FreeshipAddonRail items={[item('a'), item('b')]} onAdd={vi.fn()} />);
+    const root = idle.container.querySelector('[data-testid="freeship-addons"]')!;
+    expect(root.tagName).toBe('SECTION');
+    expect(root.getAttribute('aria-label')).toBe('Gợi ý mua thêm cho đủ Miễn phí giao hàng');
+    expect(root.hasAttribute('aria-busy')).toBe(false);
+    idle.unmount();
+    const busy = mount(<FreeshipAddonRail items={[item('a'), item('b')]} busySlug="a" onAdd={vi.fn()} />);
+    expect(busy.container.querySelector('[data-testid="freeship-addons"]')!.getAttribute('aria-busy')).toBe('true');
+  });
+
+  it('hàng cuộn bật nút ‹ › (arrows): hàng được bọc khung relative để nút mũi tên định vị từ md', () => {
+    const { container } = mount(<FreeshipAddonRail items={[item('a'), item('b')]} onAdd={vi.fn()} />);
+    expect(container.querySelector('.tubu-addon-row')!.parentElement!.className).toBe('relative');
+  });
+
+  it('a11y: mọi nút có tên và vùng chạm >= 44px, cả khi một món đang bận (vòng xoay không làm mất tên nút)', () => {
+    const { container } = mount(<FreeshipAddonRail items={[item('a'), item('b')]} busySlug="a" onAdd={vi.fn()} />);
+    expect(unnamedControls(container)).toEqual([]);
+    expect(smallTouchTargets(container)).toEqual([]);
   });
 
   it('bấm nút đang bận không gọi onAdd (bấm liên tiếp không tạo lệnh thứ hai)', () => {

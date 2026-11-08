@@ -31,7 +31,7 @@ export function FreeshipAddonRail({ items, busySlug = null, onAdd }: FreeshipAdd
   if (items.length === 0) return null;
   const title = fillCopy('freeship.addonsTitle');
   return (
-    <section data-testid="freeship-addons" className="tubu-addon">
+    <section data-testid="freeship-addons" aria-label={title} aria-busy={busySlug !== null || undefined} className="tubu-addon">
       <div className="tubu-addon-title">
         <SectionTitle>{title}</SectionTitle>
       </div>
@@ -51,8 +51,7 @@ export function FreeshipAddonRail({ items, busySlug = null, onAdd }: FreeshipAdd
                   className="tubu-addon-add"
                   data-testid="freeship-add"
                   aria-label={fillCopy('freeship.addAria', { name: item.name, price: formatVnd(item.price) })}
-                  aria-busy={busy}
-                  disabled={busy}
+                  loading={busy}
                   onPress={() => onAdd(item)}
                 >
                   {fillCopy('freeship.add')}

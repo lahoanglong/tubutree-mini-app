@@ -146,7 +146,7 @@ describe('/gio-hang — thanh Miễn phí giao hàng + dải món bù đơn (W42
     const btn = qa(c, 'freeship-add')[0]!;
     click(btn);
     await flush(2);
-    expect((qa(c, 'freeship-add')[0] as HTMLButtonElement).disabled).toBe(true);
+    expect(qa(c, 'freeship-add')[0]!.getAttribute('aria-disabled')).toBe('true');
     expect(qa(c, 'freeship-add')[0]!.getAttribute('aria-busy')).toBe('true');
     click(qa(c, 'freeship-add')[0]!);
     click(qa(c, 'freeship-add')[1]!);
@@ -179,6 +179,8 @@ describe('/gio-hang — thanh Miễn phí giao hàng + dải món bù đơn (W42
     expect(qa(c, 'cart-line')).toHaveLength(1);
     expect(q(c, 'freeship-fill')!.style.width).toBe('57%');
     expect((qa(c, 'freeship-add')[0] as HTMLButtonElement).disabled).toBe(false);
+    expect(qa(c, 'freeship-add')[0]!.hasAttribute('aria-busy')).toBe(false);
+    expect(qa(c, 'freeship-add')[0]!.hasAttribute('aria-disabled')).toBe(false);
   });
 
   it('đã đủ ngưỡng từ đầu: chỉ có dòng chúc mừng, không gợi ý, không gọi thêm giỏ', async () => {

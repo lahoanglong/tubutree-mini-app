@@ -36,11 +36,11 @@ export function FreeshipAddonRail({ items, busySlug = null, onAdd }: FreeshipAdd
   if (items.length === 0) return null;
   const title = fillCopy('freeship.addonsTitle');
   return (
-    <div data-testid="freeship-addons" className="tubu-addon">
+    <section data-testid="freeship-addons" aria-label={title} aria-busy={busySlug !== null || undefined} className="tubu-addon">
       <div className="tubu-addon-head">
         <SectionTitle block>{title}</SectionTitle>
       </div>
-      <ScrollRow label={title} className="tubu-addon-row">
+      <ScrollRow label={title} arrows className="tubu-addon-row">
         {items.map((it) => {
           const busy = busySlug === it.slug;
           const deal = typeof it.compareAt === 'number' && it.compareAt > it.price;
@@ -55,8 +55,7 @@ export function FreeshipAddonRail({ items, busySlug = null, onAdd }: FreeshipAdd
                     variant="secondary"
                     className="tubu-addon-add"
                     data-testid="freeship-add"
-                    disabled={busy}
-                    aria-busy={busy || undefined}
+                    loading={busy}
                     aria-label={fillCopy('freeship.addAria', { name: it.name, price: formatVnd(it.price) })}
                     onPress={() => onAdd(it)}
                   >
@@ -68,6 +67,6 @@ export function FreeshipAddonRail({ items, busySlug = null, onAdd }: FreeshipAdd
           );
         })}
       </ScrollRow>
-    </div>
+    </section>
   );
 }
