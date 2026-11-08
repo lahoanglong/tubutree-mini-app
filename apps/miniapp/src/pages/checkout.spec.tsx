@@ -179,6 +179,33 @@ describe('CheckoutPage — mã giới thiệu CTV (C-020)', () => {
     expect(body.referralCode).toBe('AB12CD34');
   });
 
+  it('đơn đang gửi → nút Nhập mã của ô mã giới thiệu bị khoá, không đổi mã giữa chừng (W59B)', async () => {
+    mocks.placeOrder.mockReturnValue(new Promise(() => {}));
+    renderPage();
+    const trigger = (await screen.findByText('Nhập mã')).closest('button')!;
+    expect(trigger).toBeEnabled();
+
+    const place = await screen.findByText(/(Đặt hàng|Thử lại) · /);
+    await waitFor(() => expect(place.closest('button')).not.toBeDisabled());
+    fireEvent.click(place);
+    await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(trigger).toBeDisabled());
+  });
+
+  it('đang xin SĐT trước khi gửi đơn (placeOrder chưa chạy) → nút Nhập mã đã khoá (W59B)', async () => {
+    mocks.ensurePhone.mockReturnValue(new Promise(() => {}));
+    renderPage();
+    const trigger = (await screen.findByText('Nhập mã')).closest('button')!;
+    expect(trigger).toBeEnabled();
+
+    const place = await screen.findByText(/(Đặt hàng|Thử lại) · /);
+    await waitFor(() => expect(place.closest('button')).not.toBeDisabled());
+    fireEvent.click(place);
+    await waitFor(() => expect(mocks.ensurePhone).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(trigger).toBeDisabled());
+    expect(mocks.placeOrder).not.toHaveBeenCalled();
+  });
+
   it('đặt đơn xong: nhớ có Việc cần làm cho lần mở Trang chủ sau (khung chờ giữ chỗ từ khung hình đầu)', async () => {
     renderPage();
     await placeOrderClick();
