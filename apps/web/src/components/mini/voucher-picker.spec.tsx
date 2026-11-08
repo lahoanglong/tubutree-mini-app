@@ -79,6 +79,50 @@ describe('VoucherPicker (web)', () => {
     expect(byName('Bỏ chọn mã APPLIED').getAttribute('aria-busy')).toBeNull();
   });
 
+  it('chỉ truyền pendingCode (không busy): hàng đang xử lý aria-busy, các hàng khác khoá và bấm không gọi gì', () => {
+    for (const pendingCode of ['OK', 'APPLIED']) {
+      const p = props({ pendingCode });
+      const m = mount(<VoucherPicker {...p} />);
+      const all = buttons();
+      const pending = all.filter((b) => b.getAttribute('aria-busy') === 'true');
+      expect(pending).toHaveLength(1);
+      expect(pending[0]!.getAttribute('aria-disabled')).toBe('true');
+      for (const b of all) {
+        expect(b.getAttribute('aria-disabled')).toBe('true');
+        click(b);
+      }
+      expect(p.onUse).not.toHaveBeenCalled();
+      expect(p.onRemove).not.toHaveBeenCalled();
+      m.unmount();
+    }
+  });
+
+  it('pendingCode không có trong danh sách (hàng đã đổi): mọi hàng vẫn khoá', () => {
+    const p = props({ pendingCode: 'GONE' });
+    mount(<VoucherPicker {...p} />);
+    for (const b of buttons()) expect(b.getAttribute('aria-disabled')).toBe('true');
+    click(byName('Dùng mã OK'));
+    expect(p.onUse).not.toHaveBeenCalled();
+  });
+
+  it('rảnh (không busy, không pendingCode): hàng dùng được và hàng đang dùng không bị khoá', () => {
+    mount(<VoucherPicker {...props()} />);
+    expect(byName('Dùng mã OK').getAttribute('aria-disabled')).toBeNull();
+    expect(byName('Bỏ chọn mã APPLIED').getAttribute('aria-disabled')).toBeNull();
+  });
+
+  it('danh sách aria-busy khi busy hoặc có pendingCode, không có thuộc tính khi rảnh', () => {
+    const list = () => document.querySelector('ul[aria-label="Mã giảm giá của bạn"]')!;
+    const idle = mount(<VoucherPicker {...props()} />);
+    expect(list().hasAttribute('aria-busy')).toBe(false);
+    idle.unmount();
+    const busy = mount(<VoucherPicker {...props({ busy: true })} />);
+    expect(list().getAttribute('aria-busy')).toBe('true');
+    busy.unmount();
+    mount(<VoucherPicker {...props({ pendingCode: 'OK' })} />);
+    expect(list().getAttribute('aria-busy')).toBe('true');
+  });
+
   it('không phần tử nào bị làm mờ (opacity < 1 hoặc lớp opacity-*)', () => {
     const m = mount(<VoucherPicker {...props()} />);
     const all = Array.from(m.container.querySelectorAll<HTMLElement>('*'));

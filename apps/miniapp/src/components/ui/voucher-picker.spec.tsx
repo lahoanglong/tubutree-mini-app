@@ -79,6 +79,49 @@ describe('VoucherPicker (Mini)', () => {
     expect(screen.getByRole('button', { name: 'Bỏ chọn mã APPLIED' })).not.toHaveAttribute('aria-busy');
   });
 
+  it('chỉ truyền pendingCode (không busy): hàng đang xử lý aria-busy, các hàng khác khoá và bấm không gọi gì', () => {
+    for (const pendingCode of ['OK', 'APPLIED']) {
+      const p = props({ pendingCode });
+      const { unmount } = render(<VoucherPicker {...p} />);
+      const buttons = screen.getAllByRole('button');
+      const pending = buttons.filter((b) => b.getAttribute('aria-busy') === 'true');
+      expect(pending).toHaveLength(1);
+      expect(pending[0]).toHaveAttribute('aria-disabled', 'true');
+      for (const b of buttons) {
+        expect(b).toHaveAttribute('aria-disabled', 'true');
+        fireEvent.click(b);
+      }
+      expect(p.onUse).not.toHaveBeenCalled();
+      expect(p.onRemove).not.toHaveBeenCalled();
+      unmount();
+    }
+  });
+
+  it('pendingCode không có trong danh sách (hàng đã đổi): mọi hàng vẫn khoá', () => {
+    const p = props({ pendingCode: 'GONE' });
+    render(<VoucherPicker {...p} />);
+    for (const b of screen.getAllByRole('button')) expect(b).toHaveAttribute('aria-disabled', 'true');
+    fireEvent.click(screen.getByRole('button', { name: 'Dùng mã OK' }));
+    expect(p.onUse).not.toHaveBeenCalled();
+  });
+
+  it('rảnh (không busy, không pendingCode): hàng dùng được và hàng đang dùng không bị khoá', () => {
+    render(<VoucherPicker {...props()} />);
+    expect(screen.getByRole('button', { name: 'Dùng mã OK' })).not.toHaveAttribute('aria-disabled');
+    expect(screen.getByRole('button', { name: 'Bỏ chọn mã APPLIED' })).not.toHaveAttribute('aria-disabled');
+  });
+
+  it('danh sách aria-busy khi busy hoặc có pendingCode, không có thuộc tính khi rảnh', () => {
+    const idle = render(<VoucherPicker {...props()} />);
+    expect(screen.getByRole('list')).not.toHaveAttribute('aria-busy');
+    idle.unmount();
+    const busy = render(<VoucherPicker {...props({ busy: true })} />);
+    expect(screen.getByRole('list')).toHaveAttribute('aria-busy', 'true');
+    busy.unmount();
+    render(<VoucherPicker {...props({ pendingCode: 'OK' })} />);
+    expect(screen.getByRole('list')).toHaveAttribute('aria-busy', 'true');
+  });
+
   it('không phần tử nào bị làm mờ (opacity < 1), kể cả hàng chưa đủ điều kiện và không áp dụng', () => {
     const { container } = render(<VoucherPicker {...props()} />);
     const dimmed = Array.from(container.querySelectorAll<HTMLElement>('*')).filter((el) => el.style.opacity !== '' && Number(el.style.opacity) < 1);
