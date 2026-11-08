@@ -189,6 +189,89 @@ describe('PdpBundles: Mua kèm giá tốt', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
+  describe('"Chọn tất cả"', () => {
+    const selectAll = () => screen.queryByTestId('addon-select-all');
+
+    it('có từ 2 dòng và chưa chọn đủ: nút cạnh tiêu đề, tên đọc kèm tiêu đề khối; chọn thiếu một món vẫn còn nút', async () => {
+      renderBlock(data());
+      const all = await screen.findByRole('button', { name: 'Chọn tất cả — Mua kèm giá tốt' });
+      expect(all).toHaveAttribute('data-testid', 'addon-select-all');
+      expect(all).toHaveTextContent('Chọn tất cả');
+      expect(all.parentElement).toBe(within(screen.getByTestId('pdp-addons')).getByRole('heading', { name: 'Mua kèm giá tốt' }).parentElement);
+      fireEvent.click(screen.getByRole('checkbox', { name: /Sản phẩm x/ }));
+      expect(selectAll()).not.toBeNull();
+    });
+
+    it('bấm: rung nhẹ, tick hết, nhãn nút Thêm và dòng Tiết kiệm đổi theo, nút tự gỡ và tiêu điểm sang nút Thêm', async () => {
+      renderBlock(data());
+      await screen.findByTestId('addon-select-all');
+      fireEvent.click(screen.getByTestId('addon-select-all'));
+      expect(mocks.haptic).toHaveBeenCalledWith('light');
+      for (const name of [/Sản phẩm x/, /Sản phẩm y/]) expect(screen.getByRole('checkbox', { name })).toHaveAttribute('aria-checked', 'true');
+      expect(screen.getByTestId('addon-add')).toHaveTextContent('Thêm 2 món vào giỏ');
+      expect(screen.getByTestId('addon-save')).toHaveTextContent('Tiết kiệm 70.000đ');
+      expect(selectAll()).toBeNull();
+      expect(screen.getByTestId('addon-add')).toHaveFocus();
+    });
+
+    it('chọn đủ từng dòng bằng tay thì nút cũng gỡ nhưng tiêu điểm không bị cướp sang nút Thêm', async () => {
+      renderBlock(data());
+      fireEvent.click(await screen.findByRole('checkbox', { name: /Sản phẩm x/ }));
+      fireEvent.click(screen.getByRole('checkbox', { name: /Sản phẩm y/ }));
+      expect(selectAll()).toBeNull();
+      expect(screen.getByTestId('addon-add')).not.toHaveFocus();
+    });
+
+    it('sau "Chọn tất cả" bấm Thêm gửi đủ mọi dòng một lệnh', async () => {
+      renderBlock(data());
+      fireEvent.click(await screen.findByTestId('addon-select-all'));
+      fireEvent.click(screen.getByTestId('addon-add'));
+      await waitFor(() => expect(mocks.addAll).toHaveBeenCalledTimes(1));
+      expect(mocks.addAll).toHaveBeenCalledWith([{ variationId: 'v-x', quantity: 1 }, { variationId: 'v-y', quantity: 1 }]);
+    });
+
+    it('bấm ngay lúc "Đã thêm vào giỏ": nhãn nút về "Thêm 2 món vào giỏ" để tiêu điểm nói đúng việc sắp làm', async () => {
+      renderBlock(data());
+      fireEvent.click(await screen.findByRole('checkbox', { name: /Sản phẩm y/ }));
+      fireEvent.click(screen.getByTestId('addon-add'));
+      await screen.findByRole('button', { name: 'Đã thêm vào giỏ' });
+      fireEvent.click(screen.getByTestId('addon-select-all'));
+      expect(screen.getByTestId('addon-add')).toHaveTextContent('Thêm 2 món vào giỏ');
+      expect(screen.getByTestId('addon-add')).toHaveFocus();
+    });
+
+    it('chỉ một dòng: không có nút', async () => {
+      renderBlock({ combos: [], addons: [addon('a1', [item('x', { addonPrice: 40_000 })])] });
+      await screen.findByRole('region', { name: 'Mua kèm giá tốt' });
+      expect(screen.getAllByTestId('addon-row')).toHaveLength(1);
+      expect(selectAll()).toBeNull();
+    });
+
+    it('khối đã kết thúc hay tạm hết hàng: không có nút', async () => {
+      const { qc } = renderBlock({ combos: [combo('c1', [item('a'), item('b')])], addons: data().addons });
+      await screen.findByTestId('addon-select-all');
+      await act(async () => {
+        qc.setQueryData(['bundles', 'product', 'sp-anchor'], { combos: [], addons: [] });
+      });
+      await waitFor(() => expect(screen.getByTestId('pdp-addons')).toHaveAttribute('aria-label', 'Mua kèm giá tốt · Đã kết thúc'));
+      expect(screen.getAllByTestId('addon-row')).toHaveLength(2);
+      expect(selectAll()).toBeNull();
+    });
+  });
+
+  it('bấm nút Thêm đúng lúc "Đã thêm vào giỏ" (đã bỏ chọn hết): không gửi lệnh thứ hai', async () => {
+    renderBlock(data());
+    fireEvent.click(await screen.findByRole('checkbox', { name: /Sản phẩm y/ }));
+    fireEvent.click(screen.getByTestId('addon-add'));
+    await waitFor(() => expect(mocks.addAll).toHaveBeenCalledTimes(1));
+    const add = await screen.findByRole('button', { name: 'Đã thêm vào giỏ' });
+    expect(add).toHaveAttribute('data-testid', 'addon-add');
+    expect(add).toBeEnabled();
+    fireEvent.click(add);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(mocks.addAll).toHaveBeenCalledTimes(1);
+  });
+
   it('có cả combo và mua kèm: hai vùng riêng trong một khung', async () => {
     renderBlock({ combos: [combo('c1', [item('a'), item('b')])], addons: data().addons });
     expect(await screen.findByRole('region', { name: 'Combo ưu đãi' })).toBeInTheDocument();
