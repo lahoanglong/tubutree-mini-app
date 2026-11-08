@@ -43,7 +43,7 @@ export function VariationChip({ variation, pricing, active, onClick }: Variation
         {' · '}
       </span>
       <span
-        className={`inline-flex items-center gap-0.5 ${phoneCaption} max-md:font-normal ${
+        className={`inline-flex items-center gap-0.5 tabular-nums ${phoneCaption} max-md:font-normal ${
           out
             ? 'max-md:text-[var(--color-text-disabled)]'
             : pricing.isFlash

@@ -143,8 +143,9 @@ export function useQuickAdd(source?: AddToCartSource): QuickAdd {
           flash={flashWithAllowance}
           initialId={picker.initialId ?? picker.product.pinnedVariationId ?? picker.product.repVariationId ?? null}
           initialQty={1}
+          busy={busyId === picker.product.id}
           cartLines={cartQ.data?.items}
-          onConfirm={(v, qty) => void confirmPick(v, qty)}
+          onConfirm={confirmPick}
         />
       )}
     </>

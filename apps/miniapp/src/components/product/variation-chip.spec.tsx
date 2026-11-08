@@ -49,3 +49,20 @@ describe('VariationChip Mini: nhãn tiết kiệm của phân loại đang giả
     expect(b.textContent).toContain('-20%');
   });
 });
+
+describe('VariationChip Mini: số đều (tabular-nums) cho dòng giá và phần trăm giảm', () => {
+  const priceRow = (b: HTMLElement) => b.children[1] as HTMLElement;
+
+  it('dòng giá (kèm "-15%" nằm trong dòng) dùng tabular-nums', () => {
+    const b = chip({ salePct: 15 });
+    expect(priceRow(b).textContent).toContain('85.000đ');
+    expect(priceRow(b).textContent).toContain('-15%');
+    expect(priceRow(b).style.fontVariantNumeric).toBe('tabular-nums');
+  });
+
+  it('giá Giờ vàng, đang chọn và hết hàng đều giữ tabular-nums (không phụ thuộc trạng thái)', () => {
+    expect(priceRow(chip({ isFlash: true })).style.fontVariantNumeric).toBe('tabular-nums');
+    expect(priceRow(chip({ active: true })).style.fontVariantNumeric).toBe('tabular-nums');
+    expect(priceRow(chip({ stock: 0 })).style.fontVariantNumeric).toBe('tabular-nums');
+  });
+});

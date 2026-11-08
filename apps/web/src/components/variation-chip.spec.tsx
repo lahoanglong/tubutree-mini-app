@@ -57,3 +57,20 @@ describe('VariationChip web: nhãn tiết kiệm của phân loại đang giảm
     expect(b.textContent).toContain('-20%');
   });
 });
+
+describe('VariationChip web: số đều (tabular-nums) cho dòng giá và phần trăm giảm', () => {
+  const priceRow = (b: HTMLButtonElement) => b.children[2] as HTMLElement;
+
+  it('dòng giá (kèm "-15%" nằm trong dòng) có lớp tabular-nums', () => {
+    const b = chip({ salePct: 15 });
+    expect(priceRow(b).textContent).toContain('85.000đ');
+    expect(priceRow(b).textContent).toContain('-15%');
+    expect(priceRow(b).className.split(' ')).toContain('tabular-nums');
+  });
+
+  it('giá Giờ vàng, đang chọn và hết hàng đều giữ tabular-nums (không phụ thuộc trạng thái)', () => {
+    expect(priceRow(chip({ isFlash: true })).className.split(' ')).toContain('tabular-nums');
+    expect(priceRow(chip({ active: true })).className.split(' ')).toContain('tabular-nums');
+    expect(priceRow(chip({ stock: 0 })).className.split(' ')).toContain('tabular-nums');
+  });
+});
