@@ -19,3 +19,21 @@ export function useFlashExpiry(endAt: string | undefined): void {
     return () => clearTimeout(id);
   }, [endAt]);
 }
+
+/**
+ * Như `useFlashExpiry` cho cả danh sách suất (trang Yêu thích đếm "Đang giảm" theo Giờ vàng): vẽ lại đúng mốc kết thúc SỚM NHẤT còn ở phía trước. Danh sách
+ * từ truy vấn có thể còn suất đã quá hạn, nên bỏ qua chúng; suất đó hết thì vẽ lại tính mốc kế.
+ */
+export function useFlashListExpiry(list: readonly { endAt?: string }[]): void {
+  const now = serverNow();
+  let soonest: string | undefined;
+  let soonestMs = Infinity;
+  for (const f of list) {
+    const ms = f.endAt ? Date.parse(f.endAt) : NaN;
+    if (Number.isFinite(ms) && ms > now && ms < soonestMs) {
+      soonestMs = ms;
+      soonest = f.endAt;
+    }
+  }
+  useFlashExpiry(soonest);
+}

@@ -1,7 +1,7 @@
 import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   fetchProduct: vi.fn(),
   addToCart: vi.fn(),
   getCart: vi.fn(),
+  fetchFlash: vi.fn(async (): Promise<unknown[]> => []),
   snackbar: vi.fn(),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
@@ -23,7 +24,7 @@ vi.mock('../services/shop-api', () => ({
   fetchProduct: mocks.fetchProduct,
   addToCart: mocks.addToCart,
   getCart: mocks.getCart,
-  fetchActiveFlashSales: async () => [],
+  fetchActiveFlashSales: () => mocks.fetchFlash(),
 }));
 vi.mock('../components/variation-sheet', () => ({
   VariationSheet: (p: { open: boolean; variations: { id: string }[]; onConfirm: (v: { id: string }, qty: number) => void }) =>
@@ -51,8 +52,10 @@ vi.mock('../components/ui/product-card', () => ({
 import WishlistPage from './wishlist';
 import { QUICK_ADD_SOLD_OUT } from '@tubutree/app-core/quick-add';
 
+let lastClient: QueryClient;
 function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  lastClient = qc;
   return render(
     <QueryClientProvider client={qc}>
       <WishlistPage />
@@ -293,5 +296,102 @@ describe('Trang Yêu thích: bộ lọc nhanh', () => {
     fireEvent.click(chip('Đang giảm'));
     expect(screen.getByRole('button', { name: 'Thêm Nước rửa chén vào giỏ' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Thêm Dầu gội vào giỏ' })).toBeNull();
+  });
+});
+
+describe('Trang Yêu thích: Đang giảm theo Giờ vàng', () => {
+  const item = (id: string, name: string, salePrice: number | null, inStock: boolean) => ({ id, slug: `sp-${id}`, name, basePrice: 100000, salePrice, inStock });
+  const MIXED = [item('a', 'Nước rửa chén', 80000, true), item('b', 'Xà phòng', null, true), item('c', 'Dầu gội', 70000, false), item('d', 'Nước giặt', null, false)];
+  const chip = (label: string) => screen.getByRole('button', { name: new RegExp(`^${label}`) });
+  const names = () => screen.queryAllByTestId('product-card').map((n) => (n.textContent ?? '').replace(/Thêm.*/, ''));
+  // Chờ danh sách Giờ vàng thật sự vào bộ nhớ truy vấn (mới "đã gọi" thì số đếm chưa thể dùng nó).
+  const flashLanded = () => waitFor(() => expect(lastClient.getQueryData(['flash-sales', 'active'])).toBeDefined());
+  const flashFor = (slug: string, endAfterMs: number, flashPrice = 60000) => ({
+    productSlug: slug,
+    variationId: `v-${slug}`,
+    flashPrice,
+    endAt: new Date(Date.now() + endAfterMs).toISOString(),
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.authStatus = 'authenticated';
+    mocks.getCart.mockResolvedValue({ items: [], itemCount: 0 });
+    mocks.getWishlist.mockResolvedValue(MIXED);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    mocks.fetchFlash.mockResolvedValue([]);
+  });
+
+  it('món chỉ giảm nhờ Giờ vàng được đếm và hiện ở Đang giảm; Tất cả và Còn hàng không đổi', async () => {
+    mocks.fetchFlash.mockResolvedValue([flashFor('sp-b', 3_600_000)]);
+    renderPage();
+    await screen.findAllByTestId('product-card');
+    await waitFor(() => expect(chip('Đang giảm').textContent).toBe('Đang giảm(3)'));
+    expect(chip('Tất cả').textContent).toBe('Tất cả(4)');
+    expect(chip('Còn hàng').textContent).toBe('Còn hàng(2)');
+    fireEvent.click(chip('Đang giảm'));
+    expect(names()).toEqual(['Nước rửa chén', 'Xà phòng', 'Dầu gội']);
+  });
+
+  it('suất đã hết hạn, suất không rẻ hơn giá bán và suất của sản phẩm khác không làm món thành đang giảm; suất hợp lệ của món khác vẫn được đếm', async () => {
+    mocks.getWishlist.mockResolvedValue([...MIXED, item('e', 'Khăn giấy', null, true)]);
+    mocks.fetchFlash.mockResolvedValue([flashFor('sp-b', -1_000), flashFor('sp-c', 3_600_000, 100000), flashFor('sp-khac', 3_600_000), flashFor('sp-e', 3_600_000)]);
+    renderPage();
+    await screen.findAllByTestId('product-card');
+    await flashLanded();
+    await waitFor(() => expect(chip('Đang giảm').textContent).toBe('Đang giảm(3)'));
+    fireEvent.click(chip('Đang giảm'));
+    expect(names()).toEqual(['Nước rửa chén', 'Dầu gội', 'Khăn giấy']);
+  });
+
+  it('lọc ra rỗng chỉ vì suất Giờ vàng đã hết hạn: có câu báo và nút về Tất cả', async () => {
+    mocks.getWishlist.mockResolvedValue([item('b', 'Xà phòng', null, true)]);
+    mocks.fetchFlash.mockResolvedValue([flashFor('sp-b', -1_000)]);
+    renderPage();
+    await screen.findAllByTestId('product-card');
+    await flashLanded();
+    fireEvent.click(chip('Đang giảm'));
+    expect(screen.getByText('Chưa có sản phẩm đang giảm giá trong danh sách yêu thích')).toBeInTheDocument();
+  });
+
+  it('suất hết giờ khi khách còn đang xem: số đếm và lưới tự bỏ món, không cần tải lại', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    mocks.fetchFlash.mockResolvedValue([flashFor('sp-b', 5_000)]);
+    renderPage();
+    await screen.findAllByTestId('product-card');
+    await waitFor(() => expect(chip('Đang giảm').textContent).toBe('Đang giảm(3)'));
+    fireEvent.click(chip('Đang giảm'));
+    expect(names()).toEqual(['Nước rửa chén', 'Xà phòng', 'Dầu gội']);
+    act(() => void vi.advanceTimersByTime(6_000));
+    await waitFor(() => expect(chip('Đang giảm').textContent).toBe('Đang giảm(2)'));
+    expect(names()).toEqual(['Nước rửa chén', 'Dầu gội']);
+  });
+
+  it('chỉ đọc Giờ vàng khi danh sách có món (không gọi khi trống), dùng đúng một truy vấn', async () => {
+    mocks.getWishlist.mockResolvedValue([]);
+    const first = renderPage();
+    expect(await screen.findByText('Chưa có sản phẩm yêu thích')).toBeInTheDocument();
+    expect(mocks.fetchFlash).not.toHaveBeenCalled();
+    first.unmount();
+    mocks.getWishlist.mockResolvedValue(MIXED);
+    renderPage();
+    await screen.findAllByTestId('product-card');
+    await flashLanded();
+    await act(async () => {});
+    expect(mocks.fetchFlash).toHaveBeenCalledTimes(1);
+  });
+
+  it('"Xem tất cả sản phẩm đã lưu" trả focus bàn phím về chip Tất cả (nút vừa bấm biến mất cùng khối rỗng)', async () => {
+    mocks.getWishlist.mockResolvedValue([item('a', 'Nước rửa chén', null, true)]);
+    renderPage();
+    await screen.findAllByTestId('product-card');
+    fireEvent.click(chip('Đang giảm'));
+    const cta = screen.getByRole('button', { name: 'Xem tất cả sản phẩm đã lưu' });
+    cta.focus();
+    fireEvent.click(cta);
+    await waitFor(() => expect(chip('Tất cả')).toHaveFocus());
+    expect(chip('Tất cả')).toHaveAttribute('aria-pressed', 'true');
   });
 });
