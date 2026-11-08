@@ -264,6 +264,7 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'coupon.oneCodeHint': null,
   'coupon.emptyHistoryTitle': null,
   'coupon.emptyFilterTitle': null,
+  'coupon.emptyFilterCta': 14,
   'coupon.loadError': null,
   'coupon.filterAll': 12,
   'coupon.filterDiscount': 12,
