@@ -17,11 +17,14 @@ import { HomeCombos } from './home-combos';
 const card = (id: string): ProductCard => ({
   id, slug: `sp-${id}`, brand: 'Tubu', name: `Sản phẩm ${id}`, thumbnail: null, basePrice: 100_000, salePrice: null, isFeatured: false, inStock: true, repVariationId: `v-${id}`,
 });
-const item = (id: string): BundleItemDTO => ({ productId: id, variationId: `v-${id}`, maxQty: 1, addonPrice: null, inStock: true, product: card(id) });
-const dto = (id: string, a: string, b: string): BundleDTO => ({
-  id, kind: 'BUNDLE_PCT', title: `Combo ${id}`, pct: 10, endAt: new Date(Date.now() + 86_400_000).toISOString(), anchorProductId: null, items: [item(a), item(b)],
+const item = (id: string, over: { inStock?: boolean; slug?: string } = {}): BundleItemDTO => ({
+  productId: id, variationId: `v-${id}`, maxQty: 1, addonPrice: null, inStock: over.inStock ?? true, product: { ...card(id), slug: over.slug ?? `sp-${id}` },
 });
-const views = (...specs: [string, string, string][]) => specs.map(([id, a, b]) => comboView(dto(id, a, b), Date.now())!);
+const dto = (id: string, a: string | BundleItemDTO, b: string | BundleItemDTO): BundleDTO => ({
+  id, kind: 'BUNDLE_PCT', title: `Combo ${id}`, pct: 10, endAt: new Date(Date.now() + 86_400_000).toISOString(), anchorProductId: null,
+  items: [typeof a === 'string' ? item(a) : a, typeof b === 'string' ? item(b) : b],
+});
+const views = (...specs: [string, string | BundleItemDTO, string | BundleItemDTO][]) => specs.map(([id, a, b]) => comboView(dto(id, a, b), Date.now())!);
 
 let mounted: Rendered[] = [];
 const mount = async (ui: React.ReactElement) => {
@@ -31,6 +34,7 @@ const mount = async (ui: React.ReactElement) => {
   return r.container;
 };
 const addAllButtons = (c: HTMLElement) => Array.from(c.querySelectorAll<HTMLButtonElement>('button')).filter((b) => /Thêm cả combo/.test(b.textContent ?? ''));
+const seeItemsButtons = (c: HTMLElement) => Array.from(c.querySelectorAll<HTMLButtonElement>('button')).filter((b) => b.textContent === 'Xem từng món');
 
 beforeEach(() => {
   mocks.addAll.mockReset().mockResolvedValue({});
@@ -79,6 +83,39 @@ describe('HomeCombos (web)', () => {
     click(addAllButtons(c)[0]!);
     await flush();
     expect(c.querySelector('[role="status"]')!.textContent).toBe('Sản phẩm Sản phẩm a đã hết hàng');
+  });
+
+  it('"Xem từng món" của từng thẻ mở món đầu của đúng combo đó', async () => {
+    const c = await mount(<HomeCombos views={views(['c1', 'a', 'b'], ['c2', 'c', 'd'])} />);
+    const buttons = seeItemsButtons(c);
+    expect(buttons).toHaveLength(2);
+    click(buttons[1]!);
+    expect(mocks.push).toHaveBeenCalledTimes(1);
+    expect(mocks.push).toHaveBeenCalledWith('/san-pham/sp-c');
+  });
+
+  it('món đầu hết hàng: thẻ "Combo tạm hết" vẫn có "Xem từng món", mở món còn hàng kế tiếp', async () => {
+    const c = await mount(<HomeCombos views={views(['c1', item('a', { inStock: false }), 'b'], ['c2', 'c', 'd'])} />);
+    expect(c.querySelector('[aria-label="Combo tạm hết: Combo c1"]')!.getAttribute('aria-disabled')).toBe('true');
+    const buttons = seeItemsButtons(c);
+    expect(buttons).toHaveLength(2);
+    click(buttons[0]!);
+    expect(mocks.push).toHaveBeenLastCalledWith('/san-pham/sp-b');
+    click(buttons[1]!);
+    expect(mocks.push).toHaveBeenLastCalledWith('/san-pham/sp-c');
+    expect(mocks.push).toHaveBeenCalledTimes(2);
+  });
+
+  it('mọi món hết hàng: vẫn mở món đầu của bộ thay vì mất nút', async () => {
+    const c = await mount(<HomeCombos views={views(['c1', item('a', { inStock: false }), item('b', { inStock: false })], ['c2', 'c', 'd'])} />);
+    click(seeItemsButtons(c)[0]!);
+    expect(mocks.push).toHaveBeenCalledWith('/san-pham/sp-a');
+  });
+
+  it('slug có ký tự đặc biệt được mã hoá trong đường dẫn', async () => {
+    const c = await mount(<HomeCombos views={views(['c1', item('a', { slug: 'qua tang/1 &' }), 'b'], ['c2', 'c', 'd'])} />);
+    click(seeItemsButtons(c)[0]!);
+    expect(mocks.push).toHaveBeenCalledWith('/san-pham/qua%20tang%2F1%20%26');
   });
 
   it('vùng chạm và tên nút đạt chuẩn', async () => {
