@@ -103,12 +103,18 @@ for (const vp of VIEWPORTS) {
       expect(await noHorizontalScroll(page)).toBe(true);
     });
 
-    test('ví chỉ có mã còn thiếu: chỉ dòng nhắc mở khoá, không có nút', async ({ page, api }) => {
+    test('ví chỉ có mã còn thiếu: chỉ dòng nhắc mở khoá, có đúng một nút "Mua thêm" từ 44px và không tràn ngang', async ({ page, api }) => {
       mockCart(api, { wallet: 'unlock' });
       await openCart(page);
       await expect(page.getByTestId('cart-voucher-unlock')).toBeVisible();
       await expect(page.getByTestId('cart-voucher-apply')).toHaveCount(0);
-      await expect(strip(page).getByRole('button')).toHaveCount(0);
+      const buttons = strip(page).getByRole('button');
+      await expect(buttons).toHaveCount(1);
+      await expect(buttons).toHaveText('Mua thêm');
+      const b = (await page.getByTestId('cart-voucher-unlock-cta').boundingBox())!;
+      expect(b.width, 'chiều rộng nút Mua thêm').toBeGreaterThanOrEqual(44);
+      expect(b.height, 'chiều cao nút Mua thêm').toBeGreaterThanOrEqual(44);
+      expect(b.x + b.width).toBeLessThanOrEqual(vp.width);
       expect(await noHorizontalScroll(page)).toBe(true);
     });
 

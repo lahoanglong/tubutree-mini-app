@@ -1577,3 +1577,35 @@ describe('CartPage: thanh Miễn phí giao hàng và dải gợi ý bù đơn (W
     expect(screen.queryByTestId('freeship-addons')).toBeNull();
   });
 });
+
+describe('CartPage: nút "Mua thêm" ở dòng sắp mở khoá mã (W50A)', () => {
+  // Giỏ mẫu 50.000đ: thiếu 50.000đ là trong tầm CART_VOUCHER_UNLOCK_MAX_GAP nên dòng sắp mở khoá hiện.
+  const GIAM45 = { id: 'c-giam45', code: 'GIAM45', type: 'AMOUNT', value: 45_000, minOrder: 100_000, maxDiscount: null, endAt: '2030-01-01T00:00:00Z' };
+  const SAP_MO = { code: 'GIAM45', eligible: false, discount: 0, reason: 'Đơn tối thiểu 100.000đ để dùng mã này.', shortfall: 50_000 };
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useStorefrontContext.getState().clear();
+  });
+
+  it('còn thiếu để mở mã: dòng nhắc có nút "Mua thêm", bấm thì về trang chủ', async () => {
+    mocks.getCart.mockResolvedValue(summary({}));
+    mocks.getCoupons.mockResolvedValue([GIAM45]);
+    mocks.getCouponPreviews.mockResolvedValue([SAP_MO]);
+    renderPage();
+    const cta = await screen.findByTestId('cart-voucher-unlock-cta');
+    expect(cta.textContent).toBe('Mua thêm');
+    fireEvent.click(cta);
+    expect(mocks.navigate).toHaveBeenCalledTimes(1);
+    expect(mocks.navigate).toHaveBeenCalledWith('/');
+  });
+
+  it('chỉ có mã dùng được, không có dòng sắp mở khoá: dải hiện "Áp dụng ngay" nhưng không có nút "Mua thêm"', async () => {
+    mocks.getCart.mockResolvedValue(summary({}));
+    mocks.getCoupons.mockResolvedValue([GIAM45]);
+    mocks.getCouponPreviews.mockResolvedValue([{ code: 'GIAM45', eligible: true, discount: 45_000 }]);
+    renderPage();
+    await screen.findByTestId('cart-voucher-apply-cta');
+    expect(screen.queryByTestId('cart-voucher-unlock')).toBeNull();
+    expect(screen.queryByTestId('cart-voucher-unlock-cta')).toBeNull();
+  });
+});

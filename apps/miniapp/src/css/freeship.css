@@ -150,6 +150,12 @@
   align-items: stretch;
   gap: var(--space-stack-sm);
 }
+/* Đầu dòng sắp mở khoá khi có nút "Mua thêm": chữ nhắc và nút chung một hàng, nút cao 44px nên căn giữa theo chiều dọc. */
+.tubu-vhint-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-inline-md);
+}
 .tubu-vhint-text {
   flex: 1 1 auto;
   min-width: 0;

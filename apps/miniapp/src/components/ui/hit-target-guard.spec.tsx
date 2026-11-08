@@ -91,6 +91,7 @@ describe('vùng chạm DS v2 >= 44x44', () => {
     ['StoryReelStrip (vòng Story)', () => <StoryReelStrip items={[{ slug: 'a', name: 'A', thumbnail: null, seen: false }, { slug: 'b', name: 'B', thumbnail: null, seen: true }]} onOpen={() => {}} />],
     ['FreeshipAddonRail (nút + Thêm)', () => <FreeshipAddonRail items={[{ slug: 'a', name: 'A', thumbnail: null, price: 49000, variationId: 'v' }]} onAdd={() => {}} />],
     ['CartVoucherHintStrip (nút Áp dụng ngay)', () => <CartVoucherHintStrip hint={{ apply: { code: 'A', label: 'A', saving: 1000, text: 'B', ariaLabel: 'C' }, unlock: null }} onApply={() => {}} />],
+    ['CartVoucherHintStrip (nút Mua thêm)', () => <CartVoucherHintStrip hint={{ apply: null, unlock: { code: 'A', missing: 1000, pct: 90, text: 'B', barAria: 'C' } }} onApply={() => {}} onShopMore={() => {}} />],
     ['ProductTrustStrip (lối xem chính sách)', () => <ProductTrustStrip view={productTrustStrip({ fulfillerKind: 'TUBU', returnWindowDays: 7 })} onOpenPolicy={() => {}} />],
     ['FrequentlyBoughtTogether (dòng tick, nút Thêm)', () => (
       <FrequentlyBoughtTogether

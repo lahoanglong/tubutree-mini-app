@@ -1,17 +1,22 @@
 // @vitest-environment jsdom
+import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
 
 // Giỏ ở khổ điện thoại phải là Mini App (apps/miniapp/src/pages/cart.tsx): chữ, cách đếm, thẻ mã, thanh dính đáy.
 // jsdom không có media query nên chỗ chỉ-điện-thoại kiểm bằng lớp `max-md:`/`md:`.
 
-const state = vi.hoisted(() => ({ cart: null as unknown, coupons: [] as unknown[], update: null as null | ((id: string, q: number) => Promise<unknown>) }));
+const state = vi.hoisted(() => ({
+  cart: null as unknown, coupons: [] as unknown[], previews: [] as unknown[], push: vi.fn(),
+  update: null as null | ((id: string, q: number) => Promise<unknown>),
+}));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: { id: 'u' }, status: 'authenticated', initialized: true }) }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: state.push, replace: vi.fn() }), usePathname: () => '/gio-hang' }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/shop-client')>()),
   getCart: async () => state.cart,
   getMyCoupons: async () => state.coupons,
-  getCouponPreviews: async () => [],
+  getCouponPreviews: async () => state.previews,
   updateCartItem: (id: string, q: number) => state.update!(id, q),
   getCartSelection: async () => {
     throw new Error('chưa mock');
@@ -43,6 +48,8 @@ beforeEach(() => {
   sessionStorage.clear();
   state.cart = cartOf([line({})]);
   state.coupons = [];
+  state.previews = [];
+  state.push.mockReset();
   state.update = null;
 });
 afterEach(() => {
@@ -335,5 +342,40 @@ describe('/gio-hang — khổ điện thoại xếp như Mini App', () => {
     expect(del.className).toMatch(/\bmax-md:top-1\b/);
     // Ảnh bám mép trên như Mini App (ô chọn vẫn giữa dòng), không trôi xuống giữa khi cột chữ cao.
     expect(lineEl.querySelector('a[tabindex="-1"]')!.className).toMatch(/\bmax-md:self-start\b/);
+  });
+});
+
+describe('/gio-hang — nút "Mua thêm" ở dòng sắp mở khoá mã (W50A)', () => {
+  // Giỏ mẫu 578.000đ: thiếu 72.000đ là trong tầm CART_VOUCHER_UNLOCK_MAX_GAP nên dòng sắp mở khoá hiện.
+  const SAP_MO = { code: 'GIAM45', eligible: false, discount: 0, reason: 'Đơn tối thiểu 650.000đ để dùng mã này.', shortfall: 72000 };
+  const GIAM45 = { code: 'GIAM45', type: 'AMOUNT', value: 45000, minOrder: 650000, maxDiscount: null, endAt: '2030-01-01T00:00:00Z' };
+  // Debounce 300ms của trang xem trước mã + dư cho máy CI chậm.
+  const settle = async () => {
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 500));
+    });
+    await flush(6);
+  };
+
+  it('còn thiếu để mở mã: dòng nhắc có nút "Mua thêm", bấm thì về trang chủ', async () => {
+    state.coupons = [GIAM45];
+    state.previews = [SAP_MO];
+    const c = await mount();
+    await settle();
+    const cta = c.querySelector<HTMLElement>('[data-testid="cart-voucher-unlock-cta"]');
+    expect(cta?.textContent).toBe('Mua thêm');
+    click(cta);
+    expect(state.push).toHaveBeenCalledTimes(1);
+    expect(state.push).toHaveBeenCalledWith('/');
+  });
+
+  it('chỉ có mã dùng được, không có dòng sắp mở khoá: dải hiện "Áp dụng ngay" nhưng không có nút "Mua thêm"', async () => {
+    state.coupons = [GIAM45];
+    state.previews = [{ code: 'GIAM45', eligible: true, discount: 45000 }];
+    const c = await mount();
+    await settle();
+    expect(c.querySelector('[data-testid="cart-voucher-apply-cta"]')).not.toBeNull();
+    expect(c.querySelector('[data-testid="cart-voucher-unlock"]')).toBeNull();
+    expect(c.querySelector('[data-testid="cart-voucher-unlock-cta"]')).toBeNull();
   });
 });
