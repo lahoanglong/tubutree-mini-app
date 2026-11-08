@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type * as ZmpUi from 'zmp-ui';
+import type * as VoucherPickerModule from '@tubutree/app-core/commerce/voucher-picker';
 
 const mocks = vi.hoisted(() => ({
   getCoupons: vi.fn(),
@@ -9,7 +10,12 @@ const mocks = vi.hoisted(() => ({
   applyCoupon: vi.fn(),
   removeCoupon: vi.fn(),
   openSnackbar: vi.fn(),
+  hideRows: { on: false },
 }));
+vi.mock('@tubutree/app-core/commerce/voucher-picker', async (importOriginal) => {
+  const actual = await importOriginal<typeof VoucherPickerModule>();
+  return { ...actual, pickerRows: ((...args: Parameters<typeof actual.pickerRows>) => (mocks.hideRows.on ? [] : actual.pickerRows(...args))) as typeof actual.pickerRows };
+});
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<typeof ZmpUi>()),
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
@@ -359,6 +365,18 @@ describe('VoucherSheet — hành vi (C-076 di cư DS v2: giữ nguyên hành vi)
     renderSheet();
     expect(await screen.findByText('Bạn chưa có mã giảm giá trong ví')).toBeInTheDocument();
     expect(screen.getByText('Nhập mã giảm giá ở trên để áp dụng.')).toBeInTheDocument();
+  });
+
+  it('W49A: ví có mã nhưng danh sách dựng ra rỗng → trạng thái trống, không dựng danh sách rỗng', async () => {
+    mocks.hideRows.on = true;
+    try {
+      mocks.getCoupons.mockResolvedValue(COUPONS);
+      renderSheet();
+      expect(await screen.findByText('Bạn chưa có mã giảm giá trong ví')).toBeInTheDocument();
+      expect(screen.queryByRole('list')).toBeNull();
+    } finally {
+      mocks.hideRows.on = false;
+    }
   });
 
   it('tải lỗi → hiện lý do và "Thử lại" tải lại được', async () => {

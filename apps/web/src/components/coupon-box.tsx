@@ -325,20 +325,18 @@ export function CouponBox({
           </p>
         )}
       </div>
-      {(rows.length > 0 || inSheet) && (
-        <p className="mb-2.5 mt-4 text-label font-semibold text-[color:var(--color-text-secondary)]">{fillCopy('coupon.pickMine')}</p>
-      )}
-      {/* Bảng trượt như VoucherSheet của Mini: ví đang tải có khung chờ, ví lỗi có "Thử lại"; panel tại chỗ (từ md) không có cả hai như trước. */}
-      {inSheet && couponsQ.isLoading && (
+      <p className="mb-2.5 mt-4 text-label font-semibold text-[color:var(--color-text-secondary)]">{fillCopy('coupon.pickMine')}</p>
+      {/* Bảng trượt và panel tại chỗ (từ md) cùng một thân như VoucherSheet của Mini: ví đang tải có khung chờ, ví lỗi có "Thử lại", ví trống có lời mời. Panel đóng thì thân ẩn nên không tốn chiều cao. */}
+      {couponsQ.isLoading && (
         <div role="status" aria-label={fillCopy('coupon.pickLoading')} className="flex flex-col gap-2.5">
           <Skeleton height={72} radius="var(--radius-card)" />
           <Skeleton height={72} radius="var(--radius-card)" />
         </div>
       )}
-      {inSheet && couponsQ.isError && (
+      {couponsQ.isError && (
         <ErrorState variant="inline" message={fillCopy('coupon.pickLoadError', { reason: loadErrorText(couponsQ.error) })} onRetry={() => void couponsQ.refetch()} />
       )}
-      {rows.length > 0 && (
+      {!couponsQ.isError && rows.length > 0 && (
         <>
           <VoucherPicker rows={shownRows} onUse={(c) => apply.mutate(c)} onRemove={() => drop.mutate()} busy={busy} pendingCode={pendingCode} />
           {!inSheet && rows.length > VISIBLE_COUPONS && (
@@ -348,7 +346,7 @@ export function CouponBox({
           )}
         </>
       )}
-      {inSheet && couponsQ.isSuccess && rows.length === 0 && (
+      {couponsQ.isSuccess && rows.length === 0 && (
         <div className="mt-2">
           <EmptyState variant="inline" art="leaf" heading={fillCopy('coupon.pickEmptyTitle')} body={fillCopy('coupon.pickEmptyBody')} />
         </div>
