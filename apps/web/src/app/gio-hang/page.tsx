@@ -30,7 +30,9 @@ import { PageHeader } from '@/components/ui/page-header';
 import { ErrorState } from '@/components/ui/error-state';
 import { actionErrorText, loadErrorText } from '@/lib/error-text';
 import { LineItemSkeleton } from '@/components/ui/skeleton';
-import { Badge, Countdown, FreeShippingProgressBar, KeyValueRow, ProductThumb } from '@/components/mini';
+import { Badge, CartVoucherHintStrip, Countdown, FreeShippingProgressBar, KeyValueRow, ProductThumb } from '@/components/mini';
+import { useCartVoucherHint } from '@/lib/use-cart-voucher-hint';
+import type { CouponPreviewParams } from '@/lib/shop-client';
 import { PAGE_WIDE } from '@/lib/page-frame';
 import { cartStockNote, overStockTarget, qtyPickMax } from '@tubutree/app-core/commerce/stock-text';
 import { CartComboBlock } from '@/components/cart-combo-block';
@@ -481,6 +483,13 @@ export default function CartPage() {
                 {!freeship.reached && <FreeshipAddons remaining={freeship.remaining} lines={allItems} />}
               </div>
             )}
+            <CartVoucherHintSection
+              currentCode={cart.couponCode}
+              subtotal={selectedSubtotal}
+              productIds={couponProductIds(selectedItems)}
+              preview={selectedItems.length === 0 ? undefined : { storefrontSlug: ctvSlug, itemIds: allSelected ? undefined : selectedItems.map((it) => it.id) }}
+              previewKey={couponPreviewKey(selectedItems)}
+            />
             <label className="relative mb-3 flex min-h-11 cursor-pointer items-center gap-3 px-1 text-sm font-medium text-stone-900 max-md:mb-1 max-md:min-h-11 max-md:px-0 max-md:font-normal max-md:text-[length:var(--type-body-md-size)]">
               <span className={miniCheckboxWrap}>
                 <input
@@ -680,6 +689,32 @@ export default function CartPage() {
         </StickyActionBar>
       )}
     </Shell>
+  );
+}
+
+/**
+ * Gợi ý mã giảm giá dưới thanh Miễn phí giao hàng. Tách thành component riêng để hook xem trước chạy độc lập với phần còn lại của trang, như `CartVoucherHintSection`
+ * của Mini App. Khung `aria-live` có sẵn từ lúc dựng (chèn khung cùng chữ thì trình đọc màn hình không đọc): áp xong dòng gợi ý biến mất nên "Đã áp dụng mã …" nằm ở đây.
+ */
+function CartVoucherHintSection(props: {
+  currentCode: string | null | undefined;
+  subtotal: number;
+  productIds?: string[] | undefined;
+  preview?: CouponPreviewParams | undefined;
+  previewKey: string;
+}) {
+  const v = useCartVoucherHint(props);
+  return (
+    <>
+      <CartVoucherHintStrip hint={v.hint} onApply={v.apply} applying={v.applying} error={v.error} />
+      <div aria-live="polite">
+        {v.appliedNote && (
+          <p data-testid="cart-voucher-applied" className="tubu-vhint-done">
+            {v.appliedNote}
+          </p>
+        )}
+      </div>
+    </>
   );
 }
 

@@ -532,6 +532,14 @@ export const SHOP_COPY: Record<string, string> = {
   'freeship.addonsTitle': 'Gợi ý mua thêm cho đủ Miễn phí giao hàng',
   'freeship.add': '+ Thêm',
   'freeship.addAria': 'Thêm {name} vào giỏ, {price}',
+  'cart.voucherHint.apply': '🎟️ Bạn có mã giảm giá {amount} đủ điều kiện',
+  'cart.voucherHint.applyCta': 'Áp dụng ngay',
+  'cart.voucherHint.applyAria': 'Áp dụng ngay mã {code}',
+  'cart.voucherHint.applied': 'Đã áp dụng mã {code}',
+  'cart.voucherHint.unlockAmount': '🔥 Mua thêm {price} để mở khoá mã giảm giá {amount}',
+  'cart.voucherHint.unlockPercent': '🔥 Mua thêm {price} để mở khoá mã giảm giá {pct}%',
+  'cart.voucherHint.unlockShip': '🔥 Mua thêm {price} để mở khoá mã Miễn phí giao hàng',
+  'cart.voucherHint.barAria': 'Đã đạt {pct}% đơn tối thiểu của mã giảm giá',
 
   // Dải Mua lại món quen ở Trang chủ (W43A): thẻ ngang, "+ Thêm" một chạm và "Thêm lại tất cả".
   'quickReorder.title': 'Mua lại món quen',

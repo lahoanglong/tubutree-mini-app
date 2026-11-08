@@ -18,6 +18,7 @@ import { ProductStoryShowcase } from './product-story-showcase';
 import { SegmentedTabs } from './segmented-tabs';
 import { StoryReelStrip } from './story-reel-strip';
 import { FreeshipAddonRail } from './freeship-addon-rail';
+import { CartVoucherHintStrip } from './cart-voucher-hint-strip';
 import { FrequentlyBoughtTogether } from './frequently-bought-together';
 import { QuickReorderStrip } from './quick-reorder-strip';
 
@@ -87,6 +88,7 @@ describe('vùng chạm DS v2 >= 44x44', () => {
     ['ProductStoryShowcase (vòng cung, chip bước)', () => <ProductStoryShowcase product={storyProduct} previewConfig={storyConfig} />],
     ['StoryReelStrip (vòng Story)', () => <StoryReelStrip items={[{ slug: 'a', name: 'A', thumbnail: null, seen: false }, { slug: 'b', name: 'B', thumbnail: null, seen: true }]} onOpen={() => {}} />],
     ['FreeshipAddonRail (nút + Thêm)', () => <FreeshipAddonRail items={[{ slug: 'a', name: 'A', thumbnail: null, price: 49000, variationId: 'v' }]} onAdd={() => {}} />],
+    ['CartVoucherHintStrip (nút Áp dụng ngay)', () => <CartVoucherHintStrip hint={{ apply: { code: 'A', label: 'A', saving: 1000, text: 'B', ariaLabel: 'C' }, unlock: null }} onApply={() => {}} />],
     ['FrequentlyBoughtTogether (dòng tick, nút Thêm)', () => (
       <FrequentlyBoughtTogether
         lines={[{ key: 'a', productId: 'p', slug: 'a', variationId: 'a', name: 'A', thumbnail: null, price: 49000, compareAt: null, isCurrent: true }]}

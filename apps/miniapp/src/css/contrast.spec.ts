@@ -90,6 +90,8 @@ describe('cặp màu commerce của gói tokens-a11y đạt 4,5:1 (chữ) — WC
     ['--color-text-inverse', '--color-status-danger-fg'],
     // Thanh Miễn phí giao hàng khi đã đạt (W42A): chữ xanh ngọc trên nền thành công; nhãn "Story" trên viền vòng.
     ['--color-text-success', '--color-status-success-bg'],
+    // Gợi ý mã giảm giá ở Giỏ (W44B): lời báo áp mã không được nằm trên nền canvas của trang.
+    ['--color-text-danger', '--color-bg-canvas'],
   ];
 
   it.each(pairs)('%s trên %s', (fg, bg) => {
