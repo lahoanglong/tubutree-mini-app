@@ -364,6 +364,8 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'reorder.priceDown': 44,
   'reorder.someSkipped': null,
   'reorder.allSkipped': null,
+  'reorder.selectAll': 16,
+  'reorder.savedVsBefore': 44,
   'checkout.addressNeeded': null,
   'checkout.quoteFailed': null,
   'checkout.addressFix': null,

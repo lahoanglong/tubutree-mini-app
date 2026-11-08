@@ -112,6 +112,27 @@ export function reorderPriceAt(p: ReorderPricing, quantity: number, inCart = 0):
   return { unitPrice, notice: p.comparable && p.paidPrice !== null ? priceNotice(p.paidPrice, unitPrice) : null };
 }
 
+/**
+ * Tiền các dòng đang chọn rẻ hơn lúc mua trước: tổng (giá đã trả − giá hiện tại) × số lượng trên các dòng so giá được, chỉ khi dương.
+ * Dòng đắt lên được trừ vào, vì câu "Tiết kiệm" mà tổng phải trả lại cao hơn lần trước là câu sai với khách. Mọi dòng đều rẻ đi thì
+ * số này bằng tổng phần rẻ đi của từng dòng. Dòng không so được (Giờ vàng xen vào, không có giá đã trả) không tính vào cả hai phía.
+ */
+export function reorderSavings(
+  entries: readonly { quantity: number; unitPrice: number; pricing?: Pick<ReorderPricing, 'paidPrice' | 'comparable'> }[],
+): number {
+  let net = 0;
+  for (const e of entries) {
+    const paid = e.pricing?.paidPrice ?? null;
+    if (e.pricing?.comparable && paid !== null) net += (paid - e.unitPrice) * e.quantity;
+  }
+  return Math.max(net, 0);
+}
+
+/** Câu tiết kiệm dưới dòng Tạm tính của sheet; null khi không có gì tiết kiệm. */
+export function reorderSavingsNote(saved: number): string | null {
+  return saved > 0 ? fillCopy('reorder.savedVsBefore', { x: vnd(saved) }) : null;
+}
+
 /** Số lượng từng biến thể đang có trong giỏ (giỏ mỗi biến thể một dòng; cộng dồn nếu API trả trùng). Chưa tải giỏ: bảng rỗng. */
 export function cartUnitsByVariation(items: readonly { variationId: string; quantity: number }[] | undefined): ReadonlyMap<string, number> {
   const units = new Map<string, number>();

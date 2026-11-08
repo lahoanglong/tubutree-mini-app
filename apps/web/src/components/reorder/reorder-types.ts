@@ -1,6 +1,6 @@
 import type { OrderItemView, PurchasedItem } from '@tubutree/app-core/api/orders';
 import {
-  isDiscontinuedItem, purchasedPricing, reorderLineNotices, reorderPriceAt, reorderPricing, type ReorderLineNotice, type ReorderPricing,
+  isDiscontinuedItem, purchasedPricing, reorderLineNotices, reorderPriceAt, reorderPricing, reorderSavings, type ReorderLineNotice, type ReorderPricing,
 } from '@tubutree/app-core/commerce/reorder-notice';
 import { qtyPickMax } from '@tubutree/app-core/commerce/stock-text';
 
@@ -161,4 +161,41 @@ export function selectionTotals(
     const line = lines.get(s.key)!;
     return { units: acc.units + s.quantity, subtotal: acc.subtotal + s.quantity * lineAt(line, s.quantity, unitsSharingCartLine(t, sel, cart, line)).unitPrice };
   }, { units: 0, subtotal: 0 });
+}
+
+/** Dòng còn bán của đơn: chỉ những dòng này chọn được. */
+export function availableLines(t: ReorderTarget): ReorderLine[] {
+  return targetLines(t).filter((l) => l.available);
+}
+
+/** Ô "Chọn tất cả": mọi dòng còn bán đều chọn, chỉ một số (dấu "một phần"), hay không dòng nào (kể cả khi không còn dòng nào bán được). */
+export function availableSelectionState(t: ReorderTarget, sel: Record<string, LineSelection>): 'all' | 'some' | 'none' {
+  const lines = availableLines(t);
+  const picked = lines.filter((l) => sel[l.key]?.checked === true).length;
+  if (picked === 0) return 'none';
+  return picked === lines.length ? 'all' : 'some';
+}
+
+/** Mọi dòng còn bán đang được chọn (dòng hết hàng không tính); không còn dòng nào bán được thì sai. */
+export function allAvailableSelected(t: ReorderTarget, sel: Record<string, LineSelection>): boolean {
+  return availableSelectionState(t, sel) === 'all';
+}
+
+/** Nút "Chọn tất cả": mọi dòng còn bán đang chọn thì bỏ chọn hết, ngược lại chọn hết. Giữ số lượng từng dòng, không đụng dòng hết hàng. */
+export function toggleAllAvailable(t: ReorderTarget, sel: Record<string, LineSelection>): Record<string, LineSelection> {
+  const checked = !allAvailableSelected(t, sel);
+  const next = { ...sel };
+  for (const l of availableLines(t)) next[l.key] = { checked, quantity: sel[l.key]?.quantity ?? l.defaultQuantity };
+  return next;
+}
+
+/** Tiền đang rẻ hơn lúc mua trước của các dòng đang chọn, tính theo giá và số lượng như `selectionTotals`. */
+export function selectionSavings(t: ReorderTarget, sel: Record<string, LineSelection>, cart: ReadonlyMap<string, number> = NO_CART): number {
+  const lines = new Map(targetLines(t).map((l) => [l.key, l]));
+  return reorderSavings(
+    selectedLines(t, sel).map((s) => {
+      const line = lines.get(s.key)!;
+      return { quantity: s.quantity, unitPrice: lineAt(line, s.quantity, unitsSharingCartLine(t, sel, cart, line)).unitPrice, pricing: line.pricing };
+    }),
+  );
 }

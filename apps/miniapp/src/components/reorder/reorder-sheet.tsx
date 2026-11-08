@@ -13,11 +13,15 @@ import { QuantitySelector } from '../ui/quantity-selector';
 import { SR_ONLY } from '../ui/sr-only';
 import { Text } from '../ui/text';
 import {
-  initialSelection, lineAt, selectedLines, selectionTotals, targetLines, unitsSharingCartLine,
+  availableLines, availableSelectionState, initialSelection, lineAt, selectedLines, selectionSavings, selectionTotals, targetLines, toggleAllAvailable,
+  unitsSharingCartLine,
   type LineSelection, type ReorderLine, type ReorderSource, type ReorderTarget,
 } from './reorder-types';
 import { ProductThumb } from '../ui/product-thumb';
-import { reorderSkippedNote, type ReorderLineNotice } from '@tubutree/app-core/commerce/reorder-notice';
+import { reorderSavingsNote, reorderSkippedNote, type ReorderLineNotice } from '@tubutree/app-core/commerce/reorder-notice';
+
+/** Khoảng giữa ô chọn, ảnh và chữ của một hàng (web: gap-2.5): dòng sản phẩm và hàng Chọn tất cả dùng chung để chữ thẳng cột. */
+const ROW_GAP = 10;
 
 export interface ReorderSheetProps {
   target: ReorderTarget | null;
@@ -69,6 +73,9 @@ export function ReorderSheet({ target, source, onClose, navigateToCart }: Reorde
   const lines = view ? targetLines(view) : [];
   const skippedNote = reorderSkippedNote(lines);
   const { units, subtotal } = view ? selectionTotals(view, sel, cart) : { units: 0, subtotal: 0 };
+  const savedNote = view ? reorderSavingsNote(selectionSavings(view, sel, cart)) : null;
+  const availableCount = view ? availableLines(view).length : 0;
+  const selectionState = view ? availableSelectionState(view, sel) : 'none';
 
   // Khoá ĐỒNG BỘ chống chạm đúp: isPending của react-query chỉ cập nhật sau một nhịp notify
   // (setTimeout 0) nên cú chạm thứ hai trong cùng nhịp vẫn thấy isPending=false.
@@ -100,6 +107,11 @@ export function ReorderSheet({ target, source, onClose, navigateToCart }: Reorde
       footer={
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <KeyValueRow label={vi.reorder.subtotal} value={formatVnd(subtotal)} emphasis />
+          {savedNote && (
+            <Text variant="caption" tone="success" as="div" numeric data-testid="reorder-savings-note" style={{ fontWeight: 600 }}>
+              {savedNote}
+            </Text>
+          )}
           <Text variant="caption" tone="tertiary" as="div">
             {vi.reorder.priceNote}
           </Text>
@@ -114,6 +126,30 @@ export function ReorderSheet({ target, source, onClose, navigateToCart }: Reorde
           <Text variant="body-sm" tone="secondary" as="p" data-testid="reorder-skipped-note">
             {skippedNote}
           </Text>
+        )}
+        {view && availableCount >= 2 && (
+          // Cùng nhịp với dòng sản phẩm bên dưới (ô 44px + khoảng 10px) để chữ thẳng hàng với ảnh và với web; chữ nhìn thấy ẩn khỏi trình đọc
+          // màn hình (tên của ô đã nằm trong nhãn ẩn) và vẫn chạm được.
+          <div style={{ display: 'flex', alignItems: 'center', gap: ROW_GAP }}>
+            <Checkbox
+              data-testid="reorder-toggle-all"
+              checked={selectionState === 'all'}
+              indeterminate={selectionState === 'some'}
+              onChange={() => setSel((s) => toggleAllAvailable(view, s))}
+            >
+              <span style={SR_ONLY}>{vi.reorder.selectAll(availableCount)}</span>
+            </Checkbox>
+            <div
+              aria-hidden="true"
+              data-testid="reorder-toggle-all-label"
+              onClick={() => setSel((s) => toggleAllAvailable(view, s))}
+              style={{ flex: 1, alignSelf: 'stretch', display: 'flex', alignItems: 'center' }}
+            >
+              <Text variant="body-sm" tone="primary" style={{ fontWeight: 600 }}>
+                {vi.reorder.selectAll(availableCount)}
+              </Text>
+            </div>
+          </div>
         )}
         {lines.map((line) => (
           <ReorderLineRow
@@ -147,7 +183,7 @@ function ReorderLineRow({
   return (
     <div
       data-testid="reorder-line"
-      style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}
+      style={{ display: 'flex', alignItems: 'flex-start', gap: ROW_GAP }}
     >
       <Checkbox checked={checked} disabled={!line.available} onChange={() => onChange({ checked: !checked, quantity: qty })}>
         <span style={SR_ONLY}>{vi.reorder.selectLine(line.productName)}</span>
@@ -181,7 +217,7 @@ function LineNotices({ notices }: { notices: readonly ReorderLineNotice[] }) {
   return (
     <>
       {notices.map((n) => (
-        <Text key={n.kind} variant="caption" tone={n.tone} as="div" data-notice={n.kind}>
+        <Text key={n.kind} variant="caption" tone={n.tone} as="div" numeric data-notice={n.kind}>
           {n.text}
         </Text>
       ))}

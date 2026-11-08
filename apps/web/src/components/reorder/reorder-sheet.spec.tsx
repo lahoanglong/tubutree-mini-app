@@ -429,3 +429,135 @@ describe('ReorderSheet: giá theo số lượng đã có trong giỏ', () => {
     expect(footer()).toContain('80.000đ');
   });
 });
+
+const CHEAPER = { standing: 50000, flashPrice: null, flashAllowance: null, paidPrice: 60000, comparable: true };
+const MANY: ReorderTarget = {
+  kind: 'order',
+  orderCode: 'TUBU8',
+  lines: [
+    line('a', 'Nước rửa chén'),
+    line('b', 'Dầu gội', { defaultQuantity: 1 }),
+    line('c', 'Xà phòng', { available: false, maxQuantity: 0, notices: [{ kind: 'out', tone: 'danger', text: 'Tạm hết hàng' }] }),
+  ],
+};
+const toggleAll = () => document.querySelector<HTMLInputElement>('[data-testid="reorder-toggle-all"]');
+
+describe('ReorderSheet: Chọn tất cả', () => {
+  it('từ 2 dòng còn hàng: ô "Chọn tất cả (2)" đang tick, nhãn bọc ô nên chạm cả hàng, cao tối thiểu 44px', () => {
+    mount({ target: MANY });
+    const box = toggleAll()!;
+    expect(box).not.toBeNull();
+    expect(box.checked).toBe(true);
+    const label = box.closest('label')!;
+    expect(label.textContent).toBe('Chọn tất cả (2)');
+    expect(label.className).toContain('min-h-11');
+  });
+
+  it('chỉ 1 dòng còn hàng hay mua lại một sản phẩm: không có ô', () => {
+    mount({ target: ORDER });
+    expect(toggleAll()).toBeNull();
+    mounted?.unmount();
+    mount({ target: ITEM });
+    expect(toggleAll()).toBeNull();
+  });
+
+  it('bấm khi tất cả đang chọn → bỏ chọn hết, CTA (0) bị khoá; bấm lại → chọn lại dòng còn hàng, dòng hết hàng vẫn khoá và không chọn', () => {
+    mount({ target: MANY });
+    expect(cta().textContent).toBe('Thêm vào giỏ (3)');
+    click(toggleAll()!);
+    expect(toggleAll()!.checked).toBe(false);
+    expect(checkbox('Nước rửa chén').checked).toBe(false);
+    expect(checkbox('Dầu gội').checked).toBe(false);
+    expect(cta().textContent).toBe('Thêm vào giỏ (0)');
+    expect(cta().disabled).toBe(true);
+    click(toggleAll()!);
+    expect(checkbox('Nước rửa chén').checked).toBe(true);
+    expect(checkbox('Dầu gội').checked).toBe(true);
+    expect(checkbox('Xà phòng').checked).toBe(false);
+    expect(checkbox('Xà phòng').disabled).toBe(true);
+    expect(cta().textContent).toBe('Thêm vào giỏ (3)');
+  });
+
+  it('bỏ tick một dòng → ô hết tick; bấm → chọn đủ lại và giữ số lượng đã chỉnh', () => {
+    mount({ target: MANY });
+    click(plus());
+    click(checkbox('Dầu gội'));
+    expect(toggleAll()!.checked).toBe(false);
+    expect(cta().textContent).toBe('Thêm vào giỏ (3)');
+    click(toggleAll()!);
+    expect(toggleAll()!.checked).toBe(true);
+    expect(cta().textContent).toBe('Thêm vào giỏ (4)');
+  });
+});
+
+describe('ReorderSheet: tiết kiệm so với lúc mua trước và số tabular', () => {
+  const SAVE: ReorderTarget = { kind: 'order', orderCode: 'TUBU9', lines: [line('a', 'Nước rửa chén', { pricing: CHEAPER })] };
+  const note = () => document.querySelector<HTMLElement>('[data-testid="reorder-savings-note"]');
+
+  it('món đang chọn rẻ hơn lúc mua: ngay dưới Tạm tính có câu tiết kiệm, màu xanh, số tabular', () => {
+    mount({ target: SAVE });
+    const n = note()!;
+    expect(n.textContent).toBe('Tiết kiệm 20.000đ so với lúc mua trước');
+    expect(n.className).toContain('text-success-fg');
+    expect(n.className).toContain('tabular-nums');
+    expect(n.previousElementSibling?.textContent).toContain('Tạm tính');
+  });
+
+  it('đổi số lượng cập nhật số tiền; bỏ chọn hết thì ẩn câu', () => {
+    mount({ target: SAVE });
+    click(plus());
+    expect(note()!.textContent).toBe('Tiết kiệm 30.000đ so với lúc mua trước');
+    click(checkbox('Nước rửa chén'));
+    expect(note()).toBeNull();
+  });
+
+  it('giá không rẻ đi (không so được hay đắt lên): không có câu', () => {
+    mount({ target: ORDER });
+    expect(note()).toBeNull();
+    mounted?.unmount();
+    mount({ target: { kind: 'order', orderCode: 'TUBU10', lines: [line('a', 'Nước rửa chén', { pricing: { ...CHEAPER, paidPrice: 40000 } })] } });
+    expect(note()).toBeNull();
+  });
+
+  it('đơn giá và tạm tính đều có tabular-nums để số không nhảy khi đổi số lượng', () => {
+    mount({ target: SAVE });
+    expect(document.querySelector('[data-testid="reorder-line"] p.font-bold')!.className).toContain('tabular-nums');
+    const subtotal = Array.from(document.querySelectorAll('[data-sheet-footer] span')).find((s) => s.textContent === '100.000đ')!;
+    expect(subtotal.className).toContain('tabular-nums');
+  });
+});
+
+describe('ReorderSheet: dấu "một phần", câu giá có số tabular, tiết kiệm theo tổng', () => {
+  const DEARER = { standing: 50000, flashPrice: null, flashAllowance: null, paidPrice: 40000, comparable: true };
+  const MIXED: ReorderTarget = {
+    kind: 'order',
+    orderCode: 'TUBU11',
+    lines: [line('a', 'Nước rửa chén', { pricing: CHEAPER }), line('b', 'Dầu gội', { defaultQuantity: 1, pricing: DEARER })],
+  };
+  const note = () => document.querySelector<HTMLElement>('[data-testid="reorder-savings-note"]');
+
+  it('Chọn tất cả ở trạng thái một phần khi chỉ chọn một số dòng còn hàng; chọn đủ hay bỏ hết thì bỏ dấu', () => {
+    mount({ target: MANY });
+    expect(toggleAll()!.indeterminate).toBe(false);
+    click(checkbox('Dầu gội'));
+    expect(toggleAll()!.indeterminate).toBe(true);
+    expect(toggleAll()!.checked).toBe(false);
+    click(checkbox('Nước rửa chén'));
+    expect(toggleAll()!.indeterminate).toBe(false);
+    click(toggleAll()!);
+    expect(toggleAll()!.indeterminate).toBe(false);
+    expect(toggleAll()!.checked).toBe(true);
+  });
+
+  it('câu giá đổi ("Giá giảm so với đơn trước (…)") có tabular-nums như các số tiền khác', () => {
+    mount({ target: { kind: 'order', orderCode: 'TUBU12', lines: [line('a', 'Nước rửa chén', { pricing: CHEAPER })] } });
+    expect(document.querySelector('[data-notice="priceDown"]')!.className).toContain('tabular-nums');
+  });
+
+  it('một dòng rẻ đi, một dòng đắt lên: tiết kiệm là phần tổng rẻ hơn lần trước; tổng không rẻ hơn thì không có câu', () => {
+    mount({ target: MIXED });
+    expect(note()!.textContent).toBe('Tiết kiệm 10.000đ so với lúc mua trước');
+    click(document.querySelectorAll<HTMLButtonElement>('button[aria-label^="Tăng số lượng"]')[1]!);
+    expect(note()).toBeNull();
+  });
+});
