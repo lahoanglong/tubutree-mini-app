@@ -1,11 +1,12 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
+import { Check } from 'lucide-react';
 import { formatRating } from '@tubutree/app-core/commerce/card-meta';
 import { pickQuickReviews } from '@tubutree/app-core/commerce/pdp-view';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { fetchProductReviews } from '@/lib/reviews-client';
-import { Stars } from './product-reviews';
+import { Stars, mediaSrc } from './product-reviews';
 import { pdpBand, pdpSectionTitle } from './pdp-sections';
 
 /**
@@ -27,14 +28,14 @@ export function PdpQuickReviews({ slug }: { slug: string }) {
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <h2 className={pdpSectionTitle}>{fillCopy('pdp.reviews')}</h2>
           <Stars value={average} small />
-          <span className="text-xs text-stone-600">
+          <span className="text-xs tabular-nums text-stone-600">
             {formatRating(average)} · {count}
           </span>
         </div>
         <button
           type="button"
           onClick={() => document.getElementById('danh-gia')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-          className="min-h-11 whitespace-nowrap text-xs font-semibold text-[var(--color-text-brand)]"
+          className="min-h-11 whitespace-nowrap text-xs font-semibold tabular-nums text-[var(--color-text-brand)]"
         >
           {fillCopy('pdp.reviewsAll', { n: count })}
         </button>
@@ -42,11 +43,28 @@ export function PdpQuickReviews({ slug }: { slug: string }) {
       <ul className="mt-1 flex flex-col gap-3">
         {picked.map((r) => (
           <li key={r.id} data-testid="quick-review" className="flex flex-col gap-1">
-            <div className="flex items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
               <Stars value={r.rating} small spoken="score" />
               <span className="text-xs text-stone-500">{r.author}</span>
+              {r.verifiedPurchase && (
+                <span
+                  data-testid="quick-review-verified"
+                  className="inline-flex items-center gap-0.5 rounded-full bg-success-bg px-2 py-0.5 text-xs font-medium text-success-fg"
+                >
+                  <Check className="h-3 w-3" aria-hidden="true" />
+                  Đã mua
+                </span>
+              )}
             </div>
             <p className="line-clamp-3 text-sm text-stone-800">{r.comment}</p>
+            {r.images.length > 0 && (
+              <div data-testid="quick-review-photos" className="mt-0.5 flex gap-1.5">
+                {r.images.slice(0, 3).map((src, i) => (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img key={`${src}-${i}`} src={mediaSrc(src)} alt="" loading="lazy" className="h-12 w-12 flex-none rounded-control object-cover" />
+                ))}
+              </div>
+            )}
           </li>
         ))}
       </ul>

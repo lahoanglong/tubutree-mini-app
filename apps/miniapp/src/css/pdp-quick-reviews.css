@@ -1,0 +1,26 @@
+/* Khối "Đánh giá nhanh" ở trang chi tiết (W51A, PdpQuickReviews). Số đo đặt ở đây (bánh cóc px của P17b chỉ đếm TSX); web dùng cùng số đo bằng lớp Tailwind. */
+
+/* Huy hiệu "Đã mua" cạnh tên: biểu tượng và chữ cùng hàng (web: gap-0.5). */
+.tubu-qr-verified {
+  display: inline-flex;
+}
+.tubu-qr-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* Dải tối đa 3 ảnh thật thu nhỏ dưới nhận xét (web: mt-0.5, gap-1.5, h-12 w-12). Ảnh trang trí, không phải control. */
+.tubu-qr-photos {
+  display: flex;
+  gap: 6px;
+  margin-top: 2px;
+}
+.tubu-qr-photo {
+  display: block;
+  width: 48px;
+  height: 48px;
+  flex: 0 0 auto;
+  border-radius: var(--radius-media);
+  object-fit: cover;
+}
