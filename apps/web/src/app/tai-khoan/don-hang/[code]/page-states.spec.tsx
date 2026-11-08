@@ -209,8 +209,13 @@ describe('chi tiết đơn web — nút theo trạng thái (gói hl)', () => {
     const current = list.querySelectorAll('[aria-current="step"]');
     expect(current).toHaveLength(1);
     expect(current[0]!.textContent).toContain('Đang giao');
-    const events = Array.from(list.querySelectorAll('ul[aria-label="Mốc vận chuyển"] > li')).map((li) => li.querySelector('div')?.textContent);
-    expect(events).toEqual(['Đang giao hàng', 'Đang vận chuyển', 'Đã lấy hàng', 'Chờ lấy hàng']);
+    const events = () => Array.from(list.querySelectorAll('ul[aria-label="Mốc vận chuyển"] > li')).map((li) => li.querySelector('div')?.textContent);
+    expect(events()).toEqual(['Đang giao hàng', 'Đang vận chuyển', 'Đã lấy hàng']);
+    const toggle = list.querySelector('[data-testid="track-events-toggle"]');
+    expect(toggle?.textContent).toBe('Xem thêm 1 mốc vận chuyển');
+    click(toggle);
+    await flush();
+    expect(events()).toEqual(['Đang giao hàng', 'Đang vận chuyển', 'Đã lấy hàng', 'Chờ lấy hàng']);
     expect(container.textContent).toContain('Giao Hàng Nhanh');
     click(Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Chép mã') ?? null);
     await flush();

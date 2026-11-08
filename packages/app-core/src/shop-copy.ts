@@ -195,6 +195,9 @@ export const SHOP_COPY: Record<string, string> = {
   'order.shipping.copy': 'Chép mã',
   'order.shipping.track': 'Tra cứu hành trình',
   'order.shipping.history': 'Hành trình vận chuyển',
+  'order.shipping.eventsMore': 'Xem thêm {n} mốc vận chuyển',
+  'order.shipping.eventsLess': 'Thu gọn mốc vận chuyển',
+  'order.shipping.copyAria': 'Sao chép mã vận đơn {code}',
 
   // Gợi ý hôm nay
   'suggest.title': 'Gợi ý hôm nay',

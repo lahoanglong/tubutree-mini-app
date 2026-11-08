@@ -4,9 +4,10 @@
 import { useState } from 'react';
 import { ExternalLink } from 'lucide-react';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
-import { shortDateTime, type TrackEvent } from '@tubutree/app-core/commerce/order-tracking';
+import type { TrackEvent } from '@tubutree/app-core/commerce/order-tracking';
 import { Text } from '@/components/mini/text';
 import { Button } from '@/components/mini/button';
+import { TrackEventsList } from './track-events-list';
 
 export interface OrderShippingProps {
   partner?: string | null;
@@ -64,7 +65,7 @@ export function OrderShipping({ partner, code, status, events = [], trackingHref
               )}
             </div>
           </div>
-          <Button variant="secondary" onPress={() => void copy()} style={{ flex: '0 0 auto' }}>
+          <Button variant="secondary" onPress={() => void copy()} aria-label={fillCopy('order.shipping.copyAria', { code })} style={{ flex: '0 0 auto' }}>
             {fillCopy('order.shipping.copy')}
           </Button>
         </div>
@@ -85,22 +86,7 @@ export function OrderShipping({ partner, code, status, events = [], trackingHref
           <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
         </a>
       )}
-      {events.length > 0 && (
-        <ul aria-label="Mốc vận chuyển" style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 'var(--space-stack-sm)' }}>
-          {events.map((ev, i) => (
-            <li key={`${ev.at ?? ''}-${i}`}>
-              <Text variant="caption" tone={ev.latest ? 'primary' : 'secondary'} as="div" style={{ fontWeight: ev.latest ? 600 : 400 }}>
-                {ev.label}
-              </Text>
-              {ev.at && (
-                <Text variant="caption" tone="tertiary" as="div" numeric>
-                  {shortDateTime(ev.at)}
-                </Text>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
+      <TrackEventsList events={events} />
     </section>
   );
 }

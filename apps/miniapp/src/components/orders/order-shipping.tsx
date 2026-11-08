@@ -1,8 +1,9 @@
 import { useSnackbar } from 'zmp-ui';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
-import { shortDateTime, type TrackEvent } from '@tubutree/app-core/commerce/order-tracking';
+import type { TrackEvent } from '@tubutree/app-core/commerce/order-tracking';
 import { Text } from '../ui/text';
 import { Button } from '../ui/button';
+import { TrackEventsList } from './track-events-list';
 import { copyText } from '../../utils/clipboard';
 import { haptic } from '../../utils/haptic';
 
@@ -50,7 +51,7 @@ export function OrderShipping({ partner, code, status, events = [] }: OrderShipp
               {code}
             </Text>
           </div>
-          <Button variant="secondary" onPress={copy} style={{ flex: '0 0 auto' }}>
+          <Button variant="secondary" onPress={copy} aria-label={fillCopy('order.shipping.copyAria', { code })} style={{ flex: '0 0 auto' }}>
             {fillCopy('order.shipping.copy')}
           </Button>
         </div>
@@ -60,22 +61,7 @@ export function OrderShipping({ partner, code, status, events = [] }: OrderShipp
           {status}
         </Text>
       )}
-      {events.length > 0 && (
-        <ul aria-label="Mốc vận chuyển" style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 'var(--space-stack-sm)' }}>
-          {events.map((ev, i) => (
-            <li key={`${ev.at ?? ''}-${i}`}>
-              <Text variant="caption" tone={ev.latest ? 'primary' : 'secondary'} as="div" style={{ fontWeight: ev.latest ? 600 : 400 }}>
-                {ev.label}
-              </Text>
-              {ev.at && (
-                <Text variant="caption" tone="tertiary" as="div" numeric>
-                  {shortDateTime(ev.at)}
-                </Text>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
+      <TrackEventsList events={events} />
     </section>
   );
 }

@@ -28,7 +28,7 @@ test.describe('Mini App theo dõi đơn 375', () => {
     const w = await mockWorld(api, page, 'miniapp', state, Date.now());
     await openState(page, 'miniapp', 375, w.order.code);
     await state.ready(page);
-    await page.getByTestId('order-shipping').getByRole('button', { name: 'Chép mã' }).click();
+    await page.getByTestId('order-shipping').getByRole('button', { name: 'Sao chép mã vận đơn GHN6789012345' }).click();
     await expect(page.getByText('Đã sao chép mã vận đơn')).toBeVisible();
     expect(await page.evaluate(() => (window as unknown as { __copied?: string }).__copied)).toBe('GHN6789012345');
   });

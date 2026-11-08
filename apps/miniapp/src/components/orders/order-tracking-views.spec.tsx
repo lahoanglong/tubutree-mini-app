@@ -63,12 +63,94 @@ describe('OrderTrack', () => {
     expect(upcoming.length).toBe(3);
     for (const li of Array.from(upcoming)) expect(li.textContent).not.toMatch(/\d\d:\d\d/);
   });
+
+  describe('mốc vận chuyển dài (W50B)', () => {
+    const hops = [
+      { at: '2026-11-04T02:00:00Z', status: 'Chờ lấy hàng' },
+      { at: '2026-11-04T05:00:00Z', status: 'Đã lấy hàng' },
+      { at: '2026-11-04T09:00:00Z', status: 'Nhập kho trung chuyển' },
+      { at: '2026-11-05T01:00:00Z', status: 'Đang vận chuyển' },
+      { at: '2026-11-05T03:00:00Z', status: 'Đang giao hàng' },
+    ];
+    const labels = () => within(screen.getByRole('list', { name: 'Mốc vận chuyển' })).getAllByRole('listitem').map((i) => i.querySelector('div')?.textContent);
+
+    it('đúng 3 mốc hoặc ít hơn: hiện đủ, không có nút mở rộng', () => {
+      for (const n of [1, 2, 3]) {
+        const track = orderTrack(order({ shippingHistory: hops.slice(5 - n) }))!;
+        const { unmount } = render(<OrderTrack track={track} now={NOW} />);
+        expect(labels()).toHaveLength(n);
+        expect(screen.queryByTestId('track-events-toggle')).toBeNull();
+        unmount();
+      }
+    });
+
+    it('5 mốc: mặc định 3 mốc mới nhất, nút "Xem thêm 2 mốc vận chuyển" mở đủ 5 rồi thu về 3', () => {
+      const track = orderTrack(order({ shippingHistory: hops }))!;
+      render(<OrderTrack track={track} now={NOW} />);
+      expect(labels()).toEqual(['Đang giao hàng', 'Đang vận chuyển', 'Nhập kho trung chuyển']);
+      const toggle = screen.getByTestId('track-events-toggle');
+      expect(toggle).toHaveTextContent('Xem thêm 2 mốc vận chuyển');
+      expect(toggle).toHaveAttribute('aria-expanded', 'false');
+      expect(toggle).toHaveAttribute('aria-controls', screen.getByRole('list', { name: 'Mốc vận chuyển' }).id);
+      expect(toggle.style.fontVariantNumeric).toBe('tabular-nums');
+      expect(toggle.className).toContain('min-h-11');
+      fireEvent.click(toggle);
+      expect(labels()).toEqual(['Đang giao hàng', 'Đang vận chuyển', 'Nhập kho trung chuyển', 'Đã lấy hàng', 'Chờ lấy hàng']);
+      expect(screen.getByTestId('track-events-toggle')).toHaveTextContent('Thu gọn mốc vận chuyển');
+      expect(screen.getByTestId('track-events-toggle')).toHaveAttribute('aria-expanded', 'true');
+      fireEvent.click(screen.getByTestId('track-events-toggle'));
+      expect(labels()).toHaveLength(3);
+      expect(screen.getByTestId('track-events-toggle')).toHaveTextContent('Xem thêm 2 mốc vận chuyển');
+      expect(screen.getByTestId('track-events-toggle')).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    it('mốc mới nhất giữ data-latest khi thu gọn và mở', () => {
+      const track = orderTrack(order({ shippingHistory: hops }))!;
+      render(<OrderTrack track={track} now={NOW} />);
+      const latest = () => within(screen.getByRole('list', { name: 'Mốc vận chuyển' })).getAllByRole('listitem').filter((i) => i.getAttribute('data-latest') === 'true').map((i) => i.querySelector('div')?.textContent);
+      expect(latest()).toEqual(['Đang giao hàng']);
+      fireEvent.click(screen.getByTestId('track-events-toggle'));
+      expect(latest()).toEqual(['Đang giao hàng']);
+    });
+  });
 });
 
 describe('OrderShipping', () => {
+  const trail = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({ label: `Mốc ${n - i}`, at: `2026-11-0${Math.min(9, n - i)}T02:00:00Z`, latest: i === 0 }));
+  const items = () => within(screen.getByRole('list', { name: 'Mốc vận chuyển' })).getAllByRole('listitem');
+
   it('không có hãng, mã, mốc nào thì không dựng gì', () => {
     const { container } = render(<OrderShipping />);
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it('nút chép mã có tên truy cập nêu mã vận đơn, chữ hiện vẫn là "Chép mã"', () => {
+    render(<OrderShipping code="GHN123" />);
+    const button = screen.getByRole('button', { name: 'Sao chép mã vận đơn GHN123' });
+    expect(button).toHaveTextContent('Chép mã');
+  });
+
+  it('mốc mới nhất có data-latest="true", các mốc còn lại không có', () => {
+    render(<OrderShipping code="GHN123" events={trail(3)} />);
+    expect(items().map((li) => li.getAttribute('data-latest'))).toEqual(['true', null, null]);
+  });
+
+  it('5 mốc: mặc định 3 mốc đầu, nút "Xem thêm 2 mốc vận chuyển" mở đủ 5 rồi thu về 3; 3 mốc thì không có nút', () => {
+    const { unmount } = render(<OrderShipping code="GHN123" events={trail(5)} />);
+    expect(items()).toHaveLength(3);
+    expect(screen.getByTestId('track-events-toggle')).toHaveTextContent('Xem thêm 2 mốc vận chuyển');
+    expect(screen.getByTestId('track-events-toggle')).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(screen.getByTestId('track-events-toggle'));
+    expect(items()).toHaveLength(5);
+    expect(screen.getByTestId('track-events-toggle')).toHaveTextContent('Thu gọn mốc vận chuyển');
+    expect(screen.getByTestId('track-events-toggle')).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.click(screen.getByTestId('track-events-toggle'));
+    expect(items()).toHaveLength(3);
+    unmount();
+    render(<OrderShipping code="GHN123" events={trail(3)} />);
+    expect(screen.queryByTestId('track-events-toggle')).toBeNull();
+    expect(items()).toHaveLength(3);
   });
 
   it('hiện hãng và mã; "Chép mã" chép đúng mã và báo thành công, lỗi thì nhắc chép tay', async () => {
@@ -77,10 +159,10 @@ describe('OrderShipping', () => {
     expect(screen.getByText('Giao Hàng Nhanh')).toBeInTheDocument();
     expect(screen.getByText('GHN123')).toBeInTheDocument();
     expect(screen.getByText('Đang giao hàng')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Chép mã' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sao chép mã vận đơn GHN123' }));
     expect(mocks.copyText).toHaveBeenCalledWith('GHN123');
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã sao chép mã vận đơn', type: 'success' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Chép mã' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sao chép mã vận đơn GHN123' }));
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenLastCalledWith({ text: 'Không sao chép được — hãy chép mã thủ công.', type: 'error' }));
   });
 

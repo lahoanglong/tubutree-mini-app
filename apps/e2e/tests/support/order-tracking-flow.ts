@@ -26,11 +26,23 @@ export async function expectShippingTracking(page: Page): Promise<void> {
   expect(await rows.count()).toBeGreaterThanOrEqual(3);
   await expect(rows.first()).toHaveAttribute('data-latest', 'true');
   await expect(rows.last()).not.toHaveAttribute('data-latest', 'true');
+  // Hãng ghi nhiều hơn 3 mốc: mặc định chỉ 3 mốc mới nhất; nút mở rộng cao tối thiểu 44px mở đủ rồi thu lại.
+  await expect(rows).toHaveCount(3);
+  const toggle = track.getByTestId('track-events-toggle');
+  await expect(toggle).toHaveText(/^Xem thêm \d+ mốc vận chuyển$/);
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  expect((await toggle.boundingBox())!.height).toBeGreaterThanOrEqual(43.5);
+  await toggle.click();
+  expect(await rows.count()).toBeGreaterThan(3);
+  await expect(toggle).toHaveText('Thu gọn mốc vận chuyển');
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await toggle.click();
+  await expect(rows).toHaveCount(3);
 
   const shipping = page.getByTestId('order-shipping');
   await expect(shipping).toContainText('Giao Hàng Nhanh');
   await expect(shipping).toContainText('GHN6789012345');
-  await expect(shipping.getByRole('button', { name: 'Chép mã' })).toBeVisible();
+  await expect(shipping.getByRole('button', { name: 'Sao chép mã vận đơn GHN6789012345' })).toBeVisible();
 
   await expect(shown(page, 'Liên hệ Tubu')).toHaveCount(1);
   for (const forbidden of ['Huỷ đơn', 'Thanh toán ngay', 'Mua lại đơn này']) {

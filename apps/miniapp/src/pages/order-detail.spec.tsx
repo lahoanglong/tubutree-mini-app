@@ -813,7 +813,7 @@ describe('OrderDetailPage — không mở trang ngoài (Zalo 4.1)', () => {
     expect(screen.getAllByText('Đang giao hàng').length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByRole('button', { name: 'Tra cứu hành trình' })).toBeNull();
     expect(screen.queryAllByRole('link').filter((l) => !/^Xem sản phẩm/.test(l.getAttribute('aria-label') ?? ''))).toHaveLength(0);
-    fireEvent.click(screen.getByRole('button', { name: 'Chép mã' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sao chép mã vận đơn GHN001' }));
     await waitFor(() => expect(mocks.copyText).toHaveBeenCalledWith('GHN001'));
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã sao chép mã vận đơn', type: 'success' }));
   });
