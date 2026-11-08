@@ -39,7 +39,7 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   },
 }));
 
-import { useQuery } from '@tanstack/react-query';
+import { QueryClient, useQuery } from '@tanstack/react-query';
 import { cartKey } from '@/lib/cart-key';
 import { MD_DOWN } from '@/lib/use-media-query';
 import { syncServerClock } from '@tubutree/app-core/server-clock';
@@ -1374,6 +1374,107 @@ describe('CouponBox — dạng bảng trượt (điện thoại, trong thanh dí
     expect(card.contains(alerts[0]!)).toBe(true);
     const mine = byText(still, 'p', 'Mã giảm giá của bạn')!;
     expect(alerts[0]!.compareDocumentPosition(mine) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
+describe('CouponBox — panel tại chỗ (từ md): ví tải, lỗi, trống giống bảng trượt và VoucherSheet của Mini (W49A)', () => {
+  const desktop = () => {
+    window.matchMedia = ((q: string) => ({
+      matches: false,
+      media: q,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    })) as unknown as typeof window.matchMedia;
+  };
+  beforeEach(() => desktop());
+  const open = async (box: HTMLElement) => {
+    click(box.querySelector('button[aria-expanded]'));
+    await flush(3);
+  };
+  const panel = (box: HTMLElement) => box.querySelector<HTMLElement>('#coupon-panel')!;
+
+  it('ví đang tải: mở panel thấy tiêu đề mục và khung chờ, chưa hiện "chưa có mã"; tải xong thì khung chờ biến mất', async () => {
+    let release!: () => void;
+    state.couponsGate = new Promise<void>((r) => (release = r));
+    state.coupons = [c('WELCOME30')];
+    const box = await mount();
+    expect(panel(box).hidden).toBe(true);
+    await open(box);
+    expect(panel(box).hidden).toBe(false);
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(panel(box).textContent).toContain('Mã giảm giá của bạn');
+    const wait = panel(box).querySelector('[role="status"]')!;
+    expect(wait.getAttribute('aria-label')).toBe('Đang tải danh sách mã');
+    expect(wait.querySelectorAll('.tubu-skeleton')).toHaveLength(2);
+    expect(panel(box).textContent).not.toContain('Bạn chưa có mã giảm giá trong ví');
+    release();
+    await flush(6);
+    expect(panel(box).querySelector('[role="status"]')).toBeNull();
+    expect(card(box, 'WELCOME30')).not.toBeNull();
+  });
+
+  it('ví lỗi: mở panel thấy tiêu đề mục, lý do và "Thử lại" tải lại được, không hiện "chưa có mã"', async () => {
+    state.couponsError = new Error('Mạng lỗi');
+    const box = await mount();
+    await open(box);
+    await flush(6);
+    expect(panel(box).textContent).toContain('Mã giảm giá của bạn');
+    expect(panel(box).querySelector('[data-testid="error-message"]')!.textContent).toMatch(/^Không thể tải danh sách mã giảm giá: /);
+    expect(panel(box).textContent).not.toContain('Bạn chưa có mã giảm giá trong ví');
+    state.couponsError = null;
+    state.coupons = [c('WELCOME30')];
+    click(byText(panel(box), 'button', 'Thử lại'));
+    await flush(8);
+    expect(card(box, 'WELCOME30')).not.toBeNull();
+    expect(panel(box).querySelector('[data-testid="error-message"]')).toBeNull();
+  });
+
+  it('tải lại lỗi khi đã có danh sách cũ: chỉ hiện lỗi kèm "Thử lại" như VoucherSheet, không hiện danh sách dưới lỗi', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    state.coupons = [c('WELCOME30')];
+    const r = render(<CouponBox currentCode={null} subtotal={300000} shippingFee={null} />, client);
+    mounted.push(r);
+    await flush(6);
+    await open(r.container);
+    expect(card(r.container, 'WELCOME30')).not.toBeNull();
+    state.couponsError = new Error('Mạng lỗi');
+    await act(async () => {
+      await client.refetchQueries({ queryKey: ['my-coupons'] });
+    });
+    await flush(4);
+    expect(byText(panel(r.container), 'button', 'Thử lại')).not.toBeNull();
+    expect(panel(r.container).querySelector('ul')).toBeNull();
+    expect(r.container.querySelector('button[aria-label$="mã WELCOME30"]')).toBeNull();
+  });
+
+  it('ví chưa có mã: mở panel thấy tiêu đề mục và lời mời nhập mã, không có danh sách rỗng', async () => {
+    const box = await mount();
+    await open(box);
+    expect(panel(box).textContent).toContain('Mã giảm giá của bạn');
+    expect(panel(box).textContent).toContain('Bạn chưa có mã giảm giá trong ví');
+    expect(panel(box).textContent).toContain('Nhập mã giảm giá ở trên để áp dụng.');
+    expect(panel(box).querySelector('ul')).toBeNull();
+    expect(byText(panel(box), 'p', 'Mỗi đơn dùng 1 mã')).not.toBeNull();
+  });
+
+  it('panel đóng thì thân (tiêu đề, trạng thái) nằm trong khung ẩn, không tốn chiều cao', async () => {
+    state.couponsError = new Error('Mạng lỗi');
+    const box = await mount();
+    expect(panel(box).hidden).toBe(true);
+    expect(panel(box).contains(byText(panel(box), 'p', 'Mã giảm giá của bạn'))).toBe(true);
+  });
+
+  it('ví có mã: tiêu đề mục hiện đúng một lần, không khung chờ, không lời trống', async () => {
+    state.coupons = [c('WELCOME30')];
+    const box = await mount();
+    await open(box);
+    expect(Array.from(panel(box).querySelectorAll('p')).filter((p) => p.textContent === 'Mã giảm giá của bạn')).toHaveLength(1);
+    expect(panel(box).querySelector('[role="status"]')).toBeNull();
+    expect(panel(box).textContent).not.toContain('Bạn chưa có mã giảm giá trong ví');
   });
 });
 
