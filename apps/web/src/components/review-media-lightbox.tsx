@@ -5,7 +5,6 @@ import { createPortal } from 'react-dom';
 import { Check, ChevronLeft, ChevronRight, ShoppingCart, Star, X } from 'lucide-react';
 import { lightboxCounter, lightboxStep, swipeDirection, type ReviewMediaItem } from '@tubutree/app-core/commerce/review-media';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
-import { focusableIn } from '@/lib/use-modal-a11y';
 
 export interface ReviewMediaLightboxProps {
   open: boolean;
@@ -29,9 +28,20 @@ const ICON_BTN =
 let scrollLocks = 0;
 let savedOverflow = '';
 
+// Riêng cho lightbox (không dùng `focusableIn` chung của sheet): thêm `video[controls]` để bàn phím tới được trình phát, khớp bản Mini.
+const FOCUSABLE =
+  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), video[controls], [tabindex]:not([tabindex="-1"])';
+
+/** Phần tử Tab tới được trong `panel`, theo thứ tự DOM; bỏ phần bị `hidden`/`inert` và phần có `tabindex` âm. */
+function focusableIn(panel: HTMLElement): HTMLElement[] {
+  return Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
+    (el) => !el.closest('[hidden],[inert]') && !(Number(el.getAttribute('tabindex') ?? 0) < 0),
+  );
+}
+
 /**
  * Xem ảnh/video đánh giá toàn màn hình (Mini App có bản cùng tên): nền đen 90% làm mờ phía sau, mở 220ms theo đường cong drawer
- * (`.review-lightbox`, giảm chuyển động thì hiện ngay). Chuyển tệp bằng nút Trước/Sau (44×44), phím ←/→, vuốt ngang; Esc hoặc × để đóng.
+ * (`.review-lightbox`, giảm chuyển động thì hiện ngay). Chuyển tệp bằng nút Trước/Sau (44×44), phím ←/→/Home/End, vuốt ngang; Esc hoặc × để đóng.
  * Chân hiện người mua, số sao, nhãn "Đã mua hàng", nhận xét. Không dựng khi đóng; đóng thì trả focus về nút đã mở.
  */
 export function ReviewMediaLightbox({ open, onClose, items, index, onIndexChange, author, rating, verifiedPurchase, comment, resolveSrc, onAdd }: ReviewMediaLightboxProps) {
@@ -39,8 +49,9 @@ export function ReviewMediaLightbox({ open, onClose, items, index, onIndexChange
   const panelRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const swipeStart = useRef<{ x: number; y: number } | null>(null);
-  const live = useRef({ onClose, onIndexChange, count: items.length, index });
-  live.current = { onClose, onIndexChange, count: items.length, index };
+  const at = items.length > 0 ? Math.min(Math.max(index, 0), items.length - 1) : 0;
+  const live = useRef({ onClose, onIndexChange, count: items.length, index: at });
+  live.current = { onClose, onIndexChange, count: items.length, index: at };
 
   useEffect(() => {
     if (!open) return;
@@ -54,27 +65,39 @@ export function ReviewMediaLightbox({ open, onClose, items, index, onIndexChange
       // Hộp modal khác mở sau (portal cuối DOM) giữ bàn phím.
       const modals = document.querySelectorAll('[aria-modal="true"]');
       if (modals[modals.length - 1] !== panel) return;
+      // Phím mũi tên/Home/End của thanh tua video thuộc về trình phát, không chuyển tệp.
+      const browse = live.current.count > 1 && !(e.target instanceof HTMLVideoElement);
       if (e.key === 'Escape' && !e.isComposing) {
         e.stopPropagation();
         live.current.onClose();
-      } else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && live.current.count > 1 && !(e.target instanceof HTMLVideoElement)) {
+      } else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && browse) {
         e.preventDefault();
         live.current.onIndexChange(lightboxStep(live.current.index, live.current.count, e.key === 'ArrowRight' ? 1 : -1));
+      } else if ((e.key === 'Home' || e.key === 'End') && browse) {
+        e.preventDefault();
+        const target = e.key === 'Home' ? 0 : live.current.count - 1;
+        if (target !== live.current.index) live.current.onIndexChange(target);
       } else if (e.key === 'Tab') {
         const list = focusableIn(panel);
         if (list.length === 0) {
           e.preventDefault();
           return;
         }
-        const first = list[0]!;
-        const last = list[list.length - 1]!;
+        const wrapTo = e.shiftKey ? list[list.length - 1]! : list[0]!;
         const active = document.activeElement;
-        if (e.shiftKey && (active === first || !panel.contains(active))) {
+        if (!active || !panel.contains(active)) {
           e.preventDefault();
-          last.focus();
-        } else if (!e.shiftKey && (active === last || !panel.contains(active))) {
+          wrapTo.focus();
+          return;
+        }
+        // Nút của trình phát nằm trong shadow DOM nên focus vẫn ở chính <video>: để trình duyệt tự đi qua từng nút.
+        if (active instanceof HTMLVideoElement) return;
+        // Quay vòng khi không còn phần tử nào phía trước/sau chỗ đang focus (không chỉ so với nút đầu/cuối): chính khung (tabIndex -1,
+        // sau khi bấm vùng trống) hay ô nhận xét có thanh cuộn (Chromium cho focus) đều nằm ngoài danh sách mà vẫn phải quay vòng đúng.
+        const side = e.shiftKey ? Node.DOCUMENT_POSITION_PRECEDING : Node.DOCUMENT_POSITION_FOLLOWING;
+        if (!list.some((el) => (active.compareDocumentPosition(el) & side) !== 0)) {
           e.preventDefault();
-          first.focus();
+          wrapTo.focus();
         }
       }
     };
@@ -88,7 +111,6 @@ export function ReviewMediaLightbox({ open, onClose, items, index, onIndexChange
 
   if (!open || typeof document === 'undefined' || items.length === 0) return null;
   const count = items.length;
-  const at = Math.min(Math.max(index, 0), count - 1);
   const current = items[at]!;
   const src = resolveSrc ? resolveSrc(current.src) : current.src;
   const step = (dir: 1 | -1) => onIndexChange(lightboxStep(at, count, dir));
