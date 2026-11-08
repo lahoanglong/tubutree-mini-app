@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { render, screen, within } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { fireEvent, render, screen, within } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { Button } from './button';
 import { FreeShippingProgressBar } from './free-shipping-progress-bar';
 
 describe('FreeShippingProgressBar (Mini)', () => {
@@ -79,6 +80,92 @@ describe('FreeShippingProgressBar (Mini)', () => {
   });
 });
 
+describe('FreeShippingProgressBar (Mini): nút "Mua thêm" (W51B)', () => {
+  it('chưa đạt + có onShopMore: nút nằm trong khối, chữ "Mua thêm", tên truy cập nêu số còn thiếu và bắt đầu bằng chữ hiện, bấm gọi onShopMore đúng một lần', () => {
+    const onShopMore = vi.fn();
+    render(<FreeShippingProgressBar base={50_000} threshold={200_000} onShopMore={onShopMore} />);
+    const block = screen.getByTestId('freeship-progress');
+    const cta = within(block).getByTestId('freeship-shop-more-cta');
+    expect(cta).toHaveTextContent('Mua thêm');
+    expect(cta).toHaveAccessibleName('Mua thêm: còn thiếu 150.000đ để được Miễn phí giao hàng');
+    expect(cta.getAttribute('aria-label')!.startsWith(cta.textContent!)).toBe(true);
+    expect(within(block).getByRole('button')).toBe(cta);
+    fireEvent.click(cta);
+    expect(onShopMore).toHaveBeenCalledTimes(1);
+  });
+
+  it('nút cùng hàng với dòng chữ (.tubu-freeship-head), thanh progressbar vẫn ở dưới; khối đánh dấu data-cta=true', () => {
+    const { container } = render(<FreeShippingProgressBar base={50_000} threshold={200_000} onShopMore={() => {}} />);
+    const head = container.querySelector('.tubu-freeship-head')!;
+    expect(within(head as HTMLElement).getByRole('status')).toHaveTextContent('Mua thêm 150.000đ');
+    expect(head.contains(screen.getByTestId('freeship-shop-more-cta'))).toBe(true);
+    expect(head.contains(screen.getByTestId('freeship-bar'))).toBe(false);
+    expect(screen.getByTestId('freeship-progress')).toHaveAttribute('data-cta', 'true');
+    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '25');
+  });
+
+  it('không truyền onShopMore: không nút, không hàng .tubu-freeship-head, không data-cta (khối y như trước)', () => {
+    const { container } = render(<FreeShippingProgressBar base={50_000} threshold={200_000} />);
+    expect(screen.queryByTestId('freeship-shop-more-cta')).toBeNull();
+    expect(screen.queryByRole('button')).toBeNull();
+    expect(container.querySelector('.tubu-freeship-head')).toBeNull();
+    expect(screen.getByTestId('freeship-progress')).not.toHaveAttribute('data-cta');
+  });
+
+  it('đạt ngưỡng: không còn nút dù có onShopMore, còn dòng chúc mừng, không còn thanh', () => {
+    render(<FreeShippingProgressBar base={200_000} threshold={200_000} onShopMore={() => {}} />);
+    expect(screen.queryByTestId('freeship-shop-more-cta')).toBeNull();
+    expect(screen.getByRole('status')).toHaveTextContent('🎉 Đơn hàng đã được Miễn phí giao hàng');
+    expect(screen.queryByTestId('freeship-bar')).toBeNull();
+  });
+
+  it('đạt nhờ serverReached hoặc ngưỡng 0: cũng không có nút', () => {
+    const a = render(<FreeShippingProgressBar base={10_000} threshold={200_000} serverReached onShopMore={() => {}} />);
+    expect(screen.queryByTestId('freeship-shop-more-cta')).toBeNull();
+    a.unmount();
+    render(<FreeShippingProgressBar base={0} threshold={0} onShopMore={() => {}} />);
+    expect(screen.queryByTestId('freeship-shop-more-cta')).toBeNull();
+  });
+
+  it('chuyển từ chưa đạt sang đạt: nút biến mất, vùng status giữ nguyên một phần tử để trình đọc màn hình nghe được câu chúc mừng', () => {
+    const { rerender } = render(<FreeShippingProgressBar base={100_000} threshold={200_000} onShopMore={() => {}} />);
+    const status = screen.getByRole('status');
+    expect(screen.getByTestId('freeship-shop-more-cta')).toBeInTheDocument();
+    rerender(<FreeShippingProgressBar base={200_000} threshold={200_000} onShopMore={() => {}} />);
+    expect(screen.getByRole('status')).toBe(status);
+    expect(status).toHaveTextContent('Đơn hàng đã được Miễn phí giao hàng');
+    expect(screen.queryByTestId('freeship-shop-more-cta')).toBeNull();
+  });
+
+  it('thiếu vài đồng vẫn chưa đạt: nút còn, tên truy cập nêu đúng số lẻ; tubuOnly: chữ nút chung nhưng tên truy cập nói rõ chỉ phần hàng Tubu Tree giao', () => {
+    const { rerender } = render(<FreeShippingProgressBar base={199_999} threshold={200_000} onShopMore={() => {}} />);
+    expect(screen.getByTestId('freeship-shop-more-cta')).toHaveAccessibleName('Mua thêm: còn thiếu 1đ để được Miễn phí giao hàng');
+    rerender(<FreeShippingProgressBar base={50_000} threshold={200_000} tubuOnly onShopMore={() => {}} />);
+    const tubuCta = screen.getByTestId('freeship-shop-more-cta');
+    expect(tubuCta).toHaveTextContent('Mua thêm');
+    expect(tubuCta).toHaveAccessibleName('Mua thêm: còn thiếu 150.000đ để được Miễn phí giao hàng cho phần hàng Tubu Tree giao');
+    expect(tubuCta.getAttribute('aria-label')!.startsWith(tubuCta.textContent!)).toBe(true);
+  });
+
+  it('chữ nút và tên truy cập không có chữ cấm "Freeship" và không có dấu chấm than', () => {
+    render(<FreeShippingProgressBar base={0} threshold={200_000} tubuOnly onShopMore={() => {}} />);
+    const cta = screen.getByTestId('freeship-shop-more-cta');
+    const label = `${cta.textContent} ${cta.getAttribute('aria-label')}`;
+    expect(label).not.toMatch(/freeship/i);
+    expect(label).not.toContain('!');
+  });
+
+  it('nút là Button DS thuần: không thêm style nội tuyến nào ngoài của Button, không màu thô', () => {
+    const ref = render(<Button variant="secondary" className="tubu-freeship-cta">Mua thêm</Button>);
+    const refStyle = ref.container.querySelector('button')!.getAttribute('style');
+    ref.unmount();
+    render(<FreeShippingProgressBar base={50_000} threshold={200_000} onShopMore={() => {}} />);
+    const cta = screen.getByTestId('freeship-shop-more-cta');
+    expect(cta.getAttribute('style')).toBe(refStyle);
+    expect(cta.outerHTML).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+  });
+});
+
 describe('css/freeship.css: thanh Miễn phí giao hàng', () => {
   const css = readFileSync(resolve(__dirname, '../../css/freeship.css'), 'utf8');
   function loadSheet() {
@@ -98,6 +185,14 @@ describe('css/freeship.css: thanh Miễn phí giao hàng', () => {
     expect(fill).toContain('linear-gradient(90deg');
     expect(fill).toContain('var(--color-progress-fill-from)');
     expect(fill).toContain('var(--color-action-primary-bg)');
+  });
+
+  it('W51B: có nút thì khối cao tối thiểu theo hàng nút 44px + thanh (không nhảy khi hết nút), nút cao 44px, số đều thừa kế, chữ không tràn hàng', () => {
+    expect(rule(".tubu-freeship[data-cta='true']").style.getPropertyValue('min-height')).toMatch(/^calc\(44px\b/);
+    expect(rule('.tubu-freeship-cta.zaui-btn').style.getPropertyValue('height')).toBe('44px');
+    expect(rule('.tubu-freeship-cta.zaui-btn').style.getPropertyValue('font-variant-numeric')).toBe('inherit');
+    expect(rule('.tubu-freeship-head').style.getPropertyValue('display')).toBe('flex');
+    expect(rule('.tubu-freeship-head .tubu-freeship-text').style.getPropertyValue('min-width')).toMatch(/^0(px)?$/);
   });
 
   it('phần đầy đầy dần bằng transition bề rộng (không đổi bố cục xung quanh)', () => {

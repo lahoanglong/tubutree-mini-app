@@ -980,6 +980,25 @@ describe('CartPage: giá gạch, Tiết kiệm, Countdown Giờ vàng, chân dí
     expect(screen.queryByTestId('freeship-addons')).toBeNull();
   });
 
+  it('W51B thanh Miễn phí giao hàng có nút "Mua thêm" khi chưa đạt: tên truy cập nêu số còn thiếu, bấm đưa về Trang chủ; đạt rồi không còn nút', async () => {
+    mocks.getCart.mockResolvedValue(summary({}));
+    const first = renderPage();
+    await screen.findByText('Xà bông thảo mộc');
+    const block = screen.getByTestId('freeship-progress');
+    const cta = within(block).getByRole('button', { name: 'Mua thêm: còn thiếu 150.000đ để được Miễn phí giao hàng' });
+    expect(cta).toHaveTextContent('Mua thêm');
+    mocks.navigate.mockClear();
+    fireEvent.click(cta);
+    expect(mocks.navigate).toHaveBeenCalledTimes(1);
+    expect(mocks.navigate).toHaveBeenCalledWith('/');
+    first.unmount();
+    mocks.getCart.mockResolvedValue(summary({ subtotal: 250_000, freeship: true, items: [{ ...OK_LINE, unitPrice: 250_000, total: 250_000 }] }));
+    renderPage();
+    await screen.findByText('Xà bông thảo mộc');
+    expect(screen.getByTestId('freeship-progress')).toHaveAttribute('data-reached', 'true');
+    expect(screen.queryByTestId('freeship-shop-more-cta')).toBeNull();
+  });
+
   it('chân dính gọn: tổng tiền cùng khối với nhãn (bên trái nút), Tiết kiệm nằm dưới số tiền', async () => {
     const discounted = { ...OK_LINE, unitPrice: 33_000, listUnitPrice: 50_000, total: 33_000 };
     mocks.getCart.mockResolvedValue(summary({ items: [discounted], subtotal: 33_000 }));

@@ -10,9 +10,10 @@ const state = vi.hoisted(() => ({
   bestError: false,
   add: null as null | ((variationId: string, qty: number) => Promise<unknown>),
   addCalls: [] as [string, number][],
+  push: vi.fn(),
 }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: state.push, replace: vi.fn() }), usePathname: () => '/gio-hang' }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: { id: 'u' }, status: 'authenticated', initialized: true }) }));
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }), usePathname: () => '/gio-hang' }));
 vi.mock('@/lib/use-flash-sales', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/lib/use-flash-sales')>()), useActiveFlashSales: () => [] }));
 vi.mock('@/lib/core-http', () => ({
   coreHttp: {
@@ -69,6 +70,7 @@ beforeEach(() => {
   state.best = BEST;
   state.bestError = false;
   state.addCalls = [];
+  state.push.mockClear();
   state.add = async () => state.cart;
 });
 afterEach(() => {
@@ -185,6 +187,36 @@ describe('/gio-hang — thanh Miễn phí giao hàng + dải món bù đơn (W42
     expect(q(c, 'freeship-progress')!.dataset.reached).toBe('true');
     expect(q(c, 'freeship-addons')).toBeNull();
     expect(state.addCalls).toHaveLength(0);
+  });
+
+  it('W51B chưa đạt ngưỡng: nút "Mua thêm" nằm trong thanh, tên truy cập nêu số còn thiếu, bấm đưa về Trang chủ', async () => {
+    const c = await mount();
+    const cta = q(c, 'freeship-shop-more-cta')!;
+    expect(q(c, 'freeship-progress')!.contains(cta)).toBe(true);
+    expect(cta.textContent).toBe('Mua thêm');
+    expect(cta.getAttribute('aria-label')).toBe('Mua thêm: còn thiếu 211.000đ để được Miễn phí giao hàng');
+    expect(state.push).not.toHaveBeenCalled();
+    click(cta);
+    expect(state.push).toHaveBeenCalledTimes(1);
+    expect(state.push).toHaveBeenCalledWith('/');
+  });
+
+  it('W51B đã đủ ngưỡng (từ đầu hoặc sau khi thêm món): không còn nút "Mua thêm", khối vẫn là một thanh', async () => {
+    state.cart = cartOf([line({ unitPrice: 600000, total: 600000 })]);
+    const c = await mount();
+    expect(q(c, 'freeship-progress')!.dataset.reached).toBe('true');
+    expect(q(c, 'freeship-shop-more-cta')).toBeNull();
+    expect(qa(c, 'freeship-progress')).toHaveLength(1);
+  });
+
+  it('W51B thêm món bù đơn tới khi đạt ngưỡng: nút "Mua thêm" biến mất cùng thanh', async () => {
+    state.add = async () => cartOf([line(), line({ id: 'i2', slug: 'c', variationId: 'v-c', productName: 'Món c', unitPrice: 230000, total: 230000 })]);
+    const c = await mount();
+    expect(q(c, 'freeship-shop-more-cta')).not.toBeNull();
+    click(qa(c, 'freeship-add')[0]!);
+    await flush(6);
+    expect(q(c, 'freeship-progress')!.dataset.reached).toBe('true');
+    expect(q(c, 'freeship-shop-more-cta')).toBeNull();
   });
 
   it('bỏ chọn hết: thanh tính theo phần đang chọn (thiếu đủ ngưỡng, thanh 0%)', async () => {

@@ -368,7 +368,7 @@ export default function CartPage() {
         <>
           {showFreeship && (
             <Box px={3} pt={2}>
-              <FreeShippingProgressBar base={freeshipBase} threshold={summary.freeshipThreshold} serverReached={freeshipServerReached} tubuOnly={hasMerchant} />
+              <FreeShippingProgressBar base={freeshipBase} threshold={summary.freeshipThreshold} serverReached={freeshipServerReached} tubuOnly={hasMerchant} onShopMore={() => navigate('/')} />
             </Box>
           )}
           {addonItems.length > 0 && (
