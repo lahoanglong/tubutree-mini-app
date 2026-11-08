@@ -43,7 +43,7 @@ export function QuickReorderStrip({
   // Một lệnh bay mỗi lúc: nút khác khoá hẳn thay vì xếp hàng, vì lệnh sau có thể thành "đã có trong giỏ" ngoài ý khách.
   const locked = busyAll || busyKey !== null;
   return (
-    <section data-testid="quick-reorder" aria-label={title} aria-busy={busyAll || undefined}>
+    <section data-testid="quick-reorder" aria-label={title} aria-busy={locked || undefined}>
       <div className="tubu-quick-head">
         <SectionHeader
           title={title}

@@ -107,6 +107,23 @@ describe('QuickReorderStrip (Mini)', () => {
     expect(onAddAll).not.toHaveBeenCalled();
   });
 
+  it('aria-busy của vùng theo khoá chung: không bận thì không có; busyKey hoặc busyAll thì "true"; xong thì gỡ hẳn', () => {
+    const props = { items: ITEMS, onAdd: vi.fn(), onAddAll: vi.fn(), onOpen: vi.fn() };
+    const section = () => screen.getByTestId('quick-reorder');
+    const { rerender } = render(<QuickReorderStrip {...props} />);
+    expect(section()).not.toHaveAttribute('aria-busy');
+    rerender(<QuickReorderStrip {...props} busyKey="v1" />);
+    expect(section()).toHaveAttribute('aria-busy', 'true');
+    rerender(<QuickReorderStrip {...props} busyKey={null} />);
+    expect(section()).not.toHaveAttribute('aria-busy');
+    rerender(<QuickReorderStrip {...props} busyAll />);
+    expect(section()).toHaveAttribute('aria-busy', 'true');
+    rerender(<QuickReorderStrip {...props} busyAll={false} />);
+    expect(section()).not.toHaveAttribute('aria-busy');
+    rerender(<QuickReorderStrip {...props} busyKey="v2" busyAll />);
+    expect(section()).toHaveAttribute('aria-busy', 'true');
+  });
+
   it('rỗng: không vẽ gì (không để tiêu đề trơ)', () => {
     const { container } = render(<QuickReorderStrip items={[]} onAdd={vi.fn()} onAddAll={vi.fn()} onOpen={vi.fn()} />);
     expect(container).toBeEmptyDOMElement();

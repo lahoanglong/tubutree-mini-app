@@ -11,7 +11,7 @@ export interface CartVoucherHintStripProps {
   hint: CartVoucherHint | null;
   /** Áp mã dùng được: nhận mã thật (`hint.apply.code`). */
   onApply: (code: string) => void;
-  /** Đang áp: nút báo bận (giữ nhãn) và không nhận thêm cú chạm. */
+  /** Đang áp: nút báo bận (giữ nhãn) và không nhận thêm cú chạm; cả dải báo bận và nút "Mua thêm" của dải khoá. */
   applying?: boolean;
   /** Lời báo khi áp không được; hiện ngay dưới dòng mời áp. */
   error?: string | null;
@@ -25,11 +25,12 @@ export interface CartVoucherHintStripProps {
  */
 export function CartVoucherHintStrip({ hint, onApply, applying = false, error = null, onShopMore }: CartVoucherHintStripProps) {
   const unlockTextId = useId();
+  const errorId = useId();
   const apply = hint?.apply ?? null;
   const unlock = hint?.unlock ?? null;
   if (!apply && !unlock) return null;
   return (
-    <div data-testid="cart-voucher-hint" className="tubu-vhint">
+    <div data-testid="cart-voucher-hint" aria-busy={applying || undefined} className="tubu-vhint">
       {apply && (
         <div data-testid="cart-voucher-apply" data-kind="apply" className="tubu-vhint-row">
           <p className="tubu-vhint-text">{apply.text}</p>
@@ -38,6 +39,7 @@ export function CartVoucherHintStrip({ hint, onApply, applying = false, error = 
             className="tubu-vhint-cta"
             data-testid="cart-voucher-apply-cta"
             aria-label={apply.ariaLabel}
+            aria-describedby={error ? errorId : undefined}
             loading={applying}
             onPress={() => onApply(apply.code)}
           >
@@ -46,7 +48,7 @@ export function CartVoucherHintStrip({ hint, onApply, applying = false, error = 
         </div>
       )}
       {apply && error && (
-        <p role="alert" data-testid="cart-voucher-error" className="tubu-vhint-error">
+        <p id={errorId} role="alert" data-testid="cart-voucher-error" className="tubu-vhint-error">
           {error}
         </p>
       )}
@@ -55,7 +57,7 @@ export function CartVoucherHintStrip({ hint, onApply, applying = false, error = 
           {onShopMore ? (
             <div className="tubu-vhint-head">
               <p id={unlockTextId} className="tubu-vhint-text">{unlock.text}</p>
-              <Button variant="secondary" className="tubu-vhint-cta" data-testid="cart-voucher-unlock-cta" aria-describedby={unlockTextId} onPress={onShopMore}>
+              <Button variant="secondary" className="tubu-vhint-cta" data-testid="cart-voucher-unlock-cta" aria-describedby={unlockTextId} disabled={applying} onPress={onShopMore}>
                 {fillCopy('cart.voucherHint.shopMoreCta')}
               </Button>
             </div>

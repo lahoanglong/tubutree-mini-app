@@ -36,7 +36,7 @@ export function QuickReorderStrip({ items, busyKey = null, busyAll = false, onAd
   const locked = busyAll || busyKey !== null;
   const addAllSpoken = fillCopy('quickReorder.addAllAria', { n: items.length, total: formatVnd(quickReorderTotal(items)) });
   return (
-    <section data-testid="quick-reorder" aria-label={title} aria-busy={busyAll || undefined}>
+    <section data-testid="quick-reorder" aria-label={title} aria-busy={locked || undefined}>
       <div className="tubu-quick-head">
         <SectionHeader
           title={title}

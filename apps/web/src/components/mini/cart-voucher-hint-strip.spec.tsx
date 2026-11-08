@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { useState } from 'react';
 import type { CartVoucherHint } from '@tubutree/app-core/commerce/cart-voucher-hint';
 import { describe, expect, it, vi } from 'vitest';
 import { click } from '@/test-utils/dom';
@@ -129,6 +130,70 @@ describe('CartVoucherHintStrip (web)', () => {
       expect(rule('.tubu-vhint-text')).toMatch(/min-width:\s*0/);
       expect(rule('.tubu-vhint-error')).toContain('var(--color-text-danger)');
     });
+  });
+});
+
+describe('CartVoucherHintStrip (web): báo bận và lời báo lỗi cho trình đọc màn hình', () => {
+  const ERROR = 'Mã đã hết lượt dùng.';
+  const stripOf = (c: ParentNode) => q(c, 'cart-voucher-hint')!;
+  const ariaBusy = (props: { applying?: boolean }) => stripOf(mount(<CartVoucherHintStrip hint={both} onApply={vi.fn()} {...props} />).container).getAttribute('aria-busy');
+  const applyDescribedBy = (error: string | null) => q(mount(<CartVoucherHintStrip hint={both} onApply={vi.fn()} error={error} />).container, 'cart-voucher-apply-cta')!.getAttribute('aria-describedby');
+
+  function Pending({ onShopMore }: { onShopMore: () => void }) {
+    const [applying, setApplying] = useState(true);
+    return (
+      <>
+        <button type="button" data-testid="finish" onClick={() => setApplying(false)} />
+        <CartVoucherHintStrip hint={both} onApply={vi.fn()} onShopMore={onShopMore} applying={applying} />
+      </>
+    );
+  }
+
+  it('applying: cả dải aria-busy="true"; không bận (false hoặc không truyền) thì không có thuộc tính', () => {
+    expect(ariaBusy({ applying: true })).toBe('true');
+    expect(ariaBusy({ applying: false })).toBeNull();
+    expect(ariaBusy({})).toBeNull();
+  });
+
+  it('đang áp: nút "Mua thêm" khoá và không gọi onShopMore; áp xong thì dải hết bận và nút bấm lại được', () => {
+    const onShopMore = vi.fn();
+    const { container } = mount(<Pending onShopMore={onShopMore} />);
+    const cta = () => q(container, 'cart-voucher-unlock-cta') as HTMLButtonElement;
+    expect(stripOf(container).getAttribute('aria-busy')).toBe('true');
+    expect(cta().disabled).toBe(true);
+    click(cta());
+    expect(onShopMore).not.toHaveBeenCalled();
+    click(q(container, 'finish'));
+    expect(stripOf(container).getAttribute('aria-busy')).toBeNull();
+    expect(cta().disabled).toBe(false);
+    click(cta());
+    expect(onShopMore).toHaveBeenCalledTimes(1);
+  });
+
+  it('có lỗi: "Áp dụng ngay" trỏ aria-describedby tới đúng phần tử cart-voucher-error; không lỗi thì không có aria-describedby', () => {
+    const { container } = mount(<CartVoucherHintStrip hint={both} onApply={vi.fn()} error={ERROR} />);
+    const id = q(container, 'cart-voucher-apply-cta')!.getAttribute('aria-describedby');
+    expect(id).toBeTruthy();
+    const described = container.querySelector(`[id="${id}"]`)!;
+    expect(described).toBe(q(container, 'cart-voucher-error'));
+    expect(described.textContent).toBe(ERROR);
+    expect(applyDescribedBy(null)).toBeNull();
+  });
+
+  it('chưa có lỗi: dải mời áp không mang id nào', () => {
+    const { container } = mount(<CartVoucherHintStrip hint={{ apply: APPLY, unlock: null }} onApply={vi.fn()} />);
+    expect(container.querySelector('[id]')).toBeNull();
+  });
+
+  it('id lời báo lỗi khác id câu nhắc "Mua thêm": mỗi nút chỉ trỏ tới câu của mình', () => {
+    const { container } = mount(<CartVoucherHintStrip hint={both} onApply={vi.fn()} onShopMore={vi.fn()} error={ERROR} />);
+    const applyId = q(container, 'cart-voucher-apply-cta')!.getAttribute('aria-describedby');
+    const unlockId = q(container, 'cart-voucher-unlock-cta')!.getAttribute('aria-describedby');
+    expect(applyId).toBeTruthy();
+    expect(unlockId).toBeTruthy();
+    expect(applyId).not.toBe(unlockId);
+    expect(container.querySelector(`[id="${applyId}"]`)!.textContent).toBe(ERROR);
+    expect(container.querySelector(`[id="${unlockId}"]`)!.textContent).toBe(UNLOCK.text);
   });
 });
 
