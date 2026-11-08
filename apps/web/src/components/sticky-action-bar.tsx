@@ -3,6 +3,28 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { safeAreaPadX } from '@/lib/safe-area';
 
+type WebBar = { el: HTMLElement; hideFrom: 'md' | 'lg' };
+
+// `--sticky-bar-h` và lớp `has-sticky-bar*` nằm ở <html>/<body> nên dùng chung cho cả cây. Chuyển trang (hoặc mở lớp phủ) có lúc hai thanh cùng gắn:
+// thanh của trang mới gắn trước, thanh cũ tháo sau. Tháo mà xoá biến và lớp vô điều kiện thì trang mới mất đệm đáy, thanh dính che dòng cuối.
+// Giữ danh sách thanh đang gắn theo thứ tự gắn; chỉ thanh gắn sau cùng được ghi biến, hết thanh mới xoá biến và lớp.
+const mountedWebBars: WebBar[] = [];
+
+function syncWebStickyBarState(): void {
+  const root = document.documentElement;
+  const body = document.body;
+  const top = mountedWebBars[mountedWebBars.length - 1];
+  if (!top) {
+    root.style.removeProperty('--sticky-bar-h');
+    body.classList.remove('has-sticky-bar', 'has-sticky-bar-lg');
+    return;
+  }
+  root.style.setProperty('--sticky-bar-h', `${Math.ceil(top.el.getBoundingClientRect().height)}px`);
+  body.classList.add('has-sticky-bar');
+  if (mountedWebBars.some((bar) => bar.hideFrom === 'lg')) body.classList.add('has-sticky-bar-lg');
+  else body.classList.remove('has-sticky-bar-lg');
+}
+
 /**
  * Thanh hành động dính đáy cho điện thoại (giá/tổng + nút mua). Mặc định chỉ hiện dưới màn md; từ md trở lên các trang giữ nút
  * ở khung tóm tắt như cũ. Giỏ hàng và Thanh toán truyền `hideFrom="lg"`: ở khổ máy tính bảng (md) khung tóm tắt nằm cuối trang một cột,
@@ -18,22 +40,22 @@ export function StickyActionBar({ children, label, hideFrom = 'md' }: { children
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const root = document.documentElement;
     const bar = ref.current;
-    document.body.classList.add('has-sticky-bar');
-    if (hideFrom === 'lg') document.body.classList.add('has-sticky-bar-lg');
-    const measure = () => {
-      if (bar) root.style.setProperty('--sticky-bar-h', `${Math.ceil(bar.getBoundingClientRect().height)}px`);
-    };
-    measure();
-    const observer = typeof ResizeObserver === 'function' && bar ? new ResizeObserver(measure) : null;
+    if (!bar) return;
+    const entry: WebBar = { el: bar, hideFrom };
+    mountedWebBars.push(entry);
+    syncWebStickyBarState();
+    const observer = typeof ResizeObserver === 'function'
+      ? new ResizeObserver(() => {
+        if (mountedWebBars[mountedWebBars.length - 1] === entry) syncWebStickyBarState();
+      })
+      : null;
     // border-box: vùng an toàn đáy nằm trong đệm, đổi (xoay máy) thì chỉ hộp ngoài đổi cỡ, hộp nội dung (mặc định của ResizeObserver) đứng yên.
-    if (bar) observer?.observe(bar, { box: 'border-box' });
+    observer?.observe(bar, { box: 'border-box' });
     return () => {
       observer?.disconnect();
-      root.style.removeProperty('--sticky-bar-h');
-      document.body.classList.remove('has-sticky-bar');
-      document.body.classList.remove('has-sticky-bar-lg');
+      mountedWebBars.splice(mountedWebBars.indexOf(entry), 1);
+      syncWebStickyBarState();
     };
   }, [hideFrom]);
 

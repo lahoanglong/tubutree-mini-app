@@ -8,13 +8,16 @@ export interface StickyActionBarProps {
   lead?: ReactNode;
   /** Đệm và khoảng cách gọn (10px / 4px) cho thanh nhiều lớp như chân dính giỏ; mặc định giữ 16px / 8px của các trang khác. */
   dense?: boolean;
+  /** Tên vùng cho trình đọc màn hình: có chữ thì thanh là `role="region"` với `aria-label` này, không thì giữ là div thường. */
+  label?: string;
 }
 
 // Biến `--sticky-bar-h` nằm ở <html> nên dùng chung cho cả cây. AnimationRoutes (react-transition-group) gắn trang MỚI rồi mới tháo trang cũ
 // sau hiệu ứng thoát (PDP/Thanh toán → Giỏ, hoặc Quay lại), nên thanh của trang cũ tháo SAU thanh của trang mới: tháo mà xoá biến vô điều kiện
 // thì trang mới mất giá trị và ResizeObserver không bắn lại vì thanh mới không đổi cỡ. Giữ danh sách thanh đang gắn theo thứ tự gắn; chỉ thanh
 // gắn sau cùng được ghi biến, thanh nào tháo thì biến trả về cho thanh còn lại (hết thanh mới xoá biến).
-const mountedBars: Array<{ el: HTMLElement }> = [];
+// `page` là khung cuộn `.zaui-page` gần nhất của thanh: lớp chừa chỗ chỉ gỡ khi không còn thanh nào cùng khung.
+const mountedBars: Array<{ el: HTMLElement; page: Element | null }> = [];
 
 function publishBarHeight(): void {
   const root = document.documentElement;
@@ -25,21 +28,18 @@ function publishBarHeight(): void {
 
 /** Thanh CTA dính đáy — safe-area MỘT LẦN ở đây, không phải mỗi trang tự cộng (audit A4-21: 10
  * thanh tự vẽ, 3 thiếu safe-area hoàn toàn). */
-export function StickyActionBar({ primary, secondary, summary, lead, dense }: StickyActionBarProps) {
+export function StickyActionBar({ primary, secondary, summary, lead, dense, label }: StickyActionBarProps) {
   const ref = useRef<HTMLDivElement>(null);
-  // scroll-padding chỉ có tác dụng trên khung cuộn (.zaui-page): đánh dấu khung để Tab không để phần tử lọt dưới thanh (WCAG 2.4.11).
-  useEffect(() => {
-    const page = ref.current?.closest('.zaui-page');
-    page?.classList.add('tubu-scroll-pad-sticky-bar');
-    return () => page?.classList.remove('tubu-scroll-pad-sticky-bar');
-  }, []);
   // Chiều cao thật của thanh (đã gồm safe-area và lời báo hiện thêm): trang đệm đáy theo `--sticky-bar-h` thay vì một số cứng,
   // nên thanh cao thêm hay máy có vùng an toàn đáy thì dòng cuối vẫn nằm trên thanh.
+  // scroll-padding chỉ có tác dụng trên khung cuộn (.zaui-page): đánh dấu khung để Tab không để phần tử lọt dưới thanh (WCAG 2.4.11).
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const entry = { el };
+    const page = el.closest('.zaui-page');
+    const entry = { el, page };
     mountedBars.push(entry);
+    page?.classList.add('tubu-scroll-pad-sticky-bar');
     publishBarHeight();
     const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => {
       if (mountedBars[mountedBars.length - 1] === entry) publishBarHeight();
@@ -49,13 +49,17 @@ export function StickyActionBar({ primary, secondary, summary, lead, dense }: St
     return () => {
       ro?.disconnect();
       mountedBars.splice(mountedBars.indexOf(entry), 1);
+      if (page && !mountedBars.some((bar) => bar.page === page)) page.classList.remove('tubu-scroll-pad-sticky-bar');
       publishBarHeight();
     };
   }, []);
   const pad = dense ? 10 : 16;
+  const name = label?.trim();
   return (
     <div
       ref={ref}
+      role={name ? 'region' : undefined}
+      aria-label={name || undefined}
       data-testid="sticky-bar"
       className="tubu-sticky-bar"
       style={{

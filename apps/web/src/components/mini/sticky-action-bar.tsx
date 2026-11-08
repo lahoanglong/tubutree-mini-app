@@ -1,7 +1,7 @@
 'use client';
 
 // Nguồn: apps/miniapp/src/components/ui/sticky-action-bar.tsx
-import type { ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 
 export interface StickyActionBarProps {
   primary: ReactNode;
@@ -11,14 +11,58 @@ export interface StickyActionBarProps {
   lead?: ReactNode;
   /** Đệm và khoảng cách gọn (10px / 4px) cho thanh nhiều lớp như chân dính giỏ; mặc định giữ 16px / 8px của các trang khác. */
   dense?: boolean;
+  /** Tên vùng cho trình đọc màn hình: có chữ thì thanh là `role="region"` với `aria-label` này, không thì giữ là div thường. */
+  label?: string;
+}
+
+// Biến `--sticky-bar-h` nằm ở <html> nên dùng chung cho cả cây. Khi chuyển trang, trang MỚI gắn thanh trước rồi trang cũ mới tháo thanh sau
+// hiệu ứng thoát: tháo mà xoá biến vô điều kiện thì trang mới mất giá trị và ResizeObserver không bắn lại vì thanh mới không đổi cỡ. Giữ danh sách
+// thanh đang gắn theo thứ tự gắn; chỉ thanh gắn sau cùng được ghi biến, thanh nào tháo thì biến trả về cho thanh còn lại (hết thanh mới xoá biến).
+// `page` là khung cuộn `.zaui-page` gần nhất của thanh: lớp chừa chỗ chỉ gỡ khi không còn thanh nào cùng khung.
+const mountedBars: Array<{ el: HTMLElement; page: Element | null }> = [];
+
+function publishBarHeight(): void {
+  const root = document.documentElement;
+  const top = mountedBars[mountedBars.length - 1];
+  if (!top) root.style.removeProperty('--sticky-bar-h');
+  else root.style.setProperty('--sticky-bar-h', `${Math.ceil(top.el.getBoundingClientRect().height)}px`);
 }
 
 /** Thanh CTA dính đáy — safe-area MỘT LẦN ở đây, không phải mỗi trang tự cộng (audit A4-21: 10
- * thanh tự vẽ, 3 thiếu safe-area hoàn toàn). Bản Mini App còn ghi chiều cao thật vào `--sticky-bar-h`; web đo ở `components/sticky-action-bar.tsx`. */
-export function StickyActionBar({ primary, secondary, summary, lead, dense }: StickyActionBarProps) {
+ * thanh tự vẽ, 3 thiếu safe-area hoàn toàn). Cùng cách đo `--sticky-bar-h` và đánh dấu khung cuộn với bản Mini App;
+ * thanh của các trang web thật (`components/sticky-action-bar.tsx`) có danh sách riêng. */
+export function StickyActionBar({ primary, secondary, summary, lead, dense, label }: StickyActionBarProps) {
+  const ref = useRef<HTMLDivElement>(null);
+  // Chiều cao thật của thanh (đã gồm safe-area và lời báo hiện thêm): trang đệm đáy theo `--sticky-bar-h` thay vì một số cứng,
+  // nên thanh cao thêm hay máy có vùng an toàn đáy thì dòng cuối vẫn nằm trên thanh.
+  // scroll-padding chỉ có tác dụng trên khung cuộn (.zaui-page): đánh dấu khung để Tab không để phần tử lọt dưới thanh (WCAG 2.4.11).
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const page = el.closest('.zaui-page');
+    const entry = { el, page };
+    mountedBars.push(entry);
+    page?.classList.add('tubu-scroll-pad-sticky-bar');
+    publishBarHeight();
+    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => {
+      if (mountedBars[mountedBars.length - 1] === entry) publishBarHeight();
+    });
+    // border-box: vùng an toàn đáy nằm trong đệm, đổi (xoay máy) thì chỉ hộp ngoài đổi cỡ, hộp nội dung (mặc định của ResizeObserver) đứng yên.
+    ro?.observe(el, { box: 'border-box' });
+    return () => {
+      ro?.disconnect();
+      mountedBars.splice(mountedBars.indexOf(entry), 1);
+      if (page && !mountedBars.some((bar) => bar.page === page)) page.classList.remove('tubu-scroll-pad-sticky-bar');
+      publishBarHeight();
+    };
+  }, []);
   const pad = dense ? 10 : 16;
+  const name = label?.trim();
   return (
     <div
+      ref={ref}
+      role={name ? 'region' : undefined}
+      aria-label={name || undefined}
       data-testid="sticky-bar"
       data-sticky-bar
       className="tubu-sticky-bar"
@@ -30,13 +74,16 @@ export function StickyActionBar({ primary, secondary, summary, lead, dense }: St
       }}
     >
       {summary}
-      <div style={{ display: 'flex', gap: 10, alignItems: lead ? 'center' : undefined }}>
-        {lead && <div style={{ flex: 1, minWidth: 0 }}>{lead}</div>}
+      {/* Có `lead` thì hàng cuối xuống dòng có chủ đích khi khối tổng không vừa (máy 320px, số tiền 9 chữ số, "Tiết kiệm 12.345.000đ"):
+          `lead` grow 1000 và không bị ép min-width 0, nên nó chiếm hết chỗ và hàng chỉ xuống dòng khi chữ không ngắt được của nó rộng hơn chỗ còn lại,
+          thay vì cắt hay chui dưới nút. Nút grow 1: chung hàng với `lead` thì phần dư chia 1000:1 nên giữ ~9.25rem; xuống hàng riêng thì giãn hết bề ngang. */}
+      <div style={{ display: 'flex', gap: 10, alignItems: lead ? 'center' : undefined, ...(lead ? { flexWrap: 'wrap', rowGap: 'var(--space-stack-xs)' } : null) }}>
+        {lead && <div style={{ flexGrow: 1000, flexShrink: 1, flexBasis: 0 }}>{lead}</div>}
         {secondary}
         {/* minWidth 0: flex item mặc định min-width:auto = bề rộng nội dung → hàng CTA không co được
             và tràn khỏi màn hình ở 320-390px (PDP "Mua ngay · giá" chạm 421px). Nút bên trong co/rút
             gọn nhờ .tubu-sticky-bar .tubu-btn (css/tokens.css). Có `lead` thì nút tự giữ bề rộng (đủ nhãn "Thanh toán (n)"). */}
-        <div style={lead ? { flex: '0 0 auto', minWidth: '9.25rem' } : { flex: 1, minWidth: 0 }}>{primary}</div>
+        <div style={lead ? { flexGrow: 1, flexShrink: 0, flexBasis: '9.25rem' } : { flex: 1, minWidth: 0 }}>{primary}</div>
       </div>
     </div>
   );
