@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act } from 'react';
+import { QueryClient } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
 import { headingProblems, smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
@@ -232,5 +233,117 @@ describe('/tai-khoan/yeu-thich — nút giỏ nhanh', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('/tai-khoan/yeu-thich — bộ lọc nhanh', () => {
+  const item = (id: string, name: string, salePrice: number | null, inStock: boolean) => ({ ...card(id, name), salePrice, inStock });
+  const MIXED = [item('a', 'Nước rửa chén', 80000, true), item('b', 'Xà phòng', null, true), item('c', 'Dầu gội', 70000, false), item('d', 'Nước giặt', null, false)];
+  // Nút tim trên thẻ cũng có aria-pressed, nên chỉ tìm chip trong vùng dải lọc.
+  const row = (c: HTMLElement) => c.querySelector<HTMLElement>('[role="region"][aria-label="Lọc sản phẩm yêu thích"]');
+  const chips = (c: HTMLElement) => Array.from(row(c)?.querySelectorAll<HTMLButtonElement>('button[aria-pressed]') ?? []);
+  const chip = (c: HTMLElement, label: string) => chips(c).find((b) => (b.textContent ?? '').startsWith(label))!;
+  const shown = (c: HTMLElement) => Array.from(c.querySelectorAll('a[href^="/san-pham/"]')).map((a) => a.getAttribute('href'));
+
+  beforeEach(() => {
+    mocks.get.mockImplementation(async (path: string) => (path === '/me/wishlist' ? MIXED : []));
+  });
+
+  it('có món: ba chip Tất cả, Đang giảm, Còn hàng kèm số đếm, Tất cả đang chọn, nhóm có tên', async () => {
+    const c = await mount();
+    expect(row(c)).not.toBeNull();
+    expect(chips(c).map((b) => b.textContent)).toEqual(['Tất cả(4)', 'Đang giảm(2)', 'Còn hàng(2)']);
+    expect(chips(c).map((b) => b.getAttribute('aria-pressed'))).toEqual(['true', 'false', 'false']);
+    expect(shown(c)).toHaveLength(4);
+  });
+
+  it('chọn Đang giảm rồi Còn hàng: lưới đổi theo, số đếm trên chip giữ nguyên', async () => {
+    const c = await mount();
+    click(chip(c, 'Đang giảm'));
+    expect(shown(c)).toEqual(['/san-pham/sp-a', '/san-pham/sp-c']);
+    expect(chip(c, 'Đang giảm').getAttribute('aria-pressed')).toBe('true');
+    expect(chip(c, 'Tất cả').getAttribute('aria-pressed')).toBe('false');
+    expect(chip(c, 'Tất cả').textContent).toBe('Tất cả(4)');
+    click(chip(c, 'Còn hàng'));
+    expect(shown(c)).toEqual(['/san-pham/sp-a', '/san-pham/sp-b']);
+    click(chip(c, 'Tất cả'));
+    expect(shown(c)).toHaveLength(4);
+  });
+
+  it('lọc ra rỗng: câu báo theo bộ lọc, nút "Xem tất cả sản phẩm đã lưu" đưa về Tất cả', async () => {
+    mocks.get.mockImplementation(async (path: string) => (path === '/me/wishlist' ? [item('a', 'Nước rửa chén', null, true), item('b', 'Xà phòng', 100000, true)] : []));
+    const c = await mount();
+    click(chip(c, 'Đang giảm'));
+    expect(shown(c)).toEqual([]);
+    expect(c.textContent).toContain('Chưa có sản phẩm đang giảm giá trong danh sách yêu thích');
+    expect(c.textContent).not.toContain('Chưa có sản phẩm yêu thích');
+    expect(chip(c, 'Đang giảm').textContent).toBe('Đang giảm(0)');
+    click(Array.from(c.querySelectorAll('button')).find((b) => b.textContent === 'Xem tất cả sản phẩm đã lưu')!);
+    expect(shown(c)).toEqual(['/san-pham/sp-a', '/san-pham/sp-b']);
+    expect(chip(c, 'Tất cả').getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('không món nào còn hàng: Còn hàng ra câu báo riêng', async () => {
+    mocks.get.mockImplementation(async (path: string) => (path === '/me/wishlist' ? [item('a', 'Nước rửa chén', null, false)] : []));
+    const c = await mount();
+    click(chip(c, 'Còn hàng'));
+    expect(c.textContent).toContain('Chưa có sản phẩm còn hàng trong danh sách yêu thích');
+  });
+
+  it('danh sách trống hoặc lỗi tải: không có dải lọc', async () => {
+    mocks.get.mockResolvedValue([]);
+    const empty = await mount();
+    expect(empty.textContent).toContain('Chưa có sản phẩm yêu thích');
+    expect(row(empty)).toBeNull();
+    mocks.get.mockRejectedValue(new Error('boom'));
+    const failed = await mount();
+    expect(failed.querySelector('[role="alert"]')).not.toBeNull();
+    expect(row(failed)).toBeNull();
+  });
+
+  it('"Xem tất cả sản phẩm đã lưu" trả focus về chip Tất cả (nút vừa bấm biến mất cùng khối rỗng)', async () => {
+    mocks.get.mockImplementation(async (path: string) => (path === '/me/wishlist' ? [item('a', 'Nước rửa chén', null, true)] : []));
+    const c = await mount();
+    click(chip(c, 'Đang giảm'));
+    const cta = Array.from(c.querySelectorAll('button')).find((b) => b.textContent === 'Xem tất cả sản phẩm đã lưu')!;
+    cta.focus();
+    click(cta);
+    await vi.waitFor(() => expect(document.activeElement).toBe(chip(c, 'Tất cả')));
+  });
+
+  it('danh sách về rỗng khi đang lọc rồi có món lại: bộ lọc về Tất cả, không mở ở bộ lọc cũ', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const r = render(<WishlistPage />, client);
+    mounted.push(r);
+    await flush(4);
+    click(chip(r.container, 'Đang giảm'));
+    mocks.get.mockImplementation(async () => []);
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: ['wishlist'] });
+    });
+    await vi.waitFor(async () => {
+      await flush(1);
+      expect(r.container.textContent).toContain('Chưa có sản phẩm yêu thích');
+    });
+    mocks.get.mockImplementation(async (path: string) => (path === '/me/wishlist' ? MIXED : []));
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: ['wishlist'] });
+    });
+    await vi.waitFor(async () => {
+      await flush(1);
+      expect(shown(r.container)).toHaveLength(4);
+    });
+    expect(chip(r.container, 'Tất cả').getAttribute('aria-pressed')).toBe('true');
+    expect(r.container.textContent).not.toContain('Chưa có sản phẩm đang giảm giá');
+  });
+
+  it('chip và nút lọc có tên, vùng chạm đủ 44px, một h1', async () => {
+    const c = await mount();
+    click(chip(c, 'Đang giảm'));
+    expect(headingProblems(c)).toEqual([]);
+    expect(unnamedControls(c)).toEqual([]);
+    expect(smallTouchTargets(c)).toEqual([]);
+    expect(chips(c)).toHaveLength(3);
+    for (const b of chips(c)) expect(b.className).toContain('tubu-hit-44');
   });
 });

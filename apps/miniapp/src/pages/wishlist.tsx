@@ -3,6 +3,7 @@ import { Page, useNavigate, useSnackbar } from 'zmp-ui';
 import { ShoppingCart } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { QUICK_ADD_SOLD_OUT, quickAddPlan } from '@tubutree/app-core/quick-add';
+import { wishlistFilterView, type WishlistFilterKey } from '@tubutree/app-core/commerce/wishlist-filter';
 import { getWishlist } from '../services/wishlist-api';
 import { addToCart, fetchActiveFlashSales, fetchProduct, getCart, type ProductCard as ProductCardData, type VariationDetail } from '../services/shop-api';
 import { getErrorMessage, getLoadErrorMessage } from '../services/api';
@@ -15,6 +16,8 @@ import { useFlashAllowance } from '../hooks/use-flash-allowance';
 import { AuthGate } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { ProductGrid } from '../components/ui/product-grid';
+import { Chip } from '../components/ui/chip';
+import { ScrollRow } from '../components/ui/scroll-row';
 import { PageHeader } from '../components/ui/page-header';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 
@@ -43,6 +46,7 @@ export default function WishlistPage() {
   const { openSnackbar } = useSnackbar();
   const queryClient = useQueryClient();
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<WishlistFilterKey>('all');
   const [picker, setPicker] = useState<{ product: ProductCardData; variations: VariationDetail[] } | null>(null);
   const phase = useAuthPhase();
   // Gate auth: tránh gọi /me/wishlist khi chưa login → 401 → màn lỗi (đáng lẽ là empty).
@@ -53,6 +57,11 @@ export default function WishlistPage() {
 
   // Số suất Giờ vàng khách còn mua được (đã trừ các đơn trước) cho các phân loại của sản phẩm trong bảng; không có bảng thì không có id nên không gọi.
   const flashWithAllowance = useFlashAllowance(flashQ.data, picker?.variations.map((v) => v.id) ?? []);
+
+  // Danh sách về rỗng thì bộ lọc về Tất cả: khi có món lại (quay lại trang trong ngăn xếp) trang không mở ở bộ lọc cũ.
+  if (wishQ.data && wishQ.data.length === 0 && filter !== 'all') setFilter('all');
+  // Bộ lọc chỉ có khi danh sách có món; chip đếm trên toàn danh sách, lưới và lời báo rỗng theo bộ lọc đang chọn.
+  const filterView = wishQ.data && wishQ.data.length > 0 ? wishlistFilterView(wishQ.data, filter) : null;
 
   const addLine = async (variationId: string, qty: number, source: Element | null = null) => {
     const cart = await addToCart(variationId, qty, 'wishlist');
@@ -109,12 +118,36 @@ export default function WishlistPage() {
             <ProductGrid items={[]} variant="grid" loading skeletonCount={4} />
           ) : wishQ.isError && !wishQ.data ? (
             <ErrorState message={getLoadErrorMessage(wishQ.error)} onRetry={() => void wishQ.refetch()} />
-          ) : wishQ.data && wishQ.data.length > 0 ? (
-            <ProductGrid
-              items={wishQ.data}
-              variant="grid"
-              renderImageOverlay={(p) => (p.inStock !== false ? <QuickAddButton name={p.name} busy={busyId === p.id} onPress={(source) => void quickAdd(p, source)} /> : undefined)}
-            />
+          ) : filterView ? (
+            <>
+              <ScrollRow
+                label={filterView.groupAria}
+                style={{ display: 'flex', gap: 'var(--space-inline-sm)', paddingBlock: 'var(--space-stack-xs)', marginBottom: 'var(--space-stack-sm)' }}
+              >
+                {filterView.chips.map((c) => (
+                  <Chip
+                    key={c.key}
+                    selected={c.selected}
+                    count={c.count}
+                    onPress={() => {
+                      haptic('light');
+                      setFilter(c.key);
+                    }}
+                  >
+                    {c.label}
+                  </Chip>
+                ))}
+              </ScrollRow>
+              {filterView.empty ? (
+                <EmptyState art="search" heading={filterView.empty.message} ctaLabel={filterView.empty.ctaLabel} onCta={() => setFilter('all')} variant="inline" />
+              ) : (
+                <ProductGrid
+                  items={filterView.items}
+                  variant="grid"
+                  renderImageOverlay={(p) => (p.inStock !== false ? <QuickAddButton name={p.name} busy={busyId === p.id} onPress={(source) => void quickAdd(p, source)} /> : undefined)}
+                />
+              )}
+            </>
           ) : (
             <EmptyState
               art="sprout"
