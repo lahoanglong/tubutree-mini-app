@@ -8,7 +8,7 @@ export interface VoucherPickerProps {
   onRemove: () => void;
   /** Có thao tác đang chạy hoặc trang chứa đang đổi mã: mọi nút `aria-disabled`, không bấm được (hai lần đổi mã không chồng nhau). */
   busy?: boolean;
-  /** Mã đang được áp hoặc gỡ: nút của mã đó `aria-busy`. */
+  /** Mã đang được áp hoặc gỡ: nút của mã đó `aria-busy`, các hàng còn lại bị khoá dù nơi gọi quên truyền `busy`; cả danh sách `aria-busy`. */
   pendingCode?: string | null;
 }
 
@@ -21,7 +21,11 @@ const NOOP = () => undefined;
  */
 export function VoucherPicker({ rows, onUse, onRemove, busy = false, pendingCode = null }: VoucherPickerProps) {
   return (
-    <ul aria-label={fillCopy('coupon.pickMine')} style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column' }}>
+    <ul
+      aria-label={fillCopy('coupon.pickMine')}
+      aria-busy={busy || Boolean(pendingCode) || undefined}
+      style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column' }}
+    >
       {rows.map((r) => (
         <li key={r.coupon.code}>
           <VoucherTicket
@@ -34,7 +38,7 @@ export function VoucherPicker({ rows, onUse, onRemove, busy = false, pendingCode
               label: r.label,
               ariaLabel: r.ariaLabel,
               busy: pendingCode === r.coupon.code,
-              disabled: busy,
+              disabled: busy || (pendingCode !== null && pendingCode !== r.coupon.code),
               onClick: r.action === 'use' ? () => onUse(r.coupon.code) : r.action === 'remove' ? onRemove : NOOP,
             }}
           />

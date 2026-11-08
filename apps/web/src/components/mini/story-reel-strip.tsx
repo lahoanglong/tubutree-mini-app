@@ -34,7 +34,7 @@ export function StoryReelStrip({ items, loading = false, onOpen, onWarm }: Story
   if (!loading && items.length === 0) return null;
   const title = fillCopy('story.title');
   return (
-    <section data-testid="story-reel-strip" aria-busy={loading || undefined} className="tubu-reel-strip">
+    <section data-testid="story-reel-strip" aria-label={title} aria-busy={loading || undefined} className="tubu-reel-strip">
       <div className="tubu-reel-head">
         <SectionTitle block>{title}</SectionTitle>
       </div>
@@ -56,7 +56,7 @@ export function StoryReelStrip({ items, loading = false, onOpen, onWarm }: Story
                 data-slug={it.slug}
                 data-seen={it.seen ? 'true' : 'false'}
                 aria-label={fillCopy(it.seen ? 'reel.openAriaSeen' : 'reel.openAria', { name: it.name })}
-                className="tubu-reel-item tubu-press"
+                className="tubu-reel-item tubu-press tubu-hit-44-square"
                 onClick={() => onOpen(it.slug)}
                 onPointerDown={() => onWarm?.(it.slug)}
                 onFocus={() => onWarm?.(it.slug)}

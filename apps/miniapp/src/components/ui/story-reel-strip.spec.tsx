@@ -17,8 +17,8 @@ describe('StoryReelStrip (Mini)', () => {
 
   it('hàng cuộn là vùng có tên (ScrollRow), mỗi vòng có huy hiệu Story và nhãn tên', () => {
     render(<StoryReelStrip items={[item('a')]} onOpen={vi.fn()} />);
-    const row = screen.getByRole('region', { name: 'Câu chuyện sản phẩm' });
-    expect(row.className).toContain('scroll-x');
+    const row = screen.getAllByRole('region', { name: 'Câu chuyện sản phẩm' }).find((r) => r.className.includes('scroll-x'))!;
+    expect(row).toBeDefined();
     const btn = within(row).getByRole('button');
     expect(within(btn).getByText('Story')).toBeInTheDocument();
     expect(within(btn).getByText('Món a')).toHaveClass('tubu-reel-label');
@@ -30,6 +30,21 @@ describe('StoryReelStrip (Mini)', () => {
     expect(fresh).toHaveAttribute('data-seen', 'false');
     expect(seen).toHaveAttribute('data-seen', 'true');
     expect(seen).toHaveAccessibleName('Story Món b, đã xem, mở lại');
+  });
+
+  it('vòng .tubu-reel-ring mang data-seen như web: "false" khi chưa xem, "true" khi đã xem', () => {
+    render(<StoryReelStrip items={[item('a'), item('b', { seen: true })]} onOpen={vi.fn()} />);
+    const [fresh, seen] = screen.getAllByTestId('story-reel-item');
+    expect(fresh!.querySelector('.tubu-reel-ring')).toHaveAttribute('data-seen', 'false');
+    expect(seen!.querySelector('.tubu-reel-ring')).toHaveAttribute('data-seen', 'true');
+  });
+
+  it('thẻ gốc <section> có tên theo tiêu đề dải (vùng landmark có tên)', () => {
+    render(<StoryReelStrip items={[item('a')]} onOpen={vi.fn()} />);
+    const section = screen.getByTestId('story-reel-strip');
+    expect(section.tagName).toBe('SECTION');
+    expect(section).toHaveAttribute('aria-label', 'Câu chuyện sản phẩm');
+    expect(section).toHaveAccessibleName('Câu chuyện sản phẩm');
   });
 
   it('mỗi vòng mang data-slug để e2e và các phép đo chung tìm đúng món', () => {

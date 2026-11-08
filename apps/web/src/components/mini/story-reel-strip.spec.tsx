@@ -59,7 +59,25 @@ describe('StoryReelStrip (web)', () => {
 
   it('vùng cuộn có nhãn trình đọc màn hình theo tiêu đề dải', () => {
     const { container } = mount(<StoryReelStrip items={[item('a'), item('b'), item('c')]} onOpen={vi.fn()} />);
-    expect(container.querySelector('[aria-label="Câu chuyện sản phẩm"]')).not.toBeNull();
+    expect(container.querySelector('[role="region"].scroll-x[aria-label="Câu chuyện sản phẩm"]')).not.toBeNull();
+  });
+
+  it('thẻ gốc <section> có tên theo tiêu đề dải (vùng landmark có tên), cả lúc có món lẫn lúc chờ', () => {
+    const real = mount(<StoryReelStrip items={[item('a')]} onOpen={vi.fn()} />);
+    const section = real.container.querySelector('section[data-testid="story-reel-strip"]')!;
+    expect(section.getAttribute('aria-label')).toBe('Câu chuyện sản phẩm');
+    expect(section.hasAttribute('aria-busy')).toBe(false);
+    real.unmount();
+    const loading = mount(<StoryReelStrip items={[]} loading onOpen={vi.fn()} />);
+    const sk = loading.container.querySelector('section[data-testid="story-reel-strip"]')!;
+    expect(sk.getAttribute('aria-label')).toBe('Câu chuyện sản phẩm');
+    expect(sk.getAttribute('aria-busy')).toBe('true');
+  });
+
+  it('mỗi vòng mang tubu-hit-44-square như Mini App (vùng chạm vuông 44px, không đổi hình)', () => {
+    const { container } = mount(<StoryReelStrip items={[item('a'), item('b', { seen: true })]} onOpen={vi.fn()} />);
+    expect(rings(container)).toHaveLength(2);
+    for (const r of rings(container)) expect(r.className).toMatch(/\btubu-hit-44-square\b/);
   });
 
   describe('mini.css', () => {
