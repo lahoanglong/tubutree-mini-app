@@ -102,6 +102,251 @@ describe('ReferralCodeBox — ô nhập mã giới thiệu CTV ở checkout (C-0
   });
 });
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+const REGION = { name: 'Mã người giới thiệu' };
+const submitButton = () => screen.getByRole('button', { name: 'Áp dụng' });
+const cancelButton = () => screen.getByRole('button', { name: 'Huỷ' });
+function openAndType(value = 'ab12cd34') {
+  fireEvent.click(screen.getByText('Nhập mã'));
+  fireEvent.change(input(), { target: { value } });
+}
+
+describe('ReferralCodeBox — vùng có tên cho trình đọc màn hình (W59B)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('thu gọn, đã có mã và đang nhập đều nằm trong vùng "Mã người giới thiệu"', () => {
+    const collapsed = setup();
+    expect(screen.getByRole('region', REGION).tagName).toBe('SECTION');
+    fireEvent.click(screen.getByText('Nhập mã'));
+    expect(screen.getByRole('region', REGION)).toContainElement(input());
+    collapsed.unmount();
+
+    setup({ linkedCode: 'ab12cd34' });
+    expect(screen.getByRole('region', REGION)).toHaveTextContent('AB12CD34');
+  });
+});
+
+describe('ReferralCodeBox — liên kết ô nhập với dòng lỗi (W59B)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('chưa có lỗi: ô nhập không báo aria-invalid/aria-describedby', () => {
+    setup();
+    fireEvent.click(screen.getByText('Nhập mã'));
+    expect(input()).not.toHaveAttribute('aria-invalid');
+    expect(input()).not.toHaveAttribute('aria-describedby');
+  });
+
+  it('ô trống → ô nhập aria-invalid và aria-describedby trỏ đúng vùng role=alert', () => {
+    setup();
+    fireEvent.click(screen.getByText('Nhập mã'));
+    fireEvent.click(submitButton());
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveAttribute('id', 'referral-code-error');
+    expect(input()).toHaveAttribute('aria-invalid', 'true');
+    expect(input()).toHaveAttribute('aria-describedby', 'referral-code-error');
+    expect(document.getElementById(input().getAttribute('aria-describedby')!)).toBe(alert);
+  });
+
+  it('server trả ok:false và lỗi mạng đều gắn aria-invalid + aria-describedby', async () => {
+    mocks.recordReferralTouch.mockResolvedValueOnce({ ok: false });
+    setup();
+    openAndType();
+    fireEvent.click(submitButton());
+    await screen.findByText(/Không tìm thấy mã này/);
+    expect(input()).toHaveAttribute('aria-invalid', 'true');
+    expect(input()).toHaveAttribute('aria-describedby', 'referral-code-error');
+
+    mocks.recordReferralTouch.mockRejectedValueOnce(new Error('boom'));
+    fireEvent.change(input(), { target: { value: 'ZZ99' } });
+    fireEvent.click(submitButton());
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
+    expect(input()).toHaveAttribute('aria-invalid', 'true');
+    expect(input()).toHaveAttribute('aria-describedby', 'referral-code-error');
+  });
+
+  it('gõ lại thì lỗi và hai thuộc tính aria biến mất', () => {
+    setup();
+    fireEvent.click(screen.getByText('Nhập mã'));
+    fireEvent.click(submitButton());
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    fireEvent.change(input(), { target: { value: 'a' } });
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(input()).not.toHaveAttribute('aria-invalid');
+    expect(input()).not.toHaveAttribute('aria-describedby');
+  });
+});
+
+describe('ReferralCodeBox — phím Enter trong ô nhập (W59B)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('Enter gọi apply: chuẩn hoá mã rồi xác nhận qua /affiliate/touch', async () => {
+    mocks.recordReferralTouch.mockResolvedValue({ ok: true });
+    const { onApplied } = setup();
+    openAndType('  ab12 cd34 ');
+    const notPrevented = fireEvent.keyDown(input(), { key: 'Enter' });
+    expect(notPrevented).toBe(false);
+    await waitFor(() => expect(onApplied).toHaveBeenCalledWith('AB12CD34'));
+    expect(mocks.recordReferralTouch).toHaveBeenCalledTimes(1);
+    expect(mocks.recordReferralTouch).toHaveBeenCalledWith({ referralCode: 'AB12CD34', kind: 'ctv' });
+  });
+
+  it('Enter ở ô trống nhắc nhập, không gọi server', () => {
+    setup();
+    fireEvent.click(screen.getByText('Nhập mã'));
+    fireEvent.keyDown(input(), { key: 'Enter' });
+    expect(screen.getByText(/Bạn nhập mã người giới thiệu giúp Tubu nhé/)).toBeInTheDocument();
+    expect(mocks.recordReferralTouch).not.toHaveBeenCalled();
+  });
+
+  it('phím khác Enter không gửi mã và không bị chặn mặc định', () => {
+    setup();
+    openAndType();
+    const notPrevented = fireEvent.keyDown(input(), { key: 'a' });
+    expect(notPrevented).toBe(true);
+    expect(mocks.recordReferralTouch).not.toHaveBeenCalled();
+  });
+
+  it('Enter lúc bộ gõ đang ghép chữ (isComposing hoặc keyCode 229) chỉ chốt chữ, không gửi mã', () => {
+    setup();
+    openAndType();
+    fireEvent.keyDown(input(), { key: 'Enter', isComposing: true });
+    fireEvent.keyDown(input(), { key: 'Enter', keyCode: 229 });
+    expect(mocks.recordReferralTouch).not.toHaveBeenCalled();
+  });
+});
+
+describe('ReferralCodeBox — khoá bận khi đang kiểm tra mã (W59B)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('đang chờ server: ô nhập + Huỷ khoá, Áp dụng báo bận; Enter và bấm lại không gọi server lần hai', async () => {
+    const gate = deferred<{ ok: boolean }>();
+    mocks.recordReferralTouch.mockReturnValue(gate.promise);
+    const { onApplied } = setup();
+    openAndType();
+    fireEvent.click(submitButton());
+
+    await waitFor(() => expect(input()).toBeDisabled());
+    expect(cancelButton()).toBeDisabled();
+    expect(submitButton()).toHaveAttribute('aria-busy', 'true');
+    expect(submitButton()).toHaveAttribute('aria-disabled', 'true');
+
+    fireEvent.keyDown(input(), { key: 'Enter' });
+    fireEvent.click(submitButton());
+    fireEvent.click(cancelButton());
+    expect(mocks.recordReferralTouch).toHaveBeenCalledTimes(1);
+    expect(input()).toBeInTheDocument();
+
+    gate.resolve({ ok: true });
+    await waitFor(() => expect(onApplied).toHaveBeenCalledWith('AB12CD34'));
+    expect(onApplied).toHaveBeenCalledTimes(1);
+  });
+
+  it('server báo lỗi thì mở khoá lại: ô nhập gõ được, Huỷ bấm được, Áp dụng hết báo bận', async () => {
+    const gate = deferred<{ ok: boolean }>();
+    mocks.recordReferralTouch.mockReturnValue(gate.promise);
+    setup();
+    openAndType();
+    fireEvent.click(submitButton());
+    await waitFor(() => expect(input()).toBeDisabled());
+
+    gate.reject(new Error('boom'));
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
+    expect(input()).toBeEnabled();
+    expect(cancelButton()).toBeEnabled();
+    expect(submitButton()).not.toHaveAttribute('aria-busy');
+    expect(input()).toHaveValue('ab12cd34');
+  });
+
+  it('lỗi xong thì focus về ô nhập (Chromium thả focus khi ô bị khoá lúc kiểm tra; jsdom không, nên đẩy focus sang nút phụ)', async () => {
+    const gate = deferred<{ ok: boolean }>();
+    mocks.recordReferralTouch.mockReturnValue(gate.promise);
+    setup();
+    openAndType();
+    input().focus();
+    fireEvent.keyDown(input(), { key: 'Enter' });
+    await waitFor(() => expect(input()).toBeDisabled());
+    const sink = document.createElement('button');
+    document.body.appendChild(sink);
+    sink.focus();
+    expect(sink).toHaveFocus();
+
+    gate.resolve({ ok: false });
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
+    await waitFor(() => expect(input()).toHaveFocus());
+    sink.remove();
+  });
+
+  it('Huỷ khi rảnh vẫn đóng ô nhập', () => {
+    setup();
+    openAndType();
+    fireEvent.click(cancelButton());
+    expect(screen.queryByPlaceholderText('Nhập mã người giới thiệu')).not.toBeInTheDocument();
+    expect(screen.getByText('Nhập mã')).toBeInTheDocument();
+  });
+});
+
+describe('ReferralCodeBox — prop disabled khi đơn đang gửi (W59B)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('thu gọn: nút Nhập mã bị khoá, bấm không mở ô nhập', () => {
+    setup({ disabled: true });
+    const trigger = screen.getByText('Nhập mã').closest('button')!;
+    expect(trigger).toBeDisabled();
+    expect(trigger.style.opacity).toBe('0.6');
+    expect(trigger.style.cursor).toBe('not-allowed');
+    fireEvent.click(trigger);
+    expect(screen.queryByPlaceholderText('Nhập mã người giới thiệu')).not.toBeInTheDocument();
+  });
+
+  it('mặc định không khoá: nút Nhập mã bấm được, đủ độ rõ và con trỏ tay', () => {
+    setup();
+    const trigger = screen.getByText('Nhập mã').closest('button')!;
+    expect(trigger).toBeEnabled();
+    expect(trigger.style.opacity).toBe('1');
+    expect(trigger.style.cursor).toBe('pointer');
+  });
+
+  it('đã áp dụng: nút Đổi bị khoá, bấm không mở ô nhập; mã vẫn hiện', () => {
+    setup({ appliedCode: 'AB12CD34', disabled: true });
+    expect(screen.getByRole('button', { name: 'Đổi' })).toBeDisabled();
+    fireEvent.click(screen.getByText('Đổi'));
+    expect(screen.queryByPlaceholderText('Nhập mã người giới thiệu')).not.toBeInTheDocument();
+    expect(screen.getByText('AB12CD34')).toBeInTheDocument();
+  });
+
+  it('đã áp dụng, không khoá: nút Đổi bấm được', () => {
+    setup({ appliedCode: 'AB12CD34' });
+    expect(screen.getByRole('button', { name: 'Đổi' })).toBeEnabled();
+  });
+
+  it('đang mở ô nhập mà đơn bắt đầu gửi: ô nhập + Huỷ + Áp dụng đều khoá, Enter không gọi server', () => {
+    const onApplied = vi.fn();
+    const { rerender } = render(<ReferralCodeBox linkedCode={null} appliedCode={null} onApplied={onApplied} />);
+    openAndType();
+    rerender(<ReferralCodeBox linkedCode={null} appliedCode={null} onApplied={onApplied} disabled />);
+
+    expect(input()).toBeDisabled();
+    expect(cancelButton()).toBeDisabled();
+    expect(submitButton()).toBeDisabled();
+    fireEvent.keyDown(input(), { key: 'Enter' });
+    fireEvent.click(cancelButton());
+    expect(mocks.recordReferralTouch).not.toHaveBeenCalled();
+    expect(input()).toBeInTheDocument();
+
+    rerender(<ReferralCodeBox linkedCode={null} appliedCode={null} onApplied={onApplied} />);
+    expect(input()).toBeEnabled();
+    expect(cancelButton()).toBeEnabled();
+  });
+});
+
 describe('effectiveReferralCode — mã gửi kèm đơn', () => {
   it('mã khách vừa nhập thắng mã từ link; không có gì thì undefined', () => {
     expect(effectiveReferralCode('AB12CD34', 'LINKCODE')).toBe('AB12CD34');

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ChevronRight, TriangleAlert, Users } from 'lucide-react';
 import { recordReferralTouch } from '@/lib/shop-client';
 import { ui } from '@/lib/guest-ui';
@@ -8,6 +8,7 @@ import { mini } from '@/components/order-mobile/mobile-ui';
 import { actionErrorText } from '@/lib/error-text';
 
 const MISS_MESSAGE = 'Không tìm thấy mã này, hoặc đây là mã của chính bạn. Bạn kiểm tra lại giúp Tubu nhé.';
+const ERROR_ID = 'referral-code-error';
 
 function Tile() {
   return (
@@ -47,8 +48,17 @@ export function ReferralCodeBox({
   const [draft, setDraft] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const refocus = useRef(false);
 
-  const shell = (children: React.ReactNode) => (
+  // Ô nhập bị disabled lúc kiểm tra nên trình duyệt thả focus về body; lỗi thì ô còn mở, trả focus để gõ lại ngay.
+  useEffect(() => {
+    if (checking || !refocus.current) return;
+    refocus.current = false;
+    inputRef.current?.focus();
+  }, [checking]);
+
+  const shell =(children: React.ReactNode) => (
     <section aria-label="Mã người giới thiệu" className={`p-4 ${ui.card} ${mini.band}`}>
       {children}
     </section>
@@ -112,11 +122,13 @@ export function ReferralCodeBox({
   }
 
   const apply = async () => {
+    if (checking || disabled) return;
     const code = draft.replace(/\s+/g, '').toUpperCase();
     if (!code) {
       setError('Bạn nhập mã người giới thiệu giúp Tubu nhé');
       return;
     }
+    refocus.current = true;
     setChecking(true);
     setError(null);
     try {
@@ -146,6 +158,7 @@ export function ReferralCodeBox({
         Mã người giới thiệu
       </label>
       <input
+        ref={inputRef}
         id="referral-code"
         value={draft}
         onChange={(e) => {
@@ -158,19 +171,26 @@ export function ReferralCodeBox({
         placeholder="Nhập mã người giới thiệu"
         aria-label="Mã người giới thiệu"
         aria-invalid={error ? true : undefined}
+        aria-describedby={error ? ERROR_ID : undefined}
+        disabled={checking || disabled}
         className={error ? ui.fieldError : ui.field}
       />
       {error && (
-        <p role="alert" className="flex items-start gap-1.5 text-caption text-danger-fg">
+        <p id={ERROR_ID} role="alert" className="flex items-start gap-1.5 text-caption text-danger-fg">
           <TriangleAlert className="mt-0.5 h-3.5 w-3.5 flex-none" aria-hidden="true" />
           {error}
         </p>
       )}
       <div className="flex gap-2">
-        <button type="button" onClick={() => setOpen(false)} disabled={checking} className={ui.btnSecondary}>
+        <button type="button" onClick={() => setOpen(false)} disabled={checking || disabled} className={ui.btnSecondary}>
           Huỷ
         </button>
-        <button type="submit" disabled={checking} className={`${ui.btnPrimary} flex-1`}>
+        <button
+          type="submit"
+          disabled={checking || disabled}
+          aria-busy={checking || undefined}
+          className={`${ui.btnPrimary} flex-1`}
+        >
           {checking ? 'Đang kiểm tra…' : 'Áp dụng'}
         </button>
       </div>

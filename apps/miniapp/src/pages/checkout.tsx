@@ -901,6 +901,7 @@ export default function CheckoutPage() {
         linkedCode={linkedReferral}
         appliedCode={referralApplied}
         onApplied={chosen(setReferralApplied)}
+        disabled={order.isPending || submitting}
       />
 
       {/* ── Thanh toán ── */}

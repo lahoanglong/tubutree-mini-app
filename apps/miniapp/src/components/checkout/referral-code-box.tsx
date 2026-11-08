@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { ElementRef } from 'react';
 import { Input } from 'zmp-ui';
 import { ChevronRight, TriangleAlert, Users } from 'lucide-react';
 import { recordReferralTouch } from '../../services/affiliate-api';
@@ -22,9 +23,12 @@ export interface ReferralCodeBoxProps {
   /** Mã khách đã nhập và server xác nhận trong phiên checkout này. */
   appliedCode: string | null;
   onApplied: (code: string) => void;
+  /** Khoá mọi nút và ô nhập khi đơn đang gửi. */
+  disabled?: boolean;
 }
 
 const MISS_MESSAGE = 'Không tìm thấy mã này, hoặc đây là mã của chính bạn. Bạn kiểm tra lại giúp Tubu nhé.';
+const ERROR_ID = 'referral-code-error';
 
 function Tile() {
   return (
@@ -68,14 +72,28 @@ function CodeChip({ code }: { code: string }) {
  * phải có chỗ để nhập. Mã được xác nhận qua /affiliate/touch (cơ chế attribution sẵn có: server tra
  * mã, loại mã của chính người mua, ghi "chạm" giới thiệu) rồi gửi kèm đơn qua `referralCode`.
  */
-export function ReferralCodeBox({ linkedCode, appliedCode, onApplied }: ReferralCodeBoxProps) {
+export function ReferralCodeBox({ linkedCode, appliedCode, onApplied, disabled = false }: ReferralCodeBoxProps) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
+  const inputRef = useRef<ElementRef<typeof Input>>(null);
+  const refocus = useRef(false);
 
-  const shell = (children: React.ReactNode) => (
-    <div style={{ padding: 16, marginTop: 8, background: 'var(--color-bg-surface)' }}>{children}</div>
+  // Ô nhập bị disabled lúc kiểm tra nên trình duyệt thả focus về body; lỗi thì ô còn mở, trả focus để gõ lại ngay.
+  useEffect(() => {
+    if (checking || !refocus.current) return;
+    refocus.current = false;
+    inputRef.current?.focus();
+  }, [checking]);
+
+  const shell =(children: React.ReactNode) => (
+    <section
+      aria-label="Mã người giới thiệu"
+      style={{ padding: 16, marginTop: 8, background: 'var(--color-bg-surface)' }}
+    >
+      {children}
+    </section>
   );
 
   const fixedCode = linkedCode ? linkedCode.trim().toUpperCase() : appliedCode && !open ? appliedCode : null;
@@ -99,6 +117,7 @@ export function ReferralCodeBox({ linkedCode, appliedCode, onApplied }: Referral
         {!linkedCode && (
           <Button
             variant="ghost"
+            disabled={disabled}
             onPress={() => {
               haptic('light');
               setDraft('');
@@ -118,7 +137,9 @@ export function ReferralCodeBox({ linkedCode, appliedCode, onApplied }: Referral
       <button
         type="button"
         className="tubu-press"
+        disabled={disabled}
         onClick={() => {
+          if (disabled) return;
           haptic('light');
           setOpen(true);
         }}
@@ -134,7 +155,8 @@ export function ReferralCodeBox({ linkedCode, appliedCode, onApplied }: Referral
           color: 'inherit',
           font: 'inherit',
           textAlign: 'left',
-          cursor: 'pointer',
+          opacity: disabled ? 0.6 : 1,
+          cursor: disabled ? 'not-allowed' : 'pointer',
         }}
       >
         <span style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
@@ -159,11 +181,13 @@ export function ReferralCodeBox({ linkedCode, appliedCode, onApplied }: Referral
   }
 
   const apply = async () => {
+    if (checking || disabled) return;
     const code = draft.replace(/\s+/g, '').toUpperCase();
     if (!code) {
       setError('Bạn nhập mã người giới thiệu giúp Tubu nhé');
       return;
     }
+    refocus.current = true;
     setChecking(true);
     setError(null);
     try {
@@ -188,19 +212,30 @@ export function ReferralCodeBox({ linkedCode, appliedCode, onApplied }: Referral
         Mã người giới thiệu
       </Text>
       <Input
+        ref={inputRef}
         aria-label="Mã người giới thiệu"
         placeholder="Nhập mã người giới thiệu"
         value={draft}
         maxLength={64}
         autoCapitalize="characters"
+        disabled={checking || disabled}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? ERROR_ID : undefined}
         onChange={(e) => {
           setDraft(e.target.value);
           if (error) setError(null);
         }}
+        onKeyDown={(e) => {
+          if (e.key !== 'Enter') return;
+          e.preventDefault();
+          // Bộ gõ đang ghép chữ (isComposing, hoặc keyCode 229 trên WKWebView) thì Enter chỉ chốt chữ, không gửi mã.
+          if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+          void apply();
+        }}
         status={error ? 'error' : undefined}
       />
       {error && (
-        <div role="alert" style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+        <div id={ERROR_ID} role="alert" style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
           <span aria-hidden="true" style={{ display: 'inline-flex', marginTop: 2 }}>
             <Icon icon={TriangleAlert} size="sm" tone="danger" />
           </span>
@@ -210,10 +245,17 @@ export function ReferralCodeBox({ linkedCode, appliedCode, onApplied }: Referral
         </div>
       )}
       <div style={{ display: 'flex', gap: 8 }}>
-        <Button variant="secondary" onPress={() => setOpen(false)}>
+        <Button
+          variant="secondary"
+          disabled={checking || disabled}
+          onPress={() => {
+            if (checking || disabled) return;
+            setOpen(false);
+          }}
+        >
           Huỷ
         </Button>
-        <Button fullWidth loading={checking} onPress={() => void apply()}>
+        <Button fullWidth disabled={disabled} loading={checking} onPress={() => void apply()}>
           Áp dụng
         </Button>
       </div>
