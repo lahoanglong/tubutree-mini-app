@@ -45,6 +45,7 @@ export function PdpFbt(props: FbtHostArgs) {
         lines={lines}
         picked={picked}
         onToggle={toggle}
+        onSelectAll={() => setOff(new Set())}
         summary={summary}
         busy={busyId === FBT_ID}
         onAdd={() =>

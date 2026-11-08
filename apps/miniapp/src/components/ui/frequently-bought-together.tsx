@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import type { FbtLine, FbtSummary } from '@tubutree/app-core/commerce/frequently-bought';
 import { vnd } from '@tubutree/app-core/commerce/money';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
@@ -23,6 +24,8 @@ export interface FrequentlyBoughtTogetherProps {
   /** Đang thêm cả bộ vào giỏ. */
   busy?: boolean;
   onAdd: () => void;
+  /** Tick lại cả bộ một chạm. Nút "Chọn tất cả" chỉ hiện khi có hàm này và khách đã bỏ tick ít nhất một món. */
+  onSelectAll?: () => void;
 }
 
 function FbtRow({ line, on, onToggle }: { line: FbtLine; on: boolean; onToggle: () => void }) {
@@ -62,12 +65,42 @@ function FbtRow({ line, on, onToggle }: { line: FbtLine; on: boolean; onToggle: 
  * Chỉ vẽ: chọn món, giá và tổng là việc của `buildFrequentlyBoughtBundle` / `frequentlyBoughtSummary` ở app-core (dùng chung với web). Không có
  * khuyến mãi riêng của bộ nên dòng "Tiết kiệm" chỉ là phần Giờ vàng và giá bán đã giảm của từng món, và để trống khi không có.
  */
-export function FrequentlyBoughtTogether({ lines, picked, onToggle, summary, busy = false, onAdd }: FrequentlyBoughtTogetherProps) {
+export function FrequentlyBoughtTogether({ lines, picked, onToggle, summary, busy = false, onAdd, onSelectAll }: FrequentlyBoughtTogetherProps) {
+  const root = useRef<HTMLElement>(null);
+  const refocus = useRef(false);
+  const showSelectAll = onSelectAll !== undefined && picked.size < lines.length;
+  // Nút tự gỡ khi bộ đã chọn đủ: đưa tiêu điểm sang nút Thêm để bàn phím và trình đọc màn hình không rơi về đầu trang, và nghe luôn số món, tổng mới.
+  useEffect(() => {
+    if (!refocus.current) return;
+    refocus.current = false;
+    if (!showSelectAll) root.current?.querySelector<HTMLElement>('[data-testid="fbt-add"]')?.focus();
+  });
   if (lines.length === 0) return null;
   const title = fillCopy('fbt.title');
   return (
-    <section aria-label={title} data-testid="fbt" className="tubu-fbt">
-      <SectionTitle block>{title}</SectionTitle>
+    <section ref={root} aria-label={title} data-testid="fbt" className="tubu-fbt">
+      {onSelectAll ? (
+        <div className="tubu-fbt-head">
+          <SectionTitle block>{title}</SectionTitle>
+          {showSelectAll && (
+            <button
+              type="button"
+              data-testid="fbt-select-all"
+              aria-label={fillCopy('fbt.selectAllSpoken', { title })}
+              className="tubu-press tubu-fbt-select-all"
+              onClick={() => {
+                haptic('light');
+                refocus.current = true;
+                onSelectAll();
+              }}
+            >
+              {fillCopy('fbt.selectAll')}
+            </button>
+          )}
+        </div>
+      ) : (
+        <SectionTitle block>{title}</SectionTitle>
+      )}
       <div role="group" aria-label={title} className="tubu-fbt-list">
         {lines.map((l) => (
           <FbtRow key={l.key} line={l} on={picked.has(l.key)} onToggle={() => onToggle(l.key)} />
