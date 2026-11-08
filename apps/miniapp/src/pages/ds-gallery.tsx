@@ -317,6 +317,9 @@ export default function DsGalleryPage() {
           <Variant label="còn thiếu 35.000đ">
             <FreeShippingProgressBar base={164_000} threshold={199_000} />
           </Variant>
+          <Variant label="còn thiếu, có nút Mua thêm">
+            <FreeShippingProgressBar base={164_000} threshold={199_000} onShopMore={() => undefined} />
+          </Variant>
           <Variant label="vừa bắt đầu">
             <FreeShippingProgressBar base={0} threshold={199_000} />
           </Variant>

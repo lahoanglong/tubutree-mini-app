@@ -63,6 +63,7 @@ export default function CartPage() {
   // Điện thoại: hàng mã giảm giá nằm trong thanh dính đáy (như Mini App); khổ lớn hơn: trong khung tóm tắt. Một thẻ duy nhất, nên chọn chỗ bằng JS.
   const phoneCoupon = useMediaQuery('(max-width: 767px)');
   const qc = useQueryClient();
+  const router = useRouter();
   const cartKeyNow = useCartKey();
   const cartQ = useQuery({ queryKey: cartKeyNow, queryFn: getCart, enabled: phase === 'authenticated' });
   // Máy chủ gỡ mã khi giỏ rơi dưới đơn tối thiểu và chỉ báo đúng một lần: nhớ để khách thấy mã nào mất và cần mua thêm bao nhiêu.
@@ -480,7 +481,7 @@ export default function CartPage() {
           <div className="min-w-0">
             {showFreeship && freeship && (
               <div data-testid="cart-freeship" className="mb-3 max-md:mb-2">
-                <FreeShippingProgressBar base={freeshipBase} threshold={cart.freeshipThreshold} serverReached={serverFreeship} tubuOnly={hasMerchant} />
+                <FreeShippingProgressBar base={freeshipBase} threshold={cart.freeshipThreshold} serverReached={serverFreeship} tubuOnly={hasMerchant} onShopMore={() => router.push('/')} />
                 {!freeship.reached && <FreeshipAddons remaining={freeship.remaining} lines={allItems} />}
               </div>
             )}

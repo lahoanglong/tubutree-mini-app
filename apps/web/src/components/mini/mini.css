@@ -1132,6 +1132,11 @@
 .tubu-freeship-text { margin: 0; color: var(--color-text-primary); font-size: var(--type-body-sm-size); line-height: var(--type-body-sm-lh); }
 .tubu-freeship[data-reached='true'] .tubu-freeship-text { color: var(--color-text-success); font-weight: 600; }
 .tubu-freeship-track { height: var(--p-space-3); margin-top: var(--p-space-3); border-radius: var(--radius-pill); background: var(--color-track); overflow: hidden; }
+/* Có nút "Mua thêm": dòng chữ và nút chung một hàng; khối cao tối thiểu bằng hàng nút 44px + thanh nên câu một dòng không co lại khi đạt ngưỡng (hết nút, hết thanh), như Mini. Câu dài (hàng gian hàng tự giao, màn hẹp) xuống ba dòng thì cao hơn mức này và co lại khi đạt. */
+.tubu-freeship[data-cta='true'] { min-height: calc(44px + var(--p-space-3) + var(--p-space-3) + 2 * var(--space-inset-card)); }
+.tubu-freeship-head { display: flex; align-items: center; gap: var(--space-inline-md); }
+.tubu-freeship-head .tubu-freeship-text { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.tubu-freeship-cta.zaui-btn { flex: 0 0 auto; min-width: 0; height: 44px; padding: 0 var(--space-inline-md); font-variant-numeric: inherit; }
 .tubu-freeship-fill {
   position: relative; height: 100%; border-radius: var(--radius-pill); overflow: hidden;
   background: linear-gradient(90deg, var(--color-progress-fill-from), var(--color-action-primary-bg));

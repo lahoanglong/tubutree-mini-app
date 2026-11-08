@@ -28,6 +28,27 @@
 .tubu-freeship[data-reached='true'] .tubu-freeship-text {
   color: var(--color-text-success);
 }
+/* Có nút "Mua thêm": dòng chữ và nút chung một hàng; khối cao tối thiểu bằng hàng nút 44px + thanh nên câu một dòng không co lại khi đạt ngưỡng (hết nút, hết thanh). Câu dài (hàng gian hàng tự giao, màn hẹp) xuống ba dòng thì cao hơn mức này và co lại khi đạt. */
+.tubu-freeship[data-cta='true'] {
+  min-height: calc(44px + var(--space-stack-sm) + 6px + 2 * var(--space-inline-md));
+}
+.tubu-freeship-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-inline-md);
+}
+.tubu-freeship-head .tubu-freeship-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.tubu-freeship-cta.zaui-btn {
+  flex: 0 0 auto;
+  min-width: 0;
+  height: 44px;
+  padding: 0 var(--space-inline-md);
+  font-variant-numeric: inherit;
+}
 .tubu-freeship-track {
   height: 6px;
   overflow: hidden;
