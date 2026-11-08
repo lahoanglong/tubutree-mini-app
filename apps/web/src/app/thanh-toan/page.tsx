@@ -1065,7 +1065,7 @@ export default function CheckoutPage() {
           {/* Bản sao hiển thị của dòng Tổng cộng ở khối tổng phía trên (ẩn từ lg): tổng tiền đi cùng khối dính, luôn nằm cạnh nút Đặt hàng. */}
           <div className="mb-3 hidden justify-between border-t border-[var(--color-border-subtle)] pt-3 font-bold text-[color:var(--color-text-primary)] lg:flex">
             <span>Tổng cộng</span>
-            <span>{totalText}</span>
+            <span className="tabular-nums">{totalText}</span>
           </div>
           <OrderConsent className="hidden lg:block" />
           <button
@@ -1183,7 +1183,7 @@ function DesktopLines({ items, shipments, fix }: { items: CartLine[]; shipments:
                 ))}
               <div className="flex justify-between gap-2 text-caption text-[color:var(--color-text-secondary)]">
                 <span>Phí giao</span>
-                <span>{sh.shippingFee === 0 ? 'Miễn phí' : formatVnd(sh.shippingFee)}</span>
+                <span className="tabular-nums">{sh.shippingFee === 0 ? 'Miễn phí' : formatVnd(sh.shippingFee)}</span>
               </div>
             </div>
           ))
@@ -1209,7 +1209,7 @@ function LineRow({ item, fix }: { item: CartLine; fix: LineFixView }) {
       <div data-testid="checkout-line" className="flex justify-between gap-2">
         <span className="min-w-0 text-[color:var(--color-text-secondary)]">
           <span className="line-clamp-2">{item.productName}</span>
-          <span className="block text-caption text-[color:var(--color-text-tertiary)]">
+          <span className="block text-caption tabular-nums text-[color:var(--color-text-tertiary)]">
             {item.variationName && <span>{item.variationName}</span>}
             {item.variationName ? ' · ' : ''}×{item.quantity}
           </span>
