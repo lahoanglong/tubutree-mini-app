@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
 import { smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
@@ -8,6 +9,22 @@ import { subscriptionPatch } from './subscription-edit-sheet';
 // Mini App subscriptions-panel.spec.tsx: danh sách lịch, sửa (PATCH chỉ trường đổi), tạm dừng/tiếp tục, huỷ qua sheet giữ chân, bỏ kỳ.
 
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ status: 'authenticated', initialized: true, sessionUnavailable: false }) }));
+
+// Bọc Sheet để đọc props mới nhất (open/dismissible/onClose): guard `onClose` của sheet giữ chân không có đường bấm nào chạm tới
+// khi `dismissible=false` đã ẩn nút X, Esc và nền, nên chỉ gọi thẳng onClose mới chứng minh được nó.
+const sheetSpy = vi.hoisted(() => ({
+  calls: [] as Array<{ open: boolean; dismissible?: boolean; title?: string; onClose: () => void }>,
+}));
+vi.mock('@/components/ui/sheet', async (importOriginal) => {
+  const orig = await importOriginal<typeof import('@/components/ui/sheet')>();
+  return {
+    ...orig,
+    Sheet: (p: Parameters<typeof orig.Sheet>[0]) => {
+      sheetSpy.calls.push(p);
+      return <orig.Sheet {...p} />;
+    },
+  };
+});
 
 const SUB = {
   id: 's1', quantity: 2, intervalWeeks: 4, status: 'ACTIVE', nextRunAt: '2026-10-15T00:00:00.000Z',
@@ -24,6 +41,15 @@ let calls: Call[] = [];
 let subs: Record<string, unknown>[] = [SUB];
 let failures: Record<string, { status: number; message: string }> = {};
 let listFailsOnce = false;
+let gates: Record<string, Promise<void>> = {};
+/** Giữ request `METHOD /path` đang bay (mutation ở trạng thái pending) tới khi gọi hàm trả về. */
+function hold(key: string) {
+  let release!: () => void;
+  gates[key] = new Promise<void>((r) => {
+    release = r;
+  });
+  return release;
+}
 
 function stubApi() {
   calls = [];
@@ -34,6 +60,7 @@ function stubApi() {
       const method = init?.method ?? 'GET';
       calls.push({ method, path, body: init?.body ? JSON.parse(String(init.body)) : undefined });
       const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+      await gates[`${method} ${path}`];
       const fail = failures[`${method} ${path}`];
       if (fail) return json({ message: fail.message }, fail.status);
       if (method === 'GET' && path === '/me/subscriptions') {
@@ -67,6 +94,8 @@ const btn = (label: string, root: ParentNode = document.body) =>
 beforeEach(() => {
   subs = [SUB];
   failures = {};
+  gates = {};
+  sheetSpy.calls.length = 0;
   listFailsOnce = false;
   stubApi();
 });
@@ -322,6 +351,239 @@ describe('SubscriptionsPanel', () => {
     expect(unnamedControls(c)).toEqual([]);
     expect(smallTouchTargets(c)).toEqual([]);
     expect(btn('Tạm dừng', c).parentElement?.className).toContain('flex-wrap');
+  });
+});
+
+describe('SubscriptionsPanel: khoá chéo statusMut ↔ skipMut, chặn đóng sheet, nút thẻ đang bận', () => {
+  const RETENTION_TITLE = 'Giữ lại lịch định kỳ?';
+  const SKIP = 'POST /me/subscriptions/s1/skip';
+  const STATUS = 'POST /me/subscriptions/s1/status';
+  const sheetEl = () => document.querySelector('[role="dialog"]') as HTMLElement | null;
+  const retentionSheet = () => sheetSpy.calls.filter((c) => c.title === RETENTION_TITLE).at(-1)!;
+  const cards = (c: HTMLElement) => Array.from(c.querySelectorAll('li'));
+  /** Ba nút của thẻ theo thứ tự hiển thị: Sửa, Tạm dừng/Tiếp tục, Huỷ. */
+  const cardBtns = (li: Element) => Array.from(li.querySelectorAll('button')) as HTMLButtonElement[];
+  const tryClose = () => act(() => retentionSheet().onClose());
+  const escape = () => act(() => void document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+  const aria = (b: HTMLElement, name: string) => b.getAttribute(name);
+  async function openRetention(c: HTMLElement) {
+    click(btn('Huỷ', c));
+    await flush(6);
+    expect(sheetEl()?.textContent).toContain(RETENTION_TITLE);
+  }
+
+  it('skipMut đang chạy: "Tạm dừng" + "Vẫn huỷ" + 3 nút thẻ nền khoá; "Bỏ qua kỳ này" giữ focus (aria-busy, không disabled DOM)', async () => {
+    const release = hold(SKIP);
+    const c = await mount();
+    await openRetention(c);
+    click(btn('Bỏ qua kỳ này', sheetEl()!));
+    await flush(3);
+
+    const skip = btn('Đang xử lý…', sheetEl()!);
+    expect(skip).toBeDefined();
+    expect(aria(skip, 'aria-busy')).toBe('true');
+    expect(aria(skip, 'aria-disabled')).toBe('true');
+    expect(skip.disabled).toBe(false);
+    expect(btn('Tạm dừng', sheetEl()!).disabled).toBe(true);
+    expect(btn('Vẫn huỷ', sheetEl()!).disabled).toBe(true);
+    expect(cardBtns(cards(c)[0]!).map((b) => b.disabled)).toEqual([true, true, true]);
+
+    // bấm lại / bấm nút kia: không phát sinh lời gọi API thứ hai
+    click(skip);
+    click(btn('Tạm dừng', sheetEl()!));
+    click(btn('Vẫn huỷ', sheetEl()!));
+    await flush(2);
+    expect(sent('POST', '/me/subscriptions/s1/skip')).toHaveLength(1);
+    expect(sent('POST', '/me/subscriptions/s1/status')).toHaveLength(0);
+
+    release();
+    await flush(8);
+    expect(c.textContent).toContain('Đã bỏ qua kỳ này');
+    expect(sheetEl()).toBeNull();
+  });
+
+  it('skipMut đang chạy: sheet không đóng được (không nút X, Esc, nền, onClose đều bị chặn) cho tới khi xong', async () => {
+    const release = hold(SKIP);
+    const c = await mount();
+    await openRetention(c);
+    expect(retentionSheet().dismissible).toBe(true);
+    expect(btn('Đóng', sheetEl()!)).toBeDefined();
+
+    click(btn('Bỏ qua kỳ này', sheetEl()!));
+    await flush(3);
+    expect(retentionSheet().dismissible).toBe(false);
+    expect(btn('Đóng', sheetEl()!)).toBeUndefined();
+    tryClose();
+    escape();
+    click(document.querySelector('[data-sheet-backdrop]'));
+    await flush(2);
+    expect(retentionSheet().open).toBe(true);
+    expect(sheetEl()?.textContent).toContain(RETENTION_TITLE);
+
+    release();
+    await flush(8);
+    expect(retentionSheet().open).toBe(false);
+    expect(sheetEl()).toBeNull();
+  });
+
+  it('skipMut lỗi: báo lỗi trong sheet, mở khoá lại cả sheet, đóng được', async () => {
+    const release = hold(SKIP);
+    failures[SKIP] = { status: 400, message: 'Không bỏ qua được kỳ này' };
+    const c = await mount();
+    await openRetention(c);
+    click(btn('Bỏ qua kỳ này', sheetEl()!));
+    await flush(3);
+    expect(btn('Tạm dừng', sheetEl()!).disabled).toBe(true);
+    release();
+    await flush(8);
+
+    expect(sheetEl()?.querySelector('[role="alert"]')?.textContent).toContain('Không bỏ qua được kỳ này');
+    expect(btn('Tạm dừng', sheetEl()!).disabled).toBe(false);
+    expect(btn('Vẫn huỷ', sheetEl()!).disabled).toBe(false);
+    const skip = btn('Bỏ qua kỳ này', sheetEl()!);
+    expect(skip.disabled).toBe(false);
+    expect(skip.hasAttribute('aria-busy')).toBe(false);
+    expect(skip.hasAttribute('aria-disabled')).toBe(false);
+    expect(retentionSheet().dismissible).toBe(true);
+    tryClose();
+    await flush(2);
+    expect(retentionSheet().open).toBe(false);
+  });
+
+  it('statusMut đang chạy từ "Tạm dừng" trong sheet: nút đó giữ focus (aria-busy); "Bỏ qua kỳ này", "Vẫn huỷ", thẻ nền khoá; không đóng được', async () => {
+    const release = hold(STATUS);
+    const c = await mount();
+    await openRetention(c);
+    click(btn('Tạm dừng', sheetEl()!));
+    await flush(3);
+
+    const pause = btn('Đang xử lý…', sheetEl()!);
+    expect(aria(pause, 'aria-busy')).toBe('true');
+    expect(aria(pause, 'aria-disabled')).toBe('true');
+    expect(pause.disabled).toBe(false);
+    expect(btn('Bỏ qua kỳ này', sheetEl()!).disabled).toBe(true);
+    expect(btn('Vẫn huỷ', sheetEl()!).disabled).toBe(true);
+    const [edit, toggle, cancel] = cardBtns(cards(c)[0]!);
+    expect([edit!.disabled, toggle!.disabled, cancel!.disabled]).toEqual([true, true, true]);
+    // sheet đang mở nên thẻ nền không giả vờ là nơi đang xoay
+    expect(toggle!.textContent).toBe('Tạm dừng');
+    expect(toggle!.hasAttribute('aria-busy')).toBe(false);
+
+    expect(retentionSheet().dismissible).toBe(false);
+    tryClose();
+    escape();
+    expect(retentionSheet().open).toBe(true);
+
+    click(pause);
+    click(btn('Bỏ qua kỳ này', sheetEl()!));
+    click(btn('Vẫn huỷ', sheetEl()!));
+    await flush(2);
+    expect(sent('POST', '/me/subscriptions/s1/status')).toHaveLength(1);
+    expect(sent('POST', '/me/subscriptions/s1/status')[0]!.body).toEqual({ status: 'PAUSED' });
+    expect(sent('POST', '/me/subscriptions/s1/skip')).toHaveLength(0);
+
+    release();
+    await flush(8);
+    expect(retentionSheet().open).toBe(false);
+    expect(sheetEl()).toBeNull();
+  });
+
+  it('statusMut đang chạy từ "Vẫn huỷ": nút đó giữ focus; "Tạm dừng" + "Bỏ qua kỳ này" khoá; onClose không đóng được', async () => {
+    const release = hold(STATUS);
+    const c = await mount();
+    await openRetention(c);
+    click(btn('Vẫn huỷ', sheetEl()!));
+    await flush(3);
+
+    const cancel = btn('Đang xử lý…', sheetEl()!);
+    expect(aria(cancel, 'aria-busy')).toBe('true');
+    expect(aria(cancel, 'aria-disabled')).toBe('true');
+    expect(cancel.disabled).toBe(false);
+    expect(btn('Tạm dừng', sheetEl()!).disabled).toBe(true);
+    expect(btn('Bỏ qua kỳ này', sheetEl()!).disabled).toBe(true);
+    tryClose();
+    expect(retentionSheet().open).toBe(true);
+    click(btn('Tạm dừng', sheetEl()!));
+    await flush(2);
+    expect(sent('POST', '/me/subscriptions/s1/status')).toHaveLength(1);
+    expect(sent('POST', '/me/subscriptions/s1/status')[0]!.body).toEqual({ status: 'CANCELLED' });
+
+    release();
+    await flush(8);
+    expect(retentionSheet().open).toBe(false);
+  });
+
+  it('bấm "Tạm dừng" ngay trên thẻ: chỉ nút đó hiện "Đang xử lý…" + aria-busy (còn bấm được DOM); Sửa/Huỷ và thẻ khác khoá', async () => {
+    const release = hold(STATUS);
+    subs = [SUB, { ...SUB, id: 's2' }];
+    const c = await mount();
+    click(cardBtns(cards(c)[0]!)[1]!);
+    await flush(3);
+
+    const [first, second] = cards(c).map(cardBtns) as [HTMLButtonElement[], HTMLButtonElement[]];
+    expect(first[1]!.textContent).toBe('Đang xử lý…');
+    expect(aria(first[1]!, 'aria-busy')).toBe('true');
+    expect(aria(first[1]!, 'aria-disabled')).toBe('true');
+    expect(first[1]!.disabled).toBe(false);
+    expect(second[1]!.textContent).toBe('Tạm dừng');
+    expect(second[1]!.disabled).toBe(true);
+    expect(second[1]!.hasAttribute('aria-busy')).toBe(false);
+    expect([first[0]!.disabled, first[2]!.disabled, second[0]!.disabled, second[2]!.disabled]).toEqual([true, true, true, true]);
+    expect(sheetEl()).toBeNull();
+
+    click(first[1]!);
+    click(second[1]!);
+    await flush(2);
+    expect(sent('POST', '/me/subscriptions/s1/status')).toHaveLength(1);
+    expect(sent('POST', '/me/subscriptions/s2/status')).toHaveLength(0);
+
+    release();
+    await flush(8);
+    const [after] = cards(c).map(cardBtns) as [HTMLButtonElement[]];
+    expect(after.map((b) => b.disabled)).toEqual([false, false, false]);
+    expect(after[1]!.textContent).toBe('Tạm dừng');
+    expect(after[1]!.hasAttribute('aria-busy')).toBe(false);
+  });
+
+  it('"Tiếp tục" ở gói đang dừng cũng hiện "Đang xử lý…"; lỗi thì nhả khoá, trả nhãn cũ và báo lỗi', async () => {
+    const release = hold(STATUS);
+    failures[STATUS] = { status: 400, message: 'Không đổi được trạng thái' };
+    subs = [{ ...SUB, status: 'PAUSED' }];
+    const c = await mount();
+    click(cardBtns(cards(c)[0]!)[1]!);
+    await flush(3);
+    expect(cardBtns(cards(c)[0]!)[1]!.textContent).toBe('Đang xử lý…');
+    expect(aria(cardBtns(cards(c)[0]!)[1]!, 'aria-busy')).toBe('true');
+    expect(cardBtns(cards(c)[0]!).map((b) => b.disabled)).toEqual([true, false, true]);
+
+    release();
+    await flush(8);
+    expect(c.querySelector('[role="alert"]')?.textContent).toContain('Không đổi được trạng thái');
+    const [edit, toggle, cancel] = cardBtns(cards(c)[0]!);
+    expect(toggle!.textContent).toBe('Tiếp tục');
+    expect([edit!.disabled, toggle!.disabled, cancel!.disabled]).toEqual([false, false, false]);
+    expect(toggle!.hasAttribute('aria-busy')).toBe(false);
+  });
+
+  it('số tiền / % / số lượng / ngày dùng số đều (tabular-nums)', async () => {
+    const c = await mount();
+    const leaf = (text: string) =>
+      Array.from(c.querySelectorAll('p, div, s, span')).find((e) => e.childElementCount === 0 && e.textContent === text) as HTMLElement;
+    const intro = Array.from(c.querySelectorAll('p')).find((p) => p.textContent?.includes('tiết kiệm 14% mỗi đơn')) as HTMLElement;
+    const lines = [
+      intro,
+      leaf('Đang giảm 14% cho đơn định kỳ'),
+      leaf('Hương sả · SL 2'),
+      leaf('Mỗi 4 tuần · 137.600đ'),
+      leaf('160.000đ'),
+      leaf('Tiết kiệm 14%'),
+      leaf('Lần kế: 15/10/2026'),
+    ];
+    lines.forEach((el, i) => {
+      expect(el, `dòng số ${i}`).toBeDefined();
+      expect(el.classList.contains('tabular-nums'), el.textContent ?? '').toBe(true);
+    });
+    expect(leaf('160.000đ').tagName).toBe('S');
   });
 });
 
