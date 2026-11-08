@@ -569,6 +569,8 @@ export const SHOP_COPY: Record<string, string> = {
   'fbt.pickHint': 'Chọn món muốn thêm',
   'fbt.added': 'Đã thêm {n} món vào giỏ',
   'fbt.error': 'Chưa thêm được vào giỏ. Bạn thử lại nhé.',
+  'fbt.selectAll': 'Chọn tất cả',
+  'fbt.selectAllSpoken': 'Chọn tất cả {title}',
 
   // Dải cam kết ở trang chi tiết (W45A, ProductTrustStrip): ba trụ cột ngắn và một lối xem chính sách. Chỉ nói điều Tubu làm được cho mọi sản phẩm
   // Tubu giao; không hứa chứng nhận hữu cơ hay giờ giao (chưa có dữ liệu trong hệ thống).

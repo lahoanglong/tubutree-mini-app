@@ -187,6 +187,40 @@ describe('PdpFbt (web): thêm cả bộ', () => {
     expect(mocks.addAll).not.toHaveBeenCalled();
   });
 
+  it('"Chọn tất cả": ẩn khi chọn hết; bỏ tick một món thì hiện, bấm tick lại cả bộ (nút Thêm về đủ 3 món và tổng) rồi nút ẩn', async () => {
+    const c = await mount();
+    const selectAll = () => c.querySelector<HTMLButtonElement>('[data-testid="fbt-select-all"]');
+    expect(selectAll()).toBeNull();
+    click(boxes(c)[1]!);
+    await flush(2);
+    expect(addBtn(c).textContent).toBe('Thêm 2 món vào giỏ · 150.000đ');
+    expect(selectAll()).not.toBeNull();
+    click(selectAll()!);
+    await flush(2);
+    expect(document.activeElement).toBe(addBtn(c));
+    expect(boxes(c).map((b) => b.checked)).toEqual([true, true, true]);
+    expect(addBtn(c).textContent).toBe('Thêm 3 món vào giỏ · 200.000đ');
+    expect(selectAll()).toBeNull();
+  });
+
+  it('"Chọn tất cả" sau khi bỏ tick hết: mở khoá nút Thêm và thêm đủ cả bộ', async () => {
+    const c = await mount();
+    for (const b of boxes(c)) click(b);
+    await flush(2);
+    expect(addBtn(c).disabled).toBe(true);
+    click(c.querySelector<HTMLButtonElement>('[data-testid="fbt-select-all"]')!);
+    await flush(2);
+    expect(addBtn(c).disabled).toBe(false);
+    expect(document.activeElement).toBe(addBtn(c));
+    click(addBtn(c));
+    await flush(6);
+    expect(mocks.addAll).toHaveBeenCalledWith([
+      { variationId: 'v0a', quantity: 1 },
+      { variationId: 'v1', quantity: 1 },
+      { variationId: 'v2', quantity: 1 },
+    ]);
+  });
+
   it('bỏ tick món đang xem rồi đổi phân loại: vẫn bỏ tick (khoá riêng theo "món đang xem", không theo mã phân loại)', async () => {
     const c = await mount();
     click(boxes(c)[0]!);

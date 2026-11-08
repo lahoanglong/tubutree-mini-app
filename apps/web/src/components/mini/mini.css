@@ -1418,6 +1418,31 @@
   line-height: var(--type-body-sm-lh);
   color: var(--color-text-primary);
 }
+/* Tiêu đề kèm nút "Chọn tất cả" (chỉ vẽ khi khách đã bỏ tick món): cùng số đo với Mini App. */
+.tubu-fbt-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--p-space-3);
+}
+/* Tiêu đề của SectionHeader không xuống dòng (có dấu …): phải được co lại thì chữ lớn không đẩy nút ra khỏi khối. */
+.tubu-fbt-head > :first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.tubu-fbt-select-all {
+  min-height: 44px;
+  padding: 0 var(--p-space-2);
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--type-label-size);
+  line-height: var(--type-label-lh);
+  font-weight: 600;
+  color: var(--color-text-brand);
+  flex-shrink: 0;
+}
 /* Giữ chỗ một dòng ngay cả khi chưa có số tiết kiệm: chữ hiện ra không đẩy nút bên dưới xuống. */
 .tubu-fbt-save {
   margin: var(--p-space-2) 0 var(--p-space-3);

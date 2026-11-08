@@ -43,6 +43,30 @@
   overflow: hidden;
 }
 
+/* Tiêu đề kèm nút "Chọn tất cả" (chỉ vẽ khi khách đã bỏ tick món). Số đo ở CSS vì không được style nội tuyến trên .tubu-fbt*.
+   Hàng cao 44 cả lúc chưa có nút (bằng SectionHeader của web) để danh sách không nhảy 20 khi nút hiện hay ẩn dưới ngón tay. */
+.tubu-fbt-head {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.tubu-fbt-select-all {
+  min-height: 44px;
+  padding: 0 4px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--type-label-size);
+  line-height: var(--type-label-lh);
+  font-weight: 600;
+  color: var(--color-text-brand);
+  flex-shrink: 0;
+}
+
 /* Giữ chỗ một dòng ngay cả khi chưa có số tiết kiệm: chữ hiện ra không đẩy nút bên dưới xuống. */
 .tubu-fbt-save {
   margin: 4px 0 8px;

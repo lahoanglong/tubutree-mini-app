@@ -55,6 +55,7 @@ export function PdpFbt({ bundle }: { bundle: FbtBundle }) {
       lines={bundle.lines}
       picked={picked}
       onToggle={toggle}
+      onSelectAll={() => setOff(new Set())}
       summary={summary}
       busy={busyId === FBT_ID}
       onAdd={() =>

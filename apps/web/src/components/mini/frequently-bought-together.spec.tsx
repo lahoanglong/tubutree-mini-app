@@ -91,6 +91,59 @@ describe('FrequentlyBoughtTogether (web)', () => {
     expect(rows(container)[0]!.querySelector('[style*="line-through"]')).toBeNull();
   });
 
+  describe('nút "Chọn tất cả"', () => {
+    const selectAll = (c: ParentNode) => c.querySelector<HTMLButtonElement>('[data-testid="fbt-select-all"]');
+
+    it('ẩn khi mọi món đang tick (dù có onSelectAll): DOM mặc định không đổi, không có hàng .tubu-fbt-head', () => {
+      const { container } = mount(<FrequentlyBoughtTogether {...props()} onSelectAll={vi.fn()} />);
+      expect(selectAll(container)).toBeNull();
+      expect(container.querySelector('.tubu-fbt-head')).toBeNull();
+      expect(container.querySelector('h2')?.textContent).toBe('Gợi ý mua kèm hợp vị');
+    });
+
+    it('ẩn khi không truyền onSelectAll, kể cả khi đã bỏ tick món', () => {
+      const { container } = mount(<FrequentlyBoughtTogether {...props(new Set(['v0']))} />);
+      expect(selectAll(container)).toBeNull();
+      expect(container.querySelector('.tubu-fbt-head')).toBeNull();
+    });
+
+    it('hiện khi bỏ tick một món: cùng hàng tiêu đề, có tên đọc nêu tên khối, đủ 44px', () => {
+      const { container } = mount(<FrequentlyBoughtTogether {...props(new Set(['v0', 'v2']))} onSelectAll={vi.fn()} />);
+      const btn = selectAll(container)!;
+      expect(btn.textContent).toBe('Chọn tất cả');
+      expect(btn.getAttribute('type')).toBe('button');
+      expect(btn.getAttribute('aria-label')).toBe('Chọn tất cả Gợi ý mua kèm hợp vị');
+      const head = container.querySelector('.tubu-fbt-head')!;
+      expect(head.contains(btn)).toBe(true);
+      expect(head.querySelector('h2')?.textContent).toBe('Gợi ý mua kèm hợp vị');
+      expect(unnamedControls(container)).toEqual([]);
+      // 44px của nút này do mini.css khai (jsdom không đọc CSS): kiểm ở test mini.css bên dưới.
+      expect(smallTouchTargets(container).filter((html) => !html.includes('fbt-select-all'))).toEqual([]);
+    });
+
+    it('hiện cả khi bỏ chọn hết (nút Thêm đang khoá)', () => {
+      const { container } = mount(<FrequentlyBoughtTogether {...props(new Set())} onSelectAll={vi.fn()} />);
+      expect(selectAll(container)).not.toBeNull();
+      expect(addBtn(container).disabled).toBe(true);
+    });
+
+    it('bấm nút gọi onSelectAll đúng một lần, không gọi onToggle hay onAdd', () => {
+      const onSelectAll = vi.fn();
+      const onToggle = vi.fn();
+      const onAdd = vi.fn();
+      const { container } = mount(<FrequentlyBoughtTogether {...props(new Set(['v1']))} onSelectAll={onSelectAll} onToggle={onToggle} onAdd={onAdd} />);
+      click(selectAll(container)!);
+      expect(onSelectAll).toHaveBeenCalledTimes(1);
+      expect(onToggle).not.toHaveBeenCalled();
+      expect(onAdd).not.toHaveBeenCalled();
+    });
+
+    it('không style nội tuyến trên hàng tiêu đề và nút (số đo ở mini.css)', () => {
+      const { container } = mount(<FrequentlyBoughtTogether {...props(new Set(['v0']))} onSelectAll={vi.fn()} />);
+      container.querySelectorAll('.tubu-fbt-head, .tubu-fbt-select-all').forEach((el) => expect(el.hasAttribute('style'), el.className).toBe(false));
+    });
+  });
+
   it('rỗng thì không vẽ gì', () => {
     const { container } = mount(<FrequentlyBoughtTogether {...props()} lines={[]} />);
     expect(container.textContent).toBe('');
@@ -114,6 +167,15 @@ describe('FrequentlyBoughtTogether (web)', () => {
       expect(rule('.tubu-fbt-check')).toMatch(/width:\s*44px/);
       expect(rule('.tubu-fbt')).toMatch(/font-variant-numeric:\s*tabular-nums/);
       expect(rule('.tubu-fbt-save')).toMatch(/min-height:/);
+    });
+
+    it('hàng tiêu đề là flex dàn hai đầu; nút "Chọn tất cả" cao tối thiểu 44, không co, màu thương hiệu qua token', () => {
+      expect(rule('.tubu-fbt-head')).toMatch(/display:\s*flex/);
+      expect(rule('.tubu-fbt-head')).toMatch(/justify-content:\s*space-between/);
+      expect(rule('.tubu-fbt-select-all')).toMatch(/min-height:\s*44px/);
+      expect(rule('.tubu-fbt-select-all')).toMatch(/flex-shrink:\s*0/);
+      expect(rule('.tubu-fbt-select-all')).toMatch(/color:\s*var\(--color-text-brand\)/);
+      expect(rule('.tubu-fbt-head > :first-child')).toMatch(/min-width:\s*0/);
     });
   });
 });

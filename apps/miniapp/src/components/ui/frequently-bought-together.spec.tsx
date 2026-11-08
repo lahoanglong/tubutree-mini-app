@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { frequentlyBoughtSummary, type FbtLine } from '@tubutree/app-core/commerce/frequently-bought';
+import { haptic } from '../../utils/haptic';
 import { FrequentlyBoughtTogether } from './frequently-bought-together';
 
 vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
@@ -21,7 +22,7 @@ const line = (n: number, over: Partial<FbtLine> = {}): FbtLine => ({
 });
 const LINES = [line(0, { price: 100_000, compareAt: 120_000 }), line(1), line(2, { price: 40_000 })];
 
-function renderFbt(over: { picked?: string[]; busy?: boolean; onToggle?: (k: string) => void; onAdd?: () => void; lines?: FbtLine[] } = {}) {
+function renderFbt(over: { picked?: string[]; busy?: boolean; onToggle?: (k: string) => void; onAdd?: () => void; onSelectAll?: () => void; lines?: FbtLine[] } = {}) {
   const lines = over.lines ?? LINES;
   const picked = new Set(over.picked ?? lines.map((l) => l.key));
   return render(
@@ -32,6 +33,7 @@ function renderFbt(over: { picked?: string[]; busy?: boolean; onToggle?: (k: str
       summary={frequentlyBoughtSummary(lines, picked)}
       busy={over.busy}
       onAdd={over.onAdd ?? vi.fn()}
+      onSelectAll={over.onSelectAll}
     />,
   );
 }
@@ -114,6 +116,57 @@ describe('FrequentlyBoughtTogether (Mini)', () => {
     expect(onAdd).not.toHaveBeenCalled();
   });
 
+  describe('nút "Chọn tất cả"', () => {
+    it('ẩn nút khi mọi món đang tick (dù có onSelectAll) nhưng giữ hàng .tubu-fbt-head để tiêu đề không đổi chiều cao khi nút hiện', () => {
+      const { container } = renderFbt({ onSelectAll: vi.fn() });
+      expect(screen.queryByTestId('fbt-select-all')).toBeNull();
+      const head = container.querySelector<HTMLElement>('.tubu-fbt-head')!;
+      expect(within(head).getByRole('heading', { level: 2, name: 'Gợi ý mua kèm hợp vị' })).toBeInTheDocument();
+    });
+
+    it('ẩn khi không truyền onSelectAll, kể cả khi đã bỏ tick món', () => {
+      const { container } = renderFbt({ picked: ['v0'] });
+      expect(screen.queryByTestId('fbt-select-all')).toBeNull();
+      expect(container.querySelector('.tubu-fbt-head')).toBeNull();
+    });
+
+    it('hiện khi bỏ tick một món: nằm cùng hàng tiêu đề, có tên đọc nêu tên khối', () => {
+      const { container } = renderFbt({ picked: ['v0', 'v2'], onSelectAll: vi.fn() });
+      const btn = screen.getByTestId('fbt-select-all');
+      expect(btn.tagName).toBe('BUTTON');
+      expect(btn).toHaveAttribute('type', 'button');
+      expect(btn).toHaveTextContent('Chọn tất cả');
+      expect(btn).toHaveAttribute('aria-label', 'Chọn tất cả Gợi ý mua kèm hợp vị');
+      const head = container.querySelector('.tubu-fbt-head')!;
+      expect(within(head as HTMLElement).getByRole('heading', { level: 2, name: 'Gợi ý mua kèm hợp vị' })).toBeInTheDocument();
+      expect(head).toContainElement(btn);
+    });
+
+    it('hiện cả khi bỏ tick hết (nút Thêm đang khoá)', () => {
+      renderFbt({ picked: [], onSelectAll: vi.fn() });
+      expect(screen.getByTestId('fbt-select-all')).toBeInTheDocument();
+      expect(screen.getByTestId('fbt-add')).toBeDisabled();
+    });
+
+    it('chạm nút: rung nhẹ, gọi onSelectAll đúng một lần, không gọi onToggle hay onAdd', () => {
+      const onSelectAll = vi.fn();
+      const onToggle = vi.fn();
+      const onAdd = vi.fn();
+      renderFbt({ picked: ['v1'], onSelectAll, onToggle, onAdd });
+      vi.mocked(haptic).mockClear();
+      fireEvent.click(screen.getByTestId('fbt-select-all'));
+      expect(onSelectAll).toHaveBeenCalledTimes(1);
+      expect(haptic).toHaveBeenCalledWith('light');
+      expect(onToggle).not.toHaveBeenCalled();
+      expect(onAdd).not.toHaveBeenCalled();
+    });
+
+    it('không style nội tuyến trên hàng tiêu đề và nút (số đo ở CSS)', () => {
+      const { container } = renderFbt({ picked: ['v0'], onSelectAll: vi.fn() });
+      container.querySelectorAll('.tubu-fbt-head, .tubu-fbt-select-all').forEach((el) => expect(el.hasAttribute('style'), el.className).toBe(false));
+    });
+  });
+
   it('đang thêm (busy): nút báo bận', () => {
     renderFbt({ busy: true });
     expect(screen.getByTestId('fbt-add')).toHaveAttribute('aria-busy', 'true');
@@ -140,6 +193,15 @@ describe('css/frequently-bought.css', () => {
     expect(css).toMatch(/\.tubu-fbt-row\s*{[^}]*min-height:\s*64px/);
     expect(css).toMatch(/\.tubu-fbt\s*{[^}]*font-variant-numeric:\s*tabular-nums/);
     expect(css).toMatch(/\.tubu-fbt\s*{[^}]*background:\s*var\(--color-bg-surface\)/);
+  });
+
+  it('hàng tiêu đề là flex dàn hai đầu; nút "Chọn tất cả" cao tối thiểu 44px, không co, màu thương hiệu qua token', () => {
+    expect(css).toMatch(/\.tubu-fbt-head\s*{[^}]*display:\s*flex/);
+    expect(css).toMatch(/\.tubu-fbt-head\s*{[^}]*justify-content:\s*space-between/);
+    expect(css).toMatch(/\.tubu-fbt-head\s*{[^}]*min-height:\s*44px/);
+    expect(css).toMatch(/\.tubu-fbt-select-all\s*{[^}]*min-height:\s*44px/);
+    expect(css).toMatch(/\.tubu-fbt-select-all\s*{[^}]*flex-shrink:\s*0/);
+    expect(css).toMatch(/\.tubu-fbt-select-all\s*{[^}]*color:\s*var\(--color-text-brand\)/);
   });
 
   it('không màu thô, không primitive --stone/--forest', () => {

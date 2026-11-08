@@ -554,6 +554,8 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'fbt.pickHint': 22,
   'fbt.added': 30,
   'fbt.error': 60,
+  'fbt.selectAll': 16,
+  'fbt.selectAllSpoken': null,
   'trust.groupAria': null,
   'trust.origin.title': 20,
   'trust.origin.sub': 30,
