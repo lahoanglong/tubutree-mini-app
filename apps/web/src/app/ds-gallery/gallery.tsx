@@ -6,7 +6,8 @@ import { Truck } from 'lucide-react';
 import { GALLERY_STORY_PRODUCTS, GALLERY_COMBO_ITEMS, GALLERY_PICKER_ROWS, GALLERY_SLIDES, GALLERY_SORT_OPTIONS, GALLERY_VOUCHERS, galleryCombo, galleryEnd, type GalleryVoucher } from '@tubutree/app-core/commerce/ds-gallery-data';
 import { cartComboBlocks } from '@tubutree/app-core/commerce/cart-combo';
 import { CartComboBlock } from '@/components/cart-combo-block';
-import { BannerCarousel, ComboCard, Countdown, FlashSoldBar, Heading, FreeShippingProgressBar, FreeshipAddonRail, ProductStoryShowcase, Section, SectionHeader, SortBar, StoryReelStrip, Text, VoucherPicker, VoucherTicket } from '@/components/mini';
+import type { CartVoucherHint } from '@tubutree/app-core/commerce/cart-voucher-hint';
+import { BannerCarousel, CartVoucherHintStrip, ComboCard, Countdown, FlashSoldBar, Heading, FreeShippingProgressBar, FreeshipAddonRail, ProductStoryShowcase, Section, SectionHeader, SortBar, StoryReelStrip, Text, VoucherPicker, VoucherTicket } from '@/components/mini';
 
 const GALLERY_REEL_ITEMS = [
   { slug: 'rau-muong', name: 'Rau muống', thumbnail: null, seen: false },
@@ -14,6 +15,10 @@ const GALLERY_REEL_ITEMS = [
   { slug: 'dau-goi', name: 'Dầu gội bưởi', thumbnail: null, seen: false },
   { slug: 'nuoc-rua-chen', name: 'Nước rửa chén sinh học', thumbnail: null, seen: false },
 ];
+const GALLERY_VOUCHER_HINT: CartVoucherHint = {
+  apply: { code: 'GIAM45', label: 'GIAM45', saving: 45_000, text: '🎟️ Bạn có mã giảm giá 45.000đ đủ điều kiện', ariaLabel: 'Áp dụng ngay mã GIAM45' },
+  unlock: { code: 'GIAM80', missing: 30_000, pct: 90, text: '🔥 Mua thêm 30.000đ để mở khoá mã giảm giá 80.000đ', barAria: 'Đã đạt 90% đơn tối thiểu của mã giảm giá' },
+};
 const GALLERY_ADDON_ITEMS = [
   { slug: 'rau-muong', name: 'Rau muống', thumbnail: null, price: 29_000, variationId: 'v1' },
   { slug: 'mat-ong', name: 'Mật ong rừng', thumbnail: null, price: 39_000, compareAt: 49_000, variationId: 'v2' },
@@ -305,6 +310,22 @@ export function DsGallery() {
           </Variant>
           <Variant label="đang thêm món đầu">
             <FreeshipAddonRail items={GALLERY_ADDON_ITEMS} busySlug="rau-muong" onAdd={() => undefined} />
+          </Variant>
+        </Group>
+
+        <Group name="cart-voucher-hint-strip">
+          <Variant label="mời áp mã đủ điều kiện + nhắc mã sắp mở khoá">
+            <CartVoucherHintStrip hint={GALLERY_VOUCHER_HINT} onApply={() => undefined} />
+          </Variant>
+          <Variant label="chỉ mời áp mã">
+            <CartVoucherHintStrip hint={{ apply: GALLERY_VOUCHER_HINT.apply, unlock: null }} onApply={() => undefined} />
+          </Variant>
+          <Variant label="chỉ nhắc mở khoá">
+            <CartVoucherHintStrip hint={{ apply: null, unlock: GALLERY_VOUCHER_HINT.unlock }} onApply={() => undefined} />
+          </Variant>
+          <Variant label="đang áp / áp không được">
+            <CartVoucherHintStrip hint={{ apply: GALLERY_VOUCHER_HINT.apply, unlock: null }} onApply={() => undefined} applying />
+            <CartVoucherHintStrip hint={{ apply: GALLERY_VOUCHER_HINT.apply, unlock: null }} onApply={() => undefined} error="Mã giảm giá đã hết lượt dùng." />
           </Variant>
         </Group>
       </div>

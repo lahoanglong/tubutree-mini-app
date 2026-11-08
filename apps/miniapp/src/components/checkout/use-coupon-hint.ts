@@ -16,7 +16,7 @@ import { PREVIEW_DEBOUNCE_MS, useDebounced } from '../../utils/use-debounced';
  * trả rỗng, còn ví thì đọc rẻ và dùng chung bộ nhớ đệm `['coupons']` với tấm chọn mã.
  * Số chỉ đúng cho đúng giỏ đã hỏi: giỏ vừa đổi hoặc đang tải lại thì trả null; lỗi cũng null.
  */
-function useCouponPreviews(
+export function useCouponPreviews(
   enabled: boolean,
   previewParams: CouponPreviewRequest | undefined,
   previewKey: string,

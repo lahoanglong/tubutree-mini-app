@@ -61,6 +61,8 @@ import { ConfirmSheet } from '../components/ui/confirm-sheet';
 import { CartComboBlock } from '../components/cart-combo-block';
 import { FreeShippingProgressBar } from '../components/ui/free-shipping-progress-bar';
 import { FreeshipAddonRail, type FreeshipAddonItem } from '../components/ui/freeship-addon-rail';
+import { CartVoucherHintStrip } from '../components/ui/cart-voucher-hint-strip';
+import { useCartVoucherHint } from '../components/checkout/use-cart-voucher-hint';
 import { homeBestSellerQuery } from '../components/home/home-best-seller-query';
 import { cardAddTarget } from '../utils/card-add-target';
 import { serverNow } from '../utils/server-clock';
@@ -374,6 +376,13 @@ export default function CartPage() {
               <FreeshipAddonRail items={addonItems} busySlug={addon.isPending ? addon.variables?.item.slug : null} onAdd={handleAddAddon} />
             </Box>
           )}
+          <CartVoucherHintSection
+            currentCode={summary.couponCode}
+            subtotal={selectedSubtotal}
+            productIds={cartProductIds(selectedItems)}
+            previewParams={previewParams}
+            previewKey={previewSelection?.key ?? ''}
+          />
           {/* Chọn tất cả */}
           <Box px={3} pt={2}>
             <Checkbox checked={allSelected} onChange={toggleAll} label="Chọn tất cả" />
@@ -508,6 +517,26 @@ export default function CartPage() {
         />
       )}
     </Page>
+  );
+}
+
+/**
+ * Gợi ý mã giảm giá dưới thanh Miễn phí giao hàng. Tách thành component riêng vì hook xem trước phải chạy sau các `return` sớm của trang (giỏ đang tải, lỗi),
+ * như `CouponRow`. Cùng khoá truy vấn với dòng mã ở chân dính nên không thêm lượt gọi máy chủ.
+ */
+function CartVoucherHintSection(props: {
+  currentCode: string | null | undefined;
+  subtotal: number;
+  productIds?: string[];
+  previewParams?: { storefrontSlug?: string; itemIds?: string[] };
+  previewKey: string;
+}) {
+  const v = useCartVoucherHint(props);
+  if (!v.hint) return null;
+  return (
+    <Box px={3} pt={2}>
+      <CartVoucherHintStrip hint={v.hint} onApply={v.apply} applying={v.applying} error={v.error} />
+    </Box>
   );
 }
 

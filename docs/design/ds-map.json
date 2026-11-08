@@ -368,6 +368,15 @@
       ]
     },
     {
+      "name": "CartVoucherHintStrip",
+      "miniapp": "apps/miniapp/src/components/ui/cart-voucher-hint-strip.tsx",
+      "web": "apps/web/src/components/mini/cart-voucher-hint-strip.tsx",
+      "props": "CartVoucherHintStripProps",
+      "screens": [
+        "/cart"
+      ]
+    },
+    {
       "name": "ProductThumb",
       "miniapp": "apps/miniapp/src/components/ui/product-thumb.tsx",
       "web": "apps/web/src/components/mini/product-thumb.tsx",

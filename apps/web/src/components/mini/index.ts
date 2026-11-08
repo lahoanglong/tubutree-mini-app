@@ -76,3 +76,5 @@ export { FreeShippingProgressBar } from './free-shipping-progress-bar';
 export type { FreeShippingProgressBarProps } from './free-shipping-progress-bar';
 export { FreeshipAddonRail } from './freeship-addon-rail';
 export type { FreeshipAddonItem, FreeshipAddonRailProps } from './freeship-addon-rail';
+export { CartVoucherHintStrip } from './cart-voucher-hint-strip';
+export type { CartVoucherHintStripProps } from './cart-voucher-hint-strip';

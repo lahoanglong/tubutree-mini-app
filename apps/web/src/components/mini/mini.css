@@ -1165,3 +1165,19 @@
   .tubu-freeship-fill { transition: none; }
   .tubu-freeship-fill::after { animation: none; display: none; }
 }
+
+/* ── Gợi ý mã giảm giá dưới thanh Miễn phí giao hàng (W44B, CartVoucherHintStrip): dòng mời áp mã đã đủ điều kiện (chữ + nút 44px) và dòng sắp mở khoá (chữ + thanh). ── */
+.tubu-vhint { display: flex; flex-direction: column; gap: var(--space-stack-sm); margin-bottom: var(--p-space-3); }
+.tubu-vhint-row {
+  box-sizing: border-box; display: flex; align-items: center; gap: var(--space-inline-md); padding: var(--space-inline-md);
+  border-radius: var(--radius-card); background: var(--color-bg-surface); box-shadow: var(--elevation-1); font-variant-numeric: tabular-nums;
+}
+.tubu-vhint-row[data-kind='apply'] { background: var(--color-status-success-bg); box-shadow: none; }
+.tubu-vhint-row--stack { flex-direction: column; align-items: stretch; gap: var(--space-stack-sm); }
+/* Thanh Freeship dùng chung có lề trên của chính nó; trong dải gợi ý khoảng cách chữ-thanh do gap quyết, như Mini. */
+.tubu-vhint-row--stack .tubu-freeship-track { margin-top: 0; }
+.tubu-vhint-text { flex: 1 1 auto; min-width: 0; margin: 0; color: var(--color-text-secondary); font-size: var(--type-caption-size); line-height: var(--type-caption-lh); font-weight: var(--type-label-weight); overflow-wrap: anywhere; }
+.tubu-vhint-row[data-kind='apply'] .tubu-vhint-text { color: var(--color-text-success); }
+.tubu-vhint-cta.zaui-btn { flex: 0 0 auto; min-width: 0; height: 44px; padding: 0 var(--space-inline-md); }
+.tubu-vhint-error { margin: 0; padding: 0 var(--space-inline-md); color: var(--color-text-danger); font-size: var(--type-caption-size); line-height: var(--type-caption-lh); }
+.tubu-vhint-done { margin: 0 0 var(--p-space-3); color: var(--color-text-success); font-size: var(--type-body-sm-size); line-height: var(--type-body-sm-lh); font-variant-numeric: tabular-nums; }

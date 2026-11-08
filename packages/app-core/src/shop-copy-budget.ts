@@ -521,4 +521,12 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'freeship.addonsTitle': 44,
   'freeship.add': 8,
   'freeship.addAria': null,
+  'cart.voucherHint.apply': 50,
+  'cart.voucherHint.applyCta': 14,
+  'cart.voucherHint.applyAria': null,
+  'cart.voucherHint.applied': null,
+  'cart.voucherHint.unlockAmount': 60,
+  'cart.voucherHint.unlockPercent': 56,
+  'cart.voucherHint.unlockShip': 62,
+  'cart.voucherHint.barAria': 50,
 };
