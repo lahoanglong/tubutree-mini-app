@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
-import { act } from 'react';
+import { act, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { click } from '@/test-utils/dom';
 import { mount } from './harness';
@@ -113,6 +113,151 @@ describe('SortBar (web)', () => {
     expect(scrollIntoView).not.toHaveBeenCalled();
     spy.mockRestore();
     delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+  });
+
+  describe('bàn phím: mũi tên, Home, End (như SlotTabs)', () => {
+    function Controlled({ onChange = () => {} }: { onChange?: (v: string) => void }) {
+      const [value, setValue] = useState('best');
+      return (
+        <SortBar
+          value={value}
+          options={OPTIONS}
+          onChange={(v) => {
+            setValue(v);
+            onChange(v);
+          }}
+        />
+      );
+    }
+    /** Trả `true` khi phím không bị chặn mặc định. */
+    const press = (target: Element, k: string, init: KeyboardEventInit = {}) => {
+      let notPrevented = true;
+      act(() => {
+        notPrevented = target.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true, ...init }));
+      });
+      return notPrevented;
+    };
+    const key = (k: string) => press(document.activeElement!, k);
+
+    it('ArrowRight/ArrowLeft chọn mục kế và chuyển tiêu điểm theo, quay vòng hai đầu', () => {
+      const onChange = vi.fn();
+      mount(<Controlled onChange={onChange} />);
+      byLabel('Bán chạy').focus();
+      key('ArrowRight');
+      expect(onChange).toHaveBeenLastCalledWith('new');
+      expect(document.activeElement).toBe(byLabel('Mới'));
+      expect(byLabel('Mới').getAttribute('aria-pressed')).toBe('true');
+      key('ArrowRight');
+      key('ArrowRight');
+      expect(onChange).toHaveBeenLastCalledWith('popular');
+      expect(document.activeElement).toBe(byLabel('Phổ biến'));
+      key('ArrowLeft');
+      expect(onChange).toHaveBeenLastCalledWith('price');
+      expect(document.activeElement).toBe(byLabel('Giá, đổi chiều sắp xếp'));
+      expect(onChange).toHaveBeenCalledTimes(4);
+    });
+
+    it('Home về mục đầu, End tới mục cuối, kèm tiêu điểm', () => {
+      const onChange = vi.fn();
+      mount(<Controlled onChange={onChange} />);
+      byLabel('Bán chạy').focus();
+      key('End');
+      expect(onChange).toHaveBeenLastCalledWith('price');
+      expect(document.activeElement).toBe(byLabel('Giá, đổi chiều sắp xếp'));
+      key('Home');
+      expect(onChange).toHaveBeenLastCalledWith('popular');
+      expect(document.activeElement).toBe(byLabel('Phổ biến'));
+    });
+
+    it('phím đã xử lý bị chặn mặc định (Home/End không cuộn trang)', () => {
+      mount(<SortBar value="best" options={OPTIONS} onChange={() => {}} />);
+      for (const k of ['ArrowRight', 'ArrowLeft', 'Home', 'End']) {
+        expect(press(byLabel('Bán chạy'), k), k).toBe(false);
+      }
+    });
+
+    it('Home ở mục đầu và End ở mục cuối không gọi onChange (bấm lại "Giá" sẽ đảo chiều) nhưng vẫn chặn cuộn trang', () => {
+      const onChange = vi.fn();
+      mount(<SortBar value="price" options={OPTIONS} onChange={onChange} />);
+      const last = byLabel('Giá, đổi chiều sắp xếp');
+      last.focus();
+      expect(press(last, 'End')).toBe(false);
+      expect(document.activeElement).toBe(last);
+      const first = byLabel('Phổ biến');
+      first.focus();
+      expect(press(first, 'Home')).toBe(false);
+      expect(document.activeElement).toBe(first);
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('tiêu điểm lệch mục đang chọn: phím tới đúng mục đang chọn chỉ dời tiêu điểm, không gọi onChange (tránh đảo chiều "Giá")', () => {
+      const onChange = vi.fn();
+      mount(<SortBar value="price" options={OPTIONS} onChange={onChange} />);
+      byLabel('Mới').focus();
+      expect(press(byLabel('Mới'), 'End')).toBe(false);
+      expect(document.activeElement).toBe(byLabel('Giá, đổi chiều sắp xếp'));
+      byLabel('Phổ biến').focus();
+      expect(press(byLabel('Phổ biến'), 'ArrowLeft')).toBe(false);
+      expect(document.activeElement).toBe(byLabel('Giá, đổi chiều sắp xếp'));
+      expect(onChange).not.toHaveBeenCalled();
+      byLabel('Bán chạy').focus();
+      press(byLabel('Bán chạy'), 'ArrowRight');
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(onChange).toHaveBeenLastCalledWith('new');
+      expect(document.activeElement).toBe(byLabel('Mới'));
+    });
+
+    it('Alt/Ctrl/Meta + mũi tên không bị chặn và không đổi mục (Alt+← là Quay lại của trình duyệt)', () => {
+      const onChange = vi.fn();
+      mount(<SortBar value="best" options={OPTIONS} onChange={onChange} />);
+      for (const mod of [{ altKey: true }, { ctrlKey: true }, { metaKey: true }]) {
+        expect(press(byLabel('Bán chạy'), 'ArrowLeft', mod), JSON.stringify(mod)).toBe(true);
+      }
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('chỉ một mục: mũi tên không gọi onChange', () => {
+      const onChange = vi.fn();
+      mount(<SortBar value="best" options={[OPTIONS[1]!]} onChange={onChange} />);
+      press(byLabel('Bán chạy'), 'ArrowRight');
+      press(byLabel('Bán chạy'), 'ArrowLeft');
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('phím khác (Enter, Space, Tab, chữ, mũi tên lên xuống) không bị chặn và không gọi onChange', () => {
+      const onChange = vi.fn();
+      mount(<SortBar value="best" options={OPTIONS} onChange={onChange} filterCount={1} onFilter={() => {}} />);
+      for (const k of ['Enter', ' ', 'Tab', 'a', 'ArrowUp', 'ArrowDown']) {
+        expect(press(byLabel('Bán chạy'), k), k).toBe(true);
+      }
+      expect(press(byLabel('Lọc, 1 bộ lọc đang bật'), 'ArrowRight')).toBe(true);
+      expect(onChange).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('filterExpanded', () => {
+    it.each([[false], [true]])('filterExpanded=%s: nút Lọc có aria-expanded và aria-haspopup="dialog"', (expanded) => {
+      mount(<SortBar value="best" options={OPTIONS} onChange={() => {}} onFilter={() => {}} filterExpanded={expanded} />);
+      const filter = byLabel('Lọc');
+      expect(filter.getAttribute('aria-expanded')).toBe(String(expanded));
+      expect(filter.getAttribute('aria-haspopup')).toBe('dialog');
+      for (const b of Array.from(document.querySelector('[role="group"]')!.querySelectorAll('button'))) {
+        expect(b.hasAttribute('aria-expanded')).toBe(false);
+        expect(b.hasAttribute('aria-haspopup')).toBe(false);
+      }
+    });
+
+    it('không truyền filterExpanded: nút Lọc giữ nguyên, không aria-expanded, không aria-haspopup', () => {
+      mount(<SortBar value="best" options={OPTIONS} onChange={() => {}} onFilter={() => {}} />);
+      const filter = byLabel('Lọc');
+      expect(filter.hasAttribute('aria-expanded')).toBe(false);
+      expect(filter.hasAttribute('aria-haspopup')).toBe(false);
+    });
+
+    it('có filterCount: tên đọc vẫn là "Lọc, 2 bộ lọc đang bật" cùng aria-expanded', () => {
+      mount(<SortBar value="best" options={OPTIONS} onChange={() => {}} onFilter={() => {}} filterCount={2} filterExpanded />);
+      expect(byLabel('Lọc, 2 bộ lọc đang bật').getAttribute('aria-expanded')).toBe('true');
+    });
   });
 
   it('options rỗng rồi có lại trên cùng một cây: không lỗi hook (hook đứng trước return sớm)', () => {
