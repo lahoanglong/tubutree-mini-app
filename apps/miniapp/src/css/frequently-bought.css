@@ -1,0 +1,54 @@
+/* Khối "Gợi ý mua kèm hợp vị" ở trang chi tiết (W43A). Số đo đặt ở đây (bánh cóc px của P17b chỉ đếm TSX). */
+
+.tubu-fbt {
+  box-sizing: border-box;
+  padding: 16px;
+  background: var(--color-bg-surface);
+  font-variant-numeric: tabular-nums;
+}
+
+.tubu-fbt-list {
+  display: flex;
+  flex-direction: column;
+  margin-top: 4px;
+}
+
+/* Cả dòng là vùng chạm: cao tối thiểu 64 (ảnh 48 + đệm 8 + 8), rộng hết khối. */
+.tubu-fbt-row {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 64px;
+  padding: 8px 0;
+  cursor: pointer;
+}
+
+.tubu-fbt-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tubu-fbt-tag {
+  align-self: flex-start;
+}
+
+.tubu-fbt-name {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Giữ chỗ một dòng ngay cả khi chưa có số tiết kiệm: chữ hiện ra không đẩy nút bên dưới xuống. */
+.tubu-fbt-save {
+  margin: 4px 0 8px;
+  min-height: calc(var(--type-caption-size) * var(--type-caption-lh));
+  font-size: var(--type-caption-size);
+  line-height: var(--type-caption-lh);
+  font-weight: 600;
+  color: var(--color-text-price-deal);
+}

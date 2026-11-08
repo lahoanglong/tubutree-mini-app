@@ -12,6 +12,7 @@ import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { PdpFeed } from './pdp-feed';
 import { pdpSectionTitle } from './pdp-sections';
+import { useFbt, type FbtHostArgs } from './use-fbt';
 
 const FIVE_MIN = 5 * 60_000;
 
@@ -43,8 +44,8 @@ function Rail({ title, label = title, icon, products, loading }: { title: string
 }
 
 /**
- * "Khách thường mua cùng", "Cùng thương hiệu" và "Có thể bạn cũng thích" (lưới cuối trang), không trùng nhau và không có món đang xem
- * (`pdpShelves`: trần và sàn lấy từ SHELVES). Danh sách đầu do server dựng sẵn (liên kết nội bộ cho công cụ tìm kiếm); thiếu thì tải ở
+ * "Khách thường mua cùng", "Cùng thương hiệu" và "Có thể bạn cũng thích" (lưới cuối trang), không trùng nhau, không có món đang xem và không có
+ * 2 món bổ trợ đang nằm ở khối "Gợi ý mua kèm hợp vị" (`pdpShelves`: trần và sàn lấy từ SHELVES; dải "mua cùng" có thể xuống dưới sàn và ẩn). Danh sách đầu do server dựng sẵn (liên kết nội bộ cho công cụ tìm kiếm); thiếu thì tải ở
  * trình duyệt; lưới cuối chỉ tải ở trình duyệt. Giá Giờ vàng trên thẻ khớp giá thật qua `ProductCard`.
  */
 export function PdpRails({
@@ -53,12 +54,15 @@ export function PdpRails({
   brand,
   initialRelated,
   initialBoughtTogether,
+  fbt,
 }: {
   productId: string;
   slug: string;
   brand: string;
   initialRelated?: CoreProductCard[];
   initialBoughtTogether?: CoreProductCard[];
+  /** Món đang xem cho khối "Gợi ý mua kèm hợp vị" ngay trên các dải này: 2 món bổ trợ của khối không lặp ở dải nào. Thiếu thì không có khối, các dải giữ đủ món. */
+  fbt?: Pick<FbtHostArgs, 'name' | 'thumbnail' | 'variations' | 'blockedReason'>;
 }) {
   const together = useQuery({ ...boughtTogetherQuery(coreHttp, slug), initialData: initialBoughtTogether, staleTime: FIVE_MIN, retry: 0 });
   const related = useQuery({ ...relatedQuery(coreHttp, slug), initialData: initialRelated, staleTime: FIVE_MIN, retry: 0 });
@@ -74,7 +78,8 @@ export function PdpRails({
     retry: 0,
   });
   const feed = phase === 'authenticated' ? personal.data : popular.data?.data;
-  const shelves = pdpShelves({ currentId: productId, boughtTogether: together.data ?? [], brand: related.data ?? [], feed: feed ?? [] });
+  const { claimed } = useFbt({ productId, slug, name: fbt?.name ?? '', thumbnail: fbt?.thumbnail ?? null, variations: fbt?.variations ?? [], blockedReason: fbt?.blockedReason, initialBoughtTogether });
+  const shelves = pdpShelves({ currentId: productId, boughtTogether: together.data ?? [], brand: related.data ?? [], feed: feed ?? [], claimed });
   return (
     <>
       <Rail title={fillCopy('pdp.boughtTogether')} icon products={shelves.boughtTogether} loading={together.isPending} />

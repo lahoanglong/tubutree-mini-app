@@ -27,6 +27,7 @@ import { RecordRecentlyViewed } from './record-recently-viewed';
 import { PdpChatButton, PdpContentKitRow, PdpCoupons, PdpFlashBar, PdpFreeship, PdpGroupBuyRow, PdpLowStock, PdpPointsEarn, PdpShippingRow, PdpSold, PdpSubscribeRow } from './pdp-extras';
 import { PdpBundles } from './pdp-bundles';
 import { PdpQuickReviews } from './pdp-quick-reviews';
+import { PdpFbt } from './pdp-fbt';
 import { PdpRails } from './pdp-rails';
 import { PdpLayout } from '@/components/layouts/pdp-layout';
 import { PdpDescription, PdpIngredients, PdpPromises, PdpRating } from './pdp-sections';
@@ -100,6 +101,13 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   const retailOnly = isRetailOnly(product);
   const soldText = formatSold(product.sold);
   const fromStore = product.fulfiller?.kind === 'MERCHANT' || product.fulfiller?.kind === 'UNAVAILABLE';
+  // Khối "Gợi ý mua kèm hợp vị" và các dải cuối trang dùng chung một bộ món (hook `useFbt`): chỉ chuyển các trường giá và tồn, không chuyển cả phân loại.
+  const fbtHost = {
+    name: product.name,
+    thumbnail: product.thumbnail ?? product.images[0] ?? null,
+    variations: product.variations.map((v) => ({ id: v.id, name: v.name, retailPrice: v.retailPrice, salePrice: v.salePrice, stock: v.stock })),
+    blockedReason: unavailableText,
+  };
 
   return (
     <main data-page-bleed className={`${PAGE_WIDE} py-6 max-md:px-0 max-md:py-0`}>
@@ -259,6 +267,13 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
               {/* Điện thoại: dải câu chuyện ngay dưới khối mua nhanh (chip, Số lượng), order 7 giữa Số lượng (6) và Combo (8); máy tính dùng bản ở `below`. */}
               <PdpStory product={product} placement="phone" />
 
+              {/* "Gợi ý mua kèm hợp vị": ngay trên Combo/Mua kèm giá tốt (cùng order 8, đứng trước theo thứ tự HTML); ẩn hẳn khi không có bộ. */}
+              {product.variations.length > 0 && (
+                <div className="tubu-pdp-order-8">
+                  <PdpFbt productId={product.id} slug={product.slug} initialBoughtTogether={boughtTogether} {...fbtHost} />
+                </div>
+              )}
+
               {/* Điện thoại: Combo/Mua kèm là hai dải trắng riêng như Mini App. Lớp dải đặt ở đây vì khối combo (pdp-bundles) tự nó chỉ có đệm dọc. */}
               <div
                 data-section="pdp-bundles"
@@ -300,7 +315,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
 
               {/* Điện thoại: trang không đệm (ảnh tràn mép), nên dải gợi ý tự đệm 16px; các khối trên là dải trắng tự đệm. */}
               <div className="max-md:px-4 max-md:pb-6">
-                <PdpRails productId={product.id} slug={product.slug} brand={product.brand} initialRelated={related} initialBoughtTogether={boughtTogether} />
+                <PdpRails productId={product.id} slug={product.slug} brand={product.brand} initialRelated={related} initialBoughtTogether={boughtTogether} fbt={fbtHost} />
               </div>
             </div>
           }

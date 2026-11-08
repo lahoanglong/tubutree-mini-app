@@ -842,7 +842,7 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
     });
   }
 
-  test('kệ Mua lại 3 món 375px: thẻ đầu cách đầu kệ 48px, lề trái 12px, rộng 148px như Mini App', async ({ page, api }) => {
+  test('dải Mua lại món quen 3 món 375px: thẻ đầu lề trái 12px, rộng 128px, cao 232px như Mini App', async ({ page, api }) => {
     await login(page, api);
     mockHomeEngagement(api);
     api.get('/me/purchased-items', {
@@ -850,12 +850,16 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
       nextCursor: null,
     });
     await page.goto('/');
-    const rail = page.getByRole('region', { name: 'Mua lại' });
-    await expect(rail).toBeVisible({ timeout: 15_000 });
-    const section = (await rail.boundingBox())!;
-    const tile = (await rail.locator('[data-ds="product-tile"]').first().boundingBox())!;
-    // Số đo của Mini App cùng dữ liệu: tiêu đề khối 44px + đệm kệ 4px, thẻ đầu x=12 (kệ chung P4).
-    expect({ top: tile.y - section.y, left: tile.x, width: tile.width }).toEqual({ top: 48, left: 12, width: 148 });
+    const strip = page.getByTestId('quick-reorder');
+    await expect(strip).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('quick-reorder-card')).toHaveCount(3);
+    const section = (await strip.boundingBox())!;
+    const card = (await page.getByTestId('quick-reorder-card').first().boundingBox())!;
+    expect({ left: card.x, width: card.width, height: card.height }).toEqual({ left: 12, width: 128, height: 232 });
+    // Thẻ nằm dưới tiêu đề khối, trong khung của dải.
+    expect(card.y).toBeGreaterThan(section.y);
+    expect(card.y + card.height).toBeLessThanOrEqual(section.y + section.height);
+    expect(await noHorizontalScroll(page)).toBeLessThanOrEqual(0);
   });
 
   for (const withCookie of [true, false]) {

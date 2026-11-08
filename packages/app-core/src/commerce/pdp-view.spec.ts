@@ -92,6 +92,19 @@ describe('pdpShelves', () => {
     for (const list of [out.boughtTogether, out.brand, out.feed]) expect(list.map((x) => x.id)).not.toContain('cur');
   });
 
+  it('món đã nằm trong khối "Gợi ý mua kèm hợp vị" (claimed) không lặp ở bất kỳ dải nào', () => {
+    const out = pdpShelves({
+      currentId: 'cur',
+      claimed: new Set(['b0', 'x', 'f0']),
+      boughtTogether: many('b', 5),
+      brand: [p('x'), p('y')],
+      feed: many('f', 6),
+    });
+    expect(out.boughtTogether.map((x) => x.id)).toEqual(['b1', 'b2', 'b3', 'b4']);
+    expect(out.brand.map((x) => x.id)).toEqual(['y']);
+    expect(out.feed.map((x) => x.id)).toEqual(['f1', 'f2', 'f3', 'f4', 'f5']);
+  });
+
   it('khách thường mua cùng dưới 3 món thì ẩn; feed dưới 4 món thì ẩn', () => {
     const out = pdpShelves({ currentId: 'cur', boughtTogether: many('b', 2), brand: [], feed: many('f', 3) });
     expect(out.boughtTogether).toEqual([]);

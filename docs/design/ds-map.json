@@ -377,6 +377,24 @@
       ]
     },
     {
+      "name": "QuickReorderStrip",
+      "miniapp": "apps/miniapp/src/components/ui/quick-reorder-strip.tsx",
+      "web": "apps/web/src/components/mini/quick-reorder-strip.tsx",
+      "props": "QuickReorderStripProps",
+      "screens": [
+        "/"
+      ]
+    },
+    {
+      "name": "FrequentlyBoughtTogether",
+      "miniapp": "apps/miniapp/src/components/ui/frequently-bought-together.tsx",
+      "web": "apps/web/src/components/mini/frequently-bought-together.tsx",
+      "props": "FrequentlyBoughtTogetherProps",
+      "screens": [
+        "/product/:slug"
+      ]
+    },
+    {
       "name": "ProductThumb",
       "miniapp": "apps/miniapp/src/components/ui/product-thumb.tsx",
       "web": "apps/web/src/components/mini/product-thumb.tsx",

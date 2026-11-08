@@ -1,6 +1,5 @@
 import type { CheckInStatusResponse, CouponDTO, LoyaltyOverview } from './api/loyalty';
 import { decimalVi, tierProgressPercent } from './loyalty-copy';
-import { tileBodyHeight } from './commerce/tile-metrics';
 
 /**
  * Bố cục Trang chủ, thanh đáy, Ưu đãi và hàng trạng thái đơn của trang Cá nhân. Một nguồn cho Mini App và web khổ điện thoại:
@@ -580,14 +579,19 @@ export function writePurchasedHint(storage: MemoryStorage | null, count: number)
 /** Chiều cao dòng Mua lại (1 món) và hàng tiêu đề khối (`--section-header-h`). */
 export const PURCHASED_LINE_HEIGHT = 88;
 export const SECTION_HEADER_HEIGHT = 44;
-/** Đệm trên và dưới của kệ ngang (`--rail-pad-block` = 8) và bề rộng ảnh thẻ `rail-md` (`--tile-w-md`). */
+/** Đệm trên và dưới của kệ ngang (`--rail-pad-block` = 8). */
 const RAIL_PAD = 8;
-const TILE_MD_WIDTH = 148;
 
-/** Chiều cao khung chờ của khối Mua lại theo gợi ý nhớ: tiêu đề + một dòng 88, hay tiêu đề + kệ thẻ `rail-md`. */
+/**
+ * Thẻ của dải "Mua lại món quen" (QuickReorderStrip): ảnh vuông 128 (= `--tile-w-sm`), tên một dòng, giá, nút "+ Thêm" 44. Khung chờ và dải thật cùng đọc số này
+ * (`apps/e2e` đo dải thật so với khung chờ để trang không nhảy).
+ */
+export const QUICK_REORDER_CARD_HEIGHT = 232;
+
+/** Chiều cao khung chờ của khối Mua lại theo gợi ý nhớ: tiêu đề + một dòng 88, hay tiêu đề + dải thẻ "Mua lại món quen". */
 export function purchasedSkeletonHeight(hint: PurchasedHint): number {
   if (hint === 'one') return SECTION_HEADER_HEIGHT + PURCHASED_LINE_HEIGHT;
-  if (hint === 'many') return SECTION_HEADER_HEIGHT + RAIL_PAD * 2 + TILE_MD_WIDTH + tileBodyHeight('rail-md');
+  if (hint === 'many') return SECTION_HEADER_HEIGHT + RAIL_PAD * 2 + QUICK_REORDER_CARD_HEIGHT;
   return 0;
 }
 

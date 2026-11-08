@@ -9,12 +9,12 @@ import { formatVnd } from '@/lib/format-vnd';
 
 // Chép ý nghĩa purchased-rail.spec của Mini App: kệ "Mua lại" cho khách cũ, ẩn khi rỗng/404/khách, sheet → thêm giỏ → sang giỏ, lỗi làm mới.
 const mocks = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), push: vi.fn(), phase: 'authenticated', flash: [] as unknown[] }));
-vi.mock('@/lib/use-flash-sales', () => ({ useActiveFlashSales: () => mocks.flash }));
+vi.mock('@/lib/use-flash-sales', () => ({ useActiveFlashSales: () => mocks.flash, useRunningFlash: () => ({ flash: mocks.flash, now: Date.now() }) }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get, post: mocks.post } }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => mocks.phase }));
-vi.mock('@/lib/cart-key', () => ({ cartStorefrontSlug: () => null, useCartKey: () => ['cart', null] }));
+vi.mock('@/lib/cart-key', () => ({ cartStorefrontSlug: () => null, useCartKey: () => ['cart', null], cartKey: () => ['cart', null] }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/lib/shop-client')>()), getCart: async () => ({ items: [] }) }));
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push }) }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push }), usePathname: () => '/' }));
 
 import { PurchasedRail } from './purchased-rail';
 import { HomeBlockErrorSuppressed } from '@/components/home/home-block-error';
@@ -37,7 +37,8 @@ beforeEach(() => {
   mocks.phase = 'authenticated';
   mocks.flash = [];
   rail = async () => ({ items: [ITEM], nextCursor: null });
-  mocks.get.mockReset().mockImplementation(() => rail());
+  // Giỏ không đi chung đường với kệ: trả nhầm danh sách đã mua cho GET /cart làm số trong giỏ hỏng và giá Giờ vàng của dải sai.
+  mocks.get.mockReset().mockImplementation((path: string) => (String(path).startsWith('/cart') ? Promise.resolve({ items: [] }) : rail()));
   mocks.post.mockReset().mockResolvedValue(CART);
   mocks.push.mockReset();
 });
@@ -271,11 +272,82 @@ describe('PurchasedRail — Trang chủ (Q6)', () => {
     expect(mocks.push).toHaveBeenCalledWith(expect.stringContaining('/san-pham/nuoc-rua-chen'));
   });
 
-  it('hai món trở lên: kệ cuộn ngang thẻ, không còn thẻ gọn của tab Đơn hàng', async () => {
-    rail = async () => ({ items: [ITEM, { ...ITEM, variationId: 'v2', slug: 'sp-2' }], nextCursor: null });
+  it('hai món còn hàng trở lên: dải "Mua lại món quen" thay kệ thẻ (không còn dòng một món, không còn thẻ gọn của tab Đơn hàng)', async () => {
+    rail = async () => ({ items: [ITEM, { ...ITEM, variationId: 'v2', slug: 'sp-2', productName: 'Sản phẩm hai' }], nextCursor: null });
     const c = await home();
     expect(c.querySelector('[data-testid="rebuy-line"]')).toBeNull();
-    expect(c.querySelectorAll('[role="region"] a.tubu-tile-link, [role="region"] .tubu-tile-link').length).toBeGreaterThanOrEqual(2);
+    expect(c.querySelector('section[aria-label="Mua lại món quen"]')).not.toBeNull();
+    expect(c.querySelectorAll('[data-testid="quick-reorder-card"]')).toHaveLength(2);
+    expect(c.querySelectorAll('.tubu-tile-link')).toHaveLength(0);
+  });
+
+  it('dải có tối đa 6 thẻ dù khách có nhiều món hơn', async () => {
+    rail = async () => ({ items: Array.from({ length: 9 }, (_, i) => ({ ...ITEM, variationId: `v${i}`, slug: `sp-${i}`, productName: `Sản phẩm ${i}` })), nextCursor: null });
+    const c = await home();
+    expect(c.querySelectorAll('[data-testid="quick-reorder-card"]')).toHaveLength(6);
+  });
+
+  it('hai món nhưng một món hết hàng: dưới sàn 2 món dùng được nên không có dải, giữ kệ thẻ cũ', async () => {
+    rail = async () => ({ items: [ITEM, { ...ITEM, variationId: 'v2', slug: 'sp-2', stock: 0 }], nextCursor: null });
+    const c = await home();
+    expect(c.querySelector('[data-testid="quick-reorder"]')).toBeNull();
+    expect(c.querySelectorAll('.tubu-tile-link').length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('tab Đơn hàng giữ kệ cũ dù có nhiều món (hai chạm qua sheet, vì ở đó khách chọn số lượng và Định kỳ)', async () => {
+    rail = async () => ({ items: [ITEM, { ...ITEM, variationId: 'v2', slug: 'sp-2' }, { ...ITEM, variationId: 'v3', slug: 'sp-3' }], nextCursor: null });
+    const c = await mount({ source: 'orders_tab' });
+    expect(c.querySelector('[data-testid="quick-reorder"]')).toBeNull();
+    expect(c.querySelectorAll('.tubu-tile-link').length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('dải: chạm thân thẻ mở trang sản phẩm ở đúng phân loại đã mua; "+ Thêm" một chạm gửi POST /cart/items addSource repurchase', async () => {
+    rail = async () => ({ items: [ITEM, { ...ITEM, variationId: 'v2', slug: 'sp-2', productName: 'Sản phẩm hai' }], nextCursor: null });
+    const c = await home();
+    const open = c.querySelector('[data-testid="quick-reorder-card"] .tubu-quick-open') as HTMLElement;
+    click(open);
+    expect(mocks.push).toHaveBeenCalledWith(expect.stringContaining('/san-pham/nuoc-rua-chen'));
+    expect(mocks.push.mock.calls[0]![0]).toContain('v1');
+    click(c.querySelector('[data-testid="quick-reorder-add"]') as HTMLElement);
+    await flush(6);
+    expect(mocks.post).toHaveBeenCalledWith('/cart/items', { variationId: 'v1', quantity: 1, addSource: 'repurchase' }, undefined);
+    expect(c.textContent).toContain('Đã thêm vào giỏ!');
+  });
+
+  it('dải: làm mới lỗi nhưng còn dữ liệu cũ thì dải KHÔNG biến mất, kèm dòng báo nhẹ + "Thử lại"', async () => {
+    rail = async () => ({ items: [ITEM, { ...ITEM, variationId: 'v2', slug: 'sp-2' }], nextCursor: null });
+    const client = newTestClient();
+    mounted = render(
+      <QueryClientProvider client={client}>
+        <PurchasedRail source="home_rail" />
+      </QueryClientProvider>,
+    );
+    await flush(8);
+    expect(mounted.container.querySelectorAll('[data-testid="quick-reorder-card"]')).toHaveLength(2);
+    rail = async () => {
+      throw new ApiError('Máy chủ đang bận', 503);
+    };
+    await act(async () => {
+      await client.refetchQueries({ queryKey: ['purchased-items', 10] });
+    });
+    await flush(4);
+    expect(mounted.container.querySelectorAll('[data-testid="quick-reorder-card"]')).toHaveLength(2);
+    expect(mounted.container.textContent).toContain('Máy chủ đang bận');
+    expect(mounted.container.querySelector('button[aria-label="Thử lại Mua lại"]')).not.toBeNull();
+  });
+
+  it('dải: món Giờ vàng đang chạy ghi giá Giờ vàng; hết suất của khách (flashAllowance 0) ghi giá thường vì giỏ tính giá thường', async () => {
+    mocks.flash = [{ itemId: 'f1', productSlug: 'nuoc-rua-chen', variationId: 'v1', flashPrice: 40000, endAt: new Date(Date.now() + 3_600_000).toISOString(), startAt: new Date(Date.now() - 3_600_000).toISOString() }];
+    rail = async () => ({ items: [ITEM, { ...ITEM, variationId: 'v2', slug: 'sp-2' }], nextCursor: null });
+    let c = await home();
+    const first = () => c.querySelector('[data-testid="quick-reorder-card"]') as HTMLElement;
+    expect(first().textContent).toContain('40.000đ');
+    expect(first().textContent).toContain('-38%');
+    mounted!.unmount();
+    rail = async () => ({ items: [{ ...ITEM, flashAllowance: 0 }, { ...ITEM, variationId: 'v2', slug: 'sp-2' }], nextCursor: null });
+    c = await home();
+    expect(first().textContent).toContain('65.000đ');
+    expect(first().textContent).not.toContain('40.000đ');
   });
 
   it('bỏ phân loại đã nằm ở Giờ vàng: phân loại trùng không lặp lại, hết món thì khối ẩn', async () => {

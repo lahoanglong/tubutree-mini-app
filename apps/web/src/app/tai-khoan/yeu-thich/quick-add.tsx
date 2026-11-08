@@ -31,6 +31,8 @@ type Notice = QuickAddNotice;
 export interface QuickAdd {
   /** Thêm một thẻ vào giỏ theo đúng luật giỏ nhanh: tải chi tiết, một phân loại còn hàng thì thêm thẳng, nhiều thì mở bảng chọn, hết hàng thì báo. */
   quickAdd: (product: ProductCard, opts?: { initialId?: string | null; origin?: Element | null }) => Promise<void>;
+  /** Thêm thẳng một phân loại đã biết (dải Mua lại món quen), số lượng 1, không tải chi tiết. Lỗi (hết hàng, ngừng bán) hiện thông báo như mọi đường giỏ nhanh. */
+  addVariation: (variationId: string, opts?: { origin?: Element | null }) => Promise<void>;
   /** Hiện một thông báo nổi ở đáy màn (cùng chỗ với "Đã thêm vào giỏ!"). */
   notify: (n: QuickAddNotice) => void;
   /** Mã sản phẩm đang được thêm (chặn bấm lại ở nơi vẽ nút). */
@@ -97,6 +99,12 @@ export function useQuickAdd(source?: AddToCartSource): QuickAdd {
       else await addLine(plan.variationId, 1, opts?.origin ?? null);
     });
 
+  const addVariation = (variationId: string, opts?: { origin?: Element | null }) =>
+    run(async () => {
+      setBusyId(variationId);
+      await addLine(variationId, 1, opts?.origin ?? null);
+    });
+
   const confirmPick = (variation: { id: string }, qty: number) =>
     run(async () => {
       setBusyId(picker?.product.id ?? null);
@@ -142,7 +150,7 @@ export function useQuickAdd(source?: AddToCartSource): QuickAdd {
     </>
   );
 
-  return { quickAdd, notify: show, busyId, feedback };
+  return { quickAdd, addVariation, notify: show, busyId, feedback };
 }
 
 /** Nút giỏ nhanh nổi ở góc dưới ảnh thẻ: vùng chạm 44px bọc vòng trắng 32px, cùng kiểu nút tim ở góc trên. */
