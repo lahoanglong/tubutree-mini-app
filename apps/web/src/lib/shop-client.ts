@@ -6,6 +6,7 @@ import type { CartComboGroup } from '@tubutree/shared-types';
 import { syncServerClock } from '@tubutree/app-core/server-clock';
 import { fetchActiveFlashSales } from '@tubutree/app-core/api/flash-sale';
 import { fetchFlashAllowance } from '@tubutree/app-core/api/flash-allowance';
+import type { OrderView } from '@tubutree/app-core/api/orders';
 import { apiFetch } from './client-api';
 import { coreHttp } from './core-http';
 import type { MyRefund, RefundBankInput, ReturnReasonCode } from './refund-rules';
@@ -389,7 +390,8 @@ export interface OrderListFilter {
   q?: string;
 }
 export interface OrdersPage {
-  data: OrderDTO[];
+  /** Dòng đơn đủ id/variationId/tồn như Mini App dùng cho "Mua lại" (cùng endpoint GET /orders), nên không dùng OrderDTO hẹp. */
+  data: OrderView[];
   meta: { page: number; limit: number; total: number; nextCursor?: string | null };
 }
 export const ORDERS_PAGE_SIZE = 20;

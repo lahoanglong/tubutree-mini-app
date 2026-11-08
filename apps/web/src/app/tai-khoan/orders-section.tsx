@@ -8,15 +8,20 @@ import Link from 'next/link';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { Search } from 'lucide-react';
 import { FIRST_PAGE, nextPageParam, uniqueByKey } from '@/lib/keyset-paging';
+import type { OrderView } from '@tubutree/app-core/api/orders';
 import { fetchOrdersPage, formatVnd, type OrderDTO } from '@/lib/shop-client';
 import {
   ORDER_TABS,
   buyerOrderStatusLabel,
   orderDetailHref,
   bankPaymentHref,
+  isReorderable,
   orderStatusTone,
   type OrderTabKey,
 } from '@/lib/order-view';
+import { reorderText } from '@/lib/home-text';
+import { ReorderSheet } from '@/components/reorder/reorder-sheet';
+import { orderReorderTarget, type ReorderTarget } from '@/components/reorder/reorder-types';
 import { ui } from '@/lib/guest-ui';
 import { formatDate, formatDateTime } from '@/lib/format-date';
 import { canPayNow, showsPaymentDeadline } from '@/components/orders/order-rules';
@@ -53,6 +58,14 @@ export function OrdersSection() {
   const tabHints = useScrollHints<HTMLDivElement>();
   const [draft, setDraft] = useState('');
   const [query, setQuery] = useState('');
+  // State ổn định (không dựng target trong JSX): ReorderSheet khởi tạo lại lựa chọn theo danh tính của target, như trang Đơn hàng và chi tiết đơn.
+  const [reorderTarget, setReorderTarget] = useState<ReorderTarget | null>(null);
+  // Khối này chỉ có ở desktop và ít khi bấm Mua lại: dựng sheet (useRouter, tải giỏ) từ lần bấm đầu rồi giữ nguyên cây đó cho các lần mở sau.
+  const [sheetUsed, setSheetUsed] = useState(false);
+  const reorder = (o: OrderView) => {
+    setSheetUsed(true);
+    setReorderTarget(orderReorderTarget(o));
+  };
   const current = ORDER_TABS.find((t) => t.key === tab) ?? ORDER_TABS[0];
   const filter = { ...current.filter, ...(query ? { q: query } : {}) };
   // ['orders', …]: các trang khác (chi tiết đơn) làm mới theo tiền tố ['orders'].
@@ -82,7 +95,7 @@ export function OrdersSection() {
 
       <form role="search" onSubmit={submitSearch} className="mt-3 flex gap-2">
         <label htmlFor="orders-search" className="sr-only">
-          Tìm đơn theo mã đơn hoặc tên sản phẩm
+          {orderCopy.searchLabel}
         </label>
         <div className="relative min-w-0 flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-500" aria-hidden="true" />
@@ -92,7 +105,7 @@ export function OrdersSection() {
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             maxLength={100}
-            placeholder="Mã đơn hoặc tên sản phẩm"
+            placeholder={orderCopy.searchPlaceholder}
             className={`${ui.field} pl-9`}
           />
         </div>
@@ -104,7 +117,7 @@ export function OrdersSection() {
         <div className="mt-2 flex flex-wrap items-center gap-x-2 text-sm text-stone-700">
           <span role="status">Kết quả cho “{query}”</span>
           <button type="button" onClick={clearSearch} className={`${ui.btnText} text-forest-700`}>
-            Xoá tìm kiếm
+            {orderCopy.searchClear}
           </button>
         </div>
       )}
@@ -165,13 +178,22 @@ export function OrdersSection() {
                     </Link>
                   </div>
                 )}
-                <Link
-                  href={orderDetailHref(o.code)}
-                  aria-label={`Xem chi tiết đơn ${o.code}`}
-                  className={`${ui.btnText} -ml-2 mt-1 text-forest-700`}
-                >
-                  Xem chi tiết
-                </Link>
+                <div className="mt-1 flex items-center justify-between gap-2">
+                  <Link href={orderDetailHref(o.code)} aria-label={`Xem chi tiết đơn ${o.code}`} className={`${ui.btnText} -ml-2 text-forest-700`}>
+                    Xem chi tiết
+                  </Link>
+                  {/* Như thẻ đơn của Mini App: đơn đã xong mua lại ngay ở danh sách, sheet chọn dòng + số lượng rồi sang giỏ như ở chi tiết đơn. */}
+                  {isReorderable(o.status) && (
+                    <button
+                      type="button"
+                      aria-label={`Mua lại đơn ${o.code}`}
+                      onClick={() => reorder(o)}
+                      className={ui.btnSecondary}
+                    >
+                      {reorderText.cardCta}
+                    </button>
+                  )}
+                </div>
               </li>
             ))}
           </ul>
@@ -199,12 +221,14 @@ export function OrdersSection() {
       ) : (
         <p className={`mt-3 p-6 text-center text-sm text-stone-600 ${ui.card}`}>
           {query
-            ? `Không tìm thấy đơn nào khớp “${query}”${tab === 'all' ? '' : ' ở trạng thái này'}.`
+            ? `${orderCopy.searchNoMatch(query, tab !== 'all')}.`
             : tab === 'all'
               ? 'Bạn chưa có đơn hàng nào.'
               : 'Không có đơn hàng nào ở trạng thái này.'}
         </p>
       )}
+
+      {sheetUsed && <ReorderSheet target={reorderTarget} navigateToCart onClose={() => setReorderTarget(null)} />}
     </section>
   );
 }

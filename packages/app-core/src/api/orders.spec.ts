@@ -37,6 +37,18 @@ describe('orders — hợp đồng gọi API', () => {
     expect(calls.every((c) => c.method === 'get' && c.path === '/orders')).toBe(true);
   });
 
+  it('fetchOrders: q cắt khoảng trắng, đi cùng status/group; chuỗi trắng bị bỏ', async () => {
+    const { http, calls } = fakeHttp();
+    await fetchOrders(http, { q: '  dau goi ' });
+    await fetchOrders(http, { group: 'closed', q: 'TUBU-1' }, 2, 5);
+    await fetchOrders(http, { status: 'DELIVERED', q: '   ' });
+    expect(calls.map((c) => c.opts)).toEqual([
+      { query: { q: 'dau goi', page: 1, limit: 20 } },
+      { query: { group: 'closed', q: 'TUBU-1', page: 2, limit: 5 } },
+      { query: { status: 'DELIVERED', page: 1, limit: 20 } },
+    ]);
+  });
+
   it('fetchHomeTodo: một lời GET /orders/home-todo không tham số', async () => {
     const { http, calls } = fakeHttp();
     await fetchHomeTodo(http);

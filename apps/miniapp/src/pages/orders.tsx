@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Page, useLocation, useNavigate } from 'zmp-ui';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { fetchOrders } from '../services/shop-api';
@@ -14,6 +14,7 @@ import { uniqueById } from '../utils/unique-by-id';
 import { FIRST_PAGE, nextPageParam } from '../utils/keyset-paging';
 import { PageHeader } from '../components/ui/page-header';
 import { SegmentedTabs } from '../components/ui/segmented-tabs';
+import { SearchField } from '../components/ui/search-field';
 import { Button } from '../components/ui/button';
 import { LineItemSkeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
@@ -28,6 +29,8 @@ import { SubscriptionsPanel } from '../components/subscriptions-panel';
 import { SUBSCRIPTIONS_IN_MINIAPP } from '../utils/features';
 
 const PAGE_LIMIT = 20;
+/** Độ dài tối đa ô tìm: đủ cho mã đơn và tên sản phẩm dài nhất. */
+const SEARCH_MAX_LENGTH = 60;
 
 /**
  * Tab gốc "Đơn hàng" (spec 4a.1/4a.2): tab trạng thái (+ Định kỳ) → thẻ đơn có ảnh, số món, nút Mua lại → kệ Mua lại
@@ -65,11 +68,27 @@ export default function OrdersPage() {
     if (key !== 'subscriptions' && !hasSubscription) setKeepSubsTab(false);
   };
 
+  // Ô tìm theo mã đơn hoặc tên sản phẩm: `draft` là chữ đang gõ, `query` là từ khoá đã gửi (Enter / nút Tìm của bàn phím). Từ khoá giữ
+  // nguyên khi đổi tab trạng thái, như khối đơn ở Tài khoản trên web.
+  const [draft, setDraft] = useState('');
+  const [query, setQuery] = useState('');
+  const searchRef = useRef<HTMLInputElement>(null);
+  const clearSearch = () => {
+    setDraft('');
+    setQuery('');
+  };
+  // Nút "Xoá tìm kiếm" ở màn không khớp biến mất ngay sau khi bấm: trả focus về ô như nút ✕ trong ô.
+  const clearSearchAndFocus = () => {
+    clearSearch();
+    searchRef.current?.focus();
+  };
+  const listFilter = { ...(current.filter ?? {}), ...(query ? { q: query } : {}) };
+
   // Phân trang bằng useInfiniteQuery + "Xem thêm" (giữ fix cũ: >20 đơn vẫn xem được đơn cũ).
   // Key bắt đầu bằng ['orders'] để invalidateQueries({ queryKey: ['orders'] }) hiện có vẫn làm mới danh sách.
   const orders = useInfiniteQuery({
-    queryKey: ['orders', 'list', tab],
-    queryFn: ({ pageParam }) => (pageParam.cursor ? fetchOrders(current.filter ?? {}, pageParam.page, PAGE_LIMIT, pageParam.cursor) : fetchOrders(current.filter ?? {}, pageParam.page, PAGE_LIMIT)),
+    queryKey: ['orders', 'list', tab, query],
+    queryFn: ({ pageParam }) => (pageParam.cursor ? fetchOrders(listFilter, pageParam.page, PAGE_LIMIT, pageParam.cursor) : fetchOrders(listFilter, pageParam.page, PAGE_LIMIT)),
     initialPageParam: FIRST_PAGE,
     getNextPageParam: nextPageParam,
     enabled: phase === 'authenticated' && !isSubscriptions && !awaitingTabs,
@@ -79,7 +98,9 @@ export default function OrdersPage() {
   // Chỉ nhắc mã chào mừng khi khách thật sự đang có mã (API trả kèm mã còn dùng được), số lấy từ chính mã đó: config có mệnh giá
   // không có nghĩa khách nhận được (chưa cấp, đã dùng, hết hạn, tài khoản vãng lai). Cùng khoá với khối "Quà khách mới" ở Trang chủ.
   const userId = useAuthStore((st) => st.user?.id);
-  const showWelcomeHint = phase === 'authenticated' && tab === 'all' && orders.isSuccess && list.length === 0;
+  const showWelcomeHint = phase === 'authenticated' && tab === 'all' && !query && orders.isSuccess && list.length === 0;
+  // Khách mới chưa có đơn nào thì ô tìm vô nghĩa: ẩn ở màn trống của tab Tất cả. Đang có từ khoá thì luôn hiện để xoá được.
+  const showSearch = !isSubscriptions && !awaitingTabs && !(tab === 'all' && !query && orders.isSuccess && list.length === 0);
   const offerQ = useQuery({ queryKey: ['new-customer-offer', userId], queryFn: getNewCustomerOffer, enabled: showWelcomeHint, retry: false });
   const welcome = offerQ.data?.isNewCustomer ? offerQ.data.welcomeVoucher : null;
   const emptyBody =
@@ -106,6 +127,26 @@ export default function OrdersPage() {
           />
         </div>
 
+        {showSearch && (
+          <div style={{ padding: '0 var(--space-inset-card) var(--space-stack-sm)' }}>
+            <SearchField
+              ref={searchRef}
+              value={draft}
+              // Xoá hết chữ bằng bàn phím cũng bỏ luôn bộ lọc: ô trống mà danh sách vẫn lọc thì khách không còn dấu hiệu nào (nút ✕ chỉ hiện khi ô có chữ).
+              onChange={(v) => {
+                setDraft(v);
+                if (v === '') setQuery('');
+              }}
+              onSubmit={(v) => setQuery(v.trim())}
+              onClear={clearSearch}
+              label={vi.orders.searchLabel}
+              clearLabel={vi.orders.searchClear}
+              placeholder={vi.orders.searchPlaceholder}
+              maxLength={SEARCH_MAX_LENGTH}
+            />
+          </div>
+        )}
+
         {awaitingTabs ? (
           <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
             <LineItemSkeleton />
@@ -130,7 +171,18 @@ export default function OrdersPage() {
         ) : orders.isError && list.length === 0 ? (
           <ErrorState message={getLoadErrorMessage(orders.error)} onRetry={() => void orders.refetch()} />
         ) : list.length === 0 ? (
-          tab === 'all' ? (
+          query ? (
+            // Có từ khoá: không nhầm với khách chưa từng đặt đơn. overflowWrap để từ khoá dài không tràn khung 375px.
+            <div style={{ overflowWrap: 'anywhere' }}>
+              <EmptyState
+                variant="inline"
+                art="search"
+                heading={vi.orders.searchNoMatch(query, tab !== 'all')}
+                ctaLabel={vi.orders.searchClear}
+                onCta={clearSearchAndFocus}
+              />
+            </div>
+          ) : tab === 'all' ? (
             <>
               <EmptyState
                 art="box"
@@ -176,7 +228,7 @@ export default function OrdersPage() {
         )}
 
         {/* Khách vào tab này chủ yếu để xem đơn đang giao: kệ Mua lại đứng sau danh sách, chỉ ở "Tất cả". */}
-        {tab === 'all' && !orders.isLoading && !orders.isError && <PurchasedRail source="orders_tab" />}
+        {tab === 'all' && !query && !orders.isLoading && !orders.isError && <PurchasedRail source="orders_tab" />}
       </AuthGate>
 
       <ReorderSheet target={reorderTarget} source="order_card" navigateToCart onClose={() => setReorderTarget(null)} />

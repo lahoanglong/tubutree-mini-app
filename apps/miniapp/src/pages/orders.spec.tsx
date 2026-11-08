@@ -259,3 +259,138 @@ describe('OrdersPage — đơn hàng trống chỉ nhắc voucher chào mừng k
     expect(mocks.getNewCustomerOffer).not.toHaveBeenCalled();
   });
 });
+
+// W46B: ô tìm theo mã đơn hoặc tên sản phẩm, như khối đơn ở Tài khoản trên web (API đã có tham số q).
+describe('OrdersPage — tìm đơn theo mã đơn hoặc tên sản phẩm', () => {
+  const EMPTY = { data: [], meta: { page: 1, limit: 20, total: 0 } };
+  const searchBox = () => screen.getByRole('searchbox', { name: 'Tìm đơn theo mã đơn hoặc tên sản phẩm' }) as HTMLInputElement;
+  const submit = (text: string) => {
+    fireEvent.change(searchBox(), { target: { value: text } });
+    fireEvent.submit(screen.getByRole('search'));
+  };
+  const openPage = async () => {
+    renderPage();
+    await screen.findByRole('button', { name: 'Đơn TUBU-777' });
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.search = '';
+    mocks.fetchOrders.mockImplementation(async (filter: { q?: string }) => (filter.q ? EMPTY : PAGE));
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: [], nextCursor: null });
+    mocks.getSubscriptions.mockResolvedValue([]);
+    mocks.getNewCustomerOffer.mockResolvedValue({ isNewCustomer: false, welcomeVoucher: null });
+  });
+
+  it('ô tìm có nhãn và gợi ý đúng chữ, khung cao tối thiểu 44px, nằm dưới tab trạng thái và trên danh sách', async () => {
+    await openPage();
+    expect(searchBox()).toHaveAttribute('placeholder', 'Mã đơn hoặc tên sản phẩm');
+    expect(screen.getByTestId('search-field-box').style.minHeight).toBe('44px');
+    const field = screen.getByRole('search');
+    expect(screen.getByRole('tablist').compareDocumentPosition(field) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(field.compareDocumentPosition(screen.getByRole('button', { name: 'Đơn TUBU-777' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('Enter gửi q đã cắt khoảng trắng; đổi tab vẫn giữ từ khoá cùng bộ lọc của tab', async () => {
+    await openPage();
+    submit('  nuoc rua chen ');
+    await waitFor(() => expect(mocks.fetchOrders).toHaveBeenCalledWith({ q: 'nuoc rua chen' }, 1, 20));
+    fireEvent.click(screen.getByRole('tab', { name: 'Đã giao' }));
+    await waitFor(() => expect(mocks.fetchOrders).toHaveBeenCalledWith({ status: 'DELIVERED', q: 'nuoc rua chen' }, 1, 20));
+  });
+
+  it('gõ dở chưa gửi thì không gọi API; Enter với chuỗi trắng không đổi từ khoá', async () => {
+    await openPage();
+    fireEvent.change(searchBox(), { target: { value: 'nuoc' } });
+    expect(mocks.fetchOrders).toHaveBeenCalledTimes(1);
+    submit('   ');
+    await waitFor(() => expect(searchBox().value).toBe('   '));
+    expect(mocks.fetchOrders).toHaveBeenCalledTimes(1);
+  });
+
+  it('nút ✕ trong ô xoá chữ đang gõ, trả focus về ô, không gọi API', async () => {
+    await openPage();
+    fireEvent.change(searchBox(), { target: { value: 'abc' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Xoá tìm kiếm' }));
+    expect(searchBox().value).toBe('');
+    expect(searchBox()).toHaveFocus();
+    expect(mocks.fetchOrders).toHaveBeenCalledTimes(1);
+  });
+
+  it('không khớp đơn nào: câu báo riêng kèm từ khoá, không nhầm với khách chưa từng đặt đơn (không voucher chào mừng, kệ bán chạy, nút Bắt đầu mua)', async () => {
+    await openPage();
+    submit('zzz');
+    expect(await screen.findByText('Không tìm thấy đơn nào khớp “zzz”')).toBeInTheDocument();
+    expect(screen.queryByText('Bạn chưa có đơn nào')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Bắt đầu mua' })).toBeNull();
+    expect(screen.queryByTestId('best-seller-rail')).toBeNull();
+    expect(mocks.getNewCustomerOffer).not.toHaveBeenCalled();
+  });
+
+  it('xoá hết chữ bằng bàn phím bỏ luôn bộ lọc: ô trống mà danh sách vẫn lọc thì khách không còn dấu hiệu nào', async () => {
+    await openPage();
+    submit('zzz');
+    await screen.findByText('Không tìm thấy đơn nào khớp “zzz”');
+    fireEvent.change(searchBox(), { target: { value: '' } });
+    expect(await screen.findByRole('button', { name: 'Đơn TUBU-777' })).toBeInTheDocument();
+    expect(screen.queryByText(/Không tìm thấy đơn nào khớp/)).toBeNull();
+  });
+
+  it('đang lọc một trạng thái: câu báo thêm "ở trạng thái này"', async () => {
+    await openPage();
+    fireEvent.click(screen.getByRole('tab', { name: 'Đã giao' }));
+    submit('zzz');
+    expect(await screen.findByText('Không tìm thấy đơn nào khớp “zzz” ở trạng thái này')).toBeInTheDocument();
+  });
+
+  it('"Xoá tìm kiếm" ở màn không khớp: ô trống, danh sách đơn trở lại', async () => {
+    await openPage();
+    submit('zzz');
+    await screen.findByText('Không tìm thấy đơn nào khớp “zzz”');
+    // Hai nút cùng tên: ✕ trong ô (đứng trên) và nút ở màn trống (đứng dưới).
+    const clears = screen.getAllByRole('button', { name: 'Xoá tìm kiếm' });
+    expect(clears).toHaveLength(2);
+    fireEvent.click(clears[1]!);
+    expect(await screen.findByRole('button', { name: 'Đơn TUBU-777' })).toBeInTheDocument();
+    // Nút ở màn trống bị gỡ ngay sau khi bấm: focus về ô tìm như nút ✕ trong ô.
+    expect(searchBox()).toHaveFocus();
+    expect(searchBox().value).toBe('');
+    expect(screen.queryByText(/Không tìm thấy đơn nào khớp/)).toBeNull();
+  });
+
+  it('từ khoá dài không dấu cách không làm tràn khung: màn không khớp bọc overflow-wrap', async () => {
+    await openPage();
+    submit('x'.repeat(60));
+    const heading = await screen.findByText(`Không tìm thấy đơn nào khớp “${'x'.repeat(60)}”`);
+    expect(heading.closest('[style*="overflow-wrap"]')).not.toBeNull();
+    expect(searchBox()).toHaveAttribute('maxlength', '60');
+  });
+
+  it('kệ Mua lại ẩn khi đang tìm, trở lại khi xoá từ khoá', async () => {
+    mocks.fetchOrders.mockResolvedValue(PAGE);
+    mocks.fetchPurchasedItems.mockResolvedValue({
+      items: [{ productId: 'p1', variationId: 'v1', slug: 'nrc', productName: 'Nước rửa chén', variationName: 'Chanh', brand: 'Tubu', thumbnail: null, price: 65000, salePrice: null, inStock: true, timesBought: 2 }],
+      nextCursor: null,
+    });
+    await openPage();
+    await screen.findByRole('region', { name: 'Mua lại' });
+    submit('nuoc');
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Mua lại' })).toBeNull());
+    fireEvent.click(screen.getByRole('button', { name: 'Xoá tìm kiếm' }));
+    expect(await screen.findByRole('region', { name: 'Mua lại' })).toBeInTheDocument();
+  });
+
+  it('tab Định kỳ không có ô tìm', async () => {
+    mocks.search = '?tab=subscriptions';
+    renderPage();
+    expect(await screen.findByText('Chưa có lịch đặt định kỳ')).toBeInTheDocument();
+    expect(screen.queryByRole('search')).toBeNull();
+  });
+
+  it('khách chưa có đơn nào: màn trống không có ô tìm', async () => {
+    mocks.fetchOrders.mockResolvedValue(EMPTY);
+    renderPage();
+    expect(await screen.findByRole('button', { name: 'Bắt đầu mua' })).toBeInTheDocument();
+    expect(screen.queryByRole('search')).toBeNull();
+  });
+});

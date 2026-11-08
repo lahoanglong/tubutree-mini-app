@@ -113,6 +113,14 @@ describe('shop-api — buy-flow 4a', () => {
     expect(get).toHaveBeenLastCalledWith('/orders', { params: { page: 1, limit: 20 } });
   });
 
+  it('fetchOrders: q cắt khoảng trắng đi cùng bộ lọc; chuỗi trắng bị bỏ', async () => {
+    get.mockResolvedValue({ data: { data: [], meta: { page: 1, limit: 20, total: 0 } } });
+    await fetchOrders({ status: 'DELIVERED', q: ' dau goi ' }, 1, 20);
+    expect(get).toHaveBeenLastCalledWith('/orders', { params: { status: 'DELIVERED', q: 'dau goi', page: 1, limit: 20 } });
+    await fetchOrders({ group: 'closed', q: '   ' }, 1, 20);
+    expect(get).toHaveBeenLastCalledWith('/orders', { params: { group: 'closed', page: 1, limit: 20 } });
+  });
+
   it('fetchPurchasedItems chuyển params', async () => {
     get.mockResolvedValue({ data: { items: [], nextCursor: null } });
     await fetchPurchasedItems({ variationId: 'v1', limit: 1 });
