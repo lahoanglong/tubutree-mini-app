@@ -23,17 +23,30 @@ export interface ReviewMediaLightboxProps {
 let scrollLocks = 0;
 let savedOverflow = '';
 
+const FOCUSABLE =
+  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), video[controls], [tabindex]:not([tabindex="-1"])';
+
+/** Phần tử Tab tới được trong `panel`, theo thứ tự DOM; bỏ phần bị `hidden`/`inert` và phần có `tabindex` âm. */
+function focusableIn(panel: HTMLElement): HTMLElement[] {
+  return Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
+    (el) => !el.closest('[hidden],[inert]') && !(Number(el.getAttribute('tabindex') ?? 0) < 0),
+  );
+}
+
 /**
  * Xem ảnh/video đánh giá toàn màn hình (web có bản cùng tên): nền đen 90% làm mờ phía sau, mở 220ms theo đường cong drawer
- * (`.review-lightbox`, giảm chuyển động thì hiện ngay). Chuyển tệp bằng nút Trước/Sau (44×44), vuốt ngang; nút × đóng.
+ * (`.review-lightbox`, giảm chuyển động thì hiện ngay). Chuyển tệp bằng nút Trước/Sau (44×44), vuốt ngang, phím ←/→/Home/End; nút × hoặc Esc đóng.
+ * Tab/Shift+Tab quay vòng trong hộp; hộp modal khác mở sau (cuối DOM) giữ bàn phím.
  * Nút back của Zalo đóng lightbox thay vì thoát trang: mở thì đẩy một mục lịch sử, `popstate` thì đóng (như lớp phủ chi tiết thông báo).
  * Chân hiện người mua, số sao, nhãn "Đã mua hàng", nhận xét. Không dựng khi đóng. Số đo nằm ở các lớp `.review-lightbox__*` (css/tokens.css).
  */
 export function ReviewMediaLightbox({ open, onClose, items, index, onIndexChange, author, rating, verifiedPurchase, comment, resolveSrc, onAdd }: ReviewMediaLightboxProps) {
+  const panelRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const swipeStart = useRef<{ x: number; y: number } | null>(null);
-  const live = useRef({ onClose, onIndexChange, count: items.length, index });
-  live.current = { onClose, onIndexChange, count: items.length, index };
+  const at = items.length > 0 ? Math.min(Math.max(index, 0), items.length - 1) : 0;
+  const live = useRef({ onClose, onIndexChange, count: items.length, index: at });
+  live.current = { onClose, onIndexChange, count: items.length, index: at };
 
   useEffect(() => {
     if (!open) return;
@@ -44,9 +57,45 @@ export function ReviewMediaLightbox({ open, onClose, items, index, onIndexChange
     window.history.pushState({ reviewLightbox: true }, '');
     const onPop = () => live.current.onClose();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !e.isComposing) live.current.onClose();
-      else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && live.current.count > 1 && !(e.target instanceof HTMLVideoElement)) {
+      const panel = panelRef.current;
+      if (!panel) return;
+      // Hộp modal khác mở sau (portal cuối DOM) giữ bàn phím.
+      const modals = document.querySelectorAll('[aria-modal="true"]');
+      if (modals[modals.length - 1] !== panel) return;
+      // Phím mũi tên/Home/End của thanh tua video thuộc về trình phát, không chuyển tệp.
+      const browse = live.current.count > 1 && !(e.target instanceof HTMLVideoElement);
+      if (e.key === 'Escape' && !e.isComposing) {
+        e.stopPropagation();
+        live.current.onClose();
+      } else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && browse) {
+        e.preventDefault();
         live.current.onIndexChange(lightboxStep(live.current.index, live.current.count, e.key === 'ArrowRight' ? 1 : -1));
+      } else if ((e.key === 'Home' || e.key === 'End') && browse) {
+        e.preventDefault();
+        const target = e.key === 'Home' ? 0 : live.current.count - 1;
+        if (target !== live.current.index) live.current.onIndexChange(target);
+      } else if (e.key === 'Tab') {
+        const list = focusableIn(panel);
+        if (list.length === 0) {
+          e.preventDefault();
+          return;
+        }
+        const wrapTo = e.shiftKey ? list[list.length - 1]! : list[0]!;
+        const active = document.activeElement;
+        if (!active || !panel.contains(active)) {
+          e.preventDefault();
+          wrapTo.focus();
+          return;
+        }
+        // Nút của trình phát nằm trong shadow DOM nên focus vẫn ở chính <video>: để trình duyệt tự đi qua từng nút.
+        if (active instanceof HTMLVideoElement) return;
+        // Quay vòng khi không còn phần tử nào phía trước/sau chỗ đang focus (không chỉ so với nút đầu/cuối): chính khung (tabIndex -1,
+        // sau khi bấm vùng trống) hay ô nhận xét có thanh cuộn (Chromium cho focus) đều nằm ngoài danh sách mà vẫn phải quay vòng đúng.
+        const side = e.shiftKey ? Node.DOCUMENT_POSITION_PRECEDING : Node.DOCUMENT_POSITION_FOLLOWING;
+        if (!list.some((el) => (active.compareDocumentPosition(el) & side) !== 0)) {
+          e.preventDefault();
+          wrapTo.focus();
+        }
       }
     };
     window.addEventListener('popstate', onPop);
@@ -63,7 +112,6 @@ export function ReviewMediaLightbox({ open, onClose, items, index, onIndexChange
 
   if (!open || typeof document === 'undefined' || items.length === 0) return null;
   const count = items.length;
-  const at = Math.min(Math.max(index, 0), count - 1);
   const current = items[at]!;
   const src = resolveSrc ? resolveSrc(current.src) : current.src;
   const step = (dir: 1 | -1) => onIndexChange(lightboxStep(at, count, dir));
@@ -80,7 +128,7 @@ export function ReviewMediaLightbox({ open, onClose, items, index, onIndexChange
   };
 
   return createPortal(
-    <div role="dialog" aria-modal="true" aria-label={fillCopy('review.mediaDialog')} data-testid="review-lightbox" className="review-lightbox">
+    <div ref={panelRef} role="dialog" aria-modal="true" aria-label={fillCopy('review.mediaDialog')} tabIndex={-1} data-testid="review-lightbox" className="review-lightbox">
       {/* Nút đóng bên TRÁI như màn chi tiết thông báo: capsule ⋯/✕ của Zalo luôn nằm góc phải trên. */}
       <div className="review-lightbox__bar">
         <button ref={closeRef} type="button" aria-label="Đóng" className="review-lightbox__btn tubu-press" onClick={onClose}>

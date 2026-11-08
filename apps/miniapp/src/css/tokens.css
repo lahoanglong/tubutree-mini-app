@@ -596,6 +596,7 @@ body.with-back-btn .page.page-bleed {
   flex-direction: column;
   color: var(--color-text-inverse);
   background: var(--color-bg-lightbox);
+  outline: none;
   -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
   animation: review-lightbox-in 220ms var(--ease-drawer, cubic-bezier(0.32, 0.72, 0, 1)) both;
