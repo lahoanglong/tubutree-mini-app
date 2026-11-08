@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
+import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { click, flush, render, type Rendered } from '@/test-utils/dom';
+import { click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { headingProblems, unnamedControls } from '@/test-utils/a11y';
 
 // Mini App orders.spec.tsx: tab gốc "Đơn hàng", 7 tab, thẻ đơn, Thanh toán ngay, Mua lại, Xem thêm, trạng thái trống, gợi ý khách mới.
@@ -35,6 +36,8 @@ let calls: Call[] = [];
 let orders: Record<string, unknown>[] = [];
 let total: number | undefined;
 let ordersFail = false;
+/** Khi đặt: lời gọi có `q` nhận danh sách này thay cho `orders` (API thật lọc theo mã đơn hoặc tên sản phẩm). */
+let searchRows: Record<string, unknown>[] | null = null;
 /** Khi đặt: API trả con trỏ keyset (theo thứ tự trang); trang đọc theo cursor thay vì page. */
 let keyset: { data: Record<string, unknown>[]; nextCursor: string | null }[] | null = null;
 let offer: unknown = { isNewCustomer: false, welcomeVoucher: null };
@@ -58,7 +61,8 @@ function stubApi() {
           const k = keyset[page - 1] ?? { data: [], nextCursor: null };
           return json({ data: k.data, meta: { page, limit, total: 1, nextCursor: k.nextCursor } });
         }
-        return json({ data: orders.slice((page - 1) * limit, page * limit), meta: { page, limit, total: total ?? orders.length } });
+        const rows = searchRows !== null && u.searchParams.has('q') ? searchRows : orders;
+        return json({ data: rows.slice((page - 1) * limit, page * limit), meta: { page, limit, total: total ?? rows.length } });
       }
       if (path === '/me/new-customer-offer') return json(offer);
       if (path === '/me/purchased-items') return json({ items: purchased, nextCursor: null });
@@ -92,6 +96,7 @@ beforeEach(() => {
   orders = [order('TUBU1')];
   total = undefined;
   ordersFail = false;
+  searchRows = null;
   keyset = null;
   offer = { isNewCustomer: false, welcomeVoucher: null };
   purchased = [];
@@ -294,6 +299,128 @@ describe('trang Đơn hàng: đơn trống chỉ nhắc voucher chào mừng khi
     orders = [order('TUBU1')];
     await mount();
     expect(sent('/me/new-customer-offer')).toHaveLength(0);
+  });
+});
+
+// W46B: ô tìm theo mã đơn hoặc tên sản phẩm như Mini App (orders.spec.tsx); API đã có tham số q.
+describe('trang Đơn hàng: tìm đơn theo mã đơn hoặc tên sản phẩm', () => {
+  const field = (c: HTMLElement) => c.querySelector('input[type="search"]') as HTMLInputElement | null;
+  const search = async (c: HTMLElement, text: string) => {
+    typeInto(field(c), text);
+    act(() => {
+      c.querySelector('form[role="search"]')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+    await flush(6);
+  };
+  const lastQuery = () => sent('/orders').at(-1)!.query;
+
+  it('ô tìm có nhãn và gợi ý đúng chữ, vùng chạm đủ lớn, nằm dưới tab trạng thái và trên danh sách', async () => {
+    const c = await mount();
+    const input = field(c)!;
+    expect(input.getAttribute('aria-label')).toBe('Tìm đơn theo mã đơn hoặc tên sản phẩm');
+    expect(input.placeholder).toBe('Mã đơn hoặc tên sản phẩm');
+    expect(input.maxLength).toBe(60);
+    expect(unnamedControls(c)).toEqual([]);
+    // Khung 44px (ô nhập 42px + 2 viền) như Mini App; bộ kiểm smallTouchTargets chỉ thấy ô nhập nên không dùng ở đây.
+    expect((c.querySelector('[data-testid="search-field-box"]') as HTMLElement).style.minHeight).toBe('44px');
+    const tabs = c.querySelector('[role="tablist"]')!;
+    const form = c.querySelector('form[role="search"]')!;
+    const card = c.querySelector('a[href="/tai-khoan/don-hang/TUBU1"]')!;
+    expect(tabs.compareDocumentPosition(form) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(form.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('Enter gửi q đã cắt khoảng trắng cùng bộ lọc của tab đang chọn', async () => {
+    m.search = new URLSearchParams({ tab: 'delivered' });
+    const c = await mount();
+    await search(c, '  nuoc rua chen ');
+    expect(Object.fromEntries(lastQuery())).toEqual({ status: 'DELIVERED', q: 'nuoc rua chen', page: '1', limit: '20' });
+  });
+
+  it('chuỗi trắng không gửi q và không tải lại', async () => {
+    const c = await mount();
+    const before = sent('/orders').length;
+    await search(c, '   ');
+    expect(sent('/orders')).toHaveLength(before);
+    expect(lastQuery().has('q')).toBe(false);
+  });
+
+  it('không khớp đơn nào: câu báo riêng kèm từ khoá, không nhầm với khách chưa từng đặt đơn', async () => {
+    searchRows = [];
+    const c = await mount();
+    const offerCalls = sent('/me/new-customer-offer').length;
+    await search(c, 'zzz');
+    expect(c.textContent).toContain('Không tìm thấy đơn nào khớp “zzz”');
+    expect(c.textContent).not.toContain('Bạn chưa có đơn nào');
+    expect(btn('Bắt đầu mua', c)).toBeUndefined();
+    expect(sent('/me/new-customer-offer')).toHaveLength(offerCalls);
+  });
+
+  it('xoá hết chữ bằng bàn phím bỏ luôn bộ lọc: ô trống mà danh sách vẫn lọc thì khách không còn dấu hiệu nào', async () => {
+    searchRows = [];
+    const c = await mount();
+    await search(c, 'zzz');
+    expect(c.textContent).toContain('Không tìm thấy đơn nào khớp “zzz”');
+    typeInto(field(c), '');
+    await flush(6);
+    expect(c.textContent).not.toContain('Không tìm thấy đơn nào khớp');
+    expect(c.querySelector('a[href="/tai-khoan/don-hang/TUBU1"]')).not.toBeNull();
+    expect(lastQuery().has('q')).toBe(false);
+  });
+
+  it('đang lọc một trạng thái: câu báo thêm "ở trạng thái này"', async () => {
+    searchRows = [];
+    m.search = new URLSearchParams({ tab: 'shipping' });
+    const c = await mount();
+    await search(c, 'zzz');
+    expect(c.textContent).toContain('Không tìm thấy đơn nào khớp “zzz” ở trạng thái này');
+  });
+
+  it('"Xoá tìm kiếm" ở màn không khớp: ô trống, tải lại không kèm q, danh sách đơn trở lại', async () => {
+    searchRows = [];
+    const c = await mount();
+    await search(c, 'zzz');
+    expect(c.querySelector('a[href="/tai-khoan/don-hang/TUBU1"]')).toBeNull();
+    // Hai nút cùng tên: ✕ trong ô (không có chữ, chỉ nhãn) và nút chữ ở màn trống.
+    expect(c.querySelectorAll('button[aria-label="Xoá tìm kiếm"]')).toHaveLength(1);
+    click(btn('Xoá tìm kiếm', c) ?? null);
+    await flush(6);
+    // Nút ở màn trống bị gỡ ngay sau khi bấm: focus về ô tìm như nút ✕ trong ô.
+    expect(document.activeElement).toBe(field(c));
+    expect(field(c)!.value).toBe('');
+    expect(lastQuery().has('q')).toBe(false);
+    expect(c.querySelector('a[href="/tai-khoan/don-hang/TUBU1"]')).not.toBeNull();
+  });
+
+  it('từ khoá dài không dấu cách không làm tràn khung: màn không khớp bọc break-anywhere', async () => {
+    searchRows = [];
+    const c = await mount();
+    await search(c, 'x'.repeat(60));
+    const heading = Array.from(c.querySelectorAll('*')).find((e) => e.children.length === 0 && e.textContent === `Không tìm thấy đơn nào khớp “${'x'.repeat(60)}”`);
+    expect(heading?.closest('[class*="overflow-wrap:anywhere"]')).not.toBeNull();
+  });
+
+  it('kệ Mua lại ẩn khi đang tìm', async () => {
+    purchased = [{ productId: 'p1', variationId: 'v1', slug: 'nrc', productName: 'Nước rửa chén', variationName: 'Chanh', brand: 'Tubu', thumbnail: null, price: 65000, salePrice: null, inStock: true, timesBought: 2 }];
+    searchRows = [order('TUBU9')];
+    const c = await mount();
+    expect(c.querySelector('section[aria-label="Mua lại"], [aria-label="Mua lại"]')).not.toBeNull();
+    await search(c, 'tubu9');
+    expect(c.querySelector('[aria-label="Mua lại"]')).toBeNull();
+  });
+
+  it('tab Định kỳ không có ô tìm', async () => {
+    m.search = new URLSearchParams({ tab: 'subscriptions' });
+    const c = await mount();
+    expect(c.textContent).toContain('Chưa có lịch đặt định kỳ');
+    expect(field(c)).toBeNull();
+  });
+
+  it('khách chưa có đơn nào: màn trống không có ô tìm', async () => {
+    orders = [];
+    const c = await mount();
+    expect(btn('Bắt đầu mua', c)).toBeDefined();
+    expect(field(c)).toBeNull();
   });
 });
 

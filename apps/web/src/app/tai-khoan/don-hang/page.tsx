@@ -1,13 +1,15 @@
 'use client';
 
-import { Suspense, useState } from 'react';
+import { Suspense, useRef, useState } from 'react';
 import { loadMoreFailed } from '@tubutree/app-core/client-copy';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { ordersListQuery } from '@tubutree/app-core/queries/orders';
 import { newCustomerOfferQuery } from '@tubutree/app-core/queries/loyalty';
+import { orderCopy } from '@tubutree/app-core/account-copy';
 import { EmptyState as MiniEmptyState } from '@/components/mini/empty-state';
+import { SearchField } from '@/components/mini/search-field';
 import { PageHeader } from '@/components/ui/page-header';
 import { SegmentedTabs, useTabParam } from '@/components/ui/segmented-tabs';
 import { ErrorState } from '@/components/ui/error-state';
@@ -29,6 +31,8 @@ import { loadErrorText } from '@/lib/error-text';
 import { FIRST_PAGE, nextPageParam, uniqueByKey } from '@/lib/keyset-paging';
 
 const PAGE_LIMIT = 20;
+/** Độ dài tối đa ô tìm: đủ cho mã đơn và tên sản phẩm dài nhất (cùng số với Mini App). */
+const SEARCH_MAX_LENGTH = 60;
 
 // Chỉ tab rỗng cần lưới món bán chạy: không kéo nó vào bundle đầu của trang.
 const BestSellerRail = dynamic(() => import('@/components/home/best-seller-rail').then((m) => m.BestSellerRailQuery), { ssr: false });
@@ -47,9 +51,23 @@ function OrdersPageBody() {
   // State ổn định (không dựng target trong JSX): ReorderSheet khởi tạo lại lựa chọn theo danh tính của target.
   const [reorderTarget, setReorderTarget] = useState<ReorderTarget | null>(null);
 
+  // Ô tìm theo mã đơn hoặc tên sản phẩm như Mini App: `draft` là chữ đang gõ, `query` là từ khoá đã gửi; giữ nguyên khi đổi tab.
+  const [draft, setDraft] = useState('');
+  const [query, setQuery] = useState('');
+  const searchRef = useRef<HTMLInputElement>(null);
+  const clearSearch = () => {
+    setDraft('');
+    setQuery('');
+  };
+  // Nút "Xoá tìm kiếm" ở màn không khớp biến mất ngay sau khi bấm: trả focus về ô như nút ✕ trong ô.
+  const clearSearchAndFocus = () => {
+    clearSearch();
+    searchRef.current?.focus();
+  };
+
   // Khoá bắt đầu bằng ['orders'] nên invalidateQueries({ queryKey: ['orders'] }) ở trang chuyển khoản/huỷ đơn làm mới danh sách.
   const orders = useInfiniteQuery({
-    ...ordersListQuery(coreHttp, tab, current.filter ?? {}, PAGE_LIMIT),
+    ...ordersListQuery(coreHttp, tab, { ...(current.filter ?? {}), ...(query ? { q: query } : {}) }, PAGE_LIMIT),
     initialPageParam: FIRST_PAGE,
     getNextPageParam: nextPageParam,
     enabled: phase === 'authenticated' && !isSubscriptions,
@@ -58,7 +76,9 @@ function OrdersPageBody() {
 
   // Chỉ nhắc mã chào mừng khi khách thật sự đang có mã (API trả kèm mã còn dùng được), số lấy từ chính mã đó: cấu hình có mệnh giá
   // không có nghĩa khách nhận được (chưa cấp, đã dùng, hết hạn, tài khoản vãng lai).
-  const showWelcomeHint = phase === 'authenticated' && tab === 'all' && orders.isSuccess && list.length === 0;
+  const showWelcomeHint = phase === 'authenticated' && tab === 'all' && !query && orders.isSuccess && list.length === 0;
+  // Khách mới chưa có đơn nào thì ô tìm vô nghĩa: ẩn ở màn trống của tab Tất cả. Đang có từ khoá thì luôn hiện để xoá được.
+  const showSearch = !isSubscriptions && !(tab === 'all' && !query && orders.isSuccess && list.length === 0);
   const offerQ = useQuery({ ...newCustomerOfferQuery(coreHttp, user?.id), enabled: showWelcomeHint, retry: false });
   const welcome = offerQ.data?.isNewCustomer ? offerQ.data.welcomeVoucher : null;
   const emptyBody =
@@ -85,6 +105,26 @@ function OrdersPageBody() {
           />
         </div>
 
+        {showSearch && (
+          <div className="my-2">
+            <SearchField
+              ref={searchRef}
+              value={draft}
+              // Xoá hết chữ bằng bàn phím cũng bỏ luôn bộ lọc: ô trống mà danh sách vẫn lọc thì khách không còn dấu hiệu nào (nút ✕ chỉ hiện khi ô có chữ).
+              onChange={(v) => {
+                setDraft(v);
+                if (v === '') setQuery('');
+              }}
+              onSubmit={(v) => setQuery(v.trim())}
+              onClear={clearSearch}
+              label={orderCopy.searchLabel}
+              clearLabel={orderCopy.searchClear}
+              placeholder={orderCopy.searchPlaceholder}
+              maxLength={SEARCH_MAX_LENGTH}
+            />
+          </div>
+        )}
+
         {isSubscriptions ? (
           <SubscriptionsPanel />
         ) : orders.isLoading ? (
@@ -98,7 +138,18 @@ function OrdersPageBody() {
             <ErrorState message={loadErrorText(orders.error)} onRetry={() => void orders.refetch()} />
           </div>
         ) : list.length === 0 ? (
-          tab === 'all' ? (
+          query ? (
+            // Có từ khoá: không nhầm với khách chưa từng đặt đơn. break-anywhere để từ khoá dài không tràn khung 375px.
+            <div className="[overflow-wrap:anywhere]">
+              <MiniEmptyState
+                variant="inline"
+                art="search"
+                heading={orderCopy.searchNoMatch(query, tab !== 'all')}
+                ctaLabel={orderCopy.searchClear}
+                onCta={clearSearchAndFocus}
+              />
+            </div>
+          ) : tab === 'all' ? (
             <>
               <MiniEmptyState art="box" heading="Bạn chưa có đơn nào" body={emptyBody} ctaLabel="Bắt đầu mua" onCta={() => router.push('/san-pham')} />
               <BestSellerRail />
@@ -129,7 +180,7 @@ function OrdersPageBody() {
         )}
 
         {/* Khách vào tab này chủ yếu để xem đơn đang giao: kệ Mua lại đứng sau danh sách, chỉ ở "Tất cả". */}
-        {tab === 'all' && !orders.isLoading && !orders.isError && <PurchasedRail />}
+        {tab === 'all' && !query && !orders.isLoading && !orders.isError && <PurchasedRail />}
       </>
     );
   }

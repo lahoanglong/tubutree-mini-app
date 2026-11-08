@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatDobDisplay, profileCopy } from './account-copy';
+import { formatDobDisplay, orderCopy, profileCopy } from './account-copy';
 
 describe('formatDobDisplay', () => {
   it('đổi yyyy-MM-dd sang dd/MM/yyyy', () => {
@@ -23,5 +23,18 @@ describe('profileCopy', () => {
 
   it('chuỗi không đúng dd/mm/yyyy giữ nguyên', () => {
     expect(profileCopy.dobConfirm('abc')).toBe('Ngày sinh abc chỉ đặt được một lần. Xác nhận?');
+  });
+});
+
+describe('orderCopy — ô tìm trong danh sách đơn', () => {
+  it('nhãn, gợi ý và nút xoá là một nguồn chữ cho Mini App và web', () => {
+    expect(orderCopy.searchLabel).toBe('Tìm đơn theo mã đơn hoặc tên sản phẩm');
+    expect(orderCopy.searchPlaceholder).toBe('Mã đơn hoặc tên sản phẩm');
+    expect(orderCopy.searchClear).toBe('Xoá tìm kiếm');
+  });
+
+  it('kết quả rỗng nêu từ khoá; đang lọc một trạng thái thì thêm "ở trạng thái này"', () => {
+    expect(orderCopy.searchNoMatch('zzz', false)).toBe('Không tìm thấy đơn nào khớp “zzz”');
+    expect(orderCopy.searchNoMatch('zzz', true)).toBe('Không tìm thấy đơn nào khớp “zzz” ở trạng thái này');
   });
 });

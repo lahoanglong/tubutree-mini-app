@@ -171,7 +171,7 @@ describe('queries — danh sách đơn và trang Duyệt (infinite)', () => {
   it('ordersListQuery: khoá theo tab, queryFn nhận pageParam', async () => {
     const { http, calls } = fakeHttp();
     const q = orders.ordersListQuery(http, 'shipping', { status: 'SHIPPING' });
-    expect(q.queryKey).toEqual(['orders', 'list', 'shipping']);
+    expect(q.queryKey).toEqual(['orders', 'list', 'shipping', '']);
     await q.queryFn({ pageParam: 3 });
     expect(calls).toHaveLength(1);
     expect(calls[0]!.path).toBe('/orders');
@@ -191,6 +191,15 @@ describe('queries — danh sách đơn và trang Duyệt (infinite)', () => {
     const { http, calls } = fakeHttp();
     await orders.ordersListQuery(http, 'all', {}, 10).queryFn({ pageParam: 2 });
     expect(calls[0]!.opts).toEqual({ query: { page: 2, limit: 10 } });
+  });
+
+  it('ordersListQuery: từ khoá tìm nằm trong khoá (đã cắt khoảng trắng) và trong truy vấn q, nên mỗi từ khoá một danh sách riêng', async () => {
+    const { http, calls } = fakeHttp();
+    const q = orders.ordersListQuery(http, 'delivered', { status: 'DELIVERED', q: ' dau goi ' });
+    expect(q.queryKey).toEqual(['orders', 'list', 'delivered', 'dau goi']);
+    expect(orders.ordersListQuery(http, 'delivered', { status: 'DELIVERED' }).queryKey).not.toEqual(q.queryKey);
+    await q.queryFn({ pageParam: 1 });
+    expect(calls[0]!.opts).toEqual({ query: { status: 'DELIVERED', q: 'dau goi', page: 1, limit: 20 } });
   });
 
   it('browseQuery: khoá theo urlKey, queryFn dựng truy vấn từ pageParam', async () => {

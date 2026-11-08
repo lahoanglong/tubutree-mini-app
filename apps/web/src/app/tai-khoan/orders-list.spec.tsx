@@ -10,7 +10,10 @@ const state = vi.hoisted(() => ({
   orders: [] as Record<string, unknown>[],
   /** Trang trả theo thứ tự gọi khi test muốn phân trang bằng con trỏ; rỗng = một trang như cũ. */
   keyset: [] as { data: Record<string, unknown>[]; nextCursor: string | null }[],
+  push: vi.fn(),
 }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: state.push, replace: vi.fn() }) }));
+vi.mock('@/lib/cart-key', () => ({ cartStorefrontSlug: () => null, cartKey: () => ['cart', null], useCartKey: () => ['cart', null] }));
 vi.mock('@/lib/auth-context', () => ({
   useAuth: () => ({
     user: { id: 'u', fullName: 'An', referralCode: 'AN1', pointsBalance: 0, walletBalance: 0 },
@@ -179,5 +182,94 @@ describe('danh sách đơn — phân trang bằng con trỏ keyset', () => {
     click(byText(c, 'button', 'Xem thêm đơn cũ hơn')!);
     await flush(6);
     expect(c.textContent?.match(/TB-1/g)).toHaveLength(1);
+  });
+});
+
+// W46B: thẻ đơn ở khối đơn của Tài khoản (desktop) có "Mua lại" như thẻ đơn của Mini App, dùng chung sheet và luồng với chi tiết đơn.
+describe('danh sách đơn — nút Mua lại', () => {
+  const lineItem = { id: 'i-1', variationId: 'v-1', productName: 'Dầu gội bưởi', variationName: '500ml', unitPrice: 100000, quantity: 1, total: 100000, thumbnail: null, stock: 9, available: true };
+  const orderOf = (code: string, status: string) => ({ ...order(code, [lineItem as unknown as ReturnType<typeof item>]), id: `id-${code}`, status });
+  const fetched: { path: string; body: unknown }[] = [];
+  const reorderLabels = (c: HTMLElement) =>
+    Array.from(c.querySelectorAll('button')).map((b) => b.getAttribute('aria-label') ?? '').filter((l) => l.startsWith('Mua lại đơn '));
+
+  beforeEach(() => {
+    fetched.length = 0;
+    state.push.mockReset();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        const path = new URL(url).pathname.replace(/^\/api/, '');
+        fetched.push({ path, body: init?.body ? JSON.parse(String(init.body)) : undefined });
+        const json = (b: unknown) => new Response(JSON.stringify(b), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        if (path.endsWith('/repurchase')) return json({ items: [], results: [{ orderItemId: 'i-1', status: 'added', addedQuantity: 1 }] });
+        return json({});
+      }),
+    );
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('chỉ đơn đã xong (đã giao, đã huỷ, đã hoàn) có "Mua lại", nhãn nêu mã đơn; đơn còn đang chạy thì không', async () => {
+    state.orders = [
+      orderOf('TB-1', 'DELIVERED'), orderOf('TB-2', 'CANCELLED'), orderOf('TB-3', 'RETURNED'),
+      orderOf('TB-4', 'PENDING_PAYMENT'), orderOf('TB-5', 'CONFIRMED'), orderOf('TB-6', 'PACKED'), orderOf('TB-7', 'SHIPPING'),
+    ];
+    const c = await mount();
+    expect(reorderLabels(c)).toEqual(['Mua lại đơn TB-1', 'Mua lại đơn TB-2', 'Mua lại đơn TB-3']);
+    expect(byText(c, 'button', 'Mua lại')).not.toBeNull();
+  });
+
+  it('nút có tên, đủ vùng chạm 44px, đứng cạnh liên kết "Xem chi tiết" của cùng thẻ', async () => {
+    state.orders = [orderOf('TB-1', 'DELIVERED')];
+    const c = await mount();
+    expect(unnamedControls(c)).toEqual([]);
+    expect(smallTouchTargets(c)).toEqual([]);
+    const button = c.querySelector('button[aria-label="Mua lại đơn TB-1"]')!;
+    const detail = c.querySelector('a[aria-label="Xem chi tiết đơn TB-1"]')!;
+    expect(button.parentElement).toBe(detail.parentElement);
+  });
+
+  it('chưa bấm thì chưa dựng sheet và không gọi API nào; bấm mở sheet đúng đơn với dòng đã mua', async () => {
+    state.orders = [orderOf('TB-1', 'DELIVERED')];
+    const c = await mount();
+    expect(document.body.querySelector('[role="dialog"]')).toBeNull();
+    expect(fetched).toEqual([]);
+    click(c.querySelector('button[aria-label="Mua lại đơn TB-1"]'));
+    await flush(6);
+    expect(document.body.querySelector('[role="dialog"]')).not.toBeNull();
+    expect(document.body.textContent).toContain('Từ đơn TB-1');
+    expect(document.body.textContent).toContain('Dầu gội bưởi');
+  });
+
+  it('"Thêm vào giỏ" gửi repurchase đúng body như chi tiết đơn rồi chuyển sang giỏ', async () => {
+    state.orders = [orderOf('TB-1', 'DELIVERED')];
+    const c = await mount();
+    click(c.querySelector('button[aria-label="Mua lại đơn TB-1"]'));
+    await flush(6);
+    click(byText(document.body, 'button', 'Thêm vào giỏ (1)'));
+    await flush(8);
+    expect(fetched.find((f) => f.path === '/orders/TB-1/repurchase')?.body).toEqual({ items: [{ orderItemId: 'i-1', quantity: 1 }], addSource: 'repurchase' });
+    expect(state.push).toHaveBeenCalledWith('/gio-hang');
+  });
+
+  it('mở đơn thứ nhất, đổi số lượng, đóng rồi mở đơn thứ hai: sheet theo đơn mới và số lượng mặc định, không giữ lựa chọn cũ', async () => {
+    state.orders = [orderOf('TB-1', 'DELIVERED'), orderOf('TB-2', 'DELIVERED')];
+    const c = await mount();
+    click(c.querySelector('button[aria-label="Mua lại đơn TB-1"]'));
+    await flush(6);
+    expect(document.body.textContent).toContain('Từ đơn TB-1');
+    click(document.querySelector('button[aria-label^="Tăng số lượng"]'));
+    await flush(2);
+    expect(byText(document.body, 'button', 'Thêm vào giỏ (2)')).not.toBeNull();
+    click(document.querySelector('button[aria-label="Đóng"]'));
+    await flush(4);
+    expect(document.body.querySelector('[role="dialog"]')).toBeNull();
+
+    click(c.querySelector('button[aria-label="Mua lại đơn TB-2"]'));
+    await flush(6);
+    expect(document.body.textContent).toContain('Từ đơn TB-2');
+    expect(document.body.textContent).not.toContain('Từ đơn TB-1');
+    expect(byText(document.body, 'button', 'Thêm vào giỏ (1)')).not.toBeNull();
+    expect(byText(document.body, 'button', 'Thêm vào giỏ (2)')).toBeNull();
   });
 });

@@ -343,6 +343,10 @@ export const vi = {
     timeline: 'Hành trình đơn hàng',
     repurchase: 'Mua lại đơn này',
     payNow: orderCopy.payNow,
+    searchLabel: orderCopy.searchLabel,
+    searchPlaceholder: orderCopy.searchPlaceholder,
+    searchClear: orderCopy.searchClear,
+    searchNoMatch: orderCopy.searchNoMatch,
     payBy: (when: string) => `Hạn ${when}`,
     /** Đơn chờ tiền mà hàng đã bàn giao vận chuyển (API manualHandling): thay hạn thanh toán, nút trả tiền và nút huỷ. */
     manualHandling: 'Tubu đang xử lý đơn này, liên hệ CSKH nếu cần hỗ trợ.',

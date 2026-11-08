@@ -703,6 +703,8 @@ export type OrderStatusGroup = 'processing' | 'closed';
 export interface OrderListFilter {
   status?: string;
   group?: OrderStatusGroup;
+  /** Tìm theo mã đơn hoặc tên sản phẩm (API bỏ dấu, không phân biệt hoa thường). Chuỗi trắng bị bỏ. */
+  q?: string;
 }
 
 // Bug 1 fix: truoc day khong truyen page/limit -> BE mac dinh page=1 limit=20, khach co >20 don
@@ -712,6 +714,7 @@ export const fetchOrders = async (filter: OrderListFilter = {}, page = 1, limit 
     .get<PageResponse<OrderView>>('/orders', {
       params: {
         ...(filter.status ? { status: filter.status } : filter.group ? { group: filter.group } : {}),
+        ...(filter.q?.trim() ? { q: filter.q.trim() } : {}),
         page,
         limit,
         ...(cursor ? { cursor } : {}),

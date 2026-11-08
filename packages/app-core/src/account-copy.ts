@@ -17,6 +17,12 @@ export const orderCopy = {
   etaLine: (eta: string) => `Dự kiến giao ${eta}`,
   /** Nút trả tiền đơn chuyển khoản còn chờ: thẻ đơn, thanh đáy chi tiết đơn. */
   payNow: 'Thanh toán ngay',
+  /** Ô tìm trong danh sách đơn (Mini App, web khổ điện thoại, khối đơn ở Tài khoản trên desktop): API tìm theo mã đơn hoặc tên sản phẩm, bỏ dấu. Tối đa 40 chữ. */
+  searchLabel: 'Tìm đơn theo mã đơn hoặc tên sản phẩm',
+  searchPlaceholder: 'Mã đơn hoặc tên sản phẩm',
+  searchClear: 'Xoá tìm kiếm',
+  /** Kết quả tìm rỗng. `inTab` = đang lọc một trạng thái khác "Tất cả". Tối đa 70 chữ cộng từ khoá. */
+  searchNoMatch: (q: string, inTab: boolean) => `Không tìm thấy đơn nào khớp “${q}”${inTab ? ' ở trạng thái này' : ''}`,
 };
 
 /** Nhãn ngắn cho hàng trạng thái đơn ở Cá nhân: 5 ô trên màn 375px chỉ vừa một dòng; phần đọc cho trình đọc màn hình vẫn dùng nhãn đầy đủ. */

@@ -32,8 +32,7 @@ for (const width of WIDTHS) {
 
       // Đo sau khi sheet trượt lên xong: đang trượt thì khung bị dịch và vùng chạm đo hụt một điểm ảnh.
       await page.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished.catch(() => undefined))));
-      // Ô tìm là SearchField dùng chung của cả web (ô nhập 42px trong khung 44px; Mini cao 44px): chưa thuộc phạm vi W42B, ghi ở PR để gói sau xử lý.
-      expect.soft(await probeTapTargets(page, { scope: '[role="dialog"]', ignore: ['[data-testid="search-field-box"]'] }), `${width}px: vùng chạm sheet dưới 44px`).toEqual([]);
+      expect.soft(await probeTapTargets(page, { scope: '[role="dialog"]' }), `${width}px: vùng chạm sheet dưới 44px`).toEqual([]);
       const layout = await probeLayout(page, { scope: '[role="dialog"]' });
       expect.soft(layout.overflow, `${width}px: sheet tràn ngang`).toEqual([]);
       const docOverflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
