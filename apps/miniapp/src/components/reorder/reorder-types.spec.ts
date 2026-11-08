@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import type { OrderItemView, PurchasedItem } from '../../services/shop-api';
 import {
-  MAX_REORDER_QTY, initialSelection, itemReorderTarget, lineAt, lineFromOrderItem, lineFromPurchasedItem,
-  orderReorderTarget, selectedLines, selectionTotals, unitsSharingCartLine,
+  MAX_REORDER_QTY, allAvailableSelected, availableLines, availableSelectionState, initialSelection, itemReorderTarget, lineAt, lineFromOrderItem, lineFromPurchasedItem,
+  orderReorderTarget, selectedLines, selectionSavings, selectionTotals, toggleAllAvailable, unitsSharingCartLine,
 } from './reorder-types';
 
 const orderItem = (over: Partial<OrderItemView> = {}): OrderItemView => ({
@@ -188,5 +188,117 @@ describe('giá Giờ vàng theo giỏ: số lượng đã có trong giỏ và d�
   it('API cũ không có flashPrice: giá không đổi dù giỏ có bao nhiêu', () => {
     const t = orderReorderTarget({ code: 'T7', items: [orderItem({ id: 'a', variationId: 'v1', quantity: 2, stock: 50, available: true, currentPrice: 120000, unitPrice: 120000 })] });
     expect(selectionTotals(t, initialSelection(t), cartOf([['v1', 40]]))).toEqual({ units: 2, subtotal: 240000 });
+  });
+});
+
+describe('chọn tất cả dòng còn hàng', () => {
+  const order = () =>
+    orderReorderTarget({
+      code: 'S1',
+      items: [
+        orderItem({ id: 'a', variationId: 'va', quantity: 2, stock: 50, available: true }),
+        orderItem({ id: 'b', variationId: 'vb', quantity: 3, stock: 50, available: true }),
+        orderItem({ id: 'c', variationId: 'vc', quantity: 1, stock: 0, available: false }),
+      ],
+    });
+
+  it('availableLines chỉ lấy dòng còn bán, đúng thứ tự đơn', () => {
+    expect(availableLines(order()).map((l) => l.key)).toEqual(['a', 'b']);
+  });
+
+  it('allAvailableSelected: đúng khi mọi dòng còn bán đang chọn (dòng hết hàng không tính), sai khi thiếu một dòng hay không còn dòng nào bán được', () => {
+    const t = order();
+    expect(allAvailableSelected(t, initialSelection(t))).toBe(true);
+    expect(allAvailableSelected(t, { ...initialSelection(t), b: { checked: false, quantity: 3 } })).toBe(false);
+    const soldOut = orderReorderTarget({ code: 'S2', items: [orderItem({ id: 'x', stock: 0, available: false })] });
+    expect(allAvailableSelected(soldOut, initialSelection(soldOut))).toBe(false);
+  });
+
+  it('availableSelectionState: all / some / none theo các dòng còn bán; không còn dòng nào bán được là none', () => {
+    const t = order();
+    expect(availableSelectionState(t, initialSelection(t))).toBe('all');
+    expect(availableSelectionState(t, { ...initialSelection(t), b: { checked: false, quantity: 3 } })).toBe('some');
+    expect(availableSelectionState(t, toggleAllAvailable(t, initialSelection(t)))).toBe('none');
+    const soldOut = orderReorderTarget({ code: 'S3', items: [orderItem({ id: 'x', stock: 0, available: false })] });
+    expect(availableSelectionState(soldOut, initialSelection(soldOut))).toBe('none');
+  });
+
+  it('toggleAllAvailable: mọi dòng còn bán đang chọn → bỏ chọn hết, giữ nguyên số lượng; CTA về 0', () => {
+    const t = order();
+    const sel = toggleAllAvailable(t, { ...initialSelection(t), a: { checked: true, quantity: 4 } });
+    expect(sel.a).toEqual({ checked: false, quantity: 4 });
+    expect(sel.b).toEqual({ checked: false, quantity: 3 });
+    expect(selectionTotals(t, sel).units).toBe(0);
+  });
+
+  it('toggleAllAvailable: còn ít nhất một dòng chưa chọn → chọn hết dòng còn bán, dòng hết hàng vẫn không chọn, giữ số lượng', () => {
+    const t = order();
+    const none = toggleAllAvailable(t, toggleAllAvailable(t, initialSelection(t)));
+    expect(none.a!.checked && none.b!.checked).toBe(true);
+    const partial = toggleAllAvailable(t, { a: { checked: true, quantity: 5 }, b: { checked: false, quantity: 3 }, c: { checked: false, quantity: 1 } });
+    expect(partial.a).toEqual({ checked: true, quantity: 5 });
+    expect(partial.b).toEqual({ checked: true, quantity: 3 });
+    expect(partial.c!.checked).toBe(false);
+    expect(selectedLines(t, partial).map((s) => s.key)).toEqual(['a', 'b']);
+  });
+
+  it('bật tắt qua lại: tắt hết rồi bật lại ra đúng tổng ban đầu', () => {
+    const t = order();
+    const before = selectionTotals(t, initialSelection(t));
+    const back = toggleAllAvailable(t, toggleAllAvailable(t, initialSelection(t)));
+    expect(selectionTotals(t, back)).toEqual(before);
+  });
+});
+
+describe('selectionSavings: tiền tiết kiệm so với lúc mua trước của dòng đang chọn', () => {
+  const cartOf = (entries: [string, number][]) => new Map(entries);
+
+  it('tổng (giá đã trả − giá hiện tại) × số lượng chọn: dòng đắt lên trừ vào, dòng bằng giá không đổi gì; tổng không rẻ hơn thì 0', () => {
+    const t = orderReorderTarget({
+      code: 'V1',
+      items: [
+        orderItem({ id: 'a', variationId: 'va', quantity: 2, unitPrice: 60000, currentPrice: 50000, stock: 50, available: true }),
+        orderItem({ id: 'b', variationId: 'vb', quantity: 1, unitPrice: 60000, currentPrice: 65000, stock: 50, available: true }),
+        orderItem({ id: 'c', variationId: 'vc', quantity: 1, unitPrice: 60000, currentPrice: 60000, stock: 50, available: true }),
+      ],
+    });
+    expect(selectionSavings(t, initialSelection(t))).toBe(2 * 10000 - 5000);
+    const more = { ...initialSelection(t), a: { checked: true, quantity: 5 } };
+    expect(selectionSavings(t, more)).toBe(5 * 10000 - 5000);
+    const onlyDearer = { a: { checked: false, quantity: 2 }, b: { checked: true, quantity: 1 }, c: { checked: true, quantity: 1 } };
+    expect(selectionSavings(t, onlyDearer)).toBe(0);
+  });
+
+  it('dòng bỏ chọn và dòng hết hàng không tính; bỏ chọn hết thì 0', () => {
+    const t = orderReorderTarget({
+      code: 'V2',
+      items: [
+        orderItem({ id: 'a', variationId: 'va', quantity: 2, unitPrice: 60000, currentPrice: 50000, stock: 50, available: true }),
+        orderItem({ id: 'b', variationId: 'vb', quantity: 2, unitPrice: 60000, currentPrice: 40000, stock: 0, available: false }),
+      ],
+    });
+    const sel = initialSelection(t);
+    expect(selectionSavings(t, { ...sel, b: { checked: true, quantity: 2 } })).toBe(2 * 10000);
+    expect(selectionSavings(t, { ...sel, a: { checked: false, quantity: 2 } })).toBe(0);
+  });
+
+  it('số lượng bị kẹp theo trần của dòng như tổng tiền', () => {
+    const t = orderReorderTarget({ code: 'V3', items: [orderItem({ id: 'a', variationId: 'va', quantity: 1, unitPrice: 60000, currentPrice: 50000, stock: 3, available: true })] });
+    expect(selectionSavings(t, { a: { checked: true, quantity: 99 } })).toBe(3 * 10000);
+  });
+
+  it('giá Giờ vàng thấp hơn giá đã trả: tính phần rẻ đi; vượt suất theo giỏ thì giá thường nên hết tiết kiệm', () => {
+    const t = orderReorderTarget({
+      code: 'V4',
+      items: [orderItem({ id: 'a', variationId: 'va', quantity: 2, unitPrice: 120000, currentPrice: 120000, stock: 50, available: true, flashActive: true, flashPrice: 90000, flashAllowance: 3 })],
+    });
+    const sel = initialSelection(t);
+    expect(selectionSavings(t, sel, cartOf([]))).toBe(2 * 30000);
+    expect(selectionSavings(t, sel, cartOf([['va', 2]]))).toBe(0);
+  });
+
+  it('mua lại một sản phẩm đã mua (rail) không có giá đã trả: không có tiết kiệm', () => {
+    const t = itemReorderTarget(purchased({ price: 120000, salePrice: 90000, stock: 10 }));
+    expect(selectionSavings(t, initialSelection(t))).toBe(0);
   });
 });

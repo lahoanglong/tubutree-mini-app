@@ -375,6 +375,7 @@ export const vi = {
     sheetTitle: 'Mua lại',
     fromOrder: (code: string) => `Từ đơn ${code}`,
     selectLine: (name: string) => `Chọn ${name}`,
+    selectAll: (n: number) => fillCopy('reorder.selectAll', { n }),
     unavailable: 'Tạm hết hàng',
     subtotal: 'Tạm tính',
     priceNote: 'Giá theo hiện tại, xem chính xác ở giỏ hàng.',

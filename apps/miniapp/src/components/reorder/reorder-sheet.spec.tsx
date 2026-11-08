@@ -427,3 +427,145 @@ describe('ReorderSheet: giá theo số lượng đã có trong giỏ', () => {
     expect(screen.getByText('80.000đ')).toBeInTheDocument();
   });
 });
+
+const CHEAPER = { standing: 50000, flashPrice: null, flashAllowance: null, paidPrice: 60000, comparable: true };
+const MANY: ReorderTarget = {
+  kind: 'order',
+  orderCode: 'TUBU8',
+  lines: [
+    line('a', 'Nước rửa chén'),
+    line('b', 'Dầu gội', { defaultQuantity: 1 }),
+    line('c', 'Xà phòng', { available: false, maxQuantity: 0, notices: [{ kind: 'out', tone: 'danger', text: 'Tạm hết hàng' }] }),
+  ],
+};
+const toggleAllBox = () => screen.queryByRole('checkbox', { name: /^Chọn tất cả/ }) as HTMLInputElement | null;
+
+describe('ReorderSheet: Chọn tất cả', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('từ 2 dòng còn hàng: ô "Chọn tất cả (2)" đang tick, nằm trong khung chạm 44px, có data-testid', () => {
+    renderSheet(<ReorderSheet target={MANY} source="order_card" onClose={() => {}} />);
+    const box = screen.getByRole('checkbox', { name: 'Chọn tất cả (2)' });
+    expect(box).toBeChecked();
+    expect(screen.getByTestId('reorder-toggle-all')).toBeInTheDocument();
+    expect((box.closest('[data-testid="checkbox-hit-area"]') as HTMLElement).style.minHeight).toBe('44px');
+  });
+
+  it('chỉ 1 dòng còn hàng hay mua lại một sản phẩm: không có ô', () => {
+    const { unmount } = renderSheet(<ReorderSheet target={ORDER} source="order_card" onClose={() => {}} />);
+    expect(toggleAllBox()).toBeNull();
+    expect(screen.queryByTestId('reorder-toggle-all')).toBeNull();
+    unmount();
+    renderSheet(<ReorderSheet target={{ kind: 'item', line: line('a', 'Nước rửa chén', { defaultQuantity: 1 }) }} source="order_card" onClose={() => {}} />);
+    expect(toggleAllBox()).toBeNull();
+  });
+
+  it('bấm khi tất cả đang chọn → bỏ chọn hết, CTA (0) bị khoá; bấm lại → chọn lại dòng còn hàng, dòng hết hàng vẫn khoá và không chọn', () => {
+    renderSheet(<ReorderSheet target={MANY} source="order_card" onClose={() => {}} />);
+    expect(screen.getByRole('button', { name: 'Thêm vào giỏ (3)' })).toBeInTheDocument();
+    fireEvent.click(toggleAllBox()!);
+    expect(toggleAllBox()).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Chọn Nước rửa chén' })).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Chọn Dầu gội' })).not.toBeChecked();
+    expect(screen.getByRole('button', { name: 'Thêm vào giỏ (0)' })).toBeDisabled();
+    fireEvent.click(toggleAllBox()!);
+    expect(screen.getByRole('checkbox', { name: 'Chọn Nước rửa chén' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Chọn Dầu gội' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Chọn Xà phòng' })).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Chọn Xà phòng' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Thêm vào giỏ (3)' })).toBeInTheDocument();
+  });
+
+  it('bỏ tick một dòng → ô hết tick; bấm → chọn đủ lại và giữ số lượng đã chỉnh', () => {
+    renderSheet(<ReorderSheet target={MANY} source="order_card" onClose={() => {}} />);
+    fireEvent.click(screen.getAllByRole('button', { name: /^Tăng số lượng/ })[0]!);
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Chọn Dầu gội' }));
+    expect(toggleAllBox()).not.toBeChecked();
+    expect(screen.getByRole('button', { name: 'Thêm vào giỏ (3)' })).toBeInTheDocument();
+    fireEvent.click(toggleAllBox()!);
+    expect(toggleAllBox()).toBeChecked();
+    expect(screen.getByRole('button', { name: 'Thêm vào giỏ (4)' })).toBeInTheDocument();
+  });
+});
+
+describe('ReorderSheet: tiết kiệm so với lúc mua trước và số tabular', () => {
+  beforeEach(() => vi.clearAllMocks());
+  const SAVE: ReorderTarget = { kind: 'order', orderCode: 'TUBU9', lines: [line('a', 'Nước rửa chén', { pricing: CHEAPER })] };
+
+  it('món đang chọn rẻ hơn lúc mua: ngay dưới Tạm tính có câu tiết kiệm, màu xanh, số tabular', () => {
+    renderSheet(<ReorderSheet target={SAVE} source="order_card" onClose={() => {}} />);
+    const n = screen.getByTestId('reorder-savings-note');
+    expect(n).toHaveTextContent('Tiết kiệm 20.000đ so với lúc mua trước');
+    expect(n.style.fontVariantNumeric).toBe('tabular-nums');
+    expect(n.style.color).toContain('success');
+    expect(n.previousElementSibling).toHaveTextContent('Tạm tính');
+  });
+
+  it('đổi số lượng cập nhật số tiền; bỏ chọn hết thì ẩn câu', () => {
+    renderSheet(<ReorderSheet target={SAVE} source="order_card" onClose={() => {}} />);
+    fireEvent.click(screen.getAllByRole('button', { name: /^Tăng số lượng/ })[0]!);
+    expect(screen.getByTestId('reorder-savings-note')).toHaveTextContent('Tiết kiệm 30.000đ so với lúc mua trước');
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Chọn Nước rửa chén' }));
+    expect(screen.queryByTestId('reorder-savings-note')).toBeNull();
+  });
+
+  it('giá không rẻ đi (không so được hay đắt lên): không có câu', () => {
+    const { unmount } = renderSheet(<ReorderSheet target={ORDER} source="order_card" onClose={() => {}} />);
+    expect(screen.queryByTestId('reorder-savings-note')).toBeNull();
+    unmount();
+    renderSheet(<ReorderSheet target={{ kind: 'order', orderCode: 'TUBU10', lines: [line('a', 'Nước rửa chén', { pricing: { ...CHEAPER, paidPrice: 40000 } })] }} source="order_card" onClose={() => {}} />);
+    expect(screen.queryByTestId('reorder-savings-note')).toBeNull();
+  });
+
+  it('đơn giá và tạm tính đều có số tabular để không nhảy chữ số khi đổi số lượng', () => {
+    renderSheet(<ReorderSheet target={SAVE} source="order_card" onClose={() => {}} />);
+    expect(within(screen.getByTestId('reorder-line')).getByText('50.000đ').style.fontVariantNumeric).toBe('tabular-nums');
+    expect(screen.getByText('100.000đ').style.fontVariantNumeric).toBe('tabular-nums');
+  });
+});
+
+describe('ReorderSheet: dấu "một phần", chạm chữ, câu giá có số tabular, tiết kiệm theo tổng', () => {
+  beforeEach(() => vi.clearAllMocks());
+  const DEARER = { standing: 50000, flashPrice: null, flashAllowance: null, paidPrice: 40000, comparable: true };
+  const MIXED: ReorderTarget = {
+    kind: 'order',
+    orderCode: 'TUBU11',
+    lines: [line('a', 'Nước rửa chén', { pricing: CHEAPER }), line('b', 'Dầu gội', { defaultQuantity: 1, pricing: DEARER })],
+  };
+
+  it('Chọn tất cả ở trạng thái một phần khi chỉ chọn một số dòng còn hàng; chọn đủ hay bỏ hết thì bỏ dấu', () => {
+    renderSheet(<ReorderSheet target={MANY} source="order_card" onClose={() => {}} />);
+    expect(toggleAllBox()).not.toHaveAttribute('aria-checked', 'mixed');
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Chọn Dầu gội' }));
+    expect(toggleAllBox()).toHaveAttribute('aria-checked', 'mixed');
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Chọn Nước rửa chén' }));
+    expect(toggleAllBox()).not.toHaveAttribute('aria-checked', 'mixed');
+    fireEvent.click(toggleAllBox()!);
+    expect(toggleAllBox()).toBeChecked();
+    expect(toggleAllBox()).not.toHaveAttribute('aria-checked', 'mixed');
+  });
+
+  it('chạm vào chữ "Chọn tất cả" cũng bật tắt, chữ nhìn thấy ẩn khỏi trình đọc màn hình để tên chỉ đọc một lần', () => {
+    renderSheet(<ReorderSheet target={MANY} source="order_card" onClose={() => {}} />);
+    const label = screen.getByTestId('reorder-toggle-all-label');
+    expect(label).toHaveAttribute('aria-hidden', 'true');
+    expect(label).toHaveTextContent('Chọn tất cả (2)');
+    fireEvent.click(label);
+    expect(toggleAllBox()).not.toBeChecked();
+    expect(screen.getByRole('button', { name: 'Thêm vào giỏ (0)' })).toBeDisabled();
+    fireEvent.click(label);
+    expect(toggleAllBox()).toBeChecked();
+  });
+
+  it('câu giá đổi ("Giá giảm so với đơn trước (…)") có số tabular như các số tiền khác', () => {
+    renderSheet(<ReorderSheet target={{ kind: 'order', orderCode: 'TUBU12', lines: [line('a', 'Nước rửa chén', { pricing: CHEAPER })] }} source="order_card" onClose={() => {}} />);
+    expect((document.querySelector('[data-notice="priceDown"]') as HTMLElement).style.fontVariantNumeric).toBe('tabular-nums');
+  });
+
+  it('một dòng rẻ đi, một dòng đắt lên: tiết kiệm là phần tổng rẻ hơn lần trước; tổng không rẻ hơn thì không có câu', () => {
+    renderSheet(<ReorderSheet target={MIXED} source="order_card" onClose={() => {}} />);
+    expect(screen.getByTestId('reorder-savings-note')).toHaveTextContent('Tiết kiệm 10.000đ so với lúc mua trước');
+    fireEvent.click(screen.getAllByRole('button', { name: /^Tăng số lượng/ })[1]!);
+    expect(screen.queryByTestId('reorder-savings-note')).toBeNull();
+  });
+});

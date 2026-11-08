@@ -10,13 +10,14 @@ import { Sheet } from '@/components/ui/sheet';
 import { homeErrorMessage } from '@/components/home/home-block-error';
 import type { ReorderSummary } from './reorder-summary';
 import {
-  initialSelection, lineAt, selectedLines, selectionTotals, targetLines, unitsSharingCartLine,
+  availableLines, availableSelectionState, initialSelection, lineAt, selectedLines, selectionSavings, selectionTotals, targetLines, toggleAllAvailable,
+  unitsSharingCartLine,
   type LineSelection, type ReorderLine, type ReorderSource, type ReorderTarget,
 } from './reorder-types';
 import { useCartUnits } from './use-cart-units';
 import { useReorder } from './use-reorder';
 import { ProductThumb } from '@/components/mini';
-import { reorderSkippedNote, type ReorderLineNotice } from '@tubutree/app-core/commerce/reorder-notice';
+import { reorderSavingsNote, reorderSkippedNote, type ReorderLineNotice } from '@tubutree/app-core/commerce/reorder-notice';
 
 export interface ReorderSheetProps {
   target: ReorderTarget | null;
@@ -64,6 +65,9 @@ export function ReorderSheet({ target, source, onClose, onDone, navigateToCart }
   const lines = view ? targetLines(view) : [];
   const skippedNote = reorderSkippedNote(lines);
   const { units, subtotal } = view ? selectionTotals(view, sel, cart) : { units: 0, subtotal: 0 };
+  const savedNote = view ? reorderSavingsNote(selectionSavings(view, sel, cart)) : null;
+  const availableCount = view ? availableLines(view).length : 0;
+  const selectionState = view ? availableSelectionState(view, sel) : 'none';
 
   // Khoá ĐỒNG BỘ chống chạm đúp: isPending của react-query chỉ cập nhật sau một nhịp notify.
   const inFlight = useRef(false);
@@ -112,8 +116,13 @@ export function ReorderSheet({ target, source, onClose, onDone, navigateToCart }
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between text-sm font-semibold text-stone-900">
             <span>{reorderText.subtotal}</span>
-            <span>{formatVnd(subtotal)}</span>
+            <span className="tabular-nums">{formatVnd(subtotal)}</span>
           </div>
+          {savedNote && (
+            <p data-testid="reorder-savings-note" className="text-xs font-semibold tabular-nums text-success-fg">
+              {savedNote}
+            </p>
+          )}
           <p className="text-xs text-stone-600">{reorderText.priceNote}</p>
           {notice?.kind === 'error' && (
             <p role="alert" className={ui.error}>
@@ -145,6 +154,23 @@ export function ReorderSheet({ target, source, onClose, onDone, navigateToCart }
           <p className="text-sm text-[color:var(--color-text-secondary)]" data-testid="reorder-skipped-note">
             {skippedNote}
           </p>
+        )}
+        {view && availableCount >= 2 && (
+          <label className="flex min-h-11 items-center gap-2.5 text-sm font-semibold text-[color:var(--color-text-primary)]">
+            <span className="flex h-11 w-11 flex-none items-center justify-center">
+              <input
+                type="checkbox"
+                data-testid="reorder-toggle-all"
+                checked={selectionState === 'all'}
+                ref={(el) => {
+                  if (el) el.indeterminate = selectionState === 'some';
+                }}
+                onChange={() => setSel((s) => toggleAllAvailable(view, s))}
+                className="h-5 w-5 accent-[color:var(--color-action-primary-bg)]"
+              />
+            </span>
+            {reorderText.selectAll(availableCount)}
+          </label>
         )}
         {lines.map((line) => (
           <ReorderLineRow
@@ -183,7 +209,7 @@ function ReorderLineRow({ line, value, inCart, onChange }: { line: ReorderLine; 
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <p className={`truncate text-sm font-semibold ${line.available ? 'text-stone-900' : 'text-[color:var(--color-text-secondary)]'}`}>{line.productName}</p>
         {line.variationName && <p className="text-xs text-stone-600">{line.variationName}</p>}
-        {line.available && <p className="text-sm font-bold text-stone-900">{formatVnd(unitPrice)}</p>}
+        {line.available && <p className="text-sm font-bold tabular-nums text-stone-900">{formatVnd(unitPrice)}</p>}
         <LineNotices notices={notices} />
         {line.available && (
           <QuantitySelector value={qty} max={line.maxQuantity} size="md" itemLabel={line.productName} onChange={(n) => onChange({ checked, quantity: n })} />
@@ -201,7 +227,7 @@ function LineNotices({ notices }: { notices: readonly ReorderLineNotice[] }) {
   return (
     <>
       {notices.map((n) => (
-        <p key={n.kind} className={`text-xs ${NOTICE_TONE[n.tone]}`} data-notice={n.kind}>
+        <p key={n.kind} className={`text-xs tabular-nums ${NOTICE_TONE[n.tone]}`} data-notice={n.kind}>
           {n.text}
         </p>
       ))}

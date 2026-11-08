@@ -36,6 +36,7 @@ const WORST_BY_KEY: Record<string, Record<string, string>> = {
   'reorder.qtyReduced': { old: '99' },
   'reorder.priceUp': { old: '9.999.999đ' },
   'reorder.priceDown': { old: '9.999.999đ' },
+  'reorder.savedVsBefore': { x: '99.999.999đ' },
   'order.action.payLeft': { t: '99 ngày 23 giờ' },
   'order.payByLeft': { at: '23:59 31/12', t: '99 ngày 23 giờ' },
   'order.share.total': { amount: '99.999.999đ' },

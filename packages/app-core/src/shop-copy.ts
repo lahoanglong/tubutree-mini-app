@@ -369,6 +369,8 @@ export const SHOP_COPY: Record<string, string> = {
   'reorder.priceDown': 'Giá giảm so với đơn trước ({old})',
   'reorder.someSkipped': '{n} món hết hàng hoặc ngừng bán sẽ không được thêm vào giỏ.',
   'reorder.allSkipped': 'Các món trong đơn này đều đã hết hàng hoặc ngừng bán.',
+  'reorder.selectAll': 'Chọn tất cả ({n})',
+  'reorder.savedVsBefore': 'Tiết kiệm {x} so với lúc mua trước',
   // Thanh toán (K2): Mini App và web cùng một nguồn chữ
   'checkout.addressNeeded': 'Chọn địa chỉ giao hàng để đặt hàng.',
   'checkout.quoteFailed': 'Chưa tính được tổng tiền. Bấm Thử lại ở phần tóm tắt rồi đặt hàng.',

@@ -1,4 +1,5 @@
 import { ERROR_GENERIC } from '@tubutree/app-core/client-copy';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 
 const numberFormat = new Intl.NumberFormat('vi-VN');
 
@@ -84,6 +85,7 @@ export const reorderText = {
   timesBought: (n: number) => `Đã mua ${n} lần`,
   sheetTitle: 'Mua lại',
   selectLine: (name: string) => `Chọn ${name}`,
+  selectAll: (n: number) => fillCopy('reorder.selectAll', { n }),
   unavailable: 'Tạm hết hàng',
   subtotal: 'Tạm tính',
   priceNote: 'Giá theo hiện tại, xem chính xác ở giỏ hàng.',

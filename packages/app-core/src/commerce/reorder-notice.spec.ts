@@ -7,6 +7,8 @@ import {
   reorderLineNotices,
   reorderPriceAt,
   reorderPricing,
+  reorderSavings,
+  reorderSavingsNote,
   reorderSkippedNote,
   type ReorderLineFacts,
 } from './reorder-notice';
@@ -231,5 +233,75 @@ describe('cartUnitsReady', () => {
 
   it('mất mạng, truy vấn bị tạm dừng (paused) chưa có giỏ: sẵn sàng, không khoá nút tới khi có mạng lại', () => {
     expect(cartUnitsReady({ enabled: true, status: 'pending', fetchStatus: 'paused' })).toBe(true);
+  });
+});
+
+describe('reorderSavings: tiền đang rẻ hơn lúc mua trước, cộng theo từng dòng đang chọn', () => {
+  const cheaper = { paidPrice: 100_000, comparable: true };
+
+  it('cộng (giá đã trả − giá hiện tại) × số lượng của các dòng rẻ đi', () => {
+    expect(
+      reorderSavings([
+        { quantity: 2, unitPrice: 90_000, pricing: cheaper },
+        { quantity: 3, unitPrice: 95_000, pricing: cheaper },
+      ]),
+    ).toBe(2 * 10_000 + 3 * 5_000);
+  });
+
+  it('dòng đắt lên trừ vào số tiết kiệm: chỉ báo phần tổng thật sự rẻ hơn lần trước; dòng bằng giá không đổi gì', () => {
+    expect(
+      reorderSavings([
+        { quantity: 3, unitPrice: 90_000, pricing: cheaper },
+        { quantity: 1, unitPrice: 110_000, pricing: cheaper },
+        { quantity: 2, unitPrice: 100_000, pricing: cheaper },
+      ]),
+    ).toBe(3 * 10_000 - 10_000);
+  });
+
+  it('tổng hiện tại không rẻ hơn tổng đã trả (dòng đắt lên nhiều hơn dòng rẻ đi): 0, không báo tiết kiệm sai', () => {
+    expect(
+      reorderSavings([
+        { quantity: 1, unitPrice: 95_000, pricing: cheaper },
+        { quantity: 1, unitPrice: 110_000, pricing: cheaper },
+      ]),
+    ).toBe(0);
+    expect(reorderSavings([{ quantity: 4, unitPrice: 130_000, pricing: cheaper }])).toBe(0);
+  });
+
+  it('dòng không so được không kéo số tiết kiệm lên hay xuống của dòng so được', () => {
+    expect(
+      reorderSavings([
+        { quantity: 2, unitPrice: 90_000, pricing: cheaper },
+        { quantity: 3, unitPrice: 500_000, pricing: { paidPrice: 100_000, comparable: false } },
+        { quantity: 1, unitPrice: 500_000 },
+      ]),
+    ).toBe(2 * 10_000);
+  });
+
+  it('không so được thì không tính: Giờ vàng xen vào (comparable false), không có giá đã trả, không có dữ kiện giá', () => {
+    expect(
+      reorderSavings([
+        { quantity: 2, unitPrice: 50_000, pricing: { paidPrice: 100_000, comparable: false } },
+        { quantity: 2, unitPrice: 50_000, pricing: { paidPrice: null, comparable: true } },
+        { quantity: 2, unitPrice: 50_000 },
+      ]),
+    ).toBe(0);
+  });
+
+  it('không có dòng nào: 0', () => {
+    expect(reorderSavings([])).toBe(0);
+  });
+});
+
+describe('reorderSavingsNote: câu tiết kiệm ở chân sheet Mua lại', () => {
+  it('có tiền tiết kiệm: nêu số tiền đầy đủ', () => {
+    expect(reorderSavingsNote(30_000)).toBe('Tiết kiệm 30.000đ so với lúc mua trước');
+    expect(reorderSavingsNote(1_250_000)).toBe('Tiết kiệm 1.250.000đ so với lúc mua trước');
+  });
+
+  it('không tiết kiệm (0, âm, rác): không có câu', () => {
+    expect(reorderSavingsNote(0)).toBeNull();
+    expect(reorderSavingsNote(-5_000)).toBeNull();
+    expect(reorderSavingsNote(Number.NaN)).toBeNull();
   });
 });
