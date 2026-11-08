@@ -144,7 +144,7 @@ export function ProductReviewsFallback() {
  * cùng luật với Mini App. `?danh-gia=<id đơn>` (từ chi tiết đơn) mở sẵn form cho đúng lần mua đó.
  */
 /** Đường dẫn ảnh tương đối của API ghép địa chỉ máy chủ ảnh; địa chỉ đầy đủ (video) giữ nguyên. */
-const mediaSrc = (src: string) => (src.startsWith('/') ? apiMediaUrl(src) : src);
+export const mediaSrc = (src: string) => (src.startsWith('/') ? apiMediaUrl(src) : src);
 
 export function ProductReviews({ slug }: { slug: string }) {
   const params = useSearchParams();

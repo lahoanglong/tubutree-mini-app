@@ -71,3 +71,74 @@ describe('PdpQuickReviews (web)', () => {
     expect(failed.container.innerHTML).toBe('');
   });
 });
+
+describe('PdpQuickReviews (web): số đều, huy hiệu "Đã mua", dải ảnh thu nhỏ (W51A)', () => {
+  const ABS = 'https://res.cloudinary.com/tubu/image/upload/a.jpg';
+  const load = async (items: unknown[]) => {
+    mocks.fetchProductReviews.mockResolvedValue({ average: 4.4, count: 27, distribution: {}, items });
+    const m = mount(<PdpQuickReviews slug="dau-goi" />);
+    await flush();
+    return m.container;
+  };
+  const rowOf = (c: HTMLElement, author: string) =>
+    Array.from(c.querySelectorAll<HTMLElement>('[data-testid="quick-review"]')).find((r) => r.textContent!.includes(author))!;
+
+  it('"điểm · số lượt" và nút "Xem tất cả (n)" dùng số đều (tabular-nums) để không nhảy khi số đổi', async () => {
+    const c = await load([item('a')]);
+    expect(byText(c, 'span', '4,4 · 27')!.className).toContain('tabular-nums');
+    expect(byText(c, 'button', 'Xem tất cả (27)')!.className).toContain('tabular-nums');
+  });
+
+  it('huy hiệu "Đã mua" chỉ hiện ở đánh giá verifiedPurchase=true, cùng hàng với tên người đánh giá', async () => {
+    const c = await load([
+      item('a', { author: 'Lan', verifiedPurchase: true }),
+      item('b', { author: 'Mai', verifiedPurchase: false }),
+    ]);
+    const badge = rowOf(c, 'Lan').querySelector('[data-testid="quick-review-verified"]')!;
+    expect(badge.textContent).toBe('Đã mua');
+    expect(badge.parentElement).toBe(byText(rowOf(c, 'Lan'), 'span', 'Lan')!.parentElement);
+    expect(rowOf(c, 'Mai').querySelector('[data-testid="quick-review-verified"]')).toBeNull();
+    expect(c.querySelectorAll('[data-testid="quick-review-verified"]')).toHaveLength(1);
+  });
+
+  it('đánh giá không có trường verifiedPurchase (API cũ) thì không có huy hiệu', async () => {
+    const c = await load([item('a')]);
+    expect(c.querySelector('[data-testid="quick-review-verified"]')).toBeNull();
+  });
+
+  it('dải ảnh thu nhỏ nằm dưới nhận xét: tối đa 3 ảnh, ảnh trang trí (alt rỗng, lazy)', async () => {
+    const c = await load([item('a', { images: ['/reviews/r1/images/0', '/reviews/r1/images/1', '/reviews/r1/images/2', '/reviews/r1/images/3'] })]);
+    const strip = c.querySelector('[data-testid="quick-review-photos"]')!;
+    const imgs = Array.from(strip.querySelectorAll('img'));
+    expect(imgs).toHaveLength(3);
+    imgs.forEach((img) => {
+      expect(img.getAttribute('alt')).toBe('');
+      expect(img.getAttribute('loading')).toBe('lazy');
+      // Ảnh gốc (Cloudinary) có thể rộng cả nghìn px: không có lớp 48px này thì tràn khung 375px.
+      expect(img.className).toContain('h-12');
+      expect(img.className).toContain('w-12');
+    });
+    expect(strip.previousElementSibling!.tagName).toBe('P');
+    expect(strip.previousElementSibling!.textContent).toBe('Dùng rất ổn a');
+  });
+
+  it('ảnh do API phục vụ (đường dẫn "/…") được ghép gốc API, URL tuyệt đối (Cloudinary) giữ nguyên như danh sách đầy đủ', async () => {
+    const c = await load([item('a', { images: [ABS, '/reviews/r1/images/0'] })]);
+    const srcs = Array.from(c.querySelectorAll('[data-testid="quick-review-photos"] img')).map((img) => img.getAttribute('src'));
+    expect(srcs).toHaveLength(2);
+    expect(srcs[0]).toBe(ABS);
+    expect(srcs[1]).toMatch(/^https?:\/\/.+\/reviews\/r1\/images\/0$/);
+  });
+
+  it('không có ảnh thì không dựng dải ảnh', async () => {
+    const c = await load([item('a')]);
+    expect(c.querySelector('[data-testid="quick-review-photos"]')).toBeNull();
+  });
+
+  it('có huy hiệu và dải ảnh vẫn không có control thiếu tên hay nhỏ hơn 44px', async () => {
+    const c = await load([item('a', { verifiedPurchase: true, images: ['/reviews/r1/images/0', ABS] }), item('b', { verifiedPurchase: true })]);
+    expect(c.querySelectorAll('[data-testid="quick-review-verified"]')).toHaveLength(2);
+    expect(unnamedControls(c)).toEqual([]);
+    expect(smallTouchTargets(c)).toEqual([]);
+  });
+});

@@ -136,7 +136,7 @@ describe('ProductDetailPage — câu chuyện sản phẩm', () => {
   });
   it('khối câu chuyện nằm ngay dưới khối mua nhanh (sau ô Số lượng), trước Đánh giá nhanh và mục Thành phần', async () => {
     mocks.fetchProduct.mockResolvedValue(product({ ingredients: [{ name: 'Sả chanh', percentage: '12%' }] }));
-    mocks.fetchReviews.mockResolvedValue({ data: [], average: 4.5, count: 2, items: [{ id: 'r1', rating: 5, comment: 'Thơm', authorName: 'An', createdAt: '2026-11-01T00:00:00.000Z' }] });
+    mocks.fetchReviews.mockResolvedValue({ data: [], average: 4.5, count: 2, items: [{ id: 'r1', rating: 5, comment: 'Thơm', images: [], videoUrl: null, author: 'An', createdAt: '2026-11-01T00:00:00.000Z' }] });
     renderPdp();
     const story = await screen.findByTestId('product-story');
     const qty = screen.getByRole('button', { name: /Tăng số lượng/ });
