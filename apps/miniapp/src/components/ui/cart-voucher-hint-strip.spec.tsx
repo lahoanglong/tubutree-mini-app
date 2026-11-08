@@ -200,6 +200,58 @@ describe('CartVoucherHintStrip (Mini): nút "Mua thêm" ở dòng sắp mở kho
   });
 });
 
+describe('CartVoucherHintStrip (Mini): báo bận và lời báo lỗi cho trình đọc màn hình', () => {
+  const ERROR = 'Mã đã hết lượt dùng.';
+
+  it('applying: cả dải aria-busy="true"; áp xong thì gỡ hẳn thuộc tính (không để "false"), không truyền applying cũng không có', () => {
+    const { rerender } = render(<CartVoucherHintStrip hint={both} onApply={vi.fn()} applying />);
+    expect(screen.getByTestId('cart-voucher-hint')).toHaveAttribute('aria-busy', 'true');
+    rerender(<CartVoucherHintStrip hint={both} onApply={vi.fn()} applying={false} />);
+    expect(screen.getByTestId('cart-voucher-hint')).not.toHaveAttribute('aria-busy');
+    rerender(<CartVoucherHintStrip hint={both} onApply={vi.fn()} />);
+    expect(screen.getByTestId('cart-voucher-hint')).not.toHaveAttribute('aria-busy');
+  });
+
+  it('đang áp: nút "Mua thêm" khoá và không gọi onShopMore; áp xong thì bấm lại được', () => {
+    const onShopMore = vi.fn();
+    const { rerender } = render(<CartVoucherHintStrip hint={both} onApply={vi.fn()} onShopMore={onShopMore} applying />);
+    expect(screen.getByTestId('cart-voucher-unlock-cta')).toBeDisabled();
+    fireEvent.click(screen.getByTestId('cart-voucher-unlock-cta'));
+    expect(onShopMore).not.toHaveBeenCalled();
+    rerender(<CartVoucherHintStrip hint={both} onApply={vi.fn()} onShopMore={onShopMore} applying={false} />);
+    expect(screen.getByTestId('cart-voucher-unlock-cta')).toBeEnabled();
+    fireEvent.click(screen.getByTestId('cart-voucher-unlock-cta'));
+    expect(onShopMore).toHaveBeenCalledTimes(1);
+  });
+
+  it('có lỗi: "Áp dụng ngay" được mô tả bằng đúng lời báo lỗi (aria-describedby trỏ tới cart-voucher-error); hết lỗi thì gỡ', () => {
+    const { rerender } = render(<CartVoucherHintStrip hint={both} onApply={vi.fn()} error={ERROR} />);
+    const cta = screen.getByTestId('cart-voucher-apply-cta');
+    const id = cta.getAttribute('aria-describedby');
+    expect(id).toBeTruthy();
+    expect(screen.getByTestId('cart-voucher-error')).toHaveAttribute('id', id!);
+    expect(cta).toHaveAccessibleDescription(ERROR);
+    rerender(<CartVoucherHintStrip hint={both} onApply={vi.fn()} error={null} />);
+    expect(screen.getByTestId('cart-voucher-apply-cta')).not.toHaveAttribute('aria-describedby');
+    expect(screen.queryByTestId('cart-voucher-error')).toBeNull();
+  });
+
+  it('chưa có lỗi: dải mời áp không mang id nào và "Áp dụng ngay" không có aria-describedby', () => {
+    const { container } = render(<CartVoucherHintStrip hint={{ apply: APPLY, unlock: null }} onApply={vi.fn()} />);
+    expect(screen.getByTestId('cart-voucher-apply-cta')).not.toHaveAttribute('aria-describedby');
+    expect(container.querySelector('[id]')).toBeNull();
+  });
+
+  it('id lời báo lỗi khác id câu nhắc "Mua thêm": mỗi nút chỉ được mô tả bằng câu của mình', () => {
+    render(<CartVoucherHintStrip hint={both} onApply={vi.fn()} onShopMore={vi.fn()} error={ERROR} />);
+    const applyCta = screen.getByTestId('cart-voucher-apply-cta');
+    const unlockCta = screen.getByTestId('cart-voucher-unlock-cta');
+    expect(applyCta.getAttribute('aria-describedby')).not.toBe(unlockCta.getAttribute('aria-describedby'));
+    expect(applyCta).toHaveAccessibleDescription(ERROR);
+    expect(unlockCta).toHaveAccessibleDescription(UNLOCK.text);
+  });
+});
+
 describe('css/freeship.css: đầu hàng của dòng sắp mở khoá', () => {
   const css = readFileSync(resolve(__dirname, '../../css/freeship.css'), 'utf8');
   afterEach(() => document.head.querySelectorAll('style').forEach((s) => s.remove()));

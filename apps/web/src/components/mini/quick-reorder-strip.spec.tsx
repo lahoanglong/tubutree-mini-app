@@ -85,6 +85,18 @@ describe('QuickReorderStrip (web)', () => {
     expect(onAddAll).not.toHaveBeenCalled();
   });
 
+  it('aria-busy của section theo khoá chung: không bận thì không có; busyKey hoặc busyAll thì "true"', () => {
+    const busyAttr = (extra: { busyKey?: string | null; busyAll?: boolean }) =>
+      mount(<QuickReorderStrip items={ITEMS} onAdd={noop} onAddAll={noop} onOpen={noop} {...extra} />)
+        .container.querySelector('[data-testid="quick-reorder"]')!
+        .getAttribute('aria-busy');
+    expect(busyAttr({})).toBeNull();
+    expect(busyAttr({ busyKey: null, busyAll: false })).toBeNull();
+    expect(busyAttr({ busyKey: 'v1' })).toBe('true');
+    expect(busyAttr({ busyAll: true })).toBe('true');
+    expect(busyAttr({ busyKey: 'v2', busyAll: true })).toBe('true');
+  });
+
   it('giá gạch chỉ do PriceTag vẽ (chữ đọc "giá gốc" nằm trong PriceTag); thẻ không giảm thì không gạch', () => {
     const { container } = mount(<QuickReorderStrip items={ITEMS} onAdd={noop} onAddAll={noop} onOpen={noop} />);
     const [a, b, c] = cards(container);
