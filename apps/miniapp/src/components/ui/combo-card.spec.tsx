@@ -39,6 +39,12 @@ describe('ComboCard', () => {
     expect(screen.getByText('Tiết kiệm 36.700đ').style.color).toBe('var(--color-text-price-deal)');
   });
 
+  it('Tiết kiệm và ô "+n" dùng số đều (tabular-nums) như giá', () => {
+    render(<ComboCard {...base} items={items(5)} onAddAll={() => {}} />);
+    expect(screen.getByText('Tiết kiệm 36.700đ').style.fontVariantNumeric).toBe('tabular-nums');
+    expect(screen.getByTestId('combo-more').style.fontVariantNumeric).toBe('tabular-nums');
+  });
+
   it('5 món: đúng 3 ảnh và ô "+2", danh sách vẫn đủ 5 mục có tên', () => {
     render(<ComboCard {...base} items={items(5)} onAddAll={() => {}} />);
     expect(screen.getAllByTestId('combo-thumb')).toHaveLength(3);

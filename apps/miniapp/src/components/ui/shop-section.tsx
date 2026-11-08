@@ -54,7 +54,7 @@ function comboErrorText(error: unknown): string {
   return fillCopy('shop.comboError');
 }
 
-function ComboSection({ collection, pct, preview }: { collection: ShopSectionProps['collection']; pct: number; preview: boolean }) {
+function ComboSection({ collection, pct, preview, onSeeAll }: { collection: ShopSectionProps['collection']; pct: number; preview: boolean; onSeeAll?: () => void }) {
   const qc = useQueryClient();
   const { notify } = useNotify();
   const inflight = useRef(false);
@@ -90,7 +90,7 @@ function ComboSection({ collection, pct, preview }: { collection: ShopSectionPro
   return (
     <Section id={`shop-col-${collection.id}`} label={collection.title}>
       <div data-testid="shop-combo">
-        <ComboCard title={collection.title} items={views} pct={pct} total={total} comboTotal={comboTotal} onAddAll={onAddAll} busy={mutation.isPending} />
+        <ComboCard title={collection.title} items={views} pct={pct} total={total} comboTotal={comboTotal} onAddAll={onAddAll} busy={mutation.isPending} onSeeItems={onSeeAll} />
       </div>
     </Section>
   );
@@ -108,7 +108,7 @@ export function ShopSection({ collection, showBrand, onSeeAll, preview = false }
   const view = collectionView(collection);
   const distinct = new Set(collection.items.map((it) => it.product.id)).size;
   if (view.layout === 'combo' && view.comboPct !== null && distinct >= 2) {
-    return <ComboSection collection={collection} pct={view.comboPct} preview={preview} />;
+    return <ComboSection collection={collection} pct={view.comboPct} preview={preview} onSeeAll={onSeeAll} />;
   }
 
   const layout = view.layout === 'combo' ? 'line' : view.layout;

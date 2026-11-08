@@ -90,7 +90,7 @@ export function ComboCard({ title, items, pct, total, comboTotal, onAddAll, busy
             <span style={PLUS}>+</span>
             <span
               data-testid="combo-more"
-              style={{ flex: '0 0 auto', width: THUMB, height: THUMB, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--radius-media)', background: 'var(--color-bg-chip)', color: 'var(--color-text-secondary)', fontWeight: 700, fontSize: 'var(--type-body-md-size)' }}
+              style={{ flex: '0 0 auto', width: THUMB, height: THUMB, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--radius-media)', background: 'var(--color-bg-chip)', color: 'var(--color-text-secondary)', fontWeight: 700, fontSize: 'var(--type-body-md-size)', fontVariantNumeric: 'tabular-nums' }}
             >
               {fillCopy('combo.more', { n: extra })}
             </span>
@@ -115,7 +115,7 @@ export function ComboCard({ title, items, pct, total, comboTotal, onAddAll, busy
         <PriceTag value={comboTotal} compareAt={soldOut ? undefined : total} size="md" tone={saving > 0 && !soldOut ? 'deal' : 'default'} />
       </div>
       {saving > 0 && !soldOut && (
-        <div style={{ marginTop: 2, fontSize: 'var(--type-caption-size)', lineHeight: 'var(--type-caption-lh)', fontWeight: 600, color: 'var(--color-text-price-deal)' }}>
+        <div style={{ marginTop: 2, fontSize: 'var(--type-caption-size)', lineHeight: 'var(--type-caption-lh)', fontWeight: 600, color: 'var(--color-text-price-deal)', fontVariantNumeric: 'tabular-nums' }}>
           {fillCopy('combo.save', { save: vnd(saving) })}
         </div>
       )}

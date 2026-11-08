@@ -32,6 +32,13 @@ describe('ComboCard (web)', () => {
     expect(onAddAll).toHaveBeenCalledTimes(1);
   });
 
+  it('Tiết kiệm và ô "+n" dùng số đều (tabular-nums) như giá', () => {
+    mount(<ComboCard {...base} items={items(5)} onAddAll={() => {}} />);
+    const save = Array.from(document.querySelectorAll<HTMLElement>('div')).find((e) => e.textContent === 'Tiết kiệm 36.700đ' && e.children.length === 0)!;
+    expect(save.style.fontVariantNumeric).toBe('tabular-nums');
+    expect(q('combo-more')[0]!.style.fontVariantNumeric).toBe('tabular-nums');
+  });
+
   it('5 món: 3 ảnh và ô "+2", danh sách đủ 5 mục; 3 món: không ô "+n"', () => {
     const a = mount(<ComboCard {...base} items={items(5)} onAddAll={() => {}} />);
     expect(q('combo-thumb')).toHaveLength(3);

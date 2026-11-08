@@ -219,6 +219,27 @@ describe('ShopSection combo', () => {
     expect(screen.queryByText(/^Combo -\d+%$/)).toBeNull();
   });
 
+  it('onSeeAll: ComboCard có nút "Xem từng món", bấm gọi onSeeAll đúng một lần và không ghi giỏ', () => {
+    const onSeeAll = vi.fn();
+    wrap(<ShopSection collection={combo()} onSeeAll={onSeeAll} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Xem từng món' }));
+    expect(onSeeAll).toHaveBeenCalledTimes(1);
+    expect(mocks.addAll).not.toHaveBeenCalled();
+  });
+
+  it('onSeeAll: "Combo tạm hết" vẫn có "Xem từng món" để chọn món còn hàng', () => {
+    const onSeeAll = vi.fn();
+    wrap(<ShopSection collection={combo({ items: [item(1), item(2, { inStock: false }), item(3)] })} onSeeAll={onSeeAll} />);
+    expect(screen.getByRole('button', { name: 'Combo tạm hết: Combo giặt' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Xem từng món' }));
+    expect(onSeeAll).toHaveBeenCalledTimes(1);
+  });
+
+  it('không truyền onSeeAll: combo không có nút "Xem từng món"', () => {
+    wrap(<ShopSection collection={combo()} />);
+    expect(screen.queryByRole('button', { name: 'Xem từng món' })).toBeNull();
+  });
+
   it('combo không đủ hai sản phẩm khác nhau, hoặc không có % giảm, thì không phải combo: rơi về dòng', () => {
     const a = wrap(<ShopSection collection={combo({ items: [item(1), item(1)] })} />);
     expect(screen.queryByTestId('shop-combo')).toBeNull();
