@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({ navigate: vi.fn() }));
 vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<typeof ZmpUi>()), useNavigate: () => mocks.navigate }));
 vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
 
+import { haptic } from '../../utils/haptic';
 import { SectionHeader } from './section-header';
 
 beforeEach(() => vi.clearAllMocks());
@@ -38,6 +39,52 @@ describe('SectionHeader', () => {
     fireEvent.click(btn);
     expect(onPress).toHaveBeenCalledTimes(1);
     expect(mocks.navigate).not.toHaveBeenCalled();
+  });
+
+  it('action.onPress khoá (disabled hoặc busy): nút disabled, mờ, con trỏ not-allowed; busy thêm aria-busy; bấm không gọi onPress và không rung', () => {
+    const onPress = vi.fn();
+    const action = { label: 'Thêm lại tất cả', spoken: 'Thêm lại tất cả 3 món', onPress };
+    const { rerender } = render(<SectionHeader title="Mua lại" action={{ ...action, disabled: true }} />);
+    let btn = screen.getByRole('button', { name: 'Thêm lại tất cả 3 món' });
+    expect(btn).toBeDisabled();
+    expect(btn).not.toHaveAttribute('aria-busy');
+    expect(btn.style.opacity).toBe('0.5');
+    expect(btn.style.cursor).toBe('not-allowed');
+    fireEvent.click(btn);
+    rerender(<SectionHeader title="Mua lại" action={{ ...action, busy: true }} />);
+    btn = screen.getByRole('button', { name: 'Thêm lại tất cả 3 món' });
+    expect(btn).toBeDisabled();
+    expect(btn).toHaveAttribute('aria-busy', 'true');
+    expect(btn.style.opacity).toBe('0.5');
+    expect(btn.style.cursor).toBe('not-allowed');
+    fireEvent.click(btn);
+    expect(onPress).not.toHaveBeenCalled();
+    expect(haptic).not.toHaveBeenCalled();
+  });
+
+  it('action.onPress không khoá (disabled/busy tắt): nút mở, không aria-busy, con trỏ pointer, bấm rung nhẹ và gọi onPress', () => {
+    const onPress = vi.fn();
+    render(<SectionHeader title="Mua lại" action={{ label: 'Thêm lại tất cả', onPress, disabled: false, busy: false }} />);
+    const btn = screen.getByRole('button');
+    expect(btn).toBeEnabled();
+    expect(btn).not.toHaveAttribute('aria-busy');
+    expect(btn.style.opacity).toBe('');
+    expect(btn.style.cursor).toBe('pointer');
+    fireEvent.click(btn);
+    expect(onPress).toHaveBeenCalledTimes(1);
+    expect(haptic).toHaveBeenCalledWith('light');
+  });
+
+  it('action.to (điều hướng): không bao giờ khoá — không disabled, không aria-busy, không mờ; bấm rung nhẹ và điều hướng', () => {
+    render(<SectionHeader title="Giờ vàng" action={{ to: '/flash-sale' }} />);
+    const btn = screen.getByRole('button', { name: 'Xem tất cả Giờ vàng' });
+    expect(btn).toBeEnabled();
+    expect(btn).not.toHaveAttribute('aria-busy');
+    expect(btn.style.opacity).toBe('');
+    expect(btn.style.cursor).toBe('pointer');
+    fireEvent.click(btn);
+    expect(haptic).toHaveBeenCalledWith('light');
+    expect(mocks.navigate).toHaveBeenCalledWith('/flash-sale');
   });
 
   it('icon theo tên hoặc truyền thẳng LucideIcon, luôn aria-hidden', () => {

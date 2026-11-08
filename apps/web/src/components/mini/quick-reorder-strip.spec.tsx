@@ -66,6 +66,8 @@ describe('QuickReorderStrip (web)', () => {
     expect(adds(container)[1]!.disabled).toBe(true);
     expect(adds(container)[1]!.getAttribute('aria-busy')).toBeNull();
     click(adds(container)[1]!);
+    expect(addAll(container).disabled).toBe(true);
+    expect(addAll(container).getAttribute('aria-busy')).toBeNull();
     click(addAll(container));
     expect(onAdd).not.toHaveBeenCalled();
     expect(onAddAll).not.toHaveBeenCalled();
@@ -77,6 +79,8 @@ describe('QuickReorderStrip (web)', () => {
     const { container } = mount(<QuickReorderStrip items={ITEMS} busyAll onAdd={onAdd} onAddAll={onAddAll} onOpen={noop} />);
     expect(container.querySelector('[data-testid="quick-reorder"]')?.getAttribute('aria-busy')).toBe('true');
     for (const b of adds(container)) expect(b.disabled).toBe(true);
+    expect(addAll(container).disabled).toBe(true);
+    expect(addAll(container).getAttribute('aria-busy')).toBe('true');
     click(addAll(container));
     expect(onAddAll).not.toHaveBeenCalled();
   });

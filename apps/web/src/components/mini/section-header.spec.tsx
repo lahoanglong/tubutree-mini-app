@@ -78,6 +78,48 @@ describe('SectionHeader (web)', () => {
     btn.click();
     expect(onPress).toHaveBeenCalledTimes(1);
   });
+
+  it('action.onPress khoá (disabled hoặc busy): nút disabled, mờ, con trỏ not-allowed; busy thêm aria-busy; bấm không gọi onPress', () => {
+    const onPress = vi.fn();
+    const action = { label: 'Thêm lại tất cả', spoken: 'Thêm lại tất cả 3 món', onPress };
+    const a = mount(<SectionHeader title="Mua lại" action={{ ...action, disabled: true }} />);
+    let btn = q('button')! as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+    expect(btn.getAttribute('aria-busy')).toBeNull();
+    expect(btn.style.opacity).toBe('0.5');
+    expect(btn.style.cursor).toBe('not-allowed');
+    btn.click();
+    a.unmount();
+    mount(<SectionHeader title="Mua lại" action={{ ...action, busy: true }} />);
+    btn = q('button')! as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+    expect(btn.getAttribute('aria-busy')).toBe('true');
+    expect(btn.style.opacity).toBe('0.5');
+    expect(btn.style.cursor).toBe('not-allowed');
+    btn.click();
+    expect(onPress).not.toHaveBeenCalled();
+  });
+
+  it('action.onPress không khoá (disabled/busy tắt): nút mở, không aria-busy, con trỏ pointer, bấm gọi onPress', () => {
+    const onPress = vi.fn();
+    mount(<SectionHeader title="Mua lại" action={{ label: 'Thêm lại tất cả', onPress, disabled: false, busy: false }} />);
+    const btn = q('button')! as HTMLButtonElement;
+    expect(btn.disabled).toBe(false);
+    expect(btn.getAttribute('aria-busy')).toBeNull();
+    expect(btn.style.opacity).toBe('');
+    expect(btn.style.cursor).toBe('pointer');
+    btn.click();
+    expect(onPress).toHaveBeenCalledTimes(1);
+  });
+
+  it('action.to (liên kết): không bao giờ khoá — không aria-busy, không aria-disabled, không mờ', () => {
+    mount(<SectionHeader title="Giờ vàng" action={{ to: '/gio-vang' }} />);
+    const link = q('a')!;
+    expect(link.hasAttribute('aria-busy')).toBe(false);
+    expect(link.hasAttribute('aria-disabled')).toBe(false);
+    expect(link.style.opacity).toBe('');
+    expect(link.style.cursor).toBe('');
+  });
 });
 
 describe('Section (web)', () => {
