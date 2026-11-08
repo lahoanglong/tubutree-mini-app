@@ -1,5 +1,6 @@
-import { Fragment, useEffect, useId } from 'react';
+import { Fragment, useEffect, useId, useRef } from 'react';
 import { SlidersHorizontal } from 'lucide-react';
+import { tabKeyTarget } from '@tubutree/app-core/commerce/flash-slots';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { SR_ONLY } from './sr-only';
 import { useScrollHints } from './use-scroll-hints';
@@ -20,17 +21,21 @@ export interface SortBarProps {
   onChange: (value: string) => void;
   filterCount?: number;
   onFilter?: () => void;
+  /** Bảng lọc mà nút "Lọc" mở đang mở hay đóng; có truyền thì nút báo `aria-expanded` + `aria-haspopup="dialog"`. */
+  filterExpanded?: boolean;
   sticky?: boolean;
 }
 
 /**
  * Một hàng sắp xếp dính cao 44px (critique-shop BR-01) thay hàng chip + hàng "Bộ lọc" riêng. Mục đang chọn có gạch chân 2px vẽ bằng
  * bóng trong (không đổi kích thước nên hàng không nhảy). Nhóm nút bật/tắt `aria-pressed`, không phải tablist: đây là chọn kiểu sắp
- * xếp, không đổi nội dung của một tabpanel. Dính dưới ô tìm: nơi gọi đặt `--sort-bar-top`.
+ * xếp, không đổi nội dung của một tabpanel. Dính dưới ô tìm: nơi gọi đặt `--sort-bar-top`. Phím mũi tên, Home, End chọn và đưa tiêu
+ * điểm sang mục kế (như SlotTabs); tiêu điểm luôn đi theo phím, còn `onChange` chỉ gọi khi sang mục khác mục đang chọn (bấm lại "Giá" là đảo chiều).
  */
-export function SortBar({ value, options, onChange, filterCount, onFilter, sticky }: SortBarProps) {
+export function SortBar({ value, options, onChange, filterCount, onFilter, filterExpanded, sticky }: SortBarProps) {
   const hints = useScrollHints<HTMLDivElement>();
   const uid = useId();
+  const buttonRefs = useRef<(HTMLButtonElement | null)[]>([]);
   useEffect(() => {
     // Chỉ cuộn ngang trong hàng: scrollIntoView sẽ kéo cả trang tới thanh sắp xếp khi nó nằm dưới màn hình lúc mới vào.
     const row = hints.ref.current;
@@ -54,17 +59,30 @@ export function SortBar({ value, options, onChange, filterCount, onFilter, stick
       }}
     >
       <div {...hints} role="group" aria-label={fillCopy('sort.groupLabel')} className="scroll-x tubu-scroll-fade" style={{ display: 'flex', flex: '1 1 auto', minWidth: 0 }}>
-        {options.map((o) => {
+        {options.map((o, i) => {
           const on = o.value === value;
           return (
             <Fragment key={o.value}>
             <button
+              ref={(el) => {
+                buttonRefs.current[i] = el;
+              }}
               type="button"
               className="tubu-press"
               aria-pressed={on}
               aria-label={o.spoken}
               aria-describedby={o.hint ? `${uid}-hint-${o.value}` : undefined}
               onClick={() => onChange(o.value)}
+              onKeyDown={(e) => {
+                if (e.altKey || e.ctrlKey || e.metaKey) return;
+                const target = tabKeyTarget(e.key, i, options.length);
+                if (target === null) return;
+                e.preventDefault();
+                const next = options[target]!;
+                // Chọn lại mục đang chọn là đảo chiều ("Giá"): chỉ gọi onChange khi sang mục khác. `target !== i` chặn thêm lần gọi thứ hai khi `value` chưa kịp cập nhật (giữ phím End).
+                if (target !== i && next.value !== value) onChange(next.value);
+                buttonRefs.current[target]?.focus();
+              }}
               style={{
                 flex: '1 0 auto',
                 minHeight: 44,
@@ -98,6 +116,8 @@ export function SortBar({ value, options, onChange, filterCount, onFilter, stick
           type="button"
           className="tubu-press"
           aria-label={n > 0 ? fillCopy('sort.filterSpoken', { n }) : undefined}
+          aria-expanded={typeof filterExpanded === 'boolean' ? filterExpanded : undefined}
+          aria-haspopup={typeof filterExpanded === 'boolean' ? 'dialog' : undefined}
           onClick={onFilter}
           style={{
             flex: '0 0 auto',
