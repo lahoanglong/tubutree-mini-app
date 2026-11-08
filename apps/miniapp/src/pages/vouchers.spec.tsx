@@ -377,4 +377,24 @@ describe('VouchersPage (Mini)', () => {
     expect(await screen.findByText('Chưa có mã đã dùng hoặc hết hạn')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Tất cả' })).toBeNull();
   });
+
+  it('Mã của tôi, ví trống: nút "Nhận mã" nằm trong khung nội dung; bấm về tab Nhận mã và bỏ ?tab= khỏi URL', async () => {
+    renderAt('/vouchers?tab=mine');
+    expect(await screen.findByText('Bạn chưa có mã nào dùng được')).toBeInTheDocument();
+    const panel = within(screen.getByRole('tabpanel', { name: 'Mã của tôi' }));
+    fireEvent.click(panel.getByRole('button', { name: 'Nhận mã' }));
+    expect(screen.getByTestId('loc').textContent).toBe('/vouchers');
+    expect(await screen.findByText('Chào bạn mới')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Nhận mã' })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('Nhận mã và Đã dùng–hết hạn trống: khung nội dung không có nút nào', async () => {
+    responses['/coupons/collectable'] = [];
+    renderAt();
+    expect(await screen.findByText('Hôm nay chưa có mã mới')).toBeInTheDocument();
+    expect(within(screen.getByRole('tabpanel', { name: 'Nhận mã' })).queryByRole('button')).toBeNull();
+    pickTab('Đã dùng–hết hạn');
+    expect(await screen.findByText('Chưa có mã đã dùng hoặc hết hạn')).toBeInTheDocument();
+    expect(within(screen.getByRole('tabpanel', { name: 'Đã dùng–hết hạn' })).queryByRole('button')).toBeNull();
+  });
 });

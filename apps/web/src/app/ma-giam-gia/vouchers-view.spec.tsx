@@ -332,6 +332,33 @@ describe('VouchersView (web)', () => {
     expect(button('Tất cả')).toBeNull();
   });
 
+  it('Mã của tôi, ví trống: nút "Nhận mã" nằm trong khung nội dung; bấm về tab Nhận mã và bỏ ?tab= khỏi URL', async () => {
+    nav.search = 'tab=mine';
+    mount();
+    await flush();
+    expect(text()).toContain('Bạn chưa có mã nào dùng được');
+    const panel = document.querySelector<HTMLElement>('[role="tabpanel"][aria-label="Mã của tôi"]')!;
+    const cta = [...panel.querySelectorAll<HTMLButtonElement>('button')].filter((b) => b.textContent?.trim() === 'Nhận mã');
+    expect(cta).toHaveLength(1);
+    click(cta[0]!);
+    await flush();
+    expect(nav.replaces).toEqual(['/ma-giam-gia']);
+    expect(text()).toContain('Chào bạn mới');
+    expect(tab('Nhận mã')!.getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('Nhận mã và Đã dùng–hết hạn trống: khung nội dung không có nút nào', async () => {
+    responses['/coupons/collectable'] = [];
+    mount();
+    await flush();
+    expect(text()).toContain('Hôm nay chưa có mã mới');
+    expect(document.querySelector('[role="tabpanel"][aria-label="Nhận mã"] button')).toBeNull();
+    click(tab('Đã dùng–hết hạn'));
+    await flush();
+    expect(text()).toContain('Chưa có mã đã dùng hoặc hết hạn');
+    expect(document.querySelector('[role="tabpanel"][aria-label="Đã dùng–hết hạn"] button')).toBeNull();
+  });
+
   it('danh sách xếp lưới: một cột ở điện thoại, hai ở md, ba từ lg', async () => {
     mount();
     await flush();
