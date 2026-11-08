@@ -247,6 +247,73 @@ describe('VouchersView (web)', () => {
     expect(text()).toContain('Không có mã nào ở mục này');
   });
 
+  it('bộ lọc không có mã nào khớp: nút "Xem tất cả mã" trong khung nội dung đặt lại về Tất cả, hiện lại phiếu và trả focus về chip Tất cả', async () => {
+    responses['/coupons/collectable'] = [collectable('NEW10')];
+    mount();
+    await flush();
+    click(button('Miễn phí giao hàng'));
+    const panel = document.querySelector<HTMLElement>('[role="tabpanel"][aria-label="Nhận mã"]')!;
+    expect(panel.textContent).toContain('Không có mã nào ở mục này');
+    const cta = [...panel.querySelectorAll<HTMLButtonElement>('button')].filter((b) => b.textContent?.trim() === 'Xem tất cả mã');
+    expect(cta).toHaveLength(1);
+    click(cta[0]!);
+    await flush();
+    expect(text()).toContain('Giảm 30k');
+    expect(button('Tất cả')!.getAttribute('aria-pressed')).toBe('true');
+    expect(button('Xem tất cả mã')).toBeNull();
+    await vi.waitFor(() => expect(document.activeElement).toBe(button('Tất cả')));
+  });
+
+  it('Nhận mã trống thật và Mã của tôi trống không có nút "Xem tất cả mã" (chỉ khi bộ lọc làm rỗng danh sách có mã)', async () => {
+    responses['/coupons/collectable'] = [];
+    mount();
+    await flush();
+    expect(text()).toContain('Hôm nay chưa có mã mới');
+    expect(button('Xem tất cả mã')).toBeNull();
+    click(tab('Mã của tôi'));
+    await flush();
+    expect(text()).toContain('Bạn chưa có mã nào dùng được');
+    expect(button('Xem tất cả mã')).toBeNull();
+  });
+
+  it('Sắp hết hạn: mã đã dùng hết lượt cá nhân dù hạn còn trong 3 ngày không lọt vào chip; mã còn nhận được thì có', async () => {
+    responses['/coupons/collectable'] = [collectable('OPEN', { title: 'Mã còn nhận', endAt: iso(DAY) }), collectable('SPENT', { title: 'Mã đã dùng hết', endAt: iso(DAY) })];
+    responses['/coupons/collectable/mine'] = { claimed: ['SPENT'], newCustomerOnly: [] };
+    mount();
+    await flush();
+    expect(text()).toContain('Mã còn nhận');
+    expect(text()).toContain('Mã đã dùng hết');
+    click(button('Sắp hết hạn'));
+    expect(text()).toContain('Mã còn nhận');
+    expect(text()).not.toContain('Mã đã dùng hết');
+  });
+
+  it('nhãn hạn trên phiếu: màu cảnh báo chỉ cho mã còn nhận được; mã chỉ dành khách mới (không đủ điều kiện) hết hạn trong 3 ngày vẫn màu thường', async () => {
+    responses['/coupons/collectable'] = [collectable('OPEN', { title: 'Mã còn nhận', endAt: iso(DAY) }), collectable('FIRST', { title: 'Mã khách mới', newCustomerOnly: true, endAt: iso(DAY) })];
+    responses['/coupons/collectable/mine'] = { claimed: [], newCustomerOnly: ['FIRST'] };
+    mount();
+    await flush();
+    const expiryStyle = (title: string) => {
+      const ticket = [...document.querySelectorAll<HTMLElement>('[role="group"]')].find((g) => g.textContent?.includes(title));
+      return ticket?.querySelector('[data-testid="voucher-expiry"]')?.getAttribute('style') ?? '';
+    };
+    expect(expiryStyle('Mã còn nhận')).toContain('--color-status-warning-fg');
+    expect(expiryStyle('Mã khách mới')).toContain('--color-text-tertiary');
+  });
+
+  it('Đã dùng–hết hạn: không có chip Sắp hết hạn vì mọi dòng đều đã đóng', async () => {
+    responses['/me/coupons/history'] = [
+      { code: 'USED1', title: null, type: 'AMOUNT', value: 20_000, minOrder: null, maxDiscount: null, endAt: iso(DAY), state: 'used', usedAt: iso(-3600_000) },
+      { code: 'OLD1', title: null, type: 'FREESHIP', value: 0, minOrder: null, maxDiscount: null, endAt: iso(-2 * DAY), state: 'expired', usedAt: null },
+    ];
+    nav.search = 'tab=history';
+    mount();
+    await flush();
+    expect(text()).toContain('Đã dùng');
+    expect(button('Tất cả')).not.toBeNull();
+    expect(button('Sắp hết hạn')).toBeNull();
+  });
+
   it('đổi tab ghi ?tab= bằng replace, về Nhận mã thì bỏ tham số, và đặt lại bộ lọc', async () => {
     responses['/me/coupons'] = [wallet('OWN')];
     mount();

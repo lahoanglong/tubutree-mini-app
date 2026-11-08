@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { CollectableCouponDTO, CollectableMineDTO } from '../api/coupon-collect';
 import type { CouponDTO, CouponHistoryDTO } from '../api/loyalty';
 import { voucherView } from './voucher';
-import { MINE_PREVIEW_MAX, VOUCHER_TABS, collectRows, filterVouchers, historyRows, mineRows, minePreview, voucherFilters, walletCodeSet } from './voucher-center';
+import { MINE_PREVIEW_MAX, VOUCHER_TABS, collectRows, filterVouchers, historyRows, isVoucherRowExpiring, mineRows, minePreview, voucherFilters, walletCodeSet } from './voucher-center';
 
 const NOW = Date.parse('2026-11-01T05:00:00Z');
 const D = 86_400_000;
@@ -300,6 +300,41 @@ describe('voucherFilters', () => {
       'expiring',
     ]);
   });
+
+  it('Sắp hết hạn ẩn khi mọi dòng đều đã dùng, hết hạn, hết lượt hoặc không đủ điều kiện (chip luôn rỗng); có một mã nhận hoặc dùng được thì hiện lại', () => {
+    const closed = [
+      ...historyRows([history('USED', { state: 'used', endAt: iso(NOW + D) }), history('OLD')], NOW),
+      ...collectRows([collectable('FULL', { usageLimit: 5, claimedCount: 5 }), collectable('FIRST', { newCustomerOnly: true })], new Set(), NOW, { claimed: [], newCustomerOnly: ['FIRST'] }),
+    ].map((r) => r.view);
+    expect(closed.map((v) => v.state).sort()).toEqual(['expired', 'ineligible', 'soldout', 'used']);
+    expect(voucherFilters(closed).map((f) => f.key)).toEqual(['all', 'discount', 'freeship']);
+    expect(voucherFilters([...closed, view('discount')]).map((f) => f.key)).toContain('expiring');
+    expect(voucherFilters(collectRows([collectable('NEW')], new Set(), NOW).map((r) => r.view)).map((f) => f.key)).toContain('expiring');
+  });
+});
+
+describe('isVoucherRowExpiring', () => {
+  const soon = NOW + D;
+  const row = (state: 'collectable' | 'saved' | 'used' | 'expired' | 'soldout' | 'ineligible', endAt = iso(soon)) => ({ view: { state }, coupon: { endAt } });
+
+  it('chỉ mã còn nhận hoặc dùng được mới sắp hết hạn', () => {
+    expect(isVoucherRowExpiring(row('collectable'), NOW)).toBe(true);
+    expect(isVoucherRowExpiring(row('saved'), NOW)).toBe(true);
+    for (const state of ['used', 'expired', 'soldout', 'ineligible'] as const) expect(isVoucherRowExpiring(row(state), NOW), state).toBe(false);
+  });
+
+  it('còn nhận hoặc dùng được mà hạn xa hoặc đã qua thì không', () => {
+    expect(isVoucherRowExpiring(row('saved', iso(NOW + 3 * D + 1000)), NOW)).toBe(false);
+    expect(isVoucherRowExpiring(row('saved', iso(NOW - 1)), NOW)).toBe(false);
+  });
+
+  it('thẻ dựng từ dữ liệu thật: mã đã dùng hết lượt cá nhân sắp hết hạn không được báo', () => {
+    const [spent] = collectRows([collectable('SPENT', { endAt: iso(soon) })], new Set(), NOW, { claimed: ['SPENT'], newCustomerOnly: [] });
+    expect(spent!.view.state).toBe('used');
+    expect(isVoucherRowExpiring(spent!, NOW)).toBe(false);
+    const [live] = collectRows([collectable('LIVE', { endAt: iso(soon) })], new Set(), NOW);
+    expect(isVoucherRowExpiring(live!, NOW)).toBe(true);
+  });
 });
 
 describe('filterVouchers', () => {
@@ -330,5 +365,32 @@ describe('filterVouchers', () => {
     expect(codes('expiring').sort()).toEqual(['EDGE', 'SHIP', 'SOON']);
     const withGone = [...rows, ...mineRows([wallet('GONE', { endAt: iso(NOW - 1) })], NOW)];
     expect(filterVouchers(withGone, 'expiring', NOW).map((r) => r.view.code)).not.toContain('GONE');
+  });
+  it('expiring: mã đã dùng, hết lượt hoặc không đủ điều kiện dù hạn còn trong 3 ngày thì không lọt vào; mã nhận được và mã đã lưu thì có', () => {
+    const soon = iso(NOW + D);
+    const claimRows = collectRows(
+      [
+        collectable('OPEN', { endAt: soon }),
+        collectable('FULL', { endAt: soon, usageLimit: 5, claimedCount: 5 }),
+        collectable('SPENT', { endAt: soon }),
+        collectable('FIRST', { endAt: soon, newCustomerOnly: true }),
+        collectable('HELD', { endAt: soon }),
+      ],
+      new Set(['HELD']),
+      NOW,
+      { claimed: ['SPENT'], newCustomerOnly: ['FIRST'] },
+    );
+    expect(claimRows.map((r) => [r.view.code, r.view.state]).sort()).toEqual([
+      ['FIRST', 'ineligible'],
+      ['FULL', 'soldout'],
+      ['HELD', 'saved'],
+      ['OPEN', 'collectable'],
+      ['SPENT', 'used'],
+    ]);
+    expect(filterVouchers(claimRows, 'expiring', NOW).map((r) => r.view.code).sort()).toEqual(['HELD', 'OPEN']);
+  });
+  it('expiring ở tab Đã dùng–hết hạn: không dòng nào lọt vào dù mã đã dùng còn hạn trong 3 ngày', () => {
+    const past = historyRows([history('USED', { state: 'used', endAt: iso(NOW + D) }), history('OLD', { endAt: iso(NOW + D) })], NOW);
+    expect(filterVouchers(past, 'expiring', NOW)).toEqual([]);
   });
 });

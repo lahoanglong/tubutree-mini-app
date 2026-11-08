@@ -1,11 +1,10 @@
 'use client';
 
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { collectRows, filterVouchers, historyRows, mineRows, voucherFilters, VOUCHER_TABS, walletCodeSet, type VoucherFilter, type VoucherRow, type VoucherTab } from '@tubutree/app-core/commerce/voucher-center';
+import { collectRows, filterVouchers, historyRows, isVoucherRowExpiring, mineRows, voucherFilters, VOUCHER_TABS, walletCodeSet, type VoucherFilter, type VoucherRow, type VoucherTab } from '@tubutree/app-core/commerce/voucher-center';
 import { homeCopy } from '@tubutree/app-core/home-copy';
-import { isCouponExpiring } from '@tubutree/app-core/home-layout';
 import { collectableCouponsQuery, collectableMineQuery, couponHistoryQuery, couponsQuery } from '@tubutree/app-core/queries/loyalty';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { Chip, EmptyState, SegmentedTabs, Skeleton, VoucherTicket } from '@/components/mini';
@@ -35,6 +34,7 @@ export default function VouchersView() {
   const search = params.toString();
   const returnTo = search ? `${BASE}?${search}` : BASE;
   const [filter, setFilter] = useState<VoucherFilter>('all');
+  const chipRowRef = useRef<HTMLDivElement>(null);
   const phase = useAuthPhase();
   const authed = phase === 'authenticated';
   const { claim, pendingCode, notice: claimNotice } = useClaimCoupon(returnTo);
@@ -65,6 +65,12 @@ export default function VouchersView() {
     if (key === tab) return;
     setFilter('all');
     router.replace(key === 'claim' ? BASE : `${BASE}?tab=${key}`);
+  };
+
+  const resetFilter = () => {
+    setFilter('all');
+    // Nút vừa bấm nằm trong khối trạng thái rỗng sắp biến mất: trả focus về chip Tất cả để người dùng bàn phím không rơi về đầu trang.
+    requestAnimationFrame(() => chipRowRef.current?.querySelector<HTMLButtonElement>('button[aria-pressed="true"]')?.focus());
   };
 
   const primaryFor = (row: VoucherRow) => {
@@ -104,12 +110,12 @@ export default function VouchersView() {
       />
     );
   } else if (shown.length === 0) {
-    body = <EmptyState variant="inline" art="leaf" heading={fillCopy('coupon.emptyFilterTitle')} />;
+    body = <EmptyState variant="inline" art="leaf" heading={fillCopy('coupon.emptyFilterTitle')} ctaLabel={fillCopy('coupon.emptyFilterCta')} onCta={resetFilter} />;
   } else {
     body = (
       <div data-testid="voucher-grid" className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
         {shown.map((row) => (
-          <VoucherTicket key={row.view.code} voucher={row.view} variant="ticket" primary={primaryFor(row)} reason={row.reason} expiring={isCouponExpiring(row.coupon, now)} />
+          <VoucherTicket key={row.view.code} voucher={row.view} variant="ticket" primary={primaryFor(row)} reason={row.reason} expiring={isVoucherRowExpiring(row, now)} />
         ))}
       </div>
     );
@@ -125,7 +131,7 @@ export default function VouchersView() {
           <SegmentedTabs scroll label={fillCopy('coupon.tabsLabel')} items={[...VOUCHER_TABS]} value={tab} onChange={pickTab} />
         </div>
         {!needsAccount && rows.length > 0 && (
-          <div className="scroll-x flex gap-2 pb-1 pt-2">
+          <div ref={chipRowRef} className="scroll-x flex gap-2 pb-1 pt-2">
             {filters.map((f) => (
               <Chip key={f.key} selected={f.key === activeFilter} onPress={() => setFilter(f.key)}>
                 {f.label}

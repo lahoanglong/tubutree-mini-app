@@ -300,6 +300,61 @@ describe('VouchersPage (Mini)', () => {
     expect(screen.getByText('Giảm 30k')).toBeInTheDocument();
   });
 
+  it('bộ lọc không có mã nào khớp: nút "Xem tất cả mã" trong khung nội dung đặt lại về Tất cả, hiện lại phiếu và trả focus về chip Tất cả', async () => {
+    responses['/coupons/collectable'] = [collectable('NEW10')];
+    renderAt();
+    await screen.findByText('Giảm 30k');
+    fireEvent.click(screen.getByRole('button', { name: 'Miễn phí giao hàng' }));
+    const panel = within(screen.getByRole('tabpanel', { name: 'Nhận mã' }));
+    expect(panel.getByText('Không có mã nào ở mục này')).toBeInTheDocument();
+    fireEvent.click(panel.getByRole('button', { name: 'Xem tất cả mã' }));
+    expect(screen.getByText('Giảm 30k')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Tất cả' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByRole('button', { name: 'Xem tất cả mã' })).toBeNull();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Tất cả' })).toHaveFocus());
+  });
+
+  it('Nhận mã trống thật và Mã của tôi trống không có nút "Xem tất cả mã" (chỉ khi bộ lọc làm rỗng danh sách có mã)', async () => {
+    responses['/coupons/collectable'] = [];
+    renderAt();
+    expect(await screen.findByText('Hôm nay chưa có mã mới')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Xem tất cả mã' })).toBeNull();
+    pickTab('Mã của tôi');
+    expect(await screen.findByText('Bạn chưa có mã nào dùng được')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Xem tất cả mã' })).toBeNull();
+  });
+
+  it('Sắp hết hạn: mã đã dùng hết lượt cá nhân dù hạn còn trong 3 ngày không lọt vào chip; mã còn nhận được thì có', async () => {
+    responses['/coupons/collectable'] = [collectable('OPEN', { title: 'Mã còn nhận', endAt: iso(DAY) }), collectable('SPENT', { title: 'Mã đã dùng hết', endAt: iso(DAY) })];
+    responses['/coupons/collectable/mine'] = { claimed: ['SPENT'], newCustomerOnly: [] };
+    renderAt();
+    await screen.findByText('Mã còn nhận');
+    expect(screen.getByText('Mã đã dùng hết')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Sắp hết hạn' }));
+    expect(screen.getByText('Mã còn nhận')).toBeInTheDocument();
+    expect(screen.queryByText('Mã đã dùng hết')).toBeNull();
+  });
+
+  it('nhãn hạn trên phiếu: màu cảnh báo chỉ cho mã còn nhận được; mã chỉ dành khách mới (không đủ điều kiện) hết hạn trong 3 ngày vẫn màu thường', async () => {
+    responses['/coupons/collectable'] = [collectable('OPEN', { title: 'Mã còn nhận', endAt: iso(DAY) }), collectable('FIRST', { title: 'Mã khách mới', newCustomerOnly: true, endAt: iso(DAY) })];
+    responses['/coupons/collectable/mine'] = { claimed: [], newCustomerOnly: ['FIRST'] };
+    renderAt();
+    const expiryStyle = async (title: string) => (within((await screen.findByText(title)).closest<HTMLElement>('[role="group"]')!).getByTestId('voucher-expiry').getAttribute('style') ?? '');
+    expect(await expiryStyle('Mã còn nhận')).toContain('--color-status-warning-fg');
+    expect(await expiryStyle('Mã khách mới')).toContain('--color-text-tertiary');
+  });
+
+  it('Đã dùng–hết hạn: không có chip Sắp hết hạn vì mọi dòng đều đã đóng', async () => {
+    responses['/me/coupons/history'] = [
+      { code: 'USED1', title: null, type: 'AMOUNT', value: 20_000, minOrder: null, maxDiscount: null, endAt: iso(DAY), state: 'used', usedAt: iso(-3600_000) },
+      { code: 'OLD1', title: null, type: 'FREESHIP', value: 0, minOrder: null, maxDiscount: null, endAt: iso(-2 * DAY), state: 'expired', usedAt: null },
+    ];
+    renderAt('/vouchers?tab=history');
+    expect(await screen.findByText('Đã dùng')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Tất cả' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Sắp hết hạn' })).toBeNull();
+  });
+
   it('đổi tab đặt lại bộ lọc và ghi ?tab= (replace) lên URL', async () => {
     responses['/me/coupons'] = [wallet('OWN')];
     renderAt();

@@ -266,6 +266,7 @@ export const SHOP_COPY: Record<string, string> = {
   'coupon.oneCodeHint': 'Mỗi đơn dùng 1 mã',
   'coupon.emptyHistoryTitle': 'Chưa có mã đã dùng hoặc hết hạn',
   'coupon.emptyFilterTitle': 'Không có mã nào ở mục này',
+  'coupon.emptyFilterCta': 'Xem tất cả mã',
   'coupon.loadError': 'Chưa tải được mã giảm giá',
   'coupon.filterAll': 'Tất cả',
   'coupon.filterDiscount': 'Giảm giá',

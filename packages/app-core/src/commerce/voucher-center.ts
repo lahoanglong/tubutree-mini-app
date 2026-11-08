@@ -31,11 +31,23 @@ const FILTER_LABEL: Record<VoucherFilter, string> = {
   expiring: fillCopy('coupon.filterExpiring'),
 };
 
-/** "Của shop" chỉ hiện khi tab đang có mã của gian hàng: API chưa trả phạm vi gian hàng nên thường không có, chip rỗng là nhiễu. */
+/** Mã còn việc để làm (nhận hoặc dùng): chỉ loại mã này mới có nghĩa là "sắp hết hạn"; mã đã dùng, hết lượt hay không đủ điều kiện thì hạn không còn quan trọng. */
+const isActionable = (v: Pick<VoucherView, 'state'>): boolean => v.state === 'collectable' || v.state === 'saved';
+
+/** Một dòng đáng báo "Sắp hết hạn": còn nhận hoặc dùng được và hạn trong ngưỡng. Dùng chung cho chip lọc và nhãn trên thẻ để hai nơi không lệch nhau. */
+export function isVoucherRowExpiring(row: { view: Pick<VoucherView, 'state'>; coupon: { endAt: string } }, now: number): boolean {
+  return isActionable(row.view) && isCouponExpiring(row.coupon, now);
+}
+
+/**
+ * "Của shop" chỉ hiện khi tab đang có mã của gian hàng: API chưa trả phạm vi gian hàng nên thường không có, chip rỗng là nhiễu.
+ * "Sắp hết hạn" chỉ hiện khi tab có ít nhất một mã còn nhận hoặc dùng được: tab toàn mã đã dùng, hết hạn hay hết lượt thì chip luôn rỗng.
+ * Tab chưa có dòng nào vẫn trả đủ chip (không có gì để so).
+ */
 export function voucherFilters(views: readonly VoucherView[]): { key: VoucherFilter; label: string }[] {
   const keys: VoucherFilter[] = ['all', 'discount', 'freeship'];
   if (views.some((v) => v.kind === 'shop')) keys.push('shop');
-  keys.push('expiring');
+  if (views.length === 0 || views.some(isActionable)) keys.push('expiring');
   return keys.map((key) => ({ key, label: FILTER_LABEL[key] }));
 }
 
@@ -44,7 +56,7 @@ export function filterVouchers<T extends { view: VoucherView; coupon: { endAt: s
     case 'all':
       return rows;
     case 'expiring':
-      return rows.filter((r) => isCouponExpiring(r.coupon, now));
+      return rows.filter((r) => isVoucherRowExpiring(r, now));
     default:
       return rows.filter((r) => r.view.kind === filter);
   }
