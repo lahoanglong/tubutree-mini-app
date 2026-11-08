@@ -143,7 +143,7 @@ export function OrderSuccess({
               </Text>
             ))}
           </div>
-          <IconButton icon={Copy} label={vi.success.copyCode} onPress={copyCode} />
+          <IconButton icon={Copy} label={vi.success.copyCodeLabel(codesText)} onPress={copyCode} />
         </div>
         <div style={{ borderTop: '1px solid var(--color-border-subtle)', marginTop: 12, paddingTop: 8 }}>
           <KeyValueRow
@@ -193,7 +193,7 @@ export function OrderSuccess({
                       {o.fulfillerName} giao
                     </Text>
                   </span>
-                  <Text variant="body-sm" as="span" style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>
+                  <Text variant="body-sm" as="span" numeric style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>
                     {formatVnd(o.total)}
                   </Text>
                   <Icon icon={ChevronRight} size="sm" tone="muted" />
