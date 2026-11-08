@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   push: vi.fn(),
   cancel: vi.fn(),
   corePost: vi.fn(),
+  getCart: vi.fn(),
   requestReturn: vi.fn(),
   estimate: vi.fn(),
   returns: [] as unknown[],
@@ -44,6 +45,8 @@ vi.mock('@/lib/api', async (importOriginal) => ({
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/shop-client')>()),
   fetchOrder: async () => mocks.order,
+  // Sheet Mua lại khoá nút thêm tới khi giỏ tải xong: không mock thì đi fetch thật tới API không có, báo lỗi sau một khoảng phụ thuộc tải máy.
+  getCart: () => mocks.getCart(),
   cancelOrder: mocks.cancel,
   requestReturn: mocks.requestReturn,
   estimateReturn: mocks.estimate,
@@ -119,6 +122,7 @@ beforeEach(() => {
   mocks.push.mockReset();
   mocks.cancel.mockReset().mockResolvedValue({ ...BASE, status: 'CANCELLED' });
   mocks.corePost.mockReset();
+  mocks.getCart.mockReset().mockResolvedValue({ items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 199000, itemCount: 0 });
   mocks.requestReturn.mockReset().mockResolvedValue({ id: 'r1' });
   mocks.estimate.mockReset().mockResolvedValue({ isFull: false, goods: 90000, shipping: 0, refund: 90000, moneyRefundable: true, pointsUsedBack: 0, lines: [] });
   mocks.returns = [];
@@ -385,15 +389,29 @@ describe('chi tiết đơn — mua lại (BUYERWEB-13)', () => {
   });
 
   const CART = { items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 199000, itemCount: 2 };
-  const sheetCta = () => Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find((b) => /^Thêm vào giỏ \(\d+\)$/.test(b.textContent ?? ''))!;
+  const sheetCta = () => Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find((b) => /^Thêm vào giỏ \(\d+\)$/.test(b.textContent ?? ''));
+  const SETTLE = { timeout: 5_000, interval: 20 };
+  /** Chờ tới khi điều kiện đúng thay vì đếm nhịp: giỏ và mutation xong sau số nhịp thay đổi theo tải máy, nên số nhịp cố định lúc đỏ lúc xanh. */
+  const settled = (check: () => void) =>
+    vi.waitFor(async () => {
+      await flush(1);
+      check();
+    }, SETTLE);
+  /** Mở sheet rồi chờ nút thêm hết khoá (giỏ tải xong): bấm khi nút còn khoá bị bỏ qua, nên không thể bấm ngay sau khi sheet hiện chữ. */
+  const openSheet = async (container: HTMLElement) => {
+    click(btn(container, 'Mua lại đơn này')!);
+    await settled(() => {
+      expect(sheetCta(), 'nút "Thêm vào giỏ (n)" của sheet').toBeDefined();
+      expect(sheetCta()!.disabled).toBe(false);
+    });
+  };
 
   it('"Mua lại đơn này" mở sheet chọn dòng (như Mini App), chưa gọi API', async () => {
     mocks.order = delivered;
     const { container } = await mount();
-    click(btn(container, 'Mua lại đơn này')!);
-    await flush(4);
+    await openSheet(container);
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Từ đơn TB-9');
-    expect(sheetCta().textContent).toBe('Thêm vào giỏ (2)');
+    expect(sheetCta()!.textContent).toBe('Thêm vào giỏ (2)');
     expect(mocks.corePost).not.toHaveBeenCalled();
   });
 
@@ -401,12 +419,12 @@ describe('chi tiết đơn — mua lại (BUYERWEB-13)', () => {
     mocks.order = delivered;
     mocks.corePost.mockResolvedValue({ cart: CART, results: [{ orderItemId: 'i1', status: 'added', addedQuantity: 2 }] });
     const { container } = await mount();
-    click(btn(container, 'Mua lại đơn này')!);
-    await flush(4);
-    click(sheetCta());
-    await flush(8);
-    expect(mocks.corePost).toHaveBeenCalledWith('/orders/TB-9/repurchase', { items: [{ orderItemId: 'i1', quantity: 2 }], addSource: 'repurchase' });
-    expect(mocks.push).toHaveBeenCalledWith('/gio-hang');
+    await openSheet(container);
+    click(sheetCta()!);
+    await settled(() => {
+      expect(mocks.corePost).toHaveBeenCalledWith('/orders/TB-9/repurchase', { items: [{ orderItemId: 'i1', quantity: 2 }], addSource: 'repurchase' });
+      expect(mocks.push).toHaveBeenCalledWith('/gio-hang');
+    });
   });
 
   it('mua lại: tải lại giỏ thay vì ghi giỏ không kèm gian hàng (không combo) vào cache', async () => {
@@ -415,14 +433,9 @@ describe('chi tiết đơn — mua lại (BUYERWEB-13)', () => {
     mocks.order = delivered;
     mocks.corePost.mockResolvedValue({ cart: CART, results: [{ orderItemId: 'i1', status: 'added', addedQuantity: 2 }] });
     const { container } = await mount();
-    click(btn(container, 'Mua lại đơn này')!);
-    await flush(4);
-    click(sheetCta());
-    // Chờ đến khi giỏ được tải lại thay vì đếm số nhịp: chạy cả bộ test song song trên CI chậm hơn, 8 nhịp cố định có lần chưa kịp.
-    await vi.waitFor(async () => {
-      await flush(1);
-      expect(invalidate).toHaveBeenCalledWith({ queryKey: ['cart'] });
-    }, { timeout: 5_000, interval: 20 });
+    await openSheet(container);
+    click(sheetCta()!);
+    await settled(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['cart'] }));
     expect(setData.mock.calls.some(([key]) => Array.isArray(key) && key[0] === 'cart')).toBe(false);
     invalidate.mockRestore();
     setData.mockRestore();
@@ -432,12 +445,10 @@ describe('chi tiết đơn — mua lại (BUYERWEB-13)', () => {
     mocks.order = delivered;
     mocks.corePost.mockResolvedValue({ cart: CART, results: [{ orderItemId: 'i1', status: 'skipped', reason: 'INACTIVE', addedQuantity: 0 }] });
     const { container } = await mount();
-    click(btn(container, 'Mua lại đơn này')!);
-    await flush(4);
-    click(sheetCta());
-    await flush(8);
+    await openSheet(container);
+    click(sheetCta()!);
+    await settled(() => expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Dầu gội (ngừng bán)'));
     expect(mocks.push).not.toHaveBeenCalled();
-    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Dầu gội (ngừng bán)');
     expect(document.querySelector('a[href="/gio-hang"]')).not.toBeNull();
   });
 });
