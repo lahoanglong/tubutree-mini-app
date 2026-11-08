@@ -732,7 +732,7 @@ describe('/san-pham/[slug] — bố cục máy tính và khối mới (P8)', () 
       expect(html).toContain('Chỉ khi mua cùng Dầu gội bồ kết');
     });
 
-    it('điện thoại: thứ tự khối như Mini App (Ưu đãi/Vận chuyển → Combo/Mua kèm → Đánh giá nhanh → Mở nhóm mua chung); máy tính giữ khối mua trước trong HTML', async () => {
+    it('điện thoại: thứ tự khối như Mini App (Ưu đãi/Vận chuyển → Cam kết → Combo/Mua kèm → Đánh giá nhanh → Mở nhóm mua chung); máy tính giữ khối mua trước trong HTML', async () => {
       api.bundles = BUNDLES;
       api.product = { ...PRODUCT, fulfiller: { kind: 'TUBU' }, fulfilment: 'TUBU' };
       const c = await mount();
@@ -744,7 +744,7 @@ describe('/san-pham/[slug] — bố cục máy tính và khối mới (P8)', () 
         .map((el) => ({ id: el.getAttribute('data-section')!, order: order(el) }))
         .sort((a, b) => a.order - b.order)
         .map((x) => x.id);
-      expect(visual).toEqual(['pdp-main', 'pdp-certs', 'pdp-subscribe', 'pdp-offers', 'pdp-bundles', 'pdp-quick-reviews', 'pdp-groupbuy']);
+      expect(visual).toEqual(['pdp-main', 'pdp-certs', 'pdp-subscribe', 'pdp-offers', 'pdp-trust', 'pdp-bundles', 'pdp-quick-reviews', 'pdp-groupbuy']);
       const add = c.querySelector('[data-testid="add-to-cart"]')!;
       const slots = c.querySelector('[data-testid="pdp-bundle-slots"]')!;
       const quick = c.querySelector('[data-section="pdp-quick-reviews"]')!;
@@ -812,5 +812,30 @@ describe('/san-pham/[slug] — đường kẻ dưới hàng Ưu đãi (divider) 
     expect(offers).not.toBeNull();
     expect(shipping).not.toBeNull();
     expect(hasLine(offers!)).toBe(true);
+  });
+});
+
+describe('/san-pham/[slug] — dải cam kết (W45A)', () => {
+  it('hàng Tubu giao: dải đứng sau khối mua (AddToCart) và trước dải câu chuyện/Combo, đủ ba trụ cột', async () => {
+    api.product = { ...PRODUCT, fulfiller: { kind: 'TUBU' }, fulfilment: 'TUBU' };
+    const c = await mount();
+    const slot = c.querySelector<HTMLElement>('[data-section="pdp-trust"]')!;
+    expect(slot).not.toBeNull();
+    expect(slot.className).toContain('tubu-pdp-order-7');
+    expect(slot.querySelectorAll('li')).toHaveLength(3);
+    const buy = c.querySelector('[data-testid="add-to-cart"]')!;
+    expect(buy.compareDocumentPosition(slot) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const bundles = c.querySelector('[data-section="pdp-bundles"]')!;
+    expect(slot.compareDocumentPosition(bundles) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it.each([
+    ['gian hàng tự giao', { kind: 'MERCHANT', name: 'Gốm Minh An', shippingFee: 30000, freeShipFrom: null }],
+    ['gian hàng tạm nghỉ', { kind: 'UNAVAILABLE', reason: 'STORE_PAUSED', name: 'Gốm Minh An', shippingFee: null, freeShipFrom: null }],
+  ])('%s: ô đặt dải rỗng (ẩn bằng :empty), không có dải cam kết', async (_n, fulfiller) => {
+    api.product = { ...PRODUCT, fulfilment: 'MERCHANT', fulfiller };
+    const c = await mount();
+    expect(c.querySelector('[data-testid="product-trust-strip"]')).toBeNull();
+    expect(c.querySelector('[data-section="pdp-trust"]')!.childNodes).toHaveLength(0);
   });
 });

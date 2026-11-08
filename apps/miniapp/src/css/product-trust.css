@@ -1,0 +1,84 @@
+/* Dải cam kết ở trang chi tiết (W45A, ProductTrustStrip). Số đo đặt ở đây (bánh cóc px của P17b chỉ đếm TSX); web dùng cùng số đo ở mini.css. */
+
+.tubu-trust {
+  box-sizing: border-box;
+  margin-top: var(--space-stack-sm);
+  padding: 16px;
+  background: var(--color-bg-surface);
+}
+
+.tubu-trust-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tubu-trust-list[data-count='2'] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.tubu-trust-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+}
+
+.tubu-trust-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin-bottom: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--color-bg-subtle);
+}
+
+.tubu-trust-title,
+.tubu-trust-sub {
+  margin: 0;
+  min-width: 0;
+  max-width: 100%;
+  font-size: var(--type-label-size);
+  line-height: var(--type-label-lh);
+  overflow-wrap: anywhere;
+}
+
+.tubu-trust-title {
+  color: var(--color-text-primary);
+  font-weight: 700;
+}
+
+.tubu-trust-sub {
+  color: var(--color-text-secondary);
+  font-weight: 400;
+}
+
+/* Cả dòng là vùng chạm: cao tối thiểu 44, rộng hết khối. */
+.tubu-trust-cta {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  margin: 12px 0 0;
+  padding: 0;
+  border: 0;
+  border-top: 1px solid var(--color-border-subtle);
+  background: none;
+  color: var(--color-text-brand);
+  font: inherit;
+  font-size: var(--type-caption-size);
+  line-height: var(--type-caption-lh);
+  font-weight: var(--type-label-weight);
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}

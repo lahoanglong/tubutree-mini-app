@@ -20,6 +20,8 @@ import { FreeShippingProgressBar } from '../components/ui/free-shipping-progress
 import { FreeshipAddonRail } from '../components/ui/freeship-addon-rail';
 import { FrequentlyBoughtTogether } from '../components/ui/frequently-bought-together';
 import { QuickReorderStrip } from '../components/ui/quick-reorder-strip';
+import { ProductTrustStrip } from '../components/ui/product-trust-strip';
+import { productTrustStrip } from '@tubutree/app-core/commerce/product-trust-strip';
 import { frequentlyBoughtSummary, type FbtLine } from '@tubutree/app-core/commerce/frequently-bought';
 import type { QuickReorderItem } from '@tubutree/app-core/commerce/quick-reorder';
 
@@ -356,6 +358,15 @@ export default function DsGalleryPage() {
           </Variant>
           <Variant label="đang thêm vào giỏ">
             <FrequentlyBoughtTogether lines={GALLERY_FBT_LINES} picked={GALLERY_FBT_ALL} summary={frequentlyBoughtSummary(GALLERY_FBT_LINES, GALLERY_FBT_ALL)} busy onToggle={() => undefined} onAdd={() => undefined} />
+          </Variant>
+        </Group>
+
+        <Group name="product-trust-strip">
+          <Variant label="đủ ba trụ cột + xem chính sách đổi trả">
+            <ProductTrustStrip view={productTrustStrip({ fulfillerKind: 'TUBU', returnWindowDays: 7 })} onOpenPolicy={() => undefined} />
+          </Variant>
+          <Variant label="đổi trả tắt: hai trụ cột + xem chính sách vận chuyển">
+            <ProductTrustStrip view={productTrustStrip({ fulfillerKind: 'TUBU', returnWindowDays: 0 })} onOpenPolicy={() => undefined} />
           </Variant>
         </Group>
       </div>

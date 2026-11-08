@@ -377,6 +377,21 @@
       ]
     },
     {
+      "name": "ProductTrustStrip",
+      "miniapp": "apps/miniapp/src/components/ui/product-trust-strip.tsx",
+      "web": "apps/web/src/components/mini/product-trust-strip.tsx",
+      "props": "ProductTrustStripProps",
+      "propsDiff": {
+        "miniOnly": [
+          "onOpenPolicy"
+        ],
+        "reason": "Mini mở chính sách ngay trong app bằng PolicySheet (không rời trang sản phẩm); web có lối xem là liên kết thật tới /chinh-sach/[loai] nên không cần handler"
+      },
+      "screens": [
+        "/product/:slug"
+      ]
+    },
+    {
       "name": "QuickReorderStrip",
       "miniapp": "apps/miniapp/src/components/ui/quick-reorder-strip.tsx",
       "web": "apps/web/src/components/mini/quick-reorder-strip.tsx",

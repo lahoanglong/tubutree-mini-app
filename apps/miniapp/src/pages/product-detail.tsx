@@ -19,6 +19,7 @@ import {
 } from '../services/shop-api';
 import { getErrorMessage, getLoadErrorMessage, isNotFoundError } from '../services/api';
 import { getCoupons } from '../services/account-api';
+import type { LegalSlug } from '../services/legal-api';
 import { createGroupBuy } from '../services/groupbuy-api';
 import { groupBuyPitch } from '../utils/group-buy-copy';
 import { useAuthStore } from '../store/auth';
@@ -51,6 +52,7 @@ import { couponUseCopy, couponUseOutcome } from '@tubutree/app-core/coupon-use';
 import { addOneVariationPricing } from '@tubutree/app-core/commerce/add-one-pricing';
 import { buildFrequentlyBoughtBundle, pickFbtPartners } from '@tubutree/app-core/commerce/frequently-bought';
 import { pdpShelves } from '@tubutree/app-core/commerce/pdp-view';
+import { productTrustStrip } from '@tubutree/app-core/commerce/product-trust-strip';
 import { formatRating } from '@tubutree/app-core/commerce/card-meta';
 import { offerAmount } from '@tubutree/app-core/commerce/voucher-picker';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
@@ -86,6 +88,7 @@ import { useSizedImage } from '../utils/image-src';
 import { FlashPriceBar } from '../components/product/flash-price-bar';
 import { PdpBundles } from '../components/product/pdp-bundles';
 import { PdpFbt, useFbtCartProductIds } from '../components/product/pdp-fbt';
+import { ProductTrustStrip } from '../components/ui/product-trust-strip';
 import { VariationChip } from '../components/product/variation-chip';
 import { useBundlesWait } from '../components/product/use-product-bundles';
 import { PdpOffersSheet } from '../components/product/pdp-offers-sheet';
@@ -159,7 +162,8 @@ export default function ProductDetailPage() {
   const addedTimer = useRef<ReturnType<typeof setTimeout>>();
   useEffect(() => () => clearTimeout(addedTimer.current), []);
   const [showSubscribe, setShowSubscribe] = useState(false);
-  const [shippingPolicyOpen, setShippingPolicyOpen] = useState(false);
+  // Chính sách mở ngay trong trang: nút Vận chuyển ở Cam kết Tubu và lối xem chính sách của dải cam kết dùng chung một sheet.
+  const [policySlug, setPolicySlug] = useState<LegalSlug | null>(null);
   const [sheetMode, setSheetMode] = useState<VariationSheetMode | null>(null);
   const [showContentKit, setShowContentKit] = useState(false);
   const [offersOpen, setOffersOpen] = useState(false);
@@ -882,6 +886,9 @@ export default function ProductDetailPage() {
         )}
       </div>
 
+      {/* Dải cam kết ngay dưới khối mua nhanh (chip, Số lượng, lưu ý Giờ vàng), trước dải câu chuyện; web điện thoại cùng thứ tự (order 7, đứng trước dải câu chuyện). */}
+      <ProductTrustStrip view={productTrustStrip({ fulfillerKind: p.fulfiller?.kind, returnWindowDays: config.returnWindowDays })} onOpenPolicy={setPolicySlug} />
+
       {/* Dải câu chuyện ngay dưới khối mua nhanh (chip, Số lượng), trước Combo và Đánh giá nhanh, như đặc tả; web điện thoại cùng thứ tự (order 7). */}
       {hasStory && (
         <Suspense fallback={null}>
@@ -1026,7 +1033,7 @@ export default function ProductDetailPage() {
             </Box>
           ))}
         </Box>
-        <Button variant="ghost" onPress={() => setShippingPolicyOpen(true)} style={{ minWidth: 0 }}>
+        <Button variant="ghost" onPress={() => setPolicySlug('van-chuyen')} style={{ minWidth: 0 }}>
           {POLICY_TITLES['van-chuyen']}
         </Button>
         {/* Chat OA ở đây, không ở thanh CTA dính: thêm nút 48px vào thanh làm hai nút chính hẹp lại ở màn 360px. */}
@@ -1105,7 +1112,7 @@ export default function ProductDetailPage() {
         />
       )}
 
-      <PolicySheet slug={shippingPolicyOpen ? 'van-chuyen' : null} onClose={() => setShippingPolicyOpen(false)} />
+      <PolicySheet slug={policySlug} onClose={() => setPolicySlug(null)} />
 
       <PdpOffersSheet open={offersOpen} onClose={() => setOffersOpen(false)} coupons={pdpCoupons} amount={offerAmount(price, quantity, priceView.isFlash)} onCopy={copyCoupon} />
 

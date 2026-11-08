@@ -559,6 +559,20 @@ export const SHOP_COPY: Record<string, string> = {
   'fbt.pickHint': 'Chọn món muốn thêm',
   'fbt.added': 'Đã thêm {n} món vào giỏ',
   'fbt.error': 'Chưa thêm được vào giỏ. Bạn thử lại nhé.',
+
+  // Dải cam kết ở trang chi tiết (W45A, ProductTrustStrip): ba trụ cột ngắn và một lối xem chính sách. Chỉ nói điều Tubu làm được cho mọi sản phẩm
+  // Tubu giao; không hứa chứng nhận hữu cơ hay giờ giao (chưa có dữ liệu trong hệ thống).
+  'trust.groupAria': 'Cam kết của Tubu Tree khi mua sản phẩm này',
+  'trust.origin.title': 'Nguồn gốc rõ ràng',
+  'trust.origin.sub': 'Chọn lọc kỹ từng thương hiệu',
+  'trust.delivery.title': 'Giao hàng cẩn thận',
+  'trust.delivery.sub': 'Đóng gói kỹ trước khi giao',
+  'trust.returns.title': 'Đổi trả dễ dàng',
+  'trust.returns.sub': 'Hỗ trợ nhanh nếu sản phẩm lỗi',
+  'trust.cta.returns': 'Xem chính sách đổi trả',
+  'trust.cta.shipping': 'Xem chính sách vận chuyển',
+  'trust.ctaAria.returns': 'Xem chính sách đổi trả của Tubu Tree',
+  'trust.ctaAria.shipping': 'Xem chính sách vận chuyển của Tubu Tree',
 };
 
 /** Thuật ngữ không được xuất hiện trong chữ hiển thị cho khách; `use` là chữ thay thế. Bảng gốc: ux-copy mục D2 và thiết kế §4 Q5. */

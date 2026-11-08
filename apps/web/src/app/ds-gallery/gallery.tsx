@@ -9,7 +9,8 @@ import { GALLERY_STORY_PRODUCTS, GALLERY_COMBO_ITEMS, GALLERY_PICKER_ROWS, GALLE
 import { cartComboBlocks } from '@tubutree/app-core/commerce/cart-combo';
 import { CartComboBlock } from '@/components/cart-combo-block';
 import type { CartVoucherHint } from '@tubutree/app-core/commerce/cart-voucher-hint';
-import { BannerCarousel, CartVoucherHintStrip, ComboCard, Countdown, FlashSoldBar, Heading, FreeShippingProgressBar, FreeshipAddonRail, FrequentlyBoughtTogether, ProductStoryShowcase, QuickReorderStrip, Section, SectionHeader, SortBar, StoryReelStrip, Text, VoucherPicker, VoucherTicket } from '@/components/mini';
+import { productTrustStrip } from '@tubutree/app-core/commerce/product-trust-strip';
+import { BannerCarousel, CartVoucherHintStrip, ComboCard, Countdown, FlashSoldBar, Heading, FreeShippingProgressBar, FreeshipAddonRail, FrequentlyBoughtTogether, ProductStoryShowcase, ProductTrustStrip, QuickReorderStrip, Section, SectionHeader, SortBar, StoryReelStrip, Text, VoucherPicker, VoucherTicket } from '@/components/mini';
 
 const GALLERY_REEL_ITEMS = [
   { slug: 'rau-muong', name: 'Rau muống', thumbnail: null, seen: false },
@@ -374,6 +375,15 @@ export function DsGallery() {
           </Variant>
           <Variant label="đang thêm">
             <FrequentlyBoughtTogether lines={GALLERY_FBT_LINES} picked={GALLERY_FBT_ALL} summary={frequentlyBoughtSummary(GALLERY_FBT_LINES, GALLERY_FBT_ALL)} busy onToggle={noop} onAdd={noop} />
+          </Variant>
+        </Group>
+
+        <Group name="product-trust-strip">
+          <Variant label="đủ ba trụ cột + xem chính sách đổi trả">
+            <ProductTrustStrip view={productTrustStrip({ fulfillerKind: 'TUBU', returnWindowDays: 7 })} />
+          </Variant>
+          <Variant label="đổi trả tắt: hai trụ cột + xem chính sách vận chuyển">
+            <ProductTrustStrip view={productTrustStrip({ fulfillerKind: 'TUBU', returnWindowDays: 0 })} />
           </Variant>
         </Group>
       </div>
