@@ -9,7 +9,7 @@ import { useRovingGroup } from '@/lib/use-roving-group';
 export interface SegmentedTabItem {
   key: string;
   label: string;
-  count?: number;
+  count?: number | string;
 }
 
 export interface SegmentedTabsProps {
@@ -57,7 +57,7 @@ export function SegmentedTabs({ items, value, onChange, scroll, label }: Segment
             }`}
           >
             {it.label}
-            {typeof it.count === 'number' && <span className="ml-1 opacity-75">{it.count}</span>}
+            {(typeof it.count === 'number' || typeof it.count === 'string') && <span className="ml-1 tabular-nums opacity-75">{it.count}</span>}
           </button>
         );
       })}
