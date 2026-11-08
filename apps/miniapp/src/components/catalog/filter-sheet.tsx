@@ -40,10 +40,15 @@ export interface FilterSheetProps {
  */
 export function FilterSheet({ open, onClose, state, brands, onApply }: FilterSheetProps) {
   const [draft, setDraft] = useState<FilterDraft>(() => draftFromState(state));
+  // Chống chạm đúp ĐỒNG BỘ: cùng một nháp (cùng tham chiếu) chỉ áp dụng một lần; sửa nháp → tham chiếu mới.
+  const appliedDraft = useRef<FilterDraft | null>(null);
   const [wasOpen, setWasOpen] = useState(open);
   if (open !== wasOpen) {
     setWasOpen(open);
-    if (open) setDraft(draftFromState(state));
+    if (open) {
+      setDraft(draftFromState(state));
+      appliedDraft.current = null;
+    }
   }
 
   // Khoá đếm theo URL chuẩn của nháp: mỗi nháp một khoá → phản hồi trễ của nháp cũ rơi vào khoá cũ,
@@ -58,13 +63,14 @@ export function FilterSheet({ open, onClose, state, brands, onApply }: FilterShe
     staleTime: 30_000,
     retry: false,
   });
-  const label = applyLabel({ settled: countKey === previewKey, data: count.data, isError: count.isError });
+  const settled = countKey === previewKey;
+  const label = applyLabel({ settled, data: count.data, isError: count.isError });
+  // Nút KHÔNG bao giờ disabled (Ruling 18); chỉ báo cho trình đọc màn hình biết nhãn "Xem kết quả" là đang đếm.
+  const countBusy = !settled || (count.isLoading && !count.isError);
 
   const toggleBrand = (b: string) =>
     setDraft((d) => ({ ...d, brands: d.brands.includes(b) ? d.brands.filter((x) => x !== b) : [...d.brands, b] }));
 
-  // Chống chạm đúp ĐỒNG BỘ: cùng một nháp (cùng tham chiếu) chỉ áp dụng một lần; sửa nháp → tham chiếu mới.
-  const appliedDraft = useRef<FilterDraft | null>(null);
   const apply = () => {
     if (appliedDraft.current === draft) return;
     appliedDraft.current = draft;
@@ -86,7 +92,7 @@ export function FilterSheet({ open, onClose, state, brands, onApply }: FilterShe
           <Button variant="ghost" onPress={() => setDraft({ brands: [], inStock: false })} style={{ minWidth: 0 }}>
             {vi.browse.filter.reset}
           </Button>
-          <Button onPress={apply} style={{ minWidth: 0, flex: 1, fontVariantNumeric: 'tabular-nums' }}>
+          <Button onPress={apply} aria-busy={countBusy || undefined} style={{ minWidth: 0, flex: 1, fontVariantNumeric: 'tabular-nums' }}>
             {label}
           </Button>
         </div>

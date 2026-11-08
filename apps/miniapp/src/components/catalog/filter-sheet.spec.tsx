@@ -142,6 +142,52 @@ describe('FilterSheet', () => {
     expect(screen.queryByRole('button', { name: /999/ })).not.toBeInTheDocument();
   });
 
+  describe('aria-busy của nút áp dụng (nút không bao giờ disabled — Ruling 18)', () => {
+    it('đang tải số đếm lần đầu (khoá đã ổn định, chưa có dữ liệu) → aria-busy="true"; có số thì gỡ', async () => {
+      let resolveCount: (v: ReturnType<typeof page>) => void = () => undefined;
+      mocks.fetchCatalog.mockImplementation(() => new Promise((r) => { resolveCount = r; }));
+      renderSheet({ open: true });
+      const loading = await screen.findByRole('button', { name: 'Xem kết quả' });
+      expect(loading).toHaveAttribute('aria-busy', 'true');
+      expect(loading).not.toBeDisabled();
+      expect(loading).not.toHaveAttribute('aria-disabled');
+      resolveCount(page(4));
+      const ready = await screen.findByRole('button', { name: 'Xem 4 sản phẩm' }, { timeout: 2000 });
+      expect(ready).not.toHaveAttribute('aria-busy');
+    });
+
+    it('sửa nháp: khoá chưa ổn định (đang chờ debounce) → aria-busy="true" dù đang có số cũ; số mới về thì gỡ', async () => {
+      renderSheet({ open: true });
+      const ready = await screen.findByRole('button', { name: 'Xem 7 sản phẩm' }, { timeout: 2000 });
+      expect(ready).not.toHaveAttribute('aria-busy');
+      mocks.fetchCatalog.mockResolvedValue(page(3));
+      fireEvent.click(screen.getByRole('button', { name: 'Chỉ hiện còn hàng' }));
+      const waiting = screen.getByRole('button', { name: 'Xem kết quả' });
+      expect(waiting).toHaveAttribute('aria-busy', 'true');
+      expect(waiting).not.toBeDisabled();
+      expect(waiting).not.toHaveAttribute('aria-disabled');
+      const done = await screen.findByRole('button', { name: 'Xem 3 sản phẩm' }, { timeout: 2000 });
+      expect(done).not.toHaveAttribute('aria-busy');
+    });
+
+    it('đếm lỗi → "Áp dụng" không còn báo bận', async () => {
+      mocks.fetchCatalog.mockRejectedValue(new Error('boom'));
+      renderSheet({ open: true, state: { ...EMPTY_SEARCH_STATE, inStock: true } });
+      const failed = await screen.findByRole('button', { name: 'Áp dụng' }, { timeout: 2000 });
+      expect(failed).not.toHaveAttribute('aria-busy');
+    });
+  });
+
+  it('đóng rồi mở lại sau khi đã áp dụng → nháp mới áp dụng được lần nữa (chống chạm đúp được đặt lại)', async () => {
+    const p = renderSheet({ open: true });
+    fireEvent.click(await screen.findByRole('button', { name: 'Xem 7 sản phẩm' }, { timeout: 2000 }));
+    expect(p.onApply).toHaveBeenCalledTimes(1);
+    p.rerender({ open: false });
+    p.rerender({ open: true });
+    fireEvent.click(await screen.findByRole('button', { name: 'Xem 7 sản phẩm' }, { timeout: 2000 }));
+    expect(p.onApply).toHaveBeenCalledTimes(2);
+  });
+
   it('chạm đúp nút áp dụng → onApply chỉ một lần; sửa nháp rồi áp dụng lại thì gửi tiếp', async () => {
     const p = renderSheet({ open: true });
     const apply = await screen.findByRole('button', { name: 'Xem 7 sản phẩm' }, { timeout: 2000 });

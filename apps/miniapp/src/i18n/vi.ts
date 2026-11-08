@@ -450,6 +450,7 @@ export const vi = {
       price_desc: 'Giá giảm',
     },
     resultCount: (n: number) => `${formatNumber(n)} sản phẩm`,
+    resultList: 'Danh sách sản phẩm',
     filterButton: 'Bộ lọc',
     filterButtonCount: (n: number) => `Bộ lọc (${n})`,
     activeFilters: 'Đang lọc',
