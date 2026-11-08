@@ -20,7 +20,7 @@ const mount = (ui: React.ReactElement) => {
 const qa = (c: ParentNode, id: string) => c.querySelectorAll(`[data-testid="${id}"]`);
 
 beforeEach(() => {
-  mocks.config = { ...mocks.config, returnWindowDays: 7 };
+  mocks.config = { ...mocks.config, isLoaded: true, returnWindowDays: 7 };
 });
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
@@ -50,6 +50,22 @@ describe('PdpTrustStrip (web)', () => {
     await flush();
     expect(qa(container, 'product-trust-strip')).toHaveLength(0);
     expect(container.querySelector('[data-section="pdp-trust"]')!.childNodes).toHaveLength(0);
+  });
+
+  it('tải cấu hình ở trình duyệt lỗi (chưa có dữ liệu): giữ giá trị máy chủ, đổi trả tắt thì không hứa đổi trả', async () => {
+    mocks.config = { ...mocks.config, isLoaded: false, returnWindowDays: undefined };
+    const { container } = mount(<PdpTrustStrip fulfillerKind="TUBU" initialConfig={{ returnWindowDays: 0 } as never} />);
+    await flush();
+    expect(container.querySelectorAll('li')).toHaveLength(2);
+    expect(qa(container, 'trust-pillar-returns')).toHaveLength(0);
+    expect(container.querySelector('a[data-testid="product-trust-cta"]')!.getAttribute('href')).toBe('/chinh-sach/van-chuyen');
+  });
+
+  it('không có giá trị máy chủ lẫn trình duyệt (chưa biết): vẫn giữ trụ đổi trả, không điền số ngày', async () => {
+    mocks.config = { ...mocks.config, isLoaded: false, returnWindowDays: undefined };
+    const { container } = mount(<PdpTrustStrip fulfillerKind="TUBU" />);
+    await flush();
+    expect(container.querySelectorAll('li')).toHaveLength(3);
   });
 
   it('đổi trả tắt ở cấu hình (0 ngày): bỏ trụ đổi trả, liên kết sang chính sách vận chuyển', async () => {

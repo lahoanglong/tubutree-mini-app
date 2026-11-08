@@ -60,10 +60,12 @@ describe('ProductTrustStrip (web)', () => {
   describe('cùng số đo với Mini (apps/miniapp/src/css/product-trust.css)', () => {
     const webCss = readFileSync(resolve(__dirname, 'mini.css'), 'utf8');
     const miniCss = readFileSync(resolve(__dirname, '../../../../miniapp/src/css/product-trust.css'), 'utf8');
+    // Gộp khoảng trắng trước khi khớp để luật nhóm viết nhiều dòng (`.a,\n.b {`) cũng so được; ký tự đứng trước (`}` hoặc `/` của chú thích) chặn khớp nhầm đuôi của selector dài hơn.
+    const flat = (css: string) => css.replace(/\s+/g, ' ');
     const norm = (css: string, sel: string) =>
-      (new RegExp(`${sel.replace(/[.[\]()']/g, '\\$&')}\\s*\\{([^}]*)\\}`).exec(css)?.[1] ?? '').replace(/\s+/g, ' ').trim();
+      (new RegExp(`(?:^|[}/]) ?${sel.replace(/[.[\]()']/g, '\\$&')} \\{([^}]*)\\}`).exec(flat(css))?.[1] ?? '').trim();
 
-    it.each(['.tubu-trust-list', ".tubu-trust-list[data-count='2']", '.tubu-trust-item', '.tubu-trust-icon', '.tubu-trust-title', '.tubu-trust-sub', '.tubu-trust-cta'])(
+    it.each(['.tubu-trust-list', ".tubu-trust-list[data-count='2']", '.tubu-trust-item', '.tubu-trust-icon', '.tubu-trust-title, .tubu-trust-sub', '.tubu-trust-title', '.tubu-trust-sub', '.tubu-trust-cta'])(
       '%s giống hệt Mini',
       (sel) => {
         const web = norm(webCss, sel);

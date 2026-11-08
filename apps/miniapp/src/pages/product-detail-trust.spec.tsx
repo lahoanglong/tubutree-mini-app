@@ -77,12 +77,17 @@ describe('ProductDetailPage: dải cam kết (W45A)', () => {
     mocks.fetchProduct.mockResolvedValue(product());
   });
 
-  it('hàng Tubu giao: dải ba trụ cột đứng ngay sau khối Số lượng và trước các khối bên dưới', async () => {
+  it('hàng Tubu giao: dải ba trụ cột đứng sau khối Số lượng và trước khối Cam kết Tubu ở cuối trang', async () => {
     renderPdp();
     const strip = await screen.findByTestId('product-trust-strip');
     expect(within(strip).getAllByRole('listitem')).toHaveLength(3);
-    const all = Array.from(document.querySelectorAll('[data-testid="product-trust-strip"], [data-section="pdp-flash-limit"]'));
-    expect(all.map((el) => el.getAttribute('data-testid') ?? el.getAttribute('data-section'))).toEqual(['pdp-flash-limit', 'product-trust-strip']);
+    const limit = document.querySelector('[data-section="pdp-flash-limit"]')!;
+    const promises = document.getElementById('pdp-promises')!;
+    expect(limit).not.toBeNull();
+    expect(promises).not.toBeNull();
+    const follows = (a: Element, b: Element) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(follows(limit, strip)).toBe(true);
+    expect(follows(strip, promises)).toBe(true);
   });
 
   it('chạm lối xem chính sách mở chính sách đổi trả ngay trong trang', async () => {

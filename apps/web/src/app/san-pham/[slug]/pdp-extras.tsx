@@ -168,7 +168,10 @@ export function PdpFreeship({ initialConfig }: { initialConfig?: PublicConfig } 
  */
 export function PdpTrustStrip({ fulfillerKind, initialConfig }: { fulfillerKind: string | undefined; initialConfig?: PublicConfig }) {
   const cfg = usePublicConfig(initialConfig);
-  return <ProductTrustStrip view={productTrustStrip({ fulfillerKind, returnWindowDays: cfg.returnWindowDays })} />;
+  // Tải cấu hình ở trình duyệt lỗi (429, 5xx) thì `usePublicConfig` rơi về bản dự phòng không có số ngày: giữ giá trị máy chủ đã dựng trong HTML,
+  // nếu không dải tự hứa đổi trả khi chủ shop đã tắt (đổi trả 0 ngày) và bố cục nhảy.
+  const returnWindowDays = cfg.isLoaded ? cfg.returnWindowDays : initialConfig?.returnWindowDays;
+  return <ProductTrustStrip view={productTrustStrip({ fulfillerKind, returnWindowDays })} />;
 }
 
 /**

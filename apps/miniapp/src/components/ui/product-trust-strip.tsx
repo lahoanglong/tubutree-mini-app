@@ -20,7 +20,7 @@ export function ProductTrustStrip({ view, onOpenPolicy }: ProductTrustStripProps
   if (!view) return null;
   return (
     <section data-testid="product-trust-strip" aria-label={view.groupAria} className="tubu-trust">
-      <ul className="tubu-trust-list" data-count={view.pillars.length}>
+      <ul role="list" className="tubu-trust-list" data-count={view.pillars.length}>
         {view.pillars.map((p) => (
           <li key={p.key} data-testid={`trust-pillar-${p.key}`} className="tubu-trust-item">
             <span aria-hidden="true" className="tubu-trust-icon">
