@@ -4,9 +4,10 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { loadMoreFailed } from '@tubutree/app-core/client-copy';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQueryClient, type InfiniteData } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
 import { markAllNotificationsRead, markNotificationRead, type NotificationCursor, type NotificationDTO } from '@tubutree/app-core/api/account';
+import { ME_SUMMARY_KEY } from '@tubutree/app-core/api/me-summary';
 import { fetchPurchasedItems } from '@tubutree/app-core/api/orders';
 import { nextNotificationCursor, notificationsInfiniteQuery } from '@tubutree/app-core/queries/account';
 import { notificationAction, notificationMeta, relativeTime } from '@/components/account/notification-view';
@@ -69,16 +70,40 @@ export default function NotificationsPage() {
   });
   const list = notifQ.data?.pages.flat();
   // Đếm chưa đọc của cả hộp thư (tin chưa đọc có thể nằm ngoài các trang đã nạp), cùng nguồn /me/summary với chuông, Cá nhân và thanh đáy.
-  const summaryUnread = useMeSummary({ enabled: phase === 'authenticated', select: (s) => s.unreadNotifications }).data;
+  // staleTime 0: summary Trang chủ vừa tải (mặc định tươi 10 giây) có thể chưa có tin mới mà danh sách ở đây đã có.
+  const summaryUnread = useMeSummary({ enabled: phase === 'authenticated', select: (s) => s.unreadNotifications, staleTime: 0 }).data;
 
-  // onSettled: đánh dấu đã đọc hỏng thì số chưa đọc sai mãi mà không có tín hiệu nào; nạp lại cả hai trường hợp, không báo lỗi vì là thao tác nền.
+  // Đánh dấu đã đọc sửa thẳng cache danh sách (không nạp lại mọi trang đã cuộn của infinite query) và chỉ làm mới số chưa đọc.
+  // Lệnh hỏng thì mới nạp lại danh sách để giao diện khớp lại với máy chủ; không báo lỗi vì đây là thao tác nền.
+  const markReadInCache = (match: (n: NotificationDTO) => boolean) =>
+    qc.setQueryData<InfiniteData<NotificationDTO[], NotificationCursor | undefined>>(notificationsInfiniteQuery(coreHttp).queryKey, (old) =>
+      old && { ...old, pages: old.pages.map((p) => p.map((n) => (n.status !== 'READ' && match(n) ? { ...n, status: 'READ' as const } : n))) },
+    );
+  // Lần nạp đang bay (xem thêm, làm mới nền) có thể mang dữ liệu chụp trước lệnh đọc và ghi đè bản vừa sửa: nạp lại để lấy bản đúng.
+  const refetchIfListBusy = () => {
+    const key = notificationsInfiniteQuery(coreHttp).queryKey;
+    if (qc.isFetching({ queryKey: key }) > 0) void qc.invalidateQueries({ queryKey: key });
+  };
+  const settleRead = (failed: boolean) => {
+    void qc.invalidateQueries({ queryKey: failed ? ['notifications'] : ME_SUMMARY_KEY });
+  };
+
   const readMut = useMutation({
     mutationFn: (id: string) => markNotificationRead(coreHttp, id),
-    onSettled: () => void qc.invalidateQueries({ queryKey: ['notifications'] }),
+    onSuccess: (_res, id) => {
+      markReadInCache((n) => n.id === id);
+      refetchIfListBusy();
+    },
+    // onSettled chứ không onSuccess: đánh dấu đã đọc hỏng thì số chưa đọc sai mãi mà không có tín hiệu nào.
+    onSettled: (_res, err) => settleRead(err !== null),
   });
   const readAllMut = useMutation({
     mutationFn: () => markAllNotificationsRead(coreHttp),
-    onSettled: () => void qc.invalidateQueries({ queryKey: ['notifications'] }),
+    onSuccess: () => {
+      markReadInCache(() => true);
+      refetchIfListBusy();
+    },
+    onSettled: (_res, err) => settleRead(err !== null),
   });
   const unreadCount = summaryUnread ?? list?.filter((n) => n.status !== 'READ').length ?? 0;
 

@@ -92,7 +92,17 @@ export default function VouchersView() {
   } else if (source.isLoading || (tab === 'claim' && (authed ? walletQ.isLoading || mineQ.isLoading : phase === 'loading'))) {
     body = skeleton;
   } else if (rows.length === 0) {
-    body = <EmptyState variant="inline" art="leaf" heading={emptyHeading(tab)} body={tab === 'mine' ? fillCopy('coupon.emptyMineBody') : undefined} />;
+    // Ví trống: một chạm về tab Nhận mã (chữ hướng dẫn đã nhắc "Lưu mã ở mục Nhận mã"). Nhận mã và Lịch sử trống không có việc tiếp theo.
+    body = (
+      <EmptyState
+        variant="inline"
+        art="leaf"
+        heading={emptyHeading(tab)}
+        body={tab === 'mine' ? fillCopy('coupon.emptyMineBody') : undefined}
+        ctaLabel={tab === 'mine' ? fillCopy('coupon.tabClaim') : undefined}
+        onCta={tab === 'mine' ? () => pickTab('claim') : undefined}
+      />
+    );
   } else if (shown.length === 0) {
     body = <EmptyState variant="inline" art="leaf" heading={fillCopy('coupon.emptyFilterTitle')} />;
   } else {

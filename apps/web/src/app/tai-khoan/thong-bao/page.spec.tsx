@@ -171,10 +171,13 @@ describe('/tai-khoan/thong-bao: chi tiết', () => {
     expect(dialog()).toBeNull();
   });
 
-  it('đánh dấu đã đọc xong thì nạp lại danh sách', async () => {
+  it('đánh dấu đã đọc xong: sửa thẳng cache danh sách (không nạp lại), chỉ làm mới summary', async () => {
     const { container } = await mount();
+    expect(rowOf(container, 'Đơn TT001 đã được xác nhận').querySelector('[aria-label="chưa đọc"]')).not.toBeNull();
     await openRow(container, 'Đơn TT001 đã được xác nhận');
-    expect(listCalls()).toHaveLength(2);
+    // Máy chủ giả vẫn trả tin ở trạng thái chưa đọc: dấu chỉ có thể tắt nhờ sửa cache, không phải nhờ nạp lại.
+    expect(listCalls()).toHaveLength(1);
+    expect(rowOf(container, 'Đơn TT001 đã được xác nhận').querySelector('[aria-label="chưa đọc"]')).toBeNull();
     expect(mocks.get.mock.calls.filter(([p]) => p === '/me/summary')).toHaveLength(2);
     expect(mocks.get.mock.calls.filter(([p]) => p === '/me/notifications/unread-count')).toHaveLength(0);
   });
@@ -339,13 +342,15 @@ describe('/tai-khoan/thong-bao: nhắc mua lại (REORDER_REMINDER)', () => {
 });
 
 describe('/tai-khoan/thong-bao: Đọc tất cả', () => {
-  it('có tin chưa đọc: bấm gọi API một lần rồi nạp lại danh sách', async () => {
+  it('có tin chưa đọc: bấm gọi API một lần, mọi tin chuyển sang đã đọc trong cache, không nạp lại danh sách', async () => {
     const { container } = await mount();
+    expect(container.querySelectorAll('[aria-label="chưa đọc"]')).toHaveLength(1);
     click(byText(container, 'button', 'Đọc tất cả'));
     await flush(6);
     expect(mocks.post).toHaveBeenCalledTimes(1);
     expect(mocks.post).toHaveBeenCalledWith('/me/notifications/read-all');
-    expect(listCalls()).toHaveLength(2);
+    expect(listCalls()).toHaveLength(1);
+    expect(container.querySelectorAll('[aria-label="chưa đọc"]')).toHaveLength(0);
   });
 
   it('không còn tin chưa đọc hoặc danh sách trống: ẩn nút', async () => {
@@ -490,6 +495,17 @@ describe('/tai-khoan/thong-bao: đếm chưa đọc của cả hộp thư và l�
     expect(byText(withUnread.container, 'button', 'Đọc tất cả')).not.toBeNull();
   });
 
+  it('summary trong cache còn tươi (Trang chủ vừa tải, staleTime 10 giây) vẫn tải lại khi mở trang: tin mới chưa đọc hiện "Đọc tất cả"', async () => {
+    mocks.get.mockImplementation(async (path: string) => (path === '/me/summary' ? summaryOf(1) : [ORDER_UNREAD, POINTS_READ]));
+    const qc = new TubuQueryClient({ defaultOptions: { queries: { retry: false, staleTime: 10_000 }, mutations: { retry: false } } });
+    qc.setQueryData(['me-summary'], summaryOf(0));
+    const r = render(<NotificationsPage />, qc);
+    mounted.push(r);
+    await flush(8);
+    expect(mocks.get.mock.calls.filter(([p]) => p === '/me/summary')).toHaveLength(1);
+    expect(byText(r.container, 'button', 'Đọc tất cả')).not.toBeNull();
+  });
+
   it('máy chủ báo 0 chưa đọc: ẩn nút', async () => {
     route(0);
     const { container } = await mount();
@@ -512,5 +528,118 @@ describe('/tai-khoan/thong-bao: đếm chưa đọc của cả hộp thư và l�
     expect(container.querySelector('[role="alert"]')?.textContent).toBe('Không tải thêm được thông báo. Bạn thử lại nhé.');
     expect(container.textContent).toContain('Tin số 0');
     expect(byText(container, 'button', 'Xem thêm')).not.toBeNull();
+  });
+});
+
+describe('/tai-khoan/thong-bao: F10 đánh dấu đã đọc không nạp lại mọi trang đã cuộn', () => {
+  const page = (from: number, unreadAt?: number) =>
+    Array.from({ length: 20 }, (_, i) => ({
+      id: `q${from + i}`,
+      templateCode: 'POINTS_EARNED',
+      payload: { body: `Tin số ${from + i}` },
+      status: from + i === unreadAt ? 'SENT' : 'READ',
+      sentAt: new Date(Date.UTC(2026, 9, 28, 3, 0, 0) - (from + i) * 1000).toISOString(),
+    }));
+  let unread = 1;
+  const dots = (c: HTMLElement) => c.querySelectorAll('[aria-label="chưa đọc"]');
+  const summaryCalls = () => mocks.get.mock.calls.filter(([p]) => p === '/me/summary');
+
+  beforeEach(() => {
+    unread = 1;
+    mocks.post.mockImplementation(async () => {
+      unread = 0;
+      return { ok: true, count: 1 };
+    });
+    mocks.get.mockImplementation(async (path: string, opts?: { query?: { beforeId?: string } }) => {
+      if (path === '/me/summary') return summaryOf(unread);
+      const beforeId = opts?.query?.beforeId;
+      if (!beforeId) return page(0);
+      return beforeId === 'q19' ? page(20) : page(40, 45);
+    });
+  });
+
+  async function scrollThreePages() {
+    const r = await mount();
+    click(byText(r.container, 'button', 'Xem thêm'));
+    await flush(6);
+    expect(r.container.textContent).toContain('Tin số 20');
+    click(byText(r.container, 'button', 'Xem thêm'));
+    await flush(6);
+    expect(r.container.textContent).toContain('Tin số 45');
+    // Chỉ đếm lời gọi từ lúc khách đọc tin trở đi.
+    mocks.get.mockClear();
+    return r;
+  }
+
+  it('đọc một tin ở trang 3: không gọi lại /me/notifications, tin chuyển sang đã đọc, summary làm mới', async () => {
+    const { container } = await scrollThreePages();
+    expect(dots(container)).toHaveLength(1);
+    click(rowOf(container, 'Tin số 45'));
+    await flush(8);
+    expect(mocks.post).toHaveBeenCalledWith('/me/notifications/q45/read');
+    expect(listCalls()).toHaveLength(0);
+    expect(summaryCalls()).toHaveLength(1);
+    expect(mocks.get.mock.calls).toHaveLength(1);
+    expect(dots(container)).toHaveLength(0);
+    expect(byText(container, 'button', 'Đọc tất cả')).toBeNull();
+  });
+
+  it('"Đọc tất cả" sau khi cuộn ba trang: không gọi lại /me/notifications, mọi dấu chưa đọc tắt', async () => {
+    const { container } = await scrollThreePages();
+    click(byText(container, 'button', 'Đọc tất cả'));
+    await flush(8);
+    expect(mocks.post).toHaveBeenCalledWith('/me/notifications/read-all');
+    expect(listCalls()).toHaveLength(0);
+    expect(summaryCalls()).toHaveLength(1);
+    expect(dots(container)).toHaveLength(0);
+  });
+
+  it('lệnh đọc một tin hỏng: nạp lại danh sách để khớp máy chủ, không báo lỗi', async () => {
+    mocks.post.mockRejectedValue(new Error('mạng'));
+    mocks.get.mockImplementation(async (path: string) => (path === '/me/summary' ? summaryOf(1) : [ORDER_UNREAD, POINTS_READ]));
+    const { container } = await mount();
+    click(rowOf(container, 'Đơn TT001 đã được xác nhận'));
+    await flush(8);
+    expect(listCalls()).toHaveLength(2);
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it('lệnh "Đọc tất cả" hỏng: nạp lại danh sách để khớp máy chủ, tin vẫn chưa đọc', async () => {
+    mocks.post.mockRejectedValue(new Error('mạng'));
+    mocks.get.mockImplementation(async (path: string) => (path === '/me/summary' ? summaryOf(1) : [ORDER_UNREAD, POINTS_READ]));
+    const { container } = await mount();
+    click(byText(container, 'button', 'Đọc tất cả'));
+    await flush(8);
+    expect(listCalls()).toHaveLength(2);
+    expect(dots(container)).toHaveLength(1);
+  });
+});
+
+describe('/tai-khoan/thong-bao: F10 đọc tin lúc đang nạp thêm trang', () => {
+  it('có lần nạp đang chạy khi lệnh đọc xong thì danh sách được nạp lại, bản cũ không ghi đè tin vừa đọc', async () => {
+    const first = Array.from({ length: 20 }, (_, i) => ({
+      id: `r${i}`,
+      templateCode: i === 0 ? 'ORDER_CONFIRMED' : 'POINTS_EARNED',
+      payload: { body: `Tin r${i}`, ...(i === 0 ? { data: { order_code: 'TT009' } } : {}) },
+      status: i === 0 ? 'SENT' : 'READ',
+      sentAt: new Date(Date.UTC(2026, 9, 28, 3, 0, 0) - i * 1000).toISOString(),
+    }));
+    let release: (v: unknown[]) => void = () => undefined;
+    let firstPageCalls = 0;
+    mocks.get.mockImplementation((path: string, opts?: { query?: { beforeId?: string } }) => {
+      if (path === '/me/summary') return Promise.resolve(summaryOf(1));
+      if (opts?.query?.beforeId) return new Promise((r) => (release = r));
+      firstPageCalls += 1;
+      return Promise.resolve(firstPageCalls === 1 ? first : first.map((n) => ({ ...n, status: 'READ' })));
+    });
+    const { container } = await mount();
+    click(byText(container, 'button', 'Xem thêm'));
+    click(rowOf(container, 'Tin r0'));
+    await flush(8);
+    expect(mocks.post).toHaveBeenCalledWith('/me/notifications/r0/read');
+    expect(firstPageCalls).toBeGreaterThanOrEqual(2);
+    expect(container.querySelectorAll('[aria-label="chưa đọc"]')).toHaveLength(0);
+    release([]);
+    await flush(4);
   });
 });
