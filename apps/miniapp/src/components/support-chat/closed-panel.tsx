@@ -1,5 +1,5 @@
 import { useSnackbar } from 'zmp-ui';
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { Copy, MessageSquare, Phone, type LucideIcon } from 'lucide-react';
 import { supportCopy } from '@tubutree/app-core/support-copy';
 import { Button } from '../ui/button';
@@ -32,11 +32,18 @@ export function ChatClosedPanel({ support, compact = false }: { support: Support
   const hotline = support?.hotline ?? null;
   const display = hotline ? formatPhoneDisplay(hotline) : '';
 
-  const copyHotline = async () => {
-    if (!hotline) return;
-    haptic('light');
-    const ok = await copyText(display);
-    openSnackbar(ok ? { text: copy.copied, type: 'success' } : { text: copy.copyFailed, type: 'error' });
+  // Khoá đồng bộ: Promise sao chép còn treo thì cú chạm thứ hai (số hoặc email) bị bỏ, khỏi bắn hai thông báo.
+  const copyingRef = useRef(false);
+  const copyWith = async (value: string, okText: string) => {
+    if (copyingRef.current) return;
+    copyingRef.current = true;
+    try {
+      haptic('light');
+      const ok = await copyText(value);
+      openSnackbar(ok ? { text: okText, type: 'success' } : { text: copy.copyFailed, type: 'error' });
+    } finally {
+      copyingRef.current = false;
+    }
   };
 
   const callButton = hotline && (
@@ -65,10 +72,7 @@ export function ChatClosedPanel({ support, compact = false }: { support: Support
     <Button
       variant="ghost"
       aria-label={support.email}
-      onPress={() => {
-        haptic('light');
-        void copyText(support.email!).then((ok) => openSnackbar(ok ? { text: 'Đã sao chép email hỗ trợ', type: 'success' } : { text: copy.copyFailed, type: 'error' }));
-      }}
+      onPress={() => void copyWith(support.email!, 'Đã sao chép email hỗ trợ')}
     >
       <WithIcon icon={Copy} tone="brand">{support.email}</WithIcon>
     </Button>
@@ -100,11 +104,11 @@ export function ChatClosedPanel({ support, compact = false }: { support: Support
         <>
           <button
             type="button"
-            onClick={() => void copyHotline()}
+            onClick={() => void copyWith(display, copy.copied)}
             aria-label={`${display}. ${copy.tapToCopy}`}
             style={{ background: 'none', border: 0, padding: '8px 12px', marginTop: 8, cursor: 'pointer', minHeight: 44 }}
           >
-            <Heading variant="display-md" tone="brand">{display}</Heading>
+            <Heading variant="display-md" tone="brand" style={{ fontVariantNumeric: 'tabular-nums' }}>{display}</Heading>
           </button>
           <Text variant="caption" tone="tertiary">{copy.tapToCopy}</Text>
           {callButton}
