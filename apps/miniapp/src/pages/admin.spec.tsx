@@ -1172,6 +1172,28 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
         await waitFor(() => expect(successCount('Đã duyệt ca.')).toBe(2));
       });
 
+      it('duyệt ca A rồi ca B song song, B xong trước: nút của A và "Duyệt tất cả" vẫn aria-busy tới khi A xong', async () => {
+        const dA = deferred();
+        const dB = deferred();
+        mocks.approveShift.mockReturnValueOnce(dA.promise).mockReturnValueOnce(dB.promise);
+        await openShifts();
+        await sameFrame(btn(APPROVE_S1), btn(APPROVE_S2));
+        expect(mocks.approveShift).toHaveBeenCalledTimes(2);
+        await busy(APPROVE_S2);
+        await busy(APPROVE_S1);
+        await busy('Duyệt tất cả (2)');
+        await act(async () => dB.resolve({ approved: true }));
+        await waitFor(() => expect(successCount('Đã duyệt ca.')).toBe(1));
+        await waitFor(() => expect(btn(APPROVE_S2)).not.toHaveAttribute('aria-busy'));
+        expect(btn(APPROVE_S1)).toHaveAttribute('aria-busy', 'true');
+        expect(btn('Duyệt tất cả (2)')).toHaveAttribute('aria-busy', 'true');
+        await act(async () => dA.resolve({ approved: true }));
+        await waitFor(() => expect(successCount('Đã duyệt ca.')).toBe(2));
+        await waitFor(() => expect(btn(APPROVE_S1)).not.toHaveAttribute('aria-busy'));
+        expect(btn(APPROVE_S2)).not.toHaveAttribute('aria-busy');
+        expect(btn('Duyệt tất cả (2)')).not.toHaveAttribute('aria-busy');
+      });
+
       it('chạm đúp "Duyệt với giờ đã chỉnh" chỉ duyệt một lần', async () => {
         const d = deferred();
         mocks.approveShift.mockReturnValueOnce(d.promise);
@@ -1516,6 +1538,28 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
         await act(async () => d.resolve({ status: 'OPEN' }));
         await waitFor(() => expect(successCount('Đã mở lại bảng lương — sửa xong nhớ chốt lại.')).toBe(1));
         expect(mocks.reopenPayroll).toHaveBeenCalledTimes(1);
+      });
+
+      it('xác nhận Mở lại khi việc khác đang giữ khoá: lệnh bị bỏ nhưng tấm vẫn mở và báo bận; hết bận thì xác nhận mới mở lại và đóng tấm', async () => {
+        const d = deferred();
+        mocks.finalizePayroll.mockReturnValueOnce(d.promise);
+        await openPayroll();
+        fireEvent.click(btn('Mở lại · Bình'));
+        const reopenMessage = /^Mở lại bảng lương T3\/2026 của Bình/;
+        expect(screen.getByText(reopenMessage)).toBeInTheDocument();
+        await sameFrame(btn('Chốt · Lan'), btn('Mở lại bảng lương'));
+        expect(mocks.finalizePayroll).toHaveBeenCalledTimes(1);
+        expect(mocks.reopenPayroll).not.toHaveBeenCalled();
+        expect(screen.getByText(reopenMessage)).toBeInTheDocument();
+        await busy('Mở lại bảng lương');
+        await act(async () => d.resolve({ finalized: true }));
+        await waitFor(() => expect(successCount('Đã chốt lương.')).toBe(1));
+        await waitFor(() => expect(btn('Mở lại bảng lương')).not.toHaveAttribute('aria-busy'));
+        expect(screen.getByText(reopenMessage)).toBeInTheDocument();
+        fireEvent.click(btn('Mở lại bảng lương'));
+        await waitFor(() => expect(mocks.reopenPayroll).toHaveBeenCalledWith('u3', 2026, 3));
+        expect(mocks.reopenPayroll).toHaveBeenCalledTimes(1);
+        await waitFor(() => expect(screen.queryByText(reopenMessage)).toBeNull());
       });
 
       it('mở lại lỗi thì nhả khoá, mở lại lần hai gọi API lần hai', async () => {

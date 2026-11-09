@@ -454,6 +454,10 @@ export default function ProductDetailPage() {
   const unavailable = p.fulfiller?.kind === 'UNAVAILABLE' ? p.fulfiller : null;
   const fromStore = merchant ?? unavailable;
   const retailOnly = isRetailOnly(p);
+  // Thêm giỏ và Mua ngay chung một khoá ghi giỏ nên nút kia bị bỏ qua khi một nút đang chạy: báo bằng aria-disabled (không `disabled`, để nút đang giữ focus không rớt focus).
+  // Giá trị tường minh thắng giá trị Button suy từ loading/disabled, nên phải gộp cả `!selected` vào đây.
+  const cartWriting = addMutation.isPending || buyNowMutation.isPending;
+  const ctaAriaDisabled = cartWriting || !selected || undefined;
 
   const confirmVariation = async (variation: VariationDetail, qty: number) => {
     if (!sheetMode || confirming.current || cartWrite.current) return;
@@ -1214,6 +1218,7 @@ export default function ProductDetailPage() {
                 size="lg"
                 loading={addMutation.isPending}
                 disabled={!selected}
+                aria-disabled={ctaAriaDisabled}
                 onPress={handleAdd}
                 className="tubu-add-source"
                 style={{ flex: 1 }}
@@ -1234,6 +1239,7 @@ export default function ProductDetailPage() {
                 size="lg"
                 loading={buyNowMutation.isPending}
                 disabled={!selected}
+                aria-disabled={ctaAriaDisabled}
                 onPress={handleBuyNow}
                 aria-label={`${buyNowMutation.isPending ? 'Đang xử lý…' : 'Mua ngay'} ${formatVnd(line.lineTotal)}`}
                 style={{ flex: 1, paddingTop: 6, paddingBottom: 6 }}

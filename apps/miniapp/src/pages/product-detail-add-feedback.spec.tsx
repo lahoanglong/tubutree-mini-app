@@ -236,6 +236,32 @@ describe('ProductDetailPage — khoá chạm đúp Thêm vào giỏ / Mua ngay d
     await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledTimes(1));
   });
 
+  it('đang Thêm vào giỏ thì Mua ngay báo aria-disabled (không disabled) và hết báo khi xong', async () => {
+    const pending = deferred<ReturnType<typeof cart>>();
+    mocks.addToCart.mockReturnValueOnce(pending.promise);
+    await waitForPdp();
+    expect(buyBtn()).not.toHaveAttribute('aria-disabled');
+    fireEvent.click(addBtn());
+    await waitFor(() => expect(buyBtn()).toHaveAttribute('aria-disabled', 'true'));
+    expect(buyBtn()).not.toBeDisabled();
+    expect(buyBtn()).not.toHaveAttribute('aria-busy');
+    await act(async () => pending.resolve(cart()));
+    await waitFor(() => expect(buyBtn()).not.toHaveAttribute('aria-disabled'));
+  });
+
+  it('đang Mua ngay thì Thêm vào giỏ báo aria-disabled (không disabled) và hết báo khi xong', async () => {
+    const pending = deferred<ReturnType<typeof cart>>();
+    mocks.addToCart.mockReturnValueOnce(pending.promise);
+    await waitForPdp();
+    expect(addBtn()).not.toHaveAttribute('aria-disabled');
+    fireEvent.click(buyBtn());
+    await waitFor(() => expect(addBtn()).toHaveAttribute('aria-disabled', 'true'));
+    expect(addBtn()).not.toBeDisabled();
+    expect(addBtn()).not.toHaveAttribute('aria-busy');
+    await act(async () => pending.resolve(cart()));
+    await waitFor(() => expect(addBtn()).not.toHaveAttribute('aria-disabled'));
+  });
+
   it('Mua ngay lỗi: báo lỗi, khoá chung được nhả nên Thêm vào giỏ ngay sau đó vẫn ghi giỏ', async () => {
     mocks.addToCart.mockRejectedValueOnce(new Error('Chỉ còn 0 sản phẩm')).mockResolvedValueOnce(cart());
     await waitForPdp();

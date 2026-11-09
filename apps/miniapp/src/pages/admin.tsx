@@ -158,9 +158,10 @@ function PayrollSection() {
     acting.current = false;
   };
   const exclusive = (run: () => void) => {
-    if (acting.current) return;
+    if (acting.current) return false;
     acting.current = true;
     run();
+    return true;
   };
 
   const rateM = useLockedMutation({
@@ -313,10 +314,11 @@ function PayrollSection() {
         title="Mở lại bảng lương?"
         message={reopenRow ? payrollReopenMessage(ym.month, ym.year, reopenRow.staff.fullName ?? 'NV', reopenRow.month.status) : undefined}
         confirmLabel="Mở lại bảng lương"
+        loading={payrollBusy}
         onCancel={() => setReopenRow(null)}
         onConfirm={() => {
-          if (reopenRow) exclusive(() => reopenM.mutate(reopenRow));
-          setReopenRow(null);
+          // Việc khác đang giữ khoá thì lệnh bị bỏ: giữ tấm mở (đang bận) thay vì đóng mà không làm gì.
+          if (reopenRow && exclusive(() => reopenM.mutate(reopenRow))) setReopenRow(null);
         }}
       />
 
@@ -862,17 +864,23 @@ function ShiftsSection() {
 
   // Duyệt và từ chối cùng một ca loại trừ nhau, còn "Duyệt tất cả" đụng mọi ca chờ: chung một sổ khoá ref (`isPending` chỉ đúng sau lần vẽ kế tiếp).
   // Ca khác nhau vẫn chạy song song; mỗi mutation nhả khoá của mình ở `onSettled`, thành công lẫn lỗi.
+  // Trạng thái bận lấy thẳng từ sổ khoá (`isPending`/`variables` của useMutation chỉ theo cú gọi SAU CÙNG nên ca A còn chạy mà B xong trước thì A hiện như rảnh);
+  // sổ là ref nên mỗi lần xin/nhả khoá tăng `tick` để vẽ lại.
   const acting = useRef(new Set<string>());
+  const [, setTick] = useState(0);
   const releaseShift = (_data: unknown, _error: unknown, v: { id: string }) => {
     acting.current.delete(v.id);
+    setTick((n) => n + 1);
   };
   const releaseBulk = () => {
     acting.current.delete(BULK_KEY);
+    setTick((n) => n + 1);
   };
   const exclusive = (key: string, run: () => void) => {
     const held = acting.current;
     if (key === BULK_KEY ? held.size > 0 : held.has(key) || held.has(BULK_KEY)) return;
     held.add(key);
+    setTick((n) => n + 1);
     run();
   };
 
@@ -910,9 +918,8 @@ function ShiftsSection() {
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
 
-  // Nút của một ca hiện loading theo cả ba việc chạm tới ca đó.
-  const shiftBusy = (id: string) =>
-    bulkM.isPending || (approveM.isPending && approveM.variables?.id === id) || (rejectM.isPending && rejectM.variables?.id === id);
+  // Nút của một ca hiện loading khi chính ca đó đang duyệt/từ chối hoặc "Duyệt tất cả" đang chạy.
+  const shiftBusy = (id: string) => acting.current.has(id) || acting.current.has(BULK_KEY);
 
   const [adjust, setAdjust] = useState<{ id: string; dayKey: string } | null>(null);
   const [adjStart, setAdjStart] = useState('08:00');
@@ -947,7 +954,7 @@ function ShiftsSection() {
       />
 
       {pendingIds.length > 0 && (
-        <Button loading={bulkM.isPending || approveM.isPending || rejectM.isPending} onPress={() => exclusive(BULK_KEY, () => bulkM.mutate())}>
+        <Button loading={acting.current.size > 0} onPress={() => exclusive(BULK_KEY, () => bulkM.mutate())}>
           Duyệt tất cả ({pendingIds.length})
         </Button>
       )}
@@ -1031,7 +1038,7 @@ function ShiftsSection() {
         footer={
           <Button
             fullWidth
-            loading={approveM.isPending || (!!adjust && shiftBusy(adjust.id))}
+            loading={!!adjust && shiftBusy(adjust.id)}
             disabled={!TIME_RE.test(adjStart) || !TIME_RE.test(adjEnd)}
             onPress={() =>
               adjust &&
@@ -1070,7 +1077,7 @@ function ShiftsSection() {
         footer={
           <Button
             fullWidth
-            loading={rejectM.isPending || (!!rejectId && shiftBusy(rejectId))}
+            loading={!!rejectId && shiftBusy(rejectId)}
             disabled={rejectReason.trim().length === 0}
             onPress={() => rejectId && exclusive(rejectId, () => rejectM.mutate({ id: rejectId, reason: rejectReason.trim() }))}
           >
