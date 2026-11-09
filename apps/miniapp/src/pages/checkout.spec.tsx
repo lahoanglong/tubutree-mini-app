@@ -2862,7 +2862,7 @@ describe('CheckoutPage — khoá chạm đúp dòng sửa nhanh, gỡ mã tự �
     });
   });
 
-  it('chạm đúp "Đặt hàng" trong cùng một khung hình: chỉ gửi một đơn', async () => {
+  it('chạm đúp "Đặt hàng" trong cùng một khung hình: chỉ gửi một đơn (Button đã khoá sẵn vì onPress async, giữ để không lùi)', async () => {
     const place = pending<{ id: string; code: string }>();
     mocks.placeOrder.mockReturnValue(place.promise);
     renderPage();

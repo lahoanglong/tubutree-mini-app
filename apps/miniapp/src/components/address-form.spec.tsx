@@ -445,7 +445,7 @@ describe('AddressForm — khoá chạm đúp Lưu và Điền nhanh từ Zalo (W
     expect(inputNear('Người nhận')).toHaveValue('Ánh');
   });
 
-  it('Zalo từ chối hoặc ném lỗi thì nhả khoá: bấm lại xin lại được', async () => {
+  it('Zalo từ chối (trả rỗng) thì nhả khoá: bấm lại xin lại được', async () => {
     mocks.user.current = { fullName: 'Khách', phone: null };
     mocks.requestZaloProfile.mockResolvedValue({ name: '', phone: '' });
     renderForm(<AddressForm initial={null} onCancel={() => {}} onSaved={() => {}} />);
