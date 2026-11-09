@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -132,5 +132,81 @@ describe('ReturnRequestSheet (D3: trả theo dòng và số lượng)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Sản phẩm lỗi, hỏng' }));
     expect(await screen.findByText('Dự kiến hoàn 193.000đ')).toBeInTheDocument();
     expect(screen.getByText(/gồm 15.000đ phí vận chuyển/)).toBeInTheDocument();
+  });
+});
+
+describe('ReturnRequestSheet: gửi yêu cầu khoá chạm đúp, báo bận, số đều (W69A)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.requestReturn.mockResolvedValue({ id: 'r1' });
+    mocks.fetchRefundBank.mockResolvedValue(null);
+    mocks.estimateReturn.mockResolvedValue({ refund: 89_000, goods: 89_000, shipping: 0, isFull: false, moneyRefundable: true, pointsUsedBack: 0, lines: [] });
+  });
+
+  const fillForm = () => {
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Trả Nước giặt Chai 1L' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sản phẩm lỗi, hỏng' }));
+  };
+  const submitButton = () => screen.getByRole('button', { name: 'Gửi yêu cầu' });
+  const deferred = () => {
+    let resolve!: (v: unknown) => void;
+    let reject!: (e: unknown) => void;
+    const promise = new Promise((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+
+  it('chạm đúp "Gửi yêu cầu" trong cùng một khung hình chỉ gửi một yêu cầu', async () => {
+    const d = deferred();
+    mocks.requestReturn.mockReturnValueOnce(d.promise);
+    const { onClose } = renderSheet();
+    fillForm();
+    await act(async () => {
+      fireEvent.click(submitButton());
+      fireEvent.click(submitButton());
+    });
+    expect(mocks.requestReturn).toHaveBeenCalledTimes(1);
+    await act(async () => d.resolve({ id: 'r1' }));
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+  });
+
+  it('đang gửi: nút báo aria-busy và aria-disabled, chạm thêm không gửi lần nữa', async () => {
+    const d = deferred();
+    mocks.requestReturn.mockReturnValueOnce(d.promise);
+    renderSheet();
+    fillForm();
+    fireEvent.click(submitButton());
+    await waitFor(() => expect(submitButton()).toHaveAttribute('aria-busy', 'true'));
+    expect(submitButton()).toHaveAttribute('aria-disabled', 'true');
+    fireEvent.click(submitButton());
+    expect(mocks.requestReturn).toHaveBeenCalledTimes(1);
+    await act(async () => d.resolve({ id: 'r1' }));
+  });
+
+  it('gửi lỗi: báo lỗi, không đóng sheet, khoá nhả nên bấm lại gửi được', async () => {
+    mocks.requestReturn.mockRejectedValueOnce(new Error('boom'));
+    const { onClose } = renderSheet();
+    fillForm();
+    fireEvent.click(submitButton());
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+    expect(onClose).not.toHaveBeenCalled();
+    await waitFor(() => expect(submitButton()).not.toHaveAttribute('aria-busy'));
+    fireEvent.click(submitButton());
+    await waitFor(() => expect(mocks.requestReturn).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+  });
+
+  it('nút Gửi yêu cầu cao ít nhất 44px', () => {
+    renderSheet();
+    expect(submitButton().style.minHeight).toBe('44px');
+  });
+
+  it('số tiền dự kiến hoàn dùng số đều (tabular-nums)', async () => {
+    renderSheet();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Trả Nước giặt Chai 1L' }));
+    const line = await screen.findByText('Dự kiến hoàn 89.000đ');
+    expect(line.closest('.tubu-nums')).not.toBeNull();
   });
 });

@@ -1,4 +1,4 @@
-import { useSnackbar } from 'zmp-ui';
+import { useEffect, useRef, useState } from 'react';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import type { TrackEvent } from '@tubutree/app-core/commerce/order-tracking';
 import { Text } from '../ui/text';
@@ -16,15 +16,21 @@ export interface OrderShippingProps {
   events?: readonly TrackEvent[];
 }
 
+const COPIED_MS = 2000;
+const FAILED_MS = 4000;
+
 /** Hãng vận chuyển và mã vận đơn có nút chép mã, đặt liền dưới hành trình. */
 export function OrderShipping({ partner, code, status, events = [] }: OrderShippingProps) {
-  const { openSnackbar } = useSnackbar();
+  const [result, setResult] = useState<'ok' | 'fail' | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
   if (!partner && !code && events.length === 0) return null;
-  const copy = () => {
+  const copy = async () => {
     haptic('light');
-    void copyText(code!).then((ok) =>
-      openSnackbar(ok ? { text: 'Đã sao chép mã vận đơn', type: 'success' } : { text: 'Không sao chép được — hãy chép mã thủ công.', type: 'error' }),
-    );
+    const ok = await copyText(code!);
+    clearTimeout(timer.current);
+    setResult(ok ? 'ok' : 'fail');
+    timer.current = setTimeout(() => setResult(null), ok ? COPIED_MS : FAILED_MS);
   };
   return (
     <section aria-label={fillCopy('order.shipping.title')} data-testid="order-shipping" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-inset-card)' }}>
@@ -50,6 +56,13 @@ export function OrderShipping({ partner, code, status, events = [] }: OrderShipp
             <Text variant="body-md" as="div" numeric style={{ fontWeight: 700, overflowWrap: 'anywhere' }}>
               {code}
             </Text>
+            <div role="status">
+              {result && (
+                <Text variant="caption" tone={result === 'ok' ? 'success' : 'danger'} as="div">
+                  {result === 'ok' ? 'Đã sao chép mã vận đơn' : 'Không sao chép được — hãy chép mã thủ công.'}
+                </Text>
+              )}
+            </div>
           </div>
           <Button variant="secondary" onPress={copy} aria-label={fillCopy('order.shipping.copyAria', { code })} style={{ flex: '0 0 auto' }}>
             {fillCopy('order.shipping.copy')}

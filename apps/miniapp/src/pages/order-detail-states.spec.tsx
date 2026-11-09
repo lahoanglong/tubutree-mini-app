@@ -246,7 +246,7 @@ describe('OrderDetailPage — nút theo trạng thái (gói hl)', () => {
     mocks.copyText.mockResolvedValue(true);
     fireEvent.click(screen.getByRole('button', { name: 'Sao chép mã vận đơn GHN6789012345' }));
     expect(mocks.copyText).toHaveBeenCalledWith('GHN6789012345');
-    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã sao chép mã vận đơn', type: 'success' }));
+    await waitFor(() => expect(screen.getByTestId('order-shipping')).toHaveTextContent('Đã sao chép mã vận đơn'));
   });
 
   it.each(STATES)('khối "Cần hỗ trợ?" ở cuối nội dung trang, trước thanh nút: $name', async (row) => {

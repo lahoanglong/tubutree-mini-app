@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'zmp-ui';
 import { BottomSheet } from '../ui/bottom-sheet';
 import { Button } from '../ui/button';
@@ -8,6 +8,7 @@ import { Checkbox } from '../ui/form';
 import { QuantitySelector } from '../ui/quantity-selector';
 import { Text } from '../ui/text';
 import { MultiImageUpload } from '../image-upload';
+import { useLockedMutation } from '../game/use-locked-mutation';
 import { RefundDestinationPicker } from './refund-destination-picker';
 import { estimateReturn, fetchRefundBank, requestReturn, type OrderView, type ReturnRequestDTO } from '../../services/shop-api';
 import { getErrorMessage } from '../../services/api';
@@ -98,7 +99,7 @@ export function ReturnRequestSheet({ open, onClose, order, returns, returnDays }
     [lines, reasonCode, reason, method, bank, bankAllowed],
   );
 
-  const submit = useMutation({
+  const submit = useLockedMutation({
     mutationFn: () =>
       requestReturn(order.code, {
         reasonCode: reasonCode!,
@@ -136,7 +137,7 @@ export function ReturnRequestSheet({ open, onClose, order, returns, returnDays }
       footer={
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {estimated && (
-            <div role="status" aria-live="polite" style={{ padding: '8px 12px', borderRadius: 'var(--radius-control)', background: 'var(--color-bg-subtle)' }}>
+            <div role="status" aria-live="polite" className="tubu-nums" style={{ padding: '8px 12px', borderRadius: 'var(--radius-control)', background: 'var(--color-bg-subtle)' }}>
               <Text variant="body-sm" as="div" style={{ fontWeight: 600 }}>
                 {`Dự kiến hoàn ${formatVnd(estimated.refund)}`}
               </Text>
