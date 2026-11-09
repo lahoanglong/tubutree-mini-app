@@ -54,7 +54,7 @@ function Editor() {
       );
     }
     const denied = errorStatus(q.error) === 403;
-    return <ErrorState message={ownerLoadError(q.error)} onRetry={denied ? undefined : () => void q.refetch()} />;
+    return <ErrorState message={ownerLoadError(q.error)} onRetry={denied ? undefined : () => q.refetch()} />;
   }
   const brand = q.data;
 

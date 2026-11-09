@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { QueryClient } from '@tanstack/react-query';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
+import { captureUnhandledRejections } from '@/test-utils/unhandled';
 import { WALLET_FORFEIT_LOADING, WALLET_FORFEIT_UNKNOWN } from '@tubutree/app-core/account-deletion-copy';
 
 // Cùng ý nghĩa account-deletion-section.spec.tsx của Mini App: Thử lại khi tải số dư Ví lỗi, khoá khi đang gửi yêu cầu xoá, số đều.
@@ -336,5 +337,95 @@ describe('AccountDeletionSection (web): số đều (tabular-nums)', () => {
     await openCard();
     const notice = Array.from(body().querySelectorAll('p')).find((p) => p.textContent?.includes('Ví Tubu còn 20.000đ'))!;
     expect(notice.classList.contains('tabular-nums')).toBe(true);
+  });
+});
+
+describe('AccountDeletionSection (web): khoá chạm đúp (yêu cầu xoá không hoàn tác)', () => {
+  const twice = (el: HTMLElement) =>
+    act(() => {
+      el.click();
+      el.click();
+    });
+
+  it('hai cú bấm "Gửi yêu cầu xoá" cùng khung hình chỉ gọi API một lần, kèm đúng số dư khách đã thấy và đã đồng ý', async () => {
+    mocks.get.mockReset().mockResolvedValue({ walletBalance: 20000 });
+    const pending = deferred<{ message: string }>();
+    mocks.post.mockReset().mockReturnValue(pending.promise);
+    mount();
+    await openCard();
+    click(checkbox());
+    await flush();
+    twice(submit());
+    await flush(4);
+    expect(mocks.post).toHaveBeenCalledTimes(1);
+    expect(mocks.post.mock.calls[0]![0]).toBe('/me/deletion-request');
+    expect(mocks.post.mock.calls[0]![1]).toMatchObject({ acknowledgedWalletBalance: 20000, acceptWalletForfeit: true });
+    pending.resolve({ message: 'Đã ghi nhận yêu cầu' });
+    await flush(4);
+    expect(mocks.post).toHaveBeenCalledTimes(1);
+    expect(body().querySelector('[role="status"]')?.textContent).toContain('Đã ghi nhận yêu cầu');
+  });
+
+  it('Ví 0đ: hai cú bấm cùng khung hình cũng chỉ gửi một lần và không kèm phần đồng ý', async () => {
+    const pending = deferred<{ message: string }>();
+    mocks.post.mockReset().mockReturnValue(pending.promise);
+    mount();
+    await openCard();
+    twice(submit());
+    await flush(4);
+    expect(mocks.post).toHaveBeenCalledTimes(1);
+    expect(mocks.post.mock.calls[0]![1]).not.toHaveProperty('acceptWalletForfeit');
+    pending.resolve({ message: 'ok' });
+    await flush(4);
+  });
+
+  it('gửi lỗi: khoá nhả, báo role=alert, nút gửi bấm lại được và lần hai gọi API (không có unhandled rejection)', async () => {
+    mocks.post.mockReset().mockRejectedValueOnce(new Error('Máy chủ bận')).mockResolvedValueOnce({ message: 'Đã ghi nhận yêu cầu' });
+    mount();
+    await openCard();
+    const seen = await captureUnhandledRejections(async () => {
+      twice(submit());
+      await flush(8);
+    });
+    expect(seen).toEqual([]);
+    expect(mocks.post).toHaveBeenCalledTimes(1);
+    expect(body().querySelector('[role="alert"]')?.textContent).toContain('Máy chủ bận');
+    expect(submit().hasAttribute('aria-busy')).toBe(false);
+    click(submit());
+    await flush(8);
+    expect(mocks.post).toHaveBeenCalledTimes(2);
+    expect(body().querySelector('[role="status"]')?.textContent).toContain('Đã ghi nhận yêu cầu');
+  });
+
+  it('còn số dư cũ mà lần tải lại lỗi: hai cú bấm "Thử lại" cùng khung hình chỉ tải lại một lần (có dữ liệu thì react-query huỷ rồi gọi lại nếu không chặn)', async () => {
+    const again = deferred<{ walletBalance: number }>();
+    mocks.get.mockReset().mockResolvedValueOnce({ walletBalance: 20000 }).mockRejectedValueOnce(new Error('mạng')).mockReturnValueOnce(again.promise);
+    mocks.post.mockRejectedValueOnce(new Error('Số dư vừa đổi'));
+    mount();
+    await openCard();
+    click(checkbox());
+    click(submit());
+    await flush(8);
+    expect(walletAlert()).not.toBeNull();
+    expect(mocks.get).toHaveBeenCalledTimes(2);
+    twice(retry());
+    await flush(4);
+    expect(mocks.get).toHaveBeenCalledTimes(3);
+    again.resolve({ walletBalance: 20000 });
+    await flush(4);
+    expect(walletAlert()).toBeNull();
+  });
+
+  it('"Thử lại" số dư: hai cú bấm cùng khung hình chỉ tải lại một lần', async () => {
+    const again = deferred<{ walletBalance: number }>();
+    mocks.get.mockReset().mockRejectedValueOnce(new Error('mạng')).mockReturnValueOnce(again.promise);
+    mount();
+    await openCard();
+    twice(retry());
+    await flush(4);
+    expect(mocks.get).toHaveBeenCalledTimes(2);
+    again.resolve({ walletBalance: 0 });
+    await flush(4);
+    expect(walletAlert()).toBeNull();
   });
 });

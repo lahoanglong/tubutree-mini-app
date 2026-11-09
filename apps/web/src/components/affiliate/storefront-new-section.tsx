@@ -13,7 +13,7 @@ import { LayoutPicker } from '@/components/mini/layout-picker';
 const TITLE_MAX = 80;
 const OPTIONS = styleOptions(null);
 
-function NewSectionForm({ pending, onCreate }: { pending: boolean; onCreate: (dto: ReturnType<typeof newSectionDto>) => void }) {
+function NewSectionForm({ pending, error, onCreate }: { pending: boolean; error: string | null; onCreate: (dto: ReturnType<typeof newSectionDto>) => void }) {
   const [style, setStyle] = useState<SectionStyle>('GRID');
   const [title, setTitle] = useState(suggestedSectionTitle('GRID'));
   // Tên gợi ý chỉ đi theo kiểu cho tới khi người dùng gõ: sau đó đổi kiểu không được ghi đè chữ của họ.
@@ -55,7 +55,20 @@ function NewSectionForm({ pending, onCreate }: { pending: boolean; onCreate: (dt
           <p className="mt-1 text-xs text-stone-600">{BUILDER_COPY.comboPctHint}</p>
         </div>
       )}
-      <button type="button" className={`${ui.btnPrimary} w-full`} disabled={!valid || pending} onClick={() => onCreate(newSectionDto({ style, title, comboPct: pct }))}>
+      {error && (
+        <p role="alert" className={ui.error}>
+          {error}
+        </p>
+      )}
+      {/* Đang tạo giữ aria-busy chứ không `disabled`: nút đang giữ focus mà bị vô hiệu thì Chromium thả focus về body. */}
+      <button
+        type="button"
+        className={`${ui.btnPrimary} w-full`}
+        disabled={!valid}
+        aria-busy={pending || undefined}
+        aria-disabled={pending || undefined}
+        onClick={() => onCreate(newSectionDto({ style, title, comboPct: pct }))}
+      >
         {pending ? 'Đang tạo…' : BUILDER_COPY.createAndAdd}
       </button>
     </div>
@@ -63,15 +76,17 @@ function NewSectionForm({ pending, onCreate }: { pending: boolean; onCreate: (dt
 }
 
 /** Thêm khối: chọn kiểu (cả bốn ô mở), đặt tên, Combo thêm mức giảm. Form chỉ dựng khi sheet mở nên mỗi lần mở là một khối mới, tên gợi ý theo kiểu. */
-export function StorefrontNewSection({ open, onClose, pending, onCreate }: {
+export function StorefrontNewSection({ open, onClose, pending, error = null, onCreate }: {
   open: boolean;
   onClose: () => void;
   pending: boolean;
+  /** Lỗi của lần tạo gần nhất: hiện ngay trong sheet (sheet còn mở khi lỗi, lời báo ở nền trang bị hộp thoại che). */
+  error?: string | null;
   onCreate: (dto: ReturnType<typeof newSectionDto>) => void;
 }) {
   return (
-    <Sheet open={open} onClose={onClose} title={BUILDER_COPY.addSection}>
-      {open && <NewSectionForm pending={pending} onCreate={onCreate} />}
+    <Sheet open={open} onClose={onClose} dismissible={!pending} title={BUILDER_COPY.addSection}>
+      {open && <NewSectionForm pending={pending} error={error} onCreate={onCreate} />}
     </Sheet>
   );
 }

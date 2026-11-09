@@ -23,7 +23,7 @@ export function ReportTab() {
       </div>
     );
   }
-  if (!q.data) return <ErrorState message={errText(q.error)} onRetry={() => void q.refetch()} />;
+  if (!q.data) return <ErrorState message={errText(q.error)} onRetry={() => q.refetch()} />;
   const d = q.data;
   const progress = d.nextTier ? Math.min(100, Math.round((d.revenue / d.nextTier.min) * 100)) : 100;
   return (

@@ -4,10 +4,11 @@ import { useMemo, useRef, useState } from 'react';
 import { DEALER_PRICE_LOADING } from '@tubutree/app-core/client-copy';
 import { useRouter } from 'next/navigation';
 import { AlertTriangle, Check, ClipboardList, Save, Search, X } from 'lucide-react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
 import { deleteTemplate, placeDealerOrder, saveTemplate, type DealerOrderRules, type PricelistRow } from '@tubutree/app-core/api/dealer';
 import { dealerPricelistQuery, dealerTemplatesQuery } from '@tubutree/app-core/queries/dealer';
 import { DEALER_MAX_QTY, preorderQty, realDiscountPct } from '@tubutree/app-core/dealer-pricing';
+import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
 import { newIdempotencyKey } from '@/lib/idempotency-key';
@@ -29,6 +30,8 @@ const preorderNote = (lines: number) =>
   `${lines} mặt hàng đặt vượt tồn: cả đơn sẽ giao khi đủ hàng, giữ giá hôm nay. Đơn trả trước vẫn thanh toán đủ ngay.`;
 
 type Notice = { text: string; error: boolean };
+type OrderLine = { variationId: string; quantity: number };
+const DEL_TEMPLATE_KEY = ['dealer-del-template'] as const;
 
 function PriceRow({ row, qty, onQty }: { row: PricelistRow; qty: number; onQty: (n: number) => void }) {
   const preorder = preorderQty(qty, row.stock);
@@ -80,20 +83,29 @@ export function PriceTab({ creditLimit, debt, rules }: { creditLimit: number; de
 
   const cart = useMemo(() => Object.entries(qty).filter(([, n]) => n > 0), [qty]);
 
-  const saveTpl = useMutation({
-    mutationFn: () => saveTemplate(coreHttp, tplName, cart.map(([variationId, quantity]) => ({ variationId, quantity }))),
-    onSuccess: () => {
+  // Tên và các dòng đi theo biến mutate (chụp lúc bấm), không đọc `tplName`/giỏ mới hơn. Khoá giữ tới khi danh sách mẫu mới về.
+  const saveTpl = useLockedMutation({
+    mutationFn: (v: { name: string; items: OrderLine[] }) => saveTemplate(coreHttp, v.name, v.items),
+    onSuccess: (_data, v) => {
       setSaveOpen(false);
-      setTplName('');
+      // Khách gõ tên khác trong lúc đang gửi thì giữ chữ đó, chỉ xoá khi ô vẫn là tên vừa gửi.
+      setTplName((cur) => (cur === v.name ? '' : cur));
       setNotice({ text: 'Đã lưu mẫu đơn.', error: false });
-      void qc.invalidateQueries({ queryKey: dealerTemplatesQuery(coreHttp).queryKey });
+      return qc.invalidateQueries({ queryKey: dealerTemplatesQuery(coreHttp).queryKey });
     },
   });
-  const delTpl = useMutation({
-    mutationFn: (id: string) => deleteTemplate(coreHttp, id),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: dealerTemplatesQuery(coreHttp).queryKey }),
-    onError: (e) => setNotice({ text: errText(e), error: true }),
-  });
+  // Khoá theo id mẫu: xoá hai mẫu khác nhau vẫn song song, chạm lặp vào cùng một mẫu thì bỏ qua. Giữ tới khi danh sách mới về, kẻo bấm lại trên mẫu đã xoá.
+  const delTpl = useLockedMutation(
+    {
+      mutationKey: DEL_TEMPLATE_KEY,
+      mutationFn: (id: string) => deleteTemplate(coreHttp, id),
+      onSuccess: () => qc.invalidateQueries({ queryKey: dealerTemplatesQuery(coreHttp).queryKey }),
+      onError: (e) => setNotice({ text: errText(e), error: true }),
+    },
+    (id) => id,
+  );
+  // Mọi mẫu đang xoá (không chỉ lệnh sau cùng): nút của đúng các mẫu đó báo bận.
+  const deletingTemplates = new Set(useMutationState({ filters: { mutationKey: DEL_TEMPLATE_KEY, status: 'pending' }, select: (m) => m.state.variables as string }));
 
   /** Dán "SKU<sep>SốLượng" mỗi dòng (sep = tab/phẩy/chấm phẩy/khoảng trắng) và khớp với bảng giá. */
   const applyPaste = () => {
@@ -140,19 +152,18 @@ export function PriceTab({ creditLimit, debt, rules }: { creditLimit: number; de
   // Giữ nguyên khoá qua mọi lần bấm lại tới khi đặt thành công (bấm đúp, timeout, đổi giỏ hay phương thức), như Mini App;
   // máy chủ trả lại đơn đã tạo cho cùng khoá và không đối chiếu nội dung, nên đổi khoá giữa chừng sẽ tạo đơn công nợ thứ hai.
   const orderKey = useRef(newIdempotencyKey());
-  // `disabled={isPending}` chỉ có hiệu lực sau lần render kế: hai cú bấm cùng khung hình vẫn gọi mutate hai lần.
-  const placeBusy = useRef(false);
-  const place = useMutation({
-    mutationFn: (method: 'CREDIT' | 'PREPAID') =>
-      placeDealerOrder(coreHttp, cart.map(([variationId, quantity]) => ({ variationId, quantity })), method, undefined, orderKey.current),
-    onSuccess: (order, method) => {
+  // Trả trước và Ghi công nợ chung MỘT khoá (đơn thứ hai cùng key sẽ trả lại đơn thứ nhất): `useLockedMutation` chặn cú bấm thứ hai ngay trong khung hình,
+  // và giữ tới khi công nợ, đơn, thưởng mới về. Giỏ gửi đi là biến mutate chụp lúc bấm, không phải giỏ hiện tại lúc máy chủ trả lời.
+  const place = useLockedMutation({
+    mutationFn: (v: { method: 'CREDIT' | 'PREPAID'; items: OrderLine[] }) => placeDealerOrder(coreHttp, v.items, v.method, undefined, orderKey.current),
+    onSuccess: (order, { method, items }) => {
       const lineKey = (rows: Array<[string, number]>) => rows.map(([id, n]) => `${id}:${n}`).sort().join(',');
-      const sent = lineKey(cart);
+      const sent = lineKey(items.map((it): [string, number] => [it.variationId, it.quantity]));
       const lines = order.items ?? [];
       const got = lines.every((it) => it.variationId) ? lineKey(lines.map((it): [string, number] => [it.variationId, it.quantity])) : '';
-      for (const key of ['dealer-orders', 'dealer-me', 'dealer-credit', 'dealer-rewards', 'dealer-report']) {
-        void qc.invalidateQueries({ queryKey: [key] });
-      }
+      const refreshed = Promise.all(
+        ['dealer-orders', 'dealer-me', 'dealer-credit', 'dealer-rewards', 'dealer-report'].map((key) => qc.invalidateQueries({ queryKey: [key] })),
+      );
       // Lần đặt trước đã tạo đơn dù mạng báo lỗi: máy chủ trả đơn đó (giỏ cũ), giỏ hiện tại chưa được đặt nên giữ nguyên.
       if (got !== '' && sent !== got) {
         orderKey.current = newIdempotencyKey();
@@ -160,7 +171,7 @@ export function PriceTab({ creditLimit, debt, rules }: { creditLimit: number; de
           text: `Đơn ${order.code} đã được tạo ở lần đặt trước (mạng lỗi). Giỏ hiện tại chưa đặt, kiểm tra tab Đơn hàng trước khi đặt lại.`,
           error: true,
         });
-        return;
+        return refreshed;
       }
       // Cùng giỏ nhưng khác hình thức so với nút vừa bấm: đơn là của lần trước (mạng lỗi), báo hình thức thật của đơn.
       const waitingTransfer = order.status === 'PENDING_PAYMENT';
@@ -185,17 +196,13 @@ export function PriceTab({ creditLimit, debt, rules }: { creditLimit: number; de
       setQty({});
       // Chỉ đơn máy chủ trả về còn chờ chuyển khoản mới có trang để chuyển; đơn công nợ (CONFIRMED) cũng ghi BANK_TRANSFER nên phải xét cả trạng thái.
       if (waitingTransfer && order.paymentMethod === 'BANK_TRANSFER') router.push(bankPaymentHref(order.code));
+      return refreshed;
     },
     onError: (e) => setNotice({ text: errText(e), error: true }),
-    onSettled: () => {
-      placeBusy.current = false;
-    },
   });
   const submit = (method: 'CREDIT' | 'PREPAID') => {
-    if (placeBusy.current) return;
-    placeBusy.current = true;
     setNotice(null);
-    place.mutate(method);
+    place.mutate({ method, items: cart.map(([variationId, quantity]) => ({ variationId, quantity })) });
   };
 
   const belowMin = !!rules && rules.minOrderValue > 0 && total < rules.minOrderValue;
@@ -235,10 +242,25 @@ export function PriceTab({ creditLimit, debt, rules }: { creditLimit: number; de
         </p>
       )}
       <div className="mt-2 flex gap-2">
-        <button type="button" disabled={placing || belowMin} onClick={() => submit('PREPAID')} className={`${skin.btnSecondary} flex-1`}>
+        {/* Đang đặt giữ aria-busy/aria-disabled chứ không `disabled`: nút đang giữ focus mà bị vô hiệu thì Chromium thả focus về body. */}
+        <button
+          type="button"
+          disabled={belowMin}
+          aria-busy={placing || undefined}
+          aria-disabled={placing || undefined}
+          onClick={() => submit('PREPAID')}
+          className={`${skin.btnSecondary} flex-1`}
+        >
           Trả trước
         </button>
-        <button type="button" disabled={overLimit || placing || belowMin} onClick={() => submit('CREDIT')} className={`${ui.btnPrimary} ${skin.dealerInkBtn} flex-1`}>
+        <button
+          type="button"
+          disabled={overLimit || belowMin}
+          aria-busy={placing || undefined}
+          aria-disabled={placing || undefined}
+          onClick={() => submit('CREDIT')}
+          className={`${ui.btnPrimary} ${skin.dealerInkBtn} flex-1`}
+        >
           {placing ? 'Đang đặt…' : 'Ghi công nợ'}
         </button>
       </div>
@@ -248,7 +270,11 @@ export function PriceTab({ creditLimit, debt, rules }: { creditLimit: number; de
   return (
     <div className="pb-6">
       <div role="status" aria-live="polite">
-        {notice && <p className={`mb-3 text-sm ${notice.error ? 'text-danger-fg' : 'font-medium text-success-fg'}`}>{notice.text}</p>}
+        {notice && (
+          <p role={notice.error ? 'alert' : undefined} className={`mb-3 text-sm ${notice.error ? 'text-danger-fg' : 'font-medium text-success-fg'}`}>
+            {notice.text}
+          </p>
+        )}
       </div>
 
       <div className="flex items-center gap-2">
@@ -291,11 +317,10 @@ export function PriceTab({ creditLimit, debt, rules }: { creditLimit: number; de
               <button
                 type="button"
                 aria-label="Xoá mẫu đơn"
-                aria-disabled={delTpl.isPending}
-                className={`flex min-h-11 min-w-11 items-center justify-center ${delTpl.isPending ? 'opacity-50' : ''}`}
-                onClick={() => {
-                  if (!delTpl.isPending) delTpl.mutate(t.id);
-                }}
+                aria-busy={deletingTemplates.has(t.id) || undefined}
+                aria-disabled={deletingTemplates.has(t.id) || undefined}
+                className={`flex min-h-11 min-w-11 items-center justify-center ${deletingTemplates.has(t.id) ? 'opacity-50' : ''}`}
+                onClick={() => delTpl.mutate(t.id)}
               >
                 <X className="h-4 w-4 text-danger-fg" aria-hidden="true" />
               </button>
@@ -312,7 +337,7 @@ export function PriceTab({ creditLimit, debt, rules }: { creditLimit: number; de
             ))}
           </div>
         ) : priceQ.isError && !priceQ.data ? (
-          <ErrorState message={errText(priceQ.error)} onRetry={() => void priceQ.refetch()} />
+          <ErrorState message={errText(priceQ.error)} onRetry={() => priceQ.refetch()} />
         ) : rows.length > 0 ? (
           <ul className="md:grid md:grid-cols-2">
             {rows.map((r) => (
@@ -340,8 +365,16 @@ export function PriceTab({ creditLimit, debt, rules }: { creditLimit: number; de
         open={saveOpen}
         onClose={() => setSaveOpen(false)}
         title="Lưu mẫu đơn"
+        dismissible={!saveTpl.isPending}
         footer={
-          <button type="button" disabled={!tplName.trim() || saveTpl.isPending} onClick={() => saveTpl.mutate()} className={`${ui.btnPrimary} ${skin.dealerInkBtn} w-full`}>
+          <button
+            type="button"
+            disabled={!tplName.trim()}
+            aria-busy={saveTpl.isPending || undefined}
+            aria-disabled={saveTpl.isPending || undefined}
+            onClick={() => saveTpl.mutate({ name: tplName, items: cart.map(([variationId, quantity]) => ({ variationId, quantity })) })}
+            className={`${ui.btnPrimary} ${skin.dealerInkBtn} w-full`}
+          >
             {saveTpl.isPending ? 'Đang lưu…' : 'Lưu mẫu'}
           </button>
         }

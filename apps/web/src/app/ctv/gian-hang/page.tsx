@@ -89,7 +89,7 @@ function CtvStorefront() {
   if (sfQ.isError && !sfQ.data && !notFound) {
     return (
       <Shell>
-        <ErrorState message={errText(sfQ.error)} onRetry={() => void sfQ.refetch()} />
+        <ErrorState message={errText(sfQ.error)} onRetry={() => sfQ.refetch()} />
       </Shell>
     );
   }

@@ -1,5 +1,6 @@
 'use client';
 
+import { useRef } from 'react';
 import Link from 'next/link';
 import { loadMoreFailed } from '@tubutree/app-core/client-copy';
 import { useInfiniteQuery, useQuery, type InfiniteData, type UseInfiniteQueryResult } from '@tanstack/react-query';
@@ -93,7 +94,7 @@ export default function WalletPage() {
   if (!w) {
     return (
       <LedgerShell title={TITLE} wide>
-        <ErrorState message={errText(walletQ.error)} onRetry={() => void walletQ.refetch()} />
+        <ErrorState message={errText(walletQ.error)} onRetry={() => walletQ.refetch()} />
       </LedgerShell>
     );
   }
@@ -226,6 +227,19 @@ function SourceCard({ label, value, icon: SourceIcon, wide, hint, href, note }: 
 /** Sao kê Ví Tubu từ sổ cái: mỗi biến động một dòng kèm số dư sau giao dịch. */
 function WalletHistory({ q }: { q: UseInfiniteQueryResult<InfiniteData<WalletTxnPage>> }) {
   const rows = uniqueById(q.data?.pages.flatMap((p) => p.data) ?? []);
+  // `isFetchingNextPage` chỉ đúng sau lần vẽ kế, nên khoá bằng ref; nút không `disabled` thật vì đang giữ focus (Chromium thả focus về body khi nút bị vô hiệu).
+  const paging = useRef(false);
+  const loadMore = () => {
+    if (paging.current || q.isFetchingNextPage) return;
+    paging.current = true;
+    const release = () => {
+      paging.current = false;
+    };
+    void q.fetchNextPage().then(release, (err: unknown) => {
+      release();
+      throw err;
+    });
+  };
 
   return (
     <section aria-label="Lịch sử Ví" className={`p-4 max-md:order-8 ${miniCard}`}>
@@ -239,7 +253,7 @@ function WalletHistory({ q }: { q: UseInfiniteQueryResult<InfiniteData<WalletTxn
           <Skeleton height={44} />
         </div>
       ) : q.isError && rows.length === 0 ? (
-        <ErrorState message={errText(q.error)} onRetry={() => void q.refetch()} />
+        <ErrorState message={errText(q.error)} onRetry={() => q.refetch()} />
       ) : rows.length === 0 ? (
         <p className="mt-1 text-sm text-stone-600">Chưa có biến động nào trong Ví.</p>
       ) : (
@@ -265,7 +279,13 @@ function WalletHistory({ q }: { q: UseInfiniteQueryResult<InfiniteData<WalletTxn
           </ul>
           {q.hasNextPage && (
             <div className="mt-3 text-center">
-              <button type="button" onClick={() => void q.fetchNextPage()} disabled={q.isFetchingNextPage} className={miniBtnSecondary}>
+              <button
+                type="button"
+                onClick={loadMore}
+                aria-busy={q.isFetchingNextPage || undefined}
+                aria-disabled={q.isFetchingNextPage || undefined}
+                className={miniBtnSecondary}
+              >
                 {q.isFetchingNextPage ? 'Đang tải…' : 'Xem thêm'}
               </button>
               {q.isFetchNextPageError && (

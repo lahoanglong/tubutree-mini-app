@@ -55,7 +55,7 @@ export default function DealerPage() {
   if (meQ.isError && !meQ.data) {
     return (
       <DealerShell title={TITLE}>
-        <ErrorState message={errText(meQ.error)} onRetry={() => void meQ.refetch()} />
+        <ErrorState message={errText(meQ.error)} onRetry={() => meQ.refetch()} />
       </DealerShell>
     );
   }

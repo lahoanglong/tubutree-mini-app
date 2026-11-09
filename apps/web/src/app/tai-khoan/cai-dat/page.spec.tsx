@@ -268,3 +268,65 @@ describe('/tai-khoan/cai-dat: liên kết, theo dõi OA, đăng xuất', () => {
     expect(byText(container, 'button', 'Đăng xuất mọi thiết bị')).not.toBeNull();
   });
 });
+
+describe('/tai-khoan/cai-dat: khoá chạm đúp (Mini ↔ web)', () => {
+  const twice = (el: HTMLElement) =>
+    act(() => {
+      el.click();
+      el.click();
+    });
+
+  it('hai cú bấm cùng khung hình trên một công tắc chỉ PATCH một lần, đúng giá trị lần đầu', async () => {
+    let resolveSave: (v: object) => void = () => undefined;
+    mocks.patch.mockReturnValue(new Promise((r) => (resolveSave = r)));
+    const { container } = await mount();
+    twice(promo(container));
+    await flush(2);
+    expect(mocks.patch).toHaveBeenCalledTimes(1);
+    expect(mocks.patch.mock.calls[0]![1]).toEqual({ notifyPromo: false });
+    await act(async () => resolveSave({ notifyPromo: false, notifyGarden: true }));
+    await flush(2);
+  });
+
+  it('bấm công tắc này rồi công tắc kia cùng khung hình: chỉ công tắc đầu được gửi (khoá chung cho cả hai)', async () => {
+    let resolveSave: (v: object) => void = () => undefined;
+    mocks.patch.mockReturnValue(new Promise((r) => (resolveSave = r)));
+    const { container } = await mount();
+    act(() => {
+      promo(container).click();
+      garden(container).click();
+    });
+    await flush(2);
+    expect(mocks.patch).toHaveBeenCalledTimes(1);
+    expect(mocks.patch.mock.calls[0]![1]).toEqual({ notifyPromo: false });
+    await act(async () => resolveSave({ notifyPromo: false, notifyGarden: true }));
+    await flush(2);
+  });
+
+  it('lưu lỗi: khoá nhả nên bấm lại được và lần hai gọi API; công tắc không bị disabled thật', async () => {
+    mocks.patch.mockRejectedValueOnce(new Error('net'));
+    const { container } = await mount();
+    click(promo(container));
+    await flush(4);
+    expect(container.querySelector('[role="alert"]')).not.toBeNull();
+    expect((promo(container) as HTMLButtonElement).disabled).toBe(false);
+    click(promo(container));
+    await flush(4);
+    expect(mocks.patch).toHaveBeenCalledTimes(2);
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it('tải tuỳ chọn lỗi: hai cú bấm "Thử lại" cùng khung hình chỉ tải lại một lần', async () => {
+    mocks.get.mockRejectedValueOnce(new Error('x'));
+    const { container } = await mount();
+    const before = mocks.get.mock.calls.length;
+    let resolveGet: (v: object) => void = () => undefined;
+    mocks.get.mockReturnValueOnce(new Promise((r) => (resolveGet = r)));
+    twice(byText(container, 'button', 'Thử lại')!);
+    await flush(3);
+    expect(mocks.get.mock.calls.length).toBe(before + 1);
+    await act(async () => resolveGet({ notifyPromo: true, notifyGarden: true }));
+    await flush(4);
+    expect(promo(container).getAttribute('aria-checked')).toBe('true');
+  });
+});

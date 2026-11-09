@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
 import { EyeOff, Eye, Pencil, Pin, Plus, Settings, Share2, Sparkles, Trash2, UserRoundCog } from 'lucide-react';
 import {
   createCollection,
@@ -25,6 +25,7 @@ import {
   sectionCardView, sectionHref, sectionIdFromSearch, sectionStyleOf, type newSectionDto,
 } from '@tubutree/app-core/commerce/storefront-builder';
 import { pickerQuery, storefrontQuestsQuery } from '@tubutree/app-core/queries/storefront';
+import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { coreHttp } from '@/lib/core-http';
 import { formatCount } from '@/lib/checkout-points';
 import { ui } from '@/lib/guest-ui';
@@ -49,6 +50,9 @@ import { storefrontHost } from './storefront-rules';
 import { CollectionSheet, ConfigSheet, actErrText, PickerSheet, ProfileSheet, type Notify } from './storefront-sheets';
 
 type Notice = { text: string; error: boolean } | null;
+
+const DELETE_COLLECTION_KEY = ['storefront-delete-collection'] as const;
+const DELETE_ITEM_KEY = ['storefront-delete-item'] as const;
 
 interface MenuAction {
   key: string;
@@ -84,7 +88,10 @@ function ActionMenu({ open, title, actions, onClose }: { open: boolean; title: s
 
 const samePinGroup = (a: { isPinned: boolean }, b: { isPinned: boolean }) => a.isPinned === b.isPinned;
 
-/** Hộp xác nhận cho thao tác không hoàn tác: hai nút Huỷ / hành động, cùng kiểu với sheet của Mini App. */
+/**
+ * Hộp xác nhận cho thao tác không hoàn tác: hai nút Huỷ / hành động, cùng kiểu với sheet của Mini App. Đang gửi thì hộp không đóng được (lệnh không huỷ được,
+ * đóng rồi thì lời báo lỗi và kết quả không còn chỗ hiện) và nút hành động giữ aria-busy chứ không `disabled`: nút đang giữ focus mà bị vô hiệu thì Chromium thả focus về body.
+ */
 function ConfirmSheet({
   open,
   title,
@@ -103,15 +110,16 @@ function ConfirmSheet({
   onConfirm: () => void;
 }) {
   return (
-    <Sheet open={open} onClose={onClose} title={title} description={description}>
+    <Sheet open={open} onClose={onClose} dismissible={!pending} title={title} description={description}>
       <div className="mt-1 flex gap-2">
-        <button type="button" className={`${ui.btnSecondary} flex-1`} onClick={onClose}>
+        <button type="button" className={`${ui.btnSecondary} flex-1`} aria-disabled={pending || undefined} onClick={() => !pending && onClose()}>
           Huỷ
         </button>
         <button
           type="button"
-          className="inline-flex min-h-11 flex-1 items-center justify-center rounded-control bg-danger-fg px-5 text-sm font-semibold text-stone-0 disabled:opacity-60"
-          disabled={pending}
+          className="inline-flex min-h-11 flex-1 items-center justify-center rounded-control bg-danger-fg px-5 text-sm font-semibold text-stone-0 aria-disabled:opacity-60"
+          aria-busy={pending || undefined}
+          aria-disabled={pending || undefined}
           onClick={onConfirm}
         >
           {actionLabel}
@@ -151,6 +159,8 @@ export function StorefrontBuilder({ sf, tier, tierPending, nextTier = null }: { 
   const [previewOpen, setPreviewOpen] = useState(false);
   const [questOpen, setQuestOpen] = useState(false);
   const [newOpen, setNewOpen] = useState(false);
+  const [newColError, setNewColError] = useState<string | null>(null);
+  const [noteError, setNoteError] = useState<string | null>(null);
   const [itemMenuId, setItemMenuId] = useState<string | null>(null);
   const [colMenuId, setColMenuId] = useState<string | null>(null);
   // Trang chi tiết là một mục lịch sử của chính trang này (`?khoi=`), không phải route mới: nút lùi nổi (điện thoại) và nút lùi của trình duyệt
@@ -192,28 +202,28 @@ export function StorefrontBuilder({ sf, tier, tierPending, nextTier = null }: { 
     moveTimer.current = setTimeout(() => setMoveText(text), 0);
   };
 
-  const publishMut = useMutation({
-    mutationFn: () => publishStorefront(coreHttp, true),
-    onSuccess: (res) => {
-      notify(storefrontPublishedMessage(res, sf));
-      void refresh();
+  // Đăng và gỡ đăng là hai việc ngược nhau trên cùng gian hàng nên đi chung MỘT lệnh (một khoá): một việc mỗi lúc. `onSuccess` trả lời hứa tải lại, nên khoá chỉ nhả
+  // khi gian hàng mới về; nhả sớm thì nút còn hiện trạng thái cũ và bấm được lần hai.
+  const publishMut = useLockedMutation({
+    mutationFn: (publish: boolean) => publishStorefront(coreHttp, publish),
+    onSuccess: (res, publish) => {
+      if (publish) {
+        notify(storefrontPublishedMessage(res, sf));
+      } else {
+        setConfirmUnpublish(false);
+        notify('Đã gỡ đăng gian hàng');
+      }
+      return refresh();
     },
-    onError: fail,
-  });
-  const unpublishMut = useMutation({
-    mutationFn: () => publishStorefront(coreHttp, false),
-    onSuccess: () => {
-      setConfirmUnpublish(false);
-      notify('Đã gỡ đăng gian hàng');
-      void refresh();
-    },
-    onError: (e) => {
-      setConfirmUnpublish(false);
+    onError: (e, publish) => {
+      if (!publish) setConfirmUnpublish(false);
       fail(e);
     },
   });
-  const newColMut = useMutation({
+  const publishBusy = publishMut.isPending;
+  const newColMut = useLockedMutation({
     mutationFn: (dto: ReturnType<typeof newSectionDto>) => createCollection(coreHttp, dto),
+    onMutate: () => setNewColError(null),
     onSuccess: (created, dto) => {
       // Khối mới hiện ngay trong trang chi tiết, không chờ lần tải lại.
       qc.setQueryData<StorefrontEdit | null>(['my-storefront'], (old) =>
@@ -224,27 +234,34 @@ export function StorefrontBuilder({ sf, tier, tierPending, nextTier = null }: { 
         openSection(created.id);
         setPickerCol(created.id);
       }
-      void refresh();
+      const refreshed = refresh();
       // Máy chủ kẹp `%` theo trần cấu hình: thấp hơn số vừa nhập thì nói rõ, không để CTV tưởng đã được đúng số đó.
       if (dto.kind === 'COMBO' && typeof dto.comboDiscountPct === 'number') {
         const out = comboPctOutcome(dto.comboDiscountPct, created?.comboDiscountPct);
         if (out.clamped) notify(out.text, true);
       }
+      return refreshed;
     },
-    onError: fail,
+    onError: (e) => setNewColError(actErrText(e)),
   });
-  const deleteColMut = useMutation({
-    mutationFn: (id: string) => deleteCollection(coreHttp, id),
-    onSuccess: (_d, id) => {
-      setConfirmDeleteCol(null);
-      if (id === sectionId) closeSection();
-      void refresh();
+  // Khoá theo mã khối; `useMutationState` cho biết MỌI khối đang xoá (không chỉ lệnh sau cùng) nên hộp xác nhận của khối nào bận thì báo bận đúng khối đó.
+  const deletingCols = useMutationState({ filters: { mutationKey: DELETE_COLLECTION_KEY, status: 'pending' }, select: (m) => m.state.variables as string });
+  const deleteColMut = useLockedMutation(
+    {
+      mutationKey: DELETE_COLLECTION_KEY,
+      mutationFn: (id: string) => deleteCollection(coreHttp, id),
+      onSuccess: (_d, id) => {
+        setConfirmDeleteCol(null);
+        if (id === sectionId) closeSection();
+        return refresh();
+      },
+      onError: (e) => {
+        setConfirmDeleteCol(null);
+        fail(e);
+      },
     },
-    onError: (e) => {
-      setConfirmDeleteCol(null);
-      fail(e);
-    },
-  });
+    (id) => id,
+  );
   const patchCollection = (id: string, patch: Partial<{ layout: 'GRID' | 'CAROUSEL' | 'STACK'; comboDiscountPct: number | null }>) =>
     qc.setQueryData<StorefrontEdit | null>(['my-storefront'], (old) => (old ? { ...old, collections: old.collections.map((c) => (c.id === id ? { ...c, ...patch } : c)) } : old));
   // Chỉ gửi trường đổi (không kèm kind/title): API nhận từng phần, và Thường ↔ Combo chưa đổi được sau khi tạo.
@@ -282,20 +299,29 @@ export function StorefrontBuilder({ sf, tier, tierPending, nextTier = null }: { 
       return null;
     }
   };
-  const itemMut = useMutation({
-    mutationFn: (v: { id: string; dto: { isPinned?: boolean; isHidden?: boolean } }) => updateItem(coreHttp, v.id, v.dto),
-    onSuccess: () => void refresh(),
-    onError: fail,
-  });
-  const noteMut = useMutation({
-    mutationFn: (v: { id: string; note: string }) => updateItem(coreHttp, v.id, { note: v.note }),
-    onSuccess: () => {
-      setNoting(null);
-      notify('Đã lưu lý do giới thiệu');
-      void refresh();
+  // Ghim và Ẩn cùng đi qua đây, khoá theo mã món: chạm hai mục menu của một món sát nhau chỉ gửi mục đầu, món khác vẫn chạy song song.
+  const itemMut = useLockedMutation(
+    {
+      mutationFn: (v: { id: string; dto: { isPinned?: boolean; isHidden?: boolean } }) => updateItem(coreHttp, v.id, v.dto),
+      onSuccess: () => refresh(),
+      onError: fail,
     },
-    onError: fail,
-  });
+    (v) => v.id,
+  );
+  const noteMut = useLockedMutation(
+    {
+      mutationFn: (v: { id: string; note: string }) => updateItem(coreHttp, v.id, { note: v.note }),
+      onMutate: () => setNoteError(null),
+      onSuccess: (_d, v) => {
+        // Chữ gõ thêm trong lúc gửi không được xoá cùng lần gửi đầu: chỉ đóng sheet khi ô vẫn đúng như đã gửi.
+        setNoting((cur) => (cur && cur.id === v.id && cur.note.trim() === v.note ? null : cur));
+        notify('Đã lưu lý do giới thiệu');
+        return refresh();
+      },
+      onError: (e) => setNoteError(actErrText(e)),
+    },
+    (v) => v.id,
+  );
   // Trong onSuccess/onError, lần đang chạy vẫn được đếm.
   const hasOtherReorderPending = () => qc.isMutating({ mutationKey: STOREFRONT_REORDER_MUTATION.mutationKey }) > 1;
   // Cập nhật lạc quan: thứ tự mới hiện ngay, máy chủ từ chối thì trả về đúng thứ tự cũ.
@@ -367,17 +393,22 @@ export function StorefrontBuilder({ sf, tier, tierPending, nextTier = null }: { 
     const reason = moveBlockReason(list, id, dir, same);
     if (reason) announce(moveBlockedAnnouncement({ name, dir, reason }));
   };
-  const delItemMut = useMutation({
-    mutationFn: (id: string) => removeItem(coreHttp, id),
-    onSuccess: () => {
-      setConfirmDeleteItem(null);
-      void refresh();
+  const deletingItems = useMutationState({ filters: { mutationKey: DELETE_ITEM_KEY, status: 'pending' }, select: (m) => m.state.variables as string });
+  const delItemMut = useLockedMutation(
+    {
+      mutationKey: DELETE_ITEM_KEY,
+      mutationFn: (id: string) => removeItem(coreHttp, id),
+      onSuccess: () => {
+        setConfirmDeleteItem(null);
+        return refresh();
+      },
+      onError: (e) => {
+        setConfirmDeleteItem(null);
+        fail(e);
+      },
     },
-    onError: (e) => {
-      setConfirmDeleteItem(null);
-      fail(e);
-    },
-  });
+    (id) => id,
+  );
 
   // Mở/đóng trang chi tiết: vào tiêu đề khối khi mở; khi lùi lại thì về đúng thẻ vừa mở.
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -466,8 +497,15 @@ export function StorefrontBuilder({ sf, tier, tierPending, nextTier = null }: { 
           {view.code === 'PENDING_APPROVAL' ? 'Chia sẻ sau' : 'Chia sẻ'}
         </button>
       ) : (
-        <button type="button" className={`${ui.btnPrimary} ${grow}`} disabled={itemCount === 0 || publishMut.isPending} onClick={() => publishMut.mutate()}>
-          {publishMut.isPending ? 'Đang gửi…' : publishCopy.button}
+        <button
+          type="button"
+          className={`${ui.btnPrimary} ${grow}`}
+          disabled={itemCount === 0}
+          aria-busy={publishBusy || undefined}
+          aria-disabled={publishBusy || undefined}
+          onClick={() => publishMut.mutate(true)}
+        >
+          {publishBusy ? 'Đang gửi…' : publishCopy.button}
         </button>
       )}
     </>
@@ -476,7 +514,11 @@ export function StorefrontBuilder({ sf, tier, tierPending, nextTier = null }: { 
   return (
     <div className="pb-4">
       <div role="status" aria-live="polite">
-        {notice && <p className={`mb-3 text-sm ${notice.error ? 'text-danger-fg' : 'font-medium text-success-fg'}`}>{notice.text}</p>}
+        {notice && (
+          <p role={notice.error ? 'alert' : undefined} className={`mb-3 text-sm ${notice.error ? 'text-danger-fg' : 'font-medium text-success-fg'}`}>
+            {notice.text}
+          </p>
+        )}
       </div>
       <div data-testid="move-status" role="status" aria-live="polite" className="sr-only">
         {moveText}
@@ -500,7 +542,10 @@ export function StorefrontBuilder({ sf, tier, tierPending, nextTier = null }: { 
           onMoveItem={(itemId, dir) => moveItem(sectionCol.id, itemId, dir)}
           onMoveBlocked={(itemId, dir) => blockedMove(sectionCol.items, itemId, dir, nameOfItem(sectionCol.id, itemId), samePinGroup)}
           onItemMenu={setItemMenuId}
-          onNote={(itemId) => setNoting({ id: itemId, note: sectionCol.items.find((i) => i.id === itemId)?.note ?? '' })}
+          onNote={(itemId) => {
+            setNoteError(null);
+            setNoting({ id: itemId, note: sectionCol.items.find((i) => i.id === itemId)?.note ?? '' });
+          }}
         />
       ) : (
         <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start lg:gap-x-6">
@@ -594,7 +639,14 @@ export function StorefrontBuilder({ sf, tier, tierPending, nextTier = null }: { 
               ),
             )}
             {overflow && <p className="text-xs text-stone-700">{overflow}</p>}
-            <button type="button" className={`${ui.btnSecondary} ${phoneSecondary} w-full`} onClick={() => setNewOpen(true)}>
+            <button
+              type="button"
+              className={`${ui.btnSecondary} ${phoneSecondary} w-full`}
+              onClick={() => {
+                setNewColError(null);
+                setNewOpen(true);
+              }}
+            >
               <Plus className="mr-1 h-4 w-4" aria-hidden="true" />
               {BUILDER_COPY.addSection}
             </button>
@@ -618,7 +670,7 @@ export function StorefrontBuilder({ sf, tier, tierPending, nextTier = null }: { 
 
       <StorefrontShareSheet open={shareOpen} onClose={() => setShareOpen(false)} slug={sf.slug} title={sf.title} referralCode={sf.referralCode ?? null} />
       <ContentKitSheet open={!!kitSlug} onClose={() => setKitSlug(null)} productSlug={kitSlug ?? ''} />
-      <PickerSheet open={!!pickerCol} collectionId={pickerCol} onClose={() => setPickerCol(null)} onAdded={() => void refresh()} />
+      <PickerSheet open={!!pickerCol} collectionId={pickerCol} onClose={() => setPickerCol(null)} onAdded={refresh} />
       <ProfileSheet open={profileOpen} sf={sf} onClose={() => setProfileOpen(false)} onSaved={(t) => { notify(t); void refresh(); }} />
       <ConfigSheet
         open={configOpen}
@@ -657,22 +709,22 @@ export function StorefrontBuilder({ sf, tier, tierPending, nextTier = null }: { 
         }
       />
       <CollectionSheet collection={editing} onClose={() => setEditingCol(null)} onSaved={(t) => { notify(t); void refresh(); }} />
-      <StorefrontNewSection open={newOpen} onClose={() => setNewOpen(false)} pending={newColMut.isPending} onCreate={(dto) => newColMut.mutate(dto)} />
+      <StorefrontNewSection open={newOpen} onClose={() => setNewOpen(false)} pending={newColMut.isPending} error={newColError} onCreate={(dto) => newColMut.mutate(dto)} />
 
       <ConfirmSheet
         open={confirmUnpublish}
         title="Gỡ đăng gian hàng này?"
         description="Khách mở link gian hàng sẽ không thấy gì cho tới khi bạn đăng lại."
         actionLabel="Gỡ đăng"
-        pending={unpublishMut.isPending}
+        pending={publishBusy}
         onClose={() => setConfirmUnpublish(false)}
-        onConfirm={() => unpublishMut.mutate()}
+        onConfirm={() => publishMut.mutate(false)}
       />
       <ConfirmSheet
         open={!!confirmDeleteCol}
         title={BUILDER_COPY.deleteSectionConfirm}
         actionLabel={BUILDER_COPY.deleteSection}
-        pending={deleteColMut.isPending}
+        pending={!!confirmDeleteCol && deletingCols.includes(confirmDeleteCol)}
         onClose={() => setConfirmDeleteCol(null)}
         onConfirm={() => confirmDeleteCol && deleteColMut.mutate(confirmDeleteCol)}
       />
@@ -680,7 +732,7 @@ export function StorefrontBuilder({ sf, tier, tierPending, nextTier = null }: { 
         open={!!confirmDeleteItem}
         title="Xoá sản phẩm này khỏi gian hàng?"
         actionLabel="Xoá"
-        pending={delItemMut.isPending}
+        pending={!!confirmDeleteItem && deletingItems.includes(confirmDeleteItem)}
         onClose={() => setConfirmDeleteItem(null)}
         onConfirm={() => confirmDeleteItem && delItemMut.mutate(confirmDeleteItem)}
       />
@@ -704,6 +756,7 @@ export function StorefrontBuilder({ sf, tier, tierPending, nextTier = null }: { 
       <Sheet
         open={!!noting}
         onClose={() => setNoting(null)}
+        dismissible={!noteMut.isPending}
         title="Vì sao mình giới thiệu"
         description="Lời thật của bạn thuyết phục hơn mọi mô tả sản phẩm — khách thấy ngay dưới tên món."
       >
@@ -719,11 +772,22 @@ export function StorefrontBuilder({ sf, tier, tierPending, nextTier = null }: { 
               onChange={(e) => setNoting({ ...noting, note: e.target.value })}
             />
             <div className="mt-1 text-xs text-stone-600">{noting.note.length}/200</div>
+            {noteError && (
+              <p role="alert" className={`mt-2 ${ui.error}`}>
+                {noteError}
+              </p>
+            )}
             <div className="mt-4 flex gap-2">
-              <button type="button" className={`${ui.btnSecondary} flex-1`} onClick={() => setNoting(null)}>
+              <button type="button" className={`${ui.btnSecondary} flex-1`} aria-disabled={noteMut.isPending || undefined} onClick={() => !noteMut.isPending && setNoting(null)}>
                 Huỷ
               </button>
-              <button type="button" className={`${ui.btnPrimary} flex-1`} disabled={noteMut.isPending} onClick={() => noteMut.mutate({ id: noting.id, note: noting.note.trim() })}>
+              <button
+                type="button"
+                className={`${ui.btnPrimary} flex-1`}
+                aria-busy={noteMut.isPending || undefined}
+                aria-disabled={noteMut.isPending || undefined}
+                onClick={() => noteMut.mutate({ id: noting.id, note: noting.note.trim() })}
+              >
                 Lưu
               </button>
             </div>

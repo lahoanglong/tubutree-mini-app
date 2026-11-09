@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useRef, useState } from 'react';
+import { useMutationState, useQueryClient } from '@tanstack/react-query';
 import { BRAND_OWNER_COUPON_HINT, BRAND_OWNER_INFO, BRAND_OWNER_SAVED } from '@tubutree/app-core/client-copy';
 import { Gift, Pencil, Plus, Trash2 } from 'lucide-react';
 import {
@@ -11,6 +11,7 @@ import {
   updateOwnedPromotion,
   type OwnedBrand,
 } from '@tubutree/app-core/api/brand-owner';
+import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { coreHttp } from '@/lib/core-http';
 import { EMPTY_PROMO, ownerActionError, promoDateRangeError, promoPayload, promoToForm, type PromoForm } from '@/lib/brand-owner-view';
 import { ui } from '@/lib/guest-ui';
@@ -21,6 +22,9 @@ import { useNotice } from '@/components/staff/staff-shell';
 import { BrandImageField } from './brand-image-field';
 
 const ICON_BTN = 'inline-flex h-11 w-11 flex-none items-center justify-center rounded-control text-stone-700 hover:bg-stone-50';
+const TOGGLE_KEY = ['owned-promo-toggle'] as const;
+const DELETE_KEY = ['owned-promo-delete'] as const;
+const samePromo = (a: PromoForm, b: PromoForm) => a.title === b.title && a.subtitle === b.subtitle && a.couponCode === b.couponCode && a.startAt === b.startAt && a.endAt === b.endAt;
 
 /** Thẻ "Hồ sơ" (logo, ảnh bìa, tagline, nguồn gốc, câu chuyện) và thẻ "Khuyến mãi" của nhãn. */
 export function ProfileTab({ brand }: { brand: OwnedBrand }) {
@@ -35,11 +39,12 @@ export function ProfileTab({ brand }: { brand: OwnedBrand }) {
     origin: brand.origin ?? '',
     story: brand.story ?? '',
   });
-  const saveMut = useMutation({
-    mutationFn: () => updateOwnedBrand(coreHttp, f),
+  // Hồ sơ gửi đi là biến mutate chụp lúc bấm lần đầu, không đọc `f` mới hơn; khoá giữ tới khi hồ sơ mới về.
+  const saveMut = useLockedMutation({
+    mutationFn: (sent: typeof f) => updateOwnedBrand(coreHttp, sent),
     onSuccess: () => {
       notify({ text: BRAND_OWNER_SAVED, tone: 'success' });
-      void refresh();
+      return refresh();
     },
     onError: (e) => notify({ text: ownerActionError(e), tone: 'error' }),
   });
@@ -52,44 +57,64 @@ export function ProfileTab({ brand }: { brand: OwnedBrand }) {
   };
   const dateError = promoDateRangeError(promo);
   const invalid = dateError !== null;
-  const addPromo = useMutation({
-    mutationFn: () => createOwnedPromotion(coreHttp, promoPayload(promo)),
-    onSuccess: () => {
-      resetPromoForm();
+  // Callback của mutation chạy sau khi khách có thể đã gõ/chọn khác: đọc form hiện tại qua ref, không phải bản chụp của lần vẽ lúc bấm.
+  const latest = useRef({ editingId, promo });
+  latest.current = { editingId, promo };
+  const addPromo = useLockedMutation({
+    mutationFn: (sent: PromoForm) => createOwnedPromotion(coreHttp, promoPayload(sent)),
+    onSuccess: (_data, sent) => {
+      // Chữ gõ thêm trong lúc đang gửi không bị xoá: chỉ dọn form khi nó vẫn là bản vừa gửi.
+      if (latest.current.editingId === null && samePromo(latest.current.promo, sent)) resetPromoForm();
       notify({ text: 'Đã thêm khuyến mãi', tone: 'success' });
-      void refresh();
+      return refresh();
     },
     onError: (e) => notify({ text: ownerActionError(e), tone: 'error' }),
   });
-  const updPromo = useMutation({
-    // Khi sửa, ô mã trống nghĩa là GỠ mã (chuỗi rỗng): `undefined` bị bỏ qua nên mã cũ sẽ ở lại.
-    mutationFn: () => updateOwnedPromotion(coreHttp, editingId!, { ...promoPayload(promo), couponCode: promo.couponCode.trim().toUpperCase() }),
-    onSuccess: () => {
-      resetPromoForm();
-      notify({ text: 'Đã cập nhật khuyến mãi', tone: 'success' });
-      void refresh();
+  const updPromo = useLockedMutation(
+    {
+      // Khi sửa, ô mã trống nghĩa là GỠ mã (chuỗi rỗng): `undefined` bị bỏ qua nên mã cũ sẽ ở lại.
+      mutationFn: (v: { id: string; form: PromoForm }) =>
+        updateOwnedPromotion(coreHttp, v.id, { ...promoPayload(v.form), couponCode: v.form.couponCode.trim().toUpperCase() }),
+      onSuccess: (_data, v) => {
+        if (latest.current.editingId === v.id && samePromo(latest.current.promo, v.form)) resetPromoForm();
+        notify({ text: 'Đã cập nhật khuyến mãi', tone: 'success' });
+        return refresh();
+      },
+      onError: (e) => notify({ text: ownerActionError(e), tone: 'error' }),
     },
-    onError: (e) => notify({ text: ownerActionError(e), tone: 'error' }),
-  });
-  const toggleMut = useMutation({
-    mutationFn: (v: { id: string; isActive: boolean }) => updateOwnedPromotion(coreHttp, v.id, { isActive: v.isActive }),
-    onSuccess: () => void refresh(),
-    onError: (e) => notify({ text: ownerActionError(e), tone: 'error' }),
-  });
+    (v) => v.id,
+  );
+  // Bật/tắt tính từ giá trị đang hiện: nhả khoá trước khi danh sách mới về thì lần chạm hai lật từ giá trị cũ. Khoá theo khuyến mãi, bận ở mọi dòng đang bay.
+  const toggleMut = useLockedMutation(
+    {
+      mutationKey: TOGGLE_KEY,
+      mutationFn: (v: { id: string; isActive: boolean }) => updateOwnedPromotion(coreHttp, v.id, { isActive: v.isActive }),
+      onSuccess: () => refresh(),
+      onError: (e) => notify({ text: ownerActionError(e), tone: 'error' }),
+    },
+    (v) => v.id,
+  );
+  const togglingIds = new Set(useMutationState({ filters: { mutationKey: TOGGLE_KEY, status: 'pending' }, select: (m) => (m.state.variables as { id: string }).id }));
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const delPromo = useMutation({
-    mutationFn: (id: string) => deleteOwnedPromotion(coreHttp, id),
-    // So khớp đúng khuyến mãi VỪA XOÁ với khuyến mãi đang sửa dở: xoá B không được làm mất form đang sửa của A.
-    onSuccess: (_data, deletedId) => {
-      if (editingId === deletedId) resetPromoForm();
-      setConfirmDeleteId(null);
-      void refresh();
+  const delPromo = useLockedMutation(
+    {
+      mutationKey: DELETE_KEY,
+      mutationFn: (id: string) => deleteOwnedPromotion(coreHttp, id),
+      // So khớp đúng khuyến mãi VỪA XOÁ với khuyến mãi đang sửa dở: xoá B không được làm mất form đang sửa của A.
+      onSuccess: (_data, deletedId) => {
+        if (latest.current.editingId === deletedId) resetPromoForm();
+        setConfirmDeleteId(null);
+        return refresh();
+      },
+      onError: (e) => {
+        setConfirmDeleteId(null);
+        notify({ text: ownerActionError(e), tone: 'error' });
+      },
     },
-    onError: (e) => {
-      setConfirmDeleteId(null);
-      notify({ text: ownerActionError(e), tone: 'error' });
-    },
-  });
+    (id) => id,
+  );
+  const deletingIds = new Set(useMutationState({ filters: { mutationKey: DELETE_KEY, status: 'pending' }, select: (m) => m.state.variables as string }));
+  const confirmBusy = confirmDeleteId !== null && deletingIds.has(confirmDeleteId);
 
   const bigField = `${ui.field} max-md:text-[length:var(--type-body-lg-size)]`;
   const dateClass = `${ui.field} w-full min-w-0`;
@@ -111,7 +136,14 @@ export function ProfileTab({ brand }: { brand: OwnedBrand }) {
         <Field label="Câu chuyện thương hiệu">
           <textarea className={`${ui.field} min-h-28 py-2`} maxLength={20000} value={f.story} onChange={(e) => setF({ ...f, story: e.target.value })} />
         </Field>
-        <button type="button" disabled={saveMut.isPending} onClick={() => saveMut.mutate()} className={`${ui.btnPrimary} w-full`}>
+        {/* Đang lưu giữ aria-busy/aria-disabled chứ không `disabled`: nút đang giữ focus mà bị vô hiệu thì Chromium thả focus về body. */}
+        <button
+          type="button"
+          aria-busy={saveMut.isPending || undefined}
+          aria-disabled={saveMut.isPending || undefined}
+          onClick={() => saveMut.mutate(f)}
+          className={`${ui.btnPrimary} w-full`}
+        >
           {saveMut.isPending ? 'Đang lưu…' : 'Lưu thông tin'}
         </button>
       </section>
@@ -133,9 +165,10 @@ export function ProfileTab({ brand }: { brand: OwnedBrand }) {
                 role="switch"
                 aria-checked={p.isActive}
                 aria-label={`Bật khuyến mãi ${p.title}`}
-                disabled={toggleMut.isPending}
+                aria-busy={togglingIds.has(p.id) || undefined}
+                aria-disabled={togglingIds.has(p.id) || undefined}
                 onClick={() => toggleMut.mutate({ id: p.id, isActive: !p.isActive })}
-                className="inline-flex h-11 w-12 flex-none items-center justify-center disabled:opacity-50"
+                className="inline-flex h-11 w-12 flex-none items-center justify-center aria-disabled:opacity-50"
               >
                 <span className={`flex h-6 w-10 items-center rounded-full p-0.5 transition ${p.isActive ? 'bg-forest-600' : 'bg-stone-450'}`}>
                   <span className={`h-5 w-5 rounded-full bg-stone-0 transition ${p.isActive ? 'translate-x-4' : ''}`} />
@@ -152,7 +185,16 @@ export function ProfileTab({ brand }: { brand: OwnedBrand }) {
               >
                 <Pencil className="h-4 w-4" aria-hidden="true" />
               </button>
-              <button type="button" aria-label={`Xoá khuyến mãi ${p.title}`} className={ICON_BTN} onClick={() => setConfirmDeleteId(p.id)}>
+              <button
+                type="button"
+                aria-label={`Xoá khuyến mãi ${p.title}`}
+                aria-busy={deletingIds.has(p.id) || undefined}
+                aria-disabled={deletingIds.has(p.id) || undefined}
+                className={ICON_BTN}
+                onClick={() => {
+                  if (!deletingIds.has(p.id)) setConfirmDeleteId(p.id);
+                }}
+              >
                 <Trash2 className="h-4 w-4" aria-hidden="true" />
               </button>
             </li>
@@ -182,7 +224,14 @@ export function ProfileTab({ brand }: { brand: OwnedBrand }) {
           {dateError && <p className={ui.error}>{dateError}</p>}
           {editingId ? (
             <div className="flex gap-2">
-              <button type="button" className={`${skin.btnSecondary} flex-1`} disabled={!promo.title.trim() || invalid || updPromo.isPending} onClick={() => updPromo.mutate()}>
+              <button
+                type="button"
+                className={`${skin.btnSecondary} flex-1`}
+                disabled={!promo.title.trim() || invalid}
+                aria-busy={updPromo.isPending || undefined}
+                aria-disabled={updPromo.isPending || undefined}
+                onClick={() => updPromo.mutate({ id: editingId, form: promo })}
+              >
                 {updPromo.isPending ? 'Đang lưu…' : 'Lưu thay đổi'}
               </button>
               <button type="button" className={ui.btnText} onClick={resetPromoForm}>
@@ -190,7 +239,14 @@ export function ProfileTab({ brand }: { brand: OwnedBrand }) {
               </button>
             </div>
           ) : (
-            <button type="button" className={`${skin.btnSecondary} self-start`} disabled={!promo.title.trim() || invalid || addPromo.isPending} onClick={() => addPromo.mutate()}>
+            <button
+              type="button"
+              className={`${skin.btnSecondary} self-start`}
+              disabled={!promo.title.trim() || invalid}
+              aria-busy={addPromo.isPending || undefined}
+              aria-disabled={addPromo.isPending || undefined}
+              onClick={() => addPromo.mutate(promo)}
+            >
               <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
               {addPromo.isPending ? 'Đang thêm…' : 'Thêm khuyến mãi'}
             </button>
@@ -198,18 +254,27 @@ export function ProfileTab({ brand }: { brand: OwnedBrand }) {
         </div>
       </section>
 
-      <Sheet open={!!confirmDeleteId} onClose={() => setConfirmDeleteId(null)} title="Xoá khuyến mãi này?">
+      <Sheet open={!!confirmDeleteId} onClose={() => setConfirmDeleteId(null)} title="Xoá khuyến mãi này?" dismissible={!confirmBusy}>
         <div className="flex flex-col gap-2.5 px-4 pb-4 pt-2">
-          <button type="button" className={`${skin.btnSecondary} w-full`} onClick={() => setConfirmDeleteId(null)}>
-            Huỷ
-          </button>
           <button
             type="button"
-            disabled={delPromo.isPending}
-            onClick={() => delPromo.mutate(confirmDeleteId!)}
-            className="inline-flex min-h-11 w-full items-center justify-center rounded-control bg-danger-fg px-5 text-sm font-semibold text-stone-0 disabled:opacity-60"
+            aria-disabled={confirmBusy || undefined}
+            className={`${skin.btnSecondary} w-full`}
+            onClick={() => {
+              if (!confirmBusy) setConfirmDeleteId(null);
+            }}
           >
-            {delPromo.isPending ? 'Đang xoá…' : 'Xoá'}
+            Huỷ
+          </button>
+          {/* Xoá không hoàn tác: nút giữ aria-busy/aria-disabled (không `disabled`, để không rơi focus) và hộp không đóng được khi đang gửi. */}
+          <button
+            type="button"
+            aria-busy={confirmBusy || undefined}
+            aria-disabled={confirmBusy || undefined}
+            onClick={() => delPromo.mutate(confirmDeleteId!)}
+            className="inline-flex min-h-11 w-full items-center justify-center rounded-control bg-danger-fg px-5 text-sm font-semibold text-stone-0 aria-disabled:opacity-60"
+          >
+            {confirmBusy ? 'Đang xoá…' : 'Xoá'}
           </button>
         </div>
       </Sheet>
