@@ -250,8 +250,9 @@ export default function EditProfilePage() {
               type="button"
               disabled={confirmingDob}
               aria-busy={uploadingAvatar || undefined}
+              aria-disabled={save.isPending || undefined}
               onClick={() => {
-                if (avatarBusy.current) return;
+                if (avatarBusy.current || saveBusy.current) return;
                 fileInputRef.current?.click();
               }}
               className="flex min-h-11 flex-col items-center"

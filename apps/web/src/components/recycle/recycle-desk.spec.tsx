@@ -471,6 +471,44 @@ describe('/doi-rac/quay: quét mã bằng camera trình duyệt', () => {
     gate.resolve(CONFIRMED);
     await flush(10);
   });
+  it('quét ra mã lúc quầy bận: mã được điền vào ô và giữ qua lúc xác nhận xong, không tra tự động; hết bận bấm Tra mã thì tra', async () => {
+    const gate = deferred();
+    state.confirm = () => gate.promise;
+    scan.value = 'TR-NX77K';
+    const c = await mount();
+    await lookUp(c);
+    click(button(c, 'Quét mã của khách'));
+    await flush(3);
+    click(button(c, 'Xác nhận đã nhận'));
+    await flush(3);
+    await waitFrames();
+    expect(dialog()).toBeNull();
+    expect(label(c, CODE_LABEL)).toHaveProperty('value', 'TR-NX77K');
+    expect(calls('/waste/desk/lookup')).toHaveLength(1);
+    gate.resolve(CONFIRMED);
+    await flush(10);
+    expect(label(c, CODE_LABEL)).toHaveProperty('value', 'TR-NX77K');
+    expect(calls('/waste/desk/lookup')).toHaveLength(1);
+    click(button(c, 'Tra mã'));
+    await flush(6);
+    expect(calls('/waste/desk/lookup')).toHaveLength(2);
+    expect(calls('/waste/desk/lookup')[1]!.body).toEqual({ code: 'TR-NX77K' });
+  });
+  it('quét ra mã: lúc lệnh tra còn bay, bấm Tra mã không tra chồng', async () => {
+    const gate = deferred();
+    state.lookupGate = gate.promise;
+    const c = await mount();
+    click(button(c, 'Quét mã của khách'));
+    await flush(3);
+    await waitFrames();
+    expect(calls('/waste/desk/lookup')).toHaveLength(1);
+    click(button(c, 'Tra mã'));
+    await flush(4);
+    expect(calls('/waste/desk/lookup')).toHaveLength(1);
+    gate.resolve(undefined);
+    await flush(8);
+    expect(calls('/waste/desk/lookup')).toHaveLength(1);
+  });
   it('quét nội dung không phải mã Đổi rác: báo trong khung quét, không tra', async () => {
     scan.value = 'https://example.com';
     const c = await mount();
@@ -947,6 +985,8 @@ describe('/doi-rac/quay: khoá một việc một lúc (cùng một act)', () =>
     const send = await pickReason(c);
     click(button(c, 'Xác nhận đã nhận'));
     await flush(4);
+    expect(send.getAttribute('aria-busy')).toBe('true');
+    expect(send.getAttribute('aria-disabled')).toBe('true');
     click(send);
     await flush(4);
     expect(calls('/waste/desk/requests/req-1/reject')).toHaveLength(0);
@@ -961,6 +1001,49 @@ describe('/doi-rac/quay: khoá một việc một lúc (cùng một act)', () =>
     click(button(c, 'Tra mã'));
     await flush(6);
     expect(calls('/waste/desk/lookup')).toHaveLength(2);
+  });
+
+  it('xác nhận còn bay: "Từ chối cả yêu cầu" báo aria-disabled và không mở sheet; xong thì mở được', async () => {
+    const gate = deferred();
+    state.confirm = () => gate.promise;
+    const c = await mount();
+    await lookUp(c);
+    click(button(c, 'Xác nhận đã nhận'));
+    await flush(4);
+    const reject = button(c, 'Từ chối cả yêu cầu')!;
+    expect(reject.disabled).toBe(false);
+    expect(reject.getAttribute('aria-disabled')).toBe('true');
+    click(reject);
+    await flush(4);
+    expect(dialog()).toBeNull();
+    gate.resolve(CONFIRMED);
+    await flush(10);
+    lookupReq({ id: 'req-2', code: 'TR-NEXT22' });
+    await lookUp(c, 'tr-next22');
+    const next = button(c, 'Từ chối cả yêu cầu')!;
+    expect(next.hasAttribute('aria-disabled')).toBe(false);
+    click(next);
+    await flush(4);
+    expect(dialog()).not.toBeNull();
+  });
+
+  it('xác nhận xong khi sheet Từ chối còn mở: tra yêu cầu kế tiếp thì sheet không tự bật', async () => {
+    const gate = deferred();
+    state.confirm = () => gate.promise;
+    const c = await mount();
+    await lookUp(c);
+    click(button(c, 'Từ chối cả yêu cầu'));
+    await flush(4);
+    expect(dialog()).not.toBeNull();
+    click(button(c, 'Xác nhận đã nhận'));
+    await flush(4);
+    gate.resolve(CONFIRMED);
+    await flush(10);
+    expect(dialog()).toBeNull();
+    lookupReq({ id: 'req-2', code: 'TR-NEXT22' });
+    await lookUp(c, 'tr-next22');
+    expect(button(c, 'Xác nhận đã nhận')).not.toBeNull();
+    expect(dialog()).toBeNull();
   });
 
   it('lỗi xác nhận: hiện lời lỗi, nhả khoá và gỡ aria-busy/aria-disabled để xác nhận lại', async () => {

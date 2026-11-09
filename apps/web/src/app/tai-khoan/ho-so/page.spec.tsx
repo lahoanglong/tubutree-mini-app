@@ -732,6 +732,29 @@ describe('/tai-khoan/ho-so — khoá đổi ảnh đại diện', () => {
   });
 });
 
+describe('/tai-khoan/ho-so — khoá hai chiều lưu hồ sơ và đổi ảnh', () => {
+  it('đang lưu hồ sơ: nút đổi ảnh báo aria-disabled và không mở hộp chọn tệp; lưu xong thì chọn ảnh được', async () => {
+    const gate = deferred<unknown>();
+    mocks.patch.mockReturnValue(gate.promise);
+    const { container } = await mount();
+    const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
+    const pickSpy = vi.spyOn(input, 'click');
+    const pick = byText(container, 'button', 'Chạm để chọn & cắt ảnh đại diện') as HTMLButtonElement;
+    click(saveBtn(container));
+    await flush(2);
+    expect(mocks.patch).toHaveBeenCalledTimes(1);
+    expect(pick.disabled).toBe(false);
+    expect(pick.getAttribute('aria-disabled')).toBe('true');
+    click(pick);
+    expect(pickSpy).not.toHaveBeenCalled();
+    gate.resolve({ ...ME });
+    await flush(6);
+    expect(pick.hasAttribute('aria-disabled')).toBe(false);
+    click(pick);
+    expect(pickSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('/tai-khoan/ho-so — số đều', () => {
   it('số điện thoại, ngày sinh (ô nhập và dòng "Ngày đã chọn") dùng chữ số đều', async () => {
     mocks.get.mockResolvedValue({ ...ME, dob: null });

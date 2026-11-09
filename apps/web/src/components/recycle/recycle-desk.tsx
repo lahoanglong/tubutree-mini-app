@@ -250,6 +250,7 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
 
   const finish = () => {
     setLookup(null);
+    setRejectOpen(false);
     void qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.desk });
   };
 
@@ -284,7 +285,8 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
             ? { label: 'Còn được xác nhận hôm nay', value: res.staffDailyCapRemaining }
             : null,
       });
-      setCode('');
+      // Mã vừa quét giữa lúc quầy bận (camera mở sẵn) phải còn trong ô để bấm Tra mã sau, chỉ xoá mã của yêu cầu vừa xong.
+      setCode((cur) => (cur === lookedUpCode ? '' : cur));
       finish();
     },
     onError: (e) => setNotice({ text: actErrText(e), ok: false }),
@@ -341,9 +343,9 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
               <ScanCodeButton
                 busy={busy}
                 onCode={(c) => {
+                  setCode(c);
                   if (deskBusy.current) return;
                   deskBusy.current = true;
-                  setCode(c);
                   find.mutate(c);
                 }}
                 onFail={(text) => setNotice({ text, ok: false })}
@@ -508,7 +510,9 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
                   <button
                     type="button"
                     className={`${skin.btnSecondary} w-full !text-danger-fg`}
+                    aria-disabled={busy || undefined}
                     onClick={() => {
+                      if (deskBusy.current) return;
                       reject.reset();
                       setRejectOpen(true);
                     }}
@@ -562,7 +566,7 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
           key={request.id}
           open={rejectOpen}
           onClose={() => setRejectOpen(false)}
-          pending={reject.isPending}
+          pending={busy}
           error={reject.error}
           onSubmit={(reason, note) => {
             if (deskBusy.current) return;
