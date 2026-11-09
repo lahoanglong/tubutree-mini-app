@@ -3,7 +3,7 @@
 // Nguồn: apps/miniapp/src/pages/flash-sale.tsx
 import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { cancelFlashReminder, setFlashReminder, type FlashSlotItem as FlashSlotItemData, type UpcomingFlashItem } from '@tubutree/app-core/api/flash-sale';
 import { remindIntentAction } from '@tubutree/app-core/commerce/flash-remind-intent';
@@ -35,6 +35,14 @@ const STRIP_HEIGHT = 44;
 /** Nhịp tải lại món của khung đang diễn ra: suất đã bán nhích lên, món hết suất xuống cuối. Phản hồi máy chủ được cache 3 giây. */
 const LIVE_ITEMS_REFETCH_MS = 30_000;
 const SLOTS_REFETCH_MS = 60_000;
+const REMIND_KEY = ['flash-remind'] as const;
+interface RemindVars {
+  itemId: string;
+  reminded: boolean;
+  startAt: string;
+  /** Thứ tự bắt đầu lệnh: `settleReminders` chỉ đợi các lệnh có số lớn hơn. */
+  seq: number;
+}
 const OFFLINE_TEXT = 'Chưa kết nối được tới Tubu Tree. Bạn kiểm tra mạng rồi bấm lại nhé.';
 
 /** Dải ngang tràn hai mép màn điện thoại như Mini App (trang web có lề 16px); từ md nằm trong cột. */
@@ -137,8 +145,10 @@ export default function FlashSlotsView() {
   });
 
   // Khoá theo món: nhắc hai món khác nhau vẫn chạy song song, chạm đúp cùng một món chỉ gọi API một lần (cả đường tự đặt nhắc sau đăng nhập).
+  const remindSeq = useRef(0);
   const remindMut = useLockedMutation({
-    mutationFn: ({ itemId, reminded: on }: { itemId: string; reminded: boolean; startAt: string }) => (on ? cancelFlashReminder(coreHttp, itemId) : setFlashReminder(coreHttp, itemId)),
+    mutationKey: REMIND_KEY,
+    mutationFn: ({ itemId, reminded: on }: RemindVars) => (on ? cancelFlashReminder(coreHttp, itemId) : setFlashReminder(coreHttp, itemId)),
     onMutate: async ({ itemId, reminded: on }) => {
       await qc.cancelQueries({ queryKey: upcomingKey });
       const prev = qc.getQueryData<UpcomingFlashItem[]>(upcomingKey);
@@ -150,9 +160,27 @@ export default function FlashSlotsView() {
       if (ctx?.prev) qc.setQueryData(upcomingKey, ctx.prev);
       setError(actionErrorText(e));
     },
-    // Trả lời hứa tải lại: khoá của món giữ tới khi danh sách nhắc thật về, không có thì lần chạm kế tính từ trạng thái lạc quan chưa được máy chủ xác nhận.
-    onSettled: () => qc.invalidateQueries({ queryKey: upcomingKey }),
+    // Trả lời hứa tải lại: `useLockedMutation` nhả khoá của món SAU khi nó xong, nên khoá giữ tới khi danh sách nhắc thật về; không có thì lần chạm kế tính từ trạng thái lạc quan chưa được máy chủ xác nhận.
+    onSettled: (_d, _e, v) => settleReminders(v.seq),
   }, ({ itemId }) => itemId);
+  const remind = (v: Omit<RemindVars, 'seq'>) => remindMut.mutate({ ...v, seq: ++remindSeq.current });
+  // `onMutate` của lệnh nhắc bắt đầu SAU huỷ lần tải đang bay (cancelQueries), nên `invalidateQueries` của lệnh này xong sớm dù danh sách chưa về từ máy chủ. Đợi thêm các lệnh
+  // nhắc bắt đầu sau lệnh này (mỗi lệnh tự tải lại danh sách ở onSettled của nó); chỉ đợi lệnh bắt đầu SAU nên hai lệnh không bao giờ đợi nhau.
+  const settleReminders = async (seq: number) => {
+    await qc.invalidateQueries({ queryKey: upcomingKey });
+    const cache = qc.getMutationCache();
+    const startedLater = () => cache.findAll({ mutationKey: REMIND_KEY, status: 'pending' }).some((m) => ((m.state.variables as RemindVars | undefined)?.seq ?? 0) > seq);
+    if (!startedLater()) return;
+    await new Promise<void>((resolve) => {
+      const unsubscribe = cache.subscribe(() => {
+        if (startedLater()) return;
+        unsubscribe();
+        resolve();
+      });
+    });
+  };
+  // Mọi món đang bay (không chỉ lệnh sau cùng, `remindMut.variables` chỉ giữ lệnh cuối): khoá theo món nuốt cú chạm vào các món đó, nên nút của chúng phải báo bận.
+  const remindingIds = useMutationState({ filters: { mutationKey: REMIND_KEY, status: 'pending' }, select: (m) => (m.state.variables as RemindVars).itemId });
 
   // Khách bấm "Nhắc tôi" lúc chưa đăng nhập đã được đưa đi đăng nhập (suất nằm ở sessionStorage, xem lib/pending-remind.ts). Quay về với phiên và danh sách
   // nhắc đã tải thì đặt nhắc, đúng một lần; quay về mà vẫn là khách (bỏ dở đăng nhập) thì xoá, để lần đăng nhập sau không tự đặt một nhắc đã bị lãng quên.
@@ -167,7 +195,7 @@ export default function FlashSlotsView() {
     intentHandled.current = true;
     const intent = takePendingRemind();
     if (intent && remindIntentAction(intent, upcomingList) === 'remind') {
-      remindMut.mutate({ itemId: intent.itemId, reminded: false, startAt: intent.startAt });
+      remind({ itemId: intent.itemId, reminded: false, startAt: intent.startAt });
     }
     // `remindMut` đổi tham chiếu mỗi lần render nên không đưa vào phụ thuộc: chạy lại theo phiên và danh sách nhắc là đủ.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -220,7 +248,7 @@ export default function FlashSlotsView() {
     if (phase === 'guest' && activeSlot) rememberPendingRemind({ itemId: item.itemId, startAt: activeSlot.startAt });
     if (needSession() || !activeSlot) return;
     clearMessages();
-    remindMut.mutate({ itemId: item.itemId, reminded: reminded.has(item.itemId), startAt: activeSlot.startAt });
+    remind({ itemId: item.itemId, reminded: reminded.has(item.itemId), startAt: activeSlot.startAt });
   };
 
   const onBuy = (item: FlashSlotItemData) => {
@@ -266,7 +294,7 @@ export default function FlashSlotsView() {
                 item={item}
                 slotStatus={activeTab.status}
                 reminded={reminded.has(item.itemId)}
-                remindPending={remindMut.isPending && remindMut.variables?.itemId === item.itemId}
+                remindPending={remindingIds.includes(item.itemId)}
                 buyPending={buyingId === item.itemId}
                 buyLocked={buyingId !== null && buyingId !== item.itemId}
                 onBuy={() => onBuy(item)}

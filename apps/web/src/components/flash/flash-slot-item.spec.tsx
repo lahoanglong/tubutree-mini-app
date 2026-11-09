@@ -229,3 +229,26 @@ describe('FlashSlotItem (web): nút Mua ngay đang bận', () => {
     expect(onBuy).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('FlashSlotItem (web): nút Nhắc tôi đang bận', () => {
+  it('remindPending: aria-busy + aria-disabled, không disabled thật (giữ focus), bấm không gọi onToggleRemind', () => {
+    const onToggleRemind = vi.fn();
+    const c = show(ITEM, { slotStatus: 'UPCOMING', remindPending: true, onToggleRemind });
+    const b = button(c, 'Nhắc tôi Serum Bã Trầu')!;
+    expect(b.getAttribute('aria-busy')).toBe('true');
+    expect(b.getAttribute('aria-disabled')).toBe('true');
+    expect(b.disabled).toBe(false);
+    click(b);
+    expect(onToggleRemind).not.toHaveBeenCalled();
+  });
+
+  it('không bận: không aria-busy, không aria-disabled, bấm gọi onToggleRemind', () => {
+    const onToggleRemind = vi.fn();
+    const c = show(ITEM, { slotStatus: 'UPCOMING', onToggleRemind });
+    const b = button(c, 'Nhắc tôi Serum Bã Trầu')!;
+    expect(b.getAttribute('aria-busy')).toBeNull();
+    expect(b.getAttribute('aria-disabled')).toBeNull();
+    click(b);
+    expect(onToggleRemind).toHaveBeenCalledTimes(1);
+  });
+});

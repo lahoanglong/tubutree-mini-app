@@ -529,6 +529,36 @@ describe('/mua-chung — khoá chạm đúp', () => {
     expect(joins('c')).toHaveLength(1);
   });
 
+  it('tham gia nhóm A rồi nhóm B khi A còn bay: CẢ HAI nút còn aria-busy/aria-disabled (không disabled), bấm lại A không gọi thêm API', async () => {
+    mocks.list = [GROUP('a'), GROUP('c')];
+    const ga = gate<unknown>();
+    const gc = gate<unknown>();
+    mocks.post.mockImplementation((path: string) => (path === '/group-buy/a/join' ? ga.promise : gc.promise));
+    const c = await mount();
+    const joinBtns = () => Array.from(c.querySelectorAll<HTMLButtonElement>('button')).filter((b) => b.textContent?.startsWith('Tham gia mua chung'));
+    expect(joinBtns()).toHaveLength(2);
+    click(joinBtns()[0]!);
+    await flush(2);
+    click(joinBtns()[1]!);
+    await flush(2);
+    expect(joins('a')).toHaveLength(1);
+    expect(joins('c')).toHaveLength(1);
+    for (const b of joinBtns()) {
+      expect(b.getAttribute('aria-busy')).toBe('true');
+      expect(b.getAttribute('aria-disabled')).toBe('true');
+      expect(b.disabled).toBe(false);
+    }
+    await tapTogether(joinBtns()[0]!, joinBtns()[0]!, joinBtns()[1]!);
+    await flush(2);
+    expect(joins('a')).toHaveLength(1);
+    expect(joins('c')).toHaveLength(1);
+    ga.resolve({ joined: true, currentSize: 3, status: 'OPEN' });
+    await flush(6);
+    gc.resolve({ joined: true, currentSize: 3, status: 'OPEN' });
+    await flush(8);
+    expect(joins()).toHaveLength(2);
+  });
+
   it('tham gia lỗi: role="alert", nhả khoá, bấm lại gọi lần hai', async () => {
     mocks.post.mockRejectedValueOnce(new Error('Nhóm đã đủ người'));
     const c = await mount();

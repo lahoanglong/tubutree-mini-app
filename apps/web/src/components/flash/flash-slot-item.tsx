@@ -55,11 +55,11 @@ export function FlashSlotItem({ item, slotStatus, reminded, remindPending, buyPe
       loading={remindPending}
       aria-pressed={reminded}
       aria-label={slotRemindLabel(item.productName, reminded)}
-      aria-disabled={remindLocked || undefined}
+      aria-disabled={remindLocked || remindPending || undefined}
       aria-describedby={remindLocked ? outOfStockId : undefined}
       style={remindLocked ? SOLD_OUT_ACTION_STYLE : ACTION_STYLE}
       onPress={() => {
-        if (remindLocked) return;
+        if (remindLocked || remindPending) return;
         onToggleRemind();
       }}
     >

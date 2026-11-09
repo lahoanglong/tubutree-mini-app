@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Share2 } from 'lucide-react';
 import { joinGroupBuy, type GroupBuy } from '@tubutree/app-core/api/groupbuy';
 import { groupMemberStatus, groupMissing, groupMissingLine, groupPriceLabels, groupRewardLine } from '@tubutree/app-core/group-buy-copy';
@@ -32,6 +32,7 @@ type Note = { text: string; error: boolean } | null;
 
 const JUST_CREATED_PARAM = 'moi';
 const errorText = loadErrorText;
+const JOIN_KEY = ['group-buy-join'] as const;
 
 function timeLeft(iso: string): string {
   const diff = (new Date(iso).getTime() - Date.now()) / 1000;
@@ -76,6 +77,7 @@ export function GroupBuyView({ invitedId }: { invitedId?: string }) {
   // nên khoá giữ tới khi `joined`/`currentSize` mới về; nhả sớm hơn thì thẻ còn nút "Tham gia" theo số cũ và bấm được lần hai.
   const joinM = useLockedMutation(
     {
+      mutationKey: JOIN_KEY,
       mutationFn: (id: string) => joinGroupBuy(coreHttp, id),
       onSuccess: (r) => {
         setNote({ text: r.status === 'SUCCESS' ? 'Nhóm đã đủ người! Mã giảm giá đã vào ví của bạn.' : 'Đã tham gia nhóm', error: false });
@@ -85,6 +87,8 @@ export function GroupBuyView({ invitedId }: { invitedId?: string }) {
     },
     (id) => id,
   );
+  // Mọi nhóm đang tham gia (không chỉ lệnh sau cùng, `joinM.variables` chỉ giữ lệnh cuối): khoá theo nhóm nuốt cú chạm vào các nhóm đó, nên nút của chúng phải báo bận.
+  const joiningIds = useMutationState({ filters: { mutationKey: JOIN_KEY, status: 'pending' }, select: (m) => m.state.variables as string });
 
   // Khôi phục phiên và hộp chia sẻ của trình duyệt đều chỉ mở được một lần một lúc: lần chạm thứ hai trong lúc chạy bị bỏ qua.
   const sessionRetrying = useRef(false);
@@ -132,7 +136,7 @@ export function GroupBuyView({ invitedId }: { invitedId?: string }) {
       invitedBanner={invitedBanner}
       onJoin={() => join(g.id)}
       onShare={() => void share(g)}
-      joining={joinM.isPending && joinM.variables === g.id}
+      joining={joiningIds.includes(g.id)}
       sharing={sharingId === g.id}
     />
   );

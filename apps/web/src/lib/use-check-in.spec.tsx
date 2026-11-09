@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { renderHook } from '@/test-utils/render-hook';
+import { renderHook, waitFor } from '@/test-utils/render-hook';
 
 const mocks = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get, post: mocks.post } }));
@@ -18,10 +18,6 @@ const gate = <T,>() => {
   const promise = new Promise<T>((r) => (resolve = r));
   return { promise, resolve };
 };
-const settle = () =>
-  act(async () => {
-    await new Promise((r) => setTimeout(r, 0));
-  });
 
 let unmount: (() => void) | null = null;
 beforeEach(() => {
@@ -37,8 +33,7 @@ async function mountLoaded() {
   mocks.get.mockResolvedValue(STATUS);
   const h = renderHook(() => useCheckIn(true));
   unmount = h.unmount;
-  await settle();
-  expect(h.result.current.status).toBeTruthy();
+  await waitFor(() => expect(h.result.current.status).toBeTruthy());
   return h;
 }
 
@@ -52,8 +47,7 @@ describe('useCheckIn (web): khoá giữ tới khi trạng thái mới về', () 
       h.result.current.checkIn();
       h.result.current.checkIn();
     });
-    await settle();
-    expect(mocks.post).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(mocks.post).toHaveBeenCalledTimes(1));
     expect(h.result.current.pending).toBe(true);
     await act(async () => {
       h.result.current.checkIn();
@@ -62,8 +56,7 @@ describe('useCheckIn (web): khoá giữ tới khi trạng thái mới về', () 
     await act(async () => {
       fresh.resolve(DONE);
     });
-    await settle();
-    expect(h.result.current.pending).toBe(false);
+    await waitFor(() => expect(h.result.current.pending).toBe(false));
     expect(h.result.current.status?.checkedInToday).toBe(true);
     expect(mocks.post).toHaveBeenCalledTimes(1);
   });
@@ -76,9 +69,8 @@ describe('useCheckIn (web): khoá giữ tới khi trạng thái mới về', () 
     await act(async () => {
       h.result.current.checkIn();
     });
-    await settle();
+    await waitFor(() => expect(h.result.current.message?.error).toBe(true));
     expect(mocks.post).toHaveBeenCalledTimes(1);
-    expect(h.result.current.message?.error).toBe(true);
     expect(h.result.current.pending).toBe(true);
     await act(async () => {
       h.result.current.checkIn();
@@ -87,12 +79,10 @@ describe('useCheckIn (web): khoá giữ tới khi trạng thái mới về', () 
     await act(async () => {
       fresh.resolve(STATUS);
     });
-    await settle();
-    expect(h.result.current.pending).toBe(false);
+    await waitFor(() => expect(h.result.current.pending).toBe(false));
     await act(async () => {
       h.result.current.checkIn();
     });
-    await settle();
-    expect(mocks.post).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(mocks.post).toHaveBeenCalledTimes(2));
   });
 });

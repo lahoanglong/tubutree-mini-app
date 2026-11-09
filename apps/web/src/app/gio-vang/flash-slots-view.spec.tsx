@@ -621,6 +621,67 @@ describe('Trang Giờ vàng (web): khoá chạm đúp', () => {
     expect(state.deletes).toEqual(['/flash-sales/items/c/remind']);
   });
 
+  const remindOf = (c: HTMLElement, id: string) => all<HTMLButtonElement>(c, 'button').find((b) => new RegExp(`^(Nhắc tôi|Đã đặt nhắc) Sản phẩm ${id}\\b`).test(b.getAttribute('aria-label') ?? ''))!;
+
+  it('Nhắc tôi: món c xong POST mà danh sách chưa về, bấm món d rồi bấm lại c: c vẫn khoá (đúng một POST, không DELETE) và cả hai nút còn aria-busy', async () => {
+    state.items = { s12: itemsOf(S12, [item('a')]), s20: itemsOf(S20, [item('c'), item('d')]) };
+    const c = await openEvening();
+    const releaseList = hold('/flash-sales/upcoming');
+    click(remindOf(c, 'c'));
+    await flush(6);
+    expect(state.posts).toEqual(['/flash-sales/items/c/remind']);
+    expect(remindOf(c, 'c').getAttribute('aria-busy')).toBe('true');
+    click(remindOf(c, 'd'));
+    await flush(6);
+    expect(state.posts.slice().sort()).toEqual(['/flash-sales/items/c/remind', '/flash-sales/items/d/remind']);
+    // `variables` của mutation đã đổi sang d, nhưng c vẫn bị khoá và vẫn báo bận.
+    expect(remindOf(c, 'c').getAttribute('aria-busy')).toBe('true');
+    expect(remindOf(c, 'c').getAttribute('aria-disabled')).toBe('true');
+    expect(remindOf(c, 'c').disabled).toBe(false);
+    expect(remindOf(c, 'd').getAttribute('aria-busy')).toBe('true');
+    await tapTogether(remindOf(c, 'c'));
+    await flush(2);
+    expect(state.deletes).toEqual([]);
+    expect(state.posts.filter((p) => p.includes('/c/'))).toHaveLength(1);
+    releaseList();
+    await flush(8);
+    expect(remindOf(c, 'c').getAttribute('aria-busy')).toBeNull();
+    click(remindOf(c, 'c'));
+    await flush(6);
+    expect(state.deletes).toEqual(['/flash-sales/items/c/remind']);
+  });
+
+  it('Nhắc tôi: c xong POST, d còn đang bay, danh sách chưa về: bấm lại c và d không gửi thêm lệnh nào; cả hai nhả khi danh sách của lệnh sau cùng về', async () => {
+    state.items = { s12: itemsOf(S12, [item('a')]), s20: itemsOf(S20, [item('c'), item('d')]) };
+    const c = await openEvening();
+    const releaseList = hold('/flash-sales/upcoming');
+    const releaseD = hold('/flash-sales/items/d/remind');
+    click(remindOf(c, 'c'));
+    await flush(6);
+    click(remindOf(c, 'd'));
+    await flush(6);
+    expect(state.posts.slice().sort()).toEqual(['/flash-sales/items/c/remind', '/flash-sales/items/d/remind']);
+    await tapTogether(remindOf(c, 'c'), remindOf(c, 'c'), remindOf(c, 'd'), remindOf(c, 'd'));
+    await flush(2);
+    expect(state.posts).toHaveLength(2);
+    expect(state.deletes).toEqual([]);
+    for (const id of ['c', 'd']) {
+      expect(remindOf(c, id).getAttribute('aria-busy')).toBe('true');
+      expect(remindOf(c, id).getAttribute('aria-disabled')).toBe('true');
+      expect(remindOf(c, id).disabled).toBe(false);
+    }
+    releaseD();
+    await flush(6);
+    // POST của d xong nhưng danh sách (đang bị giữ) chưa về: cả hai vẫn khoá.
+    expect(remindOf(c, 'c').getAttribute('aria-busy')).toBe('true');
+    expect(remindOf(c, 'd').getAttribute('aria-busy')).toBe('true');
+    releaseList();
+    await flush(10);
+    for (const id of ['c', 'd']) expect(remindOf(c, id).getAttribute('aria-busy')).toBeNull();
+    expect(state.posts).toHaveLength(2);
+    expect(state.deletes).toEqual([]);
+  });
+
   it('Nhắc tôi lỗi: role="alert", nhả khoá, bấm lại gọi lần hai', async () => {
     const c = await openEvening();
     state.failRemind = true;
