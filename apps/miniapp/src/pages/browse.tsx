@@ -381,7 +381,7 @@ export default function BrowsePage() {
             {products.isLoading ? (
               <CatalogGridSkeleton count={6} />
             ) : products.isError && list.length === 0 ? (
-              <ErrorState message={getLoadErrorMessage(products.error)} onRetry={() => void products.refetch()} />
+              <ErrorState message={getLoadErrorMessage(products.error)} onRetry={() => products.refetch()} />
             ) : list.length === 0 ? (
               <EmptyState
                 art={state.q ? 'search' : 'leaf'}

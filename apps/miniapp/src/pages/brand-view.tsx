@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Page, useParams, useNavigate } from 'zmp-ui';
 import { useNotify } from '../hooks/use-notify';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   getPublicBrand, getBrandShareToEarn,
   getBrandFollowState, followBrand, unfollowBrand,
@@ -11,6 +11,7 @@ import { useAuthStore } from '../store/auth';
 import { getLoadErrorMessage, isNotFoundError } from '../services/api';
 import { formatVnd } from '../utils/format';
 import { Skeleton } from '../components/ui/skeleton';
+import { useLockedMutation } from '../components/game/use-locked-mutation';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { ShareSheet } from '../components/share-sheet';
 import { getDealerMe } from '../services/dealer-api';
@@ -76,7 +77,8 @@ export default function BrandViewPage() {
   // Chỉ hỏi sau khi nhãn đã tải xong và khách đã đăng nhập: nhãn không có thì không bắn thêm request 404/401.
   const brandLoaded = !!q.data;
   const followQ = useQuery({ queryKey: ['brand-follow', slug], queryFn: () => getBrandFollowState(slug), retry: false, enabled: authed && brandLoaded });
-  const followMut = useMutation({
+  // Theo dõi/bỏ theo dõi là một công tắc đọc `followQ.data` lúc gọi: hai cú chạm cùng nhịp (dữ liệu chưa kịp vẽ lại) đều gửi cùng một chiều, nên khoá bằng ref chứ không dựa `isPending`.
+  const followMut = useLockedMutation({
     mutationFn: () => (followQ.data?.following ? unfollowBrand(slug) : followBrand(slug)),
     onSuccess: (r) => {
       qc.setQueryData(['brand-follow', slug], r);
@@ -128,7 +130,7 @@ export default function BrandViewPage() {
               onCta={() => navigate('/browse', { replace: true })}
             />
           ) : (
-            <ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => void q.refetch()} />
+            <ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => q.refetch()} />
           )}
         </div>
       </Page>

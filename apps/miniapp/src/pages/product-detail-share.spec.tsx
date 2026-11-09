@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { ReactNode } from 'react';
@@ -95,5 +95,78 @@ describe('ProductDetailPage nút Chia sẻ', () => {
       expect.objectContaining({ path: '/product/a?ref=ABCD1234' }),
       miniAppLink('/product/a?ref=ABCD1234'),
     );
+  });
+});
+
+describe('ProductDetailPage nút Chia sẻ khoá chạm đúp (W79A)', () => {
+  const renderPdp = () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    return render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={['/product/a']} future={FUTURE}>
+          <Routes>
+            <Route path="/product/:slug" element={<ProductDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.user = undefined;
+    mocks.fetchProduct.mockResolvedValue({
+      id: 'id-a', slug: 'a', brand: 'Tubu', name: 'Sản phẩm a', shortDesc: 'Mô tả ngắn', description: 'Mô tả',
+      images: ['https://img/1.jpg'], thumbnail: 'https://img/thumb.jpg', basePrice: 100000, salePrice: 80000,
+      certifications: [], ingredients: null, sold: 0,
+      variations: [{ id: 'v1', sku: 'S', name: 'Mặc định', attributes: {}, retailPrice: 100000, salePrice: null, stock: 5 }],
+    });
+  });
+
+  it('chạm đúp cùng một nhịp vẽ: một lần mở hộp thoại chia sẻ; xong thì chia sẻ lại được', async () => {
+    let finish: () => void = () => undefined;
+    mocks.shareWithFallback.mockReturnValueOnce(new Promise<void>((r) => (finish = r)));
+    renderPdp();
+    const share = await screen.findByRole('button', { name: viText.product.share });
+    await act(async () => {
+      fireEvent.click(share);
+      fireEvent.click(share);
+    });
+    expect(mocks.shareWithFallback).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      fireEvent.click(share);
+    });
+    expect(mocks.shareWithFallback).toHaveBeenCalledTimes(1);
+    await act(async () => finish());
+    await act(async () => {
+      fireEvent.click(share);
+    });
+    expect(mocks.shareWithFallback).toHaveBeenCalledTimes(2);
+  });
+
+  it('chia sẻ ném lỗi: khoá được nhả nên chạm lại vẫn chia sẻ, lỗi vẫn nổi lên (không bị nuốt)', async () => {
+    // Lỗi thật của shareWithFallback chỉ có thể là lỗi ngoài dự kiến; vitest coi unhandledrejection là lỗi chạy test nên tạm thay bộ nghe để chứng kiến nó.
+    const seen: unknown[] = [];
+    const listener = (e: unknown) => void seen.push(e);
+    const saved = process.listeners('unhandledRejection');
+    process.removeAllListeners('unhandledRejection');
+    process.on('unhandledRejection', listener);
+    try {
+      mocks.shareWithFallback.mockRejectedValueOnce(new Error('zalo hỏng'));
+      renderPdp();
+      const share = await screen.findByRole('button', { name: viText.product.share });
+      await act(async () => {
+        fireEvent.click(share);
+      });
+      await new Promise((r) => setTimeout(r, 20));
+      expect(seen).toHaveLength(1);
+      await act(async () => {
+        fireEvent.click(share);
+      });
+      expect(mocks.shareWithFallback).toHaveBeenCalledTimes(2);
+    } finally {
+      process.off('unhandledRejection', listener);
+      saved.forEach((l) => process.on('unhandledRejection', l as (...a: unknown[]) => void));
+    }
   });
 });

@@ -234,7 +234,7 @@ export function ReviewsSection({
   useEffect(() => {
     if (wantMore && moreSettled) void fetchNextPage();
   }, [wantMore, moreSettled, fetchNextPage]);
-  const retryMore = () => void (moreQ.isFetchNextPageError ? moreQ.fetchNextPage() : moreQ.refetch());
+  const retryMore = () => (moreQ.isFetchNextPageError ? moreQ.fetchNextPage() : moreQ.refetch());
 
   return (
     <section id="danh-gia" aria-label="Đánh giá sản phẩm" className="tubu-nums" style={{ padding: 16, marginTop: 8, background: 'var(--color-bg-surface)' }}>
@@ -284,7 +284,7 @@ export function ReviewsSection({
       {reviewsQ.isLoading ? (
         <ListSkeleton />
       ) : reviewsQ.isError ? (
-        <ErrorState message={getLoadErrorMessage(reviewsQ.error)} onRetry={() => void reviewsQ.refetch()} />
+        <ErrorState message={getLoadErrorMessage(reviewsQ.error)} onRetry={() => reviewsQ.refetch()} />
       ) : data && data.count > 0 ? (
         <>
           {/* Trung bình + breakdown sao 5→1 */}
@@ -346,7 +346,7 @@ export function ReviewsSection({
           {list.status === 'loading' ? (
             <ListSkeleton />
           ) : list.status === 'error' ? (
-            <ErrorState message={getLoadErrorMessage(filteredQ.error)} onRetry={() => void filteredQ.refetch()} />
+            <ErrorState message={getLoadErrorMessage(filteredQ.error)} onRetry={() => filteredQ.refetch()} />
           ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 12 }}>
             {filtered.slice(0, visible).map((r) => {
@@ -472,7 +472,7 @@ export function ReviewsSection({
             <Skeleton width="100%" height={96} />
           </div>
         ) : editingId && myReviewQ.isError ? (
-          <ErrorState message={getLoadErrorMessage(myReviewQ.error)} onRetry={() => void myReviewQ.refetch()} />
+          <ErrorState message={getLoadErrorMessage(myReviewQ.error)} onRetry={() => myReviewQ.refetch()} />
         ) : target ? (
           <WriteReview
             slug={slug}

@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Box, Page, Text, useNavigate, useParams, useLocation } from 'zmp-ui';
 import { announce, useNotify } from '../hooks/use-notify';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { BookOpen, Repeat, ChevronRight, ShoppingCart, Share2, Users, Truck, Megaphone, Check, MessageCircle, Ticket } from 'lucide-react';
 import { PRODUCT_NOT_FOUND } from '@tubutree/app-core/client-copy';
 import {
@@ -33,6 +33,7 @@ import { VariationSheet, type VariationSheetMode } from '../components/variation
 import { fetchReviews } from '../services/shop-api';
 import { trackEvent } from '../services/analytics';
 import { Skeleton } from '../components/ui/skeleton';
+import { useLockedMutation } from '../components/game/use-locked-mutation';
 import { ErrorState } from '../components/ui/empty-state';
 import { SuggestedRail } from '../components/catalog/suggested-rail';
 import { SR_ONLY } from '../components/ui/sr-only';
@@ -155,6 +156,10 @@ export default function ProductDetailPage() {
   const [storyOpen, setStoryOpen] = useState(false);
   // Bảng đóng có hiệu ứng ~200ms nên nút xác nhận còn bấm được: khoá đồng bộ để bấm đúp không thêm giỏ hai lần hay gọi login hai lần.
   const confirming = useRef(false);
+  const sharing = useRef(false);
+  // Thêm giỏ và Mua ngay đều ghi vào giỏ nên là một khoá chung: chạm "Thêm vào giỏ" rồi "Mua ngay" sát nhau (hay hai lối vào khác nhau của cùng một nút) chỉ ghi giỏ một lần.
+  // `isPending` chỉ đúng sau lần vẽ kế tiếp nên không chặn được cú chạm thứ hai; ref thì chặn ngay.
+  const cartWrite = useRef(false);
   const autoPick = useRef<{ slug: string; id: string | null } | null>(null);
   const [quantity, setQuantity] = useState(1);
   // Nút "Thêm vào giỏ" tự xác nhận "Đã thêm" ADDED_FLASH_MS; bấm lại trong lúc đó thì tính lại cửa sổ từ lần bấm sau.
@@ -319,7 +324,16 @@ export default function ProductDetailPage() {
     navigate(`${location.pathname}${location.search}${location.hash}`, { replace: true, state: rest });
   };
 
-  const addMutation = useMutation({
+  const releaseCartWrite = () => {
+    cartWrite.current = false;
+  };
+  const writeCart = (run: () => void) => {
+    if (cartWrite.current) return;
+    cartWrite.current = true;
+    run();
+  };
+
+  const addMutation = useLockedMutation({
     mutationFn: async (input: { variation: VariationDetail; qty: number }) =>
       applyGroupCoupon(await addToCart(input.variation.id, input.qty)),
     onSuccess: ({ cart: updatedCart, note }) => {
@@ -336,10 +350,11 @@ export default function ProductDetailPage() {
       else announce('status', vi.product.added);
     },
     onError: (e: unknown) => notify({ text: getErrorMessage(e), type: 'error' }),
+    onSettled: releaseCartWrite,
   });
 
   // "Mua ngay": thêm vào giỏ rồi tới thẳng checkout (giảm 2 chạm so với thêm-giỏ→mở-giỏ→checkout).
-  const buyNowMutation = useMutation({
+  const buyNowMutation = useLockedMutation({
     mutationFn: async (input: { variation: VariationDetail; qty: number }) => {
       const { cart: updatedCart, note } = await applyGroupCoupon(await addToCart(input.variation.id, input.qty));
       return { updatedCart, note, variationId: input.variation.id };
@@ -376,9 +391,10 @@ export default function ProductDetailPage() {
       setBuyFreeze(null);
       notify({ text: getErrorMessage(e), type: 'error' });
     },
+    onSettled: releaseCartWrite,
   });
 
-  const groupBuyMutation = useMutation({
+  const groupBuyMutation = useLockedMutation({
     mutationFn: (productId: string) => createGroupBuy(productId),
     onSuccess: (group) => {
       notify({ text: 'Đã mở nhóm mua chung! Rủ bạn bè tham gia nhé 🛒', type: 'success' });
@@ -399,7 +415,7 @@ export default function ProductDetailPage() {
             <SuggestedRail listSource="pdp_not_found" />
           </>
         ) : (
-          <ErrorState message={getLoadErrorMessage(product.error)} onRetry={() => void product.refetch()} />
+          <ErrorState message={getLoadErrorMessage(product.error)} onRetry={() => product.refetch()} />
         )}
       </Page>
     );
@@ -440,7 +456,7 @@ export default function ProductDetailPage() {
   const retailOnly = isRetailOnly(p);
 
   const confirmVariation = async (variation: VariationDetail, qty: number) => {
-    if (!sheetMode || confirming.current || addMutation.isPending || buyNowMutation.isPending) return;
+    if (!sheetMode || confirming.current || cartWrite.current) return;
     confirming.current = true;
     try {
       if (status !== 'authenticated') {
@@ -448,11 +464,14 @@ export default function ProductDetailPage() {
         if (useAuthStore.getState().status !== 'authenticated') return;
       }
       const mode = sheetMode;
-      setSheetMode(null);
-      setSelectedId(variation.id);
-      setQuantity(qty);
-      if (mode === 'buy') buyNowMutation.mutate({ variation, qty });
-      else addMutation.mutate({ variation, qty });
+      // Cả nhóm lệnh trong khoá: lối khác giành khoá lúc khách đang đăng nhập thì bảng giữ nguyên, không đóng bảng mà không ghi gì.
+      writeCart(() => {
+        setSheetMode(null);
+        setSelectedId(variation.id);
+        setQuantity(qty);
+        if (mode === 'buy') buyNowMutation.mutate({ variation, qty });
+        else addMutation.mutate({ variation, qty });
+      });
     } finally {
       confirming.current = false;
     }
@@ -467,10 +486,12 @@ export default function ProductDetailPage() {
       await loginWithNotice();
       if (useAuthStore.getState().status !== 'authenticated') return;
     }
-    if (selected && inStock && !addMutation.isPending) {
-      // Bấm mua là đã chọn: danh sách Giờ vàng về muộn không được đổi phân loại dưới tay khách sau khi bấm.
-      setSelectedId(selected.id);
-      addMutation.mutate({ variation: selected, qty: quantity });
+    if (selected && inStock) {
+      writeCart(() => {
+        // Bấm mua là đã chọn: danh sách Giờ vàng về muộn không được đổi phân loại dưới tay khách sau khi bấm.
+        setSelectedId(selected.id);
+        addMutation.mutate({ variation: selected, qty: quantity });
+      });
     }
   };
 
@@ -483,9 +504,11 @@ export default function ProductDetailPage() {
       await loginWithNotice();
       if (useAuthStore.getState().status !== 'authenticated') return;
     }
-    if (selected && inStock && !buyNowMutation.isPending) {
-      setSelectedId(selected.id);
-      buyNowMutation.mutate({ variation: selected, qty: quantity });
+    if (selected && inStock) {
+      writeCart(() => {
+        setSelectedId(selected.id);
+        buyNowMutation.mutate({ variation: selected, qty: quantity });
+      });
     }
   };
 
@@ -536,18 +559,24 @@ export default function ProductDetailPage() {
     claimed: fbtBundle ? new Set(fbtPartners.map((l) => l.productId)) : undefined,
   });
 
-  const handleShare = () => {
-    haptic('light');
-    const code = user?.referralCode;
-    void shareWithFallback(
-      {
-        title: p.name,
-        description: p.shortDesc ?? vi.home.tagline,
-        thumbnail: p.thumbnail ?? undefined,
-        path: withReferral(`/product/${p.slug}`, code),
-      },
-      withReferral(miniAppLink(`/product/${p.slug}`), code),
-    );
+  const handleShare = async () => {
+    if (sharing.current) return;
+    sharing.current = true;
+    try {
+      haptic('light');
+      const code = user?.referralCode;
+      await shareWithFallback(
+        {
+          title: p.name,
+          description: p.shortDesc ?? vi.home.tagline,
+          thumbnail: p.thumbnail ?? undefined,
+          path: withReferral(`/product/${p.slug}`, code),
+        },
+        withReferral(miniAppLink(`/product/${p.slug}`), code),
+      );
+    } finally {
+      sharing.current = false;
+    }
   };
 
   // Dòng "Vận chuyển ›" chỉ nói ai giao và phí/freeship (ngắn, tên truy cập gọn). Các lưu ý dài (thanh toán COD, chỉ bán giá lẻ, gian hàng
@@ -925,7 +954,6 @@ export default function ProductDetailPage() {
           // 2 lần thì tạo 2 nhóm, và không có trạng thái chờ nên tưởng không ăn (P2-7 audit).
           // Các hành động khác trên trang này (Thêm giỏ / Mua ngay / Đặt định kỳ) đều đã guard.
           onClick={async () => {
-            if (groupBuyMutation.isPending) return;
             haptic('light');
             if (status !== 'authenticated') {
               await loginWithNotice();

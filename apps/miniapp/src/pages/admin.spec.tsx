@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -990,6 +990,664 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
       expect(await screen.findByText('Mất kết nối')).toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: 'Thử lại' }));
       expect(await screen.findByText('14h30 · 30.000đ/h · Đang tính')).toBeInTheDocument();
+    });
+  });
+
+  describe('khoá chạm đúp trong cùng một khung hình (W79A)', () => {
+    const deferred = () => {
+      let resolve!: (v?: unknown) => void;
+      let reject!: (e: unknown) => void;
+      const promise = new Promise<unknown>((res, rej) => {
+        resolve = res;
+        reject = rej;
+      });
+      return { promise, resolve, reject };
+    };
+    // Mọi cú chạm trong một lần `act`: React chưa kịp vẽ lại `isPending` giữa hai cú, như hai cú chạm sát nhau trên máy thật.
+    const sameFrame = (...els: HTMLElement[]) =>
+      act(async () => {
+        for (const el of els) fireEvent.click(el);
+      });
+    const successCount = (text: string) => mocks.openSnackbar.mock.calls.filter(([a]) => a.type === 'success' && a.text === text).length;
+    const btn = (name: string) => screen.getByRole('button', { name });
+    const busy = (name: string) => waitFor(() => expect(btn(name)).toHaveAttribute('aria-busy', 'true'));
+
+    describe('Nhân sự', () => {
+      const openGrant = async (admin = false) => {
+        renderPage();
+        fireEvent.click(await screen.findByRole('button', { name: 'Thêm' }));
+        if (admin) fireEvent.click(btn('Quản trị'));
+        fireEvent.change(screen.getByLabelText('Số điện thoại'), { target: { value: '0901112223' } });
+        fireEvent.change(screen.getByLabelText('Lý do'), { target: { value: 'Nhân viên mới' } });
+      };
+      const openRevoke = async () => {
+        renderPage();
+        fireEvent.click(await screen.findByRole('button', { name: 'Thu hồi · Lan' }));
+        fireEvent.change(screen.getByLabelText('Lý do'), { target: { value: 'Nghỉ việc' } });
+      };
+
+      it('chạm đúp "Lưu quyền" chỉ cấp quyền một lần', async () => {
+        const d = deferred();
+        mocks.grantStaff.mockReturnValueOnce(d.promise);
+        await openGrant();
+        const save = btn('Lưu quyền');
+        await sameFrame(save, save);
+        expect(mocks.grantStaff).toHaveBeenCalledTimes(1);
+        await busy('Lưu quyền');
+        await act(async () => d.resolve({ granted: 'STAFF', applied: true }));
+        await waitFor(() => expect(successCount('Đã cấp quyền & áp ngay.')).toBe(1));
+        expect(mocks.grantStaff).toHaveBeenCalledTimes(1);
+      });
+
+      it('cấp quyền lỗi thì nhả khoá, bấm lại gọi lần hai', async () => {
+        mocks.grantStaff.mockRejectedValueOnce(new Error('SĐT không tồn tại'));
+        await openGrant();
+        fireEvent.click(btn('Lưu quyền'));
+        await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'SĐT không tồn tại', type: 'error' }));
+        fireEvent.click(btn('Lưu quyền'));
+        await waitFor(() => expect(mocks.grantStaff).toHaveBeenCalledTimes(2));
+      });
+
+      it('chạm đúp "Cấp quyền quản trị" ở tấm xác nhận chỉ cấp quyền ADMIN một lần', async () => {
+        const d = deferred();
+        mocks.grantStaff.mockReturnValueOnce(d.promise);
+        await openGrant(true);
+        fireEvent.click(btn('Lưu quyền'));
+        const confirm = btn('Cấp quyền quản trị');
+        await sameFrame(confirm, confirm);
+        expect(mocks.grantStaff).toHaveBeenCalledTimes(1);
+        expect(mocks.grantStaff).toHaveBeenCalledWith('0901112223', 'ADMIN', undefined, 'Nhân viên mới');
+        await act(async () => d.resolve({ granted: 'ADMIN', applied: true }));
+        await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'success' })));
+        expect(mocks.grantStaff).toHaveBeenCalledTimes(1);
+      });
+
+      it('cấp quyền ADMIN lỗi thì nhả khoá, xác nhận lại gọi lần hai', async () => {
+        mocks.grantStaff.mockRejectedValueOnce(new Error('Máy chủ bận'));
+        await openGrant(true);
+        fireEvent.click(btn('Lưu quyền'));
+        fireEvent.click(btn('Cấp quyền quản trị'));
+        await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Máy chủ bận', type: 'error' }));
+        fireEvent.click(btn('Lưu quyền'));
+        fireEvent.click(btn('Cấp quyền quản trị'));
+        await waitFor(() => expect(mocks.grantStaff).toHaveBeenCalledTimes(2));
+      });
+
+      it('chạm đúp "Thu hồi" chỉ thu hồi quyền một lần', async () => {
+        const d = deferred();
+        mocks.revokeStaff.mockReturnValueOnce(d.promise);
+        await openRevoke();
+        const revoke = btn('Thu hồi');
+        await sameFrame(revoke, revoke);
+        expect(mocks.revokeStaff).toHaveBeenCalledTimes(1);
+        expect(mocks.revokeStaff).toHaveBeenCalledWith('0901234567', 'Nghỉ việc');
+        await busy('Thu hồi');
+        expect(btn('Thu hồi')).not.toBeDisabled();
+        await act(async () => d.resolve({ revoked: 1, downgraded: false }));
+        await waitFor(() => expect(successCount('Đã thu hồi quyền.')).toBe(1));
+        expect(mocks.revokeStaff).toHaveBeenCalledTimes(1);
+      });
+
+      it('thu hồi lỗi thì nhả khoá, bấm lại gọi lần hai', async () => {
+        mocks.revokeStaff.mockRejectedValueOnce(new Error('Không thu hồi được'));
+        await openRevoke();
+        fireEvent.click(btn('Thu hồi'));
+        await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Không thu hồi được', type: 'error' }));
+        fireEvent.click(btn('Thu hồi'));
+        await waitFor(() => expect(mocks.revokeStaff).toHaveBeenCalledTimes(2));
+      });
+
+      it('chạm đúp "Huỷ lời mời" ở tấm xác nhận chỉ gọi thu hồi một lần', async () => {
+        const d = deferred();
+        mocks.revokeStaff.mockReturnValueOnce(d.promise);
+        renderPage();
+        fireEvent.click(await screen.findByRole('button', { name: 'Huỷ lời mời · 0987654321' }));
+        fireEvent.change(screen.getByLabelText('Lý do'), { target: { value: 'Mời nhầm số' } });
+        const cancel = btn('Huỷ lời mời');
+        await sameFrame(cancel, cancel);
+        expect(mocks.revokeStaff).toHaveBeenCalledTimes(1);
+        expect(mocks.revokeStaff).toHaveBeenCalledWith('0987654321', 'Mời nhầm số');
+        await act(async () => d.resolve({ revoked: 1, downgraded: false }));
+        await waitFor(() => expect(successCount('Đã thu hồi quyền.')).toBe(1));
+      });
+    });
+
+    describe('Duyệt ca', () => {
+      const openShifts = async () => {
+        renderPage();
+        await screen.findByText('Lan');
+        goTab('Duyệt ca');
+        await screen.findByText('09/03 – 15/03');
+        await screen.findAllByText('Chờ duyệt');
+      };
+      const APPROVE_S1 = 'Duyệt ca Lan T3 10/03';
+      const APPROVE_S2 = 'Duyệt ca Lan T4 11/03';
+      const REJECT_S1 = 'Từ chối ca Lan T3 10/03';
+      const typeRejectReason = () => fireEvent.change(screen.getByLabelText('Lý do'), { target: { value: 'Đủ người' } });
+
+      it('chạm đúp "Duyệt" một ca chỉ duyệt một lần; đang duyệt nút aria-busy', async () => {
+        const d = deferred();
+        mocks.approveShift.mockReturnValueOnce(d.promise);
+        await openShifts();
+        const approve = btn(APPROVE_S1);
+        await sameFrame(approve, approve);
+        expect(mocks.approveShift).toHaveBeenCalledTimes(1);
+        await busy(APPROVE_S1);
+        await act(async () => d.resolve({ approved: true }));
+        await waitFor(() => expect(successCount('Đã duyệt ca.')).toBe(1));
+        expect(mocks.approveShift).toHaveBeenCalledTimes(1);
+      });
+
+      it('duyệt lỗi thì nhả khoá, bấm lại gọi lần hai', async () => {
+        mocks.approveShift.mockRejectedValueOnce(new Error('Ca không còn chờ duyệt'));
+        await openShifts();
+        fireEvent.click(btn(APPROVE_S1));
+        await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Ca không còn chờ duyệt', type: 'error' }));
+        fireEvent.click(btn(APPROVE_S1));
+        await waitFor(() => expect(mocks.approveShift).toHaveBeenCalledTimes(2));
+      });
+
+      it('duyệt xong thì nhả khoá: bấm duyệt lại ca đó (danh sách chưa đổi) gọi lần hai', async () => {
+        await openShifts();
+        fireEvent.click(btn(APPROVE_S1));
+        await waitFor(() => expect(successCount('Đã duyệt ca.')).toBe(1));
+        await waitFor(() => expect(btn(APPROVE_S1)).not.toHaveAttribute('aria-busy'));
+        fireEvent.click(btn(APPROVE_S1));
+        await waitFor(() => expect(mocks.approveShift).toHaveBeenCalledTimes(2));
+      });
+
+      it('duyệt hai ca khác nhau trong cùng một khung hình: cả hai đều gọi API', async () => {
+        const d1 = deferred();
+        const d2 = deferred();
+        mocks.approveShift.mockReturnValueOnce(d1.promise).mockReturnValueOnce(d2.promise);
+        await openShifts();
+        await sameFrame(btn(APPROVE_S1), btn(APPROVE_S2));
+        expect(mocks.approveShift).toHaveBeenCalledTimes(2);
+        expect(mocks.approveShift).toHaveBeenNthCalledWith(1, 's1', undefined);
+        expect(mocks.approveShift).toHaveBeenNthCalledWith(2, 's2', undefined);
+        await act(async () => {
+          d1.resolve({ approved: true });
+          d2.resolve({ approved: true });
+        });
+        await waitFor(() => expect(successCount('Đã duyệt ca.')).toBe(2));
+      });
+
+      it('chạm đúp "Duyệt với giờ đã chỉnh" chỉ duyệt một lần', async () => {
+        const d = deferred();
+        mocks.approveShift.mockReturnValueOnce(d.promise);
+        await openShifts();
+        fireEvent.click(btn('Chỉnh giờ Lan T3 10/03'));
+        fireEvent.change(screen.getByLabelText('Bắt đầu'), { target: { value: '09:00' } });
+        const adjusted = btn('Duyệt với giờ đã chỉnh');
+        await sameFrame(adjusted, adjusted);
+        expect(mocks.approveShift).toHaveBeenCalledTimes(1);
+        expect(mocks.approveShift).toHaveBeenCalledWith('s1', { approvedStart: vn('2026-03-10', '09:00'), approvedEnd: vn('2026-03-10', '12:00') });
+        await busy('Duyệt với giờ đã chỉnh');
+        await act(async () => d.resolve({ approved: true }));
+        await waitFor(() => expect(successCount('Đã duyệt ca.')).toBe(1));
+        expect(mocks.approveShift).toHaveBeenCalledTimes(1);
+      });
+
+      it('duyệt với giờ đã chỉnh lỗi thì nhả khoá, bấm lại gọi lần hai', async () => {
+        mocks.approveShift.mockRejectedValueOnce(new Error('Giờ không hợp lệ'));
+        await openShifts();
+        fireEvent.click(btn('Chỉnh giờ Lan T3 10/03'));
+        fireEvent.click(btn('Duyệt với giờ đã chỉnh'));
+        await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Giờ không hợp lệ', type: 'error' }));
+        fireEvent.click(btn('Duyệt với giờ đã chỉnh'));
+        await waitFor(() => expect(mocks.approveShift).toHaveBeenCalledTimes(2));
+      });
+
+      it('chạm đúp "Xác nhận từ chối" chỉ từ chối một lần', async () => {
+        const d = deferred();
+        mocks.rejectShift.mockReturnValueOnce(d.promise);
+        await openShifts();
+        fireEvent.click(btn(REJECT_S1));
+        typeRejectReason();
+        const confirm = btn('Xác nhận từ chối');
+        await sameFrame(confirm, confirm);
+        expect(mocks.rejectShift).toHaveBeenCalledTimes(1);
+        expect(mocks.rejectShift).toHaveBeenCalledWith('s1', 'Đủ người');
+        await busy('Xác nhận từ chối');
+        await act(async () => d.resolve({ rejected: true }));
+        await waitFor(() => expect(successCount('Đã từ chối ca.')).toBe(1));
+        expect(mocks.rejectShift).toHaveBeenCalledTimes(1);
+      });
+
+      it('từ chối lỗi thì nhả khoá, bấm lại gọi lần hai', async () => {
+        mocks.rejectShift.mockRejectedValueOnce(new Error('Ca đã được duyệt'));
+        await openShifts();
+        fireEvent.click(btn(REJECT_S1));
+        typeRejectReason();
+        fireEvent.click(btn('Xác nhận từ chối'));
+        await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Ca đã được duyệt', type: 'error' }));
+        fireEvent.click(btn('Xác nhận từ chối'));
+        await waitFor(() => expect(mocks.rejectShift).toHaveBeenCalledTimes(2));
+      });
+
+      it('Duyệt rồi Xác nhận từ chối cùng một ca trong một khung hình: chỉ lệnh đầu gọi API', async () => {
+        const d = deferred();
+        mocks.approveShift.mockReturnValueOnce(d.promise);
+        await openShifts();
+        fireEvent.click(btn(REJECT_S1));
+        typeRejectReason();
+        await sameFrame(btn(APPROVE_S1), btn('Xác nhận từ chối'));
+        expect(mocks.approveShift).toHaveBeenCalledTimes(1);
+        expect(mocks.rejectShift).not.toHaveBeenCalled();
+        await act(async () => d.resolve({ approved: true }));
+        await waitFor(() => expect(successCount('Đã duyệt ca.')).toBe(1));
+        expect(mocks.rejectShift).not.toHaveBeenCalled();
+      });
+
+      it('Xác nhận từ chối rồi Duyệt cùng một ca trong một khung hình: chỉ lệnh đầu gọi API', async () => {
+        const d = deferred();
+        mocks.rejectShift.mockReturnValueOnce(d.promise);
+        await openShifts();
+        fireEvent.click(btn(REJECT_S1));
+        typeRejectReason();
+        await sameFrame(btn('Xác nhận từ chối'), btn(APPROVE_S1));
+        expect(mocks.rejectShift).toHaveBeenCalledTimes(1);
+        expect(mocks.approveShift).not.toHaveBeenCalled();
+        await act(async () => d.resolve({ rejected: true }));
+        await waitFor(() => expect(successCount('Đã từ chối ca.')).toBe(1));
+        expect(mocks.approveShift).not.toHaveBeenCalled();
+      });
+
+      it('từ chối ca này, duyệt ca khác trong cùng một khung hình: cả hai đều gọi API', async () => {
+        const d1 = deferred();
+        const d2 = deferred();
+        mocks.approveShift.mockReturnValueOnce(d1.promise);
+        mocks.rejectShift.mockReturnValueOnce(d2.promise);
+        await openShifts();
+        fireEvent.click(btn(REJECT_S1));
+        typeRejectReason();
+        await sameFrame(btn(APPROVE_S2), btn('Xác nhận từ chối'));
+        expect(mocks.approveShift).toHaveBeenCalledWith('s2', undefined);
+        expect(mocks.rejectShift).toHaveBeenCalledWith('s1', 'Đủ người');
+        await act(async () => {
+          d1.resolve({ approved: true });
+          d2.resolve({ rejected: true });
+        });
+        await waitFor(() => expect(successCount('Đã từ chối ca.')).toBe(1));
+      });
+
+      it('duyệt lỗi nhả khoá chung: từ chối đúng ca đó sau đó gọi được; từ chối lỗi nhả khoá chung: duyệt lại gọi được', async () => {
+        mocks.approveShift.mockRejectedValueOnce(new Error('Mất kết nối'));
+        mocks.rejectShift.mockRejectedValueOnce(new Error('Mất kết nối 2'));
+        await openShifts();
+        fireEvent.click(btn(REJECT_S1));
+        typeRejectReason();
+        fireEvent.click(btn(APPROVE_S1));
+        await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Mất kết nối', type: 'error' }));
+        fireEvent.click(btn('Xác nhận từ chối'));
+        await waitFor(() => expect(mocks.rejectShift).toHaveBeenCalledTimes(1));
+        await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Mất kết nối 2', type: 'error' }));
+        fireEvent.click(btn(APPROVE_S1));
+        await waitFor(() => expect(mocks.approveShift).toHaveBeenCalledTimes(2));
+      });
+
+      it('chạm đúp "Duyệt tất cả" chỉ gửi một lần; đang gửi nút aria-busy', async () => {
+        const d = deferred();
+        mocks.bulkApproveShifts.mockReturnValueOnce(d.promise);
+        await openShifts();
+        const all = btn('Duyệt tất cả (2)');
+        await sameFrame(all, all);
+        expect(mocks.bulkApproveShifts).toHaveBeenCalledTimes(1);
+        expect(mocks.bulkApproveShifts).toHaveBeenCalledWith(['s1', 's2']);
+        await busy('Duyệt tất cả (2)');
+        await act(async () => d.resolve({ approved: 2 }));
+        await waitFor(() => expect(successCount('Đã duyệt 2 ca.')).toBe(1));
+        expect(mocks.bulkApproveShifts).toHaveBeenCalledTimes(1);
+      });
+
+      it('"Duyệt tất cả" lỗi thì nhả khoá, bấm lại gọi lần hai', async () => {
+        mocks.bulkApproveShifts.mockRejectedValueOnce(new Error('Mất kết nối'));
+        await openShifts();
+        fireEvent.click(btn('Duyệt tất cả (2)'));
+        await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Mất kết nối', type: 'error' }));
+        fireEvent.click(btn('Duyệt tất cả (2)'));
+        await waitFor(() => expect(mocks.bulkApproveShifts).toHaveBeenCalledTimes(2));
+      });
+
+      it('"Duyệt tất cả" rồi Duyệt một ca trong một khung hình: chỉ "Duyệt tất cả" gọi API', async () => {
+        const d = deferred();
+        mocks.bulkApproveShifts.mockReturnValueOnce(d.promise);
+        await openShifts();
+        await sameFrame(btn('Duyệt tất cả (2)'), btn(APPROVE_S1));
+        expect(mocks.bulkApproveShifts).toHaveBeenCalledTimes(1);
+        expect(mocks.approveShift).not.toHaveBeenCalled();
+        await act(async () => d.resolve({ approved: 2 }));
+        await waitFor(() => expect(successCount('Đã duyệt 2 ca.')).toBe(1));
+        expect(mocks.approveShift).not.toHaveBeenCalled();
+      });
+
+      it('Duyệt một ca rồi "Duyệt tất cả" trong một khung hình: chỉ ca đó gọi API', async () => {
+        const d = deferred();
+        mocks.approveShift.mockReturnValueOnce(d.promise);
+        await openShifts();
+        await sameFrame(btn(APPROVE_S1), btn('Duyệt tất cả (2)'));
+        expect(mocks.approveShift).toHaveBeenCalledTimes(1);
+        expect(mocks.bulkApproveShifts).not.toHaveBeenCalled();
+        await act(async () => d.resolve({ approved: true }));
+        await waitFor(() => expect(successCount('Đã duyệt ca.')).toBe(1));
+        expect(mocks.bulkApproveShifts).not.toHaveBeenCalled();
+      });
+
+      it('"Duyệt tất cả" lỗi nhả khoá chung: duyệt một ca sau đó gọi được', async () => {
+        mocks.bulkApproveShifts.mockRejectedValueOnce(new Error('Mất kết nối'));
+        await openShifts();
+        fireEvent.click(btn('Duyệt tất cả (2)'));
+        await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Mất kết nối', type: 'error' }));
+        fireEvent.click(btn(APPROVE_S2));
+        await waitFor(() => expect(mocks.approveShift).toHaveBeenCalledWith('s2', undefined));
+      });
+
+      describe('Ca chuẩn', () => {
+        const TWO_TEMPLATES = [
+          { id: 't1', name: 'Ca sáng', startMin: 480, endMin: 720, active: true, sortOrder: 1 },
+          { id: 't2', name: 'Ca chiều', startMin: 780, endMin: 1020, active: true, sortOrder: 2 },
+        ];
+        const openTemplates = async () => {
+          await openShifts();
+          fireEvent.click(btn('Ca chuẩn'));
+          await screen.findByText('Ca sáng · 08:00–12:00');
+        };
+        const typeTemplate = () => fireEvent.change(screen.getByLabelText('Tên ca'), { target: { value: 'Ca tối' } });
+
+        it('chạm đúp "Thêm ca chuẩn" chỉ thêm một ca', async () => {
+          const d = deferred();
+          mocks.createTemplate.mockReturnValueOnce(d.promise);
+          await openTemplates();
+          typeTemplate();
+          await waitFor(() => expect(btn('Thêm ca chuẩn')).toBeEnabled());
+          const add = btn('Thêm ca chuẩn');
+          await sameFrame(add, add);
+          expect(mocks.createTemplate).toHaveBeenCalledTimes(1);
+          expect(mocks.createTemplate).toHaveBeenCalledWith({ name: 'Ca tối', startMin: 480, endMin: 720 });
+          await busy('Thêm ca chuẩn');
+          await act(async () => d.resolve({}));
+          await waitFor(() => expect(successCount('Đã thêm ca chuẩn.')).toBe(1));
+          expect(mocks.createTemplate).toHaveBeenCalledTimes(1);
+        });
+
+        it('thêm ca chuẩn lỗi thì nhả khoá, bấm lại gọi lần hai', async () => {
+          mocks.createTemplate.mockRejectedValueOnce(new Error('Tên ca bị trùng'));
+          await openTemplates();
+          typeTemplate();
+          await waitFor(() => expect(btn('Thêm ca chuẩn')).toBeEnabled());
+          fireEvent.click(btn('Thêm ca chuẩn'));
+          await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Tên ca bị trùng', type: 'error' }));
+          fireEvent.click(btn('Thêm ca chuẩn'));
+          await waitFor(() => expect(mocks.createTemplate).toHaveBeenCalledTimes(2));
+        });
+
+        it('chạm đúp "Xoá" một ca chuẩn chỉ xoá một lần; nút đang xoá aria-busy mà không disabled (giữ focus)', async () => {
+          const d = deferred();
+          mocks.deleteTemplate.mockReturnValueOnce(d.promise);
+          await openTemplates();
+          const del = btn('Xoá ca chuẩn Ca sáng');
+          await sameFrame(del, del);
+          expect(mocks.deleteTemplate).toHaveBeenCalledTimes(1);
+          await busy('Xoá ca chuẩn Ca sáng');
+          expect(btn('Xoá ca chuẩn Ca sáng')).not.toBeDisabled();
+          await act(async () => d.resolve({ deleted: true }));
+          await waitFor(() => expect(btn('Xoá ca chuẩn Ca sáng')).not.toHaveAttribute('aria-busy'));
+          expect(mocks.deleteTemplate).toHaveBeenCalledTimes(1);
+        });
+
+        it('xoá hai ca chuẩn khác nhau trong cùng một khung hình: chỉ ca đầu gọi API, dòng còn lại bị khoá', async () => {
+          const d = deferred();
+          mocks.adminGetTemplates.mockResolvedValue(TWO_TEMPLATES);
+          mocks.deleteTemplate.mockReturnValueOnce(d.promise);
+          await openTemplates();
+          await sameFrame(btn('Xoá ca chuẩn Ca sáng'), btn('Xoá ca chuẩn Ca chiều'));
+          expect(mocks.deleteTemplate).toHaveBeenCalledTimes(1);
+          expect(mocks.deleteTemplate).toHaveBeenCalledWith('t1');
+          await busy('Xoá ca chuẩn Ca sáng');
+          expect(btn('Xoá ca chuẩn Ca chiều')).toBeDisabled();
+          await act(async () => d.resolve({ deleted: true }));
+          await waitFor(() => expect(btn('Xoá ca chuẩn Ca chiều')).toBeEnabled());
+        });
+
+        it('xoá ca chuẩn lỗi thì nhả khoá, bấm lại gọi lần hai', async () => {
+          mocks.deleteTemplate.mockRejectedValueOnce(new Error('Không xoá được'));
+          await openTemplates();
+          fireEvent.click(btn('Xoá ca chuẩn Ca sáng'));
+          await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Không xoá được', type: 'error' }));
+          await waitFor(() => expect(btn('Xoá ca chuẩn Ca sáng')).not.toHaveAttribute('aria-busy'));
+          fireEvent.click(btn('Xoá ca chuẩn Ca sáng'));
+          await waitFor(() => expect(mocks.deleteTemplate).toHaveBeenCalledTimes(2));
+        });
+      });
+    });
+
+    describe('Lương', () => {
+      const TWO_OPEN = [PAY_ROWS[0], { ...PAY_ROWS[0], staff: { id: 'u9', fullName: 'Cúc', phone: null } }];
+      const openPayroll = async (rows: unknown[] = PAY_ROWS) => {
+        mocks.adminGetPayroll.mockResolvedValue(rows);
+        renderPage();
+        await screen.findByText('Lan');
+        goTab('Lương');
+        await screen.findByRole('heading', { level: 2, name: 'Lương' });
+        await screen.findAllByRole('button', { name: /^Xem giờ · / });
+      };
+      const openPaid = async (who: string) => {
+        fireEvent.click(btn(`Đã chuyển · ${who}`));
+        fireEvent.click(btn('Ảnh xác nhận chuyển khoản *'));
+      };
+      const confirmReopen = (who: string) => {
+        fireEvent.click(btn(`Mở lại · ${who}`));
+        fireEvent.click(btn('Mở lại bảng lương'));
+      };
+
+      it('chạm đúp "Lưu đơn giá" chỉ lưu một lần', async () => {
+        const d = deferred();
+        mocks.setRate.mockReturnValueOnce(d.promise);
+        await openPayroll();
+        fireEvent.click(btn('Đơn giá · Lan'));
+        fireEvent.change(screen.getByLabelText('Đơn giá (VND/giờ)'), { target: { value: '35000' } });
+        const save = btn('Lưu đơn giá');
+        await sameFrame(save, save);
+        expect(mocks.setRate).toHaveBeenCalledTimes(1);
+        expect(mocks.setRate).toHaveBeenCalledWith('u1', 35000);
+        await busy('Lưu đơn giá');
+        await act(async () => d.resolve({}));
+        await waitFor(() => expect(successCount('Đã lưu đơn giá.')).toBe(1));
+        expect(mocks.setRate).toHaveBeenCalledTimes(1);
+      });
+
+      it('lưu đơn giá lỗi thì nhả khoá, bấm lại gọi lần hai', async () => {
+        mocks.setRate.mockRejectedValueOnce(new Error('Đơn giá không hợp lệ'));
+        await openPayroll();
+        fireEvent.click(btn('Đơn giá · Lan'));
+        fireEvent.click(btn('Lưu đơn giá'));
+        await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đơn giá không hợp lệ', type: 'error' }));
+        fireEvent.click(btn('Lưu đơn giá'));
+        await waitFor(() => expect(mocks.setRate).toHaveBeenCalledTimes(2));
+      });
+
+      it('chạm đúp "Chốt" một dòng chỉ chốt một lần; nút đang chốt aria-busy mà không disabled', async () => {
+        const d = deferred();
+        mocks.finalizePayroll.mockReturnValueOnce(d.promise);
+        await openPayroll();
+        const finalize = btn('Chốt · Lan');
+        await sameFrame(finalize, finalize);
+        expect(mocks.finalizePayroll).toHaveBeenCalledTimes(1);
+        expect(mocks.finalizePayroll).toHaveBeenCalledWith('u1', 2026, 3);
+        await busy('Chốt · Lan');
+        expect(btn('Chốt · Lan')).not.toBeDisabled();
+        await act(async () => d.resolve({ finalized: true }));
+        await waitFor(() => expect(successCount('Đã chốt lương.')).toBe(1));
+        expect(mocks.finalizePayroll).toHaveBeenCalledTimes(1);
+      });
+
+      it('chốt lỗi thì nhả khoá, bấm lại gọi lần hai', async () => {
+        mocks.finalizePayroll.mockRejectedValueOnce(new Error('Chưa đủ dữ liệu'));
+        await openPayroll();
+        fireEvent.click(btn('Chốt · Lan'));
+        await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Chưa đủ dữ liệu', type: 'error' }));
+        fireEvent.click(btn('Chốt · Lan'));
+        await waitFor(() => expect(mocks.finalizePayroll).toHaveBeenCalledTimes(2));
+      });
+
+      it('chốt hai nhân viên trong cùng một khung hình: chỉ dòng đầu gọi API (một việc mỗi lúc)', async () => {
+        const d = deferred();
+        mocks.finalizePayroll.mockReturnValueOnce(d.promise);
+        await openPayroll(TWO_OPEN);
+        await sameFrame(btn('Chốt · Lan'), btn('Chốt · Cúc'));
+        expect(mocks.finalizePayroll).toHaveBeenCalledTimes(1);
+        expect(mocks.finalizePayroll).toHaveBeenCalledWith('u1', 2026, 3);
+        await act(async () => d.resolve({ finalized: true }));
+        await waitFor(() => expect(successCount('Đã chốt lương.')).toBe(1));
+        expect(mocks.finalizePayroll).toHaveBeenCalledTimes(1);
+      });
+
+      it('chạm đúp "Mở lại bảng lương" ở tấm xác nhận chỉ mở lại một lần', async () => {
+        const d = deferred();
+        mocks.reopenPayroll.mockReturnValueOnce(d.promise);
+        await openPayroll();
+        fireEvent.click(btn('Mở lại · Bình'));
+        const confirm = btn('Mở lại bảng lương');
+        await sameFrame(confirm, confirm);
+        expect(mocks.reopenPayroll).toHaveBeenCalledTimes(1);
+        expect(mocks.reopenPayroll).toHaveBeenCalledWith('u3', 2026, 3);
+        await busy('Mở lại · Bình');
+        expect(btn('Mở lại · Bình')).not.toBeDisabled();
+        await act(async () => d.resolve({ status: 'OPEN' }));
+        await waitFor(() => expect(successCount('Đã mở lại bảng lương — sửa xong nhớ chốt lại.')).toBe(1));
+        expect(mocks.reopenPayroll).toHaveBeenCalledTimes(1);
+      });
+
+      it('mở lại lỗi thì nhả khoá, mở lại lần hai gọi API lần hai', async () => {
+        mocks.reopenPayroll.mockRejectedValueOnce(new Error('Không mở lại được'));
+        await openPayroll();
+        confirmReopen('Bình');
+        await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Không mở lại được', type: 'error' }));
+        await waitFor(() => expect(btn('Mở lại · Bình')).not.toHaveAttribute('aria-busy'));
+        confirmReopen('Bình');
+        await waitFor(() => expect(mocks.reopenPayroll).toHaveBeenCalledTimes(2));
+      });
+
+      it('chạm đúp "Đánh dấu đã trả" chỉ ghi đã trả một lần', async () => {
+        const d = deferred();
+        mocks.markPaid.mockReturnValueOnce(d.promise);
+        await openPayroll();
+        await openPaid('Lan');
+        const paid = btn('Đánh dấu đã trả');
+        await sameFrame(paid, paid);
+        expect(mocks.markPaid).toHaveBeenCalledTimes(1);
+        expect(mocks.markPaid).toHaveBeenCalledWith('u1', { year: 2026, month: 3, proofImageUrl: 'https://img.test/proof.png', note: undefined });
+        await busy('Đánh dấu đã trả');
+        await act(async () => d.resolve({ paid: true }));
+        await waitFor(() => expect(successCount('Đã đánh dấu đã trả lương.')).toBe(1));
+        expect(mocks.markPaid).toHaveBeenCalledTimes(1);
+      });
+
+      it('đánh dấu đã trả lỗi thì nhả khoá, bấm lại gọi lần hai', async () => {
+        mocks.markPaid.mockRejectedValueOnce(new Error('Ảnh không hợp lệ'));
+        await openPayroll();
+        await openPaid('Lan');
+        fireEvent.click(btn('Đánh dấu đã trả'));
+        await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Ảnh không hợp lệ', type: 'error' }));
+        fireEvent.click(btn('Đánh dấu đã trả'));
+        await waitFor(() => expect(mocks.markPaid).toHaveBeenCalledTimes(2));
+      });
+
+      it('Chốt rồi Đánh dấu đã trả cùng một dòng trong một khung hình: chỉ lệnh đầu gọi API', async () => {
+        const d = deferred();
+        mocks.finalizePayroll.mockReturnValueOnce(d.promise);
+        await openPayroll();
+        await openPaid('Lan');
+        await sameFrame(btn('Chốt · Lan'), btn('Đánh dấu đã trả'));
+        expect(mocks.finalizePayroll).toHaveBeenCalledTimes(1);
+        expect(mocks.markPaid).not.toHaveBeenCalled();
+        await act(async () => d.resolve({ finalized: true }));
+        await waitFor(() => expect(successCount('Đã chốt lương.')).toBe(1));
+        expect(mocks.markPaid).not.toHaveBeenCalled();
+      });
+
+      it('Đánh dấu đã trả rồi Chốt cùng một dòng trong một khung hình: chỉ lệnh đầu gọi API', async () => {
+        const d = deferred();
+        mocks.markPaid.mockReturnValueOnce(d.promise);
+        await openPayroll();
+        await openPaid('Lan');
+        await sameFrame(btn('Đánh dấu đã trả'), btn('Chốt · Lan'));
+        expect(mocks.markPaid).toHaveBeenCalledTimes(1);
+        expect(mocks.finalizePayroll).not.toHaveBeenCalled();
+        await act(async () => d.resolve({ paid: true }));
+        await waitFor(() => expect(successCount('Đã đánh dấu đã trả lương.')).toBe(1));
+        expect(mocks.finalizePayroll).not.toHaveBeenCalled();
+      });
+
+      it('Mở lại rồi Đánh dấu đã trả cùng một dòng trong một khung hình: chỉ lệnh đầu gọi API', async () => {
+        const d = deferred();
+        mocks.reopenPayroll.mockReturnValueOnce(d.promise);
+        await openPayroll();
+        await openPaid('0912345678');
+        fireEvent.click(btn('Mở lại · 0912345678'));
+        await sameFrame(btn('Mở lại bảng lương'), btn('Đánh dấu đã trả'));
+        expect(mocks.reopenPayroll).toHaveBeenCalledTimes(1);
+        expect(mocks.markPaid).not.toHaveBeenCalled();
+        await act(async () => d.resolve({ status: 'OPEN' }));
+        await waitFor(() => expect(successCount('Đã mở lại bảng lương — sửa xong nhớ chốt lại.')).toBe(1));
+        expect(mocks.markPaid).not.toHaveBeenCalled();
+      });
+
+      it('chốt lỗi nhả khoá chung: đánh dấu đã trả sau đó gọi được; đánh dấu đã trả lỗi nhả khoá chung: chốt lại gọi được', async () => {
+        mocks.finalizePayroll.mockRejectedValueOnce(new Error('Chưa đủ dữ liệu'));
+        mocks.markPaid.mockRejectedValueOnce(new Error('Ảnh không hợp lệ'));
+        await openPayroll();
+        await openPaid('Lan');
+        fireEvent.click(btn('Chốt · Lan'));
+        await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Chưa đủ dữ liệu', type: 'error' }));
+        fireEvent.click(btn('Đánh dấu đã trả'));
+        await waitFor(() => expect(mocks.markPaid).toHaveBeenCalledTimes(1));
+        await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Ảnh không hợp lệ', type: 'error' }));
+        fireEvent.click(btn('Chốt · Lan'));
+        await waitFor(() => expect(mocks.finalizePayroll).toHaveBeenCalledTimes(2));
+      });
+
+      it('mở lại lỗi nhả khoá chung: chốt dòng khác sau đó gọi được', async () => {
+        mocks.reopenPayroll.mockRejectedValueOnce(new Error('Không mở lại được'));
+        await openPayroll();
+        confirmReopen('Bình');
+        await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Không mở lại được', type: 'error' }));
+        await waitFor(() => expect(btn('Chốt · Lan')).toBeEnabled());
+        fireEvent.click(btn('Chốt · Lan'));
+        await waitFor(() => expect(mocks.finalizePayroll).toHaveBeenCalledWith('u1', 2026, 3));
+      });
+
+      describe('Sửa giờ phiên', () => {
+        const openEdit = async () => {
+          await openPayroll();
+          fireEvent.click(btn('Xem giờ · Lan'));
+          fireEvent.click(await screen.findByRole('button', { name: 'Sửa giờ phiên 08:00' }));
+          fireEvent.change(screen.getByLabelText('Giờ ra'), { target: { value: '12:45' } });
+        };
+
+        it('chạm đúp "Lưu giờ" chỉ sửa phiên một lần', async () => {
+          const d = deferred();
+          mocks.adminEditSession.mockReturnValueOnce(d.promise);
+          await openEdit();
+          const save = btn('Lưu giờ');
+          await sameFrame(save, save);
+          expect(mocks.adminEditSession).toHaveBeenCalledTimes(1);
+          expect(mocks.adminEditSession).toHaveBeenCalledWith('ss1', { checkinAt: vn('2026-03-02', '08:00'), checkoutAt: vn('2026-03-02', '12:45') });
+          await busy('Lưu giờ');
+          await act(async () => d.resolve({ updated: true }));
+          await waitFor(() => expect(successCount('Đã sửa giờ & tính lại.')).toBe(1));
+          expect(mocks.adminEditSession).toHaveBeenCalledTimes(1);
+        });
+
+        it('sửa giờ lỗi thì nhả khoá, bấm lại gọi lần hai', async () => {
+          mocks.adminEditSession.mockRejectedValueOnce(new Error('Giờ ra trước giờ vào'));
+          await openEdit();
+          fireEvent.click(btn('Lưu giờ'));
+          await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Giờ ra trước giờ vào', type: 'error' }));
+          fireEvent.click(btn('Lưu giờ'));
+          await waitFor(() => expect(mocks.adminEditSession).toHaveBeenCalledTimes(2));
+        });
+      });
     });
   });
 });

@@ -81,7 +81,7 @@ export default function BestSellersPage() {
         {products.isLoading ? (
           <ProductGrid items={[]} variant="rank" loading skeletonCount={6} />
         ) : products.isError && list.length === 0 ? (
-          <ErrorState message={getLoadErrorMessage(products.error)} retrying={products.isFetching} onRetry={() => void products.refetch()} />
+          <ErrorState message={getLoadErrorMessage(products.error)} retrying={products.isFetching} onRetry={() => products.refetch()} />
         ) : list.length === 0 ? (
           <EmptyState
             art="leaf"

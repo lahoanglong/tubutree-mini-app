@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -458,5 +458,81 @@ describe('BrandViewPage — khung shop (tab, Theo dõi ở đầu, Sản phẩm 
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Đọc câu chuyện' }));
     expect(screen.getByRole('tab', { name: 'Câu chuyện', selected: true })).toBeInTheDocument();
+  });
+});
+
+describe('BrandViewPage — Theo dõi khoá chạm đúp (W79A)', () => {
+  const deferred = <T,>() => {
+    let resolve!: (v: T) => void;
+    let reject!: (e: unknown) => void;
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+  const followedToasts = () => mocks.openSnackbar.mock.calls.filter(([o]) => String(o.text).includes('Đã theo dõi thương hiệu'));
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.authStatus = 'authenticated';
+    mocks.getPublicBrand.mockResolvedValue(BRAND);
+    mocks.getBrandShareToEarn.mockResolvedValue({ eligible: false });
+    mocks.getBrandFollowState.mockResolvedValue({ following: false, followerCount: 12 });
+    mocks.followBrand.mockResolvedValue({ following: true, followerCount: 13 });
+    mocks.unfollowBrand.mockResolvedValue({ following: false, followerCount: 12 });
+    mocks.getDealerMe.mockResolvedValue({ isDealer: false });
+    mocks.copyText.mockResolvedValue(true);
+    mocks.fetchFlash.mockResolvedValue([]);
+  });
+
+  it('chạm đúp "Theo dõi" trong cùng một nhịp vẽ: một lời gọi followBrand, nút báo bận, xong thì báo một lần và đổi sang "Đang theo dõi"', async () => {
+    const pending = deferred<{ following: boolean; followerCount: number }>();
+    mocks.followBrand.mockReturnValue(pending.promise);
+    renderPage();
+    const follow = await screen.findByRole('button', { name: 'Theo dõi' });
+    await act(async () => {
+      fireEvent.click(follow);
+      fireEvent.click(follow);
+    });
+    expect(mocks.followBrand).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Theo dõi' })).toHaveAttribute('aria-busy', 'true'));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Theo dõi' }));
+    });
+    expect(mocks.followBrand).toHaveBeenCalledTimes(1);
+    await act(async () => pending.resolve({ following: true, followerCount: 13 }));
+    expect(await screen.findByRole('button', { name: /Đang theo dõi/ })).not.toHaveAttribute('aria-busy');
+    expect(followedToasts()).toHaveLength(1);
+    expect(mocks.unfollowBrand).not.toHaveBeenCalled();
+  });
+
+  it('đang theo dõi, chạm đúp cùng nhịp: chỉ một lần bỏ theo dõi, không có lần theo dõi lại', async () => {
+    mocks.getBrandFollowState.mockResolvedValue({ following: true, followerCount: 12 });
+    const pending = deferred<{ following: boolean; followerCount: number }>();
+    mocks.unfollowBrand.mockReturnValue(pending.promise);
+    renderPage();
+    const following = await screen.findByRole('button', { name: /Đang theo dõi/ });
+    await act(async () => {
+      fireEvent.click(following);
+      fireEvent.click(following);
+    });
+    expect(mocks.unfollowBrand).toHaveBeenCalledTimes(1);
+    expect(mocks.followBrand).not.toHaveBeenCalled();
+    await act(async () => pending.resolve({ following: false, followerCount: 12 }));
+    expect(await screen.findByRole('button', { name: 'Theo dõi' })).toBeInTheDocument();
+    expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'success', text: 'Đã bỏ theo dõi' }));
+  });
+
+  it('theo dõi lỗi: báo cảnh báo, nhả khoá nên chạm lại gọi followBrand lần nữa và lần này thành công', async () => {
+    mocks.followBrand.mockRejectedValueOnce(new Error('mạng')).mockResolvedValueOnce({ following: true, followerCount: 13 });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Theo dõi' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'warning', text: 'Cần đăng nhập để theo dõi thương hiệu.' })));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Theo dõi' })).not.toHaveAttribute('aria-busy'));
+    fireEvent.click(screen.getByRole('button', { name: 'Theo dõi' }));
+    await waitFor(() => expect(mocks.followBrand).toHaveBeenCalledTimes(2));
+    expect(await screen.findByRole('button', { name: /Đang theo dõi/ })).toBeInTheDocument();
+    expect(followedToasts()).toHaveLength(1);
   });
 });
