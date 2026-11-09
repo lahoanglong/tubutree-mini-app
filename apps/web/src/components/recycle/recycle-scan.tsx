@@ -62,10 +62,13 @@ export function ScanCodeButton({
   onCode,
   onFail,
   disabled,
+  busy,
 }: {
   onCode: (code: string) => void;
   onFail: (text: string) => void;
   disabled?: boolean;
+  /** Quầy đang bận việc khác: nút báo aria-disabled và không mở camera, nhưng KHÔNG `disabled` thật để giữ focus bàn phím. */
+  busy?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
@@ -138,7 +141,9 @@ export function ScanCodeButton({
         type="button"
         className={`${ui.btnPrimary} w-full gap-2`}
         disabled={disabled}
+        aria-disabled={busy || undefined}
         onClick={() => {
+          if (busy) return;
           setHint(null);
           setOpen(true);
         }}

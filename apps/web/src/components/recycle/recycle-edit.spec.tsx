@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WastePreviewDTO } from '@tubutree/shared-types';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
@@ -275,5 +276,79 @@ describe('/doi-rac/yeu-cau/[id]/sua — diện mạo Mini App ở điện thoạ
     const row = bar.firstElementChild!;
     expect(row.className).toContain('max-md:flex-col');
     expect(row.lastElementChild!.className).toContain('max-md:w-full');
+  });
+});
+
+// Khoá "Lưu thay đổi": hai cú chạm trong CÙNG một act chỉ ra một PATCH; nút đang lưu không `disabled` thật (giữ focus);
+// lưu xong trang còn nằm tới lúc chuyển hướng xong nên khoá GIỮ, chỉ nhả khi lỗi.
+const twice = (el: Element | null) =>
+  act(() => {
+    (el as HTMLElement).click();
+    (el as HTMLElement).click();
+  });
+function deferred<T = unknown>() {
+  let resolve!: (v: T) => void;
+  let reject!: (e: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+describe('/doi-rac/yeu-cau/[id]/sua — khoá Lưu thay đổi (cùng một act)', () => {
+  it('chạm đúp trong cùng một act chỉ một PATCH; nút đang lưu không disabled, aria-busy + aria-disabled, focus không rời nút', async () => {
+    const gate = deferred();
+    state.edit = () => gate.promise;
+    const c = await mount();
+    const btn = button(c, 'Lưu thay đổi')!;
+    btn.focus();
+    await twice(btn);
+    await flush(4);
+    expect(calls('PATCH')).toHaveLength(1);
+    expect(btn.disabled).toBe(false);
+    expect(btn.getAttribute('aria-busy')).toBe('true');
+    expect(btn.getAttribute('aria-disabled')).toBe('true');
+    expect(document.activeElement).toBe(btn);
+    gate.resolve(makeRequestDetail());
+    await flush(8);
+    expect(calls('PATCH')).toHaveLength(1);
+    expect(state.replace).toHaveBeenLastCalledWith(DETAIL);
+  });
+
+  it('lưu xong mà trang chưa bị thay: khoá giữ, bấm thêm không gửi PATCH thứ hai', async () => {
+    const c = await mount();
+    const btn = button(c, 'Lưu thay đổi')!;
+    click(btn);
+    await flush(8);
+    expect(state.replace).toHaveBeenLastCalledWith(DETAIL);
+    expect(btn.getAttribute('aria-disabled')).toBe('true');
+    click(btn);
+    await flush(6);
+    expect(calls('PATCH')).toHaveLength(1);
+  });
+
+  it('lỗi: hiện câu máy chủ, nhả khoá và gỡ aria-busy/aria-disabled để lưu lại', async () => {
+    let n = 0;
+    state.edit = () => {
+      if (++n === 1) throw new Error('Món này hiện chưa nhận, hãy bỏ khỏi danh sách');
+      return makeRequestDetail();
+    };
+    const c = await mount();
+    const btn = button(c, 'Lưu thay đổi')!;
+    click(btn);
+    await flush(8);
+    expect(c.querySelector('[role="alert"]')?.textContent).toBe('Món này hiện chưa nhận, hãy bỏ khỏi danh sách');
+    expect(btn.hasAttribute('aria-busy')).toBe(false);
+    expect(btn.hasAttribute('aria-disabled')).toBe(false);
+    click(btn);
+    await flush(8);
+    expect(calls('PATCH')).toHaveLength(2);
+    expect(state.replace).toHaveBeenLastCalledWith(DETAIL);
+  });
+
+  it('số đều: khung chính dùng tabular-nums', async () => {
+    const c = await mount();
+    expect(c.querySelector('main')?.className).toContain('tabular-nums');
   });
 });

@@ -1,7 +1,7 @@
 'use client';
 
 import { createdTodayVn } from '@tubutree/app-core/waste-copy';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -28,7 +28,7 @@ import { PREVIEW_DEBOUNCE_MS, formatPoints, pointAddress } from './recycle-label
 
 function Shell({ id, subtitle, children, bar }: { id: string; subtitle?: string; children: ReactNode; bar?: ReactNode }) {
   return (
-    <main className="mx-auto max-w-5xl space-y-4 px-4 py-6 pb-12">
+    <main className="mx-auto max-w-5xl space-y-4 px-4 py-6 pb-12 tabular-nums">
       <PageHeader title="Sửa yêu cầu" subtitle={subtitle} backHref={`/doi-rac/yeu-cau/${id}`} backLabel="Yêu cầu đổi rác" />
       {children}
       {bar}
@@ -119,13 +119,20 @@ export function RecycleEdit({ id }: { id: string }) {
     enabled: authed && ready && !leave && debounced.length > 0,
   });
 
+  // Khoá "Lưu thay đổi" bằng ref: `isPending` chỉ đúng sau lần vẽ kế, và sau khi lưu xong trang còn nằm đó tới lúc chuyển hướng
+  // xong, nên chỉ nhả khi lỗi; thành công thì giữ tới khi trang bị thay.
+  const saveBusy = useRef(false);
   const save = useMutation({
     mutationFn: () => editWasteRequest(coreHttp, id, { lines: lineInputs, ...(isDropOff && pointId ? { pointId } : {}) }),
     onSuccess: async () => {
       await Promise.all(WASTE_WRITE_INVALIDATE_KEYS.map((queryKey) => qc.invalidateQueries({ queryKey })));
       router.replace(path);
     },
+    onError: () => {
+      saveBusy.current = false;
+    },
   });
+  const saving = save.isPending || save.isSuccess;
 
   if (phase === 'loading') return <Shell id={id}><AuthLoading /></Shell>;
   if (phase === 'unavailable') return <Shell id={id}><SessionUnavailable /></Shell>;
@@ -172,8 +179,14 @@ export function RecycleEdit({ id }: { id: string }) {
             <button
               type="button"
               className={`${ui.btnPrimary} w-full`}
-              disabled={lineInputs.length === 0 || gone.length > 0 || save.isPending}
-              onClick={() => save.mutate()}
+              disabled={lineInputs.length === 0 || gone.length > 0}
+              aria-busy={saving || undefined}
+              aria-disabled={saving || undefined}
+              onClick={() => {
+                if (saveBusy.current) return;
+                saveBusy.current = true;
+                save.mutate();
+              }}
             >
               Lưu thay đổi
             </button>

@@ -258,3 +258,10 @@ describe('/doi-rac/yeu-cau — diện mạo Mini App ở điện thoại', () =>
     expect(list.className).not.toContain('box-shadow:var(--elevation');
   });
 });
+
+describe('số đều của khung chính', () => {
+  it('<main> dùng tabular-nums để điểm, số lượng và ngày không rung khi đổi', async () => {
+    const c = await mount();
+    expect(c.querySelector('main')?.className).toContain('tabular-nums');
+  });
+});

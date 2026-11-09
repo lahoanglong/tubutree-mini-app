@@ -525,3 +525,245 @@ describe('/tai-khoan/ho-so — truy cập (A11Y-02, A11Y-16)', () => {
     expect(region.textContent).not.toBe('');
   });
 });
+
+// Khoá chống lưu hai lần và tải ảnh hai lần: hai cú chạm trong CÙNG một act (chưa có lần vẽ lại xen giữa) chỉ ra một lần gọi API;
+// khoá giữ tới khi /me mới về; nút đang lưu không `disabled` thật nên focus ở lại nút.
+const twice = (el: Element | null) =>
+  act(() => {
+    (el as HTMLElement).click();
+    (el as HTMLElement).click();
+  });
+function deferred<T = void>() {
+  let resolve!: (v: T) => void;
+  let reject!: (e: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+const alertRegion = (c: HTMLElement) => c.querySelector<HTMLElement>('form > [role="alert"]');
+
+describe('/tai-khoan/ho-so — khoá lưu hồ sơ (cùng một act)', () => {
+  it('chạm đúp Lưu trong cùng một act chỉ một PATCH; nút đang lưu không disabled, aria-busy + aria-disabled, focus không rời nút', async () => {
+    const gate = deferred<unknown>();
+    mocks.patch.mockReturnValue(gate.promise);
+    const { container } = await mount();
+    const btn = saveBtn(container);
+    btn.focus();
+    await twice(btn);
+    await flush(2);
+    expect(mocks.patch).toHaveBeenCalledTimes(1);
+    expect(saveBtn(container)).toBe(btn);
+    expect(btn.disabled).toBe(false);
+    expect(btn.getAttribute('aria-busy')).toBe('true');
+    expect(btn.getAttribute('aria-disabled')).toBe('true');
+    expect(document.activeElement).toBe(btn);
+    gate.resolve({ ...ME });
+    await flush(6);
+    expect(mocks.patch).toHaveBeenCalledTimes(1);
+    expect(btn.hasAttribute('aria-busy')).toBe(false);
+  });
+
+  it('thành công: khoá giữ tới khi /me mới về, bấm thêm lúc đó không gửi lần hai; về rồi thì lưu lại được', async () => {
+    const meGate = deferred();
+    let meCalls = 0;
+    mocks.get.mockImplementation(async (path: string) => {
+      if (path === '/me' && ++meCalls > 1) await meGate.promise;
+      return ME;
+    });
+    const { container } = await mount();
+    const btn = saveBtn(container);
+    click(btn);
+    await flush(6);
+    expect(mocks.patch).toHaveBeenCalledTimes(1);
+    expect(statusText(container)).toContain('Đã cập nhật hồ sơ');
+    expect(btn.getAttribute('aria-busy')).toBe('true');
+    click(btn);
+    await flush(4);
+    expect(mocks.patch).toHaveBeenCalledTimes(1);
+    meGate.resolve();
+    await flush(6);
+    expect(btn.hasAttribute('aria-busy')).toBe(false);
+    click(btn);
+    await flush(6);
+    expect(mocks.patch).toHaveBeenCalledTimes(2);
+  });
+
+  it('lỗi: báo trong vùng role=alert có sẵn, giữ chữ đã nhập, khoá giữ tới khi /me tải lại rồi nhả để thử lại', async () => {
+    const meGate = deferred();
+    let meCalls = 0;
+    mocks.get.mockImplementation(async (path: string) => {
+      if (path === '/me' && ++meCalls > 1) await meGate.promise;
+      return ME;
+    });
+    mocks.patch.mockRejectedValueOnce(new NetworkError(false)).mockResolvedValueOnce({ ...ME });
+    const { container } = await mount();
+    expect(alertRegion(container)).not.toBeNull();
+    expect(alertRegion(container)?.textContent).toBe('');
+    typeInto(field(container, 'Họ và tên'), 'Lan C');
+    const btn = saveBtn(container);
+    click(btn);
+    await flush(6);
+    expect(alertRegion(container)?.textContent).toBeTruthy();
+    expect(field(container, 'Họ và tên').value).toBe('Lan C');
+    expect(btn.getAttribute('aria-busy')).toBe('true');
+    click(btn);
+    await flush(4);
+    expect(mocks.patch).toHaveBeenCalledTimes(1);
+    meGate.resolve();
+    await flush(6);
+    expect(btn.hasAttribute('aria-busy')).toBe(false);
+    click(btn);
+    await flush(6);
+    expect(mocks.patch).toHaveBeenCalledTimes(2);
+    expect(alertRegion(container)?.textContent).toBe('');
+  });
+
+  it('hộp xác nhận ngày sinh: chạm đúp "Xác nhận" trong cùng một act cũng chỉ một PATCH, nút giữ focus', async () => {
+    const gate = deferred<unknown>();
+    mocks.get.mockResolvedValue({ ...ME, dob: null });
+    mocks.patch.mockReturnValue(gate.promise);
+    const { container } = await mount();
+    typeInto(field(container, 'Ngày sinh'), '03/02/1991');
+    click(saveBtn(container));
+    await flush(2);
+    const yes = byText(container, 'button', 'Xác nhận') as HTMLButtonElement;
+    yes.focus();
+    await twice(yes);
+    await flush(2);
+    expect(mocks.patch).toHaveBeenCalledTimes(1);
+    expect(yes.disabled).toBe(false);
+    expect(yes.getAttribute('aria-busy')).toBe('true');
+    expect(yes.getAttribute('aria-disabled')).toBe('true');
+    expect(document.activeElement).toBe(yes);
+    expect(container.querySelector('[role="alertdialog"] p')?.className).toContain('tabular-nums');
+    gate.resolve({ ...ME });
+    await flush(4);
+  });
+});
+
+describe('/tai-khoan/ho-so — khoá đổi ảnh đại diện', () => {
+  const openCrop = async (c: HTMLElement) => {
+    const input = c.querySelector<HTMLInputElement>('input[type="file"]')!;
+    Object.defineProperty(input, 'files', { value: [new File(['x'], 'a.jpg', { type: 'image/jpeg' })], configurable: true });
+    return input;
+  };
+
+  it('hai sự kiện chọn tệp trong cùng một act chỉ đọc ảnh một lần', async () => {
+    const gate = deferred<string>();
+    mocks.compress.mockReturnValue(gate.promise);
+    const { container } = await mount();
+    const input = await openCrop(container);
+    act(() => {
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await flush(2);
+    expect(mocks.compress).toHaveBeenCalledTimes(1);
+    gate.resolve('data:image/jpeg;base64,UkFX');
+    await flush(4);
+    expect(byText(document.body, 'button', 'Xác nhận cắt')).not.toBeNull();
+  });
+
+  it('chạm đúp "Xác nhận cắt" trong cùng một act chỉ tải lên một lần', async () => {
+    const gate = deferred<string | null>();
+    mocks.upload.mockReturnValue(gate.promise);
+    const { container } = await mount();
+    const input = await openCrop(container);
+    act(() => {
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await flush(4);
+    await twice(byText(document.body, 'button', 'Xác nhận cắt'));
+    await flush(2);
+    expect(mocks.upload).toHaveBeenCalledTimes(1);
+    gate.resolve(CLOUD_URL);
+    await flush(4);
+    expect(mocks.upload).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain('Đã chọn ảnh đại diện mới.');
+  });
+
+  it('đang tải ảnh lên: gửi form bằng Enter không lưu hồ sơ; xong thì lưu được', async () => {
+    const gate = deferred<string | null>();
+    mocks.upload.mockReturnValue(gate.promise);
+    const { container } = await mount();
+    const input = await openCrop(container);
+    act(() => {
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await flush(4);
+    click(byText(document.body, 'button', 'Xác nhận cắt'));
+    await flush(2);
+    act(() => {
+      container.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+    await flush(4);
+    expect(mocks.patch).not.toHaveBeenCalled();
+    gate.resolve(CLOUD_URL);
+    await flush(4);
+    click(saveBtn(container));
+    await flush(6);
+    expect(mocks.patch).toHaveBeenCalledTimes(1);
+  });
+
+  it('đang tải ảnh lên: nút đổi ảnh báo aria-busy và không mở lại hộp chọn tệp; xong thì mở lại được', async () => {
+    const gate = deferred<string | null>();
+    mocks.upload.mockReturnValue(gate.promise);
+    const { container } = await mount();
+    const input = await openCrop(container);
+    const pickSpy = vi.spyOn(input, 'click');
+    const pick = byText(container, 'button', 'Chạm để chọn & cắt ảnh đại diện') as HTMLButtonElement;
+    act(() => {
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await flush(4);
+    click(byText(document.body, 'button', 'Xác nhận cắt'));
+    await flush(2);
+    expect(byText(container, 'button', 'Đang xử lý ảnh…')).toBe(pick);
+    expect(pick.getAttribute('aria-busy')).toBe('true');
+    click(pick);
+    expect(pickSpy).not.toHaveBeenCalled();
+    gate.resolve(CLOUD_URL);
+    await flush(4);
+    expect(pick.hasAttribute('aria-busy')).toBe(false);
+    click(pick);
+    expect(pickSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('/tai-khoan/ho-so — khoá hai chiều lưu hồ sơ và đổi ảnh', () => {
+  it('đang lưu hồ sơ: nút đổi ảnh báo aria-disabled và không mở hộp chọn tệp; lưu xong thì chọn ảnh được', async () => {
+    const gate = deferred<unknown>();
+    mocks.patch.mockReturnValue(gate.promise);
+    const { container } = await mount();
+    const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
+    const pickSpy = vi.spyOn(input, 'click');
+    const pick = byText(container, 'button', 'Chạm để chọn & cắt ảnh đại diện') as HTMLButtonElement;
+    click(saveBtn(container));
+    await flush(2);
+    expect(mocks.patch).toHaveBeenCalledTimes(1);
+    expect(pick.disabled).toBe(false);
+    expect(pick.getAttribute('aria-disabled')).toBe('true');
+    click(pick);
+    expect(pickSpy).not.toHaveBeenCalled();
+    gate.resolve({ ...ME });
+    await flush(6);
+    expect(pick.hasAttribute('aria-disabled')).toBe(false);
+    click(pick);
+    expect(pickSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('/tai-khoan/ho-so — số đều', () => {
+  it('số điện thoại, ngày sinh (ô nhập và dòng "Ngày đã chọn") dùng chữ số đều', async () => {
+    mocks.get.mockResolvedValue({ ...ME, dob: null });
+    const { container } = await mount();
+    expect(container.querySelector('dd')?.className).toContain('tabular-nums');
+    const dob = field(container, 'Ngày sinh');
+    expect(dob.className).toContain('tabular-nums');
+    typeInto(dob, '03/02/1991');
+    const picked = Array.from(container.querySelectorAll('p')).find((p) => p.textContent?.includes('03/02/1991'));
+    expect(picked?.className).toContain('tabular-nums');
+  });
+});

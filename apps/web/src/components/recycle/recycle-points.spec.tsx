@@ -208,3 +208,10 @@ describe('/doi-rac/diem-nhan — món chỉ kho nhận', () => {
     expect(c.textContent).not.toContain('chọn kho Tubu');
   });
 });
+
+describe('số đều của khung chính', () => {
+  it('<main> dùng tabular-nums để điểm, số lượng và ngày không rung khi đổi', async () => {
+    const c = await mount();
+    expect(c.querySelector('main')?.className).toContain('tabular-nums');
+  });
+});

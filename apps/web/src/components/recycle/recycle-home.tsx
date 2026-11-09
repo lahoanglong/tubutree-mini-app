@@ -52,7 +52,7 @@ import {
 
 function Shell({ children, showHistory = false }: { children: ReactNode; showHistory?: boolean }) {
   return (
-    <main className="mx-auto max-w-5xl space-y-4 px-4 py-6 pb-12">
+    <main className="mx-auto max-w-5xl space-y-4 px-4 py-6 pb-12 tabular-nums">
       <PageHeader
         title="Đổi rác lấy quà"
         actions={

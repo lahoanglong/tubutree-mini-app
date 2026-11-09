@@ -692,3 +692,88 @@ describe('Thể lệ từ bước 2: quay lại không mất ô đồng ý', () 
     expect(check(c, CONSENT).checked).toBe(true);
   });
 });
+
+// Khoá "Tạo yêu cầu": hai cú chạm trong CÙNG một act chỉ ra một yêu cầu; nút đang tạo không `disabled` thật (giữ focus);
+// tạo xong trang còn nằm tới lúc chuyển hướng xong (khoá Idempotency-Key đã xoay) nên khoá GIỮ, chỉ nhả khi lỗi.
+const twice = (el: Element | null) =>
+  act(() => {
+    (el as HTMLElement).click();
+    (el as HTMLElement).click();
+  });
+function deferred<T = unknown>() {
+  let resolve!: (v: T) => void;
+  let reject!: (e: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+const readyToCreate = async () => {
+  atStep2(PICKED);
+  const c = await mount();
+  click(check(c, CONSENT));
+  await flush(3);
+  return c;
+};
+
+describe('khoá Tạo yêu cầu (cùng một act)', () => {
+  it('chạm đúp trong cùng một act chỉ một yêu cầu; nút đang tạo không disabled, aria-busy + aria-disabled, focus không rời nút', async () => {
+    const gate = deferred();
+    state.create = () => gate.promise;
+    const c = await readyToCreate();
+    const btn = barButton(c, 'Tạo yêu cầu');
+    btn.focus();
+    await twice(btn);
+    await flush(4);
+    expect(createCalls()).toHaveLength(1);
+    expect(barButton(c, 'Đang tạo…')).toBe(btn);
+    expect(btn.disabled).toBe(false);
+    expect(btn.getAttribute('aria-busy')).toBe('true');
+    expect(btn.getAttribute('aria-disabled')).toBe('true');
+    expect(document.activeElement).toBe(btn);
+    gate.resolve(makeRequestDetail({ id: 'req-9' }));
+    await flush(10);
+    expect(createCalls()).toHaveLength(1);
+  });
+
+  it('tạo xong mà trang chưa bị thay: khoá giữ, bấm thêm không tạo yêu cầu thứ hai bằng khoá mới', async () => {
+    const c = await readyToCreate();
+    const btn = barButton(c, 'Tạo yêu cầu');
+    click(btn);
+    await flush(10);
+    expect(state.replace).toHaveBeenLastCalledWith('/doi-rac/yeu-cau/req-9');
+    expect(createCalls()).toHaveLength(1);
+    expect(btn.getAttribute('aria-disabled')).toBe('true');
+    expect(btn.textContent).toBe('Đang tạo…');
+    click(btn);
+    await flush(6);
+    expect(createCalls()).toHaveLength(1);
+  });
+
+  it('lỗi: nhả khoá và gỡ aria-busy/aria-disabled; bấm lại dùng CÙNG khoá Idempotency-Key', async () => {
+    const gate = deferred();
+    let n = 0;
+    state.create = () => (++n === 1 ? gate.promise : makeRequestDetail({ id: 'req-9' }));
+    const c = await readyToCreate();
+    const btn = barButton(c, 'Tạo yêu cầu');
+    click(btn);
+    await flush(4);
+    expect(btn.getAttribute('aria-busy')).toBe('true');
+    gate.reject(new Error('Điểm nhận đang tạm ngừng, hãy chọn điểm khác'));
+    await flush(10);
+    expect(c.querySelector('[role="alert"]')?.textContent).toBe('Điểm nhận đang tạm ngừng, hãy chọn điểm khác');
+    expect(btn.hasAttribute('aria-busy')).toBe(false);
+    expect(btn.hasAttribute('aria-disabled')).toBe(false);
+    click(btn);
+    await flush(10);
+    const keys = createCalls().map((x) => x.headers?.['Idempotency-Key']);
+    expect(keys).toHaveLength(2);
+    expect(keys[1]).toBe(keys[0]);
+  });
+
+  it('số đều: khung chính của wizard dùng tabular-nums', async () => {
+    const c = await readyToCreate();
+    expect(c.querySelector('main')?.className).toContain('tabular-nums');
+  });
+});

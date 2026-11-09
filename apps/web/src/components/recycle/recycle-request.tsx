@@ -2,7 +2,7 @@
 
 import { wasteRequestRefetchMs } from '@tubutree/app-core/waste-request-poll';
 import { pausedNote } from '@tubutree/app-core/waste-copy';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -47,7 +47,7 @@ const POINT_PAUSED = 'Điểm nhận đang tạm ngừng, hãy chọn điểm kh
 const POINT_QUOTA_FULL = 'Điểm này tạm hết hạn mức tháng này, hãy chọn điểm khác';
 const BLOCK = `flex flex-col gap-2.5 p-4 ${skin.card}`;
 const DANGER_BTN =
-  'inline-flex min-h-11 w-full items-center justify-center rounded-control border border-danger-fg bg-danger-bg px-5 text-sm font-semibold text-danger-fg transition active:scale-95 disabled:opacity-50 disabled:active:scale-100';
+  'inline-flex min-h-11 w-full items-center justify-center rounded-control border border-danger-fg bg-danger-bg px-5 text-sm font-semibold text-danger-fg transition active:scale-95 disabled:opacity-50 disabled:active:scale-100 aria-disabled:opacity-50 aria-disabled:active:scale-100';
 
 async function copyText(text: string): Promise<boolean> {
   try {
@@ -79,12 +79,17 @@ function TrackingForm({
   const refresh = useRefreshAfterWrite();
   const [carrier, setCarrier] = useState(initialCarrier);
   const [code, setCode] = useState(initialCode);
+  // Khoá bằng ref: `isPending` chỉ đúng sau lần vẽ kế. Nhả ở onSettled, tức sau khi `refresh()` trong onSuccess xong.
+  const busy = useRef(false);
   const m = useMutation({
     mutationFn: () => setWasteTracking(coreHttp, id, { carrier: carrier.trim(), trackingCode: code.trim() }),
     onSuccess: async () => {
       await refresh();
       onSaved();
       onDone?.();
+    },
+    onSettled: () => {
+      busy.current = false;
     },
   });
   const ready = carrier.trim() !== '' && code.trim() !== '';
@@ -101,7 +106,18 @@ function TrackingForm({
           {actErrText(m.error)}
         </p>
       )}
-      <button type="button" className={`${ui.btnPrimary} w-full`} disabled={!ready || m.isPending} onClick={() => m.mutate()}>
+      <button
+        type="button"
+        className={`${ui.btnPrimary} w-full`}
+        disabled={!ready}
+        aria-busy={m.isPending || undefined}
+        aria-disabled={m.isPending || undefined}
+        onClick={() => {
+          if (busy.current) return;
+          busy.current = true;
+          m.mutate();
+        }}
+      >
         Đã gửi
       </button>
     </div>
@@ -110,7 +126,7 @@ function TrackingForm({
 
 function Shell({ children, title = 'Yêu cầu đổi rác', subtitle }: { children: ReactNode; title?: string; subtitle?: string }) {
   return (
-    <main className="mx-auto max-w-5xl space-y-4 px-4 py-6 pb-12">
+    <main className="mx-auto max-w-5xl space-y-4 px-4 py-6 pb-12 tabular-nums">
       <PageHeader title={title} subtitle={subtitle} backHref="/doi-rac/yeu-cau" backLabel="Yêu cầu của tôi" />
       {children}
     </main>
@@ -152,12 +168,17 @@ export function RecycleRequestDetail({ id }: { id: string }) {
     ...wastePointsQuery(coreHttp, null),
     enabled: authed && r?.method === 'DROP_OFF' && r.status === 'OPEN',
   });
+  // Khoá bằng ref: `isPending` chỉ đúng sau lần vẽ kế. Nhả ở onSettled, tức sau khi `refresh()` trong onSuccess xong.
+  const cancelBusy = useRef(false);
   const cancel = useMutation({
     mutationFn: () => cancelWasteRequest(coreHttp, id),
     onSuccess: async () => {
       await refresh();
       setCancelOpen(false);
       setNotice({ text: 'Đã huỷ yêu cầu', ok: true });
+    },
+    onSettled: () => {
+      cancelBusy.current = false;
     },
   });
 
@@ -441,7 +462,17 @@ export function RecycleRequestDetail({ id }: { id: string }) {
         onClose={() => setCancelOpen(false)}
         title="Huỷ yêu cầu này?"
         footer={
-          <button type="button" className={DANGER_BTN} disabled={cancel.isPending} onClick={() => cancel.mutate()}>
+          <button
+            type="button"
+            className={DANGER_BTN}
+            aria-busy={cancel.isPending || undefined}
+            aria-disabled={cancel.isPending || undefined}
+            onClick={() => {
+              if (cancelBusy.current) return;
+              cancelBusy.current = true;
+              cancel.mutate();
+            }}
+          >
             Xác nhận huỷ
           </button>
         }

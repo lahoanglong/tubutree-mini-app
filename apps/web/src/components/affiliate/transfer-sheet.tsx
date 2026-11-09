@@ -28,16 +28,39 @@ export interface TransferSheetProps {
   onDone: (message: string) => void;
 }
 
-/** Sheet "Chuyển hoa hồng vào Ví": mount khi mở để form lấy đúng `max` hiện tại và một Idempotency-Key mới cho mỗi lần mở. */
+/**
+ * Sheet "Chuyển hoa hồng vào Ví": mount khi mở để form lấy đúng `max` hiện tại và một Idempotency-Key mới cho mỗi lần mở.
+ * Đang gửi thì không đóng được (nút X, Esc, bấm nền): đóng rồi mở lại sẽ có khoá mới và số dư cũ, gửi được lệnh thứ hai.
+ */
 export function TransferSheet({ open, onClose, max, knownMax, taxIdOnFile, taxPreview, onDone }: TransferSheetProps) {
+  const sendingRef = useRef(false);
+  const [sending, setSending] = useState(false);
+  const setBusy = (v: boolean) => {
+    sendingRef.current = v;
+    setSending(v);
+  };
   return (
-    <Sheet open={open} onClose={onClose} title="Chuyển hoa hồng vào Ví">
-      {open && <TransferForm max={max} knownMax={knownMax} taxIdOnFile={taxIdOnFile} taxPreview={taxPreview} onDone={onDone} />}
+    <Sheet
+      open={open}
+      dismissible={!sending}
+      onClose={() => {
+        if (!sendingRef.current) onClose();
+      }}
+      title="Chuyển hoa hồng vào Ví"
+    >
+      {open && <TransferForm max={max} knownMax={knownMax} taxIdOnFile={taxIdOnFile} taxPreview={taxPreview} onDone={onDone} onBusyChange={setBusy} />}
     </Sheet>
   );
 }
 
-function TransferForm({ max, knownMax, taxIdOnFile, taxPreview, onDone }: Omit<TransferSheetProps, 'open' | 'onClose'>) {
+function TransferForm({
+  max,
+  knownMax,
+  taxIdOnFile,
+  taxPreview,
+  onDone,
+  onBusyChange,
+}: Omit<TransferSheetProps, 'open' | 'onClose'> & { onBusyChange: (busy: boolean) => void }) {
   const cfgQ = useQuery({ ...publicConfigQuery(coreHttp), staleTime: 5 * 60_000 });
   const cfgLoaded = cfgQ.isSuccess;
   const pit = cfgQ.data?.affiliatePitWithhold;
@@ -56,20 +79,25 @@ function TransferForm({ max, knownMax, taxIdOnFile, taxPreview, onDone }: Omit<T
     onError: (e) => setError(actErrText(e)),
     onSettled: () => {
       busy.current = false;
+      onBusyChange(false);
     },
   });
 
-  const view = withdrawView({ max, pit, taxPreview, taxIdOnFile, taxId, cfgLoaded, knownMax, pending: mut.isPending });
+  // Đang gửi KHÔNG đẩy vào `valid`/`disabled`: nút `disabled` làm Chromium thả focus về body ngay lúc khách vừa bấm.
+  // Khoá chống gửi hai lần là ref `busy`; `sending` chỉ để nút báo aria-busy/aria-disabled.
+  const view = withdrawView({ max, pit, taxPreview, taxIdOnFile, taxId, cfgLoaded, knownMax, pending: false });
+  const sending = mut.isPending;
   const submit = () => {
     // `disabled` chỉ có hiệu lực sau lần render kế: hai cú bấm trong cùng khung hình vẫn gọi mutate hai lần.
     if (busy.current || !view.valid) return;
     busy.current = true;
+    onBusyChange(true);
     setError(null);
     mut.mutate();
   };
 
   return (
-    <div>
+    <div className="tabular-nums">
       {knownMax ? (
         <div>
           <div className="text-xs text-stone-700">Số tiền chuyển vào Ví</div>
@@ -106,14 +134,21 @@ function TransferForm({ max, knownMax, taxIdOnFile, taxPreview, onDone }: Omit<T
           <p role="alert" className="text-xs text-danger-fg">
             Chưa tải được cấu hình thuế.
           </p>
-          <button type="button" onClick={() => void cfgQ.refetch()} className="text-xs font-semibold text-stone-900 underline">
+          <button type="button" onClick={() => void cfgQ.refetch()} className={`${ui.btnText} text-stone-900`}>
             Thử lại
           </button>
         </div>
       )}
       <div role="alert">{error && <p className={`mt-3 ${ui.error}`}>{error}</p>}</div>
-      <button type="button" onClick={submit} disabled={!view.valid} className={`${ui.btnPrimary} mt-5 w-full`}>
-        {mut.isPending ? 'Đang gửi…' : cfgQ.isError ? 'Thử lại sau' : !cfgLoaded ? 'Đang tải…' : `Nhận ${formatVnd(view.net)} vào Ví`}
+      <button
+        type="button"
+        onClick={submit}
+        disabled={!view.valid}
+        aria-busy={sending || undefined}
+        aria-disabled={sending || undefined}
+        className={`${ui.btnPrimary} mt-5 w-full tabular-nums`}
+      >
+        {sending ? 'Đang gửi…' : cfgQ.isError ? 'Thử lại sau' : !cfgLoaded ? 'Đang tải…' : `Nhận ${formatVnd(view.net)} vào Ví`}
       </button>
     </div>
   );

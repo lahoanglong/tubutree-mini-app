@@ -129,6 +129,9 @@ export function RecycleNew() {
   const [draft, setDraft] = useState<WasteWizardDraft>(EMPTY_DRAFT);
   const [ready, setReady] = useState(false);
   const submitted = useRef(false);
+  // Khoá "Tạo yêu cầu" bằng ref: `isPending` chỉ đúng sau lần vẽ kế, và sau khi tạo xong trang còn nằm đó tới lúc chuyển hướng
+  // xong (khoá Idempotency-Key đã xoay), nên chỉ nhả khi lỗi; thành công thì giữ tới khi trang bị thay.
+  const createBusy = useRef(false);
   const toPicker = useRef(false);
   const resumeSeen = useRef<boolean | null>(null);
   // Nháp đọc ở client sau khi gắn vào cây: lần render đầu của server và client phải giống nhau.
@@ -319,12 +322,21 @@ export function RecycleNew() {
       await Promise.all(WASTE_WRITE_INVALIDATE_KEYS.map((queryKey) => qc.invalidateQueries({ queryKey })));
       router.replace(`/doi-rac/yeu-cau/${r.id}`);
     },
-    onError: () => void qc.invalidateQueries({ queryKey: wasteRulesVersionQuery(coreHttp).queryKey }),
+    onError: () => {
+      createBusy.current = false;
+      void qc.invalidateQueries({ queryKey: wasteRulesVersionQuery(coreHttp).queryKey });
+    },
   });
+  const creating = create.isPending || create.isSuccess;
+  const createNow = () => {
+    if (createBusy.current) return;
+    createBusy.current = true;
+    create.mutate();
+  };
 
   const subtitle = step === 'items' ? wasteStepCopy.items : wasteStepCopy.method;
   const shell = (content: ReactNode, bar?: ReactNode) => (
-    <main className="mx-auto max-w-5xl space-y-4 px-4 py-6 pb-12">
+    <main className="mx-auto max-w-5xl space-y-4 px-4 py-6 pb-12 tabular-nums">
       <PageHeader title="Đổi rác" subtitle={subtitle} backHref={step === 'method' ? WIZARD_PATH : '/doi-rac'} backLabel={step === 'method' ? 'Chọn món' : 'Đổi rác lấy quà'} />
       {content}
       {bar}
@@ -422,7 +434,7 @@ export function RecycleNew() {
   const selectedPreview = selected ? previews[selected] : undefined;
   const consentsOk = consentValid && (selected !== 'MAIL_IN' || (packagingConsent && postageConsent));
   const canCreate =
-    selected !== null && !isLocked(selectedPreview) && consentsOk && (selected !== 'DROP_OFF' || draft.pointId !== null) && !create.isPending;
+    selected !== null && !isLocked(selectedPreview) && consentsOk && (selected !== 'DROP_OFF' || draft.pointId !== null);
   const blockedHint = canCreate
     ? null
     : createBlockedHint({ selected: selected !== null, needsPoint: selected === 'DROP_OFF', pointChosen: draft.pointId !== null, consentsOk });
@@ -558,8 +570,15 @@ export function RecycleNew() {
         </p>
       )}
       <Actions label="Tạo yêu cầu đổi rác" summary={blockedHint ? <p className="text-sm text-stone-600">{blockedHint}</p> : undefined}>
-        <button type="button" className={`${ui.btnPrimary} w-full`} disabled={!canCreate} onClick={() => create.mutate()}>
-          {create.isPending ? 'Đang tạo…' : 'Tạo yêu cầu'}
+        <button
+          type="button"
+          className={`${ui.btnPrimary} w-full`}
+          disabled={!canCreate}
+          aria-busy={creating || undefined}
+          aria-disabled={creating || undefined}
+          onClick={createNow}
+        >
+          {creating ? 'Đang tạo…' : 'Tạo yêu cầu'}
         </button>
       </Actions>
     </>,

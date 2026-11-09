@@ -69,6 +69,9 @@ export default function EditProfilePage() {
   const [done, setDone] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Khoá đồng bộ bằng ref: `isPending`/`uploadingAvatar` chỉ đúng sau lần vẽ kế, hai cú chạm sát nhau vẫn đều thấy "chưa bận".
+  const saveBusy = useRef(false);
+  const avatarBusy = useRef(false);
   const canChangeAvatar = isCloudinaryConfigured();
 
   const me = meQ.data;
@@ -94,7 +97,8 @@ export default function EditProfilePage() {
 
   const handleAvatarFile = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file || avatarBusy.current) return;
+    avatarBusy.current = true;
     setAvatarMsg(null);
     setUploadingAvatar(true);
     try {
@@ -103,6 +107,7 @@ export default function EditProfilePage() {
     } catch {
       setAvatarMsg({ kind: 'error', text: AVATAR_READ_FAILED });
     } finally {
+      avatarBusy.current = false;
       setUploadingAvatar(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
@@ -111,6 +116,8 @@ export default function EditProfilePage() {
   const handleConfirmCrop = async (croppedUrl: string) => {
     // Xem trước ngay bằng ảnh đã cắt, nhưng chỉ URL Cloudinary mới được giữ làm ảnh đại diện: tải lên lỗi thì nói thẳng
     // và giữ ảnh cũ, không báo "đã chọn" rồi âm thầm bỏ ảnh lúc lưu.
+    if (avatarBusy.current) return;
+    avatarBusy.current = true;
     setAvatarPreview(croppedUrl);
     setCropSrc(null);
     setUploadingAvatar(true);
@@ -126,6 +133,7 @@ export default function EditProfilePage() {
     } catch {
       setAvatarMsg({ kind: 'error', text: AVATAR_UPLOAD_FAILED });
     } finally {
+      avatarBusy.current = false;
       setAvatarPreview(null);
       setUploadingAvatar(false);
     }
@@ -150,20 +158,25 @@ export default function EditProfilePage() {
         avatarUrl: avatarSkipped ? (user?.avatarUrl ?? null) : (avatarUrl ?? res?.avatarUrl ?? user?.avatarUrl ?? null),
       });
       if (res) qc.setQueryData(['me'], res);
-      void qc.invalidateQueries({ queryKey: ['me'] });
       setDone(avatarSkipped && avatarChanged ? AVATAR_NOT_SAVED : 'Đã cập nhật hồ sơ');
+      // Trả promise ra khỏi onSuccess: khoá giữ tới khi /me mới về, nếu không lần lưu kế gửi lại ngày sinh đã đặt.
+      return qc.invalidateQueries({ queryKey: ['me'] });
     },
     onError: (e) => {
-      // Phản hồi mất không có nghĩa là chưa ghi: tải lại /me để ngày sinh đã đặt chuyển sang chỉ đọc, lần lưu sau không gửi lại.
-      void qc.invalidateQueries({ queryKey: ['me'] });
       setDone(null);
       setSaveError(errorText(e));
+      // Phản hồi mất không có nghĩa là chưa ghi: tải lại /me để ngày sinh đã đặt chuyển sang chỉ đọc, lần lưu sau không gửi lại.
+      // Khoá giữ tới khi /me về để lần thử lại không dùng số liệu cũ.
+      return qc.invalidateQueries({ queryKey: ['me'] });
+    },
+    onSettled: () => {
+      saveBusy.current = false;
     },
   });
 
   const submit = () => {
     setTouched(true);
-    if (save.isPending || uploadingAvatar) return;
+    if (saveBusy.current || avatarBusy.current) return;
     if (profileNameError(fullName)) return;
     if (email.trim() !== '' && !EMAIL.test(email.trim())) return;
     if (dobEditable && dobCheck.error) {
@@ -174,6 +187,7 @@ export default function EditProfilePage() {
       setConfirmingDob(true);
       return;
     }
+    saveBusy.current = true;
     setDone(null);
     setSaveError(null);
     save.mutate();
@@ -232,7 +246,17 @@ export default function EditProfilePage() {
         {canChangeAvatar ? (
           <>
             <input ref={fileInputRef} type="file" accept="image/*" hidden className="hidden min-h-11" aria-label="Chọn ảnh đại diện" onChange={(e) => void handleAvatarFile(e)} />
-            <button type="button" disabled={confirmingDob} onClick={() => fileInputRef.current?.click()} className="flex min-h-11 flex-col items-center">
+            <button
+              type="button"
+              disabled={confirmingDob}
+              aria-busy={uploadingAvatar || undefined}
+              aria-disabled={save.isPending || undefined}
+              onClick={() => {
+                if (avatarBusy.current || saveBusy.current) return;
+                fileInputRef.current?.click();
+              }}
+              className="flex min-h-11 flex-col items-center"
+            >
               <span className="relative inline-block">
                 {avatarFigure}
                 <span aria-hidden="true" className="absolute bottom-0 right-0 flex h-7 w-7 items-center justify-center rounded-full border-2 border-stone-0 bg-forest-600 text-stone-0 shadow-card">
@@ -299,10 +323,10 @@ export default function EditProfilePage() {
               setDobText(text);
               setConfirmingDob(false);
             }}
-            className={`${dobError ? ui.fieldError : ui.field} ${FIELD_MINI}`}
+            className={`${dobError ? ui.fieldError : ui.field} ${FIELD_MINI} tabular-nums`}
           />
         </Field>
-        {dobDisplay && dobNew && <p className="mt-1 text-xs text-stone-700">{profileCopy.dobPicked(dobDisplay)}</p>}
+        {dobDisplay && dobNew && <p className="mt-1 text-xs tabular-nums text-stone-700">{profileCopy.dobPicked(dobDisplay)}</p>}
         <p id="profile-dob-hint" className="mt-1 flex items-center gap-1.5 text-xs text-stone-600">
           <Gift className="h-3.5 w-3.5" aria-hidden="true" />
           <span>
@@ -316,22 +340,18 @@ export default function EditProfilePage() {
       {/* Mini App không có khối số điện thoại ở màn này; từ md giữ để khách thấy số đang đăng nhập. */}
       <dl className="rounded-control bg-stone-50 px-3 py-2 text-sm max-md:hidden">
         <dt className="text-xs text-stone-600">Số điện thoại</dt>
-        <dd className="font-medium text-stone-900">{phoneText || 'Chưa có số điện thoại'}</dd>
+        <dd className="font-medium tabular-nums text-stone-900">{phoneText || 'Chưa có số điện thoại'}</dd>
       </dl>
 
-      {saveError && (
-        <p role="alert" className={ui.error}>
-          {saveError}
-        </p>
-      )}
+      <div role="alert">{saveError && <p className={ui.error}>{saveError}</p>}</div>
       <p role="status" className={done ? `text-sm ${done === AVATAR_NOT_SAVED ? 'text-warning-fg' : 'text-success-fg'}` : 'sr-only'}>
         {done ?? ''}
       </p>
 
       {confirmingDob && dobNew ? (
         <div ref={focusOnMount} tabIndex={-1} role="alertdialog" aria-label={profileCopy.dobConfirm(dobDisplay)} className="flex outline-none flex-col gap-2 rounded-card bg-stone-50 p-3 max-md:bg-[var(--color-bg-subtle)]">
-          <p className="text-sm text-stone-900">{profileCopy.dobConfirm(dobDisplay)}</p>
-          <button type="submit" aria-busy={save.isPending ? 'true' : undefined} className={`${ui.btnPrimary} w-full max-md:min-h-12`}>
+          <p className="text-sm tabular-nums text-stone-900">{profileCopy.dobConfirm(dobDisplay)}</p>
+          <button type="submit" aria-busy={save.isPending ? 'true' : undefined} aria-disabled={save.isPending || undefined} className={`${ui.btnPrimary} w-full max-md:min-h-12`}>
             {profileCopy.dobConfirmYes}
           </button>
           <button type="button" disabled={save.isPending} className={`${ui.btnSecondary} w-full max-md:min-h-12`} onClick={() => setConfirmingDob(false)}>
@@ -339,7 +359,7 @@ export default function EditProfilePage() {
           </button>
         </div>
       ) : (
-        <button type="submit" aria-busy={save.isPending ? 'true' : undefined} disabled={emailInvalid || !!nameError || uploadingAvatar} className={`${ui.btnPrimary} w-full max-md:min-h-12`}>
+        <button type="submit" aria-busy={save.isPending ? 'true' : undefined} aria-disabled={save.isPending || undefined} disabled={emailInvalid || !!nameError || uploadingAvatar} className={`${ui.btnPrimary} w-full max-md:min-h-12`}>
           {save.isPending ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />

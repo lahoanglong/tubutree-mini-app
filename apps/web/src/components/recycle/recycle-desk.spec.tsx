@@ -16,6 +16,7 @@ const state = vi.hoisted(() => ({
   pointsError: null as unknown,
   lookup: null as unknown,
   lookupError: null as unknown,
+  lookupGate: null as null | Promise<unknown>,
   confirm: null as unknown as (body: unknown) => unknown,
   reject: null as unknown as (body: unknown) => unknown,
   fulfil: null as unknown as (body: unknown) => unknown,
@@ -45,6 +46,7 @@ vi.mock('@/lib/core-http', () => ({
     post: async (path: string, body?: unknown, opts?: { headers?: unknown }) => {
       state.calls.push({ method: 'POST', path, body, headers: opts?.headers });
       if (path === '/waste/desk/lookup') {
+        await state.lookupGate;
         if (state.lookupError) throw state.lookupError;
         return state.lookup;
       }
@@ -101,6 +103,7 @@ beforeEach(() => {
   state.points = [makeDeskPoint()];
   state.pointsError = null;
   state.lookupError = null;
+  state.lookupGate = null;
   state.reportError = null;
   state.report = { pointId: 'pt-1', month: '2026-10', confirmations: 0, pointsAwarded: 0, quotaUsed: 0, units: [] };
   state.config = { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: true } };
@@ -449,6 +452,63 @@ describe('/doi-rac/quay: quét mã bằng camera trình duyệt', () => {
     expect(stopTrack).toHaveBeenCalled();
     expect(dialog()).toBeNull();
   });
+  it('quầy đang xác nhận: nút quét báo aria-disabled và không mở camera; mã quét ra giữa chừng không tra chồng', async () => {
+    const gate = deferred();
+    state.confirm = () => gate.promise;
+    const c = await mount();
+    await lookUp(c);
+    const scanBtn = button(c, 'Quét mã của khách')!;
+    click(scanBtn);
+    await flush(3);
+    expect(dialog()).not.toBeNull();
+    click(button(c, 'Xác nhận đã nhận'));
+    await flush(3);
+    expect(calls('/waste/desk/requests/req-1/confirm')).toHaveLength(1);
+    expect(scanBtn.disabled).toBe(false);
+    expect(scanBtn.getAttribute('aria-disabled')).toBe('true');
+    await waitFrames();
+    expect(calls('/waste/desk/lookup')).toHaveLength(1);
+    gate.resolve(CONFIRMED);
+    await flush(10);
+  });
+  it('quét ra mã lúc quầy bận: mã được điền vào ô và giữ qua lúc xác nhận xong, không tra tự động; hết bận bấm Tra mã thì tra', async () => {
+    const gate = deferred();
+    state.confirm = () => gate.promise;
+    scan.value = 'TR-NX77K';
+    const c = await mount();
+    await lookUp(c);
+    click(button(c, 'Quét mã của khách'));
+    await flush(3);
+    click(button(c, 'Xác nhận đã nhận'));
+    await flush(3);
+    await waitFrames();
+    expect(dialog()).toBeNull();
+    expect(label(c, CODE_LABEL)).toHaveProperty('value', 'TR-NX77K');
+    expect(calls('/waste/desk/lookup')).toHaveLength(1);
+    gate.resolve(CONFIRMED);
+    await flush(10);
+    expect(label(c, CODE_LABEL)).toHaveProperty('value', 'TR-NX77K');
+    expect(calls('/waste/desk/lookup')).toHaveLength(1);
+    click(button(c, 'Tra mã'));
+    await flush(6);
+    expect(calls('/waste/desk/lookup')).toHaveLength(2);
+    expect(calls('/waste/desk/lookup')[1]!.body).toEqual({ code: 'TR-NX77K' });
+  });
+  it('quét ra mã: lúc lệnh tra còn bay, bấm Tra mã không tra chồng', async () => {
+    const gate = deferred();
+    state.lookupGate = gate.promise;
+    const c = await mount();
+    click(button(c, 'Quét mã của khách'));
+    await flush(3);
+    await waitFrames();
+    expect(calls('/waste/desk/lookup')).toHaveLength(1);
+    click(button(c, 'Tra mã'));
+    await flush(4);
+    expect(calls('/waste/desk/lookup')).toHaveLength(1);
+    gate.resolve(undefined);
+    await flush(8);
+    expect(calls('/waste/desk/lookup')).toHaveLength(1);
+  });
   it('quét nội dung không phải mã Đổi rác: báo trong khung quét, không tra', async () => {
     scan.value = 'https://example.com';
     const c = await mount();
@@ -701,7 +761,10 @@ describe('/doi-rac/quay: trao quà ở kho (§8, §15.3)', () => {
     await lookUp(c, 'QG-8K2M9P4T');
     click(button(c, 'Trao quà'));
     await flush();
-    expect(button(c, 'Trao quà')!.disabled).toBe(true);
+    // Không `disabled` thật khi đang gửi (Chromium thả focus về body): báo aria-busy/aria-disabled, chặn ở handler.
+    expect(button(c, 'Trao quà')!.disabled).toBe(false);
+    expect(button(c, 'Trao quà')!.getAttribute('aria-disabled')).toBe('true');
+    expect(button(c, 'Trao quà')!.getAttribute('aria-busy')).toBe('true');
     click(button(c, 'Trao quà'));
     expect(calls('/waste/desk/gifts/fulfil')).toHaveLength(1);
   });
@@ -844,5 +907,241 @@ describe('/doi-rac/quay — diện mạo Mini App ở điện thoại', () => {
     expect(card.className).toContain('max-md:border-transparent');
     expect(card.className).toContain('max-md:p-3');
     expect(card.querySelector('p:nth-of-type(2)')!.className).toContain('max-md:text-[length:var(--type-body-md-size)]');
+  });
+});
+
+// Quầy làm MỘT việc một lúc (tra mã, xác nhận, từ chối, trao quà): hai cú chạm trong CÙNG một act (chưa có lần vẽ lại xen giữa)
+// chỉ ra một lời gọi API; nút đang gửi không `disabled` thật (Chromium thả focus) mà báo aria-busy + aria-disabled; lỗi thì nhả khoá.
+const twice = (el: Element | null) =>
+  act(() => {
+    (el as HTMLElement).click();
+    (el as HTMLElement).click();
+  });
+function deferred<T = unknown>() {
+  let resolve!: (v: T) => void;
+  let reject!: (e: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+const pickReason = async (c: HTMLElement, reason = 'Ướt') => {
+  click(button(c, 'Từ chối cả yêu cầu'));
+  await flush();
+  const sheet = dialog()!;
+  click(sheet.querySelector(`input[type="radio"][aria-label="${reason}"]`));
+  return byText(sheet, 'button', 'Từ chối yêu cầu') as HTMLButtonElement;
+};
+
+describe('/doi-rac/quay: khoá một việc một lúc (cùng một act)', () => {
+  it('Tra mã: chạm đúp trong cùng một act chỉ một lần tra; nút không disabled, aria-busy + aria-disabled, focus không rời nút', async () => {
+    const gate = deferred();
+    state.lookupGate = gate.promise;
+    const c = await mount();
+    typeInto(label(c, CODE_LABEL), 'tr-8k2m9');
+    const search = button(c, 'Tra mã')!;
+    search.focus();
+    await twice(search);
+    await flush(4);
+    expect(calls('/waste/desk/lookup')).toHaveLength(1);
+    expect(search.disabled).toBe(false);
+    expect(search.getAttribute('aria-busy')).toBe('true');
+    expect(search.getAttribute('aria-disabled')).toBe('true');
+    expect(document.activeElement).toBe(search);
+    gate.resolve(undefined);
+    await flush(8);
+    expect(calls('/waste/desk/lookup')).toHaveLength(1);
+    expect(search.hasAttribute('aria-busy')).toBe(false);
+    expect(search.hasAttribute('aria-disabled')).toBe(false);
+  });
+
+  it('Xác nhận đã nhận: chạm đúp chỉ một POST; nút không disabled, aria-busy + aria-disabled, focus không rời nút', async () => {
+    const gate = deferred();
+    state.confirm = () => gate.promise;
+    const c = await mount();
+    await lookUp(c);
+    const confirm = button(c, 'Xác nhận đã nhận')!;
+    confirm.focus();
+    await twice(confirm);
+    await flush(4);
+    expect(calls('/waste/desk/requests/req-1/confirm')).toHaveLength(1);
+    expect(confirm.disabled).toBe(false);
+    expect(confirm.getAttribute('aria-busy')).toBe('true');
+    expect(confirm.getAttribute('aria-disabled')).toBe('true');
+    expect(button(c, 'Tra mã')!.getAttribute('aria-disabled')).toBe('true');
+    expect(document.activeElement).toBe(confirm);
+    gate.resolve(CONFIRMED);
+    await flush(10);
+    expect(calls('/waste/desk/requests/req-1/confirm')).toHaveLength(1);
+    expect(c.textContent).toContain('Yêu cầu TR-8K2M9 của Ng*** A đã xong');
+  });
+
+  it('xác nhận còn bay: từ chối và tra mã khác không gửi chồng; xong rồi tra mã lại được', async () => {
+    const gate = deferred();
+    state.confirm = () => gate.promise;
+    const c = await mount();
+    await lookUp(c);
+    const send = await pickReason(c);
+    click(button(c, 'Xác nhận đã nhận'));
+    await flush(4);
+    expect(send.getAttribute('aria-busy')).toBe('true');
+    expect(send.getAttribute('aria-disabled')).toBe('true');
+    click(send);
+    await flush(4);
+    expect(calls('/waste/desk/requests/req-1/reject')).toHaveLength(0);
+    typeInto(label(c, CODE_LABEL), 'tr-khac');
+    click(button(c, 'Tra mã'));
+    await flush(4);
+    expect(calls('/waste/desk/lookup')).toHaveLength(1);
+    gate.resolve(CONFIRMED);
+    await flush(10);
+    expect(calls('/waste/desk/requests/req-1/confirm')).toHaveLength(1);
+    typeInto(label(c, CODE_LABEL), 'tr-khac');
+    click(button(c, 'Tra mã'));
+    await flush(6);
+    expect(calls('/waste/desk/lookup')).toHaveLength(2);
+  });
+
+  it('xác nhận còn bay: "Từ chối cả yêu cầu" báo aria-disabled và không mở sheet; xong thì mở được', async () => {
+    const gate = deferred();
+    state.confirm = () => gate.promise;
+    const c = await mount();
+    await lookUp(c);
+    click(button(c, 'Xác nhận đã nhận'));
+    await flush(4);
+    const reject = button(c, 'Từ chối cả yêu cầu')!;
+    expect(reject.disabled).toBe(false);
+    expect(reject.getAttribute('aria-disabled')).toBe('true');
+    click(reject);
+    await flush(4);
+    expect(dialog()).toBeNull();
+    gate.resolve(CONFIRMED);
+    await flush(10);
+    lookupReq({ id: 'req-2', code: 'TR-NEXT22' });
+    await lookUp(c, 'tr-next22');
+    const next = button(c, 'Từ chối cả yêu cầu')!;
+    expect(next.hasAttribute('aria-disabled')).toBe(false);
+    click(next);
+    await flush(4);
+    expect(dialog()).not.toBeNull();
+  });
+
+  it('xác nhận xong khi sheet Từ chối còn mở: tra yêu cầu kế tiếp thì sheet không tự bật', async () => {
+    const gate = deferred();
+    state.confirm = () => gate.promise;
+    const c = await mount();
+    await lookUp(c);
+    click(button(c, 'Từ chối cả yêu cầu'));
+    await flush(4);
+    expect(dialog()).not.toBeNull();
+    click(button(c, 'Xác nhận đã nhận'));
+    await flush(4);
+    gate.resolve(CONFIRMED);
+    await flush(10);
+    expect(dialog()).toBeNull();
+    lookupReq({ id: 'req-2', code: 'TR-NEXT22' });
+    await lookUp(c, 'tr-next22');
+    expect(button(c, 'Xác nhận đã nhận')).not.toBeNull();
+    expect(dialog()).toBeNull();
+  });
+
+  it('lỗi xác nhận: hiện lời lỗi, nhả khoá và gỡ aria-busy/aria-disabled để xác nhận lại', async () => {
+    let n = 0;
+    state.confirm = () => {
+      if (++n === 1) throw Object.assign(new Error('Forbidden'), { status: 403 });
+      return CONFIRMED;
+    };
+    const c = await mount();
+    await lookUp(c);
+    const confirm = button(c, 'Xác nhận đã nhận')!;
+    click(confirm);
+    await flush(8);
+    expect(c.querySelector('[role="alert"]')?.textContent).toContain('Tài khoản này không có quyền nhận hàng tại điểm');
+    expect(confirm.hasAttribute('aria-busy')).toBe(false);
+    expect(confirm.hasAttribute('aria-disabled')).toBe(false);
+    click(confirm);
+    await flush(10);
+    expect(calls('/waste/desk/requests/req-1/confirm')).toHaveLength(2);
+    expect(c.textContent).toContain('Yêu cầu TR-8K2M9 của Ng*** A đã xong');
+  });
+
+  it('Từ chối yêu cầu: chạm đúp chỉ một POST; nút trong sheet không disabled, aria-busy + aria-disabled; lỗi thì nhả khoá', async () => {
+    const gate = deferred();
+    state.reject = () => gate.promise;
+    const c = await mount();
+    await lookUp(c);
+    const send = await pickReason(c);
+    send.focus();
+    await twice(send);
+    await flush(4);
+    expect(calls('/waste/desk/requests/req-1/reject')).toHaveLength(1);
+    expect(send.disabled).toBe(false);
+    expect(send.getAttribute('aria-busy')).toBe('true');
+    expect(send.getAttribute('aria-disabled')).toBe('true');
+    expect(send.className).toContain('aria-disabled:opacity-50');
+    expect(button(c, 'Tra mã')!.getAttribute('aria-disabled')).toBe('true');
+    expect(document.activeElement).toBe(send);
+    gate.reject(new Error('Yêu cầu đã đóng'));
+    await flush(8);
+    expect(dialog()!.querySelector('[role="alert"]')?.textContent).toContain('Yêu cầu đã đóng');
+    expect(send.hasAttribute('aria-busy')).toBe(false);
+    expect(send.hasAttribute('aria-disabled')).toBe(false);
+    state.reject = () => ({ requestId: 'req-1', code: 'TR-8K2M9', status: 'REJECTED' });
+    click(send);
+    await flush(8);
+    expect(calls('/waste/desk/requests/req-1/reject')).toHaveLength(2);
+    expect(dialog()).toBeNull();
+  });
+
+  it('Trao quà: chạm đúp trong cùng một act chỉ một POST, nút giữ focus', async () => {
+    const gate = deferred();
+    state.fulfil = () => gate.promise;
+    state.points = [{ ...WAREHOUSE_DESK }];
+    state.lookup = { type: 'GIFT', redemption: GIFT };
+    const c = await mount();
+    await lookUp(c, 'QG-8K2M9P4T');
+    const give = button(c, 'Trao quà')!;
+    give.focus();
+    await twice(give);
+    await flush(4);
+    expect(calls('/waste/desk/gifts/fulfil')).toHaveLength(1);
+    expect(give.disabled).toBe(false);
+    expect(give.getAttribute('aria-disabled')).toBe('true');
+    expect(button(c, 'Tra mã')!.getAttribute('aria-disabled')).toBe('true');
+    expect(document.activeElement).toBe(give);
+    gate.resolve({ ...GIFT, status: 'FULFILLED' });
+    await flush(8);
+    expect(calls('/waste/desk/gifts/fulfil')).toHaveLength(1);
+    expect(c.querySelector('[role="status"]')?.textContent).toContain('Đã trao Gói hạt giống Tubu');
+  });
+
+  it('Trao quà lỗi: nhả khoá, gỡ aria-busy/aria-disabled, bấm lại gửi lần hai', async () => {
+    let n = 0;
+    state.fulfil = () => {
+      n += 1;
+      if (n === 1) throw new Error('Mạng chập chờn');
+      return { ...GIFT, status: 'FULFILLED' };
+    };
+    state.points = [{ ...WAREHOUSE_DESK }];
+    state.lookup = { type: 'GIFT', redemption: GIFT };
+    const c = await mount();
+    await lookUp(c, 'QG-8K2M9P4T');
+    click(button(c, 'Trao quà'));
+    await flush(10);
+    expect(calls('/waste/desk/gifts/fulfil')).toHaveLength(1);
+    expect(c.querySelector('[role="alert"]')?.textContent).toContain('Mạng chập chờn');
+    const again = button(c, 'Trao quà')!;
+    expect(again.hasAttribute('aria-busy')).toBe(false);
+    expect(again.hasAttribute('aria-disabled')).toBe(false);
+    click(again);
+    await flush(10);
+    expect(calls('/waste/desk/gifts/fulfil')).toHaveLength(2);
+    expect(c.querySelector('[role="status"]')?.textContent).toContain('Đã trao Gói hạt giống Tubu');
+  });
+
+  it('số đều: khung chính của quầy dùng tabular-nums', async () => {
+    const c = await mount();
+    expect(c.querySelector('main')?.className).toContain('tabular-nums');
   });
 });
