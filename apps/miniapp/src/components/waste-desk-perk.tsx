@@ -13,6 +13,7 @@ import { formatNumber, formatPoints } from '../utils/format';
 
 const COLUMN = { display: 'flex', flexDirection: 'column' } as const;
 const PERK_TITLE = 'Ưu đãi riêng của cửa hàng';
+const REPORT_TITLE = 'Báo cáo tháng này';
 
 /** Tháng 'YYYY-MM' theo giờ VN, không phụ thuộc múi giờ máy. */
 export function vnMonthKey(now: Date): string {
@@ -34,54 +35,84 @@ export function WasteDeskPerk({ point }: { point: WasteDeskPointDTO }) {
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
+  const busy = submit.isPending;
 
   const cashProblem = findCashWording(text) !== null;
 
   if (point.kind === 'WAREHOUSE') return null;
 
   return (
-    <Card>
-      <div style={{ ...COLUMN, gap: 6 }}>
-        <Text variant="body-md" as="div" style={{ fontWeight: 600 }}>{PERK_TITLE}</Text>
-        <Text variant="body-sm" tone="secondary" as="div">Cửa hàng tự chịu, không liên quan Điểm Xanh</Text>
-        <Text variant="body-md" as="div">{point.perkText ?? 'Chưa có ưu đãi'}</Text>
-        {point.perkPendingText && (
-          <Text variant="body-sm" tone="secondary" as="div">{`Đang chờ Tubu duyệt: ${point.perkPendingText}`}</Text>
-        )}
-        {point.myRole === 'OWNER' && (
-          <div>
+    <section aria-label={PERK_TITLE}>
+      <Card>
+        <div style={{ ...COLUMN, gap: 6 }}>
+          <Text variant="body-md" as="div" style={{ fontWeight: 600 }}>{PERK_TITLE}</Text>
+          <Text variant="body-sm" tone="secondary" as="div">Cửa hàng tự chịu, không liên quan Điểm Xanh</Text>
+          <Text variant="body-md" as="div">{point.perkText ?? 'Chưa có ưu đãi'}</Text>
+          {point.perkPendingText && (
+            <Text variant="body-sm" tone="secondary" as="div">{`Đang chờ Tubu duyệt: ${point.perkPendingText}`}</Text>
+          )}
+          {point.myRole === 'OWNER' && (
+            <div>
+              <Button
+                variant="secondary"
+                onPress={() => {
+                  if (open || busy) return;
+                  setText(point.perkPendingText ?? point.perkText ?? '');
+                  submit.reset();
+                  setOpen(true);
+                }}
+              >
+                Chỉnh sửa
+              </Button>
+            </div>
+          )}
+        </div>
+        <BottomSheet
+          open={open}
+          dismissible={!busy}
+          onClose={() => {
+            if (!busy) setOpen(false);
+          }}
+          title={PERK_TITLE}
+          footer={
             <Button
-              variant="secondary"
+              fullWidth
+              disabled={text.trim() === '' || cashProblem}
+              loading={busy}
               onPress={() => {
-                setText(point.perkPendingText ?? point.perkText ?? '');
-                setOpen(true);
+                if (busy || text.trim() === '' || cashProblem) return;
+                submit.mutate(text);
               }}
             >
-              Chỉnh sửa
+              Gửi duyệt
             </Button>
-          </div>
-        )}
-      </div>
-      <BottomSheet
-        open={open}
-        onClose={() => setOpen(false)}
-        title={PERK_TITLE}
-        footer={
-          <Button fullWidth disabled={text.trim() === '' || cashProblem} loading={submit.isPending} onPress={() => submit.mutate(text)}>
-            Gửi duyệt
-          </Button>
-        }
-      >
-        <Field label="Nội dung ưu đãi">
-          <Input maxLength={200} value={text} onChange={(e) => setText(e.target.value)} />
-        </Field>
-        {cashProblem && (
-          <div role="alert" style={{ marginTop: 8 }}>
-            <Text variant="caption" tone="danger" as="div">{cashWordingMessage(text)}</Text>
-          </div>
-        )}
-      </BottomSheet>
-    </Card>
+          }
+        >
+          <Field label="Nội dung ưu đãi">
+            <Input
+              maxLength={200}
+              value={text}
+              disabled={busy}
+              onChange={(e) => {
+                if (busy) return;
+                submit.reset();
+                setText(e.target.value);
+              }}
+            />
+          </Field>
+          {cashProblem && (
+            <div role="alert" style={{ marginTop: 8 }}>
+              <Text variant="caption" tone="danger" as="div">{cashWordingMessage(text)}</Text>
+            </div>
+          )}
+          {submit.isError && (
+            <div role="alert" style={{ marginTop: 'var(--space-stack-sm)' }}>
+              <Text variant="caption" tone="danger" as="div">{getErrorMessage(submit.error)}</Text>
+            </div>
+          )}
+        </BottomSheet>
+      </Card>
+    </section>
   );
 }
 
@@ -92,30 +123,44 @@ export function WasteDeskReport({ pointId }: { pointId: string }) {
     queryFn: () => getDeskPointReport(pointId, month),
   });
 
-  if (q.isError) {
+  if (q.isError || (!q.data && q.errorUpdateCount > 0)) {
     return (
-      <Card>
-        <div style={{ ...COLUMN, gap: 6 }}>
-          <Text variant="body-md" as="div">Chưa tải được báo cáo</Text>
-          <div>
-            <Button variant="secondary" onPress={() => void q.refetch()}>Thử lại</Button>
+      <section aria-label={REPORT_TITLE}>
+        <Card>
+          <div style={{ ...COLUMN, gap: 6 }}>
+            <div role="alert">
+              <Text variant="body-md" as="div">Chưa tải được báo cáo</Text>
+            </div>
+            <div>
+              <Button
+                variant="secondary"
+                loading={q.isFetching}
+                onPress={() => {
+                  if (!q.isFetching) void q.refetch();
+                }}
+              >
+                Thử lại
+              </Button>
+            </div>
           </div>
-        </div>
-      </Card>
+        </Card>
+      </section>
     );
   }
   if (!q.data) return null;
   const r = q.data;
   return (
-    <Card>
-      <div style={{ ...COLUMN, gap: 4 }}>
-        <Text variant="body-sm" tone="secondary" as="div">Báo cáo tháng này</Text>
-        <Text variant="body-md" as="div" style={{ fontWeight: 600 }}>{`${formatNumber(r.confirmations)} lượt xác nhận`}</Text>
-        <Text variant="body-md" as="div">{`Tubu đã cộng ${formatPoints(r.pointsAwarded)} cho khách`}</Text>
-        {r.units.map((u) => (
-          <Text key={u.itemId} variant="body-sm" tone="secondary" as="div">{`${u.itemName}: ${formatNumber(u.qty)} ${u.unitLabel}`}</Text>
-        ))}
-      </div>
-    </Card>
+    <section aria-label={REPORT_TITLE}>
+      <Card>
+        <div style={{ ...COLUMN, gap: 4 }}>
+          <Text variant="body-sm" tone="secondary" as="div">{REPORT_TITLE}</Text>
+          <Text variant="body-md" as="div" numeric style={{ fontWeight: 600 }}>{`${formatNumber(r.confirmations)} lượt xác nhận`}</Text>
+          <Text variant="body-md" as="div" numeric>{`Tubu đã cộng ${formatPoints(r.pointsAwarded)} cho khách`}</Text>
+          {r.units.map((u) => (
+            <Text key={u.itemId} variant="body-sm" tone="secondary" as="div" numeric>{`${u.itemName}: ${formatNumber(u.qty)} ${u.unitLabel}`}</Text>
+          ))}
+        </div>
+      </Card>
+    </section>
   );
 }
