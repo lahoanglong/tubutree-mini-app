@@ -270,6 +270,21 @@ describe('OrderShipping: chép mã khoá chạm đúp, báo tại chỗ, số đ
     expect(screen.getByRole('status')).toBeEmptyDOMElement();
   });
 
+  it('chép lần hai khi báo cũ còn hiện: dòng báo dựng lại để trình đọc màn hình đọc lại', async () => {
+    mocks.copyText.mockResolvedValue(true);
+    render(<OrderShipping code="GHN123" />);
+    await act(async () => {
+      fireEvent.click(copyButton());
+    });
+    const first = screen.getByText('Đã sao chép mã vận đơn');
+    await act(async () => {
+      fireEvent.click(copyButton());
+    });
+    const second = screen.getByText('Đã sao chép mã vận đơn');
+    expect(second).not.toBe(first);
+    expect(first.isConnected).toBe(false);
+  });
+
   it('tháo màn khi báo còn hiện: không còn hẹn giờ treo', async () => {
     vi.useFakeTimers();
     mocks.copyText.mockResolvedValue(true);

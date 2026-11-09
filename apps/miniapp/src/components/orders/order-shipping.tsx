@@ -22,6 +22,7 @@ const FAILED_MS = 4000;
 /** Hãng vận chuyển và mã vận đơn có nút chép mã, đặt liền dưới hành trình. */
 export function OrderShipping({ partner, code, status, events = [] }: OrderShippingProps) {
   const [result, setResult] = useState<'ok' | 'fail' | null>(null);
+  const [announce, setAnnounce] = useState(0);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(timer.current), []);
   if (!partner && !code && events.length === 0) return null;
@@ -30,6 +31,7 @@ export function OrderShipping({ partner, code, status, events = [] }: OrderShipp
     const ok = await copyText(code!);
     clearTimeout(timer.current);
     setResult(ok ? 'ok' : 'fail');
+    setAnnounce((n) => n + 1);
     timer.current = setTimeout(() => setResult(null), ok ? COPIED_MS : FAILED_MS);
   };
   return (
@@ -58,7 +60,7 @@ export function OrderShipping({ partner, code, status, events = [] }: OrderShipp
             </Text>
             <div role="status">
               {result && (
-                <Text variant="caption" tone={result === 'ok' ? 'success' : 'danger'} as="div">
+                <Text key={announce} variant="caption" tone={result === 'ok' ? 'success' : 'danger'} as="div">
                   {result === 'ok' ? 'Đã sao chép mã vận đơn' : 'Không sao chép được — hãy chép mã thủ công.'}
                 </Text>
               )}

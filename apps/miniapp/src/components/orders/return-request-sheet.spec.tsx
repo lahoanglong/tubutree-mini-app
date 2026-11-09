@@ -198,6 +198,21 @@ describe('ReturnRequestSheet: gửi yêu cầu khoá chạm đúp, báo bận, s
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
   });
 
+  it('đang gửi: tấm không đóng được (nút Đóng biến mất, Esc không đóng); gửi xong thì đóng như cũ', async () => {
+    const d = deferred();
+    mocks.requestReturn.mockReturnValueOnce(d.promise);
+    const { onClose } = renderSheet();
+    expect(screen.getByRole('button', { name: 'Đóng' })).toBeInTheDocument();
+    fillForm();
+    fireEvent.click(submitButton());
+    await waitFor(() => expect(submitButton()).toHaveAttribute('aria-busy', 'true'));
+    expect(screen.queryByRole('button', { name: 'Đóng' })).toBeNull();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onClose).not.toHaveBeenCalled();
+    await act(async () => d.resolve({ id: 'r1' }));
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+  });
+
   it('nút Gửi yêu cầu cao ít nhất 44px', () => {
     renderSheet();
     expect(submitButton().style.minHeight).toBe('44px');

@@ -132,6 +132,7 @@ export function ReturnRequestSheet({ open, onClose, order, returns, returnDays }
       open={open}
       onClose={onClose}
       size="full"
+      dismissible={!submit.isPending}
       title="Yêu cầu đổi/trả"
       description={`Trong ${returnDays} ngày từ khi nhận hàng. Chọn đúng sản phẩm và số lượng muốn trả, Tubu phản hồi trong 24h.`}
       footer={
