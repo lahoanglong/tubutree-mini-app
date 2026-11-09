@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -525,5 +525,57 @@ describe('GroupBuyPage — tài khoản khách bấm Tham gia (E-11)', () => {
     fireEvent.click(await joinButton());
     await waitFor(() => expect(mocks.joinGroupBuy).toHaveBeenCalledWith('a'));
     expect(mocks.ensurePhone).not.toHaveBeenCalled();
+  });
+});
+
+describe('GroupBuyPage — khoá chạm đúp Tham gia (W75A)', () => {
+  const deferred = () => {
+    let resolve!: (v: unknown) => void;
+    const promise = new Promise((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+
+  it('chạm đúp "Tham gia" trong cùng một khung hình chỉ gửi một lần, báo thành công một lần', async () => {
+    const d = deferred();
+    mocks.joinGroupBuy.mockReturnValueOnce(d.promise);
+    mocks.listGroupBuys.mockResolvedValue([GROUP('a')]);
+    renderPage();
+    const join = await screen.findByRole('button', { name: 'Tham gia mua chung (−20%)' });
+    await act(async () => {
+      fireEvent.click(join);
+      fireEvent.click(join);
+    });
+    expect(mocks.joinGroupBuy).toHaveBeenCalledTimes(1);
+    await act(async () => d.resolve({ joined: true, currentSize: 3, status: 'OPEN' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã tham gia nhóm', type: 'success' }));
+    expect(mocks.joinGroupBuy).toHaveBeenCalledTimes(1);
+    expect(mocks.openSnackbar).toHaveBeenCalledTimes(1);
+  });
+
+  it('hai nhóm khác nhau trong cùng một khung hình đều gửi (khoá theo nhóm)', async () => {
+    mocks.listGroupBuys.mockResolvedValue([GROUP('a'), GROUP('b')]);
+    mocks.joinGroupBuy.mockReturnValue(new Promise(() => {}));
+    renderPage();
+    await screen.findAllByRole('button', { name: 'Tham gia mua chung (−20%)' });
+    const [a, b] = screen.getAllByRole('button', { name: 'Tham gia mua chung (−20%)' });
+    await act(async () => {
+      fireEvent.click(a!);
+      fireEvent.click(b!);
+    });
+    expect(mocks.joinGroupBuy).toHaveBeenCalledTimes(2);
+    expect(mocks.joinGroupBuy).toHaveBeenCalledWith('a');
+    expect(mocks.joinGroupBuy).toHaveBeenCalledWith('b');
+  });
+
+  it('tham gia lỗi thì nhả khoá của nhóm: bấm lại gửi lần hai', async () => {
+    mocks.joinGroupBuy.mockRejectedValueOnce(new Error('Nhóm đã hết hạn')).mockResolvedValue({ joined: true, currentSize: 3, status: 'OPEN' });
+    mocks.listGroupBuys.mockResolvedValue([GROUP('a')]);
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Tham gia mua chung (−20%)' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Nhóm đã hết hạn', type: 'error' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tham gia mua chung (−20%)' }));
+    await waitFor(() => expect(mocks.joinGroupBuy).toHaveBeenCalledTimes(2));
   });
 });

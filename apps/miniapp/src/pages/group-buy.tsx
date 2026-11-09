@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Page, useNavigate, useParams, useSnackbar } from 'zmp-ui';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useLockedMutation } from '../components/game/use-locked-mutation';
 import { Share2 } from 'lucide-react';
 import { groupMemberStatus, groupMissing, groupMissingLine, groupPriceLabels, groupRewardLine } from '@tubutree/app-core/group-buy-copy';
 import { getGroupBuy, listGroupBuys, joinGroupBuy, type GroupBuy } from '../services/groupbuy-api';
@@ -65,7 +66,7 @@ export default function GroupBuyPage() {
   const others = rest.filter((g) => g.status !== 'SUCCESS');
   const done = rest.filter((g) => g.status === 'SUCCESS');
 
-  const joinM = useMutation({
+  const joinM = useLockedMutation({
     mutationFn: (id: string) => joinGroupBuy(id),
     onSuccess: (r) => {
       openSnackbar({
@@ -75,7 +76,7 @@ export default function GroupBuyPage() {
       void queryClient.invalidateQueries({ queryKey: ['group-buy'] });
     },
     onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
+  }, (id) => id);
 
   // Tài khoản khách (chưa có số điện thoại hay Zalo thật) bị máy chủ từ chối tham gia: liên kết trước, xong mới gửi. Khoá đồng bộ để
   // chạm đúp không mở hai lần hộp xin số điện thoại.
@@ -170,7 +171,7 @@ export default function GroupBuyPage() {
           <LineItemSkeleton />
         </div>
       ) : isError ? (
-        <ErrorState message={getLoadErrorMessage(error)} onRetry={() => void refetch()} />
+        <ErrorState message={getLoadErrorMessage(error)} onRetry={() => refetch()} />
       ) : invited || others.length > 0 || done.length > 0 ? (
         <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
           {invited && renderCard(invited, !invited.isOwner && !invited.joined)}

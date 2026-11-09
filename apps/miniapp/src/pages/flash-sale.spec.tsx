@@ -630,3 +630,113 @@ describe('Trang Giờ vàng: trạng thái tải, rỗng, lỗi', () => {
     expect(await screen.findByText('Chưa có sản phẩm trong khung giờ này')).toBeInTheDocument();
   });
 });
+
+describe('Trang Giờ vàng: khoá chạm đúp Mua ngay và Nhắc tôi (W75A)', () => {
+  const deferred = () => {
+    let resolve!: (v: unknown) => void;
+    let reject!: (e: unknown) => void;
+    const promise = new Promise((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+  const CART = { items: [{ id: 'line-a', variationId: 'v-a', quantity: 1 }] };
+
+  it('chạm đúp Mua ngay trong cùng một khung hình chỉ thêm giỏ một lần, rồi sang thanh toán một lần', async () => {
+    const d = deferred();
+    mocks.addToCart.mockReturnValueOnce(d.promise);
+    serve({ items: { s12: itemsOf(S12, [item('a')]) } });
+    renderPage();
+    const buy = await screen.findByRole('button', { name: 'Mua ngay Sản phẩm a' });
+    await act(async () => {
+      fireEvent.click(buy);
+      fireEvent.click(buy);
+    });
+    expect(mocks.addToCart).toHaveBeenCalledTimes(1);
+    await act(async () => d.resolve(CART));
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/checkout', { state: { itemIds: ['line-a'] } }));
+    expect(mocks.addToCart).toHaveBeenCalledTimes(1);
+    expect(mocks.navigate).toHaveBeenCalledTimes(1);
+  });
+
+  it('Mua ngay hai món khác nhau trong cùng một khung hình chỉ mua món chạm trước', async () => {
+    const d = deferred();
+    mocks.addToCart.mockReturnValueOnce(d.promise);
+    serve({ items: { s12: itemsOf(S12, [item('a'), item('b')]) } });
+    renderPage();
+    const buyA = await screen.findByRole('button', { name: 'Mua ngay Sản phẩm a' });
+    const buyB = screen.getByRole('button', { name: 'Mua ngay Sản phẩm b' });
+    await act(async () => {
+      fireEvent.click(buyA);
+      fireEvent.click(buyB);
+    });
+    expect(mocks.addToCart).toHaveBeenCalledTimes(1);
+    expect(mocks.addToCart).toHaveBeenCalledWith('v-a', 1, 'buy_now');
+    await act(async () => d.resolve(CART));
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledTimes(1));
+  });
+
+  it('đang mua: nút của món đang mua báo bận (aria-busy), món khác thì không', async () => {
+    mocks.addToCart.mockReturnValueOnce(deferred().promise);
+    serve({ items: { s12: itemsOf(S12, [item('a'), item('b')]) } });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Mua ngay Sản phẩm a' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Mua ngay Sản phẩm a' })).toHaveAttribute('aria-busy', 'true'));
+    expect(screen.getByRole('button', { name: 'Mua ngay Sản phẩm b' })).not.toHaveAttribute('aria-busy', 'true');
+  });
+
+  it('mua lỗi thì nhả khoá: bấm lại gọi lần hai', async () => {
+    mocks.addToCart.mockRejectedValueOnce(new Error('Hết hàng')).mockResolvedValue(CART);
+    serve({ items: { s12: itemsOf(S12, [item('a')]) } });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Mua ngay Sản phẩm a' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+    fireEvent.click(screen.getByRole('button', { name: 'Mua ngay Sản phẩm a' }));
+    await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledTimes(2));
+  });
+
+  it('chạm đúp Nhắc tôi trong cùng một khung hình chỉ đặt nhắc một lần', async () => {
+    const d = deferred();
+    mocks.setReminder.mockReturnValueOnce(d.promise);
+    serve({ items: { s12: itemsOf(S12, [item('a')]), s20: itemsOf(S20, [item('c')]) } });
+    renderPage();
+    await screen.findByRole('button', { name: 'Mua ngay Sản phẩm a' });
+    fireEvent.click(screen.getAllByRole('tab')[1]!);
+    const remind = await screen.findByRole('button', { name: 'Nhắc tôi Sản phẩm c' });
+    await act(async () => {
+      fireEvent.click(remind);
+      fireEvent.click(remind);
+    });
+    expect(mocks.setReminder).toHaveBeenCalledTimes(1);
+    await act(async () => d.resolve({}));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Tubu sẽ nhắc bạn lúc 20:00' })));
+    expect(mocks.setReminder).toHaveBeenCalledTimes(1);
+  });
+
+  it('Nhắc tôi hai món khác nhau trong cùng một khung hình đặt nhắc cả hai (khoá theo món)', async () => {
+    serve({ items: { s12: itemsOf(S12, [item('a')]), s20: itemsOf(S20, [item('c'), item('d')]) } });
+    renderPage();
+    await screen.findByRole('button', { name: 'Mua ngay Sản phẩm a' });
+    fireEvent.click(screen.getAllByRole('tab')[1]!);
+    const c = await screen.findByRole('button', { name: 'Nhắc tôi Sản phẩm c' });
+    const dd = screen.getByRole('button', { name: 'Nhắc tôi Sản phẩm d' });
+    await act(async () => {
+      fireEvent.click(c);
+      fireEvent.click(dd);
+    });
+    expect(mocks.setReminder).toHaveBeenCalledTimes(2);
+  });
+
+  it('đặt nhắc lỗi thì nhả khoá của món: bấm lại gọi lần hai', async () => {
+    mocks.setReminder.mockRejectedValueOnce(new Error('boom')).mockResolvedValue({});
+    serve({ items: { s12: itemsOf(S12, [item('a')]), s20: itemsOf(S20, [item('c')]) } });
+    renderPage();
+    await screen.findByRole('button', { name: 'Mua ngay Sản phẩm a' });
+    fireEvent.click(screen.getAllByRole('tab')[1]!);
+    fireEvent.click(await screen.findByRole('button', { name: 'Nhắc tôi Sản phẩm c' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+    fireEvent.click(await screen.findByRole('button', { name: 'Nhắc tôi Sản phẩm c' }));
+    await waitFor(() => expect(mocks.setReminder).toHaveBeenCalledTimes(2));
+  });
+});

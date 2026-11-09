@@ -100,7 +100,7 @@ function RewardsMineBody() {
   const location = useLocation();
   const newCode = new URLSearchParams(location.search).get(NEW_COUPON_PARAM);
 
-  if (q.isError) return <ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => void q.refetch()} />;
+  if (q.isError) return <ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => q.refetch()} />;
   if (!q.data) return <div style={{ padding: 16 }}><Skeleton height={120} /></div>;
   if (q.data.length === 0) {
     return <EmptyState art="box" heading="Bạn chưa đổi quà nào" ctaLabel="Đến Kho quà" onCta={() => navigate('/rewards')} />;

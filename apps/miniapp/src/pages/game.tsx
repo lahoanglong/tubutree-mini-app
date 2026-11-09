@@ -254,7 +254,7 @@ export default function GamePage() {
               onAnswer={(id, choice) => answerM.mutate({ id, choice })}
               onNext={nextQuiz}
               loadError={quizQ.isError}
-              onRetry={() => void quizQ.refetch()}
+              onRetry={() => quizQ.refetch()}
               answeredToday={profile?.quizAnsweredToday}
             />
           </div>
@@ -283,7 +283,7 @@ export default function GamePage() {
           {/* Lô đất / mở rộng vườn (§6.7) — nhiều cây song song */}
           {garden === undefined && !gardenQ.isError && <Skeleton height={120} radius="var(--radius-card)" />}
           {garden === undefined && gardenQ.isError && (
-            <ErrorState variant="inline" message={gameNewbieCopy.loadError.garden} onRetry={() => void gardenQ.refetch()} retrying={gardenQ.isFetching} />
+            <ErrorState variant="inline" message={gameNewbieCopy.loadError.garden} onRetry={() => gardenQ.refetch()} retrying={gardenQ.isFetching} />
           )}
           {garden && plotsOpen && (
             <GardenPlots
