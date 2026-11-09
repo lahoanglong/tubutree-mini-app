@@ -13,7 +13,7 @@ import { coreHttp } from '@/lib/core-http';
 import { ui } from '@/lib/guest-ui';
 import { formatVnDate, nextRunAfterIntervalChange, SUBSCRIPTION_INTERVAL_WEEKS, vnDateOf } from '@/lib/subscription-options';
 import { AddressPicker, PaymentMethodPicker, SectionLabel } from './subscription-options';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText, loadErrorText } from '@/lib/error-text';
 
 /** Trần ở client chỉ để nút + không chạy vô hạn; còn hàng hay không do API kiểm khi sinh đơn kỳ. */
 const MAX_QTY = 99;
@@ -41,6 +41,11 @@ export function SubscriptionEditSheet({ sub, onClose, onSaved }: { sub: Subscrip
   const [payment, setPayment] = useState<SubscriptionPaymentMethod>(sub.paymentMethod ?? 'COD');
   const addrQ = useQuery(addressesQuery(coreHttp));
   const walletQ = useQuery(walletQuery(coreHttp));
+  // Truy vấn lỗi mà chưa có dữ liệu bị react-query đặt về pending lúc tải lại và xoá lỗi; giữ vùng lỗi + nút Thử lại đứng yên
+  // (không mất focus) tới khi lượt tải lại có kết quả (isPending hết). Giá trị là câu lỗi cũ để vẫn hiện chữ trong lúc chờ.
+  const [addrRetrying, setAddrRetrying] = useState<string | null>(null);
+  const addrFailed = addrQ.isError && !addrQ.data;
+  const addrWaiting = addrRetrying !== null && addrQ.isPending;
 
   // API cũ chưa nhận intervalWeeks (400); chỉ API mới mới trả khoá lastOrderAt (kể cả null), dùng làm dấu hiệu hỗ trợ.
   const canEditInterval = 'lastOrderAt' in sub;
@@ -60,7 +65,10 @@ export function SubscriptionEditSheet({ sub, onClose, onSaved }: { sub: Subscrip
   return (
     <Sheet
       open
-      onClose={onClose}
+      onClose={() => {
+        if (!save.isPending) onClose();
+      }}
+      dismissible={!save.isPending}
       title="Sửa gói định kỳ"
       description={`${sub.productName}${sub.variationName ? ` · ${sub.variationName}` : ''}`}
       size="full"
@@ -71,7 +79,13 @@ export function SubscriptionEditSheet({ sub, onClose, onSaved }: { sub: Subscrip
               {actionErrorText(save.error)}
             </p>
           )}
-          <button type="button" disabled={!dirty || save.isPending} onClick={() => save.mutate()} className={`${ui.btnPrimary} w-full`}>
+          <button
+            type="button"
+            disabled={!dirty || save.isPending}
+            aria-busy={save.isPending || undefined}
+            onClick={() => save.mutate()}
+            className={`${ui.btnPrimary} w-full`}
+          >
             {save.isPending ? 'Đang lưu…' : 'Lưu thay đổi'}
           </button>
         </div>
@@ -79,7 +93,7 @@ export function SubscriptionEditSheet({ sub, onClose, onSaved }: { sub: Subscrip
     >
       <SectionLabel>Số lượng mỗi kỳ</SectionLabel>
       <div className="py-1">
-        <QuantitySelector value={quantity} min={1} max={MAX_QTY} onChange={setQuantity} />
+        <QuantitySelector value={quantity} min={1} max={MAX_QTY} disabled={save.isPending} onChange={setQuantity} />
       </div>
 
       {canEditInterval && (
@@ -87,12 +101,12 @@ export function SubscriptionEditSheet({ sub, onClose, onSaved }: { sub: Subscrip
         <SectionLabel>Chu kỳ giao</SectionLabel>
         <div role="group" aria-label="Chu kỳ giao" className="flex flex-wrap gap-2 py-1">
           {SUBSCRIPTION_INTERVAL_WEEKS.map((w) => (
-            <Chip key={w} selected={weeks === w} onPress={() => setWeeks(w)}>
+            <Chip key={w} selected={weeks === w} disabled={save.isPending} onPress={() => setWeeks(w)}>
               {w} tuần
             </Chip>
           ))}
         </div>
-        {nextRun && <p className="text-xs text-stone-600">Lần giao kế tiếp: {formatVnDate(vnDateOf(nextRun))}</p>}
+        {nextRun && <p className="text-xs tabular-nums text-stone-600">Lần giao kế tiếp: {formatVnDate(vnDateOf(nextRun))}</p>}
         {sub.status === 'PAUSED' && weeks !== sub.intervalWeeks && (
           <p className="text-xs text-stone-600">Gói đang tạm dừng: nếu đến lúc bật lại mà ngày này đã qua, ngày giao kế tiếp sẽ tính từ ngày bật lại.</p>
         )}
@@ -100,10 +114,29 @@ export function SubscriptionEditSheet({ sub, onClose, onSaved }: { sub: Subscrip
       )}
 
       <SectionLabel>Thanh toán mỗi kỳ</SectionLabel>
-      <PaymentMethodPicker value={payment} onChange={setPayment} walletBalance={walletQ.data?.walletBalance} />
+      <PaymentMethodPicker value={payment} onChange={setPayment} walletBalance={walletQ.data?.walletBalance} disabled={save.isPending} />
 
       <SectionLabel>Giao tới</SectionLabel>
-      {addrQ.isLoading ? <LineItemSkeleton /> : <AddressPicker addresses={addrQ.data ?? []} value={addressId} onChange={setAddressId} />}
+      {addrFailed || addrWaiting ? (
+        <div role="alert" className="flex flex-wrap items-center gap-2 py-1">
+          <p className={`min-w-0 flex-1 ${ui.error}`}>{addrFailed ? loadErrorText(addrQ.error) : addrRetrying}</p>
+          <button
+            type="button"
+            aria-busy={addrWaiting || undefined}
+            onClick={() => {
+              setAddrRetrying(loadErrorText(addrQ.error));
+              void addrQ.refetch();
+            }}
+            className={ui.btnSecondary}
+          >
+            Thử lại
+          </button>
+        </div>
+      ) : addrQ.isLoading ? (
+        <LineItemSkeleton />
+      ) : (
+        <AddressPicker addresses={addrQ.data ?? []} value={addressId} onChange={setAddressId} disabled={save.isPending} />
+      )}
     </Sheet>
   );
 }

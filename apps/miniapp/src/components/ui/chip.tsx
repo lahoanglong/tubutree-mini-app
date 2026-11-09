@@ -6,6 +6,8 @@ export interface ChipProps {
   children: ReactNode;
   selected?: boolean;
   onPress?: () => void;
+  /** Khoá chip (đang gửi dở): nút DOM `disabled` thật, không bấm, không nhận focus. */
+  disabled?: boolean;
   icon?: LucideIcon;
   count?: number;
   size?: 'sm' | 'md';
@@ -28,6 +30,7 @@ export function Chip({
   children,
   selected,
   onPress,
+  disabled,
   icon: IconCmp,
   count,
   size = 'md',
@@ -40,11 +43,13 @@ export function Chip({
       type="button"
       aria-pressed={selected}
       aria-label={ariaLabel}
-      className={['tubu-press', 'tubu-hit-44', className].filter(Boolean).join(' ')}
+      disabled={disabled}
+      className={[disabled ? undefined : 'tubu-press', 'tubu-hit-44', className].filter(Boolean).join(' ')}
       onClick={onPress}
       style={{
         border: 'none',
-        cursor: 'pointer',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.6 : undefined,
         fontFamily: 'inherit',
         lineHeight: 'inherit',
         display: 'inline-flex',

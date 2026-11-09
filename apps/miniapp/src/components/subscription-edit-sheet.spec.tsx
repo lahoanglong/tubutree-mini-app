@@ -17,6 +17,8 @@ vi.mock('../services/shop-api', () => ({ getAddresses: mocks.getAddresses }));
 vi.mock('../services/account-api', () => ({ getWallet: mocks.getWallet }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
+import { getErrorMessage, getLoadErrorMessage } from '../services/api';
+import { HttpError } from '../services/http';
 import { SubscriptionEditSheet, subscriptionPatch } from './subscription-edit-sheet';
 
 const SUB = {
@@ -25,10 +27,15 @@ const SUB = {
   productName: 'Nước xả vải Tubu', variationName: 'Hương sả', thumbnail: null, slug: 'nxv', unitPrice: 80000, effectiveDiscountPct: 0.14,
 };
 
-function renderSheet(sub = SUB) {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+function renderSheet(sub = SUB, qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })) {
   return render(<QueryClientProvider client={qc}><SubscriptionEditSheet sub={sub} onClose={mocks.onClose} /></QueryClientProvider>);
 }
+
+const ADDR = (id: string, street: string) => ({
+  id, recipient: 'Lan', phone: '0900000000', province: 'HCM', district: 'Q.1', ward: 'P.1', street, isDefault: id === 'a1',
+});
+const ADDRS = [ADDR('a1', '1 Lê Lợi'), ADDR('a2', '9 Hai Bà Trưng')];
+const serverError = (message: string, status = 409) => new HttpError(message, undefined, { status, data: { message } } as never);
 
 describe('SubscriptionEditSheet: đổi chu kỳ giao (Q22)', () => {
   beforeEach(() => {
@@ -81,5 +88,201 @@ describe('SubscriptionEditSheet: đổi chu kỳ giao (Q22)', () => {
     expect(subscriptionPatch(SUB, next)).toEqual({});
     expect(subscriptionPatch(SUB, { ...next, intervalWeeks: 8 })).toEqual({ intervalWeeks: 8 });
     expect(subscriptionPatch(SUB, { ...next, quantity: 3, intervalWeeks: 8 })).toEqual({ quantity: 3, intervalWeeks: 8 });
+  });
+});
+
+describe('SubscriptionEditSheet: lỗi tải địa chỉ có lối Thử lại (W61A)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
+  });
+
+  it('tải địa chỉ lỗi: vùng role=alert ghi lời lỗi + nút Thử lại, không vẽ nhóm địa chỉ trống; bấm Thử lại tải lại và hiện danh sách', async () => {
+    const err = serverError('Máy chủ đang bận', 500);
+    mocks.getAddresses.mockRejectedValueOnce(err).mockResolvedValue(ADDRS);
+    renderSheet();
+    const alert = await screen.findByRole('alert');
+    expect(within(alert).getByText(getLoadErrorMessage(err))).toBeInTheDocument();
+    expect(screen.queryByRole('radiogroup', { name: 'Giao tới' })).toBeNull();
+    expect(screen.queryAllByRole('radio', { name: /Lê Lợi/ })).toHaveLength(0);
+
+    fireEvent.click(within(alert).getByRole('button', { name: 'Thử lại' }));
+    expect(await screen.findByRole('radio', { name: /9 Hai Bà Trưng/ })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: /1 Lê Lợi/ })).toHaveAttribute('aria-checked', 'true');
+    expect(mocks.getAddresses).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('bấm Thử lại: vùng lỗi và nút đứng yên (giữ focus, giữ chữ lỗi cũ), nút báo bận, bấm thêm không gửi lượt tải thứ ba, không có nhóm địa chỉ trống', async () => {
+    let release!: (v: unknown) => void;
+    const first = serverError('Máy chủ đang bận', 500);
+    mocks.getAddresses.mockRejectedValueOnce(first).mockReturnValueOnce(new Promise((r) => { release = r; }));
+    renderSheet();
+    const alert = await screen.findByRole('alert');
+    const retry = within(alert).getByRole('button', { name: 'Thử lại' });
+    expect(retry).not.toHaveAttribute('aria-busy');
+    retry.focus();
+    fireEvent.click(retry);
+    await waitFor(() => expect(retry).toHaveAttribute('aria-busy', 'true'));
+    expect(screen.getByRole('alert')).toBe(alert);
+    expect(alert).toHaveTextContent(getLoadErrorMessage(first));
+    expect(retry).toHaveFocus();
+    expect(screen.queryByRole('radiogroup', { name: 'Giao tới' })).toBeNull();
+    fireEvent.click(retry);
+    expect(mocks.getAddresses).toHaveBeenCalledTimes(2);
+
+    release(ADDRS);
+    expect(await screen.findByRole('radio', { name: /9 Hai Bà Trưng/ })).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('Thử lại mà vẫn lỗi: vùng lỗi không chớp mất (cùng một phần tử), nút hết bận, chữ lỗi mới; Thử lại lần hai hiện danh sách', async () => {
+    let fail!: (e: unknown) => void;
+    mocks.getAddresses
+      .mockRejectedValueOnce(serverError('Máy chủ đang bận', 500))
+      .mockReturnValueOnce(new Promise((_, reject) => { fail = reject; }))
+      .mockResolvedValue(ADDRS);
+    renderSheet();
+    const alert = await screen.findByRole('alert');
+    const retry = within(alert).getByRole('button', { name: 'Thử lại' });
+    fireEvent.click(retry);
+    await waitFor(() => expect(retry).toHaveAttribute('aria-busy', 'true'));
+
+    fail(serverError('Máy chủ vẫn bận', 504));
+    await waitFor(() => expect(retry).not.toHaveAttribute('aria-busy'));
+    expect(screen.getByRole('alert')).toBe(alert);
+    expect(within(alert).getByRole('button', { name: 'Thử lại' })).toBe(retry);
+    expect(screen.queryByRole('radiogroup', { name: 'Giao tới' })).toBeNull();
+
+    fireEvent.click(retry);
+    expect(await screen.findByRole('radio', { name: /9 Hai Bà Trưng/ })).toBeInTheDocument();
+    expect(mocks.getAddresses).toHaveBeenCalledTimes(3);
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('tải địa chỉ quá hạn: nói "tải chậm" (lời của màn tải), không nói "chưa rõ đã xong chưa" (lời của nút bấm)', async () => {
+    const timeout = new HttpError('timeout of 15000ms exceeded', 'ECONNABORTED');
+    mocks.getAddresses.mockRejectedValue(timeout);
+    renderSheet();
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Tải chậm quá, thử lại nhé.');
+    expect(alert).toHaveTextContent(getLoadErrorMessage(timeout));
+    expect(alert).not.toHaveTextContent(getErrorMessage(timeout));
+  });
+
+  it('đã có danh sách trong bộ nhớ mà lần làm mới nền lỗi: vẫn hiện danh sách, không phủ bằng vùng lỗi', async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    qc.setQueryData(['addresses'], ADDRS);
+    mocks.getAddresses.mockRejectedValue(serverError('Máy chủ đang bận', 500));
+    renderSheet(SUB, qc);
+    await waitFor(() => expect(qc.getQueryState(['addresses'])?.status).toBe('error'));
+    expect(screen.getByRole('radio', { name: /9 Hai Bà Trưng/ })).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+});
+
+describe('SubscriptionEditSheet: khoá khi đang lưu và báo lỗi lưu (W61A)', () => {
+  const group = () => screen.getByRole('group', { name: 'Chu kỳ giao' });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getAddresses.mockResolvedValue(ADDRS);
+    mocks.getWallet.mockResolvedValue({ walletBalance: 50000 });
+  });
+
+  async function startSave() {
+    renderSheet();
+    await screen.findByRole('radio', { name: /9 Hai Bà Trưng/ });
+    fireEvent.click(screen.getByRole('button', { name: 'Tăng số lượng' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
+  }
+
+  it('đang lưu: nút lưu báo bận; số lượng, chu kỳ, cách trả, địa chỉ đều khoá và bấm không đổi lựa chọn', async () => {
+    mocks.updateSubscription.mockReturnValue(new Promise(() => {}));
+    await startSave();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Lưu thay đổi' })).toHaveAttribute('aria-busy', 'true'));
+
+    const chips = within(group()).getAllByRole('button');
+    expect(chips).toHaveLength(4);
+    chips.forEach((c) => expect(c).toBeDisabled());
+    const radios = screen.getAllByRole('radio');
+    expect(radios).toHaveLength(5);
+    radios.forEach((r) => expect(r).toHaveAttribute('aria-disabled', 'true'));
+    expect(screen.getByRole('button', { name: 'Tăng số lượng' })).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByRole('button', { name: 'Giảm số lượng' })).toHaveAttribute('aria-disabled', 'true');
+
+    fireEvent.click(within(group()).getByRole('button', { name: '6 tuần' }));
+    fireEvent.click(screen.getByRole('radio', { name: /9 Hai Bà Trưng/ }));
+    fireEvent.click(screen.getByRole('radio', { name: /Chuyển khoản ngân hàng/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tăng số lượng' }));
+    expect(within(group()).getByRole('button', { name: '4 tuần' })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(group()).getByRole('button', { name: '6 tuần' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('radio', { name: /9 Hai Bà Trưng/ })).toHaveAttribute('aria-checked', 'false');
+    expect(screen.getByRole('radio', { name: /Chuyển khoản ngân hàng/ })).toHaveAttribute('aria-checked', 'false');
+    expect(screen.getByText('3')).toBeInTheDocument();
+  });
+
+  it('đang lưu: nút Đóng ẩn đi và phím Escape không đóng sheet giữa lúc PATCH đang bay; lưu xong mới đóng một lần', async () => {
+    let finish!: () => void;
+    mocks.updateSubscription.mockReturnValue(new Promise((r) => { finish = () => r({ ...SUB, quantity: 3 }); }));
+    await startSave();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Lưu thay đổi' })).toHaveAttribute('aria-busy', 'true'));
+    expect(screen.queryByRole('button', { name: 'Đóng' })).toBeNull();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(mocks.onClose).not.toHaveBeenCalled();
+    finish();
+    await waitFor(() => expect(mocks.onClose).toHaveBeenCalledTimes(1));
+  });
+
+  it('chưa lưu: nút Đóng và Escape vẫn đóng sheet như cũ', async () => {
+    renderSheet();
+    await screen.findByRole('radio', { name: /9 Hai Bà Trưng/ });
+    fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+    expect(mocks.onClose).toHaveBeenCalledTimes(1);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(mocks.onClose).toHaveBeenCalledTimes(2);
+  });
+
+  it('lưu lỗi: footer hiện role=alert với lời máy chủ ngay trên nút lưu, snackbar vẫn báo, điều khiển mở lại, sheet không đóng', async () => {
+    const err = serverError('Bạn đã có gói định kỳ cho sản phẩm này tại địa chỉ đó.');
+    mocks.updateSubscription.mockRejectedValue(err);
+    await startSave();
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(getErrorMessage(err));
+    expect(alert).toHaveTextContent('Bạn đã có gói định kỳ cho sản phẩm này tại địa chỉ đó.');
+    expect(alert.nextElementSibling).toBe(screen.getByRole('button', { name: 'Lưu thay đổi' }));
+    expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: getErrorMessage(err), type: 'error' });
+    expect(screen.getByRole('button', { name: 'Lưu thay đổi' })).not.toHaveAttribute('aria-busy');
+    within(group()).getAllByRole('button').forEach((c) => expect(c).toBeEnabled());
+    screen.getAllByRole('radio').forEach((r) => expect(r).not.toHaveAttribute('aria-disabled', 'true'));
+    expect(mocks.onClose).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+    expect(mocks.onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('chưa lưu lần nào: không có role=alert nào ở footer', async () => {
+    renderSheet();
+    await screen.findByRole('radio', { name: /9 Hai Bà Trưng/ });
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+});
+
+describe('SubscriptionEditSheet: số đều (tabular-nums) cho ngày giao kế tiếp, số dư Ví và số điện thoại (W61A)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-20T05:00:00.000Z') });
+    mocks.getAddresses.mockResolvedValue(ADDRS);
+    mocks.getWallet.mockResolvedValue({ walletBalance: 120000 });
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it('dòng ngày giao kế tiếp, nhãn Ví Tubu kèm số dư và tiêu đề địa chỉ đều dùng số đều', async () => {
+    renderSheet();
+    fireEvent.click(await screen.findByRole('button', { name: '6 tuần' }));
+    expect(screen.getByText('Lần giao kế tiếp: 21/11/2026').style.fontVariantNumeric).toBe('tabular-nums');
+    expect((await screen.findByText('Ví Tubu (120.000đ)')).style.fontVariantNumeric).toBe('tabular-nums');
+    const titles = await screen.findAllByText('Lan · 0900000000');
+    expect(titles).toHaveLength(2);
+    titles.forEach((t) => expect(t.style.fontVariantNumeric).toBe('tabular-nums'));
   });
 });

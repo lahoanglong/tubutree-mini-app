@@ -10,6 +10,8 @@ export interface ChipProps {
   children: ReactNode;
   selected?: boolean;
   onPress?: () => void;
+  /** Khoá chip (đang gửi dở): nút DOM `disabled` thật, không bấm, không nhận focus. Không áp cho chip có `href`. */
+  disabled?: boolean;
   /** Có `href` thì vẽ `<Link>` (liên kết thật, công cụ tìm kiếm đi theo được) với đúng kiểu của chip; không lồng nút trong liên kết. */
   href?: string;
   icon?: LucideIcon;
@@ -34,6 +36,7 @@ export function Chip({
   children,
   selected,
   onPress,
+  disabled,
   href,
   icon: IconCmp,
   count,
@@ -42,10 +45,12 @@ export function Chip({
   className,
   style,
 }: ChipProps) {
-  const chipClass = ['tubu-press', 'tubu-hit-44', className].filter(Boolean).join(' ');
+  const locked = !href && disabled;
+  const chipClass = [locked ? undefined : 'tubu-press', 'tubu-hit-44', className].filter(Boolean).join(' ');
   const baseStyle: CSSProperties = {
     border: 'none',
-    cursor: 'pointer',
+    cursor: locked ? 'not-allowed' : 'pointer',
+    opacity: locked ? 0.6 : undefined,
     fontFamily: 'inherit',
     lineHeight: 'inherit',
     display: 'inline-flex',
@@ -81,7 +86,7 @@ export function Chip({
     );
   }
   return (
-    <button type="button" aria-pressed={selected} aria-label={ariaLabel} className={chipClass} onClick={onPress} style={baseStyle}>
+    <button type="button" aria-pressed={selected} aria-label={ariaLabel} disabled={disabled} className={chipClass} onClick={onPress} style={baseStyle}>
       {content}
     </button>
   );

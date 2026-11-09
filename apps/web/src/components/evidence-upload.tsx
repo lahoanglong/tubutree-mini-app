@@ -35,6 +35,7 @@ export function EvidenceUpload({
   const [notice, setNotice] = useState<string | null>(null);
 
   const onFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (busy || disabled) return;
     const files = Array.from(e.target.files ?? []);
     if (files.length === 0) return;
     setNotice(null);
@@ -83,7 +84,7 @@ export function EvidenceUpload({
     <div>
       <div className="text-sm font-semibold text-stone-900">
         {label} ({hint}, tối đa {max}){' '}
-        <span className="font-normal text-stone-600">
+        <span className="font-normal tabular-nums text-stone-600">
           {value.length}/{max}
         </span>
       </div>
@@ -120,6 +121,7 @@ export function EvidenceUpload({
             type="button"
             onClick={() => inputRef.current?.click()}
             disabled={disabled || busy || full}
+            aria-busy={busy || undefined}
             className={ui.btnSecondary}
           >
             <ImagePlus className="mr-1.5 h-4 w-4" aria-hidden="true" />

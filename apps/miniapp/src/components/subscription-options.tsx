@@ -62,12 +62,12 @@ export function nextRunAfterIntervalChange(
   return due < earliest ? earliest : due;
 }
 
-export function IntervalPicker({ value, onChange }: { value: number; onChange: (weeks: number) => void }) {
+export function IntervalPicker({ value, onChange, disabled = false }: { value: number; onChange: (weeks: number) => void; disabled?: boolean }) {
   const t = vi.subscriptions;
   return (
     <div role="group" aria-label={t.intervalLabel} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: '4px 0' }}>
       {SUBSCRIPTION_INTERVAL_WEEKS.map((w) => (
-        <Chip key={w} selected={value === w} onPress={() => onChange(w)}>
+        <Chip key={w} selected={value === w} disabled={disabled} onPress={() => onChange(w)}>
           {t.intervalOption(w)}
         </Chip>
       ))}
@@ -115,11 +115,11 @@ function RadioRow({
       {/* Chấm tròn chỉ để nhìn: chọn nằm ở onClick của hàng (role=radio), như hàng thanh toán ở checkout. */}
       <Radio checked={checked} disabled={disabled} onChange={() => {}} />
       <div style={{ flex: 1, minWidth: 0 }}>
-        <Text variant="body-sm" as="div" tone={disabled ? 'tertiary' : 'primary'} style={{ fontWeight: checked ? 600 : 400 }}>
+        <Text variant="body-sm" as="div" numeric tone={disabled ? 'tertiary' : 'primary'} style={{ fontWeight: checked ? 600 : 400 }}>
           {title}
         </Text>
         {hint && (
-          <Text variant="caption" tone="tertiary" as="div">
+          <Text variant="caption" tone="tertiary" as="div" numeric>
             {hint}
           </Text>
         )}
@@ -140,10 +140,12 @@ export function PaymentMethodPicker({
   value,
   onChange,
   walletBalance,
+  disabled = false,
 }: {
   value: SubscriptionPaymentMethod;
   onChange: (m: SubscriptionPaymentMethod) => void;
   walletBalance?: number;
+  disabled?: boolean;
 }) {
   const t = vi.subscriptions;
   const walletBlocked = subscriptionWalletBlockedReason(walletBalance);
@@ -156,7 +158,7 @@ export function PaymentMethodPicker({
         <RadioRow
           key={m}
           checked={value === m}
-          disabled={m === 'WALLET' && walletBlocked !== null}
+          disabled={disabled || (m === 'WALLET' && walletBlocked !== null)}
           onSelect={() => onChange(m)}
           title={label(m)}
           hint={hint(m)}
@@ -170,10 +172,12 @@ export function AddressPicker({
   addresses,
   value,
   onChange,
+  disabled = false,
 }: {
   addresses: AddressDTO[];
   value: string | undefined;
   onChange: (id: string) => void;
+  disabled?: boolean;
 }) {
   return (
     <div role="radiogroup" aria-label={vi.subscriptions.addressLabel}>
@@ -181,6 +185,7 @@ export function AddressPicker({
         <RadioRow
           key={a.id}
           checked={value === a.id}
+          disabled={disabled}
           onSelect={() => onChange(a.id)}
           title={`${a.recipient} · ${a.phone}`}
           hint={addressText(a)}
