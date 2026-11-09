@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import type { SpinResult } from '../../services/game-api';
 import { formatDate, formatDrops, formatNumber, formatVnd } from '../../utils/format';
 import { BottomSheet } from '../ui/bottom-sheet';
@@ -38,7 +39,16 @@ export function WheelPrizeSheet({
   const outcome = prize ? outcomeOf(prize) : 'POINTS';
   const won = outcome !== 'MISS';
 
+  // Khoá đồng bộ: `open` chỉ đổi sau lần vẽ kế và hộp còn nằm trên màn suốt hoạt ảnh đóng, nên hai cú chạm
+  // "Dùng ngay" sát nhau sẽ gọi onUseCoupon hai lần. Nhả khi hộp đóng hoặc giải mới về.
+  const usedRef = useRef(false);
+  useEffect(() => {
+    usedRef.current = false;
+  }, [open, prize]);
+
   const useCoupon = () => {
+    if (!open || usedRef.current) return;
+    usedRef.current = true;
     onClose();
     onUseCoupon();
   };
@@ -63,17 +73,19 @@ export function WheelPrizeSheet({
     <BottomSheet open={open} onClose={onClose} title={won ? 'Chúc mừng!' : 'Tiếc quá!'} footer={footer}>
       {prize && (
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 56, lineHeight: 1.2 }}>{won ? '🎉' : '🍀'}</div>
+          <div aria-hidden="true" style={{ fontSize: 56, lineHeight: 1.2 }}>
+            {won ? '🎉' : '🍀'}
+          </div>
           <Text variant="body-md" tone={won ? 'brand' : 'primary'} as="div" style={{ fontWeight: 600, marginTop: 4 }}>
             {prize.name}
           </Text>
           {outcome === 'POINTS' && (
-            <Text variant="body-sm" tone="secondary" as="div" style={{ marginTop: 4 }}>
+            <Text variant="body-sm" tone="secondary" as="div" numeric style={{ marginTop: 4 }}>
               +{formatNumber(prize.value)} Điểm Xanh đã vào tài khoản
             </Text>
           )}
           {outcome === 'SEEDS' && (
-            <Text variant="body-sm" tone="secondary" as="div" style={{ marginTop: 4 }}>
+            <Text variant="body-sm" tone="secondary" as="div" numeric style={{ marginTop: 4 }}>
               +{formatDrops(prize.value)} đã vào bình nước của bạn
             </Text>
           )}
@@ -95,10 +107,10 @@ export function WheelPrizeSheet({
               <Text variant="body-md" as="div" style={{ fontWeight: 700, letterSpacing: 0.5, wordBreak: 'break-all' }}>
                 {prize.coupon.code}
               </Text>
-              <Text variant="body-sm" tone="secondary" as="div" style={{ marginTop: 4 }}>
+              <Text variant="body-sm" tone="secondary" as="div" numeric style={{ marginTop: 4 }}>
                 Đơn tối thiểu {formatVnd(prize.coupon.minOrder)}
               </Text>
-              <Text variant="body-sm" tone="secondary" as="div">
+              <Text variant="body-sm" tone="secondary" as="div" numeric>
                 Hạn dùng {formatDate(prize.coupon.expiresAt)}
               </Text>
               <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 6 }}>

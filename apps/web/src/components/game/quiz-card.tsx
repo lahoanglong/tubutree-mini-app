@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { Brain, Lightbulb } from 'lucide-react';
 import { gameMoreCopy } from '@tubutree/app-core/game-more-copy';
 import type { AnswerResult, QuizItem } from '@tubutree/app-core/api/game';
@@ -38,21 +39,48 @@ export function QuizCard({
 }) {
   const t = gameMoreCopy.quiz;
   const shownReveal = currentQuiz && reveal && reveal.quizId === currentQuiz.id ? reveal : null;
+  const currentQuizId = currentQuiz?.id;
+  const revealed = shownReveal !== null;
+
+  // Khoá đồng bộ: `pending` chỉ đổi sau lần vẽ kế, hai cú bấm cùng nhịp vào đáp án sẽ gửi đáp án hai lần.
+  // Nhả khi sang câu khác, hoặc khi lượt trả lời xong mà không ra đáp án (lỗi) để chọn lại được.
+  // Dựa vào việc trang cha vẽ ra `pending=true` ít nhất một lần cho mỗi lượt gửi (isPending của mutation luôn vậy).
+  const answeringQuizIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    answeringQuizIdRef.current = null;
+  }, [currentQuizId]);
+  useEffect(() => {
+    if (!pending && !revealed) answeringQuizIdRef.current = null;
+  }, [pending, revealed]);
+  const answer = (choice: number) => {
+    if (!currentQuiz || pending || shownReveal || answeringQuizIdRef.current === currentQuiz.id) return;
+    answeringQuizIdRef.current = currentQuiz.id;
+    onAnswer(currentQuiz.id, choice);
+  };
+  // Cùng lý do cho "Câu tiếp theo"/"Hoàn thành": mỗi đáp án (mỗi đối tượng reveal, trang cha tạo mới sau mỗi lượt
+  // trả lời) chỉ sang câu kế một lần. Dựa vào việc trang cha xoá `reveal` khi gọi onNext (nextQuiz ở cả hai trang làm vậy).
+  const nextedRevealRef = useRef<QuizReveal | null>(null);
+  const next = () => {
+    if (!shownReveal || nextedRevealRef.current === shownReveal) return;
+    nextedRevealRef.current = shownReveal;
+    onNext();
+  };
+
   return (
     <GameCard title="Câu đố Sống Xanh hôm nay" icon={Brain}>
       {currentQuiz ? (
         <>
           <div className="mb-2 flex items-center justify-between gap-2">
-            <span className="text-caption text-stone-600">
+            <span className="text-caption tabular-nums text-stone-600">
               {categoryLabel(currentQuiz.category)} · {difficultyLabel(currentQuiz.difficulty)}
               {quiz && quiz.length > 1 ? ` · Câu ${answeredCount + 1}/${quiz.length}` : ''}
             </span>
-            <span className="text-caption font-semibold text-forest-700">+{formatDrops(currentQuiz.waterReward)}</span>
+            <span className="text-caption font-semibold tabular-nums text-forest-700">+{formatDrops(currentQuiz.waterReward)}</span>
           </div>
-          <QuizBlock q={currentQuiz} reveal={shownReveal} onAnswer={(choice) => onAnswer(currentQuiz.id, choice)} pending={pending} />
+          <QuizBlock q={currentQuiz} reveal={shownReveal} onAnswer={answer} pending={pending} />
           {shownReveal && (
             <div role="status" className={`mt-3 rounded-control p-3 ${shownReveal.isCorrect ? 'bg-forest-50' : 'bg-warning-bg'}`}>
-              <div className={`text-sm font-semibold ${shownReveal.isCorrect ? 'text-forest-700' : 'text-warning-fg'}`}>
+              <div className={`text-sm font-semibold tabular-nums ${shownReveal.isCorrect ? 'text-forest-700' : 'text-warning-fg'}`}>
                 {shownReveal.isCorrect ? `Chính xác! +${formatDrops(shownReveal.waterEarned)}` : 'Chưa đúng — cùng học nhé 🌿'}
               </div>
               {shownReveal.explanation && (
@@ -61,7 +89,7 @@ export function QuizCard({
                   <span>Bạn có biết: {shownReveal.explanation}</span>
                 </div>
               )}
-              <button type="button" onClick={onNext} className={`${ui.btnPrimary} mt-2.5 w-full`}>
+              <button type="button" onClick={next} className={`${ui.btnPrimary} mt-2.5 w-full`}>
                 {answeredCount + 1 >= (quiz?.length ?? 1) ? 'Hoàn thành' : 'Câu tiếp theo'}
               </button>
             </div>
@@ -107,6 +135,7 @@ function QuizBlock({
               key={i}
               type="button"
               disabled={pending || !!reveal}
+              aria-pressed={reveal ? i === reveal.choice : false}
               onClick={() => onAnswer(i)}
               // Đáp án dài phải xuống dòng thay vì bị cắt.
               className={`${miniBtnSecondary} h-auto whitespace-normal py-2 ${tone}`}
