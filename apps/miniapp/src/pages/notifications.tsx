@@ -185,7 +185,8 @@ export default function NotificationsPage() {
   });
 
   // Giữ qua lúc "Thử lại" đang chạy (không theo isError) để khối báo lỗi không biến mất rồi hiện lại; chỉ xoá khi thành công.
-  const [readAllError, setReadAllError] = useState<string | null>(null);
+  // `count` đếm số lần lỗi: làm key của dòng chữ để lần lỗi lặp lại (cùng câu) vẫn được trình đọc màn hình đọc lại.
+  const [readAllError, setReadAllError] = useState<{ message: string; count: number } | null>(null);
   // Mutation có khoá đồng bộ: isPending chỉ đổi sau lần vẽ kế tiếp, hai chạm sát nhau vẫn gửi hai lệnh.
   const readAllMut = useLockedMutation({
     mutationFn: () => markAllNotificationsRead(),
@@ -194,7 +195,7 @@ export default function NotificationsPage() {
       markReadInCache(() => true);
       refetchIfListBusy();
     },
-    onError: (err) => setReadAllError(getErrorMessage(err)),
+    onError: (err) => setReadAllError((prev) => ({ message: getErrorMessage(err), count: (prev?.count ?? 0) + 1 })),
     onSettled: (_res, err) => settleRead(err !== null),
   });
   const readAll = () => {
@@ -292,12 +293,14 @@ export default function NotificationsPage() {
         }
       />
 
-      {readAllError && (
+      {/* Hết tin chưa đọc (đọc lẻ từng tin, hoặc lệnh hết giờ mà máy chủ đã làm xong) thì không còn gì để thử lại: ẩn khối. */}
+      {readAllError && unreadCount > 0 && (
         <div role="alert" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--space-inline-sm)', padding: 'var(--space-stack-xs) var(--space-gutter) 0' }}>
-          <Text variant="body-sm" tone="danger">
-            {readAllError}
+          <Text key={readAllError.count} variant="body-sm" tone="danger">
+            {readAllError.message}
           </Text>
-          <DsButton variant="ghost" loading={readAllMut.isPending} onPress={readAll}>
+          {/* Tên riêng: ErrorState tải danh sách cũng có nút "Thử lại", hai nút làm hai việc khác nhau. */}
+          <DsButton variant="ghost" loading={readAllMut.isPending} aria-label={vi.home.retryLabel('đánh dấu đã đọc')} onPress={readAll}>
             {vi.common.retry}
           </DsButton>
         </div>
