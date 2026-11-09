@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { HAZARDOUS_DESK_NOTES } from '@tubutree/app-core/waste-copy';
 import { WAREHOUSE_ONLY_RETURN_NOTE, deskClosedText, deskDoneCopy, deskGiftReadOnly, deskInitialLines, isPartnerWarehouseOnly } from '@tubutree/app-core/waste-desk';
 import type { CSSProperties } from 'react';
 import { Input, Page, useSnackbar } from 'zmp-ui';
 import { CheckCircle2, ChevronDown, ScanLine } from 'lucide-react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useLockedMutation } from '../components/game/use-locked-mutation';
 import type {
   WasteConfirmLineInput,
   WasteDeskGiftDTO,
@@ -180,7 +181,7 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
   // Bưu kiện về kho có thể tra khi đang chọn tab đối tác: luật nhận theo điểm của yêu cầu, không theo tab đang chọn.
   const kindOfRequest = (req: WasteDeskRequestDTO) => (points.find((p) => p.id === req.pointId) ?? point).kind;
 
-  const find = useMutation({
+  const find = useLockedMutation({
     mutationFn: (c: string) => deskLookup(c),
     onSuccess: (res, c) => {
       setLookup(res.type === 'REQUEST' ? res.request : null);
@@ -233,7 +234,19 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
     void qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.desk });
   };
 
-  const confirm = useMutation({
+  // Xác nhận, từ chối và trao quà là các việc loại trừ nhau trên cùng một phiếu: một việc mỗi lúc, khoá ref vì `isPending` chỉ đúng sau lần vẽ kế tiếp
+  // (chạm "Xác nhận" rồi "Từ chối" sát nhau vẫn gửi cả hai và phiếu bị xử lý hai kiểu).
+  const acting = useRef(false);
+  const releaseActing = () => {
+    acting.current = false;
+  };
+  const exclusive = (run: () => void) => {
+    if (acting.current) return;
+    acting.current = true;
+    run();
+  };
+  const confirm = useLockedMutation({
+    onSettled: releaseActing,
     mutationFn: (req: WasteDeskRequestDTO) => {
       const lines: WasteConfirmLineInput[] = req.lines.map((l) => {
         const reason = reasons[l.itemId];
@@ -270,7 +283,8 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
 
-  const reject = useMutation({
+  const reject = useLockedMutation({
+    onSettled: releaseActing,
     mutationFn: (v: { req: WasteDeskRequestDTO; reason: WasteRejectionReason; note: string }) =>
       deskReject(v.req.id, {
         rejectionReason: v.reason,
@@ -285,7 +299,8 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
 
-  const fulfil = useMutation({
+  const fulfil = useLockedMutation({
+    onSettled: releaseActing,
     mutationFn: (v: { code: string; pointId: string; giftName: string }) => deskFulfilGift({ code: v.code, pointId: v.pointId }),
     onSuccess: (_res, v) => {
       setGift(null);
@@ -294,6 +309,7 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
 
+  const busy = confirm.isPending || reject.isPending || fulfil.isPending;
   const missingReason = !!request && request.lines.some((l) => isShort(l, received) && !reasons[l.itemId]);
   const preview = request
     ? deskPreviewPoints(request.lines, received, request.lines.map((l) => l.itemId))
@@ -460,9 +476,8 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
               <Button
                 size="lg"
                 fullWidth
-                disabled={fulfil.isPending}
-                loading={fulfil.isPending}
-                onPress={() => fulfil.mutate({ code: lookedUpCode, pointId: point.id, giftName: gift.giftName })}
+                loading={busy}
+                onPress={() => exclusive(() => fulfil.mutate({ code: lookedUpCode, pointId: point.id, giftName: gift.giftName }))}
               >
                 Trao quà
               </Button>
@@ -489,7 +504,7 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
               </div>
             }
             primary={
-              <Button size="lg" fullWidth disabled={missingReason} loading={confirm.isPending} onPress={() => confirm.mutate(request)}>
+              <Button size="lg" fullWidth disabled={missingReason} loading={busy} onPress={() => exclusive(() => confirm.mutate(request))}>
                 Xác nhận đã nhận
               </Button>
             }
@@ -502,8 +517,8 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
           key={request.id}
           open={rejectOpen}
           onClose={() => setRejectOpen(false)}
-          pending={reject.isPending}
-          onSubmit={(reason, note) => reject.mutate({ req: request, reason, note })}
+          pending={busy}
+          onSubmit={(reason, note) => exclusive(() => reject.mutate({ req: request, reason, note }))}
         />
       )}
     </div>
@@ -528,7 +543,7 @@ function DeskContent() {
 
 export default function RecycleDeskPage() {
   return (
-    <Page style={{ background: 'var(--color-bg-canvas)' }}>
+    <Page className="tubu-nums" style={{ background: 'var(--color-bg-canvas)' }}>
       <PageHeader title="Nhận hàng tại điểm" />
       <div style={{ ...COLUMN, padding: 16, paddingBottom: 48, gap: 16 }}>
         <AuthGate>

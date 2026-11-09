@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -70,6 +70,7 @@ import { resetTransferLock } from '@tubutree/app-core/ctv-dashboard';
 import { getWallet } from '../services/account-api';
 import {
   claimCtvMilestone,
+  createAffiliateLink,
   getAffiliateDashboard,
   getAffiliateLinks,
   getCommissions,
@@ -1108,5 +1109,122 @@ describe('Trang CTV — bố cục mới: lối tắt dưới thẻ hoa hồng (
     openTab('Chia sẻ');
     expect(await screen.findByText('1 lượt bấm')).toBeInTheDocument();
     expect(screen.queryByText(/\d+ đơn/)).toBeNull();
+  });
+});
+
+describe('CTV: đăng ký, tạo link, chuyển vào Ví khoá chạm đúp trong cùng một khung hình (W73A)', () => {
+  const deferred = () => {
+    let resolve!: (v: unknown) => void;
+    let reject!: (e: unknown) => void;
+    const promise = new Promise((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+  const dashboard = (withdrawableCommission: number) =>
+    ({
+      todayCommission: 0, monthCommission: 0, pendingCommission: 0, withdrawableCommission,
+      totalClicks: 0, totalConversions: 0, monthRevenue: 0,
+      tier: { name: 'Hạt Giống', emoji: '🌱', nextName: null, nextThreshold: null, toNext: 0 },
+    }) as Awaited<ReturnType<typeof getAffiliateDashboard>>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getAffiliateMe.mockResolvedValue({ isAffiliate: true, referralCode: 'TUBU88', walletBalance: 0 });
+    mocks.registerAffiliate.mockResolvedValue({ ok: true, referralCode: 'TUBU88' });
+    vi.mocked(getAffiliateDashboard).mockResolvedValue(dashboard(200_000));
+    vi.mocked(getAffiliateLinks).mockResolvedValue([]);
+    vi.mocked(requestPayout).mockResolvedValue({ note: 'Đã chuyển hoa hồng vào Ví Tubu.' } as Awaited<ReturnType<typeof requestPayout>>);
+  });
+
+  it('chạm đúp "Đăng ký miễn phí ngay" chỉ đăng ký một lần', async () => {
+    const d = deferred();
+    mocks.getAffiliateMe.mockResolvedValue({ isAffiliate: false, referralCode: 'TUBU88', walletBalance: 0 });
+    mocks.registerAffiliate.mockReturnValueOnce(d.promise);
+    renderPage();
+    const btn = await screen.findByRole('button', { name: 'Đăng ký miễn phí ngay' });
+    fireEvent.click(screen.getByRole('checkbox', { name: /đồng ý với điều khoản hoa hồng/ }));
+    await act(async () => {
+      fireEvent.click(btn);
+      fireEvent.click(btn);
+    });
+    expect(mocks.registerAffiliate).toHaveBeenCalledTimes(1);
+    await act(async () => d.resolve({ ok: true, referralCode: 'TUBU88' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'success' })));
+    expect(mocks.registerAffiliate).toHaveBeenCalledTimes(1);
+  });
+
+  it('khách vãng lai chạm đúp đăng ký: chỉ xin SĐT một lần và đăng ký một lần', async () => {
+    const d = deferred();
+    mocks.user = { id: 'g1', phone: null, zaloId: 'guest_dev-1' };
+    mocks.getAffiliateMe.mockResolvedValue({ isAffiliate: false, referralCode: 'TUBU88', walletBalance: 0 });
+    mocks.ensurePhone.mockReturnValueOnce(d.promise);
+    try {
+      renderPage();
+      const btn = await screen.findByRole('button', { name: 'Đăng ký miễn phí ngay' });
+      fireEvent.click(screen.getByRole('checkbox', { name: /đồng ý với điều khoản hoa hồng/ }));
+      await act(async () => {
+        fireEvent.click(btn);
+        fireEvent.click(btn);
+      });
+      expect(mocks.ensurePhone).toHaveBeenCalledTimes(1);
+      await act(async () => d.resolve('0901234567'));
+      await waitFor(() => expect(mocks.registerAffiliate).toHaveBeenCalledTimes(1));
+      expect(mocks.ensurePhone).toHaveBeenCalledTimes(1);
+    } finally {
+      mocks.user = { id: 'u1', phone: '0901234567', zaloId: '8412345' };
+    }
+  });
+
+  it('đăng ký lỗi thì nhả khoá, bấm lại đăng ký lần hai', async () => {
+    mocks.getAffiliateMe.mockResolvedValue({ isAffiliate: false, referralCode: 'TUBU88', walletBalance: 0 });
+    mocks.registerAffiliate.mockRejectedValueOnce(new Error('Máy chủ bận'));
+    renderPage();
+    const btn = await screen.findByRole('button', { name: 'Đăng ký miễn phí ngay' });
+    fireEvent.click(screen.getByRole('checkbox', { name: /đồng ý với điều khoản hoa hồng/ }));
+    fireEvent.click(btn);
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+    fireEvent.click(btn);
+    await waitFor(() => expect(mocks.registerAffiliate).toHaveBeenCalledTimes(2));
+  });
+
+  it('chạm đúp "+ Tạo link" chỉ tạo một link; đang tạo nút aria-busy', async () => {
+    const d = deferred();
+    vi.mocked(createAffiliateLink).mockReturnValueOnce(d.promise as ReturnType<typeof createAffiliateLink>);
+    renderPage();
+    await screen.findByRole('tab', { name: 'Chia sẻ' });
+    openTab('Chia sẻ');
+    const btn = await screen.findByRole('button', { name: '+ Tạo link' });
+    await act(async () => {
+      fireEvent.click(btn);
+      fireEvent.click(btn);
+    });
+    expect(createAffiliateLink).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(screen.getByRole('button', { name: '+ Tạo link' })).toHaveAttribute('aria-busy', 'true'));
+    await act(async () => d.resolve({ id: 'l2' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Đã tạo link chia sẻ mới', type: 'success' })));
+    expect(createAffiliateLink).toHaveBeenCalledTimes(1);
+  });
+
+  it('chạm đúp "Nhận ... vào Ví" chỉ gửi một lệnh chuyển', async () => {
+    const d = deferred();
+    vi.mocked(requestPayout).mockReturnValueOnce(d.promise as ReturnType<typeof requestPayout>);
+    renderPage();
+    const open = await screen.findByRole('button', { name: 'Chuyển vào Ví Tubu' });
+    await waitFor(() => expect(open).toBeEnabled());
+    fireEvent.click(open);
+    const submit = await screen.findByRole('button', { name: 'Nhận 200.000đ vào Ví' });
+    await act(async () => {
+      fireEvent.click(submit);
+      fireEvent.click(submit);
+    });
+    expect(requestPayout).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(submit).toHaveAttribute('aria-busy', 'true'));
+    expect(submit).not.toBeDisabled();
+    expect(submit.closest('.tubu-nums')).not.toBeNull();
+    await act(async () => d.resolve({ note: 'Đã chuyển hoa hồng vào Ví Tubu.' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Đã chuyển hoa hồng vào Ví Tubu.', type: 'success' })));
+    expect(requestPayout).toHaveBeenCalledTimes(1);
   });
 });

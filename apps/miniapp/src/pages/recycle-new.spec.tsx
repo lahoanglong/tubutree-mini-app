@@ -677,3 +677,53 @@ describe('khai món nhanh và báo trước (B-35/B-36/B-82)', () => {
     expect(screen.getByRole('radio', { name: /Mang tới điểm nhận/ })).toHaveAttribute('aria-checked', 'true');
   });
 });
+
+describe('/recycle/new: Tạo yêu cầu khoá chạm đúp (W73A)', () => {
+  const PICKED = { ...DRAFT, method: 'DROP_OFF' as const, pointId: 'pt-1', pickedPoint: makeWastePoint() };
+  const deferred = () => {
+    let resolve!: (v: unknown) => void;
+    let reject!: (e: unknown) => void;
+    const promise = new Promise((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+  const consent = async () => {
+    (await screen.findByRole('checkbox', { name: 'Tôi đồng ý với Thể lệ Đổi rác và để Tubu Tree xử lý yêu cầu này' })).click();
+    const create = screen.getByRole('button', { name: 'Tạo yêu cầu' });
+    await waitFor(() => expect(create).toBeEnabled());
+    return create;
+  };
+
+  it('chạm đúp "Tạo yêu cầu" trong cùng một khung hình chỉ gửi một yêu cầu', async () => {
+    const d = deferred();
+    mocks.createWasteRequest.mockReturnValueOnce(d.promise);
+    atStep2(PICKED);
+    renderPage();
+    const create = await consent();
+    await act(async () => {
+      fireEvent.click(create);
+      fireEvent.click(create);
+    });
+    expect(mocks.createWasteRequest).toHaveBeenCalledTimes(1);
+    await act(async () => d.resolve(makeRequestDetail({ id: 'req-9' })));
+    await waitFor(() => expect(mocks.navigate).toHaveBeenLastCalledWith('/recycle/r/req-9', { replace: true }));
+    expect(mocks.createWasteRequest).toHaveBeenCalledTimes(1);
+  });
+
+  it('đang gửi: nút aria-busy; lỗi thì nhả khoá, bấm lại gửi lần hai cùng khoá', async () => {
+    const d = deferred();
+    mocks.createWasteRequest.mockReturnValueOnce(d.promise).mockResolvedValue(makeRequestDetail());
+    atStep2(PICKED);
+    renderPage();
+    fireEvent.click(await consent());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Tạo yêu cầu' })).toHaveAttribute('aria-busy', 'true'));
+    expect(screen.getByRole('button', { name: 'Tạo yêu cầu' })).not.toBeDisabled();
+    await act(async () => d.reject(new Error('Máy chủ bận')));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Máy chủ bận', type: 'error' })));
+    fireEvent.click(screen.getByRole('button', { name: 'Tạo yêu cầu' }));
+    await waitFor(() => expect(mocks.createWasteRequest).toHaveBeenCalledTimes(2));
+    expect(mocks.createWasteRequest.mock.calls[1]![1]).toBe(mocks.createWasteRequest.mock.calls[0]![1]);
+  });
+});

@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -25,7 +25,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
-  Page: ({ children }: { children: ReactNode }) => <div data-testid="page">{children}</div>,
+  Page: ({ children, className }: { children: ReactNode; className?: string }) => <div data-testid="page" className={className}>{children}</div>,
   Sheet: ({ visible, children }: { visible: boolean; children: ReactNode }) => (visible ? <div data-testid="zaui-sheet">{children}</div> : null),
   useNavigate: () => mocks.navigate,
   useLocation: () => mocks.location,
@@ -555,7 +555,7 @@ describe('/recycle/desk — trao quà ở kho (§8, §15.3)', () => {
     renderPage();
     await lookUp('QG-8K2M9P4T');
     fireEvent.click(await screen.findByRole('button', { name: 'Trao quà' }));
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Trao quà' })).toBeDisabled());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Trao quà' })).toHaveAttribute('aria-busy', 'true'));
     fireEvent.click(screen.getByRole('button', { name: 'Trao quà' }));
     expect(mocks.deskFulfilGift).toHaveBeenCalledTimes(1);
   });
@@ -663,5 +663,227 @@ describe('/recycle/desk — quét mã và gõ mã', () => {
     fireEvent.submit(input.closest('form') as HTMLFormElement);
     await waitFor(() => expect(mocks.deskLookup).toHaveBeenCalledWith('TR-6NY3J'));
     await waitFor(() => expect(input).toHaveValue('TR-6NY3J'));
+  });
+});
+
+describe('/recycle/desk: tra mã, xác nhận, từ chối, trao quà khoá chạm đúp (W73A)', () => {
+  const deferred = () => {
+    let resolve!: (v: unknown) => void;
+    let reject!: (e: unknown) => void;
+    const promise = new Promise((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+  const CONFIRMED = { requestId: 'req-1', code: 'TR-8K2M9', status: 'COMPLETED', pointsAwarded: 6000, dropsAwarded: 0, quota: { limit: 500_000, used: 126_000, remaining: 374_000 }, staffDailyCapRemaining: 150_000 };
+  const openReject = async () => {
+    fireEvent.click(await screen.findByRole('button', { name: 'Từ chối cả yêu cầu' }));
+    const sheet = await screen.findByRole('dialog');
+    fireEvent.click(within(sheet).getByRole('radio', { name: 'Ướt' }));
+    return sheet;
+  };
+
+  it('gốc màn dùng số đều để điểm và hạn mức không nhảy cột', async () => {
+    renderPage();
+    const input = await screen.findByLabelText('Mã yêu cầu hoặc mã nhận quà');
+    expect(input.closest('.tubu-nums')).not.toBeNull();
+  });
+
+  it('chạm đúp "Tra mã" trong cùng một khung hình chỉ tra một lần', async () => {
+    const d = deferred();
+    mocks.deskLookup.mockReturnValueOnce(d.promise);
+    renderPage();
+    fireEvent.change(await screen.findByLabelText('Mã yêu cầu hoặc mã nhận quà'), { target: { value: 'tr-8k2m9' } });
+    const form = screen.getByLabelText('Mã yêu cầu hoặc mã nhận quà').closest('form') as HTMLFormElement;
+    await act(async () => {
+      fireEvent.submit(form);
+      fireEvent.submit(form);
+    });
+    expect(mocks.deskLookup).toHaveBeenCalledTimes(1);
+    await act(async () => d.resolve({ type: 'REQUEST', request: REQ }));
+    expect(await screen.findByText('Ng*** A')).toBeInTheDocument();
+    expect(mocks.deskLookup).toHaveBeenCalledTimes(1);
+  });
+
+  it('chạm đúp "Xác nhận đã nhận" chỉ xác nhận một lần (không cộng điểm hai lần)', async () => {
+    const d = deferred();
+    mocks.deskConfirm.mockReturnValueOnce(d.promise);
+    renderPage();
+    await lookUp();
+    const confirm = await screen.findByRole('button', { name: 'Xác nhận đã nhận' });
+    await act(async () => {
+      fireEvent.click(confirm);
+      fireEvent.click(confirm);
+    });
+    expect(mocks.deskConfirm).toHaveBeenCalledTimes(1);
+    await act(async () => d.resolve(CONFIRMED));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Tubu sẽ cộng 6.000 điểm cho khách', type: 'success' })));
+    expect(mocks.deskConfirm).toHaveBeenCalledTimes(1);
+  });
+
+  it('đang xác nhận: nút aria-busy; lỗi thì nhả khoá, bấm lại xác nhận lần hai', async () => {
+    const d = deferred();
+    mocks.deskConfirm.mockReturnValueOnce(d.promise).mockResolvedValue(CONFIRMED);
+    renderPage();
+    await lookUp();
+    fireEvent.click(await screen.findByRole('button', { name: 'Xác nhận đã nhận' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Xác nhận đã nhận' })).toHaveAttribute('aria-busy', 'true'));
+    await act(async () => d.reject(new Error('Yêu cầu đã đóng')));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Yêu cầu đã đóng', type: 'error' })));
+    fireEvent.click(screen.getByRole('button', { name: 'Xác nhận đã nhận' }));
+    await waitFor(() => expect(mocks.deskConfirm).toHaveBeenCalledTimes(2));
+  });
+
+  it('chạm đúp "Từ chối yêu cầu" chỉ từ chối một lần', async () => {
+    const d = deferred();
+    mocks.deskReject.mockReturnValueOnce(d.promise);
+    renderPage();
+    await lookUp();
+    const sheet = await openReject();
+    const send = within(sheet).getByRole('button', { name: 'Từ chối yêu cầu' });
+    await act(async () => {
+      fireEvent.click(send);
+      fireEvent.click(send);
+    });
+    expect(mocks.deskReject).toHaveBeenCalledTimes(1);
+    await act(async () => d.resolve({ requestId: 'req-1', code: 'TR-8K2M9', status: 'REJECTED' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Đã từ chối yêu cầu TR-8K2M9' })));
+    expect(mocks.deskReject).toHaveBeenCalledTimes(1);
+  });
+
+  it('Xác nhận và Từ chối cùng một yêu cầu: bấm cả hai trong một khung hình chỉ gửi lệnh đầu', async () => {
+    const d = deferred();
+    mocks.deskConfirm.mockReturnValueOnce(d.promise);
+    renderPage();
+    await lookUp();
+    const confirm = await screen.findByRole('button', { name: 'Xác nhận đã nhận' });
+    const sheet = await openReject();
+    const send = within(sheet).getByRole('button', { name: 'Từ chối yêu cầu' });
+    await act(async () => {
+      fireEvent.click(confirm);
+      fireEvent.click(send);
+    });
+    expect(mocks.deskConfirm).toHaveBeenCalledTimes(1);
+    expect(mocks.deskReject).not.toHaveBeenCalled();
+    await waitFor(() => expect(within(sheet).getByRole('button', { name: 'Từ chối yêu cầu' })).toHaveAttribute('aria-busy', 'true'));
+    await act(async () => d.resolve(CONFIRMED));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'success' })));
+    expect(mocks.deskReject).not.toHaveBeenCalled();
+  });
+
+  it('Từ chối rồi Xác nhận trong một khung hình chỉ gửi lệnh từ chối', async () => {
+    const d = deferred();
+    mocks.deskReject.mockReturnValueOnce(d.promise);
+    renderPage();
+    await lookUp();
+    const confirm = await screen.findByRole('button', { name: 'Xác nhận đã nhận' });
+    const sheet = await openReject();
+    const send = within(sheet).getByRole('button', { name: 'Từ chối yêu cầu' });
+    await act(async () => {
+      fireEvent.click(send);
+      fireEvent.click(confirm);
+    });
+    expect(mocks.deskReject).toHaveBeenCalledTimes(1);
+    expect(mocks.deskConfirm).not.toHaveBeenCalled();
+    await act(async () => d.resolve({ requestId: 'req-1', code: 'TR-8K2M9', status: 'REJECTED' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Đã từ chối yêu cầu TR-8K2M9' })));
+    expect(mocks.deskConfirm).not.toHaveBeenCalled();
+  });
+
+  it('xác nhận xong thì nhả khoá chung: tra mã khác xác nhận tiếp được', async () => {
+    mocks.deskConfirm.mockResolvedValue(CONFIRMED);
+    renderPage();
+    await lookUp();
+    fireEvent.click(await screen.findByRole('button', { name: 'Xác nhận đã nhận' }));
+    await waitFor(() => expect(mocks.deskConfirm).toHaveBeenCalledTimes(1));
+    await screen.findByText('Yêu cầu TR-8K2M9 của Ng*** A đã xong');
+    await lookUp('tr-8k2m9');
+    fireEvent.click(await screen.findByRole('button', { name: 'Xác nhận đã nhận' }));
+    await waitFor(() => expect(mocks.deskConfirm).toHaveBeenCalledTimes(2));
+  });
+
+  it('từ chối xong thì nhả khoá chung: tra mã khác xác nhận tiếp được', async () => {
+    mocks.deskReject.mockResolvedValue({ requestId: 'req-1', code: 'TR-8K2M9', status: 'REJECTED' });
+    mocks.deskConfirm.mockResolvedValue(CONFIRMED);
+    renderPage();
+    await lookUp();
+    const sheet = await openReject();
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Từ chối yêu cầu' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Đã từ chối yêu cầu TR-8K2M9' })));
+    await lookUp('tr-8k2m9');
+    fireEvent.click(await screen.findByRole('button', { name: 'Xác nhận đã nhận' }));
+    await waitFor(() => expect(mocks.deskConfirm).toHaveBeenCalledTimes(1));
+  });
+
+  it('từ chối lỗi thì nhả khoá chung: Xác nhận bấm được ngay sau đó', async () => {
+    mocks.deskReject.mockRejectedValueOnce(new Error('Yêu cầu đã đóng'));
+    mocks.deskConfirm.mockResolvedValue(CONFIRMED);
+    renderPage();
+    await lookUp();
+    const confirm = await screen.findByRole('button', { name: 'Xác nhận đã nhận' });
+    const sheet = await openReject();
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Từ chối yêu cầu' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Yêu cầu đã đóng', type: 'error' })));
+    fireEvent.click(confirm);
+    await waitFor(() => expect(mocks.deskConfirm).toHaveBeenCalledTimes(1));
+  });
+
+  describe('trao quà', () => {
+    const GIFT = { id: 'red-1', giftName: 'Gói hạt giống Tubu', customerName: 'Ng*** A', status: 'READY' as const, claimExpiresAt: '2099-12-16T17:30:00.000Z' };
+    beforeEach(() => {
+      mocks.getDeskPoints.mockResolvedValue([WAREHOUSE_DESK]);
+      mocks.deskLookup.mockResolvedValue({ type: 'GIFT', redemption: GIFT });
+    });
+
+    it('chạm đúp "Trao quà" trong cùng một khung hình chỉ trao một lần', async () => {
+      const d = deferred();
+      mocks.deskFulfilGift.mockReturnValueOnce(d.promise);
+      renderPage();
+      await lookUp('QG-8K2M9P4T');
+      const give = await screen.findByRole('button', { name: 'Trao quà' });
+      await act(async () => {
+        fireEvent.click(give);
+        fireEvent.click(give);
+      });
+      expect(mocks.deskFulfilGift).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Trao quà' })).toHaveAttribute('aria-busy', 'true'));
+      expect(screen.getByRole('button', { name: 'Trao quà' })).not.toBeDisabled();
+      await act(async () => d.resolve(makeGiftRedemption({ status: 'FULFILLED' })));
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Đã trao Gói hạt giống Tubu', type: 'success' })));
+      expect(mocks.deskFulfilGift).toHaveBeenCalledTimes(1);
+    });
+
+    it('đang trao quà mà tra sang yêu cầu khác: cú chạm Xác nhận bị bỏ qua và nút báo bận, xong rồi bấm lại mới chạy', async () => {
+      const d = deferred();
+      mocks.deskFulfilGift.mockReturnValueOnce(d.promise);
+      mocks.deskLookup.mockResolvedValueOnce({ type: 'GIFT', redemption: GIFT }).mockResolvedValueOnce({ type: 'REQUEST', request: REQ });
+      mocks.deskConfirm.mockResolvedValue(CONFIRMED);
+      renderPage();
+      await lookUp('QG-8K2M9P4T');
+      fireEvent.click(await screen.findByRole('button', { name: 'Trao quà' }));
+      await waitFor(() => expect(mocks.deskFulfilGift).toHaveBeenCalledTimes(1));
+      await lookUp('TR-8K2M9');
+      const confirm = await screen.findByRole('button', { name: 'Xác nhận đã nhận' });
+      await waitFor(() => expect(confirm).toHaveAttribute('aria-busy', 'true'));
+      await act(async () => {
+        fireEvent.click(confirm);
+      });
+      expect(mocks.deskConfirm).not.toHaveBeenCalled();
+      await act(async () => d.resolve(makeGiftRedemption({ status: 'FULFILLED' })));
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Đã trao Gói hạt giống Tubu', type: 'success' })));
+      fireEvent.click(screen.getByRole('button', { name: 'Xác nhận đã nhận' }));
+      await waitFor(() => expect(mocks.deskConfirm).toHaveBeenCalledTimes(1));
+    });
+
+    it('trao quà lỗi thì nhả khoá, bấm lại trao lần hai', async () => {
+      mocks.deskFulfilGift.mockRejectedValueOnce(new Error('Quà đã được nhận')).mockResolvedValue(makeGiftRedemption({ status: 'FULFILLED' }));
+      renderPage();
+      await lookUp('QG-8K2M9P4T');
+      fireEvent.click(await screen.findByRole('button', { name: 'Trao quà' }));
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Quà đã được nhận', type: 'error' })));
+      fireEvent.click(screen.getByRole('button', { name: 'Trao quà' }));
+      await waitFor(() => expect(mocks.deskFulfilGift).toHaveBeenCalledTimes(2));
+    });
   });
 });

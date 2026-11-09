@@ -4,7 +4,8 @@ import { consentStillValid, WASTE_RULES_UPDATED_NOTE } from '@tubutree/app-core/
 import { sameProvince } from '@tubutree/app-core/waste-province';
 import { isMethodLocked, orderWasteMethods, WASTE_METHODS_BASE } from '@tubutree/app-core/waste-method-order';
 import { Page, useLocation, useNavigate, useSnackbar } from 'zmp-ui';
-import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useLockedMutation } from '../components/game/use-locked-mutation';
 import type {
   WasteCreateRequest,
   WasteLineInput,
@@ -401,7 +402,7 @@ export default function RecycleNewPage() {
         ...(selected === 'MAIL_IN' ? { packagingConsent: true, postagePaidConsent: true } : {}),
       }
     : null;
-  const create = useMutation({
+  const create = useLockedMutation({
     mutationFn: () => {
       if (!body) throw new Error('Chưa chọn cách giao');
       return createWasteRequest(body, key);
@@ -544,8 +545,7 @@ export default function RecycleNewPage() {
     selected !== null &&
     !isLocked(selectedPreview) &&
     consentsOk &&
-    (selected !== 'DROP_OFF' || draft.pointId !== null) &&
-    !create.isPending;
+    (selected !== 'DROP_OFF' || draft.pointId !== null);
 
   const blockedHint = canCreate
     ? null

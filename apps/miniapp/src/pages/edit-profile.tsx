@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { AVATAR_READ_FAILED } from '@tubutree/app-core/client-copy';
 import { Input, Page, useSnackbar, useNavigate } from 'zmp-ui';
 import { Camera, Gift, Loader2 } from 'lucide-react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useLockedMutation } from '../components/game/use-locked-mutation';
 import { formatDobDisplay, profileCopy } from '@tubutree/app-core/account-copy';
 import { DOB_PLACEHOLDER, maskDobInput, validateDobVn } from '@tubutree/app-core/dob-input';
 import { cleanProfileName, profileNameError } from '@tubutree/app-core/profile-name';
@@ -119,7 +120,7 @@ export default function EditProfilePage() {
     }
   };
 
-  const save = useMutation({
+  const save = useLockedMutation({
     mutationFn: async () => {
       // API chỉ cho đặt ngày sinh một lần và từ chối cả khi gửi lại đúng giá trị cũ, nên đã có thì không gửi.
       const dobToSend = !meQ.data?.dob && dob ? dob : undefined;
