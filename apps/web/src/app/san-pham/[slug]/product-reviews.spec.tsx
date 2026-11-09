@@ -491,6 +491,8 @@ describe('ProductReviews (web) — danh sách công khai', () => {
     const c = await mount();
     await pick(c, '3 sao');
     expect(c.textContent).toContain('Không tải được đánh giá.');
+    // Lỗi hiện sau khi bấm chip, không có gì khác báo cho trình đọc màn hình: phải là role=alert.
+    expect(c.querySelector('[role="alert"]')?.textContent).toContain('Không tải được đánh giá.');
     expect(c.textContent).not.toContain('Không có đánh giá khớp bộ lọc.');
     expect(c.querySelector('h2')?.textContent).toBe('Đánh giá (3)');
     mocks.filtered = {};
@@ -720,6 +722,7 @@ describe('ProductReviews (web) — mỗi lần mua một đánh giá', () => {
     await flush();
     expect(form(c)).toBeNull();
     expect(c.textContent).toContain('Không tải được đánh giá để sửa.');
+    expect(c.querySelector('[role="alert"]')?.textContent).toContain('Không tải được đánh giá để sửa.');
     mocks.mine.a = structuredClone(MINE_A);
     click(button(c, 'Thử lại'));
     await flush();
@@ -1049,6 +1052,63 @@ describe('ProductReviews (web) — form đánh giá dùng được bằng bàn p
     finish({ id: 'a', updated: false, pointsEarned: 0 });
     await flush();
     expect(c.querySelector('[role="status"]')?.textContent).toBe('Đã gửi đánh giá của bạn');
+  });
+
+  it('đang gửi: nút Gửi báo aria-busy + aria-disabled nhưng không `disabled` (giữ focus); bấm thêm không gửi lần nữa', async () => {
+    let finish!: (v: unknown) => void;
+    mocks.saveResult = new Promise((r) => (finish = r));
+    const c = await openNew();
+    const submit = c.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+    expect(submit.hasAttribute('aria-busy')).toBe(false);
+    expect(submit.hasAttribute('aria-disabled')).toBe(false);
+    submit.focus();
+    click(submit);
+    await flush();
+    expect(submit.textContent).toBe('Đang gửi…');
+    expect(submit.getAttribute('aria-busy')).toBe('true');
+    expect(submit.getAttribute('aria-disabled')).toBe('true');
+    expect(submit.disabled).toBe(false);
+    expect(document.activeElement).toBe(submit);
+    click(submit);
+    await flush();
+    expect(mocks.saved).toHaveLength(1);
+    finish({ id: 'a', updated: false, pointsEarned: 0 });
+    await flush();
+    expect(form(c)).toBeNull();
+  });
+
+  it('gửi lỗi: nút Gửi hết bận (bỏ aria-busy và aria-disabled), nhãn về "Gửi đánh giá" để gửi lại', async () => {
+    let fail!: (e: Error) => void;
+    mocks.saveResult = new Promise((_, reject) => (fail = reject));
+    const c = await openNew();
+    const submit = c.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+    click(submit);
+    await flush();
+    expect(submit.getAttribute('aria-busy')).toBe('true');
+    fail(new Error('Đơn này chưa giao tới bạn hoặc không có sản phẩm này nên chưa đánh giá được.'));
+    await flush();
+    expect(submit.hasAttribute('aria-busy')).toBe(false);
+    expect(submit.hasAttribute('aria-disabled')).toBe(false);
+    expect(submit.textContent).toBe('Gửi đánh giá');
+  });
+
+  it('gửi xong làm mới số dư Điểm Xanh (khoá [\'loyalty\']) như Mini App: đánh giá có thưởng điểm không để trang Điểm Xanh cũ', async () => {
+    mocks.elig = structuredClone(ELIG_NEW);
+    mocks.saveResult = { id: 'a', updated: false, pointsEarned: 15 };
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const invalidate = vi.spyOn(qc, 'invalidateQueries');
+    const r = render(<ProductReviews slug="nuoc-rua-chen" />, qc);
+    mounted.push(r);
+    await flush(8);
+    click(button(r.container, 'Viết đánh giá'));
+    await flush();
+    expect(invalidate).not.toHaveBeenCalled();
+    click(button(r.container, 'Gửi đánh giá'));
+    await flush();
+    expect(mocks.saved).toHaveLength(1);
+    const keys = invalidate.mock.calls.map(([f]) => JSON.stringify(f?.queryKey));
+    expect(keys).toContain(JSON.stringify(['loyalty']));
+    expect(keys).toContain(JSON.stringify(['reviews', 'nuoc-rua-chen']));
   });
 
   it('lỗi máy chủ: câu lỗi role=alert được focus để trình đọc đọc ngay; sửa xong gửi lại được', async () => {

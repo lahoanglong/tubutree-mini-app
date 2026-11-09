@@ -77,7 +77,7 @@ function ListLoading() {
 
 function ListFailed({ onRetry }: { onRetry: () => void }) {
   return (
-    <div className="mt-3">
+    <div role="alert" className="mt-3">
       <p className={ui.error}>Không tải được đánh giá.</p>
       <button type="button" className={`${ui.btnText} text-forest-700`} onClick={onRetry}>
         Thử lại
@@ -518,7 +518,7 @@ function ReviewEditor({
   }
   if (editingId && myQ.isError) {
     return (
-      <div className="mt-3">
+      <div role="alert" className="mt-3">
         <p className={ui.error}>Không tải được đánh giá để sửa.</p>
         <button type="button" className={`${ui.btnText} text-forest-700`} onClick={() => void myQ.refetch()}>
           Thử lại
@@ -596,6 +596,8 @@ function ReviewForm({
       void qc.invalidateQueries({ queryKey: ['reviews', slug] });
       void qc.invalidateQueries({ queryKey: ['can-review', slug] });
       void qc.invalidateQueries({ queryKey: ['order'] });
+      // Đánh giá đầu tiên của sản phẩm cộng Điểm Xanh: trang Điểm Xanh, ví và Thanh toán đọc số dư từ ['loyalty'].
+      void qc.invalidateQueries({ queryKey: ['loyalty'] });
       onSaved(savedMessage(res, hidden || initial?.isVisible === false));
     },
     onSettled: () => {
@@ -728,7 +730,15 @@ function ReviewForm({
         </p>
       )}
       <div className="mt-4 flex flex-wrap gap-2">
-        <button type="submit" className={ui.btnPrimary} disabled={save.isPending || videoBusy}>
+        {/* Đang gửi dùng aria-disabled chứ không `disabled`: nút đang giữ focus mà `disabled` thì Chromium thả focus về body.
+            Lần bấm thứ hai đã bị send() chặn bằng `sending`/isPending. Đang tải video vẫn `disabled` như Mini App. */}
+        <button
+          type="submit"
+          className={ui.btnPrimary}
+          disabled={videoBusy}
+          aria-busy={save.isPending || undefined}
+          aria-disabled={save.isPending || undefined}
+        >
           {save.isPending ? 'Đang gửi…' : videoBusy ? VIDEO_UPLOADING : isEdit ? 'Lưu đánh giá' : 'Gửi đánh giá'}
         </button>
         <button type="button" className={ui.btnSecondary} onClick={onCancel} disabled={save.isPending}>
