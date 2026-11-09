@@ -1123,6 +1123,7 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
       const APPROVE_S1 = 'Duyệt ca Lan T3 10/03';
       const APPROVE_S2 = 'Duyệt ca Lan T4 11/03';
       const REJECT_S1 = 'Từ chối ca Lan T3 10/03';
+      const REJECT_S2 = 'Từ chối ca Lan T4 11/03';
       const typeRejectReason = () => fireEvent.change(screen.getByLabelText('Lý do'), { target: { value: 'Đủ người' } });
 
       it('chạm đúp "Duyệt" một ca chỉ duyệt một lần; đang duyệt nút aria-busy', async () => {
@@ -1291,6 +1292,42 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
           d2.resolve({ rejected: true });
         });
         await waitFor(() => expect(successCount('Đã từ chối ca.')).toBe(1));
+      });
+
+      it('từ chối ca A khi ca A còn chạy rồi từ chối ca B: cả hai đều gọi API, xong hết thì không còn khoá nào kẹt', async () => {
+        const dA = deferred();
+        const dB = deferred();
+        mocks.rejectShift.mockReturnValueOnce(dA.promise).mockReturnValueOnce(dB.promise);
+        await openShifts();
+        fireEvent.click(btn(REJECT_S1));
+        typeRejectReason();
+        await sameFrame(btn('Xác nhận từ chối'));
+        expect(mocks.rejectShift).toHaveBeenCalledTimes(1);
+        expect(mocks.rejectShift).toHaveBeenNthCalledWith(1, 's1', 'Đủ người');
+        await busy('Xác nhận từ chối');
+        // Tấm của ca A chỉ tự đóng khi thành công: đóng tay rồi mở tấm của ca B trong lúc A còn chạy.
+        fireEvent.click(btn('Đóng'));
+        fireEvent.click(btn(REJECT_S2));
+        fireEvent.change(screen.getByLabelText('Lý do'), { target: { value: 'Trùng ca' } });
+        await sameFrame(btn('Xác nhận từ chối'));
+        expect(mocks.rejectShift).toHaveBeenCalledTimes(2);
+        expect(mocks.rejectShift).toHaveBeenNthCalledWith(2, 's2', 'Trùng ca');
+        await busy(APPROVE_S1);
+        await busy(APPROVE_S2);
+        await busy('Duyệt tất cả (2)');
+        await act(async () => dA.resolve({ rejected: true }));
+        await waitFor(() => expect(successCount('Đã từ chối ca.')).toBe(1));
+        await waitFor(() => expect(btn(APPROVE_S1)).not.toHaveAttribute('aria-busy'));
+        expect(btn(APPROVE_S2)).toHaveAttribute('aria-busy', 'true');
+        expect(btn('Duyệt tất cả (2)')).toHaveAttribute('aria-busy', 'true');
+        await act(async () => dB.resolve({ rejected: true }));
+        await waitFor(() => expect(successCount('Đã từ chối ca.')).toBe(2));
+        await waitFor(() => expect(btn(APPROVE_S2)).not.toHaveAttribute('aria-busy'));
+        expect(btn(APPROVE_S1)).not.toHaveAttribute('aria-busy');
+        expect(btn('Duyệt tất cả (2)')).not.toHaveAttribute('aria-busy');
+        fireEvent.click(btn('Duyệt tất cả (2)'));
+        await waitFor(() => expect(mocks.bulkApproveShifts).toHaveBeenCalledWith(['s1', 's2']));
+        expect(mocks.rejectShift).toHaveBeenCalledTimes(2);
       });
 
       it('duyệt lỗi nhả khoá chung: từ chối đúng ca đó sau đó gọi được; từ chối lỗi nhả khoá chung: duyệt lại gọi được', async () => {
