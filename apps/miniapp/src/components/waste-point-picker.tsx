@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type KeyboardEvent } from 'react';
 import { Clock, Copy, MapPin, Phone } from 'lucide-react';
 import type { WastePointDTO } from '@tubutree/shared-types';
 import { callPhone } from '../services/zmp-bridge';
@@ -23,6 +23,8 @@ export interface WastePointPickerProps {
   selectedItemIds: readonly string[];
   showDistance: boolean;
   now?: Date;
+  /** Đang bận (gửi yêu cầu...): mọi ô chọn báo aria-disabled và không nhận bấm. */
+  disabled?: boolean;
 }
 
 /** Thẻ khoá chỉ mờ phần chọn và tên; lý do, chỉ đường và gọi vẫn dùng được nên giữ nguyên độ đậm. */
@@ -50,21 +52,42 @@ export function sortWastePoints(points: readonly WastePointDTO[], selectedItemId
  * Khách chọn điểm nhận. Mỗi điểm là một ô chọn (role=radio) toàn chữ; dòng khoá, ưu đãi riêng và nút gọi, chỉ đường
  * nằm NGOÀI ô chọn vì trình đọc màn hình gộp phần tử con vào radio và bỏ rơi nút.
  */
-export function WastePointPicker({ points, value, onChange, items, selectedItemIds, showDistance, now }: WastePointPickerProps) {
+export function WastePointPicker({ points, value, onChange, items, selectedItemIds, showDistance, now, disabled }: WastePointPickerProps) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const sorted = sortWastePoints(points, selectedItemIds);
   const clock = now ?? new Date();
   const isLocked = (p: WastePointDTO) => p.quotaFull || missingItemIds(p, selectedItemIds).length > 0;
   const nearestId = showDistance ? sorted.find((p) => !isLocked(p) && p.distanceKm != null)?.id : undefined;
+  const busy = disabled === true;
+  const isUsable = (p: WastePointDTO) => !busy && !isLocked(p);
+  // Một điểm dừng Tab cho cả nhóm (APG): ô đang chọn còn dùng được, không có thì ô dùng được đầu tiên, rồi tới ô đang chọn, cuối cùng ô đầu.
+  const stopId = (sorted.find((p) => p.id === value && isUsable(p)) ?? sorted.find(isUsable) ?? sorted.find((p) => p.id === value) ?? sorted[0])?.id;
+
+  // Mũi tên/Home/End chuyển tiêu điểm giữa các ô còn dùng được và chọn luôn ô đó bằng chính click() của nó, nên luật chặn
+  // (ô khoá, đang bận, đã chọn rồi) vẫn nằm ở onClick. Đi vòng ở hai đầu. Nút chép địa chỉ/gọi không phải radio nên không bị bắt phím.
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.altKey || e.ctrlKey || e.metaKey) return;
+    const forward = e.key === 'ArrowRight' || e.key === 'ArrowDown';
+    const back = e.key === 'ArrowLeft' || e.key === 'ArrowUp';
+    if (!forward && !back && e.key !== 'Home' && e.key !== 'End') return;
+    const radios = Array.from(e.currentTarget.querySelectorAll<HTMLElement>('[role="radio"]')).filter((el) => el.getAttribute('aria-disabled') !== 'true');
+    const at = radios.indexOf(document.activeElement as HTMLElement);
+    if (at < 0) return;
+    e.preventDefault();
+    const next = e.key === 'Home' ? radios[0]! : e.key === 'End' ? radios[radios.length - 1]! : radios[(at + (forward ? 1 : -1) + radios.length) % radios.length]!;
+    next.focus();
+    next.click();
+  };
 
   return (
-    <div role="radiogroup" aria-label="Chọn điểm nhận" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+    <div role="radiogroup" aria-label="Chọn điểm nhận" onKeyDown={onKeyDown} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       {sorted.map((p) => {
         const selected = p.id === value;
         const locked = isLocked(p);
         const missing = missingItemIds(p, selectedItemIds);
         const missingItems = items.filter((it) => missing.includes(it.id));
         const hours = openingStatus(p.openingHours, clock);
+        const reasonId = `waste-point-reason-${p.id}`;
         return (
           <div
             key={p.id}
@@ -79,10 +102,12 @@ export function WastePointPicker({ points, value, onChange, items, selectedItemI
               type="button"
               role="radio"
               aria-checked={selected}
-              aria-disabled={locked}
+              aria-disabled={locked || busy}
+              aria-describedby={locked ? reasonId : undefined}
+              tabIndex={p.id === stopId ? 0 : -1}
               className="tubu-press"
               onClick={() => {
-                if (locked || selected) return;
+                if (locked || busy || selected) return;
                 haptic('light');
                 onChange(p.id);
               }}
@@ -99,7 +124,7 @@ export function WastePointPicker({ points, value, onChange, items, selectedItemI
                 font: 'inherit',
                 color: 'inherit',
                 textAlign: 'left',
-                cursor: locked ? 'not-allowed' : 'pointer',
+                cursor: locked || busy ? 'not-allowed' : 'pointer',
               }}
             >
               <span
@@ -141,11 +166,11 @@ export function WastePointPicker({ points, value, onChange, items, selectedItemI
                 </span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <Icon icon={Clock} size="sm" tone="brand" />
-                  <Text variant="body-sm" as="span" tone={hours.open === null ? 'tertiary' : 'primary'}>
+                  <Text variant="body-sm" as="span" numeric tone={hours.open === null ? 'tertiary' : 'primary'}>
                     {hours.text}
                   </Text>
                   {showDistance && p.distanceKm != null && (
-                    <Text variant="body-sm" as="span">{`${formatNumber(Math.round(p.distanceKm * 10) / 10)} km`}</Text>
+                    <Text variant="body-sm" as="span" numeric>{`${formatNumber(Math.round(p.distanceKm * 10) / 10)} km`}</Text>
                   )}
                 </span>
                 <span style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -170,7 +195,7 @@ export function WastePointPicker({ points, value, onChange, items, selectedItemI
             </button>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '0 12px 12px 42px' }}>
               {locked && (
-                <div>
+                <div id={reasonId}>
                   <Badge tone="warning" style={{ whiteSpace: 'normal', display: 'inline-block' }}>{p.quotaFull ? 'Tạm hết hạn mức tháng này' : missingItemsReason(missingItems)}</Badge>
                 </div>
               )}
@@ -191,7 +216,7 @@ export function WastePointPicker({ points, value, onChange, items, selectedItemI
                   {copiedId === p.id ? 'Đã chép địa chỉ' : 'Chép địa chỉ'}
                 </Button>
                 {p.phone && (
-                  <Button variant="secondary" icon={Phone} onPress={() => void callPhone(p.phone as string)}>
+                  <Button variant="secondary" icon={Phone} style={{ fontVariantNumeric: 'tabular-nums' }} onPress={() => void callPhone(p.phone as string)}>
                     {`Gọi ${formatPhoneDisplay(p.phone)}`}
                   </Button>
                 )}

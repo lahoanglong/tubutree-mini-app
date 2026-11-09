@@ -70,6 +70,7 @@ export function CouponClaimGate() {
   const [stopped, setStopped] = useState(false);
   const [loggingIn, setLoggingIn] = useState(false);
   const inFlight = useRef(false);
+  const loginInFlight = useRef(false);
 
   useEffect(() => {
     let alive = true;
@@ -87,9 +88,11 @@ export function CouponClaimGate() {
     };
   }, []);
 
-  const forget = useCallback(async () => {
+  // Không chờ storage: bridge ZMP có thể không trả lời, mà sheet bị khoá đóng suốt lúc `claim` còn giữ inFlight.
+  // Xoá không xong thì lần mở sau nhận lại mã, máy chủ trả "đã có trong ví" và không ghi thêm.
+  const forget = useCallback(() => {
     setPending(null);
-    await clearPendingClaim();
+    void clearPendingClaim();
   }, []);
 
   const claim = useCallback(
@@ -99,7 +102,7 @@ export function CouponClaimGate() {
       setPhase({ kind: 'claiming' });
       try {
         const coupon = await claimCoupon(code);
-        await forget();
+        forget();
         void queryClient.invalidateQueries({ queryKey: ['coupons'] });
         setPhase({ kind: 'done', coupon });
       } catch (err) {
@@ -107,13 +110,13 @@ export function CouponClaimGate() {
         if (needsZaloLogin(message)) {
           setPhase({ kind: 'needLogin' });
         } else if (isNewCustomerOnlyRefusal(message) && onScanRoute() && (await marketplaceFlagOn(queryClient))) {
-          await forget();
+          forget();
           setCardGiftNote('new-customers-only');
           setPhase({ kind: 'closed' });
         } else {
           const retryable = isOutcomeUnknown(err) || isRateLimited(err);
           // Mã sai, hết hạn, đã có người nhận, khách đã có đơn: thử lại cũng vậy, không giữ trên máy nữa.
-          if (!retryable) await forget();
+          if (!retryable) forget();
           setPhase({ kind: 'failed', message, retryable });
         }
       } finally {
@@ -136,19 +139,27 @@ export function CouponClaimGate() {
     // ngay, còn object user mới mà cùng danh tính (làm mới token) thì không gọi lại.
   }, [pending, stopped, status, userKey, phase.kind, claim]);
 
+  // Đang nhận mã hoặc đăng nhập thì không đóng: lượt đang chạy xong sẽ mở sheet lại, khách thấy sheet bật lên sau khi đã đóng.
+  // Hai ref bắt cả khoảng giữa lúc bấm và lúc React vẽ lại cờ state.
   const close = () => {
+    if (inFlight.current || loginInFlight.current || phase.kind === 'claiming' || loggingIn) return;
     setStopped(true);
     setPhase({ kind: 'closed' });
   };
 
   const login = async () => {
+    if (loginInFlight.current) return;
+    loginInFlight.current = true;
     setLoggingIn(true);
+    // Xoá dòng lỗi lần trước: lần thất bại kế dựng lại thẻ role="alert" nên trình đọc màn hình đọc lại, dù chữ y hệt.
+    setPhase({ kind: 'needLogin' });
     try {
       const phone = await ensurePhoneOrThrow();
       if (!phone) setPhase({ kind: 'needLogin', loginFailed: LOGIN_FAILED });
     } catch (err) {
       setPhase({ kind: 'needLogin', loginFailed: getErrorMessage(err) });
     } finally {
+      loginInFlight.current = false;
       setLoggingIn(false);
     }
   };
@@ -188,7 +199,7 @@ export function CouponClaimGate() {
         <Button fullWidth loading={loggingIn} onPress={login}>
           Đăng nhập bằng Zalo
         </Button>
-        <Button fullWidth variant="ghost" onPress={close}>
+        <Button fullWidth variant="ghost" disabled={loggingIn} onPress={close}>
           Để sau
         </Button>
       </div>
@@ -215,11 +226,27 @@ export function CouponClaimGate() {
     <BottomSheet open={phase.kind !== 'closed'} onClose={close} title={view.title} footer={footer}>
       <div style={{ display: 'grid', gap: 8, justifyItems: 'start' }} data-testid="coupon-claim-sheet">
         {phase.kind === 'done' && <Icon icon={Gift} size="lg" tone="brand" />}
-        {view.lines.map((line, i) => (
-          <Text key={i} as="p" variant={i === 0 && phase.kind === 'done' ? 'body-lg' : 'body-md'} tone={i === 0 ? 'primary' : 'secondary'}>
-            {line}
-          </Text>
-        ))}
+        {view.lines.map((line, i) => {
+          const failure = phase.kind === 'failed' ? i === 0 : phase.kind === 'needLogin' && i === 1;
+          const text = (
+            <Text
+              key={i}
+              as="p"
+              variant={i === 0 && phase.kind === 'done' ? 'body-lg' : 'body-md'}
+              tone={phase.kind === 'needLogin' && i === 1 ? 'danger' : i === 0 ? 'primary' : 'secondary'}
+              numeric={phase.kind === 'done'}
+            >
+              {line}
+            </Text>
+          );
+          return failure ? (
+            <div key={i} role="alert">
+              {text}
+            </div>
+          ) : (
+            text
+          );
+        })}
       </div>
     </BottomSheet>
   );

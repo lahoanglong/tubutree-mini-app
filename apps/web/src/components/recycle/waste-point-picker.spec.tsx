@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act } from 'react';
 import { byText, click, render, type Rendered } from '@/test-utils/dom';
 import { headingProblems, unnamedControls } from '@/test-utils/a11y';
 import { makeWastePoint } from './recycle-fixtures';
@@ -119,5 +120,93 @@ describe('WastePointPicker (web)', () => {
     expect(mocks.callPhone).toHaveBeenCalledWith('0901234567');
     const c2 = mount({ points: [WAREHOUSE] });
     expect(byText(c2, 'button', 'Gọi')).toBeNull();
+  });
+});
+
+describe('WastePointPicker (web): lý do khoá, bàn phím, bận, số đều (W63A)', () => {
+  // Thứ tự hiển thị: Kho Tubu (mở), Hết (khoá), Gần (mở), Thiếu (khoá).
+  const radios = (c: HTMLElement) => Array.from(c.querySelectorAll<HTMLElement>('[role="radio"]'));
+  const stops = (c: HTMLElement) => radios(c).filter((r) => r.getAttribute('tabindex') === '0');
+  const press = (key: string, init: KeyboardEventInit = {}) => {
+    const ev = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init });
+    act(() => {
+      (document.activeElement as HTMLElement).dispatchEvent(ev);
+    });
+    return !ev.defaultPrevented;
+  };
+
+  it('ô khoá trỏ aria-describedby vào lý do khoá; ô mở thì không có', () => {
+    const c = mount();
+    expect(radio(c, 'Đại lý Hết').getAttribute('aria-describedby')).toBe('waste-point-reason-pt-full');
+    expect(document.getElementById('waste-point-reason-pt-full')?.textContent).toBe('Tạm hết hạn mức tháng này');
+    expect(radio(c, 'Đại lý Thiếu').getAttribute('aria-describedby')).toBe('waste-point-reason-pt-part');
+    expect(document.getElementById('waste-point-reason-pt-part')?.textContent).toBe('Điểm này không nhận: Vỏ hộp sữa');
+    expect(radio(c, 'Đại lý Gần').hasAttribute('aria-describedby')).toBe(false);
+    expect(document.getElementById('waste-point-reason-pt-near')).toBeNull();
+  });
+
+  it('mũi tên xuống/lên: sang ô dùng được kế tiếp, bỏ qua ô khoá, đi vòng, và chọn ô đó', () => {
+    const c = mount();
+    radio(c, 'Kho Tubu TP.HCM').focus();
+    expect(stops(c)[0]).toBe(radio(c, 'Kho Tubu TP.HCM'));
+    expect(press('ArrowDown')).toBe(false);
+    expect(radio(c, 'Đại lý Gần')).toBe(document.activeElement);
+    expect(onChange).toHaveBeenLastCalledWith('pt-near');
+    press('ArrowDown');
+    expect(radio(c, 'Kho Tubu TP.HCM')).toBe(document.activeElement);
+    expect(onChange).toHaveBeenLastCalledWith('pt-wh');
+    press('ArrowUp');
+    expect(radio(c, 'Đại lý Gần')).toBe(document.activeElement);
+  });
+
+  it('điểm dừng Tab theo ô đang chọn còn dùng được, ô khoá không giữ điểm dừng khi còn ô mở', () => {
+    const c = mount({ value: 'pt-near' });
+    expect(stops(c)).toEqual([radio(c, 'Đại lý Gần')]);
+    const locked = mount({ value: 'pt-full' });
+    expect(stops(locked)).toEqual([radio(locked, 'Kho Tubu TP.HCM')]);
+  });
+
+  it('disabled: mọi ô aria-disabled, bấm không gọi onChange, con trỏ not-allowed, mũi tên không chuyển tiêu điểm', () => {
+    const c = mount({ disabled: true, value: 'pt-near' });
+    for (const r of radios(c)) expect(r.getAttribute('aria-disabled')).toBe('true');
+    const near = radio(c, 'Đại lý Gần');
+    expect(near.className).toContain('cursor-not-allowed');
+    click(radio(c, 'Kho Tubu TP.HCM'));
+    expect(onChange).not.toHaveBeenCalled();
+    expect(stops(c)).toEqual([near]);
+    near.focus();
+    expect(press('ArrowDown')).toBe(true);
+    expect(near).toBe(document.activeElement);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('disabled=false hay bỏ trống: ô mở aria-disabled="false", con trỏ pointer, chọn được', () => {
+    for (const over of [{}, { disabled: false }]) {
+      const c = mount(over);
+      const near = radio(c, 'Đại lý Gần');
+      expect(near.getAttribute('aria-disabled')).toBe('false');
+      expect(near.className).toContain('cursor-pointer');
+      expect(near.className).not.toContain('cursor-not-allowed');
+      click(near);
+      expect(onChange).toHaveBeenLastCalledWith('pt-near');
+      onChange.mockClear();
+      mounted.pop()!.unmount();
+    }
+  });
+
+  it('disabled chỉ khoá việc chọn: Chỉ đường và Gọi vẫn dùng được', () => {
+    const c = mount({ disabled: true, points: [NEAR] });
+    click(byText(c, 'button', 'Chỉ đường'));
+    expect(mocks.openExternal).toHaveBeenCalledTimes(1);
+    click(byText(c, 'button', 'Gọi'));
+    expect(mocks.callPhone).toHaveBeenCalledWith('0901234567');
+  });
+
+  it('giờ mở cửa và số điện thoại dùng số đều; nút Chỉ đường thì không', () => {
+    const c = mount({ points: [NEAR] });
+    const hours = Array.from(c.querySelectorAll('span')).find((s) => s.textContent === 'Đang mở, đến 18:00' && s.children.length === 0)!;
+    expect(hours.className).toContain('tabular-nums');
+    expect(byText(c, 'button', 'Gọi')!.className).toContain('tabular-nums');
+    expect(byText(c, 'button', 'Chỉ đường')!.className).not.toContain('tabular-nums');
   });
 });

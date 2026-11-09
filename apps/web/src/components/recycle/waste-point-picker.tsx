@@ -19,6 +19,8 @@ export interface WastePointPickerProps {
   items: readonly { id: string; name: string; warehouseOnly?: boolean }[];
   selectedItemIds: readonly string[];
   now?: Date;
+  /** Đang bận (gửi yêu cầu...): mọi ô chọn báo aria-disabled và không nhận bấm. */
+  disabled?: boolean;
 }
 
 /** Thẻ khoá chỉ mờ phần chọn và tên; lý do, chỉ đường và gọi vẫn dùng được nên giữ nguyên độ đậm. */
@@ -40,10 +42,11 @@ export function sortWastePoints(points: readonly WastePointDTO[], selectedItemId
  * Khách chọn điểm nhận. Mỗi điểm là một ô chọn (role=radio) toàn chữ; dòng khoá, ưu đãi riêng và nút gọi, chỉ đường
  * nằm NGOÀI ô chọn vì trình đọc màn hình gộp phần tử con vào radio và bỏ rơi nút.
  */
-export function WastePointPicker({ points, value, onChange, items, selectedItemIds, now }: WastePointPickerProps) {
+export function WastePointPicker({ points, value, onChange, items, selectedItemIds, now, disabled }: WastePointPickerProps) {
   const sorted = sortWastePoints(points, selectedItemIds);
   const clock = now ?? new Date();
   const group = useRovingGroup();
+  const busy = disabled === true;
   const isLocked = (p: WastePointDTO) => p.quotaFull || missingItemIds(p, selectedItemIds).length > 0;
 
   return (
@@ -54,6 +57,7 @@ export function WastePointPicker({ points, value, onChange, items, selectedItemI
         const missing = missingItemIds(p, selectedItemIds);
         const missingItems = items.filter((it) => missing.includes(it.id));
         const hours = openingStatus(p.openingHours, clock);
+        const reasonId = `waste-point-reason-${p.id}`;
         return (
           <div
             key={p.id}
@@ -63,12 +67,13 @@ export function WastePointPicker({ points, value, onChange, items, selectedItemI
               type="button"
               role="radio"
               aria-checked={selected}
-              aria-disabled={locked}
+              aria-disabled={locked || busy}
+              aria-describedby={locked ? reasonId : undefined}
               onClick={() => {
-                if (locked || selected) return;
+                if (locked || busy || selected) return;
                 onChange(p.id);
               }}
-              className={`flex min-h-11 w-full items-start gap-2.5 p-3 text-left ${locked ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+              className={`flex min-h-11 w-full items-start gap-2.5 p-3 text-left ${locked || busy ? 'cursor-not-allowed' : 'cursor-pointer'}`}
             >
               <span
                 aria-hidden="true"
@@ -89,7 +94,7 @@ export function WastePointPicker({ points, value, onChange, items, selectedItemI
                 </span>
                 <span className="flex flex-wrap items-center gap-2">
                   <Clock className="h-4 w-4 flex-none text-forest-600" aria-hidden="true" />
-                  <span className={`text-sm ${hours.open === null ? 'text-stone-600' : 'text-stone-800'}`}>{hours.text}</span>
+                  <span className={`text-sm tabular-nums ${hours.open === null ? 'text-stone-600' : 'text-stone-800'}`}>{hours.text}</span>
                 </span>
                 <span className="flex flex-wrap gap-x-2 gap-y-1">
                   {items.map((it) =>
@@ -112,7 +117,7 @@ export function WastePointPicker({ points, value, onChange, items, selectedItemI
             <div className="flex flex-col gap-2 px-3 pb-3 pl-[42px]">
               {locked && (
                 <div>
-                  <span className="inline-block rounded-control bg-warning-bg px-2 py-[3px] text-xs font-semibold text-warning-fg">
+                  <span id={reasonId} className="inline-block rounded-control bg-warning-bg px-2 py-[3px] text-xs font-semibold text-warning-fg">
                     {p.quotaFull ? 'Tạm hết hạn mức tháng này' : missingItemsReason(missingItems)}
                   </span>
                 </div>
@@ -128,7 +133,7 @@ export function WastePointPicker({ points, value, onChange, items, selectedItemI
                   Chỉ đường
                 </button>
                 {p.phone && (
-                  <button type="button" className={skin.btnSecondary} onClick={() => platformBridge.callPhone(p.phone as string)}>
+                  <button type="button" className={`${skin.btnSecondary} tabular-nums`} onClick={() => platformBridge.callPhone(p.phone as string)}>
                     <Phone className="mr-1.5 h-4 w-4" aria-hidden="true" />
                     {`Gọi ${formatPhoneDisplay(p.phone)}`}
                   </button>

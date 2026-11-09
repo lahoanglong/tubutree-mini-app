@@ -110,7 +110,9 @@ export function CouponClaimGateInner({ initialCode }: { initialCode: string | nu
     void claim(pending);
   }, [pending, stopped, phaseAuth, phase.kind, pathname, claim]);
 
+  // Đang nhận mã thì không đóng: lượt nhận xong sẽ mở sheet lại. Ref bắt cả khoảng giữa lúc bấm và lúc React vẽ lại phase.
   const close = () => {
+    if (inFlight.current || phase.kind === 'claiming') return;
     setStopped(true);
     setPhase({ kind: 'closed' });
   };
@@ -178,7 +180,11 @@ export function CouponClaimGateInner({ initialCode }: { initialCode: string | nu
       <div className="grid justify-items-start gap-2" data-testid="coupon-claim-sheet">
         {phase.kind === 'done' && <Gift className="h-8 w-8 text-forest-600" aria-hidden="true" />}
         {view.lines.map((line, i) => (
-          <p key={i} className={i === 0 ? (phase.kind === 'done' ? 'text-base font-semibold text-stone-900' : 'text-sm text-stone-900') : 'text-sm text-stone-700'}>
+          <p
+            key={`${phase.kind}-${i}`}
+            role={phase.kind === 'failed' && i === 0 ? 'alert' : undefined}
+            className={`${i === 0 ? (phase.kind === 'done' ? 'text-base font-semibold text-stone-900' : 'text-sm text-stone-900') : 'text-sm text-stone-700'}${phase.kind === 'done' ? ' tabular-nums' : ''}`}
+          >
             {line}
           </p>
         ))}
