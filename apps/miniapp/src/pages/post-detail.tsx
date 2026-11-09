@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Input, Page, useParams, useNavigate, useSnackbar } from 'zmp-ui';
-import { useQuery, useInfiniteQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
+import { useLockedMutation } from '../components/game/use-locked-mutation';
 import { CheckCircle2, Clock, Flag, MessageCircle, Pin } from 'lucide-react';
 import { getPost, getComments, reportContent, type FeedComment } from '../services/feed-api';
 import { apiMediaUrl, getErrorMessage, getLoadErrorMessage } from '../services/api';
@@ -50,7 +51,7 @@ export default function PostDetailPage() {
     enabled: authed && !!id,
   });
 
-  const reportMut = useMutation({
+  const reportMut = useLockedMutation({
     mutationFn: (target: { targetType: 'POST' | 'COMMENT'; targetId?: string }) =>
       reportContent(id!, { ...target, reason: reportReason.trim() }),
     onSuccess: () => {
@@ -59,7 +60,6 @@ export default function PostDetailPage() {
       setReportReason('');
       openSnackbar({ text: vi.community.reported, type: 'success' });
     },
-    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
 
   // Đang silent-login lúc mở app (restore chưa xong) → skeleton thay vì chớp cổng đăng nhập.
@@ -96,7 +96,7 @@ export default function PostDetailPage() {
     return (
       <Page style={{ background: 'var(--color-bg-canvas)' }}>
         <PageHeader title={vi.community.title} />
-        <ErrorState message={getLoadErrorMessage(post.error)} onRetry={() => void post.refetch()} />
+        <ErrorState message={getLoadErrorMessage(post.error)} onRetry={() => post.refetch()} />
       </Page>
     );
   }
@@ -281,7 +281,7 @@ export default function PostDetailPage() {
             ))}
           </div>
         ) : comments.isError ? (
-          <ErrorState message={getLoadErrorMessage(comments.error)} onRetry={() => void comments.refetch()} />
+          <ErrorState message={getLoadErrorMessage(comments.error)} onRetry={() => comments.refetch()} />
         ) : sortedComments.length === 0 ? (
           <Text variant="body-sm" tone="tertiary" as="div">
             {vi.community.noAnswers}
@@ -316,6 +316,7 @@ export default function PostDetailPage() {
         onClose={() => {
           setReportTarget(null);
           setReportReason('');
+          if (!reportMut.isPending) reportMut.reset();
         }}
         title={vi.community.report}
         footer={
@@ -337,6 +338,11 @@ export default function PostDetailPage() {
           rows={3}
           onChange={(e) => setReportReason(e.target.value)}
         />
+        {reportMut.isError && (
+          <div key={reportMut.submittedAt} role="alert" style={{ marginTop: 'var(--space-stack-xs)' }}>
+            <Text variant="body-sm" tone="danger">{getErrorMessage(reportMut.error)}</Text>
+          </div>
+        )}
       </BottomSheet>
     </Page>
   );

@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { Button as ZmpButton, Text } from 'zmp-ui';
 import { TriangleAlert, type LucideIcon } from 'lucide-react';
 import { GO_HOME_LABEL } from '@tubutree/app-core/client-copy';
@@ -124,7 +125,8 @@ export function ErrorState({
   retrying,
 }: {
   message: string;
-  onRetry: () => void;
+  /** Trả Promise (vd. `() => query.refetch()`) thì nút khoá tới khi xong: hai cú chạm sát nhau chỉ gọi một lần. */
+  onRetry: () => unknown;
   /** Có thì thay "Thử lại" bằng "Về trang chủ" — cho lỗi 404, nơi bấm lại cũng không khác đi. */
   onHome?: () => void;
   /** 'page' (mặc định, padding rộng) hay 'inline' (padding hẹp khi nhúng trong 1 section). */
@@ -139,6 +141,22 @@ export function ErrorState({
   retrying?: boolean;
 }) {
   const inline = variant === 'inline';
+  const pressing = useRef(false);
+  const press = () => {
+    if (onHome) {
+      onHome();
+      return;
+    }
+    if (pressing.current) return;
+    const result = onRetry();
+    if (result && typeof (result as PromiseLike<unknown>).then === 'function') {
+      pressing.current = true;
+      const release = () => {
+        pressing.current = false;
+      };
+      void Promise.resolve(result).then(release, release);
+    }
+  };
   return (
     <div
       style={{
@@ -174,7 +192,7 @@ export function ErrorState({
         variant="secondary"
         loading={retrying}
         aria-busy={retrying || undefined}
-        onClick={retrying ? undefined : (onHome ?? onRetry)}
+        onClick={retrying ? undefined : press}
         style={{
           minHeight: 44,
           color: 'var(--color-action-secondary-fg)',

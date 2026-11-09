@@ -249,7 +249,7 @@ export default function FeedPage() {
       {feed.isLoading ? (
         <PostListSkeleton />
       ) : feed.isError ? (
-        <ErrorState message={getLoadErrorMessage(feed.error)} onRetry={() => void feed.refetch()} />
+        <ErrorState message={getLoadErrorMessage(feed.error)} onRetry={() => feed.refetch()} />
       ) : posts.length === 0 ? (
         filtering ? (
           <EmptyState art="search" heading={vi.community.noResult} />

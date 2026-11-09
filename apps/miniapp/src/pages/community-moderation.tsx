@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Page, Input, Avatar, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useLockedMutation } from '../components/game/use-locked-mutation';
 import { Check, X, EyeOff, Gift, Trophy } from 'lucide-react';
 import {
   adminPendingPosts,
@@ -113,8 +114,19 @@ function PendingSection() {
   const pendingQ = useQuery({ queryKey: ['admin-community-pending'], queryFn: adminPendingPosts });
   const invalidate = () => qc.invalidateQueries({ queryKey: ['admin-community-pending'] });
 
+  const acting = useRef(new Set<string>());
+  const once = (id: string, run: () => void) => {
+    if (acting.current.has(id)) return;
+    acting.current.add(id);
+    run();
+  };
+  const release = (_data: unknown, _error: unknown, id: string) => {
+    acting.current.delete(id);
+  };
+
   const approveM = useMutation({
     mutationFn: (id: string) => adminApprovePost(id),
+    onSettled: release,
     onSuccess: () => {
       openSnackbar({ text: vi.community.approved, type: 'success' });
       invalidate();
@@ -123,6 +135,7 @@ function PendingSection() {
   });
   const rejectM = useMutation({
     mutationFn: (id: string) => adminRejectPost(id),
+    onSettled: release,
     onSuccess: () => {
       openSnackbar({ text: vi.community.rejected, type: 'success' });
       invalidate();
@@ -131,7 +144,7 @@ function PendingSection() {
   });
 
   if (pendingQ.isLoading) return <Skeleton height={120} radius="var(--radius-card)" />;
-  if (pendingQ.isError && !pendingQ.data) return <ErrorState message={getLoadErrorMessage(pendingQ.error)} onRetry={() => void pendingQ.refetch()} />;
+  if (pendingQ.isError && !pendingQ.data) return <ErrorState message={getLoadErrorMessage(pendingQ.error)} onRetry={() => pendingQ.refetch()} />;
   if (!pendingQ.data || pendingQ.data.length === 0) {
     return <EmptyState art="leaf" heading={vi.community.noPending} />;
   }
@@ -142,8 +155,8 @@ function PendingSection() {
         <PendingCard
           key={post.id}
           post={post}
-          onApprove={() => approveM.mutate(post.id)}
-          onReject={() => rejectM.mutate(post.id)}
+          onApprove={() => once(post.id, () => approveM.mutate(post.id))}
+          onReject={() => once(post.id, () => rejectM.mutate(post.id))}
           loading={
             (approveM.isPending && approveM.variables === post.id) ||
             (rejectM.isPending && rejectM.variables === post.id)
@@ -216,9 +229,27 @@ function ReportsSection() {
 
   // Bài và bình luận là 2 endpoint khác nhau — trước đây chỉ có đường cho bài nên nút ẩn
   // bị giấu hoàn toàn với báo cáo bình luận (bình luận vi phạm hiển thị vĩnh viễn).
+  const acting = useRef(new Set<string>());
+  const once = (reportId: string, run: () => void) => {
+    if (acting.current.has(reportId)) return;
+    acting.current.add(reportId);
+    run();
+  };
+  const targetKey = (targetId: string) => `target:${targetId}`;
+  const onceHide = (report: AdminReport, run: () => void) => {
+    const key = targetKey(report.targetId);
+    if (acting.current.has(report.id) || acting.current.has(key)) return;
+    acting.current.add(report.id);
+    acting.current.add(key);
+    run();
+  };
   const hideM = useMutation({
-    mutationFn: ({ targetId, targetType }: { targetId: string; targetType: string }) =>
+    mutationFn: ({ targetId, targetType }: { reportId: string; targetId: string; targetType: string }) =>
       targetType === 'COMMENT' ? removeComment(targetId) : adminHidePost(targetId),
+    onSettled: (_data, _error, v) => {
+      acting.current.delete(v.reportId);
+      acting.current.delete(targetKey(v.targetId));
+    },
     onSuccess: () => {
       openSnackbar({ text: vi.community.hideContent, type: 'success' });
       invalidate();
@@ -227,6 +258,9 @@ function ReportsSection() {
   });
   const resolveM = useMutation({
     mutationFn: (id: string) => adminResolveReport(id),
+    onSettled: (_data, _error, id) => {
+      acting.current.delete(id);
+    },
     onSuccess: () => {
       openSnackbar({ text: vi.community.resolved, type: 'success' });
       invalidate();
@@ -234,8 +268,12 @@ function ReportsSection() {
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
 
+  const busy = (report: AdminReport) =>
+    (hideM.isPending && (hideM.variables?.reportId === report.id || hideM.variables?.targetId === report.targetId)) ||
+    (resolveM.isPending && resolveM.variables === report.id);
+
   if (reportsQ.isLoading) return <Skeleton height={120} radius="var(--radius-card)" />;
-  if (reportsQ.isError && !reportsQ.data) return <ErrorState message={getLoadErrorMessage(reportsQ.error)} onRetry={() => void reportsQ.refetch()} />;
+  if (reportsQ.isError && !reportsQ.data) return <ErrorState message={getLoadErrorMessage(reportsQ.error)} onRetry={() => reportsQ.refetch()} />;
   if (!reportsQ.data || reportsQ.data.length === 0) {
     return <EmptyState art="leaf" heading={vi.community.noReports} />;
   }
@@ -246,10 +284,10 @@ function ReportsSection() {
         <ReportCard
           key={report.id}
           report={report}
-          onHide={() => hideM.mutate({ targetId: report.targetId, targetType: report.targetType })}
-          onResolve={() => resolveM.mutate(report.id)}
-          hideLoading={hideM.isPending && hideM.variables?.targetId === report.targetId}
-          resolveLoading={resolveM.isPending && resolveM.variables === report.id}
+          onHide={() => onceHide(report, () => hideM.mutate({ reportId: report.id, targetId: report.targetId, targetType: report.targetType }))}
+          onResolve={() => once(report.id, () => resolveM.mutate(report.id))}
+          hideLoading={busy(report)}
+          resolveLoading={busy(report)}
         />
       ))}
     </div>
@@ -327,7 +365,7 @@ function EventsSection() {
   const [endAt, setEndAt] = useState('');
   const [rewardPoints, setRewardPoints] = useState('0');
 
-  const createM = useMutation({
+  const createM = useLockedMutation({
     mutationFn: (dto: CreateEventInput) => createEvent(dto),
     onSuccess: () => {
       openSnackbar({ text: vi.community.eventCreated, type: 'success' });
@@ -420,7 +458,7 @@ function EventsSection() {
       {eventsQ.isLoading ? (
         <Skeleton height={120} radius="var(--radius-card)" />
       ) : eventsQ.isError ? (
-        <ErrorState message={getLoadErrorMessage(eventsQ.error)} onRetry={() => void eventsQ.refetch()} />
+        <ErrorState message={getLoadErrorMessage(eventsQ.error)} onRetry={() => eventsQ.refetch()} />
       ) : !eventsQ.data || eventsQ.data.length === 0 ? (
         <EmptyState art="leaf" heading={view === 'OPEN' ? vi.community.noEvents : vi.community.noClosedEvents} />
       ) : (
@@ -474,8 +512,18 @@ function AdminEventCard({ event, onDone }: { event: AdminCommunityEvent; onDone:
   const participants = participantsQ.data ?? [];
   const chosen = participants.find((p) => p.userId === selected) ?? null;
 
+  const acting = useRef(false);
+  const exclusive = (run: () => void) => {
+    if (acting.current) return;
+    acting.current = true;
+    run();
+  };
+  const releaseActing = () => {
+    acting.current = false;
+  };
   const closeM = useMutation({
     mutationFn: () => closeEvent(event.id),
+    onSettled: releaseActing,
     onSuccess: () => {
       openSnackbar({ text: vi.community.eventClosed, type: 'success' });
       onDone();
@@ -484,12 +532,14 @@ function AdminEventCard({ event, onDone }: { event: AdminCommunityEvent; onDone:
   });
   const winnerM = useMutation({
     mutationFn: (userId: string) => pickEventWinner(event.id, userId),
+    onSettled: releaseActing,
     onSuccess: () => {
       openSnackbar({ text: vi.community.winnerPicked, type: 'success' });
       onDone();
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
+  const busy = closeM.isPending || winnerM.isPending;
 
   return (
     <Card padding={12}>
@@ -511,7 +561,7 @@ function AdminEventCard({ event, onDone }: { event: AdminCommunityEvent; onDone:
           {participantsQ.isLoading ? (
             <Skeleton height={56} radius="var(--radius-card)" style={{ marginTop: 8 }} />
           ) : participantsQ.isError ? (
-            <ErrorState message={getLoadErrorMessage(participantsQ.error)} onRetry={() => void participantsQ.refetch()} />
+            <ErrorState message={getLoadErrorMessage(participantsQ.error)} onRetry={() => participantsQ.refetch()} />
           ) : participants.length === 0 ? (
             <Text variant="body-sm" tone="tertiary" as="div" style={{ marginTop: 8 }}>{vi.community.noParticipants}</Text>
           ) : (
@@ -560,9 +610,9 @@ function AdminEventCard({ event, onDone }: { event: AdminCommunityEvent; onDone:
             <Button
               fullWidth
               icon={Trophy}
-              loading={winnerM.isPending}
+              loading={busy}
               disabled={!chosen}
-              onPress={() => chosen && winnerM.mutate(chosen.userId)}
+              onPress={() => chosen && exclusive(() => winnerM.mutate(chosen.userId))}
             >
               {chosen ? vi.community.confirmWinner(chosen.name) : vi.community.pickWinner}
             </Button>
@@ -573,7 +623,7 @@ function AdminEventCard({ event, onDone }: { event: AdminCommunityEvent; onDone:
           {vi.community.pickWinner}
         </Button>
       )}
-      <Button variant="danger" fullWidth loading={closeM.isPending} onPress={() => closeM.mutate()} style={{ marginTop: 8 }}>
+      <Button variant="danger" fullWidth loading={busy} onPress={() => exclusive(() => closeM.mutate())} style={{ marginTop: 8 }}>
         {vi.community.closeEvent}
       </Button>
     </Card>

@@ -519,3 +519,93 @@ describe('AiAdvisorPage — giữ hội thoại khi khách xem sản phẩm rồ
     setItem.mockRestore();
   });
 });
+
+describe('AiAdvisorPage: gửi và Thử lại khoá chạm đúp trong cùng một khung hình (W74A)', () => {
+  const deferred = () => {
+    let resolve!: (v: unknown) => void;
+    let reject!: (e: unknown) => void;
+    const promise = new Promise((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+
+  it('chạm đúp "Gửi": một lệnh gọi AI, tin của bạn hiện một lần', async () => {
+    const d = deferred();
+    mocks.aiChat.mockReturnValueOnce(d.promise);
+    renderPage();
+    fireEvent.change(input(), { target: { value: 'Có nước giặt không?' } });
+    const send = sendBtn();
+    await act(async () => {
+      fireEvent.click(send);
+      fireEvent.click(send);
+    });
+    expect(mocks.aiChat).toHaveBeenCalledTimes(1);
+    expect(screen.getAllByText('Có nước giặt không?')).toHaveLength(1);
+    await act(async () => d.resolve(REPLY()));
+    expect(await screen.findByText('Mình gợi ý bạn thử loại này')).toBeInTheDocument();
+    expect(mocks.aiChat).toHaveBeenCalledTimes(1);
+  });
+
+  it('nhấn Enter hai lần liền: một lệnh gọi AI', async () => {
+    const d = deferred();
+    mocks.aiChat.mockReturnValueOnce(d.promise);
+    renderPage();
+    fireEvent.change(input(), { target: { value: 'Có nước giặt không?' } });
+    await act(async () => {
+      fireEvent.keyDown(input(), { key: 'Enter' });
+      fireEvent.keyDown(input(), { key: 'Enter' });
+    });
+    expect(mocks.aiChat).toHaveBeenCalledTimes(1);
+    expect(screen.getAllByText('Có nước giặt không?')).toHaveLength(1);
+    await act(async () => d.resolve(REPLY()));
+  });
+
+  it('chạm đúp câu gợi ý: một lệnh gọi AI', async () => {
+    const d = deferred();
+    mocks.aiChat.mockReturnValueOnce(d.promise);
+    renderPage();
+    const chip = screen.getByText('Gợi ý quà tặng sống xanh');
+    await act(async () => {
+      fireEvent.click(chip);
+      fireEvent.click(chip);
+    });
+    expect(mocks.aiChat).toHaveBeenCalledTimes(1);
+    await act(async () => d.resolve(REPLY()));
+  });
+
+  it('có trả lời thì nhả khoá: câu hỏi tiếp sau gửi được', async () => {
+    renderPage();
+    await ask('Câu một');
+    expect(await screen.findByText('Mình gợi ý bạn thử loại này')).toBeInTheDocument();
+    await ask('Câu hai');
+    await waitFor(() => expect(mocks.aiChat).toHaveBeenCalledTimes(2));
+  });
+
+  it('chạm đúp "Thử lại" chỉ gửi lại một lần, không nhân đôi tin của bạn', async () => {
+    const d = deferred();
+    mocks.aiChat.mockRejectedValueOnce(new Error('Hết hạn mức')).mockReturnValueOnce(d.promise);
+    renderPage();
+    await ask('Xin chào');
+    const retry = await screen.findByRole('button', { name: 'Thử lại' });
+    await act(async () => {
+      fireEvent.click(retry);
+      fireEvent.click(retry);
+    });
+    expect(mocks.aiChat).toHaveBeenCalledTimes(2);
+    expect(screen.getAllByText('Xin chào')).toHaveLength(1);
+    await act(async () => d.resolve(REPLY('Trả lời sau khi thử lại')));
+    expect(await screen.findByText('Trả lời sau khi thử lại')).toBeInTheDocument();
+    expect(mocks.aiChat).toHaveBeenCalledTimes(2);
+  });
+
+  it('lỗi thì nhả khoá: hỏi câu mới được', async () => {
+    mocks.aiChat.mockRejectedValueOnce(new Error('Hết hạn mức'));
+    renderPage();
+    await ask('Câu một');
+    await screen.findByRole('button', { name: 'Thử lại' });
+    await ask('Câu hai');
+    await waitFor(() => expect(mocks.aiChat).toHaveBeenCalledTimes(2));
+  });
+});

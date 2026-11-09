@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -585,5 +585,369 @@ describe('CommunityModerationPage — gợi ý thưởng sự kiện theo cấu 
     await openEventsTab();
     expect(screen.getByText('Điểm Xanh thưởng cho người thắng sự kiện')).toBeInTheDocument();
     expect(screen.queryByText(/1 điểm =/)).toBeNull();
+  });
+});
+
+describe('CommunityModerationPage: khoá chạm đúp, khoá chéo cùng một đối tượng (W74A)', () => {
+  const deferred = () => {
+    let resolve!: (v: unknown) => void;
+    let reject!: (e: unknown) => void;
+    const promise = new Promise((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+  const dateInputs = () => Array.from(document.querySelectorAll<HTMLInputElement>('input[type="datetime-local"]'));
+  const openEventsTab = async () => {
+    renderPage();
+    await screen.findByText('Tiêu đề a');
+    goTab('Sự kiện');
+    await screen.findByText('Sự kiện e1');
+  };
+  const openReportsTab = async () => {
+    renderPage();
+    await screen.findByText('Tiêu đề a');
+    goTab('Báo cáo');
+    await screen.findByRole('button', { name: 'Ẩn nội dung' });
+  };
+
+  describe('bài chờ duyệt', () => {
+    it('chạm đúp "Duyệt" trong cùng một khung hình chỉ duyệt một lần', async () => {
+      const d = deferred();
+      mocks.adminApprovePost.mockReturnValueOnce(d.promise);
+      renderPage();
+      await screen.findByText('Tiêu đề a');
+      const approve = screen.getAllByRole('button', { name: 'Duyệt' })[0]!;
+      await act(async () => {
+        fireEvent.click(approve);
+        fireEvent.click(approve);
+      });
+      expect(mocks.adminApprovePost).toHaveBeenCalledTimes(1);
+      await act(async () => d.resolve({ ok: true }));
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã duyệt bài', type: 'success' }));
+      expect(mocks.adminApprovePost).toHaveBeenCalledTimes(1);
+    });
+
+    it('Duyệt và Từ chối cùng một bài trong một khung hình chỉ gửi lệnh đầu; cả hai nút báo bận', async () => {
+      const d = deferred();
+      mocks.adminApprovePost.mockReturnValueOnce(d.promise);
+      renderPage();
+      await screen.findByText('Tiêu đề a');
+      const approve = screen.getAllByRole('button', { name: 'Duyệt' })[0]!;
+      const reject = screen.getAllByRole('button', { name: 'Từ chối' })[0]!;
+      await act(async () => {
+        fireEvent.click(approve);
+        fireEvent.click(reject);
+      });
+      expect(mocks.adminApprovePost).toHaveBeenCalledTimes(1);
+      expect(mocks.adminRejectPost).not.toHaveBeenCalled();
+      await waitFor(() => expect(screen.getAllByRole('button', { name: 'Từ chối' })[0]).toHaveAttribute('aria-busy', 'true'));
+      await act(async () => d.resolve({ ok: true }));
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã duyệt bài', type: 'success' }));
+      expect(mocks.adminRejectPost).not.toHaveBeenCalled();
+    });
+
+    it('Từ chối rồi Duyệt cùng một bài trong một khung hình chỉ gửi lệnh từ chối', async () => {
+      const d = deferred();
+      mocks.adminRejectPost.mockReturnValueOnce(d.promise);
+      renderPage();
+      await screen.findByText('Tiêu đề a');
+      const approve = screen.getAllByRole('button', { name: 'Duyệt' })[0]!;
+      const reject = screen.getAllByRole('button', { name: 'Từ chối' })[0]!;
+      await act(async () => {
+        fireEvent.click(reject);
+        fireEvent.click(approve);
+      });
+      expect(mocks.adminRejectPost).toHaveBeenCalledTimes(1);
+      expect(mocks.adminApprovePost).not.toHaveBeenCalled();
+      await act(async () => d.resolve({ ok: true }));
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã từ chối bài', type: 'success' }));
+    });
+
+    it('xong (thành công) thì nhả khoá của bài: thao tác tiếp trên bài đó chạy được', async () => {
+      renderPage();
+      await screen.findByText('Tiêu đề a');
+      fireEvent.click(screen.getAllByRole('button', { name: 'Duyệt' })[0]!);
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã duyệt bài', type: 'success' }));
+      fireEvent.click(screen.getAllByRole('button', { name: 'Từ chối' })[0]!);
+      await waitFor(() => expect(mocks.adminRejectPost).toHaveBeenCalledWith('a'));
+    });
+
+    it('lỗi thì nhả khoá của bài: bấm lại gọi lần hai', async () => {
+      mocks.adminApprovePost.mockRejectedValueOnce(new Error('Bài đã được duyệt')).mockResolvedValue({ ok: true });
+      renderPage();
+      await screen.findByText('Tiêu đề a');
+      fireEvent.click(screen.getAllByRole('button', { name: 'Duyệt' })[0]!);
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Bài đã được duyệt', type: 'error' }));
+      fireEvent.click(screen.getAllByRole('button', { name: 'Duyệt' })[0]!);
+      await waitFor(() => expect(mocks.adminApprovePost).toHaveBeenCalledTimes(2));
+    });
+
+    it('Từ chối lỗi cũng nhả khoá của bài', async () => {
+      mocks.adminRejectPost.mockRejectedValueOnce(new Error('Bài đã bị gỡ'));
+      renderPage();
+      await screen.findByText('Tiêu đề a');
+      fireEvent.click(screen.getAllByRole('button', { name: 'Từ chối' })[0]!);
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Bài đã bị gỡ', type: 'error' }));
+      fireEvent.click(screen.getAllByRole('button', { name: 'Duyệt' })[0]!);
+      await waitFor(() => expect(mocks.adminApprovePost).toHaveBeenCalledWith('a'));
+    });
+
+    it('lỗi tải: chạm đúp "Thử lại" chỉ tải lại một lần', async () => {
+      const d = deferred();
+      mocks.adminPendingPosts.mockRejectedValueOnce(new Error('Máy chủ bận')).mockReturnValueOnce(d.promise);
+      renderPage();
+      const retry = await screen.findByRole('button', { name: 'Thử lại' });
+      await act(async () => {
+        fireEvent.click(retry);
+        fireEvent.click(retry);
+      });
+      expect(mocks.adminPendingPosts).toHaveBeenCalledTimes(2);
+      await act(async () => d.resolve([PENDING('a')]));
+      expect(await screen.findByText('Tiêu đề a')).toBeInTheDocument();
+    });
+  });
+
+  describe('báo cáo', () => {
+    it('chạm đúp "Ẩn nội dung" chỉ ẩn một lần', async () => {
+      const d = deferred();
+      mocks.adminHidePost.mockReturnValueOnce(d.promise);
+      await openReportsTab();
+      const hide = screen.getByRole('button', { name: 'Ẩn nội dung' });
+      await act(async () => {
+        fireEvent.click(hide);
+        fireEvent.click(hide);
+      });
+      expect(mocks.adminHidePost).toHaveBeenCalledTimes(1);
+      await act(async () => d.resolve({ ok: true }));
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Ẩn nội dung', type: 'success' }));
+      expect(mocks.adminHidePost).toHaveBeenCalledTimes(1);
+    });
+
+    it('Ẩn nội dung và Đã xử lý cùng một báo cáo trong một khung hình chỉ gửi lệnh đầu; cả hai nút báo bận', async () => {
+      const d = deferred();
+      mocks.adminHidePost.mockReturnValueOnce(d.promise);
+      await openReportsTab();
+      const hide = screen.getByRole('button', { name: 'Ẩn nội dung' });
+      const resolveBtn = screen.getByRole('button', { name: 'Đã xử lý' });
+      await act(async () => {
+        fireEvent.click(hide);
+        fireEvent.click(resolveBtn);
+      });
+      expect(mocks.adminHidePost).toHaveBeenCalledTimes(1);
+      expect(mocks.adminResolveReport).not.toHaveBeenCalled();
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Đã xử lý' })).toHaveAttribute('aria-busy', 'true'));
+      await act(async () => d.resolve({ ok: true }));
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Ẩn nội dung', type: 'success' }));
+      expect(mocks.adminResolveReport).not.toHaveBeenCalled();
+    });
+
+    it('hai báo cáo cùng một nội dung: Ẩn nội dung ở cả hai trong một khung hình chỉ ẩn một lần; cả hai thẻ báo bận', async () => {
+      const d = deferred();
+      mocks.adminReports.mockResolvedValue([REPORT('r1', { targetId: 't-x' }), REPORT('r2', { targetId: 't-x' })]);
+      mocks.adminHidePost.mockReturnValueOnce(d.promise);
+      renderPage();
+      await screen.findByText('Tiêu đề a');
+      goTab('Báo cáo');
+      await screen.findAllByRole('button', { name: 'Ẩn nội dung' });
+      const [h1, h2] = screen.getAllByRole('button', { name: 'Ẩn nội dung' });
+      await act(async () => {
+        fireEvent.click(h1!);
+        fireEvent.click(h2!);
+      });
+      expect(mocks.adminHidePost).toHaveBeenCalledTimes(1);
+      await waitFor(() => {
+        for (const b of screen.getAllByRole('button', { name: 'Ẩn nội dung' })) expect(b).toHaveAttribute('aria-busy', 'true');
+      });
+      await act(async () => d.resolve({ ok: true }));
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Ẩn nội dung', type: 'success' }));
+      expect(mocks.adminHidePost).toHaveBeenCalledTimes(1);
+    });
+
+    it('ẩn xong một báo cáo thì nhả khoá theo nội dung: báo cáo cùng nội dung kia ẩn được lần sau', async () => {
+      mocks.adminReports.mockResolvedValue([REPORT('r1', { targetId: 't-x' }), REPORT('r2', { targetId: 't-x' })]);
+      mocks.adminHidePost.mockResolvedValue({ ok: true });
+      renderPage();
+      await screen.findByText('Tiêu đề a');
+      goTab('Báo cáo');
+      await screen.findAllByRole('button', { name: 'Ẩn nội dung' });
+      fireEvent.click(screen.getAllByRole('button', { name: 'Ẩn nội dung' })[0]!);
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Ẩn nội dung', type: 'success' }));
+      fireEvent.click(screen.getAllByRole('button', { name: 'Ẩn nội dung' })[1]!);
+      await waitFor(() => expect(mocks.adminHidePost).toHaveBeenCalledTimes(2));
+    });
+
+    it('chạm đúp "Đã xử lý" chỉ đánh dấu một lần', async () => {
+      const d = deferred();
+      mocks.adminResolveReport.mockReturnValueOnce(d.promise);
+      await openReportsTab();
+      const resolveBtn = screen.getByRole('button', { name: 'Đã xử lý' });
+      await act(async () => {
+        fireEvent.click(resolveBtn);
+        fireEvent.click(resolveBtn);
+      });
+      expect(mocks.adminResolveReport).toHaveBeenCalledTimes(1);
+      await act(async () => d.resolve({ ok: true }));
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã đánh dấu xử lý', type: 'success' }));
+    });
+
+    it('xong thì nhả khoá của báo cáo; lỗi cũng nhả', async () => {
+      mocks.adminHidePost.mockResolvedValueOnce({ ok: true });
+      mocks.adminResolveReport.mockRejectedValueOnce(new Error('Báo cáo đã đóng')).mockResolvedValue({ ok: true });
+      await openReportsTab();
+      fireEvent.click(screen.getByRole('button', { name: 'Ẩn nội dung' }));
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Ẩn nội dung', type: 'success' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Đã xử lý' }));
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Báo cáo đã đóng', type: 'error' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Đã xử lý' }));
+      await waitFor(() => expect(mocks.adminResolveReport).toHaveBeenCalledTimes(2));
+    });
+  });
+
+  describe('sự kiện', () => {
+    const fillCreate = () => {
+      fireEvent.change(screen.getByPlaceholderText('Tên sự kiện'), { target: { value: 'Thử thách xanh' } });
+      fireEvent.change(dateInputs()[0]!, { target: { value: '2026-10-12T09:00' } });
+      fireEvent.change(dateInputs()[1]!, { target: { value: '2026-10-20T21:00' } });
+    };
+
+    it('chạm đúp "Tạo sự kiện" trong cùng một khung hình chỉ tạo một sự kiện', async () => {
+      const d = deferred();
+      mocks.createEvent.mockReturnValueOnce(d.promise);
+      await openEventsTab();
+      fillCreate();
+      const create = screen.getByRole('button', { name: 'Tạo sự kiện' });
+      await act(async () => {
+        fireEvent.click(create);
+        fireEvent.click(create);
+      });
+      expect(mocks.createEvent).toHaveBeenCalledTimes(1);
+      await act(async () => d.resolve(EVENT('new')));
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã tạo sự kiện 🎉', type: 'success' }));
+      expect(mocks.createEvent).toHaveBeenCalledTimes(1);
+    });
+
+    it('tạo lỗi thì nhả khoá, bấm lại tạo lần hai', async () => {
+      mocks.createEvent.mockRejectedValueOnce(new Error('Trùng tên sự kiện')).mockResolvedValue(EVENT('new'));
+      await openEventsTab();
+      fillCreate();
+      fireEvent.click(screen.getByRole('button', { name: 'Tạo sự kiện' }));
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Trùng tên sự kiện', type: 'error' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Tạo sự kiện' }));
+      await waitFor(() => expect(mocks.createEvent).toHaveBeenCalledTimes(2));
+    });
+
+    it('chạm đúp "Đóng" chỉ đóng sự kiện một lần', async () => {
+      const d = deferred();
+      mocks.closeEvent.mockReturnValueOnce(d.promise);
+      await openEventsTab();
+      const close = screen.getByRole('button', { name: 'Đóng' });
+      await act(async () => {
+        fireEvent.click(close);
+        fireEvent.click(close);
+      });
+      expect(mocks.closeEvent).toHaveBeenCalledTimes(1);
+      await act(async () => d.resolve({ ok: true }));
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã đóng sự kiện', type: 'success' }));
+      expect(mocks.closeEvent).toHaveBeenCalledTimes(1);
+    });
+
+    it('chạm đúp "Chốt ... là người thắng" chỉ chốt một lần', async () => {
+      const d = deferred();
+      mocks.pickEventWinner.mockReturnValueOnce(d.promise);
+      await openEventsTab();
+      fireEvent.click(screen.getByRole('button', { name: 'Chọn người thắng' }));
+      await screen.findByText('Người binh');
+      fireEvent.click(screen.getByRole('radio', { name: /Người binh/ }));
+      const go = screen.getByRole('button', { name: 'Chốt Người binh là người thắng' });
+      await act(async () => {
+        fireEvent.click(go);
+        fireEvent.click(go);
+      });
+      expect(mocks.pickEventWinner).toHaveBeenCalledTimes(1);
+      await act(async () => d.resolve({ ok: true }));
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã chọn người thắng', type: 'success' }));
+    });
+
+    it('Chốt người thắng và Đóng cùng một sự kiện trong một khung hình chỉ gửi lệnh đầu; cả hai nút báo bận', async () => {
+      const d = deferred();
+      mocks.pickEventWinner.mockReturnValueOnce(d.promise);
+      await openEventsTab();
+      fireEvent.click(screen.getByRole('button', { name: 'Chọn người thắng' }));
+      await screen.findByText('Người binh');
+      fireEvent.click(screen.getByRole('radio', { name: /Người binh/ }));
+      const go = screen.getByRole('button', { name: 'Chốt Người binh là người thắng' });
+      const close = screen.getByRole('button', { name: 'Đóng' });
+      await act(async () => {
+        fireEvent.click(go);
+        fireEvent.click(close);
+      });
+      expect(mocks.pickEventWinner).toHaveBeenCalledTimes(1);
+      expect(mocks.closeEvent).not.toHaveBeenCalled();
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Đóng' })).toHaveAttribute('aria-busy', 'true'));
+      await act(async () => d.resolve({ ok: true }));
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã chọn người thắng', type: 'success' }));
+      expect(mocks.closeEvent).not.toHaveBeenCalled();
+    });
+
+    it('Đóng đang chạy: nút Chốt người thắng cũng báo bận (aria-busy)', async () => {
+      const d = deferred();
+      mocks.closeEvent.mockReturnValueOnce(d.promise);
+      await openEventsTab();
+      fireEvent.click(screen.getByRole('button', { name: 'Chọn người thắng' }));
+      await screen.findByText('Người binh');
+      fireEvent.click(screen.getByRole('radio', { name: /Người binh/ }));
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+      });
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Chốt Người binh là người thắng' })).toHaveAttribute('aria-busy', 'true'),
+      );
+      await act(async () => d.resolve({ ok: true }));
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã đóng sự kiện', type: 'success' }));
+    });
+
+    it('Đóng rồi chốt người thắng cùng khung hình chỉ gửi lệnh đóng', async () => {
+      const d = deferred();
+      mocks.closeEvent.mockReturnValueOnce(d.promise);
+      await openEventsTab();
+      fireEvent.click(screen.getByRole('button', { name: 'Chọn người thắng' }));
+      await screen.findByText('Người binh');
+      fireEvent.click(screen.getByRole('radio', { name: /Người binh/ }));
+      const go = screen.getByRole('button', { name: 'Chốt Người binh là người thắng' });
+      const close = screen.getByRole('button', { name: 'Đóng' });
+      await act(async () => {
+        fireEvent.click(close);
+        fireEvent.click(go);
+      });
+      expect(mocks.closeEvent).toHaveBeenCalledTimes(1);
+      expect(mocks.pickEventWinner).not.toHaveBeenCalled();
+      await act(async () => d.resolve({ ok: true }));
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã đóng sự kiện', type: 'success' }));
+    });
+
+    it('đóng lỗi thì nhả khoá chung: chốt người thắng bấm được ngay sau đó', async () => {
+      mocks.closeEvent.mockRejectedValueOnce(new Error('Sự kiện đã đóng'));
+      await openEventsTab();
+      fireEvent.click(screen.getByRole('button', { name: 'Chọn người thắng' }));
+      await screen.findByText('Người binh');
+      fireEvent.click(screen.getByRole('radio', { name: /Người binh/ }));
+      fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Sự kiện đã đóng', type: 'error' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Chốt Người binh là người thắng' }));
+      await waitFor(() => expect(mocks.pickEventWinner).toHaveBeenCalledTimes(1));
+    });
+
+    it('chốt xong (thành công) thì nhả khoá chung', async () => {
+      await openEventsTab();
+      fireEvent.click(screen.getByRole('button', { name: 'Chọn người thắng' }));
+      await screen.findByText('Người binh');
+      fireEvent.click(screen.getByRole('radio', { name: /Người binh/ }));
+      fireEvent.click(screen.getByRole('button', { name: 'Chốt Người binh là người thắng' }));
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã chọn người thắng', type: 'success' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+      await waitFor(() => expect(mocks.closeEvent).toHaveBeenCalledWith('e1'));
+    });
   });
 });

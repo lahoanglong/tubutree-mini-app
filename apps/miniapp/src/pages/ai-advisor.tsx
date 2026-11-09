@@ -43,9 +43,13 @@ export default function AiAdvisorPage() {
   const toHistory = (list: AdvisorMessage[]): AiChatTurn[] =>
     list.slice(-MAX_HISTORY_TURNS).map((m) => ({ role: m.role, content: m.content }));
 
+  const sending = useRef(false);
   const chatM = useMutation({
     mutationKey: CHAT_MUTATION_KEY,
     mutationFn: ({ text, history }: { text: string; history: AiChatTurn[] }) => aiChat(text, history),
+    onSettled: () => {
+      sending.current = false;
+    },
     // Ghi vào store (không phải state của trang): trả lời đến sau khi khách đã rời trang vẫn còn khi quay lại.
     onSuccess: (r) => {
       useAiAdvisorStore.getState().append({ role: 'assistant', content: r.reply, products: r.products });
@@ -67,7 +71,8 @@ export default function AiAdvisorPage() {
 
   const send = (text: string) => {
     const t = text.trim();
-    if (!t || pending) return;
+    if (!t || pending || sending.current) return;
+    sending.current = true;
     useAiAdvisorStore.getState().append({ role: 'user', content: t });
     setDraft('');
     chatM.mutate({ text: t, history: toHistory(messages) });
@@ -76,7 +81,8 @@ export default function AiAdvisorPage() {
   // Gửi lại đúng câu hỏi vừa lỗi: bỏ tin xin lỗi, giữ tin của khách (không nhân đôi), lịch sử là các lượt trước câu đó.
   const retry = (failedIndex: number) => {
     const question = messages[failedIndex - 1];
-    if (pending || question?.role !== 'user') return;
+    if (pending || sending.current || question?.role !== 'user') return;
+    sending.current = true;
     useAiAdvisorStore.getState().truncate(failedIndex);
     chatM.mutate({ text: question.content, history: toHistory(messages.slice(0, failedIndex - 1)) });
   };

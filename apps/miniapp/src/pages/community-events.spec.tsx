@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -292,5 +292,46 @@ describe('CommunityEventsPage — tiêu đề, vùng chạm, biểu tượng (C-
     expect(list.container.textContent).not.toContain('🎁');
     await openEvent('Sự kiện e1');
     expect(list.container.textContent).not.toContain('🎁');
+  });
+});
+
+describe('CommunityEventsPage: "Thử lại" chạm đúp (W74A)', () => {
+  const deferred = () => {
+    let resolve!: (v: unknown) => void;
+    const promise = new Promise((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+
+  it('lỗi tải danh sách: chạm đúp "Thử lại" chỉ tải lại một lần', async () => {
+    const d = deferred();
+    mocks.listEvents.mockRejectedValueOnce(new Error('mất mạng')).mockReturnValueOnce(d.promise);
+    renderPage();
+    await screen.findByText('mất mạng');
+    const retry = screen.getByRole('button', { name: 'Thử lại' });
+    await act(async () => {
+      fireEvent.click(retry);
+      fireEvent.click(retry);
+    });
+    expect(mocks.listEvents).toHaveBeenCalledTimes(2);
+    await act(async () => d.resolve([EVENT('e1')]));
+    expect(await screen.findByText('Sự kiện e1')).toBeInTheDocument();
+  });
+
+  it('lỗi tải bài dự thi: chạm đúp "Thử lại" chỉ tải lại một lần', async () => {
+    const d = deferred();
+    mocks.eventPosts.mockRejectedValueOnce(new Error('mất mạng')).mockReturnValueOnce(d.promise);
+    renderPage();
+    await openEvent('Sự kiện e1');
+    await screen.findByText('mất mạng');
+    const retry = screen.getByRole('button', { name: 'Thử lại' });
+    await act(async () => {
+      fireEvent.click(retry);
+      fireEvent.click(retry);
+    });
+    expect(mocks.eventPosts).toHaveBeenCalledTimes(2);
+    await act(async () => d.resolve({ posts: [POST('p1')], nextCursor: null }));
+    expect(await screen.findByRole('button', { name: 'Bài p1' })).toBeInTheDocument();
   });
 });

@@ -151,7 +151,7 @@ function EventsList({
     return <CardSkeletons height={140} gap={12} />;
   }
   if (eventsQ.isError && !eventsQ.data) {
-    return <ErrorState message={getLoadErrorMessage(eventsQ.error)} onRetry={() => void eventsQ.refetch()} />;
+    return <ErrorState message={getLoadErrorMessage(eventsQ.error)} onRetry={() => eventsQ.refetch()} />;
   }
   if (!eventsQ.data || eventsQ.data.length === 0) {
     return <EmptyState art="leaf" heading={vi.community.noEvents} />;
@@ -286,7 +286,7 @@ function EventEntries({
           ))}
         </div>
       ) : entriesQ.isError ? (
-        <ErrorState message={getLoadErrorMessage(entriesQ.error)} onRetry={() => void entriesQ.refetch()} />
+        <ErrorState message={getLoadErrorMessage(entriesQ.error)} onRetry={() => entriesQ.refetch()} />
       ) : entries.length === 0 ? (
         <EmptyState art="leaf" heading={vi.community.emptyHeading} body={vi.community.eventNoEntries} />
       ) : (
