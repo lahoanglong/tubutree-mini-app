@@ -99,6 +99,16 @@ describe('BottomSheet', () => {
     expect(h2.style.letterSpacing).toBe('-0.01em');
   });
 
+  it('numericTitle: tiêu đề có số đều (tabular-nums)', () => {
+    mount(<BottomSheet open onClose={() => {}} title="Tiết kiệm 12%" numericTitle>a</BottomSheet>);
+    expect(document.querySelector<HTMLElement>('[role="dialog"] h2')!.style.fontVariantNumeric).toBe('tabular-nums');
+  });
+
+  it('không có numericTitle thì tiêu đề không ép số đều', () => {
+    mount(<BottomSheet open onClose={() => {}} title="Tiết kiệm 12%">a</BottomSheet>);
+    expect(document.querySelector<HTMLElement>('[role="dialog"] h2')!.style.fontVariantNumeric).toBe('');
+  });
+
   it('Dialog là bí danh của BottomSheet', () => {
     expect(Dialog).toBe(BottomSheet);
   });

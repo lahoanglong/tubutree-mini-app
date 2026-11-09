@@ -85,6 +85,14 @@ describe('BottomSheet', () => {
     expect(h2.style.letterSpacing).toBe('-0.01em');
   });
 
+  it('numericTitle: tiêu đề có số đều (tabular-nums); mặc định thì không', () => {
+    const { unmount } = render(<BottomSheet open title="Tiết kiệm 12%" numericTitle onClose={() => {}}>y</BottomSheet>);
+    expect(screen.getByRole('heading', { level: 2, name: 'Tiết kiệm 12%' }).style.fontVariantNumeric).toBe('tabular-nums');
+    unmount();
+    render(<BottomSheet open title="Tiết kiệm 12%" onClose={() => {}}>y</BottomSheet>);
+    expect(screen.getByRole('heading', { level: 2, name: 'Tiết kiệm 12%' }).style.fontVariantNumeric).toBe('');
+  });
+
   it('renders footer when provided', () => {
     render(
       <BottomSheet open onClose={() => {}} footer={<button type="button">Xác nhận</button>}>

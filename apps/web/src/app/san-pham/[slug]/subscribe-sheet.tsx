@@ -11,6 +11,7 @@ import {
 } from '@tubutree/app-core/api/subscriptions';
 import { Sheet } from '@/components/ui/sheet';
 import { Field } from '@/components/ui/field';
+import { LineItemSkeleton } from '@/components/ui/skeleton';
 import { Chip } from '@/components/catalog/chip';
 import { coreHttp } from '@/lib/core-http';
 import { getAddresses, getWallet } from '@/lib/shop-client';
@@ -19,7 +20,7 @@ import { bankPaymentHref } from '@/lib/order-view';
 import { ui } from '@/lib/guest-ui';
 import { usePublicConfig } from '@/lib/use-public-config';
 import { addressText, formatVnDate, isStartDateAllowed, startDateRange, subscriptionWalletBlockedReason } from '@/lib/subscription-options';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText, loadErrorText } from '@/lib/error-text';
 import { useRovingGroup } from '@/lib/use-roving-group';
 
 const INTERVALS = [4, 6, 8, 10];
@@ -55,7 +56,7 @@ function RadioRow({ checked, onSelect, title, hint, disabled = false }: { checke
         aria-hidden="true"
         className={`h-5 w-5 shrink-0 rounded-full border-2 ${checked ? 'border-forest-600 bg-forest-600 ring-2 ring-inset ring-stone-0' : 'border-stone-450 bg-stone-0'}`}
       />
-      <span className="min-w-0 flex-1">
+      <span className="min-w-0 flex-1 tabular-nums">
         <span className={`block text-sm ${disabled ? 'text-stone-500' : 'text-stone-900'} ${checked ? 'font-semibold' : ''}`}>{title}</span>
         {hint && <span className="block text-xs text-stone-600">{hint}</span>}
       </span>
@@ -92,6 +93,11 @@ export function SubscribeSheet({
   const discountPct = Math.round(usePublicConfig().subscribeDiscountPct * 100);
   const addrQ = useQuery({ queryKey: ['addresses'], queryFn: getAddresses, enabled: visible });
   const walletQ = useQuery({ queryKey: ['wallet'], queryFn: getWallet, enabled: visible });
+  // Truy vấn lỗi mà chưa có dữ liệu bị react-query đặt về pending lúc tải lại và xoá lỗi; giữ vùng lỗi + nút Thử lại đứng yên
+  // (không mất focus) tới khi lượt tải lại có kết quả (isPending hết). Giá trị là câu lỗi cũ để vẫn hiện chữ trong lúc chờ.
+  const [addrRetrying, setAddrRetrying] = useState<string | null>(null);
+  const addrFailed = addrQ.isError && !addrQ.data;
+  const addrWaiting = addrRetrying !== null && addrQ.isPending;
   const walletBlocked = subscriptionWalletBlockedReason(walletQ.data?.walletBalance);
   const addresses = addrQ.data ?? [];
   const defaultAddr = addresses.find((a) => a.isDefault) ?? addresses[0];
@@ -142,35 +148,47 @@ export function SubscribeSheet({
   });
 
   // Sheet luôn gắn sẵn: lỗi của lần tạo trước không được nằm lại khi khách đóng, nạp Ví rồi mở lại.
+  // Chỉ xoá khi sheet đang đóng: xoá cả lúc đang mở thì lời lỗi bị xoá ngay khi request thất bại (isPending hết).
   // Đang gửi thì giữ nguyên, nếu không nút mở khoá giữa chừng và khách bấm ra POST thứ hai.
   const resetCreate = create.reset;
   const creating = create.isPending;
   useEffect(() => {
-    if (!creating) resetCreate();
+    if (!visible && !creating) resetCreate();
   }, [visible, creating, resetCreate]);
 
   const noAddress = addrQ.isSuccess && addresses.length === 0;
+  const busy = create.isPending;
 
   return (
     <Sheet
       open={visible}
-      onClose={onClose}
+      onClose={() => {
+        if (!busy) onClose();
+      }}
+      dismissible={!busy}
       title={`Đặt định kỳ — tiết kiệm ${discountPct}%`}
+      numericTitle
       description="Tự động giao lại theo chu kỳ bạn chọn. Tạm dừng, sửa hoặc huỷ bất kỳ lúc nào."
       size="full"
       footer={
-        noAddress ? undefined : (
+        noAddress || addrFailed || addrWaiting ? undefined : (
           <div>
             {create.isError && (
               <p role="alert" className={`mb-2 ${ui.error}`}>
                 {actionErrorText(create.error)}
               </p>
             )}
+            {/* Đang gửi giữ aria-busy/aria-disabled chứ không `disabled` DOM: Chromium thả focus về body khi nút đang giữ focus bị disabled. */}
             <button
               type="button"
               className={`${ui.btnPrimary} w-full`}
-              disabled={!addressId || !dateOk || create.isPending || (payment === 'WALLET' && walletBlocked !== null)}
-              onClick={() => create.mutate()}
+              disabled={!addressId || !dateOk || (payment === 'WALLET' && walletBlocked !== null)}
+              aria-busy={busy || undefined}
+              aria-disabled={busy || undefined}
+              onClick={() => {
+                if (busy || !addressId || !dateOk) return;
+                create.mutate();
+              }}
             >
               {create.isPending ? 'Đang tạo…' : 'Bắt đầu đặt định kỳ'}
             </button>
@@ -181,7 +199,7 @@ export function SubscribeSheet({
       <SectionLabel>Chu kỳ giao</SectionLabel>
       <div role="group" aria-label="Chu kỳ giao" className="flex flex-wrap gap-2 py-1">
         {INTERVALS.map((w) => (
-          <Chip key={w} selected={weeks === w} onPress={() => setWeeks(w)}>
+          <Chip key={w} selected={weeks === w} disabled={busy} onPress={() => setWeeks(w)}>
             {w} tuần
           </Chip>
         ))}
@@ -189,11 +207,12 @@ export function SubscribeSheet({
 
       <SectionLabel>Đơn đầu tiên</SectionLabel>
       <div role="group" aria-label="Đơn đầu tiên" className="flex gap-2 py-1">
-        <Chip selected={startMode === 'now'} onPress={() => setStartMode('now')}>
+        <Chip selected={startMode === 'now'} disabled={busy} onPress={() => setStartMode('now')}>
           Giao ngay
         </Chip>
         <Chip
           selected={startMode === 'date'}
+          disabled={busy}
           onPress={() => {
             setStartMode('date');
             if (!startDate) setStartDate(range.min);
@@ -212,11 +231,12 @@ export function SubscribeSheet({
               value={startDate}
               min={range.min}
               max={range.max}
+              disabled={busy}
               onChange={(e) => setStartDate(e.target.value)}
               className={dateError ? ui.fieldError : ui.field}
             />
           </Field>
-          {!dateError && <p className="mt-1 text-xs text-stone-600">Chọn một ngày trong vòng {MAX_START_DAYS_AHEAD} ngày tới.</p>}
+          {!dateError && <p className="mt-1 text-xs tabular-nums text-stone-600">Chọn một ngày trong vòng {MAX_START_DAYS_AHEAD} ngày tới.</p>}
         </div>
       )}
 
@@ -226,7 +246,7 @@ export function SubscribeSheet({
           <RadioRow
             key={m}
             checked={payment === m}
-            disabled={m === 'WALLET' && walletBlocked !== null}
+            disabled={busy || (m === 'WALLET' && walletBlocked !== null)}
             onSelect={() => setPayment(m)}
             title={m === 'WALLET' && walletQ.data ? `Ví Tubu (${formatVnd(walletQ.data.walletBalance)})` : PAY_LABEL[m]}
             hint={m === 'WALLET' && walletBlocked ? walletBlocked : payment === m ? PAY_HINT[m] : undefined}
@@ -235,10 +255,24 @@ export function SubscribeSheet({
       </div>
 
       <SectionLabel>Giao tới</SectionLabel>
-      {addrQ.isError ? (
-        <p role="alert" className={ui.error}>
-          Không tải được địa chỉ. Bạn đóng rồi mở lại để thử nhé.
-        </p>
+      {addrFailed || addrWaiting ? (
+        <div role="alert" className="flex flex-wrap items-center gap-2 py-1">
+          <p className={`min-w-0 flex-1 ${ui.error}`}>{addrFailed ? loadErrorText(addrQ.error) : addrRetrying}</p>
+          <button
+            type="button"
+            aria-busy={addrWaiting || undefined}
+            onClick={() => {
+              if (addrWaiting) return;
+              setAddrRetrying(loadErrorText(addrQ.error));
+              void addrQ.refetch();
+            }}
+            className={ui.btnSecondary}
+          >
+            Thử lại
+          </button>
+        </div>
+      ) : addrQ.isLoading ? (
+        <LineItemSkeleton />
       ) : noAddress ? (
         <div>
           <p className={ui.error}>Bạn cần thêm địa chỉ giao hàng trước.</p>
@@ -259,6 +293,7 @@ export function SubscribeSheet({
             <RadioRow
               key={a.id}
               checked={addressId === a.id}
+              disabled={busy}
               onSelect={() => setAddressId(a.id)}
               title={`${a.recipient} · ${a.phone}`}
               hint={addressText(a)}

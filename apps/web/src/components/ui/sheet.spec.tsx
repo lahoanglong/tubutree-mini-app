@@ -40,6 +40,15 @@ describe('Sheet', () => {
     expect(dialog()).toBeNull();
   });
 
+  it('numericTitle: tiêu đề có số đều (tabular-nums); mặc định thì không', () => {
+    const r = mount(<Sheet open onClose={() => {}} title="Tiết kiệm 12%" numericTitle>x</Sheet>);
+    expect(document.querySelector('h2')!.classList.contains('tabular-nums')).toBe(true);
+    r.unmount();
+    mounted = mounted.filter((m) => m !== r);
+    mount(<Sheet open onClose={() => {}} title="Tiết kiệm 12%">x</Sheet>);
+    expect(document.querySelector('h2')!.classList.contains('tabular-nums')).toBe(false);
+  });
+
   it('mở: role dialog, aria-modal, tên theo tiêu đề, có nút Đóng', () => {
     const onClose = vi.fn();
     mount(<Sheet open onClose={onClose} title="Chọn mã" description="Mô tả">nội dung</Sheet>);

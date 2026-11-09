@@ -18,6 +18,8 @@ export interface BottomSheetProps {
   open: boolean;
   onClose: () => void;
   title?: string;
+  /** Tiêu đề chứa số đổi theo dữ liệu (mức %, số lượng): số đều để chữ quanh nó không rung. */
+  numericTitle?: boolean;
   description?: string;
   footer?: ReactNode;
   size?: BottomSheetSize;
@@ -76,6 +78,7 @@ export function BottomSheet({
   open,
   onClose,
   title,
+  numericTitle = false,
   description,
   footer,
   size = 'auto',
@@ -171,7 +174,11 @@ export function BottomSheet({
       >
         <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 4 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-            {title && <Heading variant="title-sm" font="ui" as="h2" id={titleId}>{title}</Heading>}
+            {title && (
+              <Heading variant="title-sm" font="ui" as="h2" id={titleId} style={numericTitle ? { fontVariantNumeric: 'tabular-nums' } : undefined}>
+                {title}
+              </Heading>
+            )}
             {/* dismissible=false phải chặn CẢ nút X, không chỉ mask-tap/swipe — nút X vẫn hiện mà
                 vẫn gọi được onClose thì "dismissible" chỉ là nửa vời, phá vỡ đúng mục đích của prop. */}
             {dismissible && <IconButton icon={X} label="Đóng" onPress={onClose} />}
