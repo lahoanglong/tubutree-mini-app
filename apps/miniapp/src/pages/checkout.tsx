@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Box, Page, Text, Input, useNavigate, useLocation, useSnackbar } from 'zmp-ui';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { WasteMeDTO, WasteRequestSummaryDTO } from '@tubutree/shared-types';
 import { Ticket, ChevronRight, Sprout, AlertCircle, Recycle } from 'lucide-react';
 import { getAddresses, getCart, checkoutQuote, placeOrder, removeCartItem, updateCartItem, type PlacedOrder } from '../services/shop-api';
@@ -34,6 +34,7 @@ import { pointsOfferText } from '@tubutree/app-core/points-offer';
 import { ReferralCodeBox, effectiveReferralCode } from '../components/checkout/referral-code-box';
 import { Skeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
+import { useLockedMutation } from '../components/game/use-locked-mutation';
 import { formatVnd, formatPoints } from '../utils/format';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { checkoutEtaLabel } from '@tubutree/app-core/shipping-eta';
@@ -328,7 +329,7 @@ export default function CheckoutPage() {
     });
   }, [quote.isSuccess]);
 
-  const order = useMutation({
+  const order = useLockedMutation({
     mutationFn: () => {
       const body = {
         addressId: addressId!,
@@ -468,11 +469,12 @@ export default function CheckoutPage() {
       }
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
     },
+    onSettled: () => setSubmitting(false),
   });
 
   // Sửa nhanh dòng hết hàng/vượt tồn ngay tại màn: khách không rời trang nên các ô đã nhập còn nguyên. Đổi dòng là đổi lựa chọn
   // của khách, nên một lần đặt đang đóng băng (chưa rõ kết quả) không được phát lại nữa.
-  const lineFix = useMutation({
+  const lineFix = useLockedMutation({
     mutationFn: ({ id, fix }: { id: string; fix: LineFix }) => (fix.kind === 'remove' ? removeCartItem(id) : updateCartItem(id, fix.quantity)),
     // Chờ giỏ và báo giá về mới thôi bận: nút xoá còn bấm được trong lúc giỏ cũ còn hiện thì lần bấm hai gọi xoá dòng đã mất và nhận 404.
     onSuccess: async () => {
@@ -485,7 +487,7 @@ export default function CheckoutPage() {
       notify({ text: getErrorMessage(e), type: 'error' });
       void queryClient.invalidateQueries({ queryKey: ['cart'] });
     },
-  });
+  }, (v) => v.id);
 
   // ── Success screen ──
   if (placed) {
@@ -1350,7 +1352,7 @@ export default function CheckoutPage() {
               try {
                 // Xin SĐT đúng lúc đặt hàng (như Homefarm) nếu tài khoản chưa có — không chặn nếu user từ chối.
                 await useAuthStore.getState().ensurePhone().catch(() => undefined);
-                order.mutate(undefined, { onSettled: () => setSubmitting(false) });
+                order.mutate();
               } catch {
                 setSubmitting(false);
               }

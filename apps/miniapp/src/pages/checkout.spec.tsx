@@ -2734,3 +2734,164 @@ describe('CheckoutPage — thanh toán một phần giỏ: dòng chọn cuối c
     expect(mocks.checkoutQuote).not.toHaveBeenCalled();
   });
 });
+
+describe('CheckoutPage — khoá chạm đúp dòng sửa nhanh, gỡ mã tự áp, đặt và kiểm tra lại đơn (W71A)', () => {
+  const SOLD_OUT = { ...CART.items[0]!, quantity: 1, stock: 0, total: 50_000 };
+  const SOLD_OUT_2 = { ...CART.items[0]!, id: 'ci2', variationId: 'v2', productName: 'Dầu gội', quantity: 1, stock: 0, total: 50_000 };
+  const OVER = { ...CART.items[0]!, quantity: 3, stock: 1, total: 150_000 };
+  const APPLIED = { ...CART, couponCode: 'WELCOME30', discount: 30_000 };
+  const networkError = () => new HttpError('Network Error', 'ERR_NETWORK');
+  const pending = <T,>() => {
+    let resolve!: (v: T) => void;
+    const promise = new Promise<T>((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+
+  beforeEach(() => {
+    mocks.publicConfig.waste.pickup = false;
+    vi.clearAllMocks();
+    mocks.placeOrder.mockReset();
+    sessionStorage.clear();
+    localStorage.clear();
+    mocks.sfCtx.slug = null;
+    mocks.sfCtx.referralCode = null;
+    mocks.sfCtx.referralEligible = null;
+    mocks.voucherProps = [];
+    mocks.getAddresses.mockResolvedValue([ADDRESS]);
+    mocks.getCart.mockResolvedValue(CART);
+    mocks.checkoutQuote.mockResolvedValue(QUOTE);
+    mocks.ensurePhone.mockResolvedValue('0900000000');
+    mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
+    mocks.getWasteMe.mockResolvedValue(makeWasteMe());
+    mocks.getCoupons.mockResolvedValue([]);
+    mocks.getCouponPreviews.mockResolvedValue([]);
+    mocks.removeCartItem.mockResolvedValue(CART);
+    mocks.updateCartItem.mockResolvedValue(CART);
+  });
+
+  it('chạm đúp "Bỏ khỏi đơn" trong cùng một khung hình: chỉ xoá dòng một lần', async () => {
+    mocks.getCart.mockResolvedValue({ ...CART, items: [SOLD_OUT, { ...SOLD_OUT_2, stock: 5 }] });
+    const remove = pending<typeof CART>();
+    mocks.removeCartItem.mockReturnValue(remove.promise);
+    renderPage();
+    const problem = await screen.findByTestId('checkout-line-problem');
+    const button = within(problem).getByRole('button', { name: 'Bỏ khỏi đơn' });
+    await act(async () => {
+      fireEvent.click(button);
+      fireEvent.click(button);
+    });
+    expect(mocks.removeCartItem).toHaveBeenCalledTimes(1);
+    expect(mocks.removeCartItem).toHaveBeenCalledWith('ci1');
+    await act(async () => remove.resolve(CART));
+  });
+
+  it('chạm đúp "Giảm còn 1" trong cùng một khung hình: chỉ sửa số lượng một lần', async () => {
+    mocks.getCart.mockResolvedValue({ ...CART, items: [OVER] });
+    const update = pending<typeof CART>();
+    mocks.updateCartItem.mockReturnValue(update.promise);
+    renderPage();
+    const problem = await screen.findByTestId('checkout-line-problem');
+    const button = within(problem).getByRole('button', { name: 'Giảm còn 1' });
+    await act(async () => {
+      fireEvent.click(button);
+      fireEvent.click(button);
+    });
+    expect(mocks.updateCartItem).toHaveBeenCalledTimes(1);
+    expect(mocks.updateCartItem).toHaveBeenCalledWith('ci1', 1);
+    await act(async () => update.resolve(CART));
+  });
+
+  it('hai dòng lỗi khác nhau: mỗi dòng vẫn xoá được song song, khoá chỉ chặn cú chạm lặp vào cùng một dòng', async () => {
+    mocks.getCart.mockResolvedValue({ ...CART, items: [SOLD_OUT, SOLD_OUT_2] });
+    const remove = pending<typeof CART>();
+    mocks.removeCartItem.mockReturnValue(remove.promise);
+    renderPage();
+    const buttons = await screen.findAllByRole('button', { name: 'Bỏ khỏi đơn' });
+    expect(buttons).toHaveLength(2);
+    await act(async () => {
+      fireEvent.click(buttons[0]!);
+      fireEvent.click(buttons[1]!);
+      fireEvent.click(buttons[0]!);
+    });
+    expect(mocks.removeCartItem.mock.calls.map((c) => c[0]).sort()).toEqual(['ci1', 'ci2']);
+    await act(async () => remove.resolve(CART));
+  });
+
+  it('xoá dòng lỗi mạng thì nhả khoá: bấm lại xoá được', async () => {
+    mocks.getCart.mockResolvedValue({ ...CART, items: [SOLD_OUT, { ...SOLD_OUT_2, stock: 5 }] });
+    mocks.removeCartItem.mockRejectedValueOnce(new Error('mạng')).mockResolvedValue(CART);
+    renderPage();
+    const problem = await screen.findByTestId('checkout-line-problem');
+    const button = within(problem).getByRole('button', { name: 'Bỏ khỏi đơn' });
+    await act(async () => fireEvent.click(button));
+    await waitFor(() => expect(button).not.toHaveAttribute('aria-busy'));
+    await act(async () => fireEvent.click(button));
+    expect(mocks.removeCartItem).toHaveBeenCalledTimes(2);
+  });
+
+  describe('mã tự áp', () => {
+    beforeEach(() => {
+      mocks.getCoupons.mockResolvedValue([{ id: 'c1', code: 'WELCOME30' }]);
+      mocks.getCouponPreviews.mockResolvedValue([{ code: 'WELCOME30', eligible: true, discount: 30_000 }]);
+      mocks.applyCoupon.mockResolvedValue(APPLIED);
+    });
+
+    it('chạm đúp "Gỡ" mã tự áp trong cùng một khung hình: chỉ gỡ một lần', async () => {
+      const remove = pending<typeof CART>();
+      mocks.removeCoupon.mockReturnValue(remove.promise);
+      renderPage();
+      const button = await screen.findByTestId('coupon-auto-remove');
+      await act(async () => {
+        fireEvent.click(button);
+        fireEvent.click(button);
+      });
+      expect(mocks.removeCoupon).toHaveBeenCalledTimes(1);
+      await act(async () => remove.resolve(CART));
+    });
+
+  });
+
+  it('chạm đúp "Đặt hàng" trong cùng một khung hình: chỉ gửi một đơn (Button đã khoá sẵn vì onPress async, giữ để không lùi)', async () => {
+    const place = pending<{ id: string; code: string }>();
+    mocks.placeOrder.mockReturnValue(place.promise);
+    renderPage();
+    const btn = await screen.findByText(/Đặt hàng · /);
+    await waitFor(() => expect(btn.closest('button')).not.toBeDisabled());
+    await act(async () => {
+      fireEvent.click(btn);
+      fireEvent.click(btn);
+    });
+    await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(1));
+    expect(btn.closest('button')).toHaveAttribute('aria-busy', 'true');
+    await act(async () => place.resolve({ id: 'o1', code: 'TT001' }));
+  });
+
+  it('giỏ rỗng sau lỗi mạng: chạm đúp "Kiểm tra lại" chỉ gửi lại một lần', async () => {
+    let cartData: typeof CART = CART;
+    mocks.getCart.mockImplementation(async () => cartData);
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const replay = pending<{ id: string; code: string }>();
+    mocks.placeOrder.mockRejectedValueOnce(networkError()).mockReturnValueOnce(replay.promise);
+    render(
+      <QueryClientProvider client={qc}>
+        <CheckoutPage />
+      </QueryClientProvider>,
+    );
+    const place = await screen.findByText(/(Đặt hàng|Thử lại) · /);
+    await waitFor(() => expect(place.closest('button')).not.toBeDisabled());
+    fireEvent.click(place);
+    await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(1));
+    cartData = { ...CART, items: [], itemCount: 0, subtotal: 0 };
+    await qc.invalidateQueries({ queryKey: ['cart'] });
+    const recheck = await screen.findByText('Kiểm tra lại');
+    await act(async () => {
+      fireEvent.click(recheck);
+      fireEvent.click(recheck);
+    });
+    expect(mocks.placeOrder).toHaveBeenCalledTimes(2);
+    await act(async () => replay.resolve({ id: 'o1', code: 'TT001' }));
+  });
+});

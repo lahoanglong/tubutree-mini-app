@@ -105,8 +105,14 @@ export function VoucherSheet({
   const previewTrusted = !!previewSig && settledSig === previewSig && previewsQ.isSuccess && !previewsQ.isFetching;
   const previews = new Map((previewTrusted ? (previewsQ.data ?? []) : []).map((p) => [p.code.toUpperCase(), p]));
 
+  // Một lệnh đổi mã (áp hoặc gỡ) mỗi lần, khoá bằng ref vì `isPending` chỉ đúng sau lần vẽ kế tiếp: hai cú chạm sát nhau vẫn đều thấy nút bật.
+  const changing = useRef(false);
+  const release = () => {
+    changing.current = false;
+  };
   const applyMut = useMutation({
     mutationFn: (code: string) => applyCoupon(code.trim().toUpperCase()),
+    onSettled: release,
     // Xoá lời báo cũ lúc bắt đầu: lỗi lặp lại cùng một câu vẫn dựng lại lời báo, cuộn tới và được trình đọc màn hình đọc lại.
     onMutate: () => setErr(null),
     onSuccess: (cart, code) => {
@@ -138,6 +144,7 @@ export function VoucherSheet({
 
   const removeMut = useMutation({
     mutationFn: removeCoupon,
+    onSettled: release,
     onMutate: () => setErr(null),
     onSuccess: (cart) => {
       queryClient.setQueryData(cartKey(), cart);
@@ -158,11 +165,19 @@ export function VoucherSheet({
   // Nút đang quay: mã đang áp (mã tay thì không có hàng nào khớp), hoặc mã đang gỡ là hàng đang dùng.
   const pendingCode = applyMut.isPending ? (applyMut.variables ?? null) : removeMut.isPending ? (rows.find((r) => r.applied)?.coupon.code ?? null) : null;
 
+  const applyCode = (code: string) => {
+    if (changing.current) return;
+    changing.current = true;
+    applyMut.mutate(code);
+  };
+  const removeCode = () => {
+    if (changing.current) return;
+    changing.current = true;
+    removeMut.mutate();
+  };
   const handleApplyCustom = () => {
     const trimmed = customCode.trim().toUpperCase();
-    if (trimmed && !isAnyMutating) {
-      applyMut.mutate(trimmed);
-    }
+    if (trimmed && !isAnyMutating) applyCode(trimmed);
   };
 
   return (
@@ -240,7 +255,7 @@ export function VoucherSheet({
               onRetry={() => void couponsQ.refetch()}
             />
           ) : rows.length > 0 ? (
-            <VoucherPicker rows={rows} onUse={(code) => applyMut.mutate(code)} onRemove={() => removeMut.mutate()} busy={isAnyMutating} pendingCode={pendingCode} />
+            <VoucherPicker rows={rows} onUse={applyCode} onRemove={removeCode} busy={isAnyMutating} pendingCode={pendingCode} />
           ) : (
             <EmptyState
               variant="inline"

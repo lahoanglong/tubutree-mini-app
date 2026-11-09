@@ -353,3 +353,105 @@ describe('AddressForm — lỗi từng ô và con trỏ (gói hk)', () => {
     await waitFor(() => expect(province).toHaveFocus());
   });
 });
+
+describe('AddressForm — khoá chạm đúp Lưu và Điền nhanh từ Zalo (W71A)', () => {
+  const typeStreet = () => fireEvent.change(inputNear('Số nhà, tên đường'), { target: { value: '1 Nguyễn Huệ' } });
+  const pending = <T,>() => {
+    let resolve!: (v: T) => void;
+    let reject!: (e: unknown) => void;
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    mocks.user.current = { fullName: 'Long', phone: '0900000000' };
+    localStorage.setItem(LAST_GEO_KEY, JSON.stringify(HCM));
+  });
+
+  it('chạm đúp Lưu địa chỉ mới trong cùng một khung hình: chỉ tạo một địa chỉ', async () => {
+    const create = pending<{ id: string }>();
+    (shopApi.createAddress as ReturnType<typeof vi.fn>).mockReturnValue(create.promise);
+    renderForm(<AddressForm initial={null} onCancel={() => {}} onSaved={() => {}} />);
+    typeStreet();
+    const save = screen.getByText('Lưu').closest('button')!;
+    await act(async () => {
+      fireEvent.click(save);
+      fireEvent.click(save);
+    });
+    expect(shopApi.createAddress).toHaveBeenCalledTimes(1);
+    expect(save).toHaveAttribute('aria-busy', 'true');
+    await act(async () => create.resolve({ id: 'new' }));
+  });
+
+  it('chạm đúp Lưu khi sửa địa chỉ: chỉ gọi updateAddress một lần', async () => {
+    const initial = {
+      id: 'a1', recipient: 'Ánh', phone: '0911111111', street: '1 X', district: '', districtCode: '', isDefault: false, ...HCM,
+    } as never;
+    const update = pending<{ id: string }>();
+    (accountApi.updateAddress as ReturnType<typeof vi.fn>).mockReturnValue(update.promise);
+    renderForm(<AddressForm initial={initial} onCancel={() => {}} onSaved={() => {}} />);
+    const save = screen.getByText('Lưu').closest('button')!;
+    await act(async () => {
+      fireEvent.click(save);
+      fireEvent.click(save);
+    });
+    expect(accountApi.updateAddress).toHaveBeenCalledTimes(1);
+    await act(async () => update.resolve({ id: 'a1' }));
+  });
+
+  it('lưu lỗi mạng thì nhả khoá: bấm Lưu lần nữa gửi lại được', async () => {
+    (shopApi.createAddress as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('mạng')).mockResolvedValue({ id: 'new' });
+    renderForm(<AddressForm initial={null} onCancel={() => {}} onSaved={() => {}} />);
+    typeStreet();
+    const save = screen.getByText('Lưu').closest('button')!;
+    await act(async () => fireEvent.click(save));
+    await waitFor(() => expect(save).not.toHaveAttribute('aria-busy'));
+    await act(async () => fireEvent.click(save));
+    expect(shopApi.createAddress).toHaveBeenCalledTimes(2);
+  });
+
+  it('bấm Lưu khi form còn thiếu thì không khoá: sửa xong bấm lại vẫn gửi', async () => {
+    (shopApi.createAddress as ReturnType<typeof vi.fn>).mockResolvedValue({ id: 'new' });
+    renderForm(<AddressForm initial={null} onCancel={() => {}} onSaved={() => {}} />);
+    const save = screen.getByText('Lưu').closest('button')!;
+    await act(async () => {
+      fireEvent.click(save);
+      fireEvent.click(save);
+    });
+    expect(shopApi.createAddress).not.toHaveBeenCalled();
+    typeStreet();
+    await act(async () => fireEvent.click(save));
+    expect(shopApi.createAddress).toHaveBeenCalledTimes(1);
+  });
+
+  it('chạm đúp "Điền nhanh từ Zalo": chỉ xin quyền một lần, nút báo bận trong lúc chờ', async () => {
+    mocks.user.current = { fullName: 'Khách', phone: null };
+    const profile = pending<{ name: string; phone: string }>();
+    mocks.requestZaloProfile.mockReturnValue(profile.promise);
+    renderForm(<AddressForm initial={null} onCancel={() => {}} onSaved={() => {}} />);
+    const quick = screen.getByText('Điền nhanh từ Zalo').closest('button')!;
+    await act(async () => {
+      fireEvent.click(quick);
+      fireEvent.click(quick);
+    });
+    expect(mocks.requestZaloProfile).toHaveBeenCalledTimes(1);
+    expect(quick).toHaveAttribute('aria-busy', 'true');
+    await act(async () => profile.resolve({ name: 'Ánh', phone: '0911111111' }));
+    expect(inputNear('Người nhận')).toHaveValue('Ánh');
+  });
+
+  it('Zalo từ chối (trả rỗng) thì nhả khoá: bấm lại xin lại được', async () => {
+    mocks.user.current = { fullName: 'Khách', phone: null };
+    mocks.requestZaloProfile.mockResolvedValue({ name: '', phone: '' });
+    renderForm(<AddressForm initial={null} onCancel={() => {}} onSaved={() => {}} />);
+    const quick = screen.getByText('Điền nhanh từ Zalo').closest('button')!;
+    await act(async () => fireEvent.click(quick));
+    await act(async () => fireEvent.click(quick));
+    expect(mocks.requestZaloProfile).toHaveBeenCalledTimes(2);
+  });
+});
