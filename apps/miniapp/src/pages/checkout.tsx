@@ -831,7 +831,7 @@ export default function CheckoutPage() {
                     {cart.data.couponCode}
                   </span>
                   {quote.data && quote.data.discount > 0 && (
-                    <Text size="xSmall" className="tubu-nums" data-testid="coupon-discount" style={{ color: 'var(--color-text-success)', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                    <Text size="xSmall" data-testid="coupon-discount" style={{ color: 'var(--color-text-success)', flexShrink: 0, whiteSpace: 'nowrap' }}>
                       -{formatVnd(quote.data.discount)}
                     </Text>
                   )}

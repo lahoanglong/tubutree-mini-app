@@ -2852,14 +2852,6 @@ describe('CheckoutPage — khoá chạm đúp dòng sửa nhanh, gỡ mã tự �
       await act(async () => remove.resolve(CART));
     });
 
-    it('mức giảm của mã ghi số đều (tabular-nums)', async () => {
-      mocks.getCart.mockResolvedValue(APPLIED);
-      mocks.checkoutQuote.mockResolvedValue({ ...QUOTE, discount: 30_000, total: 40_000 });
-      renderPage();
-      const discount = await screen.findByTestId('coupon-discount');
-      expect(discount).toHaveTextContent('-30.000đ');
-      expect(discount.className).toContain('tubu-nums');
-    });
   });
 
   it('chạm đúp "Đặt hàng" trong cùng một khung hình: chỉ gửi một đơn (Button đã khoá sẵn vì onPress async, giữ để không lùi)', async () => {
