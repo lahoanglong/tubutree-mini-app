@@ -257,4 +257,89 @@ describe('CouponClaimGate: nhận ưu đãi từ thẻ QR hộp hàng (D2-03)', 
     await flush(4);
     expect(sheet()).toBeNull();
   });
+
+  describe('khoá khi đang nhận, báo lỗi, số đều (W63A)', () => {
+    const CLAIMING_LINE = 'Tubu Tree đang thêm ưu đãi từ thẻ của bạn vào ví.';
+    const closeX = () => document.querySelector<HTMLElement>('[role="dialog"] button[aria-label="Đóng"]');
+    const lines = () => Array.from(document.querySelectorAll<HTMLElement>('[data-testid="coupon-claim-sheet"] p'));
+
+    it('đang nhận mã: nút Đóng, Esc và bấm nền không đóng sheet; nhận xong vẫn hiện ưu đãi rồi mới đóng được', async () => {
+      open('/?claim=SHOPEE-AB12CD34');
+      let resolve!: (value: typeof CLAIMED) => void;
+      mocks.post.mockReturnValue(
+        new Promise<typeof CLAIMED>((res) => {
+          resolve = res;
+        }),
+      );
+      const body = await mount();
+      expect(body.textContent).toContain(CLAIMING_LINE);
+      click(closeX());
+      act(() => {
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      });
+      click(document.querySelector('[data-sheet-backdrop]'));
+      expect(sheet()).not.toBeNull();
+      expect(body.textContent).toContain(CLAIMING_LINE);
+      await act(async () => resolve(CLAIMED));
+      await flush(4);
+      expect(body.textContent).toContain('Bạn nhận được ưu đãi');
+      click(closeX());
+      expect(sheet()).toBeNull();
+    });
+
+    it('thẻ bị từ chối: dòng lý do là role="alert" (duy nhất), chữ không đổi số đều', async () => {
+      open('/?claim=SHOPEE-AB12CD34');
+      mocks.post.mockRejectedValue(new ApiError('Mã giảm giá này đã được tài khoản khác nhận.', 400));
+      await mount();
+      const alerts = sheet()!.querySelectorAll('[role="alert"]');
+      expect(alerts).toHaveLength(1);
+      expect(alerts[0]!.textContent).toBe('Mã giảm giá này đã được tài khoản khác nhận.');
+      expect(alerts[0]!.className).not.toContain('tabular-nums');
+    });
+
+    it('đang nhận → thất bại: dựng thẻ <p> mới (không tái dùng node) để role="alert" được trình đọc màn hình đọc', async () => {
+      open('/?claim=SHOPEE-AB12CD34');
+      let reject!: (e: unknown) => void;
+      mocks.post.mockReturnValue(
+        new Promise((_, rej) => {
+          reject = rej;
+        }),
+      );
+      await mount();
+      const before = lines()[0]!;
+      expect(before.getAttribute('role')).toBeNull();
+      await act(async () => reject(new ApiError('Mã giảm giá này đã được tài khoản khác nhận.', 400)));
+      await flush(4);
+      const after = lines()[0]!;
+      expect(after).not.toBe(before);
+      expect(after.getAttribute('role')).toBe('alert');
+    });
+
+    it('mời đăng nhập: không role="alert", không số đều', async () => {
+      open('/?claim=SHOPEE-AB12CD34');
+      setPhase('guest');
+      await mount();
+      expect(sheet()!.querySelector('[role="alert"]')).toBeNull();
+      expect(lines().length).toBeGreaterThan(0);
+      for (const p of lines()) expect(p.className).not.toContain('tabular-nums');
+    });
+
+    it('đang nhận mã: câu giải thích không là alert và không đổi số đều', async () => {
+      open('/?claim=SHOPEE-AB12CD34');
+      mocks.post.mockReturnValue(new Promise(() => {}));
+      const body = await mount();
+      expect(body.textContent).toContain(CLAIMING_LINE);
+      expect(sheet()!.querySelector('[role="alert"]')).toBeNull();
+      for (const p of lines()) expect(p.className).not.toContain('tabular-nums');
+    });
+
+    it('ưu đãi đã nhận: mọi dòng dùng số đều (mức giảm, hạn dùng), không có role="alert"', async () => {
+      open('/?claim=SHOPEE-AB12CD34');
+      mocks.post.mockResolvedValue(CLAIMED);
+      await mount();
+      expect(lines()).toHaveLength(3);
+      for (const p of lines()) expect(p.className).toContain('tabular-nums');
+      expect(sheet()!.querySelector('[role="alert"]')).toBeNull();
+    });
+  });
 });
