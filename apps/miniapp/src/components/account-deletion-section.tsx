@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useSnackbar } from 'zmp-ui';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getWallet, requestAccountDeletion } from '../services/account-api';
 import {
   WALLET_FORFEIT_AGREE,
@@ -13,6 +13,7 @@ import {
 import { getErrorMessage } from '../services/api';
 import { formatVnd } from '../utils/format';
 import { openOAChat, hasOA } from '../services/zmp-bridge';
+import { useLockedMutation } from './game/use-locked-mutation';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
 import { Checkbox } from './ui/form';
@@ -35,7 +36,7 @@ export function AccountDeletionSection() {
   const walletWaiting = walletRetrying && walletQ.isPending;
 
   // Ghi nhận yêu cầu thật (CSKH xử lý thủ công, không xoá ngay) và mở sẵn Zalo OA để khách trao đổi luôn.
-  const deleteM = useMutation({
+  const deleteM = useLockedMutation({
     mutationFn: () => requestAccountDeletion(undefined, walletForfeitConsent(walletBalance, forfeitAgreed)),
     onSuccess: (res) => {
       openSnackbar({ text: res.message, type: 'info' });
@@ -124,10 +125,7 @@ export function AccountDeletionSection() {
               variant="danger"
               loading={deleteM.isPending}
               disabled={!canSubmitDeletion(walletBalance, forfeitAgreed)}
-              onPress={() => {
-                if (deleteM.isPending) return;
-                deleteM.mutate();
-              }}
+              onPress={() => deleteM.mutate()}
               style={{ flex: 1 }}
             >
               Gửi yêu cầu xoá

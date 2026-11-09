@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -105,7 +105,7 @@ vi.mock('../store/auth', () => {
 
 import ProfilePage from './profile';
 import { miniAppLink } from '../utils/miniapp-link';
-import { getWallet } from '../services/account-api';
+import { getLoyalty, getWallet } from '../services/account-api';
 
 function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -761,5 +761,175 @@ describe('Lối vào quầy Nhận hàng tại điểm (E-39)', () => {
     await waitFor(() => expect(mocks.orderCounts).toHaveBeenCalled());
     expect(mocks.deskPoints).not.toHaveBeenCalled();
     expect(screen.queryByText('Nhận hàng tại điểm')).toBeNull();
+  });
+});
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+describe('Cá nhân: chạm đúp cùng nhịp không gọi lặp (W78A)', () => {
+  const COUNTS = { pending_payment: 3, processing: 3, shipping: 3, delivered: 3, closed: 3 };
+  const copyRef = () => screen.findByRole('button', { name: /Sao chép mã LAN1/ });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    arrangeDefaults();
+    mocks.authStatus = 'authenticated';
+    mocks.notifications = [];
+    mocks.role = 'CUSTOMER';
+    mocks.getPublicConfig.mockImplementation(async () => ({}));
+    mocks.copyText.mockResolvedValue(true);
+    mocks.shareLink.mockResolvedValue(undefined);
+  });
+
+  it('chạm đúp cùng nhịp vào ô chép mã giới thiệu: chỉ chép một lần, báo một thông báo', async () => {
+    const d = deferred<boolean>();
+    mocks.copyText.mockReturnValue(d.promise);
+    renderPage();
+    const btn = await copyRef();
+    await act(async () => {
+      fireEvent.click(btn);
+      fireEvent.click(btn);
+    });
+    expect(mocks.copyText).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(btn).toHaveAttribute('aria-busy', 'true'));
+    await act(async () => {
+      d.resolve(true);
+    });
+    await waitFor(() => expect(btn).not.toHaveAttribute('aria-busy'));
+    expect(mocks.copyText).toHaveBeenCalledTimes(1);
+    expect(mocks.openSnackbar).toHaveBeenCalledTimes(1);
+    expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã sao chép mã giới thiệu', type: 'success' });
+  });
+
+  it('chép mã không được thì nhả khoá: bấm lại chép lần nữa', async () => {
+    mocks.copyText.mockResolvedValueOnce(false).mockResolvedValue(true);
+    renderPage();
+    const btn = await copyRef();
+    fireEvent.click(btn);
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'info' })));
+    await waitFor(() => expect(btn).not.toHaveAttribute('aria-busy'));
+    fireEvent.click(btn);
+    await waitFor(() => expect(mocks.copyText).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã sao chép mã giới thiệu', type: 'success' }));
+  });
+
+  it('chạm đúp cùng nhịp vào Chia sẻ: chỉ mở hộp chia sẻ một lần, nút báo bận tới khi xong', async () => {
+    const d = deferred<void>();
+    mocks.shareLink.mockReturnValue(d.promise);
+    renderPage();
+    const share = await screen.findByRole('button', { name: 'Chia sẻ' });
+    await act(async () => {
+      fireEvent.click(share);
+      fireEvent.click(share);
+    });
+    expect(mocks.shareLink).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(share).toHaveAttribute('aria-busy', 'true'));
+    await act(async () => {
+      d.resolve();
+    });
+    await waitFor(() => expect(share).not.toHaveAttribute('aria-busy'));
+    expect(mocks.shareLink).toHaveBeenCalledTimes(1);
+  });
+
+  it('Chia sẻ rồi chép mã cùng nhịp (cùng một mã): chỉ việc đầu chạy, việc sau bị bỏ', async () => {
+    const d = deferred<void>();
+    mocks.shareLink.mockReturnValue(d.promise);
+    renderPage();
+    const share = await screen.findByRole('button', { name: 'Chia sẻ' });
+    const copy = await copyRef();
+    await act(async () => {
+      fireEvent.click(share);
+      fireEvent.click(copy);
+    });
+    expect(mocks.shareLink).toHaveBeenCalledTimes(1);
+    expect(mocks.copyText).not.toHaveBeenCalled();
+    await act(async () => {
+      d.resolve();
+    });
+    await waitFor(() => expect(share).not.toHaveAttribute('aria-busy'));
+    fireEvent.click(copy);
+    await waitFor(() => expect(mocks.copyText).toHaveBeenCalledTimes(1));
+  });
+
+  it('khách đóng hộp chia sẻ (huỷ) thì nhả khoá: bấm Chia sẻ lại gọi lần nữa', async () => {
+    mocks.shareLink.mockRejectedValueOnce({ code: -2003 }).mockResolvedValue(undefined);
+    renderPage();
+    const share = await screen.findByRole('button', { name: 'Chia sẻ' });
+    fireEvent.click(share);
+    await waitFor(() => expect(mocks.shareLink).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(share).not.toHaveAttribute('aria-busy'));
+    fireEvent.click(share);
+    await waitFor(() => expect(mocks.shareLink).toHaveBeenCalledTimes(2));
+  });
+
+  // refetch() mặc định huỷ lần đang chạy rồi gọi lại khi truy vấn đã có số cũ, nên chạm đúp ở dòng báo lỗi sau một lần tải lỗi sẽ bắn hai lời gọi.
+  it('chạm đúp cùng nhịp vào Thử lại số đơn (đã có số cũ): chỉ tải lại một lần, nút báo bận tới khi xong', async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={qc}><ProfilePage /></QueryClientProvider>);
+    await waitFor(() => expect(screen.getAllByTestId('order-count-badge').length).toBeGreaterThan(0));
+    mocks.orderCounts.mockRejectedValueOnce(new Error('boom'));
+    await act(async () => {
+      await qc.refetchQueries({ queryKey: ['me-summary'] });
+    });
+    expect(await screen.findByText('Không tải được số đơn.')).toBeInTheDocument();
+    const before = mocks.orderCounts.mock.calls.length;
+    const d = deferred<typeof COUNTS>();
+    mocks.orderCounts.mockReturnValueOnce(d.promise);
+    const retry = screen.getByRole('button', { name: 'Thử lại' });
+    await act(async () => {
+      fireEvent.click(retry);
+      fireEvent.click(retry);
+    });
+    expect(mocks.orderCounts.mock.calls.length).toBe(before + 1);
+    await waitFor(() => expect(retry).toHaveAttribute('aria-busy', 'true'));
+    await act(async () => {
+      d.resolve(COUNTS);
+    });
+    await waitFor(() => expect(screen.queryByText('Không tải được số đơn.')).toBeNull());
+    expect(mocks.orderCounts.mock.calls.length).toBe(before + 1);
+  });
+
+  it('Thử lại số đơn vẫn lỗi thì nhả khoá: bấm lại tải thêm lần nữa', async () => {
+    mocks.orderCounts.mockRejectedValue(new Error('boom'));
+    renderPage();
+    expect(await screen.findByText('Không tải được số đơn.')).toBeInTheDocument();
+    const before = mocks.orderCounts.mock.calls.length;
+    fireEvent.click(screen.getByRole('button', { name: 'Thử lại' }));
+    await waitFor(() => expect(mocks.orderCounts.mock.calls.length).toBe(before + 1));
+    expect(await screen.findByText('Không tải được số đơn.')).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: 'Thử lại' }));
+    await waitFor(() => expect(mocks.orderCounts.mock.calls.length).toBe(before + 2));
+  });
+
+  it('chạm đúp cùng nhịp vào Thử lại ở dòng hạng và điểm: tải lại hạng và số đếm đúng một lần', async () => {
+    vi.mocked(getLoyalty).mockRejectedValueOnce(new Error('boom'));
+    renderPage();
+    expect(await screen.findByText('Chưa tải được hạng và điểm')).toBeInTheDocument();
+    await waitFor(() => expect(mocks.orderCounts).toHaveBeenCalled());
+    const loyaltyBefore = vi.mocked(getLoyalty).mock.calls.length;
+    const summaryBefore = mocks.orderCounts.mock.calls.length;
+    const d = deferred<{ pointsBalance: number; pointsConvertedBalance: number; tier: { name: string } }>();
+    vi.mocked(getLoyalty).mockReturnValueOnce(d.promise as never);
+    const retry = within(screen.getByRole('alert')).getByRole('button', { name: 'Thử lại' });
+    await act(async () => {
+      fireEvent.click(retry);
+      fireEvent.click(retry);
+    });
+    expect(vi.mocked(getLoyalty).mock.calls.length).toBe(loyaltyBefore + 1);
+    expect(mocks.orderCounts.mock.calls.length).toBe(summaryBefore + 1);
+    await act(async () => {
+      d.resolve({ pointsBalance: 120, pointsConvertedBalance: 30, tier: { name: 'Mầm Xanh' } });
+    });
+    await waitFor(() => expect(screen.queryByText('Chưa tải được hạng và điểm')).toBeNull());
+    expect(vi.mocked(getLoyalty).mock.calls.length).toBe(loyaltyBefore + 1);
+    expect(mocks.orderCounts.mock.calls.length).toBe(summaryBefore + 1);
   });
 });

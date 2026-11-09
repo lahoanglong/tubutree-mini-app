@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { loadMoreFailed } from '@tubutree/app-core/client-copy';
 import { Page, useNavigate } from 'zmp-ui';
-import { useInfiniteQuery, useMutation, useQueryClient, type InfiniteData } from '@tanstack/react-query';
+import { useInfiniteQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query';
 import { ME_SUMMARY_KEY } from '@tubutree/app-core/api/me-summary';
 import {
   CheckCircle2, Truck, PackageCheck, Receipt, FileText, Coins,
@@ -174,15 +174,19 @@ export default function NotificationsPage() {
     void qc.invalidateQueries({ queryKey: failed ? ['notifications'] : ME_SUMMARY_KEY });
   };
 
-  const readMut = useMutation({
-    mutationFn: (id: string) => markNotificationRead(id),
-    onSuccess: (_res, id) => {
-      markReadInCache((n) => n.id === id);
-      refetchIfListBusy();
+  // Khoá theo id tin: chạm đúp cùng một tin chưa đọc chỉ gửi một lệnh, hai tin khác nhau vẫn đọc song song.
+  const readMut = useLockedMutation(
+    {
+      mutationFn: (id: string) => markNotificationRead(id),
+      onSuccess: (_res, id) => {
+        markReadInCache((n) => n.id === id);
+        refetchIfListBusy();
+      },
+      // onSettled chứ không onSuccess: đánh dấu đã đọc hỏng thì huy hiệu chưa-đọc ở trang chủ sai vĩnh viễn mà không có tín hiệu nào.
+      onSettled: (_res, err) => settleRead(err !== null),
     },
-    // onSettled chứ không onSuccess: đánh dấu đã đọc hỏng thì huy hiệu chưa-đọc ở trang chủ sai vĩnh viễn mà không có tín hiệu nào.
-    onSettled: (_res, err) => settleRead(err !== null),
-  });
+    (id) => id,
+  );
 
   // Giữ qua lúc "Thử lại" đang chạy (không theo isError) để khối báo lỗi không biến mất rồi hiện lại; chỉ xoá khi thành công.
   // `count` đếm số lần lỗi: làm key của dòng chữ để lần lỗi lặp lại (cùng câu) vẫn được trình đọc màn hình đọc lại.
@@ -320,7 +324,7 @@ export default function NotificationsPage() {
             <LineItemSkeleton />
           </div>
         ) : notifQ.isError && !notifQ.data ? (
-          <ErrorState message={getLoadErrorMessage(notifQ.error)} onRetry={() => void notifQ.refetch()} />
+          <ErrorState message={getLoadErrorMessage(notifQ.error)} onRetry={() => notifQ.refetch()} />
         ) : list && list.length > 0 ? (
           <div className="tubu-nums" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
             {list.map((n) => {

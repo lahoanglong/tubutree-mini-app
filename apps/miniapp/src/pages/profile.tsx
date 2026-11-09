@@ -28,7 +28,7 @@ import { Skeleton } from '../components/ui/skeleton';
 import { SR_ONLY } from '../components/ui/sr-only';
 import { Heading, Text } from '../components/ui/text';
 import { GuestLinkCard } from '../components/home/guest-link-card';
-import { useShareWithFallback } from '../components/share-sheet';
+import { useActionLock, useShareWithFallback } from '../components/share-sheet';
 import { getAuthMeFlags, getOwnedBrand } from '../services/brand-owner-api';
 import { isNotFoundError } from '../services/api';
 import { getDealerMe } from '../services/dealer-api';
@@ -95,6 +95,10 @@ export default function ProfilePage() {
   const location = useLocation();
   const { openSnackbar } = useSnackbar();
   const shareWithFallback = useShareWithFallback();
+  // Chép và chia sẻ mã giới thiệu cùng một đối tượng nên chung một khoá; thử lại số đếm/hạng là khoá riêng. Cả hai là ref đồng bộ:
+  // state `busy` chỉ đổi sau lần vẽ kế nên hai cú chạm cùng nhịp vẫn đều đi qua.
+  const referralLock = useActionLock();
+  const reloadLock = useActionLock();
   const { user, status } = useAuthStore();
   const phase = useAuthPhase();
   const blocked = useBlockedMessage();
@@ -214,28 +218,31 @@ export default function ProfilePage() {
   const minOrder = referral?.minOrderAmount ? formatVnd(referral.minOrderAmount) : null;
 
   const copyReferral = () => {
-    haptic('light');
     if (!code) return;
-    void copyText(code).then((ok) =>
+    void referralLock.run('copy', async () => {
+      haptic('light');
+      const ok = await copyText(code);
       openSnackbar(
         ok
           ? { text: 'Đã sao chép mã giới thiệu', type: 'success' }
           : { text: `Không sao chép được — mã của bạn: ${code}`, type: 'info', duration: 4000 },
-      ),
-    );
+      );
+    });
   };
   const shareReferral = () => {
     if (!code) return;
-    haptic('light');
-    void shareWithFallback(
-      { title: 'Tubu Tree — Trồng cây, nhận quà', description: `Dùng mã ${code} khi mua hàng ở Tubu Tree nhé!`, path: `/?ref=${code}` },
-      `Dùng mã ${code} khi mua hàng ở Tubu Tree nhé: ${miniAppLink(`/?ref=${code}`)}`,
-    );
+    void referralLock.run('share', async () => {
+      haptic('light');
+      await shareWithFallback(
+        { title: 'Tubu Tree — Trồng cây, nhận quà', description: `Dùng mã ${code} khi mua hàng ở Tubu Tree nhé!`, path: `/?ref=${code}` },
+        `Dùng mã ${code} khi mua hàng ở Tubu Tree nhé: ${miniAppLink(`/?ref=${code}`)}`,
+      );
+    });
   };
 
   const countsFailed = summaryQ.isError;
   const reloadCounts = () => {
-    void summaryQ.refetch();
+    void reloadLock.run('counts', () => summaryQ.refetch());
   };
 
   const countFor = (key: string): number | null => {
@@ -315,10 +322,10 @@ export default function ProfilePage() {
             <button
               type="button"
               className="tubu-press"
+              aria-busy={reloadLock.busy || undefined}
               onClick={() => {
                 haptic('light');
-                void loyaltyQ.refetch();
-                reloadCounts();
+                void reloadLock.run('counts', () => Promise.all([loyaltyQ.refetch(), summaryQ.refetch()]));
               }}
               style={{ minHeight: 44, margin: '-12px -6px', padding: '0 6px', border: 'none', background: 'transparent', color: 'var(--color-text-inverse)', fontFamily: 'inherit', fontSize: 'var(--type-caption-size)', fontWeight: 700, textDecoration: 'underline', cursor: 'pointer' }}
             >
@@ -397,7 +404,7 @@ export default function ProfilePage() {
               <Text variant="caption" tone="secondary">
                 {profileCopy.ordersFailed}
               </Text>
-              <Button variant="ghost" size="md" onPress={reloadCounts}>
+              <Button variant="ghost" size="md" loading={reloadLock.busy} onPress={reloadCounts}>
                 {homeCopy.member.retry}
               </Button>
             </div>
@@ -430,6 +437,7 @@ export default function ProfilePage() {
                 type="button"
                 className="tubu-press"
                 aria-label={`${homeCopy.profile.referralCopy} mã ${code}`}
+                aria-busy={referralLock.active === 'copy' || undefined}
                 onClick={copyReferral}
                 style={{ flex: 1, minWidth: 0, minHeight: 44, boxSizing: 'border-box', padding: '8px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, border: 'none', borderRadius: 'var(--radius-control)', background: 'var(--color-action-secondary-bg)', textAlign: 'left', fontFamily: 'inherit', cursor: 'pointer' }}
               >
@@ -438,7 +446,7 @@ export default function ProfilePage() {
                 </Text>
                 <Icon icon={Copy} size="sm" tone="brand" />
               </button>
-              <Button onPress={shareReferral} style={{ flexShrink: 0 }}>
+              <Button loading={referralLock.active === 'share'} aria-disabled={referralLock.busy || undefined} onPress={shareReferral} style={{ flexShrink: 0 }}>
                 {homeCopy.profile.referralShare}
               </Button>
             </div>

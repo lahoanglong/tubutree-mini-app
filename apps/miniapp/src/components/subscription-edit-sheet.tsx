@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useSnackbar } from 'zmp-ui';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getAddresses } from '../services/shop-api';
 import { getWallet } from '../services/account-api';
 import {
@@ -11,6 +11,7 @@ import {
 import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { haptic } from '../utils/haptic';
 import { vi } from '../i18n/vi';
+import { useLockedMutation } from './game/use-locked-mutation';
 import { BottomSheet } from './ui/bottom-sheet';
 import { Button } from './ui/button';
 import { QuantitySelector } from './ui/quantity-selector';
@@ -63,7 +64,7 @@ export function SubscriptionEditSheet({ sub, onClose }: { sub: SubscriptionDTO; 
   const nextRun = nextRunAfterIntervalChange(sub, weeks);
   const dirty = Object.keys(patch).length > 0;
 
-  const save = useMutation({
+  const save = useLockedMutation({
     mutationFn: () => updateSubscription(sub.id, patch),
     onSuccess: () => {
       haptic('light');

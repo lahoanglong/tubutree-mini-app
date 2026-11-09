@@ -244,7 +244,7 @@ export default function OrderDetailPage() {
         {isNotFoundError(order.error) ? (
           <ErrorState message="Không tìm thấy đơn hàng này." onRetry={() => undefined} onHome={() => navigate('/')} />
         ) : (
-          <ErrorState message={getLoadErrorMessage(order.error)} onRetry={() => void order.refetch()} />
+          <ErrorState message={getLoadErrorMessage(order.error)} onRetry={() => order.refetch()} />
         )}
       </Shell>
     );

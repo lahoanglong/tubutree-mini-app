@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSnackbar } from 'zmp-ui';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getAddresses } from '../services/shop-api';
 import { getWallet } from '../services/account-api';
 import {
@@ -12,6 +12,7 @@ import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { haptic } from '../utils/haptic';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { vi } from '../i18n/vi';
+import { useLockedMutation } from './game/use-locked-mutation';
 import { BottomSheet } from './ui/bottom-sheet';
 import { Button } from './ui/button';
 import { Chip } from './ui/chip';
@@ -70,7 +71,7 @@ export function SubscribeSheet({
 
   // Payload dựng ở onPress (closure của lần render vừa commit) rồi truyền vào mutate: mutationFn trong options chỉ
   // được cập nhật ở effect, chạm ngay khi địa chỉ mặc định vừa hiện có thể gửi addressId cũ (undefined).
-  const create = useMutation({
+  const create = useLockedMutation({
     mutationFn: (input: Parameters<typeof createSubscription>[0]) => createSubscription(input),
     onSuccess: (sub, input) => {
       haptic('medium');

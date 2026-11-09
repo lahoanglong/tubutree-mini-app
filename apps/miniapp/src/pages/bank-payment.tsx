@@ -84,17 +84,26 @@ export default function BankPaymentPage() {
 
   const remaining = useRemaining(data?.paymentDeadline);
 
+  // Khoá đồng bộ dùng chung cho cả ba dòng chép: hai cú chạm cùng nhịp (kể cả hai dòng khác nhau) mà ghi clipboard chồng nhau
+  // thì lần đáp sau cùng thắng, còn thông báo lại nói dòng kia; ref chặn được trước khi state kịp vẽ lại.
+  const copyingRef = useRef(false);
   const copy = async (text: string, label: string): Promise<boolean> => {
-    haptic('light');
-    // Chỉ báo "Đã sao chép" SAU KHI ghi clipboard thật sự thành công — báo thành công giả ở đây là
-    // khách dán nhầm số tài khoản cũ khi chuyển khoản.
-    const ok = await copyText(text);
-    openSnackbar(
-      ok
-        ? { text: `Đã sao chép ${label}`, type: 'success', position: 'top' }
-        : { text: bankCopyFailed(label), type: 'error', position: 'top' },
-    );
-    return ok;
+    if (copyingRef.current) return false;
+    copyingRef.current = true;
+    try {
+      haptic('light');
+      // Chỉ báo "Đã sao chép" SAU KHI ghi clipboard thật sự thành công — báo thành công giả ở đây là
+      // khách dán nhầm số tài khoản cũ khi chuyển khoản.
+      const ok = await copyText(text);
+      openSnackbar(
+        ok
+          ? { text: `Đã sao chép ${label}`, type: 'success', position: 'top' }
+          : { text: bankCopyFailed(label), type: 'error', position: 'top' },
+      );
+      return ok;
+    } finally {
+      copyingRef.current = false;
+    }
   };
 
   // Cờ RIÊNG cho thao tác bấm tay. Dùng `isFetching` của query sẽ bật/tắt theo nhịp poll nền 4
@@ -205,7 +214,7 @@ export default function BankPaymentPage() {
           message={loadErrorMessage(error)}
           showSupport={false}
           retrying={isFetching}
-          onRetry={() => void refetch()}
+          onRetry={() => refetch()}
         />
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, marginTop: -24, padding: '0 32px 40px' }}>
           <Button variant="secondary" onPress={() => navigate(`/order/${code}`, { replace: true })}>

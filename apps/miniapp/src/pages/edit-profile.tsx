@@ -194,7 +194,7 @@ export default function EditProfilePage() {
           <Skeleton height={56} />
         </div>
       ) : meQ.isError ? (
-        <ErrorState message={getLoadErrorMessage(meQ.error)} onRetry={() => void meQ.refetch()} />
+        <ErrorState message={getLoadErrorMessage(meQ.error)} onRetry={() => meQ.refetch()} />
       ) : (
         <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
           {/* Avatar Upload Section */}

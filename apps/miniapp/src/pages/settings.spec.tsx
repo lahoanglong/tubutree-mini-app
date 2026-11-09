@@ -1,4 +1,4 @@
-import { render as rtlRender, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { act, render as rtlRender, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -333,5 +333,138 @@ describe('Cài đặt theo DS v2 (C-076, C-114)', () => {
     expect(await screen.findByText('Đã theo dõi')).toBeInTheDocument();
     expect(mocks.setOaPromptState).toHaveBeenCalledWith({ followed: true, promptSeen: true });
     expect(container.textContent).not.toContain('✓');
+  });
+});
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+describe('Cài đặt: chạm đúp cùng nhịp không gọi lặp (W78A)', () => {
+  const gardenSwitch = () => screen.getByRole('switch', { name: 'Nhắc nhở Vườn Xanh & tương tác bài viết' });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.stored = undefined;
+    mocks.user = { phone: '0900000000', zaloId: 'z123' };
+    mocks.storageReads = 0;
+    mocks.hasOA = false;
+    mocks.fetchNotifyPrefs.mockResolvedValue({ notifyPromo: true, notifyGarden: true });
+    mocks.saveNotifyPrefs.mockImplementation(async (patch: object) => ({ notifyPromo: true, notifyGarden: true, ...patch }));
+    mocks.getOaPromptState.mockResolvedValue({ followed: false, promptSeen: false });
+    mocks.followOA.mockResolvedValue(true);
+    mocks.requestNotifyPermission.mockResolvedValue(true);
+    mocks.setOaPromptState.mockResolvedValue(undefined);
+    mocks.logout.mockReset();
+  });
+
+  it('chạm đúp cùng nhịp vào một công tắc: chỉ gửi một PATCH, công tắc báo bận tới khi lưu xong', async () => {
+    const d = deferred<object>();
+    mocks.saveNotifyPrefs.mockReturnValue(d.promise);
+    render(<SettingsPage />);
+    await waitFor(() => expect(promoSwitch()).toHaveAttribute('aria-checked', 'true'));
+    await act(async () => {
+      fireEvent.click(promoSwitch());
+      fireEvent.click(promoSwitch());
+    });
+    expect(mocks.saveNotifyPrefs).toHaveBeenCalledTimes(1);
+    expect(mocks.saveNotifyPrefs).toHaveBeenCalledWith({ notifyPromo: false });
+    await waitFor(() => expect(promoSwitch()).toHaveAttribute('aria-disabled', 'true'));
+    await act(async () => {
+      d.resolve({ notifyPromo: false, notifyGarden: true });
+    });
+    await waitFor(() => expect(promoSwitch()).not.toHaveAttribute('aria-disabled'));
+    expect(mocks.saveNotifyPrefs).toHaveBeenCalledTimes(1);
+    expect(promoSwitch()).toHaveAttribute('aria-checked', 'false');
+  });
+
+  it('chạm hai công tắc khác nhau cùng nhịp: chỉ công tắc đầu được lưu, công tắc sau giữ nguyên', async () => {
+    const d = deferred<object>();
+    mocks.saveNotifyPrefs.mockReturnValue(d.promise);
+    render(<SettingsPage />);
+    await waitFor(() => expect(promoSwitch()).toHaveAttribute('aria-checked', 'true'));
+    await act(async () => {
+      fireEvent.click(promoSwitch());
+      fireEvent.click(gardenSwitch());
+    });
+    expect(mocks.saveNotifyPrefs).toHaveBeenCalledTimes(1);
+    expect(mocks.saveNotifyPrefs).toHaveBeenCalledWith({ notifyPromo: false });
+    await act(async () => {
+      d.resolve({ notifyPromo: false, notifyGarden: true });
+    });
+    expect(gardenSwitch()).toHaveAttribute('aria-checked', 'true');
+    await waitFor(() => expect(gardenSwitch()).not.toHaveAttribute('aria-disabled'));
+  });
+
+  it('lưu lỗi thì nhả khoá: bấm lại gửi PATCH lần nữa và lần này lưu được', async () => {
+    mocks.saveNotifyPrefs.mockRejectedValueOnce(new Error('net'));
+    render(<SettingsPage />);
+    await waitFor(() => expect(promoSwitch()).toHaveAttribute('aria-checked', 'true'));
+    fireEvent.click(promoSwitch());
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+    await waitFor(() => expect(promoSwitch()).not.toHaveAttribute('aria-disabled'));
+    fireEvent.click(promoSwitch());
+    await waitFor(() => expect(mocks.saveNotifyPrefs).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(promoSwitch()).toHaveAttribute('aria-checked', 'false'));
+  });
+
+  it('chạm đúp cùng nhịp vào Theo dõi Zalo OA: chỉ mở hộp theo dõi một lần, nút báo bận tới khi xong', async () => {
+    mocks.hasOA = true;
+    const d = deferred<boolean>();
+    mocks.followOA.mockReturnValue(d.promise);
+    render(<SettingsPage />);
+    const follow = await screen.findByRole('button', { name: 'Theo dõi' });
+    await act(async () => {
+      fireEvent.click(follow);
+      fireEvent.click(follow);
+    });
+    expect(mocks.followOA).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(follow).toHaveAttribute('aria-busy', 'true'));
+    await act(async () => {
+      d.resolve(true);
+    });
+    expect(await screen.findByText('Đã theo dõi')).toBeInTheDocument();
+    expect(mocks.followOA).toHaveBeenCalledTimes(1);
+    expect(mocks.requestNotifyPermission).toHaveBeenCalledTimes(1);
+    expect(mocks.setOaPromptState).toHaveBeenCalledTimes(1);
+    expect(mocks.setOaPromptState).toHaveBeenCalledWith({ followed: true, promptSeen: true });
+  });
+
+  it('không theo dõi được (khách từ chối) thì nhả khoá: bấm lại mở hộp theo dõi lần nữa', async () => {
+    mocks.hasOA = true;
+    mocks.followOA.mockResolvedValueOnce(false).mockResolvedValue(true);
+    render(<SettingsPage />);
+    const follow = await screen.findByRole('button', { name: 'Theo dõi' });
+    fireEvent.click(follow);
+    await waitFor(() => expect(mocks.setOaPromptState).toHaveBeenCalledWith({ followed: false, promptSeen: true }));
+    await waitFor(() => expect(follow).not.toHaveAttribute('aria-busy'));
+    expect(mocks.requestNotifyPermission).not.toHaveBeenCalled();
+    fireEvent.click(follow);
+    await waitFor(() => expect(mocks.followOA).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText('Đã theo dõi')).toBeInTheDocument();
+  });
+
+  it('chạm đúp cùng nhịp vào Đăng xuất: chỉ gọi logout một lần; xong rồi bấm lại thì gọi tiếp', async () => {
+    const d = deferred<void>();
+    mocks.logout.mockReturnValueOnce(d.promise).mockResolvedValue(undefined);
+    render(<SettingsPage />);
+    const out = screen.getByRole('button', { name: 'Đăng xuất' });
+    await act(async () => {
+      fireEvent.click(out);
+      fireEvent.click(out);
+    });
+    expect(mocks.logout).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      d.resolve();
+    });
+    expect(mocks.logout).toHaveBeenCalledTimes(1);
+    fireEvent.click(out);
+    await waitFor(() => expect(mocks.logout).toHaveBeenCalledTimes(2));
   });
 });

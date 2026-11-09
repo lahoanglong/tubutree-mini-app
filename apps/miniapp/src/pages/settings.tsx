@@ -52,6 +52,9 @@ export default function SettingsPage() {
   const [local, setLocal] = useState<LocalPrefs>(DEFAULT_LOCAL);
   const [notify, setNotify] = useState<NotifyPrefs | null>(null);
   const [saving, setSaving] = useState(false);
+  // `saving` chỉ đổi sau lần vẽ kế: hai cú chạm cùng nhịp (cùng công tắc hoặc hai công tắc) vẫn thấy false và gửi hai PATCH.
+  const savingRef = useRef(false);
+  const loggingOutRef = useRef(false);
 
   useEffect(() => {
     let alive = true;
@@ -86,7 +89,8 @@ export default function SettingsPage() {
 
   // Khoá công tắc khi đang lưu: hai PATCH ngược chiều về lệch thứ tự sẽ làm màn hình khác server.
   const toggleNotify = async (key: keyof NotifyPrefs) => {
-    if (!notify || saving) return;
+    if (!notify || savingRef.current) return;
+    savingRef.current = true;
     const before = notify;
     setSaving(true);
     setNotify({ ...before, [key]: !before[key] });
@@ -97,7 +101,18 @@ export default function SettingsPage() {
       setNotify(before);
       openSnackbar({ type: 'error', text: 'Chưa lưu được cài đặt. Kiểm tra mạng rồi thử lại.' });
     } finally {
+      savingRef.current = false;
       setSaving(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    if (loggingOutRef.current) return;
+    loggingOutRef.current = true;
+    try {
+      await logout();
+    } finally {
+      loggingOutRef.current = false;
     }
   };
 
@@ -173,7 +188,7 @@ export default function SettingsPage() {
 
       {canLogout && (
         <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 'var(--space-stack-sm)' }}>
-          <Button fullWidth variant="secondary" onPress={() => void logout()}>
+          <Button fullWidth variant="secondary" onPress={() => void handleLogout()}>
             Đăng xuất
           </Button>
           <LogoutAllSection />
@@ -283,6 +298,8 @@ function FollowOaRow() {
   const [ready, setReady] = useState(false);
   const [followed, setFollowed] = useState(false);
   const [busy, setBusy] = useState(false);
+  // `busy` chỉ đúng sau lần vẽ kế: hai cú chạm cùng nhịp vẫn thấy false và mở hộp theo dõi OA hai lần.
+  const busyRef = useRef(false);
 
   useEffect(() => {
     void getOaPromptState().then((s) => {
@@ -292,13 +309,19 @@ function FollowOaRow() {
   }, []);
 
   const handleFollow = async () => {
+    if (busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
-    const ok = await followOA();
-    if (ok) await requestNotifyPermission().catch(() => false);
-    await setOaPromptState({ followed: ok, promptSeen: true });
-    setFollowed(ok);
-    setBusy(false);
-    haptic(ok ? 'medium' : 'light');
+    try {
+      const ok = await followOA();
+      if (ok) await requestNotifyPermission().catch(() => false);
+      await setOaPromptState({ followed: ok, promptSeen: true });
+      setFollowed(ok);
+      haptic(ok ? 'medium' : 'light');
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
   };
 
   if (!ready) return null; // tránh nháy sai trạng thái trước khi đọc xong cờ trên máy

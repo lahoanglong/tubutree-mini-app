@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
@@ -284,5 +284,61 @@ describe('SubscriptionEditSheet: số đều (tabular-nums) cho ngày giao kế 
     const titles = await screen.findAllByText('Lan · 0900000000');
     expect(titles).toHaveLength(2);
     titles.forEach((t) => expect(t.style.fontVariantNumeric).toBe('tabular-nums'));
+  });
+});
+
+describe('SubscriptionEditSheet: Lưu khoá đồng bộ chạm đúp (W78A)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getAddresses.mockResolvedValue(ADDRS);
+    mocks.getWallet.mockResolvedValue({ walletBalance: 50000 });
+  });
+
+  async function openDirty() {
+    renderSheet();
+    await screen.findByRole('radio', { name: /9 Hai Bà Trưng/ });
+    fireEvent.click(screen.getByRole('button', { name: 'Tăng số lượng' }));
+    return screen.getByRole('button', { name: 'Lưu thay đổi' });
+  }
+  const deferred = () => {
+    let resolve!: (v: unknown) => void;
+    let reject!: (e: unknown) => void;
+    const promise = new Promise((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+
+  it('chạm đúp "Lưu thay đổi" trong cùng một khung hình chỉ PATCH một lần; xong báo thành công và đóng sheet một lần', async () => {
+    const d = deferred();
+    mocks.updateSubscription.mockReturnValue(d.promise);
+    const save = await openDirty();
+    await act(async () => {
+      fireEvent.click(save);
+      fireEvent.click(save);
+    });
+    expect(mocks.updateSubscription).toHaveBeenCalledTimes(1);
+    expect(mocks.updateSubscription).toHaveBeenCalledWith('s1', { quantity: 3 });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Lưu thay đổi' })).toHaveAttribute('aria-busy', 'true'));
+    await act(async () => d.resolve({ ...SUB, quantity: 3 }));
+    await waitFor(() => expect(mocks.onClose).toHaveBeenCalledTimes(1));
+    expect(mocks.openSnackbar.mock.calls.filter(([o]) => (o as { type: string }).type === 'success')).toHaveLength(1);
+  });
+
+  it('lưu lỗi thì nhả khoá, bấm lại gọi lần hai và đóng sheet khi lần hai xong', async () => {
+    const d = deferred();
+    mocks.updateSubscription.mockReturnValueOnce(d.promise);
+    const save = await openDirty();
+    fireEvent.click(save);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Lưu thay đổi' })).toHaveAttribute('aria-busy', 'true'));
+    await act(async () => d.reject(serverError('Máy chủ bận', 500)));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Lưu thay đổi' })).not.toHaveAttribute('aria-busy'));
+    expect(mocks.onClose).not.toHaveBeenCalled();
+    mocks.updateSubscription.mockResolvedValueOnce({ ...SUB, quantity: 3 });
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
+    await waitFor(() => expect(mocks.updateSubscription).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mocks.onClose).toHaveBeenCalledTimes(1));
   });
 });
