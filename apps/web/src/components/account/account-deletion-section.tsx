@@ -25,13 +25,15 @@ const DELETE_OA_MESSAGE = 'Tôi muốn xoá tài khoản Tubu Tree';
 export function AccountDeletionSection() {
   const [confirming, setConfirming] = useState(false);
   const qc = useQueryClient();
-  const [agreed, setAgreed] = useState(false);
+  const [agreedBalance, setAgreedBalance] = useState<number | null>(null);
   const walletQ = useQuery({ ...walletQuery(coreHttp), enabled: confirming });
   const balance = walletQ.data?.walletBalance;
+  // Tick gắn với số dư khách đã thấy lúc tick: ví tải lại ra số khác thì tick cũ hết hiệu lực, không gửi kèm số mới.
+  const agreed = balance !== undefined && agreedBalance === balance;
   const del = useMutation({
     mutationFn: () => requestAccountDeletion(coreHttp, undefined, walletForfeitConsent(balance, agreed)),
     onError: () => {
-      setAgreed(false);
+      setAgreedBalance(null);
       void qc.invalidateQueries({ queryKey: ['wallet'] });
     },
   });
@@ -49,7 +51,12 @@ export function AccountDeletionSection() {
           )}
         </div>
       ) : confirming ? (
-        <div className="rounded-card bg-danger-bg p-4">
+        <div
+          role="region"
+          aria-label="Xác nhận xoá tài khoản"
+          aria-busy={walletQ.isLoading || del.isPending || undefined}
+          className="rounded-card bg-danger-bg p-4"
+        >
           <p className="text-sm font-bold text-danger-fg">Xoá tài khoản vĩnh viễn?</p>
           <p className="mt-1 text-xs text-stone-700">
             Gửi yêu cầu để CSKH liên hệ xác minh và xử lý xoá tài khoản theo quy định — tài khoản CHƯA bị xoá ngay khi bạn bấm nút này.
@@ -59,7 +66,11 @@ export function AccountDeletionSection() {
               {actionErrorText(del.error)}
             </p>
           )}
-          {walletQ.isLoading && <p className="mt-2 text-xs text-stone-600">{WALLET_FORFEIT_LOADING}</p>}
+          {walletQ.isLoading && (
+            <p role="status" className="mt-2 text-xs text-stone-600">
+              {WALLET_FORFEIT_LOADING}
+            </p>
+          )}
           {walletQ.isError && (
             <p role="alert" className={`mt-2 ${ui.error}`}>
               {WALLET_FORFEIT_UNKNOWN}
@@ -67,9 +78,19 @@ export function AccountDeletionSection() {
           )}
           {balance !== undefined && balance > 0 && (
             <div className="mt-3">
-              <p className="text-sm font-bold text-stone-900">{walletForfeitNotice(formatVnd(balance))}</p>
+              <p className="text-sm font-bold tabular-nums text-stone-900">{walletForfeitNotice(formatVnd(balance))}</p>
               <label className="mt-2 flex min-h-11 items-start gap-2 text-xs text-stone-700">
-                <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="mt-0.5 size-5 shrink-0" style={{ accentColor: 'var(--color-action-primary-bg)' }} />
+                <input
+                  type="checkbox"
+                  checked={agreed}
+                  disabled={del.isPending}
+                  onChange={(e) => {
+                    if (del.isPending) return;
+                    setAgreedBalance(e.target.checked ? balance : null);
+                  }}
+                  className="mt-0.5 size-5 shrink-0"
+                  style={{ accentColor: 'var(--color-action-primary-bg)' }}
+                />
                 <span>{WALLET_FORFEIT_AGREE}</span>
               </label>
             </div>
@@ -77,18 +98,25 @@ export function AccountDeletionSection() {
           <div className="mt-3 flex gap-2">
             <button
               type="button"
+              disabled={del.isPending}
               onClick={() => {
+                if (del.isPending) return;
+                del.reset();
                 setConfirming(false);
-                setAgreed(false);
+                setAgreedBalance(null);
               }}
-              className={`${ui.btnSecondary} w-24 shrink-0 ${mini.secondary}`}
+              className={`${ui.btnSecondary} w-24 shrink-0 ${mini.secondary} disabled:opacity-60`}
             >
               Huỷ
             </button>
             <button
               type="button"
               disabled={del.isPending || !canSubmitDeletion(balance, agreed)}
-              onClick={() => del.mutate()}
+              aria-busy={del.isPending || undefined}
+              onClick={() => {
+                if (del.isPending) return;
+                del.mutate();
+              }}
               className="inline-flex min-h-11 flex-1 items-center justify-center rounded-control bg-danger-fg px-5 text-sm font-semibold text-stone-0 transition active:scale-95 disabled:opacity-60"
             >
               Gửi yêu cầu xoá
@@ -96,7 +124,14 @@ export function AccountDeletionSection() {
           </div>
         </div>
       ) : (
-        <button type="button" onClick={() => setConfirming(true)} className={`${ui.btnSecondary} w-full text-danger-fg max-md:border-transparent max-md:bg-transparent max-md:text-[color:var(--color-text-danger)] max-md:shadow-none`}>
+        <button
+          type="button"
+          onClick={() => {
+            del.reset();
+            setConfirming(true);
+          }}
+          className={`${ui.btnSecondary} w-full text-danger-fg max-md:border-transparent max-md:bg-transparent max-md:text-[color:var(--color-text-danger)] max-md:shadow-none`}
+        >
           Xoá tài khoản
         </button>
       )}

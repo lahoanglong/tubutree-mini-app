@@ -5,6 +5,7 @@ import { api, getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { Button } from './ui/button';
 import { ConfirmSheet } from './ui/confirm-sheet';
+import { Text } from './ui/text';
 
 /** Đăng xuất mọi thiết bị: máy chủ cắt hết phiên, rồi máy này tự đăng xuất. Lỗi mạng thì giữ nguyên phiên để bấm lại. */
 export function LogoutAllSection() {
@@ -19,20 +20,42 @@ export function LogoutAllSection() {
       setConfirming(false);
     },
   });
+  const busy = logoutAllM.isPending;
 
   return (
     <>
-      <Button fullWidth variant="secondary" onPress={() => setConfirming(true)}>
+      <Button
+        fullWidth
+        variant="secondary"
+        disabled={confirming || busy}
+        onPress={() => {
+          logoutAllM.reset();
+          setConfirming(true);
+        }}
+      >
         Đăng xuất mọi thiết bị
       </Button>
+      {logoutAllM.isError && (
+        <div role="alert" style={{ marginTop: 'var(--space-stack-sm)' }}>
+          <Text variant="caption" tone="danger" as="p">
+            {getErrorMessage(logoutAllM.error)}
+          </Text>
+        </div>
+      )}
       <ConfirmSheet
         open={confirming}
         title="Đăng xuất khỏi mọi thiết bị?"
         message="Mọi máy đang đăng nhập tài khoản này, kể cả máy này, sẽ phải đăng nhập lại."
         confirmLabel="Đăng xuất mọi máy"
-        loading={logoutAllM.isPending}
-        onConfirm={() => logoutAllM.mutate()}
-        onCancel={() => setConfirming(false)}
+        loading={busy}
+        onConfirm={() => {
+          if (busy) return;
+          logoutAllM.mutate();
+        }}
+        onCancel={() => {
+          if (busy) return;
+          setConfirming(false);
+        }}
       />
     </>
   );

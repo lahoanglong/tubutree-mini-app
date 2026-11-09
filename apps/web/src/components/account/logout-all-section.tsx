@@ -21,7 +21,15 @@ export function LogoutAllSection() {
 
   return (
     <>
-      <button type="button" onClick={() => setConfirming(true)} className={`${ui.btnSecondary} w-full ${mini.secondary}`}>
+      <button
+        type="button"
+        disabled={confirming || logoutAllM.isPending}
+        onClick={() => {
+          logoutAllM.reset();
+          setConfirming(true);
+        }}
+        className={`${ui.btnSecondary} w-full ${mini.secondary}`}
+      >
         Đăng xuất mọi thiết bị
       </button>
       {logoutAllM.isError && (
@@ -35,8 +43,14 @@ export function LogoutAllSection() {
         message="Mọi máy đang đăng nhập tài khoản này, kể cả máy này, sẽ phải đăng nhập lại."
         confirmLabel="Đăng xuất mọi máy"
         loading={logoutAllM.isPending}
-        onConfirm={() => logoutAllM.mutate()}
-        onCancel={() => setConfirming(false)}
+        onConfirm={() => {
+          if (logoutAllM.isPending) return;
+          logoutAllM.mutate();
+        }}
+        onCancel={() => {
+          if (logoutAllM.isPending) return;
+          setConfirming(false);
+        }}
       />
     </>
   );
