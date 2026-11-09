@@ -19,8 +19,9 @@ export interface ProductStoryShowcaseProps {
   product: ProductDetail;
   selectedVariationId?: string;
   onSelectVariation?: (id: string) => void;
-  onAddToCart?: () => void;
-  onBuyNow?: () => void;
+  /** Trả Promise thì `Button` khoá chạm lại tới khi xong; trả void thì không khoá. */
+  onAddToCart?: () => void | Promise<unknown>;
+  onBuyNow?: () => void | Promise<unknown>;
   /** Hết hàng hoặc chưa mua được: khoá hai nút ở thanh dưới của khung toàn màn. */
   buyDisabled?: boolean;
   /** Ghi đè cấu hình (Admin Live Preview): vẽ cả khi `enabled: false`. */
