@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { QuickReorderItem } from '@tubutree/app-core/commerce/quick-reorder';
 import { ApiError } from '@/lib/client-api';
@@ -73,6 +74,77 @@ describe('QuickReorderBlock (web)', () => {
     expect(mocks.post).toHaveBeenCalledTimes(1);
     release(CART);
     await flush(4);
+  });
+
+  describe('khoá đồng bộ chéo giữa "+ Thêm" và "Thêm lại tất cả" (hai cú bấm trong cùng một act)', () => {
+    const inOneAct = (...els: HTMLElement[]) =>
+      act(() => {
+        for (const el of els) el.click();
+      });
+
+    it('"+ Thêm" rồi "Thêm lại tất cả": chỉ lệnh đầu đi', async () => {
+      mocks.post.mockImplementation(() => new Promise(() => undefined));
+      const c = await mount();
+      inOneAct(adds(c)[0]!, addAll(c));
+      await flush(3);
+      expect(mocks.post).toHaveBeenCalledTimes(1);
+      expect(mocks.addAll).not.toHaveBeenCalled();
+    });
+
+    it('"Thêm lại tất cả" rồi "+ Thêm": chỉ lệnh lô đi', async () => {
+      mocks.addAll.mockImplementation(() => new Promise(() => undefined));
+      const c = await mount();
+      inOneAct(addAll(c), adds(c)[0]!);
+      await flush(3);
+      expect(mocks.addAll).toHaveBeenCalledTimes(1);
+      expect(mocks.post).not.toHaveBeenCalled();
+    });
+
+    it('hai "+ Thêm" của hai món khác nhau: chỉ một lệnh bay', async () => {
+      mocks.post.mockImplementation(() => new Promise(() => undefined));
+      const c = await mount();
+      inOneAct(adds(c)[0]!, adds(c)[1]!);
+      await flush(3);
+      expect(mocks.post).toHaveBeenCalledTimes(1);
+    });
+
+    it('"+ Thêm" xong (thành công) thì nhả khoá: "Thêm lại tất cả" đi được', async () => {
+      const c = await mount();
+      click(adds(c)[0]!);
+      await flush(6);
+      click(addAll(c));
+      await flush(6);
+      expect(mocks.addAll).toHaveBeenCalledTimes(1);
+    });
+
+    it('"+ Thêm" lỗi thì cũng nhả khoá: "Thêm lại tất cả" đi được', async () => {
+      mocks.post.mockRejectedValue(new ApiError('Sản phẩm Món 1 đã hết hàng', 400));
+      const c = await mount();
+      click(adds(c)[0]!);
+      await flush(6);
+      click(addAll(c));
+      await flush(6);
+      expect(mocks.addAll).toHaveBeenCalledTimes(1);
+    });
+
+    it('"Thêm lại tất cả" xong thì nhả khoá: "+ Thêm" đi được', async () => {
+      const c = await mount();
+      click(addAll(c));
+      await flush(6);
+      click(adds(c)[0]!);
+      await flush(6);
+      expect(mocks.post).toHaveBeenCalledTimes(1);
+    });
+
+    it('khách chưa đăng nhập bấm "Thêm lại tất cả" (sang đăng nhập, không có lệnh bay): "+ Thêm" không bị khoá', async () => {
+      mocks.phase = 'guest';
+      const c = await mount();
+      click(addAll(c));
+      await flush(2);
+      click(adds(c)[0]!);
+      await flush(4);
+      expect(mocks.post).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('"Thêm lại tất cả": một lệnh lô với mỗi món một đơn vị theo thứ tự thẻ; báo "Đã thêm 3 món vào giỏ"', async () => {

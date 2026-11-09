@@ -60,7 +60,11 @@ export function PdpFbt(props: FbtHostArgs) {
       />
       {/* Vùng báo luôn có mặt trong trang: vùng live vừa gắn cùng chữ thường không được đọc ra. */}
       <div role="status" data-testid="fbt-status" className={status ? 'tubu-fbt-status' : 'sr-only'}>
-        {status && <p className={status.ok ? 'text-success-fg' : 'text-danger-fg'}>{status.text}</p>}
+        {status && (
+          <p role={status.ok ? undefined : 'alert'} className={status.ok ? 'text-success-fg' : 'text-danger-fg'}>
+            {status.text}
+          </p>
+        )}
       </div>
     </div>
   );

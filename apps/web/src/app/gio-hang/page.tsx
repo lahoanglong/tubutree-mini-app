@@ -5,7 +5,7 @@ import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { AlertTriangle, Truck, Zap, Trash2, Minus, Plus } from 'lucide-react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutationState, useQueryClient } from '@tanstack/react-query';
 import { cartSaving, lineCompareAt } from '@tubutree/app-core/commerce/pdp-view';
 import { CART_OUT_OF_STOCK, CART_OVER_STOCK_BLOCKED, cartOutOfStockBlocked } from '@tubutree/app-core/cart-copy';
 import { cartTotalLabel } from '@tubutree/app-core/commerce/cart-total';
@@ -39,6 +39,8 @@ import { cartStockNote, overStockTarget, qtyPickMax } from '@tubutree/app-core/c
 import { CartComboBlock } from '@/components/cart-combo-block';
 import { ConfirmSheet } from '@/components/ui/confirm-sheet';
 import { useAutoDismiss } from '@/lib/use-auto-dismiss';
+import { useLockedMutation } from '@/components/game/use-locked-mutation';
+import { useCartWrite } from '@/lib/use-cart-write';
 import { FreeshipAddons } from './freeship-addons';
 
 // Sau khi xoá một dòng, khách có chừng này để hoàn tác (thêm lại đúng phân loại và số lượng).
@@ -55,6 +57,10 @@ const qtyButton =
 const qtyButtonFor = (off: boolean) => (off ? qtyButton : `${qtyButton} tubu-press`);
 
 const EmptyCart = dynamic(() => import('./empty-cart'), { ssr: false });
+
+/** Việc khách làm trên MỘT dòng giỏ: đổi số lượng hoặc xoá. Chung một khoá theo dòng nên tăng/giảm/xoá của cùng dòng không đua nhau. */
+type LineOp = { op: 'qty'; id: string; q: number } | { op: 'remove'; id: string; line?: CartLine };
+const LINE_OP_KEY = ['cart-line-op'] as const;
 
 const clampPercent = (pct: number) => (Number.isFinite(pct) ? Math.min(100, Math.max(0, Math.round(pct))) : 0);
 
@@ -97,15 +103,39 @@ export default function CartPage() {
       return next;
     });
 
-  const update = useMutation({
-    mutationFn: ({ id, q }: { id: string; q: number }) => updateCartItem(id, q),
-    onSuccess: (data) => qc.setQueryData(cartKey(), data),
-  });
-  const remove = useMutation({
-    mutationFn: (id: string) => removeCartItem(id),
-    onSuccess: (data) => qc.setQueryData(cartKey(), data),
-  });
   const [removedLine, setRemovedLine] = useState<CartLine | null>(null);
+  const [undoError, setUndoError] = useState<string | null>(null);
+  // Lỗi nhớ theo từng dòng: `mutation.error` chỉ giữ lệnh sau cùng nên lệnh của dòng A lỗi sau khi dòng B đã chạy sẽ mất lời báo.
+  const [lineErrors, setLineErrors] = useState<ReadonlyMap<string, unknown>>(() => new Map());
+  const cartWrite = useCartWrite(LINE_OP_KEY);
+  // Khoá đồng bộ theo dòng (không theo lệnh sau cùng): state chỉ đúng sau lần vẽ kế, và `variables` của mutation đổi sang dòng khác sẽ mở nhầm dòng đang bay.
+  const lineOp = useLockedMutation(
+    {
+      mutationKey: LINE_OP_KEY,
+      mutationFn: (v: LineOp) => (v.op === 'qty' ? updateCartItem(v.id, v.q) : removeCartItem(v.id)),
+      onMutate: (v) => {
+        cartWrite.began();
+        setLineErrors((prev) => new Map([...prev].filter(([id]) => id !== v.id)));
+      },
+      // Thanh hoàn tác dựng ở đây chứ không ở callback riêng của `mutate()`: callback riêng chỉ chạy cho lệnh sau cùng, nên chạm dòng khác lúc lệnh xoá còn bay sẽ làm mất thanh.
+      // Thanh chỉ mở sau khi máy chủ xoá xong: hoàn tác (thêm lại) không được vượt mặt lệnh xoá còn đang bay.
+      // Trả lời hứa tải lại giỏ (khi có lệnh chồng): lệnh còn "đang bay", khoá dòng còn giữ, tới khi giỏ mới về.
+      onSuccess: (data, v) => {
+        const refreshed = cartWrite.write(data);
+        if (v.op === 'remove' && v.line) {
+          setUndoError(null);
+          setRemovedLine(v.line);
+        }
+        return refreshed;
+      },
+      onError: (error, v) => setLineErrors((prev) => new Map(prev).set(v.id, error)),
+      onSettled: cartWrite.settled,
+    },
+    (v) => v.id,
+  );
+  // Mọi lệnh dòng đang bay (không chỉ lệnh sau cùng): nút của đúng các dòng đó báo aria-busy, dòng khác vẫn bấm được.
+  const inFlightOps = useMutationState({ filters: { mutationKey: LINE_OP_KEY, status: 'pending' }, select: (m) => m.state.variables as LineOp });
+  const busyIds = new Set(inFlightOps.map((v) => v.id));
   // Hộp báo "bộ sẽ mất giảm" trước khi xoá món khoá của combo. Dữ liệu giữ lại sau khi đóng để chữ không trống khi hộp tắt.
   const [pendingRemove, setPendingRemove] = useState<{ line: CartLine; notice: ComboRemovalNotice } | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -114,7 +144,6 @@ export default function CartPage() {
   useEffect(() => {
     if (pendingGone) setConfirmOpen(false);
   }, [pendingGone]);
-  const [undoError, setUndoError] = useState<string | null>(null);
   const undoRef = useRef<HTMLButtonElement>(null);
   const undoHold = useAutoDismiss(!!removedLine, UNDO_WINDOW_MS, () => setRemovedLine(null), removedLine);
   // Dòng vừa xoá bị gỡ khỏi cây kéo theo nút Xoá đang giữ focus: chuyển focus sang "Hoàn tác" để bàn phím không rơi về đầu trang.
@@ -127,7 +156,6 @@ export default function CartPage() {
     if (removedLine && focusUndo.current && (focusIsFree() || document.activeElement === removeOrigin.current)) undoRef.current?.focus();
     focusUndo.current = false;
   }, [removedLine]);
-  // Thanh hoàn tác chỉ mở sau khi máy chủ xoá xong: hoàn tác (thêm lại) không được vượt mặt lệnh xoá còn đang bay.
   // Hết giờ Giờ vàng khi khách đang xem: lấy lại giỏ để máy chủ tính lại giá, không cần tải trang.
   const refreshCart = () => void qc.invalidateQueries({ queryKey: ['cart'] });
   // Bấm "Hoàn tác" bằng bàn phím làm thanh hoàn tác biến mất khi nó đang giữ focus: đưa focus tới dòng vừa thêm lại (hoặc tiêu đề trang nếu dòng không còn).
@@ -158,15 +186,13 @@ export default function CartPage() {
     } catch {
       focusUndo.current = false;
     }
-    remove.mutate(line.id, {
-      onSuccess: () => {
-        setUndoError(null);
-        setRemovedLine(line);
-      },
-    });
+    lineOp.mutate({ op: 'remove', id: line.id, line });
   };
+  // Khoá đồng bộ: `removedLine` trong closure chỉ về null sau lần vẽ kế, hai cú bấm "Hoàn tác" sát nhau sẽ thêm lại hai lần (số lượng nhân đôi).
+  const undoing = useRef(false);
   const undoRemove = () => {
-    if (!removedLine) return;
+    if (!removedLine || undoing.current) return;
+    undoing.current = true;
     const line = removedLine;
     let viaKeyboard = false;
     try {
@@ -183,14 +209,11 @@ export default function CartPage() {
       .catch((e: unknown) => {
         setUndoError(actionErrorText(e));
         if (viaKeyboard) focusHeading();
+      })
+      .finally(() => {
+        undoing.current = false;
       });
   };
-  // Chặn double-click/race trên cùng 1 dòng: trong lúc đang cập nhật/xóa 1 item, khóa các
-  // nút của đúng item đó (item khác vẫn thao tác được bình thường).
-  const busyItemId =
-    (update.isPending ? update.variables?.id : null) ?? (remove.isPending ? remove.variables : null);
-  const failedItemId =
-    (update.isError ? update.variables?.id : null) ?? (remove.isError ? remove.variables : null);
 
   if (phase === 'loading') {
     return (
@@ -281,7 +304,9 @@ export default function CartPage() {
     const soldOut = it.stock <= 0;
     const atMax = it.quantity >= qtyPickMax(it.stock) || it.quantity > it.stock;
     const stockNote = cartStockNote(it.quantity, it.stock);
-    const busy = busyItemId === it.id;
+    const busy = busyIds.has(it.id);
+    const qtyPending = inFlightOps.some((v) => v.op === 'qty' && v.id === it.id);
+    const lineError = lineErrors.get(it.id);
     const compareAt = lineCompareAt(it);
     return (
       <div key={it.id} data-testid="cart-line" data-variation-id={it.variationId} className="flex gap-3 p-3 max-md:relative max-md:items-center max-md:rounded-card max-md:bg-[var(--color-bg-surface)] max-md:shadow-[var(--elevation-1)]">
@@ -346,7 +371,7 @@ export default function CartPage() {
             </div>
           )}
           {/* Số của máy chủ (it.total): máy chủ có thể tính lại giá cả dòng (flash hết suất). Ẩn khi lệnh đổi số lượng của dòng còn bay, vì lúc đó số chưa phải của máy chủ. Từ md đã có cột tổng bên phải. */}
-          {it.quantity > 1 && !(update.isPending && update.variables?.id === it.id) && (
+          {it.quantity > 1 && !qtyPending && (
             <div className="basis-full text-caption tabular-nums text-stone-600 max-md:order-4 max-md:mt-0.5 md:hidden">Thành tiền {formatVnd(it.total)}</div>
           )}
           {it.flashLimitNotice && <p className="mt-1 basis-full text-caption font-medium text-warning-fg max-md:order-2">{it.flashLimitNotice}</p>}
@@ -367,8 +392,9 @@ export default function CartPage() {
             <div className="flex items-center rounded-control border border-stone-450 text-sm max-md:order-3 max-md:ml-auto max-md:gap-2 max-md:rounded-none max-md:border-0">
               <button
                 type="button"
-                onClick={() => !busy && update.mutate({ id: it.id, q: it.quantity > it.stock ? Math.min(it.quantity - 1, overStockTarget(it.stock)) : it.quantity - 1 })}
+                onClick={() => lineOp.mutate({ op: 'qty', id: it.id, q: it.quantity > it.stock ? Math.min(it.quantity - 1, overStockTarget(it.stock)) : it.quantity - 1 })}
                 disabled={soldOut || it.quantity <= 1}
+                aria-busy={busy || undefined}
                 aria-disabled={busy || undefined}
                 aria-label={`Giảm số lượng ${it.productName}`}
                 className={qtyButtonFor(soldOut || it.quantity <= 1 || busy)}
@@ -381,8 +407,9 @@ export default function CartPage() {
               </span>
               <button
                 type="button"
-                onClick={() => !busy && update.mutate({ id: it.id, q: it.quantity + 1 })}
+                onClick={() => lineOp.mutate({ op: 'qty', id: it.id, q: it.quantity + 1 })}
                 disabled={soldOut || atMax}
+                aria-busy={busy || undefined}
                 aria-disabled={busy || undefined}
                 aria-label={`Tăng số lượng ${it.productName}`}
                 className={qtyButtonFor(soldOut || atMax || busy)}
@@ -394,6 +421,7 @@ export default function CartPage() {
             <button
               type="button"
               onClick={() => !busy && requestRemove(it)}
+              aria-busy={busy || undefined}
               aria-disabled={busy || undefined}
               aria-label={`Xoá ${it.productName} khỏi giỏ hàng`}
               aria-haspopup={comboRemovalNotice(cart?.comboGroups, it.id) ? 'dialog' : undefined}
@@ -403,9 +431,9 @@ export default function CartPage() {
               <span className="max-md:hidden">Xoá</span>
             </button>
           </div>
-          {failedItemId === it.id && (
+          {lineErrors.has(it.id) && (
             <p role="alert" className="mt-1 basis-full text-caption text-danger-fg max-md:order-5">
-              {actionErrorText(update.error ?? remove.error)}
+              {actionErrorText(lineError)}
             </p>
           )}
         </div>
@@ -453,8 +481,9 @@ export default function CartPage() {
                 </span>
                 <button
                   type="button"
-                  onClick={() => !(remove.isPending && remove.variables === it.id) && remove.mutate(it.id)}
-                  aria-disabled={(remove.isPending && remove.variables === it.id) || undefined}
+                  onClick={() => lineOp.mutate({ op: 'remove', id: it.id })}
+                  aria-busy={busyIds.has(it.id) || undefined}
+                  aria-disabled={busyIds.has(it.id) || undefined}
                   aria-label={`Xoá ${it.productName} khỏi giỏ hàng`}
                   className="inline-flex min-h-11 shrink-0 items-center rounded-control px-3 font-semibold underline aria-disabled:opacity-50"
                 >
