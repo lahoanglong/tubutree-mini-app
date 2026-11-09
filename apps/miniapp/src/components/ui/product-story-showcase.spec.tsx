@@ -500,3 +500,67 @@ describe('css/story-reel.css: thanh đáy Reel', () => {
     }
   });
 });
+
+describe('ProductStoryShowcase: nút thêm giỏ / mua ngay khoá chạm đúp khi xử lý trả Promise (W70A)', () => {
+  const deferred = () => {
+    let resolve!: () => void;
+    const promise = new Promise<void>((r) => {
+      resolve = r;
+    });
+    return { promise, resolve };
+  };
+
+  it('khung toàn màn: chạm đúp "Thêm vào giỏ" trong cùng một khung hình chỉ gọi xử lý một lần, xong thì chạm lại được', async () => {
+    const d = deferred();
+    const onAdd = vi.fn().mockReturnValueOnce(d.promise).mockResolvedValue(undefined);
+    render(<ProductStoryShowcase product={baseProduct} previewConfig={fullConfig()} fullscreen onAddToCart={onAdd} />);
+    const add = screen.getByTestId('story-add-to-cart');
+    await act(async () => {
+      fireEvent.click(add);
+      fireEvent.click(add);
+    });
+    expect(onAdd).toHaveBeenCalledTimes(1);
+    await act(async () => d.resolve());
+    await act(async () => {
+      fireEvent.click(add);
+    });
+    expect(onAdd).toHaveBeenCalledTimes(2);
+  });
+
+  it('khung toàn màn: chạm đúp "Mua ngay" chỉ gọi xử lý một lần', async () => {
+    const d = deferred();
+    const onBuy = vi.fn().mockReturnValueOnce(d.promise);
+    render(<ProductStoryShowcase product={baseProduct} previewConfig={fullConfig()} fullscreen onBuyNow={onBuy} />);
+    const buy = screen.getByTestId('story-buy-now');
+    await act(async () => {
+      fireEvent.click(buy);
+      fireEvent.click(buy);
+    });
+    expect(onBuy).toHaveBeenCalledTimes(1);
+    await act(async () => d.resolve());
+  });
+
+  it('Reel: chạm đúp "Thêm vào giỏ · giá" chỉ gọi xử lý một lần', async () => {
+    const reelProduct = { ...baseProduct, name: 'Nước rửa chén' } as unknown as ProductDetail;
+    const d = deferred();
+    const onAdd = vi.fn().mockReturnValueOnce(d.promise);
+    render(<ProductStoryShowcase product={reelProduct} fullscreen reel addPrice="49.000đ" onAddToCart={onAdd} />);
+    const add = screen.getByTestId('story-add-to-cart');
+    await act(async () => {
+      fireEvent.click(add);
+      fireEvent.click(add);
+    });
+    expect(onAdd).toHaveBeenCalledTimes(1);
+    await act(async () => d.resolve());
+  });
+
+  it('xử lý trả void thì không khoá: bấm dồn vẫn gọi từng lần (không đổi hành vi cũ)', () => {
+    const onAdd = vi.fn();
+    render(<ProductStoryShowcase product={baseProduct} previewConfig={fullConfig()} fullscreen onAddToCart={onAdd} />);
+    const add = screen.getByTestId('story-add-to-cart');
+    fireEvent.click(add);
+    fireEvent.click(add);
+    expect(onAdd).toHaveBeenCalledTimes(2);
+  });
+});
+

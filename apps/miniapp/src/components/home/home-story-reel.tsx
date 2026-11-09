@@ -77,7 +77,7 @@ interface ReelOverlayProps {
   flash: Parameters<typeof cardAddTarget>[1];
   onShow: (slug: string) => void;
   onClose: () => void;
-  onAdd: (card: ProductCard, variations: VariationDetail[]) => void;
+  onAdd: (card: ProductCard, variations: VariationDetail[]) => void | Promise<unknown>;
 }
 
 /** Một Reel đang mở: tải chi tiết món, tải trước món kế, tự nhảy qua món Admin tắt câu chuyện, và vẽ khung toàn màn của `ProductStoryShowcase`. */
@@ -179,6 +179,7 @@ export function HomeStoryReel() {
   const [seen, setSeen] = useState(() => readReelSeen(store));
   const [openSlug, setOpenSlug] = useState<string | null>(null);
   const [picker, setPicker] = useState<{ card: ProductCard; variations: VariationDetail[]; initialId: string | null } | null>(null);
+  const adding = useRef(new Set<string>());
 
   const warm = useCallback(
     (slug: string) => {
@@ -206,7 +207,18 @@ export function HomeStoryReel() {
     }
   };
 
-  const addFromReel = async (card: ProductCard, variations: VariationDetail[]) => {
+  // Khoá đổi đồng bộ và theo từng món: hai cú chạm sát nhau chạy trước lần dựng lại kế tiếp nên vẫn thấy nút và bảng còn mở, còn món khác không bị chặn.
+  const exclusive = async (slug: string, run: () => Promise<void>) => {
+    if (adding.current.has(slug)) return;
+    adding.current.add(slug);
+    try {
+      await run();
+    } finally {
+      adding.current.delete(slug);
+    }
+  };
+
+  const addFromReelOnce = async (card: ProductCard, variations: VariationDetail[]) => {
     setOpenSlug(null);
     if (useAuthStore.getState().status !== 'authenticated') {
       await loginWithNotice();
@@ -222,22 +234,26 @@ export function HomeStoryReel() {
     else setPicker({ card, variations, initialId: cardAddTarget(card, flashQ.data ?? [], serverNow()).variationId });
   };
 
+  const addFromReel = (card: ProductCard, variations: VariationDetail[]) => exclusive(card.slug, () => addFromReelOnce(card, variations));
+
   if (best.isLoading) return <StoryReelStrip items={[]} loading onOpen={show} />;
   if (items.length === 0) return null;
   return (
     <>
       <StoryReelStrip items={stripItems} onOpen={show} onWarm={warm} />
-      {openSlug && <ReelOverlay slug={openSlug} cards={items} flash={flashQ.data ?? []} onShow={show} onClose={() => setOpenSlug(null)} onAdd={(card, variations) => void addFromReel(card, variations)} />}
+      {openSlug && <ReelOverlay slug={openSlug} cards={items} flash={flashQ.data ?? []} onShow={show} onClose={() => setOpenSlug(null)} onAdd={addFromReel} />}
       {picker && (
         <ReelVariationPicker
           card={picker.card}
           variations={picker.variations}
           initialId={picker.initialId}
           onClose={() => setPicker(null)}
-          onConfirm={async (id, qty) => {
-            await addLine(id, qty);
-            setPicker(null);
-          }}
+          onConfirm={(id, qty) =>
+            exclusive(picker.card.slug, async () => {
+              await addLine(id, qty);
+              setPicker(null);
+            })
+          }
         />
       )}
     </>

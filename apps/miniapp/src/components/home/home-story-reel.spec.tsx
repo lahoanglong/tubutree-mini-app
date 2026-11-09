@@ -383,3 +383,111 @@ describe('HomeStoryReel: thêm vào giỏ từ Reel', () => {
     expect(qc.getQueryData(['cart', null])).toBeUndefined();
   });
 });
+
+describe('HomeStoryReel: thêm giỏ từ Reel khoá chạm đúp (W70A)', () => {
+  const deferred = <T,>() => {
+    let resolve!: (v: T) => void;
+    let reject!: (e: unknown) => void;
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+
+  it('chạm đúp "Thêm vào giỏ" trong cùng một khung hình chỉ thêm một lần', async () => {
+    const d = deferred<{ items: { id: string }[]; itemCount: number }>();
+    mocks.addToCart.mockReturnValueOnce(d.promise);
+    renderHost();
+    await screen.findAllByTestId('story-reel-item');
+    fireEvent.click(ring(1));
+    const add = await dialogReady();
+    await act(async () => {
+      fireEvent.click(add);
+      fireEvent.click(add);
+    });
+    expect(mocks.addToCart).toHaveBeenCalledTimes(1);
+    await act(async () => d.resolve({ items: [{ id: 'l1' }], itemCount: 1 }));
+    expect(mocks.addToCart).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(mocks.notify).toHaveBeenCalledTimes(1));
+  });
+
+  it('chưa đăng nhập, chạm đúp: chỉ mở một lần đăng nhập và thêm một lần', async () => {
+    const login = deferred<void>();
+    mocks.auth.status = 'guest';
+    mocks.login.mockImplementation(async () => {
+      await login.promise;
+      mocks.auth.status = 'authenticated';
+    });
+    renderHost();
+    await screen.findAllByTestId('story-reel-item');
+    fireEvent.click(ring(1));
+    const add = await dialogReady();
+    await act(async () => {
+      fireEvent.click(add);
+      fireEvent.click(add);
+    });
+    expect(mocks.login).toHaveBeenCalledTimes(1);
+    await act(async () => login.resolve());
+    await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledTimes(1));
+  });
+
+  it('bảng chọn phân loại: chạm đúp "xác nhận" chỉ thêm một lần', async () => {
+    mocks.fetchProduct.mockResolvedValue(detail(1, [variation('v1'), variation('v1b')]));
+    const d = deferred<{ items: { id: string }[]; itemCount: number }>();
+    mocks.addToCart.mockReturnValueOnce(d.promise);
+    renderHost();
+    await screen.findAllByTestId('story-reel-item');
+    fireEvent.click(ring(1));
+    fireEvent.click(await dialogReady());
+    const confirm = await screen.findByRole('button', { name: 'xác nhận phân loại' });
+    await act(async () => {
+      fireEvent.click(confirm);
+      fireEvent.click(confirm);
+    });
+    expect(mocks.addToCart).toHaveBeenCalledTimes(1);
+    await act(async () => d.resolve({ items: [{ id: 'l1' }], itemCount: 1 }));
+    expect(mocks.addToCart).toHaveBeenCalledTimes(1);
+  });
+
+  it('món A còn đang thêm: món B vẫn thêm được (khoá theo từng món, không nuốt cú chạm)', async () => {
+    const d = deferred<{ items: { id: string }[]; itemCount: number }>();
+    mocks.addToCart.mockReturnValueOnce(d.promise);
+    renderHost();
+    await screen.findAllByTestId('story-reel-item');
+    fireEvent.click(ring(1));
+    fireEvent.click(await dialogReady());
+    await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledWith('v1', 1));
+    fireEvent.click(ring(2));
+    fireEvent.click(await dialogReady());
+    await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledWith('v2', 1));
+    await act(async () => d.resolve({ items: [{ id: 'l1' }], itemCount: 1 }));
+  });
+
+  it('khoá nhả sau khi thêm lỗi: mở Reel lại thêm được lần nữa', async () => {
+    mocks.addToCart.mockRejectedValueOnce(new Error('boom'));
+    renderHost();
+    await screen.findAllByTestId('story-reel-item');
+    fireEvent.click(ring(1));
+    fireEvent.click(await dialogReady());
+    await waitFor(() => expect(mocks.notify).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+    fireEvent.click(ring(1));
+    fireEvent.click(await dialogReady());
+    await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mocks.notify).toHaveBeenCalledWith(expect.objectContaining({ type: 'success' })));
+  });
+
+  it('đăng nhập không thành: khoá nhả, lần chạm sau mở đăng nhập lại', async () => {
+    mocks.auth.status = 'guest';
+    renderHost();
+    await screen.findAllByTestId('story-reel-item');
+    fireEvent.click(ring(1));
+    fireEvent.click(await dialogReady());
+    await waitFor(() => expect(mocks.login).toHaveBeenCalledTimes(1));
+    await act(async () => {});
+    fireEvent.click(ring(1));
+    fireEvent.click(await dialogReady());
+    await waitFor(() => expect(mocks.login).toHaveBeenCalledTimes(2));
+  });
+});
+
