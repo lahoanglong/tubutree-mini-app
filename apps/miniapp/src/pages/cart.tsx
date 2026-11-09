@@ -105,10 +105,32 @@ function countEdits(queryClient: QueryClient, delta: number): number {
   return next;
 }
 
+// Mọi lệnh sửa MỘT dòng (đổi số lượng, xoá) xếp hàng theo thứ tự bấm, theo từng QueryClient (rời trang rồi quay lại khi lệnh cũ còn bay vẫn xếp sau nó):
+// bay song song thì máy chủ có thể nhận đảo thứ tự, hoặc lệnh xoá tới trước làm lệnh đổi số lượng nhận 404 và hoàn lại dòng đã xoá.
+const lineQueues = new WeakMap<QueryClient, Map<string, Promise<unknown>>>();
+function inLineOrder<T>(queryClient: QueryClient, id: string, task: () => Promise<T>): Promise<T> {
+  let queue = lineQueues.get(queryClient);
+  if (!queue) {
+    queue = new Map();
+    lineQueues.set(queryClient, queue);
+  }
+  const lanes = queue;
+  const run = (lanes.get(id) ?? Promise.resolve()).then(task);
+  const tail = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  lanes.set(id, tail);
+  void tail.then(() => {
+    if (lanes.get(id) === tail) lanes.delete(id);
+  });
+  return run;
+}
+
 function useOptimisticCartOptions<TVars>(
   mutationFn: (vars: TVars) => Promise<CartSummary>,
   apply: (prev: CartSummary, vars: TVars) => CartSummary,
-  onResponse?: (response: CartSummary) => void,
+  onResponse?: (response: CartSummary, vars: TVars) => void,
 ): UseMutationOptions<CartSummary, unknown, TVars, { prev: CartSummary | undefined }> {
   const queryClient = useQueryClient();
   const { openSnackbar } = useSnackbar();
@@ -123,7 +145,7 @@ function useOptimisticCartOptions<TVars>(
     },
     // Phản hồi không ghi vào cache (bấm +/− liên tiếp không bị phản hồi cũ kéo số lượng lùi; số đúng do lần đọc lại sau `onSettled` cập nhật), nhưng
     // `couponRemoved` chỉ nằm ở phản hồi này nên chuyển cho nơi nhớ lời báo.
-    onSuccess: (data) => onResponse?.(data),
+    onSuccess: (data, vars) => onResponse?.(data, vars),
     onError: (e: unknown, _vars, ctx) => {
       if (ctx?.prev) queryClient.setQueryData(cartKey(), ctx.prev);
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
@@ -208,32 +230,25 @@ export default function CartPage() {
   // Lỗi của đúng phần đang chọn: không hiện số giảm của phần chọn mà trước đây cũng không nói vì sao, nên báo tại chỗ kèm Thử lại.
   const selectionPriceFailed = !!subsetSig && settledSubsetSig === subsetSig && selectionQ.isError;
 
-  // Các lệnh đổi số lượng của CÙNG một dòng xếp hàng theo thứ tự bấm: hai PATCH bay song song có thể tới máy chủ đảo thứ tự và để lại số cũ.
-  const updateQueue = useRef(new Map<string, Promise<unknown>>());
-  const queuedUpdate = ({ id, qty }: { id: string; qty: number }) => {
-    const run = (updateQueue.current.get(id) ?? Promise.resolve()).then(() => updateCartItem(id, qty));
-    const tail = run.then(
-      () => undefined,
-      () => undefined,
-    );
-    updateQueue.current.set(id, tail);
-    void tail.then(() => {
-      if (updateQueue.current.get(id) === tail) updateQueue.current.delete(id);
-    });
-    return run;
-  };
   const update = useOptimisticCart(
-    queuedUpdate,
+    ({ id, qty }: { id: string; qty: number }) => inLineOrder(queryClient, id, () => updateCartItem(id, qty)),
     (prev, { id, qty }) =>
       recompute(prev, prev.items.map((l) => (l.id === id ? { ...l, quantity: qty } : l)), id),
     removedCoupon.remember,
   );
   // Khoá đồng bộ theo dòng: hai cú chạm sát nhau vào cùng nút Xoá không gọi xoá hai lần (lần hai nhận 404 và hoàn lại giỏ).
+  // Thanh Hoàn tác mở ở `onSuccess` cấp mutation, không ở callback của `mutate`: callback đó chỉ chạy cho lần gọi cuối, xoá dòng B khi dòng A còn bay thì mất của A.
+  // Chỉ mở sau khi máy chủ xoá xong — tránh Hoàn tác (thêm lại) vượt mặt lệnh xoá còn đang bay làm sai trạng thái cuối.
   const remove = useLockedMutation(
     useOptimisticCartOptions(
-      ({ id }: { id: string; line: CartLine }) => removeCartItem(id),
+      ({ id }: { id: string; line: CartLine }) => inLineOrder(queryClient, id, () => removeCartItem(id)),
       (prev, { id }) => recompute(prev, prev.items.filter((l) => l.id !== id)),
-      removedCoupon.remember,
+      (response, { line }) => {
+        removedCoupon.remember(response);
+        setRemoved(line);
+        if (undoTimer.current) clearTimeout(undoTimer.current);
+        undoTimer.current = setTimeout(() => setRemoved(null), UNDO_WINDOW_MS);
+      },
     ),
     ({ id }) => id,
   );
@@ -261,18 +276,7 @@ export default function CartPage() {
 
   const handleRemove = (line: CartLine) => {
     haptic('light');
-    // Undo bar chỉ mở sau khi server xóa xong — tránh undo (add lại) vượt mặt
-    // request xóa còn đang bay làm sai trạng thái cuối.
-    remove.mutate(
-      { id: line.id, line },
-      {
-        onSuccess: () => {
-          setRemoved(line);
-          if (undoTimer.current) clearTimeout(undoTimer.current);
-          undoTimer.current = setTimeout(() => setRemoved(null), UNDO_WINDOW_MS);
-        },
-      },
-    );
+    remove.mutate({ id: line.id, line });
   };
 
   // `removed` chỉ đổi sau lần vẽ kế tiếp: chạm đúp "Hoàn tác" thấy dòng vẫn còn ở cả hai lần và thêm món hai lần (số lượng nhân đôi).
@@ -436,6 +440,7 @@ export default function CartPage() {
           </Box>
           {selectionPriceFailed && (
             <div
+              key={selectionQ.errorUpdateCount}
               role="alert"
               data-testid="cart-selection-error"
               style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--space-inline-sm)', padding: 'var(--space-stack-xs) var(--space-gutter) 0' }}

@@ -1696,6 +1696,10 @@ describe('CartPage: khoá chạm đúp và đua khi đổi giỏ, Thử lại t�
     });
     expect(mocks.removeCartItem).toHaveBeenCalledTimes(1);
     await act(async () => remove.resolve(EMPTY));
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 80));
+    });
+    expect(mocks.removeCartItem).toHaveBeenCalledTimes(1);
   });
 
   it('hai dòng khác nhau: xoá cả hai liền nhau vẫn gửi đủ hai lệnh', async () => {
@@ -1729,6 +1733,39 @@ describe('CartPage: khoá chạm đúp và đua khi đổi giỏ, Thử lại t�
     await waitFor(() => expect(mocks.updateCartItem).toHaveBeenCalledTimes(2));
     expect(mocks.updateCartItem.mock.calls).toEqual([['ci-ok', 2], ['ci-ok', 3]]);
     await act(async () => resolvers[1]!(summary({})));
+  });
+
+  it('đổi số lượng rồi xoá dòng khi lệnh đổi còn bay: lệnh xoá xếp sau, đúng thứ tự bấm (không nhận 404 hoàn lại dòng đã xoá)', async () => {
+    const patches: Array<(v: ReturnType<typeof summary>) => void> = [];
+    mocks.updateCartItem.mockImplementation(() => new Promise((res) => patches.push(res)));
+    mocks.removeCartItem.mockResolvedValue(EMPTY);
+    renderPage();
+    await screen.findByText('Xà bông thảo mộc');
+    fireEvent.click(screen.getByRole('button', { name: 'Tăng số lượng' }));
+    await waitFor(() => expect(mocks.updateCartItem).toHaveBeenCalledTimes(1), { timeout: 2_000 });
+    fireEvent.click(screen.getByRole('button', { name: 'Xoá Xà bông thảo mộc' }));
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 100));
+    });
+    expect(mocks.removeCartItem).not.toHaveBeenCalled();
+    await act(async () => patches[0]!(summary({})));
+    await waitFor(() => expect(mocks.removeCartItem).toHaveBeenCalledTimes(1));
+    expect(mocks.updateCartItem.mock.invocationCallOrder[0]!).toBeLessThan(mocks.removeCartItem.mock.invocationCallOrder[0]!);
+    expect(await screen.findByRole('button', { name: 'Hoàn tác' })).toBeInTheDocument();
+  });
+
+  it('xoá dòng B khi lệnh xoá dòng A còn bay: A xong vẫn mở thanh Hoàn tác (không mất callback của lần gọi trước)', async () => {
+    mocks.getCart.mockResolvedValue(two());
+    const deletes: Array<(v: ReturnType<typeof summary>) => void> = [];
+    mocks.removeCartItem.mockImplementation(() => new Promise((res) => deletes.push(res)));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Xoá Xà bông thảo mộc' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Xoá Dầu gội' }));
+    await waitFor(() => expect(mocks.removeCartItem).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole('button', { name: 'Hoàn tác' })).toBeNull();
+    await act(async () => deletes[0]!(EMPTY));
+    expect(await screen.findByRole('button', { name: 'Hoàn tác' })).toBeInTheDocument();
+    await act(async () => deletes[1]!(EMPTY));
   });
 
   it('lệnh đổi số lượng trước bị lỗi: lệnh sau vẫn được gửi', async () => {
@@ -1816,6 +1853,15 @@ describe('CartPage: khoá chạm đúp và đua khi đổi giỏ, Thử lại t�
       fireEvent.click(screen.getByRole('checkbox', { name: 'Chọn Dầu gội' }));
       expect(screen.queryByTestId('cart-selection-error')).toBeNull();
       expect(await screen.findByTestId('cart-selection-error', {}, { timeout: 3_000 })).toBeInTheDocument();
+    });
+
+    it('Thử lại mà vẫn lỗi: dòng báo được dựng lại (trình đọc màn hình đọc lại lần thất bại thứ hai)', async () => {
+      const box = await deselectFirst();
+      const calls = mocks.getCartSelection.mock.calls.length;
+      fireEvent.click(within(box).getByRole('button', { name: 'Thử lại báo giá phần đã chọn' }));
+      await waitFor(() => expect(mocks.getCartSelection.mock.calls.length).toBe(calls + 1));
+      await waitFor(() => expect(screen.getByTestId('cart-selection-error')).not.toBe(box));
+      expect(screen.getByTestId('cart-selection-error')).toHaveAttribute('role', 'alert');
     });
 
     it('chạm đúp Thử lại trong cùng một khung hình: chỉ hỏi máy chủ thêm một lần', async () => {

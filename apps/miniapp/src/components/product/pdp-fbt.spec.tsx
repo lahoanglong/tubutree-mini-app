@@ -122,7 +122,7 @@ describe('PdpFbt: thêm cả bộ', () => {
     await waitFor(() => expect(screen.getByTestId('fbt-add')).not.toHaveAttribute('aria-busy', 'true'));
   });
 
-  it('chạm đúp nút Thêm trong cùng một khung hình (trước khi vẽ lại): chỉ một lệnh lô (W72A)', async () => {
+  it('chạm đúp nút Thêm trong cùng một khung hình (trước khi vẽ lại): chỉ một lệnh lô, đã khoá sẵn bằng ref, giữ để không lùi (W72A)', async () => {
     let release: (v: unknown) => void = () => {};
     mocks.addAll.mockImplementation(() => new Promise((r) => { release = r; }));
     renderHost();

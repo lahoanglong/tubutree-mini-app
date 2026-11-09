@@ -218,7 +218,7 @@ describe('css/freeship.css: thanh Miễn phí giao hàng', () => {
 });
 
 describe('FreeShippingProgressBar (Mini): vùng báo cho trình đọc màn hình (W72A)', () => {
-  it('dòng chữ là vùng polite có mặt từ đầu, chỉ đổi chữ khi giỏ đổi (không dựng lại vùng)', () => {
+  it('dòng chữ là vùng polite khai rõ (WebView Zalo không phải bản nào cũng hiểu role=status ngầm), có mặt từ đầu, chỉ đổi chữ khi giỏ đổi', () => {
     const { rerender } = render(<FreeShippingProgressBar base={50_000} threshold={200_000} />);
     const status = screen.getByRole('status');
     expect(status).toHaveAttribute('aria-live', 'polite');
