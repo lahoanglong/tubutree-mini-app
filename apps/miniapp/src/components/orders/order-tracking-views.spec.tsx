@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { orderActionPlan, orderHeadline, orderTrack, type TrackOrder } from '@tubutree/app-core/commerce/order-tracking';
 
 const mocks = vi.hoisted(() => ({ openSnackbar: vi.fn(), copyText: vi.fn() }));
@@ -153,7 +153,7 @@ describe('OrderShipping', () => {
     expect(items()).toHaveLength(3);
   });
 
-  it('hiện hãng và mã; "Chép mã" chép đúng mã và báo thành công, lỗi thì nhắc chép tay', async () => {
+  it('hiện hãng và mã; "Chép mã" chép đúng mã và báo thành công tại chỗ, lỗi thì nhắc chép tay', async () => {
     mocks.copyText.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
     render(<OrderShipping partner="Giao Hàng Nhanh" code="GHN123" status="Đang giao hàng" />);
     expect(screen.getByText('Giao Hàng Nhanh')).toBeInTheDocument();
@@ -161,9 +161,9 @@ describe('OrderShipping', () => {
     expect(screen.getByText('Đang giao hàng')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Sao chép mã vận đơn GHN123' }));
     expect(mocks.copyText).toHaveBeenCalledWith('GHN123');
-    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã sao chép mã vận đơn', type: 'success' }));
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Đã sao chép mã vận đơn'));
     fireEvent.click(screen.getByRole('button', { name: 'Sao chép mã vận đơn GHN123' }));
-    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenLastCalledWith({ text: 'Không sao chép được — hãy chép mã thủ công.', type: 'error' }));
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Không sao chép được — hãy chép mã thủ công.'));
   });
 
   it('có mốc truyền riêng (đơn đã hoàn) thì liệt kê mới nhất trên cùng', () => {
@@ -177,6 +177,130 @@ describe('OrderShipping', () => {
     );
     const items = within(screen.getByRole('list', { name: 'Mốc vận chuyển' })).getAllByRole('listitem');
     expect(items.map((i) => i.querySelector('div')?.textContent)).toEqual(['Giao hàng thành công', 'Đã lấy hàng']);
+  });
+});
+
+describe('OrderShipping: chép mã khoá chạm đúp, báo tại chỗ, số đều (W69A)', () => {
+  const copyButton = () => screen.getByRole('button', { name: 'Sao chép mã vận đơn GHN123' });
+  const deferred = () => {
+    let resolve!: (ok: boolean) => void;
+    const promise = new Promise<boolean>((r) => {
+      resolve = r;
+    });
+    return { promise, resolve };
+  };
+
+  afterEach(() => vi.useRealTimers());
+
+  it('vùng báo role=status có sẵn và rỗng trước khi bấm', () => {
+    render(<OrderShipping code="GHN123" />);
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
+  });
+
+  it('chạm đúp "Chép mã" trong cùng một khung hình chỉ chép một lần', async () => {
+    const d = deferred();
+    mocks.copyText.mockReturnValueOnce(d.promise);
+    render(<OrderShipping code="GHN123" />);
+    act(() => {
+      fireEvent.click(copyButton());
+      fireEvent.click(copyButton());
+    });
+    expect(mocks.copyText).toHaveBeenCalledTimes(1);
+    await act(async () => d.resolve(true));
+  });
+
+  it('khoá nhả sau khi chép xong: lần bấm sau chép lại', async () => {
+    mocks.copyText.mockResolvedValue(true);
+    render(<OrderShipping code="GHN123" />);
+    await act(async () => {
+      fireEvent.click(copyButton());
+    });
+    await act(async () => {
+      fireEvent.click(copyButton());
+    });
+    expect(mocks.copyText).toHaveBeenCalledTimes(2);
+  });
+
+  it('chép được: báo "Đã sao chép mã vận đơn" ngay dưới mã (không bắn snackbar) rồi tự tắt sau 2 giây', async () => {
+    vi.useFakeTimers();
+    mocks.copyText.mockResolvedValue(true);
+    render(<OrderShipping code="GHN123" />);
+    await act(async () => {
+      fireEvent.click(copyButton());
+    });
+    expect(screen.getByRole('status')).toHaveTextContent('Đã sao chép mã vận đơn');
+    expect(screen.getByText('Đã sao chép mã vận đơn').getAttribute('style')).toContain('--color-text-success');
+    expect(mocks.openSnackbar).not.toHaveBeenCalled();
+    act(() => vi.advanceTimersByTime(1999));
+    expect(screen.getByRole('status')).toHaveTextContent('Đã sao chép mã vận đơn');
+    act(() => vi.advanceTimersByTime(1));
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
+  });
+
+  it('chép lỗi: nhắc chép tay bằng chữ đỏ, giữ 4 giây rồi tự tắt', async () => {
+    vi.useFakeTimers();
+    mocks.copyText.mockResolvedValue(false);
+    render(<OrderShipping code="GHN123" />);
+    await act(async () => {
+      fireEvent.click(copyButton());
+    });
+    expect(screen.getByRole('status')).toHaveTextContent('Không sao chép được — hãy chép mã thủ công.');
+    expect(screen.getByText(/Không sao chép được/).getAttribute('style')).toContain('--color-text-danger');
+    expect(mocks.openSnackbar).not.toHaveBeenCalled();
+    act(() => vi.advanceTimersByTime(3999));
+    expect(screen.getByRole('status')).toHaveTextContent('Không sao chép được');
+    act(() => vi.advanceTimersByTime(1));
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
+  });
+
+  it('chép lần hai khi báo cũ còn hiện: đếm lại đủ 2 giây, báo không tắt sớm', async () => {
+    vi.useFakeTimers();
+    mocks.copyText.mockResolvedValue(true);
+    render(<OrderShipping code="GHN123" />);
+    await act(async () => {
+      fireEvent.click(copyButton());
+    });
+    act(() => vi.advanceTimersByTime(1500));
+    await act(async () => {
+      fireEvent.click(copyButton());
+    });
+    act(() => vi.advanceTimersByTime(1500));
+    expect(screen.getByRole('status')).toHaveTextContent('Đã sao chép mã vận đơn');
+    act(() => vi.advanceTimersByTime(500));
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
+  });
+
+  it('chép lần hai khi báo cũ còn hiện: dòng báo dựng lại để trình đọc màn hình đọc lại', async () => {
+    mocks.copyText.mockResolvedValue(true);
+    render(<OrderShipping code="GHN123" />);
+    await act(async () => {
+      fireEvent.click(copyButton());
+    });
+    const first = screen.getByText('Đã sao chép mã vận đơn');
+    await act(async () => {
+      fireEvent.click(copyButton());
+    });
+    const second = screen.getByText('Đã sao chép mã vận đơn');
+    expect(second).not.toBe(first);
+    expect(first.isConnected).toBe(false);
+  });
+
+  it('tháo màn khi báo còn hiện: không còn hẹn giờ treo', async () => {
+    vi.useFakeTimers();
+    mocks.copyText.mockResolvedValue(true);
+    const { unmount } = render(<OrderShipping code="GHN123" />);
+    await act(async () => {
+      fireEvent.click(copyButton());
+    });
+    expect(vi.getTimerCount()).toBeGreaterThan(0);
+    unmount();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('mã vận đơn số đều (tabular-nums) và nút Chép mã cao ít nhất 44px', () => {
+    render(<OrderShipping code="GHN123" />);
+    expect(screen.getByText('GHN123').getAttribute('style')).toContain('tabular-nums');
+    expect(copyButton().style.minHeight).toBe('44px');
   });
 });
 

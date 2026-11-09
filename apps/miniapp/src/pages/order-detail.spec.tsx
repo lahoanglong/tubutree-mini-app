@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { HttpError } from '../services/http';
@@ -815,7 +815,7 @@ describe('OrderDetailPage — không mở trang ngoài (Zalo 4.1)', () => {
     expect(screen.queryAllByRole('link').filter((l) => !/^Xem sản phẩm/.test(l.getAttribute('aria-label') ?? ''))).toHaveLength(0);
     fireEvent.click(screen.getByRole('button', { name: 'Sao chép mã vận đơn GHN001' }));
     await waitFor(() => expect(mocks.copyText).toHaveBeenCalledWith('GHN001'));
-    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã sao chép mã vận đơn', type: 'success' }));
+    await waitFor(() => expect(screen.getByTestId('order-shipping')).toHaveTextContent('Đã sao chép mã vận đơn'));
   });
 
   it('hoá đơn điện tử: chỉ chép đường dẫn, không mở ngoài', async () => {
@@ -824,6 +824,86 @@ describe('OrderDetailPage — không mở trang ngoài (Zalo 4.1)', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Chép đường dẫn' }));
     await waitFor(() => expect(mocks.copyText).toHaveBeenCalledWith('https://hoadon.test/abc.pdf'));
     expect(screen.queryByRole('button', { name: 'Tải PDF' })).toBeNull();
+  });
+});
+
+describe('OrderDetailPage: huỷ đơn và chép hoá đơn khoá chạm đúp, báo bận (W69A)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.fetchMyReturns.mockResolvedValue([]);
+    mocks.fetchMyRefunds.mockResolvedValue([]);
+    mocks.fetchRefundBank.mockResolvedValue(null);
+    mocks.copyText.mockResolvedValue(true);
+  });
+
+  const deferred = () => {
+    let resolve!: (v: unknown) => void;
+    let reject!: (e: unknown) => void;
+    const promise = new Promise((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+  const openCancelSheet = async () => {
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, status: 'CONFIRMED' });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Huỷ đơn' }));
+    fireEvent.click(screen.getByRole('button', { name: /Đổi ý/ }));
+  };
+  const confirmButton = () => {
+    const buttons = screen.getAllByRole('button', { name: 'Huỷ đơn' });
+    return buttons[buttons.length - 1]!;
+  };
+
+  it('chạm đúp nút xác nhận "Huỷ đơn" trong cùng một khung hình chỉ gọi huỷ một lần', async () => {
+    const d = deferred();
+    mocks.cancelOrder.mockReturnValueOnce(d.promise);
+    await openCancelSheet();
+    await act(async () => {
+      fireEvent.click(confirmButton());
+      fireEvent.click(confirmButton());
+    });
+    expect(mocks.cancelOrder).toHaveBeenCalledTimes(1);
+    await act(async () => d.resolve({ ...ORDER, status: 'CANCELLED' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã huỷ đơn cho bạn', type: 'success' }));
+    expect(mocks.cancelOrder).toHaveBeenCalledTimes(1);
+  });
+
+  it('đang huỷ: nút xác nhận báo aria-busy và aria-disabled', async () => {
+    const d = deferred();
+    mocks.cancelOrder.mockReturnValueOnce(d.promise);
+    await openCancelSheet();
+    fireEvent.click(confirmButton());
+    await waitFor(() => expect(confirmButton()).toHaveAttribute('aria-busy', 'true'));
+    expect(confirmButton()).toHaveAttribute('aria-disabled', 'true');
+    await act(async () => d.resolve({ ...ORDER, status: 'CANCELLED' }));
+  });
+
+  it('huỷ lỗi: báo lỗi và đóng tấm, khoá nhả nên mở lại huỷ được lần nữa', async () => {
+    mocks.cancelOrder.mockRejectedValueOnce(new Error('boom')).mockResolvedValueOnce({ ...ORDER, status: 'CANCELLED' });
+    await openCancelSheet();
+    fireEvent.click(confirmButton());
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+    expect(mocks.cancelOrder).toHaveBeenCalledTimes(1);
+    fireEvent.click(await screen.findByRole('button', { name: 'Huỷ đơn' }));
+    fireEvent.click(confirmButton());
+    await waitFor(() => expect(mocks.cancelOrder).toHaveBeenCalledTimes(2));
+  });
+
+  it('chạm đúp "Chép đường dẫn" hoá đơn chỉ chép một lần và báo một lần', async () => {
+    const d = deferred();
+    mocks.copyText.mockReturnValueOnce(d.promise);
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, status: 'SHIPPING', invoiceStatus: 'ISSUED', invoiceUrl: 'https://hoadon.test/abc.pdf' });
+    renderPage();
+    const button = await screen.findByRole('button', { name: 'Chép đường dẫn' });
+    act(() => {
+      fireEvent.click(button);
+      fireEvent.click(button);
+    });
+    expect(mocks.copyText).toHaveBeenCalledTimes(1);
+    await act(async () => d.resolve(true));
+    expect(mocks.openSnackbar).toHaveBeenCalledTimes(1);
   });
 });
 

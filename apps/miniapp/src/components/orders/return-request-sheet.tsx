@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'zmp-ui';
 import { BottomSheet } from '../ui/bottom-sheet';
 import { Button } from '../ui/button';
@@ -8,6 +8,7 @@ import { Checkbox } from '../ui/form';
 import { QuantitySelector } from '../ui/quantity-selector';
 import { Text } from '../ui/text';
 import { MultiImageUpload } from '../image-upload';
+import { useLockedMutation } from '../game/use-locked-mutation';
 import { RefundDestinationPicker } from './refund-destination-picker';
 import { estimateReturn, fetchRefundBank, requestReturn, type OrderView, type ReturnRequestDTO } from '../../services/shop-api';
 import { getErrorMessage } from '../../services/api';
@@ -98,7 +99,7 @@ export function ReturnRequestSheet({ open, onClose, order, returns, returnDays }
     [lines, reasonCode, reason, method, bank, bankAllowed],
   );
 
-  const submit = useMutation({
+  const submit = useLockedMutation({
     mutationFn: () =>
       requestReturn(order.code, {
         reasonCode: reasonCode!,
@@ -131,12 +132,13 @@ export function ReturnRequestSheet({ open, onClose, order, returns, returnDays }
       open={open}
       onClose={onClose}
       size="full"
+      dismissible={!submit.isPending}
       title="Yêu cầu đổi/trả"
       description={`Trong ${returnDays} ngày từ khi nhận hàng. Chọn đúng sản phẩm và số lượng muốn trả, Tubu phản hồi trong 24h.`}
       footer={
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {estimated && (
-            <div role="status" aria-live="polite" style={{ padding: '8px 12px', borderRadius: 'var(--radius-control)', background: 'var(--color-bg-subtle)' }}>
+            <div role="status" aria-live="polite" className="tubu-nums" style={{ padding: '8px 12px', borderRadius: 'var(--radius-control)', background: 'var(--color-bg-subtle)' }}>
               <Text variant="body-sm" as="div" style={{ fontWeight: 600 }}>
                 {`Dự kiến hoàn ${formatVnd(estimated.refund)}`}
               </Text>

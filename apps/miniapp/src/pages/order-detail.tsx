@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { INVOICE_ISSUE_FAILED } from '@tubutree/app-core/client-copy';
 import { Box, Page, Text, Sheet, useParams, useNavigate, useSnackbar } from 'zmp-ui';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Recycle, Star, Leaf, CheckCircle2, XCircle, Clock, type LucideIcon } from 'lucide-react';
 import { fetchOrder, fetchOrders, cancelOrder, fetchMyRefunds, fetchMyReturns, fetchRefundBank, type OrderView } from '../services/shop-api';
 import { getErrorMessage, getLoadErrorMessage, isNotFoundError } from '../services/api';
@@ -29,6 +29,7 @@ import {
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 import { copyText } from '../utils/clipboard';
+import { useLockedMutation } from '../components/game/use-locked-mutation';
 import { PageHeader } from '../components/ui/page-header';
 import { Badge } from '../components/ui/badge';
 import { Icon, type IconProps } from '../components/ui/icon';
@@ -193,7 +194,7 @@ export default function OrderDetailPage() {
     setOaPromptSeen(true);
   };
 
-  const cancel = useMutation({
+  const cancel = useLockedMutation({
     mutationFn: ({ choose, reason }: { choose: boolean; reason: CancelReasonCode }) =>
       cancelOrder(code!, choose ? destinationBody(cancelMethod, cancelBank) : undefined, cancelReasonBody(reason, cancelReasonText)),
     onSuccess: (cancelled) => {
@@ -534,7 +535,7 @@ export default function OrderDetailPage() {
                 variant="secondary"
                 onPress={() => {
                   haptic('light');
-                  void copyText(o.invoiceUrl!).then((ok) =>
+                  return copyText(o.invoiceUrl!).then((ok) =>
                     openSnackbar(
                       ok
                         ? { text: 'Đã sao chép đường dẫn hoá đơn. Dán vào trình duyệt để tải.', type: 'success' }
