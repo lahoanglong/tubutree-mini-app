@@ -450,6 +450,20 @@ describe('HomeStoryReel: thêm giỏ từ Reel khoá chạm đúp (W70A)', () =>
     expect(mocks.addToCart).toHaveBeenCalledTimes(1);
   });
 
+  it('món A còn đang thêm: món B vẫn thêm được (khoá theo từng món, không nuốt cú chạm)', async () => {
+    const d = deferred<{ items: { id: string }[]; itemCount: number }>();
+    mocks.addToCart.mockReturnValueOnce(d.promise);
+    renderHost();
+    await screen.findAllByTestId('story-reel-item');
+    fireEvent.click(ring(1));
+    fireEvent.click(await dialogReady());
+    await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledWith('v1', 1));
+    fireEvent.click(ring(2));
+    fireEvent.click(await dialogReady());
+    await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledWith('v2', 1));
+    await act(async () => d.resolve({ items: [{ id: 'l1' }], itemCount: 1 }));
+  });
+
   it('khoá nhả sau khi thêm lỗi: mở Reel lại thêm được lần nữa', async () => {
     mocks.addToCart.mockRejectedValueOnce(new Error('boom'));
     renderHost();

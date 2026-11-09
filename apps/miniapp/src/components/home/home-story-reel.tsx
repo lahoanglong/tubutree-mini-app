@@ -179,7 +179,7 @@ export function HomeStoryReel() {
   const [seen, setSeen] = useState(() => readReelSeen(store));
   const [openSlug, setOpenSlug] = useState<string | null>(null);
   const [picker, setPicker] = useState<{ card: ProductCard; variations: VariationDetail[]; initialId: string | null } | null>(null);
-  const adding = useRef(false);
+  const adding = useRef(new Set<string>());
 
   const warm = useCallback(
     (slug: string) => {
@@ -207,14 +207,14 @@ export function HomeStoryReel() {
     }
   };
 
-  // Cờ phải đổi đồng bộ: hai cú chạm sát nhau chạy trước lần dựng lại kế tiếp nên vẫn thấy nút và bảng còn mở.
-  const exclusive = async (run: () => Promise<void>) => {
-    if (adding.current) return;
-    adding.current = true;
+  // Khoá đổi đồng bộ và theo từng món: hai cú chạm sát nhau chạy trước lần dựng lại kế tiếp nên vẫn thấy nút và bảng còn mở, còn món khác không bị chặn.
+  const exclusive = async (slug: string, run: () => Promise<void>) => {
+    if (adding.current.has(slug)) return;
+    adding.current.add(slug);
     try {
       await run();
     } finally {
-      adding.current = false;
+      adding.current.delete(slug);
     }
   };
 
@@ -234,7 +234,7 @@ export function HomeStoryReel() {
     else setPicker({ card, variations, initialId: cardAddTarget(card, flashQ.data ?? [], serverNow()).variationId });
   };
 
-  const addFromReel = (card: ProductCard, variations: VariationDetail[]) => exclusive(() => addFromReelOnce(card, variations));
+  const addFromReel = (card: ProductCard, variations: VariationDetail[]) => exclusive(card.slug, () => addFromReelOnce(card, variations));
 
   if (best.isLoading) return <StoryReelStrip items={[]} loading onOpen={show} />;
   if (items.length === 0) return null;
@@ -249,7 +249,7 @@ export function HomeStoryReel() {
           initialId={picker.initialId}
           onClose={() => setPicker(null)}
           onConfirm={(id, qty) =>
-            exclusive(async () => {
+            exclusive(picker.card.slug, async () => {
               await addLine(id, qty);
               setPicker(null);
             })

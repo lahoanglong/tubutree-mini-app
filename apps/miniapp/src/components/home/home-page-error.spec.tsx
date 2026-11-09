@@ -71,6 +71,22 @@ describe('HomePageError: Thử lại khoá chạm đúp (W70A)', () => {
     expect(onRetry).toHaveBeenCalledTimes(2);
   });
 
+  it('onRetry ném lỗi đồng bộ: khoá nhả, nút không chết', () => {
+    const onRetry = vi.fn().mockImplementationOnce(() => {
+      throw new Error('sync');
+    });
+    const onError = (e: ErrorEvent) => e.preventDefault();
+    window.addEventListener('error', onError);
+    try {
+      renderStrip({ onRetry });
+      fireEvent.click(retryButton());
+      fireEvent.click(retryButton());
+    } finally {
+      window.removeEventListener('error', onError);
+    }
+    expect(onRetry).toHaveBeenCalledTimes(2);
+  });
+
   it('đang tải lại (retrying): nút báo aria-busy và không nhận lần chạm', () => {
     const onRetry = vi.fn();
     renderStrip({ onRetry, retrying: true });

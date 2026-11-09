@@ -24,7 +24,12 @@ export function HomePageError({ error, onRetry, retrying }: HomePageErrorProps) 
     const release = () => {
       busy.current = false;
     };
-    Promise.resolve(onRetry()).then(release, release);
+    try {
+      Promise.resolve(onRetry()).then(release, release);
+    } catch (e) {
+      release();
+      throw e;
+    }
   };
   return (
     <section aria-label={vi.home.loadErrorTitle} data-testid="home-page-error" style={{ padding: '4px 16px 0' }}>
