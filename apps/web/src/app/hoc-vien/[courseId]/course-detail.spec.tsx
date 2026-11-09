@@ -95,12 +95,20 @@ describe('/hoc-vien/[courseId] — chi tiết khoá học', () => {
     expect(body.className).toContain('whitespace-pre-line');
   });
 
-  it('bài đã học: nút "Đã học xong" bị khoá; bài chưa học: "Đánh dấu đã học" bấm được', async () => {
+  it('bài đã học: nút "Đã học xong" báo aria-disabled (không disabled thật) và bấm không gọi API; bài chưa học: "Đánh dấu đã học" bấm được', async () => {
     const { container } = await mount();
-    expect(buttons(container, 'Đã học xong')[0]!.disabled).toBe(true);
+    const done = buttons(container, 'Đã học xong')[0]!;
+    expect(done.getAttribute('aria-disabled')).toBe('true');
+    expect(done.disabled).toBe(false);
+    click(done);
+    await flush(2);
+    expect(mocks.post).not.toHaveBeenCalled();
     const todo = buttons(container, 'Đánh dấu đã học');
     expect(todo).toHaveLength(2);
-    todo.forEach((b) => expect(b.disabled).toBe(false));
+    todo.forEach((b) => {
+      expect(b.disabled).toBe(false);
+      expect(b.hasAttribute('aria-disabled')).toBe(false);
+    });
   });
 
   it('đánh dấu đã học: POST đúng bài, báo thành công, tải lại khoá và danh sách', async () => {
@@ -282,6 +290,32 @@ describe('/hoc-vien/[courseId] — khoá đồng bộ chống đánh dấu đúp
     await flush(6);
     expect(buttons(container, 'Đã học xong')).toHaveLength(2);
     expect(container.querySelector('[role="status"]')?.textContent).toContain('Đã đánh dấu hoàn thành bài học!');
+  });
+
+  it('khoá học tải lại xong, bài vừa học thành "Đã học xong": nút đang giữ focus không bị disabled thật (aria-disabled), bấm lại không gọi API', async () => {
+    const { container } = await mount();
+    const base = mocks.get.getMockImplementation()!;
+    const gate = deferred();
+    mocks.get.mockImplementation(async (path: string) => {
+      if (path === '/academy/courses/c1') {
+        await gate.promise;
+        detail = DETAIL({ completedLessonIds: ['l1', 'l3'] });
+      }
+      return base(path);
+    });
+    const first = todo(container)[0]!;
+    first.focus();
+    click(first);
+    await flush(4);
+    gate.release();
+    await flush(6);
+    expect(first.textContent?.trim()).toBe('Đã học xong');
+    expect(first.hasAttribute('disabled')).toBe(false);
+    expect(first.getAttribute('aria-disabled')).toBe('true');
+    expect(first.hasAttribute('aria-busy')).toBe(false);
+    expect(document.activeElement).toBe(first);
+    await twice(first);
+    expect(mocks.post).toHaveBeenCalledTimes(1);
   });
 
   it('lỗi nhả khoá: lỗi hiện, nút hết báo bận, bấm lại gửi lần hai và lần này thành công', async () => {

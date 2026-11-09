@@ -726,6 +726,104 @@ describe('/cong-dong/[id] — khoá đồng bộ chống bấm đúp, nút bận
     expect(mocks.patch).toHaveBeenCalledTimes(3);
   });
 
+  const esc = () =>
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+  const backdrop = () => document.querySelector<HTMLElement>('[data-sheet-backdrop]');
+
+  it('sửa bài: đang lưu thì Esc, bấm nền, nút Đóng đều không đóng khung; lỗi hiện tại chỗ, chữ đã sửa còn, rồi Esc đóng được', async () => {
+    stub(POST({ isOwner: true }));
+    const gate = deferred();
+    mocks.patch.mockImplementation(() =>
+      gate.promise.then(() => {
+        throw new Error('máy chủ bận');
+      }),
+    );
+    const { container } = await mount();
+    click(btn(container, 'Sửa'));
+    await flush(2);
+    expect(dlg().querySelector('button[aria-label="Đóng"]')).not.toBeNull();
+    typeInto(dlg().querySelector('textarea[aria-label="Chia sẻ chi tiết…"]'), 'Nội dung đã sửa');
+    click(btn(dlg(), 'Lưu'));
+    await flush(2);
+    expect(dlg().querySelector('button[aria-label="Đóng"]')).toBeNull();
+    esc();
+    click(backdrop());
+    await flush(2);
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+    gate.release();
+    await flush(6);
+    expect(dlg().querySelector('[role="alert"]')?.textContent).toContain('máy chủ bận');
+    expect(dlg().querySelector<HTMLTextAreaElement>('textarea[aria-label="Chia sẻ chi tiết…"]')!.value).toBe('Nội dung đã sửa');
+    expect(dlg().querySelector('button[aria-label="Đóng"]')).not.toBeNull();
+    esc();
+    await flush(2);
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it('báo cáo: đang gửi thì Esc, bấm nền, nút Đóng đều không đóng khung; lỗi hiện tại chỗ rồi Esc đóng được; gửi xong tự đóng', async () => {
+    const gate = deferred();
+    mocks.post.mockImplementationOnce(() =>
+      gate.promise.then(() => {
+        throw new Error('quá nhanh');
+      }),
+    );
+    const { container } = await mount();
+    click(container.querySelector('article')!.querySelector('button[aria-label="Báo cáo"]'));
+    await flush(2);
+    expect(dlg().querySelector('button[aria-label="Đóng"]')).not.toBeNull();
+    click(btn(dlg(), 'Báo cáo'));
+    await flush(2);
+    expect(dlg().querySelector('button[aria-label="Đóng"]')).toBeNull();
+    esc();
+    click(backdrop());
+    await flush(2);
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+    gate.release();
+    await flush(6);
+    expect(dlg().querySelector('[role="alert"]')?.textContent).toContain('quá nhanh');
+    expect(dlg().querySelector('button[aria-label="Đóng"]')).not.toBeNull();
+    esc();
+    await flush(2);
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    click(container.querySelector('article')!.querySelector('button[aria-label="Báo cáo"]'));
+    await flush(2);
+    click(btn(dlg(), 'Báo cáo'));
+    await flush(6);
+    expect(posts('/feed/p1/report')).toHaveLength(2);
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it('trả lời: gõ thêm trong lúc lệnh đang bay thì giữ chữ mới, không bị xoá khi lệnh trước xong', async () => {
+    const gate = deferred();
+    mocks.post.mockReturnValue(gate.promise.then(() => ({ id: 'c9', ok: true })));
+    const { container } = await mount();
+    typeInto(replyInput(container), 'Cảm ơn');
+    click(sendBtn(container));
+    await flush(2);
+    typeInto(replyInput(container), 'Cảm ơn bạn nhiều');
+    gate.release();
+    await flush(6);
+    expect(posts('/feed/p1/comments')).toHaveLength(1);
+    expect(replyInput(container).value).toBe('Cảm ơn bạn nhiều');
+    expect(shownAlerts(container)).toEqual([]);
+  });
+
+  it('trả lời: không gõ thêm thì ô được xoá khi gửi xong, kể cả chữ có khoảng trắng hai đầu', async () => {
+    const gate = deferred();
+    mocks.post.mockReturnValue(gate.promise.then(() => ({ id: 'c9', ok: true })));
+    const { container } = await mount();
+    typeInto(replyInput(container), '  Cảm ơn bạn ');
+    click(sendBtn(container));
+    await flush(2);
+    expect(replyInput(container).value).toBe('  Cảm ơn bạn ');
+    gate.release();
+    await flush(6);
+    expect(posts('/feed/p1/comments')[0]![1]).toEqual({ body: 'Cảm ơn bạn' });
+    expect(replyInput(container).value).toBe('');
+  });
+
   it('xoá bài: bấm Xoá hai lần cùng khung hình chỉ gửi một DELETE; nút báo bận, giữ focus', async () => {
     stub(POST({ isOwner: true }));
     mocks.del.mockReturnValue(never());
@@ -791,7 +889,9 @@ describe('/cong-dong/[id] — khoá đồng bộ chống bấm đúp, nút bận
     expect(choose[1]!.hasAttribute('aria-busy')).toBe(false);
   });
 
-  it('chọn hay nhất: hai bình luận khác nhau cùng khung hình đều đi (khoá theo bình luận, không nuốt cú thứ hai)', async () => {
+  // Máy chủ đọc `bestCommentId` ngoài transaction: hai lệnh "hay nhất" song song trên hai bình luận đều thấy bài chưa có câu hay nhất
+  // nên cộng uy tín và báo cho cả hai tác giả. Web chỉ cho một lệnh "hay nhất" bay tại một lúc trong cả bài.
+  it('chọn hay nhất: hai bình luận khác nhau cùng khung hình chỉ lệnh đầu đi; nút kia báo khoá nhưng không báo busy', async () => {
     stub(POST({ isOwner: true, kind: 'QUESTION', title: 'Hỏi' }));
     mocks.post.mockReturnValue(never());
     const { container } = await mount();
@@ -802,10 +902,101 @@ describe('/cong-dong/[id] — khoá đồng bộ chống bấm đúp, nút bận
     });
     await flush(2);
     expect(posts('/feed/p1/best-answer/c1')).toHaveLength(1);
-    expect(posts('/feed/p1/best-answer/c3')).toHaveLength(1);
+    expect(posts('/feed/p1/best-answer/c3')).toHaveLength(0);
     await flush(2);
     expect(choose[0]!.getAttribute('aria-busy')).toBe('true');
-    expect(choose[1]!.getAttribute('aria-busy')).toBe('true');
+    expect(choose[1]!.hasAttribute('aria-busy')).toBe(false);
+    expect(choose[1]!.getAttribute('aria-disabled')).toBe('true');
+    expect(choose[1]!.hasAttribute('disabled')).toBe(false);
+  });
+
+  it('chọn hay nhất: lệnh A còn bay thì bấm B ở khung hình sau cũng không đi; ẩn một bình luận khác vẫn đi', async () => {
+    stub(POST({ isOwner: true, kind: 'QUESTION', title: 'Hỏi' }));
+    mocks.post.mockReturnValue(never());
+    const { container } = await mount();
+    const choose = buttons(container, 'Chọn hay nhất');
+    click(choose[0]!);
+    await flush(2);
+    click(choose[1]!);
+    await flush(2);
+    expect(posts('/feed/p1/best-answer/c3')).toHaveLength(0);
+    // c3 là bình luận của chính chủ bài: ẩn nó là việc khác trên bình luận khác, không dính khoá "hay nhất" của c1.
+    click(container.querySelector('button[aria-label="Ẩn nội dung"]'));
+    await flush(6);
+    expect(mocks.del).toHaveBeenCalledTimes(1);
+    // Ẩn xong (và danh sách đã tải lại) không được nhả nhầm khoá "hay nhất" của c1 đang bay.
+    click(choose[1]!);
+    await flush(2);
+    expect(posts('/feed/p1/best-answer/c3')).toHaveLength(0);
+    expect(posts('/feed/p1/best-answer/c1')).toHaveLength(1);
+  });
+
+  it('ẩn hai bình luận khác nhau cùng khung hình đều đi; một bình luận xong không nhả khoá của bình luận kia', async () => {
+    stub(POST(), [COMMENT('c1', 'Bình', { isOwner: true }), COMMENT('c3', 'Tôi', { isOwner: true })]);
+    mocks.del.mockReturnValueOnce(never()).mockResolvedValueOnce({ ok: true });
+    const { container } = await mount();
+    const hide = () => Array.from(container.querySelectorAll<HTMLElement>('button[aria-label="Ẩn nội dung"]'));
+    act(() => {
+      hide()[0]!.click();
+      hide()[1]!.click();
+    });
+    await flush(6);
+    expect(mocks.del).toHaveBeenCalledTimes(2);
+    // Bình luận thứ hai đã xong và danh sách đã tải lại; bình luận thứ nhất còn bay nên bấm lại vẫn không đi.
+    click(hide()[0]!);
+    await flush(2);
+    expect(mocks.del).toHaveBeenCalledTimes(2);
+    expect(hide()[0]!.getAttribute('aria-busy')).toBe('true');
+    expect(hide()[1]!.hasAttribute('aria-busy')).toBe(false);
+  });
+
+  it('ẩn một bình luận đang bay: chọn hay nhất ở bình luận khác vẫn đi và nút đó không báo khoá', async () => {
+    stub(POST({ isOwner: true, kind: 'QUESTION', title: 'Hỏi' }));
+    mocks.del.mockReturnValue(never());
+    const { container } = await mount();
+    click(container.querySelector('button[aria-label="Ẩn nội dung"]'));
+    await flush(2);
+    const bestOfC1 = buttons(container, 'Chọn hay nhất')[0]!;
+    expect(bestOfC1.hasAttribute('aria-disabled')).toBe(false);
+    click(bestOfC1);
+    await flush(2);
+    expect(posts('/feed/p1/best-answer/c1')).toHaveLength(1);
+  });
+
+  it('chọn hay nhất: lệnh A xong và danh sách đã tải lại thì khoá nhả, chọn B đi; lệnh A lỗi cũng nhả', async () => {
+    stub(POST({ isOwner: true, kind: 'QUESTION', title: 'Hỏi' }));
+    mocks.post.mockRejectedValueOnce(new Error('quá nhanh'));
+    const { container } = await mount();
+    const choose = buttons(container, 'Chọn hay nhất');
+    click(choose[0]!);
+    await flush(6);
+    expect(shownAlerts(container).join()).toContain('quá nhanh');
+    click(choose[1]!);
+    await flush(6);
+    expect(posts('/feed/p1/best-answer/c3')).toHaveLength(1);
+    // Lệnh B thành công, danh sách về xong: chọn lại c1 cũng đi.
+    click(choose[0]!);
+    await flush(6);
+    expect(posts('/feed/p1/best-answer/c1')).toHaveLength(2);
+  });
+
+  it('chọn hay nhất: khoá chung cả bài giữ tới khi danh sách mới về (lệnh A xong mà bài còn cũ thì B vẫn chưa đi)', async () => {
+    stub(POST({ isOwner: true, kind: 'QUESTION', title: 'Hỏi' }));
+    const { container } = await mount();
+    const choose = buttons(container, 'Chọn hay nhất');
+    const gate = deferred();
+    commentsGate = gate.promise;
+    click(choose[0]!);
+    await flush(4);
+    expect(posts('/feed/p1/best-answer/c1')).toHaveLength(1);
+    click(choose[1]!);
+    await flush(2);
+    expect(posts('/feed/p1/best-answer/c3')).toHaveLength(0);
+    gate.release();
+    await flush(6);
+    click(choose[1]!);
+    await flush(2);
+    expect(posts('/feed/p1/best-answer/c3')).toHaveLength(1);
   });
 
   it('chọn hay nhất rồi ẩn đúng bình luận đó cùng khung hình: chỉ lệnh đầu đi (khoá chung theo bình luận)', async () => {

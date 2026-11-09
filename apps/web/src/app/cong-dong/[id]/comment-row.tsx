@@ -12,6 +12,7 @@ export function CommentRow({
   canMarkBest,
   onMarkBest,
   marking,
+  bestBlocked = false,
   onReport,
   onRemove,
   removing,
@@ -21,6 +22,8 @@ export function CommentRow({
   canMarkBest: boolean;
   onMarkBest: () => void;
   marking: boolean;
+  /** Một lệnh "hay nhất" đang bay ở bình luận khác: cả bài chỉ chọn một lần tại một lúc, nút này báo khoá nhưng không báo busy. */
+  bestBlocked?: boolean;
   onReport: () => void;
   onRemove: () => void;
   removing: boolean;
@@ -64,7 +67,7 @@ export function CommentRow({
         <button
           type="button"
           aria-busy={marking || undefined}
-          aria-disabled={locked || undefined}
+          aria-disabled={locked || bestBlocked || undefined}
           onClick={onMarkBest}
           className={`${miniBtnSecondary} mt-2`}
         >

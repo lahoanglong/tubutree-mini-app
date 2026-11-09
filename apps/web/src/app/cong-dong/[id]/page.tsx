@@ -138,27 +138,37 @@ export default function PostDetailPage() {
   const react = useLockedMutation({ mutationFn: () => reactPost(coreHttp, id), onSuccess: () => ok(), onError: onFail });
   const addCommentMut = useLockedMutation({
     mutationFn: (body: string) => addComment(coreHttp, id, body),
-    onSuccess: () => {
-      setCommentText('');
+    // Chỉ xoá ô khi nó còn đúng chữ đã gửi: khách gõ tiếp trong lúc lệnh bay thì chữ mới phải còn.
+    onSuccess: (_data, body) => {
+      setCommentText((cur) => (cur.trim() === body ? '' : cur));
       setReplyError(null);
       void ok();
     },
     onError: (e) => setReplyError(actErrText(e)),
   });
-  // Chọn hay nhất và ẩn bình luận dùng chung một khoá theo bình luận: hai việc khác nhau trên cùng một dòng không được lọt cùng khung hình.
+  // Thao tác bình luận (chọn hay nhất, ẩn) kiểm khoá bằng ref đồng bộ: hai việc trên CÙNG một bình luận không lọt cùng khung hình, và cả bài chỉ
+  // có MỘT lệnh "hay nhất" bay tại một lúc, vì máy chủ đọc `bestCommentId` ngoài transaction: hai lệnh song song đều thấy bài chưa có câu hay nhất
+  // nên cộng uy tín và báo cho cả hai tác giả. Ẩn một bình luận khác vẫn đi song song.
   // Lỗi của thao tác trên một bình luận hiện ngay dưới bình luận đó: dải lỗi đầu trang nằm ngoài màn hình khi danh sách dài.
-  const commentOp = useLockedMutation(
-    {
-      mutationKey: COMMENT_OP_KEY,
-      mutationFn: (v: CommentOp) => (v.kind === 'best' ? setBestAnswer(coreHttp, id, v.commentId) : removeComment(coreHttp, v.commentId)),
-      onMutate: () => setCommentError(null),
-      onSuccess: () => ok(),
-      onError: (e, v) => setCommentError({ commentId: v.commentId, message: actErrText(e) }),
+  const commentOpsRef = useRef<CommentOp[]>([]);
+  const commentOp = useMutation({
+    mutationKey: COMMENT_OP_KEY,
+    mutationFn: (v: CommentOp) => (v.kind === 'best' ? setBestAnswer(coreHttp, id, v.commentId) : removeComment(coreHttp, v.commentId)),
+    onMutate: () => setCommentError(null),
+    onSuccess: () => ok(),
+    onError: (e, v) => setCommentError({ commentId: v.commentId, message: actErrText(e) }),
+    onSettled: (_data, _error, v) => {
+      commentOpsRef.current = commentOpsRef.current.filter((o) => o.kind !== v.kind || o.commentId !== v.commentId);
     },
-    (v) => v.commentId,
-  );
+  });
+  const runCommentOp = (v: CommentOp) => {
+    if (commentOpsRef.current.some((o) => o.commentId === v.commentId || (o.kind === 'best' && v.kind === 'best'))) return;
+    commentOpsRef.current = [...commentOpsRef.current, v];
+    commentOp.mutate(v);
+  };
   // Mọi thao tác bình luận đang bay (không chỉ lệnh sau cùng): nút của đúng các dòng đó báo aria-busy, dòng khác vẫn bấm được.
   const inFlightCommentOps = useMutationState({ filters: { mutationKey: COMMENT_OP_KEY, status: 'pending' }, select: (m) => m.state.variables as CommentOp });
+  const bestInFlight = inFlightCommentOps.some((v) => v.kind === 'best');
   const editMut = useLockedMutation({
     mutationFn: (patch: { title?: string; body: string }) => editPost(coreHttp, id, patch),
     onSuccess: () => {
@@ -407,10 +417,11 @@ export default function PostDetailPage() {
                 key={c.id}
                 comment={c}
                 canMarkBest={canMarkBest}
-                onMarkBest={() => commentOp.mutate({ kind: 'best', commentId: c.id })}
+                onMarkBest={() => runCommentOp({ kind: 'best', commentId: c.id })}
                 marking={inFlightCommentOps.some((v) => v.kind === 'best' && v.commentId === c.id)}
+                bestBlocked={bestInFlight}
                 onReport={() => openReport({ targetType: 'COMMENT', targetId: c.id })}
-                onRemove={() => commentOp.mutate({ kind: 'remove', commentId: c.id })}
+                onRemove={() => runCommentOp({ kind: 'remove', commentId: c.id })}
                 removing={inFlightCommentOps.some((v) => v.kind === 'remove' && v.commentId === c.id)}
                 error={commentError?.commentId === c.id ? commentError.message : null}
               />

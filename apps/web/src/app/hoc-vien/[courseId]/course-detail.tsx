@@ -37,8 +37,9 @@ function CourseBody({
           const done = course.completedLessonIds.includes(lesson.id);
           const video = lesson.contentType === 'VIDEO' ? safeVideoUrl(lesson.videoUrl) : null;
           const busy = completingId === lesson.id;
-          // Khoá cứng (đã học, hay bài khác đang gửi) vẫn là `disabled`; bài ĐANG gửi báo aria-busy + aria-disabled: nút đang giữ focus mà `disabled` thì Chromium thả focus về body.
-          const locked = done || (completingId !== undefined && !busy);
+          // Bài khác đang gửi vẫn là `disabled` thật (nút đó không giữ focus). Bài ĐANG gửi và bài VỪA học xong báo aria-busy / aria-disabled + guard ở onClick:
+          // nút đang giữ focus mà `disabled` thì Chromium thả focus về body, kể cả khi khoá học tải lại xong và nút chuyển sang "Đã học xong".
+          const otherBusy = completingId !== undefined && !busy;
           return (
             <section key={lesson.id} className={`${miniCard} flex flex-col p-3`}>
               <div className="flex items-center gap-2">
@@ -58,10 +59,10 @@ function CourseBody({
               {lesson.contentType === 'ARTICLE' && lesson.body && <div className="mt-2 whitespace-pre-line break-words text-sm text-stone-700">{lesson.body}</div>}
               <button
                 type="button"
-                disabled={locked}
+                disabled={otherBusy}
                 aria-busy={busy || undefined}
-                aria-disabled={busy || undefined}
-                onClick={() => onComplete(lesson.id)}
+                aria-disabled={busy || done || undefined}
+                onClick={() => !done && onComplete(lesson.id)}
                 className={`${done ? miniBtnSecondary : ui.btnPrimary} mt-3 gap-1.5 self-start`}
               >
                 {done && <CheckCircle2 className="h-4 w-4" aria-hidden="true" />}

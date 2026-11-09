@@ -36,6 +36,7 @@ export function EditPostSheet({
     <Sheet
       open={open}
       onClose={onClose}
+      dismissible={!saving}
       title="Sửa"
       footer={
         <button
@@ -116,6 +117,7 @@ export function ReportSheet({
     <Sheet
       open={open}
       onClose={onClose}
+      dismissible={!sending}
       title="Báo cáo"
       footer={
         <button
