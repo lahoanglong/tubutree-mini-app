@@ -24,6 +24,13 @@ const STATUS_LABEL: Record<ChatItemStatus, string> = {
 };
 
 function Bubble({ item }: { item: ChatItem }) {
+  // Khoá đồng bộ cho "Gửi lại": `status` chỉ đổi sau lần vẽ kế, hai cú bấm sát nhau sẽ gửi lại hai lần. Nhả khi tin quay về failed/rejected;
+  // đổi `key` thì Bubble được dựng mới nên ref cũng mới.
+  const retryingRef = useRef(false);
+  useEffect(() => {
+    if (item.status === 'failed' || item.status === 'rejected') retryingRef.current = false;
+  }, [item.status]);
+
   if (item.sender === 'SYSTEM') {
     return (
       <div data-testid={`msg-${item.key}`} data-sender="SYSTEM" style={{ textAlign: 'center', padding: '4px 24px' }}>
@@ -32,6 +39,11 @@ function Bubble({ item }: { item: ChatItem }) {
     );
   }
   const mine = item.sender === 'CUSTOMER';
+  const retry = () => {
+    if (retryingRef.current) return;
+    retryingRef.current = true;
+    item.onRetry?.();
+  };
   return (
     <div
       data-testid={`msg-${item.key}`}
@@ -60,12 +72,18 @@ function Bubble({ item }: { item: ChatItem }) {
       {mine && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <Text variant="caption" tone={item.status === 'failed' || item.status === 'rejected' ? 'danger' : 'tertiary'}>{STATUS_LABEL[item.status]}</Text>
-          {item.createdAt && <Text variant="caption" tone="tertiary">{formatDateTime(item.createdAt)}</Text>}
+          {item.createdAt && <Text variant="caption" tone="tertiary" numeric>{formatDateTime(item.createdAt)}</Text>}
         </div>
       )}
-      {!mine && item.createdAt && <Text variant="caption" tone="tertiary">{formatDateTime(item.createdAt)}</Text>}
-      {item.error && <Text variant="caption" tone="danger" as="div">{item.error}</Text>}
-      {item.onRetry && <Button variant="ghost" onPress={item.onRetry}>Gửi lại</Button>}
+      {!mine && item.createdAt && <Text variant="caption" tone="tertiary" numeric>{formatDateTime(item.createdAt)}</Text>}
+      {item.error && (
+        <div role="alert">
+          <Text variant="caption" tone="danger" as="div">{item.error}</Text>
+        </div>
+      )}
+      {item.onRetry && (
+        <Button variant="ghost" disabled={item.status === 'sending'} onPress={retry}>Gửi lại</Button>
+      )}
     </div>
   );
 }
@@ -82,7 +100,7 @@ export function MessageList({ items }: { items: ChatItem[] }) {
     else end.scrollIntoView?.({ block: 'end' });
   }, [last?.key, last?.status]);
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 12 }}>
+    <div role="log" aria-label="Tin nhắn hỗ trợ" aria-live="polite" style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 12 }}>
       {items.map((it) => (
         <Bubble key={it.key} item={it} />
       ))}
