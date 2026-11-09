@@ -42,6 +42,24 @@ describe('Chip', () => {
     fireEvent.click(screen.getByRole('button'));
     expect(onPress).toHaveBeenCalledTimes(1);
   });
+  it('disabled: nút DOM disabled thật, bấm không gọi onPress, bỏ hiệu ứng nhấn, con trỏ không-cho-phép và mờ đi; vẫn giữ vùng chạm 44px', () => {
+    const onPress = vi.fn();
+    const { rerender } = render(<Chip onPress={onPress}>x</Chip>);
+    const on = screen.getByRole('button');
+    expect(on).toBeEnabled();
+    expect(on.className).toContain('tubu-press');
+    expect(on.style.cursor).toBe('pointer');
+    expect(on.style.opacity).toBe('');
+    rerender(<Chip disabled onPress={onPress}>x</Chip>);
+    const off = screen.getByRole('button');
+    expect(off).toBeDisabled();
+    fireEvent.click(off);
+    expect(onPress).not.toHaveBeenCalled();
+    expect(off.className).not.toContain('tubu-press');
+    expect(off.className).toContain('tubu-hit-44');
+    expect(off.style.cursor).toBe('not-allowed');
+    expect(off.style.opacity).toBe('0.6');
+  });
   it('vùng chạm >= 44px cả hai chiều cho cả hai cỡ: cao nhờ ::after 44px, rộng nhờ minWidth 44', () => {
     const css = readFileSync(resolve(__dirname, '../../css/tokens.css'), 'utf8');
     expect(css).toMatch(/\.tubu-hit-44::after\s*\{[^}]*height:\s*44px/);

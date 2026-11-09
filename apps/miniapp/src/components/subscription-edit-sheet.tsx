@@ -8,7 +8,7 @@ import {
   type SubscriptionDTO,
   type SubscriptionPaymentMethod,
 } from '../services/subscriptions-api';
-import { getErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { haptic } from '../utils/haptic';
 import { vi } from '../i18n/vi';
 import { BottomSheet } from './ui/bottom-sheet';
@@ -53,6 +53,11 @@ export function SubscriptionEditSheet({ sub, onClose }: { sub: SubscriptionDTO; 
   const [payment, setPayment] = useState<SubscriptionPaymentMethod>(sub.paymentMethod ?? 'COD');
   const addrQ = useQuery({ queryKey: ['addresses'], queryFn: getAddresses });
   const walletQ = useQuery({ queryKey: ['wallet'], queryFn: getWallet });
+  // Truy vấn lỗi mà chưa có dữ liệu bị react-query đặt về pending lúc tải lại và xoá lỗi; giữ vùng lỗi + nút Thử lại đứng yên
+  // (không mất focus) tới khi lượt tải lại có kết quả (isPending hết). Giá trị là câu lỗi cũ để vẫn hiện chữ trong lúc chờ.
+  const [addrRetrying, setAddrRetrying] = useState<string | null>(null);
+  const addrFailed = addrQ.isError && !addrQ.data;
+  const addrWaiting = addrRetrying !== null && addrQ.isPending;
 
   const patch = subscriptionPatch(sub, { quantity, addressId, paymentMethod: payment, intervalWeeks: weeks });
   const nextRun = nextRunAfterIntervalChange(sub, weeks);
@@ -72,25 +77,37 @@ export function SubscriptionEditSheet({ sub, onClose }: { sub: SubscriptionDTO; 
   return (
     <BottomSheet
       open
-      onClose={onClose}
+      onClose={() => {
+        if (!save.isPending) onClose();
+      }}
+      dismissible={!save.isPending}
       title={t.editTitle}
       description={`${sub.productName}${sub.variationName ? ` · ${sub.variationName}` : ''}`}
       size="full"
       footer={
-        <Button fullWidth loading={save.isPending} disabled={!dirty} onPress={() => save.mutate()}>
-          {t.saveCta}
-        </Button>
+        <>
+          {save.isError && (
+            <div role="alert" style={{ marginBottom: '0.375rem' }}>
+              <Text variant="caption" tone="danger" as="div">
+                {getErrorMessage(save.error)}
+              </Text>
+            </div>
+          )}
+          <Button fullWidth loading={save.isPending} disabled={!dirty} onPress={() => save.mutate()}>
+            {t.saveCta}
+          </Button>
+        </>
       }
     >
       <SectionLabel>{t.quantityLabel}</SectionLabel>
       <div style={{ padding: '4px 0' }}>
-        <QuantitySelector value={quantity} min={1} max={MAX_QTY} onChange={setQuantity} />
+        <QuantitySelector value={quantity} min={1} max={MAX_QTY} disabled={save.isPending} onChange={setQuantity} />
       </div>
 
       <SectionLabel>{t.intervalLabel}</SectionLabel>
-      <IntervalPicker value={weeks} onChange={setWeeks} />
+      <IntervalPicker value={weeks} onChange={setWeeks} disabled={save.isPending} />
       {nextRun && (
-        <Text variant="caption" tone="tertiary" as="div">
+        <Text variant="caption" tone="tertiary" as="div" numeric>
           {t.intervalNextRun(formatVnDate(vnDateOf(nextRun)))}
         </Text>
       )}
@@ -101,13 +118,29 @@ export function SubscriptionEditSheet({ sub, onClose }: { sub: SubscriptionDTO; 
       )}
 
       <SectionLabel>{t.paymentLabel}</SectionLabel>
-      <PaymentMethodPicker value={payment} onChange={setPayment} walletBalance={walletQ.data?.walletBalance} />
+      <PaymentMethodPicker value={payment} onChange={setPayment} walletBalance={walletQ.data?.walletBalance} disabled={save.isPending} />
 
       <SectionLabel>{t.addressLabel}</SectionLabel>
-      {addrQ.isLoading ? (
+      {addrFailed || addrWaiting ? (
+        <div role="alert" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', padding: '0.25rem 0' }}>
+          <Text variant="body-sm" tone="danger" as="div" style={{ flex: 1, minWidth: 0 }}>
+            {addrFailed ? getLoadErrorMessage(addrQ.error) : addrRetrying}
+          </Text>
+          <Button
+            variant="secondary"
+            loading={addrWaiting}
+            onPress={() => {
+              setAddrRetrying(getLoadErrorMessage(addrQ.error));
+              return addrQ.refetch();
+            }}
+          >
+            {vi.common.retry}
+          </Button>
+        </div>
+      ) : addrQ.isLoading ? (
         <LineItemSkeleton />
       ) : (
-        <AddressPicker addresses={addrQ.data ?? []} value={addressId} onChange={setAddressId} />
+        <AddressPicker addresses={addrQ.data ?? []} value={addressId} onChange={setAddressId} disabled={save.isPending} />
       )}
     </BottomSheet>
   );

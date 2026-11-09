@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
 import { smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
@@ -24,6 +25,10 @@ let calls: Call[] = [];
 let subs: Record<string, unknown>[] = [SUB];
 let failures: Record<string, { status: number; message: string }> = {};
 let listFailsOnce = false;
+let patchGate: Promise<void> | null = null;
+let hangAddresses = false;
+let addrGate: Promise<void> | null = null;
+const ADDRESS_LOAD_ERROR_TEXT = 'Máy chủ đang bận, thử lại nhé.';
 
 function stubApi() {
   calls = [];
@@ -34,6 +39,11 @@ function stubApi() {
       const method = init?.method ?? 'GET';
       calls.push({ method, path, body: init?.body ? JSON.parse(String(init.body)) : undefined });
       const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+      if (hangAddresses && method === 'GET' && path === '/me/addresses') {
+        return new Promise<Response>((_, reject) => init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError'))));
+      }
+      if (method === 'GET' && path === '/me/addresses' && addrGate) await addrGate;
+      if (method === 'PATCH' && patchGate) await patchGate;
       const fail = failures[`${method} ${path}`];
       if (fail) return json({ message: fail.message }, fail.status);
       if (method === 'GET' && path === '/me/subscriptions') {
@@ -68,6 +78,9 @@ beforeEach(() => {
   subs = [SUB];
   failures = {};
   listFailsOnce = false;
+  patchGate = null;
+  hangAddresses = false;
+  addrGate = null;
   stubApi();
 });
 afterEach(() => {
@@ -322,6 +335,231 @@ describe('SubscriptionsPanel', () => {
     expect(unnamedControls(c)).toEqual([]);
     expect(smallTouchTargets(c)).toEqual([]);
     expect(btn('Tạm dừng', c).parentElement?.className).toContain('flex-wrap');
+  });
+});
+
+describe('SubscriptionEditSheet (web): lỗi tải địa chỉ, khoá khi đang lưu, số đều (W61A)', () => {
+  const SUB_NEW = { ...SUB, nextRunAt: '2026-11-07T03:00:00.000Z', lastOrderAt: '2026-10-10T03:00:00.000Z' };
+  const sheetOpen = () => document.body.textContent?.includes('Sửa gói định kỳ') ?? false;
+  const radios = () => Array.from(document.body.querySelectorAll<HTMLInputElement>('input[type="radio"]'));
+  const chips = () => Array.from(document.body.querySelectorAll<HTMLButtonElement>('[role="group"][aria-label="Chu kỳ giao"] button'));
+  const alertBox = () => document.body.querySelector('[role="alert"]');
+  const openEditSheet = async () => {
+    const c = await mount();
+    click(btn('Sửa', c));
+    await flush(6);
+    return c;
+  };
+  const pressEscape = () =>
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+
+  beforeEach(() => {
+    subs = [SUB_NEW];
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it('tải địa chỉ lỗi: vùng role=alert có lời lỗi + nút Thử lại, không vẽ nhóm địa chỉ trống; Thử lại tải lại và hiện danh sách', async () => {
+    failures['GET /me/addresses'] = { status: 500, message: 'boom' };
+    await openEditSheet();
+    const loadsBefore = sent('GET', '/me/addresses').length;
+    const alert = alertBox()!;
+    expect(alert).not.toBeNull();
+    expect(alert.querySelector('p')!.textContent).toBe(ADDRESS_LOAD_ERROR_TEXT);
+    expect(alert.querySelector('p')!.textContent).not.toContain('chưa rõ đã xong chưa');
+    expect(document.body.querySelector('[role="radiogroup"][aria-label="Giao tới"]')).toBeNull();
+    expect(radio('Lê Lợi')).toBeNull();
+
+    delete failures['GET /me/addresses'];
+    click(btn('Thử lại', alert));
+    await flush(8);
+    expect(radio('9 Hai Bà Trưng')).not.toBeNull();
+    expect(radio('1 Lê Lợi')!.checked).toBe(true);
+    expect(alertBox()).toBeNull();
+    expect(sent('GET', '/me/addresses')).toHaveLength(loadsBefore + 1);
+  });
+
+  it('bấm Thử lại: vùng lỗi và nút đứng yên (giữ focus, giữ chữ lỗi cũ), nút báo bận mà không bị disabled, bấm thêm không gửi thêm lượt tải, không có nhóm địa chỉ trống', async () => {
+    failures['GET /me/addresses'] = { status: 500, message: 'boom' };
+    await openEditSheet();
+    const alert = alertBox()!;
+    const retry = btn('Thử lại', alert);
+    expect(retry.hasAttribute('aria-busy')).toBe(false);
+    const loadsBefore = sent('GET', '/me/addresses').length;
+    let release!: () => void;
+    addrGate = new Promise<void>((r) => { release = r; });
+    act(() => retry.focus());
+    click(retry);
+    await flush(3);
+    expect(alertBox()).toBe(alert);
+    expect(alert.querySelector('p')!.textContent).toBe(ADDRESS_LOAD_ERROR_TEXT);
+    expect(retry.getAttribute('aria-busy')).toBe('true');
+    expect(retry.disabled).toBe(false);
+    expect(document.activeElement).toBe(retry);
+    expect(document.body.querySelector('[role="radiogroup"][aria-label="Giao tới"]')).toBeNull();
+    click(retry);
+    await flush(2);
+    expect(sent('GET', '/me/addresses')).toHaveLength(loadsBefore + 1);
+
+    delete failures['GET /me/addresses'];
+    release();
+    await flush(8);
+    expect(radio('9 Hai Bà Trưng')).not.toBeNull();
+    expect(alertBox()).toBeNull();
+  });
+
+  it('Thử lại mà vẫn lỗi: vùng lỗi không chớp mất (cùng phần tử), nút hết bận và bấm thử tiếp được, rồi hiện danh sách khi qua', async () => {
+    failures['GET /me/addresses'] = { status: 500, message: 'boom' };
+    await openEditSheet();
+    const alert = alertBox()!;
+    const retry = btn('Thử lại', alert);
+    const loadsBefore = sent('GET', '/me/addresses').length;
+    click(retry);
+    await flush(8);
+    expect(sent('GET', '/me/addresses')).toHaveLength(loadsBefore + 1);
+    expect(alertBox()).toBe(alert);
+    expect(btn('Thử lại', alert)).toBe(retry);
+    expect(retry.hasAttribute('aria-busy')).toBe(false);
+    expect(alert.querySelector('p')!.textContent).toBe(ADDRESS_LOAD_ERROR_TEXT);
+    expect(radios()).toHaveLength(3);
+
+    delete failures['GET /me/addresses'];
+    click(retry);
+    await flush(8);
+    expect(sent('GET', '/me/addresses')).toHaveLength(loadsBefore + 2);
+    expect(radio('9 Hai Bà Trưng')).not.toBeNull();
+    expect(alertBox()).toBeNull();
+  });
+
+  it('tải địa chỉ quá hạn: nói "tải chậm" (lời của màn tải), không nói "chưa rõ đã xong chưa" (lời của nút bấm)', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    hangAddresses = true;
+    const r = render(<SubscriptionsPanel />);
+    mounted.push(r);
+    const tick = (ms = 0) =>
+      act(async () => {
+        await vi.advanceTimersByTimeAsync(ms);
+      });
+    for (let i = 0; i < 4; i++) await tick();
+    click(btn('Sửa', r.container));
+    await tick();
+    await tick(20_000);
+    for (let i = 0; i < 30; i++) await tick(100);
+    const text = alertBox()!.querySelector('p')!.textContent;
+    expect(text).toBe('Tải chậm quá, thử lại nhé.');
+    expect(text).not.toContain('chưa rõ đã xong chưa');
+  });
+
+  it('đã có danh sách mà lần làm mới nền lỗi (mở lại sheet): vẫn hiện danh sách, không phủ bằng vùng lỗi', async () => {
+    const c = await openEditSheet();
+    expect(radio('9 Hai Bà Trưng')).not.toBeNull();
+    click(btn('Đóng'));
+    await flush(4);
+    expect(sheetOpen()).toBe(false);
+    const loadsBefore = sent('GET', '/me/addresses').length;
+    failures['GET /me/addresses'] = { status: 500, message: 'boom' };
+    click(btn('Sửa', c));
+    await flush(8);
+    expect(sent('GET', '/me/addresses')).toHaveLength(loadsBefore + 1);
+    expect(radio('9 Hai Bà Trưng')).not.toBeNull();
+    expect(alertBox()).toBeNull();
+  });
+
+  it('đang lưu: nút lưu aria-busy + disabled; số lượng, chu kỳ, cách trả, địa chỉ đều khoá và bấm không đổi lựa chọn', async () => {
+    let release!: () => void;
+    patchGate = new Promise<void>((r) => { release = r; });
+    await openEditSheet();
+    click(btn('Tăng số lượng'));
+    await flush(2);
+    click(btn('Lưu thay đổi'));
+    await flush(3);
+    const saving = btn('Đang lưu…');
+    expect(saving.disabled).toBe(true);
+    expect(saving.getAttribute('aria-busy')).toBe('true');
+    expect(chips()).toHaveLength(4);
+    chips().forEach((c) => expect(c.disabled).toBe(true));
+    expect(radios()).toHaveLength(5);
+    radios().forEach((r) => expect(r.disabled).toBe(true));
+    expect(btn('Tăng số lượng').getAttribute('aria-disabled')).toBe('true');
+    expect(btn('Giảm số lượng').getAttribute('aria-disabled')).toBe('true');
+
+    click(btn('6 tuần'));
+    click(radio('9 Hai Bà Trưng'));
+    click(radio('Chuyển khoản ngân hàng'));
+    click(btn('Tăng số lượng'));
+    await flush(2);
+    expect(chips()[0]!.getAttribute('aria-pressed')).toBe('true');
+    expect(chips()[1]!.getAttribute('aria-pressed')).toBe('false');
+    expect(radio('1 Lê Lợi')!.checked).toBe(true);
+    expect(radio('Thanh toán khi nhận hàng')!.checked).toBe(true);
+    release();
+    await flush(8);
+    expect(sent('PATCH', '/me/subscriptions/s1')).toHaveLength(1);
+    expect(sent('PATCH', '/me/subscriptions/s1')[0]!.body).toEqual({ quantity: 3 });
+  });
+
+  it('đang lưu: nút Đóng ẩn đi, phím Escape và bấm nền không đóng sheet giữa lúc PATCH đang bay; lưu xong mới đóng', async () => {
+    let release!: () => void;
+    patchGate = new Promise<void>((r) => { release = r; });
+    await openEditSheet();
+    click(btn('Tăng số lượng'));
+    await flush(2);
+    click(btn('Lưu thay đổi'));
+    await flush(3);
+    expect(btn('Đang lưu…')).toBeTruthy();
+    expect(document.body.querySelector('button[aria-label="Đóng"]')).toBeNull();
+    pressEscape();
+    click(document.body.querySelector('[data-sheet-backdrop]'));
+    await flush(2);
+    expect(sheetOpen()).toBe(true);
+    release();
+    await flush(8);
+    expect(sheetOpen()).toBe(false);
+  });
+
+  it('chưa lưu: nút Đóng và phím Escape vẫn đóng sheet như cũ', async () => {
+    const c = await openEditSheet();
+    click(btn('Đóng'));
+    await flush(3);
+    expect(sheetOpen()).toBe(false);
+    click(btn('Sửa', c));
+    await flush(6);
+    expect(sheetOpen()).toBe(true);
+    pressEscape();
+    await flush(3);
+    expect(sheetOpen()).toBe(false);
+  });
+
+  it('lưu lỗi: role=alert ngay trên nút lưu, nút hết bận, điều khiển mở lại, sheet không đóng', async () => {
+    failures['PATCH /me/subscriptions/s1'] = { status: 409, message: 'Bạn đã có gói định kỳ cho sản phẩm này tại địa chỉ đó.' };
+    await openEditSheet();
+    click(radio('9 Hai Bà Trưng'));
+    await flush(2);
+    click(btn('Lưu thay đổi'));
+    await flush(8);
+    const alert = alertBox()!;
+    expect(alert.textContent).toContain('Bạn đã có gói định kỳ cho sản phẩm này tại địa chỉ đó.');
+    expect(alert.nextElementSibling).toBe(btn('Lưu thay đổi'));
+    expect(btn('Lưu thay đổi').hasAttribute('aria-busy')).toBe(false);
+    chips().forEach((c) => expect(c.disabled).toBe(false));
+    radios().forEach((r) => expect(r.disabled).toBe(false));
+    expect(sheetOpen()).toBe(true);
+    click(btn('Đóng'));
+    await flush(3);
+    expect(sheetOpen()).toBe(false);
+  });
+
+  it('số đều: dòng ngày giao kế tiếp, hàng Ví Tubu kèm số dư và hàng địa chỉ kèm số điện thoại', async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-20T05:00:00.000Z') });
+    await openEditSheet();
+    click(btn('6 tuần'));
+    const nextRun = Array.from(document.body.querySelectorAll('p')).find((p) => p.textContent === 'Lần giao kế tiếp: 21/11/2026')!;
+    expect(nextRun.className).toContain('tabular-nums');
+    const row = (text: string) => radio(text)!.closest('label')!.querySelector('span')!;
+    expect(row('Ví Tubu (50.000đ)').className).toContain('tabular-nums');
+    expect(row('9 Hai Bà Trưng').className).toContain('tabular-nums');
+    expect(row('9 Hai Bà Trưng').textContent).toContain('Lan · 0900000000');
   });
 });
 

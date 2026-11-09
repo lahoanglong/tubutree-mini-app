@@ -41,7 +41,7 @@ function RadioRow({
   return (
     <label className={`flex min-h-11 items-center gap-2.5 py-2 ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
       <input type="radio" name={name} checked={checked} disabled={disabled} onChange={onSelect} className="h-5 w-5 flex-none accent-forest-600" />
-      <span className="min-w-0 flex-1">
+      <span className="min-w-0 flex-1 tabular-nums">
         <span className={`block text-sm ${disabled ? 'text-stone-500' : 'text-stone-900'} ${checked ? 'font-semibold' : ''}`}>{title}</span>
         {hint && <span className="block text-xs text-stone-600">{hint}</span>}
       </span>
@@ -53,10 +53,12 @@ export function PaymentMethodPicker({
   value,
   onChange,
   walletBalance,
+  disabled = false,
 }: {
   value: SubscriptionPaymentMethod;
   onChange: (m: SubscriptionPaymentMethod) => void;
   walletBalance?: number;
+  disabled?: boolean;
 }) {
   const walletBlocked = subscriptionWalletBlockedReason(walletBalance);
   const label = (m: SubscriptionPaymentMethod) => (m === 'WALLET' && walletBalance !== undefined ? `Ví Tubu (${formatVnd(walletBalance)})` : PAY_LABEL[m]);
@@ -68,7 +70,7 @@ export function PaymentMethodPicker({
           key={m}
           name="sub-pay"
           checked={value === m}
-          disabled={m === 'WALLET' && walletBlocked !== null}
+          disabled={disabled || (m === 'WALLET' && walletBlocked !== null)}
           onSelect={() => onChange(m)}
           title={label(m)}
           hint={hint(m)}
@@ -78,11 +80,29 @@ export function PaymentMethodPicker({
   );
 }
 
-export function AddressPicker({ addresses, value, onChange }: { addresses: AddressDTO[]; value: string | undefined; onChange: (id: string) => void }) {
+export function AddressPicker({
+  addresses,
+  value,
+  onChange,
+  disabled = false,
+}: {
+  addresses: AddressDTO[];
+  value: string | undefined;
+  onChange: (id: string) => void;
+  disabled?: boolean;
+}) {
   return (
     <div role="radiogroup" aria-label="Giao tới">
       {addresses.map((a) => (
-        <RadioRow key={a.id} name="sub-addr" checked={value === a.id} onSelect={() => onChange(a.id)} title={`${a.recipient} · ${a.phone}`} hint={addressText(a)} />
+        <RadioRow
+          key={a.id}
+          name="sub-addr"
+          checked={value === a.id}
+          disabled={disabled}
+          onSelect={() => onChange(a.id)}
+          title={`${a.recipient} · ${a.phone}`}
+          hint={addressText(a)}
+        />
       ))}
     </div>
   );
