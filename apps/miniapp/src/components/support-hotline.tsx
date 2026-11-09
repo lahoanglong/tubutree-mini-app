@@ -1,4 +1,4 @@
-import { useContext } from 'react';
+import { useContext, useRef } from 'react';
 import { QueryClientContext, useQuery } from '@tanstack/react-query';
 import { Phone } from 'lucide-react';
 import { Button } from './ui/button';
@@ -20,8 +20,20 @@ export function SupportHotline() {
 
 function HotlineLine() {
   const q = useQuery({ queryKey: ['support-contact'], queryFn: fetchSupportContact, staleTime: 10 * 60_000 });
+  // Khoá đồng bộ: cầu nối gọi điện còn chạy thì cú chạm kế bị bỏ, khỏi mở hai cuộc gọi.
+  const callingRef = useRef(false);
   const hotline = (q.isError ? DEFAULT_SUPPORT : q.data)?.hotline;
   if (!hotline) return null;
+  const call = async () => {
+    if (callingRef.current) return;
+    callingRef.current = true;
+    try {
+      haptic('light');
+      await callPhone(hotline);
+    } finally {
+      callingRef.current = false;
+    }
+  };
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: 4 }}>
       <Text variant="caption" tone="tertiary">
@@ -30,11 +42,8 @@ function HotlineLine() {
       <Button
         variant="ghost"
         icon={Phone}
-        style={{ whiteSpace: 'nowrap' }}
-        onPress={() => {
-          haptic('light');
-          void callPhone(hotline);
-        }}
+        style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}
+        onPress={() => void call()}
       >
         {vi.errors.callHotline(formatPhoneDisplay(hotline))}
       </Button>

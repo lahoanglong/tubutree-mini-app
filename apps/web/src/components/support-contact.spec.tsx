@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 
@@ -83,6 +84,7 @@ describe('SupportContact — kênh hỗ trợ', () => {
     const c = await mount();
     click(byText(c, 'button', 'Nhắn Zalo OA'));
     expect(mocks.oa.openChat).toHaveBeenCalledWith('Hỗ trợ đơn TT001');
+    await flush(2);
     expect(c.querySelector('a[href^="tel:"]')).not.toBeNull();
   });
 
@@ -141,6 +143,71 @@ describe('SupportContact — kênh hỗ trợ', () => {
       const c = await mount();
       expect(byText(c, 'button', 'Nhắn Zalo OA')).not.toBeNull();
       expect(c.textContent).not.toMatch(/chat với Tubu Tree/i);
+    });
+  });
+
+  describe('vùng có tên và số đều', () => {
+    it('khối là một vùng (region) lấy tên từ dòng tiêu đề "Cần hỗ trợ?" qua aria-labelledby', async () => {
+      const c = await mount();
+      const region = c.querySelector('[role="region"]')!;
+      const titleId = region.getAttribute('aria-labelledby')!;
+      expect(titleId).toBeTruthy();
+      const title = document.getElementById(titleId)!;
+      expect(title.textContent).toBe('Cần hỗ trợ?');
+      // Không bọc thêm phần tử: dòng tiêu đề vẫn là con trực tiếp của khối, cùng cấp với các nút.
+      expect(title.parentElement).toBe(region);
+    });
+
+    it('hai khối cùng trang có hai id tiêu đề khác nhau, mỗi vùng trỏ đúng tiêu đề của mình', async () => {
+      const r = render(
+        <>
+          <SupportContact orderCode="TT001" />
+          <SupportContact orderCode="TT002" />
+        </>,
+      );
+      mounted.push(r);
+      await flush(5);
+      const regions = Array.from(r.container.querySelectorAll('[role="region"]'));
+      expect(regions).toHaveLength(2);
+      const ids = regions.map((x) => x.getAttribute('aria-labelledby'));
+      expect(new Set(ids).size).toBe(2);
+      regions.forEach((region, i) => expect(region.contains(document.getElementById(ids[i]!))).toBe(true));
+    });
+
+    it('khối ẩn thì không còn vùng nào', async () => {
+      mocks.support = { hotline: null, email: null, zaloOaName: null };
+      const c = await mount();
+      expect(c.querySelector('[role="region"]')).toBeNull();
+    });
+
+    it('liên kết hotline dùng số đều (tabular-nums); liên kết email thì không', async () => {
+      const c = await mount();
+      expect((c.querySelector('a[href^="tel:"]') as HTMLElement).style.fontVariantNumeric).toBe('tabular-nums');
+      expect((c.querySelector('a[href^="mailto:"]') as HTMLElement).style.fontVariantNumeric).toBe('');
+    });
+  });
+
+  describe('nút nhắn Zalo OA đang mở', () => {
+    it('hai cú bấm cùng nhịp khi OA còn đang mở chỉ mở một lần; nút báo bận tới khi xong, rồi bấm lại được', async () => {
+      let finish!: () => void;
+      mocks.oa.available = true;
+      mocks.oa.openChat.mockReturnValueOnce(new Promise<void>((r) => (finish = r)));
+      const c = await mount();
+      const btn = byText(c, 'button', 'Nhắn Zalo OA') as HTMLButtonElement;
+      expect(btn.hasAttribute('aria-busy')).toBe(false);
+      act(() => {
+        btn.click();
+        btn.click();
+      });
+      expect(mocks.oa.openChat).toHaveBeenCalledTimes(1);
+      expect(btn.getAttribute('aria-busy')).toBe('true');
+      expect(btn.disabled).toBe(false);
+      finish();
+      await flush(3);
+      expect(btn.hasAttribute('aria-busy')).toBe(false);
+      click(btn);
+      expect(mocks.oa.openChat).toHaveBeenCalledTimes(2);
+      await flush(2);
     });
   });
 });

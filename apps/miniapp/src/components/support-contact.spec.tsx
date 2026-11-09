@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   openSnackbar: vi.fn(),
   navigate: vi.fn(),
   login: vi.fn(),
+  haptic: vi.fn(),
   authStatus: 'authenticated' as string,
   authError: undefined as string | undefined,
   chatEnabled: false,
@@ -39,9 +40,39 @@ vi.mock('../pages/about-data', async (importOriginal) => ({
   fetchSupportContact: mocks.fetchSupportContact,
 }));
 vi.mock('../utils/clipboard', () => ({ copyText: mocks.copyText }));
-vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
+vi.mock('../utils/haptic', () => ({ haptic: mocks.haptic }));
 
-import { SupportContact } from './support-contact';
+import { SupportContact, once } from './support-contact';
+
+// `openOAChat` gọi thẳng SDK Zalo nên có thể reject; khoá phải nhả để nút không chết hẳn.
+describe('once — khoá đồng bộ', () => {
+  it('đang chạy thì bỏ lần gọi kế; xong thì chạy lại được', async () => {
+    const lock = { current: false };
+    let finish!: () => void;
+    const run = vi.fn(() => new Promise<void>((r) => (finish = r)));
+    const first = once(lock, run);
+    await once(lock, run);
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(lock.current).toBe(true);
+    finish();
+    await first;
+    expect(lock.current).toBe(false);
+    const again = once(lock, run);
+    expect(run).toHaveBeenCalledTimes(2);
+    finish();
+    await again;
+  });
+
+  it('việc chạy bị lỗi: ném lỗi ra ngoài và vẫn nhả khoá', async () => {
+    const lock = { current: false };
+    const boom = new Error('SDK lỗi');
+    await expect(once(lock, () => Promise.reject(boom))).rejects.toBe(boom);
+    expect(lock.current).toBe(false);
+    const run = vi.fn();
+    await once(lock, run);
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+});
 
 function renderBlock() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -171,6 +202,152 @@ describe('SupportContact — kênh hỗ trợ trên chi tiết đơn', () => {
       renderBlock();
       expect(await screen.findByRole('button', { name: /Nhắn Zalo OA/ })).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /chat với Tubu Tree/i })).toBeNull();
+    });
+  });
+
+  describe('vùng có tên và số đều', () => {
+    it('khối là một vùng (region) lấy tên từ dòng tiêu đề "Cần hỗ trợ?" qua aria-labelledby', async () => {
+      renderBlock();
+      const region = await screen.findByRole('region', { name: 'Cần hỗ trợ?' });
+      const titleId = region.getAttribute('aria-labelledby')!;
+      expect(titleId).toBeTruthy();
+      const title = document.getElementById(titleId)!;
+      expect(title.textContent).toBe('Cần hỗ trợ?');
+      // Không bọc thêm phần tử: dòng tiêu đề vẫn là con trực tiếp của khối, cùng cấp với các nút.
+      expect(title.parentElement).toBe(region);
+    });
+
+    it('hai khối cùng trang có hai id tiêu đề khác nhau, mỗi vùng trỏ đúng tiêu đề của mình', async () => {
+      const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      render(
+        <QueryClientProvider client={qc}>
+          <SupportContact orderCode="TT001" />
+          <SupportContact orderCode="TT002" />
+        </QueryClientProvider>,
+      );
+      const regions = await screen.findAllByRole('region', { name: 'Cần hỗ trợ?' });
+      expect(regions).toHaveLength(2);
+      const ids = regions.map((r) => r.getAttribute('aria-labelledby'));
+      expect(new Set(ids).size).toBe(2);
+      regions.forEach((region, i) => expect(region.contains(document.getElementById(ids[i]!))).toBe(true));
+    });
+
+    it('khối ẩn thì không còn vùng nào', async () => {
+      mocks.fetchSupportContact.mockResolvedValue({ hotline: null, email: null, zaloOaName: null });
+      renderBlock();
+      await waitFor(() => expect(mocks.fetchSupportContact).toHaveBeenCalled());
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 0));
+      });
+      expect(screen.queryByRole('region')).toBeNull();
+    });
+
+    it('nút hotline dùng số đều (tabular-nums); nút email thì không', async () => {
+      renderBlock();
+      const call = await screen.findByRole('button', { name: /Gọi hotline/ });
+      expect(call.style.fontVariantNumeric).toBe('tabular-nums');
+      expect(screen.getByRole('button', { name: /tubutree@gmail.com/ }).style.fontVariantNumeric).toBe('');
+    });
+  });
+
+  describe('khoá đồng bộ cho cầu nối đang chạy', () => {
+    const deferred = () => {
+      let resolve!: (value?: unknown) => void;
+      const promise = new Promise((r) => (resolve = r));
+      return { promise, resolve };
+    };
+    const twice = (el: HTMLElement) =>
+      act(async () => {
+        fireEvent.click(el);
+        fireEvent.click(el);
+      });
+
+    it('gọi hotline: hai cú chạm cùng nhịp khi cuộc gọi còn treo chỉ gọi một lần; xong thì chạm lại được', async () => {
+      const gate = deferred();
+      mocks.callPhone.mockReturnValueOnce(gate.promise);
+      renderBlock();
+      const btn = await screen.findByRole('button', { name: /Gọi hotline/ });
+      await twice(btn);
+      expect(mocks.callPhone).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        gate.resolve();
+      });
+      fireEvent.click(btn);
+      expect(mocks.callPhone).toHaveBeenCalledTimes(2);
+    });
+
+    it('sao chép email: hai cú chạm cùng nhịp khi lần chép còn treo chỉ chép, rung và báo một lần; xong thì chạm lại được', async () => {
+      const gate = deferred();
+      mocks.copyText.mockReturnValueOnce(gate.promise);
+      renderBlock();
+      const btn = await screen.findByRole('button', { name: /tubutree@gmail.com/ });
+      await twice(btn);
+      expect(mocks.copyText).toHaveBeenCalledTimes(1);
+      expect(mocks.haptic).toHaveBeenCalledTimes(1);
+      expect(mocks.openSnackbar).not.toHaveBeenCalled();
+      await act(async () => {
+        gate.resolve(true);
+      });
+      expect(mocks.openSnackbar).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        fireEvent.click(btn);
+      });
+      expect(mocks.copyText).toHaveBeenCalledTimes(2);
+    });
+
+    it('nhắn Zalo OA: hai cú chạm cùng nhịp khi OA còn đang mở chỉ mở một lần; xong thì chạm lại được', async () => {
+      const gate = deferred();
+      mocks.hasOA = true;
+      mocks.openOAChat.mockReturnValueOnce(gate.promise);
+      renderBlock();
+      const btn = await screen.findByRole('button', { name: /Nhắn Zalo OA/ });
+      await twice(btn);
+      expect(mocks.openOAChat).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        gate.resolve();
+      });
+      fireEvent.click(btn);
+      expect(mocks.openOAChat).toHaveBeenCalledTimes(2);
+    });
+
+    it('đăng nhập để chat: hai cú chạm cùng nhịp khi đăng nhập còn treo chỉ đăng nhập một lần; xong thì chạm lại được', async () => {
+      const gate = deferred();
+      mocks.chatEnabled = true;
+      mocks.authStatus = 'idle';
+      mocks.login.mockReturnValueOnce(gate.promise);
+      renderBlock();
+      const btn = await screen.findByRole('button', { name: 'Đăng nhập để chat với Tubu Tree' });
+      await twice(btn);
+      expect(mocks.login).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        gate.resolve();
+      });
+      fireEvent.click(btn);
+      expect(mocks.login).toHaveBeenCalledTimes(2);
+    });
+
+    it('mỗi hành động một khoá riêng: OA, đăng nhập, gọi và sao chép cùng treo vẫn không chặn nhau', async () => {
+      mocks.hasOA = true;
+      mocks.chatEnabled = true;
+      mocks.authStatus = 'idle';
+      mocks.openOAChat.mockReturnValueOnce(deferred().promise);
+      mocks.login.mockReturnValueOnce(deferred().promise);
+      mocks.callPhone.mockReturnValueOnce(deferred().promise);
+      mocks.copyText.mockReturnValueOnce(deferred().promise);
+      renderBlock();
+      const call = await screen.findByRole('button', { name: /Gọi hotline/ });
+      const oa = screen.getByRole('button', { name: /Nhắn Zalo OA/ });
+      const login = screen.getByRole('button', { name: 'Đăng nhập để chat với Tubu Tree' });
+      const copy = screen.getByRole('button', { name: /tubutree@gmail.com/ });
+      for (const btn of [oa, login, call, copy]) {
+        await act(async () => {
+          fireEvent.click(btn);
+        });
+      }
+      expect(mocks.openOAChat).toHaveBeenCalledTimes(1);
+      expect(mocks.login).toHaveBeenCalledTimes(1);
+      expect(mocks.callPhone).toHaveBeenCalledTimes(1);
+      expect(mocks.copyText).toHaveBeenCalledWith('tubutree@gmail.com');
     });
   });
 });
