@@ -1,4 +1,4 @@
-import { lazy, Suspense, useId, useState } from 'react';
+import { lazy, Suspense, useId, useRef, useState } from 'react';
 import { CalendarCheck, Check, ChevronDown, Gift, Sprout, type LucideIcon } from 'lucide-react';
 import { checkInCopy, checkInDayIcon, checkInTodayLine, type CheckInDayIcon } from '@tubutree/app-core/daily-check-in-copy';
 import { checkInDayAria, checkInRule } from '@tubutree/app-core/daily-check-in-guest-copy';
@@ -32,17 +32,35 @@ export function DailyCheckInCard({ authed, margin, compact = false, guestNote = 
   const { status, statusQ, view, pending, checkIn } = useCheckIn(authed);
   const [ruleOpen, setRuleOpen] = useState(false);
   const ruleId = useId();
+  const checkingInRef = useRef(false);
   const wrap = margin ? { margin } : undefined;
 
   if (statusQ.isLoading) return <div style={wrap}><Skeleton height={compact ? CHECK_IN_COMPACT_HEIGHT : 140} radius="var(--radius-card)" /></div>;
   if (statusQ.isError) {
     return (
       <Card style={wrap} padding={16}>
-        <ErrorState variant="inline" title={checkInCopy.loadErrorTitle} message={getLoadErrorMessage(statusQ.error)} onRetry={() => void statusQ.refetch()} />
+        <ErrorState
+          variant="inline"
+          title={checkInCopy.loadErrorTitle}
+          message={getLoadErrorMessage(statusQ.error)}
+          onRetry={() => {
+            if (!statusQ.isFetching) void statusQ.refetch();
+          }}
+        />
       </Card>
     );
   }
   if (!status || !view) return null;
+
+  // Khoá đồng bộ cho bản gọn và bản đầy đủ (dùng chung handler): chặn gọi lại trong cùng một đoạn chạy liền, trước khi `pending` vẽ lại.
+  // `checkIn()` trả void nên khoá nhả ở microtask kế tiếp (trả Promise thì giữ tới khi xong); chạm đúp giữa hai sự kiện thật do ref `busy` trong `useCheckIn` chặn.
+  const handleCheckIn = () => {
+    if (pending || checkingInRef.current) return;
+    checkingInRef.current = true;
+    void Promise.resolve(checkIn()).finally(() => {
+      checkingInRef.current = false;
+    });
+  };
 
   const today = checkInTodayLine(status);
   // Bản gọn luôn có một hàng dưới 7 ô ("Nhận ..." phần thưởng hôm nay, hoặc "đã điểm danh" khi xong): thẻ cao như nhau trước và sau khi điểm danh.
@@ -86,7 +104,7 @@ export function DailyCheckInCard({ authed, margin, compact = false, guestNote = 
           </div>
           {/* Nút đệm 12px, bỏ min-width 120px của ZaUI (như thanh dính): "Đã điểm danh" hẹp lại để tiêu đề không gãy dòng ở 360px. */}
           {compact && (
-            <Button disabled={!view.canCheckIn || pending} loading={pending} onPress={checkIn} style={{ flex: '0 0 auto', minWidth: 0, paddingLeft: 12, paddingRight: 12 }}>
+            <Button disabled={!view.canCheckIn || pending} loading={pending} onPress={handleCheckIn} style={{ flex: '0 0 auto', minWidth: 0, paddingLeft: 12, paddingRight: 12 }}>
               {view.buttonLabel}
             </Button>
           )}
@@ -145,7 +163,7 @@ export function DailyCheckInCard({ authed, margin, compact = false, guestNote = 
           </Suspense>
         )}
         {!compact && (
-          <Button fullWidth disabled={!view.canCheckIn || pending} loading={pending} onPress={checkIn} style={{ marginTop: 12 }}>
+          <Button fullWidth disabled={!view.canCheckIn || pending} loading={pending} onPress={handleCheckIn} style={{ marginTop: 12 }}>
             {view.buttonLabel}
           </Button>
         )}

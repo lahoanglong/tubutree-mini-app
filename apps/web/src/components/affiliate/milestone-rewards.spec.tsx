@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
+import { QueryClient } from '@tanstack/react-query';
 import type { CtvMilestoneItem, CtvMilestonesResponse } from '@tubutree/app-core/api/affiliate';
+import { act } from 'react';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
 
 const state = vi.hoisted(() => ({
@@ -205,5 +207,202 @@ describe('MilestoneRewards — Nhận tất cả', () => {
     await flush();
     const rows = Array.from(container.querySelector('[role="alert"]')!.children).map((c) => c.textContent);
     expect(rows).toEqual(['Mốc B (tháng 9/2026): Lỗi mạng', 'Mốc B (tháng 10/2026): Lỗi mạng']);
+  });
+});
+
+const OK = { success: true, message: 'ok', rewardPoints: 1, monthKey: 'x' };
+const neverSettles = () => new Promise<never>(() => {});
+const twoMilestones = () =>
+  data({
+    milestones: [claimable('B', 200), claimable('C', 50)],
+    previousMonth: { monthKey: '2026-09', revenue: 3_000_000, milestones: [claimable('P1', 100)] },
+  });
+const rowBtns = () => Array.from(mounted!.container.querySelectorAll('button')).filter((b) => b.textContent === 'Nhận thưởng');
+const byId = (id: string) => mounted!.container.querySelector<HTMLElement>(`#${CSS.escape(id)}`);
+
+describe('MilestoneRewards — aria-controls của nút Xem tất cả / Thu gọn', () => {
+  it('nút trỏ tới đúng danh sách mốc tháng này, dù đang gập hay mở; nhóm tháng trước nằm ngoài danh sách', async () => {
+    mount(data({ previousMonth: { monthKey: '2026-09', revenue: 3_000_000, milestones: [claimable('P1')] } }));
+    const toggle = btn(/^Xem tất cả 3 mốc$/);
+    const id = toggle.getAttribute('aria-controls')!;
+    expect(id).toBeTruthy();
+    const list = byId(id)!;
+    expect(list).not.toBeNull();
+    expect(list.tagName).toBe('UL');
+    expect(list.textContent).toContain('Mốc B');
+    expect(list.textContent).not.toContain('Mốc A');
+    expect(list.textContent).not.toContain('Mốc P1');
+    click(toggle);
+    await flush();
+    expect(btn(/^Thu gọn$/).getAttribute('aria-controls')).toBe(id);
+    expect(byId(id)!.textContent).toContain('Mốc A');
+  });
+
+  it('hai thẻ cùng trang có id danh sách khác nhau (không trùng id)', () => {
+    mounted = render(
+      <>
+        <MilestoneRewards data={data()} />
+        <MilestoneRewards data={data()} />
+      </>,
+    );
+    const ids = Array.from(mounted.container.querySelectorAll('button[aria-controls]')).map((b) => b.getAttribute('aria-controls'));
+    expect(ids).toHaveLength(2);
+    expect(ids[0]).not.toBe(ids[1]);
+  });
+});
+
+describe('MilestoneRewards — khoá nhận thưởng đồng bộ', () => {
+  it('hai cú bấm sát nhau vào cùng "Nhận thưởng" trước khi vẽ lại: chỉ gọi API một lần', async () => {
+    state.handler = neverSettles;
+    mount(data());
+    const b = rowBtns()[0]!;
+    await act(async () => {
+      click(b);
+      click(b);
+    });
+    expect(claimPaths()).toEqual(['/affiliate/milestones/B/claim']);
+  });
+
+  it('hai cú bấm sát nhau vào "Nhận tất cả": chỉ một lượt (mốc đầu chỉ gọi một lần)', async () => {
+    state.handler = neverSettles;
+    mount(twoMilestones());
+    const all = btn(/Nhận tất cả/);
+    await act(async () => {
+      click(all);
+      click(all);
+    });
+    expect(claimPaths()).toEqual(['/affiliate/milestones/P1/claim']);
+  });
+
+  it('"Nhận thưởng" rồi "Nhận tất cả" cùng một nhịp: chỉ lượt đầu chạy', async () => {
+    state.handler = neverSettles;
+    mount(twoMilestones());
+    const row = rowBtns().at(-1)!;
+    const all = btn(/Nhận tất cả/);
+    await act(async () => {
+      click(row);
+      click(all);
+    });
+    expect(claimPaths()).toEqual(['/affiliate/milestones/C/claim']);
+  });
+
+  it('"Nhận tất cả" rồi "Nhận thưởng" cùng một nhịp: chỉ lượt đầu chạy', async () => {
+    state.handler = neverSettles;
+    mount(twoMilestones());
+    const row = rowBtns().at(-1)!;
+    const all = btn(/Nhận tất cả/);
+    await act(async () => {
+      click(all);
+      click(row);
+    });
+    expect(claimPaths()).toEqual(['/affiliate/milestones/P1/claim']);
+  });
+
+  it('nhận xong (thành công) thì nhận tiếp được: khoá nhả khi mutation kết thúc', async () => {
+    state.handler = async () => OK;
+    mount(data());
+    click(rowBtns()[0]!);
+    await flush();
+    click(rowBtns()[0]!);
+    await flush();
+    expect(claimPaths()).toHaveLength(2);
+  });
+
+  it('nhận lỗi thì nhận lại được: khoá nhả cả khi mutation lỗi', async () => {
+    state.handler = async () => {
+      throw new Error('Mạng chập chờn');
+    };
+    mount(data());
+    click(rowBtns()[0]!);
+    await flush();
+    click(rowBtns()[0]!);
+    await flush();
+    expect(claimPaths()).toHaveLength(2);
+  });
+
+  it('Nhận tất cả xong thì nhận lại được: khoá nhả khi cả lượt kết thúc', async () => {
+    state.handler = async () => OK;
+    mount(twoMilestones());
+    click(btn(/Nhận tất cả/));
+    await flush();
+    expect(claimPaths()).toHaveLength(3);
+    click(btn(/Nhận tất cả/));
+    await flush();
+    expect(claimPaths()).toHaveLength(6);
+  });
+
+  it('Nhận tất cả với mọi mốc lỗi vẫn nhả khoá để thử lại', async () => {
+    state.handler = async () => {
+      throw new Error('Lỗi mạng');
+    };
+    mount(twoMilestones());
+    click(btn(/Nhận tất cả/));
+    await flush();
+    click(btn(/Nhận tất cả/));
+    await flush();
+    expect(claimPaths()).toHaveLength(6);
+  });
+});
+
+describe('MilestoneRewards — làm mới sau khi nhận', () => {
+  let inv: MockInstance<QueryClient['invalidateQueries']>;
+  beforeEach(() => {
+    inv = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
+  });
+  afterEach(() => inv.mockRestore());
+  const keys = () => inv.mock.calls.map((c) => JSON.stringify((c[0] as { queryKey: unknown }).queryKey));
+  const BALANCES = ['["loyalty"]', '["me"]', '["wallet"]', '["wallet-txn"]', '["points-txn"]'];
+
+  it('Nhận tất cả có mốc nhận được: tải lại danh sách mốc, Điểm Xanh và các số dư', async () => {
+    state.handler = async () => OK;
+    mount(twoMilestones());
+    click(btn(/Nhận tất cả/));
+    await flush();
+    expect(keys()).toContain('["affiliate-milestones"]');
+    for (const k of BALANCES) expect(keys()).toContain(k);
+  });
+
+  it('Nhận tất cả một phần lỗi (done > 0): vẫn tải lại cả hai nhóm', async () => {
+    let n = 0;
+    state.handler = async () => {
+      if (n++ === 1) throw new Error('Đã nhận rồi');
+      return OK;
+    };
+    mount(twoMilestones());
+    click(btn(/Nhận tất cả/));
+    await flush();
+    expect(keys()).toContain('["affiliate-milestones"]');
+    for (const k of BALANCES) expect(keys()).toContain(k);
+  });
+
+  it('Nhận tất cả mà mọi mốc lỗi (done === 0): chỉ tải lại danh sách mốc, không tải lại Điểm Xanh hay số dư', async () => {
+    state.handler = async () => {
+      throw new Error('Lỗi mạng');
+    };
+    mount(twoMilestones());
+    click(btn(/Nhận tất cả/));
+    await flush();
+    expect(keys()).toContain('["affiliate-milestones"]');
+    for (const k of BALANCES) expect(keys()).not.toContain(k);
+  });
+
+  it('Nhận thưởng một mốc thành công: tải lại danh sách mốc, Điểm Xanh và số dư', async () => {
+    state.handler = async () => OK;
+    mount(data());
+    click(rowBtns()[0]!);
+    await flush();
+    expect(keys()).toContain('["affiliate-milestones"]');
+    for (const k of BALANCES) expect(keys()).toContain(k);
+  });
+
+  it('Nhận thưởng một mốc lỗi: chỉ tải lại danh sách mốc cho khớp backend', async () => {
+    state.handler = async () => {
+      throw new Error('Chưa đạt');
+    };
+    mount(data());
+    click(rowBtns()[0]!);
+    await flush();
+    expect(keys()).toContain('["affiliate-milestones"]');
+    for (const k of BALANCES) expect(keys()).not.toContain(k);
   });
 });
