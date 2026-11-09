@@ -7,6 +7,7 @@ import { fillCopy } from '@tubutree/app-core/shop-copy';
 import type { TrackEvent } from '@tubutree/app-core/commerce/order-tracking';
 import { Text } from '@/components/mini/text';
 import { Button } from '@/components/mini/button';
+import { copyText } from '@/lib/copy-text';
 import { TrackEventsList } from './track-events-list';
 
 export interface OrderShippingProps {
@@ -22,15 +23,12 @@ export interface OrderShippingProps {
 
 /** Hãng vận chuyển và mã vận đơn có nút chép mã, đặt liền dưới hành trình. */
 export function OrderShipping({ partner, code, status, events = [], trackingHref }: OrderShippingProps) {
-  const [result, setResult] = useState<'ok' | 'fail' | null>(null);
+  // `n` đếm số lần báo: chạm lần hai (cùng chữ) vẫn dựng lại lời báo, như thanh thông báo của Mini App hiện lại mỗi lần chạm.
+  const [result, setResult] = useState<{ ok: boolean; n: number } | null>(null);
   if (!partner && !code && !trackingHref && events.length === 0) return null;
   const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(code!);
-      setResult('ok');
-    } catch {
-      setResult('fail');
-    }
+    const ok = await copyText(code!);
+    setResult((prev) => ({ ok, n: (prev?.n ?? 0) + 1 }));
   };
   return (
     <section aria-label={fillCopy('order.shipping.title')} data-testid="order-shipping" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-inset-card)' }}>
@@ -58,12 +56,20 @@ export function OrderShipping({ partner, code, status, events = [], trackingHref
             </Text>
             {/* Vùng báo phải có sẵn trong trang trước khi bấm thì trình đọc màn hình mới đọc lúc chữ đổi; rỗng nên không chiếm chỗ. */}
             <div role="status">
-              {result && (
-                <Text variant="caption" tone={result === 'ok' ? 'success' : 'danger'} as="div">
-                  {result === 'ok' ? 'Đã sao chép mã vận đơn' : 'Không sao chép được — hãy chép mã thủ công.'}
+              {result?.ok && (
+                <Text key={result.n} variant="caption" tone="success" as="div">
+                  Đã sao chép mã vận đơn
                 </Text>
               )}
             </div>
+            {/* Lỗi hiện sau một lần chạm nên là role="alert" (đọc ngay); dựng riêng khỏi vùng status để chữ thành công không lẫn vào. */}
+            {result && !result.ok && (
+              <div role="alert" key={result.n}>
+                <Text variant="caption" tone="danger" as="div">
+                  Không sao chép được — hãy chép mã thủ công.
+                </Text>
+              </div>
+            )}
           </div>
           <Button variant="secondary" onPress={() => void copy()} aria-label={fillCopy('order.shipping.copyAria', { code })} style={{ flex: '0 0 auto' }}>
             {fillCopy('order.shipping.copy')}

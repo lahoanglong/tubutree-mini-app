@@ -101,11 +101,16 @@ export function OrderActions({
     retry: 0,
   });
 
+  // Khoá đồng bộ: `cancel.isPending` chỉ đổi sau lần vẽ kế, hai cú bấm "Huỷ đơn" sát nhau sẽ gửi hai lần.
+  const cancelingRef = useRef(false);
   const cancel = useMutation({
     mutationFn: ({ choose, reason }: { choose: boolean; reason: CancelReasonCode }) =>
       cancelOrder(o.code, choose ? destinationBody(cancelMethod, cancelBank) : undefined, cancelReasonBody(reason, cancelReasonText)),
-    onSuccess: () => {
+    onSuccess: (cancelled) => {
       setConfirmCancel(false);
+      // Gộp phản hồi huỷ vào đơn đang hiển thị ngay (dải trạng thái, hành trình, "Thanh toán ngay" đổi tức thì như Mini App) nhưng
+      // giữ `items` cũ: phản hồi huỷ không kèm ảnh/tồn kho các dòng. Tải lại sau đó để có bản đầy đủ.
+      qc.setQueryData<OrderDetailDTO>(['order', o.code], (old) => (old ? { ...old, ...cancelled, items: old.items } : old));
       void qc.invalidateQueries({ queryKey: ['order', o.code] });
       void qc.invalidateQueries({ queryKey: ['orders'] });
       void qc.invalidateQueries({ queryKey: ['my-refunds'] });
@@ -115,6 +120,9 @@ export function OrderActions({
       setConfirmCancel(false);
       // BE từ chối vì đơn vừa bàn giao vận chuyển (và đã đồng bộ trạng thái mới): tải lại để ẩn nút hủy.
       void qc.invalidateQueries({ queryKey: ['order', o.code] });
+    },
+    onSettled: () => {
+      cancelingRef.current = false;
     },
   });
 
@@ -201,14 +209,19 @@ export function OrderActions({
       Giữ đơn
     </button>
   );
+  // Nút xác nhận đang giữ focus khi bấm: đang gửi dùng aria-disabled chứ không `disabled`, vì `disabled` làm Chromium thả focus về <body>.
   const confirmButton = (
     <button
       type="button"
       onClick={() => {
+        if (cancelingRef.current || cancel.isPending) return;
         setCancelTouched(true);
-        if (cancelReason && !cancelBankError) cancel.mutate({ choose: refundMode === 'choose', reason: cancelReason });
+        if (!cancelReason || cancelBankError) return;
+        cancelingRef.current = true;
+        cancel.mutate({ choose: refundMode === 'choose', reason: cancelReason });
       }}
-      disabled={cancel.isPending}
+      aria-busy={cancel.isPending || undefined}
+      aria-disabled={cancel.isPending || undefined}
       className={`${ui.btnSecondary} border-danger-fg text-danger-fg`}
     >
       {cancel.isPending ? 'Đang huỷ…' : 'Huỷ đơn'}
