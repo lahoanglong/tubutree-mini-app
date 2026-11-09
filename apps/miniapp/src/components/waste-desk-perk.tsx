@@ -136,9 +136,7 @@ export function WasteDeskReport({ pointId }: { pointId: string }) {
               <Button
                 variant="secondary"
                 loading={q.isFetching}
-                onPress={() => {
-                  if (!q.isFetching) void q.refetch();
-                }}
+                onPress={() => (q.isFetching ? undefined : q.refetch())}
               >
                 Thử lại
               </Button>
