@@ -3,7 +3,7 @@ import { Share2, Copy } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { fetchContentKit } from '../services/affiliate-api';
 import { getLoadErrorMessage } from '../services/api';
-import { useShareWithFallback } from './share-sheet';
+import { useActionLock, useShareWithFallback } from './share-sheet';
 import { haptic } from '../utils/haptic';
 import { vi } from '../i18n/vi';
 import { BottomSheet } from './ui/bottom-sheet';
@@ -57,23 +57,25 @@ export function ContentKitSheet({
 }) {
   const { openSnackbar } = useSnackbar();
   const shareWithFallback = useShareWithFallback();
+  const lock = useActionLock();
   const q = useQuery({
     queryKey: ['content-kit', productSlug],
     queryFn: () => fetchContentKit(productSlug),
-    enabled: visible,
+    enabled: visible && productSlug !== '',
   });
 
   // Trước đây không có clipboard thì `return` im lặng: chạm vào bài mẫu không có gì xảy ra và
   // cũng không nói vì sao. copyText còn có phương án execCommand cho webview cũ.
-  const copy = async (text: string) => {
-    const ok = await copyText(text);
-    if (ok) haptic('light');
-    openSnackbar(
-      ok
-        ? { text: vi.contentKit.copied, type: 'success' }
-        : { text: 'Không sao chép được — hãy chọn và chép thủ công.', type: 'error' },
-    );
-  };
+  const copy = (text: string) =>
+    lock.run('copy', async () => {
+      const ok = await copyText(text);
+      if (ok) haptic('light');
+      openSnackbar(
+        ok
+          ? { text: vi.contentKit.copied, type: 'success' }
+          : { text: 'Không sao chép được — hãy chọn và chép thủ công.', type: 'error' },
+      );
+    });
 
   const data = q.data;
   const link = data ? absoluteLink(data.shareLink) : '';
@@ -86,13 +88,20 @@ export function ContentKitSheet({
     <BottomSheet open={visible} onClose={onClose} title={vi.contentKit.sheetTitle}>
       <div style={{ maxHeight: '70vh', overflowY: 'auto', overscrollBehavior: 'contain' }}>
         {q.isLoading && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div role="status" aria-busy="true" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <Skeleton height={60} radius="var(--radius-card)" />
             <Skeleton height={60} radius="var(--radius-card)" />
           </div>
         )}
 
-        {q.isError && <ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => void q.refetch()} />}
+        {q.isError && (
+          <ErrorState
+            message={getLoadErrorMessage(q.error)}
+            onRetry={() => {
+              if (!q.isFetching) void q.refetch();
+            }}
+          />
+        )}
 
         {data && (
           <>
@@ -113,22 +122,26 @@ export function ContentKitSheet({
               <Button
                 fullWidth
                 icon={Share2}
+                loading={lock.active === 'share'}
+                aria-disabled={lock.busy || undefined}
                 onPress={() => {
-                  haptic('light');
-                  void shareWithFallback(
-                    {
-                      title: data.productName,
-                      description: captions[0] ?? data.productName,
-                      thumbnail: data.images[0],
-                      path: data.shareLink,
-                    },
-                    shareFallbackText(captions[0], link),
-                  );
+                  void lock.run('share', async () => {
+                    haptic('light');
+                    await shareWithFallback(
+                      {
+                        title: data.productName,
+                        description: captions[0] ?? data.productName,
+                        thumbnail: data.images[0],
+                        path: data.shareLink,
+                      },
+                      shareFallbackText(captions[0], link),
+                    );
+                  });
                 }}
               >
                 {vi.contentKit.shareZalo}
               </Button>
-              <Button fullWidth variant="secondary" icon={Copy} onPress={() => copy(link)}>
+              <Button fullWidth variant="secondary" icon={Copy} aria-disabled={lock.busy || undefined} onPress={() => copy(link)}>
                 {vi.contentKit.copyLink}
               </Button>
             </div>
@@ -142,7 +155,7 @@ export function ContentKitSheet({
             {captions.length > 0 && (
               <Section title={vi.contentKit.captionsHeading}>
                 {captions.map((c, i) => (
-                  <CopyRow key={i} onPress={() => void copy(c)}>
+                  <CopyRow key={i} busy={lock.busy} onPress={() => void copy(c)}>
                     <Text variant="caption" tone="secondary">{c}</Text>
                   </CopyRow>
                 ))}
@@ -175,7 +188,7 @@ export function ContentKitSheet({
             {data.videoUrls.length > 0 && (
               <Section title={vi.contentKit.videosHeading}>
                 {data.videoUrls.map((url, i) => (
-                  <CopyRow key={i} onPress={() => void copy(url)}>
+                  <CopyRow key={i} busy={lock.busy} onPress={() => void copy(url)}>
                     <Text variant="caption" tone="brand" style={{ wordBreak: 'break-all' }}>{url}</Text>
                   </CopyRow>
                 ))}
@@ -189,11 +202,12 @@ export function ContentKitSheet({
 }
 
 /** Hàng chạm-để-sao-chép: `<button>` thật để có Tab/Enter và vùng chạm >= 44px. */
-function CopyRow({ onPress, children }: { onPress: () => void; children: React.ReactNode }) {
+function CopyRow({ onPress, busy, children }: { onPress: () => void; busy: boolean; children: React.ReactNode }) {
   return (
     <button
       type="button"
       className="tubu-press"
+      aria-disabled={busy || undefined}
       onClick={onPress}
       style={{
         display: 'block',
@@ -205,6 +219,7 @@ function CopyRow({ onPress, children }: { onPress: () => void; children: React.R
         textAlign: 'left',
         border: 'none',
         cursor: 'pointer',
+        opacity: busy ? 0.6 : undefined,
         background: 'var(--color-bg-subtle)',
         borderRadius: 'var(--radius-control)',
       }}
@@ -216,7 +231,7 @@ function CopyRow({ onPress, children }: { onPress: () => void; children: React.R
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section style={{ marginTop: 4, marginBottom: 12 }}>
+    <section aria-label={title} style={{ marginTop: 4, marginBottom: 12 }}>
       <Heading variant="title-sm" style={{ marginBottom: 6 }}>{title}</Heading>
       {children}
     </section>

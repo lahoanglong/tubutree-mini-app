@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Copy, Share2 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { contentKitQuery } from '@tubutree/app-core/queries/affiliate';
@@ -24,12 +24,39 @@ async function copy(text: string): Promise<boolean> {
 }
 
 /**
+ * Một việc chia sẻ/sao chép chạy tại một thời điểm: bấm thêm lúc đang chạy bị bỏ qua, khỏi gọi lặp hộp chia sẻ hay
+ * clipboard. Ref chặn hai cú bấm sát nhau trước khi state kịp vẽ lại; `active` là loại việc đang chạy để nút đúng loại
+ * báo bận. Nút báo khoá bằng `aria-disabled`, không dùng `disabled` thật: nút đang giữ focus mà `disabled` thì Chromium
+ * thả focus về body. (Bản riêng của trang sản phẩm để khối tải lười không kéo theo storefront-share và thư viện QR.)
+ */
+function useActionLock() {
+  const lockRef = useRef(false);
+  const [active, setActive] = useState<string | null>(null);
+  const run = useCallback(async (kind: string, task: () => Promise<unknown>) => {
+    if (lockRef.current) return;
+    lockRef.current = true;
+    setActive(kind);
+    try {
+      await task();
+    } finally {
+      lockRef.current = false;
+      setActive(null);
+    }
+  }, []);
+  return { busy: active !== null, active, run };
+}
+
+/**
  * "Bộ nội dung bán hàng" theo từng sản phẩm: bài mẫu đã chèn tên CTV và link giới thiệu, điểm bán hàng, hỏi đáp, video.
  * Chỉ mở cho CTV (trang cha kiểm), cùng endpoint với Mini App.
  */
 export function ContentKitSheet({ visible, onClose, productSlug }: { visible: boolean; onClose: () => void; productSlug: string }) {
   const [note, setNote] = useState<Note>(null);
-  const q = useQuery({ ...contentKitQuery(coreHttp, productSlug), enabled: visible });
+  const lock = useActionLock();
+  useEffect(() => {
+    setNote(null);
+  }, [visible, productSlug]);
+  const q = useQuery({ ...contentKitQuery(coreHttp, productSlug), enabled: visible && productSlug !== '' });
 
   const data = q.data;
   const link = data ? absoluteLink(data.shareLink, window.location.origin) : '';
@@ -37,34 +64,43 @@ export function ContentKitSheet({ visible, onClose, productSlug }: { visible: bo
   const captions = data ? data.captions.map((c) => withAbsoluteLink(c, data.shareLink, link)) : [];
   const hasContent = data && (captions.length > 0 || data.usps.length > 0 || data.faqs.length > 0 || data.videoUrls.length > 0);
 
-  const doCopy = async (text: string) => {
+  const copyNow = async (text: string) => {
     const ok = await copy(text);
     setNote(ok ? { text: 'Đã sao chép', error: false } : { text: 'Không sao chép được — hãy chọn và chép thủ công.', error: true });
   };
+  const doCopy = (text: string) => lock.run('copy', () => copyNow(text));
 
-  const doShare = async () => {
-    if (!data) return;
-    if (typeof navigator.share === 'function') {
-      try {
-        await navigator.share({ title: data.productName, text: captions[0] ?? data.productName, url: link });
-        return;
-      } catch (e) {
-        // Khách đóng hộp chia sẻ: không phải lỗi, không chép thay.
-        if (e instanceof DOMException && e.name === 'AbortError') return;
+  const doShare = () =>
+    lock.run('share', async () => {
+      if (!data) return;
+      if (typeof navigator.share === 'function') {
+        try {
+          await navigator.share({ title: data.productName, text: captions[0] ?? data.productName, url: link });
+          return;
+        } catch (e) {
+          // Khách đóng hộp chia sẻ: không phải lỗi, không chép thay.
+          if (e instanceof DOMException && e.name === 'AbortError') return;
+        }
       }
-    }
-    await doCopy(shareFallbackText(captions[0], link));
-  };
+      await copyNow(shareFallbackText(captions[0], link));
+    });
 
   return (
     <Sheet open={visible} onClose={onClose} title="Nội dung bán hàng" size="full">
       {q.isLoading && (
-        <div className="flex flex-col gap-2" aria-busy="true">
+        <div role="status" aria-busy="true" className="flex flex-col gap-2">
           <Skeleton height={60} />
           <Skeleton height={60} />
         </div>
       )}
-      {q.isError && <ErrorState message={loadErrorText(q.error)} onRetry={() => void q.refetch()} />}
+      {q.isError && (
+        <ErrorState
+          message={loadErrorText(q.error)}
+          onRetry={() => {
+            if (!q.isFetching) void q.refetch();
+          }}
+        />
+      )}
 
       {data && (
         <>
@@ -78,16 +114,22 @@ export function ContentKitSheet({ visible, onClose, productSlug }: { visible: bo
           )}
 
           <div className="mb-3 flex flex-col gap-2">
-            <button type="button" className={`${ui.btnPrimary} w-full gap-2`} onClick={() => void doShare()}>
+            <button
+              type="button"
+              className={`${ui.btnPrimary} w-full gap-2`}
+              aria-disabled={lock.busy || undefined}
+              aria-busy={lock.active === 'share' || undefined}
+              onClick={() => void doShare()}
+            >
               <Share2 className="h-4 w-4" aria-hidden="true" />
               Chia sẻ
             </button>
-            <button type="button" className={`${ui.btnSecondary} w-full gap-2`} onClick={() => void doCopy(link)}>
+            <button type="button" className={`${ui.btnSecondary} w-full gap-2`} aria-disabled={lock.busy || undefined} onClick={() => void doCopy(link)}>
               <Copy className="h-4 w-4" aria-hidden="true" />
               Sao chép link
             </button>
             {note && (
-              <p role="status" className={`text-sm ${note.error ? 'text-danger-fg' : 'text-success-fg'}`}>
+              <p key={note.error ? 'alert' : 'status'} role={note.error ? 'alert' : 'status'} className={`text-sm ${note.error ? 'text-danger-fg' : 'text-success-fg'}`}>
                 {note.text}
               </p>
             )}
@@ -98,7 +140,7 @@ export function ContentKitSheet({ visible, onClose, productSlug }: { visible: bo
           {captions.length > 0 && (
             <Section title="Bài mẫu (chạm để sao chép)">
               {captions.map((c, i) => (
-                <CopyRow key={i} onPress={() => void doCopy(c)}>
+                <CopyRow key={i} busy={lock.busy} onPress={() => void doCopy(c)}>
                   <span className="text-sm text-stone-700">{c}</span>
                 </CopyRow>
               ))}
@@ -131,7 +173,7 @@ export function ContentKitSheet({ visible, onClose, productSlug }: { visible: bo
           {data.videoUrls.length > 0 && (
             <Section title="Video tham khảo">
               {data.videoUrls.map((url, i) => (
-                <CopyRow key={i} onPress={() => void doCopy(url)}>
+                <CopyRow key={i} busy={lock.busy} onPress={() => void doCopy(url)}>
                   <span className="break-all text-sm text-forest-700">{url}</span>
                 </CopyRow>
               ))}
@@ -144,9 +186,14 @@ export function ContentKitSheet({ visible, onClose, productSlug }: { visible: bo
 }
 
 /** Hàng chạm-để-sao-chép: `<button>` thật để có Tab/Enter và vùng chạm >= 44px. */
-function CopyRow({ onPress, children }: { onPress: () => void; children: ReactNode }) {
+function CopyRow({ onPress, busy, children }: { onPress: () => void; busy: boolean; children: ReactNode }) {
   return (
-    <button type="button" onClick={onPress} className="mb-1.5 block min-h-11 w-full rounded-control bg-stone-100 px-3 py-2 text-left hover:bg-stone-200">
+    <button
+      type="button"
+      aria-disabled={busy || undefined}
+      onClick={onPress}
+      className="mb-1.5 block min-h-11 w-full rounded-control bg-stone-100 px-3 py-2 text-left hover:bg-stone-200 aria-disabled:opacity-60"
+    >
       {children}
     </button>
   );
@@ -154,7 +201,7 @@ function CopyRow({ onPress, children }: { onPress: () => void; children: ReactNo
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="mb-3 mt-1">
+    <section aria-label={title} className="mb-3 mt-1">
       <h3 className="mb-1.5 text-base font-semibold text-stone-900">{title}</h3>
       {children}
     </section>

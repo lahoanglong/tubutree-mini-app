@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useSnackbar } from 'zmp-ui';
 import { Share2, Copy } from 'lucide-react';
 import { BottomSheet } from './ui/bottom-sheet';
@@ -40,6 +40,29 @@ export function useShareWithFallback() {
     },
     [openSnackbar],
   );
+}
+
+/**
+ * Một việc chia sẻ/sao chép chạy tại một thời điểm: bấm thêm lúc đang chạy bị bỏ qua, khỏi gọi lặp
+ * hộp thoại chia sẻ hay clipboard. Ref chặn hai cú chạm sát nhau trước khi state kịp vẽ lại; `active` là
+ * loại việc đang chạy để nút đúng loại báo bận. Nút báo khoá bằng `aria-disabled`, không dùng `disabled` thật:
+ * nút đang giữ focus mà `disabled` thì Chromium thả focus về body.
+ */
+export function useActionLock() {
+  const lockRef = useRef(false);
+  const [active, setActive] = useState<string | null>(null);
+  const run = useCallback(async (kind: string, task: () => Promise<unknown>) => {
+    if (lockRef.current) return;
+    lockRef.current = true;
+    setActive(kind);
+    try {
+      await task();
+    } finally {
+      lockRef.current = false;
+      setActive(null);
+    }
+  }, []);
+  return { busy: active !== null, active, run };
 }
 
 export function ShareSheet({
@@ -86,14 +109,16 @@ export function ShareSheet({
       `Đồ thiên nhiên lành cho da & nhẹ với đất 🌱 ${url}`,
     ]
   ).map((c) => (c.includes(url) ? c : `${c} ${url}`)); // luôn đảm bảo có link để dán
-  const copy = async (t: string) => {
-    const ok = await copyText(t);
-    openSnackbar(
-      ok
-        ? { text: vi.storefront.copied, type: 'success' }
-        : { text: 'Không sao chép được — hãy chọn và chép thủ công.', type: 'error' },
-    );
-  };
+  const lock = useActionLock();
+  const copy = (t: string) =>
+    lock.run('copy', async () => {
+      const ok = await copyText(t);
+      openSnackbar(
+        ok
+          ? { text: vi.storefront.copied, type: 'success' }
+          : { text: 'Không sao chép được — hãy chọn và chép thủ công.', type: 'error' },
+      );
+    });
   return (
     <BottomSheet open={visible} onClose={onClose} title={heading ?? vi.storefront.shareTitle}>
       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}><QrCode value={url} /></div>
@@ -101,41 +126,49 @@ export function ShareSheet({
         <Button
           fullWidth
           icon={Share2}
+          loading={lock.active === 'share'}
+          aria-disabled={lock.busy || undefined}
           onPress={() => {
-            haptic('light');
-            void shareWithFallback({ title, description: captions[0] ?? '', thumbnail, path: sharePath }, url);
+            void lock.run('share', async () => {
+              haptic('light');
+              await shareWithFallback({ title, description: captions[0] ?? '', thumbnail, path: sharePath }, url);
+            });
           }}
         >
           {vi.storefront.shareZalo}
         </Button>
-        <Button fullWidth variant="secondary" icon={Copy} onPress={() => copy(url)}>
+        <Button fullWidth variant="secondary" icon={Copy} aria-disabled={lock.busy || undefined} onPress={() => copy(url)}>
           {vi.storefront.copyLink}
         </Button>
       </div>
-      <Text variant="label" as="div" style={{ marginBottom: 6 }}>{vi.storefront.captionHint}</Text>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {captions.map((c, i) => (
-          <button
-            key={i}
-            type="button"
-            className="tubu-press"
-            onClick={() => void copy(c)}
-            style={{
-              minHeight: 44,
-              width: '100%',
-              boxSizing: 'border-box',
-              padding: '8px 12px',
-              textAlign: 'left',
-              border: 'none',
-              cursor: 'pointer',
-              background: 'var(--color-bg-subtle)',
-              borderRadius: 'var(--radius-control)',
-            }}
-          >
-            <Text variant="caption" tone="secondary">{c}</Text>
-          </button>
-        ))}
-      </div>
+      <section aria-label={vi.storefront.captionHint}>
+        <Text variant="label" as="div" style={{ marginBottom: 6 }}>{vi.storefront.captionHint}</Text>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {captions.map((c, i) => (
+            <button
+              key={i}
+              type="button"
+              className="tubu-press"
+              aria-disabled={lock.busy || undefined}
+              onClick={() => void copy(c)}
+              style={{
+                minHeight: 44,
+                width: '100%',
+                boxSizing: 'border-box',
+                padding: '8px 12px',
+                textAlign: 'left',
+                border: 'none',
+                cursor: 'pointer',
+                opacity: lock.busy ? 0.6 : undefined,
+                background: 'var(--color-bg-subtle)',
+                borderRadius: 'var(--radius-control)',
+              }}
+            >
+              <Text variant="caption" tone="secondary">{c}</Text>
+            </button>
+          ))}
+        </div>
+      </section>
     </BottomSheet>
   );
 }
