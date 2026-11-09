@@ -1,9 +1,10 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, ChevronLeft, FileText, PlayCircle } from 'lucide-react';
 import { completeLesson, type AcademyCourseDetail } from '@tubutree/app-core/api/academy';
 import { academyCourseQuery } from '@tubutree/app-core/queries/academy';
+import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { ErrorState } from '@/components/ui/error-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { coreHttp } from '@/lib/core-http';
@@ -35,7 +36,10 @@ function CourseBody({
         {course.lessons.map((lesson, i) => {
           const done = course.completedLessonIds.includes(lesson.id);
           const video = lesson.contentType === 'VIDEO' ? safeVideoUrl(lesson.videoUrl) : null;
-          const locked = done || (completingId !== undefined && completingId !== lesson.id);
+          const busy = completingId === lesson.id;
+          // Bài khác đang gửi vẫn là `disabled` thật (nút đó không giữ focus). Bài ĐANG gửi và bài VỪA học xong báo aria-busy / aria-disabled + guard ở onClick:
+          // nút đang giữ focus mà `disabled` thì Chromium thả focus về body, kể cả khi khoá học tải lại xong và nút chuyển sang "Đã học xong".
+          const otherBusy = completingId !== undefined && !busy;
           return (
             <section key={lesson.id} className={`${miniCard} flex flex-col p-3`}>
               <div className="flex items-center gap-2">
@@ -55,9 +59,10 @@ function CourseBody({
               {lesson.contentType === 'ARTICLE' && lesson.body && <div className="mt-2 whitespace-pre-line break-words text-sm text-stone-700">{lesson.body}</div>}
               <button
                 type="button"
-                disabled={locked || completingId === lesson.id}
-                aria-busy={completingId === lesson.id}
-                onClick={() => onComplete(lesson.id)}
+                disabled={otherBusy}
+                aria-busy={busy || undefined}
+                aria-disabled={busy || done || undefined}
+                onClick={() => !done && onComplete(lesson.id)}
                 className={`${done ? miniBtnSecondary : ui.btnPrimary} mt-3 gap-1.5 self-start`}
               >
                 {done && <CheckCircle2 className="h-4 w-4" aria-hidden="true" />}
@@ -74,12 +79,15 @@ function CourseBody({
 function Detail({ courseId }: { courseId: string }) {
   const qc = useQueryClient();
   const q = useQuery(academyCourseQuery(coreHttp, courseId));
-  const complete = useMutation({
+  // Một bài tại một lúc (giao diện đã khoá các bài khác khi một bài đang gửi), khoá đồng bộ bằng ref: `isPending` chỉ đúng sau lần vẽ kế.
+  // `onSuccess` trả lời hứa tải lại: khoá nhả sau khi khoá học mới về, nếu không bài vừa gửi còn hiện "chưa học" và bấm được lần hai.
+  const complete = useLockedMutation({
     mutationFn: (lessonId: string) => completeLesson(coreHttp, lessonId),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['academy-course', courseId] });
-      void qc.invalidateQueries({ queryKey: ['academy-courses'] });
-    },
+    onSuccess: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: ['academy-course', courseId] }),
+        qc.invalidateQueries({ queryKey: ['academy-courses'] }),
+      ]),
   });
 
   return (
@@ -91,16 +99,13 @@ function Detail({ courseId }: { courseId: string }) {
           Danh sách khoá học
         </Link>
       </div>
-      {complete.isSuccess && (
-        <p role="status" className="rounded-control bg-forest-50 px-3 py-2 text-sm text-forest-800">
-          Đã đánh dấu hoàn thành bài học! 🎉
-        </p>
-      )}
-      {complete.isError && (
-        <p role="alert" className={`rounded-control bg-danger-bg px-3 py-2 ${ui.error}`}>
-          {errorText(complete.error)}
-        </p>
-      )}
+      {/* Vùng live luôn có trong DOM (trống thì sr-only, không chiếm khoảng cách): chèn vùng live cùng lúc với chữ thì nhiều trình đọc không đọc. */}
+      <div role="status" className={complete.isSuccess ? 'rounded-control bg-forest-50 px-3 py-2 text-sm text-forest-800' : 'sr-only'}>
+        {complete.isSuccess && 'Đã đánh dấu hoàn thành bài học! 🎉'}
+      </div>
+      <div role="alert" className={complete.isError ? `rounded-control bg-danger-bg px-3 py-2 ${ui.error}` : 'sr-only'}>
+        {complete.isError && errorText(complete.error)}
+      </div>
       {q.isLoading ? (
         <Skeleton height={200} rounded="rounded-card" />
       ) : q.isError && errorStatus(q.error) === 403 ? (

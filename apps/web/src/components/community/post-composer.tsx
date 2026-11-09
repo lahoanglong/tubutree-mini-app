@@ -1,11 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
 import { Hash, HelpCircle, Leaf, Lightbulb, X, type LucideIcon } from 'lucide-react';
 import { createPost, type CreatePostInput, type FeedCategory } from '@tubutree/app-core/api/feed';
 import type { ProductSuggestion } from '@tubutree/app-core/api/catalog';
 import { Sheet } from '@/components/ui/sheet';
+import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { coreHttp } from '@/lib/core-http';
 import { ui } from '@/lib/guest-ui';
 import { ImageUpload } from './image-upload';
@@ -87,7 +87,9 @@ export function PostComposer({
   const needsTitle = kind === 'QUESTION' && title.trim().length === 0;
   const canSubmit = body.trim().length > 0 && !needsTitle;
 
-  const submit = useMutation({
+  // Khoá đồng bộ: `isPending` chỉ đúng sau lần vẽ kế, hai cú bấm "Đăng" (hay Enter hai lần) trong cùng khung hình sẽ đăng hai bài.
+  // Không giữ khoá sau khi xong: khung đóng và xoá sạch nội dung, không còn gì cũ để bấm lần hai.
+  const submit = useLockedMutation({
     mutationFn: () =>
       createPost(coreHttp, {
         kind,
@@ -105,15 +107,27 @@ export function PostComposer({
     },
   });
 
+  // Đang gửi KHÔNG đẩy vào `disabled`: nút `disabled` làm Chromium thả focus về body ngay lúc khách vừa bấm.
+  // Khoá chống đăng hai lần là ref trong `useLockedMutation`; `sending` chỉ để nút báo aria-busy/aria-disabled.
+  // Đang gửi thì không đóng được: đóng giữa chừng thì lỗi (nếu có) hiện trong khung đã đóng, khách tưởng bài đã đi.
+  const sending = submit.isPending;
   return (
     <Sheet
       open={open}
       onClose={onClose}
+      dismissible={!sending}
       title="Đăng bài"
       size="full"
       footer={
-        <button type="button" disabled={!canSubmit || submit.isPending} onClick={() => submit.mutate()} className={`${ui.btnPrimary} w-full`}>
-          {submit.isPending ? 'Đang đăng…' : 'Đăng'}
+        <button
+          type="button"
+          disabled={!canSubmit}
+          aria-busy={sending || undefined}
+          aria-disabled={sending || undefined}
+          onClick={() => submit.mutate()}
+          className={`${ui.btnPrimary} w-full`}
+        >
+          {sending ? 'Đang đăng…' : 'Đăng'}
         </button>
       }
     >
@@ -191,11 +205,7 @@ export function PostComposer({
         )}
       </div>
 
-      {submit.isError && (
-        <p role="alert" className={ui.error}>
-          {errorText(submit.error)}
-        </p>
-      )}
+      <div role="alert">{submit.isError && <p className={ui.error}>{errorText(submit.error)}</p>}</div>
     </Sheet>
   );
 }

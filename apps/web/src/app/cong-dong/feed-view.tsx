@@ -199,11 +199,10 @@ export function FeedView({ initialPreview, initialConfig }: { initialPreview?: F
           </button>
         </div>
 
-        {notice && (
-          <p role="status" className="rounded-control bg-forest-50 px-3 py-2 text-sm text-forest-800">
-            {notice}
-          </p>
-        )}
+        {/* Vùng live luôn có trong DOM (trống thì sr-only, không chiếm khoảng cách): chèn vùng live cùng lúc với chữ thì nhiều trình đọc không đọc. */}
+        <div role="status" className={notice ? 'rounded-control bg-forest-50 px-3 py-2 text-sm text-forest-800' : 'sr-only'}>
+          {notice}
+        </div>
 
         <form role="search" aria-label="Tìm kiếm" onSubmit={(e) => e.preventDefault()} className={`relative ${searchOpen || q ? '' : 'max-md:hidden'}`}>
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-500" aria-hidden="true" />
@@ -302,7 +301,13 @@ export function FeedView({ initialPreview, initialConfig }: { initialPreview?: F
           </div>
           {feed.hasNextPage && (
             <div className="flex justify-center pt-2">
-              <button type="button" disabled={feed.isFetchingNextPage} onClick={() => void feed.fetchNextPage()} className={`${miniBtnSecondary} min-w-40`}>
+              <button
+                type="button"
+                aria-busy={feed.isFetchingNextPage || undefined}
+                aria-disabled={feed.isFetchingNextPage || undefined}
+                onClick={() => !feed.isFetchingNextPage && void feed.fetchNextPage()}
+                className={`${miniBtnSecondary} min-w-40`}
+              >
                 {feed.isFetchingNextPage ? 'Đang tải…' : 'Xem thêm'}
               </button>
             </div>

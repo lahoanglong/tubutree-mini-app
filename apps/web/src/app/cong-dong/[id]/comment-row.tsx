@@ -12,6 +12,7 @@ export function CommentRow({
   canMarkBest,
   onMarkBest,
   marking,
+  bestBlocked = false,
   onReport,
   onRemove,
   removing,
@@ -21,11 +22,15 @@ export function CommentRow({
   canMarkBest: boolean;
   onMarkBest: () => void;
   marking: boolean;
+  /** Một lệnh "hay nhất" đang bay ở bình luận khác: cả bài chỉ chọn một lần tại một lúc, nút này báo khoá nhưng không báo busy. */
+  bestBlocked?: boolean;
   onReport: () => void;
   onRemove: () => void;
   removing: boolean;
   error?: string | null;
 }) {
+  // Một bình luận chỉ chịu một thao tác tại một lúc (chọn hay nhất hoặc ẩn): thao tác kia cũng báo khoá, nhưng chỉ nút đang chạy báo aria-busy.
+  const locked = marking || removing;
   return (
     <li
       data-testid="comment-row"
@@ -41,7 +46,14 @@ export function CommentRow({
         <Avatar name={comment.author} size={28} />
         <AuthorLine name={comment.author} badge={comment.badge} level={comment.authorLevel} meta={timeAgo(comment.createdAt)} />
         {comment.isOwner ? (
-          <button type="button" aria-label="Ẩn nội dung" disabled={removing} onClick={onRemove} className={`${ICON_BTN} disabled:opacity-50`}>
+          <button
+            type="button"
+            aria-label="Ẩn nội dung"
+            aria-busy={removing || undefined}
+            aria-disabled={locked || undefined}
+            onClick={onRemove}
+            className={`${ICON_BTN} aria-disabled:opacity-50`}
+          >
             <Trash2 className="h-4 w-4" aria-hidden="true" />
           </button>
         ) : (
@@ -52,15 +64,19 @@ export function CommentRow({
       </div>
       <p className="mt-1.5 whitespace-pre-wrap break-words text-sm text-stone-800">{comment.body}</p>
       {canMarkBest && !comment.isAccepted && (
-        <button type="button" disabled={marking} onClick={onMarkBest} className={`${miniBtnSecondary} mt-2`}>
+        <button
+          type="button"
+          aria-busy={marking || undefined}
+          aria-disabled={locked || bestBlocked || undefined}
+          onClick={onMarkBest}
+          className={`${miniBtnSecondary} mt-2`}
+        >
           Chọn hay nhất
         </button>
       )}
-      {error && (
-        <p role="alert" className="mt-2 rounded-control bg-danger-bg px-3 py-2 text-sm text-danger-fg">
-          {error}
-        </p>
-      )}
+      <div role="alert" className={error ? 'mt-2 rounded-control bg-danger-bg px-3 py-2 text-sm text-danger-fg' : 'sr-only'}>
+        {error}
+      </div>
     </li>
   );
 }
