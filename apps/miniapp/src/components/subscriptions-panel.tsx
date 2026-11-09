@@ -73,19 +73,20 @@ export function SubscriptionsPanel() {
   const targetSub = subs.find((s) => s.id === cancelTarget) ?? null;
   const editSub = subs.find((s) => s.id === editTarget) ?? null;
   const pending = statusMut.isPending ? statusMut.variables?.status : undefined;
+  const sheetBusy = statusMut.isPending || skipMut.isPending;
   const changeFromSheet = (status: SubStatus) => {
-    if (!cancelTarget) return;
+    if (!cancelTarget || sheetBusy) return;
     statusMut.mutate({ id: cancelTarget, status }, { onSuccess: () => setCancelTarget(null) });
   };
 
   return (
     <div style={{ padding: '4px 16px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div>
-        <Text variant="body-sm" tone="secondary" as="p">
+        <Text variant="body-sm" tone="secondary" as="p" numeric>
           {vi.subscriptions.intro(subscribePct)}
         </Text>
         {subs[0] && (
-          <Text variant="caption" tone="brand" as="p" style={{ marginTop: 4 }}>
+          <Text variant="caption" tone="brand" as="p" numeric style={{ marginTop: 4 }}>
             {vi.subscriptions.discountLine(Math.round(subs[0].effectiveDiscountPct * 100))}
           </Text>
         )}
@@ -103,7 +104,8 @@ export function SubscriptionsPanel() {
           <SubscriptionCard
             key={s.id}
             sub={s}
-            busy={statusMut.isPending}
+            busy={sheetBusy}
+            toggling={statusMut.isPending && statusMut.variables?.id === s.id && cancelTarget === null}
             address={s.addressId ? addressById.get(s.addressId) : undefined}
             onEdit={() => setEditTarget(s.id)}
             onToggle={() => statusMut.mutate({ id: s.id, status: s.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE' })}
@@ -125,7 +127,10 @@ export function SubscriptionsPanel() {
 
       <BottomSheet
         open={cancelTarget !== null}
-        onClose={() => setCancelTarget(null)}
+        onClose={() => {
+          if (!sheetBusy) setCancelTarget(null);
+        }}
+        dismissible={!sheetBusy}
         title={vi.subscriptions.saveTitle}
         description={vi.subscriptions.saveBody}
       >
@@ -133,13 +138,22 @@ export function SubscriptionsPanel() {
           <Button
             fullWidth
             loading={pending === 'PAUSED'}
-            disabled={statusMut.isPending && pending !== 'PAUSED'}
+            disabled={skipMut.isPending || (statusMut.isPending && pending !== 'PAUSED')}
             onPress={() => changeFromSheet('PAUSED')}
           >
             {vi.subscriptions.pauseCta}
           </Button>
           {targetSub?.status === 'ACTIVE' && (
-            <Button fullWidth variant="secondary" loading={skipMut.isPending} onPress={() => cancelTarget && skipMut.mutate(cancelTarget)}>
+            <Button
+              fullWidth
+              variant="secondary"
+              loading={skipMut.isPending}
+              disabled={statusMut.isPending}
+              onPress={() => {
+                if (!cancelTarget || sheetBusy) return;
+                skipMut.mutate(cancelTarget);
+              }}
+            >
               {vi.subscriptions.skipCta}
             </Button>
           )}
@@ -147,7 +161,7 @@ export function SubscriptionsPanel() {
             fullWidth
             variant="ghost"
             loading={pending === 'CANCELLED'}
-            disabled={statusMut.isPending && pending !== 'CANCELLED'}
+            disabled={skipMut.isPending || (statusMut.isPending && pending !== 'CANCELLED')}
             onPress={() => changeFromSheet('CANCELLED')}
             style={{ color: 'var(--color-text-danger)' }}
           >
@@ -162,6 +176,7 @@ export function SubscriptionsPanel() {
 function SubscriptionCard({
   sub: s,
   busy,
+  toggling,
   address,
   onEdit,
   onToggle,
@@ -169,6 +184,8 @@ function SubscriptionCard({
 }: {
   sub: SubscriptionDTO;
   busy: boolean;
+  /** Chính thẻ này đang đổi Tạm dừng/Tiếp tục: nút đó hiện spinner, không khoá DOM để giữ focus. */
+  toggling: boolean;
   address?: Parameters<typeof addressText>[0];
   onEdit: () => void;
   onToggle: () => void;
@@ -183,18 +200,18 @@ function SubscriptionCard({
           <Text variant="body-sm" as="div" style={{ fontWeight: 600 }}>
             {s.productName}
           </Text>
-          <Text variant="caption" tone="tertiary" as="div">
+          <Text variant="caption" tone="tertiary" as="div" numeric>
             {s.variationName} · SL {s.quantity}
           </Text>
-          <Text variant="caption" tone="brand" as="div" style={{ fontWeight: 600 }}>
+          <Text variant="caption" tone="brand" as="div" numeric style={{ fontWeight: 600 }}>
             {vi.subscriptions.perCycle(s.intervalWeeks, formatVnd(cycle.goods))}
           </Text>
           {cycle.discount > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
-              <Text variant="caption" tone="tertiary" as="s">
+              <Text variant="caption" tone="tertiary" as="s" numeric>
                 {formatVnd(cycle.subtotal)}
               </Text>
-              <Badge tone="success" size="sm">
+              <Badge tone="success" size="sm" style={{ fontVariantNumeric: 'tabular-nums' }}>
                 {vi.subscriptions.savePill(cycle.savePct)}
               </Badge>
             </div>
@@ -212,7 +229,7 @@ function SubscriptionCard({
           {vi.subscriptions.statusLabel[s.status]}
         </Badge>
       </div>
-      <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 10 }}>
+      <Text variant="caption" tone="secondary" as="div" numeric style={{ marginTop: 10 }}>
         {s.status === 'ACTIVE'
           ? s.nextRunAt
             ? vi.subscriptions.nextRun(formatDate(s.nextRunAt))
@@ -223,7 +240,7 @@ function SubscriptionCard({
         <Button variant="secondary" disabled={busy} onPress={onEdit} style={{ flex: '1 1 auto', minWidth: 'max-content' }}>
           {vi.subscriptions.edit}
         </Button>
-        <Button variant="secondary" disabled={busy} onPress={onToggle} style={{ flex: '1 1 auto', minWidth: 'max-content' }}>
+        <Button variant="secondary" loading={toggling} disabled={busy && !toggling} onPress={onToggle} style={{ flex: '1 1 auto', minWidth: 'max-content' }}>
           {s.status === 'ACTIVE' ? vi.subscriptions.pause : vi.subscriptions.resume}
         </Button>
         <Button variant="ghost" disabled={busy} onPress={onCancel} style={{ flex: '1 1 auto', minWidth: 'max-content', color: 'var(--color-text-danger)' }}>

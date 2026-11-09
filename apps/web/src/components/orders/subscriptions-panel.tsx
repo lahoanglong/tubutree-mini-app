@@ -69,8 +69,9 @@ export function SubscriptionsPanel() {
   const targetSub = subs.find((s) => s.id === cancelTarget) ?? null;
   const editSub = subs.find((s) => s.id === editTarget) ?? null;
   const pending = statusMut.isPending ? statusMut.variables?.status : undefined;
+  const sheetBusy = statusMut.isPending || skipMut.isPending;
   const changeFromSheet = (status: SubStatus) => {
-    if (!cancelTarget) return;
+    if (!cancelTarget || sheetBusy) return;
     statusMut.mutate({ id: cancelTarget, status }, { onSuccess: () => setCancelTarget(null) });
   };
   const actionError = statusMut.isError ? actionErrorText(statusMut.error) : skipMut.isError ? actionErrorText(skipMut.error) : null;
@@ -78,8 +79,8 @@ export function SubscriptionsPanel() {
   return (
     <div className="flex flex-col gap-3 pb-6 pt-1 max-md:px-1">
       <div>
-        <p className="text-sm text-stone-700">{`Tự động đặt lại sản phẩm bạn dùng thường xuyên — tiết kiệm ${subscribePct}% mỗi đơn, huỷ bất kỳ lúc nào.`}</p>
-        {subs[0] && <p className="mt-1 text-xs font-medium text-forest-700">{`Đang giảm ${Math.round(subs[0].effectiveDiscountPct * 100)}% cho đơn định kỳ`}</p>}
+        <p className="text-sm text-stone-700 tabular-nums">{`Tự động đặt lại sản phẩm bạn dùng thường xuyên — tiết kiệm ${subscribePct}% mỗi đơn, huỷ bất kỳ lúc nào.`}</p>
+        {subs[0] && <p className="mt-1 text-xs font-medium text-forest-700 tabular-nums">{`Đang giảm ${Math.round(subs[0].effectiveDiscountPct * 100)}% cho đơn định kỳ`}</p>}
       </div>
 
       {notice && (
@@ -106,10 +107,14 @@ export function SubscriptionsPanel() {
             <SubscriptionCard
               key={s.id}
               sub={s}
-              busy={statusMut.isPending}
+              busy={sheetBusy}
+              toggling={statusMut.isPending && statusMut.variables?.id === s.id && cancelTarget === null}
               address={s.addressId ? addressById.get(s.addressId) : undefined}
               onEdit={() => setEditTarget(s.id)}
-              onToggle={() => statusMut.mutate({ id: s.id, status: s.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE' })}
+              onToggle={() => {
+                if (sheetBusy) return;
+                statusMut.mutate({ id: s.id, status: s.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE' });
+              }}
               onCancel={() => {
                 statusMut.reset();
                 skipMut.reset();
@@ -134,7 +139,10 @@ export function SubscriptionsPanel() {
 
       <Sheet
         open={cancelTarget !== null}
-        onClose={() => setCancelTarget(null)}
+        onClose={() => {
+          if (!sheetBusy) setCancelTarget(null);
+        }}
+        dismissible={!sheetBusy}
         title="Giữ lại lịch định kỳ?"
         description="Tạm dừng hoặc bỏ qua kỳ này, thay vì huỷ hẳn nhé."
       >
@@ -144,10 +152,13 @@ export function SubscriptionsPanel() {
               {actionError}
             </p>
           )}
+          {/* Nút đang chạy giữ aria-busy/aria-disabled chứ không `disabled` DOM: Chromium thả focus về body khi nút đang giữ focus bị disabled. */}
           <button
             type="button"
             className={ui.btnPrimary}
-            disabled={statusMut.isPending}
+            disabled={sheetBusy && pending !== 'PAUSED'}
+            aria-busy={pending === 'PAUSED' || undefined}
+            aria-disabled={pending === 'PAUSED' || undefined}
             onClick={() => changeFromSheet('PAUSED')}
           >
             {pending === 'PAUSED' ? 'Đang xử lý…' : 'Tạm dừng'}
@@ -156,8 +167,13 @@ export function SubscriptionsPanel() {
             <button
               type="button"
               className={ui.btnSecondary}
-              disabled={skipMut.isPending}
-              onClick={() => cancelTarget && skipMut.mutate(cancelTarget)}
+              disabled={statusMut.isPending}
+              aria-busy={skipMut.isPending || undefined}
+              aria-disabled={skipMut.isPending || undefined}
+              onClick={() => {
+                if (!cancelTarget || sheetBusy) return;
+                skipMut.mutate(cancelTarget);
+              }}
             >
               {skipMut.isPending ? 'Đang xử lý…' : 'Bỏ qua kỳ này'}
             </button>
@@ -165,7 +181,9 @@ export function SubscriptionsPanel() {
           <button
             type="button"
             className={`${ui.btnSecondary} border-danger-fg text-danger-fg`}
-            disabled={statusMut.isPending}
+            disabled={sheetBusy && pending !== 'CANCELLED'}
+            aria-busy={pending === 'CANCELLED' || undefined}
+            aria-disabled={pending === 'CANCELLED' || undefined}
             onClick={() => changeFromSheet('CANCELLED')}
           >
             {pending === 'CANCELLED' ? 'Đang xử lý…' : 'Vẫn huỷ'}
@@ -179,6 +197,7 @@ export function SubscriptionsPanel() {
 function SubscriptionCard({
   sub: s,
   busy,
+  toggling,
   address,
   onEdit,
   onToggle,
@@ -186,6 +205,8 @@ function SubscriptionCard({
 }: {
   sub: SubscriptionDTO;
   busy: boolean;
+  /** Chính thẻ này đang đổi Tạm dừng/Tiếp tục: nút đó giữ aria-busy thay vì `disabled` để không mất focus. */
+  toggling: boolean;
   address?: Parameters<typeof addressText>[0];
   onEdit: () => void;
   onToggle: () => void;
@@ -200,12 +221,12 @@ function SubscriptionCard({
         </div>
         <div className="min-w-0 flex-1">
           <div className="text-sm font-semibold text-stone-900">{s.productName}</div>
-          <div className="text-xs text-stone-600">{`${s.variationName} · SL ${s.quantity}`}</div>
-          <div className="text-xs font-semibold text-forest-700">{`Mỗi ${s.intervalWeeks} tuần · ${formatVnd(cycle.goods)}`}</div>
+          <div className="text-xs text-stone-600 tabular-nums">{`${s.variationName} · SL ${s.quantity}`}</div>
+          <div className="text-xs font-semibold text-forest-700 tabular-nums">{`Mỗi ${s.intervalWeeks} tuần · ${formatVnd(cycle.goods)}`}</div>
           {cycle.discount > 0 && (
             <div className="flex flex-wrap items-center gap-1.5">
-              <s className="text-xs text-stone-600">{formatVnd(cycle.subtotal)}</s>
-              <Badge tone="success" size="sm">{`Tiết kiệm ${cycle.savePct}%`}</Badge>
+              <s className="text-xs text-stone-600 tabular-nums">{formatVnd(cycle.subtotal)}</s>
+              <Badge tone="success" size="sm" className="tabular-nums">{`Tiết kiệm ${cycle.savePct}%`}</Badge>
             </div>
           )}
           <div className="text-xs text-stone-600">{`Thanh toán: ${PAY_SHORT[s.paymentMethod ?? 'COD']}`}</div>
@@ -215,15 +236,22 @@ function SubscriptionCard({
           {STATUS_LABEL[s.status]}
         </Badge>
       </div>
-      <div className="mt-2.5 text-xs text-stone-700">
+      <div className="mt-2.5 text-xs text-stone-700 tabular-nums">
         {s.status === 'ACTIVE' ? (s.nextRunAt ? `Lần kế: ${formatDate(s.nextRunAt)}` : 'Đang lên lịch') : 'Đang tạm dừng'}
       </div>
       <div className="mt-2 flex flex-wrap gap-2">
         <button type="button" disabled={busy} onClick={onEdit} className={`${ui.btnSecondary} ${mini.secondary} min-w-max flex-1`}>
           Sửa
         </button>
-        <button type="button" disabled={busy} onClick={onToggle} className={`${ui.btnSecondary} ${mini.secondary} min-w-max flex-1`}>
-          {s.status === 'ACTIVE' ? 'Tạm dừng' : 'Tiếp tục'}
+        <button
+          type="button"
+          disabled={busy && !toggling}
+          aria-busy={toggling || undefined}
+          aria-disabled={toggling || undefined}
+          onClick={onToggle}
+          className={`${ui.btnSecondary} ${mini.secondary} min-w-max flex-1`}
+        >
+          {toggling ? 'Đang xử lý…' : s.status === 'ACTIVE' ? 'Tạm dừng' : 'Tiếp tục'}
         </button>
         <button type="button" disabled={busy} onClick={onCancel} className={miniGhostDanger}>
           Huỷ
