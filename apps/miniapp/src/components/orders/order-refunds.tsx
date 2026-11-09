@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'zmp-ui';
 import { CheckCircle2, Clock, TriangleAlert } from 'lucide-react';
@@ -25,17 +25,19 @@ const TONE_ICON = { success: CheckCircle2, warning: TriangleAlert, muted: Clock 
 const TONE_TEXT = { success: 'success', warning: 'warning', muted: 'secondary' } as const;
 
 /** Khoản hoàn tiền của đơn (chuyển khoản chờ xử lý, tiền về muộn): trạng thái từng bước và nút chọn nơi nhận (D2). */
-export function OrderRefunds({ orderId }: { orderId: string }) {
+export function OrderRefunds({ orderId, returnRequestIds }: { orderId: string; returnRequestIds?: ReadonlySet<string> }) {
   const refunds = useQuery({ queryKey: ['my-refunds', orderId], queryFn: () => fetchMyRefunds(orderId) });
   const [choosing, setChoosing] = useState<MyRefund | null>(null);
-  if (!refunds.data?.length) return null;
+  // Khoản hoàn của một yêu cầu trả hàng đã nằm cùng dòng với yêu cầu đó ở khối thao tác: không lặp lại ở đây (cùng luật với web).
+  const shown = (refunds.data ?? []).filter((r) => !(r.kind === 'RETURN' && r.refKey && returnRequestIds?.has(r.refKey)));
+  if (!shown.length) return null;
 
   return (
     <section aria-label="Hoàn tiền" style={{ background: 'var(--color-bg-surface)', padding: 16, marginTop: 8 }}>
       <Text variant="body-sm" as="div" style={{ fontWeight: 600, marginBottom: 6 }}>
         Hoàn tiền
       </Text>
-      {refunds.data.map((r) => {
+      {shown.map((r) => {
         const s = refundStatusText(r);
         return (
           <div key={r.id} style={{ padding: '6px 0', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
@@ -82,41 +84,60 @@ function ChooseDestinationSheet({ refund, onClose }: { refund: MyRefund; onClose
   const [touched, setTouched] = useState(false);
   const bankError = method === 'BANK' ? bankDetailsError(bank) : null;
 
+  // Điền sẵn đúng một lần (như web): bản trả về muộn chỉ điền khi cả ba ô còn trống, sau đó khách sửa hay xoá ô nào cũng không bị ghi đè.
+  // Khoản hoàn đã có tài khoản: không điền sẵn, kể cả khi khách xoá sạch ba ô để nhập tài khoản khác.
+  const prefillAppliedRef = useRef(Boolean(refund.bankAccountNo));
   const prefill = useQuery({ queryKey: ['refund-bank'], queryFn: fetchRefundBank, enabled: method === 'BANK' && !bank.accountNumber });
   useEffect(() => {
-    if (prefill.data?.accountNumber) setBank((b) => (b.accountNumber ? b : prefill.data!));
+    const saved = prefill.data;
+    if (!saved?.accountNumber || prefillAppliedRef.current) return;
+    prefillAppliedRef.current = true;
+    setBank((b) => (b.bankName || b.accountNumber || b.accountName ? b : saved));
   }, [prefill.data]);
 
+  // Khoá đồng bộ: `save.isPending` chỉ đổi sau lần vẽ kế, hai cú bấm "Xác nhận" sát nhau sẽ gọi API hai lần.
+  const savingRef = useRef(false);
+  // Phương thức đi theo biến của mutation: khách đổi radio lúc đang lưu thì onSuccess vẫn nói đúng điều đã gửi lên máy chủ.
   const save = useMutation({
-    mutationFn: () => chooseRefundDestination(refund.id, destinationBody(method, bank)),
-    onSuccess: () => {
+    mutationFn: (choice: RefundMethodChoice) => chooseRefundDestination(refund.id, destinationBody(choice, bank)),
+    onSuccess: (_data, choice) => {
       haptic('medium');
       void queryClient.invalidateQueries({ queryKey: ['my-refunds', refund.orderId] });
-      void queryClient.invalidateQueries({ queryKey: ['wallet'] });
+      // Chỉ Ví Tubu đổi số dư; chuyển khoản chỉ ghi tài khoản để Tubu chuyển trong 1-3 ngày làm việc.
+      if (choice === 'WALLET') void queryClient.invalidateQueries({ queryKey: ['wallet'] });
       openSnackbar({
-        text: method === 'WALLET' ? `Đã hoàn ${formatVnd(refund.amount)} vào Ví Tubu.` : 'Đã lưu tài khoản. Tubu sẽ chuyển khoản trong 1-3 ngày làm việc.',
+        text: choice === 'WALLET' ? `Đã hoàn ${formatVnd(refund.amount)} vào Ví Tubu.` : 'Đã lưu tài khoản. Tubu sẽ chuyển khoản trong 1-3 ngày làm việc.',
         type: 'success',
       });
       onClose();
     },
     onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onSettled: () => {
+      savingRef.current = false;
+    },
   });
+
+  const submit = () => {
+    if (savingRef.current || save.isPending) return;
+    setTouched(true);
+    if (bankError) return;
+    savingRef.current = true;
+    save.mutate(method);
+  };
+  const dismiss = () => {
+    if (save.isPending || savingRef.current) return;
+    onClose();
+  };
 
   return (
     <BottomSheet
       open
-      onClose={onClose}
+      onClose={dismiss}
+      dismissible={!save.isPending}
       title="Nơi nhận tiền hoàn"
       description={`Đơn ${refund.orderCode}`}
       footer={
-        <Button
-          fullWidth
-          loading={save.isPending}
-          onPress={() => {
-            setTouched(true);
-            if (!bankError) save.mutate();
-          }}
-        >
+        <Button fullWidth loading={save.isPending} disabled={save.isPending} onPress={submit}>
           Xác nhận
         </Button>
       }

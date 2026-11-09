@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { CheckCircle2, Clock, TriangleAlert } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { chooseRefundDestination, fetchMyRefunds, formatVnd } from '@/lib/shop-client';
@@ -125,18 +125,33 @@ function ChooseDestination({
   const [touched, setTouched] = useState(false);
   const bankError = method === 'BANK' ? bankDetailsError(bank) : null;
 
+  // Khoá đồng bộ: `save.isPending` chỉ đổi sau lần vẽ kế, hai cú bấm "Xác nhận" sát nhau sẽ gọi API hai lần.
+  const savingRef = useRef(false);
+  // Phương thức đi theo biến của mutation: khách đổi radio lúc đang lưu thì onSuccess vẫn nói đúng điều đã gửi lên máy chủ.
   const save = useMutation({
-    mutationFn: () => chooseRefundDestination(refund.id, destinationBody(method, bank)),
-    onSuccess: () => {
+    mutationFn: (choice: RefundMethodChoice) => chooseRefundDestination(refund.id, destinationBody(choice, bank)),
+    onSuccess: (_data, choice) => {
       void qc.invalidateQueries({ queryKey: ['my-refunds', refund.orderId] });
-      invalidateBalances(qc);
+      // Chỉ Ví Tubu đổi số dư; chuyển khoản chỉ ghi tài khoản để Tubu chuyển trong 1-3 ngày làm việc.
+      if (choice === 'WALLET') invalidateBalances(qc);
       onSaved(
-        method === 'WALLET'
+        choice === 'WALLET'
           ? `Đã hoàn ${formatVnd(refund.amount)} vào Ví Tubu.`
           : 'Đã lưu tài khoản. Tubu sẽ chuyển khoản trong 1-3 ngày làm việc.',
       );
     },
+    onSettled: () => {
+      savingRef.current = false;
+    },
   });
+
+  const submit = () => {
+    if (savingRef.current || save.isPending) return;
+    setTouched(true);
+    if (bankError) return;
+    savingRef.current = true;
+    save.mutate(method);
+  };
 
   return (
     <div
@@ -169,10 +184,7 @@ function ChooseDestination({
         <button
           type="button"
           disabled={save.isPending}
-          onClick={() => {
-            setTouched(true);
-            if (!bankError) save.mutate();
-          }}
+          onClick={submit}
           className={ui.btnPrimary}
         >
           {save.isPending ? 'Đang lưu…' : 'Xác nhận'}

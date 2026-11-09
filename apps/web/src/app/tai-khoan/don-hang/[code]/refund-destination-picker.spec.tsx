@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useState } from 'react';
 import { click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { EMPTY_BANK, type RefundBankInput, type RefundMethodChoice } from '@/lib/refund-rules';
+import { ui } from '@/lib/guest-ui';
 
 const m = vi.hoisted(() => ({ fetchRefundBank: vi.fn() }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
@@ -99,5 +100,64 @@ describe('RefundDestinationPicker — điền sẵn tài khoản ngân hàng đ�
     const r = mount(<Harness />);
     await pickBank(r);
     expect(field(r, 'Số tài khoản').value).toBe('');
+  });
+});
+
+describe('RefundDestinationPicker — chỉ ô sai mới báo aria-invalid và viền lỗi', () => {
+  const OK: RefundBankInput = { bankName: 'Vietcombank', accountNumber: '0123456789', accountName: 'NGUYEN AN' };
+  const LABELS = ['Tên ngân hàng', 'Số tài khoản', 'Chủ tài khoản'] as const;
+  const mountBank = async (bank: RefundBankInput, bankError: string | null) => {
+    const r = mount(<RefundDestinationPicker method="BANK" onMethod={() => {}} bank={bank} onBank={() => {}} bankError={bankError} />);
+    await flush(2);
+    return r;
+  };
+  const flagged = (r: Rendered) => LABELS.filter((l) => field(r, l).getAttribute('aria-invalid') === 'true');
+
+  it('để trống cả ba ô: cả ba bị đánh dấu, viền lỗi, câu lỗi hiện một lần', async () => {
+    const r = await mountBank({ bankName: '', accountNumber: '', accountName: '' }, 'Nhập tên ngân hàng nhận tiền hoàn.');
+    expect(flagged(r)).toEqual([...LABELS]);
+    for (const l of LABELS) expect(field(r, l).className).toContain(ui.fieldError);
+    expect(r.container.querySelectorAll('[role="alert"]')).toHaveLength(1);
+    expect(r.container.querySelector('[role="alert"]')?.textContent).toBe('Nhập tên ngân hàng nhận tiền hoàn.');
+  });
+
+  it.each([
+    ['Tên ngân hàng', 'bankName', ''],
+    ['Tên ngân hàng', 'bankName', 'A'],
+    ['Số tài khoản', 'accountNumber', ''],
+    ['Số tài khoản', 'accountNumber', '12345'],
+    ['Số tài khoản', 'accountNumber', 'abcdefgh'],
+    ['Chủ tài khoản', 'accountName', ''],
+    ['Chủ tài khoản', 'accountName', '   '],
+  ] as const)('chỉ %s sai (%j = %j): chỉ ô đó bị đánh dấu', async (label, key, value) => {
+    const r = await mountBank({ ...OK, [key]: value }, 'Lỗi tài khoản');
+    expect(flagged(r)).toEqual([label]);
+    for (const l of LABELS) {
+      if (l === label) expect(field(r, l).className).toContain(ui.fieldError);
+      else {
+        expect(field(r, l).className).not.toContain(ui.fieldError);
+        expect(field(r, l).hasAttribute('aria-invalid')).toBe(false);
+      }
+    }
+  });
+
+  it('hai ô sai: đúng hai ô bị đánh dấu', async () => {
+    const r = await mountBank({ bankName: 'A', accountNumber: '0123456789', accountName: '' }, 'Lỗi tài khoản');
+    expect(flagged(r)).toEqual(['Tên ngân hàng', 'Chủ tài khoản']);
+  });
+
+  it('chưa có câu lỗi (khách chưa bấm xác nhận): không ô nào bị đánh dấu dù đang trống', async () => {
+    const r = await mountBank({ bankName: '', accountNumber: '', accountName: '' }, null);
+    expect(flagged(r)).toEqual([]);
+    for (const l of LABELS) {
+      expect(field(r, l).hasAttribute('aria-invalid')).toBe(false);
+      expect(field(r, l).className).not.toContain(ui.fieldError);
+    }
+    expect(r.container.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it('có câu lỗi nhưng cả ba ô đã hợp lệ: không ô nào bị đánh dấu', async () => {
+    const r = await mountBank(OK, 'Lỗi từ nơi khác');
+    expect(flagged(r)).toEqual([]);
   });
 });
