@@ -217,6 +217,11 @@ export function CouponBox({
     qc.setQueryData(cartKey(), cart);
     void qc.invalidateQueries({ queryKey: ['quote'] });
   };
+  // Khoá đồng bộ dùng chung cho áp và gỡ: `busy` (state) chỉ đúng sau lần vẽ kế nên hai cú bấm sát nhau vẫn đều gọi API, hoặc gỡ chồng lên lần áp đang chạy.
+  const changingRef = useRef(false);
+  const releaseChange = () => {
+    changingRef.current = false;
+  };
   const apply = useMutation({
     mutationKey: COUPON_MUTATION_KEY,
     mutationFn: (c: string) => applyCoupon(c.trim().toUpperCase()),
@@ -242,6 +247,7 @@ export function CouponBox({
       // Khách có thể đã thu gọn trong lúc chờ: đưa ô nhập ra lại để sửa mã.
       setOpen(true);
     },
+    onSettled: releaseChange,
   });
   const drop = useMutation({
     mutationKey: COUPON_MUTATION_KEY,
@@ -254,6 +260,7 @@ export function CouponBox({
       afterChange(cart);
     },
     onError: (e) => showErr(actionErrorText(e)),
+    onSettled: releaseChange,
   });
   const autoApplyMut = useMutation({
     mutationKey: COUPON_MUTATION_KEY,
@@ -264,7 +271,19 @@ export function CouponBox({
       afterChange(cart);
     },
   });
-  const busy = apply.isPending || drop.isPending || autoApplyMut.isPending || disabled;
+  // `working`: lệnh đổi mã của chính hộp này đang chạy (nút giữ focus: aria-busy + aria-disabled, không `disabled` thật vì Chromium thả focus về body).
+  // `disabled`: trang chứa đang đặt hàng, khoá thật như trước.
+  const working = apply.isPending || drop.isPending || autoApplyMut.isPending;
+  const busy = working || disabled;
+  const changeCoupon = (run: () => void) => {
+    if (changingRef.current || autoApplyMut.isPending) return;
+    changingRef.current = true;
+    run();
+  };
+  const applyCode = (c: string) => changeCoupon(() => apply.mutate(c));
+  const dropCode = () => changeCoupon(() => drop.mutate());
+  // Spinner của "Áp dụng" chỉ quay khi chính mã gõ tay đang được áp; mã bấm từ danh sách thì chỉ khoá nút này.
+  const applyingCustom = apply.isPending && apply.variables?.trim().toUpperCase() === code.trim().toUpperCase();
   const autoMutate = autoApplyMut.mutate;
   useEffect(() => {
     if (!autoApply || !memoryUserId || autoSettled.current || currentCode || !previewTrusted) return;
@@ -284,7 +303,14 @@ export function CouponBox({
   const panelBody = (
     <>
       {currentCode && !appliedRow && (
-        <button type="button" onClick={() => drop.mutate()} disabled={busy} className={`${ui.btnText} mb-2 text-danger-fg`}>
+        <button
+          type="button"
+          onClick={dropCode}
+          disabled={disabled}
+          aria-disabled={working || undefined}
+          aria-busy={drop.isPending || undefined}
+          className={`${ui.btnText} mb-2 text-danger-fg`}
+        >
           Bỏ mã đang áp dụng
         </button>
       )}
@@ -307,14 +333,21 @@ export function CouponBox({
               if (e.key !== 'Enter' || e.nativeEvent.isComposing || e.keyCode === 229) return;
               e.preventDefault();
               if (e.repeat) return;
-              if (code.trim() && !busy) apply.mutate(code);
+              if (code.trim() && !busy) applyCode(code);
             }}
             placeholder={fillCopy('coupon.pickPlaceholder')}
             autoCapitalize="characters"
             autoComplete="off"
             className={`${ui.field} min-w-0 flex-1`}
           />
-          <button type="button" onClick={() => apply.mutate(code)} disabled={!code.trim() || busy} className={`${ui.btnPrimary} min-w-[7.5rem] px-4`}>
+          <button
+            type="button"
+            onClick={() => applyCode(code)}
+            disabled={!code.trim() || disabled}
+            aria-disabled={working || undefined}
+            aria-busy={applyingCustom || undefined}
+            className={`${ui.btnPrimary} min-w-[7.5rem] px-4`}
+          >
             {fillCopy('coupon.pickApply')}
           </button>
         </div>
@@ -338,7 +371,7 @@ export function CouponBox({
       )}
       {!couponsQ.isError && rows.length > 0 && (
         <>
-          <VoucherPicker rows={shownRows} onUse={(c) => apply.mutate(c)} onRemove={() => drop.mutate()} busy={busy} pendingCode={pendingCode} />
+          <VoucherPicker rows={shownRows} onUse={applyCode} onRemove={dropCode} busy={busy} pendingCode={pendingCode} />
           {!inSheet && rows.length > VISIBLE_COUPONS && (
             <button type="button" onClick={() => setShowAll((v) => !v)} className={`${ui.btnText} mt-1 text-[color:var(--color-text-brand)]`}>
               {showAll ? 'Thu gọn' : `Xem thêm ${rows.length - VISIBLE_COUPONS} mã`}
@@ -433,10 +466,12 @@ export function CouponBox({
               </button>
               <button
                 type="button"
-                onClick={() => drop.mutate()}
-                disabled={busy}
+                onClick={dropCode}
+                disabled={disabled}
+                aria-disabled={working || undefined}
+                aria-busy={drop.isPending || undefined}
                 aria-label={`Bỏ mã giảm giá ${currentCode}`}
-                className="flex h-11 w-11 items-center justify-center text-promo-fg disabled:opacity-50"
+                className="flex h-11 w-11 items-center justify-center text-promo-fg disabled:opacity-50 aria-disabled:opacity-50"
               >
                 <X className="h-4 w-4" aria-hidden="true" />
               </button>
@@ -534,10 +569,12 @@ export function CouponBox({
           <button
             type="button"
             data-testid="coupon-auto-remove"
-            onClick={() => drop.mutate()}
-            disabled={busy}
+            onClick={dropCode}
+            disabled={disabled}
+            aria-disabled={working || undefined}
+            aria-busy={drop.isPending || undefined}
             aria-label={couponAutoCopy.removeAria(currentCode!)}
-            className="min-h-11 min-w-11 px-2 text-caption font-semibold text-[color:var(--color-text-brand)] disabled:opacity-50"
+            className="min-h-11 min-w-11 px-2 text-caption font-semibold text-[color:var(--color-text-brand)] disabled:opacity-50 aria-disabled:opacity-50"
           >
             {couponAutoCopy.remove}
           </button>

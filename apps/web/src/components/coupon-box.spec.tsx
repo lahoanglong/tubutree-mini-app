@@ -12,6 +12,7 @@ const state = vi.hoisted(() => ({
   applyError: null as Error | null,
   removeError: null as Error | null,
   applyGate: null as Promise<void> | null,
+  removeGate: null as Promise<void> | null,
   couponsGate: null as Promise<void> | null,
   couponsError: null as Error | null,
   applyCart: {} as Record<string, unknown>,
@@ -33,6 +34,7 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
     return { items: [], couponCode: code, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 0, itemCount: 0, ...state.applyCart };
   },
   removeCoupon: async () => {
+    await state.removeGate;
     if (state.removeError) throw state.removeError;
     state.removed += 1;
     return { items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 0, itemCount: 0 };
@@ -63,6 +65,7 @@ beforeEach(() => {
   state.applyError = null;
   state.removeError = null;
   state.applyGate = null;
+  state.removeGate = null;
   state.couponsGate = null;
   state.couponsError = null;
   state.applyCart = {};
@@ -927,6 +930,21 @@ describe('CouponBox — tự áp mã giảm nhiều nhất ở thanh toán', () 
     expect(box.textContent).toContain('GIAM30');
   });
 
+  it('W71B: lúc mã tự áp còn đang chạy, bấm "Áp dụng" mã gõ tay không gọi thêm lần nào (nút aria-disabled)', async () => {
+    let release!: () => void;
+    state.applyGate = new Promise<void>((r) => (release = r));
+    const box = await mountHarness();
+    typeInto(box.querySelector('input[name="coupon-code"]'), 'MANUAL');
+    const btn = byText(box, 'button', 'Áp dụng') as HTMLButtonElement;
+    expect(btn.getAttribute('aria-disabled')).toBe('true');
+    expect(btn.getAttribute('aria-busy')).toBeNull();
+    click(btn);
+    await flush(2);
+    release();
+    await flush(8);
+    expect(state.applied).toEqual(['GIAM30']);
+  });
+
   it('bấm Gỡ → gỡ mã bằng đường gỡ sẵn có, không áp lại, câu gợi ý hiện lại', async () => {
     const box = await mountHarness();
     click(remove(box));
@@ -1503,5 +1521,288 @@ describe('CouponBox — điện thoại ngoài thanh dính (thanh toán): bảng
     await flush(6);
     expect(state.applied).toEqual(['A1']);
     expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+});
+
+// W71B: áp/gỡ mã khoá đồng bộ bằng ref dùng chung cho cả ba đường (ô nhập, Enter, danh sách mã) và cả nút gỡ. `busy` (state) chỉ đúng sau lần vẽ
+// kế nên hai cú bấm sát nhau vẫn đều gọi API (hai lần áp, hoặc áp rồi gỡ chồng nhau). Nút đang bấm giữ focus: aria-busy + aria-disabled, không `disabled` thật.
+describe('CouponBox — áp/gỡ mã khoá đồng bộ chống bấm đúp (W71B)', () => {
+  const hold = (which: 'applyGate' | 'removeGate') => {
+    let release!: () => void;
+    state[which] = new Promise<void>((r) => (release = r));
+    return () => release();
+  };
+  const field = (root: ParentNode) => root.querySelector<HTMLInputElement>('input[name="coupon-code"]')!;
+  const applyBtn = (root: ParentNode) => byText(root, 'button', 'Áp dụng') as HTMLButtonElement;
+  const dropX = (root: ParentNode, code: string) => root.querySelector<HTMLButtonElement>(`button[aria-label="Bỏ mã giảm giá ${code}"]`)!;
+  const enter = (el: Element) => act(() => { el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); });
+  const twice = (...els: Element[]) => act(() => { for (const el of els) (el as HTMLElement).click(); });
+
+  it('hai cú bấm "Áp dụng" mã gõ tay trong cùng một khung hình chỉ áp một lần', async () => {
+    const release = hold('applyGate');
+    const box = await mount();
+    typeInto(field(box), 'welcome30');
+    twice(applyBtn(box), applyBtn(box));
+    release();
+    await flush(6);
+    expect(state.applied).toEqual(['WELCOME30']);
+  });
+
+  it('Enter hai lần liền trong ô nhập chỉ áp một lần', async () => {
+    const release = hold('applyGate');
+    const box = await mount();
+    typeInto(field(box), 'WELCOME30');
+    act(() => {
+      field(box).dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      field(box).dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    });
+    release();
+    await flush(6);
+    expect(state.applied).toEqual(['WELCOME30']);
+  });
+
+  it('bấm "Áp dụng" rồi Enter trong cùng khung hình: chung một khoá, chỉ một lần', async () => {
+    const release = hold('applyGate');
+    const box = await mount();
+    typeInto(field(box), 'WELCOME30');
+    twice(applyBtn(box));
+    enter(field(box));
+    release();
+    await flush(6);
+    expect(state.applied).toEqual(['WELCOME30']);
+  });
+
+  it('hai cú bấm vào cùng một mã trong ví chỉ áp một lần; bấm hai mã khác nhau sát nhau chỉ áp mã đầu', async () => {
+    state.coupons = [c('A1'), c('B2')];
+    const release = hold('applyGate');
+    const box = await mount();
+    const a1 = card(box, 'A1').querySelector('button')!;
+    const b2 = card(box, 'B2').querySelector('button')!;
+    twice(a1, a1, b2);
+    release();
+    await flush(6);
+    expect(state.applied).toEqual(['A1']);
+  });
+
+  it('hai cú bấm nút X gỡ mã chỉ gỡ một lần', async () => {
+    const release = hold('removeGate');
+    const r = render(<CouponBox currentCode="A1" subtotal={100000} />);
+    mounted.push(r);
+    await flush(4);
+    twice(dropX(r.container, 'A1'), dropX(r.container, 'A1'));
+    release();
+    await flush(6);
+    expect(state.removed).toBe(1);
+  });
+
+  it('hai cú bấm "Bỏ mã đang áp dụng" trong panel chỉ gỡ một lần', async () => {
+    state.coupons = [c('OTHER')];
+    const release = hold('removeGate');
+    const r = render(<CouponBox currentCode="WELCOME30" subtotal={100000} />);
+    mounted.push(r);
+    await flush(4);
+    click(byText(r.container, 'button', 'Đổi mã'));
+    await flush(2);
+    const panel = r.container.querySelector<HTMLElement>('#coupon-panel')!;
+    const drop = byText(panel, 'button', 'Bỏ mã đang áp dụng')!;
+    twice(drop, drop);
+    release();
+    await flush(6);
+    expect(state.removed).toBe(1);
+  });
+
+  it('nút "Gỡ" của mã tự áp: hai cú bấm chỉ gỡ một lần', async () => {
+    sessionStorage.setItem('tubu.autocoupon.applied:u1', 'WELCOME30');
+    const release = hold('removeGate');
+    const r = render(<CouponBox currentCode="WELCOME30" subtotal={100000} memoryUserId="u1" />);
+    mounted.push(r);
+    await flush(4);
+    const auto = r.container.querySelector<HTMLButtonElement>('[data-testid="coupon-auto-remove"]')!;
+    expect(auto).not.toBeNull();
+    twice(auto, auto);
+    release();
+    await flush(6);
+    expect(state.removed).toBe(1);
+  });
+
+  it('áp một mã rồi bấm gỡ mã cũ sát nhau: gỡ không chồng lên lần áp đang chạy', async () => {
+    state.coupons = [c('A1')];
+    const release = hold('applyGate');
+    const r = render(<CouponBox currentCode="WELCOME30" subtotal={100000} />);
+    mounted.push(r);
+    await flush(4);
+    click(byText(r.container, 'button', 'Đổi mã'));
+    await flush(2);
+    const panel = r.container.querySelector<HTMLElement>('#coupon-panel')!;
+    typeInto(field(panel), 'A1');
+    twice(applyBtn(panel), dropX(r.container, 'WELCOME30'));
+    release();
+    await flush(6);
+    expect(state.applied).toEqual(['A1']);
+    expect(state.removed).toBe(0);
+  });
+
+  it('đang áp mã gõ tay: nút "Áp dụng" aria-busy + aria-disabled, không `disabled` thật, giữ focus; nút gỡ aria-disabled (không busy)', async () => {
+    const release = hold('applyGate');
+    const r = render(<CouponBox currentCode="WELCOME30" subtotal={100000} />);
+    mounted.push(r);
+    await flush(4);
+    click(byText(r.container, 'button', 'Đổi mã'));
+    await flush(2);
+    const panel = r.container.querySelector<HTMLElement>('#coupon-panel')!;
+    expect(applyBtn(panel).getAttribute('aria-busy')).toBeNull();
+    typeInto(field(panel), 'A1');
+    applyBtn(panel).focus();
+    click(applyBtn(panel));
+    await flush(2);
+    const btn = applyBtn(panel);
+    expect(btn.getAttribute('aria-busy')).toBe('true');
+    expect(btn.getAttribute('aria-disabled')).toBe('true');
+    expect(btn.disabled).toBe(false);
+    expect(document.activeElement).toBe(btn);
+    const x = dropX(r.container, 'WELCOME30');
+    expect(x.getAttribute('aria-disabled')).toBe('true');
+    expect(x.getAttribute('aria-busy')).toBeNull();
+    expect(x.disabled).toBe(false);
+    release();
+    await flush(6);
+  });
+
+  it('đang gỡ mã: nút X aria-busy + aria-disabled, không `disabled` thật', async () => {
+    const release = hold('removeGate');
+    const r = render(<CouponBox currentCode="A1" subtotal={100000} />);
+    mounted.push(r);
+    await flush(4);
+    dropX(r.container, 'A1').focus();
+    click(dropX(r.container, 'A1'));
+    await flush(2);
+    const x = dropX(r.container, 'A1');
+    expect(x.getAttribute('aria-busy')).toBe('true');
+    expect(x.getAttribute('aria-disabled')).toBe('true');
+    expect(x.disabled).toBe(false);
+    expect(document.activeElement).toBe(x);
+    release();
+    await flush(6);
+  });
+
+  it('áp lỗi: nhả khoá và bỏ aria-busy, lời báo role=alert còn nguyên, nút giữ focus; bấm lại gửi được', async () => {
+    state.applyError = new Error('Mã không hợp lệ');
+    const r = render(<CouponBox currentCode="WELCOME30" subtotal={100000} />);
+    mounted.push(r);
+    await flush(4);
+    click(byText(r.container, 'button', 'Đổi mã'));
+    await flush(2);
+    const panel = r.container.querySelector<HTMLElement>('#coupon-panel')!;
+    typeInto(field(panel), 'SAI');
+    applyBtn(panel).focus();
+    click(applyBtn(panel));
+    await flush(6);
+    expect(panel.querySelector('[role="alert"]')!.textContent).toContain('Mã không hợp lệ');
+    expect(applyBtn(panel).getAttribute('aria-busy')).toBeNull();
+    expect(applyBtn(panel).getAttribute('aria-disabled')).toBeNull();
+    expect(document.activeElement).toBe(applyBtn(panel));
+    state.applyError = null;
+    typeInto(field(panel), 'DUNG');
+    twice(applyBtn(panel), applyBtn(panel));
+    await flush(6);
+    expect(state.applied).toEqual(['DUNG']);
+  });
+
+  it('gỡ lỗi: nhả khoá để gỡ lại được', async () => {
+    state.removeError = new Error('Không gỡ được');
+    const r = render(<CouponBox currentCode="A1" subtotal={100000} />);
+    mounted.push(r);
+    await flush(4);
+    click(dropX(r.container, 'A1'));
+    await flush(6);
+    expect(r.container.querySelector('[role="alert"]')!.textContent).toContain('Không gỡ được');
+    expect(dropX(r.container, 'A1').getAttribute('aria-busy')).toBeNull();
+    state.removeError = null;
+    twice(dropX(r.container, 'A1'), dropX(r.container, 'A1'));
+    await flush(6);
+    expect(state.removed).toBe(1);
+  });
+
+  it('ô trống: "Áp dụng" vẫn là `disabled` thật (không phải lúc bận) và bấm không gọi API', async () => {
+    const box = await mount();
+    expect(applyBtn(box).disabled).toBe(true);
+    expect(applyBtn(box).getAttribute('aria-busy')).toBeNull();
+    click(applyBtn(box));
+    await flush(2);
+    expect(state.applied).toEqual([]);
+  });
+
+  it('trang đang đặt hàng (disabled): mọi nút đổi mã giữ `disabled` thật như trước, không gọi API', async () => {
+    state.coupons = [c('OTHER')];
+    sessionStorage.setItem('tubu.autocoupon.applied:u1', 'WELCOME30');
+    const r = render(<CouponBox currentCode="WELCOME30" subtotal={100000} disabled memoryUserId="u1" />);
+    mounted.push(r);
+    await flush(4);
+    expect(dropX(r.container, 'WELCOME30').disabled).toBe(true);
+    const auto = r.container.querySelector<HTMLButtonElement>('[data-testid="coupon-auto-remove"]')!;
+    expect(auto.disabled).toBe(true);
+    click(byText(r.container, 'button', 'Đổi mã'));
+    await flush(2);
+    const panel = r.container.querySelector<HTMLElement>('#coupon-panel')!;
+    expect((byText(panel, 'button', 'Bỏ mã đang áp dụng') as HTMLButtonElement).disabled).toBe(true);
+    typeInto(field(panel), 'A1');
+    expect(applyBtn(panel).disabled).toBe(true);
+    for (const btn of [dropX(r.container, 'WELCOME30'), auto, byText(panel, 'button', 'Bỏ mã đang áp dụng')!, applyBtn(panel)]) click(btn);
+    await flush(2);
+    expect(state.removed).toBe(0);
+    expect(state.applied).toEqual([]);
+  });
+
+  it('mã bấm từ danh sách: nút "Áp dụng" chỉ aria-disabled (không aria-busy), nút của mã đó aria-busy', async () => {
+    state.coupons = [c('A1'), c('B2')];
+    const release = hold('applyGate');
+    const box = await mount();
+    typeInto(field(box), 'KHAC');
+    click(card(box, 'A1').querySelector('button'));
+    await flush(2);
+    expect(applyBtn(box).getAttribute('aria-disabled')).toBe('true');
+    expect(applyBtn(box).getAttribute('aria-busy')).toBeNull();
+    expect(card(box, 'A1').querySelector('button')!.getAttribute('aria-busy')).toBe('true');
+    release();
+    await flush(6);
+  });
+
+  it('"Bỏ chọn" ở hàng mã trong danh sách: hai cú bấm chỉ gỡ một lần', async () => {
+    state.coupons = [c('WELCOME30')];
+    const release = hold('removeGate');
+    const r = render(<CouponBox currentCode="WELCOME30" subtotal={100000} />);
+    mounted.push(r);
+    await flush(4);
+    click(byText(r.container, 'button', 'Đổi mã'));
+    await flush(2);
+    const row = card(r.container, 'WELCOME30').querySelector('button')!;
+    expect(row.textContent).toBe('Bỏ chọn');
+    twice(row, row);
+    release();
+    await flush(6);
+    expect(state.removed).toBe(1);
+  });
+
+  it('đang gỡ bằng "Bỏ mã đang áp dụng" hoặc "Gỡ" của mã tự áp: nút aria-busy + aria-disabled, không `disabled` thật', async () => {
+    state.coupons = [c('OTHER')];
+    sessionStorage.setItem('tubu.autocoupon.applied:u1', 'WELCOME30');
+    const release = hold('removeGate');
+    const r = render(<CouponBox currentCode="WELCOME30" subtotal={100000} memoryUserId="u1" />);
+    mounted.push(r);
+    await flush(4);
+    click(byText(r.container, 'button', 'Đổi mã'));
+    await flush(2);
+    const panel = r.container.querySelector<HTMLElement>('#coupon-panel')!;
+    const auto = r.container.querySelector<HTMLButtonElement>('[data-testid="coupon-auto-remove"]')!;
+    const drop = byText(panel, 'button', 'Bỏ mã đang áp dụng') as HTMLButtonElement;
+    click(drop);
+    await flush(2);
+    for (const btn of [drop, auto]) {
+      expect(btn.getAttribute('aria-busy')).toBe('true');
+      expect(btn.getAttribute('aria-disabled')).toBe('true');
+      expect(btn.disabled).toBe(false);
+    }
+    release();
+    await flush(6);
   });
 });

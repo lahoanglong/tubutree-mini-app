@@ -158,6 +158,109 @@ describe('AddressForm — báo lỗi tại từng ô (BUYERWEB-14)', () => {
 });
 
 
+// W71B: Lưu địa chỉ khoá đồng bộ bằng ref. `save.isPending` chỉ đúng sau lần vẽ kế, hai cú gửi form sát nhau (bấm đúp, Enter giữ phím)
+// vẫn đều thấy nút bật và tạo hai địa chỉ. Đang lưu nút giữ focus: aria-busy + aria-disabled, không `disabled` thật.
+describe('AddressForm — Lưu khoá đồng bộ chống bấm đúp (W71B)', () => {
+  const FILLED = { form: { recipient: 'An', phone: '0912345678', street: '1 Xuân Thuỷ' }, geo: GEO };
+  const hold = () => {
+    let release!: () => void;
+    let fail!: (e: Error) => void;
+    submit.mockReturnValue(new Promise<void>((res, rej) => { release = res; fail = rej; }));
+    return { release: () => release(), fail: (e: Error) => fail(e) };
+  };
+  const twice = (el: HTMLElement) => act(() => { el.click(); el.click(); });
+
+  it('hai cú bấm Lưu trong cùng một khung hình chỉ gọi onSubmit một lần', async () => {
+    const gate = hold();
+    const c = await mount(FILLED);
+    twice(saveBtn(c));
+    await flush(2);
+    expect(submit).toHaveBeenCalledTimes(1);
+    gate.release();
+    await flush(4);
+    expect(submit).toHaveBeenCalledTimes(1);
+  });
+
+  it('gửi form hai lần liền (Enter giữ phím) chỉ gọi onSubmit một lần', async () => {
+    const gate = hold();
+    const c = await mount(FILLED);
+    const form = c.querySelector('form')!;
+    act(() => { form.requestSubmit(); form.requestSubmit(); });
+    await flush(2);
+    expect(submit).toHaveBeenCalledTimes(1);
+    gate.release();
+    await flush(4);
+  });
+
+  it('đang lưu: nút Lưu aria-busy + aria-disabled, không `disabled` thật, giữ focus, bấm thêm không gọi lại', async () => {
+    const gate = hold();
+    const c = await mount(FILLED);
+    expect(saveBtn(c).getAttribute('aria-busy')).toBeNull();
+    expect(saveBtn(c).getAttribute('aria-disabled')).toBeNull();
+    saveBtn(c).focus();
+    click(saveBtn(c));
+    await flush(2);
+    const btn = saveBtn(c);
+    expect(btn.textContent).toBe('Đang lưu…');
+    expect(btn.getAttribute('aria-busy')).toBe('true');
+    expect(btn.getAttribute('aria-disabled')).toBe('true');
+    expect(btn.disabled).toBe(false);
+    expect(document.activeElement).toBe(btn);
+    click(btn);
+    await flush(2);
+    expect(submit).toHaveBeenCalledTimes(1);
+    gate.release();
+    await flush(4);
+  });
+
+  it('lưu lỗi: hiện lời BE ở role="alert", nút giữ focus, nhả khoá để bấm lại (mỗi cú đôi vẫn một lần)', async () => {
+    const gate = hold();
+    const c = await mount(FILLED);
+    saveBtn(c).focus();
+    click(saveBtn(c));
+    await flush(2);
+    gate.fail(new Error('Số điện thoại không hợp lệ.'));
+    await flush(4);
+    expect(c.querySelector('[role="alert"]')?.textContent).toBe('Số điện thoại không hợp lệ.');
+    expect(saveBtn(c).getAttribute('aria-busy')).toBeNull();
+    expect(saveBtn(c).getAttribute('aria-disabled')).toBeNull();
+    expect(document.activeElement).toBe(saveBtn(c));
+    submit.mockReset().mockResolvedValue(undefined);
+    twice(saveBtn(c));
+    await flush(4);
+    expect(submit).toHaveBeenCalledTimes(1);
+  });
+
+  it('lưu xong mà form còn trên màn (nơi gọi chưa đóng): nhả khoá, lần lưu sau vẫn gọi được', async () => {
+    const c = await mount(FILLED);
+    click(saveBtn(c));
+    await flush(4);
+    expect(submit).toHaveBeenCalledTimes(1);
+    expect(saveBtn(c).getAttribute('aria-busy')).toBeNull();
+    click(saveBtn(c));
+    await flush(4);
+    expect(submit).toHaveBeenCalledTimes(2);
+  });
+
+  it('bấm khi còn thiếu ô: chỉ chỉ ra ô sai, KHÔNG đặt khoá, nút không busy; điền đủ rồi lưu được', async () => {
+    mocks.me = {};
+    const c = await mount();
+    twice(saveBtn(c));
+    await flush(2);
+    expect(submit).not.toHaveBeenCalled();
+    expect(saveBtn(c).getAttribute('aria-busy')).toBeNull();
+    typeInto(input(c, 'Người nhận'), 'Nguyễn An');
+    typeInto(input(c, 'Số điện thoại'), '0912345678');
+    typeInto(input(c, 'Số nhà, tên đường'), '1 Xuân Thuỷ');
+    chooseGeo(c, 'Tỉnh/Thành phố', 'p1');
+    await flush();
+    chooseGeo(c, 'Phường/Xã', 'w1');
+    click(saveBtn(c));
+    await flush(4);
+    expect(submit).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('AddressForm tạo mới — điền sẵn từ hồ sơ và địa giới lần trước (parity Mini App)', () => {
   it('điền sẵn Người nhận và SĐT từ hồ sơ', async () => {
     const c = await mount();

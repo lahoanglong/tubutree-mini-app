@@ -69,11 +69,16 @@ export function AddressForm({
   const formRef = useRef<HTMLFormElement>(null);
   const Heading = headingLevel === 2 ? 'h2' : 'h3';
 
+  // Khoá đồng bộ: `save.isPending` chỉ đúng sau lần vẽ kế, hai cú gửi form sát nhau (bấm đúp, Enter giữ phím) sẽ tạo hai địa chỉ.
+  const savingRef = useRef(false);
   const save = useMutation({
     mutationFn: (p: AddressPayload) => onSubmit(p),
     onSuccess: (_r, p) => {
       // Không biết tài khoản thì không ghi: khoá chung sẽ điền nhầm tỉnh/phường cho người dùng sau trên máy dùng chung.
       if (userId) rememberLastGeo(p, browserStorage(), userId);
+    },
+    onSettled: () => {
+      savingRef.current = false;
     },
   });
 
@@ -107,11 +112,13 @@ export function AddressForm({
       className="space-y-3 md:rounded-control md:border md:border-stone-300 md:p-3"
       onSubmit={(e) => {
         e.preventDefault();
+        if (savingRef.current) return;
         setSubmitted(true);
         if (firstInvalidField(all)) {
           setFocusTick((n) => n + 1);
           return;
         }
+        savingRef.current = true;
         save.mutate(addressPayload(form, geo));
       }}
     >
@@ -156,7 +163,13 @@ export function AddressForm({
         <button type="button" onClick={onCancel} disabled={save.isPending} className={ui.btnSecondary}>
           Huỷ
         </button>
-        <button type="submit" disabled={save.isPending} className={`${ui.btnPrimary} flex-1`}>
+        {/* Không `disabled` thật khi đang lưu: Chromium thả focus về body, khách dùng bàn phím mất chỗ khi lỗi hiện ra. */}
+        <button
+          type="submit"
+          aria-busy={save.isPending || undefined}
+          aria-disabled={save.isPending || undefined}
+          className={`${ui.btnPrimary} flex-1`}
+        >
           {save.isPending ? 'Đang lưu…' : submitLabel}
         </button>
       </div>
