@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import type { SpinResult } from '@tubutree/app-core/api/game';
 import { Sheet } from '@/components/ui/sheet';
 import { formatDate } from '@/lib/format-date';
@@ -37,7 +38,17 @@ export function WheelPrizeSheet({
   const outcome = prize ? outcomeOf(prize) : 'POINTS';
   const won = outcome !== 'MISS';
 
+  // Khoá đồng bộ, cùng hành vi với Mini App: `open` chỉ đổi sau lần vẽ kế nên hai cú bấm "Dùng ngay" sát nhau sẽ gọi
+  // onUseCoupon hai lần. Sheet web gỡ ngay khi đóng (Mini còn thêm hoạt ảnh đóng), nên nhánh `!open` chỉ là lớp phòng thủ.
+  // Nhả khi hộp đóng hoặc giải mới về.
+  const usedRef = useRef(false);
+  useEffect(() => {
+    usedRef.current = false;
+  }, [open, prize]);
+
   const useCoupon = () => {
+    if (!open || usedRef.current) return;
+    usedRef.current = true;
     onClose();
     onUseCoupon();
   };
@@ -66,14 +77,14 @@ export function WheelPrizeSheet({
             {won ? '🎉' : '🍀'}
           </div>
           <div className={`mt-1 text-base font-semibold ${won ? 'text-forest-700' : 'text-stone-900'}`}>{prize.name}</div>
-          {outcome === 'POINTS' && <p className="mt-1 text-sm text-stone-700">+{formatNumber(prize.value)} Điểm Xanh đã vào tài khoản</p>}
-          {outcome === 'SEEDS' && <p className="mt-1 text-sm text-stone-700">+{formatDrops(prize.value)} đã vào bình nước của bạn</p>}
+          {outcome === 'POINTS' && <p className="mt-1 text-sm tabular-nums text-stone-700">+{formatNumber(prize.value)} Điểm Xanh đã vào tài khoản</p>}
+          {outcome === 'SEEDS' && <p className="mt-1 text-sm tabular-nums text-stone-700">+{formatDrops(prize.value)} đã vào bình nước của bạn</p>}
           {outcome === 'MISS' && <p className="mt-1 text-sm text-stone-700">Lần này chưa trúng quà, thử lại lần sau nhé!</p>}
           {outcome === 'COUPON' && prize.coupon && (
             <div className="mt-3 rounded-control border border-dashed border-stone-450 bg-stone-50 p-3">
               <div className="break-all text-base font-bold tracking-wide text-stone-900">{prize.coupon.code}</div>
-              <p className="mt-1 text-sm text-stone-700">Đơn tối thiểu {formatVnd(prize.coupon.minOrder)}</p>
-              <p className="text-sm text-stone-700">Hạn dùng {formatDate(prize.coupon.expiresAt)}</p>
+              <p className="mt-1 text-sm tabular-nums text-stone-700">Đơn tối thiểu {formatVnd(prize.coupon.minOrder)}</p>
+              <p className="text-sm tabular-nums text-stone-700">Hạn dùng {formatDate(prize.coupon.expiresAt)}</p>
               <p className="mt-1.5 text-caption text-stone-600">Mã đã vào mục Mã giảm giá của tôi</p>
             </div>
           )}
