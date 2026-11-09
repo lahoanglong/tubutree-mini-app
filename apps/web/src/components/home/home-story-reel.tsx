@@ -79,7 +79,7 @@ interface OverlayProps {
   onGo: (slug: string) => void;
   onClose: () => void;
   onFail: () => void;
-  onAdd: (card: ProductCard, variations: VariationDetail[]) => void;
+  onAdd: (card: ProductCard, variations: VariationDetail[]) => void | Promise<unknown>;
 }
 
 /** Reel của một món: tải chi tiết, tải trước món kế, tự nhảy qua món mà admin đã tắt câu chuyện, và dựng `ProductStoryShowcase` toàn màn kiểu Reel. */
@@ -158,7 +158,9 @@ export function HomeStoryReel({ initialBestSellers }: { initialBestSellers?: Bes
     notify({ ok: false, text: fillCopy('reel.loadError') });
   };
   // Reel có z-index cao hơn bảng chọn phân loại và thông báo: đóng Reel TRƯỚC khi mở chúng (như trang chi tiết).
-  const add = (card: ProductCard, variations: VariationDetail[]) => {
+  // `async` để nút của Reel nhận Promise: khoá của nút chỉ là lớp phòng thủ thêm (Reel đóng ngay dòng đầu nên khung bị gỡ cùng khoá); chặn bấm trùng thật sự là `inFlight` trong `useQuickAdd.run`.
+  // Lỗi ném đồng bộ thành Promise bị từ chối, nút ném lại nên vẫn tới `unhandledrejection`.
+  const add = async (card: ProductCard, variations: VariationDetail[]) => {
     setOpenSlug(null);
     if (phase === 'guest') {
       // Chỉ nhớ lượt thêm khi khách không phải chọn gì (đúng một phân loại còn hàng): nhiều phân loại thì trang sản phẩm sau đăng nhập để khách tự chọn, không thêm hộ.
@@ -168,7 +170,7 @@ export function HomeStoryReel({ initialBestSellers }: { initialBestSellers?: Bes
       return;
     }
     // Bảng chọn phân loại mở sẵn ở phân loại mang đúng giá trên nút Reel (Giờ vàng thắng thì phân loại của suất đó).
-    void quickAdd(card, { initialId: pricing(card).variationId ?? null });
+    await quickAdd(card, { initialId: pricing(card).variationId ?? null });
   };
 
   const loading = best.isLoading;

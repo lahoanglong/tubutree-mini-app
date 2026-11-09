@@ -30,13 +30,19 @@ export function PdpStory({ product, placement = 'wide' }: { product: ProductDeta
   const core = useMemo<CoreProductDetail>(() => ({ ...product, variations: product.variations.map((v) => ({ attributes: {}, ...v })) }), [product]);
 
   // Khối mua có hai bộ nút (thanh dính ở điện thoại, nút nội tuyến từ md), mỗi lúc chỉ một bộ hiện: bấm bộ đang hiện.
-  const trigger = useCallback((selector: string) => {
-    setOpen(false);
-    window.setTimeout(() => {
-      const all = Array.from(document.querySelectorAll<HTMLButtonElement>(selector));
-      (all.find((b) => b.getClientRects().length > 0) ?? all[0])?.click();
-    }, 0);
-  }, []);
+  // Trả Promise xong sau cú bấm để nút của khung toàn màn khoá chạm lại tới lúc đó: chạm đúp cùng khung hình chỉ bấm nút mua một lần.
+  const trigger = useCallback(
+    (selector: string) =>
+      new Promise<void>((resolve) => {
+        setOpen(false);
+        window.setTimeout(() => {
+          const all = Array.from(document.querySelectorAll<HTMLButtonElement>(selector));
+          (all.find((b) => b.getClientRects().length > 0) ?? all[0])?.click();
+          resolve();
+        }, 0);
+      }),
+    [],
+  );
 
   if (!config) return null;
   return (
