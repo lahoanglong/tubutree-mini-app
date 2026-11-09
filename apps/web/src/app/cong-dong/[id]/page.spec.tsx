@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FeedComment, FeedItem } from '@tubutree/app-core/api/feed';
 import { byText, click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
@@ -42,6 +43,9 @@ const COMMENTS = [COMMENT('c1', 'Bình'), COMMENT('c2', 'Hạnh', { isAccepted: 
 
 let postData: FeedItem;
 let commentPages: { items: FeedComment[]; nextCursor: string | null }[];
+// Cổng cho lần tải lại bài / bình luận: giữ lời tải lại treo để canh khoá còn giữ tới khi dữ liệu mới về.
+let postGate: Promise<unknown> | null = null;
+let commentsGate: Promise<unknown> | null = null;
 function stub(post: FeedItem = POST(), comments: FeedComment[] = COMMENTS) {
   postData = post;
   commentPages = [{ items: comments, nextCursor: null }];
@@ -59,16 +63,23 @@ const btn = (root: ParentNode, name: string | RegExp) =>
   Array.from(root.querySelectorAll<HTMLElement>('button')).find((b) => (b.getAttribute('aria-label') ?? b.textContent ?? '').trim().match(typeof name === 'string' ? new RegExp(`^${name}$`) : name))!;
 const buttons = (root: ParentNode, name: string) => Array.from(root.querySelectorAll<HTMLElement>('button')).filter((b) => (b.getAttribute('aria-label') ?? b.textContent ?? '').trim() === name);
 const h1 = (c: HTMLElement) => c.querySelectorAll('h1').length;
+const shownAlerts = (root: ParentNode) => Array.from(root.querySelectorAll('[role="alert"]')).map((a) => a.textContent ?? '').filter(Boolean);
 
 beforeEach(() => {
   Object.assign(mocks.auth, { user: { id: 'u1', role: 'CUSTOMER' }, status: 'authenticated', initialized: true, sessionUnavailable: false });
   mocks.params.id = 'p1';
   mocks.push.mockReset();
   stub();
+  postGate = null;
+  commentsGate = null;
   let page = 0;
   mocks.get.mockReset().mockImplementation(async (path: string, opts?: { query?: { cursor?: string } }) => {
-    if (path === '/feed/p1') return postData;
+    if (path === '/feed/p1') {
+      await postGate;
+      return postData;
+    }
     if (path === '/feed/p1/comments') {
+      await commentsGate;
       const i = opts?.query?.cursor ? page + 1 : 0;
       page = i;
       return commentPages[Math.min(i, commentPages.length - 1)];
@@ -259,7 +270,7 @@ describe('/cong-dong/[id] — thao tác', () => {
     typeInto(input, 'Xin chào');
     click(btn(container, 'Gửi'));
     await flush(6);
-    expect(container.querySelector('[role="alert"]')?.textContent).toContain('quá nhanh');
+    expect(shownAlerts(container).join()).toContain('quá nhanh');
     expect(input.value).toBe('Xin chào');
   });
 
@@ -459,7 +470,7 @@ describe('/cong-dong/[id] — lỗi hiện tại chỗ thao tác', () => {
     await flush(6);
     expect(dlg()).not.toBeNull();
     expect(dlg().querySelector('[role="alert"]')?.textContent).toContain('máy chủ bận');
-    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(shownAlerts(container)).toEqual([]);
   });
 
   it('báo cáo lỗi: sheet Báo cáo giữ nguyên để thử lại, lỗi hiện trong hộp thoại', async () => {
@@ -487,7 +498,7 @@ describe('/cong-dong/[id] — lỗi hiện tại chỗ thao tác', () => {
     await flush(6);
     const form = container.querySelector('form')!;
     expect(form.querySelector('[role="alert"]')?.textContent).toContain('quá nhanh');
-    expect(container.querySelectorAll('[role="alert"]')).toHaveLength(1);
+    expect(shownAlerts(container)).toHaveLength(1);
   });
 
   it('ô trả lời giới hạn 500 ký tự như API', async () => {
@@ -528,5 +539,473 @@ describe('/cong-dong/[id] — tiêu đề khối như Mini App', () => {
   it('"Trả lời (n)" cỡ title-sm ở điện thoại', async () => {
     const { container } = await mount();
     expect(container.querySelector('#answers-title')!.className).toContain('max-md:text-[length:var(--type-title-sm-size)]');
+  });
+});
+
+describe('/cong-dong/[id] — khoá đồng bộ chống bấm đúp, nút bận giữ focus', () => {
+  // Hai cú bấm trong CÙNG một act: React chưa kịp vẽ lại nên `isPending`/state vẫn cũ ở cú thứ hai.
+  // mutationFn chạy sau vài microtask: đếm lời gọi API phải đợi `flush`, nếu không ca "chỉ một lần" đậu suông.
+  const twice = async (el: Element | null | undefined) => {
+    if (!el) throw new Error('twice: không thấy phần tử');
+    act(() => {
+      (el as HTMLElement).click();
+      (el as HTMLElement).click();
+    });
+    await flush(2);
+  };
+  const posts = (path: string) => mocks.post.mock.calls.filter((c) => c[0] === path);
+  const likeBtn = (c: HTMLElement) => c.querySelector<HTMLButtonElement>('button[aria-pressed]')!;
+  const sendBtn = (c: HTMLElement) => btn(c, 'Gửi') as HTMLButtonElement;
+  const replyInput = (c: HTMLElement) => c.querySelector<HTMLInputElement>('input[aria-label="Viết trả lời…"]')!;
+  const never = () => new Promise<never>(() => {});
+  const deferred = () => {
+    let release!: () => void;
+    const promise = new Promise<void>((r) => (release = r));
+    return { promise, release };
+  };
+
+  it('tim: chạm đúp cùng khung hình chỉ gọi POST /react một lần; nút báo aria-busy, vẫn giữ focus', async () => {
+    mocks.post.mockReturnValue(never());
+    const { container } = await mount();
+    likeBtn(container).focus();
+    await twice(likeBtn(container));
+    expect(posts('/feed/p1/react')).toHaveLength(1);
+    await flush(2);
+    expect(likeBtn(container).getAttribute('aria-busy')).toBe('true');
+    expect(likeBtn(container).getAttribute('aria-disabled')).toBe('true');
+    expect(likeBtn(container).disabled).toBe(false);
+    expect(document.activeElement).toBe(likeBtn(container));
+  });
+
+  it('tim: khoá giữ tới khi số tim mới về, rồi bấm lại được', async () => {
+    const { container } = await mount();
+    const gate = deferred();
+    postGate = gate.promise;
+    click(likeBtn(container));
+    await flush(4);
+    expect(posts('/feed/p1/react')).toHaveLength(1);
+    // Lệnh đã xong nhưng bài chưa tải lại: số tim còn cũ, bấm lúc này sẽ bật/tắt trên số cũ.
+    expect(likeBtn(container).getAttribute('aria-busy')).toBe('true');
+    await twice(likeBtn(container));
+    expect(posts('/feed/p1/react')).toHaveLength(1);
+    gate.release();
+    await flush(4);
+    expect(likeBtn(container).hasAttribute('aria-busy')).toBe(false);
+    click(likeBtn(container));
+    await flush(2);
+    expect(posts('/feed/p1/react')).toHaveLength(2);
+  });
+
+  it('tim: lỗi nhả khoá, báo lỗi, bấm lại gửi lần hai', async () => {
+    mocks.post.mockRejectedValueOnce(new Error('mạng chập chờn'));
+    const { container } = await mount();
+    click(likeBtn(container));
+    await flush(6);
+    expect(shownAlerts(container).join()).toContain('mạng chập chờn');
+    expect(likeBtn(container).hasAttribute('aria-busy')).toBe(false);
+    click(likeBtn(container));
+    await flush(2);
+    expect(posts('/feed/p1/react')).toHaveLength(2);
+  });
+
+  it('trả lời: bấm Gửi hai lần cùng khung hình chỉ đăng một bình luận; nút báo bận, không disabled, giữ focus', async () => {
+    mocks.post.mockReturnValue(never());
+    const { container } = await mount();
+    typeInto(replyInput(container), 'Cảm ơn bạn');
+    sendBtn(container).focus();
+    await twice(sendBtn(container));
+    expect(posts('/feed/p1/comments')).toHaveLength(1);
+    await flush(2);
+    expect(sendBtn(container).getAttribute('aria-busy')).toBe('true');
+    expect(sendBtn(container).getAttribute('aria-disabled')).toBe('true');
+    expect(sendBtn(container).disabled).toBe(false);
+    expect(document.activeElement).toBe(sendBtn(container));
+  });
+
+  it('trả lời: Enter hai lần cùng khung hình (gửi form) chỉ đăng một bình luận', async () => {
+    mocks.post.mockReturnValue(never());
+    const { container } = await mount();
+    typeInto(replyInput(container), 'Cảm ơn bạn');
+    const form = container.querySelector('form')!;
+    act(() => {
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+    await flush(2);
+    expect(posts('/feed/p1/comments')).toHaveLength(1);
+  });
+
+  it('trả lời: lỗi nhả khoá, giữ chữ, gửi lại được và lần này thành công', async () => {
+    mocks.post.mockRejectedValueOnce(new Error('quá nhanh'));
+    const { container } = await mount();
+    typeInto(replyInput(container), 'Xin chào');
+    click(sendBtn(container));
+    await flush(6);
+    expect(replyInput(container).value).toBe('Xin chào');
+    expect(sendBtn(container).hasAttribute('aria-busy')).toBe(false);
+    click(sendBtn(container));
+    await flush(6);
+    expect(posts('/feed/p1/comments')).toHaveLength(2);
+    expect(replyInput(container).value).toBe('');
+    expect(shownAlerts(container)).toEqual([]);
+  });
+
+  it('báo cáo: bấm Báo cáo hai lần cùng khung hình chỉ gửi một báo cáo; nút báo bận, không disabled, giữ focus', async () => {
+    mocks.post.mockReturnValue(never());
+    const { container } = await mount();
+    click(container.querySelector('article')!.querySelector('button[aria-label="Báo cáo"]'));
+    await flush(2);
+    const submit = btn(dlg(), 'Báo cáo') as HTMLButtonElement;
+    submit.focus();
+    await twice(submit);
+    expect(posts('/feed/p1/report')).toHaveLength(1);
+    await flush(2);
+    expect(submit.getAttribute('aria-busy')).toBe('true');
+    expect(submit.getAttribute('aria-disabled')).toBe('true');
+    expect(submit.disabled).toBe(false);
+    expect(document.activeElement).toBe(submit);
+  });
+
+  it('báo cáo: lỗi nhả khoá, thử lại gửi lần hai', async () => {
+    mocks.post.mockRejectedValueOnce(new Error('quá nhanh'));
+    const { container } = await mount();
+    click(container.querySelector('article')!.querySelector('button[aria-label="Báo cáo"]'));
+    await flush(2);
+    click(btn(dlg(), 'Báo cáo'));
+    await flush(6);
+    expect(dlg().querySelector('[role="alert"]')?.textContent).toContain('quá nhanh');
+    expect(btn(dlg(), 'Báo cáo').hasAttribute('aria-busy')).toBe(false);
+    click(btn(dlg(), 'Báo cáo'));
+    await flush(6);
+    expect(posts('/feed/p1/report')).toHaveLength(2);
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it('sửa bài: bấm Lưu hai lần cùng khung hình chỉ gửi một PATCH; nút báo bận, không disabled, giữ focus', async () => {
+    stub(POST({ isOwner: true }));
+    mocks.patch.mockReturnValue(never());
+    const { container } = await mount();
+    click(btn(container, 'Sửa'));
+    await flush(2);
+    const save = btn(dlg(), 'Lưu') as HTMLButtonElement;
+    save.focus();
+    await twice(save);
+    expect(mocks.patch).toHaveBeenCalledTimes(1);
+    await flush(2);
+    expect(save.getAttribute('aria-busy')).toBe('true');
+    expect(save.getAttribute('aria-disabled')).toBe('true');
+    expect(save.disabled).toBe(false);
+    expect(document.activeElement).toBe(save);
+  });
+
+  it('sửa bài: lỗi nhả khoá, Lưu lại được; thành công thì khoá giữ tới khi bài mới về', async () => {
+    stub(POST({ isOwner: true }));
+    mocks.patch.mockRejectedValueOnce(new Error('máy chủ bận'));
+    const { container } = await mount();
+    click(btn(container, 'Sửa'));
+    await flush(2);
+    click(btn(dlg(), 'Lưu'));
+    await flush(6);
+    expect(dlg().querySelector('[role="alert"]')?.textContent).toContain('máy chủ bận');
+    const gate = deferred();
+    postGate = gate.promise;
+    click(btn(dlg(), 'Lưu'));
+    await flush(4);
+    expect(mocks.patch).toHaveBeenCalledTimes(2);
+    // Sheet đã đóng, bài chưa tải lại: mở lại Sửa và Lưu ngay không được gửi trên bản cũ.
+    click(btn(container, 'Sửa'));
+    await flush(2);
+    // Lệnh trước còn giữ khoá nên nút vẫn ghi "Đang lưu…".
+    expect(btn(dlg(), /^(Lưu|Đang lưu…)$/).textContent).toBe('Đang lưu…');
+    await twice(btn(dlg(), /^(Lưu|Đang lưu…)$/));
+    expect(mocks.patch).toHaveBeenCalledTimes(2);
+    gate.release();
+    await flush(4);
+    click(btn(dlg(), 'Lưu'));
+    await flush(2);
+    expect(mocks.patch).toHaveBeenCalledTimes(3);
+  });
+
+  it('xoá bài: bấm Xoá hai lần cùng khung hình chỉ gửi một DELETE; nút báo bận, giữ focus', async () => {
+    stub(POST({ isOwner: true }));
+    mocks.del.mockReturnValue(never());
+    const { container } = await mount();
+    click(btn(container, 'Xoá'));
+    await flush(2);
+    const del = btn(dlg(), 'Xoá') as HTMLButtonElement;
+    del.focus();
+    await twice(del);
+    expect(mocks.del).toHaveBeenCalledTimes(1);
+    await flush(2);
+    expect(del.getAttribute('aria-busy')).toBe('true');
+    expect(del.getAttribute('aria-disabled')).toBe('true');
+    expect(del.disabled).toBe(false);
+    expect(document.activeElement).toBe(del);
+  });
+
+  it('xoá bài: xoá xong thì khoá giữ tới khi rời trang (bấm Xoá lần hai trong lúc chờ chuyển trang không gửi lại)', async () => {
+    stub(POST({ isOwner: true }));
+    const { container } = await mount();
+    click(btn(container, 'Xoá'));
+    await flush(2);
+    click(btn(dlg(), 'Xoá'));
+    await flush(6);
+    expect(mocks.push).toHaveBeenCalledWith('/cong-dong?deleted=1');
+    // Trình duyệt thật đã chuyển trang; ở đây trang còn đó nên thử bấm lại.
+    await twice(btn(dlg(), /^(Xoá|Đang xoá…)$/));
+    expect(mocks.del).toHaveBeenCalledTimes(1);
+    // Xoá xong vẫn báo bận (không quay về nhãn "Xoá" bấm được) cho tới khi rời trang.
+    expect(btn(dlg(), /^(Xoá|Đang xoá…)$/).getAttribute('aria-busy')).toBe('true');
+    expect(btn(dlg(), /^(Xoá|Đang xoá…)$/).textContent).toBe('Đang xoá…');
+  });
+
+  it('xoá bài: lỗi nhả khoá, mở lại hộp xác nhận xoá được lần hai', async () => {
+    stub(POST({ isOwner: true }));
+    mocks.del.mockRejectedValueOnce(new Error('không xoá được'));
+    const { container } = await mount();
+    click(btn(container, 'Xoá'));
+    await flush(2);
+    click(btn(dlg(), 'Xoá'));
+    await flush(6);
+    expect(shownAlerts(container).join()).toContain('không xoá được');
+    click(btn(container, 'Xoá'));
+    await flush(2);
+    click(btn(dlg(), 'Xoá'));
+    await flush(6);
+    expect(mocks.del).toHaveBeenCalledTimes(2);
+    expect(mocks.push).toHaveBeenCalledWith('/cong-dong?deleted=1');
+  });
+
+  it('chọn hay nhất: chạm đúp một bình luận chỉ gửi một lệnh; nút đó báo aria-busy, giữ focus', async () => {
+    stub(POST({ isOwner: true, kind: 'QUESTION', title: 'Hỏi' }));
+    mocks.post.mockReturnValue(never());
+    const { container } = await mount();
+    const choose = buttons(container, 'Chọn hay nhất') as HTMLButtonElement[];
+    choose[0]!.focus();
+    await twice(choose[0]);
+    expect(posts('/feed/p1/best-answer/c1')).toHaveLength(1);
+    await flush(2);
+    expect(choose[0]!.getAttribute('aria-busy')).toBe('true');
+    expect(choose[0]!.disabled).toBe(false);
+    expect(document.activeElement).toBe(choose[0]);
+    expect(choose[1]!.hasAttribute('aria-busy')).toBe(false);
+  });
+
+  it('chọn hay nhất: hai bình luận khác nhau cùng khung hình đều đi (khoá theo bình luận, không nuốt cú thứ hai)', async () => {
+    stub(POST({ isOwner: true, kind: 'QUESTION', title: 'Hỏi' }));
+    mocks.post.mockReturnValue(never());
+    const { container } = await mount();
+    const choose = buttons(container, 'Chọn hay nhất');
+    act(() => {
+      choose[0]!.click();
+      choose[1]!.click();
+    });
+    await flush(2);
+    expect(posts('/feed/p1/best-answer/c1')).toHaveLength(1);
+    expect(posts('/feed/p1/best-answer/c3')).toHaveLength(1);
+    await flush(2);
+    expect(choose[0]!.getAttribute('aria-busy')).toBe('true');
+    expect(choose[1]!.getAttribute('aria-busy')).toBe('true');
+  });
+
+  it('chọn hay nhất rồi ẩn đúng bình luận đó cùng khung hình: chỉ lệnh đầu đi (khoá chung theo bình luận)', async () => {
+    stub(POST({ isOwner: true, kind: 'QUESTION', title: 'Hỏi' }));
+    mocks.post.mockReturnValue(never());
+    const { container } = await mount();
+    const row = byText(container, '[data-testid="comment-row"]', 'Trả lời của Tôi')!;
+    act(() => {
+      byText(row, 'button', 'Chọn hay nhất')!.click();
+      row.querySelector<HTMLElement>('button[aria-label="Ẩn nội dung"]')!.click();
+    });
+    await flush(2);
+    expect(posts('/feed/p1/best-answer/c3')).toHaveLength(1);
+    expect(mocks.del).not.toHaveBeenCalled();
+    await flush(2);
+    // Nút còn lại cũng báo khoá nhưng chỉ nút đang chạy báo busy.
+    expect(row.querySelector('button[aria-label="Ẩn nội dung"]')!.getAttribute('aria-disabled')).toBe('true');
+    expect(row.querySelector('button[aria-label="Ẩn nội dung"]')!.hasAttribute('aria-busy')).toBe(false);
+  });
+
+  it('ẩn bình luận: chạm đúp chỉ gửi một DELETE; xong mà danh sách chưa tải lại thì chưa cho ẩn lần hai', async () => {
+    const { container } = await mount();
+    const hide = () => btn(container, 'Ẩn nội dung') as HTMLButtonElement;
+    hide().focus();
+    mocks.del.mockReturnValue(never());
+    await twice(hide());
+    expect(mocks.del).toHaveBeenCalledTimes(1);
+    await flush(2);
+    expect(hide().getAttribute('aria-busy')).toBe('true');
+    expect(hide().disabled).toBe(false);
+    expect(document.activeElement).toBe(hide());
+  });
+
+  it('ẩn bình luận: khoá giữ tới khi danh sách mới về, rồi nhả', async () => {
+    const { container } = await mount();
+    const gate = deferred();
+    commentsGate = gate.promise;
+    click(btn(container, 'Ẩn nội dung'));
+    await flush(4);
+    expect(mocks.del).toHaveBeenCalledTimes(1);
+    // Lệnh đã xong, danh sách còn cũ: dòng vẫn hiện, bấm lần hai sẽ DELETE bình luận đã ẩn và nhận lỗi không tìm thấy.
+    await twice(btn(container, 'Ẩn nội dung'));
+    expect(mocks.del).toHaveBeenCalledTimes(1);
+    gate.release();
+    await flush(4);
+    expect(btn(container, 'Ẩn nội dung').hasAttribute('aria-busy')).toBe(false);
+  });
+
+  it('ẩn bình luận: lỗi nhả khoá, lỗi hiện dưới đúng dòng, bấm lại gửi lần hai', async () => {
+    mocks.del.mockRejectedValueOnce(new Error('máy chủ bận'));
+    const { container } = await mount();
+    click(btn(container, 'Ẩn nội dung'));
+    await flush(6);
+    expect(shownAlerts(container).join()).toContain('máy chủ bận');
+    click(btn(container, 'Ẩn nội dung'));
+    await flush(2);
+    expect(mocks.del).toHaveBeenCalledTimes(2);
+  });
+
+  it('ADMIN ghim: chạm đúp chỉ gửi một lệnh ghim; nút báo aria-busy, giữ focus; khoá giữ tới khi bài mới về (Ghim/Bỏ ghim đảo theo bài)', async () => {
+    (mocks.auth.user as { role: string }).role = 'ADMIN';
+    mocks.post.mockResolvedValue({ ok: true });
+    const { container } = await mount();
+    const pin = () => btn(container, /^(Ghim|Bỏ ghim)$/) as HTMLButtonElement;
+    pin().focus();
+    const gate = deferred();
+    postGate = gate.promise;
+    await twice(pin());
+    expect(posts('/feed/admin/p1/pin')).toHaveLength(1);
+    await flush(4);
+    expect(pin().getAttribute('aria-busy')).toBe('true');
+    expect(pin().disabled).toBe(false);
+    expect(document.activeElement).toBe(pin());
+    // Bài còn cũ (chưa ghim): bấm lúc này gửi lại cùng một chiều.
+    click(pin());
+    await flush(2);
+    expect(posts('/feed/admin/p1/pin')).toHaveLength(1);
+    gate.release();
+    await flush(4);
+    expect(pin().hasAttribute('aria-busy')).toBe(false);
+  });
+
+  it('"Xem thêm trả lời": đang tải thì báo aria-busy + aria-disabled, không disabled (giữ focus), bấm tiếp không gọi thêm', async () => {
+    commentPages = [{ items: [COMMENT('c1', 'Bình')], nextCursor: 'cur-2' }, { items: [COMMENT('c4', 'Mai')], nextCursor: null }];
+    const { container } = await mount();
+    const more = () => btn(container, /^(Xem thêm trả lời|Đang tải…)$/) as HTMLButtonElement;
+    more().focus();
+    const gate = deferred();
+    commentsGate = gate.promise;
+    click(more());
+    await flush(2);
+    expect(more().getAttribute('aria-busy')).toBe('true');
+    expect(more().getAttribute('aria-disabled')).toBe('true');
+    expect(more().disabled).toBe(false);
+    expect(document.activeElement).toBe(more());
+    click(more());
+    await flush(2);
+    const pageCalls = () => mocks.get.mock.calls.filter((c) => c[0] === '/feed/p1/comments' && c[1]?.query?.cursor === 'cur-2').length;
+    expect(pageCalls()).toBe(1);
+    gate.release();
+    await flush(6);
+    expect(container.textContent).toContain('Trả lời của Mai');
+  });
+
+  it('ẩn rồi chọn hay nhất đúng bình luận đó cùng khung hình: chỉ lệnh đầu đi, nút Chọn hay nhất báo khoá nhưng không báo busy', async () => {
+    stub(POST({ isOwner: true, kind: 'QUESTION', title: 'Hỏi' }));
+    mocks.del.mockReturnValue(never());
+    const { container } = await mount();
+    const row = byText(container, '[data-testid="comment-row"]', 'Trả lời của Tôi')!;
+    act(() => {
+      row.querySelector<HTMLElement>('button[aria-label="Ẩn nội dung"]')!.click();
+      byText(row, 'button', 'Chọn hay nhất')!.click();
+    });
+    await flush(2);
+    expect(mocks.del).toHaveBeenCalledTimes(1);
+    expect(posts('/feed/p1/best-answer/c3')).toHaveLength(0);
+    const best = byText(row, 'button', 'Chọn hay nhất')!;
+    expect(best.getAttribute('aria-disabled')).toBe('true');
+    expect(best.hasAttribute('aria-busy')).toBe(false);
+    expect(row.querySelector('button[aria-label="Ẩn nội dung"]')!.getAttribute('aria-busy')).toBe('true');
+  });
+
+  it('gửi form trả lời khi ô trống hoặc chỉ có khoảng trắng (Enter): không gọi API', async () => {
+    const { container } = await mount();
+    const form = container.querySelector('form')!;
+    act(() => {
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+    typeInto(replyInput(container), '   ');
+    act(() => {
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+    await flush(2);
+    expect(posts('/feed/p1/comments')).toHaveLength(0);
+  });
+
+  it('vùng alert của ô trả lời và của từng bình luận có sẵn trước khi lỗi, lỗi đổi chữ trên cùng phần tử', async () => {
+    stub(POST({ isOwner: true, kind: 'QUESTION', title: 'Hỏi' }));
+    mocks.post.mockRejectedValue(new Error('quá nhanh'));
+    const { container } = await mount();
+    const replyAlert = container.querySelector('form [role="alert"]')!;
+    expect(replyAlert.textContent).toBe('');
+    const row = byText(container, '[data-testid="comment-row"]', 'Trả lời của Bình')!;
+    const rowAlert = row.querySelector('[role="alert"]')!;
+    expect(rowAlert.textContent).toBe('');
+    expect(rowAlert.className).toBe('sr-only');
+    typeInto(replyInput(container), 'Xin chào');
+    click(sendBtn(container));
+    await flush(6);
+    expect(container.querySelector('form [role="alert"]')).toBe(replyAlert);
+    expect(replyAlert.textContent).toContain('quá nhanh');
+    click(byText(row, 'button', 'Chọn hay nhất'));
+    await flush(6);
+    expect(byText(container, '[data-testid="comment-row"]', 'Trả lời của Bình')!.querySelector('[role="alert"]')).toBe(rowAlert);
+    expect(rowAlert.textContent).toContain('quá nhanh');
+    expect(rowAlert.className).not.toContain('sr-only');
+  });
+
+  it('sheet Sửa và Báo cáo: vùng alert có sẵn trước khi lỗi, lỗi đổi chữ trên cùng phần tử', async () => {
+    stub(POST({ isOwner: true }));
+    mocks.patch.mockRejectedValue(new Error('máy chủ bận'));
+    const a = await mount();
+    click(btn(a.container, 'Sửa'));
+    await flush(2);
+    const editAlert = dlg().querySelector('[role="alert"]')!;
+    expect(editAlert.textContent).toBe('');
+    click(btn(dlg(), 'Lưu'));
+    await flush(6);
+    expect(dlg().querySelector('[role="alert"]')).toBe(editAlert);
+    expect(editAlert.textContent).toContain('máy chủ bận');
+    mounted.pop()!.unmount();
+    stub(POST());
+    mocks.post.mockRejectedValue(new Error('quá nhanh'));
+    const b = await mount();
+    click(b.container.querySelector('article')!.querySelector('button[aria-label="Báo cáo"]'));
+    await flush(2);
+    const reportAlert = dlg().querySelector('[role="alert"]')!;
+    expect(reportAlert.textContent).toBe('');
+    click(btn(dlg(), 'Báo cáo'));
+    await flush(6);
+    expect(dlg().querySelector('[role="alert"]')).toBe(reportAlert);
+    expect(reportAlert.textContent).toContain('quá nhanh');
+  });
+
+  it('vùng báo luôn có trong DOM: thông báo đổi nội dung trên cùng phần tử, không dựng lại', async () => {
+    const { container } = await mount();
+    const status = container.querySelector('[role="status"]')!;
+    const alert = container.querySelector('[role="alert"]')!;
+    expect(status.textContent).toBe('');
+    expect(alert.textContent).toBe('');
+    click(container.querySelector('article')!.querySelector('button[aria-label="Báo cáo"]'));
+    await flush(2);
+    click(btn(dlg(), 'Báo cáo'));
+    await flush(6);
+    expect(container.querySelector('[role="status"]')).toBe(status);
+    expect(status.textContent).toContain('Đã gửi báo cáo, cảm ơn bạn');
+    mocks.post.mockRejectedValue(new Error('mạng hỏng'));
+    click(likeBtn(container));
+    await flush(6);
+    expect(container.querySelector('[role="alert"]')).toBe(alert);
+    expect(alert.textContent).toContain('mạng hỏng');
   });
 });

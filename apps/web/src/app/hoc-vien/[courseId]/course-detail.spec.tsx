@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AcademyCourseDetail } from '@tubutree/app-core/api/academy';
 import { ApiError } from '@/lib/client-api';
@@ -39,6 +40,7 @@ const mount = async () => {
 };
 const buttons = (root: ParentNode, name: string) => Array.from(root.querySelectorAll<HTMLButtonElement>('button')).filter((b) => (b.textContent ?? '').trim() === name);
 const calls = (m: ReturnType<typeof vi.fn>, path: string) => m.mock.calls.filter((c) => c[0] === path).length;
+const shownAlerts = (root: ParentNode) => Array.from(root.querySelectorAll('[role="alert"]')).map((a) => a.textContent ?? '').filter(Boolean);
 
 beforeEach(() => {
   Object.assign(mocks.auth, { user: { id: 'u1', role: 'AFFILIATE' }, status: 'authenticated', initialized: true, sessionUnavailable: false });
@@ -116,8 +118,8 @@ describe('/hoc-vien/[courseId] — chi tiết khoá học', () => {
     const { container } = await mount();
     click(buttons(container, 'Đánh dấu đã học')[0]!);
     await flush(6);
-    expect(container.querySelector('[role="alert"]')?.textContent).toContain('Không có quyền');
-    expect(container.querySelector('[role="status"]')).toBeNull();
+    expect(shownAlerts(container).join()).toContain('Không có quyền');
+    expect(container.querySelector('[role="status"]')?.textContent).toBe('');
     expect(calls(mocks.get, '/academy/courses/c1')).toBe(1);
   });
 
@@ -141,7 +143,7 @@ describe('/hoc-vien/[courseId] — chi tiết khoá học', () => {
   it('lỗi tải khoá: báo lỗi, Thử lại tải lại', async () => {
     mocks.get.mockReset().mockRejectedValueOnce(new Error('mất mạng')).mockResolvedValue(DETAIL());
     const { container } = await mount();
-    expect(container.querySelector('[role="alert"]')?.textContent).toContain('mất mạng');
+    expect(shownAlerts(container).join()).toContain('mất mạng');
     click(byText(container, 'button', 'Thử lại'));
     await flush(6);
     expect(container.textContent).toContain('Khoá bán hàng');
@@ -207,5 +209,110 @@ describe('/hoc-vien/[courseId] — như Mini App', () => {
     const { container } = await mount();
     const h = Array.from(container.querySelectorAll('h2')).find((x) => x.textContent === 'Khoá bán hàng')!;
     expect(h.className).toContain('max-md:text-[length:var(--type-title-md-size)]');
+  });
+});
+
+describe('/hoc-vien/[courseId] — khoá đồng bộ chống đánh dấu đúp, nút bận giữ focus', () => {
+  // mutationFn chạy sau vài microtask: đếm lời gọi API phải đợi `flush`, nếu không ca "chỉ một lần" đậu suông.
+  const twice = async (el: HTMLElement) => {
+    act(() => {
+      el.click();
+      el.click();
+    });
+    await flush(2);
+  };
+  const todo = (c: HTMLElement) => buttons(c, 'Đánh dấu đã học');
+  const deferred = () => {
+    let release!: () => void;
+    const promise = new Promise<void>((r) => (release = r));
+    return { promise, release };
+  };
+
+  it('chạm đúp "Đánh dấu đã học" cùng khung hình chỉ gửi MỘT lần; nút báo aria-busy + aria-disabled, không disabled, giữ focus', async () => {
+    mocks.post.mockReturnValue(new Promise(() => {}));
+    const { container } = await mount();
+    const first = todo(container)[0]!;
+    first.focus();
+    await twice(first);
+    expect(calls(mocks.post, '/academy/lessons/l1/complete')).toBe(1);
+    expect(mocks.post).toHaveBeenCalledTimes(1);
+    expect(first.getAttribute('aria-busy')).toBe('true');
+    expect(first.getAttribute('aria-disabled')).toBe('true');
+    expect(first.disabled).toBe(false);
+    expect(document.activeElement).toBe(first);
+    // Bài khác khoá cứng trong lúc một bài đang gửi (giữ nguyên như Mini App), nhưng không báo busy.
+    const second = todo(container)[1]!;
+    expect(second.disabled).toBe(true);
+    expect(second.hasAttribute('aria-busy')).toBe(false);
+  });
+
+  it('hai bài khác nhau cùng khung hình: chỉ bài đầu đi (một bài tại một lúc như Mini App)', async () => {
+    mocks.post.mockReturnValue(new Promise(() => {}));
+    const { container } = await mount();
+    const [a, b] = todo(container);
+    act(() => {
+      a!.click();
+      b!.click();
+    });
+    await flush(2);
+    expect(mocks.post).toHaveBeenCalledTimes(1);
+    expect(mocks.post.mock.calls[0]![0]).toBe('/academy/lessons/l1/complete');
+  });
+
+  it('gửi xong nhưng khoá học chưa tải lại: khoá còn giữ (bài chưa hiện "Đã học xong"), tải về thì nhả và báo thành công', async () => {
+    const { container } = await mount();
+    const gate = deferred();
+    const base = mocks.get.getMockImplementation()!;
+    mocks.get.mockImplementation(async (path: string) => {
+      if (path === '/academy/courses/c1') {
+        await gate.promise;
+        detail = DETAIL({ completedLessonIds: ['l1', 'l3'] });
+      }
+      return base(path);
+    });
+    const first = todo(container)[0]!;
+    click(first);
+    await flush(4);
+    expect(mocks.post).toHaveBeenCalledTimes(1);
+    expect(first.getAttribute('aria-busy')).toBe('true');
+    expect(container.querySelector('[role="status"]')?.textContent).toBe('');
+    await twice(first);
+    expect(mocks.post).toHaveBeenCalledTimes(1);
+    gate.release();
+    await flush(6);
+    expect(buttons(container, 'Đã học xong')).toHaveLength(2);
+    expect(container.querySelector('[role="status"]')?.textContent).toContain('Đã đánh dấu hoàn thành bài học!');
+  });
+
+  it('lỗi nhả khoá: lỗi hiện, nút hết báo bận, bấm lại gửi lần hai và lần này thành công', async () => {
+    mocks.post.mockRejectedValueOnce(new Error('Không có quyền'));
+    const { container } = await mount();
+    const first = todo(container)[0]!;
+    click(first);
+    await flush(6);
+    expect(shownAlerts(container).join()).toContain('Không có quyền');
+    expect(first.hasAttribute('aria-busy')).toBe(false);
+    click(first);
+    await flush(6);
+    expect(mocks.post).toHaveBeenCalledTimes(2);
+    expect(container.querySelector('[role="status"]')?.textContent).toContain('Đã đánh dấu hoàn thành bài học!');
+    expect(shownAlerts(container)).toEqual([]);
+  });
+
+  it('vùng báo luôn có trong DOM (trống thì sr-only), đổi chữ trên cùng phần tử', async () => {
+    const { container } = await mount();
+    const status = container.querySelector('[role="status"]')!;
+    const alert = container.querySelector('[role="alert"]')!;
+    expect(status.className).toBe('sr-only');
+    expect(alert.className).toBe('sr-only');
+    click(todo(container)[0]!);
+    await flush(6);
+    expect(container.querySelector('[role="status"]')).toBe(status);
+    expect(status.textContent).toContain('Đã đánh dấu hoàn thành bài học!');
+    mocks.post.mockRejectedValue(new Error('Hết phiên'));
+    click(todo(container)[0]!);
+    await flush(6);
+    expect(container.querySelector('[role="alert"]')).toBe(alert);
+    expect(alert.textContent).toContain('Hết phiên');
   });
 });

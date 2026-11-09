@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FeedCategory } from '@tubutree/app-core/api/feed';
 import { byText, click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
@@ -180,5 +181,88 @@ describe('PostComposer', () => {
     expect(unlabeledFields(dlg())).toEqual([]);
     const small = smallTouchTargets(dlg()).filter((s) => !s.includes('stub-') && !s.includes('type="file"') && !s.includes('hidden'));
     expect(small).toEqual([]);
+  });
+});
+
+describe('PostComposer — khoá đồng bộ chống đăng hai bài, nút bận giữ focus', () => {
+  const fill = () => {
+    typeInto(titleInput(), 'Tiêu đề');
+    typeInto(bodyInput(), 'Nội dung');
+  };
+  // mutationFn chạy sau vài microtask: đếm lời gọi API phải đợi `flush`, nếu không ca "chỉ một lần" đậu suông.
+  const twice = async (el: HTMLElement) => {
+    act(() => {
+      el.click();
+      el.click();
+    });
+    await flush(2);
+  };
+  const sendingBtn = () => byText(dlg(), 'button', /^(Đăng|Đang đăng…)$/) as HTMLButtonElement;
+
+  it('chạm đúp "Đăng" cùng khung hình chỉ đăng MỘT bài; nút báo aria-busy, không disabled, giữ focus', async () => {
+    mocks.post.mockReturnValue(new Promise(() => {}));
+    mount();
+    fill();
+    submitBtn().focus();
+    await twice(submitBtn());
+    expect(mocks.post).toHaveBeenCalledTimes(1);
+    const b = sendingBtn();
+    expect(b.textContent).toBe('Đang đăng…');
+    expect(b.getAttribute('aria-busy')).toBe('true');
+    expect(b.getAttribute('aria-disabled')).toBe('true');
+    expect(b.disabled).toBe(false);
+    expect(document.activeElement).toBe(b);
+  });
+
+  it('đang đăng thì không đóng được khung (không có nút Đóng, Esc không đóng) để lỗi không rơi vào khung đã đóng', async () => {
+    mocks.post.mockReturnValue(new Promise(() => {}));
+    mount();
+    fill();
+    expect(dlg().querySelector('button[aria-label="Đóng"]')).not.toBeNull();
+    click(submitBtn());
+    await flush(2);
+    expect(dlg().querySelector('button[aria-label="Đóng"]')).toBeNull();
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('đăng xong: gọi onPosted đúng một lần, nội dung được xoá, nút về "Đăng" và khoá', async () => {
+    mount();
+    fill();
+    await twice(submitBtn());
+    expect(mocks.post).toHaveBeenCalledTimes(1);
+    expect(onPosted).toHaveBeenCalledTimes(1);
+    expect(bodyInput().value).toBe('');
+    expect(submitBtn().disabled).toBe(true);
+    expect(submitBtn().hasAttribute('aria-busy')).toBe(false);
+  });
+
+  it('lỗi nhả khoá: lỗi hiện trên cùng vùng alert, giữ nội dung, bấm lại đăng lần hai thành công', async () => {
+    mocks.post.mockRejectedValueOnce(new Error('Máy chủ bận'));
+    mount();
+    const alertBox = dlg().querySelector('[role="alert"]')!;
+    expect(alertBox.textContent).toBe('');
+    fill();
+    click(submitBtn());
+    await flush(4);
+    expect(dlg().querySelector('[role="alert"]')).toBe(alertBox);
+    expect(alertBox.textContent).toContain('Máy chủ bận');
+    expect(bodyInput().value).toBe('Nội dung');
+    expect(sendingBtn().hasAttribute('aria-busy')).toBe(false);
+    expect(dlg().querySelector('button[aria-label="Đóng"]')).not.toBeNull();
+    await twice(submitBtn());
+    expect(mocks.post).toHaveBeenCalledTimes(2);
+    expect(onPosted).toHaveBeenCalledTimes(1);
+  });
+
+  it('bài dự thi: chạm đúp cùng khung hình chỉ gửi MỘT bài kèm eventId', async () => {
+    mocks.post.mockReturnValue(new Promise(() => {}));
+    mount({ eventId: 'e1', eventTitle: 'Thi vườn xanh' });
+    typeInto(bodyInput(), 'Bài dự thi');
+    await twice(submitBtn());
+    expect(mocks.post).toHaveBeenCalledTimes(1);
+    expect(mocks.post.mock.calls[0]![1]).toMatchObject({ kind: 'SHOWCASE', eventId: 'e1' });
   });
 });

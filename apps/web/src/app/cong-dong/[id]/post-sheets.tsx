@@ -38,7 +38,14 @@ export function EditPostSheet({
       onClose={onClose}
       title="Sửa"
       footer={
-        <button type="button" disabled={saving || needsTitle || body.trim().length === 0} onClick={onSave} className={`${ui.btnPrimary} w-full`}>
+        <button
+          type="button"
+          disabled={needsTitle || body.trim().length === 0}
+          aria-busy={saving || undefined}
+          aria-disabled={saving || undefined}
+          onClick={onSave}
+          className={`${ui.btnPrimary} w-full`}
+        >
           {saving ? 'Đang lưu…' : 'Lưu'}
         </button>
       }
@@ -60,11 +67,7 @@ export function EditPostSheet({
           className={`${ui.field} min-h-28 py-2`}
         />
       </div>
-      {error && (
-        <p role="alert" className={`mt-3 ${ui.error}`}>
-          {error}
-        </p>
-      )}
+      <div role="alert">{error && <p className={`mt-3 ${ui.error}`}>{error}</p>}</div>
     </Sheet>
   );
 }
@@ -79,9 +82,10 @@ export function ConfirmDeleteSheet({ open, onClose, onConfirm, deleting }: { ope
         </button>
         <button
           type="button"
-          disabled={deleting}
+          aria-busy={deleting || undefined}
+          aria-disabled={deleting || undefined}
           onClick={onConfirm}
-          className="inline-flex min-h-11 w-full items-center justify-center rounded-control bg-danger-fg px-5 text-sm font-semibold text-stone-0 disabled:opacity-60"
+          className="inline-flex min-h-11 w-full items-center justify-center rounded-control bg-danger-fg px-5 text-sm font-semibold text-stone-0 aria-disabled:opacity-60"
         >
           {deleting ? 'Đang xoá…' : 'Xoá'}
         </button>
@@ -116,20 +120,17 @@ export function ReportSheet({
       footer={
         <button
           type="button"
-          disabled={sending}
+          aria-busy={sending || undefined}
+          aria-disabled={sending || undefined}
           onClick={onSubmit}
-          className="inline-flex min-h-11 w-full items-center justify-center rounded-control bg-danger-fg px-5 text-sm font-semibold text-stone-0 disabled:opacity-60"
+          className="inline-flex min-h-11 w-full items-center justify-center rounded-control bg-danger-fg px-5 text-sm font-semibold text-stone-0 aria-disabled:opacity-60"
         >
           {sending ? 'Đang gửi…' : 'Báo cáo'}
         </button>
       }
     >
       <textarea aria-label="Lý do báo cáo…" placeholder="Lý do báo cáo…" value={reason} maxLength={500} rows={3} onChange={(e) => onReason(e.target.value)} className={`${ui.field} mt-3 min-h-24 py-2`} />
-      {error && (
-        <p role="alert" className={`mt-3 ${ui.error}`}>
-          {error}
-        </p>
-      )}
+      <div role="alert">{error && <p className={`mt-3 ${ui.error}`}>{error}</p>}</div>
     </Sheet>
   );
 }

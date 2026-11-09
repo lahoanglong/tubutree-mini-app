@@ -64,6 +64,9 @@ function Advisor({ userId }: { userId: string }) {
   const endRef = useRef<HTMLDivElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
   useStickyBarOffset(barRef);
+  // Khoá đồng bộ: `pending` (useIsMutating) chỉ đúng sau lần vẽ kế, hai cú bấm gợi ý / Enter / Thử lại trong cùng khung hình đều thấy `pending` = false,
+  // đều ghi tin của khách vào hội thoại và đều gọi chat. Nhả khi xong hay lỗi.
+  const sendingRef = useRef(false);
 
   const chatM = useMutation({
     mutationKey: CHAT_MUTATION_KEY,
@@ -75,6 +78,9 @@ function Advisor({ userId }: { userId: string }) {
     onError: (e: unknown) => {
       notify(errText(e), 'error');
       appendAdvisorMessage(userId, { role: 'assistant', content: SORRY, failed: true });
+    },
+    onSettled: () => {
+      sendingRef.current = false;
     },
   });
 
@@ -89,7 +95,8 @@ function Advisor({ userId }: { userId: string }) {
 
   const send = (text: string) => {
     const t = text.trim();
-    if (!t || pending) return;
+    if (!t || pending || sendingRef.current) return;
+    sendingRef.current = true;
     appendAdvisorMessage(userId, { role: 'user', content: t });
     setDraft('');
     chatM.mutate({ text: t, history: toHistory(messages) });
@@ -98,7 +105,8 @@ function Advisor({ userId }: { userId: string }) {
   // Gửi lại đúng câu hỏi vừa lỗi: bỏ tin xin lỗi, giữ tin của khách (không nhân đôi), lịch sử là các lượt trước câu đó.
   const retry = (failedIndex: number) => {
     const question = messages[failedIndex - 1];
-    if (pending || question?.role !== 'user') return;
+    if (pending || sendingRef.current || question?.role !== 'user') return;
+    sendingRef.current = true;
     truncateAdvisorMessages(userId, failedIndex);
     chatM.mutate({ text: question.content, history: toHistory(messages.slice(0, failedIndex - 1)) });
   };
@@ -177,8 +185,15 @@ function Advisor({ userId }: { userId: string }) {
           rows={1}
           maxLength={500}
         />
-        {/* Không gộp isPending vào disabled: nút báo đang bận bằng aria-busy, bấm lại thì send() tự chặn. */}
-        <button type="button" className={`${ui.btnPrimary} max-md:px-8`} disabled={!draft.trim()} aria-busy={pending} onClick={() => send(draft)}>
+        {/* Không gộp isPending vào disabled (nút đang giữ focus mà disabled thì Chromium thả focus về body): nút báo bận bằng aria-busy + aria-disabled, bấm lại thì send() tự chặn. */}
+        <button
+          type="button"
+          className={`${ui.btnPrimary} max-md:px-8`}
+          disabled={!draft.trim()}
+          aria-busy={pending || undefined}
+          aria-disabled={pending || undefined}
+          onClick={() => send(draft)}
+        >
           Gửi
         </button>
       </div>

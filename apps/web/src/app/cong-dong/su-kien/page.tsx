@@ -156,7 +156,13 @@ function EventEntries({
           </div>
           {entriesQ.hasNextPage && (
             <div className="flex justify-center pt-1">
-              <button type="button" disabled={entriesQ.isFetchingNextPage} onClick={() => void entriesQ.fetchNextPage()} className={`${miniBtnSecondary} min-w-40`}>
+              <button
+                type="button"
+                aria-busy={entriesQ.isFetchingNextPage || undefined}
+                aria-disabled={entriesQ.isFetchingNextPage || undefined}
+                onClick={() => !entriesQ.isFetchingNextPage && void entriesQ.fetchNextPage()}
+                className={`${miniBtnSecondary} min-w-40`}
+              >
                 {entriesQ.isFetchingNextPage ? 'Đang tải…' : 'Xem thêm bài dự thi'}
               </button>
             </div>
@@ -208,11 +214,10 @@ export default function CommunityEventsPage() {
 
   return (
     <Shell>
-      {notice && (
-        <p role="status" className="rounded-control bg-forest-50 px-3 py-2 text-sm text-forest-800">
-          {notice}
-        </p>
-      )}
+      {/* Vùng live luôn có trong DOM (trống thì sr-only, không chiếm khoảng cách): chèn vùng live cùng lúc với chữ thì nhiều trình đọc không đọc. */}
+      <div role="status" className={notice ? 'rounded-control bg-forest-50 px-3 py-2 text-sm text-forest-800' : 'sr-only'}>
+        {notice}
+      </div>
       {selected ? (
         <EventEntries
           event={selected}
