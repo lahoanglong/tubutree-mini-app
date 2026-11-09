@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
@@ -210,6 +211,62 @@ describe('/thanh-toan — đua giữa kết quả đặt đơn và dữ liệu n
     expect(m.placeOrder.mock.calls[1]![1]).toBe(m.placeOrder.mock.calls[0]![1]);
     expect(r.container.textContent).toContain('Cảm ơn bạn đã chọn Tubu');
     expect(r.container.querySelector('a[href="/tai-khoan/don-hang"]')).not.toBeNull();
+  });
+
+  // W71B: "Kiểm tra lại" cũng gửi đơn nên dùng chung khoá đồng bộ với nút Đặt hàng (state `isPending` chỉ đúng sau lần vẽ kế).
+  const reachRecheck = async () => {
+    m.getCart.mockResolvedValue(cartOf('A'));
+    const r = await mount();
+    click(placeButton(r));
+    await flush(6);
+    m.getCart.mockResolvedValue(cartOf());
+    await qcRef.invalidateQueries({ queryKey: ['cart'] });
+    await flush(8);
+    expect(r.container.textContent).toContain('Đơn của bạn có thể đã được tạo');
+    return r;
+  };
+
+  it('Kiểm tra lại: hai cú bấm sát nhau chỉ gửi lại một lần; đang gửi nút aria-busy + aria-disabled, không `disabled` thật', async () => {
+    let resolve!: (o: unknown) => void;
+    m.placeOrder
+      .mockRejectedValueOnce(new NetworkError(false))
+      .mockReturnValueOnce(new Promise((res) => (resolve = res)));
+    const r = await reachRecheck();
+    const btn = byText(r.container, 'button', 'Kiểm tra lại') as HTMLButtonElement;
+    expect(btn.getAttribute('aria-busy')).toBeNull();
+    act(() => {
+      btn.click();
+      btn.click();
+    });
+    await flush(3);
+    expect(m.placeOrder).toHaveBeenCalledTimes(2);
+    const busy = byText(r.container, 'button', 'Đang kiểm tra…') as HTMLButtonElement;
+    expect(busy.getAttribute('aria-busy')).toBe('true');
+    expect(busy.getAttribute('aria-disabled')).toBe('true');
+    expect(busy.disabled).toBe(false);
+    click(busy);
+    await flush(2);
+    expect(m.placeOrder).toHaveBeenCalledTimes(2);
+    resolve({ id: 'o1', code: 'TT1', paymentMethod: 'COD', total: 130000 });
+    await flush(8);
+    expect(r.container.textContent).toContain('Cảm ơn bạn đã chọn Tubu');
+  });
+
+  it('Kiểm tra lại lỗi mạng lần nữa: nhả khoá, nút về "Kiểm tra lại" và bấm gửi lại được', async () => {
+    m.placeOrder
+      .mockRejectedValueOnce(new NetworkError(false))
+      .mockRejectedValueOnce(new NetworkError(false))
+      .mockResolvedValue({ id: 'o1', code: 'TT1', paymentMethod: 'COD', total: 130000 });
+    const r = await reachRecheck();
+    click(byText(r.container, 'button', 'Kiểm tra lại') as HTMLButtonElement);
+    await flush(6);
+    expect(m.placeOrder).toHaveBeenCalledTimes(2);
+    const again = byText(r.container, 'button', 'Kiểm tra lại') as HTMLButtonElement;
+    expect(again.getAttribute('aria-busy')).toBeNull();
+    click(again);
+    await flush(6);
+    expect(m.placeOrder).toHaveBeenCalledTimes(3);
+    expect(r.container.textContent).toContain('Cảm ơn bạn đã chọn Tubu');
   });
 
   it('Kiểm tra lại gặp 400 vì giỏ trống: hết cờ có thể đã tạo, quay về màn giỏ trống thường', async () => {

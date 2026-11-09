@@ -193,14 +193,18 @@ describe('/thanh-toan — thanh dính đáy', () => {
     expect(barButton(c).textContent).toBe('Đặt hàng');
   });
 
-  it('đang đặt hàng: nút trên thanh dính đổi chữ và khoá (không đặt đôi)', async () => {
+  it('đang đặt hàng: nút trên thanh dính đổi chữ và khoá (không đặt đôi), aria-busy + aria-disabled để giữ focus', async () => {
     let release!: () => void;
     state.placeGate = new Promise<void>((r) => (release = r));
     const c = await mount();
     click(barButton(c));
     await flush(3);
     expect(barButton(c).textContent).toBe('Đang đặt hàng…');
-    expect(barButton(c).disabled).toBe(true);
+    expect(barButton(c).getAttribute('aria-busy')).toBe('true');
+    expect(barButton(c).getAttribute('aria-disabled')).toBe('true');
+    expect(barButton(c).disabled).toBe(false);
+    click(barButton(c));
+    await flush(2);
     expect(state.placed).toHaveLength(1);
     release();
     await flush(6);

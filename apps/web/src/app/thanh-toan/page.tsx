@@ -296,6 +296,9 @@ export default function CheckoutPage() {
   const hasLineProblem = Object.keys(lineProblems).length > 0;
 
   const attempt = useRef<{ body: PlaceBody; key: string; rev: number } | null>(null);
+  // Khoá đồng bộ cho mọi đường gửi đơn: `place.isPending` chỉ đúng sau lần vẽ kế (React Query báo trạng thái qua setTimeout 0), hai cú bấm sát nhau vẫn đều thấy nút bật.
+  // Chỉ nhả khi lỗi để khách thử lại; đặt xong thì trang đã đổi sang màn thành công hoặc chuyển sang trang VietQR, không nhả để cú bấm muộn không tạo đơn thứ hai.
+  const placingRef = useRef(false);
   // Khách đã bấm "Cập nhật giá mới" sau lỗi giá đổi: báo tổng mới cho tới lần đặt kế tiếp.
   const [priceAccepted, setPriceAccepted] = useState(false);
   const place = useMutation({
@@ -363,6 +366,7 @@ export default function CheckoutPage() {
       if (isBank) router.replace(bankPaymentHref(order.code));
     },
     onError: (e) => {
+      placingRef.current = false;
       // 401/408/429 bị chặn trước khi vào nghiệp vụ nên không nói gì về đơn của lần trước: giữ đóng băng.
       const rejectedBeforeService = e instanceof ApiError && [401, 408, 429].includes(e.status);
       if (isOutcomeUnknown(e)) unknownAttempt.current ??= attempt.current;
@@ -395,6 +399,12 @@ export default function CheckoutPage() {
     },
   });
 
+  const startPlace = () => {
+    if (placingRef.current) return;
+    placingRef.current = true;
+    place.mutate();
+  };
+
   // Sửa nhanh dòng hết hàng/vượt tồn ngay tại màn: khách không rời trang nên các ô đã nhập còn nguyên. Đổi dòng là đổi lựa chọn của khách,
   // nên một lần đặt đang đóng băng (chưa rõ kết quả) không được phát lại nữa.
   const lineFix = useMutation({
@@ -402,7 +412,8 @@ export default function CheckoutPage() {
     // Chờ giỏ và báo giá về mới thôi bận: nút xoá còn bấm được trong lúc giỏ cũ còn hiện thì lần bấm hai gọi xoá dòng đã mất và nhận 404.
     onSuccess: async () => {
       bumpChoice();
-      place.reset();
+      // Đơn đang gửi thì không reset: reset làm `isPending` về false trong lúc `placingRef` còn khoá, nút hiện lại "Đặt hàng" mà bấm không ăn gì tới khi phản hồi về.
+      if (!placingRef.current) place.reset();
       await Promise.all([qc.invalidateQueries({ queryKey: ['cart'] }), qc.invalidateQueries({ queryKey: ['quote'] })]);
     },
     // Bị từ chối thường vì tồn vừa đổi: tải lại giỏ để nút "Giảm còn n" theo tồn mới.
@@ -422,7 +433,7 @@ export default function CheckoutPage() {
   };
 
   // Từ lg nút Đặt hàng nằm cuối khung "Đơn hàng", có thể ngoài màn khi khách đang điền form hoá đơn ở cột trái: đặt lỗi thì cuộn khối nút + lời báo vào màn
-  // (nearest: không giật trang nếu đã thấy; 64rem = breakpoint lg) và trả focus về nút, vì nút bị khoá lúc đang gửi nên mất focus. Dưới lg thanh dính đáy lo phần này, không cuộn trang.
+  // (nearest: không giật trang nếu đã thấy; 64rem = breakpoint lg) và trả focus về nút, vì nút có thể đang khoá thật (báo giá đang tải) hoặc khách đã chuyển focus đi trong lúc chờ. Dưới lg thanh dính đáy lo phần này, không cuộn trang.
   // Query-core chạy `onError` (tải lại báo giá/giỏ) TRƯỚC khi ghi trạng thái lỗi, nên lúc `isError` hiện ra nút thường còn khoá vì báo giá đang tải và `focus()` vào nút khoá không có tác dụng:
   // lỗi chỉ ghi một "yêu cầu focus", làm khi báo giá và giỏ tải xong. Xong mà nút vẫn khoá vì lý do khác thì bỏ yêu cầu, kẻo lúc khách sửa xong ô hoá đơn focus bị giật về nút.
   // Báo giá có thể về sau vài giây, lúc đó khách đã tab sang ô khác và đang gõ (ghi chú, hoá đơn, ô nhập mã giảm giá, ô tick Điểm Xanh nằm ngay trong khung "Đơn hàng"): giật focus về nút
@@ -507,7 +518,13 @@ export default function CheckoutPage() {
             Lần đặt trước chưa nhận được phản hồi và giỏ đã trống. Bấm Kiểm tra lại để hệ thống trả đúng đơn đó, không tạo thêm đơn.
           </p>
           <div className="mt-5 flex flex-wrap justify-center gap-3">
-            <button type="button" onClick={() => place.mutate()} disabled={place.isPending} className={ui.btnPrimary}>
+            <button
+              type="button"
+              onClick={startPlace}
+              aria-busy={place.isPending || undefined}
+              aria-disabled={place.isPending || undefined}
+              className={ui.btnPrimary}
+            >
               {place.isPending ? 'Đang kiểm tra…' : 'Kiểm tra lại'}
             </button>
             <Link href="/tai-khoan/don-hang" className={ui.btnSecondary}>
@@ -591,9 +608,9 @@ export default function CheckoutPage() {
     .map((m) => ({ ...m, hint: quote ? paymentUnavailableReason(m.k, quote, walletBalance) : null }));
   const paymentNote = quote && !zeroNote && payment === '' ? paymentMissingNote(quote, walletBalance) : null;
   // Thiếu địa chỉ hoặc ô hoá đơn thì nút vẫn bấm được: bấm để chỉ ra ô thiếu (lỗi ngay dưới ô, con trỏ nhảy tới). Chỉ những lý do
-  // không phải ô nhập (đang gửi, đang tính tiền, dòng cần sửa, chưa có cách thanh toán) mới khoá hẳn, và đã có chữ nói lý do.
-  const placeDisabled =
-    place.isPending || hasLineProblem || (!!addressId && (!quote || quoteStale || (!zeroNote && payment === '')));
+  // không phải ô nhập (đang tính tiền, dòng cần sửa, chưa có cách thanh toán) mới khoá hẳn, và đã có chữ nói lý do.
+  // Đang gửi thì nút `aria-busy` + `aria-disabled` chứ không `disabled`: nút khoá thật làm Chromium thả focus về body; `startPlace` đã chặn cú bấm lặp.
+  const placeDisabled = hasLineProblem || (!!addressId && (!quote || quoteStale || (!zeroNote && payment === '')));
   const onPlace = () => {
     if (formBlocked) {
       setPlaceAttempted(true);
@@ -601,7 +618,7 @@ export default function CheckoutPage() {
       setFocusTick((n) => n + 1);
       return;
     }
-    place.mutate();
+    startPlace();
   };
   const totalText = checkoutTotalText({ total: quote?.total ?? null, hasAddress: !!addressId }, formatVnd);
   // Lần đặt vừa rồi chưa rõ kết quả (mất mạng, quá thời gian, 5xx): nút nói rõ là gửi lại cùng đơn (cùng khoá, không tạo đơn trùng).
@@ -1073,6 +1090,8 @@ export default function CheckoutPage() {
             type="button"
             onClick={onPlace}
             disabled={placeDisabled}
+            aria-busy={place.isPending || undefined}
+            aria-disabled={place.isPending || undefined}
             className={`${ui.btnPrimary} mt-2 hidden w-full lg:inline-flex`}
           >
             {placeLabel}
@@ -1141,6 +1160,8 @@ export default function CheckoutPage() {
           type="button"
           onClick={onPlace}
           disabled={placeDisabled}
+          aria-busy={place.isPending || undefined}
+          aria-disabled={place.isPending || undefined}
           className={`${uiBar.primary} w-full`}
         >
           {placeLabel}
