@@ -26,7 +26,7 @@ $DC ps --format '{{.Service}} {{.State}}' </dev/null
 
 echo "== $(date '+%H:%M:%S') bước 6: backup"
 COMPOSE_FILE=docker-compose.vietnix.yml POSTGRES_USER=$PGUSER POSTGRES_DB=$PGDB bash tools/backup/backup-db.sh </dev/null 2>&1 | tail -4
-DUMP=$(ls -t /var/backups/tubutree/tubutree_*.sql.gz | head -1)
+DUMP=$(ls -t /var/backups/tubutree/tubutree_*.sql.gz | sed -n 1p)
 echo "$DUMP" | tee .rollback-dump
 ls -lh "$DUMP"; gunzip -t "$DUMP"; echo "gunzip OK"
 BEFORE=$(psqlq -tAc "SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL" </dev/null)
