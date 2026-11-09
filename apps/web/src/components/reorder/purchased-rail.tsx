@@ -15,7 +15,6 @@ import { useCartKey } from '@/lib/cart-key';
 import { homeText, reorderText } from '@/lib/home-text';
 import { browserStorage } from '@/lib/recently-viewed';
 import { getCart } from '@/lib/shop-client';
-import { ui } from '@/lib/guest-ui';
 import { usePublicConfig } from '@/lib/use-public-config';
 import { useActiveFlashSales, useRunningFlash } from '@/lib/use-flash-sales';
 import { productHref } from '@/lib/product-href';
@@ -256,16 +255,10 @@ export function PurchasedRail({ source = 'orders_tab', restoring = false, exclud
   const refreshError = q.isError && (
     <div className="mb-2 flex items-center justify-between gap-3">
       <p className="min-w-0 text-sm text-stone-700">{homeErrorMessage(q.error)}</p>
-      <button
-        type="button"
-        disabled={q.isFetching}
-        aria-busy={q.isFetching || undefined}
-        aria-label={homeText.retryLabel(reorderText.railTitle)}
-        onClick={() => void q.refetch()}
-        className={`${ui.btnSecondary} flex-none`}
-      >
+      {/* Như Mini App: `Button` giữ focus khi đang tải (aria-busy, không disabled thật) và khoá đồng bộ theo Promise của `refetch`, nên hai cú bấm sát nhau chỉ tải lại một lần. */}
+      <Button variant="secondary" loading={q.isFetching} aria-label={homeText.retryLabel(reorderText.railTitle)} onPress={() => q.refetch()} className="flex-none">
         {homeText.retry}
-      </button>
+      </Button>
     </div>
   );
 

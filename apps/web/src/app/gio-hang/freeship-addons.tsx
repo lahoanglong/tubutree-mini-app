@@ -1,16 +1,19 @@
 'use client';
 
-import { useRef } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import type { ProductCard } from '@tubutree/app-core/api/catalog';
 import { pickFreeshipAddons } from '@tubutree/app-core/commerce/freeship-progress';
 import { homeBestSellerQuery } from '@tubutree/app-core/queries/home';
 import { FreeshipAddonRail, type FreeshipAddonItem } from '@/components/mini';
-import { cartKey } from '@/lib/cart-key';
+import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { coreHttp } from '@/lib/core-http';
 import { actionErrorText } from '@/lib/error-text';
 import { addToCart } from '@/lib/shop-client';
 import { useCardPricing } from '@/lib/use-card-pricing';
+import { useCartWrite } from '@/lib/use-cart-write';
+
+const ADD_KEY = ['freeship-add'] as const;
 
 interface Candidate extends FreeshipAddonItem {
   inStock: boolean;
@@ -30,26 +33,26 @@ export interface FreeshipAddonsProps {
  * (giá Giờ vàng, combo và mã giảm giá tính lại ở đó nên không cập nhật trước), món mới tự được chọn vì giỏ chỉ nhớ tập món ĐÃ BỎ chọn.
  */
 export function FreeshipAddons({ remaining, lines }: FreeshipAddonsProps) {
-  const qc = useQueryClient();
   const best = useQuery({ ...homeBestSellerQuery(coreHttp), staleTime: 60_000, retry: false });
   const pricing = useCardPricing();
-  const add = useMutation({
-    mutationFn: (item: FreeshipAddonItem) => addToCart(item.variationId, 1),
-    onSuccess: (cart) => qc.setQueryData(cartKey(), cart),
-  });
-
-  // Khoá đồng bộ: `isPending` chỉ đổi sau khi React vẽ lại, nên hai cú chạm sát nhau trước đó sẽ gửi hai lệnh thêm (cùng món thì số lượng 2). Mỗi lúc chỉ một lệnh: giỏ trả về nguyên bản mới, hai lệnh chồng nhau thì phản hồi về sau ghi đè.
-  const inFlight = useRef(false);
-  const handleAdd = (item: FreeshipAddonItem) => {
-    if (inFlight.current) return;
-    inFlight.current = true;
-    void add
-      .mutateAsync(item)
-      .catch(() => undefined)
-      .finally(() => {
-        inFlight.current = false;
-      });
-  };
+  // Lỗi nhớ riêng (không đọc `mutation.error`): lỗi của món bay trước sẽ mất nếu lệnh sau cùng thuộc món khác và thành công.
+  const [error, setError] = useState<{ value: unknown } | null>(null);
+  const cartWrite = useCartWrite(ADD_KEY);
+  // Khoá đồng bộ THEO MÓN như Mini App: `isPending` chỉ đổi sau lần vẽ kế nên hai cú chạm sát nhau vào CÙNG một món sẽ thêm hai lần, còn chạm món khác vẫn đi ngay, không bị nuốt.
+  const add = useLockedMutation(
+    {
+      mutationKey: ADD_KEY,
+      mutationFn: (item: FreeshipAddonItem) => addToCart(item.variationId, 1),
+      onMutate: () => {
+        setError(null);
+        cartWrite.began();
+      },
+      onSuccess: cartWrite.write,
+      onError: (e) => setError({ value: e }),
+      onSettled: cartWrite.settled,
+    },
+    (item) => item.slug,
+  );
 
   // Không bọc `useMemo`: giá và phân loại phụ thuộc kho Giờ vàng và đồng hồ (đọc trong `pricing`), nên Giờ vàng hết hạn phải tính lại ngay, không giữ giá cũ.
   const picked = (() => {
@@ -70,10 +73,10 @@ export function FreeshipAddons({ remaining, lines }: FreeshipAddonsProps) {
   if (picked.length === 0) return null;
   return (
     <>
-      <FreeshipAddonRail items={picked} busySlug={add.isPending ? add.variables?.slug : null} onAdd={handleAdd} />
-      {add.isError && (
+      <FreeshipAddonRail items={picked} busySlug={add.isPending ? add.variables?.slug : null} onAdd={(item) => add.mutate(item)} />
+      {error && (
         <p role="alert" className="mt-2 text-caption text-danger-fg">
-          {actionErrorText(add.error)}
+          {actionErrorText(error.value)}
         </p>
       )}
     </>

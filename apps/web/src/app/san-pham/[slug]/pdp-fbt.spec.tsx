@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProductCard } from '@tubutree/app-core/api/catalog';
 import { ApiError } from '@/lib/client-api';
@@ -244,6 +245,36 @@ describe('PdpFbt (web): thêm cả bộ', () => {
     click(addBtn(c));
     await flush(6);
     expect(status(c).textContent).toBe('Chưa thêm được vào giỏ. Bạn thử lại nhé.');
+  });
+
+  it('lỗi là role=alert (đọc ngay) nằm trong vùng báo có sẵn; thành công chỉ là role=status, không có alert', async () => {
+    mocks.addAll.mockRejectedValueOnce(new ApiError('Sản phẩm Món 1 đã hết hàng', 400));
+    const c = await mount();
+    const region = status(c);
+    click(addBtn(c));
+    await flush(6);
+    expect(status(c)).toBe(region);
+    expect(region.querySelector('[role="alert"]')?.textContent).toContain('Sản phẩm Món 1 đã hết hàng');
+    click(addBtn(c));
+    await flush(6);
+    expect(region.textContent).toContain('Đã thêm 3 món vào giỏ');
+    expect(region.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it('bấm "Thêm" hai lần trong cùng một act: chỉ MỘT lệnh lô; nút báo aria-busy, giữ focus, không disabled thật', async () => {
+    mocks.addAll.mockImplementation(() => new Promise(() => undefined));
+    const c = await mount();
+    const btn = addBtn(c);
+    btn.focus();
+    act(() => {
+      btn.click();
+      btn.click();
+    });
+    await flush(2);
+    expect(mocks.addAll).toHaveBeenCalledTimes(1);
+    expect(btn.getAttribute('aria-busy')).toBe('true');
+    expect(btn.disabled).toBe(false);
+    expect(document.activeElement).toBe(btn);
   });
 
   it('khách chưa đăng nhập: sang đăng nhập kèm đường quay lại trang sản phẩm, chưa ghi gì vào giỏ', async () => {

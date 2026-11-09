@@ -69,6 +69,8 @@ export function useBundleAdd() {
       mutation.mutate(v);
     },
     busyId: mutation.isPending ? mutation.variables?.id : undefined,
+    /** Đọc khoá đồng bộ: đúng ngay trong cú bấm, khác `busyId` chỉ đúng sau lần vẽ kế. Để nơi có thêm đường thêm giỏ khác (dải Mua lại món quen) khoá chéo. */
+    isBusy: () => inflight.current,
     result,
   };
 }

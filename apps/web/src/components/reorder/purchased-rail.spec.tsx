@@ -184,6 +184,73 @@ describe('PurchasedRail', () => {
       expect(mounted.container.textContent).toContain('Nước rửa chén');
     });
 
+    it('"Thử lại" ở dòng báo nhẹ: hai cú bấm trong cùng một act chỉ tải lại MỘT lần; nút giữ focus và báo aria-busy + aria-disabled (không disabled thật); xong thì dòng báo mất', async () => {
+      const client = newTestClient();
+      mounted = render(
+        <QueryClientProvider client={client}>
+          <PurchasedRail />
+        </QueryClientProvider>,
+      );
+      await flush(8);
+      rail = async () => {
+        throw new ApiError('Máy chủ đang bận', 503);
+      };
+      await act(async () => {
+        await client.refetchQueries({ queryKey: ['purchased-items', 10] });
+      });
+      await flush(4);
+      let release!: (v: unknown) => void;
+      let fetches = 0;
+      rail = () => {
+        fetches += 1;
+        return new Promise((r) => (release = r));
+      };
+      const retry = () => mounted!.container.querySelector<HTMLButtonElement>('button[aria-label="Thử lại Mua lại"]')!;
+      retry().focus();
+      act(() => {
+        retry().click();
+        retry().click();
+      });
+      await flush(2);
+      expect(fetches).toBe(1);
+      expect(retry().className).toContain('zaui-btn-secondary');
+      expect(retry().disabled).toBe(false);
+      expect(retry().getAttribute('aria-busy')).toBe('true');
+      expect(retry().getAttribute('aria-disabled')).toBe('true');
+      expect(document.activeElement).toBe(retry());
+      await act(async () => release({ items: [ITEM], nextCursor: null }));
+      await flush(6);
+      expect(mounted.container.querySelector('button[aria-label="Thử lại Mua lại"]')).toBeNull();
+      expect(mounted.container.textContent).not.toContain('Máy chủ đang bận');
+    });
+
+    it('"Thử lại" lỗi lần nữa: nút mở khoá để bấm tiếp, lần bấm sau tải lại thêm một lần', async () => {
+      const client = newTestClient();
+      mounted = render(
+        <QueryClientProvider client={client}>
+          <PurchasedRail />
+        </QueryClientProvider>,
+      );
+      await flush(8);
+      let fetches = 0;
+      rail = async () => {
+        fetches += 1;
+        throw new ApiError('Máy chủ đang bận', 503);
+      };
+      await act(async () => {
+        await client.refetchQueries({ queryKey: ['purchased-items', 10] });
+      });
+      await flush(4);
+      const retry = () => mounted!.container.querySelector<HTMLButtonElement>('button[aria-label="Thử lại Mua lại"]')!;
+      click(retry());
+      await flush(6);
+      expect(fetches).toBe(2);
+      expect(retry().hasAttribute('aria-busy')).toBe(false);
+      click(retry());
+      await flush(6);
+      expect(fetches).toBe(3);
+    });
+
     it('lỗi ở lần tải đầu (chưa có gì để giữ): hiện khối lỗi "Thử lại"; API cũ 404 thì vẫn ẩn', async () => {
       rail = async () => {
         throw new ApiError('Máy chủ đang bận', 503);

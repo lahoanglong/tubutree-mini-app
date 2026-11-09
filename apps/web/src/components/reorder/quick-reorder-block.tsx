@@ -31,6 +31,9 @@ export function QuickReorderBlock({ items }: { items: readonly QuickReorderItem[
   const quick = useQuickAdd('repurchase');
   const bundle = useBundleAdd();
   const busyAll = bundle.busyId === ADD_ALL_ID;
+  // Khoá chéo đồng bộ giữa hai đường thêm: `quick.busyId` và `busyAll` chỉ đúng sau lần vẽ kế nên hai cú bấm khác nút trong cùng khung hình sẽ bay hai lệnh.
+  // "+ Thêm" tự chặn "+ Thêm" khác bằng cờ của `useQuickAdd`, còn lệnh lô chặn bằng `bundle.isBusy`; `oneInFlight` là phần "+ Thêm đang bay" cho lệnh lô đọc.
+  const oneInFlight = useRef(false);
 
   // `notify` đổi danh tính mỗi lần vẽ: giữ ở ref để effect chỉ chạy khi lệnh lô có kết quả mới.
   const notifyRef = useRef(quick.notify);
@@ -47,11 +50,14 @@ export function QuickReorderBlock({ items }: { items: readonly QuickReorderItem[
         busyKey={quick.busyId}
         busyAll={busyAll}
         onAdd={(item) => {
-          if (busyAll) return;
-          void quick.addVariation(item.variationId, { origin: addButtonOf(item.variationId) });
+          if (bundle.isBusy()) return;
+          oneInFlight.current = true;
+          void quick.addVariation(item.variationId, { origin: addButtonOf(item.variationId) }).finally(() => {
+            oneInFlight.current = false;
+          });
         }}
         onAddAll={() => {
-          if (quick.busyId !== null) return;
+          if (oneInFlight.current) return;
           bundle.add({
             id: ADD_ALL_ID,
             lines: quickReorderLines(items),
