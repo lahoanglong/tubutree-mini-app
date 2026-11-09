@@ -22,6 +22,7 @@ const defer = (): Deferred & { promise: Promise<unknown> } => {
 
 const state = vi.hoisted(() => ({
   cart: null as unknown,
+  gate: null as null | Promise<unknown>,
   updates: [] as { id: string; q: number }[],
   removed: [] as string[],
   added: [] as { variationId: string; quantity: number }[],
@@ -33,7 +34,10 @@ vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: { id: 'u' }, stat
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }), usePathname: () => '/gio-hang' }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/shop-client')>()),
-  getCart: async () => state.cart,
+  getCart: async () => {
+    if (state.gate) await state.gate;
+    return state.cart;
+  },
   getMyCoupons: async () => [],
   getCouponPreviews: async () => [],
   getCartSelection: async () => {
@@ -99,6 +103,7 @@ beforeEach(() => {
   state.removed = [];
   state.added = [];
   deferred = [];
+  state.gate = null;
   state.cart = cartOf([line({})]);
   state.update = async () => state.cart;
   state.remove = async () => state.cart;
@@ -277,6 +282,84 @@ describe('/gio-hang — khoá đồng bộ tăng/giảm số lượng của dòn
     const alerts = [...container.querySelectorAll('[data-testid="cart-line"]')].map((l) => l.querySelector('[role="alert"]')?.textContent ?? null);
     expect(alerts[0]).toContain('Dầu gội hết suất');
     expect(alerts[1]).toBeNull();
+  });
+
+  // Phản hồi chồng nhau thì giỏ hiện đang cũ cho tới khi lần tải lại về: khoá của dòng phải giữ tới lúc đó, không thì "+" gửi số lượng tính từ giỏ cũ.
+  describe('giỏ đang tải lại sau lệnh chồng nhau (lần tải lại bị giữ)', () => {
+    const overlapAndHoldReload = async () => {
+      state.cart = cartOf([line({}), line(LINE_B)]);
+      state.update = hold;
+      const r = await mount();
+      click(plusA(r.container));
+      await flush(2);
+      click(plusB(r.container));
+      await flush(2);
+      const final = cartOf([line({ quantity: 3, total: 450000 }), line({ ...LINE_B, quantity: 3, total: 450000 })]);
+      state.cart = final;
+      const gate = defer();
+      state.gate = gate.promise;
+      return { ...r, final, gate };
+    };
+    const qtyOf = (c: HTMLElement, i: number) => c.querySelectorAll('[data-testid="cart-line"]')[i]!.querySelector('[aria-live="polite"]')!.textContent;
+
+    it('dòng hoàn tất SAU CÙNG vẫn khoá và báo aria-busy tới khi giỏ mới về; về rồi "+" gửi số lượng tính từ giỏ mới', async () => {
+      const { container, final, gate } = await overlapAndHoldReload();
+      await act(async () => deferred[1]!.resolve(final));
+      await act(async () => deferred[0]!.resolve(final));
+      await flush(4);
+      expect(qtyOf(container, 0)).toBe('2');
+      click(plusA(container));
+      await flush(4);
+      expect(state.updates).toEqual([{ id: 'i1', q: 3 }, { id: 'i2', q: 3 }]);
+      expect(plusA(container).getAttribute('aria-busy')).toBe('true');
+      await act(async () => gate.resolve(undefined));
+      await flush(6);
+      expect(qtyOf(container, 0)).toBe('3');
+      expect(plusA(container).getAttribute('aria-busy')).toBeNull();
+      state.update = async () => state.cart;
+      click(plusA(container));
+      await flush(4);
+      expect(state.updates[2]).toEqual({ id: 'i1', q: 4 });
+    });
+
+    it('dòng hoàn tất TRƯỚC (lần tải lại của nó bị lần sau huỷ) cũng khoá tới khi giỏ mới về', async () => {
+      const { container, final, gate } = await overlapAndHoldReload();
+      await act(async () => deferred[0]!.resolve(final));
+      await act(async () => deferred[1]!.resolve(final));
+      await flush(4);
+      click(plusA(container));
+      await flush(4);
+      expect(state.updates).toEqual([{ id: 'i1', q: 3 }, { id: 'i2', q: 3 }]);
+      expect(plusA(container).getAttribute('aria-busy')).toBe('true');
+      await act(async () => gate.resolve(undefined));
+      await flush(6);
+      expect(plusA(container).getAttribute('aria-busy')).toBeNull();
+    });
+
+    it('xoá dòng chồng với đổi số lượng dòng khác: tải lại giữ thì bấm "+" ở dòng vừa xoá không gửi lệnh lên một mã đã mất', async () => {
+      state.cart = cartOf([line({}), line(LINE_B)]);
+      state.update = hold;
+      state.remove = hold;
+      const { container } = await mount();
+      click(plusB(container));
+      await flush(2);
+      click(trashA(container));
+      await flush(2);
+      const after = cartOf([line({ ...LINE_B, quantity: 3, total: 450000 })]);
+      state.cart = after;
+      const gate = defer();
+      state.gate = gate.promise;
+      await act(async () => deferred[0]!.resolve(after));
+      await act(async () => deferred[1]!.resolve(after));
+      await flush(4);
+      click(plusA(container));
+      await flush(4);
+      expect(state.updates).toEqual([{ id: 'i2', q: 3 }]);
+      await act(async () => gate.resolve(undefined));
+      await flush(6);
+      expect(container.querySelectorAll('[data-testid="cart-line"]')).toHaveLength(1);
+      expect(undoButton(container)).toBeTruthy();
+    });
   });
 });
 

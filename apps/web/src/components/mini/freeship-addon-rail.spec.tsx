@@ -44,6 +44,24 @@ describe('FreeshipAddonRail (web)', () => {
     expect(adds(container)[1]!.querySelector('.zaui-btn-loading-icon')).toBeNull();
   });
 
+  it('busySlug nhận danh sách: mọi món trong danh sách báo bận, món ngoài danh sách không, thẻ gốc aria-busy', () => {
+    const { container } = mount(<FreeshipAddonRail items={[item('a'), item('b'), item('c')]} busySlug={['a', 'c']} onAdd={vi.fn()} />);
+    expect(adds(container).map((b) => b.getAttribute('aria-busy'))).toEqual(['true', null, 'true']);
+    expect(adds(container).map((b) => b.getAttribute('aria-disabled'))).toEqual(['true', null, 'true']);
+    expect(container.querySelector('[data-testid="freeship-addons"]')!.getAttribute('aria-busy')).toBe('true');
+  });
+
+  it('busySlug dạng chuỗi so khớp NGUYÊN mã: "ab" không làm món "a" báo bận', () => {
+    const { container } = mount(<FreeshipAddonRail items={[item('a'), item('ab')]} busySlug="ab" onAdd={vi.fn()} />);
+    expect(adds(container).map((b) => b.getAttribute('aria-busy'))).toEqual([null, 'true']);
+  });
+
+  it('busySlug là danh sách rỗng: không món nào báo bận, thẻ gốc không aria-busy', () => {
+    const { container } = mount(<FreeshipAddonRail items={[item('a'), item('b')]} busySlug={[]} onAdd={vi.fn()} />);
+    expect(adds(container).map((b) => b.getAttribute('aria-busy'))).toEqual([null, null]);
+    expect(container.querySelector('[data-testid="freeship-addons"]')!.getAttribute('aria-busy')).toBeNull();
+  });
+
   it('thẻ gốc là <section> có tên "Gợi ý mua thêm…"; aria-busy khi có món đang thêm, không có khi rảnh', () => {
     const idle = mount(<FreeshipAddonRail items={[item('a'), item('b')]} onAdd={vi.fn()} />);
     const root = idle.container.querySelector('[data-testid="freeship-addons"]')!;

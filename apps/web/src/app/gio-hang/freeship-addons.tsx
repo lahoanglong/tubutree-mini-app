@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutationState, useQuery } from '@tanstack/react-query';
 import type { ProductCard } from '@tubutree/app-core/api/catalog';
 import { pickFreeshipAddons } from '@tubutree/app-core/commerce/freeship-progress';
 import { homeBestSellerQuery } from '@tubutree/app-core/queries/home';
@@ -47,12 +47,15 @@ export function FreeshipAddons({ remaining, lines }: FreeshipAddonsProps) {
         setError(null);
         cartWrite.began();
       },
+      // `write` trả lời hứa tải lại giỏ khi có lệnh chồng: món còn bị khoá (và còn báo bận) tới khi giỏ mới về, không thì chạm lần hai thêm món đã vào giỏ.
       onSuccess: cartWrite.write,
       onError: (e) => setError({ value: e }),
       onSettled: cartWrite.settled,
     },
     (item) => item.slug,
   );
+  // Mọi món đang bay (không chỉ lệnh sau cùng): nút của đúng các món đó báo bận, vì khoá theo món nuốt cú chạm vào chúng.
+  const busySlugs = useMutationState({ filters: { mutationKey: ADD_KEY, status: 'pending' }, select: (m) => (m.state.variables as FreeshipAddonItem).slug });
 
   // Không bọc `useMemo`: giá và phân loại phụ thuộc kho Giờ vàng và đồng hồ (đọc trong `pricing`), nên Giờ vàng hết hạn phải tính lại ngay, không giữ giá cũ.
   const picked = (() => {
@@ -73,7 +76,7 @@ export function FreeshipAddons({ remaining, lines }: FreeshipAddonsProps) {
   if (picked.length === 0) return null;
   return (
     <>
-      <FreeshipAddonRail items={picked} busySlug={add.isPending ? add.variables?.slug : null} onAdd={(item) => add.mutate(item)} />
+      <FreeshipAddonRail items={picked} busySlug={busySlugs} onAdd={(item) => add.mutate(item)} />
       {error && (
         <p role="alert" className="mt-2 text-caption text-danger-fg">
           {actionErrorText(error.value)}

@@ -6,6 +6,7 @@ import { click, flush, render, type Rendered } from '@/test-utils/dom';
 // Thanh Miễn phí giao hàng và dải món bù đơn ở ĐẦU Giỏ (W42A). shop-client và core-http là bản giả; thanh, dải, query và mutation là bản thật.
 const state = vi.hoisted(() => ({
   cart: null as unknown,
+  gate: null as null | Promise<unknown>,
   best: null as unknown,
   bestError: false,
   add: null as null | ((variationId: string, qty: number) => Promise<unknown>),
@@ -28,7 +29,10 @@ vi.mock('@/lib/core-http', () => ({
 }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/shop-client')>()),
-  getCart: async () => state.cart,
+  getCart: async () => {
+    if (state.gate) await state.gate;
+    return state.cart;
+  },
   getMyCoupons: async () => [],
   getCouponPreviews: async () => [],
   addToCart: (variationId: string, qty: number) => {
@@ -69,6 +73,7 @@ beforeEach(() => {
   state.cart = cartOf([line()]);
   state.best = BEST;
   state.bestError = false;
+  state.gate = null;
   state.addCalls = [];
   state.push.mockClear();
   state.add = async () => state.cart;
@@ -217,6 +222,69 @@ describe('/gio-hang — thanh Miễn phí giao hàng + dải món bù đơn (W42
     click(qa(c, 'freeship-add')[0]!);
     await flush(6);
     expect(qa(c, 'cart-line')).toHaveLength(2);
+  });
+
+  describe('giỏ đang tải lại sau lệnh chồng nhau (lần tải lại bị giữ)', () => {
+    const lineC = () => line({ id: 'i2', slug: 'c', variationId: 'v-c', productName: 'Món c', unitPrice: 230000, total: 230000 });
+    const lineA = () => line({ id: 'i3', slug: 'a', variationId: 'v-a', productName: 'Món a', unitPrice: 50000, total: 50000 });
+    const overlapAndHoldReload = async () => {
+      const calls: ((v: unknown) => void)[] = [];
+      state.add = () => new Promise((r) => calls.push(r));
+      const c = await mount();
+      click(qa(c, 'freeship-add')[0]!);
+      await flush(2);
+      click(qa(c, 'freeship-add')[1]!);
+      await flush(2);
+      const after = cartOf([line(), lineC(), lineA()]);
+      state.cart = after;
+      let open!: () => void;
+      state.gate = new Promise((r) => {
+        open = () => r(undefined);
+      });
+      return { c, calls, after, open };
+    };
+    const addBtn = (c: ParentNode, slug: string) => qa(c, 'freeship-addon').find((e) => e.dataset.slug === slug)!.querySelector<HTMLElement>('[data-testid="freeship-add"]')!;
+
+    it('món hoàn tất SAU CÙNG: chạm lại món đó khi giỏ mới chưa về không thêm lần hai; giỏ về thì món rời dải', async () => {
+      const { c, calls, after, open } = await overlapAndHoldReload();
+      await act(async () => calls[0]!(after));
+      await act(async () => calls[1]!(after));
+      await flush(4);
+      expect(slugs(c)).toContain('c');
+      click(addBtn(c, 'c'));
+      await flush(4);
+      expect(state.addCalls).toEqual([['v-c', 1], ['v-a', 1]]);
+      await act(async () => open());
+      await flush(6);
+      expect(slugs(c)).not.toContain('c');
+      expect(qa(c, 'cart-line')).toHaveLength(3);
+    });
+
+    it('món hoàn tất TRƯỚC (lần tải lại của nó bị lần sau huỷ): chạm lại cũng không thêm lần hai', async () => {
+      const { c, calls, after, open } = await overlapAndHoldReload();
+      await act(async () => calls[1]!(after));
+      await act(async () => calls[0]!(after));
+      await flush(4);
+      click(addBtn(c, 'a'));
+      await flush(4);
+      expect(state.addCalls).toEqual([['v-c', 1], ['v-a', 1]]);
+      await act(async () => open());
+      await flush(6);
+      expect(slugs(c)).not.toContain('a');
+    });
+
+    it('hai món cùng bay: CẢ HAI nút báo aria-busy (không chỉ lệnh sau cùng), khoá nuốt cú chạm nên nút phải nói đang bận', async () => {
+      state.add = () => new Promise(() => undefined);
+      const c = await mount();
+      click(addBtn(c, 'c'));
+      await flush(2);
+      click(addBtn(c, 'a'));
+      await flush(2);
+      expect(addBtn(c, 'c').getAttribute('aria-busy')).toBe('true');
+      expect(addBtn(c, 'a').getAttribute('aria-busy')).toBe('true');
+      expect(addBtn(c, 'b').getAttribute('aria-busy')).toBeNull();
+      expect(q(c, 'freeship-addons')!.getAttribute('aria-busy')).toBe('true');
+    });
   });
 
   it('lỗi của món bay trước vẫn hiện dù lệnh sau cùng (món khác) thành công: lỗi không phụ thuộc lệnh sau cùng', async () => {

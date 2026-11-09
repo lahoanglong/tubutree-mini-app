@@ -119,12 +119,14 @@ export default function CartPage() {
       },
       // Thanh hoàn tác dựng ở đây chứ không ở callback riêng của `mutate()`: callback riêng chỉ chạy cho lệnh sau cùng, nên chạm dòng khác lúc lệnh xoá còn bay sẽ làm mất thanh.
       // Thanh chỉ mở sau khi máy chủ xoá xong: hoàn tác (thêm lại) không được vượt mặt lệnh xoá còn đang bay.
+      // Trả lời hứa tải lại giỏ (khi có lệnh chồng): lệnh còn "đang bay", khoá dòng còn giữ, tới khi giỏ mới về.
       onSuccess: (data, v) => {
-        cartWrite.write(data);
+        const refreshed = cartWrite.write(data);
         if (v.op === 'remove' && v.line) {
           setUndoError(null);
           setRemovedLine(v.line);
         }
+        return refreshed;
       },
       onError: (error, v) => setLineErrors((prev) => new Map(prev).set(v.id, error)),
       onSettled: cartWrite.settled,

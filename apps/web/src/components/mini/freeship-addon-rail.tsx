@@ -23,8 +23,8 @@ export interface FreeshipAddonItem {
 
 export interface FreeshipAddonRailProps {
   items: readonly FreeshipAddonItem[];
-  /** Món đang được thêm: nút khoá và báo bận để bấm liên tiếp không tạo hai lệnh. */
-  busySlug?: string | null;
+  /** Món đang được thêm: nút khoá và báo bận để bấm liên tiếp không tạo hai lệnh. Web cho nhiều món bay cùng lúc nên nhận cả danh sách. */
+  busySlug?: string | readonly string[] | null;
   onAdd: (item: FreeshipAddonItem) => void;
 }
 
@@ -35,14 +35,15 @@ export interface FreeshipAddonRailProps {
 export function FreeshipAddonRail({ items, busySlug = null, onAdd }: FreeshipAddonRailProps) {
   if (items.length === 0) return null;
   const title = fillCopy('freeship.addonsTitle');
+  const busySlugs = typeof busySlug === 'string' ? [busySlug] : (busySlug ?? []);
   return (
-    <section data-testid="freeship-addons" aria-label={title} aria-busy={busySlug !== null || undefined} className="tubu-addon">
+    <section data-testid="freeship-addons" aria-label={title} aria-busy={busySlugs.length > 0 || undefined} className="tubu-addon">
       <div className="tubu-addon-head">
         <SectionTitle block>{title}</SectionTitle>
       </div>
       <ScrollRow label={title} arrows className="tubu-addon-row">
         {items.map((it) => {
-          const busy = busySlug === it.slug;
+          const busy = busySlugs.includes(it.slug);
           const deal = typeof it.compareAt === 'number' && it.compareAt > it.price;
           return (
             <div key={it.slug} data-testid="freeship-addon" data-slug={it.slug} className="tubu-addon-card">
