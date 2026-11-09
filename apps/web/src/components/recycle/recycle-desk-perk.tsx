@@ -36,6 +36,7 @@ export function WasteDeskPerk({ point }: { point: WasteDeskPointDTO }) {
       void qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.desk });
     },
   });
+  const busy = submit.isPending;
 
   const cashProblem = findCashWording(text) !== null;
 
@@ -58,6 +59,7 @@ export function WasteDeskPerk({ point }: { point: WasteDeskPointDTO }) {
             type="button"
             className={skin.btnSecondary}
             onClick={() => {
+              if (open || busy) return;
               setText(point.perkPendingText ?? point.perkText ?? '');
               setSent(false);
               submit.reset();
@@ -70,14 +72,22 @@ export function WasteDeskPerk({ point }: { point: WasteDeskPointDTO }) {
       )}
       <Sheet
         open={open}
-        onClose={() => setOpen(false)}
+        dismissible={!busy}
+        onClose={() => {
+          if (!busy) setOpen(false);
+        }}
         title={PERK_TITLE}
         footer={
           <button
             type="button"
             className={`${ui.btnPrimary} w-full`}
-            disabled={text.trim() === '' || cashProblem || submit.isPending}
-            onClick={() => submit.mutate(text)}
+            disabled={text.trim() === '' || cashProblem}
+            aria-disabled={busy || undefined}
+            aria-busy={busy || undefined}
+            onClick={() => {
+              if (busy || text.trim() === '' || cashProblem) return;
+              submit.mutate(text);
+            }}
           >
             Gửi duyệt
           </button>
@@ -85,7 +95,17 @@ export function WasteDeskPerk({ point }: { point: WasteDeskPointDTO }) {
       >
         <div className="flex flex-col gap-2">
           <Field label="Nội dung ưu đãi">
-            <input maxLength={200} value={text} onChange={(e) => setText(e.target.value)} className={ui.field} />
+            <input
+              maxLength={200}
+              value={text}
+              disabled={busy}
+              onChange={(e) => {
+                if (busy) return;
+                submit.reset();
+                setText(e.target.value);
+              }}
+              className={ui.field}
+            />
           </Field>
           {cashProblem && (
             <p role="alert" className={ui.error}>
@@ -107,12 +127,20 @@ export function WasteDeskReport({ pointId }: { pointId: string }) {
   const month = vnMonthKey(new Date());
   const q = useQuery(deskPointReportQuery(coreHttp, pointId, month));
 
-  if (q.isError) {
+  if (q.isError || (!q.data && q.errorUpdateCount > 0)) {
     return (
       <section aria-label="Báo cáo tháng này" className={CARD}>
-        <p className="text-base max-md:text-[length:var(--type-body-md-size)] max-md:leading-[var(--type-body-md-lh)] text-stone-900">Chưa tải được báo cáo</p>
+        <p role="alert" className="text-base max-md:text-[length:var(--type-body-md-size)] max-md:leading-[var(--type-body-md-lh)] text-stone-900">Chưa tải được báo cáo</p>
         <div>
-          <button type="button" className={skin.btnSecondary} onClick={() => void q.refetch()}>
+          <button
+            type="button"
+            className={skin.btnSecondary}
+            aria-disabled={q.isFetching || undefined}
+            aria-busy={q.isFetching || undefined}
+            onClick={() => {
+              if (!q.isFetching) void q.refetch();
+            }}
+          >
             Thử lại
           </button>
         </div>
@@ -124,10 +152,10 @@ export function WasteDeskReport({ pointId }: { pointId: string }) {
   return (
     <section aria-label="Báo cáo tháng này" className={CARD}>
       <p className="text-sm text-stone-600">Báo cáo tháng này</p>
-      <p className="text-base max-md:text-[length:var(--type-body-md-size)] max-md:leading-[var(--type-body-md-lh)] font-semibold text-stone-900">{`${formatCount(r.confirmations)} lượt xác nhận`}</p>
-      <p className="text-base max-md:text-[length:var(--type-body-md-size)] max-md:leading-[var(--type-body-md-lh)] text-stone-900">{`Tubu đã cộng ${formatPoints(r.pointsAwarded)} cho khách`}</p>
+      <p className="text-base max-md:text-[length:var(--type-body-md-size)] max-md:leading-[var(--type-body-md-lh)] font-semibold tabular-nums text-stone-900">{`${formatCount(r.confirmations)} lượt xác nhận`}</p>
+      <p className="text-base max-md:text-[length:var(--type-body-md-size)] max-md:leading-[var(--type-body-md-lh)] tabular-nums text-stone-900">{`Tubu đã cộng ${formatPoints(r.pointsAwarded)} cho khách`}</p>
       {r.units.map((u) => (
-        <p key={u.itemId} className="text-sm text-stone-600">{`${u.itemName}: ${formatCount(u.qty)} ${u.unitLabel}`}</p>
+        <p key={u.itemId} className="text-sm tabular-nums text-stone-600">{`${u.itemName}: ${formatCount(u.qty)} ${u.unitLabel}`}</p>
       ))}
     </section>
   );
