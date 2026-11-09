@@ -216,3 +216,22 @@ describe('css/freeship.css: thanh Miễn phí giao hàng', () => {
     expect(inner.find((r) => r.selectorText === '.tubu-freeship-fill')!.style.getPropertyValue('transition')).toBe('none');
   });
 });
+
+describe('FreeShippingProgressBar (Mini): vùng báo cho trình đọc màn hình (W72A)', () => {
+  it('dòng chữ là vùng polite khai rõ (WebView Zalo không phải bản nào cũng hiểu role=status ngầm), có mặt từ đầu, chỉ đổi chữ khi giỏ đổi', () => {
+    const { rerender } = render(<FreeShippingProgressBar base={50_000} threshold={200_000} />);
+    const status = screen.getByRole('status');
+    expect(status).toHaveAttribute('aria-live', 'polite');
+    expect(status).toHaveAttribute('aria-atomic', 'true');
+    rerender(<FreeShippingProgressBar base={250_000} threshold={200_000} />);
+    expect(screen.getByRole('status')).toBe(status);
+    expect(status).toHaveTextContent('Đơn hàng đã được Miễn phí giao hàng');
+  });
+
+  it('có nút "Mua thêm": vùng polite vẫn là chính dòng chữ, không gói cả nút', () => {
+    render(<FreeShippingProgressBar base={50_000} threshold={200_000} onShopMore={() => undefined} />);
+    const status = screen.getByRole('status');
+    expect(status).toHaveAttribute('aria-live', 'polite');
+    expect(within(status).queryByRole('button')).toBeNull();
+  });
+});

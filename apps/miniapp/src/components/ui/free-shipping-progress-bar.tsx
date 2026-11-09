@@ -27,7 +27,7 @@ export function FreeShippingProgressBar({ base, threshold, serverReached, tubuOn
     : fillCopy(tubuOnly ? 'freeship.progressTubu' : 'freeship.progress', { price: formatVnd(progress.remaining) });
   const showCta = !progress.reached && !!onShopMore;
   const label = (
-    <p role="status" className="tubu-freeship-text">
+    <p role="status" aria-live="polite" aria-atomic="true" className="tubu-freeship-text">
       {text}
     </p>
   );

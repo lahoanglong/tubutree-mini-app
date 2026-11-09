@@ -55,5 +55,7 @@ export function useBundleAdd() {
       mutation.mutate(v);
     },
     busyId: mutation.isPending ? mutation.variables?.id : undefined,
+    /** Đọc khoá ref (đúng ngay trong khung hình), khác `busyId` chỉ đúng sau lần vẽ kế tiếp. */
+    inFlight: () => inflight.current,
   };
 }

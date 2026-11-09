@@ -229,6 +229,7 @@ export const vi = {
     subsetRecalcNote: 'Mua một phần giỏ: mã giảm giá và ưu đãi được tính lại ở bước thanh toán.',
     checkout: (n: number) => `Thanh toán (${n})`,
     removed: 'Đã bỏ khỏi giỏ',
+    selectionPriceError: 'Chưa tính được giá phần đã chọn.',
     couponPlaceholder: 'Nhập mã giảm giá',
     couponApply: 'Áp dụng',
     couponApplied: (code: string) => `Đã áp mã ${code}`,
