@@ -1,18 +1,34 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import type { ComponentType } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CheckInStatusResponse } from '@tubutree/app-core/api/loyalty';
+import type { ButtonProps } from '../ui/button';
 
 const mocks = vi.hoisted(() => ({
   status: null as CheckInStatusResponse | null,
   ensurePhone: vi.fn(),
   checkIn: vi.fn(),
+  pending: false,
+  statusQ: { isLoading: false, isError: false, isFetching: false, error: null as unknown, refetch: vi.fn() },
 }));
+// Bọc Button để đọc onPress mới nhất: nút đang chờ bị khoá thật nên chỉ gọi thẳng onPress mới chứng minh được guard của thẻ.
+const ctl = vi.hoisted(() => ({ buttons: new Map<string, ButtonProps>() }));
+vi.mock('../ui/button', async (importOriginal) => {
+  const orig = await importOriginal<{ Button: ComponentType<ButtonProps> }>();
+  return {
+    ...orig,
+    Button: (p: ButtonProps) => {
+      ctl.buttons.set(String(p.children), p);
+      return <orig.Button {...p} />;
+    },
+  };
+});
 vi.mock('../../hooks/use-check-in', () => ({
   useCheckIn: () => ({
     status: mocks.status,
-    statusQ: { isLoading: false, isError: false, refetch: vi.fn() },
+    statusQ: mocks.statusQ,
     view: mocks.status ? { canCheckIn: !mocks.status.checkedInToday, buttonLabel: mocks.status.checkedInToday ? 'Đã điểm danh' : 'Điểm danh' } : null,
-    pending: false,
+    pending: mocks.pending,
     checkIn: mocks.checkIn,
   }),
 }));
@@ -34,16 +50,26 @@ const base: CheckInStatusResponse = {
   rewards: REWARDS,
 };
 
+beforeEach(() => {
+  mocks.pending = false;
+  mocks.statusQ = { isLoading: false, isError: false, isFetching: false, error: null, refetch: vi.fn() };
+  mocks.checkIn.mockReset();
+  ctl.buttons.clear();
+});
+
 describe('DailyCheckInCard: khách vãng lai không được hứa Điểm Xanh', () => {
   beforeEach(() => {
     mocks.ensurePhone.mockReset();
     mocks.status = null;
   });
 
-  it('user thật: hứa "+1.000 Điểm Xanh · +10 giọt nước", không có câu mời đăng nhập', () => {
+  it('user thật: hứa "+1.000 Điểm Xanh · +10 giọt nước", không có câu mời đăng nhập', async () => {
     mocks.status = base;
     render(<DailyCheckInCard authed />);
     expect(screen.getByText('Hôm nay nhận +1.000 Điểm Xanh · +10 giọt nước')).toBeInTheDocument();
+    // Ghi chú là chunk nạp lười: nạp trước rồi chờ một nhịp, để "không thấy" nghĩa là không vẽ chứ không phải chưa tới.
+    await import('./guest-points-note');
+    await new Promise((r) => setTimeout(r, 50));
     expect(screen.queryByTestId('guest-points-note')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Ngày 1: +1.000 Điểm Xanh')).toBeInTheDocument();
   });
@@ -188,5 +214,103 @@ describe('DailyCheckInCard compact (Ưu đãi): luật gập lại', () => {
     expect(mocks.checkIn).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Luật điểm danh' }));
     expect(screen.getByText(/Một lần bấm nhận cả Điểm Xanh và giọt nước/)).toBeVisible();
+  });
+});
+
+function deferred<T>() {
+  let resolve!: (v: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+const press = () => ctl.buttons.get('Điểm danh')!.onPress!();
+
+describe('DailyCheckInCard — khoá điểm danh đồng bộ', () => {
+  beforeEach(() => {
+    mocks.status = base;
+  });
+
+  it.each([[true], [false]])('hai cú chạm sát nhau trước khi vẽ lại (compact=%s): checkIn chỉ gọi một lần', (compact) => {
+    render(<DailyCheckInCard authed compact={compact} />);
+    act(() => {
+      press();
+      press();
+    });
+    expect(mocks.checkIn).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([[true], [false]])('hai cú bấm vào nút sát nhau (compact=%s) cũng chỉ một lần điểm danh', (compact) => {
+    render(<DailyCheckInCard authed compact={compact} />);
+    const btn = screen.getByRole('button', { name: 'Điểm danh' });
+    act(() => {
+      fireEvent.click(btn);
+      fireEvent.click(btn);
+    });
+    expect(mocks.checkIn).toHaveBeenCalledTimes(1);
+  });
+
+  it('checkIn xong thì chạm tiếp được: khoá chỉ giữ trong lúc checkIn còn chạy', async () => {
+    render(<DailyCheckInCard authed />);
+    await act(async () => {
+      press();
+    });
+    await act(async () => {
+      press();
+    });
+    expect(mocks.checkIn).toHaveBeenCalledTimes(2);
+  });
+
+  it('checkIn trả Promise: khoá giữ tới khi Promise xong rồi nhả', async () => {
+    const pending = deferred<void>();
+    mocks.checkIn.mockReturnValue(pending.promise);
+    render(<DailyCheckInCard authed />);
+    await act(async () => {
+      press();
+    });
+    await act(async () => {
+      press();
+    });
+    expect(mocks.checkIn).toHaveBeenCalledTimes(1);
+    await act(async () => pending.resolve());
+    await act(async () => {
+      press();
+    });
+    expect(mocks.checkIn).toHaveBeenCalledTimes(2);
+  });
+
+  it('đang chờ (pending): chạm bị bỏ qua dù khoá ref chưa giữ; nút báo bận', () => {
+    mocks.pending = true;
+    render(<DailyCheckInCard authed />);
+    press();
+    expect(mocks.checkIn).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Điểm danh' })).toHaveAttribute('aria-busy', 'true');
+  });
+});
+
+describe('DailyCheckInCard — tải trạng thái lỗi', () => {
+  it('Thử lại gọi tải lại một lần; đang tải dở (isFetching) thì không gọi chồng', () => {
+    const refetch = vi.fn();
+    mocks.statusQ = { isLoading: false, isError: true, isFetching: true, error: new Error('Mất mạng'), refetch };
+    const { rerender } = render(<DailyCheckInCard authed />);
+    fireEvent.click(screen.getByRole('button', { name: /Thử lại/ }));
+    expect(refetch).not.toHaveBeenCalled();
+    mocks.statusQ.isFetching = false;
+    rerender(<DailyCheckInCard authed />);
+    fireEvent.click(screen.getByRole('button', { name: /Thử lại/ }));
+    expect(refetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('DailyCheckInCard — ghi chú khách ở bản gọn', () => {
+  it('guestNote={false} với bản gọn: không vẽ ghi chú dù pointsBlocked; mặc định (bản gọn) vẫn có', async () => {
+    mocks.status = { ...base, todayPoints: 0, pointsBlocked: 'GUEST' };
+    const { unmount } = render(<DailyCheckInCard authed compact guestNote={false} />);
+    await import('./guest-points-note');
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByTestId('guest-points-note')).not.toBeInTheDocument();
+    unmount();
+    render(<DailyCheckInCard authed compact />);
+    expect(await screen.findByTestId('guest-points-note')).toBeInTheDocument();
   });
 });

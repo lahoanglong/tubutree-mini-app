@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Check, Trophy } from 'lucide-react';
 import { nextMilestoneRows } from '@tubutree/app-core/ctv-dashboard';
@@ -48,13 +48,21 @@ export function MilestoneRewards({ data }: { data: CtvMilestonesResponse }) {
   const [showAll, setShowAll] = useState(false);
   const [failures, setFailures] = useState<ClaimFailure[]>([]);
   const [notice, setNotice] = useState<{ text: string; tone: 'ok' | 'warn' | 'error' } | null>(null);
+  const listId = useId();
+  // Khoá đồng bộ dùng chung cho "Nhận thưởng" và "Nhận tất cả": `busy` chỉ đổi sau lần vẽ kế, hai cú bấm trong cùng một nhịp sẽ gọi API hai lần.
+  const claimingRef = useRef(false);
+  const release = () => {
+    claimingRef.current = false;
+  };
 
   const prev = data.previousMonth;
   const targets = [...(prev ? toTargets(prev.milestones, prev.monthKey) : []), ...toTargets(data.milestones, data.monthKey)];
 
-  // Thưởng cộng Điểm Xanh (lô thường): làm mới số điểm ở thẻ tài khoản, Ví và trang Điểm Xanh.
-  const refresh = () => {
+  const refreshMilestones = () => {
     void qc.invalidateQueries({ queryKey: affiliateMilestonesQuery(coreHttp).queryKey });
+  };
+  // Thưởng cộng Điểm Xanh (lô thường): làm mới số điểm ở thẻ tài khoản, Ví và trang Điểm Xanh.
+  const refreshBalances = () => {
     void qc.invalidateQueries({ queryKey: loyaltyQuery(coreHttp).queryKey });
     invalidateBalances(qc);
   };
@@ -67,13 +75,15 @@ export function MilestoneRewards({ data }: { data: CtvMilestonesResponse }) {
     },
     onSuccess: (res) => {
       setNotice({ text: res.message || 'Đã nhận thưởng mốc thành công!', tone: 'ok' });
-      refresh();
+      refreshMilestones();
+      refreshBalances();
     },
     onError: (e) => {
       setNotice({ text: actErrText(e), tone: 'error' });
       // Lỗi "đã nhận"/"chưa đạt" → trạng thái trên máy đã cũ, tải lại để nút khớp backend.
-      void qc.invalidateQueries({ queryKey: affiliateMilestonesQuery(coreHttp).queryKey });
+      refreshMilestones();
     },
+    onSettled: release,
   });
 
   const claimAll = useMutation({
@@ -98,14 +108,28 @@ export function MilestoneRewards({ data }: { data: CtvMilestonesResponse }) {
       if (failed.length === 0) setNotice({ text: `Đã nhận ${done} mốc thưởng.`, tone: 'ok' });
       else if (done === 0) setNotice({ text: 'Chưa nhận được mốc nào. Xem lý do bên dưới.', tone: 'error' });
       else setNotice({ text: `Đã nhận ${done}/${total} mốc. Có ${failed.length} mốc chưa nhận được, xem bên dưới.`, tone: 'warn' });
-      refresh();
+      refreshMilestones();
+      // Không mốc nào nhận được thì điểm không đổi: khỏi tải lại Điểm Xanh và số dư vô ích.
+      if (done > 0) refreshBalances();
     },
+    onSettled: release,
   });
 
   if (data.milestones.length === 0 && targets.length === 0) return null;
 
   const busy = claimOne.isPending || claimAll.isPending;
   const totalPoints = targets.reduce((s, t) => s + t.points, 0);
+
+  const startClaimOne = (t: ClaimTarget) => {
+    if (busy || claimingRef.current) return;
+    claimingRef.current = true;
+    claimOne.mutate(t);
+  };
+  const startClaimAll = () => {
+    if (busy || claimingRef.current) return;
+    claimingRef.current = true;
+    claimAll.mutate(targets);
+  };
 
   const renderRow = (m: CtvMilestoneItem, month: string, revenue: number) => (
     <li key={`${month}:${m.id}`} data-testid="milestone-row" className="flex min-h-14 items-center gap-2.5 border-b border-stone-200 py-2">
@@ -125,7 +149,7 @@ export function MilestoneRewards({ data }: { data: CtvMilestonesResponse }) {
             icon={Check}
             disabled={busy}
             loading={claimOne.isPending && claimOne.variables?.id === m.id && claimOne.variables?.month === month}
-            onPress={() => claimOne.mutate({ id: m.id, month, title: m.title, points: m.rewardPoints })}
+            onPress={() => startClaimOne({ id: m.id, month, title: m.title, points: m.rewardPoints })}
           >
             Nhận thưởng
           </Button>
@@ -158,7 +182,7 @@ export function MilestoneRewards({ data }: { data: CtvMilestonesResponse }) {
       )}
 
       {targets.length >= 2 && (
-        <Button fullWidth icon={Check} disabled={claimOne.isPending} loading={claimAll.isPending} onPress={() => claimAll.mutate(targets)} className="mb-2">
+        <Button fullWidth icon={Check} disabled={claimOne.isPending} loading={claimAll.isPending} onPress={startClaimAll} className="mb-2">
           {`Nhận tất cả (${targets.length} mốc, +${formatPoints(totalPoints)})`}
         </Button>
       )}
@@ -188,9 +212,9 @@ export function MilestoneRewards({ data }: { data: CtvMilestonesResponse }) {
           <ul>{prev.milestones.map((m) => renderRow(m, prev.monthKey, prev.revenue))}</ul>
         </div>
       )}
-      <ul>{(showAll ? data.milestones : nextMilestoneRows(data.milestones)).map((m) => renderRow(m, data.monthKey, data.currentRevenue))}</ul>
+      <ul id={listId}>{(showAll ? data.milestones : nextMilestoneRows(data.milestones)).map((m) => renderRow(m, data.monthKey, data.currentRevenue))}</ul>
       {data.milestones.length > nextMilestoneRows(data.milestones).length && (
-        <button type="button" aria-expanded={showAll} onClick={() => setShowAll((v) => !v)} className={`mt-1 min-h-11 w-full text-sm font-semibold text-[var(--color-text-brand)] ${phoneBodySm}`}>
+        <button type="button" aria-expanded={showAll} aria-controls={listId} onClick={() => setShowAll((v) => !v)} className={`mt-1 min-h-11 w-full text-sm font-semibold text-[var(--color-text-brand)] ${phoneBodySm}`}>
           {showAll ? 'Thu gọn' : `Xem tất cả ${data.milestones.length} mốc`}
         </button>
       )}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { CalendarCheck, Check, ChevronDown, Gift, Sprout, type LucideIcon } from 'lucide-react';
 import { checkInCopy, checkInDayIcon, checkInTodayLine, type CheckInDayIcon } from '@tubutree/app-core/daily-check-in-copy';
 import { checkInDayAria, checkInRule } from '@tubutree/app-core/daily-check-in-guest-copy';
@@ -24,22 +24,40 @@ export const CHECK_IN_COMPACT_HEIGHT = 156;
  * Khối điểm danh DUY NHẤT của web (trang Điểm Xanh và Ưu đãi), cùng bố cục với Mini App: một nút cộng cả Điểm Xanh và giọt
  * nước, nút ở dòng riêng, ô ngày chỉ có số ngày và biểu tượng, lưới `minmax(0, 1fr)` để 7 ô gọn trong thẻ ở 320px.
  * `compact` (Ưu đãi, nơi điểm danh chỉ là một khối trong trang dài): nút lên hàng tiêu đề, nút "Luật" (tên đọc "Luật điểm danh", aria-expanded) đứng cạnh "Ngày n/7" và mở đoạn luật ngay dưới hàng đó.
- * Tài khoản khách (`pointsBlocked`) thêm khối mời đăng nhập Zalo nên cao hơn khung chờ; chỉ nhóm đó, không tính vào `CHECK_IN_COMPACT_HEIGHT`.
+ * Tài khoản khách (`pointsBlocked`) thêm khối mời đăng nhập Zalo nên cao hơn khung chờ; chỉ nhóm đó, không tính vào `CHECK_IN_COMPACT_HEIGHT`. Trang đã có thẻ mời ở trên truyền `guestNote={false}` để khỏi mời hai lần.
  */
-export function DailyCheckInCard({ authed, compact = false }: { authed: boolean; compact?: boolean }) {
+export function DailyCheckInCard({ authed, compact = false, guestNote = true }: { authed: boolean; compact?: boolean; guestNote?: boolean }) {
   const { status, statusQ, view, pending, checkIn, message } = useCheckIn(authed);
   const [ruleOpen, setRuleOpen] = useState(false);
   const ruleId = useId();
+  const checkingInRef = useRef(false);
 
   if (statusQ.isLoading) return <Skeleton height={compact ? CHECK_IN_COMPACT_HEIGHT : 140} radius="var(--radius-card)" />;
   if (statusQ.isError) {
     return (
       <Card padding={16}>
-        <ErrorState variant="inline" title={checkInCopy.loadErrorTitle} message={errText(statusQ.error)} onRetry={() => void statusQ.refetch()} />
+        <ErrorState
+          variant="inline"
+          title={checkInCopy.loadErrorTitle}
+          message={errText(statusQ.error)}
+          onRetry={() => {
+            if (!statusQ.isFetching) void statusQ.refetch();
+          }}
+        />
       </Card>
     );
   }
   if (!status || !view) return null;
+
+  // Khoá đồng bộ cho bản gọn và bản đầy đủ (dùng chung handler): chặn gọi lại trong cùng một đoạn chạy liền, trước khi `pending` vẽ lại.
+  // `checkIn()` trả void nên khoá nhả ở microtask kế tiếp (trả Promise thì giữ tới khi xong); chạm đúp giữa hai sự kiện thật do ref `busy` trong `useCheckIn` chặn.
+  const handleCheckIn = () => {
+    if (pending || checkingInRef.current) return;
+    checkingInRef.current = true;
+    void Promise.resolve(checkIn()).finally(() => {
+      checkingInRef.current = false;
+    });
+  };
 
   const today = checkInTodayLine(status);
   // Bản gọn luôn có một hàng dưới 7 ô ("Nhận ..." phần thưởng hôm nay, hoặc "đã điểm danh" khi xong): thẻ cao như nhau trước và sau khi điểm danh.
@@ -83,7 +101,7 @@ export function DailyCheckInCard({ authed, compact = false }: { authed: boolean;
           </div>
           {/* Nút đệm 12px, bỏ min-width 120px của ZaUI (như thanh dính): "Đã điểm danh" hẹp lại để tiêu đề không gãy dòng ở 360px. */}
           {compact && (
-            <Button disabled={!view.canCheckIn || pending} loading={pending} onPress={checkIn} style={{ flex: '0 0 auto', minWidth: 0, paddingLeft: 12, paddingRight: 12 }}>
+            <Button disabled={!view.canCheckIn || pending} loading={pending} onPress={handleCheckIn} style={{ flex: '0 0 auto', minWidth: 0, paddingLeft: 12, paddingRight: 12 }}>
               {view.buttonLabel}
             </Button>
           )}
@@ -136,9 +154,9 @@ export function DailyCheckInCard({ authed, compact = false }: { authed: boolean;
             </Text>
           )
         )}
-        {status.pointsBlocked && <GuestPointsNote margin="10px 0 0" />}
+        {status.pointsBlocked && guestNote && <GuestPointsNote margin="10px 0 0" />}
         {!compact && (
-          <Button fullWidth disabled={!view.canCheckIn || pending} loading={pending} onPress={checkIn} style={{ marginTop: 12 }}>
+          <Button fullWidth disabled={!view.canCheckIn || pending} loading={pending} onPress={handleCheckIn} style={{ marginTop: 12 }}>
             {view.buttonLabel}
           </Button>
         )}

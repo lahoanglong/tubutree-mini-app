@@ -1,15 +1,34 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CheckInStatusResponse } from '@tubutree/app-core/api/loyalty';
-import { click, render, type Rendered } from '@/test-utils/dom';
+import { act } from 'react';
+import type { ComponentProps } from 'react';
+import { byText, click, render, type Rendered } from '@/test-utils/dom';
 
-const mocks = vi.hoisted(() => ({ status: null as CheckInStatusResponse | null, checkIn: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  status: null as CheckInStatusResponse | null,
+  checkIn: vi.fn(),
+  pending: false,
+  statusQ: { isLoading: false, isError: false, isFetching: false, error: null as unknown, refetch: vi.fn() },
+}));
+// Bọc Button để đọc onPress mới nhất: nút đang chờ bị khoá thật nên chỉ gọi thẳng onPress mới chứng minh được guard của thẻ.
+const ctl = vi.hoisted(() => ({ buttons: new Map<string, { onPress?: () => unknown }>() }));
+vi.mock('@/components/mini', async (importOriginal) => {
+  const orig = await importOriginal<typeof import('@/components/mini')>();
+  return {
+    ...orig,
+    Button: (p: ComponentProps<typeof orig.Button>) => {
+      ctl.buttons.set(String(p.children), p as { onPress?: () => unknown });
+      return <orig.Button {...p} />;
+    },
+  };
+});
 vi.mock('@/lib/use-check-in', () => ({
   useCheckIn: () => ({
     status: mocks.status,
-    statusQ: { isLoading: false, isError: false, refetch: vi.fn() },
+    statusQ: mocks.statusQ,
     view: mocks.status ? { canCheckIn: !mocks.status.checkedInToday, buttonLabel: mocks.status.checkedInToday ? 'Đã điểm danh' : 'Điểm danh' } : null,
-    pending: false,
+    pending: mocks.pending,
     checkIn: mocks.checkIn,
     message: null,
   }),
@@ -35,6 +54,9 @@ let mounted: Rendered | null = null;
 beforeEach(() => {
   mocks.status = null;
   mocks.checkIn.mockReset();
+  mocks.pending = false;
+  mocks.statusQ = { isLoading: false, isError: false, isFetching: false, error: null, refetch: vi.fn() };
+  ctl.buttons.clear();
 });
 afterEach(() => {
   mounted?.unmount();
@@ -145,5 +167,120 @@ describe('DailyCheckInCard compact (web, Ưu đãi): luật gập lại', () => 
     expect(mocks.checkIn).not.toHaveBeenCalled();
     click(c.querySelector('button[aria-expanded]')!);
     expect(c.querySelector<HTMLElement>('#' + CSS.escape(c.querySelector('button[aria-expanded]')!.getAttribute('aria-controls')!))!.hidden).toBe(false);
+  });
+});
+
+function deferred<T>() {
+  let resolve!: (v: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+const press = () => ctl.buttons.get('Điểm danh')!.onPress!();
+const checkInButton = () => byText(mounted!.container, 'button', 'Điểm danh')!;
+const noteOf = (c: HTMLElement) => c.querySelector('[data-testid="guest-points-note"]');
+const GUEST: CheckInStatusResponse = { ...base, todayPoints: 0, pointsBlocked: 'GUEST' };
+
+describe('DailyCheckInCard (web): khoá điểm danh đồng bộ', () => {
+  beforeEach(() => {
+    mocks.status = base;
+  });
+
+  it.each([[true], [false]])('hai cú bấm sát nhau trước khi vẽ lại (compact=%s): checkIn chỉ gọi một lần', (compact) => {
+    mounted = render(<DailyCheckInCard authed compact={compact} />);
+    act(() => {
+      press();
+      press();
+    });
+    expect(mocks.checkIn).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([[true], [false]])('hai cú bấm vào nút sát nhau (compact=%s) cũng chỉ một lần điểm danh', (compact) => {
+    mounted = render(<DailyCheckInCard authed compact={compact} />);
+    const btn = checkInButton();
+    act(() => {
+      click(btn);
+      click(btn);
+    });
+    expect(mocks.checkIn).toHaveBeenCalledTimes(1);
+  });
+
+  it('checkIn xong thì bấm tiếp được: khoá chỉ giữ trong lúc checkIn còn chạy', async () => {
+    mounted = render(<DailyCheckInCard authed />);
+    await act(async () => {
+      press();
+    });
+    await act(async () => {
+      press();
+    });
+    expect(mocks.checkIn).toHaveBeenCalledTimes(2);
+  });
+
+  it('checkIn trả Promise: khoá giữ tới khi Promise xong rồi nhả', async () => {
+    const pending = deferred<void>();
+    mocks.checkIn.mockReturnValue(pending.promise);
+    mounted = render(<DailyCheckInCard authed />);
+    await act(async () => {
+      press();
+    });
+    await act(async () => {
+      press();
+    });
+    expect(mocks.checkIn).toHaveBeenCalledTimes(1);
+    await act(async () => pending.resolve());
+    await act(async () => {
+      press();
+    });
+    expect(mocks.checkIn).toHaveBeenCalledTimes(2);
+  });
+
+  it('đang chờ (pending): bấm bị bỏ qua dù khoá ref chưa giữ; nút báo bận', () => {
+    mocks.pending = true;
+    mounted = render(<DailyCheckInCard authed />);
+    press();
+    expect(mocks.checkIn).not.toHaveBeenCalled();
+    expect(checkInButton().getAttribute('aria-busy')).toBe('true');
+  });
+});
+
+describe('DailyCheckInCard (web): tải trạng thái lỗi', () => {
+  it('Thử lại gọi tải lại một lần; đang tải dở (isFetching) thì không gọi chồng', () => {
+    const refetch = vi.fn();
+    mocks.statusQ = { isLoading: false, isError: true, isFetching: true, error: new Error('Mất mạng'), refetch };
+    mounted = render(<DailyCheckInCard authed />);
+    click(byText(mounted.container, 'button', /Thử lại/));
+    expect(refetch).not.toHaveBeenCalled();
+    mocks.statusQ.isFetching = false;
+    act(() => mounted!.root.render(<DailyCheckInCard authed />));
+    click(byText(mounted.container, 'button', /Thử lại/));
+    expect(refetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('DailyCheckInCard (web): guestNote như Mini', () => {
+  it('mặc định và guestNote={true}: khách có ghi chú mời đăng nhập, ở cả bản đầy đủ lẫn bản gọn', () => {
+    mocks.status = GUEST;
+    mounted = render(<DailyCheckInCard authed />);
+    expect(noteOf(mounted.container)).not.toBeNull();
+    mounted.unmount();
+    mounted = render(<DailyCheckInCard authed compact guestNote />);
+    expect(noteOf(mounted.container)).not.toBeNull();
+  });
+
+  it('guestNote={false} (trang đã có thẻ mời ở trên): không vẽ ghi chú dù pointsBlocked, bản đầy đủ lẫn bản gọn; giọt nước vẫn hiện', () => {
+    mocks.status = GUEST;
+    mounted = render(<DailyCheckInCard authed guestNote={false} />);
+    expect(noteOf(mounted.container)).toBeNull();
+    expect(mounted.container.textContent).toContain('Hôm nay nhận +10 giọt nước');
+    mounted.unmount();
+    mounted = render(<DailyCheckInCard authed compact guestNote={false} />);
+    expect(noteOf(mounted.container)).toBeNull();
+  });
+
+  it('không pointsBlocked: guestNote không ảnh hưởng, vẫn không có ghi chú', () => {
+    mocks.status = base;
+    mounted = render(<DailyCheckInCard authed guestNote />);
+    expect(noteOf(mounted.container)).toBeNull();
   });
 });
