@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Copy, MessageSquare, Phone } from 'lucide-react';
 import { supportCopy } from '@tubutree/app-core/support-copy';
 import type { SupportContact } from '@tubutree/app-core/api/config';
@@ -12,14 +12,24 @@ import { platformBridge } from '@/lib/platform-bridge';
 /** Chat tắt: cùng nội dung với Mini App, khách thấy ngay số để gọi (lỗi đọc cấu hình đã rơi về số mặc định ở nơi gọi). */
 export function ChatClosedPanel({ support, compact = false }: { support: SupportContact | undefined; compact?: boolean }) {
   const copy = supportCopy.closed;
-  const [feedback, setFeedback] = useState<string | null>(null);
+  // `n` đếm số lần báo: cùng một chữ lặp lại (hai lần thất bại liền) vẫn dựng lại nút thông báo để trình đọc màn hình đọc lại.
+  const [feedback, setFeedback] = useState<{ text: string; ok: boolean; n: number } | null>(null);
   const [more, setMore] = useState(false);
   const hotline = support?.hotline ?? null;
   const display = hotline ? formatPhoneDisplay(hotline) : '';
   const hasOA = platformBridge.oa.available;
 
+  // Khoá đồng bộ: Promise sao chép còn treo thì cú bấm thứ hai (số hoặc email) bị bỏ.
+  const copyingRef = useRef(false);
   const copyWith = async (value: string, okText: string) => {
-    setFeedback((await copyText(value)) ? okText : copy.copyFailed);
+    if (copyingRef.current) return;
+    copyingRef.current = true;
+    try {
+      const ok = await copyText(value);
+      setFeedback((prev) => ({ text: ok ? okText : copy.copyFailed, ok, n: (prev?.n ?? 0) + 1 }));
+    } finally {
+      copyingRef.current = false;
+    }
   };
 
   const callLink = hotline && (
@@ -47,8 +57,15 @@ export function ChatClosedPanel({ support, compact = false }: { support: Support
     </Button>
   );
   const status = (
-    <div role="status" aria-live="polite" style={{ minHeight: compact ? 0 : 18 }}>
-      {feedback && <Text variant="caption" tone="secondary">{feedback}</Text>}
+    <div style={{ minHeight: compact ? 0 : 18 }}>
+      <div role="status" aria-live="polite">
+        {feedback?.ok && <Text key={feedback.n} variant="caption" tone="secondary">{feedback.text}</Text>}
+      </div>
+      {feedback && !feedback.ok && (
+        <div role="alert" key={feedback.n}>
+          <Text variant="caption" tone="danger">{feedback.text}</Text>
+        </div>
+      )}
     </div>
   );
 
@@ -83,7 +100,7 @@ export function ChatClosedPanel({ support, compact = false }: { support: Support
             aria-label={`${display}. ${copy.tapToCopy}`}
             style={{ background: 'none', border: 0, padding: '8px 12px', marginTop: 8, cursor: 'pointer', minHeight: 44 }}
           >
-            <Heading variant="display-md" tone="brand">{display}</Heading>
+            <Heading variant="display-md" tone="brand" style={{ fontVariantNumeric: 'tabular-nums' }}>{display}</Heading>
           </button>
           <Text variant="caption" tone="tertiary">{copy.tapToCopy}</Text>
           {callLink}
