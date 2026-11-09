@@ -21,12 +21,13 @@ import {
 import { nextNotificationCursor, notificationsInfiniteQuery } from '@tubutree/app-core/queries/account';
 import { coreHttp } from '../services/core-http';
 import type { NotificationCursor } from '@tubutree/app-core/api/account';
-import { getLoadErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { trackEvent } from '../services/analytics';
 import { LineItemSkeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { haptic } from '../utils/haptic';
 import { SUBSCRIPTIONS_IN_MINIAPP } from '../utils/features';
+import { useLockedMutation } from '../components/game/use-locked-mutation';
 import { useHasSubscription } from '../hooks/use-has-subscription';
 import { useMeSummary } from '../hooks/use-me-summary';
 import { AuthGate } from '../components/ui/auth-gate';
@@ -183,14 +184,24 @@ export default function NotificationsPage() {
     onSettled: (_res, err) => settleRead(err !== null),
   });
 
-  const readAllMut = useMutation({
+  // Giữ qua lúc "Thử lại" đang chạy (không theo isError) để khối báo lỗi không biến mất rồi hiện lại; chỉ xoá khi thành công.
+  // `count` đếm số lần lỗi: làm key của dòng chữ để lần lỗi lặp lại (cùng câu) vẫn được trình đọc màn hình đọc lại.
+  const [readAllError, setReadAllError] = useState<{ message: string; count: number } | null>(null);
+  // Mutation có khoá đồng bộ: isPending chỉ đổi sau lần vẽ kế tiếp, hai chạm sát nhau vẫn gửi hai lệnh.
+  const readAllMut = useLockedMutation({
     mutationFn: () => markAllNotificationsRead(),
     onSuccess: () => {
+      setReadAllError(null);
       markReadInCache(() => true);
       refetchIfListBusy();
     },
+    onError: (err) => setReadAllError((prev) => ({ message: getErrorMessage(err), count: (prev?.count ?? 0) + 1 })),
     onSettled: (_res, err) => settleRead(err !== null),
   });
+  const readAll = () => {
+    haptic('light');
+    readAllMut.mutate();
+  };
   const unreadCount = summaryUnread ?? list?.filter((n) => n.status !== 'READ').length ?? 0;
 
   // Sync với popstate (nút back cứng / vuốt back của Zalo) để đóng detail overlay khi back
@@ -274,10 +285,7 @@ export default function NotificationsPage() {
             <DsButton
               variant="ghost"
               loading={readAllMut.isPending}
-              onPress={() => {
-                haptic('light');
-                readAllMut.mutate();
-              }}
+              onPress={readAll}
             >
               Đọc tất cả
             </DsButton>
@@ -285,23 +293,36 @@ export default function NotificationsPage() {
         }
       />
 
+      {/* Hết tin chưa đọc (đọc lẻ từng tin, hoặc lệnh hết giờ mà máy chủ đã làm xong) thì không còn gì để thử lại: ẩn khối. */}
+      {readAllError && unreadCount > 0 && (
+        <div role="alert" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--space-inline-sm)', padding: 'var(--space-stack-xs) var(--space-gutter) 0' }}>
+          <Text key={readAllError.count} variant="body-sm" tone="danger">
+            {readAllError.message}
+          </Text>
+          {/* Tên riêng: ErrorState tải danh sách cũng có nút "Thử lại", hai nút làm hai việc khác nhau. */}
+          <DsButton variant="ghost" loading={readAllMut.isPending} aria-label={vi.home.retryLabel('đánh dấu đã đọc')} onPress={readAll}>
+            {vi.common.retry}
+          </DsButton>
+        </div>
+      )}
+
       <AuthGate
         loading={
-          <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div aria-busy="true" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
             <LineItemSkeleton />
             <LineItemSkeleton />
           </div>
         }
       >
         {notifQ.isLoading ? (
-          <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div aria-busy="true" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
             <LineItemSkeleton />
             <LineItemSkeleton />
           </div>
         ) : notifQ.isError && !notifQ.data ? (
           <ErrorState message={getLoadErrorMessage(notifQ.error)} onRetry={() => void notifQ.refetch()} />
         ) : list && list.length > 0 ? (
-          <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div className="tubu-nums" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
             {list.map((n) => {
               const m = notificationMeta(n.templateCode);
               const unread = n.status !== 'READ';
@@ -386,6 +407,7 @@ export default function NotificationsPage() {
           role="dialog"
           aria-modal="true"
           aria-label="Chi tiết thông báo"
+          className="tubu-nums"
           style={{
             position: 'fixed',
             top: 0,

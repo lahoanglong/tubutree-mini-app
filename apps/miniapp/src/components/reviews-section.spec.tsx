@@ -1133,6 +1133,105 @@ describe('ReviewsSection: can-review lỗi (R5-BUYER-3)', () => {
   });
 });
 
+describe('ReviewsSection: gửi đánh giá khoá chạm đúp, báo bận, lỗi gửi, số đều, vùng chạm (W68A)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.cloudinary = true;
+    mocks.auth = { status: 'authenticated' };
+    mocks.fetchReviews.mockResolvedValue(DATA);
+    mocks.canReview.mockResolvedValue(ELIG_NEW);
+    mocks.createReview.mockReset().mockResolvedValue({});
+  });
+
+  const openForm = async () => {
+    fireEvent.click(await screen.findByRole('button', { name: 'Viết đánh giá' }));
+    await screen.findByRole('radiogroup', { name: 'Số sao' });
+    return screen.getByRole('button', { name: 'Gửi đánh giá' });
+  };
+
+  it('chạm đúp "Gửi đánh giá" trong cùng một nhịp vẽ: một lời gọi createReview; đang gửi nút báo bận; xong thì đóng form', async () => {
+    let release: (v: unknown) => void = () => undefined;
+    mocks.createReview.mockReturnValue(new Promise((r) => (release = r)));
+    renderSection();
+    const send = await openForm();
+    act(() => {
+      send.click();
+      send.click();
+    });
+    await waitFor(() => expect(mocks.createReview).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Gửi đánh giá' })).toHaveAttribute('aria-busy', 'true'));
+    await act(async () => {
+      send.click();
+    });
+    await new Promise((r) => setTimeout(r, 30));
+    expect(mocks.createReview).toHaveBeenCalledTimes(1);
+    await act(async () => release({ updated: false, pointsEarned: 0 }));
+    await waitFor(() => expect(screen.queryByRole('radiogroup', { name: 'Số sao' })).toBeNull());
+  });
+
+  it('Ctrl+Enter ở ô nhận xét cũng qua khoá: gõ tắt hai lần liền chỉ gửi một lần', async () => {
+    mocks.createReview.mockReturnValue(new Promise(() => undefined));
+    renderSection();
+    await openForm();
+    const box = screen.getByPlaceholderText(/Chia sẻ cảm nhận/);
+    act(() => {
+      fireEvent.keyDown(box, { key: 'Enter', ctrlKey: true });
+      fireEvent.keyDown(box, { key: 'Enter', ctrlKey: true });
+    });
+    await waitFor(() => expect(mocks.createReview).toHaveBeenCalledTimes(1));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(mocks.createReview).toHaveBeenCalledTimes(1);
+  });
+
+  it('gửi lỗi: báo bằng role=alert tại chỗ, form và nhận xét còn nguyên, khoá đã nhả nên gửi lại được đúng một lần', async () => {
+    mocks.createReview.mockRejectedValueOnce(new Error('mạng')).mockResolvedValueOnce({ updated: false, pointsEarned: 0 });
+    renderSection();
+    const send = await openForm();
+    fireEvent.change(screen.getByPlaceholderText(/Chia sẻ cảm nhận/), { target: { value: 'Dùng êm' } });
+    fireEvent.click(send);
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Có chút trục trặc, thử lại nhé');
+    expect(screen.getByPlaceholderText(/Chia sẻ cảm nhận/)).toHaveValue('Dùng êm');
+    expect(screen.getByRole('button', { name: 'Gửi đánh giá' })).not.toHaveAttribute('aria-busy');
+    fireEvent.click(screen.getByRole('button', { name: 'Gửi đánh giá' }));
+    await waitFor(() => expect(mocks.createReview).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByRole('radiogroup', { name: 'Số sao' })).toBeNull());
+  });
+
+  it('nút "Gửi đánh giá" và nút đầu mục "Viết đánh giá" là nút 44px', async () => {
+    renderSection();
+    expect((await screen.findByRole('button', { name: 'Viết đánh giá' })).style.minHeight).toBe('44px');
+    expect((await openForm()).style.minHeight).toBe('44px');
+  });
+
+  it('tải lỗi có "Thử lại" ngay tại chỗ (nút 44px) và thử lại thì hiện danh sách', async () => {
+    mocks.fetchReviews.mockRejectedValueOnce(new Error('500')).mockResolvedValue(DATA);
+    renderSection();
+    const retry = await screen.findByRole('button', { name: 'Thử lại' });
+    expect(retry.style.minHeight).toBe('44px');
+    fireEvent.click(retry);
+    expect(await screen.findByText('Nhận xét a')).toBeInTheDocument();
+    expect(mocks.fetchReviews).toHaveBeenCalledTimes(2);
+  });
+
+  it('khung chờ danh sách báo aria-busy; có danh sách rồi thì không còn', async () => {
+    mocks.fetchReviews.mockReturnValueOnce(new Promise(() => undefined));
+    const first = renderSection();
+    await waitFor(() => expect(document.querySelector('[aria-busy="true"]')).not.toBeNull());
+    first.unmount();
+    mocks.fetchReviews.mockResolvedValue(DATA);
+    renderSection();
+    await screen.findByText('Nhận xét a');
+    expect(document.querySelector('[aria-busy="true"]')).toBeNull();
+  });
+
+  it('số đều (tabular-nums): cả khối Đánh giá nằm trong .tubu-nums', async () => {
+    renderSection();
+    await screen.findByText('Nhận xét a');
+    expect(screen.getByRole('region', { name: 'Đánh giá sản phẩm' }).classList.contains('tubu-nums')).toBe(true);
+  });
+});
+
 describe('Stars', () => {
   it('có tên truy cập "n trên 5 sao" và vẽ 5 ngôi sao', () => {
     const { container } = render(<Stars value={3.6} size={12} />);

@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -628,5 +628,166 @@ describe('F10: đọc tin lúc đang nạp thêm trang', () => {
     await waitFor(() => expect(mocks.markNotificationRead).toHaveBeenCalledWith('r0'));
     await waitFor(() => expect(firstPageCalls).toBeGreaterThanOrEqual(2));
     release([]);
+  });
+});
+
+describe('W68A: "Đọc tất cả" khoá đồng bộ, lỗi tại chỗ, khung chờ, số đều', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.authStatus = 'authenticated';
+    // Không có summary thì số chưa đọc đếm từ danh sách đã tải (các ca trên để lại mockResolvedValue(summaryOf(1)) làm nút không biến mất).
+    mocks.getSummary.mockReset();
+    mocks.getNotifications.mockReset().mockResolvedValue([ORDER_UNREAD, POINTS_READ]);
+    mocks.markNotificationRead.mockReset().mockResolvedValue({ ok: true });
+    mocks.markAllNotificationsRead.mockReset().mockResolvedValue({ ok: true, count: 1 });
+  });
+
+  const readAllButton = () => screen.findByRole('button', { name: 'Đọc tất cả' });
+
+  it('chạm đúp trong cùng một nhịp vẽ: chỉ một lời gọi API; đang gửi thì nút báo bận', async () => {
+    let release: (v: unknown) => void = () => undefined;
+    mocks.markAllNotificationsRead.mockReturnValue(new Promise((r) => (release = r)));
+    renderPage();
+    await screen.findByText('Đơn TT001 đã được xác nhận');
+    const btn = await readAllButton();
+    act(() => {
+      btn.click();
+      btn.click();
+    });
+    await waitFor(() => expect(mocks.markAllNotificationsRead).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Đọc tất cả' })).toHaveAttribute('aria-busy', 'true'));
+    await act(async () => {
+      btn.click();
+    });
+    await new Promise((r) => setTimeout(r, 30));
+    expect(mocks.markAllNotificationsRead).toHaveBeenCalledTimes(1);
+    await act(async () => release({ ok: true, count: 1 }));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Đọc tất cả' })).not.toBeInTheDocument());
+  });
+
+  it('đọc tất cả lỗi: báo tại chỗ bằng role=alert, giữ danh sách; "Thử lại" (nút 44px) gọi lại và xoá báo lỗi khi xong', async () => {
+    mocks.markAllNotificationsRead.mockRejectedValueOnce(new Error('mạng')).mockResolvedValue({ ok: true, count: 1 });
+    renderPage();
+    await screen.findByText('Đơn TT001 đã được xác nhận');
+    expect(screen.queryByRole('alert')).toBeNull();
+    fireEvent.click(await readAllButton());
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Có chút trục trặc, thử lại nhé');
+    expect(screen.getByText('Đơn TT001 đã được xác nhận')).toBeInTheDocument();
+    const retry = within(alert).getByRole('button', { name: 'Thử lại đánh dấu đã đọc' });
+    expect(retry.style.minHeight).toBe('44px');
+    fireEvent.click(retry);
+    await waitFor(() => expect(mocks.markAllNotificationsRead).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+    expect(screen.queryByRole('button', { name: 'Đọc tất cả' })).not.toBeInTheDocument();
+  });
+
+  it('lỗi rồi bấm "Thử lại": báo lỗi đứng yên, nút báo bận và không nhận lần chạm thứ hai', async () => {
+    let release: (v: unknown) => void = () => undefined;
+    mocks.markAllNotificationsRead
+      .mockRejectedValueOnce(new Error('mạng'))
+      .mockReturnValue(new Promise((r) => (release = r)));
+    renderPage();
+    await screen.findByText('Đơn TT001 đã được xác nhận');
+    fireEvent.click(await readAllButton());
+    const retry = within(await screen.findByRole('alert')).getByRole('button', { name: 'Thử lại đánh dấu đã đọc' });
+    act(() => {
+      retry.click();
+      retry.click();
+    });
+    await waitFor(() => expect(mocks.markAllNotificationsRead).toHaveBeenCalledTimes(2));
+    const busy = within(screen.getByRole('alert')).getByRole('button', { name: 'Thử lại đánh dấu đã đọc' });
+    expect(busy).toHaveAttribute('aria-busy', 'true');
+    await new Promise((r) => setTimeout(r, 30));
+    expect(mocks.markAllNotificationsRead).toHaveBeenCalledTimes(2);
+    await act(async () => release({ ok: true, count: 1 }));
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+  });
+
+  it('thất bại rồi thành công ở lần bấm sau: khoá đã nhả, API được gọi lại đúng một lần mỗi lần bấm', async () => {
+    mocks.markAllNotificationsRead.mockRejectedValueOnce(new Error('mạng')).mockResolvedValueOnce({ ok: true, count: 1 });
+    renderPage();
+    await screen.findByText('Đơn TT001 đã được xác nhận');
+    fireEvent.click(await readAllButton());
+    await screen.findByRole('alert');
+    fireEvent.click(screen.getByRole('button', { name: 'Đọc tất cả' }));
+    await waitFor(() => expect(mocks.markAllNotificationsRead).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+    await new Promise((r) => setTimeout(r, 30));
+    expect(mocks.markAllNotificationsRead).toHaveBeenCalledTimes(2);
+  });
+
+  it('lỗi lặp lại cùng một câu: khối alert đứng yên (nút giữ focus) nhưng dòng chữ dựng lại để trình đọc màn hình đọc lại', async () => {
+    mocks.markAllNotificationsRead.mockRejectedValue(new Error('mạng'));
+    renderPage();
+    await screen.findByText('Đơn TT001 đã được xác nhận');
+    fireEvent.click(await readAllButton());
+    const alert = await screen.findByRole('alert');
+    const retry = within(alert).getByRole('button', { name: 'Thử lại đánh dấu đã đọc' });
+    const firstLine = within(alert).getByText('Có chút trục trặc, thử lại nhé');
+    retry.focus();
+    fireEvent.click(retry);
+    await waitFor(() => expect(mocks.markAllNotificationsRead).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(within(alert).getByText('Có chút trục trặc, thử lại nhé')).not.toBe(firstLine));
+    expect(screen.getByRole('alert')).toBe(alert);
+    expect(within(alert).getByRole('button', { name: 'Thử lại đánh dấu đã đọc' })).toBe(retry);
+    expect(document.activeElement).toBe(retry);
+  });
+
+  it('hết tin chưa đọc sau lỗi (đọc lẻ từng tin): khối báo lỗi biến mất, không để nút "Thử lại" mồ côi', async () => {
+    mocks.getNotifications.mockResolvedValue([ORDER_UNREAD]);
+    mocks.markAllNotificationsRead.mockRejectedValue(new Error('mạng'));
+    renderPage();
+    const row = (await screen.findByText('Đơn TT001 đã được xác nhận')).closest('[role="button"]') as HTMLElement;
+    fireEvent.click(await readAllButton());
+    await screen.findByRole('alert');
+    fireEvent.click(row);
+    await waitFor(() => expect(mocks.markNotificationRead).toHaveBeenCalledWith('n1'));
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+    expect(screen.queryByRole('button', { name: 'Đọc tất cả' })).not.toBeInTheDocument();
+  });
+
+  it('danh sách tải lỗi nhưng số chưa đọc vẫn có: hai nút "Thử lại" cùng hiện thì khác tên (tải lại danh sách / đánh dấu đã đọc)', async () => {
+    mocks.getNotifications.mockRejectedValue(new Error('boom'));
+    mocks.getSummary.mockResolvedValue(summaryOf(2));
+    mocks.markAllNotificationsRead.mockRejectedValue(new Error('mạng'));
+    renderPage();
+    fireEvent.click(await readAllButton());
+    const alert = await screen.findByRole('alert');
+    const names = screen.getAllByRole('button', { name: /^Thử lại/ }).map((b) => b.getAttribute('aria-label') ?? b.textContent);
+    expect(names).toHaveLength(2);
+    expect(new Set(names).size).toBe(2);
+    expect(within(alert).getByRole('button', { name: 'Thử lại đánh dấu đã đọc' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Thử lại' })).toBeInTheDocument();
+  });
+
+  it('nút "Đọc tất cả" là nút 44px', async () => {
+    renderPage();
+    expect((await readAllButton()).style.minHeight).toBe('44px');
+  });
+
+  it('khung chờ báo aria-busy: lúc tải danh sách và lúc chờ đăng nhập xong', async () => {
+    mocks.getNotifications.mockReturnValue(new Promise(() => undefined));
+    const first = renderPage();
+    await waitFor(() => expect(document.querySelector('[aria-busy="true"]')).not.toBeNull());
+    first.unmount();
+    mocks.authStatus = 'loading';
+    renderPage();
+    expect(document.querySelector('[aria-busy="true"]')).not.toBeNull();
+  });
+
+  it('khung chờ biến mất khi có danh sách: không còn phần tử nào aria-busy', async () => {
+    renderPage();
+    await screen.findByText('Đơn TT001 đã được xác nhận');
+    expect(document.querySelector('[aria-busy="true"]')).toBeNull();
+  });
+
+  it('số đều (tabular-nums): danh sách tin và lớp chi tiết đều nằm trong .tubu-nums', async () => {
+    renderPage();
+    const row = (await screen.findByText('Đơn TT001 đã được xác nhận')).closest('[role="button"]') as HTMLElement;
+    expect(row.closest('.tubu-nums')).not.toBeNull();
+    fireEvent.click(row);
+    const dialog = await screen.findByRole('dialog', { name: 'Chi tiết thông báo' });
+    expect(dialog.classList.contains('tubu-nums')).toBe(true);
   });
 });
