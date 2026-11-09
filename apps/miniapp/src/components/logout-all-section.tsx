@@ -22,7 +22,7 @@ export function LogoutAllSection() {
 
   return (
     <>
-      <Button fullWidth variant="secondary" onPress={() => setConfirming(true)}>
+      <Button fullWidth variant="secondary" disabled={logoutAllM.isPending} onPress={() => setConfirming(true)}>
         Đăng xuất mọi thiết bị
       </Button>
       <ConfirmSheet
@@ -31,8 +31,14 @@ export function LogoutAllSection() {
         message="Mọi máy đang đăng nhập tài khoản này, kể cả máy này, sẽ phải đăng nhập lại."
         confirmLabel="Đăng xuất mọi máy"
         loading={logoutAllM.isPending}
-        onConfirm={() => logoutAllM.mutate()}
-        onCancel={() => setConfirming(false)}
+        onConfirm={() => {
+          if (logoutAllM.isPending) return;
+          logoutAllM.mutate();
+        }}
+        onCancel={() => {
+          if (logoutAllM.isPending) return;
+          setConfirming(false);
+        }}
       />
     </>
   );

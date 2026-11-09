@@ -23,10 +23,16 @@ import { Text } from './ui/text';
 export function AccountDeletionSection() {
   const { openSnackbar } = useSnackbar();
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [forfeitAgreed, setForfeitAgreed] = useState(false);
+  const [agreedBalance, setAgreedBalance] = useState<number | null>(null);
   const qc = useQueryClient();
   const walletQ = useQuery({ queryKey: ['wallet'], queryFn: getWallet, enabled: confirmDelete });
   const walletBalance = walletQ.data?.walletBalance;
+  // Đồng ý bỏ số dư gắn với đúng số tiền khách đã thấy: số dư đổi (Thử lại, tải lại khi quay về app) thì phải tick lại.
+  const forfeitAgreed = walletBalance !== undefined && agreedBalance === walletBalance;
+  // Truy vấn lỗi mà chưa có số dư bị react-query đặt về pending lúc tải lại và xoá lỗi; giữ vùng lỗi + nút Thử lại đứng yên
+  // (không mất focus) tới khi lượt tải lại có kết quả.
+  const [walletRetrying, setWalletRetrying] = useState(false);
+  const walletWaiting = walletRetrying && walletQ.isPending;
 
   // Ghi nhận yêu cầu thật (CSKH xử lý thủ công, không xoá ngay) và mở sẵn Zalo OA để khách trao đổi luôn.
   const deleteM = useMutation({
@@ -35,10 +41,11 @@ export function AccountDeletionSection() {
       openSnackbar({ text: res.message, type: 'info' });
       if (hasOA) void openOAChat('Tôi muốn xoá tài khoản Tubu Tree');
       setConfirmDelete(false);
+      setWalletRetrying(false);
     },
     onError: (e: unknown) => {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
-      setForfeitAgreed(false);
+      setAgreedBalance(null);
       void qc.invalidateQueries({ queryKey: ['wallet'] });
     },
   });
@@ -61,27 +68,39 @@ export function AccountDeletionSection() {
             Gửi yêu cầu để CSKH liên hệ xác minh và xử lý xoá tài khoản theo quy định — tài khoản CHƯA bị xoá ngay khi
             bạn bấm nút này.
           </Text>
-          {walletQ.isLoading && (
+          {walletQ.isLoading && !walletWaiting && (
             <Text variant="caption" tone="secondary" as="p" style={{ marginTop: 8 }}>
               {WALLET_FORFEIT_LOADING}
             </Text>
           )}
-          {walletQ.isError && (
-            <div role="alert" style={{ marginTop: 8 }}>
-              <Text variant="caption" tone="danger" as="p">
+          {walletQ.isError || walletWaiting ? (
+            <div role="alert" style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <Text variant="caption" tone="danger" as="p" style={{ flex: 1, minWidth: 0 }}>
                 {WALLET_FORFEIT_UNKNOWN}
               </Text>
+              <Button
+                variant="secondary"
+                loading={walletQ.isFetching}
+                disabled={deleteM.isPending}
+                onPress={() => {
+                  setWalletRetrying(true);
+                  return walletQ.refetch();
+                }}
+              >
+                Thử lại
+              </Button>
             </div>
-          )}
+          ) : null}
           {walletBalance !== undefined && walletBalance > 0 && (
             <div style={{ marginTop: 12 }}>
-              <Text variant="body-sm" as="p" style={{ fontWeight: 700 }}>
+              <Text variant="body-sm" as="p" numeric style={{ fontWeight: 700 }}>
                 {walletForfeitNotice(formatVnd(walletBalance))}
               </Text>
               <div style={{ marginTop: 8 }}>
                 <Checkbox
                   checked={forfeitAgreed}
-                  onChange={() => setForfeitAgreed((v) => !v)}
+                  disabled={deleteM.isPending}
+                  onChange={() => setAgreedBalance(forfeitAgreed ? null : walletBalance)}
                   label={WALLET_FORFEIT_AGREE}
                 />
               </div>
@@ -90,9 +109,12 @@ export function AccountDeletionSection() {
           <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
             <Button
               variant="secondary"
+              disabled={deleteM.isPending}
               onPress={() => {
+                if (deleteM.isPending) return;
                 setConfirmDelete(false);
-                setForfeitAgreed(false);
+                setAgreedBalance(null);
+                setWalletRetrying(false);
               }}
               style={{ flex: '0 0 96px' }}
             >
@@ -102,7 +124,10 @@ export function AccountDeletionSection() {
               variant="danger"
               loading={deleteM.isPending}
               disabled={!canSubmitDeletion(walletBalance, forfeitAgreed)}
-              onPress={() => deleteM.mutate()}
+              onPress={() => {
+                if (deleteM.isPending) return;
+                deleteM.mutate();
+              }}
               style={{ flex: 1 }}
             >
               Gửi yêu cầu xoá
