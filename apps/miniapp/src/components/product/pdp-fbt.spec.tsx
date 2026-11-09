@@ -122,6 +122,19 @@ describe('PdpFbt: thêm cả bộ', () => {
     await waitFor(() => expect(screen.getByTestId('fbt-add')).not.toHaveAttribute('aria-busy', 'true'));
   });
 
+  it('chạm đúp nút Thêm trong cùng một khung hình (trước khi vẽ lại): chỉ một lệnh lô (W72A)', async () => {
+    let release: (v: unknown) => void = () => {};
+    mocks.addAll.mockImplementation(() => new Promise((r) => { release = r; }));
+    renderHost();
+    const add = screen.getByTestId('fbt-add');
+    await act(async () => {
+      fireEvent.click(add);
+      fireEvent.click(add);
+    });
+    expect(mocks.addAll).toHaveBeenCalledTimes(1);
+    await act(async () => release({}));
+  });
+
   it('lỗi (tất cả-hoặc-không): báo câu cố định, không báo thành công, không chấm bay; lựa chọn của khách còn nguyên', async () => {
     mocks.addAll.mockRejectedValue(new Error('boom'));
     renderHost();

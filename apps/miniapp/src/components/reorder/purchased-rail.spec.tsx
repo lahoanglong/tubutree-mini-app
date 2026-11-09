@@ -646,3 +646,72 @@ describe('Dải "Mua lại món quen" ở Trang chủ (W43A)', () => {
     expect(screen.getByRole('button', { name: 'Thử lại Mua lại' })).toBeInTheDocument();
   });
 });
+
+describe('Dải "Mua lại món quen": một lệnh bay mỗi lúc kể cả khi hai cú chạm sát nhau (W72A)', () => {
+  const many = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({ ...ITEM, variationId: `v${i}`, slug: `sp-${i}`, productName: `SP ${i}`, variationName: null, timesBought: 1 }));
+  const addButton = (id: string) => screen.getAllByTestId('quick-reorder-add').find((b) => b.getAttribute('data-variation-id') === id)!;
+  const addAllButton = () => screen.getByRole('button', { name: /^Thêm lại tất cả 3 món vào giỏ/ });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    mocks.subs = true;
+    mocks.status = 'authenticated';
+    mocks.fetchActiveFlashSales.mockResolvedValue([]);
+    mocks.fetchProducts.mockResolvedValue({ data: [], meta: { page: 1, limit: 12, total: 0 } });
+    mocks.fetchCombos.mockResolvedValue([]);
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: many(3), nextCursor: null });
+  });
+
+  it('chạm "Thêm lại tất cả" rồi "+ Thêm" trong cùng một khung hình: chỉ có lệnh lô, không bay thêm lệnh một món', async () => {
+    mocks.addAllToCart.mockReturnValue(new Promise(() => undefined));
+    renderRail();
+    await screen.findByTestId('quick-reorder');
+    const all = addAllButton();
+    const one = addButton('v0');
+    await act(async () => {
+      fireEvent.click(all);
+      fireEvent.click(one);
+    });
+    expect(mocks.addAllToCart).toHaveBeenCalledTimes(1);
+    expect(mocks.addToCart).not.toHaveBeenCalled();
+  });
+
+  it('chạm "+ Thêm" rồi "Thêm lại tất cả" trong cùng một khung hình: chỉ có lệnh một món, không bay thêm lệnh lô', async () => {
+    mocks.addToCart.mockReturnValue(new Promise(() => undefined));
+    renderRail();
+    await screen.findByTestId('quick-reorder');
+    const all = addAllButton();
+    const one = addButton('v0');
+    await act(async () => {
+      fireEvent.click(one);
+      fireEvent.click(all);
+    });
+    expect(mocks.addToCart).toHaveBeenCalledTimes(1);
+    expect(mocks.addAllToCart).not.toHaveBeenCalled();
+  });
+
+  it('chạm đúp "+ Thêm" cùng một món trong cùng một khung hình: chỉ thêm một lần', async () => {
+    mocks.addToCart.mockReturnValue(new Promise(() => undefined));
+    renderRail();
+    await screen.findByTestId('quick-reorder');
+    const one = addButton('v1');
+    await act(async () => {
+      fireEvent.click(one);
+      fireEvent.click(one);
+    });
+    expect(mocks.addToCart).toHaveBeenCalledTimes(1);
+  });
+
+  it('lệnh lô xong (thành công hoặc lỗi) thì nhả khoá: "+ Thêm" bấm được', async () => {
+    mocks.addAllToCart.mockRejectedValueOnce(new Error('boom'));
+    mocks.addToCart.mockResolvedValue(CART);
+    renderRail();
+    await screen.findByTestId('quick-reorder');
+    await act(async () => fireEvent.click(addAllButton()));
+    await waitFor(() => expect(addButton('v0')).toBeEnabled());
+    await act(async () => fireEvent.click(addButton('v0')));
+    expect(mocks.addToCart).toHaveBeenCalledTimes(1);
+  });
+});

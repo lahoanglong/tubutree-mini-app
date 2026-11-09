@@ -33,7 +33,7 @@ export function useQuickReorder() {
   const inflight = useRef(false);
 
   const addOne = async (item: QuickReorderItem) => {
-    if (inflight.current || bundle.busyId !== undefined) return;
+    if (inflight.current || bundle.inFlight()) return;
     inflight.current = true;
     setBusyKey(item.variationId);
     try {

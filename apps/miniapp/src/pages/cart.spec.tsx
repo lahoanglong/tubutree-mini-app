@@ -1452,6 +1452,7 @@ describe('CartPage: thanh Miễn phí giao hàng và dải gợi ý bù đơn (W
   const addBtn = (name: string) => screen.getByRole('button', { name: new RegExp(`^Thêm ${name} vào giỏ`) });
   const barText = () => within(screen.getByTestId('freeship-progress')).getByRole('status').textContent;
   let resolveAdd: () => void;
+  const pendingAdds: Array<() => void> = [];
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -1460,7 +1461,8 @@ describe('CartPage: thanh Miễn phí giao hàng và dải gợi ý bù đơn (W
     mocks.fetchProducts.mockReset();
     mocks.fetchProducts.mockResolvedValue(PAGE(CARDS()));
     mocks.addToCart.mockReset();
-    mocks.addToCart.mockImplementation(() => new Promise((r) => { resolveAdd = () => r(summary({})); }));
+    pendingAdds.length = 0;
+    mocks.addToCart.mockImplementation(() => new Promise((r) => { resolveAdd = () => r(summary({})); pendingAdds.push(resolveAdd); }));
   });
 
   it('chưa đạt: dải gợi ý hiện dưới thanh, ưu tiên món đóng được khoảng thiếu (rẻ trước) rồi các món rẻ hơn; loại món đã có trong giỏ, quá đắt, hết hàng', async () => {
@@ -1504,8 +1506,12 @@ describe('CartPage: thanh Miễn phí giao hàng và dải gợi ý bù đơn (W
       await new Promise((r) => setTimeout(r, 30));
     });
     expect(mocks.addToCart.mock.calls).toEqual([['vb4', 1], ['vb3', 1]]);
-    act(() => resolveAdd());
-    await waitFor(() => expect(mocks.getCart.mock.calls.length).toBeGreaterThan(1));
+    const base = mocks.getCart.mock.calls.length;
+    act(() => pendingAdds[1]!());
+    await act(async () => {});
+    expect(mocks.getCart.mock.calls.length).toBe(base);
+    act(() => pendingAdds[0]!());
+    await waitFor(() => expect(mocks.getCart.mock.calls.length).toBeGreaterThan(base));
   });
 
   it('xong một lần thêm thì được thêm món khác', async () => {
@@ -1628,5 +1634,212 @@ describe('CartPage: nút "Mua thêm" ở dòng sắp mở khoá mã (W50A)', () 
     await screen.findByTestId('cart-voucher-apply-cta');
     expect(screen.queryByTestId('cart-voucher-unlock')).toBeNull();
     expect(screen.queryByTestId('cart-voucher-unlock-cta')).toBeNull();
+  });
+});
+
+describe('CartPage: khoá chạm đúp và đua khi đổi giỏ, Thử lại tại chỗ khi báo giá phần chọn lỗi (W72A)', () => {
+  const LINE_B = { ...OK_LINE, id: 'ci-b', variationId: 'v-b', productName: 'Dầu gội', slug: 'dg', unitPrice: 100_000, total: 100_000 };
+  const two = () => summary({ items: [OK_LINE, LINE_B], subtotal: 150_000, itemCount: 2 });
+  const pending = <T,>() => {
+    let resolve!: (v: T) => void;
+    const promise = new Promise<T>((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  const EMPTY = summary({ items: [], subtotal: 0, itemCount: 0 });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getCart.mockResolvedValue(summary({}));
+    mocks.getCartSelection.mockRejectedValue(new Error('chưa mock'));
+    mocks.fetchProducts.mockResolvedValue({ data: [], meta: { page: 1, limit: 4, total: 0 } });
+  });
+
+  it('chạm đúp "Hoàn tác" trong cùng một khung hình: chỉ thêm lại món một lần', async () => {
+    mocks.removeCartItem.mockResolvedValue(EMPTY);
+    const add = pending<ReturnType<typeof summary>>();
+    mocks.addToCart.mockReturnValue(add.promise);
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Xoá Xà bông thảo mộc' }));
+    const undo = await screen.findByRole('button', { name: 'Hoàn tác' });
+    await act(async () => {
+      fireEvent.click(undo);
+      fireEvent.click(undo);
+    });
+    expect(mocks.addToCart).toHaveBeenCalledTimes(1);
+    expect(mocks.addToCart).toHaveBeenCalledWith('v-ok', 1);
+    await act(async () => add.resolve(summary({})));
+  });
+
+  it('Hoàn tác xong thì nhả khoá: xoá rồi Hoàn tác lần nữa vẫn thêm lại được', async () => {
+    mocks.removeCartItem.mockResolvedValue(EMPTY);
+    mocks.addToCart.mockResolvedValue(summary({}));
+    renderPage();
+    for (let round = 1; round <= 2; round += 1) {
+      fireEvent.click(await screen.findByRole('button', { name: 'Xoá Xà bông thảo mộc' }));
+      const undo = await screen.findByRole('button', { name: 'Hoàn tác' });
+      await act(async () => fireEvent.click(undo));
+      await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledTimes(round));
+      await waitFor(() => expect(screen.queryByRole('button', { name: 'Hoàn tác' })).toBeNull());
+    }
+  });
+
+  it('chạm đúp nút Xoá dòng trong cùng một khung hình: chỉ xoá một lần (không nhận 404 lần hai)', async () => {
+    const remove = pending<ReturnType<typeof summary>>();
+    mocks.removeCartItem.mockReturnValue(remove.promise);
+    renderPage();
+    const button = await screen.findByRole('button', { name: 'Xoá Xà bông thảo mộc' });
+    await act(async () => {
+      fireEvent.click(button);
+      fireEvent.click(button);
+    });
+    expect(mocks.removeCartItem).toHaveBeenCalledTimes(1);
+    await act(async () => remove.resolve(EMPTY));
+  });
+
+  it('hai dòng khác nhau: xoá cả hai liền nhau vẫn gửi đủ hai lệnh', async () => {
+    mocks.getCart.mockResolvedValue(two());
+    const remove = pending<ReturnType<typeof summary>>();
+    mocks.removeCartItem.mockReturnValue(remove.promise);
+    renderPage();
+    const a = await screen.findByRole('button', { name: 'Xoá Xà bông thảo mộc' });
+    const b = await screen.findByRole('button', { name: 'Xoá Dầu gội' });
+    await act(async () => {
+      fireEvent.click(a);
+      fireEvent.click(b);
+    });
+    expect(mocks.removeCartItem.mock.calls.map((c) => c[0]).sort()).toEqual(['ci-b', 'ci-ok']);
+    await act(async () => remove.resolve(EMPTY));
+  });
+
+  it('đổi số lượng một dòng hai lần liên tiếp: lệnh sau chờ lệnh trước xong rồi mới gửi, đúng thứ tự (không đảo thứ tự ở máy chủ)', async () => {
+    const resolvers: Array<(v: ReturnType<typeof summary>) => void> = [];
+    mocks.updateCartItem.mockImplementation(() => new Promise((res) => resolvers.push(res)));
+    renderPage();
+    await screen.findByText('Xà bông thảo mộc');
+    fireEvent.click(screen.getByRole('button', { name: 'Tăng số lượng' }));
+    await waitFor(() => expect(mocks.updateCartItem).toHaveBeenCalledTimes(1), { timeout: 2_000 });
+    fireEvent.click(screen.getByRole('button', { name: 'Tăng số lượng' }));
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 700));
+    });
+    expect(mocks.updateCartItem).toHaveBeenCalledTimes(1);
+    await act(async () => resolvers[0]!(summary({})));
+    await waitFor(() => expect(mocks.updateCartItem).toHaveBeenCalledTimes(2));
+    expect(mocks.updateCartItem.mock.calls).toEqual([['ci-ok', 2], ['ci-ok', 3]]);
+    await act(async () => resolvers[1]!(summary({})));
+  });
+
+  it('lệnh đổi số lượng trước bị lỗi: lệnh sau vẫn được gửi', async () => {
+    mocks.updateCartItem.mockRejectedValueOnce(new Error('mạng')).mockResolvedValue(summary({}));
+    renderPage();
+    await screen.findByText('Xà bông thảo mộc');
+    fireEvent.click(screen.getByRole('button', { name: 'Tăng số lượng' }));
+    await waitFor(() => expect(mocks.updateCartItem).toHaveBeenCalledTimes(1), { timeout: 2_000 });
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: 'Tăng số lượng' }));
+    await waitFor(() => expect(mocks.updateCartItem).toHaveBeenCalledTimes(2), { timeout: 2_000 });
+  });
+
+  it('hai dòng khác nhau đổi số lượng cùng lúc: không chờ nhau', async () => {
+    mocks.getCart.mockResolvedValue(two());
+    mocks.updateCartItem.mockReturnValue(new Promise(() => undefined));
+    renderPage();
+    await screen.findByText('Dầu gội');
+    const pluses = screen.getAllByRole('button', { name: 'Tăng số lượng' });
+    fireEvent.click(pluses[0]!);
+    fireEvent.click(pluses[1]!);
+    await waitFor(() => expect(mocks.updateCartItem).toHaveBeenCalledTimes(2), { timeout: 2_000 });
+    expect(mocks.updateCartItem.mock.calls.map((c) => c[0]).sort()).toEqual(['ci-b', 'ci-ok']);
+  });
+
+  it('hai lệnh đổi số lượng đang bay: lệnh xong trước chưa đọc lại giỏ (khỏi nháy số cũ), lệnh xong sau mới đọc lại', async () => {
+    const resolvers: Array<(v: ReturnType<typeof summary>) => void> = [];
+    mocks.updateCartItem.mockImplementation(() => new Promise((res) => resolvers.push(res)));
+    renderPage();
+    await screen.findByText('Xà bông thảo mộc');
+    fireEvent.click(screen.getByRole('button', { name: 'Tăng số lượng' }));
+    await waitFor(() => expect(mocks.updateCartItem).toHaveBeenCalledTimes(1), { timeout: 2_000 });
+    fireEvent.click(screen.getByRole('button', { name: 'Tăng số lượng' }));
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 700));
+    });
+    const base = mocks.getCart.mock.calls.length;
+    await act(async () => resolvers[0]!(summary({})));
+    await waitFor(() => expect(mocks.updateCartItem).toHaveBeenCalledTimes(2));
+    await act(async () => {});
+    expect(mocks.getCart.mock.calls.length).toBe(base);
+    await act(async () => resolvers[1]!(summary({})));
+    await waitFor(() => expect(mocks.getCart.mock.calls.length).toBeGreaterThan(base));
+  });
+
+  it('một lệnh đổi số lượng xong lẻ loi: đọc lại giỏ như trước', async () => {
+    mocks.updateCartItem.mockResolvedValue(summary({}));
+    renderPage();
+    await screen.findByText('Xà bông thảo mộc');
+    const base = mocks.getCart.mock.calls.length;
+    fireEvent.click(screen.getByRole('button', { name: 'Tăng số lượng' }));
+    await waitFor(() => expect(mocks.getCart.mock.calls.length).toBeGreaterThan(base), { timeout: 2_000 });
+  });
+
+  describe('báo giá phần đã chọn lỗi', () => {
+    const deselectFirst = async () => {
+      mocks.getCart.mockResolvedValue(two());
+      renderPage();
+      fireEvent.click(await screen.findByRole('checkbox', { name: 'Chọn Xà bông thảo mộc' }));
+      return screen.findByTestId('cart-selection-error', {}, { timeout: 3_000 });
+    };
+
+    it('chọn một phần mà máy chủ không báo giá được: hiện dòng báo và nút Thử lại tên riêng, không im lặng', async () => {
+      const box = await deselectFirst();
+      expect(box).toHaveAttribute('role', 'alert');
+      expect(within(box).getByRole('button', { name: 'Thử lại báo giá phần đã chọn' })).toBeInTheDocument();
+    });
+
+    it('Thử lại hỏi lại máy chủ; được thì dòng báo biến mất và hiện số của phần chọn', async () => {
+      const box = await deselectFirst();
+      mocks.getCartSelection.mockResolvedValue(summary({ items: [LINE_B], subtotal: 100_000, itemCount: 1, discount: 3_000 }));
+      const calls = mocks.getCartSelection.mock.calls.length;
+      fireEvent.click(within(box).getByRole('button', { name: 'Thử lại báo giá phần đã chọn' }));
+      await waitFor(() => expect(screen.queryByTestId('cart-selection-error')).toBeNull());
+      expect(mocks.getCartSelection.mock.calls.length).toBe(calls + 1);
+      expect(await screen.findByText('-3.000đ')).toBeInTheDocument();
+    });
+
+    it('đổi lựa chọn sau khi lỗi: dòng báo của phần chọn cũ biến mất ngay, không chờ kết quả của phần chọn mới', async () => {
+      const LINE_C = { ...OK_LINE, id: 'ci-c', variationId: 'v-c', productName: 'Kem đánh răng', slug: 'kdr', unitPrice: 30_000, total: 30_000 };
+      mocks.getCart.mockResolvedValue(summary({ items: [OK_LINE, LINE_B, LINE_C], subtotal: 180_000, itemCount: 3 }));
+      renderPage();
+      fireEvent.click(await screen.findByRole('checkbox', { name: 'Chọn Xà bông thảo mộc' }));
+      await screen.findByTestId('cart-selection-error', {}, { timeout: 3_000 });
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Chọn Dầu gội' }));
+      expect(screen.queryByTestId('cart-selection-error')).toBeNull();
+      expect(await screen.findByTestId('cart-selection-error', {}, { timeout: 3_000 })).toBeInTheDocument();
+    });
+
+    it('chạm đúp Thử lại trong cùng một khung hình: chỉ hỏi máy chủ thêm một lần', async () => {
+      const box = await deselectFirst();
+      const retry = pending<ReturnType<typeof summary>>();
+      mocks.getCartSelection.mockReturnValue(retry.promise);
+      const calls = mocks.getCartSelection.mock.calls.length;
+      const button = within(box).getByRole('button', { name: 'Thử lại báo giá phần đã chọn' });
+      await act(async () => {
+        fireEvent.click(button);
+        fireEvent.click(button);
+      });
+      expect(mocks.getCartSelection.mock.calls.length).toBe(calls + 1);
+      await act(async () => retry.resolve(summary({ items: [LINE_B], subtotal: 100_000, itemCount: 1 })));
+    });
+
+    it('chọn cả giỏ (không cần giá phần chọn): không có dòng báo lỗi', async () => {
+      mocks.getCart.mockResolvedValue(two());
+      renderPage();
+      await screen.findByText('Dầu gội');
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 450));
+      });
+      expect(screen.queryByTestId('cart-selection-error')).toBeNull();
+    });
   });
 });

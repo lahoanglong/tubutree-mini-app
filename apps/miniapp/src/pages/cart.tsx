@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Box, Page, Text, useNavigate, useSnackbar } from 'zmp-ui';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, type QueryClient, type UseMutationOptions } from '@tanstack/react-query';
 import { Trash2, Ticket, ChevronRight, AlertTriangle, Zap } from 'lucide-react';
 import { cartSaving, lineCompareAt } from '@tubutree/app-core/commerce/pdp-view';
 import { cartTotalLabel } from '@tubutree/app-core/commerce/cart-total';
@@ -50,9 +50,10 @@ import { KeyValueRow } from '../components/ui/key-value-row';
 import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
+import { useLockedMutation } from '../components/game/use-locked-mutation';
 import { rowKeyboardProps } from '../components/ui/row-keyboard';
 import { PriceTag } from '../components/ui/price-tag';
-import { Heading } from '../components/ui/text';
+import { Heading, Text as DsText } from '../components/ui/text';
 import { fulfillerLabel, groupByFulfiller, showFulfillerHeaders, tubuSubtotal } from '../utils/shipments';
 import { cartKey, useCartKey } from '../services/cart-key';
 import { ProductThumb } from '../components/ui/product-thumb';
@@ -96,16 +97,25 @@ function pendingAddonLine(item: FreeshipAddonItem): CartLine {
  * Mutation giỏ hàng kiểu optimistic (AD-005):
  * cancel queries → snapshot → áp ngay vào cache → rollback nếu lỗi → invalidate khi xong.
  */
-function useOptimisticCart<TVars>(
+// Số lệnh sửa giỏ đang bay theo từng QueryClient, đếm đồng bộ (cộng ở đầu onMutate, trừ ở đầu onSettled): hai lệnh xong cùng lúc thì lệnh xong sau luôn thấy 0.
+const editsInFlight = new WeakMap<QueryClient, number>();
+function countEdits(queryClient: QueryClient, delta: number): number {
+  const next = (editsInFlight.get(queryClient) ?? 0) + delta;
+  editsInFlight.set(queryClient, next);
+  return next;
+}
+
+function useOptimisticCartOptions<TVars>(
   mutationFn: (vars: TVars) => Promise<CartSummary>,
   apply: (prev: CartSummary, vars: TVars) => CartSummary,
   onResponse?: (response: CartSummary) => void,
-) {
+): UseMutationOptions<CartSummary, unknown, TVars, { prev: CartSummary | undefined }> {
   const queryClient = useQueryClient();
   const { openSnackbar } = useSnackbar();
-  return useMutation({
+  return {
     mutationFn,
     onMutate: async (vars: TVars) => {
+      countEdits(queryClient, 1);
       await queryClient.cancelQueries({ queryKey: ['cart'] });
       const prev = queryClient.getQueryData<CartSummary>(cartKey());
       if (prev) queryClient.setQueryData(cartKey(), apply(prev, vars));
@@ -118,8 +128,19 @@ function useOptimisticCart<TVars>(
       if (ctx?.prev) queryClient.setQueryData(cartKey(), ctx.prev);
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
     },
-    onSettled: () => void queryClient.invalidateQueries({ queryKey: ['cart'] }),
-  });
+    // Còn lệnh sửa giỏ khác đang bay thì chưa đọc lại: bản đọc về lúc đó chưa có lệnh kia, giỏ nháy về số cũ. Lệnh xong cuối cùng đọc lại.
+    onSettled: () => {
+      if (countEdits(queryClient, -1) <= 0) void queryClient.invalidateQueries({ queryKey: ['cart'] });
+    },
+  };
+}
+
+function useOptimisticCart<TVars>(
+  mutationFn: (vars: TVars) => Promise<CartSummary>,
+  apply: (prev: CartSummary, vars: TVars) => CartSummary,
+  onResponse?: (response: CartSummary) => void,
+) {
+  return useMutation(useOptimisticCartOptions(mutationFn, apply, onResponse));
 }
 
 export default function CartPage() {
@@ -184,17 +205,37 @@ export default function CartPage() {
   // Số chỉ đúng cho đúng phần đã hỏi: vừa đổi chọn/số lượng (chưa hỏi lại), đang tải lại hoặc lỗi thì không hiện số cũ.
   const priced =
     !!subsetSig && settledSubsetSig === subsetSig && selectionQ.isSuccess && !selectionQ.isFetching ? selectionQ.data : null;
+  // Lỗi của đúng phần đang chọn: không hiện số giảm của phần chọn mà trước đây cũng không nói vì sao, nên báo tại chỗ kèm Thử lại.
+  const selectionPriceFailed = !!subsetSig && settledSubsetSig === subsetSig && selectionQ.isError;
 
+  // Các lệnh đổi số lượng của CÙNG một dòng xếp hàng theo thứ tự bấm: hai PATCH bay song song có thể tới máy chủ đảo thứ tự và để lại số cũ.
+  const updateQueue = useRef(new Map<string, Promise<unknown>>());
+  const queuedUpdate = ({ id, qty }: { id: string; qty: number }) => {
+    const run = (updateQueue.current.get(id) ?? Promise.resolve()).then(() => updateCartItem(id, qty));
+    const tail = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    updateQueue.current.set(id, tail);
+    void tail.then(() => {
+      if (updateQueue.current.get(id) === tail) updateQueue.current.delete(id);
+    });
+    return run;
+  };
   const update = useOptimisticCart(
-    ({ id, qty }: { id: string; qty: number }) => updateCartItem(id, qty),
+    queuedUpdate,
     (prev, { id, qty }) =>
       recompute(prev, prev.items.map((l) => (l.id === id ? { ...l, quantity: qty } : l)), id),
     removedCoupon.remember,
   );
-  const remove = useOptimisticCart(
-    ({ id }: { id: string; line: CartLine }) => removeCartItem(id),
-    (prev, { id }) => recompute(prev, prev.items.filter((l) => l.id !== id)),
-    removedCoupon.remember,
+  // Khoá đồng bộ theo dòng: hai cú chạm sát nhau vào cùng nút Xoá không gọi xoá hai lần (lần hai nhận 404 và hoàn lại giỏ).
+  const remove = useLockedMutation(
+    useOptimisticCartOptions(
+      ({ id }: { id: string; line: CartLine }) => removeCartItem(id),
+      (prev, { id }) => recompute(prev, prev.items.filter((l) => l.id !== id)),
+      removedCoupon.remember,
+    ),
+    ({ id }) => id,
   );
 
   // Gợi ý bù đơn lấy từ Bán chạy nhất (cùng khoá với Trang chủ nên thường đã có sẵn). Lỗi chỉ làm ẩn dải, không chặn giỏ.
@@ -234,15 +275,21 @@ export default function CartPage() {
     );
   };
 
+  // `removed` chỉ đổi sau lần vẽ kế tiếp: chạm đúp "Hoàn tác" thấy dòng vẫn còn ở cả hai lần và thêm món hai lần (số lượng nhân đôi).
+  const undoing = useRef(false);
   const handleUndo = () => {
-    if (!removed) return;
+    if (!removed || undoing.current) return;
+    undoing.current = true;
     haptic('light');
     const line = removed;
     setRemoved(null);
     if (undoTimer.current) clearTimeout(undoTimer.current);
     addToCart(line.variationId, line.quantity)
       .then((c) => queryClient.setQueryData(cartKey(), c))
-      .catch((e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }));
+      .catch((e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }))
+      .finally(() => {
+        undoing.current = false;
+      });
   };
 
   // Chưa đăng nhập xong: đang khôi phục → khung chờ (không chớp màn đăng nhập); mất kết nối → Thử lại; khách → mời đăng nhập.
@@ -387,6 +434,21 @@ export default function CartPage() {
           <Box px={3} pt={2}>
             <Checkbox checked={allSelected} onChange={toggleAll} label="Chọn tất cả" />
           </Box>
+          {selectionPriceFailed && (
+            <div
+              role="alert"
+              data-testid="cart-selection-error"
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--space-inline-sm)', padding: 'var(--space-stack-xs) var(--space-gutter) 0' }}
+            >
+              <DsText variant="body-sm" tone="danger">
+                {vi.cart.selectionPriceError}
+              </DsText>
+              {/* Tên riêng: nhiều nút "Thử lại" trên cùng màn làm nhiều việc khác nhau. */}
+              <Button variant="ghost" loading={selectionQ.isFetching} aria-label={vi.home.retryLabel('báo giá phần đã chọn')} onPress={() => selectionQ.refetch()}>
+                {vi.common.retry}
+              </Button>
+            </div>
+          )}
           {withHeaders && (
             <Box px={3} pt={2}>
               <Text size="xSmall" style={{ color: 'var(--color-text-secondary)' }}>
