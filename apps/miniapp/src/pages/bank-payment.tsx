@@ -84,12 +84,12 @@ export default function BankPaymentPage() {
 
   const remaining = useRemaining(data?.paymentDeadline);
 
-  // Khoá đồng bộ dùng chung cho cả ba dòng chép: hai cú chạm cùng nhịp (kể cả hai dòng khác nhau) mà ghi clipboard chồng nhau
-  // thì lần đáp sau cùng thắng, còn thông báo lại nói dòng kia; ref chặn được trước khi state kịp vẽ lại.
-  const copyingRef = useRef(false);
+  // Khoá đồng bộ THEO TỪNG DÒNG chép (khoá là nhãn): hai cú chạm cùng nhịp vào một dòng chỉ ghi clipboard một lần, còn chạm sang
+  // dòng khác vẫn chạy để không nuốt tay khách (nuốt thì khách dán nhầm giá trị mà không có phản hồi nào).
+  const copyingRef = useRef(new Set<string>());
   const copy = async (text: string, label: string): Promise<boolean> => {
-    if (copyingRef.current) return false;
-    copyingRef.current = true;
+    if (copyingRef.current.has(label)) return false;
+    copyingRef.current.add(label);
     try {
       haptic('light');
       // Chỉ báo "Đã sao chép" SAU KHI ghi clipboard thật sự thành công — báo thành công giả ở đây là
@@ -102,7 +102,7 @@ export default function BankPaymentPage() {
       );
       return ok;
     } finally {
-      copyingRef.current = false;
+      copyingRef.current.delete(label);
     }
   };
 

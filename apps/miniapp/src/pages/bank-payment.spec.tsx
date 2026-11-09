@@ -657,9 +657,10 @@ describe('Thanh toán chuyển khoản: chạm đúp cùng nhịp không gọi l
     expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã sao chép số tài khoản', type: 'success', position: 'top' });
   });
 
-  it('chạm hai dòng sao chép khác nhau cùng nhịp: chỉ dòng đầu được chép, dòng sau chờ lần chạm kế tiếp', async () => {
-    const d = deferred<boolean>();
-    mocks.copyText.mockReturnValueOnce(d.promise);
+  it('chạm hai dòng sao chép khác nhau cùng nhịp: cả hai dòng đều được chép, mỗi thông báo gọi đúng tên dòng của nó', async () => {
+    const account$ = deferred<boolean>();
+    const memo$ = deferred<boolean>();
+    mocks.copyText.mockReturnValueOnce(account$.promise).mockReturnValueOnce(memo$.promise);
     renderPage();
     const account = await screen.findByRole('button', { name: 'Sao chép số tài khoản' });
     const memo = screen.getByRole('button', { name: 'Sao chép nội dung chuyển khoản' });
@@ -667,16 +668,17 @@ describe('Thanh toán chuyển khoản: chạm đúp cùng nhịp không gọi l
       fireEvent.click(account);
       fireEvent.click(memo);
     });
-    expect(mocks.copyText).toHaveBeenCalledTimes(1);
-    expect(mocks.copyText).toHaveBeenCalledWith('0123456789');
+    expect(mocks.copyText).toHaveBeenCalledTimes(2);
+    expect(mocks.copyText).toHaveBeenNthCalledWith(1, '0123456789');
+    expect(mocks.copyText).toHaveBeenNthCalledWith(2, 'TT001');
     await act(async () => {
-      d.resolve(true);
+      account$.resolve(true);
+      memo$.resolve(true);
     });
-    expect(mocks.openSnackbar).toHaveBeenCalledTimes(1);
-    expect(screen.getAllByRole('status')).toHaveLength(1);
-    fireEvent.click(memo);
-    await waitFor(() => expect(mocks.copyText).toHaveBeenCalledTimes(2));
-    expect(mocks.copyText).toHaveBeenLastCalledWith('TT001');
+    expect(mocks.openSnackbar).toHaveBeenCalledTimes(2);
+    expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã sao chép số tài khoản', type: 'success', position: 'top' });
+    expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã sao chép nội dung chuyển khoản', type: 'success', position: 'top' });
+    expect(screen.getAllByRole('status')).toHaveLength(2);
   });
 
   it('chép không được (clipboard từ chối) thì nhả khoá: bấm lại gọi clipboard lần nữa', async () => {
