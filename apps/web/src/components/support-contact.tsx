@@ -1,6 +1,6 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useId, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { MessageCircle, MessageSquare, Phone, Mail, type LucideIcon } from 'lucide-react';
@@ -30,9 +30,9 @@ function Inner({ icon, children }: { icon: LucideIcon; children: ReactNode }) {
   );
 }
 
-function GhostLink({ href, icon, children }: { href: string; icon: LucideIcon; children: ReactNode }) {
+function GhostLink({ href, icon, numeric = false, children }: { href: string; icon: LucideIcon; numeric?: boolean; children: ReactNode }) {
   const external = href.startsWith('tel:') || href.startsWith('mailto:');
-  const props = { className: BTN, style: BTN_STYLE };
+  const props = { className: BTN, style: numeric ? { ...BTN_STYLE, fontVariantNumeric: 'tabular-nums' as const } : BTN_STYLE };
   return external ? (
     <a href={href} {...props}>
       <Inner icon={icon}>{children}</Inner>
@@ -58,6 +58,11 @@ export function SupportContact({ orderCode }: { orderCode?: string }) {
   const chatOn = usePublicConfig().chat?.enabled === true;
   const phase = useAuthPhase();
   const chatReady = chatOn && phase === 'authenticated';
+  const titleId = useId();
+  // Khoá đồng bộ: state `openingOa` chỉ đổi sau lần vẽ kế nên hai cú bấm cùng một nhịp sẽ mở OA hai lần; ref chặn được chuyện đó.
+  // `openChat` trên web xong ngay trong microtask, nên hai cú bấm cách nhau một tác vụ vẫn là hai lần mở như trước.
+  const openingOaRef = useRef(false);
+  const [openingOa, setOpeningOa] = useState(false);
   const supportQ = useQuery({ ...supportContactQuery(coreHttp), staleTime: 10 * 60_000 });
   const support = supportQ.isError ? DEFAULT_SUPPORT : supportQ.data;
   const hasOA = platformBridge.oa.available;
@@ -65,17 +70,32 @@ export function SupportContact({ orderCode }: { orderCode?: string }) {
   const email = support?.email ?? null;
   if (!hasOA && !hotline && !email && !chatReady) return null;
 
+  const openOa = async () => {
+    if (openingOaRef.current) return;
+    openingOaRef.current = true;
+    setOpeningOa(true);
+    try {
+      await platformBridge.oa.openChat(orderCode ? fillCopy('support.orderContext', { code: orderCode }) : undefined);
+    } finally {
+      openingOaRef.current = false;
+      setOpeningOa(false);
+    }
+  };
+
   const chatPath = orderCode ? `/ho-tro/chat?order=${encodeURIComponent(orderCode)}` : '/ho-tro/chat';
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-      <Text variant="caption" tone="tertiary">{fillCopy('support.title')}</Text>
+    <div role="region" aria-labelledby={titleId} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+      {/* Text chuyển prop còn lại xuống thẻ nhưng TextProps chưa khai `id`; spec "vùng có tên" giữ cho id này không rơi mất. */}
+      <Text variant="caption" tone="tertiary" {...{ id: titleId }}>
+        {fillCopy('support.title')}
+      </Text>
       {chatReady && (
         <GhostLink href={chatPath} icon={MessageCircle}>
           {fillCopy('support.chat')}
         </GhostLink>
       )}
       {!chatReady && hasOA && (
-        <button type="button" className={BTN} style={BTN_STYLE} onClick={() => void platformBridge.oa.openChat(orderCode ? fillCopy('support.orderContext', { code: orderCode }) : undefined)}>
+        <button type="button" className={BTN} style={BTN_STYLE} aria-busy={openingOa || undefined} onClick={() => void openOa()}>
           <Inner icon={MessageSquare}>{fillCopy('support.oa')}</Inner>
         </button>
       )}
@@ -85,7 +105,7 @@ export function SupportContact({ orderCode }: { orderCode?: string }) {
         </GhostLink>
       )}
       {hotline && (
-        <GhostLink href={`tel:${hotline.replace(/[^\d+]/g, '')}`} icon={Phone}>
+        <GhostLink href={`tel:${hotline.replace(/[^\d+]/g, '')}`} icon={Phone} numeric>
           {fillCopy('support.hotline', { phone: formatPhoneDisplay(hotline) })}
         </GhostLink>
       )}
