@@ -261,7 +261,7 @@ export default function RecyclePage() {
       loginBar(guestLogin),
     );
   }
-  if (meQ.isError || !me) return shell(<ErrorState message={getLoadErrorMessage(meQ.error)} onRetry={() => void meQ.refetch()} />);
+  if (meQ.isError || !me) return shell(<ErrorState message={getLoadErrorMessage(meQ.error)} onRetry={() => meQ.refetch()} />);
 
   const requestsBlock = <RequestsBlock me={me} onOpen={(id) => navigate(`/recycle/r/${id}`)} />;
   const recent = me.recentCompleted;

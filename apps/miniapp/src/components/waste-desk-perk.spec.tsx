@@ -288,6 +288,34 @@ describe('WasteDeskPerk (Mini): đang gửi duyệt', () => {
   });
 });
 
+describe('WasteDeskPerk (Mini): khoá chạm đúp Gửi duyệt (W77A)', () => {
+  it('chạm đúp "Gửi duyệt" trong cùng một khung hình chỉ gửi một lần, báo thành công một lần', async () => {
+    const send = deferred<unknown>();
+    mocks.submitDeskPerk.mockReturnValueOnce(send.promise);
+    renderWith(<WasteDeskPerk point={makeDeskPoint()} />);
+    fireEvent.change(await openSheet(), { target: { value: 'Tặng túi vải' } });
+    await act(async () => {
+      ctl.buttons.get('Gửi duyệt')!.onPress?.();
+      ctl.buttons.get('Gửi duyệt')!.onPress?.();
+    });
+    expect(mocks.submitDeskPerk).toHaveBeenCalledTimes(1);
+    await act(async () => send.resolve(makeDeskPoint({ perkPendingText: 'Tặng túi vải' })));
+    await waitFor(() => expect(sheetOpen()).toBe(false));
+    expect(mocks.submitDeskPerk).toHaveBeenCalledTimes(1);
+    expect(mocks.openSnackbar).toHaveBeenCalledTimes(1);
+  });
+
+  it('gửi lỗi thì nhả khoá: bấm lại gửi lần hai', async () => {
+    mocks.submitDeskPerk.mockRejectedValueOnce(new Error('Chưa được')).mockResolvedValue(makeDeskPoint());
+    renderWith(<WasteDeskPerk point={makeDeskPoint()} />);
+    fireEvent.change(await openSheet(), { target: { value: 'Tặng túi vải' } });
+    fireEvent.click(sendBtn());
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+    fireEvent.click(sendBtn());
+    await waitFor(() => expect(mocks.submitDeskPerk).toHaveBeenCalledTimes(2));
+  });
+});
+
 describe('WasteDeskPerk (Mini): gửi lỗi', () => {
   it('lỗi báo bằng snackbar và role="alert" tông danger ngay trong sheet; sheet vẫn mở, hết bận, chữ còn nguyên', async () => {
     mocks.submitDeskPerk.mockRejectedValue(new Error('Bạn không phải chủ điểm'));
