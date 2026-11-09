@@ -158,12 +158,105 @@ describe('OrderShipping (web)', () => {
     expect(container.querySelector('[role="status"]')?.textContent).toBe('Đã sao chép mã vận đơn');
   });
 
-  it('trình duyệt chặn clipboard thì nhắc chép tay', async () => {
+  it('trình duyệt chặn clipboard thì nhắc chép tay, lời nhắc là role="alert" còn vùng báo thành công để trống', async () => {
     vi.stubGlobal('navigator', { clipboard: { writeText: vi.fn().mockRejectedValue(new Error('chặn')) } });
     const { container } = mount(<OrderShipping code="GHN123" />);
     click(byText(container, 'button', 'Chép mã'));
     await act(async () => undefined);
-    expect(container.querySelector('[role="status"]')?.textContent).toContain('hãy chép mã thủ công');
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe('Không sao chép được — hãy chép mã thủ công.');
+    expect(container.querySelector('[role="status"]')?.textContent).toBe('');
+  });
+
+  describe('sao chép dùng chung copyText của web (có phương án hai như Mini App)', () => {
+    const execCommand = vi.fn();
+    beforeEach(() => {
+      execCommand.mockReset().mockReturnValue(true);
+      Object.defineProperty(document, 'execCommand', { value: execCommand, configurable: true, writable: true });
+    });
+    afterEach(() => {
+      delete (document as { execCommand?: unknown }).execCommand;
+    });
+
+    it('webview không có navigator.clipboard: rơi xuống execCommand("copy") và vẫn báo đã sao chép', async () => {
+      vi.stubGlobal('navigator', {});
+      const { container } = mount(<OrderShipping code="GHN123" />);
+      click(byText(container, 'button', 'Chép mã'));
+      await act(async () => undefined);
+      expect(execCommand).toHaveBeenCalledWith('copy');
+      expect(container.querySelector('[role="status"]')?.textContent).toBe('Đã sao chép mã vận đơn');
+      expect(container.querySelector('[role="alert"]')).toBeNull();
+    });
+
+    it('clipboard từ chối và execCommand cũng không chép được: mới nhắc chép tay', async () => {
+      vi.stubGlobal('navigator', { clipboard: { writeText: vi.fn().mockRejectedValue(new Error('chặn')) } });
+      execCommand.mockReturnValue(false);
+      const { container } = mount(<OrderShipping code="GHN123" />);
+      click(byText(container, 'button', 'Chép mã'));
+      await act(async () => undefined);
+      expect(container.querySelector('[role="alert"]')?.textContent).toContain('hãy chép mã thủ công');
+      expect(container.querySelector('[role="status"]')?.textContent).toBe('');
+    });
+  });
+
+  it('mỗi lần chạm đều có phản hồi mới: lời báo được dựng lại nên trình đọc màn hình đọc lại cả khi chữ không đổi', async () => {
+    const { container } = mount(<OrderShipping code="GHN123" />);
+    const tap = async () => {
+      click(byText(container, 'button', 'Chép mã'));
+      await act(async () => undefined);
+    };
+    await tap();
+    const first = container.querySelector('[role="status"] > *');
+    expect(first?.textContent).toBe('Đã sao chép mã vận đơn');
+    await tap();
+    const second = container.querySelector('[role="status"] > *');
+    expect(second?.textContent).toBe('Đã sao chép mã vận đơn');
+    expect(second).not.toBe(first);
+    expect(first!.isConnected).toBe(false);
+  });
+
+  it('tông màu theo kết quả: thành công màu thành công, lỗi màu nguy hiểm', async () => {
+    const write = vi.fn().mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('chặn'));
+    vi.stubGlobal('navigator', { clipboard: { writeText: write } });
+    const { container } = mount(<OrderShipping code="GHN123" />);
+    click(byText(container, 'button', 'Chép mã'));
+    await act(async () => undefined);
+    expect((container.querySelector('[role="status"]')!.firstElementChild as HTMLElement).style.color).toBe('var(--color-text-success)');
+    click(byText(container, 'button', 'Chép mã'));
+    await act(async () => undefined);
+    expect((container.querySelector('[role="alert"]')!.firstElementChild as HTMLElement).style.color).toBe('var(--color-text-danger)');
+  });
+
+  it('chép lỗi rồi chép được: lời nhắc chép tay biến mất; chép được rồi lỗi: lời "Đã sao chép" biến mất', async () => {
+    const write = vi.fn().mockRejectedValueOnce(new Error('chặn')).mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('chặn'));
+    vi.stubGlobal('navigator', { clipboard: { writeText: write } });
+    const { container } = mount(<OrderShipping code="GHN123" />);
+    const tap = async () => {
+      click(byText(container, 'button', 'Chép mã'));
+      await act(async () => undefined);
+    };
+    await tap();
+    expect(container.querySelector('[role="alert"]')).not.toBeNull();
+    await tap();
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(container.querySelector('[role="status"]')?.textContent).toBe('Đã sao chép mã vận đơn');
+    await tap();
+    expect(container.querySelector('[role="alert"]')).not.toBeNull();
+    expect(container.querySelector('[role="status"]')?.textContent).toBe('');
+  });
+
+  it('chép lỗi hai lần liền: lời nhắc cũng được dựng lại', async () => {
+    vi.stubGlobal('navigator', { clipboard: { writeText: vi.fn().mockRejectedValue(new Error('chặn')) } });
+    const { container } = mount(<OrderShipping code="GHN123" />);
+    const tap = async () => {
+      click(byText(container, 'button', 'Chép mã'));
+      await act(async () => undefined);
+    };
+    await tap();
+    const first = container.querySelector('[role="alert"]');
+    await tap();
+    const second = container.querySelector('[role="alert"]');
+    expect(second?.textContent).toContain('hãy chép mã thủ công');
+    expect(second).not.toBe(first);
   });
 
   it('vùng báo kết quả chép có sẵn từ đầu (rỗng) và chỉ đổi chữ, để trình đọc màn hình đọc được', async () => {

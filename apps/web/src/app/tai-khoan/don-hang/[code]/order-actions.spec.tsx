@@ -11,6 +11,8 @@ import { headingProblems, smallTouchTargets, unnamedControls } from '@/test-util
 const mocks = vi.hoisted(() => ({
   user: { id: 'u1' } as Record<string, unknown> | null,
   order: null as Record<string, unknown> | null,
+  orderGate: null as Promise<void> | null,
+  orderFetches: 0,
   push: vi.fn(),
   cancel: vi.fn(),
   corePost: vi.fn(),
@@ -44,7 +46,10 @@ vi.mock('@/lib/api', async (importOriginal) => ({
 }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/shop-client')>()),
-  fetchOrder: async () => mocks.order,
+  fetchOrder: () => {
+    mocks.orderFetches += 1;
+    return mocks.orderGate ? mocks.orderGate.then(() => mocks.order) : Promise.resolve(mocks.order);
+  },
   // Sheet Mua lại khoá nút thêm tới khi giỏ tải xong: không mock thì đi fetch thật tới API không có, báo lỗi sau một khoảng phụ thuộc tải máy.
   getCart: () => mocks.getCart(),
   cancelOrder: mocks.cancel,
@@ -64,6 +69,7 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
 }));
 
 import OrderDetailPage from './page';
+import { ReturnRequestForm } from './return-request-form';
 
 const BASE = {
   id: 'o9', code: 'TB-9', status: 'CONFIRMED', subtotal: 300000, discount: 0, shippingFee: 0, total: 300000,
@@ -119,6 +125,8 @@ const confirmWithReason = (c: HTMLElement) => {
 beforeEach(() => {
   mocks.user = { id: 'u1' };
   mocks.order = { ...BASE };
+  mocks.orderGate = null;
+  mocks.orderFetches = 0;
   mocks.push.mockReset();
   mocks.cancel.mockReset().mockResolvedValue({ ...BASE, status: 'CANCELLED' });
   mocks.corePost.mockReset();
@@ -254,6 +262,133 @@ describe('chi tiết đơn — huỷ đơn (BUYERWEB-13)', () => {
     confirmWithReason(container);
     await flush(8);
     expect(mocks.invalidateBalances).toHaveBeenCalled();
+  });
+
+  describe('trạng thái đơn đổi ngay từ phản hồi huỷ, không chờ tải lại (như Mini App)', () => {
+    // Giữ lượt tải lại đơn sau khi huỷ: nếu trang vẫn đổi trạng thái thì nó lấy từ phản hồi huỷ.
+    const holdRefetch = () => {
+      let release!: () => void;
+      mocks.orderGate = new Promise<void>((r) => (release = r));
+      return release;
+    };
+    const timelineStates = (c: HTMLElement) => Array.from(c.querySelectorAll('li[data-step]')).map((li) => li.getAttribute('data-state'));
+
+    it('dải trạng thái và hành trình rẽ sang "Đã huỷ" khi phản hồi huỷ về', async () => {
+      const { container } = await mount();
+      expect(timelineStates(container)).not.toContain('cancelled');
+      const release = holdRefetch();
+      click(btn(container, 'Huỷ đơn')!);
+      confirmWithReason(container);
+      await flush(8);
+      expect(container.querySelector('[data-testid="status-hero"]')?.textContent).toContain('Đã huỷ');
+      expect(timelineStates(container)).toContain('cancelled');
+      release();
+      await flush(4);
+    });
+
+    it('đơn chờ chuyển khoản vừa huỷ: nút "Thanh toán ngay" biến mất ngay', async () => {
+      mocks.order = { ...BASE, status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', paymentDeadline: '2099-01-01T03:00:00Z' };
+      mocks.cancel.mockResolvedValue({ ...mocks.order, status: 'CANCELLED' });
+      const { container } = await mount();
+      expect(btn(container, 'Thanh toán ngay')).toBeDefined();
+      const release = holdRefetch();
+      pressMenu(container, 'Huỷ đơn');
+      confirmWithReason(container);
+      await flush(8);
+      expect(container.textContent).toContain('Đã huỷ đơn hàng');
+      expect(btn(container, 'Thanh toán ngay')).toBeUndefined();
+      release();
+      await flush(4);
+    });
+
+    it('phản hồi huỷ không kèm đủ dòng hàng: danh sách sản phẩm giữ nguyên dòng đang có', async () => {
+      mocks.cancel.mockResolvedValue({ ...BASE, status: 'CANCELLED', items: [] });
+      const { container } = await mount();
+      const release = holdRefetch();
+      click(btn(container, 'Huỷ đơn')!);
+      confirmWithReason(container);
+      await flush(8);
+      expect(container.querySelector('[data-testid="status-hero"]')?.textContent).toContain('Đã huỷ');
+      expect(container.textContent).toContain('Dầu gội');
+      release();
+      await flush(4);
+    });
+
+    it('vẫn tải lại đơn sau khi huỷ để lấy bản đầy đủ', async () => {
+      const { container } = await mount();
+      const before = mocks.orderFetches;
+      click(btn(container, 'Huỷ đơn')!);
+      confirmWithReason(container);
+      await flush(8);
+      expect(mocks.orderFetches).toBeGreaterThan(before);
+    });
+  });
+
+  describe('khoá bấm đúp xác nhận huỷ', () => {
+    const openConfirm = async () => {
+      const r = await mount();
+      click(btn(r.container, 'Huỷ đơn')!);
+      pickReason(r.container);
+      return { ...r, confirm: confirmCancelBtn(r.container) as HTMLButtonElement };
+    };
+
+    it('hai cú bấm "Huỷ đơn" sát nhau trước khi vẽ lại: chỉ gọi API một lần', async () => {
+      mocks.cancel.mockImplementation(() => new Promise(() => {}));
+      const { confirm } = await openConfirm();
+      await act(async () => {
+        click(confirm);
+        click(confirm);
+      });
+      expect(mocks.cancel).toHaveBeenCalledTimes(1);
+    });
+
+    it('đang huỷ: nút báo aria-busy + aria-disabled nhưng không `disabled` (giữ focus), bấm thêm không gửi lần nữa', async () => {
+      mocks.cancel.mockImplementation(() => new Promise(() => {}));
+      const { confirm } = await openConfirm();
+      expect(confirm.hasAttribute('aria-busy')).toBe(false);
+      expect(confirm.hasAttribute('aria-disabled')).toBe(false);
+      confirm.focus();
+      click(confirm);
+      await flush();
+      expect(confirm.textContent).toBe('Đang huỷ…');
+      expect(confirm.getAttribute('aria-busy')).toBe('true');
+      expect(confirm.getAttribute('aria-disabled')).toBe('true');
+      expect(confirm.disabled).toBe(false);
+      expect(document.activeElement).toBe(confirm);
+      click(confirm);
+      await flush();
+      expect(mocks.cancel).toHaveBeenCalledTimes(1);
+    });
+
+    it('BE từ chối rồi khách mở lại: nút hết bận và huỷ lần hai gửi được', async () => {
+      mocks.cancel.mockRejectedValueOnce(new Error('Đơn đã bàn giao vận chuyển.'));
+      const { container, confirm } = await openConfirm();
+      click(confirm);
+      await flush(8);
+      expect(mocks.cancel).toHaveBeenCalledTimes(1);
+      click(btn(container, 'Huỷ đơn')!);
+      const again = confirmCancelBtn(container) as HTMLButtonElement;
+      expect(again.hasAttribute('aria-busy')).toBe(false);
+      expect(again.hasAttribute('aria-disabled')).toBe(false);
+      click(again);
+      await flush(8);
+      expect(mocks.cancel).toHaveBeenCalledTimes(2);
+    });
+
+    it('chưa chọn lý do mà bấm đúp: không gửi và không kẹt khoá, chọn lý do rồi gửi được', async () => {
+      const r = await mount();
+      click(btn(r.container, 'Huỷ đơn')!);
+      const confirm = confirmCancelBtn(r.container) as HTMLButtonElement;
+      await act(async () => {
+        click(confirm);
+        click(confirm);
+      });
+      expect(mocks.cancel).not.toHaveBeenCalled();
+      pickReason(r.container);
+      click(confirm);
+      await flush(8);
+      expect(mocks.cancel).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('D2: đơn chuyển khoản đã trả → mặc định hoàn về Ví Tubu', async () => {
@@ -646,6 +781,106 @@ describe('chi tiết đơn — yêu cầu đổi/trả (BUYERWEB-13)', () => {
     await flush(8);
     expect(container.querySelector('form[aria-labelledby="return-form-title"]')).not.toBeNull();
     expect(container.textContent).toContain('Quá hạn đổi/trả (7 ngày từ khi nhận hàng).');
+  });
+
+  describe('khoá bấm đúp "Gửi yêu cầu"', () => {
+    const openForm = async () => {
+      mocks.order = delivered;
+      const r = await mount();
+      pressMenu(r.container, 'Yêu cầu đổi/trả');
+      click(radio(r.container, /^Sản phẩm lỗi, hỏng$/));
+      return { ...r, submit: btn(r.container, 'Gửi yêu cầu') as HTMLButtonElement };
+    };
+
+    it('hai cú bấm sát nhau trước khi vẽ lại: chỉ gửi một yêu cầu', async () => {
+      mocks.requestReturn.mockImplementation(() => new Promise(() => {}));
+      const { submit } = await openForm();
+      await act(async () => {
+        click(submit);
+        click(submit);
+      });
+      expect(mocks.requestReturn).toHaveBeenCalledTimes(1);
+    });
+
+    it('đang gửi: nút báo aria-busy + aria-disabled nhưng không `disabled` (giữ focus), gửi form lần nữa không thêm yêu cầu', async () => {
+      mocks.requestReturn.mockImplementation(() => new Promise(() => {}));
+      const { container, submit } = await openForm();
+      expect(submit.hasAttribute('aria-busy')).toBe(false);
+      expect(submit.hasAttribute('aria-disabled')).toBe(false);
+      submit.focus();
+      click(submit);
+      await flush();
+      expect(submit.textContent).toBe('Đang gửi…');
+      expect(submit.getAttribute('aria-busy')).toBe('true');
+      expect(submit.getAttribute('aria-disabled')).toBe('true');
+      expect(submit.disabled).toBe(false);
+      expect(document.activeElement).toBe(submit);
+      click(submit);
+      act(() => {
+        container.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      });
+      await flush();
+      expect(mocks.requestReturn).toHaveBeenCalledTimes(1);
+    });
+
+    it('BE từ chối: nút hết bận (bỏ aria-busy, aria-disabled), nhãn về "Gửi yêu cầu" và gửi lại được', async () => {
+      mocks.requestReturn.mockRejectedValueOnce(new Error('Quá hạn đổi/trả (7 ngày từ khi nhận hàng).'));
+      const { container, submit } = await openForm();
+      click(submit);
+      await flush(8);
+      expect(container.querySelector('[role="alert"]')?.textContent).toContain('Quá hạn đổi/trả');
+      expect(submit.hasAttribute('aria-busy')).toBe(false);
+      expect(submit.hasAttribute('aria-disabled')).toBe(false);
+      expect(submit.textContent).toBe('Gửi yêu cầu');
+      click(submit);
+      await flush(8);
+      expect(mocks.requestReturn).toHaveBeenCalledTimes(2);
+    });
+
+    it('chọn hoàn về ngân hàng mà chưa điền tài khoản: báo lỗi, không gửi và không kẹt khoá', async () => {
+      mocks.order = delivered;
+      const { container } = await mount();
+      pressMenu(container, 'Yêu cầu đổi/trả');
+      click(radio(container, /^Sản phẩm lỗi, hỏng$/));
+      click(radio(container, /Tài khoản ngân hàng/));
+      const submit = btn(container, 'Gửi yêu cầu') as HTMLButtonElement;
+      click(submit);
+      await flush();
+      expect(mocks.requestReturn).not.toHaveBeenCalled();
+      expect(submit.hasAttribute('aria-busy')).toBe(false);
+      typeInto(field(container, 'Tên ngân hàng'), 'VCB');
+      typeInto(field(container, 'Số tài khoản'), '0071000123456');
+      typeInto(field(container, 'Chủ tài khoản'), 'Le Van C');
+      click(submit);
+      await flush(8);
+      expect(mocks.requestReturn).toHaveBeenCalledTimes(1);
+    });
+
+    it('không còn dòng nào để trả (mọi dòng đã được duyệt trả hết): form báo vậy và nút Gửi yêu cầu khoá hẳn', async () => {
+      const done = [{ id: 'r0', orderId: 'o9', status: 'APPROVED', reason: 'DAMAGED', createdAt: '2026-10-02T03:00:00Z', items: [{ orderItemId: 'i1', quantity: 2 }] }];
+      const r = render(<ReturnRequestForm order={delivered as never} returns={done as never} onDone={() => {}} onClose={() => {}} />);
+      mounted.push(r);
+      await flush();
+      expect(r.container.textContent).toContain('Mọi sản phẩm của đơn đã được trả.');
+      const submit = btn(r.container, 'Gửi yêu cầu') as HTMLButtonElement;
+      expect(submit.disabled).toBe(true);
+    });
+
+    it('thiếu lý do mà bấm đúp: không gửi và không kẹt khoá, chọn lý do rồi gửi được', async () => {
+      mocks.order = delivered;
+      const { container } = await mount();
+      pressMenu(container, 'Yêu cầu đổi/trả');
+      const submit = btn(container, 'Gửi yêu cầu') as HTMLButtonElement;
+      await act(async () => {
+        click(submit);
+        click(submit);
+      });
+      expect(mocks.requestReturn).not.toHaveBeenCalled();
+      click(radio(container, /^Sản phẩm lỗi, hỏng$/));
+      click(submit);
+      await flush(8);
+      expect(mocks.requestReturn).toHaveBeenCalledTimes(1);
+    });
   });
 
   it.each([

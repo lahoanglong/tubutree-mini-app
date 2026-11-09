@@ -88,6 +88,8 @@ export function ReturnRequestForm({
   });
   const estimated = picked.length > 0 && !estimateQ.isError && estimateQ.data?.moneyRefundable ? estimateQ.data : null;
 
+  // Khoá đồng bộ: `submit.isPending` chỉ đổi sau lần vẽ kế, hai cú bấm "Gửi yêu cầu" sát nhau sẽ gửi hai yêu cầu.
+  const sendingRef = useRef(false);
   const submit = useMutation({
     mutationFn: () =>
       requestReturn(o.code, {
@@ -102,6 +104,9 @@ export function ReturnRequestForm({
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['my-returns'] });
       onDone();
+    },
+    onSettled: () => {
+      sendingRef.current = false;
     },
   });
 
@@ -123,8 +128,11 @@ export function ReturnRequestForm({
       className="mt-3 space-y-4"
       onSubmit={(e) => {
         e.preventDefault();
+        if (sendingRef.current || submit.isPending) return;
         setTouched(true);
-        if (!formError && !bankError) submit.mutate();
+        if (formError || bankError) return;
+        sendingRef.current = true;
+        submit.mutate();
       }}
     >
       <div>
@@ -287,9 +295,13 @@ export function ReturnRequestForm({
         >
           Đóng
         </button>
+        {/* Đang gửi dùng aria-disabled chứ không `disabled`: nút đang giữ focus mà `disabled` thì Chromium thả focus về <body>;
+            lần gửi thứ hai đã bị onSubmit chặn. Hết dòng để trả thì vẫn `disabled` (không có gì để gửi). */}
         <button
           type="submit"
-          disabled={submit.isPending || lines.length === 0}
+          disabled={lines.length === 0}
+          aria-busy={submit.isPending || undefined}
+          aria-disabled={submit.isPending || undefined}
           className={ui.btnPrimary}
         >
           {submit.isPending ? 'Đang gửi…' : 'Gửi yêu cầu'}
