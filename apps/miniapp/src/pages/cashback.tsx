@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { CASHBACK_REDIRECT } from '@tubutree/app-core/client-copy';
 import { Page, Avatar, useSnackbar } from 'zmp-ui';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
+import { useLockedMutation } from '../components/game/use-locked-mutation';
 import { AlertTriangle, Undo2 } from 'lucide-react';
 import {
   getMerchants,
@@ -49,7 +50,7 @@ export default function CashbackPage() {
   const walletQ = useQuery({ queryKey: ['wallet'], queryFn: getWallet, enabled: authed });
   const [selected, setSelected] = useState<CashbackMerchant | null>(null);
 
-  const clickMut = useMutation({
+  const clickMut = useLockedMutation({
     mutationFn: (merchantId: string) => createCashbackClick(merchantId),
     onSuccess: (r) => {
       haptic('medium');
@@ -71,7 +72,7 @@ export default function CashbackPage() {
           <AuthPhaseView phase={phase} loading={<Skeleton height={120} radius="var(--radius-card)" />} />
         ) : walletQ.isError ? (
           // KHÔNG fallback 0đ khi lỗi tải ví — tránh user nghĩ rằng tiền hoàn đã biến mất.
-          <ErrorState message={getLoadErrorMessage(walletQ.error)} onRetry={() => void walletQ.refetch()} />
+          <ErrorState message={getLoadErrorMessage(walletQ.error)} onRetry={() => walletQ.refetch()} />
         ) : (
           <div
             style={{
@@ -116,7 +117,7 @@ export default function CashbackPage() {
           </div>
         ) : merchantsQ.isError ? (
           // Phân biệt "lỗi tải sàn" vs "chưa có sàn" — không cho user tưởng feature trống.
-          <ErrorState message={getLoadErrorMessage(merchantsQ.error)} onRetry={() => void merchantsQ.refetch()} />
+          <ErrorState message={getLoadErrorMessage(merchantsQ.error)} onRetry={() => merchantsQ.refetch()} />
         ) : merchantsQ.data && merchantsQ.data.length > 0 ? (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
             {merchantsQ.data.map((m) => (
@@ -171,7 +172,7 @@ export default function CashbackPage() {
           <Skeleton height={60} radius="var(--radius-card)" />
         ) : txnQ.isError ? (
           // Tránh "Chưa có giao dịch hoàn tiền" khi thực ra là API lỗi — gây hiểu lầm mất tiền.
-          <ErrorState message={getLoadErrorMessage(txnQ.error)} onRetry={() => void txnQ.refetch()} />
+          <ErrorState message={getLoadErrorMessage(txnQ.error)} onRetry={() => txnQ.refetch()} />
         ) : txnQ.data && txnQ.data.length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {txnQ.data.map((t: CashbackTxn) => {

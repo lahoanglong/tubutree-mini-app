@@ -81,7 +81,7 @@ export default function WalletPage() {
         pageSkeleton
       ) : walletQ.isError && !w ? (
         <div style={{ padding: 24 }}>
-          <ErrorState message={getLoadErrorMessage(walletQ.error)} onRetry={() => void walletQ.refetch()} />
+          <ErrorState message={getLoadErrorMessage(walletQ.error)} onRetry={() => walletQ.refetch()} />
         </div>
       ) : w ? (
         <>
@@ -253,7 +253,7 @@ function WalletHistory({ q }: { q: UseInfiniteQueryResult<InfiniteData<WalletTxn
           <Skeleton height={44} />
         </div>
       ) : q.isError ? (
-        <ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => void q.refetch()} />
+        <ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => q.refetch()} />
       ) : rows.length === 0 ? (
         <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 4 }}>
           Chưa có biến động nào trong Ví.

@@ -43,6 +43,7 @@ import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { Heading, Text } from '../components/ui/text';
 import { ContentKitSheet } from '../components/content-kit-sheet';
 import { ShareSheet } from '../components/share-sheet';
+import { useLockedMutation } from '../components/game/use-locked-mutation';
 import { PickerSheet } from '../components/storefront-pickers';
 import { StorefrontPreview } from '../components/storefront-preview';
 import { MerchantConfigSheet } from '../components/storefront-builder/config-sheet';
@@ -90,7 +91,7 @@ export default function StorefrontBuilderPage() {
   if (sfQ.isError && !sfQ.data && status !== 404) {
     return (
       <BuilderShell>
-        <div style={{ padding: 24 }}><ErrorState message={getLoadErrorMessage(sfQ.error)} onRetry={() => void sfQ.refetch()} /></div>
+        <div style={{ padding: 24 }}><ErrorState message={getLoadErrorMessage(sfQ.error)} onRetry={() => sfQ.refetch()} /></div>
       </BuilderShell>
     );
   }
@@ -181,12 +182,24 @@ function Builder({ sf, tier, tierPending, nextTier }: { sf: StorefrontEdit; tier
     return qc.invalidateQueries({ queryKey: ['my-storefront'] });
   };
 
-  const publishMut = useMutation({
+  // Đăng và gỡ đăng là hai việc ngược nhau trên cùng gian hàng: một việc mỗi lúc, khoá ref vì `isPending` chỉ đúng sau lần vẽ kế tiếp.
+  const publishing = useRef(false);
+  const releasePublishing = () => {
+    publishing.current = false;
+  };
+  const exclusivePublish = (run: () => void) => {
+    if (publishing.current) return;
+    publishing.current = true;
+    run();
+  };
+  const publishMut = useLockedMutation({
+    onSettled: releasePublishing,
     mutationFn: () => publishStorefront(true),
     onSuccess: (res) => { haptic('medium'); openSnackbar({ text: storefrontPublishedMessage(res, sf), type: 'success' }); void refresh(); },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
-  const unpublishMut = useMutation({
+  const unpublishMut = useLockedMutation({
+    onSettled: releasePublishing,
     mutationFn: () => publishStorefront(false),
     onSuccess: () => {
       haptic('medium');
@@ -196,6 +209,7 @@ function Builder({ sf, tier, tierPending, nextTier }: { sf: StorefrontEdit; tier
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
+  const publishBusy = publishMut.isPending || unpublishMut.isPending;
   // API từ chối đăng gian hàng chưa có sản phẩm; chặn ngay ở nút để CTV biết cần làm gì thay vì nhận lỗi.
   const itemCount = sf.collections.reduce((n, c) => n + c.items.length, 0);
   const menuItem = sf.collections.flatMap((c) => c.items).find((i) => i.id === itemMenuId) ?? null;
@@ -204,7 +218,7 @@ function Builder({ sf, tier, tierPending, nextTier }: { sf: StorefrontEdit; tier
   const [renaming, setRenaming] = useState<{ id: string; title: string } | null>(null);
   const [confirmDeleteCol, setConfirmDeleteCol] = useState<string | null>(null);
 
-  const newColMut = useMutation({
+  const newColMut = useLockedMutation({
     mutationFn: (dto: ReturnType<typeof newSectionDto>) => createCollection(dto),
     onSuccess: (created, dto) => {
       haptic('light');
@@ -222,15 +236,15 @@ function Builder({ sf, tier, tierPending, nextTier }: { sf: StorefrontEdit; tier
     },
     onError: (e) => notify({ text: getErrorMessage(e), type: 'error' }),
   });
-  const renameColMut = useMutation({
+  const renameColMut = useLockedMutation({
     mutationFn: (v: { id: string; title: string }) => updateCollection(v.id, { title: v.title }),
     onSuccess: () => {
       setRenaming(null);
       void refresh();
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
-  const deleteColMut = useMutation({
+  }, (v) => v.id);
+  const deleteColMut = useLockedMutation({
     mutationFn: (id: string) => deleteCollection(id),
     onSuccess: (_d, id) => {
       setConfirmDeleteCol(null);
@@ -238,7 +252,7 @@ function Builder({ sf, tier, tierPending, nextTier }: { sf: StorefrontEdit; tier
       void refresh();
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
+  }, (id) => id);
   // Chỉ gửi trường đổi (không kèm kind/title): API nhận từng phần, và Thường ↔ Combo chưa đổi được sau khi tạo.
   const layoutMut = useMutation({
     mutationFn: (v: { id: string; layout: 'GRID' | 'CAROUSEL' | 'STACK' }) => updateCollection(v.id, { layout: v.layout }),
@@ -278,12 +292,13 @@ function Builder({ sf, tier, tierPending, nextTier }: { sf: StorefrontEdit; tier
       return null;
     }
   };
-  const itemMut = useMutation({
+  // Ghim và ẩn cùng đi qua đây theo mã món: chạm hai mục menu của một món sát nhau chỉ gửi mục đầu.
+  const itemMut = useLockedMutation({
     mutationFn: (v: { id: string; dto: { isPinned?: boolean; isHidden?: boolean } }) => updateItem(v.id, v.dto),
     onSuccess: () => { haptic('light'); void refresh(); },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
-  const noteMut = useMutation({
+  }, (v) => v.id);
+  const noteMut = useLockedMutation({
     mutationFn: (v: { id: string; note: string }) => updateItem(v.id, { note: v.note }),
     onSuccess: () => {
       haptic('light');
@@ -292,7 +307,7 @@ function Builder({ sf, tier, tierPending, nextTier }: { sf: StorefrontEdit; tier
       void refresh();
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
+  }, (v) => v.id);
   // Trong onSuccess/onError, lần đang chạy vẫn được đếm.
   const hasOtherReorderPending = () => qc.isMutating({ mutationKey: STOREFRONT_REORDER_MUTATION.mutationKey }) > 1;
   // Cập nhật lạc quan: thứ tự mới hiện ngay, máy chủ từ chối thì trả về đúng thứ tự cũ.
@@ -365,11 +380,11 @@ function Builder({ sf, tier, tierPending, nextTier }: { sf: StorefrontEdit; tier
     if (reason) announce('status', moveBlockedAnnouncement({ name, dir, reason }));
   };
   const [confirmDeleteItemId, setConfirmDeleteItemId] = useState<string | null>(null);
-  const delItemMut = useMutation({
+  const delItemMut = useLockedMutation({
     mutationFn: removeItem,
     onSuccess: () => { setConfirmDeleteItemId(null); void refresh(); },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
+  }, (id) => id);
 
   // Mở/đóng trang chi tiết: lên đầu trang và vào h1 khi mở; khi lùi lại thì về đúng thẻ vừa mở, đúng chỗ đang cuộn.
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -477,7 +492,7 @@ function Builder({ sf, tier, tierPending, nextTier }: { sf: StorefrontEdit; tier
           <Button variant="secondary" style={{ flex: 1 }} onPress={() => setConfirmUnpublish(false)}>
             {vi.common.cancel}
           </Button>
-          <Button variant="danger" style={{ flex: 1 }} loading={unpublishMut.isPending} onPress={() => unpublishMut.mutate()}>
+          <Button variant="danger" style={{ flex: 1 }} loading={publishBusy} onPress={() => exclusivePublish(() => unpublishMut.mutate())}>
             {vi.storefront.unpublish}
           </Button>
         </div>
@@ -774,7 +789,7 @@ function Builder({ sf, tier, tierPending, nextTier }: { sf: StorefrontEdit; tier
               {view.code === 'PENDING_APPROVAL' ? vi.storefront.shareAfterApprovalShort : vi.storefront.shareShort}
             </Button>
           ) : (
-            <Button fullWidth className="tubu-btn-44" disabled={itemCount === 0} loading={publishMut.isPending} onPress={() => publishMut.mutate()}>
+            <Button fullWidth className="tubu-btn-44" disabled={itemCount === 0} loading={publishBusy} onPress={() => exclusivePublish(() => publishMut.mutate())}>
               {publishCopy.button}
             </Button>
           )

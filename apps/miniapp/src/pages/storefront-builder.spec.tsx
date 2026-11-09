@@ -1860,3 +1860,341 @@ describe('Màn dựng theo khối (P10)', () => {
     });
   });
 });
+
+/** Hai cú chạm sát nhau trong cùng khung hình (trước khi React vẽ lại `isPending`) chỉ được gửi một yêu cầu. */
+describe('Khoá chạm đúp: hai cú chạm cùng khung hình chỉ gửi một yêu cầu', () => {
+  function deferred<T = unknown>() {
+    let resolve!: (v: T) => void;
+    const promise = new Promise<T>((res) => { resolve = res; });
+    return { promise, resolve };
+  }
+  // Cả hai cú nhấp nằm trong MỘT act nên chưa có lần vẽ lại nào chen giữa.
+  const twice = async (first: HTMLElement, second: HTMLElement = first) => {
+    await act(async () => {
+      fireEvent.click(first);
+      fireEvent.click(second);
+    });
+  };
+  const successToasts = () => mocks.openSnackbar.mock.calls.filter(([o]) => (o as { type: string }).type === 'success');
+  const errorShown = () => waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: expect.any(String), type: 'error' }));
+  const busy = (btn: HTMLElement) => waitFor(() => expect(btn).toHaveAttribute('aria-busy', 'true'));
+  const idle = (btn: HTMLElement) => waitFor(() => expect(btn).not.toHaveAttribute('aria-busy', 'true'));
+  const inSheet = async () => within(await screen.findByTestId('sheet'));
+  const newClient = () => new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+
+  describe('đăng và gỡ đăng', () => {
+    it('hai cú chạm "Gửi duyệt" cùng khung hình chỉ đăng một lần và chỉ báo đã gửi duyệt một lần', async () => {
+      const d = deferred();
+      mocks.publishStorefront.mockReturnValue(d.promise);
+      renderPage();
+      const btn = await screen.findByRole('button', { name: 'Gửi duyệt' });
+      await twice(btn);
+      expect(mocks.publishStorefront).toHaveBeenCalledTimes(1);
+      await busy(btn);
+      await act(async () => { d.resolve({}); });
+      await waitFor(() => expect(successToasts()).toHaveLength(1));
+      expect(mocks.publishStorefront).toHaveBeenCalledTimes(1);
+    });
+
+    it('đăng lỗi thì nhả khoá: bấm lại gọi lần hai', async () => {
+      mocks.publishStorefront.mockRejectedValueOnce(new Error('Mạng yếu'));
+      renderPage();
+      const btn = await screen.findByRole('button', { name: 'Gửi duyệt' });
+      fireEvent.click(btn);
+      await errorShown();
+      await idle(btn);
+      fireEvent.click(btn);
+      await waitFor(() => expect(mocks.publishStorefront).toHaveBeenCalledTimes(2));
+    });
+
+    const openUnpublishConfirm = async (qc = newClient()) => {
+      mocks.getMyStorefront.mockResolvedValue(storefront({ isPublished: true }));
+      renderPage(qc);
+      fireEvent.click(await screen.findByRole('button', { name: 'Cài đặt' }));
+      fireEvent.click((await inSheet()).getByRole('button', { name: 'Gỡ đăng gian hàng' }));
+      return (await inSheet()).getByRole('button', { name: 'Gỡ đăng' });
+    };
+
+    it('hai cú chạm "Gỡ đăng" cùng khung hình chỉ gỡ một lần, hộp xác nhận đóng và báo đã gỡ một lần', async () => {
+      const d = deferred();
+      mocks.publishStorefront.mockReturnValue(d.promise);
+      const btn = await openUnpublishConfirm();
+      await twice(btn);
+      expect(mocks.publishStorefront).toHaveBeenCalledTimes(1);
+      expect(mocks.publishStorefront).toHaveBeenCalledWith(false);
+      await busy(btn);
+      await act(async () => { d.resolve({}); });
+      await waitFor(() => expect(screen.queryByText('Gỡ đăng gian hàng này?')).toBeNull());
+      expect(successToasts()).toEqual([[{ text: 'Đã gỡ đăng gian hàng', type: 'success' }]]);
+    });
+
+    it('gỡ đăng lỗi thì nhả khoá: bấm lại gọi lần hai', async () => {
+      mocks.publishStorefront.mockRejectedValueOnce(new Error('Mạng yếu'));
+      const btn = await openUnpublishConfirm();
+      fireEvent.click(btn);
+      await errorShown();
+      await idle(btn);
+      fireEvent.click(btn);
+      await waitFor(() => expect(mocks.publishStorefront).toHaveBeenCalledTimes(2));
+    });
+
+    // Hộp xác nhận gỡ đăng còn mở khi máy chủ báo gian hàng đã về nháp: lúc đó "Gửi duyệt" và "Gỡ đăng" cùng có mặt.
+    const bothButtons = async () => {
+      const qc = newClient();
+      const unpublish = await openUnpublishConfirm(qc);
+      await act(async () => { qc.setQueryData(['my-storefront'], storefront({ isPublished: false })); });
+      const publish = await screen.findByRole('button', { name: 'Gửi duyệt' });
+      return { publish, unpublish };
+    };
+
+    it('"Gửi duyệt" rồi "Gỡ đăng" cùng khung hình: chỉ lệnh đăng đầu tiên được gửi, xong rồi gỡ đăng mới gửi được', async () => {
+      const d = deferred();
+      mocks.publishStorefront.mockReturnValueOnce(d.promise);
+      const { publish, unpublish } = await bothButtons();
+      await twice(publish, unpublish);
+      expect(mocks.publishStorefront.mock.calls).toEqual([[true]]);
+      mocks.getMyStorefront.mockResolvedValue(storefront({ isPublished: true }));
+      await act(async () => { d.resolve({}); });
+      await waitFor(() => expect(successToasts()).toHaveLength(1));
+      const again = (await inSheet()).getByRole('button', { name: 'Gỡ đăng' });
+      await idle(again);
+      fireEvent.click(again);
+      await waitFor(() => expect(mocks.publishStorefront.mock.calls).toEqual([[true], [false]]));
+    });
+
+    it('"Gỡ đăng" rồi "Gửi duyệt" cùng khung hình: chỉ lệnh gỡ đăng đầu tiên được gửi', async () => {
+      const d = deferred();
+      mocks.publishStorefront.mockReturnValueOnce(d.promise);
+      const { publish, unpublish } = await bothButtons();
+      await twice(unpublish, publish);
+      expect(mocks.publishStorefront.mock.calls).toEqual([[false]]);
+      await act(async () => { d.resolve({}); });
+      await waitFor(() => expect(successToasts()).toHaveLength(1));
+      expect(mocks.publishStorefront).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('khối', () => {
+    const made = { id: 'c9', title: 'Mới', kind: 'NORMAL', layout: 'GRID', comboDiscountPct: null, sortOrder: 1, items: [] };
+    const openNewSheet = async () => {
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Thêm khối' }));
+      return screen.findByRole('button', { name: 'Tạo và thêm món' });
+    };
+
+    it('hai cú chạm "Tạo và thêm món" cùng khung hình chỉ tạo một khối rồi mở đúng khối đó', async () => {
+      const d = deferred();
+      mocks.createCollection.mockReturnValue(d.promise);
+      const create = await openNewSheet();
+      await twice(create);
+      expect(mocks.createCollection).toHaveBeenCalledTimes(1);
+      await busy(create);
+      mocks.getMyStorefront.mockResolvedValue(storefront({ collections: [...storefront().collections, made] }));
+      await act(async () => { d.resolve(made); });
+      expect(await screen.findByRole('heading', { level: 1, name: 'Mới' })).toBeInTheDocument();
+      expect(mocks.createCollection).toHaveBeenCalledTimes(1);
+    });
+
+    it('tạo khối lỗi thì nhả khoá: bấm lại gọi lần hai', async () => {
+      mocks.createCollection.mockRejectedValueOnce(new Error('Mạng yếu'));
+      const create = await openNewSheet();
+      fireEvent.click(create);
+      await errorShown();
+      await idle(create);
+      fireEvent.click(create);
+      await waitFor(() => expect(mocks.createCollection).toHaveBeenCalledTimes(2));
+    });
+
+    const openRename = async () => {
+      renderPage();
+      await openCard();
+      fireEvent.click(await screen.findByRole('button', { name: 'Tuỳ chọn khối' }));
+      fireEvent.click((await inSheet()).getByRole('button', { name: 'Đổi tên khối' }));
+      const sheet = await inSheet();
+      fireEvent.change(sheet.getByDisplayValue('Bộ sưu tập A'), { target: { value: 'Bộ B' } });
+      return sheet.getByRole('button', { name: 'Lưu' });
+    };
+
+    it('hai cú chạm "Lưu" của đổi tên khối cùng khung hình chỉ gửi một lần, xong thì đóng sheet', async () => {
+      const d = deferred();
+      mocks.updateCollection.mockReturnValue(d.promise);
+      const save = await openRename();
+      await twice(save);
+      expect(mocks.updateCollection).toHaveBeenCalledTimes(1);
+      expect(mocks.updateCollection).toHaveBeenCalledWith('c1', { title: 'Bộ B' });
+      await busy(save);
+      await act(async () => { d.resolve({}); });
+      await waitFor(() => expect(screen.queryByDisplayValue('Bộ B')).toBeNull());
+      expect(mocks.updateCollection).toHaveBeenCalledTimes(1);
+    });
+
+    it('đổi tên khối lỗi thì nhả khoá: bấm lại gọi lần hai', async () => {
+      mocks.updateCollection.mockRejectedValueOnce(new Error('Mạng yếu'));
+      const save = await openRename();
+      fireEvent.click(save);
+      await errorShown();
+      await idle(save);
+      fireEvent.click(save);
+      await waitFor(() => expect(mocks.updateCollection).toHaveBeenCalledTimes(2));
+    });
+
+    const openDeleteConfirm = async () => {
+      renderPage();
+      await openCard();
+      fireEvent.click(await screen.findByRole('button', { name: 'Tuỳ chọn khối' }));
+      fireEvent.click((await inSheet()).getByRole('button', { name: 'Xoá khối' }));
+      return (await inSheet()).getByRole('button', { name: 'Xoá khối' });
+    };
+
+    it('hai cú chạm "Xoá khối" cùng khung hình chỉ xoá một lần, xong thì đóng hộp xác nhận', async () => {
+      const d = deferred();
+      mocks.deleteCollection.mockReturnValue(d.promise);
+      const del = await openDeleteConfirm();
+      await twice(del);
+      expect(mocks.deleteCollection).toHaveBeenCalledTimes(1);
+      expect(mocks.deleteCollection).toHaveBeenCalledWith('c1');
+      await busy(del);
+      await act(async () => { d.resolve({}); });
+      await waitFor(() => expect(screen.queryByText('Xoá khối này?')).toBeNull());
+      expect(mocks.deleteCollection).toHaveBeenCalledTimes(1);
+    });
+
+    it('xoá khối lỗi thì nhả khoá: bấm lại gọi lần hai', async () => {
+      mocks.deleteCollection.mockRejectedValueOnce(new Error('Mạng yếu'));
+      const del = await openDeleteConfirm();
+      fireEvent.click(del);
+      await errorShown();
+      await idle(del);
+      fireEvent.click(del);
+      await waitFor(() => expect(mocks.deleteCollection).toHaveBeenCalledTimes(2));
+    });
+  });
+
+  describe('món trong khối', () => {
+    const openItemMenu = async () => {
+      fireEvent.click(await screen.findByRole('button', { name: 'Tuỳ chọn sản phẩm' }));
+      return inSheet();
+    };
+
+    it('ghim rồi ẩn cùng một món sát nhau cùng khung hình: chỉ gửi mục đầu, làm mới gian hàng một lần', async () => {
+      const d = deferred();
+      mocks.updateItem.mockReturnValue(d.promise);
+      renderPage();
+      await openCard();
+      const menu = await openItemMenu();
+      await twice(menu.getByRole('button', { name: 'Ghim lên đầu' }), menu.getByRole('button', { name: 'Ẩn sản phẩm' }));
+      expect(mocks.updateItem.mock.calls).toEqual([['i1', { isPinned: true }]]);
+      await act(async () => { d.resolve({}); });
+      await waitFor(() => expect(mocks.getMyStorefront).toHaveBeenCalledTimes(2));
+      expect(mocks.updateItem).toHaveBeenCalledTimes(1);
+    });
+
+    it('ghim lỗi thì nhả khoá: mở menu bấm lại gọi lần hai', async () => {
+      mocks.updateItem.mockRejectedValueOnce(new Error('Mạng yếu'));
+      renderPage();
+      await openCard();
+      fireEvent.click((await openItemMenu()).getByRole('button', { name: 'Ghim lên đầu' }));
+      await errorShown();
+      fireEvent.click((await openItemMenu()).getByRole('button', { name: 'Ghim lên đầu' }));
+      await waitFor(() => expect(mocks.updateItem).toHaveBeenCalledTimes(2));
+    });
+
+    const openNote = async () => {
+      renderPage();
+      await openCard();
+      fireEvent.click(await screen.findByText('Thêm lý do giới thiệu'));
+      const sheet = await inSheet();
+      fireEvent.change(sheet.getByPlaceholderText('VD: Mình dùng 3 tháng, da đỡ khô hẳn.'), { target: { value: 'Dùng 3 tháng' } });
+      return sheet.getByRole('button', { name: 'Lưu' });
+    };
+
+    it('hai cú chạm "Lưu" lý do giới thiệu cùng khung hình chỉ gửi một lần, báo đã lưu một lần và đóng sheet', async () => {
+      const d = deferred();
+      mocks.updateItem.mockReturnValue(d.promise);
+      const save = await openNote();
+      await twice(save);
+      expect(mocks.updateItem.mock.calls).toEqual([['i1', { note: 'Dùng 3 tháng' }]]);
+      await busy(save);
+      await act(async () => { d.resolve({}); });
+      await waitFor(() => expect(screen.queryByText('Vì sao mình giới thiệu')).toBeNull());
+      expect(successToasts()).toHaveLength(1);
+    });
+
+    it('lưu lý do lỗi thì nhả khoá: bấm lại gọi lần hai', async () => {
+      mocks.updateItem.mockRejectedValueOnce(new Error('Mạng yếu'));
+      const save = await openNote();
+      fireEvent.click(save);
+      await errorShown();
+      await idle(save);
+      fireEvent.click(save);
+      await waitFor(() => expect(mocks.updateItem).toHaveBeenCalledTimes(2));
+    });
+
+    const openRemoveConfirm = async () => {
+      renderPage();
+      await openCard();
+      fireEvent.click((await openItemMenu()).getByRole('button', { name: 'Xoá khỏi khối' }));
+      return (await inSheet()).getByRole('button', { name: 'Xoá' });
+    };
+
+    it('hai cú chạm "Xoá" món cùng khung hình chỉ xoá một lần, xong thì đóng hộp xác nhận', async () => {
+      const d = deferred();
+      mocks.removeItem.mockReturnValue(d.promise);
+      const del = await openRemoveConfirm();
+      await twice(del);
+      expect(mocks.removeItem).toHaveBeenCalledTimes(1);
+      expect(mocks.removeItem.mock.calls[0]![0]).toBe('i1');
+      await busy(del);
+      await act(async () => { d.resolve({}); });
+      await waitFor(() => expect(screen.queryByText('Xoá sản phẩm này khỏi gian hàng?')).toBeNull());
+      expect(mocks.removeItem).toHaveBeenCalledTimes(1);
+    });
+
+    it('xoá món lỗi thì nhả khoá: bấm lại gọi lần hai', async () => {
+      mocks.removeItem.mockRejectedValueOnce(new Error('Mạng yếu'));
+      const del = await openRemoveConfirm();
+      fireEvent.click(del);
+      await errorShown();
+      await idle(del);
+      fireEvent.click(del);
+      await waitFor(() => expect(mocks.removeItem).toHaveBeenCalledTimes(2));
+    });
+  });
+
+  describe('không khoá những việc nên bấm dồn', () => {
+    it('lưu % giảm Combo: hai cú chạm cùng khung hình vẫn chỉ gửi một lần (khoá nằm ở ô nhập)', async () => {
+      const d = deferred();
+      mocks.updateCollection.mockReturnValue(d.promise);
+      mocks.getMyStorefront.mockResolvedValue(storefront({
+        collections: [{ id: 'c3', title: 'Bộ ba', kind: 'COMBO', layout: 'CAROUSEL', comboDiscountPct: 10, sortOrder: 0, items: [item()] }],
+      }));
+      renderPage();
+      await openCard(/^Bộ ba,/);
+      fireEvent.change(screen.getByRole('textbox', { name: 'Giảm khi mua cả bộ' }), { target: { value: '15' } });
+      const save = screen.getByRole('button', { name: 'Lưu mức giảm' });
+      await twice(save);
+      expect(mocks.updateCollection.mock.calls).toEqual([['c3', { comboDiscountPct: 15 }]]);
+      await busy(save);
+      await act(async () => { d.resolve({ id: 'c3', comboDiscountPct: 15 }); });
+      await waitFor(() => expect(successToasts()).toHaveLength(1));
+    });
+
+    it('hai lần đổi chỗ cùng khung hình đều tới máy chủ, không lần nào bị bỏ qua', async () => {
+      mocks.getMyStorefront.mockResolvedValue(twoCollections());
+      renderPage();
+      await openCard(/^Bộ một,/);
+      fireEvent.click(screen.getByRole('button', { name: 'Sắp xếp' }));
+      await twice(screen.getByRole('button', { name: 'Đưa Món hai lên' }), screen.getByRole('button', { name: 'Đưa Món ba lên' }));
+      await waitFor(() => expect(mocks.reorderItems).toHaveBeenCalledTimes(2));
+    });
+
+    it('hai lần đổi chỗ khối cùng khung hình đều tới máy chủ', async () => {
+      mocks.getMyStorefront.mockResolvedValue(twoCollections());
+      renderPage();
+      await screen.findByText('Bộ một');
+      fireEvent.click(screen.getByRole('button', { name: 'Sắp xếp' }));
+      await twice(screen.getByRole('button', { name: 'Đưa khối Bộ một xuống' }), screen.getByRole('button', { name: 'Đưa khối Bộ hai lên' }));
+      await waitFor(() => expect(mocks.reorderCollections).toHaveBeenCalledTimes(2));
+    });
+  });
+});

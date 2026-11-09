@@ -11,7 +11,8 @@ import {
   BRAND_OWNER_VIEW_PAGE,
 } from '@tubutree/app-core/client-copy';
 import { Check, Gift, Pencil, Plus, Trash2 } from 'lucide-react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useLockedMutation } from '../components/game/use-locked-mutation';
 import {
   getOwnedBrand,
   updateOwnedBrand,
@@ -86,7 +87,7 @@ export default function BrandOwnerPage() {
             />
           </div>
         ) : (
-          <ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => void q.refetch()} />
+          <ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => q.refetch()} />
         )}
       </OwnerShell>
     );
@@ -114,7 +115,7 @@ function Editor({ brand }: { brand: OwnedBrand }) {
     origin: brand.origin ?? '',
     story: brand.story ?? '',
   });
-  const saveMut = useMutation({
+  const saveMut = useLockedMutation({
     mutationFn: () => updateOwnedBrand(f),
     onSuccess: () => { haptic('medium'); openSnackbar({ text: BRAND_OWNER_SAVED, type: 'success' }); void refresh(); },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
@@ -136,25 +137,25 @@ function Editor({ brand }: { brand: OwnedBrand }) {
     couponCode: promo.couponCode.trim().toUpperCase() || undefined,
     ...promoWindow(promo),
   });
-  const addPromo = useMutation({
+  const addPromo = useLockedMutation({
     mutationFn: () => createOwnedPromotion(promoIso()),
     onSuccess: () => { resetPromoForm(); openSnackbar({ text: 'Đã thêm khuyến mãi', type: 'success' }); void refresh(); },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
-  const updPromo = useMutation({
+  const updPromo = useLockedMutation({
     // Khi sửa, ô mã trống nghĩa là GỠ mã (chuỗi rỗng) — `undefined` bị bỏ qua nên mã cũ sẽ ở lại.
     mutationFn: () => updateOwnedPromotion(editingId!, { ...promoIso(), couponCode: promo.couponCode.trim().toUpperCase() }),
     onSuccess: () => { resetPromoForm(); openSnackbar({ text: 'Đã cập nhật khuyến mãi', type: 'success' }); void refresh(); },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const delPromo = useMutation({
+  const delPromo = useLockedMutation({
     mutationFn: (id: string) => deleteOwnedPromotion(id),
     // So khớp đúng promo VỪA XOÁ (biến mutate) với promo đang sửa dở — không phải "có đang sửa gì đó
     // hay không" — kẻo xoá promo B trong lúc đang sửa dở promo A lại làm mất luôn form đang sửa của A.
     onSuccess: (_data, deletedId) => { if (editingId === deletedId) resetPromoForm(); setConfirmDeleteId(null); void refresh(); },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
+  }, (id) => id);
   const startEdit = (p: OwnedBrand['promotions'][number]) => {
     setEditingId(p.id);
     setPromo({

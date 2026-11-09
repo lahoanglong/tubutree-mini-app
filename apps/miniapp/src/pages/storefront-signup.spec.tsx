@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -198,5 +198,233 @@ describe('Bước 4/4: xem trước và gửi duyệt', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Gửi duyệt' }));
     await waitFor(() => expect(mocks.publishStorefront).toHaveBeenCalledWith(true));
     expect(await screen.findByText('Chờ duyệt', { selector: 'span' })).toBeInTheDocument();
+  });
+});
+
+/** Hai cú chạm sát nhau trong cùng khung hình (trước khi React vẽ lại `isPending`) chỉ được gửi một yêu cầu. */
+describe('Khoá chạm đúp: hai cú chạm cùng khung hình chỉ gửi một yêu cầu', () => {
+  function deferred<T = unknown>() {
+    let resolve!: (v: T) => void;
+    const promise = new Promise<T>((res) => { resolve = res; });
+    return { promise, resolve };
+  }
+  // Cả hai cú nhấp nằm trong MỘT act nên chưa có lần vẽ lại nào chen giữa.
+  const twice = async (first: HTMLElement, second: HTMLElement = first) => {
+    await act(async () => {
+      fireEvent.click(first);
+      fireEvent.click(second);
+    });
+  };
+  const errorShown = () => waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: expect.any(String), type: 'error' }));
+  const busy = (btn: HTMLElement) => waitFor(() => expect(btn).toHaveAttribute('aria-busy', 'true'));
+  const idle = (btn: HTMLElement) => waitFor(() => expect(btn).not.toHaveAttribute('aria-busy', 'true'));
+  const nextBtn = () => screen.getByRole('button', { name: 'Tiếp tục' });
+  const toStep = async (step: 3 | 4) => {
+    renderPage();
+    await screen.findByLabelText('Tên gian hàng');
+    next();
+    await screen.findByText('Bước 3/4');
+    if (step === 4) {
+      next();
+      await screen.findByText('Bước 4/4');
+    }
+  };
+
+  describe('bước 1: bắt đầu', () => {
+    const open = async () => {
+      notFound();
+      renderPage();
+      return screen.findByRole('button', { name: 'Bắt đầu mở gian hàng' });
+    };
+
+    it('hai cú chạm "Bắt đầu mở gian hàng" cùng khung hình chỉ tạo gian hàng một lần rồi sang bước 2', async () => {
+      const d = deferred();
+      mocks.createStorefront.mockReturnValue(d.promise);
+      const start = await open();
+      await twice(start);
+      expect(mocks.createStorefront).toHaveBeenCalledTimes(1);
+      await busy(start);
+      mocks.getMyStorefront.mockResolvedValue(draft());
+      await act(async () => { d.resolve(draft()); });
+      expect(await screen.findByText('Bước 2/4')).toBeInTheDocument();
+      expect(mocks.createStorefront).toHaveBeenCalledTimes(1);
+    });
+
+    it('tạo gian hàng lỗi thì nhả khoá: bấm lại gọi lần hai', async () => {
+      mocks.createStorefront.mockRejectedValueOnce(new Error('Mạng yếu'));
+      const start = await open();
+      fireEvent.click(start);
+      await errorShown();
+      await idle(start);
+      fireEvent.click(start);
+      await waitFor(() => expect(mocks.createStorefront).toHaveBeenCalledTimes(2));
+    });
+  });
+
+  describe('bước 2: thông tin', () => {
+    const open = async () => {
+      mocks.getMyStorefront.mockResolvedValue(draft());
+      renderPage();
+      await screen.findByLabelText('Tên gian hàng');
+      return nextBtn();
+    };
+
+    it('hai cú chạm "Tiếp tục" cùng khung hình chỉ lưu thông tin một lần rồi sang bước 3', async () => {
+      const d = deferred();
+      mocks.updateStorefront.mockReturnValue(d.promise);
+      const save = await open();
+      await twice(save);
+      expect(mocks.updateStorefront).toHaveBeenCalledTimes(1);
+      await busy(save);
+      await act(async () => { d.resolve({}); });
+      expect(await screen.findByText('Bước 3/4')).toBeInTheDocument();
+      expect(mocks.updateStorefront).toHaveBeenCalledTimes(1);
+    });
+
+    it('lưu thông tin lỗi thì nhả khoá: bấm lại gọi lần hai', async () => {
+      mocks.updateStorefront.mockRejectedValueOnce(new Error('Mạng yếu'));
+      const save = await open();
+      fireEvent.click(save);
+      await errorShown();
+      await idle(save);
+      fireEvent.click(save);
+      await waitFor(() => expect(mocks.updateStorefront).toHaveBeenCalledTimes(2));
+    });
+  });
+
+  describe('bước 3: sản phẩm', () => {
+    const product2 = { ...product, id: 'p2', name: 'Xà phòng' };
+    const item2 = { ...item, id: 'i2', productId: 'p2', product: product2, sortOrder: 1 };
+    const twoItems = { collections: [{ id: 'c1', title: 'Sản phẩm mình chọn', kind: 'NORMAL', layout: 'GRID', comboDiscountPct: null, sortOrder: 0, items: [item, item2] }] };
+
+    it('hai cú chạm cùng một danh mục mẫu cùng khung hình chỉ áp mẫu một lần, xong thì đóng bảng chọn', async () => {
+      const d = deferred();
+      mocks.applyStorefrontTemplate.mockReturnValue(d.promise);
+      mocks.getMyStorefront.mockResolvedValue(draft());
+      await toStep(3);
+      fireEvent.click(screen.getByRole('button', { name: 'Chọn danh mục' }));
+      const cat = await screen.findByRole('button', { name: 'Dùng mẫu Chăm sóc da' });
+      await twice(cat);
+      expect(mocks.applyStorefrontTemplate.mock.calls).toEqual([['cat1']]);
+      await act(async () => { d.resolve({ collectionId: 'c9', title: 'Mẫu', itemCount: 8 }); });
+      await waitFor(() => expect(screen.queryByRole('button', { name: 'Dùng mẫu Chăm sóc da' })).toBeNull());
+      expect(mocks.applyStorefrontTemplate).toHaveBeenCalledTimes(1);
+    });
+
+    it('hai danh mục mẫu khác nhau cùng khung hình: chỉ mẫu đầu được áp (mẫu áp lên cả gian hàng nên không chạy song song)', async () => {
+      const d = deferred();
+      mocks.applyStorefrontTemplate.mockReturnValue(d.promise);
+      mocks.getStorefrontCategories.mockResolvedValue([
+        { id: 'cat1', name: 'Chăm sóc da', slug: 'cham-soc-da', image: null },
+        { id: 'cat2', name: 'Nhà bếp', slug: 'nha-bep', image: null },
+      ]);
+      mocks.getMyStorefront.mockResolvedValue(draft());
+      await toStep(3);
+      fireEvent.click(screen.getByRole('button', { name: 'Chọn danh mục' }));
+      const first = await screen.findByRole('button', { name: 'Dùng mẫu Chăm sóc da' });
+      const second = screen.getByRole('button', { name: 'Dùng mẫu Nhà bếp' });
+      await twice(first, second);
+      expect(mocks.applyStorefrontTemplate.mock.calls).toEqual([['cat1']]);
+      await act(async () => { d.resolve({ collectionId: 'c9', title: 'Mẫu', itemCount: 8 }); });
+    });
+
+    it('áp mẫu lỗi thì nhả khoá: bấm lại gọi lần hai', async () => {
+      mocks.applyStorefrontTemplate.mockRejectedValueOnce(new Error('Mạng yếu'));
+      mocks.getMyStorefront.mockResolvedValue(draft());
+      await toStep(3);
+      fireEvent.click(screen.getByRole('button', { name: 'Chọn danh mục' }));
+      const cat = await screen.findByRole('button', { name: 'Dùng mẫu Chăm sóc da' });
+      fireEvent.click(cat);
+      await errorShown();
+      await waitFor(() => expect(cat).not.toHaveAttribute('aria-disabled', 'true'));
+      fireEvent.click(cat);
+      await waitFor(() => expect(mocks.applyStorefrontTemplate).toHaveBeenCalledTimes(2));
+    });
+
+    it('hai cú chạm "Thêm sản phẩm" cùng khung hình chỉ tạo bộ sưu tập một lần rồi mở bảng chọn', async () => {
+      const d = deferred();
+      mocks.createCollection.mockReturnValue(d.promise);
+      mocks.getMyStorefront.mockResolvedValue(draft());
+      await toStep(3);
+      const pick = screen.getByRole('button', { name: 'Thêm sản phẩm' });
+      await twice(pick);
+      expect(mocks.createCollection).toHaveBeenCalledTimes(1);
+      await busy(pick);
+      await act(async () => { d.resolve({ id: 'c1', title: 'Sản phẩm mình chọn', items: [] }); });
+      expect(await screen.findByRole('button', { name: 'Thêm' })).toBeInTheDocument();
+      expect(mocks.createCollection).toHaveBeenCalledTimes(1);
+    });
+
+    it('tạo bộ sưu tập lỗi thì nhả khoá: bấm lại gọi lần hai', async () => {
+      mocks.createCollection.mockRejectedValueOnce(new Error('Mạng yếu'));
+      mocks.getMyStorefront.mockResolvedValue(draft());
+      await toStep(3);
+      const pick = screen.getByRole('button', { name: 'Thêm sản phẩm' });
+      fireEvent.click(pick);
+      await errorShown();
+      await idle(pick);
+      fireEvent.click(pick);
+      await waitFor(() => expect(mocks.createCollection).toHaveBeenCalledTimes(2));
+    });
+
+    it('hai cú chạm "Bỏ" cùng một món cùng khung hình chỉ bỏ một lần', async () => {
+      const d = deferred();
+      mocks.removeItem.mockReturnValue(d.promise);
+      mocks.getMyStorefront.mockResolvedValue(draft(twoItems));
+      await toStep(3);
+      await twice(screen.getByRole('button', { name: 'Bỏ Trà xanh' }));
+      expect(mocks.removeItem).toHaveBeenCalledTimes(1);
+      expect(mocks.removeItem.mock.calls[0]![0]).toBe('i1');
+      await act(async () => { d.resolve({}); });
+      await waitFor(() => expect(mocks.getMyStorefront).toHaveBeenCalledTimes(3));
+    });
+
+    it('bỏ hai món khác nhau cùng khung hình: cả hai đều được gửi', async () => {
+      mocks.getMyStorefront.mockResolvedValue(draft(twoItems));
+      await toStep(3);
+      await twice(screen.getByRole('button', { name: 'Bỏ Trà xanh' }), screen.getByRole('button', { name: 'Bỏ Xà phòng' }));
+      await waitFor(() => expect(mocks.removeItem).toHaveBeenCalledTimes(2));
+      expect(mocks.removeItem.mock.calls.map((c) => c[0]).sort()).toEqual(['i1', 'i2']);
+    });
+
+    it('bỏ món lỗi thì nhả khoá: bấm lại gọi lần hai', async () => {
+      mocks.removeItem.mockRejectedValueOnce(new Error('Mạng yếu'));
+      mocks.getMyStorefront.mockResolvedValue(draft(twoItems));
+      await toStep(3);
+      const del = screen.getByRole('button', { name: 'Bỏ Trà xanh' });
+      fireEvent.click(del);
+      await errorShown();
+      fireEvent.click(del);
+      await waitFor(() => expect(mocks.removeItem).toHaveBeenCalledTimes(2));
+    });
+  });
+
+  describe('bước 4: gửi duyệt', () => {
+    it('hai cú chạm "Gửi duyệt" cùng khung hình chỉ gửi một lần và chỉ báo một lần', async () => {
+      const d = deferred();
+      mocks.publishStorefront.mockReturnValue(d.promise);
+      mocks.getMyStorefront.mockResolvedValue(draft(withItem));
+      await toStep(4);
+      const submit = screen.getByRole('button', { name: 'Gửi duyệt' });
+      await twice(submit);
+      expect(mocks.publishStorefront).toHaveBeenCalledTimes(1);
+      await busy(submit);
+      mocks.getMyStorefront.mockResolvedValue(draft({ ...withItem, isPublished: true, status: 'PENDING_APPROVAL' }));
+      await act(async () => { d.resolve({}); });
+      await waitFor(() => expect(mocks.openSnackbar.mock.calls.filter(([o]) => (o as { type: string }).type === 'success')).toHaveLength(1));
+      expect(mocks.publishStorefront).toHaveBeenCalledTimes(1);
+    });
+
+    it('gửi duyệt lỗi thì nhả khoá: bấm lại gọi lần hai', async () => {
+      mocks.publishStorefront.mockRejectedValueOnce(new Error('Mạng yếu'));
+      mocks.getMyStorefront.mockResolvedValue(draft(withItem));
+      await toStep(4);
+      const submit = screen.getByRole('button', { name: 'Gửi duyệt' });
+      fireEvent.click(submit);
+      await errorShown();
+      await idle(submit);
+      fireEvent.click(submit);
+      await waitFor(() => expect(mocks.publishStorefront).toHaveBeenCalledTimes(2));
+    });
   });
 });

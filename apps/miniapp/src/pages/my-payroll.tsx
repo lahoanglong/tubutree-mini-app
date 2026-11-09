@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Input, Page, useNavigate, useSnackbar } from 'zmp-ui';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useLockedMutation } from '../components/game/use-locked-mutation';
 import { Landmark, ChevronDown } from 'lucide-react';
 import { getMyPayroll, updateBank, type PayrollStatus, type PayrollDay, type StaffProfile } from '../services/payroll-api';
 import { getHistory, type SessionHistory } from '../services/attendance-api';
@@ -127,7 +128,7 @@ function MyPayrollHub() {
     setBankOpen(true);
   };
 
-  const bankM = useMutation({
+  const bankM = useLockedMutation({
     mutationFn: () =>
       updateBank({ bankBin: bin.trim(), bankAccountNo: accNo.trim(), bankAccountName: accName.trim(), qrImageUrl: qr || undefined }),
     onSuccess: () => {
@@ -153,7 +154,7 @@ function MyPayrollHub() {
         />
 
         {payQ.isLoading && <Skeleton height={120} radius="var(--radius-card)" />}
-        {payQ.isError && <ErrorState message={getLoadErrorMessage(payQ.error)} onRetry={() => void payQ.refetch()} />}
+        {payQ.isError && <ErrorState message={getLoadErrorMessage(payQ.error)} onRetry={() => payQ.refetch()} />}
 
         {m && (
           <div

@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
@@ -34,6 +34,7 @@ vi.mock('../components/address-form', () => ({
 }));
 
 import AddressesPage from './addresses';
+import { haptic } from '../utils/haptic';
 
 const ADDR = {
   id: 'a1', recipient: 'Lan', phone: '0900000000', street: '1 Lê Lợi', ward: 'P1', district: 'Q1', province: 'HCM', isDefault: false,
@@ -222,5 +223,186 @@ describe('Sổ địa chỉ: đổi địa chỉ thì báo giá thanh toán đan
     fireEvent.click(within(title.closest('[data-testid="page"] > div') as HTMLElement).getByRole('button', { name: 'Xoá' }));
     await waitFor(() => expect(mocks.deleteAddress).toHaveBeenCalledWith('a1'));
     await waitFor(() => expect(qc.getQueryState(QUOTE_KEY)?.isInvalidated).toBe(true));
+  });
+});
+
+describe('Sổ địa chỉ: Đặt mặc định và Xoá khoá chạm đúp (W76A)', () => {
+  const ADDR2 = { ...ADDR, id: 'a2', recipient: 'Mai' };
+  const deferred = () => {
+    let resolve!: (v: unknown) => void;
+    let reject!: (e: unknown) => void;
+    const promise = new Promise((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+  const successToasts = () => mocks.openSnackbar.mock.calls.filter(([a]) => (a as { type: string }).type === 'success');
+  // Mở khung xác nhận xoá của địa chỉ thứ `index` rồi trả nút "Xoá" trong khung.
+  const openDelete = async (index = 0) => {
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Xoá' }))[index]!);
+    const title = await screen.findByRole('heading', { level: 2, name: 'Xoá địa chỉ này?' });
+    return within(title.closest('[data-testid="page"] > div') as HTMLElement).getByRole('button', { name: 'Xoá' });
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.authStatus = 'authenticated';
+    mocks.getAddresses.mockResolvedValue([ADDR]);
+    mocks.updateAddress.mockResolvedValue({});
+    mocks.deleteAddress.mockResolvedValue({});
+  });
+
+  it('chạm đúp "Đặt mặc định" trong cùng một khung hình chỉ gọi API một lần', async () => {
+    const d = deferred();
+    mocks.updateAddress.mockReturnValueOnce(d.promise);
+    renderPage();
+    const btn = await screen.findByRole('button', { name: 'Đặt mặc định' });
+    await act(async () => {
+      fireEvent.click(btn);
+      fireEvent.click(btn);
+    });
+    expect(mocks.updateAddress).toHaveBeenCalledTimes(1);
+    await act(async () => d.resolve({}));
+    await waitFor(() => expect(mocks.getAddresses).toHaveBeenCalledTimes(2));
+    expect(mocks.updateAddress).toHaveBeenCalledTimes(1);
+    expect(haptic).toHaveBeenCalledTimes(1);
+  });
+
+  it('đang đặt mặc định: nút aria-busy mà không bị disabled (giữ focus), xong thì hết busy', async () => {
+    const d = deferred();
+    mocks.updateAddress.mockReturnValueOnce(d.promise);
+    renderPage();
+    const btn = await screen.findByRole('button', { name: 'Đặt mặc định' });
+    btn.focus();
+    fireEvent.click(btn);
+    await waitFor(() => expect(btn).toHaveAttribute('aria-busy', 'true'));
+    expect(btn).not.toBeDisabled();
+    expect(btn).toHaveFocus();
+    await act(async () => d.resolve({}));
+    await waitFor(() => expect(btn).not.toHaveAttribute('aria-busy'));
+  });
+
+  it('đặt mặc định lỗi thì báo lỗi, nhả khoá, bấm lại gọi lần hai', async () => {
+    mocks.updateAddress.mockRejectedValueOnce(new Error('boom')).mockResolvedValue({});
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Đặt mặc định' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+    fireEvent.click(screen.getByRole('button', { name: 'Đặt mặc định' }));
+    await waitFor(() => expect(mocks.updateAddress).toHaveBeenCalledTimes(2));
+  });
+
+  it('hai địa chỉ khác nhau đặt mặc định trong một khung hình: cả hai cùng đi, chỉ nút của địa chỉ đang gửi báo busy', async () => {
+    const d1 = deferred();
+    const d2 = deferred();
+    mocks.getAddresses.mockResolvedValue([ADDR, ADDR2]);
+    mocks.updateAddress.mockReturnValueOnce(d1.promise).mockReturnValueOnce(d2.promise);
+    renderPage();
+    const [first, second] = await screen.findAllByRole('button', { name: 'Đặt mặc định' });
+    await act(async () => {
+      fireEvent.click(first!);
+      fireEvent.click(second!);
+    });
+    expect(mocks.updateAddress.mock.calls).toEqual([['a1', { isDefault: true }], ['a2', { isDefault: true }]]);
+    await act(async () => {
+      d1.resolve({});
+      d2.resolve({});
+    });
+    await waitFor(() => expect(mocks.getAddresses).toHaveBeenCalledTimes(3));
+  });
+
+  it('chỉ nút của địa chỉ đang đặt mặc định báo busy, địa chỉ kia vẫn bấm được', async () => {
+    const d = deferred();
+    mocks.getAddresses.mockResolvedValue([ADDR, ADDR2]);
+    mocks.updateAddress.mockReturnValueOnce(d.promise);
+    renderPage();
+    const [first, second] = await screen.findAllByRole('button', { name: 'Đặt mặc định' });
+    fireEvent.click(first!);
+    await waitFor(() => expect(first).toHaveAttribute('aria-busy', 'true'));
+    expect(second).not.toHaveAttribute('aria-busy');
+    expect(second).not.toBeDisabled();
+    await act(async () => d.resolve({}));
+  });
+
+  it('chạm đúp "Xoá" trong khung xác nhận trong cùng một khung hình chỉ xoá một lần', async () => {
+    const d = deferred();
+    mocks.deleteAddress.mockReturnValueOnce(d.promise);
+    renderPage();
+    const del = await openDelete();
+    await act(async () => {
+      fireEvent.click(del);
+      fireEvent.click(del);
+    });
+    expect(mocks.deleteAddress).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(del).toHaveAttribute('aria-busy', 'true'));
+    await act(async () => d.resolve({}));
+    await waitFor(() => expect(screen.queryByText('Xoá địa chỉ này?')).toBeNull());
+    expect(mocks.deleteAddress).toHaveBeenCalledTimes(1);
+    expect(successToasts()).toHaveLength(1);
+  });
+
+  it('xoá lỗi thì báo lỗi, giữ khung, nhả khoá, bấm lại xoá lần hai', async () => {
+    mocks.deleteAddress.mockRejectedValueOnce(new Error('boom')).mockResolvedValue({});
+    renderPage();
+    const del = await openDelete();
+    fireEvent.click(del);
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+    expect(screen.getByText('Xoá địa chỉ này?')).toBeInTheDocument();
+    fireEvent.click(del);
+    await waitFor(() => expect(mocks.deleteAddress).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByText('Xoá địa chỉ này?')).toBeNull());
+  });
+
+  it('Đặt mặc định rồi Xoá cùng một địa chỉ trong một khung hình chỉ gửi lệnh đầu; xong thì nhả khoá', async () => {
+    const d = deferred();
+    mocks.updateAddress.mockReturnValueOnce(d.promise);
+    renderPage();
+    const setDefault = await screen.findByRole('button', { name: 'Đặt mặc định' });
+    const del = await openDelete();
+    await act(async () => {
+      fireEvent.click(setDefault);
+      fireEvent.click(del);
+    });
+    expect(mocks.updateAddress).toHaveBeenCalledTimes(1);
+    expect(mocks.deleteAddress).not.toHaveBeenCalled();
+    await waitFor(() => expect(del).toHaveAttribute('aria-busy', 'true'));
+    await act(async () => d.resolve({}));
+    await waitFor(() => expect(del).not.toHaveAttribute('aria-busy'));
+    fireEvent.click(del);
+    await waitFor(() => expect(mocks.deleteAddress).toHaveBeenCalledWith('a1'));
+  });
+
+  it('Xoá rồi Đặt mặc định cùng một địa chỉ trong một khung hình chỉ gửi lệnh xoá', async () => {
+    const d = deferred();
+    mocks.deleteAddress.mockReturnValueOnce(d.promise);
+    renderPage();
+    const setDefault = await screen.findByRole('button', { name: 'Đặt mặc định' });
+    const del = await openDelete();
+    await act(async () => {
+      fireEvent.click(del);
+      fireEvent.click(setDefault);
+    });
+    expect(mocks.deleteAddress).toHaveBeenCalledTimes(1);
+    expect(mocks.updateAddress).not.toHaveBeenCalled();
+    await waitFor(() => expect(setDefault).toHaveAttribute('aria-busy', 'true'));
+    await act(async () => d.resolve({}));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã xoá địa chỉ.', type: 'success' }));
+    expect(mocks.updateAddress).not.toHaveBeenCalled();
+  });
+
+  it('Đặt mặc định địa chỉ này và Xoá địa chỉ khác trong một khung hình: cả hai cùng đi', async () => {
+    const d = deferred();
+    mocks.getAddresses.mockResolvedValue([ADDR, ADDR2]);
+    mocks.updateAddress.mockReturnValueOnce(d.promise);
+    renderPage();
+    const [setDefaultFirst] = await screen.findAllByRole('button', { name: 'Đặt mặc định' });
+    const del = await openDelete(1);
+    await act(async () => {
+      fireEvent.click(setDefaultFirst!);
+      fireEvent.click(del);
+    });
+    expect(mocks.updateAddress).toHaveBeenCalledWith('a1', { isDefault: true });
+    expect(mocks.deleteAddress).toHaveBeenCalledWith('a2');
+    await act(async () => d.resolve({}));
   });
 });
