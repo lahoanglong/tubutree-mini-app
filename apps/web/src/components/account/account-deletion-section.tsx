@@ -25,13 +25,19 @@ const DELETE_OA_MESSAGE = 'Tôi muốn xoá tài khoản Tubu Tree';
 export function AccountDeletionSection() {
   const [confirming, setConfirming] = useState(false);
   const qc = useQueryClient();
-  const [agreed, setAgreed] = useState(false);
+  const [agreedBalance, setAgreedBalance] = useState<number | null>(null);
   const walletQ = useQuery({ ...walletQuery(coreHttp), enabled: confirming });
   const balance = walletQ.data?.walletBalance;
+  // Đồng ý bỏ số dư gắn với đúng số tiền khách đã thấy: số dư đổi (Thử lại, tải lại sau lỗi) thì phải tick lại.
+  const agreed = balance !== undefined && agreedBalance === balance;
+  // Truy vấn lỗi mà chưa có số dư bị react-query đặt về pending lúc tải lại và xoá lỗi; giữ vùng lỗi + nút Thử lại đứng yên
+  // (không mất focus) tới khi lượt tải lại có kết quả.
+  const [walletRetrying, setWalletRetrying] = useState(false);
+  const walletWaiting = walletRetrying && walletQ.isPending;
   const del = useMutation({
     mutationFn: () => requestAccountDeletion(coreHttp, undefined, walletForfeitConsent(balance, agreed)),
     onError: () => {
-      setAgreed(false);
+      setAgreedBalance(null);
       void qc.invalidateQueries({ queryKey: ['wallet'] });
     },
   });
@@ -59,17 +65,31 @@ export function AccountDeletionSection() {
               {actionErrorText(del.error)}
             </p>
           )}
-          {walletQ.isLoading && <p className="mt-2 text-xs text-stone-600">{WALLET_FORFEIT_LOADING}</p>}
-          {walletQ.isError && (
-            <p role="alert" className={`mt-2 ${ui.error}`}>
-              {WALLET_FORFEIT_UNKNOWN}
-            </p>
-          )}
+          {walletQ.isLoading && !walletWaiting && <p className="mt-2 text-xs text-stone-600">{WALLET_FORFEIT_LOADING}</p>}
+          {walletQ.isError || walletWaiting ? (
+            <div role="alert" className="mt-2 flex flex-wrap items-center gap-2">
+              <p className={`min-w-0 flex-1 ${ui.error}`}>{WALLET_FORFEIT_UNKNOWN}</p>
+              <button
+                type="button"
+                disabled={del.isPending}
+                aria-busy={walletQ.isFetching || undefined}
+                aria-disabled={walletQ.isFetching || undefined}
+                onClick={() => {
+                  if (walletQ.isFetching || del.isPending) return;
+                  setWalletRetrying(true);
+                  void walletQ.refetch();
+                }}
+                className={`${ui.btnSecondary} shrink-0`}
+              >
+                Thử lại
+              </button>
+            </div>
+          ) : null}
           {balance !== undefined && balance > 0 && (
             <div className="mt-3">
-              <p className="text-sm font-bold text-stone-900">{walletForfeitNotice(formatVnd(balance))}</p>
+              <p className="text-sm font-bold tabular-nums text-stone-900">{walletForfeitNotice(formatVnd(balance))}</p>
               <label className="mt-2 flex min-h-11 items-start gap-2 text-xs text-stone-700">
-                <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="mt-0.5 size-5 shrink-0" style={{ accentColor: 'var(--color-action-primary-bg)' }} />
+                <input type="checkbox" checked={agreed} disabled={del.isPending} onChange={(e) => setAgreedBalance(e.target.checked ? (balance ?? null) : null)} className="mt-0.5 size-5 shrink-0" style={{ accentColor: 'var(--color-action-primary-bg)' }} />
                 <span>{WALLET_FORFEIT_AGREE}</span>
               </label>
             </div>
@@ -77,26 +97,43 @@ export function AccountDeletionSection() {
           <div className="mt-3 flex gap-2">
             <button
               type="button"
+              disabled={del.isPending}
               onClick={() => {
+                if (del.isPending) return;
+                del.reset();
                 setConfirming(false);
-                setAgreed(false);
+                setAgreedBalance(null);
+                setWalletRetrying(false);
               }}
               className={`${ui.btnSecondary} w-24 shrink-0 ${mini.secondary}`}
             >
               Huỷ
             </button>
+            {/* Đang gửi giữ aria-busy/aria-disabled chứ không `disabled` DOM: Chromium thả focus về body khi nút đang giữ focus bị disabled. */}
             <button
               type="button"
-              disabled={del.isPending || !canSubmitDeletion(balance, agreed)}
-              onClick={() => del.mutate()}
-              className="inline-flex min-h-11 flex-1 items-center justify-center rounded-control bg-danger-fg px-5 text-sm font-semibold text-stone-0 transition active:scale-95 disabled:opacity-60"
+              disabled={!canSubmitDeletion(balance, agreed)}
+              aria-busy={del.isPending || undefined}
+              aria-disabled={del.isPending || undefined}
+              onClick={() => {
+                if (del.isPending || !canSubmitDeletion(balance, agreed)) return;
+                del.mutate();
+              }}
+              className="inline-flex min-h-11 flex-1 items-center justify-center rounded-control bg-danger-fg px-5 text-sm font-semibold text-stone-0 transition active:scale-95 disabled:opacity-60 aria-disabled:opacity-60"
             >
-              Gửi yêu cầu xoá
+              {del.isPending ? 'Đang gửi…' : 'Gửi yêu cầu xoá'}
             </button>
           </div>
         </div>
       ) : (
-        <button type="button" onClick={() => setConfirming(true)} className={`${ui.btnSecondary} w-full text-danger-fg max-md:border-transparent max-md:bg-transparent max-md:text-[color:var(--color-text-danger)] max-md:shadow-none`}>
+        <button
+          type="button"
+          onClick={() => {
+            del.reset();
+            setConfirming(true);
+          }}
+          className={`${ui.btnSecondary} w-full text-danger-fg max-md:border-transparent max-md:bg-transparent max-md:text-[color:var(--color-text-danger)] max-md:shadow-none`}
+        >
           Xoá tài khoản
         </button>
       )}
