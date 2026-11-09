@@ -6,6 +6,7 @@ import { QueryClientContext } from '@tanstack/react-query';
 import { TriangleAlert } from 'lucide-react';
 import { ui } from '@/lib/guest-ui';
 import { SupportHotline } from '@/components/support-hotline';
+import { usePressLock } from '@/lib/use-press-lock';
 
 /**
  * Lỗi tải dữ liệu kèm "Thử lại", như ErrorState của Mini App: 'page' (mặc định) là lỗi cả trang, có dòng gọi hotline;
@@ -22,7 +23,8 @@ export function ErrorState({
   showSupport,
 }: {
   message?: string;
-  onRetry?: () => void;
+  /** Trả Promise (vd. `() => query.refetch()`) thì nút khoá bấm lại tới khi Promise xong; trả void thì không khoá được. */
+  onRetry?: () => void | PromiseLike<unknown>;
   retryLabel?: string;
   /** Dòng tiêu đề đậm trên chữ báo lỗi (Mini App: "Chưa tải được trang này"). */
   title?: string;
@@ -34,6 +36,8 @@ export function ErrorState({
   const inline = variant === 'inline';
   // Màn lỗi nằm ở khắp nơi, kể cả chỗ dựng không có QueryClientProvider (test đơn lẻ): khi đó chỉ ẩn dòng hotline.
   const hasQuery = useContext(QueryClientContext) !== undefined;
+  // Nút bận không `disabled` để giữ focus; khoá chạm đúp là ref trong `usePressLock`.
+  const { press: retry, busy } = usePressLock(onRetry);
   return (
     <div
       role="alert"
@@ -45,7 +49,13 @@ export function ErrorState({
       <p className="font-display text-lg font-semibold text-stone-900">{title ?? (onHome ? NOT_FOUND_TITLE : 'Chưa tải được trang này')}</p>
       <p data-testid="error-message" className="max-w-xs text-sm text-stone-700">{message}</p>
       {(onHome || onRetry) && (
-        <button type="button" onClick={onHome ?? onRetry} className={`${ui.btnPrimary} max-md:min-h-12 max-md:min-w-[7.5rem] max-md:rounded-full max-md:bg-forest-50 max-md:hover:bg-forest-100 max-md:px-6 max-md:text-base max-md:text-forest-700 max-md:shadow-none`}>
+        <button
+          type="button"
+          onClick={onHome ?? retry}
+          aria-busy={(!onHome && busy) || undefined}
+          aria-disabled={(!onHome && busy) || undefined}
+          className={`${ui.btnPrimary} max-md:min-h-12 max-md:min-w-[7.5rem] max-md:rounded-full max-md:bg-forest-50 max-md:hover:bg-forest-100 max-md:px-6 max-md:text-base max-md:text-forest-700 max-md:shadow-none`}
+        >
           {onHome ? GO_HOME_LABEL : retryLabel}
         </button>
       )}

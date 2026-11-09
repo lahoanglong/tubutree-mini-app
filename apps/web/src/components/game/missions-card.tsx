@@ -66,7 +66,7 @@ export function MissionsCard({
                   ariaLabel={gameNewbieCopy.missions.progressLabel(m.title, progress, goal)}
                 />
               </div>
-              <div className="mt-0.5 text-caption text-stone-600">
+              <div className="mt-0.5 text-caption tabular-nums text-stone-600">
                 {progress}/{goal}
               </div>
               {target && (
@@ -80,7 +80,16 @@ export function MissionsCard({
                 </button>
               )}
               {canClaim && (
-                <button type="button" disabled={claiming} onClick={() => onClaim(m.code)} className={`${ui.btnPrimary} mt-2 w-full`}>
+                <button
+                  type="button"
+                  aria-busy={claiming || undefined}
+                  aria-disabled={claiming || undefined}
+                  onClick={() => {
+                    if (claiming) return;
+                    onClaim(m.code);
+                  }}
+                  className={`${ui.btnPrimary} mt-2 w-full`}
+                >
                   Nhận thưởng
                 </button>
               )}

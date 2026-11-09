@@ -30,14 +30,18 @@ export function useCheckIn(enabled: boolean) {
       if (res.pending.length === 0) {
         qc.setQueryData<CheckInStatusResponse>(checkInQuery(coreHttp).queryKey, (old) => (old ? { ...old, checkedInToday: true } : old));
       }
-      void qc.invalidateQueries({ queryKey: loyaltyQuery(coreHttp).queryKey });
-      void qc.invalidateQueries({ queryKey: ['game'] });
-      void qc.invalidateQueries({ queryKey: checkInQuery(coreHttp).queryKey });
-      void qc.invalidateQueries({ queryKey: pointsTxnQuery(coreHttp).queryKey });
+      // Trả lời hứa tải lại: TanStack Query đợi nó trước `onSettled`, nên khoá `busy` còn giữ tới khi trạng thái điểm danh và số dư mới về
+      // (nhả sớm hơn thì nút còn "Điểm danh" theo số cũ và bấm được lần hai, nhất là sau lần chỉ nhận một phần).
+      return Promise.all([
+        qc.invalidateQueries({ queryKey: loyaltyQuery(coreHttp).queryKey }),
+        qc.invalidateQueries({ queryKey: ['game'] }),
+        qc.invalidateQueries({ queryKey: checkInQuery(coreHttp).queryKey }),
+        qc.invalidateQueries({ queryKey: pointsTxnQuery(coreHttp).queryKey }),
+      ]);
     },
     onError: (e) => {
       setMessage({ text: errText(e), error: true });
-      void qc.invalidateQueries({ queryKey: checkInQuery(coreHttp).queryKey });
+      return qc.invalidateQueries({ queryKey: checkInQuery(coreHttp).queryKey });
     },
     onSettled: () => {
       busy.current = false;

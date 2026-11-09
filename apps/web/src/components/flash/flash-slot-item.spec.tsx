@@ -195,3 +195,37 @@ describe('FlashSlotItem (web): dữ liệu xấu không làm vỡ dòng', () => 
     expect(c.textContent).toContain('Vừa mở bán');
   });
 });
+
+describe('FlashSlotItem (web): nút Mua ngay đang bận', () => {
+  it('buyPending: aria-busy + aria-disabled, không disabled thật (giữ focus), bấm không gọi onBuy', () => {
+    const onBuy = vi.fn();
+    const c = show(ITEM, { onBuy, buyPending: true });
+    const buy = button(c, 'Mua ngay Serum Bã Trầu')!;
+    expect(buy.getAttribute('aria-busy')).toBe('true');
+    expect(buy.getAttribute('aria-disabled')).toBe('true');
+    expect(buy.disabled).toBe(false);
+    click(buy);
+    expect(onBuy).not.toHaveBeenCalled();
+  });
+
+  it('buyLocked (món khác đang mua): aria-disabled, không aria-busy, bấm không gọi onBuy', () => {
+    const onBuy = vi.fn();
+    const c = show(ITEM, { onBuy, buyLocked: true });
+    const buy = button(c, 'Mua ngay Serum Bã Trầu')!;
+    expect(buy.getAttribute('aria-disabled')).toBe('true');
+    expect(buy.getAttribute('aria-busy')).toBeNull();
+    expect(buy.disabled).toBe(false);
+    click(buy);
+    expect(onBuy).not.toHaveBeenCalled();
+  });
+
+  it('không bận: không aria-busy, không aria-disabled, bấm gọi onBuy', () => {
+    const onBuy = vi.fn();
+    const c = show(ITEM, { onBuy });
+    const buy = button(c, 'Mua ngay Serum Bã Trầu')!;
+    expect(buy.getAttribute('aria-busy')).toBeNull();
+    expect(buy.getAttribute('aria-disabled')).toBeNull();
+    click(buy);
+    expect(onBuy).toHaveBeenCalledTimes(1);
+  });
+});

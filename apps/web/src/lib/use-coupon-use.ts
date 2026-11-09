@@ -30,6 +30,8 @@ export function useCouponUse() {
   const router = useRouter();
   const qc = useQueryClient();
   const [notice, setNotice] = useState<CouponNotice | null>(null);
+  // Mã đang chạy "Dùng ngay", chỉ để nút báo bận (khoá thật là ref `busy`).
+  const [usingCode, setUsingCode] = useState<string | null>(null);
   // Hẹn giờ sang giỏ giữ trong ref: lần "Dùng ngay" kế tiếp, lúc rời trang và `cancel` đều huỷ nó, để một hẹn giờ cũ không kéo khách sang giỏ.
   const holdTimer = useRef<number | null>(null);
   // Khoá đồng bộ chống chạm đúp: chỉ một lần "Dùng ngay" đang chạy.
@@ -60,11 +62,13 @@ export function useCouponUse() {
   const use = async (code: string, onBeforeNavigate?: () => void) => {
     if (busy.current) return;
     busy.current = true;
+    setUsingCode(code);
     clearHold();
     try {
       await run(code, onBeforeNavigate, epoch.current);
     } finally {
       busy.current = false;
+      setUsingCode(null);
     }
   };
 
@@ -105,5 +109,5 @@ export function useCouponUse() {
     }
   };
 
-  return { copy, use, notice, cancel };
+  return { copy, use, notice, cancel, usingCode };
 }

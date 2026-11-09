@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
 import { headingProblems, smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
@@ -27,6 +28,7 @@ vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get, post: mocks.post
 vi.mock('@/lib/platform-bridge', () => ({ platformBridge: { share: mocks.share } }));
 
 import { GroupBuyView } from './group-buy-view';
+import { captureUnhandledRejections } from '@/test-utils/unhandled';
 
 const HOUR = 3600 * 1000;
 const GROUP = (id: string, over: Record<string, unknown> = {}) => ({
@@ -451,5 +453,162 @@ describe('/mua-chung — cấu trúc và trợ năng', () => {
     expect(links).toHaveLength(1);
     expect(links[0]!.className).toContain('min-h-14');
     expect(links[0]!.textContent).toContain('Không ảnh');
+  });
+});
+
+describe('/mua-chung — khoá chạm đúp', () => {
+  const gate = <T,>() => {
+    let resolve!: (v: T) => void;
+    const promise = new Promise<T>((r) => (resolve = r));
+    return { promise, resolve };
+  };
+  const tapTogether = async (...els: HTMLElement[]) => {
+    await act(async () => {
+      for (const e of els) e.click();
+    });
+  };
+  const joins = (id?: string) => mocks.post.mock.calls.filter((x) => (id ? x[0] === `/group-buy/${id}/join` : String(x[0]).endsWith('/join')));
+  const listGets = () => mocks.get.mock.calls.filter((x) => x[0] === '/group-buy').length;
+
+  it('tham gia: hai cú chạm cùng khung hình chỉ POST một lần; nút báo aria-busy/aria-disabled, không disabled', async () => {
+    const g = gate<unknown>();
+    mocks.post.mockReturnValue(g.promise);
+    const c = await mount();
+    const b = btn(c, /^Tham gia mua chung/)!;
+    await tapTogether(b, b);
+    await flush(2);
+    expect(joins()).toHaveLength(1);
+    expect(b.getAttribute('aria-busy')).toBe('true');
+    expect(b.getAttribute('aria-disabled')).toBe('true');
+    expect(b.disabled).toBe(false);
+    g.resolve({ joined: true, currentSize: 3, status: 'OPEN' });
+    await flush(6);
+    expect(joins()).toHaveLength(1);
+  });
+
+  it('tham gia: khoá giữ tới khi danh sách mới về, chạm lúc thẻ còn nút "Tham gia" theo số cũ không gửi lần hai', async () => {
+    let joined = false;
+    mocks.get.mockImplementation(async (path: string) => {
+      if (path !== '/group-buy') return null;
+      await refreshGate.promise;
+      return [GROUP('a', { joined }), GROUP('b', { joined: true })];
+    });
+    const refreshGate = gate<void>();
+    refreshGate.resolve();
+    const c = await mount();
+    const fresh = gate<void>();
+    Object.assign(refreshGate, fresh);
+    mocks.post.mockImplementation(async () => {
+      joined = true;
+      return { joined: true, currentSize: 3, status: 'OPEN' };
+    });
+    const b = btn(c, /^Tham gia mua chung/)!;
+    click(b);
+    await flush(6);
+    expect(joins()).toHaveLength(1);
+    // POST xong nhưng danh sách mới chưa về: thẻ còn "Tham gia" theo số cũ, nút vẫn bận, chạm thêm không gửi lệnh thứ hai.
+    expect(b.getAttribute('aria-busy')).toBe('true');
+    await tapTogether(b, b);
+    await flush(2);
+    expect(joins()).toHaveLength(1);
+    fresh.resolve();
+    await flush(8);
+    expect(joins()).toHaveLength(1);
+    expect(btn(c, /^Tham gia mua chung/)).toBeUndefined();
+    expect(listGets()).toBeGreaterThanOrEqual(2);
+  });
+
+  it('tham gia hai nhóm khác nhau cùng khung hình: song song, mỗi nhóm một lần', async () => {
+    mocks.list = [GROUP('a'), GROUP('c')];
+    const c = await mount();
+    const bs = Array.from(c.querySelectorAll<HTMLButtonElement>('button')).filter((b) => b.textContent?.startsWith('Tham gia mua chung'));
+    expect(bs).toHaveLength(2);
+    await tapTogether(bs[0]!, bs[0]!, bs[1]!, bs[1]!);
+    await flush(6);
+    expect(joins('a')).toHaveLength(1);
+    expect(joins('c')).toHaveLength(1);
+  });
+
+  it('tham gia lỗi: role="alert", nhả khoá, bấm lại gọi lần hai', async () => {
+    mocks.post.mockRejectedValueOnce(new Error('Nhóm đã đủ người'));
+    const c = await mount();
+    const b = btn(c, /^Tham gia mua chung/)!;
+    await tapTogether(b, b);
+    await flush(5);
+    expect(joins()).toHaveLength(1);
+    expect(c.querySelector('[role="alert"]')?.textContent).toContain('Nhóm đã đủ người');
+    expect(b.getAttribute('aria-busy')).toBeNull();
+    click(b);
+    await flush(5);
+    expect(joins()).toHaveLength(2);
+  });
+
+  it('mời bạn bè: hai cú chạm cùng khung hình chỉ mở hộp chia sẻ một lần; nút báo bận không disabled; xong thì bấm lại được', async () => {
+    mocks.list = [GROUP('mine', { joined: true, isOwner: true })];
+    const g = gate<string>();
+    mocks.share.mockReturnValue(g.promise);
+    const c = await mount();
+    const b = btn(c, 'Mời bạn bè')!;
+    await tapTogether(b, b);
+    await flush(2);
+    expect(mocks.share).toHaveBeenCalledTimes(1);
+    expect(b.getAttribute('aria-busy')).toBe('true');
+    expect(b.disabled).toBe(false);
+    g.resolve('shared');
+    await flush(4);
+    expect(b.getAttribute('aria-busy')).toBeNull();
+    mocks.share.mockResolvedValue('shared');
+    click(b);
+    await flush(3);
+    expect(mocks.share).toHaveBeenCalledTimes(2);
+  });
+
+  it('mời bạn bè: hộp chia sẻ ném lỗi vẫn nhả khoá để chia sẻ lại được', async () => {
+    mocks.list = [GROUP('mine', { joined: true, isOwner: true })];
+    mocks.share.mockRejectedValueOnce(new Error('hỏng'));
+    const c = await mount();
+    const b = btn(c, 'Mời bạn bè')!;
+    const seen = await captureUnhandledRejections(async () => {
+      await tapTogether(b);
+      await flush(3);
+    });
+    expect(seen.map((e) => (e as Error).message)).toEqual(['hỏng']);
+    expect(b.getAttribute('aria-busy')).toBeNull();
+    mocks.share.mockResolvedValue('shared');
+    click(b);
+    await flush(3);
+    expect(mocks.share).toHaveBeenCalledTimes(2);
+  });
+
+  it('phiên chưa khôi phục được: "Đăng nhập để tham gia" chạm đúp cùng khung hình chỉ thử khôi phục một lần', async () => {
+    mocks.phase = 'unavailable';
+    const g = gate<void>();
+    mocks.retrySession.mockReturnValue(g.promise);
+    const c = await mount();
+    const b = btn(c, 'Đăng nhập để tham gia')!;
+    await tapTogether(b, b);
+    expect(mocks.retrySession).toHaveBeenCalledTimes(1);
+    g.resolve();
+    await flush(3);
+    click(b);
+    expect(mocks.retrySession).toHaveBeenCalledTimes(2);
+  });
+
+  it('danh sách lỗi tải: Thử lại chạm đúp cùng khung hình chỉ tải lại một lần; nút báo bận tới khi xong', async () => {
+    mocks.get.mockRejectedValueOnce(new Error('mất mạng'));
+    const c = await mount();
+    expect(c.querySelector('[role="alert"]')).not.toBeNull();
+    const before = listGets();
+    const g = gate<unknown[]>();
+    mocks.get.mockReturnValue(g.promise);
+    const retry = btn(c, 'Thử lại')!;
+    await tapTogether(retry, retry);
+    await flush(2);
+    expect(listGets()).toBe(before + 1);
+    expect(retry.getAttribute('aria-busy')).toBe('true');
+    expect(retry.disabled).toBe(false);
+    g.resolve([GROUP('a')]);
+    await flush(5);
+    expect(listGets()).toBe(before + 1);
   });
 });

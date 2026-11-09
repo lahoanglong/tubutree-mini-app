@@ -4,6 +4,7 @@
 import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { cancelFlashReminder, setFlashReminder, type FlashSlotItem as FlashSlotItemData, type UpcomingFlashItem } from '@tubutree/app-core/api/flash-sale';
 import { remindIntentAction } from '@tubutree/app-core/commerce/flash-remind-intent';
 import { initialSlotId, slotAfterEnd, slotCategoryChips, slotListView, slotTabs } from '@tubutree/app-core/commerce/flash-slots';
@@ -112,6 +113,14 @@ export default function FlashSlotsView() {
 
   const reminded = useMemo(() => new Set((upcomingQ.data ?? []).filter((u) => u.reminded).map((u) => u.itemId)), [upcomingQ.data]);
 
+  // Khoá "Mua ngay" là ref chứ không phải `isPending`: chạm thứ hai cùng khung hình vẫn thấy `isPending=false`. Chỉ nhả khi lỗi; thành công thì trang sắp
+  // chuyển sang Thanh toán và chạm thêm lúc này là cộng đôi số lượng vào giỏ (như nút Mua ngay ở trang sản phẩm).
+  const buyingRef = useRef(false);
+  const [buyingId, setBuyingId] = useState<string | null>(null);
+  const releaseBuy = () => {
+    buyingRef.current = false;
+    setBuyingId(null);
+  };
   const buyMut = useMutation({
     mutationFn: async (item: FlashSlotItemData) => ({ cart: await addToCart(item.variationId, 1), variationId: item.variationId }),
     onSuccess: ({ cart, variationId }) => {
@@ -121,10 +130,14 @@ export default function FlashSlotsView() {
       rememberCheckoutSelection(bought.length > 0 ? bought : null);
       router.push('/thanh-toan');
     },
-    onError: (e: unknown) => setError(actionErrorText(e)),
+    onError: (e: unknown) => {
+      releaseBuy();
+      setError(actionErrorText(e));
+    },
   });
 
-  const remindMut = useMutation({
+  // Khoá theo món: nhắc hai món khác nhau vẫn chạy song song, chạm đúp cùng một món chỉ gọi API một lần (cả đường tự đặt nhắc sau đăng nhập).
+  const remindMut = useLockedMutation({
     mutationFn: ({ itemId, reminded: on }: { itemId: string; reminded: boolean; startAt: string }) => (on ? cancelFlashReminder(coreHttp, itemId) : setFlashReminder(coreHttp, itemId)),
     onMutate: async ({ itemId, reminded: on }) => {
       await qc.cancelQueries({ queryKey: upcomingKey });
@@ -137,8 +150,9 @@ export default function FlashSlotsView() {
       if (ctx?.prev) qc.setQueryData(upcomingKey, ctx.prev);
       setError(actionErrorText(e));
     },
-    onSettled: () => void qc.invalidateQueries({ queryKey: upcomingKey }),
-  });
+    // Trả lời hứa tải lại: khoá của món giữ tới khi danh sách nhắc thật về, không có thì lần chạm kế tính từ trạng thái lạc quan chưa được máy chủ xác nhận.
+    onSettled: () => qc.invalidateQueries({ queryKey: upcomingKey }),
+  }, ({ itemId }) => itemId);
 
   // Khách bấm "Nhắc tôi" lúc chưa đăng nhập đã được đưa đi đăng nhập (suất nằm ở sessionStorage, xem lib/pending-remind.ts). Quay về với phiên và danh sách
   // nhắc đã tải thì đặt nhắc, đúng một lần; quay về mà vẫn là khách (bỏ dở đăng nhập) thì xoá, để lần đăng nhập sau không tự đặt một nhắc đã bị lãng quên.
@@ -210,7 +224,9 @@ export default function FlashSlotsView() {
   };
 
   const onBuy = (item: FlashSlotItemData) => {
-    if (needSession() || buyMut.isPending) return;
+    if (needSession() || buyingRef.current) return;
+    buyingRef.current = true;
+    setBuyingId(item.itemId);
     clearMessages();
     buyMut.mutate(item);
   };
@@ -225,7 +241,7 @@ export default function FlashSlotsView() {
       </div>
     );
   } else if (slotsQ.isError && !slotsQ.data) {
-    body = <ErrorState message={loadErrorText(slotsQ.error)} onRetry={() => void slotsQ.refetch()} />;
+    body = <ErrorState message={loadErrorText(slotsQ.error)} onRetry={() => slotsQ.refetch()} />;
   } else if (tabs.length === 0 || activeId === null || activeTab === null || activeSlot === null) {
     body = (
       <EmptyState art="sprout" heading={fillCopy('flash.emptyTitle')} body={fillCopy('flash.emptyBody')} ctaLabel={fillCopy('flash.emptyCta')} onCta={() => router.push('/san-pham')} />
@@ -238,7 +254,7 @@ export default function FlashSlotsView() {
     const serverEnded = itemsQ.data?.slot.status === 'ENDED';
     let list: ReactNode;
     if (itemsQ.isPending) list = <ListSkeleton />;
-    else if (itemsQ.isError) list = <ErrorState variant="inline" message={loadErrorText(itemsQ.error)} onRetry={() => void itemsQ.refetch()} />;
+    else if (itemsQ.isError) list = <ErrorState variant="inline" message={loadErrorText(itemsQ.error)} onRetry={() => itemsQ.refetch()} />;
     else if (serverEnded) list = <EmptyState variant="inline" art="sprout" heading={fillCopy('flash.endedTitle')} ctaLabel={fillCopy('flash.endedCta')} onCta={goNextSlot} />;
     else if (rows.length === 0) list = <EmptyState variant="inline" art="box" heading={fillCopy('flash.slotEmpty')} />;
     else
@@ -251,6 +267,8 @@ export default function FlashSlotsView() {
                 slotStatus={activeTab.status}
                 reminded={reminded.has(item.itemId)}
                 remindPending={remindMut.isPending && remindMut.variables?.itemId === item.itemId}
+                buyPending={buyingId === item.itemId}
+                buyLocked={buyingId !== null && buyingId !== item.itemId}
                 onBuy={() => onBuy(item)}
                 onToggleRemind={() => onToggleRemind(item)}
               />

@@ -12,6 +12,7 @@ import { Heading, Icon, Text } from '@/components/mini';
 import { useAuth } from '@/lib/auth-context';
 import { pointsSummary } from '@/lib/checkout-points';
 import { usePublicConfig } from '@/lib/use-public-config';
+import { usePressLock } from '@/lib/use-press-lock';
 
 export type PointsStripQuery = Pick<UseQueryResult<LoyaltyOverview>, 'data' | 'isError' | 'refetch'>;
 
@@ -22,6 +23,7 @@ export type PointsStripQuery = Pick<UseQueryResult<LoyaltyOverview>, 'data' | 'i
  */
 export function OffersPointsStrip({ loyalty }: { loyalty: PointsStripQuery }) {
   const router = useRouter();
+  const retry = usePressLock(() => loyalty.refetch());
   const { user } = useAuth();
   const cfg = usePublicConfig();
   const card = user
@@ -103,7 +105,9 @@ export function OffersPointsStrip({ loyalty }: { loyalty: PointsStripQuery }) {
                 <button
                   type="button"
                   className="tubu-press"
-                  onClick={() => void loyalty.refetch()}
+                  aria-busy={retry.busy || undefined}
+                  aria-disabled={retry.busy || undefined}
+                  onClick={retry.press}
                   style={{ flex: '0 0 auto', minHeight: 44, margin: '-14px -6px', padding: '0 6px', border: 'none', background: 'transparent', color: 'var(--color-text-inverse)', fontFamily: 'inherit', fontSize: 'var(--type-caption-size)', fontWeight: 700, textDecoration: 'underline', cursor: 'pointer' }}
                 >
                   {homeCopy.member.retry}

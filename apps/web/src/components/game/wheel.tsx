@@ -91,9 +91,11 @@ export function WheelOfFortune({
         <button
           type="button"
           aria-label="Quay vòng quay"
-          disabled={spinning || short}
+          disabled={short}
+          aria-busy={spinning || undefined}
+          aria-disabled={spinning || undefined}
           onClick={() => void handleSpin()}
-          className="absolute left-1/2 top-1/2 z-[2] flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-forest-600 text-caption font-semibold text-stone-0 shadow-card disabled:opacity-70"
+          className="absolute left-1/2 top-1/2 z-[2] flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-forest-600 text-caption font-semibold text-stone-0 shadow-card disabled:opacity-70 aria-disabled:opacity-70"
         >
           QUAY
         </button>
@@ -107,7 +109,13 @@ export function WheelOfFortune({
           </button>
         </>
       ) : (
-        <button type="button" disabled={spinning} onClick={() => void handleSpin()} className={`${ui.btnPrimary} min-h-12 min-w-[200px]`}>
+        <button
+          type="button"
+          aria-busy={spinning || undefined}
+          aria-disabled={spinning || undefined}
+          onClick={() => void handleSpin()}
+          className={`${ui.btnPrimary} min-h-12 min-w-[200px] tabular-nums`}
+        >
           {spinning ? 'Đang quay…' : `Quay ngay (${formatNumber(cost)} Điểm Xanh)`}
         </button>
       )}

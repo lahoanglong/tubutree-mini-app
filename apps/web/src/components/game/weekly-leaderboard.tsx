@@ -7,7 +7,7 @@ import { GameCard } from './game-card';
 
 // API xếp theo chuỗi điểm danh dài nhất mọi thời gian (không reset theo tuần), nên nhãn và số trên bục là chuỗi ngày.
 // Huy chương, 🌳 (cây đã trồng) và 🔥 (chuỗi ngày) là số liệu xếp hạng của game.
-export function WeeklyLeaderboard({ board, failed = false, onRetry }: { board: LeaderRow[] | undefined; failed?: boolean; onRetry?: () => void }) {
+export function WeeklyLeaderboard({ board, failed = false, onRetry }: { board: LeaderRow[] | undefined; failed?: boolean; onRetry?: () => void | PromiseLike<unknown> }) {
   return (
     <GameCard title="Chuỗi điểm danh dài nhất" icon={Trophy}>
       {board === undefined && failed ? (
