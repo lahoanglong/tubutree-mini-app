@@ -52,7 +52,7 @@ export function PolicySheet({ slug, onClose }: { slug: LegalSlug | null; onClose
           <Skeleton height={14} width="75%" />
         </div>
       ) : q.isError ? (
-        <ErrorState variant="inline" message={getLoadErrorMessage(q.error)} onRetry={() => void q.refetch()} />
+        <ErrorState variant="inline" message={getLoadErrorMessage(q.error)} onRetry={() => q.refetch()} />
       ) : q.data?.content ? (
         <LegalMarkdown source={q.data.content} onPolicy={setLinked} />
       ) : q.data ? (

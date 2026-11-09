@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { ABOUT_MISSION } from '@tubutree/app-core/client-copy';
 import { Page, useNavigate } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
@@ -31,11 +31,22 @@ function operatorLine(company: PublicConfig['company']): string | null {
 const FAQ_SKELETON_ROWS = 4;
 
 function HotlineButton({ phone }: { phone: string }) {
+  // Khoá đồng bộ: cầu nối gọi điện còn chạy thì cú chạm kế bị bỏ, khỏi mở hai cuộc gọi.
+  const callingRef = useRef(false);
+  const call = async () => {
+    if (callingRef.current) return;
+    callingRef.current = true;
+    try {
+      await callPhone(phone);
+    } finally {
+      callingRef.current = false;
+    }
+  };
   return (
     <button
       type="button"
       aria-label={`Hotline ${phone}, chạm để gọi`}
-      onClick={() => void callPhone(phone)}
+      onClick={() => void call()}
       style={{
         minHeight: 44,
         padding: 0,

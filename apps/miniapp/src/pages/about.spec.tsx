@@ -1,4 +1,4 @@
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { act, render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -154,6 +154,24 @@ describe('Liên hệ hỗ trợ khi /config/public lỗi và gọi hotline', () 
     expect(btn.style.minHeight).toBe('44px');
     fireEvent.click(btn);
     expect(mocks.callPhone).toHaveBeenCalledWith('0984 606 774');
+  });
+
+  it('hai cú chạm cùng nhịp khi cuộc gọi còn treo: chỉ gọi một lần; xong thì chạm lại được', async () => {
+    let finish!: () => void;
+    mocks.callPhone.mockReturnValueOnce(new Promise<void>((r) => (finish = r)));
+    mocks.getPublicConfig.mockResolvedValue({ support: SUPPORT });
+    renderPage();
+    const btn = await screen.findByRole('button', { name: /Hotline/ });
+    await act(async () => {
+      fireEvent.click(btn);
+      fireEvent.click(btn);
+    });
+    expect(mocks.callPhone).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      finish();
+    });
+    fireEvent.click(btn);
+    expect(mocks.callPhone).toHaveBeenCalledTimes(2);
   });
 });
 

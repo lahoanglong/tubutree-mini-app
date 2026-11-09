@@ -164,19 +164,24 @@ function TodayCard() {
   const hbRef = useRef<ReturnType<typeof setInterval> | null>(null);
   useEffect(() => {
     if (!openId) return;
+    // Lấy vị trí có thể mất vài giây: nếu nhân viên ra ca (hoặc rời trang) trong lúc đó thì nhịp cũ không được gửi
+    // heartbeat cho phiên đã đóng, cũng không báo "tự ra ca" đè lên lần ra ca vừa bấm.
+    let alive = true;
     let locFailNotified = false; // mỗi chuỗi lỗi vị trí chỉ báo một lần, không báo lại mỗi nhịp
     const tick = async () => {
       try {
         let locFailed = false;
         const loc = await acquireLocationPayload((m) => {
           locFailed = true;
-          if (!locFailNotified) {
+          if (alive && !locFailNotified) {
             locFailNotified = true;
             openSnackbar({ text: m, type: 'warning' });
           }
         });
+        if (!alive) return;
         if (!locFailed) locFailNotified = false;
         const r = await attnHeartbeat(loc);
+        if (!alive) return;
         if (r.closed) {
           openSnackbar({ text: 'Đã tự ra ca (ra khỏi vùng công ty).', type: 'info' });
           invalidate();
@@ -187,6 +192,7 @@ function TodayCard() {
     };
     hbRef.current = setInterval(tick, 3 * 60 * 1000);
     return () => {
+      alive = false;
       if (hbRef.current) clearInterval(hbRef.current);
     };
   }, [openId]);
@@ -254,7 +260,7 @@ function TodayCard() {
           <Text variant="body-sm" tone="secondary" as="div">
             Không tải được trạng thái chấm công.
           </Text>
-          <Button variant="secondary" style={{ marginTop: 8 }} onPress={() => void statusQ.refetch()}>
+          <Button variant="secondary" style={{ marginTop: 8 }} onPress={() => statusQ.refetch()}>
             Thử lại
           </Button>
         </div>
