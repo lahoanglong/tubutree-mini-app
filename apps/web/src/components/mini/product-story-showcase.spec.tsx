@@ -6,6 +6,7 @@ import type { ProductDetail } from '@tubutree/app-core/api/catalog';
 import type { ProductStoryConfig } from '@tubutree/shared-types';
 import { act } from 'react';
 import { click } from '@/test-utils/dom';
+import { captureUnhandledRejections } from '@/test-utils/unhandled';
 import { resetPreloadCache } from '@tubutree/app-core/commerce/story-preload';
 import { mount } from './harness';
 import { ProductStoryShowcase } from './product-story-showcase';
@@ -394,6 +395,14 @@ describe('W40B: tải trước ảnh chương kế và chuyển chương mượt
     expect(loaded).toEqual([]);
   });
 
+  it('matchMedia không dùng được: coi như khách không tắt chuyển động nên vẫn tải trước ảnh chương kế', () => {
+    window.matchMedia = (() => {
+      throw new Error('không hỗ trợ');
+    }) as unknown as typeof window.matchMedia;
+    mount(<ProductStoryShowcase product={PRODUCT} previewConfig={IMAGE_STORY} />);
+    expect(loaded).toEqual(['/api/ing-1.png']);
+  });
+
   it('đổi chương dựng lại khối nội dung (key theo bước) để chạy lại hiệu ứng vào, chữ đổi theo', () => {
     const { container } = mount(<ProductStoryShowcase product={PRODUCT} previewConfig={IMAGE_STORY} />);
     const before = q(container, 'story-step-panel')!.firstElementChild!;
@@ -503,5 +512,185 @@ describe('W42A: Reel của Trang chủ (reel, addPrice, onNext, position)', () =
     expect(q(container, 'story-add-to-cart')!.textContent).toBe('Thêm vào giỏ');
     expect(q(container, 'story-next')).toBeNull();
     expect(container.querySelector('.tubu-story-bar')!.getAttribute('data-reel')).toBeNull();
+  });
+});
+
+describe('W70B: nút thêm giỏ / mua ngay khoá chạm đúp khi xử lý trả Promise (Mini ↔ web)', () => {
+  const deferred = () => {
+    let resolve!: () => void;
+    let reject!: (e: unknown) => void;
+    const promise = new Promise<void>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+  const twice = async (el: Element | null) => {
+    await act(async () => {
+      (el as HTMLElement).click();
+      (el as HTMLElement).click();
+    });
+  };
+  const once = async (el: Element | null) => {
+    await act(async () => {
+      (el as HTMLElement).click();
+    });
+  };
+
+  it('Reel: chạm đúp "Thêm vào giỏ · giá" trong cùng một khung hình chỉ gọi xử lý một lần; xong thì chạm lại được', async () => {
+    const d = deferred();
+    const onAdd = vi.fn().mockReturnValueOnce(d.promise).mockResolvedValue(undefined);
+    const { container } = mount(<ProductStoryShowcase product={PRODUCT} fullscreen reel addPrice="1đ" onAddToCart={onAdd} onClose={() => {}} />);
+    const add = q(container, 'story-add-to-cart')!;
+    await twice(add);
+    expect(onAdd).toHaveBeenCalledTimes(1);
+    expect(add.getAttribute('aria-busy')).toBe('true');
+    expect(add.getAttribute('aria-disabled')).toBe('true');
+    await act(async () => d.resolve());
+    await once(add);
+    expect(onAdd).toHaveBeenCalledTimes(2);
+  });
+
+  it('khung toàn màn thường: chạm đúp "Thêm vào giỏ" và chạm đúp "Mua ngay" đều chỉ gọi xử lý một lần', async () => {
+    const add = deferred();
+    const buy = deferred();
+    const onAdd = vi.fn().mockReturnValue(add.promise);
+    const onBuy = vi.fn().mockReturnValue(buy.promise);
+    const { container } = mount(<ProductStoryShowcase product={PRODUCT} fullscreen onAddToCart={onAdd} onBuyNow={onBuy} onClose={() => {}} />);
+    await twice(q(container, 'story-add-to-cart'));
+    await twice(q(container, 'story-buy-now'));
+    expect(onAdd).toHaveBeenCalledTimes(1);
+    expect(onBuy).toHaveBeenCalledTimes(1);
+    expect(q(container, 'story-add-to-cart')!.getAttribute('aria-busy')).toBe('true');
+    expect(q(container, 'story-buy-now')!.getAttribute('aria-busy')).toBe('true');
+    expect(q(container, 'story-buy-now')!.getAttribute('aria-disabled')).toBe('true');
+    await act(async () => {
+      add.resolve();
+      buy.resolve();
+    });
+  });
+
+  it('hai nút khoá riêng: "Thêm vào giỏ" đang chạy không nuốt cú chạm "Mua ngay"', async () => {
+    const add = deferred();
+    const onAdd = vi.fn().mockReturnValue(add.promise);
+    const onBuy = vi.fn().mockResolvedValue(undefined);
+    const { container } = mount(<ProductStoryShowcase product={PRODUCT} fullscreen onAddToCart={onAdd} onBuyNow={onBuy} onClose={() => {}} />);
+    await once(q(container, 'story-add-to-cart'));
+    await once(q(container, 'story-buy-now'));
+    expect(onBuy).toHaveBeenCalledTimes(1);
+    await act(async () => add.resolve());
+  });
+
+  it('đang xử lý: nút báo aria-busy + aria-disabled mà KHÔNG disabled (nút giữ focus), xong thì bỏ cả hai', async () => {
+    const d = deferred();
+    const onAdd = vi.fn().mockReturnValue(d.promise);
+    const { container } = mount(<ProductStoryShowcase product={PRODUCT} fullscreen onAddToCart={onAdd} onBuyNow={() => {}} onClose={() => {}} />);
+    const add = q(container, 'story-add-to-cart') as HTMLButtonElement;
+    const buy = q(container, 'story-buy-now') as HTMLButtonElement;
+    expect(add.hasAttribute('aria-busy')).toBe(false);
+    expect(add.hasAttribute('aria-disabled')).toBe(false);
+    add.focus();
+    await once(add);
+    expect(add.getAttribute('aria-busy')).toBe('true');
+    expect(add.getAttribute('aria-disabled')).toBe('true');
+    expect(add.disabled).toBe(false);
+    expect(document.activeElement).toBe(add);
+    expect(buy.hasAttribute('aria-busy')).toBe(false);
+    await act(async () => d.resolve());
+    expect(add.hasAttribute('aria-busy')).toBe(false);
+    expect(add.hasAttribute('aria-disabled')).toBe(false);
+  });
+
+  it('xử lý lỗi (Promise bị từ chối): khoá nhả, chạm lại gọi tiếp, nút không chết, lỗi vẫn lên unhandledrejection (không bị nuốt)', async () => {
+    const d = deferred();
+    const onAdd = vi.fn().mockReturnValueOnce(d.promise).mockResolvedValue(undefined);
+    const { container } = mount(<ProductStoryShowcase product={PRODUCT} fullscreen reel onAddToCart={onAdd} onClose={() => {}} />);
+    const add = q(container, 'story-add-to-cart') as HTMLButtonElement;
+    const reported = await captureUnhandledRejections(async () => {
+      await once(add);
+      await act(async () => {
+        d.reject(new Error('offline'));
+        await d.promise.catch(() => undefined);
+      });
+    });
+    expect(reported.map((e) => (e as Error).message)).toEqual(['offline']);
+    expect(add.hasAttribute('aria-busy')).toBe(false);
+    await once(add);
+    expect(onAdd).toHaveBeenCalledTimes(2);
+  });
+
+  it('xử lý trả void thì không khoá: bấm dồn vẫn gọi từng lần, không aria-busy (không đổi hành vi cũ)', () => {
+    const onAdd = vi.fn();
+    const { container } = mount(<ProductStoryShowcase product={PRODUCT} fullscreen onAddToCart={onAdd} onClose={() => {}} />);
+    const add = q(container, 'story-add-to-cart') as HTMLButtonElement;
+    click(add);
+    click(add);
+    expect(onAdd).toHaveBeenCalledTimes(2);
+    expect(add.hasAttribute('aria-busy')).toBe(false);
+  });
+
+  it('xử lý ném lỗi đồng bộ: không kẹt khoá, chạm lại vẫn gọi', () => {
+    const onAdd = vi.fn().mockImplementationOnce(() => {
+      throw new Error('sync');
+    });
+    const swallow = (e: ErrorEvent) => e.preventDefault();
+    window.addEventListener('error', swallow);
+    try {
+      const { container } = mount(<ProductStoryShowcase product={PRODUCT} fullscreen onAddToCart={onAdd} onClose={() => {}} />);
+      const add = q(container, 'story-add-to-cart') as HTMLButtonElement;
+      click(add);
+      click(add);
+      expect(onAdd).toHaveBeenCalledTimes(2);
+      expect(add.hasAttribute('aria-busy')).toBe(false);
+    } finally {
+      window.removeEventListener('error', swallow);
+    }
+  });
+
+  it('hết hàng (buyDisabled) vẫn khoá bằng disabled thật và không gọi xử lý', async () => {
+    const onAdd = vi.fn().mockResolvedValue(undefined);
+    const { container } = mount(<ProductStoryShowcase product={PRODUCT} fullscreen reel buyDisabled onAddToCart={onAdd} onClose={() => {}} />);
+    const add = q(container, 'story-add-to-cart') as HTMLButtonElement;
+    expect(add.disabled).toBe(true);
+    await twice(add);
+    expect(onAdd).not.toHaveBeenCalled();
+  });
+});
+
+describe('W70B: giảm chuyển động theo dõi thay đổi khi đang xem (như Mini)', () => {
+  it('bật Giảm chuyển động giữa chừng thì dải chuyển sang bản tĩnh, tắt thì quay lại bản động; đóng thì gỡ lắng nghe', () => {
+    const listeners = new Set<() => void>();
+    let on = false;
+    window.matchMedia = ((query: string) => ({
+      get matches() {
+        return on && query.includes('reduce');
+      },
+      media: query,
+      addEventListener: (_: string, fn: () => void) => listeners.add(fn),
+      removeEventListener: (_: string, fn: () => void) => listeners.delete(fn),
+    })) as unknown as typeof window.matchMedia;
+    const { container, unmount } = mount(<ProductStoryShowcase product={PRODUCT} />);
+    expect(q(container, 'product-story')!.getAttribute('data-animated')).toBe('true');
+    expect(listeners.size).toBe(1);
+    on = true;
+    act(() => listeners.forEach((fn) => fn()));
+    expect(q(container, 'product-story')!.getAttribute('data-animated')).toBe('false');
+    expect(q(container, 'story-static-steps')).not.toBeNull();
+    on = false;
+    act(() => listeners.forEach((fn) => fn()));
+    expect(q(container, 'product-story')!.getAttribute('data-animated')).toBe('true');
+    unmount();
+    expect(listeners.size).toBe(0);
+  });
+
+  it('môi trường matchMedia lỗi hoặc thiếu addEventListener: vẫn dựng được, không ném', () => {
+    window.matchMedia = (() => ({ matches: false })) as unknown as typeof window.matchMedia;
+    const bare = mount(<ProductStoryShowcase product={PRODUCT} />);
+    expect(q(bare.container, 'product-story')!.getAttribute('data-animated')).toBe('true');
+    window.matchMedia = (() => {
+      throw new Error('không hỗ trợ');
+    }) as unknown as typeof window.matchMedia;
+    const broken = mount(<ProductStoryShowcase product={PRODUCT} />);
+    expect(q(broken.container, 'product-story')!.getAttribute('data-animated')).toBe('true');
   });
 });

@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BestSellersPage } from '@tubutree/app-core/api/browse';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
 import { newTestClient } from '@/test-utils/render-hook';
+import { captureUnhandledRejections } from '@/test-utils/unhandled';
 
 // Lớp mạng (apiFetch) là bản giả; core-http, query và quick-add là bản THẬT để Reel đi đúng đường thêm giỏ nhanh của web.
 const net = vi.hoisted(() => ({ apiFetch: vi.fn(), push: vi.fn(), phase: 'authenticated' as 'authenticated' | 'guest' }));
@@ -340,5 +341,83 @@ describe('HomeStoryReel (web)', () => {
     const add = q('story-add-to-cart') as HTMLButtonElement;
     expect(add.disabled).toBe(true);
     expect(add.textContent).toBe('Hết hàng');
+  });
+});
+
+describe('HomeStoryReel: thêm giỏ từ Reel khoá chạm đúp (W70B, Mini ↔ web)', () => {
+  const openReel = async (index = 0) => {
+    click(rings()[index]!);
+    await flush(4);
+  };
+  const tapAddTwice = async () => {
+    const add = q('story-add-to-cart')!;
+    await act(async () => {
+      add.click();
+      add.click();
+    });
+  };
+
+  it('khách vãng lai chạm đúp "Thêm vào giỏ · giá" trong cùng một khung hình: chỉ chuyển tới đăng nhập một lần', async () => {
+    net.phase = 'guest';
+    mount(<HomeStoryReel initialBestSellers={PAGE(CARDS)} />);
+    await flush(2);
+    await openReel();
+    await tapAddTwice();
+    expect(net.push).toHaveBeenCalledTimes(1);
+    expect(net.push).toHaveBeenCalledWith('/dang-nhap?returnTo=%2Fsan-pham%2Fa');
+    await flush(6);
+    expect(calls().filter((c) => c.endsWith('/cart/items'))).toHaveLength(0);
+  });
+
+  it('đã đăng nhập chạm đúp: chỉ một lượt thêm giỏ (một POST), Reel đóng', async () => {
+    mount(<HomeStoryReel initialBestSellers={PAGE(CARDS)} />);
+    await flush(2);
+    await openReel();
+    await tapAddTwice();
+    await flush(6);
+    expect(calls().filter((c) => c === 'POST /cart/items')).toHaveLength(1);
+    expect(q('product-story')).toBeNull();
+  });
+
+  it('khoá nhả sau lượt trước: mở Reel lại và thêm tiếp được, mỗi lượt chỉ một lần chuyển trang', async () => {
+    net.phase = 'guest';
+    mount(<HomeStoryReel initialBestSellers={PAGE(CARDS)} />);
+    await flush(2);
+    await openReel();
+    await tapAddTwice();
+    await flush(2);
+    await openReel();
+    await tapAddTwice();
+    expect(net.push).toHaveBeenCalledTimes(2);
+  });
+
+  it('món khác không bị khoá của món vừa thêm: thêm A rồi mở B thêm được ngay', async () => {
+    net.phase = 'guest';
+    mount(<HomeStoryReel initialBestSellers={PAGE(CARDS)} />);
+    await flush(2);
+    await openReel(0);
+    await tapAddTwice();
+    await openReel(1);
+    await tapAddTwice();
+    expect(net.push.mock.calls.map(([href]) => href)).toEqual(['/dang-nhap?returnTo=%2Fsan-pham%2Fa', '/dang-nhap?returnTo=%2Fsan-pham%2Fb']);
+  });
+
+  it('chuyển trang ném lỗi đồng bộ: khoá nhả, mở Reel lại thêm tiếp được, lỗi vẫn lên unhandledrejection (không bị nuốt)', async () => {
+    net.phase = 'guest';
+    net.push.mockImplementationOnce(() => {
+      throw new Error('điều hướng lỗi');
+    });
+    mount(<HomeStoryReel initialBestSellers={PAGE(CARDS)} />);
+    await flush(2);
+    const reported = await captureUnhandledRejections(async () => {
+      await openReel();
+      await tapAddTwice();
+      await flush(2);
+    });
+    expect(reported.map((e) => (e as Error).message)).toEqual(['điều hướng lỗi']);
+    expect(net.push).toHaveBeenCalledTimes(1);
+    await openReel();
+    await tapAddTwice();
+    expect(net.push).toHaveBeenCalledTimes(2);
   });
 });

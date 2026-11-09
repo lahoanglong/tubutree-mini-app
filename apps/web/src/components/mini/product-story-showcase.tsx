@@ -9,6 +9,7 @@ import { arcSlot, ambientVar, layersUpTo, resolveStoryConfig, storyView } from '
 import { preloadImages, STORY_PRELOAD_ROOT_MARGIN, storyPreloadUrls } from '@tubutree/app-core/commerce/story-preload';
 import { resolveReelStoryConfig } from '@tubutree/app-core/commerce/story-reel';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { isThenable } from './button';
 import { ProductImage } from './product-image';
 import { StorySprite } from './story-sprite';
 
@@ -16,8 +17,9 @@ export interface ProductStoryShowcaseProps {
   product: ProductDetail;
   selectedVariationId?: string;
   onSelectVariation?: (id: string) => void;
-  onAddToCart?: () => void;
-  onBuyNow?: () => void;
+  /** Trả Promise thì nút khoá chạm lại tới khi xong (như `Button` của Mini); trả void thì không khoá. */
+  onAddToCart?: () => void | Promise<unknown>;
+  onBuyNow?: () => void | Promise<unknown>;
   /** Hết hàng hoặc chưa mua được: khoá hai nút ở thanh dưới của khung toàn màn. */
   buyDisabled?: boolean;
   /** Ghi đè cấu hình (Live Preview của Admin): có thì vẽ kể cả khi `enabled: false`. */
@@ -38,12 +40,43 @@ export interface ProductStoryShowcaseProps {
 const STAGE_SIZES = '(min-width: 48rem) 28rem, 100vw';
 const FOCUSABLE = 'button:not([disabled]), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
-function prefersReducedMotion(): boolean {
+const REDUCE_QUERY = '(prefers-reduced-motion: reduce)';
+
+function reducedMotionQuery(): MediaQueryList | null {
   try {
-    return typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    return typeof window !== 'undefined' && typeof window.matchMedia === 'function' ? window.matchMedia(REDUCE_QUERY) : null;
   } catch {
-    return false;
+    return null;
   }
+}
+
+function prefersReducedMotion(): boolean {
+  return reducedMotionQuery()?.matches ?? false;
+}
+
+/**
+ * Nút của thanh đáy: xử lý trả Promise thì khoá chạm lại tới khi xong (`Button` của Mini làm đúng vậy), trả void thì không khoá. Ref chặn cú chạm thứ hai trong cùng khung hình
+ * (state chỉ đúng sau lần vẽ kế); state chỉ để báo aria-busy. Promise bị từ chối thì nhả khoá để nút không chết rồi ném lại đúng lỗi đó (như `Button`), để nó vẫn lên `unhandledrejection` và tới Sentry thay vì bị nuốt.
+ */
+function usePressLock(handler?: () => void | Promise<unknown>) {
+  const inFlight = useRef(false);
+  const [busy, setBusy] = useState(false);
+  const press = () => {
+    if (inFlight.current) return;
+    const result = handler?.();
+    if (!isThenable(result)) return;
+    inFlight.current = true;
+    setBusy(true);
+    const release = () => {
+      inFlight.current = false;
+      setBusy(false);
+    };
+    result.then(release, (err: unknown) => {
+      release();
+      throw err;
+    });
+  };
+  return { press, busy };
 }
 
 function Layer({ layer, animated }: { layer: IngredientLayerSprite; animated: boolean }) {
@@ -104,8 +137,15 @@ export function ProductStoryShowcase({ product, selectedVariationId, onSelectVar
   // Mặc định bản có chuyển động: HTML dựng sẵn và lần hydrate đầu phải khớp nhau; thiết lập giảm chuyển động chỉ biết ở trình duyệt.
   const [reduced, setReduced] = useState(false);
   useEffect(() => {
-    setReduced(prefersReducedMotion());
+    const mq = reducedMotionQuery();
+    if (!mq) return;
+    setReduced(mq.matches);
+    const onChange = () => setReduced(mq.matches);
+    mq.addEventListener?.('change', onChange);
+    return () => mq.removeEventListener?.('change', onChange);
   }, []);
+  const addPress = usePressLock(onAddToCart);
+  const buyPress = usePressLock(onBuyNow);
   const view = useMemo(() => (config ? storyView(config, { reducedMotion: reduced }) : null), [config, reduced]);
 
   const [step, setStep] = useState(0);
@@ -362,16 +402,16 @@ export function ProductStoryShowcase({ product, selectedVariationId, onSelectVar
               <ChevronRight size={16} strokeWidth={1.75} aria-hidden="true" />
             </button>
           )}
-          <button type="button" data-testid="story-add-to-cart" disabled={buyDisabled} className="tubu-story-btn tubu-story-btn-primary" onClick={() => onAddToCart?.()}>
+          <button type="button" data-testid="story-add-to-cart" disabled={buyDisabled} aria-busy={addPress.busy || undefined} aria-disabled={addPress.busy || undefined} className="tubu-story-btn tubu-story-btn-primary" onClick={addPress.press}>
             {buyDisabled ? fillCopy('story.soldOut') : addPrice ? fillCopy('reel.addPrice', { price: addPrice }) : fillCopy('story.addToCart')}
           </button>
         </div>
       ) : (
         <div className="tubu-story-bar">
-          <button type="button" data-testid="story-add-to-cart" disabled={buyDisabled} className="tubu-story-btn tubu-story-btn-secondary" onClick={() => onAddToCart?.()}>
+          <button type="button" data-testid="story-add-to-cart" disabled={buyDisabled} aria-busy={addPress.busy || undefined} aria-disabled={addPress.busy || undefined} className="tubu-story-btn tubu-story-btn-secondary" onClick={addPress.press}>
             {fillCopy('story.addToCart')}
           </button>
-          <button type="button" data-testid="story-buy-now" disabled={buyDisabled} className="tubu-story-btn tubu-story-btn-primary" onClick={() => onBuyNow?.()}>
+          <button type="button" data-testid="story-buy-now" disabled={buyDisabled} aria-busy={buyPress.busy || undefined} aria-disabled={buyPress.busy || undefined} className="tubu-story-btn tubu-story-btn-primary" onClick={buyPress.press}>
             {fillCopy(buyDisabled ? 'story.soldOut' : 'story.buyNow')}
           </button>
         </div>

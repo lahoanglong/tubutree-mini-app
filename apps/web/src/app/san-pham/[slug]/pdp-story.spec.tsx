@@ -86,6 +86,27 @@ describe('PdpStory', () => {
     await flush();
     expect(onAdd).toHaveBeenCalledTimes(1);
   });
+  it('chạm đúp "Thêm vào giỏ" / "Mua ngay" trong cùng một khung hình chỉ bấm nút của khối mua một lần (W70B)', async () => {
+    const c = await mount(PRODUCT);
+    const open = c.querySelector<HTMLElement>('[data-testid="pdp-story-open"]')!;
+    click(open);
+    const add = c.querySelector<HTMLElement>('[data-testid="story-add-to-cart"]')!;
+    await act(async () => {
+      add.click();
+      add.click();
+    });
+    await flush();
+    expect(onAdd).toHaveBeenCalledTimes(1);
+    click(open);
+    const buy = c.querySelector<HTMLElement>('[data-testid="story-buy-now"]')!;
+    await act(async () => {
+      buy.click();
+      buy.click();
+    });
+    await flush();
+    expect(onBuy).toHaveBeenCalledTimes(1);
+    expect(onAdd).toHaveBeenCalledTimes(1);
+  });
   it('chọn phân loại ở vòng cung đánh dấu khách đã tự chọn, để tồn kho thật về sau không đổi phân loại dưới tay họ', async () => {
     const c = await mount(PRODUCT);
     expect(latest!.userPicked.current).toBe(false);
