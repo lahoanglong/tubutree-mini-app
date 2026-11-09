@@ -21,7 +21,7 @@ export default function RecycleRulesPage() {
             <Skeleton height={16} width="70%" />
           </div>
         ) : rulesQ.isError ? (
-          <ErrorState message={getLoadErrorMessage(rulesQ.error)} onRetry={() => void rulesQ.refetch()} variant="inline" />
+          <ErrorState message={getLoadErrorMessage(rulesQ.error)} onRetry={() => rulesQ.refetch()} variant="inline" />
         ) : (
           <Text variant="body-md" as="div" style={{ whiteSpace: 'pre-line' }}>
             {rulesQ.data.text ?? 'Thể lệ đang được cập nhật'}

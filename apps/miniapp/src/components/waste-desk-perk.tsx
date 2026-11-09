@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Input, useSnackbar } from 'zmp-ui';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useLockedMutation } from './game/use-locked-mutation';
 import { cashWordingMessage, findCashWording, type WasteDeskPointDTO } from '@tubutree/shared-types';
 import { WASTE_QUERY_KEYS, getDeskPointReport, submitDeskPerk } from '../services/waste-api';
 import { getErrorMessage } from '../services/api';
@@ -26,7 +27,7 @@ export function WasteDeskPerk({ point }: { point: WasteDeskPointDTO }) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState('');
 
-  const submit = useMutation({
+  const submit = useLockedMutation({
     mutationFn: (v: string) => submitDeskPerk(point.id, { perkText: v.trim() }),
     onSuccess: () => {
       openSnackbar({ text: 'Đã gửi, chờ Tubu duyệt', type: 'success' });
@@ -135,9 +136,7 @@ export function WasteDeskReport({ pointId }: { pointId: string }) {
               <Button
                 variant="secondary"
                 loading={q.isFetching}
-                onPress={() => {
-                  if (!q.isFetching) void q.refetch();
-                }}
+                onPress={() => (q.isFetching ? undefined : q.refetch())}
               >
                 Thử lại
               </Button>

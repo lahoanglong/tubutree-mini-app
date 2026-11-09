@@ -431,7 +431,7 @@ export default function RecycleNewPage() {
 
   if (phase === 'unavailable') return shell(<SessionUnavailable />, subtitle);
   if (phase === 'authenticated' && meQ.isError) {
-    return shell(<ErrorState message={getLoadErrorMessage(meQ.error)} onRetry={() => void meQ.refetch()} />, subtitle);
+    return shell(<ErrorState message={getLoadErrorMessage(meQ.error)} onRetry={() => meQ.refetch()} />, subtitle);
   }
   if (!me || leave || missingDraft || replayed) {
     return shell(

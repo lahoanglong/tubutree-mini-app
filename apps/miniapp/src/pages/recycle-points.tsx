@@ -131,10 +131,7 @@ export default function RecyclePointsPage() {
     return shell(
       <ErrorState
         message={getLoadErrorMessage(loadError)}
-        onRetry={() => {
-          void meQ.refetch();
-          void pointsQ.refetch();
-        }}
+        onRetry={() => Promise.all([meQ.refetch(), pointsQ.refetch()])}
       />,
     );
   }

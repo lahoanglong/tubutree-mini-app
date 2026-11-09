@@ -49,7 +49,7 @@ export default function RecycleDonePage() {
   );
 
   if (phase === 'unavailable') return shell(<SessionUnavailable />);
-  if (q.isError) return shell(<ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => void q.refetch()} />);
+  if (q.isError) return shell(<ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => q.refetch()} />);
   if (!r) return shell(<Skeleton height={120} />);
   if (notDone) return null;
 
