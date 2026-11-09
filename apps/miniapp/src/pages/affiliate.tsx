@@ -1,7 +1,8 @@
 import { useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { Input, Page, Sheet, useSnackbar, useNavigate, useLocation } from 'zmp-ui';
-import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
+import { useLockedMutation } from '../components/game/use-locked-mutation';
 import { fetchCourses } from '../services/academy-api';
 import {
   getAffiliateMe,
@@ -184,7 +185,7 @@ function RegisterGate() {
   const user = useAuthStore((s) => s.user);
   const ensurePhone = useAuthStore((s) => s.ensurePhone);
   const [agreed, setAgreed] = useState(false);
-  const reg = useMutation({
+  const reg = useLockedMutation({
     mutationFn: async () => {
       // Khách chưa có Zalo thật không đăng ký CTV được (máy chủ từ chối): xin SĐT trước, không được thì dừng, không gọi API.
       if (user && isGuestUser(user)) {
@@ -352,7 +353,7 @@ function Dashboard() {
   const [ctvOrdering, setCtvOrdering] = useState(false);
   const [sharing, setSharing] = useState(false);
 
-  const createLink = useMutation({
+  const createLink = useLockedMutation({
     mutationFn: () => createAffiliateLink('HOMEPAGE'),
     onSuccess: () => {
       haptic('medium');
@@ -761,7 +762,7 @@ function Dashboard() {
           <Button
             variant="ghost"
             loading={createLink.isPending}
-            onPress={() => !createLink.isPending && createLink.mutate()}
+            onPress={() => createLink.mutate()}
           >
             + Tạo link
           </Button>
@@ -1096,7 +1097,7 @@ function TransferForm({
   // Một khoá cho mỗi lần mở form: chạm đúp hay thử lại sau lỗi mạng gửi cùng khoá nên BE không tạo lệnh thứ hai.
   const payKey = useRef(newIdempotencyKey());
 
-  const mut = useMutation({
+  const mut = useLockedMutation({
     mutationFn: () =>
       askTaxId ? requestPayout(max, payKey.current, taxId.trim()) : requestPayout(max, payKey.current),
     onSuccess: (r) => {
@@ -1118,17 +1119,15 @@ function TransferForm({
   const taxIdValid = !askTaxId || PERSONAL_TAX_ID_PATTERN.test(taxId.trim());
   // knownMax=false khi dashboard lỗi (max truyền vào tạm =0, KHÔNG phải số dư thật) — bỏ qua so
   // sánh với max để không khoá chết nút Gửi; BE vẫn tự validate số dư thật khi submit.
-  // !mut.isPending chặn double-submit (Button.loading của zmp-ui KHÔNG tự set thuộc tính disabled).
   const valid =
     knownMax &&
     amountNum > 0 &&
     // Chờ config THẬT: mức thuế TNCN lấy từ config, chưa có thì số nhận trên nút có thể lệch số được cộng.
     cfgLoaded &&
-    taxIdValid &&
-    !mut.isPending;
+    taxIdValid;
 
   return (
-    <div>
+    <div className="tubu-nums">
       {knownMax ? (
         <div>
           <Text variant="caption" tone="secondary" as="div">

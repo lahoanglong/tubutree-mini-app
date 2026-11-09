@@ -3,7 +3,8 @@ import { wasteRequestRefetchMs } from '@tubutree/app-core/waste-request-poll';
 import { useEffect, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { Input, Page, useNavigate, useParams, useSnackbar } from 'zmp-ui';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useLockedMutation } from '../components/game/use-locked-mutation';
 import type { WasteRequestDetailDTO, WasteRequestLineDTO } from '@tubutree/shared-types';
 import {
   WASTE_QUERY_KEYS,
@@ -104,7 +105,7 @@ function TrackingForm({
   const { openSnackbar } = useSnackbar();
   const [carrier, setCarrier] = useState(initialCarrier);
   const [code, setCode] = useState(initialCode);
-  const m = useMutation({
+  const m = useLockedMutation({
     mutationFn: () => setWasteTracking(id, { carrier: carrier.trim(), trackingCode: code.trim() }),
     onSuccess: async () => {
       await invalidateAfterWasteWrite(qc);
@@ -122,7 +123,7 @@ function TrackingForm({
       <Field label="Mã vận đơn">
         <Input maxLength={INPUT_LIMITS.recycleTrackingCode} value={code} onChange={(e) => setCode(e.target.value)} />
       </Field>
-      <Button fullWidth disabled={!ready || m.isPending} loading={m.isPending} onPress={() => m.mutate()}>
+      <Button fullWidth disabled={!ready} loading={m.isPending} onPress={() => m.mutate()}>
         Đã gửi
       </Button>
     </div>
@@ -169,7 +170,7 @@ export default function RecycleRequestPage() {
     queryFn: () => getWastePoints(),
     enabled: authed && r?.method === 'DROP_OFF' && r.status === 'OPEN',
   });
-  const cancel = useMutation({
+  const cancel = useLockedMutation({
     mutationFn: () => cancelWasteRequest(id),
     onSuccess: async () => {
       await invalidateAfterWasteWrite(qc);

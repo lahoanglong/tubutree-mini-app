@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -408,5 +408,58 @@ describe('Ảnh đại diện: không báo thành công khi ảnh không đượ
     );
     expect(mocks.openSnackbar).not.toHaveBeenCalledWith({ text: 'Đã cập nhật hồ sơ', type: 'success', position: 'top' });
     expect(mocks.setAuthState).toHaveBeenCalledWith({ user: { fullName: 'Lan', avatarUrl: null } });
+  });
+});
+
+describe('Sửa hồ sơ: Lưu khoá chạm đúp trong cùng một khung hình (W73A)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getMe.mockResolvedValue(ME);
+    mocks.cloudinary = true;
+  });
+
+  it('chạm đúp "Lưu thay đổi" chỉ gọi updateMe một lần, lưu xong quay lại một lần', async () => {
+    let resolve!: (v: unknown) => void;
+    mocks.updateMe.mockReturnValueOnce(new Promise((res) => { resolve = res; }));
+    renderPage();
+    await screen.findByLabelText('Họ và tên');
+    const save = screen.getByRole('button', { name: 'Lưu thay đổi' });
+    await act(async () => {
+      fireEvent.click(save);
+      fireEvent.click(save);
+    });
+    expect(mocks.updateMe).toHaveBeenCalledTimes(1);
+    await act(async () => resolve({ avatarUrl: null }));
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith(-1));
+    expect(mocks.navigate).toHaveBeenCalledTimes(1);
+    expect(mocks.updateMe).toHaveBeenCalledTimes(1);
+  });
+
+  it('chạm đúp "Xác nhận" ngày sinh chỉ gọi updateMe một lần', async () => {
+    let resolve!: (v: unknown) => void;
+    mocks.getMe.mockResolvedValue({ ...ME, dob: null });
+    mocks.updateMe.mockReturnValueOnce(new Promise((res) => { resolve = res; }));
+    renderPage();
+    fireEvent.change(await screen.findByLabelText('Ngày sinh'), { target: { value: '03/02/1991' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
+    const confirm = screen.getByRole('button', { name: 'Xác nhận' });
+    await act(async () => {
+      fireEvent.click(confirm);
+      fireEvent.click(confirm);
+    });
+    expect(mocks.updateMe).toHaveBeenCalledTimes(1);
+    await act(async () => resolve({ avatarUrl: null }));
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith(-1));
+    expect(mocks.updateMe).toHaveBeenCalledTimes(1);
+  });
+
+  it('lưu lỗi thì nhả khoá, bấm lại gọi lần hai', async () => {
+    mocks.updateMe.mockRejectedValueOnce(new Error('Máy chủ bận')).mockResolvedValue({ avatarUrl: null });
+    renderPage();
+    await screen.findByLabelText('Họ và tên');
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
+    await waitFor(() => expect(mocks.updateMe).toHaveBeenCalledTimes(2));
   });
 });

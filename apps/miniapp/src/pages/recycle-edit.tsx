@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { createdTodayVn } from '@tubutree/app-core/waste-copy';
 import type { ReactNode } from 'react';
 import { Page, useLocation, useNavigate, useParams, useSnackbar } from 'zmp-ui';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useLockedMutation } from '../components/game/use-locked-mutation';
 import type { WasteLineInput } from '@tubutree/shared-types';
 import {
   WASTE_QUERY_KEYS,
@@ -88,7 +89,7 @@ export default function RecycleEditPage() {
     enabled: authed && ready && !leave && debounced.length > 0,
   });
 
-  const save = useMutation({
+  const save = useLockedMutation({
     mutationFn: () => editWasteRequest(id, { lines: lineInputs, ...(isDropOff && pointId ? { pointId } : {}) }),
     onSuccess: async () => {
       await invalidateAfterWasteWrite(qc);

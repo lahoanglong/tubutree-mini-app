@@ -490,3 +490,67 @@ describe('/recycle/r/:id — theo dõi (B-83)', () => {
     expect(within(sheet).getByText('Mã TR-8K2M9 sẽ hết hiệu lực. Bạn có thể tạo yêu cầu mới bất cứ lúc nào.')).toBeInTheDocument();
   });
 });
+
+describe('/recycle/r/:id: Huỷ và Đã gửi khoá chạm đúp (W73A)', () => {
+  const deferred = () => {
+    let resolve!: (v: unknown) => void;
+    let reject!: (e: unknown) => void;
+    const promise = new Promise((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+
+  it('chạm đúp "Xác nhận huỷ" trong cùng một khung hình chỉ huỷ một lần', async () => {
+    const d = deferred();
+    mocks.cancelWasteRequest.mockReturnValueOnce(d.promise);
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Huỷ yêu cầu' }));
+    const sheet = await screen.findByRole('dialog');
+    const confirm = within(sheet).getByRole('button', { name: 'Xác nhận huỷ' });
+    await act(async () => {
+      fireEvent.click(confirm);
+      fireEvent.click(confirm);
+    });
+    expect(mocks.cancelWasteRequest).toHaveBeenCalledTimes(1);
+    await act(async () => d.resolve(makeRequestDetail({ status: 'CANCELLED', cancellable: false, editable: false })));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Đã huỷ yêu cầu', type: 'success' })));
+    expect(mocks.cancelWasteRequest).toHaveBeenCalledTimes(1);
+  });
+
+  it('đang huỷ: nút aria-busy; lỗi thì nhả khoá để huỷ lại', async () => {
+    const d = deferred();
+    mocks.cancelWasteRequest.mockReturnValueOnce(d.promise).mockResolvedValue(makeRequestDetail({ status: 'CANCELLED', cancellable: false, editable: false }));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Huỷ yêu cầu' }));
+    const sheet = await screen.findByRole('dialog');
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Xác nhận huỷ' }));
+    await waitFor(() => expect(within(sheet).getByRole('button', { name: 'Xác nhận huỷ' })).toHaveAttribute('aria-busy', 'true'));
+    await act(async () => d.reject(new Error('Yêu cầu đã đóng')));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Yêu cầu đã đóng', type: 'error' })));
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Xác nhận huỷ' }));
+    await waitFor(() => expect(mocks.cancelWasteRequest).toHaveBeenCalledTimes(2));
+  });
+
+  it('chạm đúp "Đã gửi" trong cùng một khung hình chỉ ghi mã vận đơn một lần', async () => {
+    const d = deferred();
+    mocks.getWasteRequest.mockResolvedValue(MAIL());
+    mocks.setWasteTracking.mockReturnValueOnce(d.promise);
+    renderPage();
+    const sent = await screen.findByRole('button', { name: 'Đã gửi' });
+    fireEvent.change(screen.getByLabelText('Hãng'), { target: { value: 'GHN' } });
+    fireEvent.change(screen.getByLabelText('Mã vận đơn'), { target: { value: 'GHN123' } });
+    await waitFor(() => expect(sent).toBeEnabled());
+    await act(async () => {
+      fireEvent.click(sent);
+      fireEvent.click(sent);
+    });
+    expect(mocks.setWasteTracking).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(sent).toHaveAttribute('aria-busy', 'true'));
+    expect(sent).not.toBeDisabled();
+    await act(async () => d.resolve(MAIL({ status: 'IN_TRANSIT', carrier: 'GHN', trackingCode: 'GHN123' })));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Đã lưu mã vận đơn', type: 'success' })));
+    expect(mocks.setWasteTracking).toHaveBeenCalledTimes(1);
+  });
+});

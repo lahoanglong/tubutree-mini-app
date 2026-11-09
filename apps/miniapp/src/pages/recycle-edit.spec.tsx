@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -176,5 +176,44 @@ describe('/recycle/r/:id/edit (§4.5, §7.4)', () => {
     await screen.findByText('Thùng carton');
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     expect(findNestedInteractive(container).map(describeNested)).toEqual([]);
+  });
+});
+
+describe('/recycle/r/:id/edit: Lưu khoá chạm đúp (W73A)', () => {
+  const deferred = () => {
+    let resolve!: (v: unknown) => void;
+    let reject!: (e: unknown) => void;
+    const promise = new Promise((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+
+  it('chạm đúp "Lưu thay đổi" trong cùng một khung hình chỉ gửi một lần', async () => {
+    const d = deferred();
+    mocks.editWasteRequest.mockReturnValueOnce(d.promise);
+    renderPage();
+    const save = await screen.findByRole('button', { name: 'Lưu thay đổi' });
+    await act(async () => {
+      fireEvent.click(save);
+      fireEvent.click(save);
+    });
+    expect(mocks.editWasteRequest).toHaveBeenCalledTimes(1);
+    await act(async () => d.resolve(makeRequestDetail()));
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/recycle/r/req-1', { replace: true }));
+  });
+
+  it('đang lưu: nút aria-busy; lỗi thì nhả khoá để bấm lại được', async () => {
+    const d = deferred();
+    mocks.editWasteRequest.mockReturnValueOnce(d.promise);
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Lưu thay đổi' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Lưu thay đổi' })).toHaveAttribute('aria-busy', 'true'));
+    await act(async () => d.reject(new Error('Máy chủ bận')));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Máy chủ bận', type: 'error' })));
+    mocks.editWasteRequest.mockResolvedValueOnce(makeRequestDetail());
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
+    await waitFor(() => expect(mocks.editWasteRequest).toHaveBeenCalledTimes(2));
   });
 });
