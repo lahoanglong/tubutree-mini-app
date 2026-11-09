@@ -819,3 +819,148 @@ describe('VoucherSheet — lời báo lỗi áp/gỡ mã ngay dưới ô nhập 
     expect(screen.queryByRole('alert')).toBeNull();
   });
 });
+
+describe('VoucherSheet: khoá chạm đúp áp và gỡ mã, mỗi lần chỉ một lệnh đổi mã (W71A)', () => {
+  const CART = { couponCode: 'GIAM10', discount: 5_000, couponNotice: null };
+  const KHAC = { ...COUPONS[0], code: 'KHAC' };
+  const pending = <T,>() => {
+    let resolve!: (v: T) => void;
+    let reject!: (e: unknown) => void;
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+  const input = () => screen.getByLabelText('Nhập mã giảm giá khác');
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getCoupons.mockResolvedValue([COUPONS[0], KHAC]);
+    mocks.removeCoupon.mockResolvedValue({ couponCode: null });
+  });
+
+  it('chạm đúp "Áp dụng" mã gõ tay trong cùng một khung hình: chỉ áp một lần', async () => {
+    const apply = pending<typeof CART>();
+    mocks.applyCoupon.mockReturnValue(apply.promise);
+    renderSheet();
+    await screen.findByRole('button', { name: /^Dùng mã GIAM10/ });
+    fireEvent.change(input(), { target: { value: 'abc' } });
+    const button = screen.getByRole('button', { name: 'Áp dụng' });
+    await act(async () => {
+      fireEvent.click(button);
+      fireEvent.click(button);
+    });
+    expect(mocks.applyCoupon).toHaveBeenCalledTimes(1);
+    expect(mocks.applyCoupon).toHaveBeenCalledWith('ABC');
+    await waitFor(() => expect(button).toHaveAttribute('aria-busy', 'true'));
+    await act(async () => apply.resolve(CART));
+  });
+
+  it('Enter hai lần liền (không phải giữ phím) trong cùng một khung hình: chỉ áp một lần', async () => {
+    const apply = pending<typeof CART>();
+    mocks.applyCoupon.mockReturnValue(apply.promise);
+    renderSheet();
+    await screen.findByRole('button', { name: /^Dùng mã GIAM10/ });
+    fireEvent.change(input(), { target: { value: 'abc' } });
+    await act(async () => {
+      fireEvent.keyDown(input(), { key: 'Enter' });
+      fireEvent.keyDown(input(), { key: 'Enter' });
+    });
+    expect(mocks.applyCoupon).toHaveBeenCalledTimes(1);
+    await act(async () => apply.resolve(CART));
+  });
+
+  it('chạm "Dùng mã" của hai mã khác nhau liền nhau: chỉ mã chạm trước được áp, mã sau bị bỏ', async () => {
+    const apply = pending<typeof CART>();
+    mocks.applyCoupon.mockReturnValue(apply.promise);
+    renderSheet();
+    const first = await screen.findByRole('button', { name: /^Dùng mã GIAM10/ });
+    const second = await screen.findByRole('button', { name: /^Dùng mã KHAC/ });
+    await act(async () => {
+      fireEvent.click(first);
+      fireEvent.click(second);
+    });
+    expect(mocks.applyCoupon).toHaveBeenCalledTimes(1);
+    expect(mocks.applyCoupon).toHaveBeenCalledWith('GIAM10');
+    await act(async () => apply.resolve(CART));
+  });
+
+  it('chạm "Dùng mã" rồi "Bỏ chọn" liền nhau: gỡ không chen vào lệnh áp đang chạy', async () => {
+    const apply = pending<typeof CART>();
+    mocks.applyCoupon.mockReturnValue(apply.promise);
+    renderSheet('GIAM10');
+    const remove = await screen.findByRole('button', { name: /^Bỏ chọn mã GIAM10/ });
+    const use = await screen.findByRole('button', { name: /^Dùng mã KHAC/ });
+    await act(async () => {
+      fireEvent.click(use);
+      fireEvent.click(remove);
+    });
+    expect(mocks.applyCoupon).toHaveBeenCalledTimes(1);
+    expect(mocks.removeCoupon).not.toHaveBeenCalled();
+    await act(async () => apply.resolve(CART));
+  });
+
+  it('chạm đúp "Bỏ chọn": chỉ gỡ một lần', async () => {
+    const remove = pending<{ couponCode: null }>();
+    mocks.removeCoupon.mockReturnValue(remove.promise);
+    renderSheet('GIAM10');
+    const button = await screen.findByRole('button', { name: /^Bỏ chọn mã GIAM10/ });
+    await act(async () => {
+      fireEvent.click(button);
+      fireEvent.click(button);
+    });
+    expect(mocks.removeCoupon).toHaveBeenCalledTimes(1);
+    await act(async () => remove.resolve({ couponCode: null }));
+  });
+
+  it('chạm "Bỏ chọn" rồi "Dùng mã" liền nhau: áp không chen vào lệnh gỡ đang chạy', async () => {
+    const remove = pending<{ couponCode: null }>();
+    mocks.removeCoupon.mockReturnValue(remove.promise);
+    renderSheet('GIAM10');
+    const removeBtn = await screen.findByRole('button', { name: /^Bỏ chọn mã GIAM10/ });
+    const use = await screen.findByRole('button', { name: /^Dùng mã KHAC/ });
+    await act(async () => {
+      fireEvent.click(removeBtn);
+      fireEvent.click(use);
+    });
+    expect(mocks.removeCoupon).toHaveBeenCalledTimes(1);
+    expect(mocks.applyCoupon).not.toHaveBeenCalled();
+    await act(async () => remove.resolve({ couponCode: null }));
+  });
+
+  it('lệnh áp bị từ chối thì nhả khoá: áp lại được ngay', async () => {
+    mocks.applyCoupon.mockRejectedValueOnce(new Error('mạng')).mockResolvedValue(CART);
+    renderSheet();
+    await screen.findByRole('button', { name: /^Dùng mã GIAM10/ });
+    fireEvent.change(input(), { target: { value: 'abc' } });
+    const button = screen.getByRole('button', { name: 'Áp dụng' });
+    await act(async () => fireEvent.click(button));
+    await screen.findByRole('alert');
+    await act(async () => fireEvent.click(button));
+    expect(mocks.applyCoupon).toHaveBeenCalledTimes(2);
+  });
+
+  it('lệnh áp thành công thì nhả khoá: chạm mã khác sau đó vẫn áp được', async () => {
+    mocks.applyCoupon.mockResolvedValue(CART);
+    renderSheet();
+    const first = await screen.findByRole('button', { name: /^Dùng mã GIAM10/ });
+    await act(async () => fireEvent.click(first));
+    await waitFor(() => expect(mocks.applyCoupon).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Dùng mã KHAC/ })).not.toHaveAttribute('aria-disabled', 'true'));
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: /^Dùng mã KHAC/ })));
+    expect(mocks.applyCoupon).toHaveBeenCalledTimes(2);
+    expect(mocks.applyCoupon).toHaveBeenLastCalledWith('KHAC');
+  });
+
+  it('lệnh gỡ xong thì nhả khoá: áp mã sau đó chạy được', async () => {
+    mocks.applyCoupon.mockResolvedValue(CART);
+    renderSheet('GIAM10');
+    const remove = await screen.findByRole('button', { name: /^Bỏ chọn mã GIAM10/ });
+    await act(async () => fireEvent.click(remove));
+    await waitFor(() => expect(mocks.removeCoupon).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Dùng mã KHAC/ })).not.toHaveAttribute('aria-disabled', 'true'));
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: /^Dùng mã KHAC/ })));
+    expect(mocks.applyCoupon).toHaveBeenCalledTimes(1);
+  });
+});

@@ -7,6 +7,7 @@ import { getCoupons, type CouponDTO } from '../../services/account-api';
 import { applyCoupon, getCouponPreviews, removeCoupon } from '../../services/shop-api';
 import { getErrorMessage } from '../../services/api';
 import { cartKey } from '../../services/cart-key';
+import { useLockedMutation } from '../game/use-locked-mutation';
 import { PREVIEW_DEBOUNCE_MS, useDebounced } from '../../utils/use-debounced';
 
 /**
@@ -99,7 +100,7 @@ export function useCheckoutCoupon(opts: {
       onChanged();
     },
   });
-  const removeMut = useMutation({
+  const removeMut = useLockedMutation({
     mutationFn: removeCoupon,
     onSuccess: (cart) => {
       memory.markOff();

@@ -1,6 +1,6 @@
 import { ADDRESS_INPUT_LIMIT } from '../utils/input-limits';
 import { useEffect, useRef, useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { useSnackbar, Input } from 'zmp-ui';
 import { UserRound } from 'lucide-react';
 import { createAddress, type AddressDTO } from '../services/shop-api';
@@ -23,6 +23,7 @@ import {
 import { GeoPicker, EMPTY_GEO, type GeoValue } from './geo-picker';
 import { Field } from './ui/form';
 import { Button } from './ui/button';
+import { useLockedMutation } from './game/use-locked-mutation';
 
 // Tỉnh/phường chọn qua GeoPicker (mã Pancake thật); chỉ 3 field text còn lại.
 type FormFields = 'recipient' | 'phone' | 'street';
@@ -109,7 +110,7 @@ export function AddressForm({ initial, askZaloProfile = false, onCancel, onSaved
     void fillFromZalo(false);
   }, []);
 
-  const save = useMutation({
+  const save = useLockedMutation({
     mutationFn: () => {
       const payload = {
         recipient: form.recipient.trim(),
@@ -166,7 +167,7 @@ export function AddressForm({ initial, askZaloProfile = false, onCancel, onSaved
   return (
     <div ref={rootRef} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {!initial && (!form.recipient.trim() || !form.phone.trim()) && (
-        <Button variant="secondary" icon={UserRound} loading={askingZalo} onPress={() => void fillFromZalo(true)}>
+        <Button variant="secondary" icon={UserRound} loading={askingZalo} onPress={() => fillFromZalo(true)}>
           Điền nhanh từ Zalo
         </Button>
       )}
