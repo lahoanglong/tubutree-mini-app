@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
@@ -303,5 +303,75 @@ describe('Lương của tôi theo DS v2 (C-076, C-114)', () => {
     expect(screen.getByDisplayValue('970407')).toBeInTheDocument();
     expect(screen.getByDisplayValue('0123456789')).toBeInTheDocument();
     expect(screen.getByDisplayValue('NGUYEN VAN A')).toBeInTheDocument();
+  });
+});
+
+describe('Lương của tôi: "Lưu" thông tin nhận lương khoá chạm đúp (W76A)', () => {
+  const deferred = () => {
+    let resolve!: (v: unknown) => void;
+    let reject!: (e: unknown) => void;
+    const promise = new Promise((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+  const openBankSheet = async () => {
+    await screen.findByText('Thực nhận tháng 3/2026');
+    fireEvent.click(screen.getByRole('button', { name: 'Thông tin nhận lương' }));
+    return screen.getByRole('button', { name: 'Lưu' });
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-03-15T05:00:00Z'));
+    vi.clearAllMocks();
+    mocks.role = 'STAFF';
+    mocks.getMyPayroll.mockImplementation((year: number, month: number) => Promise.resolve(payroll(year, month)));
+    mocks.getHistory.mockResolvedValue(SESSIONS);
+    mocks.updateBank.mockResolvedValue(PROFILE);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('chạm đúp "Lưu" trong cùng một khung hình chỉ lưu một lần và báo thành công một lần', async () => {
+    const d = deferred();
+    mocks.updateBank.mockReturnValueOnce(d.promise);
+    renderPage();
+    const save = await openBankSheet();
+    await act(async () => {
+      fireEvent.click(save);
+      fireEvent.click(save);
+    });
+    expect(mocks.updateBank).toHaveBeenCalledTimes(1);
+    await act(async () => d.resolve(PROFILE));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã lưu thông tin nhận lương.', type: 'success' }));
+    expect(mocks.updateBank).toHaveBeenCalledTimes(1);
+    expect(mocks.openSnackbar.mock.calls.filter(([a]) => (a as { type: string }).type === 'success')).toHaveLength(1);
+  });
+
+  it('đang lưu: nút aria-busy mà không bị disabled (giữ focus)', async () => {
+    const d = deferred();
+    mocks.updateBank.mockReturnValueOnce(d.promise);
+    renderPage();
+    const save = await openBankSheet();
+    save.focus();
+    fireEvent.click(save);
+    await waitFor(() => expect(save).toHaveAttribute('aria-busy', 'true'));
+    expect(save).not.toBeDisabled();
+    expect(save).toHaveFocus();
+    await act(async () => d.resolve(PROFILE));
+  });
+
+  it('lưu lỗi thì nhả khoá, bấm lại gọi lần hai', async () => {
+    mocks.updateBank.mockRejectedValueOnce(new Error('Máy chủ bận')).mockResolvedValue(PROFILE);
+    renderPage();
+    const save = await openBankSheet();
+    fireEvent.click(save);
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Máy chủ bận', type: 'error' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu' }));
+    await waitFor(() => expect(mocks.updateBank).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã lưu thông tin nhận lương.', type: 'success' }));
   });
 });

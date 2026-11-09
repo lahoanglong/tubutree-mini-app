@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -619,6 +619,458 @@ describe('Ca làm của tôi theo DS v2 (C-076, C-114)', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Xác nhận huỷ' }));
       await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Quá hạn huỷ', type: 'error' }));
       expect(screen.getByPlaceholderText('Lý do huỷ')).toHaveValue('Ốm');
+    });
+  });
+
+  // W76A: hai cú chạm trong CÙNG một khung hình (trước khi React vẽ lại `isPending`) từng gửi hai yêu cầu; khoá ref chặn ngay.
+  describe('khoá chạm đúp trong cùng một khung hình (W76A)', () => {
+    const deferred = () => {
+      let resolve!: (v: unknown) => void;
+      let reject!: (e: unknown) => void;
+      const promise = new Promise((res, rej) => {
+        resolve = res;
+        reject = rej;
+      });
+      return { promise, resolve, reject };
+    };
+    const snackbarWith = (text: string) => mocks.openSnackbar.mock.calls.filter((c) => c[0].text === text).length;
+    const errorSnackbars = () => mocks.openSnackbar.mock.calls.filter((c) => c[0].type === 'error').length;
+    const SP2 = shift('sp2', '2026-03-13', 'PENDING');
+    const TWO_PENDING = [WEEK_SHIFTS[1]!, SP2];
+
+    describe('chấm công hôm nay (checkinM, checkoutM)', () => {
+      const withTodayShifts = (...shifts: unknown[]) =>
+        mocks.getAttendanceStatus.mockResolvedValue({ shifts, openSession: null });
+      const withOpenSession = () => mocks.getAttendanceStatus.mockResolvedValue({ shifts: [], openSession: OPEN_SESSION });
+
+      it('chạm đúp "Vào ca" chỉ vào ca một lần và lấy vị trí một lần; đang xử lý nút aria-busy', async () => {
+        const d = deferred();
+        withTodayShifts(TODAY_SHIFT);
+        mocks.checkin.mockReturnValueOnce(d.promise);
+        renderPage();
+        const btn = await screen.findByRole('button', { name: 'Vào ca' });
+        await act(async () => {
+          fireEvent.click(btn);
+          fireEvent.click(btn);
+        });
+        expect(mocks.acquireLocationPayload).toHaveBeenCalledTimes(1);
+        expect(mocks.checkin).toHaveBeenCalledTimes(1);
+        expect(mocks.checkin).toHaveBeenCalledWith({ shiftId: 'sh1', lat: 10.1, lng: 106.2 });
+        await waitFor(() => expect(btn).toHaveAttribute('aria-busy', 'true'));
+        await act(async () => d.resolve({ sessionId: 's1', isLate: false }));
+        await waitFor(() => expect(snackbarWith('Đã vào ca. Chúc làm việc vui!')).toBe(1));
+        expect(mocks.checkin).toHaveBeenCalledTimes(1);
+      });
+
+      it('Vào ca lỗi thì nhả khoá, bấm lại vào ca lần hai', async () => {
+        withTodayShifts(TODAY_SHIFT);
+        mocks.checkin.mockRejectedValueOnce(new Error('Sai mạng WiFi')).mockResolvedValue({ sessionId: 's1', isLate: false });
+        renderPage();
+        const btn = await screen.findByRole('button', { name: 'Vào ca' });
+        await act(async () => {
+          fireEvent.click(btn);
+          fireEvent.click(btn);
+        });
+        expect(mocks.checkin).toHaveBeenCalledTimes(1);
+        await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Sai mạng WiFi', type: 'error' }));
+        await waitFor(() => expect(btn).not.toHaveAttribute('aria-busy'));
+        fireEvent.click(btn);
+        await waitFor(() => expect(mocks.checkin).toHaveBeenCalledTimes(2));
+        await waitFor(() => expect(snackbarWith('Đã vào ca. Chúc làm việc vui!')).toBe(1));
+      });
+
+      it('hai ca trong ngày: chạm "Vào ca" của cả hai trong một khung hình chỉ gửi ca đầu (một người chỉ có một phiên mở)', async () => {
+        const d = deferred();
+        withTodayShifts(TODAY_SHIFT, shift('sh2', TODAY, 'APPROVED', { startAt: vn(TODAY, '13:00'), endAt: vn(TODAY, '17:00') }));
+        mocks.checkin.mockReturnValueOnce(d.promise);
+        renderPage();
+        await screen.findAllByRole('button', { name: 'Vào ca' });
+        const [first, second] = screen.getAllByRole('button', { name: 'Vào ca' });
+        await act(async () => {
+          fireEvent.click(first!);
+          fireEvent.click(second!);
+        });
+        expect(mocks.checkin).toHaveBeenCalledTimes(1);
+        expect(mocks.checkin.mock.calls[0]![0]).toMatchObject({ shiftId: 'sh1' });
+        await act(async () => d.resolve({ sessionId: 's1', isLate: false }));
+        await waitFor(() => expect(snackbarWith('Đã vào ca. Chúc làm việc vui!')).toBe(1));
+      });
+
+      it('chạm đúp "Ra ca" chỉ ra ca một lần; đang xử lý nút aria-busy', async () => {
+        const d = deferred();
+        withOpenSession();
+        mocks.checkout.mockReturnValueOnce(d.promise);
+        renderPage();
+        const btn = await screen.findByRole('button', { name: 'Ra ca' });
+        await act(async () => {
+          fireEvent.click(btn);
+          fireEvent.click(btn);
+        });
+        expect(mocks.checkout).toHaveBeenCalledTimes(1);
+        expect(mocks.checkout).toHaveBeenCalledWith(undefined);
+        await waitFor(() => expect(btn).toHaveAttribute('aria-busy', 'true'));
+        await act(async () => d.resolve({ checkedOut: true }));
+        await waitFor(() => expect(snackbarWith('Đã ra ca.')).toBe(1));
+        expect(mocks.checkout).toHaveBeenCalledTimes(1);
+      });
+
+      it('Ra ca lỗi thì nhả khoá, bấm lại ra ca lần hai', async () => {
+        withOpenSession();
+        mocks.checkout.mockRejectedValueOnce(new Error('Mất kết nối')).mockResolvedValue({ checkedOut: true });
+        renderPage();
+        const btn = await screen.findByRole('button', { name: 'Ra ca' });
+        await act(async () => {
+          fireEvent.click(btn);
+          fireEvent.click(btn);
+        });
+        expect(mocks.checkout).toHaveBeenCalledTimes(1);
+        await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Mất kết nối', type: 'error' }));
+        await waitFor(() => expect(btn).not.toHaveAttribute('aria-busy'));
+        fireEvent.click(btn);
+        await waitFor(() => expect(mocks.checkout).toHaveBeenCalledTimes(2));
+        await waitFor(() => expect(snackbarWith('Đã ra ca.')).toBe(1));
+      });
+
+      it.each([
+        ['Ra ca', 'Xác nhận ra ca', undefined],
+        ['Xác nhận ra ca', 'Ra ca', vn(TODAY, '11:00')],
+      ])('bấm "%s" rồi "%s" trong một khung hình: cùng một khoá, chỉ gửi lệnh đầu', async (first, second, at) => {
+        const d = deferred();
+        withOpenSession();
+        mocks.checkout.mockReturnValueOnce(d.promise);
+        renderPage();
+        fireEvent.click(await screen.findByText('Quên ra ca? Chọn giờ đã về →'));
+        fireEvent.change(timeInputs()[0]!, { target: { value: '11:00' } });
+        const firstBtn = screen.getByRole('button', { name: first });
+        const secondBtn = screen.getByRole('button', { name: second });
+        await act(async () => {
+          fireEvent.click(firstBtn);
+          fireEvent.click(secondBtn);
+        });
+        expect(mocks.checkout).toHaveBeenCalledTimes(1);
+        expect(mocks.checkout).toHaveBeenCalledWith(at);
+        await act(async () => d.resolve({ checkedOut: true }));
+        await waitFor(() => expect(snackbarWith('Đã ra ca.')).toBe(1));
+        expect(mocks.checkout).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    describe('thêm / sửa ca (saveM)', () => {
+      const openAddSheet = async () => {
+        renderPage();
+        fireEvent.click(await screen.findByRole('button', { name: 'Thêm ca T4 11/03' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Ca sáng (08:00–12:00)' }));
+        return screen.getByRole('button', { name: 'Gửi duyệt' });
+      };
+
+      it('chạm đúp "Gửi duyệt" chỉ tạo một ca; đang gửi nút aria-busy, không disabled; xong thì đóng khung', async () => {
+        const d = deferred();
+        mocks.createShifts.mockReturnValueOnce(d.promise);
+        const send = await openAddSheet();
+        await act(async () => {
+          fireEvent.click(send);
+          fireEvent.click(send);
+        });
+        expect(mocks.createShifts).toHaveBeenCalledTimes(1);
+        await waitFor(() => expect(send).toHaveAttribute('aria-busy', 'true'));
+        expect(send).not.toBeDisabled();
+        await act(async () => d.resolve({ created: 1 }));
+        await waitFor(() => expect(snackbarWith('Đã gửi ca chờ duyệt.')).toBe(1));
+        await waitFor(() => expect(screen.queryByText('Chọn ca chuẩn')).not.toBeInTheDocument());
+        expect(mocks.createShifts).toHaveBeenCalledTimes(1);
+      });
+
+      it('thêm ca lỗi thì nhả khoá, bấm lại gửi lần hai', async () => {
+        mocks.createShifts.mockRejectedValueOnce(new Error('Trùng ca')).mockResolvedValue({ created: 1 });
+        const send = await openAddSheet();
+        await act(async () => {
+          fireEvent.click(send);
+          fireEvent.click(send);
+        });
+        expect(mocks.createShifts).toHaveBeenCalledTimes(1);
+        await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Trùng ca', type: 'error' }));
+        await waitFor(() => expect(send).not.toHaveAttribute('aria-busy'));
+        fireEvent.click(send);
+        await waitFor(() => expect(mocks.createShifts).toHaveBeenCalledTimes(2));
+        await waitFor(() => expect(snackbarWith('Đã gửi ca chờ duyệt.')).toBe(1));
+      });
+
+      it('chạm đúp "Lưu" khi sửa ca chỉ cập nhật một lần', async () => {
+        const d = deferred();
+        mocks.updateShift.mockReturnValueOnce(d.promise);
+        renderPage();
+        fireEvent.click(await screen.findByRole('button', { name: /^Sửa ca / }));
+        const save = screen.getByRole('button', { name: 'Lưu' });
+        await act(async () => {
+          fireEvent.click(save);
+          fireEvent.click(save);
+        });
+        expect(mocks.updateShift).toHaveBeenCalledTimes(1);
+        expect(mocks.updateShift).toHaveBeenCalledWith('sp', { startAt: vn('2026-03-12', '08:00'), endAt: vn('2026-03-12', '12:00') });
+        await waitFor(() => expect(save).toHaveAttribute('aria-busy', 'true'));
+        await act(async () => d.resolve({}));
+        await waitFor(() => expect(snackbarWith('Đã cập nhật ca.')).toBe(1));
+        expect(mocks.updateShift).toHaveBeenCalledTimes(1);
+      });
+
+      it('sửa ca lỗi thì nhả khoá, bấm lại lưu lần hai', async () => {
+        mocks.updateShift.mockRejectedValueOnce(new Error('Ca đã được duyệt')).mockResolvedValue({});
+        renderPage();
+        fireEvent.click(await screen.findByRole('button', { name: /^Sửa ca / }));
+        const save = screen.getByRole('button', { name: 'Lưu' });
+        await act(async () => {
+          fireEvent.click(save);
+          fireEvent.click(save);
+        });
+        expect(mocks.updateShift).toHaveBeenCalledTimes(1);
+        await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Ca đã được duyệt', type: 'error' }));
+        await waitFor(() => expect(save).not.toHaveAttribute('aria-busy'));
+        fireEvent.click(save);
+        await waitFor(() => expect(mocks.updateShift).toHaveBeenCalledTimes(2));
+      });
+    });
+
+    describe('xoá ca (delM, khoá theo id ca)', () => {
+      it('chạm đúp "Xoá ca" chỉ xoá một lần; đang xoá nút aria-busy, không disabled; tải lại lịch một lần', async () => {
+        const d = deferred();
+        mocks.deleteShift.mockReturnValueOnce(d.promise);
+        renderPage();
+        const del = await screen.findByRole('button', { name: /^Xoá ca / });
+        await act(async () => {
+          fireEvent.click(del);
+          fireEvent.click(del);
+        });
+        expect(mocks.deleteShift).toHaveBeenCalledTimes(1);
+        expect(mocks.deleteShift).toHaveBeenCalledWith('sp');
+        await waitFor(() => expect(del).toHaveAttribute('aria-busy', 'true'));
+        expect(del).not.toBeDisabled();
+        await act(async () => d.resolve({ deleted: true }));
+        await waitFor(() => expect(snackbarWith('Đã xoá ca.')).toBe(1));
+        await waitFor(() => expect(mocks.getShifts).toHaveBeenCalledTimes(2));
+        expect(mocks.deleteShift).toHaveBeenCalledTimes(1);
+      });
+
+      it('xoá lỗi thì nhả khoá, bấm lại gọi lần hai', async () => {
+        mocks.deleteShift.mockRejectedValueOnce(new Error('Ca đã được duyệt')).mockResolvedValue({ deleted: true });
+        renderPage();
+        const del = await screen.findByRole('button', { name: /^Xoá ca / });
+        await act(async () => {
+          fireEvent.click(del);
+          fireEvent.click(del);
+        });
+        expect(mocks.deleteShift).toHaveBeenCalledTimes(1);
+        await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Ca đã được duyệt', type: 'error' }));
+        await waitFor(() => expect(del).not.toHaveAttribute('aria-busy'));
+        fireEvent.click(del);
+        await waitFor(() => expect(mocks.deleteShift).toHaveBeenCalledTimes(2));
+        await waitFor(() => expect(snackbarWith('Đã xoá ca.')).toBe(1));
+      });
+
+      it('hai ca khác nhau trong một khung hình: cả hai cùng được xoá, chạm lặp vào ca đầu bị bỏ qua', async () => {
+        const a = deferred();
+        const b = deferred();
+        mocks.getShifts.mockResolvedValue(TWO_PENDING);
+        mocks.deleteShift.mockReturnValueOnce(a.promise).mockReturnValueOnce(b.promise);
+        renderPage();
+        const delA = await screen.findByRole('button', { name: 'Xoá ca T5 12/03' });
+        const delB = screen.getByRole('button', { name: 'Xoá ca T6 13/03' });
+        await act(async () => {
+          fireEvent.click(delA);
+          fireEvent.click(delB);
+          fireEvent.click(delA);
+        });
+        expect(mocks.deleteShift.mock.calls.map((c) => c[0])).toEqual(['sp', 'sp2']);
+        await act(async () => {
+          a.resolve({ deleted: true });
+          b.resolve({ deleted: true });
+        });
+        await waitFor(() => expect(snackbarWith('Đã xoá ca.')).toBe(2));
+      });
+    });
+
+    describe('sửa và xoá cùng một ca (khoá chung theo id ca)', () => {
+      const openEdit = async (name: string | RegExp) => {
+        fireEvent.click(await screen.findByRole('button', { name }));
+        return screen.getByRole('button', { name: 'Lưu' });
+      };
+
+      it.each([
+        ['Lưu', 'Xoá ca', 'updateShift'],
+        ['Xoá ca', 'Lưu', 'deleteShift'],
+      ])('bấm "%s" rồi "%s" của cùng một ca trong một khung hình: chỉ gửi lệnh đầu (%s)', async (first, _second, only) => {
+        const d = deferred();
+        mocks.updateShift.mockReturnValue(d.promise);
+        mocks.deleteShift.mockReturnValue(d.promise);
+        renderPage();
+        const save = await openEdit('Sửa ca T5 12/03');
+        const del = screen.getByRole('button', { name: 'Xoá ca T5 12/03' });
+        const [firstBtn, secondBtn] = first === 'Lưu' ? [save, del] : [del, save];
+        await act(async () => {
+          fireEvent.click(firstBtn);
+          fireEvent.click(secondBtn);
+        });
+        expect(mocks.updateShift).toHaveBeenCalledTimes(only === 'updateShift' ? 1 : 0);
+        expect(mocks.deleteShift).toHaveBeenCalledTimes(only === 'deleteShift' ? 1 : 0);
+        await waitFor(() => expect(save).toHaveAttribute('aria-busy', 'true'));
+        expect(del).toHaveAttribute('aria-busy', 'true');
+        await act(async () => d.resolve({}));
+        await waitFor(() => expect(del).not.toHaveAttribute('aria-busy'));
+        expect(mocks.updateShift.mock.calls.length + mocks.deleteShift.mock.calls.length).toBe(1);
+      });
+
+      it('sửa ca A rồi xoá ca B trong một khung hình: hai ca khác nhau nên cả hai cùng đi', async () => {
+        const a = deferred();
+        const b = deferred();
+        mocks.getShifts.mockResolvedValue(TWO_PENDING);
+        mocks.updateShift.mockReturnValueOnce(a.promise);
+        mocks.deleteShift.mockReturnValueOnce(b.promise);
+        renderPage();
+        const save = await openEdit('Sửa ca T5 12/03');
+        const delB = screen.getByRole('button', { name: 'Xoá ca T6 13/03' });
+        await act(async () => {
+          fireEvent.click(save);
+          fireEvent.click(delB);
+        });
+        expect(mocks.updateShift).toHaveBeenCalledTimes(1);
+        expect(mocks.updateShift.mock.calls[0]![0]).toBe('sp');
+        expect(mocks.deleteShift).toHaveBeenCalledTimes(1);
+        expect(mocks.deleteShift).toHaveBeenCalledWith('sp2');
+        await act(async () => {
+          a.resolve({});
+          b.resolve({ deleted: true });
+        });
+        await waitFor(() => expect(snackbarWith('Đã xoá ca.')).toBe(1));
+      });
+
+      it('xoá lỗi thì nhả khoá chung, sửa ca đó được ngay', async () => {
+        mocks.deleteShift.mockRejectedValueOnce(new Error('Ca đã được duyệt'));
+        renderPage();
+        const save = await openEdit('Sửa ca T5 12/03');
+        const del = screen.getByRole('button', { name: 'Xoá ca T5 12/03' });
+        await act(async () => {
+          fireEvent.click(del);
+        });
+        await waitFor(() => expect(errorSnackbars()).toBe(1));
+        await waitFor(() => expect(del).not.toHaveAttribute('aria-busy'));
+        fireEvent.click(save);
+        await waitFor(() => expect(mocks.updateShift).toHaveBeenCalledTimes(1));
+      });
+    });
+
+    describe('đăng ký nhanh (quickM)', () => {
+      const openQuick = async () => {
+        renderPage();
+        fireEvent.click(await screen.findByRole('button', { name: 'Đăng ký ca' }));
+        return screen.getByRole('button', { name: 'Gửi duyệt (3 ngày)' });
+      };
+
+      it('chạm đúp "Gửi duyệt" chỉ đăng ký một lần; đang gửi nút aria-busy, không disabled', async () => {
+        const d = deferred();
+        mocks.createShifts.mockReturnValueOnce(d.promise);
+        const send = await openQuick();
+        await act(async () => {
+          fireEvent.click(send);
+          fireEvent.click(send);
+        });
+        expect(mocks.createShifts).toHaveBeenCalledTimes(1);
+        expect(mocks.createShifts.mock.calls[0]![0]).toHaveLength(3);
+        await waitFor(() => expect(send).toHaveAttribute('aria-busy', 'true'));
+        expect(send).not.toBeDisabled();
+        await act(async () => d.resolve({ created: 3 }));
+        await waitFor(() => expect(snackbarWith('Đã đăng ký 3 ca chờ duyệt.')).toBe(1));
+        expect(mocks.createShifts).toHaveBeenCalledTimes(1);
+      });
+
+      it('lỗi thì nhả khoá, bấm lại đăng ký lần hai', async () => {
+        mocks.createShifts.mockRejectedValueOnce(new Error('Trùng ca')).mockResolvedValue({ created: 3 });
+        const send = await openQuick();
+        await act(async () => {
+          fireEvent.click(send);
+          fireEvent.click(send);
+        });
+        expect(mocks.createShifts).toHaveBeenCalledTimes(1);
+        await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Trùng ca', type: 'error' }));
+        await waitFor(() => expect(send).not.toHaveAttribute('aria-busy'));
+        fireEvent.click(send);
+        await waitFor(() => expect(mocks.createShifts).toHaveBeenCalledTimes(2));
+        await waitFor(() => expect(snackbarWith('Đã đăng ký 3 ca chờ duyệt.')).toBe(1));
+      });
+    });
+
+    describe('chép tuần trước (copyM)', () => {
+      it('chạm đúp "Chép tuần" chỉ chép một lần; đang chép nút aria-busy', async () => {
+        const d = deferred();
+        mocks.copyWeek.mockReturnValueOnce(d.promise);
+        renderPage();
+        const btn = await screen.findByRole('button', { name: 'Chép tuần trước' });
+        await act(async () => {
+          fireEvent.click(btn);
+          fireEvent.click(btn);
+        });
+        expect(mocks.copyWeek).toHaveBeenCalledTimes(1);
+        await waitFor(() => expect(btn).toHaveAttribute('aria-busy', 'true'));
+        await act(async () => d.resolve({ created: 2, skipped: 0 }));
+        await waitFor(() => expect(snackbarWith('Đã chép 2 ca từ tuần trước.')).toBe(1));
+        expect(mocks.copyWeek).toHaveBeenCalledTimes(1);
+      });
+
+      it('lỗi thì nhả khoá, bấm lại chép lần hai', async () => {
+        mocks.copyWeek.mockRejectedValueOnce(new Error('Mất kết nối')).mockResolvedValue({ created: 2, skipped: 0 });
+        renderPage();
+        const btn = await screen.findByRole('button', { name: 'Chép tuần trước' });
+        await act(async () => {
+          fireEvent.click(btn);
+          fireEvent.click(btn);
+        });
+        expect(mocks.copyWeek).toHaveBeenCalledTimes(1);
+        await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Mất kết nối', type: 'error' }));
+        await waitFor(() => expect(btn).not.toHaveAttribute('aria-busy'));
+        fireEvent.click(btn);
+        await waitFor(() => expect(mocks.copyWeek).toHaveBeenCalledTimes(2));
+        await waitFor(() => expect(snackbarWith('Đã chép 2 ca từ tuần trước.')).toBe(1));
+      });
+    });
+
+    describe('huỷ ca đã duyệt (cancelM)', () => {
+      const openCancel = async () => {
+        renderPage();
+        fireEvent.click(await screen.findByRole('button', { name: /^Huỷ ca / }));
+        fireEvent.change(screen.getByPlaceholderText('Lý do huỷ'), { target: { value: 'Bận việc nhà' } });
+        return screen.getByRole('button', { name: 'Xác nhận huỷ' });
+      };
+
+      it('chạm đúp "Xác nhận huỷ" chỉ huỷ một lần; đang huỷ nút aria-busy, không disabled; xong thì đóng khung', async () => {
+        const d = deferred();
+        mocks.cancelShift.mockReturnValueOnce(d.promise);
+        const confirm = await openCancel();
+        await act(async () => {
+          fireEvent.click(confirm);
+          fireEvent.click(confirm);
+        });
+        expect(mocks.cancelShift).toHaveBeenCalledTimes(1);
+        expect(mocks.cancelShift).toHaveBeenCalledWith('sa', { reason: 'Bận việc nhà', isEmergency: false, evidenceUrl: undefined });
+        await waitFor(() => expect(confirm).toHaveAttribute('aria-busy', 'true'));
+        expect(confirm).not.toBeDisabled();
+        await act(async () => d.resolve({ cancelled: true, penalty: false }));
+        await waitFor(() => expect(snackbarWith('Đã huỷ ca (không phạt).')).toBe(1));
+        await waitFor(() => expect(screen.queryByText('Huỷ ca đã duyệt')).not.toBeInTheDocument());
+        expect(mocks.cancelShift).toHaveBeenCalledTimes(1);
+      });
+
+      it('lỗi thì nhả khoá, bấm lại huỷ lần hai', async () => {
+        mocks.cancelShift.mockRejectedValueOnce(new Error('Quá hạn huỷ')).mockResolvedValue({ cancelled: true, penalty: false });
+        const confirm = await openCancel();
+        await act(async () => {
+          fireEvent.click(confirm);
+          fireEvent.click(confirm);
+        });
+        expect(mocks.cancelShift).toHaveBeenCalledTimes(1);
+        await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Quá hạn huỷ', type: 'error' }));
+        await waitFor(() => expect(confirm).not.toHaveAttribute('aria-busy'));
+        fireEvent.click(confirm);
+        await waitFor(() => expect(mocks.cancelShift).toHaveBeenCalledTimes(2));
+        await waitFor(() => expect(snackbarWith('Đã huỷ ca (không phạt).')).toBe(1));
+      });
     });
   });
 });

@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -189,5 +189,67 @@ describe('CashbackPage — vùng chạm, bàn phím và biểu tượng (C-076, 
     const note = await screen.findByText(/phải bấm từ đây mỗi lần mua/);
     expect(note.textContent).not.toMatch(/⚠/);
     expect(screen.getByText(/3,5%$/).textContent).not.toMatch(/↩/);
+  });
+});
+
+describe('CashbackPage — "Mua sắm & nhận hoàn tiền" khoá chạm đúp (W76A)', () => {
+  const deferred = () => {
+    let resolve!: (v: unknown) => void;
+    let reject!: (e: unknown) => void;
+    const promise = new Promise((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+  const openShopee = async () => {
+    fireEvent.click(await screen.findByText('Shopee'));
+    return screen.findByRole('button', { name: 'Mua sắm & nhận hoàn tiền' });
+  };
+
+  beforeEach(() => {
+    stubLoaded();
+  });
+
+  it('chạm đúp trong cùng một khung hình chỉ tạo một click hoàn tiền và mở link một lần', async () => {
+    const d = deferred();
+    mocks.createCashbackClick.mockReturnValueOnce(d.promise);
+    renderPage();
+    const btn = await openShopee();
+    await act(async () => {
+      fireEvent.click(btn);
+      fireEvent.click(btn);
+    });
+    expect(mocks.createCashbackClick).toHaveBeenCalledTimes(1);
+    await act(async () => d.resolve({ deeplink: 'https://aff.example/abc' }));
+    await waitFor(() => expect(mocks.openAffiliateLink).toHaveBeenCalledWith('https://aff.example/abc'));
+    expect(mocks.createCashbackClick).toHaveBeenCalledTimes(1);
+    expect(mocks.openAffiliateLink).toHaveBeenCalledTimes(1);
+    expect(mocks.openSnackbar.mock.calls.filter(([a]) => (a as { type: string }).type === 'success')).toHaveLength(1);
+  });
+
+  it('đang tạo click: nút aria-busy mà không bị disabled (giữ focus)', async () => {
+    const d = deferred();
+    mocks.createCashbackClick.mockReturnValueOnce(d.promise);
+    renderPage();
+    const btn = await openShopee();
+    btn.focus();
+    fireEvent.click(btn);
+    await waitFor(() => expect(btn).toHaveAttribute('aria-busy', 'true'));
+    expect(btn).not.toBeDisabled();
+    expect(btn).toHaveFocus();
+    await act(async () => d.resolve({ deeplink: 'https://aff.example/abc' }));
+  });
+
+  it('tạo click lỗi thì nhả khoá, bấm lại gọi lần hai và mở link', async () => {
+    mocks.createCashbackClick.mockRejectedValueOnce(new Error('x')).mockResolvedValue({ deeplink: 'https://aff.example/abc' });
+    renderPage();
+    const btn = await openShopee();
+    fireEvent.click(btn);
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+    expect(mocks.openAffiliateLink).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Mua sắm & nhận hoàn tiền' }));
+    await waitFor(() => expect(mocks.createCashbackClick).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mocks.openAffiliateLink).toHaveBeenCalledTimes(1));
   });
 });

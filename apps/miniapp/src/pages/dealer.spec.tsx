@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   getTemplates: vi.fn(),
   saveTemplate: vi.fn(),
   deleteTemplate: vi.fn(),
+  claimDealerReward: vi.fn(),
   config: { isLoaded: true, dealer: { maxDiscountPct: 0.45, reviewHours: 24 } } as Record<string, unknown>,
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
@@ -40,7 +41,7 @@ vi.mock('../services/dealer-api', async (importOriginal) => ({
   payCredit: mocks.payCredit,
   getQuarterlyReport: mocks.getQuarterlyReport,
   getDealerRewards: mocks.getDealerRewards,
-  claimDealerReward: vi.fn(),
+  claimDealerReward: mocks.claimDealerReward,
   getTemplates: mocks.getTemplates,
   saveTemplate: mocks.saveTemplate,
   deleteTemplate: mocks.deleteTemplate,
@@ -699,5 +700,336 @@ describe('DealerPage — điều kiện, nhãn, gian hàng đối tác (B-86, B-
     renderPage();
     await screen.findByText('Bạc');
     expect(screen.queryByTestId('partner-storefront-note')).toBeNull();
+  });
+});
+
+// W76A: hai cú chạm trong CÙNG một khung hình (trước khi React vẽ lại `isPending`) từng gửi hai yêu cầu; khoá ref chặn ngay.
+describe('DealerPage — khoá chạm đúp trong cùng một khung hình (W76A)', () => {
+  const deferred = () => {
+    let resolve!: (v: unknown) => void;
+    let reject!: (e: unknown) => void;
+    const promise = new Promise((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+  const snackbarWith = (text: string) => mocks.openSnackbar.mock.calls.filter((c) => c[0].text === text).length;
+  const errorSnackbars = () => mocks.openSnackbar.mock.calls.filter((c) => c[0].type === 'error').length;
+  const ORDER_OK = { code: 'TUBU7', status: 'CONFIRMED', paymentMethod: 'COD', items: [{ backorderedQty: 0, quantity: 1 }] };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    for (const fn of [mocks.placeDealerOrder, mocks.payCredit, mocks.saveTemplate, mocks.deleteTemplate, mocks.claimDealerReward]) fn.mockReset();
+    mocks.getDealerMe.mockResolvedValue(APPROVED_ME);
+    mocks.getPricelist.mockResolvedValue([row({ stock: 9 })]);
+    mocks.getTemplates.mockResolvedValue([]);
+    mocks.getDealerOrders.mockResolvedValue([]);
+    mocks.getCreditLedger.mockResolvedValue({ balance: 3_000_000, entries: [] });
+  });
+
+  describe('đặt đơn sỉ (place)', () => {
+    const addOneAndFind = async (name: string) => {
+      renderPage();
+      await screen.findByText(/tồn 9/);
+      fireEvent.click(plus());
+      return screen.findByRole('button', { name });
+    };
+
+    it('chạm đúp "Ghi công nợ" chỉ đặt một đơn; đang đặt cả hai nút aria-busy và không bị disabled', async () => {
+      const d = deferred();
+      mocks.placeDealerOrder.mockReturnValueOnce(d.promise);
+      const credit = await addOneAndFind('Ghi công nợ');
+      await act(async () => {
+        fireEvent.click(credit);
+        fireEvent.click(credit);
+      });
+      expect(mocks.placeDealerOrder).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(credit).toHaveAttribute('aria-busy', 'true'));
+      expect(credit).not.toBeDisabled();
+      const prepaid = screen.getByRole('button', { name: 'Trả trước' });
+      expect(prepaid).toHaveAttribute('aria-busy', 'true');
+      expect(prepaid).not.toBeDisabled();
+      await act(async () => d.resolve(ORDER_OK));
+      await waitFor(() => expect(snackbarWith('Đã tạo đơn đại lý!')).toBe(1));
+      expect(mocks.placeDealerOrder).toHaveBeenCalledTimes(1);
+      expect(mocks.navigate).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['Trả trước', 'Ghi công nợ', 'PREPAID'],
+      ['Ghi công nợ', 'Trả trước', 'CREDIT'],
+    ])('bấm "%s" rồi "%s" trong một khung hình: cùng một khoá, chỉ gửi lệnh đầu (%s)', async (first, second, method) => {
+      const d = deferred();
+      mocks.placeDealerOrder.mockReturnValueOnce(d.promise);
+      const firstBtn = await addOneAndFind(first);
+      const secondBtn = screen.getByRole('button', { name: second });
+      await act(async () => {
+        fireEvent.click(firstBtn);
+        fireEvent.click(secondBtn);
+      });
+      expect(mocks.placeDealerOrder).toHaveBeenCalledTimes(1);
+      expect(mocks.placeDealerOrder.mock.calls[0]![1]).toBe(method);
+      await act(async () => d.resolve(ORDER_OK));
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledTimes(1));
+      expect(mocks.placeDealerOrder).toHaveBeenCalledTimes(1);
+    });
+
+    it('lỗi thì nhả khoá, bấm lại gọi lần hai với CÙNG Idempotency-Key; thành công mới đổi khoá', async () => {
+      mocks.placeDealerOrder.mockRejectedValueOnce(new Error('network')).mockResolvedValue(ORDER_OK);
+      const credit = await addOneAndFind('Ghi công nợ');
+      await act(async () => {
+        fireEvent.click(credit);
+        fireEvent.click(credit);
+      });
+      expect(mocks.placeDealerOrder).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(errorSnackbars()).toBe(1));
+      await waitFor(() => expect(credit).not.toHaveAttribute('aria-busy'));
+      fireEvent.click(credit);
+      await waitFor(() => expect(mocks.placeDealerOrder).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(snackbarWith('Đã tạo đơn đại lý!')).toBe(1));
+      const keys = mocks.placeDealerOrder.mock.calls.map((c) => c[3]);
+      expect(typeof keys[0]).toBe('string');
+      expect(keys[1]).toBe(keys[0]);
+      fireEvent.click(plus());
+      fireEvent.click(await screen.findByRole('button', { name: 'Ghi công nợ' }));
+      await waitFor(() => expect(mocks.placeDealerOrder).toHaveBeenCalledTimes(3));
+      expect(mocks.placeDealerOrder.mock.calls[2]![3]).not.toBe(keys[0]);
+    });
+  });
+
+  describe('báo đã chuyển khoản (pay)', () => {
+    const openCredit = async () => {
+      renderPage();
+      await screen.findByText('Bạc');
+      openTab('Công nợ');
+      const amount = (await screen.findByLabelText('Số tiền đã chuyển')) as HTMLInputElement;
+      fireEvent.change(amount, { target: { value: '1000000' } });
+      return { amount, pay: screen.getByRole('button', { name: 'Báo đã chuyển khoản' }) };
+    };
+
+    it('chạm đúp "Báo đã chuyển khoản" chỉ gửi một báo; đang gửi nút aria-busy, không disabled', async () => {
+      const d = deferred();
+      mocks.payCredit.mockReturnValueOnce(d.promise);
+      const { amount, pay } = await openCredit();
+      await act(async () => {
+        fireEvent.click(pay);
+        fireEvent.click(pay);
+      });
+      expect(mocks.payCredit).toHaveBeenCalledTimes(1);
+      expect(mocks.payCredit).toHaveBeenCalledWith(1_000_000, expect.any(String), 'Báo đã chuyển khoản');
+      await waitFor(() => expect(pay).toHaveAttribute('aria-busy', 'true'));
+      expect(pay).not.toBeDisabled();
+      await act(async () => d.resolve({ message: 'Đã báo cho Tubu.' }));
+      await waitFor(() => expect(snackbarWith('Đã báo cho Tubu.')).toBe(1));
+      expect(mocks.payCredit).toHaveBeenCalledTimes(1);
+      expect(amount.value).toBe('');
+    });
+
+    it('lỗi thì nhả khoá, bấm lại gọi lần hai với CÙNG khoá; thành công mới đổi khoá', async () => {
+      mocks.payCredit.mockRejectedValueOnce(new Error('network')).mockResolvedValue({ ok: true });
+      const { amount, pay } = await openCredit();
+      await act(async () => {
+        fireEvent.click(pay);
+        fireEvent.click(pay);
+      });
+      expect(mocks.payCredit).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(errorSnackbars()).toBe(1));
+      await waitFor(() => expect(pay).not.toHaveAttribute('aria-busy'));
+      fireEvent.click(pay);
+      await waitFor(() => expect(mocks.payCredit).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(amount.value).toBe(''));
+      expect(mocks.payCredit.mock.calls[1]![1]).toBe(mocks.payCredit.mock.calls[0]![1]);
+      fireEvent.change(amount, { target: { value: '500000' } });
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Báo đã chuyển khoản' })).not.toHaveAttribute('aria-busy'));
+      fireEvent.click(screen.getByRole('button', { name: 'Báo đã chuyển khoản' }));
+      await waitFor(() => expect(mocks.payCredit).toHaveBeenCalledTimes(3));
+      expect(mocks.payCredit.mock.calls[2]![1]).not.toBe(mocks.payCredit.mock.calls[0]![1]);
+    });
+  });
+
+  describe('lưu mẫu đơn (saveTpl)', () => {
+    const openSaveSheet = async () => {
+      renderPage();
+      await screen.findByText(/tồn 9/);
+      fireEvent.click(plus());
+      fireEvent.click(await screen.findByRole('button', { name: 'Lưu mẫu' }));
+      fireEvent.change(await screen.findByPlaceholderText('Tên mẫu (vd Đơn tháng)'), { target: { value: 'Đơn tháng' } });
+      return within(screen.getByTestId('sheet')).getByRole('button', { name: 'Lưu mẫu' });
+    };
+
+    it('chạm đúp "Lưu mẫu" chỉ lưu một mẫu; đang lưu nút aria-busy, không disabled; xong thì đóng khung', async () => {
+      const d = deferred();
+      mocks.saveTemplate.mockReturnValueOnce(d.promise);
+      const save = await openSaveSheet();
+      await act(async () => {
+        fireEvent.click(save);
+        fireEvent.click(save);
+      });
+      expect(mocks.saveTemplate).toHaveBeenCalledTimes(1);
+      expect(mocks.saveTemplate).toHaveBeenCalledWith('Đơn tháng', [{ variationId: 'v1', quantity: 1 }]);
+      await waitFor(() => expect(save).toHaveAttribute('aria-busy', 'true'));
+      expect(save).not.toBeDisabled();
+      await act(async () => d.resolve({ id: 'tp1' }));
+      await waitFor(() => expect(snackbarWith('Đã lưu mẫu đơn.')).toBe(1));
+      await waitFor(() => expect(screen.queryByTestId('sheet')).toBeNull());
+      expect(mocks.saveTemplate).toHaveBeenCalledTimes(1);
+    });
+
+    it('lỗi thì nhả khoá, bấm lại gọi lần hai', async () => {
+      mocks.saveTemplate.mockRejectedValueOnce(new Error('Trùng tên')).mockResolvedValue({ id: 'tp1' });
+      const save = await openSaveSheet();
+      await act(async () => {
+        fireEvent.click(save);
+        fireEvent.click(save);
+      });
+      expect(mocks.saveTemplate).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(errorSnackbars()).toBe(1));
+      await waitFor(() => expect(save).not.toHaveAttribute('aria-busy'));
+      fireEvent.click(save);
+      await waitFor(() => expect(mocks.saveTemplate).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(snackbarWith('Đã lưu mẫu đơn.')).toBe(1));
+    });
+  });
+
+  describe('xoá mẫu đơn (delTpl, khoá theo id)', () => {
+    const TEMPLATES = [
+      { id: 'tp1', name: 'Đơn tháng', items: [{ variationId: 'v1', quantity: 2 }] },
+      { id: 'tp2', name: 'Đơn tuần', items: [{ variationId: 'v1', quantity: 1 }] },
+    ];
+    const xoa = async (count = 1) => {
+      renderPage();
+      await screen.findByRole('button', { name: /Đơn tháng/ });
+      const all = screen.getAllByRole('button', { name: 'Xoá mẫu đơn' });
+      expect(all).toHaveLength(count);
+      return all;
+    };
+
+    it('chạm đúp "Xoá mẫu đơn" chỉ xoá một lần; nút đang xoá aria-busy, và tải lại danh sách một lần', async () => {
+      const d = deferred();
+      mocks.getTemplates.mockResolvedValue([TEMPLATES[0]]);
+      mocks.deleteTemplate.mockReturnValueOnce(d.promise);
+      const [del] = await xoa();
+      await act(async () => {
+        fireEvent.click(del!);
+        fireEvent.click(del!);
+      });
+      expect(mocks.deleteTemplate).toHaveBeenCalledTimes(1);
+      expect(mocks.deleteTemplate).toHaveBeenCalledWith('tp1');
+      await waitFor(() => expect(del).toHaveAttribute('aria-busy', 'true'));
+      expect(del).toHaveAttribute('aria-disabled', 'true');
+      await act(async () => d.resolve({ ok: true }));
+      await waitFor(() => expect(mocks.getTemplates).toHaveBeenCalledTimes(2));
+      expect(mocks.deleteTemplate).toHaveBeenCalledTimes(1);
+    });
+
+    it('hai mẫu khác nhau trong một khung hình: cả hai cùng được xoá', async () => {
+      const a = deferred();
+      const b = deferred();
+      mocks.getTemplates.mockResolvedValue(TEMPLATES);
+      mocks.deleteTemplate.mockReturnValueOnce(a.promise).mockReturnValueOnce(b.promise);
+      const [delA, delB] = await xoa(2);
+      await act(async () => {
+        fireEvent.click(delA!);
+        fireEvent.click(delB!);
+        fireEvent.click(delA!);
+      });
+      expect(mocks.deleteTemplate.mock.calls.map((c) => c[0])).toEqual(['tp1', 'tp2']);
+      await act(async () => {
+        a.resolve({ ok: true });
+        b.resolve({ ok: true });
+      });
+      await waitFor(() => expect(mocks.getTemplates).toHaveBeenCalledTimes(3));
+    });
+
+    it('lỗi thì nhả khoá, bấm lại gọi lần hai', async () => {
+      mocks.getTemplates.mockResolvedValue([TEMPLATES[0]]);
+      mocks.deleteTemplate.mockRejectedValueOnce(new Error('Mẫu đã bị xoá')).mockResolvedValue({ ok: true });
+      const [del] = await xoa();
+      await act(async () => {
+        fireEvent.click(del!);
+        fireEvent.click(del!);
+      });
+      expect(mocks.deleteTemplate).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(errorSnackbars()).toBe(1));
+      await waitFor(() => expect(del).not.toHaveAttribute('aria-busy'));
+      fireEvent.click(del!);
+      await waitFor(() => expect(mocks.deleteTemplate).toHaveBeenCalledTimes(2));
+    });
+  });
+
+  describe('yêu cầu nhận thưởng (claimMut, khoá theo phần thưởng + kỳ)', () => {
+    const reward = (id: string, title: string) => ({
+      id, type: 'TOUR', title, description: null, threshold: 100_000_000, period: 'QUARTER',
+      periodKey: 'Q3/2026', periodLabel: 'Quý 3/2026', isCurrentPeriod: true, volume: 120_000_000, pendingVolume: 0,
+      achieved: true, toGo: 0, claimStatus: null, claimId: null, rejectionReason: null, claimDeadline: '2026-10-30T17:00:00.000Z',
+      canClaim: true,
+    });
+    const CLAIMED = { message: 'Đã ghi nhận yêu cầu.', alreadyClaimed: false, claimStatus: 'PENDING', claim: { id: 'c1' } };
+    const openRewards = async (titles: string[]) => {
+      mocks.getQuarterlyReport.mockResolvedValue({
+        quarter: 'Q3/2026', periodStart: '', periodEnd: '', revenue: 120_000_000, orderCount: 14,
+        pendingRevenue: 0, pendingOrderCount: 0, bonusPct: 2, bonusAmount: 2_400_000, nextTier: null,
+        tiers: [{ min: 100_000_000, pct: 2 }],
+      });
+      mocks.getDealerRewards.mockResolvedValue({ claimGraceDays: 30, rewards: titles.map((t, i) => reward(`rw${i + 1}`, t)) });
+      renderPage();
+      await screen.findByText('Bạc');
+      openTab('Báo cáo');
+      await screen.findByText('Phần thưởng đại lý');
+      await waitFor(() => expect(screen.getAllByRole('button', { name: 'Yêu cầu nhận thưởng' })).toHaveLength(titles.length));
+      return screen.getAllByRole('button', { name: 'Yêu cầu nhận thưởng' });
+    };
+
+    it('chạm đúp "Yêu cầu nhận thưởng" chỉ gửi một yêu cầu; nút dòng đó aria-busy không disabled, dòng kia disabled', async () => {
+      const d = deferred();
+      mocks.claimDealerReward.mockReturnValueOnce(d.promise);
+      const [a, b] = await openRewards(['Tour Đà Nẵng', 'Quà quý']);
+      await act(async () => {
+        fireEvent.click(a!);
+        fireEvent.click(a!);
+      });
+      expect(mocks.claimDealerReward).toHaveBeenCalledTimes(1);
+      expect(mocks.claimDealerReward).toHaveBeenCalledWith('rw1', 'Q3/2026');
+      await waitFor(() => expect(a).toHaveAttribute('aria-busy', 'true'));
+      expect(a).not.toBeDisabled();
+      await waitFor(() => expect(b).toBeDisabled());
+      await act(async () => d.resolve(CLAIMED));
+      await waitFor(() => expect(snackbarWith('Đã ghi nhận yêu cầu.')).toBe(1));
+      expect(mocks.claimDealerReward).toHaveBeenCalledTimes(1);
+    });
+
+    it('hai phần thưởng khác nhau trong một khung hình: cả hai yêu cầu cùng được gửi', async () => {
+      const x = deferred();
+      const y = deferred();
+      mocks.claimDealerReward.mockReturnValueOnce(x.promise).mockReturnValueOnce(y.promise);
+      const [a, b] = await openRewards(['Tour Đà Nẵng', 'Quà quý']);
+      await act(async () => {
+        fireEvent.click(a!);
+        fireEvent.click(b!);
+        fireEvent.click(b!);
+      });
+      expect(mocks.claimDealerReward.mock.calls).toEqual([['rw1', 'Q3/2026'], ['rw2', 'Q3/2026']]);
+      await act(async () => {
+        x.resolve(CLAIMED);
+        y.resolve(CLAIMED);
+      });
+      await waitFor(() => expect(snackbarWith('Đã ghi nhận yêu cầu.')).toBe(2));
+    });
+
+    it('lỗi thì nhả khoá, bấm lại gọi lần hai', async () => {
+      mocks.claimDealerReward.mockRejectedValueOnce(new Error('Hết hạn nhận')).mockResolvedValue(CLAIMED);
+      const [a] = await openRewards(['Tour Đà Nẵng']);
+      await act(async () => {
+        fireEvent.click(a!);
+        fireEvent.click(a!);
+      });
+      expect(mocks.claimDealerReward).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(errorSnackbars()).toBe(1));
+      await waitFor(() => expect(a).not.toHaveAttribute('aria-busy'));
+      fireEvent.click(a!);
+      await waitFor(() => expect(mocks.claimDealerReward).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(snackbarWith('Đã ghi nhận yêu cầu.')).toBe(1));
+    });
   });
 });

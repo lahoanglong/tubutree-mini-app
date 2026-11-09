@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Page, useSnackbar } from 'zmp-ui';
 import { Plus } from 'lucide-react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useLockedMutation } from '../components/game/use-locked-mutation';
 import { getAddresses, type AddressDTO } from '../services/shop-api';
 import { updateAddress, deleteAddress } from '../services/account-api';
 import { getErrorMessage, getLoadErrorMessage } from '../services/api';
@@ -41,24 +42,47 @@ export default function AddressesPage() {
   const [editing, setEditing] = useState<AddressDTO | 'new' | null>(null);
   const [confirmDel, setConfirmDel] = useState<AddressDTO | null>(null);
 
-  const setDefaultMut = useMutation({
-    mutationFn: (id: string) => updateAddress(id, { isDefault: true }),
-    onSuccess: () => {
-      haptic('light');
-      refresh();
-    },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
+  // "Đặt mặc định" và "Xoá" cùng một địa chỉ loại trừ nhau (đặt mặc định xong mà địa chỉ đã bị xoá thì máy chủ báo lỗi, xoá xong mà vẫn đặt
+  // mặc định thì địa chỉ kế tiếp bị chọn nhầm). `isPending` chỉ đúng sau lần vẽ kế tiếp nên khoá bằng ref theo id; khác id vẫn chạy song song.
+  const acting = useRef(new Set<string>());
+  const once = (id: string, run: () => void) => {
+    if (acting.current.has(id)) return;
+    acting.current.add(id);
+    run();
+  };
+  const release = (_data: unknown, _error: unknown, id: string) => {
+    acting.current.delete(id);
+  };
 
-  const deleteMut = useMutation({
-    mutationFn: (id: string) => deleteAddress(id),
-    onSuccess: () => {
-      setConfirmDel(null);
-      openSnackbar({ text: 'Đã xoá địa chỉ.', type: 'success' });
-      refresh();
+  const setDefaultMut = useLockedMutation(
+    {
+      mutationFn: (id: string) => updateAddress(id, { isDefault: true }),
+      onSuccess: () => {
+        haptic('light');
+        refresh();
+      },
+      onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+      onSettled: release,
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
+    (id) => id,
+  );
+
+  const deleteMut = useLockedMutation(
+    {
+      mutationFn: (id: string) => deleteAddress(id),
+      onSuccess: () => {
+        setConfirmDel(null);
+        openSnackbar({ text: 'Đã xoá địa chỉ.', type: 'success' });
+        refresh();
+      },
+      onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+      onSettled: release,
+    },
+    (id) => id,
+  );
+
+  const busyOf = (id: string) =>
+    (setDefaultMut.isPending && setDefaultMut.variables === id) || (deleteMut.isPending && deleteMut.variables === id);
 
   return (
     <Page style={{ background: 'var(--color-bg-canvas)' }}>
@@ -78,7 +102,7 @@ export default function AddressesPage() {
             <Skeleton style={{ height: 84, borderRadius: 'var(--radius-card)' }} />
           </div>
         ) : addrQ.isError && !addrQ.data ? (
-          <ErrorState message={getLoadErrorMessage(addrQ.error)} onRetry={() => void addrQ.refetch()} />
+          <ErrorState message={getLoadErrorMessage(addrQ.error)} onRetry={() => addrQ.refetch()} />
         ) : (
           <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
             {addrQ.data && addrQ.data.length === 0 && (
@@ -109,8 +133,8 @@ export default function AddressesPage() {
                   {!a.isDefault && (
                     <ActionLink
                       label="Đặt mặc định"
-                      onClick={() => setDefaultMut.mutate(a.id)}
-                      disabled={setDefaultMut.isPending}
+                      onClick={() => once(a.id, () => setDefaultMut.mutate(a.id))}
+                      busy={busyOf(a.id)}
                     />
                   )}
                   <ActionLink label="Sửa" onClick={() => setEditing(a)} />
@@ -118,7 +142,7 @@ export default function AddressesPage() {
                     label="Xoá"
                     danger
                     onClick={() => setConfirmDel(a)}
-                    disabled={deleteMut.isPending}
+                    disabled={deleteMut.isPending || busyOf(a.id)}
                   />
                 </div>
               </Card>
@@ -171,8 +195,8 @@ export default function AddressesPage() {
               <Button
                 fullWidth
                 variant="danger"
-                loading={deleteMut.isPending}
-                onPress={() => deleteMut.mutate(confirmDel.id)}
+                loading={busyOf(confirmDel.id)}
+                onPress={() => once(confirmDel.id, () => deleteMut.mutate(confirmDel.id))}
               >
                 Xoá
               </Button>
@@ -196,16 +220,20 @@ function ActionLink({
   onClick,
   danger,
   disabled,
+  busy,
 }: {
   label: string;
   onClick: () => void;
   danger?: boolean;
   disabled?: boolean;
+  /** Đang gửi: không dùng `disabled` vì Chromium thả focus của nút đang giữ focus khi nó bị vô hiệu; chỉ báo aria-busy, khoá nằm ở `mutate`. */
+  busy?: boolean;
 }) {
   return (
     <button
       type="button"
       disabled={disabled}
+      aria-busy={busy || undefined}
       onClick={onClick}
       className="tubu-press"
       style={{
@@ -218,8 +246,8 @@ function ActionLink({
         fontSize: 'var(--type-body-sm-size)',
         fontWeight: 600,
         color: danger ? 'var(--color-text-danger)' : 'var(--color-text-brand)',
-        opacity: disabled ? 0.5 : 1,
-        cursor: disabled ? 'default' : 'pointer',
+        opacity: disabled || busy ? 0.5 : 1,
+        cursor: disabled || busy ? 'default' : 'pointer',
       }}
     >
       {label}

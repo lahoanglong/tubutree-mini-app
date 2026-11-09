@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { HttpError } from '../services/http';
@@ -332,5 +332,150 @@ describe('BrandOwnerPage cấu trúc trang (C-076, C-114)', () => {
     fireEvent.change(screen.getByLabelText('Đến ngày'), { target: { value: '2026-11-01' } });
     expect(screen.getByText('Ngày kết thúc không được trước ngày bắt đầu.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Thêm khuyến mãi' })).toBeDisabled();
+  });
+});
+
+describe('BrandOwnerPage: Lưu thông tin, thêm/sửa/xoá khuyến mãi khoá chạm đúp (W76A)', () => {
+  const deferred = () => {
+    let resolve!: (v: unknown) => void;
+    let reject!: (e: unknown) => void;
+    const promise = new Promise((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+  const toasts = (type: string) => mocks.openSnackbar.mock.calls.filter(([a]) => (a as { type: string }).type === type);
+  const startAdd = async () => {
+    await screen.findByText('MUA 2 TẶNG 1');
+    fireEvent.change(screen.getByPlaceholderText(/Tiêu đề/), { target: { value: 'Giảm sốc' } });
+    return screen.getByRole('button', { name: 'Thêm khuyến mãi' });
+  };
+  const startEdit = async () => {
+    fireEvent.click(await screen.findByRole('button', { name: 'Sửa khuyến mãi MUA 2 TẶNG 1' }));
+    return screen.getByRole('button', { name: 'Lưu thay đổi' });
+  };
+  const openDelete = async () => {
+    fireEvent.click(await screen.findByRole('button', { name: 'Xoá khuyến mãi MUA 2 TẶNG 1' }));
+    return within(screen.getByTestId('sheet')).getByRole('button', { name: 'Xoá' });
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getOwnedBrand.mockResolvedValue(BRAND);
+    mocks.updateOwnedBrand.mockResolvedValue({});
+    mocks.createOwnedPromotion.mockResolvedValue({});
+    mocks.updateOwnedPromotion.mockResolvedValue({});
+    mocks.deleteOwnedPromotion.mockResolvedValue({});
+  });
+
+  it('chạm đúp "Lưu thông tin" trong cùng một khung hình chỉ lưu một lần', async () => {
+    const d = deferred();
+    mocks.updateOwnedBrand.mockReturnValueOnce(d.promise);
+    renderPage();
+    const save = await screen.findByRole('button', { name: 'Lưu thông tin' });
+    await act(async () => {
+      fireEvent.click(save);
+      fireEvent.click(save);
+    });
+    expect(mocks.updateOwnedBrand).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(save).toHaveAttribute('aria-busy', 'true'));
+    expect(save).not.toBeDisabled();
+    await act(async () => d.resolve({}));
+    await waitFor(() => expect(toasts('success')).toHaveLength(1));
+    expect(mocks.updateOwnedBrand).toHaveBeenCalledTimes(1);
+  });
+
+  it('lưu thông tin lỗi thì nhả khoá, bấm lại gọi lần hai', async () => {
+    mocks.updateOwnedBrand.mockRejectedValueOnce(new Error('boom')).mockResolvedValue({});
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Lưu thông tin' }));
+    await waitFor(() => expect(toasts('error')).toHaveLength(1));
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu thông tin' }));
+    await waitFor(() => expect(mocks.updateOwnedBrand).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(toasts('success')).toHaveLength(1));
+  });
+
+  it('chạm đúp "Thêm khuyến mãi" trong cùng một khung hình chỉ tạo một khuyến mãi', async () => {
+    const d = deferred();
+    mocks.createOwnedPromotion.mockReturnValueOnce(d.promise);
+    renderPage();
+    const add = await startAdd();
+    await act(async () => {
+      fireEvent.click(add);
+      fireEvent.click(add);
+    });
+    expect(mocks.createOwnedPromotion).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(add).toHaveAttribute('aria-busy', 'true'));
+    expect(add).not.toBeDisabled();
+    await act(async () => d.resolve({}));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã thêm khuyến mãi', type: 'success' }));
+    expect(mocks.createOwnedPromotion).toHaveBeenCalledTimes(1);
+    expect(toasts('success')).toHaveLength(1);
+  });
+
+  it('thêm khuyến mãi lỗi thì nhả khoá, bấm lại gọi lần hai', async () => {
+    mocks.createOwnedPromotion.mockRejectedValueOnce(new Error('boom')).mockResolvedValue({});
+    renderPage();
+    fireEvent.click(await startAdd());
+    await waitFor(() => expect(toasts('error')).toHaveLength(1));
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm khuyến mãi' }));
+    await waitFor(() => expect(mocks.createOwnedPromotion).toHaveBeenCalledTimes(2));
+  });
+
+  it('chạm đúp "Lưu thay đổi" trong cùng một khung hình chỉ cập nhật một lần', async () => {
+    const d = deferred();
+    mocks.updateOwnedPromotion.mockReturnValueOnce(d.promise);
+    renderPage();
+    const save = await startEdit();
+    await act(async () => {
+      fireEvent.click(save);
+      fireEvent.click(save);
+    });
+    expect(mocks.updateOwnedPromotion).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(save).toHaveAttribute('aria-busy', 'true'));
+    expect(save).not.toBeDisabled();
+    await act(async () => d.resolve({}));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã cập nhật khuyến mãi', type: 'success' }));
+    expect(mocks.updateOwnedPromotion).toHaveBeenCalledTimes(1);
+    expect(toasts('success')).toHaveLength(1);
+  });
+
+  it('cập nhật khuyến mãi lỗi thì nhả khoá, bấm lại gọi lần hai', async () => {
+    mocks.updateOwnedPromotion.mockRejectedValueOnce(new Error('boom')).mockResolvedValue({});
+    renderPage();
+    fireEvent.click(await startEdit());
+    await waitFor(() => expect(toasts('error')).toHaveLength(1));
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
+    await waitFor(() => expect(mocks.updateOwnedPromotion).toHaveBeenCalledTimes(2));
+  });
+
+  it('chạm đúp "Xoá" trong khung xác nhận trong cùng một khung hình chỉ xoá một lần', async () => {
+    const d = deferred();
+    mocks.deleteOwnedPromotion.mockReturnValueOnce(d.promise);
+    renderPage();
+    const del = await openDelete();
+    await act(async () => {
+      fireEvent.click(del);
+      fireEvent.click(del);
+    });
+    expect(mocks.deleteOwnedPromotion).toHaveBeenCalledTimes(1);
+    expect(mocks.deleteOwnedPromotion).toHaveBeenCalledWith('p1');
+    await waitFor(() => expect(del).toHaveAttribute('aria-busy', 'true'));
+    expect(del).not.toBeDisabled();
+    await act(async () => d.resolve({}));
+    await waitFor(() => expect(screen.queryByTestId('sheet')).toBeNull());
+    expect(mocks.deleteOwnedPromotion).toHaveBeenCalledTimes(1);
+  });
+
+  it('xoá khuyến mãi lỗi thì giữ khung, nhả khoá, bấm lại xoá lần hai', async () => {
+    mocks.deleteOwnedPromotion.mockRejectedValueOnce(new Error('boom')).mockResolvedValue({});
+    renderPage();
+    fireEvent.click(await openDelete());
+    await waitFor(() => expect(toasts('error')).toHaveLength(1));
+    expect(screen.getByTestId('sheet')).toBeInTheDocument();
+    fireEvent.click(within(screen.getByTestId('sheet')).getByRole('button', { name: 'Xoá' }));
+    await waitFor(() => expect(mocks.deleteOwnedPromotion).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByTestId('sheet')).toBeNull());
   });
 });

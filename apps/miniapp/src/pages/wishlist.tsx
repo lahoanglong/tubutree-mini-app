@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Page, useNavigate, useSnackbar } from 'zmp-ui';
 import { ShoppingCart } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -30,7 +30,6 @@ function QuickAddButton({ name, busy, onPress }: { name: string; busy: boolean; 
       type="button"
       aria-label={`Thêm ${name} vào giỏ`}
       aria-busy={busy}
-      disabled={busy}
       onClick={(e) => onPress(e.currentTarget)}
       style={{ width: 44, height: 44, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
     >
@@ -48,6 +47,9 @@ export default function WishlistPage() {
   const { openSnackbar } = useSnackbar();
   const queryClient = useQueryClient();
   const [busyId, setBusyId] = useState<string | null>(null);
+  // `busyId` chỉ đúng sau lần vẽ kế tiếp: hai cú chạm sát nhau vẫn đều thấy nút rảnh và cộng giỏ hai lần. Ref đồng bộ, dùng chung cho
+  // quickAdd và confirmPick vì cả hai cùng ghi vào giỏ.
+  const adding = useRef(false);
   const [filter, setFilter] = useState<WishlistFilterKey>('all');
   const [picker, setPicker] = useState<{ product: ProductCardData; variations: VariationDetail[] } | null>(null);
   const phase = useAuthPhase();
@@ -78,6 +80,8 @@ export default function WishlistPage() {
 
   // Thẻ không mang phân loại nên tải chi tiết lúc bấm (cũng cho tồn kho mới nhất), rồi theo cùng luật với trang chi tiết.
   const quickAdd = async (product: ProductCardData, source: Element | null = null) => {
+    if (adding.current) return;
+    adding.current = true;
     setBusyId(product.id);
     try {
       const detail = await queryClient.fetchQuery({ queryKey: ['product', product.slug], queryFn: () => fetchProduct(product.slug), staleTime: 0 });
@@ -91,11 +95,14 @@ export default function WishlistPage() {
     } catch (e) {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
     } finally {
+      adding.current = false;
       setBusyId(null);
     }
   };
 
   const confirmPick = async (variation: { id: string }, qty: number) => {
+    if (adding.current) return;
+    adding.current = true;
     setBusyId(picker?.product.id ?? null);
     try {
       await addLine(variation.id, qty);
@@ -103,6 +110,7 @@ export default function WishlistPage() {
     } catch (e) {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
     } finally {
+      adding.current = false;
       setBusyId(null);
     }
   };
@@ -122,7 +130,7 @@ export default function WishlistPage() {
           {wishQ.isLoading ? (
             <ProductGrid items={[]} variant="grid" loading skeletonCount={4} />
           ) : wishQ.isError && !wishQ.data ? (
-            <ErrorState message={getLoadErrorMessage(wishQ.error)} onRetry={() => void wishQ.refetch()} />
+            <ErrorState message={getLoadErrorMessage(wishQ.error)} onRetry={() => wishQ.refetch()} />
           ) : filterView ? (
             <>
               <ScrollRow

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Input, useNavigate, useSnackbar } from 'zmp-ui';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, Circle, Info, Plus, Trash2 } from 'lucide-react';
 import {
   SIGNUP_COPY,
@@ -39,6 +39,7 @@ import { SR_ONLY } from '../components/ui/sr-only';
 import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { Heading, Text } from '../components/ui/text';
 import { ImageUpload } from '../components/image-upload';
+import { useLockedMutation } from '../components/game/use-locked-mutation';
 import { PickerSheet, TemplatePickerSheet, TEMPLATE_HINT, TEMPLATE_TITLE } from '../components/storefront-pickers';
 import { StorefrontPreview } from '../components/storefront-preview';
 
@@ -100,7 +101,7 @@ function ConditionsStep({ sf, onStarted }: { sf: StorefrontEdit | null; onStarte
   const { openSnackbar } = useSnackbar();
   const meQ = useQuery({ queryKey: ['affiliate-me'], queryFn: getAffiliateMe, retry: false });
   const gate = signupGate(meQ.data);
-  const startMut = useMutation({
+  const startMut = useLockedMutation({
     mutationFn: async () => {
       if (!sf) await createStorefront();
     },
@@ -114,7 +115,7 @@ function ConditionsStep({ sf, onStarted }: { sf: StorefrontEdit | null; onStarte
 
   if (meQ.isLoading) return <div style={{ padding: 16 }}><Skeleton height={160} radius="var(--radius-card)" /></div>;
   if (meQ.isError) {
-    return <div style={{ padding: 16 }}><ErrorState message={getLoadErrorMessage(meQ.error)} onRetry={() => void meQ.refetch()} /></div>;
+    return <div style={{ padding: 16 }}><ErrorState message={getLoadErrorMessage(meQ.error)} onRetry={() => meQ.refetch()} /></div>;
   }
 
   return (
@@ -177,7 +178,7 @@ function InfoStep({ sf, onBack, onDone }: { sf: StorefrontEdit; onBack: () => vo
   const [coverUrl, setCoverUrl] = useState(sf.coverUrl ?? '');
   const [error, setError] = useState<string | null>(null);
 
-  const saveMut = useMutation({
+  const saveMut = useLockedMutation({
     mutationFn: () =>
       updateStorefront({ title: title.trim(), headerNote: note.trim(), avatarUrl: avatarUrl.trim(), coverUrl: coverUrl.trim() }),
     onSuccess: async () => {
@@ -236,7 +237,7 @@ function ProductsStep({ sf, onBack, onDone }: { sf: StorefrontEdit; onBack: () =
   const refresh = () => qc.invalidateQueries({ queryKey: ['my-storefront'] });
   const fail = (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' });
 
-  const templateMut = useMutation({
+  const templateMut = useLockedMutation({
     mutationFn: (categoryId: string) => applyStorefrontTemplate(categoryId),
     onSuccess: async () => {
       haptic('medium');
@@ -245,16 +246,16 @@ function ProductsStep({ sf, onBack, onDone }: { sf: StorefrontEdit; onBack: () =
     },
     onError: fail,
   });
-  const openPicker = useMutation({
+  const openPicker = useLockedMutation({
     mutationFn: async () => sf.collections[0]?.id ?? (await createCollection({ title: SIGNUP_COPY.defaultCollection })).id,
     onSuccess: (id) => setPickerCol(id),
     onError: fail,
   });
-  const removeMut = useMutation({
+  const removeMut = useLockedMutation({
     mutationFn: (id: string) => removeItem(id),
     onSuccess: () => void refresh(),
     onError: fail,
-  });
+  }, (id) => id);
 
   return (
     <>
@@ -324,7 +325,7 @@ function ReviewStep({ sf, onBack }: { sf: StorefrontEdit; onBack: () => void }) 
   const { openSnackbar } = useSnackbar();
   const copy = storefrontPublishCopy(sf);
   const needsReview = storefrontNeedsReview(sf);
-  const submitMut = useMutation({
+  const submitMut = useLockedMutation({
     mutationFn: () => publishStorefront(true),
     onSuccess: async (res) => {
       haptic('medium');

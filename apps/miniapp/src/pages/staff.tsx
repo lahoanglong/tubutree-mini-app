@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Input, Page, useNavigate, useSnackbar } from 'zmp-ui';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Copy, LogIn, LogOut, MapPin } from 'lucide-react';
 import {
   getAttendanceStatus,
@@ -35,6 +35,7 @@ import { Skeleton } from '../components/ui/skeleton';
 import { Heading, Text } from '../components/ui/text';
 import { TimeInput } from '../components/ui/time-input';
 import { ImageUpload } from '../components/image-upload';
+import { useLockedMutation } from '../components/game/use-locked-mutation';
 import { PeriodNav } from '../components/period-nav';
 import {
   mondayKeyOf,
@@ -89,7 +90,19 @@ function TodayCard() {
   const invalidate = () => qc.invalidateQueries({ queryKey: ['attn-status'] });
 
   const locFailRef = useRef<string | null>(null);
-  const checkinM = useMutation({
+  // Vào ca, Ra ca và Ra ca lùi giờ cùng đổi phiên chấm công của một người: một việc mỗi lúc. Khoá ref vì `isPending`
+  // chỉ đúng sau lần vẽ kế tiếp (chạm "Vào ca" rồi "Ra ca" sát nhau vẫn gửi cả hai và phiên bị mở lẫn đóng).
+  const attending = useRef(false);
+  const releaseAttending = () => {
+    attending.current = false;
+  };
+  const exclusive = (run: () => void) => {
+    if (attending.current) return;
+    attending.current = true;
+    run();
+  };
+  const checkinM = useLockedMutation({
+    onSettled: releaseAttending,
     mutationFn: async (shiftId: string) => {
       locFailRef.current = null;
       const loc = await acquireLocationPayload((m) => {
@@ -109,9 +122,10 @@ function TodayCard() {
         text: locFailRef.current ? `${locFailRef.current} ${getErrorMessage(e)}` : getErrorMessage(e),
         type: 'error',
       }),
-  });
+  }, (shiftId) => shiftId);
 
-  const checkoutM = useMutation({
+  const checkoutM = useLockedMutation({
+    onSettled: releaseAttending,
     mutationFn: (at?: string) => attnCheckout(at),
     onSuccess: () => {
       openSnackbar({ text: 'Đã ra ca.', type: 'success' });
@@ -120,6 +134,7 @@ function TodayCard() {
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
+  const attendBusy = checkinM.isPending || checkoutM.isPending;
 
   // Checkout lùi giờ (quên checkout khi nghỉ trưa/về sớm)
   const [backOpen, setBackOpen] = useState(false);
@@ -202,8 +217,8 @@ function TodayCard() {
             variant="secondary"
             icon={LogOut}
             style={{ marginTop: 10 }}
-            loading={checkoutM.isPending}
-            onPress={() => checkoutM.mutate(undefined)}
+            loading={attendBusy}
+            onPress={() => exclusive(() => checkoutM.mutate(undefined))}
           >
             Ra ca
           </Button>
@@ -256,7 +271,7 @@ function TodayCard() {
             <Text variant="body-sm">
               Ca {isoToVnHHMM(s.approvedStart ?? s.startAt)}–{isoToVnHHMM(s.approvedEnd ?? s.endAt)}
             </Text>
-            <Button icon={LogIn} loading={checkinM.isPending} onPress={() => checkinM.mutate(s.id)}>
+            <Button icon={LogIn} loading={attendBusy} onPress={() => exclusive(() => checkinM.mutate(s.id))}>
               Vào ca
             </Button>
           </div>
@@ -273,9 +288,9 @@ function TodayCard() {
         footer={
           <Button
             fullWidth
-            loading={checkoutM.isPending}
+            loading={attendBusy}
             disabled={backoutInvalid}
-            onPress={() => backoutCandidateISO && checkoutM.mutate(backoutCandidateISO)}
+            onPress={() => backoutCandidateISO && exclusive(() => checkoutM.mutate(backoutCandidateISO))}
           >
             Xác nhận ra ca
           </Button>
@@ -361,8 +376,20 @@ function StaffHub() {
     return { start: customStart, end: customEnd, templateId: undefined as string | undefined };
   };
 
-  const saveM = useMutation({
-    mutationFn: async () => {
+  // Sửa và Xoá cùng một ca loại trừ nhau (sheet sửa mở trên danh sách, cả hai nút cùng với tới được): khoá chung theo id ca,
+  // ca khác vẫn chạy song song. Thêm ca mới chưa có id nên chỉ dựa vào khoá riêng của saveM.
+  const shiftBusy = useRef(new Set<string>());
+  const unlockShift = (id: string | null) => {
+    if (id) shiftBusy.current.delete(id);
+  };
+  const lockShift = (id: string, run: () => void) => {
+    if (shiftBusy.current.has(id)) return;
+    shiftBusy.current.add(id);
+    run();
+  };
+  const saveM = useLockedMutation({
+    onSettled: (_data, _error, shiftId) => unlockShift(shiftId),
+    mutationFn: async (_shiftId: string | null) => {
       const { start, end, templateId } = resolvedTimes();
       const startAt = vnDateTimeISO(formDay, start);
       const endAt = vnDateTimeISO(formDay, end);
@@ -375,16 +402,23 @@ function StaffHub() {
       invalidate();
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
+  }, (shiftId) => shiftId ?? '');
+  const save = () => {
+    if (editId) lockShift(editId, () => saveM.mutate(editId));
+    else saveM.mutate(null);
+  };
 
-  const delM = useMutation({
+  const delM = useLockedMutation({
+    onSettled: (_data, _error, id) => unlockShift(id),
     mutationFn: (id: string) => deleteShift(id),
     onSuccess: () => {
       openSnackbar({ text: 'Đã xoá ca.', type: 'success' });
       invalidate();
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
+  }, (id) => id);
+  const shiftActing = (id: string) =>
+    (delM.isPending && delM.variables === id) || (saveM.isPending && saveM.variables === id);
 
   // ── Đăng ký nhanh: 1 khung giờ áp cho nhiều ngày trong tuần ──
   const [quickOpen, setQuickOpen] = useState(false);
@@ -414,7 +448,7 @@ function StaffHub() {
     }
     return { start: quickStart, end: quickEnd, templateId: undefined as string | undefined };
   };
-  const quickM = useMutation({
+  const quickM = useLockedMutation({
     mutationFn: () => {
       const { start, end, templateId } = quickTimes();
       const items = [...quickDays].sort().map((dk) => ({
@@ -433,7 +467,7 @@ function StaffHub() {
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
 
-  const copyM = useMutation({
+  const copyM = useLockedMutation({
     mutationFn: () =>
       copyWeek(keyToUtcMidnightISO(addDaysKey(mondayKey, -7)), keyToUtcMidnightISO(mondayKey)),
     onSuccess: (r) => {
@@ -452,7 +486,7 @@ function StaffHub() {
   const [cancelEmergency, setCancelEmergency] = useState(false);
   const [cancelEvidence, setCancelEvidence] = useState('');
 
-  const cancelM = useMutation({
+  const cancelM = useLockedMutation({
     mutationFn: () =>
       cancelShift(cancelId as string, {
         reason: cancelReason.trim(),
@@ -499,7 +533,7 @@ function StaffHub() {
 
         {(tplQ.isLoading || shiftsQ.isLoading) && <Skeleton height={120} radius="var(--radius-card)" />}
         {shiftsQ.isError && (
-          <ErrorState message={getLoadErrorMessage(shiftsQ.error)} onRetry={() => void shiftsQ.refetch()} />
+          <ErrorState message={getLoadErrorMessage(shiftsQ.error)} onRetry={() => shiftsQ.refetch()} />
         )}
 
         {shiftsQ.data &&
@@ -577,8 +611,8 @@ function StaffHub() {
                             variant="ghost"
                             aria-label={`Xoá ca ${dayName}`}
                             style={{ color: 'var(--color-text-danger)' }}
-                            disabled={delM.isPending}
-                            onPress={() => delM.mutate(s.id)}
+                            loading={shiftActing(s.id)}
+                            onPress={() => lockShift(s.id, () => delM.mutate(s.id))}
                           >
                             Xoá
                           </Button>
@@ -610,9 +644,9 @@ function StaffHub() {
         footer={
           <Button
             fullWidth
-            loading={saveM.isPending}
+            loading={saveM.isPending || (!!editId && shiftActing(editId))}
             disabled={!custom && !editId ? !tplId : !TIME_RE.test(customStart) || !TIME_RE.test(customEnd)}
-            onPress={() => saveM.mutate()}
+            onPress={save}
           >
             {editId ? 'Lưu' : 'Gửi duyệt'}
           </Button>

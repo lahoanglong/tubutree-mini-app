@@ -395,3 +395,161 @@ describe('Trang Yêu thích: Đang giảm theo Giờ vàng', () => {
     expect(chip('Tất cả')).toHaveAttribute('aria-pressed', 'true');
   });
 });
+
+describe('Trang Yêu thích: nút giỏ nhanh và bảng chọn phân loại khoá chạm đúp (W76A)', () => {
+  const variation = (id: string, stock = 5) => ({ id, name: `Loại ${id}`, sku: id, attributes: {}, retailPrice: 100000, salePrice: null, stock });
+  const detail = (variations: ReturnType<typeof variation>[]) => ({ id: 'p1', slug: 'xa-bong', name: 'Xà bông', thumbnail: null, variations });
+  const deferred = () => {
+    let resolve!: (v: unknown) => void;
+    let reject!: (e: unknown) => void;
+    const promise = new Promise((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+  const quickBtn = (name = 'Xà bông') => screen.getByRole('button', { name: `Thêm ${name} vào giỏ` });
+  const successToasts = () => mocks.snackbar.mock.calls.filter(([a]) => (a as { type: string }).type === 'success');
+  const errorToasts = () => mocks.snackbar.mock.calls.filter(([a]) => (a as { type: string }).type === 'error');
+  // Mở bảng chọn phân loại (sản phẩm nhiều phân loại) rồi trả nút xác nhận của bảng.
+  const openPicker = async () => {
+    mocks.fetchProduct.mockResolvedValueOnce(detail([variation('v1'), variation('v2')]));
+    fireEvent.click(await screen.findByRole('button', { name: 'Thêm Xà bông vào giỏ' }));
+    await screen.findByTestId('variation-sheet');
+    return screen.getByRole('button', { name: 'xác nhận phân loại' });
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.authStatus = 'authenticated';
+    mocks.addToCart.mockResolvedValue({ items: [] });
+    mocks.getCart.mockResolvedValue({ items: [], itemCount: 0 });
+    mocks.getWishlist.mockResolvedValue([
+      { id: 'p1', slug: 'xa-bong', name: 'Xà bông', inStock: true },
+      { id: 'p2', slug: 'dau-goi', name: 'Dầu gội', inStock: true },
+    ]);
+  });
+
+  it('chạm đúp nút giỏ trong cùng một khung hình chỉ thêm một sản phẩm vào giỏ', async () => {
+    const d = deferred();
+    mocks.fetchProduct.mockResolvedValue(detail([variation('v1')]));
+    mocks.addToCart.mockReturnValueOnce(d.promise);
+    renderPage();
+    const btn = await screen.findByRole('button', { name: 'Thêm Xà bông vào giỏ' });
+    await act(async () => {
+      fireEvent.click(btn);
+      fireEvent.click(btn);
+    });
+    await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledTimes(1));
+    expect(mocks.addToCart).toHaveBeenCalledWith('v1', 1, 'wishlist');
+    await act(async () => d.resolve({ items: [] }));
+    await waitFor(() => expect(successToasts()).toHaveLength(1));
+    expect(mocks.addToCart).toHaveBeenCalledTimes(1);
+  });
+
+  it('đang thêm: nút aria-busy mà không bị disabled (giữ focus), xong thì hết busy', async () => {
+    const d = deferred();
+    mocks.fetchProduct.mockResolvedValue(detail([variation('v1')]));
+    mocks.addToCart.mockReturnValueOnce(d.promise);
+    renderPage();
+    const btn = await screen.findByRole('button', { name: 'Thêm Xà bông vào giỏ' });
+    btn.focus();
+    fireEvent.click(btn);
+    await waitFor(() => expect(btn).toHaveAttribute('aria-busy', 'true'));
+    expect(btn).not.toBeDisabled();
+    expect(btn).toHaveFocus();
+    await act(async () => d.resolve({ items: [] }));
+    await waitFor(() => expect(btn).toHaveAttribute('aria-busy', 'false'));
+  });
+
+  it('thêm giỏ lỗi thì nhả khoá, bấm lại gọi lần hai', async () => {
+    mocks.fetchProduct.mockResolvedValue(detail([variation('v1')]));
+    mocks.addToCart.mockRejectedValueOnce(new Error('boom')).mockResolvedValue({ items: [] });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Thêm Xà bông vào giỏ' }));
+    await waitFor(() => expect(errorToasts()).toHaveLength(1));
+    fireEvent.click(quickBtn());
+    await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(successToasts()).toHaveLength(1));
+  });
+
+  it('hai sản phẩm khác nhau bấm sát nhau trong một khung hình: chỉ sản phẩm bấm trước được thêm', async () => {
+    const d = deferred();
+    mocks.fetchProduct.mockResolvedValue(detail([variation('v1')]));
+    mocks.addToCart.mockReturnValueOnce(d.promise);
+    renderPage();
+    const first = await screen.findByRole('button', { name: 'Thêm Xà bông vào giỏ' });
+    const second = screen.getByRole('button', { name: 'Thêm Dầu gội vào giỏ' });
+    await act(async () => {
+      fireEvent.click(first);
+      fireEvent.click(second);
+    });
+    await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledTimes(1));
+    expect(mocks.fetchProduct).toHaveBeenCalledTimes(1);
+    expect(mocks.fetchProduct).toHaveBeenCalledWith('xa-bong');
+    await act(async () => d.resolve({ items: [] }));
+    await waitFor(() => expect(successToasts()).toHaveLength(1));
+  });
+
+  it('chạm đúp "xác nhận phân loại" trong cùng một khung hình chỉ thêm một lần, rồi đóng bảng', async () => {
+    const d = deferred();
+    mocks.addToCart.mockReturnValueOnce(d.promise);
+    renderPage();
+    const confirm = await openPicker();
+    await act(async () => {
+      fireEvent.click(confirm);
+      fireEvent.click(confirm);
+    });
+    expect(mocks.addToCart).toHaveBeenCalledTimes(1);
+    expect(mocks.addToCart).toHaveBeenCalledWith('v2', 2, 'wishlist');
+    await act(async () => d.resolve({ items: [] }));
+    await waitFor(() => expect(screen.queryByTestId('variation-sheet')).toBeNull());
+    expect(mocks.addToCart).toHaveBeenCalledTimes(1);
+    expect(successToasts()).toHaveLength(1);
+  });
+
+  it('thêm từ bảng chọn lỗi thì giữ bảng, nhả khoá, bấm lại gọi lần hai', async () => {
+    mocks.addToCart.mockRejectedValueOnce(new Error('boom')).mockResolvedValue({ items: [] });
+    renderPage();
+    const confirm = await openPicker();
+    fireEvent.click(confirm);
+    await waitFor(() => expect(errorToasts()).toHaveLength(1));
+    expect(screen.getByTestId('variation-sheet')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'xác nhận phân loại' }));
+    await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByTestId('variation-sheet')).toBeNull());
+  });
+
+  it('xác nhận phân loại rồi bấm nút giỏ nhanh trong một khung hình: chung một khoá, chỉ lệnh thêm từ bảng đi', async () => {
+    const d = deferred();
+    mocks.addToCart.mockReturnValueOnce(d.promise);
+    renderPage();
+    const confirm = await openPicker();
+    mocks.fetchProduct.mockClear();
+    await act(async () => {
+      fireEvent.click(confirm);
+      fireEvent.click(quickBtn());
+    });
+    expect(mocks.addToCart).toHaveBeenCalledTimes(1);
+    expect(mocks.fetchProduct).not.toHaveBeenCalled();
+    await act(async () => d.resolve({ items: [] }));
+    await waitFor(() => expect(successToasts()).toHaveLength(1));
+  });
+
+  it('bấm nút giỏ nhanh rồi xác nhận phân loại trong một khung hình: chung một khoá, lệnh xác nhận bị bỏ qua', async () => {
+    const d = deferred();
+    renderPage();
+    const confirm = await openPicker();
+    mocks.fetchProduct.mockReset();
+    mocks.fetchProduct.mockReturnValueOnce(d.promise);
+    await act(async () => {
+      fireEvent.click(quickBtn());
+      fireEvent.click(confirm);
+    });
+    expect(mocks.fetchProduct).toHaveBeenCalledTimes(1);
+    expect(mocks.addToCart).not.toHaveBeenCalled();
+    await act(async () => d.resolve(detail([variation('v1')])));
+    await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledTimes(1));
+    expect(mocks.addToCart).toHaveBeenCalledWith('v1', 1, 'wishlist');
+  });
+});

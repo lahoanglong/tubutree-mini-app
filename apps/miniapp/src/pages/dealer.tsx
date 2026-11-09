@@ -16,7 +16,7 @@ import {
   Check,
   type LucideIcon,
 } from 'lucide-react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   getDealerMe,
   applyDealer,
@@ -48,6 +48,7 @@ import { haptic } from '../utils/haptic';
 import { useDebounced } from '../utils/use-debounced';
 import { newIdempotencyKey } from '../utils/idempotency';
 import { ImageUpload } from '../components/image-upload';
+import { useLockedMutation } from '../components/game/use-locked-mutation';
 import {
   DEALER_BENEFITS,
   DEALER_BENEFITS_TITLE,
@@ -113,7 +114,7 @@ export default function DealerPage() {
   if (meQ.isError && !meQ.data) {
     return (
       <DealerShell title={TITLE_HUB}>
-        <ErrorState message={getLoadErrorMessage(meQ.error)} onRetry={() => void meQ.refetch()} />
+        <ErrorState message={getLoadErrorMessage(meQ.error)} onRetry={() => meQ.refetch()} />
       </DealerShell>
     );
   }
@@ -139,7 +140,7 @@ function DealerApply({ rejected, rejectionReason }: { rejected: boolean; rejecti
     cccdBackUrl: '',
   });
 
-  const mut = useMutation({
+  const mut = useLockedMutation({
     mutationFn: () => applyDealer(form),
     onSuccess: () => {
       haptic('medium');
@@ -247,9 +248,9 @@ function DealerApply({ rejected, rejectionReason }: { rejected: boolean; rejecti
         <Button
           fullWidth
           loading={mut.isPending}
-          disabled={!valid || mut.isPending}
+          disabled={!valid}
           onPress={() => mut.mutate()}
-          style={{ marginTop: 20, ...inkButton(!valid || mut.isPending) }}
+          style={{ marginTop: 20, ...inkButton(!valid) }}
         >
           Gửi hồ sơ đăng ký
         </Button>
@@ -379,7 +380,7 @@ function PriceAndOrder({ creditLimit, debt, rules }: { creditLimit: number; debt
     haptic('light');
     setQty(Object.fromEntries(items.map((i) => [i.variationId, i.quantity])));
   };
-  const saveTpl = useMutation({
+  const saveTpl = useLockedMutation({
     mutationFn: () =>
       saveTemplate(
         tplName,
@@ -394,11 +395,13 @@ function PriceAndOrder({ creditLimit, debt, rules }: { creditLimit: number; debt
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
-  const delTpl = useMutation({
+  // Khoá theo id mẫu: xoá hai mẫu khác nhau vẫn song song, chạm lặp vào cùng một mẫu thì bỏ qua.
+  const delTpl = useLockedMutation({
     mutationFn: (id: string) => deleteTemplate(id),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['dealer-templates'] }),
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
+  }, (id) => id);
+  const deletingTpl = (id: string) => delTpl.isPending && delTpl.variables === id;
 
   /** Đặt nhanh: dán "SKU<sep>SốLượng" mỗi dòng (sep = tab/phẩy/khoảng trắng) → khớp bảng giá. */
   const applyPaste = () => {
@@ -458,7 +461,7 @@ function PriceAndOrder({ creditLimit, debt, rules }: { creditLimit: number; debt
   // lại đơn cũ không đối chiếu nội dung, nên onSuccess so dòng hàng trả về với giỏ đã gửi.
   const orderKey = useRef(newIdempotencyKey());
   const navigate = useNavigate();
-  const place = useMutation({
+  const place = useLockedMutation({
     mutationFn: (method: 'CREDIT' | 'PREPAID') =>
       placeDealerOrder(
         cart.map(([variationId, quantity]) => ({ variationId, quantity })),
@@ -568,9 +571,10 @@ function PriceAndOrder({ creditLimit, debt, rules }: { creditLimit: number; debt
                 type="button"
                 className="tubu-press"
                 aria-label="Xoá mẫu đơn"
-                aria-disabled={delTpl.isPending}
-                onClick={() => { if (!delTpl.isPending) delTpl.mutate(t.id); }}
-                style={{ ...TEMPLATE_PILL_BUTTON, minWidth: 44, opacity: delTpl.isPending ? 0.5 : 1 }}
+                aria-disabled={deletingTpl(t.id) || undefined}
+                aria-busy={deletingTpl(t.id) || undefined}
+                onClick={() => delTpl.mutate(t.id)}
+                style={{ ...TEMPLATE_PILL_BUTTON, minWidth: 44, opacity: deletingTpl(t.id) ? 0.5 : 1 }}
               >
                 <Icon icon={X} size="sm" tone="danger" />
               </button>
@@ -584,9 +588,9 @@ function PriceAndOrder({ creditLimit, debt, rules }: { creditLimit: number; debt
         <Button
           fullWidth
           loading={saveTpl.isPending}
-          disabled={!tplName.trim() || saveTpl.isPending}
+          disabled={!tplName.trim()}
           onPress={() => saveTpl.mutate()}
-          style={{ marginTop: 14, ...inkButton(!tplName.trim() || saveTpl.isPending) }}
+          style={{ marginTop: 14, ...inkButton(!tplName.trim()) }}
         >
           Lưu mẫu
         </Button>
@@ -640,7 +644,7 @@ function PriceAndOrder({ creditLimit, debt, rules }: { creditLimit: number; debt
             ))}
           </div>
         ) : priceQ.isError ? (
-          <ErrorState message={getLoadErrorMessage(priceQ.error)} onRetry={() => void priceQ.refetch()} />
+          <ErrorState message={getLoadErrorMessage(priceQ.error)} onRetry={() => priceQ.refetch()} />
         ) : rows.length > 0 ? (
           rows.map((r, i) => (
             <PriceRow
@@ -707,7 +711,7 @@ function PriceAndOrder({ creditLimit, debt, rules }: { creditLimit: number; debt
             <Button
               variant="secondary"
               loading={placing}
-              disabled={placing || belowMin}
+              disabled={belowMin}
               onPress={() => place.mutate('PREPAID')}
               style={{ flex: 1 }}
             >
@@ -718,9 +722,9 @@ function PriceAndOrder({ creditLimit, debt, rules }: { creditLimit: number; debt
             <Button
               fullWidth
               loading={placing}
-              disabled={overLimit || placing || belowMin}
+              disabled={overLimit || belowMin}
               onPress={() => place.mutate('CREDIT')}
-              style={inkButton(overLimit || placing || belowMin)}
+              style={inkButton(overLimit || belowMin)}
             >
               Ghi công nợ
             </Button>
@@ -810,7 +814,7 @@ function DealerOrders({ onOrderFirst }: { onOrderFirst: () => void }) {
           <Skeleton height={80} radius="var(--radius-card)" />
         </div>
       ) : ordersQ.isError ? (
-        <ErrorState message={getLoadErrorMessage(ordersQ.error)} onRetry={() => void ordersQ.refetch()} />
+        <ErrorState message={getLoadErrorMessage(ordersQ.error)} onRetry={() => ordersQ.refetch()} />
       ) : ordersQ.data && ordersQ.data.length > 0 ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {ordersQ.data.map((o) => {
@@ -893,7 +897,7 @@ function DealerCredit() {
   // admin tự kiểm tra sao kê ngân hàng và xác nhận. Giữ Idempotency-Key để tương thích payCredit()
   // hiện có (BE không còn dùng để trừ nợ, chỉ có tác dụng nếu tương lai cần dedupe thông báo).
   const payKey = useRef(newIdempotencyKey());
-  const pay = useMutation({
+  const pay = useLockedMutation({
     mutationFn: () => payCredit(Number(amount), payKey.current, 'Báo đã chuyển khoản'),
     onSuccess: (res) => {
       haptic('medium');
@@ -923,12 +927,12 @@ function DealerCredit() {
   if (ledgerQ.isError && !ledgerQ.data) {
     return (
       <div style={{ margin: '0 16px', paddingBottom: 24 }}>
-        <ErrorState message={getLoadErrorMessage(ledgerQ.error)} onRetry={() => void ledgerQ.refetch()} />
+        <ErrorState message={getLoadErrorMessage(ledgerQ.error)} onRetry={() => ledgerQ.refetch()} />
       </div>
     );
   }
 
-  const payDisabled = !Number.isFinite(Number(amount)) || Number(amount) <= 0 || Number(amount) > balance || pay.isPending;
+  const payDisabled = !Number.isFinite(Number(amount)) || Number(amount) <= 0 || Number(amount) > balance;
 
   return (
     <div style={{ margin: '0 16px', paddingBottom: 24 }}>
@@ -1023,7 +1027,7 @@ function DealerReport() {
   if (!q.data) {
     return (
       <div style={{ margin: '0 16px' }}>
-        <ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => void q.refetch()} />
+        <ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => q.refetch()} />
       </div>
     );
   }
@@ -1143,7 +1147,8 @@ function DealerRewardsCard() {
   const q = useQuery({ queryKey: ['dealer-rewards'], queryFn: getDealerRewards });
   const rewards = q.data?.rewards ?? [];
 
-  const claimMut = useMutation({
+  // Khoá theo (phần thưởng, kỳ): chạm lặp vào cùng một dòng thì bỏ qua, hai dòng khác nhau vẫn độc lập.
+  const claimMut = useLockedMutation({
     mutationFn: (v: { rewardId: string; periodKey: string }) => claimDealerReward(v.rewardId, v.periodKey),
     onSuccess: (res, v) => {
       haptic('heavy');
@@ -1168,7 +1173,7 @@ function DealerRewardsCard() {
       // Hết hạn / tụt doanh số... → tải lại để nút và trạng thái khớp backend.
       void qc.invalidateQueries({ queryKey: ['dealer-rewards'] });
     },
-  });
+  }, (v) => `${v.rewardId}:${v.periodKey}`);
 
   if (!rewards.length) return null;
   const pendingKey = claimMut.isPending ? `${claimMut.variables?.rewardId}|${claimMut.variables?.periodKey}` : null;
@@ -1182,6 +1187,7 @@ function DealerRewardsCard() {
         const pct = r.threshold > 0 ? Math.min(100, Math.round((r.volume / r.threshold) * 100)) : 100;
         const view = rewardClaimView(r);
         const rowKey = `${r.id}|${r.periodKey}`;
+        const claiming = claimMut.isPending && pendingKey === rowKey;
         return (
           <div key={rowKey} style={{ padding: '8px 0', borderBottom: '1px solid var(--color-border-subtle)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
@@ -1218,10 +1224,10 @@ function DealerRewardsCard() {
               )}
               {view.showClaimButton && (
                 <Button
-                  disabled={claimMut.isPending}
-                  loading={claimMut.isPending && pendingKey === rowKey}
+                  disabled={claimMut.isPending && !claiming}
+                  loading={claiming}
                   onPress={() => claimMut.mutate({ rewardId: r.id, periodKey: r.periodKey })}
-                  style={{ flexShrink: 0, ...inkButton(claimMut.isPending) }}
+                  style={{ flexShrink: 0, ...inkButton(claimMut.isPending && !claiming) }}
                 >
                   Yêu cầu nhận thưởng
                 </Button>
