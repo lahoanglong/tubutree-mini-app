@@ -4,7 +4,10 @@ import { useEffect, useId, useRef } from 'react';
 import { Landmark, Wallet } from 'lucide-react';
 import { fetchRefundBank } from '@/lib/shop-client';
 import { ui } from '@/lib/guest-ui';
-import type { RefundBankInput, RefundMethodChoice } from '@/lib/refund-rules';
+import { bankDetailsError, type RefundBankInput, type RefundMethodChoice } from '@/lib/refund-rules';
+
+// Bộ tài khoản hợp lệ mẫu: thay riêng ô đang xét bằng giá trị khách gõ rồi hỏi luật kiểm chung, để chỉ ô còn sai mới bị đánh dấu mà không chép lại luật.
+const VALID_BANK: RefundBankInput = { bankName: 'Vietcombank', accountNumber: '0123456789', accountName: 'NGUYEN AN' };
 
 interface Props {
   method: RefundMethodChoice;
@@ -69,19 +72,22 @@ export function RefundDestinationPicker({
     label: string,
     key: keyof RefundBankInput,
     extra: { inputMode?: 'numeric'; placeholder?: string } = {},
-  ) => (
-    <label className="block">
-      <span className="text-field-label text-stone-700">{label}</span>
-      <input
-        value={bank[key]}
-        onChange={(e) => onBank({ ...bank, [key]: e.target.value })}
-        maxLength={key === 'accountNumber' ? 40 : 120}
-        aria-invalid={bankError ? true : undefined}
-        className={`${bankError ? ui.fieldError : ui.field} mt-1`}
-        {...extra}
-      />
-    </label>
-  );
+  ) => {
+    const invalid = Boolean(bankError) && bankDetailsError({ ...VALID_BANK, [key]: bank[key] }) !== null;
+    return (
+      <label className="block">
+        <span className="text-field-label text-stone-700">{label}</span>
+        <input
+          value={bank[key]}
+          onChange={(e) => onBank({ ...bank, [key]: e.target.value })}
+          maxLength={key === 'accountNumber' ? 40 : 120}
+          aria-invalid={invalid ? true : undefined}
+          className={`${invalid ? ui.fieldError : ui.field} mt-1`}
+          {...extra}
+        />
+      </label>
+    );
+  };
 
   return (
     <div role="radiogroup" aria-label="Nơi nhận tiền hoàn" className="space-y-2">
