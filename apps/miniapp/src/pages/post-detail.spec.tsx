@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -312,5 +312,116 @@ describe('PostDetailPage — tiêu đề, vùng chạm, biểu tượng (C-076, 
     expect(await screen.findByRole('heading', { name: 'Báo cáo' })).toBeInTheDocument();
     const submit = screen.getAllByRole('button', { name: 'Báo cáo' });
     expect(screen.getByTestId('bottom-sheet-body').contains(submit[submit.length - 1]!)).toBe(false);
+  });
+});
+
+describe('PostDetailPage: Báo cáo khoá chạm đúp, lỗi tại chỗ (W74A)', () => {
+  const openReport = async () => {
+    await screen.findByText('Lan Anh');
+    fireEvent.click(screen.getAllByRole('button', { name: 'Báo cáo' })[0]!);
+    const reason = await screen.findByPlaceholderText('Lý do báo cáo…');
+    fireEvent.change(reason, { target: { value: 'Spam' } });
+    const submit = screen.getAllByRole('button', { name: 'Báo cáo' });
+    return submit[submit.length - 1]!;
+  };
+
+  it('chạm đúp "Báo cáo" trong cùng một khung hình chỉ gửi một báo cáo', async () => {
+    let resolve!: (v: unknown) => void;
+    mocks.reportContent.mockReturnValueOnce(new Promise((res) => { resolve = res; }));
+    renderPage();
+    const submit = await openReport();
+    await act(async () => {
+      fireEvent.click(submit);
+      fireEvent.click(submit);
+    });
+    expect(mocks.reportContent).toHaveBeenCalledTimes(1);
+    await act(async () => resolve({ ok: true }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'success' })));
+    expect(mocks.reportContent).toHaveBeenCalledTimes(1);
+  });
+
+  it('gửi lỗi: báo tại chỗ trong sheet (role=alert), nhả khoá để gửi lại; đóng sheet thì xoá cảnh báo', async () => {
+    mocks.reportContent.mockRejectedValueOnce(new Error('Bạn đã báo cáo rồi')).mockResolvedValue({ ok: true });
+    renderPage();
+    const submit = await openReport();
+    fireEvent.click(submit);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Bạn đã báo cáo rồi');
+    expect(mocks.openSnackbar).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'error' }));
+    fireEvent.click(submit);
+    await waitFor(() => expect(mocks.reportContent).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+  });
+
+  it('đóng sheet rồi mở lại: không còn cảnh báo lỗi của lần trước', async () => {
+    mocks.reportContent.mockRejectedValueOnce(new Error('Bạn đã báo cáo rồi'));
+    renderPage();
+    const submit = await openReport();
+    fireEvent.click(submit);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Bạn đã báo cáo rồi');
+    fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+    await waitFor(() => expect(screen.queryByPlaceholderText('Lý do báo cáo…')).toBeNull());
+    fireEvent.click(screen.getAllByRole('button', { name: 'Báo cáo' })[0]!);
+    await screen.findByPlaceholderText('Lý do báo cáo…');
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+});
+
+describe('PostDetailPage: đóng sheet báo cáo khi đang gửi (W74A)', () => {
+  it('không bỏ theo dõi lần gửi: mở lại vẫn báo bận, không gửi lần hai, lỗi đến sau vẫn hiện', async () => {
+    let reject!: (e: unknown) => void;
+    mocks.reportContent.mockReturnValueOnce(new Promise((_, rej) => { reject = rej; }));
+    renderPage();
+    await screen.findByText('Lan Anh');
+    fireEvent.click(screen.getAllByRole('button', { name: 'Báo cáo' })[0]!);
+    fireEvent.change(await screen.findByPlaceholderText('Lý do báo cáo…'), { target: { value: 'Spam' } });
+    const buttons = screen.getAllByRole('button', { name: 'Báo cáo' });
+    await act(async () => {
+      fireEvent.click(buttons[buttons.length - 1]!);
+    });
+    await waitFor(() => {
+      const b = screen.getAllByRole('button', { name: 'Báo cáo' });
+      expect(b[b.length - 1]).toHaveAttribute('aria-busy', 'true');
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+    await waitFor(() => expect(screen.queryByPlaceholderText('Lý do báo cáo…')).toBeNull());
+    fireEvent.click(screen.getAllByRole('button', { name: 'Báo cáo' })[0]!);
+    const reopened = await screen.findByPlaceholderText('Lý do báo cáo…');
+    fireEvent.change(reopened, { target: { value: 'Spam' } });
+    await waitFor(() => {
+      const b = screen.getAllByRole('button', { name: 'Báo cáo' });
+      expect(b[b.length - 1]).toHaveAttribute('aria-busy', 'true');
+    });
+    const b = screen.getAllByRole('button', { name: 'Báo cáo' });
+    await act(async () => {
+      fireEvent.click(b[b.length - 1]!);
+    });
+    expect(mocks.reportContent).toHaveBeenCalledTimes(1);
+    await act(async () => reject(new Error('Bạn đã báo cáo rồi')));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Bạn đã báo cáo rồi');
+  });
+});
+
+describe('PostDetailPage: "Thử lại" chạm đúp (W74A)', () => {
+  const deferred = () => {
+    let resolve!: (v: unknown) => void;
+    const promise = new Promise((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+
+  it('lỗi tải bài: chạm đúp "Thử lại" chỉ tải lại một lần', async () => {
+    const d = deferred();
+    mocks.getPost.mockRejectedValueOnce(new Error('mất mạng')).mockReturnValueOnce(d.promise);
+    renderPage();
+    await screen.findByText('mất mạng');
+    const retry = btn('Thử lại');
+    await act(async () => {
+      fireEvent.click(retry);
+      fireEvent.click(retry);
+    });
+    expect(mocks.getPost).toHaveBeenCalledTimes(2);
+    await act(async () => d.resolve(POST()));
+    expect(await screen.findByText('Lan Anh')).toBeInTheDocument();
   });
 });

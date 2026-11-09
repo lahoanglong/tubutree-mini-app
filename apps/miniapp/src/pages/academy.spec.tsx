@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -225,14 +225,38 @@ describe('AcademyPage — chi tiết khoá học, hành vi giữ nguyên khi chu
     await waitFor(() => expect(mocks.fetchCourse).toHaveBeenCalledTimes(2));
   });
 
-  it('đánh dấu lỗi: hiện thông báo lỗi, không rung, không tải lại', async () => {
+  it('đánh dấu lỗi: báo tại chỗ (role=alert), không rung, không tải lại', async () => {
     mocks.completeLesson.mockRejectedValue(new Error('Không có quyền'));
     renderPage();
     await screen.findByText('Khoá bán hàng');
     fireEvent.click(screen.getAllByRole('button', { name: viText.academy.markDone })[0]!);
-    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Không có quyền', type: 'error' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Không có quyền');
     expect(mocks.haptic).not.toHaveBeenCalled();
     expect(mocks.fetchCourse).toHaveBeenCalledTimes(1);
+  });
+
+  it('đánh dấu lỗi: cảnh báo nằm ngay dưới nút của đúng bài vừa bấm (không ở đầu trang)', async () => {
+    mocks.completeLesson.mockRejectedValue(new Error('Không có quyền'));
+    renderPage();
+    await screen.findByText('Khoá bán hàng');
+    const [first, second] = screen.getAllByRole('button', { name: viText.academy.markDone });
+    fireEvent.click(second!);
+    const alert = await screen.findByRole('alert');
+    expect(alert.parentElement).toContainElement(second!);
+    expect(alert.parentElement).not.toContainElement(first!);
+  });
+
+  it('chạm hai bài khác nhau trong cùng một khung hình chỉ gửi bài đầu', async () => {
+    mocks.completeLesson.mockReturnValue(new Promise(() => {}));
+    renderPage();
+    await screen.findByText('Khoá bán hàng');
+    const [first, second] = screen.getAllByRole('button', { name: viText.academy.markDone });
+    await act(async () => {
+      fireEvent.click(first!);
+      fireEvent.click(second!);
+    });
+    expect(mocks.completeLesson).toHaveBeenCalledTimes(1);
+    expect(mocks.completeLesson).toHaveBeenCalledWith('l1');
   });
 
   it('đang đánh dấu một bài: không bấm thêm được bài nào khác', async () => {
@@ -372,5 +396,90 @@ describe('AcademyPage — khách thường (API trả 403)', () => {
     renderPage();
     expect(await screen.findByRole('button', { name: 'Thử lại' })).toBeInTheDocument();
     expect(screen.queryByText(NOTICE_TITLE)).toBeNull();
+  });
+});
+
+describe('AcademyPage: đánh dấu hoàn thành khoá chạm đúp (W74A)', () => {
+  beforeEach(() => {
+    mocks.params = { courseId: 'c1' };
+  });
+
+  const deferred = () => {
+    let resolve!: (v: unknown) => void;
+    let reject!: (e: unknown) => void;
+    const promise = new Promise((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+
+  it('chạm đúp "Đánh dấu hoàn thành" trong cùng một khung hình chỉ gọi completeLesson một lần', async () => {
+    const d = deferred();
+    mocks.completeLesson.mockReturnValueOnce(d.promise);
+    renderPage();
+    await screen.findByText('Khoá bán hàng');
+    const btn = screen.getAllByRole('button', { name: viText.academy.markDone })[0]!;
+    await act(async () => {
+      fireEvent.click(btn);
+      fireEvent.click(btn);
+    });
+    expect(mocks.completeLesson).toHaveBeenCalledTimes(1);
+    await act(async () => d.resolve({ ok: true }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'success' })));
+    expect(mocks.completeLesson).toHaveBeenCalledTimes(1);
+  });
+
+  it('lỗi thì nhả khoá: bấm lại gọi lần hai và xoá cảnh báo cũ', async () => {
+    mocks.completeLesson.mockRejectedValueOnce(new Error('Không có quyền')).mockResolvedValue({ ok: true });
+    renderPage();
+    await screen.findByText('Khoá bán hàng');
+    fireEvent.click(screen.getAllByRole('button', { name: viText.academy.markDone })[0]!);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Không có quyền');
+    fireEvent.click(screen.getAllByRole('button', { name: viText.academy.markDone })[0]!);
+    await waitFor(() => expect(mocks.completeLesson).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+  });
+});
+
+describe('AcademyPage: "Thử lại" chạm đúp (W74A)', () => {
+  const deferred = () => {
+    let resolve!: (v: unknown) => void;
+    const promise = new Promise((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+
+  it('danh sách khoá lỗi: chạm đúp "Thử lại" chỉ tải lại một lần', async () => {
+    const d = deferred();
+    mocks.params = {};
+    mocks.fetchCourses.mockRejectedValueOnce(new Error('mất mạng')).mockReturnValueOnce(d.promise);
+    renderPage();
+    await screen.findByText('mất mạng');
+    const retry = screen.getByRole('button', { name: 'Thử lại' });
+    await act(async () => {
+      fireEvent.click(retry);
+      fireEvent.click(retry);
+    });
+    expect(mocks.fetchCourses).toHaveBeenCalledTimes(2);
+    await act(async () => d.resolve([COURSE('a')]));
+    expect(await screen.findByText('Khoá a')).toBeInTheDocument();
+  });
+
+  it('chi tiết khoá lỗi: chạm đúp "Thử lại" chỉ tải lại một lần', async () => {
+    const d = deferred();
+    mocks.params = { courseId: 'c1' };
+    mocks.fetchCourse.mockRejectedValueOnce(new Error('mất mạng')).mockReturnValueOnce(d.promise);
+    renderPage();
+    await screen.findByText('mất mạng');
+    const retry = screen.getByRole('button', { name: 'Thử lại' });
+    await act(async () => {
+      fireEvent.click(retry);
+      fireEvent.click(retry);
+    });
+    expect(mocks.fetchCourse).toHaveBeenCalledTimes(2);
+    await act(async () => d.resolve(DETAIL()));
+    expect(await screen.findByText('Khoá bán hàng')).toBeInTheDocument();
   });
 });

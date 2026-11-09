@@ -520,3 +520,29 @@ describe('FeedPage: khung chờ giống thẻ bài thật (không nhảy khi bà
     expect(screen.queryByTestId('post-card-skeleton')).toBeNull();
   });
 });
+
+describe('FeedPage: "Thử lại" chạm đúp (W74A)', () => {
+  const deferred = () => {
+    let resolve!: (v: unknown) => void;
+    const promise = new Promise((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+
+  it('lỗi tải: chạm đúp "Thử lại" trong cùng một khung hình chỉ tải lại một lần', async () => {
+    const d = deferred();
+    mocks.getFeed.mockRejectedValueOnce(new Error('mất mạng')).mockReturnValueOnce(d.promise);
+    renderPage();
+    await screen.findByText('mất mạng');
+    const retry = screen.getByRole('button', { name: 'Thử lại' });
+    await act(async () => {
+      fireEvent.click(retry);
+      fireEvent.click(retry);
+    });
+    expect(mocks.getFeed).toHaveBeenCalledTimes(2);
+    await act(async () => d.resolve({ posts: [POST('p1', 'Lan Anh')], nextCursor: null }));
+    expect(await screen.findByText('Lan Anh')).toBeInTheDocument();
+    expect(mocks.getFeed).toHaveBeenCalledTimes(2);
+  });
+});

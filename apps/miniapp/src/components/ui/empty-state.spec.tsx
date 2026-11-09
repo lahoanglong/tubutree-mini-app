@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, it, expect, vi } from 'vitest';
 
@@ -133,5 +133,40 @@ describe('ErrorState — khác trạng thái rỗng (D7 mục 5)', () => {
     render(<ErrorState message="Lỗi" onRetry={() => {}} />);
     const btn = screen.getByText('Thử lại').closest('.zaui-btn') as HTMLElement;
     expect(parseInt(btn.style.minHeight, 10)).toBeGreaterThanOrEqual(44);
+  });
+});
+
+describe('ErrorState: "Thử lại" khoá khi onRetry trả Promise (W74A)', () => {
+  it('chạm đúp trong cùng một khung hình chỉ gọi onRetry một lần, xong thì bấm lại được', async () => {
+    let resolve!: (v: unknown) => void;
+    const onRetry = vi.fn().mockReturnValueOnce(new Promise((res) => { resolve = res; })).mockResolvedValue(undefined);
+    render(withClient(<ErrorState message="Lỗi" onRetry={onRetry} />));
+    const btn = screen.getByText('Thử lại');
+    await act(async () => {
+      fireEvent.click(btn);
+      fireEvent.click(btn);
+    });
+    expect(onRetry).toHaveBeenCalledTimes(1);
+    await act(async () => resolve(undefined));
+    fireEvent.click(screen.getByText('Thử lại'));
+    expect(onRetry).toHaveBeenCalledTimes(2);
+  });
+
+  it('onRetry không trả Promise: không khoá, mỗi cú chạm gọi một lần', () => {
+    const onRetry = vi.fn();
+    render(withClient(<ErrorState message="Lỗi" onRetry={onRetry} />));
+    fireEvent.click(screen.getByText('Thử lại'));
+    fireEvent.click(screen.getByText('Thử lại'));
+    expect(onRetry).toHaveBeenCalledTimes(2);
+  });
+
+  it('onRetry trả Promise bị từ chối vẫn nhả khoá', async () => {
+    const onRetry = vi.fn().mockRejectedValueOnce(new Error('x')).mockResolvedValue(undefined);
+    render(withClient(<ErrorState message="Lỗi" onRetry={onRetry} />));
+    await act(async () => {
+      fireEvent.click(screen.getByText('Thử lại'));
+    });
+    fireEvent.click(screen.getByText('Thử lại'));
+    expect(onRetry).toHaveBeenCalledTimes(2);
   });
 });

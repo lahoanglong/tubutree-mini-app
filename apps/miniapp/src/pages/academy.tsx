@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Page, useSnackbar, useNavigate, useParams } from 'zmp-ui';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useLockedMutation } from '../components/game/use-locked-mutation';
 import { PlayCircle, FileText, CheckCircle2, BookOpen } from 'lucide-react';
 import {
   fetchCourses,
@@ -83,7 +84,7 @@ function CourseList({ onOpen, onBackToCtv }: { onOpen: (id: string) => void; onB
       ) : !allowed || (q.isError && isForbidden(q.error)) ? (
         <CtvOnlyNotice />
       ) : q.isError ? (
-        <ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => void q.refetch()} />
+        <ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => q.refetch()} />
       ) : q.data && q.data.length > 0 ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {q.data.map((c) => (
@@ -157,16 +158,17 @@ function CourseDetail({ courseId }: { courseId: string }) {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ['academy-course', courseId], queryFn: () => fetchCourse(courseId) });
 
-  const complete = useMutation({
-    mutationFn: (lessonId: string) => completeLesson(lessonId),
-    onSuccess: () => {
-      haptic('medium');
-      openSnackbar({ text: vi.academy.markDoneOk, type: 'success' });
-      void qc.invalidateQueries({ queryKey: ['academy-course', courseId] });
-      void qc.invalidateQueries({ queryKey: ['academy-courses'] });
+  const complete = useLockedMutation(
+    {
+      mutationFn: (lessonId: string) => completeLesson(lessonId),
+      onSuccess: () => {
+        haptic('medium');
+        openSnackbar({ text: vi.academy.markDoneOk, type: 'success' });
+        void qc.invalidateQueries({ queryKey: ['academy-course', courseId] });
+        void qc.invalidateQueries({ queryKey: ['academy-courses'] });
+      },
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
+  );
 
   return (
     <div style={{ padding: 16 }}>
@@ -175,12 +177,13 @@ function CourseDetail({ courseId }: { courseId: string }) {
       ) : q.isError && isForbidden(q.error) ? (
         <CtvOnlyNotice />
       ) : q.isError ? (
-        <ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => void q.refetch()} />
+        <ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => q.refetch()} />
       ) : q.data ? (
         <CourseDetailBody
           course={q.data}
           onComplete={(id) => complete.mutate(id)}
           completingId={complete.isPending ? complete.variables : undefined}
+          failure={complete.isError && complete.variables ? { lessonId: complete.variables, message: getErrorMessage(complete.error), key: complete.submittedAt } : undefined}
         />
       ) : null}
     </div>
@@ -191,10 +194,12 @@ function CourseDetailBody({
   course,
   onComplete,
   completingId,
+  failure,
 }: {
   course: AcademyCourseDetail;
   onComplete: (lessonId: string) => void;
   completingId: string | undefined;
+  failure?: { lessonId: string; message: string; key: number };
 }) {
   return (
     <div>
@@ -253,6 +258,11 @@ function CourseDetailBody({
               >
                 {done ? vi.academy.alreadyDone : vi.academy.markDone}
               </Button>
+              {failure?.lessonId === lesson.id && (
+                <div key={failure.key} role="alert" style={{ marginTop: 'var(--space-stack-xs)' }}>
+                  <Text variant="body-sm" tone="danger">{failure.message}</Text>
+                </div>
+              )}
             </Card>
           );
         })}
