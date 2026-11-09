@@ -28,7 +28,7 @@ const OPEN_STATUSES: readonly string[] = ['OPEN', 'IN_TRANSIT', 'RECEIVED'];
 
 function Shell({ children }: { children: ReactNode }) {
   return (
-    <main className="mx-auto max-w-3xl space-y-4 px-4 py-6 pb-12">
+    <main className="mx-auto max-w-3xl space-y-4 px-4 py-6 pb-12 tabular-nums">
       <PageHeader title="Yêu cầu của tôi" backHref="/doi-rac" backLabel="Đổi rác lấy quà" />
       {children}
     </main>

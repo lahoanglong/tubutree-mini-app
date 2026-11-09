@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { QueryClient } from '@tanstack/react-query';
 import { affiliateDashboardQuery } from '@tubutree/app-core/queries/affiliate';
@@ -26,6 +27,9 @@ const state = vi.hoisted(() => ({
   share: vi.fn(),
   copied: [] as string[],
   registerGate: null as null | Promise<unknown>,
+  meGate: null as null | Promise<unknown>,
+  linksGate: null as null | Promise<unknown>,
+  postFail: new Set<string>(),
   dashGate: null as null | Promise<unknown>,
   walletGate: null as null | Promise<unknown>,
   routeReady: { gianHang: true },
@@ -58,12 +62,18 @@ vi.mock('@/lib/core-http', () => ({
     get: async (path: string, opts?: { query?: Record<string, unknown> }) => {
       state.calls.push({ method: 'get', path, ...(opts?.query && Object.keys(opts.query).length > 0 ? { query: opts.query } : {}) });
       if (state.fail.has(path)) throw new Error('mất mạng');
-      if (path === '/affiliate/me') return state.me;
+      if (path === '/affiliate/me') {
+        await state.meGate;
+        return state.me;
+      }
       if (path === '/affiliate/dashboard') {
         await state.dashGate;
         return state.dash;
       }
-      if (path === '/affiliate/links') return state.links;
+      if (path === '/affiliate/links') {
+        await state.linksGate;
+        return state.links;
+      }
       if (path === '/affiliate/commissions') return pageOf(state.commissions, opts?.query);
       if (path === '/affiliate/payouts') return pageOf(state.payouts, opts?.query);
       if (path === '/affiliate/tiers') return state.tiers;
@@ -82,6 +92,7 @@ vi.mock('@/lib/core-http', () => ({
     post: async (path: string, body?: unknown) => {
       state.calls.push({ method: 'post', path, body });
       if (path === '/affiliate/register') await state.registerGate;
+      if (state.postFail.has(path)) throw new Error('mất mạng');
       return { ok: true, referralCode: 'TUBU88', shortCode: 'x' };
     },
   },
@@ -128,6 +139,9 @@ beforeEach(() => {
   state.calls = [];
   state.share = vi.fn(async () => 'shared');
   state.registerGate = null;
+  state.meGate = null;
+  state.linksGate = null;
+  state.postFail = new Set();
   state.dashGate = null;
   state.walletGate = null;
   state.routeReady.gianHang = true;
@@ -902,5 +916,156 @@ describe('/ctv — kiểu Mini App ở điện thoại (trạng thái rỗng, m�
     const commissionEmpty = Array.from(b.container.querySelectorAll('section')).find((s) => s.getAttribute('aria-label') === 'Lịch sử hoa hồng')!;
     expect(commissionEmpty.textContent).toContain('Chưa có hoa hồng');
     expect(commissionEmpty.querySelector('svg[aria-hidden]')).not.toBeNull();
+  });
+});
+
+// Khoá chống gửi hai lần của Đăng ký CTV và + Tạo link: hai cú chạm trong CÙNG một act, nút đang gửi không `disabled` thật,
+// khoá giữ tới khi dữ liệu mới về, lời báo có hai vùng luôn hiện diện (alert cho lỗi, status cho thành công).
+const twice = (el: Element | null) =>
+  act(() => {
+    (el as HTMLElement).click();
+    (el as HTMLElement).click();
+  });
+function deferred<T = void>() {
+  let resolve!: (v: T) => void;
+  let reject!: (e: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+const alertRegion = (c: HTMLElement) => c.querySelector<HTMLElement>('main > .mt-4 > [role="alert"]');
+const formAlert = (c: HTMLElement) => c.querySelector<HTMLElement>('main [role="alert"]');
+const formStatus = (c: HTMLElement) => c.querySelector<HTMLElement>('main [role="status"]');
+const statusRegion = (c: HTMLElement) => c.querySelector<HTMLElement>('main > .mt-4 > [role="status"]');
+
+describe('/ctv — khoá Đăng ký CTV (cùng một act)', () => {
+  let scrollSpy: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => {
+    state.me = { isAffiliate: false, referralCode: '', walletBalance: 0 };
+    scrollSpy = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+  });
+  afterEach(() => scrollSpy.mockRestore());
+
+  it('chạm đúp trong cùng một act chỉ một POST; nút đang gửi không disabled, aria-busy + aria-disabled, focus không rời nút', async () => {
+    const gate = deferred();
+    state.registerGate = gate.promise;
+    const { container } = mount();
+    await flush();
+    click(container.querySelector('input[type="checkbox"]'));
+    const btn = byText(container, 'button', 'Đăng ký miễn phí ngay') as HTMLButtonElement;
+    btn.focus();
+    await twice(btn);
+    await flush();
+    expect(posts()).toHaveLength(1);
+    expect(byText(container, 'button', 'Đang đăng ký…')).toBe(btn);
+    expect(btn.disabled).toBe(false);
+    expect(btn.getAttribute('aria-busy')).toBe('true');
+    expect(btn.getAttribute('aria-disabled')).toBe('true');
+    expect(document.activeElement).toBe(btn);
+    gate.resolve();
+    await flush();
+  });
+
+  it('thành công: khoá giữ tới khi hồ sơ CTV mới về; bấm thêm lúc đó không gửi đăng ký lần hai', async () => {
+    const { container } = mount();
+    await flush();
+    click(container.querySelector('input[type="checkbox"]'));
+    const btn = byText(container, 'button', 'Đăng ký miễn phí ngay') as HTMLButtonElement;
+    const meGate = deferred();
+    state.meGate = meGate.promise;
+    click(btn);
+    await flush();
+    expect(posts()).toHaveLength(1);
+    expect(btn.getAttribute('aria-busy')).toBe('true');
+    click(btn);
+    await flush();
+    expect(posts()).toHaveLength(1);
+    expect(formStatus(container)?.textContent).toContain('Chào mừng CTV Tubu Tree!');
+    expect(formAlert(container)?.textContent).toBe('');
+    state.me = { isAffiliate: true, referralCode: 'TUBU88', walletBalance: 0 };
+    meGate.resolve();
+    await flush();
+    expect(container.textContent).toContain('Có thể chuyển vào Ví');
+    expect(posts()).toHaveLength(1);
+  });
+
+  it('lỗi: báo trong vùng role=alert (vùng status rỗng), nhả khoá và gỡ aria-busy để thử lại', async () => {
+    const gate = deferred();
+    state.registerGate = gate.promise;
+    const { container } = mount();
+    await flush();
+    expect(formAlert(container)).not.toBeNull();
+    expect(formStatus(container)).not.toBeNull();
+    expect(formAlert(container)?.textContent).toBe('');
+    click(container.querySelector('input[type="checkbox"]'));
+    const btn = byText(container, 'button', 'Đăng ký miễn phí ngay') as HTMLButtonElement;
+    state.postFail.add('/affiliate/register');
+    click(btn);
+    await flush();
+    gate.resolve();
+    await flush();
+    expect(formAlert(container)?.textContent).not.toBe('');
+    expect(formStatus(container)?.textContent).toBe('');
+    expect(btn.hasAttribute('aria-busy')).toBe(false);
+    expect(btn.hasAttribute('aria-disabled')).toBe(false);
+    state.postFail.clear();
+    state.registerGate = null;
+    state.me = { isAffiliate: true, referralCode: 'TUBU88', walletBalance: 0 };
+    click(btn);
+    await flush();
+    expect(posts()).toHaveLength(2);
+  });
+});
+
+describe('/ctv — khoá + Tạo link (cùng một act)', () => {
+  it('chạm đúp trong cùng một act chỉ một POST; khoá giữ tới khi danh sách link mới về rồi nhả', async () => {
+    state.tab = 'share';
+    const { container } = mount();
+    await flush();
+    const btn = byText(container, 'button', '+ Tạo link') as HTMLButtonElement;
+    btn.focus();
+    const linksGate = deferred();
+    state.linksGate = linksGate.promise;
+    await twice(btn);
+    await flush();
+    expect(posts()).toHaveLength(1);
+    expect(btn.disabled).toBe(false);
+    expect(btn.getAttribute('aria-busy')).toBe('true');
+    expect(btn.getAttribute('aria-disabled')).toBe('true');
+    expect(document.activeElement).toBe(btn);
+    expect(statusRegion(container)?.textContent).toContain('Đã tạo link chia sẻ mới');
+    // POST đã xong nhưng danh sách link chưa về: bấm lúc này sẽ tạo thêm một link nữa trên số liệu cũ.
+    click(btn);
+    await flush();
+    expect(posts()).toHaveLength(1);
+    state.links = [{ id: 'l1', shortCode: 'abc123', targetType: 'HOMEPAGE', targetId: null, clicks: 0, conversions: 0, revenue: 0, createdAt: '2026-10-01T00:00:00Z' }];
+    linksGate.resolve();
+    await flush();
+    expect(btn.hasAttribute('aria-busy')).toBe(false);
+    expect(container.textContent).toContain('0 lượt bấm');
+    click(btn);
+    await flush();
+    expect(posts()).toHaveLength(2);
+  });
+
+  it('lỗi: báo trong vùng role=alert (vùng status rỗng) và nhả khoá để thử lại', async () => {
+    state.tab = 'share';
+    state.postFail.add('/affiliate/links');
+    const { container } = mount();
+    await flush();
+    const btn = byText(container, 'button', '+ Tạo link') as HTMLButtonElement;
+    click(btn);
+    await flush();
+    expect(alertRegion(container)?.textContent).not.toBe('');
+    expect(statusRegion(container)?.textContent).toBe('');
+    expect(btn.hasAttribute('aria-busy')).toBe(false);
+    state.postFail.clear();
+    click(btn);
+    await flush();
+    expect(posts()).toHaveLength(2);
+    expect(statusRegion(container)?.textContent).toContain('Đã tạo link chia sẻ mới');
+    expect(alertRegion(container)?.textContent).toBe('');
   });
 });

@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
+import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
+import { smallTouchTargets } from '@/test-utils/a11y';
 
 type Call = { path: string; body?: unknown; headers?: Record<string, string> };
 
@@ -9,6 +11,7 @@ const state = vi.hoisted(() => ({
   config: {} as Record<string, unknown>,
   configGate: null as null | Promise<unknown>,
   configFail: false,
+  configGets: 0,
   payout: (() => ({ ok: true })) as () => unknown,
 }));
 
@@ -16,6 +19,7 @@ vi.mock('@/lib/core-http', () => ({
   coreHttp: {
     get: async (path: string) => {
       if (path === '/config/public') {
+        state.configGets += 1;
         await state.configGate;
         if (state.configFail) throw new Error('config lỗi');
         return state.config;
@@ -47,6 +51,7 @@ beforeEach(() => {
   state.config = {};
   state.configGate = null;
   state.configFail = false;
+  state.configGets = 0;
   state.payout = () => ({ ok: true });
   done.mockReset();
 });
@@ -188,5 +193,135 @@ describe('TransferSheet — chuyển hoa hồng vào Ví', () => {
     click(b);
     await flush();
     expect(posts()).toHaveLength(1);
+  });
+});
+
+// Khoá gửi lệnh rút hoa hồng: hai cú chạm trong CÙNG một act (không có lần vẽ lại xen giữa) phải chỉ ra một lệnh, nút đang gửi
+// không `disabled` thật (Chromium thả focus về body) mà báo aria-busy/aria-disabled, sheet không đóng được khi lệnh còn bay.
+const twice = (el: Element) =>
+  act(() => {
+    (el as HTMLElement).click();
+    (el as HTMLElement).click();
+  });
+function deferred<T>() {
+  let resolve!: (v: T) => void;
+  let reject!: (e: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+const buttonByText = (text: string) => Array.from(dialog().querySelectorAll('button')).find((b) => b.textContent === text) as HTMLButtonElement | undefined;
+const pressEscape = () =>
+  act(() => {
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  });
+
+describe('TransferSheet: khoá chống gửi hai lệnh rút', () => {
+  it('chạm đúp trong cùng một act chỉ gửi một lệnh, onDone chỉ một lần', async () => {
+    const gate = deferred<unknown>();
+    state.payout = () => gate.promise;
+    mount();
+    await flush();
+    await twice(submitBtn());
+    await flush();
+    expect(posts()).toHaveLength(1);
+    gate.resolve({ ok: true });
+    await flush();
+    expect(posts()).toHaveLength(1);
+    expect(done).toHaveBeenCalledTimes(1);
+  });
+
+  it('đang gửi: nút giữ nguyên, không disabled, aria-busy + aria-disabled, focus không rời nút; lỗi thì nhả khoá và gỡ aria-busy', async () => {
+    const gate = deferred<unknown>();
+    state.payout = () => gate.promise;
+    mount();
+    await flush();
+    const b = submitBtn();
+    b.focus();
+    click(b);
+    await flush();
+    expect(buttonByText('Đang gửi…')).toBe(b);
+    expect(b.disabled).toBe(false);
+    expect(b.getAttribute('aria-busy')).toBe('true');
+    expect(b.getAttribute('aria-disabled')).toBe('true');
+    expect(document.activeElement).toBe(b);
+    click(b);
+    await flush();
+    expect(posts()).toHaveLength(1);
+    gate.reject(new Error('mất mạng'));
+    await flush();
+    expect(b.hasAttribute('aria-busy')).toBe(false);
+    expect(b.hasAttribute('aria-disabled')).toBe(false);
+    expect(dialog().querySelector('[role="alert"]')?.textContent).toContain('mất mạng');
+    state.payout = () => ({ ok: true });
+    click(b);
+    await flush();
+    expect(posts()).toHaveLength(2);
+    expect(done).toHaveBeenCalledTimes(1);
+  });
+
+  it('lệnh còn bay thì sheet không đóng được (Esc, bấm nền, nút X); lỗi rồi thì đóng được', async () => {
+    const gate = deferred<unknown>();
+    state.payout = () => gate.promise;
+    const onClose = vi.fn();
+    mount({ onClose });
+    await flush();
+    expect(dialog().querySelector('button[aria-label]')).not.toBeNull();
+    click(submitBtn());
+    await flush();
+    pressEscape();
+    click(document.querySelector('[data-sheet-backdrop]'));
+    expect(Array.from(dialog().querySelectorAll('button')).filter((b) => /Đóng/.test(b.getAttribute('aria-label') ?? ''))).toHaveLength(0);
+    expect(onClose).not.toHaveBeenCalled();
+    gate.reject(new Error('mất mạng'));
+    await flush();
+    pressEscape();
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('Esc ngay trong cùng khung với cú bấm Nhận (chưa kịp vẽ lại) cũng không đóng sheet', async () => {
+    const gate = deferred<unknown>();
+    state.payout = () => gate.promise;
+    const onClose = vi.fn();
+    mount({ onClose });
+    await flush();
+    act(() => {
+      submitBtn().click();
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+    await flush();
+    expect(onClose).not.toHaveBeenCalled();
+    gate.resolve({ ok: true });
+    await flush();
+  });
+
+  it('Thử lại cấu hình thuế đủ 44px; bấm thì tải lại và nút nhường chỗ cho trạng thái Đang tải…', async () => {
+    state.configFail = true;
+    mount();
+    await flush();
+    const retry = buttonByText('Thử lại')!;
+    expect(retry.className).toContain('min-h-11');
+    expect(smallTouchTargets(dialog())).toEqual([]);
+    let release!: () => void;
+    state.configGate = new Promise<void>((r) => (release = r));
+    state.configFail = false;
+    click(retry);
+    await flush();
+    expect(buttonByText('Thử lại')).toBeUndefined();
+    expect(buttonByText('Đang tải…')).toBeDefined();
+    release();
+    await flush();
+    expect(submitBtn().disabled).toBe(false);
+  });
+
+  it('số tiền, thuế, thực nhận và nút Nhận dùng số đều', async () => {
+    state.config = { affiliatePitWithhold: { pct: 0.1, threshold: 50_000 } };
+    mount({ taxIdOnFile: '0123456789' });
+    await flush();
+    const taxLine = Array.from(dialog().querySelectorAll('div')).find((d) => d.textContent?.startsWith('Khấu trừ thuế TNCN'))!;
+    expect(taxLine.closest('.tabular-nums')).not.toBeNull();
+    expect(submitBtn().className).toContain('tabular-nums');
   });
 });

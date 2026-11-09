@@ -437,3 +437,10 @@ describe('/doi-rac — diện mạo Mini App ở điện thoại', () => {
     expect(row.className).not.toContain('shadow');
   });
 });
+
+describe('số đều của khung chính', () => {
+  it('<main> dùng tabular-nums để điểm, số lượng và ngày không rung khi đổi', async () => {
+    const c = await mount();
+    expect(c.querySelector('main')?.className).toContain('tabular-nums');
+  });
+});

@@ -163,10 +163,14 @@ function RegisterGate() {
     mutationFn: () => registerAffiliate(coreHttp, CTV_TERMS.version),
     onSuccess: () => {
       setNotice({ text: 'Chào mừng CTV Tubu Tree! 🎉', error: false });
-      void qc.invalidateQueries({ queryKey: affiliateMeQuery(coreHttp).queryKey });
-      // Vai trò vừa đổi: tải lại Học viện (lần tải trước khi còn là khách bị từ chối và không thử lại), và về đầu trang.
-      void qc.invalidateQueries({ queryKey: academyCoursesQuery(coreHttp).queryKey });
+      // Trả promise ra khỏi onSuccess: khoá giữ tới khi hồ sơ CTV mới về, nếu không nút bật lại trên dữ liệu cũ và gửi đăng ký lần hai.
+      const refreshed = Promise.all([
+        qc.invalidateQueries({ queryKey: affiliateMeQuery(coreHttp).queryKey }),
+        // Vai trò vừa đổi: tải lại Học viện (lần tải trước khi còn là khách bị từ chối và không thử lại), và về đầu trang.
+        qc.invalidateQueries({ queryKey: academyCoursesQuery(coreHttp).queryKey }),
+      ]);
       window.scrollTo({ top: 0 });
+      return refreshed;
     },
     onError: (e) => setNotice({ text: actErrText(e), error: true }),
     onSettled: () => {
@@ -225,10 +229,19 @@ function RegisterGate() {
           </label>
         </section>
 
+        {/* Hai vùng luôn có mặt trong cây, chỉ đổi phần con: lỗi đọc ngay (alert), thành công đọc nhẹ (status). */}
+        <div role="alert">{notice?.error && <p className="mt-3 text-sm text-danger-fg">{notice.text}</p>}</div>
         <div role="status" aria-live="polite">
-          {notice && <p className={`mt-3 text-sm ${notice.error ? 'text-danger-fg' : 'font-medium text-success-fg'}`}>{notice.text}</p>}
+          {notice && !notice.error && <p className="mt-3 text-sm font-medium text-success-fg">{notice.text}</p>}
         </div>
-        <button type="button" onClick={submit} disabled={!agreed || reg.isPending} className={`${ui.btnPrimary} mt-4 w-full`}>
+        <button
+          type="button"
+          onClick={submit}
+          disabled={!agreed}
+          aria-busy={reg.isPending || undefined}
+          aria-disabled={reg.isPending || undefined}
+          className={`${ui.btnPrimary} mt-4 w-full`}
+        >
           {reg.isPending ? 'Đang đăng ký…' : 'Đăng ký miễn phí ngay'}
         </button>
         {!agreed && <p className="mt-1.5 text-center text-xs text-stone-600">{CTV_TERMS.mustAgree}</p>}
@@ -369,7 +382,8 @@ function Dashboard() {
     mutationFn: () => createAffiliateLink(coreHttp, 'HOMEPAGE'),
     onSuccess: () => {
       setNotice({ text: 'Đã tạo link chia sẻ mới', error: false });
-      void qc.invalidateQueries({ queryKey: affiliateLinksQuery(coreHttp).queryKey });
+      // Khoá giữ tới khi danh sách link mới về: bấm lần hai khi danh sách còn cũ là tạo thêm một link nữa.
+      return qc.invalidateQueries({ queryKey: affiliateLinksQuery(coreHttp).queryKey });
     },
     onError: (e) => setNotice({ text: actErrText(e), error: true }),
     onSettled: () => {
@@ -454,8 +468,9 @@ function Dashboard() {
 
   return (
     <Shell>
+      <div role="alert">{notice?.error && <p className="mb-3 text-sm text-danger-fg">{notice.text}</p>}</div>
       <div role="status" aria-live="polite">
-        {notice && <p className={`mb-3 text-sm ${notice.error ? 'text-danger-fg' : 'font-medium text-success-fg'}`}>{notice.text}</p>}
+        {notice && !notice.error && <p className="mb-3 text-sm font-medium text-success-fg">{notice.text}</p>}
       </div>
       <div className="mx-auto max-w-2xl space-y-4 max-md:space-y-3 max-md:[&>:first-child]:mb-4">
         {dashQ.isError ? (
@@ -605,7 +620,13 @@ function Dashboard() {
           <Section
             title="Link chia sẻ"
             action={
-              <button type="button" onClick={makeLink} disabled={createLink.isPending} className={ui.btnText}>
+              <button
+                type="button"
+                onClick={makeLink}
+                aria-busy={createLink.isPending || undefined}
+                aria-disabled={createLink.isPending || undefined}
+                className={ui.btnText}
+              >
                 + Tạo link
               </button>
             }

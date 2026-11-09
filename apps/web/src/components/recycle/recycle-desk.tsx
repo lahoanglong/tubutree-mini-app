@@ -2,7 +2,7 @@
 
 import { HAZARDOUS_DESK_NOTES } from '@tubutree/app-core/waste-copy';
 import { WAREHOUSE_ONLY_RETURN_NOTE, deskClosedText, deskDoneCopy, deskGiftReadOnly, deskInitialLines, isPartnerWarehouseOnly } from '@tubutree/app-core/waste-desk';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { CheckCircle2, ChevronDown } from 'lucide-react';
@@ -46,7 +46,7 @@ const PATH = '/doi-rac/quay';
 const CARD = `flex flex-col gap-3 p-4 max-md:gap-1 max-md:p-3 ${skin.card}`;
 const NO_PERMISSION = 'Tài khoản này không có quyền nhận hàng tại điểm';
 const DANGER_BTN =
-  'inline-flex min-h-11 w-full items-center justify-center rounded-control border border-danger-fg bg-danger-bg px-5 text-sm font-semibold text-danger-fg transition active:scale-95 disabled:opacity-50 disabled:active:scale-100';
+  'inline-flex min-h-11 w-full items-center justify-center rounded-control border border-danger-fg bg-danger-bg px-5 text-sm font-semibold text-danger-fg transition active:scale-95 disabled:opacity-50 disabled:active:scale-100 aria-disabled:opacity-50 aria-disabled:active:scale-100';
 
 interface DeskDone {
   code: string;
@@ -81,7 +81,7 @@ const isShort = (l: DeskLine, received: Readonly<Record<string, number>>) => (re
 
 function Shell({ children }: { children: ReactNode }) {
   return (
-    <main className="mx-auto max-w-5xl space-y-4 px-4 py-6 pb-12">
+    <main className="mx-auto max-w-5xl space-y-4 px-4 py-6 pb-12 tabular-nums">
       <PageHeader title="Nhận hàng tại điểm" backHref="/doi-rac" backLabel="Đổi rác" />
       {children}
     </main>
@@ -138,9 +138,11 @@ function RejectSheet({
         <button
           type="button"
           className={DANGER_BTN}
-          disabled={!ready || pending}
+          disabled={!ready}
+          aria-busy={pending || undefined}
+          aria-disabled={pending || undefined}
           onClick={() => {
-            if (reason) onSubmit(reason, note.trim());
+            if (reason && !pending) onSubmit(reason, note.trim());
           }}
         >
           Từ chối yêu cầu
@@ -209,6 +211,12 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
   const [done, setDone] = useState<DeskDone | null>(null);
 
   const canScan = useBarcodeScan();
+  // Quầy làm MỘT việc một lúc (tra mã, xác nhận, từ chối, trao quà) bằng ref đồng bộ: `isPending` chỉ đúng sau lần vẽ kế,
+  // hai cú chạm sát nhau vẫn gọi API hai lần; xác nhận rồi từ chối cùng một yêu cầu cũng không được chồng nhau.
+  const deskBusy = useRef(false);
+  const release = () => {
+    deskBusy.current = false;
+  };
 
   const point = points.find((p) => p.id === pointId) ?? points[0]!;
   // Bưu kiện về kho có thể tra khi đang chọn tab đối tác: luật nhận theo điểm của yêu cầu, không theo tab đang chọn.
@@ -230,6 +238,7 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
       setReasons(initial?.reasons ?? {});
     },
     onError: (e) => setNotice({ text: actErrText(e), ok: false }),
+    onSettled: release,
   });
 
   const request = lookup;
@@ -279,6 +288,7 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
       finish();
     },
     onError: (e) => setNotice({ text: actErrText(e), ok: false }),
+    onSettled: release,
   });
 
   const reject = useMutation({
@@ -293,6 +303,7 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
       setRejectOpen(false);
       finish();
     },
+    onSettled: release,
   });
 
   const fulfil = useMutation({
@@ -303,13 +314,16 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
       setNotice({ text: `Đã trao ${v.giftName}`, ok: true });
     },
     onError: (e) => setNotice({ text: actErrText(e), ok: false }),
+    onSettled: release,
   });
+  const busy = find.isPending || confirm.isPending || reject.isPending || fulfil.isPending;
 
   const missingReason = !!request && request.lines.some((l) => isShort(l, received) && !reasons[l.itemId]);
   const preview = request ? deskPreviewPoints(request.lines, received, request.lines.map((l) => l.itemId)) : 0;
   const search = () => {
     const norm = normalizeWasteLookupCode(code);
-    if (norm === '' || find.isPending) return;
+    if (norm === '' || deskBusy.current) return;
+    deskBusy.current = true;
     setCode(norm);
     find.mutate(norm);
   };
@@ -323,7 +337,18 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
       <div className="grid gap-4 md:grid-cols-[minmax(0,320px)_minmax(0,1fr)] md:items-start">
         <div className="flex flex-col gap-4 md:col-start-2 md:row-start-1">
           <div className="flex flex-col gap-2.5">
-            {canScan && <ScanCodeButton disabled={find.isPending} onCode={(c) => { setCode(c); find.mutate(c); }} onFail={(text) => setNotice({ text, ok: false })} />}
+            {canScan && (
+              <ScanCodeButton
+                busy={busy}
+                onCode={(c) => {
+                  if (deskBusy.current) return;
+                  deskBusy.current = true;
+                  setCode(c);
+                  find.mutate(c);
+                }}
+                onFail={(text) => setNotice({ text, ok: false })}
+              />
+            )}
             <Field label="Mã yêu cầu hoặc mã nhận quà">
               <input
                 value={code}
@@ -337,7 +362,14 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
                 className={ui.field}
               />
             </Field>
-            <button type="button" className={`${canScan ? skin.btnSecondary : ui.btnPrimary} w-full`} disabled={code.trim() === '' || find.isPending} onClick={search}>
+            <button
+              type="button"
+              className={`${canScan ? skin.btnSecondary : ui.btnPrimary} w-full`}
+              disabled={code.trim() === ''}
+              aria-busy={find.isPending || undefined}
+              aria-disabled={busy || undefined}
+              onClick={search}
+            >
               Tra mã
             </button>
           </div>
@@ -461,8 +493,14 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
                     <button
                       type="button"
                       className={`${ui.btnPrimary} w-full`}
-                      disabled={missingReason || confirm.isPending}
-                      onClick={() => confirm.mutate(request)}
+                      disabled={missingReason}
+                      aria-busy={confirm.isPending || undefined}
+                      aria-disabled={busy || undefined}
+                      onClick={() => {
+                        if (deskBusy.current) return;
+                        deskBusy.current = true;
+                        confirm.mutate(request);
+                      }}
                     >
                       Xác nhận đã nhận
                     </button>
@@ -500,8 +538,13 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
                 <button
                   type="button"
                   className={`${ui.btnPrimary} w-full`}
-                  disabled={fulfil.isPending}
-                  onClick={() => fulfil.mutate({ code: lookedUpCode, pointId: point.id, giftName: gift.giftName })}
+                  aria-busy={fulfil.isPending || undefined}
+                  aria-disabled={busy || undefined}
+                  onClick={() => {
+                    if (deskBusy.current) return;
+                    deskBusy.current = true;
+                    fulfil.mutate({ code: lookedUpCode, pointId: point.id, giftName: gift.giftName });
+                  }}
                 >
                   Trao quà
                 </button>
@@ -521,7 +564,11 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
           onClose={() => setRejectOpen(false)}
           pending={reject.isPending}
           error={reject.error}
-          onSubmit={(reason, note) => reject.mutate({ req: request, reason, note })}
+          onSubmit={(reason, note) => {
+            if (deskBusy.current) return;
+            deskBusy.current = true;
+            reject.mutate({ req: request, reason, note });
+          }}
         />
       )}
     </div>

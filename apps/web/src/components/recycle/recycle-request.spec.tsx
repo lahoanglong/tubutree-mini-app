@@ -13,6 +13,7 @@ const state = vi.hoisted(() => ({
   phase: 'authenticated' as string,
   request: null as unknown,
   requestError: null as unknown,
+  requestGate: null as null | Promise<unknown>,
   me: null as unknown,
   points: [] as unknown[],
   config: { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: true } } as Record<string, unknown>,
@@ -34,6 +35,7 @@ vi.mock('@/lib/core-http', () => ({
     get: async (path: string) => {
       state.calls.push({ method: 'GET', path });
       if (path === '/waste/requests/req-1') {
+        await state.requestGate;
         if (state.requestError) throw state.requestError;
         return state.request;
       }
@@ -79,6 +81,7 @@ beforeEach(() => {
   state.phase = 'authenticated';
   state.request = makeRequestDetail();
   state.requestError = null;
+  state.requestGate = null;
   state.me = makeWasteMe();
   state.points = [makeWastePoint()];
   state.config = { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: true } };
@@ -519,5 +522,140 @@ describe('/doi-rac/yeu-cau/[id] — diện mạo Mini App ở điện thoại', 
     const c = await mount();
     expect(byText(c, 'a', 'Sửa món')!.className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
     expect(button(c, 'Huỷ yêu cầu')!.className).toContain('text-danger-fg');
+  });
+});
+
+// Khoá "Xác nhận huỷ" và "Đã gửi" (mã vận đơn): hai cú chạm trong CÙNG một act chỉ ra một lệnh; nút đang gửi không `disabled`
+// thật (giữ focus), báo aria-busy + aria-disabled; khoá giữ tới khi yêu cầu mới tải về (refresh nằm trong onSuccess), nhả khi lỗi.
+const twice = (el: Element | null) =>
+  act(() => {
+    (el as HTMLElement).click();
+    (el as HTMLElement).click();
+  });
+function deferred<T = unknown>() {
+  let resolve!: (v: T) => void;
+  let reject!: (e: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+const cancelCalls = () => calls('POST').filter((x) => x.path === '/waste/requests/req-1/cancel');
+
+describe('/doi-rac/yeu-cau/[id]: khoá Xác nhận huỷ (cùng một act)', () => {
+  it('chạm đúp trong cùng một act chỉ một lệnh huỷ; nút không disabled, aria-busy + aria-disabled, focus không rời nút', async () => {
+    const gate = deferred();
+    state.cancel = () => gate.promise;
+    const c = await mount();
+    click(button(c, 'Huỷ yêu cầu'));
+    await flush(2);
+    const confirm = button(dialog()!, 'Xác nhận huỷ')!;
+    confirm.focus();
+    await twice(confirm);
+    await flush(4);
+    expect(cancelCalls()).toHaveLength(1);
+    expect(confirm.disabled).toBe(false);
+    expect(confirm.getAttribute('aria-busy')).toBe('true');
+    expect(confirm.getAttribute('aria-disabled')).toBe('true');
+    expect(confirm.className).toContain('aria-disabled:opacity-50');
+    expect(document.activeElement).toBe(confirm);
+    gate.resolve(makeRequestDetail({ status: 'CANCELLED', cancellable: false, editable: false }));
+    await flush(8);
+    expect(cancelCalls()).toHaveLength(1);
+    expect(dialog()).toBeNull();
+    expect(c.textContent).toContain('Đã huỷ yêu cầu');
+  });
+
+  it('huỷ xong nhưng yêu cầu mới chưa về: khoá giữ, bấm thêm không gửi lệnh huỷ thứ hai', async () => {
+    const c = await mount();
+    click(button(c, 'Huỷ yêu cầu'));
+    await flush(2);
+    const confirm = button(dialog()!, 'Xác nhận huỷ')!;
+    const gate = deferred();
+    state.requestGate = gate.promise;
+    click(confirm);
+    await flush(4);
+    expect(cancelCalls()).toHaveLength(1);
+    expect(confirm.getAttribute('aria-busy')).toBe('true');
+    click(confirm);
+    await flush(4);
+    expect(cancelCalls()).toHaveLength(1);
+    gate.resolve(undefined);
+    await flush(8);
+    expect(dialog()).toBeNull();
+  });
+
+  it('lỗi: hiện câu máy chủ trong sheet, nhả khoá và gỡ aria-busy/aria-disabled để huỷ lại', async () => {
+    let n = 0;
+    state.cancel = () => {
+      if (++n === 1) throw new Error('Yêu cầu đã đóng');
+      return makeRequestDetail({ status: 'CANCELLED', cancellable: false, editable: false });
+    };
+    const c = await mount();
+    click(button(c, 'Huỷ yêu cầu'));
+    await flush(2);
+    const confirm = button(dialog()!, 'Xác nhận huỷ')!;
+    click(confirm);
+    await flush(4);
+    expect(dialog()!.querySelector('[role="alert"]')?.textContent).toBe('Yêu cầu đã đóng');
+    expect(confirm.hasAttribute('aria-busy')).toBe(false);
+    expect(confirm.hasAttribute('aria-disabled')).toBe(false);
+    click(confirm);
+    await flush(6);
+    expect(cancelCalls()).toHaveLength(2);
+    expect(dialog()).toBeNull();
+  });
+});
+
+describe('/doi-rac/yeu-cau/[id]: khoá Đã gửi mã vận đơn (cùng một act)', () => {
+  const fill = (c: HTMLElement) => {
+    typeInto(field(c, 'Hãng'), 'GHN');
+    typeInto(field(c, 'Mã vận đơn'), 'GHN123');
+  };
+
+  it('chạm đúp trong cùng một act chỉ một PUT; nút không disabled, aria-busy + aria-disabled, focus không rời nút', async () => {
+    const gate = deferred();
+    state.request = MAIL();
+    state.tracking = () => gate.promise;
+    const c = await mount();
+    fill(c);
+    const sent = button(c, 'Đã gửi')!;
+    sent.focus();
+    await twice(sent);
+    await flush(4);
+    expect(calls('PUT')).toHaveLength(1);
+    expect(sent.disabled).toBe(false);
+    expect(sent.getAttribute('aria-busy')).toBe('true');
+    expect(sent.getAttribute('aria-disabled')).toBe('true');
+    expect(document.activeElement).toBe(sent);
+    gate.resolve(MAIL({ status: 'IN_TRANSIT', carrier: 'GHN', trackingCode: 'GHN123' }));
+    await flush(8);
+    expect(calls('PUT')).toHaveLength(1);
+  });
+
+  it('lỗi: hiện câu máy chủ, nhả khoá và gỡ aria-busy để gửi lại', async () => {
+    let n = 0;
+    state.request = MAIL();
+    state.tracking = () => {
+      if (++n === 1) throw new Error('Mã vận đơn đã dùng');
+      return MAIL({ status: 'IN_TRANSIT', carrier: 'GHN', trackingCode: 'GHN123' });
+    };
+    const c = await mount();
+    fill(c);
+    const sent = button(c, 'Đã gửi')!;
+    click(sent);
+    await flush(6);
+    expect(c.querySelector('[role="alert"]')?.textContent).toBe('Mã vận đơn đã dùng');
+    expect(sent.hasAttribute('aria-busy')).toBe(false);
+    expect(sent.hasAttribute('aria-disabled')).toBe(false);
+    click(sent);
+    await flush(6);
+    expect(calls('PUT')).toHaveLength(2);
+  });
+
+  it('số đều: khung chính dùng tabular-nums', async () => {
+    const c = await mount();
+    expect(c.querySelector('main')?.className).toContain('tabular-nums');
   });
 });

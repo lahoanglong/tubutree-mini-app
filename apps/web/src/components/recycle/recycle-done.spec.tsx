@@ -237,3 +237,10 @@ describe('/doi-rac/xong/[id] — diện mạo Mini App ở điện thoại', () 
     expect(byText(c, 'a', 'Đổi thêm rác')!.className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
   });
 });
+
+describe('số đều của khung chính', () => {
+  it('<main> dùng tabular-nums để điểm, số lượng và ngày không rung khi đổi', async () => {
+    const c = await mount();
+    expect(c.querySelector('main')?.className).toContain('tabular-nums');
+  });
+});
