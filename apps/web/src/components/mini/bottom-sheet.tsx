@@ -18,6 +18,8 @@ export interface BottomSheetProps {
   footer?: ReactNode;
   size?: BottomSheetSize;
   dismissible?: boolean;
+  /** Tiêu đề có số (vd "Tiết kiệm 12%"): bật tabular-nums để chữ số không nhảy khi đổi. */
+  numericTitle?: boolean;
   children: ReactNode;
 }
 
@@ -35,7 +37,7 @@ let savedOverflow = '';
  * nên phần thân/chân KHÔNG tự cộng thêm. `dismissible=false` chặn cả nút X, Esc và bấm nền. Không dựng khi đóng
  * (không có hoạt ảnh trượt xuống), nên không có nội dung ẩn trong cây truy cập.
  */
-export function BottomSheet({ open, onClose, title, description, footer, size = 'auto', dismissible = true, children }: BottomSheetProps) {
+export function BottomSheet({ open, onClose, title, description, footer, size = 'auto', dismissible = true, numericTitle = false, children }: BottomSheetProps) {
   const uid = useId();
   const panelRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
@@ -112,7 +114,11 @@ export function BottomSheet({ open, onClose, title, description, footer, size = 
         <div className="mini-sheet-handler" aria-hidden />
         <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 4 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-            {title && <Heading variant="title-sm" font="ui" as="h2" id={titleId}>{title}</Heading>}
+            {title && (
+              <Heading variant="title-sm" font="ui" as="h2" id={titleId} style={numericTitle ? { fontVariantNumeric: 'tabular-nums' } : undefined}>
+                {title}
+              </Heading>
+            )}
             {dismissible && <IconButton icon={X} label="Đóng" onPress={onClose} style={{ marginLeft: 'auto' }} />}
           </div>
           {description && <Text variant="body-sm" tone="secondary">{description}</Text>}

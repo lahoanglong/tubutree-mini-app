@@ -11,6 +11,8 @@ export interface SheetProps {
   open: boolean;
   onClose: () => void;
   title?: string;
+  /** Tiêu đề chứa số đổi theo dữ liệu (mức %, số lượng): số đều để chữ quanh nó không rung. */
+  numericTitle?: boolean;
   description?: string;
   footer?: ReactNode;
   size?: SheetSize;
@@ -41,7 +43,7 @@ const SAFE_BOTTOM = { paddingBottom: 'max(1rem, env(safe-area-inset-bottom, 0px)
  * của Mini App (`open`/`onClose`/`title`/`description`/`footer`/`size`/`dismissible`). `dismissible=false` chặn cả nút X,
  * Esc và bấm nền. Không dựng khi đóng nên không có hoạt ảnh đóng; đổi lại không có nội dung ẩn trong cây truy cập.
  */
-export function Sheet({ open, onClose, title, description, footer, size = 'auto', dismissible = true, role = 'dialog', describedBy, children }: SheetProps) {
+export function Sheet({ open, onClose, title, numericTitle = false, description, footer, size = 'auto', dismissible = true, role = 'dialog', describedBy, children }: SheetProps) {
   const uid = useId();
   const panelRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
@@ -122,7 +124,7 @@ export function Sheet({ open, onClose, title, description, footer, size = 'auto'
         <div className="flex items-start justify-between gap-2 px-4 pt-1 md:pt-4">
           <div className="min-w-0">
             {title && (
-              <h2 id={titleId} className="mt-1.5 font-ui text-base font-bold leading-6 tracking-[-0.01em] text-stone-900">
+              <h2 id={titleId} className={`mt-1.5 font-ui text-base font-bold leading-6 tracking-[-0.01em] text-stone-900${numericTitle ? ' tabular-nums' : ''}`}>
                 {title}
               </h2>
             )}

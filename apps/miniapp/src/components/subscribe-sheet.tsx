@@ -8,7 +8,7 @@ import {
   MAX_START_DAYS_AHEAD,
   type SubscriptionPaymentMethod,
 } from '../services/subscriptions-api';
-import { getErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { haptic } from '../utils/haptic';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { vi } from '../i18n/vi';
@@ -16,6 +16,7 @@ import { BottomSheet } from './ui/bottom-sheet';
 import { Button } from './ui/button';
 import { Chip } from './ui/chip';
 import { Field } from './ui/form';
+import { LineItemSkeleton } from './ui/skeleton';
 import { Text } from './ui/text';
 import {
   AddressPicker,
@@ -51,6 +52,11 @@ export function SubscribeSheet({
   const discountPct = Math.round(usePublicConfig().subscribeDiscountPct * 100);
   const addrQ = useQuery({ queryKey: ['addresses'], queryFn: getAddresses, enabled: visible });
   const walletQ = useQuery({ queryKey: ['wallet'], queryFn: getWallet, enabled: visible });
+  // Truy vấn lỗi mà chưa có dữ liệu bị react-query đặt về pending lúc tải lại và xoá lỗi; giữ vùng lỗi + nút Thử lại đứng yên
+  // (không mất focus) tới khi lượt tải lại có kết quả (isPending hết). Giá trị là câu lỗi cũ để vẫn hiện chữ trong lúc chờ.
+  const [addrRetrying, setAddrRetrying] = useState<string | null>(null);
+  const addrFailed = addrQ.isError && !addrQ.data;
+  const addrWaiting = addrRetrying !== null && addrQ.isPending;
   const addresses = addrQ.data ?? [];
   const defaultAddr = addresses.find((a) => a.isDefault) ?? addresses[0];
 
@@ -92,16 +98,21 @@ export function SubscribeSheet({
   });
 
   const noAddress = addrQ.isSuccess && addresses.length === 0;
+  const busy = create.isPending;
 
   return (
     <BottomSheet
       open={visible}
-      onClose={onClose}
+      onClose={() => {
+        if (!busy) onClose();
+      }}
+      dismissible={!busy}
       title={t.sheetTitle(discountPct)}
+      numericTitle
       description={t.sheetBody}
       size="full"
       footer={
-        noAddress ? undefined : (
+        noAddress || addrFailed || addrWaiting ? undefined : (
           <Button
             fullWidth
             loading={create.isPending}
@@ -124,15 +135,16 @@ export function SubscribeSheet({
       }
     >
       <SectionLabel>{t.intervalLabel}</SectionLabel>
-      <IntervalPicker value={weeks} onChange={setWeeks} />
+      <IntervalPicker value={weeks} onChange={setWeeks} disabled={busy} />
 
       <SectionLabel>{t.startLabel}</SectionLabel>
       <div role="group" aria-label={t.startLabel} style={{ display: 'flex', gap: 8, padding: '4px 0' }}>
-        <Chip selected={startMode === 'now'} onPress={() => setStartMode('now')}>
+        <Chip selected={startMode === 'now'} disabled={busy} onPress={() => setStartMode('now')}>
           {t.startNow}
         </Chip>
         <Chip
           selected={startMode === 'date'}
+          disabled={busy}
           onPress={() => {
             setStartMode('date');
             if (!startDate) setStartDate(range.min);
@@ -153,6 +165,7 @@ export function SubscribeSheet({
               value={startDate}
               min={range.min}
               max={range.max}
+              disabled={busy}
               onChange={(e) => setStartDate(e.target.value)}
               style={{
                 width: '100%',
@@ -169,7 +182,7 @@ export function SubscribeSheet({
             />
           </Field>
           {!dateError && (
-            <Text variant="caption" tone="tertiary" as="p" style={{ marginTop: 4 }}>
+            <Text variant="caption" tone="tertiary" as="p" numeric style={{ marginTop: 4 }}>
               {t.startDateHint(MAX_START_DAYS_AHEAD)}
             </Text>
           )}
@@ -177,10 +190,28 @@ export function SubscribeSheet({
       )}
 
       <SectionLabel>{t.paymentLabel}</SectionLabel>
-      <PaymentMethodPicker value={payment} onChange={setPayment} walletBalance={walletQ.data?.walletBalance} />
+      <PaymentMethodPicker value={payment} onChange={setPayment} walletBalance={walletQ.data?.walletBalance} disabled={busy} />
 
       <SectionLabel>{t.addressLabel}</SectionLabel>
-      {noAddress ? (
+      {addrFailed || addrWaiting ? (
+        <div role="alert" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', padding: '0.25rem 0' }}>
+          <Text variant="body-sm" tone="danger" as="div" style={{ flex: 1, minWidth: 0 }}>
+            {addrFailed ? getLoadErrorMessage(addrQ.error) : addrRetrying}
+          </Text>
+          <Button
+            variant="secondary"
+            loading={addrWaiting}
+            onPress={() => {
+              setAddrRetrying(getLoadErrorMessage(addrQ.error));
+              return addrQ.refetch();
+            }}
+          >
+            {vi.common.retry}
+          </Button>
+        </div>
+      ) : addrQ.isLoading ? (
+        <LineItemSkeleton />
+      ) : noAddress ? (
         <div>
           <Text variant="body-sm" tone="danger" as="p">
             {t.needAddress}
@@ -198,7 +229,7 @@ export function SubscribeSheet({
           </Button>
         </div>
       ) : (
-        <AddressPicker addresses={addresses} value={addressId} onChange={setAddressId} />
+        <AddressPicker addresses={addresses} value={addressId} onChange={setAddressId} disabled={busy} />
       )}
     </BottomSheet>
   );

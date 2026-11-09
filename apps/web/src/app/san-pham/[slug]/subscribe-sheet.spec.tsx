@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
-import { useState } from 'react';
+import { act, useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { unnamedControls } from '@/test-utils/a11y';
+import { loadErrorText } from '@/lib/error-text';
 
 // Cùng ý nghĩa subscribe-sheet.spec.tsx của Mini App: ngày bắt đầu + cách trả + địa chỉ, cùng endpoint và body tạo subscription.
 
@@ -20,6 +21,22 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   getWallet: mocks.getWallet,
 }));
 vi.mock('@/lib/use-public-config', () => ({ usePublicConfig: () => ({ subscribeDiscountPct: 0.12, isLoaded: true }) }));
+
+// Bọc Sheet để đọc props mới nhất (open/dismissible/onClose): guard `onClose` không có đường bấm nào chạm tới khi
+// `dismissible=false` đã ẩn nút X, Esc và nền, nên chỉ gọi thẳng onClose mới chứng minh được nó.
+const sheetSpy = vi.hoisted(() => ({
+  calls: [] as Array<{ open: boolean; dismissible?: boolean; title?: string; onClose: () => void }>,
+}));
+vi.mock('@/components/ui/sheet', async (importOriginal) => {
+  const orig = await importOriginal<typeof import('@/components/ui/sheet')>();
+  return {
+    ...orig,
+    Sheet: (p: Parameters<typeof orig.Sheet>[0]) => {
+      sheetSpy.calls.push(p);
+      return <orig.Sheet {...p} />;
+    },
+  };
+});
 
 import { SubscribeSheet } from './subscribe-sheet';
 
@@ -221,7 +238,9 @@ describe('SubscribeSheet (ngày bắt đầu, cách trả, địa chỉ)', () =>
     click(byText(body(), 'button', 'đổi')!);
     await flush();
     const pending = byText(body(), 'button', 'Đang tạo…') as HTMLButtonElement;
-    expect(pending.disabled).toBe(true);
+    // Nút đang gửi giữ aria-busy/aria-disabled (không `disabled` DOM để khỏi mất focus); bấm lại bị guard chặn.
+    expect(pending.getAttribute('aria-busy')).toBe('true');
+    expect(pending.getAttribute('aria-disabled')).toBe('true');
     click(pending);
     await flush();
     expect(mocks.http.post).toHaveBeenCalledTimes(1);
@@ -235,5 +254,286 @@ describe('SubscribeSheet (ngày bắt đầu, cách trả, địa chỉ)', () =>
     click(byText(body(), 'button', 'Thêm địa chỉ'));
     expect(onClose).toHaveBeenCalled();
     expect(mocks.push).toHaveBeenCalledWith('/tai-khoan/dia-chi');
+  });
+});
+
+function deferred<T>() {
+  let resolve!: (v: T) => void;
+  let reject!: (e: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+const skeletons = () => document.querySelectorAll('[data-skeleton]').length;
+const alertEl = () => body().querySelector('[role="alert"]') as HTMLElement | null;
+const lastSheet = () => sheetSpy.calls.at(-1)!;
+/** Gọi thẳng onClose đang treo ở sheet (nút X/Esc/nền đã bị `dismissible` chặn trước khi tới đây). */
+const tryClose = () => act(() => lastSheet().onClose());
+const escape = () => act(() => void document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+const group = (label: string) => Array.from(document.querySelectorAll<HTMLButtonElement>(`[aria-label="${label}"] button`));
+const radiosOf = (label: string) => Array.from(document.querySelectorAll<HTMLButtonElement>(`[role="radiogroup"][aria-label="${label}"] [role="radio"]`));
+const ADDRS = [ADDR('a1', false, '1 Lê Lợi'), ADDR('a2', true, '9 Hai Bà Trưng')];
+const retryBtn = () => byText(alertEl()!, 'button', 'Thử lại') as HTMLButtonElement;
+
+describe('SubscribeSheet: tải địa chỉ (skeleton, lỗi + Thử lại)', () => {
+  beforeEach(() => sheetSpy.calls.splice(0));
+
+  it('địa chỉ đang tải: hiện skeleton, chưa dựng danh sách địa chỉ; tải xong thì thay bằng danh sách', async () => {
+    const addr = deferred<typeof ADDRS>();
+    mocks.getAddresses.mockReturnValue(addr.promise);
+    mount();
+    await flush();
+    expect(skeletons()).toBeGreaterThan(0);
+    expect(document.querySelector('[role="radiogroup"][aria-label="Giao tới"]')).toBeNull();
+    expect(alertEl()).toBeNull();
+
+    addr.resolve(ADDRS);
+    await flush();
+    expect(radio(/9 Hai Bà Trưng/).getAttribute('aria-checked')).toBe('true');
+    expect(skeletons()).toBe(0);
+  });
+
+  it('tải địa chỉ lỗi: role="alert" có lời lỗi + "Thử lại"; không có nút tạo, không có danh sách địa chỉ', async () => {
+    const err = new Error('boom');
+    mocks.getAddresses.mockRejectedValue(err);
+    mount();
+    await flush();
+    expect(loadErrorText(err)).not.toBe('');
+    expect(alertEl()!.textContent).toContain(loadErrorText(err));
+    expect(retryBtn().disabled).toBe(false);
+    expect(byText(body(), 'button', 'Bắt đầu đặt định kỳ')).toBeNull();
+    expect(document.querySelector('[role="radiogroup"][aria-label="Giao tới"]')).toBeNull();
+    expect(skeletons()).toBe(0);
+  });
+
+  it('"Thử lại": gọi lại địa chỉ; đang tải nút báo bận, vùng lỗi + focus đứng yên, chưa có nút tạo; xong thì hiện danh sách + nút tạo', async () => {
+    const err = new Error('Không tải được địa chỉ giao hàng');
+    expect(loadErrorText(err)).toBe('Không tải được địa chỉ giao hàng');
+    expect(loadErrorText(null)).not.toBe(loadErrorText(err));
+    const retry = deferred<typeof ADDRS>();
+    mocks.getAddresses.mockReset().mockRejectedValueOnce(err).mockReturnValueOnce(retry.promise);
+    mount();
+    await flush();
+    const alert = alertEl()!;
+    const btn = retryBtn();
+    expect(btn.hasAttribute('aria-busy')).toBe(false);
+    btn.focus();
+    click(btn);
+    await flush();
+    expect(mocks.getAddresses).toHaveBeenCalledTimes(2);
+
+    // react-query xoá lỗi lúc tải lại: vùng lỗi vẫn là CÙNG phần tử, còn lời cũ, focus không rơi về body
+    expect(alertEl()).toBe(alert);
+    expect(alert.textContent).toContain(loadErrorText(err));
+    expect(retryBtn()).toBe(btn);
+    expect(btn.getAttribute('aria-busy')).toBe('true');
+    expect(document.activeElement).toBe(btn);
+    expect(skeletons()).toBe(0);
+    expect(byText(body(), 'button', 'Bắt đầu đặt định kỳ')).toBeNull();
+
+    // Bấm lần nữa lúc đang chờ: không đổi lời cũ thành câu chung (lỗi của truy vấn đang null), không gọi thêm.
+    click(btn);
+    await flush();
+    expect(mocks.getAddresses).toHaveBeenCalledTimes(2);
+    expect(alert.textContent).toContain(loadErrorText(err));
+
+    retry.resolve(ADDRS);
+    await flush();
+    expect(radio(/9 Hai Bà Trưng/).getAttribute('aria-checked')).toBe('true');
+    expect(alertEl()).toBeNull();
+    expect((byText(body(), 'button', 'Bắt đầu đặt định kỳ') as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('đã có danh sách địa chỉ mà lần tải lại sau đó lỗi: danh sách ở lại, không hiện vùng lỗi, vẫn có nút tạo', async () => {
+    function Harness() {
+      const [open, setOpen] = useState(true);
+      return (
+        <>
+          <button type="button" onClick={() => setOpen((v) => !v)}>đổi</button>
+          <SubscribeSheet visible={open} onClose={() => setOpen(false)} onNotice={onNotice} variationId="v1" quantity={2} />
+        </>
+      );
+    }
+    mounted.push(render(<Harness />));
+    await flush();
+    expect(radio(/9 Hai Bà Trưng/).getAttribute('aria-checked')).toBe('true');
+    mocks.getAddresses.mockReset().mockRejectedValue(new Error('boom'));
+    click(byText(body(), 'button', 'đổi')!);
+    await flush();
+    click(byText(body(), 'button', 'đổi')!);
+    await flush(3);
+    expect(mocks.getAddresses).toHaveBeenCalledTimes(1);
+    expect(alertEl()).toBeNull();
+    expect(radiosOf('Giao tới')).toHaveLength(2);
+    expect(create().disabled).toBe(false);
+  });
+
+  it('"Thử lại" lỗi tiếp: vùng lỗi vẫn đó, nút hết bận, thử lại được lần nữa', async () => {
+    const err = new Error('boom');
+    mocks.getAddresses.mockReset().mockRejectedValueOnce(err).mockRejectedValueOnce(err).mockResolvedValueOnce(ADDRS);
+    mount();
+    await flush();
+    click(retryBtn());
+    await flush();
+    expect(mocks.getAddresses).toHaveBeenCalledTimes(2);
+    expect(alertEl()!.textContent).toContain(loadErrorText(err));
+    expect(retryBtn().hasAttribute('aria-busy')).toBe(false);
+    expect(byText(body(), 'button', 'Bắt đầu đặt định kỳ')).toBeNull();
+
+    click(retryBtn());
+    await flush();
+    expect(mocks.getAddresses).toHaveBeenCalledTimes(3);
+    expect(alertEl()).toBeNull();
+    expect(radio(/9 Hai Bà Trưng/).getAttribute('aria-checked')).toBe('true');
+  });
+});
+
+describe('SubscribeSheet: khoá form + chặn đóng khi đang tạo lịch', () => {
+  beforeEach(() => sheetSpy.calls.splice(0));
+
+  /** Chọn "Chọn ngày" + một ngày hợp lệ (để ô ngày hiện ra), bấm tạo, đợi nút báo bận. */
+  async function startPending() {
+    const created = deferred<Record<string, unknown>>();
+    mocks.http.post.mockReturnValue(created.promise);
+    mount();
+    await flush();
+    click(byText(body(), 'button', 'Chọn ngày'));
+    typeInto(body().querySelector('input[type="date"]'), '2026-10-20');
+    click(byText(body(), 'button', 'Bắt đầu đặt định kỳ'));
+    await flush(3);
+    return created;
+  }
+  const dateInput = () => body().querySelector('input[type="date"]') as HTMLInputElement;
+  const pressed = (label: string) => byText(body(), 'button', label)!.getAttribute('aria-pressed');
+
+  it('đang tạo: khoá chu kỳ, "Giao ngay"/"Chọn ngày", ô ngày, 3 cách trả, các địa chỉ; nút tạo báo bận nhưng giữ focus (không disabled DOM)', async () => {
+    await startPending();
+    const weeks = group('Chu kỳ giao');
+    expect(weeks).toHaveLength(4);
+    for (const w of weeks) expect(w.disabled, w.textContent ?? '').toBe(true);
+    for (const w of group('Đơn đầu tiên')) expect(w.disabled, w.textContent ?? '').toBe(true);
+    expect(group('Đơn đầu tiên')).toHaveLength(2);
+    expect(dateInput().disabled).toBe(true);
+    const pay = radiosOf('Thanh toán mỗi kỳ');
+    expect(pay).toHaveLength(3);
+    for (const r of pay) expect(r.disabled).toBe(true);
+    const addr = radiosOf('Giao tới');
+    expect(addr).toHaveLength(2);
+    for (const r of addr) expect(r.disabled).toBe(true);
+    for (const r of [...pay, ...addr]) expect(r.classList.contains('cursor-not-allowed')).toBe(true);
+
+    const cta = byText(body(), 'button', 'Đang tạo…') as HTMLButtonElement;
+    expect(cta.getAttribute('aria-busy')).toBe('true');
+    expect(cta.getAttribute('aria-disabled')).toBe('true');
+    expect(cta.disabled).toBe(false);
+  });
+
+  it('đang tạo: bấm các điều khiển bị khoá không đổi lựa chọn; bấm nút tạo lần nữa không bắn POST thứ hai', async () => {
+    await startPending();
+    click(byText(body(), 'button', '6 tuần'));
+    expect(pressed('4 tuần')).toBe('true');
+    click(byText(body(), 'button', 'Giao ngay'));
+    expect(pressed('Chọn ngày')).toBe('true');
+    click(radio(/1 Lê Lợi/));
+    expect(radio(/1 Lê Lợi/).getAttribute('aria-checked')).toBe('false');
+    click(radio(/Chuyển khoản ngân hàng/));
+    expect(radio(/Chuyển khoản ngân hàng/).getAttribute('aria-checked')).toBe('false');
+    click(byText(body(), 'button', 'Đang tạo…'));
+    await flush();
+    expect(mocks.http.post).toHaveBeenCalledTimes(1);
+  });
+
+  it('đang tạo: sheet không đóng được (không nút X, Esc, nền, onClose đều bị chặn); tạo xong mở khoá lại', async () => {
+    const created = await startPending();
+    expect(lastSheet().dismissible).toBe(false);
+    expect(body().querySelector('[aria-label="Đóng"]')).toBeNull();
+    tryClose();
+    escape();
+    click(body().querySelector('[data-sheet-backdrop]'));
+    await flush(2);
+    expect(onClose).not.toHaveBeenCalled();
+
+    created.resolve({ ...SUB, firstOrder: null });
+    await flush(4);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(lastSheet().dismissible).toBe(true);
+    for (const w of group('Chu kỳ giao')) expect(w.disabled).toBe(false);
+    expect(dateInput().disabled).toBe(false);
+  });
+
+  it('tạo lỗi: báo lỗi trong sheet, mở khoá lại form, đóng sheet được', async () => {
+    const created = await startPending();
+    created.reject(new Error('Số dư Ví Tubu không đủ'));
+    await flush(4);
+    expect(alertEl()!.textContent).toContain('Số dư Ví Tubu không đủ');
+    expect(lastSheet().dismissible).toBe(true);
+    const cta = byText(body(), 'button', 'Bắt đầu đặt định kỳ') as HTMLButtonElement;
+    expect(cta.hasAttribute('aria-busy')).toBe(false);
+    expect(cta.hasAttribute('aria-disabled')).toBe(false);
+    for (const w of group('Chu kỳ giao')) expect(w.disabled).toBe(false);
+    for (const r of radiosOf('Giao tới')) expect(r.disabled).toBe(false);
+    tryClose();
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('request lỗi lúc sheet đang đóng: mở lại không còn lỗi cũ (lỗi chỉ xoá khi đóng, không xoá lúc đang mở)', async () => {
+    const created = deferred<Record<string, unknown>>();
+    mocks.http.post.mockReturnValue(created.promise);
+    function Harness() {
+      const [open, setOpen] = useState(true);
+      return (
+        <>
+          <button type="button" onClick={() => setOpen((v) => !v)}>đổi</button>
+          <SubscribeSheet visible={open} onClose={() => setOpen(false)} onNotice={onNotice} variationId="v1" quantity={2} />
+        </>
+      );
+    }
+    mounted.push(render(<Harness />));
+    await flush();
+    click(byText(body(), 'button', 'Bắt đầu đặt định kỳ'));
+    await flush(3);
+    click(byText(body(), 'button', 'đổi')!);
+    await flush();
+    created.reject(new Error('Số dư Ví Tubu không đủ'));
+    await flush(4);
+    click(byText(body(), 'button', 'đổi')!);
+    await flush();
+    expect(alertEl()).toBeNull();
+    expect((byText(body(), 'button', 'Bắt đầu đặt định kỳ') as HTMLButtonElement).hasAttribute('aria-busy')).toBe(false);
+  });
+
+  it('ngày bắt đầu sai: nút tạo vẫn `disabled` DOM thật (không chỉ aria khi đang gửi) và bấm không gửi gì', async () => {
+    mount();
+    await flush();
+    click(byText(body(), 'button', 'Chọn ngày'));
+    typeInto(dateInput(), '2026-10-10');
+    expect((byText(body(), 'button', 'Bắt đầu đặt định kỳ') as HTMLButtonElement).disabled).toBe(true);
+    click(byText(body(), 'button', 'Bắt đầu đặt định kỳ'));
+    await flush();
+    expect(mocks.http.post).not.toHaveBeenCalled();
+  });
+});
+
+describe('SubscribeSheet: số đều (tabular-nums)', () => {
+  it('tiêu đề có % tiết kiệm, số tuần, gợi ý số ngày tối đa, số dư Ví Tubu đều có tabular-nums', async () => {
+    mount();
+    await flush();
+    click(byText(body(), 'button', 'Chọn ngày'));
+    const hint = byText(body(), 'p', /Chọn một ngày trong vòng \d+ ngày tới/)!;
+    const wallet = radio(/Ví Tubu \(300\.000đ\)/);
+    const spots: HTMLElement[] = [
+      byText(body(), 'h2', 'tiết kiệm 12%')!,
+      ...group('Chu kỳ giao'),
+      hint,
+      wallet.querySelector('span.flex-1') as HTMLElement,
+    ];
+    expect(spots).toHaveLength(7);
+    for (const el of spots) {
+      expect(el, 'phần tử').toBeTruthy();
+      expect(el.classList.contains('tabular-nums'), el.textContent ?? '').toBe(true);
+    }
   });
 });

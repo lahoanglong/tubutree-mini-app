@@ -1,10 +1,28 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
+import { useState, type ComponentType } from 'react';
+import type { BottomSheetProps } from './ui/bottom-sheet';
+import { getLoadErrorMessage } from '../services/api';
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(), openSnackbar: vi.fn(), getAddresses: vi.fn(), getWallet: vi.fn(), createSubscription: vi.fn(),
 }));
+// Bọc BottomSheet để đọc props mới nhất (open/dismissible/onClose): guard `onClose` không có đường bấm nào chạm tới khi
+// `dismissible=false` đã ẩn nút X và chặn Esc, nên chỉ gọi thẳng onClose mới chứng minh được nó.
+const sheetSpy = vi.hoisted(() => ({
+  calls: [] as Array<{ open: boolean; dismissible?: boolean; title?: string; onClose: () => void }>,
+}));
+vi.mock('./ui/bottom-sheet', async (importOriginal) => {
+  const orig = await importOriginal<{ BottomSheet: ComponentType<BottomSheetProps> }>();
+  return {
+    ...orig,
+    BottomSheet: (p: BottomSheetProps) => {
+      sheetSpy.calls.push(p);
+      return <orig.BottomSheet {...p} />;
+    },
+  };
+});
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   useNavigate: () => mocks.navigate,
@@ -181,5 +199,243 @@ describe('SubscribeSheet (C-015: ngày bắt đầu + cách trả + địa chỉ
     expect(onClose).toHaveBeenCalled();
     expect(mocks.navigate).toHaveBeenCalledWith('/addresses');
     expect(screen.queryByRole('button', { name: 'Bắt đầu đặt định kỳ' })).not.toBeInTheDocument();
+  });
+});
+
+function deferred<T>() {
+  let resolve!: (v: T) => void;
+  let reject!: (e: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+const createBtn = () => screen.queryByRole('button', { name: 'Bắt đầu đặt định kỳ' });
+const skeletons = () => document.querySelectorAll('.tubu-skeleton').length;
+const lastSheet = () => sheetSpy.calls.at(-1)!;
+/** Gọi thẳng onClose đang treo ở sheet (nút X/Esc đã bị `dismissible` chặn trước khi tới đây). */
+const tryClose = () => act(() => lastSheet().onClose());
+const radios = (group: string) => within(screen.getByRole('radiogroup', { name: group })).getAllByRole('radio');
+const INTERVALS = ['4 tuần', '6 tuần', '8 tuần', '10 tuần'];
+
+describe('SubscribeSheet: tải địa chỉ (skeleton, lỗi + Thử lại)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sheetSpy.calls.length = 0;
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-10T03:00:00Z'));
+    mocks.getWallet.mockResolvedValue({ walletBalance: 300000 });
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it('địa chỉ đang tải: hiện skeleton, chưa dựng danh sách địa chỉ; tải xong thì thay bằng danh sách', async () => {
+    const addr = deferred<ReturnType<typeof ADDR>[]>();
+    mocks.getAddresses.mockReturnValue(addr.promise);
+    renderSheet();
+    await waitFor(() => expect(skeletons()).toBeGreaterThan(0));
+    expect(screen.queryByRole('radiogroup', { name: 'Giao tới' })).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
+
+    await act(async () => addr.resolve([ADDR('a2', true, '9 Hai Bà Trưng')]));
+    expect(await screen.findByRole('radio', { name: /9 Hai Bà Trưng/ })).toHaveAttribute('aria-checked', 'true');
+    expect(skeletons()).toBe(0);
+  });
+
+  it('tải địa chỉ lỗi: role="alert" có lời lỗi + "Thử lại"; không có nút tạo, không có danh sách địa chỉ', async () => {
+    const err = new Error('boom');
+    mocks.getAddresses.mockRejectedValue(err);
+    renderSheet();
+    const alert = await screen.findByRole('alert');
+    expect(getLoadErrorMessage(err)).not.toBe('');
+    expect(alert).toHaveTextContent(getLoadErrorMessage(err));
+    const retryBtn = within(alert).getByRole('button', { name: 'Thử lại' });
+    expect(retryBtn).toBeEnabled();
+    expect(retryBtn.className).toContain('zaui-btn-secondary');
+    expect(within(alert).getByText(getLoadErrorMessage(err)).style.color).toBe('var(--color-text-danger)');
+    expect(createBtn()).toBeNull();
+    expect(screen.queryByRole('radiogroup', { name: 'Giao tới' })).toBeNull();
+    expect(skeletons()).toBe(0);
+  });
+
+  it('"Thử lại": gọi lại địa chỉ; đang tải nút xoay, vùng lỗi + focus đứng yên, chưa có nút tạo; xong thì hiện danh sách + nút tạo', async () => {
+    const err = new Error('boom');
+    const retry = deferred<ReturnType<typeof ADDR>[]>();
+    mocks.getAddresses.mockRejectedValueOnce(err).mockReturnValueOnce(retry.promise);
+    renderSheet();
+    const alert = await screen.findByRole('alert');
+    const retryBtn = within(alert).getByRole('button', { name: 'Thử lại' });
+    retryBtn.focus();
+    fireEvent.click(retryBtn);
+    await waitFor(() => expect(mocks.getAddresses).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(retryBtn).toHaveAttribute('aria-busy', 'true'));
+
+    // react-query xoá lỗi lúc tải lại: vùng lỗi vẫn là CÙNG phần tử, còn lời cũ, focus không rơi về body
+    expect(screen.getByRole('alert')).toBe(alert);
+    expect(alert).toHaveTextContent(getLoadErrorMessage(err));
+    expect(document.activeElement).toBe(retryBtn);
+    expect(skeletons()).toBe(0);
+    expect(createBtn()).toBeNull();
+    fireEvent.click(retryBtn);
+    expect(mocks.getAddresses).toHaveBeenCalledTimes(2);
+
+    await act(async () => retry.resolve([ADDR('a1', false, '1 Lê Lợi'), ADDR('a2', true, '9 Hai Bà Trưng')]));
+    expect(await screen.findByRole('radio', { name: /9 Hai Bà Trưng/ })).toHaveAttribute('aria-checked', 'true');
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(createBtn()).toBeEnabled();
+  });
+
+  it('đã có danh sách địa chỉ mà lần tải lại sau đó lỗi: danh sách ở lại, không hiện vùng lỗi, vẫn có nút tạo', async () => {
+    mocks.getAddresses.mockReset().mockResolvedValue([ADDR('a1', false, '1 Lê Lợi'), ADDR('a2', true, '9 Hai Bà Trưng')]);
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    function Harness() {
+      const [open, setOpen] = useState(true);
+      return (
+        <>
+          <button type="button" onClick={() => setOpen((v) => !v)}>đổi</button>
+          <SubscribeSheet visible={open} onClose={() => setOpen(false)} variationId="v1" quantity={2} />
+        </>
+      );
+    }
+    const { unmount } = render(
+      <QueryClientProvider client={qc}>
+        <Harness />
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByRole('radio', { name: /9 Hai Bà Trưng/ })).toHaveAttribute('aria-checked', 'true');
+    mocks.getAddresses.mockReset().mockRejectedValue(new Error('boom'));
+    fireEvent.click(screen.getByText('đổi'));
+    fireEvent.click(screen.getByText('đổi'));
+    await waitFor(() => expect(mocks.getAddresses).toHaveBeenCalledTimes(1));
+    await act(async () => undefined);
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getAllByRole('radio', { name: /Hai Bà Trưng|Lê Lợi/ })).toHaveLength(2);
+    expect(createBtn()).toBeEnabled();
+    unmount();
+  });
+
+  it('"Thử lại" lỗi tiếp: vùng lỗi vẫn đó, nút hết xoay, thử lại được lần nữa', async () => {
+    const err = new Error('boom');
+    mocks.getAddresses.mockRejectedValueOnce(err).mockRejectedValueOnce(err).mockResolvedValueOnce([ADDR('a2', true, '9 Hai Bà Trưng')]);
+    renderSheet();
+    const retryBtn = within(await screen.findByRole('alert')).getByRole('button', { name: 'Thử lại' });
+    fireEvent.click(retryBtn);
+    await waitFor(() => expect(mocks.getAddresses).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(within(screen.getByRole('alert')).getByRole('button', { name: 'Thử lại' })).not.toHaveAttribute('aria-busy'));
+    expect(screen.getByRole('alert')).toHaveTextContent(getLoadErrorMessage(err));
+    expect(createBtn()).toBeNull();
+
+    fireEvent.click(within(screen.getByRole('alert')).getByRole('button', { name: 'Thử lại' }));
+    expect(await screen.findByRole('radio', { name: /9 Hai Bà Trưng/ })).toHaveAttribute('aria-checked', 'true');
+    expect(mocks.getAddresses).toHaveBeenCalledTimes(3);
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+});
+
+describe('SubscribeSheet: khoá form + chặn đóng khi đang tạo lịch', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sheetSpy.calls.length = 0;
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-10T03:00:00Z'));
+    mocks.getAddresses.mockResolvedValue([ADDR('a1', false, '1 Lê Lợi'), ADDR('a2', true, '9 Hai Bà Trưng')]);
+    mocks.getWallet.mockResolvedValue({ walletBalance: 300000 });
+  });
+  afterEach(() => vi.useRealTimers());
+
+  /** Chọn "Chọn ngày" + một ngày hợp lệ (để ô ngày hiện ra), bấm tạo, đợi nút báo bận. */
+  async function startPending() {
+    const create = deferred<Record<string, unknown>>();
+    mocks.createSubscription.mockReturnValue(create.promise);
+    const r = renderSheet();
+    await screen.findByRole('radio', { name: /9 Hai Bà Trưng/ });
+    fireEvent.click(screen.getByRole('button', { name: 'Chọn ngày' }));
+    fireEvent.change(screen.getByLabelText('Ngày bắt đầu giao'), { target: { value: '2026-10-20' } });
+    fireEvent.click(createBtn()!);
+    await waitFor(() => expect(createBtn()).toHaveAttribute('aria-busy', 'true'));
+    return { ...r, create };
+  }
+
+  it('đang tạo: khoá chu kỳ, "Giao ngay"/"Chọn ngày", ô ngày, 3 cách trả, các địa chỉ; nút tạo xoay nhưng giữ focus (không disabled DOM)', async () => {
+    await startPending();
+    for (const name of INTERVALS) expect(screen.getByRole('button', { name })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Giao ngay' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Chọn ngày' })).toBeDisabled();
+    expect(screen.getByLabelText('Ngày bắt đầu giao')).toBeDisabled();
+    const pay = radios('Thanh toán mỗi kỳ');
+    expect(pay).toHaveLength(3);
+    for (const r of pay) expect(r).toHaveAttribute('aria-disabled', 'true');
+    const addr = radios('Giao tới');
+    expect(addr).toHaveLength(2);
+    for (const r of addr) expect(r).toHaveAttribute('aria-disabled', 'true');
+    expect(createBtn()).toBeEnabled();
+  });
+
+  it('đang tạo: bấm các điều khiển bị khoá không đổi lựa chọn; bấm nút tạo lần nữa không bắn lời gọi thứ hai', async () => {
+    await startPending();
+    fireEvent.click(screen.getByRole('button', { name: '6 tuần' }));
+    expect(screen.getByRole('button', { name: '4 tuần' })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByRole('button', { name: 'Giao ngay' }));
+    expect(screen.getByRole('button', { name: 'Chọn ngày' })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByRole('radio', { name: /1 Lê Lợi/ }));
+    expect(screen.getByRole('radio', { name: /1 Lê Lợi/ })).toHaveAttribute('aria-checked', 'false');
+    fireEvent.click(screen.getByRole('radio', { name: /Chuyển khoản ngân hàng/ }));
+    expect(screen.getByRole('radio', { name: /Chuyển khoản ngân hàng/ })).toHaveAttribute('aria-checked', 'false');
+    fireEvent.click(createBtn()!);
+    expect(mocks.createSubscription).toHaveBeenCalledTimes(1);
+  });
+
+  it('đang tạo: sheet không đóng được (không nút X, Esc, onClose đều bị chặn); tạo xong mở khoá lại', async () => {
+    const { onClose, create } = await startPending();
+    expect(lastSheet().dismissible).toBe(false);
+    expect(screen.queryByRole('button', { name: 'Đóng' })).toBeNull();
+    tryClose();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onClose).not.toHaveBeenCalled();
+
+    await act(async () => create.resolve({ ...SUB, firstOrder: null }));
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(lastSheet().dismissible).toBe(true));
+    for (const name of INTERVALS) expect(screen.getByRole('button', { name })).toBeEnabled();
+    expect(screen.getByLabelText('Ngày bắt đầu giao')).toBeEnabled();
+  });
+
+  it('tạo lỗi: báo lỗi, mở khoá lại form, đóng sheet được', async () => {
+    const { onClose, create } = await startPending();
+    await act(async () => create.reject(new Error('Số dư Ví Tubu không đủ')));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+    await waitFor(() => expect(lastSheet().dismissible).toBe(true));
+    expect(createBtn()).not.toHaveAttribute('aria-busy');
+    for (const name of INTERVALS) expect(screen.getByRole('button', { name })).toBeEnabled();
+    for (const r of radios('Giao tới')) expect(r).not.toHaveAttribute('aria-disabled');
+    tryClose();
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('SubscribeSheet: số đều (tabular-nums)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sheetSpy.calls.length = 0;
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-10T03:00:00Z'));
+    mocks.getAddresses.mockResolvedValue([ADDR('a2', true, '9 Hai Bà Trưng')]);
+    mocks.getWallet.mockResolvedValue({ walletBalance: 300000 });
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it('tiêu đề có % tiết kiệm, số tuần, gợi ý số ngày tối đa, số dư Ví Tubu đều có tabular-nums', async () => {
+    renderSheet();
+    await screen.findByRole('radio', { name: /9 Hai Bà Trưng/ });
+    fireEvent.click(screen.getByRole('button', { name: 'Chọn ngày' }));
+    const wallet = await screen.findByRole('radio', { name: /Ví Tubu \(300\.000đ\)/ });
+    const spots: HTMLElement[] = [
+      screen.getByRole('heading', { name: /Đặt định kỳ — tiết kiệm 12%/ }),
+      ...INTERVALS.map((name) => screen.getByRole('button', { name })),
+      screen.getByText(/Chọn một ngày trong vòng \d+ ngày tới/),
+      within(wallet).getByText(/Ví Tubu \(300\.000đ\)/),
+    ];
+    for (const el of spots) expect(el.style.fontVariantNumeric, el.textContent ?? '').toBe('tabular-nums');
   });
 });
