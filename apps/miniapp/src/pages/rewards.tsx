@@ -228,7 +228,7 @@ function RewardsBody() {
   // Giữ khoá ở thân trang để đóng khung rồi mở lại cùng quà sau lỗi mạng vẫn gửi đúng khoá cũ: máy chủ có thể đã trừ điểm.
   const idem = useIdempotencyKey({ rewardId: confirmReward?.id ?? null });
 
-  if (rewardsQ.isError && !rewardsQ.data) return <ErrorState message={getLoadErrorMessage(rewardsQ.error)} onRetry={() => void rewardsQ.refetch()} />;
+  if (rewardsQ.isError && !rewardsQ.data) return <ErrorState message={getLoadErrorMessage(rewardsQ.error)} onRetry={() => rewardsQ.refetch()} />;
   const c = rewardsQ.data;
   if (!c) return <div style={{ padding: 16 }}><Skeleton height={120} /></div>;
 
@@ -314,7 +314,7 @@ function GuestRewards() {
       <GuestHint />
       <GuestLoginButton />
       {q.isError && !q.data ? (
-        <ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => void q.refetch()} />
+        <ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => q.refetch()} />
       ) : !catalog ? (
         <Skeleton height={120} />
       ) : (

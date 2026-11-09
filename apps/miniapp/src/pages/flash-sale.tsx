@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Page, useNavigate } from 'zmp-ui';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useLockedMutation } from '../components/game/use-locked-mutation';
 import { flashSlotItemsQuery, flashSlotsQuery } from '@tubutree/app-core/queries/flash-sale';
 import { initialSlotId, slotAfterEnd, slotCategoryChips, slotListView, slotTabs } from '@tubutree/app-core/commerce/flash-slots';
 import { remindIntentAction, type RemindIntent } from '@tubutree/app-core/commerce/flash-remind-intent';
@@ -112,7 +113,8 @@ export default function FlashSalePage() {
   const loginWithNotice = useLoginWithNotice();
   const login = () => void loginWithNotice();
 
-  const buyMut = useMutation({
+  // Một lần Mua ngay một lúc (mọi món): hai cú chạm sát nhau trước khi vẽ lại `isPending` không thêm giỏ hai lần.
+  const buyMut = useLockedMutation({
     mutationFn: async (item: FlashSlotItemData) => ({ cart: await addToCart(item.variationId, 1, 'buy_now'), variationId: item.variationId }),
     onSuccess: ({ cart, variationId }) => {
       qc.setQueryData(cartKey(), cart);
@@ -126,7 +128,7 @@ export default function FlashSalePage() {
     onError: (e: unknown) => notify({ text: getErrorMessage(e), type: 'error' }),
   });
 
-  const remindMut = useMutation({
+  const remindMut = useLockedMutation({
     mutationFn: ({ itemId, reminded }: { itemId: string; reminded: boolean; startAt: string }) => (reminded ? cancelFlashReminder(itemId) : setFlashReminder(itemId)),
     onMutate: async ({ itemId, reminded }) => {
       await qc.cancelQueries({ queryKey: UPCOMING_KEY });
@@ -141,7 +143,7 @@ export default function FlashSalePage() {
       notify({ text: getErrorMessage(e), type: 'error' });
     },
     onSettled: () => void qc.invalidateQueries({ queryKey: UPCOMING_KEY }),
-  });
+  }, ({ itemId }) => itemId);
 
   const reminded = useMemo(() => new Set((upcomingQ.data ?? []).filter((u) => u.reminded).map((u) => u.itemId)), [upcomingQ.data]);
 
@@ -228,14 +230,13 @@ export default function FlashSalePage() {
           pendingBuy.current = null;
           if (!mounted.current) return;
           setWaitingBuyId(null);
-          if (useAuthStore.getState().status === 'authenticated' && !buyMut.isPending) buyMut.mutate(item);
+          if (useAuthStore.getState().status === 'authenticated') buyMut.mutate(item);
         });
         return;
       }
       login();
       return;
     }
-    if (buyMut.isPending) return;
     buyMut.mutate(item);
   };
 
@@ -253,7 +254,7 @@ export default function FlashSalePage() {
       </div>
     );
   } else if (slotsQ.isError && !slotsQ.data) {
-    body = <ErrorState message={getLoadErrorMessage(slotsQ.error)} onRetry={() => void slotsQ.refetch()} retrying={slotsQ.isFetching} />;
+    body = <ErrorState message={getLoadErrorMessage(slotsQ.error)} onRetry={() => slotsQ.refetch()} retrying={slotsQ.isFetching} />;
   } else if (tabs.length === 0 || activeId === null || activeTab === null || activeSlot === null) {
     body = empty;
   } else {
@@ -264,7 +265,7 @@ export default function FlashSalePage() {
     const serverEnded = itemsQ.data?.slot.status === 'ENDED';
     let list: React.ReactNode;
     if (itemsQ.isPending) list = <ListSkeleton />;
-    else if (itemsQ.isError) list = <ErrorState variant="inline" message={getLoadErrorMessage(itemsQ.error)} onRetry={() => void itemsQ.refetch()} retrying={itemsQ.isFetching} />;
+    else if (itemsQ.isError) list = <ErrorState variant="inline" message={getLoadErrorMessage(itemsQ.error)} onRetry={() => itemsQ.refetch()} retrying={itemsQ.isFetching} />;
     else if (serverEnded)
       list = <EmptyState variant="inline" art="sprout" heading={fillCopy('flash.endedTitle')} ctaLabel={fillCopy('flash.endedCta')} onCta={goNextSlot} />;
     else if (rows.length === 0) list = <EmptyState variant="inline" art="box" heading={fillCopy('flash.slotEmpty')} />;
@@ -278,7 +279,7 @@ export default function FlashSalePage() {
                 slotStatus={activeTab.status}
                 reminded={reminded.has(item.itemId)}
                 remindPending={remindMut.isPending && remindMut.variables?.itemId === item.itemId}
-                buyPending={waitingBuyId === item.itemId}
+                buyPending={waitingBuyId === item.itemId || (buyMut.isPending && buyMut.variables?.itemId === item.itemId)}
                 onBuy={() => onBuy(item)}
                 onToggleRemind={() => onToggleRemind(item)}
               />

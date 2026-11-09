@@ -145,7 +145,7 @@ export default function OffersPage() {
             {couponsQ.isLoading ? (
               <Skeleton height={88} radius="var(--radius-card)" />
             ) : couponsQ.isError ? (
-              <ErrorState variant="inline" title={COUPONS_LOAD_ERROR_TITLE} message={getLoadErrorMessage(couponsQ.error)} onRetry={() => void couponsQ.refetch()} />
+              <ErrorState variant="inline" title={COUPONS_LOAD_ERROR_TITLE} message={getLoadErrorMessage(couponsQ.error)} onRetry={() => couponsQ.refetch()} />
             ) : mine.total > 0 ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {mine.shown.map((row) => (

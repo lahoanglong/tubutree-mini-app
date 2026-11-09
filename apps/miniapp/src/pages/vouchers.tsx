@@ -114,7 +114,7 @@ export default function VouchersPage() {
     </div>
   );
   const failed = (q: { error: unknown; isFetching: boolean; refetch: () => unknown }) => (
-    <ErrorState variant="inline" title={fillCopy('coupon.loadError')} message={getLoadErrorMessage(q.error)} retrying={q.isFetching} onRetry={() => void q.refetch()} />
+    <ErrorState variant="inline" title={fillCopy('coupon.loadError')} message={getLoadErrorMessage(q.error)} retrying={q.isFetching} onRetry={() => q.refetch()} />
   );
 
   const needsAccount = tab !== 'claim' && phase !== 'authenticated';
@@ -171,7 +171,7 @@ export default function VouchersPage() {
       <div role="tabpanel" aria-label={activeLabel} style={{ padding: '8px 16px 24px' }}>
         {tab === 'claim' && authed && walletCodes === null && (
           <div style={{ marginBottom: 12 }}>
-            <ErrorState variant="inline" title={fillCopy('coupon.walletLoadError')} message={getLoadErrorMessage(walletQ.error)} retrying={walletQ.isFetching} onRetry={() => void walletQ.refetch()} />
+            <ErrorState variant="inline" title={fillCopy('coupon.walletLoadError')} message={getLoadErrorMessage(walletQ.error)} retrying={walletQ.isFetching} onRetry={() => walletQ.refetch()} />
           </div>
         )}
         {body}

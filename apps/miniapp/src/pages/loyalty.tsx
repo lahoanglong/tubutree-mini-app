@@ -156,7 +156,7 @@ export default function LoyaltyPage() {
       ) : loyaltyQ.isLoading ? (
         pageSkeleton
       ) : loyaltyQ.isError && !loyaltyQ.data ? (
-        <ErrorState message={getLoadErrorMessage(loyaltyQ.error)} onRetry={() => void loyaltyQ.refetch()} />
+        <ErrorState message={getLoadErrorMessage(loyaltyQ.error)} onRetry={() => loyaltyQ.refetch()} />
       ) : data ? (
         <>
           <PointsBoostStrip placement="wallet" />
@@ -422,7 +422,7 @@ export default function LoyaltyPage() {
                 variant="inline"
                 title="Chưa tải được lịch sử Điểm Xanh"
                 message={getLoadErrorMessage(txnQ.error)}
-                onRetry={() => void txnQ.refetch()}
+                onRetry={() => txnQ.refetch()}
               />
             ) : history.length > 0 ? (
               <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -514,7 +514,7 @@ export default function LoyaltyPage() {
             <ErrorState
               variant="inline"
               message={`Chưa tải được mã thành viên: ${getLoadErrorMessage(memberCardQ.error)}`}
-              onRetry={() => void memberCardQ.refetch()}
+              onRetry={() => memberCardQ.refetch()}
             />
           ) : (
             <>
