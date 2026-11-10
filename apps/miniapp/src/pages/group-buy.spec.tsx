@@ -579,3 +579,156 @@ describe('GroupBuyPage — khoá chạm đúp Tham gia (W75A)', () => {
     await waitFor(() => expect(mocks.joinGroupBuy).toHaveBeenCalledTimes(2));
   });
 });
+
+describe('GroupBuyPage — khoá giữ tới khi danh sách về, khoá "Mời bạn bè" (W87A)', () => {
+  const deferred = <T,>() => {
+    let resolve!: (v: T) => void;
+    const promise = new Promise<T>((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  const JOINED = { joined: true, currentSize: 3, status: 'OPEN' as const };
+
+  it('tham gia xong mà danh sách chưa về: nút vẫn bận (chưa thành "Mời bạn bè") và bấm thêm không gửi lần hai; danh sách về thì thành viên', async () => {
+    const refreshed = deferred<GroupBuy[]>();
+    mocks.listGroupBuys.mockResolvedValueOnce([GROUP('a')]).mockReturnValueOnce(refreshed.promise);
+    mocks.joinGroupBuy.mockResolvedValue(JOINED);
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Tham gia mua chung (−20%)' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã tham gia nhóm', type: 'success' }));
+    await waitFor(() => expect(mocks.listGroupBuys).toHaveBeenCalledTimes(2));
+    const stale = screen.getByRole('button', { name: 'Tham gia mua chung (−20%)' });
+    expect(stale).toHaveAttribute('aria-busy', 'true');
+    fireEvent.click(stale);
+    fireEvent.click(stale);
+    expect(mocks.joinGroupBuy).toHaveBeenCalledTimes(1);
+    await act(async () => refreshed.resolve([GROUP('a', { joined: true, currentSize: 3 })]));
+    expect(await screen.findByRole('button', { name: 'Mời bạn bè' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Tham gia mua chung/ })).toBeNull();
+    expect(mocks.joinGroupBuy).toHaveBeenCalledTimes(1);
+    expect(mocks.openSnackbar).toHaveBeenCalledTimes(1);
+  });
+
+  it('nhóm được mời qua liên kết: tham gia xong thẻ chờ cả danh sách chung lẫn chi tiết nhóm làm mới về rồi mới nhả khoá', async () => {
+    mocks.params = { id: 'inv' };
+    const refreshed = deferred<GroupBuy>();
+    mocks.listGroupBuys.mockResolvedValue([]);
+    mocks.getGroupBuy.mockResolvedValueOnce(GROUP('inv')).mockReturnValueOnce(refreshed.promise);
+    mocks.joinGroupBuy.mockResolvedValue(JOINED);
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Tham gia mua chung (−20%)' }));
+    await waitFor(() => expect(mocks.getGroupBuy).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã tham gia nhóm', type: 'success' }));
+    const stale = screen.getByRole('button', { name: 'Tham gia mua chung (−20%)' });
+    expect(stale).toHaveAttribute('aria-busy', 'true');
+    fireEvent.click(stale);
+    expect(mocks.joinGroupBuy).toHaveBeenCalledTimes(1);
+    await act(async () => refreshed.resolve(GROUP('inv', { joined: true, currentSize: 3 })));
+    expect(await screen.findByRole('button', { name: 'Mời bạn bè' })).toBeInTheDocument();
+    expect(mocks.joinGroupBuy).toHaveBeenCalledTimes(1);
+  });
+
+  describe('"Mời bạn bè"', () => {
+    const MINE = () => mocks.listGroupBuys.mockResolvedValue([GROUP('mine', { joined: true, isOwner: true })]);
+
+    it('chạm đúp trong cùng một khung hình chỉ mở hộp chia sẻ một lần', async () => {
+      const share = deferred<void>();
+      mocks.shareWithFallback.mockReturnValueOnce(share.promise);
+      MINE();
+      renderPage();
+      const invite = await screen.findByRole('button', { name: 'Mời bạn bè' });
+      await act(async () => {
+        fireEvent.click(invite);
+        fireEvent.click(invite);
+      });
+      expect(mocks.shareWithFallback).toHaveBeenCalledTimes(1);
+      await act(async () => share.resolve());
+    });
+
+    it('hai cú chạm ở hai lần act liên tiếp (hộp chia sẻ chưa đóng): vẫn chỉ một lần', async () => {
+      const share = deferred<void>();
+      mocks.shareWithFallback.mockReturnValueOnce(share.promise);
+      MINE();
+      renderPage();
+      const invite = await screen.findByRole('button', { name: 'Mời bạn bè' });
+      await act(async () => {
+        fireEvent.click(invite);
+      });
+      await act(async () => {
+        fireEvent.click(invite);
+      });
+      expect(mocks.shareWithFallback).toHaveBeenCalledTimes(1);
+      await act(async () => share.resolve());
+    });
+
+    it('hộp chia sẻ đóng (xong hoặc khách huỷ) thì nhả khoá: bấm lại mở lần hai', async () => {
+      const share = deferred<void>();
+      mocks.shareWithFallback.mockReturnValueOnce(share.promise).mockResolvedValue(undefined);
+      MINE();
+      renderPage();
+      const invite = await screen.findByRole('button', { name: 'Mời bạn bè' });
+      fireEvent.click(invite);
+      expect(mocks.shareWithFallback).toHaveBeenCalledTimes(1);
+      await act(async () => share.resolve());
+      fireEvent.click(screen.getByRole('button', { name: 'Mời bạn bè' }));
+      expect(mocks.shareWithFallback).toHaveBeenCalledTimes(2);
+    });
+  });
+});
+
+describe('GroupBuyPage — "Thử lại" danh sách khoá chạm đúp (W87A)', () => {
+  const deferred = <T,>() => {
+    let resolve!: (v: T) => void;
+    const promise = new Promise<T>((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+
+  // Chỉ ca còn dữ liệu cũ mà lần làm mới lỗi mới chứng minh được khoá của nút: truy vấn chưa có dữ liệu thì refetch thứ hai bị react-query gộp.
+  async function renderWithRefreshError() {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <GroupBuyPage />
+      </QueryClientProvider>,
+    );
+    await screen.findByText('Sản phẩm a');
+    mocks.listGroupBuys.mockRejectedValueOnce(new Error('mất mạng'));
+    await act(async () => {
+      await qc.invalidateQueries({ queryKey: ['group-buy'] });
+    });
+    return screen.findByRole('button', { name: 'Thử lại' });
+  }
+
+  it('chạm đúp trong cùng một khung hình chỉ tải lại một lần', async () => {
+    const retry = await renderWithRefreshError();
+    const next = deferred<GroupBuy[]>();
+    mocks.listGroupBuys.mockReturnValueOnce(next.promise);
+    const before = mocks.listGroupBuys.mock.calls.length;
+    await act(async () => {
+      fireEvent.click(retry);
+      fireEvent.click(retry);
+    });
+    expect(mocks.listGroupBuys.mock.calls.length - before).toBe(1);
+    await act(async () => next.resolve([GROUP('a')]));
+    expect(await screen.findByText('Sản phẩm a')).toBeInTheDocument();
+  });
+
+  it('hai cú chạm ở hai lần act liên tiếp (lượt tải chưa về) vẫn chỉ một lần', async () => {
+    const retry = await renderWithRefreshError();
+    const next = deferred<GroupBuy[]>();
+    mocks.listGroupBuys.mockReturnValueOnce(next.promise);
+    const before = mocks.listGroupBuys.mock.calls.length;
+    await act(async () => {
+      fireEvent.click(retry);
+    });
+    await act(async () => {
+      fireEvent.click(retry);
+    });
+    expect(mocks.listGroupBuys.mock.calls.length - before).toBe(1);
+    await act(async () => next.resolve([GROUP('a')]));
+    expect(await screen.findByText('Sản phẩm a')).toBeInTheDocument();
+  });
+});

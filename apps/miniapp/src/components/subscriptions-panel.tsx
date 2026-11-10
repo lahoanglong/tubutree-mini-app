@@ -66,9 +66,10 @@ export function SubscriptionsPanel() {
   const statusMut = useLockedMutation({
     onSettled: releaseActing,
     mutationFn: ({ id, status }: { id: string; status: SubStatus }) => setSubscriptionStatus(id, status),
+    // Trả Promise: khoá (và `exclusive`) giữ tới khi danh sách làm mới về, kẻo nút thẻ sáng lại với nhãn/trạng thái cũ trong lúc chờ.
     onSuccess: () => {
       haptic('light');
-      void qc.invalidateQueries({ queryKey: ['subscriptions'] });
+      return qc.invalidateQueries({ queryKey: ['subscriptions'] });
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
@@ -79,8 +80,8 @@ export function SubscriptionsPanel() {
     onSuccess: () => {
       haptic('light');
       openSnackbar({ text: vi.subscriptions.skipOk, type: 'success' });
-      void qc.invalidateQueries({ queryKey: ['subscriptions'] });
       setCancelTarget(null);
+      return qc.invalidateQueries({ queryKey: ['subscriptions'] });
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });

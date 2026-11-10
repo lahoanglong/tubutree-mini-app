@@ -73,7 +73,9 @@ export default function GroupBuyPage() {
         text: r.status === 'SUCCESS' ? 'Nhóm đã đủ người! Mã giảm giá đã vào ví của bạn.' : 'Đã tham gia nhóm',
         type: 'success',
       });
-      void queryClient.invalidateQueries({ queryKey: ['group-buy'] });
+      // Trả Promise: khoá của nhóm giữ tới khi danh sách và chi tiết nhóm làm mới về. Nhả sớm thì thẻ còn `joined: false` và nút "Tham gia"
+      // sáng lại, chạm lần nữa gửi một lệnh tham gia thừa bị máy chủ từ chối ngay sau thông báo thành công.
+      return queryClient.invalidateQueries({ queryKey: ['group-buy'] });
     },
     onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   }, (id) => id);
@@ -133,8 +135,9 @@ export default function GroupBuyPage() {
     await joinSignedIn(id);
   };
 
+  // Trả Promise để Button giữ khoá tới khi hộp chia sẻ đóng: chạm đúp không mở hai hộp chia sẻ của Zalo.
   const share = (g: GroupBuy) =>
-    void shareWithFallback(
+    shareWithFallback(
       {
         title: `Mua chung ${g.product.name} giảm ${g.discountPct}%`,
         description: `Còn thiếu ${groupMissing(g)} người nữa là đủ nhóm, vào tham gia cùng mình nhé!`,
