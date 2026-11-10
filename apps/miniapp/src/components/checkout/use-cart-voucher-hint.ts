@@ -11,7 +11,7 @@ import { useLockedMutation } from '../game/use-locked-mutation';
 import { haptic } from '../../utils/haptic';
 import { autoCouponName } from '../../utils/coupon-name';
 import { serverNow } from '../../utils/server-clock';
-import { useCouponPreviews } from './use-coupon-hint';
+import { COUPON_CHANGE_KEY, useCouponPreviews } from './use-coupon-hint';
 
 export interface CartVoucherHintState {
   /** Null khi chưa có xem trước của máy chủ, giỏ đã có mã, hoặc không có gì đáng nói. */
@@ -53,6 +53,8 @@ export function useCartVoucherHint(opts: {
 
   // Khoá ref đồng bộ: `isPending` chỉ đúng sau lần vẽ kế tiếp, hai cú chạm sát nhau vẫn đều gọi applyCoupon.
   const mut = useLockedMutation({
+    // Khách chạm "Áp mã" ở giỏ rồi sang Thanh toán ngay: trang giỏ gỡ đi nhưng lệnh vẫn bay, nút Đặt hàng đọc khoá này để chờ.
+    mutationKey: COUPON_CHANGE_KEY,
     mutationFn: (code: string) => applyCoupon(code.trim().toUpperCase()),
     // Xoá lời báo cũ lúc bắt đầu: lỗi lặp lại cùng câu vẫn dựng lại lời báo.
     onMutate: () => setFailed(null),
