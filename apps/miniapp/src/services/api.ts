@@ -261,6 +261,14 @@ export function isNotFoundError(error: unknown): boolean {
 }
 
 /**
+ * Máy chủ từ chối lệnh vì việc đó không còn đúng với trạng thái màn đang hiện: 400 (đã xử lý, đã có yêu cầu, quá hạn), 404 (không còn), 409 (vừa đổi).
+ * Bấm lại trên màn cũ nhận đúng lỗi đó mãi nên phải tải lại dữ liệu. Mất mạng, quá hạn, 401 và 5xx không nói gì về trạng thái thật: không tính.
+ */
+export function isStaleStateError(error: unknown): boolean {
+  return isHttpError(error) && [400, 404, 409].includes(error.response?.status ?? 0);
+}
+
+/**
  * Lỗi mà máy chủ có thể đã làm xong việc trước khi trả lời: quá thời gian, mất kết nối giữa chừng, 5xx (kể cả proxy phía trước).
  * Lệnh tạo đơn/tiền gặp lỗi này phải gửi lại đúng Idempotency-Key cũ; 4xx là máy chủ đã từ chối, không có gì được ghi.
  */

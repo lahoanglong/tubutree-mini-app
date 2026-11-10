@@ -8,7 +8,8 @@ import { Icon } from '../ui/icon';
 import { Text } from '../ui/text';
 import { RefundDestinationPicker } from './refund-destination-picker';
 import { chooseRefundDestination, fetchMyRefunds, fetchRefundBank } from '../../services/shop-api';
-import { getErrorMessage } from '../../services/api';
+import { getErrorMessage, isStaleStateError } from '../../services/api';
+import { settleWithin } from '../../utils/settle-within';
 import { formatVnd } from '../../utils/format';
 import { haptic } from '../../utils/haptic';
 import {
@@ -84,6 +85,9 @@ function ChooseDestinationSheet({ refund, onClose }: { refund: MyRefund; onClose
   const [touched, setTouched] = useState(false);
   const bankError = method === 'BANK' ? bankDetailsError(bank) : null;
 
+  // Cùng khoá với danh sách ở khối cha, `enabled: false` nên chỉ đọc cache và theo dõi dữ liệu mới về, không gọi API thêm.
+  const listed = useQuery({ queryKey: ['my-refunds', refund.orderId], queryFn: () => fetchMyRefunds(refund.orderId), enabled: false });
+
   // Điền sẵn đúng một lần (như web): bản trả về muộn chỉ điền khi cả ba ô còn trống, sau đó khách sửa hay xoá ô nào cũng không bị ghi đè.
   // Khoản hoàn đã có tài khoản: không điền sẵn, kể cả khi khách xoá sạch ba ô để nhập tài khoản khác.
   const prefillAppliedRef = useRef(Boolean(refund.bankAccountNo));
@@ -111,11 +115,30 @@ function ChooseDestinationSheet({ refund, onClose }: { refund: MyRefund; onClose
       });
       onClose();
     },
-    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    // Khoản hoàn đã khác thẻ (máy khác vừa chọn Ví, Tubu vừa bắt đầu chuyển khoản): tải lại để thẻ và nút theo số thật, giữ khoá tới lúc đó.
+    // Ví cũng tải lại vì bên thắng có thể vừa cộng tiền vào Ví. Lỗi tạm (mất mạng, 5xx) thì giữ nguyên.
+    onError: (e: unknown) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      if (!isStaleStateError(e)) return undefined;
+      return settleWithin(
+        Promise.all([
+          queryClient.invalidateQueries({ queryKey: ['my-refunds', refund.orderId] }),
+          queryClient.invalidateQueries({ queryKey: ['wallet'] }),
+        ]),
+      );
+    },
     onSettled: () => {
       savingRef.current = false;
     },
   });
+
+  // Khoản đã sang bước khác trên máy chủ (đã đóng bằng Ví, Tubu đang chuyển khoản): sheet này không lưu được nữa nên đóng, thẻ phía sau
+  // đã hiện trạng thái thật. Không đóng giữa lúc đang lưu: lệnh đang bay còn phải báo kết quả, và sau lỗi bị từ chối khoá giữ tới khi
+  // dữ liệu mới về nên effect chạy lại ngay khi khoá nhả.
+  const stillChoosable = listed.data?.some((r) => r.id === refund.id && r.canChooseDestination) ?? true;
+  useEffect(() => {
+    if (!stillChoosable && !save.isPending) onClose();
+  }, [stillChoosable, save.isPending, onClose]);
 
   const submit = () => {
     if (savingRef.current || save.isPending) return;

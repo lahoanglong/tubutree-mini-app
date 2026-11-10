@@ -19,6 +19,7 @@ vi.mock('../../services/shop-api', () => ({
 }));
 vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
 
+import { HttpError } from '../../services/http';
 import { OrderRefunds } from './order-refunds';
 
 const LATE = {
@@ -484,5 +485,122 @@ describe('ChooseDestinationSheet: chỉ Ví Tubu mới làm mới số dư ví',
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
     expect(keys()).not.toContain('["wallet"]');
     expect(keys()).not.toContain('["my-refunds","o1"]');
+  });
+});
+
+describe('ChooseDestinationSheet: máy chủ từ chối thì tải lại khoản hoàn ngay và đóng khi khoản đã sang bước khác (W104A)', () => {
+  let inv: MockInstance<QueryClient['invalidateQueries']>;
+  beforeEach(() => {
+    resetMocks();
+    inv = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
+  });
+  afterEach(() => inv.mockRestore());
+  const keys = () => inv.mock.calls.map((c) => JSON.stringify((c[0] as { queryKey: unknown }).queryKey));
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message } } as never);
+  const LOST = 'Khoản hoàn này vừa được xử lý — bạn tải lại nhé.';
+  const CLOSED_BY_WALLET = { ...LATE, kind: 'CANCEL', method: 'WALLET', status: 'COMPLETED', completedAt: '2026-10-14T03:05:00Z', canChooseDestination: false };
+
+  it.each([400, 404])('bị từ chối %i: tải lại khoản hoàn của đơn và ví', async (status) => {
+    mocks.chooseRefundDestination.mockRejectedValueOnce(serverError(LOST, status));
+    renderPanel();
+    const confirm = await openSheet();
+    await act(async () => {
+      fireEvent.click(confirm);
+    });
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: LOST, type: 'error' }));
+    await waitFor(() => expect(keys()).toEqual(expect.arrayContaining(['["my-refunds","o1"]', '["wallet"]'])));
+  });
+
+  it('máy khác vừa đóng khoản bằng Ví: sau khi tải lại, sheet đóng và thẻ hiện đúng "đã hoàn vào Ví Tubu"', async () => {
+    mocks.chooseRefundDestination.mockRejectedValueOnce(serverError(LOST, 400));
+    renderPanel();
+    const confirm = await openSheet();
+    mocks.fetchMyRefunds.mockResolvedValue([CLOSED_BY_WALLET]);
+    await act(async () => {
+      fireEvent.click(confirm);
+    });
+    expect(await screen.findByText('Hoàn tiền huỷ đơn: đã hoàn vào Ví Tubu · 197.000đ')).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Xác nhận' })).toBeNull());
+    expect(screen.queryByRole('button', { name: /nơi nhận/ })).toBeNull();
+  });
+
+  it('bị từ chối: nút Xác nhận giữ khoá tới khi khoản hoàn tải lại xong rồi mới nhả', async () => {
+    mocks.chooseRefundDestination.mockRejectedValueOnce(serverError(LOST, 400));
+    renderPanel();
+    const confirm = await openSheet();
+    const refetch = deferred<unknown[]>();
+    mocks.fetchMyRefunds.mockReturnValue(refetch.promise);
+    await act(async () => {
+      fireEvent.click(confirm);
+    });
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+    expect(confirm).toBeDisabled();
+    await act(async () => {
+      fireEvent.click(confirm);
+    });
+    expect(mocks.chooseRefundDestination).toHaveBeenCalledTimes(1);
+    await act(async () => refetch.resolve([LATE]));
+    await waitFor(() => expect(confirm).toBeEnabled());
+  });
+
+  it('bị từ chối nhưng khoản vẫn chọn được (lỗi nhập liệu phía máy chủ): sheet giữ nguyên để khách sửa', async () => {
+    mocks.chooseRefundDestination.mockRejectedValueOnce(serverError('Số tài khoản không hợp lệ.', 400));
+    renderPanel();
+    const confirm = await openSheet();
+    await act(async () => {
+      fireEvent.click(confirm);
+    });
+    await waitFor(() => expect(keys()).toContain('["my-refunds","o1"]'));
+    await settle();
+    expect(screen.getByRole('button', { name: 'Xác nhận' })).toBeEnabled();
+  });
+
+  it.each([
+    ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+    ['máy chủ lỗi 503', serverError('Service Unavailable', 503)],
+    ['hết phiên 401', serverError('Unauthorized', 401)],
+  ])('%s: không tải lại, khoá nhả ngay, sheet giữ nguyên', async (_label, error) => {
+    mocks.chooseRefundDestination.mockRejectedValueOnce(error);
+    renderPanel();
+    const confirm = await openSheet();
+    await act(async () => {
+      fireEvent.click(confirm);
+    });
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+    await waitFor(() => expect(confirm).toBeEnabled());
+    expect(keys()).not.toContain('["wallet"]');
+    expect(keys()).not.toContain('["my-refunds","o1"]');
+  });
+
+  it('đang lưu thì dữ liệu mới về (khoản đã đóng) không gỡ sheet giữa chừng; lưu bị từ chối xong thì sheet đóng', async () => {
+    const d = deferred<typeof LATE>();
+    mocks.chooseRefundDestination.mockReturnValueOnce(d.promise);
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <OrderRefunds orderId="o1" />
+      </QueryClientProvider>,
+    );
+    const confirm = await openSheet();
+    await act(async () => {
+      fireEvent.click(confirm);
+    });
+    expect(confirm).toBeDisabled();
+    await act(async () => {
+      qc.setQueryData(['my-refunds', 'o1'], [CLOSED_BY_WALLET]);
+    });
+    // TanStack báo người nghe cache qua setTimeout(0): phải đợi thông báo tới sheet rồi mới kiểm, kẻo kiểm khi sheet chưa thấy gì.
+    await settle();
+    expect(screen.getByRole('button', { name: 'Xác nhận' })).toBeInTheDocument();
+    mocks.fetchMyRefunds.mockResolvedValue([CLOSED_BY_WALLET]);
+    await act(async () => d.reject(serverError(LOST, 400)));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Xác nhận' })).toBeNull());
+  });
+
+  it('khoản vẫn chọn được và không có lỗi: sheet không tự đóng', async () => {
+    renderPanel();
+    await openSheet();
+    await settle();
+    expect(screen.getByRole('button', { name: 'Xác nhận' })).toBeInTheDocument();
   });
 });

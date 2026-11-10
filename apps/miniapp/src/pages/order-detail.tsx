@@ -4,7 +4,8 @@ import { Box, Page, Text, Sheet, useParams, useNavigate, useSnackbar } from 'zmp
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Recycle, Star, Leaf, CheckCircle2, XCircle, Clock, type LucideIcon } from 'lucide-react';
 import { fetchOrder, fetchOrders, cancelOrder, fetchMyRefunds, fetchMyReturns, fetchRefundBank, type OrderView } from '../services/shop-api';
-import { getErrorMessage, getLoadErrorMessage, isNotFoundError } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage, isNotFoundError, isStaleStateError } from '../services/api';
+import { settleWithin } from '../utils/settle-within';
 import { getWasteRequestByOrder, WASTE_QUERY_KEYS } from '../services/waste-api';
 import { useAuthStore } from '../store/auth';
 import { AuthPhaseView } from '../components/ui/auth-gate';
@@ -224,7 +225,13 @@ export default function OrderDetailPage() {
       setConfirmCancel(false);
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
       // Kho đã bàn giao vận chuyển: BE vừa đồng bộ trạng thái mới — tải lại để ẩn nút huỷ.
-      void queryClient.invalidateQueries({ queryKey: ['order', code] });
+      const orderRefreshed = queryClient.invalidateQueries({ queryKey: ['order', code] });
+      if (!isStaleStateError(e)) return undefined;
+      // Máy chủ từ chối vì đơn đã sang trạng thái khác (đã giao hàng, máy khác vừa huỷ): danh sách đơn và khoản hoàn cũng đã cũ. Trả Promise để
+      // nút Huỷ đơn giữ khoá tới khi đơn tải lại xong (tối đa `settleWithin`), kẻo sáng lại với trạng thái cũ.
+      return settleWithin(
+        Promise.all([orderRefreshed, queryClient.invalidateQueries({ queryKey: ['orders'] }), queryClient.invalidateQueries({ queryKey: ['my-refunds'] })]),
+      );
     },
   });
 
