@@ -69,7 +69,23 @@ function installHandlers(db: RaceDb, selectForUpdate: boolean, advisoryLocks: bo
         const [id, userId] = c.params as string[];
         await lockIf(c, 'wasteRequest', id!);
         const r = c.rows('wasteRequest').find((x) => x.id === id && x.userId === userId);
-        return r ? [{ id: r.id, method: r.method, status: r.status, orderId: r.orderId ?? null, closeReason: r.closeReason ?? null, carrier: r.carrier ?? null, trackingCode: r.trackingCode ?? null, trackingNorm: r.trackingNorm ?? null }] : [];
+        return r
+          ? [
+              {
+                id: r.id,
+                method: r.method,
+                status: r.status,
+                orderId: r.orderId ?? null,
+                closeReason: r.closeReason ?? null,
+                carrier: r.carrier ?? null,
+                trackingCode: r.trackingCode ?? null,
+                trackingNorm: r.trackingNorm ?? null,
+                pointId: r.pointId ?? null,
+                capDayKey: r.capDayKey ?? null,
+                capMonthKey: r.capMonthKey ?? null,
+              },
+            ]
+          : [];
       },
     },
     {
@@ -113,6 +129,15 @@ export function adaptClient(client: any, counter = { n: 0 }): any {
           if (count > 0) out.push({ id });
         }
         return out;
+      },
+    },
+    // WasteRequestsService.editInTx xoá dòng cũ bằng deleteMany; client giả chỉ có delete theo khoá, nên dựng từ findMany + delete từng dòng.
+    wasteRequestLine: {
+      ...client.wasteRequestLine,
+      deleteMany: async ({ where }: { where: Record<string, unknown> }) => {
+        const rows: { id: string }[] = await client.wasteRequestLine.findMany({ where });
+        for (const r of rows) await client.wasteRequestLine.delete({ where: { id: r.id } });
+        return { count: rows.length };
       },
     },
     wasteRequest: {

@@ -48,17 +48,35 @@ function setup(opts: WasteRaceOptions & { request?: Record<string, unknown>; ord
   const hooks = new WastePickupHooks(prisma, wasteConfig as never, notifier as never);
   const requestsSvc = new WasteRequestsService(prisma, access, {} as never, {} as never, config as never);
   jest.spyOn(requestsSvc, 'loadDetail').mockResolvedValue({} as never);
+  // Sửa yêu cầu: WasteHoldService chỉ là bước tính điểm (đọc cấu hình, hạn mức), thay bằng bản giữ nguyên dòng khách gửi và chờ vài nhịp để cửa sổ đua đủ rộng.
+  const hold = {
+    validateAndHold: async (_tx: unknown, args: { lines: { itemId: string; declaredQty: number }[]; pointId: string | null }) => {
+      await delay(4);
+      return {
+        lines: args.lines.map((l) => ({ itemId: l.itemId, itemCode: 'CARTON', itemName: 'Thùng carton', unitLabel: 'kg', unitsPerPoint: 1, pointsPerGroup: 1000, dropsPerUnit: 0, gramsPerUnit: null, declaredQty: l.declaredQty })),
+        pointId: args.pointId,
+        estimatedPoints: 50_000,
+        estimatedDrops: 0,
+      };
+    },
+  };
+  const editSvc = new WasteRequestsService(prisma, access, hold as never, wasteConfig as never, config as never);
+  jest.spyOn(editSvc, 'loadDetail').mockResolvedValue({} as never);
   const confirmSvc = new WasteConfirmService(prisma, wasteConfig as never, access, new RewardPointsService(prisma, config as never), config as never, notifier as never, shipLock as never);
   const cron = new WasteExpiryCron(prisma, wasteConfig as never, notifier as never, shipLock as never, access);
 
   // Giao dịch đặt hàng: khoá yêu cầu, tạo đơn rồi gắn orderId (đúng thứ tự checkout.service.ts); gắn thất bại thì cả đơn rollback.
+  // Trả số lượng khai báo mà ghi chú thu rác của đơn được dựng từ đó (checkout.service.ts đọc dòng yêu cầu ngay sau khi khoá).
   const checkout = (orderId = 'o1', holdTicks = 6) =>
     prisma.$transaction(async (tx: any) => {
-      await lockPickupRequestForCheckout(tx, 'u1', 'r1');
+      const locked = await lockPickupRequestForCheckout(tx, 'u1', 'r1');
       await delay(holdTicks);
       await tx.order.create({ data: { id: orderId, code: `TUBU-${orderId}`, userId: 'u1', status: 'PENDING', deliveredAt: null } });
       await attachPickupRequest(tx, 'u1', 'r1', orderId);
+      return locked.lines[0]?.declaredQty ?? null;
     });
+  const edit = (qty: number) => editSvc.edit('u1', 'r1', { lines: [{ itemId: 'wi-carton', declaredQty: qty }] } as never);
+  const lineQty = () => db.rows('wasteRequestLine').filter((l) => l.requestId === 'r1').map((l) => l.declaredQty);
   const cancel = () => requestsSvc.cancel('u1', 'r1');
   const expire = () =>
     (cron as unknown as { closeRow(row: Record<string, unknown>, now: Date): Promise<string | null> }).closeRow(
@@ -71,7 +89,7 @@ function setup(opts: WasteRaceOptions & { request?: Record<string, unknown>; ord
   const events = (kind: string) => db.rows('wasteEvent').filter((e) => e.kind === kind);
   const balance = () => db.row('user', 'u1')!.pointsBalance as number;
   const ledger = () => db.rows('pointsTransaction');
-  return { db, hooks, checkout, cancel, expire, confirm, req, events, balance, ledger, notifier };
+  return { db, hooks, checkout, edit, lineQty, cancel, expire, confirm, req, events, balance, ledger, notifier };
 }
 
 beforeEach(() => {
@@ -160,6 +178,33 @@ describe('Thu kèm rác — gắn đơn, hook đơn hàng và xác nhận đua n
       waits += h.db.stats.lockWaits;
     }
     expect(seen).toEqual(new Set(['OPEN', 'CANCELLED']));
+    expect(waits).toBeGreaterThan(0);
+  });
+
+  it('đặt đơn kèm yêu cầu chen với khách sửa số lượng (quét thời điểm): ghi chú thu rác của đơn luôn khớp số lượng cuối cùng của yêu cầu; sửa sau khi đã gắn đơn bị từ chối', async () => {
+    const seen = new Set<string>();
+    let waits = 0;
+    for (const skew of SWEEP) {
+      const h = setup();
+      const ordering = async () => (await delay(Math.max(skew, 0)), h.checkout());
+      const editing = async () => (await delay(Math.max(-skew, 0)), h.edit(50));
+      const [o, e] = await Promise.allSettled([ordering(), editing()]);
+      const label = `skew ${skew}`;
+      is(label, o.status, 'fulfilled');
+      is(label, h.req().orderId, 'o1');
+      is(label, h.db.rows('order').length, 1);
+      is(label, h.lineQty(), [e.status === 'fulfilled' ? 50 : 10]);
+      is(label, (o as PromiseFulfilledResult<number | null>).value, h.lineQty()[0]);
+      if (e.status === 'rejected') {
+        is(label, httpStatus(e), 409);
+        is(label, h.events('REQUEST_EDITED').length, 0);
+      } else {
+        is(label, h.events('REQUEST_EDITED').length, 1);
+      }
+      seen.add(e.status);
+      waits += h.db.stats.lockWaits;
+    }
+    expect(seen).toEqual(new Set(['fulfilled', 'rejected']));
     expect(waits).toBeGreaterThan(0);
   });
 
