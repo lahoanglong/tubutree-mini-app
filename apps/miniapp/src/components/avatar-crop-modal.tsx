@@ -23,6 +23,9 @@ export function AvatarCropModal({
   const [dragging, setDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [processing, setProcessing] = useState(false);
+  // `processing` chỉ đúng sau lần vẽ kế (và onPress đồng bộ nên khoá của Button không áp dụng): hai cú chạm cùng nhịp
+  // sẽ dựng hai lần tải ảnh và gọi onConfirm hai lần, kéo theo tải ảnh đại diện lên hai lần.
+  const confirmingRef = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Reset controls when a new image opens
@@ -30,6 +33,7 @@ export function AvatarCropModal({
     if (visible) {
       setZoom(1);
       setOffset({ x: 0, y: 0 });
+      confirmingRef.current = false;
     }
   }, [visible, imageSrc]);
 
@@ -62,6 +66,8 @@ export function AvatarCropModal({
 
   // Process circular crop using HTML5 Canvas
   const handleConfirm = () => {
+    if (confirmingRef.current) return;
+    confirmingRef.current = true;
     haptic('medium');
     setProcessing(true);
     const img = new Image();
@@ -74,6 +80,7 @@ export function AvatarCropModal({
       const ctx = canvas.getContext('2d');
 
       if (!ctx) {
+        confirmingRef.current = false;
         setProcessing(false);
         onConfirm(imageSrc);
         return;
@@ -118,11 +125,13 @@ export function AvatarCropModal({
       ctx.drawImage(img, drawX, drawY, finalW, finalH);
 
       const croppedUrl = canvas.toDataURL('image/jpeg', 0.82);
+      confirmingRef.current = false;
       setProcessing(false);
       onConfirm(croppedUrl);
     };
 
     img.onerror = () => {
+      confirmingRef.current = false;
       setProcessing(false);
       onConfirm(imageSrc);
     };

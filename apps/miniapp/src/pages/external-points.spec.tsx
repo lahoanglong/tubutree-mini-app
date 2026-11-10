@@ -766,3 +766,130 @@ describe('Trang Tích điểm đơn sàn', () => {
     }
   });
 });
+
+describe('W78A: Tích điểm đơn sàn khoá đồng bộ chạm đúp', () => {
+  const SEARCHING = { status: 'SEARCHING', claimId: null, channel: null, maskedCode: 'SPX***789', points: null, expectedCreditAt: null, message: 'x' };
+  const deferred = <T,>() => {
+    let resolve!: (v: T) => void;
+    let reject!: (e: unknown) => void;
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+  const typeCode = async (value = 'SPXVN123456789') => {
+    fireEvent.change(await screen.findByLabelText('Hoặc nhập mã vận đơn'), { target: { value } });
+  };
+  const submitBtn = () => screen.getByRole('button', { name: 'Tích điểm' });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.phase = 'authenticated';
+    mocks.search = '';
+    mocks.hasOA = false;
+    mocks.getOaPromptState.mockResolvedValue({ promptSeen: true, followed: false });
+    window.history.replaceState({}, '', '/points/scan');
+    __resetEntrySourceForTest();
+    setCardGiftNote(null);
+    mocks.user = { phone: '0901234567' };
+    mocks.getPublicConfig.mockResolvedValue({ loyalty: LOYALTY });
+    mocks.getMyExternalClaims.mockResolvedValue(EMPTY_LIST);
+  });
+
+  it('chạm đúp "Tích điểm" trong cùng một khung hình chỉ gửi một lần; xong hiện kết quả một lần và làm mới danh sách một lần', async () => {
+    const d = deferred<typeof SEARCHING>();
+    mocks.submitExternalClaim.mockReturnValue(d.promise);
+    renderPage();
+    await typeCode();
+    const btn = submitBtn();
+    await act(async () => {
+      fireEvent.click(btn);
+      fireEvent.click(btn);
+    });
+    expect(mocks.submitExternalClaim).toHaveBeenCalledTimes(1);
+    expect(mocks.submitExternalClaim).toHaveBeenCalledWith('SPXVN123456789', 'typed');
+    await waitFor(() => expect(submitBtn()).toHaveAttribute('aria-busy', 'true'));
+    await act(async () => d.resolve(SEARCHING));
+    expect(await screen.findAllByTestId('claim-result')).toHaveLength(1);
+    await waitFor(() => expect(mocks.getMyExternalClaims).toHaveBeenCalledTimes(2));
+  });
+
+  it('chạm lần hai ngay sau lần một, trước khi nút kịp vẽ lại "đang gửi" (khoá của Button đã nhả): vẫn chỉ gửi một lần', async () => {
+    const d = deferred<typeof SEARCHING>();
+    mocks.submitExternalClaim.mockReturnValue(d.promise);
+    renderPage();
+    await typeCode();
+    const btn = submitBtn();
+    await act(async () => {
+      fireEvent.click(btn);
+      await Promise.resolve();
+      await Promise.resolve();
+      fireEvent.click(btn);
+    });
+    expect(mocks.submitExternalClaim).toHaveBeenCalledTimes(1);
+    await act(async () => d.resolve(SEARCHING));
+    await screen.findByTestId('claim-result');
+    expect(mocks.submitExternalClaim).toHaveBeenCalledTimes(1);
+  });
+
+  it('mã từ quét QR: chạm lần hai sát lần một vẫn chỉ gửi một lần, via=scan', async () => {
+    const d = deferred<typeof SEARCHING>();
+    mocks.submitExternalClaim.mockReturnValue(d.promise);
+    mocks.scanCode.mockResolvedValue({ kind: 'ok', content: 'SPXVN999999999' });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Quét mã trên nhãn' }));
+    await waitFor(() => expect((screen.getByLabelText('Hoặc nhập mã vận đơn') as HTMLInputElement).value).toBe('SPXVN999999999'));
+    const btn = submitBtn();
+    await act(async () => {
+      fireEvent.click(btn);
+      await Promise.resolve();
+      await Promise.resolve();
+      fireEvent.click(btn);
+    });
+    expect(mocks.submitExternalClaim).toHaveBeenCalledTimes(1);
+    expect(mocks.submitExternalClaim).toHaveBeenCalledWith('SPXVN999999999', 'scan');
+    await act(async () => d.resolve(SEARCHING));
+    await screen.findByTestId('claim-result');
+  });
+
+  it('"Tích điểm" và "Chia sẻ số điện thoại" cùng một khung hình, cả hai cùng chờ xin SĐT rồi cùng gửi mã: chỉ một lần gửi', async () => {
+    mocks.user = { phone: null };
+    mocks.ensurePhone.mockResolvedValueOnce(null);
+    const d = deferred<typeof SEARCHING>();
+    mocks.submitExternalClaim.mockReturnValue(d.promise);
+    renderPage();
+    await typeCode();
+    fireEvent.click(submitBtn());
+    const share = await screen.findByRole('button', { name: 'Chia sẻ số điện thoại' });
+    const grant = deferred<string>();
+    mocks.ensurePhone.mockReturnValue(grant.promise);
+    await act(async () => {
+      fireEvent.click(submitBtn());
+      fireEvent.click(share);
+    });
+    expect(mocks.ensurePhone).toHaveBeenCalledTimes(3);
+    await act(async () => grant.resolve('0901234567'));
+    await waitFor(() => expect(mocks.submitExternalClaim).toHaveBeenCalledTimes(1));
+    await act(async () => d.resolve(SEARCHING));
+    await screen.findByTestId('claim-result');
+    expect(mocks.submitExternalClaim).toHaveBeenCalledTimes(1);
+  });
+
+  it('lỗi thì nhả khoá, bấm lại gọi lần hai', async () => {
+    const d = deferred<typeof SEARCHING>();
+    mocks.submitExternalClaim.mockReturnValueOnce(d.promise);
+    renderPage();
+    await typeCode();
+    fireEvent.click(submitBtn());
+    await waitFor(() => expect(submitBtn()).toHaveAttribute('aria-busy', 'true'));
+    await act(async () => d.reject(rejection('ALREADY_CLAIMED')));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Mã này đã được dùng để tích điểm trước đó.');
+    await waitFor(() => expect(submitBtn()).not.toHaveAttribute('aria-busy'));
+
+    mocks.submitExternalClaim.mockResolvedValueOnce(SEARCHING);
+    fireEvent.click(submitBtn());
+    await waitFor(() => expect(mocks.submitExternalClaim).toHaveBeenCalledTimes(2));
+    expect(await screen.findByTestId('claim-result')).toBeInTheDocument();
+  });
+});

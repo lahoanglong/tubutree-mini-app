@@ -768,3 +768,152 @@ describe('Màn chat với Tubu Tree', () => {
     });
   });
 });
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+describe('Màn chat: chạm đúp cùng nhịp không gọi lặp (W78A)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.search = '';
+    mocks.authStatus = 'authenticated';
+    mocks.user = { id: 'u1', zaloId: 'zalo-1', phone: null };
+    mocks.cloudinary = false;
+    mocks.fetchContact.mockResolvedValue({ hotline: '0984 606 774', email: null, zaloOaName: null, hours: '8:00–21:00 mỗi ngày' });
+    mocks.fetchOrders.mockResolvedValue({ data: [], meta: { page: 1, limit: 1, total: 0 } });
+    mocks.copyText.mockResolvedValue(true);
+    mocks.hasOA = false;
+    mocks.getThread.mockResolvedValue(thread());
+    mocks.markRead.mockResolvedValue({ ok: true });
+    mocks.summary.mockResolvedValue({ unreadCount: 0 });
+    let n = 0;
+    vi.spyOn(crypto, 'randomUUID').mockImplementation(() => `cid-${++n}` as `${string}-${string}-${string}-${string}-${string}`);
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  it('chạm đúp cùng nhịp vào một câu hỏi nhanh: chỉ gửi một tin, hàng câu hỏi nhanh biến mất', async () => {
+    const d = deferred<unknown>();
+    mocks.send.mockReturnValue(d.promise);
+    renderPage();
+    const chip = await screen.findByRole('button', { name: 'Đổi trả hàng' });
+    await act(async () => {
+      fireEvent.click(chip);
+      fireEvent.click(chip);
+    });
+    expect(mocks.send).toHaveBeenCalledTimes(1);
+    expect(mocks.send).toHaveBeenCalledWith(expect.objectContaining({ body: 'Mình muốn hỏi về đổi trả hàng.', clientMsgId: 'cid-1' }));
+    expect(msgIds()).toEqual(['msg-cid-1']);
+    await act(async () => {
+      d.resolve(msg({ id: 'srv1', body: 'Mình muốn hỏi về đổi trả hàng.', clientMsgId: 'cid-1' }));
+    });
+    expect(mocks.send).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('button', { name: 'Đổi trả hàng' })).toBeNull();
+  });
+
+  it('chạm hai câu hỏi nhanh khác nhau cùng nhịp: chỉ câu đầu được gửi', async () => {
+    mocks.send.mockReturnValue(new Promise(() => undefined));
+    renderPage();
+    const a = await screen.findByRole('button', { name: 'Đổi trả hàng' });
+    const b = screen.getByRole('button', { name: 'Đơn của tôi đang ở đâu?' });
+    await act(async () => {
+      fireEvent.click(a);
+      fireEvent.click(b);
+    });
+    expect(mocks.send).toHaveBeenCalledTimes(1);
+    expect(mocks.send).toHaveBeenCalledWith(expect.objectContaining({ body: 'Mình muốn hỏi về đổi trả hàng.' }));
+    expect(msgIds()).toEqual(['msg-cid-1']);
+  });
+
+  it('câu hỏi nhanh gửi lỗi mạng: hiện "Gửi lại", bấm lại gửi đúng clientMsgId cũ (không sinh tin thứ hai)', async () => {
+    mocks.send.mockRejectedValueOnce(new Error('Network Error')).mockResolvedValueOnce(msg({ id: 'srv1', clientMsgId: 'cid-1' }));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Đổi trả hàng' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Gửi lại' }));
+    await waitFor(() => expect(mocks.send).toHaveBeenCalledTimes(2));
+    expect(mocks.send.mock.calls[1]![0].clientMsgId).toBe('cid-1');
+    expect(msgIds()).toEqual(['msg-cid-1']);
+  });
+
+  describe('tin cũ hơn', () => {
+    const arrange = () => {
+      mocks.getThread.mockResolvedValue(thread({ hasMore: true, messages: [msg({ id: 'm5', body: 'mới' })] }));
+    };
+
+    it('chạm đúp cùng nhịp vào "Xem tin cũ hơn": chỉ tải một trang, nút báo bận tới khi xong', async () => {
+      arrange();
+      const d = deferred<{ hasMore: boolean; messages: unknown[] }>();
+      mocks.getPage.mockReturnValue(d.promise);
+      renderPage();
+      const more = await screen.findByRole('button', { name: 'Xem tin cũ hơn' });
+      await act(async () => {
+        fireEvent.click(more);
+        fireEvent.click(more);
+      });
+      expect(mocks.getPage).toHaveBeenCalledTimes(1);
+      expect(mocks.getPage).toHaveBeenCalledWith({ before: 'm5' });
+      await waitFor(() => expect(more).toHaveAttribute('aria-busy', 'true'));
+      await act(async () => {
+        d.resolve({ hasMore: false, messages: [msg({ id: 'm3', body: 'cũ' })] });
+      });
+      expect(await screen.findByTestId('msg-m3')).toBeInTheDocument();
+      expect(mocks.getPage).toHaveBeenCalledTimes(1);
+      expect(msgIds()).toEqual(['msg-m3', 'msg-m5']);
+    });
+
+    it('tải trang cũ lỗi thì nhả khoá: báo lỗi, bấm lại tải lại và lần này chèn được tin cũ', async () => {
+      arrange();
+      mocks.getPage.mockRejectedValueOnce(new Error('Network Error')).mockResolvedValue({ hasMore: false, messages: [msg({ id: 'm3', body: 'cũ' })] });
+      renderPage();
+      const more = await screen.findByRole('button', { name: 'Xem tin cũ hơn' });
+      fireEvent.click(more);
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+      await waitFor(() => expect(more).not.toHaveAttribute('aria-busy'));
+      fireEvent.click(more);
+      await waitFor(() => expect(mocks.getPage).toHaveBeenCalledTimes(2));
+      expect(await screen.findByTestId('msg-m3')).toBeInTheDocument();
+    });
+  });
+
+  describe('khách vãng lai đăng nhập Zalo để chat', () => {
+    beforeEach(() => {
+      mocks.user = { id: 'g1', zaloId: 'guest_dev-1', phone: null };
+    });
+
+    it('chạm đúp cùng nhịp vào "Tiếp tục với Zalo": chỉ xin số điện thoại một lần, nút báo bận tới khi xong', async () => {
+      const d = deferred<string | null>();
+      mocks.ensurePhone.mockReturnValue(d.promise);
+      renderPage();
+      const cta = screen.getByRole('button', { name: 'Tiếp tục với Zalo' });
+      await act(async () => {
+        fireEvent.click(cta);
+        fireEvent.click(cta);
+      });
+      expect(mocks.ensurePhone).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(cta).toHaveAttribute('aria-busy', 'true'));
+      await act(async () => {
+        d.resolve('0900000000');
+      });
+      await waitFor(() => expect(cta).not.toHaveAttribute('aria-busy'));
+      expect(mocks.ensurePhone).toHaveBeenCalledTimes(1);
+    });
+
+    it('không lấy được số điện thoại thì nhả khoá: báo lỗi, bấm lại xin lần nữa', async () => {
+      mocks.ensurePhone.mockResolvedValueOnce(null).mockRejectedValueOnce(new Error('Zalo từ chối'));
+      renderPage();
+      const cta = screen.getByRole('button', { name: 'Tiếp tục với Zalo' });
+      fireEvent.click(cta);
+      expect(await screen.findByText('Chưa đăng nhập được. Bạn thử lại nhé.')).toBeInTheDocument();
+      await waitFor(() => expect(cta).not.toHaveAttribute('aria-busy'));
+      fireEvent.click(cta);
+      await waitFor(() => expect(mocks.ensurePhone).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(screen.queryByText('Chưa đăng nhập được. Bạn thử lại nhé.')).toBeNull());
+    });
+  });
+});

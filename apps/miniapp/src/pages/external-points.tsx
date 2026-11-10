@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Input, Page, useLocation, useNavigate } from 'zmp-ui';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, Clock, Info, MessageCircle, ScanLine } from 'lucide-react';
 import {
   externalClaimRejectCode,
@@ -17,6 +17,7 @@ import { trackEvent } from '../services/analytics';
 import { useCardGiftNote } from '../services/card-gift-note';
 import { getSessionAttribution, type LaunchAttribution } from '../utils/entry-source';
 import { extractClaimCode, normalizeClaimCode } from '@tubutree/app-core/claim-code';
+import { useLockedMutation } from '../components/game/use-locked-mutation';
 import { AuthPhaseView } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { PointsBoostStrip } from '../components/loyalty/points-boost-strip';
@@ -138,7 +139,7 @@ function ClaimList() {
   const [page, setPage] = useState(1);
   const q = useQuery({ queryKey: ['external-claims', page], queryFn: () => getMyExternalClaims(page, PAGE_SIZE) });
   if (q.isPending) return <Skeleton height={96} radius="var(--radius-card)" />;
-  if (q.isError) return <ErrorState message={t.listLoadFailed} onRetry={() => void q.refetch()} />;
+  if (q.isError) return <ErrorState message={t.listLoadFailed} onRetry={() => q.refetch()} />;
   const { data, meta, searching } = q.data;
   const pages = Math.max(1, Math.ceil(meta.total / meta.limit));
   return (
@@ -282,7 +283,9 @@ function ClaimForm({ fromCard, channel, initialCode, codeParamRejected }: { from
     };
   }, []);
 
-  const submit = useMutation({
+  // Khoá của Button chỉ giữ tới khi Promise của `send` xong (ngay sau mutate khi đã có SĐT) và không phủ nút `sharePhone`;
+  // khoá này giữ tới khi API trả lời, chung cho cả gõ tay, quét QR và chia sẻ SĐT.
+  const submit = useLockedMutation({
     mutationFn: (v: { code: string; via: 'scan' | 'typed' }) => submitExternalClaim(v.code, v.via),
     onSuccess: (r) => {
       haptic('medium');
@@ -512,7 +515,7 @@ export default function ExternalPointsPage() {
 
   let body;
   if (cfgQ.isError) {
-    body = <ErrorState message={getLoadErrorMessage(cfgQ.error)} onRetry={() => void cfgQ.refetch()} />;
+    body = <ErrorState message={getLoadErrorMessage(cfgQ.error)} onRetry={() => cfgQ.refetch()} />;
   } else if (cfgQ.isPending) {
     body = <div style={{ padding: 16 }}><Skeleton height={160} radius="var(--radius-card)" /></div>;
   } else if (!enabled) {

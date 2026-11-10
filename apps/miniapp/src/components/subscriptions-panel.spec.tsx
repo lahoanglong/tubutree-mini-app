@@ -43,6 +43,7 @@ vi.mock('../services/account-api', () => ({ getWallet: mocks.getWallet }));
 vi.mock('../store/auth', () => ({ useAuthStore: (sel: (s: { status: string }) => unknown) => sel({ status: 'authenticated' }) }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
+import { haptic } from '../utils/haptic';
 import { SubscriptionsPanel } from './subscriptions-panel';
 
 const SUB = {
@@ -431,5 +432,219 @@ describe('SubscriptionsPanel: khoá chéo statusMut ↔ skipMut, chặn đóng s
       screen.getByText('Lần kế: 15/10/2026'),
     ];
     for (const el of lines) expect(el.style.fontVariantNumeric, el.textContent ?? '').toBe('tabular-nums');
+  });
+});
+
+describe('SubscriptionsPanel: khoá đồng bộ chạm đúp, một việc mỗi lúc trên mọi gói (W78A)', () => {
+  const successToasts = () => mocks.openSnackbar.mock.calls.filter(([o]) => (o as { type: string }).type === 'success');
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sheetSpy.calls.length = 0;
+    mocks.getAddresses.mockResolvedValue([ADDR('a1', '1 Lê Lợi')]);
+    mocks.getWallet.mockResolvedValue({ walletBalance: 50000 });
+    mocks.getSubscriptions.mockResolvedValue([SUB]);
+  });
+
+  it('chạm đúp "Tạm dừng" ngay trên thẻ trong cùng một khung hình chỉ gửi một lần; xong thì làm mới danh sách một lần', async () => {
+    const status = deferred<Record<string, unknown>>();
+    mocks.setSubscriptionStatus.mockReturnValue(status.promise);
+    renderPanel();
+    const pause = await screen.findByRole('button', { name: 'Tạm dừng' });
+    await act(async () => {
+      fireEvent.click(pause);
+      fireEvent.click(pause);
+    });
+    expect(mocks.setSubscriptionStatus).toHaveBeenCalledTimes(1);
+    expect(mocks.setSubscriptionStatus).toHaveBeenCalledWith('s1', 'PAUSED');
+    await waitFor(() => expect(cardBtns('Tạm dừng')[0]).toHaveAttribute('aria-busy', 'true'));
+    await act(async () => status.resolve({ ...SUB, status: 'PAUSED' }));
+    await waitFor(() => expect(mocks.getSubscriptions).toHaveBeenCalledTimes(2));
+    expect(haptic).toHaveBeenCalledTimes(1);
+  });
+
+  it('chạm đúp "Tiếp tục" ở gói đang dừng trong cùng một khung hình chỉ gửi một lần (ACTIVE)', async () => {
+    const status = deferred<Record<string, unknown>>();
+    mocks.setSubscriptionStatus.mockReturnValue(status.promise);
+    mocks.getSubscriptions.mockResolvedValue([{ ...SUB, status: 'PAUSED' as const }]);
+    renderPanel();
+    const resume = await screen.findByRole('button', { name: 'Tiếp tục' });
+    await act(async () => {
+      fireEvent.click(resume);
+      fireEvent.click(resume);
+    });
+    expect(mocks.setSubscriptionStatus).toHaveBeenCalledTimes(1);
+    expect(mocks.setSubscriptionStatus).toHaveBeenCalledWith('s1', 'ACTIVE');
+    await act(async () => status.resolve({ ...SUB, status: 'ACTIVE' }));
+    await waitFor(() => expect(haptic).toHaveBeenCalledTimes(1));
+  });
+
+  it('lỗi thì nhả khoá, bấm lại gọi lần hai (nút thẻ)', async () => {
+    const status = deferred<Record<string, unknown>>();
+    mocks.setSubscriptionStatus.mockReturnValueOnce(status.promise);
+    renderPanel();
+    fireEvent.click(await screen.findByRole('button', { name: 'Tạm dừng' }));
+    await waitFor(() => expect(cardBtns('Tạm dừng')[0]).toHaveAttribute('aria-busy', 'true'));
+    await act(async () => status.reject(new Error('boom')));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+    await waitFor(() => expect(cardBtns('Tạm dừng')[0]).not.toHaveAttribute('aria-busy'));
+    mocks.setSubscriptionStatus.mockResolvedValueOnce({ ...SUB, status: 'PAUSED' });
+    fireEvent.click(cardBtns('Tạm dừng')[0]!);
+    await waitFor(() => expect(mocks.setSubscriptionStatus).toHaveBeenCalledTimes(2));
+  });
+
+  it('thành công cũng nhả khoá: bấm lần sau gửi lần hai', async () => {
+    mocks.setSubscriptionStatus.mockResolvedValue({ ...SUB, status: 'PAUSED' });
+    renderPanel();
+    fireEvent.click(await screen.findByRole('button', { name: 'Tạm dừng' }));
+    await waitFor(() => expect(haptic).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(cardBtns('Tạm dừng')[0]).not.toHaveAttribute('aria-busy'));
+    fireEvent.click(cardBtns('Tạm dừng')[0]!);
+    await waitFor(() => expect(mocks.setSubscriptionStatus).toHaveBeenCalledTimes(2));
+  });
+
+  it('hai thẻ khác nhau, "Tạm dừng" cả hai trong cùng một khung hình: chỉ gói đầu được gửi (một việc mỗi lúc như giao diện đã khoá nút thẻ nền)', async () => {
+    const status = deferred<Record<string, unknown>>();
+    mocks.setSubscriptionStatus.mockReturnValue(status.promise);
+    mocks.getSubscriptions.mockResolvedValue([SUB, { ...SUB, id: 's2' }]);
+    renderPanel();
+    await screen.findAllByRole('button', { name: 'Tạm dừng' });
+    const [first, second] = cardBtns('Tạm dừng');
+    await act(async () => {
+      fireEvent.click(first!);
+      fireEvent.click(second!);
+    });
+    expect(mocks.setSubscriptionStatus).toHaveBeenCalledTimes(1);
+    expect(mocks.setSubscriptionStatus).toHaveBeenCalledWith('s1', 'PAUSED');
+    await act(async () => status.resolve({ ...SUB, status: 'PAUSED' }));
+    await waitFor(() => expect(cardBtns('Tạm dừng')[1]).toBeEnabled());
+  });
+
+  it('chạm đúp "Vẫn huỷ" trong sheet cùng một khung hình chỉ gửi CANCELLED một lần, xong sheet đóng một lần', async () => {
+    const status = deferred<Record<string, unknown>>();
+    mocks.setSubscriptionStatus.mockReturnValue(status.promise);
+    renderPanel();
+    await openRetention();
+    const confirm = inSheet('Vẫn huỷ');
+    await act(async () => {
+      fireEvent.click(confirm);
+      fireEvent.click(confirm);
+    });
+    expect(mocks.setSubscriptionStatus).toHaveBeenCalledTimes(1);
+    expect(mocks.setSubscriptionStatus).toHaveBeenCalledWith('s1', 'CANCELLED');
+    await waitFor(() => expect(inSheet('Vẫn huỷ')).toHaveAttribute('aria-busy', 'true'));
+    await act(async () => status.resolve({ ...SUB, status: 'CANCELLED' }));
+    await waitFor(() => expect(retentionSheet().open).toBe(false));
+    expect(haptic).toHaveBeenCalledTimes(1);
+  });
+
+  it('chạm đúp "Bỏ qua kỳ này" trong cùng một khung hình chỉ gửi skip một lần; báo thành công một lần', async () => {
+    const skip = deferred<Record<string, unknown>>();
+    mocks.skipSubscriptionCycle.mockReturnValue(skip.promise);
+    renderPanel();
+    await openRetention();
+    const btn = inSheet('Bỏ qua kỳ này');
+    await act(async () => {
+      fireEvent.click(btn);
+      fireEvent.click(btn);
+    });
+    expect(mocks.skipSubscriptionCycle).toHaveBeenCalledTimes(1);
+    expect(mocks.skipSubscriptionCycle).toHaveBeenCalledWith('s1');
+    await waitFor(() => expect(inSheet('Bỏ qua kỳ này')).toHaveAttribute('aria-busy', 'true'));
+    await act(async () => skip.resolve(SUB));
+    await waitFor(() => expect(retentionSheet().open).toBe(false));
+    expect(successToasts()).toHaveLength(1);
+    expect(haptic).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['"Tạm dừng" rồi "Vẫn huỷ"', 'Tạm dừng', 'Vẫn huỷ', 'PAUSED'],
+    ['"Vẫn huỷ" rồi "Tạm dừng"', 'Vẫn huỷ', 'Tạm dừng', 'CANCELLED'],
+  ] as const)('hai nút khác nhau trong sheet, %s cùng một khung hình: chỉ lệnh đầu gọi API, sheet vẫn đóng khi lệnh đầu xong', async (_label, first, second, status) => {
+    const d = deferred<Record<string, unknown>>();
+    mocks.setSubscriptionStatus.mockReturnValue(d.promise);
+    renderPanel();
+    await openRetention();
+    const a = inSheet(first);
+    const b = inSheet(second);
+    await act(async () => {
+      fireEvent.click(a);
+      fireEvent.click(b);
+    });
+    expect(mocks.setSubscriptionStatus).toHaveBeenCalledTimes(1);
+    expect(mocks.setSubscriptionStatus).toHaveBeenCalledWith('s1', status);
+    expect(mocks.skipSubscriptionCycle).not.toHaveBeenCalled();
+    await act(async () => d.resolve({ ...SUB, status }));
+    await waitFor(() => expect(retentionSheet().open).toBe(false));
+  });
+
+  it.each([
+    ['"Bỏ qua kỳ này" rồi "Vẫn huỷ"', 'Bỏ qua kỳ này', 'Vẫn huỷ'],
+    ['"Bỏ qua kỳ này" rồi "Tạm dừng"', 'Bỏ qua kỳ này', 'Tạm dừng'],
+  ] as const)('khoá chéo skipMut → statusMut, %s cùng một khung hình: chỉ skip gọi API', async (_label, first, second) => {
+    const d = deferred<Record<string, unknown>>();
+    mocks.skipSubscriptionCycle.mockReturnValue(d.promise);
+    renderPanel();
+    await openRetention();
+    const a = inSheet(first);
+    const b = inSheet(second);
+    await act(async () => {
+      fireEvent.click(a);
+      fireEvent.click(b);
+    });
+    expect(mocks.skipSubscriptionCycle).toHaveBeenCalledTimes(1);
+    expect(mocks.setSubscriptionStatus).not.toHaveBeenCalled();
+    await act(async () => d.resolve(SUB));
+    await waitFor(() => expect(retentionSheet().open).toBe(false));
+  });
+
+  it('khoá chéo statusMut → skipMut: "Vẫn huỷ" rồi "Bỏ qua kỳ này" cùng một khung hình, chỉ CANCELLED gọi API', async () => {
+    const d = deferred<Record<string, unknown>>();
+    mocks.setSubscriptionStatus.mockReturnValue(d.promise);
+    renderPanel();
+    await openRetention();
+    const cancel = inSheet('Vẫn huỷ');
+    const skip = inSheet('Bỏ qua kỳ này');
+    await act(async () => {
+      fireEvent.click(cancel);
+      fireEvent.click(skip);
+    });
+    expect(mocks.setSubscriptionStatus).toHaveBeenCalledTimes(1);
+    expect(mocks.skipSubscriptionCycle).not.toHaveBeenCalled();
+    await act(async () => d.resolve({ ...SUB, status: 'CANCELLED' }));
+    await waitFor(() => expect(retentionSheet().open).toBe(false));
+  });
+
+  it('skip lỗi nhả khoá chung: sau đó "Vẫn huỷ" gọi được, sheet đóng', async () => {
+    const skip = deferred<Record<string, unknown>>();
+    mocks.skipSubscriptionCycle.mockReturnValueOnce(skip.promise);
+    mocks.setSubscriptionStatus.mockResolvedValue({ ...SUB, status: 'CANCELLED' });
+    renderPanel();
+    await openRetention();
+    fireEvent.click(inSheet('Bỏ qua kỳ này'));
+    await waitFor(() => expect(inSheet('Bỏ qua kỳ này')).toHaveAttribute('aria-busy', 'true'));
+    await act(async () => skip.reject(new Error('boom')));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+    await waitFor(() => expect(inSheet('Vẫn huỷ')).toBeEnabled());
+    fireEvent.click(inSheet('Vẫn huỷ'));
+    await waitFor(() => expect(mocks.setSubscriptionStatus).toHaveBeenCalledWith('s1', 'CANCELLED'));
+    await waitFor(() => expect(retentionSheet().open).toBe(false));
+  });
+
+  it('đổi trạng thái lỗi nhả khoá chung: sau đó "Bỏ qua kỳ này" gọi được', async () => {
+    const d = deferred<Record<string, unknown>>();
+    mocks.setSubscriptionStatus.mockReturnValueOnce(d.promise);
+    mocks.skipSubscriptionCycle.mockResolvedValue(SUB);
+    renderPanel();
+    await openRetention();
+    fireEvent.click(inSheet('Tạm dừng'));
+    await waitFor(() => expect(inSheet('Tạm dừng')).toHaveAttribute('aria-busy', 'true'));
+    await act(async () => d.reject(new Error('boom')));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+    await waitFor(() => expect(inSheet('Bỏ qua kỳ này')).toBeEnabled());
+    expect(retentionSheet().open).toBe(true);
+    fireEvent.click(inSheet('Bỏ qua kỳ này'));
+    await waitFor(() => expect(mocks.skipSubscriptionCycle).toHaveBeenCalledWith('s1'));
+    await waitFor(() => expect(retentionSheet().open).toBe(false));
   });
 });

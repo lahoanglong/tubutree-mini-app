@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { INVOICE_ISSUE_FAILED } from '@tubutree/app-core/client-copy';
 import { Box, Page, Text, Sheet, useParams, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -174,19 +174,28 @@ export default function OrderDetailPage() {
     ordersTotal: ordersTotalQ.data?.meta.total,
   });
 
+  // `oaBusy` chỉ đúng sau lần vẽ kế, và onPress ở nút trả `undefined` nên khoá của Button không thấy Promise:
+  // hai cú chạm cùng nhịp vẫn thấy false và mở hộp theo dõi OA hai lần.
+  const oaBusyRef = useRef(false);
   const handleFollowOaPrompt = async () => {
+    if (oaBusyRef.current) return;
+    oaBusyRef.current = true;
     setOaBusy(true);
-    const followed = await followOA();
-    if (followed) await requestNotifyPermission().catch(() => false);
-    await setOaPromptState({ promptSeen: true, followed });
-    setOaBusy(false);
-    setOaPromptSeen(true);
-    haptic(followed ? 'medium' : 'light');
-    openSnackbar(
-      followed
-        ? { text: 'Đã theo dõi Tubu Tree trên Zalo!', type: 'success' }
-        : { text: 'Không theo dõi được lúc này — bạn có thể thử lại trong Cài đặt.', type: 'error' },
-    );
+    try {
+      const followed = await followOA();
+      if (followed) await requestNotifyPermission().catch(() => false);
+      await setOaPromptState({ promptSeen: true, followed });
+      setOaPromptSeen(true);
+      haptic(followed ? 'medium' : 'light');
+      openSnackbar(
+        followed
+          ? { text: 'Đã theo dõi Tubu Tree trên Zalo!', type: 'success' }
+          : { text: 'Không theo dõi được lúc này — bạn có thể thử lại trong Cài đặt.', type: 'error' },
+      );
+    } finally {
+      oaBusyRef.current = false;
+      setOaBusy(false);
+    }
   };
 
   const handleDismissOaPrompt = () => {
@@ -244,7 +253,7 @@ export default function OrderDetailPage() {
         {isNotFoundError(order.error) ? (
           <ErrorState message="Không tìm thấy đơn hàng này." onRetry={() => undefined} onHome={() => navigate('/')} />
         ) : (
-          <ErrorState message={getLoadErrorMessage(order.error)} onRetry={() => void order.refetch()} />
+          <ErrorState message={getLoadErrorMessage(order.error)} onRetry={() => order.refetch()} />
         )}
       </Shell>
     );

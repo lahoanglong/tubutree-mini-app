@@ -439,3 +439,58 @@ describe('SubscribeSheet: số đều (tabular-nums)', () => {
     for (const el of spots) expect(el.style.fontVariantNumeric, el.textContent ?? '').toBe('tabular-nums');
   });
 });
+
+describe('SubscribeSheet: nút tạo khoá đồng bộ chạm đúp (W78A)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sheetSpy.calls.length = 0;
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-10T03:00:00Z'));
+    mocks.getAddresses.mockResolvedValue([ADDR('a1', false, '1 Lê Lợi'), ADDR('a2', true, '9 Hai Bà Trưng')]);
+    mocks.getWallet.mockResolvedValue({ walletBalance: 300000 });
+  });
+  afterEach(() => vi.useRealTimers());
+
+  async function ready() {
+    const r = renderSheet();
+    await waitFor(() => expect(screen.getByRole('radio', { name: /9 Hai Bà Trưng/ })).toHaveAttribute('aria-checked', 'true'));
+    await waitFor(() => expect(createBtn()).toBeEnabled());
+    return r;
+  }
+  const successToasts = () => mocks.openSnackbar.mock.calls.filter(([o]) => (o as { type: string }).type === 'success');
+
+  it('chạm đúp "Bắt đầu đặt định kỳ" trong cùng một khung hình chỉ tạo một lịch; xong đóng sheet và báo thành công một lần', async () => {
+    const create = deferred<Record<string, unknown>>();
+    mocks.createSubscription.mockReturnValue(create.promise);
+    const { onClose } = await ready();
+    const btn = createBtn()!;
+    await act(async () => {
+      fireEvent.click(btn);
+      fireEvent.click(btn);
+    });
+    expect(mocks.createSubscription).toHaveBeenCalledTimes(1);
+    expect(mocks.createSubscription).toHaveBeenCalledWith({
+      variationId: 'v1', quantity: 2, intervalWeeks: 4, addressId: 'a2', paymentMethod: 'COD',
+    });
+    await waitFor(() => expect(createBtn()).toHaveAttribute('aria-busy', 'true'));
+    await act(async () => create.resolve({ ...SUB, firstOrder: null }));
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(successToasts()).toHaveLength(1);
+  });
+
+  it('tạo lỗi thì nhả khoá, bấm lại gọi lần hai', async () => {
+    const create = deferred<Record<string, unknown>>();
+    mocks.createSubscription.mockReturnValueOnce(create.promise);
+    const { onClose } = await ready();
+    fireEvent.click(createBtn()!);
+    await waitFor(() => expect(createBtn()).toHaveAttribute('aria-busy', 'true'));
+    await act(async () => create.reject(new Error('Số dư Ví Tubu không đủ')));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+    await waitFor(() => expect(createBtn()).not.toHaveAttribute('aria-busy'));
+    expect(onClose).not.toHaveBeenCalled();
+    mocks.createSubscription.mockResolvedValueOnce({ ...SUB, firstOrder: null });
+    fireEvent.click(createBtn()!);
+    await waitFor(() => expect(mocks.createSubscription).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+  });
+});

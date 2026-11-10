@@ -169,7 +169,7 @@ export default function OrdersPage() {
             <LineItemSkeleton />
           </div>
         ) : orders.isError && list.length === 0 ? (
-          <ErrorState message={getLoadErrorMessage(orders.error)} onRetry={() => void orders.refetch()} />
+          <ErrorState message={getLoadErrorMessage(orders.error)} onRetry={() => orders.refetch()} />
         ) : list.length === 0 ? (
           query ? (
             // Có từ khoá: không nhầm với khách chưa từng đặt đơn. overflowWrap để từ khoá dài không tràn khung 375px.
