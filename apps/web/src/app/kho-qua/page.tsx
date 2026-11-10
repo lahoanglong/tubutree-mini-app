@@ -70,35 +70,44 @@ interface RedeemConfirmProps {
   reward: RewardItemDTO;
   catalog: RewardCatalogDTO;
   idemKey: string;
+  /** Lệnh POST đang bay: khung cha không cho đóng (X, Esc, nền, Huỷ), để mở lại không dựng ô xác nhận mới trong lúc máy chủ chưa trả lời. */
+  posting: boolean;
+  onPosting: (posting: boolean) => void;
   onRedeemed: () => void;
   onDone: (outcome: RedeemOutcome) => void;
   onCancel: () => void;
 }
 
-function RedeemConfirm({ reward, catalog, idemKey, onRedeemed, onDone, onCancel }: RedeemConfirmProps) {
+function RedeemConfirm({ reward, catalog, idemKey, posting, onPosting, onRedeemed, onDone, onCancel }: RedeemConfirmProps) {
   const qc = useQueryClient();
   const [error, setError] = useState<string | null>(null);
-  // `disabled={isPending}` chỉ có hiệu lực sau lần render kế: hai cú bấm trong cùng khung hình vẫn gọi mutate hai lần.
+  // `isPending` chỉ đúng sau lần render kế: hai cú bấm trong cùng khung hình vẫn gọi mutate hai lần.
   const busyRef = useRef(false);
   const claimPoint = reward.kind === 'SEED_PACK' || reward.kind === 'GIFT' ? catalog.claimPoint : null;
   const freeNote = rewardFreeShipNote(reward, catalog, formatVnd);
 
   const redeem = useMutation({
     mutationFn: async (): Promise<RedeemOutcome> => {
-      if (reward.kind === 'TREE') {
-        await buyTree(coreHttp, idemKey);
-        return outcomeOf(reward, null);
+      onPosting(true);
+      try {
+        if (reward.kind === 'TREE') {
+          await buyTree(coreHttp, idemKey);
+          return outcomeOf(reward, null);
+        }
+        return outcomeOf(reward, await redeemLoyaltyReward(coreHttp, reward.id, idemKey));
+      } finally {
+        onPosting(false);
       }
-      return outcomeOf(reward, await redeemLoyaltyReward(coreHttp, reward.id, idemKey));
     },
     onSuccess: async (outcome) => {
       onRedeemed();
       await Promise.all(WASTE_REDEEM_INVALIDATE_KEYS.map((queryKey) => qc.invalidateQueries({ queryKey })));
       onDone(outcome);
     },
+    // Trả Promise làm mới: khoá giữ tới khi số dư và tồn mới về, nên "Xác nhận đổi" không gửi lại trên danh sách cũ.
     onError: (e) => {
       setError(actErrText(e));
-      void qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.rewards });
+      return qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.rewards });
     },
     onSettled: () => {
       busyRef.current = false;
@@ -137,10 +146,11 @@ function RedeemConfirm({ reward, catalog, idemKey, onRedeemed, onDone, onCancel 
         </p>
       )}
       <div className="flex gap-2">
-        <button type="button" onClick={onCancel} className={`${miniBtnSecondary} flex-1`}>
+        <button type="button" onClick={onCancel} disabled={posting} className={`${miniBtnSecondary} flex-1`}>
           Huỷ
         </button>
-        <button type="button" onClick={confirm} disabled={redeem.isPending} className={`${ui.btnPrimary} flex-1`}>
+        {/* Nút đang giữ focus mà `disabled` thì Chromium thả focus về body: báo bận bằng aria-*, chặn ở `confirm`. */}
+        <button type="button" onClick={confirm} aria-busy={redeem.isPending || undefined} aria-disabled={redeem.isPending || undefined} className={`${ui.btnPrimary} flex-1`}>
           Xác nhận đổi
         </button>
       </div>
@@ -198,7 +208,7 @@ function RewardCard({ reward, catalog, onRedeem, preview = false }: { reward: Re
 }
 
 function RewardResult({ outcome, onClose }: { outcome: RedeemOutcome | null; onClose: () => void }) {
-  const { use, notice, cancel } = useCouponUse();
+  const { use, notice, cancel, usingCode } = useCouponUse();
   // Sheet đóng (bấm X, nền, hoặc "Tiếp tục mua sắm") giữa lúc câu báo đang giữ: khách đã chọn ở lại, không kéo sang giỏ.
   useEffect(() => {
     if (outcome === null) cancel();
@@ -209,7 +219,13 @@ function RewardResult({ outcome, onClose }: { outcome: RedeemOutcome | null; onC
         <div className="space-y-3">
           <p className="text-base text-stone-900">{`Mã ${outcome.couponCode ?? ''} đã vào ví mã giảm giá`}</p>
           {outcome.couponCode && (
-            <button type="button" onClick={() => void use(outcome.couponCode ?? '', onClose)} className={`${ui.btnPrimary} w-full`}>
+            <button
+              type="button"
+              onClick={() => void use(outcome.couponCode ?? '', onClose)}
+              aria-busy={usingCode === outcome.couponCode || undefined}
+              aria-disabled={usingCode === outcome.couponCode || undefined}
+              className={`${ui.btnPrimary} w-full`}
+            >
               {couponUseCopy.use}
             </button>
           )}
@@ -248,6 +264,7 @@ function RewardsBody() {
   const cfg = usePublicConfig();
   const [tab, setTab] = useState<string>(REWARD_TABS[0].key);
   const [confirmReward, setConfirmReward] = useState<RewardItemDTO | null>(null);
+  const [posting, setPosting] = useState(false);
   const [result, setResult] = useState<RedeemOutcome | null>(null);
   const [rulesOpen, setRulesOpen] = useState(false);
   // Giữ khoá ở thân trang để đóng khung rồi mở lại cùng quà sau lỗi mạng vẫn gửi đúng khoá cũ: máy chủ có thể đã trừ điểm.
@@ -314,12 +331,14 @@ function RewardsBody() {
           ))}
         </div>
       )}
-      <Sheet open={confirmReward !== null} onClose={() => setConfirmReward(null)} title="Xác nhận đổi quà">
+      <Sheet open={confirmReward !== null} dismissible={!posting} onClose={() => setConfirmReward(null)} title="Xác nhận đổi quà">
         {confirmReward && (
           <RedeemConfirm
             reward={confirmReward}
             catalog={c}
             idemKey={idem.key}
+            posting={posting}
+            onPosting={setPosting}
             onRedeemed={idem.rotate}
             onDone={(outcome) => {
               setConfirmReward(null);

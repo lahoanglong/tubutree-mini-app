@@ -56,10 +56,15 @@ function RedemptionStatus({ r }: { r: GiftRedemptionDTO }) {
   return null;
 }
 
-function VoucherEntry({ r, isNew }: { r: GiftRedemptionDTO; isNew?: boolean }) {
-  const { use, notice } = useCouponUse();
+type CouponUse = ReturnType<typeof useCouponUse>;
+
+function VoucherEntry({ r, isNew, couponUse }: { r: GiftRedemptionDTO; isNew?: boolean; couponUse: CouponUse }) {
+  const { use, notice, usingCode } = couponUse;
   const line = redemptionCouponLine(r);
   const code = r.couponCode;
+  // Một khoá "Dùng ngay" cho cả ví: hàng đang chạy báo bận (không `disabled` vì đang giữ focus), các hàng khác tắt hẳn.
+  const busy = Boolean(usingCode) && usingCode === code;
+  const otherBusy = Boolean(usingCode) && usingCode !== code;
   const body = (
     <>
       <Ticket className="h-5 w-5 flex-none text-forest-600" aria-hidden="true" />
@@ -76,7 +81,14 @@ function VoucherEntry({ r, isNew }: { r: GiftRedemptionDTO; isNew?: boolean }) {
   return (
     <div data-redemption>
       {line.usable && code ? (
-        <button type="button" onClick={() => void use(code)} className={`flex min-h-11 w-full items-center gap-3 p-4 text-left hover:bg-stone-50 ${miniOutline}`}>
+        <button
+          type="button"
+          onClick={() => void use(code)}
+          disabled={otherBusy}
+          aria-busy={busy || undefined}
+          aria-disabled={busy || undefined}
+          className={`flex min-h-11 w-full items-center gap-3 p-4 text-left hover:bg-stone-50 ${miniOutline}`}
+        >
           {body}
           <span className="flex-none text-caption font-semibold text-forest-700">{couponUseCopy.use}</span>
         </button>
@@ -92,8 +104,8 @@ function VoucherEntry({ r, isNew }: { r: GiftRedemptionDTO; isNew?: boolean }) {
   );
 }
 
-function RedemptionEntry({ r, isNew }: { r: GiftRedemptionDTO; isNew?: boolean }) {
-  if (r.giftKind === 'VOUCHER') return <VoucherEntry r={r} isNew={isNew} />;
+function RedemptionEntry({ r, isNew, couponUse }: { r: GiftRedemptionDTO; isNew?: boolean; couponUse: CouponUse }) {
+  if (r.giftKind === 'VOUCHER') return <VoucherEntry r={r} isNew={isNew} couponUse={couponUse} />;
   return (
     <div data-redemption className={`space-y-2 p-4 ${miniOutline}`}>
       <div className="flex items-center justify-between gap-2">
@@ -109,15 +121,16 @@ function RewardsMineBody() {
   const q = useQuery(myRedemptionsQuery(coreHttp));
   const router = useRouter();
   const newCode = useSearchParams().get(NEW_COUPON_PARAM);
+  const couponUse = useCouponUse();
 
-  if (q.isError) return <ErrorState message={errText(q.error)} onRetry={() => void q.refetch()} />;
+  if (q.isError) return <ErrorState message={errText(q.error)} onRetry={() => q.refetch()} />;
   if (!q.data) return <Skeleton height={120} />;
   if (q.data.length === 0) return <EmptyState art="box" heading="Bạn chưa đổi quà nào" ctaLabel="Đến Kho quà" onCta={() => router.push('/kho-qua')} />;
 
   return (
     <div className="grid gap-3 pb-12 md:grid-cols-2">
       {sortRedemptions(q.data, newCode).map((r) => (
-        <RedemptionEntry key={r.id} r={r} isNew={!!newCode && r.couponCode === newCode} />
+        <RedemptionEntry key={r.id} r={r} isNew={!!newCode && r.couponCode === newCode} couponUse={couponUse} />
       ))}
     </div>
   );
