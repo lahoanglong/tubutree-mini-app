@@ -16,7 +16,14 @@ const state = vi.hoisted(() => ({
   deletes: [] as string[],
   addToCart: vi.fn(),
   failRemind: false,
+  gates: new Map<string, Promise<void>>(),
 }));
+
+// Giữ một yêu cầu (khớp đầu đường dẫn) cho tới khi ca kiểm mở cổng, để chạm thứ hai rơi đúng lúc lệnh còn bay.
+const heldBy = async (path: string) => {
+  const hit = [...state.gates].find(([k]) => path.startsWith(k));
+  if (hit) await hit[1];
+};
 
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => state.phase, useAuthRestoring: () => false }));
 vi.mock('next/navigation', () => ({
@@ -30,6 +37,7 @@ vi.mock('@/lib/core-http', () => {
     coreHttp: {
       get: async (path: string) => {
         state.calls.push(path);
+        await heldBy(path);
         if (path === '/categories') return CATEGORIES;
         if (path === '/flash-sales/upcoming') return [{ itemId: 'c', variationId: 'v-c', productSlug: 'sp-c', productName: 'Sản phẩm c', thumbnail: null, flashPrice: 1, retailPrice: 2, startAt: S20.startAt, reminded: state.reminded }];
         if (path === '/flash-sales/slots') {
@@ -44,6 +52,7 @@ vi.mock('@/lib/core-http', () => {
       },
       post: async (path: string) => {
         state.posts.push(path);
+        await heldBy(path);
         if (state.failRemind) throw new Error('boom');
         state.reminded = true;
         return {};
@@ -136,6 +145,7 @@ beforeEach(() => {
   state.posts = [];
   state.deletes = [];
   state.failRemind = false;
+  state.gates.clear();
   state.addToCart.mockReset();
   sessionStorage.clear();
 });
@@ -503,5 +513,252 @@ describe('Trang Giờ vàng (web): trạng thái tải, rỗng, lỗi', () => {
     state.items = { s12: itemsOf(S12, []) };
     const c = await mount();
     expect(c.textContent).toContain('Chưa có sản phẩm trong khung giờ này');
+  });
+});
+
+describe('Trang Giờ vàng (web): khoá chạm đúp', () => {
+  const hold = (path: string) => {
+    let open!: () => void;
+    state.gates.set(path, new Promise<void>((r) => (open = r)));
+    return () => {
+      state.gates.delete(path);
+      open();
+    };
+  };
+  const tapTogether = async (...els: Array<HTMLElement | null>) => {
+    await act(async () => {
+      for (const e of els) e!.click();
+    });
+  };
+  const callsTo = (re: RegExp) => state.calls.filter((p) => re.test(p)).length;
+  async function openEvening() {
+    const c = await mount();
+    click(tabs(c)[1]!);
+    await flush(4);
+    return c;
+  }
+
+  it('Mua ngay: hai cú chạm cùng khung hình chỉ thêm giỏ một lần; nút aria-busy, không disabled; món khác bị khoá', async () => {
+    let done!: (v: unknown) => void;
+    state.addToCart.mockReturnValue(new Promise((r) => (done = r)));
+    const c = await mount();
+    const a = named(c, 'Mua ngay Sản phẩm a')!;
+    const b = named(c, 'Mua ngay Sản phẩm b')!;
+    await tapTogether(a, a);
+    await flush(2);
+    expect(state.addToCart).toHaveBeenCalledTimes(1);
+    expect(a.getAttribute('aria-busy')).toBe('true');
+    expect(a.getAttribute('aria-disabled')).toBe('true');
+    expect(a.disabled).toBe(false);
+    expect(b.getAttribute('aria-disabled')).toBe('true');
+    expect(b.getAttribute('aria-busy')).toBeNull();
+    await tapTogether(b);
+    expect(state.addToCart).toHaveBeenCalledTimes(1);
+    done({ items: [{ id: 'line-x', variationId: 'v-a', quantity: 1 }] });
+    await flush(6);
+    expect(state.push).toHaveBeenCalledTimes(1);
+  });
+
+  it('Mua ngay thành công: khoá giữ tới khi rời trang, chạm lại không thêm giỏ lần hai', async () => {
+    state.addToCart.mockResolvedValue({ items: [{ id: 'line-x', variationId: 'v-a', quantity: 1 }] });
+    const c = await mount();
+    const a = named(c, 'Mua ngay Sản phẩm a')!;
+    click(a);
+    await flush(6);
+    expect(state.push).toHaveBeenCalledTimes(1);
+    expect(a.getAttribute('aria-busy')).toBe('true');
+    await tapTogether(a);
+    await flush(2);
+    expect(state.addToCart).toHaveBeenCalledTimes(1);
+    expect(state.push).toHaveBeenCalledTimes(1);
+  });
+
+  it('Mua ngay lỗi: role="alert", nhả khoá, bấm lại thêm giỏ lần hai', async () => {
+    state.addToCart.mockRejectedValueOnce(new Error('Hết hàng')).mockResolvedValue({ items: [{ id: 'line-x', variationId: 'v-a', quantity: 1 }] });
+    const c = await mount();
+    const a = named(c, 'Mua ngay Sản phẩm a')!;
+    await tapTogether(a, a);
+    await flush(6);
+    expect(state.addToCart).toHaveBeenCalledTimes(1);
+    expect(alertText(c)).toContain('Hết hàng');
+    expect(a.getAttribute('aria-busy')).toBeNull();
+    expect(a.getAttribute('aria-disabled')).toBeNull();
+    click(a);
+    await flush(6);
+    expect(state.addToCart).toHaveBeenCalledTimes(2);
+    expect(state.push).toHaveBeenCalledTimes(1);
+  });
+
+  it('Nhắc tôi: hai cú chạm cùng khung hình chỉ POST một lần; nút aria-busy, không disabled', async () => {
+    const release = hold('/flash-sales/items/c/remind');
+    const c = await openEvening();
+    const r = named(c, 'Nhắc tôi Sản phẩm c')!;
+    await tapTogether(r, r);
+    await flush(2);
+    expect(state.posts).toEqual(['/flash-sales/items/c/remind']);
+    expect(r.getAttribute('aria-busy')).toBe('true');
+    expect(r.disabled).toBe(false);
+    release();
+    await flush(8);
+    expect(state.posts).toHaveLength(1);
+  });
+
+  it('Nhắc tôi: khoá giữ tới khi danh sách nhắc mới về, chạm lúc POST đã xong mà danh sách chưa về không gửi lệnh thứ hai', async () => {
+    const c = await openEvening();
+    const releaseList = hold('/flash-sales/upcoming');
+    click(named(c, 'Nhắc tôi Sản phẩm c'));
+    await flush(6);
+    expect(state.posts).toHaveLength(1);
+    const pressed = named(c, 'Đã đặt nhắc Sản phẩm c, bỏ nhắc')!;
+    await tapTogether(pressed);
+    await flush(2);
+    expect(state.deletes).toEqual([]);
+    expect(state.posts).toHaveLength(1);
+    releaseList();
+    await flush(8);
+    click(named(c, 'Đã đặt nhắc Sản phẩm c, bỏ nhắc'));
+    await flush(6);
+    expect(state.deletes).toEqual(['/flash-sales/items/c/remind']);
+  });
+
+  const remindOf = (c: HTMLElement, id: string) => all<HTMLButtonElement>(c, 'button').find((b) => new RegExp(`^(Nhắc tôi|Đã đặt nhắc) Sản phẩm ${id}\\b`).test(b.getAttribute('aria-label') ?? ''))!;
+
+  it('Nhắc tôi: món c xong POST mà danh sách chưa về, bấm món d rồi bấm lại c: c vẫn khoá (đúng một POST, không DELETE) và cả hai nút còn aria-busy', async () => {
+    state.items = { s12: itemsOf(S12, [item('a')]), s20: itemsOf(S20, [item('c'), item('d')]) };
+    const c = await openEvening();
+    const releaseList = hold('/flash-sales/upcoming');
+    click(remindOf(c, 'c'));
+    await flush(6);
+    expect(state.posts).toEqual(['/flash-sales/items/c/remind']);
+    expect(remindOf(c, 'c').getAttribute('aria-busy')).toBe('true');
+    click(remindOf(c, 'd'));
+    await flush(6);
+    expect(state.posts.slice().sort()).toEqual(['/flash-sales/items/c/remind', '/flash-sales/items/d/remind']);
+    // `variables` của mutation đã đổi sang d, nhưng c vẫn bị khoá và vẫn báo bận.
+    expect(remindOf(c, 'c').getAttribute('aria-busy')).toBe('true');
+    expect(remindOf(c, 'c').getAttribute('aria-disabled')).toBe('true');
+    expect(remindOf(c, 'c').disabled).toBe(false);
+    expect(remindOf(c, 'd').getAttribute('aria-busy')).toBe('true');
+    await tapTogether(remindOf(c, 'c'));
+    await flush(2);
+    expect(state.deletes).toEqual([]);
+    expect(state.posts.filter((p) => p.includes('/c/'))).toHaveLength(1);
+    releaseList();
+    await flush(8);
+    expect(remindOf(c, 'c').getAttribute('aria-busy')).toBeNull();
+    click(remindOf(c, 'c'));
+    await flush(6);
+    expect(state.deletes).toEqual(['/flash-sales/items/c/remind']);
+  });
+
+  it('Nhắc tôi: c xong POST, d còn đang bay, danh sách chưa về: bấm lại c và d không gửi thêm lệnh nào; cả hai nhả khi danh sách của lệnh sau cùng về', async () => {
+    state.items = { s12: itemsOf(S12, [item('a')]), s20: itemsOf(S20, [item('c'), item('d')]) };
+    const c = await openEvening();
+    const releaseList = hold('/flash-sales/upcoming');
+    const releaseD = hold('/flash-sales/items/d/remind');
+    click(remindOf(c, 'c'));
+    await flush(6);
+    click(remindOf(c, 'd'));
+    await flush(6);
+    expect(state.posts.slice().sort()).toEqual(['/flash-sales/items/c/remind', '/flash-sales/items/d/remind']);
+    await tapTogether(remindOf(c, 'c'), remindOf(c, 'c'), remindOf(c, 'd'), remindOf(c, 'd'));
+    await flush(2);
+    expect(state.posts).toHaveLength(2);
+    expect(state.deletes).toEqual([]);
+    for (const id of ['c', 'd']) {
+      expect(remindOf(c, id).getAttribute('aria-busy')).toBe('true');
+      expect(remindOf(c, id).getAttribute('aria-disabled')).toBe('true');
+      expect(remindOf(c, id).disabled).toBe(false);
+    }
+    releaseD();
+    await flush(6);
+    // POST của d xong nhưng danh sách (đang bị giữ) chưa về: cả hai vẫn khoá.
+    expect(remindOf(c, 'c').getAttribute('aria-busy')).toBe('true');
+    expect(remindOf(c, 'd').getAttribute('aria-busy')).toBe('true');
+    releaseList();
+    await flush(10);
+    for (const id of ['c', 'd']) expect(remindOf(c, id).getAttribute('aria-busy')).toBeNull();
+    expect(state.posts).toHaveLength(2);
+    expect(state.deletes).toEqual([]);
+  });
+
+  it('Nhắc tôi lỗi: role="alert", nhả khoá, bấm lại gọi lần hai', async () => {
+    const c = await openEvening();
+    state.failRemind = true;
+    const r = named(c, 'Nhắc tôi Sản phẩm c')!;
+    await tapTogether(r, r);
+    await flush(8);
+    expect(state.posts).toHaveLength(1);
+    expect(alertText(c)).not.toBeNull();
+    expect(r.getAttribute('aria-busy')).toBeNull();
+    click(named(c, 'Nhắc tôi Sản phẩm c'));
+    await flush(8);
+    expect(state.posts).toHaveLength(2);
+  });
+
+  it('Nhắc tôi hai món khác nhau cùng khung hình: song song, mỗi món một POST', async () => {
+    state.items = { s12: itemsOf(S12, [item('a')]), s20: itemsOf(S20, [item('c'), item('d')]) };
+    const c = await openEvening();
+    const rc = named(c, 'Nhắc tôi Sản phẩm c')!;
+    const rd = named(c, 'Nhắc tôi Sản phẩm d')!;
+    await tapTogether(rc, rc, rd, rd);
+    await flush(8);
+    expect(state.posts.slice().sort()).toEqual(['/flash-sales/items/c/remind', '/flash-sales/items/d/remind']);
+  });
+
+  it('tự đặt nhắc sau đăng nhập đang bay: chạm tay cùng món không POST lần hai', async () => {
+    rememberPendingRemind({ itemId: 'c', startAt: S20.startAt });
+    const release = hold('/flash-sales/items/c/remind');
+    const c = await mount();
+    await flush(6);
+    expect(state.posts).toEqual(['/flash-sales/items/c/remind']);
+    click(tabs(c)[1]!);
+    await flush(4);
+    // Cập nhật lạc quan đã đổi nhãn nút thành "Đã đặt nhắc": chạm lúc này mà không khoá sẽ gửi DELETE đè lên POST đang bay.
+    await tapTogether(named(c, 'Đã đặt nhắc Sản phẩm c, bỏ nhắc'));
+    await flush(2);
+    expect(state.posts).toHaveLength(1);
+    expect(state.deletes).toEqual([]);
+    release();
+    await flush(8);
+    expect(state.posts).toHaveLength(1);
+    expect(state.deletes).toEqual([]);
+  });
+
+  it('API khung giờ lỗi: Thử lại chạm đúp cùng khung hình chỉ tải lại một lần, nút aria-busy tới khi xong', async () => {
+    state.slots = new Error('500');
+    const c = await mount();
+    expect(alertText(c)).not.toBeNull();
+    const before = callsTo(/^\/flash-sales\/slots$/);
+    const release = hold('/flash-sales/slots');
+    state.slots = { slots: [S12, S20] };
+    const retry = named(c, 'Thử lại')!;
+    await tapTogether(retry, retry);
+    await flush(2);
+    expect(callsTo(/^\/flash-sales\/slots$/)).toBe(before + 1);
+    expect(retry.getAttribute('aria-busy')).toBe('true');
+    expect(retry.disabled).toBe(false);
+    release();
+    await flush(8);
+    expect(callsTo(/^\/flash-sales\/slots$/)).toBe(before + 1);
+    expect(named(c, 'Mua ngay Sản phẩm a')).not.toBeNull();
+  });
+
+  it('danh sách món lỗi: Thử lại tại chỗ chạm đúp cùng khung hình chỉ tải lại một lần', async () => {
+    state.items = { s12: new Error('500'), s20: itemsOf(S20, [item('c')]) };
+    const c = await mount();
+    const re = /\/flash-sales\/slots\/s12\/items/;
+    const before = callsTo(re);
+    const release = hold('/flash-sales/slots/s12/items');
+    state.items = { s12: itemsOf(S12, [item('a')]), s20: itemsOf(S20, [item('c')]) };
+    const retry = named(c, 'Thử lại')!;
+    await tapTogether(retry, retry);
+    await flush(2);
+    expect(callsTo(re)).toBe(before + 1);
+    expect(retry.getAttribute('aria-busy')).toBe('true');
+    release();
+    await flush(8);
+    expect(callsTo(re)).toBe(before + 1);
+    expect(named(c, 'Mua ngay Sản phẩm a')).not.toBeNull();
   });
 });

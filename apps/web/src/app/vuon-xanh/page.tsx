@@ -125,7 +125,7 @@ function GameBody() {
 
   if (isLoading) return <GameSkeleton />;
   // Hồ sơ là dữ liệu chủ đạo của trang (chuỗi/giọt nước/tác động xanh): lỗi thì báo rõ, không dựng với số 0 trông như "mất hết tiến độ".
-  if (isError && !profile) return <ErrorState message={errText(profileError)} onRetry={() => void refetch()} />;
+  if (isError && !profile) return <ErrorState message={errText(profileError)} onRetry={() => refetch()} />;
 
   const eco = profile?.ecoImpact;
   const checkedInToday = isSameVNDay(profile?.lastCheckInAt ?? null);
@@ -240,7 +240,7 @@ function GameBody() {
             profile={profile}
             status={checkInStatusQ.data}
             statusError={checkInStatusQ.isError}
-            onRetryStatus={() => void checkInStatusQ.refetch()}
+            onRetryStatus={() => checkInStatusQ.refetch()}
             onBuyFreeze={() => freezeM.mutate()}
             freezePending={freezeM.isPending}
             onCollectDew={() => dewM.mutate()}
@@ -272,7 +272,7 @@ function GameBody() {
               onAnswer={(id, choice) => answerM.mutate({ id, choice })}
               onNext={nextQuiz}
               loadError={quizQ.isError}
-              onRetry={() => void quizQ.refetch()}
+              onRetry={() => quizQ.refetch()}
               answeredToday={profile?.quizAnsweredToday}
             />
           </div>
@@ -300,7 +300,7 @@ function GameBody() {
           {/* Lô đất / mở rộng vườn (§6.7) — nhiều cây song song */}
           {garden === undefined && !gardenQ.isError && <Skeleton height={120} rounded="rounded-card" />}
           {garden === undefined && gardenQ.isError && (
-            <ErrorState message={gameNewbieCopy.loadError.garden} retryLabel={gameNewbieCopy.loadError.retry} onRetry={() => void gardenQ.refetch()} />
+            <ErrorState message={gameNewbieCopy.loadError.garden} retryLabel={gameNewbieCopy.loadError.retry} onRetry={() => gardenQ.refetch()} />
           )}
           {garden && plotsOpen && (
             <GardenPlots
@@ -352,7 +352,7 @@ function GameBody() {
               <FriendGifts friends={friends} giftPending={giftM.isPending} giftVariables={giftM.variables} onGift={(recipientId) => giftM.mutate(recipientId)} />
             )}
 
-            <WeeklyLeaderboard board={board} failed={boardQ.isError} onRetry={() => void boardQ.refetch()} />
+            <WeeklyLeaderboard board={board} failed={boardQ.isError} onRetry={() => boardQ.refetch()} />
 
             {seasonBoard && seasonBoard.length > 0 && <SeasonLeaderboard rows={seasonBoard} />}
 
@@ -379,7 +379,7 @@ function GameBody() {
         onCheckIn={() => checkInM.mutate()}
         onDew={() => dewM.mutate()}
         quiz={quizState}
-        onRetryQuiz={() => void quizQ.refetch()}
+        onRetryQuiz={() => quizQ.refetch()}
         onGoQuiz={() => goTab('today', 'game-quiz')}
         hasFriends={GAME_SOCIAL_ON_WEB && (friends?.length ?? 0) > 0}
         onGoFriends={() => goTab('community')}
@@ -408,6 +408,7 @@ function GameBody() {
         onShare={shareToCommunity}
         onCopyCoupon={(code) => void copyCoupon(code)}
         couponNotice={couponUse.notice}
+        couponUsing={Boolean(couponUse.usingCode)}
         onUseCoupon={(code) => void couponUse.use(code, closeHarvest)}
       />
       <GameNoticeBar notice={notice} />

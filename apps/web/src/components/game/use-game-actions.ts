@@ -88,17 +88,20 @@ export function useGameActions({
 }) {
   const queryClient = useQueryClient();
 
-  const refresh = () => {
-    void queryClient.invalidateQueries({ queryKey: ['game'] });
-    void queryClient.invalidateQueries({ queryKey: ['me'] });
-    // Điểm Xanh vừa đổi → màn Thanh toán đọc số dư từ ['loyalty'], phải làm mới cùng lúc, nếu không
-    // khách vừa tiêu xong sang checkout vẫn thấy số cũ.
-    void queryClient.invalidateQueries({ queryKey: ['loyalty'] });
-  };
+  // Trả lời hứa tải lại để `onSuccess` trả ra: TanStack Query đợi nó trước `onSettled`, nên khoá của lệnh còn giữ (nút còn bận)
+  // cho tới khi số nước/điểm/lô mới về. Nhả sớm hơn thì nút bấm được lúc màn còn số cũ: tưới tiếp theo số cũ, nhận thưởng lần hai.
+  const refresh = (): Promise<unknown> =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['game'] }),
+      queryClient.invalidateQueries({ queryKey: ['me'] }),
+      // Điểm Xanh vừa đổi → màn Thanh toán đọc số dư từ ['loyalty'], phải làm mới cùng lúc, nếu không
+      // khách vừa tiêu xong sang checkout vẫn thấy số cũ.
+      queryClient.invalidateQueries({ queryKey: ['loyalty'] }),
+    ]);
   // Hết thời gian: máy chủ có thể đã ghi nhận thao tác, nên làm mới để màn hình khớp với sổ.
   const onError = (e: unknown) => {
     notify(errText(e), 'error');
-    if (e instanceof NetworkError && e.timedOut) refresh();
+    if (e instanceof NetworkError && e.timedOut) return refresh();
   };
 
   const checkInM = useLockedMutation({
@@ -109,9 +112,11 @@ export function useGameActions({
       if (r.pending.length === 0) {
         queryClient.setQueryData<{ checkedInToday: boolean }>(['loyalty-checkin'], (old) => (old ? { ...old, checkedInToday: true } : old));
       }
-      void queryClient.invalidateQueries({ queryKey: ['loyalty-checkin'] });
-      void queryClient.invalidateQueries({ queryKey: ['points-txn'] });
-      refresh();
+      return Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['loyalty-checkin'] }),
+        queryClient.invalidateQueries({ queryKey: ['points-txn'] }),
+        refresh(),
+      ]);
     },
     onError,
   });
@@ -119,7 +124,7 @@ export function useGameActions({
     mutationFn: () => collectDew(coreHttp),
     onSuccess: (r) => {
       notify(`Hứng được +${formatDrops(r.seedsEarned)} từ giọt sương sáng 💦`, 'success');
-      refresh();
+      return refresh();
     },
     onError,
   });
@@ -127,15 +132,15 @@ export function useGameActions({
     mutationFn: () => buyStreakFreeze(coreHttp),
     onSuccess: (r) => {
       notify(`Đã mua vé giữ lửa 🧊 (còn ${r.streakFreezes} vé)`, 'success');
-      refresh();
+      return refresh();
     },
     onError,
   });
   const repairM = useLockedMutation({
     mutationFn: () => repairStreak(coreHttp),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['game', 'profile'] });
       notify('Đã hồi sinh chuỗi! 🌿', 'success');
+      return queryClient.invalidateQueries({ queryKey: ['game', 'profile'] });
     },
     onError,
   });
@@ -144,7 +149,7 @@ export function useGameActions({
       mutationFn: (recipientId: string) => giftWater(coreHttp, recipientId),
       onSuccess: (r) => {
         notify(`Đã tặng ${formatDrops(r.amount)} cho bạn 🎁`, 'success');
-        refresh();
+        return refresh();
       },
       onError,
     },
@@ -162,14 +167,13 @@ export function useGameActions({
     }
   };
 
-  const afterWatering = (label: string, r: WateringResult, home: boolean) => {
+  const afterWatering = (label: string, r: WateringResult, home: boolean): Promise<unknown> => {
     if (r.harvested) {
       onHarvest(r.reward, harvestMeta(r, home));
     } else {
       notify(`${label} · còn ${formatDrops(Math.max(0, r.target - r.progress))} nữa là thu hoạch`, 'success');
     }
-    refresh();
-    void queryClient.invalidateQueries({ queryKey: ['game', 'forest'] });
+    return Promise.all([refresh(), queryClient.invalidateQueries({ queryKey: ['game', 'forest'] })]);
   };
 
   const waterM = useLockedMutation({
@@ -183,8 +187,7 @@ export function useGameActions({
     mutationFn: (idempotencyKey: string) => buyTree(coreHttp, idempotencyKey),
     onSuccess: (r) => {
       notify(`Đã góp 1 cây vào quỹ trồng cây 🌳 (−${formatPoints(r.cost)}) · mã ${r.certificateCode}`, 'success');
-      refresh();
-      void queryClient.invalidateQueries({ queryKey: ['game', 'forest'] });
+      return Promise.all([refresh(), queryClient.invalidateQueries({ queryKey: ['game', 'forest'] })]);
     },
     onError,
   });
@@ -192,7 +195,7 @@ export function useGameActions({
     mutationFn: (slot: number) => unlockPlot(coreHttp, slot),
     onSuccess: () => {
       notify('Đã mở lô đất mới 🪴', 'success');
-      refresh();
+      return refresh();
     },
     onError,
   });
@@ -209,10 +212,12 @@ export function useGameActions({
       mutationFn: ({ tier, track }: { tier: number; track: 'free' | 'premium' }) => claimSeasonPass(coreHttp, tier, track),
       onSuccess: () => {
         notify('Đã nhận thưởng chặng mùa! 🎉', 'success');
-        void queryClient.invalidateQueries({ queryKey: ['game', 'seasonPass'] });
-        void queryClient.invalidateQueries({ queryKey: ['game', 'profile'] });
-        // Thưởng bậc có thể là Điểm Xanh.
-        void queryClient.invalidateQueries({ queryKey: ['loyalty'] });
+        return Promise.all([
+          queryClient.invalidateQueries({ queryKey: ['game', 'seasonPass'] }),
+          queryClient.invalidateQueries({ queryKey: ['game', 'profile'] }),
+          // Thưởng bậc có thể là Điểm Xanh.
+          queryClient.invalidateQueries({ queryKey: ['loyalty'] }),
+        ]);
       },
       onError,
     },
@@ -223,10 +228,12 @@ export function useGameActions({
       mutationFn: (code: string) => claimMission(coreHttp, code),
       onSuccess: (r) => {
         notify(`Đã nhận +${formatNumber(r.rewardPoints)} Điểm Xanh! 🌿`, 'success');
-        void queryClient.invalidateQueries({ queryKey: ['game', 'missions'] });
-        void queryClient.invalidateQueries({ queryKey: ['me'] });
-        // Thưởng nhiệm vụ cộng Điểm Xanh: màn Thanh toán đọc số dư từ ['loyalty'].
-        void queryClient.invalidateQueries({ queryKey: ['loyalty'] });
+        return Promise.all([
+          queryClient.invalidateQueries({ queryKey: ['game', 'missions'] }),
+          queryClient.invalidateQueries({ queryKey: ['me'] }),
+          // Thưởng nhiệm vụ cộng Điểm Xanh: màn Thanh toán đọc số dư từ ['loyalty'].
+          queryClient.invalidateQueries({ queryKey: ['loyalty'] }),
+        ]);
       },
       onError,
     },
@@ -236,7 +243,7 @@ export function useGameActions({
     mutationFn: () => shareHarvest(coreHttp),
     onSuccess: (r) => {
       notify(r.alreadyShared ? gameNewbieCopy.harvest.shareCommunityAlready : gameNewbieCopy.harvest.shareCommunityOk, 'success');
-      void queryClient.invalidateQueries({ queryKey: ['feed'] });
+      return queryClient.invalidateQueries({ queryKey: ['feed'] });
     },
     onError,
   });

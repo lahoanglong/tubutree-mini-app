@@ -28,6 +28,10 @@ export interface FlashSlotItemProps {
   slotStatus: FlashSlotStatus;
   reminded: boolean;
   remindPending: boolean;
+  /** "Mua ngay" của món này đang chạy (thêm giỏ rồi sang Thanh toán). */
+  buyPending?: boolean;
+  /** Một món KHÁC đang Mua ngay: nút này khoá để không thêm hai món cùng lúc. */
+  buyLocked?: boolean;
   onBuy: () => void;
   onToggleRemind: () => void;
 }
@@ -38,7 +42,7 @@ export interface FlashSlotItemProps {
  * chiều cao nên thẻ không nhảy khi khung mở). Món hết suất vẫn hiện nhưng ảnh và nút mờ, nút khoá (aria-disabled, không `disabled` thật để vẫn nằm trong
  * thứ tự Tab; lý do đọc qua thanh "Đã bán hết" ở khung đang diễn ra, còn khung sắp mở không có thanh nên dòng "Hết hàng" thay chỗ và nút trỏ aria-describedby tới nó); chữ giữ nguyên độ đậm vì chữ thông tin mờ đi thì tụt dưới tương phản 4,5:1. Chạm nút không mở sản phẩm.
  */
-export function FlashSlotItem({ item, slotStatus, reminded, remindPending, onBuy, onToggleRemind }: FlashSlotItemProps) {
+export function FlashSlotItem({ item, slotStatus, reminded, remindPending, buyPending = false, buyLocked = false, onBuy, onToggleRemind }: FlashSlotItemProps) {
   const view = productCardView({ product: flashCardProduct(item), flash: item, variant: 'line', now: serverNow() });
   const upcoming = slotStatus === 'UPCOMING';
   const outOfStockId = useId();
@@ -51,11 +55,11 @@ export function FlashSlotItem({ item, slotStatus, reminded, remindPending, onBuy
       loading={remindPending}
       aria-pressed={reminded}
       aria-label={slotRemindLabel(item.productName, reminded)}
-      aria-disabled={remindLocked || undefined}
+      aria-disabled={remindLocked || remindPending || undefined}
       aria-describedby={remindLocked ? outOfStockId : undefined}
       style={remindLocked ? SOLD_OUT_ACTION_STYLE : ACTION_STYLE}
       onPress={() => {
-        if (remindLocked) return;
+        if (remindLocked || remindPending) return;
         onToggleRemind();
       }}
     >
@@ -65,11 +69,12 @@ export function FlashSlotItem({ item, slotStatus, reminded, remindPending, onBuy
     <Button
       size="md"
       variant="flash"
+      loading={buyPending}
       aria-label={slotBuyLabel(item.productName)}
-      aria-disabled={item.soldOut || undefined}
+      aria-disabled={item.soldOut || buyPending || buyLocked || undefined}
       style={item.soldOut ? SOLD_OUT_ACTION_STYLE : ACTION_STYLE}
       onPress={() => {
-        if (item.soldOut) return;
+        if (item.soldOut || buyPending || buyLocked) return;
         onBuy();
       }}
     >

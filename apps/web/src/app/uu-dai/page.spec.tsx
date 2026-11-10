@@ -1,5 +1,6 @@
 import { homeCopy } from '@tubutree/app-core/home-copy';
 // @vitest-environment jsdom
+import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { headingProblems, unnamedControls } from '@/test-utils/a11y';
@@ -21,13 +22,16 @@ const state = vi.hoisted(() => ({
   collectable: [] as Record<string, unknown>[],
   flash: [] as Record<string, unknown>[],
   use: vi.fn(),
+  usingCode: null as string | null,
+  getHold: new Map<string, Promise<unknown>>(),
+  postHold: null as Promise<unknown> | null,
 }));
 
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => state.phase }));
 vi.mock('@/lib/auth-context', () => ({
   useAuth: () => ({ user: state.phase === 'authenticated' ? { id: 'u1', pointsBalance: 120, pointsConvertedBalance: 0 } : null, retrySession: vi.fn() }),
 }));
-vi.mock('@/lib/use-coupon-use', () => ({ useCouponUse: () => ({ copy: vi.fn(), use: state.use, notice: null, cancel: vi.fn() }) }));
+vi.mock('@/lib/use-coupon-use', () => ({ useCouponUse: () => ({ copy: vi.fn(), use: state.use, notice: null, cancel: vi.fn(), usingCode: state.usingCode }) }));
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: state.push }),
   useSearchParams: () => new URLSearchParams(state.search),
@@ -50,12 +54,14 @@ vi.mock('@/lib/core-http', () => {
         state.calls.push(path);
         if (path === '/campaigns') state.campaignQueries.push(opts);
         if (state.fail.has(path)) throw new Error('Máy chủ đang bận');
+        await state.getHold.get(path);
         const h = table[path];
         if (!h) throw new Error(`đường dẫn lạ ${path}`);
         return h();
       },
       post: async (path: string) => {
         state.posts.push(path);
+        await state.postHold;
         return {
           points: { success: true, cycleDay: 3, streakDays: 3, pointsEarned: 3, totalPoints: 30, message: '' },
           water: { seedsEarned: 10, streakDays: 1, totalSeeds: 10, streakFrozeUsed: false, bonusNote: '' },
@@ -117,6 +123,9 @@ beforeEach(() => {
   state.collectable = [];
   state.flash = [];
   state.use.mockReset();
+  state.usingCode = null;
+  state.getHold = new Map();
+  state.postHold = null;
   resetFlashSales();
   localStorage.clear();
   Element.prototype.scrollIntoView = vi.fn();
@@ -455,5 +464,120 @@ describe('/uu-dai — banner đầu trang (OFFERS_TOP)', () => {
     mounted = [];
     localStorage.clear();
     expect(links(await mount())).toEqual(['/chien-dich/chien-dich-all']);
+  });
+});
+
+describe('/uu-dai — khoá chạm đúp', () => {
+  const gate = () => {
+    let open!: () => void;
+    const p = new Promise<void>((r) => (open = r));
+    return { p, open };
+  };
+  const tapTogether = async (...els: HTMLElement[]) => {
+    await act(async () => {
+      for (const e of els) e.click();
+    });
+  };
+  const gets = (path: string) => state.calls.filter((p) => p === path);
+
+  it('"Lưu mã": hai cú chạm cùng khung hình chỉ POST claim một lần; nút của mã báo bận, mã khác chỉ aria-disabled, không nút nào disabled', async () => {
+    state.collectable = [OPEN_CODE, { ...OPEN_CODE, code: 'NHAN20' }];
+    const g = gate();
+    state.postHold = g.p;
+    const c = await mount();
+    const saves = Array.from(region(c, 'Nhận mã')!.querySelectorAll<HTMLButtonElement>('button')).filter((b) => b.textContent === 'Lưu mã');
+    expect(saves).toHaveLength(2);
+    await tapTogether(saves[0]!, saves[0]!);
+    await flush();
+    expect(state.posts.filter((p) => p === '/coupons/claim')).toHaveLength(1);
+    expect(saves[0]!.getAttribute('aria-busy')).toBe('true');
+    expect(saves[0]!.getAttribute('aria-disabled')).toBe('true');
+    expect(saves[1]!.getAttribute('aria-busy')).toBeNull();
+    expect(saves[1]!.getAttribute('aria-disabled')).toBe('true');
+    expect(saves.every((b) => !b.disabled)).toBe(true);
+    // Mã khác chạm lúc một mã đang lưu bị bỏ qua (khoá chung của kho mã).
+    await tapTogether(saves[1]!);
+    expect(state.posts.filter((p) => p === '/coupons/claim')).toHaveLength(1);
+    g.open();
+    await flush(8);
+    expect(state.posts.filter((p) => p === '/coupons/claim')).toHaveLength(1);
+  });
+
+  it('"Dùng ngay" đang chạy: nút của mã đó báo bận, nút mã khác aria-disabled, chạm không gọi use lần hai', async () => {
+    state.coupons = [COUPON, { ...COUPON, id: 'c2', code: 'FREESHIP' }];
+    state.usingCode = 'WELCOME20';
+    const c = await mount();
+    const uses = Array.from(region(c, 'Mã của tôi')!.querySelectorAll<HTMLButtonElement>('button')).filter((b) => b.textContent === 'Dùng ngay');
+    expect(uses).toHaveLength(2);
+    expect(uses[0]!.getAttribute('aria-busy')).toBe('true');
+    expect(uses[0]!.getAttribute('aria-disabled')).toBe('true');
+    expect(uses[1]!.getAttribute('aria-busy')).toBeNull();
+    expect(uses[1]!.getAttribute('aria-disabled')).toBe('true');
+    expect(uses.every((b) => !b.disabled)).toBe(true);
+    await tapTogether(uses[0]!, uses[1]!);
+    expect(state.use).not.toHaveBeenCalled();
+  });
+
+  it('"Dùng ngay" rảnh: bấm gọi use đúng mã, nút không báo bận', async () => {
+    const c = await mount();
+    const use = byText(region(c, 'Mã của tôi')!, 'button', 'Dùng ngay') as HTMLButtonElement;
+    expect(use.getAttribute('aria-busy')).toBeNull();
+    expect(use.getAttribute('aria-disabled')).toBeNull();
+    click(use);
+    expect(state.use).toHaveBeenCalledWith('WELCOME20');
+  });
+
+  it('Mã của tôi lỗi tải: role="alert", Thử lại chạm đúp cùng khung hình chỉ tải lại một lần', async () => {
+    state.fail.add('/me/coupons');
+    const c = await mount();
+    const mine = region(c, 'Mã của tôi')!;
+    expect(mine.querySelector('[role="alert"]')).not.toBeNull();
+    const before = gets('/me/coupons').length;
+    state.fail.delete('/me/coupons');
+    const g = gate();
+    state.getHold.set('/me/coupons', g.p);
+    const retry = byText(mine, 'button', 'Thử lại') as HTMLButtonElement;
+    await tapTogether(retry, retry);
+    await flush();
+    expect(gets('/me/coupons')).toHaveLength(before + 1);
+    expect(retry.getAttribute('aria-busy')).toBe('true');
+    expect(retry.disabled).toBe(false);
+    g.open();
+    await flush(8);
+    expect(gets('/me/coupons')).toHaveLength(before + 1);
+  });
+
+  it('dải Điểm Xanh lỗi tải: Thử lại chạm đúp cùng khung hình chỉ tải lại một lần, báo bận không disabled', async () => {
+    state.fail.add('/me/loyalty');
+    const c = await mount();
+    const strip = region(c, 'Điểm Xanh của bạn')!;
+    const before = gets('/me/loyalty').length;
+    state.fail.delete('/me/loyalty');
+    const g = gate();
+    state.getHold.set('/me/loyalty', g.p);
+    const retry = byText(strip, 'button', homeCopy.member.retry) as HTMLButtonElement;
+    await tapTogether(retry, retry);
+    await flush();
+    expect(gets('/me/loyalty')).toHaveLength(before + 1);
+    expect(retry.getAttribute('aria-busy')).toBe('true');
+    expect(retry.disabled).toBe(false);
+    g.open();
+    await flush(8);
+    expect(gets('/me/loyalty')).toHaveLength(before + 1);
+  });
+
+  it('Điểm danh (bản gọn): hai cú chạm cùng khung hình chỉ POST một lần; nút bận không disabled', async () => {
+    const g = gate();
+    state.postHold = g.p;
+    const c = await mount();
+    const b = byText(region(c, 'Điểm danh mỗi ngày')!, 'button', 'Điểm danh') as HTMLButtonElement;
+    await tapTogether(b, b);
+    await flush();
+    expect(state.posts.filter((p) => p === '/me/daily-check-in')).toHaveLength(1);
+    expect(b.getAttribute('aria-busy')).toBe('true');
+    expect(b.disabled).toBe(false);
+    g.open();
+    await flush(8);
+    expect(state.posts.filter((p) => p === '/me/daily-check-in')).toHaveLength(1);
   });
 });

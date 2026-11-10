@@ -33,7 +33,7 @@ export function QuizCard({
   onNext: () => void;
   /** Tải câu đố lỗi: khác với "chưa có câu" và "đã làm xong". */
   loadError?: boolean;
-  onRetry?: () => void;
+  onRetry?: () => void | PromiseLike<unknown>;
   /** Số câu đã làm hôm nay (từ hồ sơ): danh sách câu rỗng mà đã làm ít nhất một câu = đã hoàn thành. */
   answeredToday?: number;
 }) {

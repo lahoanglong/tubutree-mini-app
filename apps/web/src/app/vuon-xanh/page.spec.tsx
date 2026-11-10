@@ -96,6 +96,8 @@ const mount = async () => {
 const postsOf = (path: string) => state.calls.filter((c) => c.method === 'post' && c.path === path);
 const getsOf = (path: string) => state.calls.filter((c) => c.method === 'get' && c.path === path);
 const btn = (c: HTMLElement, text: string | RegExp) => byText(c, 'button', text) as HTMLButtonElement;
+// Thông báo nổi nằm ở cuối body; vùng báo lỗi tại chỗ của thẻ (vd lịch điểm danh chưa tải được) nằm trước nó trong tài liệu.
+const toastAlert = () => Array.from(document.querySelectorAll<HTMLElement>('[role="alert"]')).at(-1)!;
 // Vườn chỉ còn một nút điểm danh: nút chính trên cây (nhận nước hôm nay, hoặc nhận nốt Điểm Xanh khi chỉ còn phần đó).
 const CLAIM = /^(Điểm danh nhận|Nhận nước hôm nay)/;
 const POINTS = 'Nhận Điểm Xanh hôm nay';
@@ -365,7 +367,7 @@ describe('Vườn Xanh: điểm danh, sương, vé giữ lửa, hồi sinh chu�
     const c = await mount();
     click(btn(c, CLAIM));
     await flush(6);
-    expect(document.querySelector('[role="alert"]')!.textContent).toContain('Lỗi máy chủ');
+    expect(toastAlert().textContent).toContain('Lỗi máy chủ');
     click(btn(c, CLAIM));
     await flush(6);
     expect(postsOf('/me/daily-check-in')).toHaveLength(2);
@@ -486,7 +488,7 @@ describe('Vườn Xanh: tưới cây và góp quỹ trồng cây', () => {
     const c = await mount();
     click(btn(c, 'Tưới hết (1.250💧)'));
     await flush(6);
-    expect(document.querySelector('[role="alert"]')!.textContent).toContain('Không đủ giọt nước');
+    expect(toastAlert().textContent).toContain('Không đủ giọt nước');
     expect(btn(c, 'Tưới hết (1.250💧)').disabled).toBe(false);
   });
 
@@ -681,7 +683,7 @@ describe('Vườn Xanh: quiz Sống Xanh', () => {
     expect(c.textContent).toContain('🌿 Thiên nhiên');
     click(btn(c, 'Sưa'));
     await flush(6);
-    expect(document.querySelector('[role="alert"]')!.textContent).toContain('Hết lượt');
+    expect(toastAlert().textContent).toContain('Hết lượt');
     expect(c.textContent).not.toContain('Bạn có biết');
     expect(btn(c, 'Sưa').disabled).toBe(false);
   });
@@ -738,7 +740,7 @@ describe('Vườn Xanh: vòng quay may mắn', () => {
     };
     const c = await mount();
     await spinNow(c);
-    expect(document.querySelector('[role="alert"]')!.textContent).toContain('Không đủ điểm');
+    expect(toastAlert().textContent).toContain('Không đủ điểm');
     expect(document.querySelector('[role="dialog"]')).toBeNull();
   });
 });
@@ -778,7 +780,7 @@ describe('Vườn Xanh: thông báo nổi nằm trên hộp xác nhận', () => 
     click(btn(dialog()!, 'Xác nhận'));
     await flush(6);
     expect(dialog()).not.toBeNull();
-    const alert = document.querySelector<HTMLElement>('[role="alert"]')!;
+    const alert = toastAlert();
     expect(alert.textContent).toContain('Không đủ Điểm Xanh');
     expect(c.contains(alert)).toBe(false);
     const bar = alert.closest('body > *') as HTMLElement;
@@ -796,7 +798,7 @@ describe('Vườn Xanh: thông báo nổi nằm trên hộp xác nhận', () => 
     click(btn(c, 'Góp quỹ trồng cây'));
     click(btn(dialog()!, 'Xác nhận'));
     await flush(6);
-    const bar = document.querySelector('[role="alert"]')!.closest('body > *') as HTMLElement;
+    const bar = toastAlert().closest('body > *') as HTMLElement;
     expect(bar.className).toContain('env(safe-area-inset-bottom)');
   });
 });

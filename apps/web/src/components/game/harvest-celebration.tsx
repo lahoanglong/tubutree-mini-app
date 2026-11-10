@@ -48,6 +48,7 @@ export function HarvestCelebration({
   onCopyCoupon,
   onUseCoupon,
   couponNotice,
+  couponUsing = false,
   shared,
   sharing,
   onShare,
@@ -76,6 +77,8 @@ export function HarvestCelebration({
   onUseCoupon: (code: string) => void;
   /** Câu báo của lần "Dùng mã" (mã chưa áp được, lỗi mạng…), in ngay trong hộp trước khi sang giỏ. */
   couponNotice?: CouponNotice | null;
+  /** Lần "Dùng mã" đang chạy (kiểm giỏ, áp mã): nút báo bận, không gọi lần hai. */
+  couponUsing?: boolean;
   /** Đã đăng thành tích lần thu hoạch này lên Cộng đồng. */
   shared: boolean;
   sharing: boolean;
@@ -97,7 +100,16 @@ export function HarvestCelebration({
             </p>
           )}
           {coupons.length > 0 && (
-            <button type="button" onClick={() => onUseCoupon(coupons[0]!)} className={`${ui.btnPrimary} w-full`}>
+            <button
+              type="button"
+              aria-busy={couponUsing || undefined}
+              aria-disabled={couponUsing || undefined}
+              onClick={() => {
+                if (couponUsing) return;
+                onUseCoupon(coupons[0]!);
+              }}
+              className={`${ui.btnPrimary} w-full`}
+            >
               {t.useCoupon}
             </button>
           )}
@@ -108,7 +120,17 @@ export function HarvestCelebration({
           )}
           {!guest && canShare && (
             <>
-              <button type="button" disabled={shared || sharing} onClick={onShare} className={`${miniBtnSecondary} w-full`}>
+              <button
+                type="button"
+                disabled={shared}
+                aria-busy={sharing || undefined}
+                aria-disabled={sharing || undefined}
+                onClick={() => {
+                  if (sharing) return;
+                  onShare();
+                }}
+                className={`${miniBtnSecondary} w-full`}
+              >
                 {shared ? t.shareCommunityDone : sharing ? t.shareCommunityBusy : t.shareCommunity}
               </button>
               <p className="text-center text-caption text-stone-700">{t.shareCommunityNote}</p>

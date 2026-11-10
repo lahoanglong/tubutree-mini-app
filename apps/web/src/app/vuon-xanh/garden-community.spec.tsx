@@ -126,6 +126,8 @@ const mount = async (search = '') => {
 const postsOf = (path: string) => state.calls.filter((c) => c.method === 'post' && c.path === path);
 const getsOf = (path: string) => state.calls.filter((c) => c.method === 'get' && c.path === path);
 const btn = (c: HTMLElement, text: string | RegExp) => byText(c, 'button', text) as HTMLButtonElement;
+// Thông báo nổi nằm ở cuối body; vùng báo lỗi tại chỗ của thẻ (vd lịch điểm danh chưa tải được) nằm trước nó trong tài liệu.
+const toastAlert = () => Array.from(document.querySelectorAll<HTMLElement>('[role="alert"]')).at(-1)!;
 const panel = (c: HTMLElement, label: string) => c.querySelector<HTMLElement>(`[role="tabpanel"][aria-label="${label}"]`)!;
 const card = (c: HTMLElement, title: string | RegExp) =>
   Array.from(c.querySelectorAll('h2')).find((h) => (typeof title === 'string' ? h.textContent === title : title.test(h.textContent ?? '')))?.parentElement ?? null;
@@ -221,7 +223,11 @@ describe('Vườn Xanh: tab Vườn', () => {
     click(waters[0]!);
     click(waters[0]!);
     await flush();
-    expect(waters[0]!.disabled).toBe(true);
+    // Nút đang chạy giữ focus: báo bận bằng aria, không `disabled` thật.
+    expect(waters[0]!.getAttribute('aria-busy')).toBe('true');
+    expect(waters[0]!.getAttribute('aria-disabled')).toBe('true');
+    expect(waters[0]!.disabled).toBe(false);
+    expect(waters[1]!.getAttribute('aria-busy')).toBeNull();
     expect(waters[1]!.disabled).toBe(false);
     click(waters[1]!);
     await flush();
@@ -241,7 +247,7 @@ describe('Vườn Xanh: tab Vườn', () => {
     const w = () => Array.from(panel(c, 'Vườn').querySelectorAll<HTMLButtonElement>('button')).find((b) => b.textContent?.includes('Tưới'))!;
     click(w());
     await flush(6);
-    expect(document.querySelector('[role="alert"]')!.textContent).toBe('Cây đã chết');
+    expect(toastAlert().textContent).toBe('Cây đã chết');
     click(w());
     await flush(6);
     expect(postsOf('/game/garden/plot/p2/water')).toHaveLength(2);
@@ -274,7 +280,9 @@ describe('Vườn Xanh: tab Vườn', () => {
     click(b);
     click(b);
     await flush();
-    expect(b.disabled).toBe(true);
+    expect(b.getAttribute('aria-busy')).toBe('true');
+    expect(b.getAttribute('aria-disabled')).toBe('true');
+    expect(b.disabled).toBe(false);
     release();
     await flush(8);
     expect(postsOf('/game/garden/unlock')).toHaveLength(1);
@@ -291,7 +299,7 @@ describe('Vườn Xanh: tab Vườn', () => {
     const b = btn(panel(c, 'Vườn'), 'Mở lô');
     click(b);
     await flush(8);
-    expect(document.querySelector('[role="alert"]')!.textContent).toBe('Danh sách lô đất đã thay đổi, hãy tải lại trang.');
+    expect(toastAlert().textContent).toBe('Danh sách lô đất đã thay đổi, hãy tải lại trang.');
     expect(b.disabled).toBe(false);
     expect(postsOf('/game/garden/unlock')).toHaveLength(1);
     expect(postsOf('/game/garden/unlock')[0]!.body).toEqual({ currency: 'SEEDS', slot: 4 });
@@ -350,7 +358,9 @@ describe('Vườn Xanh: tab Cộng đồng', () => {
     click(buttons[0]!);
     click(buttons[0]!);
     await flush();
-    expect(buttons[0]!.disabled).toBe(true);
+    expect(buttons[0]!.getAttribute('aria-busy')).toBe('true');
+    expect(buttons[0]!.disabled).toBe(false);
+    expect(buttons[2]!.getAttribute('aria-busy')).toBeNull();
     expect(buttons[2]!.disabled).toBe(false);
     click(buttons[2]!);
     await flush();
@@ -375,7 +385,7 @@ describe('Vườn Xanh: tab Cộng đồng', () => {
     const b = card(c, 'Tặng nước cho bạn bè')!.querySelector<HTMLButtonElement>('button')!;
     click(b);
     await flush(6);
-    expect(document.querySelector('[role="alert"]')!.textContent).toBe('Đã tặng rồi');
+    expect(toastAlert().textContent).toBe('Đã tặng rồi');
     expect(b.disabled).toBe(false);
   });
 
@@ -658,7 +668,7 @@ describe('Vườn Xanh: hộp thu hoạch khi trình duyệt không có clipboar
     await flush(8);
     click(document.querySelector<HTMLElement>('[role="dialog"] [data-coupon]'));
     await flush();
-    expect(document.querySelector('[role="alert"]')!.textContent).toContain('Không sao chép được — mã của bạn: XANH-123');
+    expect(toastAlert().textContent).toContain('Không sao chép được — mã của bạn: XANH-123');
   });
 });
 

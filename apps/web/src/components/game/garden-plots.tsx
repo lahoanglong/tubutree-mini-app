@@ -56,7 +56,7 @@ export function GardenPlots({
                     <div className="text-sm font-semibold text-stone-900">
                       Lô {p.slot} · {treeTitle(p.treeType)}
                     </div>
-                    <div className="text-caption text-stone-700">
+                    <div className="text-caption tabular-nums text-stone-700">
                       {formatNumber(p.progress)}/{formatDrops(p.target)} · 🌳 {formatNumber(p.treesPlanted)}
                       {p.treeHealth === 'WILTED' || p.treeHealth === 'DEAD' ? ' · 🥀 héo' : ''}
                     </div>
@@ -64,8 +64,13 @@ export function GardenPlots({
                 </div>
                 <button
                   type="button"
-                  disabled={watering}
-                  onClick={() => p.id && (waterShort > 0 ? onNeedWater(waterShort) : onWaterPlot(p.id))}
+                  aria-busy={watering || undefined}
+                  aria-disabled={watering || undefined}
+                  onClick={() => {
+                    if (watering || !p.id) return;
+                    if (waterShort > 0) onNeedWater(waterShort);
+                    else onWaterPlot(p.id);
+                  }}
                   className={`${miniBtnSecondary} flex-none gap-1.5`}
                 >
                   <ShowerHead className="h-4 w-4" aria-hidden="true" />
@@ -80,7 +85,17 @@ export function GardenPlots({
         })}
       </div>
       {garden.nextUnlock ? (
-        <button type="button" disabled={unlockPending} onClick={() => (unlockShort > 0 ? onNeedWater(unlockShort) : onUnlock(garden.nextUnlock!.slot))} className={`${ui.btnPrimary} mt-3 w-full gap-2`}>
+        <button
+          type="button"
+          aria-busy={unlockPending || undefined}
+          aria-disabled={unlockPending || undefined}
+          onClick={() => {
+            if (unlockPending) return;
+            if (unlockShort > 0) onNeedWater(unlockShort);
+            else onUnlock(garden.nextUnlock!.slot);
+          }}
+          className={`${ui.btnPrimary} mt-3 w-full gap-2 tabular-nums`}
+        >
           <LockOpen className="h-4 w-4" aria-hidden="true" />
           {unlockShort > 0 ? gameNewbieCopy.short(unlockShort) : `Mở lô (${formatDrops(garden.nextUnlock.seedCost)})`}
         </button>

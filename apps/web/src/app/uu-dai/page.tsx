@@ -56,7 +56,7 @@ function OffersContent() {
   const authed = phase === 'authenticated';
   const { user } = useAuth();
   const cfg = usePublicConfig();
-  const { use: applyCoupon, notice: couponNotice } = useCouponUse();
+  const { use: applyCoupon, notice: couponNotice, usingCode } = useCouponUse();
   const [claimNoticeOpen, setClaimNoticeOpen] = useState(false);
   const loyaltyQ = useQuery({ ...loyaltyQuery(coreHttp), enabled: authed });
   const couponsQ = useQuery({ ...couponsQuery(coreHttp), enabled: authed });
@@ -163,7 +163,7 @@ function OffersContent() {
           {couponsQ.isLoading ? (
             <Skeleton height={88} radius="var(--radius-card)" />
           ) : couponsQ.isError ? (
-            <ErrorState variant="inline" title={COUPONS_LOAD_ERROR_TITLE} message={errText(couponsQ.error)} onRetry={() => void couponsQ.refetch()} />
+            <ErrorState variant="inline" title={COUPONS_LOAD_ERROR_TITLE} message={errText(couponsQ.error)} onRetry={() => couponsQ.refetch()} />
           ) : mine.total > 0 ? (
             <div data-testid="offers-mine-grid" className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
               {mine.shown.map((row) => (
@@ -171,7 +171,12 @@ function OffersContent() {
                   key={row.view.code}
                   voucher={row.view}
                   variant="ticket"
-                  primary={{ label: fillCopy('coupon.use'), onClick: () => void applyCoupon(row.view.code) }}
+                  primary={{
+                    label: fillCopy('coupon.use'),
+                    onClick: () => void applyCoupon(row.view.code),
+                    busy: usingCode === row.view.code,
+                    disabled: Boolean(usingCode) && usingCode !== row.view.code,
+                  }}
                   expiring={isCouponExpiring(row.coupon, now)}
                 />
               ))}

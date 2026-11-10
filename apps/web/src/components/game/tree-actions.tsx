@@ -70,13 +70,21 @@ export function TreeActions({
           : t.earn;
   const Icon = action.kind === 'water' ? ShowerHead : action.kind === 'harvest' ? TreePine : Droplets;
   const press = () => {
+    // Nút bận không `disabled` (Chromium thả focus về body ngay khi khách vừa bấm); chặn ở đây, còn khoá đồng bộ nằm ở mutation.
+    if (pending) return;
     if (action.kind === 'claim') onClaim(action);
     else if (action.kind === 'water') onWater(action.drops);
     else if (action.kind === 'harvest') onHarvest();
     else onEarn();
   };
   return (
-    <button type="button" disabled={pending} onClick={press} className={`${ui.btnPrimary} min-h-12 w-full gap-2`}>
+    <button
+      type="button"
+      aria-busy={pending || undefined}
+      aria-disabled={pending || undefined}
+      onClick={press}
+      className={`${ui.btnPrimary} min-h-12 w-full gap-2 tabular-nums`}
+    >
       <Icon className="h-5 w-5" aria-hidden="true" />
       {label}
     </button>
