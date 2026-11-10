@@ -776,6 +776,264 @@ describe('useAuthStore.ensurePhoneOrThrow — lỗi liên kết Zalo không bị
   });
 });
 
+describe('useAuthStore.ensurePhoneOrThrow — gộp các lần gọi chồng nhau (một hộp xin SĐT, một lần liên kết)', () => {
+  const store = () => useAuthStore.getState();
+  const guest = (id = 'guest-1') => ({ id, zaloId: `guest_h_${id}` }) as AuthUser;
+  const linked = (id: string, phone: string): LoginResponse => {
+    const res = loginResponse(id, `z-${id}`);
+    res.user = { ...res.user, phone };
+    return res;
+  };
+  const revoked = (token: string) => mockedApiPost.mock.calls.some((c) => c[0] === '/auth/logout' && (c[1] as { refreshToken: string }).refreshToken === token);
+
+  // Lưới an toàn: promise còn treo cuối test được thả để khoá in-flight (module-level) không rò sang test sau.
+  const unsettled: Array<() => void> = [];
+  function deferred<T>(fallback: T) {
+    let resolve!: (v: T) => void;
+    let reject!: (e: unknown) => void;
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    unsettled.push(() => resolve(fallback));
+    return { promise, resolve, reject };
+  }
+  /** Chỉ microtask, không timer: đủ để các await nối tiếp của một lần liên kết chạy tới chỗ chờ kế tiếp. */
+  async function drain(): Promise<void> {
+    for (let i = 0; i < 30; i++) await Promise.resolve();
+  }
+
+  beforeEach(() => {
+    useAuthStore.setState({ user: guest(), status: 'authenticated' });
+    mockedGetZaloAccessToken.mockResolvedValue({ code: 'c1', accessToken: 'zalo-at' });
+    mockedApiPost.mockResolvedValue({} as never);
+  });
+  afterEach(async () => {
+    for (const settle of unsettled.splice(0)) settle();
+    await drain();
+    mockedRequestZaloPhoneToken.mockReset();
+    mockedEnsurePhoneApi.mockReset();
+    mockedGetZaloAccessToken.mockReset();
+  });
+
+  it('hai lần gọi cùng nhịp: một hộp xin SĐT, một lần liên kết, CÙNG một promise và cùng SĐT', async () => {
+    const token = deferred<string | null>(null);
+    const link = deferred<LoginResponse>(linked('x', '0'));
+    mockedRequestZaloPhoneToken.mockReturnValue(token.promise);
+    mockedEnsurePhoneApi.mockReturnValue(link.promise);
+
+    const first = store().ensurePhoneOrThrow();
+    const second = store().ensurePhoneOrThrow();
+    expect(second).toBe(first);
+    await drain();
+    expect(mockedRequestZaloPhoneToken).toHaveBeenCalledTimes(1);
+
+    token.resolve('phone-token');
+    await drain();
+    expect(mockedEnsurePhoneApi).toHaveBeenCalledTimes(1);
+    expect(mockedEnsurePhoneApi).toHaveBeenCalledWith('c1', 'zalo-at', 'phone-token');
+
+    link.resolve(linked('real-1', '0911111111'));
+    await expect(Promise.all([first, second])).resolves.toEqual(['0911111111', '0911111111']);
+    expect(mockedRequestZaloPhoneToken).toHaveBeenCalledTimes(1);
+    expect(mockedEnsurePhoneApi).toHaveBeenCalledTimes(1);
+    expect(store().user?.id).toBe('real-1');
+  });
+
+  it('lần liên kết xong (thành công) nhả khoá: lần gọi sau chạy một lượt mới, hỏi SĐT lần thứ hai', async () => {
+    mockedRequestZaloPhoneToken.mockResolvedValue('phone-token');
+    mockedEnsurePhoneApi.mockResolvedValueOnce(linked('real-1', '0911111111'));
+    const first = store().ensurePhoneOrThrow();
+    await expect(first).resolves.toBe('0911111111');
+
+    useAuthStore.setState({ user: guest('guest-2'), status: 'authenticated' });
+    mockedEnsurePhoneApi.mockResolvedValueOnce(linked('real-2', '0922222222'));
+    const second = store().ensurePhoneOrThrow();
+
+    expect(second).not.toBe(first);
+    await expect(second).resolves.toBe('0922222222');
+    expect(mockedRequestZaloPhoneToken).toHaveBeenCalledTimes(2);
+    expect(mockedEnsurePhoneApi).toHaveBeenCalledTimes(2);
+    expect(store().user?.id).toBe('real-2');
+  });
+
+  it('khách từ chối hộp SĐT: cả hai lần gọi chồng nhau nhận null, không gọi API; lần gọi sau hỏi lại', async () => {
+    const token = deferred<string | null>(null);
+    mockedRequestZaloPhoneToken.mockReturnValueOnce(token.promise);
+
+    const first = store().ensurePhoneOrThrow();
+    const second = store().ensurePhoneOrThrow();
+    await drain();
+    token.resolve(null);
+
+    await expect(Promise.all([first, second])).resolves.toEqual([null, null]);
+    expect(mockedRequestZaloPhoneToken).toHaveBeenCalledTimes(1);
+    expect(mockedEnsurePhoneApi).not.toHaveBeenCalled();
+
+    mockedRequestZaloPhoneToken.mockResolvedValueOnce(null);
+    await expect(store().ensurePhoneOrThrow()).resolves.toBeNull();
+    expect(mockedRequestZaloPhoneToken).toHaveBeenCalledTimes(2);
+    expect(mockedEnsurePhoneApi).not.toHaveBeenCalled();
+  });
+
+  it('lần liên kết lỗi: cả hai lần gọi chồng nhau ném CÙNG một lỗi; khoá nhả, lần gọi sau chạy một lượt mới', async () => {
+    const conflict = httpFail(409, { message: 'Số điện thoại này đã gắn với một tài khoản khác.' });
+    const link = deferred<LoginResponse>(linked('x', '0'));
+    mockedRequestZaloPhoneToken.mockResolvedValue('phone-token');
+    mockedEnsurePhoneApi.mockReturnValueOnce(link.promise);
+
+    const first = store().ensurePhoneOrThrow();
+    const second = store().ensurePhoneOrThrow();
+    const settled = Promise.allSettled([first, second]);
+    await drain();
+    link.reject(conflict);
+
+    const [a, b] = await settled;
+    expect(a).toMatchObject({ status: 'rejected' });
+    expect(b).toMatchObject({ status: 'rejected' });
+    expect((a as PromiseRejectedResult).reason).toBe(conflict);
+    expect((b as PromiseRejectedResult).reason).toBe(conflict);
+    expect(mockedRequestZaloPhoneToken).toHaveBeenCalledTimes(1);
+    expect(mockedEnsurePhoneApi).toHaveBeenCalledTimes(1);
+    expect(store().user?.id).toBe('guest-1');
+
+    mockedEnsurePhoneApi.mockResolvedValueOnce(linked('real-1', '0911111111'));
+    await expect(store().ensurePhoneOrThrow()).resolves.toBe('0911111111');
+    expect(mockedRequestZaloPhoneToken).toHaveBeenCalledTimes(2);
+    expect(mockedEnsurePhoneApi).toHaveBeenCalledTimes(2);
+  });
+
+  it('ensurePhone() và ensurePhoneOrThrow() gọi chồng nhau dùng chung một hộp SĐT, mỗi bên giữ cách xử lý lỗi của mình', async () => {
+    const conflict = httpFail(409, { message: 'Số điện thoại này đã gắn với một tài khoản khác.' });
+    const token = deferred<string | null>(null);
+    mockedRequestZaloPhoneToken.mockReturnValueOnce(token.promise);
+    mockedEnsurePhoneApi.mockRejectedValueOnce(conflict);
+
+    const soft = store().ensurePhone();
+    const hard = store().ensurePhoneOrThrow();
+    const hardSettled = Promise.allSettled([hard]);
+    await drain();
+    token.resolve('phone-token');
+
+    await expect(soft).resolves.toBeNull();
+    const [res] = await hardSettled;
+    expect(res).toMatchObject({ status: 'rejected' });
+    expect((res as PromiseRejectedResult).reason).toBe(conflict);
+    expect(mockedRequestZaloPhoneToken).toHaveBeenCalledTimes(1);
+    expect(mockedEnsurePhoneApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('ensurePhone() và ensurePhoneOrThrow() gọi chồng nhau (thành công): một hộp SĐT, một lần liên kết, cùng SĐT', async () => {
+    const token = deferred<string | null>(null);
+    mockedRequestZaloPhoneToken.mockReturnValueOnce(token.promise);
+    mockedEnsurePhoneApi.mockResolvedValueOnce(linked('real-1', '0911111111'));
+
+    const soft = store().ensurePhone();
+    const hard = store().ensurePhoneOrThrow();
+    await drain();
+    token.resolve('phone-token');
+
+    await expect(Promise.all([soft, hard])).resolves.toEqual(['0911111111', '0911111111']);
+    expect(mockedRequestZaloPhoneToken).toHaveBeenCalledTimes(1);
+    expect(mockedEnsurePhoneApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('hai ensurePhone() gọi chồng nhau: một hộp SĐT, một lần liên kết, cùng SĐT', async () => {
+    const token = deferred<string | null>(null);
+    mockedRequestZaloPhoneToken.mockReturnValueOnce(token.promise);
+    mockedEnsurePhoneApi.mockResolvedValueOnce(linked('real-1', '0911111111'));
+
+    const first = store().ensurePhone();
+    const second = store().ensurePhone();
+    await drain();
+    token.resolve('phone-token');
+
+    await expect(Promise.all([first, second])).resolves.toEqual(['0911111111', '0911111111']);
+    expect(mockedRequestZaloPhoneToken).toHaveBeenCalledTimes(1);
+    expect(mockedEnsurePhoneApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('đã có SĐT: trả ngay, không hỏi gì và không kẹt khoá — xoá SĐT đi thì lần gọi sau chạy bình thường', async () => {
+    useAuthStore.setState({ user: { ...guest(), phone: '0900000000' }, status: 'authenticated' });
+
+    await expect(store().ensurePhoneOrThrow()).resolves.toBe('0900000000');
+    expect(mockedRequestZaloPhoneToken).not.toHaveBeenCalled();
+    expect(mockedEnsurePhoneApi).not.toHaveBeenCalled();
+
+    useAuthStore.setState({ user: guest(), status: 'authenticated' });
+    mockedRequestZaloPhoneToken.mockResolvedValueOnce('phone-token');
+    mockedEnsurePhoneApi.mockResolvedValueOnce(linked('real-1', '0911111111'));
+    await expect(store().ensurePhoneOrThrow()).resolves.toBe('0911111111');
+    expect(mockedRequestZaloPhoneToken).toHaveBeenCalledTimes(1);
+    expect(mockedEnsurePhoneApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('lần cũ xong trước lần mới (sau logout) không nhả khoá của lần mới: lần gọi thứ ba vẫn gộp vào lần mới', async () => {
+    const tokenA = deferred<string | null>(null);
+    const tokenB = deferred<string | null>(null);
+    mockedRequestZaloPhoneToken.mockReturnValueOnce(tokenA.promise).mockReturnValueOnce(tokenB.promise);
+
+    const flightA = store().ensurePhoneOrThrow();
+    await drain();
+    await store().logout();
+    useAuthStore.setState({ user: guest('guest-2'), status: 'authenticated' });
+    const flightB = store().ensurePhoneOrThrow();
+    await drain();
+    expect(mockedRequestZaloPhoneToken).toHaveBeenCalledTimes(2);
+
+    tokenA.resolve(null);
+    await expect(flightA).resolves.toBeNull();
+    const third = store().ensurePhoneOrThrow();
+
+    expect(third).toBe(flightB);
+    expect(mockedRequestZaloPhoneToken).toHaveBeenCalledTimes(2);
+    tokenB.resolve(null);
+    await expect(flightB).resolves.toBeNull();
+  });
+
+  it.each([
+    ['lần cũ về trước lần mới', ['a', 'b']],
+    ['lần mới về trước lần cũ', ['b', 'a']],
+  ] as const)('đăng xuất giữa lúc đang liên kết: lần gọi sau đó KHÔNG gộp vào lần cũ, kết quả lần cũ không đè phiên mới (%s)', async (_name, order) => {
+    const tokenA = deferred<string | null>(null);
+    const tokenB = deferred<string | null>(null);
+    mockedRequestZaloPhoneToken.mockReturnValueOnce(tokenA.promise).mockReturnValueOnce(tokenB.promise);
+    mockedEnsurePhoneApi.mockImplementation(async (_code: string, _at: string, phoneToken?: string) =>
+      phoneToken === 'pt-a' ? linked('old-1', '0900000001') : linked('new-2', '0900000002'),
+    );
+
+    const flightA = store().ensurePhoneOrThrow();
+    await drain();
+    expect(mockedRequestZaloPhoneToken).toHaveBeenCalledTimes(1);
+
+    await store().logout();
+    expect(store().user).toBeNull();
+    useAuthStore.setState({ user: guest('guest-2'), status: 'authenticated' });
+    const flightB = store().ensurePhoneOrThrow();
+    await drain();
+
+    expect(flightB).not.toBe(flightA);
+    expect(mockedRequestZaloPhoneToken).toHaveBeenCalledTimes(2);
+
+    const release = { a: () => tokenA.resolve('pt-a'), b: () => tokenB.resolve('pt-b') };
+    release[order[0]]();
+    await drain();
+    release[order[1]]();
+    const [resA, resB] = await Promise.all([flightA, flightB]);
+    await drain();
+
+    expect(resA).toBeNull();
+    expect(resB).toBe('0900000002');
+    expect(mockedEnsurePhoneApi).toHaveBeenCalledWith('c1', 'zalo-at', 'pt-a');
+    expect(mockedEnsurePhoneApi).toHaveBeenCalledWith('c1', 'zalo-at', 'pt-b');
+    expect(store().user?.id).toBe('new-2');
+    expect(store().user?.phone).toBe('0900000002');
+    expect(store().status).toBe('authenticated');
+    expect(revoked('refresh-old-1')).toBe(true);
+    expect(revoked('refresh-new-2')).toBe(false);
+  });
+});
+
 describe('danh tính đổi trong phiên → làm mới cache cá nhân', () => {
   let qc: QueryClient;
   let invalidate: MockInstance<QueryClient['invalidateQueries']>;

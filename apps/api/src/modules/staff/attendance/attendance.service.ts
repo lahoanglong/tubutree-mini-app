@@ -180,11 +180,13 @@ export class AttendanceService {
         throw new BadRequestException('Giờ checkout phải sau giờ checkin.');
       checkoutAt = at;
     }
-    await this.prisma.attendanceSession.update({
-      where: { id: open.id },
+    // checkoutAt: null trong where — heartbeat ra-vùng hoặc quản lý có thể đóng phiên giữa lúc đọc và lúc ghi; giờ ra và lý do đóng
+    // của lần đóng đó giữ nguyên (ghi đè bằng giờ bấm nút sẽ tính cả phút nằm ngoài vùng vào bảng lương). Phiên đã đóng thì coi như xong.
+    const { count } = await this.prisma.attendanceSession.updateMany({
+      where: { id: open.id, checkoutAt: null },
       data: { checkoutAt, closeReason: 'MANUAL' },
     });
-    return { checkedOut: true };
+    return count === 0 ? { checkedOut: true, alreadyClosed: true } : { checkedOut: true };
   }
 
   /**

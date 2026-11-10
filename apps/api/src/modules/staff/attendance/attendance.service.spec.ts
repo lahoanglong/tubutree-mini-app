@@ -207,24 +207,119 @@ describe('AttendanceService.checkin — cửa sổ thời gian của ca', () => 
 });
 
 describe('AttendanceService.checkout / heartbeat', () => {
-  it('checkout không có phiên mở → BadRequest', async () => {
+  const OPEN_CHECKIN = () => new Date(Date.now() - 4 * 3600 * 1000); // 4h trước
+
+  // Dựng prisma ghi nhận mọi phương thức GHI của attendanceSession, để khẳng định checkout chỉ đi qua updateMany có guard.
+  function checkoutPrisma(opts: { open?: Record<string, unknown> | null; updateManyResult?: { count: number } } = {}) {
+    const open = opts.open === undefined ? { id: 'open1', checkinAt: OPEN_CHECKIN() } : opts.open;
+    const writes = {
+      update: jest.fn().mockResolvedValue({}),
+      updateMany: jest.fn().mockResolvedValue(opts.updateManyResult ?? { count: 1 }),
+      create: jest.fn().mockResolvedValue({}),
+      delete: jest.fn().mockResolvedValue({}),
+      deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+      upsert: jest.fn().mockResolvedValue({}),
+    };
     const prisma = makePrisma({
-      attendanceSession: { findFirst: jest.fn().mockResolvedValue(null), update: jest.fn() },
+      attendanceSession: { findFirst: jest.fn().mockResolvedValue(open), ...writes },
     });
+    return { prisma, ...writes };
+  }
+
+  it('checkout không có phiên mở → BadRequest, không ghi gì', async () => {
+    const { prisma, update, updateMany } = checkoutPrisma({ open: null });
     await expect(mk(prisma).checkout('u1')).rejects.toBeInstanceOf(BadRequestException);
+    await expect(mk(prisma).checkout('u1')).rejects.toThrow('Không có phiên đang mở để checkout.');
+    expect(updateMany).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
   });
 
-  it('checkout lùi giờ hợp lệ (quá khứ, sau checkin) → dùng giờ đó', async () => {
-    const update = jest.fn().mockResolvedValue({});
-    const checkinAt = new Date(Date.now() - 4 * 3600 * 1000); // 4h trước
-    const at = new Date(Date.now() - 1 * 3600 * 1000); // 1h trước
-    const prisma = makePrisma({
-      attendanceSession: { findFirst: jest.fn().mockResolvedValue({ id: 'open1', checkinAt }), update },
+  it('checkout phiên đang mở → updateMany có guard checkoutAt:null, ghi giờ hiện tại + MANUAL, trả đúng {checkedOut:true}', async () => {
+    const { prisma, update, updateMany } = checkoutPrisma();
+    const before = Date.now();
+    const out = await mk(prisma).checkout('u1');
+    const after = Date.now();
+    expect(out).toEqual({ checkedOut: true });
+    expect(updateMany).toHaveBeenCalledTimes(1);
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: 'open1', checkoutAt: null },
+      data: { checkoutAt: expect.any(Date), closeReason: 'MANUAL' },
     });
-    await mk(prisma).checkout('u1', at);
-    expect(update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ checkoutAt: at, closeReason: 'MANUAL' }) }),
-    );
+    const written = updateMany.mock.calls[0][0].data.checkoutAt as Date;
+    expect(written.getTime()).toBeGreaterThanOrEqual(before);
+    expect(written.getTime()).toBeLessThanOrEqual(after);
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('checkout lùi giờ hợp lệ (quá khứ, sau checkin) → dùng giờ đó, vẫn qua guard checkoutAt:null', async () => {
+    const at = new Date(Date.now() - 1 * 3600 * 1000); // 1h trước
+    const { prisma, updateMany } = checkoutPrisma();
+    const out = await mk(prisma).checkout('u1', at);
+    expect(out).toEqual({ checkedOut: true });
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: 'open1', checkoutAt: null },
+      data: { checkoutAt: at, closeReason: 'MANUAL' },
+    });
+  });
+
+  it('checkout đua với heartbeat (phiên đã bị đóng OUT_OF_RANGE giữa lúc đọc và lúc ghi) → {checkedOut, alreadyClosed}, không ghi đè', async () => {
+    const { prisma, update, updateMany, create, delete: del, deleteMany, upsert } = checkoutPrisma({
+      updateManyResult: { count: 0 },
+    });
+    const out = await mk(prisma).checkout('u1');
+    expect(out).toEqual({ checkedOut: true, alreadyClosed: true });
+    expect(updateMany).toHaveBeenCalledTimes(1);
+    expect(updateMany.mock.calls[0][0].where).toEqual({ id: 'open1', checkoutAt: null });
+    for (const w of [update, create, del, deleteMany, upsert]) expect(w).not.toHaveBeenCalled();
+  });
+
+  it('heartbeat đóng OUT_OF_RANGE chen giữa đọc và ghi của checkout → giờ ra + lý do của heartbeat giữ nguyên', async () => {
+    const checkinAt = new Date(Date.now() - 3 * 3600_000);
+    const since = new Date(Date.now() - 6 * 60_000);
+    const row: Record<string, any> = {
+      id: 'open1',
+      staffId: 'u1',
+      checkinAt,
+      checkoutAt: null,
+      closeReason: null,
+      outOfRangeCount: 2,
+      outOfRangeSince: since,
+    };
+    let afterRead: (() => Promise<unknown>) | null = null;
+    const fake = {
+      findFirst: jest.fn(async () => {
+        if (row.checkoutAt !== null) return null;
+        const snapshot = { ...row };
+        const hook = afterRead;
+        afterRead = null;
+        if (hook) await hook();
+        return snapshot;
+      }),
+      update: jest.fn(async ({ data }: any) => {
+        if (data.outOfRangeCount?.increment) row.outOfRangeCount += data.outOfRangeCount.increment;
+        return { outOfRangeCount: row.outOfRangeCount, outOfRangeSince: row.outOfRangeSince };
+      }),
+      updateMany: jest.fn(async ({ where, data }: any) => {
+        if (where.checkoutAt === null && row.checkoutAt !== null) return { count: 0 };
+        Object.assign(row, data);
+        return { count: 1 };
+      }),
+    };
+    const prisma = makePrisma({ attendanceSession: fake });
+    afterRead = async () => {
+      expect(await mk(prisma).heartbeat('u1', '8.8.8.8', IN)).toEqual({
+        open: false,
+        closed: true,
+        reason: 'IP_NOT_ALLOWED',
+      });
+    };
+
+    const out = await mk(prisma).checkout('u1');
+
+    expect(out).toEqual({ checkedOut: true, alreadyClosed: true });
+    expect(row.checkoutAt).toEqual(since);
+    expect(row.closeReason).toBe('OUT_OF_RANGE');
+    expect(fake.updateMany).toHaveBeenCalledTimes(2); // heartbeat đóng + checkout bị guard chặn
   });
 
   it('checkout lùi giờ tương lai → BadRequest', async () => {
