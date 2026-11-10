@@ -78,6 +78,8 @@ export function OrdersSection() {
   });
   const orders = uniqueByKey(ordersQ.data?.pages.flatMap((p) => p.data) ?? [], (o) => o.code);
   const retry = usePressLock(() => ordersQ.refetch());
+  // `isFetchingNextPage` chỉ đúng sau lần vẽ kế: chạm đúp cùng khung hình sẽ gọi hai lần và lần sau huỷ lần đầu. Khoá ở usePressLock, guard `isFetchingNextPage` ở trong.
+  const loadMore = usePressLock(() => (ordersQ.isFetchingNextPage ? undefined : ordersQ.fetchNextPage()));
   const total = ordersQ.data?.pages[0]?.meta.total ?? 0;
 
   const submitSearch = (e: React.FormEvent) => {
@@ -206,8 +208,9 @@ export function OrdersSection() {
             <div className="mt-2 text-center">
               <button
                 type="button"
-                onClick={() => !ordersQ.isFetchingNextPage && void ordersQ.fetchNextPage()}
-                aria-disabled={ordersQ.isFetchingNextPage || undefined}
+                onClick={loadMore.press}
+                aria-busy={ordersQ.isFetchingNextPage || loadMore.busy || undefined}
+                aria-disabled={ordersQ.isFetchingNextPage || loadMore.busy || undefined}
                 className={ui.btnSecondary}
               >
                 {ordersQ.isFetchingNextPage ? 'Đang tải…' : 'Xem thêm đơn cũ hơn'}

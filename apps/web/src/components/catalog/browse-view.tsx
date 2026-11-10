@@ -23,6 +23,7 @@ import {
   toCatalogQuery, withListMode, type FilterDraft, type SearchState, type TitleScope,
 } from '@/lib/search-state';
 import { useBrowseState } from '@/lib/use-browse-state';
+import { usePressLock } from '@/lib/use-press-lock';
 import { useSuggest } from '@/lib/use-suggest';
 import { GRID_PRODUCTS_WITH_FILTER } from '@/lib/product-grid';
 import { PRIORITY_CARDS, ProductGrid, SortBar } from '@/components/mini';
@@ -170,14 +171,17 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
     focusFrom.current = null;
     if (listLength > from) gridRef.current?.querySelector<HTMLElement>(`ul[data-testid="catalog-grid"] li:nth-child(${from + 1}) a`)?.focus();
   }, [listLength, fetchingMore]);
-  const loadMore = () => {
-    // aria-disabled không chặn click như `disabled`: bỏ qua lần bấm khi đang tải để không gọi hai trang cùng lúc.
-    if (products.isFetchingNextPage) return;
+  // `isFetchingNextPage` chỉ đúng sau lần vẽ kế: hai cú chạm cùng khung hình gọi hai lần và lần sau huỷ lần đầu, nên khoá ở usePressLock (guard
+  // `isFetchingNextPage` ở trong). Nút báo aria-disabled chứ không `disabled` (đang giữ focus).
+  const loadMore = usePressLock(() => {
+    if (products.isFetchingNextPage) return undefined;
     focusFrom.current = list.length;
-    products.fetchNextPage().catch(() => {
+    return products.fetchNextPage().catch(() => {
       focusFrom.current = null;
     });
-  };
+  });
+  // "Thử lại" tại chỗ (lỗi khi đã có danh sách) cũng khoá như vậy; `refetch()` thứ hai huỷ lượt đầu.
+  const retryInline = usePressLock(() => (products.isFetchNextPageError ? products.fetchNextPage() : products.refetch()).catch(() => undefined));
 
   // Chế độ gõ chỉ thay nội dung bằng gợi ý khi có gì để gợi ý (đang gõ chữ, hoặc ô trống nhưng có lịch sử tìm); khách mới
   // bấm vào ô trống vẫn thấy nguyên Danh mục/danh sách thay vì một trang trắng.
@@ -450,9 +454,10 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
                       <p className="text-sm text-danger-fg">{browseText.loadMoreFailed}</p>
                       <button
                         type="button"
-                        disabled={products.isFetching}
+                        aria-busy={products.isFetching || retryInline.busy || undefined}
+                        aria-disabled={products.isFetching || retryInline.busy || undefined}
                         onClick={() => {
-                          (products.isFetchNextPageError ? products.fetchNextPage() : products.refetch()).catch(() => undefined);
+                          if (!products.isFetching) retryInline.press();
                         }}
                         className={ui.btnSecondary}
                       >
@@ -464,8 +469,9 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
                     <div className="flex justify-center pt-4 lg:hidden">
                       <button
                         type="button"
-                        aria-disabled={products.isFetchingNextPage || undefined}
-                        onClick={loadMore}
+                        aria-busy={products.isFetchingNextPage || loadMore.busy || undefined}
+                        aria-disabled={products.isFetchingNextPage || loadMore.busy || undefined}
+                        onClick={loadMore.press}
                         className={`${ui.btnSecondary} min-w-40 aria-disabled:opacity-60`}
                       >
                         {browseText.loadMore}

@@ -217,7 +217,8 @@ export default function EditProfilePage() {
       </div>,
     );
   }
-  if (meQ.isError) {
+  // Chỉ khi chưa có hồ sơ để hiện: lần tải lại sau khi lưu lỗi mà hỏng không được thay cả form (và lời báo lỗi lưu) bằng màn lỗi.
+  if (meQ.isError && !meQ.data) {
     return shell(
       <div className="mt-4">
         <ErrorState message={errorText(meQ.error)} onRetry={() => meQ.refetch()} />

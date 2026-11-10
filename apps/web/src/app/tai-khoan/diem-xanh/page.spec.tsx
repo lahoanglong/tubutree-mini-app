@@ -3,6 +3,7 @@ import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { headingProblems, smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
+import { ApiError } from '@/lib/client-api';
 
 const state = vi.hoisted(() => ({
   phase: 'authenticated' as string,
@@ -341,7 +342,7 @@ describe('/tai-khoan/diem-xanh — điểm danh', () => {
 
   it('lỗi điểm danh: báo lỗi và tải lại trạng thái để nút theo đúng thực tế', async () => {
     state.checkInPost = async () => {
-      throw new Error('Hôm nay bạn đã điểm danh rồi');
+      throw new ApiError('Hôm nay bạn đã điểm danh rồi', 409);
     };
     const c = await mount();
     const before = state.calls.filter((x) => x.path === '/me/daily-check-in' && x.method === 'get').length;

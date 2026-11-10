@@ -10,6 +10,8 @@ import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { actionErrorText } from '@/lib/error-text';
 import { loginHref } from '@/lib/return-to';
+import { serverRejectedState } from '@/lib/server-rejected-state';
+import { settleWithin } from '@/lib/settle-within';
 
 export interface ClaimNotice {
   code: string;
@@ -23,7 +25,7 @@ const OFFLINE_TEXT = 'Không kết nối được với Tubu Tree. Bạn thử l
  * "Lưu mã" ở kho mã của web (cùng luật với `hooks/use-claim-coupon.ts` của Mini App): nhận mã vào ví qua `POST /coupons/claim`, đường
  * duy nhất và đã khoá theo mã ở máy chủ. Web không có snackbar nên câu báo trả ở `notice` để trang in một dòng `role="status"`/`role="alert"`.
  * Chưa đăng nhập thì chuyển tới đăng nhập kèm `returnTo` (đăng nhập xong quay lại đúng tab); phiên chưa khôi phục được thì báo mất mạng
- * chứ không mời đăng nhập lại; đang khôi phục thì bỏ qua. Lỗi nào cũng tải lại kho, nhưng bằng `freshCollectableCouponsQuery` chứ không invalidate
+ * chứ không mời đăng nhập lại; đang khôi phục thì bỏ qua. Máy chủ từ chối thì tải lại kho, nhưng bằng `freshCollectableCouponsQuery` chứ không invalidate
  * thường: route kho có `Cache-Control: public, max-age=15` nên lần tải lại ngay sau lỗi dễ lấy đúng bản cũ trong cache trình duyệt.
  */
 export function useClaimCoupon(returnTo: string) {
@@ -54,14 +56,27 @@ export function useClaimCoupon(returnTo: string) {
         await claimCoupon(coreHttp, code);
         setNotice({ code, text: fillCopy('coupon.savedToast'), error: false });
         // Ví trước, phần còn lại sau: nếu "đã nhận" (mine) về trước ví thì mã vừa lưu nháy "Đã dùng" cho tới khi ví về.
-        await qc.invalidateQueries({ queryKey: ['coupons'], exact: true });
-        await qc.invalidateQueries({ queryKey: ['coupons'], predicate: (q) => q.queryKey.length > 1 });
+        // Khoá giữ tới khi cả hai về (có hạn 4 giây, kẻo mạng chậm giữ mọi thẻ lâu hơn lệnh đã xong): nhả sớm thì thẻ còn "Lưu mã" và chạm lại ra lỗi "đã nhận rồi".
+        await settleWithin(
+          (async () => {
+            await qc.invalidateQueries({ queryKey: ['coupons'], exact: true });
+            await qc.invalidateQueries({ queryKey: ['coupons'], predicate: (q) => q.queryKey.length > 1 });
+          })(),
+        );
         return true;
       } catch (e) {
         setNotice({ code, text: actionErrorText(e), error: true });
-        void qc.fetchQuery(freshCollectableCouponsQuery(coreHttp)).catch(() => undefined);
-        void qc.invalidateQueries({ queryKey: ['coupons', 'collectable', 'mine'] });
-        void qc.invalidateQueries({ queryKey: ['coupons'], exact: true });
+        // Chỉ khi máy chủ từ chối (hết lượt, đã nhận, không còn): thẻ đang hiện đã cũ nên tải lại và giữ khoá tới lúc đó (tối đa 4 giây), kẻo chạm lại ra đúng lỗi vừa báo.
+        // Mất mạng, 401/403 và 5xx không nói gì về trạng thái thật của mã: không tải lại.
+        if (serverRejectedState(e)) {
+          await settleWithin(
+            Promise.all([
+              qc.fetchQuery(freshCollectableCouponsQuery(coreHttp)).catch(() => undefined),
+              qc.invalidateQueries({ queryKey: ['coupons', 'collectable', 'mine'] }),
+              qc.invalidateQueries({ queryKey: ['coupons'], exact: true }),
+            ]),
+          );
+        }
         return false;
       } finally {
         busy.current = false;

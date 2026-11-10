@@ -916,6 +916,29 @@ describe('BrowseView — tải thêm, rỗng, lỗi', () => {
     expect(container.querySelectorAll('a[href^="/san-pham/sp-"]').length).toBeGreaterThanOrEqual(4);
   });
 
+  it('"Xem thêm": chạm đúp cùng khung hình chỉ tải trang 2 một lần và nút báo aria-busy', async () => {
+    nav.search = LIST;
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    routes['/products'] = (q) => (Number(q?.page) === 2 ? gate.then(() => pageOf([product(3), product(4)], 4, 2, 2)) : pageOf([product(1), product(2)], 4, 1, 2));
+    const { container } = mount();
+    await flush();
+    const more = buttonByName(container, 'Xem thêm')!;
+    act(() => {
+      more.click();
+      more.click();
+    });
+    expect(more.getAttribute('aria-busy')).toBe('true');
+    expect(more.getAttribute('aria-disabled')).toBe('true');
+    await flush(2);
+    expect(productCalls().filter((q) => q?.page === 2)).toHaveLength(1);
+    expect(more.getAttribute('aria-busy')).toBe('true');
+    expect(more.getAttribute('aria-disabled')).toBe('true');
+    release();
+    await flush(8);
+    expect(productCalls().filter((q) => q?.page === 2)).toHaveLength(1);
+  });
+
   it('"Xem thêm" xong: focus chuyển vào liên kết của thẻ đầu trang mới (không mất focus về body)', async () => {
     nav.search = LIST;
     routes['/products'] = (q) => (Number(q?.page) === 2 ? pageOf([product(3), product(4)], 4, 2, 2) : pageOf([product(1), product(2)], 4, 1, 2));
@@ -1066,6 +1089,47 @@ describe('BrowseView — tải thêm, rỗng, lỗi', () => {
     click(buttonByName(container, 'Thử lại'));
     await flush(8);
     expect(container.textContent).toContain('Sản phẩm 3');
+  });
+});
+
+describe('BrowseView — "Thử lại" tại chỗ sau lỗi Xem thêm', () => {
+  it('bấm khi lần tải còn chạy: nút aria-busy + aria-disabled, KHÔNG disabled (giữ focus), chạm đúp cùng khung hình chỉ tải một lần', async () => {
+    nav.search = LIST;
+    let failPage2 = true;
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    routes['/products'] = (q) => {
+      if (Number(q?.page) === 2) {
+        if (failPage2) throw new Error('down');
+        return gate.then(() => pageOf([product(3)], 3, 2, 2));
+      }
+      return pageOf([product(1), product(2)], 3, 1, 2);
+    };
+    const { container } = mount();
+    await flush();
+    click(buttonByName(container, 'Xem thêm'));
+    await flush(8);
+    const retry = buttonByName(container, 'Thử lại') as HTMLButtonElement;
+    expect(retry).not.toBeNull();
+    failPage2 = false;
+    const before = productCalls().filter((q) => q?.page === 2).length;
+    act(() => retry.focus());
+    act(() => {
+      retry.click();
+      retry.click();
+    });
+    expect(retry.getAttribute('aria-busy')).toBe('true');
+    expect(retry.getAttribute('aria-disabled')).toBe('true');
+    await flush(2);
+    expect(productCalls().filter((q) => q?.page === 2).length - before).toBe(1);
+    expect(retry.getAttribute('aria-busy')).toBe('true');
+    expect(retry.getAttribute('aria-disabled')).toBe('true');
+    expect(retry.disabled).toBe(false);
+    expect(document.activeElement).toBe(retry);
+    release();
+    await flush(8);
+    expect(container.textContent).toContain('Sản phẩm 3');
+    expect(productCalls().filter((q) => q?.page === 2).length - before).toBe(1);
   });
 });
 

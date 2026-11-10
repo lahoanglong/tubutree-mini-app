@@ -160,7 +160,7 @@ describe('Sổ địa chỉ — lệnh bị từ chối mà làm mới không ba
 });
 
 describe('Sổ địa chỉ — lệnh bị từ chối', () => {
-  it.each([400, 404, 409])('Đặt mặc định bị từ chối %i: lời báo hiện ngay, sổ được tải lại, khoá nhả sau khi sổ về', async (status) => {
+  it.each([400, 404, 409, 422])('Đặt mặc định bị từ chối %i: lời báo hiện ngay, sổ được tải lại, khoá nhả sau khi sổ về', async (status) => {
     mocks.update.mockRejectedValueOnce(new ApiError('Địa chỉ không còn', status));
     const c = await mount();
     const before = mocks.listCalls;

@@ -8,6 +8,8 @@ import { checkInView } from '@tubutree/app-core/loyalty-copy';
 import { checkInQuery, loyaltyQuery, pointsTxnQuery } from '@tubutree/app-core/queries/loyalty';
 import { coreHttp } from '@/lib/core-http';
 import { loadErrorText } from './error-text';
+import { serverRejectedState } from './server-rejected-state';
+import { settleWithin } from './settle-within';
 
 const errText = loadErrorText;
 
@@ -31,17 +33,21 @@ export function useCheckIn(enabled: boolean) {
         qc.setQueryData<CheckInStatusResponse>(checkInQuery(coreHttp).queryKey, (old) => (old ? { ...old, checkedInToday: true } : old));
       }
       // Trả lời hứa tải lại: TanStack Query đợi nó trước `onSettled`, nên khoá `busy` còn giữ tới khi trạng thái điểm danh và số dư mới về
-      // (nhả sớm hơn thì nút còn "Điểm danh" theo số cũ và bấm được lần hai, nhất là sau lần chỉ nhận một phần).
-      return Promise.all([
-        qc.invalidateQueries({ queryKey: loyaltyQuery(coreHttp).queryKey }),
-        qc.invalidateQueries({ queryKey: ['game'] }),
-        qc.invalidateQueries({ queryKey: checkInQuery(coreHttp).queryKey }),
-        qc.invalidateQueries({ queryKey: pointsTxnQuery(coreHttp).queryKey }),
-      ]);
+      // (nhả sớm hơn thì nút còn "Điểm danh" theo số cũ và bấm được lần hai, nhất là sau lần chỉ nhận một phần). Có hạn 4 giây: mạng chậm không giữ nút lâu hơn lệnh đã xong.
+      return settleWithin(
+        Promise.all([
+          qc.invalidateQueries({ queryKey: loyaltyQuery(coreHttp).queryKey }),
+          qc.invalidateQueries({ queryKey: ['game'] }),
+          qc.invalidateQueries({ queryKey: checkInQuery(coreHttp).queryKey }),
+          qc.invalidateQueries({ queryKey: pointsTxnQuery(coreHttp).queryKey }),
+        ]),
+      );
     },
+    // Máy chủ từ chối vì trạng thái đã đổi ("đã điểm danh rồi" ở máy khác): tải lại để thẻ theo số thật, khoá giữ tới lúc đó (tối đa 4 giây).
+    // Mất mạng, 401/403 và 5xx không nói gì về trạng thái thật: không tải lại, nhả khoá ngay.
     onError: (e) => {
       setMessage({ text: errText(e), error: true });
-      return qc.invalidateQueries({ queryKey: checkInQuery(coreHttp).queryKey });
+      return serverRejectedState(e) ? settleWithin(qc.invalidateQueries({ queryKey: checkInQuery(coreHttp).queryKey })) : undefined;
     },
     onSettled: () => {
       busy.current = false;

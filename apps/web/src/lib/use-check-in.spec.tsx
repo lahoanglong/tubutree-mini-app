@@ -2,6 +2,9 @@
 import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderHook, waitFor } from '@/test-utils/render-hook';
+import { checkInQuery, loyaltyQuery, pointsTxnQuery } from '@tubutree/app-core/queries/loyalty';
+import { ApiError, NetworkError } from '@/lib/client-api';
+import { coreHttp } from '@/lib/core-http';
 
 const mocks = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get, post: mocks.post } }));
@@ -61,28 +64,103 @@ describe('useCheckIn (web): khoá giữ tới khi trạng thái mới về', () 
     expect(mocks.post).toHaveBeenCalledTimes(1);
   });
 
-  it('lỗi: báo lỗi, vẫn bận tới khi trạng thái điểm danh tải lại xong, rồi nhả để gọi lại được', async () => {
-    mocks.post.mockRejectedValueOnce(new Error('mất mạng')).mockResolvedValue(RESULT);
+  it('thành công: làm mới Điểm Xanh, Vườn Xanh, trạng thái điểm danh và lịch sử điểm (đúng bốn nơi)', async () => {
+    mocks.post.mockResolvedValue(RESULT);
     const h = await mountLoaded();
+    const invalidate = vi.spyOn(h.client, 'invalidateQueries');
+    await act(async () => {
+      h.result.current.checkIn();
+    });
+    await waitFor(() => expect(h.result.current.pending).toBe(false));
+    const keys = invalidate.mock.calls.map(([filters]) => (filters as { queryKey: unknown[] }).queryKey);
+    expect(keys).toHaveLength(4);
+    expect(keys).toEqual(expect.arrayContaining([loyaltyQuery(coreHttp).queryKey, ['game'], checkInQuery(coreHttp).queryKey, pointsTxnQuery(coreHttp).queryKey]));
+  });
+
+  it.each([400, 404, 409, 422])('máy chủ từ chối %i: báo lỗi ngay, tải lại trạng thái điểm danh, vẫn bận tới khi nó về rồi nhả để gọi lại được', async (status) => {
+    mocks.post.mockRejectedValueOnce(new ApiError('Hôm nay bạn đã điểm danh rồi.', status)).mockResolvedValue(RESULT);
+    const h = await mountLoaded();
+    const getsBefore = mocks.get.mock.calls.length;
     const fresh = gate<unknown>();
     mocks.get.mockReturnValue(fresh.promise);
     await act(async () => {
       h.result.current.checkIn();
     });
     await waitFor(() => expect(h.result.current.message?.error).toBe(true));
-    expect(mocks.post).toHaveBeenCalledTimes(1);
+    expect(h.result.current.message?.text).toBe('Hôm nay bạn đã điểm danh rồi.');
+    expect(mocks.get.mock.calls.length).toBe(getsBefore + 1);
     expect(h.result.current.pending).toBe(true);
     await act(async () => {
       h.result.current.checkIn();
     });
     expect(mocks.post).toHaveBeenCalledTimes(1);
     await act(async () => {
-      fresh.resolve(STATUS);
+      fresh.resolve(DONE);
     });
     await waitFor(() => expect(h.result.current.pending).toBe(false));
+    expect(h.result.current.status?.checkedInToday).toBe(true);
     await act(async () => {
       h.result.current.checkIn();
     });
     await waitFor(() => expect(mocks.post).toHaveBeenCalledTimes(2));
+  });
+
+  it.each([
+    ['401', () => new ApiError('Phiên hết hạn', 401)],
+    ['403', () => new ApiError('Không có quyền', 403)],
+    ['500', () => new ApiError('Máy chủ lỗi', 500)],
+    ['503', () => new ApiError('Máy chủ bận', 503)],
+    ['mất mạng', () => new NetworkError(false)],
+  ])('%s: báo lỗi, KHÔNG tải lại trạng thái, nhả khoá ngay để bấm lại được', async (_name, make) => {
+    mocks.post.mockRejectedValueOnce(make()).mockResolvedValue(RESULT);
+    const h = await mountLoaded();
+    const getsBefore = mocks.get.mock.calls.length;
+    mocks.get.mockReturnValue(new Promise(() => undefined));
+    await act(async () => {
+      h.result.current.checkIn();
+    });
+    await waitFor(() => expect(h.result.current.pending).toBe(false));
+    expect(h.result.current.message?.error).toBe(true);
+    expect(mocks.get.mock.calls.length).toBe(getsBefore);
+    await act(async () => {
+      h.result.current.checkIn();
+    });
+    await waitFor(() => expect(mocks.post).toHaveBeenCalledTimes(2));
+  });
+
+  describe('dữ liệu mới treo mãi: khoá nhả đúng sau 4 giây', () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+    const heldFor4s = async (h: Awaited<ReturnType<typeof mountLoaded>>) => {
+      await act(async () => {
+        h.result.current.checkIn();
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3_900);
+      });
+      expect(h.result.current.pending).toBe(true);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(200);
+      });
+      expect(h.result.current.pending).toBe(false);
+    };
+
+    it('điểm danh xong mà số dư/trạng thái không về', async () => {
+      mocks.post.mockResolvedValue(RESULT);
+      const h = await mountLoaded();
+      mocks.get.mockReturnValue(new Promise(() => undefined));
+      await heldFor4s(h);
+    });
+
+    it('máy chủ từ chối mà trạng thái không về', async () => {
+      mocks.post.mockRejectedValue(new ApiError('Đã điểm danh rồi.', 409));
+      const h = await mountLoaded();
+      mocks.get.mockReturnValue(new Promise(() => undefined));
+      await heldFor4s(h);
+    });
   });
 });

@@ -428,8 +428,8 @@ describe('chi tiết đơn web — khoá đồng bộ chạm đúp (W78B)', () =
     expect(text(container)).toContain('Đã mở trang Tubu Tree trên Zalo');
   });
 
-  // Đơn đã tải rồi mà lần tải lại nền lỗi: khối lỗi vẫn hiện kèm dữ liệu cũ, nên `refetch()` thứ hai huỷ lượt đầu và gọi API lần nữa; chỉ khoá nút mới giữ một lượt.
-  it('lỗi tải lại khi đã có đơn cũ: "Thử lại" chạm đúp cùng khung hình chỉ gọi API thêm một lần', async () => {
+  // Đơn đã tải rồi mà lần tải lại nền lỗi (sau huỷ, sau khi bị từ chối): giữ nguyên đơn đang xem như Mini App, không thay cả trang bằng màn lỗi.
+  it('lỗi tải lại khi đã có đơn cũ: trang vẫn hiện đơn, không thay bằng màn lỗi', async () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const r = render(<OrderDetailPage />, client);
     mounted.push(r);
@@ -440,19 +440,11 @@ describe('chi tiết đơn web — khoá đồng bộ chạm đúp (W78B)', () =
       await client.invalidateQueries({ queryKey: ['order'] });
     });
     await flush(4);
-    const retry = byText(r.container, 'button', 'Thử lại') as HTMLButtonElement;
-    expect(retry).not.toBeNull();
-    const before = mocks.orderCalls;
-    let release!: () => void;
-    mocks.orderFails = false;
-    mocks.orderGate = new Promise<void>((res) => (release = res));
-    twice(retry);
-    await flush(3);
-    expect(mocks.orderCalls).toBe(before + 1);
-    release();
-    await flush(8);
-    expect(mocks.orderCalls).toBe(before + 1);
+    expect(client.getQueryState(['order', 'TB-9'])?.status).toBe('error');
     expect(text(r.container)).toContain('TB-9');
+    expect(text(r.container)).toContain('Dầu gội');
+    expect(byText(r.container, 'button', 'Thử lại')).toBeNull();
+    expect(r.container.querySelector('[role="alert"]')).toBeNull();
   });
 
   it('lỗi tải đơn: "Thử lại" trả refetch cho nút, chạm đúp cùng khung hình chỉ tải lại một lần', async () => {

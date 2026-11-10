@@ -28,6 +28,7 @@ import { formatVnd } from '@/lib/format-vnd';
 import { ui } from '@/lib/guest-ui';
 import { PAGE_WIDE } from '@/lib/page-frame';
 import { loadErrorText } from '@/lib/error-text';
+import { usePressLock } from '@/lib/use-press-lock';
 import { FIRST_PAGE, nextPageParam, uniqueByKey } from '@/lib/keyset-paging';
 
 const PAGE_LIMIT = 20;
@@ -73,6 +74,8 @@ function OrdersPageBody() {
     enabled: phase === 'authenticated' && !isSubscriptions,
   });
   const list = uniqueByKey(orders.data?.pages.flatMap((pg) => pg.data) ?? [], (o) => o.code);
+  // `isFetchingNextPage` chỉ đúng sau lần vẽ kế: chạm đúp cùng khung hình sẽ gọi hai lần và lần sau huỷ lần đầu. Khoá ở usePressLock, guard `isFetchingNextPage` ở trong.
+  const loadMore = usePressLock(() => (orders.isFetchingNextPage ? undefined : orders.fetchNextPage()));
 
   // Chỉ nhắc mã chào mừng khi khách thật sự đang có mã (API trả kèm mã còn dùng được), số lấy từ chính mã đó: cấu hình có mệnh giá
   // không có nghĩa khách nhận được (chưa cấp, đã dùng, hết hạn, tài khoản vãng lai).
@@ -171,7 +174,13 @@ function OrdersPageBody() {
             )}
             {orders.hasNextPage && (
               <div className="mt-3 text-center">
-                <button type="button" aria-disabled={orders.isFetchingNextPage || undefined} onClick={() => !orders.isFetchingNextPage && void orders.fetchNextPage()} className={`${ui.btnSecondary} min-w-40`}>
+                <button
+                  type="button"
+                  aria-busy={orders.isFetchingNextPage || loadMore.busy || undefined}
+                  aria-disabled={orders.isFetchingNextPage || loadMore.busy || undefined}
+                  onClick={loadMore.press}
+                  className={`${ui.btnSecondary} min-w-40`}
+                >
                   {orders.isFetchingNextPage ? 'Đang tải…' : 'Xem thêm'}
                 </button>
               </div>

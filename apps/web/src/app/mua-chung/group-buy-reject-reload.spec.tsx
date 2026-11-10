@@ -104,11 +104,12 @@ afterEach(() => {
   clock.mockRestore();
 });
 
-describe('/mua-chung — máy chủ từ chối tham gia 400/404/409: tải lại nhóm rồi mới nhả khoá', () => {
+describe('/mua-chung — máy chủ từ chối tham gia 400/404/409/422: tải lại nhóm rồi mới nhả khoá', () => {
   it.each([
     [400, 'Nhóm đã đủ người hoặc đã đóng.'],
     [404, 'Không tìm thấy nhóm mua chung.'],
     [409, 'Nhóm đã đóng.'],
+    [422, 'Nhóm không còn nhận thành viên.'],
   ])('máy chủ trả %i: báo đúng câu của máy chủ, tải lại danh sách, nhóm đã đóng không còn nút "Tham gia"', async (status, message) => {
     h.list = script([GROUP('a')], []);
     h.post.mockRejectedValue(httpError(status, message));

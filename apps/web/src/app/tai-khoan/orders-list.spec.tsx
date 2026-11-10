@@ -181,6 +181,34 @@ describe('danh sách đơn — phân trang bằng con trỏ keyset', () => {
     expect(byText(c, 'button', 'Xem thêm đơn cũ hơn')).toBeNull();
   });
 
+  it('"Xem thêm đơn cũ hơn": chạm đúp cùng khung hình chỉ tải trang kế một lần, nút báo aria-busy + aria-disabled (không disabled) tới khi trang về', async () => {
+    state.keyset = [
+      { data: [order('TB-1', [item('A')])], nextCursor: 'CUR1' },
+      { data: [order('TB-2', [item('B')])], nextCursor: null },
+    ];
+    const c = await mount();
+    let release!: () => void;
+    state.gate = new Promise<void>((r) => (release = r));
+    const more = byText(c, 'button', 'Xem thêm đơn cũ hơn') as HTMLButtonElement;
+    more.focus();
+    act(() => {
+      more.click();
+      more.click();
+    });
+    expect(more.getAttribute('aria-busy')).toBe('true');
+    expect(more.getAttribute('aria-disabled')).toBe('true');
+    await flush(3);
+    expect(state.calls).toHaveLength(2);
+    expect(more.getAttribute('aria-busy')).toBe('true');
+    expect(more.getAttribute('aria-disabled')).toBe('true');
+    expect(more.disabled).toBe(false);
+    expect(document.activeElement).toBe(more);
+    release();
+    await flush(6);
+    expect(state.calls).toHaveLength(2);
+    expect(c.textContent).toContain('TB-2');
+  });
+
   it('đơn lặp giữa hai trang chỉ hiện một lần', async () => {
     state.keyset = [
       { data: [order('TB-1', [item('A')])], nextCursor: 'CUR1' },

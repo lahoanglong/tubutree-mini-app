@@ -195,6 +195,31 @@ describe('trang Đơn hàng /tai-khoan/don-hang', () => {
     expect(btn('Xem thêm', c)).toBeUndefined();
   });
 
+  it('"Xem thêm": chạm đúp cùng khung hình chỉ tải trang 2 một lần, nút báo aria-busy + aria-disabled (không disabled) tới khi trang về', async () => {
+    orders = Array.from({ length: 25 }, (_, i) => order(`TUBU${i + 1}`));
+    const c = await mount();
+    let release!: () => void;
+    ordersGate = new Promise<void>((r) => (release = r));
+    const more = btn('Xem thêm', c)!;
+    more.focus();
+    act(() => {
+      more.click();
+      more.click();
+    });
+    expect(more.getAttribute('aria-busy')).toBe('true');
+    expect(more.getAttribute('aria-disabled')).toBe('true');
+    await flush(3);
+    expect(sent('/orders').map((x) => x.query.get('page'))).toEqual(['1', '2']);
+    expect(more.getAttribute('aria-busy')).toBe('true');
+    expect(more.getAttribute('aria-disabled')).toBe('true');
+    expect(more.disabled).toBe(false);
+    expect(document.activeElement).toBe(more);
+    release();
+    await flush(8);
+    expect(sent('/orders').map((x) => x.query.get('page'))).toEqual(['1', '2']);
+    expect(c.querySelectorAll('[data-testid="order-card"]')).toHaveLength(25);
+  });
+
   it('API trả nextCursor: "Xem thêm" gửi con trỏ đó (dù tổng báo hết trang kiểu offset) và đơn lặp giữa hai trang chỉ hiện một lần', async () => {
     keyset = [
       { data: [order('TUBU1')], nextCursor: 'CUR1' },
@@ -248,6 +273,8 @@ describe('trang Đơn hàng /tai-khoan/don-hang', () => {
       retry.click();
       retry.click();
     });
+    expect(retry.getAttribute('aria-busy')).toBe('true');
+    expect(retry.getAttribute('aria-disabled')).toBe('true');
     await flush(3);
     expect(sent('/orders')).toHaveLength(2);
     expect(retry.getAttribute('aria-busy')).toBe('true');

@@ -234,6 +234,60 @@ describe('BestSellersView — dữ liệu server, trang số, Xem thêm', () => 
   });
 });
 
+describe('BestSellersView — khoá chạm đúp "Xem thêm" và "Thử lại" tại chỗ', () => {
+  it('"Xem thêm": chạm đúp cùng khung hình chỉ tải trang kế một lần', async () => {
+    const { container } = mount();
+    await flush();
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    routes['/products'] = (q) => (Number(q?.page) === 2 ? gate.then(() => pageOf(21, 20, 2, 45)) : pageOf(1, 20, 1, 45));
+    const more = byText(container, 'button', 'Xem thêm') as HTMLButtonElement;
+    act(() => {
+      more.click();
+      more.click();
+    });
+    await flush(2);
+    expect(productCalls().filter((q) => q?.page === 2)).toHaveLength(1);
+    expect(more.getAttribute('aria-busy')).toBe('true');
+    release();
+    await flush(6);
+    expect(productCalls().filter((q) => q?.page === 2)).toHaveLength(1);
+    expect(ranks(container)).toHaveLength(40);
+  });
+
+  it('"Thử lại" tại chỗ sau lỗi Xem thêm: chạm đúp cùng khung hình chỉ tải lại một lần', async () => {
+    const { container } = mount();
+    await flush();
+    let fail = true;
+    let gate: Promise<void> | null = null;
+    routes['/products'] = (q) => {
+      if (Number(q?.page) === 2) {
+        if (fail) throw Object.assign(new Error('500'), { status: 500 });
+        return gate!.then(() => pageOf(21, 20, 2, 45));
+      }
+      return pageOf(1, 20, 1, 45);
+    };
+    click(byText(container, 'button', 'Xem thêm'));
+    await flush();
+    const alert = container.querySelector('[role="alert"]')!;
+    const retry = byText(alert, 'button', 'Thử lại') as HTMLButtonElement;
+    fail = false;
+    let release!: () => void;
+    gate = new Promise<void>((r) => (release = r));
+    const before = productCalls().filter((q) => q?.page === 2).length;
+    act(() => {
+      retry.click();
+      retry.click();
+    });
+    await flush(2);
+    expect(productCalls().filter((q) => q?.page === 2).length - before).toBe(1);
+    release();
+    await flush(6);
+    expect(productCalls().filter((q) => q?.page === 2).length - before).toBe(1);
+    expect(ranks(container)).toHaveLength(40);
+  });
+});
+
 describe('BestSellersView — rỗng và lỗi', () => {
   it('không có món nào: "Chưa đủ lượt bán để xếp hạng" + lối "Xem sản phẩm trong danh mục" (theo danh mục đang chọn)', async () => {
     routes['/products'] = () => ({ data: [], meta: { page: 1, limit: 20, total: 0 } });

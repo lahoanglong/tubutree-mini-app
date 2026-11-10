@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import { act } from 'react';
 import { QueryClient } from '@tanstack/react-query';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import { byText, click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { headingProblems, smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
+import { ApiError, NetworkError } from '@/lib/client-api';
 
 // BUYERWEB-13: chi tiết đơn trên web chỉ có dòng gọi hotline — không timeline/hành trình, không hủy, đổi trả, mua lại
 // dù API đã có sẵn (Mini App có đủ).
@@ -1184,5 +1185,208 @@ describe('chi tiết đơn — điện thoại (như Mini App)', () => {
     const { container } = await mount();
     expect(container.querySelector('[role="status"]')).not.toBeNull();
     expect(menuHas(container, 'Yêu cầu đổi/trả')).toBe(true);
+  });
+});
+
+describe('chi tiết đơn — huỷ bị máy chủ từ chối (Wave 97B, như Mini W104A)', () => {
+  let client: QueryClient;
+  let invalidate: MockInstance<QueryClient['invalidateQueries']>;
+  const keys = () => invalidate.mock.calls.map((c) => JSON.stringify((c[0] as { queryKey: unknown }).queryKey));
+  const gate = () => {
+    let release!: () => void;
+    const promise = new Promise<void>((res) => (release = res));
+    return { promise, release };
+  };
+  const mountWithClient = async () => {
+    client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    invalidate = vi.spyOn(client, 'invalidateQueries');
+    const r = render(<OrderDetailPage />, client);
+    mounted.push(r);
+    await flush(8);
+    return r;
+  };
+  const submitWalletCancel = (c: HTMLElement) => {
+    click(btn(c, 'Huỷ đơn')!);
+    confirmWithReason(c);
+  };
+  const openBankCancel = async () => {
+    mocks.order = { ...BASE, paymentMethod: 'ZALOPAY', paymentStatus: 'PAID' };
+    mocks.refundBank = { bankName: 'Techcombank', accountNumber: '190312345678', accountName: 'NGUYEN VAN A' };
+    const r = await mountWithClient();
+    click(btn(r.container, 'Huỷ đơn')!);
+    click(radio(r.container, /Tài khoản ngân hàng/));
+    await flush(8);
+    return r;
+  };
+  const TRANSIENT: Array<[string, () => Error]> = [
+    ['401', () => new ApiError('Phiên hết hạn', 401)],
+    ['403', () => new ApiError('Không có quyền', 403)],
+    ['500', () => new ApiError('Máy chủ lỗi', 500)],
+    ['503', () => new ApiError('Máy chủ bận', 503)],
+    ['mất mạng', () => new NetworkError(false)],
+  ];
+
+  it.each([400, 404, 409, 422])('%i (không có ô nhập): tải lại đơn, danh sách đơn và khoản hoàn; lời lỗi hiện ngay, nút giữ khoá tới khi đơn về', async (status) => {
+    mocks.cancel.mockRejectedValue(new ApiError('Đơn đã bàn giao cho đơn vị vận chuyển.', status));
+    const { container } = await mountWithClient();
+    const reload = gate();
+    mocks.orderGate = reload.promise;
+    submitWalletCancel(container);
+    await flush(8);
+    expect(mocks.cancel).toHaveBeenCalledTimes(1);
+    expect(keys()).toEqual(expect.arrayContaining(['["order","TB-9"]', '["orders"]', '["my-refunds"]']));
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('Đơn đã bàn giao');
+    expect(btn(container, 'Huỷ đơn')?.disabled).toBe(true);
+    click(btn(container, 'Huỷ đơn')!);
+    await flush(2);
+    expect(container.querySelector('[role="alertdialog"]')).toBeNull();
+    reload.release();
+    await flush(8);
+    expect(btn(container, 'Huỷ đơn')?.disabled).toBe(false);
+    click(btn(container, 'Huỷ đơn')!);
+    expect(container.querySelector('[role="alertdialog"]')).not.toBeNull();
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(mocks.cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('tải lại treo mãi: khoá nhả đúng sau 4 giây, không sớm hơn', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+    try {
+      mocks.cancel.mockRejectedValue(new ApiError('Đơn đã bàn giao.', 409));
+      const { container } = await mountWithClient();
+      mocks.orderGate = new Promise<void>(() => undefined);
+      submitWalletCancel(container);
+      await flush(4);
+      expect(btn(container, 'Huỷ đơn')?.disabled).toBe(true);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3_900);
+      });
+      expect(btn(container, 'Huỷ đơn')?.disabled).toBe(true);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(200);
+      });
+      await flush(2);
+      expect(btn(container, 'Huỷ đơn')?.disabled).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each(TRANSIENT)('%s: chỉ làm mới đơn như trước, KHÔNG tải lại danh sách đơn/khoản hoàn và không giữ khoá', async (_name, make) => {
+    mocks.cancel.mockRejectedValue(make());
+    const { container } = await mountWithClient();
+    mocks.orderGate = new Promise<void>(() => undefined);
+    submitWalletCancel(container);
+    await flush(8);
+    expect(container.querySelector('[role="alert"]')).not.toBeNull();
+    expect(keys()).toContain('["order","TB-9"]');
+    expect(keys()).not.toContain('["orders"]');
+    expect(keys()).not.toContain('["my-refunds"]');
+    expect(btn(container, 'Huỷ đơn')?.disabled).toBe(false);
+  });
+
+  it('chọn hoàn về ngân hàng + 400: là lỗi nhập tài khoản, KHÔNG tải lại danh sách đơn/khoản hoàn và không giữ khoá', async () => {
+    mocks.cancel.mockRejectedValue(new ApiError('Số tài khoản nhận tiền hoàn không hợp lệ.', 400));
+    const { container } = await openBankCancel();
+    mocks.orderGate = new Promise<void>(() => undefined);
+    confirmWithReason(container);
+    await flush(8);
+    expect(mocks.cancel).toHaveBeenCalledTimes(1);
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('Số tài khoản nhận tiền hoàn không hợp lệ.');
+    expect(keys()).not.toContain('["orders"]');
+    expect(keys()).not.toContain('["my-refunds"]');
+    expect(btn(container, 'Huỷ đơn')?.disabled).toBe(false);
+  });
+
+  it.each([404, 409, 422])('chọn hoàn về ngân hàng + %i: đơn đã đổi, vẫn tải lại và giữ khoá', async (status) => {
+    mocks.cancel.mockRejectedValue(new ApiError('Đơn đã đổi trạng thái.', status));
+    const { container } = await openBankCancel();
+    mocks.orderGate = new Promise<void>(() => undefined);
+    confirmWithReason(container);
+    await flush(8);
+    expect(keys()).toEqual(expect.arrayContaining(['["orders"]', '["my-refunds"]']));
+    expect(btn(container, 'Huỷ đơn')?.disabled).toBe(true);
+  });
+
+  it('có lựa chọn nơi nhận nhưng đang chọn Ví (đơn ZaloPay đã trả) + 400: không có ô nhập, vẫn tải lại và giữ khoá', async () => {
+    mocks.order = { ...BASE, paymentMethod: 'ZALOPAY', paymentStatus: 'PAID' };
+    mocks.cancel.mockRejectedValue(new ApiError('Đơn đã bàn giao.', 400));
+    const { container } = await mountWithClient();
+    mocks.orderGate = new Promise<void>(() => undefined);
+    submitWalletCancel(container);
+    await flush(8);
+    expect(mocks.cancel).toHaveBeenCalledWith('TB-9', { refundMethod: 'WALLET' }, { cancelReasonCode: 'CHANGED_MIND' });
+    expect(keys()).toEqual(expect.arrayContaining(['["orders"]', '["my-refunds"]']));
+    expect(btn(container, 'Huỷ đơn')?.disabled).toBe(true);
+  });
+
+  it('chọn hoàn về Ví (đơn trả bằng Ví) + 400: không có ô nhập nên vẫn là dữ liệu cũ, tải lại', async () => {
+    mocks.order = { ...BASE, paymentMethod: 'WALLET', paymentStatus: 'PAID' };
+    mocks.cancel.mockRejectedValue(new ApiError('Đơn đã bàn giao.', 400));
+    const { container } = await mountWithClient();
+    submitWalletCancel(container);
+    await flush(8);
+    expect(keys()).toEqual(expect.arrayContaining(['["orders"]', '["my-refunds"]']));
+  });
+
+  describe('khoản hoàn của yêu cầu trả hàng (ReturnStatus): lời từ chối còn lại sau khi dòng khoản hoàn bị gỡ', () => {
+    const RETURN = {
+      id: 'r1', orderId: 'o9', status: 'APPROVED', reason: 'x', refundAmount: 150000, refundMethod: 'BANK',
+      items: [{ orderItemId: 'i1', quantity: 1, refundAmount: 150000 }], createdAt: '2026-10-06T00:00:00Z',
+    };
+    const REFUND = {
+      id: 'rf9', orderId: 'o9', orderCode: 'TB-9', kind: 'RETURN', refKey: 'r1', amount: 150000, method: 'MANUAL_TRANSFER', status: 'PENDING',
+      bankName: null, bankAccountNo: null, bankAccountName: null, bankRef: null, completedAt: null, createdAt: '2026-10-06T00:00:00Z',
+      canChooseDestination: true,
+    };
+    const open = async () => {
+      mocks.order = { ...BASE, status: 'DELIVERED', deliveredAt: new Date().toISOString() };
+      mocks.returns = [RETURN];
+      mocks.refunds = [REFUND];
+      const r = await mountWithClient();
+      click(btn(r.container, 'Chọn nơi nhận tiền')!);
+      return r;
+    };
+    const alerts = (c: HTMLElement) => Array.from(c.querySelectorAll('[role="alert"]')).map((n) => n.textContent ?? '');
+
+    it('404 rồi khoản hoàn rời danh sách: dòng Chọn nơi nhận biến mất nhưng lời từ chối vẫn còn đúng một lần', async () => {
+      mocks.chooseDestination.mockImplementation(async () => {
+        mocks.refunds = [];
+        throw new ApiError('Không tìm thấy khoản hoàn.', 404);
+      });
+      const { container } = await open();
+      click(btn(container, 'Xác nhận')!);
+      await flush(12);
+      expect(keys()).toContain('["my-refunds","o9"]');
+      expect(btn(container, 'Chọn nơi nhận tiền')).toBeUndefined();
+      expect(alerts(container)).toEqual(['Không tìm thấy khoản hoàn.']);
+    });
+
+    it('lỗi tạm (503) rồi form bị gỡ vì khoản đã đóng: lời lỗi tạm không hiện lại như lời từ chối', async () => {
+      mocks.chooseDestination.mockRejectedValue(new ApiError('Máy chủ bận', 503));
+      const { container } = await open();
+      click(btn(container, 'Xác nhận')!);
+      await flush(8);
+      expect(alerts(container)).toEqual(['Máy chủ đang bận, thử lại nhé.']);
+      mocks.refunds = [{ ...REFUND, canChooseDestination: false, status: 'COMPLETED', method: 'WALLET' }];
+      await act(async () => {
+        await client.invalidateQueries({ queryKey: ['my-refunds', 'o9'] });
+      });
+      await flush(6);
+      expect(alerts(container)).toEqual([]);
+    });
+
+    it('mở lại form (khoản vẫn chọn được) thì lời từ chối cũ tắt', async () => {
+      mocks.chooseDestination.mockImplementation(async () => {
+        throw new ApiError('Khoản hoàn vừa được chọn ở máy khác.', 409);
+      });
+      const { container } = await open();
+      click(btn(container, 'Xác nhận')!);
+      await flush(10);
+      expect(alerts(container)).toEqual(['Khoản hoàn vừa được chọn ở máy khác.']);
+      click(btn(container, 'Để sau')!);
+      await flush(2);
+      expect(alerts(container)).toEqual([]);
+    });
   });
 });

@@ -223,3 +223,58 @@ describe('OnboardingGate: các bước quiz', () => {
     expect(document.querySelector('[role="dialog"] h2')?.textContent).toBe('Tuyệt vời!');
   });
 });
+
+describe('OnboardingGate: "Hoàn tất" khoá chạm đúp', () => {
+  const toLastQuestion = async () => {
+    await mount();
+    click(btn('Bắt đầu'));
+    click(named('checkbox', 'Chăm sóc da'));
+    next();
+    click(named('radio', 'Nhạy cảm'));
+    next();
+    click(named('checkbox', 'Gia đình'));
+    next();
+    click(named('radio', 'Giá tốt'));
+  };
+
+  it('hai cú bấm cùng khung hình chỉ gửi một lần', async () => {
+    mocks.post.mockReturnValue(new Promise(() => undefined));
+    await toLastQuestion();
+    const done = btn('Hoàn tất');
+    await act(async () => {
+      click(done);
+      click(done);
+    });
+    expect(mocks.post).toHaveBeenCalledTimes(1);
+  });
+
+  it('đang gửi: nút báo aria-busy + aria-disabled, KHÔNG disabled thật (giữ focus trong hộp thoại), bấm thêm không gửi lần hai', async () => {
+    mocks.post.mockReturnValue(new Promise(() => undefined));
+    await toLastQuestion();
+    const done = btn('Hoàn tất') as HTMLButtonElement;
+    expect(done.hasAttribute('aria-busy')).toBe(false);
+    done.focus();
+    click(done);
+    await flush(2);
+    expect(done.getAttribute('aria-busy')).toBe('true');
+    expect(done.getAttribute('aria-disabled')).toBe('true');
+    expect(done.disabled).toBe(false);
+    expect(document.activeElement).toBe(done);
+    click(done);
+    await flush(2);
+    expect(mocks.post).toHaveBeenCalledTimes(1);
+  });
+
+  it('gửi lỗi: nút hết bận (bỏ aria-busy/aria-disabled) và gửi lại được', async () => {
+    mocks.post.mockRejectedValueOnce(new Error('Máy chủ bận'));
+    await toLastQuestion();
+    next();
+    await flush(4);
+    const done = btn('Hoàn tất');
+    expect(done.hasAttribute('aria-busy')).toBe(false);
+    expect(done.hasAttribute('aria-disabled')).toBe(false);
+    click(done);
+    await flush(4);
+    expect(mocks.post).toHaveBeenCalledTimes(2);
+  });
+});

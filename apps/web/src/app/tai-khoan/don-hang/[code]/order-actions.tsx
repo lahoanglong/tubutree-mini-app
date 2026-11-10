@@ -47,6 +47,8 @@ import { ReturnRequestForm } from './return-request-form';
 import { CancelReasonPicker } from './cancel-reason-picker';
 import { cancelReasonBody, type CancelReasonCode } from '@tubutree/app-core/cancel-reasons';
 import { actionErrorText } from '@/lib/error-text';
+import { serverRejectedState } from '@/lib/server-rejected-state';
+import { settleWithin } from '@/lib/settle-within';
 
 const CANCEL_TITLE = 'Bạn muốn huỷ đơn này?';
 const CANCEL_NOTE = 'Đơn đã huỷ không thể khôi phục lại.';
@@ -106,8 +108,10 @@ export function OrderActions({
 
   // Khoá đồng bộ: `cancel.isPending` chỉ đổi sau lần vẽ kế, hai cú bấm "Huỷ đơn" sát nhau sẽ gửi hai lần.
   const cancelingRef = useRef(false);
+  // Lời lỗi giữ ở state riêng: `cancel.isError` chỉ lật sau khi Promise của onError xong, tức sau lúc tải lại, mà lời máy chủ từ chối phải hiện ngay.
+  const [cancelError, setCancelError] = useState<string | null>(null);
   const cancel = useMutation({
-    mutationFn: ({ choose, reason }: { choose: boolean; reason: CancelReasonCode }) =>
+    mutationFn: ({ choose, reason }: { choose: boolean; reason: CancelReasonCode; toBank: boolean }) =>
       cancelOrder(o.code, choose ? destinationBody(cancelMethod, cancelBank) : undefined, cancelReasonBody(reason, cancelReasonText)),
     onSuccess: (cancelled) => {
       setConfirmCancel(false);
@@ -119,10 +123,16 @@ export function OrderActions({
       void qc.invalidateQueries({ queryKey: ['my-refunds'] });
       invalidateBalances(qc);
     },
-    onError: () => {
+    onError: (e, { toBank }) => {
       setConfirmCancel(false);
+      setCancelError(actionErrorText(e));
       // BE từ chối vì đơn vừa bàn giao vận chuyển (và đã đồng bộ trạng thái mới): tải lại để ẩn nút hủy.
-      void qc.invalidateQueries({ queryKey: ['order', o.code] });
+      const orderRefreshed = qc.invalidateQueries({ queryKey: ['order', o.code] });
+      // Hoàn về ngân hàng có ô nhập tài khoản: 400 ở đó thường là máy chủ chê số tài khoản, không phải đơn đã đổi.
+      if (!serverRejectedState(e, { userInput: toBank })) return undefined;
+      // Đơn đã sang trạng thái khác (đã giao, máy khác vừa huỷ): danh sách đơn và khoản hoàn cũng đã cũ. Trả Promise để nút Huỷ đơn
+      // giữ khoá tới khi dữ liệu mới về (tối đa 4 giây), kẻo sáng lại trên trạng thái cũ.
+      return settleWithin(Promise.all([orderRefreshed, qc.invalidateQueries({ queryKey: ['orders'] }), qc.invalidateQueries({ queryKey: ['my-refunds'] })]));
     },
     onSettled: () => {
       cancelingRef.current = false;
@@ -149,7 +159,7 @@ export function OrderActions({
   const primary = plan.primary && hide(plan.primary) ? (more.shift() ?? null) : plan.primary;
   const shownPlan: OrderActionPlan = { ...plan, primary, more };
   // Lời từ chối hủy của BE và kết quả hủy phải còn trên màn dù đơn tải lại không còn việc gì để bấm.
-  if (!primary && !showsReturns && !cancel.isError && !cancel.isSuccess && !returnError) return null;
+  if (!primary && !showsReturns && !cancelError && !cancel.isSuccess && !returnError) return null;
   const returnMore = orderReturns.some((r) => r.status === 'APPROVED');
   const onAction = (kind: OrderActionKind) => {
     setReturnError(null);
@@ -164,6 +174,7 @@ export function OrderActions({
     } else if (kind === 'cancel') {
       if (cancel.isPending) return;
       cancel.reset();
+      setCancelError(null);
       setConfirmCancel(true);
     } else if (kind === 'contact') setContactOpen(true);
     else if (kind === 'reorder') setReorderTarget(orderReorderTarget({ code: o.code, items: o.items as OrderItemView[] }));
@@ -222,7 +233,7 @@ export function OrderActions({
         setCancelTouched(true);
         if (!cancelReason || cancelBankError) return;
         cancelingRef.current = true;
-        cancel.mutate({ choose: refundMode === 'choose', reason: cancelReason });
+        cancel.mutate({ choose: refundMode === 'choose', reason: cancelReason, toBank: refundMode === 'choose' && cancelMethod === 'BANK' });
       }}
       aria-busy={cancel.isPending || undefined}
       aria-disabled={cancel.isPending || undefined}
@@ -238,9 +249,9 @@ export function OrderActions({
           Đã huỷ đơn hàng. Hàng, điểm và tiền đã dùng cho đơn này được hoàn lại theo quy định.
         </p>
       )}
-      {cancel.isError && (
+      {cancelError && (
         <p ref={cancelNoticeRef} tabIndex={-1} role="alert" className={`mb-3 outline-none ${ui.error}`}>
-          {actionErrorText(cancel.error)}
+          {cancelError}
         </p>
       )}
 
@@ -348,6 +359,8 @@ function ReturnStatus({
     r,
     items.filter((it): it is typeof it & { id: string } => !!it.id),
   );
+  // Lời máy chủ từ chối việc chọn nơi nhận giữ ở dòng yêu cầu chứ không ở khoản hoàn: tải lại xong khoản đó có thể rời danh sách (404), dòng bị gỡ thì lời mất theo.
+  const [refundRejected, setRefundRejected] = useState<string | null>(null);
   return (
     <div role="status" className="mt-3 text-sm">
       <p className={`flex items-start gap-2 ${view.tone}`}>
@@ -361,8 +374,13 @@ function ReturnStatus({
       {refund && !placedForCustomer && (
         <div className="ml-6">
           {refundStatusText(refund).detail && <p className="text-xs text-stone-600">{refundStatusText(refund).detail}</p>}
-          <RefundDestinationControl refund={refund} />
+          <RefundDestinationControl refund={refund} onRejected={setRefundRejected} />
         </div>
+      )}
+      {refundRejected && (
+        <p role="alert" className={`ml-6 mt-2 ${ui.error}`}>
+          {refundRejected}
+        </p>
       )}
     </div>
   );

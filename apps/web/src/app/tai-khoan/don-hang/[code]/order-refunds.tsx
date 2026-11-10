@@ -3,10 +3,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { CheckCircle2, Clock, TriangleAlert } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { errorStatus } from '@tubutree/app-core/api/error-status';
 import { chooseRefundDestination, fetchMyRefunds, formatVnd } from '@/lib/shop-client';
 import { ui } from '@/lib/guest-ui';
 import { invalidateBalances } from '@/lib/balances';
+import { serverRejectedState } from '@/lib/server-rejected-state';
 import { settleWithin } from '@/lib/settle-within';
 import {
   EMPTY_BANK,
@@ -25,12 +25,6 @@ const TONE = {
   warning: { Icon: TriangleAlert, text: 'text-warning-fg' },
   muted: { Icon: Clock, text: 'text-stone-700' },
 } as const;
-
-/**
- * Máy chủ từ chối vì khoản hoàn không còn như thẻ đang hiện: 400 (đã xử lý), 404 (không còn), 409 (máy khác vừa chọn, Tubu vừa bắt đầu chuyển).
- * Bấm lại trên thẻ cũ nhận đúng lỗi đó mãi nên phải tải lại. Mất mạng, quá hạn, 401, 403 và 5xx không nói gì về trạng thái thật: không tính.
- */
-const isStaleRefundError = (e: unknown): boolean => [400, 404, 409].includes(errorStatus(e) ?? 0);
 
 /** Khoản hoàn tiền của đơn (chuyển khoản chờ xử lý, tiền về muộn): trạng thái từng bước và chọn nơi nhận (D2). */
 export function OrderRefunds({ orderId, returnRequestIds }: { orderId: string; returnRequestIds?: ReadonlySet<string> }) {
@@ -160,7 +154,7 @@ function ChooseDestination({
   const [touched, setTouched] = useState(false);
   // State riêng cho lời lỗi: `save.isError` chỉ lật sau khi Promise của onError xong, tức sau lúc tải lại, mà lời lỗi phải hiện ngay.
   const [error, setError] = useState<string | null>(null);
-  // Lời từ chối (400/404/409) của lần gửi gần nhất, báo lên khối cha khi form bị gỡ (nằm trong form thì mất cùng form). Lỗi tạm không phải lời từ chối
+  // Lời từ chối (400/404/409/422) của lần gửi gần nhất, báo lên khối cha khi form bị gỡ (nằm trong form thì mất cùng form). Lỗi tạm không phải lời từ chối
   // nên không bao giờ được báo lên; khách chủ động "Để sau" hay gửi lại thì lời cũ không còn nghĩa.
   const rejectionRef = useRef<string | null>(null);
   const onRejectedRef = useRef(onRejected);
@@ -189,10 +183,11 @@ function ChooseDestination({
       );
     },
     // Khoản hoàn đã khác thẻ: tải lại để thẻ và nút theo số thật, khoá giữ tới lúc đó (có hạn). Ví cũng tải lại vì bên thắng có thể vừa cộng tiền vào Ví.
-    onError: (e) => {
+    // Hoàn về tài khoản ngân hàng có ô nhập: 400 ở đó là máy chủ chê số tài khoản, không phải khoản hoàn đã đổi.
+    onError: (e, choice) => {
       const text = actionErrorText(e);
       setError(text);
-      const stale = isStaleRefundError(e);
+      const stale = serverRejectedState(e, { userInput: choice === 'BANK' });
       rejectionRef.current = stale ? text : null;
       if (!stale) return undefined;
       return settleWithin(Promise.all([qc.invalidateQueries({ queryKey: ['my-refunds', refund.orderId] }), invalidateBalances(qc)]));

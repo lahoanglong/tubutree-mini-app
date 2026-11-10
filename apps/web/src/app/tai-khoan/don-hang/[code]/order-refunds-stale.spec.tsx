@@ -3,9 +3,9 @@ import { act } from 'react';
 import { QueryClient } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import { ApiError, NetworkError } from '@/lib/client-api';
-import { click, flush, render, type Rendered } from '@/test-utils/dom';
+import { click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 
-// Mini App order-refunds.spec.tsx (W104A): "Chọn nơi nhận tiền" bị máy chủ từ chối vì khoản hoàn đã sang bước khác (400/404/409) thì tải
+// Mini App order-refunds.spec.tsx (W104A): "Chọn nơi nhận tiền" bị máy chủ từ chối vì khoản hoàn đã sang bước khác (400/404/409/422) thì tải
 // lại khoản hoàn và số dư, khoá giữ tới lúc dữ liệu về (hạn 4 giây), form đóng khi khoản không còn chọn được nữa; lỗi tạm (401, 403, 5xx, mất mạng)
 // để nguyên. Khác Mini App: lời lỗi nằm trong khối (không có snackbar) nên phải hiện ngay và còn lại sau khi form đóng.
 
@@ -41,6 +41,7 @@ const STALE = [
   [400, 'Khoản hoàn này đã được xử lý.'],
   [404, 'Không tìm thấy khoản hoàn.'],
   [409, 'Khoản hoàn vừa được chọn ở máy khác.'],
+  [422, 'Khoản hoàn này không còn chọn được nơi nhận.'],
 ] as const;
 const TRANSIENT: Array<[string, () => Error]> = [
   ['401', () => new ApiError('Phiên đăng nhập hết hạn', 401, 'SESSION_EXPIRED')],
@@ -100,7 +101,7 @@ const twice = (el: HTMLElement) =>
     click(el);
   });
 
-describe('ChooseDestination (web): máy chủ từ chối vì khoản hoàn đã đổi (400/404/409)', () => {
+describe('ChooseDestination (web): máy chủ từ chối vì khoản hoàn đã đổi (400/404/409/422)', () => {
   it.each(STALE)('%i: lời lỗi hiện ngay, khoản hoàn và số dư được tải lại, nút giữ khoá tới lúc dữ liệu về', async (status, message) => {
     const r = await mount();
     const confirm = await openForm(r);
@@ -242,6 +243,49 @@ describe('ChooseDestination (web): máy chủ từ chối vì khoản hoàn đã
     await flush(3);
     expect(form(r)).toBeNull();
     expect(alertText(r)).toBeNull();
+  });
+});
+
+describe('ChooseDestination (web): hoàn về tài khoản ngân hàng có ô nhập, 400 là máy chủ chê tài khoản', () => {
+  const openBankForm = async (r: Rendered) => {
+    const confirm = await openForm(r);
+    click(r.container.querySelector<HTMLInputElement>('input[type="radio"][value="BANK"]'));
+    await flush(2);
+    const set = (label: string, value: string) =>
+      typeInto([...r.container.querySelectorAll<HTMLInputElement>('input')].find((i) => i.labels?.[0]?.textContent === label) ?? null, value);
+    set('Tên ngân hàng', 'Techcombank');
+    set('Số tài khoản', '190312345678');
+    set('Chủ tài khoản', 'NGUYEN VAN A');
+    await flush(1);
+    return confirm;
+  };
+
+  it('400: lời máy chủ hiện trong form, KHÔNG tải lại khoản hoàn/số dư, khoá nhả ngay và lời không được báo như lời từ chối', async () => {
+    const r = await mount();
+    const confirm = await openBankForm(r);
+    m.chooseRefundDestination.mockRejectedValueOnce(new ApiError('Số tài khoản nhận tiền hoàn không hợp lệ.', 400)).mockResolvedValue(LATE);
+    m.fetchMyRefunds.mockReturnValue(new Promise(() => undefined));
+    await act(async () => click(confirm));
+    await flush(3);
+    expect(alertText(r)).toBe('Số tài khoản nhận tiền hoàn không hợp lệ.');
+    expect(m.fetchMyRefunds).toHaveBeenCalledTimes(1);
+    expect(keys()).not.toContain('["my-refunds","o1"]');
+    expect(keys()).not.toContain('["wallet"]');
+    expect(confirm.hasAttribute('aria-busy')).toBe(false);
+    click(button(r, 'Để sau')!);
+    await flush(2);
+    expect(alertText(r)).toBeNull();
+  });
+
+  it.each([404, 409, 422])('%i: khoản hoàn đã đổi nên vẫn tải lại và giữ khoá', async (status) => {
+    const r = await mount();
+    const confirm = await openBankForm(r);
+    m.chooseRefundDestination.mockRejectedValue(new ApiError('Khoản hoàn đã được xử lý.', status));
+    m.fetchMyRefunds.mockReturnValue(new Promise(() => undefined));
+    await act(async () => click(confirm));
+    await flush(3);
+    expect(keys()).toContain('["my-refunds","o1"]');
+    expect(confirm.getAttribute('aria-busy')).toBe('true');
   });
 });
 

@@ -162,7 +162,7 @@ function OffersContent() {
           )}
           {couponsQ.isLoading ? (
             <Skeleton height={88} radius="var(--radius-card)" />
-          ) : couponsQ.isError ? (
+          ) : couponsQ.isError && !couponsQ.data ? (
             <ErrorState variant="inline" title={COUPONS_LOAD_ERROR_TITLE} message={errText(couponsQ.error)} onRetry={() => couponsQ.refetch()} />
           ) : mine.total > 0 ? (
             <div data-testid="offers-mine-grid" className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
