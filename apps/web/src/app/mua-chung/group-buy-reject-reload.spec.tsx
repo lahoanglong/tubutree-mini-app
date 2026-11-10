@@ -97,7 +97,11 @@ beforeEach(() => {
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
   mounted = [];
-  syncServerClock(new Date().toISOString());
+  // Độ lệch = Date.parse(iso) − Date.now(): đọc hai lần đồng hồ có thể lệch 1 ms (qua mốc mili giây) và làm ca "đúng mốc hết hạn" đỏ ngẫu nhiên, nên đóng băng một lần đọc.
+  const t = Date.now();
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(t);
+  syncServerClock(new Date(t).toISOString());
+  clock.mockRestore();
 });
 
 describe('/mua-chung — máy chủ từ chối tham gia 400/404/409: tải lại nhóm rồi mới nhả khoá', () => {

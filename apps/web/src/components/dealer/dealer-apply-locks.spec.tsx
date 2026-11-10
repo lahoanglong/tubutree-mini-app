@@ -164,6 +164,21 @@ describe('Gửi hồ sơ đại lý — khoá tới khi trạng thái hồ sơ l
     expect(field(c, 'Số điện thoại *').value).toBe('0901234567');
   });
 
+  it('làm mới hỏng rồi gửi lại bị lỗi 500: dòng "Đã gửi hồ sơ" của lần trước được xoá, chỉ còn alert lỗi', async () => {
+    h.me = script(NOT_DEALER, () => Promise.reject(new Error('mất mạng')));
+    h.post.mockResolvedValueOnce({ ok: true }).mockRejectedValueOnce(new ApiError('Máy chủ bận', 500));
+    const c = await mount();
+    await fill(c);
+    click(submitBtn(c));
+    await flush(8);
+    expect(statusText(c)).toContain('Đã gửi hồ sơ đăng ký đại lý!');
+    click(submitBtn(c));
+    await flush(8);
+    expect(posts()).toBe(2);
+    expect(statusText(c)).not.toContain('Đã gửi hồ sơ đăng ký đại lý!');
+    expect(c.querySelector('[role="alert"]')).not.toBeNull();
+  });
+
   describe('làm mới không bao giờ về: nhả khoá sau 4 giây', () => {
     beforeEach(() => {
       // shouldAdvanceTime để `flush` (setTimeout 0) và bộ đếm giờ của react-query vẫn chạy; chỉ cần giả setTimeout để tua tới hạn.

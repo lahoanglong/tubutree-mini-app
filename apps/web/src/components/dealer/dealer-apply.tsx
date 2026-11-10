@@ -60,7 +60,11 @@ export function DealerApply({ rejected, rejectionReason }: { rejected: boolean; 
   // hồ sơ mới về (tối đa `settleWithin`): nhả sớm thì form còn hiện với nút sáng lại, bấm lần nữa gửi hồ sơ thứ hai.
   const mut = useLockedMutation({
     mutationFn: (sent: DealerApplyInput) => applyDealer(coreHttp, sent),
-    onMutate: () => setInfo(null),
+    // `done` của lần gửi trước còn nguyên khi làm mới trạng thái hỏng (form còn hiện, nút sáng lại): xoá cùng `info` để lần gửi lại lỗi không hiện cả dòng "Đã gửi" lẫn lời báo lỗi.
+    onMutate: () => {
+      setInfo(null);
+      setDone(false);
+    },
     onSuccess: () => {
       setDone(true);
       return settleWithin(qc.invalidateQueries({ queryKey: dealerMeQuery(coreHttp).queryKey }));
