@@ -13,7 +13,8 @@ import {
   invalidateAfterWasteWrite,
   previewWaste,
 } from '../services/waste-api';
-import { getErrorMessage, getLoadErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage, isStaleStateError } from '../services/api';
+import { settleWithin } from '../utils/settle-within';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { SessionUnavailable } from '../components/ui/auth-gate';
@@ -95,7 +96,19 @@ export default function RecycleEditPage() {
       await invalidateAfterWasteWrite(qc);
       navigate(`/recycle/r/${id}`, { replace: true });
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    // Yêu cầu đã đổi trạng thái (không còn sửa được) hoặc luật đổi rác đã đổi: trả Promise để khoá giữ tới khi yêu cầu, hồ sơ và ước tính
+    // tải lại xong (tối đa `settleWithin`); dữ liệu mới làm màn tự về chi tiết yêu cầu. Lỗi tạm thì nhả khoá ngay.
+    onError: (e) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      if (!isStaleStateError(e)) return undefined;
+      return settleWithin(
+        Promise.all([
+          qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.request(id) }),
+          qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.me }),
+          qc.invalidateQueries({ queryKey: [...WASTE_QUERY_KEYS.all, 'preview', 'edit', id] }),
+        ]),
+      );
+    },
   });
 
   const shell = (content: ReactNode, subtitle?: string, bar?: ReactNode) => (

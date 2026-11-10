@@ -5,11 +5,13 @@ import { getAddresses } from '../services/shop-api';
 import { getWallet } from '../services/account-api';
 import {
   createSubscription,
+  isStaleSubscriptionError,
   MAX_START_DAYS_AHEAD,
   type SubscriptionPaymentMethod,
 } from '../services/subscriptions-api';
 import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { haptic } from '../utils/haptic';
+import { settleWithin } from '../utils/settle-within';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { vi } from '../i18n/vi';
 import { useLockedMutation } from './game/use-locked-mutation';
@@ -61,9 +63,11 @@ export function SubscribeSheet({
   const addresses = addrQ.data ?? [];
   const defaultAddr = addresses.find((a) => a.isDefault) ?? addresses[0];
 
+  // Địa chỉ đang chọn không còn trong danh sách vừa tải lại (xoá ở máy khác, bị từ chối 400/404): về địa chỉ mặc định để nút Tạo không gửi lại id đã mất.
   useEffect(() => {
-    if (!addressId && defaultAddr) setAddressId(defaultAddr.id);
-  }, [addressId, defaultAddr]);
+    const gone = addrQ.isSuccess && addressId !== undefined && !(addrQ.data ?? []).some((a) => a.id === addressId);
+    if (!addressId || gone) setAddressId(defaultAddr?.id);
+  }, [addressId, defaultAddr, addrQ.isSuccess, addrQ.data]);
 
   const range = startDateRange();
   const dateOk = startMode === 'now' || isStartDateAllowed(startDate);
@@ -95,7 +99,15 @@ export function SubscribeSheet({
           : t.createdScheduled(formatVnDate(input.startDate));
       openSnackbar({ text, type: 'success' });
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      // Máy khác vừa tạo gói trùng (409) hoặc địa chỉ không còn (400/404): danh sách gói và địa chỉ của sheet đang cũ, bấm lại chỉ nhận lại đúng lỗi đó.
+      // Trả Promise từ onError (không phải onSettled, vốn chạy sau và là nơi nhả khoá) để nút tạo giữ khoá tới khi dữ liệu mới về.
+      if (!isStaleSubscriptionError(e)) return undefined;
+      return settleWithin(
+        Promise.all([qc.invalidateQueries({ queryKey: ['subscriptions'] }), qc.invalidateQueries({ queryKey: ['addresses'] })]),
+      );
+    },
   });
 
   const noAddress = addrQ.isSuccess && addresses.length === 0;

@@ -4,6 +4,8 @@ import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vite
 import { useState, type ComponentType } from 'react';
 import type { BottomSheetProps } from './ui/bottom-sheet';
 import { getLoadErrorMessage } from '../services/api';
+import { HttpError } from '../services/http';
+import { LOCK_REFRESH_WAIT_MS } from '../utils/settle-within';
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(), openSnackbar: vi.fn(), getAddresses: vi.fn(), getWallet: vi.fn(), createSubscription: vi.fn(),
@@ -492,5 +494,166 @@ describe('SubscribeSheet: nút tạo khoá đồng bộ chạm đúp (W78A)', ()
     fireEvent.click(createBtn()!);
     await waitFor(() => expect(mocks.createSubscription).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+  });
+});
+
+describe('SubscribeSheet: tạo bị từ chối vì dữ liệu cũ thì tải lại gói và địa chỉ, giữ khoá tới khi về (W110A)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.createSubscription.mockReset();
+    sheetSpy.calls.length = 0;
+    mocks.getAddresses.mockResolvedValue([ADDR('a1', false, '1 Lê Lợi'), ADDR('a2', true, '9 Hai Bà Trưng')]);
+    mocks.getWallet.mockResolvedValue({ walletBalance: 300000 });
+  });
+  afterEach(() => vi.useRealTimers());
+
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message } } as never);
+  const errorToasts = () => mocks.openSnackbar.mock.calls.filter(([o]) => (o as { type: string }).type === 'error').map(([o]) => o);
+  const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 30)); });
+  const refreshesOf = (invalidated: unknown[][], root: string) => invalidated.filter((k) => k[0] === root);
+
+  /** Dựng sheet kèm QueryClient để soi và điều khiển lệnh tải lại; `refresh` trả Promise giữ lệnh theo khoá, undefined = về ngay. */
+  async function renderLive(refresh: (key: readonly unknown[]) => Promise<void> | undefined) {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const invalidated: unknown[][] = [];
+    vi.spyOn(qc, 'invalidateQueries').mockImplementation(((filters: { queryKey: readonly unknown[] }) => {
+      invalidated.push([...filters.queryKey]);
+      return refresh(filters.queryKey) ?? Promise.resolve();
+    }) as never);
+    const onClose = vi.fn();
+    render(
+      <QueryClientProvider client={qc}>
+        <SubscribeSheet visible onClose={onClose} variationId="v1" quantity={2} />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(screen.getByRole('radio', { name: /9 Hai Bà Trưng/ })).toHaveAttribute('aria-checked', 'true'));
+    await waitFor(() => expect(createBtn()).toBeEnabled());
+    return { invalidated, onClose };
+  }
+
+  it.each([
+    [409, 'Bạn đã có gói giao định kỳ "Nước xả vải" tới địa chỉ này, hãy sửa gói đó hoặc chọn địa chỉ khác.'],
+    [400, 'Địa chỉ không hợp lệ.'],
+    [404, 'Không tìm thấy địa chỉ.'],
+  ])('bị từ chối %i (%s): báo lỗi một lần, tải lại danh sách gói và địa chỉ, nút tạo bận và bấm lại không gọi API tới khi dữ liệu về, sau đó bấm lại gọi lần hai', async (status, message) => {
+    const subs = deferred<void>();
+    const addrs = deferred<void>();
+    mocks.createSubscription.mockRejectedValueOnce(serverError(message, status));
+    const { invalidated, onClose } = await renderLive((key) => (key[0] === 'subscriptions' ? subs.promise : key[0] === 'addresses' ? addrs.promise : undefined));
+    fireEvent.click(createBtn()!);
+    await waitFor(() => expect(errorToasts()).toEqual([{ text: message, type: 'error' }]));
+    await waitFor(() => expect(invalidated).toEqual(expect.arrayContaining([['subscriptions'], ['addresses']])));
+    expect(refreshesOf(invalidated, 'subscriptions')).toHaveLength(1);
+    expect(refreshesOf(invalidated, 'addresses')).toHaveLength(1);
+    expect(createBtn()).toHaveAttribute('aria-busy', 'true');
+    expect(lastSheet().dismissible).toBe(false);
+    fireEvent.click(createBtn()!);
+    await settle();
+    expect(mocks.createSubscription).toHaveBeenCalledTimes(1);
+    expect(errorToasts()).toHaveLength(1);
+
+    // Gói về trước mà địa chỉ chưa về: còn khoá, chỉ nhả khi CẢ HAI đã về.
+    await act(async () => subs.resolve());
+    await settle();
+    expect(createBtn()).toHaveAttribute('aria-busy', 'true');
+    fireEvent.click(createBtn()!);
+    await settle();
+    expect(mocks.createSubscription).toHaveBeenCalledTimes(1);
+
+    await act(async () => addrs.resolve());
+    await waitFor(() => expect(createBtn()).not.toHaveAttribute('aria-busy'));
+    expect(lastSheet().dismissible).toBe(true);
+    mocks.createSubscription.mockResolvedValueOnce({ ...SUB, firstOrder: null });
+    fireEvent.click(createBtn()!);
+    await waitFor(() => expect(mocks.createSubscription).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(errorToasts()).toHaveLength(1);
+  });
+
+  it('địa chỉ về trước mà danh sách gói chưa về: vẫn còn khoá tới khi gói về', async () => {
+    const subs = deferred<void>();
+    mocks.createSubscription.mockRejectedValueOnce(serverError('Bạn đã có gói giao định kỳ này.', 409));
+    const { invalidated } = await renderLive((key) => (key[0] === 'subscriptions' ? subs.promise : undefined));
+    fireEvent.click(createBtn()!);
+    await waitFor(() => expect(refreshesOf(invalidated, 'subscriptions')).toHaveLength(1));
+    await settle();
+    expect(createBtn()).toHaveAttribute('aria-busy', 'true');
+    fireEvent.click(createBtn()!);
+    await settle();
+    expect(mocks.createSubscription).toHaveBeenCalledTimes(1);
+    await act(async () => subs.resolve());
+    await waitFor(() => expect(createBtn()).not.toHaveAttribute('aria-busy'));
+  });
+
+  it.each([
+    ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+    ['máy chủ lỗi 503', serverError('Service Unavailable', 503)],
+    ['hết phiên 401', serverError('Unauthorized', 401)],
+  ])('%s: không phải lỗi dữ liệu cũ nên không tải lại gói/địa chỉ và nhả khoá ngay, bấm lại gọi lần hai', async (_name, err) => {
+    // Lệnh tải lại (nếu bị gọi nhầm) treo mãi: khoá sẽ không nhả trong hạn waitFor 1 giây, test rớt.
+    const { invalidated, onClose } = await renderLive(() => new Promise<void>(() => undefined));
+    mocks.createSubscription.mockRejectedValueOnce(err);
+    fireEvent.click(createBtn()!);
+    await waitFor(() => expect(errorToasts()).toHaveLength(1));
+    await waitFor(() => expect(createBtn()).not.toHaveAttribute('aria-busy'));
+    expect(invalidated).toEqual([]);
+    expect(onClose).not.toHaveBeenCalled();
+
+    mocks.createSubscription.mockResolvedValueOnce({ ...SUB, firstOrder: null });
+    fireEvent.click(createBtn()!);
+    await waitFor(() => expect(mocks.createSubscription).toHaveBeenCalledTimes(2));
+  });
+
+  it('dữ liệu tải lại treo mãi: nút tạo còn khoá ở LOCK_REFRESH_WAIT_MS - 1 ms và nhả đúng ở LOCK_REFRESH_WAIT_MS', async () => {
+    mocks.createSubscription.mockRejectedValueOnce(serverError('Bạn đã có gói giao định kỳ này.', 409));
+    const { invalidated } = await renderLive(() => new Promise<void>(() => undefined));
+    vi.useFakeTimers();
+    const flush = async (ms: number) => {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(ms);
+        for (let i = 0; i < 3; i++) await vi.advanceTimersByTimeAsync(0);
+      });
+    };
+    fireEvent.click(createBtn()!);
+    await flush(0);
+    expect(refreshesOf(invalidated, 'subscriptions')).toHaveLength(1);
+    expect(refreshesOf(invalidated, 'addresses')).toHaveLength(1);
+    expect(errorToasts()).toHaveLength(1);
+    expect(createBtn()).toHaveAttribute('aria-busy', 'true');
+
+    await flush(LOCK_REFRESH_WAIT_MS - 1);
+    expect(createBtn()).toHaveAttribute('aria-busy', 'true');
+    fireEvent.click(createBtn()!);
+    await flush(0);
+    expect(mocks.createSubscription).toHaveBeenCalledTimes(1);
+
+    // Đủ 4 giây: khoá nhả. Thêm 1 ms cho thông báo của react-query tới React (hẹn setTimeout(0), đồng hồ giả tính là 1 ms khi hẹn lúc đang tua).
+    await flush(1);
+    await flush(1);
+    expect(createBtn()).not.toHaveAttribute('aria-busy');
+    mocks.createSubscription.mockResolvedValueOnce({ ...SUB, firstOrder: null });
+    fireEvent.click(createBtn()!);
+    await flush(0);
+    expect(mocks.createSubscription).toHaveBeenCalledTimes(2);
+  });
+
+  it('địa chỉ đang chọn bị xoá ở máy khác (400): danh sách thật tải lại thì chọn về địa chỉ mặc định, bấm lại gửi id mới chứ không lặp lỗi cũ', async () => {
+    const stale = serverError('Địa chỉ không hợp lệ.', 400);
+    mocks.createSubscription.mockRejectedValueOnce(stale).mockResolvedValue({ ...SUB, firstOrder: null });
+    mocks.getAddresses
+      .mockResolvedValueOnce([ADDR('a1', false, '1 Lê Lợi'), ADDR('a2', true, '9 Hai Bà Trưng')])
+      .mockResolvedValue([ADDR('a2', true, '9 Hai Bà Trưng')]);
+    renderSheet();
+    await waitFor(() => expect(screen.getByRole('radio', { name: /1 Lê Lợi/ })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('radio', { name: /1 Lê Lợi/ }));
+    await waitFor(() => expect(screen.getByRole('radio', { name: /1 Lê Lợi/ })).toHaveAttribute('aria-checked', 'true'));
+    fireEvent.click(createBtn()!);
+    await waitFor(() => expect(errorToasts()).toEqual([{ text: 'Địa chỉ không hợp lệ.', type: 'error' }]));
+    await waitFor(() => expect(screen.queryByRole('radio', { name: /1 Lê Lợi/ })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('radio', { name: /9 Hai Bà Trưng/ })).toHaveAttribute('aria-checked', 'true'));
+    await waitFor(() => expect(createBtn()).not.toHaveAttribute('aria-busy'));
+    fireEvent.click(createBtn()!);
+    await waitFor(() => expect(mocks.createSubscription).toHaveBeenCalledTimes(2));
+    expect(mocks.createSubscription).toHaveBeenLastCalledWith(expect.objectContaining({ addressId: 'a2' }));
   });
 });

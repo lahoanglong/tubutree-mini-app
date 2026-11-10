@@ -31,7 +31,8 @@ vi.mock('zmp-ui', async (importOriginal) => ({
   useParams: () => mocks.params,
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
 }));
-vi.mock('../services/api', () => ({
+vi.mock('../services/api', async (orig) => ({
+  ...(await orig<object>()),
   getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi'),
   getLoadErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi'),
   isNotFoundError: (e: unknown) => (e as { status?: number } | null)?.status === 404,
@@ -55,6 +56,8 @@ vi.mock('../services/waste-api', async (orig) => ({
 vi.mock('../utils/waste-labels', async (o) => ({ ...(await o<object>()), PREVIEW_DEBOUNCE_MS: 0 }));
 
 import RecycleEditPage from './recycle-edit';
+import { HttpError } from '../services/http';
+import { LOCK_REFRESH_WAIT_MS } from '../utils/settle-within';
 
 function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
@@ -215,5 +218,107 @@ describe('/recycle/r/:id/edit: Lưu khoá chạm đúp (W73A)', () => {
     mocks.editWasteRequest.mockResolvedValueOnce(makeRequestDetail());
     fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
     await waitFor(() => expect(mocks.editWasteRequest).toHaveBeenCalledTimes(2));
+  });
+});
+
+describe('/recycle/r/:id/edit: Lưu bị máy chủ từ chối thì tải lại rồi mới nhả khoá (W110A)', () => {
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message } } as never);
+  const deferred = () => {
+    let resolve!: (v?: unknown) => void;
+    const promise = new Promise((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  // TanStack báo cache qua setTimeout(0) nên phải đợi một nhịp sau khi lời hứa tải lại xong.
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+  const saveButton = () => screen.getByRole('button', { name: 'Lưu thay đổi' });
+  const errorToasts = (text: string) => mocks.openSnackbar.mock.calls.filter((c) => c[0].text === text && c[0].type === 'error');
+
+  /** Dựng trang kèm QueryClient để soi lệnh tải lại; `refresh` trả lời hứa cho từng khoá (không trả thì xong ngay). */
+  function renderLive(refresh?: (key: readonly unknown[]) => Promise<unknown> | undefined) {
+    const view = renderPage();
+    const invalidated: unknown[][] = [];
+    view.invalidate.mockImplementation(((filters: { queryKey: readonly unknown[] }) => {
+      invalidated.push([...filters.queryKey]);
+      return refresh?.(filters.queryKey) ?? Promise.resolve();
+    }) as never);
+    return { ...view, invalidated };
+  }
+
+  it.each([
+    ['409 không còn sửa được', 'Yêu cầu này không còn sửa được', 409],
+    ['400 luật đã đổi', 'Món này hiện chưa nhận, hãy bỏ khỏi danh sách', 400],
+    ['404 yêu cầu không còn', 'Không tìm thấy yêu cầu', 404],
+  ] as const)('bị từ chối %s: báo lỗi đúng một lần, tải lại yêu cầu, hồ sơ, ước tính; khoá giữ tới khi yêu cầu về', async (_label, message, status) => {
+    mocks.editWasteRequest.mockRejectedValueOnce(serverError(message, status)).mockResolvedValue(makeRequestDetail());
+    const refresh = deferred();
+    const { invalidated } = renderLive((key) => (key[1] === 'request' ? (refresh.promise as Promise<unknown>) : undefined));
+    fireEvent.click(await screen.findByRole('button', { name: 'Lưu thay đổi' }));
+    await waitFor(() => expect(errorToasts(message)).toHaveLength(1));
+    await waitFor(() => expect(invalidated).toEqual(expect.arrayContaining([['waste', 'request', 'req-1'], ['waste', 'me'], ['waste', 'preview', 'edit', 'req-1']])));
+    // Đã có lời báo lỗi mà yêu cầu chưa về: nút vẫn bận, chạm thêm không gửi lại trên dữ liệu cũ.
+    expect(saveButton()).toHaveAttribute('aria-busy', 'true');
+    fireEvent.click(saveButton());
+    await settle();
+    expect(mocks.editWasteRequest).toHaveBeenCalledTimes(1);
+    expect(errorToasts(message)).toHaveLength(1);
+    await act(async () => refresh.resolve());
+    await settle();
+    await waitFor(() => expect(saveButton()).not.toHaveAttribute('aria-busy'));
+    fireEvent.click(saveButton());
+    await waitFor(() => expect(mocks.editWasteRequest).toHaveBeenCalledTimes(2));
+  });
+
+  it.each([
+    ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+    ['máy chủ lỗi 503', serverError('Service Unavailable', 503)],
+    ['hết phiên 401', serverError('Unauthorized', 401)],
+  ])('%s: không phải dữ liệu cũ nên không tải lại, khoá nhả ngay', async (_label, error) => {
+    mocks.editWasteRequest.mockRejectedValueOnce(error).mockResolvedValue(makeRequestDetail());
+    // Mọi lệnh tải lại treo mãi: nếu khoá còn đợi chúng thì nút không bao giờ sáng lại.
+    const { invalidated } = renderLive(() => new Promise<unknown>(() => undefined));
+    fireEvent.click(await screen.findByRole('button', { name: 'Lưu thay đổi' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: error.message, type: 'error' })));
+    await waitFor(() => expect(saveButton()).not.toHaveAttribute('aria-busy'));
+    expect(invalidated).toEqual([]);
+    fireEvent.click(saveButton());
+    await waitFor(() => expect(mocks.editWasteRequest).toHaveBeenCalledTimes(2));
+  });
+
+  it('tải lại treo mãi: khoá nhả đúng sau LOCK_REFRESH_WAIT_MS, không giữ nút mãi', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      mocks.editWasteRequest.mockRejectedValueOnce(serverError('Yêu cầu này không còn sửa được', 409)).mockResolvedValue(makeRequestDetail());
+      renderLive(() => new Promise<unknown>(() => undefined));
+      fireEvent.click(await screen.findByRole('button', { name: 'Lưu thay đổi' }));
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Yêu cầu này không còn sửa được', type: 'error' })));
+      expect(saveButton()).toHaveAttribute('aria-busy', 'true');
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 500);
+      });
+      expect(saveButton()).toHaveAttribute('aria-busy', 'true');
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(600);
+      });
+      await waitFor(() => expect(saveButton()).not.toHaveAttribute('aria-busy'));
+      fireEvent.click(saveButton());
+      await waitFor(() => expect(mocks.editWasteRequest).toHaveBeenCalledTimes(2));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('bị từ chối vì yêu cầu không còn sửa được: lời báo hiện trước, rồi yêu cầu tải lại thật không còn editable thì màn tự về chi tiết yêu cầu (hành vi sẵn có)', async () => {
+    mocks.editWasteRequest.mockRejectedValueOnce(serverError('Yêu cầu này không còn sửa được', 409));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Lưu thay đổi' }));
+    mocks.getWasteRequest.mockResolvedValue(makeRequestDetail({ editable: false, cancellable: false, status: 'CANCELLED' }));
+    await waitFor(() => expect(errorToasts('Yêu cầu này không còn sửa được')).toHaveLength(1));
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/recycle/r/req-1', { replace: true }));
+    expect(errorToasts('Yêu cầu này không còn sửa được')).toHaveLength(1);
   });
 });

@@ -4,7 +4,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLockedMutation } from './game/use-locked-mutation';
 import { cashWordingMessage, findCashWording, type WasteDeskPointDTO } from '@tubutree/shared-types';
 import { WASTE_QUERY_KEYS, getDeskPointReport, submitDeskPerk } from '../services/waste-api';
-import { getErrorMessage } from '../services/api';
+import { getErrorMessage, isStaleStateError } from '../services/api';
+import { settleWithin } from '../utils/settle-within';
 import { BottomSheet } from './ui/bottom-sheet';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
@@ -34,7 +35,12 @@ export function WasteDeskPerk({ point }: { point: WasteDeskPointDTO }) {
       setOpen(false);
       void qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.desk });
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    // Trả Promise: sheet giữ bận tới khi thẻ điểm tải lại xong (tối đa LOCK_REFRESH_WAIT_MS), kẻo bấm gửi lại trên ưu đãi cũ. Lỗi tạm thì nhả ngay.
+    onError: (e: unknown) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      if (!isStaleStateError(e)) return undefined;
+      return settleWithin(qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.desk }));
+    },
   });
   const busy = submit.isPending;
 

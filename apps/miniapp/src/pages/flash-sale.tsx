@@ -10,7 +10,7 @@ import { fillCopy } from '@tubutree/app-core/shop-copy';
 import type { FlashSlotItem as FlashSlotItemData } from '@tubutree/app-core/api/flash-sale';
 import { coreHttp } from '../services/core-http';
 import { cartKey } from '../services/cart-key';
-import { getErrorMessage, getLoadErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage, isStaleStateError } from '../services/api';
 import { addToCart, cancelFlashReminder, fetchUpcomingFlashSales, setFlashReminder, type UpcomingFlashItem } from '../services/shop-api';
 import { useAuthStore } from '../store/auth';
 import { useLoginWithNotice } from '../components/ui/auth-gate';
@@ -19,6 +19,7 @@ import { useNotify } from '../hooks/use-notify';
 import { rememberCheckoutSelection } from '../utils/checkout-selection';
 import { haptic } from '../utils/haptic';
 import { serverNow } from '../utils/server-clock';
+import { settleWithin } from '../utils/settle-within';
 import { Chip } from '../components/ui/chip';
 import { Countdown } from '../components/ui/countdown';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
@@ -125,7 +126,14 @@ export default function FlashSalePage() {
       rememberCheckoutSelection(itemIds);
       navigate('/checkout', { state: { itemIds } });
     },
-    onError: (e: unknown) => notify({ text: getErrorMessage(e), type: 'error' }),
+    // Máy chủ từ chối vì suất đã đổi (hết suất, hết giờ, vượt giới hạn mỗi khách): tải lại khung giờ và món, giữ khoá tới khi dữ liệu mới về
+    // (tối đa LOCK_REFRESH_WAIT_MS) để nút không sáng lại trên số suất cũ. Lỗi tạm (mất mạng, 5xx) thì nhả khoá ngay.
+    // Khoá `['flash-sales', 'slots']` là tiền tố của khoá món từng khung nên một lệnh tải lại cả khung giờ lẫn món đang xem.
+    onError: (e: unknown) => {
+      notify({ text: getErrorMessage(e), type: 'error' });
+      if (!isStaleStateError(e)) return undefined;
+      return settleWithin(qc.invalidateQueries({ queryKey: ['flash-sales', 'slots'] }));
+    },
   });
 
   const remindMut = useLockedMutation({
@@ -138,11 +146,20 @@ export default function FlashSalePage() {
     },
     onSuccess: (_d, { reminded, startAt }) =>
       notify({ text: reminded ? fillCopy('flash.unremindToast') : fillCopy('flash.remindedToast', { time: slotClock(startAt) }), type: 'success' }),
+    // Hoàn tác lạc quan trước, rồi mới tải lại. Máy chủ từ chối vì trạng thái đã đổi (vd "Ưu đãi đã bắt đầu."): tải lại danh sách nhắc và khung giờ
+    // (kèm món của khung) rồi giữ khoá của món tới khi xong, tối đa LOCK_REFRESH_WAIT_MS. Lỗi tạm thì nhả khoá ngay.
     onError: (e, _v, ctx) => {
       if (ctx?.prev) qc.setQueryData(UPCOMING_KEY, ctx.prev);
       notify({ text: getErrorMessage(e), type: 'error' });
+      if (!isStaleStateError(e)) return undefined;
+      return settleWithin(
+        Promise.all([qc.invalidateQueries({ queryKey: UPCOMING_KEY }), qc.invalidateQueries({ queryKey: ['flash-sales', 'slots'] })]),
+      );
     },
-    onSettled: () => void qc.invalidateQueries({ queryKey: UPCOMING_KEY }),
+    // Đường từ chối "dữ liệu cũ" đã tải lại danh sách nhắc ở `onError` (và chờ nó): không tải lần hai.
+    onSettled: (_d, e) => {
+      if (!isStaleStateError(e)) void qc.invalidateQueries({ queryKey: UPCOMING_KEY });
+    },
   }, ({ itemId }) => itemId);
 
   const reminded = useMemo(() => new Set((upcomingQ.data ?? []).filter((u) => u.reminded).map((u) => u.itemId)), [upcomingQ.data]);

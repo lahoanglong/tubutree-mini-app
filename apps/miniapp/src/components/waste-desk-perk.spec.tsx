@@ -55,6 +55,7 @@ vi.mock('zmp-ui', async (importOriginal) => {
 vi.mock('../services/api', () => ({
   getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi'),
   getLoadErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi'),
+  isStaleStateError: (e: unknown) => [400, 404, 409].includes((e as { response?: { status?: number } } | null)?.response?.status ?? 0),
 }));
 vi.mock('../services/waste-api', async (orig) => ({
   ...(await orig<object>()),
@@ -62,6 +63,8 @@ vi.mock('../services/waste-api', async (orig) => ({
   getDeskPointReport: mocks.getDeskPointReport,
 }));
 
+import { HttpError } from '../services/http';
+import { LOCK_REFRESH_WAIT_MS } from '../utils/settle-within';
 import { WasteDeskPerk, WasteDeskReport, vnMonthKey } from './waste-desk-perk';
 import { makeDeskPoint, WAREHOUSE_DESK } from '../services/waste-test-fixtures';
 
@@ -459,5 +462,90 @@ describe('WasteDeskReport (Mini): vùng, số đều, lỗi và nút Thử lại
     await act(async () => slow.resolve({ ...REPORT, confirmations: 15 }));
     expect(await screen.findByText('15 lượt xác nhận')).toBeInTheDocument();
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+});
+
+describe('WasteDeskPerk (Mini): máy chủ từ chối thì giữ khoá tới khi thẻ điểm tải lại (W110A)', () => {
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message } } as never);
+  // TanStack báo cache qua setTimeout(0): đợi một nhịp để `isPending` kịp về false sau khi lệnh xong.
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+  const errorSnackbars = () => mocks.openSnackbar.mock.calls.filter(([arg]) => arg.type === 'error');
+  /** Dựng thẻ và thay `invalidateQueries` để soi khoá tải lại và giữ lời hứa tải lại trong tay. */
+  const renderLive = (refresh: () => Promise<void>) => {
+    const view = renderWith(<WasteDeskPerk point={makeDeskPoint()} />);
+    const invalidate = vi.spyOn(view.qc, 'invalidateQueries').mockImplementation((() => refresh()) as never);
+    return { ...view, invalidate };
+  };
+
+  it.each([
+    [400, 'Nội dung ưu đãi không hợp lệ'],
+    [404, 'Không tìm thấy điểm nhận'],
+    [409, 'Bạn thử lại nhé'],
+  ])('bị từ chối %i "%s": báo lỗi một lần, tải lại thẻ điểm, khoá giữ tới khi dữ liệu về rồi mới nhả', async (status, message) => {
+    mocks.submitDeskPerk.mockRejectedValueOnce(serverError(message, status)).mockResolvedValue(makeDeskPoint());
+    const refresh = deferred<void>();
+    const { invalidate } = renderLive(() => refresh.promise);
+    fireEvent.change(await openSheet(), { target: { value: 'Tặng túi vải' } });
+    fireEvent.click(sendBtn());
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: message, type: 'error' }));
+    expect(invalidate).toHaveBeenCalledTimes(1);
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['waste', 'desk'] });
+    expect(errorSnackbars()).toHaveLength(1);
+    // Đã có lời báo lỗi mà thẻ chưa về: nút Gửi duyệt vẫn bận, sheet không đóng được, chạm thêm không gửi lần hai.
+    expect(sendBtn()).toHaveAttribute('aria-busy', 'true');
+    expect(ctl.sheet!.dismissible).toBe(false);
+    await act(async () => {
+      fireEvent.click(sendBtn());
+      ctl.buttons.get('Gửi duyệt')!.onPress?.();
+    });
+    expect(mocks.submitDeskPerk).toHaveBeenCalledTimes(1);
+    await act(async () => refresh.resolve());
+    await settle();
+    await waitFor(() => expect(sendBtn()).not.toHaveAttribute('aria-busy'));
+    expect(await screen.findByRole('alert')).toHaveTextContent(message);
+    fireEvent.click(sendBtn());
+    await waitFor(() => expect(mocks.submitDeskPerk).toHaveBeenCalledTimes(2));
+  });
+
+  it.each([
+    ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+    ['máy chủ lỗi 503', serverError('Service Unavailable', 503)],
+    ['hết phiên 401', serverError('Unauthorized', 401)],
+  ])('%s: không tải lại, khoá nhả ngay', async (_label, error) => {
+    mocks.submitDeskPerk.mockRejectedValueOnce(error).mockResolvedValue(makeDeskPoint());
+    const { invalidate } = renderLive(() => Promise.resolve());
+    fireEvent.change(await openSheet(), { target: { value: 'Tặng túi vải' } });
+    fireEvent.click(sendBtn());
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+    await waitFor(() => expect(sendBtn()).not.toHaveAttribute('aria-busy'));
+    expect(invalidate).not.toHaveBeenCalled();
+    fireEvent.click(sendBtn());
+    await waitFor(() => expect(mocks.submitDeskPerk).toHaveBeenCalledTimes(2));
+  });
+
+  it('tải lại treo mãi: khoá nhả đúng sau LOCK_REFRESH_WAIT_MS', async () => {
+    mocks.submitDeskPerk.mockRejectedValueOnce(serverError('Bạn thử lại nhé', 409)).mockResolvedValue(makeDeskPoint());
+    renderLive(() => new Promise<void>(() => undefined));
+    fireEvent.change(await openSheet(), { target: { value: 'Tặng túi vải' } });
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      fireEvent.click(sendBtn());
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 500);
+      });
+      expect(sendBtn()).toHaveAttribute('aria-busy', 'true');
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(600);
+      });
+      await waitFor(() => expect(sendBtn()).not.toHaveAttribute('aria-busy'));
+    } finally {
+      vi.useRealTimers();
+    }
+    fireEvent.click(sendBtn());
+    await waitFor(() => expect(mocks.submitDeskPerk).toHaveBeenCalledTimes(2));
   });
 });

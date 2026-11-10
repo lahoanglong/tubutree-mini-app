@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Input, useSnackbar } from 'zmp-ui';
-import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, Play, Star, Video } from 'lucide-react';
 import { reviewMediaItems } from '@tubutree/app-core/commerce/review-media';
 import { ReviewMediaLightbox } from './review-media-lightbox';
@@ -13,7 +13,9 @@ import {
   type MyReviewRef,
   type ReviewableOrder,
 } from '../services/shop-api';
-import { apiMediaUrl, getErrorMessage, getLoadErrorMessage } from '../services/api';
+import { apiMediaUrl, getErrorMessage, getLoadErrorMessage, isStaleStateError } from '../services/api';
+import { settleWithin } from '../utils/settle-within';
+import { useLockedMutation } from './game/use-locked-mutation';
 import { useAuthStore } from '../store/auth';
 import { useLoginWithNotice } from './ui/auth-gate';
 import { formatRating } from '@tubutree/app-core/commerce/card-meta';
@@ -552,12 +554,11 @@ function WriteReview({
   const starRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const commentBox = useRef<HTMLDivElement>(null);
   const submitAlert = useRef<HTMLDivElement>(null);
-  // Khoá đồng bộ chống chạm đúp: isPending chỉ đổi sau lần vẽ kế tiếp nên hai chạm cùng nhịp vẫn gửi hai lần.
-  const sending = useRef(false);
   const ratingErrorId = useId();
   const commentErrorId = useId();
 
-  const submit = useMutation({
+  // Khoá chống chạm đúp nằm ở useLockedMutation: isPending chỉ đổi sau lần vẽ kế tiếp nên hai chạm cùng nhịp vẫn gửi hai lần.
+  const submit = useLockedMutation({
     mutationFn: () =>
       createReview(slug, {
         rating,
@@ -590,11 +591,21 @@ function WriteReview({
       void qc.invalidateQueries({ queryKey: ['loyalty'] });
       onDone();
     },
-    onError: (e) => setIssue({ field: 'submit', message: getErrorMessage(e) }),
-    onSettled: () => {
-      sending.current = false;
-      onSubmittingChange(false);
+    // Máy chủ từ chối vì việc không còn đúng (đơn đã trả, chưa giao, ghi đồng thời, đánh giá không còn): trả Promise để khoá và
+    // nút Gửi giữ tới khi can-review và danh sách đánh giá tải lại xong (tối đa settleWithin), kẻo bấm lại trên dữ liệu cũ nhận đúng lỗi đó.
+    // Nháp (sao, chữ, ảnh, video) nằm ở ReviewsSection nên không mất khi dữ liệu về. Lỗi tạm (mất mạng, 401, 5xx) thì nhả ngay.
+    onError: (e) => {
+      setIssue({ field: 'submit', message: getErrorMessage(e) });
+      if (!isStaleStateError(e)) return undefined;
+      return settleWithin(
+        Promise.all([
+          qc.invalidateQueries({ queryKey: ['can-review', slug] }),
+          qc.invalidateQueries({ queryKey: ['reviews', slug] }),
+          qc.invalidateQueries({ queryKey: ['my-review'] }),
+        ]),
+      );
     },
+    onSettled: () => onSubmittingChange(false),
   });
 
   useEffect(() => {
@@ -608,7 +619,7 @@ function WriteReview({
   };
 
   const send = () => {
-    if (sending.current || submit.isPending || mediaBusy) return;
+    if (submit.isPending || mediaBusy) return;
     const found = reviewFormIssue({ rating, comment });
     if (found) {
       setIssue(found);
@@ -617,7 +628,6 @@ function WriteReview({
       return;
     }
     setIssue(null);
-    sending.current = true;
     onSubmittingChange(true);
     submit.mutate();
   };
