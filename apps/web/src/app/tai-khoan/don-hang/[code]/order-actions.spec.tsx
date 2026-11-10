@@ -25,10 +25,12 @@ const mocks = vi.hoisted(() => ({
   refundBank: null as Record<string, string> | null,
   chooseDestination: vi.fn(),
   invalidateBalances: vi.fn(),
+  /** Có thì thay bản nén tức thời (giữ ảnh ở trạng thái đang xử lý tới khi test nhả). */
+  compress: null as null | ((f: File) => Promise<string>),
 }));
 vi.mock('@/lib/image-compress', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/image-compress')>()),
-  readAndCompressImage: async (f: File) => `data:image/jpeg;base64,${f.name}`,
+  readAndCompressImage: async (f: File) => (mocks.compress ? mocks.compress(f) : `data:image/jpeg;base64,${f.name}`),
 }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { post: mocks.corePost } }));
 vi.mock('@/lib/cart-key', () => ({ cartStorefrontSlug: () => null, useCartKey: () => ['cart', null] }));
@@ -139,6 +141,7 @@ beforeEach(() => {
   mocks.refundBank = null;
   mocks.chooseDestination.mockReset();
   mocks.invalidateBalances.mockReset();
+  mocks.compress = null;
 });
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
@@ -864,6 +867,46 @@ describe('chi tiết đơn — yêu cầu đổi/trả (BUYERWEB-13)', () => {
       expect(r.container.textContent).toContain('Mọi sản phẩm của đơn đã được trả.');
       const submit = btn(r.container, 'Gửi yêu cầu') as HTMLButtonElement;
       expect(submit.disabled).toBe(true);
+    });
+
+    it('đang xử lý ảnh minh chứng: nút Gửi khoá và đổi nhãn, bấm hay gửi form không tạo yêu cầu thiếu ảnh; xong thì gửi kèm ảnh vừa xử lý', async () => {
+      let finish!: (v: string) => void;
+      mocks.compress = () => new Promise<string>((resolve) => (finish = resolve));
+      const { container, submit } = await openForm();
+      const input = container.querySelector<HTMLInputElement>('form input[type="file"]')!;
+      Object.defineProperty(input, 'files', { value: [new File(['x'], 'vo.jpg', { type: 'image/jpeg' })], configurable: true });
+      act(() => {
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      await flush(2);
+      expect(submit.disabled).toBe(true);
+      expect(submit.textContent).toBe('Đang tải ảnh…');
+      click(submit);
+      act(() => {
+        container.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      });
+      await flush(4);
+      expect(mocks.requestReturn).not.toHaveBeenCalled();
+
+      await act(async () => finish('data:image/jpeg;base64,xong'));
+      await flush(2);
+      expect(submit.disabled).toBe(false);
+      expect(submit.textContent).toBe('Gửi yêu cầu');
+      click(submit);
+      await flush(8);
+      expect(mocks.requestReturn).toHaveBeenCalledTimes(1);
+      expect(mocks.requestReturn.mock.calls[0]![1].images).toEqual(['data:image/jpeg;base64,xong']);
+    });
+
+    it('đang gửi: ô thêm ảnh và nút xoá ảnh khoá, nút Gửi không đổi nhãn sang "Đang tải ảnh…"', async () => {
+      mocks.requestReturn.mockImplementation(() => new Promise(() => {}));
+      const { container, submit } = await openForm();
+      const add = () => btn(container, 'Thêm ảnh') as HTMLButtonElement;
+      expect(add().disabled).toBe(false);
+      click(submit);
+      await flush();
+      expect(add().disabled).toBe(true);
+      expect(submit.textContent).toBe('Đang gửi…');
     });
 
     it('thiếu lý do mà bấm đúp: không gửi và không kẹt khoá, chọn lý do rồi gửi được', async () => {

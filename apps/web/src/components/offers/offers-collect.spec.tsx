@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act } from 'react';
+import { QueryClient } from '@tanstack/react-query';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
 
 // Bản web của components/offers/offers-collect.spec.tsx (Mini App): 3 mã đầu, "Tất cả n mã", lỗi tại chỗ, giữ chỗ theo gợi ý.
@@ -133,6 +135,38 @@ describe('OffersCollect (web) — khối Nhận mã ở trang Ưu đãi', () => 
     await flush(6);
     expect(buttons(c, 'Lưu mã')).toHaveLength(1);
     expect(mocks.get).toHaveBeenCalledTimes(2);
+  });
+
+  it('"Thử lại" trả Promise tải lại: hai cú bấm cùng khung hình chỉ tải lại một lần, nút báo bận tới khi xong, xong thì vẽ được mã', async () => {
+    // Truy vấn phải ĐÃ có dữ liệu (rỗng) rồi mới lỗi: chưa có dữ liệu thì lần tải thứ hai tự gộp vào lần đang chạy và đếm API không chứng minh được khoá.
+    collectable = [];
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    mounted = render(<OffersCollect walletCodes={new Set()} walletLoading={false} />, qc);
+    await flush(6);
+    collectable = new ApiError('x', 500);
+    await act(async () => {
+      await qc.refetchQueries();
+    });
+    await flush(2);
+    const c = mounted.container;
+    expect(c.textContent).toContain('Chưa tải được mã giảm giá');
+    const retry = buttons(c, 'Thử lại')[0]!;
+    const before = mocks.get.mock.calls.length;
+
+    let finish!: (v: unknown) => void;
+    collectable = new Promise((resolve) => { finish = resolve; });
+    await act(async () => {
+      click(retry);
+      click(retry);
+    });
+    expect(mocks.get.mock.calls.length - before).toBe(1);
+    expect(retry.getAttribute('aria-busy')).toBe('true');
+    expect(retry.disabled).toBe(false);
+
+    await act(async () => finish([coupon('A')]));
+    await flush(4);
+    expect(buttons(c, 'Lưu mã')).toHaveLength(1);
+    expect(mocks.get.mock.calls.length - before).toBe(1);
   });
 
   it('đang nhận một mã: nút của mã đó báo bận (aria-busy)', async () => {

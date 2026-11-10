@@ -22,6 +22,7 @@ import { useAuth } from '@/lib/auth-context';
 import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
 import { ui } from '@/lib/guest-ui';
+import { usePressLock } from '@/lib/use-press-lock';
 import { newIdempotencyKey } from '@/lib/idempotency-key';
 import { bankPaymentHref } from '@/lib/order-view';
 import { isWebRouteReady } from '@/lib/route-map';
@@ -504,6 +505,16 @@ function StepButton({ label, onClick, children }: { label: string; onClick: () =
   );
 }
 
+/** "Thử lại" dạng chữ: nhận lời hứa tải lại để chạm đúp cùng khung hình chỉ tải lại một lần. Không `disabled` vì nút đang giữ focus. */
+function RetryText({ onRetry }: { onRetry: () => PromiseLike<unknown> }) {
+  const { press, busy } = usePressLock(onRetry);
+  return (
+    <button type="button" onClick={press} aria-busy={busy || undefined} aria-disabled={busy || undefined} className={ui.btnText}>
+      Thử lại
+    </button>
+  );
+}
+
 /** Tìm sản phẩm → chọn phân loại → thêm dòng. */
 function ProductVariationPicker({ onAdd }: { onAdd: (v: VariationDetail, productName: string) => void }) {
   const [q, setQ] = useState('');
@@ -537,9 +548,7 @@ function ProductVariationPicker({ onAdd }: { onAdd: (v: VariationDetail, product
         ) : detailQ.isError ? (
           <div role="alert" className="text-xs text-danger-fg">
             Không tải được dữ liệu.{' '}
-            <button type="button" onClick={() => void detailQ.refetch()} className={ui.btnText}>
-              Thử lại
-            </button>
+            <RetryText onRetry={() => detailQ.refetch()} />
           </div>
         ) : (
           <ul>
@@ -578,9 +587,7 @@ function ProductVariationPicker({ onAdd }: { onAdd: (v: VariationDetail, product
           {suggestQ.isError ? (
             <div role="alert" className="text-xs text-danger-fg">
               Không tải được dữ liệu.{' '}
-              <button type="button" onClick={() => void suggestQ.refetch()} className={ui.btnText}>
-                Thử lại
-              </button>
+              <RetryText onRetry={() => suggestQ.refetch()} />
             </div>
           ) : (
             <>

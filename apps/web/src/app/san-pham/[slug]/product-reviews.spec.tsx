@@ -30,10 +30,37 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
 vi.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams(mocks.search) }));
 vi.mock('@/components/evidence-upload', () => ({
-  EvidenceUpload: ({ value, onChange, label }: { value: string[]; onChange: (v: string[]) => void; label: string }) => (
-    <button type="button" className="min-h-11" onClick={() => onChange([...value, 'data:image/jpeg;base64,AAAA'])}>
-      {label} ({value.length})
-    </button>
+  EvidenceUpload: ({
+    value,
+    onChange,
+    onBusyChange,
+    disabled,
+    label,
+  }: {
+    value: string[];
+    onChange: (v: string[]) => void;
+    onBusyChange?: (busy: boolean) => void;
+    disabled?: boolean;
+    label: string;
+  }) => (
+    <>
+      <button type="button" className="min-h-11" aria-disabled={disabled || undefined} onClick={() => !disabled && onChange([...value, 'data:image/jpeg;base64,AAAA'])}>
+        {label} ({value.length})
+      </button>
+      <button type="button" className="min-h-11" onClick={() => onBusyChange?.(true)}>
+        Bắt đầu tải ảnh thử
+      </button>
+      <button
+        type="button"
+        className="min-h-11"
+        onClick={() => {
+          onChange([...value, 'data:image/jpeg;base64,XONG']);
+          onBusyChange?.(false);
+        }}
+      >
+        Tải xong ảnh thử
+      </button>
+    </>
   ),
 }));
 vi.mock('@/lib/reviews-client', async (importOriginal) => ({
@@ -1266,5 +1293,100 @@ describe('ProductReviews (web): "Thử lại" trả refetch nên nút báo bận
     await act(async () => release());
     await flush(8);
     expect(c.querySelector('textarea')!.value).toBe('Dùng ổn');
+  });
+});
+
+describe('ProductReviews (web): tải ảnh và gửi đánh giá không chồng nhau (W85A, Mini ↔ web)', () => {
+  beforeEach(() => {
+    mocks.elig = structuredClone(ELIG_NEW);
+  });
+  const openForm = async () => {
+    const c = await mount();
+    click(button(c, 'Viết đánh giá'));
+    await flush(6);
+    return c;
+  };
+  const submitOf = (c: HTMLElement) => form(c)!.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+
+  it('đang xử lý ảnh: nút Gửi khoá và đổi nhãn; bấm, gửi form hay Ctrl+Enter đều không lưu; xong thì gửi kèm ảnh vừa xử lý', async () => {
+    const c = await openForm();
+    click(button(c, 'Bắt đầu tải ảnh thử'));
+    const submit = submitOf(c);
+    expect(submit.disabled).toBe(true);
+    expect(submit.textContent).toBe('Đang tải ảnh…');
+    click(submit);
+    act(() => {
+      form(c)!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+    act(() => {
+      c.querySelector('textarea')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true, cancelable: true }));
+    });
+    await flush();
+    expect(mocks.saved).toEqual([]);
+
+    click(button(c, 'Tải xong ảnh thử'));
+    expect(submit.disabled).toBe(false);
+    expect(submit.textContent).toBe('Gửi đánh giá');
+    click(submit);
+    await flush();
+    expect(mocks.saved).toHaveLength(1);
+    expect(mocks.saved[0]!.body).toMatchObject({ images: ['data:image/jpeg;base64,XONG'], orderId: 'o1' });
+  });
+
+  it('đang xử lý ảnh: nút Huỷ khoá (form không đóng), xong thì Huỷ đóng được', async () => {
+    const c = await openForm();
+    const cancel = button(c, 'Huỷ') as HTMLButtonElement;
+    expect(cancel.disabled).toBe(false);
+    click(button(c, 'Bắt đầu tải ảnh thử'));
+    expect(cancel.disabled).toBe(true);
+    click(cancel);
+    expect(form(c)).not.toBeNull();
+
+    click(button(c, 'Tải xong ảnh thử'));
+    expect(cancel.disabled).toBe(false);
+    click(cancel);
+    expect(form(c)).toBeNull();
+  });
+
+  it('đang tải cả ảnh lẫn video: nhãn nói video; video xong mà ảnh còn xử lý thì vẫn khoá; xong cả hai mới gửi được', async () => {
+    configureVideo();
+    let finishUpload!: (res: unknown) => void;
+    vi.stubGlobal('fetch', vi.fn().mockReturnValue(new Promise((resolve) => (finishUpload = resolve))));
+    const c = await openForm();
+    click(button(c, 'Bắt đầu tải ảnh thử'));
+    pickVideo(c);
+    await flush(4);
+    const submit = submitOf(c);
+    expect(submit.textContent).toBe('Đang tải video…');
+    expect(submit.disabled).toBe(true);
+
+    finishUpload({ ok: true, json: async () => ({ secure_url: 'https://res.cloudinary.com/demo/v.mp4', duration: 30 }) });
+    await flush(6);
+    expect(submit.textContent).toBe('Đang tải ảnh…');
+    expect(submit.disabled).toBe(true);
+
+    click(button(c, 'Tải xong ảnh thử'));
+    expect(submit.textContent).toBe('Gửi đánh giá');
+    expect(submit.disabled).toBe(false);
+  });
+
+  it('đang gửi: ô thêm ảnh báo khoá và không thêm được ảnh; Huỷ khoá; nút Gửi không đổi nhãn sang "Đang tải ảnh…"', async () => {
+    let release!: (v: unknown) => void;
+    mocks.saveResult = new Promise((resolve) => (release = resolve));
+    const c = await openForm();
+    const add = button(c, 'Ảnh đánh giá (0)') as HTMLButtonElement;
+    click(add);
+    expect(button(c, 'Ảnh đánh giá (1)')).not.toBeNull();
+    const submit = submitOf(c);
+    click(submit);
+    await flush(2);
+    expect(mocks.saved).toHaveLength(1);
+    expect(add.getAttribute('aria-disabled')).toBe('true');
+    expect((button(c, 'Huỷ') as HTMLButtonElement).disabled).toBe(true);
+    expect(submit.textContent).toBe('Đang gửi…');
+    click(add);
+    expect(button(c, 'Ảnh đánh giá (1)')).not.toBeNull();
+    await act(async () => release({ id: 'new', updated: false, pointsEarned: 0 }));
+    await flush(4);
   });
 });

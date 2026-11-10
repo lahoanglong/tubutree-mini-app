@@ -15,6 +15,7 @@ export function EvidenceUpload({
   onChange,
   max = 3,
   disabled = false,
+  onBusyChange,
   label = 'Ảnh minh chứng',
   hint = 'khuyến khích',
   maxDataUrlLength,
@@ -23,6 +24,8 @@ export function EvidenceUpload({
   onChange: (images: string[]) => void;
   max?: number;
   disabled?: boolean;
+  /** Báo form cha khi đang xử lý ảnh: gửi lúc đó sẽ lưu bản ghi thiếu ảnh. */
+  onBusyChange?: (busy: boolean) => void;
   /** Tên loại ảnh (đầu khối, nhãn ô chọn, alt). */
   label?: string;
   hint?: string;
@@ -33,13 +36,17 @@ export function EvidenceUpload({
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const changeBusy = (next: boolean) => {
+    setBusy(next);
+    onBusyChange?.(next);
+  };
 
   const onFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (busy || disabled) return;
     const files = Array.from(e.target.files ?? []);
     if (files.length === 0) return;
     setNotice(null);
-    setBusy(true);
+    changeBusy(true);
     const added: string[] = [];
     const problems: string[] = [];
     let notImage = 0;
@@ -73,7 +80,7 @@ export function EvidenceUpload({
       if (failed > 0) problems.push('Không xử lý được ảnh, hãy chọn ảnh khác.');
       setNotice(problems.length > 0 ? problems.join(' ') : null);
     } finally {
-      setBusy(false);
+      changeBusy(false);
       if (inputRef.current) inputRef.current.value = '';
     }
   };

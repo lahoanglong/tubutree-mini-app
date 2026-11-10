@@ -25,6 +25,7 @@ import type { ReorderSummary } from '@/components/reorder/reorder-summary';
 import { reorderText } from '@/lib/home-text';
 import { itemReorderTarget, type ReorderTarget } from '@/components/reorder/reorder-types';
 import { useAuthPhase } from '@/lib/auth-phase';
+import { usePressLock } from '@/lib/use-press-lock';
 import { coreHttp } from '@/lib/core-http';
 import { formatDateTime } from '@/lib/format-date';
 import { ui } from '@/lib/guest-ui';
@@ -69,6 +70,8 @@ export default function NotificationsPage() {
     getNextPageParam: (lastPage) => nextNotificationCursor(lastPage),
     enabled: phase === 'authenticated',
   });
+  // `isFetchingNextPage` chỉ đúng sau lần vẽ kế: hai cú bấm cùng khung hình vẫn gọi hai lần (lần sau huỷ lần trước rồi nạp lại). Khoá nhả khi trang mới về.
+  const loadMore = usePressLock(() => (notifQ.isFetchingNextPage ? undefined : notifQ.fetchNextPage()));
   const list = notifQ.data?.pages.flat();
   // Đếm chưa đọc của cả hộp thư (tin chưa đọc có thể nằm ngoài các trang đã nạp), cùng nguồn /me/summary với chuông, Cá nhân và thanh đáy.
   // staleTime 0: summary Trang chủ vừa tải (mặc định tươi 10 giây) có thể chưa có tin mới mà danh sách ở đây đã có.
@@ -240,7 +243,7 @@ export default function NotificationsPage() {
       )}
       {notifQ.hasNextPage && (
         <div className="mt-3 text-center">
-          <button type="button" aria-disabled={notifQ.isFetchingNextPage || undefined} onClick={() => !notifQ.isFetchingNextPage && void notifQ.fetchNextPage()} className={`${ui.btnSecondary} min-w-40`}>
+          <button type="button" aria-busy={loadMore.busy || notifQ.isFetchingNextPage || undefined} aria-disabled={loadMore.busy || notifQ.isFetchingNextPage || undefined} onClick={loadMore.press} className={`${ui.btnSecondary} min-w-40`}>
             {notifQ.isFetchingNextPage ? 'Đang tải…' : 'Xem thêm'}
           </button>
         </div>
