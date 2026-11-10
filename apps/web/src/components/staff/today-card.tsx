@@ -6,6 +6,7 @@ import { attendanceStatusQuery } from '@tubutree/app-core/queries/attendance';
 import { coreHttp } from '@/lib/core-http';
 import { isoToVnHHMM } from '@/lib/week';
 import { ui } from '@/lib/guest-ui';
+import { usePressLock } from '@/lib/use-press-lock';
 import { skin } from '@/components/pro-shared/mini-skin';
 import { Skeleton } from '@/components/ui/skeleton';
 import { MiniAppOnlyNotice } from '@/components/mini-app-only-notice';
@@ -19,6 +20,7 @@ export function TodayCard() {
   const statusQ = useQuery(attendanceStatusQuery(coreHttp));
   const open = statusQ.data?.openSession ?? null;
   const todayShifts = statusQ.data?.shifts ?? [];
+  const retry = usePressLock(() => statusQ.refetch());
 
   return (
     <section aria-label="Chấm công hôm nay" className={`p-4 ${skin.card}`}>
@@ -32,7 +34,7 @@ export function TodayCard() {
       {statusQ.isError && !statusQ.data && (
         <div role="alert" className="mt-2">
           <p className={ui.error}>Không tải được trạng thái chấm công. {errText(statusQ.error)}</p>
-          <button type="button" onClick={() => void statusQ.refetch()} className={ui.btnText}>
+          <button type="button" onClick={retry.press} aria-busy={retry.busy || undefined} aria-disabled={retry.busy || undefined} className={ui.btnText}>
             Tải lại trạng thái
           </button>
         </div>

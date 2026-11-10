@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, Landmark } from 'lucide-react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { updateBank, type PayrollDay, type PayrollStatus, type StaffProfile } from '@tubutree/app-core/api/payroll';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { updateBank, type BankInput, type PayrollDay, type PayrollStatus, type StaffProfile } from '@tubutree/app-core/api/payroll';
 import type { SessionHistory } from '@tubutree/app-core/api/attendance';
 import { myAttendanceHistoryQuery } from '@tubutree/app-core/queries/attendance';
 import { myPayrollQuery } from '@tubutree/app-core/queries/payroll';
@@ -30,6 +30,7 @@ import { Field } from '@/components/ui/field';
 import { Sheet } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EvidenceUpload } from '@/components/evidence-upload';
+import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { safeEvidenceImage } from '@/components/admin/evidence-images';
 import { errText, PeriodNav, useNotice } from './staff-shell';
 
@@ -103,12 +104,14 @@ export function PayrollHub() {
     setBankOpen(true);
   };
 
-  const bankM = useMutation({
-    mutationFn: () => updateBank(coreHttp, { bankBin: bin.trim(), bankAccountNo: accNo.trim(), bankAccountName: accName.trim(), qrImageUrl: qr || undefined }),
+  // Gửi bản chụp lúc bấm; khoá giữ tới khi bảng lương (kèm hồ sơ ngân hàng) tải lại xong, để nút mở lại không nạp tài khoản cũ.
+  const bankM = useLockedMutation({
+    mutationFn: (v: BankInput) => updateBank(coreHttp, v),
+    onMutate: clear,
     onSuccess: () => {
       notify({ text: 'Đã lưu thông tin nhận lương.', tone: 'success' });
       setBankOpen(false);
-      void qc.invalidateQueries({ queryKey: ['my-payroll'] });
+      return qc.invalidateQueries({ queryKey: ['my-payroll'] });
     },
     onError: (e) => notify({ text: errText(e), tone: 'error' }),
   });
@@ -128,7 +131,7 @@ export function PayrollHub() {
       />
 
       {payQ.isLoading && <Skeleton height={120} rounded="rounded-card" />}
-      {payQ.isError && <ErrorState message={errText(payQ.error)} onRetry={() => void payQ.refetch()} />}
+      {payQ.isError && <ErrorState message={errText(payQ.error)} onRetry={() => payQ.refetch()} />}
 
       <div className="grid gap-3 lg:grid-cols-[22rem_1fr] lg:items-start">
         <div className="flex flex-col gap-3">
@@ -220,9 +223,17 @@ export function PayrollHub() {
       <Sheet
         open={bankOpen}
         onClose={() => setBankOpen(false)}
+        dismissible={!bankM.isPending}
         title="Thông tin nhận lương"
         footer={
-          <button type="button" disabled={bankM.isPending} onClick={() => bankM.mutate()} className={`${ui.btnPrimary} w-full`}>
+          // Đang lưu giữ aria-busy/aria-disabled chứ không `disabled`: nút đang giữ focus mà bị vô hiệu thì Chromium thả focus về body.
+          <button
+            type="button"
+            aria-busy={bankM.isPending || undefined}
+            aria-disabled={bankM.isPending || undefined}
+            onClick={() => bankM.mutate({ bankBin: bin.trim(), bankAccountNo: accNo.trim(), bankAccountName: accName.trim(), qrImageUrl: qr || undefined })}
+            className={`${ui.btnPrimary} w-full`}
+          >
             {bankM.isPending ? 'Đang lưu…' : 'Lưu'}
           </button>
         }

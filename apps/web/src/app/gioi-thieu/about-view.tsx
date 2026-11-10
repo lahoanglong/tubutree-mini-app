@@ -15,6 +15,7 @@ import { fallbackFaq } from '@/lib/faq-fallback';
 import { ui } from '@/lib/guest-ui';
 import { formatPhoneDisplay } from '@/lib/phone-display';
 import { platformBridge } from '@/lib/platform-bridge';
+import { usePressLock } from '@/lib/use-press-lock';
 import { PAGE_WIDE } from '@/lib/page-frame';
 
 const ALL_CATS = 'Tất cả';
@@ -147,6 +148,16 @@ function FaqSection({ initialFaqs, initialConfig }: { initialFaqs?: FaqItem[]; i
   );
 }
 
+/** Cầu nối OA còn chạy thì cú chạm kế bị bỏ, khỏi mở hai khung chat. */
+function OaChatButton() {
+  const { press, busy } = usePressLock(() => platformBridge.oa.openChat());
+  return (
+    <button type="button" onClick={press} aria-busy={busy || undefined} aria-disabled={busy || undefined} className={ui.btnSecondary}>
+      Nhắn Zalo OA
+    </button>
+  );
+}
+
 function SupportSection({ initialSupport }: { initialSupport?: SupportContact }) {
   const supportQ = useQuery({ ...supportContactQuery(coreHttp), staleTime: STALE_MS, initialData: initialSupport });
   const configQ = useQuery({ ...publicConfigQuery(coreHttp), staleTime: STALE_MS });
@@ -171,11 +182,7 @@ function SupportSection({ initialSupport }: { initialSupport?: SupportContact })
       value: (
         <span className="flex flex-wrap items-center justify-end gap-2">
           <span className="text-sm text-stone-900">{support.zaloOaName}</span>
-          {oa && (
-            <button type="button" onClick={() => void platformBridge.oa.openChat()} className={ui.btnSecondary}>
-              Nhắn Zalo OA
-            </button>
-          )}
+          {oa && <OaChatButton />}
         </span>
       ),
     });

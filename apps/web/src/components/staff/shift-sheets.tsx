@@ -75,9 +75,11 @@ export function ShiftFormSheet({
     <Sheet
       open={open}
       onClose={onClose}
+      dismissible={!pending}
       title={`${editId ? 'Sửa ca' : 'Thêm ca'} · ${dowLabel(day)} ${shortDayLabel(day)}`}
       footer={
-        <button type="button" disabled={pending || invalid} onClick={onSubmit} className={`${ui.btnPrimary} w-full`}>
+        // Đang gửi giữ aria-busy/aria-disabled chứ không `disabled`: nút đang giữ focus mà bị vô hiệu thì Chromium thả focus về body. `disabled` chỉ cho lý do cứng (thiếu giờ).
+        <button type="button" disabled={invalid} aria-busy={pending || undefined} aria-disabled={pending || undefined} onClick={onSubmit} className={`${ui.btnPrimary} w-full`}>
           {pending ? 'Đang gửi…' : editId ? 'Lưu' : 'Gửi duyệt'}
         </button>
       }
@@ -144,11 +146,14 @@ export function QuickSheet({
     <Sheet
       open={open}
       onClose={onClose}
+      dismissible={!pending}
       title="Đăng ký nhanh cả tuần"
       footer={
         <button
           type="button"
-          disabled={pending || days.size === 0 || (!tplId && (!TIME_RE.test(start) || !TIME_RE.test(end)))}
+          disabled={days.size === 0 || (!tplId && (!TIME_RE.test(start) || !TIME_RE.test(end)))}
+          aria-busy={pending || undefined}
+          aria-disabled={pending || undefined}
           onClick={onSubmit}
           className={`${ui.btnPrimary} w-full`}
         >
@@ -201,9 +206,17 @@ export function CancelSheet({
     <Sheet
       open={open}
       onClose={onClose}
+      dismissible={!pending}
       title="Huỷ ca đã duyệt"
       footer={
-        <button type="button" disabled={pending || reason.trim().length === 0 || (emergency && !evidence)} onClick={onSubmit} className={`${ui.btnPrimary} w-full`}>
+        <button
+          type="button"
+          disabled={reason.trim().length === 0 || (emergency && !evidence)}
+          aria-busy={pending || undefined}
+          aria-disabled={pending || undefined}
+          onClick={onSubmit}
+          className={`${ui.btnPrimary} w-full`}
+        >
           {pending ? 'Đang huỷ…' : 'Xác nhận huỷ'}
         </button>
       }

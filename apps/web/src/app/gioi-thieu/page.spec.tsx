@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act } from 'react';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
+import { captureUnhandledRejections } from '@/test-utils/unhandled';
 import { headingProblems, smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
 
 // Chép ý about.spec.tsx (Mini App): hotline/email từ cấu hình, FAQ admin hoặc bản dự phòng, nhóm lọc, accordion, xoá tài khoản
@@ -269,7 +271,58 @@ describe('/gioi-thieu: liên hệ hỗ trợ', () => {
     expect(container.textContent).toContain('Zalo OA');
     expect(container.textContent).toContain('Tubu Tree OA');
     click(button(container, 'Nhắn Zalo OA'));
+    await flush();
     expect(mocks.openChat).toHaveBeenCalledTimes(1);
+  });
+
+  describe('Nhắn Zalo OA khoá chạm đúp (Mini brand-owner "Liên hệ Tubu" trả Promise của cầu nối OA)', () => {
+    const withOa = () => {
+      mocks.oaAvailable = true;
+      setup({ config: { support: { ...SUPPORT, zaloOaName: 'Tubu Tree OA' } } });
+    };
+    const sameTick = (el: HTMLElement) =>
+      act(() => {
+        el.click();
+        el.click();
+      });
+
+    it('hai cú chạm cùng tick chỉ mở một lần; nút aria-busy + aria-disabled (không disabled) tới khi cầu nối xong, rồi bấm lại được', async () => {
+      withOa();
+      let release!: () => void;
+      mocks.openChat.mockImplementationOnce(() => new Promise<void>((r) => (release = r)));
+      const { container } = await mount();
+      const oa = button(container, 'Nhắn Zalo OA');
+      sameTick(oa);
+      await flush();
+      expect(mocks.openChat).toHaveBeenCalledTimes(1);
+      expect(oa.getAttribute('aria-busy')).toBe('true');
+      expect(oa.getAttribute('aria-disabled')).toBe('true');
+      expect(oa.disabled).toBe(false);
+      click(oa);
+      expect(mocks.openChat).toHaveBeenCalledTimes(1);
+      release();
+      await flush();
+      expect(oa.hasAttribute('aria-busy')).toBe(false);
+      click(oa);
+      await flush();
+      expect(mocks.openChat).toHaveBeenCalledTimes(2);
+    });
+
+    it('cầu nối lỗi: nhả khoá để bấm lại được và lỗi vẫn lên unhandledrejection, không bị nuốt', async () => {
+      withOa();
+      mocks.openChat.mockRejectedValueOnce(new Error('OA hỏng'));
+      const { container } = await mount();
+      const oa = button(container, 'Nhắn Zalo OA');
+      const seen = await captureUnhandledRejections(async () => {
+        click(oa);
+        await flush();
+      });
+      expect(seen.map((e) => (e as Error).message)).toEqual(['OA hỏng']);
+      expect(oa.hasAttribute('aria-busy')).toBe(false);
+      click(oa);
+      await flush();
+      expect(mocks.openChat).toHaveBeenCalledTimes(2);
+    });
   });
 
   it('chat bật: dòng "Chat với Tubu Tree" đứng đầu khối Hỗ trợ và dẫn tới /ho-tro/chat; chat tắt thì không có', async () => {
