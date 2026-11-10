@@ -233,3 +233,109 @@ describe('/tai-khoan/thong-bao: số đều như Mini (W92B ↔ W68A)', () => {
     expect(listCalls().length).toBeGreaterThan(0);
   });
 });
+
+describe('/tai-khoan/thong-bao: lệnh đọc lỗi tải lại cả danh sách và số chưa đọc', () => {
+  // Lệnh hỏng (đã đọc ở máy khác, 400) làm số trên chuông và điều kiện hiện nút "Đọc tất cả" lệch ngay, nên số chưa đọc phải tải lại cùng danh sách.
+  // Việc này do TubuQueryClient (['notifications'] làm cũ /me/summary); spec khoá để đổi khoá tải lại không làm mất nó.
+  it('"Đọc tất cả" lỗi: tải lại danh sách và /me/summary', async () => {
+    mocks.post.mockRejectedValue(new ApiError('Chưa đánh dấu được, bạn thử lại nhé.', 400));
+    const { container } = await mount();
+    expect([listCalls().length, summaryCalls().length]).toEqual([1, 1]);
+    click(readAllBtn(container));
+    await flush(8);
+    expect([listCalls().length, summaryCalls().length]).toEqual([2, 2]);
+  });
+
+  it('đọc một tin lỗi: cũng tải lại danh sách và /me/summary', async () => {
+    mocks.post.mockRejectedValue(new ApiError('Lỗi đọc tin.', 400));
+    const { container } = await mount();
+    click(byText(container, 'button', 'Đơn TT001 đã được xác nhận'));
+    await flush(8);
+    expect([listCalls().length, summaryCalls().length]).toEqual([2, 2]);
+  });
+
+  it('lệnh đọc thành công: chỉ tải lại số chưa đọc, không tải lại danh sách (đã sửa thẳng cache)', async () => {
+    const { container } = await mount();
+    click(readAllBtn(container));
+    await flush(8);
+    expect([listCalls().length, summaryCalls().length]).toEqual([1, 2]);
+  });
+});
+
+describe('/tai-khoan/thong-bao: "Thử lại" thành công thì focus không rơi về body (W92B, sửa theo review)', () => {
+  const failFirst = () =>
+    mocks.post.mockRejectedValueOnce(new ApiError('Chưa đánh dấu được, bạn thử lại nhé.', 400)).mockResolvedValueOnce({ ok: true, count: 1 });
+
+  it('nút "Thử lại" đang giữ focus rồi biến mất: focus chuyển vào danh sách', async () => {
+    failFirst();
+    const { container } = await mount();
+    click(readAllBtn(container));
+    await flush(8);
+    const retry = retryBtn(container)!;
+    retry.focus();
+    click(retry);
+    await flush(8);
+    expect(retryBtn(container)).toBeNull();
+    expect(document.activeElement).toBe(container.querySelector('ul'));
+  });
+
+  it('khách đã chuyển focus sang chỗ khác thì không giật focus về danh sách', async () => {
+    failFirst();
+    const { container } = await mount();
+    click(readAllBtn(container));
+    await flush(8);
+    const other = byText(container, 'button', 'Đơn TT001 đã được xác nhận') as HTMLButtonElement;
+    click(retryBtn(container));
+    other.focus();
+    await flush(8);
+    expect(retryBtn(container)).toBeNull();
+    expect(document.activeElement).toBe(other);
+  });
+});
+
+describe('/tai-khoan/thong-bao: lỗi "Đọc tất cả" cũ không sống lại khi có tin mới (W92B, sửa theo review)', () => {
+  it('còn chưa đọc (2 xuống 1 sau khi đọc lẻ một tin): khối lỗi vẫn ở đó vì "Thử lại" còn nghĩa', async () => {
+    mocks.post.mockImplementation(async (path: string) => {
+      if (path === READ_ALL) throw new ApiError('Chưa đánh dấu được, bạn thử lại nhé.', 400);
+      return { ok: true, count: 1 };
+    });
+    const UNREAD2 = { ...UNREAD, id: 'n3', payload: { body: 'Đơn TT002 đã được xác nhận', data: { order_code: 'TT002' } } };
+    mocks.get.mockImplementation(async (path: string) => (path === '/me/summary' ? summaryOf(2) : [UNREAD, UNREAD2, READ]));
+    const { container } = await mount();
+    click(readAllBtn(container));
+    await flush(8);
+    expect(retryBtn(container)).not.toBeNull();
+    mocks.get.mockImplementation(async (path: string) => (path === '/me/summary' ? summaryOf(1) : [{ ...UNREAD, status: 'READ' }, UNREAD2, READ]));
+    click(byText(container, 'button', 'Đơn TT001 đã được xác nhận'));
+    await flush(8);
+    expect(retryBtn(container)).not.toBeNull();
+    expect(alerts(container).join(' ')).toContain('Chưa đánh dấu được');
+  });
+
+  it('chưa đọc về 0 (khối ẩn) rồi có tin mới: khối lỗi cũ không hiện lại', async () => {
+    mocks.post.mockImplementation(async (path: string) => {
+      if (path === READ_ALL) throw new ApiError('Chưa đánh dấu được, bạn thử lại nhé.', 400);
+      return { ok: true, count: 1 };
+    });
+    const client = new TubuQueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const r = render(<NotificationsPage />, client);
+    mounted.push(r);
+    await flush(6);
+    const { container } = r;
+    click(readAllBtn(container));
+    await flush(8);
+    expect(retryBtn(container)).not.toBeNull();
+    mocks.get.mockImplementation(async (path: string) => (path === '/me/summary' ? summaryOf(0) : [{ ...UNREAD, status: 'READ' }, READ]));
+    click(byText(container, 'button', 'Đơn TT001 đã được xác nhận'));
+    await flush(8);
+    expect(retryBtn(container)).toBeNull();
+    mocks.get.mockImplementation(async (path: string) => (path === '/me/summary' ? summaryOf(2) : [{ ...UNREAD, id: 'n3' }, UNREAD, READ]));
+    await act(async () => {
+      await client.invalidateQueries();
+    });
+    await flush(6);
+    expect(readAllBtn(container)).not.toBeNull();
+    expect(retryBtn(container)).toBeNull();
+    expect(alerts(container).join(' ')).not.toContain('Chưa đánh dấu');
+  });
+});

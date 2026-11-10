@@ -2,10 +2,9 @@
 import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
-import { captureUnhandledRejections } from '@/test-utils/unhandled';
 
 // Cài đặt web ↔ Mini (Wave 92B ↔ 78A): "Đăng xuất" khoá đồng bộ, chạm đúp cùng khung hình chỉ đăng xuất một lần (mỗi lần là một lệnh POST /auth/logout
-// và một lượt xoá cache), nút báo bận bằng aria để giữ focus.
+// và một lượt xoá cache), nút báo bận bằng aria để giữ focus. Ca POST hỏng/treo với `logout()` thật nằm ở settings-logout.spec.tsx.
 
 const mocks = vi.hoisted(() => ({
   auth: {
@@ -80,22 +79,6 @@ describe('/tai-khoan/cai-dat: "Đăng xuất" khoá đồng bộ (W92B ↔ W78A)
     expect(mocks.auth.logout).toHaveBeenCalledTimes(1);
     await act(async () => out.resolve());
     await flush(4);
-    expect(btn.hasAttribute('aria-busy')).toBe(false);
-    click(btn);
-    await flush(3);
-    expect(mocks.auth.logout).toHaveBeenCalledTimes(2);
-  });
-
-  it('đăng xuất ném lỗi: khoá vẫn nhả (bấm lại được) và lỗi không bị nuốt mà lên unhandledrejection như mọi nút trả Promise', async () => {
-    mocks.auth.logout.mockRejectedValueOnce(new Error('boom'));
-    const { container } = await mount();
-    const btn = logoutBtn(container);
-    const seen = await captureUnhandledRejections(async () => {
-      click(btn);
-      await flush(4);
-    });
-    expect(seen).toHaveLength(1);
-    expect((seen[0] as Error).message).toBe('boom');
     expect(btn.hasAttribute('aria-busy')).toBe(false);
     click(btn);
     await flush(3);

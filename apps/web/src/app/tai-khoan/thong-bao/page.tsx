@@ -93,6 +93,7 @@ export default function NotificationsPage() {
   };
   // Trả lời hứa tải lại: khoá của lệnh nhả SAU khi số chưa đọc mới về, nếu không nút "Đọc tất cả" còn hiện theo số cũ và bấm được lần hai.
   // Có hạn 4 giây: mạng chậm không được giữ nút lâu hơn lệnh vừa thành công.
+  // Lỗi thì tải lại danh sách; TubuQueryClient làm cũ /me/summary cùng lúc với ['notifications'] nên số chưa đọc cũng được tải lại.
   const settleRead = (failed: boolean) => settleWithin(qc.invalidateQueries({ queryKey: failed ? ['notifications'] : ME_SUMMARY_KEY }));
 
   // Khoá theo id tin: chạm đúp cùng một tin chưa đọc chỉ gửi một lệnh, hai tin khác nhau vẫn đọc song song.
@@ -111,9 +112,13 @@ export default function NotificationsPage() {
   // Lời lỗi nằm ở state riêng chứ không đọc `readAllMut.error`: `isError` chỉ bật sau khi `onSettled` (tải lại, tới 4 giây) xong, mà lời báo phải hiện ngay.
   // Giữ qua lúc "Thử lại" đang chạy để khối không biến mất rồi hiện lại; `count` làm key dòng chữ để lần lỗi lặp lại (cùng câu) vẫn được đọc lại.
   const [readAllError, setReadAllError] = useState<{ message: string; count: number } | null>(null);
+  const retryRef = useRef<HTMLButtonElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
   const readAllMut = useLockedMutation({
     mutationFn: () => markAllNotificationsRead(coreHttp),
     onSuccess: () => {
+      // "Thử lại" biến mất cùng khối lỗi: focus còn ở đó thì chuyển vào danh sách, không để rơi về <body>. Focus đã ở chỗ khác thì giữ nguyên.
+      if (retryRef.current && document.activeElement === retryRef.current) listRef.current?.focus();
       setReadAllError(null);
       markReadInCache(() => true);
       refetchIfListBusy();
@@ -122,6 +127,10 @@ export default function NotificationsPage() {
     onSettled: (_res, err) => settleRead(err !== null),
   });
   const unreadCount = summaryUnread ?? list?.filter((n) => n.status !== 'READ').length ?? 0;
+  // Hết tin chưa đọc thì lỗi cũ hết ý nghĩa: bỏ hẳn, nếu không khi có tin mới khối "Thử lại" của lần trước sống lại.
+  useEffect(() => {
+    if (unreadCount === 0) setReadAllError(null);
+  }, [unreadCount]);
 
   const onTap = (n: NotificationDTO) => {
     if (n.status !== 'READ') readMut.mutate(n.id);
@@ -180,6 +189,7 @@ export default function NotificationsPage() {
               {readAllError.message}
             </p>
             <button
+              ref={retryRef}
               type="button"
               aria-label={RETRY_READ_ALL_LABEL}
               aria-busy={readAllMut.isPending || undefined}
@@ -237,7 +247,7 @@ export default function NotificationsPage() {
           </p>
         )}
       </div>
-      <ul className="mt-4 grid gap-2 tabular-nums">
+      <ul ref={listRef} tabIndex={-1} className="mt-4 grid gap-2 tabular-nums outline-none">
         {list.map((n) => {
           const m = notificationMeta(n.templateCode);
           const unread = n.status !== 'READ';

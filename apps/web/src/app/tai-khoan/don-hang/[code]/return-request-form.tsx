@@ -30,10 +30,11 @@ const REASON_MAX = 500;
 const STEPPER_BTN =
   'inline-flex h-11 w-11 items-center justify-center rounded-control border border-stone-450 bg-stone-0 text-stone-800 transition hover:bg-stone-50 active:scale-95 disabled:text-stone-400 disabled:active:scale-100';
 
-function initialLines(order: OrderDetailDTO, returns: ReturnRequestDTO[]): ReturnLineState[] {
+/** Các dòng còn trả được (đã trừ phần các yêu cầu được duyệt trước), chưa chọn dòng nào. */
+function returnableLines(order: OrderDetailDTO, returns: ReturnRequestDTO[]): ReturnLineState[] {
   const items = order.items.filter((it): it is typeof it & { id: string } => !!it.id);
   const remaining = remainingByLine(items, returns);
-  const lines = items
+  return items
     .map((it) => ({
       orderItemId: it.id,
       productName: it.productName,
@@ -43,8 +44,6 @@ function initialLines(order: OrderDetailDTO, returns: ReturnRequestDTO[]): Retur
       quantity: 1,
     }))
     .filter((l) => l.remaining > 0);
-  if (lines.length === 1) lines[0]!.selected = true;
-  return lines;
 }
 
 /** Yêu cầu đổi/trả theo dòng và số lượng (D3), lý do chọn sẵn và nơi nhận tiền hoàn (D2). Nơi gọi đổi `key` mỗi lần mở. */
@@ -53,16 +52,33 @@ export function ReturnRequestForm({
   returns,
   onDone,
   onClose,
+  onError,
 }: {
   order: OrderDetailDTO;
   returns: ReturnRequestDTO[];
   onDone: () => void;
   onClose: () => void;
+  /** Báo lời lỗi lên nơi giữ form: sau lần tải lại đơn có thể không còn gì để dựng form, lời máy chủ phải còn trên màn. `null` = xoá. */
+  onError?: (message: string | null) => void;
 }) {
   const qc = useQueryClient();
   const reasonName = useId();
   const titleRef = useRef<HTMLHeadingElement>(null);
-  const [lines, setLines] = useState<ReturnLineState[]>(() => initialLines(o, returns));
+  // Khách chỉ ghi đè phần mình đã chạm (chọn dòng, số lượng); danh sách dòng và số "còn trả được" suy ra từ `returns` mỗi lần vẽ, nên
+  // khi danh sách yêu cầu tải lại (máy chủ vừa từ chối vì đã có yêu cầu được duyệt) form không còn nói số cũ.
+  // Dòng duy nhất lúc mở form thì chọn sẵn; về sau không tự chọn thêm dòng nào (dòng khác biến mất không được kéo theo việc trả dòng còn lại).
+  const [picks, setPicks] = useState<Record<string, { selected: boolean; quantity: number }>>(() => {
+    const only = returnableLines(o, returns);
+    return only.length === 1 ? { [only[0]!.orderItemId]: { selected: true, quantity: 1 } } : {};
+  });
+  const lines = useMemo<ReturnLineState[]>(
+    () =>
+      returnableLines(o, returns).map((l) => {
+        const p = picks[l.orderItemId];
+        return { ...l, selected: p?.selected ?? false, quantity: Math.min(p?.quantity ?? 1, l.remaining) };
+      }),
+    [o, returns, picks],
+  );
   const [reasonCode, setReasonCode] = useState<ReturnReasonCode | null>(null);
   const [reason, setReason] = useState('');
   const [method, setMethod] = useState<RefundMethodChoice>('WALLET');
@@ -108,7 +124,10 @@ export function ReturnRequestForm({
           .map((l) => ({ orderItemId: l.orderItemId, quantity: l.quantity })),
         ...(showsMoney && bankAllowed ? destinationBody(method, bank) : {}),
       }),
-    onMutate: () => setSubmitError(null),
+    onMutate: () => {
+      setSubmitError(null);
+      onError?.(null);
+    },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['my-returns'] });
       onDone();
@@ -116,7 +135,9 @@ export function ReturnRequestForm({
     // "Đơn đang có yêu cầu đổi/trả chờ xử lý", đơn đã đổi trạng thái: danh sách yêu cầu và đơn trên trang đang cũ, tải lại để trang hiện đúng.
     // Giữ khoá tới lúc đó (tối đa 4 giây); các lỗi khác không tải lại.
     onError: (e) => {
-      setSubmitError(actionErrorText(e));
+      const message = actionErrorText(e);
+      setSubmitError(message);
+      onError?.(message);
       if (!serverRejectedState(e)) return undefined;
       return settleWithin(Promise.all([qc.invalidateQueries({ queryKey: ['my-returns'] }), qc.invalidateQueries({ queryKey: ['order', o.code] })]));
     },
@@ -134,8 +155,10 @@ export function ReturnRequestForm({
     title.focus({ preventScroll: true });
   }, []);
 
-  const setLine = (id: string, patch: Partial<ReturnLineState>) =>
-    setLines((ls) => ls.map((l) => (l.orderItemId === id ? { ...l, ...patch } : l)));
+  const setLine = (id: string, patch: Partial<Pick<ReturnLineState, 'selected' | 'quantity'>>) => {
+    const cur = lines.find((l) => l.orderItemId === id);
+    if (cur) setPicks((ps) => ({ ...ps, [id]: { selected: cur.selected, quantity: cur.quantity, ...patch } }));
+  };
 
   return (
     <form
