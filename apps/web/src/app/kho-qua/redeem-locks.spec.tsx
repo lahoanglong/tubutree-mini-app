@@ -2,7 +2,7 @@
 import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
-import { makeGiftRedemption, makeRewardCatalog } from '@/components/loyalty/reward-fixtures';
+import { makeGiftRedemption, makeRewardCatalog, makeRewardItem } from '@/components/loyalty/reward-fixtures';
 
 // Khoá của "Xác nhận đổi" và "Dùng ngay" trong khung kết quả của Kho quà (Mini: rewards.tsx): nút đang giữ focus không `disabled` thật,
 // không đóng khung khi POST còn bay, lỗi cũng giữ khoá tới khi danh sách quà làm mới về.
@@ -78,6 +78,7 @@ const card = (c: HTMLElement, name: string) => {
   return el;
 };
 const dialog = () => document.querySelector<HTMLElement>('[role="dialog"]');
+const dialogWith = (text: string) => Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"]')).find((d) => d.textContent?.includes(text)) ?? null;
 const openConfirm = async (c: HTMLElement, name: string) => {
   click(byText(card(c, name), 'button', 'Đổi'));
   await flush(3);
@@ -148,6 +149,20 @@ describe('/kho-qua — "Xác nhận đổi" giữ focus, khung không đóng khi
     expect(postsOf(REDEEM_FREESHIP)).toHaveLength(1);
   });
 
+  it('Esc và bấm nền NGAY sau cú bấm, khi POST chưa kịp bắt đầu: khung vẫn không đóng', async () => {
+    state.redeem = () => new Promise(() => {});
+    const c = await mount();
+    await openConfirm(c, 'Miễn phí vận chuyển');
+    click(confirmBtn());
+    press('Escape');
+    click(document.querySelector<HTMLElement>('[data-sheet-backdrop]'));
+    expect(postsOf(REDEEM_FREESHIP)).toHaveLength(0);
+    expect(dialog()!.textContent).toContain('Xác nhận đổi quà');
+    await flush(2);
+    expect(postsOf(REDEEM_FREESHIP)).toHaveLength(1);
+    expect(dialog()!.textContent).toContain('Xác nhận đổi quà');
+  });
+
   it('POST xong (lỗi): khung đóng được lại ngay, không đợi làm mới danh sách', async () => {
     state.redeem = () => Promise.reject(new Error('Quà này đã hết'));
     const c = await mount();
@@ -206,6 +221,66 @@ describe('/kho-qua — "Xác nhận đổi" giữ focus, khung không đóng khi
     await flush(6);
     expect(dialog()!.textContent).toContain('Đổi quà thành công');
     expect(postsOf(REDEEM_FREESHIP)).toHaveLength(1);
+  });
+});
+
+describe('/kho-qua — làm mới của quà A về muộn khi khách đã sang đổi quà B', () => {
+  const REDEEM_B = '/me/loyalty/rewards/reward-b/redeem';
+  // Quà A xong, danh sách quà chưa về (treo); khách Huỷ, mở quà B, xác nhận B (POST B đang bay); rồi danh sách của A về.
+  const setup = async () => {
+    state.rewards = makeRewardCatalog({ rewards: [makeRewardItem(), makeRewardItem({ id: 'reward-b', name: 'Giảm 20.000đ', pointsCost: 10_000, sortOrder: 2 })] });
+    let resolveB!: (v: unknown) => void;
+    let rejectB!: (e: Error) => void;
+    state.redeem = vi
+      .fn()
+      .mockResolvedValueOnce(VOUCHER_RESULT('A-CODE'))
+      .mockImplementationOnce(
+        () =>
+          new Promise((res, rej) => {
+            resolveB = res;
+            rejectB = rej;
+          }),
+      );
+    const c = await mount();
+    await openConfirm(c, 'Miễn phí vận chuyển');
+    let releaseA!: () => void;
+    state.rewardsGate = new Promise<void>((r) => (releaseA = r));
+    click(confirmBtn());
+    await flush(4);
+    expect(postsOf(REDEEM_FREESHIP)).toHaveLength(1);
+    click(byText(dialog()!, 'button', 'Huỷ'));
+    await flush(3);
+    expect(dialog()).toBeNull();
+    await openConfirm(c, 'Giảm 20.000đ');
+    click(confirmBtn());
+    await flush(3);
+    expect(postsOf(REDEEM_B)).toHaveLength(1);
+    state.rewardsGate = null;
+    releaseA();
+    await flush(6);
+    return { resolveB: (v: unknown) => resolveB(v), rejectB: (e: Error) => rejectB(e) };
+  };
+
+  it('khung B không bị đóng giữa lúc B đang POST; B xong thì hiện kết quả của B', async () => {
+    const h = await setup();
+    const confirmB = dialogWith('Xác nhận đổi quà');
+    expect(confirmB).not.toBeNull();
+    expect(confirmB!.textContent).toContain('Giảm 20.000đ');
+    expect(byText(confirmB!, 'button', 'Xác nhận đổi')!.getAttribute('aria-busy')).toBe('true');
+    await act(async () => h.resolveB(VOUCHER_RESULT('B-CODE')));
+    await flush(6);
+    expect(dialogWith('Xác nhận đổi quà')).toBeNull();
+    expect(dialogWith('Đổi quà thành công')!.textContent).toContain('Mã B-CODE đã vào ví mã giảm giá');
+    expect(postsOf(REDEEM_B)).toHaveLength(1);
+  });
+
+  it('B lỗi: câu báo của B hiện trong khung B (khung không bị đóng trước đó)', async () => {
+    const h = await setup();
+    await act(async () => h.rejectB(new Error('Quà B đã hết')));
+    await flush(6);
+    const confirmB = dialogWith('Xác nhận đổi quà');
+    expect(confirmB).not.toBeNull();
+    expect(confirmB!.querySelector('[role="alert"]')?.textContent).toBe('Quà B đã hết');
   });
 });
 

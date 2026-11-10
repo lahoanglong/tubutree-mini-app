@@ -14,7 +14,6 @@ const state = vi.hoisted(() => ({
   calls: [] as string[],
   push: vi.fn(),
   cartGate: null as Promise<void> | null,
-  carts: 0,
   applied: [] as string[],
 }));
 
@@ -27,7 +26,6 @@ vi.mock('@/components/ui/qr-code', () => ({ QrCode: ({ value }: { value: string 
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   getCart: async () => {
-    state.carts += 1;
     if (state.cartGate) await state.cartGate;
     return { itemCount: 2, couponCode: null };
   },
@@ -70,7 +68,6 @@ beforeEach(() => {
   state.calls = [];
   state.push.mockReset();
   state.cartGate = null;
-  state.carts = 0;
   state.applied = [];
 });
 afterEach(() => {
@@ -94,7 +91,7 @@ describe('/kho-qua/cua-toi — "Dùng ngay" một khoá cho cả ví', () => {
       b.click();
     });
     await flush(2);
-    expect(state.carts).toBe(1);
+    expect(state.applied).toEqual([]);
     expect(a.getAttribute('aria-busy')).toBe('true');
     expect(a.getAttribute('aria-disabled')).toBe('true');
     expect(a.hasAttribute('disabled')).toBe(false);

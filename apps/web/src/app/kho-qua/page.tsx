@@ -87,8 +87,8 @@ function RedeemConfirm({ reward, catalog, idemKey, posting, onPosting, onRedeeme
   const freeNote = rewardFreeShipNote(reward, catalog, formatVnd);
 
   const redeem = useMutation({
+    // `onPosting(true)` đặt ở `confirm` (đồng bộ với cú bấm), `false` nhả ngay khi POST xong, không đợi làm mới.
     mutationFn: async (): Promise<RedeemOutcome> => {
-      onPosting(true);
       try {
         if (reward.kind === 'TREE') {
           await buyTree(coreHttp, idemKey);
@@ -104,7 +104,7 @@ function RedeemConfirm({ reward, catalog, idemKey, posting, onPosting, onRedeeme
       await Promise.all(WASTE_REDEEM_INVALIDATE_KEYS.map((queryKey) => qc.invalidateQueries({ queryKey })));
       onDone(outcome);
     },
-    // Trả Promise làm mới: khoá giữ tới khi số dư và tồn mới về, nên "Xác nhận đổi" không gửi lại trên danh sách cũ.
+    // Khoá NÚT trong khung này (khung đóng được ngay khi POST xong): trả Promise làm mới để khung còn mở thì nút không gửi lại trên danh sách cũ.
     onError: (e) => {
       setError(actErrText(e));
       return qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.rewards });
@@ -117,6 +117,7 @@ function RedeemConfirm({ reward, catalog, idemKey, posting, onPosting, onRedeeme
   const confirm = () => {
     if (busyRef.current) return;
     busyRef.current = true;
+    onPosting(true);
     setError(null);
     redeem.mutate();
   };
@@ -341,7 +342,8 @@ function RewardsBody() {
             onPosting={setPosting}
             onRedeemed={idem.rotate}
             onDone={(outcome) => {
-              setConfirmReward(null);
+              // Làm mới của lệnh này có thể về muộn, sau khi khách đã Huỷ và mở quà khác: chỉ đóng khung nếu vẫn là khung của quà này.
+              setConfirmReward((cur) => (cur?.id === confirmReward.id ? null : cur));
               setResult(outcome);
             }}
             onCancel={() => setConfirmReward(null)}
