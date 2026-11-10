@@ -123,7 +123,7 @@ export default function CashbackPage() {
     if (phase === 'unavailable') return <SessionUnavailable />;
     if (phase === 'guest') return <LoginRequired message="Đăng nhập để xem khoản hoàn tiền của bạn." returnTo="/hoan-tien" />;
     // Không thay bằng 0đ khi tải ví lỗi: khách sẽ tưởng tiền hoàn đã biến mất.
-    if (walletQ.isError) return <ErrorState message={errText(walletQ.error)} onRetry={() => void walletQ.refetch()} />;
+    if (walletQ.isError) return <ErrorState message={errText(walletQ.error)} onRetry={() => walletQ.refetch()} />;
     if (!walletQ.data) return <Skeleton height={120} />;
     return (
       <section aria-label="Hoàn tiền đã duyệt" className="rounded-card bg-gradient-to-br from-forest-600 to-forest-700 p-5 text-stone-0 shadow-raised max-md:from-[var(--clay-500)] max-md:to-[var(--clay-700)]">
@@ -158,7 +158,7 @@ export default function CashbackPage() {
               </div>
             ) : merchantsQ.isError ? (
               // Phân biệt "lỗi tải sàn" với "chưa có sàn" để khách không tưởng tính năng trống.
-              <ErrorState message={errText(merchantsQ.error)} onRetry={() => void merchantsQ.refetch()} />
+              <ErrorState message={errText(merchantsQ.error)} onRetry={() => merchantsQ.refetch()} />
             ) : merchantsQ.data && merchantsQ.data.length > 0 ? (
               <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-4">
                 {merchantsQ.data.map((m) => (
@@ -197,7 +197,7 @@ export default function CashbackPage() {
               <Skeleton height={60} />
             ) : txnQ.isError ? (
               // Tránh "Chưa có giao dịch" khi thực ra API lỗi: dễ bị hiểu là mất tiền.
-              <ErrorState message={errText(txnQ.error)} onRetry={() => void txnQ.refetch()} />
+              <ErrorState message={errText(txnQ.error)} onRetry={() => txnQ.refetch()} />
             ) : txnQ.data && txnQ.data.length > 0 ? (
               <ul>
                 {txnQ.data.map((t) => {
@@ -230,7 +230,14 @@ export default function CashbackPage() {
         footer={
           selected &&
           (authed ? (
-            <button type="button" disabled={clickMut.isPending} onClick={() => startClick(selected.id)} className={`${ui.btnPrimary} w-full`}>
+            // Nút đang giữ focus mà `disabled` thì Chromium thả focus về body (khung hộp thoại mất chỗ đặt phím): báo bận bằng aria, chặn chạm đúp ở `startClick`.
+            <button
+              type="button"
+              aria-busy={clickMut.isPending || undefined}
+              aria-disabled={clickMut.isPending || undefined}
+              onClick={() => startClick(selected.id)}
+              className={`${ui.btnPrimary} w-full`}
+            >
               Mua sắm & nhận hoàn tiền
             </button>
           ) : (

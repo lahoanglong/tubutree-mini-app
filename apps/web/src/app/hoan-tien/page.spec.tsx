@@ -1,7 +1,10 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act } from 'react';
+import { QueryClient } from '@tanstack/react-query';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { headingProblems, smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
+import { captureUnhandledRejections } from '@/test-utils/unhandled';
 
 type Call = { method: string; path: string; body?: unknown; headers?: Record<string, string> };
 
@@ -12,6 +15,8 @@ const state = vi.hoisted(() => ({
   wallet: { cashbackPending: 123_000 } as object,
   holdDays: 45,
   fail: new Set<string>(),
+  /** Mỗi lần GET path này sẽ đợi hàm trả lời hứa (nếu có): giữ lần tải lại để thấy nút còn khoá khi dữ liệu mới chưa về. */
+  hold: {} as Record<string, () => Promise<unknown> | undefined>,
   click: null as null | (() => Promise<unknown>),
   calls: [] as Call[],
   opened: [] as string[],
@@ -25,6 +30,7 @@ vi.mock('@/lib/core-http', () => ({
   coreHttp: {
     get: async (path: string) => {
       state.calls.push({ method: 'get', path });
+      await state.hold[path]?.();
       if (state.fail.has(path)) {
         state.fail.delete(path);
         throw new Error('mất mạng');
@@ -74,6 +80,7 @@ beforeEach(() => {
   state.wallet = { cashbackPending: 123_000 };
   state.holdDays = 45;
   state.fail = new Set();
+  state.hold = {};
   state.click = async () => ({ deeplink: 'https://aff.example/abc' });
   state.calls = [];
   state.opened = [];
@@ -339,3 +346,111 @@ describe('/hoan-tien — giao diện điện thoại như Mini App', () => {
   });
 });
 
+
+
+describe('/hoan-tien — khoá chạm đúp (Mini ↔ web)', () => {
+  const getsOf = (path: string) => state.calls.filter((c) => c.method === 'get' && c.path === path);
+  const sameTick = (...els: (HTMLElement | null)[]) =>
+    act(() => {
+      for (const el of els) el!.click();
+    });
+  const gate = () => {
+    let release!: () => void;
+    const promise = new Promise<void>((r) => (release = r));
+    return { promise, release };
+  };
+  const openShopee = async (c: HTMLElement) => {
+    click(tile(c, 'Shopee'));
+    await flush(3);
+  };
+
+  it('hai cú bấm "Mua sắm" cùng khung hình chỉ tạo một click và mở một tab', async () => {
+    let resolve!: (v: unknown) => void;
+    state.click = () => new Promise((r) => (resolve = r));
+    const c = await mount();
+    await openShopee(c);
+    sameTick(buyBtn(), buyBtn());
+    await flush(2);
+    expect(postsOf('/cashback/click')).toHaveLength(1);
+    expect(state.openCalls).toHaveLength(1);
+    resolve({ deeplink: 'https://aff.example/abc' });
+    await flush(5);
+    expect(postsOf('/cashback/click')).toHaveLength(1);
+    expect(state.opened).toEqual(['https://aff.example/abc']);
+  });
+
+  it('đang tạo click: nút aria-busy + aria-disabled, KHÔNG disabled thật và vẫn giữ focus', async () => {
+    let resolve!: (v: unknown) => void;
+    state.click = () => new Promise((r) => (resolve = r));
+    const c = await mount();
+    await openShopee(c);
+    const btn = buyBtn();
+    btn.focus();
+    click(btn);
+    await flush(2);
+    expect(btn.getAttribute('aria-busy')).toBe('true');
+    expect(btn.getAttribute('aria-disabled')).toBe('true');
+    expect(btn.disabled).toBe(false);
+    expect(document.activeElement).toBe(btn);
+    click(btn);
+    expect(postsOf('/cashback/click')).toHaveLength(1);
+    resolve({ deeplink: 'https://aff.example/abc' });
+    await flush(5);
+  });
+
+  it('tạo click lỗi thì nhả khoá: nút hết bận, bấm lại gọi lần hai và mở link', async () => {
+    state.click = async () => {
+      throw new Error('Sàn đang bảo trì');
+    };
+    const c = await mount();
+    await openShopee(c);
+    click(buyBtn());
+    await flush(5);
+    expect(buyBtn().getAttribute('aria-busy')).toBeNull();
+    expect(buyBtn().getAttribute('aria-disabled')).toBeNull();
+    state.click = async () => ({ deeplink: 'https://aff.example/abc' });
+    click(buyBtn());
+    await flush(5);
+    expect(postsOf('/cashback/click')).toHaveLength(2);
+    expect(state.opened).toEqual(['https://aff.example/abc']);
+  });
+
+  // Truy vấn đã có dữ liệu rồi mới bị làm cho lỗi: khi đó ErrorState vẫn hiện suốt lúc tải lại, và lần refetch thứ hai (cancelRefetch) sẽ
+  // huỷ lần đầu rồi gọi lại nếu "Thử lại" không khoá. Chưa có dữ liệu thì refetch thứ hai dùng chung promise nên đếm gọi không phân biệt được.
+  const retryCases: { name: string; path: string; key: string[] }[] = [
+    { name: 'số dư Ví', path: '/me/wallet', key: ['wallet'] },
+    { name: 'lưới sàn', path: '/cashback/merchants', key: ['cashback-merchants'] },
+    { name: 'giao dịch hoàn tiền', path: '/cashback/transactions', key: ['cashback-txn'] },
+  ];
+  for (const rc of retryCases) {
+    it(`${rc.name} lỗi khi làm mới: hai cú bấm Thử lại cùng khung hình chỉ tải lại một lần, nút bận tới khi dữ liệu về`, async () => {
+      const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+      const r = render(<CashbackPage />, qc);
+      mounted.push(r);
+      await flush(8);
+      const c = r.container;
+      expect(qc.getQueryData(rc.key)).toBeDefined();
+      state.fail.add(rc.path);
+      await act(async () => {
+        await qc.refetchQueries({ queryKey: rc.key, exact: true });
+      });
+      await flush(2);
+      const retry = byText(c, 'button', 'Thử lại') as HTMLButtonElement;
+      expect(retry).not.toBeNull();
+      expect(qc.getQueryData(rc.key)).toBeDefined();
+      const before = getsOf(rc.path).length;
+      const g = gate();
+      state.hold[rc.path] = () => g.promise;
+      await captureUnhandledRejections(async () => {
+        sameTick(retry, retry);
+        await flush(2);
+      });
+      expect(getsOf(rc.path).length - before).toBe(1);
+      expect(retry.getAttribute('aria-busy')).toBe('true');
+      g.release();
+      await flush(5);
+      expect(byText(c, 'button', 'Thử lại')).toBeNull();
+      expect(getsOf(rc.path).length - before).toBe(1);
+    });
+  }
+});
