@@ -16,7 +16,8 @@ import type {
   WasteShortfallReason,
 } from '@tubutree/shared-types';
 import { WASTE_QUERY_KEYS, deskConfirm, deskFulfilGift, deskLookup, deskReject, getDeskPoints } from '../services/waste-api';
-import { getErrorMessage, getLoadErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage, isStaleStateError } from '../services/api';
+import { settleWithin } from '../utils/settle-within';
 import { extractWasteLookupCode, normalizeWasteLookupCode } from '@tubutree/app-core/waste-code-input';
 import { scanCode } from '../services/zmp-bridge';
 import { usePublicConfig } from '../hooks/use-public-config';
@@ -181,6 +182,14 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
   // Bưu kiện về kho có thể tra khi đang chọn tab đối tác: luật nhận theo điểm của yêu cầu, không theo tab đang chọn.
   const kindOfRequest = (req: WasteDeskRequestDTO) => (points.find((p) => p.id === req.pointId) ?? point).kind;
 
+  // Máy chủ từ chối vì phiếu hoặc lượt quà đã đổi (400/404/409): báo lời của máy chủ rồi tải lại danh sách điểm và báo cáo. Trả Promise để mọi khoá
+  // (khoá của từng lệnh lẫn `acting`, cùng nhả ở onSettled) giữ tới khi dữ liệu mới về, tối đa LOCK_REFRESH_WAIT_MS. Lỗi tạm (mất mạng, 401, 5xx) nhả ngay.
+  const rejected = (e: unknown) => {
+    openSnackbar({ text: getErrorMessage(e), type: 'error' });
+    if (!isStaleStateError(e)) return undefined;
+    return settleWithin(qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.desk }));
+  };
+
   const find = useLockedMutation({
     mutationFn: (c: string) => deskLookup(c),
     onSuccess: (res, c) => {
@@ -194,6 +203,7 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
       setReceived(initial?.received ?? {});
       setReasons(initial?.reasons ?? {});
     },
+    // Tra mã sai (404, 400) là lỗi gõ của nhân viên chứ không phải danh sách đã cũ: chỉ báo lỗi, không tải lại và không giữ khoá.
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
 
@@ -280,7 +290,7 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
       setCode('');
       finish();
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: rejected,
   });
 
   const reject = useLockedMutation({
@@ -296,7 +306,7 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
       setRejectOpen(false);
       finish();
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: rejected,
   });
 
   const fulfil = useLockedMutation({
@@ -306,7 +316,7 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
       setGift(null);
       openSnackbar({ text: `Đã trao ${v.giftName}`, type: 'success' });
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: rejected,
   });
 
   const busy = confirm.isPending || reject.isPending || fulfil.isPending;

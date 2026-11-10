@@ -29,7 +29,8 @@ import {
 import { getLoyaltyRewards } from '../services/account-api';
 import { getProvinces } from '../services/geo-api';
 import { getZaloAccessToken, requestZaloLocation } from '../services/zmp-bridge';
-import { getErrorMessage, getLoadErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage, isStaleStateError } from '../services/api';
+import { settleWithin } from '../utils/settle-within';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { useIdempotencyKey } from '../hooks/use-idempotency-key';
 import { usePublicConfig } from '../hooks/use-public-config';
@@ -414,9 +415,20 @@ export default function RecycleNewPage() {
       await invalidateAfterWasteWrite(qc);
       navigate(`/recycle/r/${r.id}`, { replace: true });
     },
+    // Máy chủ từ chối kiểu dữ liệu cũ (luật đổi rác đã đổi, không còn nhận loại này, 409 thử lại): trả Promise để khoá giữ tới khi
+    // thể lệ, hồ sơ, ước tính và điểm nhận tải lại xong (tối đa `settleWithin`). Lỗi tạm thì chỉ tải lại phiên bản thể lệ và nhả khoá ngay.
     onError: (e) => {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
-      void qc.invalidateQueries({ queryKey: [...WASTE_QUERY_KEYS.all, 'rules-version'] });
+      const refreshRules = qc.invalidateQueries({ queryKey: [...WASTE_QUERY_KEYS.all, 'rules-version'] });
+      if (!isStaleStateError(e)) return undefined;
+      return settleWithin(
+        Promise.all([
+          refreshRules,
+          qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.me }),
+          qc.invalidateQueries({ queryKey: [...WASTE_QUERY_KEYS.all, 'preview'] }),
+          qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.points(null) }),
+        ]),
+      );
     },
   });
 

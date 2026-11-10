@@ -65,6 +65,8 @@ vi.mock('../components/ui/countdown', () => ({
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import FlashSalePage from './flash-sale';
+import { HttpError } from '../services/http';
+import { LOCK_REFRESH_WAIT_MS } from '../utils/settle-within';
 
 const NOW = new Date('2026-11-01T06:00:00Z'); // 13:00 giờ VN
 const iso = (h: number) => new Date(NOW.getTime() + h * 3_600_000).toISOString();
@@ -802,5 +804,225 @@ describe('Trang Giờ vàng: "Thử lại" món của khung khoá chạm đúp, 
     fireEvent.click(screen.getAllByRole('tab')[0]!);
     expect(await screen.findByRole('button', { name: 'Mua ngay Sản phẩm a' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Nhắc tôi Sản phẩm c' })).toBeNull();
+  });
+});
+
+describe('Trang Giờ vàng: máy chủ từ chối thì tải lại và giữ khoá tới khi dữ liệu mới về, lỗi tạm nhả ngay (W110A)', () => {
+  const SLOTS_KEY = ['flash-sales', 'slots'];
+  const UPCOMING_KEY = ['flash-sales', 'upcoming'];
+  const CART = { items: [{ id: 'line-a', variationId: 'v-a', quantity: 1 }] };
+  const UPCOMING = [{ itemId: 'c', variationId: 'v-c', productSlug: 'sp-c', productName: 'Sản phẩm c', thumbnail: null, flashPrice: 1, retailPrice: 2, startAt: S20.startAt, reminded: false }];
+  const deferred = () => {
+    let resolve!: (v?: unknown) => void;
+    const promise = new Promise((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  const never = () => new Promise<never>(() => undefined);
+  const serverError = (message: string, status: number, code?: string) =>
+    new HttpError(message, undefined, { status, data: { message, ...(code ? { code } : null) } } as never);
+  const errorToasts = () => mocks.openSnackbar.mock.calls.map(([o]) => o as { text: string; type?: string }).filter((o) => o.type === 'error').map((o) => o.text);
+  const TRANSIENT: [string, () => unknown][] = [
+    ['mất mạng', () => new HttpError('Network Error', 'ERR_NETWORK')],
+    ['máy chủ lỗi 503', () => serverError('Service Unavailable', 503)],
+    ['hết phiên 401', () => serverError('Unauthorized', 401)],
+  ];
+
+  /** Dựng trang kèm QueryClient để soi lệnh tải lại (gọi xuyên qua, tải lại vẫn chạy thật). */
+  function renderLive() {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const spy = vi.spyOn(qc, 'invalidateQueries');
+    render(
+      <QueryClientProvider client={qc}>
+        <FlashSalePage />
+      </QueryClientProvider>,
+    );
+    return { qc, keys: () => spy.mock.calls.map(([filters]) => (filters as { queryKey: unknown[] }).queryKey) };
+  }
+  /** Từ lúc gọi, mọi lần tải khung giờ/món (và danh sách nhắc) đứng chờ `gate` rồi mới trả như máy chủ giả đang dùng. */
+  const holdReloads = (gate: Promise<unknown>) => {
+    const base = mocks.http.getMockImplementation()!;
+    mocks.http.mockImplementation(async (path: string, ...rest: unknown[]) => {
+      await gate;
+      return base(path, ...rest);
+    });
+    mocks.fetchUpcoming.mockImplementation(async () => {
+      await gate;
+      return UPCOMING;
+    });
+  };
+  const buyBtn = () => screen.getByRole('button', { name: 'Mua ngay Sản phẩm a' });
+  const remindBtn = () => screen.getByRole('button', { name: 'Nhắc tôi Sản phẩm c' });
+
+  async function renderMorning() {
+    serve({ items: { s12: itemsOf(S12, [item('a')]) } });
+    const live = renderLive();
+    await screen.findByRole('button', { name: 'Mua ngay Sản phẩm a' });
+    return live;
+  }
+  /** Sang khung 20:00 khi danh sách nhắc đã nằm trong cache (không có thì hoàn tác lạc quan không có gì để thấy). */
+  async function renderEvening() {
+    mocks.fetchUpcoming.mockResolvedValue(UPCOMING);
+    serve({ items: { s12: itemsOf(S12, [item('a')]), s20: itemsOf(S20, [item('c')]) } });
+    const live = renderLive();
+    await screen.findByRole('button', { name: 'Mua ngay Sản phẩm a' });
+    await waitFor(() => expect(live.qc.getQueryData(UPCOMING_KEY)).toEqual(UPCOMING));
+    fireEvent.click(screen.getAllByRole('tab')[1]!);
+    await screen.findByRole('button', { name: 'Nhắc tôi Sản phẩm c' });
+    return live;
+  }
+  /** Đồng hồ giả cho mọi bộ đếm giờ: bật sau khi trang đã vẽ xong (waitFor của RTL không chạy dưới đồng hồ giả). */
+  const useAllFakeTimers = () => {
+    vi.useRealTimers();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] });
+    vi.setSystemTime(NOW);
+  };
+  // Trạng thái bận tới React qua bộ đếm giờ 0ms của react-query, và lệnh bắt đầu chạy lệch vài ms giờ giả so với lúc bấm: nên "tới hạn" là hạn cộng biên nhỏ rồi xả vài nhịp.
+  const flush = () =>
+    act(async () => {
+      for (let i = 0; i < 4; i++) await vi.advanceTimersByTimeAsync(0);
+    });
+
+  describe('Mua ngay', () => {
+    it.each([
+      ['400 PRICE_CHANGED', 400, 'PRICE_CHANGED'],
+      ['400 FLASH_LIMIT', 400, 'FLASH_LIMIT'],
+      ['404', 404, undefined],
+      ['409', 409, undefined],
+    ])('bị từ chối %s: báo lỗi một lần, tải lại khung giờ và món, nút bận tới khi dữ liệu về rồi mới nhận lần chạm sau', async (_label, status, code) => {
+      const message = 'Suất Giờ vàng của món này đã thay đổi.';
+      mocks.addToCart.mockRejectedValueOnce(serverError(message, status, code)).mockResolvedValue(CART);
+      const { keys } = await renderMorning();
+      const gate = deferred();
+      holdReloads(gate.promise);
+      fireEvent.click(buyBtn());
+      await waitFor(() => expect(errorToasts()).toEqual([message]));
+      // Khoá `slots` là tiền tố của khoá món từng khung: một lệnh tải lại cả khung giờ lẫn món đang xem.
+      expect(keys()).toEqual([SLOTS_KEY]);
+      expect(buyBtn()).toHaveAttribute('aria-busy', 'true');
+      fireEvent.click(buyBtn());
+      expect(mocks.addToCart).toHaveBeenCalledTimes(1);
+      expect(errorToasts()).toEqual([message]);
+      await act(async () => gate.resolve());
+      await waitFor(() => expect(buyBtn()).not.toHaveAttribute('aria-busy'));
+      expect(mocks.addToCart).toHaveBeenCalledTimes(1);
+      fireEvent.click(buyBtn());
+      await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/checkout', { state: { itemIds: ['line-a'] } }));
+    });
+
+    it.each(TRANSIENT)('lỗi tạm (%s): báo lỗi, không tải lại, nhả khoá ngay dù có tải lại thì cũng treo', async (_label, makeError) => {
+      mocks.addToCart.mockRejectedValueOnce(makeError()).mockResolvedValue(CART);
+      const { keys } = await renderMorning();
+      holdReloads(never());
+      fireEvent.click(buyBtn());
+      await waitFor(() => expect(errorToasts()).toHaveLength(1));
+      await waitFor(() => expect(buyBtn()).not.toHaveAttribute('aria-busy'));
+      expect(keys()).toEqual([]);
+      fireEvent.click(buyBtn());
+      await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledTimes(2));
+    });
+
+    it('bị từ chối mà tải lại treo mãi: khoá nhả đúng sau LOCK_REFRESH_WAIT_MS, chưa tới hạn thì chạm tiếp bị từ chối', async () => {
+      mocks.addToCart.mockRejectedValueOnce(serverError('Món này đã hết suất Giờ vàng.', 400, 'PRICE_CHANGED')).mockResolvedValue(CART);
+      await renderMorning();
+      holdReloads(never());
+      useAllFakeTimers();
+      await act(async () => {
+        fireEvent.click(buyBtn());
+      });
+      await flush();
+      expect(mocks.addToCart).toHaveBeenCalledTimes(1);
+      expect(errorToasts()).toHaveLength(1);
+      expect(buyBtn()).toHaveAttribute('aria-busy', 'true');
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 1);
+        fireEvent.click(buyBtn());
+      });
+      expect(mocks.addToCart).toHaveBeenCalledTimes(1);
+      expect(buyBtn()).toHaveAttribute('aria-busy', 'true');
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(50);
+      });
+      await flush();
+      expect(buyBtn()).not.toHaveAttribute('aria-busy');
+      await act(async () => {
+        fireEvent.click(buyBtn());
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(mocks.addToCart).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('Nhắc tôi', () => {
+    it.each([400, 404, 409])('bị từ chối %i: hoàn tác nút ngay, báo lỗi một lần, tải lại danh sách nhắc và khung giờ một lần, nút bận tới khi dữ liệu về', async (status) => {
+      const message = 'Ưu đãi đã bắt đầu.';
+      mocks.setReminder.mockRejectedValueOnce(serverError(message, status)).mockResolvedValue({});
+      const { keys } = await renderEvening();
+      const gate = deferred();
+      holdReloads(gate.promise);
+      fireEvent.click(remindBtn());
+      await waitFor(() => expect(errorToasts()).toEqual([message]));
+      // Mỗi khoá đúng một lần: đường từ chối tải lại ở onError, onSettled không tải thêm lần hai.
+      expect(keys()).toEqual([UPCOMING_KEY, SLOTS_KEY]);
+      // Hoàn tác lạc quan xảy ra trước khi dữ liệu mới về: nút đã trở lại "Nhắc tôi" dù đang bận.
+      expect(remindBtn()).toHaveAttribute('aria-pressed', 'false');
+      expect(remindBtn()).toHaveAttribute('aria-busy', 'true');
+      fireEvent.click(remindBtn());
+      expect(mocks.setReminder).toHaveBeenCalledTimes(1);
+      expect(errorToasts()).toEqual([message]);
+      await act(async () => gate.resolve());
+      await waitFor(() => expect(remindBtn()).not.toHaveAttribute('aria-busy'));
+      expect(mocks.setReminder).toHaveBeenCalledTimes(1);
+      // onSettled đã chạy (khoá vừa nhả): vẫn chỉ một lần tải lại mỗi khoá, không tải thêm danh sách nhắc.
+      expect(keys()).toEqual([UPCOMING_KEY, SLOTS_KEY]);
+      fireEvent.click(remindBtn());
+      await waitFor(() => expect(mocks.setReminder).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Tubu sẽ nhắc bạn lúc 20:00', type: 'success' })));
+    });
+
+    it.each(TRANSIENT)('lỗi tạm (%s): hoàn tác, báo lỗi, chỉ tải lại danh sách nhắc như cũ, nhả khoá ngay dù tải lại treo', async (_label, makeError) => {
+      mocks.setReminder.mockRejectedValueOnce(makeError()).mockResolvedValue({});
+      const { keys } = await renderEvening();
+      holdReloads(never());
+      fireEvent.click(remindBtn());
+      await waitFor(() => expect(errorToasts()).toHaveLength(1));
+      await waitFor(() => expect(remindBtn()).not.toHaveAttribute('aria-busy'));
+      expect(remindBtn()).toHaveAttribute('aria-pressed', 'false');
+      expect(keys()).toEqual([UPCOMING_KEY]);
+      fireEvent.click(remindBtn());
+      await waitFor(() => expect(mocks.setReminder).toHaveBeenCalledTimes(2));
+    });
+
+    it('bị từ chối mà tải lại treo mãi: khoá của món nhả đúng sau LOCK_REFRESH_WAIT_MS, chưa tới hạn thì chạm tiếp bị từ chối', async () => {
+      mocks.setReminder.mockRejectedValueOnce(serverError('Ưu đãi đã bắt đầu.', 400)).mockResolvedValue({});
+      await renderEvening();
+      holdReloads(never());
+      useAllFakeTimers();
+      await act(async () => {
+        fireEvent.click(remindBtn());
+      });
+      await flush();
+      expect(mocks.setReminder).toHaveBeenCalledTimes(1);
+      expect(errorToasts()).toHaveLength(1);
+      expect(remindBtn()).toHaveAttribute('aria-busy', 'true');
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 1);
+        fireEvent.click(remindBtn());
+      });
+      expect(mocks.setReminder).toHaveBeenCalledTimes(1);
+      expect(remindBtn()).toHaveAttribute('aria-busy', 'true');
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(50);
+      });
+      await flush();
+      expect(remindBtn()).not.toHaveAttribute('aria-busy');
+      await act(async () => {
+        fireEvent.click(remindBtn());
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(mocks.setReminder).toHaveBeenCalledTimes(2);
+    });
   });
 });

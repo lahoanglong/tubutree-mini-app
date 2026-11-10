@@ -32,7 +32,8 @@ vi.mock('zmp-ui', async (importOriginal) => ({
   useParams: () => mocks.params,
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
 }));
-vi.mock('../services/api', () => ({
+vi.mock('../services/api', async (orig) => ({
+  ...(await orig<object>()),
   getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi'),
   getLoadErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi'),
   isNotFoundError: (e: unknown) => (e as { status?: number } | null)?.status === 404,
@@ -59,6 +60,8 @@ vi.mock('../components/qr-code', () => ({ QrCode: ({ value }: { value: string })
 vi.mock('../components/support-contact', () => ({ SupportContact: () => <div data-testid="support-contact" /> }));
 
 import RecycleRequestPage from './recycle-request';
+import { HttpError } from '../services/http';
+import { LOCK_REFRESH_WAIT_MS } from '../utils/settle-within';
 import { makeRequestDetail, makeWasteMe, makeWastePoint, makeWarehouseContact } from '../services/waste-test-fixtures';
 import { describeNested, findNestedInteractive } from '../components/ui/nested-interactive';
 
@@ -552,5 +555,189 @@ describe('/recycle/r/:id: Huỷ và Đã gửi khoá chạm đúp (W73A)', () =>
     await act(async () => d.resolve(MAIL({ status: 'IN_TRANSIT', carrier: 'GHN', trackingCode: 'GHN123' })));
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Đã lưu mã vận đơn', type: 'success' })));
     expect(mocks.setWasteTracking).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('/recycle/r/:id: Huỷ và Đã gửi bị máy chủ từ chối thì tải lại rồi mới nhả khoá (W110A)', () => {
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message } } as never);
+  const deferred = () => {
+    let resolve!: (v?: unknown) => void;
+    const promise = new Promise((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  // TanStack báo cache qua setTimeout(0) nên phải đợi một nhịp sau khi lời hứa tải lại xong.
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+  const errorToasts = (text: string) => mocks.openSnackbar.mock.calls.filter((c) => c[0].text === text && c[0].type === 'error');
+  const REFRESHED = [['waste', 'request', 'req-1'], ['waste', 'requests']];
+  const hold = (promise: Promise<unknown>) => (key: readonly unknown[]) => (key[1] === 'request' ? promise : undefined);
+
+  /** Dựng trang kèm QueryClient để soi lệnh tải lại; `refresh` trả lời hứa cho từng khoá (không trả thì xong ngay). */
+  function renderLive(refresh?: (key: readonly unknown[]) => Promise<unknown> | undefined) {
+    const view = renderPage();
+    const invalidated: unknown[][] = [];
+    view.invalidate.mockImplementation(((filters: { queryKey: readonly unknown[] }) => {
+      invalidated.push([...filters.queryKey]);
+      return refresh?.(filters.queryKey) ?? Promise.resolve();
+    }) as never);
+    return { ...view, invalidated };
+  }
+
+  const openCancelSheet = async () => {
+    fireEvent.click(await screen.findByRole('button', { name: 'Huỷ yêu cầu' }));
+    const sheet = await screen.findByRole('dialog');
+    return {
+      confirm: () => within(sheet).getByRole('button', { name: 'Xác nhận huỷ' }),
+    };
+  };
+  const fillTracking = async () => {
+    const sent = await screen.findByRole('button', { name: 'Đã gửi' });
+    fireEvent.change(screen.getByLabelText('Hãng'), { target: { value: 'GHN' } });
+    fireEvent.change(screen.getByLabelText('Mã vận đơn'), { target: { value: 'GHN123' } });
+    await waitFor(() => expect(sent).toBeEnabled());
+    return sent;
+  };
+
+  describe('Xác nhận huỷ (cancelWasteRequest)', () => {
+    it.each([
+      ['409 không còn huỷ được', 'Yêu cầu này không còn huỷ được', 409],
+      ['400 đã xử lý', 'Yêu cầu đã được xử lý', 400],
+      ['404 không còn', 'Không tìm thấy yêu cầu', 404],
+    ] as const)('bị từ chối %s: báo lỗi đúng một lần, tải lại chi tiết và danh sách yêu cầu; khoá giữ tới khi chi tiết về', async (_label, message, status) => {
+      mocks.cancelWasteRequest.mockRejectedValueOnce(serverError(message, status)).mockResolvedValue(makeRequestDetail({ status: 'CANCELLED', cancellable: false, editable: false }));
+      const refresh = deferred();
+      const { invalidated } = renderLive(hold(refresh.promise));
+      const { confirm } = await openCancelSheet();
+      fireEvent.click(confirm());
+      await waitFor(() => expect(errorToasts(message)).toHaveLength(1));
+      await waitFor(() => expect(invalidated).toEqual(expect.arrayContaining(REFRESHED)));
+      // Đã có lời báo lỗi mà chi tiết chưa về: nút vẫn bận, chạm thêm không huỷ lại trên dữ liệu cũ.
+      expect(confirm()).toHaveAttribute('aria-busy', 'true');
+      fireEvent.click(confirm());
+      await settle();
+      expect(mocks.cancelWasteRequest).toHaveBeenCalledTimes(1);
+      expect(errorToasts(message)).toHaveLength(1);
+      await act(async () => refresh.resolve());
+      await settle();
+      await waitFor(() => expect(confirm()).not.toHaveAttribute('aria-busy'));
+      fireEvent.click(confirm());
+      await waitFor(() => expect(mocks.cancelWasteRequest).toHaveBeenCalledTimes(2));
+    });
+
+    it.each([
+      ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+      ['máy chủ lỗi 503', serverError('Service Unavailable', 503)],
+      ['hết phiên 401', serverError('Unauthorized', 401)],
+    ])('%s: không phải dữ liệu cũ nên không tải lại, khoá nhả ngay', async (_label, error) => {
+      mocks.cancelWasteRequest.mockRejectedValueOnce(error).mockResolvedValue(makeRequestDetail({ status: 'CANCELLED', cancellable: false, editable: false }));
+      // Mọi lệnh tải lại treo mãi: nếu khoá còn đợi chúng thì nút không bao giờ sáng lại.
+      const { invalidated } = renderLive(() => new Promise<unknown>(() => undefined));
+      const { confirm } = await openCancelSheet();
+      fireEvent.click(confirm());
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: error.message, type: 'error' })));
+      await waitFor(() => expect(confirm()).not.toHaveAttribute('aria-busy'));
+      expect(invalidated).toEqual([]);
+      fireEvent.click(confirm());
+      await waitFor(() => expect(mocks.cancelWasteRequest).toHaveBeenCalledTimes(2));
+    });
+
+    it('tải lại treo mãi: khoá nhả đúng sau LOCK_REFRESH_WAIT_MS, không giữ nút mãi', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        mocks.cancelWasteRequest.mockRejectedValueOnce(serverError('Yêu cầu này không còn huỷ được', 409)).mockResolvedValue(makeRequestDetail({ status: 'CANCELLED', cancellable: false, editable: false }));
+        renderLive(() => new Promise<unknown>(() => undefined));
+        const { confirm } = await openCancelSheet();
+        fireEvent.click(confirm());
+        await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Yêu cầu này không còn huỷ được', type: 'error' })));
+        expect(confirm()).toHaveAttribute('aria-busy', 'true');
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 500);
+        });
+        expect(confirm()).toHaveAttribute('aria-busy', 'true');
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(600);
+        });
+        await waitFor(() => expect(confirm()).not.toHaveAttribute('aria-busy'));
+        fireEvent.click(confirm());
+        await waitFor(() => expect(mocks.cancelWasteRequest).toHaveBeenCalledTimes(2));
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  describe('Đã gửi (setWasteTracking)', () => {
+    it.each([
+      ['409 không còn nhập được', 'Yêu cầu này không còn nhập mã vận đơn được', 409],
+      ['400 đã xử lý', 'Yêu cầu đã được xử lý', 400],
+      ['404 không còn', 'Không tìm thấy yêu cầu', 404],
+    ] as const)('bị từ chối %s: báo lỗi đúng một lần, tải lại chi tiết và danh sách yêu cầu; khoá giữ tới khi chi tiết về', async (_label, message, status) => {
+      mocks.getWasteRequest.mockResolvedValue(MAIL());
+      mocks.setWasteTracking.mockRejectedValueOnce(serverError(message, status)).mockResolvedValue(MAIL({ status: 'IN_TRANSIT', carrier: 'GHN', trackingCode: 'GHN123' }));
+      const refresh = deferred();
+      const { invalidated } = renderLive(hold(refresh.promise));
+      const sent = await fillTracking();
+      fireEvent.click(sent);
+      await waitFor(() => expect(errorToasts(message)).toHaveLength(1));
+      await waitFor(() => expect(invalidated).toEqual(expect.arrayContaining(REFRESHED)));
+      // Đã có lời báo lỗi mà chi tiết chưa về: nút vẫn bận, chạm thêm không ghi lại trên dữ liệu cũ.
+      expect(sent).toHaveAttribute('aria-busy', 'true');
+      fireEvent.click(sent);
+      await settle();
+      expect(mocks.setWasteTracking).toHaveBeenCalledTimes(1);
+      expect(errorToasts(message)).toHaveLength(1);
+      await act(async () => refresh.resolve());
+      await settle();
+      await waitFor(() => expect(sent).not.toHaveAttribute('aria-busy'));
+      fireEvent.click(sent);
+      await waitFor(() => expect(mocks.setWasteTracking).toHaveBeenCalledTimes(2));
+    });
+
+    it.each([
+      ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+      ['máy chủ lỗi 503', serverError('Service Unavailable', 503)],
+      ['hết phiên 401', serverError('Unauthorized', 401)],
+    ])('%s: không phải dữ liệu cũ nên không tải lại, khoá nhả ngay', async (_label, error) => {
+      mocks.getWasteRequest.mockResolvedValue(MAIL());
+      mocks.setWasteTracking.mockRejectedValueOnce(error).mockResolvedValue(MAIL({ status: 'IN_TRANSIT', carrier: 'GHN', trackingCode: 'GHN123' }));
+      // Mọi lệnh tải lại treo mãi: nếu khoá còn đợi chúng thì nút không bao giờ sáng lại.
+      const { invalidated } = renderLive(() => new Promise<unknown>(() => undefined));
+      const sent = await fillTracking();
+      fireEvent.click(sent);
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: error.message, type: 'error' })));
+      await waitFor(() => expect(sent).not.toHaveAttribute('aria-busy'));
+      expect(invalidated).toEqual([]);
+      fireEvent.click(sent);
+      await waitFor(() => expect(mocks.setWasteTracking).toHaveBeenCalledTimes(2));
+    });
+
+    it('tải lại treo mãi: khoá nhả đúng sau LOCK_REFRESH_WAIT_MS, không giữ nút mãi', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        mocks.getWasteRequest.mockResolvedValue(MAIL());
+        mocks.setWasteTracking.mockRejectedValueOnce(serverError('Yêu cầu này không còn nhập mã vận đơn được', 409)).mockResolvedValue(MAIL({ status: 'IN_TRANSIT', carrier: 'GHN', trackingCode: 'GHN123' }));
+        renderLive(() => new Promise<unknown>(() => undefined));
+        const sent = await fillTracking();
+        fireEvent.click(sent);
+        await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Yêu cầu này không còn nhập mã vận đơn được', type: 'error' })));
+        expect(sent).toHaveAttribute('aria-busy', 'true');
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 500);
+        });
+        expect(sent).toHaveAttribute('aria-busy', 'true');
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(600);
+        });
+        await waitFor(() => expect(sent).not.toHaveAttribute('aria-busy'));
+        fireEvent.click(sent);
+        await waitFor(() => expect(mocks.setWasteTracking).toHaveBeenCalledTimes(2));
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 });

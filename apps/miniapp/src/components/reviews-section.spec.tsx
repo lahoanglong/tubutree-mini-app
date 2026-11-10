@@ -93,6 +93,8 @@ vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import { ReviewsSection, Stars } from './reviews-section';
 import { getErrorMessage } from '../services/api';
+import { HttpError } from '../services/http';
+import { LOCK_REFRESH_WAIT_MS } from '../utils/settle-within';
 
 const review = (id: string, rating: number, extra: Record<string, unknown> = {}) => ({
   id,
@@ -1593,5 +1595,199 @@ describe('ReviewsSection: tải ảnh và gửi đánh giá không chồng nhau 
     fireEvent.click(screen.getByRole('button', { name: 'Gửi đánh giá' }));
     await waitFor(() => expect(mocks.createReview).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(screen.queryByRole('radiogroup', { name: 'Số sao' })).toBeNull());
+  });
+});
+
+describe('ReviewsSection: máy chủ từ chối thì tải lại can-review và giữ khoá tới khi dữ liệu mới về (W110A)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.cloudinary = true;
+    mocks.auth = { status: 'authenticated' };
+    mocks.fetchReviews.mockResolvedValue(DATA);
+    mocks.canReview.mockReset().mockResolvedValue(ELIG_NEW);
+    mocks.fetchMyReview.mockReset().mockImplementation(async (id: string) => MYREVIEWS[id]);
+    mocks.createReview.mockReset().mockResolvedValue({ updated: false, pointsEarned: 0 });
+  });
+
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message } } as never);
+  const deferred = () => {
+    let resolve!: (v?: unknown) => void;
+    const promise = new Promise((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+  const sendButton = (name = 'Gửi đánh giá') => screen.getByRole('button', { name });
+  const openNewForm = async () => {
+    renderSection();
+    fireEvent.click(await screen.findByRole('button', { name: 'Viết đánh giá' }));
+    await screen.findByRole('radiogroup', { name: 'Số sao' });
+  };
+  /** Khách đã gõ xong: 3 sao, một dòng nhận xét, một ảnh. */
+  const fillDraft = () => {
+    fireEvent.click(within(screen.getByRole('radiogroup', { name: 'Số sao' })).getByRole('radio', { name: '3 sao' }));
+    fireEvent.change(screen.getByPlaceholderText(/Chia sẻ cảm nhận/), { target: { value: 'Dùng khá ổn' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm ảnh (0)' }));
+  };
+  const expectDraftKept = () => {
+    expect(within(screen.getByRole('radiogroup', { name: 'Số sao' })).getByRole('radio', { name: '3 sao' })).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByPlaceholderText(/Chia sẻ cảm nhận/)).toHaveValue('Dùng khá ổn');
+    expect(screen.getByRole('button', { name: 'Thêm ảnh (1)' })).toBeInTheDocument();
+  };
+
+  it.each([
+    [400, 'Đơn này đã trả hàng nên không đánh giá mới được.'],
+    [400, 'Đơn này chưa giao tới bạn hoặc không có sản phẩm này nên chưa đánh giá được.'],
+    [409, 'Không lưu được đánh giá do thao tác đồng thời, bạn thử lại nhé.'],
+    [404, 'Không tìm thấy đánh giá.'],
+  ])('bị từ chối %i "%s": một lời lỗi, can-review và danh sách tải lại, nút Gửi bận và không gửi lần hai tới khi dữ liệu về; nháp còn nguyên', async (status, message) => {
+    const refresh = deferred();
+    mocks.canReview.mockResolvedValueOnce(ELIG_NEW).mockReturnValueOnce(refresh.promise);
+    mocks.createReview.mockRejectedValueOnce(serverError(message, status)).mockResolvedValueOnce({ updated: false, pointsEarned: 5 });
+    await openNewForm();
+    fillDraft();
+    fireEvent.click(sendButton());
+
+    const alerts = await screen.findAllByRole('alert');
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]).toHaveTextContent(message);
+    expect(mocks.openSnackbar).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'success' }));
+    await waitFor(() => expect(mocks.canReview).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mocks.fetchReviews.mock.calls.length).toBeGreaterThanOrEqual(2));
+
+    expect(sendButton()).toHaveAttribute('aria-busy', 'true');
+    expect(screen.queryByRole('button', { name: 'Đóng' })).toBeNull();
+    await act(async () => {
+      fireEvent.click(sendButton());
+      fireEvent.keyDown(screen.getByPlaceholderText(/Chia sẻ cảm nhận/), { key: 'Enter', ctrlKey: true });
+    });
+    await settle();
+    expect(mocks.createReview).toHaveBeenCalledTimes(1);
+    expectDraftKept();
+
+    await act(async () => refresh.resolve(ELIG_NEW));
+    await waitFor(() => expect(sendButton()).not.toHaveAttribute('aria-busy'));
+    expectDraftKept();
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
+
+    fireEvent.click(sendButton());
+    await waitFor(() => expect(mocks.createReview).toHaveBeenCalledTimes(2));
+    expect(mocks.createReview.mock.calls[1]![1]).toMatchObject({ rating: 3, comment: 'Dùng khá ổn', images: ['https://i/moi.jpg'], orderId: 'o1' });
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Cảm ơn đánh giá của bạn! Đã cộng 5 Điểm Xanh', type: 'success' }));
+    await waitFor(() => expect(screen.queryByRole('radiogroup', { name: 'Số sao' })).toBeNull());
+  });
+
+  it('đơn đã trả hàng nên can-review về hết đơn: nút đầu mục và lý do đổi theo dữ liệu mới, form vẫn mở với lời máy chủ và nháp của khách', async () => {
+    mocks.canReview.mockResolvedValueOnce(ELIG_NEW).mockResolvedValueOnce({ canReview: false, reason: 'NOT_PURCHASED' });
+    mocks.createReview.mockRejectedValueOnce(serverError('Đơn này đã trả hàng nên không đánh giá mới được.', 400));
+    await openNewForm();
+    fillDraft();
+    fireEvent.click(sendButton());
+    expect(await screen.findByRole('alert')).toHaveTextContent('Đơn này đã trả hàng nên không đánh giá mới được.');
+    await waitFor(() => expect(sendButton()).not.toHaveAttribute('aria-busy'));
+    expect(screen.getByText('Mua và nhận hàng để đánh giá')).toBeInTheDocument();
+    expect(screen.queryByText('Viết đánh giá', { selector: 'button *' })).toBeNull();
+    expectDraftKept();
+    expect(screen.getByRole('alert')).toHaveTextContent('Đơn này đã trả hàng nên không đánh giá mới được.');
+  });
+
+  it('sửa đánh giá bị từ chối 409: tải lại can-review, danh sách và đánh giá đang sửa; sao khách vừa đổi không bị dữ liệu mới ghi đè', async () => {
+    mocks.canReview.mockResolvedValue(ELIG_ALL);
+    mocks.createReview.mockRejectedValueOnce(serverError('Không lưu được đánh giá do thao tác đồng thời, bạn thử lại nhé.', 409));
+    renderSection();
+    fireEvent.click(await screen.findByRole('button', { name: 'Sửa đánh giá của bạn' }));
+    const group = await screen.findByRole('radiogroup', { name: 'Số sao' });
+    await screen.findByPlaceholderText(/Chia sẻ cảm nhận/);
+    fireEvent.click(within(group).getByRole('radio', { name: '2 sao' }));
+    fireEvent.click(sendButton('Lưu đánh giá'));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Không lưu được đánh giá do thao tác đồng thời, bạn thử lại nhé.');
+    await waitFor(() => expect(mocks.canReview).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mocks.fetchMyReview).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(sendButton('Lưu đánh giá')).not.toHaveAttribute('aria-busy'));
+    expect(within(screen.getByRole('radiogroup', { name: 'Số sao' })).getByRole('radio', { name: '2 sao' })).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it.each([
+    ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+    ['máy chủ lỗi 503', serverError('Service Unavailable', 503)],
+    ['hết phiên 401', serverError('Unauthorized', 401)],
+  ])('%s: không nói gì về trạng thái thật nên không tải lại, khoá nhả ngay và gửi lại được', async (_label, error) => {
+    mocks.createReview.mockRejectedValueOnce(error).mockResolvedValueOnce({ updated: false, pointsEarned: 0 });
+    await openNewForm();
+    fillDraft();
+    fireEvent.click(sendButton());
+    expect(await screen.findAllByRole('alert')).toHaveLength(1);
+    await waitFor(() => expect(sendButton()).not.toHaveAttribute('aria-busy'));
+    await settle();
+    expect(mocks.canReview).toHaveBeenCalledTimes(1);
+    expectDraftKept();
+    expect(screen.getByRole('button', { name: 'Đóng' })).toBeInTheDocument();
+
+    fireEvent.click(sendButton());
+    await waitFor(() => expect(mocks.createReview).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByRole('radiogroup', { name: 'Số sao' })).toBeNull());
+  });
+
+  it('tải lại treo mãi: khoá nhả đúng sau LOCK_REFRESH_WAIT_MS (đồng hồ giả), rồi gửi lại được', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      mocks.canReview.mockResolvedValueOnce(ELIG_NEW).mockReturnValueOnce(new Promise(() => undefined));
+      mocks.createReview.mockRejectedValueOnce(serverError('Đơn này chưa giao tới bạn hoặc không có sản phẩm này nên chưa đánh giá được.', 400)).mockResolvedValueOnce({ updated: false, pointsEarned: 0 });
+      await openNewForm();
+      fillDraft();
+      fireEvent.click(sendButton());
+      expect(await screen.findByRole('alert')).toHaveTextContent('Đơn này chưa giao tới bạn');
+      await waitFor(() => expect(mocks.canReview).toHaveBeenCalledTimes(2));
+      expect(sendButton()).toHaveAttribute('aria-busy', 'true');
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 1_000);
+      });
+      expect(sendButton()).toHaveAttribute('aria-busy', 'true');
+      await act(async () => {
+        fireEvent.click(sendButton());
+      });
+      expect(mocks.createReview).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_100);
+      });
+      await waitFor(() => expect(sendButton()).not.toHaveAttribute('aria-busy'));
+      expectDraftKept();
+      fireEvent.click(sendButton());
+      await waitFor(() => expect(mocks.createReview).toHaveBeenCalledTimes(2));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('chạm đúp "Gửi đánh giá" trong cùng một khung hình chỉ gọi createReview một lần, kể cả khi lần đó bị từ chối', async () => {
+    const refresh = deferred();
+    const first = deferred();
+    mocks.canReview.mockResolvedValueOnce(ELIG_NEW).mockReturnValueOnce(refresh.promise);
+    mocks.createReview.mockReturnValueOnce(first.promise);
+    await openNewForm();
+    const send = sendButton();
+    act(() => {
+      send.click();
+      send.click();
+    });
+    await waitFor(() => expect(mocks.createReview).toHaveBeenCalledTimes(1));
+    await settle();
+    expect(mocks.createReview).toHaveBeenCalledTimes(1);
+
+    await act(async () => first.resolve(Promise.reject(serverError('Không lưu được đánh giá do thao tác đồng thời, bạn thử lại nhé.', 409))));
+    await waitFor(() => expect(mocks.canReview).toHaveBeenCalledTimes(2));
+    await act(async () => {
+      sendButton().click();
+    });
+    await settle();
+    expect(mocks.createReview).toHaveBeenCalledTimes(1);
+    await act(async () => refresh.resolve(ELIG_NEW));
+    await waitFor(() => expect(sendButton()).not.toHaveAttribute('aria-busy'));
   });
 });

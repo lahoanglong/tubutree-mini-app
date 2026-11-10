@@ -9,9 +9,14 @@ const mocks = vi.hoisted(() => ({
   setReminder: vi.fn(),
   cancelReminder: vi.fn(),
   navigate: vi.fn(),
+  openSnackbar: vi.fn(),
   status: 'guest',
 }));
-vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<typeof ZmpUi>()), useNavigate: () => mocks.navigate }));
+vi.mock('zmp-ui', async (importOriginal) => ({
+  ...(await importOriginal<typeof ZmpUi>()),
+  useNavigate: () => mocks.navigate,
+  useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
+}));
 vi.mock('../services/shop-api', () => ({
   fetchUpcomingFlashSales: mocks.fetchUpcoming,
   setFlashReminder: mocks.setReminder,
@@ -22,6 +27,8 @@ vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import { FLASH_HINT_KEY, FLASH_NEXT_SLOT_HEIGHT, FLASH_SKELETON_HEIGHT } from '@tubutree/app-core/home-layout';
 import { FlashSale, UpcomingFlashSales, type FlashSaleProps } from './flash-sale';
+import { HttpError } from '../services/http';
+import { LOCK_REFRESH_WAIT_MS } from '../utils/settle-within';
 
 function renderFlash(props: Partial<FlashSaleProps> = {}) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -460,5 +467,155 @@ describe('UpcomingFlashSales (C-076 di cư DS v2: giữ nguyên hành vi)', () =
     renderUpcoming();
     const btn = await screen.findByRole('button', { name: /Nhắc tôi/ });
     expect(Number.parseFloat(btn.style.minHeight)).toBeGreaterThanOrEqual(44);
+  });
+});
+
+describe('UpcomingFlashSales: máy chủ từ chối thì tải lại và giữ khoá tới khi dữ liệu mới về, lỗi tạm nhả ngay (W110A)', () => {
+  const UPCOMING_KEY = ['flash-sales', 'upcoming'];
+  const UP = {
+    itemId: 'u1', productSlug: 'nrc', productName: 'Nước rửa chén', thumbnail: null, retailPrice: 100000, flashPrice: 80000,
+    startAt: new Date(Date.now() + 3_600_000).toISOString(), reminded: false,
+  };
+  const deferred = () => {
+    let resolve!: (v?: unknown) => void;
+    const promise = new Promise((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  const never = () => new Promise<never>(() => undefined);
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message } } as never);
+  const errorToasts = () => mocks.openSnackbar.mock.calls.map(([o]) => o as { text: string; type?: string }).filter((o) => o.type === 'error').map((o) => o.text);
+  const TRANSIENT: [string, () => unknown][] = [
+    ['mất mạng', () => new HttpError('Network Error', 'ERR_NETWORK')],
+    ['máy chủ lỗi 503', () => serverError('Service Unavailable', 503)],
+    ['hết phiên 401', () => serverError('Unauthorized', 401)],
+  ];
+  // Nút nhắc là `div role="button"` không có aria-busy: dấu bận đang có là độ mờ 0,6 của thẻ đang chờ lệnh.
+  const remindBtn = (name: RegExp | string = 'Nhắc tôi') => screen.getByRole('button', { name });
+  const isBusy = () => remindBtn().style.opacity === '0.6';
+  /** Giữ các lần tải danh sách nhắc kế tiếp tới khi `gate` mở (lần đầu đã xong trước khi gọi). */
+  const holdReloads = (gate: Promise<unknown>) => {
+    mocks.fetchUpcoming.mockImplementation(async () => {
+      await gate;
+      return [UP];
+    });
+  };
+
+  async function renderLive() {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const spy = vi.spyOn(qc, 'invalidateQueries');
+    render(
+      <QueryClientProvider client={qc}>
+        <UpcomingFlashSales />
+      </QueryClientProvider>,
+    );
+    await screen.findByRole('button', { name: 'Nhắc tôi' });
+    return { qc, keys: () => spy.mock.calls.map(([filters]) => (filters as { queryKey: unknown[] }).queryKey) };
+  }
+  // Trạng thái bận tới React qua bộ đếm giờ 0ms của react-query, và lệnh bắt đầu chạy lệch vài ms giờ giả so với lúc bấm: nên "tới hạn" là hạn cộng biên nhỏ rồi xả vài nhịp.
+  const flush = () =>
+    act(async () => {
+      for (let i = 0; i < 4; i++) await vi.advanceTimersByTimeAsync(0);
+    });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // clearAllMocks không bỏ mockImplementation của test trước (tải lại treo mãi): dựng lại mặc định.
+    mocks.fetchUpcoming.mockReset().mockResolvedValue([UP]);
+    mocks.setReminder.mockReset().mockResolvedValue({});
+    mocks.cancelReminder.mockReset().mockResolvedValue({});
+    mocks.status = 'authenticated';
+  });
+
+  it.each([400, 404, 409])('bị từ chối %i: hoàn tác nút ngay, báo lỗi một lần, tải lại danh sách nhắc một lần, thẻ bận tới khi dữ liệu về', async (status) => {
+    const message = 'Ưu đãi đã bắt đầu.';
+    mocks.setReminder.mockRejectedValueOnce(serverError(message, status));
+    const { keys } = await renderLive();
+    const gate = deferred();
+    holdReloads(gate.promise);
+    fireEvent.click(remindBtn());
+    await waitFor(() => expect(errorToasts()).toEqual([message]));
+    // Đúng một lần: lệnh tải lại ở onError, onSettled không tải thêm lần hai.
+    expect(keys()).toEqual([UPCOMING_KEY]);
+    // Hoàn tác trước khi dữ liệu mới về: nhãn đã trở lại "Nhắc tôi" (lạc quan là "Đã đặt nhắc"), thẻ vẫn bận.
+    expect(screen.queryByRole('button', { name: 'Đã đặt nhắc' })).toBeNull();
+    expect(isBusy()).toBe(true);
+    fireEvent.click(remindBtn());
+    expect(mocks.setReminder).toHaveBeenCalledTimes(1);
+    expect(errorToasts()).toEqual([message]);
+    await act(async () => gate.resolve());
+    await waitFor(() => expect(isBusy()).toBe(false));
+    expect(mocks.setReminder).toHaveBeenCalledTimes(1);
+    fireEvent.click(remindBtn());
+    await waitFor(() => expect(mocks.setReminder).toHaveBeenCalledTimes(2));
+  });
+
+  it.each(TRANSIENT)('lỗi tạm (%s): hoàn tác, chỉ tải lại danh sách nhắc như cũ, nhả khoá ngay dù tải lại treo', async (_label, makeError) => {
+    mocks.setReminder.mockRejectedValueOnce(makeError());
+    const { keys } = await renderLive();
+    holdReloads(never());
+    fireEvent.click(remindBtn());
+    await waitFor(() => expect(mocks.setReminder).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(isBusy()).toBe(false));
+    expect(screen.getByRole('button', { name: 'Nhắc tôi' })).toBeInTheDocument();
+    expect(keys()).toEqual([UPCOMING_KEY]);
+    fireEvent.click(remindBtn());
+    await waitFor(() => expect(mocks.setReminder).toHaveBeenCalledTimes(2));
+  });
+
+  it('bị từ chối mà tải lại treo mãi: khoá nhả đúng sau LOCK_REFRESH_WAIT_MS, chưa tới hạn thì chạm tiếp bị từ chối', async () => {
+    mocks.setReminder.mockRejectedValueOnce(serverError('Ưu đãi đã bắt đầu.', 400));
+    await renderLive();
+    holdReloads(never());
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] });
+    try {
+      await act(async () => {
+        fireEvent.click(remindBtn());
+      });
+      await flush();
+      expect(mocks.setReminder).toHaveBeenCalledTimes(1);
+      expect(errorToasts()).toHaveLength(1);
+      expect(isBusy()).toBe(true);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 1);
+        fireEvent.click(remindBtn());
+      });
+      expect(mocks.setReminder).toHaveBeenCalledTimes(1);
+      expect(isBusy()).toBe(true);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(50);
+      });
+      await flush();
+      expect(isBusy()).toBe(false);
+      await act(async () => {
+        fireEvent.click(remindBtn());
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(mocks.setReminder).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('khoá theo món: hai món chạm cùng khung hình đều gửi lệnh, chạm đúp một món chỉ gửi một lần', async () => {
+    const UP2 = { ...UP, itemId: 'u2', productSlug: 'nrc2', productName: 'Nước giặt' };
+    mocks.fetchUpcoming.mockResolvedValue([UP, UP2]);
+    mocks.setReminder.mockReturnValue(never());
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <UpcomingFlashSales />
+      </QueryClientProvider>,
+    );
+    const buttons = await screen.findAllByRole('button', { name: 'Nhắc tôi' });
+    await act(async () => {
+      fireEvent.click(buttons[0]!);
+      fireEvent.click(buttons[0]!);
+      fireEvent.click(buttons[1]!);
+    });
+    expect(mocks.setReminder).toHaveBeenCalledTimes(2);
+    expect(mocks.setReminder).toHaveBeenNthCalledWith(1, 'u1');
+    expect(mocks.setReminder).toHaveBeenNthCalledWith(2, 'u2');
   });
 });

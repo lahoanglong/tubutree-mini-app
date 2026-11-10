@@ -3,7 +3,7 @@ import { wasteRequestRefetchMs } from '@tubutree/app-core/waste-request-poll';
 import { useEffect, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { Input, Page, useNavigate, useParams, useSnackbar } from 'zmp-ui';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useLockedMutation } from '../components/game/use-locked-mutation';
 import type { WasteRequestDetailDTO, WasteRequestLineDTO } from '@tubutree/shared-types';
 import {
@@ -15,7 +15,8 @@ import {
   invalidateAfterWasteWrite,
   setWasteTracking,
 } from '../services/waste-api';
-import { getErrorMessage, getLoadErrorMessage, isNotFoundError } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage, isNotFoundError, isStaleStateError } from '../services/api';
+import { settleWithin } from '../utils/settle-within';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { QrCode } from '../components/qr-code';
@@ -90,6 +91,19 @@ export function DeclaredCountedTable({ lines }: { lines: readonly WasteRequestLi
   );
 }
 
+/**
+ * Máy chủ từ chối kiểu dữ liệu cũ (yêu cầu đã huỷ, hết hạn, đã nhận hàng...): tải lại chi tiết yêu cầu và danh sách yêu cầu rồi mới nhả khoá
+ * (tối đa `settleWithin`), kẻo nút sáng lại trên trạng thái cũ và khách bấm tiếp nhận đúng lời từ chối đó. Lỗi tạm thì không gọi hàm này.
+ */
+function refreshAfterRejection(qc: QueryClient, id: string): Promise<void> {
+  return settleWithin(
+    Promise.all([
+      qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.request(id) }),
+      qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.requests }),
+    ]),
+  );
+}
+
 function TrackingForm({
   id,
   initialCarrier,
@@ -112,7 +126,10 @@ function TrackingForm({
       openSnackbar({ text: 'Đã lưu mã vận đơn', type: 'success' });
       onDone?.();
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      return isStaleStateError(e) ? refreshAfterRejection(qc, id) : undefined;
+    },
   });
   const ready = carrier.trim() !== '' && code.trim() !== '';
   return (
@@ -177,7 +194,10 @@ export default function RecycleRequestPage() {
       setCancelOpen(false);
       openSnackbar({ text: 'Đã huỷ yêu cầu', type: 'success' });
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      return isStaleStateError(e) ? refreshAfterRejection(qc, id) : undefined;
+    },
   });
 
   const shell = (content: ReactNode, title = 'Yêu cầu đổi rác', subtitle?: string) => (

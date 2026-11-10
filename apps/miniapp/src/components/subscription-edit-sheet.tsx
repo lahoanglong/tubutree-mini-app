@@ -11,6 +11,7 @@ import {
 } from '../services/subscriptions-api';
 import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { haptic } from '../utils/haptic';
+import { settleWithin } from '../utils/settle-within';
 import { vi } from '../i18n/vi';
 import { useLockedMutation } from './game/use-locked-mutation';
 import { BottomSheet } from './ui/bottom-sheet';
@@ -76,7 +77,8 @@ export function SubscriptionEditSheet({ sub, onClose }: { sub: SubscriptionDTO; 
     onError: (e) => {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
       // Gói đã huỷ ở máy khác (sheet tự đóng khi gói rời danh sách) hoặc đã có gói trùng: danh sách đang cũ.
-      if (isStaleSubscriptionError(e)) void qc.invalidateQueries({ queryKey: ['subscriptions'] });
+      // Trả Promise từ onError (không phải onSettled, vốn chạy sau và là nơi nhả khoá) để nút Lưu giữ khoá tới khi danh sách mới về.
+      return isStaleSubscriptionError(e) ? settleWithin(qc.invalidateQueries({ queryKey: ['subscriptions'] })) : undefined;
     },
   });
 

@@ -1,7 +1,7 @@
 import { memo, useEffect, useId, useMemo, useState, type CSSProperties, type MouseEvent } from 'react';
 import { Bell, CheckCircle2, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'zmp-ui';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   fetchUpcomingFlashSales,
   setFlashReminder,
@@ -17,11 +17,15 @@ import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { flashCardProduct, soldPercent } from '../utils/flash-display';
 import { haptic } from '../utils/haptic';
 import { serverNow } from '../utils/server-clock';
+import { settleWithin } from '../utils/settle-within';
 import { vi } from '../i18n/vi';
+import { getErrorMessage, isStaleStateError } from '../services/api';
 import { useCountdown } from '../hooks/use-countdown';
+import { useNotify } from '../hooks/use-notify';
 import { useAuthStore } from '../store/auth';
 import { browserStorage } from '../utils/recently-viewed';
 import { FLASH_NEXT_SLOT_HEIGHT, FLASH_SKELETON_HEIGHT, readFlashHint, readFlashSlotHint, writeFlashHint } from '@tubutree/app-core/home-layout';
+import { useLockedMutation } from './game/use-locked-mutation';
 import { Skeleton } from './ui/skeleton';
 import { HomeBlockError } from './home/home-block-error';
 import { Countdown } from './ui/countdown';
@@ -256,6 +260,7 @@ function UpcomingFlashCard({ item, pending, onToggleRemind }: { item: UpcomingFl
  */
 export function UpcomingFlashSales() {
   const qc = useQueryClient();
+  const { notify } = useNotify();
   const authed = useAuthStore((s) => s.status === 'authenticated');
 
   const q = useQuery({
@@ -265,22 +270,34 @@ export function UpcomingFlashSales() {
     staleTime: 30_000,
   });
 
-  const remindMut = useMutation({
-    mutationFn: ({ itemId, reminded }: { itemId: string; reminded: boolean }) =>
-      reminded ? cancelFlashReminder(itemId) : setFlashReminder(itemId),
-    onMutate: async ({ itemId, reminded }) => {
-      await qc.cancelQueries({ queryKey: ['flash-sales', 'upcoming'] });
-      const prev = qc.getQueryData<UpcomingFlashItem[]>(['flash-sales', 'upcoming']);
-      qc.setQueryData<UpcomingFlashItem[]>(['flash-sales', 'upcoming'], (old) =>
-        old?.map((it) => (it.itemId === itemId ? { ...it, reminded: !reminded } : it)),
-      );
-      return { prev };
+  // Khoá theo món: chạm đúp cùng một món không gửi hai lệnh (`pending` của thẻ chỉ đúng sau lần vẽ kế tiếp), món khác vẫn chạy song song.
+  const remindMut = useLockedMutation(
+    {
+      mutationFn: ({ itemId, reminded }: { itemId: string; reminded: boolean }) =>
+        reminded ? cancelFlashReminder(itemId) : setFlashReminder(itemId),
+      onMutate: async ({ itemId, reminded }) => {
+        await qc.cancelQueries({ queryKey: ['flash-sales', 'upcoming'] });
+        const prev = qc.getQueryData<UpcomingFlashItem[]>(['flash-sales', 'upcoming']);
+        qc.setQueryData<UpcomingFlashItem[]>(['flash-sales', 'upcoming'], (old) =>
+          old?.map((it) => (it.itemId === itemId ? { ...it, reminded: !reminded } : it)),
+        );
+        return { prev };
+      },
+      // Hoàn tác lạc quan trước. Máy chủ từ chối vì trạng thái đã đổi (vd "Ưu đãi đã bắt đầu."): thẻ sắp đổi theo dữ liệu thật nên nói lời máy chủ trước,
+      // rồi tải lại danh sách nhắc và giữ khoá của món tới khi xong (tối đa LOCK_REFRESH_WAIT_MS). Lỗi tạm (mất mạng, 5xx) thì chỉ hoàn tác, nhả khoá ngay.
+      onError: (e: unknown, _v, ctx) => {
+        if (ctx?.prev) qc.setQueryData(['flash-sales', 'upcoming'], ctx.prev);
+        if (!isStaleStateError(e)) return undefined;
+        notify({ text: getErrorMessage(e), type: 'error' });
+        return settleWithin(qc.invalidateQueries({ queryKey: ['flash-sales', 'upcoming'] }));
+      },
+      // Đường từ chối "dữ liệu cũ" đã tải lại ở `onError` (và chờ nó): không tải lần hai.
+      onSettled: (_d, e) => {
+        if (!isStaleStateError(e)) void qc.invalidateQueries({ queryKey: ['flash-sales', 'upcoming'] });
+      },
     },
-    onError: (_e, _v, ctx) => {
-      if (ctx?.prev) qc.setQueryData(['flash-sales', 'upcoming'], ctx.prev);
-    },
-    onSettled: () => void qc.invalidateQueries({ queryKey: ['flash-sales', 'upcoming'] }),
-  });
+    ({ itemId }) => itemId,
+  );
 
   const items = q.data ?? [];
   if (!authed || q.isLoading || items.length === 0) return null;
