@@ -796,6 +796,35 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
       expect(db.redemptions).toHaveLength(1);
       expect(db.ledger).toHaveLength(1);
     });
+    // Bấm đúp / mạng chập chờn: CÙNG Idempotency-Key tới song song. Chốt chặn là FOR UPDATE dòng user + đọc prior
+    // trong tx: request thua phải đọc thấy dòng của request thắng và trả đúng kết quả cũ (không 500, không trừ lần hai).
+    it('CONCURRENCY: 5 request CÙNG khoá đổi voucher song song → đúng 1 voucher, 1 lần trừ điểm, mọi phản hồi cùng một redemption', async () => {
+      const { db, prisma } = makeFakeDb([{ id: 'u1', pointsBalance: 200_000, referralCode: 'AAAA1111' }]);
+      const svc = new LoyaltyService(prisma, makeConfig());
+      const results = await Promise.allSettled(
+        Array.from({ length: 5 }, () => svc.redeemReward('u1', 'reward-discount-50k', 'key-same-0001')),
+      );
+      expect(results.filter((r) => r.status === 'rejected')).toHaveLength(0);
+      const ok = results.map((r) => (r as PromiseFulfilledResult<Awaited<ReturnType<typeof svc.redeemReward>>>).value);
+      expect(new Set(ok.map((r) => r.redemption.id)).size).toBe(1);
+      for (const r of ok) expect(r).toMatchObject({ success: true, pointsSpent: 50_000, remainingPoints: 150_000 });
+      expect(db.users.get('u1')!.pointsBalance).toBe(150_000);
+      expect(db.coupons).toHaveLength(1);
+      expect(db.redemptions).toHaveLength(1);
+      expect(db.ledger.filter((l) => l.delta < 0)).toHaveLength(1);
+    });
+    it('CONCURRENCY: 5 request CÙNG khoá đổi quà vật lý song song → tồn kho trừ đúng 1, điểm trừ đúng 1 lần', async () => {
+      const { db, prisma } = makeFakeDb([{ id: 'u1', pointsBalance: 100_000, referralCode: 'AAAA1111', ...realUser }], { gifts: [giftRow({ stock: 5 })] });
+      const svc = new LoyaltyService(prisma, makeConfig());
+      const results = await Promise.allSettled(Array.from({ length: 5 }, () => svc.redeemReward('u1', 'g1', 'key-same-0002')));
+      expect(results.filter((r) => r.status === 'rejected')).toHaveLength(0);
+      const ids = results.map((r) => (r as PromiseFulfilledResult<Awaited<ReturnType<typeof svc.redeemReward>>>).value.redemption.id);
+      expect(new Set(ids).size).toBe(1);
+      expect(db.users.get('u1')!.pointsBalance).toBe(70_000);
+      expect(db.gifts.get('g1')!.stock).toBe(4);
+      expect(db.redemptions).toHaveLength(1);
+      expect(db.ledger).toHaveLength(1);
+    });
     it('cùng khoá nhưng quà khác → 409', async () => {
       const { prisma } = makeFakeDb([{ id: 'u1', pointsBalance: 200_000, referralCode: 'AAAA1111' }]);
       const svc = new LoyaltyService(prisma, makeConfig());
