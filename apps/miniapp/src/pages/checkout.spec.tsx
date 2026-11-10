@@ -106,6 +106,7 @@ import CheckoutPage, { attachablePickup } from './checkout';
 import { recallCheckoutSelection, rememberCheckoutSelection } from '../utils/checkout-selection';
 import { makeRequestSummary, makeWasteMe } from '../services/waste-test-fixtures';
 import { createQueryClient } from '../services/query-client';
+import { COUPON_CHANGE_KEY } from '../components/checkout/use-coupon-hint';
 import { vi as viCopy } from '../i18n/vi';
 
 const ADDRESS = {
@@ -2893,5 +2894,294 @@ describe('CheckoutPage — khoá chạm đúp dòng sửa nhanh, gỡ mã tự �
     });
     expect(mocks.placeOrder).toHaveBeenCalledTimes(2);
     await act(async () => replay.resolve({ id: 'o1', code: 'TT001' }));
+  });
+});
+
+describe('CheckoutPage — khoá chéo Đặt hàng với đổi mã, "Thử lại" báo giá và tải trang, đổi cách trả tiền lúc đang gửi (W92A)', () => {
+  const A2 = { ...ADDRESS, id: 'a2', street: '9 Hai Bà Trưng', ward: 'Phường Sài Gòn', wardCode: '84_VN79_26734', isDefault: false };
+  const APPLIED = { ...CART, couponCode: 'WELCOME30', discount: 30_000 };
+  const networkError = () => new HttpError('Network Error', 'ERR_NETWORK');
+  const pending = <T,>() => {
+    let resolve!: (v: T) => void;
+    let reject!: (e: unknown) => void;
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+  const makeClient = () => new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  const renderWith = (qc: QueryClient) =>
+    render(
+      <QueryClientProvider client={qc}>
+        <CheckoutPage />
+      </QueryClientProvider>,
+    );
+  const voucherBusy = () => mocks.voucherProps[mocks.voucherProps.length - 1]!.busy;
+  const placeButton = async () => (await screen.findByText(/(Đặt hàng|Thử lại) · /)).closest('button')!;
+
+  beforeEach(() => {
+    mocks.publicConfig.waste.pickup = false;
+    vi.clearAllMocks();
+    mocks.placeOrder.mockReset();
+    sessionStorage.clear();
+    localStorage.clear();
+    mocks.sfCtx.slug = null;
+    mocks.sfCtx.referralCode = null;
+    mocks.sfCtx.referralEligible = null;
+    mocks.voucherProps = [];
+    mocks.getAddresses.mockResolvedValue([ADDRESS]);
+    mocks.getCart.mockResolvedValue(CART);
+    mocks.checkoutQuote.mockResolvedValue(QUOTE);
+    mocks.ensurePhone.mockResolvedValue('0900000000');
+    mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
+    mocks.getWasteMe.mockResolvedValue(makeWasteMe());
+    mocks.getCoupons.mockResolvedValue([]);
+    mocks.getCouponPreviews.mockResolvedValue([]);
+  });
+
+  describe('đơn đang gửi thì không đổi mã giữa chừng', () => {
+    it('xin SĐT rồi gửi đơn: tấm chọn mã nhận busy suốt từ lúc chạm Đặt hàng, nhả khi đơn xong', async () => {
+      const phone = pending<string>();
+      const place = pending<{ id: string; code: string }>();
+      mocks.ensurePhone.mockReturnValue(phone.promise);
+      mocks.placeOrder.mockReturnValue(place.promise);
+      renderPage();
+      const button = await placeButton();
+      await waitFor(() => expect(button).not.toBeDisabled());
+      expect(voucherBusy()).toBe(false);
+      fireEvent.click(button);
+      await waitFor(() => expect(voucherBusy()).toBe(true));
+      expect(mocks.placeOrder).not.toHaveBeenCalled();
+      await act(async () => phone.resolve('0900000000'));
+      await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(1));
+      expect(voucherBusy()).toBe(true);
+      await act(async () => place.reject(new Error('Hết hàng')));
+      await waitFor(() => expect(voucherBusy()).toBe(false));
+    });
+
+    it('đơn gửi lại bằng "Kiểm tra lại" (không qua nút Đặt hàng) rồi giỏ có hàng trở lại: tấm chọn mã vẫn busy', async () => {
+      let cartData: typeof CART = CART;
+      mocks.getCart.mockImplementation(async () => cartData);
+      const qc = makeClient();
+      const replay = pending<{ id: string; code: string }>();
+      mocks.placeOrder.mockRejectedValueOnce(networkError()).mockReturnValueOnce(replay.promise);
+      renderWith(qc);
+      const button = await placeButton();
+      await waitFor(() => expect(button).not.toBeDisabled());
+      fireEvent.click(button);
+      await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(1));
+      cartData = { ...CART, items: [], itemCount: 0, subtotal: 0 };
+      await qc.invalidateQueries({ queryKey: ['cart'] });
+      fireEvent.click(await screen.findByText('Kiểm tra lại'));
+      await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(2));
+      cartData = CART;
+      await qc.invalidateQueries({ queryKey: ['cart'] });
+      await screen.findByText(viCopy.checkout.placing);
+      await waitFor(() => expect(voucherBusy()).toBe(true));
+      await act(async () => replay.resolve({ id: 'o1', code: 'TT001' }));
+    });
+
+    it('nút "Gỡ" mã tự áp bị khoá khi đơn đang gửi, bấm không gọi API gỡ mã', async () => {
+      mocks.getCoupons.mockResolvedValue([{ id: 'c1', code: 'WELCOME30' }]);
+      mocks.getCouponPreviews.mockResolvedValue([{ code: 'WELCOME30', eligible: true, discount: 30_000 }]);
+      mocks.applyCoupon.mockResolvedValue(APPLIED);
+      const place = pending<{ id: string; code: string }>();
+      mocks.placeOrder.mockReturnValue(place.promise);
+      renderPage();
+      const remove = await screen.findByTestId('coupon-auto-remove');
+      const button = await placeButton();
+      await waitFor(() => expect(button).not.toBeDisabled());
+      expect(remove).toBeEnabled();
+      fireEvent.click(button);
+      await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(1));
+      expect(remove).toBeDisabled();
+      fireEvent.click(remove);
+      expect(mocks.removeCoupon).not.toHaveBeenCalled();
+      await act(async () => place.resolve({ id: 'o1', code: 'TT001' }));
+    });
+  });
+
+  describe('đổi mã trong tấm chọn mã còn đang chạy thì chưa cho Đặt hàng', () => {
+    it('lệnh áp/gỡ mã của tấm chọn mã đang bay: nút Đặt hàng khoá, bấm không gửi đơn; xong thì mở lại', async () => {
+      const qc = makeClient();
+      renderWith(qc);
+      const button = await placeButton();
+      await waitFor(() => expect(button).not.toBeDisabled());
+      const change = pending<void>();
+      let run!: Promise<unknown>;
+      act(() => {
+        run = qc.getMutationCache().build(qc, { mutationKey: COUPON_CHANGE_KEY, mutationFn: () => change.promise }).execute(undefined);
+      });
+      await waitFor(() => expect(button).toBeDisabled());
+      fireEvent.click(button);
+      expect(mocks.placeOrder).not.toHaveBeenCalled();
+      await act(async () => {
+        change.resolve();
+        await run;
+      });
+      await waitFor(() => expect(button).not.toBeDisabled());
+    });
+
+    it('mutation khác khoá (không phải đổi mã) không làm khoá nút Đặt hàng', async () => {
+      const qc = makeClient();
+      renderWith(qc);
+      const button = await placeButton();
+      await waitFor(() => expect(button).not.toBeDisabled());
+      const other = pending<void>();
+      let run!: Promise<unknown>;
+      act(() => {
+        run = qc.getMutationCache().build(qc, { mutationKey: ['khac'], mutationFn: () => other.promise }).execute(undefined);
+      });
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 30));
+      });
+      expect(button).not.toBeDisabled();
+      await act(async () => {
+        other.resolve();
+        await run;
+      });
+    });
+  });
+
+  describe('"Thử lại" trả refetch để khoá tới khi xong', () => {
+    it('lần tải lại báo giá hỏng khi đã có số cũ: chạm đúp "Thử lại" trong cùng một khung hình chỉ hỏi máy chủ thêm một lần, nút báo bận', async () => {
+      const qc = makeClient();
+      renderWith(qc);
+      await placeButton();
+      mocks.checkoutQuote.mockRejectedValue(networkError());
+      await act(async () => {
+        await qc.invalidateQueries({ queryKey: ['quote'] });
+      });
+      const retry = await screen.findByRole('button', { name: 'Thử lại' });
+      const before = mocks.checkoutQuote.mock.calls.length;
+      const next = pending<typeof QUOTE>();
+      mocks.checkoutQuote.mockReturnValue(next.promise);
+      await act(async () => {
+        fireEvent.click(retry);
+        fireEvent.click(retry);
+      });
+      expect(mocks.checkoutQuote).toHaveBeenCalledTimes(before + 1);
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Thử lại' })).toHaveAttribute('aria-busy', 'true'));
+      expect(screen.getByRole('button', { name: 'Thử lại' }).style.opacity).toBe('0.6');
+      await act(async () => next.resolve(QUOTE));
+      await waitFor(() => expect(screen.queryByRole('button', { name: 'Thử lại' })).toBeNull());
+    });
+
+    it('"Thử lại" báo giá mà vẫn lỗi thì nhả khoá: bấm lần nữa vẫn hỏi lại', async () => {
+      const qc = makeClient();
+      renderWith(qc);
+      await placeButton();
+      mocks.checkoutQuote.mockRejectedValue(networkError());
+      await act(async () => {
+        await qc.invalidateQueries({ queryKey: ['quote'] });
+      });
+      const retry = await screen.findByRole('button', { name: 'Thử lại' });
+      const before = mocks.checkoutQuote.mock.calls.length;
+      await act(async () => fireEvent.click(retry));
+      await waitFor(() => expect(mocks.checkoutQuote).toHaveBeenCalledTimes(before + 1));
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Thử lại' })).not.toHaveAttribute('aria-busy'));
+      expect(screen.getByRole('button', { name: 'Thử lại' }).style.opacity).toBe('1');
+      await act(async () => fireEvent.click(retry));
+      await waitFor(() => expect(mocks.checkoutQuote).toHaveBeenCalledTimes(before + 2));
+    });
+
+    it('"Thử lại" báo giá không mở bảng Chi tiết tính tiền của thẻ chứa nó', async () => {
+      const qc = makeClient();
+      renderWith(qc);
+      await placeButton();
+      mocks.checkoutQuote.mockRejectedValue(networkError());
+      await act(async () => {
+        await qc.invalidateQueries({ queryKey: ['quote'] });
+      });
+      fireEvent.click(await screen.findByRole('button', { name: 'Thử lại' }));
+      expect(screen.queryByText('Chi tiết tính tiền đơn hàng')).toBeNull();
+    });
+
+    it('giỏ không tải được (hồi quy): chạm đúp "Thử lại" trong cùng một khung hình chỉ tải giỏ thêm một lần, không tải lại địa chỉ đã có; trong lúc tải lại hiện khung chờ', async () => {
+      mocks.getCart.mockRejectedValueOnce(networkError());
+      renderPage();
+      const retry = await screen.findByRole('button', { name: 'Thử lại' });
+      const addressCalls = mocks.getAddresses.mock.calls.length;
+      const next = pending<typeof CART>();
+      mocks.getCart.mockReturnValue(next.promise);
+      await act(async () => {
+        fireEvent.click(retry);
+        fireEvent.click(retry);
+      });
+      expect(mocks.getCart).toHaveBeenCalledTimes(2);
+      expect(mocks.getAddresses).toHaveBeenCalledTimes(addressCalls);
+      await waitFor(() => expect(screen.queryByRole('button', { name: 'Thử lại' })).toBeNull());
+      await act(async () => next.resolve(CART));
+      expect(await screen.findByText('Xà bông thảo mộc')).toBeInTheDocument();
+    });
+
+    it('địa chỉ không tải được (hồi quy): "Thử lại" tải lại địa chỉ mà không tải lại giỏ đã có', async () => {
+      mocks.getAddresses.mockRejectedValueOnce(networkError());
+      renderPage();
+      const retry = await screen.findByRole('button', { name: 'Thử lại' });
+      const cartCalls = mocks.getCart.mock.calls.length;
+      const next = pending<(typeof ADDRESS)[]>();
+      mocks.getAddresses.mockReturnValue(next.promise);
+      await act(async () => fireEvent.click(retry));
+      expect(mocks.getAddresses).toHaveBeenCalledTimes(2);
+      expect(mocks.getCart).toHaveBeenCalledTimes(cartCalls);
+      await act(async () => next.resolve([ADDRESS]));
+      expect(await screen.findByText('Xà bông thảo mộc')).toBeInTheDocument();
+    });
+  });
+
+  describe('đổi cách trả tiền khi đơn đang gửi (hồi quy: đơn về theo cách ĐÃ GỬI, không theo ô đang chọn)', () => {
+    it('gửi COD rồi đổi sang Chuyển khoản trước khi đơn về: ở lại màn thành công, không nhảy sang màn QR', async () => {
+      const place = pending<{ id: string; code: string }>();
+      mocks.placeOrder.mockReturnValue(place.promise);
+      renderPage();
+      const button = await placeButton();
+      await waitFor(() => expect(button).not.toBeDisabled());
+      fireEvent.click(button);
+      await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(1));
+      expect(mocks.placeOrder.mock.calls[0]![0]).toMatchObject({ paymentMethod: 'COD' });
+      const bank = within(paymentBox()).getByRole('radio', { name: /Chuyển khoản ngân hàng/ });
+      fireEvent.click(bank);
+      expect(bank).toHaveAttribute('aria-checked', 'true');
+      await act(async () => place.resolve({ id: 'o1', code: 'TT001' }));
+      expect(await screen.findByTestId('order-success')).toBeInTheDocument();
+      expect(mocks.navigate).not.toHaveBeenCalledWith(expect.stringContaining('/bank-payment'), expect.anything());
+    });
+
+    it('gửi Chuyển khoản rồi đổi sang COD trước khi đơn về: vẫn sang màn QR của đúng đơn', async () => {
+      const place = pending<{ id: string; code: string }>();
+      mocks.placeOrder.mockReturnValue(place.promise);
+      renderPage();
+      const button = await placeButton();
+      await waitFor(() => expect(button).not.toBeDisabled());
+      fireEvent.click(within(paymentBox()).getByRole('radio', { name: /Chuyển khoản ngân hàng/ }));
+      fireEvent.click(button);
+      await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(1));
+      expect(mocks.placeOrder.mock.calls[0]![0]).toMatchObject({ paymentMethod: 'BANK_TRANSFER' });
+      fireEvent.click(within(paymentBox()).getByRole('radio', { name: /Thanh toán khi nhận hàng/ }));
+      await act(async () => place.resolve({ id: 'o1', code: 'TT001' }));
+      await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/bank-payment/TT001', { replace: true }));
+      expect(screen.queryByTestId('order-success')).toBeNull();
+    });
+  });
+
+  describe('báo giá về trễ không đè kết quả mới hơn (hồi quy: khoá truy vấn theo địa chỉ)', () => {
+    it('đổi địa chỉ khi báo giá địa chỉ cũ chưa về: số của địa chỉ cũ về muộn không hiện, đơn gửi theo địa chỉ và tổng mới', async () => {
+      const slow = pending<typeof QUOTE>();
+      mocks.getAddresses.mockResolvedValue([ADDRESS, A2]);
+      mocks.checkoutQuote.mockImplementation((addressId: string) => (addressId === 'a1' ? slow.promise : Promise.resolve({ ...QUOTE, total: 99_000 })));
+      mocks.placeOrder.mockResolvedValue({ id: 'o1', code: 'TT001' });
+      renderPage();
+      await waitFor(() => expect(mocks.checkoutQuote).toHaveBeenCalledWith('a1', 0, undefined, undefined));
+      fireEvent.click((await screen.findByText(/9 Hai Bà Trưng/)).closest('[role="radio"]')!);
+      expect(await screen.findByText(/Đặt hàng · 99\.000/)).toBeInTheDocument();
+      await act(async () => slow.resolve({ ...QUOTE, total: 70_000 }));
+      expect(screen.queryByText(/70\.000/)).toBeNull();
+      expect(screen.getByText(/Đặt hàng · 99\.000/)).toBeInTheDocument();
+      const body = await placeOrderClick();
+      expect(body).toMatchObject({ addressId: 'a2', expectedTotal: 99_000 });
+    });
   });
 });

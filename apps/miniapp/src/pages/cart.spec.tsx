@@ -1889,3 +1889,35 @@ describe('CartPage: khoá chạm đúp và đua khi đổi giỏ, Thử lại t�
     });
   });
 });
+
+describe('CartPage: "Thử lại" khi giỏ không tải được (hồi quy, W92A không đổi hành vi)', () => {
+  const pending = <T,>() => {
+    let resolve!: (v: T) => void;
+    const promise = new Promise<T>((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getCartSelection.mockRejectedValue(new Error('chưa mock'));
+    mocks.fetchProducts.mockResolvedValue({ data: [], meta: { page: 1, limit: 4, total: 0 } });
+  });
+
+  it('chạm đúp trong cùng một khung hình chỉ tải giỏ thêm một lần (giỏ chưa có dữ liệu nên react-query gộp lần hai); trong lúc tải lại hiện khung chờ, xong thì hiện giỏ', async () => {
+    mocks.getCart.mockRejectedValueOnce(new Error('offline'));
+    renderPage();
+    const retry = await screen.findByRole('button', { name: 'Thử lại' });
+    const next = pending<ReturnType<typeof summary>>();
+    mocks.getCart.mockReturnValue(next.promise);
+    await act(async () => {
+      fireEvent.click(retry);
+      fireEvent.click(retry);
+    });
+    expect(mocks.getCart).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Thử lại' })).toBeNull());
+    await act(async () => next.resolve(summary({})));
+    expect(await screen.findByText('Xà bông thảo mộc')).toBeInTheDocument();
+  });
+});

@@ -11,6 +11,12 @@ import { useLockedMutation } from '../game/use-locked-mutation';
 import { PREVIEW_DEBOUNCE_MS, useDebounced } from '../../utils/use-debounced';
 
 /**
+ * Khoá mutation của mọi lệnh áp/gỡ mã trong tấm chọn mã. Trang thanh toán đọc nó bằng `useIsMutating` để khoá nút Đặt hàng: khách có thể
+ * đóng tấm khi lệnh còn chạy rồi chạm Đặt hàng ở chân trang, đơn khi đó đi với giỏ chưa có mã mà lệnh áp mã vẫn đang tới máy chủ.
+ */
+export const COUPON_CHANGE_KEY = ['coupon-change'] as const;
+
+/**
  * Số xem trước từng mã của ví cho giỏ chưa có mã. Cùng khoá truy vấn và nhịp debounce với VoucherSheet nên khi khách
  * mở tấm chọn mã, số xem trước đã nằm sẵn trong bộ nhớ đệm và không phải hỏi lại. `enabled` tắt khi giỏ đã có mã: lúc đó
  * không ai cần số nên không gọi máy chủ. Ví không có mã nào thì cũng không hỏi: xem trước tính cả giỏ trên máy chủ để rồi

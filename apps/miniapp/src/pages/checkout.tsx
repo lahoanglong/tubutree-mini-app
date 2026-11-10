@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Box, Page, Text, Input, useNavigate, useLocation, useSnackbar } from 'zmp-ui';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useIsMutating, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { WasteMeDTO, WasteRequestSummaryDTO } from '@tubutree/shared-types';
 import { Ticket, ChevronRight, Sprout, AlertCircle, Recycle } from 'lucide-react';
 import { getAddresses, getCart, checkoutQuote, placeOrder, removeCartItem, updateCartItem, type PlacedOrder } from '../services/shop-api';
@@ -19,7 +19,7 @@ import { useStorefrontContext } from '../store/storefront-context';
 import { AddressSection } from '../components/checkout/address-section';
 import { OrderSuccess } from '../components/checkout/order-success';
 import { VoucherSheet } from '../components/checkout/voucher-sheet';
-import { useCheckoutCoupon } from '../components/checkout/use-coupon-hint';
+import { COUPON_CHANGE_KEY, useCheckoutCoupon } from '../components/checkout/use-coupon-hint';
 import { normalizeTaxCode } from '@tubutree/app-core/commerce/tax-code';
 import { validateInvoiceFields, type InvoiceField } from '@tubutree/app-core/commerce/checkout-form';
 import { flashLimitNotice, isCartFixableError } from '@tubutree/app-core/commerce/flash-limit';
@@ -264,6 +264,8 @@ export default function CheckoutPage() {
       bumpChoice();
     },
   });
+  // Lệnh áp/gỡ mã của tấm chọn mã còn bay: khách đóng tấm được rồi chạm Đặt hàng ở chân trang, đơn sẽ đi với giỏ chưa có mã.
+  const couponChanging = useIsMutating({ mutationKey: COUPON_CHANGE_KEY }) > 0;
 
   // Giỏ có hàng của gian hàng đối tác: Điểm Xanh chỉ trả cho hàng Tubu (trần của đơn + câu giải thích; giỏ chỉ hàng đối tác thì tắt).
   const partnerPoints = pointsCapState(quote.data, points.usable);
@@ -311,6 +313,9 @@ export default function CheckoutPage() {
   // Phát 'checkout_started' đúng 1 LẦN cho lần quote thành công đầu tiên (không phát lại mỗi
   // khi quote refetch — vd đổi địa chỉ/mã giảm giá làm quote chạy lại nhiều lần trong 1 phiên).
   const trackedCheckoutStarted = useRef(false);
+  // Khoá đồng bộ "Thử lại" báo giá: lỗi báo giá giữ nguyên dòng báo trong lúc tải lại nên khách không thấy gì xảy ra và chạm tiếp,
+  // mà báo giá đã có số cũ thì mỗi `refetch()` huỷ lần trước rồi hỏi lại.
+  const quoteRetrying = useRef(false);
   useEffect(() => {
     if (!quote.isSuccess || trackedCheckoutStarted.current) return;
     trackedCheckoutStarted.current = true;
@@ -471,6 +476,8 @@ export default function CheckoutPage() {
     },
     onSettled: () => setSubmitting(false),
   });
+  // Đang xin SĐT hoặc đang gửi đơn (kể cả đơn gửi lại bằng "Kiểm tra lại", không qua `submitting`): không đổi mã giữa chừng.
+  const orderBusy = order.isPending || submitting;
 
   // Sửa nhanh dòng hết hàng/vượt tồn ngay tại màn: khách không rời trang nên các ô đã nhập còn nguyên. Đổi dòng là đổi lựa chọn
   // của khách, nên một lần đặt đang đóng băng (chưa rõ kết quả) không được phát lại nữa.
@@ -518,10 +525,7 @@ export default function CheckoutPage() {
   const addressesFailed = addresses.isError && !addresses.data;
   if (cartFailed || addressesFailed) {
     const err = cartFailed ? cart.error : addresses.error;
-    const retry = () => {
-      if (cartFailed) void cart.refetch();
-      if (addressesFailed) void addresses.refetch();
-    };
+    const retry = () => Promise.all([cartFailed ? cart.refetch() : undefined, addressesFailed ? addresses.refetch() : undefined]);
     return (
       <Shell>
         <ErrorState message={getLoadErrorMessage(err)} onRetry={retry} />
@@ -597,7 +601,7 @@ export default function CheckoutPage() {
   // không phải ô nhập (đang tính tiền, dòng cần sửa, chưa có cách thanh toán, đang áp mã) mới khoá hẳn, và đã có chữ nói lý do.
   const formBlocked = !addressId || !invoiceValid;
   const placeLocked =
-    hasLineProblem || autoCoupon.busy || (!!addressId && (!quote.isSuccess || quote.isFetching || (!zeroNote && payment === '')));
+    hasLineProblem || autoCoupon.busy || couponChanging || (!!addressId && (!quote.isSuccess || quote.isFetching || (!zeroNote && payment === '')));
 
   // Chưa có báo giá (chưa chọn địa chỉ) thì chưa biết tổng đơn → chưa khoá, chưa có lý do.
   const paymentMethods = [
@@ -864,7 +868,7 @@ export default function CheckoutPage() {
               type="button"
               data-testid="coupon-auto-remove"
               aria-label={couponAutoCopy.removeAria(autoCoupon.autoCode)}
-              disabled={autoCoupon.removing}
+              disabled={autoCoupon.removing || orderBusy}
               onClick={() => {
                 haptic('light');
                 autoCoupon.remove();
@@ -903,7 +907,7 @@ export default function CheckoutPage() {
         linkedCode={linkedReferral}
         appliedCode={referralApplied}
         onApplied={chosen(setReferralApplied)}
-        disabled={order.isPending || submitting}
+        disabled={orderBusy}
       />
 
       {/* ── Thanh toán ── */}
@@ -1232,8 +1236,17 @@ export default function CheckoutPage() {
               size="xSmall"
               bold
               className="tubu-hit-44"
-              onClick={(e) => { e.stopPropagation(); void quote.refetch(); }}
-              style={{ color: 'var(--color-text-brand)', padding: 8, display: 'inline-block' }}
+              aria-busy={quote.isFetching || undefined}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (quoteRetrying.current) return;
+                quoteRetrying.current = true;
+                const release = () => {
+                  quoteRetrying.current = false;
+                };
+                void quote.refetch().then(release, release);
+              }}
+              style={{ color: 'var(--color-text-brand)', padding: 8, display: 'inline-block', opacity: quote.isFetching ? 0.6 : 1 }}
             >
               {vi.common.retry}
             </Text>
@@ -1338,7 +1351,7 @@ export default function CheckoutPage() {
         primary={
           <Button
             fullWidth
-            loading={order.isPending || submitting}
+            loading={orderBusy}
             disabled={placeLocked}
             onPress={async () => {
               if (submitting) return;
@@ -1428,7 +1441,7 @@ export default function CheckoutPage() {
         productIds={cartProductIds(checkoutItems)}
         previewParams={checkoutItems.length > 0 ? { ...(addressId ? { addressId } : {}), storefrontSlug: ctvSlug, itemIds } : undefined}
         previewKey={cartPreviewKey(checkoutItems)}
-        busy={autoCoupon.busy}
+        busy={autoCoupon.busy || orderBusy}
         onCouponApplied={() => {
           bumpChoice();
           void cart.refetch();

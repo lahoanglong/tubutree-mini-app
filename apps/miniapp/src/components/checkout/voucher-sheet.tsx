@@ -22,6 +22,7 @@ import { Text } from '../ui/text';
 import { VoucherPicker } from '../ui/voucher-picker';
 import { autoCouponName } from '../../utils/coupon-name';
 import { cartKey } from '../../services/cart-key';
+import { COUPON_CHANGE_KEY } from './use-coupon-hint';
 import { INPUT_LIMITS } from '../../utils/input-limits';
 
 export interface VoucherSheetProps {
@@ -111,6 +112,7 @@ export function VoucherSheet({
     changing.current = false;
   };
   const applyMut = useMutation({
+    mutationKey: COUPON_CHANGE_KEY,
     mutationFn: (code: string) => applyCoupon(code.trim().toUpperCase()),
     onSettled: release,
     // Xoá lời báo cũ lúc bắt đầu: lỗi lặp lại cùng một câu vẫn dựng lại lời báo, cuộn tới và được trình đọc màn hình đọc lại.
@@ -143,6 +145,7 @@ export function VoucherSheet({
   });
 
   const removeMut = useMutation({
+    mutationKey: COUPON_CHANGE_KEY,
     mutationFn: removeCoupon,
     onSettled: release,
     onMutate: () => setErr(null),

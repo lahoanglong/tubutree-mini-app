@@ -318,7 +318,7 @@ export default function CartPage() {
   if (!summary) {
     return (
       <Shell>
-        <ErrorState message={getLoadErrorMessage(cart.error)} onRetry={() => void cart.refetch()} />
+        <ErrorState message={getLoadErrorMessage(cart.error)} onRetry={() => cart.refetch()} />
       </Shell>
     );
   }

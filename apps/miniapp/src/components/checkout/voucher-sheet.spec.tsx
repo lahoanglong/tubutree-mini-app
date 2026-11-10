@@ -31,6 +31,7 @@ vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { syncServerClock } from '../../utils/server-clock';
 import { VoucherSheet } from './voucher-sheet';
+import { COUPON_CHANGE_KEY } from './use-coupon-hint';
 
 const COUPONS = [
   { code: 'GIAM10', type: 'PERCENT', value: 10, minOrder: null, maxDiscount: 50_000, endAt: '2027-01-01T00:00:00.000Z' },
@@ -1003,5 +1004,50 @@ describe('VoucherSheet: "Thử lại" tải danh sách mã khoá chạm đúp (W
     await act(async () => next.resolve(COUPONS));
     expect(await screen.findByText('GIAM10')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Thử lại' })).toBeNull();
+  });
+});
+
+describe('VoucherSheet: lệnh áp và gỡ mã chạy dưới khoá đổi mã để trang thanh toán khoá nút Đặt hàng (W92A)', () => {
+  const pending = <T,>() => {
+    let resolve!: (v: T) => void;
+    const promise = new Promise<T>((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  const renderWithClient = (currentCode?: string) => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <VoucherSheet visible onClose={() => {}} currentCode={currentCode} subtotal={100_000} />
+      </QueryClientProvider>,
+    );
+    return qc;
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getCoupons.mockResolvedValue(COUPONS);
+  });
+
+  it('đang áp mã: có đúng một lệnh dưới khoá đổi mã, xong thì hết', async () => {
+    const apply = pending<{ couponCode: string }>();
+    mocks.applyCoupon.mockReturnValue(apply.promise);
+    const qc = renderWithClient();
+    expect(qc.isMutating({ mutationKey: COUPON_CHANGE_KEY })).toBe(0);
+    fireEvent.click(await screen.findByRole('button', { name: /^Dùng mã GIAM10/ }));
+    await waitFor(() => expect(qc.isMutating({ mutationKey: COUPON_CHANGE_KEY })).toBe(1));
+    await act(async () => apply.resolve({ couponCode: 'GIAM10' }));
+    await waitFor(() => expect(qc.isMutating({ mutationKey: COUPON_CHANGE_KEY })).toBe(0));
+  });
+
+  it('đang gỡ mã: có đúng một lệnh dưới khoá đổi mã, xong thì hết', async () => {
+    const remove = pending<{ couponCode: null }>();
+    mocks.removeCoupon.mockReturnValue(remove.promise);
+    const qc = renderWithClient('GIAM10');
+    fireEvent.click(await screen.findByRole('button', { name: /^Bỏ chọn mã GIAM10/ }));
+    await waitFor(() => expect(qc.isMutating({ mutationKey: COUPON_CHANGE_KEY })).toBe(1));
+    await act(async () => remove.resolve({ couponCode: null }));
+    await waitFor(() => expect(qc.isMutating({ mutationKey: COUPON_CHANGE_KEY })).toBe(0));
   });
 });
