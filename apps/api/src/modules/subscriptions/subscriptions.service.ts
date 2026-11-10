@@ -101,6 +101,8 @@ const COD_LIMIT_TEXT = `${SUBSCRIPTION_COD_MAX.toLocaleString('vi-VN')}đ`;
 
 const WALLET_SHORT_MESSAGE = 'Số dư Ví Tubu không đủ để thanh toán đơn định kỳ.';
 
+const SCHEDULE_CHANGED_MESSAGE = 'Lịch giao vừa thay đổi, hãy tải lại rồi thử lại.';
+
 /** Mã lỗi ổn định cho FE: đã có gói còn chạy cùng SP + địa chỉ (C-057, Q-13). */
 export const SUBSCRIPTION_DUPLICATE = 'SUBSCRIPTION_DUPLICATE';
 
@@ -552,7 +554,13 @@ export class SubscriptionsService {
     }
     try {
       return await this.prisma.$transaction(async (tx) => {
-        const updated = await tx.subscription.update({ where: { id }, data: { status, nextRunAt, retryCount: 0 } });
+        // Ghi có điều kiện theo bản vừa đọc: cron claim chen giữa (dời nextRunAt) mà ghi theo id thì trả nextRunAt cũ về, lịch lệch kỳ.
+        const written = await tx.subscription.updateMany({
+          where: { id, userId, status: sub.status, nextRunAt: sub.nextRunAt },
+          data: { status, nextRunAt, retryCount: 0 },
+        });
+        if (written.count === 0) throw new ConflictException(SCHEDULE_CHANGED_MESSAGE);
+        const updated = await tx.subscription.findUniqueOrThrow({ where: { id } });
         await this.analytics.record(tx, {
           eventName: 'subscription_changed',
           userId,
@@ -594,7 +602,15 @@ export class SubscriptionsService {
     if (!sub || sub.userId !== userId) throw new NotFoundException('Không tìm thấy lịch đặt định kỳ.');
     if (sub.status !== 'ACTIVE') throw new BadRequestException('Chỉ bỏ qua kỳ khi lịch đang chạy.');
     const nextRunAt = this.addWeeks(sub.nextRunAt, sub.intervalWeeks);
-    return this.prisma.subscription.update({ where: { id }, data: { nextRunAt, retryCount: 0 } });
+    // Cron claim chen giữa (đã dời nextRunAt, kỳ này ra đơn) mà ghi theo id thì khách nhận "đã bỏ qua kỳ" nhưng đơn vẫn ra và lịch lệch.
+    return this.prisma.$transaction(async (tx) => {
+      const written = await tx.subscription.updateMany({
+        where: { id, userId, status: 'ACTIVE', nextRunAt: sub.nextRunAt },
+        data: { nextRunAt, retryCount: 0 },
+      });
+      if (written.count === 0) throw new ConflictException(SCHEDULE_CHANGED_MESSAGE);
+      return tx.subscription.findUniqueOrThrow({ where: { id } });
+    });
   }
 
   /**

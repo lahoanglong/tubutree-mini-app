@@ -394,15 +394,15 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
 
     it('setStatus ACTIVE lúc 10:00 VN → 00:00 VN ngày D+7 (không giữ giờ lẻ)', async () => {
       jest.useFakeTimers({ now: new Date('2026-11-04T03:00:00.000Z') });
-      const update = jest.fn().mockImplementation((a) => Promise.resolve({ id: 's1', ...a.data }));
+      const updateMany = jest.fn().mockResolvedValue({ count: 1 });
       const prisma = {
-        subscription: { findUnique: jest.fn().mockResolvedValue({ id: 's1', userId: 'u1', variationId: 'v1', status: 'PAUSED', intervalWeeks: 1, nextRunAt: new Date('2026-10-01T00:00:00Z') }), update },
+        subscription: { findUnique: jest.fn().mockResolvedValue({ id: 's1', userId: 'u1', variationId: 'v1', status: 'PAUSED', intervalWeeks: 1, nextRunAt: new Date('2026-10-01T00:00:00Z') }), updateMany, findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 's1' }) },
         variation: { findUnique: jest.fn().mockResolvedValue({ product: { name: 'P', storefrontId: null } }) },
         $transaction: jest.fn((cb: (tx: unknown) => unknown) => cb(prisma)),
       } as unknown as PrismaService;
       const svc = new SubscriptionsService(prisma, config, pricing, loyalty, notifications, pancakeStub(), makeAnalytics(), walletLedger());
       await svc.setStatus('u1', 's1', 'ACTIVE');
-      expect((update.mock.calls[0][0].data.nextRunAt as Date).getTime()).toBe(new Date('2026-11-03T17:00:00.000Z').getTime() + WEEK);
+      expect((updateMany.mock.calls[0][0].data.nextRunAt as Date).getTime()).toBe(new Date('2026-11-03T17:00:00.000Z').getTime() + WEEK);
     });
   });
 
@@ -925,31 +925,41 @@ describe('SubscriptionsService.effectiveDiscountPct: chỉ đếm gói thật (Q
 });
 
 describe('SubscriptionsService.skipCycle', () => {
-  function makeSkip(sub: unknown, updateImpl?: jest.Mock) {
-    const update = updateImpl ?? jest.fn().mockImplementation((args) => Promise.resolve({ id: 's1', ...args.data }));
+  function makeSkip(sub: unknown, count = 1) {
+    const updateMany = jest.fn().mockResolvedValue({ count });
+    const row = { id: 's1', status: 'ACTIVE' };
     const prisma = {
       subscription: {
         findUnique: jest.fn().mockResolvedValue(sub),
-        update,
+        updateMany,
+        findUniqueOrThrow: jest.fn().mockResolvedValue(row),
       },
+      $transaction: jest.fn((cb: (tx: unknown) => unknown) => cb(prisma)),
     } as unknown as PrismaService;
     const svc = new SubscriptionsService(prisma, config, pricing, loyalty, notifications, pancakeStub(), makeAnalytics(), walletLedger());
-    return { svc, update };
+    return { svc, updateMany, row };
   }
 
   it('sub ACTIVE → dời nextRunAt thêm 1 chu kỳ, giữ nguyên status', async () => {
     const nextRunAt = new Date('2026-07-10T00:00:00.000Z');
-    const { svc, update } = makeSkip({ id: 's1', userId: 'u1', status: 'ACTIVE', intervalWeeks: 4, nextRunAt });
-    await svc.skipCycle('u1', 's1');
-    const data = update.mock.calls[0][0].data;
+    const { svc, updateMany, row } = makeSkip({ id: 's1', userId: 'u1', status: 'ACTIVE', intervalWeeks: 4, nextRunAt });
+    await expect(svc.skipCycle('u1', 's1')).resolves.toBe(row);
+    const { where, data } = updateMany.mock.calls[0][0];
+    // Ghi theo đúng bản vừa đọc: cron claim đã dời nextRunAt thì không khớp, không ghi đè.
+    expect(where).toEqual({ id: 's1', userId: 'u1', status: 'ACTIVE', nextRunAt });
     expect((data.nextRunAt as Date).getTime()).toBe(nextRunAt.getTime() + 4 * 7 * 864e5);
     expect(data.status).toBeUndefined();
   });
 
+  it('cron claim đã dời nextRunAt giữa lúc đọc và ghi (count=0) → 409, không báo đã bỏ qua kỳ', async () => {
+    const { svc } = makeSkip({ id: 's1', userId: 'u1', status: 'ACTIVE', intervalWeeks: 4, nextRunAt: new Date('2026-07-10T00:00:00.000Z') }, 0);
+    await expect(svc.skipCycle('u1', 's1')).rejects.toMatchObject({ status: 409, message: 'Lịch giao vừa thay đổi, hãy tải lại rồi thử lại.' });
+  });
+
   it('bỏ kỳ giữa lúc đang thử lại vì hết hàng → xoá bộ đếm thử lại để kỳ sau đủ lượt (ENGAGE-14)', async () => {
-    const { svc, update } = makeSkip({ id: 's1', userId: 'u1', status: 'ACTIVE', intervalWeeks: 4, retryCount: 2, nextRunAt: new Date('2026-07-10T00:00:00.000Z') });
+    const { svc, updateMany } = makeSkip({ id: 's1', userId: 'u1', status: 'ACTIVE', intervalWeeks: 4, retryCount: 2, nextRunAt: new Date('2026-07-10T00:00:00.000Z') });
     await svc.skipCycle('u1', 's1');
-    expect(update.mock.calls[0][0].data.retryCount).toBe(0);
+    expect(updateMany.mock.calls[0][0].data.retryCount).toBe(0);
   });
 
   it('không tìm thấy lịch → NotFound', async () => {
@@ -969,12 +979,13 @@ describe('SubscriptionsService.skipCycle', () => {
 });
 
 describe('SubscriptionsService.setStatus', () => {
-  function makeSetStatus(sub: unknown, productStorefrontId: string | null = null) {
-    const update = jest.fn().mockImplementation((args) => Promise.resolve({ id: 's1', ...args.data }));
+  function makeSetStatus(sub: unknown, productStorefrontId: string | null = null, count = 1) {
+    const update = jest.fn().mockResolvedValue({ count });
     const prisma = {
       subscription: {
         findUnique: jest.fn().mockResolvedValue(sub),
-        update,
+        updateMany: update,
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 's1' }),
       },
       variation: {
         findUnique: jest.fn().mockResolvedValue({ product: { name: 'Mật ong rừng', storefrontId: productStorefrontId } }),
@@ -1008,9 +1019,11 @@ describe('SubscriptionsService.setStatus', () => {
   });
 
   it('PAUSED → cập nhật status + phát subscription_changed action=paused (cùng transaction)', async () => {
-    const { svc, update, analytics } = makeSetStatus({ id: 's1', userId: 'u1', status: 'ACTIVE', intervalWeeks: 4, nextRunAt: new Date(Date.now() + 999_999_999) });
+    const nextRunAt = new Date(Date.now() + 999_999_999);
+    const { svc, update, analytics } = makeSetStatus({ id: 's1', userId: 'u1', status: 'ACTIVE', intervalWeeks: 4, nextRunAt });
     await svc.setStatus('u1', 's1', 'PAUSED');
-    expect(update.mock.calls[0][0].where).toEqual({ id: 's1' });
+    // Ghi theo đúng bản vừa đọc: cron claim đã dời nextRunAt thì không khớp, không ghi đè.
+    expect(update.mock.calls[0][0].where).toEqual({ id: 's1', userId: 'u1', status: 'ACTIVE', nextRunAt });
     expect(update.mock.calls[0][0].data.status).toBe('PAUSED');
     expect(analytics.record).toHaveBeenCalledWith(
       expect.anything(),
@@ -1021,6 +1034,12 @@ describe('SubscriptionsService.setStatus', () => {
         props: expect.objectContaining({ subscriptionId: 's1', action: 'paused' }),
       }),
     );
+  });
+
+  it('cron claim đã dời nextRunAt giữa lúc đọc và ghi (count=0) → 409, không đổi trạng thái và không phát sự kiện', async () => {
+    const { svc, analytics } = makeSetStatus({ id: 's1', userId: 'u1', status: 'ACTIVE', intervalWeeks: 4, nextRunAt: new Date(Date.now() + 999_999_999) }, null, 0);
+    await expect(svc.setStatus('u1', 's1', 'PAUSED')).rejects.toMatchObject({ status: 409, message: 'Lịch giao vừa thay đổi, hãy tải lại rồi thử lại.' });
+    expect(analytics.record).not.toHaveBeenCalled();
   });
 
   it('CANCELLED → phát subscription_changed action=cancelled', async () => {
