@@ -1,5 +1,6 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { QueryClient, QueryClientProvider, type UseQueryResult } from '@tanstack/react-query';
+import type * as ReactQuery from '@tanstack/react-query';
 import type * as ZmpUi from 'zmp-ui';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -9,7 +10,19 @@ const mocks = vi.hoisted(() => ({
   claim: vi.fn(),
   pendingCode: null as string | null,
   phase: 'guest' as 'authenticated' | 'guest' | 'loading',
+  refetch: vi.fn(),
 }));
+// Đếm số lần màn gọi `refetch` (không phải số lần gọi API): query chưa có dữ liệu tự gộp các lần tải chồng nên chỉ đếm API không phân biệt được.
+vi.mock('@tanstack/react-query', async (importOriginal) => {
+  const orig = await importOriginal<typeof ReactQuery>();
+  return {
+    ...orig,
+    useQuery: ((...args: unknown[]) => {
+      const result = (orig.useQuery as (...a: unknown[]) => UseQueryResult)(...args);
+      return { ...result, refetch: (...a: Parameters<UseQueryResult['refetch']>) => { mocks.refetch(); return result.refetch(...a); } };
+    }) as typeof orig.useQuery,
+  };
+});
 vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<typeof ZmpUi>()), useNavigate: () => mocks.navigate }));
 vi.mock('../../services/core-http', () => ({ coreHttp: { get: mocks.coreGet } }));
 vi.mock('../../hooks/use-claim-coupon', () => ({ useClaimCoupon: () => ({ claim: mocks.claim, pendingCode: mocks.pendingCode }) }));
@@ -142,6 +155,23 @@ describe('OffersCollect — khối Nhận mã ở trang Ưu đãi', () => {
     fireEvent.click(retry);
     expect(await screen.findByRole('button', { name: 'Lưu mã' })).toBeInTheDocument();
     expect(mocks.coreGet).toHaveBeenCalledTimes(2);
+  });
+
+  it('"Thử lại" trả Promise tải lại (W82A): hai cú chạm cùng nhịp chỉ tải lại một lần, tải xong thì vẽ được mã', async () => {
+    collectable = { isHttpError: true, response: { status: 500, data: { message: 'x' } } };
+    renderCollect();
+    const retry = await screen.findByRole('button', { name: 'Thử lại' });
+    mocks.refetch.mockClear();
+    let finish!: (v: unknown) => void;
+    mocks.coreGet.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    await act(async () => {
+      fireEvent.click(retry);
+      fireEvent.click(retry);
+    });
+    expect(mocks.refetch).toHaveBeenCalledTimes(1);
+
+    await act(async () => finish([coupon('A')]));
+    expect(await screen.findByRole('button', { name: 'Lưu mã' })).toBeInTheDocument();
   });
 
   it('đang nhận một mã: nút của mã đó báo bận (aria-busy)', async () => {

@@ -43,9 +43,7 @@ export function DailyCheckInCard({ authed, margin, compact = false, guestNote = 
           variant="inline"
           title={checkInCopy.loadErrorTitle}
           message={getLoadErrorMessage(statusQ.error)}
-          onRetry={() => {
-            if (!statusQ.isFetching) void statusQ.refetch();
-          }}
+          onRetry={() => (statusQ.isFetching ? undefined : statusQ.refetch())}
         />
       </Card>
     );

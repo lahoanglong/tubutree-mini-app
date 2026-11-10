@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { Input, useSnackbar } from 'zmp-ui';
-import { useMutation } from '@tanstack/react-query';
 import { EyeOff } from 'lucide-react';
 import { updateStorefront, type StorefrontEdit } from '../../services/storefront-api';
 import { getErrorMessage } from '../../services/api';
 import { haptic } from '../../utils/haptic';
 import { vi } from '../../i18n/vi';
 import { DEFAULT_STOREFRONT_THEME_COLOR, STOREFRONT_THEME_COLORS } from '../../utils/storefront-theme';
+import { useLockedMutation } from '../game/use-locked-mutation';
 import { Button } from '../ui/button';
 import { Field } from '../ui/form';
 import { Heading, Text } from '../ui/text';
@@ -68,7 +68,8 @@ export function MerchantConfigSheet({
   // Chỉ gửi subdomain khi người dùng đã đổi: API kiểm từ khoá và trùng tên mỗi khi nhận subdomain.
   const typedSubdomain = form.subdomain.trim().toLowerCase();
   const subdomainChanged = typedSubdomain !== '' && typedSubdomain !== (sf.subdomain ?? '');
-  const saveMut = useMutation({
+  // `isPending` chỉ đúng sau lần vẽ kế nên hai cú chạm sát nhau vẫn gửi hai lần: khoá bằng ref (useLockedMutation). Mỗi nút một khoá, hai nút ghi các trường khác nhau.
+  const saveMut = useLockedMutation({
     mutationFn: () =>
       updateStorefront({
         title: form.title.trim() || undefined,
@@ -89,7 +90,7 @@ export function MerchantConfigSheet({
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
   // Tài khoản ngân hàng nhập trước đây không được dùng để thu tiền (khách luôn trả cho Tubu Tree) — chỉ cho gỡ đi.
-  const clearBankMut = useMutation({
+  const clearBankMut = useLockedMutation({
     mutationFn: () => updateStorefront({ bankName: '', bankBin: '', bankAccountNo: '', bankAccountName: '' }),
     onSuccess: () => {
       openSnackbar({ text: 'Đã gỡ tài khoản ngân hàng khỏi gian hàng', type: 'success' });

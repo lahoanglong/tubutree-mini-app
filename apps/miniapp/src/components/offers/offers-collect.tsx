@@ -58,7 +58,7 @@ export function OffersCollect({ walletCodes, walletLoading }: { walletCodes: Rea
     return (
       <section aria-labelledby={titleId} style={{ padding: '12px 16px 0' }}>
         <SectionHeader id={titleId} title={title} icon="ticket" />
-        <ErrorState variant="inline" title={fillCopy('coupon.loadError')} message={getLoadErrorMessage(q.error)} retrying={q.isFetching} onRetry={() => void q.refetch()} />
+        <ErrorState variant="inline" title={fillCopy('coupon.loadError')} message={getLoadErrorMessage(q.error)} retrying={q.isFetching} onRetry={() => q.refetch()} />
       </section>
     );
   }
