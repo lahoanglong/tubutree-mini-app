@@ -454,4 +454,89 @@ describe('ReturnRequestSheet: máy chủ từ chối thì tải lại ngay và �
     await act(async () => d.resolve({ id: 'r1' }));
     await waitFor(() => expect(onClose).toHaveBeenCalled());
   });
+
+  it('máy chủ báo quá hạn đổi/trả (400): khoá giữ tới khi đơn tải lại xong, rồi tấm đóng một lần và không báo thêm lời nào ngoài lời máy chủ (W109A)', async () => {
+    mocks.requestReturn.mockRejectedValueOnce(serverError('Quá hạn đổi/trả (7 ngày từ khi nhận hàng).', 400));
+    const refresh = deferred();
+    const { onClose, invalidated } = renderLive((key) => (key[0] === 'order' ? (refresh.promise as Promise<void>) : undefined));
+    fillForm();
+    fireEvent.click(submitButton());
+    await waitFor(() => expect(invalidated).toContainEqual(['order', 'TB1']));
+    expect(onClose).not.toHaveBeenCalled();
+    await act(async () => refresh.resolve());
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Quá hạn đổi/trả (7 ngày từ khi nhận hàng).', type: 'error' });
+    expect(mocks.openSnackbar.mock.calls.filter(([a]) => (a as { type: string }).type === 'info')).toHaveLength(0);
+  });
+
+  it('bị từ chối vì lý do khác còn hạn (vượt số lượng) hoặc lỗi tạm: tấm không tự đóng (W109A)', async () => {
+    mocks.requestReturn
+      .mockRejectedValueOnce(serverError('Số lượng trả của "Nước giặt" vượt số còn lại có thể trả (1).', 400))
+      .mockRejectedValueOnce(new HttpError('Network Error', 'ERR_NETWORK'));
+    const { onClose } = renderLive();
+    fillForm();
+    fireEvent.click(submitButton());
+    await waitFor(() => expect(mocks.requestReturn).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(submitButton()).not.toHaveAttribute('aria-busy'));
+    fireEvent.click(submitButton());
+    await waitFor(() => expect(mocks.requestReturn).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(submitButton()).not.toHaveAttribute('aria-busy'));
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('bị từ chối nhưng tấm còn mở; lâu sau máy khác gửi yêu cầu làm tấm hết hiệu lực: đóng kèm lời báo, không bị coi là đã báo từ lần từ chối cũ (W109A)', async () => {
+    mocks.requestReturn.mockRejectedValueOnce(serverError('Số lượng trả của "Nước giặt" vượt số còn lại có thể trả (1).', 400));
+    const { onClose, rerender } = renderLive();
+    fillForm();
+    fireEvent.click(submitButton());
+    await waitFor(() => expect(mocks.requestReturn).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(submitButton()).not.toHaveAttribute('aria-busy'));
+    expect(onClose).not.toHaveBeenCalled();
+    const later = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 60_000);
+    try {
+      rerender(ORDER, [{ orderId: 'o1', status: 'REQUESTED', items: [{ orderItemId: 'i1', quantity: 1 }] }]);
+      await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+      expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đơn này không còn đổi/trả được nữa hoặc đã có yêu cầu đang chờ xử lý.', type: 'info' });
+    } finally {
+      later.mockRestore();
+    }
+  });
+
+  it('vượt số còn lại (400): dữ liệu tải lại có yêu cầu đã duyệt thì số còn trả được cập nhật, số lượng kẹp xuống, tấm vẫn mở và gửi lại đúng số mới (W109A)', async () => {
+    mocks.requestReturn
+      .mockRejectedValueOnce(serverError('Số lượng trả của "Nước giặt" vượt số còn lại có thể trả (1).', 400))
+      .mockResolvedValue({ id: 'r1' });
+    const { onClose, rerender } = renderLive();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Trả Nước giặt Chai 1L' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tăng số lượng' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tăng số lượng' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sản phẩm lỗi, hỏng' }));
+    fireEvent.click(submitButton());
+    await waitFor(() => expect(mocks.requestReturn).toHaveBeenCalledTimes(1));
+    expect(mocks.requestReturn.mock.calls[0]![1].items).toEqual([{ orderItemId: 'i1', quantity: 3 }]);
+    await waitFor(() => expect(submitButton()).not.toHaveAttribute('aria-busy'));
+    rerender(ORDER, [{ orderId: 'o1', status: 'APPROVED', items: [{ orderItemId: 'i1', quantity: 2 }] }]);
+    expect(await screen.findByText('Chai 1L · còn trả được 1')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Tăng số lượng' })).toBeNull();
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.click(submitButton());
+    await waitFor(() => expect(mocks.requestReturn).toHaveBeenCalledTimes(2));
+    expect(mocks.requestReturn.mock.calls[1]![1].items).toEqual([{ orderItemId: 'i1', quantity: 1 }]);
+  });
+
+  it('đơn dữ liệu cũ không có dòng hàng nào: tấm không tự đóng như khi đã trả hết (W109A)', async () => {
+    const { onClose, rerender } = renderLive();
+    rerender({ ...(ORDER as object), items: [] });
+    await waitFor(() => expect(screen.queryByText('Chai 1L · còn trả được 3')).toBeNull());
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('mọi dòng đã trả hết theo dữ liệu mới: tấm đóng kèm một lời báo, không đóng im lặng (W109A)', async () => {
+    const { onClose, rerender } = renderLive();
+    rerender(ORDER, [
+      { orderId: 'o1', status: 'APPROVED', items: [{ orderItemId: 'i1', quantity: 3 }, { orderItemId: 'i2', quantity: 1 }] },
+    ]);
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đơn này không còn đổi/trả được nữa hoặc đã có yêu cầu đang chờ xử lý.', type: 'info' });
+  });
 });
