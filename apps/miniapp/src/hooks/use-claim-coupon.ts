@@ -46,9 +46,12 @@ export function useClaimCoupon() {
         return true;
       } catch (e) {
         notify({ text: getErrorMessage(e), type: 'error' });
-        void qc.fetchQuery(freshCollectableCouponsQuery(coreHttp)).catch(() => undefined);
-        void qc.invalidateQueries({ queryKey: ['coupons', 'collectable', 'mine'] });
-        void qc.invalidateQueries({ queryKey: ['coupons'], exact: true });
+        // Khoá giữ tới khi cả ba lần tải lại xong: thẻ còn cũ (vẫn "Lưu mã") chạm tiếp lúc này chỉ ra lại đúng lỗi vừa báo.
+        await Promise.all([
+          qc.fetchQuery(freshCollectableCouponsQuery(coreHttp)).catch(() => undefined),
+          qc.invalidateQueries({ queryKey: ['coupons', 'collectable', 'mine'] }),
+          qc.invalidateQueries({ queryKey: ['coupons'], exact: true }),
+        ]);
         return false;
       } finally {
         busy.current = false;

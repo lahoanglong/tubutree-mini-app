@@ -35,8 +35,9 @@ export default function AddressesPage() {
   // Báo giá của trang thanh toán giữ 10 giây: đổi địa chỉ mà không đánh dấu báo giá cũ thì khách quay lại kịp trong 10 giây vẫn thấy phí
   // ship theo địa chỉ trước, đặt đơn thì bị báo tổng tiền đổi.
   const refresh = () => {
-    void qc.invalidateQueries({ queryKey: ['addresses'] });
+    const addresses = qc.invalidateQueries({ queryKey: ['addresses'] });
     void qc.invalidateQueries({ queryKey: ['quote'] });
+    return addresses;
   };
 
   const [editing, setEditing] = useState<AddressDTO | 'new' | null>(null);
@@ -44,6 +45,7 @@ export default function AddressesPage() {
 
   // "Đặt mặc định" và "Xoá" cùng một địa chỉ loại trừ nhau (đặt mặc định xong mà địa chỉ đã bị xoá thì máy chủ báo lỗi, xoá xong mà vẫn đặt
   // mặc định thì địa chỉ kế tiếp bị chọn nhầm). `isPending` chỉ đúng sau lần vẽ kế tiếp nên khoá bằng ref theo id; khác id vẫn chạy song song.
+  // onSuccess trả lời tải lại danh sách: khoá giữ tới khi danh sách mới về, không thì thẻ cũ (địa chỉ vừa xoá, nhãn mặc định chưa đổi) sáng lại và nhận thêm một lệnh.
   const acting = useRef(new Set<string>());
   const once = (id: string, run: () => void) => {
     if (acting.current.has(id)) return;
@@ -59,7 +61,7 @@ export default function AddressesPage() {
       mutationFn: (id: string) => updateAddress(id, { isDefault: true }),
       onSuccess: () => {
         haptic('light');
-        refresh();
+        return refresh();
       },
       onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
       onSettled: release,
@@ -73,7 +75,7 @@ export default function AddressesPage() {
       onSuccess: () => {
         setConfirmDel(null);
         openSnackbar({ text: 'Đã xoá địa chỉ.', type: 'success' });
-        refresh();
+        return refresh();
       },
       onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
       onSettled: release,
@@ -174,7 +176,7 @@ export default function AddressesPage() {
             initial={editing === 'new' ? null : editing}
             onCancel={() => setEditing(null)}
             onSaved={() => {
-              refresh();
+              void refresh();
               setEditing(null);
             }}
           />

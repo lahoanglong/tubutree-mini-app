@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -460,5 +460,48 @@ describe('WalletPage — khách thường (R6-BUYER-13)', () => {
     expect(screen.queryByText('Hoàn tiền huỷ đơn')).toBeNull();
     expect(screen.getByText('Hoàn tiền đơn hàng')).toBeInTheDocument();
     expect(screen.getByText('Thanh toán đơn')).toBeInTheDocument();
+  });
+});
+
+describe('WalletPage — "Xem thêm" khoá chạm đúp (W88A)', () => {
+  const stubSecondPageHeld = () => {
+    stubLoaded();
+    let release!: (v: unknown) => void;
+    mocks.getWalletTransactions.mockImplementation((page: number) =>
+      page === 1 ? Promise.resolve(TXN_PAGE_1) : new Promise((r) => (release = r)),
+    );
+    return { release: (v: unknown) => release(v) };
+  };
+  const page2Calls = () => mocks.getWalletTransactions.mock.calls.filter(([p]) => p === 2).length;
+
+  it('hai cú chạm sát nhau trong cùng một khung hình chỉ tải trang 2 một lần; nút báo bận, trang về thì mỗi dòng hiện một lần', async () => {
+    const held = stubSecondPageHeld();
+    renderPage();
+    const more = await screen.findByRole('button', { name: 'Xem thêm' });
+    await act(async () => {
+      fireEvent.click(more);
+      fireEvent.click(more);
+    });
+    expect(page2Calls()).toBe(1);
+    await waitFor(() => expect(more).toHaveAttribute('aria-busy', 'true'));
+    await act(async () => held.release(TXN_PAGE_2));
+    expect(await screen.findAllByText('Điều chỉnh')).toHaveLength(1);
+    expect(page2Calls()).toBe(1);
+    expect(screen.queryByRole('button', { name: 'Xem thêm' })).toBeNull();
+  });
+
+  it('hai cú chạm ở hai lượt vẽ liên tiếp (trang 2 còn bay) vẫn chỉ tải một lần', async () => {
+    const held = stubSecondPageHeld();
+    renderPage();
+    const more = await screen.findByRole('button', { name: 'Xem thêm' });
+    await act(async () => {
+      fireEvent.click(more);
+    });
+    await act(async () => {
+      fireEvent.click(more);
+    });
+    expect(page2Calls()).toBe(1);
+    await act(async () => held.release(TXN_PAGE_2));
+    expect(await screen.findAllByText('Điều chỉnh')).toHaveLength(1);
   });
 });

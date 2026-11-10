@@ -107,6 +107,34 @@ describe('useClaimCoupon', () => {
     expect(result.current.pendingCode).toBeNull();
   });
 
+  it('lỗi: khoá giữ tới khi kho tải lại xong, thẻ còn cũ chạm tiếp không bắn lệnh nhận lần hai; kho về thì nhả khoá', async () => {
+    let freshReady: (v: unknown) => void = () => undefined;
+    mocks.claimCoupon.mockRejectedValueOnce(httpError(400, 'Mã giảm giá đã hết lượt nhận.'));
+    mocks.get.mockReturnValue(new Promise((r) => (freshReady = r)));
+    const { result } = setup();
+    let first: Promise<boolean> | undefined;
+    await act(async () => {
+      first = result.current.claim('TUBU30');
+    });
+    expect(mocks.notify).toHaveBeenCalledWith({ text: 'Mã giảm giá đã hết lượt nhận.', type: 'error' });
+    expect(result.current.pendingCode).toBe('TUBU30');
+    let second: boolean | undefined;
+    await act(async () => {
+      second = await result.current.claim('TUBU30');
+    });
+    expect(second).toBe(false);
+    expect(mocks.claimCoupon).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      freshReady([]);
+      await first;
+    });
+    expect(result.current.pendingCode).toBeNull();
+    await act(async () => {
+      await result.current.claim('TUBU30');
+    });
+    expect(mocks.claimCoupon).toHaveBeenCalledTimes(2);
+  });
+
   it('đang nhận một mã: pendingCode là mã đó; chạm đúp chỉ gọi máy chủ một lần', async () => {
     let release: (v: unknown) => void = () => undefined;
     mocks.claimCoupon.mockReturnValue(new Promise((r) => (release = r)));

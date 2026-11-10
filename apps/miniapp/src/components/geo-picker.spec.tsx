@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, within, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi } from 'vitest';
 import { useState } from 'react';
@@ -95,5 +95,36 @@ describe('GeoPicker: tìm phường/xã', () => {
       </QueryClientProvider>,
     );
     expect(screen.getByRole('button', { name: /^Phường\/Xã/ })).toBeDisabled();
+  });
+});
+
+describe('GeoPicker: "Thử lại" khi tải tỉnh/phường lỗi (W88A)', () => {
+  it('chạm đúp cùng một khung hình vào mỗi nút Thử lại chỉ gọi lại API một lần (truy vấn chưa có dữ liệu nên refetch gộp chung)', async () => {
+    let provincesReady: (v: unknown) => void = () => undefined;
+    let communesReady: (v: unknown) => void = () => undefined;
+    mocks.getProvinces.mockReset().mockRejectedValueOnce(new Error('offline')).mockReturnValueOnce(new Promise((r) => (provincesReady = r)));
+    mocks.getCommunes.mockReset().mockRejectedValueOnce(new Error('offline')).mockReturnValueOnce(new Promise((r) => (communesReady = r)));
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <Harness onValue={vi.fn()} />
+      </QueryClientProvider>,
+    );
+    const [provincesRetry, communesRetry] = await screen.findAllByRole('button', { name: /Thử lại/ });
+    await act(async () => {
+      fireEvent.click(provincesRetry!);
+      fireEvent.click(provincesRetry!);
+    });
+    await act(async () => {
+      fireEvent.click(communesRetry!);
+      fireEvent.click(communesRetry!);
+    });
+    expect(mocks.getProvinces).toHaveBeenCalledTimes(2);
+    expect(mocks.getCommunes).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      provincesReady([{ code: 'p1', name: 'Hà Nội' }]);
+      communesReady(WARDS);
+    });
+    await waitFor(() => expect(screen.queryByRole('button', { name: /Thử lại/ })).toBeNull());
   });
 });
