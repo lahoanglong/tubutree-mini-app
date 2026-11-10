@@ -73,6 +73,19 @@ describe('GardenHintBubble — bóng gợi ý tab Vườn Xanh (D6-16)', () => {
     expect(screen.queryByRole('status')).toBeNull();
   });
 
+  it('hai cú chạm vào bóng trong cùng khung hình chỉ mở Vườn Xanh một lần', () => {
+    const open = vi.fn();
+    render(<GardenHintBubble onGardenTab={false} onOpenGarden={open} />);
+    settle();
+    const bubble = screen.getByRole('status');
+    act(() => {
+      fireEvent.click(bubble);
+      fireEvent.click(bubble);
+    });
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
   it('khách cuộn trang thì bóng tắt ngay, không che nội dung đang đọc', () => {
     render(<GardenHintBubble onGardenTab={false} />);
     settle();

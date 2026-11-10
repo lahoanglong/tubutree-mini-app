@@ -115,7 +115,7 @@ export default function GamePage() {
   };
   const shareHarvest = () => {
     const t = gameNewbieCopy.harvest;
-    void shareLink({ title: t.shareTitle, description: t.shareDescription, path: '/game' }).catch(() => undefined);
+    return shareLink({ title: t.shareTitle, description: t.shareDescription, path: '/game' }).catch(() => undefined);
   };
   const nextQuiz = () => {
     if (reveal) setAnsweredIds((prev) => new Set(prev).add(reveal.quizId));
@@ -136,11 +136,11 @@ export default function GamePage() {
 
   // Chỉ hiện cổng đăng nhập khi đã chắc chắn user chưa đăng nhập (status settled, không authenticated)
   // — trước đây gộp chung với nhánh loading khiến user đã logout/login lỗi bị kẹt mãi ở skeleton.
-  if (!authed) return shell(<GameLoginGate onLogin={() => void login()} />);
+  if (!authed) return shell(<GameLoginGate onLogin={() => login()} />);
 
   // Profile là dữ liệu chủ đạo của trang (streak/giọt nước/eco-impact) — lỗi thì phải báo rõ,
   // không để rơi xuống render với optional-chaining trông như "mất hết tiến độ".
-  if (isError && !profile) return shell(<ErrorState message={getLoadErrorMessage(profileError)} onRetry={() => void refetch()} />);
+  if (isError && !profile) return shell(<ErrorState message={getLoadErrorMessage(profileError)} onRetry={() => refetch()} />);
 
   const eco = profile?.ecoImpact;
   const checkedInToday = isSameVNDay(profile?.lastCheckInAt ?? null);
@@ -226,7 +226,7 @@ export default function GamePage() {
             profile={profile}
             status={status}
             statusError={checkInStatusQ.isError}
-            onRetryStatus={() => void checkInStatusQ.refetch()}
+            onRetryStatus={() => (checkInStatusQ.isFetching ? undefined : checkInStatusQ.refetch())}
             onBuyFreeze={() => freezeM.mutate()}
             freezePending={freezeM.isPending}
             onCollectDew={() => dewM.mutate()}
@@ -363,7 +363,7 @@ export default function GamePage() {
         onCheckIn={() => checkInM.mutate()}
         onDew={() => dewM.mutate()}
         quiz={quizState}
-        onRetryQuiz={() => void quizQ.refetch()}
+        onRetryQuiz={() => (quizQ.isFetching ? undefined : quizQ.refetch())}
         onGoQuiz={() => goTab('today', 'game-quiz')}
         error={earnError}
       />
@@ -376,7 +376,7 @@ export default function GamePage() {
         guest={harvestMeta?.guest ?? false}
         onLogin={() => {
           setHarvested(false);
-          void login();
+          return login();
         }}
         certificate={harvestCert}
         species={harvestSpecies}

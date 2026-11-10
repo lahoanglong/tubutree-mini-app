@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { vi } from '../i18n/vi';
 import { markGardenHintSeen, shouldShowGardenHint } from '../utils/garden-hint';
 import { Text } from './ui/text';
@@ -16,6 +16,8 @@ const overlayOpen = () => typeof document !== 'undefined' && document.querySelec
  */
 export function GardenHintBubble({ onGardenTab, onOpenGarden }: { onGardenTab: boolean; onOpenGarden?: () => void }) {
   const [open, setOpen] = useState(false);
+  // `setOpen(false)` chỉ gỡ bóng sau lần vẽ kế: hai cú chạm trước đó đều thấy bóng và đều gọi `navigate` (hai mục lịch sử).
+  const opened = useRef(false);
 
   useEffect(() => {
     if (onGardenTab) {
@@ -28,6 +30,7 @@ export function GardenHintBubble({ onGardenTab, onOpenGarden }: { onGardenTab: b
     const id = setTimeout(() => {
       if (overlayOpen()) return;
       markGardenHintSeen();
+      opened.current = false;
       setOpen(true);
     }, GARDEN_HINT_DELAY_MS);
     return () => clearTimeout(id);
@@ -56,6 +59,8 @@ export function GardenHintBubble({ onGardenTab, onOpenGarden }: { onGardenTab: b
     <div
       role="status"
       onClick={() => {
+        if (opened.current) return;
+        opened.current = true;
         setOpen(false);
         onOpenGarden?.();
       }}
