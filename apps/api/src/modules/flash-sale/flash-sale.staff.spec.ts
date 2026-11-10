@@ -40,7 +40,7 @@ function setup(opts: { createdBy?: string | null; creatorRole?: 'STAFF' | 'ADMIN
       findFirst: jest.fn().mockResolvedValue(null),
       create: jest.fn().mockResolvedValue({ id: 'fi1' }),
       findUnique: jest.fn().mockResolvedValue({ soldCount: 0, flashSale: { createdBy } }),
-      delete: jest.fn().mockResolvedValue({}),
+      deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
     $executeRaw: jest.fn().mockResolvedValue(1),
     $queryRaw: jest.fn().mockResolvedValue([{ used: BigInt(used), exposure: BigInt(exposure) }]),
@@ -265,7 +265,7 @@ describe('FlashSaleService — nhân viên không đụng đợt của quản tr
     await expect(svc().removeItem('fi1', STAFF)).rejects.toBeInstanceOf(ForbiddenException);
     expect(prisma.flashSale.delete).not.toHaveBeenCalled();
     expect(prisma.flashSaleItem.create).not.toHaveBeenCalled();
-    expect(prisma.flashSaleItem.delete).not.toHaveBeenCalled();
+    expect(prisma.flashSaleItem.deleteMany).not.toHaveBeenCalled();
   });
 
   it('ghim thứ tự món (sortOrder): món của đợt ADMIN → nhân viên 403; đợt của nhân viên và ADMIN thì được', async () => {
@@ -299,7 +299,7 @@ describe('FlashSaleService — nhân viên không đụng đợt của quản tr
     await svc().updateSale('s1', { isActive: false }, STAFF);
     expect(prisma.flashSale.update).toHaveBeenCalledTimes(1);
     await svc().removeItem('fi1', STAFF);
-    expect(prisma.flashSaleItem.delete).toHaveBeenCalledTimes(1);
+    expect(prisma.flashSaleItem.deleteMany).toHaveBeenCalledTimes(1);
   });
 
   it('ADMIN sửa đợt của chính mình hay của nhân viên đều được', async () => {

@@ -527,31 +527,31 @@ describe('FlashSaleService.updateSale', () => {
 
 describe('FlashSaleService.removeItem', () => {
   it('item không tồn tại → reject "Không tìm thấy sản phẩm flash."', async () => {
-    const prisma = { flashSaleItem: { findUnique: jest.fn().mockResolvedValue(null), delete: jest.fn() } } as any;
+    const prisma = { flashSaleItem: { findUnique: jest.fn().mockResolvedValue(null), deleteMany: jest.fn() } } as any;
     await expect(new FlashSaleService(prisma, config, notifications, lifecycle).removeItem('fiX'))
       .rejects.toThrow('Không tìm thấy sản phẩm flash.');
-    expect(prisma.flashSaleItem.delete).not.toHaveBeenCalled();
+    expect(prisma.flashSaleItem.deleteMany).not.toHaveBeenCalled();
   });
 
   it('item đã có soldCount>0 → reject, KHÔNG xoá', async () => {
     const prisma = {
-      flashSaleItem: { findUnique: jest.fn().mockResolvedValue({ soldCount: 3 }), delete: jest.fn() },
+      flashSaleItem: { findUnique: jest.fn().mockResolvedValue({ soldCount: 3 }), deleteMany: jest.fn() },
     } as any;
     await expect(new FlashSaleService(prisma, config, notifications, lifecycle).removeItem('fi1'))
       .rejects.toThrow('Không thể xoá sản phẩm đã phát sinh đơn giờ vàng. Hãy tắt đợt flash thay vì xoá.');
-    expect(prisma.flashSaleItem.delete).not.toHaveBeenCalled();
+    expect(prisma.flashSaleItem.deleteMany).not.toHaveBeenCalled();
   });
 
   it('item soldCount===0 → xoá thành công, trả { ok: true }', async () => {
     const prisma = {
       flashSaleItem: {
         findUnique: jest.fn().mockResolvedValue({ soldCount: 0 }),
-        delete: jest.fn().mockResolvedValue({}),
+        deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
     } as any;
     const r = await new FlashSaleService(prisma, config, notifications, lifecycle).removeItem('fi1');
     expect(r).toEqual({ ok: true });
-    expect(prisma.flashSaleItem.delete).toHaveBeenCalledWith({ where: { id: 'fi1' } });
+    expect(prisma.flashSaleItem.deleteMany).toHaveBeenCalledWith({ where: { id: 'fi1', soldCount: 0 } });
   });
 });
 
