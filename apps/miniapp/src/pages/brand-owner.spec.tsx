@@ -2,8 +2,9 @@ import { act, render, screen, fireEvent, waitFor, within } from '@testing-librar
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { HttpError } from '../services/http';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type MockInstance } from 'vitest';
 import { vi as t } from '../i18n/vi';
+import { LOCK_REFRESH_WAIT_MS } from '../utils/settle-within';
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(), openSnackbar: vi.fn(), chatOn: false, openOAChat: vi.fn(),
@@ -620,6 +621,165 @@ describe('BrandOwnerPage: ảnh logo/bìa còn đang lên thì "Lưu thông tin"
       tagline: 'Sống xanh',
       origin: 'Đà Lạt',
       story: '',
+    });
+  });
+});
+
+// W112A: lệnh ghi bị máy chủ từ chối vì hồ sơ/khuyến mãi đã đổi (400/404/409) thì nút giữ khoá tới khi hồ sơ làm mới về (tối đa LOCK_REFRESH_WAIT_MS), kẻo bấm lại trên bản cũ nhận đúng lỗi đó. Mất mạng, quá hạn, 401, 5xx không nói gì về hồ sơ: không tải lại, nhả ngay.
+describe('BrandOwnerPage: máy chủ từ chối thì giữ khoá tới khi hồ sơ làm mới về (W112A)', () => {
+  type Refresh = () => Promise<unknown>;
+  type Opened = { invalidate: MockInstance<QueryClient['invalidateQueries']>; button: () => HTMLElement };
+  type Case = {
+    name: string;
+    /** Lệnh ghi bị giả lập. */
+    write: ReturnType<typeof vi.fn>;
+    /** Khoá tải lại kỳ vọng khi máy chủ từ chối, đúng thứ tự gọi. */
+    keys: string[][];
+    open: (refresh: Refresh) => Promise<Opened>;
+  };
+
+  const deferred = () => {
+    let resolve!: (v?: unknown) => void;
+    const promise = new Promise((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message }, headers: {} });
+  const errorSnackbars = () => mocks.openSnackbar.mock.calls.filter((c) => c[0].type === 'error').length;
+  // TanStack báo cache qua setTimeout(0): đợi một nhịp để `isPending` kịp về false sau khi lệnh xong.
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+  /** Dựng trang và thay `invalidateQueries` để soi khoá tải lại và giữ lời hứa tải lại trong tay. */
+  const renderLive = (refresh: Refresh) => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const invalidate = vi.spyOn(qc, 'invalidateQueries').mockImplementation((() => refresh()) as never);
+    render(<QueryClientProvider client={qc}><BrandOwnerPage /></QueryClientProvider>);
+    return invalidate;
+  };
+
+  const CASES: Case[] = [
+    {
+      name: 'lưu thông tin (saveMut)',
+      write: mocks.updateOwnedBrand,
+      keys: [['owned-brand']],
+      open: async (refresh) => {
+        const invalidate = renderLive(refresh);
+        await screen.findByRole('button', { name: 'Lưu thông tin' });
+        return { invalidate, button: () => screen.getByRole('button', { name: 'Lưu thông tin' }) };
+      },
+    },
+    {
+      name: 'thêm khuyến mãi (addPromo)',
+      write: mocks.createOwnedPromotion,
+      keys: [['owned-brand']],
+      open: async (refresh) => {
+        const invalidate = renderLive(refresh);
+        await screen.findByText('MUA 2 TẶNG 1');
+        fireEvent.change(screen.getByPlaceholderText(/Tiêu đề/), { target: { value: 'Giảm sốc' } });
+        return { invalidate, button: () => screen.getByRole('button', { name: 'Thêm khuyến mãi' }) };
+      },
+    },
+    {
+      name: 'sửa khuyến mãi (updPromo)',
+      write: mocks.updateOwnedPromotion,
+      keys: [['owned-brand']],
+      open: async (refresh) => {
+        const invalidate = renderLive(refresh);
+        fireEvent.click(await screen.findByRole('button', { name: 'Sửa khuyến mãi MUA 2 TẶNG 1' }));
+        return { invalidate, button: () => screen.getByRole('button', { name: 'Lưu thay đổi' }) };
+      },
+    },
+    {
+      name: 'xoá khuyến mãi (delPromo)',
+      write: mocks.deleteOwnedPromotion,
+      keys: [['owned-brand']],
+      open: async (refresh) => {
+        const invalidate = renderLive(refresh);
+        fireEvent.click(await screen.findByRole('button', { name: 'Xoá khuyến mãi MUA 2 TẶNG 1' }));
+        return { invalidate, button: () => within(screen.getByTestId('sheet')).getByRole('button', { name: 'Xoá' }) };
+      },
+    },
+  ];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    for (const fn of [mocks.updateOwnedBrand, mocks.createOwnedPromotion, mocks.updateOwnedPromotion, mocks.deleteOwnedPromotion]) {
+      fn.mockReset();
+      fn.mockResolvedValue({});
+    }
+    mocks.getOwnedBrand.mockResolvedValue(BRAND);
+  });
+
+  describe.each(CASES)('$name', (c) => {
+    it.each([
+      [400, 'Khuyến mãi này không còn hợp lệ'],
+      [404, 'Không tìm thấy nữa'],
+      [409, 'Vừa có thay đổi, bạn thử lại nhé'],
+    ])('bị từ chối %i: báo lỗi một lần, tải lại đúng khoá, nút giữ khoá tới khi dữ liệu về rồi mới nhả', async (status, message) => {
+      c.write.mockReset();
+      c.write.mockRejectedValueOnce(serverError(message, status)).mockResolvedValue({});
+      const refresh = deferred();
+      const { invalidate, button } = await c.open(() => refresh.promise);
+      fireEvent.click(button());
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: message, type: 'error' }));
+      expect(errorSnackbars()).toBe(1);
+      expect(invalidate.mock.calls.map(([filter]) => filter)).toEqual(c.keys.map((queryKey) => ({ queryKey })));
+      // Đã có lời báo lỗi mà dữ liệu chưa về: nút vẫn bận, chạm thêm không gửi lần hai.
+      expect(button()).toHaveAttribute('aria-busy', 'true');
+      await act(async () => {
+        fireEvent.click(button());
+        fireEvent.click(button());
+      });
+      expect(c.write).toHaveBeenCalledTimes(1);
+      await act(async () => refresh.resolve());
+      await settle();
+      await waitFor(() => expect(button()).not.toHaveAttribute('aria-busy'));
+      expect(errorSnackbars()).toBe(1);
+      fireEvent.click(button());
+      await waitFor(() => expect(c.write).toHaveBeenCalledTimes(2));
+    });
+
+    it.each([
+      ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+      ['hết thời gian', new HttpError('timeout', 'ECONNABORTED')],
+      ['máy chủ lỗi 503', serverError('Service Unavailable', 503)],
+      ['hết phiên 401', serverError('Unauthorized', 401)],
+    ])('%s: không giữ khoá chờ tải lại, khoá nhả ngay', async (_label, error) => {
+      c.write.mockReset();
+      c.write.mockRejectedValueOnce(error).mockResolvedValue({});
+      const { invalidate, button } = await c.open(() => new Promise(() => undefined));
+      fireEvent.click(button());
+      await waitFor(() => expect(errorSnackbars()).toBe(1));
+      await waitFor(() => expect(button()).not.toHaveAttribute('aria-busy'));
+      expect(invalidate).not.toHaveBeenCalled();
+      fireEvent.click(button());
+      await waitFor(() => expect(c.write).toHaveBeenCalledTimes(2));
+    });
+
+    it('tải lại treo mãi: khoá nhả đúng sau LOCK_REFRESH_WAIT_MS', async () => {
+      c.write.mockReset();
+      c.write.mockRejectedValueOnce(serverError('Vừa có thay đổi, bạn thử lại nhé', 409)).mockResolvedValue({});
+      const { button } = await c.open(() => new Promise(() => undefined));
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        fireEvent.click(button());
+        await waitFor(() => expect(errorSnackbars()).toBe(1));
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 500);
+        });
+        expect(button()).toHaveAttribute('aria-busy', 'true');
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(600);
+        });
+        await waitFor(() => expect(button()).not.toHaveAttribute('aria-busy'));
+      } finally {
+        vi.useRealTimers();
+      }
+      fireEvent.click(button());
+      await waitFor(() => expect(c.write).toHaveBeenCalledTimes(2));
     });
   });
 });

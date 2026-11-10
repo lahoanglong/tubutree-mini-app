@@ -1,5 +1,7 @@
 import { normalizeTemplateName } from './shift-template-name';
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
+import { throwIfLockBusy } from '../../../common/lock-busy';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { SystemConfigService } from '../../system-config/system-config.service';
 import { rangesOverlap } from './time.util';
@@ -52,22 +54,23 @@ export class ShiftsService {
         }
       }
     }
-    // chồng với ca đã có (chỉ tính PENDING/APPROVED)
-    const dates = items.map((i) => i.workDate);
-    const existing = await this.prisma.shift.findMany({
-      where: { staffId, workDate: { in: dates }, status: { in: ['PENDING', 'APPROVED'] } },
-      select: { startAt: true, endAt: true },
-    });
-    for (const it of items) {
-      for (const ex of existing) {
-        if (rangesOverlap(it.startAt, it.endAt, ex.startAt, ex.endAt)) {
-          throw new BadRequestException('Ca bị chồng với ca đã đăng ký.');
+    return this.prisma.$transaction(async (tx) => {
+      await this.lockStaff(tx, staffId);
+      // chồng với ca đã có (chỉ tính PENDING/APPROVED)
+      const dates = items.map((i) => i.workDate);
+      const existing = await tx.shift.findMany({
+        where: { staffId, workDate: { in: dates }, status: { in: ['PENDING', 'APPROVED'] } },
+        select: { startAt: true, endAt: true },
+      });
+      for (const it of items) {
+        for (const ex of existing) {
+          if (rangesOverlap(it.startAt, it.endAt, ex.startAt, ex.endAt)) {
+            throw new BadRequestException('Ca bị chồng với ca đã đăng ký.');
+          }
         }
       }
-    }
-    await this.prisma.$transaction(
-      items.map((it) =>
-        this.prisma.shift.create({
+      for (const it of items) {
+        await tx.shift.create({
           data: {
             staffId,
             workDate: it.workDate,
@@ -75,40 +78,52 @@ export class ShiftsService {
             endAt: it.endAt,
             templateId: it.templateId,
           },
-        }),
-      ),
-    );
-    return { created: items.length };
+        });
+      }
+      return { created: items.length };
+    }).catch(throwIfLockBusy);
+  }
+
+  /**
+   * Khoá dòng nhân viên (READ COMMITTED: mỗi câu sau khi nhận khoá thấy ca lần trước vừa ghi). Đăng ký, sửa giờ và chép tuần
+   * đều đọc ca đang có rồi mới ghi ở lệnh khác; không xếp hàng theo nhân viên thì hai yêu cầu song song cùng lọt qua bước kiểm chồng giờ.
+   * NO KEY UPDATE (không phải FOR UPDATE): vẫn tự xung đột nhau nên vẫn xếp hàng, nhưng không đợi FOR KEY SHARE mà insert có khoá ngoại tới users giữ.
+   */
+  private async lockStaff(tx: Pick<Prisma.TransactionClient, '$queryRaw'>, staffId: string) {
+    await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${staffId} FOR NO KEY UPDATE`;
   }
 
   async updateShift(staffId: string, id: string, patch: { startAt?: Date; endAt?: Date }) {
-    const shift = await this.prisma.shift.findFirst({ where: { id, staffId } });
-    if (!shift) throw new NotFoundException('Không tìm thấy ca.');
-    if (shift.status !== 'PENDING') throw new BadRequestException('Chỉ sửa được ca đang chờ duyệt.');
-    const startAt = patch.startAt ?? shift.startAt;
-    const endAt = patch.endAt ?? shift.endAt;
-    if (endAt <= startAt) throw new BadRequestException('Giờ kết thúc phải sau giờ bắt đầu.');
-    const others = await this.prisma.shift.findMany({
-      where: { staffId, workDate: shift.workDate, status: { in: ['PENDING', 'APPROVED'] }, id: { not: id } },
-      select: { startAt: true, endAt: true },
-    });
-    for (const ex of others) {
-      if (rangesOverlap(startAt, endAt, ex.startAt, ex.endAt)) {
-        throw new BadRequestException('Ca bị chồng giờ.');
+    return this.prisma.$transaction(async (tx) => {
+      await this.lockStaff(tx, staffId);
+      const shift = await tx.shift.findFirst({ where: { id, staffId } });
+      if (!shift) throw new NotFoundException('Không tìm thấy ca.');
+      if (shift.status !== 'PENDING') throw new BadRequestException('Chỉ sửa được ca đang chờ duyệt.');
+      const startAt = patch.startAt ?? shift.startAt;
+      const endAt = patch.endAt ?? shift.endAt;
+      if (endAt <= startAt) throw new BadRequestException('Giờ kết thúc phải sau giờ bắt đầu.');
+      const others = await tx.shift.findMany({
+        where: { staffId, workDate: shift.workDate, status: { in: ['PENDING', 'APPROVED'] }, id: { not: id } },
+        select: { startAt: true, endAt: true },
+      });
+      for (const ex of others) {
+        if (rangesOverlap(startAt, endAt, ex.startAt, ex.endAt)) {
+          throw new BadRequestException('Ca bị chồng giờ.');
+        }
       }
-    }
-    // Điều kiện PENDING nằm ngay ở lệnh ghi: admin duyệt chen giữa bản đọc ở trên và lệnh này thì ca APPROVED không được đổi giờ
-    // (khung trả lương lấy startAt/endAt khi approvedStart/approvedEnd null).
-    const res = await this.prisma.shift.updateMany({ where: { id, staffId, status: 'PENDING' }, data: { startAt, endAt } });
-    if (res.count === 0) {
-      // Ca đổi trạng thái chen giữa bản đọc và lệnh ghi: đọc lại để báo đúng thay vì mặc định "đã duyệt".
-      const now = await this.prisma.shift.findFirst({ where: { id, staffId }, select: { status: true } });
-      if (!now) throw new BadRequestException('Ca không còn nữa, tải lại.');
-      if (now.status === 'APPROVED') throw new BadRequestException('Ca vừa được duyệt, tải lại.');
-      if (now.status === 'REJECTED') throw new BadRequestException('Ca vừa bị từ chối, tải lại.');
-      throw new BadRequestException('Ca vừa đổi trạng thái, tải lại.');
-    }
-    return this.prisma.shift.findFirst({ where: { id, staffId } });
+      // Điều kiện PENDING nằm ngay ở lệnh ghi: admin duyệt chen giữa bản đọc ở trên và lệnh này thì ca APPROVED không được đổi giờ
+      // (khung trả lương lấy startAt/endAt khi approvedStart/approvedEnd null).
+      const res = await tx.shift.updateMany({ where: { id, staffId, status: 'PENDING' }, data: { startAt, endAt } });
+      if (res.count === 0) {
+        // Ca đổi trạng thái chen giữa bản đọc và lệnh ghi: đọc lại để báo đúng thay vì mặc định "đã duyệt".
+        const now = await tx.shift.findFirst({ where: { id, staffId }, select: { status: true } });
+        if (!now) throw new BadRequestException('Ca không còn nữa, tải lại.');
+        if (now.status === 'APPROVED') throw new BadRequestException('Ca vừa được duyệt, tải lại.');
+        if (now.status === 'REJECTED') throw new BadRequestException('Ca vừa bị từ chối, tải lại.');
+        throw new BadRequestException('Ca vừa đổi trạng thái, tải lại.');
+      }
+      return tx.shift.findFirst({ where: { id, staffId } });
+    }).catch(throwIfLockBusy);
   }
 
   async deleteShift(staffId: string, id: string) {
@@ -121,46 +136,47 @@ export class ShiftsService {
   async copyWeek(staffId: string, sourceWeekStart: Date, targetWeekStart: Date) {
     const offset = targetWeekStart.getTime() - sourceWeekStart.getTime();
     if (offset === 0) throw new BadRequestException('Tuần nguồn và tuần đích trùng nhau.');
-    const src = await this.prisma.shift.findMany({
-      where: {
-        staffId,
-        workDate: { gte: sourceWeekStart, lt: new Date(sourceWeekStart.getTime() + 7 * 86400000) },
-        // Chỉ chép ca CÒN HIỆU LỰC. Không lọc thì ca đã bị từ chối/đã huỷ tuần trước cũng được
-        // chép sang: nhân viên đăng 08:00–12:00 bị REJECT rồi đăng lại 09:00–13:00 (APPROVED),
-        // bấm "Copy tuần trước" là ra HAI ca chồng giờ — đúng thứ createShifts cố tình cấm.
-        status: { in: ['PENDING', 'APPROVED'] },
-      },
-      orderBy: { startAt: 'asc' },
-    });
-    const existing = await this.prisma.shift.findMany({
-      where: {
-        staffId,
-        workDate: { gte: targetWeekStart, lt: new Date(targetWeekStart.getTime() + 7 * 86400000) },
-        status: { in: ['PENDING', 'APPROVED'] },
-      },
-      select: { startAt: true, endAt: true },
-    });
-    // So chồng với CẢ ca đã có ở tuần đích LẪN các ca vừa nhận trong chính lượt copy này —
-    // trước đây chỉ so với tuần đích, nên hai ca nguồn chồng nhau vẫn vào được cùng lúc.
-    const accepted: { startAt: Date; endAt: Date }[] = [...existing];
-    const toCreate: { workDate: Date; startAt: Date; endAt: Date; templateId?: string }[] = [];
-    for (const sh of src) {
-      const c = {
-        workDate: new Date(sh.workDate.getTime() + offset),
-        startAt: new Date(sh.startAt.getTime() + offset),
-        endAt: new Date(sh.endAt.getTime() + offset),
-        templateId: sh.templateId ?? undefined,
-      };
-      if (accepted.some((ex) => rangesOverlap(c.startAt, c.endAt, ex.startAt, ex.endAt))) continue;
-      accepted.push({ startAt: c.startAt, endAt: c.endAt });
-      toCreate.push(c);
-    }
-    if (toCreate.length) {
-      await this.prisma.$transaction(
-        toCreate.map((c) => this.prisma.shift.create({ data: { staffId, ...c } })),
-      );
-    }
-    return { created: toCreate.length, skipped: src.length - toCreate.length };
+    return this.prisma.$transaction(async (tx) => {
+      await this.lockStaff(tx, staffId);
+      const src = await tx.shift.findMany({
+        where: {
+          staffId,
+          workDate: { gte: sourceWeekStart, lt: new Date(sourceWeekStart.getTime() + 7 * 86400000) },
+          // Chỉ chép ca CÒN HIỆU LỰC. Không lọc thì ca đã bị từ chối/đã huỷ tuần trước cũng được
+          // chép sang: nhân viên đăng 08:00–12:00 bị REJECT rồi đăng lại 09:00–13:00 (APPROVED),
+          // bấm "Copy tuần trước" là ra HAI ca chồng giờ — đúng thứ createShifts cố tình cấm.
+          status: { in: ['PENDING', 'APPROVED'] },
+        },
+        orderBy: { startAt: 'asc' },
+      });
+      const existing = await tx.shift.findMany({
+        where: {
+          staffId,
+          workDate: { gte: targetWeekStart, lt: new Date(targetWeekStart.getTime() + 7 * 86400000) },
+          status: { in: ['PENDING', 'APPROVED'] },
+        },
+        select: { startAt: true, endAt: true },
+      });
+      // So chồng với CẢ ca đã có ở tuần đích LẪN các ca vừa nhận trong chính lượt copy này —
+      // trước đây chỉ so với tuần đích, nên hai ca nguồn chồng nhau vẫn vào được cùng lúc.
+      const accepted: { startAt: Date; endAt: Date }[] = [...existing];
+      const toCreate: { workDate: Date; startAt: Date; endAt: Date; templateId?: string }[] = [];
+      for (const sh of src) {
+        const c = {
+          workDate: new Date(sh.workDate.getTime() + offset),
+          startAt: new Date(sh.startAt.getTime() + offset),
+          endAt: new Date(sh.endAt.getTime() + offset),
+          templateId: sh.templateId ?? undefined,
+        };
+        if (accepted.some((ex) => rangesOverlap(c.startAt, c.endAt, ex.startAt, ex.endAt))) continue;
+        accepted.push({ startAt: c.startAt, endAt: c.endAt });
+        toCreate.push(c);
+      }
+      for (const c of toCreate) {
+        await tx.shift.create({ data: { staffId, ...c } });
+      }
+      return { created: toCreate.length, skipped: src.length - toCreate.length };
+    }).catch(throwIfLockBusy);
   }
 
   async cancelShift(

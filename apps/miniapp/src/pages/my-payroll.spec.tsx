@@ -1,9 +1,11 @@
 import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach, type MockInstance } from 'vitest';
 import { formatVnd } from '../utils/format';
 import { vi as t } from '../i18n/vi';
+import { HttpError } from '../services/http';
+import { LOCK_REFRESH_WAIT_MS } from '../utils/settle-within';
 
 const mocks = vi.hoisted(() => ({
   getMyPayroll: vi.fn(),
@@ -25,7 +27,11 @@ vi.mock('zmp-ui', async (importOriginal) => ({
 }));
 vi.mock('../services/payroll-api', () => ({ getMyPayroll: mocks.getMyPayroll, updateBank: mocks.updateBank }));
 vi.mock('../services/attendance-api', () => ({ getHistory: mocks.getHistory }));
-vi.mock('../services/api', () => ({ getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : String(e)), getLoadErrorMessage: (e: unknown) => (e instanceof Error ? e.message : String(e)) }));
+vi.mock('../services/api', async (importOriginal) => ({
+  getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : String(e)),
+  getLoadErrorMessage: (e: unknown) => (e instanceof Error ? e.message : String(e)),
+  isStaleStateError: (await importOriginal<{ isStaleStateError: (error: unknown) => boolean }>()).isStaleStateError,
+}));
 vi.mock('../store/auth', () => ({
   useAuthStore: (sel: (s: { user: { role: string } }) => unknown) => sel({ user: { role: mocks.role } }),
 }));
@@ -450,5 +456,148 @@ describe('Lương của tôi: ảnh QR còn đang lên thì "Lưu" chờ (W90A)'
     await waitFor(() => expect(screen.getByRole('button', { name: 'QR nhận lương' })).toBeDisabled());
     await act(async () => release(PROFILE));
     await waitFor(() => expect(screen.queryByRole('button', { name: 'QR nhận lương' })).toBeNull());
+  });
+});
+
+// W112A: lưu thông tin nhận lương bị máy chủ từ chối vì hồ sơ nhân viên đã đổi (400/404/409) thì nút Lưu giữ khoá tới khi dữ liệu làm mới về (tối đa LOCK_REFRESH_WAIT_MS), kẻo bấm lại trên bản cũ nhận đúng lỗi đó. Mất mạng, quá hạn, 401, 5xx không nói gì về hồ sơ: không tải lại, nhả ngay.
+describe('Lương của tôi: máy chủ từ chối thì giữ khoá tới khi dữ liệu làm mới về (W112A)', () => {
+  type Refresh = () => Promise<unknown>;
+  type Opened = { invalidate: MockInstance<QueryClient['invalidateQueries']>; button: () => HTMLElement };
+  type Case = {
+    name: string;
+    /** Lệnh ghi bị giả lập. */
+    write: ReturnType<typeof vi.fn>;
+    /** Khoá tải lại kỳ vọng khi máy chủ từ chối, đúng thứ tự gọi. */
+    keys: string[][];
+    open: (refresh: Refresh) => Promise<Opened>;
+  };
+
+  const deferred = () => {
+    let resolve!: (v?: unknown) => void;
+    const promise = new Promise((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message }, headers: {} });
+  const errorSnackbars = () => mocks.openSnackbar.mock.calls.filter((c) => c[0].type === 'error').length;
+  // TanStack báo cache qua setTimeout(0): đợi một nhịp để `isPending` kịp về false sau khi lệnh xong.
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+  /** Dựng trang và thay `invalidateQueries` để soi khoá tải lại và giữ lời hứa tải lại trong tay. */
+  const renderLive = (refresh: Refresh) => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const invalidate = vi.spyOn(qc, 'invalidateQueries').mockImplementation((() => refresh()) as never);
+    render(
+      <QueryClientProvider client={qc}>
+        <MyPayrollPage />
+      </QueryClientProvider>,
+    );
+    return invalidate;
+  };
+
+  const CASES: Case[] = [
+    {
+      name: 'lưu thông tin nhận lương (bankM)',
+      write: mocks.updateBank,
+      keys: [['my-payroll']],
+      open: async (refresh) => {
+        const invalidate = renderLive(refresh);
+        await screen.findByText('Thực nhận tháng 3/2026');
+        fireEvent.click(screen.getByRole('button', { name: 'Thông tin nhận lương' }));
+        return { invalidate, button: () => screen.getByRole('button', { name: 'Lưu' }) };
+      },
+    },
+  ];
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-03-15T05:00:00Z'));
+    vi.clearAllMocks();
+    mocks.role = 'STAFF';
+    mocks.getMyPayroll.mockImplementation((year: number, month: number) => Promise.resolve(payroll(year, month)));
+    mocks.getHistory.mockResolvedValue(SESSIONS);
+    mocks.updateBank.mockReset();
+    mocks.updateBank.mockResolvedValue(PROFILE);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  describe.each(CASES)('$name', (c) => {
+    it.each([
+      [400, 'Hồ sơ nhân viên không còn hợp lệ'],
+      [404, 'Không tìm thấy hồ sơ nhân viên'],
+      [409, 'Vừa có thay đổi, bạn thử lại nhé'],
+    ])('bị từ chối %i: báo lỗi một lần, tải lại đúng khoá, nút giữ khoá tới khi dữ liệu về rồi mới nhả', async (status, message) => {
+      c.write.mockReset();
+      c.write.mockRejectedValueOnce(serverError(message, status)).mockResolvedValue(PROFILE);
+      const refresh = deferred();
+      const { invalidate, button } = await c.open(() => refresh.promise);
+      fireEvent.click(button());
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: message, type: 'error' }));
+      expect(errorSnackbars()).toBe(1);
+      expect(invalidate.mock.calls.map(([filter]) => filter)).toEqual(c.keys.map((queryKey) => ({ queryKey })));
+      // Đã có lời báo lỗi mà dữ liệu chưa về: nút vẫn bận, chạm thêm không gửi lần hai.
+      expect(button()).toHaveAttribute('aria-busy', 'true');
+      await act(async () => {
+        fireEvent.click(button());
+        fireEvent.click(button());
+      });
+      expect(c.write).toHaveBeenCalledTimes(1);
+      await act(async () => refresh.resolve());
+      await settle();
+      await waitFor(() => expect(button()).not.toHaveAttribute('aria-busy'));
+      expect(errorSnackbars()).toBe(1);
+      fireEvent.click(button());
+      await waitFor(() => expect(c.write).toHaveBeenCalledTimes(2));
+      // Gửi lại đúng thứ đã gửi lần đầu: không đổi nội dung, không thêm trường.
+      expect(c.write.mock.calls[1]).toEqual(c.write.mock.calls[0]);
+    });
+
+    it.each([
+      ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+      ['hết thời gian', new HttpError('timeout', 'ECONNABORTED')],
+      ['máy chủ lỗi 503', serverError('Service Unavailable', 503)],
+      ['hết phiên 401', serverError('Unauthorized', 401)],
+    ])('%s: không giữ khoá chờ tải lại, khoá nhả ngay', async (_label, error) => {
+      c.write.mockReset();
+      c.write.mockRejectedValueOnce(error).mockResolvedValue(PROFILE);
+      const { invalidate, button } = await c.open(() => new Promise(() => undefined));
+      fireEvent.click(button());
+      await waitFor(() => expect(errorSnackbars()).toBe(1));
+      await waitFor(() => expect(button()).not.toHaveAttribute('aria-busy'));
+      expect(invalidate).not.toHaveBeenCalled();
+      fireEvent.click(button());
+      await waitFor(() => expect(c.write).toHaveBeenCalledTimes(2));
+      expect(c.write.mock.calls[1]).toEqual(c.write.mock.calls[0]);
+    });
+
+    it('tải lại treo mãi: khoá nhả đúng sau LOCK_REFRESH_WAIT_MS', async () => {
+      c.write.mockReset();
+      c.write.mockRejectedValueOnce(serverError('Vừa có thay đổi, bạn thử lại nhé', 409)).mockResolvedValue(PROFILE);
+      const { button } = await c.open(() => new Promise(() => undefined));
+      // beforeEach chỉ giả Date; muốn giả cả setTimeout phải bỏ bản cũ rồi dựng lại (trang đã tính tháng xong nên Date thật không ảnh hưởng).
+      vi.useRealTimers();
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        fireEvent.click(button());
+        await waitFor(() => expect(errorSnackbars()).toBe(1));
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 500);
+        });
+        expect(button()).toHaveAttribute('aria-busy', 'true');
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(600);
+        });
+        await waitFor(() => expect(button()).not.toHaveAttribute('aria-busy'));
+      } finally {
+        vi.useRealTimers();
+      }
+      fireEvent.click(button());
+      await waitFor(() => expect(c.write).toHaveBeenCalledTimes(2));
+    });
   });
 });

@@ -1,7 +1,7 @@
 import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { vi as t } from '../i18n/vi';
 
 const mocks = vi.hoisted(() => ({
@@ -47,6 +47,8 @@ vi.mock('../components/image-upload', () => ({
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import StorefrontBuilderPage from './storefront-builder';
+import { HttpError } from '../services/http';
+import { LOCK_REFRESH_WAIT_MS } from '../utils/settle-within';
 
 const product = { id: 'p1', name: 'Trà xanh', slug: 'tra-xanh', thumbnail: null, brand: 'Tubu', basePrice: 100_000, salePrice: 80_000, ratingAvg: 5, reviewCount: 1, inStock: true };
 const item = { id: 'i1', productId: 'p1', note: null, variationId: null, isPinned: false, isHidden: false, sortOrder: 0, product };
@@ -483,5 +485,236 @@ describe('Bước 2/4: ảnh đại diện và ảnh bìa còn đang lên thì "
     expect(screen.getByLabelText(COVER)).toBeDisabled();
     await act(async () => release({}));
     expect(await screen.findByText('Bước 3/4')).toBeInTheDocument();
+  });
+});
+
+// W112A: lệnh ghi bị máy chủ từ chối vì gian hàng đã đổi (400/404/409) thì nút giữ khoá tới khi dữ liệu làm mới về (tối đa LOCK_REFRESH_WAIT_MS). Mất mạng, quá hạn, 401, 5xx không nói gì về gian hàng thật: không tải lại, nhả ngay.
+describe('Luồng 4 bước: máy chủ từ chối thì tải lại rồi mới nhả khoá (W112A)', () => {
+  type Pending = { promise: Promise<void>; resolve: () => void };
+  type Case = {
+    name: string;
+    /** Lệnh ghi bị giả lập. */
+    write: ReturnType<typeof vi.fn>;
+    /** Khoá tải lại kỳ vọng khi máy chủ từ chối, đúng thứ tự gọi. */
+    keys: string[][];
+    /** Giá trị lệnh ghi trả ở lần bấm lại sau khi nhả khoá. */
+    succeed: unknown;
+    /** Dựng màn tới đúng bước có nút (trước khi bật bản tải lại giả); trả hàm bấm nút, đồng bộ. */
+    open: (qc: QueryClient) => Promise<() => void>;
+  };
+
+  const MINE = [['my-storefront']];
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message }, headers: {} });
+  const errorToasts = () => mocks.openSnackbar.mock.calls.filter(([o]) => (o as { type: string }).type === 'error');
+  // TanStack báo cache qua setTimeout(0): đợi một nhịp để `isPending` kịp về false sau khi lệnh xong.
+  const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 30)); });
+  const pending = (): Pending => {
+    let resolve!: () => void;
+    const promise = new Promise<void>((res) => { resolve = res; });
+    return { promise, resolve };
+  };
+  const TEMPORARY: [string, unknown][] = [
+    ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+    ['quá thời gian', new HttpError('timeout', 'ECONNABORTED')],
+    ['máy chủ lỗi 503', serverError('Service Unavailable', 503)],
+    ['hết phiên 401', serverError('Unauthorized', 401)],
+  ];
+  /** Bước chuyển giữa các màn cần tải lại thật; chỉ sau `arm()` mỗi lần tải lại mới là một lời hứa riêng giữ trong tay. */
+  function liveClient() {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const invalidate = vi.spyOn(qc, 'invalidateQueries');
+    const refreshes: Pending[] = [];
+    const arm = (opts: { hang?: boolean } = {}) => {
+      invalidate.mockClear();
+      invalidate.mockImplementation((() => {
+        const p = pending();
+        if (!opts.hang) refreshes.push(p);
+        return p.promise;
+      }) as never);
+    };
+    return { qc, invalidate, refreshes, arm };
+  }
+  const keysOf = (invalidate: ReturnType<typeof liveClient>['invalidate']) => invalidate.mock.calls.map(([f]) => (f as { queryKey: string[] }).queryKey);
+  const mount = (qc: QueryClient) => render(<QueryClientProvider client={qc}><StorefrontBuilderPage /></QueryClientProvider>);
+  const toStep = async (qc: QueryClient, step: 3 | 4) => {
+    mount(qc);
+    await screen.findByLabelText('Tên gian hàng');
+    next();
+    await screen.findByText('Bước 3/4');
+    if (step === 4) {
+      next();
+      await screen.findByText('Bước 4/4');
+    }
+  };
+
+  const CASES: Case[] = [
+    {
+      name: 'bắt đầu mở gian hàng (startMut)',
+      write: mocks.createStorefront,
+      keys: MINE,
+      succeed: draft(),
+      open: async (qc) => {
+        notFound();
+        mount(qc);
+        await screen.findByRole('button', { name: 'Bắt đầu mở gian hàng' });
+        return () => fireEvent.click(screen.getByRole('button', { name: 'Bắt đầu mở gian hàng' }));
+      },
+    },
+    {
+      name: 'lưu thông tin (InfoStep saveMut)',
+      write: mocks.updateStorefront,
+      keys: MINE,
+      succeed: {},
+      open: async (qc) => {
+        mocks.getMyStorefront.mockResolvedValue(draft());
+        mount(qc);
+        await screen.findByLabelText('Tên gian hàng');
+        return next;
+      },
+    },
+    {
+      name: 'áp mẫu theo danh mục (templateMut)',
+      write: mocks.applyStorefrontTemplate,
+      keys: MINE,
+      succeed: { collectionId: 'c9', title: 'Mẫu', itemCount: 8 },
+      open: async (qc) => {
+        mocks.getMyStorefront.mockResolvedValue(draft());
+        await toStep(qc, 3);
+        fireEvent.click(screen.getByRole('button', { name: 'Chọn danh mục' }));
+        await screen.findByRole('button', { name: 'Dùng mẫu Chăm sóc da' });
+        return () => fireEvent.click(screen.getByRole('button', { name: 'Dùng mẫu Chăm sóc da' }));
+      },
+    },
+    {
+      name: 'tạo bộ sưu tập để mở bộ chọn (openPicker)',
+      write: mocks.createCollection,
+      keys: MINE,
+      succeed: { id: 'c1', title: 'Sản phẩm mình chọn', items: [] },
+      open: async (qc) => {
+        mocks.getMyStorefront.mockResolvedValue(draft());
+        await toStep(qc, 3);
+        return () => fireEvent.click(screen.getByRole('button', { name: 'Thêm sản phẩm' }));
+      },
+    },
+    {
+      name: 'bỏ món (removeMut)',
+      write: mocks.removeItem,
+      keys: MINE,
+      succeed: {},
+      open: async (qc) => {
+        mocks.getMyStorefront.mockResolvedValue(draft(withItem));
+        await toStep(qc, 3);
+        return () => fireEvent.click(screen.getByRole('button', { name: 'Bỏ Trà xanh' }));
+      },
+    },
+    {
+      name: 'thêm sản phẩm từ bộ chọn (PickerSheet addMut)',
+      write: mocks.addItem,
+      keys: MINE,
+      succeed: {},
+      open: async (qc) => {
+        mocks.getMyStorefront.mockResolvedValue(draft(withItem));
+        await toStep(qc, 3);
+        fireEvent.click(screen.getByRole('button', { name: 'Thêm sản phẩm' }));
+        await screen.findByText('Xà phòng');
+        return () => fireEvent.click(screen.getByRole('button', { name: 'Thêm' }));
+      },
+    },
+    {
+      name: 'gửi duyệt (submitMut)',
+      write: mocks.publishStorefront,
+      keys: [['storefront-quests'], ['my-storefront']],
+      succeed: {},
+      open: async (qc) => {
+        mocks.getMyStorefront.mockResolvedValue(draft(withItem));
+        await toStep(qc, 4);
+        return () => fireEvent.click(screen.getByRole('button', { name: 'Gửi duyệt' }));
+      },
+    },
+  ];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    for (const fn of new Set(CASES.map((c) => c.write))) fn.mockReset();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  describe.each(CASES)('$name', (c) => {
+    it.each([
+      [400, 'Việc này đã được xử lý rồi'],
+      [404, 'Không tìm thấy nữa'],
+      [409, 'Vừa có thay đổi, bạn thử lại nhé'],
+    ])('bị từ chối %i: báo lỗi một lần, tải lại đúng khoá, giữ khoá tới khi dữ liệu về hết rồi mới nhả', async (status, message) => {
+      const { qc, invalidate, refreshes, arm } = liveClient();
+      const press = await c.open(qc);
+      c.write.mockRejectedValueOnce(serverError(message, status)).mockResolvedValue(c.succeed);
+      arm();
+      press();
+      press();
+      await waitFor(() => expect(errorToasts()).toEqual([[{ text: message, type: 'error' }]]));
+      expect(keysOf(invalidate)).toEqual(c.keys);
+      expect(c.write).toHaveBeenCalledTimes(1);
+      // Đã báo lỗi mà dữ liệu chưa về: chạm thêm không gửi lần hai.
+      press();
+      await settle();
+      expect(c.write).toHaveBeenCalledTimes(1);
+      // Mới về một phần (Promise.all còn chờ khoá cuối): vẫn giữ.
+      await act(async () => refreshes.slice(0, -1).forEach((p) => p.resolve()));
+      await settle();
+      press();
+      await settle();
+      expect(c.write).toHaveBeenCalledTimes(1);
+      await act(async () => refreshes.at(-1)!.resolve());
+      await settle();
+      expect(errorToasts()).toHaveLength(1);
+      press();
+      await waitFor(() => expect(c.write).toHaveBeenCalledTimes(2));
+    });
+
+    it.each(TEMPORARY)('%s: không nói gì về gian hàng thật nên không tải lại, khoá nhả ngay', async (_label, error) => {
+      const { qc, invalidate, arm } = liveClient();
+      const press = await c.open(qc);
+      c.write.mockRejectedValueOnce(error).mockResolvedValue(c.succeed);
+      arm();
+      press();
+      await waitFor(() => expect(errorToasts()).toHaveLength(1));
+      await settle();
+      expect(invalidate).not.toHaveBeenCalled();
+      press();
+      await waitFor(() => expect(c.write).toHaveBeenCalledTimes(2));
+    });
+
+    it('bị từ chối mà dữ liệu tải lại treo mãi: còn khoá ở 3,5 giây, nhả sau LOCK_REFRESH_WAIT_MS', async () => {
+      const { qc, arm } = liveClient();
+      const press = await c.open(qc);
+      c.write.mockRejectedValueOnce(serverError('Không tìm thấy nữa', 404)).mockResolvedValue(c.succeed);
+      arm({ hang: true });
+      vi.useFakeTimers();
+      press();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(errorToasts()).toHaveLength(1);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3_500);
+      });
+      press();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(c.write).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 3_500 + 100);
+        for (let i = 0; i < 3; i++) await vi.advanceTimersByTimeAsync(0);
+      });
+      press();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(c.write).toHaveBeenCalledTimes(2);
+      expect(errorToasts()).toHaveLength(1);
+    });
   });
 });

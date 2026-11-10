@@ -2,9 +2,10 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'zmp-ui';
 import { Check } from 'lucide-react';
 import { claimQuest, type QuestList as QuestData } from '../../services/storefront-api';
-import { getErrorMessage } from '../../services/api';
+import { getErrorMessage, isStaleStateError } from '../../services/api';
 import { formatPoints } from '../../utils/format';
 import { haptic } from '../../utils/haptic';
+import { settleWithin } from '../../utils/settle-within';
 import { vi } from '../../i18n/vi';
 import { useLockedMutation } from '../game/use-locked-mutation';
 import { Badge } from '../ui/badge';
@@ -26,7 +27,11 @@ export function QuestList({ data }: { data: QuestData }) {
       // Trả Promise: khoá nhả sau khi danh sách tải lại, không thì nút "Nhận" sáng lại trên dữ liệu cũ và cú chạm kế hiện thêm lời báo điểm.
       return qc.invalidateQueries({ queryKey: ['storefront-quests'] });
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    // Máy chủ từ chối (nhiệm vụ đã nhận ở máy khác, chưa đạt...): tải lại danh sách rồi mới nhả khoá, kẻo nút "Nhận" còn sáng trên dữ liệu cũ. Mất mạng, quá hạn, 401, 5xx: nhả ngay, không tải lại.
+    onError: (e) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      return isStaleStateError(e) ? settleWithin(qc.invalidateQueries({ queryKey: ['storefront-quests'] })) : undefined;
+    },
   });
 
   return (

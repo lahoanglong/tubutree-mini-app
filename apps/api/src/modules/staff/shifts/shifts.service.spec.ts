@@ -1,4 +1,5 @@
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ServiceUnavailableException } from '@nestjs/common';
+import { LOCK_BUSY_MESSAGE } from '../../../common/lock-busy';
 import { ShiftsService } from './shifts.service';
 import type { PrismaService } from '../../../prisma/prisma.service';
 import type { SystemConfigService } from '../../system-config/system-config.service';
@@ -7,7 +8,21 @@ const cfg = {
   get: jest.fn(async (_k: string, d: number) => d),
 } as unknown as SystemConfigService;
 
-function makePrisma(over: Record<string, unknown> = {}) {
+type Mocks = Record<string, unknown>;
+
+// Bản tx và bản prisma ngoài mang hai jest.fn RIÊNG cho mỗi hàm, cùng chuyển lời gọi về hàm gốc trong `over`: assertion đặt trên hàm gốc
+// vẫn đúng dù lời gọi đi qua bên nào, còn bên nào bị gọi thì đo được riêng, nên đọc/ghi lọt ra ngoài giao dịch sẽ bị bắt.
+function mirror(src: Mocks): Mocks {
+  const out: Mocks = {};
+  for (const [k, v] of Object.entries(src)) {
+    if (typeof v === 'function') out[k] = jest.fn((...a: unknown[]) => (v as (...x: unknown[]) => unknown)(...a));
+    else if (v && typeof v === 'object') out[k] = mirror(v as Mocks);
+    else out[k] = v;
+  }
+  return out;
+}
+
+function makeSplit(over: Mocks = {}) {
   const base = {
     shift: {
       findMany: jest.fn().mockResolvedValue([]),
@@ -19,18 +34,19 @@ function makePrisma(over: Record<string, unknown> = {}) {
       count: jest.fn().mockResolvedValue(0),
     },
     shiftTemplate: { findMany: jest.fn(), create: jest.fn(), updateMany: jest.fn(), delete: jest.fn() },
+    $queryRaw: jest.fn().mockResolvedValue([]),
   };
-  const merged = { ...base, ...over } as Record<string, unknown>;
-  // Dual-mode mặc định: copyWeek() gọi $transaction([...ops]) (mảng promise), cancelShift()
-  // gọi $transaction(async tx => {...}, {isolationLevel}) (callback) — tx nhận CHÍNH prisma
-  // mock này nên tx.shift.count/updateMany dùng chung mock đã set ở `over`. Test tự truyền
-  // `over.$transaction` (vd để giả lập P2034) thì giữ nguyên, không ghi đè.
-  if (!('$transaction' in over)) {
-    merged.$transaction = jest.fn((arg: unknown) =>
-      typeof arg === 'function' ? (arg as (tx: unknown) => unknown)(merged) : Promise.all(arg as Promise<unknown>[]),
-    );
-  }
-  return merged as unknown as PrismaService;
+  const { $transaction: _custom, ...fns } = { ...base, ...over } as Mocks;
+  const tx = mirror(fns);
+  const outer = mirror(fns);
+  // Mọi đường ghi (createShifts, updateShift, copyWeek, cancelShift) gọi $transaction(async tx => {...}) với `tx` RIÊNG, không phải `outer`.
+  // Test tự truyền `over.$transaction` (vd để giả lập P2034) thì giữ nguyên, không ghi đè.
+  outer.$transaction = '$transaction' in over ? over.$transaction : jest.fn((fn: (t: unknown) => unknown) => fn(tx));
+  return { prisma: outer as unknown as PrismaService, tx, outer };
+}
+
+function makePrisma(over: Mocks = {}) {
+  return makeSplit(over).prisma;
 }
 
 const mk = (prisma: PrismaService) => new ShiftsService(prisma, cfg);
@@ -305,9 +321,11 @@ describe('ShiftsService.copyWeek — chỉ chép ca còn hiệu lực, không t�
   function mkPrisma(src: unknown[]) {
     const findMany = jest.fn().mockResolvedValueOnce(src).mockResolvedValueOnce([]);
     const create = jest.fn().mockImplementation(({ data }) => data);
+    const tx = { shift: { findMany, create }, $queryRaw: jest.fn().mockResolvedValue([]) };
     const prisma = {
-      shift: { findMany, create },
-      $transaction: jest.fn().mockImplementation((ops: unknown[]) => Promise.resolve(ops)),
+      shift: { findMany: jest.fn(), create: jest.fn() },
+      $queryRaw: jest.fn().mockResolvedValue([]),
+      $transaction: jest.fn().mockImplementation((fn: (t: unknown) => unknown) => fn(tx)),
     } as unknown as PrismaService;
     return { prisma, findMany, create };
   }
@@ -331,6 +349,145 @@ describe('ShiftsService.copyWeek — chỉ chép ca còn hiệu lực, không t�
 
     expect(out).toEqual({ created: 1, skipped: 1 });
     expect(create).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('ShiftsService — khoá dòng nhân viên xếp hàng các yêu cầu song song trước khi kiểm chồng giờ', () => {
+  const day = new Date('2026-07-10T00:00:00Z');
+  const item = { workDate: day, startAt: new Date('2026-07-10T01:00:00Z'), endAt: new Date('2026-07-10T04:00:00Z') };
+
+  function traced() {
+    const order: string[] = [];
+    const lockSql: string[] = [];
+    const queryRaw = jest.fn(async (strings: TemplateStringsArray, ...values: unknown[]) => {
+      order.push('lock');
+      lockSql.push(`${strings.join('?')}|${values.join(',')}`);
+      return [];
+    });
+    const findMany = jest.fn(async () => { order.push('find'); return []; });
+    const findFirst = jest.fn(async () => { order.push('find'); return { id: 's1', staffId: 'u1', status: 'PENDING', workDate: day, startAt: item.startAt, endAt: item.endAt }; });
+    const create = jest.fn(async () => { order.push('write'); return {}; });
+    const updateMany = jest.fn(async () => { order.push('write'); return { count: 1 }; });
+    const prisma = makePrisma({ $queryRaw: queryRaw, shift: { findMany, findFirst, create, updateMany } });
+    return { prisma, order, lockSql };
+  }
+
+  it('createShifts: khoá dòng users của nhân viên trước khi đọc ca đang có và trước khi ghi', async () => {
+    const { prisma, order, lockSql } = traced();
+    await mk(prisma).createShifts('u1', [item]);
+    expect(order).toEqual(['lock', 'find', 'write']);
+    expect(lockSql[0]).toMatch(/FROM "users" WHERE "id" = \? FOR NO KEY UPDATE\|u1$/);
+  });
+
+  it('updateShift: khoá trước khi đọc ca và đọc ca khác cùng ngày, rồi mới ghi', async () => {
+    const { prisma, order, lockSql } = traced();
+    await mk(prisma).updateShift('u1', 's1', { endAt: new Date('2026-07-10T05:00:00Z') });
+    expect(order.slice(0, 3)).toEqual(['lock', 'find', 'find']);
+    expect(order.indexOf('write')).toBeGreaterThan(order.lastIndexOf('lock'));
+    expect(lockSql[0]).toMatch(/FOR NO KEY UPDATE\|u1$/);
+  });
+
+  it('copyWeek: khoá trước khi đọc tuần nguồn và tuần đích', async () => {
+    const { prisma, order, lockSql } = traced();
+    await mk(prisma).copyWeek('u1', new Date('2026-07-06T00:00:00Z'), new Date('2026-07-13T00:00:00Z'));
+    expect(order).toEqual(['lock', 'find', 'find']);
+    expect(lockSql[0]).toMatch(/FOR NO KEY UPDATE\|u1$/);
+  });
+
+  it('lỗi chồng giờ vẫn là BadRequest và không ghi gì (giao dịch đã mở và khoá trước đó)', async () => {
+    const create = jest.fn();
+    const findMany = jest.fn().mockResolvedValue([{ startAt: item.startAt, endAt: item.endAt }]);
+    const { prisma, tx, outer } = makeSplit({ shift: { findMany, create } });
+    await expect(mk(prisma).createShifts('u1', [item])).rejects.toThrow('Ca bị chồng với ca đã đăng ký.');
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(outer.$queryRaw).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+  });
+});
+
+describe('ShiftsService: đăng ký, sửa giờ, chép tuần đọc và ghi trên tx, không lọt ra prisma ngoài giao dịch', () => {
+  const day = new Date('2026-07-10T00:00:00Z');
+  const item = { workDate: day, startAt: new Date('2026-07-10T01:00:00Z'), endAt: new Date('2026-07-10T04:00:00Z') };
+  const current = { id: 's1', staffId: 'u1', status: 'PENDING', workDate: day, startAt: item.startAt, endAt: item.endAt };
+  const fullShift = (o: Record<string, jest.Mock> = {}) => ({
+    findMany: jest.fn().mockResolvedValue([]),
+    findFirst: jest.fn(),
+    create: jest.fn().mockResolvedValue({}),
+    createMany: jest.fn().mockResolvedValue({ count: 0 }),
+    update: jest.fn().mockResolvedValue({}),
+    updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+    deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+    count: jest.fn().mockResolvedValue(0),
+    ...o,
+  });
+  const shiftOf = (o: Mocks) => o.shift as Record<string, jest.Mock>;
+  const rawOf = (o: Mocks) => o.$queryRaw as jest.Mock;
+  /** Bản ngoài giao dịch: không một hàm đọc/ghi ca nào, cũng không câu raw nào được gọi. */
+  const expectOuterUntouched = (outer: Mocks) => {
+    for (const [name, fn] of Object.entries(shiftOf(outer))) expect([name, fn.mock.calls.length]).toEqual([name, 0]);
+    expect(rawOf(outer)).not.toHaveBeenCalled();
+  };
+
+  it('createShifts: khoá, đọc ca đang có và tạo ca đều trên tx', async () => {
+    const { prisma, tx, outer } = makeSplit({ shift: fullShift() });
+    await mk(prisma).createShifts('u1', [item]);
+    expect(rawOf(tx)).toHaveBeenCalledTimes(1);
+    expect(shiftOf(tx).findMany).toHaveBeenCalledTimes(1);
+    expect(shiftOf(tx).create).toHaveBeenCalledTimes(1);
+    expect(shiftOf(tx).createMany).not.toHaveBeenCalled();
+    expectOuterUntouched(outer);
+  });
+
+  it('updateShift: khoá, đọc ca, đọc ca khác cùng ngày và ghi giờ mới đều trên tx', async () => {
+    const findFirst = jest.fn().mockResolvedValueOnce(current).mockResolvedValueOnce({ ...current, endAt: new Date('2026-07-10T05:00:00Z') });
+    const { prisma, tx, outer } = makeSplit({ shift: fullShift({ findFirst }) });
+    await mk(prisma).updateShift('u1', 's1', { endAt: new Date('2026-07-10T05:00:00Z') });
+    expect(rawOf(tx)).toHaveBeenCalledTimes(1);
+    expect(shiftOf(tx).findFirst).toHaveBeenCalledTimes(2);
+    expect(shiftOf(tx).findMany).toHaveBeenCalledTimes(1);
+    expect(shiftOf(tx).updateMany).toHaveBeenCalledTimes(1);
+    expectOuterUntouched(outer);
+  });
+
+  it('updateShift: ghi trượt (count 0) thì đọc lại trạng thái cũng trên tx', async () => {
+    const findFirst = jest.fn().mockResolvedValueOnce(current).mockResolvedValueOnce({ status: 'APPROVED' });
+    const { prisma, tx, outer } = makeSplit({ shift: fullShift({ findFirst, updateMany: jest.fn().mockResolvedValue({ count: 0 }) }) });
+    await expect(mk(prisma).updateShift('u1', 's1', { endAt: new Date('2026-07-10T05:00:00Z') })).rejects.toThrow('Ca vừa được duyệt, tải lại');
+    expect(shiftOf(tx).findFirst).toHaveBeenCalledTimes(2);
+    expectOuterUntouched(outer);
+  });
+
+  it('copyWeek: khoá, đọc tuần nguồn, đọc tuần đích và tạo ca đều trên tx', async () => {
+    const src = [{ workDate: new Date('2026-06-29'), startAt: new Date('2026-06-29T01:00:00Z'), endAt: new Date('2026-06-29T05:00:00Z'), templateId: null }];
+    const findMany = jest.fn().mockResolvedValueOnce(src).mockResolvedValueOnce([]);
+    const { prisma, tx, outer } = makeSplit({ shift: fullShift({ findMany }) });
+    await mk(prisma).copyWeek('u1', new Date('2026-06-29T00:00:00Z'), new Date('2026-07-06T00:00:00Z'));
+    expect(rawOf(tx)).toHaveBeenCalledTimes(1);
+    expect(shiftOf(tx).findMany).toHaveBeenCalledTimes(2);
+    expect(shiftOf(tx).create).toHaveBeenCalledTimes(1);
+    expect(shiftOf(tx).createMany).not.toHaveBeenCalled();
+    expectOuterUntouched(outer);
+  });
+
+  describe('thua tranh khoá của nhân viên', () => {
+    const CALLS: [string, (svc: ShiftsService) => Promise<unknown>][] = [
+      ['createShifts', (svc) => svc.createShifts('u1', [item])],
+      ['updateShift', (svc) => svc.updateShift('u1', 's1', { endAt: new Date('2026-07-10T05:00:00Z') })],
+      ['copyWeek', (svc) => svc.copyWeek('u1', new Date('2026-07-06T00:00:00Z'), new Date('2026-07-13T00:00:00Z'))],
+    ];
+
+    it.each(CALLS)('%s: hết hạn chờ khoá → 503 "Hệ thống đang bận", không phải 500', async (_name, call) => {
+      const prisma = makePrisma({ $transaction: jest.fn().mockRejectedValue(new Error('canceling statement due to lock timeout')) });
+      const err = await call(mk(prisma)).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(ServiceUnavailableException);
+      expect((err as ServiceUnavailableException).message).toBe(LOCK_BUSY_MESSAGE);
+    });
+
+    it.each(CALLS)('%s: lỗi khác ném nguyên, không bị đổi thành 503', async (_name, call) => {
+      const boom = new Error('boom');
+      const prisma = makePrisma({ $transaction: jest.fn().mockRejectedValue(boom) });
+      await expect(call(mk(prisma))).rejects.toBe(boom);
+    });
   });
 });
 

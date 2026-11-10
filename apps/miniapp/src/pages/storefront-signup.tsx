@@ -24,8 +24,9 @@ import {
   type StorefrontEdit,
 } from '../services/storefront-api';
 import { getAffiliateMe } from '../services/affiliate-api';
-import { getErrorMessage, getLoadErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage, isStaleStateError } from '../services/api';
 import { haptic } from '../utils/haptic';
+import { settleWithin } from '../utils/settle-within';
 import { vi } from '../i18n/vi';
 import { useUploadBusy } from '../hooks/use-upload-busy';
 import { BottomSheet } from '../components/ui/bottom-sheet';
@@ -112,7 +113,11 @@ function ConditionsStep({ sf, onStarted }: { sf: StorefrontEdit | null; onStarte
       await qc.invalidateQueries({ queryKey: ['my-storefront'] });
       onStarted();
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    // Máy chủ từ chối (gian hàng đã tạo ở máy khác, chưa đủ điều kiện CTV...): tải lại gian hàng rồi mới nhả nút, bấm lại sẽ đi tiếp trên gian hàng có sẵn thay vì tạo lần hai. Mất mạng, quá hạn, 401, 5xx: nhả ngay, không tải lại.
+    onError: (e) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      return isStaleStateError(e) ? settleWithin(qc.invalidateQueries({ queryKey: ['my-storefront'] })) : undefined;
+    },
   });
 
   if (meQ.isLoading) return <div style={{ padding: 16 }}><Skeleton height={160} radius="var(--radius-card)" /></div>;
@@ -189,7 +194,11 @@ function InfoStep({ sf, onBack, onDone }: { sf: StorefrontEdit; onBack: () => vo
       await qc.invalidateQueries({ queryKey: ['my-storefront'] });
       onDone();
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    // Máy chủ từ chối (gian hàng không còn, thông tin không hợp lệ nữa...): tải lại gian hàng rồi mới nhả nút Tiếp tục và ô ảnh. Mất mạng, quá hạn, 401, 5xx: nhả ngay, không tải lại.
+    onError: (e) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      return isStaleStateError(e) ? settleWithin(qc.invalidateQueries({ queryKey: ['my-storefront'] })) : undefined;
+    },
   });
 
   const next = () => {
@@ -243,7 +252,12 @@ function ProductsStep({ sf, onBack, onDone }: { sf: StorefrontEdit; onBack: () =
   const [pickerCol, setPickerCol] = useState<string | null>(null);
   const items = sf.collections.flatMap((c) => c.items);
   const refresh = () => qc.invalidateQueries({ queryKey: ['my-storefront'] });
-  const fail = (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' });
+  // Dùng chung cho áp mẫu, mở bộ chọn (tạo bộ sưu tập) và bỏ món: máy chủ từ chối vì danh sách đã cũ (mẫu đã áp, bộ sưu tập đã có, món đã bị xoá ở máy khác) thì tải lại gian hàng rồi mới nhả khoá.
+  // Mất mạng, quá hạn, 401, 5xx không nói gì về danh sách thật: nhả ngay, không tải lại.
+  const fail = (e: unknown) => {
+    openSnackbar({ text: getErrorMessage(e), type: 'error' });
+    return isStaleStateError(e) ? settleWithin(refresh()) : undefined;
+  };
 
   const templateMut = useLockedMutation({
     mutationFn: (categoryId: string) => applyStorefrontTemplate(categoryId),
@@ -322,7 +336,7 @@ function ProductsStep({ sf, onBack, onDone }: { sf: StorefrontEdit; onBack: () =
         />
       </BottomSheet>
       <BottomSheet open={!!pickerCol} onClose={() => setPickerCol(null)} title={SIGNUP_COPY.pickCta}>
-        {pickerCol && <PickerSheet collectionId={pickerCol} onAdded={() => void refresh()} onClose={() => setPickerCol(null)} />}
+        {pickerCol && <PickerSheet collectionId={pickerCol} onAdded={() => void refresh()} onStale={refresh} onClose={() => setPickerCol(null)} />}
       </BottomSheet>
     </>
   );
@@ -341,7 +355,12 @@ function ReviewStep({ sf, onBack }: { sf: StorefrontEdit; onBack: () => void }) 
       void qc.invalidateQueries({ queryKey: ['storefront-quests'] });
       await qc.invalidateQueries({ queryKey: ['my-storefront'] });
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    // Máy chủ từ chối (đã gửi duyệt ở máy khác, chưa có sản phẩm...): tải lại gian hàng và Hành trình (cùng hai khoá lúc gửi thành công) rồi mới nhả nút. Mất mạng, quá hạn, 401, 5xx: nhả ngay, không tải lại.
+    onError: (e) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      if (!isStaleStateError(e)) return undefined;
+      return settleWithin(Promise.all([qc.invalidateQueries({ queryKey: ['storefront-quests'] }), qc.invalidateQueries({ queryKey: ['my-storefront'] })]));
+    },
   });
 
   return (

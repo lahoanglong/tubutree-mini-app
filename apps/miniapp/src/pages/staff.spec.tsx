@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, type MockInstance } from 'vitest';
 import { vi as t } from '../i18n/vi';
 
 const mocks = vi.hoisted(() => ({
@@ -47,7 +47,11 @@ vi.mock('../services/shifts-api', () => ({
   copyWeek: mocks.copyWeek,
   cancelShift: mocks.cancelShift,
 }));
-vi.mock('../services/api', () => ({ getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : String(e)), getLoadErrorMessage: (e: unknown) => (e instanceof Error ? e.message : String(e)) }));
+vi.mock('../services/api', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : String(e)),
+  getLoadErrorMessage: (e: unknown) => (e instanceof Error ? e.message : String(e)),
+}));
 vi.mock('../store/auth', () => ({
   useAuthStore: (sel: (s: { user: { role: string } }) => unknown) => sel({ user: { role: mocks.role } }),
 }));
@@ -62,6 +66,8 @@ vi.mock('../components/image-upload', () => ({
   },
 }));
 
+import { HttpError } from '../services/http';
+import { LOCK_REFRESH_WAIT_MS } from '../utils/settle-within';
 import StaffPage from './staff';
 
 // 11/03/2026 12:00 giờ VN (Thứ 4): tuần 09/03–15/03, "hôm nay" = 11/03.
@@ -1277,6 +1283,256 @@ describe('Ca làm của tôi theo DS v2 (C-076, C-114)', () => {
       await waitFor(() => expect(screen.getByRole('button', { name: 'Ảnh chứng cứ' })).toBeDisabled());
       await act(async () => release({ cancelled: true, penalty: false }));
       await waitFor(() => expect(screen.queryByText('Huỷ ca đã duyệt')).not.toBeInTheDocument());
+    });
+  });
+
+  // W112A: lệnh ghi bị máy chủ từ chối vì ca/phiên đã đổi (400/404/409) thì nút giữ khoá tới khi dữ liệu làm mới về (tối đa LOCK_REFRESH_WAIT_MS), kẻo bấm lại trên số cũ nhận đúng lỗi đó. Mất mạng, quá hạn, 401, 5xx không nói gì về trạng thái thật: không tải lại, nhả ngay.
+  describe('máy chủ từ chối thì giữ khoá tới khi dữ liệu làm mới về (W112A)', () => {
+    type Refresh = () => Promise<unknown>;
+    type Opened = { invalidate: MockInstance<QueryClient['invalidateQueries']>; button: () => HTMLElement };
+    type Case = {
+      name: string;
+      /** Lệnh ghi bị giả lập. */
+      write: ReturnType<typeof vi.fn>;
+      /** Khoá tải lại kỳ vọng khi máy chủ từ chối, đúng thứ tự gọi. */
+      keys: string[][];
+      /** Giá trị lệnh ghi trả ở lần bấm lại sau khi nhả khoá. */
+      succeed: unknown;
+      open: (refresh: Refresh) => Promise<Opened>;
+    };
+
+    const deferred = () => {
+      let resolve!: (v?: unknown) => void;
+      const promise = new Promise((res) => {
+        resolve = res;
+      });
+      return { promise, resolve };
+    };
+    const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message }, headers: {} });
+    const errorSnackbars = () => mocks.openSnackbar.mock.calls.filter((c) => c[0].type === 'error').length;
+    // TanStack báo cache qua setTimeout(0): đợi một nhịp để `isPending` kịp về false sau khi lệnh xong.
+    const settle = () =>
+      act(async () => {
+        await new Promise((r) => setTimeout(r, 30));
+      });
+    /** Dựng trang và thay `invalidateQueries` để soi khoá tải lại và giữ lời hứa tải lại trong tay. */
+    const renderLive = (refresh: Refresh) => {
+      const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+      const invalidate = vi.spyOn(qc, 'invalidateQueries').mockImplementation((() => refresh()) as never);
+      render(
+        <QueryClientProvider client={qc}>
+          <StaffPage />
+        </QueryClientProvider>,
+      );
+      return invalidate;
+    };
+    const named = (name: string | RegExp) => () => screen.getByRole('button', { name });
+    // Tuần 09/03–15/03 (NOW = 11/03): khoá lịch tuần là ['my-shifts', thứ Hai].
+    const WEEK_KEY = [['my-shifts', '2026-03-09']];
+    const ATTN_KEY = [['attn-status']];
+
+    const CASES: Case[] = [
+      {
+        name: 'Vào ca (checkinM)',
+        write: mocks.checkin,
+        keys: ATTN_KEY,
+        succeed: { sessionId: 's1', isLate: false },
+        open: async (refresh) => {
+          mocks.getAttendanceStatus.mockResolvedValue({ shifts: [TODAY_SHIFT], openSession: null });
+          const invalidate = renderLive(refresh);
+          await screen.findByRole('button', { name: 'Vào ca' });
+          return { invalidate, button: named('Vào ca') };
+        },
+      },
+      {
+        name: 'Ra ca (checkoutM)',
+        write: mocks.checkout,
+        keys: ATTN_KEY,
+        succeed: { checkedOut: true },
+        open: async (refresh) => {
+          mocks.getAttendanceStatus.mockResolvedValue({ shifts: [], openSession: OPEN_SESSION });
+          const invalidate = renderLive(refresh);
+          await screen.findByRole('button', { name: 'Ra ca' });
+          return { invalidate, button: named('Ra ca') };
+        },
+      },
+      {
+        name: 'Ra ca lùi giờ (checkoutM, tấm Xác nhận ra ca)',
+        write: mocks.checkout,
+        keys: ATTN_KEY,
+        succeed: { checkedOut: true },
+        open: async (refresh) => {
+          mocks.getAttendanceStatus.mockResolvedValue({ shifts: [], openSession: OPEN_SESSION });
+          const invalidate = renderLive(refresh);
+          fireEvent.click(await screen.findByText('Quên ra ca? Chọn giờ đã về →'));
+          fireEvent.change(timeInputs()[0]!, { target: { value: '11:00' } });
+          return { invalidate, button: named('Xác nhận ra ca') };
+        },
+      },
+      {
+        name: 'Gửi duyệt ca mới (saveM tạo)',
+        write: mocks.createShifts,
+        keys: WEEK_KEY,
+        succeed: { created: 1 },
+        open: async (refresh) => {
+          const invalidate = renderLive(refresh);
+          fireEvent.click(await screen.findByRole('button', { name: 'Thêm ca T4 11/03' }));
+          fireEvent.click(screen.getByRole('button', { name: 'Ca sáng (08:00–12:00)' }));
+          return { invalidate, button: named('Gửi duyệt') };
+        },
+      },
+      {
+        name: 'Lưu ca đã gửi (saveM sửa)',
+        write: mocks.updateShift,
+        keys: WEEK_KEY,
+        succeed: {},
+        open: async (refresh) => {
+          const invalidate = renderLive(refresh);
+          fireEvent.click(await screen.findByRole('button', { name: /^Sửa ca / }));
+          return { invalidate, button: named('Lưu') };
+        },
+      },
+      {
+        name: 'Xoá ca (delM)',
+        write: mocks.deleteShift,
+        keys: WEEK_KEY,
+        succeed: { deleted: true },
+        open: async (refresh) => {
+          const invalidate = renderLive(refresh);
+          await screen.findByRole('button', { name: /^Xoá ca / });
+          return { invalidate, button: named(/^Xoá ca /) };
+        },
+      },
+      {
+        name: 'Đăng ký ca nhanh (quickM)',
+        write: mocks.createShifts,
+        keys: WEEK_KEY,
+        succeed: { created: 3 },
+        open: async (refresh) => {
+          const invalidate = renderLive(refresh);
+          fireEvent.click(await screen.findByRole('button', { name: 'Đăng ký ca' }));
+          return { invalidate, button: named('Gửi duyệt (3 ngày)') };
+        },
+      },
+      {
+        name: 'Chép tuần trước (copyM)',
+        write: mocks.copyWeek,
+        keys: WEEK_KEY,
+        succeed: { created: 2, skipped: 0 },
+        open: async (refresh) => {
+          const invalidate = renderLive(refresh);
+          await screen.findByRole('button', { name: 'Chép tuần trước' });
+          return { invalidate, button: named('Chép tuần trước') };
+        },
+      },
+      {
+        name: 'Xác nhận huỷ ca (cancelM)',
+        write: mocks.cancelShift,
+        keys: WEEK_KEY,
+        succeed: { cancelled: true, penalty: false },
+        open: async (refresh) => {
+          const invalidate = renderLive(refresh);
+          fireEvent.click(await screen.findByRole('button', { name: /^Huỷ ca / }));
+          fireEvent.change(screen.getByPlaceholderText('Lý do huỷ'), { target: { value: 'Bận việc nhà' } });
+          return { invalidate, button: named('Xác nhận huỷ') };
+        },
+      },
+    ];
+
+    describe.each(CASES)('$name', (c) => {
+      it.each([
+        [400, 'Ca vừa được duyệt, tải lại.'],
+        [404, 'Không tìm thấy ca nữa'],
+        [409, 'Vừa có thay đổi, bạn thử lại nhé'],
+      ])('bị từ chối %i: báo lỗi một lần, tải lại đúng khoá, nút giữ khoá tới khi dữ liệu về rồi mới nhả', async (status, message) => {
+        c.write.mockRejectedValueOnce(serverError(message, status)).mockResolvedValue(c.succeed);
+        const refresh = deferred();
+        const { invalidate, button } = await c.open(() => refresh.promise);
+        fireEvent.click(button());
+        await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: message, type: 'error' }));
+        expect(errorSnackbars()).toBe(1);
+        expect(invalidate.mock.calls.map(([filter]) => filter)).toEqual(c.keys.map((queryKey) => ({ queryKey })));
+        // Đã có lời báo lỗi mà dữ liệu chưa về: nút vẫn bận, chạm thêm không gửi lần hai.
+        expect(button()).toHaveAttribute('aria-busy', 'true');
+        await act(async () => {
+          fireEvent.click(button());
+          fireEvent.click(button());
+        });
+        expect(c.write).toHaveBeenCalledTimes(1);
+        await act(async () => refresh.resolve());
+        await settle();
+        await waitFor(() => expect(button()).not.toHaveAttribute('aria-busy'));
+        expect(errorSnackbars()).toBe(1);
+        fireEvent.click(button());
+        await waitFor(() => expect(c.write).toHaveBeenCalledTimes(2));
+      });
+
+      it.each([
+        ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+        ['hết thời gian', new HttpError('timeout', 'ECONNABORTED')],
+        ['máy chủ lỗi 503', serverError('Service Unavailable', 503)],
+        ['hết phiên 401', serverError('Unauthorized', 401)],
+      ])('%s: không giữ khoá chờ tải lại, khoá nhả ngay, không tải lại khoá nào', async (_label, error) => {
+        c.write.mockRejectedValueOnce(error).mockResolvedValue(c.succeed);
+        const { invalidate, button } = await c.open(() => new Promise(() => undefined));
+        fireEvent.click(button());
+        await waitFor(() => expect(errorSnackbars()).toBe(1));
+        await waitFor(() => expect(button()).not.toHaveAttribute('aria-busy'));
+        expect(invalidate).not.toHaveBeenCalled();
+        fireEvent.click(button());
+        await waitFor(() => expect(c.write).toHaveBeenCalledTimes(2));
+      });
+
+      it('tải lại treo mãi: khoá nhả đúng sau LOCK_REFRESH_WAIT_MS', async () => {
+        c.write.mockRejectedValueOnce(serverError('Vừa có thay đổi, bạn thử lại nhé', 409)).mockResolvedValue(c.succeed);
+        const { button } = await c.open(() => new Promise(() => undefined));
+        // Bộ hẹn giờ giả chỉ bật từ lúc này: Date đã giả từ beforeEach nên dựng lại cả hai, giữ đúng mốc NOW của tuần đang hiện.
+        vi.useRealTimers();
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        vi.setSystemTime(new Date(NOW));
+        try {
+          fireEvent.click(button());
+          await waitFor(() => expect(errorSnackbars()).toBe(1));
+          await act(async () => {
+            await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 500);
+          });
+          expect(button()).toHaveAttribute('aria-busy', 'true');
+          await act(async () => {
+            await vi.advanceTimersByTimeAsync(600);
+          });
+          await waitFor(() => expect(button()).not.toHaveAttribute('aria-busy'));
+        } finally {
+          vi.useRealTimers();
+        }
+        fireEvent.click(button());
+        await waitFor(() => expect(c.write).toHaveBeenCalledTimes(2));
+      });
+    });
+
+    // Sửa và Xoá cùng một ca chung khoá theo id ca: lúc Xoá còn giữ khoá chờ lịch mới, Lưu của đúng ca đó cũng phải chờ.
+    describe('khoá chung theo id ca khi đang chờ dữ liệu mới', () => {
+      it('xoá bị từ chối 409: Lưu cùng ca bị bỏ qua tới khi lịch tuần về, sau đó sửa được', async () => {
+        mocks.deleteShift.mockRejectedValueOnce(serverError('Ca vừa được duyệt, tải lại.', 409));
+        const refresh = deferred();
+        renderLive(() => refresh.promise);
+        fireEvent.click(await screen.findByRole('button', { name: 'Sửa ca T5 12/03' }));
+        const save = screen.getByRole('button', { name: 'Lưu' });
+        const del = screen.getByRole('button', { name: 'Xoá ca T5 12/03' });
+        await act(async () => {
+          fireEvent.click(del);
+        });
+        await waitFor(() => expect(errorSnackbars()).toBe(1));
+        await act(async () => {
+          fireEvent.click(save);
+        });
+        expect(mocks.updateShift).not.toHaveBeenCalled();
+        await act(async () => refresh.resolve());
+        await settle();
+        await waitFor(() => expect(del).not.toHaveAttribute('aria-busy'));
+        fireEvent.click(save);
+        await waitFor(() => expect(mocks.updateShift).toHaveBeenCalledTimes(1));
+        expect(mocks.deleteShift).toHaveBeenCalledTimes(1);
+      });
     });
   });
 });
