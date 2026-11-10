@@ -13,6 +13,8 @@ import { formatCount } from '@/lib/checkout-points';
 import { formatVnd } from '@/lib/format-vnd';
 import { ui } from '@/lib/guest-ui';
 import { phoneCaption, phoneFlatCard, phoneSecondary } from '@/lib/phone-ui';
+import { serverRejectedState } from '@/lib/server-rejected-state';
+import { settleWithin } from '@/lib/settle-within';
 import { Badge } from '@/components/ui/badge';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { questPercent, statsRows } from './storefront-rules';
@@ -90,9 +92,13 @@ export function QuestList({ data, onNotice }: { data: QuestData; onNotice: Notif
       onMutate: (code) => setClaimErrors((prev) => new Map([...prev].filter(([k]) => k !== code))),
       onSuccess: (r) => {
         onNotice(`+${formatCount(r.rewardPoints)} điểm 🎉`);
-        return qc.invalidateQueries({ queryKey: storefrontQuestsQuery(coreHttp).queryKey });
+        return settleWithin(qc.invalidateQueries({ queryKey: storefrontQuestsQuery(coreHttp).queryKey }));
       },
-      onError: (e, code) => setClaimErrors((prev) => new Map(prev).set(code, actErrText(e))),
+      onError: (e, code) => {
+        setClaimErrors((prev) => new Map(prev).set(code, actErrText(e)));
+        // Nhiệm vụ đã nhận ở máy khác hay chưa đạt: danh sách cũ còn nút "Nhận", nên tải lại rồi mới nhả khoá. Mất mạng, 401, 403, 5xx nhả ngay.
+        return serverRejectedState(e) ? settleWithin(qc.invalidateQueries({ queryKey: storefrontQuestsQuery(coreHttp).queryKey })) : undefined;
+      },
     },
     (code) => code,
   );

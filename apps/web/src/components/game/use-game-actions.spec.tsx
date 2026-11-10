@@ -26,11 +26,19 @@ describe('useGameActions: lỗi khi bấm nút', () => {
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['game'] });
   });
 
-  it('máy chủ từ chối (4xx): chỉ báo lời máy chủ, không làm mới', async () => {
+  it('máy chủ từ chối vì trạng thái đã đổi (400): báo lời máy chủ rồi làm mới Vườn Xanh', async () => {
     api.collectDew.mockRejectedValue(new ApiError('Bạn đã hứng sương hôm nay rồi.', 400));
     const { notify, invalidate, hook } = setup();
     await act(async () => hook.result.current.dewM.mutate());
     await waitFor(() => expect(notify).toHaveBeenCalledWith('Bạn đã hứng sương hôm nay rồi.', 'error'));
+    await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['game'] }));
+  });
+
+  it('máy chủ từ chối không nói về trạng thái (403): chỉ báo lời máy chủ, không làm mới', async () => {
+    api.collectDew.mockRejectedValue(new ApiError('Tài khoản không được hứng sương.', 403));
+    const { notify, invalidate, hook } = setup();
+    await act(async () => hook.result.current.dewM.mutate());
+    await waitFor(() => expect(notify).toHaveBeenCalledWith('Tài khoản không được hứng sương.', 'error'));
     expect(invalidate).not.toHaveBeenCalled();
   });
 });

@@ -139,7 +139,7 @@ export function HomeStoryReel({ initialBestSellers }: { initialBestSellers?: Bes
   const best = useBlockQuery(useQuery({ ...homeBestSellerQuery(coreHttp), ...(initialBestSellers ? { initialData: initialBestSellers, staleTime: STALE } : {}) }));
   const items = useMemo(() => reelItems(best.data?.data), [best.data]);
   const pricing = useCardPricing();
-  const { quickAdd, notify, feedback } = useQuickAdd();
+  const { quickAdd, notify, feedback } = useQuickAdd(undefined, homeBestSellerQuery(coreHttp).queryKey);
 
   const [seen, setSeen] = useState<ReadonlySet<string>>(() => new Set());
   useEffect(() => {

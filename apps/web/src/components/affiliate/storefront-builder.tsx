@@ -30,6 +30,7 @@ import { coreHttp } from '@/lib/core-http';
 import { formatCount } from '@/lib/checkout-points';
 import { ui } from '@/lib/guest-ui';
 import { phoneBrandText, phoneCaption, phoneFlatCard, phoneSecondary } from '@/lib/phone-ui';
+import { settleWithin } from '@/lib/settle-within';
 import { shallowPush, shallowReplace } from '@/lib/shallow-url';
 import { Badge } from '@/components/ui/badge';
 import { Badge as TrustBadge } from '@/components/mini/badge';
@@ -188,7 +189,7 @@ export function StorefrontBuilder({ sf, tier, tierPending, nextTier = null }: { 
   const refresh = () => {
     // Cập nhật cả tiến trình "Hành trình gian hàng" sau khi thêm sản phẩm / đăng (nhiệm vụ đọc từ cùng dữ liệu).
     void qc.invalidateQueries({ queryKey: storefrontQuestsQuery(coreHttp).queryKey });
-    return qc.invalidateQueries({ queryKey: ['my-storefront'] });
+    return settleWithin(qc.invalidateQueries({ queryKey: ['my-storefront'] }));
   };
   const fail = (e: unknown) => notify(actErrText(e), true);
 

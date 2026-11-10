@@ -8,6 +8,7 @@ import { ShoppingCart } from 'lucide-react';
 import { addToCart, getCart, type AddToCartSource } from '@tubutree/app-core/api/cart';
 import { fetchProduct, type ProductCard, type VariationDetail } from '@tubutree/app-core/api/catalog';
 import { QUICK_ADD_SOLD_OUT, quickAddPlan } from '@tubutree/app-core/quick-add';
+import { productQuery } from '@tubutree/app-core/queries/catalog';
 import { wishlistQuery } from '@tubutree/app-core/queries/wishlist';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { cartKey, cartStorefrontSlug, useCartKey } from '@/lib/cart-key';
@@ -44,10 +45,12 @@ export interface QuickAdd {
 }
 
 /**
- * Đường giỏ nhanh dùng chung cho thẻ yêu thích và Reel Trang chủ. Thẻ không mang phân loại nên tải chi tiết lúc thêm (cũng cho tồn kho mới nhất), rồi theo cùng luật
+ * Đường giỏ nhanh dùng chung cho thẻ yêu thích, Reel Trang chủ và dải Mua lại món quen. Thẻ không mang phân loại nên tải chi tiết lúc thêm (cũng cho tồn kho mới nhất), rồi theo cùng luật
  * với trang chi tiết: một phân loại thì thêm thẳng, nhiều thì mở bảng chọn. `source` là nguồn ghi nhận lúc thêm giỏ (thiếu thì không ghi).
+ * `staleKey` là khoá truy vấn của danh sách đang vẽ thẻ/món để thêm: máy chủ từ chối vì trạng thái đã đổi (400/404/409/422) thì danh sách đó đã cũ nên tải lại đúng khoá này.
+ * Cùng lúc tải lại chi tiết của đúng sản phẩm vừa bấm (khi biết slug): Reel và nơi khác vẽ nút từ chi tiết đó, còn bản cũ thì nút vẫn sáng.
  */
-export function useQuickAdd(source?: AddToCartSource): QuickAdd {
+export function useQuickAdd(source: AddToCartSource | undefined, staleKey: readonly unknown[]): QuickAdd {
   const qc = useQueryClient();
   const flash = useActiveFlashSales();
   const phase = useAuthPhase();
@@ -73,7 +76,10 @@ export function useQuickAdd(source?: AddToCartSource): QuickAdd {
     playCartFeedback(origin?.isConnected ? origin : null);
   };
 
-  const run = async (task: () => Promise<void>) => {
+  const reloadStale = (slug: string | undefined) =>
+    Promise.all((slug ? [staleKey, productQuery(coreHttp, slug).queryKey] : [staleKey]).map((queryKey) => qc.invalidateQueries({ queryKey })));
+
+  const run = async (task: () => Promise<void>, slug?: string) => {
     if (inFlight.current) return;
     inFlight.current = true;
     try {
@@ -81,8 +87,8 @@ export function useQuickAdd(source?: AddToCartSource): QuickAdd {
     } catch (e) {
       show({ ok: false, text: actionErrorText(e) });
       setPicker(null);
-      // Ở trang Yêu thích, thẻ đang hiện đã cũ: giữ khoá tới khi danh sách yêu thích mới về (tối đa 4 giây) kẻo chạm lại nhận đúng lời từ chối đó. Reel Trang chủ và dải Mua lại món quen cũng dùng hook này nhưng không có truy vấn yêu thích nào đang dùng nên khoá nhả ngay. Lời lỗi đã hiện trước khi chờ.
-      if (serverRejectedState(e)) await settleWithin(qc.invalidateQueries({ queryKey: wishlistQuery(coreHttp).queryKey }));
+      // Thẻ/món đang hiện đã cũ: giữ khoá tới khi dữ liệu của nơi gọi mới về (tối đa 4 giây) kẻo chạm lại nhận đúng lời từ chối đó. Lời lỗi đã hiện trước khi chờ.
+      if (serverRejectedState(e)) await settleWithin(reloadStale(slug));
     } finally {
       inFlight.current = false;
       setBusyId(null);
@@ -97,11 +103,10 @@ export function useQuickAdd(source?: AddToCartSource): QuickAdd {
       if (plan.kind === 'soldOut') {
         show({ ok: false, text: QUICK_ADD_SOLD_OUT });
         // Thẻ còn nút giỏ và không có lớp Hết hàng nếu không tải lại: khách bấm lại sẽ ra đúng lời báo này.
-        void qc.invalidateQueries({ queryKey: wishlistQuery(coreHttp).queryKey });
-      }
-      else if (plan.kind === 'pick') setPicker({ product, variations: detail.variations, initialId: opts?.initialId ?? null });
+        void reloadStale(product.slug);
+      } else if (plan.kind === 'pick') setPicker({ product, variations: detail.variations, initialId: opts?.initialId ?? null });
       else await addLine(plan.variationId, 1, opts?.origin ?? null);
-    });
+    }, product.slug);
 
   const addVariation = (variationId: string, opts?: { origin?: Element | null }) =>
     run(async () => {
@@ -114,7 +119,7 @@ export function useQuickAdd(source?: AddToCartSource): QuickAdd {
       setBusyId(picker?.product.id ?? null);
       await addLine(variation.id, qty);
       setPicker(null);
-    });
+    }, picker?.product.slug);
 
   const feedback = (
     <>
@@ -160,7 +165,7 @@ export function useQuickAdd(source?: AddToCartSource): QuickAdd {
 
 /** Nút giỏ nhanh nổi ở góc dưới ảnh thẻ: vùng chạm 44px bọc vòng trắng 32px, cùng kiểu nút tim ở góc trên. */
 export function useWishlistQuickAdd(): { buttonFor: (p: ProductCard) => ReactNode; feedback: ReactNode } {
-  const { quickAdd, busyId, feedback } = useQuickAdd('wishlist');
+  const { quickAdd, busyId, feedback } = useQuickAdd('wishlist', wishlistQuery(coreHttp).queryKey);
   // Khoá chung cả trang: một thẻ đang bay thì chạm giỏ ở thẻ khác bị nuốt, nên mọi nút báo aria-disabled (chỉ thẻ đang bay báo thêm aria-busy), không `disabled` kẻo rớt focus.
   const buttonFor = (p: ProductCard) =>
     p.inStock === false ? null : (

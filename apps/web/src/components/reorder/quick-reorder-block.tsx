@@ -12,6 +12,8 @@ import { playCartFeedback } from '@/lib/cart-feedback';
 import { productHref } from '@/lib/product-href';
 import { useBundleAdd } from '@/lib/use-bundle-add';
 
+/** Tiền tố khoá danh sách món đã mua (`purchasedItemsQuery` thêm giới hạn ở cuối): dải vẽ từ đúng danh sách này, nên bị từ chối vì trạng thái đã đổi thì tải lại nó. */
+const PURCHASED_ITEMS_KEY = ['purchased-items'] as const;
 const ADD_ALL_ID = 'quick-reorder';
 const ADD_ALL_BUTTON = '[data-testid="quick-reorder"] .tubu-quick-head button';
 
@@ -28,8 +30,8 @@ function addButtonOf(variationId: string): Element | null {
  */
 export function QuickReorderBlock({ items }: { items: readonly QuickReorderItem[] }) {
   const router = useRouter();
-  const quick = useQuickAdd('repurchase');
-  const bundle = useBundleAdd();
+  const quick = useQuickAdd('repurchase', PURCHASED_ITEMS_KEY);
+  const bundle = useBundleAdd([PURCHASED_ITEMS_KEY]);
   const busyAll = bundle.busyId === ADD_ALL_ID;
   // Khoá chéo đồng bộ giữa hai đường thêm: `quick.busyId` và `busyAll` chỉ đúng sau lần vẽ kế nên hai cú bấm khác nút trong cùng khung hình sẽ bay hai lệnh.
   // "+ Thêm" tự chặn "+ Thêm" khác bằng cờ của `useQuickAdd`, còn lệnh lô chặn bằng `bundle.isBusy`; `oneInFlight` là phần "+ Thêm đang bay" cho lệnh lô đọc.

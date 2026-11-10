@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { act } from 'react';
+import { QueryClient } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BundleDTO, BundleItemDTO } from '@tubutree/app-core/api/bundle';
 import type { ProductCard } from '@tubutree/app-core/api/catalog';
@@ -122,5 +124,84 @@ describe('HomeCombos (web)', () => {
     const c = await mount(<HomeCombos views={views(['c1', 'a', 'b'], ['c2', 'c', 'd'])} />);
     expect(smallTouchTargets(c)).toEqual([]);
     expect(unnamedControls(c)).toEqual([]);
+  });
+});
+
+describe('HomeCombos (web): lệnh lô bị máy chủ từ chối vì trạng thái đã đổi (W98B)', () => {
+  const setup = async (reload: Promise<void> | null) => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const invalidate = vi.spyOn(qc, 'invalidateQueries').mockImplementation(() => (reload ?? Promise.resolve()) as Promise<void>);
+    const r = render(<HomeCombos views={views(['c1', 'a', 'b'])} />, qc);
+    mounted.push(r);
+    await flush();
+    const c = r.container;
+    invalidate.mockClear();
+    return { c, invalidate };
+  };
+  const keysOf = (spy: { mock: { calls: unknown[][] } }) => spy.mock.calls.map((call) => JSON.stringify((call[0] as { queryKey: unknown }).queryKey));
+
+  it.each([400, 404, 409])('HTTP %i: tải lại danh sách combo Trang chủ (đúng khoá), giữ khoá tới khi về (chạm lại không gọi API) rồi nhả', async (status) => {
+    let release!: () => void;
+    const reload = new Promise<void>((r) => (release = r));
+    mocks.addAll.mockRejectedValue(new ApiError('Sản phẩm đã hết hàng', status));
+    const { c, invalidate } = await setup(reload);
+    click(addAllButtons(c)[0]!);
+    await flush(6);
+    expect(keysOf(invalidate)).toEqual([JSON.stringify(['bundles', 'home-combos'])]);
+    expect(mocks.addAll).toHaveBeenCalledTimes(1);
+    click(addAllButtons(c)[0]!);
+    await flush(4);
+    expect(mocks.addAll).toHaveBeenCalledTimes(1);
+    await act(async () => release());
+    await flush(6);
+    mocks.addAll.mockResolvedValue({});
+    click(addAllButtons(c)[0]!);
+    await flush(6);
+    expect(mocks.addAll).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([401, 500, 503])('HTTP %i (lỗi tạm): không tải lại, nhả khoá ngay', async (status) => {
+    mocks.addAll.mockRejectedValue(new ApiError('Máy chủ bận', status));
+    const { c, invalidate } = await setup(new Promise<void>(() => undefined));
+    click(addAllButtons(c)[0]!);
+    await flush(6);
+    expect(invalidate).not.toHaveBeenCalled();
+    mocks.addAll.mockResolvedValue({});
+    click(addAllButtons(c)[0]!);
+    await flush(6);
+    expect(mocks.addAll).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('HomeCombos (web): bị từ chối mà danh sách combo tải lại không bao giờ về (W98B)', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('còn khoá ở 3 giây (chạm lại không gọi API), nhả sau 4 giây', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    vi.spyOn(qc, 'invalidateQueries').mockImplementation(() => new Promise<void>(() => undefined));
+    mocks.addAll.mockRejectedValue(new ApiError('Sản phẩm b đã hết hàng', 409));
+    const r = render(<HomeCombos views={views(['c1', 'a', 'b'])} />, qc);
+    mounted.push(r);
+    await flush();
+    click(addAllButtons(r.container)[0]!);
+    await flush(6);
+    expect(mocks.addAll).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_000);
+    });
+    click(addAllButtons(r.container)[0]!);
+    await flush(4);
+    expect(mocks.addAll).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_500);
+    });
+    await flush(2);
+    mocks.addAll.mockResolvedValue({});
+    click(addAllButtons(r.container)[0]!);
+    await flush(6);
+    expect(mocks.addAll).toHaveBeenCalledTimes(2);
   });
 });

@@ -455,36 +455,41 @@ describe('/gio-hang — khoá đồng bộ xoá dòng và Hoàn tác', () => {
   });
 });
 
-describe('/gio-hang — "Thử lại" khi giỏ tải lại lỗi (W81B)', () => {
-  // Giỏ đã có dữ liệu: react-query giữ dữ liệu cũ và `refetch` thứ hai huỷ rồi gọi lại API, nên chỉ cú chạm đầu được đi.
-  // Giỏ chưa từng tải được thì refetch thứ hai dùng chung lượt đang bay và thẻ lỗi biến mất ngay: ca đó không phân biệt được có khoá hay không.
-  it('tải lại lỗi khi giỏ đã có dòng: chạm đúp "Thử lại" trong cùng một khung hình chỉ gọi giỏ thêm một lần, nút báo aria-busy tới khi giỏ mới về', async () => {
+describe('/gio-hang — tải giỏ lỗi (W81B, W98B)', () => {
+  it('giỏ đã có dòng rồi tải lại nền lỗi: giữ giỏ đang xem và thanh Thanh toán, không thay bằng màn lỗi', async () => {
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
     const r = render(<CartPage />, qc);
     mounted.push(r);
     await flush(6);
     expect(plusA(r.container)).not.toBeNull();
+    const bar = () => r.container.querySelector('[data-testid="sticky-bar"]');
+    expect(bar()).not.toBeNull();
+    const before = state.cartCalls;
     state.cartError = new Error('Mạng lỗi');
     await act(async () => {
       await qc.refetchQueries({ queryKey: ['cart'] });
     });
     await flush(4);
+    expect(state.cartCalls).toBeGreaterThan(before);
+    expect(plusA(r.container)).not.toBeNull();
+    expect(bar()).not.toBeNull();
+    expect([...r.container.querySelectorAll('button')].some((b) => b.textContent === 'Thử lại')).toBe(false);
+  });
+
+  // Khoá chạm đúp của "Thử lại" nằm ở components/ui/error-state.tsx (usePressLock, spec riêng ở error-state.spec.tsx): truy vấn chưa có dữ liệu dùng chung lượt tải đang bay
+  // nên đếm lời gọi giỏ không phân biệt được có khoá hay không. Test này chỉ kiểm màn lỗi hiện rồi mất khi giỏ tải được.
+  it('giỏ chưa từng tải được: màn lỗi có "Thử lại"; bấm thì tải lại giỏ, màn lỗi biến mất và giỏ hiện', async () => {
+    state.cartError = new Error('Mạng lỗi');
+    const r = render(<CartPage />);
+    mounted.push(r);
+    await flush(6);
     const retryBtn = () => [...r.container.querySelectorAll('button')].find((b) => b.textContent === 'Thử lại')!;
     expect(retryBtn()).toBeDefined();
     const before = state.cartCalls;
-
-    const held = defer();
-    state.gate = held.promise;
     state.cartError = null;
-    clickTwice(retryBtn());
-    await flush(2);
-    expect(state.cartCalls).toBe(before + 1);
-    expect(retryBtn().getAttribute('aria-busy')).toBe('true');
-    expect(retryBtn().getAttribute('aria-disabled')).toBe('true');
-    expect(retryBtn().disabled).toBe(false);
-
-    await act(async () => held.resolve(undefined));
+    click(retryBtn());
     await flush(6);
+    expect(state.cartCalls).toBe(before + 1);
     expect(retryBtn()).toBeUndefined();
     expect(plusA(r.container)).not.toBeNull();
   });

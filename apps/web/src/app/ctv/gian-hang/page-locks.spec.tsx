@@ -67,6 +67,7 @@ const state = vi.hoisted(() => ({
   kit: null as unknown,
   me: { isAffiliate: true, canRegister: true, canOpenStorefront: true } as unknown,
   fail: new Set<string>(),
+  failStatus: new Map<string, number>(),
   hold: new Set<string>(),
   gates: new Map<string, Promise<void>>(),
   calls: [] as Call[],
@@ -128,6 +129,8 @@ vi.mock('@/lib/core-http', () => {
     const gate = state.gates.get(`${method} ${path}`);
     if (gate) await gate;
     if (state.fail.has(`${method} ${path}`)) throw httpError(500, 'mất mạng');
+    const failStatus = state.failStatus.get(`${method} ${path}`);
+    if (failStatus) throw httpError(failStatus, 'Bạn chưa hoàn thành nhiệm vụ này.');
     if (method === 'get') {
       if (path === '/storefront/me') {
         if (state.sfStatus !== 200) throw httpError(state.sfStatus, 'không có');
@@ -237,6 +240,7 @@ beforeEach(() => {
   ];
   state.kit = { productName: 'Trà xanh', images: [], captions: ['Xem /product/tra-xanh?ref=A nhé'], usps: ['Thơm'], faqs: [{ q: 'Dùng sao?', a: 'Pha nước nóng' }], videoUrls: ['https://v.example/1'], shareLink: '/product/tra-xanh?ref=A' };
   state.fail = new Set();
+  state.failStatus = new Map();
   state.hold = new Set();
   state.gates = new Map();
   state.calls = [];
@@ -977,6 +981,72 @@ describe('khoá chống chạm đúp — nhiệm vụ Hành trình gian hàng', 
   });
 });
 
+describe('Nhận thưởng nhiệm vụ bị máy chủ từ chối vì trạng thái đã đổi (W98B, Mini ↔ web)', () => {
+  const claim = () => Array.from(dialog()!.querySelectorAll<HTMLElement>('button')).find((b) => /^(Nhận|Đang nhận)/.test(b.textContent ?? ''))!;
+  const questGets = () => calls('get', '/storefront/me/quests').length;
+
+  it.each([400, 404, 409, 422])('HTTP %i: lời báo hiện dưới nhiệm vụ, danh sách nhiệm vụ tải lại một lần, khoá giữ tới khi về rồi nhả', async (status) => {
+    mount();
+    await flush();
+    await openQuests();
+    state.failStatus.set('post /storefront/me/quests/Q1/claim', status);
+    const releaseFresh = hold('get /storefront/me/quests');
+    const before = questGets();
+    click(claim());
+    await flush();
+    expect(alerts()).toEqual(['Bạn chưa hoàn thành nhiệm vụ này.']);
+    expect(questGets() - before).toBe(1);
+    expectBusy(claim());
+    click(claim());
+    await flush();
+    expect(calls('post', '/storefront/me/quests/Q1/claim')).toHaveLength(1);
+    await releaseFresh();
+    expectIdle(claim());
+    state.failStatus.clear();
+    click(claim());
+    await flush();
+    expect(calls('post', '/storefront/me/quests/Q1/claim')).toHaveLength(2);
+  });
+
+  it.each([401, 403, 500, 503])('HTTP %i (lỗi tạm): báo lỗi, không tải lại danh sách nhiệm vụ, nhả khoá ngay', async (status) => {
+    mount();
+    await flush();
+    await openQuests();
+    state.failStatus.set('post /storefront/me/quests/Q1/claim', status);
+    hold('get /storefront/me/quests');
+    const before = questGets();
+    click(claim());
+    await flush();
+    expect(alerts()).toEqual(['Bạn chưa hoàn thành nhiệm vụ này.']);
+    expect(questGets() - before).toBe(0);
+    expectIdle(claim());
+  });
+
+  it('tải lại không bao giờ về: còn khoá ở 3 giây, nhả sau 4 giây', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+    try {
+      mount();
+      await flush();
+      await openQuests();
+      state.failStatus.set('post /storefront/me/quests/Q1/claim', 409);
+      state.hold.add('get /storefront/me/quests');
+      click(claim());
+      await flush();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3_000);
+      });
+      expectBusy(claim());
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_500);
+      });
+      await flush(2);
+      expectIdle(claim());
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe('khoá chống chạm đúp — luồng đăng ký 4 bước', () => {
   const toStep3 = async () => {
     mount();
@@ -1185,6 +1255,150 @@ describe('khoá chống chạm đúp — luồng đăng ký 4 bước', () => {
     await flush();
     expect(calls('post', '/storefront/me/publish')).toHaveLength(2);
     expect(text()).toContain('Đã gửi duyệt.');
+  });
+});
+
+describe('khoá giữ có hạn 4 giây khi dữ liệu mới không bao giờ về (W98B)', () => {
+  const advance = (ms: number) =>
+    act(async () => {
+      await vi.advanceTimersByTimeAsync(ms);
+    });
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+  /** Còn khoá ở 3 giây, nhả sau 4 giây (cộng dư để Promise hạn xong). */
+  const stillBusyThenReleased = async (el: () => HTMLElement) => {
+    await advance(3_000);
+    expectBusy(el());
+    await advance(1_500);
+    await flush(2);
+    expectIdle(el());
+  };
+
+  it('Nhận thưởng nhiệm vụ: danh sách nhiệm vụ không về thì nút nhả sau 4 giây, nhận lại được', async () => {
+    mount();
+    await flush();
+    await openQuests();
+    const claim = () => Array.from(dialog()!.querySelectorAll<HTMLElement>('button')).find((b) => /^(Nhận|Đang nhận)/.test(b.textContent ?? ''))!;
+    state.hold.add('get /storefront/me/quests');
+    click(claim());
+    await flush();
+    expect(calls('post', '/storefront/me/quests/Q1/claim')).toHaveLength(1);
+    await stillBusyThenReleased(claim);
+    click(claim());
+    await flush();
+    expect(calls('post', '/storefront/me/quests/Q1/claim')).toHaveLength(2);
+  });
+
+  it('Ghim sản phẩm trong khối: gian hàng mới không về thì khoá nhả sau 4 giây', async () => {
+    mount();
+    await flush();
+    await openFirstSection();
+    state.hold.add(ME);
+    await openItemMenu();
+    click(btn('Ghim lên đầu'));
+    await flush();
+    expect(calls('patch', '/storefront/me/items/i1')).toHaveLength(1);
+    await openItemMenu();
+    click(btn('Ẩn sản phẩm'));
+    await flush();
+    expect(calls('patch', '/storefront/me/items/i1')).toHaveLength(1);
+    await advance(3_000);
+    await openItemMenu();
+    click(btn('Ẩn sản phẩm'));
+    await flush();
+    expect(calls('patch', '/storefront/me/items/i1')).toHaveLength(1);
+    await advance(1_500);
+    await flush(2);
+    await openItemMenu();
+    click(btn('Ẩn sản phẩm'));
+    await flush();
+    expect(calls('patch', '/storefront/me/items/i1')).toHaveLength(2);
+  });
+
+  describe('luồng đăng ký 4 bước', () => {
+    it('Bước thông tin — Tiếp tục: gian hàng mới không về thì sang bước sản phẩm sau 4 giây', async () => {
+      state.sf = storefront({ status: 'DRAFT' });
+      mount();
+      await flush();
+      await flush();
+      state.hold.add(ME);
+      click(btn('Tiếp tục'));
+      await flush();
+      expect(calls('patch', '/storefront/me')).toHaveLength(1);
+      expect(text()).toContain('Bước 2/4');
+      await advance(3_000);
+      expect(text()).toContain('Bước 2/4');
+      await advance(1_500);
+      await flush(2);
+      expect(text()).toContain('Bước 3/4');
+    });
+
+    it('Chọn mẫu: gian hàng mới không về thì khoá nhả sau 4 giây, chọn lại được', async () => {
+      state.sf = storefront({ status: 'DRAFT', collections: [] });
+      mount();
+      await flush();
+      await flush();
+      click(btn('Tiếp tục'));
+      await flush();
+      click(btn('Chọn danh mục'));
+      await flush();
+      state.hold.add(ME);
+      click(btn('Dùng mẫu Nhà bếp', dialog()!));
+      await flush();
+      expect(calls('post', '/storefront/me/apply-template')).toHaveLength(1);
+      expect(dialog()).toBeNull();
+      await advance(3_000);
+      click(btn('Chọn danh mục'));
+      await flush();
+      click(btn('Dùng mẫu Nhà bếp', dialog()!));
+      await flush();
+      expect(calls('post', '/storefront/me/apply-template')).toHaveLength(1);
+      await advance(1_500);
+      await flush(2);
+      click(btn('Dùng mẫu Nhà bếp', dialog()!));
+      await flush();
+      expect(calls('post', '/storefront/me/apply-template')).toHaveLength(2);
+    });
+
+    it('Bỏ món: gian hàng mới không về thì khoá nhả sau 4 giây', async () => {
+      state.sf = storefront({ status: 'DRAFT' });
+      mount();
+      await flush();
+      await flush();
+      click(btn('Tiếp tục'));
+      await flush();
+      const remove = btn('Bỏ Trà xanh');
+      state.hold.add(ME);
+      click(remove);
+      await flush();
+      expect(calls('delete', '/storefront/me/items/i1')).toHaveLength(1);
+      await stillBusyThenReleased(() => remove);
+      click(remove);
+      await flush();
+      expect(calls('delete', '/storefront/me/items/i1')).toHaveLength(2);
+    });
+
+    it('Gửi duyệt: gian hàng mới không về thì nút nhả sau 4 giây (lời báo đã hiện ngay)', async () => {
+      state.sf = storefront({ status: 'DRAFT' });
+      mount();
+      await flush();
+      await flush();
+      click(btn('Tiếp tục'));
+      await flush();
+      click(btn('Tiếp tục'));
+      await flush();
+      const submit = btn('Gửi duyệt');
+      state.hold.add(ME);
+      click(submit);
+      await flush();
+      expect(calls('post', '/storefront/me/publish')).toHaveLength(1);
+      expect(text()).toContain('Đã gửi duyệt.');
+      await stillBusyThenReleased(() => btn('Gửi duyệt'));
+    });
   });
 });
 

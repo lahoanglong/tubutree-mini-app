@@ -60,6 +60,7 @@ import BackLink from '@/components/back-link';
 import { PageHeader } from '@/components/ui/page-header';
 import { PAGE_NARROW, PAGE_WIDE } from '@/lib/page-frame';
 import { actionErrorText, loadErrorText } from '@/lib/error-text';
+import { serverRejectedState } from '@/lib/server-rejected-state';
 import { settleWithin } from '@/lib/settle-within';
 
 const TITLE = 'Cộng tác viên';
@@ -373,10 +374,14 @@ function Dashboard() {
     mutationFn: () => createAffiliateLink(coreHttp, 'HOMEPAGE'),
     onSuccess: () => {
       setNotice({ text: 'Đã tạo link chia sẻ mới', error: false });
-      // Khoá giữ tới khi danh sách link mới về: bấm lần hai khi danh sách còn cũ là tạo thêm một link nữa.
-      return qc.invalidateQueries({ queryKey: affiliateLinksQuery(coreHttp).queryKey });
+      // Khoá giữ tới khi danh sách link mới về (tối đa 4 giây): bấm lần hai khi danh sách còn cũ là tạo thêm một link nữa.
+      return settleWithin(qc.invalidateQueries({ queryKey: affiliateLinksQuery(coreHttp).queryKey }));
     },
-    onError: (e) => setNotice({ text: actErrText(e), error: true }),
+    onError: (e) => {
+      setNotice({ text: actErrText(e), error: true });
+      // Giữ khoá tới khi danh sách link mới về (tối đa 4 giây); lỗi mạng, 401, 403, 5xx nhả ngay.
+      return serverRejectedState(e) ? settleWithin(qc.invalidateQueries({ queryKey: affiliateLinksQuery(coreHttp).queryKey })) : undefined;
+    },
     onSettled: () => {
       linkBusy.current = false;
     },

@@ -296,7 +296,7 @@ export default function CartPage() {
           ? cartOutOfStockBlocked(outOfStockSelected.map((it) => it.productName))
           : CART_OVER_STOCK_BLOCKED
         : null;
-  const showBar = !cartQ.isLoading && !cartQ.isError && !!cart && cart.items.length > 0;
+  const showBar = !cartQ.isLoading && !!cart && cart.items.length > 0;
 
   // Một dòng giỏ; dòng của bộ combo và dòng lẻ vẽ cùng một hàm.
   const renderLine = (it: CartLine) => {
@@ -501,7 +501,7 @@ export default function CartPage() {
           <LineItemSkeleton />
           <LineItemSkeleton />
         </div>
-      ) : cartQ.isError ? (
+      ) : cartQ.isError && !cart ? (
         <ErrorState message={loadErrorText(cartQ.error)} onRetry={() => cartQ.refetch()} />
       ) : !cart || cart.items.length === 0 ? (
         <EmptyCart />

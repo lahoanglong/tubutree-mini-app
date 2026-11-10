@@ -5,6 +5,7 @@ import { QueryClient } from '@tanstack/react-query';
 import { affiliateDashboardQuery } from '@tubutree/app-core/queries/affiliate';
 import { resetTransferLock } from '@tubutree/app-core/ctv-dashboard';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
+import { ApiError } from '@/lib/client-api';
 
 type Call = { method: string; path: string; body?: unknown; query?: Record<string, unknown> };
 
@@ -30,6 +31,7 @@ const state = vi.hoisted(() => ({
   meGate: null as null | Promise<unknown>,
   linksGate: null as null | Promise<unknown>,
   postFail: new Set<string>(),
+  postStatus: new Map<string, number>(),
   dashGate: null as null | Promise<unknown>,
   walletGate: null as null | Promise<unknown>,
   failGate: null as null | Promise<unknown>,
@@ -97,6 +99,8 @@ vi.mock('@/lib/core-http', () => ({
       state.calls.push({ method: 'post', path, body });
       if (path === '/affiliate/register') await state.registerGate;
       if (state.postFail.has(path)) throw new Error('mất mạng');
+      const status = state.postStatus.get(path);
+      if (status) throw new ApiError('Lời từ chối của máy chủ', status);
       return { ok: true, referralCode: 'TUBU88', shortCode: 'x' };
     },
   },
@@ -111,6 +115,7 @@ const mount = (client?: QueryClient) => {
   return r;
 };
 const posts = () => state.calls.filter((c) => c.method === 'post');
+const linkGets = () => state.calls.filter((c) => c.method === 'get' && c.path === '/affiliate/links').length;
 
 const DASH = {
   todayCommission: 5_000,
@@ -146,6 +151,7 @@ beforeEach(() => {
   state.meGate = null;
   state.linksGate = null;
   state.postFail = new Set();
+  state.postStatus = new Map();
   state.dashGate = null;
   state.walletGate = null;
   state.failGate = null;
@@ -1053,6 +1059,106 @@ describe('/ctv — khoá + Tạo link (cùng một act)', () => {
     click(btn);
     await flush();
     expect(posts()).toHaveLength(2);
+  });
+
+  it('danh sách link không bao giờ về: còn khoá ở 3 giây (chạm thêm không gửi lệnh), nhả sau 4 giây', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+    try {
+      state.tab = 'share';
+      const { container } = mount();
+      await flush();
+      const btn = byText(container, 'button', '+ Tạo link') as HTMLButtonElement;
+      state.linksGate = new Promise(() => undefined);
+      click(btn);
+      await flush();
+      expect(posts()).toHaveLength(1);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3_000);
+      });
+      expect(btn.getAttribute('aria-busy')).toBe('true');
+      click(btn);
+      await flush();
+      expect(posts()).toHaveLength(1);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_500);
+      });
+      await flush(2);
+      expect(btn.hasAttribute('aria-busy')).toBe(false);
+      click(btn);
+      await flush();
+      expect(posts()).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([400, 404, 409, 422])('HTTP %i (máy chủ từ chối vì trạng thái đã đổi): báo lỗi, tải lại danh sách link rồi mới nhả khoá (chạm lại không gửi lệnh)', async (status) => {
+    state.tab = 'share';
+    const { container } = mount();
+    await flush();
+    const btn = byText(container, 'button', '+ Tạo link') as HTMLButtonElement;
+    const gate = deferred();
+    state.linksGate = gate.promise;
+    state.postStatus.set('/affiliate/links', status);
+    const before = linkGets();
+    click(btn);
+    await flush();
+    expect(alertRegion(container)?.textContent).not.toBe('');
+    expect(linkGets() - before).toBe(1);
+    expect(btn.getAttribute('aria-busy')).toBe('true');
+    click(btn);
+    await flush();
+    expect(posts()).toHaveLength(1);
+    gate.resolve();
+    await flush();
+    expect(btn.hasAttribute('aria-busy')).toBe(false);
+    state.postStatus.clear();
+    click(btn);
+    await flush();
+    expect(posts()).toHaveLength(2);
+  });
+
+  it('bị từ chối 409 mà danh sách link không bao giờ về: còn khoá ở 3 giây (chạm thêm không gửi lệnh), nhả sau 4 giây', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+    try {
+      state.tab = 'share';
+      const { container } = mount();
+      await flush();
+      const btn = byText(container, 'button', '+ Tạo link') as HTMLButtonElement;
+      state.linksGate = new Promise(() => undefined);
+      state.postStatus.set('/affiliate/links', 409);
+      click(btn);
+      await flush();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3_000);
+      });
+      expect(btn.getAttribute('aria-busy')).toBe('true');
+      click(btn);
+      await flush();
+      expect(posts()).toHaveLength(1);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_500);
+      });
+      await flush(2);
+      expect(btn.hasAttribute('aria-busy')).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([401, 403, 500, 503])('HTTP %i (lỗi tạm): báo lỗi, không tải lại danh sách link, nhả khoá ngay', async (status) => {
+    state.tab = 'share';
+    const { container } = mount();
+    await flush();
+    const btn = byText(container, 'button', '+ Tạo link') as HTMLButtonElement;
+    state.linksGate = new Promise(() => undefined);
+    state.postStatus.set('/affiliate/links', status);
+    const before = linkGets();
+    click(btn);
+    await flush();
+    expect(alertRegion(container)?.textContent).not.toBe('');
+    expect(linkGets() - before).toBe(0);
+    expect(btn.hasAttribute('aria-busy')).toBe(false);
   });
 
   it('lỗi: báo trong vùng role=alert (vùng status rỗng) và nhả khoá để thử lại', async () => {

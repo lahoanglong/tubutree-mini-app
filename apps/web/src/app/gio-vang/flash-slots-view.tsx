@@ -293,7 +293,7 @@ export default function FlashSlotsView() {
     const serverEnded = itemsQ.data?.slot.status === 'ENDED';
     let list: ReactNode;
     if (itemsQ.isPending) list = <ListSkeleton />;
-    else if (itemsQ.isError) list = <ErrorState variant="inline" message={loadErrorText(itemsQ.error)} onRetry={() => itemsQ.refetch()} />;
+    else if (itemsQ.isError && !itemsQ.data) list = <ErrorState variant="inline" message={loadErrorText(itemsQ.error)} onRetry={() => itemsQ.refetch()} />;
     else if (serverEnded) list = <EmptyState variant="inline" art="sprout" heading={fillCopy('flash.endedTitle')} ctaLabel={fillCopy('flash.endedCta')} onCta={goNextSlot} />;
     else if (rows.length === 0) list = <EmptyState variant="inline" art="box" heading={fillCopy('flash.slotEmpty')} />;
     else

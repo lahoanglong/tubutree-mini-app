@@ -34,6 +34,7 @@ import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
 import { ui } from '@/lib/guest-ui';
 import { phoneSecondary } from '@/lib/phone-ui';
+import { settleWithin } from '@/lib/settle-within';
 import { useStickyBarOffset } from '@/components/use-sticky-bar-offset';
 import { IMAGES_UPLOADING } from '@/lib/image-compress';
 import { useUploadBusy } from '@/lib/use-upload-busy';
@@ -249,7 +250,7 @@ function InfoStep({ sf, onBack, onDone }: { sf: StorefrontEdit; onBack: () => vo
   const saveMut = useLockedMutation({
     mutationFn: () => updateStorefront(coreHttp, { title: title.trim(), headerNote: note.trim(), avatarUrl: avatarUrl.trim(), coverUrl: coverUrl.trim() }),
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ['my-storefront'] });
+      await settleWithin(qc.invalidateQueries({ queryKey: ['my-storefront'] }));
       onDone();
     },
     onError: (e) => setSaveError(actErrText(e)),
@@ -314,7 +315,7 @@ function ProductsStep({ sf, onBack, onDone }: { sf: StorefrontEdit; onBack: () =
   // Lỗi bỏ món nhớ theo từng món: `mutation.error` chỉ giữ lệnh sau cùng nên món A lỗi sau khi món B đã chạy sẽ mất lời báo.
   const [removeErrors, setRemoveErrors] = useState<ReadonlyMap<string, string>>(() => new Map());
   const items = sf.collections.flatMap((c) => c.items);
-  const refresh = () => qc.invalidateQueries({ queryKey: ['my-storefront'] });
+  const refresh = () => settleWithin(qc.invalidateQueries({ queryKey: ['my-storefront'] }));
   const fail = (e: unknown) => setError(actErrText(e));
 
   const templateMut = useLockedMutation({
@@ -458,7 +459,7 @@ function ReviewStep({ sf, onBack }: { sf: StorefrontEdit; onBack: () => void }) 
     onSuccess: async (res) => {
       setDone(storefrontPublishedMessage(res, sf));
       void qc.invalidateQueries({ queryKey: storefrontQuestsQuery(coreHttp).queryKey });
-      await qc.invalidateQueries({ queryKey: ['my-storefront'] });
+      await settleWithin(qc.invalidateQueries({ queryKey: ['my-storefront'] }));
     },
     onError: (e) => setError(actErrText(e)),
   });

@@ -764,7 +764,7 @@ describe('Trang Giờ vàng (web): khoá chạm đúp', () => {
   });
 });
 
-describe('Trang Giờ vàng (web): khoá giữ có hạn 4 giây và "Thử lại" món khi đã có dữ liệu (W83B)', () => {
+describe('Trang Giờ vàng (web): khoá giữ có hạn 4 giây và lỗi tải lại nền khi đã có dữ liệu (W83B, W98B)', () => {
   const hold = (path: string) => {
     let open!: () => void;
     state.gates.set(path, new Promise<void>((r) => (open = r)));
@@ -815,11 +815,8 @@ describe('Trang Giờ vàng (web): khoá giữ có hạn 4 giây và "Thử lạ
     });
   });
 
-  // Truy vấn chưa có dữ liệu thì react-query gộp hai lần refetch làm một, nên chỉ ca còn dữ liệu cũ mà lần làm mới lỗi mới chứng minh được khoá của nút
-  // (refetch thứ hai sẽ huỷ rồi chạy lại).
-  describe('"Thử lại" ở vùng danh sách món (truy vấn ĐÃ có dữ liệu rồi mới lỗi)', () => {
-    const itemsRe = /\/flash-sales\/slots\/s12\/items/;
-    async function mountThenRefreshError() {
+  describe('truy vấn món ĐÃ có dữ liệu rồi tải lại nền hỏng', () => {
+    it('giữ danh sách món cũ, không thay bằng khối lỗi "Thử lại"', async () => {
       const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
       const r = render(<FlashSlotsView />, qc);
       mounted.push(r);
@@ -830,37 +827,9 @@ describe('Trang Giờ vàng (web): khoá giữ có hạn 4 giây và "Thử lạ
         await qc.invalidateQueries({ queryKey: ['flash-sales', 'slots', 's12', 'items'] });
       });
       await flush(2);
-      const retry = named(r.container, 'Thử lại')!;
-      expect(retry).toBeTruthy();
-      state.items = { ...state.items, s12: itemsOf(S12, [item('a')]) };
-      return { c: r.container, retry };
-    }
-
-    it('chạm đúp trong cùng một khung hình chỉ tải lại một lần; nút báo bận tới khi món về', async () => {
-      const { c, retry } = await mountThenRefreshError();
-      const release = hold('/flash-sales/slots/s12/items');
-      const before = callsTo(itemsRe);
-      await tapTogether(retry, retry);
-      await flush(2);
-      expect(callsTo(itemsRe) - before).toBe(1);
-      expect(retry.getAttribute('aria-busy')).toBe('true');
-      expect(retry.disabled).toBe(false);
-      release();
-      await flush(8);
-      expect(named(c, 'Mua ngay Sản phẩm a')).not.toBeNull();
-      expect(callsTo(itemsRe) - before).toBe(1);
-    });
-
-    it('hai cú chạm ở hai lần act liên tiếp (lượt tải chưa về) vẫn chỉ một lần', async () => {
-      const { c, retry } = await mountThenRefreshError();
-      const release = hold('/flash-sales/slots/s12/items');
-      const before = callsTo(itemsRe);
-      await tapTogether(retry);
-      await tapTogether(retry);
-      expect(callsTo(itemsRe) - before).toBe(1);
-      release();
-      await flush(8);
-      expect(named(c, 'Mua ngay Sản phẩm a')).not.toBeNull();
+      expect(qc.getQueryState(['flash-sales', 'slots', 's12', 'items'])?.status).toBe('error');
+      expect(named(r.container, 'Mua ngay Sản phẩm a')).not.toBeNull();
+      expect(named(r.container, 'Thử lại')).toBeNull();
     });
   });
 });

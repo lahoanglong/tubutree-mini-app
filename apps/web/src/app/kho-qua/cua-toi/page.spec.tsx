@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { act } from 'react';
+import { QueryClient } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { headingProblems, smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
@@ -8,6 +10,7 @@ const state = vi.hoisted(() => ({
   phase: 'authenticated' as string,
   mine: [] as object[],
   failOnce: false,
+  failMine: false,
   calls: [] as string[],
   push: vi.fn(),
   search: '',
@@ -35,7 +38,10 @@ vi.mock('@/lib/core-http', () => ({
         state.failOnce = false;
         throw new Error('mất mạng');
       }
-      if (path === '/me/loyalty/rewards/mine') return state.mine;
+      if (path === '/me/loyalty/rewards/mine') {
+        if (state.failMine) throw new Error('mất mạng');
+        return state.mine;
+      }
       throw new Error(`chưa mock ${path}`);
     },
   },
@@ -60,6 +66,7 @@ beforeEach(() => {
   state.phase = 'authenticated';
   state.mine = [];
   state.failOnce = false;
+  state.failMine = false;
   state.calls = [];
   state.push.mockClear();
   state.search = '';
@@ -210,6 +217,23 @@ describe('/kho-qua/cua-toi — Quà của tôi', () => {
     expect(c.textContent).toContain('QG-8K2M9P4T');
     // Màn lỗi cả trang còn đọc hotline từ cấu hình công khai: không tính request đó.
     expect(state.calls.filter((p) => !p.includes('/config/'))).toHaveLength(2);
+  });
+
+  it('đã có danh sách rồi tải lại nền lỗi: giữ danh sách đang xem, không thay bằng màn lỗi', async () => {
+    state.mine = [makeGiftRedemption()];
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const r = render(<RewardsMinePage />, qc);
+    mounted.push(r);
+    await flush(8);
+    expect(r.container.textContent).toContain('QG-8K2M9P4T');
+    state.failMine = true;
+    await act(async () => {
+      await qc.invalidateQueries({ queryKey: ['loyalty-rewards', 'mine'] });
+    });
+    await flush(4);
+    expect(state.calls.filter((p) => p === '/me/loyalty/rewards/mine').length).toBeGreaterThanOrEqual(2);
+    expect(r.container.textContent).toContain('QG-8K2M9P4T');
+    expect(r.container.textContent).not.toContain('Thử lại');
   });
 
   it('đang khôi phục phiên → không gọi API; khách → đăng nhập quay lại /kho-qua/cua-toi', async () => {

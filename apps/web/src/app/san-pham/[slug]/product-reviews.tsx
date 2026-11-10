@@ -325,7 +325,7 @@ export function ProductReviews({ slug }: { slug: string }) {
 
       {listLoading ? (
         <ListLoading />
-      ) : listQ.isError ? (
+      ) : listQ.isError && !data ? (
         <ListFailed onRetry={() => listQ.refetch()} />
       ) : !data || data.count === 0 ? (
         <EmptyState variant="inline" art="sprout" heading="Chưa có đánh giá" body="Hãy là người đầu tiên chia sẻ trải nghiệm." />
