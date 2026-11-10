@@ -29,13 +29,14 @@ import { ProductThumb } from '../components/ui/product-thumb';
 const SHARE_LOCK_MAX_MS = 30_000;
 
 /**
- * Máy chủ đã trả lời mà nhóm có thể đã khác lúc khách bấm: 400/404/409 (đã đủ người, đã hết hạn, đã đóng, đã tham gia rồi) hoặc 5xx (máy chủ
- * có thể đã ghi thành viên trước khi lỗi). Mất mạng hay hết thời gian thì không có gì để tải lại, và 401 thì tải lại cũng 401.
+ * Máy chủ đã nói rõ nhóm khác với thẻ đang hiện: 400/404/409 (đã đủ người, đã hết hạn, đã đóng, đã tham gia rồi). Mất mạng, hết thời gian,
+ * 401 và 5xx thì không tải lại: các lỗi đó hay đến đúng lúc máy chủ đang bận (triển khai), lần tải lại cũng hỏng và lỗi tải danh sách sẽ thay
+ * cả danh sách bằng màn lỗi. Nếu máy chủ đã ghi thành viên trước khi lỗi 5xx thì lần bấm sau nhận 400 "đã tham gia" và tải lại ở đó.
  */
 function groupMayHaveChanged(e: unknown): boolean {
   if (!isHttpError(e)) return false;
   const status = e.response?.status ?? 0;
-  return status === 400 || status === 404 || status === 409 || status >= 500;
+  return status === 400 || status === 404 || status === 409;
 }
 
 function timeLeft(iso: string): string {

@@ -797,7 +797,6 @@ describe('GroupBuyPage — tải lại nhóm khi máy chủ từ chối tham gia
     [400, 'Nhóm đã đủ người hoặc đã đóng.'],
     [404, 'Không tìm thấy nhóm mua chung.'],
     [409, 'Nhóm đã đóng.'],
-    [500, 'Máy chủ đang bận, bạn thử lại sau nhé.'],
   ])('máy chủ trả %i: báo đúng câu của máy chủ, tải lại danh sách và nhóm đã đóng không còn nút "Tham gia"', async (status, message) => {
     mocks.listGroupBuys.mockResolvedValueOnce([GROUP('a')]).mockResolvedValue([]);
     mocks.joinGroupBuy.mockRejectedValue(httpError(status, message));
@@ -850,6 +849,8 @@ describe('GroupBuyPage — tải lại nhóm khi máy chủ từ chối tham gia
   it.each([
     ['mất mạng hoặc hết thời gian (không có phản hồi)', new Error('Mạng chưa ổn định')],
     ['hết phiên (401): tải lại cũng 401', httpError(401, 'Phiên đăng nhập đã hết hạn.')],
+    ['máy chủ bận (500)', httpError(500, 'Máy chủ đang bận, bạn thử lại sau nhé.')],
+    ['cổng lỗi lúc triển khai (502)', httpError(502, 'Máy chủ đang bận, bạn thử lại sau nhé.')],
   ])('%s: báo lỗi, không tải lại danh sách (tải lại hỏng sẽ thay cả danh sách bằng màn lỗi)', async (_label, error) => {
     mocks.joinGroupBuy.mockRejectedValue(error);
     renderPage();
