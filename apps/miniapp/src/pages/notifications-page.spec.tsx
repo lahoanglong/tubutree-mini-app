@@ -791,3 +791,90 @@ describe('W68A: "Đọc tất cả" khoá đồng bộ, lỗi tại chỗ, khung
     expect(dialog.classList.contains('tubu-nums')).toBe(true);
   });
 });
+
+describe('W78A: đánh dấu đã đọc từng tin khoá đồng bộ theo id tin', () => {
+  const ORDER_UNREAD_2 = {
+    id: 'n4',
+    templateCode: 'ORDER_SHIPPING',
+    payload: { body: 'Đơn TT002 đang giao', data: { order_code: 'TT002' } },
+    status: 'SENT' as const,
+    sentAt: SENT_AT,
+  };
+  const deferred = () => {
+    let resolve!: (v: unknown) => void;
+    let reject!: (e: unknown) => void;
+    const promise = new Promise((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+  const rowOf = async (text: string) => (await screen.findByText(text)).closest('[role="button"]') as HTMLElement;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.authStatus = 'authenticated';
+    mocks.getSummary.mockReset();
+    mocks.getNotifications.mockReset().mockResolvedValue([ORDER_UNREAD, ORDER_UNREAD_2, POINTS_READ]);
+    mocks.markNotificationRead.mockReset().mockResolvedValue({ ok: true });
+    mocks.markAllNotificationsRead.mockReset().mockResolvedValue({ ok: true, count: 2 });
+  });
+
+  it('chạm đúp cùng một tin chưa đọc trong cùng một khung hình chỉ gửi một lệnh đọc; xong tin chuyển sang đã đọc', async () => {
+    const d = deferred();
+    mocks.markNotificationRead.mockReturnValue(d.promise);
+    renderPage();
+    const row = await rowOf('Đơn TT001 đã được xác nhận');
+    expect(within(row).getByLabelText('chưa đọc')).toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(row);
+      fireEvent.click(row);
+    });
+    expect(mocks.markNotificationRead).toHaveBeenCalledTimes(1);
+    expect(mocks.markNotificationRead).toHaveBeenCalledWith('n1');
+    await act(async () => d.resolve({ ok: true }));
+    await waitFor(() => expect(within(row).queryByLabelText('chưa đọc')).toBeNull());
+    expect(mocks.markNotificationRead).toHaveBeenCalledTimes(1);
+  });
+
+  it('hai tin chưa đọc khác nhau chạm trong cùng một khung hình: cả hai đều gửi lệnh đọc (khoá theo id)', async () => {
+    const a = deferred();
+    const b = deferred();
+    mocks.markNotificationRead.mockImplementation((id: string) => (id === 'n1' ? a.promise : b.promise));
+    renderPage();
+    const first = await rowOf('Đơn TT001 đã được xác nhận');
+    const second = await rowOf('Đơn TT002 đang giao');
+    await act(async () => {
+      fireEvent.click(first);
+      fireEvent.click(second);
+    });
+    expect(mocks.markNotificationRead).toHaveBeenCalledTimes(2);
+    expect(mocks.markNotificationRead.mock.calls.map(([id]) => id).sort()).toEqual(['n1', 'n4']);
+    await act(async () => {
+      a.resolve({ ok: true });
+      b.resolve({ ok: true });
+    });
+    await waitFor(() => expect(within(first).queryByLabelText('chưa đọc')).toBeNull());
+    await waitFor(() => expect(within(second).queryByLabelText('chưa đọc')).toBeNull());
+  });
+
+  it('lỗi thì nhả khoá, chạm lại tin đó gọi lần hai; tin vẫn chưa đọc cho tới khi lần hai xong', async () => {
+    const d = deferred();
+    mocks.markNotificationRead.mockReturnValueOnce(d.promise);
+    renderPage();
+    const row = await rowOf('Đơn TT001 đã được xác nhận');
+    await act(async () => {
+      fireEvent.click(row);
+      fireEvent.click(row);
+    });
+    expect(mocks.markNotificationRead).toHaveBeenCalledTimes(1);
+    await act(async () => d.reject(new Error('mạng')));
+    await waitFor(() => expect(mocks.getNotifications).toHaveBeenCalledTimes(2));
+    expect(row.isConnected).toBe(true);
+    expect(within(row).getByLabelText('chưa đọc')).toBeInTheDocument();
+
+    fireEvent.click(row);
+    await waitFor(() => expect(mocks.markNotificationRead).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(within(row).queryByLabelText('chưa đọc')).toBeNull());
+  });
+});

@@ -1,14 +1,15 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Share2 } from 'lucide-react';
 import { joinGroupBuy, type GroupBuy } from '@tubutree/app-core/api/groupbuy';
 import { groupMemberStatus, groupMissing, groupMissingLine, groupPriceLabels, groupRewardLine } from '@tubutree/app-core/group-buy-copy';
 import { groupBuyListQuery, groupBuyOneQuery } from '@tubutree/app-core/queries/groupbuy';
 import { EmptyState } from '@/components/empty-state';
+import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { useActiveFlashSales } from '@/lib/use-flash-sales';
 import { Badge } from '@/components/ui/badge';
 import { ErrorState } from '@/components/ui/error-state';
@@ -31,6 +32,7 @@ type Note = { text: string; error: boolean } | null;
 
 const JUST_CREATED_PARAM = 'moi';
 const errorText = loadErrorText;
+const JOIN_KEY = ['group-buy-join'] as const;
 
 function timeLeft(iso: string): string {
   const diff = (new Date(iso).getTime() - Date.now()) / 1000;
@@ -71,32 +73,59 @@ export function GroupBuyView({ invitedId }: { invitedId?: string }) {
   const others = rest.filter((g) => g.status !== 'SUCCESS');
   const done = rest.filter((g) => g.status === 'SUCCESS');
 
-  const joinM = useMutation({
-    mutationFn: (id: string) => joinGroupBuy(coreHttp, id),
-    onSuccess: (r) => {
-      setNote({ text: r.status === 'SUCCESS' ? 'Nhóm đã đủ người! Mã giảm giá đã vào ví của bạn.' : 'Đã tham gia nhóm', error: false });
-      void qc.invalidateQueries({ queryKey: ['group-buy'] });
+  // Khoá theo nhóm: chạm đúp vào CÙNG nhóm bị bỏ qua, hai nhóm khác nhau vẫn tham gia song song. `onSuccess` trả lời hứa tải lại danh sách
+  // nên khoá giữ tới khi `joined`/`currentSize` mới về; nhả sớm hơn thì thẻ còn nút "Tham gia" theo số cũ và bấm được lần hai.
+  const joinM = useLockedMutation(
+    {
+      mutationKey: JOIN_KEY,
+      mutationFn: (id: string) => joinGroupBuy(coreHttp, id),
+      onSuccess: (r) => {
+        setNote({ text: r.status === 'SUCCESS' ? 'Nhóm đã đủ người! Mã giảm giá đã vào ví của bạn.' : 'Đã tham gia nhóm', error: false });
+        return qc.invalidateQueries({ queryKey: ['group-buy'] });
+      },
+      onError: (e: unknown) => setNote({ text: errorText(e), error: true }),
     },
-    onError: (e: unknown) => setNote({ text: errorText(e), error: true }),
-  });
+    (id) => id,
+  );
+  // Mọi nhóm đang tham gia (không chỉ lệnh sau cùng, `joinM.variables` chỉ giữ lệnh cuối): khoá theo nhóm nuốt cú chạm vào các nhóm đó, nên nút của chúng phải báo bận.
+  const joiningIds = useMutationState({ filters: { mutationKey: JOIN_KEY, status: 'pending' }, select: (m) => m.state.variables as string });
+
+  // Khôi phục phiên và hộp chia sẻ của trình duyệt đều chỉ mở được một lần một lúc: lần chạm thứ hai trong lúc chạy bị bỏ qua.
+  const sessionRetrying = useRef(false);
+  const sharingRef = useRef(false);
+  const [sharingId, setSharingId] = useState<string | null>(null);
 
   const join = (id: string) => {
     if (authed) {
       setNote(null);
       joinM.mutate(id);
-    } else if (phase === 'unavailable') void retrySession();
-    else router.push(loginHref(invitedId ? `/mua-chung/${invitedId}` : '/mua-chung'));
+    } else if (phase === 'unavailable') {
+      if (sessionRetrying.current) return;
+      sessionRetrying.current = true;
+      void retrySession().finally(() => {
+        sessionRetrying.current = false;
+      });
+    } else router.push(loginHref(invitedId ? `/mua-chung/${invitedId}` : '/mua-chung'));
   };
 
   const share = async (g: GroupBuy) => {
+    // `navigator.share` thứ hai khi hộp đầu còn mở bị từ chối, rồi nhánh dự phòng sẽ báo "Đã sao chép liên kết" sai sự thật.
+    if (sharingRef.current) return;
+    sharingRef.current = true;
+    setSharingId(g.id);
     setNote(null);
-    const result = await platformBridge.share({
-      title: `Mua chung ${g.product.name} giảm ${g.discountPct}%`,
-      text: `Còn thiếu ${groupMissing(g)} người nữa là đủ nhóm, vào tham gia cùng mình nhé!`,
-      path: withReferral(`/mua-chung/${encodeURIComponent(g.id)}`, user?.referralCode),
-    });
-    if (result === 'copied') setNote({ text: 'Đã sao chép liên kết nhóm.', error: false });
-    else if (result === 'failed') setNote({ text: 'Không sao chép được. Bạn chép liên kết trên thanh địa chỉ nhé.', error: true });
+    try {
+      const result = await platformBridge.share({
+        title: `Mua chung ${g.product.name} giảm ${g.discountPct}%`,
+        text: `Còn thiếu ${groupMissing(g)} người nữa là đủ nhóm, vào tham gia cùng mình nhé!`,
+        path: withReferral(`/mua-chung/${encodeURIComponent(g.id)}`, user?.referralCode),
+      });
+      if (result === 'copied') setNote({ text: 'Đã sao chép liên kết nhóm.', error: false });
+      else if (result === 'failed') setNote({ text: 'Không sao chép được. Bạn chép liên kết trên thanh địa chỉ nhé.', error: true });
+    } finally {
+      sharingRef.current = false;
+      setSharingId(null);
+    }
   };
 
   const renderCard = (g: GroupBuy, invitedBanner = false) => (
@@ -107,7 +136,8 @@ export function GroupBuyView({ invitedId }: { invitedId?: string }) {
       invitedBanner={invitedBanner}
       onJoin={() => join(g.id)}
       onShare={() => void share(g)}
-      joining={joinM.isPending && joinM.variables === g.id}
+      joining={joiningIds.includes(g.id)}
+      sharing={sharingId === g.id}
     />
   );
 
@@ -128,7 +158,7 @@ export function GroupBuyView({ invitedId }: { invitedId?: string }) {
             <LineItemSkeleton />
           </div>
         ) : listQ.isError ? (
-          <ErrorState message={errorText(listQ.error)} onRetry={() => void listQ.refetch()} />
+          <ErrorState message={errorText(listQ.error)} onRetry={() => listQ.refetch()} />
         ) : invited || others.length > 0 || done.length > 0 ? (
           <div className="flex flex-col gap-6">
             {(invited || others.length > 0) && (
@@ -181,6 +211,7 @@ function GroupCard({
   onJoin,
   onShare,
   joining,
+  sharing,
 }: {
   g: GroupBuy;
   authed: boolean;
@@ -188,6 +219,7 @@ function GroupCard({
   onJoin: () => void;
   onShare: () => void;
   joining: boolean;
+  sharing: boolean;
 }) {
   const isOpen = g.status === 'OPEN';
   const member = authed && g.joined;
@@ -216,7 +248,7 @@ function GroupCard({
             </Badge>
           </div>
           <p className="text-xs text-stone-600 max-md:text-[length:var(--type-caption-size)]">{prices.solo}</p>
-          <p className="text-xs text-stone-600 max-md:text-[length:var(--type-caption-size)]">
+          <p className="text-xs tabular-nums text-stone-600 max-md:text-[length:var(--type-caption-size)]">
             {g.currentSize}/{g.targetSize} người · {g.status === 'SUCCESS' ? 'đã đủ nhóm' : timeLeft(g.expiresAt)}
           </p>
         </div>
@@ -245,13 +277,32 @@ function GroupCard({
       ) : inOpenGroup ? (
         <>
           <p className="mt-2 text-xs font-semibold text-stone-700 max-md:text-[length:var(--type-caption-size)]">{groupMemberStatus(g)}</p>
-          <button type="button" onClick={onShare} className={`${ui.btnPrimary} mt-2 w-full gap-1.5`}>
+          <button
+            type="button"
+            aria-busy={sharing || undefined}
+            aria-disabled={sharing || undefined}
+            onClick={() => {
+              if (sharing) return;
+              onShare();
+            }}
+            className={`${ui.btnPrimary} mt-2 w-full gap-1.5`}
+          >
             <Share2 className="h-4 w-4" aria-hidden="true" />
             Mời bạn bè
           </button>
         </>
       ) : (
-        <button type="button" disabled={!isOpen || member || joining} onClick={onJoin} className={`${ui.btnPrimary} mt-3 w-full`}>
+        <button
+          type="button"
+          disabled={!isOpen || member}
+          aria-busy={joining || undefined}
+          aria-disabled={joining || undefined}
+          onClick={() => {
+            if (joining) return;
+            onJoin();
+          }}
+          className={`${ui.btnPrimary} mt-3 w-full tabular-nums`}
+        >
           {label}
         </button>
       )}

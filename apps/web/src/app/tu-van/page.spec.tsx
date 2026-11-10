@@ -606,3 +606,127 @@ describe('Trợ lý AI: giữ hội thoại khi khách xem sản phẩm rồi qu
     setItem.mockRestore();
   });
 });
+
+describe('Trợ lý AI: khoá đồng bộ chống gửi đúp, nút bận giữ focus', () => {
+  // mutationFn chạy sau vài microtask: đếm lời gọi API phải đợi `flush`, nếu không ca "chỉ một lần" đậu suông.
+  const settle = () => flush(3);
+  const userBubbles = (c: HTMLElement, text: string) => c.textContent!.split(text).length - 1;
+
+  it('chạm đúp nút Gửi cùng khung hình chỉ gửi MỘT câu hỏi, tin của bạn không nhân đôi; nút báo aria-busy + aria-disabled', async () => {
+    state.chat = () => new Promise(() => {});
+    const c = await mount();
+    typeInto(input(c), 'Có nước giặt không?');
+    act(() => {
+      sendBtn(c).click();
+      sendBtn(c).click();
+    });
+    await settle();
+    expect(state.calls).toHaveLength(1);
+    expect(userBubbles(c, 'Có nước giặt không?')).toBe(1);
+    expect(sendBtn(c).getAttribute('aria-busy')).toBe('true');
+    expect(sendBtn(c).getAttribute('aria-disabled')).toBe('true');
+  });
+
+  it('khách gõ tiếp lúc trợ lý đang soạn: nút Gửi (đã có chữ) không disabled thật, giữ focus, báo aria-busy; bấm không gửi thêm', async () => {
+    state.chat = () => new Promise(() => {});
+    const c = await mount();
+    await ask(c, 'Câu 1');
+    typeInto(input(c), 'Câu 2');
+    sendBtn(c).focus();
+    expect(sendBtn(c).disabled).toBe(false);
+    expect(sendBtn(c).getAttribute('aria-busy')).toBe('true');
+    expect(sendBtn(c).getAttribute('aria-disabled')).toBe('true');
+    click(sendBtn(c));
+    await settle();
+    expect(state.calls).toHaveLength(1);
+    expect(document.activeElement).toBe(sendBtn(c));
+    expect(input(c).value).toBe('Câu 2');
+  });
+
+  it('Enter hai lần cùng khung hình (phím giữ lặp) chỉ gửi MỘT câu hỏi, tin của bạn không nhân đôi', async () => {
+    state.chat = () => new Promise(() => {});
+    const c = await mount();
+    typeInto(input(c), 'Giữ phím Enter');
+    act(() => {
+      input(c).dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+      input(c).dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    });
+    await settle();
+    expect(state.calls).toHaveLength(1);
+    expect(userBubbles(c, 'Giữ phím Enter')).toBe(1);
+  });
+
+  it('chạm đúp một câu gợi ý cùng khung hình chỉ gửi MỘT câu hỏi', async () => {
+    state.chat = () => new Promise(() => {});
+    const c = await mount();
+    const suggestion = byText(c, 'button', 'Gợi ý quà tặng sống xanh')!;
+    act(() => {
+      suggestion.click();
+      suggestion.click();
+    });
+    await settle();
+    expect(state.calls).toHaveLength(1);
+    expect(state.calls[0]!.body.message).toBe('Gợi ý quà tặng sống xanh');
+  });
+
+  it('hai câu gợi ý khác nhau cùng khung hình: chỉ câu đầu đi (một cuộc trò chuyện, một lượt trả lời tại một lúc)', async () => {
+    state.chat = () => new Promise(() => {});
+    const c = await mount();
+    const a = byText(c, 'button', 'Gợi ý quà tặng sống xanh')!;
+    const b = byText(c, 'button', 'Mình cần sản phẩm tẩy rửa nhà bếp xanh')!;
+    act(() => {
+      a.click();
+      b.click();
+    });
+    await settle();
+    expect(state.calls.map((x) => x.body.message)).toEqual(['Gợi ý quà tặng sống xanh']);
+  });
+
+  it('lỗi nhả khoá: câu kế tiếp gửi được, và nút Gửi hết báo bận', async () => {
+    let n = 0;
+    state.chat = () => {
+      if (n++ === 0) throw new Error('Hết hạn mức');
+      return REPLY('Ổn rồi');
+    };
+    const c = await mount();
+    await ask(c, 'Câu 1');
+    expect(sendBtn(c).hasAttribute('aria-busy')).toBe(false);
+    await ask(c, 'Câu 2');
+    expect(state.calls).toHaveLength(2);
+    expect(c.textContent).toContain('Ổn rồi');
+  });
+
+  it('Thử lại: chạm đúp cùng khung hình chỉ gửi lại MỘT lần, không cắt hội thoại hai lần', async () => {
+    let n = 0;
+    state.chat = () => {
+      n++;
+      if (n === 1) throw new Error('Hết hạn mức');
+      return new Promise(() => {});
+    };
+    const c = await mount();
+    await ask(c, 'Xin chào');
+    expect(state.calls).toHaveLength(1);
+    const retry = byText(c, 'button', 'Thử lại')!;
+    act(() => {
+      retry.click();
+      retry.click();
+    });
+    await settle();
+    expect(state.calls).toHaveLength(2);
+    expect(state.calls[1]!.body).toEqual({ message: 'Xin chào', history: [] });
+    expect(userBubbles(c, 'Xin chào')).toBe(1);
+  });
+
+  it('Thử lại vẫn lỗi: nhả khoá, bấm Thử lại lần nữa gửi lần ba', async () => {
+    state.chat = () => {
+      throw new Error('Hết hạn mức');
+    };
+    const c = await mount();
+    await ask(c, 'Xin chào');
+    click(byText(c, 'button', 'Thử lại'));
+    await settle();
+    click(byText(c, 'button', 'Thử lại'));
+    await settle();
+    expect(state.calls).toHaveLength(3);
+  });
+});

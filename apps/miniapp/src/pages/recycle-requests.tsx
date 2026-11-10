@@ -54,7 +54,7 @@ export default function RecycleRequestsPage() {
     );
   }
   if (q.isError && isWasteForbidden(q.error)) return shell(<WastePhoneNeeded text="Cho Tubu số điện thoại để xem yêu cầu đổi rác của bạn." />);
-  if (q.isError) return shell(<ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => void q.refetch()} />);
+  if (q.isError) return shell(<ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => q.refetch()} />);
   if (q.isPending || !q.data) return shell(<Skeleton height={120} />);
 
   const rows = q.data;

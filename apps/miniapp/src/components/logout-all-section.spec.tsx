@@ -147,3 +147,56 @@ describe('LogoutAllSection: khoá khi đang đăng xuất mọi thiết bị', (
     expect(mocks.apiPost).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('LogoutAllSection: xác nhận khoá đồng bộ chạm đúp (W78A)', () => {
+  it('chạm đúp "Đăng xuất mọi máy" trong cùng một khung hình chỉ gọi logout-all một lần và đăng xuất máy này một lần', async () => {
+    const pending = deferred<unknown>();
+    mocks.apiPost.mockReturnValue(pending.promise);
+    mount();
+    fireEvent.click(trigger());
+    const confirm = confirmBtn();
+    await act(async () => {
+      fireEvent.click(confirm);
+      fireEvent.click(confirm);
+    });
+    expect(mocks.apiPost).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(confirmBtn()).toHaveAttribute('aria-busy', 'true'));
+    await act(async () => pending.resolve({}));
+    await waitFor(() => expect(mocks.logout).toHaveBeenCalledTimes(1));
+    expect(mocks.apiPost).toHaveBeenCalledTimes(1);
+  });
+
+  it('chạm đúp nút mở hộp rồi xác nhận: chỉ một hộp xác nhận, chưa gọi máy chủ cho tới khi xác nhận', async () => {
+    mount();
+    await act(async () => {
+      fireEvent.click(trigger());
+      fireEvent.click(trigger());
+    });
+    expect(screen.getAllByText('Đăng xuất khỏi mọi thiết bị?')).toHaveLength(1);
+    expect(mocks.apiPost).not.toHaveBeenCalled();
+  });
+
+  it('lỗi thì nhả khoá: chạm đúp chỉ báo lỗi một lần, mở lại hộp và xác nhận lần nữa gọi lần hai rồi đăng xuất', async () => {
+    const pending = deferred<unknown>();
+    mocks.apiPost.mockReturnValueOnce(pending.promise);
+    mount();
+    fireEvent.click(trigger());
+    const confirm = confirmBtn();
+    await act(async () => {
+      fireEvent.click(confirm);
+      fireEvent.click(confirm);
+    });
+    expect(mocks.apiPost).toHaveBeenCalledTimes(1);
+    await act(async () => pending.reject(new Error('boom')));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'lỗi máy chủ', type: 'error' }));
+    expect(mocks.openSnackbar).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(lastSheet().open).toBe(false));
+    expect(mocks.logout).not.toHaveBeenCalled();
+
+    mocks.apiPost.mockResolvedValueOnce({});
+    fireEvent.click(trigger());
+    fireEvent.click(confirmBtn());
+    await waitFor(() => expect(mocks.logout).toHaveBeenCalledTimes(1));
+    expect(mocks.apiPost).toHaveBeenCalledTimes(2);
+  });
+});

@@ -534,3 +534,44 @@ describe('/cong-dong — khung chờ giống thẻ bài thật (không nhảy kh
     expect(skeletons(container)).toHaveLength(0);
   });
 });
+
+describe('FeedView — nút bận giữ focus, vùng báo luôn có trong DOM', () => {
+  it('"Xem thêm": đang tải thì aria-busy + aria-disabled, không disabled (giữ focus), bấm tiếp không gọi thêm trang', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    let n = 0;
+    feedImpl = () => {
+      if (n++ === 0) return { posts: [POST('p1', 'Lan Anh')], nextCursor: 'cur-2' };
+      return gate.then(() => ({ posts: [POST('p3', 'Hà My')], nextCursor: null }));
+    };
+    const { container } = await mount();
+    const more = () => byText(container, 'button', /^(Xem thêm|Đang tải…)$/) as HTMLButtonElement;
+    more().focus();
+    click(more());
+    await flush(2);
+    expect(more().textContent).toBe('Đang tải…');
+    expect(more().getAttribute('aria-busy')).toBe('true');
+    expect(more().getAttribute('aria-disabled')).toBe('true');
+    expect(more().disabled).toBe(false);
+    expect(document.activeElement).toBe(more());
+    click(more());
+    await flush(2);
+    expect(feedCalls().filter((c) => c[1].query.cursor === 'cur-2')).toHaveLength(1);
+    release();
+    await flush(6);
+    expect(container.textContent).toContain('Hà My');
+  });
+
+  it('vùng báo đăng bài luôn có trong DOM (trống thì sr-only), đổi chữ trên cùng phần tử', async () => {
+    const { container } = await mount();
+    const status = container.querySelector('[role="status"]')!;
+    expect(status.textContent).toBe('');
+    expect(status.className).toBe('sr-only');
+    click(exact(container, 'button', 'Đăng bài'));
+    click(byText(document.body, 'button', 'stub-dang-xong'));
+    await flush();
+    expect(container.querySelector('[role="status"]')).toBe(status);
+    expect(status.textContent).toContain('Đã đăng bài 🌿');
+    expect(status.className).not.toContain('sr-only');
+  });
+});

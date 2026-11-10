@@ -4,7 +4,7 @@ import { useRef, useState, type FormHTMLAttributes, type ReactNode } from 'react
 import { useStickyBarOffset } from '@/components/use-sticky-bar-offset';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Clock, Flag, Heart, MessageCircle, Pencil, Pin, Trash2 } from 'lucide-react';
 import {
   addComment,
@@ -19,6 +19,7 @@ import {
 import { postCommentsQuery, postQuery } from '@tubutree/app-core/queries/feed';
 import { AuthorLine, Avatar, KIND_ICON, KIND_LABEL, safeMediaUrl, timeAgo } from '@/components/community/post-parts';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
+import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { ErrorState } from '@/components/ui/error-state';
 import { PageHeader } from '@/components/ui/page-header';
 import { miniBleed, miniBtnSecondary } from '@/components/loyalty/mini-surface';
@@ -42,6 +43,8 @@ const errorText = loadErrorText;
 const actErrText = actionErrorText;
 
 type ReportTarget = { targetType: 'POST' | 'COMMENT'; targetId?: string };
+type CommentOp = { kind: 'best' | 'remove'; commentId: string };
+const COMMENT_OP_KEY = ['community-comment-op'] as const;
 
 // Ô trả lời fixed ở điện thoại: gắn has-sticky-bar để chân trang không bị che.
 function ReplyBar(props: FormHTMLAttributes<HTMLFormElement>) {
@@ -118,10 +121,12 @@ export default function PostDetailPage() {
     setNotice(null);
     setFailure(actErrText(e));
   };
+  // Trả lời hứa tải lại: thao tác nào cần số liệu mới trước khi bấm lần hai (tim, ghim, chọn hay nhất, ẩn, sửa) trả nó ra khỏi `onSuccess`,
+  // TanStack Query đợi nó trước `onSettled` nên khoá chỉ nhả khi dữ liệu mới về. Thao tác không còn gì cũ để bấm (trả lời, báo cáo) bỏ qua bằng `void`.
   const ok = (message?: string) => {
     setFailure(null);
     setNotice(message ?? null);
-    void refresh();
+    return refresh();
   };
 
   const openReport = (target: ReportTarget) => {
@@ -129,49 +134,64 @@ export default function PostDetailPage() {
     setReportTarget(target);
   };
 
-  const react = useMutation({ mutationFn: () => reactPost(coreHttp, id), onSuccess: () => ok(), onError: onFail });
-  const addCommentMut = useMutation({
+  // Khoá đồng bộ cho mọi thao tác ghi: `isPending` chỉ đúng sau lần vẽ kế, hai cú bấm trong cùng khung hình đều thấy nút đang bật và đều gọi API.
+  const react = useLockedMutation({ mutationFn: () => reactPost(coreHttp, id), onSuccess: () => ok(), onError: onFail });
+  const addCommentMut = useLockedMutation({
     mutationFn: (body: string) => addComment(coreHttp, id, body),
-    onSuccess: () => {
-      setCommentText('');
+    // Chỉ xoá ô khi nó còn đúng chữ đã gửi: khách gõ tiếp trong lúc lệnh bay thì chữ mới phải còn.
+    onSuccess: (_data, body) => {
+      setCommentText((cur) => (cur.trim() === body ? '' : cur));
       setReplyError(null);
-      ok();
+      void ok();
     },
     onError: (e) => setReplyError(actErrText(e)),
   });
+  // Thao tác bình luận (chọn hay nhất, ẩn) kiểm khoá bằng ref đồng bộ: hai việc trên CÙNG một bình luận không lọt cùng khung hình, và cả bài chỉ
+  // có MỘT lệnh "hay nhất" bay tại một lúc, vì máy chủ đọc `bestCommentId` ngoài transaction: hai lệnh song song đều thấy bài chưa có câu hay nhất
+  // nên cộng uy tín và báo cho cả hai tác giả. Ẩn một bình luận khác vẫn đi song song.
   // Lỗi của thao tác trên một bình luận hiện ngay dưới bình luận đó: dải lỗi đầu trang nằm ngoài màn hình khi danh sách dài.
-  const markBest = useMutation({
-    mutationFn: (commentId: string) => setBestAnswer(coreHttp, id, commentId),
+  const commentOpsRef = useRef<CommentOp[]>([]);
+  const commentOp = useMutation({
+    mutationKey: COMMENT_OP_KEY,
+    mutationFn: (v: CommentOp) => (v.kind === 'best' ? setBestAnswer(coreHttp, id, v.commentId) : removeComment(coreHttp, v.commentId)),
     onMutate: () => setCommentError(null),
     onSuccess: () => ok(),
-    onError: (e, commentId) => setCommentError({ commentId, message: actErrText(e) }),
+    onError: (e, v) => setCommentError({ commentId: v.commentId, message: actErrText(e) }),
+    onSettled: (_data, _error, v) => {
+      commentOpsRef.current = commentOpsRef.current.filter((o) => o.kind !== v.kind || o.commentId !== v.commentId);
+    },
   });
-  const removeCommentMut = useMutation({
-    mutationFn: (commentId: string) => removeComment(coreHttp, commentId),
-    onMutate: () => setCommentError(null),
-    onSuccess: () => ok(),
-    onError: (e, commentId) => setCommentError({ commentId, message: actErrText(e) }),
-  });
-  const editMut = useMutation({
+  const runCommentOp = (v: CommentOp) => {
+    if (commentOpsRef.current.some((o) => o.commentId === v.commentId || (o.kind === 'best' && v.kind === 'best'))) return;
+    commentOpsRef.current = [...commentOpsRef.current, v];
+    commentOp.mutate(v);
+  };
+  // Mọi thao tác bình luận đang bay (không chỉ lệnh sau cùng): nút của đúng các dòng đó báo aria-busy, dòng khác vẫn bấm được.
+  const inFlightCommentOps = useMutationState({ filters: { mutationKey: COMMENT_OP_KEY, status: 'pending' }, select: (m) => m.state.variables as CommentOp });
+  const bestInFlight = inFlightCommentOps.some((v) => v.kind === 'best');
+  const editMut = useLockedMutation({
     mutationFn: (patch: { title?: string; body: string }) => editPost(coreHttp, id, patch),
     onSuccess: () => {
       setEditing(false);
       setEditError(null);
-      ok('Lưu');
+      return ok('Lưu');
     },
     onError: (e) => setEditError(actErrText(e)),
   });
-  const reportMut = useMutation({
+  const reportMut = useLockedMutation({
     mutationFn: (target: ReportTarget) => reportContent(coreHttp, id, { ...target, reason: reportReason.trim() }),
     onSuccess: () => {
       setReportTarget(null);
       setReportReason('');
       setReportError(null);
-      ok('Đã gửi báo cáo, cảm ơn bạn 🌿');
+      void ok('Đã gửi báo cáo, cảm ơn bạn 🌿');
     },
     onError: (e) => setReportError(actErrText(e)),
   });
-  const pinMut = useMutation({ mutationFn: () => adminPin(coreHttp, id, !(post.data?.isPinned ?? false)), onSuccess: () => ok(), onError: onFail });
+  const pinMut = useLockedMutation({ mutationFn: () => adminPin(coreHttp, id, !(post.data?.isPinned ?? false)), onSuccess: () => ok(), onError: onFail });
+  // Xoá thì trang sắp rời đi (router.push): khoá chỉ nhả khi lỗi. Nhả ở `onSettled` thì trong lúc chờ chuyển trang khách còn bấm "Xoá" lần hai
+  // và nhận lỗi "không tìm thấy" của bài vừa xoá.
+  const deletingRef = useRef(false);
   const deleteMut = useMutation({
     mutationFn: () => deletePost(coreHttp, id),
     onSuccess: () => {
@@ -180,10 +200,16 @@ export default function PostDetailPage() {
       router.push('/cong-dong?deleted=1');
     },
     onError: (e) => {
+      deletingRef.current = false;
       setConfirmDelete(false);
       onFail(e);
     },
   });
+  const confirmDeletePost = () => {
+    if (deletingRef.current) return;
+    deletingRef.current = true;
+    deleteMut.mutate();
+  };
 
   if (phase === 'loading') {
     return (
@@ -234,16 +260,13 @@ export default function PostDetailPage() {
 
   return (
     <Shell>
-      {notice && (
-        <p role="status" className="rounded-control bg-forest-50 px-3 py-2 text-sm text-forest-800">
-          {notice}
-        </p>
-      )}
-      {failure && (
-        <p role="alert" className="rounded-control bg-danger-bg px-3 py-2 text-sm text-danger-fg">
-          {failure}
-        </p>
-      )}
+      {/* Vùng live luôn có trong DOM (trống thì sr-only, không chiếm khoảng cách): chèn vùng live cùng lúc với chữ thì nhiều trình đọc không đọc. */}
+      <div role="status" className={notice ? 'rounded-control bg-forest-50 px-3 py-2 text-sm text-forest-800' : 'sr-only'}>
+        {notice}
+      </div>
+      <div role="alert" className={failure ? 'rounded-control bg-danger-bg px-3 py-2 text-sm text-danger-fg' : 'sr-only'}>
+        {failure}
+      </div>
 
       <article className={`${ui.card} p-4 ${miniBleed}`}>
         {p.status === 'PENDING' && p.isOwner && (
@@ -259,7 +282,13 @@ export default function PostDetailPage() {
           </div>
         )}
         {isAdmin && (
-          <button type="button" disabled={pinMut.isPending} onClick={() => pinMut.mutate()} className={`${miniBtnSecondary} mb-2.5`}>
+          <button
+            type="button"
+            aria-busy={pinMut.isPending || undefined}
+            aria-disabled={pinMut.isPending || undefined}
+            onClick={() => pinMut.mutate()}
+            className={`${miniBtnSecondary} mb-2.5`}
+          >
             <Pin className="mr-1.5 h-4 w-4" aria-hidden="true" />
             {p.isPinned ? 'Bỏ ghim' : 'Ghim'}
           </button>
@@ -349,12 +378,10 @@ export default function PostDetailPage() {
           <button
             type="button"
             aria-pressed={p.liked}
+            aria-busy={react.isPending || undefined}
             aria-disabled={react.isPending || undefined}
-            onClick={() => {
-              // Chặn chạm nhanh: mỗi lần chạm là một lời gọi bật/tắt tim, chồng nhau thì kết quả khó đoán.
-              if (react.isPending) return;
-              react.mutate();
-            }}
+            // Mỗi lần chạm là một lời gọi bật/tắt tim: chồng nhau thì hai lời gọi trái chiều. Khoá nhả khi số tim mới về.
+            onClick={() => react.mutate()}
             className={`inline-flex min-h-11 min-w-11 items-center gap-1.5 ${p.liked ? 'font-semibold text-forest-700' : ''} ${react.isPending ? 'opacity-60' : ''}`}
           >
             <Heart className="h-5 w-5" aria-hidden="true" style={p.liked ? { fill: 'currentColor' } : undefined} />
@@ -390,18 +417,25 @@ export default function PostDetailPage() {
                 key={c.id}
                 comment={c}
                 canMarkBest={canMarkBest}
-                onMarkBest={() => markBest.mutate(c.id)}
-                marking={markBest.isPending && markBest.variables === c.id}
+                onMarkBest={() => runCommentOp({ kind: 'best', commentId: c.id })}
+                marking={inFlightCommentOps.some((v) => v.kind === 'best' && v.commentId === c.id)}
+                bestBlocked={bestInFlight}
                 onReport={() => openReport({ targetType: 'COMMENT', targetId: c.id })}
-                onRemove={() => removeCommentMut.mutate(c.id)}
-                removing={removeCommentMut.isPending && removeCommentMut.variables === c.id}
+                onRemove={() => runCommentOp({ kind: 'remove', commentId: c.id })}
+                removing={inFlightCommentOps.some((v) => v.kind === 'remove' && v.commentId === c.id)}
                 error={commentError?.commentId === c.id ? commentError.message : null}
               />
             ))}
           </ul>
         )}
         {comments.hasNextPage && (
-          <button type="button" disabled={comments.isFetchingNextPage} onClick={() => void comments.fetchNextPage()} className={`${miniBtnSecondary} mt-2.5`}>
+          <button
+            type="button"
+            aria-busy={comments.isFetchingNextPage || undefined}
+            aria-disabled={comments.isFetchingNextPage || undefined}
+            onClick={() => !comments.isFetchingNextPage && void comments.fetchNextPage()}
+            className={`${miniBtnSecondary} mt-2.5`}
+          >
             {comments.isFetchingNextPage ? 'Đang tải…' : 'Xem thêm trả lời'}
           </button>
         )}
@@ -411,7 +445,7 @@ export default function PostDetailPage() {
         onSubmit={(e) => {
           e.preventDefault();
           const body = commentText.trim();
-          if (body && !addCommentMut.isPending) {
+          if (body) {
             setReplyError(null);
             addCommentMut.mutate(body);
           }
@@ -420,11 +454,9 @@ export default function PostDetailPage() {
         className="sticky bottom-0 -mx-4 flex flex-col gap-1.5 border-t border-stone-200 bg-stone-0 px-4 py-2.5 md:mx-0 md:rounded-card md:border max-md:fixed max-md:inset-x-0 max-md:z-30 max-md:mx-0 max-md:border-t-0 max-md:shadow-[var(--elevation-3)]"
         style={{ paddingBottom: 'max(0.625rem, env(safe-area-inset-bottom, 0px))' }}
       >
-        {replyError && (
-          <p role="alert" className={ui.error}>
-            {replyError}
-          </p>
-        )}
+        <div role="alert" className={replyError ? ui.error : 'sr-only'}>
+          {replyError}
+        </div>
         <div className="flex gap-2">
           <input
             aria-label="Viết trả lời…"
@@ -434,7 +466,13 @@ export default function PostDetailPage() {
             onChange={(e) => setCommentText(e.target.value)}
             className={`${ui.field} flex-1`}
           />
-          <button type="submit" disabled={commentText.trim().length === 0 || addCommentMut.isPending} className={ui.btnPrimary}>
+          <button
+            type="submit"
+            disabled={commentText.trim().length === 0}
+            aria-busy={addCommentMut.isPending || undefined}
+            aria-disabled={addCommentMut.isPending || undefined}
+            className={ui.btnPrimary}
+          >
             Gửi
           </button>
         </div>
@@ -452,7 +490,7 @@ export default function PostDetailPage() {
         error={editError}
         onSave={() => editMut.mutate({ title: p.kind === 'QUESTION' ? editTitle.trim() : undefined, body: editBody.trim() })}
       />
-      <ConfirmDeleteSheet open={confirmDelete} onClose={() => setConfirmDelete(false)} deleting={deleteMut.isPending} onConfirm={() => deleteMut.mutate()} />
+      <ConfirmDeleteSheet open={confirmDelete} onClose={() => setConfirmDelete(false)} deleting={deleteMut.isPending || deleteMut.isSuccess} onConfirm={confirmDeletePost} />
       <ReportSheet
         open={!!reportTarget}
         reason={reportReason}

@@ -6,6 +6,7 @@ import type { CheckInStatusResponse } from '@tubutree/app-core/api/loyalty';
 import { checkInCopy } from '@tubutree/app-core/daily-check-in-copy';
 import { guestCheckInCopy } from '@tubutree/app-core/daily-check-in-guest-copy';
 import { ui } from '@/lib/guest-ui';
+import { usePressLock } from '@/lib/use-press-lock';
 import { miniBtnSecondary, miniCard, miniSectionTitle } from '@/components/loyalty/mini-surface';
 import { formatDrops } from './format';
 import { isSameVNDay } from './game-utils';
@@ -27,7 +28,7 @@ export function CheckInStreak({
   status?: CheckInStatusResponse;
   /** Lịch chung tải lỗi: một dòng + Thử lại (nút chính vẫn theo hồ sơ giọt nước nên không chặn việc tưới). */
   statusError?: boolean;
-  onRetryStatus?: () => void;
+  onRetryStatus?: () => void | PromiseLike<unknown>;
   onBuyFreeze: () => void;
   freezePending: boolean;
   onCollectDew: () => void;
@@ -35,6 +36,7 @@ export function CheckInStreak({
   /** Thiếu nước cho vé giữ lửa: mở sheet "Kiếm nước" với số giọt còn thiếu. */
   onNeedWater: (missing: number) => void;
 }) {
+  const retryStatus = usePressLock(onRetryStatus);
   const streakDays = status?.streakDays ?? profile?.streakDays ?? 0;
   const dewCollectedToday = isSameVNDay(profile?.lastDewAt ?? null);
   const checkedInToday = isSameVNDay(profile?.lastCheckInAt ?? null);
@@ -43,7 +45,7 @@ export function CheckInStreak({
   const freezeShort = profile ? missingDrops(profile.totalSeeds, freezeCost) : 0;
   const dayReward = (day: number): number | null => (day === 7 ? (profile?.streak7Seeds ?? null) : day === 3 ? STREAK_3_SEEDS : null);
   return (
-    <section className={`p-4 ${miniCard}`}>
+    <section className={`p-4 tabular-nums ${miniCard}`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
           <h2 className={`flex items-center gap-1.5 whitespace-nowrap ${ui.sectionTitle} ${miniSectionTitle}`}>
@@ -74,8 +76,16 @@ export function CheckInStreak({
       </div>
       {statusError && (
         <div className="mt-2 flex items-center justify-between gap-2">
-          <span className="min-w-0 text-caption text-danger-fg">{checkInCopy.loadErrorTitle}</span>
-          <button type="button" onClick={() => onRetryStatus?.()} className={`${miniBtnSecondary} flex-none`}>
+          <span role="alert" className="min-w-0 text-caption text-danger-fg">
+            {checkInCopy.loadErrorTitle}
+          </span>
+          <button
+            type="button"
+            aria-busy={retryStatus.busy || undefined}
+            aria-disabled={retryStatus.busy || undefined}
+            onClick={retryStatus.press}
+            className={`${miniBtnSecondary} flex-none`}
+          >
             Thử lại
           </button>
         </div>
@@ -91,14 +101,29 @@ export function CheckInStreak({
           </span>
           <button
             type="button"
-            disabled={freezePending}
-            onClick={() => (freezeShort > 0 ? onNeedWater(freezeShort) : onBuyFreeze())}
+            aria-busy={freezePending || undefined}
+            aria-disabled={freezePending || undefined}
+            onClick={() => {
+              if (freezePending) return;
+              if (freezeShort > 0) onNeedWater(freezeShort);
+              else onBuyFreeze();
+            }}
             className={`${miniBtnSecondary} min-h-11 flex-auto`}
           >
             {freezeShort > 0 ? gameMoreCopy.freezeShort(freezeShort) : `Mua (${formatDrops(freezeCost)})`}
           </button>
         </div>
-        <button type="button" disabled={dewCollectedToday || dewPending} onClick={onCollectDew} className={`${miniBtnSecondary} mt-2 w-full gap-1.5`}>
+        <button
+          type="button"
+          disabled={dewCollectedToday}
+          aria-busy={dewPending || undefined}
+          aria-disabled={dewPending || undefined}
+          onClick={() => {
+            if (dewPending) return;
+            onCollectDew();
+          }}
+          className={`${miniBtnSecondary} mt-2 w-full gap-1.5`}
+        >
           <Droplets className="h-4 w-4" aria-hidden="true" />
           {dewCollectedToday ? 'Đã hứng sương' : t.dew(profile?.dewSeeds ?? null)}
         </button>

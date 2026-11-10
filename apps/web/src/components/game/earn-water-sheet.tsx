@@ -4,6 +4,7 @@ import { gameNewbieCopy } from '@tubutree/app-core/game-newbie';
 import { Sheet } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ui } from '@/lib/guest-ui';
+import { usePressLock } from '@/lib/use-press-lock';
 import { miniBtnSecondary } from '@/components/loyalty/mini-surface';
 
 export type EarnQuizState = { status: 'loading' } | { status: 'error' } | { status: 'ready'; left: number };
@@ -60,13 +61,14 @@ export function EarnWaterSheet({
   onCheckIn: () => void;
   onDew: () => void;
   quiz: EarnQuizState;
-  onRetryQuiz: () => void;
+  onRetryQuiz: () => void | PromiseLike<unknown>;
   onGoQuiz: () => void;
   hasFriends: boolean;
   onGoFriends: () => void;
   /** Lỗi của lần điểm danh/hứng sương vừa rồi. */
   error: string | null;
 }) {
+  const retryQuiz = usePressLock(onRetryQuiz);
   const quizLeft = quiz.status === 'ready' ? quiz.left : 0;
   const allDone = checkedInToday && dewToday && quiz.status === 'ready' && quizLeft === 0;
   return (
@@ -81,7 +83,7 @@ export function EarnWaterSheet({
         </button>
       }
     >
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-2 tabular-nums">
         {error && (
           <p role="alert" className="text-caption text-danger-fg">
             {error}
@@ -89,7 +91,16 @@ export function EarnWaterSheet({
         )}
         {!checkedInToday && (
           <Row title={t.checkin} gain={checkInGain != null ? t.gain(checkInGain) : undefined}>
-            <button type="button" disabled={checkInPending} onClick={onCheckIn} className={`${ui.btnPrimary} gap-1.5`}>
+            <button
+              type="button"
+              aria-busy={checkInPending || undefined}
+              aria-disabled={checkInPending || undefined}
+              onClick={() => {
+                if (checkInPending) return;
+                onCheckIn();
+              }}
+              className={`${ui.btnPrimary} gap-1.5`}
+            >
               <Droplets className="h-4 w-4" aria-hidden="true" />
               {t.checkinCta}
             </button>
@@ -97,7 +108,16 @@ export function EarnWaterSheet({
         )}
         {!dewToday && (
           <Row title={t.dew} gain={dewGain != null ? t.gain(dewGain) : undefined}>
-            <button type="button" disabled={dewPending} onClick={onDew} className={`${miniBtnSecondary} gap-1.5`}>
+            <button
+              type="button"
+              aria-busy={dewPending || undefined}
+              aria-disabled={dewPending || undefined}
+              onClick={() => {
+                if (dewPending) return;
+                onDew();
+              }}
+              className={`${miniBtnSecondary} gap-1.5`}
+            >
               <Droplets className="h-4 w-4" aria-hidden="true" />
               {t.dewCta}
             </button>
@@ -110,7 +130,13 @@ export function EarnWaterSheet({
         )}
         {quiz.status === 'error' && (
           <Row title={t.error}>
-            <button type="button" onClick={onRetryQuiz} className={miniBtnSecondary}>
+            <button
+              type="button"
+              aria-busy={retryQuiz.busy || undefined}
+              aria-disabled={retryQuiz.busy || undefined}
+              onClick={retryQuiz.press}
+              className={miniBtnSecondary}
+            >
               {t.retry}
             </button>
           </Row>

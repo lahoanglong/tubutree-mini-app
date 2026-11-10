@@ -530,7 +530,7 @@ function DeskContent() {
   const cfg = usePublicConfig();
   if (pointsQ.isPending) return <Skeleton height={120} />;
   if (pointsQ.isError) {
-    return <ErrorState message={getLoadErrorMessage(pointsQ.error)} onRetry={() => void pointsQ.refetch()} retrying={pointsQ.isFetching} />;
+    return <ErrorState message={getLoadErrorMessage(pointsQ.error)} onRetry={() => pointsQ.refetch()} retrying={pointsQ.isFetching} />;
   }
   if (pointsQ.data.length === 0) {
     // Máy chủ bỏ qua điểm của đại lý khi chương trình tắt, nên danh sách rỗng lúc đó không có nghĩa là mất quyền.

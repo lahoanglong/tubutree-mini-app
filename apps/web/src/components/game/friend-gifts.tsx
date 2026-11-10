@@ -25,7 +25,17 @@ export function FriendGifts({
               <Sprout className="h-4 w-4 flex-none text-forest-600" aria-hidden="true" />
               <span className="truncate">{f.nickname}</span>
             </span>
-            <button type="button" disabled={f.giftedToday || sending} onClick={() => onGift(f.id)} className={`${miniBtnSecondary} flex-none`}>
+            <button
+              type="button"
+              disabled={f.giftedToday}
+              aria-busy={sending || undefined}
+              aria-disabled={sending || undefined}
+              onClick={() => {
+                if (sending) return;
+                onGift(f.id);
+              }}
+              className={`${miniBtnSecondary} flex-none`}
+            >
               {f.giftedToday ? 'Đã tặng hôm nay' : 'Tặng 💧'}
             </button>
           </div>

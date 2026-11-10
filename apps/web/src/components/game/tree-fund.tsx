@@ -70,14 +70,23 @@ export function TreeFund({
     <div className="flex flex-col gap-2">
       {short ? (
         <>
-          <p className="text-center text-sm text-stone-700">{gameNewbieCopy.fund.have(points ?? 0, treePointsPrice ?? 0)}</p>
+          <p className="text-center text-sm tabular-nums text-stone-700">{gameNewbieCopy.fund.have(points ?? 0, treePointsPrice ?? 0)}</p>
           <button type="button" onClick={onEarnPoints} className={`${miniBtnSecondary} w-full gap-2`}>
             <TreePine className="h-5 w-5" aria-hidden="true" />
             {gameNewbieCopy.fund.howToEarn}
           </button>
         </>
       ) : (
-        <button type="button" disabled={busy} onClick={openConfirm} className={`${miniBtnSecondary} w-full gap-2`}>
+        <button
+          type="button"
+          aria-busy={busy || undefined}
+          aria-disabled={busy || undefined}
+          onClick={() => {
+            if (busy) return;
+            openConfirm();
+          }}
+          className={`${miniBtnSecondary} w-full gap-2 tabular-nums`}
+        >
           <TreePine className="h-5 w-5" aria-hidden="true" />
           <span>
             Góp quỹ trồng cây
@@ -96,13 +105,19 @@ export function TreeFund({
             <button type="button" disabled={busy} onClick={closeConfirm} className={`${miniBtnSecondary} flex-1`}>
               Huỷ
             </button>
-            <button type="button" disabled={busy} onClick={() => void confirm()} className={`${ui.btnPrimary} flex-1`}>
+            <button
+              type="button"
+              aria-busy={busy || undefined}
+              aria-disabled={busy || undefined}
+              onClick={() => void confirm()}
+              className={`${ui.btnPrimary} flex-1`}
+            >
               Xác nhận
             </button>
           </div>
         }
       >
-        <p className="text-sm text-stone-900">
+        <p className="text-sm tabular-nums text-stone-900">
           {treePointsPrice != null ? `Góp quỹ trồng cây sẽ trừ ${formatPoints(treePointsPrice)} từ Điểm Xanh của bạn.` : 'Góp quỹ trồng cây sẽ trừ Điểm Xanh của bạn.'}
         </p>
         <p className="mt-2 text-caption text-stone-600">{gameNewbieCopy.fund.confirmOrder}</p>

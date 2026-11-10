@@ -27,6 +27,7 @@ import {
   tierThresholdLabel,
 } from '@/lib/loyalty-copy';
 import { ui } from '@/lib/guest-ui';
+import { usePressLock } from '@/lib/use-press-lock';
 import { GuestTiers } from '@/components/loyalty/guest-tiers';
 import { AuthLoading, SessionUnavailable } from '@/components/login-required';
 import { ErrorState } from '@/components/ui/error-state';
@@ -67,6 +68,7 @@ export default function LoyaltyPage() {
   const wasteHistoryQ = useQuery({ ...wasteRequestsQuery(coreHttp), enabled: authed && wasteOff, retry: false });
   const hasWasteHistory = (wasteHistoryQ.data?.length ?? 0) > 0;
 
+  const loadMore = usePressLock(() => txnQ.fetchNextPage());
   const [showCard, setShowCard] = useState(false);
   // Thẻ thành viên chỉ tải khi khách mở thẻ: bớt một lần gọi mỗi lần vào trang.
   const cardQ = useQuery({ ...memberCardQuery(coreHttp), enabled: authed && showCard });
@@ -124,7 +126,7 @@ export default function LoyaltyPage() {
   if (!data) {
     return (
       <LedgerShell title={TITLE} wide>
-        <ErrorState message={errText(loyaltyQ.error)} onRetry={() => void loyaltyQ.refetch()} />
+        <ErrorState message={errText(loyaltyQ.error)} onRetry={() => loyaltyQ.refetch()} />
       </LedgerShell>
     );
   }
@@ -156,7 +158,7 @@ export default function LoyaltyPage() {
   return (
     <LedgerShell title={TITLE} wide>
       <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] lg:grid-rows-[auto_auto_auto_1fr] lg:items-start">
-          <section aria-label="Hạng thành viên" className={`p-5 text-center lg:col-span-2 ${miniSurface} ${tierStyle.bg}`}>
+          <section aria-label="Hạng thành viên" className={`p-5 text-center tabular-nums lg:col-span-2 ${miniSurface} ${tierStyle.bg}`}>
             <div aria-hidden="true" className="text-5xl leading-none max-md:text-[56px]">
               {tierStyle.emoji}
             </div>
@@ -305,12 +307,12 @@ export default function LoyaltyPage() {
           </section>
           </div>
 
-          <section aria-label="Lịch sử Điểm Xanh" className={`p-4 lg:col-start-1 ${miniCard}`}>
+          <section aria-label="Lịch sử Điểm Xanh" className={`p-4 tabular-nums lg:col-start-1 ${miniCard}`}>
             <h2 className={`mb-2 ${ui.sectionTitle} ${miniSectionTitle}`}>Lịch sử Điểm Xanh</h2>
             {txnQ.isLoading ? (
               <Skeleton height={64} />
             ) : txnQ.isError && history.length === 0 ? (
-              <InlineError message="Không tải được lịch sử Điểm Xanh." onRetry={() => void txnQ.refetch()} />
+              <InlineError message="Không tải được lịch sử Điểm Xanh." onRetry={() => txnQ.refetch()} />
             ) : history.length === 0 ? (
               <p className="py-3 text-center text-sm text-stone-600">Chưa có giao dịch điểm nào.</p>
             ) : (
@@ -332,8 +334,9 @@ export default function LoyaltyPage() {
             {txnQ.hasNextPage && (
               <button
                 type="button"
-                aria-disabled={txnQ.isFetchingNextPage || undefined}
-                onClick={() => !txnQ.isFetchingNextPage && void txnQ.fetchNextPage()}
+                aria-busy={txnQ.isFetchingNextPage || loadMore.busy || undefined}
+                aria-disabled={txnQ.isFetchingNextPage || loadMore.busy || undefined}
+                onClick={() => !txnQ.isFetchingNextPage && loadMore.press()}
                 className={`${miniBtnSecondary} mt-3 w-full`}
               >
                 {txnQ.isFetchingNextPage ? 'Đang tải…' : txnQ.isFetchNextPageError ? 'Chưa tải được, bấm để thử lại' : 'Xem thêm'}
@@ -354,7 +357,7 @@ export default function LoyaltyPage() {
         card={cardQ.data}
         loading={cardQ.isLoading}
         error={cardQ.isError ? errText(cardQ.error) : null}
-        onRetry={() => void cardQ.refetch()}
+        onRetry={() => cardQ.refetch()}
         tierLabel={`Hạng ${tierName} · ${formatCount(lots.total)} Điểm Xanh`}
         tierEmoji={tierStyle.emoji}
       />
@@ -407,7 +410,7 @@ function MemberCardSheet({
   card: { memberCode: string; posCreditEnabled: boolean } | undefined;
   loading: boolean;
   error: string | null;
-  onRetry: () => void;
+  onRetry: () => void | PromiseLike<unknown>;
   tierLabel: string;
   tierEmoji: string;
 }) {
@@ -494,11 +497,14 @@ function Section({ title, action, children, className = '' }: { title: string; a
   );
 }
 
-function InlineError({ message, onRetry }: { message: string; onRetry: () => void }) {
+function InlineError({ message, onRetry }: { message: string; onRetry: () => void | PromiseLike<unknown> }) {
+  const retry = usePressLock(onRetry);
   return (
     <div className="text-center">
-      <p className={ui.error}>{message}</p>
-      <button type="button" onClick={onRetry} className={`${ui.btnText} text-forest-700`}>
+      <p role="alert" className={ui.error}>
+        {message}
+      </p>
+      <button type="button" aria-busy={retry.busy || undefined} aria-disabled={retry.busy || undefined} onClick={retry.press} className={`${ui.btnText} text-forest-700`}>
         Thử lại
       </button>
     </div>

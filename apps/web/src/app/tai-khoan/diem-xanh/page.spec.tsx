@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { headingProblems, smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
@@ -15,6 +16,7 @@ const state = vi.hoisted(() => ({
   wasteRequests: [] as unknown[],
   fail: new Set<string>(),
   pending: new Set<string>(),
+  holds: new Map<string, Promise<unknown>>(),
   readyRoutes: new Set<string>(),
   calls: [] as { method: string; path: string; body?: unknown; headers?: Record<string, string>; query?: Record<string, unknown> }[],
   checkInPost: null as null | (() => Promise<unknown>),
@@ -57,6 +59,7 @@ vi.mock('@/lib/core-http', () => {
         state.calls.push({ method: 'get', path, query: opts?.query });
         if (state.fail.has(path)) throw new Error('Máy chủ đang bận');
         if (state.pending.has(path)) return new Promise(() => undefined);
+        await state.holds.get(path);
         return table[path]!(opts?.query);
       },
       post: async (path: string, body?: unknown, opts?: { headers?: Record<string, string> }) => {
@@ -89,6 +92,7 @@ beforeEach(() => {
   state.phase = 'authenticated';
   state.fail = new Set();
   state.pending = new Set();
+  state.holds = new Map();
   state.readyRoutes = new Set();
   state.calls = [];
   state.push.mockReset();
@@ -712,5 +716,162 @@ describe('/tai-khoan/diem-xanh — tiêu đề khối như Mini App', () => {
     }
     const tier = c.querySelector('section[aria-label="Hạng thành viên"] h2')!;
     expect(tier.className).toContain('max-md:text-[length:var(--type-title-lg-size)]');
+  });
+});
+
+describe('/tai-khoan/diem-xanh — khoá chạm đúp', () => {
+  const gate = () => {
+    let open!: () => void;
+    const p = new Promise<void>((r) => (open = r));
+    return { p, open };
+  };
+  const tapTogether = async (...els: HTMLElement[]) => {
+    await act(async () => {
+      for (const e of els) e.click();
+    });
+  };
+  const posts = () => state.calls.filter((x) => x.method === 'post');
+  const gets = (path: string) => state.calls.filter((x) => x.method === 'get' && x.path === path);
+  const PARTIAL = {
+    points: { success: true, cycleDay: 3, streakDays: 3, pointsEarned: 3, totalPoints: 1804, message: '' },
+    water: null,
+    alreadyDone: false,
+    pending: ['water'],
+  };
+
+  it('điểm danh: hai cú chạm cùng khung hình chỉ POST một lần; nút bận báo aria-busy/aria-disabled, không disabled', async () => {
+    const g = gate();
+    state.checkInPost = async () => {
+      await g.p;
+      return PARTIAL;
+    };
+    const c = await mount();
+    const b = byText(c, 'button', 'Điểm danh') as HTMLButtonElement;
+    await tapTogether(b, b);
+    await flush();
+    expect(posts()).toHaveLength(1);
+    expect(b.getAttribute('aria-busy')).toBe('true');
+    expect(b.getAttribute('aria-disabled')).toBe('true');
+    expect(b.disabled).toBe(false);
+    g.open();
+    await flush(8);
+    expect(posts()).toHaveLength(1);
+  });
+
+  it('điểm danh: khoá giữ tới khi trạng thái mới về (nhận một phần vẫn bấm lại được, nhưng không trước khi tải lại xong)', async () => {
+    state.checkInPost = async () => PARTIAL;
+    const c = await mount();
+    const fresh = gate();
+    state.holds.set('/me/daily-check-in', fresh.p);
+    const b = byText(c, 'button', 'Điểm danh') as HTMLButtonElement;
+    click(b);
+    await flush(8);
+    expect(posts()).toHaveLength(1);
+    // POST đã xong, lịch điểm danh mới chưa về: vẫn bận, chạm thêm không gửi lệnh thứ hai.
+    expect(b.getAttribute('aria-busy')).toBe('true');
+    await tapTogether(b, b);
+    await flush();
+    expect(posts()).toHaveLength(1);
+    fresh.open();
+    await flush(8);
+    expect(b.getAttribute('aria-busy')).toBeNull();
+    click(b);
+    await flush(8);
+    expect(posts()).toHaveLength(2);
+  });
+
+  it('điểm danh lỗi: role="alert", nhả khoá, bấm lại gọi lần hai', async () => {
+    let fail = true;
+    state.checkInPost = async () => {
+      if (fail) throw new Error('Máy chủ đang bận');
+      return PARTIAL;
+    };
+    const c = await mount();
+    const b = byText(c, 'button', 'Điểm danh') as HTMLButtonElement;
+    await tapTogether(b, b);
+    await flush(8);
+    expect(posts()).toHaveLength(1);
+    expect(c.querySelector('[role="alert"]')?.textContent).toContain('Máy chủ đang bận');
+    expect(b.getAttribute('aria-busy')).toBeNull();
+    fail = false;
+    click(b);
+    await flush(8);
+    expect(posts()).toHaveLength(2);
+  });
+
+  it('"Xem thêm": hai cú chạm cùng khung hình chỉ tải một trang; nút báo bận không disabled', async () => {
+    state.txns = Array.from({ length: 45 }, (_, i) => ({
+      id: `n${String(i).padStart(2, '0')}`, delta: 1, reason: 'CHECKIN_DAILY:DAY_1', expiresAt: null, createdAt: new Date(Date.UTC(2026, 9, 10, 5) - i * 1000).toISOString(),
+    }));
+    const c = await mount();
+    expect(gets('/me/points/transactions')).toHaveLength(1);
+    const g = gate();
+    state.holds.set('/me/points/transactions', g.p);
+    const b = byText(c, 'button', 'Xem thêm') as HTMLButtonElement;
+    await tapTogether(b, b);
+    await flush();
+    expect(gets('/me/points/transactions')).toHaveLength(2);
+    expect(b.getAttribute('aria-busy')).toBe('true');
+    expect(b.disabled).toBe(false);
+    g.open();
+    await flush(8);
+    expect(gets('/me/points/transactions')).toHaveLength(2);
+    expect(c.querySelectorAll('section[aria-label="Lịch sử Điểm Xanh"] li')).toHaveLength(40);
+  });
+
+  it('lịch sử lỗi tải: dòng báo role="alert", Thử lại chạm đúp cùng khung hình chỉ tải lại một lần', async () => {
+    state.fail.add('/me/points/transactions');
+    const c = await mount();
+    const section = c.querySelector('section[aria-label="Lịch sử Điểm Xanh"]')!;
+    expect(section.querySelector('[role="alert"]')?.textContent).toContain('Không tải được lịch sử Điểm Xanh');
+    const before = gets('/me/points/transactions').length;
+    state.fail.clear();
+    const g = gate();
+    state.holds.set('/me/points/transactions', g.p);
+    const retry = byText(section as HTMLElement, 'button', 'Thử lại') as HTMLButtonElement;
+    await tapTogether(retry, retry);
+    await flush();
+    expect(gets('/me/points/transactions')).toHaveLength(before + 1);
+    expect(retry.getAttribute('aria-busy')).toBe('true');
+    g.open();
+    await flush(8);
+    expect(gets('/me/points/transactions')).toHaveLength(before + 1);
+  });
+
+  it('hạng lỗi tải: Thử lại chạm đúp cùng khung hình chỉ tải lại một lần', async () => {
+    state.fail.add('/me/loyalty');
+    const c = await mount();
+    const before = gets('/me/loyalty').length;
+    state.fail.clear();
+    const g = gate();
+    state.holds.set('/me/loyalty', g.p);
+    const retry = byText(c, 'button', 'Thử lại') as HTMLButtonElement;
+    await tapTogether(retry, retry);
+    await flush();
+    expect(gets('/me/loyalty')).toHaveLength(before + 1);
+    expect(retry.getAttribute('aria-busy')).toBe('true');
+    g.open();
+    await flush(8);
+    expect(gets('/me/loyalty')).toHaveLength(before + 1);
+  });
+
+  it('thẻ thành viên lỗi tải mã: Thử lại chạm đúp cùng khung hình chỉ tải lại một lần', async () => {
+    state.fail.add('/me/loyalty/member-card');
+    const c = await mount();
+    click(byText(c, 'button', 'Thẻ thành viên số'));
+    await flush(8);
+    const dialog = document.querySelector('[role="dialog"]') as HTMLElement;
+    const before = gets('/me/loyalty/member-card').length;
+    state.fail.clear();
+    const g = gate();
+    state.holds.set('/me/loyalty/member-card', g.p);
+    const retry = byText(dialog, 'button', 'Thử lại') as HTMLButtonElement;
+    await tapTogether(retry, retry);
+    await flush();
+    expect(gets('/me/loyalty/member-card')).toHaveLength(before + 1);
+    expect(retry.getAttribute('aria-busy')).toBe('true');
+    g.open();
+    await flush(8);
+    expect(gets('/me/loyalty/member-card')).toHaveLength(before + 1);
   });
 });

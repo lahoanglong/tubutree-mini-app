@@ -235,16 +235,36 @@ describe('DailyCheckInCard (web): khoá điểm danh đồng bộ', () => {
     expect(mocks.checkIn).toHaveBeenCalledTimes(2);
   });
 
-  it('đang chờ (pending): bấm bị bỏ qua dù khoá ref chưa giữ; nút báo bận', () => {
+  it.each([[true], [false]])('đang chờ (compact=%s): bấm bị bỏ qua dù khoá ref chưa giữ; nút báo bận bằng aria và KHÔNG disabled (giữ focus)', (compact) => {
     mocks.pending = true;
-    mounted = render(<DailyCheckInCard authed />);
+    mounted = render(<DailyCheckInCard authed compact={compact} />);
     press();
     expect(mocks.checkIn).not.toHaveBeenCalled();
-    expect(checkInButton().getAttribute('aria-busy')).toBe('true');
+    const b = checkInButton();
+    expect(b.getAttribute('aria-busy')).toBe('true');
+    expect(b.getAttribute('aria-disabled')).toBe('true');
+    expect((b as HTMLButtonElement).disabled).toBe(false);
   });
 });
 
 describe('DailyCheckInCard (web): tải trạng thái lỗi', () => {
+  it('Thử lại chạm đúp cùng khung hình chỉ tải lại một lần; nút báo bận tới khi tải xong', async () => {
+    const pending = deferred<void>();
+    const refetch = vi.fn(() => pending.promise);
+    mocks.statusQ = { isLoading: false, isError: true, isFetching: false, error: new Error('Mất mạng'), refetch };
+    mounted = render(<DailyCheckInCard authed />);
+    const retry = byText(mounted.container, 'button', /Thử lại/) as HTMLButtonElement;
+    await act(async () => {
+      retry.click();
+      retry.click();
+    });
+    expect(refetch).toHaveBeenCalledTimes(1);
+    expect(retry.getAttribute('aria-busy')).toBe('true');
+    expect(retry.disabled).toBe(false);
+    await act(async () => pending.resolve());
+    expect(retry.getAttribute('aria-busy')).toBeNull();
+  });
+
   it('Thử lại gọi tải lại một lần; đang tải dở (isFetching) thì không gọi chồng', () => {
     const refetch = vi.fn();
     mocks.statusQ = { isLoading: false, isError: true, isFetching: true, error: new Error('Mất mạng'), refetch };

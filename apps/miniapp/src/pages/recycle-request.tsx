@@ -199,7 +199,7 @@ export default function RecycleRequestPage() {
         />,
       );
     }
-    return shell(<ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => void q.refetch()} />);
+    return shell(<ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => q.refetch()} />);
   }
   if (!r) return shell(<Skeleton height={120} />);
 

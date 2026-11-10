@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate, useSnackbar } from 'zmp-ui';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   getSubscriptions,
   setSubscriptionStatus,
@@ -22,6 +22,7 @@ import { Card } from './ui/card';
 import { EmptyState, ErrorState } from './ui/empty-state';
 import { LineItemSkeleton } from './ui/skeleton';
 import { Text } from './ui/text';
+import { useLockedMutation } from './game/use-locked-mutation';
 import { SubscriptionEditSheet } from './subscription-edit-sheet';
 import { addressText } from './subscription-options';
 import { ProductThumb } from './ui/product-thumb';
@@ -50,7 +51,20 @@ export function SubscriptionsPanel() {
   const addrQ = useQuery({ queryKey: ['addresses'], queryFn: getAddresses, enabled: authed && subs.length > 0 });
   const addressById = new Map((addrQ.data ?? []).map((a) => [a.id, a]));
 
-  const statusMut = useMutation({
+  // Tạm dừng/Tiếp tục/Huỷ và Bỏ qua kỳ loại trừ nhau trên mọi gói (giao diện cũng khoá hết nút thẻ khi một việc đang chạy): một việc
+  // mỗi lúc, khoá ref vì `isPending` chỉ đúng sau lần vẽ kế tiếp (chạm "Tạm dừng" rồi "Vẫn huỷ" sát nhau vẫn gửi cả hai lệnh).
+  const acting = useRef(false);
+  const releaseActing = () => {
+    acting.current = false;
+  };
+  const exclusive = (run: () => void) => {
+    if (acting.current) return;
+    acting.current = true;
+    run();
+  };
+
+  const statusMut = useLockedMutation({
+    onSettled: releaseActing,
     mutationFn: ({ id, status }: { id: string; status: SubStatus }) => setSubscriptionStatus(id, status),
     onSuccess: () => {
       haptic('light');
@@ -59,7 +73,8 @@ export function SubscriptionsPanel() {
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
 
-  const skipMut = useMutation({
+  const skipMut = useLockedMutation({
+    onSettled: releaseActing,
     mutationFn: (id: string) => skipSubscriptionCycle(id),
     onSuccess: () => {
       haptic('light');
@@ -75,8 +90,8 @@ export function SubscriptionsPanel() {
   const pending = statusMut.isPending ? statusMut.variables?.status : undefined;
   const sheetBusy = statusMut.isPending || skipMut.isPending;
   const changeFromSheet = (status: SubStatus) => {
-    if (!cancelTarget || sheetBusy) return;
-    statusMut.mutate({ id: cancelTarget, status }, { onSuccess: () => setCancelTarget(null) });
+    if (!cancelTarget) return;
+    exclusive(() => statusMut.mutate({ id: cancelTarget, status }, { onSuccess: () => setCancelTarget(null) }));
   };
 
   return (
@@ -98,7 +113,7 @@ export function SubscriptionsPanel() {
           <LineItemSkeleton />
         </>
       ) : subsQ.isError ? (
-        <ErrorState variant="inline" message={getLoadErrorMessage(subsQ.error)} onRetry={() => void subsQ.refetch()} />
+        <ErrorState variant="inline" message={getLoadErrorMessage(subsQ.error)} onRetry={() => subsQ.refetch()} />
       ) : subs.length > 0 ? (
         subs.map((s) => (
           <SubscriptionCard
@@ -108,7 +123,7 @@ export function SubscriptionsPanel() {
             toggling={statusMut.isPending && statusMut.variables?.id === s.id && cancelTarget === null}
             address={s.addressId ? addressById.get(s.addressId) : undefined}
             onEdit={() => setEditTarget(s.id)}
-            onToggle={() => statusMut.mutate({ id: s.id, status: s.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE' })}
+            onToggle={() => exclusive(() => statusMut.mutate({ id: s.id, status: s.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE' }))}
             onCancel={() => setCancelTarget(s.id)}
           />
         ))
@@ -150,8 +165,8 @@ export function SubscriptionsPanel() {
               loading={skipMut.isPending}
               disabled={statusMut.isPending}
               onPress={() => {
-                if (!cancelTarget || sheetBusy) return;
-                skipMut.mutate(cancelTarget);
+                if (!cancelTarget) return;
+                exclusive(() => skipMut.mutate(cancelTarget));
               }}
             >
               {vi.subscriptions.skipCta}

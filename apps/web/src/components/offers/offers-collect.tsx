@@ -65,7 +65,7 @@ export function OffersCollect({ walletCodes, walletLoading }: { walletCodes: Rea
     return (
       <section aria-labelledby={titleId}>
         <SectionHeader id={titleId} title={title} icon="ticket" />
-        <ErrorState variant="inline" title={fillCopy('coupon.loadError')} message={loadErrorText(q.error)} onRetry={() => void q.refetch()} />
+        <ErrorState variant="inline" title={fillCopy('coupon.loadError')} message={loadErrorText(q.error)} onRetry={() => q.refetch()} />
       </section>
     );
   }
@@ -93,7 +93,12 @@ export function OffersCollect({ walletCodes, walletLoading }: { walletCodes: Rea
             key={row.view.code}
             voucher={row.view}
             variant="ticket"
-            primary={{ label: fillCopy('coupon.save'), onClick: () => void claim(row.view.code), busy: pendingCode === row.view.code }}
+            primary={{
+              label: fillCopy('coupon.save'),
+              onClick: () => void claim(row.view.code),
+              busy: pendingCode === row.view.code,
+              disabled: Boolean(pendingCode) && pendingCode !== row.view.code,
+            }}
             expiring={isCouponExpiring(row.coupon, now)}
           />
         ))}

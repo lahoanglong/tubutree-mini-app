@@ -84,17 +84,26 @@ export default function BankPaymentPage() {
 
   const remaining = useRemaining(data?.paymentDeadline);
 
+  // Khoá đồng bộ THEO TỪNG DÒNG chép (khoá là nhãn): hai cú chạm cùng nhịp vào một dòng chỉ ghi clipboard một lần, còn chạm sang
+  // dòng khác vẫn chạy để không nuốt tay khách (nuốt thì khách dán nhầm giá trị mà không có phản hồi nào).
+  const copyingRef = useRef(new Set<string>());
   const copy = async (text: string, label: string): Promise<boolean> => {
-    haptic('light');
-    // Chỉ báo "Đã sao chép" SAU KHI ghi clipboard thật sự thành công — báo thành công giả ở đây là
-    // khách dán nhầm số tài khoản cũ khi chuyển khoản.
-    const ok = await copyText(text);
-    openSnackbar(
-      ok
-        ? { text: `Đã sao chép ${label}`, type: 'success', position: 'top' }
-        : { text: bankCopyFailed(label), type: 'error', position: 'top' },
-    );
-    return ok;
+    if (copyingRef.current.has(label)) return false;
+    copyingRef.current.add(label);
+    try {
+      haptic('light');
+      // Chỉ báo "Đã sao chép" SAU KHI ghi clipboard thật sự thành công — báo thành công giả ở đây là
+      // khách dán nhầm số tài khoản cũ khi chuyển khoản.
+      const ok = await copyText(text);
+      openSnackbar(
+        ok
+          ? { text: `Đã sao chép ${label}`, type: 'success', position: 'top' }
+          : { text: bankCopyFailed(label), type: 'error', position: 'top' },
+      );
+      return ok;
+    } finally {
+      copyingRef.current.delete(label);
+    }
   };
 
   // Cờ RIÊNG cho thao tác bấm tay. Dùng `isFetching` của query sẽ bật/tắt theo nhịp poll nền 4
@@ -205,7 +214,7 @@ export default function BankPaymentPage() {
           message={loadErrorMessage(error)}
           showSupport={false}
           retrying={isFetching}
-          onRetry={() => void refetch()}
+          onRetry={() => refetch()}
         />
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, marginTop: -24, padding: '0 32px 40px' }}>
           <Button variant="secondary" onPress={() => navigate(`/order/${code}`, { replace: true })}>

@@ -225,6 +225,51 @@ describe('/cong-dong/su-kien — chi tiết sự kiện', () => {
   });
 });
 
+describe('/cong-dong/su-kien — nút bận giữ focus, vùng báo luôn có trong DOM', () => {
+  it('"Xem thêm bài dự thi": đang tải thì aria-busy + aria-disabled, không disabled (giữ focus), bấm tiếp không gọi thêm trang', async () => {
+    entryPages = [{ posts: [POST('p1')], nextCursor: 'cur-2' }, { posts: [POST('p3')], nextCursor: null }];
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const base = mocks.get.getMockImplementation()!;
+    mocks.get.mockImplementation(async (path: string, o?: { query?: { cursor?: string } }) => {
+      if (path === '/feed/events/e1/posts' && o?.query?.cursor) await gate;
+      return base(path, o);
+    });
+    const { container } = await mount();
+    await openEvent(container, 'Sự kiện e1');
+    const more = () => Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find((b) => /^(Xem thêm bài dự thi|Đang tải…)$/.test(b.textContent ?? ''))!;
+    more().focus();
+    click(more());
+    await flush(2);
+    expect(more().textContent).toBe('Đang tải…');
+    expect(more().getAttribute('aria-busy')).toBe('true');
+    expect(more().getAttribute('aria-disabled')).toBe('true');
+    expect(more().disabled).toBe(false);
+    expect(document.activeElement).toBe(more());
+    click(more());
+    await flush(2);
+    expect(mocks.get.mock.calls.filter((c) => c[0] === '/feed/events/e1/posts' && c[1]?.query?.cursor === 'cur-2')).toHaveLength(1);
+    release();
+    await flush(6);
+    expect(container.querySelector('a[href="/cong-dong/p3"]')).not.toBeNull();
+  });
+
+  it('vùng báo đăng bài luôn có trong DOM (trống thì sr-only), đổi chữ trên cùng phần tử', async () => {
+    const { container } = await mount();
+    const status = container.querySelector('[role="status"]')!;
+    expect(status.textContent).toBe('');
+    expect(status.className).toBe('sr-only');
+    await openEvent(container, 'Sự kiện e1');
+    click(btn(container, 'Đăng bài dự thi'));
+    await flush(2);
+    click(btn(container, 'đã đăng'));
+    await flush(6);
+    expect(container.querySelector('[role="status"]')).toBe(status);
+    expect(status.textContent).toContain('Đã đăng bài');
+    expect(status.className).not.toContain('sr-only');
+  });
+});
+
 describe('/cong-dong/su-kien — tiêu đề, vùng chạm, truy cập', () => {
   it('có đúng một h1 ở mọi trạng thái, kể cả khi xem chi tiết', async () => {
     mocks.auth.status = 'idle';

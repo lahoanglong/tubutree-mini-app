@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
-import { captureUnhandledRejections } from '@/test-utils/unhandled';
 import { act } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { captureUnhandledRejections } from '@/test-utils/unhandled';
 import { ErrorState } from './error-state';
 
 vi.mock('@/lib/core-http', () => ({
@@ -68,55 +68,90 @@ describe('ErrorState', () => {
     expect(container.querySelector('a')).toBeNull();
   });
 
-  describe('Thử lại trả lời hứa (refetch)', () => {
-    const retryButton = (c: HTMLElement) => c.querySelector('button')!;
-    const clickTwiceInOneTick = (el: HTMLElement) =>
-      act(() => {
-        el.click();
-        el.click();
+  describe('Thử lại khoá chạm đúp', () => {
+    const gate = () => {
+      let resolve!: () => void;
+      let reject!: (e: unknown) => void;
+      const promise = new Promise<void>((res, rej) => {
+        resolve = res;
+        reject = rej;
       });
+      return { promise, resolve, reject };
+    };
+    const tapTwice = async (b: HTMLElement) => {
+      await act(async () => {
+        b.click();
+        b.click();
+      });
+    };
 
-    it('hai cú bấm cùng khung hình chỉ gọi onRetry một lần; nút báo aria-busy + aria-disabled, KHÔNG disabled thật; xong thì bấm lại được', async () => {
-      let done!: () => void;
-      const onRetry = vi.fn(() => new Promise<void>((r) => { done = r; }));
+    it('onRetry trả Promise: hai cú chạm cùng khung hình chỉ gọi một lần; nút báo bận bằng aria, không disabled; xong thì bấm lại được', async () => {
+      const g = gate();
+      const onRetry = vi.fn(() => g.promise);
       const { container } = mount(<ErrorState onRetry={onRetry} />);
-      clickTwiceInOneTick(retryButton(container));
+      const b = container.querySelector('button')!;
+      await tapTwice(b);
       expect(onRetry).toHaveBeenCalledTimes(1);
-      expect(retryButton(container).getAttribute('aria-busy')).toBe('true');
-      expect(retryButton(container).getAttribute('aria-disabled')).toBe('true');
-      expect(retryButton(container).disabled).toBe(false);
-      click(retryButton(container));
-      expect(onRetry).toHaveBeenCalledTimes(1);
-
-      await act(async () => done());
-      await flush();
-      expect(retryButton(container).hasAttribute('aria-busy')).toBe(false);
-      click(retryButton(container));
+      expect(b.getAttribute('aria-busy')).toBe('true');
+      expect(b.getAttribute('aria-disabled')).toBe('true');
+      expect(b.disabled).toBe(false);
+      await act(async () => {
+        g.resolve();
+        await g.promise;
+      });
+      expect(b.getAttribute('aria-busy')).toBeNull();
+      expect(b.getAttribute('aria-disabled')).toBeNull();
+      click(b);
+      await flush(1);
       expect(onRetry).toHaveBeenCalledTimes(2);
     });
 
-    it('lời hứa bị từ chối: nhả khoá để bấm lại được và lỗi vẫn lên unhandledrejection (không bị nuốt)', async () => {
-      const boom = new Error('mạng đứt');
-      const onRetry = vi.fn(() => Promise.reject(boom));
+    it('Promise bị từ chối: nhả khoá để bấm lại được và ném lại đúng lỗi (không nuốt)', async () => {
+      const g = gate();
+      const onRetry = vi.fn().mockReturnValueOnce(g.promise).mockReturnValue(undefined);
       const { container } = mount(<ErrorState onRetry={onRetry} />);
+      const b = container.querySelector('button')!;
+      const boom = new Error('mất mạng');
       const seen = await captureUnhandledRejections(async () => {
-        click(retryButton(container));
-        await flush();
+        await tapTwice(b);
+        await act(async () => {
+          g.reject(boom);
+          await g.promise.catch(() => undefined);
+        });
       });
       expect(seen).toEqual([boom]);
-      expect(retryButton(container).hasAttribute('aria-busy')).toBe(false);
-      await captureUnhandledRejections(async () => {
-        click(retryButton(container));
-        await flush();
-      });
+      expect(b.getAttribute('aria-busy')).toBeNull();
+      click(b);
       expect(onRetry).toHaveBeenCalledTimes(2);
     });
 
-    it('onRetry không trả lời hứa (void) thì không khoá: giữ hành vi cũ', () => {
-      const onRetry = vi.fn();
+    it('onRetry ném đồng bộ: không để khoá kẹt, lần bấm sau vẫn gọi được', () => {
+      let n = 0;
+      const onRetry = vi.fn(() => {
+        n += 1;
+        if (n === 1) throw new Error('ném đồng bộ');
+      });
       const { container } = mount(<ErrorState onRetry={onRetry} />);
-      clickTwiceInOneTick(retryButton(container));
+      const b = container.querySelector('button')!;
+      // React đưa lỗi ném trong handler lên `window.error`; chặn mặc định để vitest không tính nó là lỗi chưa bắt.
+      const swallow = (e: ErrorEvent) => e.preventDefault();
+      window.addEventListener('error', swallow);
+      try {
+        click(b);
+        click(b);
+      } finally {
+        window.removeEventListener('error', swallow);
+      }
       expect(onRetry).toHaveBeenCalledTimes(2);
+    });
+
+    it('nút "Về trang chủ" không bao giờ báo bận', async () => {
+      const onHome = vi.fn();
+      const { container } = mount(<ErrorState onHome={onHome} />);
+      const b = container.querySelector('button')!;
+      await tapTwice(b);
+      expect(onHome).toHaveBeenCalledTimes(2);
+      expect(b.getAttribute('aria-busy')).toBeNull();
     });
   });
 });

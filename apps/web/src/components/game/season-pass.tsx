@@ -45,7 +45,7 @@ export function SeasonPass({
   return (
     <GameCard title="Chặng Mùa" icon={Ticket}>
       <p className="text-caption text-stone-700">{`Điểm danh mỗi ngày để lên bậc mùa "${pass.seasonTitle ?? ''}"`}</p>
-      <div className="mb-1 mt-2.5 flex justify-between text-caption">
+      <div className="mb-1 mt-2.5 flex justify-between text-caption tabular-nums">
         <span className="font-semibold text-forest-700">{xpText(xp)}</span>
         <span className="text-stone-600">{xpText(maxXp)}</span>
       </div>
@@ -83,8 +83,13 @@ export function SeasonPass({
                   ) : pointsHidden(t.free) ? null : (
                     <button
                       type="button"
-                      disabled={!t.unlocked || busy('free')}
-                      onClick={() => onClaim(t.tier, 'free')}
+                      disabled={!t.unlocked}
+                      aria-busy={busy('free') || undefined}
+                      aria-disabled={busy('free') || undefined}
+                      onClick={() => {
+                        if (busy('free')) return;
+                        onClaim(t.tier, 'free');
+                      }}
                       className={`${ui.btnPrimary} mt-1 w-full gap-1`}
                     >
                       {!t.unlocked && <Lock className="h-4 w-4" aria-hidden="true" />}
@@ -103,8 +108,13 @@ export function SeasonPass({
                   ) : pointsHidden(t.premium) ? null : (
                     <button
                       type="button"
-                      disabled={premiumLocked || busy('premium')}
-                      onClick={() => onClaim(t.tier, 'premium')}
+                      disabled={premiumLocked}
+                      aria-busy={busy('premium') || undefined}
+                      aria-disabled={busy('premium') || undefined}
+                      onClick={() => {
+                        if (busy('premium')) return;
+                        onClaim(t.tier, 'premium');
+                      }}
                       className={`${miniBtnSecondary} mt-1 w-full gap-1`}
                     >
                       {premiumLocked && <Lock className="h-4 w-4" aria-hidden="true" />}

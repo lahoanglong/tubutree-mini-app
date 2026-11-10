@@ -276,6 +276,65 @@ describe('AccountDeletionSection: khoá khi đang gửi yêu cầu', () => {
   });
 });
 
+describe('AccountDeletionSection: nút gửi yêu cầu khoá đồng bộ chạm đúp (W78A)', () => {
+  const readyToSend = async () => {
+    mount();
+    await openCard();
+    await waitFor(() => expect(submitBtn()).toBeEnabled());
+  };
+
+  it('chạm đúp "Gửi yêu cầu xoá" trong cùng một khung hình chỉ gửi một yêu cầu; xong báo, mở OA và đóng thẻ một lần', async () => {
+    mocks.hasOA = true;
+    const pending = deferred<{ message: string }>();
+    mocks.requestAccountDeletion.mockReturnValue(pending.promise);
+    await readyToSend();
+    const send = submitBtn();
+    await act(async () => {
+      fireEvent.click(send);
+      fireEvent.click(send);
+    });
+    expect(mocks.requestAccountDeletion).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(submitBtn()).toHaveAttribute('aria-busy', 'true'));
+    await act(async () => pending.resolve({ message: 'Đã ghi nhận yêu cầu' }));
+    await waitFor(() => expect(screen.queryByText('Xoá tài khoản vĩnh viễn?')).toBeNull());
+    expect(mocks.openSnackbar.mock.calls.filter(([o]) => (o as { type: string }).type === 'info')).toHaveLength(1);
+    expect(mocks.openOAChat).toHaveBeenCalledTimes(1);
+  });
+
+  it('lỗi thì nhả khoá: chạm đúp chỉ báo lỗi một lần, bấm lại gọi lần hai và thành công thì đóng thẻ', async () => {
+    const pending = deferred<{ message: string }>();
+    mocks.requestAccountDeletion.mockReturnValueOnce(pending.promise);
+    await readyToSend();
+    const send = submitBtn();
+    await act(async () => {
+      fireEvent.click(send);
+      fireEvent.click(send);
+    });
+    expect(mocks.requestAccountDeletion).toHaveBeenCalledTimes(1);
+    await act(async () => pending.reject(new Error('boom')));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'lỗi gửi', type: 'error' }));
+    expect(mocks.openSnackbar.mock.calls.filter(([o]) => (o as { type: string }).type === 'error')).toHaveLength(1);
+    await waitFor(() => expect(submitBtn()).not.toHaveAttribute('aria-busy'));
+    expect(screen.getByText('Xoá tài khoản vĩnh viễn?')).toBeInTheDocument();
+
+    fireEvent.click(submitBtn());
+    await waitFor(() => expect(mocks.requestAccountDeletion).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByText('Xoá tài khoản vĩnh viễn?')).toBeNull());
+  });
+
+  it('nút "Xoá tài khoản" mở thẻ xác nhận chỉ một thẻ dù chạm đúp; chưa gửi gì lên máy chủ', async () => {
+    mount();
+    const open = await screen.findByRole('button', { name: 'Xoá tài khoản' });
+    await act(async () => {
+      fireEvent.click(open);
+      fireEvent.click(open);
+    });
+    expect(screen.getAllByText('Xoá tài khoản vĩnh viễn?')).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: /Gửi yêu cầu xoá/ })).toHaveLength(1);
+    expect(mocks.requestAccountDeletion).not.toHaveBeenCalled();
+  });
+});
+
 describe('AccountDeletionSection: số đều (tabular-nums)', () => {
   it('dòng báo số dư Ví mất có tabular-nums', async () => {
     mocks.getWallet.mockResolvedValue({ walletBalance: 20000 });

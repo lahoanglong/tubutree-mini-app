@@ -40,9 +40,7 @@ export function DailyCheckInCard({ authed, compact = false, guestNote = true }: 
           variant="inline"
           title={checkInCopy.loadErrorTitle}
           message={errText(statusQ.error)}
-          onRetry={() => {
-            if (!statusQ.isFetching) void statusQ.refetch();
-          }}
+          onRetry={() => (statusQ.isFetching ? undefined : statusQ.refetch())}
         />
       </Card>
     );
@@ -63,7 +61,7 @@ export function DailyCheckInCard({ authed, compact = false, guestNote = true }: 
   // Bản gọn luôn có một hàng dưới 7 ô ("Nhận ..." phần thưởng hôm nay, hoặc "đã điểm danh" khi xong): thẻ cao như nhau trước và sau khi điểm danh.
   const todayRow = checkInTodayLine(status, { short: true }) ?? (status.checkedInToday ? checkInCopy.alreadyDone : null);
   return (
-    <div data-testid="daily-check-in">
+    <div data-testid="daily-check-in" className="tabular-nums">
       <Card padding={compact ? 12 : 16}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: compact ? 8 : 12 }}>
           {!compact && (
@@ -101,7 +99,7 @@ export function DailyCheckInCard({ authed, compact = false, guestNote = true }: 
           </div>
           {/* Nút đệm 12px, bỏ min-width 120px của ZaUI (như thanh dính): "Đã điểm danh" hẹp lại để tiêu đề không gãy dòng ở 360px. */}
           {compact && (
-            <Button disabled={!view.canCheckIn || pending} loading={pending} onPress={handleCheckIn} style={{ flex: '0 0 auto', minWidth: 0, paddingLeft: 12, paddingRight: 12 }}>
+            <Button disabled={!view.canCheckIn} loading={pending} onPress={handleCheckIn} style={{ flex: '0 0 auto', minWidth: 0, paddingLeft: 12, paddingRight: 12 }}>
               {view.buttonLabel}
             </Button>
           )}
@@ -156,7 +154,7 @@ export function DailyCheckInCard({ authed, compact = false, guestNote = true }: 
         )}
         {status.pointsBlocked && guestNote && <GuestPointsNote margin="10px 0 0" />}
         {!compact && (
-          <Button fullWidth disabled={!view.canCheckIn || pending} loading={pending} onPress={handleCheckIn} style={{ marginTop: 12 }}>
+          <Button fullWidth disabled={!view.canCheckIn} loading={pending} onPress={handleCheckIn} style={{ marginTop: 12 }}>
             {view.buttonLabel}
           </Button>
         )}

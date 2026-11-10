@@ -620,3 +620,138 @@ describe('Thanh toán chuyển khoản: lưu mã QR (R-8) và bố cục (R-96)'
     expect(within(screen.getByTestId('sticky-bar')).getByRole('button', { name: /Tôi đã chuyển khoản/ })).toBeInTheDocument();
   });
 });
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+describe('Thanh toán chuyển khoản: chạm đúp cùng nhịp không gọi lặp (W78A)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getBankQr.mockResolvedValue(QR);
+    mocks.copyText.mockResolvedValue(true);
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  it('chạm đúp cùng nhịp vào một nút sao chép: chỉ ghi clipboard một lần và báo một thông báo', async () => {
+    const d = deferred<boolean>();
+    mocks.copyText.mockReturnValue(d.promise);
+    renderPage();
+    const btn = await screen.findByRole('button', { name: 'Sao chép số tài khoản' });
+    await act(async () => {
+      fireEvent.click(btn);
+      fireEvent.click(btn);
+    });
+    expect(mocks.copyText).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      d.resolve(true);
+    });
+    expect(mocks.copyText).toHaveBeenCalledTimes(1);
+    expect(mocks.openSnackbar).toHaveBeenCalledTimes(1);
+    expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã sao chép số tài khoản', type: 'success', position: 'top' });
+  });
+
+  it('chạm hai dòng sao chép khác nhau cùng nhịp: cả hai dòng đều được chép, mỗi thông báo gọi đúng tên dòng của nó', async () => {
+    const account$ = deferred<boolean>();
+    const memo$ = deferred<boolean>();
+    mocks.copyText.mockReturnValueOnce(account$.promise).mockReturnValueOnce(memo$.promise);
+    renderPage();
+    const account = await screen.findByRole('button', { name: 'Sao chép số tài khoản' });
+    const memo = screen.getByRole('button', { name: 'Sao chép nội dung chuyển khoản' });
+    await act(async () => {
+      fireEvent.click(account);
+      fireEvent.click(memo);
+    });
+    expect(mocks.copyText).toHaveBeenCalledTimes(2);
+    expect(mocks.copyText).toHaveBeenNthCalledWith(1, '0123456789');
+    expect(mocks.copyText).toHaveBeenNthCalledWith(2, 'TT001');
+    await act(async () => {
+      account$.resolve(true);
+      memo$.resolve(true);
+    });
+    expect(mocks.openSnackbar).toHaveBeenCalledTimes(2);
+    expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã sao chép số tài khoản', type: 'success', position: 'top' });
+    expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã sao chép nội dung chuyển khoản', type: 'success', position: 'top' });
+    expect(screen.getAllByRole('status')).toHaveLength(2);
+  });
+
+  it('chép không được (clipboard từ chối) thì nhả khoá: bấm lại gọi clipboard lần nữa', async () => {
+    mocks.copyText.mockResolvedValueOnce(false).mockResolvedValue(true);
+    renderPage();
+    const btn = await screen.findByRole('button', { name: 'Sao chép số tiền' });
+    fireEvent.click(btn);
+    await waitFor(() =>
+      expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Không thể sao chép số tiền. Bạn chép thủ công nhé.', type: 'error', position: 'top' }),
+    );
+    fireEvent.click(btn);
+    await waitFor(() => expect(mocks.copyText).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã sao chép số tiền', type: 'success', position: 'top' }));
+  });
+
+  it('chạm đúp cùng nhịp vào nút Kiểm tra: chỉ dò trạng thái thêm một lần, nút báo bận tới khi xong', async () => {
+    const d = deferred<typeof QR>();
+    mocks.getBankQr.mockResolvedValueOnce(QR).mockReturnValueOnce(d.promise);
+    renderPage();
+    const btn = await screen.findByRole('button', { name: /Tôi đã chuyển khoản/ });
+    expect(mocks.getBankQr).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      fireEvent.click(btn);
+      fireEvent.click(btn);
+    });
+    expect(mocks.getBankQr).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(btn).toHaveAttribute('aria-busy', 'true'));
+    await act(async () => {
+      d.resolve({ ...QR, paymentStatus: 'UNPAID' });
+    });
+    await waitFor(() => expect(btn).not.toHaveAttribute('aria-busy'));
+    expect(mocks.getBankQr).toHaveBeenCalledTimes(2);
+    expect(mocks.openSnackbar).toHaveBeenCalledTimes(1);
+    expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: BANK_NOT_RECEIVED, type: 'warning', position: 'top' });
+  });
+
+  it('Kiểm tra gặp lỗi mạng thì nhả khoá: bấm lại dò thêm lần nữa', async () => {
+    mocks.getBankQr.mockResolvedValueOnce(QR).mockRejectedValueOnce(new Error('Network Error')).mockResolvedValue(QR);
+    renderPage();
+    const btn = await screen.findByRole('button', { name: /Tôi đã chuyển khoản/ });
+    fireEvent.click(btn);
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: BANK_CHECK_NETWORK, type: 'error', position: 'top' }));
+    await waitFor(() => expect(btn).not.toHaveAttribute('aria-busy'));
+    fireEvent.click(btn);
+    await waitFor(() => expect(mocks.getBankQr).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: BANK_NOT_RECEIVED, type: 'warning', position: 'top' }));
+  });
+
+  it('chạm đúp cùng nhịp vào Lưu mã QR: chỉ gọi cầu nối lưu ảnh một lần', async () => {
+    const d = deferred<'saved' | 'failed'>();
+    const save = vi.spyOn(platformBridge, 'saveImage').mockReturnValue(d.promise);
+    renderPage();
+    const btn = await screen.findByRole('button', { name: 'Lưu mã QR' });
+    await act(async () => {
+      fireEvent.click(btn);
+      fireEvent.click(btn);
+    });
+    expect(save).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      d.resolve('saved');
+    });
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText('Đã lưu ảnh QR vào máy.')).toBeInTheDocument();
+  });
+
+  it('Lưu mã QR báo lỗi thì nhả khoá: bấm lại gọi cầu nối lần nữa', async () => {
+    const save = vi.spyOn(platformBridge, 'saveImage').mockResolvedValueOnce('failed').mockResolvedValue('saved');
+    renderPage();
+    const btn = await screen.findByRole('button', { name: 'Lưu mã QR' });
+    fireEvent.click(btn);
+    expect(await screen.findByText(/Chưa lưu được/)).toBeInTheDocument();
+    fireEvent.click(btn);
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText('Đã lưu ảnh QR vào máy.')).toBeInTheDocument();
+  });
+});

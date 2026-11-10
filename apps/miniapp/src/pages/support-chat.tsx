@@ -70,7 +70,11 @@ function ChatLoginInvite({ onDone }: { onDone: () => void }) {
   const ensurePhoneOrThrow = useAuthStore((s) => s.ensurePhoneOrThrow);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
+  // `busy` chỉ đúng sau lần vẽ kế: hai cú chạm cùng nhịp vẫn thấy false và mở hộp xin SĐT hai lần.
+  const busyRef = useRef(false);
   const login = async () => {
+    if (busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
     setFailed(null);
     try {
@@ -80,6 +84,7 @@ function ChatLoginInvite({ onDone }: { onDone: () => void }) {
     } catch (e) {
       setFailed(getErrorMessage(e));
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   };
@@ -109,6 +114,11 @@ function ChatBody({ onLoginRequired }: { onLoginRequired: () => void }) {
   );
   const [contextUsed, setContextUsed] = useState(false);
   const contextUsedRef = useRef(false);
+  // Hàng câu hỏi nhanh chỉ dùng được một lần mỗi lần trống: hai chip (hoặc một chip chạm đúp) cùng nhịp đều thấy hàng còn hiện
+  // vì danh sách chưa kịp vẽ lại, và mỗi lần enqueue lại sinh clientMsgId mới nên máy chủ không gộp được thành một tin.
+  const quickPickedRef = useRef(false);
+  // `loadingOlder` chỉ đổi sau lần vẽ kế nên hai cú chạm cùng nhịp đều thấy false và tải cùng một trang hai lần.
+  const loadingOlderRef = useRef(false);
   const [visible, setVisible] = useState(() => document.visibilityState === 'visible');
   const [seen, setSeen] = useState<Map<string, SupportChatMessageDTO>>(() => new Map());
   const [olderHasMore, setOlderHasMore] = useState<boolean | null>(null);
@@ -237,9 +247,15 @@ function ChatBody({ onLoginRequired }: { onLoginRequired: () => void }) {
     return [...server.map(toItem), ...local];
   }, [server, pending, deliver]);
 
+  const listEmpty = items.length === 0;
+  useEffect(() => {
+    if (listEmpty) quickPickedRef.current = false;
+  }, [listEmpty]);
+
   const loadOlder = async () => {
     const oldest = server[0]?.id;
-    if (!oldest || loadingOlder) return;
+    if (!oldest || loadingOlderRef.current) return;
+    loadingOlderRef.current = true;
     setLoadingOlder(true);
     try {
       const page = await getSupportChatPage({ before: oldest });
@@ -252,6 +268,7 @@ function ChatBody({ onLoginRequired }: { onLoginRequired: () => void }) {
     } catch (e) {
       openSnackbar({ text: chatErrorText(e), type: 'error' });
     } finally {
+      loadingOlderRef.current = false;
       setLoadingOlder(false);
     }
   };
@@ -272,7 +289,7 @@ function ChatBody({ onLoginRequired }: { onLoginRequired: () => void }) {
     );
   }
   if (threadLoginRequired) return null;
-  if (!thread) return <ErrorState message={chatErrorText(threadQ.error)} onRetry={() => void threadQ.refetch()} />;
+  if (!thread) return <ErrorState message={chatErrorText(threadQ.error)} onRetry={() => threadQ.refetch()} />;
 
   // Chat tắt: còn lịch sử thì vẫn cho đọc (chỉ đọc, phần liên hệ thay ô nhập); chưa có tin nào thì cả màn là phần liên hệ.
   const closed = !thread.enabled && !thread.blocked;
@@ -285,7 +302,11 @@ function ChatBody({ onLoginRequired }: { onLoginRequired: () => void }) {
   // Lời chào là bong bóng phía client (không lưu): luôn nằm đầu cuộc trò chuyện, tức khi không còn tin cũ hơn để tải.
   const showGreeting = !closed && !closedText && !(olderHasMore ?? thread.hasMore);
   const greeting: ChatItem = { key: 'greeting', sender: 'STAFF', body: supportCopy.greeting(support?.hours ?? null), imageUrl: null, createdAt: null, status: 'sent' };
-  const pickQuick = (q: QuickReply) => enqueue(q.body, null, shippingCode && q.body.includes(shippingCode) ? { orderCode: shippingCode } : undefined);
+  const pickQuick = (q: QuickReply) => {
+    if (quickPickedRef.current) return;
+    quickPickedRef.current = true;
+    enqueue(q.body, null, shippingCode && q.body.includes(shippingCode) ? { orderCode: shippingCode } : undefined);
+  };
   const productName = productSlug ? qc.getQueryData<{ name?: string }>(['product', productSlug])?.name ?? productSlug : null;
   const chipLabel = orderCode ? `Về đơn ${orderCode}` : productName ? `Về sản phẩm ${productName}` : null;
 
