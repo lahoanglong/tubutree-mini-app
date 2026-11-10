@@ -1,7 +1,9 @@
 import { act, render as rtlRender, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { WALLET_FORFEIT_AGREE, WALLET_FORFEIT_LOADING, WALLET_FORFEIT_UNKNOWN } from '../utils/account-deletion-copy';
+import { HttpError } from '../services/http';
+import { LOCK_REFRESH_WAIT_MS } from '../utils/settle-within';
 
 const mocks = vi.hoisted(() => ({
   openSnackbar: vi.fn(),
@@ -342,5 +344,102 @@ describe('AccountDeletionSection: số đều (tabular-nums)', () => {
     await openCard();
     const notice = await screen.findByText(/Ví Tubu còn 20\.000đ/);
     expect(notice.style.fontVariantNumeric).toBe('tabular-nums');
+  });
+});
+
+describe('AccountDeletionSection: máy chủ từ chối vì số dư không còn khớp thì tải lại số dư rồi mới nhả khoá (W108A)', () => {
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message } } as never);
+  const errorToasts = () => mocks.openSnackbar.mock.calls.filter(([o]) => (o as { type: string }).type === 'error');
+  const TEMPORARY: [string, unknown][] = [
+    ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+    ['quá thời gian', new HttpError('timeout', 'ECONNABORTED')],
+    ['máy chủ lỗi 503', serverError('Service Unavailable', 503)],
+    ['hết phiên 401', serverError('Unauthorized', 401)],
+    ['lỗi không phải HTTP', new Error('boom')],
+  ];
+  /** Mở thẻ với số dư 20.000đ đã tick đồng ý; lần tải lại số dư kế tiếp do `refetch` quyết định. */
+  async function readyWithBalance(refetch: Promise<{ walletBalance: number }>) {
+    mocks.getWallet.mockResolvedValueOnce({ walletBalance: 20000 }).mockReturnValueOnce(refetch).mockResolvedValue({ walletBalance: 30000 });
+    mount();
+    await openCard();
+    await screen.findByText(/Ví Tubu còn 20\.000đ/);
+    fireEvent.click(agreeBox());
+    await waitFor(() => expect(submitBtn()).toBeEnabled());
+  }
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it.each([400, 404, 409])('bị từ chối %i: tải lại số dư, ô đồng ý và nút Huỷ khoá tới khi số mới về, rồi phải tick lại đúng số mới mới gửi được', async (status) => {
+    const refetch = deferred<{ walletBalance: number }>();
+    mocks.requestAccountDeletion.mockRejectedValueOnce(serverError('Số dư Ví vừa đổi.', status));
+    await readyWithBalance(refetch.promise);
+    const send = submitBtn();
+    await act(async () => {
+      fireEvent.click(send);
+      fireEvent.click(send);
+    });
+    await waitFor(() => expect(mocks.getWallet).toHaveBeenCalledTimes(2));
+    expect(mocks.requestAccountDeletion).toHaveBeenCalledTimes(1);
+    expect(errorToasts()).toHaveLength(1);
+    expect(submitBtn()).toHaveAttribute('aria-busy', 'true');
+    expect(agreeBox()).toBeDisabled();
+    expect(agreeBox()).not.toBeChecked();
+    expect(cancelBtn()).toBeDisabled();
+    fireEvent.click(submitBtn());
+    expect(mocks.requestAccountDeletion).toHaveBeenCalledTimes(1);
+
+    await act(async () => refetch.resolve({ walletBalance: 30000 }));
+    await screen.findByText(/Ví Tubu còn 30\.000đ/);
+    await waitFor(() => expect(agreeBox()).toBeEnabled());
+    expect(agreeBox()).not.toBeChecked();
+    expect(submitBtn()).toBeDisabled();
+    expect(cancelBtn()).toBeEnabled();
+    expect(errorToasts()).toHaveLength(1);
+
+    fireEvent.click(agreeBox());
+    await waitFor(() => expect(submitBtn()).toBeEnabled());
+    fireEvent.click(submitBtn());
+    await waitFor(() => expect(mocks.requestAccountDeletion).toHaveBeenCalledTimes(2));
+    expect(mocks.requestAccountDeletion).toHaveBeenLastCalledWith(undefined, { acknowledgedWalletBalance: 30000, acceptWalletForfeit: true });
+  });
+
+  it.each(TEMPORARY)('%s: khoá nhả ngay, không đợi số dư tải lại (ô đồng ý và Huỷ mở lại liền)', async (_label, error) => {
+    const refetch = deferred<{ walletBalance: number }>();
+    mocks.requestAccountDeletion.mockRejectedValueOnce(error);
+    await readyWithBalance(refetch.promise);
+    await act(async () => {
+      fireEvent.click(submitBtn());
+    });
+    await waitFor(() => expect(errorToasts()).toHaveLength(1));
+    await waitFor(() => expect(mocks.getWallet).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(submitBtn()).not.toHaveAttribute('aria-busy'));
+    expect(agreeBox()).toBeEnabled();
+    expect(cancelBtn()).toBeEnabled();
+    await act(async () => refetch.resolve({ walletBalance: 20000 }));
+  });
+
+  it('bị từ chối mà số dư tải lại treo mãi: khoá nhả đúng sau LOCK_REFRESH_WAIT_MS, không sớm hơn', async () => {
+    mocks.requestAccountDeletion.mockRejectedValueOnce(serverError('Số dư Ví vừa đổi.', 400));
+    await readyWithBalance(new Promise<{ walletBalance: number }>(() => undefined));
+    vi.useFakeTimers();
+    await act(async () => {
+      fireEvent.click(submitBtn());
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(mocks.getWallet).toHaveBeenCalledTimes(2);
+    expect(agreeBox()).toBeDisabled();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 1);
+    });
+    expect(agreeBox()).toBeDisabled();
+    expect(cancelBtn()).toBeDisabled();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(50);
+      for (let i = 0; i < 3; i++) await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(agreeBox()).toBeEnabled();
+    expect(cancelBtn()).toBeEnabled();
   });
 });

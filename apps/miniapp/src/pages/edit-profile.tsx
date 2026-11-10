@@ -8,9 +8,10 @@ import { formatDobDisplay, profileCopy } from '@tubutree/app-core/account-copy';
 import { DOB_PLACEHOLDER, maskDobInput, validateDobVn } from '@tubutree/app-core/dob-input';
 import { cleanProfileName, profileNameError } from '@tubutree/app-core/profile-name';
 import { getMe, updateMe } from '../services/account-api';
-import { getErrorMessage, getLoadErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage, isStaleStateError } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { haptic } from '../utils/haptic';
+import { settleWithin } from '../utils/settle-within';
 import { isCloudinaryConfigured, readAndCompressImage, uploadToCloudinary } from '../components/image-upload';
 import { ProfileAvatar } from '../components/account/profile-avatar';
 import { AvatarCropModal } from '../components/avatar-crop-modal';
@@ -52,9 +53,11 @@ export default function EditProfilePage() {
   const [rawImageForCrop, setRawImageForCrop] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Khách đã gõ hay đổi ảnh thì hồ sơ tải lại (sau khi máy chủ từ chối, khi quay lại app) chỉ đổi phần đọc thẳng từ hồ sơ như ngày sinh, không ghi đè ô đang sửa.
+  const editedRef = useRef(false);
 
   useEffect(() => {
-    if (meQ.data) {
+    if (meQ.data && !editedRef.current) {
       setFullName(meQ.data.fullName ?? '');
       setEmail(meQ.data.email ?? '');
       // `||` vì chuỗi rỗng cũng là chưa có ảnh; ảnh Zalo đã lưu vào user lúc đăng nhập.
@@ -67,13 +70,15 @@ export default function EditProfilePage() {
   const dobCheck = validateDobVn(dobText);
   const dob = dobEditable ? (dobCheck.iso ?? '') : (meQ.data?.dob ?? '');
   const dobNew = dobEditable && dob !== '';
+  // Hồ sơ tải lại (sau khi máy chủ từ chối) có thể đã có ngày sinh: khung xác nhận biến mất cùng nút "Không", nên cờ thô phải thôi khoá các ô khác.
+  const confirming = confirmingDob && dobNew;
   const dobDisplay = formatDobDisplay(dob);
   const dobError = dobEditable && (dobTouched || dobText.length === 10) ? dobCheck.error : null;
   const emailInvalid = touched && email.trim() !== '' && !EMAIL.test(email.trim());
   const nameError = touched ? profileNameError(fullName) : null;
 
   const handlePickAvatar = () => {
-    if (!canChangeAvatar || confirmingDob) return;
+    if (!canChangeAvatar || confirming) return;
     haptic('light');
     fileInputRef.current?.click();
   };
@@ -106,6 +111,7 @@ export default function EditProfilePage() {
       const blob = await (await fetch(croppedUrl)).blob();
       const secureUrl = await uploadToCloudinary(blob);
       if (secureUrl) {
+        editedRef.current = true;
         setAvatarUrl(secureUrl);
         setAvatarChanged(true);
         openSnackbar({ text: 'Đã chọn ảnh đại diện mới. Bấm "Lưu thay đổi" để lưu.', type: 'success', position: 'top' });
@@ -168,7 +174,12 @@ export default function EditProfilePage() {
       }
       navigate(-1);
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error', position: 'top' }),
+    // Máy chủ từ chối vì hồ sơ không còn khớp (ngày sinh đã đặt ở máy khác, hoặc lần gửi trước hết thời gian mà vẫn được ghi): tải lại hồ sơ rồi mới nhả khoá,
+    // để ô ngày sinh khoá lại và lần lưu kế không gửi ngày sinh nữa. Mất mạng, quá hạn, 401, 5xx không nói gì về hồ sơ thật: nhả ngay để thử lại.
+    onError: (e) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error', position: 'top' });
+      return isStaleStateError(e) ? settleWithin(qc.invalidateQueries({ queryKey: ['me'] })) : undefined;
+    },
   });
 
   const avatarFigure = (
@@ -258,8 +269,11 @@ export default function EditProfilePage() {
           <Field label="Họ và tên" error={nameError ?? undefined}>
             <Input
               value={fullName}
-              readOnly={confirmingDob}
-              onChange={(e) => setFullName(e.target.value)}
+              readOnly={confirming}
+              onChange={(e) => {
+                editedRef.current = true;
+                setFullName(e.target.value);
+              }}
               onBlur={() => setTouched(true)}
               maxLength={120}
               status={nameError ? 'error' : undefined}
@@ -270,8 +284,11 @@ export default function EditProfilePage() {
             <Input
               type="text"
               value={email}
-              readOnly={confirmingDob}
-              onChange={(e) => setEmail(e.target.value)}
+              readOnly={confirming}
+              onChange={(e) => {
+                editedRef.current = true;
+                setEmail(e.target.value);
+              }}
               onBlur={() => setTouched(true)}
               status={emailInvalid ? 'error' : undefined}
             />
@@ -283,7 +300,7 @@ export default function EditProfilePage() {
                 {...(dobEditable
                   ? { type: 'text', inputMode: 'numeric', placeholder: DOB_PLACEHOLDER, autoComplete: 'bday', value: dobText }
                   : { type: 'text', value: formatDobDisplay(meQ.data?.dob) || dob })}
-                readOnly={!dobEditable || confirmingDob}
+                readOnly={!dobEditable || confirming}
                 aria-invalid={dobError ? true : undefined}
                 onBlur={() => setDobTouched(true)}
                 onChange={(e) => {
@@ -323,7 +340,7 @@ export default function EditProfilePage() {
             ) : null}
           </div>
 
-          {confirmingDob && dobNew ? (
+          {confirming ? (
             <div role="alertdialog" aria-label={profileCopy.dobConfirm(dobDisplay)} style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 12, borderRadius: 'var(--radius-card)', background: 'var(--color-bg-subtle)' }}>
               <Text variant="body-md" tone="primary">{profileCopy.dobConfirm(dobDisplay)}</Text>
               <Button

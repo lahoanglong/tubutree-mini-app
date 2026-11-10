@@ -5,7 +5,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLockedMutation } from '../components/game/use-locked-mutation';
 import { getAddresses, type AddressDTO } from '../services/shop-api';
 import { updateAddress, deleteAddress } from '../services/account-api';
-import { getErrorMessage, getLoadErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage, isStaleStateError } from '../services/api';
+import { isHttpError } from '../services/http';
 import { haptic } from '../utils/haptic';
 import { settleWithin } from '../utils/settle-within';
 import { Badge } from '../components/ui/badge';
@@ -57,6 +58,18 @@ export default function AddressesPage() {
   const release = (_data: unknown, _error: unknown, id: string) => {
     acting.current.delete(id);
   };
+  // Máy chủ từ chối vì sổ không còn khớp (địa chỉ đã xoá ở máy khác, đang gắn gói giao định kỳ): tải lại sổ rồi mới nhả khoá, không thì thẻ cũ
+  // sáng lại và mỗi cú chạm kế tiếp nhận đúng lỗi đó. Mất mạng, quá hạn, 401, 5xx không nói gì về sổ thật nên giữ nguyên, khách thử lại được ngay.
+  const rejected = (e: unknown, id: string) => {
+    openSnackbar({ text: getErrorMessage(e), type: 'error' });
+    if (!isStaleStateError(e)) return undefined;
+    // 404 là địa chỉ không còn nữa: gỡ thẻ ngay như đường xoá thành công, vì lần tải lại có thể bị huỷ hoặc lỗi mạng.
+    if (isHttpError(e) && e.response?.status === 404) {
+      qc.setQueryData<AddressDTO[]>(['addresses'], (list) => list?.filter((x) => x.id !== id));
+      setConfirmDel((cur) => (cur?.id === id ? null : cur));
+    }
+    return settleWithin(refresh());
+  };
 
   const setDefaultMut = useLockedMutation(
     {
@@ -65,7 +78,7 @@ export default function AddressesPage() {
         haptic('light');
         return settleWithin(refresh());
       },
-      onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+      onError: (e, id) => rejected(e, id),
       onSettled: release,
     },
     (id) => id,
@@ -80,7 +93,7 @@ export default function AddressesPage() {
         openSnackbar({ text: 'Đã xoá địa chỉ.', type: 'success' });
         return settleWithin(refresh());
       },
-      onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+      onError: (e, id) => rejected(e, id),
       onSettled: release,
     },
     (id) => id,

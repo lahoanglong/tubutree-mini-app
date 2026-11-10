@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type * as ZmpUi from 'zmp-ui';
@@ -181,3 +181,57 @@ describe('OnboardingGate — các bước quiz (C-076 di cư DS v2: giữ nguyê
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 });
+
+describe('OnboardingGate — "Hoàn tất" khoá đồng bộ chạm đúp (W108A)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.location = { pathname: '/', search: '' };
+    mocks.storage = {};
+    mocks.getMe.mockResolvedValue({ onboarded: false });
+  });
+
+  const next = () => fireEvent.click(screen.getByRole('button', { name: /^(Tiếp tục|Hoàn tất)$/ }));
+  // Trả lời đủ bốn câu, dừng ở câu cuối với nút "Hoàn tất" chưa bấm.
+  async function answerAll() {
+    renderGate();
+    fireEvent.click(await screen.findByRole('button', { name: 'Bắt đầu' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Chăm sóc da' }));
+    next();
+    fireEvent.click(screen.getByRole('radio', { name: 'Nhạy cảm' }));
+    next();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Gia đình' }));
+    next();
+    fireEvent.click(screen.getByRole('radio', { name: 'Giá tốt' }));
+    return screen.getByRole('button', { name: 'Hoàn tất' });
+  }
+
+  it('chạm đúp "Hoàn tất" trong cùng một khung hình chỉ gửi một lần; xong hiện lời cảm ơn', async () => {
+    let resolve!: (v: unknown) => void;
+    mocks.complete.mockReturnValueOnce(new Promise((res) => { resolve = res; }));
+    const done = await answerAll();
+    await act(async () => {
+      fireEvent.click(done);
+      fireEvent.click(done);
+    });
+    expect(mocks.complete).toHaveBeenCalledTimes(1);
+    await act(async () => resolve({}));
+    expect(await screen.findByRole('heading', { name: 'Tuyệt vời!' })).toBeInTheDocument();
+    expect(mocks.complete).toHaveBeenCalledTimes(1);
+  });
+
+  it('gửi lỗi thì nhả khoá: bấm lại gửi được và hiện lời cảm ơn', async () => {
+    mocks.complete.mockRejectedValueOnce(new Error('mạng')).mockResolvedValue({});
+    const done = await answerAll();
+    await act(async () => {
+      fireEvent.click(done);
+      fireEvent.click(done);
+    });
+    expect(mocks.complete).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Hoàn tất' })).not.toHaveAttribute('aria-busy'));
+    expect(screen.queryByRole('heading', { name: 'Tuyệt vời!' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Hoàn tất' }));
+    await waitFor(() => expect(mocks.complete).toHaveBeenCalledTimes(2));
+    expect(await screen.findByRole('heading', { name: 'Tuyệt vời!' })).toBeInTheDocument();
+  });
+});
+
