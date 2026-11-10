@@ -22,8 +22,7 @@ import {
   type FeedPostKind,
   type CreateEventInput,
 } from '../services/feed-api';
-import { apiMediaUrl, getErrorMessage, getLoadErrorMessage } from '../services/api';
-import { isHttpError } from '../services/http';
+import { apiMediaUrl, getErrorMessage, getLoadErrorMessage, isStaleStateError } from '../services/api';
 import { settleWithin } from '../utils/settle-within';
 import { useAuthStore } from '../store/auth';
 import { usePublicConfig } from '../hooks/use-public-config';
@@ -127,23 +126,33 @@ function PendingSection() {
     acting.current.delete(id);
   };
 
+  // Khoá `acting` nhả ở onSettled, mà TanStack chờ lời hứa onSuccess/onError trả về rồi mới gọi onSettled: nên khoá giữ tới khi danh sách làm mới
+  // về (tối đa `settleWithin`). Lệnh bị từ chối vì bài đã đổi trạng thái (người khác đã duyệt/từ chối/gỡ: 400/404/409) thì danh sách đang hiện
+  // dữ liệu cũ, tải lại để bài đó biến mất; lỗi mạng/5xx thì chưa chắc đã đổi nên không tải lại và nhả khoá ngay.
+  const refreshWhenRejected = (e: unknown) => (isStaleStateError(e) ? settleWithin(invalidate()) : undefined);
   const approveM = useMutation({
     mutationFn: (id: string) => adminApprovePost(id),
     onSettled: release,
     onSuccess: () => {
       openSnackbar({ text: vi.community.approved, type: 'success' });
-      invalidate();
+      return settleWithin(invalidate());
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      return refreshWhenRejected(e);
+    },
   });
   const rejectM = useMutation({
     mutationFn: (id: string) => adminRejectPost(id),
     onSettled: release,
     onSuccess: () => {
       openSnackbar({ text: vi.community.rejected, type: 'success' });
-      invalidate();
+      return settleWithin(invalidate());
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      return refreshWhenRejected(e);
+    },
   });
 
   if (pendingQ.isLoading) return <Skeleton height={120} radius="var(--radius-card)" />;
@@ -229,6 +238,8 @@ function ReportsSection() {
   const { openSnackbar } = useSnackbar();
   const reportsQ = useQuery({ queryKey: ['admin-community-reports'], queryFn: adminReports });
   const invalidate = () => qc.invalidateQueries({ queryKey: ['admin-community-reports'] });
+  // Cùng cách giữ khoá như PendingSection. Khoá 'admin-community-reports' đã gồm cả số ở tab Báo cáo; màn này không liệt kê bài chờ duyệt nên không đụng khoá đó.
+  const refreshWhenRejected = (e: unknown) => (isStaleStateError(e) ? settleWithin(invalidate()) : undefined);
 
   // Bài và bình luận là 2 endpoint khác nhau — trước đây chỉ có đường cho bài nên nút ẩn
   // bị giấu hoàn toàn với báo cáo bình luận (bình luận vi phạm hiển thị vĩnh viễn).
@@ -255,9 +266,12 @@ function ReportsSection() {
     },
     onSuccess: () => {
       openSnackbar({ text: vi.community.hideContent, type: 'success' });
-      invalidate();
+      return settleWithin(invalidate());
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      return refreshWhenRejected(e);
+    },
   });
   const resolveM = useMutation({
     mutationFn: (id: string) => adminResolveReport(id),
@@ -266,9 +280,12 @@ function ReportsSection() {
     },
     onSuccess: () => {
       openSnackbar({ text: vi.community.resolved, type: 'success' });
-      invalidate();
+      return settleWithin(invalidate());
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      return refreshWhenRejected(e);
+    },
   });
 
   const busy = (report: AdminReport) =>
@@ -380,9 +397,12 @@ function EventsSection() {
       setStartAt('');
       setEndAt('');
       setRewardPoints('0');
-      invalidate();
+      return settleWithin(invalidate());
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      return isStaleStateError(e) ? settleWithin(invalidate()) : undefined;
+    },
   });
 
   const filled = title.trim().length > 0 && startAt.length > 0 && endAt.length > 0;
@@ -531,8 +551,7 @@ function AdminEventCard({ event, onDone }: { event: AdminCommunityEvent; onDone:
   // liệu cũ nên tải lại cả danh sách lẫn người dự thi và giữ khoá tới khi xong, kẻo bấm lại ra đúng lỗi cũ. Lỗi mạng/5xx thì trạng thái
   // chưa chắc đã đổi nên không tải lại.
   const refreshWhenRejected = (e: unknown) => {
-    const status = isHttpError(e) ? e.response?.status : undefined;
-    if (status !== 400 && status !== 404 && status !== 409) return undefined;
+    if (!isStaleStateError(e)) return undefined;
     return settleWithin(Promise.all([onDone(), qc.invalidateQueries({ queryKey: ['admin-community-event-participants', event.id] })]));
   };
   // Trả Promise: khoá giữ tới khi danh sách sự kiện làm mới về (tối đa `settleWithin`). Nhả sớm thì thẻ còn nút "Chốt"/"Đóng" của sự kiện đã

@@ -17,6 +17,9 @@ const mocks = vi.hoisted(() => ({
   claimSeasonPass: vi.fn(),
   waterPlot: vi.fn(),
   waterTree: vi.fn(),
+  checkIn: vi.fn(),
+  buyStreakFreeze: vi.fn(),
+  buyTree: vi.fn(),
 }));
 vi.mock('zmp-ui', () => ({ useSnackbar: () => ({ openSnackbar: mocks.openSnackbar }) }));
 vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
@@ -30,6 +33,9 @@ vi.mock('../../services/game-api', async (orig) => ({
   claimSeasonPass: mocks.claimSeasonPass,
   waterPlot: mocks.waterPlot,
   waterTree: mocks.waterTree,
+  checkIn: mocks.checkIn,
+  buyStreakFreeze: mocks.buyStreakFreeze,
+  buyTree: mocks.buyTree,
 }));
 
 import { useGameActions } from './use-game-actions';
@@ -74,13 +80,15 @@ const PROBES = {
   seasonPass: ['game', 'seasonPass'],
   me: ['me'],
   loyalty: ['loyalty'],
+  quiz: ['game', 'quiz'],
+  checkIn: ['loyalty-checkin'],
 } as const;
 type Probe = keyof typeof PROBES;
 
 /** Lần tải đầu của mọi khoá xong ngay; lần tải lại của `held` treo tới khi `release()` (hoặc mãi mãi nếu không ai gọi). */
 function setupHeld(held: Probe) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  const fetched: Record<Probe, number> = { profile: 0, missions: 0, seasonPass: 0, me: 0, loyalty: 0 };
+  const fetched: Record<Probe, number> = { profile: 0, missions: 0, seasonPass: 0, me: 0, loyalty: 0, quiz: 0, checkIn: 0 };
   let release: () => void = () => undefined;
   const gate = new Promise<void>((resolve) => {
     release = resolve;
@@ -102,6 +110,8 @@ function setupHeld(held: Probe) {
       useProbe('seasonPass');
       useProbe('me');
       useProbe('loyalty');
+      useProbe('quiz');
+      useProbe('checkIn');
       return useGameActions({ onHarvest: vi.fn(), onAnswered: vi.fn() });
     },
     { wrapper },
@@ -327,8 +337,8 @@ describe('useGameActions: bị từ chối, các trường hợp biên của kho
     await waitFor(() => expect(hook.result.current.waterM.isPending).toBe(false));
   });
 
-  it('tưới thường (20💧) bị từ chối 400: chỉ báo lỗi, không tải lại, nhả khoá ngay', async () => {
-    mocks.waterTree.mockRejectedValue(httpError(400));
+  it('tưới thường (20💧) gặp 500 (lỗi tạm): chỉ báo lỗi, không tải lại, nhả khoá ngay', async () => {
+    mocks.waterTree.mockRejectedValue(httpError(500));
     const { hook, fetched } = setupHeld('profile');
     await waitFor(() => expect(Object.values(fetched).every((n) => n === 1)).toBe(true));
     act(() => hook.result.current.waterM.mutate(20));
@@ -336,5 +346,209 @@ describe('useGameActions: bị từ chối, các trường hợp biên của kho
     await settleTicks();
     expect(mocks.openSnackbar).toHaveBeenCalledTimes(1);
     expect(Object.values(fetched).every((n) => n === 1)).toBe(true);
+  });
+});
+
+const quizStaleError = (status: number) =>
+  new HttpError('Câu hỏi này không thuộc bộ câu hôm nay.', undefined, { status, data: { message: 'Câu hỏi này không thuộc bộ câu hôm nay.' } } as never);
+
+interface W111aCase {
+  name: string;
+  api: ReturnType<typeof vi.fn>;
+  tap: (a: Actions) => void;
+  pending: (a: Actions) => boolean;
+  /** Khoá nào bị tải lại khi máy chủ từ chối; ca đầu của danh sách là khoá được giữ treo ở các ca còn lại. */
+  held: Probe[];
+  stale: (status: number) => HttpError;
+}
+const W111A: W111aCase[] = [
+  { name: 'điểm danh (checkInM)', api: mocks.checkIn, tap: (a) => a.checkInM.mutate(), pending: (a) => a.checkInM.isPending, held: ['profile', 'me', 'loyalty', 'checkIn'], stale: httpError },
+  { name: 'mua vé giữ lửa (freezeM)', api: mocks.buyStreakFreeze, tap: (a) => a.freezeM.mutate(), pending: (a) => a.freezeM.isPending, held: ['profile', 'me', 'loyalty'], stale: httpError },
+  { name: 'tưới thường 20💧 (waterM)', api: mocks.waterTree, tap: (a) => a.waterM.mutate(20), pending: (a) => a.waterM.isPending, held: ['profile', 'me', 'loyalty'], stale: httpError },
+  { name: 'trả lời câu đố ngoài bộ (answerM)', api: mocks.answerQuiz, tap: (a) => a.answerM.mutate({ id: 'q1', choice: 0 }), pending: (a) => a.answerM.isPending, held: ['quiz'], stale: quizStaleError },
+];
+const W111A_STALE = W111A.flatMap((c) => [
+  ...c.held.map((h) => [c.name, 400, h, c] as const),
+  ...[404, 409].map((status) => [c.name, status, c.held[0]!, c] as const),
+]);
+const W111A_TEMPORARY = W111A.flatMap((c) => [401, 500, 502].map((status) => [c.name, status, c] as const));
+
+describe('(W111A) lệnh ghi bị từ chối 400/404/409 giữ khoá tới khi dữ liệu mới về', () => {
+  beforeEach(() => {
+    for (const c of W111A) c.api.mockReset();
+    mocks.openSnackbar.mockClear();
+  });
+
+  it.each(W111A_STALE)('%s bị từ chối %i: tải lại %s, giữ khoá tới khi về (chạm lại bị bỏ qua), báo một lần, rồi nhả', async (_name, status, held, c) => {
+    c.api.mockRejectedValue(c.stale(status));
+    const { hook, fetched, release } = setupHeld(held);
+    await waitFor(() => expect(Object.values(fetched).every((n) => n === 1)).toBe(true));
+    act(() => c.tap(hook.result.current));
+    await waitFor(() => expect(fetched[held]).toBe(2));
+    await settleTicks();
+    expect(c.pending(hook.result.current)).toBe(true);
+    act(() => c.tap(hook.result.current));
+    await settleTicks();
+    expect(c.api).toHaveBeenCalledTimes(1);
+    expect(mocks.openSnackbar).toHaveBeenCalledTimes(1);
+    await act(async () => release());
+    await waitFor(() => expect(c.pending(hook.result.current)).toBe(false));
+    act(() => c.tap(hook.result.current));
+    await waitFor(() => expect(c.api).toHaveBeenCalledTimes(2));
+  });
+
+  it.each(W111A_TEMPORARY)('%s gặp %i (lỗi tạm): chỉ báo lỗi, không tải lại, nhả khoá ngay', async (_name, status, c) => {
+    c.api.mockRejectedValue(httpError(status));
+    const { hook, fetched } = setupHeld(c.held[0]!);
+    await waitFor(() => expect(Object.values(fetched).every((n) => n === 1)).toBe(true));
+    act(() => c.tap(hook.result.current));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(c.pending(hook.result.current)).toBe(false));
+    await settleTicks();
+    expect(Object.values(fetched).every((n) => n === 1)).toBe(true);
+    act(() => c.tap(hook.result.current));
+    await waitFor(() => expect(c.api).toHaveBeenCalledTimes(2));
+  });
+
+  it.each(W111A.map((c) => [c.name, c] as const))('%s mất mạng: chỉ báo lỗi, không tải lại, nhả khoá ngay', async (_name, c) => {
+    c.api.mockRejectedValue(new HttpError('Network Error', 'ERR_NETWORK'));
+    const { hook, fetched } = setupHeld(c.held[0]!);
+    await waitFor(() => expect(Object.values(fetched).every((n) => n === 1)).toBe(true));
+    act(() => c.tap(hook.result.current));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(c.pending(hook.result.current)).toBe(false));
+    await settleTicks();
+    expect(Object.values(fetched).every((n) => n === 1)).toBe(true);
+  });
+
+  it.each(W111A.map((c) => [c.name, c] as const))('%s quá hạn (ECONNABORTED): tải lại không chờ, nhả khoá ngay dù tải lại còn treo', async (_name, c) => {
+    c.api.mockRejectedValue(new HttpError('timeout', 'ECONNABORTED'));
+    const held = c.held[0]!;
+    const { hook, fetched } = setupHeld(held);
+    await waitFor(() => expect(Object.values(fetched).every((n) => n === 1)).toBe(true));
+    act(() => c.tap(hook.result.current));
+    await waitFor(() => expect(fetched[held]).toBe(2));
+    await waitFor(() => expect(c.pending(hook.result.current)).toBe(false));
+    act(() => c.tap(hook.result.current));
+    await waitFor(() => expect(c.api).toHaveBeenCalledTimes(2));
+  });
+});
+
+describe('(W111A) dữ liệu tải lại treo mãi thì nhả khoá sau LOCK_REFRESH_WAIT_MS, không sớm hơn', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it.each(W111A.map((c) => [c.name, c] as const))('%s', async (_name, c) => {
+    c.api.mockReset();
+    c.api.mockRejectedValue(c.stale(400));
+    const held = c.held[0]!;
+    const { hook, fetched } = setupHeld(held);
+    await waitFor(() => expect(Object.values(fetched).every((n) => n === 1)).toBe(true));
+    vi.useFakeTimers();
+    act(() => c.tap(hook.result.current));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(fetched[held]).toBe(2);
+    expect(c.pending(hook.result.current)).toBe(true);
+    await act(async () => { await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 1); });
+    expect(c.pending(hook.result.current)).toBe(true);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS);
+      for (let i = 0; i < 3; i++) await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(c.pending(hook.result.current)).toBe(false);
+    act(() => c.tap(hook.result.current));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(c.api).toHaveBeenCalledTimes(2);
+  });
+});
+
+/** Một lượt góp qua `mutateAsync` như TreeFund gọi: `settled` chỉ bật khi Promise xong, tức lúc khoá ref `inFlight` ở TreeFund nhả. */
+function startBuy(hook: { result: { current: Actions } }) {
+  const outcome = { settled: false, ok: undefined as boolean | undefined };
+  act(() => {
+    void hook.result.current.buyTreeM.mutateAsync('key-12345678').then(
+      () => Object.assign(outcome, { settled: true, ok: true }),
+      () => Object.assign(outcome, { settled: true, ok: false }),
+    );
+  });
+  return outcome;
+}
+
+describe('(W111A) góp quỹ trồng cây (buyTreeM, mutateAsync): Promise chỉ xong khi dữ liệu mới về', () => {
+  const BUY_HELD: Probe[] = ['profile', 'me', 'loyalty'];
+  const BUY_STALE = [
+    ...BUY_HELD.map((h) => [400, h] as const),
+    ...[404, 409].map((status) => [status, 'profile' as Probe] as const),
+  ];
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+  beforeEach(() => {
+    mocks.buyTree.mockReset();
+    mocks.openSnackbar.mockClear();
+  });
+
+  it.each(BUY_STALE)('bị từ chối %i: tải lại %s, mutateAsync chưa xong và isPending còn true tới khi về, báo một lần', async (status, held) => {
+    mocks.buyTree.mockRejectedValue(httpError(status));
+    const { hook, fetched, release } = setupHeld(held);
+    await waitFor(() => expect(Object.values(fetched).every((n) => n === 1)).toBe(true));
+    const outcome = startBuy(hook);
+    await waitFor(() => expect(fetched[held]).toBe(2));
+    await settleTicks();
+    expect(outcome.settled).toBe(false);
+    expect(hook.result.current.buyTreeM.isPending).toBe(true);
+    expect(mocks.openSnackbar).toHaveBeenCalledTimes(1);
+    await act(async () => release());
+    await waitFor(() => expect(outcome).toMatchObject({ settled: true, ok: false }));
+    await waitFor(() => expect(hook.result.current.buyTreeM.isPending).toBe(false));
+  });
+
+  it.each([401, 500, 502])('gặp %i (lỗi tạm): mutateAsync reject ngay, không tải lại', async (status) => {
+    mocks.buyTree.mockRejectedValue(httpError(status));
+    const { hook, fetched } = setupHeld('profile');
+    await waitFor(() => expect(Object.values(fetched).every((n) => n === 1)).toBe(true));
+    const outcome = startBuy(hook);
+    await waitFor(() => expect(outcome).toMatchObject({ settled: true, ok: false }));
+    await settleTicks();
+    expect(mocks.openSnackbar).toHaveBeenCalledTimes(1);
+    expect(Object.values(fetched).every((n) => n === 1)).toBe(true);
+  });
+
+  it('mất mạng: mutateAsync reject ngay, không tải lại', async () => {
+    mocks.buyTree.mockRejectedValue(new HttpError('Network Error', 'ERR_NETWORK'));
+    const { hook, fetched } = setupHeld('profile');
+    await waitFor(() => expect(Object.values(fetched).every((n) => n === 1)).toBe(true));
+    const outcome = startBuy(hook);
+    await waitFor(() => expect(outcome).toMatchObject({ settled: true, ok: false }));
+    await settleTicks();
+    expect(Object.values(fetched).every((n) => n === 1)).toBe(true);
+  });
+
+  it('quá hạn (ECONNABORTED): tải lại không chờ, mutateAsync reject ngay dù tải lại còn treo', async () => {
+    mocks.buyTree.mockRejectedValue(new HttpError('timeout', 'ECONNABORTED'));
+    const { hook, fetched } = setupHeld('profile');
+    await waitFor(() => expect(Object.values(fetched).every((n) => n === 1)).toBe(true));
+    const outcome = startBuy(hook);
+    await waitFor(() => expect(fetched.profile).toBe(2));
+    await waitFor(() => expect(outcome).toMatchObject({ settled: true, ok: false }));
+  });
+
+  it('tải lại treo mãi: mutateAsync reject sau LOCK_REFRESH_WAIT_MS, không sớm hơn', async () => {
+    mocks.buyTree.mockRejectedValue(httpError(400));
+    const { hook, fetched } = setupHeld('profile');
+    await waitFor(() => expect(Object.values(fetched).every((n) => n === 1)).toBe(true));
+    vi.useFakeTimers();
+    const outcome = startBuy(hook);
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(fetched.profile).toBe(2);
+    expect(outcome.settled).toBe(false);
+    await act(async () => { await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 1); });
+    expect(outcome.settled).toBe(false);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS);
+      for (let i = 0; i < 3; i++) await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(outcome).toMatchObject({ settled: true, ok: false });
   });
 });

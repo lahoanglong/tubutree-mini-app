@@ -95,7 +95,7 @@ export function useGameActions({
     if (isHttpError(e) && e.code === 'ECONNABORTED') void refresh();
   };
 
-  // Máy chủ từ chối một việc một-lần bằng 400/404/409 (đã nhận, lô đã đổi, không còn đủ điều kiện): thẻ đang hiện đã cũ nên tải lại
+  // Máy chủ từ chối một lệnh ghi bằng 400/404/409 (đã nhận, lô đã đổi, không còn đủ điều kiện, thiếu nước/điểm): thẻ đang hiện đã cũ nên tải lại
   // rồi mới nhả khoá. Nhả ngay thì nút còn sáng trên dữ liệu cũ và chạm lại nhận đúng lời từ chối đó. Mất mạng, quá hạn, 401 và 5xx
   // không nói gì về trạng thái thật nên không tải lại ở đây.
   const onRejectedOnce = (e: unknown) => {
@@ -115,7 +115,14 @@ export function useGameActions({
       void queryClient.invalidateQueries({ queryKey: ['points-txn'] });
       void refresh();
     },
-    onError,
+    // Trạng thái điểm danh nằm ở ['loyalty-checkin'] (không thuộc ['loyalty']) cạnh hồ sơ ['game'], nên bị từ chối vì đã điểm danh
+    // thì phải tải lại cả hai, kẻo nút còn sáng trên dữ liệu cũ.
+    onError: (e: unknown) => {
+      onError(e);
+      return isStaleStateError(e)
+        ? settleWithin(Promise.all([refresh(), queryClient.invalidateQueries({ queryKey: ['loyalty-checkin'] })]))
+        : undefined;
+    },
   });
   const dewM = useLockedMutation({
     mutationFn: collectDew,
@@ -131,7 +138,7 @@ export function useGameActions({
       openSnackbar({ text: `Đã mua vé giữ lửa 🧊 (còn ${r.streakFreezes} vé)`, type: 'success' });
       void refresh();
     },
-    onError,
+    onError: onRejectedOnce,
   });
   const repairM = useLockedMutation({
     mutationFn: repairStreak,
@@ -167,12 +174,12 @@ export function useGameActions({
   const waterM = useLockedMutation({
     mutationFn: (drops: number) => waterTree(drops),
     onSuccess: (r, drops) => afterWatering(`Đã tưới −${formatDrops(drops)}`, r),
-    // Tưới 0💧 là nút Thu hoạch: cây đã thu hoạch ở máy khác thì nút này chỉ đúng trên hồ sơ cũ, nên bị từ chối phải tải lại.
-    // Tưới thường bị từ chối (thiếu nước…) thì chỉ báo, vì lượt sau là một quyết định mới của khách.
-    onError: (e, drops) => (drops === 0 ? onRejectedOnce(e) : onError(e)),
+    // Bị từ chối bằng 400/404/409 (thiếu nước, cây đã thu hoạch ở máy khác…): số giọt và thẻ cây đang hiện đã cũ, nên tải lại rồi mới nhả khoá.
+    onError: onRejectedOnce,
   });
   // Khoá chống chạm đúp của lượt góp nằm ở TreeActions (cần biết kết quả để quyết định đóng hộp hay giữ key), nên
-  // đây dùng useMutation thường và caller gọi mutateAsync.
+  // đây dùng useMutation thường và caller gọi mutateAsync. Promise trả từ onError được chờ trước khi mutateAsync reject,
+  // nên khoá ref ở caller giữ tới khi dữ liệu mới về.
   const buyTreeM = useMutation({
     mutationFn: (idempotencyKey: string) => buyTree(idempotencyKey),
     onSuccess: (r) => {
@@ -180,7 +187,7 @@ export function useGameActions({
       void refresh();
       void queryClient.invalidateQueries({ queryKey: ['game', 'forest'] });
     },
-    onError,
+    onError: onRejectedOnce,
   });
   const unlockM = useLockedMutation({
     mutationFn: (slot: number) => unlockPlot(slot),
@@ -239,7 +246,7 @@ export function useGameActions({
       const message = getErrorMessage(e);
       if (!isStaleQuizMessage(message)) return onError(e);
       openSnackbar({ text: gameMoreCopy.quiz.staleSet, type: 'warning' });
-      void queryClient.invalidateQueries({ queryKey: ['game', 'quiz'] });
+      return settleWithin(queryClient.invalidateQueries({ queryKey: ['game', 'quiz'] }));
     },
   }, ({ id }) => id);
 

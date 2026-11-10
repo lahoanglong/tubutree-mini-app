@@ -39,7 +39,7 @@ import {
   type DealerOrderRules,
 } from '../services/dealer-api';
 import { errorCode } from '@tubutree/app-core/api/error-status';
-import { getErrorMessage, getLoadErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage, isOutcomeUnknown, isStaleStateError } from '../services/api';
 import { formatDate, formatRatePct, formatVnd } from '../utils/format';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { useAuthStore } from '../store/auth';
@@ -405,13 +405,23 @@ function PriceAndOrder({ creditLimit, debt, rules }: { creditLimit: number; debt
       openSnackbar({ text: 'Đã lưu mẫu đơn.', type: 'success' });
       void qc.invalidateQueries({ queryKey: ['dealer-templates'] });
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    // Trả Promise: nút Lưu mẫu giữ khoá tới khi danh sách mẫu tải lại (tối đa `settleWithin`) khi máy chủ từ chối (tên trùng, mẫu quá hạn...). Mất mạng, 401, 5xx không nói gì về danh sách: nhả ngay.
+    onError: (e) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      if (!isStaleStateError(e)) return undefined;
+      return settleWithin(qc.invalidateQueries({ queryKey: ['dealer-templates'] }));
+    },
   });
   // Khoá theo id mẫu: xoá hai mẫu khác nhau vẫn song song, chạm lặp vào cùng một mẫu thì bỏ qua.
   const delTpl = useLockedMutation({
     mutationFn: (id: string) => deleteTemplate(id),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['dealer-templates'] }),
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    // Mẫu đã bị xoá ở nơi khác (404): tải lại để dòng biến mất thay vì để nút Xoá bấm mãi ra cùng một lỗi.
+    onError: (e) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      if (!isStaleStateError(e)) return undefined;
+      return settleWithin(qc.invalidateQueries({ queryKey: ['dealer-templates'] }));
+    },
   }, (id) => id);
   const deletingTpl = (id: string) => delTpl.isPending && delTpl.variables === id;
 
@@ -520,7 +530,21 @@ function PriceAndOrder({ creditLimit, debt, rules }: { creditLimit: number; debt
         navigate(`/bank-payment/${order.code}`);
       }
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    // Máy chủ từ chối (hạn mức, giá, tồn, tối thiểu đã đổi): tải lại số liệu rồi mới nhả nút, kẻo bấm lại trên số cũ nhận đúng lỗi đó. Idempotency-Key giữ nguyên.
+    onError: (e) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      if (!isStaleStateError(e)) return undefined;
+      return settleWithin(
+        Promise.all([
+          qc.invalidateQueries({ queryKey: ['dealer-orders'] }),
+          qc.invalidateQueries({ queryKey: ['dealer-me'] }),
+          qc.invalidateQueries({ queryKey: ['dealer-credit'] }),
+          qc.invalidateQueries({ queryKey: ['dealer-rewards'] }),
+          qc.invalidateQueries({ queryKey: ['dealer-report'] }),
+          qc.invalidateQueries({ queryKey: ['dealer-pricelist'] }),
+        ]),
+      );
+    },
   });
 
   const belowMin = !!rules && rules.minOrderValue > 0 && total < rules.minOrderValue;
@@ -924,7 +948,14 @@ function DealerCredit() {
       void qc.invalidateQueries({ queryKey: ['dealer-credit'] });
       void qc.invalidateQueries({ queryKey: ['dealer-me'] });
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    // Máy chủ từ chối: tải lại sổ công nợ và hồ sơ rồi mới nhả nút. Cùng payKey: 4xx là chưa ghi gì.
+    onError: (e) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      if (!isStaleStateError(e)) return undefined;
+      return settleWithin(
+        Promise.all([qc.invalidateQueries({ queryKey: ['dealer-credit'] }), qc.invalidateQueries({ queryKey: ['dealer-me'] })]),
+      );
+    },
   });
 
   const balance = ledgerQ.data?.balance ?? 0;
@@ -1182,8 +1213,11 @@ function DealerRewardsCard() {
     },
     onError: (e) => {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
-      // Hết hạn / tụt doanh số... → tải lại để nút và trạng thái khớp backend.
-      void qc.invalidateQueries({ queryKey: ['dealer-rewards'] });
+      // Hết hạn / tụt doanh số (máy chủ từ chối) → tải lại để nút và trạng thái khớp backend, nút dòng đó giữ khoá tới khi dữ liệu về. Mất mạng, 401, 5xx: không tải lại, nhả ngay.
+      // Quá hạn/5xx: máy chủ có thể đã ghi nhận phần thưởng, làm mới nền (không giữ khoá) để dòng không còn nút "Nhận" của phần thưởng đã nhận.
+      if (isOutcomeUnknown(e)) void qc.invalidateQueries({ queryKey: ['dealer-rewards'] });
+      if (!isStaleStateError(e)) return undefined;
+      return settleWithin(qc.invalidateQueries({ queryKey: ['dealer-rewards'] }));
     },
   }, (v) => `${v.rewardId}:${v.periodKey}`);
 

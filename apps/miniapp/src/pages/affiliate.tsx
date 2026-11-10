@@ -23,7 +23,8 @@ import {
   type CommissionStatus,
   type PayoutStatus,
 } from '../services/affiliate-api';
-import { getErrorMessage, getLoadErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage, isStaleStateError } from '../services/api';
+import { settleWithin } from '../utils/settle-within';
 import { ShareSheet } from '../components/share-sheet';
 import { SegmentedTabs } from '../components/ui/segmented-tabs';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
@@ -201,7 +202,14 @@ function RegisterGate() {
       // Vai trò vừa đổi: tải lại Học viện (lần tải trước khi còn là khách bị từ chối và không thử lại).
       void qc.invalidateQueries({ queryKey: ['academy-courses'] });
     },
-    onError: (e) => openSnackbar({ text: e instanceof GuestLinkRequired ? vi.ctvTerms.needZalo : getErrorMessage(e), type: 'error' }),
+    // Trả Promise: nút giữ bận tới khi vai trò và Học viện tải lại xong (tối đa LOCK_REFRESH_WAIT_MS), kẻo bấm lại trên màn đăng ký đã cũ (vd đã là CTV). Lỗi mạng/5xx/401 nhả ngay.
+    onError: (e) => {
+      openSnackbar({ text: e instanceof GuestLinkRequired ? vi.ctvTerms.needZalo : getErrorMessage(e), type: 'error' });
+      if (!isStaleStateError(e)) return undefined;
+      return settleWithin(
+        Promise.all([qc.invalidateQueries({ queryKey: ['affiliate-me'] }), qc.invalidateQueries({ queryKey: ['academy-courses'] })]),
+      );
+    },
   });
 
   const benefits = [
@@ -360,7 +368,12 @@ function Dashboard() {
       openSnackbar({ text: 'Đã tạo link chia sẻ mới', type: 'success' });
       void qc.invalidateQueries({ queryKey: ['affiliate-links'] });
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    // Trả Promise: nút giữ bận tới khi danh sách link tải lại xong (tối đa LOCK_REFRESH_WAIT_MS). Lỗi mạng/5xx/401 nhả ngay.
+    onError: (e) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      if (!isStaleStateError(e)) return undefined;
+      return settleWithin(qc.invalidateQueries({ queryKey: ['affiliate-links'] }));
+    },
   });
 
   const d = dashQ.data;
@@ -1093,6 +1106,7 @@ function TransferForm({
   const { openSnackbar } = useSnackbar();
   // Không đọc affiliateWalletMultiplier: chuyển hoa hồng vào Ví Tubu là quy đổi 1:1.
   const { affiliatePitWithhold: pit, isLoaded: cfgLoaded } = usePublicConfig();
+  const qc = useQueryClient();
   const [taxId, setTaxId] = useState('');
   // Một khoá cho mỗi lần mở form: chạm đúp hay thử lại sau lỗi mạng gửi cùng khoá nên BE không tạo lệnh thứ hai.
   const payKey = useRef(newIdempotencyKey());
@@ -1108,7 +1122,24 @@ function TransferForm({
       });
       onDone();
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    // Máy chủ từ chối vì số dư/hồ sơ trên màn đã cũ (vd lệnh tự chuyển 8:00 vừa chạy): tải lại đúng dữ liệu đường thành công làm mới và giữ nút bận tới khi về
+    // (tối đa LOCK_REFRESH_WAIT_MS), kẻo bấm lại trên số cũ. Dashboard làm mới SAU Ví như onDone để số to không nhảy hai lần. Lỗi mạng/5xx/401 nhả ngay.
+    onError: (e) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      if (!isStaleStateError(e)) return undefined;
+      return settleWithin(
+        Promise.all([
+          qc.invalidateQueries({ queryKey: ['affiliate-commissions'] }),
+          qc.invalidateQueries({ queryKey: ['affiliate-payouts'] }),
+          qc.invalidateQueries({ queryKey: ['affiliate-tax-statement'] }),
+          qc.invalidateQueries({ queryKey: ['affiliate-me'] }),
+          (async () => {
+            await qc.invalidateQueries({ queryKey: ['wallet'] });
+            await qc.invalidateQueries({ queryKey: ['affiliate-dashboard'] });
+          })(),
+        ]),
+      );
+    },
   });
 
   // BE chỉ nhận chuyển toàn bộ hoa hồng có thể chuyển (affiliate.service.requestPayout), nên số tiền không cho sửa.

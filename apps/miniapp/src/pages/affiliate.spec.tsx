@@ -1,7 +1,9 @@
 import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, type MockInstance } from 'vitest';
+import { HttpError } from '../services/http';
+import { LOCK_REFRESH_WAIT_MS } from '../utils/settle-within';
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
@@ -1226,5 +1228,311 @@ describe('CTV: đăng ký, tạo link, chuyển vào Ví khoá chạm đúp tron
     await act(async () => d.resolve({ note: 'Đã chuyển hoa hồng vào Ví Tubu.' }));
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Đã chuyển hoa hồng vào Ví Tubu.', type: 'success' })));
     expect(requestPayout).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('CTV: đăng ký, tạo link, chuyển vào Ví bị máy chủ từ chối thì giữ khoá tới khi dữ liệu mới về (W111A)', () => {
+  const newClient = () => new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  const rejectedWith = (status: number, message: string) =>
+    new HttpError(message, 'ERR_BAD_REQUEST', { status, data: { statusCode: status, message } } as never);
+  const networkError = () => new HttpError('Network Error', 'ERR_NETWORK');
+  // TanStack báo cache qua setTimeout(0): đợi một nhịp để `isPending` kịp về false.
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+  const errorSnackbars = () => mocks.openSnackbar.mock.calls.filter(([arg]) => arg.type === 'error');
+  const dashboard = (withdrawableCommission: number) =>
+    ({
+      todayCommission: 0, monthCommission: 0, pendingCommission: 0, withdrawableCommission,
+      totalClicks: 0, totalConversions: 0, monthRevenue: 0,
+      tier: { name: 'Hạt Giống', emoji: '🌱', nextName: null, nextThreshold: null, toNext: 0 },
+    }) as Awaited<ReturnType<typeof getAffiliateDashboard>>;
+
+  let inv: MockInstance<QueryClient['invalidateQueries']> | undefined;
+  /** Thay `invalidateQueries` của client để soi khoá tải lại và giữ lời hứa tải lại trong tay. */
+  const holdRefresh = (qc: QueryClient, hang = false) => {
+    let finish!: () => void;
+    const pending = hang ? new Promise<void>(() => undefined) : new Promise<void>((resolve) => (finish = resolve));
+    inv = vi.spyOn(qc, 'invalidateQueries').mockImplementation((() => pending) as never);
+    return { finish: () => finish() };
+  };
+  const refreshed = () => (inv?.mock.calls ?? []).map((c) => JSON.stringify((c[0] as { queryKey: unknown }).queryKey));
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getAffiliateMe.mockResolvedValue({ isAffiliate: true, referralCode: 'TUBU88', walletBalance: 0 });
+    mocks.registerAffiliate.mockResolvedValue({ ok: true, referralCode: 'TUBU88' });
+    vi.mocked(getAffiliateDashboard).mockResolvedValue(dashboard(200_000));
+    vi.mocked(getAffiliateLinks).mockResolvedValue([]);
+    vi.mocked(createAffiliateLink).mockResolvedValue({ id: 'l2' } as Awaited<ReturnType<typeof createAffiliateLink>>);
+    vi.mocked(requestPayout).mockResolvedValue({ note: 'Đã chuyển hoa hồng vào Ví Tubu.' } as Awaited<ReturnType<typeof requestPayout>>);
+  });
+  afterEach(() => {
+    inv?.mockRestore();
+    inv = undefined;
+    vi.useRealTimers();
+  });
+
+  describe('đăng ký CTV', () => {
+    beforeEach(() => mocks.getAffiliateMe.mockResolvedValue({ isAffiliate: false, referralCode: 'TUBU88', walletBalance: 0 }));
+    const registerBtn = async (qc: QueryClient) => {
+      renderPage(qc);
+      const btn = await screen.findByRole('button', { name: 'Đăng ký miễn phí ngay' });
+      fireEvent.click(screen.getByRole('checkbox', { name: /đồng ý với điều khoản hoa hồng/ }));
+      return btn;
+    };
+
+    it.each([
+      [400, 'Hồ sơ đã được đăng ký'],
+      [404, 'Không tìm thấy hồ sơ'],
+      [409, 'Bạn đã là CTV rồi'],
+    ])('bị từ chối %i: báo lỗi một lần, tải lại vai trò và Học viện, khoá giữ tới khi dữ liệu về rồi mới nhả', async (status, message) => {
+      const qc = newClient();
+      const refresh = holdRefresh(qc);
+      mocks.registerAffiliate.mockRejectedValueOnce(rejectedWith(status, message));
+      const btn = await registerBtn(qc);
+      fireEvent.click(btn);
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: message, type: 'error' }));
+      expect(refreshed()).toEqual(['["affiliate-me"]', '["academy-courses"]']);
+      expect(errorSnackbars()).toHaveLength(1);
+      await settle();
+      expect(btn).toHaveAttribute('aria-busy', 'true');
+      await act(async () => {
+        fireEvent.click(btn);
+      });
+      expect(mocks.registerAffiliate).toHaveBeenCalledTimes(1);
+      expect(errorSnackbars()).toHaveLength(1);
+
+      await act(async () => refresh.finish());
+      await settle();
+      await waitFor(() => expect(btn).not.toHaveAttribute('aria-busy', 'true'));
+      fireEvent.click(btn);
+      await waitFor(() => expect(mocks.registerAffiliate).toHaveBeenCalledTimes(2));
+    });
+
+    it.each([
+      ['mất mạng', networkError()],
+      ['máy chủ lỗi 503', rejectedWith(503, 'Máy chủ bận')],
+      ['hết phiên 401', rejectedWith(401, 'Hết phiên')],
+    ])('%s: không tải lại, khoá nhả ngay', async (_label, error) => {
+      const qc = newClient();
+      holdRefresh(qc, true);
+      mocks.registerAffiliate.mockRejectedValueOnce(error);
+      const btn = await registerBtn(qc);
+      fireEvent.click(btn);
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+      await settle();
+      await waitFor(() => expect(btn).not.toHaveAttribute('aria-busy', 'true'));
+      expect(refreshed()).toEqual([]);
+      fireEvent.click(btn);
+      await waitFor(() => expect(mocks.registerAffiliate).toHaveBeenCalledTimes(2));
+    });
+
+    it('tải lại treo mãi: khoá nhả sau LOCK_REFRESH_WAIT_MS', async () => {
+      const qc = newClient();
+      holdRefresh(qc, true);
+      mocks.registerAffiliate.mockRejectedValueOnce(rejectedWith(409, 'Bạn đã là CTV rồi'));
+      const btn = await registerBtn(qc);
+      vi.useFakeTimers();
+      fireEvent.click(btn);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 1);
+      });
+      expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' }));
+      expect(btn).toHaveAttribute('aria-busy', 'true');
+      fireEvent.click(btn);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(mocks.registerAffiliate).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2);
+      });
+      expect(btn).not.toHaveAttribute('aria-busy', 'true');
+      fireEvent.click(btn);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(mocks.registerAffiliate).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('tạo link chia sẻ', () => {
+    const createBtn = async (qc: QueryClient) => {
+      renderPage(qc);
+      await screen.findByRole('tab', { name: 'Chia sẻ' });
+      openTab('Chia sẻ');
+      return screen.findByRole('button', { name: '+ Tạo link' });
+    };
+
+    it.each([
+      [400, 'Link này đã tồn tại'],
+      [404, 'Không tìm thấy gian hàng'],
+      [409, 'Danh sách link vừa đổi'],
+    ])('bị từ chối %i: báo lỗi một lần, tải lại danh sách link, khoá giữ tới khi dữ liệu về rồi mới nhả', async (status, message) => {
+      const qc = newClient();
+      const refresh = holdRefresh(qc);
+      vi.mocked(createAffiliateLink).mockRejectedValueOnce(rejectedWith(status, message));
+      const btn = await createBtn(qc);
+      fireEvent.click(btn);
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: message, type: 'error' }));
+      expect(refreshed()).toEqual(['["affiliate-links"]']);
+      expect(errorSnackbars()).toHaveLength(1);
+      await settle();
+      expect(btn).toHaveAttribute('aria-busy', 'true');
+      await act(async () => {
+        fireEvent.click(btn);
+      });
+      expect(createAffiliateLink).toHaveBeenCalledTimes(1);
+
+      await act(async () => refresh.finish());
+      await settle();
+      await waitFor(() => expect(btn).not.toHaveAttribute('aria-busy', 'true'));
+      fireEvent.click(btn);
+      await waitFor(() => expect(createAffiliateLink).toHaveBeenCalledTimes(2));
+    });
+
+    it.each([
+      ['mất mạng', networkError()],
+      ['máy chủ lỗi 503', rejectedWith(503, 'Máy chủ bận')],
+      ['hết phiên 401', rejectedWith(401, 'Hết phiên')],
+    ])('%s: không tải lại, khoá nhả ngay', async (_label, error) => {
+      const qc = newClient();
+      holdRefresh(qc, true);
+      vi.mocked(createAffiliateLink).mockRejectedValueOnce(error);
+      const btn = await createBtn(qc);
+      fireEvent.click(btn);
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+      await settle();
+      await waitFor(() => expect(btn).not.toHaveAttribute('aria-busy', 'true'));
+      expect(refreshed()).toEqual([]);
+      fireEvent.click(btn);
+      await waitFor(() => expect(createAffiliateLink).toHaveBeenCalledTimes(2));
+    });
+
+    it('tải lại treo mãi: khoá nhả sau LOCK_REFRESH_WAIT_MS', async () => {
+      const qc = newClient();
+      holdRefresh(qc, true);
+      vi.mocked(createAffiliateLink).mockRejectedValueOnce(rejectedWith(409, 'Danh sách link vừa đổi'));
+      const btn = await createBtn(qc);
+      vi.useFakeTimers();
+      fireEvent.click(btn);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 1);
+      });
+      expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' }));
+      expect(btn).toHaveAttribute('aria-busy', 'true');
+      fireEvent.click(btn);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(createAffiliateLink).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2);
+      });
+      expect(btn).not.toHaveAttribute('aria-busy', 'true');
+      fireEvent.click(btn);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(createAffiliateLink).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('chuyển hoa hồng vào Ví', () => {
+    const sendBtn = async (qc: QueryClient) => {
+      renderPage(qc);
+      const open = await screen.findByRole('button', { name: 'Chuyển vào Ví Tubu' });
+      await waitFor(() => expect(open).toBeEnabled());
+      fireEvent.click(open);
+      return screen.findByRole('button', { name: 'Nhận 200.000đ vào Ví' });
+    };
+
+    it.each([
+      [400, 'Hoa hồng có thể chuyển đã thay đổi'],
+      [404, 'Không tìm thấy hồ sơ CTV'],
+      [409, 'Lệnh chuyển khác đang xử lý'],
+    ])('bị từ chối %i: báo lỗi một lần, tải lại dữ liệu đường thành công làm mới (Ví trước dashboard), khoá giữ tới khi về rồi mới nhả', async (status, message) => {
+      const qc = newClient();
+      const refresh = holdRefresh(qc);
+      vi.mocked(requestPayout).mockRejectedValueOnce(rejectedWith(status, message));
+      const btn = await sendBtn(qc);
+      fireEvent.click(btn);
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: message, type: 'error' }));
+      expect(errorSnackbars()).toHaveLength(1);
+      // Dashboard chờ Ví về trước để số to không nhảy hai lần: chưa có khoá dashboard khi Ví còn treo.
+      expect(refreshed()).toEqual([
+        '["affiliate-commissions"]',
+        '["affiliate-payouts"]',
+        '["affiliate-tax-statement"]',
+        '["affiliate-me"]',
+        '["wallet"]',
+      ]);
+      await settle();
+      expect(btn).toHaveAttribute('aria-busy', 'true');
+      await act(async () => {
+        fireEvent.click(btn);
+      });
+      expect(requestPayout).toHaveBeenCalledTimes(1);
+      expect(errorSnackbars()).toHaveLength(1);
+
+      await act(async () => refresh.finish());
+      await settle();
+      expect(refreshed()).toContain('["affiliate-dashboard"]');
+      await waitFor(() => expect(btn).not.toHaveAttribute('aria-busy', 'true'));
+      fireEvent.click(btn);
+      await waitFor(() => expect(requestPayout).toHaveBeenCalledTimes(2));
+      const keys = vi.mocked(requestPayout).mock.calls.map((c) => c[1]);
+      expect(keys[1]).toBe(keys[0]);
+    });
+
+    it.each([
+      ['mất mạng', networkError()],
+      ['máy chủ lỗi 503', rejectedWith(503, 'Máy chủ bận')],
+      ['hết phiên 401', rejectedWith(401, 'Hết phiên')],
+    ])('%s: không tải lại, khoá nhả ngay, gửi lại cùng Idempotency-Key', async (_label, error) => {
+      const qc = newClient();
+      holdRefresh(qc, true);
+      vi.mocked(requestPayout).mockRejectedValueOnce(error);
+      const btn = await sendBtn(qc);
+      fireEvent.click(btn);
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+      await settle();
+      await waitFor(() => expect(btn).not.toHaveAttribute('aria-busy', 'true'));
+      expect(refreshed()).toEqual([]);
+      fireEvent.click(btn);
+      await waitFor(() => expect(requestPayout).toHaveBeenCalledTimes(2));
+      const keys = vi.mocked(requestPayout).mock.calls.map((c) => c[1]);
+      expect(keys[1]).toBe(keys[0]);
+    });
+
+    it('tải lại treo mãi: khoá nhả sau LOCK_REFRESH_WAIT_MS', async () => {
+      const qc = newClient();
+      holdRefresh(qc, true);
+      vi.mocked(requestPayout).mockRejectedValueOnce(rejectedWith(409, 'Lệnh chuyển khác đang xử lý'));
+      const btn = await sendBtn(qc);
+      vi.useFakeTimers();
+      fireEvent.click(btn);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 1);
+      });
+      expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' }));
+      expect(btn).toHaveAttribute('aria-busy', 'true');
+      fireEvent.click(btn);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(requestPayout).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2);
+      });
+      expect(btn).not.toHaveAttribute('aria-busy', 'true');
+      fireEvent.click(btn);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(requestPayout).toHaveBeenCalledTimes(2);
+    });
   });
 });

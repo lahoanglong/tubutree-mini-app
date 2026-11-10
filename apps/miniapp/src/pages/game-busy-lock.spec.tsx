@@ -67,6 +67,7 @@ vi.mock('../services/account-api', () => ({
 }));
 
 import GamePage from './game';
+import { HttpError } from '../services/http';
 import { vi as viText } from '../i18n/vi';
 
 const PROFILE = {
@@ -245,6 +246,29 @@ describe('GamePage — chạm đúp cùng khung hình chỉ gọi API một lầ
     const ok = await screen.findByRole('button', { name: 'Xác nhận' });
     await tapTogether(ok, ok);
     expect(mocks.api.buyTree).toHaveBeenCalledTimes(1);
+  });
+
+  it('(W111A) góp quỹ bị từ chối 400: khoá của hộp xác nhận giữ tới khi hồ sơ tải lại xong, chạm lại bị bỏ qua, về rồi gửi lại được', async () => {
+    mocks.api.buyTree.mockRejectedValue(new HttpError('Không đủ Điểm Xanh', undefined, { status: 400, data: { message: 'Không đủ Điểm Xanh' } } as never));
+    renderPage();
+    await openTab('Vườn');
+    fireEvent.click(await screen.findByRole('button', { name: /Góp quỹ trồng cây/ }));
+    const ok = await screen.findByRole('button', { name: 'Xác nhận' });
+    const refetched = pending<unknown>();
+    mocks.api.getGameProfile.mockClear();
+    mocks.api.getGameProfile.mockReturnValue(refetched.promise);
+    await tapTogether(ok);
+    await waitFor(() => expect(mocks.api.getGameProfile).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    });
+    expect(ok).toHaveAttribute('aria-busy', 'true');
+    await tapTogether(ok);
+    expect(mocks.api.buyTree).toHaveBeenCalledTimes(1);
+    await act(async () => refetched.resolve({ ...PROFILE }));
+    await waitFor(() => expect(ok).not.toHaveAttribute('aria-busy', 'true'));
+    await tapTogether(ok);
+    await waitFor(() => expect(mocks.api.buyTree).toHaveBeenCalledTimes(2));
   });
 });
 
