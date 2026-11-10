@@ -165,7 +165,8 @@ function TodayCard() {
   useEffect(() => {
     if (!openId) return;
     // Lấy vị trí có thể mất vài giây: nếu nhân viên ra ca (hoặc rời trang) trong lúc đó thì nhịp cũ không được gửi
-    // heartbeat cho phiên đã đóng, cũng không báo "tự ra ca" đè lên lần ra ca vừa bấm.
+    // heartbeat cho phiên đã đóng, cũng không báo lỗi vị trí cho phiên đã đóng. Câu trả lời "closed" của một heartbeat
+    // đã gửi thì vẫn báo: máy chủ thật sự đã tự ra ca, kể cả khi người dùng vừa rời trang.
     let alive = true;
     let locFailNotified = false; // mỗi chuỗi lỗi vị trí chỉ báo một lần, không báo lại mỗi nhịp
     const tick = async () => {
@@ -181,7 +182,6 @@ function TodayCard() {
         if (!alive) return;
         if (!locFailed) locFailNotified = false;
         const r = await attnHeartbeat(loc);
-        if (!alive) return;
         if (r.closed) {
           openSnackbar({ text: 'Đã tự ra ca (ra khỏi vùng công ty).', type: 'info' });
           invalidate();

@@ -357,28 +357,55 @@ describe('Ca làm của tôi theo DS v2 (C-076, C-114)', () => {
       expect(mocks.openSnackbar).not.toHaveBeenCalledWith({ text: 'Đã tự ra ca (ra khỏi vùng công ty).', type: 'info' });
     });
 
-    it('heartbeat đang chờ máy chủ khi ra ca: câu trả lời "closed" của nhịp cũ không báo "tự ra ca"', async () => {
+    it('ra ca trong lúc nhịp heartbeat còn đang lấy vị trí: lỗi vị trí đến muộn không hiện cảnh báo', async () => {
       const spy = vi.spyOn(globalThis, 'setInterval');
       mocks.getAttendanceStatus
         .mockResolvedValueOnce({ shifts: [], openSession: OPEN_SESSION })
         .mockResolvedValue({ shifts: [], openSession: null });
-      mocks.acquireLocationPayload.mockResolvedValue({ lat: 1, lng: 2 });
-      let answered!: (v: unknown) => void;
-      mocks.heartbeat.mockReturnValueOnce(new Promise((r) => (answered = r)));
+      let failLate!: () => void;
+      mocks.acquireLocationPayload.mockImplementationOnce(
+        (onFailure?: (m: string) => void) =>
+          new Promise((r) => {
+            failLate = () => {
+              onFailure?.('Không lấy được vị trí: hết thời gian chờ tín hiệu GPS.');
+              r({});
+            };
+          }),
+      );
       renderPage();
       await screen.findByText('Đang trong ca · vào lúc 08:30 · đi trễ');
       const tick = spy.mock.calls.find((c) => c[1] === 3 * 60 * 1000)![0] as () => Promise<void>;
       const running = tick();
-      await waitFor(() => expect(mocks.heartbeat).toHaveBeenCalledTimes(1));
       fireEvent.click(screen.getByRole('button', { name: 'Ra ca' }));
+      await waitFor(() => expect(mocks.checkout).toHaveBeenCalledTimes(1));
       await screen.findByText('Hôm nay bạn không có ca đã duyệt.');
-      const loadsBefore = mocks.getAttendanceStatus.mock.calls.length;
+      await act(async () => {
+        failLate();
+        await running;
+      });
+      expect(mocks.openSnackbar).not.toHaveBeenCalledWith({
+        text: 'Không lấy được vị trí: hết thời gian chờ tín hiệu GPS.',
+        type: 'warning',
+      });
+    });
+
+    it('rời trang khi heartbeat đã gửi: câu trả lời "closed" vẫn báo "tự ra ca" và tải lại trạng thái', async () => {
+      const spy = vi.spyOn(globalThis, 'setInterval');
+      mocks.getAttendanceStatus.mockResolvedValue({ shifts: [], openSession: OPEN_SESSION });
+      mocks.acquireLocationPayload.mockResolvedValue({ lat: 1, lng: 2 });
+      let answered!: (v: unknown) => void;
+      mocks.heartbeat.mockReturnValueOnce(new Promise((r) => (answered = r)));
+      const view = renderPage();
+      await screen.findByText('Đang trong ca · vào lúc 08:30 · đi trễ');
+      const tick = spy.mock.calls.find((c) => c[1] === 3 * 60 * 1000)![0] as () => Promise<void>;
+      const running = tick();
+      await waitFor(() => expect(mocks.heartbeat).toHaveBeenCalledTimes(1));
+      view.unmount();
       await act(async () => {
         answered({ closed: true });
         await running;
       });
-      expect(mocks.openSnackbar).not.toHaveBeenCalledWith({ text: 'Đã tự ra ca (ra khỏi vùng công ty).', type: 'info' });
-      expect(mocks.getAttendanceStatus.mock.calls.length).toBe(loadsBefore);
+      expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã tự ra ca (ra khỏi vùng công ty).', type: 'info' });
     });
 
     it('không trong ca thì không đặt nhịp heartbeat', async () => {

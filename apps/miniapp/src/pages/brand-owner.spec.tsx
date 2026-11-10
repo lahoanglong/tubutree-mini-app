@@ -512,7 +512,7 @@ describe('BrandOwnerPage: "Liên hệ Tubu" và "Thử lại" khoá chạm đúp
     expect(mocks.openOAChat).toHaveBeenCalledTimes(2);
   });
 
-  it('tab Doanh thu: hai cú chạm cùng nhịp vào "Thử lại" chỉ tải lại một lần', async () => {
+  it('tab Doanh thu: "Thử lại" tải lại rồi hiện số liệu', async () => {
     const d = deferred();
     mocks.getOwnedBrandSales.mockRejectedValueOnce(new Error('mạng lỗi')).mockReturnValueOnce(d.promise);
     renderPage();
