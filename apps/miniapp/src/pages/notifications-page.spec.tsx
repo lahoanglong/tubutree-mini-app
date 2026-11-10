@@ -994,6 +994,31 @@ describe('W108A: máy chủ từ chối lệnh đọc thì tải lại danh sác
     await waitFor(() => expect(mocks.markNotificationRead).toHaveBeenCalledTimes(2));
   });
 
+  it('bị từ chối "không còn khớp" thì danh sách chỉ tải lại đúng một lần sau khi khoá nhả (đọc một tin và Đọc tất cả), không tải thêm ở onSettled', async () => {
+    const refetchOne = deferred<unknown>();
+    listThen(refetchOne.promise);
+    mocks.markNotificationRead.mockRejectedValueOnce(serverError('Không tìm thấy thông báo.', 404));
+    mocks.markAllNotificationsRead.mockRejectedValueOnce(serverError('Hộp thư vừa đổi, bạn thử lại nhé.', 409));
+    renderPage();
+    const row = await rowOf();
+    await act(async () => {
+      fireEvent.click(row);
+    });
+    await waitFor(() => expect(mocks.getNotifications).toHaveBeenCalledTimes(2));
+    await act(async () => refetchOne.resolve(LIST));
+    await settle();
+    await settle();
+    expect(mocks.getNotifications).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      fireEvent.click(await screen.findByRole('button', { name: 'Đọc tất cả' }));
+    });
+    await waitFor(() => expect(mocks.getNotifications).toHaveBeenCalledTimes(3));
+    await settle();
+    await settle();
+    expect(mocks.getNotifications).toHaveBeenCalledTimes(3);
+  });
+
   it.each(TEMPORARY)('đọc một tin gặp %s: khoá nhả ngay, không đợi danh sách tải lại', async (_label, error) => {
     const refetch = deferred<unknown>();
     listThen(refetch.promise);
