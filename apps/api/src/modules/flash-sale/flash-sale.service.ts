@@ -39,6 +39,7 @@ export { FLASH_SOLD_OUT_MSG, FLASH_OVER_LIMIT_MSG, FLASH_LIMIT, flashOverLimitMe
 export const FLASH_START_LOCKED_MSG = 'Đợt flash sale đã bắt đầu, không đổi được giờ bắt đầu. Chỉ sửa được tên, giờ kết thúc hoặc tắt đợt.';
 export const FLASH_ITEM_CLASH_MSG = 'Sản phẩm đã có trong đợt flash khác.';
 export const FLASH_ADMIN_SALE_MSG = 'Đợt flash sale do quản trị viên hoặc hệ thống tạo — nhân viên không sửa được, nhờ quản trị viên.';
+const REMOVE_SOLD_ITEM_MSG = 'Không thể xoá sản phẩm đã phát sinh đơn giờ vàng. Hãy tắt đợt flash thay vì xoá.';
 
 export interface FlashSlotDTO {
   id: string;
@@ -853,10 +854,13 @@ export class FlashSaleService {
     });
     if (!item) throw new BadRequestException('Không tìm thấy sản phẩm flash.');
     if (actor?.staff) await this.assertStaffCreated(item.flashSale.createdBy);
-    if (item.soldCount > 0) {
-      throw new BadRequestException('Không thể xoá sản phẩm đã phát sinh đơn giờ vàng. Hãy tắt đợt flash thay vì xoá.');
+    if (item.soldCount > 0) throw new BadRequestException(REMOVE_SOLD_ITEM_MSG);
+    // soldCount đã đọc ở trên có thể cũ: khách đặt xong giữa hai câu thì DELETE theo id sẽ cuốn luôn dòng lượt mua (CASCADE). Điều kiện soldCount nằm trong chính câu DELETE.
+    const removed = await this.prisma.flashSaleItem.deleteMany({ where: { id: itemId, soldCount: 0 } });
+    if (removed.count === 0) {
+      const still = await this.prisma.flashSaleItem.findUnique({ where: { id: itemId }, select: { id: true } });
+      throw new BadRequestException(still ? REMOVE_SOLD_ITEM_MSG : 'Không tìm thấy sản phẩm flash.');
     }
-    await this.prisma.flashSaleItem.delete({ where: { id: itemId } });
     return { ok: true };
   }
 
