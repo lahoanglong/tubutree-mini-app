@@ -205,12 +205,17 @@ export class UsersService {
 
   /** Lưu kết quả onboarding quiz (segments) vào metadata + đánh dấu đã onboard. */
   async completeOnboarding(userId: string, segments: string[]) {
-    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
-    const metadata = { ...(user.metadata as Record<string, unknown> | null), segments, onboardedAt: new Date().toISOString() };
-    const updated = await this.prisma.user.update({
-      where: { id: userId },
-      data: { metadata },
-      include: { tier: true },
+    const updated = await this.prisma.$transaction(async (tx) => {
+      // Khoá dòng users rồi mới đọc metadata: duyệt hồ sơ đại lý ghi dealerTierId vào cùng cột (cũng gộp từ dòng đã khoá), ghi lại bản đọc
+      // trước đó sẽ xoá mất bậc vừa cấp. NO KEY UPDATE như duyệt hồ sơ để không đợi KEY SHARE của khoá ngoại.
+      await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${userId} FOR NO KEY UPDATE`;
+      const user = await tx.user.findUniqueOrThrow({ where: { id: userId } });
+      const metadata = { ...(user.metadata as Record<string, unknown> | null), segments, onboardedAt: new Date().toISOString() };
+      return tx.user.update({
+        where: { id: userId },
+        data: { metadata },
+        include: { tier: true },
+      });
     });
     return this.serialize(updated);
   }

@@ -186,3 +186,86 @@ describe('DealerPage: ảnh CCCD còn đang lên thì "Gửi hồ sơ đăng ký
     await waitFor(() => expect(screen.getByRole('button', { name: FRONT })).toBeEnabled());
   });
 });
+
+// W103A: mutation chỉ xong khi onSuccess/onError trả Promise xong; không trả thì nút sáng lại trong lúc dealer-me còn đang tải, form vẫn hiện và bấm lại gửi hồ sơ thứ hai.
+describe('DealerPage: Gửi hồ sơ giữ khoá tới khi trạng thái hồ sơ làm mới về (W103A)', () => {
+  const deferred = <T,>() => {
+    let resolve!: (v: T) => void;
+    const promise = new Promise<T>((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.applyDealer.mockReset();
+    mocks.getDealerMe.mockReset();
+  });
+
+  it('gửi thành công: dealer-me chưa về thì nút còn aria-busy và ô ảnh còn khoá, chạm lại không gửi hồ sơ thứ hai; về PENDING thì sang màn chờ duyệt', async () => {
+    const refetch = deferred<unknown>();
+    mocks.getDealerMe.mockResolvedValueOnce(NONE).mockReturnValueOnce(refetch.promise);
+    mocks.applyDealer.mockResolvedValue({ ok: true });
+    renderPage();
+    const submit = await fillForm();
+    fireEvent.click(submit);
+    await waitFor(() => expect(mocks.getDealerMe).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã gửi hồ sơ đăng ký đại lý!', type: 'success' }));
+    expect(submit).toHaveAttribute('aria-busy', 'true');
+    expect(screen.getByRole('button', { name: 'Ảnh CCCD mặt trước *' })).toBeDisabled();
+    fireEvent.click(submit);
+    await new Promise((r) => setTimeout(r, 30));
+    expect(mocks.applyDealer).toHaveBeenCalledTimes(1);
+
+    await act(async () => refetch.resolve({ ...NONE, status: 'PENDING' }));
+    expect(await screen.findByText('Hồ sơ đang được duyệt')).toBeInTheDocument();
+    expect(mocks.applyDealer).toHaveBeenCalledTimes(1);
+  });
+
+  it('API báo đã có hồ sơ chờ duyệt (DEALER_APPLICATION_PENDING): nút giữ khoá tới khi dealer-me về, báo bằng thông tin chứ không phải lỗi', async () => {
+    const refetch = deferred<unknown>();
+    mocks.getDealerMe.mockResolvedValueOnce(NONE).mockReturnValueOnce(refetch.promise);
+    mocks.applyDealer.mockRejectedValue(
+      new HttpError('x', 'ERR_BAD_REQUEST', { status: 400, data: { code: 'DEALER_APPLICATION_PENDING', message: 'Bạn đã có đơn đăng ký đang chờ duyệt.' }, headers: {} }),
+    );
+    renderPage();
+    const submit = await fillForm();
+    fireEvent.click(submit);
+    await waitFor(() => expect(mocks.getDealerMe).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Bạn đã có đơn đăng ký đang chờ duyệt.', type: 'info' }));
+    expect(submit).toHaveAttribute('aria-busy', 'true');
+    fireEvent.click(submit);
+    await new Promise((r) => setTimeout(r, 30));
+    expect(mocks.applyDealer).toHaveBeenCalledTimes(1);
+
+    await act(async () => refetch.resolve({ ...NONE, status: 'PENDING' }));
+    expect(await screen.findByText('Hồ sơ đang được duyệt')).toBeInTheDocument();
+    expect(mocks.openSnackbar).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'error' }));
+  });
+
+  it('dealer-me tải lại lỗi: khoá vẫn nhả (không treo nút), form còn đó để thử lại', async () => {
+    mocks.getDealerMe.mockResolvedValueOnce(NONE).mockRejectedValue(new Error('mạng chập chờn'));
+    mocks.applyDealer.mockResolvedValue({ ok: true });
+    renderPage();
+    const submit = await fillForm();
+    fireEvent.click(submit);
+    await waitFor(() => expect(mocks.getDealerMe).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(submit).not.toHaveAttribute('aria-busy'));
+    expect(screen.getByRole('button', { name: 'Gửi hồ sơ đăng ký' })).toBeEnabled();
+  });
+
+  it('lỗi tiếng Anh của máy chủ không hiện thô: snackbar là câu tiếng Việt, hồ sơ không bị coi là đã nhận (không làm mới dealer-me)', async () => {
+    mocks.getDealerMe.mockResolvedValue(NONE);
+    mocks.applyDealer.mockRejectedValue(
+      new HttpError('x', 'ERR_BAD_REQUEST', { status: 400, data: { message: 'phone must be a string' }, headers: {} }),
+    );
+    renderPage();
+    fireEvent.click(await fillForm());
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+    const text = mocks.openSnackbar.mock.calls.find((c) => c[0].type === 'error')![0].text as string;
+    expect(text).toBe(t.errors.generic);
+    expect(text).not.toMatch(/must be/);
+    expect(mocks.getDealerMe).toHaveBeenCalledTimes(1);
+  });
+});

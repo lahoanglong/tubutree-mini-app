@@ -1652,14 +1652,14 @@ describe('AffiliateService.requestPayout (money safety)', () => {
 
     it('register: có dấu → 403; getMe canRegister=false', async () => {
       const mk = (affiliateRevokedAt: Date | null) =>
-        ({
+        withUserLockTx({
           user: {
             findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'CUSTOMER', zaloId: 'z1', phone: '0900000001', referralCode: 'R', affiliateRevokedAt, walletBalance: 0 }),
             update: jest.fn(),
           },
           commission: { aggregate: jest.fn().mockResolvedValue({ _sum: { amount: 0 } }), findFirst: jest.fn().mockResolvedValue(null) },
           storefront: { findFirst: jest.fn().mockResolvedValue(null) },
-        }) as unknown as PrismaService;
+        });
       const revoked = mk(new Date());
       await expect(svcOf(revoked).register('u1')).rejects.toBeInstanceOf(ForbiddenException);
       expect((revoked.user.update as jest.Mock)).not.toHaveBeenCalled();
@@ -3401,17 +3401,24 @@ describe('AffiliateService.recordTouch: hạn tính từ lúc khách bấm (clic
   });
 });
 
+/** register() khoá dòng users trong một transaction: giả `$transaction` chạy callback trên chính client giả và `$queryRaw` (SELECT ... FOR NO KEY UPDATE) trả rỗng. */
+function withUserLockTx<T extends Record<string, unknown>>(parts: T): PrismaService {
+  const client: Record<string, unknown> = { ...parts, $queryRaw: jest.fn().mockResolvedValue([]) };
+  client.$transaction = (cb: (tx: unknown) => unknown) => cb(client);
+  return client as unknown as PrismaService;
+}
+
 describe('AffiliateService.register: đánh dấu danh sách ảnh /img cũ', () => {
   type U = Record<string, unknown>;
   function setup(over: U = {}, updateImpl?: jest.Mock) {
     const stale = { markStale: jest.fn() };
     const update = updateImpl ?? jest.fn().mockResolvedValue({});
-    const prisma = {
+    const prisma = withUserLockTx({
       user: {
         findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'CUSTOMER', zaloId: 'z1', phone: '0900000001', referralCode: 'R', affiliateRevokedAt: null, metadata: null, ...over }),
         update,
       },
-    } as unknown as PrismaService;
+    });
     const svc = new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics, undefined, undefined, undefined, undefined, stale as never);
     return { svc, stale, update };
   }
@@ -3423,9 +3430,9 @@ describe('AffiliateService.register: đánh dấu danh sách ảnh /img cũ', ()
       insideCalls = stale.markStale.mock.calls.length;
       return {};
     });
-    const prisma = {
+    const prisma = withUserLockTx({
       user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'CUSTOMER', zaloId: 'z1', phone: '0900000001', referralCode: 'R', affiliateRevokedAt: null, metadata: null }), update },
-    } as unknown as PrismaService;
+    });
     const svc = new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics, undefined, undefined, undefined, undefined, stale as never);
     await svc.register('u1');
     expect(update).toHaveBeenCalledTimes(1);
@@ -3467,9 +3474,9 @@ describe('AffiliateService.register: đánh dấu danh sách ảnh /img cũ', ()
   });
 
   it('không tiêm ImageRegistryStale (@Optional) → vẫn đăng ký được', async () => {
-    const prisma = {
+    const prisma = withUserLockTx({
       user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'CUSTOMER', zaloId: 'z1', phone: '0900000001', referralCode: 'R', affiliateRevokedAt: null, metadata: null }), update: jest.fn().mockResolvedValue({}) },
-    } as unknown as PrismaService;
+    });
     await expect(new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).register('u1')).resolves.toMatchObject({ ok: true });
   });
 });

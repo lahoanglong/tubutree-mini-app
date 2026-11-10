@@ -176,32 +176,38 @@ export class AffiliateService {
   ) {}
 
   async register(userId: string, termsVersion?: string) {
-    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
-    if (!canRegisterAsAffiliate(user.role)) {
-      throw new BadRequestException('Tài khoản này không thể đăng ký CTV.');
-    }
-    if (user.affiliateRevokedAt) throw new ForbiddenException(AFFILIATE_REVOKED_MESSAGE);
-    // Khách theo deviceId tạo được vô hạn: hoa hồng và Ví chỉ dành cho tài khoản đã có Zalo thật hoặc SĐT.
-    if (!isRealUser(user)) throw new BadRequestException(AFFILIATE_REAL_USER_REQUIRED_MSG);
-    const data: Prisma.UserUpdateInput = {};
-    if (user.role !== 'AFFILIATE') data.role = 'AFFILIATE';
-    // Bằng chứng người dùng đã đồng ý điều khoản hoa hồng/thuế: ghi vào User.metadata (đã dùng cho
-    // segments/dealerTierId, không cần migration). Chỉ ghi khi phiên bản đổi để giữ thời điểm đồng
-    // ý đầu tiên của từng phiên bản; merge để không mất khoá metadata khác.
-    const version = termsVersion?.trim();
-    if (version) {
-      const meta = (user.metadata as Record<string, unknown> | null) ?? {};
-      const prev = meta.affiliateTerms as { version?: string } | undefined;
-      if (prev?.version !== version) {
-        data.metadata = {
-          ...meta,
-          affiliateTerms: { version, acceptedAt: new Date().toISOString() },
-        } as Prisma.InputJsonValue;
+    const { user, data } = await this.prisma.$transaction(async (tx) => {
+      // Khoá dòng users rồi mới đọc vai trò và metadata: duyệt hồ sơ đại lý (hay cấp vai trò) chen giữa lúc đọc và lúc ghi thì lệnh ghi
+      // dưới đây sẽ đè DEALER bằng AFFILIATE và xoá dealerTierId bằng bản metadata cũ. Sau khoá, người vừa thành đại lý bị chặn ở bước kiểm vai trò.
+      await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${userId} FOR NO KEY UPDATE`;
+      const user = await tx.user.findUniqueOrThrow({ where: { id: userId } });
+      if (!canRegisterAsAffiliate(user.role)) {
+        throw new BadRequestException('Tài khoản này không thể đăng ký CTV.');
       }
-    }
-    if (Object.keys(data).length > 0) {
-      await this.prisma.user.update({ where: { id: userId }, data });
-    }
+      if (user.affiliateRevokedAt) throw new ForbiddenException(AFFILIATE_REVOKED_MESSAGE);
+      // Khách theo deviceId tạo được vô hạn: hoa hồng và Ví chỉ dành cho tài khoản đã có Zalo thật hoặc SĐT.
+      if (!isRealUser(user)) throw new BadRequestException(AFFILIATE_REAL_USER_REQUIRED_MSG);
+      const data: Prisma.UserUpdateInput = {};
+      if (user.role !== 'AFFILIATE') data.role = 'AFFILIATE';
+      // Bằng chứng người dùng đã đồng ý điều khoản hoa hồng/thuế: ghi vào User.metadata (đã dùng cho
+      // segments/dealerTierId, không cần migration). Chỉ ghi khi phiên bản đổi để giữ thời điểm đồng
+      // ý đầu tiên của từng phiên bản; merge để không mất khoá metadata khác.
+      const version = termsVersion?.trim();
+      if (version) {
+        const meta = (user.metadata as Record<string, unknown> | null) ?? {};
+        const prev = meta.affiliateTerms as { version?: string } | undefined;
+        if (prev?.version !== version) {
+          data.metadata = {
+            ...meta,
+            affiliateTerms: { version, acceptedAt: new Date().toISOString() },
+          } as Prisma.InputJsonValue;
+        }
+      }
+      if (Object.keys(data).length > 0) {
+        await tx.user.update({ where: { id: userId }, data });
+      }
+      return { user, data };
+    });
     // Vai trò vừa đổi: bỏ bản nhớ 5 giây của phiên, không thì các route CTV (Học viện...) còn thấy vai trò cũ và trả 403.
     if (data.role) this.sessionState?.invalidate(userId);
     // Lên CTV thì gian hàng CTV đang có của người này (vd. bị thu hồi quyền nhân viên về khách) hiện lại: danh sách ảnh /img nạp lại.

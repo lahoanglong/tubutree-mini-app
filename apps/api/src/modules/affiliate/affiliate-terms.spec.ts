@@ -14,13 +14,20 @@ import type { SessionStateService } from '../auth/session-state.service';
 
 const noop = {} as never;
 
+/** register() khoá dòng users trong một transaction: giả `$transaction` chạy callback trên chính client giả và `$queryRaw` (SELECT ... FOR NO KEY UPDATE) trả rỗng. */
+function withTx(parts: Record<string, unknown>): PrismaService {
+  const client: Record<string, unknown> = { ...parts, $queryRaw: jest.fn().mockResolvedValue([]) };
+  client.$transaction = (cb: (tx: unknown) => unknown) => cb(client);
+  return client as unknown as PrismaService;
+}
+
 function makeService(user: Record<string, unknown>, sessionState?: SessionStateService) {
   const update = jest.fn().mockResolvedValue({});
   // Mặc định là tài khoản thật (có SĐT); ca khách ghi đè phone/zaloId.
   const row = { phone: '0901234567', ...user };
-  const prisma = {
+  const prisma = withTx({
     user: { findUniqueOrThrow: jest.fn().mockResolvedValue(row), update },
-  } as unknown as PrismaService;
+  });
   const svc = new AffiliateService(
     prisma,
     noop as SystemConfigService,
