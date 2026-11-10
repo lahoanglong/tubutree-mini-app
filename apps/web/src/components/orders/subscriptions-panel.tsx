@@ -50,6 +50,7 @@ export function SubscriptionsPanel() {
   const [cancelTarget, setCancelTarget] = useState<string | null>(null);
   const [editTarget, setEditTarget] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [rejected, setRejected] = useState<string | null>(null);
   // Nhiều gói cùng SP chỉ khác nhau ở địa chỉ, nên thẻ phải hiện địa chỉ để khách phân biệt.
   const addrQ = useQuery({ ...addressesQuery(coreHttp), enabled: authed && subs.length > 0 });
   const addressById = new Map((addrQ.data ?? []).map((a) => [a.id, a]));
@@ -70,12 +71,20 @@ export function SubscriptionsPanel() {
 
   // Lệnh bị từ chối vì gói đã khác thẻ (cron vừa tạm dừng, máy khác vừa huỷ): tải lại để lần bấm sau dựa trên số thật, và giữ khoá tới lúc đó
   // như lệnh thành công (react-query chờ Promise này trước `onSettled`). Lỗi tạm (mạng, 5xx) thì để nguyên danh sách.
-  const onActionError = (e: unknown) =>
-    isStaleSubscriptionError(e) ? settleWithin(qc.invalidateQueries({ queryKey: ['subscriptions'] })) : undefined;
+  // `isError` của mutation chỉ bật SAU khi Promise này xong (tối đa 4 giây), nên lời máy chủ nằm ở state riêng để hiện ngay như snackbar của Mini
+  // và còn lại khi sheet Sửa tự đóng vì gói đã rời danh sách.
+  const onActionError = (e: unknown) => {
+    if (!isStaleSubscriptionError(e)) return undefined;
+    setRejected(actionErrorText(e));
+    return settleWithin(qc.invalidateQueries({ queryKey: ['subscriptions'] }));
+  };
 
   const statusMut = useLockedMutation({
     mutationFn: ({ id, status }: { id: string; status: SubStatus; from: 'card' | 'sheet' }) => setSubscriptionStatus(coreHttp, id, status),
-    onMutate: () => setNotice(null),
+    onMutate: () => {
+      setNotice(null);
+      setRejected(null);
+    },
     onSuccess: () => {
       setCancelTarget(null);
       return settleWithin(qc.invalidateQueries({ queryKey: ['subscriptions'] }));
@@ -85,7 +94,10 @@ export function SubscriptionsPanel() {
   });
   const skipMut = useLockedMutation({
     mutationFn: (id: string) => skipSubscriptionCycle(coreHttp, id),
-    onMutate: () => setNotice(null),
+    onMutate: () => {
+      setNotice(null);
+      setRejected(null);
+    },
     onSuccess: () => {
       setNotice('Đã bỏ qua kỳ này, hẹn kỳ sau nhé');
       setCancelTarget(null);
@@ -103,7 +115,7 @@ export function SubscriptionsPanel() {
     if (!cancelTarget) return;
     exclusive(() => statusMut.mutate({ id: cancelTarget, status, from: 'sheet' }));
   };
-  const actionError = statusMut.isError ? actionErrorText(statusMut.error) : skipMut.isError ? actionErrorText(skipMut.error) : null;
+  const actionError = rejected ?? (statusMut.isError ? actionErrorText(statusMut.error) : skipMut.isError ? actionErrorText(skipMut.error) : null);
 
   return (
     <div className="flex flex-col gap-3 pb-6 pt-1 max-md:px-1">
@@ -117,7 +129,7 @@ export function SubscriptionsPanel() {
           {notice}
         </p>
       )}
-      {actionError && !cancelTarget && (
+      {actionError && !cancelTarget && !editSub && (
         <p role="alert" className={ui.error}>
           {actionError}
         </p>
@@ -165,7 +177,16 @@ export function SubscriptionsPanel() {
       )}
 
       {editSub && (
-        <SubscriptionEditSheet key={editSub.id} sub={editSub} onClose={() => setEditTarget(null)} onSaved={setNotice} />
+        <SubscriptionEditSheet
+          key={editSub.id}
+          sub={editSub}
+          onClose={() => {
+            setRejected(null);
+            setEditTarget(null);
+          }}
+          onSaved={setNotice}
+          onRejected={setRejected}
+        />
       )}
 
       <Sheet

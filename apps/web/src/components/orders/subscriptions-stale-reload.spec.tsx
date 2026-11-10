@@ -7,7 +7,8 @@ import { captureUnhandledRejections } from '@/test-utils/unhandled';
 import { SubscriptionsPanel } from './subscriptions-panel';
 
 // Mini App subscriptions-panel.spec.tsx (W98A): lệnh Tạm dừng/Tiếp tục/Huỷ/Bỏ qua kỳ và lưu Sửa bị 400/404/409 thì tải lại danh sách gói,
-// khoá giữ tới lúc danh sách về (hạn 4 giây); lỗi tạm (401, 5xx, mất mạng) để nguyên danh sách.
+// khoá giữ tới lúc danh sách về (hạn 4 giây); lỗi tạm (401, 5xx, mất mạng) để nguyên danh sách. Riêng nút Lưu của sheet Sửa KHÔNG giữ khoá chờ danh sách
+// (Mini dùng `void`): lời lỗi hiện ngay trong sheet, tải lại chạy nền; gói đã rời danh sách thì sheet tự đóng và lời lỗi được báo lên trang.
 
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ status: 'authenticated', initialized: true, sessionUnavailable: false }) }));
 
@@ -244,6 +245,7 @@ describe('SubscriptionsPanel (web): lệnh bị từ chối vì gói đã đổi
     expect(sent(LIST)).toHaveLength(2);
     expect(document.body.textContent).not.toContain('Sửa gói định kỳ');
     expect(document.body.textContent).toContain('Chưa có lịch đặt định kỳ');
+    expect(alertText()).toBe('Gói định kỳ đã huỷ, không sửa được nữa.');
   });
 
   describe.each(TRANSIENT)('lỗi tạm %s: chỉ báo lỗi, KHÔNG tải lại danh sách, khoá nhả để bấm lại được', (_name, failure) => {
@@ -296,6 +298,62 @@ describe('SubscriptionsPanel (web): lệnh bị từ chối vì gói đã đổi
       expect(sent(LIST)).toHaveLength(1);
       expect(document.body.textContent).toContain('Sửa gói định kỳ');
       expect(busy(btn('Lưu thay đổi'))).toBe(false);
+    });
+  });
+
+  describe('lời máy chủ khi lệnh bị từ chối vì gói đã đổi', () => {
+    it('"Tạm dừng" trên thẻ bị 409: lời lỗi hiện ngay khi danh sách còn đang tải lại, không chờ tới khi khoá nhả', async () => {
+      await mount();
+      failures[STATUS] = { status: 409, message: STALE[2][1] };
+      const releaseList = hold(LIST);
+      click(cardBtns()[TOGGLE]!);
+      await flush(8);
+      expect(busy(cardBtns()[TOGGLE])).toBe(true);
+      expect(alertText()).toBe(STALE[2][1]);
+      releaseList();
+      await flush(8);
+      expect(alertText()).toBe(STALE[2][1]);
+    });
+
+    it('bấm lệnh mới thì lời của lần bị từ chối trước được xoá', async () => {
+      await mount();
+      failures[STATUS] = { status: 409, message: STALE[2][1] };
+      click(cardBtns()[TOGGLE]!);
+      await flush(8);
+      expect(alertText()).toBe(STALE[2][1]);
+      delete failures[STATUS];
+      subs = [PAUSED];
+      click(cardBtns()[TOGGLE]!);
+      await flush(8);
+      expect(alertText()).toBe('');
+    });
+
+    it('lưu Sửa bị 409 khi gói còn trong danh sách: sheet mở chỉ có MỘT lời lỗi (trong sheet); lưu lại thành công thì sheet đóng và không còn lời cũ', async () => {
+      await mount();
+      await openEditAndChange();
+      failures[PATCH] = { status: 409, message: STALE[2][1] };
+      click(btn('Lưu thay đổi')!);
+      await flush(10);
+      expect(document.body.textContent).toContain('Sửa gói định kỳ');
+      expect(document.body.querySelectorAll('[role="alert"]')).toHaveLength(1);
+      delete failures[PATCH];
+      click(btn('Lưu thay đổi')!);
+      await flush(10);
+      expect(document.body.textContent).not.toContain('Sửa gói định kỳ');
+      expect(alertText()).toBe('');
+    });
+
+    it('lưu Sửa bị 409 rồi đóng sheet bằng nút Đóng: không còn lời lỗi nào trên trang', async () => {
+      await mount();
+      await openEditAndChange();
+      failures[PATCH] = { status: 409, message: STALE[2][1] };
+      click(btn('Lưu thay đổi')!);
+      await flush(10);
+      expect(alertText()).toBe(STALE[2][1]);
+      click(btn('Đóng')!);
+      await flush(6);
+      expect(document.body.textContent).not.toContain('Sửa gói định kỳ');
+      expect(alertText()).toBe('');
     });
   });
 
@@ -395,6 +453,7 @@ describe('SubscriptionsPanel (web): lệnh bị từ chối vì gói đã đổi
       await advance(3_000);
       expect(busy(cardBtns()[TOGGLE])).toBe(true);
       together(cardBtns()[TOGGLE], cardBtns()[TOGGLE]);
+      await flush(3);
       expect(sent(STATUS)).toHaveLength(1);
       await advance(1_500);
       await flush(4);
@@ -414,6 +473,7 @@ describe('SubscriptionsPanel (web): lệnh bị từ chối vì gói đã đổi
       await advance(3_000);
       expect(isBusy('Vẫn huỷ')).toBe(true);
       together(sheetBusyBtn());
+      await flush(3);
       expect(sent(STATUS)).toHaveLength(1);
       await advance(1_500);
       await flush(4);
@@ -431,6 +491,7 @@ describe('SubscriptionsPanel (web): lệnh bị từ chối vì gói đã đổi
       await advance(3_000);
       expect(isBusy('Bỏ qua kỳ này')).toBe(true);
       together(sheetBusyBtn());
+      await flush(3);
       expect(sent(SKIP)).toHaveLength(1);
       await advance(1_500);
       await flush(4);

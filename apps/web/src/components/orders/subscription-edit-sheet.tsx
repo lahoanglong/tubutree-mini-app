@@ -35,7 +35,17 @@ export function subscriptionPatch(
 }
 
 /** Sửa số lượng / chu kỳ / địa chỉ / cách trả của gói đang chạy hoặc tạm dừng. Mount khi mở để state lấy từ gói đang chọn. */
-export function SubscriptionEditSheet({ sub, onClose, onSaved }: { sub: SubscriptionDTO; onClose: () => void; onSaved: (text: string) => void }) {
+export function SubscriptionEditSheet({
+  sub,
+  onClose,
+  onSaved,
+  onRejected,
+}: {
+  sub: SubscriptionDTO;
+  onClose: () => void;
+  onSaved: (text: string) => void;
+  onRejected?: (text: string) => void;
+}) {
   const qc = useQueryClient();
   const [quantity, setQuantity] = useState(sub.quantity);
   const [weeks, setWeeks] = useState(sub.intervalWeeks);
@@ -65,7 +75,10 @@ export function SubscriptionEditSheet({ sub, onClose, onSaved }: { sub: Subscrip
     // Gói đã huỷ ở máy khác (sheet tự đóng khi gói rời danh sách) hoặc đã có gói trùng: danh sách đang cũ. Không giữ nút Lưu chờ nó
     // để lời lỗi và nút bấm lại hiện ngay.
     onError: (e) => {
-      if (isStaleSubscriptionError(e)) void qc.invalidateQueries({ queryKey: ['subscriptions'] });
+      if (!isStaleSubscriptionError(e)) return;
+      // Gói rời danh sách thì sheet tự đóng và lời lỗi trong footer biến mất cùng nó: báo lên trang để khách còn thấy lý do.
+      onRejected?.(actionErrorText(e));
+      void qc.invalidateQueries({ queryKey: ['subscriptions'] });
     },
   });
 
