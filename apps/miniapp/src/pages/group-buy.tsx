@@ -5,7 +5,7 @@ import { useLockedMutation } from '../components/game/use-locked-mutation';
 import { Share2 } from 'lucide-react';
 import { groupMemberStatus, groupMissing, groupMissingLine, groupPriceLabels, groupRewardLine } from '@tubutree/app-core/group-buy-copy';
 import { getGroupBuy, listGroupBuys, joinGroupBuy, type GroupBuy } from '../services/groupbuy-api';
-import { getErrorMessage, getLoadErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage, isHttpError } from '../services/api';
 import { fetchActiveFlashSales } from '../services/shop-api';
 import { serverNow } from '../utils/server-clock';
 import { settleWithin } from '../utils/settle-within';
@@ -28,8 +28,19 @@ import { ProductThumb } from '../components/ui/product-thumb';
 /** Hộp chia sẻ của Zalo không có hạn: quá ngần này thì nhả khoá "Mời bạn bè" dù hộp chưa báo xong. */
 const SHARE_LOCK_MAX_MS = 30_000;
 
+/**
+ * Máy chủ đã nói rõ nhóm khác với thẻ đang hiện: 400/404/409 (đã đủ người, đã hết hạn, đã đóng, đã tham gia rồi). Mất mạng, hết thời gian,
+ * 401 và 5xx thì không tải lại: các lỗi đó hay đến đúng lúc máy chủ đang bận (triển khai), lần tải lại cũng hỏng và lỗi tải danh sách sẽ thay
+ * cả danh sách bằng màn lỗi. Nếu máy chủ đã ghi thành viên trước khi lỗi 5xx thì lần bấm sau nhận 400 "đã tham gia" và tải lại ở đó.
+ */
+function groupMayHaveChanged(e: unknown): boolean {
+  if (!isHttpError(e)) return false;
+  const status = e.response?.status ?? 0;
+  return status === 400 || status === 404 || status === 409;
+}
+
 function timeLeft(iso: string): string {
-  const diff = (new Date(iso).getTime() - Date.now()) / 1000;
+  const diff = (new Date(iso).getTime() - serverNow()) / 1000;
   if (diff <= 0) return 'đã hết hạn';
   if (diff < 3600) return `còn ${Math.floor(diff / 60)} phút`;
   if (diff < 86400) return `còn ${Math.floor(diff / 3600)} giờ`;
@@ -81,7 +92,11 @@ export default function GroupBuyPage() {
       // và nút "Tham gia" sáng lại, chạm lần nữa gửi một lệnh tham gia thừa bị máy chủ từ chối ngay sau thông báo thành công.
       return settleWithin(queryClient.invalidateQueries({ queryKey: ['group-buy'] }));
     },
-    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e: unknown) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      // Thẻ đang cho bấm "Tham gia" trên nhóm mà máy chủ vừa nói đã đủ/đã đóng/đã có mình: tải lại để thẻ hiện đúng trạng thái, giữ khoá tới lúc đó.
+      return groupMayHaveChanged(e) ? settleWithin(queryClient.invalidateQueries({ queryKey: ['group-buy'] })) : undefined;
+    },
   }, (id) => id);
 
   // Tài khoản khách (chưa có số điện thoại hay Zalo thật) bị máy chủ từ chối tham gia: liên kết trước, xong mới gửi. Khoá đồng bộ để
@@ -228,7 +243,9 @@ function GroupCard({
   joining: boolean;
 }) {
   const pct = g.targetSize > 0 ? Math.min(100, Math.round((g.currentSize / g.targetSize) * 100)) : 0;
-  const isOpen = g.status === 'OPEN';
+  // Nhóm quá hạn nhưng cron 15 phút chưa đóng vẫn trả OPEN: máy chủ từ chối mọi lần tham gia, nên thẻ coi như đã hết hạn thay vì cho bấm mãi.
+  const expired = g.status === 'OPEN' && new Date(g.expiresAt).getTime() <= serverNow();
+  const isOpen = g.status === 'OPEN' && !expired;
   const member = authed && g.joined;
   const closedLabel = g.status === 'SUCCESS' ? 'Nhóm đã đủ người' : 'Nhóm đã hết hạn';
   const label = !isOpen ? closedLabel : !authed ? 'Đăng nhập để tham gia' : `Tham gia mua chung (−${g.discountPct}%)`;

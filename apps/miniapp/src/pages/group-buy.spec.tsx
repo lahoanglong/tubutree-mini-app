@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest';
 import type { GroupBuy } from '../services/groupbuy-api';
 import { formatVnd } from '../utils/format';
+import { syncServerClock } from '../utils/server-clock';
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
@@ -38,7 +39,11 @@ vi.mock('../services/groupbuy-api', () => ({
 }));
 vi.mock('../services/shop-api', () => ({ fetchActiveFlashSales: mocks.fetchActiveFlashSales }));
 vi.mock('../components/share-sheet', () => ({ useShareWithFallback: () => mocks.shareWithFallback }));
-vi.mock('../services/api', () => ({ getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi'), getLoadErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi') }));
+vi.mock('../services/api', () => ({
+  getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi'),
+  getLoadErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi'),
+  isHttpError: (e: unknown) => (e as { isHttpError?: unknown } | null)?.isHttpError === true,
+}));
 vi.mock('../store/auth', () => {
   const state = () => ({ status: mocks.auth.status, error: mocks.auth.error, login: mocks.login, user: mocks.auth.user, ensurePhone: mocks.ensurePhone });
   return { useAuthStore: Object.assign((sel?: (s: unknown) => unknown) => (sel ? sel(state()) : state()), { getState: state }) };
@@ -774,5 +779,137 @@ describe('GroupBuyPage — khoá giữ có hạn khi việc kéo dài mãi (W87A
     await advance(1_500);
     fireEvent.click(screen.getByRole('button', { name: 'Mời bạn bè' }));
     expect(mocks.shareWithFallback).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('GroupBuyPage — tải lại nhóm khi máy chủ từ chối tham gia, nhóm quá hạn chưa bị cron đóng (W102A)', () => {
+  const deferred = <T,>() => {
+    let resolve!: (v: T) => void;
+    const promise = new Promise<T>((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  const httpError = (status: number, message: string) => Object.assign(new Error(message), { isHttpError: true, response: { status } });
+  const JOIN = 'Tham gia mua chung (−20%)';
+
+  it.each([
+    [400, 'Nhóm đã đủ người hoặc đã đóng.'],
+    [404, 'Không tìm thấy nhóm mua chung.'],
+    [409, 'Nhóm đã đóng.'],
+  ])('máy chủ trả %i: báo đúng câu của máy chủ, tải lại danh sách và nhóm đã đóng không còn nút "Tham gia"', async (status, message) => {
+    mocks.listGroupBuys.mockResolvedValueOnce([GROUP('a')]).mockResolvedValue([]);
+    mocks.joinGroupBuy.mockRejectedValue(httpError(status, message));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: JOIN }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: message, type: 'error' }));
+    await waitFor(() => expect(mocks.listGroupBuys).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText('Chưa có nhóm mua chung nào')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: JOIN })).toBeNull();
+    expect(mocks.joinGroupBuy).toHaveBeenCalledTimes(1);
+  });
+
+  it('"Bạn đã tham gia nhóm này rồi" (đã vào từ máy khác hoặc lần bấm trước): tải lại thì thẻ thành "Mời bạn bè", không còn nút tham gia', async () => {
+    mocks.listGroupBuys.mockResolvedValueOnce([GROUP('a')]).mockResolvedValue([GROUP('a', { joined: true, currentSize: 3 })]);
+    mocks.joinGroupBuy.mockRejectedValue(httpError(400, 'Bạn đã tham gia nhóm này rồi.'));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: JOIN }));
+    expect(await screen.findByRole('button', { name: 'Mời bạn bè' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: JOIN })).toBeNull();
+  });
+
+  it('thẻ giữ khoá tới khi danh sách tải lại về: lúc đó bấm thêm không gửi lần hai, về rồi thẻ hiện đúng trạng thái', async () => {
+    const refreshed = deferred<GroupBuy[]>();
+    mocks.listGroupBuys.mockResolvedValueOnce([GROUP('a')]).mockReturnValueOnce(refreshed.promise);
+    mocks.joinGroupBuy.mockRejectedValue(httpError(400, 'Nhóm đã đủ người hoặc đã đóng.'));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: JOIN }));
+    await waitFor(() => expect(mocks.listGroupBuys).toHaveBeenCalledTimes(2));
+    const stale = screen.getByRole('button', { name: JOIN });
+    expect(stale).toHaveAttribute('aria-busy', 'true');
+    fireEvent.click(stale);
+    expect(mocks.joinGroupBuy).toHaveBeenCalledTimes(1);
+    await act(async () => refreshed.resolve([]));
+    expect(await screen.findByText('Chưa có nhóm mua chung nào')).toBeInTheDocument();
+    expect(mocks.joinGroupBuy).toHaveBeenCalledTimes(1);
+  });
+
+  it('nhóm mở bằng liên kết: lỗi 400 tải lại cả chi tiết nhóm lẫn danh sách chung', async () => {
+    mocks.params = { id: 'inv' };
+    mocks.listGroupBuys.mockResolvedValue([]);
+    mocks.getGroupBuy.mockResolvedValueOnce(GROUP('inv')).mockResolvedValue(GROUP('inv', { status: 'SUCCESS', joined: false }));
+    mocks.joinGroupBuy.mockRejectedValue(httpError(400, 'Nhóm đã đóng.'));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: JOIN }));
+    await waitFor(() => expect(mocks.getGroupBuy).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mocks.listGroupBuys).toHaveBeenCalledTimes(2));
+    expect(await screen.findByRole('button', { name: 'Nhóm đã đủ người' })).toBeDisabled();
+  });
+
+  it.each([
+    ['mất mạng hoặc hết thời gian (không có phản hồi)', new Error('Mạng chưa ổn định')],
+    ['hết phiên (401): tải lại cũng 401', httpError(401, 'Phiên đăng nhập đã hết hạn.')],
+    ['máy chủ bận (500)', httpError(500, 'Máy chủ đang bận, bạn thử lại sau nhé.')],
+    ['cổng lỗi lúc triển khai (502)', httpError(502, 'Máy chủ đang bận, bạn thử lại sau nhé.')],
+  ])('%s: báo lỗi, không tải lại danh sách (tải lại hỏng sẽ thay cả danh sách bằng màn lỗi)', async (_label, error) => {
+    mocks.joinGroupBuy.mockRejectedValue(error);
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: JOIN }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: (error as Error).message, type: 'error' }));
+    expect(mocks.listGroupBuys).toHaveBeenCalledTimes(1);
+    expect(await screen.findByRole('button', { name: JOIN })).toBeInTheDocument();
+  });
+
+  describe('nhóm quá hạn mà cron 15 phút chưa đóng (API vẫn trả OPEN)', () => {
+    const PAST = () => new Date(Date.now() - 60_000).toISOString();
+
+    it('nhóm được mời qua liên kết: ghi "Nhóm đã hết hạn", nút bị khoá, không gửi yêu cầu tham gia', async () => {
+      mocks.params = { id: 'late' };
+      mocks.getGroupBuy.mockResolvedValue(GROUP('late', { expiresAt: PAST() }));
+      mocks.listGroupBuys.mockResolvedValue([]);
+      renderPage();
+      const closed = await screen.findByRole('button', { name: 'Nhóm đã hết hạn' });
+      expect(closed).toBeDisabled();
+      expect(screen.getByText('2/5 người · đã hết hạn')).toBeInTheDocument();
+      fireEvent.click(closed);
+      expect(mocks.joinGroupBuy).not.toHaveBeenCalled();
+    });
+
+    it('thành viên của nhóm quá hạn: không còn nút "Mời bạn bè" (mời vào nhóm không tham gia được nữa)', async () => {
+      mocks.listGroupBuys.mockResolvedValue([GROUP('mine', { joined: true, isOwner: true, expiresAt: PAST() })]);
+      renderPage();
+      expect(await screen.findByRole('button', { name: 'Nhóm đã hết hạn' })).toBeDisabled();
+      expect(screen.queryByRole('button', { name: 'Mời bạn bè' })).toBeNull();
+    });
+
+    it('đúng mốc hết hạn (bằng giờ máy chủ) đã tính là hết hạn, như máy chủ (expiresAt <= now)', async () => {
+      const now = Date.now();
+      const clock = vi.spyOn(Date, 'now').mockReturnValue(now);
+      try {
+        mocks.listGroupBuys.mockResolvedValue([GROUP('edge', { expiresAt: new Date(now).toISOString() })]);
+        renderPage();
+        expect(await screen.findByRole('button', { name: 'Nhóm đã hết hạn' })).toBeDisabled();
+      } finally {
+        clock.mockRestore();
+      }
+    });
+
+    it('điện thoại chạy chậm hơn máy chủ 10 phút: hạn tính theo giờ máy chủ, nhóm đã hết hạn thật dù đồng hồ máy còn 5 phút', async () => {
+      syncServerClock(new Date(Date.now() + 10 * 60_000).toISOString());
+      try {
+        mocks.listGroupBuys.mockResolvedValue([GROUP('skew', { expiresAt: new Date(Date.now() + 5 * 60_000).toISOString() })]);
+        renderPage();
+        expect(await screen.findByRole('button', { name: 'Nhóm đã hết hạn' })).toBeDisabled();
+        expect(screen.getByText('2/5 người · đã hết hạn')).toBeInTheDocument();
+      } finally {
+        syncServerClock(new Date().toISOString());
+      }
+    });
+
+    it('nhóm còn hạn một phút vẫn cho tham gia', async () => {
+      mocks.listGroupBuys.mockResolvedValue([GROUP('soon', { expiresAt: new Date(Date.now() + 60_000).toISOString() })]);
+      renderPage();
+      expect(await screen.findByRole('button', { name: JOIN })).not.toBeDisabled();
+    });
   });
 });
