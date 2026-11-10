@@ -236,6 +236,98 @@ describe('WasteDeskPerk (web): đang gửi duyệt', () => {
   });
 });
 
+describe('WasteDeskPerk (web): khoá chạm đúp Gửi duyệt (W77B)', () => {
+  it('chạm đúp "Gửi duyệt" trong cùng một act chỉ gửi một lần, báo thành công một lần', async () => {
+    const send = deferred<unknown>();
+    mocks.put.mockReturnValue(send.promise);
+    const { qc } = mount(<WasteDeskPerk point={makeDeskPoint()} />);
+    const invalidate = vi.spyOn(qc, 'invalidateQueries');
+    await openSheet();
+    type('Tặng túi vải');
+    await act(async () => {
+      reactProps(btn('Gửi duyệt')).onClick?.();
+      reactProps(btn('Gửi duyệt')).onClick?.();
+    });
+    await flush(3);
+    expect(mocks.put).toHaveBeenCalledTimes(1);
+    await act(async () => send.resolve(makeDeskPoint({ perkPendingText: 'Tặng túi vải' })));
+    await flush(4);
+    expect(sheetOpen()).toBe(false);
+    expect(mocks.put).toHaveBeenCalledTimes(1);
+    expect(invalidate).toHaveBeenCalledTimes(1);
+    expect(statuses().map((s) => s.textContent)).toEqual(['Đã gửi, chờ Tubu duyệt']);
+  });
+  it('gửi lỗi thì nhả khoá: bấm lại gửi lần hai', async () => {
+    mocks.put.mockRejectedValueOnce(FAIL).mockResolvedValue(makeDeskPoint());
+    mount(<WasteDeskPerk point={makeDeskPoint()} />);
+    await openSheet();
+    type('Tặng túi vải');
+    click(btn('Gửi duyệt'));
+    await flush(6);
+    expect(alerts()).toHaveLength(1);
+    click(btn('Gửi duyệt'));
+    await flush(6);
+    expect(mocks.put).toHaveBeenCalledTimes(2);
+    expect(sheetOpen()).toBe(false);
+  });
+  it('khoá giữ tới khi danh sách điểm làm mới xong: "Chỉnh sửa" báo bận, chưa mở lại được bằng chữ cũ', async () => {
+    mocks.put.mockResolvedValue(makeDeskPoint({ perkPendingText: 'Tặng túi vải' }));
+    const { qc } = mount(<WasteDeskPerk point={makeDeskPoint()} />);
+    const refresh = deferred<void>();
+    vi.spyOn(qc, 'invalidateQueries').mockReturnValue(refresh.promise);
+    await openSheet();
+    type('Tặng túi vải');
+    click(btn('Gửi duyệt'));
+    await flush(6);
+    expect(sheetOpen()).toBe(false);
+    expect(btn('Chỉnh sửa').getAttribute('aria-disabled')).toBe('true');
+    expect(btn('Chỉnh sửa').disabled).toBe(false);
+    await act(async () => reactProps(btn('Chỉnh sửa')).onClick?.());
+    await flush(3);
+    expect(sheetOpen()).toBe(false);
+
+    await act(async () => refresh.resolve());
+    await flush(4);
+    expect(btn('Chỉnh sửa').hasAttribute('aria-disabled')).toBe(false);
+    await openSheet();
+    expect(sheetOpen()).toBe(true);
+  });
+});
+
+describe('WasteDeskPerk (web): danh sách điểm đang làm mới', () => {
+  it('danh sách điểm đang tải lại (thẻ vừa dựng lại, chưa thấy chữ mới): "Chỉnh sửa" báo bận và không mở; tải xong thì mở được', async () => {
+    const { qc } = mount(<WasteDeskPerk point={makeDeskPoint()} />);
+    const refresh = deferred<unknown>();
+    act(() => {
+      void qc.fetchQuery({ queryKey: ['waste', 'desk'], queryFn: () => refresh.promise });
+    });
+    await flush(2);
+    expect(btn('Chỉnh sửa').getAttribute('aria-disabled')).toBe('true');
+    expect(btn('Chỉnh sửa').disabled).toBe(false);
+    click(btn('Chỉnh sửa'));
+    await act(async () => reactProps(btn('Chỉnh sửa')).onClick?.());
+    await flush(3);
+    expect(sheetOpen()).toBe(false);
+    await act(async () => refresh.resolve([]));
+    await flush(3);
+    expect(btn('Chỉnh sửa').hasAttribute('aria-disabled')).toBe(false);
+    await openSheet();
+    expect(sheetOpen()).toBe(true);
+  });
+  it('báo cáo tháng đang tải (cùng tiền tố khoá nhưng không đổi chữ ưu đãi): "Chỉnh sửa" vẫn mở được', async () => {
+    const { qc } = mount(<WasteDeskPerk point={makeDeskPoint()} />);
+    const report = deferred<unknown>();
+    act(() => {
+      void qc.fetchQuery({ queryKey: ['waste', 'desk', 'report', 'pt-1', '2026-10'], queryFn: () => report.promise });
+    });
+    await flush(2);
+    expect(btn('Chỉnh sửa').hasAttribute('aria-disabled')).toBe(false);
+    await openSheet();
+    expect(sheetOpen()).toBe(true);
+    await act(async () => report.resolve(REPORT));
+  });
+});
+
 describe('WasteDeskPerk (web): gửi lỗi', () => {
   it('lỗi hiện bằng role="alert" ngay trong sheet; sheet vẫn mở, hết bận, chữ còn nguyên', async () => {
     mocks.put.mockRejectedValue(FAIL);
@@ -352,6 +444,58 @@ describe('WasteDeskReport (web): vùng, số đều, lỗi và nút Thử lại'
     await flush(4);
     expect(body().textContent).toContain('3 lượt xác nhận');
     expect(alerts()).toHaveLength(0);
+  });
+  it('đã có số liệu mà tải lại lỗi: chạm đúp trong cùng một act chỉ tải lại một lần, nút báo bận tới khi xong', async () => {
+    mocks.get.mockResolvedValueOnce(REPORT);
+    const { qc } = mount(<WasteDeskReport pointId="pt-1" />);
+    await flush(6);
+    mocks.get.mockRejectedValueOnce(new Error('x'));
+    await act(async () => {
+      await qc.refetchQueries({ queryKey: ['waste', 'desk'] });
+    });
+    await flush(3);
+    expect(alerts()).toHaveLength(1);
+    expect(mocks.get).toHaveBeenCalledTimes(2);
+
+    const slow = deferred<typeof REPORT>();
+    mocks.get.mockReturnValue(slow.promise);
+    await act(async () => {
+      reactProps(btn('Thử lại')).onClick?.();
+      reactProps(btn('Thử lại')).onClick?.();
+    });
+    await flush(3);
+    expect(mocks.get).toHaveBeenCalledTimes(3);
+    expect(btn('Thử lại').getAttribute('aria-busy')).toBe('true');
+    expect(btn('Thử lại').getAttribute('aria-disabled')).toBe('true');
+
+    await act(async () => slow.resolve({ ...REPORT, confirmations: 21 }));
+    await flush(4);
+    expect(body().textContent).toContain('21 lượt xác nhận');
+    expect(mocks.get).toHaveBeenCalledTimes(3);
+  });
+  it('đã có số liệu, đang tải lại ngầm (không phải do bấm): Thử lại báo bận và bấm không tải chồng', async () => {
+    mocks.get.mockResolvedValueOnce(REPORT);
+    const { qc } = mount(<WasteDeskReport pointId="pt-1" />);
+    await flush(6);
+    mocks.get.mockRejectedValueOnce(new Error('x'));
+    await act(async () => {
+      await qc.refetchQueries({ queryKey: ['waste', 'desk'] });
+    });
+    await flush(3);
+    const background = deferred<typeof REPORT>();
+    mocks.get.mockReturnValue(background.promise);
+    act(() => {
+      void qc.refetchQueries({ queryKey: ['waste', 'desk'] });
+    });
+    await flush(3);
+    expect(mocks.get).toHaveBeenCalledTimes(3);
+    expect(btn('Thử lại').getAttribute('aria-busy')).toBe('true');
+    expect(btn('Thử lại').getAttribute('aria-disabled')).toBe('true');
+    await act(async () => reactProps(btn('Thử lại')).onClick?.());
+    expect(mocks.get).toHaveBeenCalledTimes(3);
+    await act(async () => background.resolve({ ...REPORT, confirmations: 8 }));
+    await flush(4);
+    expect(body().textContent).toContain('8 lượt xác nhận');
   });
   it('đã có số liệu mà tải lại lỗi: Thử lại khoá và báo bận khi đang tải, gọi thẳng onClick không tải lần hai', async () => {
     mocks.get.mockResolvedValueOnce(REPORT);

@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { act } from 'react';
+import { QueryClient } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { headingProblems, unnamedControls } from '@/test-utils/a11y';
@@ -14,6 +16,7 @@ const state = vi.hoisted(() => ({
   replace: vi.fn(),
   me: null as unknown,
   points: [] as unknown[],
+  pointsGate: null as Promise<unknown> | null,
   calls: [] as string[],
   config: { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: true } } as Record<string, unknown>,
 }));
@@ -32,7 +35,10 @@ vi.mock('@/lib/core-http', () => ({
     get: async (path: string) => {
       state.calls.push(path);
       if (path === '/waste/me') return state.me;
-      if (path.startsWith('/waste/points')) return state.points;
+      if (path.startsWith('/waste/points')) {
+        await state.pointsGate;
+        return state.points;
+      }
       throw new Error(`chưa mock ${path}`);
     },
     post: async () => {
@@ -71,6 +77,7 @@ beforeEach(() => {
   state.config = { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: true } };
   state.me = makeWasteMe({ laneFlags: { dropoff: true, mailin: true, pickup: true } });
   state.points = [HCM, HCM2, HN];
+  state.pointsGate = null;
   seedNav();
 });
 afterEach(() => {
@@ -213,5 +220,41 @@ describe('số đều của khung chính', () => {
   it('<main> dùng tabular-nums để điểm, số lượng và ngày không rung khi đổi', async () => {
     const c = await mount();
     expect(c.querySelector('main')?.className).toContain('tabular-nums');
+  });
+});
+
+describe('/doi-rac/diem-nhan: tỉnh và ô tìm là bộ lọc cục bộ, không có phản hồi nào của tỉnh cũ để ghi đè', () => {
+  it('đổi tỉnh và gõ tìm không gọi lại API; danh sách làm mới về chậm khi đang ở Hà Nội thì vẫn ở Hà Nội, ô tìm còn nguyên', async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const r = render(<RecyclePoints />, qc);
+    mounted.push(r);
+    await flush(10);
+    const c = r.container;
+    const listCalls = () => state.calls.filter((p) => p.startsWith('/waste/points')).length;
+    expect(listCalls()).toBe(1);
+    click(byText(c, '[role="tab"]', 'Hà Nội'));
+    typeInto(c.querySelector('input[type="search"]'), 'gươm');
+    await flush(2);
+    expect(listCalls()).toBe(1);
+    expect(radios(c).map((x) => x.textContent)).toEqual([expect.stringContaining('Đại lý Hồ Gươm')]);
+
+    let release!: () => void;
+    state.pointsGate = new Promise<void>((res) => {
+      release = res;
+    });
+    const HN2 = makeWastePoint({ id: 'pt-hn2', name: 'Đại lý Gươm Vàng', provinceCode: '01', provinceName: 'Hà Nội', communeName: 'Phường Hàng Bạc' });
+    state.points = [HCM, HCM2, HN, HN2];
+    await act(async () => {
+      void qc.invalidateQueries();
+    });
+    await flush(2);
+    expect(listCalls()).toBe(2);
+    expect(radios(c)).toHaveLength(1);
+    await act(async () => release());
+    await flush(6);
+    expect(byText(c, '[role="tab"]', 'Hà Nội')?.getAttribute('aria-selected')).toBe('true');
+    expect((c.querySelector('input[type="search"]') as HTMLInputElement).value).toBe('gươm');
+    expect(radios(c).map((x) => x.textContent)).toEqual([expect.stringContaining('Đại lý Hồ Gươm'), expect.stringContaining('Đại lý Gươm Vàng')]);
+    expect(listCalls()).toBe(2);
   });
 });

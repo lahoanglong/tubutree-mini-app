@@ -137,8 +137,8 @@ export function RecycleEdit({ id }: { id: string }) {
   if (phase === 'loading') return <Shell id={id}><AuthLoading /></Shell>;
   if (phase === 'unavailable') return <Shell id={id}><SessionUnavailable /></Shell>;
   if (phase === 'guest') return <Shell id={id}><LoginRequired message="Đăng nhập để sửa yêu cầu đổi rác của bạn." returnTo={editPath} /></Shell>;
-  if (q.isError) return <Shell id={id}><ErrorState message={errText(q.error)} onRetry={() => void q.refetch()} /></Shell>;
-  if (meQ.isError && !me) return <Shell id={id}><ErrorState message={errText(meQ.error)} onRetry={() => void meQ.refetch()} /></Shell>;
+  if (q.isError) return <Shell id={id}><ErrorState message={errText(q.error)} onRetry={() => q.refetch()} /></Shell>;
+  if (meQ.isError && !me) return <Shell id={id}><ErrorState message={errText(meQ.error)} onRetry={() => meQ.refetch()} /></Shell>;
   if (!r || !draft || !ready || leave || !me) return <Shell id={id} subtitle={r?.code}><Skeleton height={120} rounded="rounded-card" /></Shell>;
 
   const setLine = (itemId: string, n: number) =>

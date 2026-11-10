@@ -55,7 +55,7 @@ export function RecycleDone({ id }: { id: string }) {
   if (phase === 'loading') return <Shell id={id}><AuthLoading /></Shell>;
   if (phase === 'unavailable') return <Shell id={id}><SessionUnavailable /></Shell>;
   if (phase === 'guest') return <Shell id={id}><LoginRequired message="Đăng nhập để xem kết quả đổi rác của bạn." returnTo={`/doi-rac/xong/${id}`} /></Shell>;
-  if (q.isError) return <Shell id={id}><ErrorState message={errText(q.error)} onRetry={() => void q.refetch()} /></Shell>;
+  if (q.isError) return <Shell id={id}><ErrorState message={errText(q.error)} onRetry={() => q.refetch()} /></Shell>;
   if (!r) return <Shell id={id}><Skeleton height={120} rounded="rounded-card" /></Shell>;
   if (notDone) return <Shell id={id}><Skeleton height={120} rounded="rounded-card" /></Shell>;
 

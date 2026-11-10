@@ -1,11 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useIsFetching, useQuery, useQueryClient } from '@tanstack/react-query';
 import { cashWordingMessage, findCashWording, type WasteDeskPointDTO } from '@tubutree/shared-types';
 import { WASTE_QUERY_KEYS, submitDeskPerk } from '@tubutree/app-core/api/waste';
 import { deskPointReportQuery } from '@tubutree/app-core/queries/waste';
 import { friendlyActionError as errText } from '@/lib/friendly-error';
+import { usePressLock } from '@/lib/use-press-lock';
+import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { coreHttp } from '@/lib/core-http';
 import { formatCount } from '@/lib/checkout-points';
 import { ui } from '@/lib/guest-ui';
@@ -28,15 +30,19 @@ export function WasteDeskPerk({ point }: { point: WasteDeskPointDTO }) {
   const [text, setText] = useState('');
   const [sent, setSent] = useState(false);
 
-  const submit = useMutation({
+  const submit = useLockedMutation({
     mutationFn: (v: string) => submitDeskPerk(coreHttp, point.id, { perkText: v.trim() }),
+    // Trả Promise làm mới để `isPending` giữ tới khi `point` mới về; đổi tab điểm rồi quay lại dựng lại thẻ (isPending về false), lúc đó `refreshing` giữ.
     onSuccess: () => {
       setSent(true);
       setOpen(false);
-      void qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.desk });
+      return qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.desk });
     },
   });
   const busy = submit.isPending;
+  // Chỉ truy vấn danh sách điểm (khoá chính xác): các báo cáo cùng tiền tố tải lại thường xuyên mà không đổi chữ ưu đãi.
+  const refreshing = useIsFetching({ queryKey: WASTE_QUERY_KEYS.desk, exact: true }) > 0;
+  const editLocked = busy || refreshing;
 
   const cashProblem = findCashWording(text) !== null;
 
@@ -58,8 +64,9 @@ export function WasteDeskPerk({ point }: { point: WasteDeskPointDTO }) {
           <button
             type="button"
             className={skin.btnSecondary}
+            aria-disabled={editLocked || undefined}
             onClick={() => {
-              if (open || busy) return;
+              if (open || editLocked) return;
               setText(point.perkPendingText ?? point.perkText ?? '');
               setSent(false);
               submit.reset();
@@ -126,6 +133,7 @@ export function WasteDeskPerk({ point }: { point: WasteDeskPointDTO }) {
 export function WasteDeskReport({ pointId }: { pointId: string }) {
   const month = vnMonthKey(new Date());
   const q = useQuery(deskPointReportQuery(coreHttp, pointId, month));
+  const { press: retry } = usePressLock(() => (q.isFetching ? undefined : q.refetch()));
 
   if (q.isError || (!q.data && q.errorUpdateCount > 0)) {
     return (
@@ -137,9 +145,7 @@ export function WasteDeskReport({ pointId }: { pointId: string }) {
             className={skin.btnSecondary}
             aria-disabled={q.isFetching || undefined}
             aria-busy={q.isFetching || undefined}
-            onClick={() => {
-              if (!q.isFetching) void q.refetch();
-            }}
+            onClick={retry}
           >
             Thử lại
           </button>

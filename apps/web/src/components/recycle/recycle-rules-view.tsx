@@ -37,7 +37,7 @@ export function RecycleRulesView({ initialText }: { initialText?: string | null 
       ) : q.isError && errorStatus(q.error) === 401 && phase === 'guest' ? (
         <LoginRequired message="Đăng nhập để xem thể lệ Đổi rác lấy quà." returnTo="/doi-rac/quy-dinh" />
       ) : q.isError ? (
-        <ErrorState message={errText(q.error)} onRetry={isAuthError(q.error) ? undefined : () => void q.refetch()} />
+        <ErrorState message={errText(q.error)} onRetry={isAuthError(q.error) ? undefined : () => q.refetch()} />
       ) : (
         <div className="whitespace-pre-line text-base text-stone-900 max-md:text-[length:var(--type-body-md-size)] max-md:leading-[var(--type-body-md-lh)]">{q.data.text ?? 'Thể lệ đang được cập nhật'}</div>
       )}

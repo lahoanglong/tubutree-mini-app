@@ -65,7 +65,7 @@ export function RecycleRequests() {
   }
   // Chưa có SĐT đã xác minh thì web không xin được (chỉ Zalo xin được): chỉ chỉ đường sang Mini App, như ba trang đổi rác kia (Q2).
   if (me && me.eligibility !== 'OK') return <Shell><MiniAppOnlyNotice path="/doi-rac/yeu-cau" /></Shell>;
-  if (q.isError) return <Shell><ErrorState message={errText(q.error)} onRetry={isAuthError(q.error) ? undefined : () => void q.refetch()} /></Shell>;
+  if (q.isError) return <Shell><ErrorState message={errText(q.error)} onRetry={isAuthError(q.error) ? undefined : () => q.refetch()} /></Shell>;
   if (q.isPending || !q.data) return <Shell><Skeleton height={120} rounded="rounded-card" /></Shell>;
 
   const rows = q.data;

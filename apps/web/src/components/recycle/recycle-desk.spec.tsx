@@ -13,6 +13,7 @@ import { WAREHOUSE_DESK, makeDeskPoint, makeDeskRequest } from './recycle-fixtur
 const state = vi.hoisted(() => ({
   phase: 'authenticated' as string,
   points: [] as unknown[],
+  pointsGate: null as null | Promise<unknown>,
   pointsError: null as unknown,
   lookup: null as unknown,
   lookupError: null as unknown,
@@ -21,6 +22,8 @@ const state = vi.hoisted(() => ({
   reject: null as unknown as (body: unknown) => unknown,
   fulfil: null as unknown as (body: unknown) => unknown,
   report: null as unknown,
+  reportBy: {} as Record<string, unknown>,
+  reportGate: {} as Record<string, Promise<unknown>>,
   reportError: null as unknown,
   config: { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: true } } as Record<string, unknown>,
   calls: [] as { method: string; path: string; body?: unknown; headers?: unknown }[],
@@ -34,12 +37,15 @@ vi.mock('@/lib/core-http', () => ({
     get: async (path: string) => {
       state.calls.push({ method: 'GET', path });
       if (path === '/waste/desk/points') {
+        await state.pointsGate;
         if (state.pointsError) throw state.pointsError;
         return state.points;
       }
       if (/^\/waste\/desk\/points\/[^/]+\/report$/.test(path)) {
+        const pointId = path.split('/')[4]!;
+        await state.reportGate[pointId];
         if (state.reportError) throw state.reportError;
-        return state.report;
+        return state.reportBy[pointId] ?? state.report;
       }
       throw new Error(`chưa mock ${path}`);
     },
@@ -102,9 +108,12 @@ beforeEach(() => {
   state.phase = 'authenticated';
   state.points = [makeDeskPoint()];
   state.pointsError = null;
+  state.pointsGate = null;
   state.lookupError = null;
   state.lookupGate = null;
   state.reportError = null;
+  state.reportBy = {};
+  state.reportGate = {};
   state.report = { pointId: 'pt-1', month: '2026-10', confirmations: 0, pointsAwarded: 0, quotaUsed: 0, units: [] };
   state.config = { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: true } };
   state.calls = [];
@@ -1143,5 +1152,111 @@ describe('/doi-rac/quay: khoá một việc một lúc (cùng một act)', () =>
   it('số đều: khung chính của quầy dùng tabular-nums', async () => {
     const c = await mount();
     expect(c.querySelector('main')?.className).toContain('tabular-nums');
+  });
+});
+
+const pressEscape = () =>
+  act(() => {
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  });
+
+describe('/doi-rac/quay: sheet Từ chối không đóng được khi đang gửi', () => {
+  it('Esc, bấm nền và nút Đóng đều không đóng sheet; lỗi hiện ngay trong sheet còn mở; hết bận thì đóng được', async () => {
+    const gate = deferred();
+    state.reject = () => gate.promise;
+    const c = await mount();
+    await lookUp(c);
+    const send = await pickReason(c);
+    expect(dialog()!.querySelector('[aria-label="Đóng"]')).not.toBeNull();
+    click(send);
+    await flush(4);
+    expect(calls('/waste/desk/requests/req-1/reject')).toHaveLength(1);
+    expect(dialog()!.querySelector('[aria-label="Đóng"]')).toBeNull();
+    pressEscape();
+    click(document.querySelector('[data-sheet-backdrop]'));
+    await flush(2);
+    expect(dialog()).not.toBeNull();
+
+    await act(async () => gate.reject(Object.assign(new Error('Forbidden'), { status: 403 })));
+    await flush(6);
+    expect(dialog()).not.toBeNull();
+    expect(dialog()!.querySelector('[role="alert"]')?.textContent).toContain('Tài khoản này không có quyền nhận hàng tại điểm');
+    expect(dialog()!.querySelector('[aria-label="Đóng"]')).not.toBeNull();
+    pressEscape();
+    await flush(2);
+    expect(dialog()).toBeNull();
+  });
+});
+
+describe('/doi-rac/quay: báo cáo tháng theo điểm không bị lẫn khi đổi tab nhanh', () => {
+  const reportOf = (pointId: string, confirmations: number) => ({ pointId, month: '2026-10', confirmations, pointsAwarded: 0, quotaUsed: 0, units: [] });
+  beforeEach(() => {
+    state.points = [makeDeskPoint(), makeDeskPoint({ id: 'pt-2', name: 'Đại lý B' })];
+  });
+
+  it('báo cáo của điểm A về chậm sau khi đã sang điểm B: màn vẫn là số của B, quay lại A thì ra số của A', async () => {
+    const slowA = deferred();
+    state.reportGate['pt-1'] = slowA.promise;
+    state.reportBy = { 'pt-1': reportOf('pt-1', 99), 'pt-2': reportOf('pt-2', 3) };
+    const c = await mount();
+    click(byText(c, '[role="tab"]', 'Đại lý B'));
+    await flush(6);
+    expect(c.textContent).toContain('3 lượt xác nhận');
+    slowA.resolve(undefined);
+    await flush(8);
+    expect(c.textContent).toContain('3 lượt xác nhận');
+    expect(c.textContent).not.toContain('99 lượt xác nhận');
+    click(byText(c, '[role="tab"]', 'Đại lý Cô Ba'));
+    await flush(6);
+    expect(c.textContent).toContain('99 lượt xác nhận');
+    expect(c.textContent).not.toContain('3 lượt xác nhận');
+  });
+
+  it('sang điểm B khi báo cáo của B chưa về: không giữ số của A trên màn', async () => {
+    const slowB = deferred();
+    state.reportGate['pt-2'] = slowB.promise;
+    state.reportBy = { 'pt-1': reportOf('pt-1', 99), 'pt-2': reportOf('pt-2', 3) };
+    const c = await mount();
+    expect(c.textContent).toContain('99 lượt xác nhận');
+    click(byText(c, '[role="tab"]', 'Đại lý B'));
+    await flush(6);
+    expect(c.textContent).not.toContain('99 lượt xác nhận');
+    expect(c.querySelector('section[aria-label="Báo cáo tháng này"]')).toBeNull();
+    slowB.resolve(undefined);
+    await flush(8);
+    expect(c.textContent).toContain('3 lượt xác nhận');
+  });
+});
+
+describe('/doi-rac/quay: gửi duyệt ưu đãi xong, danh sách điểm chưa làm mới', () => {
+  it('đổi sang điểm B rồi quay lại A trong lúc làm mới: "Chỉnh sửa" của A còn báo bận, xong thì nạp đúng chữ vừa gửi', async () => {
+    const A = makeDeskPoint();
+    state.points = [A, makeDeskPoint({ id: 'pt-2', name: 'Đại lý B' })];
+    const c = await mount();
+    click(button(c, 'Chỉnh sửa'));
+    await flush();
+    typeInto(label(dialog()!, 'Nội dung ưu đãi'), 'Tặng túi vải');
+    const refresh = deferred();
+    state.pointsGate = refresh.promise;
+    click(byText(dialog()!, 'button', 'Gửi duyệt'));
+    await flush(10);
+    expect(dialog()).toBeNull();
+    click(byText(c, '[role="tab"]', 'Đại lý B'));
+    await flush(4);
+    click(byText(c, '[role="tab"]', 'Đại lý Cô Ba'));
+    await flush(4);
+    const edit = button(c, 'Chỉnh sửa')!;
+    expect(edit.getAttribute('aria-disabled')).toBe('true');
+    click(edit);
+    await flush(3);
+    expect(dialog()).toBeNull();
+
+    state.points = [makeDeskPoint({ perkPendingText: 'Tặng túi vải' }), makeDeskPoint({ id: 'pt-2', name: 'Đại lý B' })];
+    refresh.resolve(undefined);
+    await flush(10);
+    expect(button(c, 'Chỉnh sửa')!.hasAttribute('aria-disabled')).toBe(false);
+    click(button(c, 'Chỉnh sửa'));
+    await flush(3);
+    expect((label(dialog()!, 'Nội dung ưu đãi') as HTMLInputElement).value).toBe('Tặng túi vải');
   });
 });

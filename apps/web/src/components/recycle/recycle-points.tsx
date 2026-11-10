@@ -98,10 +98,7 @@ export function RecyclePoints() {
     return shell(
       <ErrorState
         message={errText(loadError)}
-        onRetry={() => {
-          void meQ.refetch();
-          void pointsQ.refetch();
-        }}
+        onRetry={() => Promise.all([meQ.refetch(), pointsQ.refetch()])}
       />,
     );
   }
