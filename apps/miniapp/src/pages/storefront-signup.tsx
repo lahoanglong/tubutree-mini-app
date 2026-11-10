@@ -24,7 +24,7 @@ import {
   type StorefrontEdit,
 } from '../services/storefront-api';
 import { getAffiliateMe } from '../services/affiliate-api';
-import { getErrorMessage, getLoadErrorMessage, isStaleStateError } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage, isServerRejection, isStaleStateError } from '../services/api';
 import { haptic } from '../utils/haptic';
 import { settleWithin } from '../utils/settle-within';
 import { vi } from '../i18n/vi';
@@ -266,7 +266,11 @@ function ProductsStep({ sf, onBack, onDone }: { sf: StorefrontEdit; onBack: () =
       setTemplateOpen(false);
       await refresh();
     },
-    onError: fail,
+    onError: (e) => {
+      // Tấm chọn mẫu không có ô nhập, chạm một danh mục là gửi: máy chủ từ chối hẳn (400/404/409/422: gian hàng đã có bộ sưu tập, danh mục không còn...) thì bấm lại nhận đúng lỗi đó, đóng tấm (lời báo đã ở snackbar, khoá vẫn giữ tới khi gian hàng tải lại). Mất mạng, quá hạn, 401, 5xx: giữ mở để thử lại.
+      if (isServerRejection(e)) setTemplateOpen(false);
+      return fail(e);
+    },
   });
   const openPicker = useLockedMutation({
     mutationFn: async () => sf.collections[0]?.id ?? (await createCollection({ title: SIGNUP_COPY.defaultCollection })).id,

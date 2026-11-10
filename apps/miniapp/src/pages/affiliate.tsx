@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { Input, Page, Sheet, useSnackbar, useNavigate, useLocation } from 'zmp-ui';
 import { useQuery, useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
@@ -23,7 +23,7 @@ import {
   type CommissionStatus,
   type PayoutStatus,
 } from '../services/affiliate-api';
-import { getErrorMessage, getLoadErrorMessage, isStaleStateError } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage, isStaleStateError, isTargetGoneError } from '../services/api';
 import { settleWithin } from '../utils/settle-within';
 import { ShareSheet } from '../components/share-sheet';
 import { SegmentedTabs } from '../components/ui/segmented-tabs';
@@ -1036,6 +1036,7 @@ function Dashboard() {
             // dashQ lỗi → max tạm =0 (không phải số dư thật) — đừng chặn theo max chưa xác thực,
             // để BE tự validate số dư (đồng bộ với nút "Chuyển vào Ví" phía trên vẫn cho mở sheet).
             knownMax={!dashQ.isError}
+            onRejected={() => setTransferring(false)}
             onDone={() => {
               setTransferring(false);
               void qc.invalidateQueries({ queryKey: ['affiliate-commissions'] });
@@ -1095,6 +1096,7 @@ function TransferForm({
   knownMax,
   taxIdOnFile,
   onDone,
+  onRejected,
 }: {
   max: number;
   /** Thuế máy chủ sẽ khấu trừ nếu chuyển hết ngay (đã cộng dồn các lần chuyển trong tháng); thiếu khi API cũ. */
@@ -1102,8 +1104,17 @@ function TransferForm({
   knownMax: boolean;
   taxIdOnFile: string | null;
   onDone: () => void;
+  /** Máy chủ báo lệnh không còn đúng với số dư thật (404/409): tấm cha đóng lại, số liệu mới đã về. */
+  onRejected: () => void;
 }) {
   const { openSnackbar } = useSnackbar();
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   // Không đọc affiliateWalletMultiplier: chuyển hoa hồng vào Ví Tubu là quy đổi 1:1.
   const { affiliatePitWithhold: pit, isLoaded: cfgLoaded } = usePublicConfig();
   const qc = useQueryClient();
@@ -1127,7 +1138,7 @@ function TransferForm({
     onError: (e) => {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
       if (!isStaleStateError(e)) return undefined;
-      return settleWithin(
+      const held = settleWithin(
         Promise.all([
           qc.invalidateQueries({ queryKey: ['affiliate-commissions'] }),
           qc.invalidateQueries({ queryKey: ['affiliate-payouts'] }),
@@ -1139,6 +1150,13 @@ function TransferForm({
           })(),
         ]),
       );
+      // Tấm có ô MST/CCCD: chỉ đóng khi lệnh chuyển không còn đúng với số dư thật (404/409, vd lệnh tự chuyển vừa chạy), đóng SAU khi số liệu mới về để nút báo bận tới lúc đó; 400/422 là lỗi ở ô nhập, giữ tấm để sửa.
+      // Khách có thể đã đóng tấm rồi mở lại trong lúc chờ (form mới, khoá mới): chỉ báo đóng khi chính form này còn gắn.
+      return isTargetGoneError(e)
+        ? held.then(() => {
+            if (mounted.current) onRejected();
+          })
+        : held;
     },
   });
 

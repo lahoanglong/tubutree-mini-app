@@ -1480,11 +1480,20 @@ describe('CTV: đăng ký, tạo link, chuyển vào Ví bị máy chủ từ ch
       await act(async () => refresh.finish());
       await settle();
       expect(refreshed()).toContain('["affiliate-dashboard"]');
-      await waitFor(() => expect(btn).not.toHaveAttribute('aria-busy', 'true'));
-      fireEvent.click(btn);
+      // W114A: 404/409 đóng tấm sau khi số liệu về, mở lại là form mới với Idempotency-Key mới (lệnh 4xx chưa ghi gì nên khoá cũ không cần giữ); 400 giữ tấm và khoá cũ.
+      const closes = status !== 400;
+      let again = btn;
+      if (closes) {
+        await waitFor(() => expect(screen.queryByRole('button', { name: 'Nhận 200.000đ vào Ví' })).toBeNull());
+        fireEvent.click(screen.getByRole('button', { name: 'Chuyển vào Ví Tubu' }));
+        again = await screen.findByRole('button', { name: 'Nhận 200.000đ vào Ví' });
+      }
+      await waitFor(() => expect(again).not.toHaveAttribute('aria-busy', 'true'));
+      fireEvent.click(again);
       await waitFor(() => expect(requestPayout).toHaveBeenCalledTimes(2));
       const keys = vi.mocked(requestPayout).mock.calls.map((c) => c[1]);
-      expect(keys[1]).toBe(keys[0]);
+      if (closes) expect(keys[1]).not.toBe(keys[0]);
+      else expect(keys[1]).toBe(keys[0]);
     });
 
     it.each([
@@ -1527,12 +1536,215 @@ describe('CTV: đăng ký, tạo link, chuyển vào Ví bị máy chủ từ ch
       await act(async () => {
         await vi.advanceTimersByTimeAsync(2);
       });
-      expect(btn).not.toHaveAttribute('aria-busy', 'true');
-      fireEvent.click(btn);
+      // W114A: 409 đóng tấm cùng lúc khoá nhả; mở lại (truy vấn đồng bộ vì đồng hồ giả chặn findBy) để soi nút.
+      expect(screen.queryByRole('button', { name: 'Nhận 200.000đ vào Ví' })).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Chuyển vào Ví Tubu' }));
+      const again = screen.getByRole('button', { name: 'Nhận 200.000đ vào Ví' });
+      expect(again).not.toHaveAttribute('aria-busy', 'true');
+      fireEvent.click(again);
       await act(async () => {
         await vi.advanceTimersByTimeAsync(0);
       });
       expect(requestPayout).toHaveBeenCalledTimes(2);
     });
+  });
+});
+
+// W114A: tấm "Chuyển hoa hồng vào Ví" có ô MST/CCCD nên chỉ đóng khi lệnh không còn đúng với số dư thật (404/409), đóng SAU khi số liệu mới về (nút báo bận tới lúc đó); 400/422 là lỗi ở ô nhập, giữ tấm. Mất mạng, quá hạn, 5xx, 401: tấm ở lại, nhả khoá ngay.
+describe('CTV: tấm Chuyển hoa hồng vào Ví đóng khi lệnh không còn đúng với số dư thật (W114A)', () => {
+  const newClient = () => new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  const rejectedWith = (status: number, message: string) =>
+    new HttpError(message, 'ERR_BAD_REQUEST', { status, data: { statusCode: status, message } } as never);
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+  const errorSnackbars = () => mocks.openSnackbar.mock.calls.filter(([arg]) => arg.type === 'error');
+  const SEND = { name: 'Nhận 200.000đ vào Ví' };
+  const dashboard = (withdrawableCommission: number) =>
+    ({
+      todayCommission: 0, monthCommission: 0, pendingCommission: 0, withdrawableCommission,
+      totalClicks: 0, totalConversions: 0, monthRevenue: 0,
+      tier: { name: 'Hạt Giống', emoji: '🌱', nextName: null, nextThreshold: null, toNext: 0 },
+    }) as Awaited<ReturnType<typeof getAffiliateDashboard>>;
+
+  let inv: MockInstance<QueryClient['invalidateQueries']> | undefined;
+  const holdRefresh = (qc: QueryClient, hang = false) => {
+    let finish!: () => void;
+    const pending = hang ? new Promise<void>(() => undefined) : new Promise<void>((resolve) => (finish = resolve));
+    inv = vi.spyOn(qc, 'invalidateQueries').mockImplementation((() => pending) as never);
+    return { finish: () => finish() };
+  };
+  const refreshed = () => (inv?.mock.calls ?? []).map((c) => JSON.stringify((c[0] as { queryKey: unknown }).queryKey));
+  const sheetGone = () => waitFor(() => expect(screen.queryByRole('button', SEND)).toBeNull());
+  const openSheet = async () => {
+    const open = await screen.findByRole('button', { name: 'Chuyển vào Ví Tubu' });
+    await waitFor(() => expect(open).toBeEnabled());
+    fireEvent.click(open);
+    return screen.findByRole('button', SEND);
+  };
+  const sendBtn = async (qc: QueryClient) => {
+    renderPage(qc);
+    return openSheet();
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getAffiliateMe.mockResolvedValue({ isAffiliate: true, referralCode: 'TUBU88', walletBalance: 0 });
+    vi.mocked(getAffiliateDashboard).mockResolvedValue(dashboard(200_000));
+    vi.mocked(getAffiliateLinks).mockResolvedValue([]);
+    vi.mocked(requestPayout).mockReset().mockResolvedValue({ note: 'Đã chuyển hoa hồng vào Ví Tubu.' } as Awaited<ReturnType<typeof requestPayout>>);
+  });
+  afterEach(() => {
+    inv?.mockRestore();
+    inv = undefined;
+    vi.useRealTimers();
+  });
+
+  it.each([
+    [404, 'Không tìm thấy hồ sơ CTV'],
+    [409, 'Lệnh chuyển khác đang xử lý'],
+  ])('bị từ chối %i: báo lỗi một lần, tải lại số liệu, tấm còn mở và nút bận tới khi về, rồi đóng và nhả khoá (mở lại là form mới, khoá mới)', async (status, message) => {
+    const qc = newClient();
+    const refresh = holdRefresh(qc);
+    vi.mocked(requestPayout).mockRejectedValueOnce(rejectedWith(status, message));
+    const btn = await sendBtn(qc);
+    await act(async () => {
+      fireEvent.click(btn);
+      fireEvent.click(btn);
+      fireEvent.click(btn);
+    });
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: message, type: 'error' }));
+    expect(errorSnackbars()).toHaveLength(1);
+    expect(refreshed()).toEqual(['["affiliate-commissions"]', '["affiliate-payouts"]', '["affiliate-tax-statement"]', '["affiliate-me"]', '["wallet"]']);
+    await settle();
+    // Số liệu chưa về: tấm còn mở, nút bận, chạm thêm không gọi API.
+    expect(screen.getByRole('button', SEND)).toBe(btn);
+    expect(btn).toHaveAttribute('aria-busy', 'true');
+    await act(async () => {
+      fireEvent.click(btn);
+    });
+    expect(requestPayout).toHaveBeenCalledTimes(1);
+
+    await act(async () => refresh.finish());
+    await sheetGone();
+    expect(errorSnackbars()).toHaveLength(1);
+    const again = await openSheet();
+    expect(again).not.toHaveAttribute('aria-busy', 'true');
+    fireEvent.click(again);
+    await waitFor(() => expect(requestPayout).toHaveBeenCalledTimes(2));
+    const keys = vi.mocked(requestPayout).mock.calls.map((c) => c[1]);
+    expect(keys[1]).not.toBe(keys[0]);
+  });
+
+  it('bị từ chối 400: tải lại và giữ khoá tới khi về nhưng tấm ở lại, bấm lại gửi cùng Idempotency-Key', async () => {
+    const qc = newClient();
+    const refresh = holdRefresh(qc);
+    vi.mocked(requestPayout).mockRejectedValueOnce(rejectedWith(400, 'Hoa hồng có thể chuyển đã thay đổi'));
+    const btn = await sendBtn(qc);
+    fireEvent.click(btn);
+    await waitFor(() => expect(errorSnackbars()).toHaveLength(1));
+    await settle();
+    expect(refreshed()).toContain('["wallet"]');
+    expect(btn).toHaveAttribute('aria-busy', 'true');
+    await act(async () => {
+      fireEvent.click(btn);
+    });
+    expect(requestPayout).toHaveBeenCalledTimes(1);
+    await act(async () => refresh.finish());
+    await settle();
+    await waitFor(() => expect(btn).not.toHaveAttribute('aria-busy', 'true'));
+    expect(screen.getByRole('button', SEND)).toBe(btn);
+    fireEvent.click(btn);
+    await waitFor(() => expect(requestPayout).toHaveBeenCalledTimes(2));
+    const keys = vi.mocked(requestPayout).mock.calls.map((c) => c[1]);
+    expect(keys[1]).toBe(keys[0]);
+  });
+
+  it('bị từ chối 422: tấm ở lại, báo lỗi một lần, không tải lại, khoá nhả ngay, gửi lại cùng Idempotency-Key', async () => {
+    const qc = newClient();
+    holdRefresh(qc, true);
+    vi.mocked(requestPayout).mockRejectedValueOnce(rejectedWith(422, 'Mã số thuế không hợp lệ'));
+    const btn = await sendBtn(qc);
+    fireEvent.click(btn);
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Mã số thuế không hợp lệ', type: 'error' }));
+    await waitFor(() => expect(btn).not.toHaveAttribute('aria-busy', 'true'));
+    await settle();
+    expect(screen.getByRole('button', SEND)).toBe(btn);
+    expect(refreshed()).toEqual([]);
+    expect(errorSnackbars()).toHaveLength(1);
+    fireEvent.click(btn);
+    await waitFor(() => expect(requestPayout).toHaveBeenCalledTimes(2));
+    const keys = vi.mocked(requestPayout).mock.calls.map((c) => c[1]);
+    expect(keys[1]).toBe(keys[0]);
+  });
+
+  it.each([
+    ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+    ['hết thời gian (ECONNABORTED)', new HttpError('timeout of 15000ms exceeded', 'ECONNABORTED')],
+    ['máy chủ lỗi 503', rejectedWith(503, 'Máy chủ bận')],
+    ['hết phiên 401', rejectedWith(401, 'Hết phiên')],
+  ])('%s: tấm ở lại, khoá nhả ngay, không tải lại, gửi lại cùng Idempotency-Key', async (_label, error) => {
+    const qc = newClient();
+    holdRefresh(qc, true);
+    vi.mocked(requestPayout).mockRejectedValueOnce(error);
+    const btn = await sendBtn(qc);
+    fireEvent.click(btn);
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+    await waitFor(() => expect(btn).not.toHaveAttribute('aria-busy', 'true'));
+    await settle();
+    expect(screen.getByRole('button', SEND)).toBe(btn);
+    expect(refreshed()).toEqual([]);
+    fireEvent.click(btn);
+    await waitFor(() => expect(requestPayout).toHaveBeenCalledTimes(2));
+    const keys = vi.mocked(requestPayout).mock.calls.map((c) => c[1]);
+    expect(keys[1]).toBe(keys[0]);
+  });
+
+  it('tải lại treo mãi: tấm còn mở và bận ở LOCK_REFRESH_WAIT_MS - 500, hết hạn thì đóng và nhả khoá', async () => {
+    const qc = newClient();
+    holdRefresh(qc, true);
+    vi.mocked(requestPayout).mockRejectedValueOnce(rejectedWith(409, 'Lệnh chuyển khác đang xử lý'));
+    const btn = await sendBtn(qc);
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      fireEvent.click(btn);
+      await waitFor(() => expect(errorSnackbars()).toHaveLength(1));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 500);
+      });
+      expect(screen.getByRole('button', SEND)).toBe(btn);
+      expect(btn).toHaveAttribute('aria-busy', 'true');
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(600);
+      });
+      await sheetGone();
+    } finally {
+      vi.useRealTimers();
+    }
+    const again = await openSheet();
+    expect(again).not.toHaveAttribute('aria-busy', 'true');
+    fireEvent.click(again);
+    await waitFor(() => expect(requestPayout).toHaveBeenCalledTimes(2));
+  });
+
+  it('khách đã đóng tấm rồi mở lại lúc lệnh bay: lỗi 409 của form cũ không đóng tấm mới', async () => {
+    const qc = newClient();
+    const refresh = holdRefresh(qc);
+    let reject!: (e: unknown) => void;
+    vi.mocked(requestPayout).mockReturnValueOnce(new Promise((_, rej) => { reject = rej; }));
+    const btn = await sendBtn(qc);
+    await act(async () => {
+      fireEvent.click(btn);
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+    await sheetGone();
+    const reopened = await openSheet();
+    expect(reopened).not.toBe(btn);
+    await act(async () => reject(rejectedWith(409, 'Lệnh chuyển khác đang xử lý')));
+    await waitFor(() => expect(errorSnackbars()).toHaveLength(1));
+    await act(async () => refresh.finish());
+    await settle();
+    expect(screen.getByRole('button', SEND)).toBe(reopened);
   });
 });

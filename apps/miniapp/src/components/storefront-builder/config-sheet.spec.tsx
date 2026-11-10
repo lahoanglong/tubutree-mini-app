@@ -173,7 +173,7 @@ describe('MerchantConfigSheet: máy chủ từ chối thì tải lại rồi m�
     vi.useRealTimers();
   });
 
-  describe.each(CASES)('$name', ({ button }) => {
+  describe.each(CASES)('$name', ({ name, button }) => {
     it.each([400, 404, 409])('bị từ chối %i: báo lỗi một lần, tải lại gian hàng và Hành trình, nút bận tới khi cả hai về rồi mới nhận cú chạm mới', async (status) => {
       mocks.updateStorefront.mockRejectedValueOnce(serverError('Gian hàng không còn.', status)).mockResolvedValue({});
       const reload: Record<string, ReturnType<typeof pending>> = { 'storefront-quests': pending(), 'my-storefront': pending() };
@@ -198,7 +198,8 @@ describe('MerchantConfigSheet: máy chủ từ chối thì tải lại rồi m�
       await act(async () => reload['my-storefront']!.resolve());
       await waitFor(() => expect(btn).not.toHaveAttribute('aria-busy'));
       expect(onSaved).not.toHaveBeenCalled();
-      expect(onClose).not.toHaveBeenCalled();
+      // Tấm Cài đặt đóng sau khi dữ liệu về khi 404/409 (W114A); 400 và nút gỡ ngân hàng giữ nguyên.
+      expect(onClose).toHaveBeenCalledTimes(name === 'Lưu cấu hình' && status !== 400 ? 1 : 0);
       expect(errorToasts()).toHaveLength(1);
       fireEvent.click(btn);
       await waitFor(() => expect(mocks.updateStorefront).toHaveBeenCalledTimes(2));
@@ -247,5 +248,32 @@ describe('MerchantConfigSheet: máy chủ từ chối thì tải lại rồi m�
       });
       expect(mocks.updateStorefront).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it.each([404, 409])('Lưu cấu hình bị từ chối %i rồi tấm bị gỡ và mở lại lúc dữ liệu còn tải: lệnh đóng của tấm cũ không đóng tấm mới (W114A)', async (status) => {
+    mocks.updateStorefront.mockRejectedValueOnce(serverError('Gian hàng không còn.', status));
+    const refresh = pending();
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const invalidate = vi.spyOn(qc, 'invalidateQueries').mockImplementation((() => refresh.promise) as never);
+    // Cha truyền cùng một onClose cho mọi lần mở tấm: lệnh đóng trễ của tấm cũ gọi trúng tấm mới nếu không được chặn.
+    const onClose = vi.fn();
+    const tree = () => (
+      <QueryClientProvider client={qc}>
+        <MerchantConfigSheet sf={sf} onClose={onClose} onSaved={() => {}} unpublishLabel={null} onUnpublish={() => {}} />
+      </QueryClientProvider>
+    );
+    const first = render(tree());
+    await act(async () => {
+      fireEvent.click(saveBtn());
+    });
+    await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(2));
+    first.unmount();
+    render(tree());
+    await act(async () => refresh.resolve());
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+    expect(onClose).not.toHaveBeenCalled();
+    expect(saveBtn()).not.toHaveAttribute('aria-busy');
   });
 });

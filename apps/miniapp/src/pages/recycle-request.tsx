@@ -1,6 +1,6 @@
 import { pausedNote } from '@tubutree/app-core/waste-copy';
 import { wasteRequestRefetchMs } from '@tubutree/app-core/waste-request-poll';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { Input, Page, useNavigate, useParams, useSnackbar } from 'zmp-ui';
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
@@ -15,7 +15,7 @@ import {
   invalidateAfterWasteWrite,
   setWasteTracking,
 } from '../services/waste-api';
-import { getErrorMessage, getLoadErrorMessage, isNotFoundError, isStaleStateError } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage, isNotFoundError, isServerRejection, isStaleStateError } from '../services/api';
 import { settleWithin } from '../utils/settle-within';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { usePublicConfig } from '../hooks/use-public-config';
@@ -152,6 +152,8 @@ export default function RecycleRequestPage() {
   const { openSnackbar } = useSnackbar();
   const qc = useQueryClient();
   const { id = '' } = useParams();
+  const idRef = useRef(id);
+  idRef.current = id;
   const phase = useAuthPhase();
   const cfg = usePublicConfig();
 
@@ -188,15 +190,22 @@ export default function RecycleRequestPage() {
     enabled: authed && r?.method === 'DROP_OFF' && r.status === 'OPEN',
   });
   const cancel = useLockedMutation({
-    mutationFn: () => cancelWasteRequest(id),
+    mutationFn: (rid: string) => cancelWasteRequest(rid),
     onSuccess: async () => {
       await invalidateAfterWasteWrite(qc);
       setCancelOpen(false);
       openSnackbar({ text: 'Đã huỷ yêu cầu', type: 'success' });
     },
-    onError: (e) => {
+    onError: (e, rid) => {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
-      return isStaleStateError(e) ? refreshAfterRejection(qc, id) : undefined;
+      const held = isStaleStateError(e) ? refreshAfterRejection(qc, rid) : undefined;
+      if (!isServerRejection(e)) return held;
+      // Tấm huỷ chỉ có nút Xác nhận: máy chủ từ chối hẳn (400/404/409/422) thì bấm lại nhận đúng lỗi đó. Đóng SAU khi yêu cầu mới về để nút báo bận tới lúc đó.
+      // Màn có thể đã chuyển sang yêu cầu khác (cùng route, đổi id) nên chỉ đóng khi vẫn đang ở yêu cầu bị từ chối; id lấy từ biến của lệnh vì tuỳ chọn của
+      // useMutation được cập nhật theo từng lần vẽ, `id` trong closure lúc này đã là id mới.
+      return Promise.resolve(held).then(() => {
+        if (idRef.current === rid) setCancelOpen(false);
+      });
     },
   });
 
@@ -458,7 +467,7 @@ export default function RecycleRequestPage() {
         onClose={() => setCancelOpen(false)}
         title="Huỷ yêu cầu này?"
         footer={
-          <Button variant="danger" fullWidth loading={cancel.isPending} onPress={() => cancel.mutate()}>
+          <Button variant="danger" fullWidth loading={cancel.isPending} onPress={() => cancel.mutate(id)}>
             Xác nhận huỷ
           </Button>
         }

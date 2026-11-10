@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLockedMutation } from '../components/game/use-locked-mutation';
 import { getAddresses, type AddressDTO } from '../services/shop-api';
 import { updateAddress, deleteAddress } from '../services/account-api';
-import { getErrorMessage, getLoadErrorMessage, isStaleStateError } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage, isServerRejection, isStaleStateError } from '../services/api';
 import { isHttpError } from '../services/http';
 import { haptic } from '../utils/haptic';
 import { settleWithin } from '../utils/settle-within';
@@ -93,7 +93,13 @@ export default function AddressesPage() {
         openSnackbar({ text: 'Đã xoá địa chỉ.', type: 'success' });
         return settleWithin(refresh());
       },
-      onError: (e, id) => rejected(e, id),
+      onError: (e, id) => {
+        const held = rejected(e, id);
+        if (!isServerRejection(e)) return held;
+        // Khung xác nhận chỉ có nút Xoá: máy chủ từ chối hẳn (400/404/409/422) thì bấm lại nhận đúng lỗi đó. Đóng SAU khi sổ mới về để nút Xoá
+        // báo bận tới lúc đó; khách có thể đã đóng khung này và mở khung của địa chỉ khác trong lúc chờ nên chỉ đóng đúng khung của id này.
+        return Promise.resolve(held).then(() => setConfirmDel((cur) => (cur?.id === id ? null : cur)));
+      },
       onSettled: release,
     },
     (id) => id,

@@ -36,7 +36,11 @@ const ADDR = (id: string, street: string) => ({
   id, recipient: 'Lan', phone: '0900000000', province: 'HCM', district: 'Q.1', ward: 'P.1', street, isDefault: id === 'a1',
 });
 const ADDRS = [ADDR('a1', '1 Lê Lợi'), ADDR('a2', '9 Hai Bà Trưng')];
-const serverError = (message: string, status = 409) => new HttpError(message, undefined, { status, data: { message } } as never);
+// `code` là mã lỗi nghiệp vụ API gắn vào body: 409 trùng gói cùng địa chỉ mang SUBSCRIPTION_DUPLICATE (khách tự đổi địa chỉ được nên sheet ở lại), 409 không mã là gói vừa đổi (sheet đóng).
+const serverError = (message: string, status = 409, code?: string) =>
+  new HttpError(message, undefined, { status, data: { message, ...(code ? { code } : {}) } } as never);
+const DUPLICATE = 'SUBSCRIPTION_DUPLICATE';
+const DUPLICATE_MESSAGE = 'Bạn đã có gói giao định kỳ "Nước xả vải Tubu" tới địa chỉ này, hãy sửa gói đó hoặc chọn địa chỉ khác.';
 
 describe('SubscriptionEditSheet: đổi chu kỳ giao (Q22)', () => {
   beforeEach(() => {
@@ -245,7 +249,7 @@ describe('SubscriptionEditSheet: khoá khi đang lưu và báo lỗi lưu (W61A)
   });
 
   it('lưu lỗi: footer hiện role=alert với lời máy chủ ngay trên nút lưu, snackbar vẫn báo, điều khiển mở lại, sheet không đóng', async () => {
-    const err = serverError('Bạn đã có gói định kỳ cho sản phẩm này tại địa chỉ đó.');
+    const err = serverError('Bạn đã có gói định kỳ cho sản phẩm này tại địa chỉ đó.', 409, DUPLICATE);
     mocks.updateSubscription.mockRejectedValue(err);
     await startSave();
     const alert = await screen.findByRole('alert');
@@ -365,14 +369,14 @@ describe('SubscriptionEditSheet: lưu bị từ chối vì gói đã đổi thì
   }
 
   it.each([
-    [400, 'Gói định kỳ đã huỷ, không sửa được nữa.'],
-    [404, 'Không tìm thấy lịch đặt định kỳ.'],
-    [409, 'Bạn đã có gói giao định kỳ "Nước xả vải Tubu" tới địa chỉ này, hãy sửa gói đó hoặc chọn địa chỉ khác.'],
-  ])('%i: báo lời máy chủ và làm mới danh sách gói (gói đã huỷ ở máy khác thì biến mất, gói trùng hiện ra)', async (status, message) => {
-    const invalidate = await saveWith(serverError(message, status));
+    [400, 'Gói định kỳ đã huỷ, không sửa được nữa.', undefined, false],
+    [404, 'Không tìm thấy lịch đặt định kỳ.', undefined, true],
+    [409, DUPLICATE_MESSAGE, DUPLICATE, false],
+  ])('%i: báo lời máy chủ và làm mới danh sách gói (gói đã huỷ ở máy khác thì biến mất, gói trùng hiện ra); sheet đóng chỉ khi gói không còn', async (status, message, code, closes) => {
+    const invalidate = await saveWith(serverError(message, status, code));
     expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: message, type: 'error' });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['subscriptions'] });
-    expect(mocks.onClose).not.toHaveBeenCalled();
+    expect(mocks.onClose).toHaveBeenCalledTimes(closes ? 1 : 0);
   });
 
   it.each([
@@ -422,13 +426,13 @@ describe('SubscriptionEditSheet: Lưu bị từ chối vì gói đã đổi thì
   }
 
   it.each([
-    [409, 'Lịch giao vừa thay đổi, hãy tải lại rồi thử lại.'],
-    [400, 'Gói định kỳ đã huỷ, không sửa được nữa.'],
-    [404, 'Không tìm thấy lịch đặt định kỳ.'],
-    [409, 'Bạn đã có gói giao định kỳ "Nước xả vải Tubu" tới địa chỉ này, hãy sửa gói đó hoặc chọn địa chỉ khác.'],
-  ])('bị từ chối %i (%s): báo lỗi một lần, tải lại danh sách gói, nút Lưu bận và bấm lại không gọi API tới khi danh sách về, sau đó bấm lại gọi lần hai', async (status, message) => {
+    [409, 'Lịch giao vừa thay đổi, hãy tải lại rồi thử lại.', undefined, true],
+    [400, 'Gói định kỳ đã huỷ, không sửa được nữa.', undefined, false],
+    [404, 'Không tìm thấy lịch đặt định kỳ.', undefined, true],
+    [409, DUPLICATE_MESSAGE, DUPLICATE, false],
+  ])('bị từ chối %i (%s): báo lỗi một lần, tải lại danh sách gói, nút Lưu bận và bấm lại không gọi API tới khi danh sách về, sau đó bấm lại gọi lần hai', async (status, message, code, closes) => {
     const refresh = deferred();
-    mocks.updateSubscription.mockRejectedValueOnce(serverError(message, status));
+    mocks.updateSubscription.mockRejectedValueOnce(serverError(message, status, code));
     const { invalidated } = renderLive(() => refresh.promise);
     await openDirty();
     fireEvent.click(saveBtn());
@@ -443,6 +447,9 @@ describe('SubscriptionEditSheet: Lưu bị từ chối vì gói đã đổi thì
 
     await act(async () => refresh.resolve());
     await waitFor(() => expect(saveBtn()).not.toHaveAttribute('aria-busy'));
+    // Gói không còn hoặc vừa đổi: cha được báo đóng sau khi danh sách về (onClose giả không gỡ sheet khỏi cây nên đếm lại từ đây để phần dưới vẫn đếm đúng lần đóng khi lưu xong); lỗi ở lựa chọn (400, trùng gói) giữ sheet.
+    expect(mocks.onClose).toHaveBeenCalledTimes(closes ? 1 : 0);
+    mocks.onClose.mockClear();
     mocks.updateSubscription.mockResolvedValueOnce({ ...SUB, quantity: 3 });
     fireEvent.click(saveBtn());
     await waitFor(() => expect(mocks.updateSubscription).toHaveBeenCalledTimes(2));
@@ -500,5 +507,190 @@ describe('SubscriptionEditSheet: Lưu bị từ chối vì gói đã đổi thì
     fireEvent.click(saveBtn());
     await flush(0);
     expect(mocks.updateSubscription).toHaveBeenCalledTimes(2);
+  });
+});
+
+// W114A: sheet sửa gói có ô chọn (số lượng, chu kỳ, cách trả, địa chỉ) nên chỉ báo đóng (onClose) khi gói không còn hoặc vừa đổi (404, 409 không mã), SAU khi danh sách gói + địa chỉ mới về (nút Lưu báo bận tới lúc đó); 400/422 và 409 trùng gói (SUBSCRIPTION_DUPLICATE) là lỗi ở lựa chọn, giữ sheet để khách đổi địa chỉ. Mất mạng, quá hạn, 5xx, 401: sheet ở lại, nhả khoá ngay.
+describe('SubscriptionEditSheet: đóng khi gói không còn hoặc vừa đổi, sau khi dữ liệu mới về (W114A)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.updateSubscription.mockReset();
+    mocks.getAddresses.mockResolvedValue(ADDRS);
+    mocks.getWallet.mockResolvedValue({ walletBalance: 50000 });
+  });
+  afterEach(() => vi.useRealTimers());
+
+  const deferred = () => {
+    let resolve!: (v?: unknown) => void;
+    const promise = new Promise<void>((res) => {
+      resolve = res as () => void;
+    });
+    return { promise, resolve };
+  };
+  const saveBtn = () => screen.getByRole('button', { name: 'Lưu thay đổi' });
+  const errorToasts = () => mocks.openSnackbar.mock.calls.filter(([o]) => (o as { type: string }).type === 'error').map(([o]) => o);
+  const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 30)); });
+  const sv = (message: string, status: number, code?: string) => serverError(message, status, code);
+
+  function renderLive(refresh: (key: readonly unknown[]) => Promise<void> | undefined) {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const invalidated: unknown[][] = [];
+    vi.spyOn(qc, 'invalidateQueries').mockImplementation(((filters: { queryKey: readonly unknown[] }) => {
+      invalidated.push([...filters.queryKey]);
+      return refresh(filters.queryKey) ?? Promise.resolve();
+    }) as never);
+    renderSheet(SUB, qc);
+    return { invalidated };
+  }
+  async function openDirty() {
+    await screen.findByRole('radio', { name: /9 Hai Bà Trưng/ });
+    fireEvent.click(screen.getByRole('button', { name: 'Tăng số lượng' }));
+  }
+
+  it.each([
+    [404, 'Không tìm thấy lịch đặt định kỳ.'],
+    [409, 'Lịch giao vừa thay đổi, hãy tải lại rồi thử lại.'],
+  ])('bị từ chối %i: báo lỗi một lần, tải lại gói và địa chỉ, nút bận tới khi CẢ HAI về, rồi mới báo đóng và nhả khoá', async (status, message) => {
+    const subs = deferred();
+    const addrs = deferred();
+    mocks.updateSubscription.mockRejectedValueOnce(sv(message, status)).mockResolvedValue({ ...SUB, quantity: 3 });
+    const { invalidated } = renderLive((key) => (key[0] === 'subscriptions' ? subs.promise : key[0] === 'addresses' ? addrs.promise : undefined));
+    await openDirty();
+    await act(async () => {
+      fireEvent.click(saveBtn());
+      fireEvent.click(saveBtn());
+      fireEvent.click(saveBtn());
+    });
+    await waitFor(() => expect(errorToasts()).toEqual([{ text: message, type: 'error' }]));
+    await waitFor(() => expect(invalidated).toEqual(expect.arrayContaining([['subscriptions'], ['addresses']])));
+    expect(mocks.updateSubscription).toHaveBeenCalledTimes(1);
+    expect(saveBtn()).toHaveAttribute('aria-busy', 'true');
+
+    // Gói về trước, địa chỉ chưa về: chưa đóng, còn khoá.
+    await act(async () => subs.resolve());
+    await settle();
+    expect(mocks.onClose).not.toHaveBeenCalled();
+    expect(saveBtn()).toHaveAttribute('aria-busy', 'true');
+    fireEvent.click(saveBtn());
+    await settle();
+    expect(mocks.updateSubscription).toHaveBeenCalledTimes(1);
+
+    await act(async () => addrs.resolve());
+    await waitFor(() => expect(mocks.onClose).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(saveBtn()).not.toHaveAttribute('aria-busy'));
+    expect(errorToasts()).toHaveLength(1);
+    fireEvent.click(saveBtn());
+    await waitFor(() => expect(mocks.updateSubscription).toHaveBeenCalledTimes(2));
+  });
+
+  it('bị từ chối 400 (địa chỉ không còn): tải lại gói và địa chỉ, giữ khoá tới khi về nhưng KHÔNG báo đóng, sửa lựa chọn rồi lưu lại được', async () => {
+    const subs = deferred();
+    mocks.updateSubscription.mockRejectedValueOnce(sv('Địa chỉ không hợp lệ.', 400)).mockResolvedValue({ ...SUB, quantity: 3 });
+    const { invalidated } = renderLive((key) => (key[0] === 'subscriptions' ? subs.promise : undefined));
+    await openDirty();
+    fireEvent.click(saveBtn());
+    await waitFor(() => expect(errorToasts()).toEqual([{ text: 'Địa chỉ không hợp lệ.', type: 'error' }]));
+    await waitFor(() => expect(invalidated).toEqual(expect.arrayContaining([['subscriptions'], ['addresses']])));
+    expect(saveBtn()).toHaveAttribute('aria-busy', 'true');
+    await act(async () => subs.resolve());
+    await waitFor(() => expect(saveBtn()).not.toHaveAttribute('aria-busy'));
+    await settle();
+    expect(mocks.onClose).not.toHaveBeenCalled();
+    expect(await screen.findByRole('alert')).toHaveTextContent('Địa chỉ không hợp lệ.');
+    fireEvent.click(saveBtn());
+    await waitFor(() => expect(mocks.updateSubscription).toHaveBeenCalledTimes(2));
+  });
+
+  it('bị từ chối 409 trùng gói (SUBSCRIPTION_DUPLICATE): giữ khoá tới khi gói và địa chỉ về rồi nhả, sheet KHÔNG đóng và còn nguyên lựa chọn, đổi địa chỉ rồi lưu lại được', async () => {
+    const subs = deferred();
+    const addrs = deferred();
+    mocks.updateSubscription.mockRejectedValueOnce(sv(DUPLICATE_MESSAGE, 409, DUPLICATE)).mockResolvedValue({ ...SUB, quantity: 3, intervalWeeks: 6 });
+    const { invalidated } = renderLive((key) => (key[0] === 'subscriptions' ? subs.promise : key[0] === 'addresses' ? addrs.promise : undefined));
+    await openDirty();
+    fireEvent.click(screen.getByRole('button', { name: '6 tuần' }));
+    fireEvent.click(screen.getByRole('radio', { name: /9 Hai Bà Trưng/ }));
+    fireEvent.click(saveBtn());
+    await waitFor(() => expect(errorToasts()).toEqual([{ text: DUPLICATE_MESSAGE, type: 'error' }]));
+    await waitFor(() => expect(invalidated).toEqual(expect.arrayContaining([['subscriptions'], ['addresses']])));
+    expect(mocks.updateSubscription).toHaveBeenCalledWith('s1', { quantity: 3, intervalWeeks: 6, addressId: 'a2' });
+    expect(saveBtn()).toHaveAttribute('aria-busy', 'true');
+
+    await act(async () => subs.resolve());
+    await settle();
+    expect(saveBtn()).toHaveAttribute('aria-busy', 'true');
+    fireEvent.click(saveBtn());
+    await settle();
+    expect(mocks.updateSubscription).toHaveBeenCalledTimes(1);
+
+    await act(async () => addrs.resolve());
+    await waitFor(() => expect(saveBtn()).not.toHaveAttribute('aria-busy'));
+    await settle();
+    expect(mocks.onClose).not.toHaveBeenCalled();
+    expect(await screen.findByRole('alert')).toHaveTextContent(DUPLICATE_MESSAGE);
+    expect(screen.getByRole('button', { name: '6 tuần' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('radio', { name: /9 Hai Bà Trưng/ })).toHaveAttribute('aria-checked', 'true');
+
+    fireEvent.click(screen.getByRole('radio', { name: /1 Lê Lợi/ }));
+    fireEvent.click(saveBtn());
+    await waitFor(() => expect(mocks.updateSubscription).toHaveBeenCalledTimes(2));
+    expect(mocks.updateSubscription).toHaveBeenLastCalledWith('s1', { quantity: 3, intervalWeeks: 6 });
+    await waitFor(() => expect(mocks.onClose).toHaveBeenCalledTimes(1));
+    expect(errorToasts()).toHaveLength(1);
+  });
+
+  it('bị từ chối 422: sheet ở lại kèm lỗi tại chỗ, không tải lại, khoá nhả ngay', async () => {
+    mocks.updateSubscription.mockRejectedValueOnce(sv('Số lượng không hợp lệ', 422)).mockResolvedValue({ ...SUB, quantity: 3 });
+    // Mọi lệnh tải lại treo mãi: nếu khoá còn đợi chúng thì nút không bao giờ sáng lại.
+    const { invalidated } = renderLive(() => new Promise<void>(() => undefined));
+    await openDirty();
+    fireEvent.click(saveBtn());
+    await waitFor(() => expect(errorToasts()).toEqual([{ text: 'Số lượng không hợp lệ', type: 'error' }]));
+    await waitFor(() => expect(saveBtn()).not.toHaveAttribute('aria-busy'));
+    await settle();
+    expect(invalidated).toEqual([]);
+    expect(mocks.onClose).not.toHaveBeenCalled();
+    fireEvent.click(saveBtn());
+    await waitFor(() => expect(mocks.updateSubscription).toHaveBeenCalledTimes(2));
+  });
+
+  it.each([
+    ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+    ['hết thời gian (ECONNABORTED)', new HttpError('timeout of 15000ms exceeded', 'ECONNABORTED')],
+    ['máy chủ lỗi 503', serverError('Service Unavailable', 503)],
+    ['hết phiên 401', serverError('Unauthorized', 401)],
+  ])('%s: sheet ở lại, không tải lại, nhả khoá ngay, bấm lại gọi lần hai', async (_label, err) => {
+    mocks.updateSubscription.mockRejectedValueOnce(err).mockResolvedValue({ ...SUB, quantity: 3 });
+    const { invalidated } = renderLive(() => new Promise<void>(() => undefined));
+    await openDirty();
+    fireEvent.click(saveBtn());
+    await waitFor(() => expect(errorToasts()).toHaveLength(1));
+    await waitFor(() => expect(saveBtn()).not.toHaveAttribute('aria-busy'));
+    await settle();
+    expect(invalidated).toEqual([]);
+    expect(mocks.onClose).not.toHaveBeenCalled();
+    fireEvent.click(saveBtn());
+    await waitFor(() => expect(mocks.updateSubscription).toHaveBeenCalledTimes(2));
+  });
+
+  it('dữ liệu tải lại treo mãi: chưa báo đóng ở LOCK_REFRESH_WAIT_MS - 500, hết hạn thì báo đóng một lần và nhả khoá', async () => {
+    mocks.updateSubscription.mockRejectedValueOnce(sv('Lịch giao vừa thay đổi, hãy tải lại rồi thử lại.', 409)).mockResolvedValue({ ...SUB, quantity: 3 });
+    renderLive(() => new Promise<void>(() => undefined));
+    await openDirty();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    fireEvent.click(saveBtn());
+    await waitFor(() => expect(errorToasts()).toHaveLength(1));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 500);
+    });
+    expect(mocks.onClose).not.toHaveBeenCalled();
+    expect(saveBtn()).toHaveAttribute('aria-busy', 'true');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(600);
+    });
+    await waitFor(() => expect(mocks.onClose).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(saveBtn()).not.toHaveAttribute('aria-busy'));
+    vi.useRealTimers();
+    fireEvent.click(saveBtn());
+    await waitFor(() => expect(mocks.updateSubscription).toHaveBeenCalledTimes(2));
   });
 });

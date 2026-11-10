@@ -365,6 +365,9 @@ function StaffHub() {
   // ── Sheet thêm/sửa ca ──
   const [formOpen, setFormOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
+  // onError chạy với bản dựng lúc bấm; muốn biết tấm đang sửa ca nào LÚC LỖI VỀ thì phải đọc qua ref.
+  const editIdRef = useRef(editId);
+  editIdRef.current = editId;
   const [formDay, setFormDay] = useState(mondayKey);
   const [tplId, setTplId] = useState<string | null>(null);
   const [customStart, setCustomStart] = useState('08:00');
@@ -423,8 +426,11 @@ function StaffHub() {
       setFormOpen(false);
       invalidate();
     },
-    onError: (e) => {
+    onError: (e, shiftId) => {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      // Tấm sửa ca có ô giờ: chỉ đóng khi ca không còn hoặc vừa đổi (404/409); 400/422 là giờ chưa hợp lệ hay chồng giờ, giữ tấm để sửa. Thêm ca mới chưa có ca đích (API chỉ từ chối 400) nên không đóng.
+      // Tấm đóng được lúc lệnh chạy: chỉ đóng nếu tấm vẫn đang sửa đúng ca này (đã mở thêm ca hoặc sửa ca khác thì giữ).
+      if (isTargetGoneError(e) && shiftId && editIdRef.current === shiftId) setFormOpen(false);
       return refreshIfStale(e);
     },
   }, (shiftId) => shiftId ?? '');

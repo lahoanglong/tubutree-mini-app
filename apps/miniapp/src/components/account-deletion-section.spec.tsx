@@ -391,6 +391,11 @@ describe('AccountDeletionSection: máy chủ từ chối vì số dư không cò
     expect(mocks.requestAccountDeletion).toHaveBeenCalledTimes(1);
 
     await act(async () => refetch.resolve({ walletBalance: 30000 }));
+    // W114A: 404/409 thu thẻ sau khi số dư mới về; mở lại để tick lại đúng số mới. 400 giữ thẻ.
+    if (status !== 400) {
+      await waitFor(() => expect(screen.queryByText('Xoá tài khoản vĩnh viễn?')).toBeNull());
+      await openCard();
+    }
     await screen.findByText(/Ví Tubu còn 30\.000đ/);
     await waitFor(() => expect(agreeBox()).toBeEnabled());
     expect(agreeBox()).not.toBeChecked();
@@ -441,5 +446,128 @@ describe('AccountDeletionSection: máy chủ từ chối vì số dư không cò
     });
     expect(agreeBox()).toBeEnabled();
     expect(cancelBtn()).toBeEnabled();
+  });
+});
+
+// W114A: thẻ xoá tài khoản có ô đồng ý bỏ số dư nên chỉ thu lại khi tài khoản không còn hoặc vừa đổi (404/409), SAU khi số dư mới về (nút gửi báo bận tới lúc đó); 400/422 là lỗi ở ô đồng ý, giữ thẻ. Mất mạng, quá hạn, 5xx, 401: thẻ ở lại, nhả khoá ngay.
+describe('AccountDeletionSection: thu thẻ khi tài khoản không còn hoặc vừa đổi, sau khi số dư mới về (W114A)', () => {
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message } } as never);
+  const errorToasts = () => mocks.openSnackbar.mock.calls.filter(([o]) => (o as { type: string }).type === 'error');
+  const CARD = 'Xoá tài khoản vĩnh viễn?';
+  const cardGone = () => waitFor(() => expect(screen.queryByText(CARD)).toBeNull());
+  async function readyWithBalance(refetch: Promise<{ walletBalance: number }>) {
+    mocks.getWallet.mockResolvedValueOnce({ walletBalance: 20000 }).mockReturnValueOnce(refetch).mockResolvedValue({ walletBalance: 30000 });
+    const view = mount();
+    await openCard();
+    await screen.findByText(/Ví Tubu còn 20\.000đ/);
+    fireEvent.click(agreeBox());
+    await waitFor(() => expect(submitBtn()).toBeEnabled());
+    return view;
+  }
+
+  beforeEach(() => {
+    mocks.getWallet.mockReset();
+    mocks.requestAccountDeletion.mockReset();
+    mocks.openSnackbar.mockClear();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it.each([404, 409])('bị từ chối %i: báo lỗi một lần, tải lại ["wallet"], thẻ còn mở và nút bận tới khi số dư về, rồi thu thẻ và nhả khoá', async (status) => {
+    const refetch = deferred<{ walletBalance: number }>();
+    mocks.requestAccountDeletion.mockRejectedValueOnce(serverError('Tài khoản vừa đổi.', status));
+    const { qc } = await readyWithBalance(refetch.promise);
+    const invalidate = vi.spyOn(qc, 'invalidateQueries');
+    const send = submitBtn();
+    await act(async () => {
+      fireEvent.click(send);
+      fireEvent.click(send);
+      fireEvent.click(send);
+    });
+    await waitFor(() => expect(mocks.getWallet).toHaveBeenCalledTimes(2));
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['wallet'] });
+    expect(mocks.requestAccountDeletion).toHaveBeenCalledTimes(1);
+    expect(errorToasts()).toHaveLength(1);
+    // Số dư chưa về: thẻ còn mở, nút bận, ô đồng ý và Huỷ khoá, chạm thêm không gửi lại.
+    expect(screen.getByText(CARD)).toBeInTheDocument();
+    expect(submitBtn()).toHaveAttribute('aria-busy', 'true');
+    expect(cancelBtn()).toBeDisabled();
+    fireEvent.click(submitBtn());
+    expect(mocks.requestAccountDeletion).toHaveBeenCalledTimes(1);
+
+    await act(async () => refetch.resolve({ walletBalance: 30000 }));
+    await cardGone();
+    expect(errorToasts()).toHaveLength(1);
+    // Mở lại: số dư mới, ô đồng ý trống, phải tick lại đúng số mới.
+    await openCard();
+    await screen.findByText(/Ví Tubu còn 30\.000đ/);
+    expect(agreeBox()).not.toBeChecked();
+    expect(submitBtn()).toBeDisabled();
+    fireEvent.click(agreeBox());
+    await waitFor(() => expect(submitBtn()).toBeEnabled());
+    fireEvent.click(submitBtn());
+    await waitFor(() => expect(mocks.requestAccountDeletion).toHaveBeenCalledTimes(2));
+    expect(mocks.requestAccountDeletion).toHaveBeenLastCalledWith(undefined, { acknowledgedWalletBalance: 30000, acceptWalletForfeit: true });
+  });
+
+  it('bị từ chối 400 (số dư lệch): thẻ ở lại, giữ khoá tới khi số dư mới về rồi mở khoá, ô đồng ý trống để tick lại', async () => {
+    const refetch = deferred<{ walletBalance: number }>();
+    mocks.requestAccountDeletion.mockRejectedValueOnce(serverError('Số dư Ví vừa đổi.', 400));
+    await readyWithBalance(refetch.promise);
+    fireEvent.click(submitBtn());
+    await waitFor(() => expect(mocks.getWallet).toHaveBeenCalledTimes(2));
+    expect(submitBtn()).toHaveAttribute('aria-busy', 'true');
+    await act(async () => refetch.resolve({ walletBalance: 30000 }));
+    await screen.findByText(/Ví Tubu còn 30\.000đ/);
+    await waitFor(() => expect(agreeBox()).toBeEnabled());
+    expect(screen.getByText(CARD)).toBeInTheDocument();
+    expect(agreeBox()).not.toBeChecked();
+    expect(cancelBtn()).toBeEnabled();
+  });
+
+  it('bị từ chối 422: thẻ ở lại, số dư vẫn tải lại như mọi lỗi nhưng khoá nhả ngay, không đợi', async () => {
+    mocks.requestAccountDeletion.mockRejectedValueOnce(serverError('Dữ liệu không hợp lệ', 422));
+    await readyWithBalance(new Promise<{ walletBalance: number }>(() => undefined));
+    fireEvent.click(submitBtn());
+    await waitFor(() => expect(errorToasts()).toHaveLength(1));
+    await waitFor(() => expect(mocks.getWallet).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(cancelBtn()).toBeEnabled());
+    expect(screen.getByText(CARD)).toBeInTheDocument();
+    expect(agreeBox()).toBeEnabled();
+    expect(agreeBox()).not.toBeChecked();
+  });
+
+  it.each([
+    ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+    ['hết thời gian (ECONNABORTED)', new HttpError('timeout of 15000ms exceeded', 'ECONNABORTED')],
+    ['máy chủ lỗi 503', serverError('Service Unavailable', 503)],
+    ['hết phiên 401', serverError('Unauthorized', 401)],
+  ])('%s: thẻ ở lại, khoá nhả ngay, không đợi số dư tải lại', async (_label, error) => {
+    mocks.requestAccountDeletion.mockRejectedValueOnce(error);
+    await readyWithBalance(new Promise<{ walletBalance: number }>(() => undefined));
+    fireEvent.click(submitBtn());
+    await waitFor(() => expect(errorToasts()).toHaveLength(1));
+    await waitFor(() => expect(submitBtn()).not.toHaveAttribute('aria-busy'));
+    expect(screen.getByText(CARD)).toBeInTheDocument();
+    expect(cancelBtn()).toBeEnabled();
+    expect(agreeBox()).toBeEnabled();
+  });
+
+  it('số dư tải lại treo mãi: thẻ còn mở và bận ở LOCK_REFRESH_WAIT_MS - 500, hết hạn thì thu thẻ', async () => {
+    mocks.requestAccountDeletion.mockRejectedValueOnce(serverError('Tài khoản vừa đổi.', 409));
+    await readyWithBalance(new Promise<{ walletBalance: number }>(() => undefined));
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    fireEvent.click(submitBtn());
+    await waitFor(() => expect(mocks.getWallet).toHaveBeenCalledTimes(2));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 500);
+    });
+    expect(screen.getByText(CARD)).toBeInTheDocument();
+    expect(submitBtn()).toHaveAttribute('aria-busy', 'true');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(600);
+    });
+    await cardGone();
   });
 });
