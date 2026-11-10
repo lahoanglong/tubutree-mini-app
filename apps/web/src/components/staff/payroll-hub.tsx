@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, Landmark } from 'lucide-react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { updateBank, type PayrollDay, type PayrollStatus, type StaffProfile } from '@tubutree/app-core/api/payroll';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { updateBank, type BankInput, type PayrollDay, type PayrollStatus, type StaffProfile } from '@tubutree/app-core/api/payroll';
 import type { SessionHistory } from '@tubutree/app-core/api/attendance';
 import { myAttendanceHistoryQuery } from '@tubutree/app-core/queries/attendance';
 import { myPayrollQuery } from '@tubutree/app-core/queries/payroll';
@@ -30,6 +30,7 @@ import { Field } from '@/components/ui/field';
 import { Sheet } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EvidenceUpload } from '@/components/evidence-upload';
+import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { safeEvidenceImage } from '@/components/admin/evidence-images';
 import { errText, PeriodNav, useNotice } from './staff-shell';
 
@@ -38,6 +39,9 @@ const STATUS_LABEL: Record<PayrollStatus, string> = {
   FINALIZED: 'Đã chốt',
   PAID: 'Đã trả',
 };
+
+// Chỉ phần tài khoản nhận lương mà form nạp sẵn.
+type BankFields = Pick<StaffProfile, 'bankBin' | 'bankAccountNo' | 'bankAccountName' | 'qrImageUrl'>;
 
 const fmtH = (min: number) => `${Math.floor(min / 60)}h${String(min % 60).padStart(2, '0')}`;
 
@@ -79,7 +83,7 @@ export function PayrollHub() {
   // mở form đúng lúc đó sẽ nạp ô RỖNG và bấm Lưu gửi chuỗi rỗng đè mất tài khoản đã lưu (upsert `update: dto` ở BE).
   // `profileLoaded` tách "chưa tải được lần nào / tải lỗi" khỏi "nhân viên chưa có hồ sơ" (profile null hợp lệ): trường hợp đầu khoá nút,
   // không thì form rỗng + Lưu cũng đè mất tài khoản đã lưu.
-  const [profileCache, setProfileCache] = useState<StaffProfile | null>(null);
+  const [profileCache, setProfileCache] = useState<BankFields | null>(null);
   const [profileLoaded, setProfileLoaded] = useState(false);
   useEffect(() => {
     if (payQ.data) {
@@ -95,6 +99,8 @@ export function PayrollHub() {
   const [qr, setQr] = useState('');
 
   const openBank = () => {
+    // Đang lưu (kể cả lúc tải lại bảng lương): mở lúc này nạp tài khoản cũ rồi Lưu ghi đè tài khoản vừa lưu.
+    if (bankM.isPending) return;
     clear();
     setBin(profileCache?.bankBin ?? '');
     setAccNo(profileCache?.bankAccountNo ?? '');
@@ -103,12 +109,21 @@ export function PayrollHub() {
     setBankOpen(true);
   };
 
-  const bankM = useMutation({
-    mutationFn: () => updateBank(coreHttp, { bankBin: bin.trim(), bankAccountNo: accNo.trim(), bankAccountName: accName.trim(), qrImageUrl: qr || undefined }),
-    onSuccess: () => {
+  // Gửi bản chụp lúc bấm; khoá giữ tới khi bảng lương tải lại xong và nút mở tấm bị chặn trong lúc đó. Tải lại có thể lỗi (mất mạng) nên
+  // hồ sơ nạp sẵn cũng được ghi ngay bằng tài khoản vừa lưu: không thì lần mở sau nạp tài khoản cũ và Lưu ghi đè tài khoản mới.
+  const bankM = useLockedMutation({
+    mutationFn: (v: BankInput) => updateBank(coreHttp, v),
+    onMutate: clear,
+    onSuccess: (_data, v) => {
+      setProfileCache({
+        bankBin: v.bankBin ?? null,
+        bankAccountNo: v.bankAccountNo ?? null,
+        bankAccountName: v.bankAccountName ?? null,
+        qrImageUrl: v.qrImageUrl ?? null,
+      });
       notify({ text: 'Đã lưu thông tin nhận lương.', tone: 'success' });
       setBankOpen(false);
-      void qc.invalidateQueries({ queryKey: ['my-payroll'] });
+      return qc.invalidateQueries({ queryKey: ['my-payroll'] });
     },
     onError: (e) => notify({ text: errText(e), tone: 'error' }),
   });
@@ -128,7 +143,7 @@ export function PayrollHub() {
       />
 
       {payQ.isLoading && <Skeleton height={120} rounded="rounded-card" />}
-      {payQ.isError && <ErrorState message={errText(payQ.error)} onRetry={() => void payQ.refetch()} />}
+      {payQ.isError && <ErrorState message={errText(payQ.error)} onRetry={() => payQ.refetch()} />}
 
       <div className="grid gap-3 lg:grid-cols-[22rem_1fr] lg:items-start">
         <div className="flex flex-col gap-3">
@@ -157,7 +172,14 @@ export function PayrollHub() {
             </section>
           )}
 
-          <button type="button" onClick={openBank} disabled={!profileLoaded} className={skin.btnSecondary}>
+          <button
+            type="button"
+            onClick={openBank}
+            disabled={!profileLoaded}
+            aria-busy={bankM.isPending || undefined}
+            aria-disabled={bankM.isPending || undefined}
+            className={skin.btnSecondary}
+          >
             <Landmark className="mr-1.5 h-4 w-4" aria-hidden="true" />
             Thông tin nhận lương
           </button>
@@ -220,9 +242,17 @@ export function PayrollHub() {
       <Sheet
         open={bankOpen}
         onClose={() => setBankOpen(false)}
+        dismissible={!bankM.isPending}
         title="Thông tin nhận lương"
         footer={
-          <button type="button" disabled={bankM.isPending} onClick={() => bankM.mutate()} className={`${ui.btnPrimary} w-full`}>
+          // Đang lưu giữ aria-busy/aria-disabled chứ không `disabled`: nút đang giữ focus mà bị vô hiệu thì Chromium thả focus về body.
+          <button
+            type="button"
+            aria-busy={bankM.isPending || undefined}
+            aria-disabled={bankM.isPending || undefined}
+            onClick={() => bankM.mutate({ bankBin: bin.trim(), bankAccountNo: accNo.trim(), bankAccountName: accName.trim(), qrImageUrl: qr || undefined })}
+            className={`${ui.btnPrimary} w-full`}
+          >
             {bankM.isPending ? 'Đang lưu…' : 'Lưu'}
           </button>
         }
