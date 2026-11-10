@@ -5,9 +5,11 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Share2 } from 'lucide-react';
+import { errorStatus } from '@tubutree/app-core/api/error-status';
 import { joinGroupBuy, type GroupBuy } from '@tubutree/app-core/api/groupbuy';
 import { groupMemberStatus, groupMissing, groupMissingLine, groupPriceLabels, groupRewardLine } from '@tubutree/app-core/group-buy-copy';
 import { groupBuyListQuery, groupBuyOneQuery } from '@tubutree/app-core/queries/groupbuy';
+import { serverNow } from '@tubutree/app-core/server-clock';
 import { EmptyState } from '@/components/empty-state';
 import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { useActiveFlashSales } from '@/lib/use-flash-sales';
@@ -35,8 +37,18 @@ const JUST_CREATED_PARAM = 'moi';
 const errorText = loadErrorText;
 const JOIN_KEY = ['group-buy-join'] as const;
 
+/**
+ * Máy chủ đã nói rõ nhóm khác với thẻ đang hiện: 400/404/409 (đã đủ người, đã hết hạn, đã đóng, đã tham gia rồi). Mất mạng, hết thời gian,
+ * 401 và 5xx thì không tải lại: các lỗi đó hay đến đúng lúc máy chủ đang bận (triển khai), lần tải lại cũng hỏng và lỗi tải danh sách sẽ thay
+ * cả danh sách bằng màn lỗi. Nếu máy chủ đã ghi thành viên trước khi lỗi 5xx thì lần bấm sau nhận 400 "đã tham gia" và tải lại ở đó.
+ */
+function groupMayHaveChanged(e: unknown): boolean {
+  const status = errorStatus(e);
+  return status === 400 || status === 404 || status === 409;
+}
+
 function timeLeft(iso: string): string {
-  const diff = (new Date(iso).getTime() - Date.now()) / 1000;
+  const diff = (new Date(iso).getTime() - serverNow()) / 1000;
   if (diff <= 0) return 'đã hết hạn';
   if (diff < 3600) return `còn ${Math.floor(diff / 60)} phút`;
   if (diff < 86400) return `còn ${Math.floor(diff / 3600)} giờ`;
@@ -84,7 +96,11 @@ export function GroupBuyView({ invitedId }: { invitedId?: string }) {
         setNote({ text: r.status === 'SUCCESS' ? 'Nhóm đã đủ người! Mã giảm giá đã vào ví của bạn.' : 'Đã tham gia nhóm', error: false });
         return settleWithin(qc.invalidateQueries({ queryKey: ['group-buy'] }));
       },
-      onError: (e: unknown) => setNote({ text: errorText(e), error: true }),
+      onError: (e: unknown) => {
+        setNote({ text: errorText(e), error: true });
+        // Thẻ đang cho bấm "Tham gia" trên nhóm mà máy chủ vừa nói đã đủ/đã đóng/đã có mình: tải lại để thẻ hiện đúng trạng thái, giữ khoá tới lúc đó.
+        return groupMayHaveChanged(e) ? settleWithin(qc.invalidateQueries({ queryKey: ['group-buy'] })) : undefined;
+      },
     },
     (id) => id,
   );
@@ -222,7 +238,9 @@ function GroupCard({
   joining: boolean;
   sharing: boolean;
 }) {
-  const isOpen = g.status === 'OPEN';
+  // Nhóm quá hạn nhưng cron 15 phút chưa đóng vẫn trả OPEN: máy chủ từ chối mọi lần tham gia, nên thẻ coi như đã hết hạn thay vì cho bấm mãi.
+  const expired = g.status === 'OPEN' && new Date(g.expiresAt).getTime() <= serverNow();
+  const isOpen = g.status === 'OPEN' && !expired;
   const member = authed && g.joined;
   const productHref = `/san-pham/${encodeURIComponent(g.product.slug)}`;
   const closedLabel = g.status === 'SUCCESS' ? 'Nhóm đã đủ người' : 'Nhóm đã hết hạn';
@@ -232,7 +250,7 @@ function GroupCard({
   const missingLine = groupMissingLine(g);
 
   return (
-    <article className={`${ui.card} flex flex-col p-3 max-md:border-0 max-md:shadow-[var(--elevation-1)]`}>
+    <article className={`${ui.card} flex flex-col p-3 tabular-nums max-md:border-0 max-md:shadow-[var(--elevation-1)]`}>
       {invitedBanner && <p className="mb-1.5 text-xs font-semibold text-forest-700 max-md:text-[length:var(--type-caption-size)]">Bạn được mời vào nhóm này</p>}
       <Link href={productHref} className="flex min-h-14 gap-3">
         <span className="inline-flex shrink-0 self-start">
@@ -249,7 +267,7 @@ function GroupCard({
             </Badge>
           </div>
           <p className="text-xs text-stone-600 max-md:text-[length:var(--type-caption-size)]">{prices.solo}</p>
-          <p className="text-xs tabular-nums text-stone-600 max-md:text-[length:var(--type-caption-size)]">
+          <p className="text-xs text-stone-600 max-md:text-[length:var(--type-caption-size)]">
             {g.currentSize}/{g.targetSize} người · {g.status === 'SUCCESS' ? 'đã đủ nhóm' : timeLeft(g.expiresAt)}
           </p>
         </div>
@@ -302,7 +320,7 @@ function GroupCard({
             if (joining) return;
             onJoin();
           }}
-          className={`${ui.btnPrimary} mt-3 w-full tabular-nums`}
+          className={`${ui.btnPrimary} mt-3 w-full`}
         >
           {label}
         </button>
