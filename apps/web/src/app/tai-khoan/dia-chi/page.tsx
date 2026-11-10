@@ -85,6 +85,8 @@ export default function AddressBookPage() {
           deleteOk.current = true;
           setConfirmId((cur) => (cur === v.id ? null : cur));
           setRemovedNotice(true);
+          // Lần tải lại có thể bị lần làm mới của lệnh sau huỷ hoặc lỗi mạng: dòng đã xoá không được ở lại chờ chúng.
+          qc.setQueryData<AddressDTO[]>(['addresses'], (list) => list?.filter((x) => x.id !== v.id));
         }
         return refresh();
       },

@@ -283,3 +283,53 @@ describe('GeoPicker — sheet chọn địa giới (W42B)', () => {
     expect(document.activeElement).toBe(selectByLabel(c, 'Phường/Xã'));
   });
 });
+
+describe('GeoPicker — "Thử lại" khi tải tỉnh/phường lỗi (kiểm hồi quy, không có khoá riêng)', () => {
+  it('chạm đúp cùng một khung hình vào mỗi nút Thử lại chỉ gọi lại API một lần (query-core gộp refetch của truy vấn chưa có dữ liệu, mà nút này chỉ hiện khi chưa có dữ liệu)', async () => {
+    let provincesCalls = 0;
+    let communesCalls = 0;
+    let openProvinces: () => void = () => undefined;
+    let openCommunes: () => void = () => undefined;
+    const provincesGate = new Promise<void>((r) => (openProvinces = r));
+    const communesGate = new Promise<void>((r) => (openCommunes = r));
+    const reply = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('/geo/provinces')) {
+          provincesCalls += 1;
+          if (provincesCalls === 1) return reply(503, { message: 'x' });
+          await provincesGate;
+          return reply(200, [{ code: '84_VN01', name: 'Hà Nội' }]);
+        }
+        communesCalls += 1;
+        if (communesCalls === 1) return reply(503, { message: 'x' });
+        await communesGate;
+        return reply(200, [{ code: '84_VN01_001', name: 'Cầu Giấy' }]);
+      }),
+    );
+    const value = { province: 'Hà Nội', provinceCode: '84_VN01', ward: '', wardCode: '' };
+    const { container } = mount(<GeoPicker value={value} onChange={() => {}} />);
+    await flush();
+    const retries = () => Array.from(container.querySelectorAll('button')).filter((b) => b.textContent === 'Thử lại');
+    expect(retries()).toHaveLength(2);
+    const [provincesRetry, communesRetry] = retries();
+    act(() => {
+      provincesRetry!.click();
+      provincesRetry!.click();
+    });
+    act(() => {
+      communesRetry!.click();
+      communesRetry!.click();
+    });
+    await flush(3);
+    expect(provincesCalls).toBe(2);
+    expect(communesCalls).toBe(2);
+    await act(async () => {
+      openProvinces();
+      openCommunes();
+    });
+    await flush(4);
+    expect(retries()).toHaveLength(0);
+  });
+});
