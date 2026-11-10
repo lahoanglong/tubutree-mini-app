@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   repairStreak: vi.fn(),
   claimMission: vi.fn(),
   claimSeasonPass: vi.fn(),
+  waterPlot: vi.fn(),
 }));
 vi.mock('zmp-ui', () => ({ useSnackbar: () => ({ openSnackbar: mocks.openSnackbar }) }));
 vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
@@ -26,6 +27,7 @@ vi.mock('../../services/game-api', async (orig) => ({
   repairStreak: mocks.repairStreak,
   claimMission: mocks.claimMission,
   claimSeasonPass: mocks.claimSeasonPass,
+  waterPlot: mocks.waterPlot,
 }));
 
 import { useGameActions } from './use-game-actions';
@@ -154,6 +156,95 @@ describe('useGameActions: dữ liệu làm mới treo mãi thì nhả khoá sau 
   it.each(ONE_SHOT.map((c) => [c.name, c] as const))('%s', async (_name, c) => {
     c.api.mockReset();
     c.api.mockResolvedValue(c.result);
+    const held = c.held[0]!;
+    const { hook, fetched } = setupHeld(held);
+    await waitFor(() => expect(Object.values(fetched).every((n) => n === 1)).toBe(true));
+    vi.useFakeTimers();
+    act(() => c.tap(hook.result.current));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(fetched[held]).toBe(2);
+    expect(c.pending(hook.result.current)).toBe(true);
+    await act(async () => { await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 1); });
+    expect(c.pending(hook.result.current)).toBe(true);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS);
+      for (let i = 0; i < 3; i++) await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(c.pending(hook.result.current)).toBe(false);
+    act(() => c.tap(hook.result.current));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(c.api).toHaveBeenCalledTimes(2);
+  });
+});
+
+const httpError = (status: number) => new HttpError('Máy chủ từ chối', undefined, { status, data: { message: 'Máy chủ từ chối' } } as never);
+
+const REJECTABLE = [
+  ...ONE_SHOT,
+  { name: 'tưới lô phụ', api: mocks.waterPlot, result: undefined, tap: (a: Actions) => a.waterPlotM.mutate('plot-1'), pending: (a: Actions) => a.waterPlotM.isPending, held: ['profile', 'me', 'loyalty'] as Probe[] },
+];
+const REJECT_STALE = REJECTABLE.flatMap((c) => [400, 404, 409].map((status) => [c.name, status, c] as const));
+const REJECT_TEMPORARY = REJECTABLE.flatMap((c) => [401, 500, 502].map((status) => [c.name, status, c] as const));
+
+describe('useGameActions: máy chủ từ chối việc một-lần (400/404/409) thì tải lại rồi mới nhả khoá', () => {
+  beforeEach(() => {
+    for (const c of REJECTABLE) c.api.mockReset();
+    mocks.openSnackbar.mockClear();
+  });
+
+  it.each(REJECT_STALE)('%s bị từ chối %i: tải lại dữ liệu, giữ khoá tới khi về, báo lỗi một lần', async (_name, status, c) => {
+    c.api.mockRejectedValue(httpError(status));
+    const held = c.held[0]!;
+    const { hook, fetched, release } = setupHeld(held);
+    await waitFor(() => expect(Object.values(fetched).every((n) => n === 1)).toBe(true));
+    act(() => c.tap(hook.result.current));
+    await waitFor(() => expect(fetched[held]).toBe(2));
+    await settleTicks();
+    expect(c.pending(hook.result.current)).toBe(true);
+    act(() => c.tap(hook.result.current));
+    await settleTicks();
+    expect(c.api).toHaveBeenCalledTimes(1);
+    expect(mocks.openSnackbar).toHaveBeenCalledTimes(1);
+    expect(mocks.openSnackbar.mock.calls[0]?.[0].type).toBe('error');
+    await act(async () => release());
+    await waitFor(() => expect(c.pending(hook.result.current)).toBe(false));
+    act(() => c.tap(hook.result.current));
+    await waitFor(() => expect(c.api).toHaveBeenCalledTimes(2));
+  });
+
+  it.each(REJECT_TEMPORARY)('%s gặp %i (lỗi tạm): chỉ báo lỗi, không tải lại, nhả khoá ngay', async (_name, status, c) => {
+    c.api.mockRejectedValue(httpError(status));
+    const { hook, fetched } = setupHeld(c.held[0]!);
+    await waitFor(() => expect(Object.values(fetched).every((n) => n === 1)).toBe(true));
+    act(() => c.tap(hook.result.current));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(c.pending(hook.result.current)).toBe(false));
+    await settleTicks();
+    expect(Object.values(fetched).every((n) => n === 1)).toBe(true);
+    act(() => c.tap(hook.result.current));
+    await waitFor(() => expect(c.api).toHaveBeenCalledTimes(2));
+  });
+
+  it('mất mạng (không có phản hồi): chỉ báo lỗi, không tải lại, nhả khoá ngay', async () => {
+    mocks.claimSeasonPass.mockRejectedValue(new HttpError('Network Error', 'ERR_NETWORK'));
+    const { hook, fetched } = setupHeld('seasonPass');
+    await waitFor(() => expect(Object.values(fetched).every((n) => n === 1)).toBe(true));
+    act(() => hook.result.current.claimPassM.mutate({ tier: 1, track: 'free' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(hook.result.current.claimPassM.isPending).toBe(false));
+    await settleTicks();
+    expect(fetched.seasonPass).toBe(1);
+  });
+});
+
+describe('useGameActions: bị từ chối mà dữ liệu tải lại treo mãi thì nhả khoá sau LOCK_REFRESH_WAIT_MS, không sớm hơn', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it.each(REJECTABLE.map((c) => [c.name, c] as const))('%s', async (_name, c) => {
+    c.api.mockReset();
+    c.api.mockRejectedValue(httpError(400));
     const held = c.held[0]!;
     const { hook, fetched } = setupHeld(held);
     await waitFor(() => expect(Object.values(fetched).every((n) => n === 1)).toBe(true));
