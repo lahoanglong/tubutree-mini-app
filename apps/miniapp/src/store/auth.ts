@@ -468,6 +468,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   ensurePhoneOrThrow: () => {
+    // Đã có SĐT (kể cả do lần liên kết khác vừa đính vào) thì không phải chờ lần đang chạy.
+    const known = get().user?.phone;
+    if (known) return Promise.resolve(known);
     // Gộp các lần gọi chồng nhau: hai nút bấm gần nhau chỉ mở hộp xin SĐT và gọi liên kết một lần, cùng nhận một kết quả.
     if (phoneLinkInFlight) return phoneLinkInFlight;
     const run = (async (): Promise<string | null> => {

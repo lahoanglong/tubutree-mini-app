@@ -968,6 +968,39 @@ describe('useAuthStore.ensurePhoneOrThrow — gộp các lần gọi chồng nha
     expect(mockedEnsurePhoneApi).toHaveBeenCalledTimes(1);
   });
 
+  it('lần gọi tới lúc hộp SĐT của lần khác còn mở mà user ĐÃ có SĐT: trả ngay SĐT đó, không chờ và không thừa hưởng kết quả null khi lần kia bị từ chối', async () => {
+    const token = deferred<string | null>(null);
+    mockedRequestZaloPhoneToken.mockReturnValueOnce(token.promise);
+
+    const flightA = store().ensurePhoneOrThrow();
+    let aSettled = false;
+    void flightA.then(() => {
+      aSettled = true;
+    });
+    await drain();
+    expect(mockedRequestZaloPhoneToken).toHaveBeenCalledTimes(1);
+
+    // Trong lúc hộp SĐT của A còn mở, một đường khác (nâng cấp ngầm, liên kết khác) đã đính SĐT vào phiên.
+    useAuthStore.setState({ user: { ...guest(), phone: '0988888888' }, status: 'authenticated' });
+    const flightB = store().ensurePhoneOrThrow();
+
+    expect(flightB).not.toBe(flightA);
+    await expect(flightB).resolves.toBe('0988888888');
+    expect(aSettled).toBe(false);
+    expect(mockedRequestZaloPhoneToken).toHaveBeenCalledTimes(1);
+    expect(mockedEnsurePhoneApi).not.toHaveBeenCalled();
+
+    // A bị từ chối: A nhận null, B đã nhận SĐT từ trước nên không bị đổi theo, và lần gọi sau vẫn trả SĐT mà không hỏi lại.
+    token.resolve(null);
+    await expect(flightA).resolves.toBeNull();
+    await expect(flightB).resolves.toBe('0988888888');
+    expect(store().user?.phone).toBe('0988888888');
+
+    await expect(store().ensurePhoneOrThrow()).resolves.toBe('0988888888');
+    expect(mockedRequestZaloPhoneToken).toHaveBeenCalledTimes(1);
+    expect(mockedEnsurePhoneApi).not.toHaveBeenCalled();
+  });
+
   it('lần cũ xong trước lần mới (sau logout) không nhả khoá của lần mới: lần gọi thứ ba vẫn gộp vào lần mới', async () => {
     const tokenA = deferred<string | null>(null);
     const tokenB = deferred<string | null>(null);

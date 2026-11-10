@@ -186,7 +186,14 @@ export class AttendanceService {
       where: { id: open.id, checkoutAt: null },
       data: { checkoutAt, closeReason: 'MANUAL' },
     });
-    return count === 0 ? { checkedOut: true, alreadyClosed: true } : { checkedOut: true };
+    if (count === 0) {
+      // Giờ lùi `at` của nhân viên không được lưu: nói rõ thay vì báo "đã ra ca" trong khi bảng lương theo giờ đóng tự động.
+      if (at) {
+        throw new BadRequestException('Phiên đã được hệ thống đóng trước khi lưu giờ ra của bạn, nhờ quản lý chỉnh giờ ra giúp bạn.');
+      }
+      return { checkedOut: true, alreadyClosed: true };
+    }
+    return { checkedOut: true };
   }
 
   /**
@@ -382,9 +389,11 @@ export class AttendanceService {
     await this.assertNoOverlap(s.shiftId, checkinAt, checkoutAt, sessionId, db);
     const closeReason =
       patch.checkoutAt === undefined ? s.closeReason : checkoutAt ? 'ADMIN' : null;
+    // Sửa riêng checkinAt thì không ghi lại checkoutAt đã đọc: heartbeat hoặc cron có thể đóng phiên giữa lúc đọc và lúc ghi, ghi lại
+    // checkoutAt cũ (null) sẽ mở lại phiên đã đóng và bảng lương tính cả phần ngoài vùng.
     await db.attendanceSession.update({
       where: { id: sessionId },
-      data: { checkinAt, checkoutAt, closeReason },
+      data: patch.checkoutAt === undefined ? { checkinAt } : { checkinAt, checkoutAt, closeReason },
     });
     return { staffId: s.staffId, workDate: s.shift.workDate };
   }
