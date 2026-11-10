@@ -1,9 +1,10 @@
 import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { vi as t } from '../i18n/vi';
 import type { AdminPendingPost, AdminReport, AdminCommunityEvent, EventParticipant } from '../services/feed-api';
+import { HttpError } from '../services/http';
 
 const mocks = vi.hoisted(() => ({
   openSnackbar: vi.fn(),
@@ -952,6 +953,7 @@ describe('CommunityModerationPage: khoá chạm đúp, khoá chéo cùng một �
       fireEvent.click(screen.getByRole('radio', { name: /Người binh/ }));
       fireEvent.click(screen.getByRole('button', { name: 'Chốt Người binh là người thắng' }));
       await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã chọn người thắng', type: 'success' }));
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Đóng' })).not.toHaveAttribute('aria-busy', 'true'));
       fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
       await waitFor(() => expect(mocks.closeEvent).toHaveBeenCalledWith('e1'));
     });
@@ -1002,5 +1004,230 @@ describe('CommunityModerationPage: ảnh bìa sự kiện còn đang lên thì "
     await waitFor(() => expect(screen.getByRole('button', { name: 'Ảnh bìa sự kiện' })).toBeDisabled());
     await act(async () => release({ id: 'new' }));
     await waitFor(() => expect(screen.getByRole('button', { name: 'Ảnh bìa sự kiện' })).toBeEnabled());
+  });
+});
+
+describe('CommunityModerationPage: sự kiện giữ khoá tới khi danh sách làm mới, lệnh bị từ chối vì trạng thái đã đổi thì tải lại (W101A)', () => {
+  const deferred = <T,>() => {
+    let resolve!: (v: T) => void;
+    const promise = new Promise<T>((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  const rejected = (status: number, message: string) => new HttpError(message, undefined, { status, data: { message } });
+  const openEventsTab = async () => {
+    renderPage();
+    await screen.findByText('Tiêu đề a');
+    goTab('Sự kiện');
+    await screen.findByText('Sự kiện e1');
+  };
+  const choose = async (name = 'binh') => {
+    fireEvent.click(screen.getByRole('button', { name: 'Chọn người thắng' }));
+    await screen.findByText(`Người ${name}`);
+    fireEvent.click(screen.getByRole('radio', { name: new RegExp(`Người ${name}`) }));
+    return screen.getByRole('button', { name: `Chốt Người ${name} là người thắng` });
+  };
+  /** Lần tải danh sách OPEN đầu trả ngay, các lần sau treo tới khi test nhả. */
+  const holdOpenRefetch = () => {
+    const refetch = deferred<AdminCommunityEvent[]>();
+    let opened = 0;
+    mocks.adminEvents.mockImplementation(async (status: string) => {
+      if (status !== 'OPEN') return [];
+      opened += 1;
+      return opened === 1 ? [EVENT('e1')] : refetch.promise;
+    });
+    return refetch;
+  };
+  const openCalls = () => mocks.adminEvents.mock.calls.filter((c) => c[0] === 'OPEN').length;
+
+  it('chốt người thắng xong: nút còn báo bận tới khi danh sách làm mới về; chạm lại và Đóng trong lúc chờ không gửi lệnh nào', async () => {
+    const refetch = holdOpenRefetch();
+    await openEventsTab();
+    const go = await choose();
+    fireEvent.click(go);
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã chọn người thắng', type: 'success' }));
+    await waitFor(() => expect(openCalls()).toBe(2));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Đóng' })).toHaveAttribute('aria-busy', 'true'));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Chốt Người binh là người thắng' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+    });
+    expect(mocks.pickEventWinner).toHaveBeenCalledTimes(1);
+    expect(mocks.closeEvent).not.toHaveBeenCalled();
+
+    await act(async () => refetch.resolve([EVENT('e1')]));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Đóng' })).not.toHaveAttribute('aria-busy', 'true'));
+    fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+    await waitFor(() => expect(mocks.closeEvent).toHaveBeenCalledTimes(1));
+  });
+
+  it('chốt xong và sự kiện biến khỏi danh sách "Đang mở" khi làm mới về: thẻ không còn để chạm lại', async () => {
+    const refetch = holdOpenRefetch();
+    await openEventsTab();
+    fireEvent.click(await choose());
+    await waitFor(() => expect(openCalls()).toBe(2));
+    expect(screen.getByText('Sự kiện e1')).toBeInTheDocument();
+    await act(async () => refetch.resolve([]));
+    expect(await screen.findByText('Chưa có sự kiện nào')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Chốt .* là người thắng/ })).toBeNull();
+    expect(mocks.pickEventWinner).toHaveBeenCalledTimes(1);
+  });
+
+  it('Đóng xong: nút còn báo bận tới khi danh sách làm mới về', async () => {
+    const refetch = holdOpenRefetch();
+    await openEventsTab();
+    fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã đóng sự kiện', type: 'success' }));
+    await waitFor(() => expect(openCalls()).toBe(2));
+    expect(screen.getByRole('button', { name: 'Đóng' })).toHaveAttribute('aria-busy', 'true');
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+    });
+    expect(mocks.closeEvent).toHaveBeenCalledTimes(1);
+    await act(async () => refetch.resolve([EVENT('e1')]));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Đóng' })).not.toHaveAttribute('aria-busy', 'true'));
+  });
+
+  it('chốt bị từ chối vì sự kiện đã đóng (400): báo đúng câu của máy chủ, tải lại danh sách và người dự thi, giữ khoá tới khi xong', async () => {
+    const message = 'Sự kiện đã đóng hoặc đã chọn người thắng.';
+    mocks.pickEventWinner.mockRejectedValueOnce(rejected(400, message));
+    const refetch = holdOpenRefetch();
+    await openEventsTab();
+    fireEvent.click(await choose());
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: message, type: 'error' }));
+    await waitFor(() => expect(openCalls()).toBe(2));
+    await waitFor(() => expect(mocks.adminEventParticipants).toHaveBeenCalledTimes(2));
+    expect(mocks.adminEventParticipants).toHaveBeenLastCalledWith('e1');
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Chốt Người binh là người thắng' }));
+    });
+    expect(mocks.pickEventWinner).toHaveBeenCalledTimes(1);
+
+    await act(async () => refetch.resolve([]));
+    expect(await screen.findByText('Chưa có sự kiện nào')).toBeInTheDocument();
+  });
+
+  it('chốt bị từ chối vì người dự thi vừa bị gỡ bài (400): danh sách người dự thi tải lại, người đó biến mất và không còn gì được chọn', async () => {
+    const message = 'Người này chưa có bài dự thi nào được đăng trong sự kiện, không thể chọn làm người thắng.';
+    mocks.pickEventWinner.mockRejectedValueOnce(rejected(400, message));
+    mocks.adminEventParticipants.mockResolvedValueOnce([PARTICIPANT('an'), PARTICIPANT('binh')]).mockResolvedValue([PARTICIPANT('an')]);
+    await openEventsTab();
+    fireEvent.click(await choose());
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: message, type: 'error' }));
+    await waitFor(() => expect(screen.queryByText('Người binh')).toBeNull());
+    expect(screen.getByText('Người an')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Chốt .* là người thắng/ })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Chọn người thắng' })).toBeDisabled();
+  });
+
+  it.each([400, 404, 409])('Đóng bị từ chối với mã %i (sự kiện đã đổi hoặc không còn): báo lỗi và tải lại danh sách', async (status) => {
+    mocks.closeEvent.mockRejectedValueOnce(rejected(status, 'Không tìm thấy bản ghi.'));
+    await openEventsTab();
+    expect(openCalls()).toBe(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Không tìm thấy bản ghi.', type: 'error' }));
+    await waitFor(() => expect(openCalls()).toBe(2));
+  });
+
+  it.each([
+    ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+    ['máy chủ lỗi 500', rejected(500, 'Lỗi hệ thống')],
+    ['quá thời gian', new HttpError('timeout', 'ECONNABORTED')],
+  ])('chốt lỗi %s: không tải lại (chưa chắc trạng thái đã đổi), nhả khoá ngay để bấm lại', async (_label, error) => {
+    mocks.pickEventWinner.mockRejectedValueOnce(error);
+    await openEventsTab();
+    fireEvent.click(await choose());
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+    expect(openCalls()).toBe(1);
+    expect(mocks.adminEventParticipants).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Chốt Người binh là người thắng' }));
+    await waitFor(() => expect(mocks.pickEventWinner).toHaveBeenCalledTimes(2));
+  });
+
+  it.each([403, 429])('chốt bị từ chối với mã %i (không phải sự kiện đổi trạng thái): báo lỗi, không tải lại danh sách, nhả khoá ngay để bấm lại', async (status) => {
+    const message = 'Bạn không có quyền thực hiện thao tác này.';
+    mocks.pickEventWinner.mockRejectedValueOnce(rejected(status, message));
+    await openEventsTab();
+    fireEvent.click(await choose());
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: message, type: 'error' }));
+    expect(openCalls()).toBe(1);
+    expect(mocks.adminEventParticipants).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Chốt Người binh là người thắng' }));
+    await waitFor(() => expect(mocks.pickEventWinner).toHaveBeenCalledTimes(2));
+  });
+
+  it.each([403, 429])('Đóng bị từ chối với mã %i: báo lỗi, không tải lại danh sách, nhả khoá ngay để bấm lại', async (status) => {
+    const message = 'Bạn thao tác quá nhanh, vui lòng thử lại sau.';
+    mocks.closeEvent.mockRejectedValueOnce(rejected(status, message));
+    await openEventsTab();
+    fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: message, type: 'error' }));
+    expect(openCalls()).toBe(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+    await waitFor(() => expect(mocks.closeEvent).toHaveBeenCalledTimes(2));
+  });
+
+  describe('danh sách tải lại treo mãi: khoá vẫn nhả sau tối đa 4 giây (settleWithin)', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+    const busyClose = () => screen.getByRole('button', { name: 'Đóng' });
+
+    it.each([
+      ['chốt thành công', null, 'pick'],
+      ['chốt bị từ chối vì sự kiện đã đóng (400)', rejected(400, 'Sự kiện đã đóng hoặc đã chọn người thắng.'), 'pick'],
+      ['Đóng thành công', null, 'close'],
+    ] as const)('%s', async (_label, error, kind) => {
+      if (error) mocks.pickEventWinner.mockRejectedValueOnce(error);
+      holdOpenRefetch();
+      await openEventsTab();
+      const go = kind === 'pick' ? await choose() : busyClose();
+      // Chỉ giả setTimeout: waitFor của testing-library và vòng đời khác không bị đụng, nhưng settleWithin và lô thông báo của react-query thì có.
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      await act(async () => {
+        fireEvent.click(go);
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(openCalls()).toBe(2);
+      expect(busyClose()).toHaveAttribute('aria-busy', 'true');
+      const closeCalls = kind === 'close' ? 1 : 0;
+      expect(mocks.closeEvent).toHaveBeenCalledTimes(closeCalls);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3_900);
+      });
+      expect(busyClose()).toHaveAttribute('aria-busy', 'true');
+      expect(mocks.closeEvent).toHaveBeenCalledTimes(closeCalls);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(200);
+      });
+      expect(busyClose()).not.toHaveAttribute('aria-busy', 'true');
+      await act(async () => {
+        fireEvent.click(busyClose());
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(mocks.closeEvent).toHaveBeenCalledTimes(closeCalls + 1);
+    });
+  });
+
+  it.each([
+    ['Đóng', async () => {
+      mocks.closeEvent.mockRejectedValueOnce(rejected(404, 'Không tìm thấy bản ghi.'));
+      fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+    }],
+    ['Chốt người thắng', async () => {
+      mocks.pickEventWinner.mockRejectedValueOnce(rejected(404, 'Không tìm thấy bản ghi.'));
+      fireEvent.click(await choose());
+    }],
+  ])('%s bị từ chối: snackbar lỗi hiện ngay, không đợi danh sách tải lại xong', async (_label, act1) => {
+    holdOpenRefetch();
+    await openEventsTab();
+    await act1();
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Không tìm thấy bản ghi.', type: 'error' }));
+    // Danh sách đã bắt đầu tải lại nhưng chưa về (treo): câu báo lỗi không phụ thuộc nó.
+    await waitFor(() => expect(openCalls()).toBe(2));
+    expect(screen.getByText('Sự kiện e1')).toBeInTheDocument();
   });
 });
