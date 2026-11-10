@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { Heart } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -15,6 +15,8 @@ const IDS_KEY = wishlistIdsQuery(coreHttp).queryKey;
 // Mỗi sản phẩm một hàng đợi: lệnh thêm/bỏ gửi lần lượt đúng thứ tự chạm, nên chạm nhanh không còn hai lệnh "thêm" đua nhau (409).
 const tails = new Map<string, Promise<void>>();
 let inFlight = 0;
+// Nhiều tim cùng chờ phiên mà ra khách thì chỉ một lần sang đăng nhập (cờ riêng từng tim sẽ đẩy mỗi tim một lần). Đặt lại ở mọi pha khác "guest", kể cả lúc dựng, nên lần khôi phục sau vẫn đẩy được.
+let loginPushed = false;
 
 function sendToggle(qc: QueryClient, productId: string, want: boolean) {
   inFlight += 1;
@@ -65,19 +67,43 @@ export function WishlistHeart({
   // Nảy khi vừa chạm để thích (không nảy khi dữ liệu máy chủ về làm tim đỏ); hết hiệu ứng thì gỡ lớp để lần sau nảy lại.
   const [popping, setPopping] = useState(false);
 
-  const onClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (phase === 'guest') {
-      router.push(loginHref(`${window.location.pathname}${window.location.search}`));
-      return;
-    }
-    if (!authed) return;
+  const toggle = () => {
     void qc.cancelQueries({ queryKey: IDS_KEY });
     const current = qc.getQueryData<string[]>(IDS_KEY) ?? [];
     const want = !current.includes(productId);
     setPopping(want);
     qc.setQueryData<string[]>(IDS_KEY, want ? [...current, productId] : current.filter((id) => id !== productId));
     sendToggle(qc, productId, want);
+  };
+  const toLogin = () => router.push(loginHref(`${window.location.pathname}${window.location.search}`));
+
+  // Chạm lúc app còn đang khôi phục phiên không bị nuốt: nhớ ý định (một cờ, nên chạm nhiều lần vẫn là một ý định thích, không thêm rồi bỏ) và làm khi pha ra.
+  const waitingForSession = useRef(false);
+  useEffect(() => {
+    if (phase !== 'guest') loginPushed = false;
+    if (!waitingForSession.current || phase === 'loading') return;
+    waitingForSession.current = false;
+    if (phase === 'authenticated') toggle();
+    else if (phase === 'guest' && !loginPushed) {
+      loginPushed = true;
+      toLogin();
+    }
+    // Chỉ theo pha: `toggle` và `toLogin` đổi tham chiếu mỗi lần dựng.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
+
+  const onClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (phase === 'guest') {
+      toLogin();
+      return;
+    }
+    if (phase === 'loading') {
+      waitingForSession.current = true;
+      return;
+    }
+    if (!authed) return;
+    toggle();
   };
 
   // Tim nổi trên thẻ sản phẩm 18px như Mini App (đĩa 32px quanh nó); tim đứng riêng (trang chi tiết) 22px.

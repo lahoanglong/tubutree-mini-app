@@ -21,6 +21,7 @@ import { actionErrorText, loadErrorText } from '@/lib/error-text';
 import { PAGE_NARROW } from '@/lib/page-frame';
 import { clearPendingRemind, rememberPendingRemind, takePendingRemind } from '@/lib/pending-remind';
 import { loginHref } from '@/lib/return-to';
+import { serverRejectedState } from '@/lib/server-rejected-state';
 import { settleWithin } from '@/lib/settle-within';
 import { addToCart } from '@/lib/shop-client';
 import { Chip, EmptyState, ProductTileSkeleton, Skeleton, SlotTabs, Text, slotTabId } from '@/components/mini';
@@ -45,6 +46,8 @@ interface RemindVars {
   seq: number;
 }
 const OFFLINE_TEXT = 'Chưa kết nối được tới Tubu Tree. Bạn kiểm tra mạng rồi bấm lại nhé.';
+/** Khoá cha của khung giờ và món từng khung: tải lại cả hai khi máy chủ nói khung hay món đã khác thẻ đang hiện. */
+const SLOTS_KEY = ['flash-sales', 'slots'] as const;
 
 /** Dải ngang tràn hai mép màn điện thoại như Mini App (trang web có lề 16px); từ md nằm trong cột. */
 const BLEED = 'max-md:mx-[calc(50%-50vw)]';
@@ -140,8 +143,13 @@ export default function FlashSlotsView() {
       router.push('/thanh-toan');
     },
     onError: (e: unknown) => {
-      releaseBuy();
       setError(actionErrorText(e));
+      if (!serverRejectedState(e)) {
+        releaseBuy();
+        return;
+      }
+      // Thẻ đang hiện đã cũ: giữ khoá tới khi khung giờ và món mới về (tối đa 4 giây) kẻo chạm lại nhận đúng lời từ chối đó. Lời lỗi đã hiện ở state riêng nên không chờ.
+      return settleWithin(qc.invalidateQueries({ queryKey: SLOTS_KEY })).then(releaseBuy);
     },
   });
 
@@ -163,7 +171,8 @@ export default function FlashSlotsView() {
     },
     // Trả lời hứa tải lại: `useLockedMutation` nhả khoá của món SAU khi nó xong, nên khoá giữ tới khi danh sách nhắc thật về; không có thì lần chạm kế tính từ trạng thái lạc quan chưa được máy chủ xác nhận.
     // Có hạn (`settleWithin`): mạng chậm không giữ nút Nhắc tôi lâu hơn lệnh đã xong.
-    onSettled: (_d, _e, v) => settleWithin(settleReminders(v.seq)),
+    // Máy chủ từ chối vì trạng thái đã đổi (khung vừa mở bán, món đã gỡ): khung giờ và món cũng phải tải lại, cùng một hạn 4 giây với danh sách nhắc.
+    onSettled: (_d, e, v) => settleWithin(Promise.all([settleReminders(v.seq), serverRejectedState(e) ? qc.invalidateQueries({ queryKey: SLOTS_KEY }) : undefined])),
   }, ({ itemId }) => itemId);
   const remind = (v: Omit<RemindVars, 'seq'>) => remindMut.mutate({ ...v, seq: ++remindSeq.current });
   // `onMutate` của lệnh nhắc bắt đầu SAU huỷ lần tải đang bay (cancelQueries), nên `invalidateQueries` của lệnh này xong sớm dù danh sách chưa về từ máy chủ. Đợi thêm các lệnh

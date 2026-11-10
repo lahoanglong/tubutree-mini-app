@@ -106,7 +106,6 @@ export default function WishlistPage() {
           ) : (
             <ProductGrid items={filterView.items} variant="grid" renderImageOverlay={(p) => buttonFor(p)} />
           )}
-          {feedback}
         </section>
       ) : (
         <EmptyState
@@ -116,6 +115,8 @@ export default function WishlistPage() {
           actionLabel="Khám phá sản phẩm"
         />
       )}
+      {/* Ngoài khối lưới: giỏ nhanh bị từ chối thì danh sách tải lại có thể làm thẻ (cả lưới) biến mất, lời lỗi không được mất theo. */}
+      {feedback}
     </Shell>
   );
 }

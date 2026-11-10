@@ -353,6 +353,9 @@ export default function AddToCart({
   const buyTotal = formatVnd(line?.lineTotal ?? 0);
   const addLabel = !available ? fillTileCopy('stock.out') : busy && !buying ? 'Đang thêm…' : `Thêm vào giỏ · ${addTotal}`;
   const buyLabel = busy && buying ? 'Đang xử lý…' : 'Mua ngay';
+  // Chỉ nút đang chạy báo aria-busy (như `Button` của Mini App khi loading); cả hai cùng aria-disabled vì chung một khoá ghi giỏ.
+  const addBusy = (busy && !buying) || undefined;
+  const buyBusy = (busy && buying) || undefined;
   // `busy` chỉ aria-disabled (nút đang giữ focus không bị trình duyệt đẩy về body); trạng thái cố định mới `disabled`.
   const cannotBuy = !available || phase === 'loading';
   const hasStatus = !!(msg || warn);
@@ -419,7 +422,7 @@ export default function AddToCart({
         <span className="text-sm font-semibold text-stone-900 md:hidden">Số lượng</span>
         <QuantitySelector value={qty} max={maxQty} onChange={setQty} />
         {/* Từ md: nút thêm giỏ ngay cạnh số lượng. Dưới md hai nút nằm ở thanh dính đáy (bên dưới). */}
-        <button type="button" data-testid="pdp-add-to-cart" onClick={(e) => { addSource.current = e.currentTarget; onAdd(); }} disabled={cannotBuy} aria-disabled={busy || undefined} className={`${ui.btnSecondary} hidden flex-1 md:inline-flex`}>
+        <button type="button" data-testid="pdp-add-to-cart" onClick={(e) => { addSource.current = e.currentTarget; onAdd(); }} disabled={cannotBuy} aria-busy={addBusy} aria-disabled={busy || undefined} className={`${ui.btnSecondary} hidden flex-1 tabular-nums md:inline-flex`}>
           {addLabel}
         </button>
       </div>
@@ -433,7 +436,7 @@ export default function AddToCart({
           <p className={`text-sm text-[var(--color-text-secondary)] md:pt-2 ${phoneCaption} ${phoneBandPad} max-md:pb-3`}>{overLimitText}</p>
         )}
       </div>
-      <button type="button" data-testid="pdp-buy-now" onClick={onBuyNow} disabled={cannotBuy} aria-disabled={busy || undefined} className={`${ui.btnPrimary} mt-3 hidden w-full md:inline-flex`}>
+      <button type="button" data-testid="pdp-buy-now" onClick={onBuyNow} disabled={cannotBuy} aria-busy={buyBusy} aria-disabled={busy || undefined} className={`${ui.btnPrimary} mt-3 hidden w-full md:inline-flex`}>
         {buyLabel}
       </button>
 
@@ -477,14 +480,14 @@ export default function AddToCart({
           </Link>
           {available ? (
             <div className="flex min-w-0 flex-1 gap-2.5">
-              <button type="button" data-testid="pdp-add-to-cart" onClick={(e) => { addSource.current = e.currentTarget; onAdd(); }} disabled={cannotBuy} aria-disabled={busy || undefined} className={`${uiBar.secondary} ${phoneSecondary} min-w-0 flex-1`}>
+              <button type="button" data-testid="pdp-add-to-cart" onClick={(e) => { addSource.current = e.currentTarget; onAdd(); }} disabled={cannotBuy} aria-busy={addBusy} aria-disabled={busy || undefined} className={`${uiBar.secondary} ${phoneSecondary} min-w-0 flex-1`}>
                 {busy && !buying ? 'Đang thêm…' : 'Thêm vào giỏ'}
               </button>
               {/* Hai dòng (nhãn + giá) như Mini App: một dòng "Mua ngay · giá" tràn ở 320-390px. */}
               <button
                 type="button"
                 onClick={onBuyNow}
-                disabled={cannotBuy} aria-disabled={busy || undefined}
+                disabled={cannotBuy} aria-busy={buyBusy} aria-disabled={busy || undefined}
                 aria-label={`${buyLabel} ${buyTotal}`}
                 data-testid="buy-now"
                 className={`${uiBar.primary} min-w-0 flex-1 flex-col !py-1.5 leading-[1.2]`}
