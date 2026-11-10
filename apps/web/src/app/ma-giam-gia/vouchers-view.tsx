@@ -94,7 +94,7 @@ export default function VouchersView() {
   if (needsAccount) {
     body = phase === 'loading' ? skeleton : phase === 'unavailable' ? <SessionUnavailable /> : <LoginRequired message={homeCopy.offers.loginBody} returnTo={returnTo} />;
   } else if (source.isError && rows.length === 0) {
-    body = <ErrorState variant="inline" title={fillCopy('coupon.loadError')} message={loadErrorText(source.error)} onRetry={() => void source.refetch()} />;
+    body = <ErrorState variant="inline" title={fillCopy('coupon.loadError')} message={loadErrorText(source.error)} onRetry={() => source.refetch()} />;
   } else if (source.isLoading || (tab === 'claim' && (authed ? walletQ.isLoading || mineQ.isLoading : phase === 'loading'))) {
     body = skeleton;
   } else if (rows.length === 0) {
@@ -148,7 +148,7 @@ export default function VouchersView() {
       <div role="tabpanel" aria-label={activeLabel} className="pb-6 pt-2">
         {tab === 'claim' && authed && walletCodes === null && (
           <div className="mb-3">
-            <ErrorState variant="inline" title={fillCopy('coupon.walletLoadError')} message={loadErrorText(walletQ.error)} onRetry={() => void walletQ.refetch()} />
+            <ErrorState variant="inline" title={fillCopy('coupon.walletLoadError')} message={loadErrorText(walletQ.error)} onRetry={() => walletQ.refetch()} />
           </div>
         )}
         {body}

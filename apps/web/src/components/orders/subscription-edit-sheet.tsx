@@ -11,6 +11,7 @@ import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { QuantitySelector } from '@/components/ui/quantity-selector';
 import { LineItemSkeleton } from '@/components/ui/skeleton';
 import { coreHttp } from '@/lib/core-http';
+import { isStaleSubscriptionError } from '@/lib/subscription-stale-error';
 import { ui } from '@/lib/guest-ui';
 import { formatVnDate, nextRunAfterIntervalChange, SUBSCRIPTION_INTERVAL_WEEKS, vnDateOf } from '@/lib/subscription-options';
 import { AddressPicker, PaymentMethodPicker, SectionLabel } from './subscription-options';
@@ -60,6 +61,11 @@ export function SubscriptionEditSheet({ sub, onClose, onSaved }: { sub: Subscrip
       onSaved('Đã cập nhật gói định kỳ');
       void qc.invalidateQueries({ queryKey: ['subscriptions'] });
       onClose();
+    },
+    // Gói đã huỷ ở máy khác (sheet tự đóng khi gói rời danh sách) hoặc đã có gói trùng: danh sách đang cũ. Không giữ nút Lưu chờ nó
+    // để lời lỗi và nút bấm lại hiện ngay.
+    onError: (e) => {
+      if (isStaleSubscriptionError(e)) void qc.invalidateQueries({ queryKey: ['subscriptions'] });
     },
   });
 

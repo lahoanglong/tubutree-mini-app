@@ -17,6 +17,7 @@ import { useAuthPhase } from '@/lib/auth-phase';
 import { formatDate } from '@/lib/format-date';
 import { formatVnd } from '@/lib/format-vnd';
 import { settleWithin } from '@/lib/settle-within';
+import { isStaleSubscriptionError } from '@/lib/subscription-stale-error';
 import { ui } from '@/lib/guest-ui';
 import { mini, miniGhostDanger } from '@/components/order-mobile/mobile-ui';
 import { subscriptionCycleView } from './subscription-price';
@@ -67,6 +68,11 @@ export function SubscriptionsPanel() {
     run();
   };
 
+  // Lệnh bị từ chối vì gói đã khác thẻ (cron vừa tạm dừng, máy khác vừa huỷ): tải lại để lần bấm sau dựa trên số thật, và giữ khoá tới lúc đó
+  // như lệnh thành công (react-query chờ Promise này trước `onSettled`). Lỗi tạm (mạng, 5xx) thì để nguyên danh sách.
+  const onActionError = (e: unknown) =>
+    isStaleSubscriptionError(e) ? settleWithin(qc.invalidateQueries({ queryKey: ['subscriptions'] })) : undefined;
+
   const statusMut = useLockedMutation({
     mutationFn: ({ id, status }: { id: string; status: SubStatus; from: 'card' | 'sheet' }) => setSubscriptionStatus(coreHttp, id, status),
     onMutate: () => setNotice(null),
@@ -74,6 +80,7 @@ export function SubscriptionsPanel() {
       setCancelTarget(null);
       return settleWithin(qc.invalidateQueries({ queryKey: ['subscriptions'] }));
     },
+    onError: onActionError,
     onSettled: releaseActing,
   });
   const skipMut = useLockedMutation({
@@ -84,6 +91,7 @@ export function SubscriptionsPanel() {
       setCancelTarget(null);
       return settleWithin(qc.invalidateQueries({ queryKey: ['subscriptions'] }));
     },
+    onError: onActionError,
     onSettled: releaseActing,
   });
 
