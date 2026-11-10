@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
+import { QueryClient } from '@tanstack/react-query';
 import { byText, click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { captureUnhandledRejections } from '@/test-utils/unhandled';
 
@@ -253,6 +254,25 @@ describe('/dai-ly — lỗi tải hồ sơ: Thử lại không gọi chồng', (
     expect(gets('/dealer/me').length - before).toBe(1);
     gate.resolve();
     await flush();
+  });
+
+  // "Thử lại" của trang chỉ hiện khi chưa có hồ sơ (isError && !data): lúc đó refetch thứ hai dùng chung promise đang bay và ErrorState
+  // gỡ ngay khi truy vấn về trạng thái chờ, nên khoá của nút không đổi được số lần gọi. Có dữ liệu rồi thì trang giữ nguyên, không vẽ Thử lại.
+  it('đã có hồ sơ mà làm mới lỗi: giữ nguyên trang đại lý, không thay bằng ErrorState', async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const r = render(<DealerPage />, qc);
+    mounted.push(r);
+    await flush(8);
+    expect(qc.getQueryData(['dealer-me'])).toBeDefined();
+    m.getGate['/dealer/me'] = () => Promise.reject(new Error('Máy chủ bận'));
+    await act(async () => {
+      await qc.refetchQueries({ queryKey: ['dealer-me'], exact: true });
+    });
+    await flush(2);
+    expect(qc.getQueryState(['dealer-me'])?.status).toBe('error');
+    expect(buttons('Thử lại')).toHaveLength(0);
+    expect(r.container.textContent).not.toContain('Máy chủ bận');
+    expect(r.container.textContent).toContain('Nước rửa chén');
   });
 });
 
