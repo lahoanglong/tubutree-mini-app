@@ -111,7 +111,7 @@ function Detail({ courseId }: { courseId: string }) {
       ) : q.isError && errorStatus(q.error) === 403 ? (
         <CtvOnlyNotice />
       ) : q.isError ? (
-        <ErrorState message={errorText(q.error)} onRetry={isAuthError(q.error) ? undefined : () => void q.refetch()} />
+        <ErrorState message={errorText(q.error)} onRetry={isAuthError(q.error) ? undefined : () => q.refetch()} />
       ) : q.data ? (
         <CourseBody course={q.data} onComplete={(id) => complete.mutate(id)} completingId={complete.isPending ? complete.variables : undefined} />
       ) : null}

@@ -92,7 +92,7 @@ function CoursesLoaded() {
   if (q.isError && errorStatus(q.error) === 403) {
     return <CtvOnlyNotice />;
   }
-  if (q.isError) return <ErrorState message={errorText(q.error)} onRetry={isAuthError(q.error) ? undefined : () => void q.refetch()} />;
+  if (q.isError) return <ErrorState message={errorText(q.error)} onRetry={isAuthError(q.error) ? undefined : () => q.refetch()} />;
   if (!q.data || q.data.length === 0) {
     return (
       <section className={`${ui.card} p-8 text-center`}>
