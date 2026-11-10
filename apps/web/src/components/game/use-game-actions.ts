@@ -28,6 +28,7 @@ import { useLockedMutation } from './use-locked-mutation';
 import { NetworkError } from '@/lib/client-api';
 import { gameMoreCopy, isStaleQuizMessage } from '@tubutree/app-core/game-more-copy';
 import { actionErrorText } from '@/lib/error-text';
+import { serverRejectedState } from '@/lib/server-rejected-state';
 import { settleWithin } from '@/lib/settle-within';
 
 export type { HarvestReward };
@@ -73,6 +74,10 @@ type Notify = (text: string, tone: 'success' | 'error') => void;
 
 const errText = actionErrorText;
 
+/** Khoá của lệnh tặng nước: nơi vẽ nút đọc `useMutationState` theo khoá này để biết MỌI bạn đang được tặng (`giftM.variables` chỉ giữ lệnh sau cùng). */
+export const GIFT_MUTATION_KEY = ['game', 'gift'] as const;
+
+
 /**
  * Mọi lệnh ghi của trang Vườn Xanh. Trạng thái giao diện (hộp thu hoạch, đáp án quiz) ở lại trang và đi vào qua
  * callback, để việc ẩn/hiện khối theo tab không làm mất nó. Mỗi mutation giữ nguyên danh sách khoá cần làm mới: số dư
@@ -105,6 +110,9 @@ export function useGameActions({
     notify(errText(e), 'error');
     if (e instanceof NetworkError && e.timedOut) return settleWithin(refresh());
   };
+  // Việc một-lần bị từ chối bằng 400/404/409: danh sách bạn và số nước đang hiện đã cũ, nên tải lại rồi mới nhả khoá (nhả ngay thì nút còn sáng
+  // trên dữ liệu cũ và chạm lại nhận đúng lời từ chối đó). Lời lỗi đã hiện trước khi chờ.
+  const onRejectedOnce = (e: unknown) => onError(e) ?? (serverRejectedState(e) ? settleWithin(refresh()) : undefined);
 
   const checkInM = useLockedMutation({
     mutationFn: () => checkIn(coreHttp),
@@ -150,12 +158,13 @@ export function useGameActions({
   });
   const giftM = useLockedMutation(
     {
+      mutationKey: GIFT_MUTATION_KEY,
       mutationFn: (recipientId: string) => giftWater(coreHttp, recipientId),
       onSuccess: (r) => {
         notify(`Đã tặng ${formatDrops(r.amount)} cho bạn 🎁`, 'success');
         return settleWithin(refresh());
       },
-      onError,
+      onError: onRejectedOnce,
     },
     (recipientId) => recipientId,
   );

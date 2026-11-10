@@ -349,7 +349,7 @@ function GameBody() {
 
             {/* Tặng nước bạn bè (social) */}
             {friends && friends.length > 0 && (
-              <FriendGifts friends={friends} giftPending={giftM.isPending} giftVariables={giftM.variables} onGift={(recipientId) => giftM.mutate(recipientId)} />
+              <FriendGifts friends={friends} onGift={(recipientId) => giftM.mutate(recipientId)} />
             )}
 
             <WeeklyLeaderboard board={board} failed={boardQ.isError} onRetry={() => boardQ.refetch()} />

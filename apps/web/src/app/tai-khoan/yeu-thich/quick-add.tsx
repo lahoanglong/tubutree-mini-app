@@ -14,6 +14,8 @@ import { cartKey, cartStorefrontSlug, useCartKey } from '@/lib/cart-key';
 import { coreHttp } from '@/lib/core-http';
 import { playCartFeedback } from '@/lib/cart-feedback';
 import { actionErrorText } from '@/lib/error-text';
+import { serverRejectedState } from '@/lib/server-rejected-state';
+import { settleWithin } from '@/lib/settle-within';
 import { useActiveFlashSales } from '@/lib/use-flash-sales';
 import { useFlashAllowance } from '@/lib/use-flash-allowance';
 import { useAutoDismiss } from '@/lib/use-auto-dismiss';
@@ -79,6 +81,8 @@ export function useQuickAdd(source?: AddToCartSource): QuickAdd {
     } catch (e) {
       show({ ok: false, text: actionErrorText(e) });
       setPicker(null);
+      // Thẻ đang hiện đã cũ: giữ khoá tới khi danh sách yêu thích mới về (tối đa 4 giây) kẻo chạm lại nhận đúng lời từ chối đó. Lời lỗi đã hiện trước khi chờ.
+      if (serverRejectedState(e)) await settleWithin(qc.invalidateQueries({ queryKey: wishlistQuery(coreHttp).queryKey }));
     } finally {
       inFlight.current = false;
       setBusyId(null);

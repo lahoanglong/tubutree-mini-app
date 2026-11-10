@@ -354,7 +354,8 @@ describe('Vườn Xanh: tab Cộng đồng', () => {
     const gifts = card(c, 'Tặng nước cho bạn bè')!;
     const buttons = Array.from(gifts.querySelectorAll<HTMLButtonElement>('button'));
     expect(buttons.map((b) => b.textContent)).toEqual(['Tặng 💧', 'Đã tặng hôm nay', 'Tặng 💧']);
-    expect(buttons[1]!.disabled).toBe(true);
+    expect(buttons[1]!.disabled).toBe(false);
+    expect(buttons[1]!.getAttribute('aria-disabled')).toBe('true');
     click(buttons[0]!);
     click(buttons[0]!);
     await flush();
