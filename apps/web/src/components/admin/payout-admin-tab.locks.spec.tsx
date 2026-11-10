@@ -196,7 +196,8 @@ describe('PayoutAdminTab: lời lỗi ở cấp danh sách', () => {
     const c = await mount();
     await approve(c);
     expect(lists()).toBe(2);
-    expect(c.textContent).not.toContain('1.500.000');
+    // dòng đã rời bộ lọc (lời lỗi nêu số tiền của lệnh nên không dò theo chữ trên cả trang)
+    expect(c.querySelector('.tabular-nums.rounded-card')).toBeNull();
     const alert = c.querySelector('[role="alert"]');
     expect(alert?.textContent).toContain('Lệnh rút này đã được duyệt trước đó.');
   });

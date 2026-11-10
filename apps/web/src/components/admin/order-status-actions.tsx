@@ -166,7 +166,8 @@ export function OrderStatusActions({
   // Lời lỗi đổi trạng thái nằm ở state riêng và ngoài khối nút: `isError` chỉ lật sau khi lần tải lại xong, và khối nút biến mất khi đơn mới về không còn nút nào.
   const [statusError, setStatusError] = useState<string | null>(null);
 
-  // Một lệnh đổi trạng thái mỗi lúc (khoá ref đồng bộ). Đơn vừa đổi ở nơi khác (400/404/409) thì tải lại để nút khớp trạng thái thật; lỗi khác không tải lại.
+  // Một lệnh đổi trạng thái mỗi lúc (khoá ref đồng bộ). Đơn vừa đổi ở nơi khác (400/404/409) thì tải lại và CHỜ nó về trước khi nhả khoá để nút khớp trạng thái thật;
+  // lỗi khác nhả khoá ngay (trên production MutationCache vẫn làm cũ khoá admin-* ở nền sau mỗi lệnh).
   const statusMut = useLockedMutation({
     mutationFn: ({ status, note }: { status: string; note?: string }) => updateOrderStatus(order.id || order.code, status, note),
     onMutate: () => setStatusError(null),

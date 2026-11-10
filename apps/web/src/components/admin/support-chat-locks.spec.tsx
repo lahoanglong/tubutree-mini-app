@@ -6,7 +6,7 @@ import { SupportChatTab } from './support-chat-tab';
 
 // Wave 96B: admin "Chat CSKH": cầu nối Zalo (Đăng nhập, Đăng xuất, Kết nối lại, Lưu nhóm, Gửi tin thử, công tắc Cho khách chat) và hội thoại (Gửi trả lời,
 // Gửi lại, Chặn/Bỏ chặn). Tin trả lời gửi tới khách nên chạm đúp không được gửi hai tin. Giữ khoá tới khi dữ liệu làm mới về (tối đa 4 giây), bị từ chối
-// vì dữ liệu cũ (400/404/409) thì tải lại, nút giữ focus dùng aria-busy/aria-disabled.
+// vì dữ liệu cũ (400/404/409) thì tải lại, nút giữ focus dùng aria-busy/aria-disabled. Gửi trả lời có ô nhập: 400 là lỗi nhập, chỉ hiện tại ô, không tải lại.
 
 const BRIDGE = { state: 'CONNECTED', since: '2026-10-23T03:05:00.000Z', lastError: null, zaloUid: 'z1', displayName: 'CSKH Tubu', avatar: null, checkedAt: '2026-10-23T03:06:00.000Z', groupId: 'G1', enabled: false, deaf: false };
 const GROUPS = { groups: [{ id: 'G1', name: 'Nhóm CSKH', memberCount: 5 }, { id: 'G2', name: 'Nhóm thử', memberCount: 2 }] };
@@ -245,7 +245,7 @@ describe('Cầu nối Zalo', () => {
     await flush();
   });
 
-  it('bị từ chối vì dữ liệu cũ (409): lời lỗi hiện ngay khi trạng thái còn đang tải lại, và tải lại trạng thái; 500 thì không tải lại', async () => {
+  it('bị từ chối vì dữ liệu cũ (409): lời lỗi hiện ngay khi trạng thái còn đang tải lại, và tải lại trạng thái; 500 thì mã không tự tải lại (QueryClient trần, chưa có MutationCache của production)', async () => {
     const g = gate();
     hold('GET bridge', g, BRIDGE);
     routes['PUT settings'] = () => json(409, { statusCode: 409, message: 'Nhóm đã đổi.' });
@@ -315,7 +315,7 @@ describe('Hội thoại với khách', () => {
     expect(byText(c, 'button', 'Đang gửi…')).toBeNull();
   });
 
-  it('trả lời bị từ chối (409): giữ nguyên chữ đã gõ, lời lỗi hiện ngay, tải lại hội thoại và danh sách; 500 thì không tải lại', async () => {
+  it('trả lời bị từ chối (409): giữ nguyên chữ đã gõ, lời lỗi hiện ngay, tải lại hội thoại và danh sách; 500 thì mã không tự tải lại (QueryClient trần, chưa có MutationCache của production)', async () => {
     const g = gate();
     hold('GET conversations/c1', g, DETAIL);
     routes['POST conversations/c1/reply'] = () => json(409, { statusCode: 409, message: 'Hội thoại đã đóng.' });
@@ -338,6 +338,36 @@ describe('Hội thoại với khách', () => {
     await flush();
     expect(count('GET', 'conversations/c1')).toBe(detailBefore);
     expect(aria(btn(c, 'Gửi trả lời')).busy).toBeNull();
+  });
+
+  it('trả lời bị máy chủ báo 400 (nội dung không hợp lệ): lời lỗi tại ô trả lời, giữ chữ, KHÔNG tải lại hội thoại hay danh sách, nhả khoá ngay để sửa', async () => {
+    routes['POST conversations/c1/reply'] = () => json(400, { statusCode: 400, message: 'body must be longer than or equal to 1 characters' });
+    const c = await mountTab(false);
+    await openDetail(c);
+    typeInto(c.querySelector('textarea[name="reply"]'), '\u200B');
+    const detail0 = count('GET', 'conversations/c1');
+    const list0 = count('GET', 'conversations');
+    await tap(btn(c, 'Gửi trả lời'));
+    await flush();
+    expect(count('POST', 'conversations/c1/reply')).toBe(1);
+    expect(alerts(c).length).toBeGreaterThan(0);
+    expect(c.querySelector<HTMLTextAreaElement>('textarea[name="reply"]')!.value).toBe('\u200B');
+    expect(count('GET', 'conversations/c1')).toBe(detail0);
+    expect(count('GET', 'conversations')).toBe(list0);
+    expect(aria(btn(c, 'Gửi trả lời')).busy).toBeNull();
+  });
+
+  it('Chặn chat (không có ô nhập) bị báo 400 vì hội thoại đã đổi: vẫn là dữ liệu cũ, tải lại hội thoại', async () => {
+    routes['POST conversations/c1/block'] = () => json(400, { statusCode: 400, message: 'Hội thoại đã bị chặn.' });
+    const c = await mountTab(true);
+    await openDetail(c);
+    const detail0 = count('GET', 'conversations/c1');
+    await tap(btn(c, 'Chặn chat'));
+    await flush();
+    answerConfirm(true);
+    await flush(3);
+    expect(alerts(c).join('|')).toContain('Hội thoại đã bị chặn.');
+    expect(count('GET', 'conversations/c1')).toBeGreaterThan(detail0);
   });
 
   it('Gửi lại: chạm đúp chỉ gửi một lần; mọi nút Gửi lại aria-disabled, không disabled', async () => {
@@ -417,7 +447,7 @@ describe('Hội thoại với khách', () => {
     await flush();
   });
 
-  it('Chặn chat bị từ chối vì hội thoại không còn (404): lời lỗi hiện ngay và tải lại; 500 thì không tải lại', async () => {
+  it('Chặn chat bị từ chối vì hội thoại không còn (404): lời lỗi hiện ngay và tải lại; 500 thì mã không tự tải lại (QueryClient trần, chưa có MutationCache của production)', async () => {
     routes['POST conversations/c1/block'] = () => json(404, { statusCode: 404, message: 'Không tìm thấy hội thoại.' });
     const c = await mountTab(false);
     await openDetail(c);

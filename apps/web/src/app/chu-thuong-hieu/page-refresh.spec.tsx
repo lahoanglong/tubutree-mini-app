@@ -138,8 +138,22 @@ describe('/chu-thuong-hieu — Lưu thông tin', () => {
     expect(calls('PATCH', OWNER)).toHaveLength(2);
   });
 
-  it('bị từ chối 400/404/409: lời lỗi hiện ngay, tải lại hồ sơ và giữ khoá tới khi hồ sơ về', async () => {
-    for (const status of [400, 404, 409]) {
+  it('bị 400 (tagline, nguồn gốc, câu chuyện hoặc ảnh không hợp lệ): lời lỗi hiện ngay, KHÔNG tải lại hồ sơ, nhả khoá ngay để sửa rồi lưu lại', async () => {
+    m.write[`PATCH ${OWNER}`] = reject(400, 'Câu chuyện quá dài.');
+    await mount();
+    const gate = holdOwner();
+    click(save());
+    await flush();
+    expect(calls('PATCH', OWNER)).toHaveLength(1);
+    expect(alerts()).toContain('Câu chuyện quá dài.');
+    expect(calls('GET', OWNER)).toHaveLength(1);
+    expect(busy(save())).toBe(false);
+    gate.release();
+    await flush();
+  });
+
+  it('bị từ chối 404/409: lời lỗi hiện ngay, tải lại hồ sơ và giữ khoá tới khi hồ sơ về', async () => {
+    for (const status of [404, 409]) {
       m.calls = [];
       m.write[`PATCH ${OWNER}`] = reject(status, 'Hồ sơ đã đổi, tải lại nhé.');
       const r = await mount();
@@ -187,6 +201,22 @@ describe('/chu-thuong-hieu — Thêm và sửa khuyến mãi', () => {
     expect(busy(add())).toBe(false);
   });
 
+  it('Thêm bị 400 (tiêu đề, mã hoặc ngày không hợp lệ): giữ chữ đã nhập, hiện lỗi, KHÔNG tải lại hồ sơ, nhả khoá ngay', async () => {
+    m.write[`POST ${OWNER}/promotions`] = reject(400, 'Mã giảm giá không tồn tại.');
+    await mount();
+    typeInto(titleInput(), 'MUA 3 TẶNG 1');
+    const gate = holdOwner();
+    click(add());
+    await flush();
+    expect(calls('POST', `${OWNER}/promotions`)).toHaveLength(1);
+    expect(alerts()).toContain('Mã giảm giá không tồn tại.');
+    expect(calls('GET', OWNER)).toHaveLength(1);
+    expect(busy(add())).toBe(false);
+    expect(titleInput().value).toBe('MUA 3 TẶNG 1');
+    gate.release();
+    await flush();
+  });
+
   it('Thêm bị từ chối 409: giữ chữ đã nhập, hiện lỗi, tải lại hồ sơ rồi mới nhả khoá', async () => {
     m.write[`POST ${OWNER}/promotions`] = reject(409, 'Trùng khuyến mãi đang chạy.');
     await mount();
@@ -222,6 +252,22 @@ describe('/chu-thuong-hieu — Thêm và sửa khuyến mãi', () => {
     click(upd());
     await flush();
     expect(calls('PATCH', `${OWNER}/promotions/p1`)).toHaveLength(2);
+  });
+
+  it('Sửa bị 400 (tiêu đề, mã hoặc ngày không hợp lệ): hiện lỗi, KHÔNG tải lại hồ sơ, nhả khoá ngay để sửa rồi lưu lại', async () => {
+    m.write[`PATCH ${OWNER}/promotions/p1`] = reject(400, 'Ngày kết thúc phải sau ngày bắt đầu.');
+    await mount();
+    click(named('Sửa khuyến mãi KM Một'));
+    await flush();
+    const gate = holdOwner();
+    click(upd());
+    await flush();
+    expect(calls('PATCH', `${OWNER}/promotions/p1`)).toHaveLength(1);
+    expect(alerts()).toContain('Ngày kết thúc phải sau ngày bắt đầu.');
+    expect(calls('GET', OWNER)).toHaveLength(1);
+    expect(busy(upd())).toBe(false);
+    gate.release();
+    await flush();
   });
 
   it('Sửa khuyến mãi đã bị xoá ở máy khác (404): hiện lỗi, tải lại, dòng biến mất mà lời lỗi vẫn còn; giữ khoá tới khi hồ sơ về', async () => {
@@ -264,6 +310,20 @@ describe('/chu-thuong-hieu — Bật/tắt khuyến mãi', () => {
     click(sw('KM Một'));
     await flush();
     expect(calls('PATCH', `${OWNER}/promotions/p1`)).toHaveLength(2);
+  });
+
+  it('Bật/tắt không có ô nhập: 400 vẫn là dữ liệu cũ, hiện lỗi và tải lại hồ sơ rồi mới nhả khoá', async () => {
+    m.write[`PATCH ${OWNER}/promotions/p1`] = reject(400, 'Khuyến mãi đã hết hạn.');
+    await mount();
+    const gate = holdOwner();
+    click(sw('KM Một'));
+    await flush();
+    expect(alerts()).toContain('Khuyến mãi đã hết hạn.');
+    expect(calls('GET', OWNER)).toHaveLength(2);
+    expect(busy(sw('KM Một'))).toBe(true);
+    gate.release();
+    await flush();
+    expect(busy(sw('KM Một'))).toBe(false);
   });
 
   it('khuyến mãi đã bị xoá ở máy khác (404): hiện lỗi, tải lại, dòng biến mất; giữ khoá tới khi hồ sơ về', async () => {
@@ -309,6 +369,22 @@ describe('/chu-thuong-hieu — Xoá khuyến mãi', () => {
     await advance(3_500);
     expect(busy(del('KM Một'))).toBe(true);
     await advance(700);
+    expect(busy(del('KM Một'))).toBe(false);
+  });
+
+  it('Xoá không có ô nhập: 400 vẫn là dữ liệu cũ, hộp đóng, hiện lỗi và tải lại hồ sơ rồi mới nhả khoá', async () => {
+    m.write[`DELETE ${OWNER}/promotions/p1`] = reject(400, 'Khuyến mãi đang chạy không xoá được.');
+    await mount();
+    click(del('KM Một'));
+    await flush();
+    const gate = holdOwner();
+    click(confirmDelete());
+    await flush();
+    expect(alerts()).toContain('Khuyến mãi đang chạy không xoá được.');
+    expect(calls('GET', OWNER)).toHaveLength(2);
+    expect(busy(del('KM Một'))).toBe(true);
+    gate.release();
+    await flush();
     expect(busy(del('KM Một'))).toBe(false);
   });
 

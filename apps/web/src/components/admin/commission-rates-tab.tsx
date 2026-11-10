@@ -178,7 +178,8 @@ function FillMissing({ missingTubu, maxRate }: { missingTubu: number; maxRate: n
     },
     onError: (e) => {
       setMsg({ ok: false, text: errText(e, 'Không áp được %.') });
-      return reloadWhenStale(e, refresh);
+      // Ô % do admin gõ: 400 là lỗi nhập liệu (vượt trần, không nguyên), hiện tại form và không tải lại; chỉ 404/409 là dữ liệu cũ.
+      return reloadWhenStale(e, refresh, true);
     },
   });
   if (missingTubu === 0 && !msg) return null;
@@ -267,7 +268,7 @@ function ProductCard({
     },
     onError: (e) => {
       setMsg({ ok: false, text: errText(e, 'Không đặt được %.') });
-      return reloadWhenStale(e, refresh);
+      return reloadWhenStale(e, refresh, true);
     },
   });
   const onApply = async () => {
@@ -374,9 +375,10 @@ function VariationRow({
       onRateSaved(r.affiliateRate);
       return settleWithin(refresh());
     },
-    onError: (e) => {
+    onError: (e, rate) => {
       setMsg({ ok: false, text: errText(e, 'Không lưu được %.') });
-      return reloadWhenStale(e, refresh);
+      // Chỉ "Lưu" mang số do admin gõ (400 là lỗi nhập liệu); "Về mặc định" gửi null, không có ô nhập nên 400 vẫn là trạng thái đã đổi.
+      return reloadWhenStale(e, refresh, rate !== null);
     },
   });
   const parsed = text.trim() && text !== initial ? parseRateInput(text, maxRate) : null;
@@ -516,7 +518,7 @@ function RateCsvImport() {
     },
     onError: (e) => {
       setMsg({ ok: false, text: errText(e, 'Không áp dụng được.') });
-      return reloadWhenStale(e, refresh);
+      return reloadWhenStale(e, refresh, true);
     },
   });
   const busy = previewMut.isPending || applyMut.isPending;
@@ -662,7 +664,7 @@ function DealerPriceImport() {
     },
     onError: (e) => {
       setMsg({ ok: false, text: errText(e, 'Không nhập được giá sỉ.') });
-      return reloadWhenStale(e, refresh);
+      return reloadWhenStale(e, refresh, true);
     },
   });
   const busy = previewMut.isPending || applyMut.isPending;
@@ -696,14 +698,20 @@ function DealerPriceImport() {
         Chọn bậc, dán 2 cột SKU và giá sỉ (đồng) từ Excel, mỗi dòng một SKU. Giá không được thấp hơn giá lẻ trừ chiết khấu đại lý tối đa, và không cao hơn giá lẻ. Xem trước rồi mới
         ghi; còn dòng lỗi thì không dòng nào được ghi.
       </p>
-      <DealerTierSelect
-        value={tierId}
-        onChange={(id) => {
-          setTierId(id);
-          setPreview(null);
-        }}
-        className="w-full sm:w-80"
-      />
+      {/* Đổi bậc lúc xem trước/ghi còn chạy thì lệnh vẫn đi theo bậc cũ mà lời "Đã cập nhật" hiện cạnh bậc mới. Ô <select> không có readOnly nên khoá bằng fieldset
+          (không dùng `contents`: space-y của section không áp được lên phần tử không có hộp); lúc này nút Ghi mới giữ tiêu điểm, không phải ô chọn.
+          Guard trong onChange giữ nguyên bậc khi sự kiện change vẫn tới được. */}
+      <fieldset disabled={busy} className="min-w-0">
+        <DealerTierSelect
+          value={tierId}
+          onChange={(id) => {
+            if (busy) return;
+            setTierId(id);
+            setPreview(null);
+          }}
+          className="w-full sm:w-80"
+        />
+      </fieldset>
       <textarea
         aria-label="Nội dung CSV sku,giá sỉ"
         rows={5}

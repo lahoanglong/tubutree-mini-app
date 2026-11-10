@@ -6,6 +6,8 @@ import { MerchantProductsTab } from './merchant-products-tab';
 
 // Wave 96B: admin "Duyệt SP đối tác" (duyệt/từ chối, gỡ liên kết, xác nhận hàng ký gửi: quyết định về tiền của đối tác). Một việc mỗi lúc, giữ khoá tới khi
 // danh sách làm mới về (tối đa 4 giây), bị từ chối vì trạng thái đã đổi thì tải lại và lời báo đứng ở cấp tab để không mất khi dòng biến mất.
+// Chạy trên QueryClient trần (test-utils/dom), không có MutationCache của production: ở production mọi lệnh settle (kể cả lỗi) đều làm cũ khoá admin-*, nên "không tải lại"
+// ở đây chỉ nói màn KHÔNG tự gọi tải lại và KHÔNG chờ nó. Quy tắc 400/404/409 chỉ quyết định việc chờ tải lại trước khi nhả khoá.
 
 const PRODUCT = (id: string, name: string) => ({
   id,
@@ -248,7 +250,7 @@ describe('Duyệt / Từ chối sản phẩm đối tác', () => {
     expect(alerts(c).join('|')).toContain('Không tìm thấy sản phẩm');
   });
 
-  it('500: không tải lại, báo lỗi dưới nút, nhả khoá để bấm lại', async () => {
+  it('500: màn không tự tải lại, báo lỗi dưới nút, nhả khoá để bấm lại', async () => {
     routes['/admin/merchant-products/p1/review'] = () => json(500, { statusCode: 500, message: 'Lỗi máy chủ.' });
     const c = await mount();
     await tap(btn(c, 'Duyệt xuất bản'));
@@ -340,7 +342,7 @@ describe('Gỡ liên kết mã Pancake', () => {
     }
   });
 
-  it('500: không tải lại, lỗi hiện dưới dòng, nhả khoá', async () => {
+  it('500: màn không tự tải lại, lỗi hiện dưới dòng, nhả khoá', async () => {
     routes['/admin/merchant-products/pm1/unlink'] = () => json(500, { statusCode: 500, message: 'Lỗi máy chủ.' });
     const c = await mount();
     await openUnlink(c);
@@ -430,7 +432,7 @@ describe('Xác nhận hàng ký gửi', () => {
     }
   });
 
-  it('500: không tải lại, lỗi dưới khối, nhả khoá', async () => {
+  it('500: màn không tự tải lại, lỗi dưới khối, nhả khoá', async () => {
     routes['/admin/merchant-fulfilment/links/l1/confirm-consignment'] = () => json(500, { statusCode: 500, message: 'Lỗi máy chủ.' });
     const c = await mount();
     await openAsk(c);

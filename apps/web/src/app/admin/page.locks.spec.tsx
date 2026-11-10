@@ -326,34 +326,62 @@ describe.each([
     expect(confirmDialog()).not.toBeNull();
   });
 
-  it.each([400, 404])('bị từ chối %i cũng tải lại danh sách', async (status) => {
-    api().mockRejectedValue(new HttpError('Không còn nữa.', status));
+  it('bị từ chối 404 (người dùng không còn): hiện lỗi, tải lại danh sách', async () => {
+    api().mockRejectedValue(new HttpError('Không còn nữa.', 404));
     const c = await open();
     await start(c);
     expect(reads('listUsers')).toBe(2);
     expect(messageOf(c)?.textContent).toBe('Không còn nữa.');
   });
 
-  it.each([401, 403, 500, 503])('lỗi %i: hiện lỗi, KHÔNG tải lại danh sách, nhả khoá ngay', async (status) => {
-    api().mockRejectedValue(new HttpError('Máy chủ từ chối.', status));
+  // Lệnh có ô lý do do admin gõ (DTO MinLength 3 / MaxLength 500 sau khi cắt khoảng trắng và ký tự vô hình): 400 là lỗi nhập, tải lại danh sách không sửa được nó.
+  it('bị từ chối 400 (lý do không hợp lệ): hiện lỗi ngay, KHÔNG tải lại danh sách, nhả khoá ngay', async () => {
+    api().mockRejectedValue(new HttpError('Lý do cần ít nhất 3 ký tự.', 400));
     const c = await open();
     await start(c);
-    expect(messageOf(c)?.textContent).toBe('Máy chủ từ chối.');
+    expect(messageOf(c)?.textContent).toBe('Lý do cần ít nhất 3 ký tự.');
+    expect(messageOf(c)?.className).toContain('text-danger-fg');
     expect(reads('listUsers')).toBe(1);
     click(byLabel(c, label));
     await flush();
     expect(confirmDialog()).not.toBeNull();
   });
 
-  it('mất mạng: hiện lỗi, không tải lại, nhả khoá ngay', async () => {
+  // Máy chủ có thể đã ghi trước khi trả lỗi: skipAdminInvalidate tắt lần làm mới của MutationCache nên chính lệnh phải tải lại, nhưng không bắt khoá chờ.
+  it.each([401, 403, 500, 503, 504])('lỗi %i: hiện lỗi, tải lại danh sách (không chờ), nhả khoá ngay', async (status) => {
+    api().mockRejectedValue(new HttpError('Máy chủ từ chối.', status));
+    const c = await open();
+    await start(c);
+    expect(messageOf(c)?.textContent).toBe('Máy chủ từ chối.');
+    expect(reads('listUsers')).toBe(2);
+    click(byLabel(c, label));
+    await flush();
+    expect(confirmDialog()).not.toBeNull();
+  });
+
+  it('mất mạng: hiện lỗi, tải lại danh sách, nhả khoá ngay', async () => {
     api().mockRejectedValue(new TypeError('Failed to fetch'));
     const c = await open();
     await start(c);
     expect(messageOf(c)?.className).toContain('text-danger-fg');
-    expect(reads('listUsers')).toBe(1);
+    expect(reads('listUsers')).toBe(2);
     click(byLabel(c, label));
     await flush();
     expect(confirmDialog()).not.toBeNull();
+  });
+
+  it('504 mà lần tải lại danh sách treo: khoá vẫn nhả ngay (không chờ lần tải lại), danh sách đã được hỏi lại', async () => {
+    api().mockRejectedValue(new HttpError('Cổng máy chủ hết hạn.', 504));
+    listGate();
+    const c = await open();
+    await start(c);
+    await flush();
+    expect(reads('listUsers')).toBe(2);
+    click(byLabel(c, label));
+    await flush();
+    expect(confirmDialog()).not.toBeNull();
+    answerConfirm(false);
+    await flush();
   });
 
   it('tải lại sau khi bị từ chối cũng treo: nhả sau hạn 4 giây', async () => {
@@ -547,7 +575,7 @@ describe('Cấp / đổi vai trò theo SĐT', () => {
     expect(reads('listUsers')).toBe(lookups + 1);
   });
 
-  it.each([400, 404, 409])('bị từ chối %i: lời lỗi hiện ngay, tải lại danh sách, giữ khoá tới khi danh sách về', async (status) => {
+  it.each([404, 409])('bị từ chối %i: lời lỗi hiện ngay, tải lại danh sách, giữ khoá tới khi danh sách về', async (status) => {
     mocks.setUserRole.mockRejectedValue(new HttpError('Không tìm thấy người dùng với SĐT này.', status));
     const list = refreshGate();
     const c = await mount('users');
@@ -565,7 +593,20 @@ describe('Cấp / đổi vai trò theo SĐT', () => {
     expect(busy(grantBtn(c)).busy).toBeNull();
   });
 
-  it.each([401, 403, 500])('lỗi %i: hiện lỗi, KHÔNG tải lại danh sách, nhả khoá ngay (form còn nguyên)', async (status) => {
+  // Lệnh có ô người dùng nhập (SĐT, vai trò, bậc, lý do): 400 là lỗi nhập, tải lại danh sách không sửa được và lời lỗi đã nằm ngay dưới form.
+  it('bị từ chối 400 (SĐT không hợp lệ): lời lỗi hiện ngay dưới form, KHÔNG tải lại danh sách, nhả khoá ngay, form còn nguyên', async () => {
+    mocks.setUserRole.mockRejectedValue(new HttpError('SĐT không hợp lệ.', 400));
+    const c = await mount('users');
+    fill(c);
+    await submit(c);
+    const bad = [...c.querySelectorAll('p')].find((p) => p.textContent === 'SĐT không hợp lệ.')!;
+    expect(bad.className).toContain('text-danger-fg');
+    expect(reads('listUsers')).toBe(2);
+    expect(busy(grantBtn(c))).toEqual({ busy: null, disabled: null, real: false });
+    expect(c.querySelector<HTMLInputElement>('input[placeholder^="SĐT"]')!.value).toBe(PHONE);
+  });
+
+  it.each([401, 403, 500])('lỗi %i: hiện lỗi, lệnh KHÔNG tự tải lại danh sách (QueryClient trần không có MutationCache; production vẫn làm cũ khoá admin-* ở lỗi này), nhả khoá ngay (form còn nguyên)', async (status) => {
     mocks.setUserRole.mockRejectedValue(new HttpError('Máy chủ từ chối.', status));
     const c = await mount('users');
     fill(c);
@@ -776,7 +817,7 @@ describe('Hồ sơ đại lý: duyệt / từ chối', () => {
     expect(reads('listDealerApps')).toBe(2);
   });
 
-  it.each([401, 403, 500])('duyệt lỗi %i: hiện lỗi, KHÔNG tải lại danh sách hồ sơ, nhả khoá ngay', async (status) => {
+  it.each([401, 403, 500])('duyệt lỗi %i: hiện lỗi, lệnh KHÔNG tự tải lại danh sách hồ sơ (QueryClient trần; production vẫn làm cũ khoá admin-* qua MutationCache), nhả khoá ngay', async (status) => {
     mocks.reviewDealerApp.mockRejectedValue(new HttpError('Máy chủ từ chối.', status));
     const c = await open();
     click(approveBtn(c));
@@ -1094,7 +1135,7 @@ describe('Tạo mã giảm giá', () => {
     expect(reads('listCoupons')).toBe(2);
   });
 
-  it.each([400, 404, 409])('bị từ chối %i: danh sách mã cũng bị làm cũ (quay lại thì tải lại)', async (status) => {
+  it.each([404, 409])('bị từ chối %i: danh sách mã cũng bị làm cũ (quay lại thì tải lại)', async (status) => {
     mocks.createCoupon.mockRejectedValue(new HttpError('Mã đã tồn tại', status));
     const c = await openFresh();
     click(create(c));
@@ -1103,7 +1144,19 @@ describe('Tạo mã giảm giá', () => {
     expect(reads('listCoupons')).toBe(2);
   });
 
-  it.each([401, 403, 500])('lỗi %i: KHÔNG làm cũ danh sách mã (quay lại vẫn dùng bản đã tải)', async (status) => {
+  // Form có ô người dùng gõ (mã, giá trị, hạn, giới hạn): 400 là lỗi nhập ngay dưới form, danh sách mã không đổi nên không làm cũ.
+  it('bị từ chối 400 (mã sai dạng): lời lỗi role=alert ngay dưới form, KHÔNG làm cũ danh sách mã, nhả khoá để sửa rồi gửi lại', async () => {
+    mocks.createCoupon.mockRejectedValue(new HttpError('Mã chỉ gồm chữ, số và dấu gạch ngang.', 400));
+    const c = await openFresh();
+    click(create(c));
+    await flush();
+    expect(msg(c, 'Mã chỉ gồm chữ, số và dấu gạch ngang.')?.className).toContain('text-danger-fg');
+    expect(busy(create(c))).toEqual({ busy: null, disabled: null, real: false });
+    await backToList(c);
+    expect(reads('listCoupons')).toBe(1);
+  });
+
+  it.each([401, 403, 500])('lỗi %i: lệnh KHÔNG làm cũ danh sách mã (quay lại vẫn dùng bản đã tải; production vẫn làm cũ khoá admin-* qua MutationCache)', async (status) => {
     mocks.createCoupon.mockRejectedValue(new HttpError('Máy chủ từ chối', status));
     const c = await openFresh();
     click(create(c));
@@ -1188,7 +1241,18 @@ describe('Nhãn hàng: tạo nhãn', () => {
     expect(busy(create(c)).busy).toBeNull();
   });
 
-  it('lỗi 500: hiện lỗi, KHÔNG tải lại danh sách, nhả ngay và giữ nguyên tên đã gõ', async () => {
+  it('bị từ chối 400 (tên nhãn không hợp lệ): lỗi nhập hiện ngay dưới form, KHÔNG tải lại danh sách, nhả ngay và giữ nguyên tên đã gõ', async () => {
+    mocks.createBrand.mockRejectedValue(new HttpError('Tên nhãn tối đa 120 ký tự.', 400));
+    const c = await open();
+    click(create(c));
+    await flush();
+    expect(c.querySelector('[role="alert"]')?.textContent).toBe('Tên nhãn tối đa 120 ký tự.');
+    expect(reads('listBrands')).toBe(1);
+    expect(busy(create(c)).busy).toBeNull();
+    expect(c.querySelector<HTMLInputElement>('input[placeholder^="Tên nhãn"]')!.value).toBe('Dừa Mới');
+  });
+
+  it('lỗi 500: hiện lỗi, lệnh KHÔNG tự tải lại danh sách (QueryClient trần; production vẫn làm cũ khoá admin-* qua MutationCache), nhả ngay và giữ nguyên tên đã gõ', async () => {
     mocks.createBrand.mockRejectedValue(new HttpError('Máy chủ đang bận', 500));
     const c = await open();
     click(create(c));
@@ -1315,6 +1379,8 @@ type BrandAction = {
   trigger: (c: HTMLElement) => HTMLElement;
   confirm?: boolean;
   ok?: unknown;
+  /** Lệnh có form người dùng gõ (DTO kiểm dữ liệu vào): 400 là lỗi nhập hiện trong form, không phải dữ liệu cũ. */
+  input?: boolean;
 };
 
 const rowButton = (c: HTMLElement, rowText: string, label: string) => {
@@ -1333,9 +1399,10 @@ const BRAND_ACTIONS: BrandAction[] = [
     refresh: 'listPromotions',
     prepare: (c) => typeInto(c.querySelector('input[placeholder^="Tiêu đề (MUA"]'), 'Freeship'),
     trigger: (c) => btnByText(c, 'Thêm KM'),
+    input: true,
   },
   { name: 'Xoá khuyến mãi', api: () => mocks.deletePromotion, refresh: 'listPromotions', confirm: true, trigger: (c) => rowButton(c, 'MUA 2 TẶNG 1 · Hè', 'Xoá') },
-  { name: 'Lưu thông tin nhãn', api: () => mocks.updateBrand, refresh: 'listBrands', trigger: (c) => btnByText(c, 'Lưu thông tin') },
+  { name: 'Lưu thông tin nhãn', api: () => mocks.updateBrand, refresh: 'listBrands', trigger: (c) => btnByText(c, 'Lưu thông tin'), input: true },
   {
     name: 'Gán chủ nhãn',
     api: () => mocks.updateBrand,
@@ -1435,13 +1502,15 @@ describe.each(BRAND_ACTIONS)('Nhãn hàng: $name', (a) => {
     expect(busy(a.trigger(c)).busy).toBeNull();
   });
 
-  it.each([404, 409])('bị từ chối %i: lời lỗi hiện ngay ở cấp trang (role alert), tải lại dữ liệu rồi mới nhả', async (status) => {
+  it.each(a.input ? [404, 409] : [400, 404, 409])('bị từ chối %i: lời lỗi hiện ngay ở cấp trang (role alert), tải lại dữ liệu rồi mới nhả', async (status) => {
     a.api().mockRejectedValue(new HttpError('Dữ liệu vừa đổi.', status));
     const list = hold();
     const c = await openRow();
     const before = reads(a.refresh);
     await fire(c);
     expect(errorAlert(c)).toBe('Dữ liệu vừa đổi.');
+    // 404/409 có thể làm hàng biến mất sau lần tải lại nên lời lỗi đi lên đầu tab, không nằm trong form/hàng.
+    if (a.input) expect(a.trigger(c).closest('.rounded-card')!.contains(c.querySelector('[role="alert"]'))).toBe(false);
     expect(reads(a.refresh)).toBe(before + 1);
     expect(busy(a.trigger(c)).busy).toBe('true');
     list.resolve();
@@ -1449,9 +1518,34 @@ describe.each(BRAND_ACTIONS)('Nhãn hàng: $name', (a) => {
     expect(busy(a.trigger(c)).busy).toBeNull();
   });
 
+  if (a.input) {
+    it('bị từ chối 400 (lỗi nhập liệu): lời lỗi hiện ngay trong form đang gõ (không dồn lên đầu tab), KHÔNG tải lại dữ liệu, nhả khoá ngay', async () => {
+      a.api().mockRejectedValue(new HttpError('Dữ liệu nhập không hợp lệ.', 400));
+      const c = await openRow();
+      const before = reads(a.refresh);
+      await fire(c);
+      const alerts = [...c.querySelectorAll('[role="alert"]')];
+      expect(alerts.map((x) => x.textContent)).toEqual(['Dữ liệu nhập không hợp lệ.']);
+      expect(a.trigger(c).closest('.rounded-card')!.contains(alerts[0]!)).toBe(true);
+      expect(reads(a.refresh)).toBe(before);
+      expect(busy(a.trigger(c)).busy).toBeNull();
+    });
+
+    it('lỗi nhập trong form biến mất khi lệnh mới bắt đầu', async () => {
+      a.api().mockRejectedValueOnce(new HttpError('Dữ liệu nhập không hợp lệ.', 400));
+      a.api().mockResolvedValue(a.ok ?? {});
+      const c = await openRow();
+      await fire(c);
+      expect(c.querySelectorAll('[role="alert"]')).toHaveLength(1);
+      await fire(c);
+      expect(a.api()).toHaveBeenCalledTimes(2);
+      expect(c.querySelectorAll('[role="alert"]')).toHaveLength(0);
+    });
+  }
+
   it('bị từ chối mà tải lại treo: nhả sau hạn 4 giây', async () => {
     useHangTimers();
-    a.api().mockRejectedValue(new HttpError('Dữ liệu vừa đổi.', 400));
+    a.api().mockRejectedValue(new HttpError('Dữ liệu vừa đổi.', 409));
     mocks.hold[a.refresh] = { after: 1, promise: new Promise(() => {}) };
     const c = await openRow();
     await fire(c);
@@ -1472,7 +1566,7 @@ describe.each(BRAND_ACTIONS)('Nhãn hàng: $name', (a) => {
     expect(errorAlert(c)).toBeUndefined();
   });
 
-  it.each([401, 403, 500])('lỗi %i: hiện lỗi, KHÔNG tải lại, nhả ngay', async (status) => {
+  it.each([401, 403, 500])('lỗi %i: hiện lỗi, lệnh KHÔNG tự tải lại (QueryClient trần; production vẫn làm cũ khoá admin-* qua MutationCache), nhả ngay', async (status) => {
     a.api().mockRejectedValue(new HttpError('Máy chủ từ chối.', status));
     const c = await openRow();
     const before = reads(a.refresh);

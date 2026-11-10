@@ -117,7 +117,7 @@ export function PayrollHub() {
 
   // Gửi bản chụp lúc bấm; khoá giữ tới khi bảng lương tải lại xong và nút mở tấm bị chặn trong lúc đó. Tải lại có thể lỗi (mất mạng) nên
   // hồ sơ nạp sẵn cũng được ghi ngay bằng tài khoản vừa lưu: không thì lần mở sau nạp tài khoản cũ và Lưu ghi đè tài khoản mới.
-  // Chờ tải lại có hạn `settleWithin`; bị từ chối 400/404/409 thì tải lại rồi mới nhả khoá (lời lỗi hiện ngay ở thông báo của trang).
+  // Chờ tải lại có hạn `settleWithin`; bị từ chối 404/409 thì tải lại rồi mới nhả khoá, còn 400 là lỗi nhập (lời lỗi hiện ngay ở thông báo của trang, không tải lại).
   const refreshPayroll = () => qc.invalidateQueries({ queryKey: ['my-payroll'] });
   const bankM = useLockedMutation({
     mutationFn: (v: BankInput) => updateBank(coreHttp, v),
@@ -135,7 +135,8 @@ export function PayrollHub() {
     },
     onError: (e) => {
       notify({ text: errText(e), tone: 'error' });
-      return reloadWhenStale(e, refreshPayroll);
+      // Mã ngân hàng, số tài khoản và ảnh QR do nhân viên nhập: 400 là lỗi nhập, chỉ 404/409 tải lại bảng lương.
+      return reloadWhenStale(e, refreshPayroll, true);
     },
   });
 

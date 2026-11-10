@@ -223,7 +223,8 @@ describe('DealerClaimsTab: lời lỗi ở cấp danh sách', () => {
     click(approveBtn(c));
     await flush(4);
     expect(lists()).toBe(2);
-    expect(c.textContent).not.toContain('Tour Đà Lạt');
+    // dòng đã rời bộ lọc (lời lỗi nêu tên phần thưởng của yêu cầu nên không dò theo chữ trên cả trang)
+    expect(c.querySelector('.tabular-nums.rounded-card')).toBeNull();
     expect(c.querySelector('[role="alert"]')?.textContent).toContain('Yêu cầu này không còn ở trạng thái chờ duyệt.');
   });
 

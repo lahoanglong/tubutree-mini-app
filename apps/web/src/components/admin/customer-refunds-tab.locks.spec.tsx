@@ -6,7 +6,9 @@ import { answerAsk, answerConfirm, byText, click, confirmDialog, flush, render, 
 import type { AdminCustomerRefund } from '@/lib/admin-client';
 
 // W96B: Trả về hàng chờ / Xác nhận tiền dư / Không phải tiền dư giữ khoá tới khi danh sách làm mới về (tối đa 4 giây), lệnh bị từ chối
-// vì trạng thái đã đổi thì tải lại, lỗi khác không tải lại. Đây là đường TIỀN: mỗi ca chạm lại TRONG lúc khoá và đếm số lần gọi API.
+// vì trạng thái đã đổi (400/404/409) thì tải lại rồi mới nhả khoá; lỗi khác nhả khoá ngay, không chờ tải lại. Spec dựng QueryClient trần, không có MutationCache như production
+// (ở đó khoá admin-* vẫn bị làm cũ ở nền sau mỗi lệnh, kể cả lỗi 5xx), nên "không tải lại" ở đây là lệnh không tự gọi tải lại và không chờ.
+// Đây là đường TIỀN: mỗi ca chạm lại TRONG lúc khoá và đếm số lần gọi API.
 
 const refund = (over: Partial<AdminCustomerRefund> = {}): AdminCustomerRefund => ({
   id: 'r1',
@@ -199,7 +201,7 @@ describe('Trả về hàng chờ', () => {
     expect(releaseBtn(c).getAttribute('aria-disabled')).toBeNull();
   });
 
-  it('lỗi 500: hiện lỗi, KHÔNG tải lại danh sách, nhả khoá ngay để thử lại', async () => {
+  it('lỗi 500: hiện lỗi, lệnh không tự tải lại danh sách (QueryClient trần, không có MutationCache như production), nhả khoá ngay để thử lại', async () => {
     rows = [processing()];
     writeRoute = () => json(500, { statusCode: 500, message: 'Máy chủ lỗi' });
     const c = await mount();
@@ -268,7 +270,7 @@ describe('Xác nhận tiền dư', () => {
     expect(verifyBtn(c).getAttribute('aria-disabled')).toBeNull();
   });
 
-  it('lỗi 500: không tải lại danh sách, nhả khoá ngay', async () => {
+  it('lỗi 500: lệnh không tự tải lại danh sách (QueryClient trần, không có MutationCache như production), nhả khoá ngay', async () => {
     rows = [unverified()];
     writeRoute = () => json(500, { statusCode: 500, message: 'Máy chủ lỗi' });
     const c = await mount();
@@ -316,7 +318,7 @@ describe('Không phải tiền dư', () => {
     expect(dismissBtn(c).getAttribute('aria-disabled')).toBeNull();
   });
 
-  it('API từ chối (404): tải lại rồi mới nhả khoá; lỗi 403 thì không tải lại', async () => {
+  it('API từ chối (404): tải lại rồi mới nhả khoá; lỗi 403 thì lệnh không tự tải lại, nhả khoá ngay (QueryClient trần)', async () => {
     rows = [unverified()];
     writeRoute = () => json(404, { statusCode: 404, message: 'Không tìm thấy khoản.' });
     const c = await mount();

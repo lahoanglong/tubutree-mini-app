@@ -4,8 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { StaffRosterTab } from './staff-roster-tab';
 import { answerAsk, answerConfirm, byText, click, confirmDialog, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 
-// Wave 96B: cấp/thu hồi quyền và lưu nhóm việc giữ khoá tới khi danh sách nhân sự mới về (tối đa 4 giây), bị từ chối 400/404/409 thì tải lại,
-// lời báo không mất cùng dòng bị gỡ. fetch giả có cổng chặn từng đường để dựng đúng khoảnh khắc "lệnh xong nhưng danh sách chưa về".
+// Wave 96B: cấp/thu hồi quyền và lưu nhóm việc giữ khoá tới khi danh sách nhân sự mới về (tối đa 4 giây), bị từ chối 404/409 thì tải lại
+// (cả ba lệnh đều có ô nhập SĐT/lý do/nhóm nên 400 là lỗi nhập: hiện lời lỗi, không tải lại), lời báo không mất cùng dòng bị gỡ.
+// Spec chạy trên QueryClient trần: các ca "lỗi 5xx" chỉ chứng minh lệnh không tự gọi tải lại; trên production MutationCache vẫn làm cũ khoá admin-* sau mỗi lệnh. fetch giả có cổng chặn từng đường để dựng đúng khoảnh khắc "lệnh xong nhưng danh sách chưa về".
 
 const U1 = { id: 'u1', phone: '0911111111', fullName: 'Lan', avatarUrl: null, role: 'STAFF', staffPermissions: ['KHO'], createdAt: '2026-10-01T00:00:00Z' };
 const U2 = { id: 'u2', phone: '0922222222', fullName: 'Mai', avatarUrl: null, role: 'STAFF', staffPermissions: [], createdAt: '2026-10-01T00:00:00Z' };
@@ -129,8 +130,22 @@ describe('Cấp quyền: khoá giữ tới khi danh sách làm mới về, có h
     expect(grants()).toBe(2);
   });
 
-  it('cấp bị từ chối 400/404/409: lời lỗi hiện ngay, tải lại danh sách và giữ khoá tới khi danh sách về', async () => {
-    for (const status of [400, 404, 409]) {
+  it('cấp bị 400 (SĐT, lý do hoặc nhóm việc không hợp lệ): lời lỗi hiện ngay, lệnh KHÔNG tự tải lại danh sách, nhả khoá ngay để sửa rồi cấp lại', async () => {
+    const c = await mount();
+    routes.grant = () => json(400, { message: 'Số điện thoại không hợp lệ.' });
+    const g = holdList();
+    const before = listGets();
+    await grant(c);
+    expect(grants()).toBe(1);
+    expect(alertText(c)).toContain('Số điện thoại không hợp lệ.');
+    expect(listGets()).toBe(before);
+    expect(isBusy(saveBtn(c))).toBe(false);
+    g.resolve();
+    await flush();
+  });
+
+  it('cấp bị từ chối 404/409: lời lỗi hiện ngay, tải lại danh sách và giữ khoá tới khi danh sách về', async () => {
+    for (const status of [404, 409]) {
       calls.length = 0;
       const c = await mount();
       routes.grant = () => json(status, { message: 'Số điện thoại này đã đổi trạng thái' });
@@ -152,7 +167,7 @@ describe('Cấp quyền: khoá giữ tới khi danh sách làm mới về, có h
     }
   });
 
-  it('cấp lỗi 500 hoặc mất mạng: hiện lỗi, KHÔNG tải lại danh sách, nhả khoá ngay', async () => {
+  it('cấp lỗi 500 hoặc mất mạng: hiện lỗi, nhả khoá ngay, lệnh không tự gọi tải lại danh sách (QueryClient trần của spec không có MutationCache như production)', async () => {
     const c = await mount();
     routes.grant = () => json(500, { message: 'Máy chủ đang bận' });
     const before = listGets();
@@ -218,7 +233,21 @@ describe('Thu hồi quyền: giữ khoá tới khi danh sách về, bị từ ch
     expect(alertText(c)).toContain('Người này không còn quyền.');
   });
 
-  it('thu hồi lỗi 500: không tải lại, nhả khoá ngay', async () => {
+  it('thu hồi bị 400 (tự thu hồi quyền của chính mình): lời lỗi hiện ngay, lệnh KHÔNG tự tải lại danh sách, nhả khoá ngay', async () => {
+    const c = await mount();
+    routes.revoke = () => json(400, { message: 'Không thể tự thu hồi quyền của chính mình.' });
+    const g = holdList();
+    const before = listGets();
+    await revoke(c, 'Lan');
+    expect(revokes()).toBe(1);
+    expect(alertText(c)).toContain('Không thể tự thu hồi quyền của chính mình.');
+    expect(listGets()).toBe(before);
+    expect(isBusy(revokeBtn(c, 'Lan'))).toBe(false);
+    g.resolve();
+    await flush();
+  });
+
+  it('thu hồi lỗi 500: nhả khoá ngay, lệnh không tự gọi tải lại (QueryClient trần của spec không có MutationCache như production)', async () => {
     const c = await mount();
     routes.revoke = () => json(500, { message: 'Máy chủ đang bận' });
     const before = listGets();
@@ -296,7 +325,21 @@ describe('Lưu nhóm việc: khoá, hạn 4 giây, lời báo sống sót khi d�
     expect(alertText(c)).toContain('Không tìm thấy người dùng.');
   });
 
-  it('lưu lỗi 500: lời lỗi, không tải lại, nhả khoá ngay để lưu lại được', async () => {
+  it('lưu bị 400 (nhóm việc hoặc lý do không hợp lệ): lời lỗi hiện ngay, lệnh KHÔNG tự tải lại danh sách, nhả khoá ngay để lưu lại', async () => {
+    const c = await mount();
+    routes.perms = () => json(400, { message: 'Nhóm việc không hợp lệ.' });
+    const g = holdList();
+    const before = listGets();
+    await editPerms(c);
+    expect(permPuts()).toBe(1);
+    expect(alertText(c)).toContain('Nhóm việc không hợp lệ.');
+    expect(listGets()).toBe(before);
+    expect(isBusy(pickerSave(memberCard(c, 'Lan')))).toBe(false);
+    g.resolve();
+    await flush();
+  });
+
+  it('lưu lỗi 500: lời lỗi, nhả khoá ngay để lưu lại được, lệnh không tự gọi tải lại (QueryClient trần của spec không có MutationCache như production)', async () => {
     const c = await mount();
     routes.perms = () => json(500, { message: 'Máy chủ đang bận' });
     const before = listGets();

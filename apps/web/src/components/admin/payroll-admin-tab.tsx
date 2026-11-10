@@ -64,7 +64,8 @@ export function PayrollAdminTab() {
   const [detailRow, setDetailRow] = useState<AdminPayrollRow | null>(null);
   const [adjustRow, setAdjustRow] = useState<AdminPayrollRow | null>(null);
   // Trả lời hứa làm mới để khoá giữ tới khi bảng lương mới về (tối đa `settleWithin`, kẻo mạng chậm giữ nút lâu hơn lệnh vừa xong): nhả sớm thì dòng vừa chốt còn hiện nút "Chốt" cũ và bấm lại được.
-  // Lệnh bị từ chối vì bảng đã cũ (tháng đã chốt/đã trả, nhân viên không còn: 400/404/409) cũng tải lại rồi mới nhả; lỗi khác không tải lại.
+  // Lệnh bị từ chối vì bảng đã cũ (tháng đã chốt/đã trả, nhân viên không còn: 400/404/409) cũng tải lại rồi mới nhả. Lệnh có ô nhập (Đơn giá, Ghi đã trả, Sửa giờ phiên) thì 400 là lỗi nhập liệu:
+  // hiện trong tờ, không tải lại, khoá nhả ngay; chỉ 404/409 tải lại. Quy tắc này chỉ quyết định việc CHỜ tải lại trước khi nhả khoá: trên production MutationCache vẫn làm cũ khoá admin-* ở lỗi khác.
   // Chốt/mở lại/tính lại làm mới theo tháng của chính lệnh (đi trong biến mutation), không theo tháng đang xem lúc xong: đổi tháng khi lệnh còn bay mà làm mới nhầm tháng thì quay lại thấy dữ liệu cũ.
   // `refetchType: 'all'` vì tháng cũ lúc đó không còn ai xem nên mặc định chỉ đánh dấu cũ chứ không tải lại.
   const refreshMonth = (p: { year: number; month: number }) => qc.invalidateQueries({ queryKey: ['admin-payroll', p.year, p.month], refetchType: 'all' });
@@ -99,7 +100,7 @@ export function PayrollAdminTab() {
     },
     onError: (e) => {
       setRateErr(errText(e));
-      return reloadWhenStale(e, refresh);
+      return reloadWhenStale(e, refresh, true);
     },
   });
   const finalizeM = useLockedMutation({
@@ -139,7 +140,7 @@ export function PayrollAdminTab() {
     },
     onError: (e) => {
       setPayErr(errText(e));
-      return reloadWhenStale(e, refresh);
+      return reloadWhenStale(e, refresh, true);
     },
   });
   const payrollBusy = finalizeM.isPending || reopenM.isPending || paidM.isPending;
@@ -252,15 +253,19 @@ export function PayrollAdminTab() {
                 <button type="button" aria-label={`Xem giờ · ${name}`} onClick={() => setDetailRow(row)} className={BTN_XS_SECONDARY}>
                   Xem giờ
                 </button>
+                {/* Lệnh lưu xong là tờ đã đóng nhưng khoá còn giữ tới khi bảng mới về: mở lại lúc này nạp đơn giá CŨ rồi Lưu ghi đè đơn giá vừa lưu (payroll-hub cũng chặn nút mở tấm khi lệnh lưu còn chờ). */}
                 <button
                   type="button"
                   aria-label={`Đơn giá · ${name}`}
+                  aria-busy={rateM.isPending || undefined}
+                  aria-disabled={rateM.isPending || undefined}
                   onClick={() => {
+                    if (rateM.isPending) return;
                     setRateErr(null);
                     setRateRow(row);
                     setRateVal(String(row.profile?.hourlyRate ?? 0));
                   }}
-                  className={BTN_XS_SECONDARY}
+                  className={`${BTN_XS_SECONDARY} aria-disabled:opacity-50`}
                 >
                   Đơn giá
                 </button>
@@ -302,13 +307,16 @@ export function PayrollAdminTab() {
                   <button
                     type="button"
                     aria-label={`Ghi đã trả lương · ${name}`}
+                    aria-busy={paidM.isPending || undefined}
+                    aria-disabled={paidM.isPending || undefined}
                     onClick={() => {
+                      if (paidM.isPending) return;
                       setPayErr(null);
                       setPayRow(row);
                       setProof('');
                       setNote('');
                     }}
-                    className={row.month.status === 'OPEN' ? BTN_XS_SECONDARY : BTN_XS_PRIMARY}
+                    className={`${row.month.status === 'OPEN' ? BTN_XS_SECONDARY : BTN_XS_PRIMARY} aria-disabled:opacity-50`}
                   >
                     Ghi đã trả lương
                   </button>
@@ -483,7 +491,7 @@ function DetailSheet({
     },
     onError: (e) => {
       setErr(errText(e));
-      return reloadWhenStale(e, refreshAll);
+      return reloadWhenStale(e, refreshAll, true);
     },
   });
 
@@ -519,16 +527,20 @@ function DetailSheet({
                         {isoToVnHHMM(s.checkinAt)} → {s.checkoutAt ? isoToVnHHMM(s.checkoutAt) : 'đang mở'}
                         {s.isLate ? ' · trễ' : ''}
                       </span>
+                      {/* Lưu xong là form đã đóng nhưng khoá còn giữ tới khi chi tiết mới về: mở lại lúc này nạp giờ CŨ của phiên rồi Lưu ghi đè giờ vừa sửa. */}
                       <button
                         type="button"
                         aria-label={`Sửa giờ phiên ${isoToVnHHMM(s.checkinAt)}`}
+                        aria-busy={editM.isPending || undefined}
+                        aria-disabled={editM.isPending || undefined}
                         onClick={() => {
+                          if (editM.isPending) return;
                           setErr(null);
                           setEditId(s.id);
                           setCi(isoToVnHHMM(s.checkinAt));
                           setCo(s.checkoutAt ? isoToVnHHMM(s.checkoutAt) : isoToVnHHMM(s.checkinAt));
                         }}
-                        className={BTN_LINK}
+                        className={`${BTN_LINK} aria-disabled:opacity-50`}
                       >
                         Sửa giờ
                       </button>

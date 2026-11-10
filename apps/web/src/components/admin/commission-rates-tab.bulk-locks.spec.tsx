@@ -7,8 +7,10 @@ import { answerConfirm, byText, click, confirmDialog, flush, render, typeInto, t
 import type { CommissionRatesPage } from '@/lib/commission-rates';
 
 // W96B: bốn lệnh ghi hàng loạt của tab "Hoa hồng & giá sỉ" (TIỀN: hoa hồng CTV, giá sỉ đại lý): áp % cho biến thể chưa có %, đặt % cho cả sản phẩm,
-// nhập CSV % và nhập CSV giá sỉ. Mỗi lệnh giữ khoá tới khi danh sách tải lại xong (tối đa 4 giây), tải lại khi bị từ chối vì dữ liệu cũ (400/404/409)
-// mà không tải lại với lỗi khác, nút bận báo bằng aria-busy/aria-disabled thay disabled, ô nhập đang gửi chỉ readOnly để Enter không làm rơi tiêu điểm.
+// nhập CSV % và nhập CSV giá sỉ. Mỗi lệnh giữ khoá tới khi danh sách tải lại xong (tối đa 4 giây). Cả bốn lệnh đều có ô người dùng nhập (số %, CSV) nên 400 là
+// lỗi nhập liệu: hiện tại form, không tải lại, nhả khoá ngay; chỉ 404/409 là dữ liệu cũ (tải lại, chờ ≤4 giây). Test dựng QueryClient trần, không có MutationCache như
+// production (ở đó khoá admin-* vẫn bị làm cũ sau mỗi lệnh), nên "không tải lại" ở đây là lệnh không tự gọi và không chờ tải lại. Nút bận báo bằng
+// aria-busy/aria-disabled thay disabled, ô nhập đang gửi chỉ readOnly để Enter không làm rơi tiêu điểm; ô chọn bậc giá sỉ khoá khi xem trước/ghi còn chạy.
 
 const PAGE: CommissionRatesPage = {
   items: [
@@ -33,6 +35,7 @@ const PAGE: CommissionRatesPage = {
   summary: { missing: 2, missingTubu: 2 },
 };
 const TIER = { id: 't1', name: 'Đại lý Bạc', minOrderVolume: 10_000_000, creditLimit: 0, paymentTerms: null };
+const TIER2 = { id: 't2', name: 'Đại lý Vàng', minOrderVolume: 50_000_000, creditLimit: 0, paymentTerms: null };
 const RATE_PREVIEW = {
   rows: [{ line: 1, sku: 'NRC-500', input: '10', status: 'OK', rate: 10, currentRate: null, productName: 'Nước rửa chén', variationName: '500ml', message: null }],
   counts: { OK: 1, UNCHANGED: 0, NOT_FOUND: 0, INVALID: 0, OVER_CAP: 0, DUPLICATE: 0 },
@@ -60,6 +63,7 @@ let writeGate: Promise<void> | undefined;
 let listLoads = 0;
 let historyLoads = 0;
 let historyGate: Promise<void> | undefined;
+let previewGate: Promise<void> | undefined;
 let writeStatus = 200;
 const writes: { method: string; url: string }[] = [];
 const count = (suffix: string) => writes.filter((w) => w.url.endsWith(suffix)).length;
@@ -78,15 +82,19 @@ beforeEach(() => {
   listLoads = 0;
   historyLoads = 0;
   historyGate = undefined;
+  previewGate = undefined;
   writeStatus = 200;
   writes.length = 0;
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string, init?: RequestInit) => {
       const method = init?.method ?? 'GET';
-      if (url.includes('/admin/dealer-tiers')) return json(200, [TIER]);
+      if (url.includes('/admin/dealer-tiers')) return json(200, [TIER, TIER2]);
       if (url.endsWith('/admin/commission-rates/import/preview')) return json(200, RATE_PREVIEW);
-      if (url.endsWith('/admin/dealer-prices/import/preview')) return json(200, DEALER_PREVIEW);
+      if (url.endsWith('/admin/dealer-prices/import/preview')) {
+        await previewGate;
+        return json(200, DEALER_PREVIEW);
+      }
       if (method !== 'GET') {
         writes.push({ method, url });
         await writeGate;
@@ -252,7 +260,39 @@ describe.each(forms)('$name', (form) => {
     expect(btn().getAttribute('aria-busy')).toBeNull();
   });
 
-  it('lỗi 500: hiện lỗi, KHÔNG tải lại danh sách, nhả khoá ngay', async () => {
+  it('lỗi 400 (lỗi nhập liệu: số % ngoài khoảng, CSV có dòng lỗi): lỗi hiện ngay tại form, KHÔNG tải lại danh sách, nhả khoá ngay', async () => {
+    writeStatus = 400;
+    const c = await mount();
+    const { btn, field } = await form.open(c);
+    const list = gate();
+    listGate = list.promise;
+    await submit(btn);
+    expect(count(form.writeSuffix)).toBe(1);
+    expect(listLoads).toBe(1);
+    expect(c.querySelector('[role="alert"]')?.textContent).toContain('Lỗi 400');
+    expect(btn().getAttribute('aria-disabled')).toBeNull();
+    expect(btn().getAttribute('aria-busy')).toBeNull();
+    expect(field().readOnly).toBe(false);
+    list.resolve();
+    await flush();
+  });
+
+  it('lỗi 404 (mục không còn): tải lại danh sách, giữ khoá tới khi danh sách về', async () => {
+    writeStatus = 404;
+    const c = await mount();
+    const { btn } = await form.open(c);
+    const list = gate();
+    listGate = list.promise;
+    await submit(btn);
+    expect(listLoads).toBe(2);
+    expect(c.querySelector('[role="alert"]')?.textContent).toContain('Lỗi 404');
+    expect(btn().getAttribute('aria-disabled')).toBe('true');
+    list.resolve();
+    await flush();
+    expect(btn().getAttribute('aria-disabled')).toBeNull();
+  });
+
+  it('lỗi 500: hiện lỗi, lệnh không tự tải lại danh sách (QueryClient trần, không có MutationCache như production), nhả khoá ngay', async () => {
     writeStatus = 500;
     const c = await mount();
     const { btn } = await form.open(c);
@@ -290,6 +330,64 @@ describe.each(forms)('$name', (form) => {
     list.resolve();
     await flush();
     expect(field().readOnly).toBe(false);
+  });
+});
+
+describe('Giá sỉ đại lý: ô chọn bậc khoá khi xem trước hoặc ghi còn chạy', () => {
+  const section = (c: HTMLElement) => c.querySelector<HTMLElement>('section[aria-label="Giá sỉ đại lý"]')!;
+  const tierSelect = (c: HTMLElement) => section(c).querySelector('select')!;
+  const csvBox = (c: HTMLElement) => section(c).querySelector('textarea[aria-label="Nội dung CSV sku,giá sỉ"]')!;
+
+  it('ghi còn bay: đổi sang bậc khác bị chặn (ô vẫn ở bậc đã xem trước) nên lời "Đã cập nhật" không đứng cạnh bậc khác; ghi xong thì đổi bậc được lại', async () => {
+    const c = await mount();
+    const { btn } = await forms[3]!.open(c);
+    const post = gate();
+    writeGate = post.promise;
+    await submit(btn);
+    expect(count('/dealer-prices/import')).toBe(1);
+    expect(tierSelect(c).matches(':disabled')).toBe(true);
+    typeInto(tierSelect(c), 't2');
+    await flush(1);
+    expect(tierSelect(c).value).toBe('t1');
+    expect(btn().getAttribute('aria-busy')).toBe('true');
+    post.resolve();
+    await flush();
+    expect(section(c).querySelector('[role="status"]')?.textContent).toContain('Đã cập nhật 1 giá sỉ');
+    expect(tierSelect(c).value).toBe('t1');
+    expect(tierSelect(c).matches(':disabled')).toBe(false);
+    typeInto(tierSelect(c), 't2');
+    await flush(1);
+    expect(tierSelect(c).value).toBe('t2');
+  });
+
+  it('xem trước còn bay: đổi bậc bị chặn, bản xem trước về vẫn thuộc đúng bậc đang chọn', async () => {
+    const c = await mount();
+    typeInto(tierSelect(c), 't1');
+    const pre = gate();
+    previewGate = pre.promise;
+    typeInto(csvBox(c), 'NRC-500;85.000');
+    click(byText(section(c), 'button', /^Xem trước giá sỉ$/));
+    await flush(2);
+    expect(tierSelect(c).matches(':disabled')).toBe(true);
+    typeInto(tierSelect(c), 't2');
+    await flush(1);
+    expect(tierSelect(c).value).toBe('t1');
+    pre.resolve();
+    await flush();
+    expect(byText(section(c), 'button', /^Ghi 1 giá sỉ$/)).not.toBeNull();
+    expect(tierSelect(c).value).toBe('t1');
+    expect(tierSelect(c).matches(':disabled')).toBe(false);
+  });
+
+  it('lệnh ghi bị từ chối: ô chọn bậc mở lại ngay (không kẹt khoá)', async () => {
+    writeStatus = 400;
+    const c = await mount();
+    const { btn } = await forms[3]!.open(c);
+    await submit(btn);
+    expect(c.querySelector('[role="alert"]')?.textContent).toContain('Lỗi 400');
+    typeInto(tierSelect(c), 't2');
+    await flush(1);
+    expect(tierSelect(c).value).toBe('t2');
   });
 });
 

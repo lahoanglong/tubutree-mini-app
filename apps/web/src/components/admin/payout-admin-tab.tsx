@@ -36,6 +36,17 @@ const STATUS_TONE: Record<AdminPayoutStatus, Tone> = {
 
 export { seedPayoutFilter };
 
+/** Lời lỗi theo id lệnh rút: đặt hoặc thay lời của đúng lệnh đó, `null` thì gỡ; lời của lệnh khác giữ nguyên. */
+function withNotice(all: Record<string, string>, id: string, message: string | null): Record<string, string> {
+  if (message === null) {
+    if (!(id in all)) return all;
+    const next = { ...all };
+    delete next[id];
+    return next;
+  }
+  return { ...all, [id]: message };
+}
+
 /**
  * Thuế TNCN hoa hồng và các lệnh rút ngân hàng cũ (hoa hồng CTV / Ví Tubu → ngân hàng; rút đã bỏ, chỉ còn lệnh tạo trước đó). Trước đây (P0 A5-08 = A6-05) Payout
  * REQUESTED không có màn nào xử lý — tiền bị trừ khỏi số dư CTV (hoặc commission bị khoá) rồi
@@ -55,7 +66,8 @@ export function PayoutAdminTab({ canReview = true }: { canReview?: boolean }) {
   });
   const totalPages = q.data ? Math.max(1, Math.ceil(q.data.meta.total / q.data.meta.limit)) : 1;
   // Lời lỗi của lệnh ghi nằm ở đây, ngoài dòng: tải lại làm dòng rời bộ lọc (lệnh đã được xử lý ở máy khác) thì lời lỗi vẫn còn.
-  const [notice, setNotice] = useState<string | null>(null);
+  // Mỗi lệnh một lời: lệnh ở dòng khác (thành công hay lỗi) không được xoá hay thay lời nhắc tải lại của lệnh chi tiền vừa gặp lỗi.
+  const [notices, setNotices] = useState<Record<string, string>>({});
 
   return (
     <div className="space-y-4">
@@ -75,6 +87,7 @@ export function PayoutAdminTab({ canReview = true }: { canReview?: boolean }) {
                 onClick={() => {
                   setFilter(s as AdminPayoutStatus | '');
                   setPage(1);
+                  setNotices({});
                 }}
                 className={chipClass(filter === s)}
               >
@@ -85,11 +98,11 @@ export function PayoutAdminTab({ canReview = true }: { canReview?: boolean }) {
         </div>
 
         <Notice>Tubu Tree đã bỏ rút tiền về ngân hàng: hoa hồng chuyển thẳng vào Ví Tubu. Mục này chỉ còn để xử lý các lệnh rút tạo trước đó.</Notice>
-        {notice && (
-          <p role="alert" className="text-sm text-danger-fg">
-            {notice}
+        {Object.entries(notices).map(([id, text]) => (
+          <p key={id} role="alert" className="text-sm text-danger-fg">
+            {text}
           </p>
-        )}
+        ))}
         {q.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
         {q.isError && (
           <p className="text-sm text-danger-fg">
@@ -100,7 +113,7 @@ export function PayoutAdminTab({ canReview = true }: { canReview?: boolean }) {
           </p>
         )}
         <div className="space-y-2">
-          {q.data?.data.map((p) => <PayoutRow key={p.id} payout={p} canReview={canReview} onError={setNotice} />)}
+          {q.data?.data.map((p) => <PayoutRow key={p.id} payout={p} canReview={canReview} onError={(message) => setNotices((all) => withNotice(all, p.id, message))} />)}
           {q.data?.data.length === 0 && (
             <p className="rounded-card border border-stone-200 bg-stone-0 p-6 text-center text-sm text-stone-500">
               Không có lệnh rút nào{filter ? ` ở trạng thái "${PAYOUT_STATUS_LABEL[filter]}"` : ''}.
@@ -237,8 +250,8 @@ function recipientLines(p: AdminPayout): string {
 }
 
 /**
- * `onError` có thì lời lỗi của lệnh ghi (máy chủ từ chối) đi lên danh sách thay vì nằm trong dòng, vì tải lại có thể gỡ dòng khỏi bộ lọc.
- * Lỗi nhập liệu (thiếu lý do) luôn hiện ngay trên dòng.
+ * `onError` có thì lời lỗi của lệnh ghi (máy chủ từ chối) đi lên danh sách thay vì nằm trong dòng, vì tải lại có thể gỡ dòng khỏi bộ lọc;
+ * ở đó nó đứng riêng cho từng lệnh nên phải nêu số tiền, người nhận và mã lệnh. Lỗi nhập liệu (thiếu lý do) luôn hiện ngay trên dòng.
  */
 export function PayoutRow({ payout: p, canReview = true, onError }: { payout: AdminPayout; canReview?: boolean; onError?: (message: string | null) => void }) {
   const qc = useQueryClient();
@@ -249,7 +262,11 @@ export function PayoutRow({ payout: p, canReview = true, onError }: { payout: Ad
   const acts = canReview ? flow : { ...flow, approve: false, reject: false };
   const { confirm, dialog } = useConfirm();
 
-  const reportServerError = (message: string | null) => (onError ? onError(message) : setErr(message));
+  const userLabel = p.user?.fullName || p.user?.phone || p.userId;
+  const reportServerError = (message: string | null) => {
+    if (!onError) return setErr(message);
+    onError(message === null ? null : `Lệnh rút ${formatVnd(p.amount)} của ${userLabel} (mã ${p.id.slice(-6)}): ${message}`);
+  };
   const refresh = () => qc.invalidateQueries({ queryKey: ['admin-payouts'] });
   // Khoá giữ tới khi danh sách làm mới về (tối đa 4 giây): nhả sớm thì lệnh vừa duyệt/chi còn nút của trạng thái cũ và bấm lại được.
   const mut = useLockedMutation({
@@ -271,7 +288,8 @@ export function PayoutRow({ payout: p, canReview = true, onError }: { payout: Ad
       // lỗi không phải 4xx; 4xx là lời nghiệp vụ đã nói rõ kết quả.
       const unsure = !(e instanceof ApiError) || e.status >= 500;
       reportServerError(unsure ? `${text} ${a === 'markPaid' ? PAID_RELOAD_HINT : RELOAD_HINT}` : text);
-      // Trạng thái có thể vừa bị admin khác đổi, hoặc lệnh đã ghi rồi mới lỗi mạng/5xx (chi tiền): luôn tải lại để thấy trạng thái thật, khác quy tắc chung (chỉ 400/404/409).
+      // Khác quy tắc chung (chỉ 400/404/409 mới CHỜ tải lại trước khi nhả khoá): lệnh duyệt/chi tiền nào lỗi cũng chờ tải lại xong rồi mới nhả khoá, vì trạng thái có thể vừa bị admin khác đổi
+      // hoặc lệnh đã ghi rồi mới lỗi mạng/5xx, và nhả sớm thì nút còn hiện với trạng thái cũ. Trên production MutationCache vẫn làm cũ khoá admin-* ở mọi lỗi, nhưng không chờ.
       return settleWithin(refresh());
     },
   });
@@ -318,7 +336,6 @@ export function PayoutRow({ payout: p, canReview = true, onError }: { payout: Ad
     mut.mutate(a);
   };
 
-  const userLabel = p.user?.fullName || p.user?.phone || p.userId;
   const bank = p.bankInfo;
   const actionable = acts.approve || acts.reject || acts.markPaid;
 

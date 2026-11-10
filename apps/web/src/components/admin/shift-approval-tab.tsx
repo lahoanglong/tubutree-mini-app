@@ -52,7 +52,8 @@ export function ShiftApprovalTab() {
   const [adjEnd, setAdjEnd] = useState('12:00');
   const [tplOpen, setTplOpen] = useState(false);
   // Trả lời hứa làm mới để khoá của ca giữ tới khi danh sách ca mới về (tối đa `settleWithin`, kẻo mạng chậm giữ nút lâu hơn lệnh vừa xong): nhả sớm thì nút "Duyệt" của ca vừa duyệt còn hiện và bấm lại được.
-  // Lệnh bị từ chối vì danh sách đã cũ (ca không còn chờ duyệt: 400/404/409) cũng tải lại tuần của lệnh rồi mới nhả; lỗi khác không tải lại.
+  // Lệnh bị từ chối vì danh sách đã cũ (ca không còn chờ duyệt: 400/404/409) cũng tải lại tuần của lệnh rồi mới nhả (lệnh có ô nhập giờ/tên: chỉ 404/409, 400 là lỗi nhập hiện trong tờ).
+  // Quy tắc này chỉ quyết định việc CHỜ tải lại trước khi nhả khoá: trên production MutationCache vẫn làm cũ khoá admin-* ở lỗi khác.
   // Làm mới theo tuần của chính lệnh (đi trong biến mutation), không theo tuần đang xem lúc xong: đổi tuần khi lệnh còn bay mà làm mới nhầm tuần thì quay lại thấy ca cũ còn nút "Duyệt".
   // `refetchType: 'all'` vì tuần cũ lúc đó không còn ai xem nên mặc định chỉ đánh dấu cũ chứ không tải lại.
   const invalidate = (week: string) => Promise.all([qc.invalidateQueries({ queryKey: ['admin-shifts', week], refetchType: 'all' }), invalidateInbox(qc)]);
@@ -107,7 +108,8 @@ export function ShiftApprovalTab() {
       onError: (e, v) => {
         if (v.approvedStart) setAdjustErr(errText(e));
         else fail(e);
-        return reloadWhenStale(e, () => invalidate(v.week));
+        // Duyệt kèm giờ đã chỉnh có ô nhập giờ nên 400 (giờ kết thúc không sau giờ bắt đầu) là lỗi nhập hiện trong tờ; duyệt thường không có ô nhập, 400 là ca đã đổi trạng thái.
+        return reloadWhenStale(e, () => invalidate(v.week), !!v.approvedStart);
       },
     },
     (v) => v.id,
@@ -341,7 +343,8 @@ function TemplateSheet({ open, onClose }: { open: boolean; onClose: () => void }
     },
     onError: (e) => {
       setErr(errText(e));
-      return reloadWhenStale(e, refresh);
+      // Tên ca và giờ do admin gõ: 400 (giờ kết thúc không sau giờ bắt đầu, tên không hợp lệ) là lỗi nhập, chỉ 404/409 tải lại.
+      return reloadWhenStale(e, refresh, true);
     },
   });
   const delM = useLockedMutation({

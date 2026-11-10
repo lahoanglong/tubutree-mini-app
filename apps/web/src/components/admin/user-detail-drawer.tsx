@@ -27,6 +27,9 @@ import { settleWithin } from '@/lib/settle-within';
 import { reloadWhenStale } from '@/lib/stale-write-rejection';
 import { useLockedMutation } from '@/components/game/use-locked-mutation';
 
+// Mọi lệnh ghi trong ngăn này có ô lý do do admin gõ (DTO kiểm độ dài): reloadWhenStale(..., true) coi 400 là lỗi nhập hiện tại chỗ, chỉ 404/409 chờ tải lại.
+// Quy tắc chỉ quyết định việc CHỜ tải lại trước khi nhả khoá: lỗi khác nhả ngay, và trên production MutationCache vẫn làm cũ khoá `admin-*` ở lỗi đó.
+
 /** Nút đang chạy báo bận bằng aria-disabled thay `disabled` DOM: Chromium thả tiêu điểm về body khi nút đang giữ tiêu điểm bị disabled. */
 const BUSY_CLASS = 'aria-disabled:opacity-60';
 
@@ -372,7 +375,7 @@ function ForfeitCommissions({
     },
     onError: (e) => {
       onMessage({ tone: 'danger', text: actionErrorText(e) });
-      return reloadWhenStale(e, refresh);
+      return reloadWhenStale(e, refresh, true);
     },
   });
   const start = async () => {
@@ -421,7 +424,7 @@ function StaffPermissionsForm({ userId, current }: { userId: string; current: St
     },
     onError: (e) => {
       setMsg({ tone: 'danger', text: actionErrorText(e) });
-      return reloadWhenStale(e, refresh);
+      return reloadWhenStale(e, refresh, true);
     },
   });
   const dirty = [...perms].sort().join(',') !== [...current].sort().join(',');
@@ -493,7 +496,7 @@ function RevokeSessionsSection({ userId }: { userId: string }) {
     },
     onError: (e) => {
       setMsg({ ok: false, text: actionErrorText(e) });
-      return reloadWhenStale(e, refresh);
+      return reloadWhenStale(e, refresh, true);
     },
   });
   const onClick = async () => {
@@ -553,7 +556,7 @@ function WasteFlagsSection({ userId }: { userId: string }) {
     },
     onError: (e) => {
       setErr(actionErrorText(e));
-      return reloadWhenStale(e, refresh);
+      return reloadWhenStale(e, refresh, true);
     },
   });
   const change = async (title: string, confirmLabel: string, locking: boolean, patch: FlagChange) => {

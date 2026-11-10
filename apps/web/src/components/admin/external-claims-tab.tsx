@@ -221,8 +221,9 @@ function ClaimRow({ claim: c, who, onOutcome }: { claim: AdminExternalClaimRow; 
       qc.invalidateQueries({ queryKey: ['admin-external-claim', c.id] }),
       qc.invalidateQueries({ queryKey: ['admin-ops-inbox'] }),
     ]);
-  // Một khoá cho cả dòng, giữ tới khi danh sách tải lại xong (tối đa 4 giây): nhả sớm thì nút còn hiện với trạng thái cũ. Lỗi nào cũng tải lại
-  // (lệnh có thể đã ghi trước khi lỗi mạng/5xx về), danh sách giữ dữ liệu cũ nếu lần tải lại hỏng.
+  // Một khoá cho cả dòng, giữ tới khi danh sách tải lại xong (tối đa 4 giây): nhả sớm thì nút còn hiện với trạng thái cũ. Khác quy tắc chung (chỉ 400/404/409 mới
+  // CHỜ tải lại): lỗi nào cũng chờ tải lại xong rồi mới nhả khoá vì lệnh có thể đã ghi trước khi lỗi mạng/5xx về; danh sách giữ dữ liệu cũ nếu lần tải lại hỏng.
+  // Trên production MutationCache vẫn làm cũ khoá admin-* ở mọi lỗi, nhưng không chờ.
   const mut = useLockedMutation({
     mutationFn: (job: ClaimJob) => job.run(),
     onSuccess: (msg) => {
@@ -484,7 +485,7 @@ function AttemptRow({ attempt: a, who, onOutcome }: { attempt: AdminExternalAtte
       qc.invalidateQueries({ queryKey: ['admin-external-claims'] }),
       qc.invalidateQueries({ queryKey: ['admin-ops-inbox'] }),
     ]);
-  // Giữ khoá tới khi các danh sách tải lại xong (tối đa 4 giây); lỗi nào cũng tải lại như trước.
+  // Giữ khoá tới khi các danh sách tải lại xong (tối đa 4 giây); lỗi nào cũng chờ tải lại như trước (khác quy tắc chung chỉ chờ ở 400/404/409).
   const mut = useLockedMutation({
     mutationFn: (job: AttemptJob) => job.run(),
     onSuccess: (msg) => {

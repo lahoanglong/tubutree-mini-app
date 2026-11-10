@@ -8,7 +8,8 @@ import { answerAsk, answerConfirm, byText, click, confirmDialog, flush, render, 
 import type { AdminOrder } from '@/lib/admin-client';
 
 // W96B: đổi trạng thái đơn / ghi nhận tiền / chạy lại việc sau giao giữ khoá tới khi danh sách đơn làm mới về (tối đa 4 giây), lệnh bị từ chối vì
-// đơn đã đổi (400/404/409) thì tải lại, lỗi khác không tải lại, lời lỗi nằm ngoài khối nút (khối nút đổi/biến mất theo trạng thái đơn mới).
+// đơn đã đổi (400/404/409) thì tải lại rồi mới nhả khoá; lỗi khác nhả khoá ngay, không chờ tải lại. Spec dựng QueryClient trần, không có MutationCache như production
+// (ở đó khoá admin-* vẫn bị làm cũ ở nền sau mỗi lệnh, kể cả lỗi 5xx), nên "không tải lại" ở đây là lệnh không tự gọi tải lại. Lời lỗi nằm ngoài khối nút (khối nút đổi/biến mất theo trạng thái đơn mới).
 
 const order = (over: Partial<AdminOrder> = {}): AdminOrder => ({
   id: 'o1',
@@ -158,7 +159,7 @@ describe('Chuyển trạng thái (không hỏi xác nhận)', () => {
     expect(c.querySelector('[role="alert"]')?.textContent).toContain('đã được huỷ ở nơi khác');
   });
 
-  it('lỗi 500: hiện lỗi, KHÔNG tải lại, nhả khoá ngay', async () => {
+  it('lỗi 500: hiện lỗi, lệnh không tự tải lại (QueryClient trần, không có MutationCache như production), nhả khoá ngay', async () => {
     writeRoute = (kind) => (kind === 'status' ? json(500, { statusCode: 500, message: 'Máy chủ lỗi' }) : json(200, {}));
     const c = await mount(order());
     click(btn(c, 'Đã đóng gói'));
@@ -233,7 +234,7 @@ describe('Đã nhận tiền (ghi nhận chuyển khoản)', () => {
     expect(btn(c, 'Đã nhận tiền').getAttribute('aria-disabled')).toBeNull();
   });
 
-  it('bị từ chối vì đơn đã đổi (400): hiện lỗi, tải lại rồi mới nhả khoá; lỗi 500 không tải lại', async () => {
+  it('bị từ chối vì đơn đã đổi (400): hiện lỗi, tải lại rồi mới nhả khoá; lỗi 500: lệnh không tự tải lại, nhả khoá ngay (QueryClient trần)', async () => {
     writeRoute = (kind) => (kind === 'pay' ? json(400, { statusCode: 400, message: 'Đơn đã được xác nhận thanh toán.' }) : json(200, {}));
     const c = await mount(order());
     const list = gate();

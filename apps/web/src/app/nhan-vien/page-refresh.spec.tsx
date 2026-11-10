@@ -5,7 +5,8 @@ import { click, flush, render, typeInto, type Rendered } from '@/test-utils/dom'
 import { ApiError } from '@/lib/client-api';
 
 // Wave 96B (Mini ↔ web, Wave 76A/80A): lệnh ghi lịch ca của nhân viên giữ khoá tới khi danh sách ca mới về, có hạn 4 giây; lệnh bị từ chối vì ca đã
-// đổi trạng thái (400/404/409) thì tải lại đúng tuần của lệnh. Mini chỉ `invalidate()` không chờ, web chặt hơn có chủ ý.
+// đổi trạng thái (400/404/409) thì tải lại đúng tuần của lệnh; lệnh có ô nhập (thêm/sửa/đăng ký nhanh/huỷ ca) chỉ tải lại ở 404/409, còn 400 là lỗi nhập
+// hiện lời lỗi. Mini chỉ `invalidate()` không chờ, web chặt hơn có chủ ý.
 
 type Call = { method: string; path: string; body?: unknown; query?: Record<string, string> };
 type Gate = { path: string; promise: Promise<unknown> };
@@ -141,6 +142,8 @@ afterEach(() => {
 interface Command {
   name: string;
   writeKey: string;
+  /** Lệnh có ô người dùng nhập/chọn (giờ, lý do, ảnh): 400 là lỗi nhập liệu, không phải ca đã cũ. */
+  input: boolean;
   /** Mở tấm (nếu cần) và bấm gửi. */
   fire: () => Promise<void>;
   /** Nút luôn thấy được báo bận trong lúc lệnh còn giữ khoá. */
@@ -151,6 +154,7 @@ interface Command {
 const COMMANDS: Command[] = [
   {
     name: 'Thêm ca',
+    input: true,
     writeKey: 'POST /staff/shifts',
     fire: async () => {
       await press('Thêm ca T4 11/03');
@@ -163,6 +167,7 @@ const COMMANDS: Command[] = [
   },
   {
     name: 'Sửa ca',
+    input: true,
     writeKey: 'PATCH /staff/shifts/sp',
     fire: async () => {
       await press('Sửa ca T5 12/03');
@@ -175,6 +180,7 @@ const COMMANDS: Command[] = [
   },
   {
     name: 'Xoá ca',
+    input: false,
     writeKey: 'DELETE /staff/shifts/sp',
     fire: async () => {
       await press('Xoá ca T5 12/03');
@@ -184,6 +190,7 @@ const COMMANDS: Command[] = [
   },
   {
     name: 'Đăng ký nhanh',
+    input: true,
     writeKey: 'POST /staff/shifts',
     fire: async () => {
       await press('Đăng ký ca');
@@ -195,6 +202,7 @@ const COMMANDS: Command[] = [
   },
   {
     name: 'Chép tuần trước',
+    input: false,
     writeKey: 'POST /staff/shifts/copy-week',
     fire: async () => {
       await press('Chép tuần trước');
@@ -204,6 +212,7 @@ const COMMANDS: Command[] = [
   },
   {
     name: 'Huỷ ca đã duyệt',
+    input: true,
     writeKey: 'POST /staff/shifts/sa/cancel',
     fire: async () => {
       await press('Huỷ ca T6 13/03');
@@ -232,7 +241,7 @@ describe.each(COMMANDS)('/nhan-vien — $name: giữ khoá tới khi danh sách 
     expect(busy(cmd.busyEl())).toBe(false);
   });
 
-  it('bị từ chối 400: hiện lỗi, tải lại đúng tuần của lệnh và giữ khoá tới khi danh sách về', async () => {
+  it('bị từ chối 400: lệnh không có ô nhập thì tải lại đúng tuần của lệnh và giữ khoá tới khi danh sách về; lệnh có ô nhập (lỗi nhập liệu) thì hiện lỗi, KHÔNG tải lại, nhả khoá ngay', async () => {
     m.write[cmd.writeKey] = reject(400, 'Ca đã đổi trạng thái, tải lại nhé.');
     await mount();
     const before = weekGets().length;
@@ -240,8 +249,13 @@ describe.each(COMMANDS)('/nhan-vien — $name: giữ khoá tới khi danh sách 
     await cmd.fire();
     expect(cmd.paths()).toBe(1);
     expect(alerts()).toContain('Ca đã đổi trạng thái, tải lại nhé.');
-    expect(weekGets()).toHaveLength(before + 1);
-    expect(busy(cmd.busyEl())).toBe(true);
+    if (cmd.input) {
+      expect(weekGets()).toHaveLength(before);
+      expect(busy(cmd.busyEl())).toBe(false);
+    } else {
+      expect(weekGets()).toHaveLength(before + 1);
+      expect(busy(cmd.busyEl())).toBe(true);
+    }
     gate.release();
     await flush();
     expect(busy(cmd.busyEl())).toBe(false);

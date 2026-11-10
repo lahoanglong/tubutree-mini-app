@@ -8,6 +8,8 @@ import type { ConfigRow } from '@/lib/admin-client';
 
 // Wave 96B: admin "Thu kèm rác qua Gomdon (kỹ thuật)": công tắc kỹ thuật, Lưu kho & cân nặng, Kiểm tra kết nối. Một lệnh mỗi lúc, giữ khoá tới khi tình trạng làm mới
 // về (tối đa 4 giây), nút giữ focus dùng aria-busy/aria-disabled thay disabled.
+// Chạy trên QueryClient trần (test-utils/dom), không có MutationCache của production: ở production mọi lệnh settle (kể cả lỗi) đều làm cũ khoá admin-*, nên "không tải lại"
+// ở đây chỉ nói màn KHÔNG tự gọi tải lại và KHÔNG chờ nó. Quy tắc 400/404/409 chỉ quyết định việc chờ tải lại trước khi nhả khoá.
 
 const ROWS: ConfigRow[] = [
   { key: GOMDON_TOGGLE_KEY, value: false, description: null, category: 'shipping' },
@@ -117,7 +119,7 @@ describe('Công tắc kỹ thuật Gomdon', () => {
     expect(aria(toggleEl(c)).busy).toBeNull();
   });
 
-  it('lỗi 500: báo lỗi, không tải lại tình trạng, nhả khoá', async () => {
+  it('lỗi 500: báo lỗi, màn không tự tải lại tình trạng, nhả khoá', async () => {
     routes['PUT /admin/config'] = () => json(500, { statusCode: 500, message: 'Lỗi máy chủ.' });
     const c = await mount();
     const before = count('GET', '/admin/gomdon/status');

@@ -65,9 +65,10 @@ export function ConversationDetail({ id }: { id: string }) {
       setReply('');
       return settleWithin(reload());
     },
+    // Nội dung do nhân viên gõ: 400 (chỉ có ký tự vô hình, quá 1000 ký tự) là lỗi nhập, hiện tại ô và giữ chữ để sửa; tải lại hội thoại không giúp gì.
     onError: (e) => {
       setError(errText(e, 'Không gửi được trả lời.'));
-      return reloadWhenStale(e, reload);
+      return reloadWhenStale(e, reload, true);
     },
     onSettled: () => {
       sending.current = false;

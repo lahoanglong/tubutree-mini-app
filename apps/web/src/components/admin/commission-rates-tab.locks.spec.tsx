@@ -6,7 +6,9 @@ import { answerConfirm, byText, click, confirmDialog, flush, render, typeInto, t
 import type { CommissionRatesPage } from '@/lib/commission-rates';
 
 // W96B: ô "% hoa hồng" của một biến thể (TIỀN: hoa hồng CTV) khoá chạm đúp ngay cả khi hai cú chạm cùng một khung hình, giữ khoá tới khi danh sách tải lại
-// xong (tối đa 4 giây), tải lại khi bị từ chối vì dữ liệu cũ (400/404/409) và không tải lại với lỗi khác. Ô nhập đang bận không `disabled` để Enter không làm mất tiêu điểm.
+// xong (tối đa 4 giây). "Lưu" có ô nhập nên 400 là lỗi nhập liệu (hiện tại dòng, không tải lại, nhả khoá ngay); "Về mặc định" không có ô nhập nên 400/404/409 đều là dữ liệu cũ
+// (tải lại, chờ ≤4 giây). Test dựng QueryClient trần, không có MutationCache như production (ở đó khoá admin-* vẫn bị làm cũ sau mỗi lệnh), nên "không tải lại" ở đây
+// là lệnh không tự gọi và không chờ tải lại. Ô nhập đang bận không `disabled` để Enter không làm mất tiêu điểm.
 
 const pageWith = (rate: number | null): CommissionRatesPage => ({
   items: [
@@ -159,7 +161,41 @@ describe('Lưu %', () => {
     expect(save(c).getAttribute('aria-disabled')).toBeNull();
   });
 
-  it('lỗi 500: hiện lỗi, KHÔNG tải lại, nhả khoá ngay', async () => {
+  it('lỗi 400 (lỗi nhập liệu: % ngoài khoảng hoặc không nguyên): lỗi hiện ngay tại dòng, KHÔNG tải lại, nhả khoá ngay', async () => {
+    putStatus = 400;
+    const c = await mount();
+    const list = gate();
+    listGate = list.promise;
+    typeInto(input(c), '9');
+    click(save(c));
+    await flush(4);
+    expect(puts).toEqual([{ rate: 9 }]);
+    expect(listLoads).toBe(1);
+    expect(row(c).textContent).toContain('Lỗi 400');
+    expect(save(c).getAttribute('aria-disabled')).toBeNull();
+    expect(save(c).getAttribute('aria-busy')).toBeNull();
+    expect(input(c).readOnly).toBe(false);
+    list.resolve();
+    await flush();
+  });
+
+  it('lỗi 404 (biến thể không còn): tải lại, giữ khoá tới khi danh sách về', async () => {
+    putStatus = 404;
+    const c = await mount();
+    const list = gate();
+    listGate = list.promise;
+    typeInto(input(c), '9');
+    click(save(c));
+    await flush(4);
+    expect(listLoads).toBe(2);
+    expect(row(c).textContent).toContain('Lỗi 404');
+    expect(save(c).getAttribute('aria-disabled')).toBe('true');
+    list.resolve();
+    await flush();
+    expect(save(c).getAttribute('aria-disabled')).toBeNull();
+  });
+
+  it('lỗi 500: hiện lỗi, lệnh không tự tải lại (QueryClient trần, không có MutationCache như production), nhả khoá ngay', async () => {
     putStatus = 500;
     const c = await mount();
     typeInto(input(c), '9');
@@ -209,6 +245,25 @@ describe('Về mặc định', () => {
     await flush(2);
     expect(confirmDialog()).toBeNull();
     expect(puts).toHaveLength(1);
+    list.resolve();
+    await flush();
+    expect(clear(c).getAttribute('aria-disabled')).toBeNull();
+  });
+});
+
+describe('Về mặc định: không có ô nhập nên 400 vẫn là dữ liệu cũ', () => {
+  it('bị từ chối 400: tải lại danh sách, giữ khoá tới khi danh sách về', async () => {
+    putStatus = 400;
+    const c = await mount();
+    const list = gate();
+    listGate = list.promise;
+    click(clear(c));
+    await flush(1);
+    answerConfirm(true);
+    await flush(4);
+    expect(puts).toEqual([{ rate: null }]);
+    expect(listLoads).toBe(2);
+    expect(clear(c).getAttribute('aria-disabled')).toBe('true');
     list.resolve();
     await flush();
     expect(clear(c).getAttribute('aria-disabled')).toBeNull();

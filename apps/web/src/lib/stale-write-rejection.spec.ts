@@ -18,6 +18,21 @@ describe('isStaleWriteRejection', () => {
     expect(isStaleWriteRejection(null)).toBe(false);
     expect(isStaleWriteRejection('400')).toBe(false);
   });
+
+  it('lệnh có ô nhập liệu (hasInput): 400 là lỗi nhập, không phải dữ liệu cũ; 404 và 409 vẫn là dữ liệu cũ', () => {
+    expect(isStaleWriteRejection({ status: 400 }, true)).toBe(false);
+    expect(isStaleWriteRejection({ response: { status: 400 } }, true)).toBe(false);
+    for (const status of [404, 409]) {
+      expect(isStaleWriteRejection({ status }, true)).toBe(true);
+      expect(isStaleWriteRejection({ response: { status } }, true)).toBe(true);
+    }
+    for (const status of [401, 403, 500, 502]) expect(isStaleWriteRejection({ status }, true)).toBe(false);
+  });
+
+  it('hasInput=false (mặc định) giữ nguyên: 400 vẫn là dữ liệu cũ', () => {
+    expect(isStaleWriteRejection({ status: 400 })).toBe(true);
+    expect(isStaleWriteRejection({ status: 400 }, false)).toBe(true);
+  });
 });
 
 describe('reloadWhenStale', () => {
@@ -48,6 +63,15 @@ describe('reloadWhenStale', () => {
 
   it('lần tải lại hỏng: không ném, vẫn xong', async () => {
     await expect(reloadWhenStale({ status: 400 }, () => Promise.reject(new Error('boom')))).resolves.toBeUndefined();
+  });
+
+  it('lệnh có ô nhập liệu: 400 không tải lại (trả undefined), 404 và 409 tải lại', async () => {
+    const reload = vi.fn(() => Promise.resolve());
+    expect(reloadWhenStale({ status: 400 }, reload, true)).toBeUndefined();
+    expect(reload).not.toHaveBeenCalled();
+    await reloadWhenStale({ status: 404 }, reload, true);
+    await reloadWhenStale({ status: 409 }, reload, true);
+    expect(reload).toHaveBeenCalledTimes(2);
   });
 
   it('lỗi khác (500, 403, mất mạng): không tải lại, trả undefined để khoá nhả ngay', () => {

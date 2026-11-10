@@ -40,7 +40,7 @@ function defaultDay(year: number, month: number): string {
  * Thưởng/phạt tay cho một nhân viên: chọn loại và số tiền dương (máy chủ lưu số dương = trừ lương, số âm = thưởng, nên người dùng
  * không phải nhớ dấu), ngày công, lý do bắt buộc. Chỉ ghi sau khi xác nhận có nhắc lại số tiền; khoản giống hệt vừa ghi thì hỏi lại
  * trước khi ghi thêm. Khoản không xoá được nên một khoá ref phủ cả đường hỏi lẫn đường gửi và nhánh "khoản giống hệt" (Huỷ → tính lại),
- * nhả ở mọi đường thoát; lệnh bị từ chối vì bảng lương đã cũ (400/404/409 không phải khoản trùng) thì tải lại bảng (`onStale`) rồi mới nhả.
+ * nhả ở mọi đường thoát; lệnh bị từ chối vì bảng lương đã cũ (404/409 không phải khoản trùng; 400 là lỗi nhập số tiền/lý do nên chỉ hiện trong tờ) thì tải lại bảng (`onStale`) rồi mới nhả.
  */
 export function PayrollAdjustSheet({
   row,
@@ -133,7 +133,8 @@ export function PayrollAdjustSheet({
         return;
       }
       setErr(actionErrorText(e));
-      await reloadWhenStale(e, () => onStale?.());
+      // Có ô số tiền và lý do nên 400 là lỗi nhập (hiện trong tờ ở trên), không phải bảng đã cũ: chỉ 404/409 tải lại bảng.
+      await reloadWhenStale(e, () => onStale?.(), true);
     }
   };
 

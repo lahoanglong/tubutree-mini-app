@@ -6,7 +6,8 @@ import { StorefrontsTab } from './storefronts-tab';
 import type { AdminStorefrontDetail, AdminStorefrontRow } from '@/lib/admin-storefronts-client';
 
 // Wave 96B: admin "Gian hàng" (duyệt/Bỏ duyệt, Gỡ đăng, Đăng lại, Đã xem). Một việc mỗi lúc, giữ khoá tới khi danh sách làm mới về (tối đa 4 giây),
-// bị từ chối vì dữ liệu đã cũ (400/404) thì tải lại, nút giữ focus dùng aria-busy/aria-disabled thay disabled.
+// bị từ chối vì dữ liệu đã cũ (400/404/409) thì tải lại, nút giữ focus dùng aria-busy/aria-disabled thay disabled.
+// Gỡ đăng có ô lý do người dùng nhập: 400 là lỗi nhập, chỉ hiện trong ngăn và không tải lại; chỉ 404/409 là dữ liệu cũ.
 
 const ROW = (over: Partial<AdminStorefrontRow> = {}): AdminStorefrontRow => ({
   id: 's1', slug: 'linh123', title: 'Shop của Linh', type: 'CTV', isPartner: false, isPublished: true, publishedAt: '2026-10-01T00:00:00.000Z',
@@ -152,7 +153,7 @@ describe('Duyệt nhanh và Đã xem trên thẻ danh sách', () => {
     expect(aria(btn(c, 'Duyệt')).disabled).toBeNull();
   });
 
-  it('gian hàng không còn (404): tải lại danh sách, lời báo hiện ngay và còn lại khi thẻ biến mất; 500 thì không tải lại', async () => {
+  it('gian hàng không còn (404): tải lại danh sách, lời báo hiện ngay và còn lại khi thẻ biến mất; 500 thì mã không tự tải lại (QueryClient trần, chưa có MutationCache của production)', async () => {
     routes['/admin/storefronts/s1/approval'] = () => json(404, { statusCode: 404, message: 'Không tìm thấy gian hàng.' });
     let loads = 0;
     routes['/admin/storefronts?'] = () => json(200, { data: ++loads === 1 ? rows : [], meta: { page: 1, limit: 50, total: 0 }, changedAfterApproval: 0 });
@@ -256,6 +257,79 @@ describe('Ngăn chi tiết: Duyệt gian hàng, Bỏ duyệt, Gỡ đăng, Đăn
     await flush();
   });
 
+  it('Gỡ đăng bị máy chủ báo 400 (lý do không hợp lệ): lời lỗi trong ngăn, KHÔNG tải lại chi tiết hay danh sách, nhả khoá ngay để sửa lý do', async () => {
+    routes['/admin/storefronts/s1/take-down'] = () => json(400, { statusCode: 400, message: 'Cần nhập lý do gỡ đăng để báo chủ gian hàng.' });
+    const c = await mount();
+    const d = await openDrawer(c);
+    const list0 = listGets();
+    const detail0 = detailGets();
+    click(btn(d, 'Gỡ đăng'));
+    await flush();
+    answerAsk('Lý do hợp lệ với giao diện');
+    await flush(3);
+    expect(posts('/take-down')).toBe(1);
+    expect(alerts(d).join('|')).toContain('Cần nhập lý do gỡ đăng');
+    expect(detailGets()).toBe(detail0);
+    expect(listGets()).toBe(list0);
+    expect(aria(btn(d, 'Gỡ đăng')).busy).toBeNull();
+  });
+
+  it.each([404, 409])('Gỡ đăng bị máy chủ báo %i (gian hàng không còn / đã đổi): vẫn là dữ liệu cũ, tải lại chi tiết và danh sách', async (status) => {
+    routes['/admin/storefronts/s1/take-down'] = () => json(status, { statusCode: status, message: 'Gian hàng đã được xử lý ở nơi khác.' });
+    const c = await mount();
+    const d = await openDrawer(c);
+    const list0 = listGets();
+    const detail0 = detailGets();
+    click(btn(d, 'Gỡ đăng'));
+    await flush();
+    answerAsk('Dùng ảnh của nhãn khác');
+    await flush(3);
+    expect(alerts(d).join('|')).toContain('Gian hàng đã được xử lý ở nơi khác.');
+    expect(detailGets()).toBeGreaterThan(detail0);
+    expect(listGets()).toBeGreaterThan(list0);
+  });
+
+  it('Bỏ duyệt (không có ô nhập) bị báo 400 vì gian hàng đã đổi loại: vẫn là dữ liệu cũ, tải lại chi tiết và danh sách', async () => {
+    detail = DETAIL({ approved: true, approvedAt: '2026-10-01T00:00:00.000Z' });
+    routes['/admin/storefronts/s1/approval'] = () => json(400, { statusCode: 400, message: 'Chỉ gian hàng CTV mới cần duyệt.' });
+    const c = await mount();
+    const d = await openDrawer(c);
+    const detail0 = detailGets();
+    click(btn(d, 'Bỏ duyệt'));
+    await flush();
+    answerConfirm(true);
+    await flush(3);
+    expect(alerts(d).join('|')).toContain('Chỉ gian hàng CTV mới cần duyệt.');
+    expect(detailGets()).toBeGreaterThan(detail0);
+  });
+
+  it('Đăng lại và Đã xem (không có ô nhập) bị báo 400 vì gian hàng đã đổi: vẫn là dữ liệu cũ, tải lại chi tiết', async () => {
+    detail = DETAIL({ isPublished: false, publicVisible: false, takenDownAt: '2026-10-05T00:00:00.000Z', takenDownReason: 'Ảnh vi phạm' });
+    routes['/admin/storefronts/s1/reinstate'] = () => json(400, { statusCode: 400, message: 'Gian hàng không ở trạng thái đã gỡ.' });
+    const c = await mount();
+    const d = await openDrawer(c);
+    const detail0 = detailGets();
+    click(btn(d, 'Đăng lại'));
+    await flush();
+    answerConfirm(true);
+    await flush(3);
+    expect(alerts(d).join('|')).toContain('Gian hàng không ở trạng thái đã gỡ.');
+    expect(detailGets()).toBeGreaterThan(detail0);
+  });
+
+  it('Đã xem trong ngăn bị báo 400: vẫn là dữ liệu cũ, tải lại chi tiết', async () => {
+    detail = DETAIL({ approved: true, approvedAt: '2026-10-01T00:00:00.000Z', contentChangedAt: '2026-10-20T03:30:00.000Z' });
+    rows = [ROW({ approved: true })];
+    routes['/admin/storefronts/s1/content-seen'] = () => json(400, { statusCode: 400, message: 'Mốc đã xem không hợp lệ.' });
+    const c = await mount();
+    const d = await openDrawer(c);
+    const detail0 = detailGets();
+    await tap(btn(d, 'Đã xem'));
+    await flush();
+    expect(alerts(d).join('|')).toContain('Mốc đã xem không hợp lệ.');
+    expect(detailGets()).toBeGreaterThan(detail0);
+  });
+
   it('Bỏ duyệt và Đăng lại: không mở hộp xác nhận khi đang ghi sổ', async () => {
     detail = DETAIL({ approved: true, approvedAt: '2026-10-01T00:00:00.000Z' });
     const g = gate();
@@ -319,7 +393,7 @@ describe('Ngăn chi tiết: Duyệt gian hàng, Bỏ duyệt, Gỡ đăng, Đăn
     await flush();
   });
 
-  it('gian hàng không còn (404): lời báo hiện ngay trong ngăn, tải lại chi tiết và danh sách; 403 thì không tải lại', async () => {
+  it('gian hàng không còn (404): lời báo hiện ngay trong ngăn, tải lại chi tiết và danh sách; 403 thì mã không tự tải lại (QueryClient trần, chưa có MutationCache của production)', async () => {
     routes['/admin/storefronts/s1/approval'] = () => json(404, { statusCode: 404, message: 'Không tìm thấy gian hàng.' });
     const c = await mount();
     const d = await openDrawer(c);

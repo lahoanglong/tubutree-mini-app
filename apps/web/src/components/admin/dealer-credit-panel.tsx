@@ -131,7 +131,8 @@ export function DealerCreditPanel({
     onError: (e: unknown) => {
       setMsg({ ok: false, text: actionErrorText(e) });
       // Lỗi mạng/hết giờ: máy chủ có thể đã ghi khoản này, tải lại sổ để kế toán thấy dư nợ thật trước khi bấm lại.
-      // Khác các nơi khác (chỉ tải lại khi 400/404/409): ở đây MỌI lỗi đều tải lại, vì 5xx/mất mạng chưa chứng minh khoản chưa được ghi.
+      // Khác các nơi khác (chỉ CHỜ tải lại khi 400/404/409): ở đây MỌI lỗi đều tải lại và chờ, vì 5xx/mất mạng chưa chứng minh khoản chưa được ghi
+      // và khoá ['dealer-credit-ledger'] không mang tiền tố admin- nên MutationCache của production không làm cũ nó thay mình.
       return settleWithin(qc.invalidateQueries({ queryKey: ['dealer-credit-ledger', userId] }));
     },
     onSettled: () => {

@@ -167,8 +167,9 @@ export function FulfilOrderCard({ order: o, onNotice }: { order: FulfilOrder; on
     acting.current = true;
     run();
   };
+  // `hasInput`: lệnh có ô người dùng nhập (mã vận đơn, lý do): 400 là lỗi nhập liệu nên hiện dưới form của thẻ, không tải lại; chỉ 404/409 là đơn đã đổi.
   const mut = useMutation({
-    mutationFn: (fn: () => Promise<unknown>) => fn(),
+    mutationFn: (cmd: { run: () => Promise<unknown>; hasInput: boolean }) => cmd.run(),
     onMutate: () => {
       setError(null);
       onNotice?.(null);
@@ -177,11 +178,11 @@ export function FulfilOrderCard({ order: o, onNotice }: { order: FulfilOrder; on
       setPanel(null);
       return settleWithin(refresh());
     },
-    onError: (e: unknown) => {
+    onError: (e: unknown, cmd) => {
       const text = actionErrorText(e);
-      if (isStaleWriteRejection(e) && onNotice) onNotice(`${text} Danh sách đã được làm mới.`);
+      if (isStaleWriteRejection(e, cmd.hasInput) && onNotice) onNotice(`${text} Danh sách đã được làm mới.`);
       else setError(text);
-      return reloadWhenStale(e, refresh);
+      return reloadWhenStale(e, refresh, cmd.hasInput);
     },
     onSettled: () => {
       acting.current = false;
@@ -269,12 +270,12 @@ export function FulfilOrderCard({ order: o, onNotice }: { order: FulfilOrder; on
 
       <div className="mt-3 flex flex-wrap gap-2">
         {o.status === 'CONFIRMED' && !o.merchantAcceptedAt && (
-          <button type="button" {...busyAttrs} onClick={() => exclusive(() => mut.mutate(() => acceptFulfilOrder(o.id)))} className={`${BTN_XS_PRIMARY} ${BUSY_CLASS}`}>
+          <button type="button" {...busyAttrs} onClick={() => exclusive(() => mut.mutate({ run: () => acceptFulfilOrder(o.id), hasInput: false }))} className={`${BTN_XS_PRIMARY} ${BUSY_CLASS}`}>
             Xác nhận đơn
           </button>
         )}
         {o.status === 'CONFIRMED' && o.merchantAcceptedAt && (
-          <button type="button" {...busyAttrs} onClick={() => exclusive(() => mut.mutate(() => packFulfilOrder(o.id)))} className={`${BTN_XS_SECONDARY} ${BUSY_CLASS}`}>
+          <button type="button" {...busyAttrs} onClick={() => exclusive(() => mut.mutate({ run: () => packFulfilOrder(o.id), hasInput: false }))} className={`${BTN_XS_SECONDARY} ${BUSY_CLASS}`}>
             <PackageCheck className="mr-1 inline h-3.5 w-3.5" aria-hidden="true" />
             Đã đóng gói
           </button>
@@ -286,7 +287,7 @@ export function FulfilOrderCard({ order: o, onNotice }: { order: FulfilOrder; on
         )}
         {o.status === 'SHIPPING' && (
           <>
-            <button type="button" {...busyAttrs} onClick={() => exclusive(() => mut.mutate(() => deliverFulfilOrder(o.id)))} className={`${BTN_XS_PRIMARY} ${BUSY_CLASS}`}>
+            <button type="button" {...busyAttrs} onClick={() => exclusive(() => mut.mutate({ run: () => deliverFulfilOrder(o.id), hasInput: false }))} className={`${BTN_XS_PRIMARY} ${BUSY_CLASS}`}>
               Khách đã nhận hàng
             </button>
             <button type="button" {...busyAttrs} onClick={() => open('fail')} aria-expanded={panel === 'fail'} className={`${BTN_XS_DANGER} ${BUSY_CLASS}`}>
@@ -307,13 +308,15 @@ export function FulfilOrderCard({ order: o, onNotice }: { order: FulfilOrder; on
           onSubmit={(e) => {
             e.preventDefault();
             exclusive(() =>
-              mut.mutate(() =>
-                shipFulfilOrder(o.id, {
-                  carrier: carrier.trim(),
-                  trackingCode: trackingCode.trim(),
-                  trackingUrl: trackingUrl.trim() || undefined,
-                }),
-              ),
+              mut.mutate({
+                run: () =>
+                  shipFulfilOrder(o.id, {
+                    carrier: carrier.trim(),
+                    trackingCode: trackingCode.trim(),
+                    trackingUrl: trackingUrl.trim() || undefined,
+                  }),
+                hasInput: true,
+              }),
             );
           }}
         >
@@ -344,7 +347,7 @@ export function FulfilOrderCard({ order: o, onNotice }: { order: FulfilOrder; on
             e.preventDefault();
             const r = reason.trim();
             if (!r) return;
-            exclusive(() => mut.mutate(() => (panel === 'fail' ? failFulfilOrder(o.id, r) : cancelFulfilOrder(o.id, r))));
+            exclusive(() => mut.mutate({ run: () => (panel === 'fail' ? failFulfilOrder(o.id, r) : cancelFulfilOrder(o.id, r)), hasInput: true }));
           }}
         >
           <label className="block text-xs font-medium text-stone-700">

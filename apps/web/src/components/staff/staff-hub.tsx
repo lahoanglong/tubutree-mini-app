@@ -101,11 +101,13 @@ export function StaffHub() {
   // Trả lời hứa làm mới để khoá giữ tới khi danh sách ca mới về, tối đa `settleWithin` (nhả sớm thì ca vừa xoá/huỷ còn nút và chạm lại được).
   // `refetchType: 'all'` vì tuần của lệnh có thể không còn được xem lúc xong; mặc định tuần đó chỉ bị đánh dấu cũ.
   const refresh = (week: string) => qc.invalidateQueries({ queryKey: ['my-shifts', week], refetchType: 'all' });
-  // Lệnh bị từ chối 400/404/409 (ca đã được duyệt hay xoá ở máy khác, bị chồng giờ) thì danh sách đang hiện đã cũ: tải lại đúng tuần của lệnh
+  // Lệnh bị từ chối (ca đã được duyệt hay xoá ở máy khác, bị chồng giờ: 400/404/409, xem `hasInput` bên dưới) thì danh sách đang hiện đã cũ: tải lại đúng tuần của lệnh
   // rồi mới nhả khoá. Lời lỗi đặt vào thông báo của trang trước, nên không mất khi ca biến mất khỏi danh sách.
-  const failAndReload = (e: unknown, week: string) => {
+  // `hasInput`: lệnh có ô người dùng nhập/chọn (giờ ca, đăng ký nhanh, lý do huỷ và ảnh) thì 400 là lỗi nhập liệu (giờ kết thúc không sau giờ bắt đầu, ca chồng giờ...):
+  // hiện lỗi, không tải lại, chỉ 404/409 tải lại. Xoá ca và Chép tuần không có ô nhập nên 400 vẫn là ca đã đổi trạng thái.
+  const failAndReload = (e: unknown, week: string, hasInput = false) => {
     notify({ text: errText(e), tone: 'error' });
-    return reloadWhenStale(e, () => refresh(week));
+    return reloadWhenStale(e, () => refresh(week), hasInput);
   };
 
   // Trạng thái bận lấy theo đích của từng lệnh (kể cả lúc lệnh đang làm mới danh sách). Nút MỞ tấm của đúng đích đó bị chặn, nên tấm
@@ -159,7 +161,7 @@ export function StaffHub() {
         setFormOpen(false);
         return settleWithin(refresh(v.week));
       },
-      onError: (e, v) => failAndReload(e, v.week),
+      onError: (e, v) => failAndReload(e, v.week, true),
       onSettled: (_data, _error, v) => unlockShift(v.editId),
     },
     (v) => v.editId ?? '',
@@ -217,7 +219,7 @@ export function StaffHub() {
         setQuickOpen(false);
         return settleWithin(refresh(v.week));
       },
-      onError: (e, v) => failAndReload(e, v.week),
+      onError: (e, v) => failAndReload(e, v.week, true),
     },
     (v) => v.week,
   );
@@ -261,7 +263,7 @@ export function StaffHub() {
         setCancelId((cur) => (cur === v.id ? null : cur));
         return settleWithin(refresh(v.week));
       },
-      onError: (e, v) => failAndReload(e, v.week),
+      onError: (e, v) => failAndReload(e, v.week, true),
     },
     (v) => v.id,
   );

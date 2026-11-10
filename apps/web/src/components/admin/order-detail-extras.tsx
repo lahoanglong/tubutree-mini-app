@@ -210,15 +210,16 @@ export function OrderInvoicePanel({ order }: { order: AdminOrder }) {
   const refresh = () => Promise.all([qc.invalidateQueries({ queryKey: ['admin-orders'] }), qc.invalidateQueries({ queryKey: ['admin-invoice-pending-count'] })]);
   // Khoá giữ tới khi đơn làm mới về (tối đa 4 giây): nhả sớm thì nút còn hiện với đơn chưa xuất hoá đơn và bấm lại được.
   const mut = useLockedMutation({
-    mutationFn: () => issueOrderInvoice(order.id || order.code, url),
+    mutationFn: (link: string) => issueOrderInvoice(order.id || order.code, link),
     onSuccess: (r) => {
       setMsg({ ok: true, text: r.message });
       setUrl('');
       return settleWithin(refresh());
     },
-    onError: (e: unknown) => {
+    onError: (e: unknown, link) => {
       setMsg({ ok: false, text: actionErrorText(e) });
-      return reloadWhenStale(e, refresh);
+      // Có gõ link thì 400 có thể là link bị máy chủ từ chối (tên miền không được phép: danh sách nằm ở env, client không biết): lỗi nhập liệu, không tải lại.
+      return reloadWhenStale(e, refresh, link.trim() !== '');
     },
   });
 
@@ -242,7 +243,7 @@ export function OrderInvoicePanel({ order }: { order: AdminOrder }) {
       confirmLabel: 'Đã xuất hoá đơn',
     });
     if (!ok) return;
-    mut.mutate();
+    mut.mutate(url);
   };
 
   return (

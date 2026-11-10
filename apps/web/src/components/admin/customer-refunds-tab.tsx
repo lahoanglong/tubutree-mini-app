@@ -155,7 +155,8 @@ export function CustomerRefundsTab({ meId, isAdmin = true, phoneMasked = !isAdmi
   const qc = useQueryClient();
   const { ask, confirm, dialog } = useConfirm();
   // Lệnh ghi giữ khoá tới khi danh sách làm mới về (tối đa 4 giây): nhả sớm thì dòng vừa xử lý còn nút và bấm lại ra lỗi "không còn chờ".
-  // Chỉ khi máy chủ từ chối vì khoản đã đổi (400/404/409) mới tải lại; 5xx/403/mất mạng không nói gì về trạng thái thật.
+  // Quy tắc 400/404/409 chỉ quyết định việc CHỜ tải lại trước khi nhả khoá (khoản đã đổi thì dòng còn nút cũ); lỗi khác nhả khoá ngay vì 5xx/403/mất mạng không nói gì về trạng thái thật.
+  // Trên production MutationCache vẫn làm cũ mọi khoá admin-* sau mỗi lệnh kể cả lỗi 5xx, nên lệnh đã ghi trước khi lỗi vẫn được tải lại ở nền (không ai chờ).
   // Khoá theo id khoản (ref đồng bộ): chạm đúp cùng khung hình chỉ gửi một lệnh. Lời báo ở cấp tab nên không mất khi dòng bị gỡ.
   const refresh = () => Promise.all([qc.invalidateQueries({ queryKey: [CUSTOMER_REFUNDS_QUERY_KEY] }), invalidateInbox(qc)]);
   const release = useLockedMutation(

@@ -4,7 +4,8 @@ import { act } from 'react';
 import { click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { ApiError } from '@/lib/client-api';
 
-// Wave 96B (Mini ↔ web, Wave 76A): "Thông tin nhận lương" giữ khoá tới khi bảng lương mới về, có hạn 4 giây; bị từ chối 400/404/409 thì tải lại.
+// Wave 96B (Mini ↔ web, Wave 76A): "Thông tin nhận lương" giữ khoá tới khi bảng lương mới về, có hạn 4 giây; bị từ chối 404/409 thì tải lại
+// (400 là lỗi nhập ngân hàng/QR: hiện lỗi tại tấm, không tải lại).
 // Mini chỉ `invalidate` không chờ, web chặt hơn có chủ ý.
 
 type Call = { method: string; path: string; body?: unknown };
@@ -139,8 +140,28 @@ describe('/nhan-vien/bang-luong — Thông tin nhận lương: khoá giữ tới
     expect(sheetOpen()).toBe(true);
   });
 
-  it('bị từ chối 400/404/409: hiện lỗi, tải lại bảng lương, giữ khoá (tấm mở lại không được, Lưu không gửi thêm) tới khi bảng lương về', async () => {
-    for (const status of [400, 404, 409]) {
+  it('bị 400 (mã ngân hàng hoặc ảnh QR không hợp lệ): hiện lỗi, KHÔNG tải lại bảng lương, tấm còn mở và nhả khoá ngay để sửa rồi lưu lại', async () => {
+    m.put = reject(400, 'Mã ngân hàng không hợp lệ.');
+    await mount();
+    await openBank();
+    const before = payrollGets().length;
+    const gate = holdGet('/staff/payroll');
+    click(save());
+    await flush();
+    expect(puts()).toHaveLength(1);
+    expect(alerts()).toContain('Mã ngân hàng không hợp lệ.');
+    expect(payrollGets()).toHaveLength(before);
+    expect(sheetOpen()).toBe(true);
+    expect(busy(save())).toBe(false);
+    click(save());
+    await flush();
+    expect(puts()).toHaveLength(2);
+    gate.release();
+    await flush();
+  });
+
+  it('bị từ chối 404/409: hiện lỗi, tải lại bảng lương, giữ khoá (tấm mở lại không được, Lưu không gửi thêm) tới khi bảng lương về', async () => {
+    for (const status of [404, 409]) {
       m.calls = [];
       m.put = reject(status, 'Mã ngân hàng không hợp lệ.');
       const r = await mount();

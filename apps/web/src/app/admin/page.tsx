@@ -9,6 +9,7 @@ import { useAuth } from '@/lib/auth-context';
 import { formatVnd } from '@/lib/shop-client';
 import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { settleWithin } from '@/lib/settle-within';
+import { errorStatus } from '@tubutree/app-core/api/error-status';
 import { reloadWhenStale } from '@/lib/stale-write-rejection';
 import { usePressLock } from '@/lib/use-press-lock';
 import {
@@ -822,6 +823,8 @@ export default function AdminPage() {
 
 /** Nút đang chạy báo bận bằng aria-disabled thay `disabled` DOM: Chromium thả focus về body khi nút đang giữ focus bị disabled. */
 const BUSY_CLASS = 'aria-disabled:opacity-60';
+/** 400 của lệnh có ô người dùng nhập: lỗi nhập liệu của DTO, hiện ngay tại form và không tải lại (xem `hasInput` ở lib/stale-write-rejection.ts). */
+const isInputRejection = (e: unknown) => errorStatus(e) === 400;
 /** Mọi khoá `admin-*` trừ danh sách người dùng: cùng phạm vi MutationCache.onSettled của createQueryClient (lib/query-client.ts), phần danh sách người dùng được chờ riêng. */
 const ADMIN_KEYS_EXCEPT_USERS = {
   predicate: (query: { queryKey: readonly unknown[] }) =>
@@ -960,8 +963,9 @@ function DealerRow({ app: a, onReviewError }: { app: DealerApp; onReviewError: (
     onError: (e) => {
       // Lời lỗi ở cấp danh sách, không ở hàng: tải lại làm hàng đã bị xử lý biến mất thì lời lỗi vẫn còn.
       onReviewError(actionErrorText(e));
-      // Hồ sơ đã bị admin khác xử lý (400/404/409): tải lại danh sách rồi mới nhả khoá, kẻo bấm lại ra đúng lỗi cũ. Lỗi khác chưa nói gì về
-      // trạng thái hồ sơ nên không đụng danh sách (tải lại hỏng sẽ thay danh sách bằng màn lỗi); chỉ hỏi lại hộp việc cho số Chờ duyệt.
+      // Hồ sơ đã bị admin khác xử lý (400 "Đơn đã được xử lý", 404, 409): chờ tải lại danh sách rồi mới nhả khoá, kẻo bấm lại ra đúng lỗi cũ. Lệnh này không có
+      // DTO kiểm dữ liệu nhập (lý do chỉ @IsOptional, nút Duyệt cần chọn bậc) nên 400 vẫn là dữ liệu cũ. Quy tắc 400/404/409 chỉ quyết định việc CHỜ tải lại trước khi nhả khoá:
+      // lỗi khác nhả ngay và ở đây chỉ hỏi lại hộp việc; trên production MutationCache vẫn làm cũ mọi khoá `admin-*` (kể cả danh sách hồ sơ) ở lỗi khác.
       const reload = reloadWhenStale(e, refresh);
       if (reload) return reload;
       void invalidateInbox(qc);
@@ -2278,6 +2282,8 @@ function ReturnsTab({
   const [filter, setFilter] = useState<ReturnsFilter>(initialFilter);
   const [searchInput, setSearchInput] = useState('');
   const search = useDebounced(searchInput.trim(), 300);
+  // Lời lỗi của Từ chối / "Đã nhận hàng về" nằm ở đây, ngoài từng hàng: tab lọc mặc định "Chờ duyệt", yêu cầu bị admin khác xử lý trước thì tải lại làm hàng rời bộ lọc và lời lỗi vẫn còn.
+  const [actionError, setActionError] = useState<string | null>(null);
   // Trước đây 1 trang (mặc định 20 của BE) và vứt meta → quá 20 yêu cầu thì các yêu cầu CŨ NHẤT (sát hạn
   // 7 ngày nhất) biến mất im lặng. Nay "Tải thêm" + hiện tổng.
   const oldestFirst = filter === 'REQUESTED' || filter === 'TO_RECEIVE';
@@ -2331,8 +2337,9 @@ function ReturnsTab({
 
       <div className="mt-3 space-y-3">
         {q.isError && <LoadError message="Không tải được danh sách yêu cầu đổi/trả." onRetry={() => q.refetch()} />}
+        {actionError && <p role="alert" className="text-sm text-danger-fg">{actionError}</p>}
         {q.isLoading && <ListSkeleton label="Đang tải danh sách yêu cầu" rows={3} className="h-24" />}
-        {view.items.map((r) => <ReturnRow key={r.id} item={r} canReview={canReview} canReceive={canReceive} />)}
+        {view.items.map((r) => <ReturnRow key={r.id} item={r} canReview={canReview} canReceive={canReceive} onActionError={setActionError} />)}
         {q.data && view.items.length === 0 && <Empty>{search ? `Không có yêu cầu đổi/trả nào khớp "${search}". ${searchEmptyHint(search, { phoneMasked: false }) ?? ''}`.trim() : 'Không có yêu cầu đổi/trả nào.'}</Empty>}
       </div>
       <LoadMoreButton
@@ -2389,15 +2396,20 @@ function UsersTab({ isAdmin = true, onOpenOrder, onOpenUserOrders }: { isAdmin?:
     acting.current.delete(v.id);
   };
   // Làm cũ cùng phạm vi với MutationCache.onSettled của createQueryClient (mọi khoá `admin-*`: hộp việc, số liệu...) nhưng chỉ CHỜ danh sách người dùng: khoá của nút
-  // không được đợi khoá khác chậm hơn. `skipAdminInvalidate` vì lần làm mới này thay lần của MutationCache (không tải lại hai lần).
+  // không được đợi khoá khác chậm hơn. `skipAdminInvalidate` tắt lần làm mới của MutationCache để lần của lệnh thay nó (không tải lại hai lần); vì vậy nhánh LỖI
+  // cũng phải tự làm mới (onError), nếu không máy chủ đã ghi mà danh sách và ngăn chi tiết vẫn hiện chưa khoá.
   const refreshAdmin = () => {
     void qc.invalidateQueries(ADMIN_KEYS_EXCEPT_USERS);
     return qc.invalidateQueries({ queryKey: ['admin-users'] });
   };
   const onError = (e: unknown) => {
     setMsg({ ok: false, text: actionErrorText(e) });
-    // Trạng thái tài khoản vừa đổi (400/404/409) thì tải lại; lỗi mạng/5xx/401/403 không đụng danh sách đang hiện.
-    return reloadWhenStale(e, refreshAdmin);
+    // Lệnh có ô lý do (DTO kiểm độ dài): 404/409 là tài khoản vừa đổi nên chờ tải lại xong mới nhả khoá; 400 là lỗi nhập, máy chủ chưa ghi gì nên không tải lại.
+    const reload = reloadWhenStale(e, refreshAdmin, true);
+    if (reload) return reload;
+    // Mất mạng/5xx/401/403 không nói máy chủ đã ghi hay chưa: hỏi lại danh sách nhưng không bắt khoá chờ (lần tải lại hỏng không được giữ nút).
+    if (!isInputRejection(e)) void refreshAdmin();
+    return undefined;
   };
   const block = useMutation({
     meta: { skipAdminInvalidate: true },
@@ -2656,10 +2668,11 @@ function GrantRoleForm({ onDone }: { onDone: () => PromiseLike<unknown> | unknow
       setTierId('');
       return settleWithin(onDone());
     },
-    // Vai trò/người dùng vừa đổi (400/404/409) thì tải lại danh sách rồi mới nhả khoá; lỗi mạng/5xx/401/403 không tải lại.
+    // Vai trò/người dùng vừa đổi (404/409) thì chờ tải lại danh sách rồi mới nhả khoá. 400 là lỗi nhập (SĐT, bậc, lý do) hiện ngay dưới form, không tải lại.
+    // Lỗi mạng/5xx/401/403: lệnh không tự tải lại (trên production MutationCache vẫn làm cũ khoá `admin-*`).
     onError: (e: unknown) => {
       setMsg({ ok: false, text: actionErrorText(e) });
-      return reloadWhenStale(e, onDone);
+      return reloadWhenStale(e, onDone, true);
     },
     onSettled: () => {
       acting.current = false;
@@ -2893,11 +2906,12 @@ function CouponsTab({ onOpenConfig }: { onOpenConfig?: () => void } = {}) {
       setMsg('Đã tạo mã giảm giá!');
       return settleWithin(refreshCoupons());
     },
-    // Mã trùng (409) hay dữ liệu đổi (400/404): tải lại danh sách mã rồi mới nhả khoá; lỗi mạng/5xx/401/403 không tải lại.
+    // Mã trùng (409) hay mã không còn (404): chờ tải lại danh sách mã rồi mới nhả khoá. 400 là lỗi nhập của form (mã sai dạng, giá trị, hạn): lời lỗi đã dưới form, không tải lại.
+    // Lỗi mạng/5xx/401/403: lệnh không tự tải lại (trên production MutationCache vẫn làm cũ khoá `admin-*`).
     onError: (e) => {
       setMsgIsError(true);
       setMsg(actionErrorText(e));
-      return reloadWhenStale(e, refreshCoupons);
+      return reloadWhenStale(e, refreshCoupons, true);
     },
   });
   const field = `${INPUT_CLASS} ${TOUCH_H}`;
@@ -3022,9 +3036,10 @@ function BrandsTab() {
       setForm({ name: '', tagline: '' });
       return settleWithin(refreshBrands());
     },
+    // 400 là lỗi nhập của form tạo nhãn (lời lỗi ngay dưới form): không tải lại; 404/409 mới là dữ liệu cũ.
     onError: (e) => {
       setErr(actionErrorText(e));
-      return reloadWhenStale(e, refreshBrands);
+      return reloadWhenStale(e, refreshBrands, true);
     },
   });
   const cell = 'grow basis-full sm:basis-48';
@@ -3073,14 +3088,19 @@ function BrandRow({ brand, report }: { brand: AdminBrand; report: (text: string 
   const refreshPromos = () => qc.invalidateQueries({ queryKey: ['admin-brand-promos', brand.id] });
   // Phần chung của mọi lệnh trong hàng: xoá lỗi cũ khi bắt đầu; lỗi đưa lên `report` (state của tab, không mất khi hàng biến mất) NGAY rồi mới tải lại danh sách
   // của lệnh đó nếu máy chủ từ chối vì dữ liệu cũ (400/404/409). Khoá nhả sau lần tải lại (tối đa `settleWithin`); lỗi mạng/5xx/401/403 nhả ngay.
-  const settle = (refresh: () => Promise<unknown>, start?: () => void) => ({
+  // Lệnh có form người dùng gõ truyền `input`: 400 là lỗi nhập nên hiện ngay trong form (không dồn lên đầu tab, nơi form đang gõ nằm ngoài tầm nhìn) và không tải lại;
+  // chỉ 404/409 (hàng có thể biến mất) mới đi lên `report` và tải lại.
+  const settle = (refresh: () => Promise<unknown>, start?: () => void, input?: { show: (text: string | null) => void }) => ({
     onMutate: () => {
       report(null);
+      input?.show(null);
       start?.();
     },
     onError: (e: unknown) => {
-      report(actionErrorText(e));
-      return reloadWhenStale(e, refresh);
+      const text = actionErrorText(e);
+      if (input && isInputRejection(e)) input.show(text);
+      else report(text);
+      return reloadWhenStale(e, refresh, !!input);
     },
   });
   const patch = useLockedMutation({
@@ -3127,6 +3147,7 @@ function BrandRow({ brand, report }: { brand: AdminBrand; report: (text: string 
   const [promo, setPromo] = useState({ title: '', subtitle: '', startAt: '', endAt: '' });
   const [promoStartPending, setPromoStartPending] = useState(false);
   const [promoEndPending, setPromoEndPending] = useState(false);
+  const [promoError, setPromoError] = useState<string | null>(null);
   const addPromo = useLockedMutation({
     mutationFn: () => createPromotion(brand.id, {
       title: promo.title.trim(), subtitle: promo.subtitle.trim() || undefined,
@@ -3134,7 +3155,7 @@ function BrandRow({ brand, report }: { brand: AdminBrand; report: (text: string 
       startAt: localDateIso(promo.startAt, false, Date.now()),
       endAt: localDateIso(promo.endAt, true, Date.now() + 30 * 864e5),
     }),
-    ...settle(refreshPromos),
+    ...settle(refreshPromos, undefined, { show: setPromoError }),
     onSuccess: () => {
       setPromo({ title: '', subtitle: '', startAt: '', endAt: '' });
       return settleWithin(refreshPromos());
@@ -3294,6 +3315,7 @@ function BrandRow({ brand, report }: { brand: AdminBrand; report: (text: string 
                 className={`${BTN_PRIMARY} ${BUSY_CLASS}`}
               >Thêm KM</button>
             </div>
+            {promoError && <p role="alert" className="mt-1 text-sm text-danger-fg">{promoError}</p>}
           </div>
         </div>
       )}
@@ -3313,6 +3335,7 @@ function BrandInfoForm({ brand, report }: { brand: AdminBrand; report: (text: st
   });
   const [certs, setCerts] = useState<BrandCert[]>(brand.certifications ?? []);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const refreshBrands = () => qc.invalidateQueries({ queryKey: ['admin-brands'] });
   const save = useLockedMutation({
     mutationFn: () =>
@@ -3326,16 +3349,19 @@ function BrandInfoForm({ brand, report }: { brand: AdminBrand; report: (text: st
       }),
     onMutate: () => {
       report(null);
+      setSaveError(null);
       setSaved(false);
     },
     onSuccess: () => {
       setSaved(true);
       return settleWithin(refreshBrands());
     },
-    // Lỗi lên `report` (state của tab) chứ không giữ ở đây: sau 404/409 danh sách nhãn tải lại và form này có thể biến mất.
+    // 404/409 lên `report` (state của tab): danh sách nhãn tải lại và form này có thể biến mất. 400 là lỗi nhập của form (link ảnh, chứng nhận...): hiện ngay dưới nút Lưu, không tải lại.
     onError: (e) => {
-      report(actionErrorText(e));
-      return reloadWhenStale(e, refreshBrands);
+      const text = actionErrorText(e);
+      if (isInputRejection(e)) setSaveError(text);
+      else report(text);
+      return reloadWhenStale(e, refreshBrands, true);
     },
   });
 
@@ -3390,6 +3416,7 @@ function BrandInfoForm({ brand, report }: { brand: AdminBrand; report: (text: st
           className={`${BTN_PRIMARY} ${BUSY_CLASS}`}
         >Lưu thông tin</button>
         {saved && <span className="ml-2 inline-flex items-center gap-1 text-sm text-success-fg">Đã lưu <Check className="h-4 w-4" aria-hidden /></span>}
+        {saveError && <p role="alert" className="mt-1 text-sm text-danger-fg">{saveError}</p>}
       </div>
     </div>
   );

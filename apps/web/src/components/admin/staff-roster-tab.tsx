@@ -33,7 +33,8 @@ export function StaffRosterTab({ meId }: { meId?: string } = {}) {
   const [newPerms, setNewPerms] = useState<StaffPermission[]>([]);
   const [msg, setMsg] = useState<{ tone: 'success' | 'warning' | 'danger'; text: string } | null>(null);
   // Trả lời hứa làm mới để khoá giữ tới khi danh sách nhân sự mới về (tối đa `settleWithin`): nhả sớm thì người vừa thu hồi còn nút "Thu hồi" và bấm lại được.
-  // Lệnh bị từ chối 400/404/409 (người đã mất quyền ở máy khác, lời mời hết hạn) cũng tải lại, vì dòng đang hiện đã cũ.
+  // Lệnh bị từ chối 404/409 (người đã mất quyền ở máy khác, lời mời hết hạn) cũng tải lại, vì dòng đang hiện đã cũ; cả ba lệnh đều có ô nhập (SĐT, nhóm việc, lý do) nên 400 là lỗi nhập, chỉ hiện lời lỗi.
+  // Quy tắc này chỉ quyết định việc CHỜ tải lại trước khi nhả khoá: trên production MutationCache vẫn làm cũ khoá admin-* ở lỗi khác.
   const refresh = () => qc.invalidateQueries({ queryKey: ['admin-staff'] });
   // Lời báo thành công của từng ô nhóm việc nằm ở đây, không ở trong ô: ô dựng lại bằng `key` khi nhóm việc đổi sau lần làm mới.
   const [pickerNotes, setPickerNotes] = useState<Record<string, string>>({});
@@ -62,7 +63,8 @@ export function StaffRosterTab({ meId }: { meId?: string } = {}) {
     },
     onError: (e) => {
       setMsg({ tone: 'danger', text: errText(e) });
-      return reloadWhenStale(e, refresh);
+      // SĐT, nhóm việc và lý do do admin nhập: 400 là lỗi nhập (SĐT sai dạng, tự cấp cho chính mình...), chỉ 404/409 tải lại.
+      return reloadWhenStale(e, refresh, true);
     },
   });
 
@@ -81,7 +83,7 @@ export function StaffRosterTab({ meId }: { meId?: string } = {}) {
     },
     onError: (e) => {
       setMsg({ tone: 'danger', text: errText(e) });
-      return reloadWhenStale(e, refresh);
+      return reloadWhenStale(e, refresh, true);
     },
   });
 
@@ -357,7 +359,7 @@ function PermissionPicker({
     },
     onError: (e) => {
       onFail(errText(e));
-      return reloadWhenStale(e, onSaved);
+      return reloadWhenStale(e, onSaved, true);
     },
   });
   const dirty = [...perms].sort().join(',') !== [...current].sort().join(',');

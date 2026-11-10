@@ -6,8 +6,9 @@ import { answerAsk, answerConfirm, byText, click, confirmDialog, flush, render, 
 import { captureUnhandledRejections } from '@/test-utils/unhandled';
 
 // W96B: duyệt/từ chối/duyệt tất cả/ca chuẩn giữ khoá tới khi danh sách về nhưng tối đa 4 giây; lệnh bị từ chối vì dữ liệu đã cũ
-// (400/404/409) thì tải lại rồi mới nhả; lời lỗi của tờ "Chỉnh giờ & duyệt" hiện NGAY TRONG tờ (lớp nền che lời báo của trang).
+// (400/404/409) thì tải lại rồi mới nhả (lệnh có ô nhập giờ/tên: chỉ 404/409, còn 400 là lỗi nhập hiện trong tờ); lời lỗi của tờ "Chỉnh giờ & duyệt" hiện NGAY TRONG tờ (lớp nền che lời báo của trang).
 // Web chặt hơn Mini ở hạn 4 giây và tải lại khi bị từ chối: Mini admin.tsx chỉ khoá useLockedMutation.
+// Spec chạy trên QueryClient trần: các ca "lỗi 5xx" chỉ chứng minh lệnh không tự chờ/gọi tải lại; trên production MutationCache vẫn làm cũ khoá admin-* sau mỗi lệnh.
 
 const staff = { id: 's1', fullName: 'Lan', phone: '0911111111', avatarUrl: null };
 const shift = (id: string, status = 'PENDING') => ({
@@ -328,7 +329,7 @@ describe('lệnh bị từ chối vì dữ liệu đã cũ (400/404/409): tải 
     ['máy chủ 500', () => json(500, { message: 'Máy chủ đang bận' })],
     ['quyền 403', () => json(403, { message: 'Không đủ quyền.' })],
     ['mất mạng', () => Promise.reject(new TypeError('Failed to fetch'))],
-  ] as const)('Duyệt lỗi %s: hiện lỗi, KHÔNG tải lại danh sách, nhả khoá ngay để thử lại', async (_name, reply) => {
+  ] as const)('Duyệt lỗi %s: hiện lỗi, nhả khoá ngay để thử lại, không chờ tải lại danh sách (spec chạy QueryClient trần, không có MutationCache như production)', async (_name, reply) => {
     const c = await mount();
     routes.approve = reply as Route;
     await doApprove(c);
@@ -340,7 +341,7 @@ describe('lệnh bị từ chối vì dữ liệu đã cũ (400/404/409): tải 
     expect(approves()).toBe(2);
   });
 
-  it('Từ chối và Duyệt tất cả lỗi 500: không tải lại danh sách', async () => {
+  it('Từ chối và Duyệt tất cả lỗi 500: lệnh không tự gọi tải lại danh sách (QueryClient trần của spec không có MutationCache như production)', async () => {
     const c = await mount();
     routes.reject = () => json(500, { message: 'x' });
     routes.bulk = () => json(500, { message: 'x' });
@@ -382,6 +383,23 @@ describe('lệnh bị từ chối vì dữ liệu đã cũ (400/404/409): tải 
     expect(urls().filter((u) => u === nextUrl)).toHaveLength(1);
   });
 
+  it('Thêm ca chuẩn bị 400 (giờ kết thúc không sau giờ bắt đầu): hiện lỗi trong tờ, lệnh KHÔNG tự tải lại danh sách ca chuẩn, nhả khoá ngay', async () => {
+    const c = await mount();
+    await openTpl(c);
+    routes.tplAdd = () => json(400, { message: 'Giờ kết thúc phải sau giờ bắt đầu.' });
+    const list = holdTplList();
+    await addTemplate();
+    expect(alertText(document.body)).toContain('Giờ kết thúc phải sau giờ bắt đầu.');
+    expect(tplGets()).toBe(1);
+    expect(isBusy(addTplBtn())).toBe(false);
+    routes.tplAdd = () => json(200, { id: 'tN' });
+    click(addTplBtn());
+    await flush(3);
+    expect(count('POST', '/admin/shift-templates')).toBe(2);
+    list.resolve();
+    await flush();
+  });
+
   it('Thêm ca chuẩn bị 409 (trùng tên): hiện lỗi trong tờ, tải lại danh sách ca chuẩn, nhả khi danh sách về', async () => {
     const c = await mount();
     await openTpl(c);
@@ -395,6 +413,21 @@ describe('lệnh bị từ chối vì dữ liệu đã cũ (400/404/409): tải 
     list.resolve();
     await flush();
     expect(isBusy(addTplBtn())).toBe(false);
+  });
+
+  it('Xoá ca chuẩn bị 400 (không có ô nhập, nên vẫn là dữ liệu cũ): hiện lỗi trong tờ, tải lại danh sách ca chuẩn, nhả khi danh sách về', async () => {
+    const c = await mount();
+    await openTpl(c);
+    routes.tplDel = () => json(400, { message: 'Ca chuẩn đang được dùng.' });
+    const list = holdTplList();
+    click(delTplBtn('Ca sáng'));
+    await flush(3);
+    expect(alertText(document.body)).toContain('Ca chuẩn đang được dùng.');
+    expect(tplGets()).toBe(2);
+    expect(isBusy(delTplBtn('Ca sáng'))).toBe(true);
+    list.resolve();
+    await flush();
+    expect(isBusy(delTplBtn('Ca sáng'))).toBe(false);
   });
 
   it('Xoá ca chuẩn bị 404 (đã bị xoá): hiện lỗi trong tờ, tải lại danh sách ca chuẩn, nhả khi danh sách về', async () => {
@@ -412,7 +445,7 @@ describe('lệnh bị từ chối vì dữ liệu đã cũ (400/404/409): tải 
     expect(isBusy(delTplBtn('Ca sáng'))).toBe(false);
   });
 
-  it('Thêm/Xoá ca chuẩn lỗi 500: không tải lại danh sách ca chuẩn', async () => {
+  it('Thêm/Xoá ca chuẩn lỗi 500: lệnh không tự gọi tải lại danh sách ca chuẩn (QueryClient trần của spec không có MutationCache như production)', async () => {
     const c = await mount();
     await openTpl(c);
     routes.tplAdd = () => json(500, { message: 'x' });
@@ -439,6 +472,25 @@ describe('lời lỗi của tờ "Chỉnh giờ & duyệt" hiện trong tờ, kh
     await flush();
     await openAdjust(c);
     expect(alertText(document.querySelector('[role=dialog]')!)).toBe('');
+  });
+
+  it('lỗi 400 (giờ kết thúc không sau giờ bắt đầu): lời lỗi trong tờ, lệnh KHÔNG tự tải lại danh sách, tờ nhả ngay để sửa giờ', async () => {
+    const c = await mount();
+    routes.approve = () => json(400, { message: 'Giờ kết thúc phải sau giờ bắt đầu.' });
+    const list = holdList();
+    await openAdjust(c);
+    click(adjustBtn());
+    await flush(3);
+    expect(alertText(document.querySelector('[role=dialog]')!)).toContain('Giờ kết thúc phải sau giờ bắt đầu.');
+    expect(alertText(c)).toBe('');
+    expect(listGets()).toBe(1);
+    expect(isBusy(adjustBtn())).toBe(false);
+    routes.approve = () => json(200, { ok: true });
+    click(adjustBtn());
+    await flush(3);
+    expect(approves()).toBe(2);
+    list.resolve();
+    await flush();
   });
 
   it('lỗi 409: lời lỗi trong tờ và danh sách được tải lại; tờ nhả khi danh sách về', async () => {

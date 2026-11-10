@@ -3,11 +3,13 @@ import { act } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { OrderInvoicePanel } from './order-detail-extras';
-import { answerConfirm, byText, click, confirmDialog, flush, render, type Rendered } from '@/test-utils/dom';
+import { answerConfirm, byText, click, confirmDialog, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 import type { AdminOrder } from '@/lib/admin-client';
 
-// W96B: "Đã xuất hoá đơn" (ghi nhận hoá đơn VAT, báo khách) giữ khoá tới khi đơn làm mới về (tối đa 4 giây), tải lại khi máy chủ từ chối vì đơn đã đổi
-// (400/404/409) mà không tải lại với lỗi khác, nút báo bận bằng aria-busy/aria-disabled và ô link chỉ readOnly (không disabled).
+// W96B: "Đã xuất hoá đơn" (ghi nhận hoá đơn VAT, báo khách) giữ khoá tới khi đơn làm mới về (tối đa 4 giây), tải lại (chờ ≤4 giây) khi máy chủ từ chối vì đơn đã đổi:
+// không gõ link thì 400/404/409; có gõ link thì 400 là lỗi nhập (link bị máy chủ từ chối, vd tên miền không được phép) hiện tại form, không tải lại, chỉ 404/409 tải lại.
+// Test dựng QueryClient trần, không có MutationCache như production (ở đó khoá admin-* vẫn bị làm cũ sau mỗi lệnh), nên "không tải lại" là lệnh không tự gọi
+// và không chờ tải lại. Nút báo bận bằng aria-busy/aria-disabled và ô link chỉ readOnly (không disabled).
 
 const order = (): AdminOrder => ({
   id: 'o1',
@@ -158,7 +160,42 @@ describe('OrderInvoicePanel: Đã xuất hoá đơn giữ khoá', () => {
     expect(btn(c).getAttribute('aria-disabled')).toBeNull();
   });
 
-  it.each([500, 403])('lỗi %i: hiện lỗi, KHÔNG tải lại đơn, nhả khoá ngay', async (status) => {
+  const LINK = 'https://hoadon.abc.vn/TB-500';
+  const typeLink = (c: HTMLElement) => typeInto(c.querySelector('input[type="url"]'), LINK);
+
+  it('có gõ link, máy chủ từ chối 400 (link không được chấp nhận): lỗi hiện tại form, KHÔNG tải lại đơn, nhả khoá ngay, link còn để sửa', async () => {
+    postStatus = 400;
+    const c = await mount();
+    typeLink(c);
+    const list = gate();
+    ordersGate = list.promise;
+    await issue(c);
+    expect(posts).toHaveLength(1);
+    expect(c.querySelector('[role="alert"]')?.textContent).toContain('vừa được phát hành bởi người khác');
+    expect(ordersLoads).toBe(1);
+    expect(btn(c).getAttribute('aria-disabled')).toBeNull();
+    const input = c.querySelector<HTMLInputElement>('input[type="url"]')!;
+    expect(input.readOnly).toBe(false);
+    expect(input.value).toBe(LINK);
+    list.resolve();
+    await flush();
+  });
+
+  it.each([404, 409])('có gõ link, bị từ chối %i (đơn đã đổi): đơn tải lại, khoá giữ tới khi đơn về', async (status) => {
+    postStatus = status;
+    const c = await mount();
+    typeLink(c);
+    const list = gate();
+    ordersGate = list.promise;
+    await issue(c);
+    expect(ordersLoads).toBe(2);
+    expect(btn(c).getAttribute('aria-disabled')).toBe('true');
+    list.resolve();
+    await flush();
+    expect(btn(c).getAttribute('aria-disabled')).toBeNull();
+  });
+
+  it.each([500, 403])('lỗi %i: hiện lỗi, lệnh không tự tải lại đơn (QueryClient trần, không có MutationCache như production), nhả khoá ngay', async (status) => {
     postStatus = status;
     const c = await mount();
     await issue(c);

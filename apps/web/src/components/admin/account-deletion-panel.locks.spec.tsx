@@ -193,7 +193,8 @@ describe('AccountDeletionPanel: lời lỗi ở cấp danh sách', () => {
     const c = await mount();
     await process(c);
     expect(lists()).toBe(2);
-    expect(c.textContent).not.toContain('Nguyễn Văn A');
+    // dòng đã rời hàng chờ (lời lỗi nêu tên khách của yêu cầu nên không dò theo chữ trên cả trang)
+    expect(c.querySelector('.tabular-nums.rounded-card')).toBeNull();
     expect(c.querySelector('[role="alert"]')?.textContent).toContain('Yêu cầu này đã được xử lý.');
   });
 

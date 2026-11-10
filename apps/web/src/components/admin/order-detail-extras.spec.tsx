@@ -216,6 +216,8 @@ describe('OrderInvoicePanel', () => {
     click(btn);
     click(btn);
     await flush();
+    // Chạm lại lúc lệnh còn bay: handler tự chặn nên không mở hộp xác nhận thứ hai (chỉ đếm POST thì bỏ guard vẫn xanh vì hộp chưa được trả lời).
+    expect(confirmDialog()).toBeNull();
     expect(calls).toHaveLength(1);
     // Nút đang giữ tiêu điểm không `disabled` (Chromium thả tiêu điểm về body): báo bận bằng aria-disabled.
     expect(btn.disabled).toBe(false);

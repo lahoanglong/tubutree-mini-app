@@ -320,16 +320,17 @@ function StorefrontDrawer({ id, onClose }: { id: string; onClose: () => void }) 
       qc.invalidateQueries({ queryKey: ['admin-storefront', id] }),
     ]);
   const refresh = () => settleWithin(reload());
-  const onError = (e: unknown) => {
+  const onError = (e: unknown, hasInput = false) => {
     setFailure(errorText(e));
-    return reloadWhenStale(e, reload);
+    return reloadWhenStale(e, reload, hasInput);
   };
   const onSettled = () => {
     acting.current = false;
   };
-  const takeDown = useMutation({ mutationFn: (reason: string) => takeDownStorefront(id, reason), onSuccess: refresh, onError, onSettled });
-  const reinstate = useMutation({ mutationFn: () => reinstateStorefront(id), onSuccess: refresh, onError, onSettled });
-  const approve = useMutation({ mutationFn: (approved: boolean) => approveStorefront(id, approved), onSuccess: refresh, onError, onSettled });
+  // Lý do do admin nhập: 400 (trống sau khi bỏ khoảng trắng, quá dài) là lỗi nhập, chỉ hiện trong ngăn để sửa; tải lại không giúp gì. Các lệnh còn lại không có ô nhập.
+  const takeDown = useMutation({ mutationFn: (reason: string) => takeDownStorefront(id, reason), onSuccess: refresh, onError: (e) => onError(e, true), onSettled });
+  const reinstate = useMutation({ mutationFn: () => reinstateStorefront(id), onSuccess: refresh, onError: (e) => onError(e), onSettled });
+  const approve = useMutation({ mutationFn: (approved: boolean) => approveStorefront(id, approved), onSuccess: refresh, onError: (e) => onError(e), onSettled });
   const [changedAgain, setChangedAgain] = useState<ChangedAgain | null>(null);
   const seen = useMutation({
     mutationFn: (sentAt: string | null | undefined) => markStorefrontContentSeen(id, sentAt),
@@ -337,7 +338,7 @@ function StorefrontDrawer({ id, onClose }: { id: string; onClose: () => void }) 
       setChangedAgain(changedAgainOf(result, sentAt));
       return refresh();
     },
-    onError,
+    onError: (e) => onError(e),
     onSettled,
   });
   const busy = takeDown.isPending || reinstate.isPending || approve.isPending || seen.isPending;

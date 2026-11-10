@@ -5,7 +5,10 @@ import { answerAsk, answerConfirm, byText, click, confirmDialog, flush, render, 
 import { MerchantFulfilmentTab } from './merchant-fulfilment-tab';
 
 // Wave 96B: admin "Đơn đối tác & đối soát" (đường TIỀN): Lập phiếu, Bật/Tắt đối tác, Lưu phí, Đã chuyển/Đã thu, Huỷ phiếu. Một việc mỗi lúc, giữ khoá tới khi
-// danh sách làm mới về (tối đa 4 giây), bị từ chối vì trạng thái đã đổi (400/404/409) thì tải lại, lời lỗi đứng ở đầu tab.
+// danh sách làm mới về (tối đa 4 giây), bị từ chối vì dữ liệu đã cũ thì chờ tải lại, lời lỗi đứng ở đầu tab. Lập phiếu: 400/404/409; Đã chuyển và Huỷ phiếu có ô nhập
+// (mã giao dịch, lý do) nên 400 là lỗi nhập, hiện trong dòng phiếu, chỉ 404/409 là phiếu đã đổi.
+// Chạy trên QueryClient trần (test-utils/dom), không có MutationCache của production: ở production mọi lệnh settle (kể cả lỗi) đều làm cũ khoá admin-*, nên "không tải lại"
+// ở đây chỉ nói màn KHÔNG tự gọi tải lại và KHÔNG chờ nó. Quy tắc 400/404/409 chỉ quyết định việc chờ tải lại trước khi nhả khoá.
 
 const OVERVIEW = {
   slaConfig: { confirmHours: 24, shipHours: 48, deliverDays: 7 },
@@ -156,7 +159,7 @@ describe('Lập phiếu đối soát', () => {
     expect(creates()).toBe(2);
   });
 
-  it.each([400, 404, 409])('tổng bảng kê đã đổi (%i): lời lỗi hiện NGAY ở đầu tab, tải lại tổng quan và phiếu, giữ khoá tới khi về', async (status) => {
+  it.each([400, 404, 409])('Lập phiếu: tổng bảng kê đã đổi (%i): lời lỗi hiện NGAY ở đầu tab, tải lại tổng quan và phiếu, giữ khoá tới khi về', async (status) => {
     const g = gate();
     holdOverview(g);
     routes['/admin/merchant-fulfilment/payouts'] = () => json(status, { message: 'Bảng kê vừa đổi, xem lại tổng tiền trước khi lập phiếu.' });
@@ -175,7 +178,7 @@ describe('Lập phiếu đối soát', () => {
     expect(c.querySelector('[role="alert"]')?.textContent).toContain('Bảng kê vừa đổi');
   });
 
-  it('lỗi 500: nhắc tải lại trang, KHÔNG tải lại danh sách, nhả khoá ngay', async () => {
+  it('lỗi 500: nhắc tải lại trang, màn không tự tải lại danh sách, nhả khoá ngay', async () => {
     routes['/admin/merchant-fulfilment/payouts'] = () => json(500, { message: 'Máy chủ đang bận' });
     const c = await mount();
     click(buttons(c, 'Lập phiếu đối soát')[0]!);
@@ -284,7 +287,7 @@ describe('Phiếu: Đã chuyển / Huỷ phiếu', () => {
     expect(aria(btn(c, 'Đã chuyển')).disabled).toBeNull();
   });
 
-  it.each([400, 404, 409])('phiếu đã đổi (%i): lời lỗi hiện NGAY ở đầu tab, tải lại phiếu và tổng quan, giữ khoá tới khi về; lời lỗi còn sau khi phiếu biến khỏi danh sách', async (status) => {
+  it.each([404, 409])('Đã chuyển: phiếu đã đổi (%i): lời lỗi hiện NGAY ở đầu tab, tải lại phiếu và tổng quan, giữ khoá tới khi về; lời lỗi còn sau khi phiếu biến khỏi danh sách', async (status) => {
     const list = gate();
     let loads = 0;
     routes['/admin/merchant-fulfilment/payouts?'] = async () => {
@@ -305,7 +308,82 @@ describe('Phiếu: Đã chuyển / Huỷ phiếu', () => {
     expect(c.querySelector('[role="alert"]')?.textContent).toContain('Phiếu đã bị huỷ');
   });
 
-  it('ghi sổ lỗi 500: lời lỗi hiện, KHÔNG tải lại, nhả khoá ngay để thử lại', async () => {
+  // Mã giao dịch và lý do huỷ là ô người dùng nhập: máy chủ chỉ trả 400 khi ô trống/quá dài (trạng thái phiếu đã đổi là 404/409), nên 400 là lỗi nhập, không phải dữ liệu cũ.
+  describe('400 vì ô nhập (mã giao dịch / lý do huỷ)', () => {
+    const PAYOUT2 = { ...PAYOUT, id: 'mp2', storefrontId: 'sf3', storefront: { id: 'sf3', title: 'Trà Shan giao hộ' } };
+    const twoPayouts = () => json(200, { data: [PAYOUT, PAYOUT2], meta: { page: 1, limit: 20, total: 2 } });
+    const payoutRows = (c: HTMLElement) => Array.from(c.querySelectorAll('li')).filter((li) => li.querySelector('input[required]'));
+    const outsideRows = (c: HTMLElement) => Array.from(c.querySelectorAll('[role="alert"]')).filter((el) => !el.closest('li'));
+
+    it('Đã chuyển bị 400: lời lỗi nằm trong đúng dòng phiếu (phiếu thứ hai), màn không tải lại và không chờ tải lại, không lời lỗi ở đầu tab, nhả khoá ngay để sửa rồi gửi lại', async () => {
+      let attempts = 0;
+      routes['/admin/merchant-fulfilment/payouts?'] = twoPayouts;
+      routes['/admin/merchant-fulfilment/payouts/mp2/paid'] = () => (++attempts === 1 ? json(400, { message: 'Cần nhập mã giao dịch ngân hàng.' }) : json(200, { ...PAYOUT2, status: 'PAID' }));
+      const c = await mount();
+      const second = payoutRows(c)[1]!;
+      typeInto(second.querySelector('input[required]'), 'FT0009');
+      click(buttons(second, 'Đã chuyển')[0]!);
+      await flush();
+      answerConfirm(true);
+      await flush();
+      expect(payoutRows(c)[1]!.querySelector('[role="alert"]')?.textContent).toContain('Cần nhập mã giao dịch ngân hàng.');
+      expect(outsideRows(c)).toEqual([]);
+      expect(payoutGets()).toBe(1);
+      expect(overviewGets()).toBe(1);
+      expect(aria(buttons(payoutRows(c)[1]!, 'Đã chuyển')[0]!).disabled).toBeNull();
+      click(buttons(payoutRows(c)[1]!, 'Đã chuyển')[0]!);
+      await flush();
+      answerConfirm(true);
+      await flush();
+      expect(count('POST', '/payouts/mp2/paid')).toBe(2);
+      expect(payoutRows(c)[1]!.querySelector('[role="alert"]')).toBeNull();
+    });
+
+    it('Huỷ phiếu bị 400: lời lỗi nằm trong đúng dòng phiếu, màn không tải lại, không lời lỗi ở đầu tab, nhả khoá ngay', async () => {
+      routes['/admin/merchant-fulfilment/payouts?'] = twoPayouts;
+      routes['/admin/merchant-fulfilment/payouts/mp2/cancel'] = () => json(400, { message: 'Cần nhập lý do huỷ phiếu để báo gian hàng.' });
+      const c = await mount();
+      click(buttons(payoutRows(c)[1]!, 'Huỷ phiếu')[0]!);
+      await flush();
+      answerAsk('Sai tài khoản nhận');
+      await flush();
+      expect(count('POST', '/payouts/mp2/cancel')).toBe(1);
+      expect(payoutRows(c)[1]!.querySelector('[role="alert"]')?.textContent).toContain('Cần nhập lý do huỷ phiếu');
+      expect(outsideRows(c)).toEqual([]);
+      expect(payoutGets()).toBe(1);
+      expect(overviewGets()).toBe(1);
+      expect(aria(buttons(payoutRows(c)[1]!, 'Huỷ phiếu')[0]!).disabled).toBeNull();
+      routes['/admin/merchant-fulfilment/payouts/mp2/cancel'] = () => json(200, { ...PAYOUT2, status: 'CANCELLED' });
+      click(buttons(payoutRows(c)[1]!, 'Huỷ phiếu')[0]!);
+      await flush();
+      answerAsk('Sai tài khoản nhận, nhập lại');
+      await flush();
+      expect(count('POST', '/payouts/mp2/cancel')).toBe(2);
+      expect(payoutRows(c)[1]?.querySelector('[role="alert"]') ?? null).toBeNull();
+    });
+
+    it.each([404, 409])('Huỷ phiếu bị từ chối vì phiếu đã đổi (%i): lời lỗi ở đầu tab, tải lại phiếu và tổng quan, giữ khoá tới khi về, chạm lại không gửi lệnh thứ hai', async (status) => {
+      const g = gate();
+      holdOverview(g);
+      routes['/admin/merchant-fulfilment/payouts/mp1/cancel'] = () => json(status, { message: 'Chỉ huỷ được phiếu chưa chuyển tiền.' });
+      const c = await mount();
+      click(btn(c, 'Huỷ phiếu'));
+      await flush();
+      answerAsk('Sai tài khoản nhận');
+      await flush();
+      expect(c.querySelector('[role="alert"]')?.textContent).toContain('Chỉ huỷ được phiếu chưa chuyển tiền.');
+      expect(payoutGets()).toBe(2);
+      expect(overviewGets()).toBe(2);
+      click(btn(c, 'Huỷ phiếu'));
+      await flush(2);
+      expect(confirmDialog()).toBeNull();
+      expect(payoutCancel()).toBe(1);
+      g.resolve();
+      await flush();
+    });
+  });
+
+  it('ghi sổ lỗi 500: lời lỗi hiện, màn không tự tải lại, nhả khoá ngay để thử lại', async () => {
     routes['/admin/merchant-fulfilment/payouts/mp1/paid'] = () => json(500, { message: 'Máy chủ đang bận' });
     const c = await mount();
     await fillRefAndConfirm(c);

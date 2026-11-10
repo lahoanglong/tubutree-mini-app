@@ -161,7 +161,7 @@ describe('Đơn cần giao: Xác nhận đơn / Đã đóng gói / Khách đã n
     expect(count('POST', '/merchant/fulfil-orders/1/accept')).toBe(2);
   });
 
-  it.each([400, 404, 409])('đơn đã đổi trạng thái (%i): lời lỗi hiện NGAY ở đầu danh sách, tải lại, giữ khoá tới khi danh sách về; lời lỗi còn sau khi thẻ bị gỡ', async (status) => {
+  it.each([400, 404, 409])('Xác nhận đơn (không có ô nhập) bị từ chối vì đơn đã đổi trạng thái (%i): lời lỗi hiện NGAY ở đầu danh sách, tải lại, giữ khoá tới khi danh sách về; lời lỗi còn sau khi thẻ bị gỡ', async (status) => {
     const list = gate();
     let loads = 0;
     routes['/merchant/fulfil-orders?'] = async () => {
@@ -181,6 +181,26 @@ describe('Đơn cần giao: Xác nhận đơn / Đã đóng gói / Khách đã n
     await flush();
     expect(c.querySelector('article[aria-label="Đơn TF1"]')).toBeNull();
     expect(c.querySelector('[role="alert"]')?.textContent).toContain('Đơn vừa được cập nhật ở nơi khác');
+  });
+
+  it.each([
+    ['pack', 'Đã đóng gói', { merchantAcceptedAt: '2026-11-01T04:00:00.000Z' }],
+    ['deliver', 'Khách đã nhận hàng', { status: 'SHIPPING', merchantAcceptedAt: '2026-11-01T04:00:00.000Z', shippingCode: 'VD1', shippingPartner: 'GHN' }],
+  ] as const)('%s (không có ô nhập) bị 400 vì đơn đã đổi bước: vẫn là dữ liệu cũ, lời lỗi kèm "Danh sách đã được làm mới." ở đầu danh sách và tải lại', async (path, label, over) => {
+    const list = gate();
+    let loads = 0;
+    routes['/merchant/fulfil-orders?'] = async () => {
+      if (++loads > 1) await list.promise;
+      return json(200, page(loads > 1 ? [] : [order('1', over)]));
+    };
+    routes[`/merchant/fulfil-orders/1/${path}`] = () => json(400, { message: 'Chỉ đơn đang giao mới xác nhận "Đã giao" được.' });
+    const c = await mountOrders();
+    click(btn(card(c, '1'), label));
+    await flush();
+    expect(c.querySelector('[role="alert"]')?.textContent).toContain('Danh sách đã được làm mới.');
+    expect(listGets()).toBe(2);
+    list.resolve();
+    await flush();
   });
 
   it('lỗi 500: lời lỗi trên đúng thẻ, KHÔNG tải lại danh sách, nhả khoá ngay để thử lại', async () => {
@@ -283,6 +303,155 @@ describe('Đơn cần giao: form mã vận đơn và huỷ đơn', () => {
     expect(count('POST', '/merchant/fulfil-orders/1/deliver')).toBe(1);
     g.resolve();
     await flush();
+  });
+});
+
+// Lệnh có ô người dùng nhập (ShipMerchantOrderDto, MerchantOrderReasonDto): 400 là lỗi nhập liệu (link tra cứu sai dạng, hãng vận chuyển chỉ gồm dấu cách),
+// tải lại danh sách không sửa được nó. Lời lỗi phải nằm dưới form của đúng thẻ; chỉ 404/409 là dữ liệu cũ.
+type InputCmd = 'ship' | 'cancel' | 'fail';
+const ACCEPTED = '2026-11-01T04:00:00.000Z';
+const INPUT_CMDS: Record<InputCmd, { over: Record<string, unknown>; open: string; fill: (form: HTMLFormElement) => void }> = {
+  ship: {
+    over: { merchantAcceptedAt: ACCEPTED },
+    open: 'Nhập mã vận đơn',
+    fill: (form) => {
+      const inputs = form.querySelectorAll<HTMLInputElement>('input');
+      typeInto(inputs[0]!, 'GHN');
+      typeInto(inputs[1]!, 'VD123');
+      typeInto(inputs[2]!, 'abc xyz');
+    },
+  },
+  cancel: { over: {}, open: 'Huỷ đơn', fill: (form) => typeInto(form.querySelector('input'), 'Hết hàng') },
+  fail: {
+    over: { status: 'SHIPPING', merchantAcceptedAt: ACCEPTED, shippingCode: 'VD1', shippingPartner: 'GHN' },
+    open: 'Giao không thành công',
+    fill: (form) => typeInto(form.querySelector('input'), 'Khách không nghe máy'),
+  },
+};
+const CMD_PATH: Record<InputCmd, string> = { ship: 'ship', cancel: 'cancel', fail: 'fail' };
+const eightOrders = (target: InputCmd, drop = false) =>
+  Array.from({ length: 8 }, (_, i) => String(i + 1))
+    .filter((id) => !(drop && id === '8'))
+    .map((id) => order(id, id === '8' ? INPUT_CMDS[target].over : {}));
+const submitForm = async (form: HTMLFormElement) => {
+  await act(async () => {
+    form.requestSubmit();
+  });
+  await flush();
+};
+/** Mở form của lệnh trên thẻ đơn thứ 8 (xa đầu danh sách) rồi điền ô nhập. */
+async function openInputForm(c: HTMLElement, cmd: InputCmd) {
+  const a = card(c, '8');
+  click(btn(a, INPUT_CMDS[cmd].open));
+  await flush(1);
+  const form = a.querySelector('form')!;
+  INPUT_CMDS[cmd].fill(form);
+  return { a, form };
+}
+/** Nút gửi của form: đổi chữ khi đang chạy nên tìm theo vai trò, không theo chữ. */
+const submitBtn = (form: HTMLFormElement) => form.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+const topAlerts = (c: HTMLElement) => Array.from(c.querySelectorAll('[role="alert"]')).filter((el) => !el.closest('article'));
+
+describe('Đơn cần giao: lệnh có ô nhập liệu (Nhập mã vận đơn / Huỷ đơn / Giao không thành công)', () => {
+  const INPUT_ERROR = 'Link tra cứu vận đơn không hợp lệ, ví dụ ghn.vn/tra-cuu/GHN123.';
+
+  it.each(['ship', 'cancel', 'fail'] as const)(
+    '%s: máy chủ trả 400 vì nhập sai: lời lỗi nằm dưới form của đúng thẻ (thẻ thứ 8), form còn mở, KHÔNG tải lại danh sách, không câu "Danh sách đã được làm mới", không có lời lỗi ở đầu danh sách',
+    async (cmd) => {
+      routes['/merchant/fulfil-orders?'] = () => json(200, page(eightOrders(cmd)));
+      routes[`/merchant/fulfil-orders/8/${CMD_PATH[cmd]}`] = () => json(400, { message: INPUT_ERROR });
+      const c = await mountOrders();
+      const { a, form } = await openInputForm(c, cmd);
+      await submitForm(form);
+      const alert = a.querySelector('[role="alert"]');
+      expect(alert?.textContent).toContain(INPUT_ERROR);
+      expect(form.compareDocumentPosition(alert!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(a.contains(form)).toBe(true);
+      expect(topAlerts(c)).toEqual([]);
+      expect(c.textContent).not.toContain('Danh sách đã được làm mới');
+      expect(listGets()).toBe(1);
+      expect(c.querySelectorAll('article')).toHaveLength(8);
+    },
+  );
+
+  it.each(['ship', 'cancel', 'fail'] as const)('%s: sau lỗi nhập 400 khoá nhả ngay, sửa lại gửi tiếp được (lệnh thứ hai ra máy chủ) và lời lỗi cũ biến mất khi gửi lại', async (cmd) => {
+    let attempts = 0;
+    routes['/merchant/fulfil-orders?'] = () => json(200, page(eightOrders(cmd)));
+    routes[`/merchant/fulfil-orders/8/${CMD_PATH[cmd]}`] = () => (++attempts === 1 ? json(400, { message: INPUT_ERROR }) : json(200, order('8', INPUT_CMDS[cmd].over)));
+    const c = await mountOrders();
+    const { a, form } = await openInputForm(c, cmd);
+    await submitForm(form);
+    expect(aria(submitBtn(form)).busy).toBeNull();
+    await submitForm(form);
+    expect(count('POST', `/merchant/fulfil-orders/8/${CMD_PATH[cmd]}`)).toBe(2);
+    expect(a.textContent).not.toContain(INPUT_ERROR);
+  });
+
+  it('ship: hãng vận chuyển chỉ gồm dấu cách (trình duyệt cho qua `required`, DTO @Trim @IsNotEmpty từ chối): 400 hiện dưới form, không tải lại', async () => {
+    let sent: { carrier?: string } = {};
+    routes['/merchant/fulfil-orders?'] = () => json(200, page(eightOrders('ship')));
+    routes['/merchant/fulfil-orders/8/ship'] = () => json(400, { message: 'Cần nhập hãng vận chuyển và mã vận đơn.' });
+    const c = await mountOrders();
+    const a = card(c, '8');
+    click(btn(a, 'Nhập mã vận đơn'));
+    await flush(1);
+    const form = a.querySelector('form')!;
+    const inputs = form.querySelectorAll<HTMLInputElement>('input');
+    typeInto(inputs[0]!, '   ');
+    typeInto(inputs[1]!, 'VD123');
+    const fetchMock = globalThis.fetch as unknown as { mock: { calls: [string, RequestInit?][] } };
+    await submitForm(form);
+    const post = fetchMock.mock.calls.find(([u, init]) => u.includes('/fulfil-orders/8/ship') && init?.method === 'POST');
+    sent = JSON.parse(String(post?.[1]?.body ?? '{}'));
+    expect(sent.carrier).toBe('');
+    expect(a.querySelector('[role="alert"]')?.textContent).toContain('Cần nhập hãng vận chuyển');
+    expect(topAlerts(c)).toEqual([]);
+    expect(listGets()).toBe(1);
+  });
+
+  it.each([
+    ['ship', 404],
+    ['ship', 409],
+    ['cancel', 404],
+    ['cancel', 409],
+    ['fail', 404],
+    ['fail', 409],
+  ] as const)('%s bị từ chối vì dữ liệu cũ (%i): lời lỗi kèm "Danh sách đã được làm mới." ở đầu danh sách (không lặp dưới form), tải lại, giữ khoá tới khi danh sách về, chạm lại chỉ gọi API một lần', async (cmd, status) => {
+    const list = gate();
+    let loads = 0;
+    routes['/merchant/fulfil-orders?'] = async () => {
+      if (++loads > 1) await list.promise;
+      return json(200, page(eightOrders(cmd, loads > 1)));
+    };
+    routes[`/merchant/fulfil-orders/8/${CMD_PATH[cmd]}`] = () => json(status, { message: 'Đơn vừa được cập nhật ở nơi khác.' });
+    const c = await mountOrders();
+    const { a, form } = await openInputForm(c, cmd);
+    await submitForm(form);
+    expect(topAlerts(c)[0]?.textContent).toContain('Đơn vừa được cập nhật ở nơi khác. Danh sách đã được làm mới.');
+    expect(a.querySelector('[role="alert"]')).toBeNull();
+    expect(listGets()).toBe(2);
+    expect(aria(submitBtn(form)).busy).toBe('true');
+    await act(async () => {
+      form.requestSubmit();
+    });
+    await flush(2);
+    expect(count('POST', `/merchant/fulfil-orders/8/${CMD_PATH[cmd]}`)).toBe(1);
+    list.resolve();
+    await flush();
+    expect(c.querySelector('article[aria-label="Đơn TF8"]')).toBeNull();
+    expect(topAlerts(c)[0]?.textContent).toContain('Danh sách đã được làm mới.');
+  });
+
+  it.each(['ship', 'cancel', 'fail'] as const)('%s: lỗi 500 hiện dưới form của thẻ, không tải lại, nhả khoá ngay', async (cmd) => {
+    routes['/merchant/fulfil-orders?'] = () => json(200, page(eightOrders(cmd)));
+    routes[`/merchant/fulfil-orders/8/${CMD_PATH[cmd]}`] = () => json(500, { message: 'Máy chủ đang bận' });
+    const c = await mountOrders();
+    const { a, form } = await openInputForm(c, cmd);
+    await submitForm(form);
+    expect(a.querySelector('[role="alert"]')?.textContent).toContain('Máy chủ đang bận');
+    expect(topAlerts(c)).toEqual([]);
+    expect(listGets()).toBe(1);
+    expect(aria(submitBtn(form)).busy).toBeNull();
   });
 });
 

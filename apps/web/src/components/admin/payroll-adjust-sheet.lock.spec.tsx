@@ -146,7 +146,7 @@ describe('đang gửi khoản', () => {
     expect(adjusts()).toHaveLength(1);
   });
 
-  it('lệnh ghi lỗi 500: lời lỗi trong tờ, nhả khoá và ghi lại được (không tải lại bảng)', async () => {
+  it('lệnh ghi lỗi 500: lời lỗi trong tờ, nhả khoá và ghi lại được (tờ không gọi tải lại bảng)', async () => {
     await mount();
     fill();
     routes.adjust = () => json(500, { message: 'x' });
@@ -253,7 +253,7 @@ describe('khoản giống hệt (409): Huỷ → tính lại vẫn giữ khoá',
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('409 khoản giống hệt không phải từ chối vì bảng cũ: không tải lại bảng', async () => {
+  it('409 khoản giống hệt không phải từ chối vì bảng cũ: tờ không gọi tải lại bảng (onStale)', async () => {
     await duplicateThenCancel();
     answerConfirm(false);
     await flush(3);
@@ -264,7 +264,24 @@ describe('khoản giống hệt (409): Huỷ → tính lại vẫn giữ khoá',
 describe('lệnh bị từ chối vì bảng lương đã cũ: tải lại rồi mới nhả khoá', () => {
   const STALE = 'Tháng lương đã chốt/đã trả — mở lại tháng trước khi điều chỉnh.';
 
-  it.each([[400], [404], [409]])('bị %i: lời lỗi trong tờ ngay, gọi tải lại bảng một lần, khoá chỉ nhả khi tải lại xong', async (status) => {
+  it('bị 400 (số tiền hoặc lý do không hợp lệ): lời lỗi trong tờ ngay, KHÔNG gọi tải lại bảng, nhả khoá ngay để sửa rồi ghi lại', async () => {
+    await mount();
+    fill();
+    routes.adjust = () => json(400, { message: 'Lý do điều chỉnh cần ít nhất 3 ký tự.' });
+    const held = gate();
+    onStale.mockImplementation(() => held.promise);
+    await writeAfterConfirm();
+    expect(alertText(sheet())).toContain('Lý do điều chỉnh cần ít nhất 3 ký tự.');
+    expect(onStale).not.toHaveBeenCalled();
+    expect(isBusy(submitBtn())).toBe(false);
+    expect(adjusts()).toHaveLength(1);
+    routes.adjust = () => json(200, { adjusted: true });
+    await writeAfterConfirm();
+    expect(adjusts()).toHaveLength(2);
+    held.resolve();
+  });
+
+  it.each([[404], [409]])('bị %i: lời lỗi trong tờ ngay, gọi tải lại bảng một lần, khoá chỉ nhả khi tải lại xong', async (status) => {
     await mount();
     fill();
     routes.adjust = () => json(status, { message: STALE });
@@ -288,7 +305,7 @@ describe('lệnh bị từ chối vì bảng lương đã cũ: tải lại rồi
     await mount();
     fill();
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
-    routes.adjust = () => json(400, { message: STALE });
+    routes.adjust = () => json(404, { message: STALE });
     onStale.mockImplementation(() => new Promise(() => undefined));
     await writeAfterConfirm();
     await advance(3_500);
@@ -298,7 +315,7 @@ describe('lệnh bị từ chối vì bảng lương đã cũ: tải lại rồi
     expect(isBusy(submitBtn())).toBe(false);
   });
 
-  it.each([[500], [403]])('lỗi %i không nói gì về trạng thái thật: không tải lại bảng', async (status) => {
+  it.each([[500], [403]])('lỗi %i không nói gì về trạng thái thật: tờ không gọi tải lại bảng (onStale)', async (status) => {
     await mount();
     fill();
     routes.adjust = () => json(status, { message: 'Không đủ quyền.' });

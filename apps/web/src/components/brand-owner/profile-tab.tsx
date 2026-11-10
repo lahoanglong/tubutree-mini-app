@@ -34,12 +34,13 @@ const samePromo = (a: PromoForm, b: PromoForm) => a.title === b.title && a.subti
 export function ProfileTab({ brand }: { brand: OwnedBrand }) {
   const qc = useQueryClient();
   const { node: notice, notify } = useNotice();
-  // Lệnh ghi trả lời hứa làm mới để khoá giữ tới khi hồ sơ mới về, tối đa `settleWithin`. Bị từ chối 400/404/409 (khuyến mãi đã bị xoá hoặc
-  // đổi ở máy khác) thì tải lại luôn: dòng đang hiện đã cũ, bấm lại ra đúng lỗi đó. Lời lỗi nằm ở khung thông báo của trang, không mất theo dòng bị gỡ.
+  // Lệnh ghi trả lời hứa làm mới để khoá giữ tới khi hồ sơ mới về, tối đa `settleWithin`. Bị từ chối vì khuyến mãi đã bị xoá hoặc đổi ở máy khác
+  // (404/409, thêm 400 với bật/tắt và xoá) thì tải lại luôn: dòng đang hiện đã cũ, bấm lại ra đúng lỗi đó. Lời lỗi nằm ở khung thông báo của trang, không mất theo dòng bị gỡ.
   const refresh = () => qc.invalidateQueries({ queryKey: ['owned-brand'] });
-  const failAndReload = (e: unknown) => {
+  // `hasInput`: lệnh có ô người dùng nhập (hồ sơ, form khuyến mãi) thì 400 là lỗi nhập liệu, chỉ 404/409 tải lại; bật/tắt và xoá không có ô nhập nên 400 vẫn là dữ liệu cũ.
+  const failAndReload = (e: unknown, hasInput = false) => {
     notify({ text: ownerActionError(e), tone: 'error' });
-    return reloadWhenStale(e, refresh);
+    return reloadWhenStale(e, refresh, hasInput);
   };
 
   const [f, setF] = useState({
@@ -58,7 +59,7 @@ export function ProfileTab({ brand }: { brand: OwnedBrand }) {
       notify({ text: BRAND_OWNER_SAVED, tone: 'success' });
       return settleWithin(refresh());
     },
-    onError: failAndReload,
+    onError: (e) => failAndReload(e, true),
   });
 
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -80,7 +81,7 @@ export function ProfileTab({ brand }: { brand: OwnedBrand }) {
       notify({ text: 'Đã thêm khuyến mãi', tone: 'success' });
       return settleWithin(refresh());
     },
-    onError: failAndReload,
+    onError: (e) => failAndReload(e, true),
   });
   const updPromo = useLockedMutation(
     {
@@ -92,7 +93,7 @@ export function ProfileTab({ brand }: { brand: OwnedBrand }) {
         notify({ text: 'Đã cập nhật khuyến mãi', tone: 'success' });
         return settleWithin(refresh());
       },
-      onError: failAndReload,
+      onError: (e) => failAndReload(e, true),
     },
     (v) => v.id,
   );
@@ -102,7 +103,7 @@ export function ProfileTab({ brand }: { brand: OwnedBrand }) {
       mutationKey: TOGGLE_KEY,
       mutationFn: (v: { id: string; isActive: boolean }) => updateOwnedPromotion(coreHttp, v.id, { isActive: v.isActive }),
       onSuccess: () => settleWithin(refresh()),
-      onError: failAndReload,
+      onError: (e) => failAndReload(e),
     },
     (v) => v.id,
   );

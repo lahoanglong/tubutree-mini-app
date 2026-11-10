@@ -84,9 +84,10 @@ const PREVIEW = (over: Partial<AdminReturnPreview> = {}): AdminReturnPreview => 
   ...over,
 });
 
+const noop = () => undefined;
 let mounted: Rendered[] = [];
 const mount = async (item: AdminReturnRequest) => {
-  const r = render(<ReturnRow item={item} />);
+  const r = render(<ReturnRow item={item} onActionError={noop} />);
   mounted.push(r);
   await flush();
   return r.container;
@@ -289,14 +290,14 @@ describe('ReturnRow — duyệt đổi/trả theo dòng (ADMINOPS-6, D3)', () =>
   });
 
   it('quyền nhân viên: KHO không có nút duyệt/từ chối, CSKH không có nút "Đã nhận hàng về" (API chặn theo nhóm việc)', async () => {
-    const kho = render(<ReturnRow item={REQ()} canReview={false} />);
+    const kho = render(<ReturnRow item={REQ()} canReview={false} onActionError={noop} />);
     mounted.push(kho);
     await flush();
     expect(btn(kho.container, 'Duyệt hoàn tiền')).toBeNull();
     expect(btn(kho.container, 'Từ chối')).toBeNull();
     expect(kho.container.textContent).toContain('Chờ CSKH hoặc admin duyệt.');
 
-    const cskh = render(<ReturnRow item={REQ({ status: 'APPROVED', refundAmount: 89_000, reviewedAt: '2026-10-13T05:00:00Z' })} canReceive={false} />);
+    const cskh = render(<ReturnRow item={REQ({ status: 'APPROVED', refundAmount: 89_000, reviewedAt: '2026-10-13T05:00:00Z' })} canReceive={false} onActionError={noop} />);
     mounted.push(cskh);
     await flush();
     expect(btn(cskh.container, 'Đã nhận hàng về')).toBeNull();

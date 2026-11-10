@@ -17,7 +17,8 @@ import { captureUnhandledRejections } from '@/test-utils/unhandled';
 import { currentVnYearMonth } from '@/lib/week';
 
 // W96B: Chốt/Mở lại/Ghi đã trả/Đơn giá/Tính lại tháng/Sửa giờ phiên giữ khoá tới khi dữ liệu về nhưng tối đa 4 giây; lệnh bị từ chối vì
-// dữ liệu đã cũ (400/404/409) thì tải lại rồi mới nhả; lời lỗi của tờ hiện trong tờ; Tính lại tháng khoá đồng bộ.
+// dữ liệu đã cũ (400/404/409) thì tải lại rồi mới nhả (lệnh có ô nhập: chỉ 404/409, còn 400 là lỗi nhập hiện trong tờ); lời lỗi của tờ hiện trong tờ; Tính lại tháng khoá đồng bộ.
+// Spec chạy trên QueryClient trần: các ca "lỗi 5xx" chỉ chứng minh lệnh không tự chờ/gọi tải lại; trên production MutationCache vẫn làm cũ khoá admin-* sau mỗi lệnh.
 // Web chặt hơn Mini ở hạn 4 giây và tải lại khi bị từ chối: Mini admin.tsx chỉ khoá useLockedMutation. Mini không có "Tính lại tháng".
 
 const { year, month } = currentVnYearMonth();
@@ -222,7 +223,7 @@ describe('hạn 4 giây: dữ liệu làm mới không về thì khoá vẫn nh�
     expect(q(c, 'Chốt · Lan').hasAttribute('aria-disabled')).toBe(false);
   });
 
-  it('Lưu đơn giá: bảng lương không về thì mở lại tờ vẫn bận ở 3,5 giây, nhả sau hạn 4 giây', async () => {
+  it('Lưu đơn giá: bảng lương không về thì nút Đơn giá chưa mở lại tờ ở 3,5 giây, nhả sau hạn 4 giây và tờ mở được', async () => {
     const c = await mount();
     useHangTimers();
     routes.list = never;
@@ -231,11 +232,13 @@ describe('hạn 4 giây: dữ liệu làm mới không về thì khoá vẫn nh�
     click(q(c, 'Đơn giá · Lan'));
     await flush();
     await advance(3_500);
-    expect(isBusy(rateSave())).toBe(true);
-    await tap(rateSave());
+    expect(dialogEl()).toBeNull();
     expect(writes('/rate')).toBe(1);
     await advance(1_000);
     await flush();
+    click(q(c, 'Đơn giá · Lan'));
+    await flush();
+    expect(dialogEl()).not.toBeNull();
     expect(isBusy(rateSave())).toBe(false);
   });
 
@@ -329,9 +332,9 @@ describe('lệnh bị từ chối vì dữ liệu đã cũ (400/404/409): tải 
     expect(alertText(c)).toContain(STALE);
   });
 
-  it('Ghi đã trả bị 400: lời lỗi trong tờ (không ở trang), tải lại bảng, nhả khi bảng về', async () => {
+  it.each([[404], [409]])('Ghi đã trả bị %i: lời lỗi trong tờ (không ở trang), tải lại bảng, nhả khi bảng về', async (status) => {
     const c = await mount();
-    routes.paid = () => json(400, { message: 'Tháng này đã trả rồi.' });
+    routes.paid = () => json(status, { message: 'Tháng này đã trả rồi.' });
     const list = holdList();
     await doPaid(c);
     expect(alertText(dialogEl()!)).toContain('Tháng này đã trả rồi.');
@@ -345,9 +348,26 @@ describe('lệnh bị từ chối vì dữ liệu đã cũ (400/404/409): tải 
     expect(isBusy(paidSave())).toBe(false);
   });
 
-  it('Lưu đơn giá bị 404: lời lỗi trong tờ, tải lại bảng, nhả khi bảng về', async () => {
+  it('Ghi đã trả bị 400 (ảnh hoặc ghi chú không hợp lệ): lời lỗi trong tờ, lệnh KHÔNG tự tải lại, nhả khoá ngay để sửa rồi gửi lại', async () => {
     const c = await mount();
-    routes.rate = () => json(404, { message: 'Không tìm thấy nhân viên.' });
+    routes.paid = () => json(400, { message: 'Ảnh xác nhận không hợp lệ.' });
+    const list = holdList();
+    await doPaid(c);
+    expect(alertText(dialogEl()!)).toContain('Ảnh xác nhận không hợp lệ.');
+    expect(alertText(c)).toBe('');
+    expect(listGets()).toBe(1);
+    expect(isBusy(paidSave())).toBe(false);
+    routes.paid = () => json(200, { paid: true });
+    click(paidSave());
+    await flush(3);
+    expect(writes('/mark-paid')).toBe(2);
+    list.resolve();
+    await flush();
+  });
+
+  it.each([[404], [409]])('Lưu đơn giá bị %i: lời lỗi trong tờ, tải lại bảng, nhả khi bảng về', async (status) => {
+    const c = await mount();
+    routes.rate = () => json(status, { message: 'Không tìm thấy nhân viên.' });
     const list = holdList();
     await doRate(c);
     expect(alertText(dialogEl()!)).toContain('Không tìm thấy nhân viên.');
@@ -356,6 +376,23 @@ describe('lệnh bị từ chối vì dữ liệu đã cũ (400/404/409): tải 
     list.resolve();
     await flush();
     expect(isBusy(rateSave())).toBe(false);
+  });
+
+  it('Lưu đơn giá bị 400 (vượt trần đơn giá): lời lỗi trong tờ, lệnh KHÔNG tự tải lại, nhả khoá ngay để sửa số rồi lưu lại', async () => {
+    const c = await mount();
+    routes.rate = () => json(400, { message: 'Đơn giá không hợp lệ.' });
+    const list = holdList();
+    await doRate(c);
+    expect(alertText(dialogEl()!)).toContain('Đơn giá không hợp lệ.');
+    expect(alertText(c)).toBe('');
+    expect(listGets()).toBe(1);
+    expect(isBusy(rateSave())).toBe(false);
+    routes.rate = () => json(200, { hourlyRate: 50_000 });
+    click(rateSave());
+    await flush(3);
+    expect(writes('/rate')).toBe(2);
+    list.resolve();
+    await flush();
   });
 
   it('Tính lại tháng bị 400 (tháng đã chốt): hiện lỗi, tải lại bảng, nhả khi bảng về', async () => {
@@ -389,11 +426,45 @@ describe('lệnh bị từ chối vì dữ liệu đã cũ (400/404/409): tải 
     expect(isBusy(saveHours())).toBe(false);
   });
 
+  it('Lưu giờ phiên bị 409: lỗi trong tờ, tải lại chi tiết giờ công và bảng lương, nhả khi chi tiết về', async () => {
+    const c = await mount();
+    await openDetailEdit(c);
+    expect(detailGets()).toBe(1);
+    routes.edit = () => json(409, { message: 'Phiên vừa được sửa ở nơi khác.' });
+    const detail = holdDetail();
+    await doSaveHours();
+    expect(alertText(dialogEl()!)).toContain('Phiên vừa được sửa ở nơi khác.');
+    expect(detailGets()).toBe(2);
+    expect(listGets()).toBe(2);
+    expect(isBusy(saveHours())).toBe(true);
+    detail.resolve();
+    await flush();
+    expect(isBusy(saveHours())).toBe(false);
+  });
+
+  it('Lưu giờ phiên bị 400 (giờ ra không sau giờ vào): lỗi trong tờ, lệnh KHÔNG tự tải lại chi tiết hay bảng lương, nhả khoá ngay', async () => {
+    const c = await mount();
+    await openDetailEdit(c);
+    routes.edit = () => json(400, { message: 'Giờ checkout phải sau giờ checkin.' });
+    const detail = holdDetail();
+    await doSaveHours();
+    expect(alertText(dialogEl()!)).toContain('Giờ checkout phải sau giờ checkin.');
+    expect(detailGets()).toBe(1);
+    expect(listGets()).toBe(1);
+    expect(isBusy(saveHours())).toBe(false);
+    routes.edit = () => json(200, { updated: true });
+    click(saveHours());
+    await flush(3);
+    expect(writes('/attendance/session/ss1/edit')).toBe(2);
+    detail.resolve();
+    await flush();
+  });
+
   it.each([
     ['máy chủ 500', () => json(500, { message: 'x' })],
     ['quyền 403', () => json(403, { message: 'Không đủ quyền.' })],
     ['mất mạng', () => Promise.reject(new TypeError('Failed to fetch'))],
-  ] as const)('Chốt lỗi %s: hiện lỗi, KHÔNG tải lại bảng, nhả khoá ngay', async (_name, reply) => {
+  ] as const)('Chốt lỗi %s: hiện lỗi, nhả khoá ngay, không chờ tải lại bảng (spec chạy QueryClient trần, không có MutationCache như production)', async (_name, reply) => {
     const c = await mount();
     routes.finalize = reply as Route;
     await doFinalize(c);
@@ -402,7 +473,7 @@ describe('lệnh bị từ chối vì dữ liệu đã cũ (400/404/409): tải 
     expect(isBusy(q(c, 'Chốt · Lan'))).toBe(false);
   });
 
-  it('Mở lại, Ghi đã trả, Đơn giá, Tính lại, Lưu giờ lỗi 500: không tải lại', async () => {
+  it('Mở lại, Ghi đã trả, Đơn giá, Tính lại, Lưu giờ lỗi 500: lệnh không tự gọi tải lại (QueryClient trần của spec không có MutationCache như production)', async () => {
     const c = await mount();
     routes.reopen = () => json(500, { message: 'x' });
     routes.paid = () => json(500, { message: 'x' });
@@ -468,9 +539,9 @@ describe('Thưởng/phạt: bảng lương tải lại khi tờ bị từ chối
     await flush(3);
   };
 
-  it('400 (tháng đã chốt): lời lỗi trong tờ và bảng lương được tải lại một lần', async () => {
+  it.each([[404], [409]])('%i (bảng đã cũ): lời lỗi trong tờ và bảng lương được tải lại một lần', async (status) => {
     const c = await mount();
-    routes.adjust = () => json(400, { message: 'Tháng lương đã chốt/đã trả.' });
+    routes.adjust = () => json(status, { message: 'Tháng lương đã chốt/đã trả.' });
     await openAdjust(c);
     await submitAdjust();
     expect(alertText(dialogEl()!)).toContain('Tháng lương đã chốt/đã trả.');
@@ -478,7 +549,17 @@ describe('Thưởng/phạt: bảng lương tải lại khi tờ bị từ chối
     expect(listGets()).toBe(2);
   });
 
-  it('500: không tải lại bảng', async () => {
+  it('400 (số tiền hoặc lý do không hợp lệ): lời lỗi trong tờ, lệnh KHÔNG tự tải lại bảng lương', async () => {
+    const c = await mount();
+    routes.adjust = () => json(400, { message: 'Số tiền điều chỉnh phải khác 0.' });
+    await openAdjust(c);
+    await submitAdjust();
+    expect(alertText(dialogEl()!)).toContain('Số tiền điều chỉnh phải khác 0.');
+    expect(writes('/admin/payroll/adjust')).toBe(1);
+    expect(listGets()).toBe(1);
+  });
+
+  it('500: bảng lương không được gọi tải lại (QueryClient trần của spec không có MutationCache như production)', async () => {
     const c = await mount();
     routes.adjust = () => json(500, { message: 'x' });
     await openAdjust(c);
@@ -623,5 +704,84 @@ describe('số giờ và tiền dùng tabular-nums', () => {
     click(q(c, 'Đơn giá · Lan'));
     await flush();
     expect(dialogEl()!.querySelector('input[type=number]')!.classList.contains('tabular-nums')).toBe(true);
+  });
+});
+
+// Lệnh lưu đã xong và tờ đã đóng nhưng khoá còn giữ tới khi dữ liệu mới về: mở lại tờ lúc này nạp dữ liệu CŨ (đơn giá, giờ phiên) rồi Lưu ghi đè giá trị vừa lưu.
+describe('không mở lại tờ khi lệnh lưu còn chờ dữ liệu mới', () => {
+  const rateOf = (c: HTMLElement, label: string) => q(c, label);
+  const rowWithRate = (id: string, name: string, status: string, hourlyRate: number) => {
+    const base = row(id, name, status);
+    return { ...base, profile: { ...base.profile, hourlyRate } };
+  };
+
+  it('Đơn giá: bảng lương chưa về thì nút Đơn giá của mọi dòng báo bận (aria-disabled, không disabled) và không mở tờ; bảng về thì mở tờ với đơn giá mới', async () => {
+    const c = await mount();
+    ROWS = [rowWithRate('1', 'Lan', 'OPEN', 50_000), row('2', 'Mai', 'FINALIZED')];
+    const list = holdList();
+    await doRate(c);
+    expect(writes('/rate')).toBe(1);
+    expect(dialogEl()).toBeNull();
+    for (const label of ['Đơn giá · Lan', 'Đơn giá · Mai']) {
+      const b = rateOf(c, label);
+      expect(b.getAttribute('aria-disabled')).toBe('true');
+      expect(b.getAttribute('aria-busy')).toBe('true');
+      expect(b.disabled).toBe(false);
+      click(b);
+      await flush();
+      expect(dialogEl()).toBeNull();
+    }
+    list.resolve();
+    await flush(3);
+    expect(rateOf(c, 'Đơn giá · Lan').hasAttribute('aria-disabled')).toBe(false);
+    click(rateOf(c, 'Đơn giá · Lan'));
+    await flush();
+    expect(dialogEl()!.querySelector<HTMLInputElement>('input[type=number]')!.value).toBe('50000');
+    expect(writes('/rate')).toBe(1);
+  });
+
+  it('Sửa giờ phiên: chi tiết chưa về thì nút Sửa giờ cũ không mở form (khỏi nạp giờ cũ); chi tiết về thì mở form với giờ mới', async () => {
+    const c = await mount();
+    await openDetailEdit(c);
+    const held = gate();
+    routes.detail = () =>
+      held.promise.then(() =>
+        json(200, { ...DETAIL, sessions: [{ ...DETAIL.sessions[0], checkinAt: '2026-10-19T01:30:00.000Z', checkoutAt: '2026-10-19T10:00:00.000Z' }] }),
+      );
+    await doSaveHours();
+    expect(writes('/attendance/session/ss1/edit')).toBe(1);
+    const stale = document.querySelector<HTMLButtonElement>('[aria-label="Sửa giờ phiên 08:00"]')!;
+    expect(stale.getAttribute('aria-disabled')).toBe('true');
+    expect(stale.getAttribute('aria-busy')).toBe('true');
+    expect(stale.disabled).toBe(false);
+    click(stale);
+    await flush();
+    expect(document.querySelectorAll('[role=dialog] input[type=time]')).toHaveLength(0);
+    held.resolve();
+    await flush(3);
+    click(document.querySelector('[aria-label="Sửa giờ phiên 08:30"]'));
+    await flush();
+    const times = document.querySelectorAll<HTMLInputElement>('[role=dialog] input[type=time]');
+    expect([times[0]!.value, times[1]!.value]).toEqual(['08:30', '17:00']);
+  });
+
+  it('Ghi đã trả: bảng lương chưa về thì nút Ghi đã trả lương không mở lại tờ; bảng về thì mở được', async () => {
+    const c = await mount();
+    const list = holdList();
+    await doPaid(c);
+    expect(writes('/mark-paid')).toBe(1);
+    const b = q(c, 'Ghi đã trả lương · Mai');
+    expect(b.getAttribute('aria-disabled')).toBe('true');
+    expect(b.getAttribute('aria-busy')).toBe('true');
+    expect(b.disabled).toBe(false);
+    click(b);
+    await flush();
+    expect(dialogEl()).toBeNull();
+    list.resolve();
+    await flush(3);
+    click(q(c, 'Ghi đã trả lương · Mai'));
+    await flush();
+    expect(dialogEl()).not.toBeNull();
+    expect(writes('/mark-paid')).toBe(1);
   });
 });

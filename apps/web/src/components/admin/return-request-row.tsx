@@ -53,10 +53,13 @@ export function ReturnRow({
   item: r,
   canReview = true,
   canReceive = true,
+  onActionError,
 }: {
   item: AdminReturnRequest;
   canReview?: boolean;
   canReceive?: boolean;
+  /** Lời lỗi của Từ chối / "Đã nhận hàng về" do tab giữ (như DealersTab): tab lọc mặc định "Chờ duyệt", yêu cầu đã bị xử lý thì tải lại làm hàng rời bộ lọc và lời lỗi trong hàng mất theo. */
+  onActionError: (text: string | null) => void;
 }) {
   const qc = useQueryClient();
   const { confirm, dialog } = useConfirm();
@@ -64,9 +67,9 @@ export function ReturnRow({
   const [confirming, setConfirming] = useState(false);
   const [shopFault, setShopFault] = useState<boolean | undefined>(undefined);
   const [noteError, setNoteError] = useState<string | null>(null);
-  // Lỗi lưu ở state riêng: `mutation.isError` chỉ bật sau khi lần tải lại xong, và hàng đổi trạng thái thì khối nút bị gỡ.
+  // Lỗi duyệt ở state riêng: `mutation.isError` chỉ bật sau khi lần tải lại xong, và hàng đổi trạng thái thì khối nút bị gỡ. Lỗi duyệt chỉ tính lại số tiền hoàn
+  // (hàng không rời danh sách) nên ở lại trong khối xác nhận; lỗi Từ chối / đã nhận hàng đi lên tab qua `onActionError`.
   const [approveError, setApproveError] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
 
   const preview = useQuery({
     queryKey: ['admin-return-preview', r.id, shopFault],
@@ -106,10 +109,10 @@ export function ReturnRow({
   const reject = useLockedMutation(
     {
       mutationFn: () => reviewReturnRequest(r.id, false, note.trim()),
-      onMutate: () => setActionError(null),
+      onMutate: () => onActionError(null),
       onSuccess: () => settleWithin(refresh()),
       onError: (e: unknown) => {
-        setActionError(errorText(e, 'Không từ chối được yêu cầu.'));
+        onActionError(errorText(e, 'Không từ chối được yêu cầu.'));
         return reloadWhenStale(e, refresh);
       },
     },
@@ -118,10 +121,10 @@ export function ReturnRow({
   const received = useLockedMutation(
     {
       mutationFn: () => markReturnReceived(r.id),
-      onMutate: () => setActionError(null),
+      onMutate: () => onActionError(null),
       onSuccess: () => settleWithin(refresh()),
       onError: (e: unknown) => {
-        setActionError(errorText(e, 'Không ghi nhận được.'));
+        onActionError(errorText(e, 'Không ghi nhận được.'));
         return reloadWhenStale(e, refresh);
       },
     },
@@ -458,11 +461,6 @@ export function ReturnRow({
               </div>
             ))}
         </div>
-      )}
-      {actionError && (
-        <p role="alert" className="mt-2 text-xs text-danger-fg">
-          {actionError}
-        </p>
       )}
       {dialog}
     </div>

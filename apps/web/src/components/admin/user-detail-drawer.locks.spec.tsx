@@ -6,7 +6,8 @@ import { answerAsk, byText, click, confirmDialog, flush, render, type Rendered }
 import type { AdminUserDetail } from '@/lib/admin-client';
 
 // W96B: bốn lệnh ghi QUYỀN/TIỀN của ngăn kéo người dùng (huỷ hoa hồng chờ rút, nhóm việc nhân viên, cắt phiên, khoá đổi rác) giữ khoá tới khi dữ
-// liệu làm mới về (tối đa 4 giây); bị từ chối vì trạng thái đã đổi (400/404/409) thì tải lại, lỗi khác không tải lại. Mỗi ca chạm lại TRONG khoá.
+// liệu làm mới về (tối đa 4 giây); bị từ chối vì dữ liệu cũ (404/409) thì chờ tải lại rồi mới nhả; 400 là lỗi nhập lý do (DTO) nên hiện tại chỗ, không tải lại;
+// lỗi khác nhả khoá ngay. Mỗi ca chạm lại TRONG khoá.
 
 const USER = {
   id: 'u1',
@@ -215,7 +216,19 @@ describe.each(scenarios)('$name', (sc) => {
     expect(btn(body).getAttribute('aria-disabled')).toBeNull();
   });
 
-  it('lỗi 500: hiện lỗi, KHÔNG tải lại, nhả khoá ngay', async () => {
+  // Cả bốn lệnh có ô lý do do admin gõ (DTO MinLength 3 / MaxLength 500 / không chứa < >): 400 là lỗi nhập, tải lại chi tiết không sửa được nó.
+  it('bị từ chối 400 (lý do không hợp lệ): hiện lỗi ngay tại chỗ, KHÔNG tải lại, nhả khoá ngay', async () => {
+    const body = await sc.open();
+    writeStatus = 400;
+    const before = sc.gets();
+    await run(body);
+    expect(sc.gets()).toBe(before);
+    expect(body.querySelector('[role="alert"]')?.textContent).toContain('Lỗi 400');
+    expect(btn(body).getAttribute('aria-disabled')).toBeNull();
+    expect(writes(sc.writePart)).toBe(1);
+  });
+
+  it('lỗi 500: hiện lỗi, lệnh KHÔNG tự tải lại (QueryClient của spec không có MutationCache; production vẫn làm cũ khoá admin-*), nhả khoá ngay', async () => {
     const body = await sc.open();
     writeStatus = 500;
     const before = sc.gets();

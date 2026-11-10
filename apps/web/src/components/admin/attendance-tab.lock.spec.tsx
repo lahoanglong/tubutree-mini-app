@@ -209,7 +209,7 @@ describe('Chốt ra ca bị từ chối vì phiên đã đóng (400/404): tải 
     ['máy chủ 500', () => json(500, { message: 'x' })],
     ['quyền 403', () => json(403, { message: 'Không đủ quyền.' })],
     ['mất mạng', () => Promise.reject(new TypeError('Failed to fetch'))],
-  ] as const)('lỗi %s: hiện lỗi, KHÔNG tải lại, nhả khoá ngay để thử lại', async (_name, reply) => {
+  ] as const)('lỗi %s: hiện lỗi, nhả khoá ngay để thử lại (lệnh không tự tải lại danh sách; trên production MutationCache vẫn làm cũ khoá admin-attendance-live)', async (_name, reply) => {
     const c = await mount();
     routes.checkout = reply as Route;
     await doCheckout(c);

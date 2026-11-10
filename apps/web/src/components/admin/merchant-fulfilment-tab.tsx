@@ -18,6 +18,7 @@ import { payoutStatus, payoutToTubu } from '@/lib/merchant-payout';
 import { formatDate, formatDateTime } from '@/lib/format-date';
 import { actionErrorText } from '@/lib/admin-error-text';
 import { ApiError } from '@/lib/client-api';
+import { errorStatus } from '@tubutree/app-core/api/error-status';
 import { settleWithin } from '@/lib/settle-within';
 import { reloadWhenStale } from '@/lib/stale-write-rejection';
 import { ORDER_STATUS_LABELS } from '@/lib/export-csv';
@@ -97,8 +98,10 @@ export function MerchantFulfilmentTab({ onOpenConsignmentConfirm, isAdmin = fals
     setError(unsure ? `${text} Tải lại trang để xem trạng thái hiện tại.` : text);
     return undefined;
   };
-  // Lập phiếu và ghi sổ/huỷ phiếu bị từ chối vì dữ liệu đang hiện đã cũ (400/404/409: tổng bảng kê vừa khác, phiếu đã huỷ) thì tải lại; lời lỗi ở state của tab nên không mất cùng hàng/phiếu bị gỡ.
-  // Bật/tắt đối tác và lưu phí bị từ chối vì luật nghiệp vụ (còn việc dở, ngoài khoảng), không phải dữ liệu cũ: chỉ báo lỗi, không tải lại.
+  // Lập phiếu bị từ chối vì dữ liệu đang hiện đã cũ (400/404/409: tổng bảng kê vừa khác, không còn khoản nào) thì chờ tải lại rồi mới nhả khoá. Ghi sổ/huỷ phiếu chỉ 404/409 (phiếu đã đổi):
+  // 400 của hai lệnh đó là lỗi nhập, PayoutRow tự xử lý. Lời lỗi ở state của tab nên không mất cùng hàng/phiếu bị gỡ.
+  // Bật/tắt đối tác và lưu phí bị từ chối vì luật nghiệp vụ (còn việc dở, ngoài khoảng), không phải dữ liệu cũ: màn không chờ tải lại. Quy tắc 400/404/409 chỉ quyết định việc CHỜ tải lại
+  // trước khi nhả khoá; trên production MutationCache vẫn làm cũ mọi khoá admin-* sau mỗi lệnh (kể cả lệnh lỗi), nên danh sách vẫn có thể tự tải lại.
   const onError = (e: unknown): Settled => {
     showError(e);
     return reloadWhenStale(e, reload);
@@ -562,13 +565,22 @@ function PayoutRow({
   const [bankRef, setBankRef] = useState('');
   const [refMissing, setRefMissing] = useState(false);
   const refErrorId = useId();
+  // Mã giao dịch và lý do huỷ là ô người dùng nhập: máy chủ chỉ trả 400 khi ô trống hoặc quá dài (phiếu đã đổi là 404/409). Lỗi nhập hiện ngay trong dòng này,
+  // không tải lại danh sách (không sửa được lỗi nhập) và không lên đầu tab, xa dòng đang làm.
+  const [rowError, setRowError] = useState<string | null>(null);
+  const onRowError = (e: unknown): Settled => {
+    if (errorStatus(e) !== 400) return onError(e);
+    setRowError(actionErrorText(e));
+    return undefined;
+  };
   // Ghi sổ và Huỷ phiếu loại trừ nhau trên một phiếu và đều không rút lại được: ref vì `isPending` chỉ đúng sau lần vẽ kế.
   const acting = useRef(false);
   const releaseActing = () => {
     acting.current = false;
   };
-  const paidMut = useMutation({ mutationFn: () => markAdminMerchantPayoutPaid(p.id, bankRef.trim()), onSuccess: onDone, onError, onSettled: releaseActing });
-  const cancelMut = useMutation({ mutationFn: (reason: string) => cancelAdminMerchantPayout(p.id, reason), onSuccess: onDone, onError, onSettled: releaseActing });
+  const clearRowError = () => setRowError(null);
+  const paidMut = useMutation({ mutationFn: () => markAdminMerchantPayoutPaid(p.id, bankRef.trim()), onMutate: clearRowError, onSuccess: onDone, onError: onRowError, onSettled: releaseActing });
+  const cancelMut = useMutation({ mutationFn: (reason: string) => cancelAdminMerchantPayout(p.id, reason), onMutate: clearRowError, onSuccess: onDone, onError: onRowError, onSettled: releaseActing });
   const { confirm, ask, dialog } = useConfirm();
   const busy = paidMut.isPending || cancelMut.isPending;
   const bank = p.bankInfo;
@@ -708,6 +720,11 @@ function PayoutRow({
             </button>
           </form>
         </>
+      )}
+      {rowError && (
+        <p role="alert" className="text-danger-fg">
+          {rowError}
+        </p>
       )}
       {dialog}
     </li>

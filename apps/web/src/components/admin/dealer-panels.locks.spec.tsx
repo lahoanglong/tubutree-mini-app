@@ -134,7 +134,7 @@ describe('DealerPaymentPanel: Xác nhận đã nhận chuyển khoản', () => {
     expect(btn(c).getAttribute('aria-disabled')).toBeNull();
   });
 
-  it('bị từ chối vì đơn đã đổi (409): hiện lỗi ngay, tải lại rồi mới nhả; lỗi 500 không tải lại', async () => {
+  it('bị từ chối vì đơn đã đổi (409): hiện lỗi ngay, tải lại rồi mới nhả; lỗi 500: lệnh không tự tải lại, nhả khoá ngay (QueryClient trần, không có MutationCache như production)', async () => {
     writeStatus = 409;
     const c = await mount();
     const list = gate();

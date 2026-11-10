@@ -5,7 +5,9 @@ import { answerConfirm, byText, click, confirmDialog, flush, render, typeInto, t
 import { CommunityModerationTab } from './community-moderation-tab';
 
 // Wave 96B: khoá Duyệt/Từ chối/Ẩn/Ghim/Bỏ qua báo cáo/Gửi trả lời của kiểm duyệt cộng đồng (web ↔ Mini W74A): một việc mỗi dòng, giữ tới khi danh sách
-// làm mới về (tối đa 4 giây), bị từ chối vì trạng thái đã đổi (400/404/409) thì tải lại, lời lỗi đứng ở đầu tab (không mất cùng dòng bị gỡ).
+// làm mới về (tối đa 4 giây), bị từ chối vì trạng thái đã đổi thì tải lại, lời lỗi đứng ở đầu tab (không mất cùng dòng bị gỡ).
+// Lệnh có ô người dùng nhập (lý do từ chối/ẩn, nội dung trả lời): 400 là lỗi nhập liệu, hiện trên đúng dòng và không tải lại; chỉ 404/409 là dữ liệu cũ.
+// Lệnh không có ô nhập (Duyệt, Ghim, Bỏ qua): 400/404/409 đều là dữ liệu cũ.
 
 const PENDING = [
   { id: 'p1', kind: 'SHOWCASE', title: 'Ban công mới trồng', body: 'Khoe vườn ban công.', images: [], author: 'Lan', category: null, createdAt: '2026-10-17T03:00:00.000Z' },
@@ -169,7 +171,7 @@ describe('bài chờ duyệt: Duyệt / Từ chối', () => {
     expect(count('POST', '/feed/admin/p1/approve')).toBe(2);
   });
 
-  it.each([400, 404, 409])('từ chối bị máy chủ báo %i: lời lỗi hiện NGAY ở đầu tab, tải lại danh sách, giữ khoá tới khi danh sách về', async (status) => {
+  it.each([404, 409])('từ chối bị máy chủ báo %i: lời lỗi hiện NGAY ở đầu tab, tải lại danh sách, giữ khoá tới khi danh sách về', async (status) => {
     const list = gate();
     let loads = 0;
     routes['/feed/admin/pending'] = async () => {
@@ -196,6 +198,31 @@ describe('bài chờ duyệt: Duyệt / Từ chối', () => {
     expect(c.querySelector('[role="alert"]')?.textContent).toContain('Bài này đã được đăng nên không thể từ chối.');
   });
 
+  it('Duyệt (không có ô nhập) bị máy chủ báo 400 vì bài đã đổi trạng thái: vẫn là dữ liệu cũ, lời lỗi ở đầu tab và tải lại danh sách', async () => {
+    routes['/feed/admin/p1/approve'] = () => json(400, { message: 'Bài không còn chờ duyệt.' });
+    const c = await mount();
+    click(btn(row(c, '[data-post="p1"]'), 'Duyệt'));
+    await flush();
+    expect(c.querySelector('[role="alert"]')?.textContent).toContain('Bài không còn chờ duyệt.');
+    expect(pendingGets()).toBe(2);
+  });
+
+  it('từ chối kèm lý do bị máy chủ báo 400 (lỗi nhập lý do): lời lỗi trên đúng dòng, KHÔNG tải lại, không có thông báo ở đầu tab, nhả khoá ngay', async () => {
+    routes['/feed/admin/p1/reject'] = () => json(400, { message: 'reason must be shorter than or equal to 200 characters' });
+    const c = await mount();
+    const li = row(c, '[data-post="p1"]');
+    click(btn(li, 'Từ chối'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(count('POST', '/feed/admin/p1/reject')).toBe(1);
+    expect(li.querySelector('[role="alert"]')).not.toBeNull();
+    expect(c.querySelectorAll('[role="alert"]')).toHaveLength(1);
+    expect(c.textContent).not.toContain('Danh sách đã được làm mới');
+    expect(pendingGets()).toBe(1);
+    expect(busyOf(btn(li, 'Duyệt')).busy).toBeNull();
+  });
+
   it('từ chối bị từ chối mà danh sách tải lại treo: vẫn nhả sau hạn 4 giây', async () => {
     useHangTimers();
     let loads = 0;
@@ -210,7 +237,7 @@ describe('bài chờ duyệt: Duyệt / Từ chối', () => {
     expect(busyOf(btn(li, 'Duyệt')).busy).toBeNull();
   });
 
-  it('lỗi 500 hoặc mất mạng: lời lỗi trên đúng dòng, KHÔNG tải lại danh sách, nhả khoá ngay để thử lại', async () => {
+  it('lỗi 500 hoặc mất mạng: lời lỗi trên đúng dòng, mã không tự tải lại danh sách và nhả khoá ngay để thử lại (QueryClient trần, chưa có MutationCache của production)', async () => {
     routes['/feed/admin/p1/approve'] = () => json(500, { message: 'Máy chủ đang bận' });
     const c = await mount();
     const li = row(c, '[data-post="p1"]');
@@ -280,6 +307,33 @@ describe('báo cáo vi phạm: Ẩn bài / Bỏ qua', () => {
     expect(count('POST', '/feed/admin/reports/r1/resolve')).toBe(1);
     g.resolve();
     await flush();
+  });
+
+  it('Ẩn bài kèm lý do bị máy chủ báo 400 (lỗi nhập lý do): lời lỗi trên đúng dòng, KHÔNG tải lại, không có thông báo ở đầu tab, báo cáo chưa bị đóng', async () => {
+    routes['/feed/admin/a2/hide'] = () => json(400, { message: 'reason must be shorter than or equal to 200 characters' });
+    routes['/feed/admin/reports/r1/resolve'] = () => json(200, { ok: true });
+    const c = await mount({ initialView: 'reports', isAdmin: true });
+    const li = row(c, '[data-report="r1"]');
+    click(btn(li, 'Ẩn bài'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(count('POST', '/feed/admin/a2/hide')).toBe(1);
+    expect(count('POST', '/feed/admin/reports/r1/resolve')).toBe(0);
+    expect(li.querySelector('[role="alert"]')).not.toBeNull();
+    expect(c.querySelectorAll('[role="alert"]')).toHaveLength(1);
+    expect(c.textContent).not.toContain('Danh sách đã được làm mới');
+    expect(reportGets()).toBe(1);
+    expect(busyOf(btn(li, 'Ẩn bài')).busy).toBeNull();
+  });
+
+  it('Bỏ qua, đóng báo cáo (không có ô nhập) bị báo 400 vì báo cáo đã đổi: vẫn là dữ liệu cũ, lời lỗi ở đầu tab và tải lại', async () => {
+    routes['/feed/admin/reports/r1/resolve'] = () => json(400, { message: 'Báo cáo đã được xử lý.' });
+    const c = await mount({ initialView: 'reports', isAdmin: true });
+    click(btn(row(c, '[data-report="r1"]'), 'Bỏ qua, đóng báo cáo'));
+    await flush();
+    expect(c.querySelector('[role="alert"]')?.textContent).toContain('Báo cáo đã được xử lý.');
+    expect(reportGets()).toBe(2);
   });
 
   it('đóng báo cáo bị 404 (báo cáo đã được người khác đóng): tải lại cả báo cáo lẫn bài đã đăng, lời lỗi ở đầu tab, khoá giữ tới khi về', async () => {
@@ -410,11 +464,126 @@ describe('câu hỏi chưa trả lời: Gửi trả lời', () => {
     await act(async () => form.requestSubmit());
     await flush();
     expect(unansweredGets()).toBe(2);
+    typeInto(c.querySelector('textarea[name="reply"]'), 'Tưới ít lại nhé');
     await act(async () => form.requestSubmit());
     await flush(2);
     expect(count('POST', '/feed/q1/comments')).toBe(1);
     list.resolve();
     await flush();
+  });
+
+  const replyBox = (c: HTMLElement) => c.querySelector<HTMLTextAreaElement>('textarea[name="reply"]')!;
+  const submitReply = async (c: HTMLElement) => {
+    await act(async () => c.querySelector('form')!.requestSubmit());
+  };
+
+  it('gửi thành công: ô trả lời trống ngay, kể cả khi danh sách tải lại treo quá hạn 4 giây (không còn chữ để gửi trùng sau 10 giây)', async () => {
+    useHangTimers();
+    let loads = 0;
+    routes['/feed/admin/unanswered'] = () => (++loads > 1 ? new Promise<Response>(() => {}) : json(200, UNANSWERED));
+    routes['/feed/q1/comments'] = () => json(200, { id: 'c1' });
+    const c = await mount({ initialView: 'unanswered' });
+    typeInto(replyBox(c), 'Tưới ít lại nhé');
+    await submitReply(c);
+    await advance(100);
+    expect(count('POST', '/feed/q1/comments')).toBe(1);
+    expect(unansweredGets()).toBe(2);
+    expect(replyBox(c).value).toBe('');
+    await advance(4_500);
+    expect(replyBox(c).value).toBe('');
+    expect(count('POST', '/feed/q1/comments')).toBe(1);
+  });
+
+  it('gửi thành công mà danh sách tải lại hỏng (500): ô trả lời vẫn trống', async () => {
+    let loads = 0;
+    routes['/feed/admin/unanswered'] = () => (++loads > 1 ? json(500, { message: 'lỗi' }) : json(200, UNANSWERED));
+    routes['/feed/q1/comments'] = () => json(200, { id: 'c1' });
+    const c = await mount({ initialView: 'unanswered' });
+    typeInto(replyBox(c), 'Tưới ít lại nhé');
+    await submitReply(c);
+    await flush();
+    expect(unansweredGets()).toBe(2);
+    expect(replyBox(c).value).toBe('');
+  });
+
+  it('gõ thêm trong lúc lệnh còn bay: chữ mới không bị xoá khi lệnh cũ thành công', async () => {
+    const g = gate();
+    routes['/feed/q1/comments'] = async () => {
+      await g.promise;
+      return json(200, { id: 'c1' });
+    };
+    const c = await mount({ initialView: 'unanswered' });
+    typeInto(replyBox(c), 'Câu thứ nhất');
+    await submitReply(c);
+    await flush(1);
+    typeInto(replyBox(c), 'Câu thứ hai khác hẳn');
+    g.resolve();
+    await flush();
+    expect(count('POST', '/feed/q1/comments')).toBe(1);
+    expect(replyBox(c).value).toBe('Câu thứ hai khác hẳn');
+  });
+
+  it('gửi lỗi 500: chữ giữ nguyên để gửi lại, lời lỗi trên đúng dòng', async () => {
+    routes['/feed/q1/comments'] = () => json(500, { message: 'Máy chủ đang bận' });
+    const c = await mount({ initialView: 'unanswered' });
+    typeInto(replyBox(c), 'Tưới ít lại nhé');
+    await submitReply(c);
+    await flush();
+    expect(replyBox(c).value).toBe('Tưới ít lại nhé');
+    expect(row(c, '[data-post="q1"]').textContent).toContain('Máy chủ đang bận');
+  });
+
+  it('chữ chỉ gồm U+200B (JS .trim() không bỏ, máy chủ bỏ): 400 hiện trên đúng dòng, không ở đầu tab, không tải lại danh sách, chữ còn để sửa', async () => {
+    routes['/feed/q1/comments'] = () => json(400, { message: 'Nội dung bình luận trống.' });
+    const c = await mount({ initialView: 'unanswered' });
+    typeInto(replyBox(c), '\u200B');
+    await submitReply(c);
+    await flush();
+    expect(count('POST', '/feed/q1/comments')).toBe(1);
+    expect(row(c, '[data-post="q1"]').querySelector('[role="alert"]')?.textContent).toContain('Nội dung bình luận trống');
+    expect(c.querySelectorAll('[role="alert"]')).toHaveLength(1);
+    expect(c.textContent).not.toContain('Danh sách đã được làm mới');
+    expect(unansweredGets()).toBe(1);
+    expect(replyBox(c).value).toBe('\u200B');
+  });
+
+  it.each([404, 409])('bình luận bị báo %i (bài không còn đăng): vẫn là dữ liệu cũ, lời lỗi ở đầu tab và tải lại danh sách', async (status) => {
+    routes['/feed/q1/comments'] = () => json(status, { message: 'Bài viết không tồn tại.' });
+    const c = await mount({ initialView: 'unanswered' });
+    typeInto(replyBox(c), 'Tưới ít lại nhé');
+    await submitReply(c);
+    await flush();
+    expect(c.querySelector('[role="alert"]')?.textContent).toContain('Bài viết không tồn tại.');
+    expect(c.textContent).toContain('Danh sách đã được làm mới');
+    expect(unansweredGets()).toBe(2);
+  });
+});
+
+describe('bài đã đăng: Ẩn kèm lý do', () => {
+  it('Ẩn bị máy chủ báo 400 (lỗi nhập lý do): lời lỗi trên đúng dòng, KHÔNG tải lại, không có thông báo ở đầu tab', async () => {
+    routes['/feed/admin/a1/hide'] = () => json(400, { message: 'reason must be shorter than or equal to 200 characters' });
+    const c = await mount({ initialView: 'published' });
+    const li = row(c, '[data-post="a1"]');
+    click(btn(li, 'Ẩn'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(count('POST', '/feed/admin/a1/hide')).toBe(1);
+    expect(li.querySelector('[role="alert"]')).not.toBeNull();
+    expect(c.querySelectorAll('[role="alert"]')).toHaveLength(1);
+    expect(c.textContent).not.toContain('Danh sách đã được làm mới');
+    expect(publishedGets()).toBe(1);
+  });
+
+  it.each([404, 409])('Ẩn bị máy chủ báo %i (bài đã đổi trạng thái): lời lỗi ở đầu tab và tải lại danh sách', async (status) => {
+    routes['/feed/admin/a1/hide'] = () => json(status, { message: 'Bài đang chờ duyệt nên chưa được đăng.' });
+    const c = await mount({ initialView: 'published' });
+    click(btn(row(c, '[data-post="a1"]'), 'Ẩn'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(c.querySelector('[role="alert"]')?.textContent).toContain('Bài đang chờ duyệt nên chưa được đăng.');
+    expect(publishedGets()).toBe(2);
   });
 });
 

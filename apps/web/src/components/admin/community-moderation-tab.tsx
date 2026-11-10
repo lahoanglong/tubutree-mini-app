@@ -169,9 +169,18 @@ function Thumbnails({ images }: { images: string[] }) {
 /**
  * Thao tác trên một bài: gọi API, làm mới danh sách và số trên "Việc cần xử lý". Khoá của dòng giữ tới khi danh sách làm mới về (tối đa `settleWithin`):
  * nhả sớm thì dòng vừa duyệt còn nút và bấm lại ra lỗi "đã đổi trạng thái". Bị từ chối vì trạng thái đã đổi (400/404/409) thì lời lỗi hiện ngay ở đầu tab
- * (dòng sắp biến khỏi danh sách) rồi tải lại; lỗi khác hiện trên đúng dòng và không tải lại (lần tải lại hỏng sẽ thay danh sách bằng màn lỗi).
+ * (dòng sắp biến khỏi danh sách) rồi tải lại; lỗi khác hiện trên đúng dòng và mã không chờ tải lại, khoá nhả ngay (lần tải lại hỏng sẽ thay danh sách bằng màn lỗi).
+ * Quy tắc 400/404/409 chỉ quyết định việc CHỜ tải lại trước khi nhả khoá: trên production MutationCache vẫn làm cũ mọi khoá `admin-*` (kể cả khoá của tab này) sau mỗi lệnh settle, kể cả 5xx.
+ * `hasInput`: lệnh nhận chữ do người kiểm duyệt nhập (lý do từ chối/ẩn, nội dung trả lời): 400 là lỗi nhập liệu nên hiện trên đúng dòng, không tải lại;
+ * chỉ 404/409 là dữ liệu cũ. `onSent`: chạy ngay khi lệnh thành công, trước và độc lập với lần làm mới danh sách (lần làm mới có thể treo tới hạn 4 giây hoặc hỏng).
  */
-function usePostAction<V>(fn: (v: V) => Promise<unknown>, refreshKeys: QueryKey[], failText: string, lock: RowLock) {
+function usePostAction<V>(
+  fn: (v: V) => Promise<unknown>,
+  refreshKeys: QueryKey[],
+  failText: string,
+  lock: RowLock,
+  { hasInput = false, onSent }: { hasInput?: boolean; onSent?: (v: V) => void } = {},
+) {
   const qc = useQueryClient();
   const setStaleNotice = useContext(StaleNoticeContext);
   const [err, setErr] = useState<string | null>(null);
@@ -185,9 +194,12 @@ function usePostAction<V>(fn: (v: V) => Promise<unknown>, refreshKeys: QueryKey[
       setErr(null);
       setStaleNotice(null);
     },
-    onSuccess: refresh,
+    onSuccess: (_data, v) => {
+      onSent?.(v);
+      return refresh();
+    },
     onError: (e) => {
-      if (isStaleWriteRejection(e)) {
+      if (isStaleWriteRejection(e, hasInput)) {
         setStaleNotice(e instanceof Error ? e.message : failText);
         return refresh();
       }
@@ -239,7 +251,7 @@ function PendingRow({ post: p }: { post: CommunityPendingPost }) {
   const keys = [QUERY_KEYS.pending];
   const lock = useRowLock();
   const approve = usePostAction(() => approveCommunityPost(p.id), keys, 'Không duyệt được bài.', lock);
-  const reject = usePostAction((reason: string) => rejectCommunityPost(p.id, reason || undefined), keys, 'Không từ chối được bài.', lock);
+  const reject = usePostAction((reason: string) => rejectCommunityPost(p.id, reason || undefined), keys, 'Không từ chối được bài.', lock, { hasInput: true });
   const askReject = async () => {
     if (lock.isHeld()) return;
     const reason = await ask({
@@ -318,6 +330,7 @@ function ReportRow({ report: r, canRemoveComment }: { report: CommunityReport; c
     keys,
     'Không ẩn được nội dung.',
     lock,
+    { hasInput: true },
   );
   const askHide = async () => {
     if (lock.isHeld()) return;
@@ -413,7 +426,7 @@ function PublishedRow({ post: p, canPin }: { post: CommunityPublishedPost; canPi
   const keys = [QUERY_KEYS.published, QUERY_KEYS.unanswered];
   const lock = useRowLock();
   const pin = usePostAction((pinned: boolean) => pinCommunityPost(p.id, pinned), keys, 'Không đổi được trạng thái ghim.', lock);
-  const hide = usePostAction((reason: string) => hideCommunityPost(p.id, reason || undefined), keys, 'Không ẩn được bài.', lock);
+  const hide = usePostAction((reason: string) => hideCommunityPost(p.id, reason || undefined), keys, 'Không ẩn được bài.', lock, { hasInput: true });
   const askHide = async () => {
     if (lock.isHeld()) return;
     const reason = await ask({
@@ -496,7 +509,12 @@ const REPLY_MAX = 500;
 function UnansweredRow({ question: p }: { question: CommunityUnansweredQuestion }) {
   const [reply, setReply] = useState('');
   const lock = useRowLock();
-  const send = usePostAction((body: string) => addComment(coreHttp, p.id, body), [QUERY_KEYS.unanswered], 'Không gửi được câu trả lời.', lock);
+  // Xoá ô ngay khi gửi xong: còn chữ thì sau khi khoá nhả (≤ 4 giây) bấm lại sẽ ra bình luận công khai thứ hai khi đã quá cửa sổ gộp trùng 10 giây của máy chủ.
+  // Chỉ xoá khi ô còn đúng chữ đã gửi, người dùng gõ tiếp câu khác trong lúc chờ thì giữ.
+  const send = usePostAction((body: string) => addComment(coreHttp, p.id, body), [QUERY_KEYS.unanswered], 'Không gửi được câu trả lời.', lock, {
+    hasInput: true,
+    onSent: (sent) => setReply((cur) => (cur.trim() === sent ? '' : cur)),
+  });
   const body = reply.trim();
   return (
     <li data-post={p.id} className="rounded-card border border-stone-200 bg-stone-0 p-3 shadow-card">

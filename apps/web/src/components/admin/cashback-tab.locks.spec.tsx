@@ -4,8 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CashbackTab } from './cashback-tab';
 import { answerAsk, answerConfirm, byText, click, confirmDialog, flush, render, type Rendered } from '@/test-utils/dom';
 
-// W96B: duyệt / từ chối hoàn tiền sàn ngoài (TIỀN vào Ví khách) giữ khoá tới khi danh sách làm mới về (tối đa 4 giây), tải lại khi máy chủ từ chối vì
-// giao dịch đã đổi (400/404/409), nút báo bận bằng aria-busy/aria-disabled (không disabled).
+// W96B: duyệt / từ chối hoàn tiền sàn ngoài (TIỀN vào Ví khách) giữ khoá tới khi danh sách làm mới về (tối đa 4 giây), CHỜ tải lại khi máy chủ từ chối vì
+// giao dịch đã đổi (400/404/409), nút báo bận bằng aria-busy/aria-disabled (không disabled). Spec dựng QueryClient trần (không có MutationCache như
+// createQueryClient trên production, nơi mọi mutation settle đều làm cũ khoá admin-*): chỉ kiểm việc chờ và nhả khoá, không kiểm có tải lại nền hay không.
 
 const txn = (id: string, over: Record<string, unknown> = {}) => ({
   id,
@@ -171,7 +172,7 @@ describe('CashbackTab: lệnh bị từ chối vì giao dịch đã đổi', () 
     expect(c.textContent).toContain('Giao dịch này đã được duyệt trước đó.');
   });
 
-  it.each([500, 403])('%i: hiện lỗi, KHÔNG tải lại danh sách, nhả khoá ngay', async (status) => {
+  it.each([500, 403])('%i: hiện lỗi, không chờ tải lại (không gọi tải lại từ chính lệnh này), nhả khoá ngay', async (status) => {
     writeStatus = status;
     writeBody = { statusCode: status, message: 'Máy chủ đang bận' };
     const c = await mount();

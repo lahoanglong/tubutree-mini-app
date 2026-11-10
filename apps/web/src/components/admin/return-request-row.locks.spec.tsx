@@ -74,6 +74,8 @@ let listLoads = 0;
 let setItemOnPage: (i: AdminReturnRequest) => void = () => undefined;
 function Host({ first }: { first: AdminReturnRequest }) {
   const [item, setItem] = useState(first);
+  // Giống ReturnsTab: lời lỗi của Từ chối / đã nhận hàng do cha giữ, ngoài hàng.
+  const [actionError, setActionError] = useState<string | null>(null);
   setItemOnPage = setItem;
   useQuery({
     queryKey: ['admin-returns', 'probe'],
@@ -83,7 +85,12 @@ function Host({ first }: { first: AdminReturnRequest }) {
       return [];
     },
   });
-  return <ReturnRow item={item} />;
+  return (
+    <>
+      <ReturnRow item={item} onActionError={setActionError} />
+      {actionError && <p role="alert">{actionError}</p>}
+    </>
+  );
 }
 
 let mounted: Rendered | null = null;
@@ -283,7 +290,8 @@ describe('Từ chối', () => {
     await flush();
   });
 
-  it('lỗi 500: hiện lỗi, KHÔNG tải lại danh sách, nhả khoá ngay', async () => {
+  // Spec dùng QueryClient trần (không có MutationCache): chỉ kiểm lệnh Từ chối tự không tải lại; production vẫn làm cũ khoá admin-* ở lỗi này.
+  it('lỗi 500: hiện lỗi, lệnh KHÔNG tự tải lại danh sách, nhả khoá ngay', async () => {
     mocks.review.mockRejectedValueOnce(withStatus(500, 'Máy chủ lỗi'));
     const c = await mount(REQ());
     await reject(c);
@@ -332,7 +340,7 @@ describe('"Đã nhận hàng về" (cộng kho)', () => {
     expect(btn(c, /^Đã nhận hàng về$/)!.getAttribute('aria-disabled')).toBeNull();
   });
 
-  it('bị từ chối 409: lời lỗi hiện ngay, tải lại rồi mới nhả; lỗi 500 không tải lại', async () => {
+  it('bị từ chối 409: lời lỗi hiện ngay, tải lại rồi mới nhả; lỗi 500: lệnh không tự tải lại (QueryClient trần của spec, không có MutationCache)', async () => {
     mocks.received.mockRejectedValueOnce(withStatus(409, 'Đã ghi nhận trước đó'));
     const c = await mount(approved());
     const list = gate();

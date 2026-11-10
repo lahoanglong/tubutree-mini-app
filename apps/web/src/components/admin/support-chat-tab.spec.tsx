@@ -504,13 +504,12 @@ describe('SupportChatTab — nhóm nhận tin', () => {
     const gate = new Promise<void>((r) => (release = r));
     stub();
     const base = globalThis.fetch;
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (url: string, init?: RequestInit) => {
-        if ((init?.method ?? 'GET') === 'POST' && String(url).includes('bridge/test')) await gate;
-        return base(url, init);
-      }),
-    );
+    const fetchSpy = vi.fn(async (url: string, init?: RequestInit) => {
+      if ((init?.method ?? 'GET') === 'POST' && String(url).includes('bridge/test')) await gate;
+      return base(url, init);
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+    const testPosts = () => fetchSpy.mock.calls.filter(([url, init]) => (init?.method ?? 'GET') === 'POST' && String(url).includes('bridge/test')).length;
     const { container } = mount(<SupportChatTab isAdmin />);
     await flush();
     const btn = byText(container, 'button', 'Gửi tin thử') as HTMLButtonElement;
@@ -518,6 +517,11 @@ describe('SupportChatTab — nhóm nhận tin', () => {
     await flush(2);
     // aria-disabled thay disabled: nút vừa bấm đang giữ focus, Chromium thả focus về body khi nó bị disabled.
     expect(byText(container, 'button', 'Đang gửi')?.getAttribute('aria-disabled')).toBe('true');
+    expect(testPosts()).toBe(1);
+    // aria-disabled không chặn được cú bấm: việc chặn là của guard trong handler, nên phải bấm lại để kiểm nó.
+    click(byText(container, 'button', 'Đang gửi'));
+    await flush(2);
+    expect(testPosts()).toBe(1);
     release();
     await flush();
     expect((byText(container, 'button', 'Gửi tin thử') as HTMLButtonElement).disabled).toBe(false);

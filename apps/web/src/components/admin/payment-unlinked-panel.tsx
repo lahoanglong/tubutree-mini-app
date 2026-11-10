@@ -69,7 +69,7 @@ export function PaymentUnlinkedPanel({ order, isAdmin, canFinance = false }: { o
     onError: (e: unknown) => {
       setMsg({ ok: false, text: actionErrorText(e) });
       // 409 (khoản mới tới) hay 400 (bên kia đã đóng): lấy lại mốc cờ và danh sách khoản mới nhất. Lỗi nào cũng tải lại như trước
-      // (đã ghi rồi mới lỗi mạng/5xx thì cờ đã gỡ), khác quy tắc chung chỉ 400/404/409.
+      // (đã ghi rồi mới lỗi mạng/5xx thì cờ đã gỡ), khác quy tắc chung chỉ CHỜ tải lại khi 400/404/409.
       return settleWithin(reloadOrder());
     },
   });
