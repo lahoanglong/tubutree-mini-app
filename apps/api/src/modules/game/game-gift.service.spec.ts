@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { GameGiftService } from './game-gift.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
@@ -21,7 +22,6 @@ function setup(opts: {
   };
   const waterGift = {
     create: jest.fn().mockImplementation(async () => (opts.giftCreate ? opts.giftCreate() : {})),
-    deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
     findMany: jest.fn().mockResolvedValue([]),
   };
   const gameProfile = {
@@ -30,10 +30,18 @@ function setup(opts: {
     upsert: jest.fn().mockResolvedValue({}),
   };
   const executeRaw = jest.fn().mockResolvedValue(1);
-  const prisma = { user, waterGift, gameProfile, $executeRaw: executeRaw } as unknown as PrismaService;
+  const transaction = jest.fn(async (cb: (tx: unknown) => Promise<unknown>, _options?: unknown) => cb(prisma));
+  const prisma = {
+    user,
+    waterGift,
+    gameProfile,
+    $executeRaw: executeRaw,
+    // Truyền thẳng: hành vi rollback thật được chứng minh ở game-gift.service.tx.spec.ts (fake DB có rollback).
+    $transaction: transaction,
+  } as unknown as PrismaService;
   const notify = jest.fn().mockResolvedValue(undefined);
   const notifications = { notify, notifySafe: notify } as unknown as NotificationsService;
-  return { svc: new GameGiftService(prisma, config, notifications), user, waterGift, gameProfile, notify, executeRaw };
+  return { svc: new GameGiftService(prisma, config, notifications), user, waterGift, gameProfile, notify, executeRaw, transaction };
 }
 
 describe('GameGiftService.giftWater', () => {
@@ -64,25 +72,47 @@ describe('GameGiftService.giftWater', () => {
     expect(notify).toHaveBeenCalledWith('friend1', 'GAME_WATER_GIFT', expect.any(Object));
   });
 
+  it('tx có hạn dài hơn mặc định 5 giây: chờ khoá dòng users của checkout/spin tính vào hạn, quá hạn là P2028 → 500', async () => {
+    const { svc, transaction } = setup();
+    await svc.giftWater('u1', 'friend1');
+    expect(transaction).toHaveBeenCalledWith(expect.any(Function), { timeout: 15_000, maxWait: 10_000 });
+  });
+
   it('người nhận là người đã mời mình (referrer) → cũng hợp lệ', async () => {
     const { svc } = setup({ me: { referredById: 'r0' }, referees: [] });
     const r = await svc.giftWater('u1', 'r0');
     expect(r.recipientId).toBe('r0');
   });
 
-  it('đã tặng hôm nay (unique vi phạm) → BadRequest', async () => {
-    const { svc } = setup({
+  it('đã tặng hôm nay (unique P2002 vi phạm) → BadRequest, không trừ/cộng gì', async () => {
+    const { svc, gameProfile, notify } = setup({
       giftCreate: () => {
-        throw new Error('Unique constraint failed');
+        throw new Prisma.PrismaClientKnownRequestError('Unique constraint failed', { code: 'P2002', clientVersion: 'test' });
       },
     });
+    await expect(svc.giftWater('u1', 'friend1')).rejects.toMatchObject({
+      message: 'Hôm nay bạn đã tặng nước cho người này rồi 🌿',
+    });
     await expect(svc.giftWater('u1', 'friend1')).rejects.toBeInstanceOf(BadRequestException);
+    expect(gameProfile.updateMany).not.toHaveBeenCalled();
+    expect(gameProfile.upsert).not.toHaveBeenCalled();
+    expect(notify).not.toHaveBeenCalled();
   });
 
-  it('không đủ 💧 → rollback gift + BadRequest', async () => {
-    const { svc, waterGift } = setup({ decCount: 0 });
-    await expect(svc.giftWater('u1', 'friend1')).rejects.toBeInstanceOf(BadRequestException);
-    expect(waterGift.deleteMany).toHaveBeenCalled(); // đã rollback bản ghi gift
+  it('lỗi tạo gift không phải unique → ném nguyên văn, KHÔNG gắn nhãn "đã tặng"', async () => {
+    const boom = new Error('connection reset');
+    const { svc } = setup({
+      giftCreate: () => {
+        throw boom;
+      },
+    });
+    await expect(svc.giftWater('u1', 'friend1')).rejects.toBe(boom);
+  });
+
+  it('không đủ 💧 → BadRequest giữ nguyên lời, không báo (gift và phần đã cộng huỷ theo tx)', async () => {
+    const { svc, notify } = setup({ decCount: 0 });
+    await expect(svc.giftWater('u1', 'friend1')).rejects.toMatchObject({ message: 'Cần 10💧 để tặng nước.' });
+    expect(notify).not.toHaveBeenCalled();
   });
 
   it('cộng tank người nhận có cap tank_capacity (increment vượt cap → clamp qua updateMany guard)', async () => {
