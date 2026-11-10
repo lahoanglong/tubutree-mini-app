@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import type { ReactNode } from 'react';
@@ -187,6 +187,83 @@ describe('VouchersPage (Mini)', () => {
     expect(callsTo('/coupons/collectable').some(([, opts]) => typeof (opts as { query?: { fresh?: unknown } } | undefined)?.query?.fresh === 'number')).toBe(true);
     expect(await screen.findByText('Đã hết lượt')).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: 'Lưu mã' })).toHaveLength(1);
+  });
+
+  describe('Lưu mã: kiểm hồi quy khoá chạm đúp có từ trước (W88A không đổi phần này)', () => {
+    const deferred = <T,>() => {
+      let resolve!: (v: T) => void;
+      const promise = new Promise<T>((res) => (resolve = res));
+      return { promise, resolve };
+    };
+
+    it('hai cú chạm cùng một khung hình chỉ gọi POST claim một lần, một thông báo (khoá ref của useClaimCoupon)', async () => {
+      const claim = deferred<unknown>();
+      mocks.claimCoupon.mockReturnValueOnce(claim.promise);
+      renderAt();
+      const save = (await screen.findAllByRole('button', { name: 'Lưu mã' }))[0]!;
+      await act(async () => {
+        fireEvent.click(save);
+        fireEvent.click(save);
+      });
+      expect(mocks.claimCoupon).toHaveBeenCalledTimes(1);
+      expect(save).toHaveAttribute('aria-busy', 'true');
+      await act(async () => claim.resolve({ code: 'NEW10', alreadyClaimed: false }));
+      await waitFor(() => expect(mocks.notify).toHaveBeenCalledWith({ text: 'Đã lưu vào Mã của tôi', type: 'success' }));
+      expect(mocks.claimCoupon).toHaveBeenCalledTimes(1);
+      expect(mocks.notify.mock.calls.filter(([a]) => (a as { type: string }).type === 'success')).toHaveLength(1);
+    });
+
+    it('hai cú chạm ở hai lượt act liên tiếp chỉ gọi POST claim một lần (ref của hook và aria-busy của thẻ cùng chặn, bỏ một lớp vẫn xanh)', async () => {
+      const claim = deferred<unknown>();
+      mocks.claimCoupon.mockReturnValueOnce(claim.promise);
+      renderAt();
+      const save = (await screen.findAllByRole('button', { name: 'Lưu mã' }))[0]!;
+      await act(async () => {
+        fireEvent.click(save);
+      });
+      await act(async () => {
+        fireEvent.click(save);
+      });
+      expect(mocks.claimCoupon).toHaveBeenCalledTimes(1);
+      await act(async () => claim.resolve({ code: 'NEW10', alreadyClaimed: false }));
+      await waitFor(() => expect(mocks.notify).toHaveBeenCalledWith({ text: 'Đã lưu vào Mã của tôi', type: 'success' }));
+    });
+  });
+
+  describe('Lưu mã: giữ khoá tới khi kho tải lại sau lỗi (W88A)', () => {
+    const deferred = <T,>() => {
+      let resolve!: (v: T) => void;
+      const promise = new Promise<T>((res) => (resolve = res));
+      return { promise, resolve };
+    };
+
+    it('claim lỗi hết lượt mà kho mới chưa về: thẻ còn cũ vẫn báo bận, chạm tiếp không gọi POST lần hai; kho về thì thẻ thành Đã hết lượt', async () => {
+      const fresh = deferred<unknown>();
+      renderAt();
+      const save = (await screen.findAllByRole('button', { name: 'Lưu mã' }))[0]!;
+      mocks.claimCoupon.mockRejectedValue(httpError(400, 'Mã giảm giá đã hết lượt nhận.'));
+      mocks.coreGet.mockImplementation(async (path: string, opts?: { query?: { fresh?: unknown } }) => {
+        if (path === '/coupons/collectable' && typeof opts?.query?.fresh === 'number') return fresh.promise;
+        return responses[path];
+      });
+      await act(async () => {
+        fireEvent.click(save);
+      });
+      await waitFor(() => expect(mocks.notify).toHaveBeenCalledWith({ text: 'Mã giảm giá đã hết lượt nhận.', type: 'error' }));
+      expect(save).toHaveAttribute('aria-busy', 'true');
+      await act(async () => {
+        fireEvent.click(save);
+      });
+      expect(mocks.claimCoupon).toHaveBeenCalledTimes(1);
+      await act(async () =>
+        fresh.resolve([
+          collectable('NEW10', { title: 'Chào bạn mới', usageLimit: 1, claimedCount: 1 }),
+          collectable('SHIP', { type: 'FREESHIP', value: 0 }),
+        ]),
+      );
+      expect(await screen.findByText('Đã hết lượt')).toBeInTheDocument();
+      expect(mocks.claimCoupon).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('mã đã nhận mà đã dùng hết lượt cá nhân (ví không còn): không có nút Lưu mã, thẻ ghi Đã dùng, mã chưa nhận vẫn Lưu được', async () => {

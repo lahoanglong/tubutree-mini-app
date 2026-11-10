@@ -286,7 +286,7 @@ function WalletHistory({ q }: { q: UseInfiniteQueryResult<InfiniteData<WalletTxn
               fullWidth
               variant="ghost"
               loading={q.isFetchingNextPage}
-              onPress={() => void q.fetchNextPage()}
+              onPress={() => q.fetchNextPage()}
               style={{ marginTop: 8 }}
             >
               Xem thêm

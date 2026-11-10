@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   status: 'authenticated' as 'authenticated' | 'idle',
@@ -21,6 +21,7 @@ vi.mock('./use-notify', () => ({ useNotify: () => ({ notify: mocks.notify }) }))
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import { useClaimCoupon } from './use-claim-coupon';
+import { LOCK_REFRESH_WAIT_MS } from '../utils/settle-within';
 
 const httpError = (status: number, message: string) => ({ isHttpError: true, response: { status, data: { message } } });
 
@@ -30,6 +31,10 @@ function setup() {
   const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
   return { ...renderHook(() => useClaimCoupon(), { wrapper }), invalidate, qc };
 }
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -105,6 +110,67 @@ describe('useClaimCoupon', () => {
     });
     expect(ok).toBe(false);
     expect(result.current.pendingCode).toBeNull();
+  });
+
+  it('lỗi: khoá giữ tới khi kho tải lại xong, thẻ còn cũ chạm tiếp không bắn lệnh nhận lần hai; kho về thì nhả khoá', async () => {
+    let freshReady: (v: unknown) => void = () => undefined;
+    mocks.claimCoupon.mockRejectedValueOnce(httpError(400, 'Mã giảm giá đã hết lượt nhận.'));
+    mocks.get.mockReturnValue(new Promise((r) => (freshReady = r)));
+    const { result } = setup();
+    let first: Promise<boolean> | undefined;
+    await act(async () => {
+      first = result.current.claim('TUBU30');
+    });
+    expect(mocks.notify).toHaveBeenCalledWith({ text: 'Mã giảm giá đã hết lượt nhận.', type: 'error' });
+    expect(result.current.pendingCode).toBe('TUBU30');
+    let second: boolean | undefined;
+    await act(async () => {
+      second = await result.current.claim('TUBU30');
+    });
+    expect(second).toBe(false);
+    expect(mocks.claimCoupon).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      freshReady([]);
+      await first;
+    });
+    expect(result.current.pendingCode).toBeNull();
+    await act(async () => {
+      await result.current.claim('TUBU30');
+    });
+    expect(mocks.claimCoupon).toHaveBeenCalledTimes(2);
+  });
+
+  it('lỗi mà kho không về (mạng chết): thông báo lỗi hiện trước khi chờ, khoá nhả sau LOCK_REFRESH_WAIT_MS và không sớm hơn', async () => {
+    vi.useFakeTimers();
+    mocks.claimCoupon.mockRejectedValueOnce(httpError(400, 'Mã giảm giá đã hết lượt nhận.'));
+    mocks.get.mockReturnValue(new Promise(() => undefined));
+    const { result } = setup();
+    let first: Promise<boolean> | undefined;
+    await act(async () => {
+      first = result.current.claim('TUBU30');
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(mocks.notify).toHaveBeenCalledWith({ text: 'Mã giảm giá đã hết lượt nhận.', type: 'error' });
+    expect(result.current.pendingCode).toBe('TUBU30');
+    let early: boolean | undefined;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 100);
+      early = await result.current.claim('TUBU30');
+    });
+    expect(early).toBe(false);
+    expect(mocks.claimCoupon).toHaveBeenCalledTimes(1);
+    expect(result.current.pendingCode).toBe('TUBU30');
+    let released: boolean | undefined;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(200);
+      released = await first;
+    });
+    expect(released).toBe(false);
+    expect(result.current.pendingCode).toBeNull();
+    await act(async () => {
+      await result.current.claim('TUBU30');
+    });
+    expect(mocks.claimCoupon).toHaveBeenCalledTimes(2);
   });
 
   it('đang nhận một mã: pendingCode là mã đó; chạm đúp chỉ gọi máy chủ một lần', async () => {
