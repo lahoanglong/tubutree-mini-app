@@ -740,3 +740,67 @@ describe('Trang Giờ vàng: khoá chạm đúp Mua ngay và Nhắc tôi (W75A)'
     await waitFor(() => expect(mocks.setReminder).toHaveBeenCalledTimes(2));
   });
 });
+
+describe('Trang Giờ vàng: "Thử lại" món của khung khoá chạm đúp, đổi tab lúc món khung trước chưa về (W87A)', () => {
+  const deferred = () => {
+    let resolve!: (v: unknown) => void;
+    const promise = new Promise((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  const stamp = (body: object) => ({ ...body, serverNow: new Date().toISOString() });
+  const itemCalls = (id: string) => mocks.http.mock.calls.filter(([p]) => new RegExp(`/slots/${id}/items`).test(String(p))).length;
+  /** Giả lập mọi lời gọi đường dẫn của khung `id` trả `reply`, còn lại giữ máy chủ giả đang dùng. */
+  const overrideItems = (id: string, reply: () => unknown) => {
+    const base = mocks.http.getMockImplementation()!;
+    mocks.http.mockImplementation((p: string, ...rest: unknown[]) => (new RegExp(`/slots/${id}/items`).test(p) ? reply() : base(p, ...rest)));
+  };
+
+  async function renderWithItemsRefreshError() {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <FlashSalePage />
+      </QueryClientProvider>,
+    );
+    await screen.findByRole('button', { name: 'Mua ngay Sản phẩm a' });
+    overrideItems('s12', () => Promise.reject(new Error('500')));
+    await act(async () => {
+      await qc.invalidateQueries({ queryKey: ['flash-sales', 'slots', 's12', 'items'] });
+    });
+    return screen.findByRole('button', { name: 'Thử lại' });
+  }
+
+  // Chỉ ca còn dữ liệu cũ mà lần làm mới lỗi mới chứng minh được khoá của nút: truy vấn chưa có dữ liệu thì refetch thứ hai bị react-query gộp.
+  it('"Thử lại" ở vùng danh sách: chạm đúp trong cùng một khung hình chỉ tải lại một lần', async () => {
+    serve({ items: { s12: itemsOf(S12, [item('a')]) } });
+    const retry = await renderWithItemsRefreshError();
+    const next = deferred();
+    overrideItems('s12', () => next.promise);
+    const before = itemCalls('s12');
+    await act(async () => {
+      fireEvent.click(retry);
+      fireEvent.click(retry);
+    });
+    expect(itemCalls('s12') - before).toBe(1);
+    await act(async () => next.resolve(stamp(itemsOf(S12, [item('a')]))));
+    expect(await screen.findByRole('button', { name: 'Mua ngay Sản phẩm a' })).toBeInTheDocument();
+  });
+
+  // Chỉ ghim hành vi nhìn thấy khi đổi tab; không chứng minh chống kết quả cũ (khoá truy vấn theo khung nên kết quả muộn vào ô nhớ khác).
+  it('đổi sang khung 20:00 lúc món khung 12:00 chưa về: hiện món khung 20:00; quay lại 12:00 thì thấy món của nó', async () => {
+    serve({ items: { s20: itemsOf(S20, [item('c')]) } });
+    const late = deferred();
+    overrideItems('s12', () => late.promise);
+    renderPage();
+    await screen.findAllByRole('tab');
+    fireEvent.click(screen.getAllByRole('tab')[1]!);
+    expect(await screen.findByRole('button', { name: 'Nhắc tôi Sản phẩm c' })).toBeInTheDocument();
+    expect(screen.getAllByRole('tab')[1]).toHaveAttribute('aria-selected', 'true');
+    await act(async () => late.resolve(stamp(itemsOf(S12, [item('a')]))));
+    fireEvent.click(screen.getAllByRole('tab')[0]!);
+    expect(await screen.findByRole('button', { name: 'Mua ngay Sản phẩm a' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Nhắc tôi Sản phẩm c' })).toBeNull();
+  });
+});

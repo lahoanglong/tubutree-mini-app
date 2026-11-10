@@ -1,6 +1,6 @@
 import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ComponentType } from 'react';
 import type { BottomSheetProps } from './ui/bottom-sheet';
 
@@ -646,5 +646,219 @@ describe('SubscriptionsPanel: khoá đồng bộ chạm đúp, một việc mỗ
     fireEvent.click(inSheet('Bỏ qua kỳ này'));
     await waitFor(() => expect(mocks.skipSubscriptionCycle).toHaveBeenCalledWith('s1'));
     await waitFor(() => expect(retentionSheet().open).toBe(false));
+  });
+});
+
+describe('SubscriptionsPanel: khoá giữ tới khi danh sách làm mới về (W87A)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sheetSpy.calls.length = 0;
+    mocks.getAddresses.mockResolvedValue([ADDR('a1', '1 Lê Lợi')]);
+    mocks.getWallet.mockResolvedValue({ walletBalance: 50000 });
+    mocks.getSubscriptions.mockResolvedValue([SUB]);
+  });
+
+  it('"Tạm dừng" xong mà danh sách chưa về: nút vẫn bận và bấm thêm không gửi lệnh thứ hai; danh sách về thì nút thành "Tiếp tục" và hết bận', async () => {
+    const refreshed = deferred<unknown[]>();
+    mocks.getSubscriptions.mockResolvedValueOnce([SUB]).mockReturnValueOnce(refreshed.promise);
+    mocks.setSubscriptionStatus.mockResolvedValue({ ...SUB, status: 'PAUSED' });
+    renderPanel();
+    fireEvent.click(await screen.findByRole('button', { name: 'Tạm dừng' }));
+    await waitFor(() => expect(haptic).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mocks.getSubscriptions).toHaveBeenCalledTimes(2));
+    const stale = cardBtns('Tạm dừng')[0]!;
+    expect(stale).toHaveAttribute('aria-busy', 'true');
+    fireEvent.click(stale);
+    fireEvent.click(stale);
+    expect(mocks.setSubscriptionStatus).toHaveBeenCalledTimes(1);
+    await act(async () => refreshed.resolve([{ ...SUB, status: 'PAUSED' }]));
+    const resume = await screen.findByRole('button', { name: 'Tiếp tục' });
+    expect(resume).not.toHaveAttribute('aria-busy');
+    expect(resume).toBeEnabled();
+    expect(mocks.setSubscriptionStatus).toHaveBeenCalledTimes(1);
+  });
+
+  it('"Vẫn huỷ" xong mà danh sách chưa về: sheet đóng ngay sau lệnh, nút thẻ vẫn khoá (không nút nào xoay nhầm); danh sách về thì mở lại, một lệnh duy nhất', async () => {
+    const refreshed = deferred<unknown[]>();
+    mocks.getSubscriptions.mockResolvedValueOnce([SUB]).mockReturnValueOnce(refreshed.promise);
+    mocks.setSubscriptionStatus.mockResolvedValue({ ...SUB, status: 'CANCELLED' });
+    renderPanel();
+    await openRetention();
+    fireEvent.click(inSheet('Vẫn huỷ'));
+    await waitFor(() => expect(haptic).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mocks.getSubscriptions).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(retentionSheet().open).toBe(false));
+    expect(screen.getByRole('button', { name: 'Huỷ' })).toBeDisabled();
+    expect(cardBtns('Tạm dừng')[0]).toBeDisabled();
+    expect(cardBtns('Tạm dừng')[0]).not.toHaveAttribute('aria-busy');
+    expect(mocks.setSubscriptionStatus).toHaveBeenCalledTimes(1);
+    await act(async () => refreshed.resolve([{ ...SUB, status: 'CANCELLED' }]));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Huỷ' })).toBeEnabled());
+    expect(mocks.setSubscriptionStatus).toHaveBeenCalledTimes(1);
+  });
+
+  it('"Bỏ qua kỳ này" xong mà danh sách chưa về: các nút thẻ vẫn khoá (kỳ giao kế tiếp còn là số cũ); danh sách về thì mở lại', async () => {
+    const refreshed = deferred<unknown[]>();
+    mocks.getSubscriptions.mockResolvedValueOnce([SUB]).mockReturnValueOnce(refreshed.promise);
+    mocks.skipSubscriptionCycle.mockResolvedValue(SUB);
+    renderPanel();
+    await openRetention();
+    fireEvent.click(inSheet('Bỏ qua kỳ này'));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'success' })));
+    await waitFor(() => expect(mocks.getSubscriptions).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(retentionSheet().open).toBe(false));
+    expect(screen.getByRole('button', { name: 'Sửa' })).toBeDisabled();
+    expect(cardBtns('Tạm dừng')[0]).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Huỷ' })).toBeDisabled();
+    await act(async () => refreshed.resolve([SUB]));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Sửa' })).toBeEnabled());
+    expect(cardBtns('Tạm dừng')[0]).toBeEnabled();
+    expect(mocks.skipSubscriptionCycle).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('SubscriptionsPanel: "Thử lại" danh sách khoá chạm đúp (W87A)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getAddresses.mockResolvedValue([ADDR('a1', '1 Lê Lợi')]);
+    mocks.getWallet.mockResolvedValue({ walletBalance: 50000 });
+    mocks.getSubscriptions.mockResolvedValue([SUB]);
+  });
+
+  // Truy vấn chưa có dữ liệu thì react-query gộp hai lần refetch làm một, nên chỉ ca còn dữ liệu cũ mà lần làm mới lỗi mới chứng minh được khoá của nút
+  // (refetch thứ hai sẽ huỷ rồi chạy lại).
+  async function renderWithRefreshError() {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    render(<QueryClientProvider client={qc}><SubscriptionsPanel /></QueryClientProvider>);
+    await screen.findByText('Nước xả vải Tubu');
+    mocks.getSubscriptions.mockRejectedValueOnce(new Error('mất mạng'));
+    await act(async () => {
+      await qc.invalidateQueries({ queryKey: ['subscriptions'] });
+    });
+    return screen.findByRole('button', { name: 'Thử lại' });
+  }
+
+  it('chạm đúp trong cùng một khung hình chỉ tải lại một lần', async () => {
+    const retry = await renderWithRefreshError();
+    const next = deferred<unknown[]>();
+    mocks.getSubscriptions.mockReturnValueOnce(next.promise);
+    const before = mocks.getSubscriptions.mock.calls.length;
+    await act(async () => {
+      fireEvent.click(retry);
+      fireEvent.click(retry);
+    });
+    expect(mocks.getSubscriptions.mock.calls.length - before).toBe(1);
+    await act(async () => next.resolve([SUB]));
+    await screen.findByText('Nước xả vải Tubu');
+  });
+
+  it('hai cú chạm ở hai lần act liên tiếp (lượt tải chưa về) vẫn chỉ một lần', async () => {
+    const retry = await renderWithRefreshError();
+    const next = deferred<unknown[]>();
+    mocks.getSubscriptions.mockReturnValueOnce(next.promise);
+    const before = mocks.getSubscriptions.mock.calls.length;
+    await act(async () => {
+      fireEvent.click(retry);
+    });
+    await act(async () => {
+      fireEvent.click(retry);
+    });
+    expect(mocks.getSubscriptions.mock.calls.length - before).toBe(1);
+    await act(async () => next.resolve([SUB]));
+    await screen.findByText('Nước xả vải Tubu');
+  });
+});
+
+describe('SubscriptionsPanel: "Sửa" chờ danh sách làm mới, khoá giữ danh sách có hạn (W87A)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sheetSpy.calls.length = 0;
+    mocks.getAddresses.mockResolvedValue([ADDR('a1', '1 Lê Lợi')]);
+    mocks.getWallet.mockResolvedValue({ walletBalance: 50000 });
+    mocks.getSubscriptions.mockResolvedValue([SUB]);
+  });
+  const qtyShown = () => screen.getByRole('button', { name: 'Giảm số lượng' }).nextElementSibling?.textContent;
+
+  it('lưu ở sheet "Sửa" xong mà danh sách chưa về: "Sửa" không mở lại sheet trên số liệu cũ; danh sách về thì mở với số lượng MỚI', async () => {
+    const refreshed = deferred<unknown[]>();
+    mocks.getSubscriptions.mockResolvedValueOnce([SUB]).mockReturnValueOnce(refreshed.promise);
+    mocks.updateSubscription.mockResolvedValue({ ...SUB, quantity: 3 });
+    renderPanel();
+    fireEvent.click(await screen.findByRole('button', { name: 'Sửa' }));
+    await screen.findByText('Sửa gói định kỳ');
+    expect(qtyShown()).toBe('2');
+    fireEvent.click(screen.getByRole('button', { name: 'Tăng số lượng' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
+    await waitFor(() => expect(mocks.updateSubscription).toHaveBeenCalledWith('s1', { quantity: 3 }));
+    await waitFor(() => expect(mocks.getSubscriptions).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByText('Sửa gói định kỳ')).toBeNull());
+    const edit = screen.getByRole('button', { name: 'Sửa' });
+    await waitFor(() => expect(edit).toBeDisabled());
+    fireEvent.click(edit);
+    expect(screen.queryByText('Sửa gói định kỳ')).toBeNull();
+    await act(async () => refreshed.resolve([{ ...SUB, quantity: 3 }]));
+    await waitFor(() => expect(edit).toBeEnabled());
+    fireEvent.click(edit);
+    await screen.findByText('Sửa gói định kỳ');
+    expect(qtyShown()).toBe('3');
+    expect(screen.getByRole('button', { name: 'Lưu thay đổi' })).toBeDisabled();
+  });
+});
+
+describe('SubscriptionsPanel: khoá giữ danh sách có hạn 4 giây khi làm mới không về (W87A)', () => {
+  const never = () => new Promise<unknown[]>(() => undefined);
+  const advance = (ms: number) =>
+    act(async () => {
+      await vi.advanceTimersByTimeAsync(ms);
+    });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sheetSpy.calls.length = 0;
+    // shouldAdvanceTime để bộ đếm giờ của react-query và waitFor vẫn chạy; chỉ cần giả setTimeout để tua tới hạn.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+    mocks.getAddresses.mockResolvedValue([ADDR('a1', '1 Lê Lợi')]);
+    mocks.getWallet.mockResolvedValue({ walletBalance: 50000 });
+    mocks.getSubscriptions.mockResolvedValueOnce([SUB]).mockReturnValueOnce(never());
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it('"Tạm dừng" trên thẻ: còn khoá ở 3 giây, nhả sau 4 giây dù danh sách chưa về', async () => {
+    mocks.setSubscriptionStatus.mockResolvedValue({ ...SUB, status: 'PAUSED' });
+    renderPanel();
+    fireEvent.click(await screen.findByRole('button', { name: 'Tạm dừng' }));
+    await waitFor(() => expect(mocks.getSubscriptions).toHaveBeenCalledTimes(2));
+    await advance(3_000);
+    expect(cardBtns('Tạm dừng')[0]).toHaveAttribute('aria-busy', 'true');
+    fireEvent.click(cardBtns('Tạm dừng')[0]!);
+    expect(mocks.setSubscriptionStatus).toHaveBeenCalledTimes(1);
+    await advance(1_500);
+    await waitFor(() => expect(cardBtns('Tạm dừng')[0]).not.toHaveAttribute('aria-busy'));
+    fireEvent.click(cardBtns('Tạm dừng')[0]!);
+    await waitFor(() => expect(mocks.setSubscriptionStatus).toHaveBeenCalledTimes(2));
+  });
+
+  it('"Vẫn huỷ" trong sheet: nút thẻ còn khoá ở 3 giây, nhả sau 4 giây', async () => {
+    mocks.setSubscriptionStatus.mockResolvedValue({ ...SUB, status: 'CANCELLED' });
+    renderPanel();
+    await openRetention();
+    fireEvent.click(inSheet('Vẫn huỷ'));
+    await waitFor(() => expect(mocks.getSubscriptions).toHaveBeenCalledTimes(2));
+    await advance(3_000);
+    expect(screen.getByRole('button', { name: 'Huỷ' })).toBeDisabled();
+    await advance(1_500);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Huỷ' })).toBeEnabled());
+  });
+
+  it('"Bỏ qua kỳ này": nút thẻ còn khoá ở 3 giây, nhả sau 4 giây', async () => {
+    mocks.skipSubscriptionCycle.mockResolvedValue(SUB);
+    renderPanel();
+    await openRetention();
+    fireEvent.click(inSheet('Bỏ qua kỳ này'));
+    await waitFor(() => expect(mocks.getSubscriptions).toHaveBeenCalledTimes(2));
+    await advance(3_000);
+    expect(screen.getByRole('button', { name: 'Huỷ' })).toBeDisabled();
+    await advance(1_500);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Huỷ' })).toBeEnabled());
   });
 });
