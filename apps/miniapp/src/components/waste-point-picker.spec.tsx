@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { act, render, screen, fireEvent, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { makeWastePoint } from '../services/waste-test-fixtures';
 import { describeNested, findNestedInteractive } from './ui/nested-interactive';
@@ -329,6 +329,22 @@ describe('WastePointPicker — lý do khoá, bàn phím, bận, số đều (W63
     expect(await screen.findByRole('button', { name: 'Đã chép địa chỉ' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Gọi/ }));
     expect(mocks.callPhone).toHaveBeenCalledWith('0901234567');
+  });
+
+  it('Gọi: chạm đúp trong cùng một nhịp chỉ mở cuộc gọi một lần; gọi xong thì gọi lại được', async () => {
+    let finish: () => void = () => undefined;
+    mocks.callPhone.mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve; }));
+    renderPicker({ points: [NEAR] });
+    const call = screen.getByRole('button', { name: /Gọi/ });
+    act(() => {
+      fireEvent.click(call);
+      fireEvent.click(call);
+    });
+    expect(mocks.callPhone).toHaveBeenCalledTimes(1);
+    await act(async () => finish());
+    fireEvent.click(call);
+    expect(mocks.callPhone).toHaveBeenCalledTimes(2);
+    expect(mocks.callPhone).toHaveBeenLastCalledWith('0901234567');
   });
 
   it('giờ mở cửa, khoảng cách và số điện thoại dùng số đều; nút Chép địa chỉ thì không', () => {

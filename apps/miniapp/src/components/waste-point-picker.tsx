@@ -216,7 +216,7 @@ export function WastePointPicker({ points, value, onChange, items, selectedItemI
                   {copiedId === p.id ? 'Đã chép địa chỉ' : 'Chép địa chỉ'}
                 </Button>
                 {p.phone && (
-                  <Button variant="secondary" icon={Phone} style={{ fontVariantNumeric: 'tabular-nums' }} onPress={() => void callPhone(p.phone as string)}>
+                  <Button variant="secondary" icon={Phone} style={{ fontVariantNumeric: 'tabular-nums' }} onPress={() => callPhone(p.phone as string)}>
                     {`Gọi ${formatPhoneDisplay(p.phone)}`}
                   </Button>
                 )}

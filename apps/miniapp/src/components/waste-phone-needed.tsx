@@ -31,7 +31,7 @@ export function WastePhoneNeeded({ text }: { text: string }) {
         <Text variant="body-sm" tone="secondary" as="div">
           {wasteGuestCopy.whyPhone}
         </Text>
-        <Button fullWidth onPress={() => void share()}>
+        <Button fullWidth onPress={share}>
           Cho Tubu số điện thoại
         </Button>
       </div>

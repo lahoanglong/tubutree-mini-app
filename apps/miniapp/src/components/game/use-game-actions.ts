@@ -24,6 +24,7 @@ import { isHttpError } from '../../services/http';
 import { gameMoreCopy, isStaleQuizMessage } from '@tubutree/app-core/game-more-copy';
 import { vi } from '../../i18n/vi';
 import { formatDrops, formatPoints } from '../../utils/format';
+import { settleWithin } from '../../utils/settle-within';
 import { useLockedMutation } from './use-locked-mutation';
 
 export type { HarvestReward };
@@ -77,17 +78,21 @@ export function useGameActions({
   const { openSnackbar } = useSnackbar();
   const queryClient = useQueryClient();
 
-  const refresh = () => {
-    void queryClient.invalidateQueries({ queryKey: ['game'] });
-    void queryClient.invalidateQueries({ queryKey: ['me'] });
-    // Điểm Xanh vừa đổi → màn Thanh toán đọc số dư từ ['loyalty'], phải làm mới cùng lúc, nếu không
-    // khách vừa tiêu xong sang checkout vẫn thấy số cũ.
-    void queryClient.invalidateQueries({ queryKey: ['loyalty'] });
-  };
+  const refresh = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['game'] }),
+      queryClient.invalidateQueries({ queryKey: ['me'] }),
+      // Điểm Xanh vừa đổi → màn Thanh toán đọc số dư từ ['loyalty'], phải làm mới cùng lúc, nếu không
+      // khách vừa tiêu xong sang checkout vẫn thấy số cũ.
+      queryClient.invalidateQueries({ queryKey: ['loyalty'] }),
+    ]);
+  // Việc một-lần (nhận thưởng, hứng sương, mở lô) giữ khoá tới khi dữ liệu mới về: nhả sớm thì nút còn sáng trên dữ liệu cũ và
+  // cú chạm kế tiếp bị máy chủ từ chối ngay sau lời báo thành công. Có hạn để mạng chậm không giữ nút lâu hơn lệnh vừa xong.
+  const refreshThenRelease = () => settleWithin(refresh());
   // Hết thời gian: máy chủ có thể đã ghi nhận thao tác, nên làm mới để màn hình khớp với sổ.
   const onError = (e: unknown) => {
     openSnackbar({ text: getErrorMessage(e), type: 'error' });
-    if (isHttpError(e) && e.code === 'ECONNABORTED') refresh();
+    if (isHttpError(e) && e.code === 'ECONNABORTED') void refresh();
   };
 
   const checkInM = useLockedMutation({
@@ -100,7 +105,7 @@ export function useGameActions({
       }
       void queryClient.invalidateQueries({ queryKey: ['loyalty-checkin'] });
       void queryClient.invalidateQueries({ queryKey: ['points-txn'] });
-      refresh();
+      void refresh();
     },
     onError,
   });
@@ -108,7 +113,7 @@ export function useGameActions({
     mutationFn: collectDew,
     onSuccess: (r) => {
       openSnackbar({ text: `Hứng được +${formatDrops(r.seedsEarned)} từ giọt sương sáng 💦`, type: 'success' });
-      refresh();
+      return refreshThenRelease();
     },
     onError,
   });
@@ -116,23 +121,23 @@ export function useGameActions({
     mutationFn: buyStreakFreeze,
     onSuccess: (r) => {
       openSnackbar({ text: `Đã mua vé giữ lửa 🧊 (còn ${r.streakFreezes} vé)`, type: 'success' });
-      refresh();
+      void refresh();
     },
     onError,
   });
   const repairM = useLockedMutation({
     mutationFn: repairStreak,
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['game', 'profile'] });
       haptic('medium');
       openSnackbar({ text: vi.game.streakRepair.ok, type: 'success' });
+      return settleWithin(queryClient.invalidateQueries({ queryKey: ['game', 'profile'] }));
     },
     onError,
   });
   const handleSpin = async () => {
     try {
       const r = await spin();
-      refresh();
+      void refresh();
       return r;
     } catch (e) {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
@@ -147,7 +152,7 @@ export function useGameActions({
       const left = Math.max(0, r.target - r.progress);
       openSnackbar({ text: `${label} · còn ${formatDrops(left)} nữa là thu hoạch`, type: 'success' });
     }
-    refresh();
+    void refresh();
     void queryClient.invalidateQueries({ queryKey: ['game', 'forest'] });
   };
 
@@ -162,7 +167,7 @@ export function useGameActions({
     mutationFn: (idempotencyKey: string) => buyTree(idempotencyKey),
     onSuccess: (r) => {
       openSnackbar({ text: `Đã góp 1 cây vào quỹ trồng cây 🌳 (−${formatPoints(r.cost)}) · mã ${r.certificateCode}`, type: 'success' });
-      refresh();
+      void refresh();
       void queryClient.invalidateQueries({ queryKey: ['game', 'forest'] });
     },
     onError,
@@ -171,7 +176,7 @@ export function useGameActions({
     mutationFn: (slot: number) => unlockPlot(slot),
     onSuccess: () => {
       openSnackbar({ text: 'Đã mở lô đất mới 🪴', type: 'success' });
-      refresh();
+      return refreshThenRelease();
     },
     onError,
   });
@@ -185,10 +190,14 @@ export function useGameActions({
     onSuccess: () => {
       haptic('medium');
       openSnackbar({ text: vi.game.seasonPass.claimOk, type: 'success' });
-      void queryClient.invalidateQueries({ queryKey: ['game', 'seasonPass'] });
-      void queryClient.invalidateQueries({ queryKey: ['game', 'profile'] });
-      // Thưởng bậc có thể là Điểm Xanh.
-      void queryClient.invalidateQueries({ queryKey: ['loyalty'] });
+      return settleWithin(
+        Promise.all([
+          queryClient.invalidateQueries({ queryKey: ['game', 'seasonPass'] }),
+          queryClient.invalidateQueries({ queryKey: ['game', 'profile'] }),
+          // Thưởng bậc có thể là Điểm Xanh.
+          queryClient.invalidateQueries({ queryKey: ['loyalty'] }),
+        ]),
+      );
     },
     onError,
   }, ({ tier, track }) => `${tier}:${track}`);
@@ -197,10 +206,14 @@ export function useGameActions({
     onSuccess: (r) => {
       haptic('medium');
       openSnackbar({ text: vi.game.missions.claimOk(r.rewardPoints), type: 'success' });
-      void queryClient.invalidateQueries({ queryKey: ['game', 'missions'] });
-      void queryClient.invalidateQueries({ queryKey: ['me'] });
-      // Thưởng nhiệm vụ cộng Điểm Xanh: màn Thanh toán đọc số dư từ ['loyalty'].
-      void queryClient.invalidateQueries({ queryKey: ['loyalty'] });
+      return settleWithin(
+        Promise.all([
+          queryClient.invalidateQueries({ queryKey: ['game', 'missions'] }),
+          queryClient.invalidateQueries({ queryKey: ['me'] }),
+          // Thưởng nhiệm vụ cộng Điểm Xanh: màn Thanh toán đọc số dư từ ['loyalty'].
+          queryClient.invalidateQueries({ queryKey: ['loyalty'] }),
+        ]),
+      );
     },
     onError,
   }, (code) => code);

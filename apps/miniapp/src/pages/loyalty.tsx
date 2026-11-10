@@ -458,7 +458,7 @@ export default function LoyaltyPage() {
                     variant="secondary"
                     fullWidth
                     loading={txnQ.isFetchingNextPage}
-                    onPress={() => void txnQ.fetchNextPage()}
+                    onPress={() => txnQ.fetchNextPage()}
                     style={{ marginTop: 12 }}
                   >
                     {txnQ.isFetchNextPageError ? 'Chưa tải được, bấm để thử lại' : 'Xem thêm'}
