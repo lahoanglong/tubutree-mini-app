@@ -1,7 +1,7 @@
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
@@ -201,6 +201,7 @@ describe('/rewards Kho quà (§4.8)', () => {
     fireEvent.click(within(await waitFor(() => card('Miễn phí vận chuyển'))).getByRole('button', { name: 'Đổi' }));
     fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Xác nhận đổi' }));
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Quà này đã hết hoặc đã ngừng đổi', type: 'error' })));
+    await waitFor(() => expect(within(screen.getByRole('dialog')).getByRole('button', { name: 'Xác nhận đổi' })).not.toHaveAttribute('aria-busy'));
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Xác nhận đổi' }));
     await waitFor(() => expect(mocks.redeemLoyaltyReward).toHaveBeenCalledTimes(2));
     expect(mocks.redeemLoyaltyReward.mock.calls.map((c) => c[1])).toEqual(['key-2', 'key-2']);
@@ -219,6 +220,7 @@ describe('/rewards Kho quà (§4.8)', () => {
     fireEvent.click(within(await waitFor(() => card('Miễn phí vận chuyển'))).getByRole('button', { name: 'Đổi' }));
     fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Xác nhận đổi' }));
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalled());
+    await waitFor(() => expect(within(screen.getByRole('dialog')).getByRole('button', { name: 'Xác nhận đổi' })).not.toHaveAttribute('aria-busy'));
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Huỷ' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     fireEvent.click(within(card('Miễn phí vận chuyển')).getByRole('button', { name: 'Đổi' }));
@@ -367,5 +369,148 @@ describe('/rewards Kho quà (§4.8)', () => {
     await screen.findByText('Miễn phí vận chuyển');
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     expect(findNestedInteractive(container).map(describeNested)).toEqual([]);
+  });
+});
+
+describe('/rewards đổi quà: khoá có hạn, không đóng khung giữa chừng (W100A)', () => {
+  const advance = (ms: number) =>
+    act(async () => {
+      await vi.advanceTimersByTimeAsync(ms);
+    });
+  const VOUCHER_RESULT = {
+    success: true,
+    message: 'ok',
+    pointsSpent: 20_000,
+    remainingPoints: 10_000,
+    redemption: makeGiftRedemption({ giftKind: 'VOUCHER', status: 'FULFILLED', code: null, couponCode: 'FREESHIP-ABC' }),
+    coupon: { code: 'FREESHIP-ABC', type: 'FREESHIP', value: 0, minOrder: 99000, maxDiscount: null, endAt: '2026-11-16T16:59:59.000Z' },
+  };
+  const openConfirm = async () => {
+    fireEvent.click(within(await waitFor(() => card('Miễn phí vận chuyển'))).getByRole('button', { name: 'Đổi' }));
+    return within(await screen.findByRole('dialog'));
+  };
+
+  beforeEach(() => {
+    // shouldAdvanceTime để bộ đếm giờ của react-query và waitFor vẫn chạy; chỉ cần giả setTimeout để tua tới hạn.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    mocks.invalidate.mockReset();
+  });
+
+  it('đổi xong mà làm mới dữ liệu không về: kết quả (mã đã trừ điểm) vẫn hiện sau tối đa 4 giây, không để khách nhìn nút quay mãi', async () => {
+    mocks.redeemLoyaltyReward.mockResolvedValue(VOUCHER_RESULT);
+    mocks.invalidate.mockReturnValue(new Promise(() => undefined));
+    renderPage();
+    fireEvent.click((await openConfirm()).getByRole('button', { name: 'Xác nhận đổi' }));
+    await waitFor(() => expect(mocks.invalidate).toHaveBeenCalledTimes(1));
+    await advance(3_000);
+    expect(screen.queryByText(/đã vào ví mã giảm giá/)).toBeNull();
+    expect(within(screen.getByRole('dialog')).getByRole('button', { name: 'Xác nhận đổi' })).toHaveAttribute('aria-busy', 'true');
+    await advance(1_500);
+    expect(await screen.findByText('Mã FREESHIP-ABC đã vào ví mã giảm giá')).toBeInTheDocument();
+  });
+
+  it('đang gửi lệnh đổi thì khung xác nhận không đóng được (Huỷ, Esc): mở lại cũng không gửi thêm lệnh; xong thì hiện kết quả', async () => {
+    let resolve!: (v: unknown) => void;
+    mocks.redeemLoyaltyReward.mockReturnValue(new Promise((r) => { resolve = r; }));
+    mocks.invalidate.mockResolvedValue(undefined);
+    renderPage();
+    const sheet = await openConfirm();
+    expect(screen.getByRole('button', { name: 'Đóng' })).toBeInTheDocument();
+    fireEvent.click(sheet.getByRole('button', { name: 'Xác nhận đổi' }));
+    await waitFor(() => expect(mocks.redeemLoyaltyReward).toHaveBeenCalledTimes(1));
+
+    expect(screen.queryByRole('button', { name: 'Đóng' })).toBeNull();
+    fireEvent.click(sheet.getByRole('button', { name: 'Huỷ' }));
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Xác nhận đổi' }));
+    expect(mocks.redeemLoyaltyReward).toHaveBeenCalledTimes(1);
+
+    await act(async () => resolve(VOUCHER_RESULT));
+    expect(await screen.findByText('Mã FREESHIP-ABC đã vào ví mã giảm giá')).toBeInTheDocument();
+    expect(mocks.redeemLoyaltyReward).toHaveBeenCalledTimes(1);
+  });
+
+  it('đổi lỗi mà danh mục chưa tải lại xong: nút còn khoá (aria-busy), chạm tiếp không gửi lại lệnh cũ; nhả sau tối đa 4 giây rồi đổi lại CÙNG khoá', async () => {
+    mocks.redeemLoyaltyReward.mockRejectedValueOnce(new Error('Quà này đã hết hoặc đã ngừng đổi')).mockResolvedValue(VOUCHER_RESULT);
+    mocks.invalidate.mockResolvedValue(undefined);
+    renderPage();
+    const sheet = await openConfirm();
+    mocks.getLoyaltyRewards.mockReturnValueOnce(new Promise(() => undefined));
+    fireEvent.click(sheet.getByRole('button', { name: 'Xác nhận đổi' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Quà này đã hết hoặc đã ngừng đổi', type: 'error' })));
+    await waitFor(() => expect(mocks.getLoyaltyRewards).toHaveBeenCalledTimes(2));
+
+    await advance(3_000);
+    const confirm = within(screen.getByRole('dialog')).getByRole('button', { name: 'Xác nhận đổi' });
+    expect(confirm).toHaveAttribute('aria-busy', 'true');
+    fireEvent.click(confirm);
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Huỷ' }));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(mocks.redeemLoyaltyReward).toHaveBeenCalledTimes(1);
+
+    await advance(1_500);
+    await waitFor(() => expect(within(screen.getByRole('dialog')).getByRole('button', { name: 'Xác nhận đổi' })).not.toHaveAttribute('aria-busy'));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Xác nhận đổi' }));
+    await waitFor(() => expect(mocks.redeemLoyaltyReward).toHaveBeenCalledTimes(2));
+    expect(mocks.redeemLoyaltyReward.mock.calls.map((c) => c[1])).toEqual(['key-2', 'key-2']);
+  });
+
+  it('đổi xong rồi đổi lại cùng quà: lượt thứ hai dùng khoá MỚI (khoá cũ chỉ để phát lại một lượt đã trừ điểm)', async () => {
+    mocks.redeemLoyaltyReward.mockResolvedValue(VOUCHER_RESULT);
+    mocks.invalidate.mockResolvedValue(undefined);
+    renderPage();
+    fireEvent.click((await openConfirm()).getByRole('button', { name: 'Xác nhận đổi' }));
+    await screen.findByText('Mã FREESHIP-ABC đã vào ví mã giảm giá');
+    fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    fireEvent.click((await openConfirm()).getByRole('button', { name: 'Xác nhận đổi' }));
+    await waitFor(() => expect(mocks.redeemLoyaltyReward).toHaveBeenCalledTimes(2));
+
+    const [first, second] = mocks.redeemLoyaltyReward.mock.calls.map((c) => c[1]);
+    expect(second).not.toBe(first);
+  });
+
+  it('hai quà khác nhau dùng hai khoá khác nhau: lỗi mạng ở quà A không làm quà B phát lại khoá của A', async () => {
+    mocks.getLoyaltyRewards.mockResolvedValue(
+      makeRewardCatalog({
+        rewards: [
+          makeRewardItem(),
+          makeRewardItem({ id: 'reward-discount-20k', name: 'Giảm 20.000đ', pointsCost: 10_000, voucher: { type: 'AMOUNT', value: 20000, minOrder: 100000, maxDiscount: null, validDays: 30 }, sortOrder: 2 }),
+        ],
+      }),
+    );
+    mocks.redeemLoyaltyReward.mockRejectedValueOnce(new Error('Network Error')).mockResolvedValue(VOUCHER_RESULT);
+    mocks.invalidate.mockResolvedValue(undefined);
+    renderPage();
+    fireEvent.click(within(await waitFor(() => card('Miễn phí vận chuyển'))).getByRole('button', { name: 'Đổi' }));
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Xác nhận đổi' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalled());
+    await waitFor(() => expect(within(screen.getByRole('dialog')).getByRole('button', { name: 'Xác nhận đổi' })).not.toHaveAttribute('aria-busy'));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Huỷ' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    fireEvent.click(within(card('Giảm 20.000đ')).getByRole('button', { name: 'Đổi' }));
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Xác nhận đổi' }));
+    await waitFor(() => expect(mocks.redeemLoyaltyReward).toHaveBeenCalledTimes(2));
+
+    expect(mocks.redeemLoyaltyReward.mock.calls.map((c) => c[0])).toEqual(['reward-freeship', 'reward-discount-20k']);
+    const [keyA, keyB] = mocks.redeemLoyaltyReward.mock.calls.map((c) => c[1]);
+    expect(keyB).not.toBe(keyA);
+  });
+
+  it('lệnh khác của ứng dụng đang bay không khoá khung đổi quà: chỉ lệnh đổi quà mới chặn đóng', async () => {
+    mocks.invalidate.mockResolvedValue(undefined);
+    const { qc } = renderPage();
+    await openConfirm();
+    void qc.getMutationCache().build(qc, { mutationKey: ['cart-add'], mutationFn: () => new Promise(() => undefined) }).execute(undefined);
+    await waitFor(() => expect(qc.isMutating()).toBe(1));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 });
