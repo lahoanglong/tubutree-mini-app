@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   gate: null as Promise<void> | null,
   listCalls: 0,
   listError: false,
+  script: [] as Promise<Record<string, unknown>[]>[],
   update: vi.fn(),
   create: vi.fn(),
   remove: vi.fn(),
@@ -28,6 +29,8 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/shop-client')>()),
   getAddresses: async () => {
     mocks.listCalls += 1;
+    const scripted = mocks.script.shift();
+    if (scripted) return scripted;
     if (mocks.gate) await mocks.gate;
     if (mocks.listError) throw new Error('boom');
     return mocks.list;
@@ -89,6 +92,7 @@ beforeEach(() => {
   mocks.gate = null;
   mocks.listCalls = 0;
   mocks.listError = false;
+  mocks.script = [];
   mocks.update.mockReset().mockResolvedValue(A1);
   mocks.create.mockReset().mockResolvedValue(A1);
   mocks.remove.mockReset().mockResolvedValue({ ok: true });
@@ -234,7 +238,7 @@ describe('Sổ địa chỉ — Xoá khoá theo địa chỉ, loại trừ với
     await flush(4);
     expect(c.querySelector('[role="alertdialog"]')).toBeNull();
     expect(document.activeElement).not.toBe(btn(c, 'Thêm địa chỉ mới'));
-    expect(btn(c, DEL_A2)!.getAttribute('aria-disabled')).toBe('true');
+    expect(btn(c, DEL_A2)).toBeUndefined();
     await releaseList();
     expect(document.activeElement).toBe(btn(c, 'Thêm địa chỉ mới'));
   });
@@ -278,6 +282,99 @@ describe('Sổ địa chỉ — Xoá khoá theo địa chỉ, loại trừ với
     expect(mocks.remove).toHaveBeenCalledTimes(1);
     expect(mocks.update).toHaveBeenCalledWith('a3', { isDefault: true });
     await releaseList();
+  });
+});
+
+describe('Sổ địa chỉ — sổ mới chưa về thì dòng đã xoá vẫn không quay lại (Mini 88A)', () => {
+  type Rows = Record<string, unknown>[];
+  const deferred = <T,>() => {
+    let resolve!: (v: T) => void;
+    let reject!: (e: unknown) => void;
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+  const cardOf = (c: HTMLElement, name: string) => Array.from(c.querySelectorAll('li')).find((li) => li.textContent?.includes(name));
+  const deleteA2 = async (c: HTMLElement) => {
+    click(btn(c, DEL_A2)!);
+    click(confirmBtn(c, 'Xoá')!);
+    await flush(4);
+  };
+
+  it('xoá xong mà sổ mới chưa về: dòng đã xoá và cả ba nút của nó biến mất ngay, dòng kia còn nguyên; sổ về rồi vẫn vậy', async () => {
+    const c = await mount();
+    const refetch = deferred<Rows>();
+    mocks.script.push(refetch.promise);
+    await deleteA2(c);
+    expect(mocks.listCalls).toBe(2);
+    expect(mocks.remove).toHaveBeenCalledWith('a2');
+    expect(cardOf(c, 'Trần Bình')).toBeUndefined();
+    expect(btn(c, DEL_A2)).toBeUndefined();
+    expect(btn(c, SET_A2)).toBeUndefined();
+    expect(btn(c, 'Sửa địa chỉ của Trần Bình')).toBeUndefined();
+    expect(cardOf(c, 'Lê Chi')).toBeDefined();
+    expect(btn(c, DEL_A3)).toBeDefined();
+    await act(async () => refetch.resolve([A1, A3]));
+    await flush(4);
+    expect(cardOf(c, 'Trần Bình')).toBeUndefined();
+    expect(cardOf(c, 'Lê Chi')).toBeDefined();
+  });
+
+  it('xoá xong mà tải lại sổ lỗi: dòng đã xoá không quay lại, dòng kia còn nguyên, không có unhandled rejection', async () => {
+    const c = await mount();
+    const refetch = deferred<Rows>();
+    mocks.script.push(refetch.promise);
+    const seen = await captureUnhandledRejections(async () => {
+      await deleteA2(c);
+      await act(async () => refetch.reject(new Error('offline')));
+      await flush(4);
+    });
+    expect(seen).toEqual([]);
+    expect(mocks.listCalls).toBe(2);
+    expect(cardOf(c, 'Trần Bình')).toBeUndefined();
+    expect(cardOf(c, 'Lê Chi')).toBeDefined();
+  });
+
+  it('xoá một địa chỉ rồi đặt mặc định địa chỉ khác trước khi lần tải lại đầu về (lần sau huỷ lần trước): địa chỉ đã xoá vắng mặt ở mọi bước, kể cả khi sổ cũ của lần bị huỷ về muộn', async () => {
+    const c = await mount();
+    const afterDelete = deferred<Rows>();
+    const afterDefault = deferred<Rows>();
+    mocks.script.push(afterDelete.promise, afterDefault.promise);
+    await deleteA2(c);
+    expect(cardOf(c, 'Trần Bình')).toBeUndefined();
+    click(btn(c, SET_A3)!);
+    await flush(4);
+    expect(mocks.update).toHaveBeenCalledWith('a3', { isDefault: true });
+    expect(mocks.listCalls).toBe(3);
+    expect(cardOf(c, 'Trần Bình')).toBeUndefined();
+    await act(async () => afterDelete.resolve([A1, A2, A3]));
+    await flush(4);
+    expect(cardOf(c, 'Trần Bình')).toBeUndefined();
+    await act(async () => afterDefault.resolve([{ ...A1, isDefault: false }, { ...A3, isDefault: true }]));
+    await flush(4);
+    expect(cardOf(c, 'Trần Bình')).toBeUndefined();
+    expect(cardOf(c, 'Lê Chi')!.textContent).toContain('Mặc định');
+    expect(mocks.remove).toHaveBeenCalledTimes(1);
+  });
+
+  it('kiểm hồi quy (đã đúng từ trước, không chứng minh sửa của wave): đặt mặc định xong mà tải lại sổ lỗi thì khoá vẫn nhả, nút hết bận, bấm lại gửi được', async () => {
+    const c = await mount();
+    const refetch = deferred<Rows>();
+    mocks.script.push(refetch.promise);
+    click(btn(c, SET_A2)!);
+    await flush(4);
+    expect(btn(c, SET_A2)!.getAttribute('aria-busy')).toBe('true');
+    const seen = await captureUnhandledRejections(async () => {
+      await act(async () => refetch.reject(new Error('offline')));
+      await flush(4);
+    });
+    expect(seen).toEqual([]);
+    expect(btn(c, SET_A2)!.hasAttribute('aria-busy')).toBe(false);
+    click(btn(c, SET_A2)!);
+    await flush(4);
+    expect(mocks.update).toHaveBeenCalledTimes(2);
   });
 });
 

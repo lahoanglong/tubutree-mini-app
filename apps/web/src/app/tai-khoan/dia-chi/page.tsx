@@ -85,6 +85,8 @@ export default function AddressBookPage() {
           deleteOk.current = true;
           setConfirmId((cur) => (cur === v.id ? null : cur));
           setRemovedNotice(true);
+          // Lần tải lại có thể bị lần làm mới của lệnh sau huỷ hoặc lỗi mạng: dòng đã xoá không được ở lại chờ chúng.
+          qc.setQueryData<AddressDTO[]>(['addresses'], (list) => list?.filter((x) => x.id !== v.id));
         }
         return refresh();
       },
@@ -101,8 +103,8 @@ export default function AddressBookPage() {
   const busyKey = inFlightOps.map((v) => v.id).join('|');
 
   // Hộp xác nhận xóa thay chính nút "Xóa" của dòng nên focus phải được dời theo: vào "Giữ lại" (lựa chọn an toàn) khi mở, khi đóng
-  // về nút "Xóa" của dòng đó. Xóa xong thì dòng biến mất sau khi tải lại danh sách, nên về nút "Thêm địa chỉ mới". Chờ hết
-  // việc đang bay của địa chỉ đó vì kết quả xóa đến sau lúc hộp đóng.
+  // về nút "Xóa" của dòng đó. Xóa xong thì dòng biến mất ngay khỏi bộ nhớ đệm (không đợi tải lại), nên về nút "Thêm địa chỉ mới"
+  // sau khi sổ mới về và khoá nhả. Chờ hết việc đang bay của địa chỉ đó vì kết quả xóa đến sau lúc hộp đóng.
   useEffect(() => {
     if (confirmId === null) return;
     restoreFocusFor.current = confirmId;

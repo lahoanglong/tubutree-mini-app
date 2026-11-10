@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 
@@ -442,5 +443,30 @@ describe('VouchersView (web)', () => {
     expect(h1s).toHaveLength(1);
     expect(h1s[0]!.textContent).toBe('Mã giảm giá');
     expect(byText(document.body, 'header', 'Mỗi đơn dùng 1 mã')).toBeTruthy();
+  });
+});
+
+describe('VouchersView (web) — Lưu mã khoá chạm đúp (kiểm hồi quy: khoá có từ trước, không chứng minh sửa của wave)', () => {
+  it('hai cú chạm cùng một khung hình chỉ gọi POST claim một lần; nút aria-busy, không disabled thật; xong thì đúng một dòng báo', async () => {
+    let finish: (v: unknown) => void = () => undefined;
+    mocks.post.mockReset().mockReturnValueOnce(new Promise((r) => (finish = r)));
+    mount();
+    await flush();
+    const save = buttons('Lưu mã')[0]!;
+    act(() => {
+      save.click();
+      save.click();
+    });
+    await flush(3);
+    expect(mocks.post).toHaveBeenCalledTimes(1);
+    expect(save.getAttribute('aria-busy')).toBe('true');
+    expect(save.getAttribute('aria-disabled')).toBe('true');
+    expect(save.disabled).toBe(false);
+    responses['/me/coupons'] = [wallet('NEW10')];
+    await act(async () => finish({ code: 'NEW10', alreadyClaimed: false }));
+    await flush(6);
+    expect(mocks.post).toHaveBeenCalledTimes(1);
+    expect(document.querySelectorAll('[role="status"]')).toHaveLength(1);
+    expect(buttons('Dùng ngay')).toHaveLength(1);
   });
 });
