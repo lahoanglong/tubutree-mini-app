@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react';
 import { STOREFRONT_TEMPLATE_BUSY } from '@tubutree/app-core/client-copy';
 import Link from 'next/link';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, Circle, Info, Plus, Trash2 } from 'lucide-react';
 import {
   SIGNUP_COPY,
@@ -29,6 +29,7 @@ import {
 } from '@tubutree/app-core/api/storefront';
 import { affiliateMeQuery } from '@tubutree/app-core/queries/affiliate';
 import { storefrontCategoriesQuery, storefrontQuestsQuery } from '@tubutree/app-core/queries/storefront';
+import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
 import { ui } from '@/lib/guest-ui';
@@ -41,6 +42,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { StorefrontImageUpload } from './storefront-image-upload';
 import { StorefrontPreview } from './storefront-preview';
 import { PickerSheet, actErrText, errText } from './storefront-sheets';
+
+const REMOVE_ITEM_KEY = ['storefront-signup-remove-item'] as const;
 
 interface Props {
   /** null = chưa có gian hàng (API trả 404). */
@@ -121,7 +124,10 @@ function BottomBar({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** Thanh hành động dính đáy: Quay lại + nút chính, cùng kiểu thanh dưới của trình dựng. */
+/**
+ * Thanh hành động dính đáy: Quay lại + nút chính, cùng kiểu thanh dưới của trình dựng. Nút chính đang gửi (`loading`) giữ aria-busy chứ không `disabled`
+ * (nút đang giữ focus mà bị vô hiệu thì Chromium thả focus về body); `disabled` thật chỉ khi chưa đủ điều kiện đi tiếp.
+ */
 function StepBar({
   onBack,
   next,
@@ -140,7 +146,14 @@ function StepBar({
             {SIGNUP_COPY.back}
           </button>
         )}
-        <button type="button" className={`${ui.btnPrimary} min-w-0 flex-1`} disabled={next.disabled || next.loading} onClick={next.onPress}>
+        <button
+          type="button"
+          className={`${ui.btnPrimary} min-w-0 flex-1`}
+          disabled={next.disabled}
+          aria-busy={next.loading || undefined}
+          aria-disabled={next.loading || undefined}
+          onClick={next.onPress}
+        >
           {next.label}
         </button>
       </div>
@@ -153,10 +166,11 @@ function ConditionsStep({ sf, onStarted }: { sf: StorefrontEdit | null; onStarte
   const [error, setError] = useState<string | null>(null);
   const meQ = useQuery({ ...affiliateMeQuery(coreHttp), retry: false });
   const gate = signupGate(meQ.data);
-  const startMut = useMutation({
+  const startMut = useLockedMutation({
     mutationFn: async () => {
       if (!sf) await createStorefront(coreHttp);
     },
+    onMutate: () => setError(null),
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ['my-storefront'] });
       onStarted();
@@ -165,7 +179,7 @@ function ConditionsStep({ sf, onStarted }: { sf: StorefrontEdit | null; onStarte
   });
 
   if (meQ.isLoading) return <Skeleton height={160} />;
-  if (meQ.isError) return <ErrorState message={errText(meQ.error)} onRetry={() => void meQ.refetch()} />;
+  if (meQ.isError) return <ErrorState message={errText(meQ.error)} onRetry={() => meQ.refetch()} />;
 
   return (
     <>
@@ -228,7 +242,7 @@ function InfoStep({ sf, onBack, onDone }: { sf: StorefrontEdit; onBack: () => vo
   const [error, setError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  const saveMut = useMutation({
+  const saveMut = useLockedMutation({
     mutationFn: () => updateStorefront(coreHttp, { title: title.trim(), headerNote: note.trim(), avatarUrl: avatarUrl.trim(), coverUrl: coverUrl.trim() }),
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ['my-storefront'] });
@@ -292,28 +306,39 @@ function ProductsStep({ sf, onBack, onDone }: { sf: StorefrontEdit; onBack: () =
   const [templateOpen, setTemplateOpen] = useState(false);
   const [pickerCol, setPickerCol] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Lỗi bỏ món nhớ theo từng món: `mutation.error` chỉ giữ lệnh sau cùng nên món A lỗi sau khi món B đã chạy sẽ mất lời báo.
+  const [removeErrors, setRemoveErrors] = useState<ReadonlyMap<string, string>>(() => new Map());
   const items = sf.collections.flatMap((c) => c.items);
   const refresh = () => qc.invalidateQueries({ queryKey: ['my-storefront'] });
   const fail = (e: unknown) => setError(actErrText(e));
 
-  const templateMut = useMutation({
+  const templateMut = useLockedMutation({
     mutationFn: (categoryId: string) => applyStorefrontTemplate(coreHttp, categoryId),
+    onMutate: () => setError(null),
     onSuccess: async () => {
       setTemplateOpen(false);
       await refresh();
     },
     onError: fail,
   });
-  const openPicker = useMutation({
+  const openPicker = useLockedMutation({
     mutationFn: async () => sf.collections[0]?.id ?? (await createCollection(coreHttp, { title: SIGNUP_COPY.defaultCollection })).id,
+    onMutate: () => setError(null),
     onSuccess: (id) => setPickerCol(id),
     onError: fail,
   });
-  const removeMut = useMutation({
-    mutationFn: (id: string) => removeItem(coreHttp, id),
-    onSuccess: () => void refresh(),
-    onError: fail,
-  });
+  // Khoá theo mã món: bỏ hai món khác nhau vẫn song song, chạm lặp vào cùng một món thì bỏ qua.
+  const removeMut = useLockedMutation(
+    {
+      mutationKey: REMOVE_ITEM_KEY,
+      mutationFn: (id: string) => removeItem(coreHttp, id),
+      onMutate: (id) => setRemoveErrors((prev) => new Map([...prev].filter(([k]) => k !== id))),
+      onSuccess: () => refresh(),
+      onError: (e, id) => setRemoveErrors((prev) => new Map(prev).set(id, actErrText(e))),
+    },
+    (id) => id,
+  );
+  const removingIds = useMutationState({ filters: { mutationKey: REMOVE_ITEM_KEY, status: 'pending' }, select: (m) => m.state.variables as string });
   const catQ = useQuery({ ...storefrontCategoriesQuery(coreHttp), enabled: templateOpen });
 
   return (
@@ -335,24 +360,42 @@ function ProductsStep({ sf, onBack, onDone }: { sf: StorefrontEdit; onBack: () =
         {items.length === 0 ? (
           <p className="mt-1 text-xs text-stone-600">{SIGNUP_COPY.noProducts}</p>
         ) : (
-          items.map((it) => (
-            <div key={it.id} className="flex items-center border-b border-stone-200 py-1.5">
-              <div className="min-w-0 flex-1">
-                <div className="text-sm text-stone-900">{it.product?.name ?? 'Sản phẩm'}</div>
-                <div className="text-sm font-semibold tabular-nums text-stone-900">{formatVnd(it.product?.salePrice ?? it.product?.basePrice ?? 0)}</div>
+          items.map((it) => {
+            const removing = removingIds.includes(it.id);
+            return (
+              <div key={it.id} className="border-b border-stone-200 py-1.5">
+                <div className="flex items-center">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm text-stone-900">{it.product?.name ?? 'Sản phẩm'}</div>
+                    <div className="text-sm font-semibold tabular-nums text-stone-900">{formatVnd(it.product?.salePrice ?? it.product?.basePrice ?? 0)}</div>
+                  </div>
+                  <button
+                    type="button"
+                    aria-label={`Bỏ ${it.product?.name ?? 'sản phẩm'}`}
+                    aria-busy={removing || undefined}
+                    aria-disabled={removing || undefined}
+                    onClick={() => removeMut.mutate(it.id)}
+                    className={`inline-flex h-11 w-11 items-center justify-center rounded-full text-danger-fg hover:bg-stone-100 ${removing ? 'opacity-50' : ''}`}
+                  >
+                    <Trash2 className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                </div>
+                {removeErrors.get(it.id) && (
+                  <p role="alert" className={`mt-1 ${ui.error}`}>
+                    {removeErrors.get(it.id)}
+                  </p>
+                )}
               </div>
-              <button
-                type="button"
-                aria-label={`Bỏ ${it.product?.name ?? 'sản phẩm'}`}
-                onClick={() => removeMut.mutate(it.id)}
-                className="inline-flex h-11 w-11 items-center justify-center rounded-full text-danger-fg hover:bg-stone-100"
-              >
-                <Trash2 className="h-4 w-4" aria-hidden="true" />
-              </button>
-            </div>
-          ))
+            );
+          })
         )}
-        <button type="button" className={`${ui.btnSecondary} mt-2.5`} disabled={openPicker.isPending} onClick={() => openPicker.mutate()}>
+        <button
+          type="button"
+          className={`${ui.btnSecondary} mt-2.5`}
+          aria-busy={openPicker.isPending || undefined}
+          aria-disabled={openPicker.isPending || undefined}
+          onClick={() => openPicker.mutate()}
+        >
           <Plus className="mr-1 h-4 w-4" aria-hidden="true" />
           {SIGNUP_COPY.pickCta}
         </button>
@@ -369,9 +412,9 @@ function ProductsStep({ sf, onBack, onDone }: { sf: StorefrontEdit; onBack: () =
         next={{ label: SIGNUP_COPY.next, disabled: items.length === 0, onPress: onDone }}
       />
 
-      <Sheet open={templateOpen} onClose={() => setTemplateOpen(false)} title="Bắt đầu nhanh với 1 mẫu có sẵn" description={SIGNUP_COPY.templateHint}>
+      <Sheet open={templateOpen} onClose={() => setTemplateOpen(false)} dismissible={!templateMut.isPending} title="Bắt đầu nhanh với 1 mẫu có sẵn" description={SIGNUP_COPY.templateHint}>
         {catQ.isLoading && <Skeleton height={120} />}
-        {catQ.isError && <ErrorState message={errText(catQ.error)} onRetry={() => void catQ.refetch()} />}
+        {catQ.isError && <ErrorState message={errText(catQ.error)} onRetry={() => catQ.refetch()} />}
         {catQ.data && (
           <div className="grid grid-cols-2 gap-2">
             {catQ.data.map((c: StorefrontCategory) => (
@@ -379,8 +422,9 @@ function ProductsStep({ sf, onBack, onDone }: { sf: StorefrontEdit; onBack: () =
                 key={c.id}
                 type="button"
                 aria-label={`Dùng mẫu ${c.name}`}
+                aria-busy={(templateMut.isPending && templateMut.variables === c.id) || undefined}
                 aria-disabled={templateMut.isPending || undefined}
-                onClick={() => !templateMut.isPending && templateMut.mutate(c.id)}
+                onClick={() => templateMut.mutate(c.id)}
                 className="min-h-11 rounded-card border border-stone-200 bg-stone-0 p-3 text-center text-sm"
               >
                 {templateMut.isPending && templateMut.variables === c.id ? STOREFRONT_TEMPLATE_BUSY : c.name}
@@ -388,11 +432,11 @@ function ProductsStep({ sf, onBack, onDone }: { sf: StorefrontEdit; onBack: () =
             ))}
           </div>
         )}
-        <button type="button" className={`${ui.btnSecondary} mt-4 w-full`} onClick={() => setTemplateOpen(false)}>
+        <button type="button" className={`${ui.btnSecondary} mt-4 w-full`} aria-disabled={templateMut.isPending || undefined} onClick={() => !templateMut.isPending && setTemplateOpen(false)}>
           Để sau, tự chọn sản phẩm
         </button>
       </Sheet>
-      <PickerSheet open={!!pickerCol} collectionId={pickerCol} onClose={() => setPickerCol(null)} onAdded={() => void refresh()} />
+      <PickerSheet open={!!pickerCol} collectionId={pickerCol} onClose={() => setPickerCol(null)} onAdded={refresh} />
     </>
   );
 }
@@ -403,8 +447,9 @@ function ReviewStep({ sf, onBack }: { sf: StorefrontEdit; onBack: () => void }) 
   const [done, setDone] = useState<string | null>(null);
   const copy = storefrontPublishCopy(sf);
   const needsReview = storefrontNeedsReview(sf);
-  const submitMut = useMutation({
+  const submitMut = useLockedMutation({
     mutationFn: () => publishStorefront(coreHttp, true),
+    onMutate: () => setError(null),
     onSuccess: async (res) => {
       setDone(storefrontPublishedMessage(res, sf));
       void qc.invalidateQueries({ queryKey: storefrontQuestsQuery(coreHttp).queryKey });

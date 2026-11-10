@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, type CSSProperties } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, ChevronDown, TrendingUp } from 'lucide-react';
 import { BUILDER_COPY } from '@tubutree/app-core/commerce/storefront-builder';
 import { claimQuest, type QuestList as QuestData } from '@tubutree/app-core/api/storefront';
 import { storefrontQuestsQuery, storefrontStatsQuery } from '@tubutree/app-core/queries/storefront';
+import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { coreHttp } from '@/lib/core-http';
 import { statValueScale } from '@tubutree/app-core/commerce/stat-value-fit';
 import { formatCount } from '@/lib/checkout-points';
@@ -16,6 +17,8 @@ import { Badge } from '@/components/ui/badge';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { questPercent, statsRows } from './storefront-rules';
 import { actErrText, type Notify } from './storefront-sheets';
+
+const CLAIM_QUEST_KEY = ['storefront-claim-quest'] as const;
 
 function StatBox({ value, label, brand }: { value: string; label: string; brand?: boolean }) {
   return (
@@ -77,14 +80,23 @@ export function StatsSection() {
 /** Chuỗi nhiệm vụ early-win thưởng Điểm Xanh, nằm trong sheet mở từ dải Hành trình. Nút nhận là nút phụ: màn dựng chỉ có một nút chính (thanh dính). */
 export function QuestList({ data, onNotice }: { data: QuestData; onNotice: Notify }) {
   const qc = useQueryClient();
-  const claimMut = useMutation({
-    mutationFn: (code: string) => claimQuest(coreHttp, code),
-    onSuccess: (r) => {
-      onNotice(`+${formatCount(r.rewardPoints)} điểm 🎉`);
-      void qc.invalidateQueries({ queryKey: storefrontQuestsQuery(coreHttp).queryKey });
+  // Lỗi nhớ theo mã nhiệm vụ và hiện ngay dưới dòng đó (sheet này che vùng báo của trang); `mutation.error` chỉ giữ lệnh sau cùng.
+  const [claimErrors, setClaimErrors] = useState<ReadonlyMap<string, string>>(() => new Map());
+  // Khoá theo mã nhiệm vụ, giữ tới khi danh sách nhiệm vụ mới về (lúc đó dòng mới thành "Đã nhận"): nhả sớm thì nút còn hiện và bấm nhận lần hai.
+  const claimMut = useLockedMutation(
+    {
+      mutationKey: CLAIM_QUEST_KEY,
+      mutationFn: (code: string) => claimQuest(coreHttp, code),
+      onMutate: (code) => setClaimErrors((prev) => new Map([...prev].filter(([k]) => k !== code))),
+      onSuccess: (r) => {
+        onNotice(`+${formatCount(r.rewardPoints)} điểm 🎉`);
+        return qc.invalidateQueries({ queryKey: storefrontQuestsQuery(coreHttp).queryKey });
+      },
+      onError: (e, code) => setClaimErrors((prev) => new Map(prev).set(code, actErrText(e))),
     },
-    onError: (e) => onNotice(actErrText(e), true),
-  });
+    (code) => code,
+  );
+  const claimingCodes = useMutationState({ filters: { mutationKey: CLAIM_QUEST_KEY, status: 'pending' }, select: (m) => m.state.variables as string });
   return (
     <div>
       <div className="mb-1 flex items-center justify-between">
@@ -108,8 +120,14 @@ export function QuestList({ data, onNotice }: { data: QuestData; onNotice: Notif
                 Đã nhận
               </Badge>
             ) : q.done ? (
-              <button type="button" className={`${ui.btnSecondary} ${phoneSecondary}`} disabled={claimMut.isPending} onClick={() => claimMut.mutate(q.code)}>
-                {claimMut.isPending && claimMut.variables === q.code ? 'Đang nhận…' : `Nhận ${formatCount(q.rewardPoints)} điểm`}
+              <button
+                type="button"
+                className={`${ui.btnSecondary} ${phoneSecondary}`}
+                aria-busy={claimingCodes.includes(q.code) || undefined}
+                aria-disabled={claimingCodes.includes(q.code) || undefined}
+                onClick={() => claimMut.mutate(q.code)}
+              >
+                {claimingCodes.includes(q.code) ? 'Đang nhận…' : `Nhận ${formatCount(q.rewardPoints)} điểm`}
               </button>
             ) : (
               <span className="whitespace-nowrap text-xs text-stone-600">
@@ -117,6 +135,11 @@ export function QuestList({ data, onNotice }: { data: QuestData; onNotice: Notif
               </span>
             )}
           </div>
+          {claimErrors.get(q.code) && (
+            <p role="alert" className={`mt-1 ${ui.error}`}>
+              {claimErrors.get(q.code)}
+            </p>
+          )}
           <div className="mt-1.5">
             <ProgressBar value={questPercent(q)} max={100} ariaLabel={`${q.title}: tiến độ nhiệm vụ`} />
           </div>

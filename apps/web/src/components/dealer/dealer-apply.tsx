@@ -3,12 +3,13 @@
 import { useEffect, useState } from 'react';
 import { DEALER_REJECTED_RESUBMIT } from '@tubutree/app-core/client-copy';
 import { Hourglass, Store } from 'lucide-react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { applyDealer, type DealerApplyInput } from '@tubutree/app-core/api/dealer';
 import { dealerMeQuery } from '@tubutree/app-core/queries/dealer';
 import { coreHttp } from '@/lib/core-http';
 import { usePublicConfig } from '@/lib/use-public-config';
 import { useAuth } from '@/lib/auth-context';
+import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import {
   DEALER_BENEFITS,
   DEALER_BENEFITS_TITLE,
@@ -45,11 +46,12 @@ export function DealerApply({ rejected, rejectionReason }: { rejected: boolean; 
   const [form, setForm] = useState<DealerApplyInput>({ businessName: '', ownerName: '', phone: '', address: '', cccdFrontUrl: '', cccdBackUrl: '' });
   const [done, setDone] = useState(false);
 
-  const mut = useMutation({
-    mutationFn: () => applyDealer(coreHttp, form),
+  // Gửi đúng bản hồ sơ lúc bấm lần đầu (biến mutate), không đọc `form` mới hơn; khoá giữ tới khi hồ sơ mới về để màn không cho gửi lần hai trên trạng thái cũ.
+  const mut = useLockedMutation({
+    mutationFn: (sent: DealerApplyInput) => applyDealer(coreHttp, sent),
     onSuccess: () => {
       setDone(true);
-      void qc.invalidateQueries({ queryKey: dealerMeQuery(coreHttp).queryKey });
+      return qc.invalidateQueries({ queryKey: dealerMeQuery(coreHttp).queryKey });
     },
   });
 
@@ -102,7 +104,7 @@ export function DealerApply({ rejected, rejectionReason }: { rejected: boolean; 
           className="mt-4 flex flex-col gap-3"
           onSubmit={(e) => {
             e.preventDefault();
-            if (valid && !mut.isPending) mut.mutate();
+            if (valid) mut.mutate(form);
           }}
         >
           <Field label="Tên doanh nghiệp / cửa hàng *">
@@ -130,7 +132,14 @@ export function DealerApply({ rejected, rejectionReason }: { rejected: boolean; 
               {errText(mut.error)}
             </p>
           )}
-          <button type="submit" disabled={!valid || mut.isPending} className={`${ui.btnPrimary} ${skin.dealerInkBtn} mt-2 w-full`}>
+          {/* Đang gửi giữ aria-busy/aria-disabled chứ không `disabled`: Chromium thả focus về body khi nút đang giữ focus bị vô hiệu. */}
+          <button
+            type="submit"
+            disabled={!valid}
+            aria-busy={mut.isPending || undefined}
+            aria-disabled={mut.isPending || undefined}
+            className={`${ui.btnPrimary} ${skin.dealerInkBtn} mt-2 w-full`}
+          >
             {mut.isPending ? 'Đang gửi…' : 'Gửi hồ sơ đăng ký'}
           </button>
         </form>

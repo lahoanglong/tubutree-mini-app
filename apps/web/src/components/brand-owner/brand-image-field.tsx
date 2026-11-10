@@ -35,10 +35,16 @@ export function BrandImageField({
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // `busy` chỉ đúng sau lần vẽ kế; ref chặn tệp thứ hai chọn ngay khi tệp đầu còn đang tải (hai lần `onChange` ghi chồng nhau, ảnh về sau thắng).
+  const uploading = useRef(false);
+  const pick = () => {
+    if (uploading.current) return;
+    inputRef.current?.click();
+  };
 
   const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file || uploading.current) return;
     setError(null);
     try {
       if (!isUsableImageFile(file)) {
@@ -49,12 +55,14 @@ export function BrandImageField({
         setError('Ảnh quá lớn (tối đa 20MB). Hãy chọn ảnh khác nhé.');
         return;
       }
+      uploading.current = true;
       setBusy(true);
       const secureUrl = upload === 'inline' ? null : await uploadToCloudinary(file);
       onChange(secureUrl ?? (await readAndCompressImage(file)));
     } catch {
       setError('Tải ảnh thất bại. Hãy chọn lại tệp ảnh khác.');
     } finally {
+      uploading.current = false;
       setBusy(false);
       if (inputRef.current) inputRef.current.value = '';
     }
@@ -66,10 +74,11 @@ export function BrandImageField({
       <input ref={inputRef} type="file" accept="image/*" hidden aria-label={`Chọn ảnh ${subject}`} onChange={(e) => void onFile(e)} />
       <button
         type="button"
-        onClick={() => inputRef.current?.click()}
-        disabled={busy}
+        onClick={pick}
+        aria-busy={busy || undefined}
+        aria-disabled={busy || undefined}
         aria-label={value ? `Đổi ảnh ${subject}` : `Tải ảnh ${subject} lên`}
-        className="flex min-h-20 w-full items-center justify-center overflow-hidden rounded-control border-2 border-dashed border-stone-450 bg-stone-50 max-md:border-[1.5px] max-md:border-[color:var(--color-border-default)] max-md:bg-[color:var(--color-bg-canvas)] text-sm font-semibold text-forest-700 hover:bg-stone-100 disabled:opacity-60"
+        className="flex min-h-20 w-full items-center justify-center overflow-hidden rounded-control border-2 border-dashed border-stone-450 bg-stone-50 max-md:border-[1.5px] max-md:border-[color:var(--color-border-default)] max-md:bg-[color:var(--color-bg-canvas)] text-sm font-semibold text-forest-700 hover:bg-stone-100 aria-disabled:opacity-60"
       >
         {busy ? (
           <span className="inline-flex items-center gap-1 text-stone-600">
@@ -87,7 +96,7 @@ export function BrandImageField({
         )}
       </button>
       {value && !busy && (
-        <button type="button" onClick={() => inputRef.current?.click()} className={`${ui.btnText} no-underline text-forest-700`}>
+        <button type="button" onClick={pick} className={`${ui.btnText} no-underline text-forest-700`}>
           <RefreshCw className="mr-1 h-3 w-3" aria-hidden="true" />
           Đổi ảnh khác
         </button>

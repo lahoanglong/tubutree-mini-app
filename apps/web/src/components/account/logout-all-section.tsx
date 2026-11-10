@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { mini } from '@/components/order-mobile/mobile-ui';
 import { ConfirmSheet } from '@/components/ui/confirm-sheet';
 import { useAuth } from '@/lib/auth-context';
@@ -13,9 +13,11 @@ import { ui } from '@/lib/guest-ui';
 export function LogoutAllSection() {
   const { logout } = useAuth();
   const [confirming, setConfirming] = useState(false);
-  const logoutAllM = useMutation({
+  // Khoá ref: `isPending` chỉ đúng sau lần vẽ kế, hai cú xác nhận sát nhau sẽ gọi logout-all và đăng xuất hai lần.
+  // `onSuccess` trả lời hứa của `logout()` (tự nuốt lỗi) để khoá giữ tới khi máy này đăng xuất xong, không nhả giữa hai lệnh.
+  const logoutAllM = useLockedMutation({
     mutationFn: () => apiFetch('/auth/logout-all', { method: 'POST' }),
-    onSuccess: () => void logout(),
+    onSuccess: () => logout(),
     onError: () => setConfirming(false),
   });
 

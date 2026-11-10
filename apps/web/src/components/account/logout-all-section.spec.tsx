@@ -161,3 +161,62 @@ describe('LogoutAllSection (web): khoá khi đang đăng xuất mọi thiết b�
     expect(mocks.logout).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('LogoutAllSection (web): chạm đúp xác nhận', () => {
+  it('hai cú bấm xác nhận cùng khung hình chỉ gọi logout-all và đăng xuất máy này đúng một lần', async () => {
+    const pending = deferred<unknown>();
+    mocks.apiFetch.mockReturnValue(pending.promise);
+    mount();
+    click(trigger());
+    act(() => {
+      confirmBtn().click();
+      confirmBtn().click();
+    });
+    await flush(4);
+    expect(mocks.apiFetch).toHaveBeenCalledTimes(1);
+    pending.resolve({});
+    await flush(4);
+    expect(mocks.logout).toHaveBeenCalledTimes(1);
+  });
+
+  it('gửi lỗi: khoá nhả nên gửi lại được và lần hai gọi máy chủ', async () => {
+    mocks.apiFetch.mockRejectedValueOnce(new Error('Máy chủ bận'));
+    mount();
+    click(trigger());
+    click(confirmBtn());
+    await flush(6);
+    expect(banner()?.textContent).toContain('Máy chủ bận');
+    click(trigger());
+    await flush(2);
+    click(confirmBtn());
+    await flush(6);
+    expect(mocks.apiFetch).toHaveBeenCalledTimes(2);
+    expect(mocks.logout).toHaveBeenCalledTimes(1);
+  });
+
+  it('logout-all đã 200 mà logout() còn treo: khoá vẫn giữ, bấm lại không gọi logout-all lần hai, nút còn aria-busy', async () => {
+    const loggingOut = deferred<void>();
+    mocks.logout.mockReturnValue(loggingOut.promise);
+    mount();
+    click(trigger());
+    click(confirmBtn());
+    await flush(6);
+    expect(mocks.apiFetch).toHaveBeenCalledTimes(1);
+    expect(mocks.logout).toHaveBeenCalledTimes(1);
+    expect(confirmBtn().getAttribute('aria-busy')).toBe('true');
+    expect(trigger().disabled).toBe(true);
+
+    click(confirmBtn());
+    act(() => lastSheet().onConfirm());
+    await flush(4);
+    expect(mocks.apiFetch).toHaveBeenCalledTimes(1);
+    expect(mocks.logout).toHaveBeenCalledTimes(1);
+    expect(confirmBtn().getAttribute('aria-busy')).toBe('true');
+
+    loggingOut.resolve();
+    await flush(4);
+    expect(mocks.apiFetch).toHaveBeenCalledTimes(1);
+    expect(mocks.logout).toHaveBeenCalledTimes(1);
+    expect(trigger().disabled).toBe(false);
+  });
+});

@@ -26,7 +26,7 @@ export function OrdersTab({ onOrderFirst }: { onOrderFirst: () => void }) {
       </div>
     );
   }
-  if (q.isError && !q.data) return <ErrorState message={errText(q.error)} onRetry={() => void q.refetch()} />;
+  if (q.isError && !q.data) return <ErrorState message={errText(q.error)} onRetry={() => q.refetch()} />;
   const orders = q.data ?? [];
   if (orders.length === 0) {
     return (

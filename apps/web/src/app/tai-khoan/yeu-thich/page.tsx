@@ -73,7 +73,7 @@ export default function WishlistPage() {
       {wishQ.isLoading ? (
         <ProductGridSkeleton count={4} />
       ) : wishQ.isError && !wishQ.data ? (
-        <ErrorState message={loadErrorText(wishQ.error)} onRetry={() => void wishQ.refetch()} />
+        <ErrorState message={loadErrorText(wishQ.error)} onRetry={() => wishQ.refetch()} />
       ) : filterView ? (
         <section aria-labelledby="wishlist-list">
           <h2 id="wishlist-list" className="sr-only">

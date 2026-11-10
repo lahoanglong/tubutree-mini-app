@@ -2,10 +2,11 @@
 
 import { useRef, useState } from 'react';
 import { AlertTriangle, Leaf } from 'lucide-react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { DEALER_PAY_AMOUNT_LABEL } from '@tubutree/app-core/client-copy';
 import { payCredit } from '@tubutree/app-core/api/dealer';
 import { dealerCreditQuery, dealerMeQuery } from '@tubutree/app-core/queries/dealer';
+import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
 import { formatDate } from '@/lib/format-date';
@@ -26,35 +27,35 @@ export function CreditTab() {
   const [amount, setAmount] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
 
-  // Key giữ nguyên qua các lần bấm lại của CÙNG một lần báo (bấm đúp/timeout), đổi sau khi báo thành công.
+  // Key vẫn gửi đi (header Idempotency-Key) nhưng `POST /dealer/credit-payment` chưa đọc nó: chống báo trùng hiện chỉ dựa vào khoá phía client bên dưới,
+  // không chống được timeout rồi gửi lại. Key đổi sau mỗi lần báo thành công.
   const payKey = useRef(newIdempotencyKey());
-  const payBusy = useRef(false);
-  const pay = useMutation({
-    mutationFn: () => payCredit(coreHttp, Number(amount), payKey.current, 'Báo đã chuyển khoản'),
-    onSuccess: (res) => {
+  // Số tiền và key đi theo biến mutate (chụp lúc bấm lần đầu), không đọc `amount` mới hơn. Khoá giữ tới khi dư nợ mới về: nhả sớm thì bấm lần hai trên dư nợ cũ vẫn qua được kiểm "vượt dư nợ".
+  const pay = useLockedMutation({
+    mutationFn: (v: { amount: number; typed: string; key: string }) => payCredit(coreHttp, v.amount, v.key, 'Báo đã chuyển khoản'),
+    // Xoá lời báo cũ ở đây: cú bấm bị khoá nuốt không chạy onMutate nên không làm mất lời báo vừa hiện.
+    onMutate: () => setNotice(null),
+    onSuccess: (res, v) => {
       setNotice((res as { message?: string })?.message ?? 'Đã báo cho quản trị viên — chờ xác nhận đã nhận được tiền.');
       payKey.current = newIdempotencyKey();
-      setAmount('');
-      void qc.invalidateQueries({ queryKey: dealerCreditQuery(coreHttp).queryKey });
-      void qc.invalidateQueries({ queryKey: dealerMeQuery(coreHttp).queryKey });
-    },
-    onSettled: () => {
-      payBusy.current = false;
+      // Khách gõ số khác trong lúc đang gửi thì giữ số đó, chỉ xoá khi ô vẫn là số vừa gửi.
+      setAmount((cur) => (cur === v.typed ? '' : cur));
+      return Promise.all([
+        qc.invalidateQueries({ queryKey: dealerCreditQuery(coreHttp).queryKey }),
+        qc.invalidateQueries({ queryKey: dealerMeQuery(coreHttp).queryKey }),
+      ]);
     },
   });
   const submit = () => {
-    if (payBusy.current) return;
-    payBusy.current = true;
-    setNotice(null);
-    pay.mutate();
+    pay.mutate({ amount: Number(amount), typed: amount, key: payKey.current });
   };
 
   if (ledgerQ.isLoading) return <Skeleton height={140} />;
-  if (ledgerQ.isError && !ledgerQ.data) return <ErrorState message={errText(ledgerQ.error)} onRetry={() => void ledgerQ.refetch()} />;
+  if (ledgerQ.isError && !ledgerQ.data) return <ErrorState message={errText(ledgerQ.error)} onRetry={() => ledgerQ.refetch()} />;
 
   const balance = ledgerQ.data?.balance ?? 0;
   const entries = ledgerQ.data?.entries ?? [];
-  const payDisabled = !Number.isFinite(Number(amount)) || Number(amount) <= 0 || Number(amount) > balance || pay.isPending;
+  const payDisabled = !Number.isFinite(Number(amount)) || Number(amount) <= 0 || Number(amount) > balance;
 
   return (
     <div className="grid gap-4 pb-6 lg:grid-cols-2 lg:items-start">
@@ -73,7 +74,15 @@ export function CreditTab() {
               />
             </Field>
           </div>
-          <button type="button" disabled={payDisabled} onClick={submit} className={`${ui.btnPrimary} ${skin.dealerInkBtn} flex-none`}>
+          {/* Đang gửi giữ aria-busy/aria-disabled chứ không `disabled`: nút đang giữ focus mà bị vô hiệu thì Chromium thả focus về body. */}
+          <button
+            type="button"
+            disabled={payDisabled}
+            aria-busy={pay.isPending || undefined}
+            aria-disabled={pay.isPending || undefined}
+            onClick={submit}
+            className={`${ui.btnPrimary} ${skin.dealerInkBtn} flex-none`}
+          >
             {pay.isPending ? 'Đang gửi…' : 'Báo đã chuyển khoản'}
           </button>
         </div>

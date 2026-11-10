@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { STOREFRONT_TEMPLATE_BUSY, STOREFRONT_TEMPLATE_HINT } from '@tubutree/app-core/client-copy';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useIsMutating, useQuery } from '@tanstack/react-query';
 import { EyeOff, Plus } from 'lucide-react';
 import {
   addItem,
@@ -17,6 +17,7 @@ import {
 } from '@tubutree/app-core/api/storefront';
 import { BUILDER_COPY } from '@tubutree/app-core/commerce/storefront-builder';
 import { pickerQuery, storefrontCategoriesQuery } from '@tubutree/app-core/queries/storefront';
+import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
 import { isPartnerStore } from '@/lib/partner-store';
@@ -36,6 +37,11 @@ export const actErrText = actionErrorText;
 
 export type Notify = (text: string, error?: boolean) => void;
 
+const PROFILE_SAVE_KEY = ['storefront-profile-save'] as const;
+const CONFIG_KEY = ['storefront-config'] as const;
+const RENAME_KEY = ['storefront-collection-rename'] as const;
+const PICKER_ADD_KEY = ['storefront-picker-add'] as const;
+
 function InlineError({ text }: { text: string | null }) {
   return text ? (
     <p role="alert" className="mt-2 text-sm text-danger-fg">
@@ -45,22 +51,40 @@ function InlineError({ text }: { text: string | null }) {
 }
 
 /** Chọn mẫu dựng sẵn theo danh mục khi tạo gian hàng mới (mỗi mẫu = 1 bộ sưu tập + tối đa 8 sản phẩm nổi bật); luôn có lối "Bỏ qua". */
-export function TemplateSheet({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: () => void }) {
+export function TemplateSheet({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: () => unknown }) {
   const [error, setError] = useState<string | null>(null);
   const catQ = useQuery({ ...storefrontCategoriesQuery(coreHttp), enabled: open });
+  // Hai cách tạo cùng tạo gian hàng nên loại trừ nhau; ref vì `isPending` chỉ đúng sau lần vẽ kế.
+  const creating = useRef(false);
+  const releaseCreating = () => {
+    creating.current = false;
+  };
+  const exclusiveCreate = (run: () => void) => {
+    if (creating.current) return;
+    creating.current = true;
+    setError(null);
+    try {
+      run();
+    } catch (e) {
+      creating.current = false;
+      throw e;
+    }
+  };
   // Tạo gian hàng RỒI áp mẫu, tách hai bước: lỗi ở bước áp mẫu (vd hết sản phẩm gợi ý) không chặn gian hàng đã tạo.
-  const withTemplate = useMutation({
+  const withTemplate = useLockedMutation({
     mutationFn: async (categoryId: string) => {
       await createStorefront(coreHttp);
       return applyStorefrontTemplate(coreHttp, categoryId);
     },
-    onSuccess: onCreated,
+    onSuccess: () => onCreated(),
     onError: (e) => setError(actErrText(e)),
+    onSettled: releaseCreating,
   });
-  const blank = useMutation({
+  const blank = useLockedMutation({
     mutationFn: () => createStorefront(coreHttp),
-    onSuccess: onCreated,
+    onSuccess: () => onCreated(),
     onError: (e) => setError(actErrText(e)),
+    onSettled: releaseCreating,
   });
   const busy = withTemplate.isPending || blank.isPending;
 
@@ -70,9 +94,10 @@ export function TemplateSheet({ open, onClose, onCreated }: { open: boolean; onC
       onClose={onClose}
       title="Bắt đầu nhanh với 1 mẫu có sẵn"
       description={STOREFRONT_TEMPLATE_HINT}
+      dismissible={!busy}
     >
       {catQ.isLoading && <Skeleton height={120} />}
-      {catQ.isError && <ErrorState message={errText(catQ.error)} onRetry={() => void catQ.refetch()} />}
+      {catQ.isError && <ErrorState message={errText(catQ.error)} onRetry={() => catQ.refetch()} />}
       {catQ.data && (
         <div className="grid grid-cols-2 gap-2">
           {catQ.data.map((c: StorefrontCategory) => (
@@ -80,12 +105,9 @@ export function TemplateSheet({ open, onClose, onCreated }: { open: boolean; onC
               key={c.id}
               type="button"
               aria-label={`Dùng mẫu ${c.name}`}
+              aria-busy={(withTemplate.isPending && withTemplate.variables === c.id) || undefined}
               aria-disabled={busy || undefined}
-              onClick={() => {
-                if (busy) return;
-                setError(null);
-                withTemplate.mutate(c.id);
-              }}
+              onClick={() => exclusiveCreate(() => withTemplate.mutate(c.id))}
               className={`min-h-11 rounded-card border border-stone-200 bg-stone-0 p-3 text-center text-sm ${busy && withTemplate.variables !== c.id ? 'opacity-50' : ''}`}
             >
               {c.image ? (
@@ -103,12 +125,9 @@ export function TemplateSheet({ open, onClose, onCreated }: { open: boolean; onC
       <button
         type="button"
         className={`${ui.btnSecondary} mt-4 w-full`}
-        disabled={busy}
-        onClick={() => {
-          if (busy) return;
-          setError(null);
-          blank.mutate();
-        }}
+        aria-busy={blank.isPending || undefined}
+        aria-disabled={busy || undefined}
+        onClick={() => exclusiveCreate(() => blank.mutate())}
       >
         {blank.isPending ? 'Đang tạo…' : 'Bỏ qua, tự tạo gian hàng trống'}
       </button>
@@ -117,24 +136,26 @@ export function TemplateSheet({ open, onClose, onCreated }: { open: boolean; onC
 }
 
 /** Chọn sản phẩm (có tìm kiếm) để thêm vào một bộ sưu tập. */
-export function PickerSheet({ open, collectionId, onClose, onAdded }: { open: boolean; collectionId: string | null; onClose: () => void; onAdded: () => void }) {
+export function PickerSheet({ open, collectionId, onClose, onAdded }: { open: boolean; collectionId: string | null; onClose: () => void; onAdded: () => unknown }) {
+  // Đóng lúc đang thêm thì lời báo lỗi mất theo, mở lại ra khoá mới nên thêm trùng được.
+  const adding = useIsMutating({ mutationKey: PICKER_ADD_KEY }) > 0;
   return (
-    <Sheet open={open} onClose={onClose} title="Thêm sản phẩm">
+    <Sheet open={open} onClose={onClose} dismissible={!adding} title="Thêm sản phẩm">
       {open && collectionId && <PickerBody collectionId={collectionId} onClose={onClose} onAdded={onAdded} />}
     </Sheet>
   );
 }
 
-function PickerBody({ collectionId, onClose, onAdded }: { collectionId: string; onClose: () => void; onAdded: () => void }) {
+function PickerBody({ collectionId, onClose, onAdded }: { collectionId: string; onClose: () => void; onAdded: () => unknown }) {
   const [search, setSearch] = useState('');
   const [error, setError] = useState<string | null>(null);
   const listQ = useQuery(pickerQuery(coreHttp, search));
-  const addMut = useMutation({
+  // Một sản phẩm mỗi lúc (chung một khoá cho mọi nút Thêm). `onAdded` trả lời hứa tải lại gian hàng nên khoá còn giữ tới khi danh sách mới về.
+  const addMut = useLockedMutation({
+    mutationKey: PICKER_ADD_KEY,
     mutationFn: (p: PickerProduct) => addItem(coreHttp, collectionId, { productId: p.id }),
-    onSuccess: () => {
-      setError(null);
-      onAdded();
-    },
+    onMutate: () => setError(null),
+    onSuccess: () => onAdded(),
     onError: (e) => setError(actErrText(e)),
   });
   const products = listQ.data ?? [];
@@ -145,7 +166,7 @@ function PickerBody({ collectionId, onClose, onAdded }: { collectionId: string; 
       <InlineError text={error} />
       <div className="mt-3 max-h-[360px] overflow-y-auto">
         {listQ.isError ? (
-          <ErrorState message={errText(listQ.error)} onRetry={() => void listQ.refetch()} />
+          <ErrorState message={errText(listQ.error)} onRetry={() => listQ.refetch()} />
         ) : listQ.isLoading ? (
           <div className="space-y-2">
             <Skeleton height={44} />
@@ -168,7 +189,14 @@ function PickerBody({ collectionId, onClose, onAdded }: { collectionId: string; 
                   )}
                 </div>
               </div>
-              <button type="button" aria-label={`Thêm ${p.name}`} className={ui.btnSecondary} disabled={addMut.isPending} onClick={() => addMut.mutate(p)}>
+              <button
+                type="button"
+                aria-label={`Thêm ${p.name}`}
+                className={ui.btnSecondary}
+                aria-busy={(addMut.isPending && addMut.variables?.id === p.id) || undefined}
+                aria-disabled={addMut.isPending || undefined}
+                onClick={() => addMut.mutate(p)}
+              >
                 <Plus className="mr-1 h-4 w-4" aria-hidden="true" />
                 Thêm
               </button>
@@ -176,7 +204,7 @@ function PickerBody({ collectionId, onClose, onAdded }: { collectionId: string; 
           ))
         )}
       </div>
-      <button type="button" className={`${ui.btnSecondary} mt-3 w-full`} onClick={onClose}>
+      <button type="button" className={`${ui.btnSecondary} mt-3 w-full`} aria-disabled={addMut.isPending || undefined} onClick={() => !addMut.isPending && onClose()}>
         Xong
       </button>
     </div>
@@ -185,8 +213,10 @@ function PickerBody({ collectionId, onClose, onAdded }: { collectionId: string; 
 
 /** Hồ sơ gian hàng: ảnh đại diện, ảnh bìa, lời nhắn. Đủ cả ba là điều kiện của nhiệm vụ "Hoàn thiện hồ sơ gian hàng". */
 export function ProfileSheet({ open, sf, onClose, onSaved }: { open: boolean; sf: StorefrontEdit; onClose: () => void; onSaved: Notify }) {
+  // Đóng sheet lúc đang lưu thì form gỡ khỏi cây và lời báo lỗi của lần lưu mất theo: khách tưởng đã lưu.
+  const saving = useIsMutating({ mutationKey: PROFILE_SAVE_KEY }) > 0;
   return (
-    <Sheet open={open} onClose={onClose} title="Hồ sơ gian hàng" description="Ảnh đại diện, ảnh bìa và lời nhắn là thứ khách nhìn thấy đầu tiên.">
+    <Sheet open={open} onClose={onClose} dismissible={!saving} title="Hồ sơ gian hàng" description="Ảnh đại diện, ảnh bìa và lời nhắn là thứ khách nhìn thấy đầu tiên.">
       {open && <ProfileForm sf={sf} onClose={onClose} onSaved={onSaved} />}
     </Sheet>
   );
@@ -197,10 +227,12 @@ function ProfileForm({ sf, onClose, onSaved }: { sf: StorefrontEdit; onClose: ()
   const [coverUrl, setCoverUrl] = useState(sf.coverUrl ?? '');
   const [headerNote, setHeaderNote] = useState(sf.headerNote ?? '');
   const [error, setError] = useState<string | null>(null);
-  const saveMut = useMutation({
+  const saveMut = useLockedMutation({
+    mutationKey: PROFILE_SAVE_KEY,
     // Gửi chuỗi RỖNG (không phải undefined) khi CTV chủ động xoá: undefined bị PATCH bỏ qua, nên xoá ảnh bìa rồi Lưu
     // sẽ báo thành công mà ảnh cũ vẫn còn trên gian hàng công khai.
     mutationFn: () => updateStorefront(coreHttp, { avatarUrl: avatarUrl.trim(), coverUrl: coverUrl.trim(), headerNote: headerNote.trim() }),
+    onMutate: () => setError(null),
     onSuccess: () => {
       onSaved('Đã cập nhật hồ sơ gian hàng');
       onClose();
@@ -226,10 +258,10 @@ function ProfileForm({ sf, onClose, onSaved }: { sf: StorefrontEdit; onClose: ()
       <div className="mt-1 text-xs text-stone-600">{headerNote.length}/200</div>
       {!complete && <p className="mt-2 text-xs text-stone-700">Đủ cả ba mục sẽ hoàn thành nhiệm vụ “hồ sơ gian hàng”.</p>}
       <InlineError text={error} />
-      <button type="button" className={`${ui.btnPrimary} mt-4 w-full`} disabled={saveMut.isPending} onClick={() => saveMut.mutate()}>
+      <button type="button" className={`${ui.btnPrimary} mt-4 w-full`} aria-busy={saveMut.isPending || undefined} aria-disabled={saveMut.isPending || undefined} onClick={() => saveMut.mutate()}>
         {saveMut.isPending ? 'Đang lưu…' : 'Lưu hồ sơ'}
       </button>
-      <button type="button" className={`${ui.btnSecondary} mt-2 w-full`} onClick={onClose}>
+      <button type="button" className={`${ui.btnSecondary} mt-2 w-full`} aria-disabled={saveMut.isPending || undefined} onClick={() => !saveMut.isPending && onClose()}>
         Đóng
       </button>
     </div>
@@ -253,8 +285,9 @@ export function ConfigSheet({
   unpublishLabel: string | null;
   onUnpublish: () => void;
 }) {
+  const saving = useIsMutating({ mutationKey: CONFIG_KEY }) > 0;
   return (
-    <Sheet open={open} onClose={onClose} title={BUILDER_COPY.configTitle}>
+    <Sheet open={open} onClose={onClose} dismissible={!saving} title={BUILDER_COPY.configTitle}>
       {open && <ConfigForm sf={sf} onClose={onClose} onSaved={onSaved} unpublishLabel={unpublishLabel} onUnpublish={onUnpublish} />}
     </Sheet>
   );
@@ -287,7 +320,8 @@ function ConfigForm({
   // Chỉ gửi subdomain khi người dùng đã đổi: API kiểm từ khoá và trùng tên mỗi khi nhận subdomain.
   const typedSubdomain = form.subdomain.trim().toLowerCase();
   const subdomainChanged = typedSubdomain !== '' && typedSubdomain !== (sf.subdomain ?? '');
-  const saveMut = useMutation({
+  const saveMut = useLockedMutation({
+    mutationKey: [...CONFIG_KEY, 'save'],
     mutationFn: () =>
       updateStorefront(coreHttp, {
         title: form.title.trim() || undefined,
@@ -299,6 +333,7 @@ function ConfigForm({
           warehousePhone: form.warehousePhone.trim(),
         }),
       }),
+    onMutate: () => setError(null),
     onSuccess: () => {
       onSaved('Đã lưu cấu hình gian hàng!');
       onClose();
@@ -306,11 +341,14 @@ function ConfigForm({
     onError: (e) => setError(actErrText(e)),
   });
   // Tài khoản ngân hàng nhập trước đây không được dùng để thu tiền (khách luôn trả cho Tubu Tree) — chỉ cho gỡ đi.
-  const clearBankMut = useMutation({
+  const clearBankMut = useLockedMutation({
+    mutationKey: [...CONFIG_KEY, 'clear-bank'],
     mutationFn: () => updateStorefront(coreHttp, { bankName: '', bankBin: '', bankAccountNo: '', bankAccountName: '' }),
+    onMutate: () => setError(null),
     onSuccess: () => onSaved('Đã gỡ tài khoản ngân hàng khỏi gian hàng'),
     onError: (e) => setError(actErrText(e)),
   });
+  const configBusy = saveMut.isPending || clearBankMut.isPending;
 
   return (
     <div className="flex flex-col gap-3">
@@ -362,7 +400,7 @@ function ConfigForm({
             <p className="mb-1.5 text-xs text-stone-700">
               Gian hàng đang lưu tài khoản {sf.bankName ?? 'ngân hàng'} ****{sf.bankAccountNo.slice(-4)} nhưng tài khoản này không được dùng để thu tiền.
             </p>
-            <button type="button" className={ui.btnSecondary} disabled={clearBankMut.isPending} onClick={() => clearBankMut.mutate()}>
+            <button type="button" className={ui.btnSecondary} aria-busy={clearBankMut.isPending || undefined} aria-disabled={clearBankMut.isPending || undefined} onClick={() => clearBankMut.mutate()}>
               Gỡ tài khoản đã lưu
             </button>
           </div>
@@ -382,13 +420,14 @@ function ConfigForm({
       )}
 
       <InlineError text={error} />
-      <button type="button" className={`${ui.btnPrimary} mt-2 w-full`} disabled={saveMut.isPending} onClick={() => saveMut.mutate()}>
+      <button type="button" className={`${ui.btnPrimary} mt-2 w-full`} aria-busy={saveMut.isPending || undefined} aria-disabled={saveMut.isPending || undefined} onClick={() => saveMut.mutate()}>
         {saveMut.isPending ? 'Đang lưu…' : 'Lưu cấu hình gian hàng'}
       </button>
       {unpublishLabel && (
         <div className="border-t border-stone-200 pt-3">
           <p className="mb-2 text-xs text-stone-600">Khách mở link gian hàng sẽ không thấy gì cho tới khi bạn đăng lại.</p>
-          <button type="button" className={`${ui.btnSecondary} w-full`} onClick={onUnpublish}>
+          {/* Gỡ đăng đóng cả sheet: lúc đang lưu/gỡ ngân hàng thì lời báo lỗi của lệnh đó sẽ mất theo. */}
+          <button type="button" className={`${ui.btnSecondary} w-full`} aria-disabled={configBusy || undefined} onClick={() => !configBusy && onUnpublish()}>
             <EyeOff className="mr-1 h-4 w-4" aria-hidden="true" />
             {unpublishLabel}
           </button>
@@ -408,8 +447,9 @@ export function CollectionSheet({
   onClose: () => void;
   onSaved: Notify;
 }) {
+  const saving = useIsMutating({ mutationKey: RENAME_KEY }) > 0;
   return (
-    <Sheet open={!!collection} onClose={onClose} title={BUILDER_COPY.renameSection}>
+    <Sheet open={!!collection} onClose={onClose} dismissible={!saving} title={BUILDER_COPY.renameSection}>
       {collection && <CollectionForm key={collection.id} collection={collection} onClose={onClose} onSaved={onSaved} />}
     </Sheet>
   );
@@ -418,8 +458,10 @@ export function CollectionSheet({
 function CollectionForm({ collection, onClose, onSaved }: { collection: StorefrontCollectionEdit; onClose: () => void; onSaved: Notify }) {
   const [title, setTitle] = useState(collection.title);
   const [error, setError] = useState<string | null>(null);
-  const saveMut = useMutation({
+  const saveMut = useLockedMutation({
+    mutationKey: RENAME_KEY,
     mutationFn: () => updateCollection(coreHttp, collection.id, { title: title.trim() }),
+    onMutate: () => setError(null),
     onSuccess: () => {
       onSaved(BUILDER_COPY.sectionRenamed);
       onClose();
@@ -433,7 +475,7 @@ function CollectionForm({ collection, onClose, onSaved }: { collection: Storefro
         <input className={ui.field} maxLength={80} value={title} onChange={(e) => setTitle(e.target.value)} />
       </Field>
       <InlineError text={error} />
-      <button type="button" className={`${ui.btnPrimary} w-full`} disabled={!title.trim() || saveMut.isPending} onClick={() => saveMut.mutate()}>
+      <button type="button" className={`${ui.btnPrimary} w-full`} disabled={!title.trim()} aria-busy={saveMut.isPending || undefined} aria-disabled={saveMut.isPending || undefined} onClick={() => saveMut.mutate()}>
         {saveMut.isPending ? 'Đang lưu…' : 'Lưu'}
       </button>
     </div>

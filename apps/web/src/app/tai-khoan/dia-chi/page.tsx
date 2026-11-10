@@ -3,13 +3,14 @@
 import { useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { MapPin, Plus } from 'lucide-react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { useOptionalAuth } from '@/lib/auth-context';
 import { addressToForm, isLegacyGeo } from '@/lib/address-form';
 import { createAddress, deleteAddress, getAddresses, updateAddress, type AddressDTO } from '@/lib/shop-client';
 import { ui } from '@/lib/guest-ui';
 import { AddressForm } from '@/components/address-form';
+import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { mini } from '@/components/order-mobile/mobile-ui';
 import { PageHeader } from '@/components/ui/page-header';
@@ -23,6 +24,10 @@ const MiniEmptyState = dynamic(() => import('@/components/mini/empty-state').the
 const LINK_MINI = 'tubu-press min-w-11 justify-center max-md:text-sm max-md:no-underline max-md:text-[color:var(--color-text-brand)]';
 
 const NOTICE_MS = 4000;
+
+/** Việc khách làm trên MỘT địa chỉ: đặt mặc định hoặc xoá. Chung một khoá theo id nên hai việc của cùng địa chỉ không chồng nhau, địa chỉ khác vẫn chạy song song. */
+type AddressOp = { op: 'default' | 'delete'; id: string };
+const ADDRESS_OP_KEY = ['address-op'] as const;
 
 const line = (a: AddressDTO) => [a.street, a.ward, a.district, a.province].filter(Boolean).join(', ');
 
@@ -39,10 +44,20 @@ export default function AddressBookPage() {
   const restoreFocusFor = useRef<string | null>(null);
 
   const addrQ = useQuery({ queryKey: ['addresses'], queryFn: getAddresses, enabled: phase === 'authenticated' });
-  const refresh = () => {
-    void qc.invalidateQueries({ queryKey: ['addresses'] });
-    void qc.invalidateQueries({ queryKey: ['quote'] });
+  const retrying = useRef(false);
+  const retryLoad = () => {
+    if (retrying.current) return;
+    retrying.current = true;
+    const release = () => {
+      retrying.current = false;
+    };
+    void addrQ.refetch().then(release, (err: unknown) => {
+      release();
+      throw err;
+    });
   };
+  // Trả lời hứa để khoá của địa chỉ còn giữ tới khi sổ mới về: nhả sớm thì "Đặt mặc định" bấm được lần hai trên số liệu cũ.
+  const refresh = () => Promise.all([qc.invalidateQueries({ queryKey: ['addresses'] }), qc.invalidateQueries({ queryKey: ['quote'] })]);
 
   // Báo "Đã xóa" như snackbar của Mini App: tự tắt sau vài giây và tắt ngay khi có thao tác khác bắt đầu.
   const [removedNotice, setRemovedNotice] = useState(false);
@@ -52,25 +67,42 @@ export default function AddressBookPage() {
     return () => clearTimeout(t);
   }, [removedNotice]);
 
-  const makeDefault = useMutation({
-    mutationFn: (id: string) => updateAddress(id, { isDefault: true }),
-    onMutate: () => setRemovedNotice(false),
-    onSuccess: refresh,
-  });
-  const remove = useMutation({
-    mutationFn: (id: string) => deleteAddress(id),
-    onMutate: () => setRemovedNotice(false),
-    onSuccess: () => {
-      setConfirmId(null);
-      setRemovedNotice(true);
-      refresh();
+  // Lỗi nhớ theo từng địa chỉ: `mutation.error` chỉ giữ lệnh sau cùng nên lệnh của địa chỉ A lỗi sau khi địa chỉ B đã chạy sẽ mất lời báo.
+  const [opErrors, setOpErrors] = useState<ReadonlyMap<string, unknown>>(() => new Map());
+  const clearError = (id: string) => setOpErrors((prev) => (prev.has(id) ? new Map([...prev].filter(([k]) => k !== id)) : prev));
+  const deleteOk = useRef(false);
+  const addressOp = useLockedMutation(
+    {
+      mutationKey: ADDRESS_OP_KEY,
+      mutationFn: async (v: AddressOp): Promise<unknown> => (v.op === 'delete' ? deleteAddress(v.id) : updateAddress(v.id, { isDefault: true })),
+      onMutate: (v) => {
+        setRemovedNotice(false);
+        clearError(v.id);
+        if (v.op === 'delete') deleteOk.current = false;
+      },
+      onSuccess: (_d, v) => {
+        if (v.op === 'delete') {
+          deleteOk.current = true;
+          setConfirmId((cur) => (cur === v.id ? null : cur));
+          setRemovedNotice(true);
+        }
+        return refresh();
+      },
+      onError: (error, v) => {
+        setOpErrors((prev) => new Map(prev).set(v.id, error));
+        if (v.op === 'delete') setConfirmId((cur) => (cur === v.id ? null : cur));
+      },
     },
-    onError: () => setConfirmId(null),
-  });
+    (v) => v.id,
+  );
+  // Mọi việc đang bay (không chỉ lệnh sau cùng): nút của đúng các địa chỉ đó báo aria-busy, địa chỉ khác vẫn bấm được.
+  const inFlightOps = useMutationState({ filters: { mutationKey: ADDRESS_OP_KEY, status: 'pending' }, select: (m) => m.state.variables as AddressOp });
+  const opOf = new Map(inFlightOps.map((v) => [v.id, v.op] as const));
+  const busyKey = inFlightOps.map((v) => v.id).join('|');
 
   // Hộp xác nhận xóa thay chính nút "Xóa" của dòng nên focus phải được dời theo: vào "Giữ lại" (lựa chọn an toàn) khi mở, khi đóng
   // về nút "Xóa" của dòng đó. Xóa xong thì dòng biến mất sau khi tải lại danh sách, nên về nút "Thêm địa chỉ mới". Chờ hết
-  // `isPending` vì kết quả xóa đến sau lúc hộp đóng.
+  // việc đang bay của địa chỉ đó vì kết quả xóa đến sau lúc hộp đóng.
   useEffect(() => {
     if (confirmId === null) return;
     restoreFocusFor.current = confirmId;
@@ -78,11 +110,11 @@ export default function AddressBookPage() {
   }, [confirmId]);
   useEffect(() => {
     const id = restoreFocusFor.current;
-    if (confirmId !== null || id === null || remove.isPending) return;
+    if (confirmId !== null || id === null || busyKey.split('|').includes(id)) return;
     restoreFocusFor.current = null;
-    const trigger = remove.isSuccess ? undefined : deleteTriggers.current.get(id);
+    const trigger = deleteOk.current ? undefined : deleteTriggers.current.get(id);
     (trigger ?? addButtonRef.current)?.focus();
-  }, [confirmId, remove.isPending, remove.isSuccess, remove.isError]);
+  }, [confirmId, busyKey]);
 
   if (phase === 'loading') {
     return (
@@ -107,7 +139,6 @@ export default function AddressBookPage() {
   }
 
   const addresses = addrQ.data ?? [];
-  const actionError = makeDefault.isError ? makeDefault.error : remove.isError ? remove.error : null;
 
   return (
     <Shell>
@@ -115,7 +146,13 @@ export default function AddressBookPage() {
       {addrQ.isError && (
         <p role="alert" className={`py-6 text-center ${ui.error}`}>
           Không tải được sổ địa chỉ.{' '}
-          <button type="button" onClick={() => void addrQ.refetch()} className={ui.btnText}>
+          <button
+            type="button"
+            onClick={retryLoad}
+            aria-busy={addrQ.isFetching || undefined}
+            aria-disabled={addrQ.isFetching || undefined}
+            className={ui.btnText}
+          >
             Thử lại
           </button>
         </p>
@@ -123,11 +160,6 @@ export default function AddressBookPage() {
       {removedNotice && (
         <p role="status" className="mb-3 text-sm font-medium text-success-fg">
           Đã xoá địa chỉ.
-        </p>
-      )}
-      {actionError && (
-        <p role="alert" className={`mb-3 ${ui.error}`}>
-          {actionErrorText(actionError)}
         </p>
       )}
 
@@ -173,6 +205,11 @@ export default function AddressBookPage() {
                     )}
                   </div>
                   <p className="mt-1 break-words text-sm text-stone-700 max-md:mt-0.5 max-md:text-[length:var(--type-caption-size)] max-md:text-[color:var(--color-text-secondary)]">{line(a)}</p>
+                  {opErrors.has(a.id) && (
+                    <p role="alert" className={`mt-1 ${ui.error}`}>
+                      {actionErrorText(opErrors.get(a.id))}
+                    </p>
+                  )}
                   {isLegacyGeo(a) && (
                     <p className="mt-1 text-xs font-medium text-warning-fg">
                       Địa giới cũ (trước khi sắp xếp tỉnh/phường 2025) — chưa giao được, bấm Sửa để chọn lại tỉnh/phường.
@@ -193,16 +230,27 @@ export default function AddressBookPage() {
                         Các đơn đã đặt trước đây vẫn giữ nguyên địa chỉ giao.
                       </p>
                       <div className="mt-3 flex flex-wrap gap-2">
-                        <button ref={keepRef} type="button" onClick={() => setConfirmId(null)} disabled={remove.isPending} className={ui.btnPrimary}>
+                        {/* Đang xoá thì không đóng hộp: kết quả xoá vẫn đến, và nút không `disabled` thật vì "Xoá" đang giữ focus (Chromium thả focus về body). */}
+                        <button
+                          ref={keepRef}
+                          type="button"
+                          onClick={() => {
+                            if (opOf.has(a.id)) return;
+                            setConfirmId(null);
+                          }}
+                          aria-disabled={opOf.has(a.id) || undefined}
+                          className={ui.btnPrimary}
+                        >
                           Giữ lại
                         </button>
                         <button
                           type="button"
-                          onClick={() => remove.mutate(a.id)}
-                          disabled={remove.isPending}
+                          onClick={() => addressOp.mutate({ op: 'delete', id: a.id })}
+                          aria-busy={opOf.get(a.id) === 'delete' || undefined}
+                          aria-disabled={opOf.has(a.id) || undefined}
                           className={`${ui.btnSecondary} border-danger-fg text-danger-fg`}
                         >
-                          {remove.isPending ? 'Đang xoá…' : 'Xoá'}
+                          {opOf.get(a.id) === 'delete' ? 'Đang xoá…' : 'Xoá'}
                         </button>
                       </div>
                     </div>
@@ -222,8 +270,9 @@ export default function AddressBookPage() {
                       {!a.isDefault && (
                         <button
                           type="button"
-                          onClick={() => makeDefault.mutate(a.id)}
-                          disabled={makeDefault.isPending}
+                          onClick={() => addressOp.mutate({ op: 'default', id: a.id })}
+                          aria-busy={opOf.get(a.id) === 'default' || undefined}
+                          aria-disabled={opOf.has(a.id) || undefined}
                           aria-label={`Đặt mặc định cho địa chỉ của ${a.recipient}`}
                           className={`${ui.btnText} ${LINK_MINI}`}
                         >
@@ -237,9 +286,11 @@ export default function AddressBookPage() {
                         }}
                         type="button"
                         onClick={() => {
-                          remove.reset();
+                          if (opOf.has(a.id)) return;
+                          clearError(a.id);
                           setConfirmId(a.id);
                         }}
+                        aria-disabled={opOf.has(a.id) || undefined}
                         aria-label={`Xoá địa chỉ của ${a.recipient}`}
                         className={`${ui.btnText} tubu-press min-w-11 justify-center text-danger-fg max-md:no-underline max-md:text-sm max-md:text-[color:var(--color-text-danger)]`}
                       >

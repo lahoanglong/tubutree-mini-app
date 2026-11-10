@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRef, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { requestAccountDeletion } from '@tubutree/app-core/api/account';
 import { walletQuery } from '@tubutree/app-core/queries/wallet';
 import {
@@ -12,6 +12,7 @@ import {
   walletForfeitConsent,
   walletForfeitNotice,
 } from '@tubutree/app-core/account-deletion-copy';
+import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { mini } from '@/components/order-mobile/mobile-ui';
 import { coreHttp } from '@/lib/core-http';
 import { ui } from '@/lib/guest-ui';
@@ -34,8 +35,11 @@ export function AccountDeletionSection() {
   // (không mất focus) tới khi lượt tải lại có kết quả.
   const [walletRetrying, setWalletRetrying] = useState(false);
   const walletWaiting = walletRetrying && walletQ.isPending;
-  const del = useMutation({
-    mutationFn: () => requestAccountDeletion(coreHttp, undefined, walletForfeitConsent(balance, agreed)),
+  const walletRetryLock = useRef(false);
+  // Yêu cầu xoá không hoàn tác: phần đồng ý tính ở nút theo đúng số dư khách đang thấy rồi truyền vào, không đọc lại state lúc lệnh thực sự chạy.
+  // Khoá ref chặn cú bấm thứ hai ngay trong khung hình (`isPending` chỉ đúng sau lần vẽ kế) và nhả ở `onSettled`, cả khi lỗi.
+  const del = useLockedMutation({
+    mutationFn: (consent: ReturnType<typeof walletForfeitConsent>) => requestAccountDeletion(coreHttp, undefined, consent),
     onError: () => {
       setAgreedBalance(null);
       void qc.invalidateQueries({ queryKey: ['wallet'] });
@@ -47,7 +51,7 @@ export function AccountDeletionSection() {
     <div className="grid gap-3">
       {del.isSuccess ? (
         <div role="status" className="rounded-card bg-stone-100 p-4">
-          <p className="text-sm text-stone-900">{del.data.message}</p>
+          <p className="text-sm text-stone-900">{del.data?.message}</p>
           {oa && (
             <button type="button" onClick={() => void platformBridge.oa.openChat(DELETE_OA_MESSAGE)} className={`${ui.btnSecondary} mt-3`}>
               Nhắn Zalo OA về việc xoá tài khoản
@@ -75,9 +79,16 @@ export function AccountDeletionSection() {
                 aria-busy={walletQ.isFetching || undefined}
                 aria-disabled={walletQ.isFetching || undefined}
                 onClick={() => {
-                  if (walletQ.isFetching || del.isPending) return;
+                  if (walletRetryLock.current || walletQ.isFetching || del.isPending) return;
+                  walletRetryLock.current = true;
                   setWalletRetrying(true);
-                  void walletQ.refetch();
+                  const release = () => {
+                    walletRetryLock.current = false;
+                  };
+                  void walletQ.refetch().then(release, (err: unknown) => {
+                    release();
+                    throw err;
+                  });
                 }}
                 className={`${ui.btnSecondary} shrink-0`}
               >
@@ -117,7 +128,7 @@ export function AccountDeletionSection() {
               aria-disabled={del.isPending || undefined}
               onClick={() => {
                 if (del.isPending || !canSubmitDeletion(balance, agreed)) return;
-                del.mutate();
+                del.mutate(walletForfeitConsent(balance, agreed));
               }}
               className="inline-flex min-h-11 flex-1 items-center justify-center rounded-control bg-danger-fg px-5 text-sm font-semibold text-stone-0 transition active:scale-95 disabled:opacity-60 aria-disabled:opacity-60"
             >

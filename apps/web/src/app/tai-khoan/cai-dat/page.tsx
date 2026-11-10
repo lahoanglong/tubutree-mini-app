@@ -46,6 +46,18 @@ export default function SettingsPage() {
   const savingRef = useRef(false);
   const [saveError, setSaveError] = useState(false);
   const [fontScale, setFontScale] = useState<FontScale>('normal');
+  const prefsRetrying = useRef(false);
+  const retryPrefs = () => {
+    if (prefsRetrying.current) return;
+    prefsRetrying.current = true;
+    const release = () => {
+      prefsRetrying.current = false;
+    };
+    void prefsQ.refetch().then(release, (err: unknown) => {
+      release();
+      throw err;
+    });
+  };
 
   useEffect(() => {
     let alive = true;
@@ -118,7 +130,13 @@ export default function SettingsPage() {
         {prefsQ.isError && !prefsQ.data && (
           <div role="alert" className="mt-2 flex flex-wrap items-center gap-2">
             <p className={ui.error}>{LOAD_FAILED}</p>
-            <button type="button" onClick={() => void prefsQ.refetch()} className={`${ui.btnText} min-h-11`}>
+            <button
+              type="button"
+              onClick={retryPrefs}
+              aria-busy={prefsQ.isFetching || undefined}
+              aria-disabled={prefsQ.isFetching || undefined}
+              className={`${ui.btnText} min-h-11`}
+            >
               Thử lại
             </button>
           </div>

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act } from 'react';
 import { byText, click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { headingProblems, smallTouchTargets, unlabeledFields, unnamedControls } from '@/test-utils/a11y';
 import { ApiError, NetworkError } from '@/lib/client-api';
@@ -20,6 +21,7 @@ const state = vi.hoisted(() => ({
   share: null as null | (() => Promise<string>),
   shared: [] as unknown[],
   hold: new Set<string>(),
+  waiters: [] as (() => void)[],
 }));
 
 vi.mock('@/lib/route-map', () => ({ isWebRouteReady: (p: string) => (p === '/ctv' ? state.ctvReady : true) }));
@@ -42,6 +44,7 @@ vi.mock('@/lib/core-http', () => ({
   coreHttp: {
     get: async (path: string, opts?: { query?: Record<string, unknown> }) => {
       state.calls.push({ method: 'get', path, query: opts?.query });
+      if (state.hold.has(`${path}#${opts?.query?.page ?? ''}`)) await new Promise<void>((resolve) => state.waiters.push(resolve));
       if (state.fail.has(path)) throw new Error('Máy chủ đang bận');
       if (path === '/me/wallet') return state.wallet;
       if (path === '/me/referral') return state.referral;
@@ -92,6 +95,8 @@ beforeEach(() => {
   state.loyalty = { ...LOYALTY };
   state.pages = [PAGE_1, PAGE_2];
   state.fail = new Set();
+  state.hold = new Set();
+  state.waiters = [];
   state.calls = [];
   state.shared = [];
   state.share = async () => 'shared';
@@ -445,5 +450,65 @@ describe('/tai-khoan/vi-tubu — số Điểm Xanh không gãy dòng (9968242c)'
     const column = points.parentElement as HTMLElement;
     expect(column.contains(byText(c, 'span', 'Bạc'))).toBe(true);
     expect(column.className).toContain('min-w-0');
+  });
+});
+
+
+describe('/tai-khoan/vi-tubu — khoá chạm đúp (Mini ↔ web)', () => {
+  const twice = (el: HTMLElement | null) =>
+    act(() => {
+      el!.click();
+      el!.click();
+    });
+  const releaseHeld = async () => {
+    await act(async () => {
+      state.waiters.splice(0).forEach((r) => r());
+    });
+    await flush(6);
+  };
+
+  it('"Xem thêm": hai cú bấm cùng khung hình chỉ tải trang kế một lần; nút aria-busy + aria-disabled, KHÔNG disabled thật; xong thì nút ẩn vì hết trang', async () => {
+    state.hold.add('/me/wallet/transactions#2');
+    const c = await mount();
+    const more = byText(c, 'button', 'Xem thêm')!;
+    twice(more);
+    await flush(3);
+    expect(state.calls.filter((x) => x.path === '/me/wallet/transactions' && x.query?.page === 2)).toHaveLength(1);
+    const busy = byText(c, 'button', 'Đang tải…') as HTMLButtonElement;
+    expect(busy.getAttribute('aria-busy')).toBe('true');
+    expect(busy.getAttribute('aria-disabled')).toBe('true');
+    expect(busy.disabled).toBe(false);
+    click(busy);
+    expect(state.calls.filter((x) => x.path === '/me/wallet/transactions' && x.query?.page === 2)).toHaveLength(1);
+    await releaseHeld();
+    expect(c.querySelectorAll('li')).toHaveLength(3);
+  });
+
+  it('"Xem thêm" lỗi: nhả khoá, báo lỗi role=alert và bấm lại được', async () => {
+    state.pages = [{ ...PAGE_1, total: 3 }, PAGE_2];
+    const c = await mount();
+    state.fail.add('/me/wallet/transactions');
+    click(byText(c, 'button', 'Xem thêm'));
+    await flush(8);
+    expect(c.querySelector('[role="alert"]')?.textContent).toContain('lịch sử');
+    state.fail.delete('/me/wallet/transactions');
+    const before = state.calls.filter((x) => x.path === '/me/wallet/transactions' && x.query?.page === 2).length;
+    click(byText(c, 'button', 'Xem thêm'));
+    await flush(8);
+    expect(state.calls.filter((x) => x.path === '/me/wallet/transactions' && x.query?.page === 2).length).toBe(before + 1);
+  });
+
+  it('lỗi tải ví: hai cú bấm Thử lại cùng khung hình chỉ gọi lại /me/wallet một lần', async () => {
+    state.fail.add('/me/wallet');
+    const c = await mount();
+    const before = state.calls.filter((x) => x.path === '/me/wallet').length;
+    state.hold.add('/me/wallet#');
+    state.fail.delete('/me/wallet');
+    twice(byText(c, 'button', 'Thử lại'));
+    await flush(3);
+    expect(state.calls.filter((x) => x.path === '/me/wallet').length).toBe(before + 1);
+    expect(byText(c, 'button', 'Thử lại')).toBeNull();
+    await releaseHeld();
+    expect(c.textContent).toContain('1.250.000đ');
   });
 });

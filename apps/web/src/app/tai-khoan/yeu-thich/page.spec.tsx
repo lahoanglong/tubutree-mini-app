@@ -236,6 +236,102 @@ describe('/tai-khoan/yeu-thich — nút giỏ nhanh', () => {
   });
 });
 
+describe('/tai-khoan/yeu-thich — khoá chạm đúp giỏ nhanh (Mini ↔ web)', () => {
+  const variation = (id: string, stock = 5) => ({ id, name: `Loại ${id}`, sku: id, attributes: {}, retailPrice: 100000, salePrice: null, stock });
+  let detail: { variations: ReturnType<typeof variation>[] };
+  let gateDetail: Promise<void> | null;
+  let openGate: () => void;
+  const holdDetail = () => {
+    gateDetail = new Promise<void>((resolve) => {
+      openGate = resolve;
+    });
+  };
+  const addButton = (c: HTMLElement, name: string) => c.querySelector<HTMLButtonElement>(`button[aria-label="Thêm ${name} vào giỏ"]`);
+  const twice = (el: HTMLElement | null) =>
+    act(() => {
+      el!.click();
+      el!.click();
+    });
+  const productFetches = () => mocks.get.mock.calls.filter(([path]) => String(path).startsWith('/products/'));
+
+  beforeEach(() => {
+    detail = { variations: [variation('v1')] };
+    gateDetail = null;
+    mocks.get.mockImplementation(async (path: string) => {
+      if (path === '/me/wishlist') return [card('a', 'Nước rửa chén'), card('c', 'Dầu gội')];
+      if (path.startsWith('/products/')) {
+        if (gateDetail) await gateDetail;
+        return detail;
+      }
+      return [];
+    });
+  });
+
+  it('hai cú bấm cùng khung hình trên cùng một thẻ chỉ tải chi tiết và thêm giỏ đúng một lần', async () => {
+    const c = await mount();
+    twice(addButton(c, 'Nước rửa chén'));
+    await flush(8);
+    expect(productFetches()).toHaveLength(1);
+    expect(mocks.post).toHaveBeenCalledTimes(1);
+  });
+
+  it('khoá chung cho mọi thẻ: đang thêm thẻ A thì bấm thẻ B bị bỏ qua; xong thì bấm lại được', async () => {
+    holdDetail();
+    const c = await mount();
+    click(addButton(c, 'Nước rửa chén')!);
+    await flush(3);
+    click(addButton(c, 'Dầu gội')!);
+    await flush(3);
+    expect(productFetches().map(([p]) => p)).toEqual(['/products/sp-a']);
+    // Chỉ thẻ đang bay báo bận.
+    expect(addButton(c, 'Nước rửa chén')!.getAttribute('aria-busy')).toBe('true');
+    expect(addButton(c, 'Dầu gội')!.getAttribute('aria-busy')).toBe('false');
+    gateDetail = null;
+    await act(async () => openGate());
+    await flush(6);
+    expect(mocks.post).toHaveBeenCalledTimes(1);
+    click(addButton(c, 'Dầu gội')!);
+    await flush(6);
+    expect(mocks.post).toHaveBeenCalledTimes(2);
+  });
+
+  it('lỗi: khoá nhả, báo role=alert, bấm lại thêm được đúng một lần', async () => {
+    mocks.post.mockRejectedValueOnce(new Error('boom'));
+    const c = await mount();
+    click(addButton(c, 'Nước rửa chén')!);
+    await flush(6);
+    expect(c.querySelector('[role="alert"]')).not.toBeNull();
+    expect(addButton(c, 'Nước rửa chén')!.getAttribute('aria-busy')).toBe('false');
+    twice(addButton(c, 'Nước rửa chén'));
+    await flush(8);
+    expect(mocks.post).toHaveBeenCalledTimes(2);
+  });
+
+  it('bảng chọn phân loại: xác nhận hai lần cùng khung hình chỉ thêm giỏ một lần với đúng phân loại và số lượng lần đầu', async () => {
+    detail = { variations: [variation('v1'), variation('v2')] };
+    const c = await mount();
+    click(addButton(c, 'Nước rửa chén')!);
+    await flush(8);
+    const confirm = Array.from(c.querySelectorAll('button')).find((b) => b.textContent === 'xác nhận phân loại')!;
+    twice(confirm);
+    await flush(6);
+    expect(mocks.post).toHaveBeenCalledTimes(1);
+    expect(mocks.post.mock.calls[0]![1]).toEqual({ variationId: 'v2', quantity: 2, addSource: 'wishlist' });
+  });
+
+  it('lỗi tải danh sách: hai cú bấm Thử lại cùng khung hình chỉ tải lại một lần', async () => {
+    mocks.get.mockImplementation(async (path: string) => {
+      if (path === '/me/wishlist') throw new Error('boom');
+      return [];
+    });
+    const c = await mount();
+    const before = mocks.get.mock.calls.filter(([path]) => path === '/me/wishlist').length;
+    twice(Array.from(c.querySelectorAll('button')).find((b) => b.textContent === 'Thử lại') ?? null);
+    await flush(4);
+    expect(mocks.get.mock.calls.filter(([path]) => path === '/me/wishlist').length).toBe(before + 1);
+  });
+});
+
 describe('/tai-khoan/yeu-thich — bộ lọc nhanh', () => {
   const item = (id: string, name: string, salePrice: number | null, inStock: boolean) => ({ ...card(id, name), salePrice, inStock });
   const MIXED = [item('a', 'Nước rửa chén', 80000, true), item('b', 'Xà phòng', null, true), item('c', 'Dầu gội', 70000, false), item('d', 'Nước giặt', null, false)];
