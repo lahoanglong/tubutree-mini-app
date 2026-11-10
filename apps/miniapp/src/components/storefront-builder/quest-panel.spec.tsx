@@ -1,9 +1,9 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { QuestList as QuestData, StorefrontQuest } from '../../services/storefront-api';
 
-const mocks = vi.hoisted(() => ({ openSnackbar: vi.fn(), claimQuest: vi.fn() }));
+const mocks = vi.hoisted(() => ({ openSnackbar: vi.fn(), claimQuest: vi.fn(), fetchQuests: vi.fn() }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
@@ -99,5 +99,34 @@ describe('QuestList — khoá đồng bộ nhận thưởng nhiệm vụ (W82A)'
     fireEvent.click(claimButtons()[1]!);
     await waitFor(() => expect(mocks.claimQuest).toHaveBeenCalledTimes(2));
     expect(mocks.claimQuest).toHaveBeenLastCalledWith('B');
+  });
+
+  it('nhận xong nhưng danh sách chưa tải lại: khoá giữ tới khi tải lại xong, bấm lại không nhận lần hai', async () => {
+    let reload!: (v: QuestData) => void;
+    mocks.fetchQuests.mockImplementationOnce(() => new Promise<QuestData>((resolve) => { reload = resolve; }));
+    mocks.claimQuest.mockResolvedValueOnce(OK);
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    function Live() {
+      const q = useQuery({ queryKey: ['storefront-quests'], queryFn: () => mocks.fetchQuests(), initialData: data, staleTime: Infinity });
+      return <QuestList data={q.data!} />;
+    }
+    render(
+      <QueryClientProvider client={qc}>
+        <Live />
+      </QueryClientProvider>,
+    );
+    const btn = claimButtons()[0]!;
+    await act(async () => {
+      fireEvent.click(btn);
+    });
+    await waitFor(() => expect(mocks.fetchQuests).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      fireEvent.click(btn);
+    });
+    expect(mocks.claimQuest).toHaveBeenCalledTimes(1);
+
+    await act(async () => reload({ ...data, quests: [quest('A', { claimed: true }), quest('B')] }));
+    await waitFor(() => expect(claimButtons()).toHaveLength(1));
+    expect(mocks.openSnackbar).toHaveBeenCalledTimes(1);
   });
 });

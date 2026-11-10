@@ -23,7 +23,8 @@ export function QuestList({ data }: { data: QuestData }) {
     onSuccess: (r) => {
       haptic('medium');
       openSnackbar({ text: `+${formatPoints(r.rewardPoints)} 🎉`, type: 'success' });
-      void qc.invalidateQueries({ queryKey: ['storefront-quests'] });
+      // Trả Promise: khoá nhả sau khi danh sách tải lại, không thì nút "Nhận" sáng lại trên dữ liệu cũ và cú chạm kế hiện thêm lời báo điểm.
+      return qc.invalidateQueries({ queryKey: ['storefront-quests'] });
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
