@@ -22,6 +22,7 @@ import {
 } from '@/lib/refund-rules';
 import { RefundDestinationPicker } from './refund-destination-picker';
 import { actionErrorText } from '@/lib/error-text';
+import { IMAGES_UPLOADING } from '@/lib/image-compress';
 
 const REASON_MAX = 500;
 const STEPPER_BTN =
@@ -65,6 +66,8 @@ export function ReturnRequestForm({
   const [method, setMethod] = useState<RefundMethodChoice>('WALLET');
   const [bank, setBank] = useState<RefundBankInput>(EMPTY_BANK);
   const [images, setImages] = useState<string[]>([]);
+  // Ảnh còn đang xử lý mà gửi thì yêu cầu thiếu ảnh minh chứng.
+  const [imagesBusy, setImagesBusy] = useState(false);
   const [touched, setTouched] = useState(false);
 
   const bankAllowed = canRefundToBank(o.paymentMethod) && !o.placedForCustomer;
@@ -128,7 +131,7 @@ export function ReturnRequestForm({
       className="mt-3 space-y-4"
       onSubmit={(e) => {
         e.preventDefault();
-        if (sendingRef.current || submit.isPending) return;
+        if (imagesBusy || sendingRef.current || submit.isPending) return;
         setTouched(true);
         if (formError || bankError) return;
         sendingRef.current = true;
@@ -239,7 +242,7 @@ export function ReturnRequestForm({
         </label>
       </fieldset>
 
-      <EvidenceUpload value={images} onChange={setImages} disabled={submit.isPending} />
+      <EvidenceUpload value={images} onChange={setImages} onBusyChange={setImagesBusy} disabled={submit.isPending} />
 
       {showsMoney &&
         (bankAllowed ? (
@@ -296,15 +299,15 @@ export function ReturnRequestForm({
           Đóng
         </button>
         {/* Đang gửi dùng aria-disabled chứ không `disabled`: nút đang giữ focus mà `disabled` thì Chromium thả focus về <body>;
-            lần gửi thứ hai đã bị onSubmit chặn. Hết dòng để trả thì vẫn `disabled` (không có gì để gửi). */}
+            lần gửi thứ hai đã bị onSubmit chặn. Hết dòng để trả hoặc ảnh còn đang xử lý thì vẫn `disabled` (chưa có gì đủ để gửi). */}
         <button
           type="submit"
-          disabled={lines.length === 0}
+          disabled={lines.length === 0 || imagesBusy}
           aria-busy={submit.isPending || undefined}
           aria-disabled={submit.isPending || undefined}
           className={ui.btnPrimary}
         >
-          {submit.isPending ? 'Đang gửi…' : 'Gửi yêu cầu'}
+          {submit.isPending ? 'Đang gửi…' : imagesBusy ? IMAGES_UPLOADING : 'Gửi yêu cầu'}
         </button>
       </div>
     </form>

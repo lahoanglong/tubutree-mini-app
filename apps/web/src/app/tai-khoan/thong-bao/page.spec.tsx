@@ -747,3 +747,88 @@ describe('/tai-khoan/thong-bao: khoá đồng bộ chạm đúp (W78B)', () => {
     expect(listCalls()).toHaveLength(2);
   });
 });
+
+describe('/tai-khoan/thong-bao: "Xem thêm" khoá đồng bộ', () => {
+  const rows = (from: number, n: number) =>
+    Array.from({ length: n }, (_, i) => ({
+      id: `p${from + i}`, templateCode: 'POINTS_EARNED', payload: { body: `Tin số ${from + i}` }, status: 'READ',
+      sentAt: new Date(Date.UTC(2026, 9, 28, 3, 0, 0) - (from + i) * 1000).toISOString(),
+    }));
+  const serve = (page2: Promise<unknown> | (() => Promise<unknown>)) => {
+    mocks.get.mockImplementation(async (path: string) => {
+      if (path === '/me/summary') return summaryOf(0);
+      return listCalls().length === 1 ? rows(0, 20) : typeof page2 === 'function' ? page2() : page2;
+    });
+  };
+  const more = (c: HTMLElement) => byText(c, 'button', /Xem thêm|Đang tải/) as HTMLButtonElement;
+
+  it('hai cú bấm cùng khung hình chỉ nạp trang 2 một lần; nút báo aria-busy không `disabled` tới khi xong', async () => {
+    let finish!: (v: unknown) => void;
+    serve(new Promise((resolve) => { finish = resolve; }));
+    const { container } = await mount();
+    const b = more(container);
+    await act(async () => {
+      click(b);
+      click(b);
+    });
+    expect(listCalls()).toHaveLength(2);
+    expect(b.getAttribute('aria-busy')).toBe('true');
+    expect(b.getAttribute('aria-disabled')).toBe('true');
+    expect(b.disabled).toBe(false);
+
+    await act(async () => finish(rows(20, 5)));
+    await flush(4);
+    expect(container.textContent).toContain('Tin số 24');
+    expect(listCalls()).toHaveLength(2);
+  });
+
+  it('cú bấm thứ hai cách cú đầu một microtask vẫn chưa vẽ lại: vẫn một lần nạp', async () => {
+    serve(new Promise(() => undefined));
+    const { container } = await mount();
+    const b = more(container);
+    await act(async () => {
+      click(b);
+      await Promise.resolve();
+      click(b);
+    });
+    expect(listCalls()).toHaveLength(2);
+  });
+
+  it('mở lại trang lúc trang 2 còn đang nạp (khoá của lần dựng trước đã mất): "Xem thêm" báo khoá và bấm không nạp chồng', async () => {
+    let finish!: (v: unknown) => void;
+    serve(new Promise((resolve) => { finish = resolve; }));
+    const client = new TubuQueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const first = render(<NotificationsPage />, client);
+    await flush(6);
+    click(more(first.container));
+    await flush(2);
+    expect(listCalls()).toHaveLength(2);
+    first.unmount();
+
+    const second = render(<NotificationsPage />, client);
+    mounted.push(second);
+    await flush(4);
+    const b = more(second.container);
+    expect(b.getAttribute('aria-disabled')).toBe('true');
+    click(b);
+    await flush(2);
+    expect(listCalls()).toHaveLength(2);
+    await act(async () => finish(rows(20, 5)));
+    await flush(4);
+    expect(second.container.textContent).toContain('Tin số 24');
+  });
+
+  it('nạp lỗi: nhả khoá, bấm lại nạp tiếp được', async () => {
+    let n = 0;
+    serve(() => (n++ === 0 ? Promise.reject(new Error('mạng')) : Promise.resolve(rows(20, 5))));
+    const { container } = await mount();
+    click(more(container));
+    await flush(6);
+    expect(container.querySelector('[role="alert"]')).not.toBeNull();
+    expect(more(container).getAttribute('aria-busy')).toBeNull();
+    click(more(container));
+    await flush(6);
+    expect(container.textContent).toContain('Tin số 24');
+    expect(listCalls()).toHaveLength(3);
+  });
+});

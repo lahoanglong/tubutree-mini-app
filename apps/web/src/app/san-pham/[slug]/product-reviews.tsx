@@ -32,7 +32,7 @@ import {
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { REVIEW_COMMENT_MAX, reviewFormIssue, type ReviewFormIssue } from '@tubutree/app-core/commerce/review-form';
 import { isImeEnter, isSubmitShortcut } from '@tubutree/app-core/keyboard';
-import { MAX_PUBLIC_DATA_URL_LENGTH } from '@/lib/image-compress';
+import { IMAGES_UPLOADING, MAX_PUBLIC_DATA_URL_LENGTH } from '@/lib/image-compress';
 import { loginHref } from '@/lib/return-to';
 import {
   EDIT_HIDDEN_NOTE,
@@ -417,7 +417,9 @@ export function ProductReviews({ slug }: { slug: string }) {
                         type="button"
                         className={`${ui.btnText} ml-auto text-forest-700`}
                         aria-label={mine.orderCode ? `Sửa đánh giá đơn ${mine.orderCode}` : 'Sửa đánh giá này'}
-                        onClick={() => openEdit(mine)}
+                        // Form đang mở thì đổi `target` sẽ dựng lại form (đổi key) và bỏ mất ảnh đang xử lý; nút đầu trang cũng chỉ hiện khi chưa có form. Không `disabled` để nút giữ focus.
+                        aria-disabled={target ? true : undefined}
+                        onClick={() => !target && openEdit(mine)}
                       >
                         Sửa
                       </button>
@@ -598,6 +600,9 @@ function ReviewForm({
   const [videoUrl, setVideoUrl] = useState<string | null>(initial?.videoUrl ?? null);
   // Đang tải video lên: gửi lúc này sẽ lưu đánh giá không kèm video (mất phần thưởng video, sửa lại cũng không được cộng thêm).
   const [videoBusy, setVideoBusy] = useState(false);
+  // Ảnh còn đang xử lý cũng vậy: gửi lúc này lưu đánh giá thiếu ảnh, và ảnh chen vào sau khi đã gửi không vào bản đang gửi.
+  const [imagesBusy, setImagesBusy] = useState(false);
+  const mediaBusy = videoBusy || imagesBusy;
   // Lỗi ở hàng sao hay ô nhận xét trước khi gửi: đọc qua role=alert, focus tới chỗ cần sửa. Lỗi máy chủ nằm ở `save.error`.
   const [issue, setIssue] = useState<ReviewFormIssue | null>(null);
   const commentRef = useRef<HTMLTextAreaElement>(null);
@@ -639,7 +644,7 @@ function ReviewForm({
   };
 
   const send = () => {
-    if (videoBusy || save.isPending || sending.current) return;
+    if (mediaBusy || save.isPending || sending.current) return;
     const found = reviewFormIssue({ rating, comment });
     if (found) {
       setIssue(found);
@@ -744,6 +749,7 @@ function ReviewForm({
           hint="không bắt buộc"
           maxDataUrlLength={MAX_PUBLIC_DATA_URL_LENGTH}
           disabled={save.isPending}
+          onBusyChange={setImagesBusy}
         />
       </div>
       <ReviewVideoUpload value={videoUrl} onChange={setVideoUrl} onBusyChange={setVideoBusy} disabled={save.isPending} />
@@ -755,17 +761,17 @@ function ReviewForm({
       )}
       <div className="mt-4 flex flex-wrap gap-2">
         {/* Đang gửi dùng aria-disabled chứ không `disabled`: nút đang giữ focus mà `disabled` thì Chromium thả focus về body.
-            Lần bấm thứ hai đã bị send() chặn bằng `sending`/isPending. Đang tải video vẫn `disabled` như Mini App. */}
+            Lần bấm thứ hai đã bị send() chặn bằng `sending`/isPending. Đang tải video hay ảnh vẫn `disabled` như Mini App. */}
         <button
           type="submit"
           className={ui.btnPrimary}
-          disabled={videoBusy}
+          disabled={mediaBusy}
           aria-busy={save.isPending || undefined}
           aria-disabled={save.isPending || undefined}
         >
-          {save.isPending ? 'Đang gửi…' : videoBusy ? VIDEO_UPLOADING : isEdit ? 'Lưu đánh giá' : 'Gửi đánh giá'}
+          {save.isPending ? 'Đang gửi…' : videoBusy ? VIDEO_UPLOADING : imagesBusy ? IMAGES_UPLOADING : isEdit ? 'Lưu đánh giá' : 'Gửi đánh giá'}
         </button>
-        <button type="button" className={ui.btnSecondary} onClick={onCancel} disabled={save.isPending}>
+        <button type="button" className={ui.btnSecondary} onClick={onCancel} disabled={save.isPending || imagesBusy}>
           Huỷ
         </button>
       </div>

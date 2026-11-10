@@ -609,3 +609,155 @@ describe('CtvOrderSheet — SĐT và tên người nhận cùng luật với má
     expect(orderPosts()).toHaveLength(0);
   });
 });
+
+describe('CtvOrderSheet — khoá đồng bộ khi tạo đơn hộ khách', () => {
+  const deferredOrder = () => {
+    let finish!: (v: unknown) => void;
+    let fail!: (e: unknown) => void;
+    state.order = () => new Promise((resolve, reject) => { finish = resolve; fail = reject; });
+    return { finish: (v: unknown) => finish(v), fail: (e: unknown) => fail(e) };
+  };
+  const CREATED = { id: 'o1', code: 'TUBU9', total: 84_000, status: 'PENDING', items: [] };
+
+  it('hai cú bấm "Tạo đơn" trong cùng một khung hình (trước khi vẽ lại): chỉ tạo một đơn, một key', async () => {
+    const order = deferredOrder();
+    await readyWithAn();
+    const b = submit();
+    await act(async () => {
+      click(b);
+      click(b);
+    });
+    expect(orderPosts()).toHaveLength(1);
+
+    await act(async () => order.finish(CREATED));
+    await until(() => text().includes('Đã tạo đơn hộ khách'));
+    expect(orderPosts()).toHaveLength(1);
+  });
+
+  it('cú bấm thứ hai cách cú đầu một microtask vẫn chưa vẽ lại: vẫn chỉ một đơn', async () => {
+    deferredOrder();
+    await readyWithAn();
+    const b = submit();
+    await act(async () => {
+      click(b);
+      await Promise.resolve();
+      click(b);
+    });
+    expect(orderPosts()).toHaveLength(1);
+  });
+
+  it('máy chủ từ chối: nhả khoá, báo lỗi, bấm lại gửi tiếp đúng key cũ', async () => {
+    const order = deferredOrder();
+    await readyWithAn();
+    await act(async () => {
+      click(submit());
+      click(submit());
+    });
+    await act(async () => order.fail(new ApiError('Sản phẩm không đủ tồn kho.', 400, 'OUT_OF_STOCK')));
+    await until(() => text().includes('Sản phẩm không đủ tồn kho.'));
+    expect(orderPosts()).toHaveLength(1);
+
+    state.order = async () => CREATED;
+    click(submit());
+    await until(() => text().includes('Đã tạo đơn hộ khách'));
+    expect(orderPosts()).toHaveLength(2);
+    expect(keyOf(1)).toBe(keyOf(0));
+  });
+
+  it('lỗi mạng chưa rõ kết quả: nhả khoá sau lần tự kiểm tra lại; "Gửi lại đơn" gửi đúng key cũ và bấm đúp vẫn một lần', async () => {
+    state.order = async () => {
+      throw new NetworkError(true);
+    };
+    await readyWithAn();
+    click(submit());
+    await until(() => submit().textContent === 'Gửi lại đơn', 6000);
+    expect(orderPosts()).toHaveLength(2);
+
+    const order = deferredOrder();
+    const resend = submit();
+    await act(async () => {
+      click(resend);
+      click(resend);
+    });
+    expect(orderPosts()).toHaveLength(3);
+    expect(keyOf(2)).toBe(keyOf(0));
+    await act(async () => order.finish(CREATED));
+    await until(() => text().includes('Đã tạo đơn hộ khách'));
+    expect(orderPosts()).toHaveLength(3);
+  }, 10_000);
+});
+
+describe('CtvOrderSheet — "Thử lại" của ô chọn sản phẩm trả Promise tải lại', () => {
+  const PRODUCT = { name: 'Nước rửa chén', variations: [{ id: 'var1', name: 'Chanh', retailPrice: 65_000, salePrice: null, stock: 10 }] };
+  const SUGGESTION = [{ slug: 'nrc', name: 'Nước rửa chén', thumbnail: null, basePrice: 65_000 }];
+  const search = () => body().querySelector<HTMLInputElement>('input[type="search"]');
+  const retry = () => btn('Thử lại') as HTMLButtonElement;
+
+  it('phân loại: hai cú bấm cùng khung hình chỉ tải lại một lần, nút báo bận tới khi xong', async () => {
+    let calls = 0;
+    let finish!: (v: unknown) => void;
+    state.product = () => {
+      calls += 1;
+      if (calls === 2) return Promise.reject(new Error('mạng lỗi'));
+      if (calls === 3) return new Promise((resolve) => { finish = resolve; });
+      return Promise.resolve(PRODUCT);
+    };
+    mount();
+    typeInto(search(), 'nước');
+    await until(() => !!btn(/Nước rửa chén/));
+    click(btn(/Nước rửa chén/));
+    await until(() => !!btn(/^Chanh/));
+    click(btn('Đóng'));
+    // Mở lại cùng sản phẩm: dữ liệu cũ còn trong cache, lần tải nền lỗi nên vừa có dữ liệu vừa có lỗi, đúng chỗ hai lần refetch chồng nhau không được gộp.
+    typeInto(search(), 'nước');
+    await until(() => !!btn(/Nước rửa chén/));
+    click(btn(/Nước rửa chén/));
+    await until(() => !!btn('Thử lại'));
+    expect(calls).toBe(2);
+
+    const b = retry();
+    await act(async () => {
+      click(b);
+      click(b);
+    });
+    expect(calls).toBe(3);
+    expect(b.getAttribute('aria-busy')).toBe('true');
+    expect(b.disabled).toBe(false);
+
+    await act(async () => finish(PRODUCT));
+    await until(() => !!btn(/^Chanh/));
+    expect(calls).toBe(3);
+  });
+
+  it('gợi ý sản phẩm: hai cú bấm cùng khung hình chỉ tải lại một lần, nút báo bận tới khi xong', async () => {
+    let finish!: (v: unknown) => void;
+    state.suggest = async (q) => {
+      const n = state.suggestCalls.length;
+      if (n === 2) throw new Error('mạng lỗi');
+      if (n === 3) return new Promise((resolve) => { finish = resolve; });
+      return q ? SUGGESTION : [];
+    };
+    mount();
+    typeInto(search(), 'nước');
+    await until(() => !!btn(/Nước rửa chén/));
+    // Xoá ô tìm rồi gõ lại đúng từ khoá: dữ liệu cũ còn trong cache, lần tải nền lỗi nên vừa có dữ liệu vừa có lỗi.
+    typeInto(search(), '');
+    await until(() => !btn(/Nước rửa chén/));
+    typeInto(search(), 'nước');
+    await until(() => !!btn('Thử lại'));
+    expect(state.suggestCalls).toHaveLength(2);
+
+    const b = retry();
+    await act(async () => {
+      click(b);
+      click(b);
+    });
+    expect(state.suggestCalls).toHaveLength(3);
+    expect(b.getAttribute('aria-busy')).toBe('true');
+    expect(b.disabled).toBe(false);
+
+    await act(async () => finish(SUGGESTION));
+    await until(() => !!btn(/Nước rửa chén/));
+    expect(state.suggestCalls).toHaveLength(3);
+  });
+});

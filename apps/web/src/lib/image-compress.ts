@@ -7,6 +7,9 @@ export const MAX_UPLOAD_DATA_URL_LENGTH = 1_400_000;
 /** Trần ký tự của ảnh base64 trong nội dung công khai như đánh giá (uploaded-image.ts PUBLIC_CONTENT_MAX_DATA_URL_LENGTH = 700.000). */
 export const MAX_PUBLIC_DATA_URL_LENGTH = 690_000;
 
+/** Chữ trên nút Gửi của form cha khi ảnh còn đang xử lý (cùng chữ với Mini App). */
+export const IMAGES_UPLOADING = 'Đang tải ảnh…';
+
 export const isUsableImageFile = (file: Pick<File, 'type'>): boolean => file.type.startsWith('image/');
 
 /** Kích thước sau khi thu cạnh dài về `maxDim`, giữ tỉ lệ; ảnh đã nhỏ hơn thì giữ nguyên. */
