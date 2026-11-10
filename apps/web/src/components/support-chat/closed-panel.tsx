@@ -45,7 +45,7 @@ export function ChatClosedPanel({ support, compact = false }: { support: Support
   const oaNode =
     support?.zaloOaName &&
     (hasOA ? (
-      <Button variant="secondary" icon={MessageSquare} fullWidth onPress={() => void platformBridge.oa.openChat()}>
+      <Button variant="secondary" icon={MessageSquare} fullWidth onPress={() => platformBridge.oa.openChat()}>
         {copy.oa}
       </Button>
     ) : (

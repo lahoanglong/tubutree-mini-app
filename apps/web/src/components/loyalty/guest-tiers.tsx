@@ -35,7 +35,7 @@ export function GuestTiers({ returnTo }: { returnTo: string }) {
       <GuestLoginLink returnTo={returnTo} />
       <h2 className="text-lg font-semibold text-stone-900">{guestPreviewCopy.tiersTitle}</h2>
       {q.isError && !q.data ? (
-        <ErrorState message={errText(q.error)} onRetry={() => void q.refetch()} />
+        <ErrorState message={errText(q.error)} onRetry={() => q.refetch()} />
       ) : !q.data ? (
         <Skeleton height={120} />
       ) : (

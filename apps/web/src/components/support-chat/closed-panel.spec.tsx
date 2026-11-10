@@ -280,3 +280,45 @@ describe('ChatClosedPanel (web): bản gọn (chat tắt mà còn lịch sử)',
     expect(alertRegion(c)!.textContent).toBe(copy.copyFailed);
   });
 });
+
+describe('ChatClosedPanel (web): nút "Nhắn OA" khoá khi cầu nối còn chạy', () => {
+  it('chạm đúp trong cùng một khung hình chỉ mở chat OA một lần; cầu nối xong thì chạm lại mở được', async () => {
+    mocks.oaAvailable = true;
+    const gate = deferred<void>();
+    mocks.openChat.mockReturnValueOnce(gate.promise);
+    const c = mount(<ChatClosedPanel support={FULL} />);
+    const oa = byName(c, copy.oa)!;
+    await act(async () => {
+      click(oa);
+      click(oa);
+    });
+    expect(mocks.openChat).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await Promise.resolve();
+      click(oa);
+    });
+    expect(mocks.openChat).toHaveBeenCalledTimes(1);
+
+    await act(async () => gate.resolve());
+    await act(async () => {
+      click(oa);
+    });
+    expect(mocks.openChat).toHaveBeenCalledTimes(2);
+  });
+
+  it('bản gọn: chạm đúp "Nhắn OA" cũng chỉ mở một lần', async () => {
+    mocks.oaAvailable = true;
+    const gate = deferred<void>();
+    mocks.openChat.mockReturnValueOnce(gate.promise);
+    const c = mount(<ChatClosedPanel support={FULL} compact />);
+    click(byName(c, copy.more));
+    const oa = byName(c, copy.oa)!;
+    await act(async () => {
+      click(oa);
+      click(oa);
+    });
+    expect(mocks.openChat).toHaveBeenCalledTimes(1);
+    await act(async () => gate.resolve());
+  });
+});

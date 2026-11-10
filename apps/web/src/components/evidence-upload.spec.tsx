@@ -140,6 +140,33 @@ describe('EvidenceUpload — ảnh minh chứng đổi/trả', () => {
       expect(removeButtons(c).map((b) => b.disabled)).toEqual([false, false]);
     });
 
+    it('báo form cha đang xử lý rồi xong (kể cả khi mọi tệp bị bỏ vì không phải ảnh hay quá lớn, và khi nén lỗi) để khoá nút Gửi trong lúc chờ', async () => {
+      let finish!: (v: string) => void;
+      m.compress.mockReset().mockReturnValueOnce(new Promise<string>((resolve) => (finish = resolve)));
+      const busy: boolean[] = [];
+      const onChange = vi.fn();
+      const r = render(<EvidenceUpload value={[]} onChange={onChange} onBusyChange={(b) => busy.push(b)} />);
+      mounted.push(r);
+      await flush(2);
+      pick(r.container, [file('a.jpg')]);
+      await flush(2);
+      expect(busy).toEqual([true]);
+      expect(onChange).not.toHaveBeenCalled();
+      finish('data:image/jpeg;base64,a.jpg');
+      await flush(4);
+      expect(onChange).toHaveBeenCalledWith(['data:image/jpeg;base64,a.jpg']);
+      expect(busy).toEqual([true, false]);
+
+      pick(r.container, [file('doc.pdf', 1000, 'application/pdf'), file('lon.jpg', 21 * 1024 * 1024)]);
+      await flush(4);
+      expect(busy).toEqual([true, false, true, false]);
+
+      m.compress.mockReset().mockRejectedValueOnce(new Error('hỏng'));
+      pick(r.container, [file('x.jpg')]);
+      await flush(4);
+      expect(busy).toEqual([true, false, true, false, true, false]);
+    });
+
     it('disabled từ ngoài: chọn tệp bị bỏ, không nén và không đổi giá trị', async () => {
       const onChange = vi.fn();
       const r = render(<EvidenceUpload value={[]} onChange={onChange} disabled />);
