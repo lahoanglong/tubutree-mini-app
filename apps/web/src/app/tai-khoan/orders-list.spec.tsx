@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
@@ -8,6 +9,8 @@ import { smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
 const state = vi.hoisted(() => ({
   calls: [] as { page: number; filter: Record<string, string>; cursor?: string }[],
   orders: [] as Record<string, unknown>[],
+  fail: false,
+  gate: null as Promise<void> | null,
   /** Trang trả theo thứ tự gọi khi test muốn phân trang bằng con trỏ; rỗng = một trang như cũ. */
   keyset: [] as { data: Record<string, unknown>[]; nextCursor: string | null }[],
   push: vi.fn(),
@@ -28,6 +31,8 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   getMe: async () => ({ pointsBalance: 0, walletBalance: 0 }),
   fetchOrdersPage: async (page: number, filter: Record<string, string> = {}, cursor?: string) => {
     state.calls.push({ page, filter, ...(cursor ? { cursor } : {}) });
+    if (state.gate) await state.gate;
+    if (state.fail) throw new Error('boom');
     const k = state.keyset[state.calls.length - 1];
     if (k) return { data: k.data, meta: { page, limit: 20, total: 1, nextCursor: k.nextCursor } };
     return { data: state.orders, meta: { page, limit: 20, total: state.orders.length } };
@@ -55,6 +60,8 @@ beforeEach(() => {
   state.calls = [];
   state.orders = [];
   state.keyset = [];
+  state.fail = false;
+  state.gate = null;
 });
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
@@ -271,5 +278,28 @@ describe('danh sách đơn — nút Mua lại', () => {
     expect(document.body.textContent).not.toContain('Từ đơn TB-1');
     expect(byText(document.body, 'button', 'Thêm vào giỏ (1)')).not.toBeNull();
     expect(byText(document.body, 'button', 'Thêm vào giỏ (2)')).toBeNull();
+  });
+});
+
+describe('danh sách đơn — "Thử lại" khoá chạm đúp (W78B)', () => {
+  it('chạm đúp "Thử lại" cùng khung hình chỉ tải lại một lần', async () => {
+    state.fail = true;
+    const c = await mount();
+    expect(c.textContent).toContain('Không tải được danh sách đơn hàng.');
+    let release!: () => void;
+    state.fail = false;
+    state.orders = [order('TB-9', [item('Mật ong')])];
+    state.gate = new Promise<void>((r) => (release = r));
+    const retry = byText(c, 'button', 'Thử lại') as HTMLButtonElement;
+    act(() => {
+      retry.click();
+      retry.click();
+    });
+    await flush(3);
+    expect(state.calls).toHaveLength(2);
+    release();
+    await flush(6);
+    expect(c.textContent).toContain('TB-9');
+    expect(state.calls).toHaveLength(2);
   });
 });

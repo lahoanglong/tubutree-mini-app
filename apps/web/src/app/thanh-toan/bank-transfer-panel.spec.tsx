@@ -184,12 +184,15 @@ describe('BankTransferPanel — thanh toán chuyển khoản sau khi đặt đơ
     const btn = () => byText(container, 'button', /Tôi đã chuyển khoản|Đang kiểm tra/) as HTMLButtonElement;
     click(btn());
     await flush(2);
-    expect(btn().disabled).toBe(true);
+    expect(btn().getAttribute('aria-disabled')).toBe('true');
+    expect(btn().getAttribute('aria-busy')).toBe('true');
+    expect(btn().disabled).toBe(false);
     expect(btn().textContent).toBe('Đang kiểm tra…');
 
     release();
     await flush();
-    expect(btn().disabled).toBe(false);
+    expect(btn().hasAttribute('aria-disabled')).toBe(false);
+    expect(btn().hasAttribute('aria-busy')).toBe(false);
     expect(container.querySelector('[data-testid="bank-check-result"]')?.textContent).toBe(BANK_NOT_RECEIVED);
   });
 
@@ -332,6 +335,187 @@ describe('BankTransferPanel — thanh toán chuyển khoản sau khi đặt đơ
     click(container.querySelector('button[aria-label="Sao chép: 250000"]'));
     await flush();
     expect(writeText).toHaveBeenCalledWith('250000');
+  });
+
+  describe('khoá đồng bộ chạm đúp (W78B)', () => {
+    const twice = (...els: (Element | null)[]) =>
+      act(() => {
+        for (const el of els) (el as HTMLElement).click();
+        for (const el of els) (el as HTMLElement).click();
+      });
+    const gate = () => {
+      let release: () => void = () => {};
+      const held = new Promise<void>((r) => (release = r));
+      return { held, release: () => release() };
+    };
+    const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+
+    it('"Tôi đã chuyển khoản" bấm đúp cùng khung hình: chỉ dò một lần, xong mới bấm lại được', async () => {
+      const g = gate();
+      let calls = 0;
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => {
+          calls += 1;
+          if (calls === 2) await g.held;
+          return json(QR_BODY);
+        }),
+      );
+      const { container } = mount(<BankTransferPanel order={order()} />);
+      await flush();
+      expect(calls).toBe(1);
+      twice(byText(container, 'button', 'Tôi đã chuyển khoản'));
+      await flush(2);
+      expect(calls).toBe(2);
+      g.release();
+      await flush(4);
+      expect(calls).toBe(2);
+      click(byText(container, 'button', 'Tôi đã chuyển khoản'));
+      await flush(4);
+      expect(calls).toBe(3);
+    });
+
+    it('nút trong dòng chảy và nút dính đáy chung một khoá: bấm cả hai cùng khung hình vẫn chỉ dò một lần', async () => {
+      const g = gate();
+      let calls = 0;
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => {
+          calls += 1;
+          if (calls === 2) await g.held;
+          return json(QR_BODY);
+        }),
+      );
+      const { container } = mount(<BankTransferPanel order={order()} stickyCheck />);
+      await flush();
+      const both = Array.from(container.querySelectorAll('button')).filter((b) => b.textContent === 'Tôi đã chuyển khoản — Kiểm tra');
+      expect(both).toHaveLength(2);
+      act(() => {
+        both[0]!.click();
+        both[1]!.click();
+      });
+      await flush(2);
+      expect(calls).toBe(2);
+      const busy = Array.from(container.querySelectorAll('button')).filter((b) => b.textContent === 'Đang kiểm tra…');
+      expect(busy).toHaveLength(2);
+      for (const b of busy) {
+        expect(b.getAttribute('aria-busy')).toBe('true');
+        expect(b.getAttribute('aria-disabled')).toBe('true');
+        expect(b.disabled).toBe(false);
+      }
+      g.release();
+      await flush(4);
+      expect(calls).toBe(2);
+    });
+
+    it('kiểm tra tay lỗi mạng: nhả khoá để bấm lại được', async () => {
+      let calls = 0;
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => {
+          calls += 1;
+          if (calls === 2) throw new TypeError('Failed to fetch');
+          return json(QR_BODY);
+        }),
+      );
+      const { container } = mount(<BankTransferPanel order={order()} />);
+      await flush();
+      click(byText(container, 'button', 'Tôi đã chuyển khoản'));
+      await flush(6);
+      expect(container.querySelector('[data-testid="bank-check-result"]')?.textContent).toBe(BANK_CHECK_NETWORK);
+      click(byText(container, 'button', 'Tôi đã chuyển khoản'));
+      await flush(6);
+      expect(calls).toBe(3);
+      expect(container.querySelector('[data-testid="bank-check-result"]')?.textContent).toBe(BANK_NOT_RECEIVED);
+    });
+
+    it('lỗi tải lần đầu: "Thử lại" bấm đúp cùng khung hình chỉ tải lại một lần, nút bận có aria-busy giữ focus', async () => {
+      const g = gate();
+      let calls = 0;
+      let failing = true;
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => {
+          calls += 1;
+          if (failing) return json({ message: 'lỗi' }, 500);
+          await g.held;
+          return json(QR_BODY);
+        }),
+      );
+      const { container } = mount(<BankTransferPanel order={order()} />);
+      await flush(6);
+      const retry = byText(container, 'button', 'Thử lại') as HTMLButtonElement;
+      expect(retry).not.toBeNull();
+      failing = false;
+      const before = calls;
+      twice(retry);
+      await flush(2);
+      expect(calls).toBe(before + 1);
+      expect(retry.disabled).toBe(false);
+      g.release();
+      await flush(6);
+      expect(calls).toBe(before + 1);
+      expect(container.textContent).toContain('Techcombank');
+    });
+
+    it('sao chép: hai cú chạm cùng khung hình vào một dòng chỉ ghi clipboard một lần, dòng khác vẫn chép được', async () => {
+      const g = gate();
+      const writeText = vi.fn(async () => {
+        await g.held;
+      });
+      vi.stubGlobal('navigator', { clipboard: { writeText } });
+      const api = mockFetch({ '/payments/bank-qr/': { body: QR_BODY } });
+      vi.stubGlobal('fetch', vi.fn(api.fn));
+      const { container } = mount(<BankTransferPanel order={order()} />);
+      await flush();
+      // Nút điện thoại (CopyControls) có nhãn `Sao chép <tên dòng>`; nút có dấu hai chấm là CopyButton dùng chung cho màn rộng.
+      const memo = container.querySelector('button[aria-label="Sao chép nội dung chuyển khoản"]');
+      const account = container.querySelector('button[aria-label="Sao chép số tài khoản"]');
+      twice(memo);
+      await flush(2);
+      expect(writeText).toHaveBeenCalledTimes(1);
+      click(account);
+      await flush(2);
+      expect(writeText).toHaveBeenCalledTimes(2);
+      expect(writeText).toHaveBeenLastCalledWith('9984606774');
+      expect(writeText).toHaveBeenNthCalledWith(1, 'TB-777');
+      g.release();
+      await flush(4);
+      click(memo);
+      await flush(4);
+      expect(writeText).toHaveBeenCalledTimes(3);
+    });
+
+    it('"Lưu mã QR" bận: aria-busy + aria-disabled, không `disabled`, bấm đúp chỉ tải ảnh một lần', async () => {
+      const g = gate();
+      Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:qr'), revokeObjectURL: vi.fn() });
+      vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+      let imageCalls = 0;
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (url: string) => {
+          if (url === QR_BODY.qrImageUrl) {
+            imageCalls += 1;
+            await g.held;
+            return { ok: true, blob: async () => new Blob(['png'], { type: 'image/png' }) } as unknown as Response;
+          }
+          return json(QR_BODY);
+        }),
+      );
+      const { container } = mount(<BankTransferPanel order={order()} />);
+      await flush();
+      const save = byText(container, 'button', 'Lưu mã QR') as HTMLButtonElement;
+      twice(save);
+      await flush(3);
+      expect(imageCalls).toBe(1);
+      expect(save.getAttribute('aria-busy')).toBe('true');
+      expect(save.getAttribute('aria-disabled')).toBe('true');
+      expect(save.disabled).toBe(false);
+      g.release();
+      await flush(6);
+      expect(imageCalls).toBe(1);
+      expect(save.hasAttribute('aria-busy')).toBe(false);
+    });
   });
 
   describe('đếm ngược hạn chuyển khoản (D5-02)', () => {

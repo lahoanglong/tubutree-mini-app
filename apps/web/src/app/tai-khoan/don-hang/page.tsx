@@ -135,7 +135,7 @@ function OrdersPageBody() {
           </div>
         ) : orders.isError && list.length === 0 ? (
           <div className="mt-3">
-            <ErrorState message={loadErrorText(orders.error)} onRetry={() => void orders.refetch()} />
+            <ErrorState message={loadErrorText(orders.error)} onRetry={() => orders.refetch()} />
           </div>
         ) : list.length === 0 ? (
           query ? (

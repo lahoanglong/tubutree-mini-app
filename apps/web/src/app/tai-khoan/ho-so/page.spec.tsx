@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
+import { QueryClient } from '@tanstack/react-query';
 import { byText, click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { headingProblems, smallTouchTargets, unlabeledFields, unnamedControls } from '@/test-utils/a11y';
 
@@ -131,6 +132,57 @@ describe('/tai-khoan/ho-so — khung trang', () => {
     await flush(6);
     expect(mocks.get.mock.calls.filter(([p]) => !String(p).includes('/config/'))).toHaveLength(2);
     expect(field(container, 'Họ và tên').value).toBe('Lan');
+  });
+
+  it('"Thử lại" chạm đúp cùng một act (W78B): /me chỉ tải lại một lần, về rồi hiện hồ sơ', async () => {
+    mocks.get.mockRejectedValueOnce(new Error('Mất kết nối'));
+    const { container } = await mount();
+    const meCalls = () => mocks.get.mock.calls.filter(([p]) => !String(p).includes('/config/')).length;
+    expect(meCalls()).toBe(1);
+    let release!: () => void;
+    mocks.get.mockImplementationOnce(() => new Promise((r) => (release = () => r(ME))));
+    const retry = byText(container, 'button', 'Thử lại') as HTMLButtonElement;
+    act(() => {
+      retry.click();
+      retry.click();
+    });
+    await flush(2);
+    expect(meCalls()).toBe(2);
+    await act(async () => release());
+    await flush(6);
+    expect(meCalls()).toBe(2);
+    expect(field(container, 'Họ và tên').value).toBe('Lan');
+  });
+});
+
+describe('/tai-khoan/ho-so — "Thử lại" khi đã có hồ sơ cũ (W78B)', () => {
+  // Lần tải lại nền lỗi vẫn hiện khối lỗi kèm dữ liệu cũ: `refetch()` thứ hai huỷ lượt đầu và gọi API lần nữa, nên chỉ khoá nút mới giữ một lượt.
+  it('chạm đúp cùng một act: /me chỉ tải lại một lần', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const r = render(<EditProfilePage />, client);
+    mounted.push(r);
+    await flush(6);
+    const meCalls = () => mocks.get.mock.calls.filter(([p]) => !String(p).includes('/config/')).length;
+    mocks.get.mockRejectedValueOnce(new Error('Mất kết nối'));
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: ['me'] });
+    });
+    await flush(2);
+    expect(r.container.querySelector('[role="alert"]')?.textContent).toContain('Mất kết nối');
+    const before = meCalls();
+    let release!: () => void;
+    mocks.get.mockImplementationOnce(() => new Promise((res) => (release = () => res(ME))));
+    const retry = byText(r.container, 'button', 'Thử lại') as HTMLButtonElement;
+    act(() => {
+      retry.click();
+      retry.click();
+    });
+    await flush(2);
+    expect(meCalls()).toBe(before + 1);
+    await act(async () => release());
+    await flush(6);
+    expect(meCalls()).toBe(before + 1);
+    expect(field(r.container, 'Họ và tên').value).toBe('Lan');
   });
 });
 

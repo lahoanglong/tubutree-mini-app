@@ -308,7 +308,9 @@ describe('/tai-khoan/thong-bao: nhắc mua lại (REORDER_REMINDER)', () => {
     click(cta);
     await flush(2);
     expect(cta.querySelector('svg.animate-spin')).not.toBeNull();
-    expect(cta.hasAttribute('disabled')).toBe(true);
+    expect(cta.getAttribute('aria-disabled')).toBe('true');
+    expect(cta.getAttribute('aria-busy')).toBe('true');
+    expect(cta.hasAttribute('disabled')).toBe(false);
     const close = dialog()!.querySelector<HTMLElement>('button[aria-label*="Đóng"], button[aria-label*="đóng"]');
     expect(close).not.toBeNull();
     click(close!);
@@ -641,5 +643,107 @@ describe('/tai-khoan/thong-bao: F10 đọc tin lúc đang nạp thêm trang', ()
     expect(container.querySelectorAll('[aria-label="chưa đọc"]')).toHaveLength(0);
     release([]);
     await flush(4);
+  });
+});
+
+describe('/tai-khoan/thong-bao: khoá đồng bộ chạm đúp (W78B)', () => {
+  // Hai cú bấm trong cùng một `act`: React chưa kịp vẽ lại giữa chúng nên state `isPending` còn cũ, chỉ ref đồng bộ mới chặn được.
+  const twice = (...els: HTMLElement[]) =>
+    act(() => {
+      for (const el of els) el.click();
+    });
+  const posts = (path: string) => mocks.post.mock.calls.filter(([p]) => p === path);
+
+  it('chạm đúp cùng một tin chưa đọc trong một khung hình: chỉ một lệnh đọc', async () => {
+    const { container } = await mount();
+    const row = rowOf(container, 'Đơn TT001 đã được xác nhận');
+    twice(row, row);
+    await flush(8);
+    expect(posts('/me/notifications/n1/read')).toHaveLength(1);
+  });
+
+  it('hai tin chưa đọc khác nhau chạm cùng khung hình: đọc song song, mỗi tin một lệnh', async () => {
+    mocks.get.mockResolvedValue([ORDER_UNREAD, OPS]);
+    const { container } = await mount();
+    twice(rowOf(container, 'Đơn TT001 đã được xác nhận'), rowOf(container, 'Gomdon lỗi'));
+    await flush(8);
+    expect(posts('/me/notifications/n1/read')).toHaveLength(1);
+    expect(posts('/me/notifications/n4/read')).toHaveLength(1);
+  });
+
+  it('"Đọc tất cả" chạm đúp trong một khung hình: chỉ một lệnh; nút bận giữ focus (aria-busy + aria-disabled, không disabled)', async () => {
+    let release!: () => void;
+    mocks.post.mockReturnValue(new Promise((r) => (release = () => r({ ok: true, count: 1 }))));
+    const { container } = await mount();
+    const all = byText(container, 'button', 'Đọc tất cả') as HTMLButtonElement;
+    twice(all, all);
+    await flush(3);
+    expect(posts('/me/notifications/read-all')).toHaveLength(1);
+    expect(all.getAttribute('aria-busy')).toBe('true');
+    expect(all.getAttribute('aria-disabled')).toBe('true');
+    expect(all.disabled).toBe(false);
+    release();
+    await flush(8);
+    expect(posts('/me/notifications/read-all')).toHaveLength(1);
+  });
+
+  it('"Đọc tất cả" xong nhưng số chưa đọc mới chưa về: nút còn theo số cũ nhưng vẫn khoá, không gửi lệnh thứ hai; số về thì nút biến mất', async () => {
+    let unread = 1;
+    let releaseSummary!: () => void;
+    let gate: Promise<void> | null = null;
+    mocks.get.mockImplementation(async (path: string) => {
+      if (path === '/me/summary') {
+        await gate;
+        return summaryOf(unread);
+      }
+      return [ORDER_UNREAD, POINTS_READ];
+    });
+    mocks.post.mockImplementation(async () => {
+      unread = 0;
+      return { ok: true, count: 1 };
+    });
+    const { container } = await mount();
+    gate = new Promise<void>((r) => (releaseSummary = r));
+    const all = byText(container, 'button', 'Đọc tất cả') as HTMLButtonElement;
+    click(all);
+    await flush(6);
+    expect(posts('/me/notifications/read-all')).toHaveLength(1);
+    expect(byText(container, 'button', 'Đọc tất cả')).toBe(all);
+    expect(all.getAttribute('aria-busy')).toBe('true');
+    click(all);
+    await flush(4);
+    expect(posts('/me/notifications/read-all')).toHaveLength(1);
+    releaseSummary();
+    await flush(8);
+    expect(byText(container, 'button', 'Đọc tất cả')).toBeNull();
+    expect(posts('/me/notifications/read-all')).toHaveLength(1);
+  });
+
+  it('"Đọc tất cả" lỗi: nhả khoá, bấm lại gửi lệnh lần hai', async () => {
+    mocks.post.mockRejectedValueOnce(new Error('mạng')).mockResolvedValue({ ok: true, count: 1 });
+    const { container } = await mount();
+    click(byText(container, 'button', 'Đọc tất cả'));
+    await flush(8);
+    expect(posts('/me/notifications/read-all')).toHaveLength(1);
+    const again = byText(container, 'button', 'Đọc tất cả') as HTMLButtonElement;
+    expect(again.hasAttribute('aria-busy')).toBe(false);
+    click(again);
+    await flush(8);
+    expect(posts('/me/notifications/read-all')).toHaveLength(2);
+  });
+
+  it('"Thử lại" ở màn lỗi tải trả refetch cho nút: chạm đúp cùng khung hình chỉ tải lại một lần, nút báo bận tới khi xong', async () => {
+    let release!: (v: unknown) => void;
+    mocks.get.mockRejectedValueOnce(new Error('boom')).mockImplementation(async () => new Promise((r) => (release = r)));
+    const { container } = await mount();
+    const retry = byText(container, 'button', 'Thử lại') as HTMLButtonElement;
+    twice(retry, retry);
+    await flush(3);
+    expect(listCalls()).toHaveLength(2);
+    expect(retry.getAttribute('aria-busy')).toBe('true');
+    release([POINTS_READ]);
+    await flush(8);
+    expect(container.textContent).toContain('Bạn nhận thêm 50 điểm Xanh');
+    expect(listCalls()).toHaveLength(2);
   });
 });

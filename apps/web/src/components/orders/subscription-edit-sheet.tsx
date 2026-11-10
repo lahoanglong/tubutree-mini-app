@@ -1,12 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { updateSubscription, type SubscriptionDTO, type SubscriptionPaymentMethod } from '@tubutree/app-core/api/subscriptions';
 import { addressesQuery } from '@tubutree/app-core/queries/checkout';
 import { walletQuery } from '@tubutree/app-core/queries/wallet';
 import { Chip } from '@/components/catalog/chip';
 import { Sheet } from '@/components/ui/sheet';
+import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { QuantitySelector } from '@/components/ui/quantity-selector';
 import { LineItemSkeleton } from '@/components/ui/skeleton';
 import { coreHttp } from '@/lib/core-http';
@@ -53,7 +54,7 @@ export function SubscriptionEditSheet({ sub, onClose, onSaved }: { sub: Subscrip
   const nextRun = canEditInterval ? nextRunAfterIntervalChange(sub, weeks) : null;
   const dirty = Object.keys(patch).length > 0;
 
-  const save = useMutation({
+  const save = useLockedMutation({
     mutationFn: () => updateSubscription(coreHttp, sub.id, patch),
     onSuccess: () => {
       onSaved('Đã cập nhật gói định kỳ');
@@ -79,10 +80,12 @@ export function SubscriptionEditSheet({ sub, onClose, onSaved }: { sub: Subscrip
               {actionErrorText(save.error)}
             </p>
           )}
+          {/* Đang lưu giữ aria-busy/aria-disabled chứ không `disabled`: nút đang giữ focus mà `disabled` thì Chromium thả focus về body; khoá chạm đúp là của useLockedMutation. */}
           <button
             type="button"
-            disabled={!dirty || save.isPending}
+            disabled={!dirty}
             aria-busy={save.isPending || undefined}
+            aria-disabled={save.isPending || undefined}
             onClick={() => save.mutate()}
             className={`${ui.btnPrimary} w-full`}
           >

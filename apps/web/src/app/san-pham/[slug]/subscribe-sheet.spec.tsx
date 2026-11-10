@@ -517,6 +517,39 @@ describe('SubscribeSheet: khoá form + chặn đóng khi đang tạo lịch', ()
   });
 });
 
+describe('SubscribeSheet: khoá đồng bộ chạm đúp (W78B)', () => {
+  it('chạm đúp "Bắt đầu đặt định kỳ" trong một khung hình: một POST, một lần báo, đóng một lần', async () => {
+    const created = deferred<Record<string, unknown>>();
+    mocks.http.post.mockReturnValue(created.promise);
+    mount();
+    await flush();
+    const cta = create();
+    act(() => {
+      cta.click();
+      cta.click();
+    });
+    await flush(3);
+    expect(mocks.http.post).toHaveBeenCalledTimes(1);
+    await act(async () => created.resolve({ ...SUB, firstOrder: null }));
+    await flush(4);
+    expect(mocks.http.post).toHaveBeenCalledTimes(1);
+    expect(onNotice).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('tạo lỗi nhả khoá: bấm lại gửi POST lần hai', async () => {
+    mocks.http.post.mockRejectedValueOnce(new Error('mạng')).mockResolvedValue({ ...SUB, firstOrder: null });
+    mount();
+    await flush();
+    click(create());
+    await flush(4);
+    expect(body().querySelector('[role="alert"]')).not.toBeNull();
+    click(create());
+    await flush(4);
+    expect(mocks.http.post).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe('SubscribeSheet: số đều (tabular-nums)', () => {
   it('tiêu đề có % tiết kiệm, số tuần, gợi ý số ngày tối đa, số dư Ví Tubu đều có tabular-nums', async () => {
     mount();

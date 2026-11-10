@@ -4,13 +4,14 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { loadMoreFailed } from '@tubutree/app-core/client-copy';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useInfiniteQuery, useMutation, useQueryClient, type InfiniteData } from '@tanstack/react-query';
+import { useInfiniteQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
 import { markAllNotificationsRead, markNotificationRead, type NotificationCursor, type NotificationDTO } from '@tubutree/app-core/api/account';
 import { ME_SUMMARY_KEY } from '@tubutree/app-core/api/me-summary';
 import { fetchPurchasedItems } from '@tubutree/app-core/api/orders';
 import { nextNotificationCursor, notificationsInfiniteQuery } from '@tubutree/app-core/queries/account';
 import { notificationAction, notificationMeta, relativeTime } from '@/components/account/notification-view';
+import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { ErrorState } from '@/components/ui/error-state';
 import { mini } from '@/components/order-mobile/mobile-ui';
@@ -84,20 +85,23 @@ export default function NotificationsPage() {
     const key = notificationsInfiniteQuery(coreHttp).queryKey;
     if (qc.isFetching({ queryKey: key }) > 0) void qc.invalidateQueries({ queryKey: key });
   };
-  const settleRead = (failed: boolean) => {
-    void qc.invalidateQueries({ queryKey: failed ? ['notifications'] : ME_SUMMARY_KEY });
-  };
+  // Trả lời hứa tải lại: khoá của lệnh nhả SAU khi số chưa đọc mới về, nếu không nút "Đọc tất cả" còn hiện theo số cũ và bấm được lần hai.
+  const settleRead = (failed: boolean) => qc.invalidateQueries({ queryKey: failed ? ['notifications'] : ME_SUMMARY_KEY });
 
-  const readMut = useMutation({
-    mutationFn: (id: string) => markNotificationRead(coreHttp, id),
-    onSuccess: (_res, id) => {
-      markReadInCache((n) => n.id === id);
-      refetchIfListBusy();
+  // Khoá theo id tin: chạm đúp cùng một tin chưa đọc chỉ gửi một lệnh, hai tin khác nhau vẫn đọc song song.
+  const readMut = useLockedMutation(
+    {
+      mutationFn: (id: string) => markNotificationRead(coreHttp, id),
+      onSuccess: (_res, id) => {
+        markReadInCache((n) => n.id === id);
+        refetchIfListBusy();
+      },
+      // onSettled chứ không onSuccess: đánh dấu đã đọc hỏng thì số chưa đọc sai mãi mà không có tín hiệu nào.
+      onSettled: (_res, err) => settleRead(err !== null),
     },
-    // onSettled chứ không onSuccess: đánh dấu đã đọc hỏng thì số chưa đọc sai mãi mà không có tín hiệu nào.
-    onSettled: (_res, err) => settleRead(err !== null),
-  });
-  const readAllMut = useMutation({
+    (id) => id,
+  );
+  const readAllMut = useLockedMutation({
     mutationFn: () => markAllNotificationsRead(coreHttp),
     onSuccess: () => {
       markReadInCache(() => true);
@@ -148,7 +152,8 @@ export default function NotificationsPage() {
         backLabel="Quay lại tài khoản"
         actions={
           phase === 'authenticated' && unreadCount > 0 ? (
-            <button type="button" disabled={readAllMut.isPending} onClick={() => readAllMut.mutate()} className={`${ui.btnText} text-forest-700 max-md:text-[color:var(--color-text-brand)] max-md:no-underline`}>
+            // Nút đang giữ focus: bận thì aria-busy/aria-disabled, không `disabled` (Chromium thả focus về body).
+            <button type="button" aria-busy={readAllMut.isPending || undefined} aria-disabled={readAllMut.isPending || undefined} onClick={() => readAllMut.mutate()} className={`${ui.btnText} text-forest-700 max-md:text-[color:var(--color-text-brand)] max-md:no-underline`}>
               {readAllMut.isPending && <Loader2 className="mr-1 h-4 w-4 animate-spin" aria-hidden="true" />}
               Đọc tất cả
             </button>
@@ -174,7 +179,7 @@ export default function NotificationsPage() {
   if (notifQ.isError && !notifQ.data) {
     return shell(
       <div className="mt-4">
-        <ErrorState message={errorText(notifQ.error)} onRetry={() => void notifQ.refetch()} />
+        <ErrorState message={errorText(notifQ.error)} onRetry={() => notifQ.refetch()} />
       </div>,
     );
   }
@@ -268,7 +273,7 @@ function Detail({ n, busy, onNavigate, onReorder }: { n: NotificationDTO; busy: 
       <hr className="border-stone-200" />
       <p className="whitespace-pre-line text-sm leading-relaxed text-stone-900">{n.payload.body || ''}</p>
       {action?.kind === 'reorder' && (
-        <button type="button" disabled={busy} aria-busy={busy || undefined} onClick={() => onReorder(action.to)} className={`${ui.btnPrimary} w-full`}>
+        <button type="button" aria-busy={busy || undefined} aria-disabled={busy || undefined} onClick={() => onReorder(action.to)} className={`${ui.btnPrimary} w-full`}>
           {busy && <Loader2 className="mr-1 h-4 w-4 animate-spin" aria-hidden="true" />}
           {action.label}
         </button>

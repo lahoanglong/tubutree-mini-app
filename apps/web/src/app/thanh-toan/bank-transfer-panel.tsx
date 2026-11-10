@@ -15,6 +15,7 @@ import { platformBridge } from '@/lib/platform-bridge';
 import { StickyActionBar } from '@/components/sticky-action-bar';
 import { mini } from '@/components/order-mobile/mobile-ui';
 import { useRemaining } from '@/lib/use-remaining';
+import { usePressLock } from '@/lib/use-press-lock';
 import { copyText } from '@/lib/copy-text';
 import { ApiError, NetworkError } from '@/lib/client-api';
 import { isBusinessMessage, loadErrorText } from '@/lib/error-text';
@@ -81,8 +82,6 @@ export function BankTransferPanel({
     // Pancake/ngân hàng đối soát chuyển khoản → webhook lật PAID; FE tự dò mỗi 4s tới khi thấy tiền về.
     refetchInterval: (q) => (q.state.data?.paymentStatus === 'PAID' || isFinalRejection(q.state.error) ? false : 4000),
   });
-  // Cờ riêng cho lần khách bấm tay: `isFetching` còn bật theo nhịp dò nền 4s, gắn vào nút thì nút khoá/nhấp nháy đúng lúc khách chạm.
-  const [checking, setChecking] = useState(false);
   const [checkResult, setCheckResult] = useState<'unpaid' | 'failed' | 'error' | null>(null);
   const [checkError, setCheckError] = useState(BANK_CHECK_NETWORK);
   const [qrSaved, setQrSaved] = useState<SaveImageResult | null>(null);
@@ -104,10 +103,9 @@ export function BankTransferPanel({
     if (isBankTransfer) onState?.(panelState);
   }, [isBankTransfer, panelState, onState]);
 
-  if (!isBankTransfer) return null;
-
-  const handleCheck = async () => {
-    setChecking(true);
+  // Cờ riêng cho lần khách bấm tay: `isFetching` còn bật theo nhịp dò nền 4s, gắn vào nút thì nút khoá/nhấp nháy đúng lúc khách chạm.
+  // Nút Kiểm tra trong dòng chảy và nút dính đáy chung một khoá; khoá là ref nên hai cú chạm cùng khung hình chỉ dò một lần.
+  const check = usePressLock(async () => {
     setCheckResult(null);
     try {
       const res = await refetch({ throwOnError: true });
@@ -116,10 +114,12 @@ export function BankTransferPanel({
     } catch (e) {
       setCheckError(isFinalRejection(e) ? errorMessage(e) : isSessionExpired(e) ? sessionExpiredText(e as ApiError) : BANK_CHECK_NETWORK);
       setCheckResult('error');
-    } finally {
-      setChecking(false);
     }
-  };
+  });
+  const checking = check.busy;
+  const retry = usePressLock(() => refetch());
+
+  if (!isBankTransfer) return null;
 
   const checkResultText =
     checkResult === 'error'
@@ -189,7 +189,16 @@ export function BankTransferPanel({
         </span>
         <p className="text-base font-semibold text-stone-900">Chưa tải được thông tin thanh toán</p>
         <p className="max-w-xs text-sm text-stone-600">{errorMessage(error)}</p>
-        <button type="button" disabled={isFetching} aria-busy={isFetching || undefined} onClick={() => void refetch()} className={ui.btnSecondary}>
+        {/* Nút đang giữ focus: bận thì aria-busy/aria-disabled, không `disabled` (Chromium thả focus về body). Khoá chạm đúp là ref trong usePressLock. */}
+        <button
+          type="button"
+          aria-busy={isFetching || undefined}
+          aria-disabled={isFetching || undefined}
+          onClick={() => {
+            if (!isFetching) retry.press();
+          }}
+          className={ui.btnSecondary}
+        >
           Thử lại
         </button>
         {orderHref && (
@@ -236,7 +245,8 @@ export function BankTransferPanel({
           <button
             type="button"
             onClick={() => void handleSaveQr(data.qrImageUrl, data.orderCode)}
-            disabled={savingQr}
+            aria-busy={savingQr || undefined}
+            aria-disabled={savingQr || undefined}
             className={`${ui.btnSecondary} ${mini.secondary} gap-2 max-md:mt-2 max-md:w-full`}
           >
             <Download className="h-4 w-4 max-md:hidden" aria-hidden="true" />
@@ -313,8 +323,9 @@ export function BankTransferPanel({
 
       <button
         type="button"
-        onClick={() => void handleCheck()}
-        disabled={checking}
+        onClick={check.press}
+        aria-busy={checking || undefined}
+        aria-disabled={checking || undefined}
         className={`${ui.btnPrimary} mt-4 w-full max-md:mx-2 max-md:mt-3 max-md:w-[calc(100%-16px)] ${stickyCheck ? 'max-md:hidden' : ''}`}
       >
         {checking ? 'Đang kiểm tra…' : 'Tôi đã chuyển khoản — Kiểm tra'}
@@ -336,7 +347,7 @@ export function BankTransferPanel({
               {checkResultText}
             </p>
           )}
-          <button type="button" onClick={() => void handleCheck()} disabled={checking} className={`${ui.btnPrimary} w-full`}>
+          <button type="button" onClick={check.press} aria-busy={checking || undefined} aria-disabled={checking || undefined} className={`${ui.btnPrimary} w-full`}>
             {checking ? 'Đang kiểm tra…' : 'Tôi đã chuyển khoản — Kiểm tra'}
           </button>
         </StickyActionBar>
@@ -357,12 +368,20 @@ const DEADLINE_BOX = 'max-md:mx-2 max-md:mt-2 max-md:rounded-control max-md:bg-[
 function CopyControls({ text, name, iconOnly = false }: { text: string; name: string; iconOnly?: boolean }) {
   const [copied, setCopied] = useState(false);
   const [failed, setFailed] = useState(false);
+  // Khoá riêng từng dòng chép: hai cú chạm cùng nhịp vào một dòng chỉ ghi clipboard một lần, còn chạm sang dòng khác vẫn chạy.
+  const copying = useRef(false);
   const copy = async () => {
-    // Chỉ báo "Đã sao chép" khi thật sự vào clipboard: báo sai thì khách dán số tài khoản cũ vào app ngân hàng.
-    const ok = await copyText(text);
-    setFailed(!ok);
-    setCopied(ok);
-    if (ok) setTimeout(() => setCopied(false), 2000);
+    if (copying.current) return;
+    copying.current = true;
+    try {
+      // Chỉ báo "Đã sao chép" khi thật sự vào clipboard: báo sai thì khách dán số tài khoản cũ vào app ngân hàng.
+      const ok = await copyText(text);
+      setFailed(!ok);
+      setCopied(ok);
+      if (ok) setTimeout(() => setCopied(false), 2000);
+    } finally {
+      copying.current = false;
+    }
   };
   return (
     <>

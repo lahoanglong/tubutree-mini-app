@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type KeyboardEvent, type PointerEvent } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { Check, X, ZoomIn, ZoomOut } from 'lucide-react';
 import { Sheet } from '@/components/ui/sheet';
 import { ui } from '@/lib/guest-ui';
@@ -29,11 +29,15 @@ export function AvatarCropSheet({
   const [dragging, setDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [processing, setProcessing] = useState(false);
+  // `processing` chỉ đúng sau lần vẽ kế: hai cú chạm cùng nhịp sẽ dựng hai lần tải ảnh và gọi onConfirm hai lần, kéo theo tải ảnh đại diện lên hai lần.
+  const confirmingRef = useRef(false);
 
   useEffect(() => {
     if (open) {
       setZoom(1);
       setOffset({ x: 0, y: 0 });
+      confirmingRef.current = false;
+      setProcessing(false);
     }
   }, [open, imageSrc]);
 
@@ -63,6 +67,8 @@ export function AvatarCropSheet({
   };
 
   const confirm = () => {
+    if (confirmingRef.current) return;
+    confirmingRef.current = true;
     setProcessing(true);
     const img = new Image();
     img.crossOrigin = 'anonymous';
@@ -72,6 +78,7 @@ export function AvatarCropSheet({
       canvas.height = OUTPUT;
       const ctx = canvas.getContext('2d');
       if (!ctx) {
+        confirmingRef.current = false;
         setProcessing(false);
         onConfirm(imageSrc);
         return;
@@ -87,29 +94,38 @@ export function AvatarCropSheet({
       const h = baseH * zoom;
       ctx.drawImage(img, (MASK / 2 - w / 2 + offset.x) * k, (MASK / 2 - h / 2 + offset.y) * k, w * k, h * k);
       const url = canvas.toDataURL('image/jpeg', 0.82);
+      confirmingRef.current = false;
       setProcessing(false);
       onConfirm(url);
     };
     img.onerror = () => {
+      confirmingRef.current = false;
       setProcessing(false);
       onConfirm(imageSrc);
     };
     img.src = imageSrc;
   };
 
+  // Đang dựng ảnh cắt thì không đóng được: đóng giữa chừng mà onConfirm vẫn về sau sẽ tải một ảnh mà khách đã huỷ chọn.
+  const closeUnlessProcessing = () => {
+    if (!confirmingRef.current) onClose();
+  };
+
   return (
     <Sheet
       open={open}
-      onClose={onClose}
+      onClose={closeUnlessProcessing}
+      dismissible={!processing}
       title="Cắt ảnh đại diện"
       description="Kéo di chuyển hoặc thu phóng để chọn góc mặt đẹp nhất"
       footer={
         <div className="flex gap-3">
-          <button type="button" onClick={onClose} className={`${ui.btnSecondary} flex-1 gap-1.5`}>
+          <button type="button" onClick={closeUnlessProcessing} aria-disabled={processing || undefined} className={`${ui.btnSecondary} flex-1 gap-1.5`}>
             <X className="h-4 w-4" aria-hidden="true" />
             Huỷ chọn
           </button>
-          <button type="button" onClick={confirm} disabled={processing} className={`${ui.btnPrimary} flex-1 gap-1.5`}>
+          {/* Đang xử lý giữ aria-busy/aria-disabled chứ không `disabled`: nút đang giữ focus mà `disabled` thì Chromium thả focus về body. */}
+          <button type="button" onClick={confirm} aria-busy={processing || undefined} aria-disabled={processing || undefined} className={`${ui.btnPrimary} flex-1 gap-1.5`}>
             <Check className="h-4 w-4" aria-hidden="true" />
             {processing ? 'Đang xử lý…' : 'Xác nhận dùng'}
           </button>
