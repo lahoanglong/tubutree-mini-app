@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { RaceDb } from '../../../test/fakes/race-db.fake';
+import { RaceDb, tick } from '../../../test/fakes/race-db.fake';
 import { pgLikeClient } from '../../../test/fakes/race-db-client';
 import { CartService } from '../cart/cart.service';
 import { CouponsService } from '../coupons/coupons.service';
@@ -18,7 +18,7 @@ jest.mock('../../common/order-code', () => ({ generateUniqueOrderCode: async () 
  * (applyWalletDelta), dùng mã (CouponsService.redeem), dọn giỏ. Chỉ `compute` (đọc ngoài transaction, quyết định giá/điểm/mã) và việc dựng
  * phản hồi được thay bằng stub: compute đọc giỏ/số dư lúc bắt đầu request nên hai request cùng thấy số liệu cũ, đúng cửa sổ đua cần kiểm.
  */
-const PRICE: Record<string, number> = { v1: 60_000, v2: 60_000, v3: 30_000 };
+const PRICE: Record<string, number> = { v1: 60_000, v2: 60_000, v3: 30_000, v4: 60_000 };
 const POINT_VND = 1;
 const COUPON_OFF = 10_000;
 const TUBU = { kind: 'TUBU', storefrontId: null, name: 'Tubu Tree', ownerUserId: null } as const;
@@ -61,7 +61,7 @@ function setup(opts: Options) {
     analyticsEvent: {},
   });
   db.seed('product', [{ id: 'p1', isActive: true, approvalStatus: 'APPROVED' }]);
-  const stock = opts.stock ?? { v1: 10, v2: 10, v3: 10 };
+  const stock = opts.stock ?? { v1: 10, v2: 10, v3: 10, v4: 10 };
   db.seed(
     'variation',
     Object.entries(stock).map(([id, n]) => ({ id, productId: 'p1', isActive: true, stock: n, reservedStock: 0 })),
@@ -99,9 +99,12 @@ function setup(opts: Options) {
       match: /FROM "variations" WHERE "id" IN/,
       run: async (c) => {
         // Mức khoá nằm trong đoạn `Prisma.sql` lồng nên chuỗi SQL mà cơ sở dữ liệu giả thấy chỉ còn dấu `?` (cờ `locking` luôn false);
-        // câu này chỉ do lockVariationsInIdOrder phát ra, nên luôn coi là câu khoá và khoá theo thứ tự id như Postgres làm với ORDER BY.
-        const ids = [...(c.params as string[])].sort();
-        for (const id of ids) await c.lockRow('variation', id);
+        // câu này chỉ do lockVariationsInIdOrder phát ra, nên luôn coi là câu khoá; thứ tự khoá theo ORDER BY còn trong chuỗi SQL, bỏ ORDER BY thì khoá theo thứ tự tham số (thứ tự dòng giỏ).
+        const ids = /ORDER BY "id"/.test(c.sql) ? [...(c.params as string[])].sort() : [...(c.params as string[])];
+        for (const id of ids) {
+          await c.lockRow('variation', id);
+          await tick();
+        }
         return ids.map((id) => ({ id }));
       },
     },
@@ -275,7 +278,8 @@ describe('CheckoutService.placeOrder — race: mã giảm giá', () => {
     const { db, place, orders, user, ledgerOf, pointsLedgerOf, variation, cartLines, cartOf, expectInvariants } = setup({
       users: {
         u1: { wallet: 200_000, points: 100, couponCode: 'ONCE' },
-        u2: { wallet: 200_000, points: 100, couponCode: 'ONCE' },
+        // Dòng kho riêng (v4): nếu cùng v1 thì hai giao dịch đã xếp hàng ở dòng kho trước khi chạm mã, test không còn chứng minh khoá mã.
+        u2: { wallet: 200_000, points: 100, couponCode: 'ONCE', lines: [{ id: 'ci-u2-1', variationId: 'v4' }] },
       },
       coupons: [{ id: 'c1', code: 'ONCE', scope: 'PUBLIC', perUserLimit: 1, usageLimit: 1, usedCount: 0, newCustomerOnly: false, createdById: null }],
     });
@@ -300,7 +304,8 @@ describe('CheckoutService.placeOrder — race: mã giảm giá', () => {
     // Bên thắng: trừ một lần Ví + điểm, giỏ được dọn cùng transaction.
     expect(user(winner)).toMatchObject({ walletBalance: 200_000 - (60_000 - COUPON_OFF - 10), pointsBalance: 90 });
     expect(cartLines(winner)).toHaveLength(0);
-    expect(variation('v1')).toMatchObject({ stock: 9, reservedStock: 1 });
+    expect(variation(winner === 'u1' ? 'v1' : 'v4')).toMatchObject({ stock: 9, reservedStock: 1 });
+    expect(variation(loser === 'u1' ? 'v1' : 'v4')).toMatchObject({ stock: 10, reservedStock: 0 });
     expectInvariants();
     expect(db.stats.lockWaits).toBeGreaterThan(0);
     expect(db.stats.rollbacks).toBeGreaterThan(0);
@@ -483,7 +488,7 @@ describe('CheckoutService.placeOrder — race: Điểm Xanh', () => {
 
   it('hai khách khác nhau tiêu điểm của riêng mình song song: cả hai đều qua, mỗi người trừ đúng phần của mình (khoá điểm không chặn nhầm người khác)', async () => {
     const { place, orders, user, expectInvariants } = setup({
-      users: { u1: { points: 100 }, u2: { points: 100 } },
+      users: { u1: { points: 100 }, u2: { points: 100, lines: [{ id: 'ci-u2-1', variationId: 'v4' }] } },
     });
     await Promise.all([place('u1', { paymentMethod: 'COD', pointsToUse: 60 }), place('u2', { paymentMethod: 'COD', pointsToUse: 60 })]);
     expect(orders()).toHaveLength(2);
