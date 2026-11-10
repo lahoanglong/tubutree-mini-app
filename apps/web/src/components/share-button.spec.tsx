@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act } from 'react';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 
 const mocks = vi.hoisted(() => ({ auth: { user: null as null | { referralCode: string } } }));
@@ -82,5 +83,48 @@ describe('ShareButton', () => {
     click(byText(container, 'button', 'Chia sẻ'));
     await flush();
     expect(container.querySelector('[role="status"]')?.textContent).toMatch(/Không sao chép được/);
+  });
+});
+
+describe('ShareButton: khoá chạm đúp (W79B, Mini ↔ web)', () => {
+  const pending = () => {
+    let resolve!: () => void;
+    const promise = new Promise<void>((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+
+  it('hộp chia sẻ đang mở (Promise chưa xong): chạm lại không mở chồng; nút aria-busy + aria-disabled, không disabled; đóng hộp thì chạm lại được', async () => {
+    const d = pending();
+    const share = vi.fn().mockReturnValueOnce(d.promise).mockResolvedValue(undefined);
+    setNav({ share });
+    const { container } = mount();
+    const button = byText(container, 'button', 'Chia sẻ') as HTMLButtonElement;
+    await act(async () => {
+      button.click();
+      button.click();
+    });
+    expect(share).toHaveBeenCalledTimes(1);
+    expect(button.getAttribute('aria-busy')).toBe('true');
+    expect(button.getAttribute('aria-disabled')).toBe('true');
+    expect(button.disabled).toBe(false);
+    await act(async () => d.resolve());
+    expect(button.hasAttribute('aria-busy')).toBe(false);
+    click(button);
+    await flush();
+    expect(share).toHaveBeenCalledTimes(2);
+  });
+
+  it('sao chép lỗi hay khách đóng hộp (AbortError): khoá nhả, nút không chết', async () => {
+    const share = vi.fn().mockRejectedValueOnce(new DOMException('x', 'AbortError')).mockResolvedValue(undefined);
+    setNav({ share });
+    const { container } = mount();
+    const button = byText(container, 'button', 'Chia sẻ') as HTMLButtonElement;
+    click(button);
+    await flush();
+    click(button);
+    await flush();
+    expect(share).toHaveBeenCalledTimes(2);
   });
 });

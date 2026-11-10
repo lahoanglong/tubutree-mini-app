@@ -1,7 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { adminEditSession } from '@tubutree/app-core/api/attendance';
 import {
@@ -16,10 +16,12 @@ import {
 import { payrollReopenMessage } from '@tubutree/app-core/payroll-copy';
 import { adminPayrollDetailQuery, adminPayrollQuery } from '@tubutree/app-core/queries/payroll';
 import { coreHttp } from '@/lib/core-http';
+import { usePressLock } from '@/lib/use-press-lock';
 import { actionErrorText } from '@/lib/admin-error-text';
 import { downloadCsvFile } from '@/lib/export-csv';
 import { formatVnd } from '@/lib/format-vnd';
 import { addDaysKey, currentVnYearMonth, dowLabel, isoToVnHHMM, shiftYearMonth, shortDayLabel, vnDateKey, vnDateTimeISO } from '@/lib/week';
+import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { Sheet } from '@/components/ui/sheet';
 import { EvidenceUpload } from '@/components/evidence-upload';
 import { errText, PeriodNav } from '@/components/staff/staff-shell';
@@ -30,6 +32,9 @@ import { BTN_LINK, BTN_PRIMARY, BTN_SECONDARY, BTN_XS_PRIMARY, BTN_XS_SECONDARY,
 
 // Chỉ nạp khi bấm "Thưởng/phạt": giữ gói đầu của /admin nhẹ.
 const PayrollAdjustSheet = dynamic(() => import('./payroll-adjust-sheet').then((m) => m.PayrollAdjustSheet));
+
+/** Việc theo dòng và tháng: tháng đi cùng biến để `onSuccess` không phải đọc tháng đang xem. */
+type PayrollJob = { r: AdminPayrollRow; year: number; month: number };
 
 const PAY_STATUS: Record<PayrollStatus, string> = { OPEN: 'Đang tính', FINALIZED: 'Đã chốt', PAID: 'Đã trả' };
 const fmtHM = (min: number) => `${Math.floor(min / 60)}h${String(min % 60).padStart(2, '0')}`;
@@ -52,52 +57,75 @@ export function PayrollAdminTab() {
   const [note, setNote] = useState('');
   const [detailRow, setDetailRow] = useState<AdminPayrollRow | null>(null);
   const [adjustRow, setAdjustRow] = useState<AdminPayrollRow | null>(null);
-  const invalidate = () => void qc.invalidateQueries({ queryKey: ['admin-payroll', ym.year, ym.month] });
+  // Trả lời hứa làm mới để khoá giữ tới khi bảng lương mới về: nhả sớm thì dòng vừa chốt còn hiện nút "Chốt" cũ và bấm lại được.
+  // Chốt/mở lại/tính lại làm mới theo tháng của chính lệnh (đi trong biến mutation), không theo tháng đang xem lúc xong: đổi tháng khi lệnh còn bay mà làm mới nhầm tháng thì quay lại thấy dữ liệu cũ.
+  // `refetchType: 'all'` vì tháng cũ lúc đó không còn ai xem nên mặc định chỉ đánh dấu cũ chứ không tải lại.
+  const refreshMonth = (p: { year: number; month: number }) => qc.invalidateQueries({ queryKey: ['admin-payroll', p.year, p.month], refetchType: 'all' });
+  const refresh = () => refreshMonth(ym);
+  const invalidate = () => void refresh();
   const ok = (text: string) => setMsg({ tone: 'success', text });
   const fail = (e: unknown) => setMsg({ tone: 'danger', text: errText(e) });
 
-  const rateM = useMutation({
+  // Chốt, mở lại và đánh dấu đã trả đều đổi trạng thái bảng lương nên chỉ một việc mỗi lúc (cũng là lý do các dòng khác bị khoá khi một dòng đang chạy).
+  // Khoá ref vì `isPending` chỉ đúng sau lần vẽ kế tiếp: hai cú chạm sát nhau vẫn gửi cả hai.
+  const acting = useRef(false);
+  const releaseActing = () => {
+    acting.current = false;
+  };
+  const exclusive = (run: () => void) => {
+    if (acting.current) return false;
+    acting.current = true;
+    run();
+    return true;
+  };
+
+  const rateM = useLockedMutation({
     mutationFn: () => setRate(coreHttp, rateRow!.staff.id, Number(rateVal)),
     onSuccess: () => {
       ok('Đã lưu đơn giá.');
       setRateRow(null);
-      invalidate();
+      return refresh();
     },
     onError: fail,
   });
-  const finalizeM = useMutation({
-    mutationFn: (r: AdminPayrollRow) => finalizePayroll(coreHttp, r.staff.id, ym.year, ym.month),
-    onSuccess: () => {
+  const finalizeM = useLockedMutation({
+    onSettled: releaseActing,
+    mutationFn: (v: PayrollJob) => finalizePayroll(coreHttp, v.r.staff.id, v.year, v.month),
+    onSuccess: (_d, v) => {
       ok('Đã chốt lương.');
-      invalidate();
+      return refreshMonth(v);
     },
     onError: fail,
   });
-  const reopenM = useMutation({
-    mutationFn: (r: AdminPayrollRow) => reopenPayroll(coreHttp, r.staff.id, ym.year, ym.month),
-    onSuccess: () => {
+  const reopenM = useLockedMutation({
+    onSettled: releaseActing,
+    mutationFn: (v: PayrollJob) => reopenPayroll(coreHttp, v.r.staff.id, v.year, v.month),
+    onSuccess: (_d, v) => {
       ok('Đã mở lại bảng lương — sửa xong nhớ chốt lại.');
-      invalidate();
+      return refreshMonth(v);
     },
     onError: fail,
   });
-  const paidM = useMutation({
+  const paidM = useLockedMutation({
+    onSettled: releaseActing,
     mutationFn: () => markPaid(coreHttp, payRow!.staff.id, { year: ym.year, month: ym.month, proofImageUrl: proof, note: note || undefined }),
     onSuccess: () => {
       ok('Đã đánh dấu đã trả lương.');
       setPayRow(null);
       setProof('');
       setNote('');
-      invalidate();
+      return refresh();
     },
     onError: fail,
   });
+  const payrollBusy = finalizeM.isPending || reopenM.isPending || paidM.isPending;
+  const retryPayroll = usePressLock(() => payQ.refetch());
 
   const recomputeM = useMutation({
-    mutationFn: (r: AdminPayrollRow) => recomputePayroll(coreHttp, r.staff.id, ym.year, ym.month),
-    onSuccess: (_d, r) => {
-      ok(`Đã tính lại bảng lương T${ym.month}/${ym.year} của ${r.staff.fullName ?? r.staff.phone ?? 'NV'}.`);
-      invalidate();
+    mutationFn: (v: PayrollJob) => recomputePayroll(coreHttp, v.r.staff.id, v.year, v.month),
+    onSuccess: (_d, v) => {
+      ok(`Đã tính lại bảng lương T${v.month}/${v.year} của ${v.r.staff.fullName ?? v.r.staff.phone ?? 'NV'}.`);
+      void refreshMonth(v);
     },
     onError: (e) => setMsg({ tone: 'danger', text: actionErrorText(e) }),
   });
@@ -108,25 +136,27 @@ export function PayrollAdminTab() {
       message: `Tính lại giờ công và tiền phạt tự động của ${r.staff.fullName ?? r.staff.phone ?? 'NV'} trong T${ym.month}/${ym.year} theo dữ liệu chấm công hiện có. Đơn giá của những ngày đã tính được giữ nguyên.`,
       confirmLabel: 'Tính lại',
     });
-    if (go) recomputeM.mutate(r);
+    if (go) recomputeM.mutate({ r, year: ym.year, month: ym.month });
   };
 
   const askFinalize = async (r: AdminPayrollRow) => {
+    if (acting.current) return;
     const go = await confirm({
       title: 'Chốt bảng lương?',
       message: `Chốt bảng lương T${ym.month}/${ym.year} của ${r.staff.fullName ?? r.staff.phone ?? 'NV'}: ${fmtHM(r.month.totalMinutes)}, thực nhận ${formatVnd(r.month.net)}. Sau khi chốt, muốn sửa phải mở lại.`,
       confirmLabel: 'Chốt lương',
     });
-    if (go) finalizeM.mutate(r);
+    if (go) exclusive(() => finalizeM.mutate({ r, year: ym.year, month: ym.month }));
   };
 
   const askReopen = async (r: AdminPayrollRow) => {
+    if (acting.current) return;
     const go = await confirm({
       title: 'Mở lại bảng lương?',
       message: payrollReopenMessage(ym.month, ym.year, r.staff.fullName ?? 'NV', r.month.status),
       confirmLabel: 'Mở lại',
     });
-    if (go) reopenM.mutate(r);
+    if (go) exclusive(() => reopenM.mutate({ r, year: ym.year, month: ym.month }));
   };
 
   const rows = payQ.data ?? [];
@@ -161,7 +191,7 @@ export function PayrollAdminTab() {
       {payQ.isError && (
         <div role="alert" className="text-sm text-danger-fg">
           {errText(payQ.error)}{' '}
-          <button type="button" onClick={() => void payQ.refetch()} className="font-medium underline">
+          <button type="button" onClick={retryPayroll.press} aria-busy={retryPayroll.busy || undefined} aria-disabled={retryPayroll.busy || undefined} className="font-medium underline">
             Thử lại
           </button>
         </div>
@@ -172,9 +202,9 @@ export function PayrollAdminTab() {
         {rows.map((row) => {
           const name = row.staff.fullName ?? row.staff.phone ?? 'NV';
           // Chỉ dòng đang chạy có trạng thái bận; dòng khác khoá để không chốt/mở lại hai nhân viên cùng lúc.
-          const finalizing = finalizeM.isPending && finalizeM.variables?.staff.id === row.staff.id;
-          const reopening = reopenM.isPending && reopenM.variables?.staff.id === row.staff.id;
-          const recomputing = recomputeM.isPending && recomputeM.variables?.staff.id === row.staff.id;
+          const finalizing = finalizeM.isPending && finalizeM.variables?.r.staff.id === row.staff.id;
+          const reopening = reopenM.isPending && reopenM.variables?.r.staff.id === row.staff.id;
+          const recomputing = recomputeM.isPending && recomputeM.variables?.r.staff.id === row.staff.id;
           return (
             <section key={row.staff.id} aria-label={name} className="rounded-card border border-stone-200 bg-stone-0 p-3 shadow-card">
               <div className="flex items-center justify-between gap-2">
@@ -229,7 +259,8 @@ export function PayrollAdminTab() {
                   <button
                     type="button"
                     aria-label={`Chốt · ${name}`}
-                    disabled={finalizeM.isPending}
+                    aria-busy={finalizing || undefined}
+                    aria-disabled={payrollBusy || undefined}
                     onClick={() => void askFinalize(row)}
                     className={BTN_XS_SECONDARY}
                   >
@@ -251,7 +282,14 @@ export function PayrollAdminTab() {
                   </button>
                 )}
                 {row.month.status !== 'OPEN' && (
-                  <button type="button" aria-label={`Mở lại · ${name}`} disabled={reopenM.isPending} onClick={() => void askReopen(row)} className={BTN_LINK}>
+                  <button
+                    type="button"
+                    aria-label={`Mở lại · ${name}`}
+                    aria-busy={reopening || undefined}
+                    aria-disabled={payrollBusy || undefined}
+                    onClick={() => void askReopen(row)}
+                    className={BTN_LINK}
+                  >
                     {reopening ? 'Đang mở…' : 'Mở lại'}
                   </button>
                 )}
@@ -282,9 +320,17 @@ export function PayrollAdminTab() {
       <Sheet
         open={!!rateRow}
         onClose={() => setRateRow(null)}
+        dismissible={!rateM.isPending}
         title={`Đơn giá giờ · ${rateRow?.staff.fullName ?? ''}`}
         footer={
-          <button type="button" disabled={rateM.isPending || !/^\d+$/.test(rateVal)} onClick={() => rateM.mutate()} className={`${BTN_PRIMARY} w-full`}>
+          <button
+            type="button"
+            disabled={!/^\d+$/.test(rateVal)}
+            aria-busy={rateM.isPending || undefined}
+            aria-disabled={rateM.isPending || undefined}
+            onClick={() => rateM.mutate()}
+            className={`${BTN_PRIMARY} w-full`}
+          >
             Lưu đơn giá
           </button>
         }
@@ -297,9 +343,17 @@ export function PayrollAdminTab() {
       <Sheet
         open={!!payRow}
         onClose={() => setPayRow(null)}
+        dismissible={!paidM.isPending}
         title={`Xác nhận đã chuyển · ${payRow?.staff.fullName ?? ''}`}
         footer={
-          <button type="button" disabled={paidM.isPending || !proof} onClick={() => paidM.mutate()} className={`${BTN_PRIMARY} w-full`}>
+          <button
+            type="button"
+            disabled={!proof}
+            aria-busy={payrollBusy || undefined}
+            aria-disabled={payrollBusy || undefined}
+            onClick={() => exclusive(() => paidM.mutate())}
+            className={`${BTN_PRIMARY} w-full`}
+          >
             Đánh dấu đã trả
           </button>
         }
@@ -356,7 +410,7 @@ function DetailSheet({
   const [co, setCo] = useState('17:00');
   const [err, setErr] = useState<string | null>(null);
 
-  const editM = useMutation({
+  const editM = useLockedMutation({
     mutationFn: (dayKey: string) =>
       adminEditSession(coreHttp, editId as string, {
         // Ca qua đêm: giờ ra nhỏ hơn giờ vào thuộc NGÀY HÔM SAU, dựng cả hai mốc cùng ngày sẽ gửi checkout < checkin và BE từ chối.
@@ -368,14 +422,14 @@ function DetailSheet({
     onSuccess: () => {
       setErr(null);
       setEditId(null);
-      void qc.invalidateQueries({ queryKey: ['admin-payroll-detail', staffId, year, month] });
       onChanged();
+      return qc.invalidateQueries({ queryKey: ['admin-payroll-detail', staffId, year, month] });
     },
     onError: (e) => setErr(errText(e)),
   });
 
   return (
-    <Sheet open={!!row} onClose={onClose} size="full" title={`Giờ công · ${row?.staff.fullName ?? ''} · T${month}/${year}`}>
+    <Sheet open={!!row} onClose={onClose} dismissible={!editM.isPending} size="full" title={`Giờ công · ${row?.staff.fullName ?? ''} · T${month}/${year}`}>
       <div className="space-y-2.5">
         {err && <p role="alert" className="text-sm text-danger-fg">{err}</p>}
         {detailQ.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
@@ -438,7 +492,14 @@ function DetailSheet({
                       </div>
                       {/* co === ci là phiên chưa ra ca (ô giờ ra khởi tạo bằng giờ vào): lưu lúc đó ghi khoảng 0 phút hoặc cả 24 tiếng. */}
                       {co === ci && <p className="text-xs text-warning-fg">Nhập giờ ra khác giờ vào để lưu.</p>}
-                      <button type="button" disabled={editM.isPending || co === ci || !ci || !co} onClick={() => editM.mutate(dayKey)} className={BTN_PRIMARY}>
+                      <button
+                        type="button"
+                        disabled={co === ci || !ci || !co}
+                        aria-busy={editM.isPending || undefined}
+                        aria-disabled={editM.isPending || undefined}
+                        onClick={() => editM.mutate(dayKey)}
+                        className={BTN_PRIMARY}
+                      >
                         Lưu giờ
                       </button>
                     </div>

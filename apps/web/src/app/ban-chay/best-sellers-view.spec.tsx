@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act } from 'react';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 
 // Bản web của pages/best-sellers.spec.tsx (Mini App): tab danh mục tầng 1 trên URL, thẻ hạng 1..n theo vị trí thật, "Xem thêm" ở điện
@@ -260,6 +261,29 @@ describe('BestSellersView — rỗng và lỗi', () => {
     expect(retry).not.toBeNull();
     fail = false;
     click(retry);
+    await flush();
+    expect(ranks(container)).toHaveLength(20);
+  });
+
+  it('"Thử lại" trả refetch: bấm khi lần tải lại còn chạy thì nút aria-busy + aria-disabled (không disabled), xong thì danh sách hiện (W79B)', async () => {
+    let attempts = 0;
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    routes['/products'] = async () => {
+      attempts += 1;
+      if (attempts === 1) throw Object.assign(new Error('500'), { status: 500 });
+      await gate;
+      return pageOf(1, 20, 1, 45);
+    };
+    const { container } = mount();
+    await flush();
+    const retry = byText(container, 'button', 'Thử lại') as HTMLButtonElement;
+    click(retry);
+    await flush(1);
+    expect(retry.getAttribute('aria-busy')).toBe('true');
+    expect(retry.getAttribute('aria-disabled')).toBe('true');
+    expect(retry.disabled).toBe(false);
+    await act(async () => release());
     await flush();
     expect(ranks(container)).toHaveLength(20);
   });

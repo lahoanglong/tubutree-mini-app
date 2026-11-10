@@ -1169,3 +1169,102 @@ describe('ProductReviews (web) — form đánh giá dùng được bằng bàn p
     expect(mocks.saved[0]!.body).toMatchObject({ rating: 4, orderId: 'o1' });
   });
 });
+
+describe('ProductReviews (web): "Thử lại" trả refetch nên nút báo bận tới khi tải lại xong (W79B, Mini ↔ web)', () => {
+  const FIRST = Array.from({ length: 6 }, (_, i) => review(`p${i}`, 5));
+  const SECOND = [review('q0', 4), review('q1', 4), review('q2', 4)];
+  const PAGED = { ...LIST, count: 9, distribution: { '5': 6, '4': 3 }, items: FIRST };
+  // Lần đầu của khoá bị gọi thì lỗi, các lần sau chờ cổng rồi trả dữ liệu: nút Thử lại đang bấm phải còn aria-busy lúc chờ.
+  const failOnceThenHold = (matches: (filter: number | string, cursor?: string) => boolean, data: (filter: number | string, cursor?: string) => unknown) => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    let failed = false;
+    mocks.serve = async (filter, cursor) => {
+      if (!matches(filter, cursor)) return data(filter, cursor);
+      if (!failed) {
+        failed = true;
+        return new Error('mất mạng');
+      }
+      await gate;
+      return data(filter, cursor);
+    };
+    return release;
+  };
+  const expectBusyThenDone = async (c: HTMLElement, release: () => void, doneText: string) => {
+    const retry = button(c, 'Thử lại') as HTMLButtonElement;
+    click(retry);
+    await flush(1);
+    expect(retry.getAttribute('aria-busy')).toBe('true');
+    expect(retry.getAttribute('aria-disabled')).toBe('true');
+    expect(retry.disabled).toBe(false);
+    await act(async () => release());
+    await flush(8);
+    expect(c.textContent).toContain(doneText);
+  };
+
+  it('danh sách đầu lỗi (reviewsQ)', async () => {
+    const release = failOnceThenHold((f, cur) => f === 'all' && !cur, () => structuredClone(LIST));
+    const c = await mount();
+    expect(c.textContent).toContain('Không tải được đánh giá.');
+    await expectBusyThenDone(c, release, 'Nhận xét a');
+  });
+
+  it('chip lọc lỗi (filteredQ)', async () => {
+    const release = failOnceThenHold((f) => f === 3, () => ({ ...LIST, items: [review('c', 3)] }));
+    mocks.serve = ((inner) => async (f: number | string, cur?: string) => (f === 'all' ? structuredClone(LIST) : inner(f, cur)))(mocks.serve!);
+    const c = await mount();
+    await pick(c, '3 sao');
+    expect(c.textContent).toContain('Không tải được đánh giá.');
+    await expectBusyThenDone(c, release, 'Nhận xét c');
+  });
+
+  it('trang kế lỗi (retryMore)', async () => {
+    const release = failOnceThenHold(
+      (_f, cur) => cur === 'c1',
+      () => ({ ...PAGED, items: SECOND, nextCursor: null }),
+    );
+    const inner = mocks.serve!;
+    mocks.serve = async (f, cur) => (cur ? inner(f, cur) : { ...PAGED, items: FIRST, nextCursor: 'c1' });
+    const c = await mount();
+    click(button(c, 'Xem thêm đánh giá'));
+    await flush(8);
+    expect(c.textContent).toContain('Không tải được đánh giá.');
+    await expectBusyThenDone(c, release, 'Nhận xét q2');
+  });
+
+  // Đã có đánh giá cũ trong bộ nhớ đệm rồi lần làm mới lỗi: thẻ lỗi ở lại suốt lúc tải lại nên quan sát được aria-busy, và lần gọi thứ hai của refetch()
+  // sẽ huỷ lần đầu rồi tải lại (khi đã có dữ liệu) nên bỏ khoá thì số lần gọi máy chủ thành 2.
+  // can-review (eligQ) chỉ hiện thẻ lỗi khi chưa có dữ liệu: bấm Thử lại là thẻ biến mất ngay, nên khoá của nó không quan sát được từ ngoài.
+  it('đánh giá của mình khi sửa (myQ): làm mới lỗi, chạm đúp Thử lại chỉ tải một lần, nút aria-busy tới khi xong', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const r = render(<ProductReviews slug="nuoc-rua-chen" />, client);
+    mounted.push(r);
+    const c = r.container;
+    await flush(8);
+    click(buttonNamed(c, 'Sửa đánh giá đơn TB0001'));
+    await flush(8);
+    expect(c.querySelector('textarea')!.value).toBe('Dùng ổn');
+    mocks.mine.a = new Error('mất mạng');
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: ['my-review'] });
+    });
+    await flush(2);
+    expect(c.textContent).toContain('Không tải được đánh giá để sửa.');
+    let release!: () => void;
+    mocks.mine.a = new Promise((res) => (release = () => res(structuredClone(MINE_A))));
+    const before = mocks.myCalls.length;
+    const retry = button(c, 'Thử lại') as HTMLButtonElement;
+    await act(async () => {
+      retry.click();
+      retry.click();
+    });
+    await flush(1);
+    expect(mocks.myCalls.length - before).toBe(1);
+    expect(retry.getAttribute('aria-busy')).toBe('true');
+    expect(retry.getAttribute('aria-disabled')).toBe('true');
+    expect(retry.disabled).toBe(false);
+    await act(async () => release());
+    await flush(8);
+    expect(c.querySelector('textarea')!.value).toBe('Dùng ổn');
+  });
+});

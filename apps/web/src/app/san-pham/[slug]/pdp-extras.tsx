@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -19,6 +19,7 @@ import { autoCouponName } from '@/lib/coupon-name';
 import { BottomSheet } from '@/components/mini/bottom-sheet';
 import { FlashPriceBar } from '@/components/mini/flash-price-bar';
 import { GameNoticeBar, useGameNotice } from '@/components/game/game-notice';
+import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { Icon } from '@/components/mini/icon';
 import { ProductTrustStrip } from '@/components/mini/product-trust-strip';
 import { ListRow } from '@/components/mini/list-row';
@@ -423,20 +424,30 @@ export function PdpGroupBuyRow({ productId, slug }: { productId: string; slug: s
   const phase = useAuthPhase();
   const cfg = usePublicConfig();
   const [error, setError] = useState<string | null>(null);
-  const create = useMutation({
+  // Hai cú bấm trong cùng khung hình tạo hai nhóm: `isPending` chỉ đúng sau lần dựng kế tiếp, khoá ref của `useLockedMutation` chặn ngay.
+  // Tạo xong là rời trang nhưng `router.push` còn chờ máy chủ; khoá của mutation đã nhả nên giữ khoá `leaving` tới khi trang đi (như `add-to-cart`).
+  const leaving = useRef(false);
+  const [leavingUi, setLeavingUi] = useState(false);
+  const create = useLockedMutation({
     mutationFn: () => createGroupBuy(coreHttp, productId),
-    onSuccess: (group) => router.push(`/mua-chung/${encodeURIComponent(group.id)}?moi=1`),
+    onMutate: () => setError(null),
+    onSuccess: (group) => {
+      leaving.current = true;
+      setLeavingUi(true);
+      router.push(`/mua-chung/${encodeURIComponent(group.id)}?moi=1`);
+    },
     onError: (e: unknown) => setError(actionErrorText(e)),
   });
+  const waiting = create.isPending || leavingUi;
 
   const onClick = () => {
-    if (create.isPending || phase === 'loading') return;
-    setError(null);
+    if (leaving.current || phase === 'loading') return;
     if (phase === 'unavailable') {
       setError(offlineMessage('mở nhóm mua chung được'));
       return;
     }
     if (phase === 'guest') {
+      setError(null);
       router.push(loginHref(pagePath(slug)));
       return;
     }
@@ -448,15 +459,16 @@ export function PdpGroupBuyRow({ productId, slug }: { productId: string; slug: s
       <button
         type="button"
         onClick={onClick}
-        disabled={create.isPending}
-        className={`${rowButton} disabled:opacity-60`}
+        aria-busy={waiting || undefined}
+        aria-disabled={waiting || undefined}
+        className={`${rowButton} aria-disabled:opacity-60`}
       >
         <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-forest-50">
           <Users className="h-5 w-5 text-forest-700" aria-hidden="true" />
         </span>
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-semibold text-forest-700">
-            {create.isPending ? 'Đang mở nhóm…' : 'Mở nhóm mua chung — nhận mã giảm giá khi đủ người'}
+            {waiting ? 'Đang mở nhóm…' : 'Mở nhóm mua chung — nhận mã giảm giá khi đủ người'}
           </span>
           <span className="block text-xs text-stone-600">{groupBuyPitch(cfg.groupBuy)}</span>
         </span>

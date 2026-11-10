@@ -32,6 +32,7 @@ const state = vi.hoisted(() => ({
   postFail: new Set<string>(),
   dashGate: null as null | Promise<unknown>,
   walletGate: null as null | Promise<unknown>,
+  failGate: null as null | Promise<unknown>,
   routeReady: { gianHang: true },
   courses: [{ id: 'c1' }] as unknown[],
   tab: undefined as string | undefined,
@@ -61,7 +62,10 @@ vi.mock('@/lib/core-http', () => ({
   coreHttp: {
     get: async (path: string, opts?: { query?: Record<string, unknown> }) => {
       state.calls.push({ method: 'get', path, ...(opts?.query && Object.keys(opts.query).length > 0 ? { query: opts.query } : {}) });
-      if (state.fail.has(path)) throw new Error('mất mạng');
+      if (state.fail.has(path)) {
+        await state.failGate;
+        if (state.fail.has(path)) throw new Error('mất mạng');
+      }
       if (path === '/affiliate/me') {
         await state.meGate;
         return state.me;
@@ -144,6 +148,7 @@ beforeEach(() => {
   state.postFail = new Set();
   state.dashGate = null;
   state.walletGate = null;
+  state.failGate = null;
   state.routeReady.gianHang = true;
   state.courses = [{ id: 'c1' }];
   state.tab = undefined;
@@ -1067,5 +1072,67 @@ describe('/ctv — khoá + Tạo link (cùng một act)', () => {
     expect(posts()).toHaveLength(2);
     expect(statusRegion(container)?.textContent).toContain('Đã tạo link chia sẻ mới');
     expect(alertRegion(container)?.textContent).toBe('');
+  });
+});
+
+describe('/ctv: "Thử lại" trả refetch nên nút báo bận tới khi tải lại xong (W79B, Mini ↔ web)', () => {
+  // Chưa có dữ liệu thì `refetch()` lần hai dùng chung lời hứa của lần một, nên đếm lời gọi API không bắt được thiếu khoá: kiểm aria-busy.
+  const CASES: [string, string | undefined, string][] = [
+    ['hồ sơ CTV (cả trang)', undefined, '/affiliate/me'],
+    ['tổng quan', undefined, '/affiliate/dashboard'],
+    ['thưởng mốc', 'overview', '/affiliate/milestones'],
+    ['link chia sẻ', 'share', '/affiliate/links'],
+    ['lịch sử hoa hồng', 'commission', '/affiliate/commissions'],
+    ['lịch sử chuyển vào Ví', 'commission', '/affiliate/payouts'],
+    ['theo gian hàng', 'commission', '/affiliate/analytics/storefronts'],
+    ['theo sản phẩm', 'commission', '/affiliate/analytics/products'],
+  ];
+
+  it.each(CASES)('%s: bấm Thử lại khi lần tải lại còn chạy thì nút aria-busy + aria-disabled, xong thì hết bận', async (_name, tab, path) => {
+    state.tab = tab;
+    state.fail.add(path);
+    const { container } = mount();
+    await flush();
+    const retry = byText(container, 'button', 'Thử lại') as HTMLButtonElement;
+    expect(retry).not.toBeNull();
+    let release!: () => void;
+    state.failGate = new Promise<void>((r) => (release = r));
+    click(retry);
+    await flush(1);
+    expect(retry.getAttribute('aria-busy')).toBe('true');
+    expect(retry.getAttribute('aria-disabled')).toBe('true');
+    state.fail.clear();
+    await act(async () => release());
+    await flush();
+    expect(byText(container, 'button', 'Thử lại')).toBeNull();
+  });
+
+  // Nút "Thử lại" của khối này là Button (khoá bằng ref, không có aria-busy): dựng trạng thái ĐÃ có dữ liệu cũ rồi cho lần làm mới lỗi,
+  // vì lúc đó `refetch()` lần hai huỷ lần một và gửi lại, nên chạm đúp không khoá sẽ gửi hai lần tải lại.
+  it('sản phẩm hoa hồng nổi bật: chạm đúp "Thử lại" (đã có dữ liệu cũ) chỉ tải lại một lần', async () => {
+    state.tab = 'share';
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    mount(client);
+    await flush();
+    const loads = () => state.calls.filter((c) => c.path === '/storefront/me/products').length;
+    state.fail.add('/storefront/me/products');
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: ['affiliate-featured-products'] });
+    });
+    await flush();
+    const retry = byText(document.body, 'button', 'Thử lại') as HTMLButtonElement;
+    expect(retry).not.toBeNull();
+    const before = loads();
+    let release!: () => void;
+    state.failGate = new Promise<void>((r) => (release = r));
+    await act(async () => {
+      retry.click();
+      retry.click();
+    });
+    expect(loads() - before).toBe(1);
+    state.fail.clear();
+    await act(async () => release());
+    await flush();
+    expect(byText(document.body, 'button', 'Thử lại')).toBeNull();
   });
 });

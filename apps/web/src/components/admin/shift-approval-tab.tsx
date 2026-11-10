@@ -1,7 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMemo, useRef, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   approveShift,
   bulkApproveShifts,
@@ -13,7 +13,9 @@ import {
 import { adminShiftsQuery, adminShiftTemplatesQuery } from '@tubutree/app-core/queries/shifts';
 import { invalidateInbox } from '@/lib/admin-client';
 import { coreHttp } from '@/lib/core-http';
+import { usePressLock } from '@/lib/use-press-lock';
 import { addDaysKey, dowLabel, hhmmToMin, isoToVnHHMM, keyToUtcMidnightISO, mondayKeyOf, minToHHMM, shortDayLabel, vnDateTimeISO } from '@/lib/week';
+import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { Sheet } from '@/components/ui/sheet';
 import { errText, PeriodNav } from '@/components/staff/staff-shell';
 import { useConfirm } from './confirm-dialog';
@@ -23,6 +25,9 @@ import type { Tone } from '@/lib/recycling';
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 // Ca chuẩn kết thúc cuối ngày (endMin 1440) hợp lệ ở máy chủ và Mini App; chỉ ô giờ ca chuẩn nhận 24:00.
 const TEMPLATE_END_RE = /^(([01]\d|2[0-3]):[0-5]\d|24:00)$/;
+
+// Khoá của "Duyệt tất cả" trong sổ khoá ca; id ca là chuỗi do máy chủ cấp nên không bao giờ trùng dấu sao.
+const BULK_KEY = '*';
 
 const SHIFT_STATUS: Record<AdminShift['status'], { label: string; tone: Tone }> = {
   PENDING: { label: 'Chờ duyệt', tone: 'warning' },
@@ -44,10 +49,10 @@ export function ShiftApprovalTab() {
   const [adjStart, setAdjStart] = useState('08:00');
   const [adjEnd, setAdjEnd] = useState('12:00');
   const [tplOpen, setTplOpen] = useState(false);
-  const invalidate = () => {
-    void qc.invalidateQueries({ queryKey: ['admin-shifts', mondayKey] });
-    void invalidateInbox(qc);
-  };
+  // Trả lời hứa làm mới để khoá của ca giữ tới khi danh sách ca mới về: nhả sớm thì nút "Duyệt" của ca vừa duyệt còn hiện và bấm lại được.
+  // Làm mới theo tuần của chính lệnh (đi trong biến mutation), không theo tuần đang xem lúc xong: đổi tuần khi lệnh còn bay mà làm mới nhầm tuần thì quay lại thấy ca cũ còn nút "Duyệt".
+  // `refetchType: 'all'` vì tuần cũ lúc đó không còn ai xem nên mặc định chỉ đánh dấu cũ chứ không tải lại.
+  const invalidate = (week: string) => Promise.all([qc.invalidateQueries({ queryKey: ['admin-shifts', week], refetchType: 'all' }), invalidateInbox(qc)]);
   const fail = (e: unknown) => setMsg({ tone: 'danger', text: errText(e) });
 
   const grouped = useMemo(() => {
@@ -61,32 +66,66 @@ export function ShiftApprovalTab() {
   }, [shiftsQ.data]);
   const pendingIds = useMemo(() => (shiftsQ.data ?? []).filter((s) => s.status === 'PENDING').map((s) => s.id), [shiftsQ.data]);
 
-  const approveM = useMutation({
-    mutationFn: (v: { id: string; approvedStart?: string; approvedEnd?: string }) =>
-      approveShift(coreHttp, v.id, v.approvedStart ? { approvedStart: v.approvedStart, approvedEnd: v.approvedEnd } : undefined),
-    onSuccess: () => {
-      setMsg({ tone: 'success', text: 'Đã duyệt ca.' });
-      setAdjust(null);
-      invalidate();
+  // Duyệt và từ chối cùng một ca loại trừ nhau, còn "Duyệt tất cả" đụng mọi ca chờ: chung một sổ khoá ref (`isPending` chỉ đúng sau lần vẽ kế tiếp).
+  // Ca khác nhau vẫn chạy song song; mỗi mutation nhả khoá của mình ở `onSettled`, thành công lẫn lỗi.
+  // Trạng thái bận lấy thẳng từ sổ khoá (`isPending`/`variables` của useMutation chỉ theo cú gọi SAU CÙNG nên ca A còn chạy mà B xong trước thì A hiện như rảnh);
+  // sổ là ref nên mỗi lần xin/nhả khoá tăng `tick` để vẽ lại.
+  const acting = useRef(new Set<string>());
+  const [, setTick] = useState(0);
+  const releaseShift = (_data: unknown, _error: unknown, v: { id: string }) => {
+    acting.current.delete(v.id);
+    setTick((n) => n + 1);
+  };
+  const releaseBulk = () => {
+    acting.current.delete(BULK_KEY);
+    setTick((n) => n + 1);
+  };
+  const held = (key: string) => (key === BULK_KEY ? acting.current.size > 0 : acting.current.has(key) || acting.current.has(BULK_KEY));
+  const exclusive = (key: string, run: () => void) => {
+    if (held(key)) return;
+    acting.current.add(key);
+    setTick((n) => n + 1);
+    run();
+  };
+
+  const approveM = useLockedMutation(
+    {
+      onSettled: releaseShift,
+      mutationFn: (v: { id: string; week: string; approvedStart?: string; approvedEnd?: string }) =>
+        approveShift(coreHttp, v.id, v.approvedStart ? { approvedStart: v.approvedStart, approvedEnd: v.approvedEnd } : undefined),
+      onSuccess: (_d, v) => {
+        setMsg({ tone: 'success', text: 'Đã duyệt ca.' });
+        // Chỉ đóng tấm của đúng ca vừa xong: duyệt ca B không được đóng tấm "Chỉnh giờ & duyệt" của ca A đang gõ dở.
+        setAdjust((cur) => (cur?.id === v.id ? null : cur));
+        return invalidate(v.week);
+      },
+      onError: fail,
     },
-    onError: fail,
-  });
-  const rejectM = useMutation({
-    mutationFn: (v: { id: string; reason: string }) => rejectShift(coreHttp, v.id, v.reason),
-    onSuccess: () => {
-      setMsg({ tone: 'success', text: 'Đã từ chối ca.' });
-      invalidate();
+    (v) => v.id,
+  );
+  const rejectM = useLockedMutation(
+    {
+      onSettled: releaseShift,
+      mutationFn: (v: { id: string; reason: string; week: string }) => rejectShift(coreHttp, v.id, v.reason),
+      onSuccess: (_d, v) => {
+        setMsg({ tone: 'success', text: 'Đã từ chối ca.' });
+        return invalidate(v.week);
+      },
+      onError: fail,
     },
-    onError: fail,
-  });
-  const bulkM = useMutation({
-    mutationFn: (ids: string[]) => bulkApproveShifts(coreHttp, ids),
-    onSuccess: (r) => {
+    (v) => v.id,
+  );
+  const bulkM = useLockedMutation({
+    onSettled: releaseBulk,
+    mutationFn: (v: { ids: string[]; week: string }) => bulkApproveShifts(coreHttp, v.ids),
+    onSuccess: (r, v) => {
       setMsg({ tone: 'success', text: `Đã duyệt ${r.approved} ca.` });
-      invalidate();
+      return invalidate(v.week);
     },
     onError: fail,
   });
+  const retryShifts = usePressLock(() => shiftsQ.refetch());
+  const adjustBusy = !!adjust && held(adjust.id);
 
   const openAdjust = (s: AdminShift) => {
     setAdjust({ id: s.id, dayKey: s.workDate.slice(0, 10) });
@@ -95,6 +134,7 @@ export function ShiftApprovalTab() {
   };
 
   const askBulkApprove = async () => {
+    if (held(BULK_KEY)) return;
     // Danh sách tự làm mới khi hộp đang mở: duyệt đúng những ca đã nêu trong câu hỏi, không lấy lại danh sách lúc bấm.
     const ids = [...pendingIds];
     const ok = await confirm({
@@ -102,10 +142,11 @@ export function ShiftApprovalTab() {
       message: `Duyệt ${ids.length} ca đang chờ của tuần này? Các ca cần từ chối hoặc chỉnh giờ nên xử lý riêng trước.`,
       confirmLabel: `Duyệt ${ids.length} ca`,
     });
-    if (ok) bulkM.mutate(ids);
+    if (ok) exclusive(BULK_KEY, () => bulkM.mutate({ ids, week: mondayKey }));
   };
 
   const askReject = async (s: AdminShift, who: string) => {
+    if (held(s.id)) return;
     const reason = await ask({
       title: 'Từ chối ca',
       message: `Ca của ${who} ngày ${shortDayLabel(s.workDate.slice(0, 10))} sẽ bị từ chối và nhân viên thấy lý do.`,
@@ -113,7 +154,7 @@ export function ShiftApprovalTab() {
       tone: 'danger',
       input: { label: 'Lý do', placeholder: 'Lý do', required: true, maxLength: 300 },
     });
-    if (reason) rejectM.mutate({ id: s.id, reason });
+    if (reason) exclusive(s.id, () => rejectM.mutate({ id: s.id, reason, week: mondayKey }));
   };
 
   return (
@@ -138,7 +179,13 @@ export function ShiftApprovalTab() {
         </Notice>
       )}
       {pendingIds.length > 0 && (
-        <button type="button" disabled={bulkM.isPending} onClick={() => void askBulkApprove()} className={BTN_PRIMARY}>
+        <button
+          type="button"
+          aria-busy={acting.current.size > 0 || undefined}
+          aria-disabled={acting.current.size > 0 || undefined}
+          onClick={() => void askBulkApprove()}
+          className={BTN_PRIMARY}
+        >
           Duyệt tất cả ({pendingIds.length})
         </button>
       )}
@@ -147,7 +194,7 @@ export function ShiftApprovalTab() {
       {shiftsQ.isError && (
         <div role="alert" className="text-sm text-danger-fg">
           {errText(shiftsQ.error)}{' '}
-          <button type="button" onClick={() => void shiftsQ.refetch()} className="font-medium underline">
+          <button type="button" onClick={retryShifts.press} aria-busy={retryShifts.busy || undefined} aria-disabled={retryShifts.busy || undefined} className="font-medium underline">
             Thử lại
           </button>
         </div>
@@ -162,6 +209,7 @@ export function ShiftApprovalTab() {
               const dayKey = s.workDate.slice(0, 10);
               const dayName = `${dowLabel(dayKey)} ${shortDayLabel(dayKey)}`;
               const st = SHIFT_STATUS[s.status];
+              const busy = held(s.id);
               return (
                 <div key={s.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-stone-200 py-2">
                   <div className="min-w-0 text-sm">
@@ -180,8 +228,9 @@ export function ShiftApprovalTab() {
                       <button
                         type="button"
                         aria-label={`Duyệt ca ${g.name} ${dayName}`}
-                        disabled={approveM.isPending}
-                        onClick={() => approveM.mutate({ id: s.id })}
+                        aria-busy={busy || undefined}
+                        aria-disabled={busy || undefined}
+                        onClick={() => exclusive(s.id, () => approveM.mutate({ id: s.id, week: mondayKey }))}
                         className={BTN_LINK}
                       >
                         Duyệt
@@ -189,7 +238,8 @@ export function ShiftApprovalTab() {
                       <button
                         type="button"
                         aria-label={`Từ chối ca ${g.name} ${dayName}`}
-                        disabled={rejectM.isPending}
+                        aria-busy={busy || undefined}
+                        aria-disabled={busy || undefined}
                         onClick={() => void askReject(s, g.name)}
                         className={BTN_LINK_DANGER}
                       >
@@ -207,18 +257,24 @@ export function ShiftApprovalTab() {
       <Sheet
         open={!!adjust}
         onClose={() => setAdjust(null)}
+        dismissible={!adjustBusy}
         title="Chỉnh giờ & duyệt"
         footer={
           <button
             type="button"
-            disabled={approveM.isPending || !TIME_RE.test(adjStart) || !TIME_RE.test(adjEnd)}
+            disabled={!TIME_RE.test(adjStart) || !TIME_RE.test(adjEnd)}
+            aria-busy={adjustBusy || undefined}
+            aria-disabled={adjustBusy || undefined}
             onClick={() =>
               adjust &&
-              approveM.mutate({
-                id: adjust.id,
-                approvedStart: vnDateTimeISO(adjust.dayKey, adjStart),
-                approvedEnd: vnDateTimeISO(adjust.dayKey, adjEnd),
-              })
+              exclusive(adjust.id, () =>
+                approveM.mutate({
+                  id: adjust.id,
+                  week: mondayKey,
+                  approvedStart: vnDateTimeISO(adjust.dayKey, adjStart),
+                  approvedEnd: vnDateTimeISO(adjust.dayKey, adjEnd),
+                }),
+              )
             }
             className={`${BTN_PRIMARY} w-full`}
           >
@@ -252,39 +308,41 @@ function TemplateSheet({ open, onClose }: { open: boolean; onClose: () => void }
   const [start, setStart] = useState('08:00');
   const [end, setEnd] = useState('12:00');
   const [err, setErr] = useState<string | null>(null);
-  // Nhân viên đăng ký ca bằng danh sách này nên làm mới cả hai khoá.
-  const refresh = () => {
-    void qc.invalidateQueries({ queryKey: ['admin-templates'] });
-    void qc.invalidateQueries({ queryKey: ['shift-templates'] });
-  };
-  const addM = useMutation({
-    mutationFn: () => createTemplate(coreHttp, { name: name.trim(), startMin: hhmmToMin(start), endMin: hhmmToMin(end) }),
-    onSuccess: () => {
+  // Nhân viên đăng ký ca bằng danh sách này nên làm mới cả hai khoá; trả lời hứa để khoá giữ tới khi danh sách mới về.
+  const refresh = () => Promise.all([qc.invalidateQueries({ queryKey: ['admin-templates'] }), qc.invalidateQueries({ queryKey: ['shift-templates'] })]);
+  // Chữ khách gõ thêm trong lúc gửi không bị xoá khi thành công: chỉ xoá nếu ô vẫn đúng chữ đã gửi.
+  const addM = useLockedMutation({
+    mutationFn: (v: { name: string }) => createTemplate(coreHttp, { name: v.name.trim(), startMin: hhmmToMin(start), endMin: hhmmToMin(end) }),
+    onSuccess: (_data, v) => {
       setErr(null);
-      setName('');
-      refresh();
+      setName((cur) => (cur === v.name ? '' : cur));
+      return refresh();
     },
     onError: (e) => setErr(errText(e)),
   });
-  const delM = useMutation({
+  const delM = useLockedMutation({
     mutationFn: (id: string) => deleteTemplate(coreHttp, id),
     onSuccess: () => {
       setErr(null);
-      refresh();
+      return refresh();
     },
     onError: (e) => setErr(errText(e)),
   });
+  const sending = addM.isPending || delM.isPending;
 
   return (
     <Sheet
       open={open}
       onClose={onClose}
+      dismissible={!sending}
       title="Ca chuẩn"
       footer={
         <button
           type="button"
-          disabled={addM.isPending || !name.trim() || !TIME_RE.test(start) || !TEMPLATE_END_RE.test(end)}
-          onClick={() => addM.mutate()}
+          disabled={!name.trim() || !TIME_RE.test(start) || !TEMPLATE_END_RE.test(end)}
+          aria-busy={addM.isPending || undefined}
+          aria-disabled={addM.isPending || undefined}
+          onClick={() => addM.mutate({ name })}
           className={`${BTN_PRIMARY} w-full`}
         >
           Thêm ca chuẩn
@@ -300,7 +358,14 @@ function TemplateSheet({ open, onClose }: { open: boolean; onClose: () => void }
             <span>
               {t.name} · {minToHHMM(t.startMin)}–{minToHHMM(t.endMin)}
             </span>
-            <button type="button" aria-label={`Xoá ca chuẩn ${t.name}`} disabled={delM.isPending} onClick={() => delM.mutate(t.id)} className={BTN_LINK_DANGER}>
+            <button
+              type="button"
+              aria-label={`Xoá ca chuẩn ${t.name}`}
+              aria-busy={(delM.isPending && delM.variables === t.id) || undefined}
+              aria-disabled={delM.isPending || undefined}
+              onClick={() => delM.mutate(t.id)}
+              className={BTN_LINK_DANGER}
+            >
               Xoá
             </button>
           </div>

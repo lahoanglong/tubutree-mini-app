@@ -436,7 +436,7 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
               {products.isLoading || pastLastPage ? (
                 <ProductGridSkeleton count={8} className={GRID_PRODUCTS_WITH_FILTER} />
               ) : products.isError && list.length === 0 ? (
-                <ErrorState message={errorMessage(products.error)} onRetry={() => void products.refetch()} retryLabel={browseText.retry} />
+                <ErrorState message={errorMessage(products.error)} onRetry={() => products.refetch()} retryLabel={browseText.retry} />
               ) : list.length === 0 ? (
                 <EmptyResults q={state.q} root={root} onClear={() => updateList(CLEAR_SEARCH_PATCH)} />
               ) : (

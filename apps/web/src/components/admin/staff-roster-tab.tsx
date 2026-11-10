@@ -6,6 +6,8 @@ import type { StaffRole } from '@tubutree/app-core/api/staff';
 import { adminStaffQuery } from '@tubutree/app-core/queries/staff';
 import { grantDoneText, grantPermissionsHint } from '@tubutree/app-core/staff-copy';
 import { coreHttp } from '@/lib/core-http';
+import { usePressLock } from '@/lib/use-press-lock';
+import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { grantStaffRole, revokeStaffRole, setStaffPermissions, STAFF_PERMISSION_LABELS, STAFF_PERMISSION_SHORT, type StaffPermission } from '@/lib/admin-client';
 import { errText } from '@/components/staff/staff-shell';
 import { formatDate } from '@/lib/format-date';
@@ -23,11 +25,13 @@ export function StaffRosterTab({ meId }: { meId?: string } = {}) {
   const qc = useQueryClient();
   const { ask, dialog } = useConfirm();
   const staffQ = useQuery(adminStaffQuery(coreHttp));
+  const retryStaff = usePressLock(() => staffQ.refetch());
   const [phone, setPhone] = useState('');
   const [role, setRole] = useState<StaffRole>('STAFF');
   const [newPerms, setNewPerms] = useState<StaffPermission[]>([]);
   const [msg, setMsg] = useState<{ tone: 'success' | 'warning' | 'danger'; text: string } | null>(null);
-  const refresh = () => void qc.invalidateQueries({ queryKey: ['admin-staff'] });
+  // Trả lời hứa làm mới để khoá giữ tới khi danh sách nhân sự mới về: nhả sớm thì người vừa thu hồi còn nút "Thu hồi" và bấm lại được.
+  const refresh = () => qc.invalidateQueries({ queryKey: ['admin-staff'] });
   // Thêm lại SĐT của người đã là nhân viên: máy chủ thay nhóm cũ bằng nhóm chọn ở đây, nên báo trước nhóm họ đang có.
   const typedPhone = phone.trim();
   const existingStaff = role === 'STAFF' ? staffQ.data?.members.find((m) => m.role === 'STAFF' && m.phone === typedPhone) : undefined;
@@ -36,24 +40,25 @@ export function StaffRosterTab({ meId }: { meId?: string } = {}) {
   const pendingInvite = role === 'STAFF' && !existingStaff ? staffQ.data?.pendingInvites.find((i) => i.role === 'STAFF' && i.phone === typedPhone) : undefined;
   const pendingNames = pendingInvite ? PERMISSIONS.filter((p) => pendingInvite.staffPermissions?.includes(p)).map((p) => STAFF_PERMISSION_SHORT[p]) : null;
 
-  const grantM = useMutation({
+  // Nhóm việc đang gõ và SĐT là chữ khách nhập: chỉ xoá khi vẫn đúng như lúc gửi, để chữ gõ thêm trong lúc chờ không mất.
+  const grantM = useLockedMutation({
     // Nhóm việc chỉ có nghĩa với nhân viên; không chọn nhóm nào thì không gửi khoá permissions để máy chủ giữ nguyên nhóm đã lưu.
     mutationFn: async (reason: string) => {
       const to = phone.trim();
       const names = PERMISSIONS.filter((p) => newPerms.includes(p)).map((p) => STAFF_PERMISSION_SHORT[p]);
       const r = await grantStaffRole(to, role, reason, role === 'STAFF' && newPerms.length ? newPerms : undefined);
-      return { r, to, names, alreadyStaff: existingNames !== null };
+      return { r, to, names, alreadyStaff: existingNames !== null, sentPerms: newPerms };
     },
-    onSuccess: ({ r, to, names, alreadyStaff }) => {
+    onSuccess: ({ r, to, names, alreadyStaff, sentPerms }) => {
       setMsg({ tone: 'success', text: grantDoneText(r, to, names, alreadyStaff) });
-      setPhone('');
-      setNewPerms([]);
-      refresh();
+      setPhone((cur) => (cur.trim() === to ? '' : cur));
+      setNewPerms((cur) => (cur === sentPerms ? [] : cur));
+      return refresh();
     },
     onError: (e) => setMsg({ tone: 'danger', text: errText(e) }),
   });
 
-  const revokeM = useMutation({
+  const revokeM = useLockedMutation({
     mutationFn: (v: { phone: string; reason: string }) => revokeStaffRole(v.phone, v.reason),
     onSuccess: (res) => {
       setMsg(
@@ -64,7 +69,7 @@ export function StaffRosterTab({ meId }: { meId?: string } = {}) {
             }
           : { tone: 'success', text: 'Đã thu hồi quyền.' },
       );
-      refresh();
+      return refresh();
     },
     onError: (e) => setMsg({ tone: 'danger', text: errText(e) }),
   });
@@ -89,6 +94,7 @@ export function StaffRosterTab({ meId }: { meId?: string } = {}) {
 
   // Cấp ADMIN là nâng quyền toàn hệ thống, rủi ro hơn hẳn STAFF nên hộp xác nhận nói rõ hơn.
   const submitGrant = async () => {
+    if (grantM.isPending) return;
     setMsg(null);
     const reason = await askReason(
       role === 'ADMIN'
@@ -113,6 +119,7 @@ export function StaffRosterTab({ meId }: { meId?: string } = {}) {
 
   // Hạ quyền nhầm một quản trị viên thì chỉ người còn quyền mới cấp lại được.
   const askRevoke = async (p: string, who: string) => {
+    if (revokeM.isPending) return;
     setMsg(null);
     const reason = await askReason({
       title: 'Thu hồi quyền?',
@@ -126,6 +133,7 @@ export function StaffRosterTab({ meId }: { meId?: string } = {}) {
   };
 
   const askCancelInvite = async (p: string) => {
+    if (revokeM.isPending) return;
     setMsg(null);
     const reason = await askReason({
       title: 'Huỷ lời mời?',
@@ -193,7 +201,13 @@ export function StaffRosterTab({ meId }: { meId?: string } = {}) {
             <p className="text-xs text-stone-500">{grantPermissionsHint(existingNames, pendingNames)}</p>
           </div>
         )}
-        <button type="submit" disabled={!PHONE_RE.test(phone.trim()) || grantM.isPending} className={BTN_PRIMARY}>
+        <button
+          type="submit"
+          disabled={!PHONE_RE.test(phone.trim())}
+          aria-busy={grantM.isPending || undefined}
+          aria-disabled={grantM.isPending || undefined}
+          className={BTN_PRIMARY}
+        >
           Lưu quyền
         </button>
       </form>
@@ -202,7 +216,7 @@ export function StaffRosterTab({ meId }: { meId?: string } = {}) {
       {staffQ.isError && (
         <div role="alert" className="text-sm text-danger-fg">
           {errText(staffQ.error)}{' '}
-          <button type="button" onClick={() => void staffQ.refetch()} className="font-medium underline">
+          <button type="button" onClick={retryStaff.press} aria-busy={retryStaff.busy || undefined} aria-disabled={retryStaff.busy || undefined} className="font-medium underline">
             Thử lại
           </button>
         </div>
@@ -226,7 +240,8 @@ export function StaffRosterTab({ meId }: { meId?: string } = {}) {
                     <button
                       type="button"
                       aria-label={`Thu hồi · ${m.fullName ?? m.phone}`}
-                      disabled={revokeM.isPending}
+                      aria-busy={(revokeM.isPending && revokeM.variables?.phone === m.phone) || undefined}
+                      aria-disabled={revokeM.isPending || undefined}
                       onClick={() => void askRevoke(m.phone as string, m.fullName ?? (m.phone as string))}
                       className={`${BTN_LINK_DANGER} shrink-0`}
                     >
@@ -262,7 +277,8 @@ export function StaffRosterTab({ meId }: { meId?: string } = {}) {
                       <button
                         type="button"
                         aria-label={`Thu hồi lời mời · ${p.phone}`}
-                        disabled={revokeM.isPending}
+                        aria-busy={(revokeM.isPending && revokeM.variables?.phone === p.phone) || undefined}
+                        aria-disabled={revokeM.isPending || undefined}
                         onClick={() => void askCancelInvite(p.phone)}
                         className={`${BTN_LINK_DANGER} shrink-0`}
                       >

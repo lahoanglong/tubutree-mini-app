@@ -33,11 +33,12 @@ describe('HomeBlockError', () => {
     expect(smallTouchTargets(container)).toEqual([]);
   });
 
-  it('đang thử lại sau lỗi → nút báo đang tải và khoá bấm tiếp', () => {
+  it('đang thử lại sau lỗi → nút báo aria-busy + aria-disabled, KHÔNG disabled (nút giữ focus) và khoá bấm tiếp', () => {
     const refetch = vi.fn();
     const { container } = mount(<HomeBlockError title="Bán chạy" error={new Error('x')} onRetry={refetch} retrying />);
     const btn = container.querySelector<HTMLButtonElement>('button[aria-label="Thử lại Bán chạy"]')!;
-    expect(btn.disabled).toBe(true);
+    expect(btn.disabled).toBe(false);
+    expect(btn.getAttribute('aria-disabled')).toBe('true');
     expect(btn.getAttribute('aria-busy')).toBe('true');
     click(btn);
     expect(refetch).not.toHaveBeenCalled();
@@ -161,5 +162,62 @@ describe('HomePageError: Thử lại khoá chạm đúp (W70B, Mini ↔ web)', (
     } finally {
       window.removeEventListener('error', swallow);
     }
+  });
+});
+
+describe('HomeBlockError: Thử lại khoá chạm đúp (W79B, Mini ↔ web)', () => {
+  const deferred = () => {
+    let resolve!: () => void;
+    let reject!: (e: unknown) => void;
+    const promise = new Promise<void>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+  const retryButton = (c: HTMLElement) => c.querySelector<HTMLButtonElement>('button[aria-label="Thử lại Bán chạy"]')!;
+  const tap = async (el: HTMLElement, times = 1) => {
+    await act(async () => {
+      for (let i = 0; i < times; i++) el.click();
+    });
+  };
+
+  it('chạm đúp cùng khung hình chỉ tải lại một lần, nút aria-busy tới khi Promise xong rồi chạm lại được', async () => {
+    const d = deferred();
+    const onRetry = vi.fn().mockReturnValueOnce(d.promise).mockResolvedValue(undefined);
+    const { container } = mount(<HomeBlockError title="Bán chạy" error={new Error('x')} onRetry={onRetry} />);
+    await tap(retryButton(container), 2);
+    expect(onRetry).toHaveBeenCalledTimes(1);
+    expect(retryButton(container).getAttribute('aria-busy')).toBe('true');
+    expect(retryButton(container).getAttribute('aria-disabled')).toBe('true');
+    expect(retryButton(container).disabled).toBe(false);
+    await act(async () => d.resolve());
+    expect(retryButton(container).hasAttribute('aria-busy')).toBe(false);
+    await tap(retryButton(container));
+    expect(onRetry).toHaveBeenCalledTimes(2);
+  });
+
+  it('tải lại lỗi (Promise bị từ chối): khoá nhả nên chạm lại gọi tiếp, lỗi vẫn lên unhandledrejection', async () => {
+    const d = deferred();
+    const onRetry = vi.fn().mockReturnValueOnce(d.promise).mockResolvedValue(undefined);
+    const { container } = mount(<HomeBlockError title="Bán chạy" error={new Error('x')} onRetry={onRetry} />);
+    const reported = await captureUnhandledRejections(async () => {
+      await tap(retryButton(container));
+      await act(async () => {
+        d.reject(new Error('offline'));
+        await d.promise.catch(() => undefined);
+      });
+    });
+    expect(reported.map((e) => (e as Error).message)).toEqual(['offline']);
+    await tap(retryButton(container));
+    expect(onRetry).toHaveBeenCalledTimes(2);
+  });
+
+  it('onRetry không trả Promise (hàm rỗng): không khoá, chạm lại gọi tiếp', async () => {
+    const onRetry = vi.fn();
+    const { container } = mount(<HomeBlockError title="Bán chạy" error={new Error('x')} onRetry={onRetry} />);
+    await tap(retryButton(container));
+    await tap(retryButton(container));
+    expect(onRetry).toHaveBeenCalledTimes(2);
   });
 });

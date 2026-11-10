@@ -201,4 +201,51 @@ describe('CampaignBody (web): trang chiến dịch giống Mini App', () => {
     expect(c.textContent).toContain('Sản phẩm 1');
     expect(byText(c, 'button', 'Thử lại')).not.toBeNull();
   });
+
+  describe('"Thử lại" trả refetch nên nút báo bận tới khi tải lại xong (W79B, Mini ↔ web)', () => {
+    const gateRetry = (failFor: (p: number) => boolean) => {
+      let release!: () => void;
+      const gate = new Promise<void>((r) => (release = r));
+      let failed = false;
+      mocks.get.mockImplementation(async (path: string, opts?: { query?: { page?: number } }) => {
+        if (path !== '/campaigns/giua-thu/products') throw new Error(`không mock ${path}`);
+        const p = opts?.query?.page ?? 1;
+        if (failFor(p) && !failed) {
+          failed = true;
+          throw new Error('Máy chủ đang bận');
+        }
+        if (failed) await gate;
+        return page([1, 2, 3], p, 3);
+      });
+      return release;
+    };
+
+    it('trang đầu lỗi: bấm Thử lại khi lần tải lại còn chạy thì nút aria-busy + aria-disabled, xong thì lưới hiện', async () => {
+      const release = gateRetry((p) => p === 1);
+      const c = await mount(<CampaignBody campaign={DETAIL} />);
+      const retry = byText(c, 'button', 'Thử lại') as HTMLButtonElement;
+      click(retry);
+      await flush(1);
+      expect(retry.getAttribute('aria-busy')).toBe('true');
+      expect(retry.getAttribute('aria-disabled')).toBe('true');
+      await act(async () => release());
+      await flush(8);
+      expect(c.textContent).toContain('Sản phẩm 1');
+    });
+
+    it('trang kế lỗi: bấm Thử lại tại chỗ khi lần tải lại còn chạy thì nút aria-busy + aria-disabled, xong thì món trang kế hiện', async () => {
+      const release = gateRetry((p) => p === 2);
+      const c = await mount(<CampaignBody campaign={{ ...DETAIL, productCount: 40 }} initialProducts={{ data: [card(1), card(2)], meta: { page: 1, limit: 20, total: 40 } }} />);
+      click(byText(c, 'button', 'Xem thêm'));
+      await flush(8);
+      const retry = byText(c, 'button', 'Thử lại') as HTMLButtonElement;
+      click(retry);
+      await flush(1);
+      expect(retry.getAttribute('aria-busy')).toBe('true');
+      expect(retry.getAttribute('aria-disabled')).toBe('true');
+      await act(async () => release());
+      await flush(8);
+      expect(byText(c, 'button', 'Thử lại')).toBeNull();
+    });
+  });
 });

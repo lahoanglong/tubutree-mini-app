@@ -56,6 +56,7 @@ import { pdpBand, pdpSectionTitle } from './pdp-sections';
 import { reviewVideoConfig } from './review-video-config';
 import { actionErrorText } from '@/lib/error-text';
 import { useRovingGroup } from '@/lib/use-roving-group';
+import { usePressLock } from '@/lib/use-press-lock';
 
 // Mã tải video (Cloudinary, đo độ dài) chỉ cần khi khách mở form đánh giá: tách khỏi First Load của trang sản phẩm.
 const ReviewVideoUpload = dynamic(() => import('./review-video-upload').then((m) => m.ReviewVideoUpload), { ssr: false });
@@ -75,11 +76,19 @@ function ListLoading() {
   );
 }
 
-function ListFailed({ onRetry }: { onRetry: () => void }) {
+function ListFailed({ onRetry }: { onRetry: () => void | PromiseLike<unknown> }) {
+  // Nút đang giữ focus nên không `disabled`; khoá chạm đúp là ref trong `usePressLock`, nhả khi lần tải lại xong.
+  const { press, busy } = usePressLock(onRetry);
   return (
     <div role="alert" className="mt-3">
       <p className={ui.error}>Không tải được đánh giá.</p>
-      <button type="button" className={`${ui.btnText} text-forest-700`} onClick={onRetry}>
+      <button
+        type="button"
+        className={`${ui.btnText} text-forest-700`}
+        onClick={press}
+        aria-busy={busy || undefined}
+        aria-disabled={busy || undefined}
+      >
         Thử lại
       </button>
     </div>
@@ -158,6 +167,8 @@ export function ProductReviews({ slug }: { slug: string }) {
     enabled: phase === 'authenticated',
     retry: false,
   });
+  // Nút Thử lại đang giữ focus nên không `disabled`; khoá chạm đúp là ref trong `usePressLock`, nhả khi lần hỏi lại xong.
+  const retryElig = usePressLock(() => eligQ.refetch());
   const [target, setTarget] = useState<FormTarget | null>(null);
   const [visible, setVisible] = useState(REVIEW_STEP);
   const [filter, setFilter] = useState<ReviewFilterKey>('all');
@@ -236,7 +247,7 @@ export function ProductReviews({ slug }: { slug: string }) {
   useEffect(() => {
     if (wantMore && moreSettled) void fetchNextPage();
   }, [wantMore, moreSettled, fetchNextPage]);
-  const retryMore = () => void (moreQ.isFetchNextPageError ? moreQ.fetchNextPage() : moreQ.refetch());
+  const retryMore = () => (moreQ.isFetchNextPageError ? moreQ.fetchNextPage() : moreQ.refetch());
 
   return (
     <section id="danh-gia" data-section="pdp-reviews" aria-labelledby="danh-gia-title" className={`${pdpBand} scroll-mt-20 tabular-nums`}>
@@ -270,7 +281,13 @@ export function ProductReviews({ slug }: { slug: string }) {
       {phase === 'authenticated' && eligQ.isError && !eligQ.data && (
         <div role="alert" className="mt-2 flex flex-wrap items-center gap-x-3">
           <p className={ui.error}>{ELIGIBILITY_FAILED}</p>
-          <button type="button" className={`${ui.btnText} text-forest-700`} onClick={() => void eligQ.refetch()}>
+          <button
+            type="button"
+            className={`${ui.btnText} text-forest-700`}
+            onClick={retryElig.press}
+            aria-busy={retryElig.busy || undefined}
+            aria-disabled={retryElig.busy || undefined}
+          >
             Thử lại
           </button>
         </div>
@@ -307,7 +324,7 @@ export function ProductReviews({ slug }: { slug: string }) {
       {listLoading ? (
         <ListLoading />
       ) : listQ.isError ? (
-        <ListFailed onRetry={() => void listQ.refetch()} />
+        <ListFailed onRetry={() => listQ.refetch()} />
       ) : !data || data.count === 0 ? (
         <EmptyState variant="inline" art="sprout" heading="Chưa có đánh giá" body="Hãy là người đầu tiên chia sẻ trải nghiệm." />
       ) : (
@@ -361,7 +378,7 @@ export function ProductReviews({ slug }: { slug: string }) {
           {list.status === 'loading' ? (
             <ListLoading />
           ) : list.status === 'error' ? (
-            <ListFailed onRetry={() => void filteredQ.refetch()} />
+            <ListFailed onRetry={() => filteredQ.refetch()} />
           ) : (
           <>
           <ul className="mt-3">
@@ -509,6 +526,7 @@ function ReviewEditor({
     retry: false,
     gcTime: 0,
   });
+  const retryMy = usePressLock(() => myQ.refetch());
   if (editingId && myQ.isPending) {
     return (
       <p role="status" className="mt-3 text-sm text-stone-600">
@@ -520,7 +538,13 @@ function ReviewEditor({
     return (
       <div role="alert" className="mt-3">
         <p className={ui.error}>Không tải được đánh giá để sửa.</p>
-        <button type="button" className={`${ui.btnText} text-forest-700`} onClick={() => void myQ.refetch()}>
+        <button
+          type="button"
+          className={`${ui.btnText} text-forest-700`}
+          onClick={retryMy.press}
+          aria-busy={retryMy.busy || undefined}
+          aria-disabled={retryMy.busy || undefined}
+        >
           Thử lại
         </button>
         <button type="button" className={`${ui.btnText} text-stone-700`} onClick={rest.onCancel}>

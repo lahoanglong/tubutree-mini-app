@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act } from 'react';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
 import { smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
 
@@ -344,5 +345,47 @@ describe('/brand/[slug] — mã giảm giá của khuyến mãi', () => {
   it('không có mã thì không vẽ gì', async () => {
     const c = await mount(<BrandPromoCode code={null} />);
     expect(c.querySelector('button')).toBeNull();
+  });
+});
+
+describe('/brand/[slug] — Theo dõi khoá chạm đúp (W79B, Mini ↔ web)', () => {
+  const pending = <T,>() => {
+    let resolve!: (v: T) => void;
+    const promise = new Promise<T>((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+
+  it('hai cú chạm cùng một khung hình (dữ liệu chưa kịp vẽ lại) chỉ gửi một lệnh; nút aria-busy, không disabled', async () => {
+    const call = pending<{ following: boolean; followerCount: number }>();
+    mocks.post.mockReturnValue(call.promise);
+    const c = await mount(actions());
+    const follow = btn(c, 'Theo dõi')!;
+    await act(async () => {
+      follow.click();
+      follow.click();
+    });
+    await flush(1);
+    expect(mocks.post).toHaveBeenCalledTimes(1);
+    expect(mocks.del).not.toHaveBeenCalled();
+    expect(btn(c, 'Theo dõi')!.getAttribute('aria-busy')).toBe('true');
+    expect(btn(c, 'Theo dõi')!.hasAttribute('disabled')).toBe(false);
+    await act(async () => call.resolve({ following: true, followerCount: 13 }));
+    await flush(3);
+    expect(btn(c, 'Đang theo dõi')!.hasAttribute('aria-busy')).toBe(false);
+  });
+
+  it('lệnh lỗi nhả khoá: chạm lại gửi được lần hai, lỗi cũ xoá khi gửi lại', async () => {
+    mocks.post.mockRejectedValueOnce(new Error('401')).mockResolvedValue({ following: true, followerCount: 13 });
+    const c = await mount(actions());
+    click(btn(c, 'Theo dõi')!);
+    await flush(5);
+    expect(c.querySelector('[role="alert"]')?.textContent).toBe('Cần đăng nhập để theo dõi thương hiệu.');
+    click(btn(c, 'Theo dõi')!);
+    expect(c.querySelector('[role="alert"]')).toBeNull();
+    await flush(5);
+    expect(mocks.post).toHaveBeenCalledTimes(2);
+    expect(c.querySelector('[role="status"]')?.textContent).toBe('Đã theo dõi thương hiệu');
   });
 });

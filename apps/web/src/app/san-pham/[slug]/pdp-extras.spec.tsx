@@ -522,6 +522,53 @@ describe('PdpGroupBuyRow', () => {
     await act(async () => resolve({ id: 'g1' }));
     expect(mocks.http.post).toHaveBeenCalledTimes(1);
   });
+  it('hai cú bấm cùng một khung hình (chưa kịp vẽ lại) chỉ tạo một nhóm; nút aria-busy + aria-disabled, không disabled (W79B)', async () => {
+    let resolve!: (v: unknown) => void;
+    mocks.http.post.mockReturnValue(new Promise((r) => (resolve = r)));
+    const { container } = mount(<PdpGroupBuyRow productId="p1" slug="dau-goi" />);
+    const btn = container.querySelector('button')!;
+    await act(async () => {
+      btn.click();
+      btn.click();
+    });
+    expect(mocks.http.post).toHaveBeenCalledTimes(1);
+    await flush(1);
+    expect(btn.getAttribute('aria-busy')).toBe('true');
+    expect(btn.getAttribute('aria-disabled')).toBe('true');
+    expect(btn.disabled).toBe(false);
+    await act(async () => resolve({ id: 'g1' }));
+    expect(mocks.push).toHaveBeenCalledTimes(1);
+  });
+  it('tạo xong mà trang nhóm chưa mở (router.push còn treo): chạm lại không tạo nhóm thứ hai, nút còn aria-busy + aria-disabled (W79B)', async () => {
+    mocks.http.post.mockResolvedValue({ id: 'g1' });
+    const { container } = mount(<PdpGroupBuyRow productId="p1" slug="dau-goi" />);
+    const btn = container.querySelector('button')!;
+    click(btn);
+    await flush();
+    expect(mocks.http.post).toHaveBeenCalledTimes(1);
+    expect(mocks.push).toHaveBeenCalledTimes(1);
+    expect(btn.getAttribute('aria-busy')).toBe('true');
+    expect(btn.getAttribute('aria-disabled')).toBe('true');
+    expect(btn.disabled).toBe(false);
+    expect(container.textContent).toContain('Đang mở nhóm…');
+    click(btn);
+    await flush();
+    expect(mocks.http.post).toHaveBeenCalledTimes(1);
+    expect(mocks.push).toHaveBeenCalledTimes(1);
+  });
+  it('tạo nhóm lỗi: khoá nhả nên bấm lại gửi được, lỗi cũ biến mất khi gửi lại (W79B)', async () => {
+    mocks.http.post.mockRejectedValueOnce(new Error('Sản phẩm không mở nhóm được')).mockResolvedValue({ id: 'g1' });
+    const { container } = mount(<PdpGroupBuyRow productId="p1" slug="dau-goi" />);
+    const btn = container.querySelector('button')!;
+    click(btn);
+    await flush();
+    expect(container.querySelector('[role="alert"]')!.textContent).toBe('Sản phẩm không mở nhóm được');
+    click(btn);
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    await flush();
+    expect(mocks.http.post).toHaveBeenCalledTimes(2);
+    expect(mocks.push).toHaveBeenCalledWith('/mua-chung/g1?moi=1');
+  });
   it('khách chưa đăng nhập: sang đăng nhập, không tạo nhóm', async () => {
     mocks.phase = 'guest';
     const { container } = mount(<PdpGroupBuyRow productId="p1" slug="dau-goi" />);

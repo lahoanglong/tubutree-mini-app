@@ -126,7 +126,7 @@ export default function BestSellersView({ initial = null, categories: initialCat
         {products.isLoading ? (
           <ProductGrid items={[]} variant="rank" loading skeletonCount={8} className={GRID_RANK} />
         ) : products.isError && list.length === 0 ? (
-          <ErrorState message={loadErrorText(products.error)} onRetry={() => void products.refetch()} retryLabel={browseText.retry} />
+          <ErrorState message={loadErrorText(products.error)} onRetry={() => products.refetch()} retryLabel={browseText.retry} />
         ) : list.length === 0 ? (
           <EmptyState title={fillCopy('rank.emptyTitle')} actionHref={emptyHref} actionLabel={fillCopy('rank.emptyCta')} />
         ) : (
