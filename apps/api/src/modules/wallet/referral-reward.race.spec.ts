@@ -7,7 +7,8 @@ import { RewardPointsService } from './reward-points.service';
 
 /**
  * Thưởng giới thiệu (người mời nhận điểm khi người được mời có đơn thứ hai giao xong) và mốc thưởng thêm chạy đồng thời (Postgres READ COMMITTED,
- * xem test/fakes/race-db.fake.ts): cấp thưởng trùng cho cùng người được mời, cấp chen với trả đơn, cấp mốc chen với thu hồi, thu hồi trùng,
+ * xem test/fakes/race-db.fake.ts): cấp thưởng trùng cho cùng người được mời, cấp chen với trả cả đơn (trả một phần chỉ có ở integration-race
+ * referral-partial-return, chạy trên Postgres thật), cấp mốc chen với thu hồi, thu hồi trùng,
  * thu hồi chen với việc người mời tiêu điểm, cấp chen với gộp tài khoản khách và với việc cắt liên kết tự mời.
  * Dùng RewardPointsService và các hàm thu hồi trong referral-reward.ts THẬT; chỉ khoá hàng và SQL thô được giả bằng handler, còn lần "trả đơn" và "gộp khách"
  * được dựng lại đúng phần ghi liên quan (lật trạng thái rồi gọi hàm thu hồi; khoá khách và đích, chuyển đơn, đặt mergedIntoId) — các luồng đầy đủ đã có ở
