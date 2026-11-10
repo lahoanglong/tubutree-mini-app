@@ -68,7 +68,7 @@ function setup(opts: { coupon?: Record<string, unknown>; users?: number; claimed
   ]);
   db.seed('couponClaim', (opts.claimedBy ?? []).map((userId) => ({ couponId: 'c1', userId })));
   db.seed('order', opts.orders ?? []);
-  db.handlers.push({ match: /pg_advisory_xact_lock/, run: (c) => c.lockKey(c.params.map(String).join('|')).then(() => 1) });
+  db.handlers.push({ match: /pg_advisory_xact_lock\(/, run: (c) => c.lockKey(c.params.map(String).join('|')).then(() => 1) });
   let insertAttempts = 0;
   const realTransaction = db.client.$transaction;
   db.client.$transaction = (cb: (tx: any) => Promise<unknown>) =>
@@ -107,7 +107,7 @@ describe('CouponClaimService.claim — race', () => {
       is(`skew ${skew}: cả hai thành công`, fulfilled(rs), 2);
       is(`skew ${skew}: một dòng`, owners(), ['u1']);
       is(`skew ${skew}: đúng một lần là lần đầu`, flags(rs), [false, true]);
-      // Có tổng lượt: lần sau xếp hàng ở khoá theo mã. Không có tổng lượt: cả hai cùng INSERT và ON CONFLICT DO NOTHING nuốt lần sau.
+      // Có tổng lượt: `lockWaits` đếm cả lần chờ khoá advisory lẫn lần chờ khoá unique của INSERT trùng. Không có tổng lượt: cả hai cùng INSERT và ON CONFLICT DO NOTHING nuốt lần sau.
       collided += usageLimit === null ? insertAttempts() - 1 : db.stats.lockWaits;
     }
     expect(collided).toBeGreaterThan(0);
@@ -288,7 +288,7 @@ describe('CouponClaimService.claim — chen với admin đổi mã', () => {
     is('cả hai thứ tự đều xảy ra', [...seen].sort(), ['nhận', 'từ chối']);
   });
 
-  it('admin nâng tổng lượt 1 → 2 lúc hai khách tranh: kết quả khớp một thứ tự tuần tự (một hoặc hai dòng), bên thua bị từ chối bằng câu tiếng Việt', async () => {
+  it('đổi tổng lượt 1 → 2 (ghi thẳng dòng mã, không qua AdminService.updateCoupon) lúc hai khách tranh: kết quả khớp một thứ tự tuần tự (một hoặc hai dòng), bên thua bị từ chối bằng câu tiếng Việt', async () => {
     const counts = new Set<number>();
     for (const skew of SKEWS) {
       const { db, claims, owners } = setup({ coupon: { usageLimit: 1 } });
@@ -304,7 +304,7 @@ describe('CouponClaimService.claim — chen với admin đổi mã', () => {
     is('cả hai kết quả hợp lệ đều xảy ra', [...counts].sort(), [1, 2]);
   });
 
-  it('admin hạ tổng lượt 3 → 1 khi đã có một dòng: nhận trước lúc hạ thì thêm một dòng (hạ không thu hồi), nhận sau thì bị từ chối; không có kết quả thứ ba', async () => {
+  it('đổi tổng lượt 3 → 1 (ghi thẳng dòng mã, không qua AdminService.updateCoupon) khi đã có một dòng: nhận trước lúc hạ thì thêm một dòng (hạ không thu hồi), nhận sau thì bị từ chối; không có kết quả thứ ba', async () => {
     const counts = new Set<number>();
     for (const skew of SKEWS) {
       const { db, claims, owners } = setup({ coupon: { usageLimit: 3 }, claimedBy: ['p1'] });
