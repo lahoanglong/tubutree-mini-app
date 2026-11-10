@@ -5,6 +5,7 @@ import { frequentlyBoughtLines, frequentlyBoughtSummary } from '@tubutree/app-co
 import { boughtTogetherQuery } from '@tubutree/app-core/queries/catalog';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { FrequentlyBoughtTogether } from '@/components/mini/frequently-bought-together';
+import { productStockKey } from '@/components/pdp-stock';
 import { playCartFeedback } from '@/lib/cart-feedback';
 import { coreHttp } from '@/lib/core-http';
 import { useBundleAdd } from '@/lib/use-bundle-add';
@@ -22,7 +23,7 @@ const CURRENT = 'current';
  */
 export function PdpFbt(props: FbtHostArgs) {
   const { bundle } = useFbt(props);
-  const { add, busyId, result } = useBundleAdd(boughtTogetherQuery(coreHttp, props.slug).queryKey);
+  const { add, busyId, result } = useBundleAdd([boughtTogetherQuery(coreHttp, props.slug).queryKey, productStockKey(props.slug)]);
   const [off, setOff] = useState<ReadonlySet<string>>(new Set());
   const root = useRef<HTMLDivElement>(null);
 

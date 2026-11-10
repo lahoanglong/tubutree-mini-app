@@ -2,7 +2,7 @@
 import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { QueryClient } from '@tanstack/react-query';
-import { byText, flush, render, type Rendered } from '@/test-utils/dom';
+import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { makeGiftRedemption } from '@/components/loyalty/reward-fixtures';
 
 // "Quà của tôi" (Mini: rewards-mine.tsx): "Dùng ngay" dùng MỘT khoá cho cả ví mã (hook ở thân trang, không mỗi hàng một khoá), "Thử lại" trả refetch.
@@ -108,10 +108,11 @@ describe('/kho-qua/cua-toi — "Dùng ngay" một khoá cho cả ví', () => {
   });
 });
 
-describe('/kho-qua/cua-toi — "Thử lại" chạm đúp', () => {
-  // Chỉ màn chưa có dữ liệu mới hiện "Thử lại" (đã có danh sách mà tải lại nền lỗi thì giữ danh sách, xem page.spec.tsx): bấm là truy vấn chưa có dữ liệu
-  // quay lại trạng thái đang tải và màn lỗi biến mất ngay, nên khoá của nút không quan sát được từ ngoài, chỉ đếm được số lần gọi API.
-  it('danh sách chưa từng tải được: chạm đúp "Thử lại" chỉ gọi API thêm một lần rồi hiện danh sách', async () => {
+describe('/kho-qua/cua-toi — "Thử lại" khi chưa có dữ liệu', () => {
+  // Chỉ màn chưa có dữ liệu mới hiện "Thử lại" (đã có danh sách mà tải lại nền lỗi thì giữ danh sách, xem page.spec.tsx). Khoá chạm đúp của nút nằm ở
+  // components/ui/error-state.tsx (usePressLock, spec riêng ở error-state.spec.tsx); truy vấn chưa có dữ liệu dùng chung lượt tải đang bay nên đếm lời gọi API
+  // không phân biệt được có khoá hay không. Test này chỉ kiểm màn lỗi biến mất và danh sách hiện khi tải lại được.
+  it('danh sách chưa từng tải được: bấm "Thử lại" thì tải lại một lần, màn lỗi biến mất và danh sách hiện', async () => {
     state.error = new Error('Mạng lỗi');
     const r = render(<RewardsMinePage />);
     mounted.push(r);
@@ -120,12 +121,10 @@ describe('/kho-qua/cua-toi — "Thử lại" chạm đúp', () => {
     expect(retry).not.toBeNull();
     const before = state.calls.filter((p) => p === '/me/loyalty/rewards/mine').length;
     state.error = null;
-    act(() => {
-      retry.click();
-      retry.click();
-    });
+    click(retry);
     await flush(6);
     expect(state.calls.filter((p) => p === '/me/loyalty/rewards/mine').length).toBe(before + 1);
+    expect(byText(r.container, 'button', 'Thử lại')).toBeNull();
     expect(r.container.textContent).toContain('Miễn phí vận chuyển');
   });
 });

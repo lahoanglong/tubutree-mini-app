@@ -444,7 +444,7 @@ describe('HomeStoryReel: thêm giỏ từ Reel bị máy chủ từ chối vì t
   };
   const keysOf = (spy: { mock: { calls: unknown[][] } }) => spy.mock.calls.map((call) => JSON.stringify((call[0] as { queryKey: unknown }).queryKey));
 
-  it.each([400, 404, 409])('HTTP %i: tải lại danh sách Bán chạy nhất (khoá của dải Reel), không tải Yêu thích; khoá giữ tới khi về', async (status) => {
+  it.each([400, 404, 409])('HTTP %i: tải lại danh sách Bán chạy nhất (khoá của dải Reel) và chi tiết của đúng món vừa bấm (Reel vẽ nút từ đó), không tải Yêu thích; khoá giữ tới khi về', async (status) => {
     let release!: () => void;
     const invalidate = setup(new Promise<void>((r) => (release = r)));
     await flush(2);
@@ -452,7 +452,7 @@ describe('HomeStoryReel: thêm giỏ từ Reel bị máy chủ từ chối vì t
     await openReel();
     click(q('story-add-to-cart'));
     await flush(8);
-    expect(keysOf(invalidate)).toEqual([JSON.stringify(['products', 'home-best-seller'])]);
+    expect(keysOf(invalidate)).toEqual([JSON.stringify(['products', 'home-best-seller']), JSON.stringify(['product', 'a'])]);
     expect(mounted!.container.querySelector('[role="alert"]')?.textContent).toContain('Sản phẩm đã hết hàng.');
     const before = posts();
     await openReel();
@@ -465,6 +465,18 @@ describe('HomeStoryReel: thêm giỏ từ Reel bị máy chủ từ chối vì t
     click(q('story-add-to-cart'));
     await flush(6);
     expect(posts()).toBe(before + 1);
+  });
+
+  it('chi tiết tải mới cho thấy hết hàng (Reel còn bản cũ còn hàng): tải lại danh sách Bán chạy nhất và chi tiết của đúng món đó', async () => {
+    const invalidate = setup(null);
+    await flush(2);
+    await openReel(1);
+    details.b = detail('b', { variations: [{ id: 'v-b', sku: 'b', name: 'Mặc định', attributes: {}, retailPrice: 50000, salePrice: null, stock: 0 }] });
+    invalidate.mockClear();
+    click(q('story-add-to-cart'));
+    await flush(8);
+    expect(keysOf(invalidate)).toEqual([JSON.stringify(['products', 'home-best-seller']), JSON.stringify(['product', 'b'])]);
+    expect(posts()).toBe(0);
   });
 
   it.each([401, 500, 502])('HTTP %i (lỗi tạm): chỉ báo lỗi, không tải lại, nhả khoá ngay', async (status) => {

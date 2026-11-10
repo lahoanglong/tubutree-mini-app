@@ -295,9 +295,11 @@ describe('PdpFbt (web): thêm cả bộ', () => {
 });
 
 describe('PdpFbt (web): lệnh lô bị máy chủ từ chối vì trạng thái đã đổi (W98B)', () => {
-  const setup = async (reload: Promise<void> | null) => {
+  const setup = async (reload: Promise<void> | null, gateOf?: (key: string) => Promise<void>) => {
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-    const invalidate = vi.spyOn(qc, 'invalidateQueries').mockImplementation(() => (reload ?? Promise.resolve()) as Promise<void>);
+    const invalidate = vi
+      .spyOn(qc, 'invalidateQueries')
+      .mockImplementation((filters) => (gateOf ? gateOf(JSON.stringify((filters as { queryKey: unknown }).queryKey)) : (reload ?? Promise.resolve())) as Promise<void>);
     const r = render(
       <PdpSelectionProvider initialId="v0a">
         <PdpFbt productId="p0" slug="sp-0" name="Dầu gội bưởi" thumbnail={null} variations={VARIATIONS} initialBoughtTogether={[card(1), card(2), card(3)]} />
@@ -312,19 +314,37 @@ describe('PdpFbt (web): lệnh lô bị máy chủ từ chối vì trạng thái
   };
   const keysOf = (spy: { mock: { calls: unknown[][] } }) => spy.mock.calls.map((call) => JSON.stringify((call[0] as { queryKey: unknown }).queryKey));
 
-  it.each([400, 404, 409])('HTTP %i: tải lại danh sách "Khách thường mua cùng" (đúng khoá), giữ khoá tới khi về (chạm lại không gọi API) rồi nhả', async (status) => {
+  it.each([400, 404, 409])('HTTP %i: tải lại danh sách "Khách thường mua cùng" và tồn kho của món đang xem (đúng khoá), giữ khoá tới khi về (chạm lại không gọi API) rồi nhả', async (status) => {
     let release!: () => void;
     const reload = new Promise<void>((r) => (release = r));
     mocks.addAll.mockRejectedValue(new ApiError('Sản phẩm đã hết hàng', status));
     const { c, invalidate } = await setup(reload);
     click(addBtn(c));
     await flush(6);
-    expect(keysOf(invalidate)).toEqual([JSON.stringify(['bought-together', 'sp-0'])]);
+    expect(keysOf(invalidate)).toEqual([JSON.stringify(['bought-together', 'sp-0']), JSON.stringify(['product-stock', 'sp-0'])]);
     expect(mocks.addAll).toHaveBeenCalledTimes(1);
     click(addBtn(c));
     await flush(4);
     expect(mocks.addAll).toHaveBeenCalledTimes(1);
     await act(async () => release());
+    await flush(6);
+    mocks.addAll.mockResolvedValue({});
+    click(addBtn(c));
+    await flush(6);
+    expect(mocks.addAll).toHaveBeenCalledTimes(2);
+  });
+
+  it('khoá chỉ nhả khi CẢ HAI khoá đã về: danh sách mua kèm về trước mà tồn kho còn bay thì chạm lại vẫn bị chặn', async () => {
+    let releaseStock!: () => void;
+    const stock = new Promise<void>((r) => (releaseStock = r));
+    mocks.addAll.mockRejectedValue(new ApiError('Sản phẩm đã hết hàng', 409));
+    const { c } = await setup(null, (key) => (key === JSON.stringify(['product-stock', 'sp-0']) ? stock : Promise.resolve()));
+    click(addBtn(c));
+    await flush(6);
+    click(addBtn(c));
+    await flush(4);
+    expect(mocks.addAll).toHaveBeenCalledTimes(1);
+    await act(async () => releaseStock());
     await flush(6);
     mocks.addAll.mockResolvedValue({});
     click(addBtn(c));

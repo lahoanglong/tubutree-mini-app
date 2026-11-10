@@ -67,6 +67,7 @@ const state = vi.hoisted(() => ({
   kit: null as unknown,
   me: { isAffiliate: true, canRegister: true, canOpenStorefront: true } as unknown,
   fail: new Set<string>(),
+  failStatus: new Map<string, number>(),
   hold: new Set<string>(),
   gates: new Map<string, Promise<void>>(),
   calls: [] as Call[],
@@ -128,6 +129,8 @@ vi.mock('@/lib/core-http', () => {
     const gate = state.gates.get(`${method} ${path}`);
     if (gate) await gate;
     if (state.fail.has(`${method} ${path}`)) throw httpError(500, 'mất mạng');
+    const failStatus = state.failStatus.get(`${method} ${path}`);
+    if (failStatus) throw httpError(failStatus, 'Bạn chưa hoàn thành nhiệm vụ này.');
     if (method === 'get') {
       if (path === '/storefront/me') {
         if (state.sfStatus !== 200) throw httpError(state.sfStatus, 'không có');
@@ -237,6 +240,7 @@ beforeEach(() => {
   ];
   state.kit = { productName: 'Trà xanh', images: [], captions: ['Xem /product/tra-xanh?ref=A nhé'], usps: ['Thơm'], faqs: [{ q: 'Dùng sao?', a: 'Pha nước nóng' }], videoUrls: ['https://v.example/1'], shareLink: '/product/tra-xanh?ref=A' };
   state.fail = new Set();
+  state.failStatus = new Map();
   state.hold = new Set();
   state.gates = new Map();
   state.calls = [];
@@ -974,6 +978,72 @@ describe('khoá chống chạm đúp — nhiệm vụ Hành trình gian hàng', 
     await flush();
     expect(calls('post', '/storefront/me/quests/Q1/claim')).toHaveLength(2);
     expect(dialog()!.querySelectorAll('[role="alert"]')).toHaveLength(0);
+  });
+});
+
+describe('Nhận thưởng nhiệm vụ bị máy chủ từ chối vì trạng thái đã đổi (W98B, Mini ↔ web)', () => {
+  const claim = () => Array.from(dialog()!.querySelectorAll<HTMLElement>('button')).find((b) => /^(Nhận|Đang nhận)/.test(b.textContent ?? ''))!;
+  const questGets = () => calls('get', '/storefront/me/quests').length;
+
+  it.each([400, 404, 409, 422])('HTTP %i: lời báo hiện dưới nhiệm vụ, danh sách nhiệm vụ tải lại một lần, khoá giữ tới khi về rồi nhả', async (status) => {
+    mount();
+    await flush();
+    await openQuests();
+    state.failStatus.set('post /storefront/me/quests/Q1/claim', status);
+    const releaseFresh = hold('get /storefront/me/quests');
+    const before = questGets();
+    click(claim());
+    await flush();
+    expect(alerts()).toEqual(['Bạn chưa hoàn thành nhiệm vụ này.']);
+    expect(questGets() - before).toBe(1);
+    expectBusy(claim());
+    click(claim());
+    await flush();
+    expect(calls('post', '/storefront/me/quests/Q1/claim')).toHaveLength(1);
+    await releaseFresh();
+    expectIdle(claim());
+    state.failStatus.clear();
+    click(claim());
+    await flush();
+    expect(calls('post', '/storefront/me/quests/Q1/claim')).toHaveLength(2);
+  });
+
+  it.each([401, 403, 500, 503])('HTTP %i (lỗi tạm): báo lỗi, không tải lại danh sách nhiệm vụ, nhả khoá ngay', async (status) => {
+    mount();
+    await flush();
+    await openQuests();
+    state.failStatus.set('post /storefront/me/quests/Q1/claim', status);
+    hold('get /storefront/me/quests');
+    const before = questGets();
+    click(claim());
+    await flush();
+    expect(alerts()).toEqual(['Bạn chưa hoàn thành nhiệm vụ này.']);
+    expect(questGets() - before).toBe(0);
+    expectIdle(claim());
+  });
+
+  it('tải lại không bao giờ về: còn khoá ở 3 giây, nhả sau 4 giây', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+    try {
+      mount();
+      await flush();
+      await openQuests();
+      state.failStatus.set('post /storefront/me/quests/Q1/claim', 409);
+      state.hold.add('get /storefront/me/quests');
+      click(claim());
+      await flush();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3_000);
+      });
+      expectBusy(claim());
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_500);
+      });
+      await flush(2);
+      expectIdle(claim());
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

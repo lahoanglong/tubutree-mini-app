@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { QueryClient } from '@tanstack/react-query';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
 import { ApiError, NetworkError } from '@/lib/client-api';
 
@@ -198,5 +199,52 @@ describe('Yêu thích: giỏ nhanh bị máy chủ từ chối vì trạng thái
     await tapTogether(add);
     await flush(8);
     expect(productFetches()).toBe(2);
+  });
+});
+
+describe('Yêu thích: giỏ nhanh bị từ chối tải lại cả chi tiết của đúng món vừa bấm (nơi khác vẽ nút từ chi tiết đó)', () => {
+  const keysOf = (spy: { mock: { calls: unknown[][] } }) => spy.mock.calls.map((call) => JSON.stringify((call[0] as { queryKey: unknown }).queryKey));
+
+  it('thêm giỏ bị từ chối 409: tải lại danh sách yêu thích rồi chi tiết sp-a, không món khác', async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const invalidate = vi.spyOn(qc, 'invalidateQueries');
+    const r = render(<WishlistPage />, qc);
+    mounted.push(r);
+    await flush(4);
+    mocks.post.mockRejectedValue(new ApiError('Sản phẩm đã hết hàng.', 409));
+    invalidate.mockClear();
+    await tapTogether(addButton(r.container, 'Nước rửa chén'));
+    await flush(8);
+    expect(keysOf(invalidate)).toEqual([JSON.stringify(['wishlist']), JSON.stringify(['product', 'sp-a'])]);
+  });
+
+  it('bảng chọn phân loại: xác nhận bị từ chối 409 thì tải lại chi tiết của món trong bảng (sp-a), không phải món khác', async () => {
+    detail = { variations: [variation('v1'), variation('v2')] };
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const invalidate = vi.spyOn(qc, 'invalidateQueries');
+    const r = render(<WishlistPage />, qc);
+    mounted.push(r);
+    await flush(4);
+    click(addButton(r.container, 'Nước rửa chén')!);
+    await flush(8);
+    const confirm = Array.from(r.container.querySelectorAll('button')).find((b) => b.textContent === 'xác nhận phân loại')!;
+    mocks.post.mockRejectedValue(new ApiError('Phân loại này vừa hết hàng.', 409));
+    invalidate.mockClear();
+    await tapTogether(confirm);
+    await flush(8);
+    expect(keysOf(invalidate)).toEqual([JSON.stringify(['wishlist']), JSON.stringify(['product', 'sp-a'])]);
+  });
+
+  it('lỗi tạm 503: không tải lại gì', async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const invalidate = vi.spyOn(qc, 'invalidateQueries');
+    const r = render(<WishlistPage />, qc);
+    mounted.push(r);
+    await flush(4);
+    mocks.post.mockRejectedValue(new ApiError('Service unavailable', 503));
+    invalidate.mockClear();
+    await tapTogether(addButton(r.container, 'Nước rửa chén'));
+    await flush(8);
+    expect(invalidate).not.toHaveBeenCalled();
   });
 });

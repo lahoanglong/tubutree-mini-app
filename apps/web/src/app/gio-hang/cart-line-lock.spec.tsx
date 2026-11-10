@@ -476,7 +476,9 @@ describe('/gio-hang — tải giỏ lỗi (W81B, W98B)', () => {
     expect([...r.container.querySelectorAll('button')].some((b) => b.textContent === 'Thử lại')).toBe(false);
   });
 
-  it('giỏ chưa từng tải được: màn lỗi có "Thử lại", chạm đúp trong cùng một khung hình chỉ gọi giỏ thêm một lần, rồi hiện giỏ', async () => {
+  // Khoá chạm đúp của "Thử lại" nằm ở components/ui/error-state.tsx (usePressLock, spec riêng ở error-state.spec.tsx): truy vấn chưa có dữ liệu dùng chung lượt tải đang bay
+  // nên đếm lời gọi giỏ không phân biệt được có khoá hay không. Test này chỉ kiểm màn lỗi hiện rồi mất khi giỏ tải được.
+  it('giỏ chưa từng tải được: màn lỗi có "Thử lại"; bấm thì tải lại giỏ, màn lỗi biến mất và giỏ hiện', async () => {
     state.cartError = new Error('Mạng lỗi');
     const r = render(<CartPage />);
     mounted.push(r);
@@ -485,7 +487,7 @@ describe('/gio-hang — tải giỏ lỗi (W81B, W98B)', () => {
     expect(retryBtn()).toBeDefined();
     const before = state.cartCalls;
     state.cartError = null;
-    clickTwice(retryBtn());
+    click(retryBtn());
     await flush(6);
     expect(state.cartCalls).toBe(before + 1);
     expect(retryBtn()).toBeUndefined();

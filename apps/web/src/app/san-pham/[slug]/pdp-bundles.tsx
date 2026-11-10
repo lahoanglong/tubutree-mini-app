@@ -119,7 +119,7 @@ export function PdpBundles({
   /** Lúc server lấy `initialBundles` (ms): trang ISR sống tới 5 phút, quá `STALE_MS` thì trình duyệt tải lại ngay sau khi hiển thị, bộ vừa tắt không treo ở trang. */
   initialFetchedAt?: number;
 }) {
-  const { add, busyId, result } = useBundleAdd(bundleKeys.product(slug));
+  const { add, busyId, result } = useBundleAdd([bundleKeys.product(slug)]);
   const [picked, setPicked] = useState<ReadonlySet<string>>(new Set());
   const [justAdded, setJustAdded] = useState(false);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);

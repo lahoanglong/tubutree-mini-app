@@ -25,7 +25,7 @@ export function HomeCombos({ views }: HomeCombosProps) {
 }
 
 function HomeCombosRail({ views }: HomeCombosProps) {
-  const { add, busyId, result } = useBundleAdd(bundleKeys.homeCombos);
+  const { add, busyId, result } = useBundleAdd([bundleKeys.homeCombos]);
   const router = useRouter();
   const title = fillCopy('combo.homeTitle');
   return (

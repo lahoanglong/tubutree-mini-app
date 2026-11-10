@@ -31,7 +31,7 @@ function addButtonOf(variationId: string): Element | null {
 export function QuickReorderBlock({ items }: { items: readonly QuickReorderItem[] }) {
   const router = useRouter();
   const quick = useQuickAdd('repurchase', PURCHASED_ITEMS_KEY);
-  const bundle = useBundleAdd(PURCHASED_ITEMS_KEY);
+  const bundle = useBundleAdd([PURCHASED_ITEMS_KEY]);
   const busyAll = bundle.busyId === ADD_ALL_ID;
   // Khoá chéo đồng bộ giữa hai đường thêm: `quick.busyId` và `busyAll` chỉ đúng sau lần vẽ kế nên hai cú bấm khác nút trong cùng khung hình sẽ bay hai lệnh.
   // "+ Thêm" tự chặn "+ Thêm" khác bằng cờ của `useQuickAdd`, còn lệnh lô chặn bằng `bundle.isBusy`; `oneInFlight` là phần "+ Thêm đang bay" cho lệnh lô đọc.
