@@ -33,6 +33,8 @@ import { EvidenceUpload } from '@/components/evidence-upload';
 import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { safeEvidenceImage } from '@/components/admin/evidence-images';
 import { errText, PeriodNav, useNotice } from './staff-shell';
+import { IMAGES_UPLOADING } from '@/lib/image-compress';
+import { useUploadBusy } from '@/lib/use-upload-busy';
 
 const STATUS_LABEL: Record<PayrollStatus, string> = {
   OPEN: 'Đang tính',
@@ -97,6 +99,8 @@ export function PayrollHub() {
   const [accNo, setAccNo] = useState('');
   const [accName, setAccName] = useState('');
   const [qr, setQr] = useState('');
+  // Cờ nằm ở trang vì tấm "Thông tin nhận lương" gỡ nội dung khi đóng; tấm không đóng được lúc ảnh QR còn lên.
+  const { busy: qrBusy, onBusyChange: onQrBusyChange } = useUploadBusy();
 
   const openBank = () => {
     // Đang lưu (kể cả lúc tải lại bảng lương): mở lúc này nạp tài khoản cũ rồi Lưu ghi đè tài khoản vừa lưu.
@@ -242,18 +246,22 @@ export function PayrollHub() {
       <Sheet
         open={bankOpen}
         onClose={() => setBankOpen(false)}
-        dismissible={!bankM.isPending}
+        // Đóng giữa lúc ảnh QR còn đang lên rồi mở lại: ảnh về muộn đè lên bản vừa nạp lại từ hồ sơ.
+        dismissible={!bankM.isPending && !qrBusy}
         title="Thông tin nhận lương"
         footer={
           // Đang lưu giữ aria-busy/aria-disabled chứ không `disabled`: nút đang giữ focus mà bị vô hiệu thì Chromium thả focus về body.
           <button
             type="button"
-            aria-busy={bankM.isPending || undefined}
-            aria-disabled={bankM.isPending || undefined}
-            onClick={() => bankM.mutate({ bankBin: bin.trim(), bankAccountNo: accNo.trim(), bankAccountName: accName.trim(), qrImageUrl: qr || undefined })}
+            aria-busy={bankM.isPending || qrBusy || undefined}
+            aria-disabled={bankM.isPending || qrBusy || undefined}
+            onClick={() => {
+              if (qrBusy) return;
+              bankM.mutate({ bankBin: bin.trim(), bankAccountNo: accNo.trim(), bankAccountName: accName.trim(), qrImageUrl: qr || undefined });
+            }}
             className={`${ui.btnPrimary} w-full`}
           >
-            {bankM.isPending ? 'Đang lưu…' : 'Lưu'}
+            {bankM.isPending ? 'Đang lưu…' : qrBusy ? IMAGES_UPLOADING : 'Lưu'}
           </button>
         }
       >
@@ -268,7 +276,7 @@ export function PayrollHub() {
             <input className={ui.field} value={accName} onChange={(e) => setAccName(e.target.value)} />
           </Field>
           <p className="text-xs text-stone-600">Hoặc tải ảnh QR nhận tiền (ưu tiên nếu có):</p>
-          <EvidenceUpload label="QR nhận lương" max={1} value={qr ? [qr] : []} onChange={(v) => setQr(v[0] ?? '')} />
+          <EvidenceUpload label="QR nhận lương" max={1} value={qr ? [qr] : []} onChange={(v) => setQr(v[0] ?? '')} onBusyChange={onQrBusyChange} disabled={bankM.isPending} />
         </div>
       </Sheet>
     </div>

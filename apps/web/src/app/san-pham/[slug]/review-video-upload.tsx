@@ -10,7 +10,11 @@ import {
   videoUploadCopy,
 } from '@tubutree/app-core/cloudinary-video';
 import { ui } from '@/lib/guest-ui';
+import { withDeadline } from '@/lib/with-deadline';
 import { reviewVideoConfig } from './review-video-config';
+
+/** Video tối đa 50MB: trên đường lên 2 Mbps cần cỡ 200 giây, nên hạn rộng hơn ảnh nhiều. Quá hạn thì báo lỗi để khách chọn lại, form cha không chờ mãi. */
+const VIDEO_UPLOAD_TIMEOUT_MS = 300_000;
 
 /**
  * Video đánh giá: tải thẳng lên Cloudinary, cùng giới hạn và lời báo với Mini App. Máy chủ chỉ nhận video đã tải lên
@@ -48,7 +52,11 @@ export function ReviewVideoUpload({
     setError(null);
     changeBusy(true);
     try {
-      onChange(await uploadCloudinaryVideo(file, config, { readDuration: readVideoDuration }));
+      // Hạn chót nằm ở fetch truyền xuống: hàm tải dùng chung với Mini App nên không tự có hạn. Huỷ fetch thì nó báo "Tải video thất bại".
+      const url = await withDeadline(VIDEO_UPLOAD_TIMEOUT_MS, (signal) =>
+        uploadCloudinaryVideo(file, config, { readDuration: readVideoDuration, fetchImpl: (input, init) => fetch(input, { ...init, signal }) }),
+      );
+      onChange(url);
     } catch (err) {
       setError(err instanceof VideoUploadError ? err.message : videoUploadCopy.failed);
     } finally {

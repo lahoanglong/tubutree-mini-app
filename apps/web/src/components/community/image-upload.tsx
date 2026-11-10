@@ -10,16 +10,33 @@ import { ui } from '@/lib/guest-ui';
  * Ảnh đính kèm bài cộng đồng: lên Cloudinary khi bản build có cấu hình, lỗi hoặc chưa cấu hình thì nén thành ảnh nhúng (data URL)
  * trong trần của nội dung công khai — cùng thứ tự với `MultiImageUpload` của Mini App.
  */
-export function ImageUpload({ value, onChange, max = 6, label = 'Ảnh đính kèm bài viết' }: { value: string[]; onChange: (urls: string[]) => void; max?: number; label?: string }) {
+export function ImageUpload({
+  value,
+  onChange,
+  max = 6,
+  label = 'Ảnh đính kèm bài viết',
+  onBusyChange,
+  disabled = false,
+}: {
+  value: string[];
+  onChange: (urls: string[]) => void;
+  max?: number;
+  label?: string;
+  /** Báo form cha khi đang tải: bấm Đăng lúc ảnh còn đang lên sẽ đăng bài thiếu ảnh. */
+  onBusyChange?: (busy: boolean) => void;
+  /** Form cha đang gửi: thêm ảnh lúc này không vào bài đang gửi. */
+  disabled?: boolean;
+}) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const onFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
-    if (files.length === 0) return;
+    if (files.length === 0 || disabled) return;
     setError(null);
     setBusy(true);
+    onBusyChange?.(true);
     try {
       const added: string[] = [];
       let oversized = 0;
@@ -46,6 +63,7 @@ export function ImageUpload({ value, onChange, max = 6, label = 'Ảnh đính k�
       else if (added.length === 0) setError('Tải ảnh thất bại. Hãy chọn tệp ảnh khác.');
     } finally {
       setBusy(false);
+      onBusyChange?.(false);
       if (inputRef.current) inputRef.current.value = '';
     }
   };
@@ -75,7 +93,7 @@ export function ImageUpload({ value, onChange, max = 6, label = 'Ảnh đính k�
         ))}
         {value.length < max && (
           <li>
-            <button type="button" disabled={busy} onClick={() => inputRef.current?.click()} className={ui.btnSecondary}>
+            <button type="button" disabled={busy || disabled} onClick={() => inputRef.current?.click()} className={ui.btnSecondary}>
               <ImagePlus className="mr-1.5 h-4 w-4" aria-hidden="true" />
               {busy ? 'Đang tải ảnh…' : 'Thêm ảnh'}
             </button>

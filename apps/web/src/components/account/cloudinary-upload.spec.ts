@@ -59,3 +59,38 @@ describe('uploadToCloudinary', () => {
     await expect(uploadToCloudinary(new Blob(['x']))).resolves.toBeNull();
   });
 });
+
+describe('uploadToCloudinary — hạn chót', () => {
+  const hang = () =>
+    fetchMock.mockImplementation(
+      (_url: string, init: RequestInit) =>
+        new Promise((_res, rej) => init.signal!.addEventListener('abort', () => rej(new DOMException('Aborted', 'AbortError')))),
+    );
+
+  it('Cloudinary im quá 120 giây: huỷ yêu cầu và trả null để nơi gọi rơi về bản nén; trước hạn thì chưa huỷ', async () => {
+    vi.useFakeTimers();
+    try {
+      hang();
+      const result = uploadToCloudinary(new Blob(['x']));
+      await vi.advanceTimersByTimeAsync(119_999);
+      const signal = (fetchMock.mock.calls[0] as [string, RequestInit])[1].signal!;
+      expect(signal.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(signal.aborted).toBe(true);
+      await expect(result).resolves.toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('phản hồi về trước hạn: trả secure_url và không để lại bộ hẹn giờ', async () => {
+    vi.useFakeTimers();
+    try {
+      fetchMock.mockResolvedValue({ ok: true, json: async () => ({ secure_url: 'https://res.cloudinary.com/demo/a.jpg' }) });
+      await expect(uploadToCloudinary(new Blob(['x']))).resolves.toBe('https://res.cloudinary.com/demo/a.jpg');
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

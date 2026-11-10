@@ -137,3 +137,33 @@ describe('ReviewVideoUpload — tải video đánh giá lên Cloudinary như Min
     expect(kept.querySelector('input[type="file"]')).toBeNull();
   });
 });
+
+describe('ReviewVideoUpload — hạn chót 300 giây', () => {
+  it('Cloudinary im quá hạn: huỷ yêu cầu, báo "Tải video thất bại", nhả cờ bận và chọn lại được; trước hạn vẫn đang tải', async () => {
+    const c = await mount();
+    vi.useFakeTimers();
+    try {
+      fetchMock.mockImplementation(
+        (_url: string, init: RequestInit) =>
+          new Promise((_res, rej) => init.signal!.addEventListener('abort', () => rej(new DOMException('Aborted', 'AbortError')))),
+      );
+      pick(c, videoFile());
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(299_999);
+      });
+      const signal = (fetchMock.mock.calls[0] as [string, RequestInit])[1].signal!;
+      expect(signal.aborted).toBe(false);
+      expect(busyLog).toEqual([true]);
+      expect(c.querySelector('[role="alert"]')).toBeNull();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1);
+      });
+      expect(signal.aborted).toBe(true);
+      expect(busyLog).toEqual([true, false]);
+      expect(c.querySelector('[role="alert"]')?.textContent).toBe('Tải video thất bại, thử lại.');
+      expect(byText(c, 'button', 'Quay/đăng video review (≤ 60s)')).not.toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

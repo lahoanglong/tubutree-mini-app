@@ -22,6 +22,8 @@ import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
 import { isPartnerStore } from '@/lib/partner-store';
 import { ui } from '@/lib/guest-ui';
+import { IMAGES_UPLOADING } from '@/lib/image-compress';
+import { useUploadBusy } from '@/lib/use-upload-busy';
 import { Badge } from '@/components/ui/badge';
 import { EmptyStateInline } from './storefront-inline';
 import { ErrorState } from '@/components/ui/error-state';
@@ -227,6 +229,8 @@ function ProfileForm({ sf, onClose, onSaved }: { sf: StorefrontEdit; onClose: ()
   const [coverUrl, setCoverUrl] = useState(sf.coverUrl ?? '');
   const [headerNote, setHeaderNote] = useState(sf.headerNote ?? '');
   const [error, setError] = useState<string | null>(null);
+  // Lưu lúc ảnh còn đang lên sẽ gửi ảnh cũ (hoặc rỗng) rồi đóng form, ảnh mới về sau bị bỏ.
+  const { busy: imagesBusy, onBusyChange } = useUploadBusy();
   const saveMut = useLockedMutation({
     mutationKey: PROFILE_SAVE_KEY,
     // Gửi chuỗi RỖNG (không phải undefined) khi CTV chủ động xoá: undefined bị PATCH bỏ qua, nên xoá ảnh bìa rồi Lưu
@@ -243,8 +247,8 @@ function ProfileForm({ sf, onClose, onSaved }: { sf: StorefrontEdit; onClose: ()
 
   return (
     <div>
-      <StorefrontImageUpload label="Ảnh đại diện" value={avatarUrl} onChange={setAvatarUrl} maxDim={400} quality={0.8} />
-      <StorefrontImageUpload label="Ảnh bìa" value={coverUrl} onChange={setCoverUrl} maxDim={1000} quality={0.75} />
+      <StorefrontImageUpload label="Ảnh đại diện" value={avatarUrl} onChange={setAvatarUrl} onBusyChange={onBusyChange} disabled={saveMut.isPending} maxDim={400} quality={0.8} />
+      <StorefrontImageUpload label="Ảnh bìa" value={coverUrl} onChange={setCoverUrl} onBusyChange={onBusyChange} disabled={saveMut.isPending} maxDim={1000} quality={0.75} />
       <Field label="Lời nhắn của bạn">
         <textarea
           className={`${ui.field} py-2`}
@@ -258,8 +262,17 @@ function ProfileForm({ sf, onClose, onSaved }: { sf: StorefrontEdit; onClose: ()
       <div className="mt-1 text-xs text-stone-600">{headerNote.length}/200</div>
       {!complete && <p className="mt-2 text-xs text-stone-700">Đủ cả ba mục sẽ hoàn thành nhiệm vụ “hồ sơ gian hàng”.</p>}
       <InlineError text={error} />
-      <button type="button" className={`${ui.btnPrimary} mt-4 w-full`} aria-busy={saveMut.isPending || undefined} aria-disabled={saveMut.isPending || undefined} onClick={() => saveMut.mutate()}>
-        {saveMut.isPending ? 'Đang lưu…' : 'Lưu hồ sơ'}
+      <button
+        type="button"
+        className={`${ui.btnPrimary} mt-4 w-full`}
+        aria-busy={saveMut.isPending || imagesBusy || undefined}
+        aria-disabled={saveMut.isPending || imagesBusy || undefined}
+        onClick={() => {
+          if (imagesBusy) return;
+          saveMut.mutate();
+        }}
+      >
+        {saveMut.isPending ? 'Đang lưu…' : imagesBusy ? IMAGES_UPLOADING : 'Lưu hồ sơ'}
       </button>
       <button type="button" className={`${ui.btnSecondary} mt-2 w-full`} aria-disabled={saveMut.isPending || undefined} onClick={() => !saveMut.isPending && onClose()}>
         Đóng

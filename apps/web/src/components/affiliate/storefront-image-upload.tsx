@@ -43,20 +43,33 @@ export function StorefrontImageUpload({
   onChange,
   maxDim,
   quality,
+  onBusyChange,
+  disabled = false,
 }: {
   label: string;
   value: string;
   onChange: (url: string) => void;
   maxDim: number;
   quality: number;
+  /** Báo form cha khi đang tải: bấm Lưu lúc ảnh còn đang lên sẽ lưu ảnh cũ (hoặc rỗng) rồi bỏ ảnh về sau. */
+  onBusyChange?: (busy: boolean) => void;
+  /** Form cha đang lưu: đổi ảnh lúc này không vào bản đang lưu mà vẫn làm đổi nhãn nút Lưu. */
+  disabled?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // `busy` chỉ đúng sau lần vẽ kế; ref chặn tệp thứ hai chọn ngay khi tệp đầu còn đang tải: ảnh chậm về sau sẽ ghi đè ảnh về trước, còn nút Lưu của form cha đã nhả khoá.
+  const uploading = useRef(false);
+
+  const pick = () => {
+    if (uploading.current || disabled) return;
+    inputRef.current?.click();
+  };
 
   const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file || uploading.current || disabled) return;
     setError(null);
     const reset = () => {
       if (inputRef.current) inputRef.current.value = '';
@@ -69,13 +82,17 @@ export function StorefrontImageUpload({
       setError('Ảnh quá lớn (tối đa 20MB). Hãy chọn ảnh khác nhé.');
       return reset();
     }
+    uploading.current = true;
     setBusy(true);
+    onBusyChange?.(true);
     try {
       onChange((await uploadToCloudinary(file)) ?? (await compress(file, maxDim, quality)));
     } catch {
       setError('Tải ảnh thất bại. Hãy chọn lại tệp ảnh khác.');
     } finally {
+      uploading.current = false;
       setBusy(false);
+      onBusyChange?.(false);
       reset();
     }
   };
@@ -86,9 +103,10 @@ export function StorefrontImageUpload({
       <input ref={inputRef} type="file" accept="image/*" hidden aria-label={`Chọn tệp ${label.toLowerCase()}`} onChange={(e) => void onFile(e)} />
       <button
         type="button"
-        onClick={() => inputRef.current?.click()}
+        onClick={pick}
+        aria-disabled={disabled || undefined}
         aria-label={value ? `Đổi ${label.toLowerCase()}` : `Tải lên ${label.toLowerCase()}`}
-        className="flex min-h-20 w-full items-center justify-center overflow-hidden rounded-control border-2 border-dashed border-stone-450 bg-stone-50 text-sm font-semibold text-forest-700"
+        className="flex min-h-20 w-full items-center justify-center overflow-hidden rounded-control border-2 border-dashed border-stone-450 bg-stone-50 text-sm font-semibold text-forest-700 aria-disabled:opacity-60"
       >
         {busy ? (
           <span role="status">Đang tải ảnh…</span>
@@ -103,7 +121,7 @@ export function StorefrontImageUpload({
         )}
       </button>
       {value && !busy && (
-        <button type="button" onClick={() => inputRef.current?.click()} className="mt-1 inline-flex min-h-11 items-center gap-1 text-xs font-semibold text-forest-700">
+        <button type="button" onClick={pick} aria-disabled={disabled || undefined} className="mt-1 inline-flex min-h-11 items-center gap-1 text-xs font-semibold text-forest-700">
           <RefreshCw className="h-3 w-3" aria-hidden="true" />
           Đổi ảnh khác
         </button>

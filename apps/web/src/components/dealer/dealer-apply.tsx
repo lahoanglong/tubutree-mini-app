@@ -19,6 +19,8 @@ import {
 } from '@tubutree/app-core/dealer-apply-copy';
 import { applyPitch, pendingBody } from '@/lib/dealer-view';
 import { ui } from '@/lib/guest-ui';
+import { IMAGES_UPLOADING } from '@/lib/image-compress';
+import { useUploadBusy } from '@/lib/use-upload-busy';
 import { phoneBodySm, phoneCaption } from '@/lib/phone-ui';
 import { skin } from '@/components/pro-shared/mini-skin';
 import { Field } from '@/components/ui/field';
@@ -45,6 +47,8 @@ export function DealerApply({ rejected, rejectionReason }: { rejected: boolean; 
   const qc = useQueryClient();
   const [form, setForm] = useState<DealerApplyInput>({ businessName: '', ownerName: '', phone: '', address: '', cccdFrontUrl: '', cccdBackUrl: '' });
   const [done, setDone] = useState(false);
+  // Gửi hồ sơ lúc ảnh CCCD còn đang lên (nhất là chọn lại ảnh mờ) sẽ gửi đi ảnh cũ để duyệt.
+  const { busy: imagesBusy, onBusyChange } = useUploadBusy();
 
   // Gửi đúng bản hồ sơ lúc bấm lần đầu (biến mutate), không đọc `form` mới hơn; khoá giữ tới khi hồ sơ mới về để màn không cho gửi lần hai trên trạng thái cũ.
   const mut = useLockedMutation({
@@ -104,7 +108,7 @@ export function DealerApply({ rejected, rejectionReason }: { rejected: boolean; 
           className="mt-4 flex flex-col gap-3"
           onSubmit={(e) => {
             e.preventDefault();
-            if (valid) mut.mutate(form);
+            if (valid && !imagesBusy) mut.mutate(form);
           }}
         >
           <Field label="Tên doanh nghiệp / cửa hàng *">
@@ -122,8 +126,22 @@ export function DealerApply({ rejected, rejectionReason }: { rejected: boolean; 
           <Field label="Địa chỉ kinh doanh *">
             <input className={ui.field} value={form.address} onChange={set('address')} />
           </Field>
-          <BrandImageField upload="inline" label="Ảnh CCCD mặt trước *" value={form.cccdFrontUrl} onChange={(url) => setForm((f) => ({ ...f, cccdFrontUrl: url }))} />
-          <BrandImageField upload="inline" label="Ảnh CCCD mặt sau *" value={form.cccdBackUrl} onChange={(url) => setForm((f) => ({ ...f, cccdBackUrl: url }))} />
+          <BrandImageField
+            upload="inline"
+            label="Ảnh CCCD mặt trước *"
+            value={form.cccdFrontUrl}
+            onChange={(url) => setForm((f) => ({ ...f, cccdFrontUrl: url }))}
+            onBusyChange={onBusyChange}
+            disabled={mut.isPending}
+          />
+          <BrandImageField
+            upload="inline"
+            label="Ảnh CCCD mặt sau *"
+            value={form.cccdBackUrl}
+            onChange={(url) => setForm((f) => ({ ...f, cccdBackUrl: url }))}
+            onBusyChange={onBusyChange}
+            disabled={mut.isPending}
+          />
           <div role="status" aria-live="polite">
             {done && <p className="text-sm font-medium text-success-fg">Đã gửi hồ sơ đăng ký đại lý!</p>}
           </div>
@@ -136,11 +154,11 @@ export function DealerApply({ rejected, rejectionReason }: { rejected: boolean; 
           <button
             type="submit"
             disabled={!valid}
-            aria-busy={mut.isPending || undefined}
-            aria-disabled={mut.isPending || undefined}
+            aria-busy={mut.isPending || imagesBusy || undefined}
+            aria-disabled={mut.isPending || imagesBusy || undefined}
             className={`${ui.btnPrimary} ${skin.dealerInkBtn} mt-2 w-full`}
           >
-            {mut.isPending ? 'Đang gửi…' : 'Gửi hồ sơ đăng ký'}
+            {mut.isPending ? 'Đang gửi…' : imagesBusy ? IMAGES_UPLOADING : 'Gửi hồ sơ đăng ký'}
           </button>
         </form>
       </div>

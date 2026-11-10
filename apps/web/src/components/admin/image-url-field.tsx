@@ -7,11 +7,23 @@ import { INPUT_CLASS } from './ui';
  * Ảnh bìa/logo trong quản trị: nút tải ảnh lên là đường chính, ô dán link giữ lại cho ai đã có sẵn đường link ảnh.
  * Ảnh vừa tải là đường link hoặc ảnh nén; ô link chỉ hiện chữ khi giá trị là link, để không đổ cả ảnh nén vào một ô chữ.
  */
-export function ImageUrlField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+export function ImageUrlField({
+  label,
+  value,
+  onChange,
+  onBusyChange,
+  disabled,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  onBusyChange?: (busy: boolean) => void;
+  disabled?: boolean;
+}) {
   const isEmbedded = value.startsWith('data:');
   return (
     <div className="space-y-1">
-      <BrandImageField label={label} value={value} onChange={onChange} />
+      <BrandImageField label={label} value={value} onChange={onChange} onBusyChange={onBusyChange} disabled={disabled} />
       <label className="block text-xs text-stone-600">
         Hoặc dán link ảnh
         <input

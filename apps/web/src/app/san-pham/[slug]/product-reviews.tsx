@@ -771,7 +771,7 @@ function ReviewForm({
         >
           {save.isPending ? 'Đang gửi…' : videoBusy ? VIDEO_UPLOADING : imagesBusy ? IMAGES_UPLOADING : isEdit ? 'Lưu đánh giá' : 'Gửi đánh giá'}
         </button>
-        <button type="button" className={ui.btnSecondary} onClick={onCancel} disabled={save.isPending || imagesBusy}>
+        <button type="button" className={ui.btnSecondary} onClick={onCancel} disabled={save.isPending || mediaBusy}>
           Huỷ
         </button>
       </div>

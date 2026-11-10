@@ -25,6 +25,8 @@ import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { Sheet } from '@/components/ui/sheet';
 import { EvidenceUpload } from '@/components/evidence-upload';
 import { errText, PeriodNav } from '@/components/staff/staff-shell';
+import { IMAGES_UPLOADING } from '@/lib/image-compress';
+import { useUploadBusy } from '@/lib/use-upload-busy';
 import { useConfirm } from './confirm-dialog';
 import { safeEvidenceImage } from './evidence-images';
 import { payrollCsv } from './payroll-csv';
@@ -54,6 +56,8 @@ export function PayrollAdminTab() {
   const [rateVal, setRateVal] = useState('');
   const [payRow, setPayRow] = useState<AdminPayrollRow | null>(null);
   const [proof, setProof] = useState('');
+  // Cờ nằm ở trang vì tấm "Xác nhận đã chuyển" gỡ nội dung khi đóng, còn ảnh về muộn vẫn ghi vào `proof` của trang.
+  const { busy: proofBusy, onBusyChange: onProofBusyChange } = useUploadBusy();
   const [note, setNote] = useState('');
   const [detailRow, setDetailRow] = useState<AdminPayrollRow | null>(null);
   const [adjustRow, setAdjustRow] = useState<AdminPayrollRow | null>(null);
@@ -343,18 +347,22 @@ export function PayrollAdminTab() {
       <Sheet
         open={!!payRow}
         onClose={() => setPayRow(null)}
-        dismissible={!paidM.isPending}
+        // Đóng giữa lúc ảnh còn đang lên rồi mở nhân viên khác: ảnh của người trước về muộn sẽ nằm trong tấm của người sau.
+        dismissible={!paidM.isPending && !proofBusy}
         title={`Xác nhận đã chuyển · ${payRow?.staff.fullName ?? ''}`}
         footer={
           <button
             type="button"
             disabled={!proof}
-            aria-busy={payrollBusy || undefined}
-            aria-disabled={payrollBusy || undefined}
-            onClick={() => exclusive(() => paidM.mutate())}
+            aria-busy={payrollBusy || proofBusy || undefined}
+            aria-disabled={payrollBusy || proofBusy || undefined}
+            onClick={() => {
+              if (proofBusy) return;
+              exclusive(() => paidM.mutate());
+            }}
             className={`${BTN_PRIMARY} w-full`}
           >
-            Đánh dấu đã trả
+            {proofBusy ? IMAGES_UPLOADING : 'Đánh dấu đã trả'}
           </button>
         }
       >
@@ -363,7 +371,15 @@ export function PayrollAdminTab() {
             <span className="text-stone-600">Số tiền</span>
             <strong>{formatVnd(payRow?.month.net ?? 0)}</strong>
           </div>
-          <EvidenceUpload label="Ảnh xác nhận chuyển khoản" hint="bắt buộc" max={1} value={proof ? [proof] : []} onChange={(v) => setProof(v[0] ?? '')} />
+          <EvidenceUpload
+            label="Ảnh xác nhận chuyển khoản"
+            hint="bắt buộc"
+            max={1}
+            value={proof ? [proof] : []}
+            onChange={(v) => setProof(v[0] ?? '')}
+            onBusyChange={onProofBusyChange}
+            disabled={paidM.isPending}
+          />
           <Field label="Ghi chú (tuỳ chọn)">
             <input maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} className={INPUT_CLASS} />
           </Field>

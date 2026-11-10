@@ -12,10 +12,19 @@ import { smallTouchTargets, unlabeledFields } from '@/test-utils/a11y';
 const mocks = vi.hoisted(() => ({ post: vi.fn() }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { post: mocks.post, get: vi.fn() } }));
 vi.mock('./image-upload', () => ({
-  ImageUpload: ({ onChange }: { onChange: (v: string[]) => void }) => (
-    <button type="button" onClick={() => onChange(['https://img/1.jpg'])}>
-      stub-them-anh
-    </button>
+  ImageUpload: ({ onChange, onBusyChange, disabled }: { onChange: (v: string[]) => void; onBusyChange?: (busy: boolean) => void; disabled?: boolean }) => (
+    <>
+      <button type="button" onClick={() => onChange(['https://img/1.jpg'])}>
+        stub-them-anh
+      </button>
+      <button type="button" onClick={() => onBusyChange?.(true)}>
+        stub-bat-dau-tai
+      </button>
+      <button type="button" onClick={() => onBusyChange?.(false)}>
+        stub-tai-xong
+      </button>
+      <output data-testid="slot-disabled">{String(disabled)}</output>
+    </>
   ),
 }));
 vi.mock('./product-picker', () => ({
@@ -264,5 +273,62 @@ describe('PostComposer — khoá đồng bộ chống đăng hai bài, nút bậ
     await twice(submitBtn());
     expect(mocks.post).toHaveBeenCalledTimes(1);
     expect(mocks.post.mock.calls[0]![1]).toMatchObject({ kind: 'SHOWCASE', eventId: 'e1' });
+  });
+});
+
+describe('PostComposer — nút Đăng khoá lúc ảnh còn đang lên', () => {
+  const fill = () => {
+    typeInto(titleInput(), 'Tiêu đề');
+    typeInto(bodyInput(), 'Nội dung');
+  };
+  // Nút Đăng đổi chữ theo trạng thái; ô ảnh giả có nút "stub-*" nên chọn theo đúng ba chữ của nút Đăng.
+  const postBtn = () => Array.from(dlg().querySelectorAll<HTMLButtonElement>('button')).find((b) => /^(Đăng|Đang đăng…|Đang tải ảnh…)$/.test(b.textContent?.trim() ?? ''))!;
+  const stub = (name: string) => click(byText(dlg(), 'button', name));
+
+  it('ảnh đang lên: nút báo aria-busy + aria-disabled, đổi chữ, bấm không gọi API; ảnh xong thì nhả và đăng kèm ảnh', async () => {
+    mount();
+    fill();
+    stub('stub-them-anh');
+    stub('stub-bat-dau-tai');
+    const busy = postBtn();
+    expect(busy.textContent).toBe('Đang tải ảnh…');
+    expect(busy.getAttribute('aria-busy')).toBe('true');
+    expect(busy.getAttribute('aria-disabled')).toBe('true');
+    click(busy);
+    await flush(2);
+    expect(mocks.post).not.toHaveBeenCalled();
+
+    stub('stub-tai-xong');
+    const idle = postBtn();
+    expect(idle.textContent).toBe('Đăng');
+    expect(idle.hasAttribute('aria-busy')).toBe(false);
+    click(idle);
+    await flush(2);
+    expect(mocks.post).toHaveBeenCalledTimes(1);
+    expect(mocks.post).toHaveBeenCalledWith('/feed', expect.objectContaining({ images: ['https://img/1.jpg'] }));
+  });
+
+  it('hai lượt tải chồng nhau: lượt đầu xong vẫn khoá, chỉ nhả khi lượt cuối xong', async () => {
+    mount();
+    fill();
+    stub('stub-bat-dau-tai');
+    stub('stub-bat-dau-tai');
+    stub('stub-tai-xong');
+    expect(postBtn().textContent).toBe('Đang tải ảnh…');
+    click(postBtn());
+    await flush(2);
+    expect(mocks.post).not.toHaveBeenCalled();
+    stub('stub-tai-xong');
+    expect(postBtn().textContent).toBe('Đăng');
+  });
+
+  it('đang đăng: ô ảnh nhận disabled để ảnh thêm lúc này không lọt vào bài đang gửi', async () => {
+    mocks.post.mockReturnValue(new Promise(() => {}));
+    mount();
+    fill();
+    expect(dlg().querySelector('[data-testid="slot-disabled"]')!.textContent).toBe('false');
+    click(postBtn());
+    await flush(2);
+    expect(dlg().querySelector('[data-testid="slot-disabled"]')!.textContent).toBe('true');
   });
 });

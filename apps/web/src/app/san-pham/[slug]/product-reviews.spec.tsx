@@ -1435,3 +1435,103 @@ describe('ProductReviews (web): tải ảnh và gửi đánh giá không chồng
     await flush(4);
   });
 });
+
+describe('ProductReviews (web): video đang tải thì form không gửi, không đóng, không bị đổi sang đánh giá khác (W85B, Mini ↔ web: videoBusy cấp trang)', () => {
+  const submitOf = (c: HTMLElement) => form(c)!.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+  /** Giữ lượt tải video tới khi gọi hàm trả về; trả lời về như Cloudinary. */
+  const holdVideo = () => {
+    let finish!: (res: unknown) => void;
+    vi.stubGlobal('fetch', vi.fn().mockReturnValue(new Promise((resolve) => (finish = resolve))));
+    return async () => {
+      finish({ ok: true, json: async () => ({ secure_url: 'https://res.cloudinary.com/demo/v.mp4', duration: 30 }) });
+      await flush(6);
+    };
+  };
+  const openNew = async (elig: unknown = ELIG_NEW) => {
+    mocks.elig = structuredClone(elig);
+    configureVideo();
+    const c = await mount();
+    click(button(c, 'Viết đánh giá'));
+    await flush(6);
+    return c;
+  };
+
+  it('Gửi khoá và đổi nhãn; bấm, gửi form hay Ctrl+Enter đều không lưu; video xong thì gửi kèm video', async () => {
+    const finish = holdVideo();
+    const c = await openNew();
+    pickVideo(c);
+    await flush(4);
+    const submit = submitOf(c);
+    expect(submit.textContent).toBe('Đang tải video…');
+    expect(submit.disabled).toBe(true);
+    click(submit);
+    act(() => {
+      form(c)!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+    act(() => {
+      c.querySelector('textarea')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true, cancelable: true }));
+    });
+    await flush();
+    expect(mocks.saved).toEqual([]);
+
+    await finish();
+    expect(submit.textContent).toBe('Gửi đánh giá');
+    expect(submit.disabled).toBe(false);
+    click(submit);
+    await flush();
+    expect(mocks.saved).toHaveLength(1);
+    expect(mocks.saved[0]!.body).toMatchObject({ videoUrl: 'https://res.cloudinary.com/demo/v.mp4', orderId: 'o1' });
+  });
+
+  it('Huỷ khoá (form không đóng) lúc video còn lên, xong thì Huỷ đóng được', async () => {
+    const finish = holdVideo();
+    const c = await openNew();
+    const cancel = button(c, 'Huỷ') as HTMLButtonElement;
+    expect(cancel.disabled).toBe(false);
+    pickVideo(c);
+    await flush(4);
+    expect(cancel.disabled).toBe(true);
+    click(cancel);
+    expect(form(c)).not.toBeNull();
+
+    await finish();
+    expect(cancel.disabled).toBe(false);
+    click(cancel);
+    expect(form(c)).toBeNull();
+  });
+
+  it('"Sửa" của đánh giá trong danh sách bị chặn lúc video còn lên: form không bị dựng lại nên video xong vẫn vào đúng form cũ', async () => {
+    const finish = holdVideo();
+    const c = await openNew(ELIG_REPEAT);
+    const edit = () => buttonNamed(c, 'Sửa đánh giá đơn TB0001')!;
+    expect(edit().getAttribute('aria-disabled')).toBe('true');
+    expect(form(c)!.getAttribute('aria-label')).toBe('Viết đánh giá');
+    pickVideo(c);
+    await flush(4);
+    expect(submitOf(c).textContent).toBe('Đang tải video…');
+    expect(edit().getAttribute('aria-disabled')).toBe('true');
+    expect(edit().disabled).toBe(false);
+    click(edit());
+    await flush(6);
+    expect(mocks.myCalls).toEqual([]);
+    expect(form(c)!.getAttribute('aria-label')).toBe('Viết đánh giá');
+
+    const submit = submitOf(c);
+    await finish();
+    expect(submit.isConnected).toBe(true);
+    click(submit);
+    await flush();
+    expect(mocks.saved).toHaveLength(1);
+    expect(mocks.saved[0]!.body).toMatchObject({ videoUrl: 'https://res.cloudinary.com/demo/v.mp4', orderId: 'o2' });
+  });
+
+  it('video tải lỗi: nhả khoá, Gửi và Huỷ dùng lại được', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('mạng')));
+    const c = await openNew();
+    pickVideo(c);
+    await flush(6);
+    expect(c.querySelector('[role="alert"]')?.textContent).toContain('Tải video thất bại');
+    expect(submitOf(c).disabled).toBe(false);
+    expect((button(c, 'Huỷ') as HTMLButtonElement).disabled).toBe(false);
+  });
+});
