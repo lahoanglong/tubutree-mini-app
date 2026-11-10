@@ -40,6 +40,9 @@ const STATUS_LABEL: Record<PayrollStatus, string> = {
   PAID: 'Đã trả',
 };
 
+// Chỉ phần tài khoản nhận lương mà form nạp sẵn.
+type BankFields = Pick<StaffProfile, 'bankBin' | 'bankAccountNo' | 'bankAccountName' | 'qrImageUrl'>;
+
 const fmtH = (min: number) => `${Math.floor(min / 60)}h${String(min % 60).padStart(2, '0')}`;
 
 /** Bảng lương theo tháng của nhân viên: thực nhận, chi tiết theo tuần/ngày/phiên chấm công, tài khoản nhận lương. */
@@ -80,7 +83,7 @@ export function PayrollHub() {
   // mở form đúng lúc đó sẽ nạp ô RỖNG và bấm Lưu gửi chuỗi rỗng đè mất tài khoản đã lưu (upsert `update: dto` ở BE).
   // `profileLoaded` tách "chưa tải được lần nào / tải lỗi" khỏi "nhân viên chưa có hồ sơ" (profile null hợp lệ): trường hợp đầu khoá nút,
   // không thì form rỗng + Lưu cũng đè mất tài khoản đã lưu.
-  const [profileCache, setProfileCache] = useState<StaffProfile | null>(null);
+  const [profileCache, setProfileCache] = useState<BankFields | null>(null);
   const [profileLoaded, setProfileLoaded] = useState(false);
   useEffect(() => {
     if (payQ.data) {
@@ -96,6 +99,8 @@ export function PayrollHub() {
   const [qr, setQr] = useState('');
 
   const openBank = () => {
+    // Đang lưu (kể cả lúc tải lại bảng lương): mở lúc này nạp tài khoản cũ rồi Lưu ghi đè tài khoản vừa lưu.
+    if (bankM.isPending) return;
     clear();
     setBin(profileCache?.bankBin ?? '');
     setAccNo(profileCache?.bankAccountNo ?? '');
@@ -104,11 +109,18 @@ export function PayrollHub() {
     setBankOpen(true);
   };
 
-  // Gửi bản chụp lúc bấm; khoá giữ tới khi bảng lương (kèm hồ sơ ngân hàng) tải lại xong, để nút mở lại không nạp tài khoản cũ.
+  // Gửi bản chụp lúc bấm; khoá giữ tới khi bảng lương tải lại xong và nút mở tấm bị chặn trong lúc đó. Tải lại có thể lỗi (mất mạng) nên
+  // hồ sơ nạp sẵn cũng được ghi ngay bằng tài khoản vừa lưu: không thì lần mở sau nạp tài khoản cũ và Lưu ghi đè tài khoản mới.
   const bankM = useLockedMutation({
     mutationFn: (v: BankInput) => updateBank(coreHttp, v),
     onMutate: clear,
-    onSuccess: () => {
+    onSuccess: (_data, v) => {
+      setProfileCache({
+        bankBin: v.bankBin ?? null,
+        bankAccountNo: v.bankAccountNo ?? null,
+        bankAccountName: v.bankAccountName ?? null,
+        qrImageUrl: v.qrImageUrl ?? null,
+      });
       notify({ text: 'Đã lưu thông tin nhận lương.', tone: 'success' });
       setBankOpen(false);
       return qc.invalidateQueries({ queryKey: ['my-payroll'] });
@@ -160,7 +172,14 @@ export function PayrollHub() {
             </section>
           )}
 
-          <button type="button" onClick={openBank} disabled={!profileLoaded} className={skin.btnSecondary}>
+          <button
+            type="button"
+            onClick={openBank}
+            disabled={!profileLoaded}
+            aria-busy={bankM.isPending || undefined}
+            aria-disabled={bankM.isPending || undefined}
+            className={skin.btnSecondary}
+          >
             <Landmark className="mr-1.5 h-4 w-4" aria-hidden="true" />
             Thông tin nhận lương
           </button>

@@ -68,7 +68,6 @@ interface CancelVars {
 const SAVE_KEY = ['staff-shift-save'] as const;
 const DELETE_KEY = ['staff-shift-delete'] as const;
 const QUICK_KEY = ['staff-shift-quick'] as const;
-const COPY_KEY = ['staff-shift-copy'] as const;
 const CANCEL_KEY = ['staff-shift-cancel'] as const;
 
 /** Đích của mọi lệnh cùng loại đang bay (useLockedMutation chỉ giữ biến của lệnh sau cùng nên không dùng `variables`). */
@@ -101,6 +100,16 @@ export function StaffHub() {
   const refresh = (week: string) => qc.invalidateQueries({ queryKey: ['my-shifts', week], refetchType: 'all' });
   const fail = (e: unknown) => notify({ text: errText(e), tone: 'error' });
 
+  // Trạng thái bận lấy theo đích của từng lệnh (kể cả lúc lệnh đang làm mới danh sách). Nút MỞ tấm của đúng đích đó bị chặn, nên tấm
+  // không bao giờ mở lại trong lúc đích còn bận (không kẹt "Đang gửi…" khi chưa gửi gì, không nạp dữ liệu cũ); đích khác không bị ảnh hưởng.
+  const savingKeys = useBusyKeys<SaveVars>(SAVE_KEY, (v) => v.editId ?? '');
+  const deletingIds = useBusyKeys<DeleteVars>(DELETE_KEY, (v) => v.id);
+  const quickingWeeks = useBusyKeys<QuickVars>(QUICK_KEY, (v) => v.week);
+  const cancelingIds = useBusyKeys<CancelVars>(CANCEL_KEY, (v) => v.id);
+  const rowBusy = (id: string) => deletingIds.has(id) || savingKeys.has(id) || cancelingIds.has(id);
+  const addBusy = savingKeys.has('');
+  const quickBusy = quickingWeeks.has(mondayKey);
+
   // Sửa và Xoá cùng một ca loại trừ nhau (sheet sửa mở trên danh sách, nút Xoá của ca đó vẫn với tới được): khoá chung theo id ca bằng ref,
   // `isPending` chỉ đúng sau lần vẽ kế tiếp. Ca khác vẫn chạy song song; thêm ca mới chưa có id nên chỉ dựa vào khoá riêng của saveM.
   const shiftBusy = useRef(new Set<string>());
@@ -118,11 +127,13 @@ export function StaffHub() {
   const [form, setForm] = useState<ShiftFormState>({ editId: null, day: mondayKey, tplId: null, custom: false, start: '08:00', end: '12:00' });
   const patchForm = (p: Partial<ShiftFormState>) => setForm((f) => ({ ...f, ...p }));
   const openAdd = (day: string) => {
+    if (addBusy) return;
     clear();
     setForm({ editId: null, day, tplId: null, custom: false, start: '08:00', end: '12:00' });
     setFormOpen(true);
   };
   const openEdit = (s: Shift) => {
+    if (rowBusy(s.id)) return;
     clear();
     setForm({ editId: s.id, day: s.workDate.slice(0, 10), tplId: null, custom: true, start: isoToVnHHMM(s.startAt), end: isoToVnHHMM(s.endAt) });
     setFormOpen(true);
@@ -145,7 +156,6 @@ export function StaffHub() {
     },
     (v) => v.editId ?? '',
   );
-  const savingKeys = useBusyKeys<SaveVars>(SAVE_KEY, (v) => v.editId ?? '');
   const submitForm = () => {
     const tpl = !form.custom && form.tplId ? templates.find((x) => x.id === form.tplId) : undefined;
     const start = tpl ? minToHHMM(tpl.startMin) : form.start;
@@ -176,14 +186,14 @@ export function StaffHub() {
     },
     (v) => v.id,
   );
-  const deletingIds = useBusyKeys<DeleteVars>(DELETE_KEY, (v) => v.id);
-  const formBusy = savingKeys.has(form.editId ?? '') || (form.editId !== null && deletingIds.has(form.editId));
+  const formBusy = savingKeys.has(form.editId ?? '');
 
   // Đăng ký nhanh
   const [quickOpen, setQuickOpen] = useState(false);
   const [quick, setQuick] = useState<QuickState>({ tplId: null, start: '08:00', end: '17:00', days: new Set() });
   const patchQuick = (p: Partial<QuickState>) => setQuick((q) => ({ ...q, ...p }));
   const openQuick = () => {
+    if (quickBusy) return;
     clear();
     // Mặc định T2–T6 (từ hôm nay trở đi), giống Mini App.
     setQuick({ tplId: null, start: '08:00', end: '17:00', days: new Set(dayKeys.slice(0, 5).filter((dk) => dk >= todayKey)) });
@@ -203,7 +213,6 @@ export function StaffHub() {
     },
     (v) => v.week,
   );
-  const quickingWeeks = useBusyKeys<QuickVars>(QUICK_KEY, (v) => v.week);
   const submitQuick = () => {
     const tpl = quick.tplId ? templates.find((x) => x.id === quick.tplId) : undefined;
     const start = tpl ? minToHHMM(tpl.startMin) : quick.start;
@@ -214,21 +223,17 @@ export function StaffHub() {
     });
   };
 
-  const copyM = useLockedMutation(
-    {
-      mutationKey: COPY_KEY,
-      mutationFn: (v: CopyVars) => copyWeek(coreHttp, keyToUtcMidnightISO(addDaysKey(v.week, -7)), keyToUtcMidnightISO(v.week)),
-      onMutate: clear,
-      onSuccess: (r, v) => {
-        notify(r.created > 0 ? { text: `Đã copy ${r.created} ca từ tuần trước.`, tone: 'success' } : { text: 'Tuần trước không có ca để copy.', tone: 'info' });
-        return refresh(v.week);
-      },
-      onError: fail,
+  // Khoá chung mọi tuần: chép W-1 → W rồi sang tuần sau chép W → W+1 mà lệnh đầu chưa xong thì W+1 thiếu ca vừa chép vào W.
+  const copyM = useLockedMutation({
+    mutationFn: (v: CopyVars) => copyWeek(coreHttp, keyToUtcMidnightISO(addDaysKey(v.week, -7)), keyToUtcMidnightISO(v.week)),
+    onMutate: clear,
+    onSuccess: (r, v) => {
+      notify(r.created > 0 ? { text: `Đã copy ${r.created} ca từ tuần trước.`, tone: 'success' } : { text: 'Tuần trước không có ca để copy.', tone: 'info' });
+      return refresh(v.week);
     },
-    (v) => v.week,
-  );
-  const copyingWeeks = useBusyKeys<CopyVars>(COPY_KEY, (v) => v.week);
-  const copyBusy = copyingWeeks.has(mondayKey);
+    onError: fail,
+  });
+  const copyBusy = copyM.isPending;
 
   // Huỷ ca đã duyệt
   const [cancelId, setCancelId] = useState<string | null>(null);
@@ -248,8 +253,13 @@ export function StaffHub() {
     },
     (v) => v.id,
   );
-  const cancelingIds = useBusyKeys<CancelVars>(CANCEL_KEY, (v) => v.id);
   const cancelBusy = cancelId !== null && cancelingIds.has(cancelId);
+  const openCancel = (id: string) => {
+    if (rowBusy(id)) return;
+    clear();
+    setCancel(EMPTY_CANCEL);
+    setCancelId(id);
+  };
   const submitCancel = () => {
     if (!cancelId) return;
     cancelM.mutate({ id: cancelId, reason: cancel.reason.trim(), isEmergency: cancel.emergency, evidenceUrl: cancel.evidence || undefined, week: mondayKey });
@@ -269,7 +279,13 @@ export function StaffHub() {
       />
 
       <div className="flex flex-wrap gap-2">
-        <button type="button" onClick={openQuick} className={`${ui.btnPrimary} min-w-[10rem] flex-1`}>
+        <button
+          type="button"
+          aria-busy={quickBusy || undefined}
+          aria-disabled={quickBusy || undefined}
+          onClick={openQuick}
+          className={`${ui.btnPrimary} min-w-[10rem] flex-1`}
+        >
           <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
           Đăng ký ca
         </button>
@@ -308,7 +324,14 @@ export function StaffHub() {
                     )}
                   </div>
                   {dk >= todayKey && (
-                    <button type="button" aria-label={`Thêm ca ${dayName}`} onClick={() => openAdd(dk)} className={`${rowBtn} text-forest-600`}>
+                    <button
+                      type="button"
+                      aria-label={`Thêm ca ${dayName}`}
+                      aria-busy={addBusy || undefined}
+                      aria-disabled={addBusy || undefined}
+                      onClick={() => openAdd(dk)}
+                      className={`${rowBtn} text-forest-600`}
+                    >
                       <Plus className="mr-1 h-4 w-4" aria-hidden="true" />
                       Thêm
                     </button>
@@ -335,14 +358,21 @@ export function StaffHub() {
                       </div>
                       {s.status === 'PENDING' && (
                         <div className="flex gap-1">
-                          <button type="button" aria-label={`Sửa ca ${dayName}`} onClick={() => openEdit(s)} className={`${rowBtn} text-forest-600`}>
+                          <button
+                            type="button"
+                            aria-label={`Sửa ca ${dayName}`}
+                            aria-busy={rowBusy(s.id) || undefined}
+                            aria-disabled={rowBusy(s.id) || undefined}
+                            onClick={() => openEdit(s)}
+                            className={`${rowBtn} text-forest-600`}
+                          >
                             Sửa
                           </button>
                           <button
                             type="button"
                             aria-label={`Xoá ca ${dayName}`}
-                            aria-busy={deletingIds.has(s.id) || undefined}
-                            aria-disabled={deletingIds.has(s.id) || undefined}
+                            aria-busy={rowBusy(s.id) || undefined}
+                            aria-disabled={rowBusy(s.id) || undefined}
                             onClick={() => lockShift(s.id, () => delM.mutate({ id: s.id, week: mondayKey }))}
                             className={`${rowBtn} text-danger-fg`}
                           >
@@ -351,7 +381,14 @@ export function StaffHub() {
                         </div>
                       )}
                       {s.status === 'APPROVED' && (
-                        <button type="button" aria-label={`Huỷ ca ${dayName}`} onClick={() => { clear(); setCancel(EMPTY_CANCEL); setCancelId(s.id); }} className={`${rowBtn} text-danger-fg`}>
+                        <button
+                          type="button"
+                          aria-label={`Huỷ ca ${dayName}`}
+                          aria-busy={rowBusy(s.id) || undefined}
+                          aria-disabled={rowBusy(s.id) || undefined}
+                          onClick={() => openCancel(s.id)}
+                          className={`${rowBtn} text-danger-fg`}
+                        >
                           Huỷ ca
                         </button>
                       )}

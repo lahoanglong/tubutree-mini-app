@@ -200,7 +200,7 @@ describe('/nhan-vien — Thêm ca', () => {
     expect(text()).toContain('Đã gửi ca chờ duyệt.');
   });
 
-  it('khoá giữ tới khi danh sách ca mới về: mở lại tấm trong lúc tải lại thì nút còn bận và cú bấm bị bỏ', async () => {
+  it('lệnh trước xong POST, danh sách còn làm mới: mọi nút "Thêm" aria-busy + aria-disabled và bấm không mở tấm; Sửa ca khác vẫn mở, tấm không bận và đóng được; làm mới xong thì Thêm gửi lại được', async () => {
     await mount();
     await openAdd();
     const hold = holdGet('/staff/shifts');
@@ -208,14 +208,26 @@ describe('/nhan-vien — Thêm ca', () => {
     await flush();
     expect(calls('POST', '/staff/shifts')).toHaveLength(1);
     expect(sheetOpen('Thêm ca · T4 11/03')).toBe(false);
-    await openAdd();
-    expect(busy(submit())).toBe(true);
-    click(submit());
+    for (const name of ['Thêm ca T4 11/03', 'Thêm ca T5 12/03']) {
+      const add = btn(name);
+      expect(busy(add)).toBe(true);
+      expect(add.getAttribute('aria-disabled')).toBe('true');
+      expect(add.disabled).toBe(false);
+      click(add);
+      await flush();
+      expect(document.querySelector('[role="dialog"]')).toBeNull();
+    }
+    await press('Sửa ca T6 13/03');
+    expect(sheetOpen('Sửa ca · T6 13/03')).toBe(true);
+    expect(busy(btn(/^(Lưu|Đang gửi…)$/))).toBe(false);
+    expect(closeBtn()).not.toBeNull();
+    click(closeBtn()!);
     await flush();
-    expect(calls('POST', '/staff/shifts')).toHaveLength(1);
+    expect(sheetOpen('Sửa ca · T6 13/03')).toBe(false);
     hold.release();
     await flush();
-    expect(busy(submit())).toBe(false);
+    expect(busy(btn('Thêm ca T4 11/03'))).toBe(false);
+    await openAdd();
     click(submit());
     await flush();
     expect(calls('POST', '/staff/shifts')).toHaveLength(2);
@@ -308,21 +320,63 @@ describe('/nhan-vien — Sửa và Xoá ca', () => {
     expect(calls('DELETE', '/staff/shifts/sp')).toHaveLength(2);
   });
 
-  it('Sửa và Xoá cùng một ca loại trừ nhau: ca đang bị xoá thì Lưu ở sheet sửa không gửi PATCH và hiện bận', async () => {
+  it('Xoá ca A đang bay: nút Sửa của A aria-busy + aria-disabled và bấm không mở tấm (không nạp ca sắp bị xoá)', async () => {
     const del = defer();
     m.write['DELETE /staff/shifts/sp'] = () => del.promise;
     await mount();
     click(btn('Xoá ca T5 12/03'));
     await flush();
+    const edit = btn('Sửa ca T5 12/03');
+    expect(busy(edit)).toBe(true);
+    expect(edit.getAttribute('aria-disabled')).toBe('true');
+    expect(edit.disabled).toBe(false);
+    click(edit);
+    await flush();
+    expect(sheetOpen('Sửa ca · T5 12/03')).toBe(false);
+    del.resolve({ deleted: true });
+    await flush();
+    expect(busy(btn('Sửa ca T5 12/03'))).toBe(false);
+  });
+
+  it('Sửa ca A xong, danh sách còn làm mới: Sửa lại và Xoá của A đều aria-busy, bấm không mở tấm (không nạp giờ cũ) và không gửi DELETE; ca B không bị ảnh hưởng', async () => {
+    await mount();
     await press('Sửa ca T5 12/03');
-    expect(busy(saveBtn())).toBe(true);
+    typeInto(document.querySelectorAll<HTMLInputElement>('input[type="time"]')[1]!, '11:30');
+    const hold = holdGet('/staff/shifts');
+    click(saveBtn());
+    await flush();
+    expect(calls('PATCH', '/staff/shifts/sp')).toHaveLength(1);
+    expect(sheetOpen('Sửa ca · T5 12/03')).toBe(false);
+    for (const name of ['Sửa ca T5 12/03', 'Xoá ca T5 12/03']) {
+      expect(busy(btn(name))).toBe(true);
+      expect(btn(name).getAttribute('aria-disabled')).toBe('true');
+      expect(btn(name).disabled).toBe(false);
+    }
+    click(btn('Sửa ca T5 12/03'));
+    click(btn('Xoá ca T5 12/03'));
+    await flush();
+    expect(sheetOpen('Sửa ca · T5 12/03')).toBe(false);
+    expect(calls('DELETE', '/staff/shifts/sp')).toHaveLength(0);
+    expect(busy(btn('Sửa ca T6 13/03'))).toBe(false);
+    expect(busy(btn('Xoá ca T6 13/03'))).toBe(false);
+    hold.release();
+    await flush();
+    expect(busy(btn('Sửa ca T5 12/03'))).toBe(false);
+    expect(busy(btn('Xoá ca T5 12/03'))).toBe(false);
+  });
+
+  it('tấm sửa A đã mở rồi mới có lệnh xoá A bay: Lưu không gửi PATCH (khoá chung theo id ca)', async () => {
+    const del = defer();
+    m.write['DELETE /staff/shifts/sp'] = () => del.promise;
+    await mount();
+    await press('Sửa ca T5 12/03');
+    click(btn('Xoá ca T5 12/03'));
+    await flush();
     click(saveBtn());
     await flush();
     expect(calls('PATCH', '/staff/shifts/sp')).toHaveLength(0);
     del.resolve({ deleted: true });
     await flush();
-    expect(calls('PATCH', '/staff/shifts/sp')).toHaveLength(0);
-    expect(busy(saveBtn())).toBe(false);
   });
 
   it('Sửa lỗi: nhả khoá để lưu lại được, báo role=alert, giữ giờ đã gõ', async () => {
@@ -405,7 +459,7 @@ describe('/nhan-vien — Đăng ký nhanh', () => {
     expect(text()).toContain('Đã đăng ký 3 ca chờ duyệt.');
   });
 
-  it('khoá giữ tới khi danh sách ca mới về: mở lại tấm trong lúc tải lại thì nút còn bận và cú bấm bị bỏ', async () => {
+  it('lệnh trước xong POST, danh sách còn làm mới: "Đăng ký ca" của tuần đó aria-busy + aria-disabled, bấm không mở tấm; sang tuần khác thì mở được, tấm không bận và đóng được', async () => {
     m.write['POST /staff/shifts'] = () => ({ created: 3 });
     await mount();
     await press('Đăng ký ca');
@@ -414,14 +468,24 @@ describe('/nhan-vien — Đăng ký nhanh', () => {
     await flush();
     expect(calls('POST', '/staff/shifts')).toHaveLength(1);
     expect(sheetOpen('Đăng ký nhanh cả tuần')).toBe(false);
-    await press('Đăng ký ca');
-    expect(busy(submit())).toBe(true);
-    click(submit());
+    const open = btn('Đăng ký ca');
+    expect(busy(open)).toBe(true);
+    expect(open.getAttribute('aria-disabled')).toBe('true');
+    expect(open.disabled).toBe(false);
+    click(open);
     await flush();
-    expect(calls('POST', '/staff/shifts')).toHaveLength(1);
+    expect(sheetOpen('Đăng ký nhanh cả tuần')).toBe(false);
+    await press('Tuần sau');
+    expect(busy(btn('Đăng ký ca'))).toBe(false);
+    await press('Đăng ký ca');
+    expect(sheetOpen('Đăng ký nhanh cả tuần')).toBe(true);
+    expect(busy(submit())).toBe(false);
+    expect(closeBtn()).not.toBeNull();
+    click(closeBtn()!);
+    await flush();
+    expect(sheetOpen('Đăng ký nhanh cả tuần')).toBe(false);
     hold.release();
     await flush();
-    expect(busy(submit())).toBe(false);
   });
 
   it('gửi lỗi: nhả khoá, giữ sheet, gửi lại được', async () => {
@@ -472,7 +536,7 @@ describe('/nhan-vien — Chép tuần trước', () => {
     await flush();
   });
 
-  it('khoá theo tuần đích và làm mới đúng tuần của lệnh: đổi tuần khi lệnh còn bay thì nút tuần mới không bận, tuần cũ vẫn tải lại', async () => {
+  it('khoá chung mọi tuần: đổi tuần khi lệnh còn bay thì nút vẫn bận và cú bấm bị bỏ; xong thì làm mới đúng tuần của lệnh rồi chép tuần mới được', async () => {
     const post = defer();
     m.write['POST /staff/shifts/copy-week'] = () => post.promise;
     await mount();
@@ -480,11 +544,21 @@ describe('/nhan-vien — Chép tuần trước', () => {
     await flush();
     await press('Tuần sau');
     expect(weekGets(WEEK1_FROM).length).toBeGreaterThan(0);
-    expect(busy(btn('Chép tuần trước'))).toBe(false);
+    const copy = btn('Chép tuần trước');
+    expect(busy(copy)).toBe(true);
+    expect(copy.getAttribute('aria-disabled')).toBe('true');
+    click(copy);
+    await flush();
+    expect(calls('POST', '/staff/shifts/copy-week')).toHaveLength(1);
     const before = weekGets(WEEK0_FROM).length;
+    m.write['POST /staff/shifts/copy-week'] = () => ({ created: 1, skipped: 0 });
     post.resolve({ created: 2, skipped: 0 });
     await flush();
     expect(weekGets(WEEK0_FROM).length).toBe(before + 1);
+    expect(busy(copy)).toBe(false);
+    await press('Chép tuần trước');
+    expect(calls('POST', '/staff/shifts/copy-week')).toHaveLength(2);
+    expect(calls('POST', '/staff/shifts/copy-week')[1]!.body).toEqual({ sourceWeekStart: WEEK0_FROM, targetWeekStart: WEEK1_FROM });
   });
 
   it('copy lỗi: nhả khoá, báo role=alert, chép lại được', async () => {
@@ -527,7 +601,7 @@ describe('/nhan-vien — Huỷ ca đã duyệt', () => {
     expect(text()).toContain('Đã huỷ ca (không phạt).');
   });
 
-  it('ca A đang làm mới sau khi huỷ: sheet huỷ ca B không bị kẹt (khoá theo đích), huỷ B gửi được; ca A còn hiện thì chạm lại bị bỏ', async () => {
+  it('ca A xong POST, danh sách còn làm mới: nút Huỷ ca của A aria-busy + aria-disabled, bấm không mở tấm; huỷ ca B vẫn mở, tấm không bận, đóng được và gửi được', async () => {
     await mount();
     await openCancel('Huỷ ca T6 13/03');
     const hold = holdGet('/staff/shifts');
@@ -535,19 +609,27 @@ describe('/nhan-vien — Huỷ ca đã duyệt', () => {
     await flush();
     expect(calls('POST', '/staff/shifts/sa/cancel')).toHaveLength(1);
     expect(sheetOpen('Huỷ ca đã duyệt')).toBe(false);
+    const cancelA = btn('Huỷ ca T6 13/03');
+    expect(busy(cancelA)).toBe(true);
+    expect(cancelA.getAttribute('aria-disabled')).toBe('true');
+    expect(cancelA.disabled).toBe(false);
+    click(cancelA);
+    await flush();
+    expect(sheetOpen('Huỷ ca đã duyệt')).toBe(false);
+    expect(busy(btn('Huỷ ca T7 14/03'))).toBe(false);
     await openCancel('Huỷ ca T7 14/03');
     expect(busy(submit())).toBe(false);
     expect(closeBtn()).not.toBeNull();
+    click(closeBtn()!);
+    await flush();
+    expect(sheetOpen('Huỷ ca đã duyệt')).toBe(false);
+    await openCancel('Huỷ ca T7 14/03');
     click(submit());
     await flush();
     expect(calls('POST', '/staff/shifts/sb/cancel')).toHaveLength(1);
-    await openCancel('Huỷ ca T6 13/03');
-    expect(busy(submit())).toBe(true);
-    click(submit());
-    await flush();
-    expect(calls('POST', '/staff/shifts/sa/cancel')).toHaveLength(1);
     hold.release();
     await flush();
+    expect(busy(btn('Huỷ ca T6 13/03'))).toBe(false);
   });
 
   it('huỷ lỗi: nhả khoá, giữ lý do đã nhập, báo role=alert, gửi lại được', async () => {

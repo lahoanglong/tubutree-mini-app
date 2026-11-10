@@ -275,7 +275,7 @@ describe('/gioi-thieu: liên hệ hỗ trợ', () => {
     expect(mocks.openChat).toHaveBeenCalledTimes(1);
   });
 
-  describe('Nhắn Zalo OA khoá chạm đúp (Mini brand-owner "Liên hệ Tubu" trả Promise của cầu nối OA)', () => {
+  describe('Nhắn Zalo OA: khoá giữ khi cầu nối OA chưa trả (cầu nối chậm; cầu nối web trả ngay nên hai click thật vẫn mở hai tab)', () => {
     const withOa = () => {
       mocks.oaAvailable = true;
       setup({ config: { support: { ...SUPPORT, zaloOaName: 'Tubu Tree OA' } } });
@@ -286,7 +286,7 @@ describe('/gioi-thieu: liên hệ hỗ trợ', () => {
         el.click();
       });
 
-    it('hai cú chạm cùng tick chỉ mở một lần; nút aria-busy + aria-disabled (không disabled) tới khi cầu nối xong, rồi bấm lại được', async () => {
+    it('cầu nối chưa trả: hai cú chạm cùng tick chỉ mở một lần; nút aria-busy + aria-disabled (không disabled) tới khi cầu nối xong, rồi bấm lại được', async () => {
       withOa();
       let release!: () => void;
       mocks.openChat.mockImplementationOnce(() => new Promise<void>((r) => (release = r)));

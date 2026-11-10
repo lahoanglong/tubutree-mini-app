@@ -14,7 +14,7 @@ const m = vi.hoisted(() => ({
   calls: [] as Call[],
   gates: [] as Array<{ path: string; promise: Promise<unknown> }>,
   failOnce: new Set<string>(),
-  put: null as null | (() => unknown),
+  put: null as null | ((body: unknown) => unknown),
 }));
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
@@ -36,13 +36,13 @@ vi.mock('@/lib/core-http', () => ({
         m.failOnce.delete(path);
         throw new Error('Mất kết nối');
       }
-      if (path === '/staff/payroll') return PAYROLL;
+      if (path === '/staff/payroll') return { ...PAYROLL, profile: server.profile };
       if (path === '/staff/attendance/history') return [];
       throw new Error(`chưa mock ${path}`);
     },
     put: async (path: string, body?: unknown) => {
       m.calls.push({ method: 'PUT', path, body });
-      return m.put!();
+      return m.put!(body);
     },
   },
 }));
@@ -55,6 +55,9 @@ const PAYROLL = {
   days: [{ id: 'd1', workDate: '2026-03-02T00:00:00.000Z', workedMinutes: 270, hourlyRate: 30000, gross: 135000, fines: 0, net: 135000 }],
   profile: PROFILE,
 };
+// Hồ sơ phía máy chủ: lệnh PUT thành công ghi vào đây, lần GET bảng lương kế tiếp đọc ra bản mới.
+const server = { profile: { ...PROFILE } };
+const ACC_LABEL = 'Số tài khoản';
 const BIN_LABEL = 'Mã số ngân hàng (6 chữ số, VD 970407; chưa biết thì tải ảnh QR ở dưới)';
 
 const defer = (): Deferred => {
@@ -115,7 +118,11 @@ beforeEach(() => {
   m.calls = [];
   m.gates = [];
   m.failOnce.clear();
-  m.put = () => PROFILE;
+  server.profile = { ...PROFILE };
+  m.put = (body) => {
+    server.profile = { ...server.profile, ...(body as object) };
+    return server.profile;
+  };
 });
 afterEach(() => {
   mounted.forEach((r) => r.unmount());
@@ -145,25 +152,51 @@ describe('/nhan-vien/bang-luong — Thông tin nhận lương', () => {
     expect(text()).toContain('Đã lưu thông tin nhận lương.');
   });
 
-  it('khoá giữ tới khi bảng lương mới về: mở lại tấm trong lúc tải lại thì nút còn bận và cú bấm bị bỏ', async () => {
+  it('lưu xong, bảng lương còn làm mới: nút mở aria-busy + aria-disabled (không disabled) và bấm không mở tấm; làm mới xong mở ra tài khoản MỚI và Lưu gửi tài khoản mới, không phải cũ', async () => {
     await mount();
     await openBank();
+    typeInto(field(ACC_LABEL), '9999999999');
     const hold = holdGet('/staff/payroll');
     click(save());
     await flush();
     expect(puts()).toHaveLength(1);
     expect(sheetOpen()).toBe(false);
-    await openBank();
-    expect(busy(save())).toBe(true);
-    click(save());
+    const opener = btn('Thông tin nhận lương');
+    expect(busy(opener)).toBe(true);
+    expect(opener.getAttribute('aria-disabled')).toBe('true');
+    expect(opener.disabled).toBe(false);
+    click(opener);
     await flush();
-    expect(puts()).toHaveLength(1);
+    expect(sheetOpen()).toBe(false);
     hold.release();
     await flush();
-    expect(busy(save())).toBe(false);
+    expect(busy(opener)).toBe(false);
+    await openBank();
+    expect(field(ACC_LABEL).value).toBe('9999999999');
+    click(btn('QR nhận lương'));
     click(save());
     await flush();
     expect(puts()).toHaveLength(2);
+    expect(puts()[1]!.body).toMatchObject({ bankAccountNo: '9999999999', qrImageUrl: 'data:image/jpeg;base64,QR' });
+  });
+
+  it('lưu xong nhưng tải lại bảng lương lỗi (mất mạng): mở lại vẫn nạp tài khoản MỚI vừa lưu, Lưu (chỉ đổi QR) không ghi đè bằng tài khoản cũ', async () => {
+    await mount();
+    await openBank();
+    typeInto(field(ACC_LABEL), '9999999999');
+    m.failOnce.add('/staff/payroll');
+    click(save());
+    await flush();
+    expect(puts()).toHaveLength(1);
+    expect(busy(btn('Thông tin nhận lương'))).toBe(false);
+    await openBank();
+    expect(field(ACC_LABEL).value).toBe('9999999999');
+    expect(field(BIN_LABEL).value).toBe('970407');
+    click(btn('QR nhận lương'));
+    click(save());
+    await flush();
+    expect(puts()).toHaveLength(2);
+    expect(puts()[1]!.body).toMatchObject({ bankBin: '970407', bankAccountNo: '9999999999', bankAccountName: 'NGUYEN VAN A', qrImageUrl: 'data:image/jpeg;base64,QR' });
   });
 
   it('lưu lỗi: nhả khoá, giữ ô đã nhập, báo role=alert, sheet đóng lại được và lưu lại được', async () => {

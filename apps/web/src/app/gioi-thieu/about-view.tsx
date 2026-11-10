@@ -148,7 +148,10 @@ function FaqSection({ initialFaqs, initialConfig }: { initialFaqs?: FaqItem[]; i
   );
 }
 
-/** Cầu nối OA còn chạy thì cú chạm kế bị bỏ, khỏi mở hai khung chat. */
+/**
+ * Giữ khoá khi cầu nối OA chưa trả (cầu nối chậm như Mini App `openOAChat`). Ở web `openChat` gọi `window.open` đồng bộ rồi trả ngay, nên
+ * hai cú click thật (hai task riêng) vẫn mở hai tab: khoá này chỉ có tác dụng với cầu nối chậm, không chặn được chuyện đó.
+ */
 function OaChatButton() {
   const { press, busy } = usePressLock(() => platformBridge.oa.openChat());
   return (
