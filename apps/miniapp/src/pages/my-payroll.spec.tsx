@@ -423,15 +423,21 @@ describe('Lương của tôi: ảnh QR còn đang lên thì "Lưu" chờ (W90A)'
     expect(mocks.updateBank).toHaveBeenCalledWith(expect.objectContaining({ qrImageUrl: 'https://img.test/qr-moi.png' }));
   });
 
-  it('đóng tấm giữa lúc QR còn lên rồi mở lại: cờ nằm ở trang nên Lưu vẫn chờ tới khi lượt cũ xong', async () => {
+  it('QR còn đang lên: tấm không đóng được (mất nút Đóng, Esc không đóng); xong thì đóng được', async () => {
     await openBankSheet();
+    expect(screen.getByRole('button', { name: 'Đóng' })).toBeInTheDocument();
+
     act(() => mocks.picker.onBusyChange(true));
-    fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
-    await waitFor(() => expect(screen.queryByRole('button', { name: 'QR nhận lương' })).toBeNull());
-    fireEvent.click(screen.getByRole('button', { name: 'Thông tin nhận lương' }));
-    expect(await screen.findByRole('button', { name: t.common.imagesUploading })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Đóng' })).toBeNull();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.getByRole('button', { name: 'QR nhận lương' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: t.common.imagesUploading })).toBeDisabled();
+
+    // Xong lượt tải thì Esc đóng được: chứng tỏ Esc ở trên bị chặn vì khoá chứ không phải vì test không bắt được phím.
     act(() => mocks.picker.onBusyChange(false));
-    expect(await screen.findByRole('button', { name: 'Lưu' })).toBeEnabled();
+    expect(await screen.findByRole('button', { name: 'Đóng' })).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'QR nhận lương' })).toBeNull());
   });
 
   it('đang lưu thì ô ảnh khoá: đổi QR lúc này không vào bản đang gửi', async () => {

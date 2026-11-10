@@ -497,6 +497,11 @@ function StaffHub() {
   // nên lượt tải còn chạy không còn chặn nút (ảnh không ai chờ), bật lại thì chặn tiếp tới khi lượt đó xong.
   const { busy: uploadBusy, onBusyChange: onEvidenceBusyChange } = useUploadBusy();
   const evidenceBusy = cancelEmergency && uploadBusy;
+  // Ảnh chứng cứ thuộc về đúng một ca: mở huỷ ca khác không được mang ảnh của ca vừa đóng.
+  const openCancel = (id: string) => {
+    setCancelEvidence('');
+    setCancelId(id);
+  };
 
   const cancelM = useLockedMutation({
     mutationFn: () =>
@@ -635,7 +640,7 @@ function StaffHub() {
                           variant="ghost"
                           aria-label={`Huỷ ca ${dayName}`}
                           style={{ color: 'var(--color-text-danger)' }}
-                          onPress={() => setCancelId(s.id)}
+                          onPress={() => openCancel(s.id)}
                         >
                           Huỷ ca
                         </Button>
@@ -781,6 +786,8 @@ function StaffHub() {
       <BottomSheet
         open={!!cancelId}
         onClose={() => setCancelId(null)}
+        // Đóng giữa lúc ảnh còn đang lên rồi mở ca khác: ảnh của ca trước về muộn sẽ nằm trong tấm của ca sau.
+        dismissible={!evidenceBusy}
         title="Huỷ ca đã duyệt"
         footer={
           <Button

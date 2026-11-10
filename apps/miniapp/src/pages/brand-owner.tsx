@@ -231,16 +231,16 @@ function Editor({ brand }: { brand: OwnedBrand }) {
           {/* Thông tin thương hiệu */}
           <Card style={{ margin: '0 16px 12px' }}>
             <Heading variant="title-sm" as="h2" style={{ marginBottom: 8 }}>{BRAND_OWNER_INFO}</Heading>
-            <div style={{ marginBottom: 8 }}><ImageUpload label="Logo" value={f.logoUrl} onChange={(url) => setF({ ...f, logoUrl: url })} onBusyChange={onBusyChange} disabled={saveMut.isPending} /></div>
-            <div style={{ marginBottom: 8 }}><ImageUpload label="Ảnh bìa" value={f.coverUrl} onChange={(url) => setF({ ...f, coverUrl: url })} onBusyChange={onBusyChange} disabled={saveMut.isPending} /></div>
+            <div style={{ marginBottom: 8 }}><ImageUpload label="Logo" value={f.logoUrl} onChange={(url) => setF((p) => ({ ...p, logoUrl: url }))} onBusyChange={onBusyChange} disabled={saveMut.isPending} /></div>
+            <div style={{ marginBottom: 8 }}><ImageUpload label="Ảnh bìa" value={f.coverUrl} onChange={(url) => setF((p) => ({ ...p, coverUrl: url }))} onBusyChange={onBusyChange} disabled={saveMut.isPending} /></div>
             <div style={{ marginBottom: 8 }}>
-              <Field label="Câu giới thiệu ngắn"><Input maxLength={INPUT_LIMITS.brandTagline} value={f.tagline} onChange={(e) => setF({ ...f, tagline: e.target.value })} /></Field>
+              <Field label="Câu giới thiệu ngắn"><Input maxLength={INPUT_LIMITS.brandTagline} value={f.tagline} onChange={(e) => { const v = e.target.value; setF((p) => ({ ...p, tagline: v })); }} /></Field>
             </div>
             <div style={{ marginBottom: 8 }}>
-              <Field label="Nguồn gốc"><Input maxLength={INPUT_LIMITS.brandOrigin} value={f.origin} onChange={(e) => setF({ ...f, origin: e.target.value })} /></Field>
+              <Field label="Nguồn gốc"><Input maxLength={INPUT_LIMITS.brandOrigin} value={f.origin} onChange={(e) => { const v = e.target.value; setF((p) => ({ ...p, origin: v })); }} /></Field>
             </div>
             <div style={{ marginBottom: 8 }}>
-              <Field label="Câu chuyện thương hiệu"><Input.TextArea maxLength={INPUT_LIMITS.brandStory} value={f.story} onChange={(e) => setF({ ...f, story: e.target.value })} /></Field>
+              <Field label="Câu chuyện thương hiệu"><Input.TextArea maxLength={INPUT_LIMITS.brandStory} value={f.story} onChange={(e) => { const v = e.target.value; setF((p) => ({ ...p, story: v })); }} /></Field>
             </div>
             <Button
               fullWidth

@@ -98,10 +98,10 @@ const UPLOAD_MAX_DIM = 1600;
 const UPLOAD_QUALITY = 0.82;
 /** JPEG nhỏ hơn mức này và cạnh dài vừa thì gửi nguyên, nén lại chỉ làm xấu thêm. */
 const UPLOAD_KEEP_BYTES = 500 * 1024;
-/** Cloudinary im quá lâu thì bỏ lượt tải, rơi về bản nén tại chỗ: ô thêm ảnh và nút Gửi của form cha chờ lượt này nên không được treo mãi. */
-const CLOUDINARY_TIMEOUT_MS = 60_000;
-/** Video tối đa 50MB: trên đường lên 4G yếu (vài Mbps) cần cả hai ba phút, nên rộng hơn ảnh. Quá hạn thì báo lỗi để khách chọn lại, nút Gửi của form cha không treo mãi. */
-const VIDEO_UPLOAD_TIMEOUT_MS = 180_000;
+/** Cloudinary im quá lâu thì bỏ lượt tải, rơi về bản nén tại chỗ: ô thêm ảnh và nút Gửi của form cha chờ lượt này nên không được treo mãi. PNG/HEIC không nén tới 20MB trên mạng yếu cần cỡ 80 giây, nên hạn phải rộng hơn thế. */
+const CLOUDINARY_TIMEOUT_MS = 120_000;
+/** Video tối đa 50MB: trên đường lên 2 Mbps cần cỡ 200 giây, nên hạn rộng hơn ảnh nhiều. Quá hạn thì báo lỗi để khách chọn lại, nút Gửi của form cha không treo mãi. */
+const VIDEO_UPLOAD_TIMEOUT_MS = 300_000;
 
 /**
  * Chạy `run` với hạn chót: hết `ms` thì huỷ yêu cầu đang chờ, cả lúc chờ phản hồi lẫn lúc đọc thân.

@@ -121,7 +121,7 @@ function MyPayrollHub() {
   const [accNo, setAccNo] = useState('');
   const [accName, setAccName] = useState('');
   const [qr, setQr] = useState('');
-  // Cờ nằm ở trang vì tấm "Thông tin nhận lương" gỡ nội dung khi đóng, còn ảnh QR về muộn vẫn ghi vào `qr` của trang.
+  // Cờ nằm ở trang vì tấm "Thông tin nhận lương" gỡ nội dung khi đóng; tấm không đóng được lúc ảnh QR còn lên.
   const { busy: qrBusy, onBusyChange: onQrBusyChange } = useUploadBusy();
 
   const openBank = () => {
@@ -270,6 +270,8 @@ function MyPayrollHub() {
       <BottomSheet
         open={bankOpen}
         onClose={() => setBankOpen(false)}
+        // Đóng giữa lúc ảnh QR còn đang lên rồi mở lại: ảnh về muộn đè lên bản vừa nạp lại từ hồ sơ.
+        dismissible={!qrBusy}
         title="Thông tin nhận lương"
         footer={
           <Button

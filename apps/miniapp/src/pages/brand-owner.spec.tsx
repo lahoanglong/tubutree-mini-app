@@ -599,4 +599,27 @@ describe('BrandOwnerPage: ảnh logo/bìa còn đang lên thì "Lưu thông tin"
     await act(async () => hold.release({}));
     await waitFor(() => expect(screen.getByText('Logo')).not.toHaveAttribute('data-disabled'));
   });
+
+  it('ảnh về muộn bằng onChange của lần vẽ đầu: không ghi đè ảnh kia, bìa, hay chữ vừa gõ trong lúc ảnh lên', async () => {
+    renderPage();
+    await screen.findByText('Thông tin thương hiệu');
+    // Ô ảnh thật giữ onChange của lần vẽ lúc chọn tệp rồi gọi sau khi tải xong; ở đây chụp lại đúng bản đó.
+    const logoFirstRender = mocks.pickers['Logo']!.onChange;
+    const coverFirstRender = mocks.pickers['Ảnh bìa']!.onChange;
+
+    fireEvent.change(screen.getByLabelText('Câu giới thiệu ngắn'), { target: { value: 'Sống xanh' } });
+    fireEvent.change(screen.getByLabelText('Nguồn gốc'), { target: { value: 'Đà Lạt' } });
+    act(() => coverFirstRender('https://img.test/bia.png'));
+    act(() => logoFirstRender('https://img.test/logo.png'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu thông tin' }));
+    await waitFor(() => expect(mocks.updateOwnedBrand).toHaveBeenCalledTimes(1));
+    expect(mocks.updateOwnedBrand.mock.calls[0]![0]).toEqual({
+      logoUrl: 'https://img.test/logo.png',
+      coverUrl: 'https://img.test/bia.png',
+      tagline: 'Sống xanh',
+      origin: 'Đà Lạt',
+      story: '',
+    });
+  });
 });

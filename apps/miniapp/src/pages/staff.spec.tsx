@@ -1223,6 +1223,50 @@ describe('Ca làm của tôi theo DS v2 (C-076, C-114)', () => {
       expect(await screen.findByRole('button', { name: 'Xác nhận huỷ' })).toBeEnabled();
     });
 
+    it('ảnh còn đang lên: tấm huỷ ca không đóng được (mất nút Đóng, Esc không đóng); xong thì đóng được', async () => {
+      await openEmergencyCancel();
+      expect(screen.getByRole('button', { name: 'Đóng' })).toBeInTheDocument();
+
+      act(() => mocks.picker.onBusyChange(true));
+      expect(screen.queryByRole('button', { name: 'Đóng' })).toBeNull();
+      fireEvent.keyDown(document, { key: 'Escape' });
+      expect(screen.getByRole('heading', { level: 2, name: 'Huỷ ca đã duyệt' })).toBeInTheDocument();
+
+      // Xong lượt tải thì Esc đóng được: chứng tỏ Esc ở trên bị chặn vì khoá chứ không phải vì test không bắt được phím.
+      act(() => mocks.picker.onBusyChange(false));
+      expect(await screen.findByRole('button', { name: 'Đóng' })).toBeInTheDocument();
+      fireEvent.keyDown(document, { key: 'Escape' });
+      await waitFor(() => expect(screen.queryByText('Huỷ ca đã duyệt')).not.toBeInTheDocument());
+    });
+
+    it('mở huỷ ca khác sau khi đóng tấm ca trước: không mang ảnh chứng cứ của ca trước (Xác nhận huỷ chờ ảnh mới)', async () => {
+      mocks.getShifts.mockResolvedValue([
+        ...WEEK_SHIFTS,
+        shift('sb', '2026-03-15', 'APPROVED', { approvedStart: vn('2026-03-15', '09:00'), approvedEnd: vn('2026-03-15', '13:00') }),
+      ]);
+      renderPage();
+      const cancelButtons = await screen.findAllByRole('button', { name: /^Huỷ ca / });
+      expect(cancelButtons).toHaveLength(2);
+      fireEvent.click(cancelButtons[0]!);
+      fireEvent.change(screen.getByPlaceholderText('Lý do huỷ'), { target: { value: 'Ốm' } });
+      fireEvent.click(screen.getByText('Đột xuất (có chứng cứ)'));
+      fireEvent.click(await screen.findByRole('button', { name: 'Ảnh chứng cứ' }));
+      expect(screen.getByRole('button', { name: 'Xác nhận huỷ' })).toBeEnabled();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+      await waitFor(() => expect(screen.queryByText('Huỷ ca đã duyệt')).not.toBeInTheDocument());
+      fireEvent.click(screen.getAllByRole('button', { name: /^Huỷ ca / })[1]!);
+
+      expect(await screen.findByRole('heading', { level: 2, name: 'Huỷ ca đã duyệt' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Xác nhận huỷ' })).toBeDisabled();
+      fireEvent.click(screen.getByRole('button', { name: 'Ảnh chứng cứ' }));
+      const confirm = screen.getByRole('button', { name: 'Xác nhận huỷ' });
+      expect(confirm).toBeEnabled();
+      fireEvent.click(confirm);
+      await waitFor(() => expect(mocks.cancelShift).toHaveBeenCalledTimes(1));
+      expect(mocks.cancelShift).toHaveBeenCalledWith('sb', { reason: 'Ốm', isEmergency: true, evidenceUrl: 'https://img.test/e.png' });
+    });
+
     it('đang huỷ ca thì ô ảnh khoá', async () => {
       let release!: (v: unknown) => void;
       mocks.cancelShift.mockReturnValueOnce(new Promise((r) => (release = r)));

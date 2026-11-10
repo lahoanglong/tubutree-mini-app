@@ -467,7 +467,7 @@ describe('W60B — khoá khi đang tải, lời báo lỗi role="alert", số đ
     expect(onChange).toHaveBeenCalledWith(['https://i/2.jpg']);
   });
 
-  it('MultiImageUpload: Cloudinary im quá 60 giây thì huỷ lượt tải, rơi về ảnh nén tại chỗ và nhả khoá (không treo nút Gửi của form cha)', async () => {
+  it('MultiImageUpload: Cloudinary im quá 120 giây thì huỷ lượt tải, rơi về ảnh nén tại chỗ và nhả khoá (không treo nút Gửi của form cha)', async () => {
     class FakeReader {
       onload: ((e: { target: { result: string } }) => void) | null = null;
       onerror: (() => void) | null = null;
@@ -502,7 +502,7 @@ describe('W60B — khoá khi đang tải, lời báo lỗi role="alert", số đ
       expect(busy).toEqual([true]);
 
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(59_999);
+        await vi.advanceTimersByTimeAsync(119_999);
       });
       expect(busy).toEqual([true]);
       expect(onChange).not.toHaveBeenCalled();
@@ -670,7 +670,7 @@ describe('W90A — ô ảnh đơn và ô video: báo bận, khoá khi form cha �
       expect(openPicker).toHaveBeenCalledTimes(1);
     });
 
-    it('Cloudinary im quá 60 giây: huỷ lượt tải, rơi về ảnh nén tại chỗ và báo xong (không treo nút Lưu của form cha)', async () => {
+    it('Cloudinary im quá 120 giây: huỷ lượt tải, rơi về ảnh nén tại chỗ và báo xong (không treo nút Lưu của form cha)', async () => {
       fakeLocalDecode();
       const fetchMock = hangingFetch();
       const { ImageUpload } = await loadConfigured();
@@ -684,7 +684,7 @@ describe('W90A — ô ảnh đơn và ô video: báo bận, khoá khi form cha �
       expect(fetchMock).toHaveBeenCalledTimes(1);
       expect(busy).toEqual([true]);
 
-      await advance(59_999);
+      await advance(119_999);
       expect(busy).toEqual([true]);
       expect(onChange).not.toHaveBeenCalled();
 
@@ -695,13 +695,13 @@ describe('W90A — ô ảnh đơn và ô video: báo bận, khoá khi form cha �
   });
 
   describe('uploadToCloudinary (dùng chung với ảnh đơn, chat hỗ trợ, đổi ảnh đại diện)', () => {
-    it('Cloudinary im quá 60 giây thì huỷ yêu cầu và trả null để nơi gọi rơi về bản tại chỗ', async () => {
+    it('Cloudinary im quá 120 giây thì huỷ yêu cầu và trả null để nơi gọi rơi về bản tại chỗ', async () => {
       const fetchMock = hangingFetch();
       const { uploadToCloudinary } = await loadConfigured();
       vi.useFakeTimers();
       let result: string | null | undefined;
       void uploadToCloudinary(png('a.png')).then((r) => (result = r));
-      await advance(59_999);
+      await advance(119_999);
       expect(result).toBeUndefined();
       await advance(1);
       expect(result).toBeNull();
@@ -718,7 +718,7 @@ describe('W90A — ô ảnh đơn và ô video: báo bận, khoá khi form cha �
   });
 
   describe('VideoUpload', () => {
-    it('video 50MB trên mạng yếu: Cloudinary im quá 180 giây thì huỷ, báo lỗi, nhả khoá và chọn lại được', async () => {
+    it('video 50MB trên mạng yếu: Cloudinary im quá 300 giây thì huỷ, báo lỗi, nhả khoá và chọn lại được', async () => {
       const fetchMock = hangingFetch();
       const { VideoUpload } = await loadConfigured();
       vi.useFakeTimers();
@@ -731,7 +731,7 @@ describe('W90A — ô ảnh đơn và ô video: báo bận, khoá khi form cha �
       expect(fetchMock).toHaveBeenCalledTimes(1);
       expect(busy).toEqual([true]);
 
-      await advance(179_999);
+      await advance(299_999);
       expect(busy).toEqual([true]);
       expect(screen.queryByRole('alert')).toBeNull();
 
@@ -751,7 +751,7 @@ describe('W90A — ô ảnh đơn và ô video: báo bận, khoá khi form cha �
       expect(busy).toEqual([true, false, true, false]);
     });
 
-    it('hạn chót phủ cả lúc đọc thân phản hồi: phản hồi đã về mà thân không về thì sau 180 giây vẫn nhả khoá', async () => {
+    it('hạn chót phủ cả lúc đọc thân phản hồi: phản hồi đã về mà thân không về thì sau 300 giây vẫn nhả khoá', async () => {
       hangingBodyFetch();
       const { VideoUpload } = await loadConfigured();
       vi.useFakeTimers();
@@ -760,14 +760,14 @@ describe('W90A — ô ảnh đơn và ô video: báo bận, khoá khi form cha �
       await act(async () => {
         pickFiles(container, [mp4()]);
       });
-      await advance(179_999);
+      await advance(299_999);
       expect(busy).toEqual([true]);
       await advance(1);
       expect(busy).toEqual([true, false]);
       expect(screen.getByRole('alert').textContent).toBe('Tải video thất bại, thử lại.');
     });
 
-    it('tải xong sớm thì không còn hẹn giờ 180 giây nào treo lại', async () => {
+    it('tải xong sớm thì không còn hẹn giờ 300 giây nào treo lại', async () => {
       vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ secure_url: 'https://res.cloudinary.com/demo/v.mp4', duration: 10 }) }));
       const { VideoUpload } = await loadConfigured();
       vi.useFakeTimers();

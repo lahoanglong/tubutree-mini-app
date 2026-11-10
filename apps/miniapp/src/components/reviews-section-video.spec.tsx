@@ -106,7 +106,7 @@ describe('ReviewsSection với ô video thật: tải video và gửi đánh gi�
     expect(mocks.createReview.mock.calls[0]![1]).toMatchObject({ videoUrl: VIDEO_URL, orderId: 'o1' });
   });
 
-  it('Cloudinary im quá 180 giây: video bị huỷ, form tự mở lại (nút Đóng và Gửi trở lại, lỗi hiện tại chỗ) và gửi được không kèm video', async () => {
+  it('Cloudinary im quá 300 giây: video bị huỷ, form tự mở lại (nút Đóng và Gửi trở lại, lỗi hiện tại chỗ) và gửi được không kèm video', async () => {
     const fetchMock = vi.fn(
       (_url: string, init: { signal: AbortSignal }) =>
         new Promise((_resolve, reject) => init.signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))),
@@ -120,7 +120,7 @@ describe('ReviewsSection với ô video thật: tải video và gửi đánh gi�
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('button', { name: 'Đóng' })).toBeNull();
 
-    await advance(179_999);
+    await advance(299_999);
     expect(screen.queryByRole('button', { name: 'Đóng' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Gửi đánh giá' })).toBeNull();
 

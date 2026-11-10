@@ -80,7 +80,7 @@ describe('ProfileSheet với ô ảnh thật: Lưu hồ sơ chờ ảnh còn đa
     });
   });
 
-  it('Cloudinary im quá 60 giây: lượt tải bị huỷ, ảnh nén tại chỗ vào form và Lưu tự mở lại (không treo mãi)', async () => {
+  it('Cloudinary im quá 120 giây: lượt tải bị huỷ, ảnh nén tại chỗ vào form và Lưu tự mở lại (không treo mãi)', async () => {
     class FakeReader {
       onload: ((e: { target: { result: string } }) => void) | null = null;
       onerror: (() => void) | null = null;
@@ -113,7 +113,7 @@ describe('ProfileSheet với ô ảnh thật: Lưu hồ sơ chờ ảnh còn đa
     expect(m.saveButton().textContent).toBe(t.common.imagesUploading);
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(59_999);
+      await vi.advanceTimersByTimeAsync(119_999);
     });
     expect(m.saveButton().textContent).toBe(t.common.imagesUploading);
     expect(m.saveButton()).toBeDisabled();
