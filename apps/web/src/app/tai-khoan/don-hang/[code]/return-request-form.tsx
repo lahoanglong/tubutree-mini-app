@@ -23,6 +23,8 @@ import {
 import { RefundDestinationPicker } from './refund-destination-picker';
 import { actionErrorText } from '@/lib/error-text';
 import { IMAGES_UPLOADING } from '@/lib/image-compress';
+import { serverRejectedState } from '@/lib/server-rejected-state';
+import { settleWithin } from '@/lib/settle-within';
 
 const REASON_MAX = 500;
 const STEPPER_BTN =
@@ -93,6 +95,8 @@ export function ReturnRequestForm({
 
   // Khoá đồng bộ: `submit.isPending` chỉ đổi sau lần vẽ kế, hai cú bấm "Gửi yêu cầu" sát nhau sẽ gửi hai yêu cầu.
   const sendingRef = useRef(false);
+  // Lời lỗi ở state riêng: `submit.isError` chỉ bật sau khi `onError` (tải lại, tới 4 giây) xong, mà lời báo phải hiện ngay.
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const submit = useMutation({
     mutationFn: () =>
       requestReturn(o.code, {
@@ -104,9 +108,17 @@ export function ReturnRequestForm({
           .map((l) => ({ orderItemId: l.orderItemId, quantity: l.quantity })),
         ...(showsMoney && bankAllowed ? destinationBody(method, bank) : {}),
       }),
+    onMutate: () => setSubmitError(null),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['my-returns'] });
       onDone();
+    },
+    // "Đơn đang có yêu cầu đổi/trả chờ xử lý", đơn đã đổi trạng thái: danh sách yêu cầu và đơn trên trang đang cũ, tải lại để trang hiện đúng.
+    // Giữ khoá tới lúc đó (tối đa 4 giây); các lỗi khác không tải lại.
+    onError: (e) => {
+      setSubmitError(actionErrorText(e));
+      if (!serverRejectedState(e)) return undefined;
+      return settleWithin(Promise.all([qc.invalidateQueries({ queryKey: ['my-returns'] }), qc.invalidateQueries({ queryKey: ['order', o.code] })]));
     },
     onSettled: () => {
       sendingRef.current = false;
@@ -284,9 +296,9 @@ export function ReturnRequestForm({
           {formError}
         </p>
       )}
-      {submit.isError && (
+      {submitError && (
         <p role="alert" className={ui.error}>
-          {actionErrorText(submit.error)}
+          {submitError}
         </p>
       )}
       <div className="flex flex-wrap gap-2">

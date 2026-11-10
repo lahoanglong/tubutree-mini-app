@@ -30,10 +30,13 @@ import { coreHttp } from '@/lib/core-http';
 import { formatDateTime } from '@/lib/format-date';
 import { ui } from '@/lib/guest-ui';
 import { PAGE_NARROW } from '@/lib/page-frame';
-import { loadErrorText } from '@/lib/error-text';
+import { actionErrorText, loadErrorText } from '@/lib/error-text';
+import { settleWithin } from '@/lib/settle-within';
 import { useMeSummary } from '@/lib/use-me-summary';
 
 const NOTICE_MS = 4000;
+/** Tên riêng: màn lỗi tải danh sách cũng có nút "Thử lại", hai nút làm hai việc khác nhau. */
+const RETRY_READ_ALL_LABEL = 'Thử lại đánh dấu đã đọc';
 
 const errorText = loadErrorText;
 
@@ -89,7 +92,8 @@ export default function NotificationsPage() {
     if (qc.isFetching({ queryKey: key }) > 0) void qc.invalidateQueries({ queryKey: key });
   };
   // Trả lời hứa tải lại: khoá của lệnh nhả SAU khi số chưa đọc mới về, nếu không nút "Đọc tất cả" còn hiện theo số cũ và bấm được lần hai.
-  const settleRead = (failed: boolean) => qc.invalidateQueries({ queryKey: failed ? ['notifications'] : ME_SUMMARY_KEY });
+  // Có hạn 4 giây: mạng chậm không được giữ nút lâu hơn lệnh vừa thành công.
+  const settleRead = (failed: boolean) => settleWithin(qc.invalidateQueries({ queryKey: failed ? ['notifications'] : ME_SUMMARY_KEY }));
 
   // Khoá theo id tin: chạm đúp cùng một tin chưa đọc chỉ gửi một lệnh, hai tin khác nhau vẫn đọc song song.
   const readMut = useLockedMutation(
@@ -104,12 +108,17 @@ export default function NotificationsPage() {
     },
     (id) => id,
   );
+  // Lời lỗi nằm ở state riêng chứ không đọc `readAllMut.error`: `isError` chỉ bật sau khi `onSettled` (tải lại, tới 4 giây) xong, mà lời báo phải hiện ngay.
+  // Giữ qua lúc "Thử lại" đang chạy để khối không biến mất rồi hiện lại; `count` làm key dòng chữ để lần lỗi lặp lại (cùng câu) vẫn được đọc lại.
+  const [readAllError, setReadAllError] = useState<{ message: string; count: number } | null>(null);
   const readAllMut = useLockedMutation({
     mutationFn: () => markAllNotificationsRead(coreHttp),
     onSuccess: () => {
+      setReadAllError(null);
       markReadInCache(() => true);
       refetchIfListBusy();
     },
+    onError: (err) => setReadAllError((prev) => ({ message: actionErrorText(err), count: (prev?.count ?? 0) + 1 })),
     onSettled: (_res, err) => settleRead(err !== null),
   });
   const unreadCount = summaryUnread ?? list?.filter((n) => n.status !== 'READ').length ?? 0;
@@ -163,7 +172,28 @@ export default function NotificationsPage() {
           ) : undefined
         }
       />
-      <div className="max-md:px-4">{body}</div>
+      <div className="max-md:px-4">
+        {/* Hết tin chưa đọc (đọc lẻ từng tin, hoặc lệnh hết giờ mà máy chủ đã làm xong) thì không còn gì để thử lại: ẩn khối. */}
+        {phase === 'authenticated' && readAllError && unreadCount > 0 && (
+          <div role="alert" className="mt-3 flex items-center justify-between gap-3">
+            <p key={readAllError.count} className={ui.error}>
+              {readAllError.message}
+            </p>
+            <button
+              type="button"
+              aria-label={RETRY_READ_ALL_LABEL}
+              aria-busy={readAllMut.isPending || undefined}
+              aria-disabled={readAllMut.isPending || undefined}
+              onClick={() => readAllMut.mutate()}
+              className={`${ui.btnText} shrink-0 text-forest-700`}
+            >
+              {readAllMut.isPending && <Loader2 className="mr-1 h-4 w-4 animate-spin" aria-hidden="true" />}
+              Thử lại
+            </button>
+          </div>
+        )}
+        {body}
+      </div>
     </main>
   );
 
@@ -207,7 +237,7 @@ export default function NotificationsPage() {
           </p>
         )}
       </div>
-      <ul className="mt-4 grid gap-2">
+      <ul className="mt-4 grid gap-2 tabular-nums">
         {list.map((n) => {
           const m = notificationMeta(n.templateCode);
           const unread = n.status !== 'READ';
@@ -261,7 +291,7 @@ function Detail({ n, busy, onNavigate, onReorder }: { n: NotificationDTO; busy: 
   const m = notificationMeta(n.templateCode);
   const action = notificationAction(n.templateCode, n.payload.data);
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 tabular-nums">
       <div className="flex items-center gap-3">
         <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-stone-100 text-forest-600">
           <m.Icon className="h-6 w-6" aria-hidden="true" />

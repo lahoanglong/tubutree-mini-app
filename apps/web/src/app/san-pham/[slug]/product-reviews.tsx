@@ -55,6 +55,8 @@ import { EvidenceUpload } from '@/components/evidence-upload';
 import { pdpBand, pdpSectionTitle } from './pdp-sections';
 import { reviewVideoConfig } from './review-video-config';
 import { actionErrorText } from '@/lib/error-text';
+import { serverRejectedState } from '@/lib/server-rejected-state';
+import { settleWithin } from '@/lib/settle-within';
 import { useRovingGroup } from '@/lib/use-roving-group';
 import { usePressLock } from '@/lib/use-press-lock';
 
@@ -611,6 +613,9 @@ function ReviewForm({
   const sending = useRef(false);
   const ratingErrorId = useId();
   const commentErrorId = useId();
+  // Lời lỗi máy chủ ở state riêng: `save.isError` chỉ bật sau khi `onError` (tải lại, tới 4 giây) xong, mà lời báo phải hiện và được focus ngay.
+  // Mỗi lần lỗi là một đối tượng mới nên cùng một câu lặp lại vẫn được focus và đọc lại.
+  const [saveError, setSaveError] = useState<{ message: string } | null>(null);
 
   const save = useMutation({
     mutationFn: () =>
@@ -621,6 +626,13 @@ function ReviewForm({
         videoUrl: videoUrl ?? undefined,
         orderId,
       }),
+    onMutate: () => setSaveError(null),
+    // "Đơn đã trả hàng", đơn không còn: quyền đánh giá đang hiện (nút "Viết đánh giá", đơn chốt lúc mở form) đã cũ, tải lại để trang hiện đúng.
+    // Giữ khoá tới lúc đó (tối đa 4 giây); các lỗi khác không tải lại.
+    onError: (e) => {
+      setSaveError({ message: actionErrorText(e) });
+      return serverRejectedState(e) ? settleWithin(qc.invalidateQueries({ queryKey: ['can-review', slug] })) : undefined;
+    },
     onSuccess: (res) => {
       void qc.invalidateQueries({ queryKey: ['reviews', slug] });
       void qc.invalidateQueries({ queryKey: ['can-review', slug] });
@@ -635,8 +647,8 @@ function ReviewForm({
   });
 
   useEffect(() => {
-    if (save.error) saveAlert.current?.focus();
-  }, [save.error]);
+    if (saveError) saveAlert.current?.focus();
+  }, [saveError]);
 
   const pickRating = (i: number) => {
     setRating(i);
@@ -754,9 +766,9 @@ function ReviewForm({
       </div>
       <ReviewVideoUpload value={videoUrl} onChange={setVideoUrl} onBusyChange={setVideoBusy} disabled={save.isPending} />
       <p className={`mt-3 text-sm ${!isEdit && rewardAvailable && hasMedia ? 'font-semibold text-success-fg' : 'text-stone-600'}`}>{hint}</p>
-      {save.isError && (
+      {saveError && (
         <p ref={saveAlert} tabIndex={-1} role="alert" className={`mt-2 ${ui.error}`}>
-          {actionErrorText(save.error)}
+          {saveError.message}
         </p>
       )}
       <div className="mt-4 flex flex-wrap gap-2">

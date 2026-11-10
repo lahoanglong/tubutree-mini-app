@@ -25,6 +25,7 @@ import { MAX_IMAGE_BYTES, isUsableImageFile, readAndCompressImage } from '@/lib/
 import { formatPhoneDisplay } from '@/lib/phone-display';
 import { PAGE_NARROW } from '@/lib/page-frame';
 import { loadErrorText } from '@/lib/error-text';
+import { settleWithin } from '@/lib/settle-within';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -160,14 +161,15 @@ export default function EditProfilePage() {
       if (res) qc.setQueryData(['me'], res);
       setDone(avatarSkipped && avatarChanged ? AVATAR_NOT_SAVED : 'Đã cập nhật hồ sơ');
       // Trả promise ra khỏi onSuccess: khoá giữ tới khi /me mới về, nếu không lần lưu kế gửi lại ngày sinh đã đặt.
-      return qc.invalidateQueries({ queryKey: ['me'] });
+      // Có hạn 4 giây: mạng chậm không được giữ nút lâu hơn lệnh đã xong.
+      return settleWithin(qc.invalidateQueries({ queryKey: ['me'] }));
     },
     onError: (e) => {
       setDone(null);
       setSaveError(errorText(e));
       // Phản hồi mất không có nghĩa là chưa ghi: tải lại /me để ngày sinh đã đặt chuyển sang chỉ đọc, lần lưu sau không gửi lại.
-      // Khoá giữ tới khi /me về để lần thử lại không dùng số liệu cũ.
-      return qc.invalidateQueries({ queryKey: ['me'] });
+      // Khoá giữ tới khi /me về (tối đa 4 giây) để lần thử lại không dùng số liệu cũ.
+      return settleWithin(qc.invalidateQueries({ queryKey: ['me'] }));
     },
     onSettled: () => {
       saveBusy.current = false;
