@@ -1,4 +1,4 @@
-import { api } from './api';
+import { api, isHttpError } from './api';
 import { takeMeBlock } from './home-feed';
 
 /** Cổng ZaloPay/VNPAY cần khách thao tác mỗi kỳ nên gói định kỳ chỉ nhận 3 cách này (Q-13, khớp API). */
@@ -41,6 +41,13 @@ export interface SubscriptionFirstOrder {
 }
 
 export type CreatedSubscription = SubscriptionDTO & { firstOrder?: SubscriptionFirstOrder | null };
+
+/**
+ * Máy chủ từ chối lệnh vì gói không còn như thẻ đang hiện: 400 (đã huỷ, đã tạm dừng), 404 (không còn), 409 (lịch vừa đổi, trùng gói).
+ * Thẻ cũ bấm lại sẽ nhận đúng lỗi đó mãi nên phải tải lại danh sách. Mất mạng, quá hạn, 5xx không nói gì về trạng thái thật: không tính.
+ */
+export const isStaleSubscriptionError = (error: unknown): boolean =>
+  isHttpError(error) && [400, 404, 409].includes(error.response?.status ?? 0);
 
 export const getSubscriptions = async () =>
   (await takeMeBlock('subscriptions')) ?? api.get<SubscriptionDTO[]>('/me/subscriptions').then((r) => r.data);

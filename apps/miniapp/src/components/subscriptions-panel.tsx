@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   getSubscriptions,
   setSubscriptionStatus,
+  isStaleSubscriptionError,
   skipSubscriptionCycle,
   type SubscriptionDTO,
 } from '../services/subscriptions-api';
@@ -64,6 +65,13 @@ export function SubscriptionsPanel() {
     run();
   };
 
+  // Lệnh bị từ chối vì gói đã khác thẻ (cron vừa tạm dừng, máy khác vừa huỷ): tải lại để lần bấm sau dựa trên số thật, và giữ khoá tới lúc đó
+  // như lệnh thành công. Lỗi tạm (mạng, 5xx) thì để nguyên danh sách.
+  const onActionError = (e: unknown) => {
+    openSnackbar({ text: getErrorMessage(e), type: 'error' });
+    return isStaleSubscriptionError(e) ? settleWithin(qc.invalidateQueries({ queryKey: ['subscriptions'] })) : undefined;
+  };
+
   const statusMut = useLockedMutation({
     onSettled: releaseActing,
     mutationFn: ({ id, status }: { id: string; status: SubStatus }) => setSubscriptionStatus(id, status),
@@ -74,7 +82,7 @@ export function SubscriptionsPanel() {
       setCancelTarget(null);
       return settleWithin(qc.invalidateQueries({ queryKey: ['subscriptions'] }));
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: onActionError,
   });
 
   const skipMut = useLockedMutation({
@@ -86,7 +94,7 @@ export function SubscriptionsPanel() {
       setCancelTarget(null);
       return settleWithin(qc.invalidateQueries({ queryKey: ['subscriptions'] }));
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: onActionError,
   });
 
   const targetSub = subs.find((s) => s.id === cancelTarget) ?? null;

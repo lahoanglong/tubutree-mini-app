@@ -342,3 +342,43 @@ describe('SubscriptionEditSheet: Lưu khoá đồng bộ chạm đúp (W78A)', (
     await waitFor(() => expect(mocks.onClose).toHaveBeenCalledTimes(1));
   });
 });
+
+describe('SubscriptionEditSheet: lưu bị từ chối vì gói đã đổi thì tải lại danh sách gói (W98A)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getAddresses.mockResolvedValue(ADDRS);
+    mocks.getWallet.mockResolvedValue({ walletBalance: 50000 });
+  });
+
+  async function saveWith(err: unknown) {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const invalidate = vi.spyOn(qc, 'invalidateQueries');
+    mocks.updateSubscription.mockRejectedValue(err);
+    renderSheet(SUB, qc);
+    await screen.findByRole('radio', { name: /9 Hai Bà Trưng/ });
+    fireEvent.click(screen.getByRole('button', { name: 'Tăng số lượng' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Lưu thay đổi' })).not.toHaveAttribute('aria-busy'));
+    return invalidate;
+  }
+
+  it.each([
+    [400, 'Gói định kỳ đã huỷ, không sửa được nữa.'],
+    [404, 'Không tìm thấy lịch đặt định kỳ.'],
+    [409, 'Bạn đã có gói giao định kỳ "Nước xả vải Tubu" tới địa chỉ này, hãy sửa gói đó hoặc chọn địa chỉ khác.'],
+  ])('%i: báo lời máy chủ và làm mới danh sách gói (gói đã huỷ ở máy khác thì biến mất, gói trùng hiện ra)', async (status, message) => {
+    const invalidate = await saveWith(serverError(message, status));
+    expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: message, type: 'error' });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['subscriptions'] });
+    expect(mocks.onClose).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['máy chủ lỗi 500', serverError('Internal server error', 500)],
+    ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+  ])('%s: chỉ báo lỗi, không làm mới danh sách gói', async (_name, err) => {
+    const invalidate = await saveWith(err);
+    expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ['subscriptions'] });
+  });
+});
