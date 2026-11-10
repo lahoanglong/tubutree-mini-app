@@ -353,6 +353,31 @@ describe('/dai-ly — đặt đơn (Trả trước và Ghi công nợ chung mộ
     await flush();
     expect(posts('/dealer/orders')).toHaveLength(2);
   });
+
+  it('cú bấm bị khoá nuốt KHÔNG xoá cảnh báo vừa hiện (đơn lần trước); chỉ lệnh thật sự đi mới xoá', async () => {
+    let n = 0;
+    m.post['/dealer/orders'] = () => {
+      n += 1;
+      return n === 1 ? { code: 'TUBU6', items: [{ variationId: 'v-khac', quantity: 9, backorderedQty: 0 }] } : new Promise(() => undefined);
+    };
+    await mount();
+    addOne();
+    const gate = holdGet('/dealer/me');
+    click(ghi()[0]!);
+    await flush();
+    expect(document.body.textContent).toContain('Đơn TUBU6 đã được tạo ở lần đặt trước');
+    click(ghi()[0]!);
+    sameTick(tra()[0], ghi()[1]);
+    await flush();
+    expect(posts('/dealer/orders')).toHaveLength(1);
+    expect(document.body.textContent).toContain('Đơn TUBU6 đã được tạo ở lần đặt trước');
+    gate.release();
+    await flush();
+    click(ghi()[0]!);
+    await flush();
+    expect(posts('/dealer/orders')).toHaveLength(2);
+    expect(document.body.textContent).not.toContain('Đơn TUBU6');
+  });
 });
 
 describe('/dai-ly — đặt đơn: khoá giữ tới khi công nợ mới về (đơn đúng giỏ)', () => {
@@ -450,6 +475,32 @@ describe('/dai-ly — báo đã chuyển khoản (tiền)', () => {
     click(pay());
     await flush();
     expect(posts('/dealer/credit-payment')).toHaveLength(2);
+  });
+
+  it('cú bấm bị khoá nuốt KHÔNG xoá lời báo vừa hiện; chỉ lệnh thật sự đi mới xoá', async () => {
+    let n = 0;
+    m.post['/dealer/credit-payment'] = () => {
+      n += 1;
+      return n === 1 ? { ok: true } : new Promise(() => undefined);
+    };
+    await open();
+    typeInto(amountInput(), '1000000');
+    const gate = holdGet('/dealer/credit-ledger');
+    click(pay());
+    await flush();
+    const notice = 'Đã báo cho quản trị viên';
+    expect(document.body.textContent).toContain(notice);
+    typeInto(amountInput(), '1000000');
+    click(pay());
+    await flush();
+    expect(posts('/dealer/credit-payment')).toHaveLength(1);
+    expect(document.body.textContent).toContain(notice);
+    gate.release();
+    await flush();
+    click(pay());
+    await flush();
+    expect(posts('/dealer/credit-payment')).toHaveLength(2);
+    expect(document.body.textContent).not.toContain(notice);
   });
 
   it('lỗi: role=alert, nhả khoá; bấm lại giữ nguyên Idempotency-Key', async () => {
@@ -701,6 +752,32 @@ describe('/dai-ly — nhận thưởng theo (phần thưởng, kỳ)', () => {
     click(claim(0));
     await flush();
     expect(posts('/dealer/rewards/rw1/claim')).toHaveLength(2);
+  });
+
+  it('cú bấm bị khoá nuốt KHÔNG xoá lời báo vừa hiện (dòng khác vừa nhận xong); chỉ lệnh thật sự đi mới xoá', async () => {
+    setup({ '/dealer/rewards': { claimGraceDays: 30, rewards: [reward('rw1'), reward('rw2'), reward('rw3')] } });
+    const p1 = defer();
+    m.post['/dealer/rewards/rw1/claim'] = () => p1.promise;
+    m.post['/dealer/rewards/rw2/claim'] = () => claimOk;
+    m.post['/dealer/rewards/rw3/claim'] = () => new Promise(() => undefined);
+    await mount('tab=report');
+    const gate = holdGet('/dealer/rewards');
+    click(claim(0));
+    click(claim(1));
+    await flush();
+    expect(document.body.textContent).toContain(claimOk.message);
+    // Dòng 2 đã gửi xong nên hết nút: còn dòng 1 (đang bay, bị khoá) và dòng 3.
+    click(claim(0));
+    await flush();
+    expect(posts('/dealer/rewards/rw1/claim')).toHaveLength(1);
+    expect(document.body.textContent).toContain(claimOk.message);
+    click(claim(1));
+    await flush();
+    expect(posts('/dealer/rewards/rw3/claim')).toHaveLength(1);
+    expect(document.body.textContent).not.toContain(claimOk.message);
+    gate.release();
+    p1.resolve(claimOk);
+    await flush();
   });
 
   it('lỗi dòng được xoá khi bấm lại dòng đó', async () => {

@@ -27,11 +27,14 @@ export function CreditTab() {
   const [amount, setAmount] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
 
-  // Key giữ nguyên qua các lần bấm lại của CÙNG một lần báo (bấm đúp/timeout), đổi sau khi báo thành công.
+  // Key vẫn gửi đi (header Idempotency-Key) nhưng `POST /dealer/credit-payment` chưa đọc nó: chống báo trùng hiện chỉ dựa vào khoá phía client bên dưới,
+  // không chống được timeout rồi gửi lại. Key đổi sau mỗi lần báo thành công.
   const payKey = useRef(newIdempotencyKey());
   // Số tiền và key đi theo biến mutate (chụp lúc bấm lần đầu), không đọc `amount` mới hơn. Khoá giữ tới khi dư nợ mới về: nhả sớm thì bấm lần hai trên dư nợ cũ vẫn qua được kiểm "vượt dư nợ".
   const pay = useLockedMutation({
     mutationFn: (v: { amount: number; typed: string; key: string }) => payCredit(coreHttp, v.amount, v.key, 'Báo đã chuyển khoản'),
+    // Xoá lời báo cũ ở đây: cú bấm bị khoá nuốt không chạy onMutate nên không làm mất lời báo vừa hiện.
+    onMutate: () => setNotice(null),
     onSuccess: (res, v) => {
       setNotice((res as { message?: string })?.message ?? 'Đã báo cho quản trị viên — chờ xác nhận đã nhận được tiền.');
       payKey.current = newIdempotencyKey();
@@ -44,7 +47,6 @@ export function CreditTab() {
     },
   });
   const submit = () => {
-    setNotice(null);
     pay.mutate({ amount: Number(amount), typed: amount, key: payKey.current });
   };
 

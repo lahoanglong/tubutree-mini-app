@@ -156,6 +156,8 @@ export function PriceTab({ creditLimit, debt, rules }: { creditLimit: number; de
   // và giữ tới khi công nợ, đơn, thưởng mới về. Giỏ gửi đi là biến mutate chụp lúc bấm, không phải giỏ hiện tại lúc máy chủ trả lời.
   const place = useLockedMutation({
     mutationFn: (v: { method: 'CREDIT' | 'PREPAID'; items: OrderLine[] }) => placeDealerOrder(coreHttp, v.items, v.method, undefined, orderKey.current),
+    // Xoá cảnh báo cũ ở đây chứ không ở nơi gọi: cú bấm bị khoá nuốt không chạy onMutate, nên không xoá nhầm lời báo vừa hiện.
+    onMutate: () => setNotice(null),
     onSuccess: (order, { method, items }) => {
       const lineKey = (rows: Array<[string, number]>) => rows.map(([id, n]) => `${id}:${n}`).sort().join(',');
       const sent = lineKey(items.map((it): [string, number] => [it.variationId, it.quantity]));
@@ -201,7 +203,6 @@ export function PriceTab({ creditLimit, debt, rules }: { creditLimit: number; de
     onError: (e) => setNotice({ text: errText(e), error: true }),
   });
   const submit = (method: 'CREDIT' | 'PREPAID') => {
-    setNotice(null);
     place.mutate({ method, items: cart.map(([variationId, quantity]) => ({ variationId, quantity })) });
   };
 

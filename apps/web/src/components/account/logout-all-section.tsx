@@ -14,9 +14,10 @@ export function LogoutAllSection() {
   const { logout } = useAuth();
   const [confirming, setConfirming] = useState(false);
   // Khoá ref: `isPending` chỉ đúng sau lần vẽ kế, hai cú xác nhận sát nhau sẽ gọi logout-all và đăng xuất hai lần.
+  // `onSuccess` trả lời hứa của `logout()` (tự nuốt lỗi) để khoá giữ tới khi máy này đăng xuất xong, không nhả giữa hai lệnh.
   const logoutAllM = useLockedMutation({
     mutationFn: () => apiFetch('/auth/logout-all', { method: 'POST' }),
-    onSuccess: () => void logout(),
+    onSuccess: () => logout(),
     onError: () => setConfirming(false),
   });
 

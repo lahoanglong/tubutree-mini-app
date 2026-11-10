@@ -40,6 +40,7 @@ export type Notify = (text: string, error?: boolean) => void;
 const PROFILE_SAVE_KEY = ['storefront-profile-save'] as const;
 const CONFIG_KEY = ['storefront-config'] as const;
 const RENAME_KEY = ['storefront-collection-rename'] as const;
+const PICKER_ADD_KEY = ['storefront-picker-add'] as const;
 
 function InlineError({ text }: { text: string | null }) {
   return text ? (
@@ -136,8 +137,10 @@ export function TemplateSheet({ open, onClose, onCreated }: { open: boolean; onC
 
 /** Chọn sản phẩm (có tìm kiếm) để thêm vào một bộ sưu tập. */
 export function PickerSheet({ open, collectionId, onClose, onAdded }: { open: boolean; collectionId: string | null; onClose: () => void; onAdded: () => unknown }) {
+  // Đóng lúc đang thêm thì lời báo lỗi mất theo, mở lại ra khoá mới nên thêm trùng được.
+  const adding = useIsMutating({ mutationKey: PICKER_ADD_KEY }) > 0;
   return (
-    <Sheet open={open} onClose={onClose} title="Thêm sản phẩm">
+    <Sheet open={open} onClose={onClose} dismissible={!adding} title="Thêm sản phẩm">
       {open && collectionId && <PickerBody collectionId={collectionId} onClose={onClose} onAdded={onAdded} />}
     </Sheet>
   );
@@ -149,6 +152,7 @@ function PickerBody({ collectionId, onClose, onAdded }: { collectionId: string; 
   const listQ = useQuery(pickerQuery(coreHttp, search));
   // Một sản phẩm mỗi lúc (chung một khoá cho mọi nút Thêm). `onAdded` trả lời hứa tải lại gian hàng nên khoá còn giữ tới khi danh sách mới về.
   const addMut = useLockedMutation({
+    mutationKey: PICKER_ADD_KEY,
     mutationFn: (p: PickerProduct) => addItem(coreHttp, collectionId, { productId: p.id }),
     onMutate: () => setError(null),
     onSuccess: () => onAdded(),
@@ -200,7 +204,7 @@ function PickerBody({ collectionId, onClose, onAdded }: { collectionId: string; 
           ))
         )}
       </div>
-      <button type="button" className={`${ui.btnSecondary} mt-3 w-full`} onClick={onClose}>
+      <button type="button" className={`${ui.btnSecondary} mt-3 w-full`} aria-disabled={addMut.isPending || undefined} onClick={() => !addMut.isPending && onClose()}>
         Xong
       </button>
     </div>
@@ -257,7 +261,7 @@ function ProfileForm({ sf, onClose, onSaved }: { sf: StorefrontEdit; onClose: ()
       <button type="button" className={`${ui.btnPrimary} mt-4 w-full`} aria-busy={saveMut.isPending || undefined} aria-disabled={saveMut.isPending || undefined} onClick={() => saveMut.mutate()}>
         {saveMut.isPending ? 'Đang lưu…' : 'Lưu hồ sơ'}
       </button>
-      <button type="button" className={`${ui.btnSecondary} mt-2 w-full`} onClick={onClose}>
+      <button type="button" className={`${ui.btnSecondary} mt-2 w-full`} aria-disabled={saveMut.isPending || undefined} onClick={() => !saveMut.isPending && onClose()}>
         Đóng
       </button>
     </div>
@@ -344,6 +348,7 @@ function ConfigForm({
     onSuccess: () => onSaved('Đã gỡ tài khoản ngân hàng khỏi gian hàng'),
     onError: (e) => setError(actErrText(e)),
   });
+  const configBusy = saveMut.isPending || clearBankMut.isPending;
 
   return (
     <div className="flex flex-col gap-3">
@@ -421,7 +426,8 @@ function ConfigForm({
       {unpublishLabel && (
         <div className="border-t border-stone-200 pt-3">
           <p className="mb-2 text-xs text-stone-600">Khách mở link gian hàng sẽ không thấy gì cho tới khi bạn đăng lại.</p>
-          <button type="button" className={`${ui.btnSecondary} w-full`} onClick={onUnpublish}>
+          {/* Gỡ đăng đóng cả sheet: lúc đang lưu/gỡ ngân hàng thì lời báo lỗi của lệnh đó sẽ mất theo. */}
+          <button type="button" className={`${ui.btnSecondary} w-full`} aria-disabled={configBusy || undefined} onClick={() => !configBusy && onUnpublish()}>
             <EyeOff className="mr-1 h-4 w-4" aria-hidden="true" />
             {unpublishLabel}
           </button>

@@ -758,10 +758,39 @@ describe('khoá chống chạm đúp — món trong khối (ghim/ẩn, lý do, x
     await flush();
     expect(calls('post', '/storefront/me/collections/c1/items')).toHaveLength(3);
   });
+
+  it('Thêm sản phẩm: nút "Xong" trong thân sheet không đóng được lúc đang thêm (lời báo lỗi còn chỗ hiện); xong thì đóng được', async () => {
+    mount();
+    await flush();
+    await openFirstSection();
+    click(btn('Thêm sản phẩm'));
+    await flush();
+    const ADD = 'post /storefront/me/collections/c1/items';
+    state.fail.add(ADD);
+    const release = hold(ADD);
+    await tap(btn('Thêm Xà phòng', dialog()!), 1);
+    const done = btn('Xong', dialog()!);
+    expect(done.getAttribute('aria-disabled')).toBe('true');
+    expect((done as HTMLButtonElement).disabled).toBe(false);
+    expect(closeButton(dialog()!)).toBeNull();
+    click(done);
+    pressEscape();
+    await flush();
+    expect(dialog()?.textContent).toContain('Thêm sản phẩm');
+    await release();
+    expect(Array.from(dialog()!.querySelectorAll('[role="alert"]')).map((e) => e.textContent)).toEqual(['mất mạng']);
+    expect(btn('Xong', dialog()!).hasAttribute('aria-disabled')).toBe(false);
+    click(btn('Xong', dialog()!));
+    await flush();
+    expect(dialog()).toBeNull();
+  });
 });
 
 describe('khoá chống chạm đúp — hồ sơ, cấu hình gian hàng', () => {
   const PATCH_ME = 'patch /storefront/me';
+  /** Nút chữ trong thân sheet (không phải nút X của khung, vốn mang aria-label cùng tên). */
+  const bodyBtn = (name: string, root: ParentNode) =>
+    Array.from(root.querySelectorAll<HTMLElement>('button')).find((e) => !e.hasAttribute('aria-label') && (e.textContent ?? '').trim() === name)!;
 
   it('Lưu hồ sơ: hai cú chạm chỉ gửi một lần; sheet không đóng được lúc lưu; lỗi role=alert trong sheet; nhả khoá để lưu lại', async () => {
     mount();
@@ -824,6 +853,61 @@ describe('khoá chống chạm đúp — hồ sơ, cấu hình gian hàng', () =
     click(btn('Gỡ tài khoản đã lưu', dialog()!));
     await flush();
     expect(calls('patch', '/storefront/me')).toHaveLength(2);
+  });
+
+  it('Hồ sơ: nút "Đóng" trong thân sheet không đóng được lúc đang lưu (lỗi còn chỗ hiện); lưu xong lỗi thì đóng được', async () => {
+    mount();
+    await flush();
+    click(btn('Sửa hồ sơ'));
+    await flush();
+    state.fail.add(PATCH_ME);
+    const release = hold(PATCH_ME);
+    await tap(btn('Lưu hồ sơ', dialog()!), 1);
+    const close = bodyBtn('Đóng', dialog()!);
+    expect(close.getAttribute('aria-disabled')).toBe('true');
+    expect((close as HTMLButtonElement).disabled).toBe(false);
+    click(close);
+    await flush();
+    expect(dialog()?.textContent).toContain('Hồ sơ gian hàng');
+    await release();
+    expect(Array.from(dialog()!.querySelectorAll('[role="alert"]')).map((e) => e.textContent)).toEqual(['mất mạng']);
+    expect(bodyBtn('Đóng', dialog()!).hasAttribute('aria-disabled')).toBe(false);
+    click(bodyBtn('Đóng', dialog()!));
+    await flush();
+    expect(dialog()).toBeNull();
+  });
+
+  it('Cấu hình: nút Gỡ đăng trong thân sheet không đóng sheet lúc đang lưu hoặc đang gỡ ngân hàng; rảnh thì mở hộp xác nhận', async () => {
+    state.sf = storefront({ isPublished: true, bankAccountNo: '1234567890', bankName: 'VCB' });
+    mount();
+    await flush();
+    await openConfig();
+    state.fail.add(PATCH_ME);
+    const releaseSave = hold(PATCH_ME);
+    await tap(btn('Lưu cấu hình gian hàng', dialog()!), 1);
+    const unpublish = btn('Gỡ đăng gian hàng', dialog()!);
+    expect(unpublish.getAttribute('aria-disabled')).toBe('true');
+    expect((unpublish as HTMLButtonElement).disabled).toBe(false);
+    click(unpublish);
+    await flush();
+    expect(dialog()?.textContent).toContain('Cài đặt gian hàng');
+    expect(dialog()?.textContent).not.toContain('Gỡ đăng gian hàng này?');
+    await releaseSave();
+    expect(Array.from(dialog()!.querySelectorAll('[role="alert"]')).map((e) => e.textContent)).toEqual(['mất mạng']);
+
+    state.fail.delete(PATCH_ME);
+    const releaseClear = hold(PATCH_ME);
+    await tap(btn('Gỡ tài khoản đã lưu', dialog()!), 1);
+    click(btn('Gỡ đăng gian hàng', dialog()!));
+    await flush();
+    expect(dialog()?.textContent).toContain('Cài đặt gian hàng');
+    expect(dialog()?.textContent).not.toContain('Gỡ đăng gian hàng này?');
+    await releaseClear();
+
+    expect(btn('Gỡ đăng gian hàng', dialog()!).hasAttribute('aria-disabled')).toBe(false);
+    click(btn('Gỡ đăng gian hàng', dialog()!));
+    await flush();
+    expect(dialog()?.textContent).toContain('Gỡ đăng gian hàng này?');
   });
 });
 

@@ -36,7 +36,11 @@ export function RewardsCard() {
     {
       mutationKey: CLAIM_KEY,
       mutationFn: (v: ClaimVars) => claimDealerReward(coreHttp, v.rewardId, v.periodKey),
-      onMutate: (v) => dropRowError(claimRowKey(v)),
+      // Xoá lời báo cũ ở đây: cú bấm bị khoá nuốt không chạy onMutate nên không làm mất lời báo vừa hiện.
+      onMutate: (v) => {
+        setNotice(null);
+        dropRowError(claimRowKey(v));
+      },
       onSuccess: (res, v) => {
         setNotice({ text: res.message, error: false });
         // Cập nhật ngay dòng vừa gửi để nút không bật lại trong lúc chờ tải lại.
@@ -110,10 +114,7 @@ export function RewardsCard() {
                     type="button"
                     aria-busy={claiming || undefined}
                     aria-disabled={claiming || undefined}
-                    onClick={() => {
-                      setNotice(null);
-                      claimMut.mutate({ rewardId: r.id, periodKey: r.periodKey });
-                    }}
+                    onClick={() => claimMut.mutate({ rewardId: r.id, periodKey: r.periodKey })}
                     className={`${ui.btnPrimary} ${skin.dealerInkBtn} flex-none`}
                   >
                     {claiming ? 'Đang gửi…' : 'Yêu cầu nhận thưởng'}
