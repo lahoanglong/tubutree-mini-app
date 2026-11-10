@@ -44,7 +44,8 @@ beforeEach(() => {
   mocks.getDailyCheckInStatus.mockResolvedValue({ checkedInToday: false, rewards: [] });
 });
 
-describe('useCheckIn: khoá đồng bộ chống chạm đúp', () => {
+// Ghi lại khoá có sẵn của use-check-in (chưa có spec riêng); wave 84A không đổi hook này.
+describe('useCheckIn: khoá đồng bộ chống chạm đúp (kiểm lại hành vi có sẵn)', () => {
   it('hai lần checkIn() trong cùng khung hình chỉ gọi API một lần', async () => {
     mocks.postDailyCheckIn.mockReturnValue(deferred().promise);
     const { result } = setup();

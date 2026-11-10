@@ -7,7 +7,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  * Các nút của trang Vườn không đi qua `useLockedMutation`: "Thử lại" lịch điểm danh, cổng đăng nhập, "Đăng nhập Zalo" trong
  * hộp thu hoạch và "Chia sẻ với bạn bè". Chúng chỉ được chặn chạm đúp nếu handler TRẢ Promise (Button/ErrorState khoá tới khi
  * Promise xong); `() => void x()` trả undefined nên hai cú chạm cùng khung hình đều lọt. Mỗi ca chạy cả hai kiểu: hai cú
- * chạm trong cùng một `act`, và hai cú cách nhau một microtask (React đã kịp chạy xen giữa).
+ * chạm trong cùng một `act` (React chưa vẽ xen giữa), và hai cú ở hai `act` liên tiếp (React đã vẽ xong cú đầu).
  */
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
@@ -105,14 +105,22 @@ function renderPage() {
   return { ...view, qc };
 }
 
-type Taps = 'cùng khung hình' | 'cách nhau một microtask';
-const TAPS: Taps[] = ['cùng khung hình', 'cách nhau một microtask'];
+type Taps = 'cùng khung hình' | 'hai lượt vẽ liên tiếp';
+const TAPS: Taps[] = ['cùng khung hình', 'hai lượt vẽ liên tiếp'];
 
-/** Hai cú chạm vào cùng một nút theo `how`; trong cả hai kiểu không có lần dựng lại nào do test chen vào. */
+/** Hai cú chạm vào cùng một nút theo `how`. */
 async function tapTwice(target: HTMLElement, how: Taps) {
+  if (how === 'hai lượt vẽ liên tiếp') {
+    await act(async () => {
+      target.click();
+    });
+    await act(async () => {
+      target.click();
+    });
+    return;
+  }
   await act(async () => {
     target.click();
-    if (how === 'cách nhau một microtask') await Promise.resolve();
     target.click();
   });
 }

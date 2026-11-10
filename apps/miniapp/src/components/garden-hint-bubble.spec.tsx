@@ -86,6 +86,23 @@ describe('GardenHintBubble — bóng gợi ý tab Vườn Xanh (D6-16)', () => {
     expect(screen.queryByRole('status')).toBeNull();
   });
 
+  it('ghi cờ "đã xem" hỏng (bộ nhớ đầy) thì bóng hiện lại lần sau vẫn bấm được', () => {
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('QuotaExceededError');
+    });
+    const open = vi.fn();
+    const view = render(<GardenHintBubble onGardenTab={false} onOpenGarden={open} />);
+    settle();
+    fireEvent.click(screen.getByRole('status'));
+    expect(open).toHaveBeenCalledTimes(1);
+    view.rerender(<GardenHintBubble onGardenTab onOpenGarden={open} />);
+    view.rerender(<GardenHintBubble onGardenTab={false} onOpenGarden={open} />);
+    settle();
+    fireEvent.click(screen.getByRole('status'));
+    expect(open).toHaveBeenCalledTimes(2);
+    setItem.mockRestore();
+  });
+
   it('khách cuộn trang thì bóng tắt ngay, không che nội dung đang đọc', () => {
     render(<GardenHintBubble onGardenTab={false} />);
     settle();
