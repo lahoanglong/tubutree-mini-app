@@ -22,8 +22,11 @@ function setup(goal: Record<string, unknown> | null = ACTIVE, mine: Record<strin
     findUnique: jest.fn().mockResolvedValue(mine),
     upsert: jest.fn().mockResolvedValue({}),
   };
-  const prisma = { communityGoal, communityContribution } as unknown as PrismaService;
-  return { svc: new GameCommunityService(prisma), communityGoal, communityContribution };
+  // Hàng mốc bị khoá (FOR UPDATE) trả về đúng số liệu của mốc đang ACTIVE; rỗng nghĩa là mốc đã đóng giữa chừng.
+  const $queryRaw = jest.fn().mockResolvedValue(goal ? [{ currentDrops: goal.currentDrops, targetDrops: goal.targetDrops }] : []);
+  const prisma = { communityGoal, communityContribution, $queryRaw } as unknown as PrismaService & { $transaction: unknown };
+  (prisma as unknown as { $transaction: (fn: (tx: unknown) => unknown) => unknown }).$transaction = (fn) => fn(prisma);
+  return { svc: new GameCommunityService(prisma), communityGoal, communityContribution, $queryRaw };
 }
 
 describe('GameCommunityService.getCommunityState', () => {
@@ -61,8 +64,7 @@ describe('GameCommunityService.contribute', () => {
   });
 
   it('góp hợp lệ chưa đủ mốc → tăng hồ + upsert đóng góp, KHÔNG fulfil', async () => {
-    const { svc, communityGoal, communityContribution } = setup(ACTIVE);
-    communityGoal.findUnique.mockResolvedValue({ ...ACTIVE, currentDrops: 300 }); // < target
+    const { svc, communityGoal, communityContribution } = setup({ ...ACTIVE, currentDrops: 200 }); // 200 + 100 < 1000
     const r = await svc.contribute('u1', 100);
     expect(r).toEqual({ goalId: 'g1', contributed: 100 });
     expect(communityGoal.update).toHaveBeenCalledWith(
@@ -72,13 +74,33 @@ describe('GameCommunityService.contribute', () => {
     expect(communityGoal.updateMany).not.toHaveBeenCalled(); // chưa fulfil
   });
 
-  it('góp làm đủ mốc → tự fulfil (status-guard)', async () => {
-    const { svc, communityGoal } = setup(ACTIVE);
-    communityGoal.findUnique.mockResolvedValue({ ...ACTIVE, currentDrops: 1000 }); // >= target
+  it('góp làm đủ mốc → tự fulfil (status-guard) trong cùng giao dịch', async () => {
+    const { svc, communityGoal } = setup({ ...ACTIVE, currentDrops: 200 }); // 200 + 900 >= 1000
     await svc.contribute('u1', 900);
     expect(communityGoal.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: 'g1', status: 'ACTIVE' } }),
     );
+  });
+
+  it('mốc đã đóng giữa lúc đọc và lúc khoá (khoá không thấy hàng ACTIVE) → không ghi vào mốc đó, sang mốc ACTIVE kế', async () => {
+    const G2 = { ...ACTIVE, id: 'g2', currentDrops: 0 };
+    const { svc, communityGoal, communityContribution, $queryRaw } = setup(ACTIVE);
+    communityGoal.findFirst.mockResolvedValueOnce(ACTIVE).mockResolvedValueOnce(G2);
+    $queryRaw.mockResolvedValueOnce([]).mockResolvedValueOnce([{ currentDrops: 0, targetDrops: 1000 }]);
+    const r = await svc.contribute('u1', 100);
+    expect(r).toEqual({ goalId: 'g2', contributed: 100 });
+    expect(communityGoal.update).toHaveBeenCalledTimes(1);
+    expect(communityGoal.update).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'g2' } }));
+    expect(communityContribution.upsert).toHaveBeenCalledTimes(1);
+  });
+
+  it('mốc nào cũng đóng giữa chừng (ba lần thử) → null, không ghi gì', async () => {
+    const { svc, communityGoal, communityContribution, $queryRaw } = setup(ACTIVE);
+    $queryRaw.mockResolvedValue([]);
+    expect(await svc.contribute('u1', 100)).toBeNull();
+    expect($queryRaw).toHaveBeenCalledTimes(3);
+    expect(communityGoal.update).not.toHaveBeenCalled();
+    expect(communityContribution.upsert).not.toHaveBeenCalled();
   });
 });
 

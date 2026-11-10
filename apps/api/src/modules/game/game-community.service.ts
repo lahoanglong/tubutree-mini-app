@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 
 /**
@@ -44,40 +45,49 @@ export class GameCommunityService {
    */
   async contribute(userId: string, drops: number): Promise<{ goalId: string; contributed: number } | null> {
     if (drops <= 0) return null;
-    const goal = await this.prisma.communityGoal.findFirst({
-      where: { status: 'ACTIVE' },
-      orderBy: { startAt: 'asc' },
-    });
-    if (!goal) return null;
+    // Mốc vừa được lượt khác chốt giữa lúc đọc và lúc khoá thì sang mốc ACTIVE kế tiếp; không cộng thêm vào mốc đã đóng.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const goal = await this.prisma.communityGoal.findFirst({
+        where: { status: 'ACTIVE' },
+        orderBy: { startAt: 'asc' },
+      });
+      if (!goal) return null;
 
-    await this.prisma.communityGoal.update({
-      where: { id: goal.id },
-      data: { currentDrops: { increment: drops } },
-    });
-    await this.prisma.communityContribution.upsert({
-      where: { userId_goalId: { userId, goalId: goal.id } },
-      create: { userId, goalId: goal.id, drops },
-      update: { drops: { increment: drops } },
-    });
-
-    const fresh = await this.prisma.communityGoal.findUnique({ where: { id: goal.id } });
-    if (fresh && fresh.currentDrops >= fresh.targetDrops) {
-      await this.fulfil(goal.id);
+      const contributed = await this.prisma.$transaction(async (tx) => {
+        // Khoá dòng mốc tới hết tx: lượt góp sau chờ lượt trước, nên thấy mốc đã DONE (không còn khớp status) thay vì cộng vào mốc
+        // đã đóng. Tăng hồ, ghi đóng góp và chốt mốc cùng một tx nên không còn cảnh hồ tăng mà dòng đóng góp không có.
+        const locked = await tx.$queryRaw<{ currentDrops: number; targetDrops: number }[]>`
+          SELECT "currentDrops", "targetDrops" FROM "community_goals" WHERE "id" = ${goal.id} AND "status" = 'ACTIVE' FOR UPDATE`;
+        const row = locked[0];
+        if (!row) return false;
+        await tx.communityGoal.update({
+          where: { id: goal.id },
+          data: { currentDrops: { increment: drops } },
+        });
+        await tx.communityContribution.upsert({
+          where: { userId_goalId: { userId, goalId: goal.id } },
+          create: { userId, goalId: goal.id, drops },
+          update: { drops: { increment: drops } },
+        });
+        if (row.currentDrops + drops >= row.targetDrops) await this.fulfil(goal.id, tx);
+        return true;
+      });
+      if (contributed) return { goalId: goal.id, contributed: drops };
     }
-    return { goalId: goal.id, contributed: drops };
+    return null;
   }
 
   /**
    * Chốt mốc: ACTIVE → FULFILLING (count-guard chống double) → DONE.
    * Việc trồng batch thật để sau (gate). Trả true nếu chính lần này chốt.
    */
-  async fulfil(goalId: string): Promise<boolean> {
-    const guard = await this.prisma.communityGoal.updateMany({
+  async fulfil(goalId: string, db: Prisma.TransactionClient | PrismaService = this.prisma): Promise<boolean> {
+    const guard = await db.communityGoal.updateMany({
       where: { id: goalId, status: 'ACTIVE' },
       data: { status: 'FULFILLING', fulfilledAt: new Date() },
     });
     if (guard.count === 0) return false; // tiến trình khác đã chốt
-    await this.prisma.communityGoal.update({
+    await db.communityGoal.update({
       where: { id: goalId },
       data: { status: 'DONE' },
     });
