@@ -5,7 +5,8 @@ import { useLockedMutation } from '../components/game/use-locked-mutation';
 import { Landmark, ChevronDown } from 'lucide-react';
 import { getMyPayroll, updateBank, type PayrollStatus, type PayrollDay, type StaffProfile } from '../services/payroll-api';
 import { getHistory, type SessionHistory } from '../services/attendance-api';
-import { getErrorMessage, getLoadErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage, isStaleStateError } from '../services/api';
+import { settleWithin } from '../utils/settle-within';
 import { useAuthStore } from '../store/auth';
 import { BottomSheet } from '../components/ui/bottom-sheet';
 import { Badge } from '../components/ui/badge';
@@ -140,7 +141,12 @@ function MyPayrollHub() {
       setBankOpen(false);
       qc.invalidateQueries({ queryKey: ['my-payroll'] });
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    // Trả Promise: nút Lưu giữ khoá tới khi bảng lương và hồ sơ tải lại (tối đa `settleWithin`) khi máy chủ từ chối (hồ sơ nhân viên đã đổi hoặc bị gỡ). Mất mạng, 401, 5xx không nói gì về hồ sơ: nhả ngay.
+    onError: (e) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      if (!isStaleStateError(e)) return undefined;
+      return settleWithin(qc.invalidateQueries({ queryKey: ['my-payroll'] }));
+    },
   });
 
   const m = payQ.data?.month;

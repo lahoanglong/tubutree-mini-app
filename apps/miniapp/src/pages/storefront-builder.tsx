@@ -20,10 +20,11 @@ import {
   BUILDER_COPY, comboPctOutcome, moveAnnouncement, moveBlockReason, moveBlockedAnnouncement, overflowSectionsNotice, questStripView,
   sectionCardView, sectionHref, sectionIdFromSearch, sectionStyleOf, type newSectionDto,
 } from '@tubutree/app-core/commerce/storefront-builder';
-import { apiMediaUrl, getErrorMessage, getLoadErrorMessage } from '../services/api';
+import { apiMediaUrl, getErrorMessage, getLoadErrorMessage, isStaleStateError } from '../services/api';
 import { getCtvTiers } from '../services/affiliate-api';
 import { formatPoints } from '../utils/format';
 import { haptic } from '../utils/haptic';
+import { settleWithin } from '../utils/settle-within';
 import { vi } from '../i18n/vi';
 import { trustBadgeLabel } from '../utils/storefront-badge';
 import { announce, useNotify } from '../hooks/use-notify';
@@ -181,6 +182,10 @@ function Builder({ sf, tier, tierPending, nextTier }: { sf: StorefrontEdit; tier
     void qc.invalidateQueries({ queryKey: ['storefront-quests'] });
     return qc.invalidateQueries({ queryKey: ['my-storefront'] });
   };
+  // Máy chủ từ chối vì màn đã cũ (400/404/409: gian hàng đã đăng/gỡ ở máy khác, khối hay món không còn...): tải lại gian hàng và Hành trình rồi mới nhả khoá, kẻo bấm lại trên dữ liệu cũ nhận đúng lỗi đó.
+  // Gọi ở `return` của onError (TanStack chờ Promise đó trước onSettled), quá `settleWithin` thì nhả. Mất mạng, quá hạn, 401, 5xx không nói gì về trạng thái thật: nhả ngay, không tải lại.
+  const reloadAll = () => Promise.all([qc.invalidateQueries({ queryKey: ['storefront-quests'] }), qc.invalidateQueries({ queryKey: ['my-storefront'] })]);
+  const holdForFresh = (e: unknown) => (isStaleStateError(e) ? settleWithin(reloadAll()) : undefined);
 
   // Đăng và gỡ đăng là hai việc ngược nhau trên cùng gian hàng: một việc mỗi lúc, khoá ref vì `isPending` chỉ đúng sau lần vẽ kế tiếp.
   const publishing = useRef(false);
@@ -196,7 +201,10 @@ function Builder({ sf, tier, tierPending, nextTier }: { sf: StorefrontEdit; tier
     onSettled: releasePublishing,
     mutationFn: () => publishStorefront(true),
     onSuccess: (res) => { haptic('medium'); openSnackbar({ text: storefrontPublishedMessage(res, sf), type: 'success' }); void refresh(); },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      return holdForFresh(e);
+    },
   });
   const unpublishMut = useLockedMutation({
     onSettled: releasePublishing,
@@ -207,7 +215,10 @@ function Builder({ sf, tier, tierPending, nextTier }: { sf: StorefrontEdit; tier
       openSnackbar({ text: vi.storefront.unpublished, type: 'success' });
       void refresh();
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      return holdForFresh(e);
+    },
   });
   const publishBusy = publishMut.isPending || unpublishMut.isPending;
   // API từ chối đăng gian hàng chưa có sản phẩm; chặn ngay ở nút để CTV biết cần làm gì thay vì nhận lỗi.
@@ -234,7 +245,10 @@ function Builder({ sf, tier, tierPending, nextTier }: { sf: StorefrontEdit; tier
         if (out.clamped) notify({ text: out.text, type: 'warning' });
       }
     },
-    onError: (e) => notify({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e) => {
+      notify({ text: getErrorMessage(e), type: 'error' });
+      return holdForFresh(e);
+    },
   });
   const renameColMut = useLockedMutation({
     mutationFn: (v: { id: string; title: string }) => updateCollection(v.id, { title: v.title }),
@@ -242,7 +256,10 @@ function Builder({ sf, tier, tierPending, nextTier }: { sf: StorefrontEdit; tier
       setRenaming(null);
       void refresh();
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      return holdForFresh(e);
+    },
   }, (v) => v.id);
   const deleteColMut = useLockedMutation({
     mutationFn: (id: string) => deleteCollection(id),
@@ -251,7 +268,10 @@ function Builder({ sf, tier, tierPending, nextTier }: { sf: StorefrontEdit; tier
       if (id === sectionId) closeSection();
       void refresh();
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      return holdForFresh(e);
+    },
   }, (id) => id);
   // Chỉ gửi trường đổi (không kèm kind/title): API nhận từng phần, và Thường ↔ Combo chưa đổi được sau khi tạo.
   const layoutMut = useMutation({
@@ -262,7 +282,10 @@ function Builder({ sf, tier, tierPending, nextTier }: { sf: StorefrontEdit; tier
       announce('status', BUILDER_COPY.layoutSaved);
       void refresh();
     },
-    onError: (e) => notify({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e) => {
+      notify({ text: getErrorMessage(e), type: 'error' });
+      return holdForFresh(e);
+    },
     onSettled: (_d, _e, v) => sectionStyle.settled(v.id, v.layout),
   });
   const sectionStyle = useSectionStyle({
@@ -289,6 +312,8 @@ function Builder({ sf, tier, tierPending, nextTier }: { sf: StorefrontEdit; tier
       return out.saved;
     } catch (e) {
       notify({ text: getErrorMessage(e), type: 'error' });
+      // ComboPctField giữ ô nhập khoá tới khi hàm này trả về: chờ dữ liệu mới về (tối đa `settleWithin`) khi máy chủ từ chối.
+      if (isStaleStateError(e)) await holdForFresh(e);
       return null;
     }
   };
@@ -296,7 +321,10 @@ function Builder({ sf, tier, tierPending, nextTier }: { sf: StorefrontEdit; tier
   const itemMut = useLockedMutation({
     mutationFn: (v: { id: string; dto: { isPinned?: boolean; isHidden?: boolean } }) => updateItem(v.id, v.dto),
     onSuccess: () => { haptic('light'); void refresh(); },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      return holdForFresh(e);
+    },
   }, (v) => v.id);
   const noteMut = useLockedMutation({
     mutationFn: (v: { id: string; note: string }) => updateItem(v.id, { note: v.note }),
@@ -306,7 +334,10 @@ function Builder({ sf, tier, tierPending, nextTier }: { sf: StorefrontEdit; tier
       openSnackbar({ text: vi.storefront.itemNoteSaved, type: 'success' });
       void refresh();
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      return holdForFresh(e);
+    },
   }, (v) => v.id);
   // Trong onSuccess/onError, lần đang chạy vẫn được đếm.
   const hasOtherReorderPending = () => qc.isMutating({ mutationKey: STOREFRONT_REORDER_MUTATION.mutationKey }) > 1;
@@ -383,7 +414,10 @@ function Builder({ sf, tier, tierPending, nextTier }: { sf: StorefrontEdit; tier
   const delItemMut = useLockedMutation({
     mutationFn: removeItem,
     onSuccess: () => { setConfirmDeleteItemId(null); void refresh(); },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      return holdForFresh(e);
+    },
   }, (id) => id);
 
   // Mở/đóng trang chi tiết: lên đầu trang và vào h1 khi mở; khi lùi lại thì về đúng thẻ vừa mở, đúng chỗ đang cuộn.
@@ -499,7 +533,7 @@ function Builder({ sf, tier, tierPending, nextTier }: { sf: StorefrontEdit; tier
       </BottomSheet>
 
       <BottomSheet open={!!pickerCol} onClose={() => setPickerCol(null)} title={vi.storefront.addProduct}>
-        {pickerCol && <PickerSheet collectionId={pickerCol} onAdded={() => { void refresh(); }} onClose={() => setPickerCol(null)} />}
+        {pickerCol && <PickerSheet collectionId={pickerCol} onAdded={() => { void refresh(); }} onStale={reloadAll} onClose={() => setPickerCol(null)} />}
       </BottomSheet>
 
       <BottomSheet open={!!renaming} onClose={() => setRenaming(null)} title={BUILDER_COPY.renameSection}>

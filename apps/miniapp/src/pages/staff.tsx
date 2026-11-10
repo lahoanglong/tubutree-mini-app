@@ -20,7 +20,7 @@ import {
   type Shift,
   type ShiftTemplate,
 } from '../services/shifts-api';
-import { getErrorMessage, getLoadErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage, isStaleStateError } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { Badge, type BadgeTone } from '../components/ui/badge';
 import { BottomSheet } from '../components/ui/bottom-sheet';
@@ -50,6 +50,7 @@ import {
   dowLabel,
 } from '../utils/week';
 import { INPUT_LIMITS } from '../utils/input-limits';
+import { settleWithin } from '../utils/settle-within';
 import { vi } from '../i18n/vi';
 import { useUploadBusy } from '../hooks/use-upload-busy';
 
@@ -90,6 +91,9 @@ function TodayCard() {
   const open = statusQ.data?.openSession ?? null;
   const todayShifts = statusQ.data?.shifts ?? [];
   const invalidate = () => qc.invalidateQueries({ queryKey: ['attn-status'] });
+  // Máy chủ từ chối vì phiên chấm công đã khác màn (đã vào ca/ra ca rồi...): trả Promise từ onError để khoá `attending` và nút giữ tới khi
+  // trạng thái mới về (tối đa `settleWithin`), kẻo bấm lại trên trạng thái cũ nhận đúng lỗi đó. Mất mạng, 401, 5xx không nói gì về phiên: nhả ngay.
+  const refreshIfStale = (e: unknown) => (isStaleStateError(e) ? settleWithin(invalidate()) : undefined);
 
   const locFailRef = useRef<string | null>(null);
   // Vào ca, Ra ca và Ra ca lùi giờ cùng đổi phiên chấm công của một người: một việc mỗi lúc. Khoá ref vì `isPending`
@@ -119,11 +123,13 @@ function TodayCard() {
       });
       invalidate();
     },
-    onError: (e) =>
+    onError: (e) => {
       openSnackbar({
         text: locFailRef.current ? `${locFailRef.current} ${getErrorMessage(e)}` : getErrorMessage(e),
         type: 'error',
-      }),
+      });
+      return refreshIfStale(e);
+    },
   }, (shiftId) => shiftId);
 
   const checkoutM = useLockedMutation({
@@ -134,7 +140,10 @@ function TodayCard() {
       setBackOpen(false);
       invalidate();
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      return refreshIfStale(e);
+    },
   });
   const attendBusy = checkinM.isPending || checkoutM.isPending;
 
@@ -347,6 +356,9 @@ function StaffHub() {
   }, [shiftsQ.data]);
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['my-shifts', mondayKey] });
+  // Máy chủ từ chối vì ca đã đổi trạng thái ("Ca vừa được duyệt", đã huỷ, không còn...): trả Promise từ onError để nút và khoá theo id ca giữ tới
+  // khi lịch tuần mới về (tối đa `settleWithin`), kẻo bấm lại trên ca cũ nhận đúng lỗi đó. Mất mạng, 401, 5xx không nói gì về lịch: nhả ngay.
+  const refreshIfStale = (e: unknown) => (isStaleStateError(e) ? settleWithin(invalidate()) : undefined);
 
   // ── Sheet thêm/sửa ca ──
   const [formOpen, setFormOpen] = useState(false);
@@ -409,7 +421,10 @@ function StaffHub() {
       setFormOpen(false);
       invalidate();
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      return refreshIfStale(e);
+    },
   }, (shiftId) => shiftId ?? '');
   const save = () => {
     if (editId) lockShift(editId, () => saveM.mutate(editId));
@@ -423,7 +438,10 @@ function StaffHub() {
       openSnackbar({ text: 'Đã xoá ca.', type: 'success' });
       invalidate();
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      return refreshIfStale(e);
+    },
   }, (id) => id);
   const shiftActing = (id: string) =>
     (delM.isPending && delM.variables === id) || (saveM.isPending && saveM.variables === id);
@@ -472,7 +490,10 @@ function StaffHub() {
       setQuickOpen(false);
       invalidate();
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      return refreshIfStale(e);
+    },
   });
 
   const copyM = useLockedMutation({
@@ -485,7 +506,10 @@ function StaffHub() {
       });
       invalidate();
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      return refreshIfStale(e);
+    },
   });
 
   // ── Sheet huỷ ca ──
@@ -521,7 +545,10 @@ function StaffHub() {
       setCancelEvidence('');
       invalidate();
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      return refreshIfStale(e);
+    },
   });
 
   return (

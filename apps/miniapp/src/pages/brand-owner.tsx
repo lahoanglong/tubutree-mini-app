@@ -21,7 +21,8 @@ import {
   deleteOwnedPromotion,
   type OwnedBrand,
 } from '../services/brand-owner-api';
-import { getErrorMessage, getLoadErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage, isStaleStateError } from '../services/api';
+import { settleWithin } from '../utils/settle-within';
 import { Skeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { Button } from '../components/ui/button';
@@ -112,6 +113,12 @@ function Editor({ brand }: { brand: OwnedBrand }) {
   const { openSnackbar } = useSnackbar();
   const navigate = useNavigate();
   const refresh = () => qc.invalidateQueries({ queryKey: ['owned-brand'] });
+  // Máy chủ từ chối vì hồ sơ/khuyến mãi đã đổi (400/404/409): trả Promise để nút giữ khoá tới khi hồ sơ tải lại (tối đa `settleWithin`), kẻo bấm lại trên bản cũ nhận đúng lỗi đó. Mất mạng, 401, 5xx không nói gì về hồ sơ: nhả ngay.
+  const onWriteError = (e: unknown) => {
+    openSnackbar({ text: getErrorMessage(e), type: 'error' });
+    if (!isStaleStateError(e)) return undefined;
+    return settleWithin(refresh());
+  };
   const [tab, setTab] = useState<OwnerTab>('profile');
 
   const [f, setF] = useState({
@@ -126,7 +133,7 @@ function Editor({ brand }: { brand: OwnedBrand }) {
   const saveMut = useLockedMutation({
     mutationFn: () => updateOwnedBrand(f),
     onSuccess: () => { haptic('medium'); openSnackbar({ text: BRAND_OWNER_SAVED, type: 'success' }); void refresh(); },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: onWriteError,
   });
 
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -148,13 +155,13 @@ function Editor({ brand }: { brand: OwnedBrand }) {
   const addPromo = useLockedMutation({
     mutationFn: () => createOwnedPromotion(promoIso()),
     onSuccess: () => { resetPromoForm(); openSnackbar({ text: 'Đã thêm khuyến mãi', type: 'success' }); void refresh(); },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: onWriteError,
   });
   const updPromo = useLockedMutation({
     // Khi sửa, ô mã trống nghĩa là GỠ mã (chuỗi rỗng) — `undefined` bị bỏ qua nên mã cũ sẽ ở lại.
     mutationFn: () => updateOwnedPromotion(editingId!, { ...promoIso(), couponCode: promo.couponCode.trim().toUpperCase() }),
     onSuccess: () => { resetPromoForm(); openSnackbar({ text: 'Đã cập nhật khuyến mãi', type: 'success' }); void refresh(); },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: onWriteError,
   });
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const delPromo = useLockedMutation({
@@ -162,7 +169,7 @@ function Editor({ brand }: { brand: OwnedBrand }) {
     // So khớp đúng promo VỪA XOÁ (biến mutate) với promo đang sửa dở — không phải "có đang sửa gì đó
     // hay không" — kẻo xoá promo B trong lúc đang sửa dở promo A lại làm mất luôn form đang sửa của A.
     onSuccess: (_data, deletedId) => { if (editingId === deletedId) resetPromoForm(); setConfirmDeleteId(null); void refresh(); },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: onWriteError,
   }, (id) => id);
   const startEdit = (p: OwnedBrand['promotions'][number]) => {
     setEditingId(p.id);

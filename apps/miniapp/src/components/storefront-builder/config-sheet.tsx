@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { Input, useSnackbar } from 'zmp-ui';
+import { useQueryClient } from '@tanstack/react-query';
 import { EyeOff } from 'lucide-react';
 import { updateStorefront, type StorefrontEdit } from '../../services/storefront-api';
-import { getErrorMessage } from '../../services/api';
+import { getErrorMessage, isStaleStateError } from '../../services/api';
 import { haptic } from '../../utils/haptic';
+import { settleWithin } from '../../utils/settle-within';
 import { vi } from '../../i18n/vi';
 import { DEFAULT_STOREFRONT_THEME_COLOR, STOREFRONT_THEME_COLORS } from '../../utils/storefront-theme';
 import { useLockedMutation } from '../game/use-locked-mutation';
@@ -54,6 +56,7 @@ export function MerchantConfigSheet({
   onUnpublish: () => void;
 }) {
   const { openSnackbar } = useSnackbar();
+  const qc = useQueryClient();
   const [form, setForm] = useState({
     title: sf.title ?? '',
     subdomain: sf.subdomain ?? '',
@@ -68,6 +71,13 @@ export function MerchantConfigSheet({
   // Chỉ gửi subdomain khi người dùng đã đổi: API kiểm từ khoá và trùng tên mỗi khi nhận subdomain.
   const typedSubdomain = form.subdomain.trim().toLowerCase();
   const subdomainChanged = typedSubdomain !== '' && typedSubdomain !== (sf.subdomain ?? '');
+  // Máy chủ từ chối vì gian hàng đã đổi (400/404/409: subdomain trùng hay vừa bị khoá, gian hàng không còn...): tải lại gian hàng và Hành trình (cùng hai khoá `onSaved` làm mới) rồi mới nhả khoá nút.
+  // Mất mạng, quá hạn, 401, 5xx không nói gì về gian hàng thật: nhả ngay để thử lại.
+  const failSave = (e: unknown) => {
+    openSnackbar({ text: getErrorMessage(e), type: 'error' });
+    if (!isStaleStateError(e)) return undefined;
+    return settleWithin(Promise.all([qc.invalidateQueries({ queryKey: ['storefront-quests'] }), qc.invalidateQueries({ queryKey: ['my-storefront'] })]));
+  };
   // `isPending` chỉ đúng sau lần vẽ kế nên hai cú chạm sát nhau vẫn gửi hai lần: khoá bằng ref (useLockedMutation). Mỗi nút một khoá, hai nút ghi các trường khác nhau.
   const saveMut = useLockedMutation({
     mutationFn: () =>
@@ -87,7 +97,7 @@ export function MerchantConfigSheet({
       onSaved();
       onClose();
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: failSave,
   });
   // Tài khoản ngân hàng nhập trước đây không được dùng để thu tiền (khách luôn trả cho Tubu Tree) — chỉ cho gỡ đi.
   const clearBankMut = useLockedMutation({
@@ -96,7 +106,7 @@ export function MerchantConfigSheet({
       openSnackbar({ text: 'Đã gỡ tài khoản ngân hàng khỏi gian hàng', type: 'success' });
       onSaved();
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: failSave,
   });
 
   return (

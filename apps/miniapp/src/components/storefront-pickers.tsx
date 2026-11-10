@@ -1,16 +1,18 @@
 import { useState } from 'react';
 import { Input, useSnackbar } from 'zmp-ui';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
 import { addItem, getStorefrontCategories, pickerProducts, type PickerProduct, type StorefrontCategory } from '../services/storefront-api';
-import { getErrorMessage, getLoadErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage, isStaleStateError } from '../services/api';
 import { haptic } from '../utils/haptic';
+import { settleWithin } from '../utils/settle-within';
 import { vi } from '../i18n/vi';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { EmptyState, ErrorState } from './ui/empty-state';
 import { PriceTag } from './ui/price-tag';
 import { Skeleton } from './ui/skeleton';
+import { useLockedMutation } from './game/use-locked-mutation';
 import { Text } from './ui/text';
 import { STOREFRONT_TEMPLATE_BUSY, STOREFRONT_TEMPLATE_HINT } from '@tubutree/app-core/client-copy';
 
@@ -73,15 +75,27 @@ export function TemplatePickerSheet({
   );
 }
 
-export function PickerSheet({ collectionId, onAdded, onClose }: { collectionId: string; onAdded: () => void; onClose: () => void }) {
+export function PickerSheet({
+  collectionId, onAdded, onStale, onClose,
+}: {
+  collectionId: string;
+  onAdded: () => void;
+  /** Máy chủ từ chối vì bộ sưu tập hay món đã cũ (400/404/409): tải lại đúng phần `onAdded` làm mới; Promise trả về giữ nút Thêm khoá tới khi dữ liệu về. */
+  onStale: () => PromiseLike<unknown>;
+  onClose: () => void;
+}) {
   const { openSnackbar } = useSnackbar();
   const [search, setSearch] = useState('');
   const listQ = useQuery({ queryKey: ['picker', search], queryFn: () => pickerProducts(search) });
-  const addMut = useMutation({
+  // Khoá theo sản phẩm: thêm hai món khác nhau vẫn song song, chạm lặp vào cùng một món thì bỏ qua.
+  const addMut = useLockedMutation({
     mutationFn: (p: PickerProduct) => addItem(collectionId, { productId: p.id }),
     onSuccess: () => { haptic('light'); onAdded(); },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
+    onError: (e) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      return isStaleStateError(e) ? settleWithin(onStale()) : undefined;
+    },
+  }, (p) => p.id);
   const products = listQ.data ?? [];
 
   return (
@@ -111,7 +125,7 @@ export function PickerSheet({ collectionId, onAdded, onClose }: { collectionId: 
                     )}
                   </div>
                 </div>
-                <Button icon={Plus} onPress={() => addMut.mutate(p)}>Thêm</Button>
+                <Button icon={Plus} loading={addMut.isPending && addMut.variables?.id === p.id} onPress={() => addMut.mutate(p)}>Thêm</Button>
               </div>
             ))
           )}

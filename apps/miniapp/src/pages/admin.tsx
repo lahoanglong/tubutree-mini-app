@@ -27,7 +27,7 @@ import {
 import { adminEditSession } from '../services/attendance-api';
 import { payrollReopenMessage } from '@tubutree/app-core/payroll-copy';
 import { grantDoneText, grantPermissionsHint } from '@tubutree/app-core/staff-copy';
-import { getErrorMessage, getLoadErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage, isStaleStateError } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { vi } from '../i18n/vi';
 import { useUploadBusy } from '../hooks/use-upload-busy';
@@ -49,6 +49,7 @@ import { ImageUpload } from '../components/image-upload';
 import { PeriodNav } from '../components/period-nav';
 import { formatVnd } from '../utils/format';
 import { safeImageUrl } from '../utils/safe-image-url';
+import { settleWithin } from '../utils/settle-within';
 import {
   mondayKeyOf,
   addDaysKey,
@@ -141,6 +142,12 @@ function PayrollSection() {
   const [ym, setYm] = useState(() => currentVnYearMonth());
   const payQ = useQuery({ queryKey: ['admin-payroll', ym.year, ym.month], queryFn: () => adminGetPayroll(ym.year, ym.month) });
   const invalidate = () => qc.invalidateQueries({ queryKey: ['admin-payroll', ym.year, ym.month] });
+  // Máy chủ từ chối vì bảng lương đã khác màn đang hiện (đã chốt/đã trả/mở lại ở nơi khác, nhân viên không còn): trả Promise để nút giữ khoá tới khi bảng tải lại (tối đa `settleWithin`), kẻo bấm lại trên số cũ nhận đúng lỗi đó. Mất mạng, quá hạn, 401, 5xx không nói gì về bảng: nhả ngay.
+  const onWriteRejected = (e: unknown) => {
+    openSnackbar({ text: getErrorMessage(e), type: 'error' });
+    if (!isStaleStateError(e)) return undefined;
+    return settleWithin(invalidate());
+  };
 
   const [qrRow, setQrRow] = useState<AdminPayrollRow | null>(null);
   const qrSrc = qrRow ? safeImageUrl(qrRow.qrImageUrl ?? qrRow.profile?.qrImageUrl) : null;
@@ -174,7 +181,7 @@ function PayrollSection() {
       setRateRow(null);
       invalidate();
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: onWriteRejected,
   });
   const finalizeM = useLockedMutation({
     onSettled: releaseActing,
@@ -183,7 +190,7 @@ function PayrollSection() {
       openSnackbar({ text: 'Đã chốt lương.', type: 'success' });
       invalidate();
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: onWriteRejected,
   });
   const reopenM = useLockedMutation({
     onSettled: releaseActing,
@@ -192,7 +199,7 @@ function PayrollSection() {
       openSnackbar({ text: 'Đã mở lại bảng lương — sửa xong nhớ chốt lại.', type: 'success' });
       invalidate();
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: onWriteRejected,
   });
   const paidM = useLockedMutation({
     onSettled: releaseActing,
@@ -204,7 +211,7 @@ function PayrollSection() {
       setNote('');
       invalidate();
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: onWriteRejected,
   });
   const payrollBusy = finalizeM.isPending || reopenM.isPending || paidM.isPending;
 
@@ -406,7 +413,8 @@ function DetailSheet({
   year: number;
   month: number;
   onClose: () => void;
-  onChanged: () => void;
+  // Trả lời hứa tải lại bảng lương (nếu có) để `editM` chờ được khi máy chủ từ chối.
+  onChanged: () => unknown;
 }) {
   const { openSnackbar } = useSnackbar();
   const qc = useQueryClient();
@@ -440,7 +448,12 @@ function DetailSheet({
       qc.invalidateQueries({ queryKey: ['admin-payroll-detail', staffId, year, month] });
       onChanged();
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    // Phiên không còn hoặc bảng lương đã chốt (400/404/409): tải lại cả chi tiết giờ công lẫn bảng lương rồi mới nhả khoá "Lưu giờ". Mất mạng, quá hạn, 401, 5xx: nhả ngay.
+    onError: (e) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      if (!isStaleStateError(e)) return undefined;
+      return settleWithin(Promise.all([qc.invalidateQueries({ queryKey: ['admin-payroll-detail', staffId, year, month] }), onChanged()]));
+    },
   });
 
   return (
@@ -568,6 +581,13 @@ function StaffSection() {
   const pendingInvite = role === 'STAFF' && !existingStaff ? staffQ.data?.pendingInvites.find((i) => i.role === 'STAFF' && i.phone === phone.trim()) : undefined;
   const pendingNames = pendingInvite ? STAFF_PERMISSIONS.filter((p) => pendingInvite.staffPermissions?.includes(p)).map((p) => STAFF_PERMISSION_LABELS[p]) : null;
 
+  // Danh sách nhân sự đã khác màn đang hiện (người đã được cấp/thu hồi ở nơi khác, SĐT không còn): nút giữ khoá tới khi danh sách tải lại (tối đa `settleWithin`). Mất mạng, quá hạn, 401, 5xx: nhả ngay.
+  const onWriteRejected = (e: unknown) => {
+    openSnackbar({ text: getErrorMessage(e), type: 'error' });
+    if (!isStaleStateError(e)) return undefined;
+    return settleWithin(qc.invalidateQueries({ queryKey: ['admin-staff'] }));
+  };
+
   const grantM = useLockedMutation({
     // Nhóm việc chỉ có nghĩa với nhân viên; không chọn nhóm nào thì không gửi để máy chủ giữ nguyên nhóm đã lưu.
     mutationFn: async () => {
@@ -584,7 +604,7 @@ function StaffSection() {
       setGrantReason('');
       qc.invalidateQueries({ queryKey: ['admin-staff'] });
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: onWriteRejected,
   });
 
   const revokeM = useLockedMutation({
@@ -601,7 +621,7 @@ function StaffSection() {
       );
       qc.invalidateQueries({ queryKey: ['admin-staff'] });
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: onWriteRejected,
   });
   const closeRevoke = () => {
     setRevokeTarget(null);
@@ -858,6 +878,14 @@ function ShiftsSection() {
     void qc.invalidateQueries({ queryKey: SHIFTS_PENDING_KEY });
     return qc.invalidateQueries({ queryKey: ['admin-shifts', mondayKey] });
   };
+  // Ca đã đổi trạng thái ở nơi khác (đã duyệt/từ chối/huỷ) nên máy chủ từ chối (400/404/409): tải lại cả số ca chờ lẫn danh sách tuần rồi mới nhả khoá, kẻo bấm lại trên ca cũ nhận đúng lỗi đó. Mất mạng, quá hạn, 401, 5xx: nhả ngay.
+  const onWriteRejected = (e: unknown) => {
+    openSnackbar({ text: getErrorMessage(e), type: 'error' });
+    if (!isStaleStateError(e)) return undefined;
+    return settleWithin(
+      Promise.all([qc.invalidateQueries({ queryKey: SHIFTS_PENDING_KEY }), qc.invalidateQueries({ queryKey: ['admin-shifts', mondayKey] })]),
+    );
+  };
 
   const grouped = useMemo(() => {
     const map = new Map<string, { name: string; shifts: AdminShift[] }>();
@@ -906,7 +934,7 @@ function ShiftsSection() {
       setAdjust(null);
       invalidate();
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: onWriteRejected,
   }, (v) => v.id);
 
   const rejectM = useLockedMutation({
@@ -918,7 +946,7 @@ function ShiftsSection() {
       setRejectReason('');
       invalidate();
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: onWriteRejected,
   }, (v) => v.id);
 
   const bulkM = useLockedMutation({
@@ -928,7 +956,7 @@ function ShiftsSection() {
       openSnackbar({ text: `Đã duyệt ${r.approved} ca.`, type: 'success' });
       invalidate();
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: onWriteRejected,
   });
 
   // Nút của một ca hiện loading khi chính ca đó đang duyệt/từ chối hoặc "Duyệt tất cả" đang chạy.
@@ -1119,6 +1147,15 @@ function TemplateSheet({ visible, onClose }: { visible: boolean; onClose: () => 
   const typedName = name.trim().toLowerCase();
   const duplicateName = !!typedName && (tplQ.data ?? []).some((t) => t.name.trim().toLowerCase() === typedName);
 
+  // Danh sách ca chuẩn đã khác màn đang hiện (tên vừa bị thêm trùng, ca vừa bị xoá ở nơi khác): nút giữ khoá tới khi cả hai danh sách tải lại (tối đa `settleWithin`). Mất mạng, quá hạn, 401, 5xx: nhả ngay.
+  const onWriteRejected = (e: unknown) => {
+    openSnackbar({ text: getErrorMessage(e), type: 'error' });
+    if (!isStaleStateError(e)) return undefined;
+    return settleWithin(
+      Promise.all([qc.invalidateQueries({ queryKey: ['admin-templates'] }), qc.invalidateQueries({ queryKey: ['shift-templates'] })]),
+    );
+  };
+
   const addM = useLockedMutation({
     mutationFn: () => createTemplate({ name: name.trim(), startMin: hhmmToMin(start), endMin: hhmmToMin(end) }),
     onSuccess: () => {
@@ -1127,7 +1164,7 @@ function TemplateSheet({ visible, onClose }: { visible: boolean; onClose: () => 
       qc.invalidateQueries({ queryKey: ['admin-templates'] });
       qc.invalidateQueries({ queryKey: ['shift-templates'] });
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: onWriteRejected,
   });
   const delM = useLockedMutation({
     mutationFn: (id: string) => deleteTemplate(id),
@@ -1135,7 +1172,7 @@ function TemplateSheet({ visible, onClose }: { visible: boolean; onClose: () => 
       qc.invalidateQueries({ queryKey: ['admin-templates'] });
       qc.invalidateQueries({ queryKey: ['shift-templates'] });
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: onWriteRejected,
   });
 
   return (
