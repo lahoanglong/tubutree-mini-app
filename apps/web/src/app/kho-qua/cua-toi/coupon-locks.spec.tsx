@@ -109,40 +109,21 @@ describe('/kho-qua/cua-toi — "Dùng ngay" một khoá cho cả ví', () => {
 });
 
 describe('/kho-qua/cua-toi — "Thử lại" chạm đúp', () => {
-  it('tải lại lỗi khi đã có danh sách: chạm đúp chỉ gọi API thêm một lần, nút aria-busy tới khi dữ liệu mới về', async () => {
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-    const r = render(<RewardsMinePage />, client);
+  // Chỉ màn chưa có dữ liệu mới hiện "Thử lại" (đã có danh sách mà tải lại nền lỗi thì giữ danh sách, xem page.spec.tsx): bấm là truy vấn chưa có dữ liệu
+  // quay lại trạng thái đang tải và màn lỗi biến mất ngay, nên khoá của nút không quan sát được từ ngoài, chỉ đếm được số lần gọi API.
+  it('danh sách chưa từng tải được: chạm đúp "Thử lại" chỉ gọi API thêm một lần rồi hiện danh sách', async () => {
+    state.error = new Error('Mạng lỗi');
+    const r = render(<RewardsMinePage />);
     mounted.push(r);
     await flush(8);
-    expect(r.container.textContent).toContain('Miễn phí vận chuyển');
-
-    state.error = new Error('Mạng lỗi');
-    await act(async () => {
-      await client.refetchQueries({ queryKey: ['loyalty-rewards', 'mine'] });
-    });
-    await flush(4);
     const retry = byText(r.container, 'button', 'Thử lại') as HTMLButtonElement;
     expect(retry).not.toBeNull();
     const before = state.calls.filter((p) => p === '/me/loyalty/rewards/mine').length;
-
-    let release!: () => void;
-    state.gate = new Promise<void>((res) => (release = res));
     state.error = null;
-    retry.focus();
     act(() => {
       retry.click();
       retry.click();
     });
-    await flush(2);
-    expect(state.calls.filter((p) => p === '/me/loyalty/rewards/mine').length).toBe(before + 1);
-    const busy = byText(r.container, 'button', 'Thử lại') as HTMLButtonElement;
-    expect(busy.getAttribute('aria-busy')).toBe('true');
-    expect(busy.getAttribute('aria-disabled')).toBe('true');
-    expect(busy.hasAttribute('disabled')).toBe(false);
-    expect(document.activeElement).toBe(busy);
-
-    state.gate = null;
-    release();
     await flush(6);
     expect(state.calls.filter((p) => p === '/me/loyalty/rewards/mine').length).toBe(before + 1);
     expect(r.container.textContent).toContain('Miễn phí vận chuyển');

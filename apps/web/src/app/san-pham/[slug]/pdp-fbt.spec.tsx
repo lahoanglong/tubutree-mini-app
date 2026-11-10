@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act } from 'react';
+import { QueryClient } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProductCard } from '@tubutree/app-core/api/catalog';
 import { ApiError } from '@/lib/client-api';
@@ -290,5 +291,56 @@ describe('PdpFbt (web): thêm cả bộ', () => {
     const c = await mount();
     expect(status(c).getAttribute('role')).toBe('status');
     expect(status(c).textContent).toBe('');
+  });
+});
+
+describe('PdpFbt (web): lệnh lô bị máy chủ từ chối vì trạng thái đã đổi (W98B)', () => {
+  const setup = async (reload: Promise<void> | null) => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const invalidate = vi.spyOn(qc, 'invalidateQueries').mockImplementation(() => (reload ?? Promise.resolve()) as Promise<void>);
+    const r = render(
+      <PdpSelectionProvider initialId="v0a">
+        <PdpFbt productId="p0" slug="sp-0" name="Dầu gội bưởi" thumbnail={null} variations={VARIATIONS} initialBoughtTogether={[card(1), card(2), card(3)]} />
+      </PdpSelectionProvider>,
+      qc,
+    );
+    mounted.push(r);
+    await flush(6);
+    const c = r.container;
+    invalidate.mockClear();
+    return { c, invalidate };
+  };
+  const keysOf = (spy: { mock: { calls: unknown[][] } }) => spy.mock.calls.map((call) => JSON.stringify((call[0] as { queryKey: unknown }).queryKey));
+
+  it.each([400, 404, 409])('HTTP %i: tải lại danh sách "Khách thường mua cùng" (đúng khoá), giữ khoá tới khi về (chạm lại không gọi API) rồi nhả', async (status) => {
+    let release!: () => void;
+    const reload = new Promise<void>((r) => (release = r));
+    mocks.addAll.mockRejectedValue(new ApiError('Sản phẩm đã hết hàng', status));
+    const { c, invalidate } = await setup(reload);
+    click(addBtn(c));
+    await flush(6);
+    expect(keysOf(invalidate)).toEqual([JSON.stringify(['bought-together', 'sp-0'])]);
+    expect(mocks.addAll).toHaveBeenCalledTimes(1);
+    click(addBtn(c));
+    await flush(4);
+    expect(mocks.addAll).toHaveBeenCalledTimes(1);
+    await act(async () => release());
+    await flush(6);
+    mocks.addAll.mockResolvedValue({});
+    click(addBtn(c));
+    await flush(6);
+    expect(mocks.addAll).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([401, 500, 503])('HTTP %i (lỗi tạm): không tải lại, nhả khoá ngay', async (status) => {
+    mocks.addAll.mockRejectedValue(new ApiError('Máy chủ bận', status));
+    const { c, invalidate } = await setup(new Promise<void>(() => undefined));
+    click(addBtn(c));
+    await flush(6);
+    expect(invalidate).not.toHaveBeenCalled();
+    mocks.addAll.mockResolvedValue({});
+    click(addBtn(c));
+    await flush(6);
+    expect(mocks.addAll).toHaveBeenCalledTimes(2);
   });
 });

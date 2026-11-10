@@ -1055,6 +1055,37 @@ describe('/ctv — khoá + Tạo link (cùng một act)', () => {
     expect(posts()).toHaveLength(2);
   });
 
+  it('danh sách link không bao giờ về: còn khoá ở 3 giây (chạm thêm không gửi lệnh), nhả sau 4 giây', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+    try {
+      state.tab = 'share';
+      const { container } = mount();
+      await flush();
+      const btn = byText(container, 'button', '+ Tạo link') as HTMLButtonElement;
+      state.linksGate = new Promise(() => undefined);
+      click(btn);
+      await flush();
+      expect(posts()).toHaveLength(1);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3_000);
+      });
+      expect(btn.getAttribute('aria-busy')).toBe('true');
+      click(btn);
+      await flush();
+      expect(posts()).toHaveLength(1);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_500);
+      });
+      await flush(2);
+      expect(btn.hasAttribute('aria-busy')).toBe(false);
+      click(btn);
+      await flush();
+      expect(posts()).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('lỗi: báo trong vùng role=alert (vùng status rỗng) và nhả khoá để thử lại', async () => {
     state.tab = 'share';
     state.postFail.add('/affiliate/links');

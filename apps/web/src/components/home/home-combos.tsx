@@ -5,6 +5,7 @@ import type { ComboView } from '@tubutree/app-core/commerce/bundle-view';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { useRouter } from 'next/navigation';
 import { ComboCard, RailShell, SectionHeader } from '@/components/mini';
+import { bundleKeys } from '@tubutree/app-core/queries/bundle';
 import { useBundleAdd } from '@/lib/use-bundle-add';
 
 /** Bề rộng một thẻ combo trong kệ: chừa lề phải để thấy một góc thẻ kế tiếp (gợi ý vuốt), không vượt 288px ở màn rộng. */
@@ -24,7 +25,7 @@ export function HomeCombos({ views }: HomeCombosProps) {
 }
 
 function HomeCombosRail({ views }: HomeCombosProps) {
-  const { add, busyId, result } = useBundleAdd();
+  const { add, busyId, result } = useBundleAdd(bundleKeys.homeCombos);
   const router = useRouter();
   const title = fillCopy('combo.homeTitle');
   return (

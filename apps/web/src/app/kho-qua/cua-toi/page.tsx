@@ -123,7 +123,7 @@ function RewardsMineBody() {
   const newCode = useSearchParams().get(NEW_COUPON_PARAM);
   const couponUse = useCouponUse();
 
-  if (q.isError) return <ErrorState message={errText(q.error)} onRetry={() => q.refetch()} />;
+  if (q.isError && !q.data) return <ErrorState message={errText(q.error)} onRetry={() => q.refetch()} />;
   if (!q.data) return <Skeleton height={120} />;
   if (q.data.length === 0) return <EmptyState art="box" heading="Bạn chưa đổi quà nào" ctaLabel="Đến Kho quà" onCta={() => router.push('/kho-qua')} />;
 

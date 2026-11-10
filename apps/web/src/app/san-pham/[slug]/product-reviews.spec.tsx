@@ -3,6 +3,7 @@ import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderToString } from 'react-dom/server';
 import { focusManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { reviewListKey } from '@tubutree/app-core/commerce/review-filter';
 import { byText, click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
 
@@ -1293,6 +1294,27 @@ describe('ProductReviews (web): "Thử lại" trả refetch nên nút báo bận
     await act(async () => release());
     await flush(8);
     expect(c.querySelector('textarea')!.value).toBe('Dùng ổn');
+  });
+});
+
+describe('ProductReviews (web): danh sách đã có dữ liệu mà tải lại nền lỗi thì giữ danh sách cũ (W98B)', () => {
+  it('giữ các đánh giá đang xem, không thay bằng "Không tải được đánh giá." kèm Thử lại', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const r = render(<ProductReviews slug="nuoc-rua-chen" />, client);
+    mounted.push(r);
+    const c = r.container;
+    await flush(8);
+    expect(c.textContent).toContain('Nhận xét a');
+    mocks.serve = async () => new Error('mất mạng');
+    const before = mocks.listCalls.length;
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: reviewListKey('nuoc-rua-chen', 'all') });
+    });
+    await flush(4);
+    expect(mocks.listCalls.length).toBeGreaterThan(before);
+    expect(c.textContent).toContain('Nhận xét a');
+    expect(c.textContent).not.toContain('Không tải được đánh giá.');
+    expect(button(c, 'Thử lại')).toBeNull();
   });
 });
 

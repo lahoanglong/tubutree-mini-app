@@ -594,3 +594,49 @@ describe('PdpBundles (web): khoá chạm đúp "Thêm cả combo" và "Thêm n m
     await flush();
   });
 });
+
+describe('PdpBundles (web): lệnh lô bị máy chủ từ chối vì trạng thái đã đổi (W98B)', () => {
+  const setup = async (reload: Promise<void> | null) => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const invalidate = vi.spyOn(qc, 'invalidateQueries').mockImplementation(() => (reload ?? Promise.resolve()) as Promise<void>);
+    const r = render(<PdpBundles slug="sp-anchor" initialBundles={{ combos: ONE_COMBO, addons: [] }} />, qc);
+    mounted.push(r);
+    await flush();
+    const c = r.container;
+    invalidate.mockClear();
+    return { c, invalidate };
+  };
+  const keysOf = (spy: { mock: { calls: unknown[][] } }) => spy.mock.calls.map((call) => JSON.stringify((call[0] as { queryKey: unknown }).queryKey));
+
+  it.each([400, 404, 409])('HTTP %i: tải lại bộ combo/mua kèm của sản phẩm (đúng khoá), giữ khoá tới khi về (chạm lại không gọi API) rồi nhả', async (status) => {
+    let release!: () => void;
+    const reload = new Promise<void>((r) => (release = r));
+    mocks.addAll.mockRejectedValue(new ApiError('Sản phẩm đã hết hàng', status));
+    const { c, invalidate } = await setup(reload);
+    click(buttonText(c, /Thêm cả combo/)!);
+    await flush(6);
+    expect(keysOf(invalidate)).toEqual([JSON.stringify(['bundles', 'product', 'sp-anchor'])]);
+    expect(mocks.addAll).toHaveBeenCalledTimes(1);
+    click(buttonText(c, /Thêm cả combo/)!);
+    await flush(4);
+    expect(mocks.addAll).toHaveBeenCalledTimes(1);
+    await act(async () => release());
+    await flush(6);
+    mocks.addAll.mockResolvedValue({});
+    click(buttonText(c, /Thêm cả combo/)!);
+    await flush(6);
+    expect(mocks.addAll).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([401, 500, 503])('HTTP %i (lỗi tạm): không tải lại, nhả khoá ngay', async (status) => {
+    mocks.addAll.mockRejectedValue(new ApiError('Máy chủ bận', status));
+    const { c, invalidate } = await setup(new Promise<void>(() => undefined));
+    click(buttonText(c, /Thêm cả combo/)!);
+    await flush(6);
+    expect(invalidate).not.toHaveBeenCalled();
+    mocks.addAll.mockResolvedValue({});
+    click(buttonText(c, /Thêm cả combo/)!);
+    await flush(6);
+    expect(mocks.addAll).toHaveBeenCalledTimes(2);
+  });
+});

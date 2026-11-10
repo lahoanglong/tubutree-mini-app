@@ -9,6 +9,8 @@ import { useAuthPhase } from './auth-phase';
 import { ApiError } from './client-api';
 import { actionErrorText, isBusinessMessage } from './error-text';
 import { loginHref } from './return-to';
+import { serverRejectedState } from './server-rejected-state';
+import { settleWithin } from './settle-within';
 import { addAllToCart } from './shop-combo';
 
 export interface BundleAdd {
@@ -37,8 +39,10 @@ function errorText(error: unknown, fallback: string): string {
  * "Thêm cả combo" và "Thêm n món vào giỏ" của web: một lệnh `addAllToCart` (máy chủ thêm hết hoặc không món nào), mỗi lúc chỉ một lệnh bay.
  * Web không có thông báo nổi nên kết quả là `result` để nơi gọi vẽ ở vùng `role="status"`. Khách chưa đăng nhập được chuyển sang
  * đăng nhập (kèm đường quay lại), chưa ghi gì vào giỏ.
+ * `staleKey` là khoá truy vấn của danh sách đang vẽ bộ để thêm: máy chủ từ chối vì trạng thái đã đổi (400/404/409: món hết hàng, ngừng bán, bộ hết hạn) thì danh sách đó đã cũ
+ * nên tải lại đúng khoá này rồi mới nhả khoá (tối đa 4 giây), kẻo chạm lại nhận đúng lời từ chối đó.
  */
-export function useBundleAdd() {
+export function useBundleAdd(staleKey: readonly unknown[]) {
   const qc = useQueryClient();
   const router = useRouter();
   const pathname = usePathname();
@@ -52,7 +56,10 @@ export function useBundleAdd() {
       setResult({ id: v.id, ok: true, text: v.successText });
       v.onDone?.();
     },
-    onError: (error, v) => setResult({ id: v.id, ok: false, text: errorText(error, fillCopy(v.errorKey)) }),
+    onError: (error, v) => {
+      setResult({ id: v.id, ok: false, text: errorText(error, fillCopy(v.errorKey)) });
+      return serverRejectedState(error) ? settleWithin(qc.invalidateQueries({ queryKey: staleKey })) : undefined;
+    },
     onSettled: () => {
       inflight.current = false;
     },

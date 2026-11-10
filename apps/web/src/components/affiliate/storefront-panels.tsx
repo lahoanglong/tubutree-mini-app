@@ -13,6 +13,7 @@ import { formatCount } from '@/lib/checkout-points';
 import { formatVnd } from '@/lib/format-vnd';
 import { ui } from '@/lib/guest-ui';
 import { phoneCaption, phoneFlatCard, phoneSecondary } from '@/lib/phone-ui';
+import { settleWithin } from '@/lib/settle-within';
 import { Badge } from '@/components/ui/badge';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { questPercent, statsRows } from './storefront-rules';
@@ -90,7 +91,7 @@ export function QuestList({ data, onNotice }: { data: QuestData; onNotice: Notif
       onMutate: (code) => setClaimErrors((prev) => new Map([...prev].filter(([k]) => k !== code))),
       onSuccess: (r) => {
         onNotice(`+${formatCount(r.rewardPoints)} điểm 🎉`);
-        return qc.invalidateQueries({ queryKey: storefrontQuestsQuery(coreHttp).queryKey });
+        return settleWithin(qc.invalidateQueries({ queryKey: storefrontQuestsQuery(coreHttp).queryKey }));
       },
       onError: (e, code) => setClaimErrors((prev) => new Map(prev).set(code, actErrText(e))),
     },

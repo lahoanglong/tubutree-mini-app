@@ -2,9 +2,11 @@
 
 import { useRef, useState } from 'react';
 import { frequentlyBoughtLines, frequentlyBoughtSummary } from '@tubutree/app-core/commerce/frequently-bought';
+import { boughtTogetherQuery } from '@tubutree/app-core/queries/catalog';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { FrequentlyBoughtTogether } from '@/components/mini/frequently-bought-together';
 import { playCartFeedback } from '@/lib/cart-feedback';
+import { coreHttp } from '@/lib/core-http';
 import { useBundleAdd } from '@/lib/use-bundle-add';
 import { useFbt, type FbtHostArgs } from './use-fbt';
 
@@ -20,7 +22,7 @@ const CURRENT = 'current';
  */
 export function PdpFbt(props: FbtHostArgs) {
   const { bundle } = useFbt(props);
-  const { add, busyId, result } = useBundleAdd();
+  const { add, busyId, result } = useBundleAdd(boughtTogetherQuery(coreHttp, props.slug).queryKey);
   const [off, setOff] = useState<ReadonlySet<string>>(new Set());
   const root = useRef<HTMLDivElement>(null);
 

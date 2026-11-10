@@ -7,6 +7,7 @@ import type { BestSellersPage } from '@tubutree/app-core/api/browse';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
 import { newTestClient } from '@/test-utils/render-hook';
 import { captureUnhandledRejections } from '@/test-utils/unhandled';
+import { ApiError } from '@/lib/client-api';
 
 // Lớp mạng (apiFetch) là bản giả; core-http, query và quick-add là bản THẬT để Reel đi đúng đường thêm giỏ nhanh của web.
 const net = vi.hoisted(() => ({ apiFetch: vi.fn(), push: vi.fn(), phase: 'authenticated' as 'authenticated' | 'guest' }));
@@ -419,5 +420,65 @@ describe('HomeStoryReel: thêm giỏ từ Reel khoá chạm đúp (W70B, Mini �
     await openReel();
     await tapAddTwice();
     expect(net.push).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('HomeStoryReel: thêm giỏ từ Reel bị máy chủ từ chối vì trạng thái đã đổi (W98B)', () => {
+  const openReel = async (index = 0) => {
+    click(rings()[index]!);
+    await flush(4);
+  };
+  const posts = () => calls().filter((c) => c === 'POST /cart/items').length;
+  const setup = (reload: Promise<void> | null) => {
+    const qc = newTestClient();
+    const invalidate = vi.spyOn(qc, 'invalidateQueries').mockImplementation(() => (reload ?? Promise.resolve()) as Promise<void>);
+    mounted = render(<HomeStoryReel initialBestSellers={PAGE(CARDS)} />, qc);
+    return invalidate;
+  };
+  const failPost = (error: unknown) => {
+    const inner = net.apiFetch.getMockImplementation()!;
+    net.apiFetch.mockImplementation(async (path: string, opts?: { method?: string }) => {
+      if (path.split('?')[0] === '/cart/items' && opts?.method === 'POST') throw error;
+      return inner(path, opts);
+    });
+  };
+  const keysOf = (spy: { mock: { calls: unknown[][] } }) => spy.mock.calls.map((call) => JSON.stringify((call[0] as { queryKey: unknown }).queryKey));
+
+  it.each([400, 404, 409])('HTTP %i: tải lại danh sách Bán chạy nhất (khoá của dải Reel), không tải Yêu thích; khoá giữ tới khi về', async (status) => {
+    let release!: () => void;
+    const invalidate = setup(new Promise<void>((r) => (release = r)));
+    await flush(2);
+    failPost(new ApiError('Sản phẩm đã hết hàng.', status));
+    await openReel();
+    click(q('story-add-to-cart'));
+    await flush(8);
+    expect(keysOf(invalidate)).toEqual([JSON.stringify(['products', 'home-best-seller'])]);
+    expect(mounted!.container.querySelector('[role="alert"]')?.textContent).toContain('Sản phẩm đã hết hàng.');
+    const before = posts();
+    await openReel();
+    click(q('story-add-to-cart'));
+    await flush(6);
+    expect(posts()).toBe(before);
+    await act(async () => release());
+    await flush(6);
+    await openReel();
+    click(q('story-add-to-cart'));
+    await flush(6);
+    expect(posts()).toBe(before + 1);
+  });
+
+  it.each([401, 500, 502])('HTTP %i (lỗi tạm): chỉ báo lỗi, không tải lại, nhả khoá ngay', async (status) => {
+    const invalidate = setup(new Promise<void>(() => undefined));
+    await flush(2);
+    failPost(new ApiError('Máy chủ bận', status));
+    await openReel();
+    click(q('story-add-to-cart'));
+    await flush(8);
+    expect(invalidate).not.toHaveBeenCalled();
+    const before = posts();
+    await openReel();
+    click(q('story-add-to-cart'));
+    await flush(6);
+    expect(posts()).toBe(before + 1);
   });
 });

@@ -130,7 +130,10 @@ export function useGameActions({
         ]),
       );
     },
-    onError,
+    // Trạng thái điểm danh nằm ở ['loyalty-checkin'] (không thuộc ['loyalty']) cạnh hồ sơ ['game'], nên bị từ chối vì đã điểm danh
+    // thì phải tải lại cả hai, kẻo nút còn sáng trên dữ liệu cũ.
+    onError: (e: unknown) =>
+      onError(e) ?? (serverRejectedState(e) ? settleWithin(Promise.all([refresh(), queryClient.invalidateQueries({ queryKey: ['loyalty-checkin'] })])) : undefined),
   });
   const dewM = useLockedMutation({
     mutationFn: () => collectDew(coreHttp),
@@ -138,7 +141,7 @@ export function useGameActions({
       notify(`Hứng được +${formatDrops(r.seedsEarned)} từ giọt sương sáng 💦`, 'success');
       return settleWithin(refresh());
     },
-    onError,
+    onError: onRejectedOnce,
   });
   const freezeM = useLockedMutation({
     mutationFn: () => buyStreakFreeze(coreHttp),
@@ -146,7 +149,7 @@ export function useGameActions({
       notify(`Đã mua vé giữ lửa 🧊 (còn ${r.streakFreezes} vé)`, 'success');
       return settleWithin(refresh());
     },
-    onError,
+    onError: onRejectedOnce,
   });
   const repairM = useLockedMutation({
     mutationFn: () => repairStreak(coreHttp),
@@ -154,7 +157,7 @@ export function useGameActions({
       notify('Đã hồi sinh chuỗi! 🌿', 'success');
       return settleWithin(queryClient.invalidateQueries({ queryKey: ['game', 'profile'] }));
     },
-    onError,
+    onError: onRejectedOnce,
   });
   const giftM = useLockedMutation(
     {
@@ -192,7 +195,7 @@ export function useGameActions({
   const waterM = useLockedMutation({
     mutationFn: (drops: number) => waterTree(coreHttp, drops),
     onSuccess: (r, drops) => afterWatering(`Đã tưới −${formatDrops(drops)}`, r, true),
-    onError,
+    onError: onRejectedOnce,
   });
   // Khoá chống bấm đúp của lượt góp nằm ở TreeActions (cần biết kết quả để quyết định đóng hộp hay giữ key), nên
   // đây dùng useMutation thường và caller gọi mutateAsync.
@@ -202,7 +205,8 @@ export function useGameActions({
       notify(`Đã góp 1 cây vào quỹ trồng cây 🌳 (−${formatPoints(r.cost)}) · mã ${r.certificateCode}`, 'success');
       return settleWithin(Promise.all([refresh(), queryClient.invalidateQueries({ queryKey: ['game', 'forest'] })]));
     },
-    onError,
+    // Promise của onError được chờ trước khi mutateAsync từ chối, nên khoá ref ở TreeFund giữ tới khi dữ liệu mới về.
+    onError: onRejectedOnce,
   });
   const unlockM = useLockedMutation({
     mutationFn: (slot: number) => unlockPlot(coreHttp, slot),
@@ -210,13 +214,13 @@ export function useGameActions({
       notify('Đã mở lô đất mới 🪴', 'success');
       return settleWithin(refresh());
     },
-    onError,
+    onError: onRejectedOnce,
   });
   const waterPlotM = useLockedMutation(
     {
       mutationFn: (plotId: string) => waterPlot(coreHttp, plotId, 20),
       onSuccess: (r) => afterWatering(`Đã tưới lô −${formatDrops(20)}`, r, false),
-      onError,
+      onError: onRejectedOnce,
     },
     (plotId) => plotId,
   );
@@ -234,7 +238,7 @@ export function useGameActions({
           ]),
         );
       },
-      onError,
+      onError: onRejectedOnce,
     },
     ({ tier, track }) => `${tier}:${track}`,
   );
@@ -252,7 +256,7 @@ export function useGameActions({
           ]),
         );
       },
-      onError,
+      onError: onRejectedOnce,
     },
     (code) => code,
   );
@@ -276,7 +280,7 @@ export function useGameActions({
       onError: (e: unknown) => {
         if (!isStaleQuizMessage(errText(e))) return onError(e);
         notify(gameMoreCopy.quiz.staleSet, 'error');
-        void queryClient.invalidateQueries({ queryKey: ['game', 'quiz'] });
+        return settleWithin(queryClient.invalidateQueries({ queryKey: ['game', 'quiz'] }));
       },
     },
     ({ id }) => id,

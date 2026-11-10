@@ -17,6 +17,7 @@ const state = vi.hoisted(() => ({
   posts: [] as string[],
   addToCart: vi.fn(),
   failRemind: null as unknown,
+  failItems: null as unknown,
   gates: new Map<string, Promise<void>>(),
 }));
 
@@ -42,6 +43,7 @@ vi.mock('@/lib/core-http', () => {
         if (path === '/flash-sales/upcoming') return [{ itemId: 'c', variationId: 'v-c', productSlug: 'sp-c', productName: 'Sản phẩm c', thumbnail: null, flashPrice: 1, retailPrice: 2, startAt: S20.startAt, reminded: state.reminded }];
         if (path === '/flash-sales/slots') return stamp(state.slots);
         const id = /\/flash-sales\/slots\/([^/]+)\/items/.exec(path)?.[1];
+        if (id && state.failItems) throw state.failItems;
         const body = id ? state.items[id] : undefined;
         if (body === undefined) throw new Error(`đường dẫn lạ ${path}`);
         return stamp(body);
@@ -152,6 +154,7 @@ beforeEach(() => {
   state.calls = [];
   state.posts = [];
   state.failRemind = null;
+  state.failItems = null;
   state.gates.clear();
   state.addToCart.mockReset();
   sessionStorage.clear();
@@ -279,6 +282,28 @@ describe('Giờ vàng: Nhắc tôi bị máy chủ từ chối', () => {
     expect(callsTo(SLOTS) - slotsBefore).toBe(0);
     expect(callsTo(/s20\/items/) - itemsBefore).toBe(0);
     expect(r.getAttribute('aria-busy')).toBeNull();
+  });
+
+  it('tải lại món hỏng (502) sau khi bị từ chối: danh sách món cũ vẫn hiện, không thay bằng khối lỗi tải', async () => {
+    state.failRemind = new ApiError('Suất Giờ vàng vừa thay đổi, hãy tải lại rồi thử lại.', 409);
+    const c = await openEvening();
+    const r = remindC(c);
+    expect(r.getAttribute('aria-label')).toBe('Nhắc tôi Sản phẩm c');
+    state.failItems = new ApiError('Bad gateway', 502);
+    const itemsBefore = callsTo(/s20\/items/);
+    await tapTogether(r);
+    await flush(10);
+    expect(callsTo(/s20\/items/) - itemsBefore).toBe(1);
+    expect(alertText(c)).toContain('Suất Giờ vàng vừa thay đổi');
+    expect(named(c, /^Nhắc tôi Sản phẩm c\b/)).toBeTruthy();
+    expect(c.textContent).not.toContain('Thử lại');
+  });
+
+  it('chưa có dữ liệu món nào mà tải hỏng (502): vẫn hiện khối lỗi tải có Thử lại', async () => {
+    state.failItems = new ApiError('Bad gateway', 502);
+    const c = await mount();
+    expect(c.textContent).toContain('Thử lại');
+    expect(named(c, 'Mua ngay Sản phẩm a')).toBeNull();
   });
 
   it('tải lại không bao giờ về: còn khoá ở 3 giây, nhả sau 4 giây', async () => {

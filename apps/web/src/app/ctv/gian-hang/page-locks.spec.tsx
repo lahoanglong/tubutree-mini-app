@@ -1188,6 +1188,150 @@ describe('khoá chống chạm đúp — luồng đăng ký 4 bước', () => {
   });
 });
 
+describe('khoá giữ có hạn 4 giây khi dữ liệu mới không bao giờ về (W98B)', () => {
+  const advance = (ms: number) =>
+    act(async () => {
+      await vi.advanceTimersByTimeAsync(ms);
+    });
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+  /** Còn khoá ở 3 giây, nhả sau 4 giây (cộng dư để Promise hạn xong). */
+  const stillBusyThenReleased = async (el: () => HTMLElement) => {
+    await advance(3_000);
+    expectBusy(el());
+    await advance(1_500);
+    await flush(2);
+    expectIdle(el());
+  };
+
+  it('Nhận thưởng nhiệm vụ: danh sách nhiệm vụ không về thì nút nhả sau 4 giây, nhận lại được', async () => {
+    mount();
+    await flush();
+    await openQuests();
+    const claim = () => Array.from(dialog()!.querySelectorAll<HTMLElement>('button')).find((b) => /^(Nhận|Đang nhận)/.test(b.textContent ?? ''))!;
+    state.hold.add('get /storefront/me/quests');
+    click(claim());
+    await flush();
+    expect(calls('post', '/storefront/me/quests/Q1/claim')).toHaveLength(1);
+    await stillBusyThenReleased(claim);
+    click(claim());
+    await flush();
+    expect(calls('post', '/storefront/me/quests/Q1/claim')).toHaveLength(2);
+  });
+
+  it('Ghim sản phẩm trong khối: gian hàng mới không về thì khoá nhả sau 4 giây', async () => {
+    mount();
+    await flush();
+    await openFirstSection();
+    state.hold.add(ME);
+    await openItemMenu();
+    click(btn('Ghim lên đầu'));
+    await flush();
+    expect(calls('patch', '/storefront/me/items/i1')).toHaveLength(1);
+    await openItemMenu();
+    click(btn('Ẩn sản phẩm'));
+    await flush();
+    expect(calls('patch', '/storefront/me/items/i1')).toHaveLength(1);
+    await advance(3_000);
+    await openItemMenu();
+    click(btn('Ẩn sản phẩm'));
+    await flush();
+    expect(calls('patch', '/storefront/me/items/i1')).toHaveLength(1);
+    await advance(1_500);
+    await flush(2);
+    await openItemMenu();
+    click(btn('Ẩn sản phẩm'));
+    await flush();
+    expect(calls('patch', '/storefront/me/items/i1')).toHaveLength(2);
+  });
+
+  describe('luồng đăng ký 4 bước', () => {
+    it('Bước thông tin — Tiếp tục: gian hàng mới không về thì sang bước sản phẩm sau 4 giây', async () => {
+      state.sf = storefront({ status: 'DRAFT' });
+      mount();
+      await flush();
+      await flush();
+      state.hold.add(ME);
+      click(btn('Tiếp tục'));
+      await flush();
+      expect(calls('patch', '/storefront/me')).toHaveLength(1);
+      expect(text()).toContain('Bước 2/4');
+      await advance(3_000);
+      expect(text()).toContain('Bước 2/4');
+      await advance(1_500);
+      await flush(2);
+      expect(text()).toContain('Bước 3/4');
+    });
+
+    it('Chọn mẫu: gian hàng mới không về thì khoá nhả sau 4 giây, chọn lại được', async () => {
+      state.sf = storefront({ status: 'DRAFT', collections: [] });
+      mount();
+      await flush();
+      await flush();
+      click(btn('Tiếp tục'));
+      await flush();
+      click(btn('Chọn danh mục'));
+      await flush();
+      state.hold.add(ME);
+      click(btn('Dùng mẫu Nhà bếp', dialog()!));
+      await flush();
+      expect(calls('post', '/storefront/me/apply-template')).toHaveLength(1);
+      expect(dialog()).toBeNull();
+      await advance(3_000);
+      click(btn('Chọn danh mục'));
+      await flush();
+      click(btn('Dùng mẫu Nhà bếp', dialog()!));
+      await flush();
+      expect(calls('post', '/storefront/me/apply-template')).toHaveLength(1);
+      await advance(1_500);
+      await flush(2);
+      click(btn('Dùng mẫu Nhà bếp', dialog()!));
+      await flush();
+      expect(calls('post', '/storefront/me/apply-template')).toHaveLength(2);
+    });
+
+    it('Bỏ món: gian hàng mới không về thì khoá nhả sau 4 giây', async () => {
+      state.sf = storefront({ status: 'DRAFT' });
+      mount();
+      await flush();
+      await flush();
+      click(btn('Tiếp tục'));
+      await flush();
+      const remove = btn('Bỏ Trà xanh');
+      state.hold.add(ME);
+      click(remove);
+      await flush();
+      expect(calls('delete', '/storefront/me/items/i1')).toHaveLength(1);
+      await stillBusyThenReleased(() => remove);
+      click(remove);
+      await flush();
+      expect(calls('delete', '/storefront/me/items/i1')).toHaveLength(2);
+    });
+
+    it('Gửi duyệt: gian hàng mới không về thì nút nhả sau 4 giây (lời báo đã hiện ngay)', async () => {
+      state.sf = storefront({ status: 'DRAFT' });
+      mount();
+      await flush();
+      await flush();
+      click(btn('Tiếp tục'));
+      await flush();
+      click(btn('Tiếp tục'));
+      await flush();
+      const submit = btn('Gửi duyệt');
+      state.hold.add(ME);
+      click(submit);
+      await flush();
+      expect(calls('post', '/storefront/me/publish')).toHaveLength(1);
+      expect(text()).toContain('Đã gửi duyệt.');
+      await stillBusyThenReleased(() => btn('Gửi duyệt'));
+    });
+  });
+});
+
 describe('"Thử lại" khi tải lỗi khoá cú bấm đôi (ErrorState trả lời hứa tải lại)', () => {
   it('lỗi tải gian hàng: hai cú chạm chỉ tải lại một lần, nút báo aria-busy; tải lỗi tiếp thì nhả khoá', async () => {
     state.fail.add(ME);

@@ -373,8 +373,8 @@ function Dashboard() {
     mutationFn: () => createAffiliateLink(coreHttp, 'HOMEPAGE'),
     onSuccess: () => {
       setNotice({ text: 'Đã tạo link chia sẻ mới', error: false });
-      // Khoá giữ tới khi danh sách link mới về: bấm lần hai khi danh sách còn cũ là tạo thêm một link nữa.
-      return qc.invalidateQueries({ queryKey: affiliateLinksQuery(coreHttp).queryKey });
+      // Khoá giữ tới khi danh sách link mới về (tối đa 4 giây): bấm lần hai khi danh sách còn cũ là tạo thêm một link nữa.
+      return settleWithin(qc.invalidateQueries({ queryKey: affiliateLinksQuery(coreHttp).queryKey }));
     },
     onError: (e) => setNotice({ text: actErrText(e), error: true }),
     onSettled: () => {
