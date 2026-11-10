@@ -281,10 +281,132 @@ describe('ChooseDestination (web): "Xác nhận" giữ focus khi đang lưu', ()
 });
 
 describe('OrderRefunds (web): số tiền thẳng hàng', () => {
-  it('khối Hoàn tiền dùng tabular-nums cho số tiền và form chọn nơi nhận bên trong', async () => {
+  it('khối Hoàn tiền dùng tabular-nums và form chọn nơi nhận mở ra nằm trong khối đó', async () => {
     const r = await mount();
     const section = r.container.querySelector('section[aria-labelledby="refunds-title"]')!;
     expect(section.className).toContain('tabular-nums');
     expect(section.textContent).toContain('197.000');
+    await openForm(r);
+    const group = r.container.querySelector('[role="group"]')!;
+    expect(section.contains(group)).toBe(true);
+    expect(group.closest('.tabular-nums')).toBe(section);
+  });
+});
+
+const LATE2 = { ...LATE, id: 'r2', amount: 120_000 };
+const alerts = (r: Rendered) => [...r.container.querySelectorAll('[role="alert"]')].map((a) => a.textContent);
+
+describe('OrderRefunds (web): lời từ chối sống ở khối Hoàn tiền, không mất cùng dòng khoản hoàn bị gỡ', () => {
+  it('khoản duy nhất, 404, tải lại ra danh sách rỗng: dòng bị gỡ nhưng lời từ chối vẫn còn đúng một lần trong khối Hoàn tiền', async () => {
+    const r = await mount();
+    const confirm = await openForm(r);
+    m.chooseRefundDestination.mockRejectedValue(new ApiError('Không tìm thấy khoản hoàn.', 404));
+    m.fetchMyRefunds.mockResolvedValue([]);
+    await act(async () => click(confirm));
+    await flush(4);
+    expect(r.container.querySelector('li')).toBeNull();
+    expect(r.container.querySelector('ul')).toBeNull();
+    expect(form(r)).toBeNull();
+    expect(alerts(r)).toEqual(['Không tìm thấy khoản hoàn.']);
+    expect(r.container.querySelector('section[aria-labelledby="refunds-title"]')?.contains(r.container.querySelector('[role="alert"]'))).toBe(true);
+  });
+
+  it('khoản còn trong danh sách nhưng đã đóng (409): lời từ chối hiện đúng một lần, không nhân đôi', async () => {
+    const r = await mount();
+    const confirm = await openForm(r);
+    m.chooseRefundDestination.mockRejectedValue(new ApiError('Khoản hoàn vừa được chọn ở máy khác.', 409));
+    m.fetchMyRefunds.mockResolvedValue([CLOSED]);
+    await act(async () => click(confirm));
+    await flush(4);
+    expect(r.container.querySelector('li')).not.toBeNull();
+    expect(alerts(r)).toEqual(['Khoản hoàn vừa được chọn ở máy khác.']);
+  });
+
+  it('hai khoản: lời từ chối của khoản thứ nhất tắt khi khách mở form của khoản thứ hai', async () => {
+    m.fetchMyRefunds.mockResolvedValue([LATE, LATE2]);
+    const r = await mount();
+    const confirm = await openForm(r);
+    m.chooseRefundDestination.mockRejectedValue(new ApiError('Khoản hoàn vừa được chọn ở máy khác.', 409));
+    m.fetchMyRefunds.mockResolvedValue([CLOSED, LATE2]);
+    await act(async () => click(confirm));
+    await flush(4);
+    expect(alerts(r)).toEqual(['Khoản hoàn vừa được chọn ở máy khác.']);
+    await openForm(r);
+    expect(form(r)).not.toBeNull();
+    expect(alerts(r)).toEqual([]);
+  });
+
+  it('lỗi tạm (503) rồi dữ liệu nền làm form tự đóng: KHÔNG hiện lại lời lỗi tạm như lời từ chối', async () => {
+    const r = await mount();
+    const confirm = await openForm(r);
+    m.chooseRefundDestination.mockRejectedValue(new ApiError('Máy chủ bận', 503));
+    await act(async () => click(confirm));
+    await flush(3);
+    expect(alerts(r)).toHaveLength(1);
+    m.fetchMyRefunds.mockResolvedValue([CLOSED]);
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: ['my-refunds', 'o1'] });
+    });
+    await flush(3);
+    expect(form(r)).toBeNull();
+    expect(alerts(r)).toEqual([]);
+  });
+
+  it('lỗi tạm rồi 404 rồi form đóng: lời từ chối của lần gửi cuối là lời được giữ lại', async () => {
+    const r = await mount();
+    const confirm = await openForm(r);
+    m.chooseRefundDestination.mockRejectedValueOnce(new ApiError('Máy chủ bận', 503)).mockRejectedValue(new ApiError('Khoản hoàn đã được xử lý.', 400));
+    await act(async () => click(confirm));
+    await flush(3);
+    m.fetchMyRefunds.mockResolvedValue([CLOSED]);
+    await act(async () => click(confirm));
+    await flush(4);
+    expect(form(r)).toBeNull();
+    expect(alerts(r)).toEqual(['Khoản hoàn đã được xử lý.']);
+  });
+
+  it('gửi lại đang bay thì khoản bị gỡ khỏi danh sách: lời từ chối của lần gửi trước không hiện lại khi chưa biết lần này ra sao', async () => {
+    const r = await mount();
+    const confirm = await openForm(r);
+    const second = deferred<typeof LATE>();
+    m.chooseRefundDestination.mockRejectedValueOnce(new ApiError('Lịch vừa đổi, hãy thử lại.', 409)).mockReturnValue(second.promise);
+    await act(async () => click(confirm));
+    await flush(4);
+    await act(async () => click(confirm));
+    m.fetchMyRefunds.mockResolvedValue([]);
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: ['my-refunds', 'o1'] });
+    });
+    await flush(3);
+    expect(r.container.querySelector('li')).toBeNull();
+    expect(alerts(r)).toEqual([]);
+    await act(async () => second.resolve(LATE));
+    await flush(3);
+  });
+
+  it('khách bấm "Để sau" khi form còn mở sau lời từ chối: lời từ chối không hiện lại ở khối cha', async () => {
+    const r = await mount();
+    const confirm = await openForm(r);
+    m.chooseRefundDestination.mockRejectedValue(new ApiError('Lịch vừa đổi, hãy thử lại.', 409));
+    await act(async () => click(confirm));
+    await flush(4);
+    expect(form(r)).not.toBeNull();
+    click(button(r, 'Để sau')!);
+    await flush(2);
+    expect(form(r)).toBeNull();
+    expect(alerts(r)).toEqual([]);
+  });
+
+  it('bị từ chối rồi gửi lại thành công: không còn lời từ chối nào, chỉ có lời xác nhận', async () => {
+    const r = await mount();
+    const confirm = await openForm(r);
+    m.chooseRefundDestination.mockRejectedValueOnce(new ApiError('Lịch vừa đổi, hãy thử lại.', 409)).mockResolvedValue(LATE);
+    await act(async () => click(confirm));
+    await flush(4);
+    await act(async () => click(confirm));
+    await flush(4);
+    expect(form(r)).toBeNull();
+    expect(alerts(r)).toEqual([]);
+    expect(r.container.querySelector('[role="status"]')?.textContent).toBe('Đã hoàn 197.000đ vào Ví Tubu.');
   });
 });

@@ -41,41 +41,57 @@ export function OrderRefunds({ orderId, returnRequestIds }: { orderId: string; r
   });
   // Khoản hoàn của một yêu cầu trả hàng đã nằm cùng dòng với yêu cầu đó ở khối thao tác (ReturnStatus): không lặp lại ở đây.
   const shown = (refunds.data ?? []).filter((r) => !(r.kind === 'RETURN' && r.refKey && returnRequestIds?.has(r.refKey)));
+  // Lời máy chủ từ chối giữ ở khối này chứ không ở dòng khoản hoàn: tải lại xong khoản đó có thể rời danh sách (404), dòng bị gỡ thì lời mất theo.
+  const [rejected, setRejected] = useState<string | null>(null);
 
-  if (!shown.length) return null;
+  if (!shown.length && !rejected) return null;
   return (
     <section aria-labelledby="refunds-title" className={`mt-4 p-4 tabular-nums ${ui.card}`}>
       <h2 id="refunds-title" className={ui.sectionTitle}>
         Hoàn tiền
       </h2>
-      <ul className="mt-2 space-y-3">
-        {shown.map((r) => {
-          const s = refundStatusText(r);
-          const tone = TONE[s.tone];
-          return (
-            <li key={r.id} className="flex items-start gap-2">
-              <tone.Icon className={`mt-0.5 h-4 w-4 flex-none ${tone.text}`} aria-hidden="true" />
-              <div className="min-w-0 flex-1">
-                <p className={`text-sm font-semibold ${tone.text}`}>
-                  {s.title} · {formatVnd(r.amount)}
-                </p>
-                {s.detail && <p className="text-xs text-stone-600">{s.detail}</p>}
-                <RefundDestinationControl refund={r} />
-              </div>
-            </li>
-          );
-        })}
-      </ul>
+      {shown.length > 0 && (
+        <ul className="mt-2 space-y-3">
+          {shown.map((r) => {
+            const s = refundStatusText(r);
+            const tone = TONE[s.tone];
+            return (
+              <li key={r.id} className="flex items-start gap-2">
+                <tone.Icon className={`mt-0.5 h-4 w-4 flex-none ${tone.text}`} aria-hidden="true" />
+                <div className="min-w-0 flex-1">
+                  <p className={`text-sm font-semibold ${tone.text}`}>
+                    {s.title} · {formatVnd(r.amount)}
+                  </p>
+                  {s.detail && <p className="text-xs text-stone-600">{s.detail}</p>}
+                  <RefundDestinationControl refund={r} onRejected={setRejected} />
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {rejected && (
+        <p role="alert" className={`mt-2 ${ui.error}`}>
+          {rejected}
+        </p>
+      )}
     </section>
   );
 }
 
 /** Nút "Chọn/Đổi nơi nhận tiền" của một khoản hoàn, kèm form và lời xác nhận sau khi lưu; dùng ở khối Hoàn tiền và dòng yêu cầu trả hàng. */
-export function RefundDestinationControl({ refund: r }: { refund: MyRefund }) {
+export function RefundDestinationControl({
+  refund: r,
+  onRejected,
+}: {
+  refund: MyRefund;
+  /** Nơi giữ lời máy chủ từ chối sau khi form bị gỡ; không truyền thì lời nằm ngay dưới dòng này (mất nếu dòng cũng bị gỡ). */
+  onRejected?: (text: string | null) => void;
+}) {
   const [choosing, setChoosing] = useState(false);
   const [done, setDone] = useState<string | null>(null);
-  // Lời máy chủ từ chối còn lại sau khi form tự đóng (khoản hoàn đã sang bước khác): nằm trong form thì mất cùng form.
-  const [rejected, setRejected] = useState<string | null>(null);
+  const [localRejected, setLocalRejected] = useState<string | null>(null);
+  const reportRejected = (text: string | null) => (onRejected ? onRejected(text) : setLocalRejected(text));
   return (
     <>
       {done && (
@@ -83,9 +99,9 @@ export function RefundDestinationControl({ refund: r }: { refund: MyRefund }) {
           {done}
         </p>
       )}
-      {rejected && (
+      {localRejected && (
         <p role="alert" className={`mt-2 ${ui.error}`}>
-          {rejected}
+          {localRejected}
         </p>
       )}
       {r.canChooseDestination && !choosing && (
@@ -93,7 +109,7 @@ export function RefundDestinationControl({ refund: r }: { refund: MyRefund }) {
           type="button"
           onClick={() => {
             setDone(null);
-            setRejected(null);
+            reportRejected(null);
             setChoosing(true);
           }}
           className={`mt-2 ${r.bankAccountNo ? ui.btnSecondary : ui.btnPrimary}`}
@@ -106,10 +122,7 @@ export function RefundDestinationControl({ refund: r }: { refund: MyRefund }) {
           key={r.id}
           refund={r}
           onClose={() => setChoosing(false)}
-          onUnavailable={(msg) => {
-            setChoosing(false);
-            setRejected(msg);
-          }}
+          onRejected={reportRejected}
           onSaved={(msg) => {
             setChoosing(false);
             setDone(msg);
@@ -123,12 +136,12 @@ export function RefundDestinationControl({ refund: r }: { refund: MyRefund }) {
 function ChooseDestination({
   refund,
   onClose,
-  onUnavailable,
+  onRejected,
   onSaved,
 }: {
   refund: MyRefund;
   onClose: () => void;
-  onUnavailable: (rejection: string | null) => void;
+  onRejected: (rejection: string) => void;
   onSaved: (msg: string) => void;
 }) {
   const qc = useQueryClient();
@@ -147,6 +160,17 @@ function ChooseDestination({
   const [touched, setTouched] = useState(false);
   // State riêng cho lời lỗi: `save.isError` chỉ lật sau khi Promise của onError xong, tức sau lúc tải lại, mà lời lỗi phải hiện ngay.
   const [error, setError] = useState<string | null>(null);
+  // Lời từ chối (400/404/409) của lần gửi gần nhất, báo lên khối cha khi form bị gỡ (nằm trong form thì mất cùng form). Lỗi tạm không phải lời từ chối
+  // nên không bao giờ được báo lên; khách chủ động "Để sau" hay gửi lại thì lời cũ không còn nghĩa.
+  const rejectionRef = useRef<string | null>(null);
+  const onRejectedRef = useRef(onRejected);
+  onRejectedRef.current = onRejected;
+  useEffect(
+    () => () => {
+      if (rejectionRef.current) onRejectedRef.current(rejectionRef.current);
+    },
+    [],
+  );
   const bankError = method === 'BANK' ? bankDetailsError(bank) : null;
 
   // Khoá đồng bộ: `save.isPending` chỉ đổi sau lần vẽ kế, hai cú bấm "Xác nhận" sát nhau sẽ gọi API hai lần.
@@ -166,8 +190,11 @@ function ChooseDestination({
     },
     // Khoản hoàn đã khác thẻ: tải lại để thẻ và nút theo số thật, khoá giữ tới lúc đó (có hạn). Ví cũng tải lại vì bên thắng có thể vừa cộng tiền vào Ví.
     onError: (e) => {
-      setError(actionErrorText(e));
-      if (!isStaleRefundError(e)) return undefined;
+      const text = actionErrorText(e);
+      setError(text);
+      const stale = isStaleRefundError(e);
+      rejectionRef.current = stale ? text : null;
+      if (!stale) return undefined;
       return settleWithin(Promise.all([qc.invalidateQueries({ queryKey: ['my-refunds', refund.orderId] }), invalidateBalances(qc)]));
     },
     onSettled: () => {
@@ -178,14 +205,15 @@ function ChooseDestination({
   // Khoản đã sang bước khác trên máy chủ: form này không lưu được nữa nên đóng, khối phía sau đã hiện trạng thái thật. Không đóng giữa lúc
   // đang lưu: lệnh đang bay còn phải báo kết quả, và sau lỗi bị từ chối khoá giữ tới khi dữ liệu mới về nên effect chạy lại ngay khi khoá nhả.
   useEffect(() => {
-    if (!refund.canChooseDestination && !save.isPending) onUnavailable(error);
-  }, [refund.canChooseDestination, save.isPending, error, onUnavailable]);
+    if (!refund.canChooseDestination && !save.isPending) onClose();
+  }, [refund.canChooseDestination, save.isPending, onClose]);
 
   const submit = () => {
     if (savingRef.current || save.isPending) return;
     setTouched(true);
     if (bankError) return;
     setError(null);
+    rejectionRef.current = null;
     savingRef.current = true;
     save.mutate(method);
   };
@@ -212,7 +240,10 @@ function ChooseDestination({
       <div className="mt-3 flex flex-wrap gap-2">
         <button
           type="button"
-          onClick={onClose}
+          onClick={() => {
+            rejectionRef.current = null;
+            onClose();
+          }}
           disabled={save.isPending}
           className={ui.btnSecondary}
         >
