@@ -1,7 +1,7 @@
 import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest';
 import type { GroupBuy } from '../services/groupbuy-api';
 import { formatVnd } from '../utils/format';
 
@@ -80,6 +80,7 @@ beforeEach(() => {
   mocks.auth.error = undefined;
   mocks.listGroupBuys.mockResolvedValue([GROUP('a'), GROUP('b', { joined: true })]);
   mocks.joinGroupBuy.mockResolvedValue({ joined: true, currentSize: 3, status: 'OPEN' });
+  mocks.shareWithFallback.mockResolvedValue(undefined);
 });
 
 describe('GroupBuyPage — hành vi giữ nguyên khi chuyển DS v2', () => {
@@ -730,5 +731,48 @@ describe('GroupBuyPage — "Thử lại" danh sách khoá chạm đúp (W87A)', 
     expect(mocks.listGroupBuys.mock.calls.length - before).toBe(1);
     await act(async () => next.resolve([GROUP('a')]));
     expect(await screen.findByText('Sản phẩm a')).toBeInTheDocument();
+  });
+});
+
+describe('GroupBuyPage — khoá giữ có hạn khi việc kéo dài mãi (W87A)', () => {
+  const advance = (ms: number) =>
+    act(async () => {
+      await vi.advanceTimersByTimeAsync(ms);
+    });
+
+  beforeEach(() => {
+    // shouldAdvanceTime để bộ đếm giờ của react-query và waitFor vẫn chạy; chỉ cần giả setTimeout để tua tới hạn.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it('tham gia xong mà danh sách không về: còn khoá ở 3 giây, nhả sau 4 giây', async () => {
+    mocks.listGroupBuys.mockResolvedValueOnce([GROUP('a')]).mockReturnValueOnce(new Promise(() => undefined));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Tham gia mua chung (−20%)' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã tham gia nhóm', type: 'success' }));
+    await waitFor(() => expect(mocks.listGroupBuys).toHaveBeenCalledTimes(2));
+    await advance(3_000);
+    expect(screen.getByRole('button', { name: 'Tham gia mua chung (−20%)' })).toHaveAttribute('aria-busy', 'true');
+    fireEvent.click(screen.getByRole('button', { name: 'Tham gia mua chung (−20%)' }));
+    expect(mocks.joinGroupBuy).toHaveBeenCalledTimes(1);
+    await advance(1_500);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Tham gia mua chung (−20%)' })).not.toHaveAttribute('aria-busy'));
+    fireEvent.click(screen.getByRole('button', { name: 'Tham gia mua chung (−20%)' }));
+    await waitFor(() => expect(mocks.joinGroupBuy).toHaveBeenCalledTimes(2));
+  });
+
+  it('hộp chia sẻ treo mãi: "Mời bạn bè" còn khoá ở 29 giây, nhả sau 30 giây', async () => {
+    mocks.shareWithFallback.mockReturnValueOnce(new Promise(() => undefined));
+    mocks.listGroupBuys.mockResolvedValue([GROUP('mine', { joined: true, isOwner: true })]);
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Mời bạn bè' }));
+    expect(mocks.shareWithFallback).toHaveBeenCalledTimes(1);
+    await advance(29_000);
+    fireEvent.click(screen.getByRole('button', { name: 'Mời bạn bè' }));
+    expect(mocks.shareWithFallback).toHaveBeenCalledTimes(1);
+    await advance(1_500);
+    fireEvent.click(screen.getByRole('button', { name: 'Mời bạn bè' }));
+    expect(mocks.shareWithFallback).toHaveBeenCalledTimes(2);
   });
 });

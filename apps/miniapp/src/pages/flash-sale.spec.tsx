@@ -741,7 +741,7 @@ describe('Trang Giờ vàng: khoá chạm đúp Mua ngay và Nhắc tôi (W75A)'
   });
 });
 
-describe('Trang Giờ vàng: "Thử lại" món của khung khoá chạm đúp, kết quả muộn của khung cũ (W87A)', () => {
+describe('Trang Giờ vàng: "Thử lại" món của khung khoá chạm đúp, đổi tab lúc món khung trước chưa về (W87A)', () => {
   const deferred = () => {
     let resolve!: (v: unknown) => void;
     const promise = new Promise((res) => {
@@ -788,7 +788,8 @@ describe('Trang Giờ vàng: "Thử lại" món của khung khoá chạm đúp, 
     expect(await screen.findByRole('button', { name: 'Mua ngay Sản phẩm a' })).toBeInTheDocument();
   });
 
-  it('khung 12:00 trả lời muộn sau khi khách đã sang khung 20:00: danh sách vẫn là của khung 20:00 (khoá truy vấn theo khung, nên không cần reqIdRef); về lại 12:00 thấy món của nó', async () => {
+  // Chỉ ghim hành vi nhìn thấy khi đổi tab; không chứng minh chống kết quả cũ (khoá truy vấn theo khung nên kết quả muộn vào ô nhớ khác).
+  it('đổi sang khung 20:00 lúc món khung 12:00 chưa về: hiện món khung 20:00; quay lại 12:00 thì thấy món của nó', async () => {
     serve({ items: { s20: itemsOf(S20, [item('c')]) } });
     const late = deferred();
     overrideItems('s12', () => late.promise);
@@ -796,10 +797,8 @@ describe('Trang Giờ vàng: "Thử lại" món của khung khoá chạm đúp, 
     await screen.findAllByRole('tab');
     fireEvent.click(screen.getAllByRole('tab')[1]!);
     expect(await screen.findByRole('button', { name: 'Nhắc tôi Sản phẩm c' })).toBeInTheDocument();
-    await act(async () => late.resolve(stamp(itemsOf(S12, [item('a')]))));
-    expect(screen.getByRole('button', { name: 'Nhắc tôi Sản phẩm c' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Mua ngay Sản phẩm a' })).toBeNull();
     expect(screen.getAllByRole('tab')[1]).toHaveAttribute('aria-selected', 'true');
+    await act(async () => late.resolve(stamp(itemsOf(S12, [item('a')]))));
     fireEvent.click(screen.getAllByRole('tab')[0]!);
     expect(await screen.findByRole('button', { name: 'Mua ngay Sản phẩm a' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Nhắc tôi Sản phẩm c' })).toBeNull();

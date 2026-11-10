@@ -14,6 +14,7 @@ import { useAuthStore } from '../store/auth';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { formatDate, formatVnd } from '../utils/format';
 import { haptic } from '../utils/haptic';
+import { settleWithin } from '../utils/settle-within';
 import { vi } from '../i18n/vi';
 import { Badge, type BadgeTone } from './ui/badge';
 import { BottomSheet } from './ui/bottom-sheet';
@@ -66,10 +67,12 @@ export function SubscriptionsPanel() {
   const statusMut = useLockedMutation({
     onSettled: releaseActing,
     mutationFn: ({ id, status }: { id: string; status: SubStatus }) => setSubscriptionStatus(id, status),
-    // Trả Promise: khoá (và `exclusive`) giữ tới khi danh sách làm mới về, kẻo nút thẻ sáng lại với nhãn/trạng thái cũ trong lúc chờ.
+    // Trả Promise: khoá (và `exclusive`) giữ tới khi danh sách làm mới về (tối đa `settleWithin`), kẻo nút thẻ sáng lại với nhãn/trạng thái cũ
+    // trong lúc chờ. Sheet đóng ngay sau lệnh, không chờ danh sách.
     onSuccess: () => {
       haptic('light');
-      return qc.invalidateQueries({ queryKey: ['subscriptions'] });
+      setCancelTarget(null);
+      return settleWithin(qc.invalidateQueries({ queryKey: ['subscriptions'] }));
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
@@ -81,7 +84,7 @@ export function SubscriptionsPanel() {
       haptic('light');
       openSnackbar({ text: vi.subscriptions.skipOk, type: 'success' });
       setCancelTarget(null);
-      return qc.invalidateQueries({ queryKey: ['subscriptions'] });
+      return settleWithin(qc.invalidateQueries({ queryKey: ['subscriptions'] }));
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
@@ -92,7 +95,7 @@ export function SubscriptionsPanel() {
   const sheetBusy = statusMut.isPending || skipMut.isPending;
   const changeFromSheet = (status: SubStatus) => {
     if (!cancelTarget) return;
-    exclusive(() => statusMut.mutate({ id: cancelTarget, status }, { onSuccess: () => setCancelTarget(null) }));
+    exclusive(() => statusMut.mutate({ id: cancelTarget, status }));
   };
 
   return (
@@ -121,9 +124,13 @@ export function SubscriptionsPanel() {
             key={s.id}
             sub={s}
             busy={sheetBusy}
-            toggling={statusMut.isPending && statusMut.variables?.id === s.id && cancelTarget === null}
+            toggling={statusMut.isPending && statusMut.variables?.id === s.id && statusMut.variables.status !== 'CANCELLED' && cancelTarget === null}
+            refreshing={subsQ.isFetching}
             address={s.addressId ? addressById.get(s.addressId) : undefined}
-            onEdit={() => setEditTarget(s.id)}
+            onEdit={() => {
+              if (subsQ.isFetching) return;
+              setEditTarget(s.id);
+            }}
             onToggle={() => exclusive(() => statusMut.mutate({ id: s.id, status: s.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE' }))}
             onCancel={() => setCancelTarget(s.id)}
           />
@@ -193,6 +200,7 @@ function SubscriptionCard({
   sub: s,
   busy,
   toggling,
+  refreshing,
   address,
   onEdit,
   onToggle,
@@ -202,6 +210,8 @@ function SubscriptionCard({
   busy: boolean;
   /** Chính thẻ này đang đổi Tạm dừng/Tiếp tục: nút đó hiện spinner, không khoá DOM để giữ focus. */
   toggling: boolean;
+  /** Danh sách đang tải lại: "Sửa" chờ, kẻo mở sheet trên số liệu cũ (vừa lưu 3 mà form hiện 2, lần lưu sau ghi đè về 2). */
+  refreshing: boolean;
   address?: Parameters<typeof addressText>[0];
   onEdit: () => void;
   onToggle: () => void;
@@ -253,7 +263,7 @@ function SubscriptionCard({
           : vi.subscriptions.pausedLine}
       </Text>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
-        <Button variant="secondary" disabled={busy} onPress={onEdit} style={{ flex: '1 1 auto', minWidth: 'max-content' }}>
+        <Button variant="secondary" disabled={busy || refreshing} onPress={onEdit} style={{ flex: '1 1 auto', minWidth: 'max-content' }}>
           {vi.subscriptions.edit}
         </Button>
         <Button variant="secondary" loading={toggling} disabled={busy && !toggling} onPress={onToggle} style={{ flex: '1 1 auto', minWidth: 'max-content' }}>

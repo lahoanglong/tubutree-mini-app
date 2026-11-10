@@ -8,6 +8,7 @@ import { getGroupBuy, listGroupBuys, joinGroupBuy, type GroupBuy } from '../serv
 import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { fetchActiveFlashSales } from '../services/shop-api';
 import { serverNow } from '../utils/server-clock';
+import { settleWithin } from '../utils/settle-within';
 import { formatVnd } from '../utils/format';
 import { useAuthStore } from '../store/auth';
 import { useLoginWithNotice } from '../components/ui/auth-gate';
@@ -23,6 +24,9 @@ import { Heading, Text } from '../components/ui/text';
 import { useShareWithFallback } from '../components/share-sheet';
 import { withReferral } from '../utils/share-link';
 import { ProductThumb } from '../components/ui/product-thumb';
+
+/** Hộp chia sẻ của Zalo không có hạn: quá ngần này thì nhả khoá "Mời bạn bè" dù hộp chưa báo xong. */
+const SHARE_LOCK_MAX_MS = 30_000;
 
 function timeLeft(iso: string): string {
   const diff = (new Date(iso).getTime() - Date.now()) / 1000;
@@ -73,9 +77,9 @@ export default function GroupBuyPage() {
         text: r.status === 'SUCCESS' ? 'Nhóm đã đủ người! Mã giảm giá đã vào ví của bạn.' : 'Đã tham gia nhóm',
         type: 'success',
       });
-      // Trả Promise: khoá của nhóm giữ tới khi danh sách và chi tiết nhóm làm mới về. Nhả sớm thì thẻ còn `joined: false` và nút "Tham gia"
-      // sáng lại, chạm lần nữa gửi một lệnh tham gia thừa bị máy chủ từ chối ngay sau thông báo thành công.
-      return queryClient.invalidateQueries({ queryKey: ['group-buy'] });
+      // Trả Promise: khoá của nhóm giữ tới khi danh sách và chi tiết nhóm làm mới về (tối đa `settleWithin`). Nhả sớm thì thẻ còn `joined: false`
+      // và nút "Tham gia" sáng lại, chạm lần nữa gửi một lệnh tham gia thừa bị máy chủ từ chối ngay sau thông báo thành công.
+      return settleWithin(queryClient.invalidateQueries({ queryKey: ['group-buy'] }));
     },
     onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   }, (id) => id);
@@ -135,18 +139,21 @@ export default function GroupBuyPage() {
     await joinSignedIn(id);
   };
 
-  // Trả Promise để Button giữ khoá tới khi hộp chia sẻ đóng: chạm đúp không mở hai hộp chia sẻ của Zalo.
+  // Trả Promise để Button giữ khoá tới khi hộp chia sẻ đóng: chạm đúp không mở hai hộp chia sẻ của Zalo. Có hạn: hộp chia sẻ treo thì nút không chết tới lúc rời trang.
   const share = (g: GroupBuy) =>
-    shareWithFallback(
-      {
-        title: `Mua chung ${g.product.name} giảm ${g.discountPct}%`,
-        description: `Còn thiếu ${groupMissing(g)} người nữa là đủ nhóm, vào tham gia cùng mình nhé!`,
-        thumbnail: g.product.thumbnail ?? undefined,
-        path: withReferral(`/group-buy/${g.id}`, referralCode),
-      },
-      `Cùng mình mua chung ${g.product.name} giảm ${g.discountPct}% trên Tubu Tree nhé! Vào mục "Mua chung nhóm" để tham gia.${
-        referralCode ? ` Mã giới thiệu của mình: ${referralCode}` : ''
-      }`,
+    settleWithin(
+      shareWithFallback(
+        {
+          title: `Mua chung ${g.product.name} giảm ${g.discountPct}%`,
+          description: `Còn thiếu ${groupMissing(g)} người nữa là đủ nhóm, vào tham gia cùng mình nhé!`,
+          thumbnail: g.product.thumbnail ?? undefined,
+          path: withReferral(`/group-buy/${g.id}`, referralCode),
+        },
+        `Cùng mình mua chung ${g.product.name} giảm ${g.discountPct}% trên Tubu Tree nhé! Vào mục "Mua chung nhóm" để tham gia.${
+          referralCode ? ` Mã giới thiệu của mình: ${referralCode}` : ''
+        }`,
+      ),
+      SHARE_LOCK_MAX_MS,
     );
 
   const renderCard = (g: GroupBuy, invitedBanner = false) => (
