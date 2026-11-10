@@ -58,21 +58,28 @@ function setup() {
 }
 
 describe('CustomerRefundsService — race', () => {
-  it('khách bấm nhận về Ví nhiều lần cùng lúc: Ví được cộng đúng MỘT lần, khoản COMPLETED bằng Ví, các lần thua nhận 400 "vừa được xử lý"', async () => {
+  it('khách bấm nhận về Ví nhiều lần cùng lúc: Ví được cộng đúng MỘT lần, khoản COMPLETED bằng Ví, hai lần thua nhận 400 "vừa được xử lý"', async () => {
     const { db, svc, wallet, ledger, refund, notifications } = setup();
     const settled = await Promise.allSettled([
       svc.chooseDestination('u1', 'r1', { refundMethod: 'WALLET' }),
       svc.chooseDestination('u1', 'r1', { refundMethod: 'WALLET' }),
       svc.chooseDestination('u1', 'r1', { refundMethod: 'WALLET' }),
     ]);
-    expect(settled.filter((s) => s.status === 'fulfilled')).toHaveLength(1);
-    for (const s of settled.filter((x) => x.status === 'rejected')) expect(httpStatus(s)).toBe(400);
+    const won = settled.flatMap((s) => (s.status === 'fulfilled' ? [s.value] : []));
+    const lost = settled.filter((s) => s.status === 'rejected');
+    expect(won).toHaveLength(1);
+    expect(lost).toHaveLength(2);
+    expect(won[0]).toMatchObject({ id: 'r1', status: 'COMPLETED', method: 'WALLET' });
+    for (const s of lost) {
+      expect(httpStatus(s)).toBe(400);
+      expect(((s as PromiseRejectedResult).reason as Error).message).toBe('Khoản hoàn này vừa được xử lý — bạn tải lại nhé.');
+    }
+    expect(db.rows('orderCustomerRefund')).toHaveLength(1);
     expect(refund()).toMatchObject({ method: 'WALLET', status: 'COMPLETED' });
     expect(wallet()).toBe(AMOUNT);
     expect(ledger()).toHaveLength(1);
     expect(ledger()[0]).toMatchObject({ type: 'ORDER_REFUND', delta: AMOUNT, refId: 'r1' });
     expect(notifications.notifySafe).toHaveBeenCalledTimes(1);
-    expect(db.stats.lockWaits + db.stats.rollbacks).toBeGreaterThan(0);
   });
 
   it('hai admin cùng bấm "Bắt đầu chuyển khoản": đúng một người giữ khoản (claimedBy là người thắng), người kia nhận 400 và không chuyển trùng', async () => {

@@ -54,19 +54,27 @@ describe('applyWalletDelta — race', () => {
     expect(db.stats.lockWaits).toBeGreaterThan(0);
   });
 
-  it('nhiều lệnh cộng/trừ song song: số dư luôn bằng tổng sổ cái và balanceAfter của dòng cuối bằng số dư', async () => {
+  it('nhiều lệnh cộng/trừ song song: lệnh trừ thứ hai bị từ chối vì số dư đã bị lệnh đầu trừ, số dư cuối đúng 25.000đ, đúng bốn dòng sổ và balanceAfter nối tiếp nhau', async () => {
     const { run, ledger, balanceNow } = setup(100_000);
     const settled = await Promise.allSettled([
-      run({ userId: 'u1', delta: -30_000, type: 'ORDER_PAY', refId: 'o1' }),
-      run({ userId: 'u1', delta: 20_000, type: 'ORDER_REFUND', refId: 'r1' }),
-      run({ userId: 'u1', delta: -90_000, type: 'ORDER_PAY', refId: 'o2' }),
+      run({ userId: 'u1', delta: -60_000, type: 'ORDER_PAY', refId: 'o1' }),
+      run({ userId: 'u1', delta: -60_000, type: 'ORDER_PAY', refId: 'o2' }),
+      run({ userId: 'u1', delta: 30_000, type: 'ORDER_REFUND', refId: 'r1' }),
+      run({ userId: 'u1', delta: -50_000, type: 'ORDER_PAY', refId: 'o3' }),
       run({ userId: 'u1', delta: 5_000, type: 'CASHBACK', refId: 'c1' }),
     ]);
-    expect(settled.every((s) => s.status === 'fulfilled' || (s.reason as Error).message === 'Số dư ví không đủ.')).toBe(true);
+    expect(settled.map((s) => s.status)).toEqual(['fulfilled', 'rejected', 'fulfilled', 'fulfilled', 'fulfilled']);
+    expect(((settled[1] as PromiseRejectedResult).reason as Error).message).toBe('Số dư ví không đủ.');
     const rows = ledger();
-    expect(100_000 + rows.reduce((s, r) => s + r.delta, 0)).toBe(balanceNow());
-    expect(balanceNow()).toBeGreaterThanOrEqual(0);
-    expect(rows.map((r) => r.balanceAfter)).toContain(balanceNow());
-    expect(new Set(rows.map((r) => `${r.type}:${r.refId}`)).size).toBe(rows.length);
+    expect(rows).toHaveLength(4);
+    expect(balanceNow()).toBe(25_000);
+    // Dòng sổ theo thứ tự commit: mỗi dòng ghi số dư sau đúng bằng số dư dòng trước cộng delta của nó (không dòng nào đọc số dư cũ).
+    expect(rows.map((r) => [r.refId, r.delta, r.balanceAfter])).toEqual([
+      ['o1', -60_000, 40_000],
+      ['r1', 30_000, 70_000],
+      ['o3', -50_000, 20_000],
+      ['c1', 5_000, 25_000],
+    ]);
+    expect(100_000 + rows.reduce((sum, r) => sum + r.delta, 0)).toBe(balanceNow());
   });
 });

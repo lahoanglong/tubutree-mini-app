@@ -121,16 +121,95 @@ describe('AffiliateService — race', () => {
     expect(db.stats.lockWaits).toBeGreaterThan(0);
   });
 
-  it('hai lệnh chuyển cùng Idempotency-Key cùng lúc: một lệnh, Ví cộng một lần, bên thua nhận kết quả của lệnh thắng hoặc lỗi 4xx', async () => {
-    const { db, svc, wallet, ledger } = setup();
+  it('ba lệnh chuyển cùng Idempotency-Key cùng lúc: một lệnh, Ví cộng một lần, hai bên thua nhận ĐÚNG kết quả của lệnh thắng (không 409), hoa hồng chốt một lần', async () => {
+    const { db, svc, wallet, ledger, status } = setup();
     const settled = await Promise.allSettled([pay(svc, 'same'), pay(svc, 'same'), pay(svc, 'same')]);
-    expect(settled.filter((s) => s.status === 'fulfilled').length).toBeGreaterThanOrEqual(1);
-    for (const s of settled) {
-      if (s.status === 'rejected') expect(httpStatus(s)).toBeLessThan(500);
-    }
+    expect(settled.map((s) => s.status)).toEqual(['fulfilled', 'fulfilled', 'fulfilled']);
+    const results = settled.map((s) => (s as PromiseFulfilledResult<Record<string, unknown>>).value);
+    const note = 'Đã cộng 300000đ vào Ví Tubu.';
+    for (const r of results) expect(r).toMatchObject({ ok: true, method: 'WALLET_BALANCE', credited: 300_000, note });
+    expect(results.filter((r) => 'count' in r)).toEqual([{ ok: true, method: 'WALLET_BALANCE', credited: 300_000, count: 2, note }]);
     expect(db.rows('payout')).toHaveLength(1);
+    expect(db.rows('payout')[0]).toMatchObject({ idempotencyKey: 'same', userId: 'ctv', amount: 300_000, status: 'PAID' });
     expect(wallet()).toBe(300_000);
     expect(ledger('COMMISSION_PAYOUT')).toHaveLength(1);
+    expect(['c1', 'c2'].map(status)).toEqual(['PAID', 'PAID']);
+    expect(db.rows('commission').every((c) => c.walletPayoutId === db.rows('payout')[0]!.id)).toBe(true);
+    expect(db.stats.lockWaits).toBeGreaterThan(0);
+  });
+
+  // Trả một phần cắt `amount` của hoa hồng APPROVED và giữ khoá dòng tới lúc commit (đường trả hàng không lấy khoá tháng thuế): lần chuyển phải khoá dòng khi
+  // đọc để thấy số đã cắt. Đọc không khoá thì Ví nhận số cũ (300.000đ) trong khi hoa hồng chỉ còn 260.000đ.
+  it('lệnh chuyển chen với lần trả một phần cắt amount hoa hồng (quét thời điểm): Ví luôn bằng tổng hoa hồng PAID sau khi cắt, không nhận số cũ', async () => {
+    const seen = new Set<string>();
+    for (let skew = -40; skew <= 40; skew++) {
+      const { db, svc, wallet, ledger, status } = setup();
+      let cut = 0;
+      const transfer = async () => (await delay(Math.max(-skew, 0)), pay(svc, 'k1'));
+      const partialReturn = async () => {
+        await delay(Math.max(skew, 0));
+        await db.client.$transaction(async (tx: any) => {
+          cut = (await tx.commission.updateMany({ where: { id: 'c1', status: 'APPROVED', amount: 100_000 }, data: { amount: { decrement: 40_000 } } })).count;
+          await delay(8); // giữ khoá dòng tới commit như lần duyệt trả một phần còn đang ghi các bảng khác
+        });
+      };
+      const [paid] = await Promise.allSettled([transfer(), partialReturn()]);
+      const label = `offset ${skew}`;
+      const sumPaid = db.rows('commission').filter((c) => c.status === 'PAID').reduce((sum, c) => sum + c.amount, 0);
+      is(label, db.row('commission', 'c1')!.amount, cut ? 60_000 : 100_000);
+      if (paid.status === 'fulfilled') {
+        is(label, wallet(), sumPaid);
+        is(label, wallet(), cut ? 260_000 : 300_000);
+        is(label, ledger('COMMISSION_PAYOUT').map((t) => t.delta), [wallet()]);
+        is(label, db.rows('payout')[0]!.grossAmount, wallet());
+        is(label, ['c1', 'c2'].map(status), ['PAID', 'PAID']);
+      } else {
+        is(label, httpStatus(paid), 400); // số tiền khách thấy (300.000đ) lớn hơn số khả dụng sau khi cắt
+        is(label, wallet(), 0);
+        is(label, db.rows('payout').length, 0);
+        is(label, ['c1', 'c2'].map(status), ['APPROVED', 'APPROVED']);
+      }
+      seen.add(paid.status === 'fulfilled' ? `chuyển ${wallet()}, cắt ${cut}` : 'bị từ chối');
+    }
+    expect(seen).toEqual(new Set(['chuyển 260000, cắt 1', 'chuyển 300000, cắt 0', 'bị từ chối']));
+  });
+
+  // Lệnh rút ngân hàng cũ (REQUESTED, đã giữ 600.000đ thuế vì tháng đã 6.000.000đ) bị từ chối chen với lần chuyển mới 1.000.000đ cùng tháng thuế. Hai bên không chung
+  // dòng hoa hồng nào (hoa hồng của lệnh cũ còn nằm trong lệnh) nên chỉ khoá tháng thuế xếp chúng nối tiếp nhau: chuyển trước thì phần thuế dư được hoàn lại,
+  // từ chối trước thì lần chuyển báo thử lại. Không khoá, lần chuyển thấy lệnh cũ còn tính (giữ 100.000đ) còn lần từ chối không thấy lệnh mới (không hoàn), thuế giữ dư mãi.
+  it('chuyển hoa hồng chen với từ chối lệnh rút cũ cùng tháng thuế (quét thời điểm): thuế giữ ròng luôn khớp mức phải giữ của tháng (0đ), phần dư được hoàn Ví đúng một lần', async () => {
+    const seen = new Set<string>();
+    for (let skew = -60; skew <= 60; skew += 2) {
+      const { db, svc, wallet, ledger, status } = setup({
+        commissions: [commission('c0', 'o0', 6_000_000, { payoutBatchId: 'p0' }), commission('c1', 'o1', 1_000_000)],
+        payouts: [{ id: 'p0', userId: 'ctv', amount: 5_400_000, fee: 0, grossAmount: 6_000_000, taxWithheld: 600_000, taxRefunded: 0, method: 'BANK', status: 'REQUESTED', requestedAt: new Date() }],
+      });
+      db.seed('order', [{ id: 'o0', code: 'TUBU0', userId: 'buyer', referrerUserId: 'ctv', status: 'DELIVERED', type: 'RETAIL', placedForCustomer: false }]);
+      db.seed('user', [{ id: 'ctv', role: 'STAFF', walletBalance: 0, pointsBalance: 0, metadata: null, affiliateRevokedAt: null, personalTaxId: '0123456789' }]);
+      const transfer = async () => (await delay(Math.max(skew, 0)), pay(svc, 'k1', 1_000_000));
+      const reject = async () => (await delay(Math.max(-skew, 0)), svc.rejectPayout('a1', 'p0', 'Sai thông tin'));
+      const [paid, rejected] = await Promise.allSettled([transfer(), reject()]);
+      const label = `offset ${skew}`;
+      is(label, rejected.status, 'fulfilled');
+      is(label, db.row('payout', 'p0')!.status, 'REJECTED');
+      is(label, status('c0'), 'APPROVED'); // hoa hồng của lệnh bị từ chối trả về số dư khả dụng
+      is(label, ledger().reduce((sum, t) => sum + t.delta, 0), wallet());
+      if (paid.status === 'fulfilled') {
+        const mine = db.rows('payout').filter((x) => x.id !== 'p0');
+        is(label, mine.length, 1);
+        is(label, mine[0]!.taxWithheld - mine[0]!.taxRefunded, 0); // 1.000.000đ < ngưỡng 5.000.000đ của tháng sau khi lệnh cũ bị từ chối: không còn thuế phải giữ
+        is(label, wallet(), 1_000_000);
+        is(label, ledger('PIT_REFUND').map((t) => t.delta), [100_000]);
+        is(label, status('c1'), 'PAID');
+      } else {
+        is(label, (httpStatus(paid) ?? 500) < 500, true);
+        is(label, wallet(), 0);
+        is(label, db.rows('payout').length, 1);
+        is(label, status('c1'), 'APPROVED');
+      }
+      seen.add(paid.status === 'fulfilled' ? 'chuyển trước, hoàn thuế dư' : `từ chối trước, chuyển nhận ${httpStatus(paid)}`);
+    }
+    expect([...seen].sort()).toEqual(['chuyển trước, hoàn thuế dư', 'từ chối trước, chuyển nhận 400', 'từ chối trước, chuyển nhận 409']);
   });
 
   it('lệnh chuyển chen với lần thu hồi hoa hồng của đơn vừa bị trả (quét thời điểm): Ví luôn khớp hoa hồng PAID còn lại, hoa hồng đơn bị trả luôn REJECTED, không 500', async () => {

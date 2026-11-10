@@ -90,6 +90,9 @@ export { CTV_MONTHLY_MILESTONES, type CtvMilestone } from './ctv-milestones';
 
 type Db = PrismaService | Prisma.TransactionClient;
 
+/** Dòng lệnh chuyển đã tạo, đủ để dựng lại phản hồi cho lần gọi lặp cùng Idempotency-Key. */
+type PayoutReplayRow = { id: string; method: string; amount: number; status: PayoutStatus };
+
 const vnd = (n: number) => `${n.toLocaleString('vi-VN')}đ`;
 
 /** Kết quả thu hồi một hoa hồng khi đơn bị trả/huỷ (reverseCommissionsForOrder). */
@@ -1406,6 +1409,17 @@ export class AffiliateService {
     }
   }
 
+  private payoutReplay(existing: PayoutReplayRow) {
+    return existing.method === 'WALLET_BALANCE'
+      ? {
+          ok: true,
+          method: existing.method,
+          credited: existing.amount,
+          note: `Đã cộng ${existing.amount}đ vào Ví Tubu.`,
+        }
+      : { ok: true, payoutId: existing.id, status: existing.status };
+  }
+
   async requestPayout(
     userId: string,
     amount: number,
@@ -1431,16 +1445,7 @@ export class AffiliateService {
     // cần thêm cột mới.
     if (key) {
       const existing = await this.prisma.payout.findUnique({ where: { idempotencyKey: key } });
-      if (existing && existing.userId === userId) {
-        return existing.method === 'WALLET_BALANCE'
-          ? {
-              ok: true,
-              method: existing.method,
-              credited: existing.amount,
-              note: `Đã cộng ${existing.amount}đ vào Ví Tubu.`,
-            }
-          : { ok: true, payoutId: existing.id, status: existing.status };
-      }
+      if (existing && existing.userId === userId) return this.payoutReplay(existing);
       // idempotencyKey unique toàn cục (không compound theo userId) — nếu key trùng nhưng thuộc
       // user khác thì KHÔNG trả payout của người khác ra ngoài; bắt buộc client thử lại key mới.
       if (existing) throw new BadRequestException('Idempotency-Key đã được sử dụng, bạn thử lại nhé.');
@@ -1475,12 +1480,18 @@ export class AffiliateService {
     // Rút = cash-out TOÀN BỘ hoa hồng khả dụng (commission là bản ghi rời rạc, không
     // tách lẻ theo số tiền tùy ý). credited tính theo tổng THỰC trong transaction →
     // không mất tiền; gate theo updateMany.count → không double-spend khi chạy đồng thời.
-    let result: { credited: number; count: number };
+    let result: { credited: number; count: number } | { replay: PayoutReplayRow };
     try {
       result = await this.prisma.$transaction(async (tx) => {
         // Một mốc giờ cho khoá, khung tháng cộng dồn, requestedAt và paidAt (báo cáo thuế gom theo paidAt): lệch nhau quanh nửa đêm cuối tháng thì lệnh rơi sang tháng khác.
         const now = new Date();
         await this.lockPitMonth(tx, userId, now);
+        // Cùng Idempotency-Key, lệnh kia vừa commit trong lúc ta đợi khoá tháng: hoa hồng đã chuyển hết nên đi tiếp chỉ ra lỗi 409,
+        // trả lại lệnh đã tạo như lần gọi lại tuần tự. Kiểm sau khoá (không phải trước) vì chỉ lúc này mới thấy được lệnh vừa commit.
+        if (key) {
+          const prior = await tx.payout.findUnique({ where: { idempotencyKey: key } });
+          if (prior && prior.userId === userId) return { replay: prior };
+        }
         // Khoá dòng khi đọc: lần trả một phần cắt amount của hoa hồng APPROVED giữ khoá tới lúc commit. Đọc không khoá thì thấy amount
         // cũ, updateMany đợi khoá rồi vẫn khớp (điều kiện WHERE không có amount) và Ví nhận nhiều hơn hoa hồng còn lại. Thứ tự khoá
         // hoa hồng rồi tới Ví CTV trùng với đường thu hồi nên không deadlock.
@@ -1569,6 +1580,7 @@ export class AffiliateService {
       }
       throw err;
     }
+    if ('replay' in result) return this.payoutReplay(result.replay);
     return {
       ok: true,
       method,

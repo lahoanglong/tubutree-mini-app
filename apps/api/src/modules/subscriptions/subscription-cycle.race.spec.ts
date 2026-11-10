@@ -1,3 +1,4 @@
+import { HttpException } from '@nestjs/common';
 import { RaceDb, tick } from '../../../test/fakes/race-db.fake';
 import { WalletLedgerService } from '../wallet/wallet-ledger.service';
 import { SubscriptionsService } from './subscriptions.service';
@@ -11,10 +12,13 @@ const delay = async (n: number) => {
   for (let i = 0; i < n; i++) await tick();
 };
 const is = (label: string, actual: unknown, expected: unknown) => expect({ label, actual }).toEqual({ label, actual: expected });
+const httpStatus = (r: PromiseSettledResult<unknown>) => (r.status === 'rejected' && r.reason instanceof HttpException ? r.reason.getStatus() : null);
 
 const UNIT = 50_000;
 const QTY = 2;
 const CYCLE_TOTAL = 88_000; // 100.000đ giảm 12% (bậc mặc định), phí giao 0
+const DAY = 86_400_000;
+const INTERVAL = 4 * 7 * DAY; // intervalWeeks của gói seed
 
 function setup() {
   const db = new RaceDb({
@@ -130,10 +134,12 @@ describe('SubscriptionsService cycle — race', () => {
     expect(db.stats.rollbacks).toBeGreaterThan(0);
   });
 
+  // setStatus/skipCycle ghi CÓ ĐIỀU KIỆN theo bản vừa đọc (status + nextRunAt): cron claim chen giữa thì khách nhận 409 và gói giữ nguyên
+  // ACTIVE với kỳ đã ra đơn; ghi theo id thì lệnh của khách trả nextRunAt về mốc cũ (lịch lệch) trong khi đơn kỳ đó vẫn ra.
   it.each(['PAUSED', 'CANCELLED'] as const)(
-    'cron chen với khách bấm %s (quét thời điểm): gói luôn ở trạng thái khách chọn, tối đa một đơn, Ví/kho/sổ luôn khớp số đơn',
+    'cron chen với khách bấm %s (quét thời điểm): khách thắng thì gói đúng trạng thái đã chọn, thua thì 409 và kỳ đó ra đúng một đơn; lịch không bị kéo ngược',
     async (target) => {
-      const seen = new Set<number>();
+      const seen = new Set<string>();
       for (let skew = -40; skew <= 40; skew++) {
         const { db, svc, orders, wallet, ledger, variation } = setup();
         const cron = async () => (await delay(Math.max(skew, 0)), svc.processDue());
@@ -141,17 +147,57 @@ describe('SubscriptionsService cycle — race', () => {
         const [ranCron, acted] = await Promise.allSettled([cron(), act()]);
         const label = `skew ${skew}`;
         is(label, ranCron.status, 'fulfilled');
-        is(label, acted.status, 'fulfilled');
-        is(label, db.row('subscription', 's1')!.status, target);
         const n = orders().length;
+        const sub = db.row('subscription', 's1')!;
+        if (acted.status === 'fulfilled') {
+          is(label, sub.status, target);
+        } else {
+          is(label, httpStatus(acted), 409);
+          is(label, sub.status, 'ACTIVE');
+          is(label, n, 1);
+        }
+        if (n === 1) is(label, sub.nextRunAt.getTime() > Date.now() + 20 * DAY, true); // kỳ đã ra đơn thì lịch ở kỳ kế, không bị ghi cũ kéo ngược
         is(label, n <= 1, true);
         is(label, wallet(), 500_000 - CYCLE_TOTAL * n);
         is(label, ledger().length, n);
         is(label, variation().stock, 10 - QTY * n);
         is(label, variation().reservedStock, QTY * n);
-        seen.add(n);
+        seen.add(`${n} đơn, khách ${acted.status}`);
       }
-      expect(seen).toEqual(new Set([0, 1]));
+      expect(seen).toEqual(new Set(['0 đơn, khách fulfilled', '1 đơn, khách fulfilled', '1 đơn, khách rejected']));
     },
   );
+
+  it('khách bấm Bỏ qua kỳ chen với cron claim (quét thời điểm): bỏ qua thắng thì kỳ đó KHÔNG ra đơn, thua thì 409; không bao giờ báo đã bỏ qua mà đơn kỳ đó vẫn ra', async () => {
+    const seen = new Set<string>();
+    for (let skew = -40; skew <= 40; skew++) {
+      const { db, svc, orders, wallet, ledger, variation } = setup();
+      const due = (db.row('subscription', 's1')!.nextRunAt as Date).getTime();
+      const cron = async () => (await delay(Math.max(skew, 0)), svc.processDue());
+      const act = async () => (await delay(Math.max(-skew, 0)), svc.skipCycle('u1', 's1'));
+      const [ranCron, skipped] = await Promise.allSettled([cron(), act()]);
+      const label = `skew ${skew}`;
+      is(label, ranCron.status, 'fulfilled');
+      const n = orders().length;
+      const sub = db.row('subscription', 's1')!;
+      const next = sub.nextRunAt.getTime();
+      is(label, sub.status, 'ACTIVE');
+      if (skipped.status === 'fulfilled') {
+        // Bỏ qua thắng cron: lịch dời một chu kỳ từ kỳ đến hạn và kỳ đó không ra đơn. Cron claim trước thì khách bỏ qua kỳ KẾ (một chu kỳ nữa).
+        if (n === 0) is(label, next, due + INTERVAL);
+        else is(label, next > Date.now() + 40 * DAY, true);
+      } else {
+        is(label, httpStatus(skipped), 409);
+        is(label, n, 1);
+        is(label, next > Date.now() + 20 * DAY && next < Date.now() + 40 * DAY, true); // chỉ có dời của cron claim
+      }
+      is(label, n <= 1, true);
+      is(label, wallet(), 500_000 - CYCLE_TOTAL * n);
+      is(label, ledger().length, n);
+      is(label, variation().stock, 10 - QTY * n);
+      is(label, variation().reservedStock, QTY * n);
+      seen.add(`${n} đơn, bỏ qua ${skipped.status}`);
+    }
+    expect(seen).toEqual(new Set(['0 đơn, bỏ qua fulfilled', '1 đơn, bỏ qua fulfilled', '1 đơn, bỏ qua rejected']));
+  });
 });
