@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, type ReactNode } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -19,6 +19,7 @@ import { autoCouponName } from '@/lib/coupon-name';
 import { BottomSheet } from '@/components/mini/bottom-sheet';
 import { FlashPriceBar } from '@/components/mini/flash-price-bar';
 import { GameNoticeBar, useGameNotice } from '@/components/game/game-notice';
+import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { Icon } from '@/components/mini/icon';
 import { ProductTrustStrip } from '@/components/mini/product-trust-strip';
 import { ListRow } from '@/components/mini/list-row';
@@ -423,20 +424,22 @@ export function PdpGroupBuyRow({ productId, slug }: { productId: string; slug: s
   const phase = useAuthPhase();
   const cfg = usePublicConfig();
   const [error, setError] = useState<string | null>(null);
-  const create = useMutation({
+  // Hai cú bấm trong cùng khung hình tạo hai nhóm: `isPending` chỉ đúng sau lần dựng kế tiếp, khoá ref của `useLockedMutation` chặn ngay.
+  const create = useLockedMutation({
     mutationFn: () => createGroupBuy(coreHttp, productId),
+    onMutate: () => setError(null),
     onSuccess: (group) => router.push(`/mua-chung/${encodeURIComponent(group.id)}?moi=1`),
     onError: (e: unknown) => setError(actionErrorText(e)),
   });
 
   const onClick = () => {
-    if (create.isPending || phase === 'loading') return;
-    setError(null);
+    if (phase === 'loading') return;
     if (phase === 'unavailable') {
       setError(offlineMessage('mở nhóm mua chung được'));
       return;
     }
     if (phase === 'guest') {
+      setError(null);
       router.push(loginHref(pagePath(slug)));
       return;
     }
@@ -448,8 +451,9 @@ export function PdpGroupBuyRow({ productId, slug }: { productId: string; slug: s
       <button
         type="button"
         onClick={onClick}
-        disabled={create.isPending}
-        className={`${rowButton} disabled:opacity-60`}
+        aria-busy={create.isPending || undefined}
+        aria-disabled={create.isPending || undefined}
+        className={`${rowButton} aria-disabled:opacity-60`}
       >
         <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-forest-50">
           <Users className="h-5 w-5 text-forest-700" aria-hidden="true" />

@@ -18,7 +18,8 @@ export interface AffiliateFeaturedProductsProps {
   products: readonly FeaturedAffiliateProduct[] | null;
   /** Tải danh sách lỗi: hiện lời báo và nút "Thử lại". */
   error?: boolean;
-  onRetry?: () => void;
+  /** Trả Promise (vd. `() => query.refetch()`) thì nút khoá bấm lại tới khi Promise xong. */
+  onRetry?: () => void | PromiseLike<unknown>;
 }
 
 /** "Đã chép link" ở lại 2 giây rồi trả nhãn cũ; chép lỗi thì báo cách chép tay lâu hơn. */

@@ -100,6 +100,9 @@ export default function AddToCart({
   const qty = shared?.quantity ?? localQty;
   const setQty = shared?.setQuantity ?? setLocalQty;
   const [busy, setBusy] = useState(false);
+  // Thêm giỏ và Mua ngay đều ghi vào giỏ nên một khoá chung cho cả hai nút, cả lối đăng nhập xong thêm nốt và lối lightbox ảnh đánh giá: bấm hai nút sát nhau chỉ ghi giỏ một lần.
+  // `busy` chỉ đúng sau lần dựng kế tiếp nên không chặn được cú bấm thứ hai trong cùng khung hình; ref thì chặn ngay.
+  const cartWrite = useRef(false);
   // Đang làm "Mua ngay" (thêm giỏ rồi đi tiếp) hay chỉ "Thêm vào giỏ": quyết định chữ trên nút nào đang quay.
   const [buying, setBuying] = useState(false);
   // Giỏ lúc khách bấm "Mua ngay". Thêm xong, giỏ mới (có món vừa thêm) được ghi vào cache trước khi `router.push` xong, và PDP còn đứng đó: nếu số nút
@@ -222,6 +225,8 @@ export default function AddToCart({
   };
 
   const add = async (variationId: string, quantity: number, buyNow = false) => {
+    if (cartWrite.current) return;
+    cartWrite.current = true;
     setBusy(true);
     setBuying(buyNow);
     setBuyFreeze(buyNow ? { lines: cartData?.items } : null);
@@ -262,6 +267,7 @@ export default function AddToCart({
       void qc.invalidateQueries({ queryKey: ['product-stock', slug] });
     } finally {
       if (!leaving) {
+        cartWrite.current = false;
         setBusy(false);
         setBuyFreeze(null);
       }

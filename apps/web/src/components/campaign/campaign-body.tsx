@@ -34,11 +34,11 @@ function Products({ slug, initial }: { slug: string; initial?: PageResponse<Prod
   const first = results[0];
   const last = results[results.length - 1];
   if (first?.isPending) return <ProductGrid items={[]} variant="grid" loading />;
-  if (first?.isError) return <ErrorState variant="inline" message={loadErrorText(first.error)} onRetry={() => void first.refetch()} />;
+  if (first?.isError) return <ErrorState variant="inline" message={loadErrorText(first.error)} onRetry={() => first.refetch()} />;
   return (
     <>
       <ProductGrid items={view.items} variant="grid" />
-      {last?.isError && <ErrorState variant="inline" message={loadErrorText(last.error)} onRetry={() => void last.refetch()} />}
+      {last?.isError && <ErrorState variant="inline" message={loadErrorText(last.error)} onRetry={() => last.refetch()} />}
       {view.hasMore && !last?.isError && (
         <div className="mt-4">
           <Button variant="secondary" fullWidth loading={last?.isPending} onPress={() => setPages((n) => n + 1)}>

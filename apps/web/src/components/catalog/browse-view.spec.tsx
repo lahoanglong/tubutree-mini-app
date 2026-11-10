@@ -1022,6 +1022,30 @@ describe('BrowseView — tải thêm, rỗng, lỗi', () => {
     expect(container.textContent).toContain('Sản phẩm 1');
   });
 
+  it('"Thử lại" trả refetch: bấm khi lần tải lại còn chạy thì nút aria-busy + aria-disabled, xong thì danh sách hiện (W79B)', async () => {
+    nav.search = LIST;
+    let attempts = 0;
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    routes['/products'] = async () => {
+      attempts += 1;
+      if (attempts === 1) throw new Error('Mất kết nối');
+      await gate;
+      return pageOf([product(1)], 1);
+    };
+    const { container } = mount();
+    await flush(8);
+    const retry = buttonByName(container, 'Thử lại') as HTMLButtonElement;
+    click(retry);
+    await flush(1);
+    expect(retry.getAttribute('aria-busy')).toBe('true');
+    expect(retry.getAttribute('aria-disabled')).toBe('true');
+    expect(retry.disabled).toBe(false);
+    await act(async () => release());
+    await flush(8);
+    expect(container.textContent).toContain('Sản phẩm 1');
+  });
+
   it('lỗi khi "Xem thêm": giữ nguyên danh sách, báo và thử lại tại chỗ', async () => {
     nav.search = LIST;
     let failPage2 = true;

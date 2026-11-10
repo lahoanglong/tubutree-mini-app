@@ -127,7 +127,7 @@ export default function CtvPage() {
   if (meQ.isError && !meQ.data) {
     return (
       <Shell>
-        <ErrorState message={errText(meQ.error)} onRetry={() => void meQ.refetch()} />
+        <ErrorState message={errText(meQ.error)} onRetry={() => meQ.refetch()} />
       </Shell>
     );
   }
@@ -475,7 +475,7 @@ function Dashboard() {
       <div className="mx-auto max-w-2xl space-y-4 max-md:space-y-3 max-md:[&>:first-child]:mb-4">
         {dashQ.isError ? (
           // Không đưa "0đ" khi lỗi tải: CTV sẽ tưởng mình chưa có hoa hồng.
-          <ErrorState message={errText(dashQ.error)} onRetry={() => void dashQ.refetch()} />
+          <ErrorState message={errText(dashQ.error)} onRetry={() => dashQ.refetch()} />
         ) : dashQ.isLoading || hero.waiting ? (
           <div role="status" aria-label="Đang tải hoa hồng">
             <Skeleton height={148} />
@@ -567,7 +567,7 @@ function Dashboard() {
 
           {milestonesQ.isError ? (
             <div className={`${ui.card} ${phoneFlatCard} p-4`}>
-              <ErrorState variant="inline" message={errText(milestonesQ.error)} onRetry={() => void milestonesQ.refetch()} />
+              <ErrorState variant="inline" message={errText(milestonesQ.error)} onRetry={() => milestonesQ.refetch()} />
             </div>
           ) : milestonesQ.isLoading ? (
             <div className={`${ui.card} ${phoneFlatCard} p-4`}>
@@ -615,7 +615,7 @@ function Dashboard() {
             </ul>
           </Section>
           <section data-testid="ctv-featured-card" className={`${ui.card} ${phoneFlatCard} p-4`}>
-            <AffiliateFeaturedProducts products={featured} error={featuredQ.isError} onRetry={() => void featuredQ.refetch()} />
+            <AffiliateFeaturedProducts products={featured} error={featuredQ.isError} onRetry={() => featuredQ.refetch()} />
           </section>
           <Section
             title="Link chia sẻ"
@@ -632,7 +632,7 @@ function Dashboard() {
             }
           >
             {linksQ.isError ? (
-              <ErrorState variant="inline" message={errText(linksQ.error)} onRetry={() => void linksQ.refetch()} />
+              <ErrorState variant="inline" message={errText(linksQ.error)} onRetry={() => linksQ.refetch()} />
             ) : linksQ.data && linksQ.data.length > 0 ? (
               <ul>
                 {linksQ.data.map((l) => (
@@ -668,7 +668,7 @@ function Dashboard() {
           <Section title="Lịch sử hoa hồng">
             {commQ.isError && commissions.length === 0 ? (
               // Tránh "Chưa có hoa hồng" khi thực tế là API lỗi.
-              <ErrorState variant="inline" message={errText(commQ.error)} onRetry={() => void commQ.refetch()} />
+              <ErrorState variant="inline" message={errText(commQ.error)} onRetry={() => commQ.refetch()} />
             ) : commissions.length > 0 ? (
               <>
                 <ul>
@@ -698,7 +698,7 @@ function Dashboard() {
               </div>
             )}
             {payoutsQ.isError && payouts.length === 0 ? (
-              <ErrorState variant="inline" message={errText(payoutsQ.error)} onRetry={() => void payoutsQ.refetch()} />
+              <ErrorState variant="inline" message={errText(payoutsQ.error)} onRetry={() => payoutsQ.refetch()} />
             ) : payouts.length > 0 ? (
               <>
                 <ul>
@@ -717,7 +717,7 @@ function Dashboard() {
 
           <Section title="Theo gian hàng">
             {sfQ.isError ? (
-              <ErrorState variant="inline" message={errText(sfQ.error)} onRetry={() => void sfQ.refetch()} />
+              <ErrorState variant="inline" message={errText(sfQ.error)} onRetry={() => sfQ.refetch()} />
             ) : sfQ.data && sfQ.data.storefronts.length > 0 ? (
               <ul>
                 {sfQ.data.storefronts.map((sf) => (
@@ -741,7 +741,7 @@ function Dashboard() {
 
           <Section title="Theo sản phẩm">
             {pbQ.isError ? (
-              <ErrorState variant="inline" message={errText(pbQ.error)} onRetry={() => void pbQ.refetch()} />
+              <ErrorState variant="inline" message={errText(pbQ.error)} onRetry={() => pbQ.refetch()} />
             ) : pbQ.data && pbQ.data.length > 0 ? (
               <ul>
                 {pbQ.data.slice(0, 10).map((p, i) => (

@@ -4,6 +4,8 @@ import { createContext, useContext } from 'react';
 import { homeText } from '@/lib/home-text';
 import { ui } from '@/lib/guest-ui';
 import { loadErrorText } from '@/lib/error-text';
+import { usePressLock } from '@/lib/use-press-lock';
+import { isThenable } from '@/components/mini/button';
 
 /**
  * true khi Trang chủ đã hiện MỘT dải lỗi cấp trang (API sập hẳn): khối lỗi từng kệ ẩn đi, không xếp chồng 6 thẻ giống hệt nhau.
@@ -31,7 +33,13 @@ export interface HomeBlockErrorProps {
  */
 export function HomeBlockError({ title, error, onRetry, retrying = false }: HomeBlockErrorProps) {
   const suppressed = useContext(HomeBlockErrorSuppressed);
+  // Nút đang giữ focus nên không `disabled`; `retrying` chỉ đúng sau lần dựng kế tiếp nên khoá chạm đúp là ref trong `usePressLock`, nhả khi lần tải lại xong.
+  const { press, busy } = usePressLock(() => {
+    const result = onRetry();
+    return isThenable(result) ? result : undefined;
+  });
   if (suppressed) return null;
+  const waiting = retrying || busy;
   return (
     <section aria-label={title} data-testid="home-block-error" className="py-2">
       <h2 className="mb-2 font-display text-lg font-semibold text-stone-900">{title}</h2>
@@ -39,10 +47,13 @@ export function HomeBlockError({ title, error, onRetry, retrying = false }: Home
         <p className="min-w-0 text-sm text-stone-700">{homeErrorMessage(error)}</p>
         <button
           type="button"
-          disabled={retrying}
-          aria-busy={retrying || undefined}
+          aria-busy={waiting || undefined}
+          aria-disabled={waiting || undefined}
           aria-label={homeText.retryLabel(title)}
-          onClick={() => void onRetry()}
+          onClick={() => {
+            if (retrying) return;
+            press();
+          }}
           className={`${ui.btnSecondary} flex-none`}
         >
           {homeText.retry}

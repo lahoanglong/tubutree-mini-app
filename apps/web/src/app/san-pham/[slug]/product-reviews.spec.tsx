@@ -1169,3 +1169,66 @@ describe('ProductReviews (web) — form đánh giá dùng được bằng bàn p
     expect(mocks.saved[0]!.body).toMatchObject({ rating: 4, orderId: 'o1' });
   });
 });
+
+describe('ProductReviews (web): "Thử lại" trả refetch nên nút báo bận tới khi tải lại xong (W79B, Mini ↔ web)', () => {
+  const FIRST = Array.from({ length: 6 }, (_, i) => review(`p${i}`, 5));
+  const SECOND = [review('q0', 4), review('q1', 4), review('q2', 4)];
+  const PAGED = { ...LIST, count: 9, distribution: { '5': 6, '4': 3 }, items: FIRST };
+  // Lần đầu của khoá bị gọi thì lỗi, các lần sau chờ cổng rồi trả dữ liệu: nút Thử lại đang bấm phải còn aria-busy lúc chờ.
+  const failOnceThenHold = (matches: (filter: number | string, cursor?: string) => boolean, data: (filter: number | string, cursor?: string) => unknown) => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    let failed = false;
+    mocks.serve = async (filter, cursor) => {
+      if (!matches(filter, cursor)) return data(filter, cursor);
+      if (!failed) {
+        failed = true;
+        return new Error('mất mạng');
+      }
+      await gate;
+      return data(filter, cursor);
+    };
+    return release;
+  };
+  const expectBusyThenDone = async (c: HTMLElement, release: () => void, doneText: string) => {
+    const retry = button(c, 'Thử lại') as HTMLButtonElement;
+    click(retry);
+    await flush(1);
+    expect(retry.getAttribute('aria-busy')).toBe('true');
+    expect(retry.getAttribute('aria-disabled')).toBe('true');
+    expect(retry.disabled).toBe(false);
+    await act(async () => release());
+    await flush(8);
+    expect(c.textContent).toContain(doneText);
+  };
+
+  it('danh sách đầu lỗi (reviewsQ)', async () => {
+    const release = failOnceThenHold((f, cur) => f === 'all' && !cur, () => structuredClone(LIST));
+    const c = await mount();
+    expect(c.textContent).toContain('Không tải được đánh giá.');
+    await expectBusyThenDone(c, release, 'Nhận xét a');
+  });
+
+  it('chip lọc lỗi (filteredQ)', async () => {
+    const release = failOnceThenHold((f) => f === 3, () => ({ ...LIST, items: [review('c', 3)] }));
+    mocks.serve = ((inner) => async (f: number | string, cur?: string) => (f === 'all' ? structuredClone(LIST) : inner(f, cur)))(mocks.serve!);
+    const c = await mount();
+    await pick(c, '3 sao');
+    expect(c.textContent).toContain('Không tải được đánh giá.');
+    await expectBusyThenDone(c, release, 'Nhận xét c');
+  });
+
+  it('trang kế lỗi (retryMore)', async () => {
+    const release = failOnceThenHold(
+      (_f, cur) => cur === 'c1',
+      () => ({ ...PAGED, items: SECOND, nextCursor: null }),
+    );
+    const inner = mocks.serve!;
+    mocks.serve = async (f, cur) => (cur ? inner(f, cur) : { ...PAGED, items: FIRST, nextCursor: 'c1' });
+    const c = await mount();
+    click(button(c, 'Xem thêm đánh giá'));
+    await flush(8);
+    expect(c.textContent).toContain('Không tải được đánh giá.');
+    await expectBusyThenDone(c, release, 'Nhận xét q2');
+  });
+});

@@ -3,12 +3,13 @@
 import { useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { BadgePercent, Check, Copy, Plus, Share2, Store } from 'lucide-react';
 import { followBrand, unfollowBrand } from '@tubutree/app-core/api/brand';
 import { brandFollowQuery, brandShareToEarnQuery } from '@tubutree/app-core/queries/brand';
 import { dealerMeQuery } from '@tubutree/app-core/queries/dealer';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { Button } from '@/components/mini/button';
 import { IconButton } from '@/components/mini/icon-button';
 import { SectionHeader } from '@/components/mini/section-header';
@@ -64,8 +65,10 @@ export function BrandActions({ slug, name, followerCount, children }: { slug: st
   const following = followQ.data?.following === true;
   const count = followQ.data?.followerCount ?? followerCount;
 
-  const followMut = useMutation({
+  // Theo dõi/bỏ theo dõi là một công tắc đọc `following` lúc gọi: hai cú chạm cùng nhịp (dữ liệu chưa kịp vẽ lại) đều gửi cùng một chiều, nên khoá bằng ref chứ không dựa `isPending`.
+  const followMut = useLockedMutation({
     mutationFn: () => (following ? unfollowBrand(coreHttp, slug) : followBrand(coreHttp, slug)),
+    onMutate: () => setNote(null),
     onSuccess: (r) => {
       qc.setQueryData(brandFollowQuery(coreHttp, slug).queryKey, r);
       setNote({ text: r.following ? 'Đã theo dõi thương hiệu' : 'Đã bỏ theo dõi', error: false });
@@ -74,10 +77,8 @@ export function BrandActions({ slug, name, followerCount, children }: { slug: st
   });
 
   const onFollow = () => {
-    if (authed) {
-      setNote(null);
-      followMut.mutate();
-    } else if (phase === 'unavailable') void retrySession();
+    if (authed) followMut.mutate();
+    else if (phase === 'unavailable') void retrySession();
     else if (phase === 'guest') router.push(loginHref(`${window.location.pathname}${window.location.search}`));
   };
 
