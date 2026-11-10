@@ -96,12 +96,16 @@ describe('OrderReturnsService — ảnh minh chứng không nhúng base64 trong 
       placedForCustomer: false, total: 100_000, shippingFee: 0, deliveredAt: new Date(), updatedAt: new Date(), createdAt: new Date(),
       items: [{ id: 'a', orderId: 'o1', variationId: 'v', productName: 'SP', variationName: 'M', unitPrice: 100_000, quantity: 1, total: 100_000 }],
     };
+    const prisma = {
+      order: { findUnique: jest.fn().mockResolvedValue(order) },
+      orderStatusHistory: { findFirst: jest.fn().mockResolvedValue(null) },
+      returnRequest: { findFirst: jest.fn().mockResolvedValue(null), findMany: jest.fn().mockResolvedValue([]), create },
+      $queryRaw: jest.fn().mockResolvedValue([{ id: 'o1' }]),
+    } as unknown as PrismaService;
+    // `request` chạy trong transaction có khoá đơn: giao dịch giả dùng lại chính đối tượng prisma giả.
+    Object.assign(prisma, { $transaction: async (fn: (tx: unknown) => unknown) => fn(prisma) });
     const svc = new OrderReturnsService(
-      {
-        order: { findUnique: jest.fn().mockResolvedValue(order) },
-        orderStatusHistory: { findFirst: jest.fn().mockResolvedValue(null) },
-        returnRequest: { findFirst: jest.fn().mockResolvedValue(null), findMany: jest.fn().mockResolvedValue([]), create },
-      } as unknown as PrismaService,
+      prisma,
       { get: async <T>(_k: string, fb?: T) => fb as T } as never,
       {} as never,
       {} as never,

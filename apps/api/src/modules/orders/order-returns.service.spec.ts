@@ -64,6 +64,11 @@ function makeService(
       create,
     },
   } as unknown as PrismaService;
+  // `request` chạy trong một transaction có khoá hàng đơn: giao dịch giả dùng lại chính đối tượng prisma giả.
+  Object.assign(prisma, {
+    $transaction: async (fn: (tx: unknown) => unknown) => fn(prisma),
+    $queryRaw: jest.fn().mockResolvedValue([{ id: 'o1' }]),
+  });
   const config = {
     get: async <T>(k: string, fb?: T): Promise<T> => (k === 'returns.window_days' ? ((over.windowDays ?? 7) as T) : (fb as T)),
   } as unknown as SystemConfigService;
@@ -601,6 +606,7 @@ describe('OrderReturnsService — hàng trả của đơn gian hàng tự giao v
     const restockReturnedItems = jest.fn().mockResolvedValue(1);
     const tx = {
       returnRequest: { updateMany, findMany: jest.fn().mockResolvedValue([]) },
+      returnRequestItem: { findMany: jest.fn().mockResolvedValue(approved.items) },
       $queryRaw: jest.fn().mockResolvedValue([]),
       order: { findUniqueOrThrow: jest.fn().mockResolvedValue(deliveredOrder()) },
     };

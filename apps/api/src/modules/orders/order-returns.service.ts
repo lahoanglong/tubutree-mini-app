@@ -206,56 +206,64 @@ export class OrderReturnsService {
   // ── Khách ──
 
   async request(userId: string, code: string, dto: ReturnRequestDto) {
-    const order = await this.prisma.order.findUnique({ where: { code }, include: { items: true } });
-    if (!order || order.userId !== userId) throw new NotFoundException('Không tìm thấy đơn hàng.');
-    if (order.status !== 'DELIVERED') throw new BadRequestException('Chỉ yêu cầu đổi/trả với đơn đã giao.');
     const windowDays = await this.config.get<number>('returns.window_days', 7);
-    // Mốc giao THẬT (OrderStatusService ghi deliveredAt; đơn cũ lấy lần lật DELIVERED trong sổ). updatedAt trôi theo mọi
-    // lần ghi sau khi giao (webhook vận chuyển, hoá đơn) nên không dùng được.
-    const deliveredAt = order.deliveredAt ?? (await this.lastDeliveredAt(order.id)) ?? order.updatedAt ?? order.createdAt;
-    if (Date.now() - new Date(deliveredAt).getTime() > windowDays * 864e5) {
-      throw new BadRequestException(`Quá hạn đổi/trả (${windowDays} ngày từ khi nhận hàng).`);
-    }
-    const existing = await this.prisma.returnRequest.findFirst({ where: { orderId: order.id, status: 'REQUESTED' } });
-    if (existing) throw new BadRequestException('Đơn đang có yêu cầu đổi/trả chờ xử lý.');
-
     const reasonCode = dto.reasonCode ?? null;
     const text = dto.reason?.trim() ?? '';
-    if ((!reasonCode || reasonCode === 'OTHER') && text.length < 5) {
-      throw new BadRequestException(RETURN_REASON_REQUIRED);
-    }
-    const reason = text || RETURN_REASONS[reasonCode as ReturnReasonCode].label;
-
-    const prior = await partialReturnTotals(this.prisma, order.id);
-    const lines = this.requestedLines(order, prior.approvedQty, dto.items);
-    const remainingAll = order.items.every((i) => (lines.get(i.id) ?? 0) + (prior.approvedQty.get(i.id) ?? 0) >= i.quantity);
-    // Đơn đại lý có công nợ/đặt trước/thưởng doanh số theo cả đơn — chưa đảo theo phần được, chỉ nhận trả cả đơn.
-    if (order.type === 'DEALER' && !remainingAll) {
-      throw new BadRequestException('Đơn đại lý chỉ trả được cả đơn. Bạn chọn tất cả sản phẩm hoặc liên hệ Tubu nhé.');
-    }
-    const destination = this.destinationFor(order, dto);
-
     const images = dto.images ?? [];
-    let req: Omit<ReturnRow, 'images' | (typeof BUYER_HIDDEN_RETURN_FIELDS)[number]>;
+    let made: { order: OrderWithItems; lines: Map<string, number>; reason: string; req: Omit<ReturnRow, 'images' | (typeof BUYER_HIDDEN_RETURN_FIELDS)[number]> };
     try {
-      req = await this.prisma.returnRequest.create({
-        data: {
-          orderId: order.id,
-          userId,
-          reason,
-          reasonCode,
-          images,
-          refundMethod: destination.method,
-          ...(destination.method === 'BANK'
-            ? {
-                bankName: destination.bank.bankName,
-                bankAccountNo: destination.bank.accountNumber,
-                bankAccountName: destination.bank.accountName,
-              }
-            : {}),
-          items: { create: [...lines].map(([orderItemId, quantity]) => ({ orderItemId, quantity })) },
-        },
-        select: BUYER_RETURN_SELECT,
+      made = await this.prisma.$transaction(async (tx) => {
+        const own = await tx.order.findUnique({ where: { code }, select: { id: true, userId: true } });
+        if (!own || own.userId !== userId) throw new NotFoundException('Không tìm thấy đơn hàng.');
+        // Khoá đơn trước khi đọc trạng thái, hạn đổi/trả và phần đã trả: duyệt/nhận hàng trả, webhook huỷ/trả đều khoá đúng dòng này, nên yêu cầu mới
+        // không còn dựa trên đơn đã lật sang RETURNED/CANCELLED hay trên số còn lại đã cũ (duyệt xong sau lúc đọc).
+        await tx.$queryRaw`SELECT "id" FROM "orders" WHERE "id" = ${own.id} FOR UPDATE`;
+        const order = await tx.order.findUnique({ where: { code }, include: { items: true } });
+        if (!order || order.userId !== userId) throw new NotFoundException('Không tìm thấy đơn hàng.');
+        if (order.status !== 'DELIVERED') throw new BadRequestException('Chỉ yêu cầu đổi/trả với đơn đã giao.');
+        // Mốc giao THẬT (OrderStatusService ghi deliveredAt; đơn cũ lấy lần lật DELIVERED trong sổ). updatedAt trôi theo mọi
+        // lần ghi sau khi giao (webhook vận chuyển, hoá đơn) nên không dùng được.
+        const deliveredAt = order.deliveredAt ?? (await this.lastDeliveredAt(order.id, tx)) ?? order.updatedAt ?? order.createdAt;
+        if (Date.now() - new Date(deliveredAt).getTime() > windowDays * 864e5) {
+          throw new BadRequestException(`Quá hạn đổi/trả (${windowDays} ngày từ khi nhận hàng).`);
+        }
+        const existing = await tx.returnRequest.findFirst({ where: { orderId: order.id, status: 'REQUESTED' } });
+        if (existing) throw new BadRequestException('Đơn đang có yêu cầu đổi/trả chờ xử lý.');
+
+        if ((!reasonCode || reasonCode === 'OTHER') && text.length < 5) {
+          throw new BadRequestException(RETURN_REASON_REQUIRED);
+        }
+        const reason = text || RETURN_REASONS[reasonCode as ReturnReasonCode].label;
+
+        const prior = await partialReturnTotals(tx, order.id);
+        const lines = this.requestedLines(order, prior.approvedQty, dto.items);
+        const remainingAll = order.items.every((i) => (lines.get(i.id) ?? 0) + (prior.approvedQty.get(i.id) ?? 0) >= i.quantity);
+        // Đơn đại lý có công nợ/đặt trước/thưởng doanh số theo cả đơn — chưa đảo theo phần được, chỉ nhận trả cả đơn.
+        if (order.type === 'DEALER' && !remainingAll) {
+          throw new BadRequestException('Đơn đại lý chỉ trả được cả đơn. Bạn chọn tất cả sản phẩm hoặc liên hệ Tubu nhé.');
+        }
+        const destination = this.destinationFor(order, dto);
+
+        const req = await tx.returnRequest.create({
+          data: {
+            orderId: order.id,
+            userId,
+            reason,
+            reasonCode,
+            images,
+            refundMethod: destination.method,
+            ...(destination.method === 'BANK'
+              ? {
+                  bankName: destination.bank.bankName,
+                  bankAccountNo: destination.bank.accountNumber,
+                  bankAccountName: destination.bank.accountName,
+                }
+              : {}),
+            items: { create: [...lines].map(([orderItemId, quantity]) => ({ orderItemId, quantity })) },
+          },
+          select: BUYER_RETURN_SELECT,
+        });
+        return { order, lines, reason, req };
       });
     } catch (err) {
       // Guard thật là unique index partial (orderId WHERE status='REQUESTED'): hai lần gửi song song chỉ một lần tạo.
@@ -264,6 +272,7 @@ export class OrderReturnsService {
       }
       throw err;
     }
+    const { order, lines, reason, req } = made;
     await this.notifications.notifySafe(userId, 'RETURN_REQUESTED', { order_code: code }, undefined, `order=${code}`);
     const itemName = new Map(order.items.map((i) => [i.id, i.productName]));
     await notifyMerchantOwner(this.prisma, this.notifications, this.logger, order.id, 'MERCHANT_RETURN_REQUESTED', {
@@ -702,7 +711,9 @@ export class OrderReturnsService {
       await tx.$queryRaw`SELECT "id" FROM "orders" WHERE "id" = ${req.orderId} FOR UPDATE`;
       const order = await tx.order.findUniqueOrThrow({ where: { id: req.orderId }, include: { items: true } });
       const prior = await partialReturnTotals(tx, order.id, id);
-      return this.reversal.restockReturnedItems(tx, order, req.items, prior.restockedQty);
+      // Dòng của yêu cầu đọc lại trong tx, sau khoá đơn: `req.items` ở trên đọc từ trước, duyệt xong sau lúc đó đã ghi lại các dòng (kèm số tiền từng dòng).
+      const items = await tx.returnRequestItem.findMany({ where: { returnRequestId: id } });
+      return this.reversal.restockReturnedItems(tx, order, items, prior.restockedQty);
     });
     // Pancake đã báo "Hoàn một phần" và chỉ còn chờ nhận hàng: nhận hết rồi thì việc trong "Cần xử lý Pancake" đã xong.
     await this.prisma.$executeRaw`
@@ -940,8 +951,8 @@ export class OrderReturnsService {
   }
 
   /** Fallback cho đơn chưa có deliveredAt: lần lật DELIVERED cuối trong sổ lịch sử trạng thái. */
-  private async lastDeliveredAt(orderId: string): Promise<Date | null> {
-    const h = await this.prisma.orderStatusHistory
+  private async lastDeliveredAt(orderId: string, db: Prisma.TransactionClient | PrismaService = this.prisma): Promise<Date | null> {
+    const h = await db.orderStatusHistory
       ?.findFirst({
         where: { orderId, toStatus: 'DELIVERED', fromStatus: { not: 'DELIVERED' } },
         orderBy: { createdAt: 'desc' },

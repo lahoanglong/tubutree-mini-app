@@ -12,7 +12,7 @@ import { useLockedMutation } from '../game/use-locked-mutation';
 import { RefundDestinationPicker } from './refund-destination-picker';
 import { estimateReturn, fetchRefundBank, requestReturn, type OrderView, type ReturnRequestDTO } from '../../services/shop-api';
 import { getErrorMessage, isStaleStateError } from '../../services/api';
-import { settleWithin } from '../../utils/settle-within';
+import { LOCK_REFRESH_WAIT_MS, settleWithin } from '../../utils/settle-within';
 import { haptic } from '../../utils/haptic';
 import { vi } from '../../i18n/vi';
 import { formatNumber, formatVnd } from '../../utils/format';
@@ -36,6 +36,9 @@ interface Props {
   returns: ReturnRequestDTO[];
   returnDays: number;
 }
+
+/** Câu máy chủ trả khi hết hạn đổi/trả ("Quá hạn đổi/trả (7 ngày từ khi nhận hàng)."): hạn tính theo giờ máy chủ nên Mini chỉ biết qua lời này. */
+const RETURN_WINDOW_CLOSED = /^Quá hạn đổi\/trả/;
 
 function initialLines(order: OrderView, returns: ReturnRequestDTO[]): ReturnLineState[] {
   const remaining = remainingByLine(order.items, returns.filter((r) => r.orderId === order.id));
@@ -102,7 +105,10 @@ export function ReturnRequestSheet({ open, onClose, order, returns, returnDays }
     [lines, reasonCode, reason, method, bank, bankAllowed],
   );
 
-  const rejectedRef = useRef(false);
+  // Mốc lần máy chủ từ chối gần nhất: chỉ trong lúc tải lại sau đó, tấm tự đóng mới coi là đã được lời máy chủ báo trước.
+  const rejectedAtRef = useRef(0);
+  // Máy chủ báo quá hạn đổi/trả: đơn vẫn Đã giao nên dữ liệu tải lại không tự làm form hết hiệu lực, phải đóng theo lời máy chủ.
+  const [windowClosed, setWindowClosed] = useState(false);
   const submit = useLockedMutation({
     mutationFn: () =>
       requestReturn(order.code, {
@@ -126,7 +132,8 @@ export function ReturnRequestSheet({ open, onClose, order, returns, returnDays }
     onError: (e: unknown) => {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
       if (!isStaleStateError(e)) return undefined;
-      rejectedRef.current = true;
+      rejectedAtRef.current = Date.now();
+      if (RETURN_WINDOW_CLOSED.test(getErrorMessage(e))) setWindowClosed(true);
       return settleWithin(
         Promise.all([
           queryClient.invalidateQueries({ queryKey: ['order', order.code] }),
@@ -140,12 +147,34 @@ export function ReturnRequestSheet({ open, onClose, order, returns, returnDays }
 
   // Đơn đã rời trạng thái Đã giao hoặc đã có yêu cầu chờ xử lý (máy khác vừa gửi, hoặc dữ liệu vừa tải lại sau khi bị từ chối): form này
   // không gửi được nữa nên đóng. Lỗi nhập liệu thì trạng thái đơn không đổi và form giữ nguyên để khách sửa.
-  const unavailable = order.status !== 'DELIVERED' || returns.some((r) => r.orderId === order.id && r.status === 'REQUESTED');
+  // Số còn trả được của từng dòng theo dữ liệu mới nhất (yêu cầu khác của đơn vừa được duyệt): giữ lựa chọn của khách, chỉ kẹp số lượng xuống
+  // mức còn lại, gỡ dòng đã hết; không thì "vượt số còn lại" bị máy chủ từ chối lặp lại với đúng số lượng đó.
+  const remainingNow = useMemo(() => remainingByLine(order.items, returns.filter((r) => r.orderId === order.id)), [order.items, order.id, returns]);
+  useEffect(() => {
+    setLines((ls) => {
+      let changed = false;
+      const next = ls.flatMap((l) => {
+        const left = remainingNow.get(l.orderItemId) ?? 0;
+        if (left <= 0) {
+          changed = true;
+          return [];
+        }
+        if (left === l.remaining) return [l];
+        changed = true;
+        return [{ ...l, remaining: left, quantity: Math.min(l.quantity, left) }];
+      });
+      return changed ? next : ls;
+    });
+  }, [remainingNow]);
+  const exhausted = order.items.length > 0 && lines.length === 0;
+  const unavailable =
+    order.status !== 'DELIVERED' || windowClosed || exhausted || returns.some((r) => r.orderId === order.id && r.status === 'REQUESTED');
   useEffect(() => {
     if (!open || !unavailable || submit.isPending) return;
     // Khách vừa đọc lời máy chủ từ chối thì không báo thêm; còn dữ liệu nền mới về thì tấm biến mất mà không có lời nào, nên phải nói.
-    if (!rejectedRef.current) openSnackbar({ text: 'Đơn này không còn đổi/trả được nữa hoặc đã có yêu cầu đang chờ xử lý.', type: 'info' });
-    rejectedRef.current = false;
+    const justRejected = Date.now() - rejectedAtRef.current < LOCK_REFRESH_WAIT_MS + 1_000;
+    if (!justRejected) openSnackbar({ text: 'Đơn này không còn đổi/trả được nữa hoặc đã có yêu cầu đang chờ xử lý.', type: 'info' });
+    rejectedAtRef.current = 0;
     onClose();
   }, [open, unavailable, submit.isPending, onClose, openSnackbar]);
 
