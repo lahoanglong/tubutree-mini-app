@@ -1370,6 +1370,51 @@ describe('ProductReviews (web): tải ảnh và gửi đánh giá không chồng
     expect(submit.disabled).toBe(false);
   });
 
+  it('đang mở form viết mà ảnh còn xử lý: "Sửa" của đánh giá trong danh sách bị chặn, form không bị dựng lại nên ảnh vừa xử lý xong vẫn vào đúng form cũ', async () => {
+    mocks.elig = structuredClone(ELIG_REPEAT);
+    const c = await mount();
+    const edit = () => buttonNamed(c, 'Sửa đánh giá đơn TB0001')!;
+    expect(edit().getAttribute('aria-disabled')).toBeNull();
+    click(button(c, 'Viết đánh giá'));
+    await flush(6);
+    expect(form(c)!.getAttribute('aria-label')).toBe('Viết đánh giá');
+    click(button(c, 'Bắt đầu tải ảnh thử'));
+    const submit = submitOf(c);
+    expect(submit.textContent).toBe('Đang tải ảnh…');
+
+    expect(edit().getAttribute('aria-disabled')).toBe('true');
+    expect(edit().disabled).toBe(false);
+    click(edit());
+    await flush(6);
+    expect(mocks.myCalls).toEqual([]);
+    expect(form(c)!.getAttribute('aria-label')).toBe('Viết đánh giá');
+    expect(submit.isConnected).toBe(true);
+    expect(submit.textContent).toBe('Đang tải ảnh…');
+    expect(submit.disabled).toBe(true);
+
+    click(button(c, 'Tải xong ảnh thử'));
+    expect(button(c, 'Ảnh đánh giá (1)')).not.toBeNull();
+    click(submit);
+    await flush();
+    expect(mocks.saved).toHaveLength(1);
+    expect(mocks.saved[0]!.body).toMatchObject({ images: ['data:image/jpeg;base64,XONG'], orderId: 'o2' });
+  });
+
+  it('form đã đóng: "Sửa" của đánh giá trong danh sách mở lại được', async () => {
+    mocks.elig = structuredClone(ELIG_REPEAT);
+    const c = await mount();
+    click(button(c, 'Viết đánh giá'));
+    await flush(6);
+    expect(buttonNamed(c, 'Sửa đánh giá đơn TB0001')!.getAttribute('aria-disabled')).toBe('true');
+    click(button(c, 'Huỷ'));
+    expect(form(c)).toBeNull();
+    expect(buttonNamed(c, 'Sửa đánh giá đơn TB0001')!.getAttribute('aria-disabled')).toBeNull();
+    click(buttonNamed(c, 'Sửa đánh giá đơn TB0001'));
+    await flush(6);
+    expect(mocks.myCalls).toEqual(['a']);
+    expect(form(c)!.getAttribute('aria-label')).toBe('Sửa đánh giá');
+  });
+
   it('đang gửi: ô thêm ảnh báo khoá và không thêm được ảnh; Huỷ khoá; nút Gửi không đổi nhãn sang "Đang tải ảnh…"', async () => {
     let release!: (v: unknown) => void;
     mocks.saveResult = new Promise((resolve) => (release = resolve));

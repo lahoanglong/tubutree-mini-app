@@ -417,7 +417,9 @@ export function ProductReviews({ slug }: { slug: string }) {
                         type="button"
                         className={`${ui.btnText} ml-auto text-forest-700`}
                         aria-label={mine.orderCode ? `Sửa đánh giá đơn ${mine.orderCode}` : 'Sửa đánh giá này'}
-                        onClick={() => openEdit(mine)}
+                        // Form đang mở thì đổi `target` sẽ dựng lại form (đổi key) và bỏ mất ảnh đang xử lý; nút đầu trang cũng chỉ hiện khi chưa có form. Không `disabled` để nút giữ focus.
+                        aria-disabled={target ? true : undefined}
+                        onClick={() => !target && openEdit(mine)}
                       >
                         Sửa
                       </button>
