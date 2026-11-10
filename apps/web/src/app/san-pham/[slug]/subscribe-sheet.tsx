@@ -15,6 +15,8 @@ import { LineItemSkeleton } from '@/components/ui/skeleton';
 import { Chip } from '@/components/catalog/chip';
 import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { coreHttp } from '@/lib/core-http';
+import { serverRejectedState } from '@/lib/server-rejected-state';
+import { settleWithin } from '@/lib/settle-within';
 import { getAddresses, getWallet } from '@/lib/shop-client';
 import { formatVnd } from '@/lib/format-vnd';
 import { bankPaymentHref } from '@/lib/order-view';
@@ -114,6 +116,8 @@ export function SubscribeSheet({
       ? `Ngày bắt đầu phải từ ngày mai tới ${MAX_START_DAYS_AHEAD} ngày tới.`
       : undefined;
 
+  // Lời lỗi ở state riêng: `create.isError` chỉ bật sau khi `onError` (tải lại, tới 4 giây) xong, mà lời báo phải hiện ngay.
+  const [createError, setCreateError] = useState<{ value: unknown } | null>(null);
   const create = useLockedMutation({
     mutationFn: () =>
       createSubscription(coreHttp, {
@@ -124,6 +128,7 @@ export function SubscribeSheet({
         paymentMethod: payment,
         ...(startMode === 'date' ? { startDate } : {}),
       }),
+    onMutate: () => setCreateError(null),
     onSuccess: (sub) => {
       void qc.invalidateQueries({ queryKey: ['subscriptions'] });
       const first = sub.firstOrder;
@@ -146,6 +151,20 @@ export function SubscribeSheet({
             : `Đã tạo lịch định kỳ, đơn đầu giao từ ${formatVnDate(startDate)} 🌿`,
       );
     },
+    // Máy khác vừa tạo gói trùng (409), địa chỉ không còn (400/404), Ví vừa hết tiền (400): gói, địa chỉ và số dư Ví trên sheet đang cũ, bấm lại chỉ nhận đúng lỗi đó.
+    // Trả Promise từ onError (không phải onSettled, nơi nhả khoá) để nút giữ bận tới khi dữ liệu mới về (tối đa `settleWithin`), như Mini App (apps/miniapp/src/components/subscribe-sheet.tsx:102-110); web tải thêm Ví (Mini chỉ tải gói và địa chỉ) và tính cả 422. Mạng/401/403/5xx nhả ngay.
+    // Không có ô nhập chữ: chu kỳ, cách trả là lựa chọn cố định, ngày bắt đầu đã bị `isStartDateAllowed` chặn, nên 400 là trạng thái.
+    onError: (e) => {
+      setCreateError({ value: e });
+      if (!serverRejectedState(e)) return undefined;
+      return settleWithin(
+        Promise.all([
+          qc.invalidateQueries({ queryKey: ['subscriptions'] }),
+          qc.invalidateQueries({ queryKey: ['addresses'] }),
+          qc.invalidateQueries({ queryKey: ['wallet'] }),
+        ]),
+      );
+    },
   });
 
   // Sheet luôn gắn sẵn: lỗi của lần tạo trước không được nằm lại khi khách đóng, nạp Ví rồi mở lại.
@@ -154,7 +173,10 @@ export function SubscribeSheet({
   const resetCreate = create.reset;
   const creating = create.isPending;
   useEffect(() => {
-    if (!visible && !creating) resetCreate();
+    if (!visible && !creating) {
+      resetCreate();
+      setCreateError(null);
+    }
   }, [visible, creating, resetCreate]);
 
   const noAddress = addrQ.isSuccess && addresses.length === 0;
@@ -174,9 +196,9 @@ export function SubscribeSheet({
       footer={
         noAddress || addrFailed || addrWaiting ? undefined : (
           <div>
-            {create.isError && (
+            {createError && (
               <p role="alert" className={`mb-2 ${ui.error}`}>
-                {actionErrorText(create.error)}
+                {actionErrorText(createError.value)}
               </p>
             )}
             {/* Đang gửi giữ aria-busy/aria-disabled chứ không `disabled` DOM: Chromium thả focus về body khi nút đang giữ focus bị disabled. */}

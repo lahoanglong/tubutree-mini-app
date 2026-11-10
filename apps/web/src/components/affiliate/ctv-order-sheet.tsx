@@ -17,12 +17,15 @@ import {
   ctvOrderQuoteQuery,
 } from '@tubutree/app-core/queries/affiliate';
 import { productQuery, suggestQuery } from '@tubutree/app-core/queries/catalog';
+import { errorStatus } from '@tubutree/app-core/api/error-status';
 import { ApiError, NetworkError } from '@/lib/client-api';
 import { useAuth } from '@/lib/auth-context';
 import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
 import { ui } from '@/lib/guest-ui';
 import { usePressLock } from '@/lib/use-press-lock';
+import { serverRejectedState } from '@/lib/server-rejected-state';
+import { settleWithin } from '@/lib/settle-within';
 import { newIdempotencyKey } from '@/lib/idempotency-key';
 import { bankPaymentHref } from '@/lib/order-view';
 import { isWebRouteReady } from '@/lib/route-map';
@@ -218,21 +221,25 @@ function CtvOrderForm({ onClose }: { onClose: () => void }) {
         void qc.invalidateQueries({ queryKey: q(coreHttp).queryKey });
       }
     },
+    // Trả Promise tải lại báo giá: nút giữ bận tới khi báo giá mới về (tối đa `settleWithin`), kẻo bấm lại gửi đúng tổng/cách trả đã cũ. Lời lỗi đặt vào state TRƯỚC (`mut.isError` chỉ bật sau khi Promise này xong).
     onError: (e, s) => {
       if (isOutcomeUnknown(e)) {
         setUnconfirmedKey(s.key);
-        return;
+        return undefined;
       }
       setUnconfirmedKey(null);
       const code = errCode(e);
+      const refreshQuote = () => settleWithin(qc.invalidateQueries({ queryKey: ['ctv-order-quote'] }));
       if (code && PRICE_MOVED.has(code)) {
         setPriceMoved({ message: actErrText(e), itemsKey });
-        void qc.invalidateQueries({ queryKey: ['ctv-order-quote'] });
-        return;
+        return refreshQuote();
       }
-      // Báo giá đang cache còn cho COD mà máy chủ từ chối (đơn vượt trần): tải lại để khoá COD và tự chuyển sang chuyển khoản.
-      if (code === 'PAYMENT_METHOD_NOT_ALLOWED') void qc.invalidateQueries({ queryKey: ['ctv-order-quote'] });
       setSubmitError(actErrText(e));
+      // Báo giá đang cache còn cho COD mà máy chủ từ chối (đơn vượt trần): tải lại để khoá COD và tự chuyển sang chuyển khoản.
+      // 404/409/422 nói báo giá trên màn đã cũ. 400 không mã thì không: CtvOrderCustomerDto (NO_HTML) trả 400 nhập liệu TRƯỚC mọi kiểm tra trạng thái mà form không chặn ký tự `<`/`>`,
+      // báo giá không liên quan nên chỉ hiện lỗi dưới form. Mạng/5xx đã rẽ nhánh trên, 401/403 không nói gì về trạng thái: nhả ngay.
+      if (code === 'PAYMENT_METHOD_NOT_ALLOWED' || (errorStatus(e) !== 400 && serverRejectedState(e))) return refreshQuote();
+      return undefined;
     },
     onSettled: () => {
       busy.current = false;
@@ -470,7 +477,8 @@ function CtvOrderForm({ onClose }: { onClose: () => void }) {
         type="button"
         onClick={submit}
         aria-busy={mut.isPending}
-        disabled={(showErrors && !valid) || quotePending || mut.isPending}
+        aria-disabled={mut.isPending || undefined}
+        disabled={(showErrors && !valid) || quotePending}
         className={`${ui.btnPrimary} mt-3 w-full`}
       >
         {mut.isPending ? 'Đang tạo đơn…' : resendSameOrder ? t.resend : t.submit}

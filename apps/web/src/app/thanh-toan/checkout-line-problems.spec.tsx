@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
+import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { QueryClient } from '@tanstack/react-query';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
-import { ApiError } from '@/lib/client-api';
+import { ApiError, NetworkError } from '@/lib/client-api';
 
 const ADDR = {
   id: 'a1', recipient: 'An', phone: '0912345678', province: 'Hà Nội', district: '', ward: 'Ba Đình', street: '1 Phố Huế',
@@ -18,6 +20,7 @@ const m = vi.hoisted(() => ({
   cart: vi.fn(),
   updateCartItem: vi.fn(),
   removeCartItem: vi.fn(),
+  placeOrder: vi.fn(),
 }));
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn() }) }));
@@ -30,7 +33,7 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   getMyCoupons: async () => [],
   getAddresses: async () => [ADDR],
   checkoutQuote: (...args: unknown[]) => m.quote(...args),
-  placeOrder: vi.fn(),
+  placeOrder: (...args: unknown[]) => m.placeOrder(...args),
   updateCartItem: (...args: unknown[]) => m.updateCartItem(...args),
   removeCartItem: (...args: unknown[]) => m.removeCartItem(...args),
 }));
@@ -53,6 +56,7 @@ beforeEach(() => {
   m.quote.mockReset().mockResolvedValue(QUOTE);
   m.updateCartItem.mockReset().mockResolvedValue({});
   m.removeCartItem.mockReset().mockResolvedValue({});
+  m.placeOrder.mockReset();
   m.items = [];
   m.cart.mockReset().mockImplementation(async () => ({
     items: m.items, couponCode: null, subtotal: 100000, discount: 0, freeship: false, freeshipThreshold: 500000, itemCount: m.items.length,
@@ -112,7 +116,7 @@ describe('/thanh-toan — lỗi theo từng dòng hàng (hk)', () => {
     click(btn);
     await flush(6);
     expect(m.removeCartItem).toHaveBeenCalledTimes(1);
-    expect(btn.disabled).toBe(true);
+    expect(btn.getAttribute('aria-busy')).toBe('true');
     click(btn);
     await flush(4);
     expect(m.removeCartItem).toHaveBeenCalledTimes(1);
@@ -146,5 +150,232 @@ describe('/thanh-toan — lỗi theo từng dòng hàng (hk)', () => {
     const region = r.container.querySelector('[role="region"][aria-label="Sản phẩm trong đơn"]')!;
     expect(region.querySelectorAll('[data-testid="checkout-line"]')).toHaveLength(7);
     expect(region.querySelector('[data-testid="checkout-line-problem"]')).not.toBeNull();
+  });
+});
+
+describe('/thanh-toan — sửa nhanh dòng hàng: khoá tới khi giỏ mới về, bị từ chối thì tải lại rồi mới nhả', () => {
+  const cartOf = () => ({ items: m.items, couponCode: null, subtotal: 100000, discount: 0, freeship: false, freeshipThreshold: 500000, itemCount: m.items.length });
+  const holdCart = () => {
+    let open: () => void = () => undefined;
+    m.cart.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          open = () => resolve(cartOf());
+        }),
+    );
+    return { release: () => open() };
+  };
+  const fixBtn = (r: Rendered, label: string, nth = 0) => byText(problems(r)[nth]!, 'button', label) as HTMLButtonElement;
+  const isBusy = (b: HTMLElement) => b.getAttribute('aria-busy') === 'true';
+  const alertOf = (r: Rendered, nth = 0) => problems(r)[nth]!.querySelector('span')!.textContent;
+
+  it('hai cú chạm cùng khung hình vào "Bỏ khỏi đơn": chỉ xoá một lần, nút báo bận bằng aria (không disabled thật)', async () => {
+    m.items = [line('i1', 'Dầu gội', { stock: 0 }), line('i2', 'Mật ong')];
+    const r = await mount();
+    const gate = holdCart();
+    const btn = fixBtn(r, 'Bỏ khỏi đơn');
+    act(() => {
+      btn.click();
+      btn.click();
+    });
+    await flush(6);
+    expect(m.removeCartItem).toHaveBeenCalledTimes(1);
+    expect(isBusy(btn)).toBe(true);
+    expect(btn.getAttribute('aria-disabled')).toBe('true');
+    expect(btn.disabled).toBe(false);
+    gate.release();
+    await flush(8);
+  });
+
+  it.each([400, 404, 409, 422])('%i: lời lỗi hiện ngay dòng đó, giỏ được tải lại, nút giữ bận tới khi giỏ về; chạm lần hai không gửi', async (status) => {
+    m.items = [line('i1', 'Dầu gội', { quantity: 4, stock: 1 })];
+    m.updateCartItem.mockRejectedValue(new ApiError('Kho đã đổi, bạn thử lại nhé.', status));
+    const r = await mount();
+    const carts = m.cart.mock.calls.length;
+    const gate = holdCart();
+    click(fixBtn(r, 'Giảm còn 1'));
+    await flush(6);
+    expect(alertOf(r)).toBe('Kho đã đổi, bạn thử lại nhé.');
+    expect(m.cart.mock.calls.length).toBe(carts + 1);
+    expect(isBusy(fixBtn(r, 'Giảm còn 1'))).toBe(true);
+    await act(async () => {
+      fixBtn(r, 'Giảm còn 1').click();
+      fixBtn(r, 'Giảm còn 1').click();
+    });
+    expect(m.updateCartItem).toHaveBeenCalledTimes(1);
+    m.items = [line('i1', 'Dầu gội', { quantity: 4, stock: 2 })];
+    gate.release();
+    await flush(8);
+    expect(isBusy(fixBtn(r, 'Giảm còn 2'))).toBe(false);
+  });
+
+  it.each([401, 403, 500, 503])('%i: không tải lại giỏ, nhả nút ngay, giữ lời lỗi', async (status) => {
+    m.items = [line('i1', 'Dầu gội', { stock: 0 })];
+    m.removeCartItem.mockRejectedValue(new ApiError('Máy chủ bận.', status));
+    const r = await mount();
+    const carts = m.cart.mock.calls.length;
+    const before = alertOf(r);
+    click(fixBtn(r, 'Bỏ khỏi đơn'));
+    await flush(6);
+    expect(m.cart.mock.calls.length).toBe(carts);
+    expect(isBusy(fixBtn(r, 'Bỏ khỏi đơn'))).toBe(false);
+    expect(alertOf(r)).not.toBe(before);
+  });
+
+  it('mất mạng: không tải lại giỏ, nhả ngay', async () => {
+    m.items = [line('i1', 'Dầu gội', { stock: 0 })];
+    m.removeCartItem.mockRejectedValue(new NetworkError(false));
+    const r = await mount();
+    const carts = m.cart.mock.calls.length;
+    click(fixBtn(r, 'Bỏ khỏi đơn'));
+    await flush(6);
+    expect(m.cart.mock.calls.length).toBe(carts);
+    expect(isBusy(fixBtn(r, 'Bỏ khỏi đơn'))).toBe(false);
+  });
+
+  it('bị từ chối mà giỏ tải lại treo quá 4 giây: nhả nút', async () => {
+    m.items = [line('i1', 'Dầu gội', { stock: 0 })];
+    m.removeCartItem.mockRejectedValue(new ApiError('Giỏ hàng không còn sản phẩm này.', 404));
+    const r = await mount();
+    holdCart();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      click(fixBtn(r, 'Bỏ khỏi đơn'));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3_900);
+      });
+      expect(isBusy(fixBtn(r, 'Bỏ khỏi đơn'))).toBe(true);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(200);
+      });
+      expect(isBusy(fixBtn(r, 'Bỏ khỏi đơn'))).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('sửa được mà giỏ/báo giá tải lại treo quá 4 giây: nhả nút, không giữ mãi', async () => {
+    m.items = [line('i1', 'Dầu gội', { stock: 0 }), line('i2', 'Mật ong')];
+    const r = await mount();
+    holdCart();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      click(fixBtn(r, 'Bỏ khỏi đơn'));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3_900);
+      });
+      expect(isBusy(fixBtn(r, 'Bỏ khỏi đơn'))).toBe(true);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(200);
+      });
+      expect(isBusy(fixBtn(r, 'Bỏ khỏi đơn'))).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('hai dòng khác nhau: chạm dòng thứ hai khi dòng đầu còn bay vẫn gửi, và cả hai nút cùng báo bận', async () => {
+    m.items = [line('i1', 'Dầu gội', { stock: 0 }), line('i2', 'Mật ong', { stock: 0 })];
+    const r = await mount();
+    const gate = holdCart();
+    click(fixBtn(r, 'Bỏ khỏi đơn', 0));
+    await flush(4);
+    click(fixBtn(r, 'Bỏ khỏi đơn', 1));
+    await flush(4);
+    expect(m.removeCartItem.mock.calls.map((c) => c[0])).toEqual(['i1', 'i2']);
+    expect(isBusy(fixBtn(r, 'Bỏ khỏi đơn', 0))).toBe(true);
+    expect(isBusy(fixBtn(r, 'Bỏ khỏi đơn', 1))).toBe(true);
+    m.items = [];
+    gate.release();
+    await flush(8);
+  });
+
+  it('chạm lại sau lỗi: lời lỗi cũ của dòng đó mất khi lệnh mới bắt đầu', async () => {
+    m.items = [line('i1', 'Dầu gội', { quantity: 4, stock: 1 })];
+    m.updateCartItem.mockRejectedValueOnce(new ApiError('Kho đã đổi, bạn thử lại nhé.', 409));
+    const r = await mount();
+    click(fixBtn(r, 'Giảm còn 1'));
+    await flush(8);
+    expect(alertOf(r)).toBe('Kho đã đổi, bạn thử lại nhé.');
+    m.updateCartItem.mockImplementation(() => new Promise(() => undefined));
+    click(fixBtn(r, 'Giảm còn 1'));
+    await flush(6);
+    expect(alertOf(r)).not.toBe('Kho đã đổi, bạn thử lại nhé.');
+  });
+
+  it('lỗi của dòng này không hiện ở dòng khác', async () => {
+    m.items = [line('i1', 'Dầu gội', { stock: 0 }), line('i2', 'Mật ong', { stock: 0 })];
+    m.removeCartItem.mockRejectedValue(new ApiError('Dòng này vừa đổi.', 422));
+    const r = await mount();
+    click(fixBtn(r, 'Bỏ khỏi đơn', 1));
+    await flush(8);
+    expect(alertOf(r, 1)).toBe('Dòng này vừa đổi.');
+    expect(alertOf(r, 0)).not.toBe('Dòng này vừa đổi.');
+  });
+
+  it('lỗi của dòng này còn nguyên khi chạm sửa dòng khác (chỉ chạm lại chính dòng đó mới xoá)', async () => {
+    m.items = [line('i1', 'Dầu gội', { stock: 0 }), line('i2', 'Mật ong', { stock: 0 })];
+    m.removeCartItem.mockRejectedValueOnce(new ApiError('Dòng này vừa đổi.', 422));
+    const r = await mount();
+    click(fixBtn(r, 'Bỏ khỏi đơn', 0));
+    await flush(8);
+    expect(alertOf(r, 0)).toBe('Dòng này vừa đổi.');
+    m.removeCartItem.mockImplementation(() => new Promise(() => undefined));
+    click(fixBtn(r, 'Bỏ khỏi đơn', 1));
+    await flush(6);
+    expect(alertOf(r, 0)).toBe('Dòng này vừa đổi.');
+  });
+
+  describe('sửa nhanh sau một lần đặt hàng đã lỗi', () => {
+    const OK_LINE = () => line('i1', 'Dầu gội');
+    const PROBLEM_LINE = () => line('i2', 'Mật ong', { stock: 0 });
+    const mountWithClient = async () => {
+      const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+      const r = render(<CheckoutPage />, qc);
+      mounted.push(r);
+      await flush(8);
+      return { r, qc };
+    };
+    const placeBtn = (r: Rendered) => byText(r.container, 'button', /^(Đặt hàng|Thử lại ·)/) as HTMLButtonElement;
+    // Giỏ đổi ở nơi khác sau lần đặt lỗi: dòng hết hàng hiện ra mà lời lỗi đặt hàng vẫn còn.
+    const cartGainsProblemLine = async (qc: QueryClient) => {
+      m.items = [OK_LINE(), PROBLEM_LINE()];
+      await act(async () => {
+        await qc.invalidateQueries({ queryKey: ['cart'] });
+      });
+      await flush(6);
+    };
+
+    it('lời lỗi đặt hàng lần trước mất khi sửa được dòng (không để lời cũ nằm cạnh giỏ đã sửa)', async () => {
+      m.items = [OK_LINE()];
+      m.placeOrder.mockRejectedValue(new ApiError('Đơn bị từ chối vì phí vận chuyển.', 400));
+      const { r, qc } = await mountWithClient();
+      click(placeBtn(r));
+      await flush(8);
+      expect(r.container.textContent).toContain('Đơn bị từ chối vì phí vận chuyển.');
+      await cartGainsProblemLine(qc);
+      m.items = [OK_LINE()];
+      click(fixBtn(r, 'Bỏ khỏi đơn'));
+      await flush(10);
+      expect(m.removeCartItem).toHaveBeenCalledWith('i2');
+      expect(r.container.textContent).not.toContain('Đơn bị từ chối vì phí vận chuyển.');
+    });
+
+    it('lần đặt trước chưa rõ kết quả (mất mạng) rồi khách sửa dòng: bấm Đặt hàng không gửi lại đơn cũ mà báo kiểm tra Đơn hàng', async () => {
+      m.items = [OK_LINE()];
+      m.placeOrder.mockRejectedValue(new NetworkError(false));
+      const { r, qc } = await mountWithClient();
+      click(placeBtn(r));
+      await flush(8);
+      expect(m.placeOrder).toHaveBeenCalledTimes(1);
+      await cartGainsProblemLine(qc);
+      m.items = [OK_LINE()];
+      click(fixBtn(r, 'Bỏ khỏi đơn'));
+      await flush(10);
+      click(placeBtn(r));
+      await flush(8);
+      expect(m.placeOrder).toHaveBeenCalledTimes(1);
+      expect(r.container.textContent).toContain('Đơn trước có thể đã được tạo');
+    });
   });
 });

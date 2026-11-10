@@ -4,6 +4,7 @@ import { useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { CartSummary } from '@/lib/shop-client';
 import { cartKey } from '@/lib/cart-key';
+import { settleWithin } from '@/lib/settle-within';
 
 /**
  * Cách ghi phản hồi giỏ của các lệnh giỏ chạy song song theo từng đích (từng dòng, từng món). Mỗi phản hồi là NGUYÊN giỏ, nên hai lệnh khác đích
@@ -22,7 +23,7 @@ export function useCartWrite(mutationKey: readonly unknown[]) {
       if (qc.isMutating({ mutationKey }) > 1) overlapped.current = true;
     },
     write: (cart: CartSummary): Promise<void> | undefined => {
-      if (overlapped.current) return qc.invalidateQueries({ queryKey: ['cart'] });
+      if (overlapped.current) return settleWithin(qc.invalidateQueries({ queryKey: ['cart'] }));
       qc.setQueryData(cartKey(), cart);
       return undefined;
     },
