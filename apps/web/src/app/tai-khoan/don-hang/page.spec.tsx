@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
+import { QueryClient } from '@tanstack/react-query';
+import { click, flush, remount, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { headingProblems, unnamedControls } from '@/test-utils/a11y';
 
 // Mini App orders.spec.tsx: tab gốc "Đơn hàng", 7 tab, thẻ đơn, Thanh toán ngay, Mua lại, Xem thêm, trạng thái trống, gợi ý khách mới.
@@ -195,6 +196,55 @@ describe('trang Đơn hàng /tai-khoan/don-hang', () => {
     expect(btn('Xem thêm', c)).toBeUndefined();
   });
 
+  it('"Xem thêm": chạm đúp cùng khung hình chỉ tải trang 2 một lần, nút báo aria-busy + aria-disabled (không disabled) tới khi trang về', async () => {
+    orders = Array.from({ length: 25 }, (_, i) => order(`TUBU${i + 1}`));
+    const c = await mount();
+    let release!: () => void;
+    ordersGate = new Promise<void>((r) => (release = r));
+    const more = btn('Xem thêm', c)!;
+    more.focus();
+    act(() => {
+      more.click();
+      more.click();
+    });
+    expect(more.getAttribute('aria-busy')).toBe('true');
+    expect(more.getAttribute('aria-disabled')).toBe('true');
+    await flush(3);
+    expect(sent('/orders').map((x) => x.query.get('page'))).toEqual(['1', '2']);
+    expect(more.getAttribute('aria-busy')).toBe('true');
+    expect(more.getAttribute('aria-disabled')).toBe('true');
+    expect(more.disabled).toBe(false);
+    expect(document.activeElement).toBe(more);
+    release();
+    await flush(8);
+    expect(sent('/orders').map((x) => x.query.get('page'))).toEqual(['1', '2']);
+    expect(c.querySelectorAll('[data-testid="order-card"]')).toHaveLength(25);
+  });
+
+  it('"Xem thêm": dựng lại màn khi trang 2 còn tải (khoá ref trống, truy vấn vẫn chạy): chạm lại không tải trang 2 lần hai', async () => {
+    orders = Array.from({ length: 25 }, (_, i) => order(`TUBU${i + 1}`));
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const r = render(<OrdersPage />, qc);
+    mounted.push(r);
+    await flush(8);
+    let release!: () => void;
+    ordersGate = new Promise<void>((res) => (release = res));
+    click(btn('Xem thêm', r.container)!);
+    await flush(3);
+    expect(sent('/orders').map((x) => x.query.get('page'))).toEqual(['1', '2']);
+    remount(r, <OrdersPage />, qc);
+    await flush(4);
+    const more = btn('Đang tải…', r.container)!;
+    expect(more.getAttribute('aria-disabled')).toBe('true');
+    click(more);
+    await flush(3);
+    expect(sent('/orders').map((x) => x.query.get('page'))).toEqual(['1', '2']);
+    release();
+    await flush(8);
+    expect(sent('/orders').map((x) => x.query.get('page'))).toEqual(['1', '2']);
+    expect(r.container.querySelectorAll('[data-testid="order-card"]')).toHaveLength(25);
+  });
+
   it('API trả nextCursor: "Xem thêm" gửi con trỏ đó (dù tổng báo hết trang kiểu offset) và đơn lặp giữa hai trang chỉ hiện một lần', async () => {
     keyset = [
       { data: [order('TUBU1')], nextCursor: 'CUR1' },
@@ -248,6 +298,8 @@ describe('trang Đơn hàng /tai-khoan/don-hang', () => {
       retry.click();
       retry.click();
     });
+    expect(retry.getAttribute('aria-busy')).toBe('true');
+    expect(retry.getAttribute('aria-disabled')).toBe('true');
     await flush(3);
     expect(sent('/orders')).toHaveLength(2);
     expect(retry.getAttribute('aria-busy')).toBe('true');

@@ -2,12 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { ApiError, NetworkError } from '@/lib/client-api';
 import { serverRejectedState } from './server-rejected-state';
 
-describe('serverRejectedState: chỉ 400/404/409 mới đáng tải lại', () => {
-  it.each([400, 404, 409])('ApiError %i: có', (status) => {
+describe('serverRejectedState: chỉ 400/404/409/422 mới đáng tải lại', () => {
+  it.each([400, 404, 409, 422])('ApiError %i: có', (status) => {
     expect(serverRejectedState(new ApiError('x', status))).toBe(true);
   });
 
-  it.each([401, 403, 408, 410, 422, 429, 500, 502, 503, 504])('ApiError %i: không', (status) => {
+  it.each([401, 403, 408, 410, 429, 500, 502, 503, 504])('ApiError %i: không', (status) => {
     expect(serverRejectedState(new ApiError('x', status))).toBe(false);
   });
 

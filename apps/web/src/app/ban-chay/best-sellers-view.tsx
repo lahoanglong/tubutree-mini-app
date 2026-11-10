@@ -85,11 +85,11 @@ export default function BestSellersView({ initial = null, categories: initialCat
     focusFrom.current = null;
     if (listLength > from) gridRef.current?.querySelector<HTMLElement>(`ul[data-testid="catalog-grid"] li:nth-child(${from + 1}) a`)?.focus();
   }, [listLength, fetchingMore]);
+  // Trả Promise để `Button` khoá chạm đúp tới khi xong: `loading` chỉ đúng sau lần vẽ kế, hai cú chạm cùng khung hình gọi hai lần và lần sau huỷ lần đầu.
   const loadMore = () => {
-    // Button đang `loading` không nhận chạm, nhưng thẻ này còn gọi được từ nơi khác: không gọi hai trang cùng lúc.
-    if (products.isFetchingNextPage) return;
+    if (products.isFetchingNextPage) return undefined;
     focusFrom.current = list.length;
-    products.fetchNextPage().catch(() => {
+    return products.fetchNextPage().catch(() => {
       focusFrom.current = null;
     });
   };
@@ -141,9 +141,7 @@ export default function BestSellersView({ initial = null, categories: initialCat
                 <Button
                   variant="secondary"
                   loading={products.isFetching}
-                  onPress={() => {
-                    (products.isFetchNextPageError ? products.fetchNextPage() : products.refetch()).catch(() => undefined);
-                  }}
+                  onPress={() => (products.isFetchNextPageError ? products.fetchNextPage() : products.refetch()).catch(() => undefined)}
                   style={{ minWidth: 0 }}
                 >
                   {browseText.retry}

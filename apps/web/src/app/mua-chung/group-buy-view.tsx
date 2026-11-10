@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Share2 } from 'lucide-react';
-import { errorStatus } from '@tubutree/app-core/api/error-status';
 import { joinGroupBuy, type GroupBuy } from '@tubutree/app-core/api/groupbuy';
 import { groupMemberStatus, groupMissing, groupMissingLine, groupPriceLabels, groupRewardLine } from '@tubutree/app-core/group-buy-copy';
 import { groupBuyListQuery, groupBuyOneQuery } from '@tubutree/app-core/queries/groupbuy';
@@ -24,6 +23,7 @@ import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
 import { ui } from '@/lib/guest-ui';
 import { platformBridge } from '@/lib/platform-bridge';
+import { serverRejectedState } from '@/lib/server-rejected-state';
 import { settleWithin } from '@/lib/settle-within';
 import { loginHref } from '@/lib/return-to';
 import { withReferral } from '@/lib/share-link';
@@ -36,16 +36,6 @@ type Note = { text: string; error: boolean } | null;
 const JUST_CREATED_PARAM = 'moi';
 const errorText = loadErrorText;
 const JOIN_KEY = ['group-buy-join'] as const;
-
-/**
- * Máy chủ đã nói rõ nhóm khác với thẻ đang hiện: 400/404/409 (đã đủ người, đã hết hạn, đã đóng, đã tham gia rồi). Mất mạng, hết thời gian,
- * 401 và 5xx thì không tải lại: các lỗi đó hay đến đúng lúc máy chủ đang bận (triển khai), lần tải lại cũng hỏng và lỗi tải danh sách sẽ thay
- * cả danh sách bằng màn lỗi. Nếu máy chủ đã ghi thành viên trước khi lỗi 5xx thì lần bấm sau nhận 400 "đã tham gia" và tải lại ở đó.
- */
-function groupMayHaveChanged(e: unknown): boolean {
-  const status = errorStatus(e);
-  return status === 400 || status === 404 || status === 409;
-}
 
 function timeLeft(iso: string): string {
   const diff = (new Date(iso).getTime() - serverNow()) / 1000;
@@ -99,7 +89,7 @@ export function GroupBuyView({ invitedId }: { invitedId?: string }) {
       onError: (e: unknown) => {
         setNote({ text: errorText(e), error: true });
         // Thẻ đang cho bấm "Tham gia" trên nhóm mà máy chủ vừa nói đã đủ/đã đóng/đã có mình: tải lại để thẻ hiện đúng trạng thái, giữ khoá tới lúc đó.
-        return groupMayHaveChanged(e) ? settleWithin(qc.invalidateQueries({ queryKey: ['group-buy'] })) : undefined;
+        return serverRejectedState(e) ? settleWithin(qc.invalidateQueries({ queryKey: ['group-buy'] })) : undefined;
       },
     },
     (id) => id,

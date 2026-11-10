@@ -155,19 +155,16 @@ describe('/tai-khoan/ho-so — khung trang', () => {
   });
 });
 
-describe('/tai-khoan/ho-so — "Thử lại" khi đã có hồ sơ cũ (W78B)', () => {
-  // Lần tải lại nền lỗi vẫn hiện khối lỗi kèm dữ liệu cũ: `refetch()` thứ hai huỷ lượt đầu và gọi API lần nữa, nên chỉ khoá nút mới giữ một lượt.
+describe('/tai-khoan/ho-so — "Thử lại" khi chưa có hồ sơ (W78B)', () => {
+  // `refetch()` thứ hai huỷ lượt đầu và gọi API lần nữa, nên chỉ khoá nút mới giữ một lượt. Khi đã có hồ sơ mà lần tải lại nền lỗi thì
+  // trang giữ nguyên form (không có khối lỗi, xem ca "lưu lỗi rồi tải lại /me cũng lỗi"), nên nút Thử lại chỉ còn ở lần tải đầu.
   it('chạm đúp cùng một act: /me chỉ tải lại một lần', async () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    mocks.get.mockRejectedValueOnce(new Error('Mất kết nối'));
     const r = render(<EditProfilePage />, client);
     mounted.push(r);
     await flush(6);
     const meCalls = () => mocks.get.mock.calls.filter(([p]) => !String(p).includes('/config/')).length;
-    mocks.get.mockRejectedValueOnce(new Error('Mất kết nối'));
-    await act(async () => {
-      await client.invalidateQueries({ queryKey: ['me'] });
-    });
-    await flush(2);
     expect(r.container.querySelector('[role="alert"]')?.textContent).toContain('Mất kết nối');
     const before = meCalls();
     let release!: () => void;
@@ -413,6 +410,18 @@ describe('/tai-khoan/ho-so — lưu (PATCH /me)', () => {
     expect(container.textContent).not.toContain('ECONNRESET');
     expect(container.textContent).not.toContain('Đã cập nhật hồ sơ');
     expect(mocks.auth.updateProfile).not.toHaveBeenCalled();
+  });
+
+  it('lưu lỗi rồi tải lại /me cũng lỗi: form vẫn ở đó cùng lời báo lỗi lưu, không thay cả trang bằng màn lỗi', async () => {
+    mocks.patch.mockRejectedValue(new ApiError('Máy chủ lỗi', 500));
+    const { container } = await mount();
+    mocks.get.mockRejectedValue(new NetworkError(false));
+    click(saveBtn(container));
+    await flush(8);
+    expect(saveBtn(container)).not.toBeNull();
+    expect(field(container, 'Họ và tên')).toBeDefined();
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('Máy chủ đang bận');
+    expect(byText(container, 'button', 'Thử lại')).toBeNull();
   });
 
   it('mất mạng: câu báo mất kết nối của web, không phải chữ kỹ thuật', async () => {

@@ -171,7 +171,8 @@ export default function OrderDetailPage() {
     );
   }
 
-  if (orderQ.isError || !orderQ.data) {
+  // Chỉ thay cả trang bằng màn lỗi khi KHÔNG có đơn để hiện: lần tải lại nền lỗi (sau huỷ, sau bị từ chối) giữ nguyên đơn đang xem như Mini App.
+  if (!orderQ.data) {
     // API trả 404 cho cả đơn không tồn tại lẫn đơn của người khác: không phân biệt để không lộ mã đơn.
     const notFound = orderQ.error instanceof ApiError && orderQ.error.status === 404;
     return (

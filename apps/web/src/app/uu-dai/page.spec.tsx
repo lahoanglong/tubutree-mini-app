@@ -1,6 +1,8 @@
 import { homeCopy } from '@tubutree/app-core/home-copy';
 // @vitest-environment jsdom
 import { act } from 'react';
+import { QueryClient } from '@tanstack/react-query';
+import { couponsQuery } from '@tubutree/app-core/queries/loyalty';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { headingProblems, unnamedControls } from '@/test-utils/a11y';
@@ -73,6 +75,7 @@ vi.mock('@/lib/core-http', () => {
   };
 });
 
+import { coreHttp } from '@/lib/core-http';
 import { resetFlashSales } from '@/lib/use-flash-sales';
 import OffersPage from './page';
 
@@ -278,6 +281,24 @@ describe('/uu-dai — trang Ưu đãi', () => {
     const c = await mount();
     expect(region(c, 'Mã của tôi')!.textContent).toContain('Chưa tải được mã giảm giáMáy chủ đang bận');
     expect(byText(region(c, 'Mã của tôi')!, 'button', 'Thử lại')).not.toBeNull();
+  });
+
+  it('làm mới nền lỗi khi đã có mã: giữ nguyên các thẻ mã đang hiện, không thay bằng khối lỗi', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const r = render(<OffersPage />, client);
+    mounted.push(r);
+    await flush(8);
+    const mine = () => region(r.container, 'Mã của tôi')!;
+    expect(mine().querySelectorAll('[role="group"]')).toHaveLength(1);
+    state.fail.add('/me/coupons');
+    await act(async () => {
+      await client.refetchQueries({ queryKey: couponsQuery(coreHttp).queryKey });
+    });
+    await flush(4);
+    expect(client.getQueryState(couponsQuery(coreHttp).queryKey)?.status).toBe('error');
+    expect(mine().querySelectorAll('[role="group"]')).toHaveLength(1);
+    expect(byText(mine(), 'button', 'Thử lại')).toBeNull();
+    expect(mine().querySelector('[role="alert"]')).toBeNull();
   });
 
   it('Mã của tôi: mỗi thẻ có nút "Dùng ngay" gọi use đúng mã; "Xem tất cả" tới /ma-giam-gia?tab=mine', async () => {

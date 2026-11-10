@@ -16,8 +16,8 @@ import { mini } from '@/components/order-mobile/mobile-ui';
 import { PageHeader } from '@/components/ui/page-header';
 import { PAGE_NARROW } from '@/lib/page-frame';
 import { actionErrorText } from '@/lib/error-text';
+import { serverRejectedState } from '@/lib/server-rejected-state';
 import { settleWithin } from '@/lib/settle-within';
-import { errorStatus } from '@tubutree/app-core/api/error-status';
 
 // Chỉ sổ địa chỉ rỗng mới cần màn trống: không kéo nó vào bundle đầu của trang.
 const MiniEmptyState = dynamic(() => import('@/components/mini/empty-state').then((m) => m.EmptyState), { ssr: false });
@@ -30,15 +30,6 @@ const NOTICE_MS = 4000;
 /** Việc khách làm trên MỘT địa chỉ: đặt mặc định hoặc xoá. Chung một khoá theo id nên hai việc của cùng địa chỉ không chồng nhau, địa chỉ khác vẫn chạy song song. */
 type AddressOp = { op: 'default' | 'delete'; id: string };
 const ADDRESS_OP_KEY = ['address-op'] as const;
-
-/**
- * Máy chủ đã nói rõ địa chỉ không còn như sổ đang hiện: 400/404/409 (đã xoá ở máy khác, đã là mặc định). Mất mạng, 401 và 5xx thì không
- * tải lại: các lỗi đó hay đến đúng lúc máy chủ đang bận, lần tải lại cũng hỏng và lỗi tải sổ sẽ thay cả sổ bằng màn lỗi.
- */
-function addressMayHaveChanged(e: unknown): boolean {
-  const status = errorStatus(e);
-  return status === 400 || status === 404 || status === 409;
-}
 
 const line = (a: AddressDTO) => [a.street, a.ward, a.district, a.province].filter(Boolean).join(', ');
 
@@ -110,7 +101,7 @@ export default function AddressBookPage() {
       onError: (error, v) => {
         setOpErrors((prev) => new Map(prev).set(v.id, error));
         if (v.op === 'delete') setConfirmId((cur) => (cur === v.id ? null : cur));
-        return addressMayHaveChanged(error) ? settleWithin(refresh()) : undefined;
+        return serverRejectedState(error) ? settleWithin(refresh()) : undefined;
       },
     },
     (v) => v.id,

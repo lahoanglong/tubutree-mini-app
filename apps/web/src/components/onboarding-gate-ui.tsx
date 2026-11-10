@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Baby, Check, Droplets, Flag, Flower2, Leaf, Package, PawPrint, Recycle, Smile, Sparkles, Sprout, SprayCan, Sun, User, UserRound,
   Users, Wallet, type LucideIcon,
@@ -16,6 +16,7 @@ import { platformBridge } from '@/lib/platform-bridge';
 import { useModalA11y } from '@/lib/use-modal-a11y';
 import { useShellPathname } from '@/lib/shell-pathname';
 import { actionErrorText } from '@/lib/error-text';
+import { useLockedMutation } from '@/components/game/use-locked-mutation';
 
 interface Q {
   id: string;
@@ -133,7 +134,8 @@ function Onboarding({ onSnooze, onDone }: { onSnooze: () => void; onDone: () => 
   const total = QUESTIONS.length;
   const finishStep = total + 1;
 
-  const submit = useMutation({
+  // Khoá đồng bộ như Mini App: `isPending` chỉ đúng sau lần vẽ kế, hai cú bấm "Hoàn tất" sát nhau sẽ gửi hai lần.
+  const submit = useLockedMutation({
     mutationFn: () => completeOnboarding(coreHttp, Object.values(answers).flat()),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['me'] });
@@ -219,7 +221,9 @@ function Onboarding({ onSnooze, onDone }: { onSnooze: () => void; onDone: () => 
                 <button
                   type="button"
                   className={`${light} w-full`}
-                  disabled={sel.length === 0 || (step === total && submit.isPending)}
+                  disabled={sel.length === 0}
+                  aria-busy={(step === total && submit.isPending) || undefined}
+                  aria-disabled={(step === total && submit.isPending) || undefined}
                   onClick={() => {
                     if (step < total) setStep(step + 1);
                     else submit.mutate();
