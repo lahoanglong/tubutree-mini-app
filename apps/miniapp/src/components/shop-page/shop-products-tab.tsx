@@ -72,13 +72,13 @@ function BrandList({ slug, sort, showBrand }: { slug: string; sort: ShopSort; sh
   });
   const items = useMemo(() => q.data?.pages.flatMap((p) => p.data) ?? [], [q.data]);
   if (q.isPending) return <ProductGrid items={[]} variant="grid" loading showBrand={showBrand} />;
-  if (q.isError && items.length === 0) return <ErrorState variant="inline" message={getLoadErrorMessage(q.error)} onRetry={() => void q.refetch()} retrying={q.isFetching} />;
+  if (q.isError && items.length === 0) return <ErrorState variant="inline" message={getLoadErrorMessage(q.error)} onRetry={() => q.refetch()} retrying={q.isFetching} />;
   if (items.length === 0) return <EmptyState variant="inline" art="basket" heading={fillCopy('shop.emptyProducts')} />;
   return (
     <>
       <ProductGrid items={items} variant="grid" showBrand={showBrand} listSource="shop_products" />
-      {q.isFetchNextPageError && <ErrorState variant="inline" message={getLoadErrorMessage(q.error)} onRetry={() => void q.fetchNextPage()} retrying={q.isFetchingNextPage} />}
-      {q.hasNextPage && !q.isFetchNextPageError && <MoreButton loading={q.isFetchingNextPage} onPress={() => void q.fetchNextPage()} />}
+      {q.isFetchNextPageError && <ErrorState variant="inline" message={getLoadErrorMessage(q.error)} onRetry={() => q.fetchNextPage()} retrying={q.isFetchingNextPage} />}
+      {q.hasNextPage && !q.isFetchNextPageError && <MoreButton loading={q.isFetchingNextPage} onPress={() => q.fetchNextPage()} />}
     </>
   );
 }
@@ -105,7 +105,7 @@ export function ShopProductsTab({ source, showBrand, initialSort = 'popular', sc
         {source.kind === 'local' ? (
           <LocalList products={source.products} sort={sort} showBrand={showBrand} />
         ) : (
-          <BrandList slug={source.slug} sort={sort} showBrand={showBrand} />
+          <BrandList key={sort} slug={source.slug} sort={sort} showBrand={showBrand} />
         )}
       </div>
     </div>

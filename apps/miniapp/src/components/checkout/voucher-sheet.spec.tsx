@@ -964,3 +964,44 @@ describe('VoucherSheet: khoá chạm đúp áp và gỡ mã, mỗi lần chỉ m
     expect(mocks.applyCoupon).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('VoucherSheet: "Thử lại" tải danh sách mã khoá chạm đúp (W81A)', () => {
+  const pending = <T,>() => {
+    let resolve!: (v: T) => void;
+    const promise = new Promise<T>((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+
+  // Lần tải lại ở nền hỏng khi ví đã có dữ liệu: react-query giữ dữ liệu cũ và `refetch` thứ hai sẽ huỷ rồi gọi lại API, nên chỉ cú chạm đầu được đi.
+  it('lần tải lại lỗi khi ví đã có mã: chạm đúp "Thử lại" trong cùng một khung hình chỉ gọi API thêm một lần', async () => {
+    vi.clearAllMocks();
+    mocks.getCoupons.mockResolvedValueOnce(COUPONS);
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <VoucherSheet visible onClose={() => {}} subtotal={100_000} />
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByText('GIAM10')).toBeInTheDocument();
+    mocks.getCoupons.mockRejectedValueOnce(new Error('Mạng lỗi'));
+    await act(async () => {
+      await qc.refetchQueries({ queryKey: ['coupons'] });
+    });
+    const retry = await screen.findByRole('button', { name: 'Thử lại' });
+    expect(mocks.getCoupons).toHaveBeenCalledTimes(2);
+
+    const next = pending<typeof COUPONS>();
+    mocks.getCoupons.mockReturnValueOnce(next.promise);
+    await act(async () => {
+      fireEvent.click(retry);
+      fireEvent.click(retry);
+    });
+    expect(mocks.getCoupons).toHaveBeenCalledTimes(3);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Thử lại' })).toHaveAttribute('aria-busy', 'true'));
+    await act(async () => next.resolve(COUPONS));
+    expect(await screen.findByText('GIAM10')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Thử lại' })).toBeNull();
+  });
+});
