@@ -300,6 +300,25 @@ describe('DailyCheckInCard — tải trạng thái lỗi', () => {
     fireEvent.click(screen.getByRole('button', { name: /Thử lại/ }));
     expect(refetch).toHaveBeenCalledTimes(1);
   });
+
+  it('Thử lại trả Promise tải lại (W82A): hai cú chạm cùng nhịp chỉ tải lại một lần, tải xong thì thử lại được tiếp', async () => {
+    let finish!: () => void;
+    const refetch = vi.fn(() => new Promise<void>((resolve) => { finish = resolve; }));
+    mocks.statusQ = { isLoading: false, isError: true, isFetching: false, error: new Error('Mất mạng'), refetch };
+    render(<DailyCheckInCard authed />);
+    const retry = screen.getByRole('button', { name: /Thử lại/ });
+    await act(async () => {
+      fireEvent.click(retry);
+      fireEvent.click(retry);
+    });
+    expect(refetch).toHaveBeenCalledTimes(1);
+
+    await act(async () => finish());
+    await act(async () => {
+      fireEvent.click(retry);
+    });
+    expect(refetch).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe('DailyCheckInCard — ghi chú khách ở bản gọn', () => {

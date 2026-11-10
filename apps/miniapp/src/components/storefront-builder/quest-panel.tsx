@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'zmp-ui';
 import { Check } from 'lucide-react';
 import { claimQuest, type QuestList as QuestData } from '../../services/storefront-api';
@@ -6,6 +6,7 @@ import { getErrorMessage } from '../../services/api';
 import { formatPoints } from '../../utils/format';
 import { haptic } from '../../utils/haptic';
 import { vi } from '../../i18n/vi';
+import { useLockedMutation } from '../game/use-locked-mutation';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Icon } from '../ui/icon';
@@ -16,12 +17,14 @@ import { Text } from '../ui/text';
 export function QuestList({ data }: { data: QuestData }) {
   const qc = useQueryClient();
   const { openSnackbar } = useSnackbar();
-  const claimMut = useMutation({
+  // Một lần nhận mỗi lúc cho cả danh sách (các nút khác đã bị `disabled` sau lần vẽ kế): ref chặn cú chạm thứ hai cùng nhịp, kể cả sang nhiệm vụ khác.
+  const claimMut = useLockedMutation({
     mutationFn: (code: string) => claimQuest(code),
     onSuccess: (r) => {
       haptic('medium');
       openSnackbar({ text: `+${formatPoints(r.rewardPoints)} 🎉`, type: 'success' });
-      void qc.invalidateQueries({ queryKey: ['storefront-quests'] });
+      // Trả Promise: khoá nhả sau khi danh sách tải lại, không thì nút "Nhận" sáng lại trên dữ liệu cũ và cú chạm kế hiện thêm lời báo điểm.
+      return qc.invalidateQueries({ queryKey: ['storefront-quests'] });
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });

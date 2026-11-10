@@ -37,7 +37,7 @@ export function GuestTiers() {
       <GuestLoginButton />
       <Heading variant="title-md" as="h2">{guestPreviewCopy.tiersTitle}</Heading>
       {q.isError && !q.data ? (
-        <ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => void q.refetch()} />
+        <ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => q.refetch()} />
       ) : !q.data ? (
         <Skeleton height={120} />
       ) : (

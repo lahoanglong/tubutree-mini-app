@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { Input, useSnackbar, useNavigate } from 'zmp-ui';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { qtyPickMax } from '@tubutree/app-core/commerce/stock-text';
 import { Trash2, Plus, Minus, UserPlus, TriangleAlert, type LucideIcon } from 'lucide-react';
 import { Button } from '../ui/button';
@@ -14,6 +14,7 @@ import { ListRow } from '../ui/list-row';
 import { Skeleton } from '../ui/skeleton';
 import { Heading, Text } from '../ui/text';
 import { ChoiceCard } from './choice-card';
+import { useLockedMutation } from '../game/use-locked-mutation';
 import { GeoPicker, EMPTY_GEO, type GeoValue } from '../geo-picker';
 import {
   loadRecentCustomers,
@@ -209,7 +210,9 @@ export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
   };
   const resendSameOrder = unconfirmedKey !== null && orderKeys.current.peek(body) === unconfirmedKey;
 
-  const mut = useMutation({
+  // Khoá đồng bộ theo `useLockedMutation`: `isPending` chỉ đúng sau lần vẽ kế, hai cú chạm sát nhau vẫn đều thấy nút sẵn sàng. Khoá nhả ở
+  // `onSettled` (sau cả lần tự kiểm tra lại), nên key của lần gửi đang chạy không bị cú chạm thứ hai đụng tới; lỗi thì nhả để "Gửi lại đơn" chạy.
+  const mut = useLockedMutation({
     mutationFn: (s: Submission) => createCtvOrder(s.body, s.key),
     // Quá thời gian/mất kết nối: máy chủ có thể đã ghi đơn. Tự gửi lại đúng đơn đó (cùng key, máy chủ trả lại đơn đã có) thay
     // vì để CTV bấm lại; lỗi nghiệp vụ 4xx thì không.
@@ -577,7 +580,7 @@ function ProductVariationPicker({ onAdd }: { onAdd: (v: VariationDetail, product
         {detailQ.isLoading ? (
           <Skeleton height={16} width="50%" />
         ) : detailQ.isError ? (
-          <ErrorState variant="inline" message={vi.errors.loadFailed} onRetry={() => void detailQ.refetch()} />
+          <ErrorState variant="inline" message={vi.errors.loadFailed} onRetry={() => detailQ.refetch()} />
         ) : (
           (p?.variations ?? []).map((v) => {
             const out = v.stock <= 0;
@@ -625,7 +628,7 @@ function ProductVariationPicker({ onAdd }: { onAdd: (v: VariationDetail, product
       {canSuggest && (
         <div style={{ marginTop: 4 }}>
           {suggestQ.isError ? (
-            <ErrorState variant="inline" message={vi.errors.loadFailed} onRetry={() => void suggestQ.refetch()} />
+            <ErrorState variant="inline" message={vi.errors.loadFailed} onRetry={() => suggestQ.refetch()} />
           ) : (
             <>
               {results.map((p) => (

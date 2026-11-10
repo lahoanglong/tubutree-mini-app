@@ -640,3 +640,133 @@ describe('CtvOrderSheet — SĐT và tên người nhận cùng luật với má
     expect(mocks.createCtvOrder).not.toHaveBeenCalled();
   });
 });
+
+describe('CtvOrderSheet — khoá đồng bộ khi tạo đơn hộ khách (W82A)', () => {
+  beforeEach(resetMocks);
+
+  const deferredOrder = () => {
+    let finish!: (v: unknown) => void;
+    let fail!: (e: unknown) => void;
+    mocks.createCtvOrder.mockImplementationOnce(
+      () => new Promise((resolve, reject) => { finish = resolve; fail = reject; }),
+    );
+    return { finish: (v: unknown) => finish(v), fail: (e: unknown) => fail(e) };
+  };
+
+  it('hai cú chạm "Tạo đơn" trong cùng một nhịp (trước khi vẽ lại): chỉ tạo một đơn, một key', async () => {
+    const order = deferredOrder();
+    await readyWithAn();
+    const btn = submitBtn();
+    await act(async () => {
+      fireEvent.click(btn);
+      fireEvent.click(btn);
+    });
+    expect(mocks.createCtvOrder).toHaveBeenCalledTimes(1);
+
+    await act(async () => order.finish({ code: 'TUBU9', total: 84_000, items: [] }));
+    expect(await screen.findByText(/Đã tạo đơn hộ khách/)).toBeInTheDocument();
+    expect(mocks.createCtvOrder).toHaveBeenCalledTimes(1);
+  });
+
+  it('cú chạm thứ hai cách cú đầu một microtask vẫn chưa vẽ lại: vẫn chỉ một đơn', async () => {
+    deferredOrder();
+    await readyWithAn();
+    const btn = submitBtn();
+    await act(async () => {
+      fireEvent.click(btn);
+      await Promise.resolve();
+      fireEvent.click(btn);
+    });
+    expect(mocks.createCtvOrder).toHaveBeenCalledTimes(1);
+  });
+
+  it('máy chủ từ chối: nhả khoá, báo lỗi, bấm lại gửi tiếp đúng key cũ (key chỉ đổi khi tạo đơn xong)', async () => {
+    const order = deferredOrder();
+    await readyWithAn();
+    await act(async () => {
+      fireEvent.click(submitBtn());
+      fireEvent.click(submitBtn());
+    });
+    await act(async () => order.fail(rejected('OUT_OF_STOCK', 'Sản phẩm "Nước rửa chén" không đủ tồn kho.')));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Sản phẩm "Nước rửa chén" không đủ tồn kho.' })));
+    expect(mocks.createCtvOrder).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(submitBtn());
+    await screen.findByText(/Đã tạo đơn hộ khách/);
+    expect(mocks.createCtvOrder).toHaveBeenCalledTimes(2);
+    expect(keyOfCall(1)).toBe(keyOfCall(0));
+  });
+
+  it('lỗi mạng chưa rõ kết quả: nhả khoá sau lần tự kiểm tra lại, "Gửi lại đơn" gửi đúng key cũ và chạm đúp vẫn một lần', async () => {
+    mocks.createCtvOrder.mockRejectedValueOnce(timeoutError()).mockRejectedValueOnce(timeoutError());
+    await readyWithAn();
+    fireEvent.click(submitBtn());
+    await screen.findByRole('alert', {}, { timeout: 4000 });
+    const resend = screen.getByRole('button', { name: 'Gửi lại đơn' });
+    expect(mocks.createCtvOrder).toHaveBeenCalledTimes(2);
+
+    const order = deferredOrder();
+    await act(async () => {
+      fireEvent.click(resend);
+      fireEvent.click(resend);
+    });
+    expect(mocks.createCtvOrder).toHaveBeenCalledTimes(3);
+    expect(keyOfCall(2)).toBe(keyOfCall(0));
+    await act(async () => order.finish({ code: 'TUBU9', total: 84_000, items: [] }));
+    expect(await screen.findByText(/Đã tạo đơn hộ khách/)).toBeInTheDocument();
+  });
+
+  it('"Thử lại" của ô chọn phân loại trả Promise: hai cú chạm cùng nhịp chỉ tải lại một lần', async () => {
+    let finishRetry!: (v: unknown) => void;
+    mocks.fetchProduct
+      .mockResolvedValueOnce({ name: 'Nước rửa chén', variations: [{ id: 'var1', name: 'Chanh', retailPrice: 65_000, salePrice: null, stock: 10 }] })
+      .mockRejectedValueOnce(new Error('mạng lỗi'))
+      .mockImplementationOnce(() => new Promise((resolve) => { finishRetry = resolve; }));
+    renderSheet();
+    const pickProduct = async () => {
+      fireEvent.change(screen.getByPlaceholderText('Tìm sản phẩm để thêm…'), { target: { value: 'nước' } });
+      fireEvent.click(await screen.findByText('Nước rửa chén'));
+    };
+    await pickProduct();
+    await screen.findByText('Chanh');
+    fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+    // Mở lại cùng sản phẩm: dữ liệu cũ còn trong cache, lần tải nền lỗi nên vừa có dữ liệu vừa có lỗi (refetch lúc đó huỷ lần đang chạy rồi chạy lại).
+    await pickProduct();
+    const retry = await screen.findByRole('button', { name: 'Thử lại' });
+    expect(mocks.fetchProduct).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      fireEvent.click(retry);
+      fireEvent.click(retry);
+    });
+    expect(mocks.fetchProduct).toHaveBeenCalledTimes(3);
+    await act(async () => finishRetry({ name: 'Nước rửa chén', variations: [{ id: 'var1', name: 'Chanh', retailPrice: 65_000, salePrice: null, stock: 10 }] }));
+    expect(await screen.findByText('Chanh')).toBeInTheDocument();
+  });
+
+  it('"Thử lại" của gợi ý sản phẩm trả Promise: hai cú chạm cùng nhịp chỉ tải lại một lần', async () => {
+    let finishRetry!: (v: unknown) => void;
+    mocks.suggestProducts
+      .mockResolvedValueOnce([{ slug: 'nrc', name: 'Nước rửa chén', thumbnail: null, basePrice: 65_000 }])
+      .mockRejectedValueOnce(new Error('mạng lỗi'))
+      .mockImplementationOnce(() => new Promise((resolve) => { finishRetry = resolve; }));
+    renderSheet();
+    const search = screen.getByPlaceholderText('Tìm sản phẩm để thêm…');
+    fireEvent.change(search, { target: { value: 'nước' } });
+    await screen.findByText('Nước rửa chén');
+    // Xoá ô tìm rồi gõ lại đúng từ khoá: dữ liệu cũ còn trong cache, lần tải nền lỗi nên vừa có dữ liệu vừa có lỗi.
+    fireEvent.change(search, { target: { value: '' } });
+    await waitFor(() => expect(screen.queryByText('Nước rửa chén')).toBeNull());
+    fireEvent.change(search, { target: { value: 'nước' } });
+    const retry = await screen.findByRole('button', { name: 'Thử lại' });
+    expect(mocks.suggestProducts).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      fireEvent.click(retry);
+      fireEvent.click(retry);
+    });
+    expect(mocks.suggestProducts).toHaveBeenCalledTimes(3);
+    await act(async () => finishRetry([{ slug: 'nrc', name: 'Nước rửa chén', thumbnail: null, basePrice: 65_000 }]));
+    expect(await screen.findByText('Nước rửa chén')).toBeInTheDocument();
+  });
+});

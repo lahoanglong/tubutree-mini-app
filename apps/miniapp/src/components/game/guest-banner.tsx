@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { getErrorMessage } from '../../services/api';
 import { useAuthStore } from '../../store/auth';
 import { Button } from '../ui/button';
@@ -16,8 +16,12 @@ export function GuestBanner() {
   const ensurePhoneOrThrow = useAuthStore((s) => s.ensurePhoneOrThrow);
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
+  // Khoá đồng bộ: `pending` chỉ đúng sau lần vẽ kế, hai cú chạm sát nhau sẽ mở hộp xin SĐT của Zalo và gọi API liên kết hai lần.
+  const linkingRef = useRef(false);
   if (!user || user.phone || !user.zaloId?.startsWith('guest_')) return null;
   const login = async () => {
+    if (linkingRef.current) return;
+    linkingRef.current = true;
     setPending(true);
     setFailed(null);
     try {
@@ -26,6 +30,7 @@ export function GuestBanner() {
     } catch (err) {
       setFailed(getErrorMessage(err));
     } finally {
+      linkingRef.current = false;
       setPending(false);
     }
   };
@@ -48,7 +53,7 @@ export function GuestBanner() {
           </Text>
         </div>
       )}
-      <Button fullWidth loading={pending} disabled={pending} onPress={() => void login()}>
+      <Button fullWidth loading={pending} onPress={login}>
         {t.cta}
       </Button>
     </div>

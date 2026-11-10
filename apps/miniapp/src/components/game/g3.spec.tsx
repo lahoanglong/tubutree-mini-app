@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi } from 'vitest';
 
@@ -185,5 +185,71 @@ describe('G3 lượt 2', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: 'Đăng nhập Zalo' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Số điện thoại này đã gắn với tài khoản Zalo khác.');
+  });
+});
+
+describe('GuestBanner — khoá đồng bộ liên kết Zalo (W82A)', () => {
+  const wrap = () =>
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <GuestBanner />
+      </QueryClientProvider>,
+    );
+  const loginBtn = () => screen.getByRole('button', { name: 'Đăng nhập Zalo' });
+  const deferredLink = () => {
+    let finish!: (phone: string | null) => void;
+    let fail!: (e: unknown) => void;
+    mocks.ensurePhone.mockImplementationOnce(() => new Promise<string | null>((resolve, reject) => { finish = resolve; fail = reject; }));
+    return { finish: (phone: string | null) => finish(phone), fail: (e: unknown) => fail(e) };
+  };
+
+  it('hai cú chạm sát nhau (trước khi vẽ lại): chỉ mở luồng xin SĐT một lần, nút báo bận mà không bị disabled', async () => {
+    mocks.user = { id: 'u', zaloId: 'guest_abc', phone: null };
+    mocks.ensurePhone.mockReset();
+    const link = deferredLink();
+    wrap();
+    const btn = loginBtn();
+    await act(async () => {
+      fireEvent.click(btn);
+      fireEvent.click(btn);
+    });
+    expect(mocks.ensurePhone).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(btn).toHaveAttribute('aria-busy', 'true'));
+    expect(btn).not.toBeDisabled();
+
+    await act(async () => link.finish(null));
+    await waitFor(() => expect(btn).not.toHaveAttribute('aria-busy'));
+  });
+
+  it('cú chạm thứ hai cách cú đầu một microtask vẫn chưa vẽ lại: vẫn một lần', async () => {
+    mocks.user = { id: 'u', zaloId: 'guest_abc', phone: null };
+    mocks.ensurePhone.mockReset();
+    deferredLink();
+    wrap();
+    const btn = loginBtn();
+    await act(async () => {
+      fireEvent.click(btn);
+      await Promise.resolve();
+      fireEvent.click(btn);
+    });
+    expect(mocks.ensurePhone).toHaveBeenCalledTimes(1);
+  });
+
+  it('máy chủ từ chối thì nhả khoá, báo đúng lời máy chủ, bấm lại liên kết được', async () => {
+    mocks.user = { id: 'u', zaloId: 'guest_abc', phone: null };
+    mocks.ensurePhone.mockReset();
+    const link = deferredLink();
+    wrap();
+    await act(async () => {
+      fireEvent.click(loginBtn());
+      fireEvent.click(loginBtn());
+    });
+    await act(async () => link.fail(new HttpError('conflict', undefined, { status: 409, data: { message: 'Số điện thoại này đã gắn với tài khoản Zalo khác.' } })));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Số điện thoại này đã gắn với tài khoản Zalo khác.');
+    expect(mocks.ensurePhone).toHaveBeenCalledTimes(1);
+
+    mocks.ensurePhone.mockResolvedValueOnce(null);
+    fireEvent.click(loginBtn());
+    await waitFor(() => expect(mocks.ensurePhone).toHaveBeenCalledTimes(2));
   });
 });

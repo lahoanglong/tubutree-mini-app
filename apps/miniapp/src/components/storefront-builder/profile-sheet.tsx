@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { Input, useSnackbar } from 'zmp-ui';
-import { useMutation } from '@tanstack/react-query';
 import { updateStorefront, type StorefrontEdit } from '../../services/storefront-api';
 import { getErrorMessage } from '../../services/api';
 import { haptic } from '../../utils/haptic';
 import { vi } from '../../i18n/vi';
+import { useLockedMutation } from '../game/use-locked-mutation';
 import { Button } from '../ui/button';
 import { Text } from '../ui/text';
 import { ImageUpload } from '../image-upload';
@@ -28,7 +28,7 @@ export function ProfileSheet({
   const [coverUrl, setCoverUrl] = useState(sf.coverUrl ?? '');
   const [headerNote, setHeaderNote] = useState(sf.headerNote ?? '');
 
-  const saveMut = useMutation({
+  const saveMut = useLockedMutation({
     mutationFn: () =>
       // Gửi chuỗi RỖNG (không phải undefined) khi CTV chủ động xoá: undefined bị PATCH bỏ qua,
       // nên trước đây xoá ảnh bìa rồi bấm Lưu là snackbar báo thành công mà ảnh cũ vẫn còn trên
