@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Input, Page, useSnackbar, useNavigate } from 'zmp-ui';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useLockedMutation } from '../components/game/use-locked-mutation';
 import { UserPlus, ShieldCheck, Check, X, Clock, Plus, MessagesSquare } from 'lucide-react';
 import { listStaff, grantStaff, revokeStaff, getShiftsPendingCount, STAFF_PERMISSIONS, STAFF_PERMISSION_LABELS, type StaffPermission, type StaffRole } from '../services/staff-api';
 import {
@@ -89,6 +90,8 @@ const TABS: { key: Tab; label: string }[] = [
 const SECTION_STYLE = { padding: '0 16px 16px', display: 'flex', flexDirection: 'column', gap: 12 } as const;
 
 const SHIFTS_PENDING_KEY = ['admin-shifts-pending'] as const;
+// Khoá của "Duyệt tất cả" trong sổ khoá ca; id ca là chuỗi do máy chủ cấp nên không bao giờ trùng dấu sao.
+const BULK_KEY = '*';
 
 function AdminHub() {
   const navigate = useNavigate();
@@ -148,7 +151,20 @@ function PayrollSection() {
   const [detailRow, setDetailRow] = useState<AdminPayrollRow | null>(null);
   const [reopenRow, setReopenRow] = useState<AdminPayrollRow | null>(null);
 
-  const rateM = useMutation({
+  // Chốt, mở lại và đánh dấu đã trả đều đổi trạng thái bảng lương nên chỉ một việc mỗi lúc (cũng là lý do các dòng khác bị khoá khi một dòng đang chạy).
+  // Khoá ref vì `isPending` chỉ đúng sau lần vẽ kế tiếp: hai cú chạm sát nhau vẫn gửi cả hai.
+  const acting = useRef(false);
+  const releaseActing = () => {
+    acting.current = false;
+  };
+  const exclusive = (run: () => void) => {
+    if (acting.current) return false;
+    acting.current = true;
+    run();
+    return true;
+  };
+
+  const rateM = useLockedMutation({
     mutationFn: () => setRate(rateRow!.staff.id, Number(rateVal)),
     onSuccess: () => {
       openSnackbar({ text: 'Đã lưu đơn giá.', type: 'success' });
@@ -157,7 +173,8 @@ function PayrollSection() {
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
-  const finalizeM = useMutation({
+  const finalizeM = useLockedMutation({
+    onSettled: releaseActing,
     mutationFn: (r: AdminPayrollRow) => finalizePayroll(r.staff.id, ym.year, ym.month),
     onSuccess: () => {
       openSnackbar({ text: 'Đã chốt lương.', type: 'success' });
@@ -165,7 +182,8 @@ function PayrollSection() {
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
-  const reopenM = useMutation({
+  const reopenM = useLockedMutation({
+    onSettled: releaseActing,
     mutationFn: (r: AdminPayrollRow) => reopenPayroll(r.staff.id, ym.year, ym.month),
     onSuccess: () => {
       openSnackbar({ text: 'Đã mở lại bảng lương — sửa xong nhớ chốt lại.', type: 'success' });
@@ -173,7 +191,8 @@ function PayrollSection() {
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
-  const paidM = useMutation({
+  const paidM = useLockedMutation({
+    onSettled: releaseActing,
     mutationFn: () => markPaid(payRow!.staff.id, { year: ym.year, month: ym.month, proofImageUrl: proof, note: note || undefined }),
     onSuccess: () => {
       openSnackbar({ text: 'Đã đánh dấu đã trả lương.', type: 'success' });
@@ -184,6 +203,7 @@ function PayrollSection() {
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
+  const payrollBusy = finalizeM.isPending || reopenM.isPending || paidM.isPending;
 
   return (
     <div style={SECTION_STYLE}>
@@ -199,7 +219,7 @@ function PayrollSection() {
       />
 
       {payQ.isLoading && <Skeleton height={120} radius="var(--radius-card)" />}
-      {payQ.isError && <ErrorState message={getLoadErrorMessage(payQ.error)} onRetry={() => void payQ.refetch()} />}
+      {payQ.isError && <ErrorState message={getLoadErrorMessage(payQ.error)} onRetry={() => payQ.refetch()} />}
 
       {payQ.data?.map((row) => {
         const name = row.staff.fullName ?? row.staff.phone ?? 'NV';
@@ -252,8 +272,8 @@ function PayrollSection() {
                   variant="secondary"
                   aria-label={`Chốt · ${name}`}
                   loading={finalizing}
-                  disabled={finalizeM.isPending && !finalizing}
-                  onPress={() => finalizeM.mutate(row)}
+                  disabled={payrollBusy && !finalizing}
+                  onPress={() => exclusive(() => finalizeM.mutate(row))}
                 >
                   Chốt
                 </Button>
@@ -276,7 +296,7 @@ function PayrollSection() {
                   variant="ghost"
                   aria-label={`Mở lại · ${name}`}
                   loading={reopening}
-                  disabled={reopenM.isPending && !reopening}
+                  disabled={payrollBusy && !reopening}
                   onPress={() => setReopenRow(row)}
                 >
                   Mở lại
@@ -294,10 +314,11 @@ function PayrollSection() {
         title="Mở lại bảng lương?"
         message={reopenRow ? payrollReopenMessage(ym.month, ym.year, reopenRow.staff.fullName ?? 'NV', reopenRow.month.status) : undefined}
         confirmLabel="Mở lại bảng lương"
+        loading={payrollBusy}
         onCancel={() => setReopenRow(null)}
         onConfirm={() => {
-          if (reopenRow) reopenM.mutate(reopenRow);
-          setReopenRow(null);
+          // Việc khác đang giữ khoá thì lệnh bị bỏ: giữ tấm mở (đang bận) thay vì đóng mà không làm gì.
+          if (reopenRow && exclusive(() => reopenM.mutate(reopenRow))) setReopenRow(null);
         }}
       />
 
@@ -341,7 +362,7 @@ function PayrollSection() {
         onClose={() => setPayRow(null)}
         title={`Xác nhận đã chuyển · ${payRow?.staff.fullName ?? ''}`}
         footer={
-          <Button fullWidth loading={paidM.isPending} disabled={!proof} onPress={() => paidM.mutate()}>
+          <Button fullWidth loading={payrollBusy} disabled={!proof} onPress={() => exclusive(() => paidM.mutate())}>
             Đánh dấu đã trả
           </Button>
         }
@@ -387,7 +408,7 @@ function DetailSheet({
   const [ci, setCi] = useState('08:00');
   const [co, setCo] = useState('17:00');
 
-  const editM = useMutation({
+  const editM = useLockedMutation({
     mutationFn: (dayKey: string) =>
       adminEditSession(editId as string, {
         // Ca qua đêm: checkout 02:00 thuộc NGÀY HÔM SAU. Dựng cả hai mốc theo cùng một ngày như
@@ -414,7 +435,7 @@ function DetailSheet({
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: '60vh', overflowY: 'auto' }}>
         {detailQ.isLoading && <Skeleton height={100} radius="var(--radius-card)" />}
         {detailQ.isError && !detailQ.data && (
-          <ErrorState variant="inline" message={getLoadErrorMessage(detailQ.error)} onRetry={() => void detailQ.refetch()} />
+          <ErrorState variant="inline" message={getLoadErrorMessage(detailQ.error)} onRetry={() => detailQ.refetch()} />
         )}
         {detailQ.data && (
           <>
@@ -534,7 +555,7 @@ function StaffSection() {
   const pendingInvite = role === 'STAFF' && !existingStaff ? staffQ.data?.pendingInvites.find((i) => i.role === 'STAFF' && i.phone === phone.trim()) : undefined;
   const pendingNames = pendingInvite ? STAFF_PERMISSIONS.filter((p) => pendingInvite.staffPermissions?.includes(p)).map((p) => STAFF_PERMISSION_LABELS[p]) : null;
 
-  const grantM = useMutation({
+  const grantM = useLockedMutation({
     // Nhóm việc chỉ có nghĩa với nhân viên; không chọn nhóm nào thì không gửi để máy chủ giữ nguyên nhóm đã lưu.
     mutationFn: async () => {
       const to = phone.trim();
@@ -553,7 +574,7 @@ function StaffSection() {
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
 
-  const revokeM = useMutation({
+  const revokeM = useLockedMutation({
     mutationFn: (v: { phone: string; reason: string }) => revokeStaff(v.phone, v.reason),
     onSuccess: (res) => {
       closeRevoke();
@@ -595,7 +616,7 @@ function StaffSection() {
       </div>
 
       {staffQ.isLoading && <Skeleton height={80} radius="var(--radius-card)" />}
-      {staffQ.isError && <ErrorState message={getLoadErrorMessage(staffQ.error)} onRetry={() => void staffQ.refetch()} />}
+      {staffQ.isError && <ErrorState message={getLoadErrorMessage(staffQ.error)} onRetry={() => staffQ.refetch()} />}
 
       {staffQ.data && (
         <>
@@ -841,7 +862,30 @@ function ShiftsSection() {
     [shiftsQ.data],
   );
 
-  const approveM = useMutation({
+  // Duyệt và từ chối cùng một ca loại trừ nhau, còn "Duyệt tất cả" đụng mọi ca chờ: chung một sổ khoá ref (`isPending` chỉ đúng sau lần vẽ kế tiếp).
+  // Ca khác nhau vẫn chạy song song; mỗi mutation nhả khoá của mình ở `onSettled`, thành công lẫn lỗi.
+  // Trạng thái bận lấy thẳng từ sổ khoá (`isPending`/`variables` của useMutation chỉ theo cú gọi SAU CÙNG nên ca A còn chạy mà B xong trước thì A hiện như rảnh);
+  // sổ là ref nên mỗi lần xin/nhả khoá tăng `tick` để vẽ lại.
+  const acting = useRef(new Set<string>());
+  const [, setTick] = useState(0);
+  const releaseShift = (_data: unknown, _error: unknown, v: { id: string }) => {
+    acting.current.delete(v.id);
+    setTick((n) => n + 1);
+  };
+  const releaseBulk = () => {
+    acting.current.delete(BULK_KEY);
+    setTick((n) => n + 1);
+  };
+  const exclusive = (key: string, run: () => void) => {
+    const held = acting.current;
+    if (key === BULK_KEY ? held.size > 0 : held.has(key) || held.has(BULK_KEY)) return;
+    held.add(key);
+    setTick((n) => n + 1);
+    run();
+  };
+
+  const approveM = useLockedMutation({
+    onSettled: releaseShift,
     mutationFn: (v: { id: string; approvedStart?: string; approvedEnd?: string }) =>
       approveShift(v.id, v.approvedStart ? { approvedStart: v.approvedStart, approvedEnd: v.approvedEnd } : undefined),
     onSuccess: () => {
@@ -850,9 +894,10 @@ function ShiftsSection() {
       invalidate();
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
+  }, (v) => v.id);
 
-  const rejectM = useMutation({
+  const rejectM = useLockedMutation({
+    onSettled: releaseShift,
     mutationFn: (v: { id: string; reason: string }) => rejectShift(v.id, v.reason),
     onSuccess: () => {
       openSnackbar({ text: 'Đã từ chối ca.', type: 'success' });
@@ -861,9 +906,10 @@ function ShiftsSection() {
       invalidate();
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
+  }, (v) => v.id);
 
-  const bulkM = useMutation({
+  const bulkM = useLockedMutation({
+    onSettled: releaseBulk,
     mutationFn: () => bulkApproveShifts(pendingIds),
     onSuccess: (r) => {
       openSnackbar({ text: `Đã duyệt ${r.approved} ca.`, type: 'success' });
@@ -871,6 +917,9 @@ function ShiftsSection() {
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
+
+  // Nút của một ca hiện loading khi chính ca đó đang duyệt/từ chối hoặc "Duyệt tất cả" đang chạy.
+  const shiftBusy = (id: string) => acting.current.has(id) || acting.current.has(BULK_KEY);
 
   const [adjust, setAdjust] = useState<{ id: string; dayKey: string } | null>(null);
   const [adjStart, setAdjStart] = useState('08:00');
@@ -905,13 +954,13 @@ function ShiftsSection() {
       />
 
       {pendingIds.length > 0 && (
-        <Button loading={bulkM.isPending} onPress={() => bulkM.mutate()}>
+        <Button loading={acting.current.size > 0} onPress={() => exclusive(BULK_KEY, () => bulkM.mutate())}>
           Duyệt tất cả ({pendingIds.length})
         </Button>
       )}
 
       {shiftsQ.isLoading && <Skeleton height={120} radius="var(--radius-card)" />}
-      {shiftsQ.isError && <ErrorState message={getLoadErrorMessage(shiftsQ.error)} onRetry={() => void shiftsQ.refetch()} />}
+      {shiftsQ.isError && <ErrorState message={getLoadErrorMessage(shiftsQ.error)} onRetry={() => shiftsQ.refetch()} />}
       {shiftsQ.data && grouped.length === 0 && (
         <EmptyState art="box" heading="Không có ca nào trong tuần này" />
       )}
@@ -926,7 +975,7 @@ function ShiftsSection() {
             const end = isoToVnHHMM(s.approvedEnd ?? s.endAt);
             const st = SHIFT_STATUS[s.status];
             const dayName = `${dowLabel(s.workDate.slice(0, 10))} ${shortDayLabel(s.workDate.slice(0, 10))}`;
-            const approving = approveM.isPending && approveM.variables?.id === s.id;
+            const busy = shiftBusy(s.id);
             return (
               <div
                 key={s.id}
@@ -959,8 +1008,8 @@ function ShiftsSection() {
                       variant="ghost"
                       icon={Check}
                       aria-label={`Duyệt ca ${g.name} ${dayName}`}
-                      loading={approving}
-                      onPress={() => approveM.mutate({ id: s.id })}
+                      loading={busy}
+                      onPress={() => exclusive(s.id, () => approveM.mutate({ id: s.id }))}
                     >
                       Duyệt
                     </Button>
@@ -989,15 +1038,17 @@ function ShiftsSection() {
         footer={
           <Button
             fullWidth
-            loading={approveM.isPending}
+            loading={!!adjust && shiftBusy(adjust.id)}
             disabled={!TIME_RE.test(adjStart) || !TIME_RE.test(adjEnd)}
             onPress={() =>
               adjust &&
-              approveM.mutate({
-                id: adjust.id,
-                approvedStart: vnDateTimeISO(adjust.dayKey, adjStart),
-                approvedEnd: vnDateTimeISO(adjust.dayKey, adjEnd),
-              })
+              exclusive(adjust.id, () =>
+                approveM.mutate({
+                  id: adjust.id,
+                  approvedStart: vnDateTimeISO(adjust.dayKey, adjStart),
+                  approvedEnd: vnDateTimeISO(adjust.dayKey, adjEnd),
+                }),
+              )
             }
           >
             Duyệt với giờ đã chỉnh
@@ -1026,9 +1077,9 @@ function ShiftsSection() {
         footer={
           <Button
             fullWidth
-            loading={rejectM.isPending}
+            loading={!!rejectId && shiftBusy(rejectId)}
             disabled={rejectReason.trim().length === 0}
-            onPress={() => rejectId && rejectM.mutate({ id: rejectId, reason: rejectReason.trim() })}
+            onPress={() => rejectId && exclusive(rejectId, () => rejectM.mutate({ id: rejectId, reason: rejectReason.trim() }))}
           >
             Xác nhận từ chối
           </Button>
@@ -1055,7 +1106,7 @@ function TemplateSheet({ visible, onClose }: { visible: boolean; onClose: () => 
   const typedName = name.trim().toLowerCase();
   const duplicateName = !!typedName && (tplQ.data ?? []).some((t) => t.name.trim().toLowerCase() === typedName);
 
-  const addM = useMutation({
+  const addM = useLockedMutation({
     mutationFn: () => createTemplate({ name: name.trim(), startMin: hhmmToMin(start), endMin: hhmmToMin(end) }),
     onSuccess: () => {
       openSnackbar({ text: 'Đã thêm ca chuẩn.', type: 'success' });
@@ -1065,7 +1116,7 @@ function TemplateSheet({ visible, onClose }: { visible: boolean; onClose: () => 
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
-  const delM = useMutation({
+  const delM = useLockedMutation({
     mutationFn: (id: string) => deleteTemplate(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-templates'] });
@@ -1094,24 +1145,29 @@ function TemplateSheet({ visible, onClose }: { visible: boolean; onClose: () => 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {tplQ.isLoading && <Skeleton height={60} radius="var(--radius-card)" />}
         {tplQ.isError && (
-          <ErrorState variant="inline" message={getLoadErrorMessage(tplQ.error)} onRetry={() => void tplQ.refetch()} />
+          <ErrorState variant="inline" message={getLoadErrorMessage(tplQ.error)} onRetry={() => tplQ.refetch()} />
         )}
-        {(tplQ.data ?? []).map((t) => (
-          <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-            <Text variant="body-sm">
-              {t.name} · {minToHHMM(t.startMin)}–{minToHHMM(t.endMin)}
-            </Text>
-            <Button
-              variant="ghost"
-              aria-label={`Xoá ca chuẩn ${t.name}`}
-              style={{ color: 'var(--color-text-danger)' }}
-              disabled={delM.isPending}
-              onPress={() => delM.mutate(t.id)}
-            >
-              Xoá
-            </Button>
-          </div>
-        ))}
+        {(tplQ.data ?? []).map((t) => {
+          // Một lần xoá mỗi lúc: dòng đang xoá có spinner (vẫn bấm được nên giữ focus), dòng khác khoá.
+          const deleting = delM.isPending && delM.variables === t.id;
+          return (
+            <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+              <Text variant="body-sm">
+                {t.name} · {minToHHMM(t.startMin)}–{minToHHMM(t.endMin)}
+              </Text>
+              <Button
+                variant="ghost"
+                aria-label={`Xoá ca chuẩn ${t.name}`}
+                style={{ color: 'var(--color-text-danger)' }}
+                loading={deleting}
+                disabled={delM.isPending && !deleting}
+                onPress={() => delM.mutate(t.id)}
+              >
+                Xoá
+              </Button>
+            </div>
+          );
+        })}
         <div style={{ borderTop: '1px solid var(--color-border-subtle)', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <Field label="Tên ca" error={duplicateName ? 'Đã có ca chuẩn cùng tên.' : undefined}>
             <Input maxLength={INPUT_LIMITS.shiftTemplateName} placeholder="Tên ca (VD Ca sáng)" value={name} onChange={(e) => setName(e.target.value)} />

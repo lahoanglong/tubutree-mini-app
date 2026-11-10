@@ -56,7 +56,7 @@ export default function StorefrontViewPage() {
         {gone ? (
           <ErrorState message={vi.storefront.notFound} onRetry={() => undefined} onHome={() => navigate('/')} />
         ) : (
-          <ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => void q.refetch()} />
+          <ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => q.refetch()} />
         )}
         {gone && <SuggestedRail listSource="storefront_not_found" />}
       </Page>

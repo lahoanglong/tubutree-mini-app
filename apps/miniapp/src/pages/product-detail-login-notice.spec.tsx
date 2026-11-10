@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { ReactNode } from 'react';
@@ -122,5 +122,51 @@ describe('ProductDetailPage — tài khoản bị khoá bấm mua', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Thêm vào giỏ' }));
     await waitFor(() => expect(mocks.login).toHaveBeenCalledTimes(1));
     expect(mocks.openSnackbar).not.toHaveBeenCalled();
+  });
+});
+
+describe('ProductDetailPage — Mở nhóm mua chung khoá chạm đúp (W79A)', () => {
+  const OPENED = 'Đã mở nhóm mua chung! Rủ bạn bè tham gia nhé 🛒';
+  const openedToasts = () => mocks.openSnackbar.mock.calls.filter(([o]) => o.text === OPENED);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.auth = { status: 'authenticated', error: undefined };
+    mocks.fetchProduct.mockResolvedValue(product);
+    mocks.createGroupBuy.mockResolvedValue({ id: 'g1' });
+  });
+
+  it('chạm đúp cùng một nhịp vẽ: một lần tạo nhóm, nhóm mở đúng một lần; xong thì khoá nhả', async () => {
+    let release: (g: { id: string }) => void = () => undefined;
+    mocks.createGroupBuy.mockReturnValueOnce(new Promise((r) => (release = r)));
+    renderPdp();
+    const row = await screen.findByRole('button', { name: /Mở nhóm mua chung/ });
+    await act(async () => {
+      fireEvent.click(row);
+      fireEvent.click(row);
+    });
+    expect(mocks.createGroupBuy).toHaveBeenCalledTimes(1);
+    expect(mocks.createGroupBuy).toHaveBeenCalledWith('p1');
+    await waitFor(() => expect(screen.getByRole('button', { name: /Đang mở nhóm/ })).toBeInTheDocument());
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Đang mở nhóm/ }));
+    });
+    expect(mocks.createGroupBuy).toHaveBeenCalledTimes(1);
+    await act(async () => release({ id: 'g1' }));
+    await waitFor(() => expect(openedToasts()).toHaveLength(1));
+    expect(mocks.createGroupBuy).toHaveBeenCalledTimes(1);
+    fireEvent.click(await screen.findByRole('button', { name: /Mở nhóm mua chung/ }));
+    await waitFor(() => expect(mocks.createGroupBuy).toHaveBeenCalledTimes(2));
+  });
+
+  it('tạo nhóm lỗi: báo lỗi, nhả khoá nên chạm lại tạo nhóm lần nữa và lần này mở được', async () => {
+    mocks.createGroupBuy.mockRejectedValueOnce(new Error('Sản phẩm chưa mở mua chung'));
+    renderPdp();
+    fireEvent.click(await screen.findByRole('button', { name: /Mở nhóm mua chung/ }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+    await waitFor(() => expect(screen.getByRole('button', { name: /Mở nhóm mua chung/ })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /Mở nhóm mua chung/ }));
+    await waitFor(() => expect(mocks.createGroupBuy).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(openedToasts()).toHaveLength(1));
   });
 });

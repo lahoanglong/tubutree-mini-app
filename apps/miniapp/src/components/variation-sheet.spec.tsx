@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
@@ -465,5 +465,23 @@ describe('VariationSheet: số đều (tabular-nums) cho tồn kho, giới hạn
     fireEvent.click(plus());
     expect(screen.getByRole('status')).toHaveTextContent(OVER_5);
     expect(screen.getByRole('status').style.fontVariantNumeric).toBe('tabular-nums');
+  });
+});
+
+describe('VariationSheet: hai cú bấm xác nhận cùng một nhịp vẽ (W79A)', () => {
+  // Nút xác nhận trả về đúng giá trị của onConfirm để Button giữ khoá tới khi Promise xong; đổi thành `{ onConfirm(...) }` là mất khoá này.
+  it('onConfirm trả Promise: hai cú bấm cùng nhịp (busy chưa kịp đổi) chỉ gọi onConfirm một lần; Promise xong thì bấm lại được', async () => {
+    let finish: () => void = () => undefined;
+    const onConfirm = vi.fn(() => new Promise<void>((r) => (finish = r)));
+    render(sheetElement({ busy: false }, onConfirm));
+    act(() => {
+      fireEvent.click(buyButton());
+      fireEvent.click(buyButton());
+    });
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ id: 'v1' }), 3);
+    await act(async () => finish());
+    fireEvent.click(buyButton());
+    expect(onConfirm).toHaveBeenCalledTimes(2);
   });
 });

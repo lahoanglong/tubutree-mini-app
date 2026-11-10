@@ -30,11 +30,11 @@ function Products({ slug }: { slug: string }) {
   const last = results[results.length - 1];
   const first = results[0];
   if (first?.isPending) return <ProductGrid items={[]} variant="grid" loading />;
-  if (first?.isError) return <ErrorState variant="inline" message={getLoadErrorMessage(first.error)} onRetry={() => void first.refetch()} retrying={first.isFetching} />;
+  if (first?.isError) return <ErrorState variant="inline" message={getLoadErrorMessage(first.error)} onRetry={() => first.refetch()} retrying={first.isFetching} />;
   return (
     <>
       <ProductGrid items={view.items} variant="grid" listSource="campaign" />
-      {last?.isError && <ErrorState variant="inline" message={getLoadErrorMessage(last.error)} onRetry={() => void last.refetch()} retrying={last.isFetching} />}
+      {last?.isError && <ErrorState variant="inline" message={getLoadErrorMessage(last.error)} onRetry={() => last.refetch()} retrying={last.isFetching} />}
       {view.hasMore && !last?.isError && (
         <div style={{ marginTop: 16 }}>
           <Button variant="secondary" fullWidth loading={last?.isPending} onPress={() => setPages((n) => n + 1)}>
@@ -78,7 +78,7 @@ export default function CampaignPage() {
                 onCta={() => navigate('/', { replace: true })}
               />
             ) : (
-              <ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => void q.refetch()} retrying={q.isFetching} />
+              <ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => q.refetch()} retrying={q.isFetching} />
             )}
           </div>
         )}

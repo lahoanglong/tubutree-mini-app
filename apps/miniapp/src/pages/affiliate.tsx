@@ -151,7 +151,7 @@ export default function AffiliatePage() {
     return (
       <Page className="tubu-nums" style={{ background: 'var(--color-bg-canvas)' }}>
         <PageHeader title={PAGE_TITLE} />
-        <ErrorState message={getLoadErrorMessage(meQ.error)} onRetry={() => void meQ.refetch()} />
+        <ErrorState message={getLoadErrorMessage(meQ.error)} onRetry={() => meQ.refetch()} />
       </Page>
     );
   }
@@ -399,7 +399,7 @@ function Dashboard() {
       <div style={{ padding: 16 }}>
         {dashQ.isError ? (
           // KHÔNG fallback 0đ khi lỗi tải — hiển thị nhầm "0đ" gây hiểu lầm CTV chưa có hoa hồng.
-          <ErrorState message={getLoadErrorMessage(dashQ.error)} onRetry={() => void dashQ.refetch()} />
+          <ErrorState message={getLoadErrorMessage(dashQ.error)} onRetry={() => dashQ.refetch()} />
         ) : dashQ.isLoading || hero.waiting ? (
           // Chưa có số liệu (dashboard hoặc Ví): đừng hiện "0đ" rồi đổi nhãn và số khi dữ liệu về.
           <div role="status" aria-label="Đang tải hoa hồng">
@@ -672,7 +672,7 @@ function Dashboard() {
       {/* Thưởng mốc doanh số tháng — thưởng bằng Điểm Xanh (tiêu trong app, không rút được) */}
       {milestonesQ.isError ? (
         <Card padding={16} style={BLOCK_GAP}>
-          <ErrorState variant="inline" message={getLoadErrorMessage(milestonesQ.error)} onRetry={() => void milestonesQ.refetch()} />
+          <ErrorState variant="inline" message={getLoadErrorMessage(milestonesQ.error)} onRetry={() => milestonesQ.refetch()} />
         </Card>
       ) : milestonesQ.isLoading ? (
         <Card padding={16} style={BLOCK_GAP}>
@@ -752,7 +752,7 @@ function Dashboard() {
 
       {/* Sản phẩm có hoa hồng cao: một chạm chép link giới thiệu gắn mã CTV */}
       <Card padding={16} style={BLOCK_GAP}>
-        <AffiliateFeaturedProducts products={featured} error={featuredQ.isError} onRetry={() => void featuredQ.refetch()} />
+        <AffiliateFeaturedProducts products={featured} error={featuredQ.isError} onRetry={() => featuredQ.refetch()} />
       </Card>
 
       {/* Link chia sẻ */}
@@ -770,7 +770,7 @@ function Dashboard() {
       >
         {linksQ.isError ? (
           // Phân biệt rõ "chưa có link" vs "lỗi tải" — tránh user tưởng rằng họ chưa tạo link.
-          <ErrorState variant="inline" message={getLoadErrorMessage(linksQ.error)} onRetry={() => void linksQ.refetch()} />
+          <ErrorState variant="inline" message={getLoadErrorMessage(linksQ.error)} onRetry={() => linksQ.refetch()} />
         ) : linksQ.data && linksQ.data.length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {linksQ.data.map((l) => (
@@ -824,7 +824,7 @@ function Dashboard() {
       <Section title="Lịch sử hoa hồng">
         {commQ.isError && commissions.length === 0 ? (
           // Tránh hiển thị "Chưa có hoa hồng" khi thực tế là API lỗi — CTV sẽ mất niềm tin.
-          <ErrorState variant="inline" message={getLoadErrorMessage(commQ.error)} onRetry={() => void commQ.refetch()} />
+          <ErrorState variant="inline" message={getLoadErrorMessage(commQ.error)} onRetry={() => commQ.refetch()} />
         ) : commissions.length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {commissions.map((c: Commission) => {
@@ -886,7 +886,7 @@ function Dashboard() {
           </div>
         )}
         {payoutsQ.isError && payouts.length === 0 ? (
-          <ErrorState variant="inline" message={getLoadErrorMessage(payoutsQ.error)} onRetry={() => void payoutsQ.refetch()} />
+          <ErrorState variant="inline" message={getLoadErrorMessage(payoutsQ.error)} onRetry={() => payoutsQ.refetch()} />
         ) : payouts.length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {payouts.map((p) => (
@@ -906,7 +906,7 @@ function Dashboard() {
       {/* Hoa hồng theo gian hàng */}
       <Section title="Theo gian hàng">
         {sfQ.isError ? (
-          <ErrorState variant="inline" message={getLoadErrorMessage(sfQ.error)} onRetry={() => void sfQ.refetch()} />
+          <ErrorState variant="inline" message={getLoadErrorMessage(sfQ.error)} onRetry={() => sfQ.refetch()} />
         ) : sfQ.data && sfQ.data.storefronts.length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {sfQ.data.storefronts.map((sf) => (
@@ -950,7 +950,7 @@ function Dashboard() {
       {/* Hoa hồng theo sản phẩm */}
       <Section title="Theo sản phẩm">
         {pbQ.isError ? (
-          <ErrorState variant="inline" message={getLoadErrorMessage(pbQ.error)} onRetry={() => void pbQ.refetch()} />
+          <ErrorState variant="inline" message={getLoadErrorMessage(pbQ.error)} onRetry={() => pbQ.refetch()} />
         ) : pbQ.data && pbQ.data.length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {pbQ.data.slice(0, 10).map((p, i) => (

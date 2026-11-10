@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { ReactNode } from 'react';
@@ -152,5 +152,186 @@ describe('ProductDetailPage — nút thêm giỏ tự xác nhận (PL-12)', () =
     await advance(30);
     expect(screen.queryByRole('button', { name: 'Đã thêm' })).toBeNull();
     expect(addBtn()).toBeInTheDocument();
+  });
+});
+
+describe('ProductDetailPage — khoá chạm đúp Thêm vào giỏ / Mua ngay dùng chung một khoá ghi giỏ (W79A)', () => {
+  const deferred = <T,>() => {
+    let resolve!: (v: T) => void;
+    const promise = new Promise<T>((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  const buyBtn = () => screen.getByRole('button', { name: /^Mua ngay/ });
+  const STORY_PRODUCT = { ...PRODUCT, ingredients: [{ name: 'Sả chanh', percentage: '12%' }] };
+  const TWO_VARIATIONS = {
+    ...PRODUCT,
+    variations: [
+      { id: 'v1', sku: 'S1', name: '250g', attributes: {}, retailPrice: 100_000, salePrice: null, stock: 5 },
+      { id: 'v2', sku: 'S2', name: '500g', attributes: {}, retailPrice: 180_000, salePrice: null, stock: 5 },
+    ],
+  };
+  const waitForPdp = async () => {
+    renderPdp();
+    await screen.findByRole('button', { name: 'Thêm vào giỏ' });
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.fetchProduct.mockResolvedValue(PRODUCT);
+    mocks.addToCart.mockResolvedValue(cart());
+    mocks.applyCoupon.mockResolvedValue(cart({ couponCode: CODE, discount: 15_000 }));
+  });
+
+  it('Thêm vào giỏ rồi Mua ngay cùng một nhịp vẽ: chỉ một lần ghi giỏ và Mua ngay không chạy; xong thì khoá nhả, Mua ngay sau đó ghi giỏ và tới thanh toán', async () => {
+    const pending = deferred<ReturnType<typeof cart>>();
+    mocks.addToCart.mockReturnValueOnce(pending.promise);
+    await waitForPdp();
+    await act(async () => {
+      fireEvent.click(addBtn());
+      fireEvent.click(buyBtn());
+    });
+    expect(mocks.addToCart).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(addBtn()).toHaveAttribute('aria-busy', 'true'));
+    await act(async () => pending.resolve(cart()));
+    expect(mocks.navigate).not.toHaveBeenCalled();
+    await waitFor(() => expect(addBtn()).not.toHaveAttribute('aria-busy'));
+    fireEvent.click(buyBtn());
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/checkout', { state: { itemIds: ['line1'] } }));
+    expect(mocks.addToCart).toHaveBeenCalledTimes(2);
+  });
+
+  it('Mua ngay rồi Thêm vào giỏ cùng một nhịp vẽ: một lần ghi giỏ, đi tới thanh toán đúng một lần', async () => {
+    const pending = deferred<ReturnType<typeof cart>>();
+    mocks.addToCart.mockReturnValueOnce(pending.promise);
+    await waitForPdp();
+    await act(async () => {
+      fireEvent.click(buyBtn());
+      fireEvent.click(addBtn());
+    });
+    expect(mocks.addToCart).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Đang xử lý/ })).toHaveAttribute('aria-busy', 'true'));
+    await act(async () => pending.resolve(cart()));
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledTimes(1));
+    expect(mocks.navigate).toHaveBeenCalledWith('/checkout', { state: { itemIds: ['line1'] } });
+    expect(mocks.addToCart).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['Thêm vào giỏ', () => addBtn()],
+    ['Mua ngay', () => buyBtn()],
+  ])('chạm đúp "%s" cách nhau một vi tác vụ (khoá Promise của Button đã nhả, trang chưa vẽ lại): chỉ một lần ghi giỏ', async (_name, pick) => {
+    const pending = deferred<ReturnType<typeof cart>>();
+    mocks.addToCart.mockReturnValueOnce(pending.promise);
+    await waitForPdp();
+    const btn = pick();
+    await act(async () => {
+      fireEvent.click(btn);
+      await Promise.resolve();
+      fireEvent.click(btn);
+    });
+    expect(mocks.addToCart).toHaveBeenCalledTimes(1);
+    await act(async () => pending.resolve(cart()));
+    await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledTimes(1));
+  });
+
+  it('đang Thêm vào giỏ thì Mua ngay báo aria-disabled (không disabled) và hết báo khi xong', async () => {
+    const pending = deferred<ReturnType<typeof cart>>();
+    mocks.addToCart.mockReturnValueOnce(pending.promise);
+    await waitForPdp();
+    expect(buyBtn()).not.toHaveAttribute('aria-disabled');
+    fireEvent.click(addBtn());
+    await waitFor(() => expect(buyBtn()).toHaveAttribute('aria-disabled', 'true'));
+    expect(buyBtn()).not.toBeDisabled();
+    expect(buyBtn()).not.toHaveAttribute('aria-busy');
+    await act(async () => pending.resolve(cart()));
+    await waitFor(() => expect(buyBtn()).not.toHaveAttribute('aria-disabled'));
+  });
+
+  it('đang Mua ngay thì Thêm vào giỏ báo aria-disabled (không disabled) và hết báo khi xong', async () => {
+    const pending = deferred<ReturnType<typeof cart>>();
+    mocks.addToCart.mockReturnValueOnce(pending.promise);
+    await waitForPdp();
+    expect(addBtn()).not.toHaveAttribute('aria-disabled');
+    fireEvent.click(buyBtn());
+    await waitFor(() => expect(addBtn()).toHaveAttribute('aria-disabled', 'true'));
+    expect(addBtn()).not.toBeDisabled();
+    expect(addBtn()).not.toHaveAttribute('aria-busy');
+    await act(async () => pending.resolve(cart()));
+    await waitFor(() => expect(addBtn()).not.toHaveAttribute('aria-disabled'));
+  });
+
+  it('Mua ngay lỗi: báo lỗi, khoá chung được nhả nên Thêm vào giỏ ngay sau đó vẫn ghi giỏ', async () => {
+    mocks.addToCart.mockRejectedValueOnce(new Error('Chỉ còn 0 sản phẩm')).mockResolvedValueOnce(cart());
+    await waitForPdp();
+    fireEvent.click(buyBtn());
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error', text: 'Chỉ còn 0 sản phẩm' })));
+    await waitFor(() => expect(buyBtn()).not.toHaveAttribute('aria-busy'));
+    fireEvent.click(addBtn());
+    await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledTimes(2));
+    expect(await screen.findByRole('button', { name: 'Đã thêm' })).toBeInTheDocument();
+    expect(mocks.navigate).not.toHaveBeenCalled();
+  });
+
+  describe('khung câu chuyện toàn màn (nút trả về void nên Button không tự khoá)', () => {
+    const openStory = async () => {
+      mocks.fetchProduct.mockResolvedValue(STORY_PRODUCT);
+      renderPdp();
+      fireEvent.click(await screen.findByRole('button', { name: 'Xem câu chuyện sản phẩm' }));
+      return within(await screen.findByRole('dialog', { name: 'Câu chuyện sản phẩm' }));
+    };
+
+    it('chạm đúp "Thêm vào giỏ" trong khung câu chuyện cùng nhịp vẽ: một lần ghi giỏ, khung đóng, báo Đã thêm', async () => {
+      const pending = deferred<ReturnType<typeof cart>>();
+      mocks.addToCart.mockReturnValueOnce(pending.promise);
+      const dialog = await openStory();
+      const add = dialog.getByTestId('story-add-to-cart');
+      await act(async () => {
+        fireEvent.click(add);
+        fireEvent.click(add);
+      });
+      expect(mocks.addToCart).toHaveBeenCalledTimes(1);
+      expect(screen.queryByRole('dialog', { name: 'Câu chuyện sản phẩm' })).toBeNull();
+      await act(async () => pending.resolve(cart()));
+      expect(await screen.findByRole('button', { name: 'Đã thêm' })).toBeInTheDocument();
+      expect(mocks.addToCart).toHaveBeenCalledTimes(1);
+    });
+
+    it('chạm "Thêm vào giỏ" rồi "Mua ngay" trong khung câu chuyện cùng nhịp vẽ: chỉ nút đầu ghi giỏ', async () => {
+      const pending = deferred<ReturnType<typeof cart>>();
+      mocks.addToCart.mockReturnValueOnce(pending.promise);
+      const dialog = await openStory();
+      await act(async () => {
+        fireEvent.click(dialog.getByTestId('story-add-to-cart'));
+        fireEvent.click(dialog.getByTestId('story-buy-now'));
+      });
+      expect(mocks.addToCart).toHaveBeenCalledTimes(1);
+      await act(async () => pending.resolve(cart()));
+      expect(mocks.navigate).not.toHaveBeenCalled();
+      expect(await screen.findByRole('button', { name: 'Đã thêm' })).toBeInTheDocument();
+    });
+  });
+
+  it('bảng chọn phân loại: chạm đúp nút xác nhận cùng nhịp vẽ chỉ ghi giỏ một lần, bảng đóng và chọn đúng phân loại', async () => {
+    const pending = deferred<ReturnType<typeof cart>>();
+    mocks.addToCart.mockReturnValueOnce(pending.promise);
+    mocks.fetchProduct.mockResolvedValue(TWO_VARIATIONS);
+    renderPdp(null);
+    fireEvent.click(await screen.findByRole('button', { name: 'Thêm vào giỏ' }));
+    const sheet = within(await screen.findByRole('dialog', { name: 'Chọn phân loại' }));
+    fireEvent.click(sheet.getByRole('button', { name: /500g/ }));
+    const confirm = sheet.getByRole('button', { name: /^Thêm vào giỏ · / });
+    // Cách nhau một vi tác vụ: khoá Promise của Button đã nhả nhưng trang chưa vẽ lại (isPending, sheetMode còn cũ), chỉ khoá ghi giỏ chặn được.
+    await act(async () => {
+      fireEvent.click(confirm);
+      await Promise.resolve();
+      fireEvent.click(confirm);
+    });
+    expect(mocks.addToCart).toHaveBeenCalledTimes(1);
+    expect(mocks.addToCart).toHaveBeenCalledWith('v2', 1);
+    await act(async () => pending.resolve(cart()));
+    expect(await screen.findByRole('button', { name: 'Đã thêm' })).toBeInTheDocument();
+    expect(mocks.addToCart).toHaveBeenCalledTimes(1);
   });
 });
