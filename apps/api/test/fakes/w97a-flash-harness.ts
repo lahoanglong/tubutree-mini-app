@@ -33,17 +33,22 @@ export function flashHandlers(db: RaceDb): void {
         const item = c.rows('flashSaleItem').find((r) => r.id === itemId);
         if (!item) return 0;
         if (/EXISTS/.test(c.sql)) {
-          const sale = c.rows('flashSale').find((r) => r.id === item.flashSaleId);
-          if (!sale) return 0;
-          if (/fs\."isActive" = true/.test(c.sql) && !sale.isActive) return 0;
-          if (iStart >= 0) {
-            const op = /fs\."startAt"\s*(<=|<)\s*$/.exec(seg[iStart]!)![1]!;
-            if (!cmp(sale.startAt.getTime(), op, (c.params[iStart] as Date).getTime())) return 0;
-          }
-          if (iEnd >= 0) {
-            const op = /fs\."endAt"\s*(>=|>)\s*$/.exec(seg[iEnd]!)![1]!;
-            if (!cmp(sale.endAt.getTime(), op, (c.params[iEnd] as Date).getTime())) return 0;
-          }
+          // Điều kiện nối đợt nằm trong chuỗi SQL: bỏ `fs.id = fsi."flashSaleId"` thì EXISTS đúng với BẤT KỲ đợt nào đang chạy, như Postgres.
+          const joined = /fs\.id = fsi\."flashSaleId"/.test(c.sql);
+          const sales = c.rows('flashSale').filter((r) => !joined || r.id === item.flashSaleId);
+          const live = sales.some((sale) => {
+            if (/fs\."isActive" = true/.test(c.sql) && !sale.isActive) return false;
+            if (iStart >= 0) {
+              const op = /fs\."startAt"\s*(<=|<)\s*$/.exec(seg[iStart]!)![1]!;
+              if (!cmp(sale.startAt.getTime(), op, (c.params[iStart] as Date).getTime())) return false;
+            }
+            if (iEnd >= 0) {
+              const op = /fs\."endAt"\s*(>=|>)\s*$/.exec(seg[iEnd]!)![1]!;
+              if (!cmp(sale.endAt.getTime(), op, (c.params[iEnd] as Date).getTime())) return false;
+            }
+            return true;
+          });
+          if (!live) return 0;
         }
         if (iQuota >= 0) {
           const op = /^\s*(<=|<)\s*fsi\."quota"/.exec(seg[iQuota + 1] ?? '')?.[1] ?? '<=';

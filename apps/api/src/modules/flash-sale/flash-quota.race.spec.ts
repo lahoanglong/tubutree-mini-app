@@ -63,6 +63,18 @@ describe('FlashSaleService.consumeQuotas — race', () => {
     expect(lockWaits).toBeGreaterThan(0);
   });
 
+  it('món của đợt đã kết thúc không bán được dù có đợt khác đang chạy: SOLD_OUT, bộ đếm không đổi (điều kiện nối món với đúng đợt của nó)', async () => {
+    const { db, buy, item } = setup({
+      sale: { id: 's-ended', startAt: new Date(T0.getTime() - 2 * HOUR), endAt: new Date(T0.getTime() - HOUR) },
+      items: [{ quota: 5, perUserLimit: 5 }],
+    });
+    db.seed('flashSale', [{ id: 's-live', startAt: new Date(T0.getTime() - HOUR), endAt: new Date(T0.getTime() + HOUR), isActive: true }]);
+    const settled = await Promise.allSettled([buy('u1', [{ flashSaleItemId: 'fi1', quantity: 1 }])]);
+    expect(settled.map(outcomeOf)).toEqual(['SOLD_OUT']);
+    expect(item().soldCount).toBe(0);
+    expect(db.rows('flashSalePurchase')).toHaveLength(0);
+  });
+
   it('ba khách tranh quota 3 với số lượng 2, 1, 1 (mọi cặp lệch giờ): tổng đã bán = tổng số lượng của các bên thắng, không quá 3, không bán nửa dòng', async () => {
     const qtys = [2, 1, 1];
     for (const skew of skews) {
@@ -246,7 +258,7 @@ describe('FlashSaleService.restore — race', () => {
     expect(bothSucceeded).toBeLessThan(skews.length);
   });
 
-  it('hoàn nhiều hơn số đã bán, hoặc hoàn lần hai cho cùng một đơn: bộ đếm và lượt mua dừng ở 0, không âm, không đụng lượt mua của khách khác', async () => {
+  it('hoàn nhiều hơn số đã bán: bộ đếm và lượt mua dừng ở 0, không âm, không đụng lượt mua của khách khác (restore không tự chống hoàn trùng một đơn, bên gọi chặn bằng CAS trạng thái đơn)', async () => {
     const { cancel, item, bought } = setup({
       items: [{ quota: 5, soldCount: 3 }],
       purchases: [
@@ -310,6 +322,20 @@ describe('FlashSaleService.removeItem — race với đặt đơn', () => {
     }
     expect(removed).toBeGreaterThan(0);
     expect(kept).toBeGreaterThan(0);
+  });
+
+  it('hai admin xoá cùng một món chưa bán (lệch -20..20 nhịp): đúng một bên xoá được, bên kia nhận "không tìm thấy" chứ không phải "đã phát sinh đơn"', async () => {
+    for (const skew of skews) {
+      const { db, client } = setup({ items: [{ quota: 5, soldCount: 0 }] });
+      const service = new FlashSaleService(client as never, {} as never, {} as never, {} as never);
+      const [a, b] = lag(skew);
+      const remove = async (n: number) => (await ticks(n), service.removeItem('fi1'));
+      const settled = await Promise.allSettled([remove(a), remove(b)]);
+      expect(settled.filter((s) => s.status === 'fulfilled')).toHaveLength(1);
+      const failed = settled.find((s): s is PromiseRejectedResult => s.status === 'rejected')!;
+      expect(String(failed.reason.message)).toBe('Không tìm thấy sản phẩm flash.');
+      expect(db.row('flashSaleItem', 'fi1')).toBeFalsy();
+    }
   });
 
   it('món đã bán (soldCount > 0) không xoá được; món không tồn tại báo không tìm thấy', async () => {
