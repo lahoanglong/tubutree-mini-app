@@ -109,6 +109,12 @@ export function GroupBuyView({ invitedId }: { invitedId?: string }) {
 
   // Khôi phục phiên và hộp chia sẻ của trình duyệt đều chỉ mở được một lần một lúc: lần chạm thứ hai trong lúc chạy bị bỏ qua.
   const sessionRetrying = useRef(false);
+  // Khách chạm Tham gia hai lần cùng khung hình: `router.push` không có trạng thái để thẻ báo bận, nên cả hai cú chạm đều gọi điều hướng sang đăng nhập (mở luồng đăng nhập hai lần).
+  // Cờ chỉ đặt lại khi phiên đổi pha: điều hướng không xảy ra mà màn còn sống thì nút Tham gia không được chết.
+  const loginRedirected = useRef(false);
+  useEffect(() => {
+    loginRedirected.current = false;
+  }, [phase]);
   const sharingRef = useRef(false);
   const [sharingId, setSharingId] = useState<string | null>(null);
 
@@ -122,7 +128,11 @@ export function GroupBuyView({ invitedId }: { invitedId?: string }) {
       void retrySession().finally(() => {
         sessionRetrying.current = false;
       });
-    } else router.push(loginHref(invitedId ? `/mua-chung/${invitedId}` : '/mua-chung'));
+    } else {
+      if (loginRedirected.current) return;
+      loginRedirected.current = true;
+      router.push(loginHref(invitedId ? `/mua-chung/${invitedId}` : '/mua-chung'));
+    }
   };
 
   const share = async (g: GroupBuy) => {

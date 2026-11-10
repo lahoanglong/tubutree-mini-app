@@ -12,6 +12,7 @@ import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
 import { newIdempotencyKey } from '@/lib/idempotency-key';
+import { settleWithin } from '@/lib/settle-within';
 import { bankPaymentHref } from '@/lib/order-view';
 import { useDebounced } from '@/lib/use-debounced';
 import { ui } from '@/lib/guest-ui';
@@ -83,7 +84,7 @@ export function PriceTab({ creditLimit, debt, rules }: { creditLimit: number; de
 
   const cart = useMemo(() => Object.entries(qty).filter(([, n]) => n > 0), [qty]);
 
-  // Tên và các dòng đi theo biến mutate (chụp lúc bấm), không đọc `tplName`/giỏ mới hơn. Khoá giữ tới khi danh sách mẫu mới về.
+  // Tên và các dòng đi theo biến mutate (chụp lúc bấm), không đọc `tplName`/giỏ mới hơn. Khoá giữ tới khi danh sách mẫu mới về, tối đa `settleWithin`.
   const saveTpl = useLockedMutation({
     mutationFn: (v: { name: string; items: OrderLine[] }) => saveTemplate(coreHttp, v.name, v.items),
     onSuccess: (_data, v) => {
@@ -91,15 +92,15 @@ export function PriceTab({ creditLimit, debt, rules }: { creditLimit: number; de
       // Khách gõ tên khác trong lúc đang gửi thì giữ chữ đó, chỉ xoá khi ô vẫn là tên vừa gửi.
       setTplName((cur) => (cur === v.name ? '' : cur));
       setNotice({ text: 'Đã lưu mẫu đơn.', error: false });
-      return qc.invalidateQueries({ queryKey: dealerTemplatesQuery(coreHttp).queryKey });
+      return settleWithin(qc.invalidateQueries({ queryKey: dealerTemplatesQuery(coreHttp).queryKey }));
     },
   });
-  // Khoá theo id mẫu: xoá hai mẫu khác nhau vẫn song song, chạm lặp vào cùng một mẫu thì bỏ qua. Giữ tới khi danh sách mới về, kẻo bấm lại trên mẫu đã xoá.
+  // Khoá theo id mẫu: xoá hai mẫu khác nhau vẫn song song, chạm lặp vào cùng một mẫu thì bỏ qua. Giữ tới khi danh sách mới về (tối đa `settleWithin`), kẻo bấm lại trên mẫu đã xoá.
   const delTpl = useLockedMutation(
     {
       mutationKey: DEL_TEMPLATE_KEY,
       mutationFn: (id: string) => deleteTemplate(coreHttp, id),
-      onSuccess: () => qc.invalidateQueries({ queryKey: dealerTemplatesQuery(coreHttp).queryKey }),
+      onSuccess: () => settleWithin(qc.invalidateQueries({ queryKey: dealerTemplatesQuery(coreHttp).queryKey })),
       onError: (e) => setNotice({ text: errText(e), error: true }),
     },
     (id) => id,
@@ -153,7 +154,7 @@ export function PriceTab({ creditLimit, debt, rules }: { creditLimit: number; de
   // máy chủ trả lại đơn đã tạo cho cùng khoá và không đối chiếu nội dung, nên đổi khoá giữa chừng sẽ tạo đơn công nợ thứ hai.
   const orderKey = useRef(newIdempotencyKey());
   // Trả trước và Ghi công nợ chung MỘT khoá (đơn thứ hai cùng key sẽ trả lại đơn thứ nhất): `useLockedMutation` chặn cú bấm thứ hai ngay trong khung hình,
-  // và giữ tới khi công nợ, đơn, thưởng mới về. Giỏ gửi đi là biến mutate chụp lúc bấm, không phải giỏ hiện tại lúc máy chủ trả lời.
+  // và giữ tới khi công nợ, đơn, thưởng mới về (tối đa `settleWithin`). Giỏ gửi đi là biến mutate chụp lúc bấm, không phải giỏ hiện tại lúc máy chủ trả lời.
   const place = useLockedMutation({
     mutationFn: (v: { method: 'CREDIT' | 'PREPAID'; items: OrderLine[] }) => placeDealerOrder(coreHttp, v.items, v.method, undefined, orderKey.current),
     // Xoá cảnh báo cũ ở đây chứ không ở nơi gọi: cú bấm bị khoá nuốt không chạy onMutate, nên không xoá nhầm lời báo vừa hiện.
@@ -163,8 +164,8 @@ export function PriceTab({ creditLimit, debt, rules }: { creditLimit: number; de
       const sent = lineKey(items.map((it): [string, number] => [it.variationId, it.quantity]));
       const lines = order.items ?? [];
       const got = lines.every((it) => it.variationId) ? lineKey(lines.map((it): [string, number] => [it.variationId, it.quantity])) : '';
-      const refreshed = Promise.all(
-        ['dealer-orders', 'dealer-me', 'dealer-credit', 'dealer-rewards', 'dealer-report'].map((key) => qc.invalidateQueries({ queryKey: [key] })),
+      const refreshed = settleWithin(
+        Promise.all(['dealer-orders', 'dealer-me', 'dealer-credit', 'dealer-rewards', 'dealer-report'].map((key) => qc.invalidateQueries({ queryKey: [key] }))),
       );
       // Lần đặt trước đã tạo đơn dù mạng báo lỗi: máy chủ trả đơn đó (giỏ cũ), giỏ hiện tại chưa được đặt nên giữ nguyên.
       if (got !== '' && sent !== got) {

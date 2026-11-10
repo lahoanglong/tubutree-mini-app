@@ -44,6 +44,7 @@ import { ErrorState } from '@/components/ui/error-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/mini/empty-state';
 import { CtvDashboardSkeleton } from '@/components/affiliate/ctv-skeleton';
+import { LoadMore } from '@/components/affiliate/load-more';
 import { CtvShortcuts, type CtvShortcut } from '@/components/affiliate/ctv-shortcuts';
 import { MilestoneRewards } from '@/components/affiliate/milestone-rewards';
 import { TierCard } from '@/components/affiliate/tier-card';
@@ -59,6 +60,7 @@ import BackLink from '@/components/back-link';
 import { PageHeader } from '@/components/ui/page-header';
 import { PAGE_NARROW, PAGE_WIDE } from '@/lib/page-frame';
 import { actionErrorText, loadErrorText } from '@/lib/error-text';
+import { settleWithin } from '@/lib/settle-within';
 
 const TITLE = 'Cộng tác viên';
 
@@ -163,12 +165,14 @@ function RegisterGate() {
     mutationFn: () => registerAffiliate(coreHttp, CTV_TERMS.version),
     onSuccess: () => {
       setNotice({ text: 'Chào mừng CTV Tubu Tree! 🎉', error: false });
-      // Trả promise ra khỏi onSuccess: khoá giữ tới khi hồ sơ CTV mới về, nếu không nút bật lại trên dữ liệu cũ và gửi đăng ký lần hai.
-      const refreshed = Promise.all([
-        qc.invalidateQueries({ queryKey: affiliateMeQuery(coreHttp).queryKey }),
-        // Vai trò vừa đổi: tải lại Học viện (lần tải trước khi còn là khách bị từ chối và không thử lại), và về đầu trang.
-        qc.invalidateQueries({ queryKey: academyCoursesQuery(coreHttp).queryKey }),
-      ]);
+      // Trả promise ra khỏi onSuccess: khoá giữ tới khi hồ sơ CTV mới về (tối đa 4 giây), nếu không nút bật lại trên dữ liệu cũ và gửi đăng ký lần hai.
+      const refreshed = settleWithin(
+        Promise.all([
+          qc.invalidateQueries({ queryKey: affiliateMeQuery(coreHttp).queryKey }),
+          // Vai trò vừa đổi: tải lại Học viện (lần tải trước khi còn là khách bị từ chối và không thử lại), và về đầu trang.
+          qc.invalidateQueries({ queryKey: academyCoursesQuery(coreHttp).queryKey }),
+        ]),
+      );
       window.scrollTo({ top: 0 });
       return refreshed;
     },
@@ -324,19 +328,6 @@ function CommissionRow({ c }: { c: Commission }) {
       </div>
       <Badge tone={m.tone}>{m.label}</Badge>
     </li>
-  );
-}
-
-/** Nút "Tải thêm" của lịch sử có phân trang; tải trang kế lỗi thì giữ các dòng đã có và nói cách thử lại. */
-function LoadMore({ q }: { q: { hasNextPage: boolean; isFetchingNextPage: boolean; isFetchNextPageError: boolean; fetchNextPage: () => unknown } }) {
-  if (!q.hasNextPage) return null;
-  return (
-    <div className="pt-2">
-      {q.isFetchNextPageError && <p className="mb-1.5 text-center text-xs text-danger-fg">Chưa tải thêm được. Bạn bấm Tải thêm để thử lại nhé.</p>}
-      <button type="button" onClick={() => void q.fetchNextPage()} disabled={q.isFetchingNextPage} className={`${ui.btnSecondary} w-full`}>
-        {q.isFetchingNextPage ? 'Đang tải…' : 'Tải thêm'}
-      </button>
-    </div>
   );
 }
 

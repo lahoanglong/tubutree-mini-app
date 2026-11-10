@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { markGardenHintSeen, shouldShowGardenHint } from './garden-hint';
@@ -19,6 +19,8 @@ const overlayOpen = () => typeof document !== 'undefined' && document.querySelec
 export function GardenHintBubble({ onGardenTab }: { onGardenTab: boolean }) {
   const [open, setOpen] = useState(false);
   const router = useRouter();
+  // Hai cú chạm trong cùng một tác vụ đều thấy bóng trước khi `setOpen(false)` kịp vẽ, và đều gọi `router.push` (điều hướng thừa tới cùng một trang).
+  const opened = useRef(false);
 
   useEffect(() => {
     if (onGardenTab) {
@@ -31,6 +33,7 @@ export function GardenHintBubble({ onGardenTab }: { onGardenTab: boolean }) {
     const id = setTimeout(() => {
       if (overlayOpen()) return;
       markGardenHintSeen();
+      opened.current = false;
       setOpen(true);
     }, GARDEN_HINT_DELAY_MS);
     return () => clearTimeout(id);
@@ -59,6 +62,8 @@ export function GardenHintBubble({ onGardenTab }: { onGardenTab: boolean }) {
     <div
       role="status"
       onClick={() => {
+        if (opened.current) return;
+        opened.current = true;
         setOpen(false);
         router.push('/vuon-xanh');
       }}

@@ -26,6 +26,8 @@ import { miniBleed, miniBtnSecondary } from '@/components/loyalty/mini-surface';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
+import { settleWithin } from '@/lib/settle-within';
+import { usePressLock } from '@/lib/use-press-lock';
 import { coreHttp } from '@/lib/core-http';
 import { TagPrice } from '@/components/community/tag-price';
 import { ui } from '@/lib/guest-ui';
@@ -114,6 +116,10 @@ export default function PostDetailPage() {
     enabled: authed && !!id,
   });
 
+  // Khoá chạm lặp là ref trong `usePressLock` (hai cú chạm cùng khung hình). `isFetchingNextPage` chặn khi màn dựng lại với khoá mới mà lượt nạp trang kế cũ còn chạy:
+  // `fetchNextPage` mặc định huỷ lượt đang chạy rồi gửi lại, tức một yêu cầu thừa.
+  const loadMoreComments = usePressLock(() => (comments.isFetchingNextPage ? undefined : comments.fetchNextPage()));
+
   // Gốc ['community'] là tiền tố của bài ['community', id], bình luận ['community', id, 'comments'] và cả danh sách bảng tin:
   // một lần làm mới cập nhật trang này lẫn thẻ ở /cong-dong (huy hiệu hay nhất, tiêu đề sửa, số tim/bình luận, bài đã xoá).
   const refresh = () => qc.invalidateQueries({ queryKey: ['community'] });
@@ -126,7 +132,8 @@ export default function PostDetailPage() {
   const ok = (message?: string) => {
     setFailure(null);
     setNotice(message ?? null);
-    return refresh();
+    // Tối đa `settleWithin`: mạng chậm không giữ nút lâu hơn lệnh đã xong.
+    return settleWithin(refresh());
   };
 
   const openReport = (target: ReportTarget) => {
@@ -242,7 +249,7 @@ export default function PostDetailPage() {
   if (!post.data) {
     return (
       <Shell>
-        <ErrorState message={errorText(post.error)} onRetry={() => void post.refetch()} />
+        <ErrorState message={errorText(post.error)} onRetry={() => post.refetch()} />
       </Shell>
     );
   }
@@ -407,7 +414,7 @@ export default function PostDetailPage() {
             ))}
           </div>
         ) : comments.isError ? (
-          <ErrorState message={errorText(comments.error)} onRetry={() => void comments.refetch()} />
+          <ErrorState message={errorText(comments.error)} onRetry={() => comments.refetch()} />
         ) : sorted.length === 0 ? (
           <p className="text-sm text-stone-600">Hãy là người đầu tiên chia sẻ hoặc đặt câu hỏi!</p>
         ) : (
@@ -431,9 +438,9 @@ export default function PostDetailPage() {
         {comments.hasNextPage && (
           <button
             type="button"
-            aria-busy={comments.isFetchingNextPage || undefined}
-            aria-disabled={comments.isFetchingNextPage || undefined}
-            onClick={() => !comments.isFetchingNextPage && void comments.fetchNextPage()}
+            aria-busy={loadMoreComments.busy || comments.isFetchingNextPage || undefined}
+            aria-disabled={loadMoreComments.busy || comments.isFetchingNextPage || undefined}
+            onClick={loadMoreComments.press}
             className={`${miniBtnSecondary} mt-2.5`}
           >
             {comments.isFetchingNextPage ? 'Đang tải…' : 'Xem thêm trả lời'}
