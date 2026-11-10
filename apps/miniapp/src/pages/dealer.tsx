@@ -50,6 +50,7 @@ import { useDebounced } from '../utils/use-debounced';
 import { newIdempotencyKey } from '../utils/idempotency';
 import { ImageUpload } from '../components/image-upload';
 import { useLockedMutation } from '../components/game/use-locked-mutation';
+import { settleWithin } from '../utils/settle-within';
 import {
   DEALER_BENEFITS,
   DEALER_BENEFITS_TITLE,
@@ -148,13 +149,14 @@ function DealerApply({ rejected, rejectionReason }: { rejected: boolean; rejecti
     onSuccess: () => {
       haptic('medium');
       openSnackbar({ text: 'Đã gửi hồ sơ đăng ký đại lý!', type: 'success' });
-      void qc.invalidateQueries({ queryKey: ['dealer-me'] });
+      // Trả Promise: nút và ô ảnh giữ khoá tới khi trạng thái hồ sơ làm mới về (tối đa `settleWithin`); nhả sớm thì form còn hiện với nút sáng lại, bấm lần nữa gửi hồ sơ thứ hai.
+      return settleWithin(qc.invalidateQueries({ queryKey: ['dealer-me'] }));
     },
     onError: (e) => {
       // Mất phản hồi rồi bấm lại: hồ sơ đã nhận, làm mới trạng thái để sang màn chờ duyệt thay vì đứng ở form.
       const already = errorCode(e) === 'DEALER_APPLICATION_PENDING';
-      if (already) void qc.invalidateQueries({ queryKey: ['dealer-me'] });
       openSnackbar({ text: getErrorMessage(e), type: already ? 'info' : 'error' });
+      if (already) return settleWithin(qc.invalidateQueries({ queryKey: ['dealer-me'] }));
     },
   });
 
