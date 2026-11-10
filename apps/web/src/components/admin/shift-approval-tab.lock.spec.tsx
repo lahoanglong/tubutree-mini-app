@@ -318,6 +318,25 @@ describe('ShiftApprovalTab: tờ chỉnh giờ & duyệt', () => {
     expect(document.querySelector('[role="dialog"]')).toBeNull();
   });
 
+  it('duyệt ca B xong không đóng tờ chỉnh giờ của ca A đang gõ dở, giờ gõ còn nguyên', async () => {
+    const gate = deferred();
+    const api = stub([shift('a'), shift('b')], [], { approve: { b: gate.promise } });
+    const c = await mount();
+    click(approveBtn(c, 1));
+    await flush(2);
+    expect(api.to('/admin/shifts/b/approve')).toHaveLength(1);
+    click(c.querySelectorAll('[aria-label^="Chỉnh giờ"]')[0]!);
+    await flush();
+    const times = () => document.querySelectorAll<HTMLInputElement>('[role=dialog] input[type=time]');
+    typeInto(times()[0]!, '08:30');
+    typeInto(times()[1]!, '11:45');
+    gate.resolve();
+    await flush();
+    expect(c.textContent).toContain('Đã duyệt ca.');
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+    expect([times()[0]!.value, times()[1]!.value]).toEqual(['08:30', '11:45']);
+  });
+
   it('chưa gửi: Esc đóng tờ như thường', async () => {
     stub([shift('a')]);
     const c = await mount();
@@ -326,6 +345,58 @@ describe('ShiftApprovalTab: tờ chỉnh giờ & duyệt', () => {
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     });
     expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+});
+
+describe('ShiftApprovalTab: làm mới đúng tuần của lệnh', () => {
+  const listUrls = (api: ReturnType<typeof stub>) => api.calls.filter((x) => x.method === 'GET' && /\/admin\/shifts\?/.test(x.url)).map((x) => x.url);
+
+  it('duyệt ca của tuần này rồi sang tuần sau khi lệnh còn bay: lệnh xong thì tuần CŨ được tải lại, không phải tuần đang xem', async () => {
+    const gate = deferred();
+    const api = stub([shift('a')], [], { approve: { a: gate.promise } });
+    const c = await mount();
+    const weekUrl = listUrls(api)[0]!;
+    click(approveBtn(c));
+    await flush(2);
+    click(c.querySelector('[aria-label="Tuần sau"]'));
+    await flush();
+    const nextUrl = listUrls(api).find((u) => u !== weekUrl)!;
+    expect(nextUrl).toBeDefined();
+    const loads = (url: string) => listUrls(api).filter((u) => u === url).length;
+    expect([loads(weekUrl), loads(nextUrl)]).toEqual([1, 1]);
+    gate.resolve();
+    await flush();
+    expect(loads(weekUrl)).toBe(2);
+    expect(loads(nextUrl)).toBe(1);
+  });
+
+  it('"Duyệt tất cả" và "Từ chối" cũng làm mới đúng tuần của lệnh khi đổi tuần giữa chừng', async () => {
+    const bulk = deferred();
+    const reject = deferred();
+    const api = stub([shift('a'), shift('b')], [], { bulk: bulk.promise, reject: { b: reject.promise } });
+    const c = await mount();
+    const weekUrl = listUrls(api)[0]!;
+    click(bulkBtn(c));
+    await flush();
+    answerConfirm(true);
+    await flush(2);
+    click(c.querySelector('[aria-label="Tuần sau"]'));
+    await flush();
+    bulk.resolve();
+    await flush();
+    expect(listUrls(api).filter((u) => u === weekUrl)).toHaveLength(2);
+    click(c.querySelector('[aria-label="Tuần trước"]'));
+    await flush();
+    click(rejectBtn(c, 1));
+    await flush();
+    answerAsk('Trùng ca');
+    await flush(2);
+    click(c.querySelector('[aria-label="Tuần sau"]'));
+    await flush();
+    const before = listUrls(api).filter((u) => u === weekUrl).length;
+    reject.resolve();
+    await flush();
+    expect(listUrls(api).filter((u) => u === weekUrl).length).toBe(before + 1);
   });
 });
 

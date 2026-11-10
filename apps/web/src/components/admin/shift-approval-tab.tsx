@@ -50,7 +50,9 @@ export function ShiftApprovalTab() {
   const [adjEnd, setAdjEnd] = useState('12:00');
   const [tplOpen, setTplOpen] = useState(false);
   // Trả lời hứa làm mới để khoá của ca giữ tới khi danh sách ca mới về: nhả sớm thì nút "Duyệt" của ca vừa duyệt còn hiện và bấm lại được.
-  const invalidate = () => Promise.all([qc.invalidateQueries({ queryKey: ['admin-shifts', mondayKey] }), invalidateInbox(qc)]);
+  // Làm mới theo tuần của chính lệnh (đi trong biến mutation), không theo tuần đang xem lúc xong: đổi tuần khi lệnh còn bay mà làm mới nhầm tuần thì quay lại thấy ca cũ còn nút "Duyệt".
+  // `refetchType: 'all'` vì tuần cũ lúc đó không còn ai xem nên mặc định chỉ đánh dấu cũ chứ không tải lại.
+  const invalidate = (week: string) => Promise.all([qc.invalidateQueries({ queryKey: ['admin-shifts', week], refetchType: 'all' }), invalidateInbox(qc)]);
   const fail = (e: unknown) => setMsg({ tone: 'danger', text: errText(e) });
 
   const grouped = useMemo(() => {
@@ -89,12 +91,13 @@ export function ShiftApprovalTab() {
   const approveM = useLockedMutation(
     {
       onSettled: releaseShift,
-      mutationFn: (v: { id: string; approvedStart?: string; approvedEnd?: string }) =>
+      mutationFn: (v: { id: string; week: string; approvedStart?: string; approvedEnd?: string }) =>
         approveShift(coreHttp, v.id, v.approvedStart ? { approvedStart: v.approvedStart, approvedEnd: v.approvedEnd } : undefined),
-      onSuccess: () => {
+      onSuccess: (_d, v) => {
         setMsg({ tone: 'success', text: 'Đã duyệt ca.' });
-        setAdjust(null);
-        return invalidate();
+        // Chỉ đóng tấm của đúng ca vừa xong: duyệt ca B không được đóng tấm "Chỉnh giờ & duyệt" của ca A đang gõ dở.
+        setAdjust((cur) => (cur?.id === v.id ? null : cur));
+        return invalidate(v.week);
       },
       onError: fail,
     },
@@ -103,10 +106,10 @@ export function ShiftApprovalTab() {
   const rejectM = useLockedMutation(
     {
       onSettled: releaseShift,
-      mutationFn: (v: { id: string; reason: string }) => rejectShift(coreHttp, v.id, v.reason),
-      onSuccess: () => {
+      mutationFn: (v: { id: string; reason: string; week: string }) => rejectShift(coreHttp, v.id, v.reason),
+      onSuccess: (_d, v) => {
         setMsg({ tone: 'success', text: 'Đã từ chối ca.' });
-        return invalidate();
+        return invalidate(v.week);
       },
       onError: fail,
     },
@@ -114,10 +117,10 @@ export function ShiftApprovalTab() {
   );
   const bulkM = useLockedMutation({
     onSettled: releaseBulk,
-    mutationFn: (ids: string[]) => bulkApproveShifts(coreHttp, ids),
-    onSuccess: (r) => {
+    mutationFn: (v: { ids: string[]; week: string }) => bulkApproveShifts(coreHttp, v.ids),
+    onSuccess: (r, v) => {
       setMsg({ tone: 'success', text: `Đã duyệt ${r.approved} ca.` });
-      return invalidate();
+      return invalidate(v.week);
     },
     onError: fail,
   });
@@ -139,7 +142,7 @@ export function ShiftApprovalTab() {
       message: `Duyệt ${ids.length} ca đang chờ của tuần này? Các ca cần từ chối hoặc chỉnh giờ nên xử lý riêng trước.`,
       confirmLabel: `Duyệt ${ids.length} ca`,
     });
-    if (ok) exclusive(BULK_KEY, () => bulkM.mutate(ids));
+    if (ok) exclusive(BULK_KEY, () => bulkM.mutate({ ids, week: mondayKey }));
   };
 
   const askReject = async (s: AdminShift, who: string) => {
@@ -151,7 +154,7 @@ export function ShiftApprovalTab() {
       tone: 'danger',
       input: { label: 'Lý do', placeholder: 'Lý do', required: true, maxLength: 300 },
     });
-    if (reason) exclusive(s.id, () => rejectM.mutate({ id: s.id, reason }));
+    if (reason) exclusive(s.id, () => rejectM.mutate({ id: s.id, reason, week: mondayKey }));
   };
 
   return (
@@ -227,7 +230,7 @@ export function ShiftApprovalTab() {
                         aria-label={`Duyệt ca ${g.name} ${dayName}`}
                         aria-busy={busy || undefined}
                         aria-disabled={busy || undefined}
-                        onClick={() => exclusive(s.id, () => approveM.mutate({ id: s.id }))}
+                        onClick={() => exclusive(s.id, () => approveM.mutate({ id: s.id, week: mondayKey }))}
                         className={BTN_LINK}
                       >
                         Duyệt
@@ -267,6 +270,7 @@ export function ShiftApprovalTab() {
               exclusive(adjust.id, () =>
                 approveM.mutate({
                   id: adjust.id,
+                  week: mondayKey,
                   approvedStart: vnDateTimeISO(adjust.dayKey, adjStart),
                   approvedEnd: vnDateTimeISO(adjust.dayKey, adjEnd),
                 }),

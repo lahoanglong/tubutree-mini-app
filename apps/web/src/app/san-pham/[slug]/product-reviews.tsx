@@ -167,6 +167,8 @@ export function ProductReviews({ slug }: { slug: string }) {
     enabled: phase === 'authenticated',
     retry: false,
   });
+  // Nút Thử lại đang giữ focus nên không `disabled`; khoá chạm đúp là ref trong `usePressLock`, nhả khi lần hỏi lại xong.
+  const retryElig = usePressLock(() => eligQ.refetch());
   const [target, setTarget] = useState<FormTarget | null>(null);
   const [visible, setVisible] = useState(REVIEW_STEP);
   const [filter, setFilter] = useState<ReviewFilterKey>('all');
@@ -279,7 +281,13 @@ export function ProductReviews({ slug }: { slug: string }) {
       {phase === 'authenticated' && eligQ.isError && !eligQ.data && (
         <div role="alert" className="mt-2 flex flex-wrap items-center gap-x-3">
           <p className={ui.error}>{ELIGIBILITY_FAILED}</p>
-          <button type="button" className={`${ui.btnText} text-forest-700`} onClick={() => void eligQ.refetch()}>
+          <button
+            type="button"
+            className={`${ui.btnText} text-forest-700`}
+            onClick={retryElig.press}
+            aria-busy={retryElig.busy || undefined}
+            aria-disabled={retryElig.busy || undefined}
+          >
             Thử lại
           </button>
         </div>
@@ -518,6 +526,7 @@ function ReviewEditor({
     retry: false,
     gcTime: 0,
   });
+  const retryMy = usePressLock(() => myQ.refetch());
   if (editingId && myQ.isPending) {
     return (
       <p role="status" className="mt-3 text-sm text-stone-600">
@@ -529,7 +538,13 @@ function ReviewEditor({
     return (
       <div role="alert" className="mt-3">
         <p className={ui.error}>Không tải được đánh giá để sửa.</p>
-        <button type="button" className={`${ui.btnText} text-forest-700`} onClick={() => void myQ.refetch()}>
+        <button
+          type="button"
+          className={`${ui.btnText} text-forest-700`}
+          onClick={retryMy.press}
+          aria-busy={retryMy.busy || undefined}
+          aria-disabled={retryMy.busy || undefined}
+        >
           Thử lại
         </button>
         <button type="button" className={`${ui.btnText} text-stone-700`} onClick={rest.onCancel}>

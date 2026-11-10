@@ -51,12 +51,20 @@ const deferred = () => {
   const promise = new Promise<void>((r) => (resolve = r));
   return { promise, resolve };
 };
-type Gates = { write?: Promise<void>; list?: Promise<void>; detail?: Promise<void>; failOnce?: boolean };
+type Gates = {
+  write?: Promise<void>;
+  list?: Promise<void>;
+  detail?: Promise<void>;
+  failOnce?: boolean;
+  /** Bảng lương trả về sau khi một lệnh ghi đã xong (như máy chủ thật sau khi chốt). */
+  after?: unknown[];
+};
 
 function stub(rows: unknown[], gates: Gates = {}) {
   const calls: { url: string; method: string }[] = [];
   let listLoads = 0;
   let failed = false;
+  let written = false;
   const json = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status, headers: { 'Content-Type': 'application/json' } });
   vi.stubGlobal(
     'fetch',
@@ -69,6 +77,7 @@ function stub(rows: unknown[], gates: Gates = {}) {
           return json({ message: 'Máy chủ đang bận' }, 500);
         }
         await gates.write;
+        written = true;
         return json({ ok: true, hourlyRate: 50_000 });
       }
       if (url.includes('/detail')) {
@@ -77,10 +86,10 @@ function stub(rows: unknown[], gates: Gates = {}) {
       }
       listLoads += 1;
       if (listLoads > 1) await gates.list;
-      return json(rows);
+      return json(written && gates.after ? gates.after : rows);
     }),
   );
-  return { calls, writes: () => calls.filter((c) => c.method !== 'GET') };
+  return { calls, writes: () => calls.filter((c) => c.method !== 'GET'), lists: () => calls.filter((c) => c.method === 'GET' && /\/admin\/payroll\?/.test(c.url)).map((c) => c.url) };
 }
 
 const tap = async (...els: HTMLElement[]) => {
@@ -355,6 +364,67 @@ describe('PayrollAdminTab: khoá giữ tới khi bảng lương mới về và l
     expect(api.writes()).toHaveLength(1);
     gate.resolve();
     await flush();
+  });
+});
+
+describe('PayrollAdminTab: làm mới đúng tháng của lệnh', () => {
+  it('chốt lương tháng này rồi sang tháng trước khi lệnh còn bay: lệnh xong thì tháng CŨ được tải lại; quay lại không còn nút "Chốt" trên dữ liệu cũ', async () => {
+    const gate = deferred();
+    const api = stub([row('1', 'Lan', 'OPEN')], { write: gate.promise, after: [row('1', 'Lan', 'FINALIZED')] });
+    const c = await mount();
+    const monthUrl = api.lists()[0]!;
+    click(q(c, 'Chốt · Lan'));
+    await flush();
+    answerConfirm(true);
+    await flush(2);
+    click(c.querySelector('[aria-label="Tháng trước"]'));
+    await flush();
+    const loads = (url: string) => api.lists().filter((u) => u === url).length;
+    const prevUrl = api.lists().find((u) => u !== monthUrl)!;
+    expect([loads(monthUrl), loads(prevUrl)]).toEqual([1, 1]);
+    gate.resolve();
+    await flush();
+    expect(c.textContent).toContain('Đã chốt lương.');
+    expect(loads(monthUrl)).toBe(2);
+    expect(loads(prevUrl)).toBe(1);
+    click(c.querySelector('[aria-label="Tháng sau"]'));
+    expect(q(c, 'Chốt · Lan')).toBeNull();
+    expect(q(c, 'Mở lại · Lan')).not.toBeNull();
+  });
+
+  it('"Mở lại" đổi tháng giữa chừng cũng làm mới tháng của lệnh', async () => {
+    const gate = deferred();
+    const api = stub([row('2', 'Mai', 'FINALIZED')], { write: gate.promise });
+    const c = await mount();
+    const monthUrl = api.lists()[0]!;
+    click(q(c, 'Mở lại · Mai'));
+    await flush();
+    answerConfirm(true);
+    await flush(2);
+    click(c.querySelector('[aria-label="Tháng trước"]'));
+    await flush();
+    gate.resolve();
+    await flush();
+    expect(api.lists().filter((u) => u === monthUrl)).toHaveLength(2);
+  });
+});
+
+describe('PayrollAdminTab: tính lại tháng đổi tháng giữa chừng', () => {
+  it('làm mới và báo đúng tháng của lệnh, không theo tháng đang xem lúc xong', async () => {
+    const gate = deferred();
+    const api = stub([row('1', 'Lan', 'OPEN')], { write: gate.promise });
+    const c = await mount();
+    const monthUrl = api.lists()[0]!;
+    click(q(c, 'Tính lại tháng · Lan'));
+    await flush();
+    answerConfirm(true);
+    await flush(2);
+    click(c.querySelector('[aria-label="Tháng trước"]'));
+    await flush();
+    gate.resolve();
+    await flush();
+    expect(c.textContent).toContain(`Đã tính lại bảng lương T${month}/${year}`);
+    expect(api.lists().filter((u) => u === monthUrl)).toHaveLength(2);
   });
 });
 

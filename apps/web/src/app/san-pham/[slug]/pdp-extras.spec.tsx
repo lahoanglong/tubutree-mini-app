@@ -539,6 +539,23 @@ describe('PdpGroupBuyRow', () => {
     await act(async () => resolve({ id: 'g1' }));
     expect(mocks.push).toHaveBeenCalledTimes(1);
   });
+  it('tạo xong mà trang nhóm chưa mở (router.push còn treo): chạm lại không tạo nhóm thứ hai, nút còn aria-busy + aria-disabled (W79B)', async () => {
+    mocks.http.post.mockResolvedValue({ id: 'g1' });
+    const { container } = mount(<PdpGroupBuyRow productId="p1" slug="dau-goi" />);
+    const btn = container.querySelector('button')!;
+    click(btn);
+    await flush();
+    expect(mocks.http.post).toHaveBeenCalledTimes(1);
+    expect(mocks.push).toHaveBeenCalledTimes(1);
+    expect(btn.getAttribute('aria-busy')).toBe('true');
+    expect(btn.getAttribute('aria-disabled')).toBe('true');
+    expect(btn.disabled).toBe(false);
+    expect(container.textContent).toContain('Đang mở nhóm…');
+    click(btn);
+    await flush();
+    expect(mocks.http.post).toHaveBeenCalledTimes(1);
+    expect(mocks.push).toHaveBeenCalledTimes(1);
+  });
   it('tạo nhóm lỗi: khoá nhả nên bấm lại gửi được, lỗi cũ biến mất khi gửi lại (W79B)', async () => {
     mocks.http.post.mockRejectedValueOnce(new Error('Sản phẩm không mở nhóm được')).mockResolvedValue({ id: 'g1' });
     const { container } = mount(<PdpGroupBuyRow productId="p1" slug="dau-goi" />);

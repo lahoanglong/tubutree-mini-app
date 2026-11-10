@@ -1231,4 +1231,40 @@ describe('ProductReviews (web): "Thử lại" trả refetch nên nút báo bận
     expect(c.textContent).toContain('Không tải được đánh giá.');
     await expectBusyThenDone(c, release, 'Nhận xét q2');
   });
+
+  // Đã có đánh giá cũ trong bộ nhớ đệm rồi lần làm mới lỗi: thẻ lỗi ở lại suốt lúc tải lại nên quan sát được aria-busy, và lần gọi thứ hai của refetch()
+  // sẽ huỷ lần đầu rồi tải lại (khi đã có dữ liệu) nên bỏ khoá thì số lần gọi máy chủ thành 2.
+  // can-review (eligQ) chỉ hiện thẻ lỗi khi chưa có dữ liệu: bấm Thử lại là thẻ biến mất ngay, nên khoá của nó không quan sát được từ ngoài.
+  it('đánh giá của mình khi sửa (myQ): làm mới lỗi, chạm đúp Thử lại chỉ tải một lần, nút aria-busy tới khi xong', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const r = render(<ProductReviews slug="nuoc-rua-chen" />, client);
+    mounted.push(r);
+    const c = r.container;
+    await flush(8);
+    click(buttonNamed(c, 'Sửa đánh giá đơn TB0001'));
+    await flush(8);
+    expect(c.querySelector('textarea')!.value).toBe('Dùng ổn');
+    mocks.mine.a = new Error('mất mạng');
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: ['my-review'] });
+    });
+    await flush(2);
+    expect(c.textContent).toContain('Không tải được đánh giá để sửa.');
+    let release!: () => void;
+    mocks.mine.a = new Promise((res) => (release = () => res(structuredClone(MINE_A))));
+    const before = mocks.myCalls.length;
+    const retry = button(c, 'Thử lại') as HTMLButtonElement;
+    await act(async () => {
+      retry.click();
+      retry.click();
+    });
+    await flush(1);
+    expect(mocks.myCalls.length - before).toBe(1);
+    expect(retry.getAttribute('aria-busy')).toBe('true');
+    expect(retry.getAttribute('aria-disabled')).toBe('true');
+    expect(retry.disabled).toBe(false);
+    await act(async () => release());
+    await flush(8);
+    expect(c.querySelector('textarea')!.value).toBe('Dùng ổn');
+  });
 });
