@@ -50,6 +50,8 @@ import {
   dowLabel,
 } from '../utils/week';
 import { INPUT_LIMITS } from '../utils/input-limits';
+import { vi } from '../i18n/vi';
+import { useUploadBusy } from '../hooks/use-upload-busy';
 
 const STATUS: Record<Shift['status'], { label: string; tone: BadgeTone }> = {
   PENDING: { label: 'Chờ duyệt', tone: 'warning' },
@@ -491,6 +493,15 @@ function StaffHub() {
   const [cancelReason, setCancelReason] = useState('');
   const [cancelEmergency, setCancelEmergency] = useState(false);
   const [cancelEvidence, setCancelEvidence] = useState('');
+  // Cờ nằm ở trang vì tấm huỷ ca gỡ nội dung khi đóng, còn ảnh về muộn vẫn ghi vào `cancelEvidence` của trang. Tắt "Đột xuất" gỡ ô ảnh
+  // nên lượt tải còn chạy không còn chặn nút (ảnh không ai chờ), bật lại thì chặn tiếp tới khi lượt đó xong.
+  const { busy: uploadBusy, onBusyChange: onEvidenceBusyChange } = useUploadBusy();
+  const evidenceBusy = cancelEmergency && uploadBusy;
+  // Ảnh chứng cứ thuộc về đúng một ca: mở huỷ ca khác không được mang ảnh của ca vừa đóng.
+  const openCancel = (id: string) => {
+    setCancelEvidence('');
+    setCancelId(id);
+  };
 
   const cancelM = useLockedMutation({
     mutationFn: () =>
@@ -629,7 +640,7 @@ function StaffHub() {
                           variant="ghost"
                           aria-label={`Huỷ ca ${dayName}`}
                           style={{ color: 'var(--color-text-danger)' }}
-                          onPress={() => setCancelId(s.id)}
+                          onPress={() => openCancel(s.id)}
                         >
                           Huỷ ca
                         </Button>
@@ -775,15 +786,20 @@ function StaffHub() {
       <BottomSheet
         open={!!cancelId}
         onClose={() => setCancelId(null)}
+        // Đóng giữa lúc ảnh còn đang lên rồi mở ca khác: ảnh của ca trước về muộn sẽ nằm trong tấm của ca sau.
+        dismissible={!evidenceBusy}
         title="Huỷ ca đã duyệt"
         footer={
           <Button
             fullWidth
             loading={cancelM.isPending}
-            disabled={cancelReason.trim().length === 0 || (cancelEmergency && !cancelEvidence)}
-            onPress={() => cancelM.mutate()}
+            disabled={cancelReason.trim().length === 0 || (cancelEmergency && !cancelEvidence) || evidenceBusy}
+            onPress={() => {
+              if (evidenceBusy) return;
+              cancelM.mutate();
+            }}
           >
-            Xác nhận huỷ
+            {evidenceBusy ? vi.common.imagesUploading : 'Xác nhận huỷ'}
           </Button>
         }
       >
@@ -796,7 +812,7 @@ function StaffHub() {
           </Field>
           <SwitchRow label="Đột xuất (có chứng cứ)" on={cancelEmergency} onToggle={() => setCancelEmergency((v) => !v)} />
           {cancelEmergency && (
-            <ImageUpload label="Ảnh chứng cứ" value={cancelEvidence} onChange={setCancelEvidence} />
+            <ImageUpload label="Ảnh chứng cứ" value={cancelEvidence} onChange={setCancelEvidence} onBusyChange={onEvidenceBusyChange} disabled={cancelM.isPending} />
           )}
         </div>
       </BottomSheet>

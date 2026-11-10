@@ -59,9 +59,19 @@ vi.mock('./image-upload', () => ({
     </>
   ),
   isCloudinaryConfigured: () => mocks.cloudinary,
-  VideoUpload: ({ value, onChange, onBusyChange }: { value: string; onChange: (v: string) => void; onBusyChange?: (busy: boolean) => void }) => (
+  VideoUpload: ({
+    value,
+    onChange,
+    onBusyChange,
+    disabled,
+  }: {
+    value: string;
+    onChange: (v: string) => void;
+    onBusyChange?: (busy: boolean) => void;
+    disabled?: boolean;
+  }) => (
     <>
-      <button type="button" onClick={() => onChange('https://v/moi.mp4')}>
+      <button type="button" disabled={disabled} onClick={() => onChange('https://v/moi.mp4')}>
         Chọn video thử ({value ? 1 : 0})
       </button>
       <button type="button" onClick={() => onBusyChange?.(true)}>
@@ -1530,6 +1540,46 @@ describe('ReviewsSection: tải ảnh và gửi đánh giá không chồng nhau 
     expect(screen.getByRole('button', { name: 'Thêm ảnh (1)' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Xoá ảnh thử' })).toBeDisabled();
     expect(screen.queryByRole('button', { name: 'Đang tải ảnh…' })).toBeNull();
+    await act(async () => release({ updated: false, pointsEarned: 0 }));
+    await waitFor(() => expect(screen.queryByRole('radiogroup', { name: 'Số sao' })).toBeNull());
+  });
+
+  it('đang tải video: form không đóng được (không có nút Đóng, Esc không đóng), nên không mở lại được form mới để gửi thiếu video; tải xong thì đóng được và nháp còn video (W90A)', async () => {
+    await openForm();
+    expect(screen.getByRole('button', { name: 'Đóng' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Bắt đầu tải video thử' }));
+    expect(screen.queryByRole('button', { name: 'Đóng' })).toBeNull();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.getByRole('radiogroup', { name: 'Số sao' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Đang tải video…' })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tải xong video thử' }));
+    expect(await screen.findByRole('button', { name: 'Đóng' })).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('radiogroup', { name: 'Số sao' })).toBeNull());
+    fireEvent.click(await screen.findByRole('button', { name: 'Viết đánh giá' }));
+    expect(await screen.findByRole('button', { name: 'Chọn video thử (1)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Gửi đánh giá' })).not.toBeDisabled();
+  });
+
+  it('video và ảnh cùng đang tải: form chỉ đóng được khi cả hai xong (W90A)', async () => {
+    await openForm();
+    fireEvent.click(screen.getByRole('button', { name: 'Bắt đầu tải video thử' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Bắt đầu tải ảnh thử' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tải xong video thử' }));
+    expect(screen.queryByRole('button', { name: 'Đóng' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Tải xong ảnh thử' }));
+    expect(await screen.findByRole('button', { name: 'Đóng' })).toBeInTheDocument();
+  });
+
+  it('đang gửi: ô chọn video khoá, không đổi video của lần đang gửi (W90A)', async () => {
+    let release: (v: unknown) => void = () => undefined;
+    mocks.createReview.mockReturnValue(new Promise((r) => (release = r)));
+    await openForm();
+    expect(screen.getByRole('button', { name: 'Chọn video thử (0)' })).not.toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Gửi đánh giá' }));
+    await waitFor(() => expect(mocks.createReview).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole('button', { name: 'Chọn video thử (0)' })).toBeDisabled();
     await act(async () => release({ updated: false, pointsEarned: 0 }));
     await waitFor(() => expect(screen.queryByRole('radiogroup', { name: 'Số sao' })).toBeNull());
   });

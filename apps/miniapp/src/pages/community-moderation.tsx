@@ -37,6 +37,7 @@ import { Heading, Text } from '../components/ui/text';
 import { formatDate, formatNumber, formatPoints, formatVnd } from '../utils/format';
 import { timeAgo } from '../utils/time-ago';
 import { vi } from '../i18n/vi';
+import { useUploadBusy } from '../hooks/use-upload-busy';
 import { communityViewsFor, reportsTabCount, type CommunityView } from '@tubutree/app-core/community-moderation-views';
 import { getCommunityReportsCount } from '../services/staff-api';
 import { KIND_LABEL } from '../components/community/post-card';
@@ -364,6 +365,8 @@ function EventsSection() {
   const [startAt, setStartAt] = useState('');
   const [endAt, setEndAt] = useState('');
   const [rewardPoints, setRewardPoints] = useState('0');
+  // Tạo sự kiện lúc ảnh bìa còn đang lên sẽ tạo không bìa; ảnh về sau rơi sang biểu mẫu trống kế tiếp.
+  const { busy: coverBusy, onBusyChange } = useUploadBusy();
 
   const createM = useLockedMutation({
     mutationFn: (dto: CreateEventInput) => createEvent(dto),
@@ -384,7 +387,7 @@ function EventsSection() {
   const canCreate = filled && !createM.isPending;
 
   const submitCreate = () => {
-    if (!canCreate) return;
+    if (!canCreate || coverBusy) return;
     createM.mutate({
       title: title.trim(),
       description: description.trim() || undefined,
@@ -415,7 +418,7 @@ function EventsSection() {
             maxLength={2000}
             onChange={(e) => setDescription(e.target.value)}
           />
-          <ImageUpload label={vi.community.eventCoverLabel} value={coverUrl} onChange={setCoverUrl} />
+          <ImageUpload label={vi.community.eventCoverLabel} value={coverUrl} onChange={setCoverUrl} onBusyChange={onBusyChange} disabled={createM.isPending} />
           <Field label={vi.community.eventStartLabel}>
             <input
               type="datetime-local"
@@ -440,8 +443,8 @@ function EventsSection() {
             onChange={(e) => setRewardPoints(e.target.value)}
           />
           <Text variant="caption" tone="tertiary" as="div">{rewardHint}</Text>
-          <Button fullWidth loading={createM.isPending} disabled={!filled} onPress={submitCreate}>
-            {vi.community.createEvent}
+          <Button fullWidth loading={createM.isPending} disabled={!filled || coverBusy} onPress={submitCreate}>
+            {coverBusy ? vi.common.imagesUploading : vi.community.createEvent}
           </Button>
         </div>
       </Card>

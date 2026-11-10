@@ -98,8 +98,24 @@ const UPLOAD_MAX_DIM = 1600;
 const UPLOAD_QUALITY = 0.82;
 /** JPEG nhỏ hơn mức này và cạnh dài vừa thì gửi nguyên, nén lại chỉ làm xấu thêm. */
 const UPLOAD_KEEP_BYTES = 500 * 1024;
-/** Cloudinary im quá lâu thì bỏ lượt tải, rơi về bản nén tại chỗ: ô thêm ảnh và nút Gửi của form cha chờ lượt này nên không được treo mãi. */
-const CLOUDINARY_TIMEOUT_MS = 60_000;
+/** Cloudinary im quá lâu thì bỏ lượt tải, rơi về bản nén tại chỗ: ô thêm ảnh và nút Gửi của form cha chờ lượt này nên không được treo mãi. PNG/HEIC không nén tới 20MB trên mạng yếu cần cỡ 80 giây, nên hạn phải rộng hơn thế. */
+const CLOUDINARY_TIMEOUT_MS = 120_000;
+/** Video tối đa 50MB: trên đường lên 2 Mbps cần cỡ 200 giây, nên hạn rộng hơn ảnh nhiều. Quá hạn thì báo lỗi để khách chọn lại, nút Gửi của form cha không treo mãi. */
+const VIDEO_UPLOAD_TIMEOUT_MS = 300_000;
+
+/**
+ * Chạy `run` với hạn chót: hết `ms` thì huỷ yêu cầu đang chờ, cả lúc chờ phản hồi lẫn lúc đọc thân.
+ * Không dùng AbortSignal.timeout: WebView Zalo đời cũ chưa có.
+ */
+async function withDeadline<T>(ms: number, run: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  try {
+    return await run(controller.signal);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 /**
  * Bản gửi lên Cloudinary. Chỉ JPEG lớn mới nén: PNG/WebP/GIF giữ nguyên (nền trong suốt, QR, logo), và mọi lỗi giải mã
@@ -133,16 +149,19 @@ function dataUrlToBlob(dataUrl: string): Blob {
 export async function uploadToCloudinary(file: File | Blob): Promise<string | null> {
   if (!CONFIGURED) return null;
   try {
-    const form = new FormData();
-    form.append('file', file);
-    form.append('upload_preset', PRESET!);
-    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD}/image/upload`, {
-      method: 'POST',
-      body: form,
+    return await withDeadline(CLOUDINARY_TIMEOUT_MS, async (signal) => {
+      const form = new FormData();
+      form.append('file', file);
+      form.append('upload_preset', PRESET!);
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD}/image/upload`, {
+        method: 'POST',
+        body: form,
+        signal,
+      });
+      if (!res.ok) return null;
+      const data = (await res.json()) as { secure_url?: string };
+      return data.secure_url ?? null;
     });
-    if (!res.ok) return null;
-    const data = (await res.json()) as { secure_url?: string };
-    return data.secure_url ?? null;
   } catch {
     return null;
   }
@@ -155,12 +174,18 @@ export function ImageUpload({
   label,
   value,
   onChange,
+  onBusyChange,
+  disabled = false,
   maxDim,
   quality,
 }: {
   label: string;
   value: string;
   onChange: (url: string) => void;
+  /** Báo form cha khi đang tải: bấm Lưu lúc ảnh còn đang lên sẽ lưu bản ghi không có ảnh hoặc còn ảnh cũ. */
+  onBusyChange?: (busy: boolean) => void;
+  /** Form cha đang lưu: đổi ảnh lúc này không vào bản đang lưu mà vẫn làm đổi nhãn nút Lưu. */
+  disabled?: boolean;
   /** Chỉ cho nhánh base64 (chưa cấu hình Cloudinary): cạnh dài tối đa và chất lượng JPEG. Tải lên Cloudinary luôn dùng mức cố định 1600. */
   maxDim?: number;
   quality?: number;
@@ -168,24 +193,29 @@ export function ImageUpload({
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const changeUploading = (next: boolean) => {
+    setUploading(next);
+    onBusyChange?.(next);
+  };
 
   const pick = () => {
-    if (uploading) return;
+    if (uploading || disabled) return;
     haptic('light');
     inputRef.current?.click();
   };
 
   const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (uploading) return;
+    if (uploading || disabled) return;
     const file = e.target.files?.[0];
     if (!file) return;
     setError(null);
+    // Ảnh quá lớn dừng ở đây, trước khi báo bận: không có lượt tải nào để chờ.
     if (file.size > MAX_IMAGE_BYTES) {
       setError('Ảnh quá lớn (tối đa 20MB). Hãy chọn ảnh khác nhé.');
       if (inputRef.current) inputRef.current.value = '';
       return;
     }
-    setUploading(true);
+    changeUploading(true);
     try {
       if (CONFIGURED) {
         const secureUrl = await uploadToCloudinary(await prepareForCloudinary(file));
@@ -202,7 +232,7 @@ export function ImageUpload({
     } catch {
       setError('Tải ảnh thất bại. Hãy chọn lại tệp ảnh khác.');
     } finally {
-      setUploading(false);
+      changeUploading(false);
       if (inputRef.current) inputRef.current.value = '';
     }
   };
@@ -219,7 +249,7 @@ export function ImageUpload({
         type="button"
         className="tubu-press"
         onClick={pick}
-        disabled={uploading}
+        disabled={uploading || disabled}
         aria-busy={uploading || undefined}
         style={{
           width: '100%',
@@ -253,7 +283,7 @@ export function ImageUpload({
         )}
       </button>
       {value && !uploading && (
-        <button type="button" onClick={pick} style={{ ...LINK_BUTTON, marginTop: 4, color: 'var(--color-text-brand)' }}>
+        <button type="button" onClick={pick} disabled={disabled} style={{ ...LINK_BUTTON, marginTop: 4, color: 'var(--color-text-brand)' }}>
           <Text variant="caption" tone="brand" as="span" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
             <RefreshCw size={12} />
             Đổi ảnh khác
@@ -279,12 +309,15 @@ export function VideoUpload({
   value,
   onChange,
   onBusyChange,
+  disabled = false,
   maxSeconds = REVIEW_VIDEO_MAX_SECONDS,
 }: {
   value: string;
   onChange: (url: string) => void;
   /** Báo form cha khi đang tải: video 50MB trên 4G mất cả phút, form phải chờ thay vì gửi đánh giá không kèm video. */
   onBusyChange?: (busy: boolean) => void;
+  /** Form cha đang gửi: đổi hay xoá video lúc này không vào bản đang gửi mà vẫn làm đổi nhãn nút Gửi. */
+  disabled?: boolean;
   maxSeconds?: number;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -297,19 +330,26 @@ export function VideoUpload({
 
   // Một lần tải mỗi lúc: lần hai chạy song song sẽ báo "xong" trước lần đầu và mở lại nút Gửi của form khi video vẫn đang tải.
   const pick = () => {
-    if (uploading) return;
+    if (uploading || disabled) return;
     haptic('light');
     inputRef.current?.click();
   };
 
   const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (uploading) return;
+    if (uploading || disabled) return;
     const file = e.target.files?.[0];
     if (!file) return;
     setError(null);
     changeUploading(true);
     try {
-      const url = await uploadCloudinaryVideo(file, { cloudName: CLOUD!, uploadPreset: PRESET! }, { maxSeconds, readDuration: readVideoDuration });
+      // Hạn chót nằm ở fetch truyền xuống: hàm tải dùng chung với web nên không tự có hạn. Huỷ fetch thì nó báo "Tải video thất bại".
+      const url = await withDeadline(VIDEO_UPLOAD_TIMEOUT_MS, (signal) =>
+        uploadCloudinaryVideo(
+          file,
+          { cloudName: CLOUD!, uploadPreset: PRESET! },
+          { maxSeconds, readDuration: readVideoDuration, fetchImpl: (input, init) => fetch(input, { ...init, signal }) },
+        ),
+      );
       haptic('medium');
       onChange(url);
     } catch (err) {
@@ -329,10 +369,10 @@ export function VideoUpload({
         <div>
           <video src={value} controls style={{ width: '100%', maxHeight: 200, borderRadius: 'var(--radius-control)', background: 'var(--color-bg-inverse)' }} />
           <div style={{ display: 'flex', gap: 12, marginTop: 4 }}>
-            <button type="button" onClick={pick} disabled={uploading} style={LINK_BUTTON}>
+            <button type="button" onClick={pick} disabled={uploading || disabled} style={LINK_BUTTON}>
               <Text variant="caption" tone="brand" as="span">{uploading ? videoUploadCopy.uploading : 'Đổi video'}</Text>
             </button>
-            <button type="button" onClick={() => onChange('')} disabled={uploading} style={LINK_BUTTON}>
+            <button type="button" onClick={() => onChange('')} disabled={uploading || disabled} style={LINK_BUTTON}>
               <Text variant="caption" tone="danger" as="span">Xoá video</Text>
             </button>
           </div>
@@ -342,7 +382,7 @@ export function VideoUpload({
           type="button"
           className="tubu-press"
           onClick={pick}
-          disabled={uploading}
+          disabled={uploading || disabled}
           style={{
             width: '100%',
             font: 'inherit',
@@ -419,33 +459,7 @@ export function MultiImageUpload({
           oversizedCount += 1;
           continue;
         }
-        let uploadedUrl = '';
-        if (CONFIGURED) {
-          // Không dùng AbortSignal.timeout: WebView Zalo đời cũ chưa có.
-          const controller = new AbortController();
-          const timer = setTimeout(() => controller.abort(), CLOUDINARY_TIMEOUT_MS);
-          try {
-            const form = new FormData();
-            form.append('file', file);
-            form.append('upload_preset', PRESET!);
-            const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD}/image/upload`, {
-              method: 'POST',
-              body: form,
-              signal: controller.signal,
-            });
-            if (res.ok) {
-              const data = (await res.json()) as { secure_url?: string };
-              if (data.secure_url) uploadedUrl = data.secure_url;
-            }
-          } catch {
-            // fallback
-          } finally {
-            clearTimeout(timer);
-          }
-        }
-        if (!uploadedUrl) {
-          uploadedUrl = await readAndCompressImage(file);
-        }
+        const uploadedUrl = (await uploadToCloudinary(file)) || (await readAndCompressImage(file));
         if (uploadedUrl) newUrls.push(uploadedUrl);
       }
       if (newUrls.length > 0) {

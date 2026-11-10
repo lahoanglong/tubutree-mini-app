@@ -28,6 +28,8 @@ const mocks = vi.hoisted(() => ({
   reopenPayroll: vi.fn(),
   markPaid: vi.fn(),
   adminEditSession: vi.fn(),
+  // Ô ảnh giả ghi lại props lần vẽ gần nhất: test tự báo "đang tải"/"tải xong" như ô thật.
+  picker: { onChange: (_url: string): void => undefined, onBusyChange: (_busy: boolean): void => undefined, disabled: false },
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -67,11 +69,14 @@ vi.mock('../store/auth', () => ({
   useAuthStore: (sel: (s: { user: { role: string; id: string } }) => unknown) => sel({ user: { role: mocks.role, id: mocks.meId } }),
 }));
 vi.mock('../components/image-upload', () => ({
-  ImageUpload: ({ label, onChange }: { label: string; onChange: (url: string) => void }) => (
-    <button type="button" onClick={() => onChange('https://img.test/proof.png')}>
-      {label}
-    </button>
-  ),
+  ImageUpload: ({ label, onChange, onBusyChange, disabled }: { label: string; onChange: (url: string) => void; onBusyChange?: (busy: boolean) => void; disabled?: boolean }) => {
+    mocks.picker = { onChange, onBusyChange: onBusyChange ?? (() => undefined), disabled: Boolean(disabled) };
+    return (
+      <button type="button" disabled={disabled} onClick={() => onChange('https://img.test/proof.png')}>
+        {label}
+      </button>
+    );
+  },
 }));
 
 import AdminPage from './admin';
@@ -1729,6 +1734,59 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
           await waitFor(() => expect(mocks.adminEditSession).toHaveBeenCalledTimes(2));
         });
       });
+    });
+  });
+  describe('ảnh xác nhận chuyển khoản còn đang lên (W90A)', () => {
+    const openPaySheet = async () => {
+      mocks.adminGetPayroll.mockResolvedValue(PAY_ROWS);
+      renderPage();
+      await screen.findByText('Lan');
+      goTab('Lương');
+      await screen.findByText('14h30 · 30.000đ/h · Đang tính');
+      fireEvent.click(screen.getByRole('button', { name: 'Đã chuyển · Lan' }));
+      await screen.findByRole('heading', { level: 2, name: 'Xác nhận đã chuyển · Lan' });
+    };
+    const startUpload = () => act(() => mocks.picker.onBusyChange(true));
+    const finishUpload = (url: string) =>
+      act(() => {
+        mocks.picker.onChange(url);
+        mocks.picker.onBusyChange(false);
+      });
+
+    it('đổi ảnh khác: lúc ảnh mới còn lên, nút khoá + đổi nhãn, bấm không đánh dấu đã trả, tấm không đóng được; xong thì gửi ảnh MỚI', async () => {
+      await openPaySheet();
+      fireEvent.click(screen.getByRole('button', { name: 'Ảnh xác nhận chuyển khoản *' }));
+      expect(screen.getByRole('button', { name: 'Đánh dấu đã trả' })).toBeEnabled();
+      expect(screen.getByRole('button', { name: 'Đóng' })).toBeInTheDocument();
+
+      startUpload();
+      const waiting = screen.getByRole('button', { name: t.common.imagesUploading });
+      expect(waiting).toBeDisabled();
+      fireEvent.click(waiting);
+      expect(mocks.markPaid).not.toHaveBeenCalled();
+      expect(screen.queryByRole('button', { name: 'Đóng' })).toBeNull();
+
+      finishUpload('https://img.test/moi.png');
+      const save = await screen.findByRole('button', { name: 'Đánh dấu đã trả' });
+      expect(save).toBeEnabled();
+      expect(screen.getByRole('button', { name: 'Đóng' })).toBeInTheDocument();
+      fireEvent.click(save);
+      await waitFor(() => expect(mocks.markPaid).toHaveBeenCalledTimes(1));
+      expect(mocks.markPaid).toHaveBeenCalledWith('u1', { year: 2026, month: 3, proofImageUrl: 'https://img.test/moi.png', note: undefined });
+    });
+
+    it('đang lưu thì ô ảnh khoá: đổi ảnh lúc này không vào bản đang gửi', async () => {
+      let release!: (v: unknown) => void;
+      mocks.markPaid.mockReturnValueOnce(new Promise((r) => (release = r)));
+      await openPaySheet();
+      fireEvent.click(screen.getByRole('button', { name: 'Ảnh xác nhận chuyển khoản *' }));
+      expect(screen.getByRole('button', { name: 'Ảnh xác nhận chuyển khoản *' })).toBeEnabled();
+      fireEvent.click(screen.getByRole('button', { name: 'Đánh dấu đã trả' }));
+      await waitFor(() => expect(mocks.markPaid).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Ảnh xác nhận chuyển khoản *' })).toBeDisabled());
+      expect(mocks.picker.disabled).toBe(true);
+      await act(async () => release({ paid: true }));
+      await waitFor(() => expect(screen.queryByText('Đánh dấu đã trả')).not.toBeInTheDocument());
     });
   });
 });

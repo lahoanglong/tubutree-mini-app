@@ -39,6 +39,8 @@ import { haptic } from '../utils/haptic';
 import { promoDateRangeError, promoFormDates, promoWindow } from '../utils/brand-owner-promo';
 import { hasOA, openOAChat } from '../services/zmp-bridge';
 import { usePublicConfig } from '../hooks/use-public-config';
+import { useUploadBusy } from '../hooks/use-upload-busy';
+import { vi } from '../i18n/vi';
 import { BrandSalesTab } from './brand-owner-sales';
 import { INPUT_LIMITS } from '../utils/input-limits';
 
@@ -119,6 +121,8 @@ function Editor({ brand }: { brand: OwnedBrand }) {
     origin: brand.origin ?? '',
     story: brand.story ?? '',
   });
+  // Cờ nằm ở Editor (không ở tab Hồ sơ) vì đổi sang tab Doanh thu gỡ ô ảnh còn lượt tải đang chạy; ảnh về muộn vẫn ghi vào `f`.
+  const { busy: imagesBusy, onBusyChange } = useUploadBusy();
   const saveMut = useLockedMutation({
     mutationFn: () => updateOwnedBrand(f),
     onSuccess: () => { haptic('medium'); openSnackbar({ text: BRAND_OWNER_SAVED, type: 'success' }); void refresh(); },
@@ -227,19 +231,27 @@ function Editor({ brand }: { brand: OwnedBrand }) {
           {/* Thông tin thương hiệu */}
           <Card style={{ margin: '0 16px 12px' }}>
             <Heading variant="title-sm" as="h2" style={{ marginBottom: 8 }}>{BRAND_OWNER_INFO}</Heading>
-            <div style={{ marginBottom: 8 }}><ImageUpload label="Logo" value={f.logoUrl} onChange={(url) => setF({ ...f, logoUrl: url })} /></div>
-            <div style={{ marginBottom: 8 }}><ImageUpload label="Ảnh bìa" value={f.coverUrl} onChange={(url) => setF({ ...f, coverUrl: url })} /></div>
+            <div style={{ marginBottom: 8 }}><ImageUpload label="Logo" value={f.logoUrl} onChange={(url) => setF((p) => ({ ...p, logoUrl: url }))} onBusyChange={onBusyChange} disabled={saveMut.isPending} /></div>
+            <div style={{ marginBottom: 8 }}><ImageUpload label="Ảnh bìa" value={f.coverUrl} onChange={(url) => setF((p) => ({ ...p, coverUrl: url }))} onBusyChange={onBusyChange} disabled={saveMut.isPending} /></div>
             <div style={{ marginBottom: 8 }}>
-              <Field label="Câu giới thiệu ngắn"><Input maxLength={INPUT_LIMITS.brandTagline} value={f.tagline} onChange={(e) => setF({ ...f, tagline: e.target.value })} /></Field>
+              <Field label="Câu giới thiệu ngắn"><Input maxLength={INPUT_LIMITS.brandTagline} value={f.tagline} onChange={(e) => { const v = e.target.value; setF((p) => ({ ...p, tagline: v })); }} /></Field>
             </div>
             <div style={{ marginBottom: 8 }}>
-              <Field label="Nguồn gốc"><Input maxLength={INPUT_LIMITS.brandOrigin} value={f.origin} onChange={(e) => setF({ ...f, origin: e.target.value })} /></Field>
+              <Field label="Nguồn gốc"><Input maxLength={INPUT_LIMITS.brandOrigin} value={f.origin} onChange={(e) => { const v = e.target.value; setF((p) => ({ ...p, origin: v })); }} /></Field>
             </div>
             <div style={{ marginBottom: 8 }}>
-              <Field label="Câu chuyện thương hiệu"><Input.TextArea maxLength={INPUT_LIMITS.brandStory} value={f.story} onChange={(e) => setF({ ...f, story: e.target.value })} /></Field>
+              <Field label="Câu chuyện thương hiệu"><Input.TextArea maxLength={INPUT_LIMITS.brandStory} value={f.story} onChange={(e) => { const v = e.target.value; setF((p) => ({ ...p, story: v })); }} /></Field>
             </div>
-            <Button fullWidth loading={saveMut.isPending} onPress={() => saveMut.mutate()}>
-              Lưu thông tin
+            <Button
+              fullWidth
+              loading={saveMut.isPending}
+              disabled={imagesBusy}
+              onPress={() => {
+                if (imagesBusy) return;
+                saveMut.mutate();
+              }}
+            >
+              {imagesBusy ? vi.common.imagesUploading : 'Lưu thông tin'}
             </Button>
           </Card>
 

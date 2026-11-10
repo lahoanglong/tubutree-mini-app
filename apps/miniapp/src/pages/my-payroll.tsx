@@ -20,6 +20,8 @@ import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
 import { ImageUpload } from '../components/image-upload';
 import { PeriodNav } from '../components/period-nav';
+import { vi } from '../i18n/vi';
+import { useUploadBusy } from '../hooks/use-upload-busy';
 import { formatVnd } from '../utils/format';
 import { safeImageUrl } from '../utils/safe-image-url';
 import {
@@ -119,6 +121,8 @@ function MyPayrollHub() {
   const [accNo, setAccNo] = useState('');
   const [accName, setAccName] = useState('');
   const [qr, setQr] = useState('');
+  // Cờ nằm ở trang vì tấm "Thông tin nhận lương" gỡ nội dung khi đóng; tấm không đóng được lúc ảnh QR còn lên.
+  const { busy: qrBusy, onBusyChange: onQrBusyChange } = useUploadBusy();
 
   const openBank = () => {
     setBin(profileCache?.bankBin ?? '');
@@ -266,10 +270,20 @@ function MyPayrollHub() {
       <BottomSheet
         open={bankOpen}
         onClose={() => setBankOpen(false)}
+        // Đóng giữa lúc ảnh QR còn đang lên rồi mở lại: ảnh về muộn đè lên bản vừa nạp lại từ hồ sơ.
+        dismissible={!qrBusy}
         title="Thông tin nhận lương"
         footer={
-          <Button fullWidth loading={bankM.isPending} onPress={() => bankM.mutate()}>
-            Lưu
+          <Button
+            fullWidth
+            loading={bankM.isPending}
+            disabled={qrBusy}
+            onPress={() => {
+              if (qrBusy) return;
+              bankM.mutate();
+            }}
+          >
+            {qrBusy ? vi.common.imagesUploading : 'Lưu'}
           </Button>
         }
       >
@@ -284,7 +298,7 @@ function MyPayrollHub() {
             <Input maxLength={INPUT_LIMITS.bankAccountName} value={accName} onChange={(e) => setAccName(e.target.value)} />
           </Field>
           <Text variant="caption" tone="tertiary" as="div">Hoặc tải ảnh QR nhận tiền (ưu tiên nếu có):</Text>
-          <ImageUpload label="QR nhận lương" value={qr} onChange={setQr} />
+          <ImageUpload label="QR nhận lương" value={qr} onChange={setQr} onBusyChange={onQrBusyChange} disabled={bankM.isPending} />
         </div>
       </BottomSheet>
     </Page>

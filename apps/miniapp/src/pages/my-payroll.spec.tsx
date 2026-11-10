@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import { formatVnd } from '../utils/format';
+import { vi as t } from '../i18n/vi';
 
 const mocks = vi.hoisted(() => ({
   getMyPayroll: vi.fn(),
@@ -11,6 +12,8 @@ const mocks = vi.hoisted(() => ({
   openSnackbar: vi.fn(),
   navigate: vi.fn(),
   role: 'STAFF' as string,
+  // Ô ảnh giả ghi lại props lần vẽ gần nhất: test tự báo "đang tải"/"tải xong" như ô thật.
+  picker: { onChange: (_url: string): void => undefined, onBusyChange: (_busy: boolean): void => undefined, disabled: false },
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -27,11 +30,14 @@ vi.mock('../store/auth', () => ({
   useAuthStore: (sel: (s: { user: { role: string } }) => unknown) => sel({ user: { role: mocks.role } }),
 }));
 vi.mock('../components/image-upload', () => ({
-  ImageUpload: ({ label, onChange }: { label: string; onChange: (url: string) => void }) => (
-    <button type="button" onClick={() => onChange('https://img.test/qr.png')}>
-      {label}
-    </button>
-  ),
+  ImageUpload: ({ label, onChange, onBusyChange, disabled }: { label: string; onChange: (url: string) => void; onBusyChange?: (busy: boolean) => void; disabled?: boolean }) => {
+    mocks.picker = { onChange, onBusyChange: onBusyChange ?? (() => undefined), disabled: Boolean(disabled) };
+    return (
+      <button type="button" disabled={disabled} onClick={() => onChange('https://img.test/qr.png')}>
+        {label}
+      </button>
+    );
+  },
 }));
 
 import MyPayrollPage from './my-payroll';
@@ -373,5 +379,76 @@ describe('Lương của tôi: "Lưu" thông tin nhận lương khoá chạm đú
     fireEvent.click(screen.getByRole('button', { name: 'Lưu' }));
     await waitFor(() => expect(mocks.updateBank).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã lưu thông tin nhận lương.', type: 'success' }));
+  });
+});
+
+describe('Lương của tôi: ảnh QR còn đang lên thì "Lưu" chờ (W90A)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-03-15T05:00:00Z'));
+    vi.clearAllMocks();
+    mocks.role = 'STAFF';
+    mocks.getMyPayroll.mockImplementation((year: number, month: number) => Promise.resolve(payroll(year, month)));
+    mocks.getHistory.mockResolvedValue(SESSIONS);
+    mocks.updateBank.mockResolvedValue(PROFILE);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+  const openBankSheet = async () => {
+    renderPage();
+    await screen.findByText('Thực nhận tháng 3/2026');
+    fireEvent.click(screen.getByRole('button', { name: 'Thông tin nhận lương' }));
+    await screen.findByRole('button', { name: 'QR nhận lương' });
+  };
+
+  it('đang tải QR: nút Lưu khoá + đổi nhãn, bấm không gọi updateBank; tải xong thì lưu kèm QR mới', async () => {
+    await openBankSheet();
+    act(() => mocks.picker.onBusyChange(true));
+    const waiting = screen.getByRole('button', { name: t.common.imagesUploading });
+    expect(waiting).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Lưu' })).toBeNull();
+    fireEvent.click(waiting);
+    await new Promise((r) => setTimeout(r, 30));
+    expect(mocks.updateBank).not.toHaveBeenCalled();
+
+    act(() => {
+      mocks.picker.onChange('https://img.test/qr-moi.png');
+      mocks.picker.onBusyChange(false);
+    });
+    const save = await screen.findByRole('button', { name: 'Lưu' });
+    expect(save).toBeEnabled();
+    fireEvent.click(save);
+    await waitFor(() => expect(mocks.updateBank).toHaveBeenCalledTimes(1));
+    expect(mocks.updateBank).toHaveBeenCalledWith(expect.objectContaining({ qrImageUrl: 'https://img.test/qr-moi.png' }));
+  });
+
+  it('QR còn đang lên: tấm không đóng được (mất nút Đóng, Esc không đóng); xong thì đóng được', async () => {
+    await openBankSheet();
+    expect(screen.getByRole('button', { name: 'Đóng' })).toBeInTheDocument();
+
+    act(() => mocks.picker.onBusyChange(true));
+    expect(screen.queryByRole('button', { name: 'Đóng' })).toBeNull();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.getByRole('button', { name: 'QR nhận lương' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: t.common.imagesUploading })).toBeDisabled();
+
+    // Xong lượt tải thì Esc đóng được: chứng tỏ Esc ở trên bị chặn vì khoá chứ không phải vì test không bắt được phím.
+    act(() => mocks.picker.onBusyChange(false));
+    expect(await screen.findByRole('button', { name: 'Đóng' })).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'QR nhận lương' })).toBeNull());
+  });
+
+  it('đang lưu thì ô ảnh khoá: đổi QR lúc này không vào bản đang gửi', async () => {
+    let release!: (v: unknown) => void;
+    mocks.updateBank.mockReturnValueOnce(new Promise((r) => (release = r)));
+    await openBankSheet();
+    expect(screen.getByRole('button', { name: 'QR nhận lương' })).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu' }));
+    await waitFor(() => expect(mocks.updateBank).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'QR nhận lương' })).toBeDisabled());
+    await act(async () => release(PROFILE));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'QR nhận lương' })).toBeNull());
   });
 });

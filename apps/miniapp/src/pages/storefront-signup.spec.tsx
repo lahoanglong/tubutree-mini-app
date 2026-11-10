@@ -2,6 +2,7 @@ import { act, render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { vi as t } from '../i18n/vi';
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
@@ -35,10 +36,13 @@ vi.mock('zmp-ui', async (importOriginal) => ({
 }));
 vi.mock('../services/storefront-api', () => ({ ...mocks }));
 vi.mock('../services/affiliate-api', () => ({ getAffiliateMe: mocks.getAffiliateMe, getCtvTiers: mocks.getCtvTiers }));
+// Ô ảnh giả ghi lại props lần vẽ gần nhất theo nhãn: test tự báo "đang tải"/"tải xong" như ô thật.
+const pickers = vi.hoisted(() => ({} as Record<string, { onChange: (v: string) => void; onBusyChange: (busy: boolean) => void; disabled: boolean }>));
 vi.mock('../components/image-upload', () => ({
-  ImageUpload: ({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) => (
-    <input aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} />
-  ),
+  ImageUpload: ({ label, value, onChange, onBusyChange, disabled }: { label: string; value: string; onChange: (v: string) => void; onBusyChange?: (busy: boolean) => void; disabled?: boolean }) => {
+    pickers[label] = { onChange, onBusyChange: onBusyChange ?? (() => undefined), disabled: Boolean(disabled) };
+    return <input aria-label={label} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} />;
+  },
 }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
@@ -426,5 +430,58 @@ describe('Khoá chạm đúp: hai cú chạm cùng khung hình chỉ gửi một
       fireEvent.click(submit);
       await waitFor(() => expect(mocks.publishStorefront).toHaveBeenCalledTimes(2));
     });
+  });
+});
+
+describe('Bước 2/4: ảnh đại diện và ảnh bìa còn đang lên thì "Tiếp tục" chờ (W90A)', () => {
+  const AVATAR = 'Ảnh đại diện';
+  const COVER = 'Ảnh bìa';
+  const openInfoStep = async () => {
+    mocks.getMyStorefront.mockResolvedValue(draft());
+    renderPage();
+    await screen.findByLabelText('Tên gian hàng');
+  };
+
+  it('hai ô tải chồng nhau: còn một ô chưa xong là nút vẫn khoá, bấm không lưu; cả hai xong mới lưu, kèm ảnh MỚI rồi sang bước 3', async () => {
+    await openInfoStep();
+    act(() => pickers[AVATAR]!.onBusyChange(true));
+    act(() => pickers[COVER]!.onBusyChange(true));
+    const waiting = screen.getByRole('button', { name: t.common.imagesUploading });
+    expect(waiting).toBeDisabled();
+    fireEvent.click(waiting);
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+    expect(mocks.updateStorefront).not.toHaveBeenCalled();
+
+    act(() => {
+      pickers[AVATAR]!.onChange('https://cdn.example/a2.png');
+      pickers[AVATAR]!.onBusyChange(false);
+    });
+    expect(screen.getByRole('button', { name: t.common.imagesUploading })).toBeDisabled();
+
+    act(() => {
+      pickers[COVER]!.onChange('https://cdn.example/c2.png');
+      pickers[COVER]!.onBusyChange(false);
+    });
+    const go = await screen.findByRole('button', { name: 'Tiếp tục' });
+    expect(go).toBeEnabled();
+    fireEvent.click(go);
+    await waitFor(() => expect(mocks.updateStorefront).toHaveBeenCalledTimes(1));
+    expect(mocks.updateStorefront).toHaveBeenCalledWith(expect.objectContaining({ avatarUrl: 'https://cdn.example/a2.png', coverUrl: 'https://cdn.example/c2.png' }));
+    expect(await screen.findByText('Bước 3/4')).toBeInTheDocument();
+  });
+
+  it('đang lưu thông tin thì cả hai ô ảnh khoá', async () => {
+    let release!: (v: unknown) => void;
+    mocks.updateStorefront.mockReturnValueOnce(new Promise((r) => (release = r)));
+    await openInfoStep();
+    expect(screen.getByLabelText(AVATAR)).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Tiếp tục' }));
+    await waitFor(() => expect(mocks.updateStorefront).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByLabelText(AVATAR)).toBeDisabled());
+    expect(screen.getByLabelText(COVER)).toBeDisabled();
+    await act(async () => release({}));
+    expect(await screen.findByText('Bước 3/4')).toBeInTheDocument();
   });
 });

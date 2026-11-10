@@ -26,6 +26,8 @@ import {
 import { getAffiliateMe } from '../services/affiliate-api';
 import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { haptic } from '../utils/haptic';
+import { vi } from '../i18n/vi';
+import { useUploadBusy } from '../hooks/use-upload-busy';
 import { BottomSheet } from '../components/ui/bottom-sheet';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
@@ -177,6 +179,8 @@ function InfoStep({ sf, onBack, onDone }: { sf: StorefrontEdit; onBack: () => vo
   const [avatarUrl, setAvatarUrl] = useState(sf.avatarUrl ?? '');
   const [coverUrl, setCoverUrl] = useState(sf.coverUrl ?? '');
   const [error, setError] = useState<string | null>(null);
+  // Sang bước sau lúc ảnh còn đang lên sẽ gửi ảnh cũ (hoặc rỗng), ảnh mới về sau mất cùng bước này.
+  const { busy: imagesBusy, onBusyChange } = useUploadBusy();
 
   const saveMut = useLockedMutation({
     mutationFn: () =>
@@ -189,6 +193,7 @@ function InfoStep({ sf, onBack, onDone }: { sf: StorefrontEdit; onBack: () => vo
   });
 
   const next = () => {
+    if (imagesBusy) return;
     const problem = validateStorefrontInfo({ title, headerNote: note });
     setError(problem);
     if (!problem) saveMut.mutate();
@@ -220,10 +225,13 @@ function InfoStep({ sf, onBack, onDone }: { sf: StorefrontEdit; onBack: () => vo
       </Card>
       <Card style={SECTION}>
         <Heading variant="title-sm" as="h3" style={{ marginBottom: 8 }}>{SIGNUP_COPY.imagesTitle}</Heading>
-        <ImageUpload label="Ảnh đại diện" value={avatarUrl} onChange={setAvatarUrl} maxDim={400} quality={0.8} />
-        <ImageUpload label="Ảnh bìa" value={coverUrl} onChange={setCoverUrl} maxDim={1000} quality={0.75} />
+        <ImageUpload label="Ảnh đại diện" value={avatarUrl} onChange={setAvatarUrl} onBusyChange={onBusyChange} disabled={saveMut.isPending} maxDim={400} quality={0.8} />
+        <ImageUpload label="Ảnh bìa" value={coverUrl} onChange={setCoverUrl} onBusyChange={onBusyChange} disabled={saveMut.isPending} maxDim={1000} quality={0.75} />
       </Card>
-      <StepBar onBack={onBack} next={{ label: SIGNUP_COPY.next, loading: saveMut.isPending, onPress: next }} />
+      <StepBar
+        onBack={onBack}
+        next={{ label: imagesBusy ? vi.common.imagesUploading : SIGNUP_COPY.next, loading: saveMut.isPending, disabled: imagesBusy, onPress: next }}
+      />
     </>
   );
 }
