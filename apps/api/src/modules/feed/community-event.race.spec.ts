@@ -1,5 +1,4 @@
 import { BadRequestException, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
-import type { RaceDb } from '../../../test/fakes/race-db.fake';
 import { tick } from '../../../test/fakes/race-db.fake';
 import { createCommunityRaceDb, eventEntry } from '../../../test/fakes/w101a-helpers';
 import { RewardPointsService } from '../wallet/reward-points.service';
@@ -49,8 +48,8 @@ const eventRow = (id = 'e1', over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-function setup(opts: { advisoryLocks?: boolean; event?: Record<string, unknown> | null; config?: Record<string, unknown>; onFeedPostInsert?: (db: RaceDb) => void } = {}) {
-  const { db, prisma } = createCommunityRaceDb({ advisoryLocks: opts.advisoryLocks, onFeedPostInsert: opts.onFeedPostInsert });
+function setup(opts: { event?: Record<string, unknown> | null; config?: Record<string, unknown> } = {}) {
+  const { db, prisma } = createCommunityRaceDb();
   db.seed(
     'user',
     ['u1', 'u2', 'u3', 'a1'].map((id) => ({ id, role: 'CUSTOMER', pointsBalance: 0, pointsConvertedBalance: 0 })),
@@ -73,7 +72,7 @@ function setup(opts: { advisoryLocks?: boolean; event?: Record<string, unknown> 
   const close = (eventId = 'e1') => feed.closeEvent(eventId);
 
   const ev = (id = 'e1') => db.row('communityEvent', id)!;
-  const wins = (id = 'e1') => db.rows('pointsTransaction').filter((t) => String(t.reason).startsWith(`COMMUNITY_EVENT_WIN:${id}:`));
+  const wins = (id = 'e1') => db.rows('pointsTransaction').filter((t) => String(t.reason).startsWith(`COMMUNITY_EVENT_WIN:${id}`));
   const postRows = (eventId: string | null = 'e1') => db.rows('feedPost').filter((p) => p.metaEventId === eventId);
   const balance = (id: string) => db.row('user', id)!.pointsBalance as number;
   const ledgerSum = (id: string) => db.rows('pointsTransaction').filter((t) => t.userId === id).reduce((s, t) => s + (t.delta as number), 0);
@@ -118,6 +117,26 @@ describe('Sự kiện cộng đồng: đăng bài dự thi (createPost với eve
     expect(h.postRows()).toHaveLength(1);
     expect(h.db.rows('pointsTransaction').filter((t) => String(t.reason).startsWith('COMMUNITY_POST:'))).toHaveLength(1);
     expect(h.db.stats.lockWaits).toBeGreaterThan(0);
+  });
+
+  // Trần thật: community.daily_post_reward_cap = 1 (seed.ts và giá trị dự phòng trong CommunityRewardService.rewardPost). Hai bài KHÁC nhau của cùng
+  // một người đều PUBLISHED nhưng chỉ bài vào sổ trước nhận thưởng; đếm-rồi-cấp nằm dưới khoá dòng người nhận (FOR NO KEY UPDATE).
+  it('hai bài khác nhau của cùng một người đăng song song (quét thời điểm): thưởng đăng bài trong ngày không vượt trần 1, sổ khớp số dư', async () => {
+    let waits = 0;
+    for (const skew of SWEEP) {
+      const h = setup();
+      const [a, b] = await race(skew, () => h.post('u1', { body: 'Bài thứ nhất của tôi' }), () => h.post('u1', { body: 'Bài thứ hai của tôi' }));
+      const label = `skew ${skew}`;
+      is(label, [a.status, b.status], ['fulfilled', 'fulfilled']);
+      is(label, h.postRows().length, 2);
+      is(label, h.postRows().map((p) => p.status), ['PUBLISHED', 'PUBLISHED']);
+      const rewards = h.db.rows('pointsTransaction').filter((t) => t.refType === 'COMMUNITY' && String(t.reason).startsWith('COMMUNITY_POST:'));
+      is(label, rewards.length, 1);
+      is(label, h.balance('u1'), rewards[0]!.delta);
+      is(label, h.ledgerSum('u1'), h.balance('u1'));
+      waits += h.db.stats.lockWaits;
+    }
+    expect(waits).toBeGreaterThan(0);
   });
 
   it('cùng nội dung nhưng khác sự kiện, khác người, hoặc không dự sự kiện nào: mỗi bài vẫn được tạo, không bị nuốt', async () => {
@@ -370,15 +389,20 @@ describe('Sự kiện cộng đồng: chọn người thắng (pickWinner)', () 
     expect(broken.wins()).toHaveLength(1);
   });
 
-  it('khoá idempotency của thưởng theo người: một người nhận một lần; nhưng hai người khác nhau cùng sự kiện đều nhận được, nên chỉ phép đóng có điều kiện chặn trả thưởng đôi', async () => {
+  // Khoá thưởng nhúng userId nên một người nhận tối đa một khoản cho mỗi sự kiện; cái chặn hai NGƯỜI KHÁC NHAU cùng thắng một sự kiện là cổng
+  // `count === 1` của pickWinner (các test hai quản trị ở trên), không phải khoá này. Test chỉ khẳng định phần của khoá: không ai nhận hai lần.
+  it('thưởng người thắng idempotent theo người: gọi lại cho cùng một người không cộng thêm; mỗi người tối đa một khoản', async () => {
     const h = setup();
     const expiresAt = await h.reward.expiresAt();
     await expect(h.reward.rewardEventWinner('u1', 'e1', POINTS, undefined, expiresAt)).resolves.toBe(true);
     await expect(h.reward.rewardEventWinner('u1', 'e1', POINTS, undefined, expiresAt)).resolves.toBe(false);
-    expect(h.wins()).toHaveLength(1);
+    await h.reward.rewardEventWinner('u2', 'e1', POINTS, undefined, expiresAt);
+    await h.reward.rewardEventWinner('u2', 'e1', POINTS, undefined, expiresAt);
+    expect(h.wins().length).toBeGreaterThanOrEqual(1);
+    for (const userId of ['u1', 'u2']) expect(h.wins().filter((t) => t.userId === userId).length).toBeLessThanOrEqual(1);
     expect(h.balance('u1')).toBe(POINTS);
-    await expect(h.reward.rewardEventWinner('u2', 'e1', POINTS, undefined, expiresAt)).resolves.toBe(true);
-    expect(h.wins().map((t) => t.userId).sort()).toEqual(['u1', 'u2']);
+    expect(h.ledgerSum('u1')).toBe(h.balance('u1'));
+    expect(h.ledgerSum('u2')).toBe(h.balance('u2'));
   });
 });
 

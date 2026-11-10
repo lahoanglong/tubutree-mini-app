@@ -13,14 +13,10 @@ import { pgLikeClient } from './race-db-client';
  *  - `pointsTransaction.createManyAndReturn` (applyPointsDelta ghi dòng thưởng bằng nó): dựng trên createMany(skipDuplicates) = ON CONFLICT DO NOTHING.
  * Và đúng như Postgres, `create` bỏ khoá có giá trị `undefined` (để cột lấy giá trị mặc định thay vì ghi đè bằng undefined).
  *
- * Khoá advisory khớp CHÍNH XÁC /pg_advisory_xact_lock\(/ (không khớp biến thể _shared); `advisoryLocks: false` bỏ khoá để chứng minh
- * tầng khác không gánh thay. Ràng buộc unique của sổ điểm: partial unique `reason` WHERE refType = 'COMMUNITY' (migration 20261012100000).
+ * Khoá advisory khớp CHÍNH XÁC /pg_advisory_xact_lock\(/ (không khớp biến thể _shared). Khoá dòng người nhận thưởng (SELECT ... FROM "users")
+ * chỉ áp khi chính chuỗi SQL còn chứa FOR NO KEY UPDATE (cờ `locking`): bỏ đoạn đó khỏi dịch vụ thì khoá biến mất và thưởng đôi lộ ra, thay vì
+ * handler không khớp và lỗi bị nuốt. Ràng buộc unique của sổ điểm: partial unique `reason` WHERE refType = 'COMMUNITY' (migration 20261012100000).
  */
-export interface CommunityRaceOptions {
-  advisoryLocks?: boolean;
-  /** Gọi ngay trước khi bài được INSERT (trạng thái đã commit của DB lúc đó đọc được qua `db`). */
-  onFeedPostInsert?: (db: RaceDb) => void;
-}
 
 export function communityRaceTables(): Record<string, TableSpec> {
   return {
@@ -56,14 +52,13 @@ function translateWhere(where: any): any {
   return out;
 }
 
-function wrap(client: any, opts: CommunityRaceOptions, db: RaceDb, counter: { n: number }): any {
+function wrap(client: any, counter: { n: number }): any {
   const feedPost = client.feedPost;
   const wrapped: Record<string, any> = {
     ...client,
     feedPost: {
       ...feedPost,
       create: (args: any) => {
-        opts.onFeedPostInsert?.(db);
         const data = dropUndefined(args.data);
         return feedPost.create({
           ...args,
@@ -95,28 +90,28 @@ function wrap(client: any, opts: CommunityRaceOptions, db: RaceDb, counter: { n:
     },
   };
   if (typeof client.$transaction === 'function') {
-    wrapped.$transaction = (fn: (tx: any) => Promise<unknown>) => client.$transaction((tx: any) => fn(wrap(tx, opts, db, counter)));
+    wrapped.$transaction = (fn: (tx: any) => Promise<unknown>) => client.$transaction((tx: any) => fn(wrap(tx, counter)));
   }
   return wrapped;
 }
 
-export function createCommunityRaceDb(opts: CommunityRaceOptions = {}): { db: RaceDb; prisma: any } {
+export function createCommunityRaceDb(): { db: RaceDb; prisma: any } {
   const db = new RaceDb(communityRaceTables());
   db.handlers.push(
     {
       match: /pg_advisory_xact_lock\(/,
-      run: (c) => (opts.advisoryLocks === false ? Promise.resolve() : c.lockKey(`${c.sql.replace(/\s+/g, ' ')}|${c.params.join('|')}`)).then(() => 1),
+      run: (c) => c.lockKey(`${c.sql.replace(/\s+/g, ' ')}|${c.params.join('|')}`).then(() => 1),
     },
-    // rewardWithDailyCap khoá dòng người nhận; chỉ khoá khi chính câu SQL còn FOR NO KEY UPDATE.
+    // rewardWithDailyCap khoá dòng người nhận; handler khớp câu SELECT khoá người dùng dù có hay không có FOR NO KEY UPDATE, và chỉ khoá khi còn.
     {
-      match: /FROM "users" WHERE "id" = \? FOR NO KEY UPDATE/,
+      match: /SELECT 1 FROM "users" WHERE "id" = \?/,
       run: async (c) => {
         if (c.locking) await c.lockRow('user', c.params[0] as string);
         return [{ '?column?': 1 }];
       },
     },
   );
-  return { db, prisma: wrap(pgLikeClient(db), opts, db, { n: 0 }) };
+  return { db, prisma: wrap(pgLikeClient(db), { n: 0 }) };
 }
 
 /** Bài dự thi đã seed thẳng vào DB giả: ghi luôn hai cột phẳng mà `create` của client bọc sẽ ghi. */

@@ -1,7 +1,7 @@
 import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { vi as t } from '../i18n/vi';
 import type { AdminPendingPost, AdminReport, AdminCommunityEvent, EventParticipant } from '../services/feed-api';
 import { HttpError } from '../services/http';
@@ -1143,5 +1143,91 @@ describe('CommunityModerationPage: sự kiện giữ khoá tới khi danh sách 
     expect(mocks.adminEventParticipants).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole('button', { name: 'Chốt Người binh là người thắng' }));
     await waitFor(() => expect(mocks.pickEventWinner).toHaveBeenCalledTimes(2));
+  });
+
+  it.each([403, 429])('chốt bị từ chối với mã %i (không phải sự kiện đổi trạng thái): báo lỗi, không tải lại danh sách, nhả khoá ngay để bấm lại', async (status) => {
+    const message = 'Bạn không có quyền thực hiện thao tác này.';
+    mocks.pickEventWinner.mockRejectedValueOnce(rejected(status, message));
+    await openEventsTab();
+    fireEvent.click(await choose());
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: message, type: 'error' }));
+    expect(openCalls()).toBe(1);
+    expect(mocks.adminEventParticipants).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Chốt Người binh là người thắng' }));
+    await waitFor(() => expect(mocks.pickEventWinner).toHaveBeenCalledTimes(2));
+  });
+
+  it.each([403, 429])('Đóng bị từ chối với mã %i: báo lỗi, không tải lại danh sách, nhả khoá ngay để bấm lại', async (status) => {
+    const message = 'Bạn thao tác quá nhanh, vui lòng thử lại sau.';
+    mocks.closeEvent.mockRejectedValueOnce(rejected(status, message));
+    await openEventsTab();
+    fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: message, type: 'error' }));
+    expect(openCalls()).toBe(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+    await waitFor(() => expect(mocks.closeEvent).toHaveBeenCalledTimes(2));
+  });
+
+  describe('danh sách tải lại treo mãi: khoá vẫn nhả sau tối đa 4 giây (settleWithin)', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+    const busyClose = () => screen.getByRole('button', { name: 'Đóng' });
+
+    it.each([
+      ['chốt thành công', null, 'pick'],
+      ['chốt bị từ chối vì sự kiện đã đóng (400)', rejected(400, 'Sự kiện đã đóng hoặc đã chọn người thắng.'), 'pick'],
+      ['Đóng thành công', null, 'close'],
+    ] as const)('%s', async (_label, error, kind) => {
+      if (error) mocks.pickEventWinner.mockRejectedValueOnce(error);
+      holdOpenRefetch();
+      await openEventsTab();
+      const go = kind === 'pick' ? await choose() : busyClose();
+      // Chỉ giả setTimeout: waitFor của testing-library và vòng đời khác không bị đụng, nhưng settleWithin và lô thông báo của react-query thì có.
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      await act(async () => {
+        fireEvent.click(go);
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(openCalls()).toBe(2);
+      expect(busyClose()).toHaveAttribute('aria-busy', 'true');
+      const closeCalls = kind === 'close' ? 1 : 0;
+      expect(mocks.closeEvent).toHaveBeenCalledTimes(closeCalls);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3_900);
+      });
+      expect(busyClose()).toHaveAttribute('aria-busy', 'true');
+      expect(mocks.closeEvent).toHaveBeenCalledTimes(closeCalls);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(200);
+      });
+      expect(busyClose()).not.toHaveAttribute('aria-busy', 'true');
+      await act(async () => {
+        fireEvent.click(busyClose());
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(mocks.closeEvent).toHaveBeenCalledTimes(closeCalls + 1);
+    });
+  });
+
+  it.each([
+    ['Đóng', async () => {
+      mocks.closeEvent.mockRejectedValueOnce(rejected(404, 'Không tìm thấy bản ghi.'));
+      fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+    }],
+    ['Chốt người thắng', async () => {
+      mocks.pickEventWinner.mockRejectedValueOnce(rejected(404, 'Không tìm thấy bản ghi.'));
+      fireEvent.click(await choose());
+    }],
+  ])('%s bị từ chối: snackbar lỗi hiện ngay, không đợi danh sách tải lại xong', async (_label, act1) => {
+    holdOpenRefetch();
+    await openEventsTab();
+    await act1();
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Không tìm thấy bản ghi.', type: 'error' }));
+    // Danh sách đã bắt đầu tải lại nhưng chưa về (treo): câu báo lỗi không phụ thuộc nó.
+    await waitFor(() => expect(openCalls()).toBe(2));
+    expect(screen.getByText('Sự kiện e1')).toBeInTheDocument();
   });
 });
