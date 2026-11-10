@@ -58,9 +58,13 @@ export default function BrandOwnerPage() {
   const navigate = useNavigate();
   const chatOn = usePublicConfig().chat?.enabled === true;
   const canMessage = chatOn || hasOA;
+  // Trả Promise của cầu nối OA để Button khoá cú chạm kế tới khi mở xong, khỏi mở hai khung chat.
   const messageTubu = () => {
-    if (chatOn) navigate('/chat');
-    else void openOAChat();
+    if (chatOn) {
+      navigate('/chat');
+      return;
+    }
+    return openOAChat();
   };
 
   if (q.isLoading) {

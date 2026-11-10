@@ -334,6 +334,80 @@ describe('Ca làm của tôi theo DS v2 (C-076, C-114)', () => {
       await waitFor(() => expect(mocks.getAttendanceStatus).toHaveBeenCalledTimes(2));
     });
 
+    it('ra ca trong lúc nhịp heartbeat còn đang lấy vị trí: nhịp cũ không gửi heartbeat và không báo "tự ra ca"', async () => {
+      const spy = vi.spyOn(globalThis, 'setInterval');
+      mocks.getAttendanceStatus
+        .mockResolvedValueOnce({ shifts: [], openSession: OPEN_SESSION })
+        .mockResolvedValue({ shifts: [], openSession: null });
+      let gotLocation!: (v: unknown) => void;
+      mocks.acquireLocationPayload.mockReturnValueOnce(new Promise((r) => (gotLocation = r)));
+      mocks.heartbeat.mockResolvedValue({ closed: true });
+      renderPage();
+      await screen.findByText('Đang trong ca · vào lúc 08:30 · đi trễ');
+      const tick = spy.mock.calls.find((c) => c[1] === 3 * 60 * 1000)![0] as () => Promise<void>;
+      const running = tick();
+      fireEvent.click(screen.getByRole('button', { name: 'Ra ca' }));
+      await waitFor(() => expect(mocks.checkout).toHaveBeenCalledTimes(1));
+      await screen.findByText('Hôm nay bạn không có ca đã duyệt.');
+      await act(async () => {
+        gotLocation({ lat: 1, lng: 2 });
+        await running;
+      });
+      expect(mocks.heartbeat).not.toHaveBeenCalled();
+      expect(mocks.openSnackbar).not.toHaveBeenCalledWith({ text: 'Đã tự ra ca (ra khỏi vùng công ty).', type: 'info' });
+    });
+
+    it('ra ca trong lúc nhịp heartbeat còn đang lấy vị trí: lỗi vị trí đến muộn không hiện cảnh báo', async () => {
+      const spy = vi.spyOn(globalThis, 'setInterval');
+      mocks.getAttendanceStatus
+        .mockResolvedValueOnce({ shifts: [], openSession: OPEN_SESSION })
+        .mockResolvedValue({ shifts: [], openSession: null });
+      let failLate!: () => void;
+      mocks.acquireLocationPayload.mockImplementationOnce(
+        (onFailure?: (m: string) => void) =>
+          new Promise((r) => {
+            failLate = () => {
+              onFailure?.('Không lấy được vị trí: hết thời gian chờ tín hiệu GPS.');
+              r({});
+            };
+          }),
+      );
+      renderPage();
+      await screen.findByText('Đang trong ca · vào lúc 08:30 · đi trễ');
+      const tick = spy.mock.calls.find((c) => c[1] === 3 * 60 * 1000)![0] as () => Promise<void>;
+      const running = tick();
+      fireEvent.click(screen.getByRole('button', { name: 'Ra ca' }));
+      await waitFor(() => expect(mocks.checkout).toHaveBeenCalledTimes(1));
+      await screen.findByText('Hôm nay bạn không có ca đã duyệt.');
+      await act(async () => {
+        failLate();
+        await running;
+      });
+      expect(mocks.openSnackbar).not.toHaveBeenCalledWith({
+        text: 'Không lấy được vị trí: hết thời gian chờ tín hiệu GPS.',
+        type: 'warning',
+      });
+    });
+
+    it('rời trang khi heartbeat đã gửi: câu trả lời "closed" vẫn báo "tự ra ca" và tải lại trạng thái', async () => {
+      const spy = vi.spyOn(globalThis, 'setInterval');
+      mocks.getAttendanceStatus.mockResolvedValue({ shifts: [], openSession: OPEN_SESSION });
+      mocks.acquireLocationPayload.mockResolvedValue({ lat: 1, lng: 2 });
+      let answered!: (v: unknown) => void;
+      mocks.heartbeat.mockReturnValueOnce(new Promise((r) => (answered = r)));
+      const view = renderPage();
+      await screen.findByText('Đang trong ca · vào lúc 08:30 · đi trễ');
+      const tick = spy.mock.calls.find((c) => c[1] === 3 * 60 * 1000)![0] as () => Promise<void>;
+      const running = tick();
+      await waitFor(() => expect(mocks.heartbeat).toHaveBeenCalledTimes(1));
+      view.unmount();
+      await act(async () => {
+        answered({ closed: true });
+        await running;
+      });
+      expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã tự ra ca (ra khỏi vùng công ty).', type: 'info' });
+    });
+
     it('không trong ca thì không đặt nhịp heartbeat', async () => {
       const spy = vi.spyOn(globalThis, 'setInterval');
       renderPage();
@@ -1028,6 +1102,30 @@ describe('Ca làm của tôi theo DS v2 (C-076, C-114)', () => {
         fireEvent.click(btn);
         await waitFor(() => expect(mocks.copyWeek).toHaveBeenCalledTimes(2));
         await waitFor(() => expect(snackbarWith('Đã chép 2 ca từ tuần trước.')).toBe(1));
+      });
+    });
+
+    // Làm mới trạng thái sau "Vào ca" lỗi khi đã có dữ liệu cũ: refetch mặc định HUỶ lượt đang chạy rồi gọi lại,
+    // nên hai cú chạm "Thử lại" mà nút không tự khoá sẽ gửi hai yêu cầu.
+    describe('"Thử lại" trạng thái chấm công sau khi làm mới lỗi (W80A)', () => {
+      it('hai cú chạm cùng nhịp vào "Thử lại" chỉ tải lại một lần', async () => {
+        const d = deferred();
+        mocks.getAttendanceStatus
+          .mockResolvedValueOnce({ shifts: [TODAY_SHIFT], openSession: null })
+          .mockRejectedValueOnce(new Error('Mất kết nối'))
+          .mockReturnValueOnce(d.promise);
+        renderPage();
+        fireEvent.click(await screen.findByRole('button', { name: 'Vào ca' }));
+        await screen.findByText('Không tải được trạng thái chấm công.');
+        const retry = screen.getAllByRole('button', { name: 'Thử lại' })[0]!;
+        await act(async () => {
+          fireEvent.click(retry);
+          fireEvent.click(retry);
+        });
+        expect(mocks.getAttendanceStatus).toHaveBeenCalledTimes(3);
+        await act(async () => d.resolve({ shifts: [], openSession: null }));
+        expect(await screen.findByText('Hôm nay bạn không có ca đã duyệt.')).toBeInTheDocument();
+        expect(mocks.getAttendanceStatus).toHaveBeenCalledTimes(3);
       });
     });
 

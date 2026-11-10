@@ -479,3 +479,53 @@ describe('BrandOwnerPage: Lưu thông tin, thêm/sửa/xoá khuyến mãi khoá 
     await waitFor(() => expect(screen.queryByTestId('sheet')).toBeNull());
   });
 });
+
+describe('BrandOwnerPage: "Liên hệ Tubu" và "Thử lại" khoá chạm đúp (W80A)', () => {
+  const deferred = () => {
+    let resolve!: (v: unknown) => void;
+    const promise = new Promise((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.chatOn = false;
+    mocks.getOwnedBrand.mockResolvedValue(BRAND);
+    mocks.getOwnedBrandSales.mockResolvedValue(SALES);
+  });
+
+  it('hai cú chạm cùng nhịp vào "Liên hệ Tubu" khi cầu nối OA còn treo: chỉ mở một lần; xong thì chạm lại được', async () => {
+    mocks.getOwnedBrand.mockRejectedValue({ response: { status: 404 } });
+    const d = deferred();
+    mocks.openOAChat.mockReturnValueOnce(d.promise);
+    renderPage();
+    const contact = await screen.findByRole('button', { name: 'Liên hệ Tubu' });
+    await act(async () => {
+      fireEvent.click(contact);
+      fireEvent.click(contact);
+    });
+    expect(mocks.openOAChat).toHaveBeenCalledTimes(1);
+    await act(async () => d.resolve(undefined));
+    fireEvent.click(contact);
+    expect(mocks.openOAChat).toHaveBeenCalledTimes(2);
+  });
+
+  it('tab Doanh thu: "Thử lại" tải lại rồi hiện số liệu', async () => {
+    const d = deferred();
+    mocks.getOwnedBrandSales.mockRejectedValueOnce(new Error('mạng lỗi')).mockReturnValueOnce(d.promise);
+    renderPage();
+    await screen.findByText('Sachi');
+    fireEvent.click(screen.getByRole('tab', { name: 'Doanh thu' }));
+    const retry = await screen.findByRole('button', { name: /thử lại/i });
+    await act(async () => {
+      fireEvent.click(retry);
+      fireEvent.click(retry);
+    });
+    expect(mocks.getOwnedBrandSales).toHaveBeenCalledTimes(2);
+    await act(async () => d.resolve(SALES));
+    expect(await screen.findByText('4.560.000đ')).toBeInTheDocument();
+    expect(mocks.getOwnedBrandSales).toHaveBeenCalledTimes(2);
+  });
+});
