@@ -1,7 +1,7 @@
 import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   getAddresses: vi.fn(),
@@ -35,6 +35,7 @@ vi.mock('../components/address-form', () => ({
 
 import AddressesPage from './addresses';
 import { haptic } from '../utils/haptic';
+import { LOCK_REFRESH_WAIT_MS } from '../utils/settle-within';
 
 const ADDR = {
   id: 'a1', recipient: 'Lan', phone: '0900000000', street: '1 Lê Lợi', ward: 'P1', district: 'Q1', province: 'HCM', isDefault: false,
@@ -407,21 +408,28 @@ describe('Sổ địa chỉ: Đặt mặc định và Xoá khoá chạm đúp (W
   });
 });
 
-describe('Sổ địa chỉ: khoá giữ tới khi danh sách tải lại xong (W88A)', () => {
+describe('Sổ địa chỉ: khoá giữ tới khi danh sách tải lại xong, có hạn chờ (W88A)', () => {
+  const ADDR2 = { ...ADDR, id: 'a2', recipient: 'Mai' };
   const deferred = <T,>() => {
     let resolve!: (v: T) => void;
-    let reject!: (e: unknown) => void;
-    const promise = new Promise<T>((res, rej) => {
+    const promise = new Promise<T>((res) => {
       resolve = res;
-      reject = rej;
     });
-    return { promise, resolve, reject };
+    return { promise, resolve };
   };
-  const openDelete = async () => {
-    fireEvent.click(await screen.findByRole('button', { name: 'Xoá' }));
+  const never = () => new Promise<unknown[]>(() => undefined);
+  // Chuỗi lệnh của react-query chạy lệch vài ms giờ giả so với lúc bấm, và trạng thái bận tới React qua bộ đếm giờ 0ms: nên "tới hạn" là hạn cộng biên nhỏ rồi xả thêm vài nhịp.
+  const pastCap = async () => {
+    await vi.advanceTimersByTimeAsync(50);
+    for (let i = 0; i < 3; i++) await vi.advanceTimersByTimeAsync(0);
+  };
+  // Mở khung xác nhận xoá của địa chỉ thứ `index` rồi trả nút "Xoá" trong khung.
+  const openDelete = async (index = 0) => {
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Xoá' }))[index]!);
     const title = await screen.findByRole('heading', { level: 2, name: 'Xoá địa chỉ này?' });
     return within(title.closest('[data-testid="page"] > div') as HTMLElement).getByRole('button', { name: 'Xoá' });
   };
+  const cardOfA = () => screen.queryByText(/Lan · 0900000000/);
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -429,6 +437,9 @@ describe('Sổ địa chỉ: khoá giữ tới khi danh sách tải lại xong (
     mocks.getAddresses.mockReset();
     mocks.updateAddress.mockReset().mockResolvedValue({});
     mocks.deleteAddress.mockReset().mockResolvedValue({});
+  });
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('đặt mặc định xong mà danh sách mới chưa về: nút vẫn báo bận, chạm tiếp không gọi API lần hai; danh sách về thì thẻ thành Mặc định', async () => {
@@ -452,32 +463,124 @@ describe('Sổ địa chỉ: khoá giữ tới khi danh sách tải lại xong (
     expect(mocks.updateAddress).toHaveBeenCalledTimes(1);
   });
 
-  it('xoá xong mà danh sách mới chưa về: thẻ cũ báo bận, Đặt mặc định và Xoá không gọi API vào địa chỉ đã xoá; danh sách về thì thẻ biến mất', async () => {
+  it('xoá xong mà danh sách mới chưa về: thẻ địa chỉ đã xoá biến mất ngay, không còn nút Đặt mặc định / Sửa / Xoá của nó, địa chỉ kia còn nguyên', async () => {
     const refetch = deferred<unknown[]>();
-    mocks.getAddresses.mockResolvedValueOnce([ADDR]).mockReturnValueOnce(refetch.promise);
+    mocks.getAddresses.mockResolvedValueOnce([ADDR, ADDR2]).mockReturnValueOnce(refetch.promise);
     renderPage();
-    const setDefault = await screen.findByRole('button', { name: 'Đặt mặc định' });
-    const del = await openDelete();
+    const del = await openDelete(0);
     await act(async () => {
       fireEvent.click(del);
     });
     await waitFor(() => expect(mocks.getAddresses).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(screen.queryByText('Xoá địa chỉ này?')).toBeNull());
-    expect(setDefault).toHaveAttribute('aria-busy', 'true');
-    await act(async () => {
-      fireEvent.click(setDefault);
-    });
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Xoá' }));
-    });
+    expect(mocks.deleteAddress).toHaveBeenCalledWith('a1');
+    expect(cardOfA()).toBeNull();
+    expect(screen.getByText(/Mai · 0900000000/)).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Đặt mặc định' })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: 'Sửa' })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: 'Xoá' })).toHaveLength(1);
+    await act(async () => refetch.resolve([ADDR2]));
+    expect(cardOfA()).toBeNull();
     expect(mocks.updateAddress).not.toHaveBeenCalled();
-    expect(screen.queryByText('Xoá địa chỉ này?')).toBeNull();
-    expect(mocks.deleteAddress).toHaveBeenCalledTimes(1);
-    await act(async () => refetch.resolve([]));
-    expect(await screen.findByText('Bạn chưa có địa chỉ giao hàng nào')).toBeInTheDocument();
   });
 
-  it('tải lại danh sách lỗi thì vẫn nhả khoá: không kẹt nút bận, bấm lại gửi được', async () => {
+  it('xoá xong mà tải lại danh sách lỗi: thẻ đã xoá vẫn không quay lại', async () => {
+    mocks.getAddresses.mockResolvedValueOnce([ADDR, ADDR2]).mockRejectedValueOnce(new Error('offline'));
+    renderPage();
+    const del = await openDelete(0);
+    await act(async () => {
+      fireEvent.click(del);
+    });
+    await waitFor(() => expect(mocks.getAddresses).toHaveBeenCalledTimes(2));
+    expect(cardOfA()).toBeNull();
+    expect(screen.getByText(/Mai · 0900000000/)).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Đặt mặc định' })).toHaveLength(1);
+  });
+
+  it('xoá A rồi đặt mặc định B trước khi lần tải lại của A về (lần sau huỷ lần trước): A vẫn vắng mặt ở mọi bước', async () => {
+    const afterDelete = deferred<unknown[]>();
+    const afterDefault = deferred<unknown[]>();
+    mocks.getAddresses.mockResolvedValueOnce([ADDR, ADDR2]).mockReturnValueOnce(afterDelete.promise).mockReturnValueOnce(afterDefault.promise);
+    renderPage();
+    const del = await openDelete(0);
+    await act(async () => {
+      fireEvent.click(del);
+    });
+    await waitFor(() => expect(mocks.getAddresses).toHaveBeenCalledTimes(2));
+    expect(cardOfA()).toBeNull();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Đặt mặc định' }));
+    });
+    await waitFor(() => expect(mocks.getAddresses).toHaveBeenCalledTimes(3));
+    expect(mocks.updateAddress).toHaveBeenCalledWith('a2', { isDefault: true });
+    expect(cardOfA()).toBeNull();
+    await act(async () => afterDelete.resolve([ADDR, ADDR2]));
+    expect(cardOfA()).toBeNull();
+    await act(async () => afterDefault.resolve([{ ...ADDR2, isDefault: true }]));
+    expect(await screen.findByText('Mặc định')).toBeInTheDocument();
+    expect(cardOfA()).toBeNull();
+    expect(mocks.deleteAddress).toHaveBeenCalledTimes(1);
+  });
+
+  it('tải lại danh sách treo mãi: khoá đặt mặc định nhả đúng sau LOCK_REFRESH_WAIT_MS, chưa tới hạn thì chạm tiếp bị từ chối', async () => {
+    mocks.getAddresses.mockResolvedValueOnce([ADDR]).mockReturnValueOnce(never()).mockResolvedValue([ADDR]);
+    renderPage();
+    const btn = await screen.findByRole('button', { name: 'Đặt mặc định' });
+    vi.useFakeTimers();
+    await act(async () => {
+      fireEvent.click(btn);
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(mocks.getAddresses).toHaveBeenCalledTimes(2);
+    expect(btn).toHaveAttribute('aria-busy', 'true');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 1);
+      fireEvent.click(btn);
+    });
+    expect(mocks.updateAddress).toHaveBeenCalledTimes(1);
+    expect(btn).toHaveAttribute('aria-busy', 'true');
+    await act(async () => {
+      await pastCap();
+    });
+    expect(btn).not.toHaveAttribute('aria-busy');
+    await act(async () => {
+      fireEvent.click(btn);
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(mocks.updateAddress).toHaveBeenCalledTimes(2);
+  });
+
+  it('tải lại danh sách treo mãi: khoá xoá nhả đúng sau LOCK_REFRESH_WAIT_MS (nút Xoá của thẻ khác bị khoá tới lúc đó)', async () => {
+    mocks.getAddresses.mockResolvedValueOnce([ADDR, ADDR2]).mockReturnValueOnce(never()).mockResolvedValue([ADDR2]);
+    renderPage();
+    const del = await openDelete(0);
+    vi.useFakeTimers();
+    await act(async () => {
+      fireEvent.click(del);
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(mocks.deleteAddress).toHaveBeenCalledTimes(1);
+    const otherDelete = screen.getByRole('button', { name: 'Xoá' });
+    expect(otherDelete).toBeDisabled();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 1);
+    });
+    expect(otherDelete).toBeDisabled();
+    await act(async () => {
+      await pastCap();
+    });
+    expect(otherDelete).not.toBeDisabled();
+  });
+});
+
+describe('Sổ địa chỉ: kiểm hồi quy khoá sau lỗi tải lại (đã đúng từ trước W88A, không chứng minh sửa của wave này)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.authStatus = 'authenticated';
+    mocks.getAddresses.mockReset();
+    mocks.updateAddress.mockReset().mockResolvedValue({});
+  });
+
+  it('tải lại danh sách lỗi thì khoá vẫn nhả: nút hết bận, bấm lại gửi được', async () => {
     mocks.getAddresses.mockResolvedValueOnce([ADDR]).mockRejectedValueOnce(new Error('offline')).mockResolvedValue([ADDR]);
     renderPage();
     const btn = await screen.findByRole('button', { name: 'Đặt mặc định' });

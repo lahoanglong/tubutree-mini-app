@@ -463,7 +463,7 @@ describe('WalletPage — khách thường (R6-BUYER-13)', () => {
   });
 });
 
-describe('WalletPage — "Xem thêm" khoá chạm đúp (W88A)', () => {
+describe('WalletPage — "Xem thêm" khoá chạm đúp, onPress trả Promise (W88A)', () => {
   const stubSecondPageHeld = () => {
     stubLoaded();
     let release!: (v: unknown) => void;
@@ -490,7 +490,7 @@ describe('WalletPage — "Xem thêm" khoá chạm đúp (W88A)', () => {
     expect(screen.queryByRole('button', { name: 'Xem thêm' })).toBeNull();
   });
 
-  it('hai cú chạm ở hai lượt vẽ liên tiếp (trang 2 còn bay) vẫn chỉ tải một lần', async () => {
+  it('hai cú chạm ở hai lượt act liên tiếp, lúc React chưa kịp nhận isFetchingNextPage từ query-core (đo được: không có khoá của Button thì gọi hai lần), vẫn chỉ tải một lần', async () => {
     const held = stubSecondPageHeld();
     renderPage();
     const more = await screen.findByRole('button', { name: 'Xem thêm' });

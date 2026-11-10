@@ -7,6 +7,7 @@ import { getErrorMessage } from '../services/api';
 import { coreHttp } from '../services/core-http';
 import { useAuthStore } from '../store/auth';
 import { haptic } from '../utils/haptic';
+import { settleWithin } from '../utils/settle-within';
 import { useNotify } from './use-notify';
 
 /**
@@ -47,11 +48,14 @@ export function useClaimCoupon() {
       } catch (e) {
         notify({ text: getErrorMessage(e), type: 'error' });
         // Khoá giữ tới khi cả ba lần tải lại xong: thẻ còn cũ (vẫn "Lưu mã") chạm tiếp lúc này chỉ ra lại đúng lỗi vừa báo.
-        await Promise.all([
-          qc.fetchQuery(freshCollectableCouponsQuery(coreHttp)).catch(() => undefined),
-          qc.invalidateQueries({ queryKey: ['coupons', 'collectable', 'mine'] }),
-          qc.invalidateQueries({ queryKey: ['coupons'], exact: true }),
-        ]);
+        // Có hạn chờ: mạng chết thì lần tải lại tốn cả chục giây, không để một khoá chung giữ mọi thẻ lâu thế.
+        await settleWithin(
+          Promise.all([
+            qc.fetchQuery(freshCollectableCouponsQuery(coreHttp)).catch(() => undefined),
+            qc.invalidateQueries({ queryKey: ['coupons', 'collectable', 'mine'] }),
+            qc.invalidateQueries({ queryKey: ['coupons'], exact: true }),
+          ]),
+        );
         return false;
       } finally {
         busy.current = false;

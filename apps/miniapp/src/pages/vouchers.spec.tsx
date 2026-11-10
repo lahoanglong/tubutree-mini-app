@@ -189,14 +189,14 @@ describe('VouchersPage (Mini)', () => {
     expect(screen.getAllByRole('button', { name: 'Lưu mã' })).toHaveLength(1);
   });
 
-  describe('khoá chạm đúp Lưu mã (W88A)', () => {
+  describe('Lưu mã: kiểm hồi quy khoá chạm đúp có từ trước (W88A không đổi phần này)', () => {
     const deferred = <T,>() => {
       let resolve!: (v: T) => void;
       const promise = new Promise<T>((res) => (resolve = res));
       return { promise, resolve };
     };
 
-    it('hai cú chạm Lưu mã trong cùng một khung hình chỉ gọi POST claim một lần, một thông báo', async () => {
+    it('hai cú chạm cùng một khung hình chỉ gọi POST claim một lần, một thông báo (khoá ref của useClaimCoupon)', async () => {
       const claim = deferred<unknown>();
       mocks.claimCoupon.mockReturnValueOnce(claim.promise);
       renderAt();
@@ -213,7 +213,7 @@ describe('VouchersPage (Mini)', () => {
       expect(mocks.notify.mock.calls.filter(([a]) => (a as { type: string }).type === 'success')).toHaveLength(1);
     });
 
-    it('hai cú chạm Lưu mã ở hai lượt vẽ liên tiếp (lệnh đầu còn bay) chỉ gọi POST claim một lần', async () => {
+    it('hai cú chạm ở hai lượt act liên tiếp chỉ gọi POST claim một lần (ref của hook và aria-busy của thẻ cùng chặn, bỏ một lớp vẫn xanh)', async () => {
       const claim = deferred<unknown>();
       mocks.claimCoupon.mockReturnValueOnce(claim.promise);
       renderAt();
@@ -228,6 +228,14 @@ describe('VouchersPage (Mini)', () => {
       await act(async () => claim.resolve({ code: 'NEW10', alreadyClaimed: false }));
       await waitFor(() => expect(mocks.notify).toHaveBeenCalledWith({ text: 'Đã lưu vào Mã của tôi', type: 'success' }));
     });
+  });
+
+  describe('Lưu mã: giữ khoá tới khi kho tải lại sau lỗi (W88A)', () => {
+    const deferred = <T,>() => {
+      let resolve!: (v: T) => void;
+      const promise = new Promise<T>((res) => (resolve = res));
+      return { promise, resolve };
+    };
 
     it('claim lỗi hết lượt mà kho mới chưa về: thẻ còn cũ vẫn báo bận, chạm tiếp không gọi POST lần hai; kho về thì thẻ thành Đã hết lượt', async () => {
       const fresh = deferred<unknown>();

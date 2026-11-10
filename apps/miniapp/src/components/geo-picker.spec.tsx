@@ -98,8 +98,8 @@ describe('GeoPicker: tìm phường/xã', () => {
   });
 });
 
-describe('GeoPicker: "Thử lại" khi tải tỉnh/phường lỗi (W88A)', () => {
-  it('chạm đúp cùng một khung hình vào mỗi nút Thử lại chỉ gọi lại API một lần (truy vấn chưa có dữ liệu nên refetch gộp chung)', async () => {
+describe('GeoPicker: "Thử lại" khi tải tỉnh/phường lỗi (kiểm hồi quy, W88A không đổi nguồn)', () => {
+  it('chạm đúp cùng một khung hình vào mỗi nút Thử lại chỉ gọi lại API một lần (query-core gộp refetch của truy vấn chưa có dữ liệu)', async () => {
     let provincesReady: (v: unknown) => void = () => undefined;
     let communesReady: (v: unknown) => void = () => undefined;
     mocks.getProvinces.mockReset().mockRejectedValueOnce(new Error('offline')).mockReturnValueOnce(new Promise((r) => (provincesReady = r)));
