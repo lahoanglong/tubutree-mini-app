@@ -10,13 +10,17 @@ const h = vi.hoisted(() => ({
   apply: vi.fn(),
   notify: vi.fn(),
 }));
-vi.mock('./use-coupon-hint', () => ({ useCouponPreviews: h.previews }));
+vi.mock('./use-coupon-hint', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  useCouponPreviews: h.previews,
+}));
 vi.mock('../../services/shop-api', () => ({ applyCoupon: h.apply }));
 vi.mock('../../services/api', () => ({ getErrorMessage: (e: unknown) => (e as Error).message }));
 vi.mock('../../hooks/use-notify', () => ({ useNotify: () => ({ notify: h.notify }) }));
 vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import { useCartVoucherHint } from './use-cart-voucher-hint';
+import { COUPON_CHANGE_KEY } from './use-coupon-hint';
 
 const coupon = (code: string, over: Partial<CouponDTO> = {}): CouponDTO => ({
   code,
@@ -107,6 +111,20 @@ describe('useCartVoucherHint (Mini)', () => {
     expect(h.apply).toHaveBeenCalledTimes(1);
     await act(async () => release({ items: [], couponCode: 'GIAM45' }));
     await waitFor(() => expect(result.current.applying).toBe(false));
+  });
+
+  it('đang áp mã ở giỏ: lệnh nằm dưới khoá đổi mã để nút Đặt hàng ở trang Thanh toán chờ, kể cả khi trang giỏ đã gỡ', async () => {
+    h.previews.mockReturnValue({ wallet: [coupon('GIAM45')], previews: [usable('GIAM45', 45_000)] });
+    let resolveApply: (cart: unknown) => void = () => undefined;
+    h.apply.mockReturnValue(new Promise((resolve) => { resolveApply = resolve; }));
+    const { result, qc, unmount } = setup();
+    expect(qc.isMutating({ mutationKey: COUPON_CHANGE_KEY })).toBe(0);
+    act(() => result.current.apply('giam45'));
+    await waitFor(() => expect(qc.isMutating({ mutationKey: COUPON_CHANGE_KEY })).toBe(1));
+    unmount();
+    expect(qc.isMutating({ mutationKey: COUPON_CHANGE_KEY })).toBe(1);
+    await act(async () => resolveApply({ items: [], couponCode: 'GIAM45' }));
+    await waitFor(() => expect(qc.isMutating({ mutationKey: COUPON_CHANGE_KEY })).toBe(0));
   });
 
   describe('khoá chạm đúp đồng bộ (W81A)', () => {
