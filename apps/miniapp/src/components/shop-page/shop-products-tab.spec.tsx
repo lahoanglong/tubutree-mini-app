@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProductCard as ProductCardData } from '@tubutree/app-core/api/catalog';
@@ -140,5 +140,59 @@ describe('ShopProductsTab nguồn brand (phân trang thật)', () => {
     wrap(<ShopProductsTab source={{ kind: 'brand', slug: 'fuwa' }} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Thử lại' }));
     await waitFor(() => expect(tileCount()).toBe(2));
+  });
+});
+
+describe('ShopProductsTab nguồn brand: khoá chạm đúp "Xem thêm" và "Thử lại" (W81A)', () => {
+  const page = (from: number, count: number, total: number) => ({
+    data: Array.from({ length: count }, (_, i) => product(from + i)),
+    meta: { page: 1, limit: 20, total },
+  });
+  const pending = <T,>() => {
+    let resolve!: (v: T) => void;
+    const promise = new Promise<T>((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+
+  it('chạm đúp "Xem thêm" trong cùng một khung hình: chỉ xin trang 2 một lần; xong thì bấm tiếp xin được trang 3', async () => {
+    mocks.fetchBrandProducts.mockResolvedValueOnce(page(1, 20, 45));
+    wrap(<ShopProductsTab source={{ kind: 'brand', slug: 'fuwa' }} />);
+    await waitFor(() => expect(tileCount()).toBe(20));
+    const next = pending<ReturnType<typeof page>>();
+    mocks.fetchBrandProducts.mockReturnValueOnce(next.promise);
+    const button = more()!;
+    await act(async () => {
+      fireEvent.click(button);
+      fireEvent.click(button);
+    });
+    expect(mocks.fetchBrandProducts).toHaveBeenCalledTimes(2);
+    await act(async () => next.resolve(page(21, 20, 45)));
+    await waitFor(() => expect(tileCount()).toBe(40));
+    mocks.fetchBrandProducts.mockResolvedValueOnce(page(41, 5, 45));
+    fireEvent.click(more()!);
+    await waitFor(() => expect(tileCount()).toBe(45));
+    expect(mocks.fetchBrandProducts).toHaveBeenCalledTimes(3);
+  });
+
+  it('trang kế lỗi: chạm đúp "Thử lại" trong cùng một khung hình chỉ xin lại một lần; lỗi tiếp thì nhả khoá, bấm lại xin được', async () => {
+    mocks.fetchBrandProducts.mockResolvedValueOnce(page(1, 20, 45)).mockRejectedValueOnce(new Error('mạng'));
+    wrap(<ShopProductsTab source={{ kind: 'brand', slug: 'fuwa' }} />);
+    await waitFor(() => expect(tileCount()).toBe(20));
+    fireEvent.click(more()!);
+    const retry = await screen.findByRole('button', { name: 'Thử lại' });
+    expect(mocks.fetchBrandProducts).toHaveBeenCalledTimes(2);
+    mocks.fetchBrandProducts.mockRejectedValueOnce(new Error('mạng'));
+    await act(async () => {
+      fireEvent.click(retry);
+      fireEvent.click(retry);
+    });
+    expect(mocks.fetchBrandProducts).toHaveBeenCalledTimes(3);
+    await waitFor(() => expect(mocks.fetchBrandProducts).toHaveBeenCalledTimes(3));
+    mocks.fetchBrandProducts.mockResolvedValueOnce(page(21, 20, 45));
+    fireEvent.click(await screen.findByRole('button', { name: 'Thử lại' }));
+    await waitFor(() => expect(tileCount()).toBe(40));
+    expect(mocks.fetchBrandProducts).toHaveBeenCalledTimes(4);
   });
 });

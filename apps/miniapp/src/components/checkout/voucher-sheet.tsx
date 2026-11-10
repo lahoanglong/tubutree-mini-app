@@ -252,7 +252,7 @@ export function VoucherSheet({
             <ErrorState
               variant="inline"
               message={fillCopy('coupon.pickLoadError', { reason: getLoadErrorMessage(couponsQ.error) })}
-              onRetry={() => void couponsQ.refetch()}
+              onRetry={() => couponsQ.refetch()}
             />
           ) : rows.length > 0 ? (
             <VoucherPicker rows={rows} onUse={applyCode} onRemove={removeCode} busy={isAnyMutating} pendingCode={pendingCode} />

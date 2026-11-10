@@ -108,4 +108,68 @@ describe('useCartVoucherHint (Mini)', () => {
     await act(async () => release({ items: [], couponCode: 'GIAM45' }));
     await waitFor(() => expect(result.current.applying).toBe(false));
   });
+
+  describe('khoá chạm đúp đồng bộ (W81A)', () => {
+    const pending = <T,>() => {
+      let resolve!: (v: T) => void;
+      let reject!: (e: unknown) => void;
+      const promise = new Promise<T>((res, rej) => {
+        resolve = res;
+        reject = rej;
+      });
+      return { promise, resolve, reject };
+    };
+    const CART = { items: [], couponCode: 'GIAM45' };
+
+    beforeEach(() => {
+      h.previews.mockReturnValue({ wallet: [coupon('GIAM45'), coupon('KHAC30')], previews: [usable('GIAM45', 45_000), usable('KHAC30', 30_000)] });
+    });
+
+    it('hai cú chạm cùng một khung hình, chưa kịp vẽ lại: chỉ gọi applyCoupon một lần', async () => {
+      const call = pending<typeof CART>();
+      h.apply.mockReturnValue(call.promise);
+      const { result } = setup();
+      await act(async () => {
+        result.current.apply('GIAM45');
+        result.current.apply('GIAM45');
+      });
+      expect(h.apply).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(result.current.applying).toBe(true));
+      await act(async () => call.resolve(CART));
+      await waitFor(() => expect(result.current.applying).toBe(false));
+    });
+
+    it('hai mã khác nhau liền nhau: giỏ chỉ có một mã nên chỉ mã chạm trước được gửi', async () => {
+      const call = pending<typeof CART>();
+      h.apply.mockReturnValue(call.promise);
+      const { result } = setup();
+      await act(async () => {
+        result.current.apply('GIAM45');
+        result.current.apply('KHAC30');
+      });
+      expect(h.apply).toHaveBeenCalledTimes(1);
+      expect(h.apply).toHaveBeenCalledWith('GIAM45');
+      await act(async () => call.resolve(CART));
+    });
+
+    it('lệnh bị từ chối thì nhả khoá: lời báo lỗi hiện và chạm lại gọi được lần hai', async () => {
+      h.apply.mockRejectedValueOnce(new Error('Mã đã hết lượt dùng.')).mockResolvedValue(CART);
+      const { result } = setup();
+      await act(async () => result.current.apply('GIAM45'));
+      await waitFor(() => expect(result.current.error).toBe('Mã đã hết lượt dùng.'));
+      await act(async () => result.current.apply('GIAM45'));
+      expect(h.apply).toHaveBeenCalledTimes(2);
+      await waitFor(() => expect(h.notify).toHaveBeenCalledTimes(1));
+    });
+
+    it('lệnh thành công thì nhả khoá: áp lại sau đó vẫn gọi được', async () => {
+      h.apply.mockResolvedValue(CART);
+      const { result } = setup();
+      await act(async () => result.current.apply('GIAM45'));
+      await waitFor(() => expect(h.notify).toHaveBeenCalledTimes(1));
+      await act(async () => result.current.apply('KHAC30'));
+      expect(h.apply).toHaveBeenCalledTimes(2);
+      expect(h.apply).toHaveBeenLastCalledWith('KHAC30');
+    });
+  });
 });

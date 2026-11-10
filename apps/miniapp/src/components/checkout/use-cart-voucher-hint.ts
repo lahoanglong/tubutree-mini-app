@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import type { CouponPreviewRequest } from '@tubutree/shared-types';
 import { cartVoucherHint, type CartVoucherHint } from '@tubutree/app-core/commerce/cart-voucher-hint';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
@@ -7,6 +7,7 @@ import { applyCoupon } from '../../services/shop-api';
 import { getErrorMessage } from '../../services/api';
 import { cartKey } from '../../services/cart-key';
 import { useNotify } from '../../hooks/use-notify';
+import { useLockedMutation } from '../game/use-locked-mutation';
 import { haptic } from '../../utils/haptic';
 import { autoCouponName } from '../../utils/coupon-name';
 import { serverNow } from '../../utils/server-clock';
@@ -50,7 +51,8 @@ export function useCartVoucherHint(opts: {
       })
     : null;
 
-  const mut = useMutation({
+  // Khoá ref đồng bộ: `isPending` chỉ đúng sau lần vẽ kế tiếp, hai cú chạm sát nhau vẫn đều gọi applyCoupon.
+  const mut = useLockedMutation({
     mutationFn: (code: string) => applyCoupon(code.trim().toUpperCase()),
     // Xoá lời báo cũ lúc bắt đầu: lỗi lặp lại cùng câu vẫn dựng lại lời báo.
     onMutate: () => setFailed(null),
@@ -72,9 +74,7 @@ export function useCartVoucherHint(opts: {
   const offered = hint?.apply?.code ?? null;
   return {
     hint: hint && (hint.apply || hint.unlock) ? hint : null,
-    apply: (code) => {
-      if (!mut.isPending) mut.mutate(code);
-    },
+    apply: (code) => mut.mutate(code),
     applying: mut.isPending,
     error: failed && offered && failed.code === offered.trim().toUpperCase() ? failed.text : null,
   };

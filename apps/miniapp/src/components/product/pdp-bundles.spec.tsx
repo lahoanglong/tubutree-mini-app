@@ -358,3 +358,93 @@ describe('PdpBundles: khối đã hiện thì không gỡ giữa trang (giữ ch
   });
 });
 
+
+describe('PdpBundles: khoá chạm đúp "Thêm cả combo" và "Thêm n món" bằng ref của useBundleAdd (W81A)', () => {
+  const pending = <T,>() => {
+    let resolve!: (v: T) => void;
+    const promise = new Promise<T>((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+
+  it('chạm đúp "Thêm cả combo" trong cùng một khung hình, chưa kịp vẽ lại: chỉ một lệnh lô', async () => {
+    const call = pending<object>();
+    mocks.addAll.mockReturnValue(call.promise);
+    renderBlock({ combos: [combo('c1', [item('a'), item('b')])], addons: [] });
+    const add = await screen.findByRole('button', { name: /^Thêm cả combo/ });
+    await act(async () => {
+      fireEvent.click(add);
+      fireEvent.click(add);
+    });
+    expect(mocks.addAll).toHaveBeenCalledTimes(1);
+    await act(async () => call.resolve({}));
+  });
+
+  it('chạm hai combo khác nhau liền nhau: mỗi lúc chỉ một lệnh bay, combo chạm sau bị bỏ', async () => {
+    const call = pending<object>();
+    mocks.addAll.mockReturnValue(call.promise);
+    renderBlock({ combos: [combo('c1', [item('a'), item('b')]), combo('c2', [item('c'), item('d')])], addons: [] });
+    await screen.findAllByRole('button', { name: /^Thêm cả combo/ });
+    const [first, second] = screen.getAllByRole('button', { name: /^Thêm cả combo/ });
+    await act(async () => {
+      fireEvent.click(first!);
+      fireEvent.click(second!);
+    });
+    expect(mocks.addAll).toHaveBeenCalledTimes(1);
+    expect(mocks.addAll).toHaveBeenCalledWith([{ variationId: 'v-a', quantity: 1 }, { variationId: 'v-b', quantity: 1 }]);
+    await act(async () => call.resolve({}));
+  });
+
+  it('lệnh combo lỗi thì nhả khoá: chạm lại gửi được lần hai, thành công thì nhả tiếp', async () => {
+    mocks.addAll.mockRejectedValueOnce(new Error('x')).mockResolvedValue({});
+    renderBlock({ combos: [combo('c1', [item('a'), item('b')])], addons: [] });
+    const add = await screen.findByRole('button', { name: /^Thêm cả combo/ });
+    await act(async () => {
+      fireEvent.click(add);
+    });
+    await waitFor(() => expect(mocks.notify).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+    await act(async () => {
+      fireEvent.click(add);
+    });
+    await waitFor(() => expect(mocks.notify).toHaveBeenCalledWith(expect.objectContaining({ type: 'success' })));
+    await act(async () => {
+      fireEvent.click(add);
+    });
+    expect(mocks.addAll).toHaveBeenCalledTimes(3);
+  });
+
+  it('chạm đúp "Thêm n món vào giỏ" của Mua kèm trong cùng một khung hình: chỉ một lệnh lô', async () => {
+    const call = pending<object>();
+    mocks.addAll.mockReturnValue(call.promise);
+    renderBlock({ combos: [], addons: [addon('a1', [item('x', { addonPrice: 40_000 })])] });
+    fireEvent.click(await screen.findByRole('checkbox', { name: /Sản phẩm x/ }));
+    const add = screen.getByTestId('addon-add');
+    await act(async () => {
+      fireEvent.click(add);
+      fireEvent.click(add);
+    });
+    expect(mocks.addAll).toHaveBeenCalledTimes(1);
+    expect(mocks.addAll).toHaveBeenCalledWith([{ variationId: 'v-x', quantity: 1 }]);
+    await act(async () => call.resolve({}));
+  });
+
+  it('Mua kèm đang bay: chạm "Thêm cả combo" cùng lúc bị bỏ, vì cả khối dùng chung một khoá', async () => {
+    const call = pending<object>();
+    mocks.addAll.mockReturnValue(call.promise);
+    renderBlock({
+      combos: [combo('c1', [item('a'), item('b')])],
+      addons: [addon('a1', [item('x', { addonPrice: 40_000 })])],
+    });
+    fireEvent.click(await screen.findByRole('checkbox', { name: /Sản phẩm x/ }));
+    const addon1 = screen.getByTestId('addon-add');
+    const combo1 = screen.getByRole('button', { name: /^Thêm cả combo/ });
+    await act(async () => {
+      fireEvent.click(addon1);
+      fireEvent.click(combo1);
+    });
+    expect(mocks.addAll).toHaveBeenCalledTimes(1);
+    expect(mocks.addAll).toHaveBeenCalledWith([{ variationId: 'v-x', quantity: 1 }]);
+    await act(async () => call.resolve({}));
+  });
+});

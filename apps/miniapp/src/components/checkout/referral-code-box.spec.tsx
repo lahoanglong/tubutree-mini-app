@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ recordReferralTouch: vi.fn() }));
@@ -290,6 +290,89 @@ describe('ReferralCodeBox — khoá bận khi đang kiểm tra mã (W59B)', () =
     fireEvent.click(cancelButton());
     expect(screen.queryByPlaceholderText('Nhập mã người giới thiệu')).not.toBeInTheDocument();
     expect(screen.getByText('Nhập mã')).toBeInTheDocument();
+  });
+});
+
+describe('ReferralCodeBox — khoá đồng bộ chống chạm đúp (W81A)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('hai cú bấm "Áp dụng" trong cùng một khung hình, chưa kịp vẽ lại: chỉ gọi /affiliate/touch một lần', async () => {
+    const gate = deferred<{ ok: boolean }>();
+    mocks.recordReferralTouch.mockReturnValue(gate.promise);
+    const { onApplied } = setup();
+    openAndType();
+    const button = submitButton();
+    await act(async () => {
+      fireEvent.click(button);
+      fireEvent.click(button);
+    });
+    expect(mocks.recordReferralTouch).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(button).toHaveAttribute('aria-busy', 'true'));
+    await act(async () => gate.resolve({ ok: true }));
+    expect(onApplied).toHaveBeenCalledTimes(1);
+  });
+
+  it('bấm "Áp dụng" rồi Enter trong cùng một khung hình: chỉ gọi một lần', async () => {
+    const gate = deferred<{ ok: boolean }>();
+    mocks.recordReferralTouch.mockReturnValue(gate.promise);
+    setup();
+    openAndType();
+    await act(async () => {
+      fireEvent.click(submitButton());
+      fireEvent.keyDown(input(), { key: 'Enter' });
+    });
+    expect(mocks.recordReferralTouch).toHaveBeenCalledTimes(1);
+    await act(async () => gate.resolve({ ok: false }));
+  });
+
+  it('Enter hai lần liền (không phải giữ phím) trong cùng một khung hình: chỉ gọi một lần', async () => {
+    const gate = deferred<{ ok: boolean }>();
+    mocks.recordReferralTouch.mockReturnValue(gate.promise);
+    setup();
+    openAndType();
+    await act(async () => {
+      fireEvent.keyDown(input(), { key: 'Enter' });
+      fireEvent.keyDown(input(), { key: 'Enter' });
+    });
+    expect(mocks.recordReferralTouch).toHaveBeenCalledTimes(1);
+    await act(async () => gate.resolve({ ok: false }));
+  });
+
+  it('lỗi mạng thì nhả khoá: bấm lại gọi lần hai; mã không tìm thấy (ok:false) cũng nhả khoá', async () => {
+    mocks.recordReferralTouch
+      .mockRejectedValueOnce(new Error('mạng'))
+      .mockResolvedValueOnce({ ok: false })
+      .mockResolvedValue({ ok: true });
+    const { onApplied } = setup();
+    openAndType();
+    await act(async () => {
+      fireEvent.click(submitButton());
+    });
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
+    await act(async () => {
+      fireEvent.click(submitButton());
+    });
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/Không tìm thấy mã này/));
+    await act(async () => {
+      fireEvent.click(submitButton());
+    });
+    expect(mocks.recordReferralTouch).toHaveBeenCalledTimes(3);
+    await waitFor(() => expect(onApplied).toHaveBeenCalledWith('AB12CD34'));
+  });
+
+  it('ô trống: không giữ khoá, gõ mã rồi bấm lại gọi được', async () => {
+    mocks.recordReferralTouch.mockResolvedValue({ ok: true });
+    setup();
+    openAndType('');
+    await act(async () => {
+      fireEvent.click(submitButton());
+    });
+    expect(mocks.recordReferralTouch).not.toHaveBeenCalled();
+    fireEvent.change(input(), { target: { value: 'ab12cd34' } });
+    await act(async () => {
+      fireEvent.click(submitButton());
+    });
+    expect(mocks.recordReferralTouch).toHaveBeenCalledTimes(1);
   });
 });
 
