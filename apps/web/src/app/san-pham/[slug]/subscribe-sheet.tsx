@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, type ReactNode } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import {
   MAX_START_DAYS_AHEAD,
@@ -13,6 +13,7 @@ import { Sheet } from '@/components/ui/sheet';
 import { Field } from '@/components/ui/field';
 import { LineItemSkeleton } from '@/components/ui/skeleton';
 import { Chip } from '@/components/catalog/chip';
+import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { coreHttp } from '@/lib/core-http';
 import { getAddresses, getWallet } from '@/lib/shop-client';
 import { formatVnd } from '@/lib/format-vnd';
@@ -113,7 +114,7 @@ export function SubscribeSheet({
       ? `Ngày bắt đầu phải từ ngày mai tới ${MAX_START_DAYS_AHEAD} ngày tới.`
       : undefined;
 
-  const create = useMutation({
+  const create = useLockedMutation({
     mutationFn: () =>
       createSubscription(coreHttp, {
         variationId,

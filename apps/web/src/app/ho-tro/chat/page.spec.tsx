@@ -864,4 +864,86 @@ describe('/ho-tro/chat — Chat với Tubu Tree', () => {
       expect(buttonByName(c, 'Xem tin cũ hơn')).toBeNull();
     });
   });
+
+  describe('khoá chạm đúp (W78B)', () => {
+    const gate = () => {
+      let release!: (v?: unknown) => void;
+      const held = new Promise((r) => (release = r));
+      return { held, release: () => release() };
+    };
+    const chips = (c: HTMLElement, name: string) => Array.from(c.querySelectorAll('button')).filter((b) => b.textContent === name);
+
+    it('hai chip câu hỏi nhanh (hoặc một chip chạm đúp) cùng khung hình: chỉ gửi một tin', async () => {
+      mocks.send.mockResolvedValue(msg({ id: 'srv1', body: 'x', clientMsgId: 'cid-1' }));
+      const c = mount();
+      await waitFor(() => expect(chips(c, 'Đổi trả hàng').length).toBeGreaterThan(0));
+      const [first] = chips(c, 'Đổi trả hàng');
+      const other = chips(c, 'Cách dùng sản phẩm')[0]!;
+      act(() => {
+        first!.click();
+        first!.click();
+        other.click();
+      });
+      await waitFor(() => expect(mocks.send).toHaveBeenCalledTimes(1));
+      await flush(4);
+      expect(mocks.send).toHaveBeenCalledTimes(1);
+      expect(chips(c, 'Đổi trả hàng')).toHaveLength(0);
+    });
+
+    it('"Xem tin cũ hơn" chạm đúp cùng khung hình: chỉ tải một trang; xong thì tin cũ chèn lên và nút biến mất', async () => {
+      const g = gate();
+      mocks.getThread.mockResolvedValue(thread({ hasMore: true, messages: [msg({ id: 'm05', body: 'tin 5' })] }));
+      mocks.getPage.mockImplementation(async () => {
+        await g.held;
+        return { hasMore: false, messages: [msg({ id: 'm03', body: 'tin 3', createdAt: '2026-10-23T03:03:00.000Z' })] };
+      });
+      const c = mount();
+      await waitFor(() => expect(buttonByName(c, 'Xem tin cũ hơn')).not.toBeNull());
+      const older = buttonByName(c, 'Xem tin cũ hơn')!;
+      act(() => {
+        older.click();
+        older.click();
+      });
+      await flush(2);
+      expect(mocks.getPage).toHaveBeenCalledTimes(1);
+      g.release();
+      await waitFor(() => expect(bubble(c, 'm03')).not.toBeNull());
+      expect(mocks.getPage).toHaveBeenCalledTimes(1);
+      expect(buttonByName(c, 'Xem tin cũ hơn')).toBeNull();
+    });
+
+    it('tải trang cũ lỗi: nhả khoá, báo lỗi, bấm lại tải được', async () => {
+      mocks.getThread.mockResolvedValue(thread({ hasMore: true, messages: [msg({ id: 'm05', body: 'tin 5' })] }));
+      mocks.getPage.mockRejectedValueOnce(new Error(ERROR_NETWORK)).mockResolvedValue({ hasMore: false, messages: [msg({ id: 'm03', body: 'tin 3', createdAt: '2026-10-23T03:03:00.000Z' })] });
+      const c = mount();
+      await waitFor(() => expect(buttonByName(c, 'Xem tin cũ hơn')).not.toBeNull());
+      click(buttonByName(c, 'Xem tin cũ hơn'));
+      await waitFor(() => expect(c.querySelector('[role="alert"]')?.textContent).toContain('Mất kết nối'));
+      click(buttonByName(c, 'Xem tin cũ hơn'));
+      await waitFor(() => expect(bubble(c, 'm03')).not.toBeNull());
+      expect(mocks.getPage).toHaveBeenCalledTimes(2);
+    });
+
+    it('lỗi tải hội thoại: "Thử lại" chạm đúp cùng khung hình chỉ tải lại một lần, về rồi hiện ô nhập', async () => {
+      const g = gate();
+      mocks.getThread.mockRejectedValueOnce(statusError(400, 'Yêu cầu không hợp lệ'));
+      const c = mount();
+      await waitFor(() => expect(buttonByName(c, 'Thử lại')).not.toBeNull());
+      const before = mocks.getThread.mock.calls.length;
+      mocks.getThread.mockImplementation(async () => {
+        await g.held;
+        return thread();
+      });
+      const retry = buttonByName(c, 'Thử lại')!;
+      act(() => {
+        retry.click();
+        retry.click();
+      });
+      await flush(2);
+      expect(mocks.getThread.mock.calls.length).toBe(before + 1);
+      g.release();
+      await waitFor(() => expect(textbox(c)).not.toBeNull());
+      expect(mocks.getThread.mock.calls.length).toBe(before + 1);
+    });
+  });
 });

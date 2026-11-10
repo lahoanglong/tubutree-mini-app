@@ -1,6 +1,9 @@
 // @vitest-environment jsdom
+import { act } from 'react';
+import { QueryClient } from '@tanstack/react-query';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
+import { captureUnhandledRejections } from '@/test-utils/unhandled';
 
 // Phần chi tiết đơn của Mini App (order-detail.tsx) mà trang web cần có đủ: mốc thời gian, dòng Điểm Xanh, đặt trước,
 // sao chép mã vận đơn, hoá đơn VAT, phiếu thu rác, lời mời theo dõi OA, hạn đổi/trả, đơn đã bàn giao vận chuyển.
@@ -17,6 +20,10 @@ const mocks = vi.hoisted(() => ({
   follow: vi.fn(),
   oaAvailable: true,
   writeText: vi.fn(),
+  orderCalls: 0,
+  orderFails: false,
+  orderGate: null as Promise<void> | null,
+  storageFails: false,
 }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: { id: 'u1' }, status: 'authenticated', initialized: true }) }));
 vi.mock('next/navigation', () => ({ useParams: () => ({ code: 'TB-9' }), useRouter: () => ({ push: vi.fn() }) }));
@@ -26,7 +33,12 @@ vi.mock('@/lib/api', async (importOriginal) => ({
 }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/shop-client')>()),
-  fetchOrder: async () => mocks.order,
+  fetchOrder: async () => {
+    mocks.orderCalls += 1;
+    if (mocks.orderGate) await mocks.orderGate;
+    if (mocks.orderFails) throw new Error('boom');
+    return mocks.order;
+  },
   fetchMyReturns: async () => mocks.returns,
   fetchMyRefunds: async () => [],
   fetchOrdersPage: async () => ({ data: [], meta: { page: 1, limit: 20, total: mocks.ordersTotal } }),
@@ -58,6 +70,7 @@ vi.mock('@/lib/platform-bridge', () => ({
     storage: {
       get: async (k: string) => mocks.storage[k] ?? null,
       set: async (k: string, v: string) => {
+        if (mocks.storageFails) throw new Error('disk');
         mocks.storage[k] = v;
       },
     },
@@ -109,6 +122,10 @@ beforeEach(() => {
   mocks.oaAvailable = true;
   mocks.follow.mockReset();
   mocks.writeText.mockReset();
+  mocks.orderCalls = 0;
+  mocks.orderFails = false;
+  mocks.orderGate = null;
+  mocks.storageFails = false;
   Object.defineProperty(navigator, 'clipboard', { value: { writeText: mocks.writeText }, configurable: true });
 });
 afterEach(() => {
@@ -362,6 +379,101 @@ describe('chi tiết đơn web — lời mời theo dõi OA sau đơn đầu', (
     const t = text(container);
     expect(t).not.toContain(heading);
     expect(t).toContain('Đã mở trang Tubu Tree trên Zalo, bấm "Quan tâm" để nhận cập nhật đơn.');
+  });
+});
+
+describe('chi tiết đơn web — khoá đồng bộ chạm đúp (W78B)', () => {
+  const heading = 'Theo dõi Tubu Tree trên Zalo';
+  const twice = (el: HTMLElement) =>
+    act(() => {
+      el.click();
+      el.click();
+    });
+
+  it('"Theo dõi ngay" chạm đúp cùng khung hình: chỉ mở trang OA một lần; nút bận giữ focus, "Để sau" bị chặn tới khi xong', async () => {
+    mocks.ordersTotal = 1;
+    let release!: (v: boolean) => void;
+    mocks.follow.mockReturnValue(new Promise<boolean>((r) => (release = r)));
+    const { container } = await mount();
+    const follow = byText(container, 'button', 'Theo dõi ngay') as HTMLButtonElement;
+    twice(follow);
+    await flush(3);
+    expect(mocks.follow).toHaveBeenCalledTimes(1);
+    expect(follow.getAttribute('aria-busy')).toBe('true');
+    expect(follow.getAttribute('aria-disabled')).toBe('true');
+    expect(follow.disabled).toBe(false);
+    const later = byText(container, 'button', 'Để sau') as HTMLButtonElement;
+    expect(later.getAttribute('aria-disabled')).toBe('true');
+    click(later);
+    await flush(3);
+    expect(mocks.storage.tubu_oa_prompt).toBeUndefined();
+    await act(async () => release(true));
+    await flush(4);
+    expect(mocks.follow).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(mocks.storage.tubu_oa_prompt!)).toEqual({ promptSeen: true, followed: true });
+    expect(text(container)).toContain('Đã theo dõi Tubu Tree trên Zalo!');
+  });
+
+  it('ghi cờ đã hỏi lỗi (setOaPromptState tự nuốt): vẫn báo kết quả, không ném lỗi, đúng một lần mở OA', async () => {
+    mocks.ordersTotal = 1;
+    mocks.follow.mockResolvedValue(false);
+    mocks.storageFails = true;
+    const { container } = await mount();
+    const seen = await captureUnhandledRejections(async () => {
+      twice(byText(container, 'button', 'Theo dõi ngay') as HTMLElement);
+      await flush(4);
+    });
+    expect(seen).toEqual([]);
+    expect(mocks.follow).toHaveBeenCalledTimes(1);
+    expect(text(container)).toContain('Đã mở trang Tubu Tree trên Zalo');
+  });
+
+  // Đơn đã tải rồi mà lần tải lại nền lỗi: khối lỗi vẫn hiện kèm dữ liệu cũ, nên `refetch()` thứ hai huỷ lượt đầu và gọi API lần nữa; chỉ khoá nút mới giữ một lượt.
+  it('lỗi tải lại khi đã có đơn cũ: "Thử lại" chạm đúp cùng khung hình chỉ gọi API thêm một lần', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const r = render(<OrderDetailPage />, client);
+    mounted.push(r);
+    await flush(10);
+    expect(text(r.container)).toContain('TB-9');
+    mocks.orderFails = true;
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: ['order'] });
+    });
+    await flush(4);
+    const retry = byText(r.container, 'button', 'Thử lại') as HTMLButtonElement;
+    expect(retry).not.toBeNull();
+    const before = mocks.orderCalls;
+    let release!: () => void;
+    mocks.orderFails = false;
+    mocks.orderGate = new Promise<void>((res) => (release = res));
+    twice(retry);
+    await flush(3);
+    expect(mocks.orderCalls).toBe(before + 1);
+    release();
+    await flush(8);
+    expect(mocks.orderCalls).toBe(before + 1);
+    expect(text(r.container)).toContain('TB-9');
+  });
+
+  it('lỗi tải đơn: "Thử lại" trả refetch cho nút, chạm đúp cùng khung hình chỉ tải lại một lần', async () => {
+    mocks.orderFails = true;
+    const { container } = await mount();
+    // Truy vấn đơn tự thử lại một lần sau 1 giây trước khi báo lỗi.
+    await new Promise<void>((r) => setTimeout(r, 1100));
+    await flush(4);
+    const retry = byText(container, 'button', 'Thử lại') as HTMLButtonElement;
+    expect(retry).not.toBeNull();
+    const before = mocks.orderCalls;
+    let release!: () => void;
+    mocks.orderFails = false;
+    mocks.orderGate = new Promise<void>((r) => (release = r));
+    twice(retry);
+    await flush(3);
+    expect(mocks.orderCalls).toBe(before + 1);
+    release();
+    await flush(8);
+    expect(text(container)).toContain('TB-9');
+    expect(mocks.orderCalls).toBe(before + 1);
   });
 });
 

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act } from 'react';
+import { act, useState } from 'react';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { unnamedControls } from '@/test-utils/a11y';
 import { AvatarCropSheet } from './avatar-crop-sheet';
@@ -10,11 +10,14 @@ import { AvatarCropSheet } from './avatar-crop-sheet';
 const drawImage = vi.fn();
 const ctx = { beginPath: vi.fn(), arc: vi.fn(), clip: vi.fn(), drawImage };
 let mounted: Rendered | null = null;
-let imageMode: 'load' | 'error' = 'load';
+let imageMode: 'load' | 'error' | 'hold' = 'load';
+// Ảnh chưa nạp xong (chế độ 'hold'): ca kiểm gọi hàm để cho nó nạp xong hoặc lỗi.
+let held: { load: () => void; fail: () => void }[] = [];
 
 beforeEach(() => {
   drawImage.mockClear();
   imageMode = 'load';
+  held = [];
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(ctx as unknown as CanvasRenderingContext2D);
   vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue('data:image/jpeg;base64,Q1JPUA==');
   vi.stubGlobal(
@@ -26,6 +29,10 @@ beforeEach(() => {
       onload: (() => void) | null = null;
       onerror: (() => void) | null = null;
       set src(_v: string) {
+        if (imageMode === 'hold') {
+          held.push({ load: () => this.onload?.(), fail: () => this.onerror?.() });
+          return;
+        }
         queueMicrotask(() => (imageMode === 'load' ? this.onload?.() : this.onerror?.()));
       }
     },
@@ -110,5 +117,120 @@ describe('AvatarCropSheet', () => {
     click(byText(document.body, 'button', 'Xác nhận dùng'));
     await flush();
     expect(b.onConfirm).toHaveBeenCalledWith('data:image/jpeg;base64,UkFX');
+  });
+});
+
+describe('AvatarCropSheet: khoá đồng bộ xác nhận (W78B)', () => {
+  const twice = (el: HTMLElement) =>
+    act(() => {
+      el.click();
+      el.click();
+    });
+  const confirmBtn = () => byText(document.body, 'button', /Xác nhận dùng|Đang xử lý/) as HTMLButtonElement;
+
+  it('chạm đúp "Xác nhận dùng" cùng khung hình: dựng một ảnh, onConfirm một lần', async () => {
+    const { onConfirm } = mount();
+    twice(confirmBtn());
+    await flush();
+    expect(drawImage).toHaveBeenCalledTimes(1);
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+  });
+
+  it('đang xử lý: nút giữ focus (aria-busy + aria-disabled, không `disabled`), chạm thêm không dựng ảnh thứ hai; xong thì nhả', async () => {
+    imageMode = 'hold';
+    const { onConfirm } = mount();
+    confirmBtn().focus();
+    click(confirmBtn());
+    await flush(2);
+    expect(confirmBtn().textContent).toBe('Đang xử lý…');
+    expect(confirmBtn().getAttribute('aria-busy')).toBe('true');
+    expect(confirmBtn().getAttribute('aria-disabled')).toBe('true');
+    expect(confirmBtn().disabled).toBe(false);
+    expect(document.activeElement).toBe(confirmBtn());
+    click(confirmBtn());
+    await flush(2);
+    expect(held).toHaveLength(1);
+
+    await act(async () => held[0]!.load());
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+    expect(confirmBtn().textContent).toBe('Xác nhận dùng');
+    expect(confirmBtn().hasAttribute('aria-busy')).toBe(false);
+    click(confirmBtn());
+    await flush(2);
+    expect(held).toHaveLength(2);
+  });
+
+  it('đang xử lý: "Huỷ chọn" bị chặn (aria-disabled), không có nút Đóng, Esc và bấm nền không đóng; xong thì đóng được lại', async () => {
+    imageMode = 'hold';
+    const { onClose, onConfirm } = mount();
+    click(confirmBtn());
+    await flush(2);
+    const cancel = byText(document.body, 'button', 'Huỷ chọn') as HTMLButtonElement;
+    expect(cancel.getAttribute('aria-disabled')).toBe('true');
+    expect(cancel.disabled).toBe(false);
+    click(cancel);
+    expect(onClose).not.toHaveBeenCalled();
+    expect(document.querySelector('button[aria-label="Đóng"]')).toBeNull();
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+    click(document.querySelector('[data-sheet-backdrop]'));
+    expect(onClose).not.toHaveBeenCalled();
+
+    await act(async () => held[0]!.load());
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+    expect(cancel.hasAttribute('aria-disabled')).toBe(false);
+    expect(document.querySelector('button[aria-label="Đóng"]')).not.toBeNull();
+    click(cancel);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('ảnh lỗi hoặc không có canvas: nhả khoá, trả ảnh gốc một lần, bấm lại được', async () => {
+    imageMode = 'hold';
+    const { onConfirm } = mount();
+    click(confirmBtn());
+    await flush(2);
+    await act(async () => held[0]!.fail());
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+    expect(onConfirm).toHaveBeenLastCalledWith('data:image/jpeg;base64,UkFX');
+    expect(confirmBtn().hasAttribute('aria-busy')).toBe(false);
+
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+    click(confirmBtn());
+    await flush(2);
+    await act(async () => held[1]!.load());
+    expect(onConfirm).toHaveBeenCalledTimes(2);
+    click(confirmBtn());
+    await flush(2);
+    expect(held).toHaveLength(3);
+  });
+
+  it('mở lại sheet khi lần dựng trước chưa về: khoá và trạng thái bận được đặt lại', async () => {
+    imageMode = 'hold';
+    const onConfirm = vi.fn();
+    function Harness() {
+      const [open, setOpen] = useState(true);
+      return (
+        <>
+          <button type="button" data-toggle onClick={() => setOpen((o) => !o)}>
+            đổi
+          </button>
+          <AvatarCropSheet open={open} imageSrc="data:image/jpeg;base64,UkFX" onClose={() => setOpen(false)} onConfirm={onConfirm} />
+        </>
+      );
+    }
+    mounted = render(<Harness />);
+    click(confirmBtn());
+    await flush(2);
+    expect(held).toHaveLength(1);
+    click(document.querySelector('[data-toggle]'));
+    await flush(2);
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    click(document.querySelector('[data-toggle]'));
+    await flush(2);
+    expect(confirmBtn().textContent).toBe('Xác nhận dùng');
+    click(confirmBtn());
+    await flush(2);
+    expect(held).toHaveLength(2);
   });
 });

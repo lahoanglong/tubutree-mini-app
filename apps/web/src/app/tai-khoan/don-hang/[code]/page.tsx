@@ -184,7 +184,7 @@ export default function OrderDetailPage() {
             onRetry={() => router.push('/')}
           />
         ) : (
-          <ErrorState message={loadErrorText(orderQ.error)} onRetry={() => void orderQ.refetch()} />
+          <ErrorState message={loadErrorText(orderQ.error)} onRetry={() => orderQ.refetch()} />
         )}
       </Shell>
     );

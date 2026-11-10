@@ -23,6 +23,7 @@ import { reorderText } from '@/lib/home-text';
 import { ReorderSheet } from '@/components/reorder/reorder-sheet';
 import { orderReorderTarget, type ReorderTarget } from '@/components/reorder/reorder-types';
 import { ui } from '@/lib/guest-ui';
+import { usePressLock } from '@/lib/use-press-lock';
 import { formatDate, formatDateTime } from '@/lib/format-date';
 import { canPayNow, showsPaymentDeadline } from '@/components/orders/order-rules';
 import { formatCount } from '@/lib/checkout-points';
@@ -76,6 +77,7 @@ export function OrdersSection() {
     getNextPageParam: nextPageParam,
   });
   const orders = uniqueByKey(ordersQ.data?.pages.flatMap((p) => p.data) ?? [], (o) => o.code);
+  const retry = usePressLock(() => ordersQ.refetch());
   const total = ordersQ.data?.pages[0]?.meta.total ?? 0;
 
   const submitSearch = (e: React.FormEvent) => {
@@ -149,7 +151,7 @@ export function OrdersSection() {
       ) : ordersQ.isError && orders.length === 0 ? (
         <div className={`mt-3 p-6 text-center ${ui.card}`}>
           <p className={ui.error}>Không tải được danh sách đơn hàng.</p>
-          <button type="button" onClick={() => void ordersQ.refetch()} className={`${ui.btnText} mt-1 text-forest-700`}>
+          <button type="button" onClick={retry.press} aria-busy={retry.busy || undefined} aria-disabled={retry.busy || undefined} className={`${ui.btnText} mt-1 text-forest-700`}>
             Thử lại
           </button>
         </div>

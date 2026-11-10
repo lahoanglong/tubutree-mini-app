@@ -5,6 +5,7 @@ import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { headingProblems, smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
+import { ME_SUMMARY_KEY } from '@tubutree/app-core/api/me-summary';
 
 // Chép ý profile-hub.spec.tsx, profile-brand-owner.spec.tsx và profile.spec.ts (Mini App): thẻ đầu, ba số dư, menu theo nhóm,
 // mục theo vai trò/cờ, đại lý và chủ nhãn đổi theo dữ liệu, mã giới thiệu có nút chép. Mục trỏ route pending bị ẩn.
@@ -630,3 +631,212 @@ describe('hub /tai-khoan — lối vào quầy Nhận hàng tại điểm (E-39)
     expect(link(c, '/doi-rac/quay')).toBeNull();
   });
 });
+
+describe('hub /tai-khoan — khoá chạm đúp (W78B)', () => {
+  const gate = () => {
+    let release: () => void = () => {};
+    const held = new Promise<void>((r) => (release = r));
+    return { held, release: () => release() };
+  };
+  const times = (path: string) => mocks.calls.filter((p) => p === path).length;
+  const retryButtons = (c: HTMLElement) => Array.from(c.querySelectorAll<HTMLButtonElement>('button')).filter((b) => b.textContent === 'Thử lại');
+  const copyBtn = (c: HTMLElement) => byText(c, 'button', 'Mã của bạn: AN1') as HTMLButtonElement;
+  const shareBtn = (c: HTMLElement) => byText(c, 'button', 'Chia sẻ') as HTMLButtonElement;
+
+  it('chạm đúp nút chép mã cùng khung hình: clipboard ghi một lần; đang chép cả hai nút khoá bằng aria-disabled, nút chép báo aria-busy', async () => {
+    const g = gate();
+    const writeText = vi.fn(() => g.held);
+    const share = vi.fn();
+    vi.stubGlobal('navigator', { clipboard: { writeText }, share });
+    const c = await mount();
+    const copy = copyBtn(c);
+    const sharing = shareBtn(c);
+    act(() => {
+      copy.click();
+      copy.click();
+      sharing.click();
+    });
+    await flush(2);
+    expect(writeText).toHaveBeenCalledTimes(1);
+    expect(share).not.toHaveBeenCalled();
+    expect(copy.getAttribute('aria-busy')).toBe('true');
+    expect(sharing.hasAttribute('aria-busy')).toBe(false);
+    for (const b of [copy, sharing]) {
+      expect(b.getAttribute('aria-disabled')).toBe('true');
+      expect(b.disabled).toBe(false);
+    }
+    g.release();
+    await flush(4);
+    expect(c.querySelector('[role="status"]')?.textContent).toContain('Đã sao chép mã giới thiệu');
+    expect(copy.hasAttribute('aria-disabled')).toBe(false);
+    expect(sharing.hasAttribute('aria-disabled')).toBe(false);
+    click(copy);
+    await flush(3);
+    expect(writeText).toHaveBeenCalledTimes(2);
+  });
+
+  it('chia sẻ chạm đúp: hộp chia sẻ mở một lần, nút chép bị khoá cho tới khi đóng hộp', async () => {
+    const g = gate();
+    const share = vi.fn(() => g.held);
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('navigator', { clipboard: { writeText }, share });
+    const c = await mount();
+    const sharing = shareBtn(c);
+    act(() => {
+      sharing.click();
+      sharing.click();
+      copyBtn(c).click();
+    });
+    await flush(2);
+    expect(share).toHaveBeenCalledTimes(1);
+    expect(writeText).not.toHaveBeenCalled();
+    expect(sharing.getAttribute('aria-busy')).toBe('true');
+    expect(copyBtn(c).hasAttribute('aria-busy')).toBe(false);
+    g.release();
+    await flush(4);
+    expect(sharing.hasAttribute('aria-busy')).toBe(false);
+    click(sharing);
+    await flush(3);
+    expect(share).toHaveBeenCalledTimes(2);
+  });
+
+  it('chép lỗi: nhả khoá, báo mã để tự chép, chép lại được', async () => {
+    const writeText = vi.fn().mockRejectedValueOnce(new Error('denied')).mockResolvedValue(undefined);
+    vi.stubGlobal('navigator', { clipboard: { writeText } });
+    const c = await mount();
+    click(copyBtn(c));
+    await flush(3);
+    expect(c.querySelector('[role="status"]')?.textContent).toContain('Không sao chép được — mã của bạn: AN1');
+    expect(copyBtn(c).hasAttribute('aria-busy')).toBe(false);
+    click(copyBtn(c));
+    await flush(3);
+    expect(writeText).toHaveBeenCalledTimes(2);
+    expect(c.querySelector('[role="status"]')?.textContent).toContain('Đã sao chép mã giới thiệu');
+  });
+
+  it('"Thử lại" số đơn chạm đúp cùng khung hình: /me/summary chỉ tải lại một lần', async () => {
+    mocks.summarySource.orderCounts = () => {
+      throw new Error('boom');
+    };
+    const c = await mount();
+    const before = times('/me/summary');
+    const g = gate();
+    mocks.routes['/me/summary'] = async () => {
+      await g.held;
+      return { orders: { pending_payment: 1, processing: 0, shipping: 0, delivered: 0, closed: 0, active: 1 }, unreadNotifications: 0, activeSubscriptions: 0 };
+    };
+    const retry = byText(c, 'button', 'Thử lại') as HTMLButtonElement;
+    act(() => {
+      retry.click();
+      retry.click();
+    });
+    await flush(2);
+    expect(times('/me/summary')).toBe(before + 1);
+    g.release();
+    await flush(8);
+    expect(times('/me/summary')).toBe(before + 1);
+    expect(c.textContent).not.toContain('Không tải được số đơn.');
+  });
+
+  // Hai nút Thử lại cùng gọi /me/summary. Chỉ khi số đơn cũ đã có (data) mới phân biệt được khoá chung với hai khoá riêng: không có data thì hai
+  // `refetch()` tự dùng chung promise, còn có data thì lượt thứ hai huỷ lượt đầu và gọi API lần nữa.
+  it('"Thử lại" hạng và "Thử lại" số đơn cùng khung hình khi số đơn đã có số cũ: /me/summary chỉ gọi thêm một lần (khoá chung)', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    mocks.routes['/me/loyalty'] = () => {
+      throw new Error('offline');
+    };
+    const r = render(<AccountPage />, client);
+    mounted.push(r);
+    await flush(8);
+    mocks.summarySource.orderCounts = () => {
+      throw new Error('boom');
+    };
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: ME_SUMMARY_KEY });
+    });
+    await flush(2);
+    const buttons = retryButtons(r.container);
+    expect(buttons).toHaveLength(2);
+    expect(r.container.textContent).toContain('Chưa tải được hạng và điểm');
+    expect(r.container.textContent).toContain('Không tải được số đơn.');
+    const g = gate();
+    mocks.routes['/me/summary'] = async () => {
+      await g.held;
+      return { orders: { pending_payment: 0, processing: 0, shipping: 0, delivered: 0, closed: 0, active: 0 }, unreadNotifications: 0, activeSubscriptions: 0 };
+    };
+    const loyaltyBefore = times('/me/loyalty');
+    const summaryBefore = times('/me/summary');
+    act(() => {
+      for (const b of buttons) b.click();
+      for (const b of buttons) b.click();
+    });
+    await flush(2);
+    expect(times('/me/loyalty') - loyaltyBefore).toBe(1);
+    expect(times('/me/summary') - summaryBefore).toBe(1);
+    g.release();
+    await flush(6);
+  });
+
+  // Có số cũ rồi mà lần tải lại nền lỗi: khối lỗi hiện kèm dữ liệu cũ, nên `refetch()` thứ hai huỷ lượt đầu và gọi API lần nữa; chỉ khoá mới giữ một lượt.
+  it('"Thử lại" số đơn khi đã có số cũ, chạm đúp cùng khung hình: /me/summary chỉ gọi thêm một lần', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const r = render(<AccountPage />, client);
+    mounted.push(r);
+    await flush(8);
+    mocks.summarySource.orderCounts = () => {
+      throw new Error('boom');
+    };
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: ME_SUMMARY_KEY });
+    });
+    await flush(2);
+    expect(r.container.textContent).toContain('Không tải được số đơn.');
+    const g = gate();
+    mocks.routes['/me/summary'] = async () => {
+      await g.held;
+      return { orders: { pending_payment: 0, processing: 0, shipping: 0, delivered: 0, closed: 0, active: 0 }, unreadNotifications: 0, activeSubscriptions: 0 };
+    };
+    const before = times('/me/summary');
+    const retry = byText(r.container, 'button', 'Thử lại') as HTMLButtonElement;
+    act(() => {
+      retry.click();
+      retry.click();
+    });
+    await flush(2);
+    expect(times('/me/summary')).toBe(before + 1);
+    g.release();
+    await flush(8);
+    expect(times('/me/summary')).toBe(before + 1);
+    expect(r.container.textContent).not.toContain('Không tải được số đơn.');
+  });
+
+  it('"Thử lại" hạng khi số đơn đã có số cũ, chạm đúp cùng khung hình: /me/summary và /me/loyalty đều chỉ gọi thêm một lần', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    mocks.routes['/me/loyalty'] = () => {
+      throw new Error('offline');
+    };
+    const r = render(<AccountPage />, client);
+    mounted.push(r);
+    await flush(8);
+    expect(r.container.textContent).toContain('Chưa tải được hạng và điểm');
+    const g = gate();
+    const summaryOk = { orders: { pending_payment: 0, processing: 0, shipping: 0, delivered: 0, closed: 0, active: 0 }, unreadNotifications: 0, activeSubscriptions: 0 };
+    mocks.routes['/me/summary'] = async () => {
+      await g.held;
+      return summaryOk;
+    };
+    const loyaltyBefore = times('/me/loyalty');
+    const summaryBefore = times('/me/summary');
+    const [retry] = retryButtons(r.container);
+    act(() => {
+      retry!.click();
+      retry!.click();
+    });
+    await flush(2);
+    expect(times('/me/loyalty') - loyaltyBefore).toBe(1);
+    expect(times('/me/summary') - summaryBefore).toBe(1);
+    g.release();
+    await flush(6);
+  });
+});
+

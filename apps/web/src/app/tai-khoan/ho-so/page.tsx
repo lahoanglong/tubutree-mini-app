@@ -217,7 +217,7 @@ export default function EditProfilePage() {
   if (meQ.isError) {
     return shell(
       <div className="mt-4">
-        <ErrorState message={errorText(meQ.error)} onRetry={() => void meQ.refetch()} />
+        <ErrorState message={errorText(meQ.error)} onRetry={() => meQ.refetch()} />
       </div>,
     );
   }

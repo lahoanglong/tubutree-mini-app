@@ -65,6 +65,11 @@ function ChatBody() {
   );
   const [contextUsed, setContextUsed] = useState(false);
   const contextUsedRef = useRef(false);
+  // Hàng câu hỏi nhanh chỉ dùng được một lần mỗi lần trống: hai chip (hoặc một chip chạm đúp) cùng nhịp đều thấy hàng còn hiện vì danh sách
+  // chưa kịp vẽ lại, và mỗi lần enqueue lại sinh clientMsgId mới nên máy chủ không gộp được thành một tin.
+  const quickPickedRef = useRef(false);
+  // `loadingOlder` chỉ đổi sau lần vẽ kế nên hai cú chạm cùng nhịp đều thấy false và tải cùng một trang hai lần.
+  const loadingOlderRef = useRef(false);
   const [visible, setVisible] = useState(() => document.visibilityState === 'visible');
   const [seen, setSeen] = useState<Map<string, SupportChatMessageDTO>>(() => new Map());
   const [olderHasMore, setOlderHasMore] = useState<boolean | null>(null);
@@ -181,9 +186,15 @@ function ChatBody() {
     return [...server.map(toItem), ...local];
   }, [server, pending, deliver]);
 
+  const listEmpty = items.length === 0;
+  useEffect(() => {
+    if (listEmpty) quickPickedRef.current = false;
+  }, [listEmpty]);
+
   const loadOlder = async () => {
     const oldest = server[0]?.id;
-    if (!oldest || loadingOlder) return;
+    if (!oldest || loadingOlderRef.current) return;
+    loadingOlderRef.current = true;
     setLoadingOlder(true);
     setNotice(null);
     try {
@@ -197,6 +208,7 @@ function ChatBody() {
     } catch (e) {
       setNotice(errorText(e));
     } finally {
+      loadingOlderRef.current = false;
       setLoadingOlder(false);
     }
   };
@@ -209,7 +221,7 @@ function ChatBody() {
       </div>
     );
   }
-  if (!thread) return <ErrorState message={errorText(threadQ.error)} onRetry={() => void threadQ.refetch()} />;
+  if (!thread) return <ErrorState message={errorText(threadQ.error)} onRetry={() => threadQ.refetch()} />;
 
   // Chat tắt: còn lịch sử thì vẫn cho đọc (chỉ đọc, phần liên hệ thay ô nhập); chưa có tin nào thì cả màn là phần liên hệ.
   const closed = !thread.enabled && !thread.blocked;
@@ -222,7 +234,11 @@ function ChatBody() {
   // Lời chào là bong bóng phía client (không lưu): luôn nằm đầu cuộc trò chuyện, tức khi không còn tin cũ hơn để tải.
   const showGreeting = !closed && !closedText && !(olderHasMore ?? thread.hasMore);
   const greeting: ChatItem = { key: 'greeting', sender: 'STAFF', body: supportCopy.greeting(support?.hours ?? null), imageUrl: null, createdAt: null, status: 'sent' };
-  const pickQuick = (q: QuickReply) => enqueue(q.body, null, shippingCode && q.body.includes(shippingCode) ? { orderCode: shippingCode } : undefined);
+  const pickQuick = (q: QuickReply) => {
+    if (quickPickedRef.current) return;
+    quickPickedRef.current = true;
+    enqueue(q.body, null, shippingCode && q.body.includes(shippingCode) ? { orderCode: shippingCode } : undefined);
+  };
   const productName = productSlug && !productQ.isLoading ? (productQ.data?.name ?? productSlug) : null;
   const chipLabel = orderCode ? `Về đơn ${orderCode}` : productName ? `Về sản phẩm ${productName}` : null;
 

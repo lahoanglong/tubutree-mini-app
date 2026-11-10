@@ -36,6 +36,8 @@ let calls: Call[] = [];
 let orders: Record<string, unknown>[] = [];
 let total: number | undefined;
 let ordersFail = false;
+/** Khi đặt: lời gọi /orders chờ tới khi gate xong (lần tải lại ở trạng thái đang bay). */
+let ordersGate: Promise<void> | null = null;
 /** Khi đặt: lời gọi có `q` nhận danh sách này thay cho `orders` (API thật lọc theo mã đơn hoặc tên sản phẩm). */
 let searchRows: Record<string, unknown>[] | null = null;
 /** Khi đặt: API trả con trỏ keyset (theo thứ tự trang); trang đọc theo cursor thay vì page. */
@@ -54,6 +56,7 @@ function stubApi() {
       calls.push({ method, path, query: u.searchParams, body: init?.body ? JSON.parse(String(init.body)) : undefined });
       const json = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status, headers: { 'Content-Type': 'application/json' } });
       if (path === '/orders') {
+        if (ordersGate) await ordersGate;
         if (ordersFail) return json({ message: 'ECONNRESET tại bảng orders' }, 500);
         const page = Number(u.searchParams.get('page') ?? 1);
         const limit = Number(u.searchParams.get('limit') ?? 20);
@@ -96,6 +99,7 @@ beforeEach(() => {
   orders = [order('TUBU1')];
   total = undefined;
   ordersFail = false;
+  ordersGate = null;
   searchRows = null;
   keyset = null;
   offer = { isNewCustomer: false, welcomeVoucher: null };
@@ -228,6 +232,27 @@ describe('trang Đơn hàng /tai-khoan/don-hang', () => {
     expect(c.textContent).not.toContain('ECONNRESET');
     ordersFail = false;
     click(btn('Thử lại', c) ?? null);
+    await flush(8);
+    expect(c.querySelector('a[href="/tai-khoan/don-hang/TUBU1"]')).not.toBeNull();
+    expect(sent('/orders')).toHaveLength(2);
+  });
+
+  it('"Thử lại" trả refetch cho nút: chạm đúp cùng khung hình chỉ tải lại một lần, nút báo bận tới khi danh sách về', async () => {
+    ordersFail = true;
+    const c = await mount();
+    let release!: () => void;
+    ordersFail = false;
+    ordersGate = new Promise<void>((r) => (release = r));
+    const retry = btn('Thử lại', c)!;
+    act(() => {
+      retry.click();
+      retry.click();
+    });
+    await flush(3);
+    expect(sent('/orders')).toHaveLength(2);
+    expect(retry.getAttribute('aria-busy')).toBe('true');
+    expect(retry.getAttribute('aria-disabled')).toBe('true');
+    release();
     await flush(8);
     expect(c.querySelector('a[href="/tai-khoan/don-hang/TUBU1"]')).not.toBeNull();
     expect(sent('/orders')).toHaveLength(2);

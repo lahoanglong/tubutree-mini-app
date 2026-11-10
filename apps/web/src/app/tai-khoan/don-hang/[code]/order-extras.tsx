@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { INVOICE_ISSUE_FAILED } from '@tubutree/app-core/client-copy';
 import Link from 'next/link';
 import { ChevronRight, Recycle } from 'lucide-react';
@@ -76,6 +76,8 @@ export function FollowOaPrompt() {
   const [seen, setSeen] = useState(true);
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
+  // `busy` chỉ đúng sau lần vẽ kế: hai cú bấm cùng nhịp vẫn thấy false và mở trang OA hai lần.
+  const busyRef = useRef(false);
   const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
@@ -108,14 +110,21 @@ export function FollowOaPrompt() {
   if (!shouldShowFollowOaPrompt({ hasOA, promptSeen: seen, ordersTotal: totalQ.data?.meta.total })) return null;
 
   const follow = async () => {
+    if (busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
-    const followed = await platformBridge.oa.follow().catch(() => false);
-    await setOaPromptState(platformBridge.storage, { promptSeen: true, followed });
-    setBusy(false);
-    setSeen(true);
-    setNotice(followed ? 'Đã theo dõi Tubu Tree trên Zalo!' : 'Đã mở trang Tubu Tree trên Zalo, bấm "Quan tâm" để nhận cập nhật đơn.');
+    try {
+      const followed = await platformBridge.oa.follow().catch(() => false);
+      await setOaPromptState(platformBridge.storage, { promptSeen: true, followed });
+      setSeen(true);
+      setNotice(followed ? 'Đã theo dõi Tubu Tree trên Zalo!' : 'Đã mở trang Tubu Tree trên Zalo, bấm "Quan tâm" để nhận cập nhật đơn.');
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
   };
   const later = () => {
+    if (busyRef.current) return;
     void setOaPromptState(platformBridge.storage, { promptSeen: true });
     setSeen(true);
   };
@@ -125,10 +134,11 @@ export function FollowOaPrompt() {
       <p className="text-sm font-semibold text-forest-800">Theo dõi Tubu Tree trên Zalo</p>
       <p className="mt-1 text-xs text-stone-700">Nhận cập nhật đơn và tư vấn từ Tubu Tree qua Zalo — không bỏ lỡ tin quan trọng.</p>
       <div className="mt-2 flex flex-wrap gap-2">
-        <button type="button" onClick={() => void follow()} disabled={busy} className={ui.btnPrimary}>
+        {/* Nút đang giữ focus: bận thì aria-busy/aria-disabled, không `disabled` (Chromium thả focus về body). */}
+        <button type="button" onClick={() => void follow()} aria-busy={busy || undefined} aria-disabled={busy || undefined} className={ui.btnPrimary}>
           {busy ? 'Đang mở…' : 'Theo dõi ngay'}
         </button>
-        <button type="button" onClick={later} disabled={busy} className={ui.btnText}>
+        <button type="button" onClick={later} aria-disabled={busy || undefined} className={ui.btnText}>
           Để sau
         </button>
       </div>

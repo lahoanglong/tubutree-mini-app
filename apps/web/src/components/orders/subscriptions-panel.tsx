@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import Link from 'next/link';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { setSubscriptionStatus, skipSubscriptionCycle, type SubscriptionDTO } from '@tubutree/app-core/api/subscriptions';
 import { subscriptionsQuery } from '@tubutree/app-core/queries/subscriptions';
 import { addressesQuery } from '@tubutree/app-core/queries/checkout';
@@ -11,6 +11,7 @@ import { Badge, type BadgeTone } from '@/components/ui/badge';
 import { ErrorState } from '@/components/ui/error-state';
 import { LineItemSkeleton } from '@/components/ui/skeleton';
 import { Sheet } from '@/components/ui/sheet';
+import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { coreHttp } from '@/lib/core-http';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { formatDate } from '@/lib/format-date';
@@ -51,19 +52,37 @@ export function SubscriptionsPanel() {
   const addrQ = useQuery({ ...addressesQuery(coreHttp), enabled: authed && subs.length > 0 });
   const addressById = new Map((addrQ.data ?? []).map((a) => [a.id, a]));
 
-  const statusMut = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: SubStatus }) => setSubscriptionStatus(coreHttp, id, status),
+  // Tạm dừng/Tiếp tục/Huỷ và Bỏ qua kỳ loại trừ nhau trên mọi gói (giao diện cũng khoá hết nút thẻ khi một việc đang chạy): một việc mỗi lúc.
+  // Ref vì `isPending` chỉ đúng sau lần vẽ kế (chạm "Tạm dừng" rồi "Vẫn huỷ" sát nhau vẫn gửi cả hai lệnh). Cả hai lệnh trả lời hứa tải lại
+  // danh sách nên khoá giữ tới khi trạng thái mới về; sheet đóng ngay khi lệnh xong để mất mạng lúc tải lại không giữ sheet kẹt.
+  const acting = useRef(false);
+  const releaseActing = () => {
+    acting.current = false;
+  };
+  const exclusive = (run: () => void) => {
+    if (acting.current) return;
+    acting.current = true;
+    run();
+  };
+
+  const statusMut = useLockedMutation({
+    mutationFn: ({ id, status }: { id: string; status: SubStatus; from: 'card' | 'sheet' }) => setSubscriptionStatus(coreHttp, id, status),
     onMutate: () => setNotice(null),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['subscriptions'] }),
+    onSuccess: () => {
+      setCancelTarget(null);
+      return qc.invalidateQueries({ queryKey: ['subscriptions'] });
+    },
+    onSettled: releaseActing,
   });
-  const skipMut = useMutation({
+  const skipMut = useLockedMutation({
     mutationFn: (id: string) => skipSubscriptionCycle(coreHttp, id),
     onMutate: () => setNotice(null),
     onSuccess: () => {
       setNotice('Đã bỏ qua kỳ này, hẹn kỳ sau nhé');
-      void qc.invalidateQueries({ queryKey: ['subscriptions'] });
       setCancelTarget(null);
+      return qc.invalidateQueries({ queryKey: ['subscriptions'] });
     },
+    onSettled: releaseActing,
   });
 
   const targetSub = subs.find((s) => s.id === cancelTarget) ?? null;
@@ -71,8 +90,8 @@ export function SubscriptionsPanel() {
   const pending = statusMut.isPending ? statusMut.variables?.status : undefined;
   const sheetBusy = statusMut.isPending || skipMut.isPending;
   const changeFromSheet = (status: SubStatus) => {
-    if (!cancelTarget || sheetBusy) return;
-    statusMut.mutate({ id: cancelTarget, status }, { onSuccess: () => setCancelTarget(null) });
+    if (!cancelTarget) return;
+    exclusive(() => statusMut.mutate({ id: cancelTarget, status, from: 'sheet' }));
   };
   const actionError = statusMut.isError ? actionErrorText(statusMut.error) : skipMut.isError ? actionErrorText(skipMut.error) : null;
 
@@ -100,7 +119,7 @@ export function SubscriptionsPanel() {
           <LineItemSkeleton />
         </>
       ) : subsQ.isError ? (
-        <ErrorState variant="inline" message={errText(subsQ.error)} onRetry={() => void subsQ.refetch()} />
+        <ErrorState variant="inline" message={errText(subsQ.error)} onRetry={() => subsQ.refetch()} />
       ) : subs.length > 0 ? (
         <ul className="flex flex-col gap-3">
           {subs.map((s) => (
@@ -108,14 +127,15 @@ export function SubscriptionsPanel() {
               key={s.id}
               sub={s}
               busy={sheetBusy}
-              toggling={statusMut.isPending && statusMut.variables?.id === s.id && cancelTarget === null}
+              toggling={statusMut.isPending && statusMut.variables?.id === s.id && statusMut.variables.from === 'card'}
               address={s.addressId ? addressById.get(s.addressId) : undefined}
-              onEdit={() => setEditTarget(s.id)}
-              onToggle={() => {
-                if (sheetBusy) return;
-                statusMut.mutate({ id: s.id, status: s.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE' });
+              onEdit={() => {
+                if (acting.current) return;
+                setEditTarget(s.id);
               }}
+              onToggle={() => exclusive(() => statusMut.mutate({ id: s.id, status: s.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE', from: 'card' }))}
               onCancel={() => {
+                if (acting.current) return;
                 statusMut.reset();
                 skipMut.reset();
                 setCancelTarget(s.id);
@@ -171,8 +191,8 @@ export function SubscriptionsPanel() {
               aria-busy={skipMut.isPending || undefined}
               aria-disabled={skipMut.isPending || undefined}
               onClick={() => {
-                if (!cancelTarget || sheetBusy) return;
-                skipMut.mutate(cancelTarget);
+                if (!cancelTarget) return;
+                exclusive(() => skipMut.mutate(cancelTarget));
               }}
             >
               {skipMut.isPending ? 'Đang xử lý…' : 'Bỏ qua kỳ này'}
@@ -205,7 +225,7 @@ function SubscriptionCard({
 }: {
   sub: SubscriptionDTO;
   busy: boolean;
-  /** Chính thẻ này đang đổi Tạm dừng/Tiếp tục: nút đó giữ aria-busy thay vì `disabled` để không mất focus. */
+  /** Chính thẻ này đang đổi Tạm dừng/Tiếp tục bằng nút trên thẻ (không tính lệnh gửi từ sheet): nút đó giữ aria-busy thay vì `disabled` để không mất focus. */
   toggling: boolean;
   address?: Parameters<typeof addressText>[0];
   onEdit: () => void;
@@ -240,7 +260,9 @@ function SubscriptionCard({
         {s.status === 'ACTIVE' ? (s.nextRunAt ? `Lần kế: ${formatDate(s.nextRunAt)}` : 'Đang lên lịch') : 'Đang tạm dừng'}
       </div>
       <div className="mt-2 flex flex-wrap gap-2">
-        <button type="button" disabled={busy} onClick={onEdit} className={`${ui.btnSecondary} ${mini.secondary} min-w-max flex-1`}>
+        {/* "Sửa" và "Huỷ" mở sheet và sheet trả focus về đúng nút này khi đóng: lúc đó lệnh vừa gửi từ sheet còn chờ danh sách mới (busy vẫn true),
+            nên khoá bằng aria-disabled (chặn ở onEdit/onCancel) chứ không `disabled`, nếu không focus rơi về body. */}
+        <button type="button" aria-disabled={busy || undefined} onClick={onEdit} className={`${ui.btnSecondary} ${mini.secondary} min-w-max flex-1`}>
           Sửa
         </button>
         <button
@@ -253,7 +275,7 @@ function SubscriptionCard({
         >
           {toggling ? 'Đang xử lý…' : s.status === 'ACTIVE' ? 'Tạm dừng' : 'Tiếp tục'}
         </button>
-        <button type="button" disabled={busy} onClick={onCancel} className={miniGhostDanger}>
+        <button type="button" aria-disabled={busy || undefined} onClick={onCancel} className={miniGhostDanger}>
           Huỷ
         </button>
       </div>

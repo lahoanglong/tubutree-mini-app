@@ -19,6 +19,7 @@ import { supportChatSummaryQuery } from '@tubutree/app-core/queries/support-chat
 import { deskPointsQuery } from '@tubutree/app-core/queries/waste';
 import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
+import { useActionLock } from '@/lib/use-action-lock';
 import { useMeSummary } from '@/lib/use-me-summary';
 import { coreHttp } from '@/lib/core-http';
 import { isWebRouteReady } from '@/lib/route-map';
@@ -145,6 +146,9 @@ function AccountContent() {
   const { user } = useAuth();
   const phase = useAuthPhase();
   const [copyMsg, setCopyMsg] = useState<string | null>(null);
+  // Chép và chia sẻ mã giới thiệu cùng một đối tượng nên chung một khoá; tải lại số đếm/hạng là khoá riêng (hai nút Thử lại dùng chung).
+  const referralLock = useActionLock();
+  const reloadLock = useActionLock();
   const authed = phase === 'authenticated';
   // Hồ sơ trong phiên đăng nhập là ảnh chụp lúc đăng nhập: số điểm/ví phải đổi ngay sau khi đặt đơn hay huỷ đơn, nên lấy lại mỗi lần vào trang và quay lại tab.
   const meQ = useQuery({ queryKey: ['me'], queryFn: getMe, enabled: authed, refetchOnWindowFocus: true });
@@ -232,7 +236,7 @@ function AccountContent() {
 
   const countsFailed = summaryQ.isError;
   const reloadCounts = () => {
-    void summaryQ.refetch();
+    void reloadLock.run('counts', () => summaryQ.refetch());
   };
 
   const countFor = (key: string): number | null => {
@@ -241,33 +245,37 @@ function AccountContent() {
     return summaryQ.data.orders[key as keyof typeof summaryQ.data.orders] ?? null;
   };
 
-  const copyReferral = async () => {
+  const copyReferral = () => {
     if (!code) return;
-    try {
-      await navigator.clipboard.writeText(code);
-      setCopyMsg('Đã sao chép mã giới thiệu');
-    } catch {
-      setCopyMsg(`Không sao chép được — mã của bạn: ${code}`);
-    }
-  };
-  const shareReferral = async () => {
-    if (!code) return;
-    const url = `${window.location.origin}/?ref=${encodeURIComponent(code)}`;
-    const text = `Dùng mã ${code} khi mua hàng ở Tubu Tree nhé: ${url}`;
-    if (typeof navigator.share === 'function') {
+    void referralLock.run('copy', async () => {
       try {
-        await navigator.share({ title: 'Tubu Tree — Trồng cây, nhận quà', text, url });
-        return;
-      } catch (e) {
-        if (e instanceof DOMException && e.name === 'AbortError') return;
+        await navigator.clipboard.writeText(code);
+        setCopyMsg('Đã sao chép mã giới thiệu');
+      } catch {
+        setCopyMsg(`Không sao chép được — mã của bạn: ${code}`);
       }
-    }
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopyMsg('Đã sao chép lời mời kèm liên kết');
-    } catch {
-      setCopyMsg(`Không chia sẻ được — mã của bạn: ${code}`);
-    }
+    });
+  };
+  const shareReferral = () => {
+    if (!code) return;
+    void referralLock.run('share', async () => {
+      const url = `${window.location.origin}/?ref=${encodeURIComponent(code)}`;
+      const text = `Dùng mã ${code} khi mua hàng ở Tubu Tree nhé: ${url}`;
+      if (typeof navigator.share === 'function') {
+        try {
+          await navigator.share({ title: 'Tubu Tree — Trồng cây, nhận quà', text, url });
+          return;
+        } catch (e) {
+          if (e instanceof DOMException && e.name === 'AbortError') return;
+        }
+      }
+      try {
+        await navigator.clipboard.writeText(text);
+        setCopyMsg('Đã sao chép lời mời kèm liên kết');
+      } catch {
+        setCopyMsg(`Không chia sẻ được — mã của bạn: ${code}`);
+      }
+    });
   };
 
   return (
@@ -321,9 +329,10 @@ function AccountContent() {
               <span className="text-caption">{homeCopy.member.tierFailed}</span>
               <button
                 type="button"
+                aria-busy={reloadLock.busy || undefined}
+                aria-disabled={reloadLock.busy || undefined}
                 onClick={() => {
-                  void loyaltyQ.refetch();
-                  reloadCounts();
+                  void reloadLock.run('counts', () => Promise.all([loyaltyQ.refetch(), summaryQ.refetch()]));
                 }}
                 className="tubu-press -my-3 -mx-1.5 min-h-11 px-1.5 text-caption font-bold underline"
               >
@@ -391,7 +400,7 @@ function AccountContent() {
                 <Text variant="caption" tone="secondary">
                   {profileCopy.ordersFailed}
                 </Text>
-                <Button variant="ghost" onPress={reloadCounts}>
+                <Button variant="ghost" loading={reloadLock.busy} onPress={reloadCounts}>
                   {homeCopy.member.retry}
                 </Button>
               </div>
@@ -423,7 +432,9 @@ function AccountContent() {
                 <button
                   type="button"
                   aria-label={`${homeCopy.profile.referralCode}: ${code}, ${homeCopy.profile.referralCopy.toLowerCase()}`}
-                  onClick={() => void copyReferral()}
+                  aria-busy={referralLock.active === 'copy' || undefined}
+                  aria-disabled={referralLock.busy || undefined}
+                  onClick={copyReferral}
                   className="tubu-press flex min-h-11 min-w-0 flex-1 items-center justify-between gap-2 rounded-control bg-[var(--color-action-secondary-bg)] px-3 py-2 text-left"
                 >
                   <Text variant="caption" style={{ color: 'var(--color-action-secondary-fg)' }}>
@@ -431,7 +442,13 @@ function AccountContent() {
                   </Text>
                   <Copy className="h-4 w-4 flex-none text-forest-600" aria-hidden="true" />
                 </button>
-                <button type="button" onClick={() => void shareReferral()} className={`${ui.btnPrimary} flex-none`}>
+                <button
+                  type="button"
+                  aria-busy={referralLock.active === 'share' || undefined}
+                  aria-disabled={referralLock.busy || undefined}
+                  onClick={shareReferral}
+                  className={`${ui.btnPrimary} flex-none`}
+                >
                   {homeCopy.profile.referralShare}
                 </button>
               </div>
