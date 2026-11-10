@@ -2,12 +2,13 @@
 
 // Nguồn: apps/miniapp/src/components/checkout/use-cart-voucher-hint.ts (cùng đầu vào, cùng kết quả; khác chỗ lấy dữ liệu và cách báo áp thành công).
 import { useEffect, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { cartVoucherHint, type CartVoucherHint } from '@tubutree/app-core/commerce/cart-voucher-hint';
 import { serverNow } from '@tubutree/app-core/server-clock';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { applyCoupon, getCouponPreviews, getMyCoupons, type CouponPreviewParams } from '@/lib/shop-client';
 import { PREVIEW_DEBOUNCE_MS, useSettled } from '@/components/coupon-box';
+import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { autoCouponName } from '@/lib/coupon-name';
 import { cartKey } from '@/lib/cart-key';
 import { actionErrorText } from '@/lib/error-text';
@@ -73,7 +74,8 @@ export function useCartVoucherHint(opts: {
         })
       : null;
 
-  const mut = useMutation({
+  // Khoá ref đồng bộ: `isPending` chỉ đúng sau lần vẽ kế tiếp, hai cú chạm sát nhau vẫn đều gọi applyCoupon.
+  const mut = useLockedMutation({
     mutationFn: (code: string) => applyCoupon(code.trim().toUpperCase()),
     // Xoá lời báo cũ lúc bắt đầu: lỗi lặp lại cùng câu vẫn dựng lại lời báo.
     onMutate: () => setFailed(null),
@@ -94,9 +96,7 @@ export function useCartVoucherHint(opts: {
   const offered = hint?.apply?.code ?? null;
   return {
     hint: hint && (hint.apply || hint.unlock) ? hint : null,
-    apply: (code) => {
-      if (!mut.isPending) mut.mutate(code);
-    },
+    apply: (code) => mut.mutate(code),
     applying: mut.isPending,
     error: failed && offered && failed.code === offered.trim().toUpperCase() ? failed.text : null,
     appliedNote,

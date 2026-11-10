@@ -95,13 +95,13 @@ function BrandInfinite({ slug, sort, showBrand }: { slug: string; sort: ShopSort
   });
   const items = useMemo(() => (q.data?.pages.flatMap((p) => p.data) ?? []) as ProductCardData[], [q.data]);
   if (q.isPending) return <ProductGrid items={[]} variant="grid" loading showBrand={showBrand} />;
-  if (q.isError && items.length === 0) return <ErrorState variant="inline" message={loadErrorText(q.error)} onRetry={() => void q.refetch()} />;
+  if (q.isError && items.length === 0) return <ErrorState variant="inline" message={loadErrorText(q.error)} onRetry={() => q.refetch()} />;
   if (items.length === 0) return <EmptyState variant="inline" art="basket" heading={fillCopy('shop.emptyProducts')} />;
   return (
     <>
       <ProductGrid items={items} variant="grid" showBrand={showBrand} />
-      {q.isFetchNextPageError && <ErrorState variant="inline" message={loadErrorText(q.error)} onRetry={() => void q.fetchNextPage()} />}
-      {q.hasNextPage && !q.isFetchNextPageError && <MoreButton loading={q.isFetchingNextPage} onPress={() => void q.fetchNextPage()} />}
+      {q.isFetchNextPageError && <ErrorState variant="inline" message={loadErrorText(q.error)} onRetry={() => q.fetchNextPage()} />}
+      {q.hasNextPage && !q.isFetchNextPageError && <MoreButton loading={q.isFetchingNextPage} onPress={() => q.fetchNextPage()} />}
     </>
   );
 }
@@ -110,7 +110,7 @@ function BrandPaged({ slug, sort, showBrand, onPage }: { slug: string; sort: Sho
   const [page, setPage] = useState(1);
   const q = useQuery({ ...brandPage(slug, sort, page), placeholderData: keepPreviousData });
   if (q.isPending) return <ProductGrid items={[]} variant="grid" loading showBrand={showBrand} />;
-  if (q.isError) return <ErrorState variant="inline" message={loadErrorText(q.error)} onRetry={() => void q.refetch()} />;
+  if (q.isError) return <ErrorState variant="inline" message={loadErrorText(q.error)} onRetry={() => q.refetch()} />;
   const items = q.data.data as ProductCardData[];
   if (items.length === 0 && page === 1) return <EmptyState variant="inline" art="basket" heading={fillCopy('shop.emptyProducts')} />;
   return (
@@ -148,7 +148,7 @@ export function ShopProductsTab({ source, showBrand, initialSort = 'popular', sc
         ) : wide ? (
           <BrandPaged key={sort} slug={source.slug} sort={sort} showBrand={showBrand} onPage={toTop} />
         ) : (
-          <BrandInfinite slug={source.slug} sort={sort} showBrand={showBrand} />
+          <BrandInfinite key={sort} slug={source.slug} sort={sort} showBrand={showBrand} />
         )}
       </div>
     </div>

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act } from 'react';
+import { QueryClient } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
 
@@ -23,6 +24,8 @@ const defer = (): Deferred & { promise: Promise<unknown> } => {
 const state = vi.hoisted(() => ({
   cart: null as unknown,
   gate: null as null | Promise<unknown>,
+  cartError: null as Error | null,
+  cartCalls: 0,
   updates: [] as { id: string; q: number }[],
   removed: [] as string[],
   added: [] as { variationId: string; quantity: number }[],
@@ -35,7 +38,9 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), replace: 
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/shop-client')>()),
   getCart: async () => {
+    state.cartCalls += 1;
     if (state.gate) await state.gate;
+    if (state.cartError) throw state.cartError;
     return state.cart;
   },
   getMyCoupons: async () => [],
@@ -104,6 +109,8 @@ beforeEach(() => {
   state.added = [];
   deferred = [];
   state.gate = null;
+  state.cartError = null;
+  state.cartCalls = 0;
   state.cart = cartOf([line({})]);
   state.update = async () => state.cart;
   state.remove = async () => state.cart;
@@ -445,5 +452,40 @@ describe('/gio-hang — khoá đồng bộ xoá dòng và Hoàn tác', () => {
     click(undoButton(container)!);
     await flush(4);
     expect(state.added).toHaveLength(2);
+  });
+});
+
+describe('/gio-hang — "Thử lại" khi giỏ tải lại lỗi (W81B)', () => {
+  // Giỏ đã có dữ liệu: react-query giữ dữ liệu cũ và `refetch` thứ hai huỷ rồi gọi lại API, nên chỉ cú chạm đầu được đi.
+  // Giỏ chưa từng tải được thì refetch thứ hai dùng chung lượt đang bay và thẻ lỗi biến mất ngay: ca đó không phân biệt được có khoá hay không.
+  it('tải lại lỗi khi giỏ đã có dòng: chạm đúp "Thử lại" trong cùng một khung hình chỉ gọi giỏ thêm một lần, nút báo aria-busy tới khi giỏ mới về', async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const r = render(<CartPage />, qc);
+    mounted.push(r);
+    await flush(6);
+    expect(plusA(r.container)).not.toBeNull();
+    state.cartError = new Error('Mạng lỗi');
+    await act(async () => {
+      await qc.refetchQueries({ queryKey: ['cart'] });
+    });
+    await flush(4);
+    const retryBtn = () => [...r.container.querySelectorAll('button')].find((b) => b.textContent === 'Thử lại')!;
+    expect(retryBtn()).toBeDefined();
+    const before = state.cartCalls;
+
+    const held = defer();
+    state.gate = held.promise;
+    state.cartError = null;
+    clickTwice(retryBtn());
+    await flush(2);
+    expect(state.cartCalls).toBe(before + 1);
+    expect(retryBtn().getAttribute('aria-busy')).toBe('true');
+    expect(retryBtn().getAttribute('aria-disabled')).toBe('true');
+    expect(retryBtn().disabled).toBe(false);
+
+    await act(async () => held.resolve(undefined));
+    await flush(6);
+    expect(retryBtn()).toBeUndefined();
+    expect(plusA(r.container)).not.toBeNull();
   });
 });

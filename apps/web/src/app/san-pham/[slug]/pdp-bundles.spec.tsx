@@ -509,3 +509,88 @@ describe('PdpBundles (web): Mua kèm giá tốt', () => {
     expect(unnamedControls(c)).toEqual([]);
   });
 });
+
+describe('PdpBundles (web): khoá chạm đúp "Thêm cả combo" và "Thêm n món" bằng ref của useBundleAdd', () => {
+  const pending = <T,>() => {
+    let resolve!: (v: T) => void;
+    const promise = new Promise<T>((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  const comboButtons = (c: HTMLElement) =>
+    Array.from(c.querySelectorAll<HTMLButtonElement>('button')).filter((b) => /^Thêm cả combo/.test(b.textContent ?? ''));
+  // Hai cú bấm trong CÙNG một act: React chưa vẽ lại giữa chúng nên `busyId` (state) vẫn trống ở cả hai.
+  const twice = (a: HTMLElement, b: HTMLElement = a) =>
+    act(() => {
+      a.click();
+      b.click();
+    });
+
+  it('chạm đúp "Thêm cả combo" trong cùng một khung hình: chỉ một lệnh lô', async () => {
+    const call = pending<object>();
+    mocks.addAll.mockReturnValue(call.promise);
+    const c = await mount({ combos: ONE_COMBO, addons: [] });
+    twice(comboButtons(c)[0]!);
+    await flush(2);
+    expect(mocks.addAll).toHaveBeenCalledTimes(1);
+    await act(async () => call.resolve({}));
+    await flush();
+  });
+
+  it('chạm hai combo khác nhau liền nhau: mỗi lúc chỉ một lệnh bay, combo chạm sau bị bỏ', async () => {
+    const call = pending<object>();
+    mocks.addAll.mockReturnValue(call.promise);
+    const c = await mount({ combos: [combo('c1', [item('a'), item('b')]), combo('c2', [item('c'), item('d')])], addons: [] });
+    const [first, second] = comboButtons(c);
+    twice(first!, second!);
+    await flush(2);
+    expect(mocks.addAll).toHaveBeenCalledTimes(1);
+    expect(mocks.addAll).toHaveBeenCalledWith([{ variationId: 'v-a', quantity: 1 }, { variationId: 'v-b', quantity: 1 }]);
+    await act(async () => call.resolve({}));
+    await flush();
+  });
+
+  it('lệnh combo lỗi thì nhả khoá: chạm lại gửi được lần hai, thành công thì nhả tiếp', async () => {
+    mocks.addAll.mockRejectedValueOnce(new Error('x')).mockResolvedValue({});
+    const c = await mount({ combos: ONE_COMBO, addons: [] });
+    click(comboButtons(c)[0]!);
+    await flush();
+    expect(c.querySelector('[data-testid="pdp-combos"] [role="status"]')!.textContent).toContain('giỏ của bạn không thay đổi');
+    click(comboButtons(c)[0]!);
+    await flush();
+    expect(c.querySelector('[data-testid="pdp-combos"] [role="status"]')!.textContent).toBe('Đã thêm cả combo vào giỏ');
+    click(comboButtons(c)[0]!);
+    await flush();
+    expect(mocks.addAll).toHaveBeenCalledTimes(3);
+  });
+
+  it('chạm đúp "Thêm n món vào giỏ" của Mua kèm trong cùng một khung hình: chỉ một lệnh lô', async () => {
+    const call = pending<object>();
+    mocks.addAll.mockReturnValue(call.promise);
+    const c = await mount({ combos: [], addons: [addon('a1', [item('x', { addonPrice: 40_000 })])] });
+    click(rows(c)[0]!);
+    twice(c.querySelector<HTMLElement>('[data-testid="addon-add"]')!);
+    await flush(2);
+    expect(mocks.addAll).toHaveBeenCalledTimes(1);
+    expect(mocks.addAll).toHaveBeenCalledWith([{ variationId: 'v-x', quantity: 1 }]);
+    await act(async () => call.resolve({}));
+    await flush();
+  });
+
+  it('Mua kèm đang bay: chạm "Thêm cả combo" cùng lúc bị bỏ, vì cả khối dùng chung một khoá', async () => {
+    const call = pending<object>();
+    mocks.addAll.mockReturnValue(call.promise);
+    const c = await mount({
+      combos: [combo('c1', [item('a'), item('b')])],
+      addons: [addon('a1', [item('x', { addonPrice: 40_000 })])],
+    });
+    click(rows(c)[0]!);
+    twice(c.querySelector<HTMLElement>('[data-testid="addon-add"]')!, comboButtons(c)[0]!);
+    await flush(2);
+    expect(mocks.addAll).toHaveBeenCalledTimes(1);
+    expect(mocks.addAll).toHaveBeenCalledWith([{ variationId: 'v-x', quantity: 1 }]);
+    await act(async () => call.resolve({}));
+    await flush();
+  });
+});

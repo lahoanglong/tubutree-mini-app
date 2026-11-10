@@ -502,7 +502,7 @@ export default function CartPage() {
           <LineItemSkeleton />
         </div>
       ) : cartQ.isError ? (
-        <ErrorState message={loadErrorText(cartQ.error)} onRetry={() => void cartQ.refetch()} />
+        <ErrorState message={loadErrorText(cartQ.error)} onRetry={() => cartQ.refetch()} />
       ) : !cart || cart.items.length === 0 ? (
         <EmptyCart />
       ) : (

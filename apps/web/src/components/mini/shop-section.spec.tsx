@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
 import { resetFlashSales } from '@/lib/use-flash-sales';
@@ -200,6 +201,24 @@ describe('ShopSection (web) combo', () => {
     await flush();
     expect(status(c)).toContain('Đã thêm cả combo vào giỏ');
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['cart'] });
+  });
+
+  // Hai `click` liền nhau (mỗi cái một act) đã cho React vẽ lại giữa chúng nên nút `loading` tự chặn; cú bấm trong CÙNG một khung hình mới thử được khoá ref `inflight`.
+  it('hai cú bấm trong cùng một khung hình, chưa kịp vẽ lại: chỉ một lệnh, nhả khoá sau khi xong thì bấm lại gửi được', async () => {
+    let resolve!: (v: unknown) => void;
+    mocks.addAll.mockReturnValueOnce(new Promise((r) => { resolve = r; })).mockResolvedValue({});
+    const c = await mount(<ShopSection collection={combo()} />);
+    act(() => {
+      add(c).click();
+      add(c).click();
+    });
+    await flush(2);
+    expect(mocks.addAll).toHaveBeenCalledTimes(1);
+    resolve({});
+    await flush();
+    click(add(c));
+    await flush();
+    expect(mocks.addAll).toHaveBeenCalledTimes(2);
   });
 
   it('phân loại: ghim còn hàng > đại diện; ghim đã hết hàng thì gửi phân loại đại diện, không gửi phân loại ghim hỏng', async () => {
